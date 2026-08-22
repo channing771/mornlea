@@ -35,14 +35,14 @@
 
 ### Requirement: 生命以十个空半满心呈现
 
-系统 SHALL 只消费已确认的权威生命值，并 MUST 先把该值钳制到 `0..core.MaxHealth`，再以固定十个槽位的空心、半心和满心呈现。生命行 MUST NOT 绘制背景面板；未确认生命值 MUST 完全隐藏。
+系统 SHALL 只消费已确认的权威生命值，并 MUST 先把该值钳制到 `0..core.MaxHealth`，再让固定十个槽位各自直接解析为空心、半心或满心。每个槽位 MUST 恰好产生一个完整 cell，生命行 MUST NOT 绘制背景面板；未确认生命值 MUST 完全隐藏。
 
 #### Scenario: 奇数生命显示半心
 
 - **GIVEN** 已确认生命值为一个落在 `0..core.MaxHealth` 内的奇数
 - **WHEN** 系统布局生命状态行
-- **THEN** 系统 MUST 显示十个空心槽
-- **AND** 覆盖层 MUST 包含对应数量的满心和恰好一个半心
+- **THEN** 系统 MUST 显示十个 resolved 心形槽位，其中对应数量的槽位直接使用满心 cell，并有恰好一个槽位直接使用半心 cell
+- **AND** 未填充的其余槽位 MUST 直接使用空心 cell，每个槽位 MUST 只有一个实例
 - **AND** 生命行 MUST NOT 产生任何背景面板实例
 
 #### Scenario: 越界和未确认生命安全处理
@@ -54,7 +54,7 @@
 
 ### Requirement: 氧气以耗损时可见的十段气泡呈现
 
-系统 SHALL 只消费已确认的权威氧气值并将其钳制到 `0..core.MaxOxygenTicks`。满氧与未确认氧气 MUST 完全隐藏；氧气耗损时 MUST 先显示十个空气泡槽，再以 `ceil(value * 10 / core.MaxOxygenTicks)` 个满气泡覆盖，零值 MUST 没有满气泡覆盖。
+系统 SHALL 只消费已确认的权威氧气值并将其钳制到 `0..core.MaxOxygenTicks`。满氧与未确认氧气 MUST 完全隐藏；氧气耗损时 MUST 把十个槽位中的 `ceil(value * 10 / core.MaxOxygenTicks)` 个直接解析为满气泡，其余槽位直接解析为空气泡。每个槽位 MUST 恰好产生一个完整 cell，零值 MUST 产生十个空气泡。
 
 #### Scenario: 满氧完全不占用呈现实例
 
@@ -66,8 +66,8 @@
 
 - **GIVEN** 已确认氧气值小于 `core.MaxOxygenTicks`
 - **WHEN** 系统布局氧气状态行
-- **THEN** 系统 MUST 显示十个空气泡槽
-- **AND** 满气泡数量 MUST 等于 `ceil(value * 10 / core.MaxOxygenTicks)`，其中零值 MUST 产生零个满气泡
+- **THEN** 系统 MUST 显示十个 resolved 气泡槽位，每个槽位 MUST 只有一个实例
+- **AND** 直接使用满气泡 cell 的槽位数量 MUST 等于 `ceil(value * 10 / core.MaxOxygenTicks)`，其余槽位 MUST 直接使用空气泡 cell，其中零值 MUST 产生十个空气泡
 
 ### Requirement: 采掘进度同时使用颜色和形状反馈
 
@@ -122,14 +122,16 @@
 
 ### Requirement: 生存 HUD 保持固定资源和实例兼容性
 
-生存 HUD SHALL 继续使用固定容量的预分配资源、同一个既有 HUD pass 和相同的 48-byte instance 编码。合法最坏组合 MUST 不超过固定 quad 与 glyph 上限；稳定态准备和呈现 MUST 保持零每帧动态 GPU 资源，且不得新增 HUD shader、GPU pass 或上传格式。
+生存 HUD SHALL 继续使用 benchmark scenario v18 已锁定的固定容量预分配资源、同一个既有 HUD pass 和相同的 48-byte instance 编码。`maxHotbarQuads` MUST 保持 247，`maxHotbarGlyphs` MUST 保持 700，glyph offset MUST 保持 12288 bytes，固定上传总容量 MUST 保持 45888 bytes。合法最坏组合 MUST 不超过这些固定上限；稳定态准备和呈现 MUST 保持零每帧动态 GPU 资源，且不得新增 HUD shader、GPU pass 或上传格式。
 
 #### Scenario: 关闭和打开界面的合法最坏组合均有界
 
 - **GIVEN** 分别构造关闭界面的最坏快捷栏、状态与采掘组合，以及打开界面的最大背包、容器、状态与聊天组合
 - **WHEN** 系统准备两种 HUD
-- **THEN** 两种组合的 quad 与 glyph 数量 MUST 均不超过各自固定上限
+- **THEN** 关闭和打开合法最坏组合的 quad 数量 MUST 分别不超过 76 和 245，且都 MUST 不超过固定上限 247
+- **AND** 合法最大 glyph 组合 MUST 不超过固定上限 700
 - **AND** 两种组合 MUST 继续通过同一 HUD pass 以相同 48-byte instance 编码输出
+- **AND** glyph offset 与固定上传总容量 MUST 分别保持 12288 与 45888 bytes
 
 #### Scenario: 稳定态不创建每帧动态 GPU 资源
 

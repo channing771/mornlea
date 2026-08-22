@@ -20,16 +20,16 @@
 
 ## 3. 生命、氧气、响应式布局与固定容量（对应执行 Task 4）
 
-- [x] 3.1 在 `internal/render/hud/health_test.go` 先写失败测试，覆盖未确认、0/1/2/19/20/越界、零尺寸与打开/关闭态，断言十个空心及半/满覆盖数、没有额外生命背景实例、关闭态快捷栏左上锚点和打开态快捷栏左下锚点；运行 `go test ./internal/render/hud -run 'TestHealth' -count=1` 并记录预期失败。
-- [x] 3.2 在 `internal/render/hud/health.go` 最小重写生命布局：删除未使用 atlas 参数，钳制到 `core.MaxHealth`，只使用完整空/半/满 cell 且不追加背景，并仅依赖 `hotbarRowBounds`、`open` 和 framebuffer 尺寸。
-- [x] 3.3 在 `internal/render/hud/oxygen_test.go` 先写失败测试，覆盖未确认、满值、0、1 tick、全部分段边界、`core.MaxOxygenTicks-1`、越界、零尺寸与打开/关闭态；断言满氧零实例、耗氧十空槽加整数向上取整覆盖，以及快捷栏右侧上下锚点；运行 `go test ./internal/render/hud -run 'TestOxygen' -count=1` 并记录预期失败。
+- [x] 3.1 在 `internal/render/hud/health_test.go` 先写失败测试，覆盖未确认、0/1/2/19/20/越界、零尺寸与打开/关闭态，断言十个 resolved 槽位各自直接选择空/半/满 cell、没有额外生命背景或覆盖实例、关闭态快捷栏左上锚点和打开态快捷栏左下锚点；运行 `go test ./internal/render/hud -run 'TestHealth' -count=1` 并记录预期失败。
+- [x] 3.2 在 `internal/render/hud/health.go` 最小重写生命布局：删除未使用 atlas 参数，钳制到 `core.MaxHealth`，每个槽位只追加一个完整空/半/满 cell 且不追加背景，并仅依赖 `hotbarRowBounds`、`open` 和 framebuffer 尺寸。
+- [x] 3.3 在 `internal/render/hud/oxygen_test.go` 先写失败测试，覆盖未确认、满值、0、1 tick、全部分段边界、`core.MaxOxygenTicks-1`、越界、零尺寸与打开/关闭态；断言满氧零实例、耗氧十个 resolved 槽位按整数向上取整直接选择空/满气泡，以及快捷栏右侧上下锚点；运行 `go test ./internal/render/hud -run 'TestOxygen' -count=1` 并记录预期失败。
 - [x] 3.4 在 `internal/render/hud/oxygen.go` 最小改为 atlas 气泡：钳制权威值，保留未确认/满氧隐藏，用纯整数公式计算十段覆盖，不再绘制纯色比例横条。
 - [x] 3.5 在 `layout_test.go` 与 `renderer_test.go` 先写响应式/命中失败测试：覆盖 1280×720、640×360、窄窗口和零尺寸的打开/关闭态，遍历全部 rectangle 验证 framebuffer 内，证明打开态生命/氧气不与 36 个 `InventorySlotAt` 可命中格相交，且边界命中样本语义不变；运行 `go test ./internal/render/hud -run 'Test(Responsive|Open.*Status|InventorySlotAt)' -count=1` 并记录预期失败。
-- [x] 3.6 在 `renderer_test.go` 先写容量见证失败测试：分别构造关闭与打开互斥分支合法最大组合，要求 `healthQuads == 20`、`oxygenQuads == 20` 且较大分支见证 `maxHotbarQuads`；同时锁定 48-byte 编码、256-byte offsets、区间不重叠和实际实例前缀。运行对应 `go test ./internal/render/hud -run 'TestHotbar(Fixed|Capacity|Maximum)' -count=1` 并记录因容量尚未对账而失败。
-- [x] 3.7 在 `internal/render/hud/renderer.go` 只把已有 `open` 传给生命/氧气布局；在 `layout.go` 扩展关闭态联合缩放边界并实现打开态状态行避让、零尺寸无实例；分别计算关闭/打开分支上限后取较大值，保持 `internal/render/hud/encode.go` 不变，以最小实现使 3.5/3.6 红测转绿。
+- [x] 3.6 在 `renderer_test.go` 先写容量见证失败测试：分别构造关闭与打开互斥分支合法最大组合，要求 `healthQuads == 10`、`oxygenQuads == 10`、合法最坏分别为 76/245 且均不超过 benchmark v18 固定 `maxHotbarQuads == 247`；同时锁定 48-byte 编码、256-byte offsets、12288 glyph offset、45888 总容量、区间不重叠和实际实例前缀。运行对应 `go test ./internal/render/hud -run 'TestHotbar(Fixed|Capacity|Maximum)' -count=1` 并记录因容量尚未对账而失败。
+- [x] 3.7 在 `internal/render/hud/renderer.go` 只把已有 `open` 传给生命/氧气布局；在 `layout.go` 扩展关闭态联合缩放边界并实现打开态状态行避让、零尺寸无实例；分别计算关闭/打开合法分支上限并保持 benchmark v18 的 247/12288/45888 与 `internal/render/hud/encode.go` 不变，以最小实现使 3.5/3.6 红测转绿。
 - [x] 3.8 运行 `gofmt -w internal/render/hud/health.go internal/render/hud/health_test.go internal/render/hud/oxygen.go internal/render/hud/oxygen_test.go internal/render/hud/layout.go internal/render/hud/layout_test.go internal/render/hud/renderer.go internal/render/hud/renderer_test.go`、`go test ./internal/render/hud -race -count=1`、`go test ./internal/archcheck -count=1` 与 `git diff --check`，记录验证证据。
-- [ ] 3.9 implementer 自证通过后提交候选 `git commit -m "feat: align survival status around hotbar"`；以候选 parent/候选提交生成 committed review package 和 SHA-256，再交给一名新的独立 task reviewer，由同一 reviewer 同时给出 SPEC 与 QUALITY 两项裁决。
-- [ ] 3.10 finding 只以追加 fix commit 修复；每轮重跑 3.8、更新 review package，并由同一 scoped task reviewer 同时复审 SPEC 与 QUALITY，最多 5 轮。重点检查权威值来源、生命无背景、满氧隐藏、打开态可见性/避让、窄窗口、固定容量和编码不变；两项 PASS/CLEAN 后用后续 bookkeeping commit 回填 ledger。
+- [x] 3.9 implementer 自证通过后提交候选 `git commit -m "feat: align survival status around hotbar"`；以候选 parent/候选提交生成 committed review package 和 SHA-256，再交给一名新的独立 task reviewer，由同一 reviewer 同时给出 SPEC 与 QUALITY 两项裁决。
+- [ ] 3.10 finding 只以追加 fix commit 修复；首轮 P1 用 resolved-slot 把生命/氧气各限为 10 quad，并锁回 benchmark v18 的 247/12288/45888；首轮 P2 删除打开态分隔线的 1px floor，并以 17×800、800×17 及更小正尺寸回归验证全部实例有限且界内。每轮重跑 3.8、benchmark scenario/layout focused、OpenSpec strict，更新 review package，并由同一 scoped reviewer 同时复审 SPEC 与 QUALITY，最多 5 轮；两项 PASS/CLEAN 后用后续 bookkeeping commit 回填 ledger。
 
 ## 4. 确定性 survival feedback capture 与 golden（对应执行 Task 5）
 

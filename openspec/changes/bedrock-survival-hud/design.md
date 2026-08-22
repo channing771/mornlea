@@ -37,7 +37,7 @@
 
 ### 3. 生命和氧气只改变呈现，不改变数据来源
 
-`HotbarRenderer.Prepare` 继续接收 app 已转换的 `HealthOverlay` 与 `OxygenOverlay`，只把现有 `open` 状态传给两个布局函数。生命先画十个空心，再用完整半心/满心 cell 覆盖，不追加任何生命背景实例；输入先钳制到 `core.MaxHealth`。氧气未确认或满值时立即返回；耗损时先画十个空槽，再按纯整数公式 `(value*10 + MaxOxygenTicks - 1) / MaxOxygenTicks` 计算覆盖数并画满气泡。
+`HotbarRenderer.Prepare` 继续接收 app 已转换的 `HealthOverlay` 与 `OxygenOverlay`，只把现有 `open` 状态传给两个布局函数。生命输入先钳制到 `core.MaxHealth`，十个槽位各自直接选择完整的空心、半心或满心 cell，不追加背景或覆盖层。氧气未确认或满值时立即返回；耗损时按纯整数公式 `(value*10 + MaxOxygenTicks - 1) / MaxOxygenTicks` 计算满气泡数，十个槽位各自直接选择空或满气泡 cell。
 
 否决裁剪满心 UV 生成半心，因为完整半心 cell 能避免采样边缘并让 atlas 单元直接可验。否决本地预测或新的 predictor 分支：权威值的现有所有权已经满足行为需求，复制状态逻辑会让单机/TCP 呈现分叉。
 
@@ -49,9 +49,9 @@
 
 ### 5. 固定容量按互斥布局分别证明
 
-`maxHotbarQuads` 按关闭分支和打开分支分别求最坏值，再取较大者并加上生命、氧气和聊天上限；不得把两个互斥分支相加。生命和氧气上限各为 20 quad。测试分别构造合法关闭态与打开态最大组合，并保留 `hotbarInstanceBytes == 48`、256-byte offset 对齐、区间不重叠和只导出实际实例前缀的现有门禁。
+`maxHotbarQuads` 的 benchmark scenario v18 契约保持精确 247，不随本 change 移动；`maxHotbarGlyphs`、glyph offset 与固定上传总容量同样保持 700、12288 bytes 与 45888 bytes。关闭分支和打开分支仍分别求合法最坏值，生命和耗氧上限各为 10 quad，故含聊天的关闭/打开合法最坏分别为 76/245，均不把互斥分支相加且较大值仍留在 v18 的 247 上限内。测试分别构造两种合法最大组合，并保留 `hotbarInstanceBytes == 48`、256-byte offset 对齐、区间不重叠和只导出实际实例前缀的既有门禁。
 
-否决动态增长或按帧分配，因为实例数有清晰小上限，现有固定缓冲更简单且保持稳定态零动态 GPU 资源。否决为了省算术而把互斥分支相加，这会无根据扩大长期容量契约。
+否决动态增长或按帧分配，因为实例数有清晰小上限，现有固定缓冲更简单且保持稳定态零动态 GPU 资源。否决为了省算术而把互斥分支相加，这会无根据扩大长期容量契约；也否决把双层空槽与覆盖实例计入容量，因为 resolved-slot 使用自带轮廓的完整 cell 可保持相同最终像素并避免静默改变 v18 workload。
 
 ### 6. capture 用临时且幂等恢复的 HUD 夹具
 
@@ -69,7 +69,7 @@
 
 - [窄 framebuffer 中联合高度计算遗漏某一状态行，导致矩形越界] → 用零尺寸、多个窄尺寸、关闭/打开态和最大 overlay 的表驱动几何测试遍历全部 rectangle。
 - [新增 atlas 列改变物品缩略图采样] → 测试每个 UI cell 的二值 alpha/确定性，并逐像素证明偏移后的物品列仍等于 registry 顶面且 UV 不越列。
-- [固定容量算小造成 overflow，算大则掩盖无界增长] → 分别让关闭和打开合法最大组合见证分支上限，并保留编码、offset 与实际前缀门禁。
+- [固定容量算小造成 overflow，算大则静默改变 benchmark v18 workload] → 分别见证关闭 76、打开 245 和 glyph 700 的合法最大组合，并精确锁定 247 quad、12288 glyph offset、45888 总容量、编码与实际前缀门禁。
 - [capture 临时 predictor 污染后续 LOD/水下场景] → restore closure 幂等并覆盖所有返回路径；顺序测试同时固定完整 15 场景、倒数第二远环和唯一末尾水下。
 - [HUD 改动使多个旧 golden 合法变化] → 逐张检查全部候选，只接受能由 HUD 区域解释的差异，不调整既有双阈值；世界、实体、光照、水与 LOD 区域变化先查根因。
 
