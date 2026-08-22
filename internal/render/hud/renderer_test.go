@@ -1,6 +1,7 @@
 package hud
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -94,10 +95,10 @@ func TestHotbarFixedUploadLayoutMatchesCapacityContract(t *testing.T) {
 		name      string
 		got, want int
 	}{
-		{"quad 容量", maxHotbarQuads, 265},
+		{"quad 容量", maxHotbarQuads, 247},
 		{"glyph 容量", maxHotbarGlyphs, 700},
-		{"glyph offset", hotbarGlyphOffset, 13056},
-		{"总容量", hotbarUploadBytes, 46656},
+		{"glyph offset", hotbarGlyphOffset, 12288},
+		{"总容量", hotbarUploadBytes, 45888},
 	} {
 		if test.got != test.want {
 			t.Errorf("%s=%d，想要固定容量 %d", test.name, test.got, test.want)
@@ -108,7 +109,7 @@ func TestHotbarFixedUploadLayoutMatchesCapacityContract(t *testing.T) {
 // TestResponsiveHotbarPrepareKeepsEveryInstanceInFramebuffer 防止联合布局只缩放
 // 快捷栏，遗漏状态行、采掘轨道或打开态最大容器 overlay。
 func TestResponsiveHotbarPrepareKeepsEveryInstanceInFramebuffer(t *testing.T) {
-	for _, size := range [][2]uint32{{1280, 720}, {640, 360}, {240, 40}} {
+	for _, size := range [][2]uint32{{1280, 720}, {640, 360}, {240, 40}, {17, 800}, {800, 17}, {16, 16}, {1, 1}} {
 		for _, open := range []bool{false, true} {
 			renderer := newTestHotbarRenderer()
 			var chest *ChestOverlay
@@ -123,12 +124,12 @@ func TestResponsiveHotbarPrepareKeepsEveryInstanceInFramebuffer(t *testing.T) {
 				t.Fatalf("framebuffer %v open=%v Prepare: %v", size, open, err)
 			}
 			for index, quad := range renderer.layout.quads {
-				if quad.X < 0 || quad.Y < 0 || quad.X+quad.Width > float32(size[0]) || quad.Y+quad.Height > float32(size[1]) {
+				if !finiteRectangle(quad) || quad.X < 0 || quad.Y < 0 || quad.X+quad.Width > float32(size[0]) || quad.Y+quad.Height > float32(size[1]) {
 					t.Fatalf("framebuffer %v open=%v quad %d 越界: %+v", size, open, index, quad)
 				}
 			}
 			for index, glyph := range renderer.layout.glyphs {
-				if glyph.X < 0 || glyph.Y < 0 || glyph.X+glyph.Width > float32(size[0]) || glyph.Y+glyph.Height > float32(size[1]) {
+				if !finiteRectangle(glyph) || glyph.X < 0 || glyph.Y < 0 || glyph.X+glyph.Width > float32(size[0]) || glyph.Y+glyph.Height > float32(size[1]) {
 					t.Fatalf("framebuffer %v open=%v glyph %d 越界: %+v", size, open, index, glyph)
 				}
 			}
@@ -152,8 +153,8 @@ func TestResponsiveHotbarPrepareKeepsEveryInstanceInFramebuffer(t *testing.T) {
 // TestHotbarMaximumBranchesAndEncodingContract 同时见证互斥分支容量、48-byte
 // 编码、256-byte 对齐与 `FrameStreams` 的实际实例前缀。
 func TestHotbarMaximumBranchesAndEncodingContract(t *testing.T) {
-	if healthQuads != 20 || oxygenQuads != 20 || hotbarInstanceBytes != 48 {
-		t.Fatalf("health/oxygen/instance=%d/%d/%d，想要 20/20/48", healthQuads, oxygenQuads, hotbarInstanceBytes)
+	if healthQuads != 10 || oxygenQuads != 10 || hotbarInstanceBytes != 48 {
+		t.Fatalf("health/oxygen/instance=%d/%d/%d，想要 10/10/48", healthQuads, oxygenQuads, hotbarInstanceBytes)
 	}
 	if hotbarViewportOffset%256 != 0 || hotbarQuadOffset%256 != 0 || hotbarGlyphOffset%256 != 0 ||
 		hotbarViewportOffset+hotbarViewportBytes > hotbarQuadOffset ||
@@ -186,8 +187,9 @@ func TestHotbarMaximumBranchesAndEncodingContract(t *testing.T) {
 		1280, 800, render.NewUploadBudget(1024)); err != nil {
 		t.Fatalf("打开最大分支 Prepare: %v", err)
 	}
-	if len(renderer.layout.quads) != maxHotbarQuads {
-		t.Fatalf("较大打开分支 quads=%d，想要见证固定上限 %d", len(renderer.layout.quads), maxHotbarQuads)
+	openWant := openInventoryQuads + healthQuads + oxygenQuads + maxChatQuads
+	if len(renderer.layout.quads) != openWant || len(renderer.layout.quads) != 245 || len(renderer.layout.quads) > maxHotbarQuads {
+		t.Fatalf("较大打开分支 quads=%d，想要 245 且不超过固定上限 %d", len(renderer.layout.quads), maxHotbarQuads)
 	}
 	viewport, quads, glyphs := renderer.FrameStreams()
 	if len(viewport) != hotbarViewportBytes || len(quads) != len(renderer.layout.quads)*hotbarInstanceBytes ||
@@ -226,4 +228,16 @@ func newTestHotbarRenderer() *HotbarRenderer {
 		},
 		upload: make([]byte, hotbarUploadBytes),
 	}
+}
+
+func finiteRectangle(rect hotbarInstance) bool {
+	if rect.Width < 0 || rect.Height < 0 {
+		return false
+	}
+	for _, value := range [...]float32{rect.X, rect.Y, rect.Width, rect.Height} {
+		if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
+			return false
+		}
+	}
+	return true
 }

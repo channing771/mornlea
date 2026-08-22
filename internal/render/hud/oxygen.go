@@ -3,8 +3,8 @@ package hud
 import "github.com/channing771/mornlea/internal/core"
 
 const (
-	// 氧气 HUD 的合法最坏值是十个空槽叠加十个满气泡。
-	oxygenQuads        = oxygenSegmentCount * 2
+	// 氧气 HUD 的十个槽位各自直接选择空或满气泡。
+	oxygenQuads        = oxygenSegmentCount
 	oxygenSegmentCount = 10
 	oxygenBarWidth     = oxygenSegmentCount*healthHeartSize + (oxygenSegmentCount-1)*healthHeartGap
 )
@@ -36,23 +36,14 @@ func appendOxygenBar(dst *hotbarLayout, oxygen OxygenOverlay, open bool, width, 
 	}
 	bubbleSize := healthHeartSize * scale
 	bubbleGap := healthHeartGap * scale
-	emptyUV := hotbarBubbleUV(false)
-	for segment := range oxygenSegmentCount {
-		dst.quads = append(dst.quads, hotbarInstance{
-			X: x + float32(segment)*(bubbleSize+bubbleGap), Y: y,
-			Width: bubbleSize, Height: bubbleSize,
-			U0: emptyUV[0], V0: emptyUV[1], U1: emptyUV[2], V1: emptyUV[3],
-			Color: [4]float32{1, 1, 1, 1},
-		})
-	}
 	filled := (int(value)*oxygenSegmentCount + int(core.MaxOxygenTicks) - 1) /
 		int(core.MaxOxygenTicks)
-	fullUV := hotbarBubbleUV(true)
-	for segment := range filled {
+	for segment := range oxygenSegmentCount {
+		uv := hotbarBubbleUV(segment < filled)
 		dst.quads = append(dst.quads, hotbarInstance{
 			X: x + float32(segment)*(bubbleSize+bubbleGap), Y: y,
 			Width: bubbleSize, Height: bubbleSize,
-			U0: fullUV[0], V0: fullUV[1], U1: fullUV[2], V1: fullUV[3],
+			U0: uv[0], V0: uv[1], U1: uv[2], V1: uv[3],
 			Color: [4]float32{1, 1, 1, 1},
 		})
 	}

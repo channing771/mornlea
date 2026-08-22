@@ -36,12 +36,12 @@ func TestOxygenBarUsesConfirmedCeilingSegments(t *testing.T) {
 			appendOxygenBar(&layout, OxygenOverlay{Confirmed: true, Value: value}, false, 1280, 800)
 			filled := (int(value)*oxygenSegmentCount + int(core.MaxOxygenTicks) - 1) /
 				int(core.MaxOxygenTicks)
-			if len(layout.quads) != oxygenSegmentCount+filled || len(layout.glyphs) != 0 {
+			if len(layout.quads) != oxygenSegmentCount || len(layout.glyphs) != 0 {
 				t.Fatalf("氧气 %d：quads/glyphs=%d/%d，想要 %d/0", value,
-					len(layout.quads), len(layout.glyphs), oxygenSegmentCount+filled)
+					len(layout.quads), len(layout.glyphs), oxygenSegmentCount)
 			}
 			for index, bubble := range layout.quads {
-				wantUV := hotbarBubbleUV(index >= oxygenSegmentCount)
+				wantUV := hotbarBubbleUV(index < filled)
 				if got := [4]float32{bubble.U0, bubble.V0, bubble.U1, bubble.V1}; got != wantUV {
 					t.Fatalf("氧气 %d 实例 %d UV=%v，想要 %v", value, index, got, wantUV)
 				}
@@ -83,8 +83,8 @@ func TestOxygenBarAnchorsToHotbar(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			var layout hotbarLayout
 			appendOxygenBar(&layout, OxygenOverlay{Confirmed: true, Value: 1}, test.open, 1280, 800)
-			if len(layout.quads) != 11 {
-				t.Fatalf("quads=%d，想要十个空槽加一个满气泡", len(layout.quads))
+			if len(layout.quads) != oxygenSegmentCount {
+				t.Fatalf("quads=%d，想要十个 resolved 气泡槽位", len(layout.quads))
 			}
 			for index, bubble := range layout.quads {
 				wantX := float32(703 + index%10*17)

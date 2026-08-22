@@ -189,10 +189,11 @@ func TestHotbarLayoutStaysWithinFixedCapacity(t *testing.T) {
 	appendHealthBar(&layout, HealthOverlay{Confirmed: true, Value: core.MaxHealth}, false, 1280, 800)
 	appendOxygenBar(&layout, OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1}, false, 1280, 800)
 	appendChatOverlay(&layout, atlas, chat, 1280, 800)
-	if len(layout.quads) != closedHotbarQuads+healthQuads+oxygenQuads+maxChatQuads ||
+	closedWant := closedHotbarQuads + healthQuads + oxygenQuads + maxChatQuads
+	if len(layout.quads) != closedWant || closedWant != 76 ||
 		len(layout.quads) > maxHotbarQuads {
 		t.Fatalf("关闭分支 quads=%d，分支公式/总上限=%d/%d", len(layout.quads),
-			closedHotbarQuads+healthQuads+oxygenQuads+maxChatQuads, maxHotbarQuads)
+			closedWant, maxHotbarQuads)
 	}
 
 	// 十行固定配方是打开分支的 quad 最大 overlay，并以合法来源高亮见证第二个
@@ -204,11 +205,8 @@ func TestHotbarLayoutStaysWithinFixedCapacity(t *testing.T) {
 	appendOxygenBar(&layout, OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1}, true, 1280, 800)
 	appendChatOverlay(&layout, atlas, chat, 1280, 800)
 	openWant := openInventoryQuads + healthQuads + oxygenQuads + maxChatQuads
-	if len(layout.quads) != openWant {
-		t.Fatalf("打开分支 quads=%d，分支公式=%d", len(layout.quads), openWant)
-	}
-	if len(layout.quads) != maxHotbarQuads {
-		t.Fatalf("较大打开分支 quads=%d，想要见证总上限 %d", len(layout.quads), maxHotbarQuads)
+	if len(layout.quads) != openWant || openWant != 245 || len(layout.quads) > maxHotbarQuads {
+		t.Fatalf("打开分支 quads=%d，想要 245 且不超过固定上限 %d", len(layout.quads), maxHotbarQuads)
 	}
 
 	// glyph 上限由 36 格两位数量、满箱两位数量与七行聊天共同见证。

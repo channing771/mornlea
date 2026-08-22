@@ -3,8 +3,8 @@ package hud
 import "github.com/channing771/mornlea/internal/core"
 
 const (
-	// 生命值 HUD：十颗空心和最多十颗填充爱心，不绘制背景面板。
-	healthQuads        = healthSegmentCount * 2
+	// 生命值 HUD：十个槽位各自直接选择空、半或满心，不绘制背景面板。
+	healthQuads        = healthSegmentCount
 	healthSegmentCount = 10
 	healthHeartSize    = float32(16)
 	healthHeartGap     = float32(1)
@@ -41,32 +41,19 @@ func appendHealthBar(dst *hotbarLayout, health HealthOverlay, open bool, width, 
 	if open {
 		y = hotbarY + (hotbarSlotSize+statusBarGap)*scale
 	}
-	emptyUV := hotbarHeartUV(heartEmpty)
-	for segment := range healthSegmentCount {
-		dst.quads = append(dst.quads, hotbarInstance{
-			X: x + float32(segment)*(heartSize+heartGap), Y: y,
-			Width: heartSize, Height: heartSize,
-			U0: emptyUV[0], V0: emptyUV[1], U1: emptyUV[2], V1: emptyUV[3],
-			Color: [4]float32{1, 1, 1, 1},
-		})
-	}
 	value := min(health.Value, uint8(core.MaxHealth))
-	filled := int(value) / 2
-	fullUV := hotbarHeartUV(heartFull)
-	for segment := range filled {
+	for segment := range healthSegmentCount {
+		fill := heartEmpty
+		if segment < int(value)/2 {
+			fill = heartFull
+		} else if segment == int(value)/2 && value%2 != 0 {
+			fill = heartHalf
+		}
+		uv := hotbarHeartUV(fill)
 		dst.quads = append(dst.quads, hotbarInstance{
 			X: x + float32(segment)*(heartSize+heartGap), Y: y,
 			Width: heartSize, Height: heartSize,
-			U0: fullUV[0], V0: fullUV[1], U1: fullUV[2], V1: fullUV[3],
-			Color: [4]float32{1, 1, 1, 1},
-		})
-	}
-	if value%2 != 0 {
-		halfUV := hotbarHeartUV(heartHalf)
-		dst.quads = append(dst.quads, hotbarInstance{
-			X: x + float32(filled)*(heartSize+heartGap), Y: y,
-			Width: heartSize, Height: heartSize,
-			U0: halfUV[0], V0: halfUV[1], U1: halfUV[2], V1: halfUV[3],
+			U0: uv[0], V0: uv[1], U1: uv[2], V1: uv[3],
 			Color: [4]float32{1, 1, 1, 1},
 		})
 	}

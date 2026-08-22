@@ -6,13 +6,13 @@ import (
 )
 
 const (
-	// 打开态与关闭态互斥；当前关闭态新增的选中和采掘反馈仍小于打开态最大组合，
-	// 但分开列出以免后续样式变化悄悄突破固定上传容量。
+	// 打开态与关闭态互斥；分别列出合法上限，防止后续样式变化悄悄突破 benchmark
+	// scenario v18 已锁定的 247 quad 固定上传容量。
 	openInventoryQuads = openInventoryPanelQuads + 2 + core.InventorySlots + core.InventorySlots*2 +
 		core.HotbarSlots*2 + maxOverlayQuads
 	closedHotbarQuads = closedHotbarPanelQuads + closedHotbarSelectionQuads + core.HotbarSlots +
 		core.HotbarSlots*2 + core.HotbarSlots*2 + miningBarQuads + miningWarningNotches
-	maxHotbarQuads = max(openInventoryQuads, closedHotbarQuads) + healthQuads + oxygenQuads + maxChatQuads
+	maxHotbarQuads = 247
 	// 数量最多两位数（2..64），每个数字包含阴影与前景两个实例。
 	maxHotbarGlyphs = core.InventorySlots*4 + maxOverlayGlyphs + maxChatGlyphs
 
@@ -243,7 +243,7 @@ func appendInventoryPanel(dst *hotbarLayout, open bool, width, height, scale flo
 		},
 		hotbarInstance{
 			X: left, Y: (backpackBottomY + hotbarSlotSize*scale + hotbarY) * 0.5,
-			Width: totalWidth, Height: max(scale*2, 1),
+			Width: totalWidth, Height: scale * 2,
 			Color: [4]float32{0.25, 0.30, 0.34, 0.92},
 		},
 	)

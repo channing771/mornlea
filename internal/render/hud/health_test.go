@@ -17,11 +17,11 @@ func TestHealthBarUsesConfirmedClampedHeartCells(t *testing.T) {
 	}{
 		{"未确认", HealthOverlay{Value: 12}, 0, 0, 0, 0},
 		{"零血", HealthOverlay{Confirmed: true}, 10, 0, 0, 10},
-		{"一点生命", HealthOverlay{Confirmed: true, Value: 1}, 10, 1, 0, 11},
-		{"两点生命", HealthOverlay{Confirmed: true, Value: 2}, 10, 0, 1, 11},
-		{"十九点生命", HealthOverlay{Confirmed: true, Value: 19}, 10, 1, 9, 20},
-		{"满血", HealthOverlay{Confirmed: true, Value: core.MaxHealth}, 10, 0, 10, 20},
-		{"越界值钳制", HealthOverlay{Confirmed: true, Value: 255}, 10, 0, 10, 20},
+		{"一点生命", HealthOverlay{Confirmed: true, Value: 1}, 9, 1, 0, 10},
+		{"两点生命", HealthOverlay{Confirmed: true, Value: 2}, 9, 0, 1, 10},
+		{"十九点生命", HealthOverlay{Confirmed: true, Value: 19}, 0, 1, 9, 10},
+		{"满血", HealthOverlay{Confirmed: true, Value: core.MaxHealth}, 0, 0, 10, 10},
+		{"越界值钳制", HealthOverlay{Confirmed: true, Value: 255}, 0, 0, 10, 10},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var layout hotbarLayout
@@ -61,8 +61,8 @@ func TestHealthBarAnchorsToHotbar(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			var layout hotbarLayout
 			appendHealthBar(&layout, HealthOverlay{Confirmed: true, Value: 1}, test.open, 1280, 800)
-			if len(layout.quads) != 11 {
-				t.Fatalf("quads=%d，想要十个空心加一个半心", len(layout.quads))
+			if len(layout.quads) != healthSegmentCount {
+				t.Fatalf("quads=%d，想要十个 resolved 心形槽位", len(layout.quads))
 			}
 			for index, heart := range layout.quads {
 				wantX := float32(408 + index%10*17)
