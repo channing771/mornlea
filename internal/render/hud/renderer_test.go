@@ -3,6 +3,7 @@ package hud
 import (
 	"testing"
 
+	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/render"
 )
 
@@ -45,6 +46,47 @@ func TestHotbarPrepareReusesLayoutAndUploadStorage(t *testing.T) {
 	})
 	if allocations != 0 {
 		t.Fatalf("warmed hotbar Prepare allocations=%v want=0", allocations)
+	}
+}
+
+// TestHotbarPrepareClosedMiningEncodesLayeredFeedback 验证 `Prepare` 的关闭态输出
+// 实际包含双层快捷栏与不可采采掘形状；删掉任一层或 warning notch 都会改变实例前缀。
+func TestHotbarPrepareClosedMiningEncodesLayeredFeedback(t *testing.T) {
+	renderer := &HotbarRenderer{
+		atlas: &allocationGlyphSource{},
+		layout: hotbarLayout{
+			quads:  make([]hotbarInstance, 0, maxHotbarQuads),
+			glyphs: make([]hotbarInstance, 0, maxHotbarGlyphs),
+		},
+		upload: make([]byte, hotbarUploadBytes),
+	}
+	if err := renderer.Prepare(
+		core.Inventory{}, true, false, -1, nil, nil,
+		MiningOverlay{Active: true, ProgressTicks: 6, RequiredTicks: 15},
+		HealthOverlay{}, OxygenOverlay{}, ChatOverlay{}, 1280, 800, render.NewUploadBudget(1024),
+	); err != nil {
+		t.Fatalf("关闭态 Prepare: %v", err)
+	}
+
+	const wantQuads = 2 + 2 + core.HotbarSlots + 2 + 3
+	if got := len(renderer.layout.quads); got != wantQuads {
+		t.Fatalf("关闭态采掘实例=%d，想要双层面板、双层选中、九格、轨道/填充和三个缺口共 %d", got, wantQuads)
+	}
+	if got := len(renderer.upload[hotbarQuadOffset : hotbarQuadOffset+wantQuads*hotbarInstanceBytes]); got != wantQuads*hotbarInstanceBytes {
+		t.Fatalf("编码 quad 前缀=%d bytes，想要 %d", got, wantQuads*hotbarInstanceBytes)
+	}
+
+	panelCount, notchCount := 0, 0
+	for _, quad := range renderer.layout.quads {
+		if quad.Width > 432 && quad.Height > 48 {
+			panelCount++
+		}
+		if quad.Width == 6 && quad.Height == 12 {
+			notchCount++
+		}
+	}
+	if panelCount != 2 || notchCount != 3 {
+		t.Fatalf("关闭态面板=%d、warning notch=%d，想要 2/3", panelCount, notchCount)
 	}
 }
 
