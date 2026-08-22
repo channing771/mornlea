@@ -485,6 +485,20 @@ func TestInventorySlotAtRejectsOutsideHits(t *testing.T) {
 	}
 }
 
+// TestInventorySlotOriginKeepsOpenHotbarScale 防止关闭态共享边界误改打开态的
+// 快捷栏行；后者必须继续使用完整容器的缩放比例，保证既有命中几何不漂移。
+func TestInventorySlotOriginKeepsOpenHotbarScale(t *testing.T) {
+	const width, height = float32(640), float32(360)
+	scale := hudScale(true, width, height)
+	total := (core.HotbarSlots*hotbarSlotSize + (core.HotbarSlots-1)*hotbarSlotGap) * scale
+	wantX := (width - total) * 0.5
+	wantY := height - (hotbarBottomMargin+hotbarSlotSize)*scale
+	gotX, gotY := inventorySlotOrigin(0, true, width, height)
+	if gotX != wantX || gotY != wantY {
+		t.Fatalf("打开态快捷栏原点=(%v,%v)，想要容器缩放后的 (%v,%v)", gotX, gotY, wantX, wantY)
+	}
+}
+
 // 杀死变异：小窗口保持固定 48px 会让上方配方行落出 framebuffer；独立缩放命中则会漂移。
 func TestOpenInventoryFitsAndHitsAt640x360(t *testing.T) {
 	atlas := newFakeNameTagAtlas()

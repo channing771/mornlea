@@ -363,16 +363,18 @@ func appendMiningBar(dst *hotbarLayout, overlay MiningOverlay, width, height flo
 // inventorySlotOrigin 返回统一索引对应格子的左上角像素坐标。
 // 索引 0..8 是底部快捷栏行，9..35 是其上方自上而下的三行背包。
 func inventorySlotOrigin(slot int, open bool, width, height float32) (float32, float32) {
-	scale := hudScale(open, width, height)
 	column := slot % core.HotbarSlots
-	left, hotbarY, _, closedScale := hotbarRowBounds(width, height)
-	x := left + float32(column)*(hotbarSlotSize+hotbarSlotGap)*closedScale
-	if !open || slot < core.HotbarSlots {
+	if !open {
+		left, hotbarY, _, scale := hotbarRowBounds(width, height)
+		return left + float32(column)*(hotbarSlotSize+hotbarSlotGap)*scale, hotbarY
+	}
+	scale := hudScale(open, width, height)
+	total := (core.HotbarSlots*hotbarSlotSize + (core.HotbarSlots-1)*hotbarSlotGap) * scale
+	x := (width-total)*0.5 + float32(column)*(hotbarSlotSize+hotbarSlotGap)*scale
+	hotbarY := height - (hotbarBottomMargin+hotbarSlotSize)*scale
+	if slot < core.HotbarSlots {
 		return x, hotbarY
 	}
-	total := (core.HotbarSlots*hotbarSlotSize + (core.HotbarSlots-1)*hotbarSlotGap) * scale
-	x = (width-total)*0.5 + float32(column)*(hotbarSlotSize+hotbarSlotGap)*scale
-	hotbarY = height - (hotbarBottomMargin+hotbarSlotSize)*scale
 	// 背包第 0 行在最上方，第 2 行紧邻快捷栏。
 	row := (slot - core.HotbarSlots) / core.HotbarSlots
 	rowsAbove := float32(2 - row)
