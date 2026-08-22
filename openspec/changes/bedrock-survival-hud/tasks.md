@@ -44,8 +44,8 @@
 - [x] 4.5 在可用 Metal 环境运行 `make visual-update VISUAL_OUT=build/visual-bedrock-survival-hud-update`；确认场景共 15 张、新增 `hud-survival-feedback.png`，且只提交实际受影响的 `cmd/mornlea/testdata/golden` 文件，不移动场景尾序、不放宽双阈值。
 - [x] 4.6 人工逐图复核全部 15 张候选并把文件清单与结论写入 `ledger.md`；重点确认 `hud-hotbar-health` 的九格/双层选中/数量/耐久/无背景满血/满氧隐藏，`hud-survival-feedback` 的低血/气泡/磨损工具/不可采中段形状，以及 `inventory-crafting` 的状态行避让；任何世界、实体、光照、水或 LOD 区域异常先修根因。
 - [x] 4.7 运行 `make visual-check VISUAL_OUT=build/visual-bedrock-survival-hud-final`、`go test ./cmd/mornlea -run 'Test(HUDCapture|Capture.*Scene|WaterUnderwater|FarHorizon)' -count=1` 与 `git diff --check`。
-- [ ] 4.8 implementer 自证和人工验收通过后提交候选 `git commit -m "test: lock survival HUD presentation"`；以候选 parent/候选提交生成 committed review package 和 SHA-256，再交给一名新的独立 task reviewer，由同一 reviewer 同时给出 SPEC 与 QUALITY 两项裁决。
-- [ ] 4.9 finding 只以追加 fix commit 修复；每轮重跑 4.4/4.7、必要时重新逐图验收、更新 review package，并由同一 scoped task reviewer 同时复审 SPEC 与 QUALITY，最多 5 轮。重点检查 fixture 仅限 capture、错误路径恢复、场景隔离、完整顺序与阈值；两项 PASS/CLEAN 后用后续 bookkeeping commit 回填 ledger。
+- [x] 4.8 implementer 自证和人工验收通过后提交候选 `git commit -m "test: lock survival HUD presentation"`；以候选 parent/候选提交生成 committed review package 和 SHA-256，再交给一名新的独立 task reviewer，由同一 reviewer 同时给出 SPEC 与 QUALITY 两项裁决。
+- [x] 4.9 finding 只以追加 fix commit 修复；每轮重跑 4.4/4.7、必要时重新逐图验收、更新 review package，并由同一 scoped task reviewer 同时复审 SPEC 与 QUALITY，最多 5 轮。重点检查 fixture 仅限 capture、错误路径恢复、场景隔离、完整顺序与阈值；两项 PASS/CLEAN 后用后续 bookkeeping commit 回填 ledger。
 
 ## 5. 长期基线、全量验证与整分支终审（对应执行 Task 6）
 
