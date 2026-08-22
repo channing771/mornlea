@@ -1,7 +1,6 @@
 package hud
 
 import (
-	"math"
 	"unicode/utf8"
 
 	"github.com/channing771/mornlea/internal/render"
@@ -17,6 +16,9 @@ const (
 	chatLineHeight      = float32(28)
 	chatPanelGap        = float32(4)
 	chatHealthClearance = float32(8)
+	// `chatFitSlack` 比一个 framebuffer pixel 小 256 倍，正常尺寸不可见；它覆盖
+	// 最多 32 个 glyph 的 float32 pen 累加及 panel 坐标乘加误差。
+	chatFitSlack = float32(1.0 / 256.0)
 )
 
 // ChatOverlay 是调用方提供的固定聊天呈现值；Lines 只消费最后六条。
@@ -103,14 +105,13 @@ func appendChatOverlay(
 	// 且高度按本帧真实行数、宽度按最宽可见文本共同取界。
 	scale := survivalScale
 	if requiredHeight := stackHeight + chatHealthClearance; requiredHeight > 0 {
-		if bound := max(statusTop/requiredHeight, 0); bound < scale {
-			// 向零留一个 float32 ULP，避免边界乘加四舍五入成极小负坐标。
-			scale = math.Nextafter32(bound, 0)
+		if bound := max(statusTop-chatFitSlack, 0) / requiredHeight; bound < scale {
+			scale = bound
 		}
 	}
 	if requiredWidth := hudEdgeMargin + 2*chatPadding + maxTextWidth; requiredWidth > 0 {
-		if bound := max(width/requiredWidth, 0); bound < scale {
-			scale = math.Nextafter32(bound, 0)
+		if bound := max(width-chatFitSlack, 0) / requiredWidth; bound < scale {
+			scale = bound
 		}
 	}
 	padding := chatPadding * scale

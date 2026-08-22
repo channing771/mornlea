@@ -3,8 +3,10 @@ package hud
 import (
 	"math"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/render"
@@ -213,6 +215,131 @@ func TestChatOverlayStaysInFramebufferAndAboveClosedSurvivalStatus(t *testing.T)
 		}
 	}
 }
+
+// 杀死变异：删除或缩小亚像素余量、恢复只留一个 float32 ULP，会让真实字体在临界尺寸越界。
+func TestChatOverlayEmbeddedFontStaysStrictlyInsideFitThresholds(t *testing.T) {
+	atlas := newEmbeddedChatGlyphAtlas(t, "界i")
+
+	for _, witness := range []struct {
+		name          string
+		char          string
+		width, height float32
+	}{
+		{name: "wide_cjk", char: "界", width: 44, height: 40},
+		{name: "narrow_latin", char: "i", width: 109, height: 40},
+	} {
+		t.Run(witness.name, func(t *testing.T) {
+			assertEmbeddedChatStrictBounds(t, atlas, witness.char, witness.width, witness.height, true)
+		})
+	}
+
+	for _, scan := range []struct {
+		name, char   string
+		centerWidth  int
+		centerHeight int
+	}{
+		{name: "cjk", char: "界", centerWidth: 44, centerHeight: 40},
+		{name: "latin", char: "i", centerWidth: 109, centerHeight: 40},
+	} {
+		t.Run(scan.name+"_scan", func(t *testing.T) {
+			for width := scan.centerWidth - 2; width <= scan.centerWidth+2; width++ {
+				for height := scan.centerHeight - 2; height <= scan.centerHeight+2; height++ {
+					for _, open := range []bool{false, true} {
+						assertEmbeddedChatStrictBounds(t, atlas, scan.char, float32(width), float32(height), open)
+					}
+				}
+			}
+		})
+	}
+}
+
+func assertEmbeddedChatStrictBounds(
+	t *testing.T,
+	atlas render.GlyphSource,
+	char string,
+	width, height float32,
+	open bool,
+) {
+	t.Helper()
+	line := strings.Repeat(char, maxChatRunes)
+	lines := []string{line, line, line, line, line, line}
+	layout := hotbarLayout{
+		quads:  make([]hotbarInstance, 0, healthQuads+oxygenQuads+maxChatQuads),
+		glyphs: make([]hotbarInstance, 0, maxChatGlyphs),
+	}
+	appendHealthBar(&layout, HealthOverlay{Confirmed: true, Value: 12}, false, width, height)
+	appendOxygenBar(&layout, OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks / 2}, false, width, height)
+	statusCount := len(layout.quads)
+	appendChatOverlay(&layout, atlas, ChatOverlay{Open: open, Input: line, Lines: lines}, width, height)
+
+	panels := layout.quads[statusCount:]
+	wantPanels := 1
+	wantGlyphs := maxChatLines * maxChatRunes * 2
+	if open {
+		wantPanels++
+		wantGlyphs += maxChatRunes * 2
+	}
+	if len(panels) != wantPanels || len(layout.glyphs) != wantGlyphs {
+		t.Fatalf("%vx%v open=%t panels/glyphs=%d/%d want=%d/%d",
+			width, height, open, len(panels), len(layout.glyphs), wantPanels, wantGlyphs)
+	}
+	for index, panel := range panels {
+		assertChatInstanceInFramebuffer(t, "panel", index, panel, width, height)
+	}
+	for index, glyph := range layout.glyphs {
+		assertChatInstanceInFramebuffer(t, "glyph", index, glyph, width, height)
+		panel := panels[len(panels)-1]
+		if open && index < maxChatRunes*2 {
+			panel = panels[0]
+		}
+		if glyph.X < panel.X || glyph.Y < panel.Y ||
+			glyph.X+glyph.Width > panel.X+panel.Width || glyph.Y+glyph.Height > panel.Y+panel.Height {
+			t.Fatalf("%vx%v open=%t glyph %d escapes panel: glyph=%+v panel=%+v",
+				width, height, open, index, glyph, panel)
+		}
+	}
+	for statusIndex, status := range layout.quads[:statusCount] {
+		for panelIndex, panel := range panels {
+			if chatInstancesOverlap(status, panel) {
+				t.Fatalf("%vx%v open=%t status %d overlaps panel %d: status=%+v panel=%+v",
+					width, height, open, statusIndex, panelIndex, status, panel)
+			}
+		}
+		for glyphIndex, glyph := range layout.glyphs {
+			if chatInstancesOverlap(status, glyph) {
+				t.Fatalf("%vx%v open=%t status %d overlaps glyph %d: status=%+v glyph=%+v",
+					width, height, open, statusIndex, glyphIndex, status, glyph)
+			}
+		}
+	}
+}
+
+func newEmbeddedChatGlyphAtlas(t *testing.T, text string) *render.GlyphAtlas {
+	t.Helper()
+	atlas, err := render.NewGlyphAtlasWithSink(chatGlyphSink{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(atlas.Release)
+	atlas.Request(text)
+	deadline := time.Now().Add(2 * time.Second)
+	for _, char := range text {
+		for atlas.Glyph(char).Slot == 0 {
+			if time.Now().After(deadline) {
+				t.Fatalf("production glyph %q was not ready", char)
+			}
+			if err := atlas.FlushUploads(render.NewUploadBudget(1024)); err != nil {
+				t.Fatalf("flush production glyph %q: %v", char, err)
+			}
+			runtime.Gosched()
+		}
+	}
+	return atlas
+}
+
+type chatGlyphSink struct{}
+
+func (chatGlyphSink) WriteGlyphRect(uint32, uint32, uint32, uint32, []byte) {}
 
 func assertChatInstanceInFramebuffer(
 	t *testing.T,
