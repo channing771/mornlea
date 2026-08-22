@@ -1,9 +1,6 @@
 package hud
 
-import (
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/render"
-)
+import "github.com/channing771/mornlea/internal/core"
 
 const (
 	// 生命值 HUD：十颗空心和最多十颗填充爱心，不绘制背景面板。
@@ -11,6 +8,7 @@ const (
 	healthSegmentCount = 10
 	healthHeartSize    = float32(16)
 	healthHeartGap     = float32(1)
+	statusBarGap       = float32(4)
 )
 
 // heartFill 标识固定心形 cell 的填充状态。
@@ -30,18 +28,19 @@ type HealthOverlay struct {
 	Value     uint8
 }
 
-// appendHealthBar 在 framebuffer 左下角绘制一排无背景的服务端确认爱心；
-// 每颗两点，奇数值画半颗，打开背包不会改变其尺度或位置。
-func appendHealthBar(dst *hotbarLayout, atlas render.GlyphSource, health HealthOverlay, width, height float32) {
+// appendHealthBar 以快捷栏左边沿为锚点绘制无背景的服务端确认爱心；关闭容器时
+// 位于快捷栏上方，打开时移入快捷栏下方留白，不读取或推算任何游戏状态。
+func appendHealthBar(dst *hotbarLayout, health HealthOverlay, open bool, width, height float32) {
 	if !health.Confirmed || width <= 0 || height <= 0 {
 		return
 	}
-	_ = atlas
-	scale := hudScale(false, width, height)
-	x := hudEdgeMargin * scale
+	x, hotbarY, _, scale := hotbarRowBounds(open, width, height)
 	heartSize := healthHeartSize * scale
 	heartGap := healthHeartGap * scale
-	y := height - (hudEdgeMargin+healthHeartSize)*scale
+	y := hotbarY - (statusBarGap+healthHeartSize)*scale
+	if open {
+		y = hotbarY + (hotbarSlotSize+statusBarGap)*scale
+	}
 	emptyUV := hotbarHeartUV(heartEmpty)
 	for segment := range healthSegmentCount {
 		dst.quads = append(dst.quads, hotbarInstance{

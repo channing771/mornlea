@@ -56,6 +56,10 @@ const (
 		recipeRowGap + hotbarSlotSize +
 		float32(len(inventoryRecipeIDs)-1)*(hotbarSlotSize+hotbarSlotGap) +
 		hotbarPanelPadding
+	// 关闭态联合高度从 framebuffer 下沿覆盖快捷栏、状态行和最坏采掘轨道；
+	// `hudScale` 用它保证三者在矮窗口中按同一比例缩小。
+	closedHUDHeight = hotbarBottomMargin + hotbarSlotSize + statusBarGap + healthHeartSize +
+		miningBarGap + miningBarHeight
 )
 
 var (
@@ -320,11 +324,12 @@ func appendMiningBar(dst *hotbarLayout, overlay MiningOverlay, width, height flo
 	if !overlay.Active || overlay.RequiredTicks == 0 {
 		return
 	}
-	left, hotbarY, totalWidth, scale := hotbarRowBounds(width, height)
+	left, hotbarY, totalWidth, scale := hotbarRowBounds(false, width, height)
 	barWidth := miningBarWidth * scale
 	barHeight := miningBarHeight * scale
 	x := left + (totalWidth-barWidth)*0.5
-	y := hotbarY - (miningBarGap+miningBarHeight)*scale
+	statusY := hotbarY - (statusBarGap+healthHeartSize)*scale
+	y := statusY - (miningBarGap+miningBarHeight)*scale
 	dst.quads = append(dst.quads, hotbarInstance{
 		X: x, Y: y, Width: barWidth, Height: barHeight,
 		Color: miningTrackColor,
@@ -364,14 +369,11 @@ func appendMiningBar(dst *hotbarLayout, overlay MiningOverlay, width, height flo
 // 索引 0..8 是底部快捷栏行，9..35 是其上方自上而下的三行背包。
 func inventorySlotOrigin(slot int, open bool, width, height float32) (float32, float32) {
 	column := slot % core.HotbarSlots
+	left, hotbarY, _, scale := hotbarRowBounds(open, width, height)
+	x := left + float32(column)*(hotbarSlotSize+hotbarSlotGap)*scale
 	if !open {
-		left, hotbarY, _, scale := hotbarRowBounds(width, height)
-		return left + float32(column)*(hotbarSlotSize+hotbarSlotGap)*scale, hotbarY
+		return x, hotbarY
 	}
-	scale := hudScale(open, width, height)
-	total := (core.HotbarSlots*hotbarSlotSize + (core.HotbarSlots-1)*hotbarSlotGap) * scale
-	x := (width-total)*0.5 + float32(column)*(hotbarSlotSize+hotbarSlotGap)*scale
-	hotbarY := height - (hotbarBottomMargin+hotbarSlotSize)*scale
 	if slot < core.HotbarSlots {
 		return x, hotbarY
 	}
@@ -382,9 +384,10 @@ func inventorySlotOrigin(slot int, open bool, width, height float32) (float32, f
 	return x, y
 }
 
-// hotbarRowBounds 返回关闭态快捷栏的共享中心边界，供快捷栏与采掘反馈使用。
-func hotbarRowBounds(width, height float32) (left, top, totalWidth, scale float32) {
-	scale = hudScale(false, width, height)
+// hotbarRowBounds 返回对应容器状态下快捷栏的共享中心边界，供快捷栏、状态行与
+// 采掘反馈复用，避免打开态命中缩放和非交互状态行各算一套几何。
+func hotbarRowBounds(open bool, width, height float32) (left, top, totalWidth, scale float32) {
+	scale = hudScale(open, width, height)
 	totalWidth = (core.HotbarSlots*hotbarSlotSize + (core.HotbarSlots-1)*hotbarSlotGap) * scale
 	left = (width - totalWidth) * 0.5
 	top = height - (hotbarBottomMargin+hotbarSlotSize)*scale
@@ -404,6 +407,8 @@ func hudScale(open bool, width, height float32) float32 {
 		if available := height - 2*hudEdgeMargin; available < openHUDHeight {
 			scale = min(scale, max(available/openHUDHeight, 0))
 		}
+	} else if available := height - 2*hudEdgeMargin; available < closedHUDHeight {
+		scale = min(scale, max(available/closedHUDHeight, 0))
 	}
 	return scale
 }

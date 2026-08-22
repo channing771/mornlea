@@ -176,45 +176,51 @@ func TestHotbarLayoutStaysWithinFixedCapacity(t *testing.T) {
 		atlas.glyphs[char] = fakeNameTagGlyph(7)
 	}
 	var layout hotbarLayout
-	// 十行固定配方（91 quad）已超过箱子视图（82 quad），因此 quad 上限的见证是
-	// 配方视图（overlay 与 chest 都为 nil），再叠加已确认的满血十段生命条、
-	// 未满氧气条与满屏聊天才是真正的最坏布局。glyph 上限仍在箱子视图上见证。
+	chatLine := strings.Repeat("中", maxChatRunes)
+	chat := ChatOverlay{Open: true, Input: chatLine,
+		Lines: []string{chatLine, chatLine, chatLine, chatLine, chatLine, chatLine}}
+
+	// 关闭分支包含双层面板/选中、九格双层物品、九条磨损耐久和最坏不可采
+	// 采掘形状；它与打开分支互斥，不能相加进固定容量。
+	layoutInventory(
+		&layout, atlas, maxQuadTestInventory(), false, -1, nil, nil,
+		MiningOverlay{Active: true, ProgressTicks: 6, RequiredTicks: 15}, 1280, 800,
+	)
+	appendHealthBar(&layout, HealthOverlay{Confirmed: true, Value: core.MaxHealth}, false, 1280, 800)
+	appendOxygenBar(&layout, OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1}, false, 1280, 800)
+	appendChatOverlay(&layout, atlas, chat, 1280, 800)
+	if len(layout.quads) != closedHotbarQuads+healthQuads+oxygenQuads+maxChatQuads ||
+		len(layout.quads) > maxHotbarQuads {
+		t.Fatalf("关闭分支 quads=%d，分支公式/总上限=%d/%d", len(layout.quads),
+			closedHotbarQuads+healthQuads+oxygenQuads+maxChatQuads, maxHotbarQuads)
+	}
+
+	// 十行固定配方是打开分支的 quad 最大 overlay，并以合法来源高亮见证第二个
+	// 选中实例；较大互斥分支必须恰好见证总上限。
 	layoutInventory(
 		&layout, atlas, maxQuadTestInventory(), true, 5, nil, nil, MiningOverlay{}, 1280, 800,
 	)
-	appendHealthBar(&layout, atlas, HealthOverlay{Confirmed: true, Value: core.MaxHealth}, 1280, 800)
-	// 氧气条只在未满时出现，因此最坏布局取一个未满值；满氧反而是零 quad。
-	appendOxygenBar(&layout, OxygenOverlay{Confirmed: true, Value: 0}, 1280, 800)
-	chatLine := strings.Repeat("中", maxChatRunes)
-	appendChatOverlay(&layout, atlas, ChatOverlay{
-		Open: true, Input: chatLine,
-		Lines: []string{chatLine, chatLine, chatLine, chatLine, chatLine, chatLine},
-	}, 1280, 800)
-	if len(layout.quads) != maxHotbarQuads {
-		t.Fatalf("quad 上限见证 quads=%d，想要 %d", len(layout.quads), maxHotbarQuads)
+	appendHealthBar(&layout, HealthOverlay{Confirmed: true, Value: core.MaxHealth}, true, 1280, 800)
+	appendOxygenBar(&layout, OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1}, true, 1280, 800)
+	appendChatOverlay(&layout, atlas, chat, 1280, 800)
+	openWant := openInventoryQuads + healthQuads + oxygenQuads + maxChatQuads
+	if len(layout.quads) != openWant {
+		t.Fatalf("打开分支 quads=%d，分支公式=%d", len(layout.quads), openWant)
 	}
-	layoutInventory(
-		&layout, atlas, fullTestInventory(), true, 5, nil, fullChestOverlay(), MiningOverlay{}, 1280, 800,
-	)
-	appendHealthBar(&layout, atlas, HealthOverlay{Confirmed: true, Value: core.MaxHealth}, 1280, 800)
-	appendOxygenBar(&layout, OxygenOverlay{Confirmed: true, Value: 0}, 1280, 800)
-	appendChatOverlay(&layout, atlas, ChatOverlay{
-		Open: true, Input: chatLine,
-		Lines: []string{chatLine, chatLine, chatLine, chatLine, chatLine, chatLine},
-	}, 1280, 800)
+	if len(layout.quads) != maxHotbarQuads {
+		t.Fatalf("较大打开分支 quads=%d，想要见证总上限 %d", len(layout.quads), maxHotbarQuads)
+	}
+
+	// glyph 上限由 36 格两位数量、满箱两位数量与七行聊天共同见证。
+	layoutInventory(&layout, atlas, fullTestInventory(), true, 5, nil, fullChestOverlay(), MiningOverlay{}, 1280, 800)
+	appendHealthBar(&layout, HealthOverlay{Confirmed: true, Value: core.MaxHealth}, true, 1280, 800)
+	appendOxygenBar(&layout, OxygenOverlay{Confirmed: true, Value: 0}, true, 1280, 800)
+	appendChatOverlay(&layout, atlas, chat, 1280, 800)
 	if len(layout.glyphs) != maxHotbarGlyphs {
 		t.Fatalf("glyph 上限见证=%d，想要 %d", len(layout.glyphs), maxHotbarGlyphs)
 	}
 	if len(layout.quads) > maxHotbarQuads {
 		t.Fatalf("glyph 上限见证 quads=%d，超过固定上限 %d", len(layout.quads), maxHotbarQuads)
-	}
-	closed := layoutInventory(
-		&layout, atlas, fullTestInventory(), false, -1, nil, nil,
-		MiningOverlay{Active: true, ProgressTicks: 6, RequiredTicks: 15, Harvestable: true},
-		1280, 800,
-	)
-	if len(closed.quads) != closedHotbarPanelQuads+closedHotbarSelectionQuads+core.HotbarSlots*3+miningBarQuads+1 || len(closed.quads) > maxHotbarQuads {
-		t.Fatalf("关闭界面加采掘条 quads=%d，固定上限=%d", len(closed.quads), maxHotbarQuads)
 	}
 }
 
@@ -344,7 +350,7 @@ func TestMiningOverlayUsesStateSpecificGeometry(t *testing.T) {
 		t.Fatalf("active 6/15 quads=%d，想要轨道、填充和亮色末端标记", len(green.quads))
 	}
 	background, fill, cap := green.quads[len(green.quads)-3], green.quads[len(green.quads)-2], green.quads[len(green.quads)-1]
-	if background.X != 520 || background.Y != 700 ||
+	if background.X != 520 || background.Y != 680 ||
 		background.Width != 240 || background.Height != 12 ||
 		background.Color != ([4]float32{0.05, 0.05, 0.06, 0.78}) {
 		t.Fatalf("采掘条背景=%+v", background)
@@ -536,4 +542,61 @@ func TestOpenInventoryFitsAndHitsAt640x360(t *testing.T) {
 	if !ok || recipe != core.RecipeStoneBricks {
 		t.Fatalf("缩放按钮命中=%d,%v，想要石砖配方", recipe, ok)
 	}
+}
+
+// TestResponsiveStatusFitsAndAvoidsOpenInventory 防止状态行在打开容器时继续使用
+// 关闭态缩放，覆盖 36 个保持可命中的权威物品格。
+func TestResponsiveStatusFitsAndAvoidsOpenInventory(t *testing.T) {
+	for _, size := range [][2]float32{{1280, 720}, {640, 360}, {240, 40}} {
+		var status hotbarLayout
+		appendHealthBar(&status, HealthOverlay{Confirmed: true, Value: 7}, true, size[0], size[1])
+		appendOxygenBar(&status, OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1}, true, size[0], size[1])
+		if len(status.quads) == 0 {
+			t.Fatalf("framebuffer %v：打开态低血/耗氧状态行不可见", size)
+		}
+		for index, quad := range status.quads {
+			if quad.X < 0 || quad.Y < 0 || quad.X+quad.Width > size[0] || quad.Y+quad.Height > size[1] {
+				t.Fatalf("framebuffer %v：状态 quad %d 越界: %+v", size, index, quad)
+			}
+			for slot := range core.InventorySlots {
+				left, top := inventorySlotOrigin(slot, true, size[0], size[1])
+				slotSize := hotbarSlotSize * hudScale(true, size[0], size[1])
+				if rectanglesIntersect(quad, hotbarInstance{X: left, Y: top, Width: slotSize, Height: slotSize}) {
+					t.Fatalf("framebuffer %v：状态 quad %d 与可命中格 %d 相交: %+v", size, index, slot, quad)
+				}
+			}
+		}
+	}
+}
+
+// TestInventorySlotAtBoundariesRemainHalfOpen 锁定改动前的左上闭、右下开命中语义。
+func TestInventorySlotAtBoundariesRemainHalfOpen(t *testing.T) {
+	for _, size := range [][2]uint32{{1280, 720}, {640, 360}, {240, 40}} {
+		scale := hudScale(true, float32(size[0]), float32(size[1]))
+		slotSize := hotbarSlotSize * scale
+		for slot := range core.InventorySlots {
+			left, top := inventorySlotOrigin(slot, true, float32(size[0]), float32(size[1]))
+			for _, point := range [][2]float64{
+				{float64(left), float64(top)},
+				{float64(left + slotSize*0.75), float64(top + slotSize*0.75)},
+			} {
+				got, ok := InventorySlotAt(point[0], point[1], size[0], size[1])
+				if !ok || got != uint8(slot) {
+					t.Fatalf("framebuffer %v slot %d 内点 %v 命中=%d,%v", size, slot, point, got, ok)
+				}
+			}
+			for _, point := range [][2]float64{
+				{float64(left + slotSize), float64(top + slotSize*0.5)},
+				{float64(left + slotSize*0.5), float64(top + slotSize)},
+			} {
+				if got, ok := InventorySlotAt(point[0], point[1], size[0], size[1]); ok {
+					t.Fatalf("framebuffer %v slot %d 右/下边界 %v 意外命中 %d", size, slot, point, got)
+				}
+			}
+		}
+	}
+}
+
+func rectanglesIntersect(a, b hotbarInstance) bool {
+	return a.X < b.X+b.Width && a.X+a.Width > b.X && a.Y < b.Y+b.Height && a.Y+a.Height > b.Y
 }
