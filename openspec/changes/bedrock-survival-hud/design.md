@@ -35,6 +35,8 @@
 
 否决为窄窗口另建布局或增加 `uiScale` 配置：同一套比例缩放足以满足边界，分支重排会扩大命中与视觉状态空间。否决修改打开态格子位置：只移动非交互状态行即可避让，改格子会破坏 `InventorySlotAt` 契约。
 
+Task 4 第五轮评审确认聊天已按真实栈高和最宽可见文本统一缩放，但理论 fit scale 只向零移动一个 float32 ULP，仍不足以覆盖 panel 尺寸、坐标与最多 32 个 glyph 的后续乘加累积。controller 将这个在真实栈高约束完成后才隔离出的数值稳定性根因拆为独立 Task 4B，并给它单独最多五轮修复；既有“任一正尺寸 framebuffer 中全部 HUD 严格界内”契约不放宽。Task 4B 在求聊天统一 scale 前从可用宽高扣除固定亚像素余量（候选为 framebuffer pixel 的 `1/256`，极小可用量钳到零），一次修复共享缩放入口；不在反例、panel、glyph 或调用方分别裁切，也不改变行数、文本、uniform scale、容量与正常尺寸可见结果。
+
 ### 3. 生命和氧气只改变呈现，不改变数据来源
 
 `HotbarRenderer.Prepare` 继续接收 app 已转换的 `HealthOverlay` 与 `OxygenOverlay`，只把现有 `open` 状态传给两个布局函数。生命输入先钳制到 `core.MaxHealth`，十个槽位各自直接选择完整的空心、半心或满心 cell，不追加背景或覆盖层。氧气未确认或满值时立即返回；耗损时按纯整数公式 `(value*10 + MaxOxygenTicks - 1) / MaxOxygenTicks` 计算满气泡数，十个槽位各自直接选择空或满气泡 cell。
@@ -68,6 +70,7 @@
 ## Risks / Trade-offs
 
 - [窄 framebuffer 中联合高度计算遗漏某一状态行，导致矩形越界] → 用零尺寸、多个窄尺寸、关闭/打开态和最大 overlay 的表驱动几何测试遍历全部 rectangle。
+- [聊天理论 fit scale 的 float32 乘加误差在临界尺寸越过严格边界] → 用固定亚像素余量覆盖最终 panel/glyph 运算链，并以真实 CJK、窄 Latin 两个反例和相邻小整数尺寸扫描验证 open/closed 全部实例 finite、界内且不与状态行相交。
 - [新增 atlas 列改变物品缩略图采样] → 测试每个 UI cell 的二值 alpha/确定性，并逐像素证明偏移后的物品列仍等于 registry 顶面且 UV 不越列。
 - [固定容量算小造成 overflow，算大则静默改变 benchmark v18 workload] → 分别见证关闭 76、打开 245 和 glyph 700 的合法最大组合，并精确锁定 247 quad、12288 glyph offset、45888 总容量、编码与实际前缀门禁。
 - [capture 临时 predictor 污染后续 LOD/水下场景] → restore closure 幂等并覆盖所有返回路径；顺序测试同时固定完整 15 场景、倒数第二远环和唯一末尾水下。
