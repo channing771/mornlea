@@ -49,11 +49,11 @@
 
 ## 5. 长期基线、全量验证与整分支终审（对应执行 Task 6）
 
-- [ ] 5.1 仅在实现与 visual 验收完成后逐字节同步 `AGENTS.md`/`CLAUDE.md` 的当前能力描述，并在 `docs/notes/progress.md` 记录里程碑；不把 change 非目标写入长期基线，不推进协议 v23、engine ABI v6、client ABI v7、benchmark scenario v18 或任何存档 schema。
-- [ ] 5.2 对账 `tasks.md` 与 `ledger.md`：只勾选已有实现、focused 验证、spec review 和 quality review 证据的条目，记录所有 implementer/reviewer、commit、finding、修复轮次、人工 visual 结论与 controller ruling。
-- [ ] 5.3 运行 `gofmt -l .`、`go test ./internal/render/hud ./cmd/mornlea -race -count=1`、`go test ./internal/archcheck -count=1`、`cmp -s AGENTS.md CLAUDE.md` 与 `git diff --check`；`gofmt -l .` 必须无输出，其余命令必须退出 0。
-- [ ] 5.4 在整分支终审前仅运行一次 `make rust`、`make rust-check`、`go test ./... -race`、`go vet ./...`、`make visual-check VISUAL_OUT=build/visual-bedrock-survival-hud-final-review` 与 `openspec validate --all --strict --no-interactive`；不得放宽 correctness、overflow、完整性、I/O、数据丢失或视觉阈值门禁。
-- [ ] 5.5 用 `git diff --name-only "$(git merge-base HEAD main)"..HEAD`、`git diff --stat "$(git merge-base HEAD main)"..HEAD` 与 `git status --short` 复核候选范围；确认没有产品改动落入 `engine/`、`internal/network`、`internal/sim`、`internal/storage` 或 `cmd/mornlea-server`，没有 PNG UI 源资产、第三方依赖、配置键、协议字段或 ABI 变化。
+- [x] 5.1 仅在实现与 visual 验收完成后逐字节同步 `AGENTS.md`/`CLAUDE.md` 的当前能力描述，并在 `docs/notes/progress.md` 记录里程碑；不把 change 非目标写入长期基线，不推进协议 v23、engine ABI v6、client ABI v7、benchmark scenario v18 或任何存档 schema。
+- [x] 5.2 对账 `tasks.md` 与 `ledger.md`：只勾选已有实现、focused 验证、spec review 和 quality review 证据的条目，记录所有 implementer/reviewer、commit、finding、修复轮次、人工 visual 结论与 controller ruling。
+- [x] 5.3 运行 `gofmt -l .`、`go test ./internal/render/hud ./cmd/mornlea -race -count=1`、`go test ./internal/archcheck -count=1`、`cmp -s AGENTS.md CLAUDE.md` 与 `git diff --check`；`gofmt -l .` 必须无输出，其余命令必须退出 0。
+- [x] 5.4 在整分支终审前仅运行一次 `make rust`、`make rust-check`、`go test ./... -race`、`go vet ./...`、`make visual-check VISUAL_OUT=build/visual-bedrock-survival-hud-final-review` 与 `openspec validate --all --strict --no-interactive`；不得放宽 correctness、overflow、完整性、I/O、数据丢失或视觉阈值门禁。
+- [x] 5.5 用 `git diff --name-only "$(git merge-base HEAD main)"..HEAD`、`git diff --stat "$(git merge-base HEAD main)"..HEAD` 与 `git status --short` 复核候选范围；确认没有产品改动落入 `engine/`、`internal/network`、`internal/sim`、`internal/storage` 或 `cmd/mornlea-server`，没有 PNG UI 源资产、第三方依赖、配置键、协议字段或 ABI 变化。
 - [ ] 5.6 implementer 自证通过后先提交长期文档与 ledger 候选 `git commit -m "docs: record survival HUD milestone"`；记录 `BASE=$(git merge-base HEAD main)` 与 committed `HEAD`，生成覆盖完整 `BASE..HEAD` diff 及 SHA-256 的整分支 review package。
 - [ ] 5.7 把 committed 整分支 review package 交给一名新的独立 task reviewer，由同一 reviewer 同时给出 SPEC 与 QUALITY 两项裁决，并逐项核对 proposal/spec/design/tasks、权威数据来源、生命无背景、容器避让、固定容量、capture 恢复、完整场景顺序、原创资产和 golden 范围。
 - [ ] 5.8 finding 只以追加 fix commit 修复，不得 amend 历史候选；每轮按影响范围重跑 5.3/5.4、更新 `HEAD`/review package，并由同一 scoped task reviewer 同时复审 SPEC 与 QUALITY，最多 5 轮。两项 PASS/CLEAN 后以纯 bookkeeping commit 回填最终结论，再重跑 5.5 把该提交纳入最终范围复核并确认工作区只剩已知无关改动；不得自行归档，取得用户明确批准后才运行 `openspec-archive-change`。

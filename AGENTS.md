@@ -8,6 +8,8 @@
 
 图形客户端默认在完整程序化材质注册表上应用内嵌的 Pixel Perfection 子集，未映射的 layer 最终回退到程序化材质。可选顶层配置 `texturePackPath` 只在启动时从本地目录读取 16×16 PNG 并按逻辑 layer 逐层覆盖；benchmark 与 capture 忽略本地覆盖，无图形专用服务端不加载客户端资产。该材质能力沿用远环 LOD 合入后的协议 v23、engine ABI v6、client ABI v7 与 benchmark scenario v18，未推进这些版本。
 
+图形客户端已使用原创程序化生存 HUD：关闭容器时显示居中九格快捷栏，选中格以外扩高对比外框和强调色内框构成双层轮廓，数量与工具耐久继续显示权威镜像；采掘反馈以移动末端标记和固定警示缺口区分可采与不可采形状。已确认生命和耗损氧气各用十个 resolved 单实例心形或气泡槽表达；状态行在关闭/打开容器时分别位于快捷栏上方/下方并避让可交互格，聊天面板与字形使用同一有界缩放比保持在 framebuffer 内且不与状态行相交。HUD 保持 benchmark scenario v18 的 247 quad、700 glyph、12288-byte glyph offset 与 45888-byte 固定上传容量；15 个无窗口 capture 场景与 golden 通过 `hud-hotbar-health`、`hud-survival-feedback`和 `inventory-crafting` 长期锁定关闭态、生存反馈和打开容器的呈现。
+
 Raycast 生产路径同样由 Rust `mornlea_engine` 独占 DDA 遍历；`internal/core` 只保留输入校验、一次归一化、64-record batch 驱动、惰性 callback 与 `RayHit.Point`，旧 Go DDA 只是测试 oracle，没有生产 fallback。
 
 ## 开始工作前
