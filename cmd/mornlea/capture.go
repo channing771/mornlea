@@ -229,6 +229,10 @@ var captureScenes = []captureScene{
 			inventory.Backpack[9] = core.ItemStack{Item: core.ItemIronBlock, Count: 1}
 			return app.inventory.Apply(network.InventoryState{Inventory: inventory})
 		},
+		HUD: &captureHUDFixture{
+			Health: 5,
+			Oxygen: core.MaxOxygenTicks / 3,
+		},
 	},
 	{
 		// 调试面板的视觉布局（行距、标签列宽、段头分组、只读行暗色）此前没有

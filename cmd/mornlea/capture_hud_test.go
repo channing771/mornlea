@@ -12,6 +12,20 @@ import (
 	"github.com/channing771/mornlea/internal/render/hud"
 )
 
+func TestHUDCaptureInventoryCraftingIncludesDepletedOxygen(t *testing.T) {
+	scene := captureSceneByName(t, "inventory-crafting")
+	if scene.HUD == nil {
+		t.Fatal("inventory-crafting 缺少已确认生命与耗损氧气夹具")
+	}
+	if scene.HUD.Health != 5 {
+		t.Fatalf("inventory-crafting health=%d，想要低生命 5", scene.HUD.Health)
+	}
+	if scene.HUD.Oxygen != core.MaxOxygenTicks/3 {
+		t.Fatalf("inventory-crafting oxygen=%d，想要 %d",
+			scene.HUD.Oxygen, core.MaxOxygenTicks/3)
+	}
+}
+
 func TestHUDCaptureSurvivalFeedbackFixtureRestoresState(t *testing.T) {
 	scene := captureSceneByName(t, "hud-survival-feedback")
 	wantFixture := captureHUDFixture{
