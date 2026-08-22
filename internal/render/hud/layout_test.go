@@ -197,7 +197,7 @@ func TestHotbarLayoutStaysWithinFixedCapacity(t *testing.T) {
 	}
 
 	// 十行固定配方是打开分支的 quad 最大 overlay，并以合法来源高亮见证第二个
-	// 选中实例；较大互斥分支必须恰好见证总上限。
+	// 选中实例；打开态以 245 见证合法最大，未打满 scenario v18 固定的 247，保留 2 个 quad 余量。
 	layoutInventory(
 		&layout, atlas, maxQuadTestInventory(), true, 5, nil, nil, MiningOverlay{}, 1280, 800,
 	)

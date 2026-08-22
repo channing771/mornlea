@@ -89,7 +89,8 @@ func TestHotbarPrepareClosedMiningEncodesLayeredFeedback(t *testing.T) {
 }
 
 // TestHotbarFixedUploadLayoutMatchesCapacityContract 把合法最坏组合对应的固定上传
-// 容量钉成数值断言；容量可随有界实例数更新，但 48-byte 编码契约保持不变。
+// 容量钉成 benchmark scenario v18 数值；固定布局只能随新 benchmark scenario 显式迁移，
+// 不得随有界实例数静默更新，48-byte 编码契约保持不变。
 func TestHotbarFixedUploadLayoutMatchesCapacityContract(t *testing.T) {
 	for _, test := range []struct {
 		name      string
