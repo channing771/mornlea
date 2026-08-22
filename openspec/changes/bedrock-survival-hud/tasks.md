@@ -5,8 +5,8 @@
 - [ ] 1.3 在 `internal/render/hud/atlas.go` 与 `health.go` 最小实现原创程序化半心/气泡、固定列偏移及 `hotbarHeartUV`/`hotbarBubbleUV` 窄 helper；复用现有 atlas 与 `hotbarTextureUV`，不增加 PNG、sprite registry、主题对象或新依赖。
 - [ ] 1.4 运行 `gofmt -w internal/render/hud/atlas.go internal/render/hud/atlas_test.go internal/render/hud/health.go internal/render/hud/health_test.go internal/render/hud/oxygen_test.go`、`go test ./internal/render/hud -race -count=1`、`go test ./internal/archcheck -count=1` 与 `git diff --check`，把命令、退出状态和关键计数写入 `ledger.md`。
 - [ ] 1.5 implementer 自证通过后提交候选 `git commit -m "feat: add survival HUD atlas icons"`；记录本组 `BASE`（候选提交的 parent）与 `HEAD`，生成包含两者、`git diff "$BASE..$HEAD"` 及其 SHA-256 的 scratch review package。
-- [ ] 1.6 把同一 committed review package 分别交给独立 spec reviewer 与 quality reviewer，记录身份、finding 和裁决；reviewer MUST NOT 评审未提交工作区 diff。
-- [ ] 1.7 任一 finding 只以追加 fix commit 修复，不得 amend 候选提交；每轮重跑 1.4、更新 `HEAD`/review package 并复审，最多 5 轮。两项均 PASS/CLEAN 后用后续 bookkeeping commit 回填 `ledger.md`，不得把评审前结论写入候选提交。
+- [ ] 1.6 把 committed review package 交给一名新的独立 task reviewer，由同一 reviewer 同时给出 SPEC 与 QUALITY 两项裁决，并记录其身份、finding 和裁决；reviewer MUST NOT 评审未提交工作区 diff。
+- [ ] 1.7 任一 finding 只以追加 fix commit 修复，不得 amend 候选提交；每轮重跑 1.4、更新 `HEAD`/review package，并由同一 scoped task reviewer 同时复审 SPEC 与 QUALITY，最多 5 轮。两项均 PASS/CLEAN 后用后续 bookkeeping commit 回填 `ledger.md`，不得把评审前结论写入候选提交。
 
 ## 2. 快捷栏、选中格、耐久与采掘轨道（对应执行 Task 3）
 
@@ -15,8 +15,8 @@
 - [ ] 2.3 在 `layout_test.go` 先覆盖采掘 inactive、零 required ticks、0%、中段、超 100%、可采与不可采，证明可采有移动末端 cap、不可采有固定 warning notch，忽略 RGB 后几何仍不同；运行 `go test ./internal/render/hud -run 'TestMining' -count=1` 并记录预期失败。
 - [ ] 2.4 在 `layout.go` 以现有纯色 `hotbarInstance` 最小扩展 `appendMiningBar`：比例钳制到 1，可采追加末端 cap，不可采追加固定 notch；按本组新增实例更新关闭分支容量组成，不增加 shader、贴图 cell 或动画。
 - [ ] 2.5 运行 `gofmt -w internal/render/hud/layout.go internal/render/hud/layout_test.go internal/render/hud/renderer_test.go`、`go test ./internal/render/hud -race -count=1`、`go test ./internal/archcheck -count=1` 与 `git diff --check`，记录验证证据。
-- [ ] 2.6 implementer 自证通过后提交候选 `git commit -m "feat: restyle survival hotbar feedback"`；记录候选 parent 为 `BASE`、候选为 `HEAD`，生成包含 committed diff 与 SHA-256 的 scratch review package，再分别派发独立 spec/quality review。
-- [ ] 2.7 finding 只以追加 fix commit 修复；每轮重跑 2.5、更新 review package 并双复审，最多 5 轮。重点检查 `InventorySlotAt`、打开态容器视觉、权威物品语义和非颜色形状；两项 PASS/CLEAN 后用后续 bookkeeping commit 回填 ledger。
+- [ ] 2.6 implementer 自证通过后提交候选 `git commit -m "feat: restyle survival hotbar feedback"`；记录候选 parent 为 `BASE`、候选为 `HEAD`，生成包含 committed diff 与 SHA-256 的 scratch review package，再交给一名新的独立 task reviewer，由同一 reviewer 同时给出 SPEC 与 QUALITY 两项裁决。
+- [ ] 2.7 finding 只以追加 fix commit 修复；每轮重跑 2.5、更新 review package，并由同一 scoped task reviewer 同时复审 SPEC 与 QUALITY，最多 5 轮。重点检查 `InventorySlotAt`、打开态容器视觉、权威物品语义和非颜色形状；两项 PASS/CLEAN 后用后续 bookkeeping commit 回填 ledger。
 
 ## 3. 生命、氧气、响应式布局与固定容量（对应执行 Task 4）
 
@@ -28,8 +28,8 @@
 - [ ] 3.6 在 `renderer_test.go` 先写容量见证失败测试：分别构造关闭与打开互斥分支合法最大组合，要求 `healthQuads == 20`、`oxygenQuads == 20` 且较大分支见证 `maxHotbarQuads`；同时锁定 48-byte 编码、256-byte offsets、区间不重叠和实际实例前缀。运行对应 `go test ./internal/render/hud -run 'TestHotbar(Fixed|Capacity|Maximum)' -count=1` 并记录因容量尚未对账而失败。
 - [ ] 3.7 在 `internal/render/hud/renderer.go` 只把已有 `open` 传给生命/氧气布局；在 `layout.go` 扩展关闭态联合缩放边界并实现打开态状态行避让、零尺寸无实例；分别计算关闭/打开分支上限后取较大值，保持 `internal/render/hud/encode.go` 不变，以最小实现使 3.5/3.6 红测转绿。
 - [ ] 3.8 运行 `gofmt -w internal/render/hud/health.go internal/render/hud/health_test.go internal/render/hud/oxygen.go internal/render/hud/oxygen_test.go internal/render/hud/layout.go internal/render/hud/layout_test.go internal/render/hud/renderer.go internal/render/hud/renderer_test.go`、`go test ./internal/render/hud -race -count=1`、`go test ./internal/archcheck -count=1` 与 `git diff --check`，记录验证证据。
-- [ ] 3.9 implementer 自证通过后提交候选 `git commit -m "feat: align survival status around hotbar"`；以候选 parent/候选提交生成 committed review package 和 SHA-256，再分别派发独立 spec/quality review。
-- [ ] 3.10 finding 只以追加 fix commit 修复；每轮重跑 3.8、更新 review package 并双复审，最多 5 轮。重点检查权威值来源、生命无背景、满氧隐藏、打开态可见性/避让、窄窗口、固定容量和编码不变；两项 PASS/CLEAN 后用后续 bookkeeping commit 回填 ledger。
+- [ ] 3.9 implementer 自证通过后提交候选 `git commit -m "feat: align survival status around hotbar"`；以候选 parent/候选提交生成 committed review package 和 SHA-256，再交给一名新的独立 task reviewer，由同一 reviewer 同时给出 SPEC 与 QUALITY 两项裁决。
+- [ ] 3.10 finding 只以追加 fix commit 修复；每轮重跑 3.8、更新 review package，并由同一 scoped task reviewer 同时复审 SPEC 与 QUALITY，最多 5 轮。重点检查权威值来源、生命无背景、满氧隐藏、打开态可见性/避让、窄窗口、固定容量和编码不变；两项 PASS/CLEAN 后用后续 bookkeeping commit 回填 ledger。
 
 ## 4. 确定性 survival feedback capture 与 golden（对应执行 Task 5）
 
@@ -40,8 +40,8 @@
 - [ ] 4.5 在可用 Metal 环境运行 `make visual-update VISUAL_OUT=build/visual-bedrock-survival-hud-update`；确认场景共 15 张、新增 `hud-survival-feedback.png`，且只提交实际受影响的 `cmd/mornlea/testdata/golden` 文件，不移动场景尾序、不放宽双阈值。
 - [ ] 4.6 人工逐图复核全部 15 张候选并把文件清单与结论写入 `ledger.md`；重点确认 `hud-hotbar-health` 的九格/双层选中/数量/耐久/无背景满血/满氧隐藏，`hud-survival-feedback` 的低血/气泡/磨损工具/不可采中段形状，以及 `inventory-crafting` 的状态行避让；任何世界、实体、光照、水或 LOD 区域异常先修根因。
 - [ ] 4.7 运行 `make visual-check VISUAL_OUT=build/visual-bedrock-survival-hud-final`、`go test ./cmd/mornlea -run 'Test(HUDCapture|Capture.*Scene|WaterUnderwater|FarHorizon)' -count=1` 与 `git diff --check`。
-- [ ] 4.8 implementer 自证和人工验收通过后提交候选 `git commit -m "test: lock survival HUD presentation"`；以候选 parent/候选提交生成 committed review package 和 SHA-256，再分别派发独立 spec/quality review。
-- [ ] 4.9 finding 只以追加 fix commit 修复；每轮重跑 4.4/4.7、必要时重新逐图验收、更新 review package 并双复审，最多 5 轮。重点检查 fixture 仅限 capture、错误路径恢复、场景隔离、完整顺序与阈值；两项 PASS/CLEAN 后用后续 bookkeeping commit 回填 ledger。
+- [ ] 4.8 implementer 自证和人工验收通过后提交候选 `git commit -m "test: lock survival HUD presentation"`；以候选 parent/候选提交生成 committed review package 和 SHA-256，再交给一名新的独立 task reviewer，由同一 reviewer 同时给出 SPEC 与 QUALITY 两项裁决。
+- [ ] 4.9 finding 只以追加 fix commit 修复；每轮重跑 4.4/4.7、必要时重新逐图验收、更新 review package，并由同一 scoped task reviewer 同时复审 SPEC 与 QUALITY，最多 5 轮。重点检查 fixture 仅限 capture、错误路径恢复、场景隔离、完整顺序与阈值；两项 PASS/CLEAN 后用后续 bookkeeping commit 回填 ledger。
 
 ## 5. 长期基线、全量验证与整分支终审（对应执行 Task 6）
 
@@ -51,5 +51,5 @@
 - [ ] 5.4 在整分支终审前仅运行一次 `make rust`、`make rust-check`、`go test ./... -race`、`go vet ./...`、`make visual-check VISUAL_OUT=build/visual-bedrock-survival-hud-final-review` 与 `openspec validate --all --strict --no-interactive`；不得放宽 correctness、overflow、完整性、I/O、数据丢失或视觉阈值门禁。
 - [ ] 5.5 用 `git diff --name-only "$(git merge-base HEAD main)"..HEAD`、`git diff --stat "$(git merge-base HEAD main)"..HEAD` 与 `git status --short` 复核候选范围；确认没有产品改动落入 `engine/`、`internal/network`、`internal/sim`、`internal/storage` 或 `cmd/mornlea-server`，没有 PNG UI 源资产、第三方依赖、配置键、协议字段或 ABI 变化。
 - [ ] 5.6 implementer 自证通过后先提交长期文档与 ledger 候选 `git commit -m "docs: record survival HUD milestone"`；记录 `BASE=$(git merge-base HEAD main)` 与 committed `HEAD`，生成覆盖完整 `BASE..HEAD` diff 及 SHA-256 的整分支 review package。
-- [ ] 5.7 把同一 committed 整分支 review package 交给新的独立 spec reviewer 与 quality reviewer，逐项核对 proposal/spec/design/tasks、权威数据来源、生命无背景、容器避让、固定容量、capture 恢复、完整场景顺序、原创资产和 golden 范围。
-- [ ] 5.8 finding 只以追加 fix commit 修复，不得 amend 历史候选；每轮按影响范围重跑 5.3/5.4、更新 `HEAD`/review package 并双复审，最多 5 轮。两项 PASS/CLEAN 后以纯 bookkeeping commit 回填最终结论，再重跑 5.5 把该提交纳入最终范围复核并确认工作区只剩已知无关改动；不得自行归档，取得用户明确批准后才运行 `openspec-archive-change`。
+- [ ] 5.7 把 committed 整分支 review package 交给一名新的独立 task reviewer，由同一 reviewer 同时给出 SPEC 与 QUALITY 两项裁决，并逐项核对 proposal/spec/design/tasks、权威数据来源、生命无背景、容器避让、固定容量、capture 恢复、完整场景顺序、原创资产和 golden 范围。
+- [ ] 5.8 finding 只以追加 fix commit 修复，不得 amend 历史候选；每轮按影响范围重跑 5.3/5.4、更新 `HEAD`/review package，并由同一 scoped task reviewer 同时复审 SPEC 与 QUALITY，最多 5 轮。两项 PASS/CLEAN 后以纯 bookkeeping commit 回填最终结论，再重跑 5.5 把该提交纳入最终范围复核并确认工作区只剩已知无关改动；不得自行归档，取得用户明确批准后才运行 `openspec-archive-change`。
