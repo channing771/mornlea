@@ -1,10 +1,10 @@
 ## 1. 原创心形与气泡 atlas（对应执行 Task 2）
 
-- [ ] 1.1 重新读取 `proposal.md`、两个 delta spec、`design.md` 和本组任务；在 clean checkout 先运行 `make rust`，并把 implementer 身份与起始 commit 记入 `ledger.md`。
-- [ ] 1.2 在 `internal/render/hud/atlas_test.go`、`health_test.go` 与 `oxygen_test.go` 先写失败测试：固定空/半/满心、空/满气泡五列顺序，证明每列非空且互异、alpha 仅 0/255、atlas 连续构建逐字节相等、偏移后的物品列仍逐像素等于 registry 顶面、全部列 UV 不越 16×16 cell；运行 `go test ./internal/render/hud -run 'TestHotbar(TextureAtlas|ColumnUV)' -count=1` 并记录预期失败。
-- [ ] 1.3 在 `internal/render/hud/atlas.go` 与 `health.go` 最小实现原创程序化半心/气泡、固定列偏移及 `hotbarHeartUV`/`hotbarBubbleUV` 窄 helper；复用现有 atlas 与 `hotbarTextureUV`，不增加 PNG、sprite registry、主题对象或新依赖。
-- [ ] 1.4 运行 `gofmt -w internal/render/hud/atlas.go internal/render/hud/atlas_test.go internal/render/hud/health.go internal/render/hud/health_test.go internal/render/hud/oxygen_test.go`、`go test ./internal/render/hud -race -count=1`、`go test ./internal/archcheck -count=1` 与 `git diff --check`，把命令、退出状态和关键计数写入 `ledger.md`。
-- [ ] 1.5 implementer 自证通过后提交候选 `git commit -m "feat: add survival HUD atlas icons"`；记录本组 `BASE`（候选提交的 parent）与 `HEAD`，生成包含两者、`git diff "$BASE..$HEAD"` 及其 SHA-256 的 scratch review package。
+- [x] 1.1 重新读取 `proposal.md`、两个 delta spec、`design.md` 和本组任务；在 clean checkout 先运行 `make rust`，并把 implementer 身份与起始 commit 记入 `ledger.md`。
+- [x] 1.2 在 `internal/render/hud/atlas_test.go`、`health_test.go` 与 `oxygen_test.go` 先写失败测试：固定空/半/满心、空/满气泡五列顺序，证明每列非空且互异、alpha 仅 0/255、atlas 连续构建逐字节相等、偏移后的物品列仍逐像素等于 registry 顶面、全部列 UV 不越 16×16 cell；运行 `go test ./internal/render/hud -run 'TestHotbar(TextureAtlas|ColumnUV)' -count=1` 并记录预期失败。
+- [x] 1.3 在 `internal/render/hud/atlas.go` 与 `health.go` 最小实现原创程序化半心/气泡、固定列偏移及 `hotbarHeartUV`/`hotbarBubbleUV` 窄 helper；复用现有 atlas 与 `hotbarTextureUV`，不增加 PNG、sprite registry、主题对象或新依赖。
+- [x] 1.4 运行 `gofmt -w internal/render/hud/atlas.go internal/render/hud/atlas_test.go internal/render/hud/health.go internal/render/hud/health_test.go internal/render/hud/oxygen_test.go`、`go test ./internal/render/hud -race -count=1`、`go test ./internal/archcheck -count=1` 与 `git diff --check`，把命令、退出状态和关键计数写入 `ledger.md`。
+- [x] 1.5 implementer 自证通过后提交候选 `git commit -m "feat: add survival HUD atlas icons"`；记录本组 `BASE`（候选提交的 parent）与 `HEAD`，生成包含两者、`git diff "$BASE..$HEAD"` 及其 SHA-256 的 scratch review package。
 - [ ] 1.6 把 committed review package 交给一名新的独立 task reviewer，由同一 reviewer 同时给出 SPEC 与 QUALITY 两项裁决，并记录其身份、finding 和裁决；reviewer MUST NOT 评审未提交工作区 diff。
 - [ ] 1.7 任一 finding 只以追加 fix commit 修复，不得 amend 候选提交；每轮重跑 1.4、更新 `HEAD`/review package，并由同一 scoped task reviewer 同时复审 SPEC 与 QUALITY，最多 5 轮。两项均 PASS/CLEAN 后用后续 bookkeeping commit 回填 `ledger.md`，不得把评审前结论写入候选提交。
 

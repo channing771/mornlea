@@ -97,7 +97,7 @@ func TestHealthBarUsesTenTwoPointHearts(t *testing.T) {
 			if len(layout.quads) != test.wantQuads || len(layout.glyphs) != 0 {
 				t.Fatalf("quads/glyphs=%d/%d，想要 %d/0", len(layout.quads), len(layout.glyphs), test.wantQuads)
 			}
-			emptyUV := hotbarTextureUV(hotbarEmptyHeartColumn)
+			emptyUV := hotbarHeartUV(heartEmpty)
 			for index, heart := range layout.quads[:10] {
 				if got := [4]float32{heart.U0, heart.V0, heart.U1, heart.V1}; got != emptyUV {
 					t.Fatalf("空心爱心 %d UV=%v，想要 %v", index, got, emptyUV)
@@ -108,19 +108,18 @@ func TestHealthBarUsesTenTwoPointHearts(t *testing.T) {
 			}
 			if test.health > 0 {
 				last := layout.quads[len(layout.quads)-1]
-				fullUV := hotbarTextureUV(hotbarFullHeartColumn)
-				wantU1 := fullUV[2]
+				fill := heartFull
 				if test.lastHalf {
-					wantU1 = (fullUV[0] + fullUV[2]) * 0.5
+					fill = heartHalf
 				}
-				if got := [4]float32{last.U0, last.V0, last.U1, last.V1}; got != ([4]float32{fullUV[0], fullUV[1], wantU1, fullUV[3]}) {
+				if got, want := [4]float32{last.U0, last.V0, last.U1, last.V1}, hotbarHeartUV(fill); got != want {
 					t.Fatalf("最后填充爱心 UV=%v，想要完整/半颗材质", got)
 				}
 			}
 			if test.lastHalf {
 				last := layout.quads[len(layout.quads)-1]
-				if last.Width != healthHeartSize/2 || last.Height != healthHeartSize {
-					t.Fatalf("奇数生命末颗=%+v，想要半颗爱心", last)
+				if last.Width != healthHeartSize || last.Height != healthHeartSize {
+					t.Fatalf("奇数生命末颗=%+v，想要完整半颗爱心", last)
 				}
 			}
 		})

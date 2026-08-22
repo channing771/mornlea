@@ -6,6 +6,24 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 )
 
+// 杀死变异：空、满气泡若绕过固定 UI cell，会在后续布局接线时采样到错误图集列。
+func TestOxygenBubbleUVUsesStableUICells(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		full bool
+		want [4]float32
+	}{
+		{"空气泡", false, hotbarTextureUV(hotbarEmptyBubbleColumn)},
+		{"满气泡", true, hotbarTextureUV(hotbarFullBubbleColumn)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := hotbarBubbleUV(test.full); got != test.want {
+				t.Fatalf("UV=%v，想要 %v", got, test.want)
+			}
+		})
+	}
+}
+
 // oxygenQuadsFor 返回给定氧气叠加值追加进 hotbarLayout 的 quad（不含任何既有内容）。
 func oxygenQuadsFor(overlay OxygenOverlay, width, height float32) []hotbarInstance {
 	var layout hotbarLayout
