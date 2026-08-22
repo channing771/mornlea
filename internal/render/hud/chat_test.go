@@ -1,6 +1,7 @@
 package hud
 
 import (
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -121,47 +122,114 @@ func TestChatOverlayGlyphInkDoesNotOverlapOrEscapePanels(t *testing.T) {
 	}
 }
 
-func TestChatOverlayStaysAboveClosedSurvivalStatus(t *testing.T) {
-	const width, height = float32(640), float32(360)
-	atlas := newFakeNameTagAtlas()
-	layout := hotbarLayout{
-		quads:  make([]hotbarInstance, 0, healthQuads+oxygenQuads+maxChatQuads),
-		glyphs: make([]hotbarInstance, 0, 64),
+func TestChatOverlayStaysInFramebufferAndAboveClosedSurvivalStatus(t *testing.T) {
+	sizes := []struct {
+		name          string
+		width, height float32
+	}{
+		{"regular", 640, 360},
+		{"short", 640, 300},
+		{"small", 240, 40},
+		{"narrow", 17, 800},
+		{"flat", 800, 17},
+		{"minimum_hud_margin", 16, 16},
+		{"one_pixel", 1, 1},
 	}
-	appendHealthBar(&layout, HealthOverlay{Confirmed: true, Value: 12}, false, width, height)
-	appendOxygenBar(&layout, OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks / 2}, false, width, height)
-	statusCount := len(layout.quads)
-	if statusCount != healthQuads+oxygenQuads {
-		t.Fatalf("status quads=%d want=%d", statusCount, healthQuads+oxygenQuads)
-	}
-	_, hotbarY, _, scale := hotbarRowBounds(false, width, height)
-	statusTop := hotbarY - (statusBarGap+healthHeartSize)*scale
-	for index, quad := range layout.quads {
-		if quad.Y != statusTop {
-			t.Fatalf("status quad %d top=%v want shared closed anchor %v", index, quad.Y, statusTop)
-		}
-	}
+	line := strings.Repeat("界", maxChatRunes)
+	lines := []string{line, line, line, line, line, line}
+	for _, size := range sizes {
+		for _, open := range []bool{false, true} {
+			name := size.name + "/closed"
+			if open {
+				name = size.name + "/open"
+			}
+			t.Run(name, func(t *testing.T) {
+				atlas := newFakeNameTagAtlas()
+				atlas.tofu = render.Glyph{Advance: 10, BearingY: 25, Width: 8, Height: 24}
+				layout := hotbarLayout{
+					quads:  make([]hotbarInstance, 0, healthQuads+oxygenQuads+maxChatQuads),
+					glyphs: make([]hotbarInstance, 0, maxChatGlyphs),
+				}
+				appendHealthBar(&layout, HealthOverlay{Confirmed: true, Value: 12}, false, size.width, size.height)
+				appendOxygenBar(&layout, OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks / 2}, false, size.width, size.height)
+				statusCount := len(layout.quads)
+				if statusCount != healthQuads+oxygenQuads {
+					t.Fatalf("status quads=%d want=%d", statusCount, healthQuads+oxygenQuads)
+				}
+				_, hotbarY, _, survivalScale := hotbarRowBounds(false, size.width, size.height)
+				statusTop := hotbarY - (statusBarGap+healthHeartSize)*survivalScale
+				for index, quad := range layout.quads {
+					if quad.Y != statusTop {
+						t.Fatalf("status quad %d top=%v want shared closed anchor %v", index, quad.Y, statusTop)
+					}
+				}
 
-	appendChatOverlay(&layout, atlas, ChatOverlay{
-		Open: true, Input: "@阿木 挖石头", Lines: []string{"旅人 → 阿木：挖石头"},
-	}, width, height)
-	chatPanels := layout.quads[statusCount:]
-	if len(chatPanels) != maxChatQuads || len(layout.glyphs) == 0 {
-		t.Fatalf("chat panels/glyphs=%d/%d want=%d/nonzero", len(chatPanels), len(layout.glyphs), maxChatQuads)
+				appendChatOverlay(&layout, atlas, ChatOverlay{Open: open, Input: line, Lines: lines}, size.width, size.height)
+				chatPanels := layout.quads[statusCount:]
+				wantPanels := 1
+				wantGlyphs := len(lines) * maxChatRunes * 2
+				if open {
+					wantPanels++
+					wantGlyphs += maxChatRunes * 2
+				}
+				if len(chatPanels) != wantPanels || len(layout.glyphs) != wantGlyphs {
+					t.Fatalf("chat panels/glyphs=%d/%d want=%d/%d",
+						len(chatPanels), len(layout.glyphs), wantPanels, wantGlyphs)
+				}
+				for index, panel := range chatPanels {
+					assertChatInstanceInFramebuffer(t, "panel", index, panel, size.width, size.height)
+				}
+				for index, glyph := range layout.glyphs {
+					assertChatInstanceInFramebuffer(t, "glyph", index, glyph, size.width, size.height)
+				}
+				for statusIndex, status := range layout.quads[:statusCount] {
+					for panelIndex, panel := range chatPanels {
+						if chatInstancesOverlap(status, panel) {
+							t.Fatalf("status quad %d overlaps chat panel %d: status=%+v panel=%+v",
+								statusIndex, panelIndex, status, panel)
+						}
+					}
+					for glyphIndex, glyph := range layout.glyphs {
+						if chatInstancesOverlap(status, glyph) {
+							t.Fatalf("status quad %d overlaps chat glyph %d: status=%+v glyph=%+v",
+								statusIndex, glyphIndex, status, glyph)
+						}
+					}
+				}
+				if size.width == 640 && size.height == 360 {
+					history := chatPanels[len(chatPanels)-1]
+					wantHistoryHeight := (maxChatLines*chatLineHeight + 2*chatPadding) * survivalScale
+					if history.Height != wantHistoryHeight {
+						t.Fatalf("regular history height=%v want survival-scale height %v",
+							history.Height, wantHistoryHeight)
+					}
+					lowerPanel := chatPanels[0]
+					wantBottom := statusTop - chatHealthClearance*survivalScale
+					if bottom := lowerPanel.Y + lowerPanel.Height; bottom != wantBottom {
+						t.Fatalf("regular chat bottom=%v want shared status clearance anchor %v", bottom, wantBottom)
+					}
+				}
+			})
+		}
 	}
-	for statusIndex, status := range layout.quads[:statusCount] {
-		for panelIndex, panel := range chatPanels {
-			if chatInstancesOverlap(status, panel) {
-				t.Fatalf("status quad %d overlaps chat panel %d: status=%+v panel=%+v",
-					statusIndex, panelIndex, status, panel)
-			}
+}
+
+func assertChatInstanceInFramebuffer(
+	t *testing.T,
+	kind string,
+	index int,
+	instance hotbarInstance,
+	width, height float32,
+) {
+	t.Helper()
+	for _, value := range [...]float32{instance.X, instance.Y, instance.Width, instance.Height} {
+		if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
+			t.Fatalf("chat %s %d contains non-finite geometry: %+v", kind, index, instance)
 		}
-		for glyphIndex, glyph := range layout.glyphs {
-			if chatInstancesOverlap(status, glyph) {
-				t.Fatalf("status quad %d overlaps chat glyph %d: status=%+v glyph=%+v",
-					statusIndex, glyphIndex, status, glyph)
-			}
-		}
+	}
+	if instance.X < 0 || instance.Y < 0 || instance.Width < 0 || instance.Height < 0 ||
+		instance.X+instance.Width > width || instance.Y+instance.Height > height {
+		t.Fatalf("chat %s %d escapes %vx%v framebuffer: %+v", kind, index, width, height, instance)
 	}
 }
 

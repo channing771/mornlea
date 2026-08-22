@@ -1,6 +1,7 @@
 package hud
 
 import (
+	"math"
 	"unicode/utf8"
 
 	"github.com/channing771/mornlea/internal/render"
@@ -81,13 +82,43 @@ func appendChatOverlay(
 	if len(lines) == 0 && !overlay.Open {
 		return
 	}
-	_, hotbarY, _, scale := hotbarRowBounds(false, width, height)
+	_, hotbarY, _, survivalScale := hotbarRowBounds(false, width, height)
+	statusTop := hotbarY - (statusBarGap+healthHeartSize)*survivalScale
+	stackHeight := float32(0)
+	if len(lines) > 0 {
+		stackHeight = float32(len(lines))*chatLineHeight + 2*chatPadding
+	}
+	maxTextWidth := float32(0)
+	for _, line := range lines {
+		maxTextWidth = max(maxTextWidth, chatTextWidth(atlas, line, 1))
+	}
+	if overlay.Open {
+		stackHeight += chatLineHeight + 2*chatPadding
+		if len(lines) > 0 {
+			stackHeight += chatPanelGap
+		}
+		maxTextWidth = max(maxTextWidth, chatTextWidth(atlas, overlay.Input, 1))
+	}
+	// 状态行仍使用 survival scale；聊天栈只能在此基础上继续缩小，
+	// 且高度按本帧真实行数、宽度按最宽可见文本共同取界。
+	scale := survivalScale
+	if requiredHeight := stackHeight + chatHealthClearance; requiredHeight > 0 {
+		if bound := max(statusTop/requiredHeight, 0); bound < scale {
+			// 向零留一个 float32 ULP，避免边界乘加四舍五入成极小负坐标。
+			scale = math.Nextafter32(bound, 0)
+		}
+	}
+	if requiredWidth := hudEdgeMargin + 2*chatPadding + maxTextWidth; requiredWidth > 0 {
+		if bound := max(width/requiredWidth, 0); bound < scale {
+			scale = math.Nextafter32(bound, 0)
+		}
+	}
 	padding := chatPadding * scale
 	lineHeight := chatLineHeight * scale
 	x := hudEdgeMargin * scale
 	// 聊天的整个面板栈从关闭态状态行上方向上生长，不依赖是否恰好
 	// 显示生命或氧气，避免权威状态变化让已接受的聊天行突然被覆盖。
-	bottom := hotbarY - (statusBarGap+healthHeartSize+chatHealthClearance)*scale
+	bottom := statusTop - chatHealthClearance*scale
 	inputHeight := lineHeight + 2*padding
 	if overlay.Open {
 		inputY := bottom - inputHeight
