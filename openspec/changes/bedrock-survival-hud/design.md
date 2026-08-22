@@ -37,7 +37,7 @@
 
 ### 3. 生命和氧气只改变呈现，不改变数据来源
 
-`HotbarRenderer.Prepare` 继续接收 app 已转换的 `HealthOverlay` 与 `OxygenOverlay`，只把现有 `open` 状态传给两个布局函数。生命先画十个空心，再用完整半心/满心 cell 覆盖；输入先钳制到 `core.MaxHealth`。氧气未确认或满值时立即返回；耗损时先画十个空槽，再按纯整数公式 `(value*10 + MaxOxygenTicks - 1) / MaxOxygenTicks` 计算覆盖数并画满气泡。
+`HotbarRenderer.Prepare` 继续接收 app 已转换的 `HealthOverlay` 与 `OxygenOverlay`，只把现有 `open` 状态传给两个布局函数。生命先画十个空心，再用完整半心/满心 cell 覆盖，不追加任何生命背景实例；输入先钳制到 `core.MaxHealth`。氧气未确认或满值时立即返回；耗损时先画十个空槽，再按纯整数公式 `(value*10 + MaxOxygenTicks - 1) / MaxOxygenTicks` 计算覆盖数并画满气泡。
 
 否决裁剪满心 UV 生成半心，因为完整半心 cell 能避免采样边缘并让 atlas 单元直接可验。否决本地预测或新的 predictor 分支：权威值的现有所有权已经满足行为需求，复制状态逻辑会让单机/TCP 呈现分叉。
 
@@ -75,6 +75,6 @@
 
 ## Migration Plan
 
-这是客户端呈现与视觉基线的原地替换，不需要数据或线上滚动迁移。实现按 atlas、快捷栏/采掘、生命/氧气/容量、capture/golden 的顺序提交，每组均先写失败测试并完成独立规格与质量评审。最后同步长期文档并执行 Rust、全仓 race/vet、架构、OpenSpec 和 visual 门禁。
+这是客户端呈现与视觉基线的原地替换，不需要数据或线上滚动迁移。实现按 atlas、快捷栏/采掘、生命/氧气/容量、capture/golden 的顺序提交；每组先写失败测试并完成 implementer 自证与候选提交，再以该提交生成 review package 进行独立规格与质量评审，finding 只通过追加 fix commit 修复并重新评审。最后同步长期文档、提交候选、执行 Rust、全仓 race/vet、架构、OpenSpec 和 visual 门禁，再按同样顺序完成整分支终审。
 
 协议保持 v23，engine ABI 保持 v6，client ABI 保持 v7，benchmark scenario 保持 v18；玩家 schema v6、区块 schema v9、世界 metadata v2、`companions.ai` schema v4 和配置格式均不变。回退时按相反顺序撤销本 change 的提交及新增 golden 即可，不需要恢复或转换用户数据；归档仅在实现、视觉验收和整分支终审通过后进行。
