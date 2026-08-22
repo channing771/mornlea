@@ -5,7 +5,7 @@
 | Task | Implementer | Implementer commit | Spec review | Quality review | 修复轮次 | 验证证据 | Ruling |
 |---|---|---|---|---|---:|---|---|
 | 1 OpenSpec change | `/root/hud_task1_openspec` | `b67f38e`（候选）/ `978c8f3`（round 1 fix）/ `5c9ce64`（round 2 fix） | `/root/hud_task1_review`：初审 SPEC FAIL；round 1 复审 SPEC PASS；round 2 复审 SPEC PASS | `/root/hud_task1_review`：初审 QUALITY FAIL；round 1 复审 QUALITY FAIL；round 2 复审 QUALITY PASS | 2 | 三次提交前均为 OpenSpec 56/0、diff check EXIT 0；最终 review package SHA-256 `52eb2bc47378ed10f297d85a73cc50c06e58cb0ef31372a1bdc0afe675d253b2`，strict 56/0、范围 diff check EXIT 0 | 通过 |
-| 2 atlas icons | `/root/hud_task2_atlas` | `HEAD`（本候选；`BASE` 为 `6886679c44eeb548347bac77aa10bdbaed749ada`） | 待独立评审 | 待独立评审 | 0 | 已重读 change 产物；`make rust` EXIT 0；红测 `go test ./internal/render/hud -run 'TestHotbar(TextureAtlas|ColumnUV)' -count=1` 如预期因 `hotbarHalfHeartColumn`、气泡列和 UV helper 未定义而失败；绿测 `go test ./internal/render/hud -race -count=1` EXIT 0、`go test ./internal/archcheck -count=1` EXIT 0、`gofmt -w` 与 `git diff --check` EXIT 0 | 待 controller 裁决 |
+| 2 atlas icons | `/root/hud_task2_atlas` | `eb440ed`（候选）/ `HEAD`（round 1 fix；`BASE` 为 `6886679c44eeb548347bac77aa10bdbaed749ada`） | `/root/hud_task2_review`：首轮 SPEC FAIL（3 个 P2） | `/root/hud_task2_review`：首轮 QUALITY FAIL（3 个 P2） | 1 | 初轮证据：`make rust` EXIT 0；红测因新增列/helper 未定义而失败；HUD race、archcheck、gofmt、diff check 均 EXIT 0。round 1：全枚举 placement 顶面、字面列顺序断言；重跑 HUD race、archcheck、gofmt、diff check 待本轮提交前完成 | 待复审 |
 | 3 hotbar/mining | 待派发 | 待提交 | 待独立评审 | 待独立评审 | 0 | 待执行 | 待 controller 裁决 |
 | 4 status/layout/capacity | 待派发 | 待提交 | 待独立评审 | 待独立评审 | 0 | 待执行 | 待 controller 裁决 |
 | 5 capture/golden | 待派发 | 待提交 | 待独立评审 | 待独立评审 | 0 | 待执行 | 待 controller 裁决 |
@@ -21,6 +21,9 @@
 | 1 | 1 | `/root/hud_task1_review` | P2：Task 4 响应式/命中与容量见证测试排在实现之后 | round 1 把两类失败测试分别前移到 3.5/3.6，最小实现后移到 3.7；fix `978c8f3` | round 1 复审：ADDRESSED | `/root`：要求恢复 red-green 顺序 |
 | 1 | 2 | `/root/hud_task1_review` | P1：五组任务把单一 task reviewer 扩成分别的 spec reviewer 与 quality reviewer，重复占用评审席位 | round 2 把五处派发统一为一名新的独立 task reviewer 同时给出 SPEC/QUALITY 双裁决，复审由同一 scoped reviewer 双裁决；fix `5c9ce64` | round 2 复审：ADDRESSED | `/root`：只做该项最小修复 |
 | 1 | 2 | `/root/hud_task1_review` | 第 2 轮复审无新 P0、P1、P2 或 P3 finding | 复审完整范围 `08932d9..5c9ce64`；review package SHA-256 `52eb2bc47378ed10f297d85a73cc50c06e58cb0ef31372a1bdc0afe675d253b2`；strict 56/0；diff check EXIT 0 | SPEC PASS / QUALITY PASS | `/root`：通过 |
+| 2 | 1 | `/root/hud_task2_review` | P2：顶面逐像素测试手写 placement 子集，遗漏 `ItemLightBlock`、`ItemWheatSeeds` 与未来注册项 | 本轮改为 `0 <= item < ItemIDMax`，仅跳过 `ItemPlacement` 为 false 的项 | 待复审 | 待 controller 裁决 |
+| 2 | 1 | `/root/hud_task2_review` | P2：未锁定五个 UI cell 与物品 offset 的字面列顺序 | 本轮断言 `[6]int{0, 1, 2, 3, 4, 5}` | 待复审 | 待 controller 裁决 |
+| 2 | 1 | `/root/hud_task2_review` | P2：review package 未包含 committed diff、commit list 与 stat | 本轮提交后以 `review-package` 脚本重生成完整 scratch package | 待复审 | 待 controller 裁决 |
 
 ## 人工视觉验收
 

@@ -13,6 +13,17 @@ import (
 // 杀死变异：漏画任一固定 UI 图标、复用同一图标、引入半透明边缘或让构建读取不稳定
 // 状态，都会破坏生存状态行的固定图集契约。
 func TestHotbarTextureAtlasUIIconsAreDistinctBinaryAndDeterministic(t *testing.T) {
+	if got, want := [6]int{
+		hotbarEmptyHeartColumn,
+		hotbarHalfHeartColumn,
+		hotbarFullHeartColumn,
+		hotbarEmptyBubbleColumn,
+		hotbarFullBubbleColumn,
+		hotbarBlockColumnOffset,
+	}, [6]int{0, 1, 2, 3, 4, 5}; got != want {
+		t.Fatalf("HUD 图集列顺序=%v，想要 %v", got, want)
+	}
+
 	registry := assets.NewRegistry()
 	pixels := buildHotbarTextureAtlas(registry)
 	if again := buildHotbarTextureAtlas(registry); !bytes.Equal(pixels, again) {
@@ -65,17 +76,10 @@ func hotbarTextureCell(pixels []byte, column int) []byte {
 func TestHotbarTextureAtlasCopiesRegisteredBlockTopFaces(t *testing.T) {
 	registry := assets.NewRegistry()
 	pixels := buildHotbarTextureAtlas(registry)
-	for _, item := range []core.ItemID{
-		core.ItemStone, core.ItemDirt, core.ItemGrass, core.ItemStoneBrick,
-		core.ItemFurnace, core.ItemIronBlock, core.ItemChest,
-		core.ItemCobblestone, core.ItemSmoothStone, core.ItemSand, core.ItemGravel,
-		core.ItemOakLog, core.ItemOakPlanks, core.ItemLeaves, core.ItemGlass,
-		core.ItemBrick, core.ItemWhiteWool, core.ItemRoofTile, core.ItemClay,
-		core.ItemSnowBlock, core.ItemMossyCobblestone,
-	} {
+	for item := core.ItemID(0); item < core.ItemIDMax; item++ {
 		block, ok := core.ItemPlacement(item)
 		if !ok {
-			t.Fatalf("测试物品 %d 不可放置", item)
+			continue
 		}
 		source := registry.LayerRGBA(int(registry.Material(block, mesh.FacePosY)))
 		column := hotbarBlockColumnOffset + int(item)
