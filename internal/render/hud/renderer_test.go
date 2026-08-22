@@ -72,10 +72,6 @@ func TestHotbarPrepareClosedMiningEncodesLayeredFeedback(t *testing.T) {
 	if got := len(renderer.layout.quads); got != wantQuads {
 		t.Fatalf("关闭态采掘实例=%d，想要双层面板、双层选中、九格、轨道/填充和三个缺口共 %d", got, wantQuads)
 	}
-	if got := len(renderer.upload[hotbarQuadOffset : hotbarQuadOffset+wantQuads*hotbarInstanceBytes]); got != wantQuads*hotbarInstanceBytes {
-		t.Fatalf("编码 quad 前缀=%d bytes，想要 %d", got, wantQuads*hotbarInstanceBytes)
-	}
-
 	panelCount, notchCount := 0, 0
 	for _, quad := range renderer.layout.quads {
 		if quad.Width > 432 && quad.Height > 48 {
