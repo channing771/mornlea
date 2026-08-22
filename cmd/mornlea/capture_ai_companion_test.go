@@ -59,7 +59,7 @@ func TestWaterUnderwaterCaptureSceneIsLast(t *testing.T) {
 // 全部呈现状态,与前一场景互相独立。
 func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 	wantNames := []string{
-		"terrain-noon", "hud-hotbar-health", "avatar-nametag", "inventory-crafting",
+		"terrain-noon", "hud-hotbar-health", "hud-survival-feedback", "avatar-nametag", "inventory-crafting",
 		"debug-panel", "skylight-tunnel", "block-light-room", "materials-showcase",
 		"target-block-feedback", "oak-grove", "ai-companion",
 		"water-surface-slope", "far-horizon", "water-underwater",

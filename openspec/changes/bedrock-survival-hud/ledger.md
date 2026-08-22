@@ -8,7 +8,7 @@
 | 2 atlas icons | `/root/hud_task2_atlas` | `eb440ed`（候选）/ `1b94ee3`（round 1 fix）/ `8d3b4d7`（round 2 ledger-only fix；`BASE` 为 `6886679c44eeb548347bac77aa10bdbaed749ada`） | `/root/hud_task2_review`：首轮 SPEC FAIL（3 个 P2）；round 1 复审 SPEC FAIL（仅 package SHA-256 未闭合）；round 2 复审 SPEC PASS | `/root/hud_task2_review`：首轮 QUALITY FAIL（3 个 P2）；round 1 复审 QUALITY FAIL（仅 package SHA-256 未闭合）；round 2 复审 QUALITY PASS | 2 | `make rust` EXIT 0；红测按预期失败；HUD race、archcheck、gofmt、diff check 均 EXIT 0。round 1 覆盖全枚举 placement 与字面列顺序；round 2 ledger-only 后官方 package 覆盖完整 `BASE..HEAD`，原始 diff SHA-256 `4ad046ef0d15285b9f015dd13e462769e39158b0e63a3790f7979babc4ccb6c9`，复审重新计算一致 | 通过 |
 | 3 hotbar/mining | `/root/hud_task3_hotbar` | `4aabc6a`（候选）/ `3e047b5`（打开态修复）/ `ad2c6bb`（round 1 补测）/ `60ddd5b`（round 1 验证）/ `29f4e58`（见证收紧） | `/root/hud_task3_review`：首轮 SPEC FAIL（1 个 P2）；round 1 SPEC PASS | `/root/hud_task3_review`：首轮 QUALITY FAIL（1 个 P2）；round 1 QUALITY PASS | 1 | `make rust` EXIT 0；快捷栏、采掘与 BASE archive renderer 红测均按预期失败；renderer focused、HUD race、archcheck、gofmt、diff check 均 EXIT 0；package raw diff SHA-256 `cfe0d5cd946d66bc8b343f5f50a5b0ba1fd059311af0577a9ccbdfd46f7595bc` | 通过 |
 | 4 status/layout/capacity | `/root/hud_task4_status` | `92f0c64`（候选）/ `5e7f970`（round 1 docs fix）/ `a15ac66`（round 1 code fix）/ `04ecf8c`（round 2 comment fix）/ `ade4768`（round 2 verification）/ `02a7a8a`（round 3 downstream fix） | `/root/hud_task4_review`：首轮 SPEC FAIL（P1/P2）；round 1/2/3 复审 SPEC PASS | `/root/hud_task4_review`：首轮 QUALITY FAIL（P1/P2）；round 1 复审 QUALITY FAIL（新 P3 注释漂移）；round 2/3 复审 QUALITY PASS | 3 | 全部生命/氧气、响应式、容量与下游集成分段均真实 RED/GREEN；round 3 archive 完整 `cmd/mornlea` race 307.500s、HUD race、archcheck、benchmark v18 focused、OpenSpec strict 56/0、gofmt、diff check 均 PASS；最终 package raw SHA-256 `6412be44786380e5cc03c27589246c7b81ee52e53e3f9915764f201e515207ae` | `/root`：选择 resolved single-slot 保持 benchmark v18 的 247/700/12288/45888，精确修正下游契约；round 3 最终双 PASS，通过 |
-| 5 capture/golden | 待派发 | 待提交 | 待独立评审 | 待独立评审 | 0 | 待执行 | 待 controller 裁决 |
+| 5 capture/golden | `/root/hud_task5_capture` | 本候选提交（SHA 见提交记录） | 待独立评审 | 待独立评审 | 0 | `make rust`、真实 RED、focused、`cmd/mornlea` race 187.189s、archcheck、gofmt、diff check、15 场景 visual-update/逐图验收、最终 visual-check 15×0 像素差均 PASS | 待 controller 裁决 |
 | 6 closeout | 待派发 | 待提交 | 待独立评审 | 待独立评审 | 0 | 待执行 | 待 controller 裁决 |
 
 ## Finding 与修复记录
@@ -39,7 +39,7 @@
 
 | 执行人 | 候选目录 | 接受的 golden | 拒绝项与根因 | 结论 |
 |---|---|---|---|---|
-| 待执行 | 待记录 | 待逐图列出 | 待记录 | 待记录 |
+| `/root/hud_task5_capture` | `build/visual-bedrock-survival-hud-update` | `terrain-noon.png`、`hud-hotbar-health.png`、`hud-survival-feedback.png`、`avatar-nametag.png`、`inventory-crafting.png`、`debug-panel.png`、`skylight-tunnel.png`、`block-light-room.png`、`materials-showcase.png`、`target-block-feedback.png`、`oak-grove.png`、`ai-companion.png`、`water-surface-slope.png`、`far-horizon.png`、`water-underwater.png` | 无；14 张旧图的变化 bbox 均只落在 HUD 区域，新图是唯一新增 golden | 15 张逐图接受；`hud-hotbar-health` 的九格/双层选中/数量/耐久/满血/满氧隐藏、`hud-survival-feedback` 的低血/气泡/磨损工具/不可采中段缺口、`inventory-crafting` 的下方状态行均符合规格，世界/实体/光照/LOD/水域无异常 |
 
 ## 整分支终审
 

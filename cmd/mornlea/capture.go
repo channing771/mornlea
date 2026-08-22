@@ -14,6 +14,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/render/hud"
 )
 
 // captureWidth/captureHeight 是视觉场景的固定分辨率。
@@ -40,6 +41,12 @@ const captureGlyphSettleFrames = 32
 
 var captureSettleTimeout = 5 * time.Minute
 
+type captureHUDFixture struct {
+	Health uint8
+	Oxygen uint16
+	Mining hud.MiningOverlay
+}
+
 // captureScene 是一个视觉场景。三要素缺一不可：确定性的世界状态由固定种子、
 // waitUntilLoaded 与可选 Prepare 保证，固定的相机位姿与其余呈现状态由 Apply
 // 设置，抓帧时机由 WarmupFrames 和收敛判据固定。任何一项随环境变化，产出的图
@@ -59,6 +66,8 @@ type captureScene struct {
 	// Apply 在最后一帧渲染前执行，是场景对呈现状态的全部干预。
 	// 它跑在 drainServerMessages 之后，因此设置的值不会被当帧的服务端消息覆盖。
 	Apply func(*application) error
+	// HUD 是仅在 capture 收敛与最终帧期间生效的临时生存状态。
+	HUD *captureHUDFixture
 	// PinVolatile 可选，在字形收敛帧之后、最后一帧渲染之前执行，用来钉住那些
 	// 随机器速度变化、因而不属于场景三要素的量。
 	//
@@ -104,10 +113,6 @@ var captureScenes = []captureScene{
 			return nil
 		},
 	},
-	// ponytail: 生命值只覆盖满血 20。部分心形需要注入 PlayerState，
-	// 而 Predictor.ApplyPlayerState 带 ServerTick 单调校验与位置和解，
-	// 从抓帧钩子注入会牵动相机。要覆盖需要先给 Predictor 加一个
-	// 只改生命值的测试入口，或让抓帧场景能脚本化地驱动服务端造成伤害。
 	{
 		Name:         "hud-hotbar-health",
 		WarmupFrames: 8,
@@ -133,6 +138,34 @@ var captureScenes = []captureScene{
 			}
 			inventory.Backpack[0] = core.ItemStack{Item: core.ItemCoal, Count: 12}
 			return app.inventory.Apply(network.InventoryState{Inventory: inventory})
+		},
+	},
+	{
+		Name:         "hud-survival-feedback",
+		WarmupFrames: 8,
+		Apply: func(app *application) error {
+			app.worldTimeTicks = 6000
+			app.camera.Yaw = 0
+			app.camera.Pitch = -0.25
+			inventory := core.Inventory{}
+			inventory.Hotbar.Selected = 2
+			inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 64}
+			inventory.Hotbar.Slots[1] = core.ItemStack{Item: core.ItemStoneBrick, Count: 7}
+			inventory.Hotbar.Slots[2] = core.ItemStack{
+				Item: core.ItemStonePickaxe, Count: 1, Durability: 40,
+			}
+			inventory.Hotbar.Slots[3] = core.ItemStack{
+				Item: core.ItemIronPickaxe, Count: 1, Durability: 250,
+			}
+			inventory.Backpack[0] = core.ItemStack{Item: core.ItemCoal, Count: 12}
+			return app.inventory.Apply(network.InventoryState{Inventory: inventory})
+		},
+		HUD: &captureHUDFixture{
+			Health: 5,
+			Oxygen: core.MaxOxygenTicks / 3,
+			Mining: hud.MiningOverlay{
+				Active: true, ProgressTicks: 4, RequiredTicks: 9, Harvestable: false,
+			},
 		},
 	},
 	{
@@ -512,6 +545,13 @@ func captureSceneImage(app *application, scene captureScene) (*image.NRGBA, erro
 	if err := scene.Apply(app); err != nil {
 		return nil, fmt.Errorf("应用场景状态: %w", err)
 	}
+	if scene.HUD != nil {
+		restore, err := applyCaptureHUDFixture(app, scene.HUD)
+		if err != nil {
+			return nil, fmt.Errorf("应用 HUD 场景夹具: %w", err)
+		}
+		defer restore()
+	}
 	settleDeadline := time.Now().Add(captureSettleTimeout)
 	for i := 0; ; i++ {
 		if _, err := app.renderFrame(captureDrainMax); err != nil {
@@ -544,6 +584,40 @@ func captureSceneImage(app *application, scene captureScene) (*image.NRGBA, erro
 	}
 	pixels := app.renderer.Readback()
 	return bgraToNRGBA(pixels, captureWidth, captureHeight), nil
+}
+
+func applyCaptureHUDFixture(
+	app *application,
+	fixture *captureHUDFixture,
+) (func(), error) {
+	originalPredictor, originalMining := app.predictor, app.miningOverlay
+	state, ready := originalPredictor.State()
+	if !ready {
+		return nil, errors.New("capture HUD 夹具需要已就绪 predictor")
+	}
+	predictor := client.NewPredictor()
+	if err := predictor.Begin(network.PlayerState{
+		Dimension: core.Overworld,
+		Position:  state.Position,
+		Velocity:  state.Velocity,
+		OnGround:  state.OnGround,
+		Yaw:       app.camera.Yaw,
+		Pitch:     app.camera.Pitch,
+		Ready:     true,
+		Health:    fixture.Health,
+		Oxygen:    fixture.Oxygen,
+	}); err != nil {
+		return nil, fmt.Errorf("构造 capture HUD predictor: %w", err)
+	}
+	app.predictor, app.miningOverlay = predictor, fixture.Mining
+	restored := false
+	return func() {
+		if restored {
+			return
+		}
+		restored = true
+		app.predictor, app.miningOverlay = originalPredictor, originalMining
+	}, nil
 }
 
 // `runGoldenUpdateControl` 在两个 disposable application 上只抓取 far-horizon，

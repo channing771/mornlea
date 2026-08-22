@@ -33,13 +33,13 @@
 
 ## 4. 确定性 survival feedback capture 与 golden（对应执行 Task 5）
 
-- [ ] 4.1 在新建 `cmd/mornlea/capture_hud_test.go` 和既有 capture tests 先写失败测试：固定完整 15 场景顺序、`hud-survival-feedback` 紧随 `hud-hotbar-health`、`far-horizon` 倒数第二、`water-underwater` 唯一末尾，以及 HUD 夹具值和一次/重复 restore 后 predictor 指针与 mining overlay 恢复；运行 `go test ./cmd/mornlea -run 'Test(HUDCapture|CaptureSceneOrder|WaterUnderwater|FarHorizon)' -count=1` 并记录预期失败。
-- [ ] 4.2 在 `cmd/mornlea/capture.go` 增加最小 `captureHUDFixture` 和 `captureScene.HUD`：保存原 predictor/mining，复用原有限物理状态构造固定 Ready/Overworld predictor，钉住 health/oxygen/yaw/pitch/mining，并返回幂等 restore；不修改产品 `Predictor` API 或 `renderFrame` 热路径。
-- [ ] 4.3 在 scene Apply 后、收敛帧前应用夹具并对所有后续返回路径 `defer restore()`；注册固定低血、`core.MaxOxygenTicks/3`、磨损工具、不可采 `4/9` 进度的 `hud-survival-feedback`，删除旧的部分心形 capture 限制注释，并更新既有顺序测试。
-- [ ] 4.4 运行 `gofmt -w cmd/mornlea/capture.go cmd/mornlea/capture_ai_companion_test.go cmd/mornlea/capture_hud_test.go`、`go test ./cmd/mornlea -run 'Test(HUDCapture|Capture.*Scene|WaterUnderwater|FarHorizon)' -count=1`、`go test ./cmd/mornlea -race -count=1`、`go test ./internal/archcheck -count=1` 与 `git diff --check`。
-- [ ] 4.5 在可用 Metal 环境运行 `make visual-update VISUAL_OUT=build/visual-bedrock-survival-hud-update`；确认场景共 15 张、新增 `hud-survival-feedback.png`，且只提交实际受影响的 `cmd/mornlea/testdata/golden` 文件，不移动场景尾序、不放宽双阈值。
-- [ ] 4.6 人工逐图复核全部 15 张候选并把文件清单与结论写入 `ledger.md`；重点确认 `hud-hotbar-health` 的九格/双层选中/数量/耐久/无背景满血/满氧隐藏，`hud-survival-feedback` 的低血/气泡/磨损工具/不可采中段形状，以及 `inventory-crafting` 的状态行避让；任何世界、实体、光照、水或 LOD 区域异常先修根因。
-- [ ] 4.7 运行 `make visual-check VISUAL_OUT=build/visual-bedrock-survival-hud-final`、`go test ./cmd/mornlea -run 'Test(HUDCapture|Capture.*Scene|WaterUnderwater|FarHorizon)' -count=1` 与 `git diff --check`。
+- [x] 4.1 在新建 `cmd/mornlea/capture_hud_test.go` 和既有 capture tests 先写失败测试：固定完整 15 场景顺序、`hud-survival-feedback` 紧随 `hud-hotbar-health`、`far-horizon` 倒数第二、`water-underwater` 唯一末尾，以及 HUD 夹具值和一次/重复 restore 后 predictor 指针与 mining overlay 恢复；运行 `go test ./cmd/mornlea -run 'Test(HUDCapture|CaptureSceneOrder|WaterUnderwater|FarHorizon)' -count=1` 并记录预期失败。
+- [x] 4.2 在 `cmd/mornlea/capture.go` 增加最小 `captureHUDFixture` 和 `captureScene.HUD`：保存原 predictor/mining，复用原有限物理状态构造固定 Ready/Overworld predictor，钉住 health/oxygen/yaw/pitch/mining，并返回幂等 restore；不修改产品 `Predictor` API 或 `renderFrame` 热路径。
+- [x] 4.3 在 scene Apply 后、收敛帧前应用夹具并对所有后续返回路径 `defer restore()`；注册固定低血、`core.MaxOxygenTicks/3`、磨损工具、不可采 `4/9` 进度的 `hud-survival-feedback`，删除旧的部分心形 capture 限制注释，并更新既有顺序测试。
+- [x] 4.4 运行 `gofmt -w cmd/mornlea/capture.go cmd/mornlea/capture_ai_companion_test.go cmd/mornlea/capture_hud_test.go`、`go test ./cmd/mornlea -run 'Test(HUDCapture|Capture.*Scene|WaterUnderwater|FarHorizon)' -count=1`、`go test ./cmd/mornlea -race -count=1`、`go test ./internal/archcheck -count=1` 与 `git diff --check`。
+- [x] 4.5 在可用 Metal 环境运行 `make visual-update VISUAL_OUT=build/visual-bedrock-survival-hud-update`；确认场景共 15 张、新增 `hud-survival-feedback.png`，且只提交实际受影响的 `cmd/mornlea/testdata/golden` 文件，不移动场景尾序、不放宽双阈值。
+- [x] 4.6 人工逐图复核全部 15 张候选并把文件清单与结论写入 `ledger.md`；重点确认 `hud-hotbar-health` 的九格/双层选中/数量/耐久/无背景满血/满氧隐藏，`hud-survival-feedback` 的低血/气泡/磨损工具/不可采中段形状，以及 `inventory-crafting` 的状态行避让；任何世界、实体、光照、水或 LOD 区域异常先修根因。
+- [x] 4.7 运行 `make visual-check VISUAL_OUT=build/visual-bedrock-survival-hud-final`、`go test ./cmd/mornlea -run 'Test(HUDCapture|Capture.*Scene|WaterUnderwater|FarHorizon)' -count=1` 与 `git diff --check`。
 - [ ] 4.8 implementer 自证和人工验收通过后提交候选 `git commit -m "test: lock survival HUD presentation"`；以候选 parent/候选提交生成 committed review package 和 SHA-256，再交给一名新的独立 task reviewer，由同一 reviewer 同时给出 SPEC 与 QUALITY 两项裁决。
 - [ ] 4.9 finding 只以追加 fix commit 修复；每轮重跑 4.4/4.7、必要时重新逐图验收、更新 review package，并由同一 scoped task reviewer 同时复审 SPEC 与 QUALITY，最多 5 轮。重点检查 fixture 仅限 capture、错误路径恢复、场景隔离、完整顺序与阈值；两项 PASS/CLEAN 后用后续 bookkeeping commit 回填 ledger。
 
