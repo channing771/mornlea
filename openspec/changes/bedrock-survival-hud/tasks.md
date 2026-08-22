@@ -10,11 +10,11 @@
 
 ## 2. 快捷栏、选中格、耐久与采掘轨道（对应执行 Task 3）
 
-- [ ] 2.1 在 `internal/render/hud/layout_test.go` 与 `renderer_test.go` 先写失败测试：固定关闭态居中九格、面板外阴影/内表面、每格表面、选中格外扩高对比外框与强调内框、数量双层最多两位及耐久显示条件；运行 `go test ./internal/render/hud -run 'Test(ClosedHotbar|HotbarCount|Durability)' -count=1` 并记录预期失败。
-- [ ] 2.2 在 `internal/render/hud/layout.go` 增加当前产品所需的包内常量和 `hotbarRowBounds`，让 `inventorySlotOrigin`、状态锚点与采掘轨道复用同一几何；只改关闭态快捷栏绘制，继续复用现有物品、数量和耐久 append 路径，不改变打开态容器视觉或 `InventorySlotAt`。
-- [ ] 2.3 在 `layout_test.go` 先覆盖采掘 inactive、零 required ticks、0%、中段、超 100%、可采与不可采，证明可采有移动末端 cap、不可采有固定 warning notch，忽略 RGB 后几何仍不同；运行 `go test ./internal/render/hud -run 'TestMining' -count=1` 并记录预期失败。
-- [ ] 2.4 在 `layout.go` 以现有纯色 `hotbarInstance` 最小扩展 `appendMiningBar`：比例钳制到 1，可采追加末端 cap，不可采追加固定 notch；按本组新增实例更新关闭分支容量组成，不增加 shader、贴图 cell 或动画。
-- [ ] 2.5 运行 `gofmt -w internal/render/hud/layout.go internal/render/hud/layout_test.go internal/render/hud/renderer_test.go`、`go test ./internal/render/hud -race -count=1`、`go test ./internal/archcheck -count=1` 与 `git diff --check`，记录验证证据。
+- [x] 2.1 在 `internal/render/hud/layout_test.go` 与 `renderer_test.go` 先写失败测试：固定关闭态居中九格、面板外阴影/内表面、每格表面、选中格外扩高对比外框与强调内框、数量双层最多两位及耐久显示条件；运行 `go test ./internal/render/hud -run 'Test(ClosedHotbar|HotbarCount|Durability)' -count=1` 并记录预期失败。
+- [x] 2.2 在 `internal/render/hud/layout.go` 增加当前产品所需的包内常量和 `hotbarRowBounds`，让 `inventorySlotOrigin`、状态锚点与采掘轨道复用同一几何；只改关闭态快捷栏绘制，继续复用现有物品、数量和耐久 append 路径，不改变打开态容器视觉或 `InventorySlotAt`。
+- [x] 2.3 在 `layout_test.go` 先覆盖采掘 inactive、零 required ticks、0%、中段、超 100%、可采与不可采，证明可采有移动末端 cap、不可采有固定 warning notch，忽略 RGB 后几何仍不同；运行 `go test ./internal/render/hud -run 'TestMining' -count=1` 并记录预期失败。
+- [x] 2.4 在 `layout.go` 以现有纯色 `hotbarInstance` 最小扩展 `appendMiningBar`：比例钳制到 1，可采追加末端 cap，不可采追加固定 notch；按本组新增实例更新关闭分支容量组成，不增加 shader、贴图 cell 或动画。
+- [x] 2.5 运行 `gofmt -w internal/render/hud/layout.go internal/render/hud/layout_test.go internal/render/hud/renderer_test.go`、`go test ./internal/render/hud -race -count=1`、`go test ./internal/archcheck -count=1` 与 `git diff --check`，记录验证证据。
 - [ ] 2.6 implementer 自证通过后提交候选 `git commit -m "feat: restyle survival hotbar feedback"`；记录候选 parent 为 `BASE`、候选为 `HEAD`，生成包含 committed diff 与 SHA-256 的 scratch review package，再交给一名新的独立 task reviewer，由同一 reviewer 同时给出 SPEC 与 QUALITY 两项裁决。
 - [ ] 2.7 finding 只以追加 fix commit 修复；每轮重跑 2.5、更新 review package，并由同一 scoped task reviewer 同时复审 SPEC 与 QUALITY，最多 5 轮。重点检查 `InventorySlotAt`、打开态容器视觉、权威物品语义和非颜色形状；两项 PASS/CLEAN 后用后续 bookkeeping commit 回填 ledger。
 

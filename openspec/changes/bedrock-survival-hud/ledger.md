@@ -6,7 +6,7 @@
 |---|---|---|---|---|---:|---|---|
 | 1 OpenSpec change | `/root/hud_task1_openspec` | `b67f38e`（候选）/ `978c8f3`（round 1 fix）/ `5c9ce64`（round 2 fix） | `/root/hud_task1_review`：初审 SPEC FAIL；round 1 复审 SPEC PASS；round 2 复审 SPEC PASS | `/root/hud_task1_review`：初审 QUALITY FAIL；round 1 复审 QUALITY FAIL；round 2 复审 QUALITY PASS | 2 | 三次提交前均为 OpenSpec 56/0、diff check EXIT 0；最终 review package SHA-256 `52eb2bc47378ed10f297d85a73cc50c06e58cb0ef31372a1bdc0afe675d253b2`，strict 56/0、范围 diff check EXIT 0 | 通过 |
 | 2 atlas icons | `/root/hud_task2_atlas` | `eb440ed`（候选）/ `1b94ee3`（round 1 fix）/ `8d3b4d7`（round 2 ledger-only fix；`BASE` 为 `6886679c44eeb548347bac77aa10bdbaed749ada`） | `/root/hud_task2_review`：首轮 SPEC FAIL（3 个 P2）；round 1 复审 SPEC FAIL（仅 package SHA-256 未闭合）；round 2 复审 SPEC PASS | `/root/hud_task2_review`：首轮 QUALITY FAIL（3 个 P2）；round 1 复审 QUALITY FAIL（仅 package SHA-256 未闭合）；round 2 复审 QUALITY PASS | 2 | `make rust` EXIT 0；红测按预期失败；HUD race、archcheck、gofmt、diff check 均 EXIT 0。round 1 覆盖全枚举 placement 与字面列顺序；round 2 ledger-only 后官方 package 覆盖完整 `BASE..HEAD`，原始 diff SHA-256 `4ad046ef0d15285b9f015dd13e462769e39158b0e63a3790f7979babc4ccb6c9`，复审重新计算一致 | 通过 |
-| 3 hotbar/mining | 待派发 | 待提交 | 待独立评审 | 待独立评审 | 0 | 待执行 | 待 controller 裁决 |
+| 3 hotbar/mining | `/root/hud_task3_hotbar` | 本候选提交（SHA 由 controller 回填） | 待独立评审 | 待独立评审 | 0 | `make rust` EXIT 0；快捷栏与采掘红测均按预期失败；HUD race、archcheck、gofmt、diff check 均 EXIT 0 | 待 controller 裁决 |
 | 4 status/layout/capacity | 待派发 | 待提交 | 待独立评审 | 待独立评审 | 0 | 待执行 | 待 controller 裁决 |
 | 5 capture/golden | 待派发 | 待提交 | 待独立评审 | 待独立评审 | 0 | 待执行 | 待 controller 裁决 |
 | 6 closeout | 待派发 | 待提交 | 待独立评审 | 待独立评审 | 0 | 待执行 | 待 controller 裁决 |

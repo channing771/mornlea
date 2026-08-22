@@ -6,21 +6,31 @@ import (
 )
 
 const (
-	// 固定容量按最坏布局：背包分组面板、两种高亮、36 个栏位、双层物品内容、
-	// 九格快捷栏耐久条，再加最大的容器叠加层、十段生命条与两段氧气条。
-	maxHotbarQuads = openInventoryPanelQuads + 2 + core.InventorySlots + core.InventorySlots*2 +
-		core.HotbarSlots*2 + maxOverlayQuads + healthQuads + oxygenQuads + maxChatQuads
+	// 打开态与关闭态互斥；当前关闭态新增的选中和采掘反馈仍小于打开态最大组合，
+	// 但分开列出以免后续样式变化悄悄突破固定上传容量。
+	openInventoryQuads = openInventoryPanelQuads + 2 + core.InventorySlots + core.InventorySlots*2 +
+		core.HotbarSlots*2 + maxOverlayQuads
+	closedHotbarQuads = closedHotbarPanelQuads + closedHotbarSelectionQuads + core.HotbarSlots +
+		core.HotbarSlots*2 + core.HotbarSlots*2 + miningBarQuads + miningWarningNotches
+	maxHotbarQuads = max(openInventoryQuads, closedHotbarQuads) + healthQuads + oxygenQuads + maxChatQuads
 	// 数量最多两位数（2..64），每个数字包含阴影与前景两个实例。
 	maxHotbarGlyphs = core.InventorySlots*4 + maxOverlayGlyphs + maxChatGlyphs
 
 	// 打开背包时依次绘制外框、背包区、快捷栏区和分隔线。
 	openInventoryPanelQuads = 4
+	// 关闭态快捷栏以外阴影和内表面形成独立面板，选中格再用双层轮廓强调。
+	closedHotbarPanelQuads     = 2
+	closedHotbarSelectionQuads = 2
+	miningBarQuads             = 2
+	miningWarningNotches       = 3
 
 	hotbarSlotSize      = float32(48)
 	hotbarSlotGap       = float32(4)
 	hotbarBottomMargin  = float32(24)
 	hotbarSelectBorder  = float32(3)
+	hotbarSelectInset   = float32(3)
 	hotbarPanelPadding  = float32(6)
+	hotbarPanelInset    = float32(2)
 	hotbarSwatchInset   = float32(10)
 	hotbarSwatchBorder  = float32(2)
 	hotbarDigitMargin   = float32(3)
@@ -30,6 +40,8 @@ const (
 	miningBarWidth      = float32(240)
 	miningBarHeight     = float32(12)
 	miningBarGap        = float32(16)
+	miningBarCapWidth   = float32(8)
+	miningNotchWidth    = float32(6)
 	// 背包界面在快捷栏之上再放 3 行，并与快捷栏留出一段间隔。
 	inventoryRowGap = float32(12)
 
@@ -44,6 +56,18 @@ const (
 		recipeRowGap + hotbarSlotSize +
 		float32(len(inventoryRecipeIDs)-1)*(hotbarSlotSize+hotbarSlotGap) +
 		hotbarPanelPadding
+)
+
+var (
+	hotbarPanelShadowColor   = [4]float32{0.012, 0.015, 0.02, 0.94}
+	hotbarPanelSurfaceColor  = [4]float32{0.045, 0.052, 0.06, 0.96}
+	hotbarSelectedOuterColor = [4]float32{0.96, 0.92, 0.72, 1}
+	hotbarSelectedInnerColor = [4]float32{1, 0.72, 0.24, 0.98}
+	miningTrackColor         = [4]float32{0.05, 0.05, 0.06, 0.78}
+	miningHarvestableColor   = [4]float32{0.30, 0.78, 0.36, 0.95}
+	miningBlockedColor       = [4]float32{0.95, 0.55, 0.15, 0.95}
+	miningCapColor           = [4]float32{0.96, 1, 0.76, 1}
+	miningNotchColor         = [4]float32{0.18, 0.12, 0.08, 1}
 )
 
 // hotbarDigits 是 HUD 需要的全部字形，登录后不再增长。
@@ -100,12 +124,16 @@ func layoutInventory(
 	appendInventoryPanel(dst, open, width, height, scale)
 	// 高亮先于栏位表面绘制，栏位只覆盖内部并留下像素边框。
 	selectedX, selectedY := inventorySlotOrigin(int(inventory.Hotbar.Selected), open, width, height)
+	selectedColor := hotbarSelectedOuterColor
+	if open {
+		selectedColor = hotbarSelectedInnerColor
+	}
 	dst.quads = append(dst.quads, hotbarInstance{
 		X:      selectedX - selectBorder,
 		Y:      selectedY - selectBorder,
 		Width:  slotSize + 2*selectBorder,
 		Height: slotSize + 2*selectBorder,
-		Color:  [4]float32{1, 0.72, 0.24, 0.98},
+		Color:  selectedColor,
 	})
 	if open && source >= 0 {
 		if sourceX, sourceY, ok := containerSourceOrigin(source, overlay, chest, width, height); ok {
@@ -124,6 +152,14 @@ func layoutInventory(
 			X: x, Y: y,
 			Width: slotSize, Height: slotSize,
 			Color: [4]float32{0.12, 0.13, 0.14, 0.90},
+		})
+	}
+	if !open {
+		inset := hotbarSelectInset * scale
+		dst.quads = append(dst.quads, hotbarInstance{
+			X: selectedX + inset, Y: selectedY + inset,
+			Width: slotSize - 2*inset, Height: slotSize - 2*inset,
+			Color: hotbarSelectedInnerColor,
 		})
 	}
 	for slot := range slots {
@@ -167,14 +203,26 @@ func appendInventoryPanel(dst *hotbarLayout, open bool, width, height, scale flo
 	}
 	padding := hotbarPanelPadding * scale
 	totalWidth := (core.HotbarSlots*hotbarSlotSize + (core.HotbarSlots-1)*hotbarSlotGap) * scale
+	if !open {
+		panelHeight := hotbarSlotSize*scale + 2*padding
+		dst.quads = append(dst.quads, hotbarInstance{
+			X: left - padding, Y: top - padding,
+			Width: totalWidth + 2*padding, Height: panelHeight,
+			Color: hotbarPanelShadowColor,
+		})
+		inset := hotbarPanelInset * scale
+		dst.quads = append(dst.quads, hotbarInstance{
+			X: left - padding + inset, Y: top - padding + inset,
+			Width: totalWidth + 2*padding - 2*inset, Height: panelHeight - 2*inset,
+			Color: hotbarPanelSurfaceColor,
+		})
+		return
+	}
 	dst.quads = append(dst.quads, hotbarInstance{
 		X: left - padding, Y: top - padding,
 		Width: totalWidth + 2*padding, Height: hotbarY + hotbarSlotSize*scale - top + 2*padding,
 		Color: [4]float32{0.025, 0.03, 0.035, 0.88},
 	})
-	if !open {
-		return
-	}
 	_, backpackBottomY := inventorySlotOrigin(core.InventorySlots-1, true, width, height)
 	innerPadding := padding * 0.5
 	dst.quads = append(dst.quads,
@@ -272,28 +320,44 @@ func appendMiningBar(dst *hotbarLayout, overlay MiningOverlay, width, height flo
 	if !overlay.Active || overlay.RequiredTicks == 0 {
 		return
 	}
-	scale := hudScale(false, width, height)
+	left, hotbarY, totalWidth, scale := hotbarRowBounds(width, height)
 	barWidth := miningBarWidth * scale
 	barHeight := miningBarHeight * scale
-	x := (width - barWidth) * 0.5
-	_, hotbarY := inventorySlotOrigin(0, false, width, height)
+	x := left + (totalWidth-barWidth)*0.5
 	y := hotbarY - (miningBarGap+miningBarHeight)*scale
 	dst.quads = append(dst.quads, hotbarInstance{
 		X: x, Y: y, Width: barWidth, Height: barHeight,
-		Color: [4]float32{0.05, 0.05, 0.06, 0.78},
+		Color: miningTrackColor,
 	})
-	fraction := float32(overlay.ProgressTicks) / float32(overlay.RequiredTicks)
+	fraction := min(float32(overlay.ProgressTicks)/float32(overlay.RequiredTicks), 1)
 	if fraction <= 0 {
 		return
 	}
-	color := [4]float32{0.95, 0.55, 0.15, 0.95}
+	color := miningBlockedColor
 	if overlay.Harvestable {
-		color = [4]float32{0.30, 0.78, 0.36, 0.95}
+		color = miningHarvestableColor
 	}
 	dst.quads = append(dst.quads, hotbarInstance{
 		X: x, Y: y, Width: barWidth * min(fraction, 1), Height: barHeight,
 		Color: color,
 	})
+	if overlay.Harvestable {
+		capWidth := miningBarCapWidth * scale
+		dst.quads = append(dst.quads, hotbarInstance{
+			X: min(max(x+barWidth*fraction-capWidth, x), x+barWidth-capWidth), Y: y,
+			Width: capWidth, Height: barHeight,
+			Color: miningCapColor,
+		})
+		return
+	}
+	notchWidth := miningNotchWidth * scale
+	for _, position := range [...]float32{0.25, 0.5, 0.75} {
+		dst.quads = append(dst.quads, hotbarInstance{
+			X: x + barWidth*position - notchWidth*0.5, Y: y,
+			Width: notchWidth, Height: barHeight,
+			Color: miningNotchColor,
+		})
+	}
 }
 
 // inventorySlotOrigin 返回统一索引对应格子的左上角像素坐标。
@@ -301,17 +365,28 @@ func appendMiningBar(dst *hotbarLayout, overlay MiningOverlay, width, height flo
 func inventorySlotOrigin(slot int, open bool, width, height float32) (float32, float32) {
 	scale := hudScale(open, width, height)
 	column := slot % core.HotbarSlots
-	total := (core.HotbarSlots*hotbarSlotSize + (core.HotbarSlots-1)*hotbarSlotGap) * scale
-	x := (width-total)*0.5 + float32(column)*(hotbarSlotSize+hotbarSlotGap)*scale
-	hotbarY := height - (hotbarBottomMargin+hotbarSlotSize)*scale
+	left, hotbarY, _, closedScale := hotbarRowBounds(width, height)
+	x := left + float32(column)*(hotbarSlotSize+hotbarSlotGap)*closedScale
 	if !open || slot < core.HotbarSlots {
 		return x, hotbarY
 	}
+	total := (core.HotbarSlots*hotbarSlotSize + (core.HotbarSlots-1)*hotbarSlotGap) * scale
+	x = (width-total)*0.5 + float32(column)*(hotbarSlotSize+hotbarSlotGap)*scale
+	hotbarY = height - (hotbarBottomMargin+hotbarSlotSize)*scale
 	// 背包第 0 行在最上方，第 2 行紧邻快捷栏。
 	row := (slot - core.HotbarSlots) / core.HotbarSlots
 	rowsAbove := float32(2 - row)
 	y := hotbarY - (inventoryRowGap+(rowsAbove+1)*hotbarSlotSize+rowsAbove*hotbarSlotGap)*scale
 	return x, y
+}
+
+// hotbarRowBounds 返回关闭态快捷栏的共享中心边界，供快捷栏与采掘反馈使用。
+func hotbarRowBounds(width, height float32) (left, top, totalWidth, scale float32) {
+	scale = hudScale(false, width, height)
+	totalWidth = (core.HotbarSlots*hotbarSlotSize + (core.HotbarSlots-1)*hotbarSlotGap) * scale
+	left = (width - totalWidth) * 0.5
+	top = height - (hotbarBottomMargin+hotbarSlotSize)*scale
+	return left, top, totalWidth, scale
 }
 func hudScale(open bool, width, height float32) float32 {
 	if width <= 0 || height <= 0 {
