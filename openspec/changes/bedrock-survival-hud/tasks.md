@@ -16,7 +16,7 @@
 - [x] 2.4 在 `layout.go` 以现有纯色 `hotbarInstance` 最小扩展 `appendMiningBar`：比例钳制到 1，可采追加末端 cap，不可采追加固定 notch；按本组新增实例更新关闭分支容量组成，不增加 shader、贴图 cell 或动画。
 - [x] 2.5 运行 `gofmt -w internal/render/hud/layout.go internal/render/hud/layout_test.go internal/render/hud/renderer_test.go`、`go test ./internal/render/hud -race -count=1`、`go test ./internal/archcheck -count=1` 与 `git diff --check`，记录验证证据。
 - [x] 2.6 implementer 自证通过后提交候选 `git commit -m "feat: restyle survival hotbar feedback"`；记录候选 parent 为 `BASE`、候选为 `HEAD`，生成包含 committed diff 与 SHA-256 的 scratch review package，再交给一名新的独立 task reviewer，由同一 reviewer 同时给出 SPEC 与 QUALITY 两项裁决。
-- [ ] 2.7 finding 只以追加 fix commit 修复；每轮重跑 2.5、更新 review package，并由同一 scoped task reviewer 同时复审 SPEC 与 QUALITY，最多 5 轮。重点检查 `InventorySlotAt`、打开态容器视觉、权威物品语义和非颜色形状；两项 PASS/CLEAN 后用后续 bookkeeping commit 回填 ledger。
+- [x] 2.7 finding 只以追加 fix commit 修复；每轮重跑 2.5、更新 review package，并由同一 scoped task reviewer 同时复审 SPEC 与 QUALITY，最多 5 轮。重点检查 `InventorySlotAt`、打开态容器视觉、权威物品语义和非颜色形状；两项 PASS/CLEAN 后用后续 bookkeeping commit 回填 ledger。
 
 ## 3. 生命、氧气、响应式布局与固定容量（对应执行 Task 4）
 
