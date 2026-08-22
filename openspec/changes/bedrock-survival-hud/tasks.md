@@ -29,7 +29,7 @@
 - [x] 3.7 在 `internal/render/hud/renderer.go` 只把已有 `open` 传给生命/氧气布局；在 `layout.go` 扩展关闭态联合缩放边界并实现打开态状态行避让、零尺寸无实例；分别计算关闭/打开合法分支上限并保持 benchmark v18 的 247/12288/45888 与 `internal/render/hud/encode.go` 不变，以最小实现使 3.5/3.6 红测转绿。
 - [x] 3.8 运行 `gofmt -w internal/render/hud/health.go internal/render/hud/health_test.go internal/render/hud/oxygen.go internal/render/hud/oxygen_test.go internal/render/hud/layout.go internal/render/hud/layout_test.go internal/render/hud/renderer.go internal/render/hud/renderer_test.go`、`go test ./internal/render/hud -race -count=1`、`go test ./internal/archcheck -count=1` 与 `git diff --check`，记录验证证据。
 - [x] 3.9 implementer 自证通过后提交候选 `git commit -m "feat: align survival status around hotbar"`；以候选 parent/候选提交生成 committed review package 和 SHA-256，再交给一名新的独立 task reviewer，由同一 reviewer 同时给出 SPEC 与 QUALITY 两项裁决。
-- [x] 3.10 finding 只以追加 fix commit 修复；首轮 P1 用 resolved-slot 把生命/氧气各限为 10 quad，并锁回 benchmark v18 的 247/12288/45888；首轮 P2 删除打开态分隔线的 1px floor，并以 17×800、800×17 及更小正尺寸回归验证全部实例有限且界内。每轮重跑 3.8、benchmark scenario/layout focused、OpenSpec strict，更新 review package，并由同一 scoped reviewer 同时复审 SPEC 与 QUALITY，最多 5 轮；两项 PASS/CLEAN 后用后续 bookkeeping commit 回填 ledger。
+- [ ] 3.10 finding 只以追加 fix commit 修复；首轮 P1 用 resolved-slot 把生命/氧气各限为 10 quad，并锁回 benchmark v18 的 247/12288/45888；首轮 P2 删除打开态分隔线的 1px floor，并以 17×800、800×17 及更小正尺寸回归验证全部实例有限且界内。每轮重跑 3.8、benchmark scenario/layout focused、OpenSpec strict，更新 review package，并由同一 scoped reviewer 同时复审 SPEC 与 QUALITY，最多 5 轮；两项 PASS/CLEAN 后用后续 bookkeeping commit 回填 ledger。
 
 ## 4. 确定性 survival feedback capture 与 golden（对应执行 Task 5）
 

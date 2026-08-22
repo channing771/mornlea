@@ -121,6 +121,55 @@ func TestChatOverlayGlyphInkDoesNotOverlapOrEscapePanels(t *testing.T) {
 	}
 }
 
+func TestChatOverlayStaysAboveClosedSurvivalStatus(t *testing.T) {
+	const width, height = float32(640), float32(360)
+	atlas := newFakeNameTagAtlas()
+	layout := hotbarLayout{
+		quads:  make([]hotbarInstance, 0, healthQuads+oxygenQuads+maxChatQuads),
+		glyphs: make([]hotbarInstance, 0, 64),
+	}
+	appendHealthBar(&layout, HealthOverlay{Confirmed: true, Value: 12}, false, width, height)
+	appendOxygenBar(&layout, OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks / 2}, false, width, height)
+	statusCount := len(layout.quads)
+	if statusCount != healthQuads+oxygenQuads {
+		t.Fatalf("status quads=%d want=%d", statusCount, healthQuads+oxygenQuads)
+	}
+	_, hotbarY, _, scale := hotbarRowBounds(false, width, height)
+	statusTop := hotbarY - (statusBarGap+healthHeartSize)*scale
+	for index, quad := range layout.quads {
+		if quad.Y != statusTop {
+			t.Fatalf("status quad %d top=%v want shared closed anchor %v", index, quad.Y, statusTop)
+		}
+	}
+
+	appendChatOverlay(&layout, atlas, ChatOverlay{
+		Open: true, Input: "@阿木 挖石头", Lines: []string{"旅人 → 阿木：挖石头"},
+	}, width, height)
+	chatPanels := layout.quads[statusCount:]
+	if len(chatPanels) != maxChatQuads || len(layout.glyphs) == 0 {
+		t.Fatalf("chat panels/glyphs=%d/%d want=%d/nonzero", len(chatPanels), len(layout.glyphs), maxChatQuads)
+	}
+	for statusIndex, status := range layout.quads[:statusCount] {
+		for panelIndex, panel := range chatPanels {
+			if chatInstancesOverlap(status, panel) {
+				t.Fatalf("status quad %d overlaps chat panel %d: status=%+v panel=%+v",
+					statusIndex, panelIndex, status, panel)
+			}
+		}
+		for glyphIndex, glyph := range layout.glyphs {
+			if chatInstancesOverlap(status, glyph) {
+				t.Fatalf("status quad %d overlaps chat glyph %d: status=%+v glyph=%+v",
+					statusIndex, glyphIndex, status, glyph)
+			}
+		}
+	}
+}
+
+func chatInstancesOverlap(a, b hotbarInstance) bool {
+	return a.X < b.X+b.Width && b.X < a.X+a.Width &&
+		a.Y < b.Y+b.Height && b.Y < a.Y+a.Height
+}
+
 func assertChatGlyphPairInsidePanel(t *testing.T, pair []hotbarInstance, panel hotbarInstance) {
 	t.Helper()
 	if len(pair) != 2 {

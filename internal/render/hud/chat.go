@@ -81,11 +81,13 @@ func appendChatOverlay(
 	if len(lines) == 0 && !overlay.Open {
 		return
 	}
-	scale := hudScale(false, width, height)
+	_, hotbarY, _, scale := hotbarRowBounds(false, width, height)
 	padding := chatPadding * scale
 	lineHeight := chatLineHeight * scale
 	x := hudEdgeMargin * scale
-	bottom := height - (hudEdgeMargin+healthHeartSize+chatHealthClearance)*scale
+	// 聊天的整个面板栈从关闭态状态行上方向上生长，不依赖是否恰好
+	// 显示生命或氧气，避免权威状态变化让已接受的聊天行突然被覆盖。
+	bottom := hotbarY - (statusBarGap+healthHeartSize+chatHealthClearance)*scale
 	inputHeight := lineHeight + 2*padding
 	if overlay.Open {
 		inputY := bottom - inputHeight
