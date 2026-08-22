@@ -449,7 +449,7 @@ func TestApplicationRendersHealthBeforeInventoryConfirmation(t *testing.T) {
 	if rendered, err := app.renderFrame(1); err != nil || !rendered {
 		t.Fatalf("renderFrame=(%v,%v)", rendered, err)
 	}
-	// 未确认背包时 HUD 只画生命值爱心(quad 流恰为爱心实例数)。
+	// 未确认背包时 HUD 只画十个 resolved-slot 生命槽。
 	if _, quads, _ := app.hotbarRenderer.FrameStreams(); len(quads)/48 != int(healthQuadInstancesForHUDTest) {
 		t.Fatalf("unconfirmed inventory health quads=%d want=%d", len(quads)/48, healthQuadInstancesForHUDTest)
 	}

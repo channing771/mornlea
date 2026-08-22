@@ -12,8 +12,8 @@ import (
 	"github.com/channing771/mornlea/internal/network"
 )
 
-// 12 点生命新增十颗空心爱心和六颗填充爱心，不包含背景面板。
-const healthQuadInstancesForHUDTest = 16
+// 12 点生命解析为十个心形槽：六个满心、四个空心，不包含背景面板。
+const healthQuadInstancesForHUDTest = 10
 
 // Mutation killed: forwarding a predicted/stale health value, swapping the
 // Confirmed flag computed from Predictor.Health(), or failing to clear health
@@ -36,12 +36,12 @@ func TestHUDHealthReflectsOnlyConfirmedPredictorState(t *testing.T) {
 	}
 	baseline := hudQuadCount()
 
-	// 收到生命值为 12 的权威状态：HUD 必须显示十颗空心和六颗填充爱心。
+	// 收到生命值为 12 的权威状态：HUD 必须以六个满心和四个空心解析成十个槽。
 	if err := app.predictor.Begin(network.PlayerState{
 		ServerTick: 1, Dimension: core.Overworld,
 		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true,
 		// 氧气给满值：氧气条只在未满时出现，这里要观察的是生命条的 quad 增量，
-		// 未满氧气会额外追加两个 quad 并让下面的增量断言失去意义。
+		// 未满氧气会额外追加十个 resolved-slot quad，让下面的生命增量断言失去意义。
 		Ready: true, Health: 12, Oxygen: core.MaxOxygenTicks,
 	}); err != nil {
 		t.Fatal(err)
@@ -83,7 +83,7 @@ func TestHUDHealthHiddenAfterDisconnect(t *testing.T) {
 		ServerTick: 1, Dimension: core.Overworld,
 		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true,
 		// 氧气给满值：氧气条只在未满时出现，这里要观察的是生命条的 quad 增量，
-		// 未满氧气会额外追加两个 quad 并让下面的增量断言失去意义。
+		// 未满氧气会额外追加十个 resolved-slot quad，让下面的生命增量断言失去意义。
 		Ready: true, Health: 12, Oxygen: core.MaxOxygenTicks,
 	}); err != nil {
 		t.Fatal(err)
@@ -156,8 +156,8 @@ func TestHUDOxygenBarFollowsAuthoritativePlayerState(t *testing.T) {
 	restored := apply(core.MaxOxygenTicks)
 
 	const quadBytes = 48
-	if len(half)-len(full) != 2*quadBytes {
-		t.Fatalf("未满氧气新增 %d 字节，想要两个 quad（%d 字节）", len(half)-len(full), 2*quadBytes)
+	if len(half)-len(full) != 10*quadBytes {
+		t.Fatalf("未满氧气新增 %d 字节，想要十个 resolved-slot quad（%d 字节）", len(half)-len(full), 10*quadBytes)
 	}
 	if len(quarter) != len(half) {
 		t.Fatalf("两个不同未满值的 quad 数不同：%d vs %d", len(quarter)/quadBytes, len(half)/quadBytes)
