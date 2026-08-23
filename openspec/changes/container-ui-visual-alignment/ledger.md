@@ -8,7 +8,7 @@
 | 2 程序化容器 atlas | `/root/container_task2_impl`（本轮 fresh implementer） | `506395c95595b7187377888d4c914fe2608fd2d9`; `07f28e079cb2c8bfc5ef6981afcbaf3dcca5c485` | `/root/container_task2_review`（`task-2-review.md`） | PASS | FAIL | 1/5 进行中 | RED、HUD race、archcheck、vet、format、diff check；fix 1 focused 与 strict 已通过 | 仅接受 P2 注释修复；同一 reviewer 复审待发生 |
 | 3 overlay/interaction redlines | `/root/container_task3_impl`（本轮 fresh implementer） | `79a98947b45bdb2818871ee01846a7564452ca85`; `c7598752835af837d923ecc4bfacab11759fe6e3` | 待派发 fresh task reviewer | 待评审 | 待评审 | 1/5 复审待发生 | RED、HUD focused/race、archcheck、vet、format、diff check 通过；cmd race 未完成 | 待裁决 |
 | 4 capture/golden | `/root/container_task4_impl`（本轮 fresh implementer） | `b98ba7145f65b82acd6ceb0e9535827e79384ded` | 待派发 fresh task reviewer | 待评审 | 待评审 | 0/5 | RED/聚焦 GREEN、Metal update/check、17 图人工审查、HUD/archcheck race、vet、strict、format、diff check；完整 `cmd/mornlea` race 超时中止，未记为通过 | 待裁决 |
-| 5 closeout | 待派发 fresh implementer | 待执行 | 待派发 fresh whole-branch reviewer | 待评审 | 待评审 | 0/5 | 待执行 | 待裁决 |
+| 5 closeout | `/root/container_task5_impl`（本轮 fresh implementer） | 本轮 docs/ledger 候选待提交 | 待派发 fresh whole-branch reviewer | 待评审 | 待评审 | 0/5 | Rust、archcheck、vet、format、strict、17 图 visual 通过；`cmd/mornlea` race exit 143，未通过 | 不得派 whole-branch review、push、PR 或归档，待完整 Go race 门禁成功 |
 
 ## Task 1 现状与决策记录
 
@@ -55,3 +55,12 @@
 - 人工逐图审查：terrain-noon、hud-hotbar-health、hud-survival-feedback、avatar-nametag、inventory-crafting、chest-container、furnace-container、debug-panel、skylight-tunnel、block-light-room、materials-showcase、target-block-feedback、oak-grove、ai-companion、water-surface-slope、far-horizon、water-underwater 均通过；容器三图可见原创框/凹槽/来源、36/63/39 格、10 条配方及熔炉火焰/箭头，末三保持水面斜坡/远环/水下且无无关漂移；未使用 Mojang 像素，未放宽阈值。
 - 验证：聚焦 GREEN、`go test ./internal/render/hud -race -count=1`、`go test ./internal/archcheck -count=1`、`go vet ./cmd/mornlea`、strict OpenSpec、`gofmt -l cmd/mornlea` 与 `git diff --check` 全通过。完整 `go test ./cmd/mornlea -race -count=1` 在与已有遗留同命令并行时超过常规时长，已只终止本 implementer 启动的精确 PID，未将其记为通过；这是待 reviewer/后续重跑的风险。
 - 候选提交：`b98ba7145f65b82acd6ceb0e9535827e79384ded`（`test: lock container UI visuals`）；尚未进行独立 SPEC/QUALITY 双裁决，不得视为 PASS。
+
+## Task 5 已发生事实
+
+- `2026-08-23`：fresh implementer `/root/container_task5_impl` 在 `efdd922e781ffd7ec5e1d8a126e880503ea570dd` 上开始；只在本 worktree 更新长期基线、tasks 与 ledger，未改产品行为或 golden，未派生子代理或 reviewer。
+- 长期基线：`AGENTS.md` 与 `CLAUDE.md` 逐字节同步容器像素界面、36/39/63 栏位、20px header、266/267 固定 HUD 容量和 17 项 capture 清单；`docs/notes/progress.md` 追加相同已交付能力，协议 v24、各 schema、benchmark scenario v19、engine/client ABI 与配置格式均保持原值。
+- 已通过：`make rust`（0.20s）、`make rust-check`（29.3s）、`go test ./internal/render/hud -race -count=1`（2.784s）、`go test ./internal/archcheck -count=1`（3.603s）、`go vet ./...`（2.354s）、`gofmt -l .`、`cmp -s AGENTS.md CLAUDE.md`、`openspec validate --all --strict --no-interactive`（58 passed / 0 failed）与 `git diff --check`。
+- 视觉：`make visual-check VISUAL_OUT=build/visual-container-ui-final`（37.532s）逐张比对 17 项正式场景，全部最大通道差 0、差异像素 0/230400；两张 far-horizon diagnostic controls 未计入正式清单。
+- 未通过且不得掩盖：独占执行 `go test ./cmd/mornlea -race -count=1` 约 7 分钟无输出后收到 SIGTERM，exit 143；因此 `go test ./internal/render/hud ./cmd/mornlea -race -count=1` 与 `go test ./... -race` 均无完整通过结论，scenario v19 benchmark producer/perfcheck、whole-branch SPEC/QUALITY review、push、PR 与归档均未执行。
+- 范围审计（`cff1133f62782b04a36a0461549edb64be877de2..efdd922e781ffd7ec5e1d8a126e880503ea570dd`）：产品改动仅为 `internal/render/hud` 与 `cmd/mornlea` capture，另有 OpenSpec、task report 和 17 张正式 golden；无 network/sim/storage/server、协议/存档/ABI/配置/依赖或二进制 UI 源改动。完整 committed package 与 SHA-256 只能在本轮 docs 提交后作为未通过门禁的审查证据提供，不能替代失败门禁。

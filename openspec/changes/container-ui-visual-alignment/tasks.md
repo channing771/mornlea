@@ -26,7 +26,7 @@
 
 ## 4. 长期基线、全量门禁与整分支终审（后续执行 Task 5）
 
-- [ ] 4.1 实现与 visual 验收完成后才逐字节同步 `AGENTS.md`/`CLAUDE.md` 的当前容器视觉与 17 场景能力，并更新 `docs/notes/progress.md`；不写 change 非目标，不推进任何版本。
+- [x] 4.1 实现与 visual 验收完成后才逐字节同步 `AGENTS.md`/`CLAUDE.md` 的当前容器视觉与 17 场景能力，并更新 `docs/notes/progress.md`；不写 change 非目标，不推进任何版本。
 - [ ] 4.2 对账 tasks/ledger，只勾选已有 RED/GREEN、focused、task review 与人工 visual 证据的条目；记录全部 implementer/reviewer、commit、finding、修复轮次和 controller ruling。
 - [ ] 4.3 运行 `gofmt -l .`、`go test ./internal/render/hud ./cmd/mornlea -race -count=1`、`go test ./internal/archcheck -count=1`、`go vet ./...`、`cmp -s AGENTS.md CLAUDE.md`、`openspec validate --all --strict --no-interactive` 与 `git diff --check`。
 - [ ] 4.4 整分支终审前只运行一次 `make rust`、`make rust-check`、`go test ./... -race`、scenario v19 benchmark producer/perfcheck、`make visual-check VISUAL_OUT=build/visual-container-ui-visual-alignment-final-review` 与 strict OpenSpec；性能值只记录，不放宽 correctness、overflow、完整性、I/O、数据丢失或视觉阈值。
