@@ -3,14 +3,24 @@
 package audio
 
 /*
+#cgo CFLAGS: -std=c11
 #cgo LDFLAGS: -framework AudioToolbox -framework CoreFoundation
 #include <stdint.h>
 
 typedef struct audio_player audio_player;
+typedef struct audio_player_test_state audio_player_test_state;
 
 audio_player *audio_player_create(float volume, uint32_t max_samples);
 int audio_player_play(audio_player *player, const int16_t *pcm, uint32_t samples);
 void audio_player_close(audio_player *player);
+audio_player_test_state *audio_player_test_create(void);
+void audio_player_test_close(audio_player_test_state *state);
+int audio_player_test_play(audio_player_test_state *state, const int16_t *pcm, uint32_t samples);
+int audio_player_test_last_slot(audio_player_test_state *state);
+int audio_player_test_busy_count(audio_player_test_state *state);
+void audio_player_test_finish(audio_player_test_state *state, int slot);
+void audio_player_test_fail_next(audio_player_test_state *state);
+int audio_player_test_failed(audio_player_test_state *state);
 */
 import "C"
 
@@ -101,4 +111,56 @@ func maxCueSamples() int {
 		maximum = max(maximum, spec.samples)
 	}
 	return maximum
+}
+
+// playerStateTest 在不构造 AudioQueue 的前提下镜像 C 层的 PCM/槽调度路径，
+// 仅供自动测试锁定实时播放的无分配和失败语义。
+type playerStateTest struct {
+	state *C.audio_player_test_state
+}
+
+func newPlayerStateTest() *playerStateTest {
+	state := C.audio_player_test_create()
+	if state == nil {
+		return nil
+	}
+	return &playerStateTest{state: state}
+}
+
+func (state *playerStateTest) close() {
+	if state != nil && state.state != nil {
+		C.audio_player_test_close(state.state)
+		state.state = nil
+	}
+}
+
+func (state *playerStateTest) play(pcm []int16) int {
+	if state == nil || state.state == nil || len(pcm) == 0 {
+		return audioPlayFailure
+	}
+	return int(C.audio_player_test_play(
+		state.state,
+		(*C.int16_t)(unsafe.Pointer(unsafe.SliceData(pcm))),
+		C.uint32_t(len(pcm)),
+	))
+}
+
+func (state *playerStateTest) lastSlot() int {
+	return int(C.audio_player_test_last_slot(state.state))
+}
+
+func (state *playerStateTest) busyCount() int {
+	return int(C.audio_player_test_busy_count(state.state))
+}
+
+func (state *playerStateTest) finish(slot int) {
+	C.audio_player_test_finish(state.state, C.int(slot))
+}
+
+func (state *playerStateTest) failNext() {
+	C.audio_player_test_fail_next(state.state)
+}
+
+func (state *playerStateTest) failed() bool {
+	return C.audio_player_test_failed(state.state) != 0
 }
