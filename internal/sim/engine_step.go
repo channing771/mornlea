@@ -319,7 +319,9 @@ func (engine *Engine) Step() TickResult {
 		engine.reconcileSubscriptions(&result)
 	}
 
-	// 阶段顺序契约：所有区块写者必须位于 reconcileSubscriptions 之后。订阅收缩会把
+	// 阶段顺序契约：所有区块写者必须位于 reconcileSubscriptions 之后。近战先冻结
+	// 伤害意图，再立刻结算死亡；两者都不写区块，死亡掉落与其后的其他写者仍在
+	// reconcileSubscriptions 之后。订阅收缩会把
 	// 干净区块（Revision == PersistedRevision）从 records 里立即删除，写在它之前的
 	// 写者留下的 revision barrier 会在 finishChanges 取到 nil record 而崩溃，
 	// 掉落物也随被删除的 record 一起消失。死亡结算是唯一会在写区块的同一 tick 里
@@ -328,6 +330,7 @@ func (engine *Engine) Step() TickResult {
 	// 已经推高 revision，区块转脏，RequestUnload 只会走 Unloading 分支。
 	// settleDeaths 同时必须早于本 tick 末尾的状态发布，外部才观察不到生命值为 0 的
 	// 中间状态。
+	engine.advancePlayerMelee()
 	engine.settleDeaths(pending)
 
 	// 伙伴放置结算：Place 意图在 action 阶段收集，世界写统一放在

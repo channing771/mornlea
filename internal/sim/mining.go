@@ -213,7 +213,7 @@ func (engine *Engine) advanceMining(
 	for _, id := range sessions[:count] {
 		session := engine.sessions[id]
 		player := session.player
-		if !player.miningHeld || player.reset || !session.hasView || session.viewContainer {
+		if !player.miningHeld || player.meleeSuppressedMining || player.reset || !session.hasView || session.viewContainer {
 			player.mining = miningState{}
 			continue
 		}

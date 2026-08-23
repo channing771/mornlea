@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,6 +38,19 @@ type integrationClient struct {
 type flatGenerator struct{}
 
 type changedGenerator struct{}
+
+// `trackedMemoryStore` 记录异步区块读取是否仍在途，供八人确定性集成测试与
+// 同 tick 近战顺序测试共用同一稳定态判据。
+type trackedMemoryStore struct {
+	*storage.MemoryStore
+	inFlight atomic.Int64
+}
+
+func (store *trackedMemoryStore) LoadChunk(ctx context.Context, key core.ChunkKey) (storage.StoredChunk, error) {
+	store.inFlight.Add(1)
+	defer store.inFlight.Add(-1)
+	return store.MemoryStore.LoadChunk(ctx, key)
+}
 
 func (flatGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
 	return integrationChunk(position, core.StoneID)
@@ -268,6 +282,65 @@ func waitIntegrationCondition(t *testing.T, label string, condition func() bool)
 	case <-done:
 	case <-deadline.C:
 		t.Fatalf("timed out waiting for %s", label)
+	}
+}
+
+// `manualMultiplayerStable` 为八人确定性集成测试与同 tick 近战顺序测试确认服务端、
+// 存储和客户端镜像已经同时稳定。
+func manualMultiplayerStable(running *Server, store *trackedMemoryStore, clients []*multiplayerTCPClient, key core.ChunkKey) bool {
+	running.stepMu.Lock()
+	info, ready := running.engine.ChunkInfo(key)
+	queuesEmpty := len(running.pending) == 0 && len(running.jobs) == 0 && len(running.acquired) == 0 &&
+		len(running.generated) == 0 && len(running.incoming) == 0 && len(running.queued) == 0
+	allPlayersReady := true
+	for index := range clients {
+		update, ok := running.engine.Player(sim.SessionID(index + 1))
+		allPlayersReady = allPlayersReady && ok && update.Ready
+	}
+	running.stepMu.Unlock()
+	if !ready || info.State != sim.ChunkReady || !queuesEmpty || !allPlayersReady || store.inFlight.Load() != 0 {
+		return false
+	}
+	for _, connected := range clients {
+		if !connected.readyWithFootSnapshot() {
+			return false
+		}
+	}
+	return true
+}
+
+// `drainMultiplayerClientsToTick` 为八人确定性集成测试与同 tick 近战顺序测试把所有
+// 客户端消息排空到同一权威 tick。
+func drainMultiplayerClientsToTick(t *testing.T, ctx context.Context, transport string, clients []*multiplayerTCPClient, tick uint64) {
+	t.Helper()
+	for {
+		complete := true
+		progressed := false
+		for index, connected := range clients {
+			for connected.local.ServerTick < tick {
+				got, err := drainOneTask16(connected)
+				if err != nil {
+					t.Fatalf("%s tick %d drain player %d: %v\n%s", transport, tick, index, err, multiplayerDiagnosticsMany(clients))
+				}
+				if !got {
+					complete = false
+					break
+				}
+				progressed = true
+			}
+			if connected.local.ServerTick < tick {
+				complete = false
+			}
+		}
+		if complete {
+			return
+		}
+		if err := ctx.Err(); err != nil {
+			t.Fatalf("%s drain to tick %d: %v\n%s", transport, tick, err, multiplayerDiagnosticsMany(clients))
+		}
+		if !progressed {
+			time.Sleep(integrationPollInterval)
+		}
 	}
 }
 

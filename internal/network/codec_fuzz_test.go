@@ -6,6 +6,9 @@ func FuzzSmallPacketCodec(f *testing.F) {
 	f.Add(uint8(StateHandshake), uint32(0), []byte{2})
 	f.Add(uint8(StateHandshake), uint32(0), []byte{1})
 	f.Add(uint8(StateHandshake), uint32(0), []byte{3})
+	// 当前 v25 与刚退役 v24 都必须进入握手解码语料，防止版本门禁误接回退。
+	f.Add(uint8(StateHandshake), uint32(0), []byte{25})
+	f.Add(uint8(StateHandshake), uint32(0), []byte{24})
 	f.Add(uint8(StateLogin), uint32(0), []byte{0})
 	// v23 LoginSuccess：16 字节 UUIDv4 + little-endian uint64 世界种子。
 	f.Add(uint8(StateLogin), uint32(0), []byte{

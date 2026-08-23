@@ -37,7 +37,7 @@ func measureProtocolSummary() (client.ProtocolSummary, error) {
 		return client.ProtocolSummary{}, err
 	}
 	defer codec.Close()
-	packet := network.PlayerInput{Sequence: 1, MoveX: 1, MoveZ: -1, Jump: true, Yaw: 0.5, Pitch: -0.25}
+	packet := fixedBenchmarkPlayerInput()
 	const samples = 2048
 	encode := make([]float64, samples)
 	decode := make([]float64, samples)
@@ -64,6 +64,10 @@ func measureProtocolSummary() (client.ProtocolSummary, error) {
 		DecodeP99MS: durationP99(decode),
 		Bytes:       bytes,
 	}, nil
+}
+
+func fixedBenchmarkPlayerInput() network.PlayerInput {
+	return network.PlayerInput{Sequence: 1, MoveX: 1, MoveZ: -1, Jump: true, Yaw: 0.5, Pitch: -0.25}
 }
 
 func measurePlayerPersistenceSummary() (client.PersistenceSummary, error) {

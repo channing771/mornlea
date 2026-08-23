@@ -7,15 +7,15 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 )
 
-func TestProtocolVersionIsTwentyFour(t *testing.T) {
-	if ProtocolVersion != 24 {
-		t.Fatalf("协议版本=%d，想要 24", ProtocolVersion)
+func TestProtocolVersionIsTwentyFive(t *testing.T) {
+	if ProtocolVersion != 25 {
+		t.Fatalf("协议版本=%d，想要 25", ProtocolVersion)
 	}
 }
 
-func TestProtocolV24RejectsPriorVersionsBeforePlay(t *testing.T) {
-	// v23 是上一版本（rust-engine-lod-shell 交付的登录种子段），必须和 v22
-	// 及更早版本一样在 Handshake 阶段稳定拒绝，并给出版本不匹配原因。
+func TestProtocolV25RejectsPriorVersionsBeforePlay(t *testing.T) {
+	// v24 是上一版本（authoritative-hunger 交付的进食与饥饿字段），必须和
+	// 更早版本一样在 Handshake 阶段稳定拒绝，并给出版本不匹配原因。
 	// 循环上界是 `ProtocolVersion` 而不是某个字面量：升版时刚退役的那一版
 	// 必须自动进入覆盖，否则这条用例只测得到远古版本。
 	for version := uint32(1); version < ProtocolVersion; version++ {

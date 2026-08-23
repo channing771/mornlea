@@ -10,7 +10,6 @@ import (
 	"math"
 	"reflect"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -29,6 +28,11 @@ const multiplayerClientCount = 8
 var multiplayerNames = [...]string{"阿明", "Builder", "小麦", "Redstone", "星河", "Miner", "方块", "Alex"}
 
 var multiplayerManualTarget = core.BlockPos{X: 0, Y: 1, Z: 6}
+
+var multiplayerStartPositions = [...]mgl32.Vec3{
+	{0.5, 1.001, 0.5}, {2.5, 1.001, 0.5}, {4.5, 1.001, 0.5}, {6.5, 1.001, 0.5},
+	{8.5, 1.001, 0.5}, {10.5, 1.001, 0.5}, {12.5, 1.001, 0.5}, {14.5, 1.001, 0.5},
+}
 
 type multiplayerManualGenerator struct{}
 
@@ -62,17 +66,6 @@ type multiplayerRunResult struct {
 	MirrorRevision [multiplayerClientCount]uint64
 }
 
-type trackedMemoryStore struct {
-	*storage.MemoryStore
-	inFlight atomic.Int64
-}
-
-func (store *trackedMemoryStore) LoadChunk(ctx context.Context, key core.ChunkKey) (storage.StoredChunk, error) {
-	store.inFlight.Add(1)
-	defer store.inFlight.Add(-1)
-	return store.MemoryStore.LoadChunk(ctx, key)
-}
-
 func TestEightMemorySessionsAreDeterministicFor2000Ticks(t *testing.T) {
 	runEightMemorySessionsDeterminism(t, 2000)
 }
@@ -96,18 +89,20 @@ func fixedEightPlayerScript(ticks uint64) []multiplayerScriptStep {
 			input := network.PlayerInput{Sequence: tick*2 - 1, Yaw: 0, Pitch: -0.2}
 			if tick <= miningUntil[player] {
 				input.Yaw = math.Pi
+				if player == 1 && tick <= 49 {
+					// 第二名玩家从独立 X 车道斜向命中首名玩家的同一方块；射线在
+					// 到达首名车道前已经离开玩家包围盒所在的近端 Z 范围。
+					input.Yaw = float32(math.Pi - math.Atan2(2, 6))
+				}
 				input.Mining = true
 			} else if player < 2 && tick < 20 {
-				// 前两名玩家保持同一出生位置，以便 tick 20 竞争同一方块。
+				// 前两名玩家先停在各自车道，tick 20 再从不同方向竞争同一方块。
 			} else {
-				switch player % 4 {
-				case 0:
-					input.MoveX = sign
-				case 1:
-					input.MoveX = -sign
-				case 2:
+				// 采掘脚本的每名玩家各占一条 X 车道；移动只沿车道，令 `Mining`
+				// 期间的 +Z 射线始终没有其他 active 同维玩家候选。
+				if player%2 == 0 {
 					input.MoveZ = sign
-				case 3:
+				} else {
 					input.MoveZ = -sign
 				}
 			}
@@ -619,7 +614,7 @@ func assertRawBusinessTicks(
 }
 
 func multiplayerSessionSpec(index int, identity network.Identity, endpoint network.ServerEndpoint) SessionSpec {
-	location := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
+	location := sim.PlayerLocation{Dimension: core.Overworld, Position: multiplayerStartPositions[index]}
 	return SessionSpec{
 		ID: sim.SessionID(index + 1), Generation: 1,
 		PlayerID: identity.PlayerID, DisplayName: identity.DisplayName, Endpoint: endpoint,
@@ -688,61 +683,6 @@ func multiplayerPacketStreams(
 		t.Fatalf("Accept TCP: %v", err)
 	}
 	return clientStream, serverStream, closeTransport
-}
-
-func manualMultiplayerStable(running *Server, store *trackedMemoryStore, clients []*multiplayerTCPClient, key core.ChunkKey) bool {
-	running.stepMu.Lock()
-	info, ready := running.engine.ChunkInfo(key)
-	queuesEmpty := len(running.pending) == 0 && len(running.jobs) == 0 && len(running.acquired) == 0 &&
-		len(running.generated) == 0 && len(running.incoming) == 0 && len(running.queued) == 0
-	allPlayersReady := true
-	for index := range clients {
-		update, ok := running.engine.Player(sim.SessionID(index + 1))
-		allPlayersReady = allPlayersReady && ok && update.Ready
-	}
-	running.stepMu.Unlock()
-	if !ready || info.State != sim.ChunkReady || !queuesEmpty || !allPlayersReady || store.inFlight.Load() != 0 {
-		return false
-	}
-	for _, connected := range clients {
-		if !connected.readyWithFootSnapshot() {
-			return false
-		}
-	}
-	return true
-}
-
-func drainMultiplayerClientsToTick(t *testing.T, ctx context.Context, transport string, clients []*multiplayerTCPClient, tick uint64) {
-	t.Helper()
-	for {
-		complete := true
-		progressed := false
-		for index, connected := range clients {
-			for connected.local.ServerTick < tick {
-				got, err := drainOneTask16(connected)
-				if err != nil {
-					t.Fatalf("%s tick %d drain player %d: %v\n%s", transport, tick, index, err, multiplayerDiagnosticsMany(clients))
-				}
-				if !got {
-					complete = false
-					break
-				}
-				progressed = true
-			}
-			if connected.local.ServerTick < tick {
-				complete = false
-			}
-		}
-		if complete {
-			return
-		}
-		if err := ctx.Err(); err != nil {
-			t.Fatalf("%s drain to tick %d: %v\n%s", transport, tick, err, multiplayerDiagnosticsMany(clients))
-		}
-		if !progressed {
-			time.Sleep(integrationPollInterval)
-		}
-	}
 }
 
 func multiplayerDiagnosticsMany(clients []*multiplayerTCPClient) string {

@@ -142,12 +142,12 @@ func TestLoginClientWithSeedSurfacesWorldSeed(t *testing.T) {
 	}
 }
 
-// TestV24ClientRejectsPriorServerAcrossTransports 模拟一个只会说 v17 的
-// 服务端（生产服务端已升 v24，只能以对端身份模拟；类型化 `Send` 会拒绝
+// TestV25ClientRejectsPriorServerAcrossTransports 模拟一个只会说 v17 的
+// 服务端（生产服务端已升 v25，只能以对端身份模拟；类型化 `Send` 会拒绝
 // 非当前版本的 `ServerHello`，因此按传输写原始字节），验证当前客户端在
 // Memory 与 TCP 上都拒绝它，不进入登录阶段，也不产生半兼容会话。
-func TestV24ClientRejectsPriorServerAcrossTransports(t *testing.T) {
-	// 17 是一个任意选取的远古版本样本；`ProtocolVersion` - 1（v23）是刚退役、
+func TestV25ClientRejectsPriorServerAcrossTransports(t *testing.T) {
+	// 17 是一个任意选取的远古版本样本；`ProtocolVersion` - 1（v24）是刚退役、
 	// 离当前最近的版本——同一条镜像用例必须两档都覆盖，不能只留着早已作古的
 	// 17 而让刚退役的版本失去回归覆盖。
 	legacyVersions := []uint32{17, ProtocolVersion - 1}

@@ -115,6 +115,50 @@ func TestMiningReleaseClearsSameTick(t *testing.T) {
 	}
 }
 
+// TestMeleeHitClearsMiningOnlyForThatTick 覆盖命中玩家时采掘进度必须清零；
+// `miningHeld` 保留，下一 tick 仍由持续输入决定。
+func TestMeleeHitClearsMiningOnlyForThatTick(t *testing.T) {
+	engine, sessions, _ := readyMiningPlayers(t, 1)
+	player := engine.sessions[sessions[0]].player
+	player.mining = miningState{progressTicks: 3, requiredTicks: 5}
+	engine.RegisterSession(SessionID(2), core.Overworld, core.ChunkPos{})
+	engine.Step()
+	setMeleePlayer(engine, sessions[0], mgl32.Vec3{0.5, 1, 8.5}, 0)
+	setMeleePlayer(engine, SessionID(2), mgl32.Vec3{0.5, 1, 7}, 0)
+	player.pitch = miningTestPitch
+	player.miningHeld = true
+
+	engine.Step()
+	if player.mining != (miningState{}) {
+		t.Fatalf("命中玩家后 mining=%+v，想要零值", player.mining)
+	}
+	if !player.miningHeld {
+		t.Fatal("命中玩家后 miningHeld 被清空")
+	}
+
+	setMeleePlayer(engine, SessionID(2), mgl32.Vec3{4.5, 1, 7}, 0)
+	engine.Step()
+	if player.mining.progressTicks != 1 {
+		t.Fatalf("目标移出射线后的下一 tick mining=%+v，想要 progress=1", player.mining)
+	}
+}
+
+// TestMeleeMissKeepsMiningProgress 覆盖无合法玩家目标时，既有采掘状态机逐 tick
+// 保持不变。
+func TestMeleeMissKeepsMiningProgress(t *testing.T) {
+	engine, sessions, _ := readyMiningPlayers(t, 1)
+	player := engine.sessions[sessions[0]].player
+
+	engine.Step()
+	if player.mining.progressTicks != 1 {
+		t.Fatalf("无玩家目标首 tick mining=%+v，想要 progress=1", player.mining)
+	}
+	engine.Step()
+	if player.mining.progressTicks != 2 {
+		t.Fatalf("无玩家目标次 tick mining=%+v，想要 progress=2", player.mining)
+	}
+}
+
 func TestMiningTargetBlockAndToolChangesRestartAtOne(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -231,9 +275,13 @@ func TestMiningLifecyclePathsClearIntentAndProgress(t *testing.T) {
 		engine, sessions, _ := readyMiningPlayers(t, 1)
 		advanceMiningOnce(engine)
 		player := engine.sessions[sessions[0]].player
+		player.meleeCooldownTicks = 4
+		player.meleeSuppressedMining = true
 		player.beginReset()
-		if player.miningHeld || player.mining != (miningState{}) {
-			t.Fatalf("beginReset 后 held=%v mining=%+v", player.miningHeld, player.mining)
+		if player.miningHeld || player.mining != (miningState{}) ||
+			player.meleeCooldownTicks != 0 || player.meleeSuppressedMining {
+			t.Fatalf("beginReset 后 held=%v mining=%+v cooldown=%d suppressed=%v",
+				player.miningHeld, player.mining, player.meleeCooldownTicks, player.meleeSuppressedMining)
 		}
 	})
 

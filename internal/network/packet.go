@@ -7,7 +7,9 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 )
 
-// ProtocolVersion 是当前唯一支持的协议版本；v24 上线权威饥饿（`PlayerInput`
+// ProtocolVersion 是当前唯一支持的协议版本；v25 只扩展既有 `Mining` 位的语义：
+// 它表示持续 primary action，服务端在每个 tick 决定这次意图攻击玩家还是采掘方块，
+// 不新增 wire 字段或 packet。v24 上线权威饥饿（`PlayerInput`
 // 多出 Eating 输入位、`PlayerState` 多出 Hunger 权威值），并拒绝 v23 及更早登录。
 //
 // v24 的两处变化都是既有 packet 的尾部追加，不新增消息类型、不新增
@@ -27,7 +29,7 @@ import (
 // v21 在 `PlayerState` 末尾追加 2 字节权威氧气（只发给玩家本人的权威
 // 值）；v20 追加 8 个流体方块编号（只扩方块 ID 集合，wire 形状不变），流体
 // 变更走既有区块变更通道（design.md D8）。
-const ProtocolVersion uint32 = 24
+const ProtocolVersion uint32 = 25
 
 // State 标识连接当前允许交换的 packet 集合。
 type State uint8
