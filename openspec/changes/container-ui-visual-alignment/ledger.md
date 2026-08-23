@@ -7,7 +7,7 @@
 | 1 OpenSpec change | `/root/hud_merge_impl`（本轮 fresh implementer） | `f36eb5bb3686403fa1e70cadb90688d4a27276bc`; `93a2d8d81a48777997d5ee11d3bb31e520d6fe3f` | `/root/container_task1_review`（`task-1-review.md`；修复轮次 1 复审见 `task-1-review-round-1.md`） | PASS（修复轮次 1 复审） | FAIL（修复轮次 1 复审） | 2/5 进行中 | change 创建前结构 RED；fix 1 strict/diff 通过；修复轮次 1 复审为 Spec PASS / Quality FAIL，1 finding | controller 只接受补齐 fix SHA 与 reviewer 审计事实，进入修复轮次 2；本轮复审待结论 |
 | 2 程序化容器 atlas | `/root/container_task2_impl`（本轮 fresh implementer） | `506395c95595b7187377888d4c914fe2608fd2d9`; `07f28e079cb2c8bfc5ef6981afcbaf3dcca5c485` | `/root/container_task2_review`（`task-2-review.md`） | PASS | FAIL | 1/5 进行中 | RED、HUD race、archcheck、vet、format、diff check；fix 1 focused 与 strict 已通过 | 仅接受 P2 注释修复；同一 reviewer 复审待发生 |
 | 3 overlay/interaction redlines | `/root/container_task3_impl`（本轮 fresh implementer） | `79a98947b45bdb2818871ee01846a7564452ca85`; `c7598752835af837d923ecc4bfacab11759fe6e3` | 待派发 fresh task reviewer | 待评审 | 待评审 | 1/5 复审待发生 | RED、HUD focused/race、archcheck、vet、format、diff check 通过；cmd race 未完成 | 待裁决 |
-| 4 capture/golden | 待派发 fresh implementer | 待执行 | 待派发 fresh task reviewer | 待评审 | 待评审 | 0/5 | 待执行 | 待裁决 |
+| 4 capture/golden | `/root/container_task4_impl`（本轮 fresh implementer） | `b98ba7145f65b82acd6ceb0e9535827e79384ded` | 待派发 fresh task reviewer | 待评审 | 待评审 | 0/5 | RED/聚焦 GREEN、Metal update/check、17 图人工审查、HUD/archcheck race、vet、strict、format、diff check；完整 `cmd/mornlea` race 超时中止，未记为通过 | 待裁决 |
 | 5 closeout | 待派发 fresh implementer | 待执行 | 待派发 fresh whole-branch reviewer | 待评审 | 待评审 | 0/5 | 待执行 | 待裁决 |
 
 ## Task 1 现状与决策记录
@@ -44,3 +44,14 @@
 - 修复轮次 1：只扩展 `layout_test.go` 的既有表驱动测试。三种 framebuffer 直接读取三类 overlay panel，锁定旧 X/Width/底边不变及仅向上扩 `containerHeaderHeight*scale`；同一尺寸集穷举 36/39/63 格的左上闭、中心与右/下开命中。未改生产代码，复审结论尚未发生。
 - 修复轮次 1 验证：focused HUD、HUD race、archcheck、目标 `gofmt -l`、`git diff --check` 与 strict OpenSpec 均通过。
 - 修复提交：`c7598752835af837d923ecc4bfacab11759fe6e3`（`test: lock container header boundaries`）。
+
+## Task 4 已发生事实
+
+- `2026-08-23`：fresh implementer `/root/container_task4_impl` 在现有 Task 3 修复基线上开始；未派生子代理或 reviewer，只修改本 worktree 的 `cmd/mornlea` capture/测试/golden。
+- RED：`go test ./cmd/mornlea -run 'Test(CaptureSceneOrder|ContainerCapture|WaterUnderwater|FarHorizon)' -count=1` 以原有 15 项场景表与缺少 `chest-container`/`furnace-container` 失败；失败准确对应新增场景尚未注册。
+- GREEN：场景表在 `inventory-crafting` 后严格插入 `chest-container`、`furnace-container`，完整正式清单为 terrain-noon、hud-hotbar-health、hud-survival-feedback、avatar-nametag、inventory-crafting、chest-container、furnace-container、debug-panel、skylight-tunnel、block-light-room、materials-showcase、target-block-feedback、oak-grove、ai-companion、water-surface-slope、far-horizon、water-underwater；最后三项不变。
+- GREEN：两场景均复用 `resetCapturePresentation`，显式重置远端实体/面板/互斥容器并钉住 6000 tick、固定相机和背包；箱子装入 27 格跨三行内容且来源 36，熔炉装入 raw iron/coal/ingot、`ProgressTicks=73`、`BurnTicks=911` 且来源 37。测试锁定确认镜像、36 格背包、状态值及互斥 reset，未新增产品测试 API 或修改视觉阈值。
+- Metal：`make visual-update VISUAL_OUT=build/visual-container-ui-update` 生成 17 张正式 golden（另有两张 far-horizon control，只在输出目录）；`make visual-check VISUAL_OUT=build/visual-container-ui-check` 成功，输出恰为 17 张正式场景图。
+- 人工逐图审查：terrain-noon、hud-hotbar-health、hud-survival-feedback、avatar-nametag、inventory-crafting、chest-container、furnace-container、debug-panel、skylight-tunnel、block-light-room、materials-showcase、target-block-feedback、oak-grove、ai-companion、water-surface-slope、far-horizon、water-underwater 均通过；容器三图可见原创框/凹槽/来源、36/63/39 格、10 条配方及熔炉火焰/箭头，末三保持水面斜坡/远环/水下且无无关漂移；未使用 Mojang 像素，未放宽阈值。
+- 验证：聚焦 GREEN、`go test ./internal/render/hud -race -count=1`、`go test ./internal/archcheck -count=1`、`go vet ./cmd/mornlea`、strict OpenSpec、`gofmt -l cmd/mornlea` 与 `git diff --check` 全通过。完整 `go test ./cmd/mornlea -race -count=1` 在与已有遗留同命令并行时超过常规时长，已只终止本 implementer 启动的精确 PID，未将其记为通过；这是待 reviewer/后续重跑的风险。
+- 候选提交：`b98ba7145f65b82acd6ceb0e9535827e79384ded`（`test: lock container UI visuals`）；尚未进行独立 SPEC/QUALITY 双裁决，不得视为 PASS。
