@@ -74,7 +74,7 @@ fn pack_quad(x: u8, y: u8, z: u8, w: u8, h: u8, face: u32, material: u16, back: 
 
 /// plant_cell 返回一株植物的四条 quad：两条对角线 × 正反两面。
 ///
-/// 次序与 engine `greedy.rs` 的 `PLANT_QUADS` 一致。
+/// 次序与 engine `greedy/mod.rs` 的 `PLANT_QUADS` 一致。
 fn plant_cell() -> Vec<u64> {
     let (x, y, z) = CELL;
     vec![

@@ -45,7 +45,7 @@ const (
 	LayerFarmlandDry
 	LayerFarmlandWet
 	// LayerWheat0..LayerWheat7 是小麦八个生长阶段的材质层，**必须连续且是本枚举
-	// 的最后 8 层**：Rust 侧 `greedy.rs` 用一段硬编码的闭区间
+	// 的最后 8 层**：Rust 侧 `quad.rs` 用一段硬编码的闭区间
 	// [PLANT_MATERIAL_FIRST, PLANT_MATERIAL_LAST] 判断一格是不是植物，从而决定
 	// 出交叉斜面而非轴向面。两侧没有共享常量也没有生成步骤，只能人手同步——
 	// 数值一侧由 internal/mesh 的 PlantMaterialFirst/PlantMaterialLast 与

@@ -283,7 +283,7 @@ make visual-update             # 重新生成基线，写入 cmd/mornlea/testdat
 
 | 语言 | 职责 |
 | --- | --- |
-| Rust（`engine/crates/mornlea_engine`） | 确定性区段网格、传播光照、共享碰撞解析与方块射线 DDA 的**唯一生产实现**：贪心网格与 AO（`greedy.rs`）、天空光与方块光（`light.rs`）、碰撞与 step（`collision.rs`）、64-record cursor batch raycast（`raycast.rs`）、native 输入解析和 C ABI。panic 不穿过 ABI，非法输入在发布结果前拒绝；workspace 只含该 crate，normal dependency 只有 `std`。 |
+| Rust（`engine/crates/mornlea_engine`） | 确定性区段网格、传播光照、共享碰撞解析与方块射线 DDA 的**唯一生产实现**：贪心网格与 AO（`greedy/mod.rs`）、天空光与方块光（`light.rs`）、碰撞与 step（`collision.rs`）、64-record cursor batch raycast（`raycast.rs`）、native 输入解析和 C ABI。panic 不穿过 ABI，非法输入在发布结果前拒绝；workspace 只含该 crate，normal dependency 只有 `std`。 |
 | Go | 应用装配、世界与区块数据模型、权威模拟、网络与存档、客户端镜像与预测、GPU 渲染、世界生成、资产与配置，以及物理 state/input/tunable、碰撞 snapshot 编码和 raycast 校验/归一化/callback/Point。`internal/nativeabi` 是唯一 engine C header/symbol bridge；`internal/mesh`、`internal/physics` 和 `internal/core` 持有各自领域 API 与缓冲区。 |
 
 边界规则：

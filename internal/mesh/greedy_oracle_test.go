@@ -21,7 +21,7 @@ type oracleMaskCell struct {
 const oracleFullFluidHeight uint8 = 15
 
 // oracleCellHeight 返回一格流体的 4-bit 高度原值，非流体返回 (0,false)。
-// 规则与 engine 的 greedy.rs cell_height 相同：上方也是流体则取满格 15。
+// 规则与 engine 的 greedy/mod.rs cell_height 相同：上方也是流体则取满格 15。
 func oracleCellHeight(n *world.Neighborhood, reg mesh.Registry, x, y, z int) (uint8, bool) {
 	raw := reg.FluidHeight(n.At(x, y, z))
 	if raw == 0 {
@@ -33,7 +33,7 @@ func oracleCellHeight(n *world.Neighborhood, reg mesh.Registry, x, y, z int) (ui
 	return raw, true
 }
 
-// oracleCornerHeight 是 engine greedy.rs corner_height 的 Go 对照实现：
+// oracleCornerHeight 是 engine greedy/mod.rs corner_height 的 Go 对照实现：
 // 顶点被四列共享，取其中流体格 h_raw 的整数平均（向下取整），任一格上方也是
 // 流体则直接取 15。整除是唯一的算术，不引入浮点。
 func oracleCornerHeight(n *world.Neighborhood, reg mesh.Registry, vx, y, vz int) uint8 {
@@ -55,7 +55,7 @@ func oracleCornerHeight(n *world.Neighborhood, reg mesh.Registry, vx, y, vz int)
 	return uint8(sum / count)
 }
 
-// oracleFluidCorners 是 engine greedy.rs fluid_corners 的 Go 对照实现。
+// oracleFluidCorners 是 engine greedy/mod.rs fluid_corners 的 Go 对照实现。
 func oracleFluidCorners(n *world.Neighborhood, reg mesh.Registry, p [3]int, face mesh.Face, axis, u, v int) [4]uint8 {
 	var corners [4]uint8
 	for i, c := range [4][2]int{{-1, -1}, {1, -1}, {1, 1}, {-1, 1}} {
@@ -135,7 +135,7 @@ func meshSectionGoOracle(n *world.Neighborhood, reg mesh.Registry, light *goLigh
 						continue
 					}
 
-					// 水面按 1×1 出面，不贪心合并（见 engine greedy.rs 的同名说明）。
+					// 水面按 1×1 出面，不贪心合并（见 engine greedy/mod.rs 的同名说明）。
 					w, h := 1, 1
 					if !c.fluid {
 						for ui+w < 16 && mask[vi][ui+w] == c {
@@ -173,7 +173,7 @@ func meshSectionGoOracle(n *world.Neighborhood, reg mesh.Registry, light *goLigh
 	}
 
 	// 植物交叉斜面：轴向面在上面的循环里已被 FaceVisible 挡掉（assets 对作物一律
-	// 返回 false），这里独立实现一遍 engine greedy.rs 的 mesh_plants。
+	// 返回 false），这里独立实现一遍 engine greedy/mod.rs 的 mesh_plants。
 	//
 	// 与被测实现只共享**规则**、不共享代码：Rust 在 engine 里，本函数在 Go 测试里，
 	// 两边各写一遍枚举次序、四条 quad 的 (face, back) 组合、上方格采光与满 AO。

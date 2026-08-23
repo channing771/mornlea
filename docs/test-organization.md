@@ -125,18 +125,25 @@ helper 落位规则与验收清单都在这里。条文是原则，本文件是�
   `b2a6edb`）；client `engine/crates/mornlea_client/src/render/water_tests.rs`
   （既有先例，与 `render/plant_tests.rs` 同式，都在 `render/mod.rs` 以
   `#[cfg(test)] mod …;` 挂载）。
+- 挂载布局惯例：`#[cfg(test)] mod …;` 声明集中为 `mod.rs` 尾部一个块
+  （`greedy/mod.rs` 尾部先例）；client `render/mod.rs` 里挂载与生产 `pub mod`
+  按字母序混排是历史形态，新拆分不采用。
 
 ### helper 中心
 
 - 跟随既有先例，不另立并行中心；两种粒度：
   - crate 级共享用 `#[cfg(test)] pub(crate) mod tests`（engine crate 的
-    `src/input.rs`；`light.rs` 与 `ffi.rs` 的测试经 `crate::input::tests::*`
-    复用其 `valid_input`/`ENTRY_BYTES` 夹具）；
+    `src/input.rs`；`light.rs` 与 `ffi.rs` 的测试经
+    `crate::input::tests::valid_input`、`crate::input::tests::ENTRY_BYTES`
+    具名导入复用其夹具）；
   - 模块内多测试文件共享用 `test_support.rs`（engine crate 的
     `src/greedy/test_support.rs`，挂载为 `#[cfg(test)] mod test_support;`，
-    主题文件经 `super::test_support::*` 引用）。
+    主题文件经 `use super::test_support::{…}` 具名导入引用）。
 - 落位前同样先 grep 引用集合：被多于一个测试模块引用的 helper 才迁入中心，
   单模块私有的留在消费它的测试文件内。
+- 中心体量上限与 Go 侧同判据：超过约 500 行、或横跨两个以上不相干域时按域
+  再拆；现状 engine `src/greedy/test_support.rs` 63 行、`src/input.rs` 的
+  `tests` 模块约 190 行，均远未触及。
 - helper 必须有中文 doc 注释（`///`）说明用途；跨模块准入的注明消费者范围。
 
 ### 验收清单（Rust 等价物）

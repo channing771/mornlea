@@ -351,7 +351,7 @@ func TestFluidBlocksUseDedicatedWaterMaterialLayer(t *testing.T) {
 // **唯一**机械守卫。
 //
 // 区间的数值真值源是本包的层枚举，但常量必须住在 internal/mesh（assets 依赖
-// mesh，反向不成立），Rust 的 greedy.rs 还硬编码了第三份。三份没有共享定义也
+// mesh，反向不成立），Rust 的 quad.rs 还硬编码了第三份。三份没有共享定义也
 // 没有生成步骤：在 LayerWheat0 之前插一层会整体平移这段区间，而那件事**不会**
 // 让任何材质或渲染断言变红——Rust 会把别的方块当成植物、把小麦当成普通方块。
 // 本条钉住 Go 两处相等，跨语言那一侧由 internal/mesh 的

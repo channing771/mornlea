@@ -52,7 +52,7 @@ func (f Face) Positive() bool { return f&1 == 1 }
 //   - Go：本对常量，由 internal/assets 的 LayerWheat0..LayerWheat7 提供数值，
 //     两者相等由 assets 的 TestPlantMaterialLayersMatchMeshContract 钉住
 //     （assets 依赖 mesh，反向不成立，所以常量住在这里、断言写在那边）；
-//   - Rust engine：`greedy.rs` 的 PLANT_MATERIAL_FIRST / PLANT_MATERIAL_LAST，
+//   - Rust engine：`quad.rs` 的 PLANT_MATERIAL_FIRST / PLANT_MATERIAL_LAST，
 //     它据此决定哪些格跳过轴向面、改出 4 条交叉斜面；跨语言一致性由真的喂一次
 //     Rust mesher 的 TestNativeOracleParityWheatCrossPlanes 兜底；
 //   - 着色器：terrain.wgsl 与 cull.wgsl **不**复制这段数值，改按 `face >= 6`
