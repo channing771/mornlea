@@ -22,11 +22,11 @@
 
 ## 4A. Task 4 fix round 4
 
-- [ ] 安全重放完整音频栈到 melee PR #66 修复 HEAD `82eb03b`，保存旧 HEAD 备份，并以 `git range-diff` 核对 11 个提交内容等价。
-- [ ] 为 active→inactive/rejected→无关移除旧目标无声写 RED，并在成功增量优先顺序下保留正常采掘完成 cue。
-- [ ] 为同一 `PlayerState` 同时确认进食与伤害写 RED，以零分配定长结果独立返回并各播放一次。
-- [ ] 在 delta spec、design、plan 中补齐有效本地 UI click 与空白/禁用/发送失败静音契约，不删除既有行为。
-- [ ] 运行 focused RED/GREEN、四包组合 race、archcheck、vet、`gofmt -l .`、59 项严格 OpenSpec、`git diff --check` 与 AGENTS/CLAUDE 逐字节一致检查。
+- [x] 安全重放完整音频栈到 melee PR #66 修复 HEAD `82eb03b`，保存旧 HEAD 备份，并以 `git range-diff` 核对 11 个提交内容等价。
+- [x] 为 active→inactive/rejected→无关移除旧目标无声写 RED，并在成功增量优先顺序下保留正常采掘完成 cue。
+- [x] 为同一 `PlayerState` 同时确认进食与伤害写 RED，以零分配定长结果独立返回并各播放一次。
+- [x] 在 delta spec、design、plan 中补齐有效本地 UI click 与空白/禁用/发送失败静音契约，不删除既有行为。
+- [x] 运行 focused RED/GREEN、四包组合 race、archcheck、vet、`gofmt -l .`、59 项严格 OpenSpec、`git diff --check` 与 AGENTS/CLAUDE 逐字节一致检查。
 
 ## 5. 收尾
 
