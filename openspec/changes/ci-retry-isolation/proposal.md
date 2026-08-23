@@ -8,6 +8,7 @@
 - 将 macOS `test` 拆成单次 Rust 构建、质量门禁、三片完整 Go race、集成门禁和轻量汇总 `test`；所有 Go 下游复用同一 SHA 校验过的 Rust artifact。
 - 保持原 `go test ./... -race -p=1` 包集合、50ms 探针、重复次数、正确性阈值与性能测试命令语义；性能数值只记录，不新增时长门禁。
 - 让缺失或 SHA 不匹配的 artifact、任一必要 job 失败和任一测试错误均在最终 `test` 汇总中 fail-closed；GitHub 的 rerun failed jobs 只重跑失败分片与汇总，不回退为整 workflow 重跑。
+- 根修 `internal/server/companion_interact_parity_test.go` 的跨接收者无语义采集交错，以及 `internal/server/companion_stage_acceptance_test.go` 的台词 outcome 就绪边界；保留每个接收者的 EventID 顺序与完整台词节点集断言。
 
 ## Non-Goals
 
@@ -17,4 +18,4 @@
 
 ## Impact
 
-受影响文件仅为 `.github/workflows/ci.yml` 与本 change 的 OpenSpec/迁移记录。产物无线上协议、存档和玩家数据迁移；回退 workflow 提交即可恢复旧 CI。总墙钟耗时和 runner provenance 继续作为报告信息，不作为共享 runner 上的阻塞阈值。
+受影响代码为 `.github/workflows/ci.yml`、`internal/server/companion_interact_parity_test.go` 与 `internal/server/companion_stage_acceptance_test.go`，并同步本 change 的 OpenSpec/迁移记录。产物无线上协议、存档和玩家数据迁移；回退 workflow 与两处测试夹具提交即可分别恢复旧 CI 和旧测试行为。总墙钟耗时和 runner provenance 继续作为报告信息，不作为共享 runner 上的阻塞阈值。
