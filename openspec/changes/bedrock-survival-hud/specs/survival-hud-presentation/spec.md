@@ -69,9 +69,47 @@
 - **THEN** 系统 MUST 显示十个 resolved 气泡槽位，每个槽位 MUST 只有一个实例
 - **AND** 直接使用满气泡 cell 的槽位数量 MUST 等于 `ceil(value * 10 / core.MaxOxygenTicks)`，其余槽位 MUST 直接使用空气泡 cell，其中零值 MUST 产生十个空气泡
 
+### Requirement: 饥饿以十个常驻空槽和权威填充呈现
+
+系统 SHALL 只消费已确认的权威饥饿值，并 MUST 先把该值钳制到 `0..core.MaxHunger`。未确认饥饿 MUST 完全隐藏；已确认饥饿无论是否满值都 MUST 显示十个空鸡腿槽，并在其上追加 `ceil(Hunger / 2)` 个填充鸡腿。奇数值的最后一个填充 MUST 只覆盖对应鸡腿的右半边，饥饿条 MUST NOT 绘制背景面板。
+
+#### Scenario: 已确认饥饿始终显示十格刻度
+
+- **GIVEN** 已确认饥饿值为 `0`、任一中间值、`core.MaxHunger` 或高于 `core.MaxHunger`
+- **WHEN** 系统布局饥饿状态行
+- **THEN** 系统 MUST 恰好显示十个空鸡腿槽
+- **AND** 填充鸡腿数量 MUST 等于钳制后饥饿值的 `ceil(Hunger / 2)`
+- **AND** 饥饿条 MUST NOT 产生背景面板实例
+
+#### Scenario: 奇数饥饿使用右半格且未确认值隐藏
+
+- **GIVEN** 一份奇数的已确认饥饿值和一份未确认饥饿值
+- **WHEN** 系统分别布局两份状态
+- **THEN** 已确认值的最后一个填充 MUST 只显示对应鸡腿的右半边
+- **AND** 未确认值 MUST 不产生任何鸡腿实例
+
+### Requirement: 状态行固定为三栏共享布局
+
+生命、耗损氧气与饥饿 SHALL 组成一个顺序固定为 health / depleted oxygen / hunger 的三栏状态组。每栏设计宽度 MUST 为十个 16 design-pixel 图标加九个 1 design-pixel 间隔，即 `169` design pixels；相邻栏之间 MUST 相隔 `12` design pixels，使整组设计宽度恰好为 `531` design pixels。整组 MUST 水平居中，并 MUST 与快捷栏和采掘反馈使用完全相同的缩放比例。满氧时中栏 MUST 不绘制气泡，但其几何宽度 MUST 继续保留，生命与饥饿不得因此跳动。
+
+#### Scenario: 三栏顺序、间距与居中保持稳定
+
+- **GIVEN** 已确认生命、耗损氧气与饥饿状态
+- **WHEN** 系统布局关闭或打开容器的状态组
+- **THEN** 三栏 MUST 按 health / depleted oxygen / hunger 顺序排列
+- **AND** 每栏设计宽度 MUST 为 `169`，栏间设计间隔 MUST 为 `12`，整组设计宽度 MUST 为 `531`
+- **AND** 整组 MUST 水平居中并与快捷栏、采掘反馈使用相同的缩放比例
+
+#### Scenario: 满氧隐藏不改变左右栏位置
+
+- **GIVEN** 两帧具有相同的生命与饥饿值，其中一帧氧气耗损、另一帧氧气为满值
+- **WHEN** 系统布局两帧状态组
+- **THEN** 满氧帧的中栏 MUST 不产生气泡实例
+- **AND** 两帧的生命栏与饥饿栏 MUST 具有完全相同的位置和尺度
+
 ### Requirement: 采掘进度同时使用颜色和形状反馈
 
-活动且所需 tick 非零的权威采掘进度 SHALL 位于生命与氧气状态行上方，进度比例 MUST 钳制到 `0..100%`。可采目标和不可采目标 MUST 同时具有颜色差异与形状差异；可采进度 MUST 具有随填充末端移动的亮标记，不可采进度 MUST 具有固定数量和位置的警示缺口，且不得使用固定警示缺口冒充可采末端标记。
+活动且所需 tick 非零的权威采掘进度 SHALL 位于三栏状态组上方，进度比例 MUST 钳制到 `0..100%`。可采目标和不可采目标 MUST 同时具有颜色差异与形状差异；可采进度 MUST 具有随填充末端移动的亮标记，不可采进度 MUST 具有固定数量和位置的警示缺口，且不得使用固定警示缺口冒充可采末端标记。
 
 #### Scenario: 超额进度钳制在轨道内
 
@@ -94,12 +132,12 @@
 
 ### Requirement: 生存 HUD 在窄 framebuffer 内整体等比缩小
 
-系统 SHALL 把快捷栏、生命、氧气和采掘反馈作为同一布局整体响应 framebuffer 尺寸。空间不足时所有元素 MUST 使用同一比例等比缩小；宽或高为零时 MUST 不产生任何实例；任一正尺寸 framebuffer 中的所有 HUD 矩形 MUST 完全位于 framebuffer 内。
+系统 SHALL 把快捷栏、生命、氧气、饥饿和采掘反馈作为同一布局整体响应 framebuffer 尺寸。空间不足时所有元素 MUST 使用同一比例等比缩小，并 MUST 同时容纳既有快捷栏或打开态面板与 `531` design-pixel 状态组；宽或高为零时 MUST 不产生任何实例；任一正尺寸 framebuffer 中包括饥饿在内的所有 HUD 矩形 MUST 完全位于 framebuffer 内。
 
 #### Scenario: 窄窗口保持同一比例并不越界
 
 - **GIVEN** 一个不足以按设计尺寸容纳完整生存 HUD 的正尺寸 framebuffer
-- **WHEN** 系统布局快捷栏、耗损氧气、生命和活动采掘反馈
+- **WHEN** 系统布局快捷栏、耗损氧气、生命、饥饿和活动采掘反馈
 - **THEN** 全部元素 MUST 使用同一缩放比例
 - **AND** 每个矩形 MUST 完全位于 framebuffer 内
 
@@ -109,29 +147,36 @@
 - **WHEN** 系统准备生存 HUD
 - **THEN** 系统 MUST 不生成任何 HUD 矩形或字形实例
 
-### Requirement: 容器打开时状态行避让既有交互格子
+### Requirement: 状态组按容器状态避让既有交互格子
 
-关闭背包、合成、箱子或熔炉界面时，生命状态 SHALL 位于快捷栏上方并与其左边沿对齐，耗损氧气 SHALL 位于快捷栏上方并与其右边沿对齐。任一容器界面打开时，生命和耗损氧气 MUST 保持可见并移至快捷栏下方的既有底部留白，且 MUST NOT 覆盖或改变任何既有可交互物品格的命中区域。
+关闭背包、合成、箱子或熔炉界面时，三栏状态组 SHALL 位于快捷栏正上方一行，采掘反馈 SHALL 位于状态组正上方一行。任一容器界面打开时，同一个三栏状态组 MUST 保持可见并移至快捷栏正下方一行，且 MUST 完全位于 framebuffer 内，不得覆盖、相交或改变任何既有可交互物品格的命中区域。
 
-#### Scenario: 打开容器后状态行保持可见且不拦截格子
+#### Scenario: 关闭容器时状态与采掘按行堆叠
 
-- **GIVEN** 已打开任一既有容器界面、已确认低生命和已确认耗损氧气
-- **WHEN** 系统布局 HUD 并对所有可交互物品格执行既有命中测试
-- **THEN** 生命和氧气 MUST 位于快捷栏下方且完全可见
-- **AND** 它们 MUST 不与任何可交互物品格矩形相交，既有命中结果 MUST 保持不变
+- **GIVEN** 容器界面关闭且三栏状态和活动采掘反馈均可见
+- **WHEN** 系统布局 HUD
+- **THEN** 三栏状态组 MUST 位于快捷栏正上方一行
+- **AND** 采掘反馈 MUST 位于三栏状态组正上方一行
+
+#### Scenario: 打开容器后状态组保持可见且不拦截格子
+
+- **GIVEN** 已打开任一既有容器界面，并已确认低生命、耗损氧气与饥饿
+- **WHEN** 系统布局 HUD 并对全部 36 个可交互物品格执行既有命中测试
+- **THEN** 同一个三栏状态组 MUST 位于快捷栏正下方一行且完全位于 framebuffer 内
+- **AND** 状态组 MUST 不与任何可交互物品格矩形相交，既有命中结果 MUST 保持不变
 
 ### Requirement: 生存 HUD 保持固定资源和实例兼容性
 
-生存 HUD SHALL 继续使用 benchmark scenario v18 已锁定的固定容量预分配资源、同一个既有 HUD pass 和相同的 48-byte instance 编码。`maxHotbarQuads` MUST 保持 247，`maxHotbarGlyphs` MUST 保持 700，glyph offset MUST 保持 12288 bytes，固定上传总容量 MUST 保持 45888 bytes。合法最坏组合 MUST 不超过这些固定上限；稳定态准备和呈现 MUST 保持零每帧动态 GPU 资源，且不得新增 HUD shader、GPU pass 或上传格式。
+生存 HUD SHALL 继续使用 main 的 benchmark scenario v19 已锁定的固定容量预分配资源、同一个既有 HUD pass 和相同的 48-byte instance 编码。`maxHotbarQuads` MUST 保持 267，`maxHotbarGlyphs` MUST 保持 700，glyph offset MUST 保持 13312 bytes，固定上传总容量 MUST 保持 46912 bytes，所有固定区间 offset MUST 保持 256-byte 对齐。合法最坏组合 MUST 不超过这些固定上限；稳定态准备和呈现 MUST 保持零每帧动态 GPU 资源，且不得新增 HUD shader、GPU pass、上传格式、API、ABI、配置项或依赖。
 
 #### Scenario: 关闭和打开界面的合法最坏组合均有界
 
 - **GIVEN** 分别构造关闭界面的最坏快捷栏、状态与采掘组合，以及打开界面的最大背包、容器、状态与聊天组合
 - **WHEN** 系统准备两种 HUD
-- **THEN** 关闭和打开合法最坏组合的 quad 数量 MUST 分别不超过 76 和 245，且都 MUST 不超过固定上限 247
+- **THEN** 加入最多 20 个饥饿 quad 后，关闭和打开合法最坏组合的 quad 数量 MUST 分别恰好为 96 和 265，且都 MUST 不超过固定上限 267
 - **AND** 合法最大 glyph 组合 MUST 不超过固定上限 700
 - **AND** 两种组合 MUST 继续通过同一 HUD pass 以相同 48-byte instance 编码输出
-- **AND** glyph offset 与固定上传总容量 MUST 分别保持 12288 与 45888 bytes
+- **AND** glyph offset 与固定上传总容量 MUST 分别保持 13312 与 46912 bytes，固定区间 MUST 保持 256-byte 对齐
 
 #### Scenario: 稳定态不创建每帧动态 GPU 资源
 
