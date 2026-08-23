@@ -2,7 +2,7 @@
 
 ### Requirement: 本地 cue 只在确认边界播放
 
-图形客户端 SHALL 只在成功采掘完成、成功放置完成、成功进食完成和收到伤害确认这四种已确认边界各播放对应的一次本地 cue。预测、拒绝、失败和同一确认的重复镜像 MUST NOT 播放 cue。
+图形客户端 SHALL 只在成功采掘完成、收到本会话首次有效的 `PlaceBlockSucceeded`、成功进食完成和收到伤害确认这四种已确认边界各播放对应的一次本地 cue。预测、拒绝、失败、旧/重复放置序号和同一确认的重复镜像 MUST NOT 播放 cue。
 
 #### Scenario: 成功事件播放一次
 
@@ -15,6 +15,38 @@
 - **GIVEN** 预测、拒绝、失败或重复确认
 - **WHEN** 客户端处理该状态
 - **THEN** MUST NOT 播放 cue
+
+#### Scenario: 放置序号按会话去重
+
+- **GIVEN** 客户端已消费某会话的一个 `PlaceBlockSucceeded` 序号
+- **WHEN** 收到重复或更旧序号，或会话 reset 后收到新会话重新起步的序号
+- **THEN** 前者 MUST NOT 播放 cue，后者 MUST 被视为新会话的首次确认
+
+### Requirement: 放置成功确认建立唯一因果边界
+
+协议 v26 SHALL 在 Play S→C ID 20 定义载荷恰为 `Sequence u64` 的 `PlaceBlockSucceeded`，并保持 ID 21 未分配。服务端只能在某 `PlaceBlock` 已于同一权威 tick 原子完成世界写入和恰减一件物品后，向发起会话发送恰好一个同序号成功确认。拒绝或失败 MUST 只发既有 `CommandRejected`，不得同时产生成功确认。
+
+#### Scenario: 连续放置分别确认
+
+- **GIVEN** 同一会话使用同一 slot/item 连续发起两个可成功放置命令
+- **WHEN** 两个命令在同 tick 或跨 tick 完成
+- **THEN** 发起会话 MUST 收到两个各自序号的成功确认，其他会话 MUST NOT 收到
+
+#### Scenario: 拒绝放置没有成功确认
+
+- **GIVEN** 某 `PlaceBlock` 被权威模拟拒绝
+- **WHEN** 服务端发布本 tick 结果
+- **THEN** 发起会话 MUST 只收到同序号 `CommandRejected`，且任何会话 MUST NOT 收到该序号成功确认
+
+### Requirement: 协议 v26 拒绝旧对端
+
+客户端与服务端 SHALL 只接受协议 v26，并 MUST 在 Play 之前拒绝 v25 及更早版本。此次升版 MUST NOT 修改存档 schema、engine/client ABI 或 benchmark scenario。
+
+#### Scenario: v25 对端在握手阶段被拒绝
+
+- **GIVEN** 客户端或服务端声明协议 v25
+- **WHEN** 对端处理握手
+- **THEN** MUST 在进入 Play 前以版本不匹配拒绝
 
 ### Requirement: 总音量严格配置
 
