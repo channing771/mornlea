@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go 1.26、Rust 1.97.1、现有 `mornlea_engine`/`mornlea_client` ABI、OpenSpec、Go `testing`、无窗口 capture/golden、现有 SDD review-package helper。
 
-**Spec:** `openspec/changes/bedrock-survival-hud/proposal.md`、`openspec/changes/bedrock-survival-hud/specs/hud/spec.md`、`openspec/changes/bedrock-survival-hud/specs/capture/spec.md`、`openspec/changes/bedrock-survival-hud/design.md`、`openspec/changes/bedrock-survival-hud/tasks.md`
+**Spec:** `openspec/changes/bedrock-survival-hud/proposal.md`、`openspec/changes/bedrock-survival-hud/specs/survival-hud-presentation/spec.md`、`openspec/changes/bedrock-survival-hud/specs/visual-verification/spec.md`、`openspec/changes/bedrock-survival-hud/design.md`、`openspec/changes/bedrock-survival-hud/tasks.md`
 
 ## Global Constraints
 
@@ -48,6 +48,7 @@
 - Modify: `docs/notes/progress.md`
 - Modify: `internal/render/hud/atlas.go`
 - Modify: `internal/render/hud/atlas_test.go`
+- Modify: `internal/render/hud/chat_test.go`
 - Modify: `internal/render/hud/health.go`
 - Modify: `internal/render/hud/health_test.go`
 - Modify: `internal/render/hud/hotbar_test.go`
@@ -182,15 +183,17 @@ cmd/mornlea/testdata/golden/water-underwater.png
 - [ ] 先把工作树整理成能由 Go parser 读取的临时 RED 状态：删除所有 conflict marker；保留 main 的 `HungerOverlay` 数据流和当前分支的 health/oxygen/open-layout 数据流；不提交、不暂存 PNG。运行：
 
 ```bash
-rg -n '^(<<<<<<<|=======|>>>>>>>)' \
-  AGENTS.md CLAUDE.md cmd/mornlea docs/notes internal/render/hud
+if rg -n '^(<<<<<<<|=======|>>>>>>>)' \
+  AGENTS.md CLAUDE.md cmd/mornlea docs/notes internal/render/hud; then
+  exit 1
+fi
 ```
 
-Expected: 无输出。此步只消除语法级冲突，不宣称布局已经正确。
+Expected: `rg` 无输出并返回 1，`if` 条件把“无匹配”当成成功继续；发现任一 marker 时打印位置并显式退出 1。此步只消除语法级冲突，不宣称布局已经正确。
 
 #### Step 5: 先写七列 atlas 的失败测试
 
-- [ ] 在 `internal/render/hud/atlas_test.go` 与 `internal/render/hud/hunger_test.go` 写最终断言，覆盖：七个 UI cell 的固定顺序、每列确有非透明像素、item 起始 offset 从 5 变为 7、block 顶面复制仍正确、每个 UV 都严格留在本列、奇数饥饿只使用满鸡腿列的右半 UV。
+- [ ] 扩展 `internal/render/hud/atlas_test.go` 现有 `TestHotbarTextureAtlasUIIconsAreDistinctBinaryAndDeterministic`、`TestHotbarTextureAtlasCopiesRegisteredBlockTopFaces`、`TestHotbarColumnUVStaysInsideItsOwnColumn`，并在 `internal/render/hud/hunger_test.go` 写半格断言。覆盖：七个 UI cell 的固定顺序、每列非空、每个像素 alpha 只能为 0 或 255、七列两两逐字节不同、连续两次构建的整个 atlas 逐字节相同、每个可放置 `ItemID` 的 16×16 RGBA 全部像素等于注册表顶面、block 起始 offset 从 5 变为 7、每个 UV 严格留在本列、奇数饥饿只使用满鸡腿列的右半 UV。复用现有 exhaustive test 循环与 `hotbarTextureCell`，不得在测试里复制 heart/bubble/drumstick painter 逻辑。
 
 测试形状必须直接枚举稳定列，而不是复刻 painter 实现：
 
@@ -206,7 +209,63 @@ wantColumns := [...]int{
 }
 ```
 
-并断言第一个 item layer 的列是 `len(wantColumns)`，而不是保留旧的 4 或 5。
+二值 alpha、非空、两两互异与全 atlas 确定性继续使用现有测试形状：
+
+```go
+pixels := buildHotbarTextureAtlas(registry)
+if again := buildHotbarTextureAtlas(registry); !bytes.Equal(pixels, again) {
+	t.Fatal("连续构建的 hotbar 图集不相同")
+}
+cells := make([][]byte, len(wantColumns))
+for index, column := range wantColumns {
+	cell := hotbarTextureCell(pixels, column)
+	cells[index] = cell
+	opaque := 0
+	for pixel := 3; pixel < len(cell); pixel += 4 {
+		alpha := cell[pixel]
+		if alpha != 0 && alpha != 255 {
+			t.Fatalf("UI 列 %d alpha=%d，想要 0 或 255", column, alpha)
+		}
+		if alpha == 255 {
+			opaque++
+		}
+	}
+	if opaque == 0 {
+		t.Fatalf("UI 列 %d 没有非透明像素", column)
+	}
+}
+for left := range cells {
+	for right := left + 1; right < len(cells); right++ {
+		if bytes.Equal(cells[left], cells[right]) {
+			t.Fatalf("UI 列 %d 与 %d 的内容相同", wantColumns[left], wantColumns[right])
+		}
+	}
+}
+```
+
+每个可放置物品必须沿用现有穷举上界并逐像素核对，不能退回抽样 item 或抽样 pixel：
+
+```go
+for item := core.ItemID(0); item < core.ItemIDMax; item++ {
+	block, ok := core.ItemPlacement(item)
+	if !ok {
+		continue
+	}
+	source := registry.LayerRGBA(int(registry.Material(block, mesh.FacePosY)))
+	column := hotbarBlockColumnOffset + int(item)
+	for y := range hotbarTextureSize {
+		for x := range hotbarTextureSize {
+			src := (y*hotbarTextureSize + x) * 4
+			dst := (y*hotbarTextureWidth + column*hotbarTextureSize + x) * 4
+			if got, want := [4]byte(pixels[dst:dst+4]), [4]byte(source[src:src+4]); got != want {
+				t.Fatalf("物品 %d 像素 (%d,%d)=%v，想要注册表材质 %v", item, x, y, got, want)
+			}
+		}
+	}
+}
+```
+
+并断言 `hotbarBlockColumnOffset == len(wantColumns)`，而不是保留旧的 4 或 5。
 
 - [ ] 运行 RED：
 
@@ -229,7 +288,7 @@ const (
 	hotbarFullBubbleColumn
 	hotbarEmptyDrumstickColumn
 	hotbarFullDrumstickColumn
-	hotbarItemColumnOffset
+	hotbarBlockColumnOffset
 )
 ```
 
@@ -289,7 +348,33 @@ const (
 func statusColumnOrigin(column int, open bool, width, height float32) (x, y, scale float32)
 ```
 
-`statusColumnOrigin` 必须复用 `hotbarRowBounds`/现有 `hudScale`，只计算三列组的居中 X 与 open/closed 共用 Y；不得创建第二套 scale 或复制 hotbar 几何公式。`column` 只允许 0、1、2；错误值应沿用本包内部不产生布局的安全行为。
+`hudScale` 必须用现有标识符把宽度约束改成“既有内容与 531px 状态组取较大者”，高度约束仍复用现有 `openHUDHeight`/`closedHUDHeight`：
+
+```go
+hotbarContentWidth := core.HotbarSlots*hotbarSlotSize +
+	(core.HotbarSlots-1)*hotbarSlotGap + 2*hotbarPanelPadding
+contentWidth := max(hotbarContentWidth, statusGroupWidth)
+if available := width - 2*hudEdgeMargin; available < contentWidth {
+	scale = max(available/contentWidth, 0)
+}
+```
+
+`statusColumnOrigin` 只复用 `hotbarRowBounds` 得到同一个 `hudScale` 与 hotbar Y，公式固定为：
+
+```go
+func statusColumnOrigin(column int, open bool, width, height float32) (x, y, scale float32) {
+	_, hotbarY, _, scale := hotbarRowBounds(open, width, height)
+	x = (width-statusGroupWidth*scale)*0.5 +
+		float32(column)*(statusColumnWidth+statusColumnGap)*scale
+	y = hotbarY - (statusBarGap+healthHeartSize)*scale
+	if open {
+		y = hotbarY + (hotbarSlotSize+statusBarGap)*scale
+	}
+	return x, y, scale
+}
+```
+
+调用者只传 0、1、2；不要为内部固定列索引增加错误类型、对象层级或第二套 scale。
 
 - [ ] 修改 `appendHealthBar`、`appendOxygenBar` 使用 column 0/1；修改 main 带入的 hunger 接口为：
 
@@ -302,20 +387,37 @@ func appendHungerBar(
 )
 ```
 
-并使用 column 2。饥饿在右列从右向左排 10 格；empty 先画，fill 后画；奇数末格只改变 U 范围和屏幕宽度，不引入新纹理 cell。
+并使用 column 2。饥饿在右列从右向左排 10 格；empty 先画，fill 后画；奇数最后一个 fill 必须同时右移半格、把屏幕宽度减半并取满鸡腿右半 U，不引入新纹理 cell：
+
+```go
+x := segmentX(segment)
+fillWidth := size
+fillU0 := fullUV[0]
+if segment == filled-1 && value%2 != 0 {
+	x += size / 2
+	fillWidth = size / 2
+	fillU0 = (fullUV[0] + fullUV[2]) / 2
+}
+```
 
 - [ ] 保持 `HotbarRenderer.Prepare` 的 main 参数顺序：
 
 ```go
-func (r *HotbarRenderer) Prepare(
-	state State,
+func (renderer *HotbarRenderer) Prepare(
+	inventory core.Inventory,
+	inventoryConfirmed bool,
+	open bool,
+	source int,
+	overlay *FurnaceOverlay,
+	chest *ChestOverlay,
 	mining MiningOverlay,
 	health HealthOverlay,
 	oxygen OxygenOverlay,
 	hunger HungerOverlay,
 	chat ChatOverlay,
-	width, height float32,
-) ([]byte, uint32)
+	width, height uint32,
+	budget *render.UploadBudget,
+) error
 ```
 
 在 `cmd/mornlea/app_frame.go` 保留 main 的权威读取：
@@ -343,15 +445,18 @@ Expected: 全部通过；满氧气隐藏前后 health/hunger 坐标完全一致�
 
 #### Step 9: 先写容量、聊天和 app 权威数据流的失败测试
 
-- [ ] 手工语义合并并扩充 `internal/render/hud/renderer_test.go`、`hotbar_test.go`、`cmd/mornlea/health_hud_test.go` 与 `cmd/mornlea/chat_test.go`。保留双方现有测试，新增/调整以下精确契约：
+- [ ] 手工语义合并并扩充 `internal/render/hud/renderer_test.go`、`internal/render/hud/hotbar_test.go`、`internal/render/hud/chat_test.go`、`cmd/mornlea/health_hud_test.go` 与 `cmd/mornlea/chat_test.go`。保留双方现有测试，使用生产代码的实际标识符新增/调整以下精确契约；`maxHotbarGlyphs` 继续保留现有表达式，`hotbarUploadBytes` 继续由 `internal/render/hud/encode.go` 的固定区间推导，不做重命名：
 
 ```go
-const (
-	maxHotbarQuads       = 267
-	hotbarGlyphCapacity  = 700
-	hotbarGlyphOffset    = 13312
-	hotbarUploadCapacity = 46912
-)
+checks := []struct {
+	name      string
+	got, want int
+}{
+	{"quad 容量", maxHotbarQuads, 267},
+	{"glyph 容量", maxHotbarGlyphs, 700},
+	{"glyph offset", hotbarGlyphOffset, 13312},
+	{"总容量", hotbarUploadBytes, 46912},
+}
 ```
 
   - 固定 instance size 为 48 bytes，所有固定 offset `% 256 == 0`。
@@ -359,7 +464,7 @@ const (
   - closed 最大实例数严格 96，open 最大实例数严格 265；不是只验证“小于容量”。
   - `TestHotbarPrepareReusesLayoutAndUploadStorage` 保持零热路径 allocation/资源复用契约。
   - `TestHotbarMaximumBranchesAndEncodingContract` 同时覆盖 health 10、depleted oxygen 10、hunger 20 和现有最大分支。
-  - `TestChatOverlayStaysInFramebufferAndAboveClosedSurvivalStatus` 把三列状态组作为 anchor，仍要求 `1/256` framebuffer-pixel slack。
+  - `internal/render/hud/chat_test.go` 的 `TestChatOverlayStaysInFramebufferAndAboveClosedSurvivalStatus` 与 `assertEmbeddedChatStrictBounds` 都追加已确认的 `HungerOverlay{Value: core.MaxHunger}`；`statusCount` 必须为 `healthQuads + oxygenQuads + hungerQuads`，所有 health/oxygen/hunger quad 都使用同一个 closed status Y，且聊天仍要求 `1/256` framebuffer-pixel slack。测试 layout 的 quad capacity 也必须包含 `hungerQuads`。
   - app 测试让权威 hunger 9 产生 10 health + 15 hunger quad；unconfirmed hunger 只保留 health 10，不能画 20 个空鸡腿。
   - depleted oxygen 的增量固定为 10 quad，不沿用 main 的旧气泡计数。
   - 保留 `TestFormatChatEventUnknownKindFallsBackToNeutralLine`。
@@ -387,7 +492,8 @@ Expected: 旧 247/12288/45888 容量、旧 closed/open 最大值、旧 main stat
 
 ```bash
 gofmt -w internal/render/hud/renderer.go internal/render/hud/renderer_test.go \
-  internal/render/hud/hotbar_test.go cmd/mornlea/health_hud_test.go \
+  internal/render/hud/hotbar_test.go internal/render/hud/chat_test.go \
+  cmd/mornlea/health_hud_test.go \
   cmd/mornlea/chat_test.go cmd/mornlea/app_frame.go
 go test ./internal/render/hud ./cmd/mornlea \
   -run 'Test(Hotbar|ChatOverlay|HUDHunger|ApplicationRenders)' -count=1
@@ -572,13 +678,15 @@ Expected: 所有命令成功，`gofmt -l .` 无输出；performance 数值只记
 - [ ] 对最终文本再次排除 marker，验证基线文档一致，并确认没有未知 unmerged path：
 
 ```bash
-rg -n '^(<<<<<<<|=======|>>>>>>>)' . \
-  --glob '!build/**' --glob '!.git/**'
+if rg -n '^(<<<<<<<|=======|>>>>>>>)' . \
+  --glob '!build/**' --glob '!.git/**'; then
+  exit 1
+fi
 cmp -s AGENTS.md CLAUDE.md
 git diff --name-only --diff-filter=U
 ```
 
-Expected: 前两条成功且 `rg`/unmerged 列表无输出；若 binary paths 仍是 unmerged，必须确认 15 张刚由最终二进制生成后再 `git add`。
+Expected: `rg` 无输出并返回 1 时 `if` 继续，发现 marker 时显式退出 1；`cmp` 成功且 unmerged 列表无输出。若 binary paths 仍是 unmerged，必须确认 15 张刚由最终二进制生成后再 `git add`。
 
 - [ ] 只暂存最终源码、文档、OpenSpec 证据和 15 张正式 golden；不得暂存 `build/` 或 `.superpowers/sdd/` 报告。用 `git status --short` 和 cached diff 逐项检查：
 
@@ -638,7 +746,42 @@ Package 必须包含 BASE..HEAD commit list、stat、full diff、raw diff SHA-25
 
 - [ ] 有 finding 时，把每项 finding 原文和裁决追加 ledger，派回同一 implementer 修复；修复形成 merge commit 之后的追加 commit，不改写 merge commit。每轮后重跑受影响 focused 验证、更新 ledger、重新生成同一 BASE..HEAD package/hash，并交同一 reviewer 复核；最多 5 轮，超限逐条交 controller 裁决。
 
-- [ ] task reviewer 最终双 PASS 后，把 implementer、reviewer、轮次、最终 commit、验证和 ruling 写入 ledger。随后派一个与 task reviewer 不同的 fresh whole-branch reviewer，使用更新后的 BASE..HEAD package 做整分支终审。
+- [ ] task reviewer 最终双 PASS 后，把 implementer、reviewer、轮次、最终 commit、验证、SPEC/QUALITY 结论和 controller ruling 写入 `ledger.md`；同步勾选此时已经有完整证据的 OpenSpec checkbox，6.13 仍保持未勾选。先把这些 task-review 证据提交，不能让 whole-branch reviewer 阅读工作树中的未提交 ledger：
+
+```bash
+openspec validate --all --strict --no-interactive
+git diff --check
+git add openspec/changes/bedrock-survival-hud/tasks.md \
+  openspec/changes/bedrock-survival-hud/ledger.md
+git diff --cached --check
+git commit -m "docs: record authoritative hunger HUD task review"
+task_bookkeeping_head=$(git rev-parse HEAD)
+```
+
+Expected: commit 只含已经发生的 task-review ledger 证据与已挣得的 checkbox；不写 whole-branch review 或 push 的未来结果。
+
+- [ ] 以包含上述 bookkeeping commit 的 `task_bookkeeping_head` 重新生成完整 `integration_base..HEAD` package 与两种 hash，覆盖 task review 阶段使用的旧包：
+
+```bash
+plan_file=docs/superpowers/plans/2026-08-22-bedrock-survival-hud-main-integration.md
+review_out=.superpowers/sdd/bedrock-survival-hud-main-integration/implementation-review-package.diff
+review_tmp=$(mktemp)
+/Users/chen/.agents/skills/subagent-driven-development/scripts/review-package \
+  "$plan_file" "$integration_base" "$task_bookkeeping_head" "$review_tmp"
+raw_diff_sha=$(git diff "$integration_base..$task_bookkeeping_head" | shasum -a 256 | awk '{print $1}')
+{
+  sed -n '1p' "$review_tmp"
+  printf '\nRaw diff SHA-256: %s\n' "$raw_diff_sha"
+  sed -n '2,$p' "$review_tmp"
+} > "$review_out"
+rm "$review_tmp"
+package_sha=$(shasum -a 256 "$review_out" | awk '{print $1}')
+printf 'raw_diff_sha=%s\npackage_sha=%s\n' "$raw_diff_sha" "$package_sha"
+git diff --quiet
+git diff --cached --quiet
+```
+
+Expected: package 的 commit list/stat/full diff 包含 task-review bookkeeping commit；tracked working tree 与 index 都干净。此时才派一个与 task reviewer 不同的 fresh whole-branch reviewer；reviewer 只审 committed `integration_base..task_bookkeeping_head` 与这个完整 package，不读取 package 范围之外或未提交的证据。
 
 - [ ] whole-branch reviewer 的 finding 仍进入同一有界 repair loop；最终双 PASS 后才正常 push PR #64 分支。禁止 rebase、force-push 或改写已审核历史。
 
