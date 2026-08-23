@@ -33,6 +33,6 @@
 - [x] 在 Darwin 运行 `make rust`、`make rust-check`、focused race、archcheck、`go test ./... -race`、`go vet ./...`、`gofmt -l .`、59 项严格 OpenSpec 与 diff/cmp 门禁。
 - [x] 交叉编译 Linux/amd64 的纯 Go `internal/audio` 测试二进制，并确认 Linux/amd64 专服依赖图不含 `internal/audio`；字面 `GOOS=linux go test ./internal/audio` 生成 ELF 后不能在 Darwin 宿主执行。
 - [x] 确认无音频资产、新依赖、存档/schema、engine/client ABI 或 benchmark scenario 变化；协议唯一变化是 v26 Play S→C ID 20 的 8-byte `PlaceBlockSucceeded`，ID 21 保持未分配。
-- [ ] 由 PR 的 Linux runner 原生执行 `GOOS=linux go test ./internal/audio` 与既有 `linux-server` bundle job。
+- [x] 由 PR 的 Linux runner 原生执行 `GOOS=linux go test ./internal/audio` 与既有 `linux-server` bundle job。
 - [ ] 由用户/验收者显式启动交互客户端，分别试听四个 cue、`audioVolume=0.25` 与 `audioVolume=0`；自动代理不得自行聚焦窗口。
-- [ ] 完成全新整分支 SPEC/QUALITY 终审，正常 push 并创建独立 PR；不自行归档。
+- [x] 完成全新整分支 SPEC/QUALITY 终审，正常 push 并创建独立 PR；不自行归档。

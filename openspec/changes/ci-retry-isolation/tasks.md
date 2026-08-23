@@ -18,7 +18,7 @@
 - [x] 3.3 由真实失败验证最终 `test` fail-closed，并用 GitHub “Re-run failed jobs” 确认只重跑失败 job 与汇总。
 - [x] 3.4 连续 push 新提交，确认旧 SHA workflow 被 concurrency 取消，新 SHA 只留一份活动 workflow。
 - [x] 3.5 把真实 Actions 各 job 墙钟记入 `ledger.md`，只作记录。
-- [ ] 3.6 生成最终 `BASE..HEAD` committed review package 与 SHA-256，完成独立整分支终审；不自行归档。
+- [x] 3.6 生成最终 `BASE..HEAD` committed review package 与 SHA-256，完成独立整分支终审；不自行归档。
 
 ## 4. Task 6：远端既有 server 偶发测试根修
 

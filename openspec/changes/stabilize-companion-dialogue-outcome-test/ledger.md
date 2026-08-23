@@ -24,3 +24,5 @@
 | Task 3 共享门禁 | `go test ./internal/archcheck -count=1` 退出 0（2.626s）；`go test ./... -race` 退出 0；`go vet ./...` 退出 0 且无输出；`gofmt -l .` 退出 0 且无输出；`openspec validate --all --strict --no-interactive` 退出 0（58 passed、0 failed）；`git diff --check` 退出 0 且无输出。 |
 | Task 3 结论边界 | 上述样本证明测试同步前置条件已从固定 tick 的调度猜测改为 outcome 入队事实；不据此宣称测试“绝不 flaky”。产品 diff 为空，测试 diff 仅涉及唯一 helper 与三个同源等待段，`skip_specs: true` 仍符合无可观察产品行为变化的范围。 |
 | Task 3 终审 round 1 | HEAD `a87fb8f95387e22af63341914054aa4ab9b4380d`：规格 FAIL、质量 PASS。P1 指出正式 CI RED 缺少日志中的 `0.05s`，且 Task 1 本地 `-count=10` 聚合因没有逐次断言与耗时而被过度标为可审计频次；本修复轮仅补齐 CI 耗时并降级本地聚合资格，独立复审待控制会话记录。 |
+
+| 五路归档收尾 | 已验证远端事实：PR #65 合入 `4437670cc3110d33351dd1eccdbcadeb96606555`（`Merge pull request #65 from channing771/codex/stabilize-companion-dialogue-outcome-test`）。本收尾不伪造未提供的 run 编号或人工验收；change 保持 active，等待控制会话归档。 |

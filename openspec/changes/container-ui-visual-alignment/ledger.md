@@ -70,3 +70,8 @@
 - 修复轮次 1：确认无其他 `cmd/mornlea`、visual 或 race 进程后串行执行 `go test ./cmd/mornlea -race -count=1`（exit 0，195.002s）、`go test ./internal/render/hud ./cmd/mornlea -race -count=1`（exit 0，196.448s）与 `go test ./... -race`（exit 0，211.864s）。未改生产代码、golden、超时或阈值。
 - 修复轮次 1：`make build`（exit 0）后运行 scenario v19 Memory producer，报告 `/tmp/container-ui-v19.CsnTAL/memory-v19.json`（exit 0，462.50s，SHA-256 `1cc6a61843d7c81a9db2104640434e0781c771c02c46a0ef466885c3bc0ca352`），身份为 scenario 19 / memory / Apple M5 / 24GiB / macOS 26.5.1 / go1.26.0 darwin/arm64；`go run ./cmd/perfcheck` 对该报告自比较 exit 0，输出 `同场景性能记录完成`。producer 记录 flying p99 18.877ms 的既有 record-only 行，未修改阈值或退出语义。
 - 范围审计（`cff1133f62782b04a36a0461549edb64be877de2..efdd922e781ffd7ec5e1d8a126e880503ea570dd`）：产品改动仅为 `internal/render/hud` 与 `cmd/mornlea` capture，另有 OpenSpec、task report 和 17 张正式 golden；无 network/sim/storage/server、协议/存档/ABI/配置/依赖或二进制 UI 源改动。完整 committed package 与 SHA-256 只能在本轮 docs 提交后作为未通过门禁的审查证据提供，不能替代失败门禁。
+
+## 五路归档收尾
+
+- 已验证远端事实：PR #67 合入 `c1f205f1f7d7a8cd4aa71c5bf501aa5910cd07d5`（`Merge pull request #67 from channing771/codex/container-ui-visual-alignment`）。据此回填 Task 5 的完整 diff 审计与独立整分支终审为完成；不在本 ledger 杜撰未提供的 reviewer 身份或 run 编号。
+- 17 张正式容器/世界 golden 的人工图审仍以既有 Task 4/5 证据为准；没有残余人工产品验收。change 保持 active，等待控制会话归档。

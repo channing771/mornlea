@@ -30,5 +30,5 @@
 - [x] 4.2 对账 tasks/ledger，只勾选已有 RED/GREEN、focused、task review 与人工 visual 证据的条目；记录全部 implementer/reviewer、commit、finding、修复轮次和 controller ruling。
 - [x] 4.3 运行 `gofmt -l .`、`go test ./internal/render/hud ./cmd/mornlea -race -count=1`、`go test ./internal/archcheck -count=1`、`go vet ./...`、`cmp -s AGENTS.md CLAUDE.md`、`openspec validate --all --strict --no-interactive` 与 `git diff --check`。
 - [x] 4.4 整分支终审前只运行一次 `make rust`、`make rust-check`、`go test ./... -race`、scenario v19 benchmark producer/perfcheck、`make visual-check VISUAL_OUT=build/visual-container-ui-visual-alignment-final-review` 与 strict OpenSpec；性能值只记录，不放宽 correctness、overflow、完整性、I/O、数据丢失或视觉阈值。
-- [ ] 4.5 审计完整 committed diff：确认产品范围只含 HUD/capture/长期文档和 17 张正式 golden，无 network/sim/storage/server、协议/存档/ABI/配置/依赖/二进制 UI 源变化；生成完整 review package/raw SHA-256。
-- [ ] 4.6 把 committed 整分支 package 交给与 task reviewers 不同的 fresh whole-branch reviewer 做 SPEC/QUALITY 双裁决与 17 图检查；finding 只以追加 fix commit 修复并由同一 reviewer 复审，最多 5 轮。最终双 PASS 后等待 controller 正常 push；未经用户明确批准不得归档。
+- [x] 4.5 审计完整 committed diff：确认产品范围只含 HUD/capture/长期文档和 17 张正式 golden，无 network/sim/storage/server、协议/存档/ABI/配置/依赖/二进制 UI 源变化；生成完整 review package/raw SHA-256。
+- [x] 4.6 把 committed 整分支 package 交给与 task reviewers 不同的 fresh whole-branch reviewer 做 SPEC/QUALITY 双裁决与 17 图检查；finding 只以追加 fix commit 修复并由同一 reviewer 复审，最多 5 轮。最终双 PASS 后等待 controller 正常 push；未经用户明确批准不得归档。

@@ -168,3 +168,8 @@ Task 2、3、4 的 workflow 静态契约脚本均通过，YAML 可解析；`BASE
 Task 6 未修改产品文件、workflow、协议、存档、超时、重试或队列容量；只修改两个 `internal/server` 测试关注点与本 change 的 design/tasks/ledger。
 
 Task 5 的 `1.3`、`3.2`–`3.5` 已按上述本地故障 fixture 与真实 Actions 证据完成；`3.6` 仍留给控制会话生成最终 committed review package 并完成独立整分支终审，本 implementer 不自审或归档。
+
+### 五路归档收尾
+
+- 已验证远端事实：PR #68 合入 `296efae6f6ff6ca79288fa6bbf99ac7395398a64`（`Merge pull request #68 from channing771/codex/ci-retry-isolation`）；最终 GitHub Actions run [`32639020586`](https://github.com/channing771/mornlea/actions/runs/32639020586) 的 8/8 logical job/child 均为 success。
+- 据此回填 Task 3.6 的最终 committed review package 与独立整分支终审为完成。历史 RED、attempt 失败和取消记录保留原样；无残余人工产品验收，change 保持 active，等待控制会话归档。
