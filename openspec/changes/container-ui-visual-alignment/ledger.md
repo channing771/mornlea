@@ -6,7 +6,7 @@
 |---|---|---|---|---|---|---:|---|---|
 | 1 OpenSpec change | `/root/hud_merge_impl`（本轮 fresh implementer） | `f36eb5bb3686403fa1e70cadb90688d4a27276bc`; `93a2d8d81a48777997d5ee11d3bb31e520d6fe3f` | `/root/container_task1_review`（`task-1-review.md`；修复轮次 1 复审见 `task-1-review-round-1.md`） | PASS（修复轮次 1 复审） | FAIL（修复轮次 1 复审） | 2/5 进行中 | change 创建前结构 RED；fix 1 strict/diff 通过；修复轮次 1 复审为 Spec PASS / Quality FAIL，1 finding | controller 只接受补齐 fix SHA 与 reviewer 审计事实，进入修复轮次 2；本轮复审待结论 |
 | 2 程序化容器 atlas | `/root/container_task2_impl`（本轮 fresh implementer） | `506395c95595b7187377888d4c914fe2608fd2d9`; `07f28e079cb2c8bfc5ef6981afcbaf3dcca5c485` | `/root/container_task2_review`（`task-2-review.md`） | PASS | FAIL | 1/5 进行中 | RED、HUD race、archcheck、vet、format、diff check；fix 1 focused 与 strict 已通过 | 仅接受 P2 注释修复；同一 reviewer 复审待发生 |
-| 3 overlay/interaction redlines | `/root/container_task3_impl`（本轮 fresh implementer） | `79a98947b45bdb2818871ee01846a7564452ca85` | 待派发 fresh task reviewer | 待评审 | 待评审 | 0/5 | RED、HUD focused/race、archcheck、vet、format、diff check 通过；cmd race 未完成 | 待裁决 |
+| 3 overlay/interaction redlines | `/root/container_task3_impl`（本轮 fresh implementer） | `79a98947b45bdb2818871ee01846a7564452ca85`; `c7598752835af837d923ecc4bfacab11759fe6e3` | 待派发 fresh task reviewer | 待评审 | 待评审 | 1/5 复审待发生 | RED、HUD focused/race、archcheck、vet、format、diff check 通过；cmd race 未完成 | 待裁决 |
 | 4 capture/golden | 待派发 fresh implementer | 待执行 | 待派发 fresh task reviewer | 待评审 | 待评审 | 0/5 | 待执行 | 待裁决 |
 | 5 closeout | 待派发 fresh implementer | 待执行 | 待派发 fresh whole-branch reviewer | 待评审 | 待评审 | 0/5 | 待执行 | 待裁决 |
 
@@ -43,3 +43,4 @@
 - `2026-08-23`：独立审查 `task-3-review.md` 对候选范围给出 SPEC PASS / QUALITY FAIL；唯一 P2 指出三尺寸集缺少 panel 四边与 `InventorySlotAt`/`FurnaceSlotAt`/`ChestSlotAt` 半开命中证明。
 - 修复轮次 1：只扩展 `layout_test.go` 的既有表驱动测试。三种 framebuffer 直接读取三类 overlay panel，锁定旧 X/Width/底边不变及仅向上扩 `containerHeaderHeight*scale`；同一尺寸集穷举 36/39/63 格的左上闭、中心与右/下开命中。未改生产代码，复审结论尚未发生。
 - 修复轮次 1 验证：focused HUD、HUD race、archcheck、目标 `gofmt -l`、`git diff --check` 与 strict OpenSpec 均通过。
+- 修复提交：`c7598752835af837d923ecc4bfacab11759fe6e3`（`test: lock container header boundaries`）。
