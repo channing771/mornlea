@@ -109,6 +109,12 @@ type playerState struct {
 	spawned bool
 	// health 是服务端单写者拥有的权威生命值，0..core.MaxHealth。
 	health uint8
+	// meleeCooldownTicks 是最近一次成功近战后目标还须免疫的 tick 数；它是瞬态
+	// 权威状态，不进玩家更新、快照、哈希或存档。
+	meleeCooldownTicks uint8
+	// meleeSuppressedMining 只标记本 tick 已命中玩家的采掘分流；下一 tick 必须由
+	// 当时的持续输入重新判定，不能跨 tick 保留。
+	meleeSuppressedMining bool
 	// peakY 是离地后到达过的最高高度，瞬态字段，不持久化、不进入快照/哈希。
 	// 身体浸没时它被逐 tick 重置到当前高度，因此水中不会累积出摔落伤害。
 	// 落地、传送、重生、维度 reset 都会把它重置为当前高度。
