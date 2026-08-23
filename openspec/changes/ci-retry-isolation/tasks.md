@@ -2,7 +2,7 @@
 
 - [x] 1.1 只修改 `.github/workflows/ci.yml`，将触发器、concurrency、macOS job DAG、SHA-bound artifact、三片 race、integration 和 fail-closed `test` 汇总落实为 `proposal.md`、`design.md` 与 `specs/test-timing-discipline/spec.md` 的契约。
 - [x] 1.2 按 `ledger.md` 逐项核对旧 macOS `test` 的每条命令，证明每条命令恰好落入一个新 job/step；证明三片 race 的包并集与原命令相同、交集为空，50ms 探针保持独立且不降 `-count`。
-- [ ] 1.3 验证 artifact 缺失、SHA/大小/摘要不匹配、下游 job 失败、取消和 skipped 前置均使最终 `test` 失败；验证 GitHub rerun failed jobs 只重跑失败分片与汇总，成功分片不重跑。（本地已静态核对 fail-closed 结构；真实 Actions rerun 证据待独立 PR。）
+- [x] 1.3 验证 artifact 缺失、SHA/大小/摘要不匹配、下游 job 失败、取消和 skipped 前置均使最终 `test` 失败；验证 GitHub rerun failed jobs 只重跑失败分片与汇总，成功分片不重跑。（严格 validator 的故障 fixture 与 fail-closed 结构已本地核对；run `32635234402` 的自然失败、最终汇总及 attempts 1/2 已验证真实 rerun 隔离。）
 - [x] 1.4 证明 `linux-server` 的 job、步骤、命令、runner 和独立 Rust 构建未改；性能只记录，未新增时长门禁或 allow-failure。
 
 ## 2. 收尾
@@ -14,8 +14,8 @@
 ## 3. PR 实机验收与终审
 
 - [x] 3.1 本地运行 Rust build/check、全仓 race、vet、gofmt、OpenSpec strict 与 `git diff --check`；结果和墙钟记录见 `ledger.md`。
-- [ ] 3.2 正常 push 独立 PR，确认同一 PR SHA 只有一个 workflow，job graph 完整，两个下游成功下载并验证同 SHA artifact。
-- [ ] 3.3 由真实失败验证最终 `test` fail-closed，并用 GitHub “Re-run failed jobs” 确认只重跑失败 job 与汇总。
-- [ ] 3.4 连续 push 新提交，确认旧 SHA workflow 被 concurrency 取消，新 SHA 只留一份活动 workflow。
-- [ ] 3.5 把真实 Actions 各 job 墙钟记入 `ledger.md`，只作记录。
+- [x] 3.2 正常 push 独立 PR，确认同一 PR SHA 只有一个 workflow，job graph 完整，两个下游成功下载并验证同 SHA artifact。
+- [x] 3.3 由真实失败验证最终 `test` fail-closed，并用 GitHub “Re-run failed jobs” 确认只重跑失败 job 与汇总。
+- [x] 3.4 连续 push 新提交，确认旧 SHA workflow 被 concurrency 取消，新 SHA 只留一份活动 workflow。
+- [x] 3.5 把真实 Actions 各 job 墙钟记入 `ledger.md`，只作记录。
 - [ ] 3.6 生成最终 `BASE..HEAD` committed review package 与 SHA-256，完成独立整分支终审；不自行归档。

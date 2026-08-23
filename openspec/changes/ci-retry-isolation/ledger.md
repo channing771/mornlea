@@ -111,5 +111,26 @@ Task 2、3、4 的 workflow 静态契约脚本均通过，YAML 可解析；`BASE
 | 至少两个下游成功下载并验证同 SHA artifact | `quality`、`integration` 及三个 race child 均已验证 |
 | 真实失败使最终 `test` 失败，rerun failed jobs 只重跑失败 job 与 `test` | run `32635234402` attempts 1/2 已验证 |
 | 新 SHA 取消旧 SHA，且新 SHA 只留一份活动 workflow | runs `32635108391`→`32635234402` 已验证 |
-| `native-macos`、`quality`、3 个 race child、`integration`、`linux-server`、`test` 墙钟 | 上表已记录；修复后的成功 run 待补 |
+| `native-macos`、`quality`、3 个 race child、`integration`、`linux-server`、`test` 墙钟 | runs `32635234402`、`32636406562` 均已记录 |
 | 最终 `BASE..HEAD` review package、SHA-256 与独立整分支终审 | 待本收尾提交后由控制会话执行 |
+
+#### Artifact 消费修复后的成功 run
+
+- 修复 SHA `c241bd5f58bef77524284ba2442e722a776af6f9` 只对应一条 `pull_request` CI workflow：[run `32636406562`](https://github.com/channing771/mornlea/actions/runs/32636406562)。API 返回恰好八个逻辑 job/child，全部为 `success`。
+- `quality`、`integration` 与三个 race child 的 `actions/download-artifact@v4` 和“校验 native artifact”步骤全部成功；随后各自的 Go 门禁也成功，证明已验证的顶层 dylib 被恢复到 Cargo 声明的 `release/deps` 运行路径，且没有下游重建 Rust。
+- 最终 `test` job `97187958294` 的五条 fail-closed 断言全部成功。run `32635234402` 的失败/重跑证据与本次成功 run 合在一起覆盖失败、隔离重跑和修复后完整绿路径。
+
+以下时长按 GitHub job `started_at` 到 `completed_at` 计算，只记录，不参与退出状态：
+
+| job | job ID | 起止时间（UTC） | 墙钟 |
+|---|---:|---|---:|
+| `native-macos` | 97186738846 | 11:23:33–11:26:09 | 156s |
+| `quality` | 97187044633 | 11:27:21–11:27:54 | 33s |
+| `go-race / cmd` | 97187044631 | 11:26:11–11:34:16 | 485s |
+| `go-race / internal-server` | 97187044644 | 11:26:11–11:30:02 | 231s |
+| `go-race / internal-rest` | 97187044626 | 11:26:11–11:29:58 | 227s |
+| `integration` | 97187044600 | 11:26:11–11:28:25 | 134s |
+| `linux-server` | 97186738778 | 11:23:32–11:24:25 | 53s |
+| `test` | 97187958294 | 11:34:18–11:34:22 | 4s |
+
+Task 5 的 `1.3`、`3.2`–`3.5` 已按上述本地故障 fixture 与真实 Actions 证据完成；`3.6` 仍留给控制会话生成最终 committed review package 并完成独立整分支终审，本 implementer 不自审或归档。
