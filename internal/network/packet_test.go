@@ -83,8 +83,8 @@ func TestProtocolV1StateAndErrorCodesAreFrozen(t *testing.T) {
 			t.Fatalf("%s state = %d, want %d", tc.name, tc.got, tc.want)
 		}
 	}
-	if ProtocolVersion != 25 {
-		t.Fatalf("protocol version = %d, want 25", ProtocolVersion)
+	if ProtocolVersion != 26 {
+		t.Fatalf("protocol version = %d, want 26", ProtocolVersion)
 	}
 
 	codes := []struct {
@@ -132,6 +132,7 @@ func TestValidateServerPacket(t *testing.T) {
 		{"keep alive", StatePlay, KeepAlive{Token: 1}},
 		{"disconnect", StatePlay, Disconnect{Code: DisconnectTimeout}},
 		{"inventory state", StatePlay, InventoryState{}},
+		{"place block succeeded", StatePlay, PlaceBlockSucceeded{Sequence: 1}},
 		{"item drop upserts", StatePlay, ItemDropUpserts{Drops: []ItemDrop{{
 			ID:   core.DropID{Dimension: core.Overworld, Slot: 0, Generation: 1},
 			Item: core.ItemStone, Count: 1,

@@ -79,7 +79,10 @@ func (a *application) drainServerMessages(maxMessages int) {
 			if cue, play := a.audioFeedback.ObserveInventoryState(state); play {
 				a.playLocalCue(cue)
 			}
-			if cue, play := a.audioFeedback.ObservePlacementInventoryState(state); play {
+			continue
+		}
+		if success, ok := message.(network.PlaceBlockSucceeded); ok {
+			if cue, play := a.audioFeedback.ObservePlacementSuccess(success); play {
 				a.playLocalCue(cue)
 			}
 			continue
@@ -194,9 +197,6 @@ func (a *application) drainServerMessages(maxMessages int) {
 			if cue, play := a.audioFeedback.ObserveBlockChanges(changes); play {
 				a.playLocalCue(cue)
 			}
-			if cue, play := a.audioFeedback.ObservePlacementBlockChanges(changes); play {
-				a.playLocalCue(cue)
-			}
 		}
 		switch message := message.(type) {
 		case network.ChunkSnapshot:
@@ -217,7 +217,6 @@ func (a *application) drainServerMessages(maxMessages int) {
 			}
 		}
 		if update.Rejected != nil {
-			a.audioFeedback.RejectPlacement(update.Rejected.Sequence)
 			slog.Warn("权威命令被拒绝",
 				"sequence", update.Rejected.Sequence, "reason", update.Rejected.Reason)
 		}

@@ -756,6 +756,8 @@ func parityBusinessMessage(
 		return []string{fmt.Sprintf("PlayerState:%+v", message)}
 	case network.CommandRejected:
 		return []string{fmt.Sprintf("CommandRejected:%+v", message)}
+	case network.PlaceBlockSucceeded:
+		return []string{fmt.Sprintf("PlaceBlockSucceeded:%+v", message)}
 	case network.InventoryState:
 		return []string{fmt.Sprintf("InventoryState:%+v", message.Inventory)}
 	case network.KeepAlive, network.Disconnect:

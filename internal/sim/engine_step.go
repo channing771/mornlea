@@ -348,6 +348,11 @@ func (engine *Engine) Step() TickResult {
 					Sequence: command.Sequence,
 					Reason:   reason,
 				})
+			} else {
+				result.PlacementSuccesses = append(result.PlacementSuccesses, PlacementSuccess{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+				})
 			}
 		case CommandTillSoil:
 			if reason, rejected := engine.executeTillSoil(command, pending); rejected {

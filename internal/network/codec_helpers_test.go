@@ -201,6 +201,9 @@ func sameServerPacket(got, want ServerPacket) bool {
 	case CommandRejected:
 		other, ok := want.(CommandRejected)
 		return ok && got == other
+	case PlaceBlockSucceeded:
+		other, ok := want.(PlaceBlockSucceeded)
+		return ok && got == other
 	case KeepAlive:
 		other, ok := want.(KeepAlive)
 		return ok && got == other

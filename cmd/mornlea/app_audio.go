@@ -10,31 +10,19 @@ import (
 
 // localAudioFeedback 只保存确认消息之间的极小匹配状态，不参与预测或权威状态。
 type localAudioFeedback struct {
-	hasHealth       bool
-	health          uint8
-	hasHunger       bool
-	hunger          uint8
-	hasMiningTarget bool
-	miningTarget    core.BlockPos
-	hasStack        bool
-	selected        uint8
-	stack           core.ItemStack
-	foodDecrease    bool
-	hungerIncrease  bool
-	placement       pendingPlacement
-}
-
-// pendingPlacement 保存单条已发送放置请求的本地证据；世界写入与扣料必须都确认。
-type pendingPlacement struct {
-	active    bool
-	sequence  uint64
-	target    core.BlockPos
-	block     core.BlockID
-	selected  uint8
-	item      core.ItemID
-	count     uint8
-	blockSeen bool
-	itemSeen  bool
+	hasHealth            bool
+	health               uint8
+	hasHunger            bool
+	hunger               uint8
+	hasMiningTarget      bool
+	miningTarget         core.BlockPos
+	hasStack             bool
+	selected             uint8
+	stack                core.ItemStack
+	foodDecrease         bool
+	hungerIncrease       bool
+	hasPlacementSequence bool
+	placementSequence    uint64
 }
 
 // Reset 丢弃会话、重生或权威重置前的全部确认基线。
@@ -119,67 +107,15 @@ func (feedback *localAudioFeedback) ObserveBlockChanges(changes network.BlockCha
 	return 0, false
 }
 
-// BeginPlacement 用已成功发送请求时的本地只读快照替换上一条未完成放置。
-func (feedback *localAudioFeedback) BeginPlacement(
-	sequence uint64,
-	target core.BlockPos,
-	block core.BlockID,
-	selected uint8,
-	stack core.ItemStack,
-) {
-	feedback.placement = pendingPlacement{
-		active: true, sequence: sequence, target: target, block: block, selected: selected,
-		item: stack.Item, count: stack.Count,
-	}
-}
-
-// ClearPlacement 丢弃未完成放置，避免拒绝或会话边界与后续状态错误配对。
-func (feedback *localAudioFeedback) ClearPlacement() {
-	feedback.placement = pendingPlacement{}
-}
-
-// RejectPlacement 仅清除同一条放置请求，避免无关命令拒绝吞掉已到达的一半确认。
-func (feedback *localAudioFeedback) RejectPlacement(sequence uint64) {
-	if feedback.placement.active && feedback.placement.sequence == sequence {
-		feedback.ClearPlacement()
-	}
-}
-
-// ObservePlacementBlockChanges 只接受精确目标写入预期方块的已应用世界增量。
-func (feedback *localAudioFeedback) ObservePlacementBlockChanges(changes network.BlockChanges) (audio.Cue, bool) {
-	pending := &feedback.placement
-	if !pending.active {
+// ObservePlacementSuccess 只消费本会话严格递增的权威放置成功序号。
+// 重复和旧序号无声；`Reset` 清空基线后，新会话可从低序号重新开始。
+func (feedback *localAudioFeedback) ObservePlacementSuccess(success network.PlaceBlockSucceeded) (audio.Cue, bool) {
+	if feedback.hasPlacementSequence && success.Sequence <= feedback.placementSequence {
 		return 0, false
 	}
-	for _, change := range changes.Changes {
-		if change.Position == pending.target && change.Block == pending.block {
-			pending.blockSeen = true
-			if pending.itemSeen {
-				feedback.ClearPlacement()
-				return audio.CueUIClick, true
-			}
-			return 0, false
-		}
-	}
-	return 0, false
-}
-
-// ObservePlacementInventoryState 只接受原选中放置物恰好扣减一件的权威库存。
-func (feedback *localAudioFeedback) ObservePlacementInventoryState(state network.InventoryState) (audio.Cue, bool) {
-	pending := &feedback.placement
-	if !pending.active {
-		return 0, false
-	}
-	stack := state.Inventory.Hotbar.Slots[pending.selected]
-	if !itemStackDecreasedByOne(pending.item, pending.count, stack) {
-		return 0, false
-	}
-	pending.itemSeen = true
-	if pending.blockSeen {
-		feedback.ClearPlacement()
-		return audio.CueUIClick, true
-	}
-	return 0, false
+	feedback.hasPlacementSequence = true
+	feedback.placementSequence = success.Sequence
+	return audio.CueUIClick, true
 }
 
 func (feedback *localAudioFeedback) clearEating() {
@@ -201,38 +137,6 @@ func foodStackDecreasedByOne(previous, current core.ItemStack) bool {
 		return current == (core.ItemStack{})
 	}
 	return current.Item == previous.Item && current.Count == previous.Count-1
-}
-
-func itemStackDecreasedByOne(item core.ItemID, count uint8, current core.ItemStack) bool {
-	if item == core.ItemNone || count == 0 {
-		return false
-	}
-	if count == 1 {
-		return current == (core.ItemStack{})
-	}
-	return current.Item == item && current.Count == count-1
-}
-
-// placementTarget 复现权威放置的命中面邻格规则；无法表达的原点命中不建 pending。
-func placementTarget(hit core.RayHit) (core.BlockPos, bool) {
-	target := hit.Block
-	switch hit.Face {
-	case core.BlockFaceNegX:
-		target.X--
-	case core.BlockFacePosX:
-		target.X++
-	case core.BlockFaceNegY:
-		target.Y--
-	case core.BlockFacePosY:
-		target.Y++
-	case core.BlockFaceNegZ:
-		target.Z--
-	case core.BlockFacePosZ:
-		target.Z++
-	default:
-		return core.BlockPos{}, false
-	}
-	return target, target.Y >= core.MinY && target.Y < core.MaxY
 }
 
 // playLocalCue 把可选的本地播放器隔离在客户端边界；无声降级保持 nil 即可。

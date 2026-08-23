@@ -59,8 +59,8 @@ func TestProtocolV22TillSoilPacketIDIsFrozen(t *testing.T) {
 	if _, ok := clientPacketForID(StatePlay, 13+1); ok {
 		t.Fatal("Play client packet ID 14 必须保持未分配")
 	}
-	if ProtocolVersion != 25 {
-		t.Fatalf("协议版本 = %d，想要 25——翻地命令随 v22 交付，当前版本为 v25", ProtocolVersion)
+	if ProtocolVersion != 26 {
+		t.Fatalf("协议版本 = %d，想要 26——当前版本为 v26", ProtocolVersion)
 	}
 }
 
@@ -104,7 +104,7 @@ func TestProtocolV1RegistryRejectsUnknownIDsAndStates(t *testing.T) {
 	if _, ok := clientPacketForID(StateHandshake, 1); ok {
 		t.Fatal("unknown handshake client packet ID accepted")
 	}
-	if _, ok := serverPacketForID(StatePlay, 20); ok {
+	if _, ok := serverPacketForID(StatePlay, 21); ok {
 		t.Fatal("unknown play server packet ID accepted")
 	}
 	if _, ok := clientPacketID(StateLogin, ClientHello{}); ok {
@@ -259,6 +259,9 @@ func sameServerPacketType(left, right ServerPacket) bool {
 		return ok
 	case CommandRejected:
 		_, ok := right.(CommandRejected)
+		return ok
+	case PlaceBlockSucceeded:
+		_, ok := right.(PlaceBlockSucceeded)
 		return ok
 	case KeepAlive:
 		_, ok := right.(KeepAlive)

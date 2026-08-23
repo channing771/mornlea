@@ -6,9 +6,9 @@ func FuzzSmallPacketCodec(f *testing.F) {
 	f.Add(uint8(StateHandshake), uint32(0), []byte{2})
 	f.Add(uint8(StateHandshake), uint32(0), []byte{1})
 	f.Add(uint8(StateHandshake), uint32(0), []byte{3})
-	// 当前 v25 与刚退役 v24 都必须进入握手解码语料，防止版本门禁误接回退。
+	// 当前 v26 与刚退役 v25 都必须进入握手解码语料，防止版本门禁误接回退。
+	f.Add(uint8(StateHandshake), uint32(0), []byte{26})
 	f.Add(uint8(StateHandshake), uint32(0), []byte{25})
-	f.Add(uint8(StateHandshake), uint32(0), []byte{24})
 	f.Add(uint8(StateLogin), uint32(0), []byte{0})
 	// v23 LoginSuccess：16 字节 UUIDv4 + little-endian uint64 世界种子。
 	f.Add(uint8(StateLogin), uint32(0), []byte{
@@ -37,6 +37,12 @@ func FuzzSmallPacketCodec(f *testing.F) {
 	// 且形状随字段变动自动跟上。
 	if id, payload, err := encodeClientPacketPayload(StatePlay, TillSoil{
 		Sequence: 0x0102030405060708, Yaw: 1.5, Pitch: -0.5,
+	}); err == nil {
+		f.Add(uint8(StatePlay), id, payload)
+	}
+	// v26 放置成功确认只携带原命令序号。
+	if id, payload, err := encodeServerControlPayload(StatePlay, PlaceBlockSucceeded{
+		Sequence: 0x0102030405060708,
 	}); err == nil {
 		f.Add(uint8(StatePlay), id, payload)
 	}

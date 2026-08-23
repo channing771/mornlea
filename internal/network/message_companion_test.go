@@ -61,6 +61,7 @@ func TestCompanionMessageIDsAreAppendOnly(t *testing.T) {
 		{StatePlay, CompanionSpawn{}, 17},
 		{StatePlay, CompanionStates{}, 18},
 		{StatePlay, CompanionDespawn{}, 19},
+		{StatePlay, PlaceBlockSucceeded{}, 20},
 	})
 	if _, ok := clientPacketForID(StatePlay, 1); ok {
 		t.Fatal("Play client packet ID 1 必须保持未分配")
@@ -69,8 +70,8 @@ func TestCompanionMessageIDsAreAppendOnly(t *testing.T) {
 	if _, ok := clientPacketForID(StatePlay, 14); ok {
 		t.Fatal("未知 client packet ID 14 被接受")
 	}
-	if _, ok := serverPacketForID(StatePlay, 20); ok {
-		t.Fatal("未知 server packet ID 20 被接受")
+	if _, ok := serverPacketForID(StatePlay, 21); ok {
+		t.Fatal("未知 server packet ID 21 被接受")
 	}
 }
 

@@ -183,3 +183,13 @@ func (rejection CommandRejected) Validate() error {
 	}
 	return nil
 }
+
+// PlaceBlockSucceeded 确认同序号 `PlaceBlock` 已在一个权威 tick
+// 内原子完成世界写入和恰减一件物品。该消息只发给命令
+// 的发起会话，不表达其他命令或预测状态。
+type PlaceBlockSucceeded struct {
+	Sequence uint64
+}
+
+func (PlaceBlockSucceeded) serverMessage() {}
+func (PlaceBlockSucceeded) serverPacket()  {}

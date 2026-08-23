@@ -46,6 +46,7 @@ func BenchmarkSmallPacketCodec(b *testing.B) {
 		{"CommandRejected", StatePlay, CommandRejected{Sequence: 6, Reason: RejectNoTarget}},
 		{"KeepAlive", StatePlay, KeepAlive{Token: 7}},
 		{"Disconnect", StatePlay, Disconnect{Code: DisconnectServerShutdown, Message: "shutdown"}},
+		{"PlaceBlockSucceeded", StatePlay, PlaceBlockSucceeded{Sequence: 13}},
 	}
 	for _, fixture := range clientPackets {
 		b.Run("EncodeClient/"+fixture.name, func(b *testing.B) {

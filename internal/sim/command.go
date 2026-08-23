@@ -118,6 +118,13 @@ type Rejection struct {
 	Reason   RejectReason
 }
 
+// PlacementSuccess 标记某会话的玩家放置命令已原子完成世界
+// 写入和恰减一件物品。它只是当 tick 的出口事实，不参与后续模拟。
+type PlacementSuccess struct {
+	Session  SessionID
+	Sequence uint64
+}
+
 type ResyncRequest struct {
 	Session      SessionID
 	Sequence     uint64
@@ -127,18 +134,21 @@ type ResyncRequest struct {
 }
 
 type TickResult struct {
-	Acquire     []core.ChunkKey
-	Generate    []core.ChunkKey
-	Forget      map[SessionID][]core.ChunkKey
-	Ready       []core.ChunkKey
-	Changes     []ChunkChangeBatch
-	Rejected    []Rejection
-	Resync      []ResyncRequest
-	Players     []PlayerUpdate
-	Companions  []CompanionUpdate
-	Inventories []InventoryUpdate
-	Furnaces    []FurnaceUpdate
-	FurnaceEnds []FurnaceEnd
+	Acquire  []core.ChunkKey
+	Generate []core.ChunkKey
+	Forget   map[SessionID][]core.ChunkKey
+	Ready    []core.ChunkKey
+	Changes  []ChunkChangeBatch
+	Rejected []Rejection
+	// PlacementSuccesses 按命令的确定性处理顺序列出本 tick 的
+	// 玩家放置成功；数量受本 tick 已摄取命令数的既有上界限制。
+	PlacementSuccesses []PlacementSuccess
+	Resync             []ResyncRequest
+	Players            []PlayerUpdate
+	Companions         []CompanionUpdate
+	Inventories        []InventoryUpdate
+	Furnaces           []FurnaceUpdate
+	FurnaceEnds        []FurnaceEnd
 	// Chests 是本 tick 发给箱子查看者的完整权威状态；关闭通知与熔炉共用 FurnaceEnds，
 	// 因为 ContainerRef 本身携带 Kind，一份关闭列表足以表达两种容器。
 	Chests []ChestUpdate

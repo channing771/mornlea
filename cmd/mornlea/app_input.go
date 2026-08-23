@@ -82,20 +82,13 @@ func (a *application) placeBlock() {
 	if _, _, isFood := core.FoodValue(hotbar.Slots[hotbar.Selected].Item); isFood {
 		return
 	}
-	sequence := a.nextSequence()
 	if err := a.send(network.PlaceBlock{
-		Sequence: sequence,
+		Sequence: a.nextSequence(),
 		Yaw:      a.camera.Yaw,
 		Pitch:    a.camera.Pitch,
 		Slot:     hotbar.Selected,
 	}); err != nil {
 		slog.Warn("发送放置命令失败", "error", err)
-		return
-	}
-	if block, placeable := core.ItemPlacement(hotbar.Slots[hotbar.Selected].Item); placeable {
-		if target, known := placementTarget(hit); known && found {
-			a.audioFeedback.BeginPlacement(sequence, target, block, hotbar.Selected, hotbar.Slots[hotbar.Selected])
-		}
 	}
 }
 
