@@ -12,25 +12,26 @@ import (
 // 饥饿值与生命值、氧气同属权威镜像，客户端一侧没有任何推算。
 func TestAppendHungerBarDrawsOnlyConfirmedValues(t *testing.T) {
 	var unconfirmed hotbarLayout
-	appendHungerBar(&unconfirmed, HungerOverlay{Confirmed: false, Value: 12}, 1280, 720)
+	appendHungerBar(&unconfirmed, HungerOverlay{Confirmed: false, Value: 12}, false, 1280, 720)
 	if len(unconfirmed.quads) != 0 || len(unconfirmed.glyphs) != 0 {
 		t.Fatalf("未确认饥饿值 quads=%d glyphs=%d，想要都为 0",
 			len(unconfirmed.quads), len(unconfirmed.glyphs))
 	}
 	var degenerate hotbarLayout
-	appendHungerBar(&degenerate, HungerOverlay{Confirmed: true, Value: 12}, 0, 720)
+	appendHungerBar(&degenerate, HungerOverlay{Confirmed: true, Value: 12}, false, 0, 720)
 	if len(degenerate.quads) != 0 {
 		t.Fatalf("零宽 framebuffer quads=%d，想要 0", len(degenerate.quads))
 	}
 }
 
-// TestHungerBarUsesTenTwoPointDrumsticks 逐 quad 断言鸡腿的**填充列**与几何。
+// TestHungerBarUsesConfirmedClampedTwoPointSegments 逐 quad 断言鸡腿的**填充列**、
+// 上限钳制与半格几何。
 //
 // 断言的是「第几个 quad 采哪一列纹理、宽多少、画在哪」，不是「quad 非空」或
 // 「两个值的 quad 数不同」：一个把填充比例写死（例如恒画 10 满鸡腿）的实现会让
 // 后两者全绿。半格粒度也必须逐个核对——奇数饥饿值必须给出恰好一个半宽 quad，
 // 且因为饥饿条是**右下镜像**，半格露出的是鸡腿的右半边（U0 取中点、X 右移半格）。
-func TestHungerBarUsesTenTwoPointDrumsticks(t *testing.T) {
+func TestHungerBarUsesConfirmedClampedTwoPointSegments(t *testing.T) {
 	emptyUV := hotbarTextureUV(hotbarEmptyDrumstickColumn)
 	fullUV := hotbarTextureUV(hotbarFullDrumstickColumn)
 	halfU0 := (fullUV[0] + fullUV[2]) * 0.5
@@ -42,12 +43,16 @@ func TestHungerBarUsesTenTwoPointDrumsticks(t *testing.T) {
 		wantUV [][4]float32
 	}{
 		{"饥饿全空", 0, 0, false, nil},
-		{"饥饿 13 给出六满一半三空", 13, 6, true, nil},
+		{"一点饥饿给出右半格", 1, 0, true, nil},
+		{"两点饥饿给出一满格", 2, 1, false, nil},
+		{"九点饥饿给出四满一半", 9, 4, true, nil},
+		{"十九点饥饿给出九满一半", 19, 9, true, nil},
 		{"饥饿满仍然显示十满", core.MaxHunger, 10, false, nil},
+		{"越界值钳制到满饥饿", 255, 10, false, nil},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var layout hotbarLayout
-			appendHungerBar(&layout, HungerOverlay{Confirmed: true, Value: test.value}, 1280, 720)
+			appendHungerBar(&layout, HungerOverlay{Confirmed: true, Value: test.value}, false, 1280, 720)
 			wantQuads := healthSegmentCount + test.full
 			if test.half {
 				wantQuads++
@@ -104,7 +109,7 @@ func TestHungerBarUsesTenTwoPointDrumsticks(t *testing.T) {
 func TestHungerBarDistinguishesValues(t *testing.T) {
 	layoutFor := func(value uint8) []hotbarInstance {
 		var layout hotbarLayout
-		appendHungerBar(&layout, HungerOverlay{Confirmed: true, Value: value}, 1280, 720)
+		appendHungerBar(&layout, HungerOverlay{Confirmed: true, Value: value}, false, 1280, 720)
 		return layout.quads
 	}
 	full, mid, odd := layoutFor(core.MaxHunger), layoutFor(12), layoutFor(13)
@@ -120,38 +125,25 @@ func TestHungerBarDistinguishesValues(t *testing.T) {
 	}
 }
 
-// TestHungerBarMirrorsHealthBarOnTheRight 钉死右下镜像：饥饿条与生命条同一行、
-// 同尺度，两者到各自窗口边沿的距离相等。杀死变异：把饥饿条画在左下会与生命条
-// 重叠，画在别的行会破坏「一行两条资源」的读数。
+// TestHungerBarMirrorsHealthBarOnTheRight 钉死鸡腿从右向左排列且使用心形同款
+// 16×16 槽尺寸；快捷栏右边缘锚点与 open/closed 行位由状态栈几何测试单独覆盖。
 func TestHungerBarMirrorsHealthBarOnTheRight(t *testing.T) {
-	atlas := newFakeNameTagAtlas()
 	const width, height = 1280, 720
-	var health, hunger hotbarLayout
-	appendHealthBar(&health, atlas, HealthOverlay{Confirmed: true, Value: core.MaxHealth},
-		width, height)
-	appendHungerBar(&hunger, HungerOverlay{Confirmed: true, Value: core.MaxHunger}, width, height)
-	if len(health.quads) != len(hunger.quads) {
-		t.Fatalf("生命/饥饿 quad 数=%d/%d，两条条必须同构",
-			len(health.quads), len(hunger.quads))
+	var hunger hotbarLayout
+	appendHungerBar(&hunger, HungerOverlay{Confirmed: true, Value: core.MaxHunger}, false, width, height)
+	if len(hunger.quads) != hungerQuads {
+		t.Fatalf("饥饿 quad 数=%d，想要 %d", len(hunger.quads), hungerQuads)
 	}
 	for index := range healthSegmentCount {
-		left, right := health.quads[index], hunger.quads[index]
-		if left.Y != right.Y || left.Height != right.Height || left.Width != right.Width {
-			t.Fatalf("第 %d 格生命=%+v 饥饿=%+v，想要同行同尺寸", index, left, right)
+		quad := hunger.quads[index]
+		if quad.Width != healthHeartSize || quad.Height != healthHeartSize {
+			t.Fatalf("第 %d 格尺寸=%v×%v，想要 %v×%v",
+				index, quad.Width, quad.Height, healthHeartSize, healthHeartSize)
 		}
-		// 镜像：生命第 i 格的左边沿距左沿 == 饥饿第 i 格的右边沿距右沿。
-		if got, want := width-(right.X+right.Width), left.X; got != want {
-			t.Fatalf("第 %d 格右边距=%v，想要与生命条左边距 %v 对称", index, got, want)
+		if index > 0 && quad.X >= hunger.quads[index-1].X {
+			t.Fatalf("第 %d 格 X=%v，没有位于前一格 X=%v 的左侧",
+				index, quad.X, hunger.quads[index-1].X)
 		}
-	}
-	// 打开背包不得移动或缩放饥饿条：它与生命条一样只用 hudScale(false, …)。
-	var open hotbarLayout
-	layoutInventory(&open, atlas, core.Inventory{}, true, -1, nil, nil, MiningOverlay{},
-		width, height)
-	start := len(open.quads)
-	appendHungerBar(&open, HungerOverlay{Confirmed: true, Value: core.MaxHunger}, width, height)
-	if !reflect.DeepEqual(open.quads[start:], hunger.quads) {
-		t.Fatal("打开背包移动或缩放了饥饿条")
 	}
 }
 

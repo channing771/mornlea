@@ -43,12 +43,14 @@ func TestInventoryLayoutDrawsAllFixedRecipeRows(t *testing.T) {
 		{core.ItemStone, core.ItemStoneHoe},
 		{core.ItemIronIngot, core.ItemIronHoe},
 	}
-	// 1280x800 下 openHUDHeight 仍放得下十行，hudScale 保持 1，行距是整数 52。
-	for row, y := range []float32{500, 448, 396, 344, 292, 240, 188, 136, 84, 32} {
+	// 两行状态栈会让 1280x800 打开态整体轻微缩小；配方仍复用统一 origin。
+	for row := range inventoryRecipeIDs {
 		start := 1 + row*9
 		input, output := overlay[start], overlay[start+3]
 		inputFace, outputFace := overlay[start+2], overlay[start+5]
-		if input.X != 408 || output.X != 460 || input.Y != y || output.Y != y {
+		wantInputX, wantY := craftingRecipeSlotOrigin(row, 0, 1280, 800)
+		wantOutputX, _ := craftingRecipeSlotOrigin(row, 1, 1280, 800)
+		if input.X != wantInputX || output.X != wantOutputX || input.Y != wantY || output.Y != wantY {
 			t.Fatalf("配方行 %d 位置错误: input=%+v output=%+v", row, input, output)
 		}
 		assertHotbarItemFace(t, inputFace, wantItems[row][0])
@@ -120,34 +122,25 @@ func TestInventoryLayoutDrawsAllFixedRecipeRows(t *testing.T) {
 	}
 }
 func TestRecipeButtonHitTestMatchesDrawnGeometry(t *testing.T) {
-	for _, test := range []struct {
-		name   string
-		y      float64
-		recipe core.RecipeID
-	}{
-		{"石砖", 501, core.RecipeStoneBricks},
-		{"熔炉", 449, core.RecipeFurnace},
-		{"铁块", 397, core.RecipeIronBlock},
-		{"石镐", 345, core.RecipeStonePickaxe},
-		{"铁镐", 293, core.RecipeIronPickaxe},
-		{"箱子", 241, core.RecipeChest},
-		{"橡木木板", 189, core.RecipeOakPlanks},
-		{"发光方块", 137, core.RecipeLightBlock},
-		{"石锄", 85, core.RecipeStoneHoe},
-		{"铁锄", 33, core.RecipeIronHoe},
-	} {
-		got, ok := RecipeButtonAt(513, test.y, 1280, 800)
-		if !ok || got != test.recipe {
-			t.Fatalf("%s按钮命中 = %d, %v，想要 %d", test.name, got, ok, test.recipe)
+	const width, height = float32(1280), float32(800)
+	scale := hudScale(true, width, height)
+	for row, recipe := range inventoryRecipeIDs {
+		left, top := craftingRecipeButtonOrigin(row, width, height)
+		cursorX := left + recipeButtonWidth*scale*0.5
+		cursorY := top + hotbarSlotSize*scale*0.5
+		got, ok := RecipeButtonAt(float64(cursorX), float64(cursorY), uint32(width), uint32(height))
+		if !ok || got != recipe {
+			t.Fatalf("配方 %d 按钮命中 = %d, %v，想要 %d", row, got, ok, recipe)
 		}
-		if _, ok := InventorySlotAt(513, test.y, 1280, 800); ok {
-			t.Fatalf("%s按钮与背包格重叠", test.name)
+		if _, ok := InventorySlotAt(float64(cursorX), float64(cursorY), uint32(width), uint32(height)); ok {
+			t.Fatalf("配方 %d 按钮与背包格重叠", row)
 		}
 	}
-	if _, ok := RecipeButtonAt(511, 501, 1280, 800); ok {
+	left, top := craftingRecipeButtonOrigin(0, width, height)
+	if _, ok := RecipeButtonAt(float64(left)-1, float64(top)+1, uint32(width), uint32(height)); ok {
 		t.Fatal("按钮左侧 1 像素被判为命中")
 	}
-	if _, ok := RecipeButtonAt(513, 501, 0, 0); ok {
+	if _, ok := RecipeButtonAt(float64(left)+1, float64(top)+1, 0, 0); ok {
 		t.Fatal("零尺寸 framebuffer 被判为命中")
 	}
 }
@@ -250,7 +243,8 @@ func TestFurnaceSourceHighlightCoversFurnaceSlots(t *testing.T) {
 		if source >= core.InventorySlots {
 			wantX, wantY = recipeSlotOrigin(source-core.InventorySlots, 1280, 800)
 		}
-		if highlight.X != wantX-hotbarSelectBorder || highlight.Y != wantY-hotbarSelectBorder {
+		border := hotbarSelectBorder * hudScale(true, 1280, 800)
+		if highlight.X != wantX-border || highlight.Y != wantY-border {
 			t.Fatalf("来源 %d 高亮 = %+v，想要包住 (%f,%f)",
 				source, highlight, wantX, wantY)
 		}
@@ -374,7 +368,8 @@ func TestChestSourceHighlightCoversChestSlots(t *testing.T) {
 		if source >= core.InventorySlots {
 			wantX, wantY = chestSlotOrigin(source-core.InventorySlots, 1280, 800)
 		}
-		if highlight.X != wantX-hotbarSelectBorder || highlight.Y != wantY-hotbarSelectBorder {
+		border := hotbarSelectBorder * hudScale(true, 1280, 800)
+		if highlight.X != wantX-border || highlight.Y != wantY-border {
 			t.Fatalf("来源 %d 高亮 = %+v，想要包住 (%f,%f)",
 				source, highlight, wantX, wantY)
 		}

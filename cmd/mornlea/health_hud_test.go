@@ -13,8 +13,8 @@ import (
 	"github.com/channing771/mornlea/internal/network"
 )
 
-// 12 点生命新增十颗空心爱心和六颗填充爱心，不包含背景面板。
-const healthQuadInstancesForHUDTest = 16
+// 12 点生命解析为十个心形槽：六个满心、四个空心，不包含背景面板。
+const healthQuadInstancesForHUDTest = 10
 
 // 满饥饿值新增十个空鸡腿槽底和十个填充鸡腿。
 //
@@ -25,6 +25,9 @@ const healthQuadInstancesForHUDTest = 16
 // 饥饿条与氧气条相反：满值时也常驻界面（所以下面的夹具无论给什么值都会有那十个
 // 空槽底），给满值只是让填充部分也是整十、便于口算。
 const hungerQuadInstancesForHUDTest = 20
+
+// 耗损氧气始终解析为十个气泡槽；满氧与未确认氧气为零实例。
+const oxygenQuadInstancesForHUDTest = 10
 
 // Mutation killed: forwarding a predicted/stale health value, swapping the
 // Confirmed flag computed from Predictor.Health(), or failing to clear health
@@ -47,12 +50,12 @@ func TestHUDHealthReflectsOnlyConfirmedPredictorState(t *testing.T) {
 	}
 	baseline := hudQuadCount()
 
-	// 收到生命值为 12 的权威状态：HUD 必须显示十颗空心和六颗填充爱心。
+	// 收到生命值为 12 的权威状态：HUD 必须以六个满心和四个空心解析成十个槽。
 	if err := app.predictor.Begin(network.PlayerState{
 		ServerTick: 1, Dimension: core.Overworld,
 		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true,
 		// 氧气给满值：氧气条只在未满时出现，这里要观察的是生命条的 quad 增量，
-		// 未满氧气会额外追加两个 quad 并让下面的增量断言失去意义。
+		// 未满氧气会额外追加十个 resolved-slot quad，让下面的生命增量断言失去意义。
 		Ready: true, Health: 12, Oxygen: core.MaxOxygenTicks, Hunger: core.MaxHunger,
 	}); err != nil {
 		t.Fatal(err)
@@ -95,7 +98,7 @@ func TestHUDHealthHiddenAfterDisconnect(t *testing.T) {
 		ServerTick: 1, Dimension: core.Overworld,
 		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true,
 		// 氧气给满值：氧气条只在未满时出现，这里要观察的是生命条的 quad 增量，
-		// 未满氧气会额外追加两个 quad 并让下面的增量断言失去意义。
+		// 未满氧气会额外追加十个 resolved-slot quad，让下面的生命增量断言失去意义。
 		Ready: true, Health: 12, Oxygen: core.MaxOxygenTicks, Hunger: core.MaxHunger,
 	}); err != nil {
 		t.Fatal(err)
@@ -170,8 +173,9 @@ func TestHUDOxygenBarFollowsAuthoritativePlayerState(t *testing.T) {
 	restored := apply(core.MaxOxygenTicks)
 
 	const quadBytes = 48
-	if len(half)-len(full) != 2*quadBytes {
-		t.Fatalf("未满氧气新增 %d 字节，想要两个 quad（%d 字节）", len(half)-len(full), 2*quadBytes)
+	if len(half)-len(full) != oxygenQuadInstancesForHUDTest*quadBytes {
+		t.Fatalf("未满氧气新增 %d 字节，想要十个 resolved-slot quad（%d 字节）",
+			len(half)-len(full), oxygenQuadInstancesForHUDTest*quadBytes)
 	}
 	if len(quarter) != len(half) {
 		t.Fatalf("两个不同未满值的 quad 数不同：%d vs %d", len(quarter)/quadBytes, len(half)/quadBytes)
@@ -192,10 +196,10 @@ func TestHUDOxygenBarFollowsAuthoritativePlayerState(t *testing.T) {
 // 走一遍 wire→Predictor 镜像→app 装配的完整路径，钉死 `renderFrame` 里那行
 // `hud.HungerOverlay` 取的是 `Predictor.Hunger()`。两个值故意互不相等且奇偶相反：
 //
-//   - 生命 14（偶数）：10 颗空心 + 7 颗填充 = 17 个 quad，没有半颗；
+//   - 生命 14（偶数）：十个 resolved-slot 心形 = 10 个 quad，没有半颗；
 //   - 饥饿 9（奇数）：10 个空鸡腿槽底 + 5 个填充 = 15 个 quad，末个是半格。
 //
-// 把饥饿条接成生命值时总数变成 17+17=34 且再没有任何半格 quad，下面两条断言各自
+// 把饥饿条接成生命值时总数变成 10+17=27 且再没有任何半格 quad，下面两条断言各自
 // 变红——只数「非空」或只数总量都挡不住这个接线错误。
 func TestHUDHungerBarFollowsAuthoritativePlayerState(t *testing.T) {
 	app := newRemoteRenderApplication(t, &integrationGlyphSource{})
@@ -231,8 +235,8 @@ func TestHUDHungerBarFollowsAuthoritativePlayerState(t *testing.T) {
 		t.Fatalf("已确认权威状态 renderFrame=(%v,%v)", rendered, err)
 	}
 	widths := hudQuadWidths()
-	if got, want := len(widths), 17+15; got != want {
-		t.Fatalf("quad=%d，想要 %d（生命 14 的 17 个 + 饥饿 9 的 15 个）", got, want)
+	if got, want := len(widths), healthQuadInstancesForHUDTest+15; got != want {
+		t.Fatalf("quad=%d，想要 %d（生命 14 的 10 个 + 饥饿 9 的 15 个）", got, want)
 	}
 	// 两条 bar 的格尺寸相同，因此整格宽度就是最大值，半格恰为它的一半。
 	fullWidth := slices.Max(widths)

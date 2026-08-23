@@ -10,30 +10,93 @@ import (
 	"github.com/channing771/mornlea/internal/render"
 )
 
+// 杀死变异：漏画任一固定 UI 图标、复用同一图标、引入半透明边缘或让构建读取不稳定
+// 状态，都会破坏生存状态行的固定图集契约。
+func TestHotbarTextureAtlasUIIconsAreDistinctBinaryAndDeterministic(t *testing.T) {
+	wantColumns := [...]int{
+		0, // empty heart
+		1, // half heart
+		2, // full heart
+		3, // empty bubble
+		4, // full bubble
+		5, // empty drumstick
+		6, // full drumstick
+	}
+	gotColumns := [...]int{
+		hotbarEmptyHeartColumn,
+		hotbarHalfHeartColumn,
+		hotbarFullHeartColumn,
+		hotbarEmptyBubbleColumn,
+		hotbarFullBubbleColumn,
+		hotbarEmptyDrumstickColumn,
+		hotbarFullDrumstickColumn,
+	}
+	if gotColumns != wantColumns {
+		t.Fatalf("HUD 图集列顺序=%v，想要 %v", gotColumns, wantColumns)
+	}
+	if hotbarBlockColumnOffset != len(wantColumns) {
+		t.Fatalf("物品列 offset=%d，想要紧随七个 UI cell 的 %d", hotbarBlockColumnOffset, len(wantColumns))
+	}
+
+	registry := assets.NewRegistry()
+	pixels := buildHotbarTextureAtlas(registry)
+	if again := buildHotbarTextureAtlas(registry); !bytes.Equal(pixels, again) {
+		t.Fatal("连续构建的 hotbar 图集不相同")
+	}
+
+	cells := make([][]byte, len(wantColumns))
+	for index, column := range wantColumns {
+		cell := hotbarTextureCell(pixels, column)
+		cells[index] = cell
+		opaque := 0
+		for pixel := 3; pixel < len(cell); pixel += 4 {
+			if alpha := cell[pixel]; alpha != 0 && alpha != 255 {
+				t.Fatalf("UI 列 %d alpha=%d，想要 0 或 255", column, alpha)
+			} else if alpha == 255 {
+				opaque++
+			}
+		}
+		if opaque == 0 {
+			t.Fatalf("UI 列 %d 没有非透明像素", column)
+		}
+	}
+	for left := range cells {
+		for right := left + 1; right < len(cells); right++ {
+			if bytes.Equal(cells[left], cells[right]) {
+				t.Fatalf("UI 列 %d 与 %d 的内容相同", wantColumns[left], wantColumns[right])
+			}
+		}
+	}
+}
+
+// hotbarTextureCell 返回图集指定 16×16 cell 的连续 RGBA 副本，便于逐字节比较。
+func hotbarTextureCell(pixels []byte, column int) []byte {
+	cell := make([]byte, hotbarTextureSize*hotbarTextureSize*4)
+	for y := range hotbarTextureSize {
+		source := (y*hotbarTextureWidth + column*hotbarTextureSize) * 4
+		copy(cell[y*hotbarTextureSize*4:], pixels[source:source+hotbarTextureSize*4])
+	}
+	return cell
+}
+
 // 杀死变异：重新用近似色块或复制错误方块面的像素，都无法通过逐像素来源核对。
 func TestHotbarTextureAtlasCopiesRegisteredBlockTopFaces(t *testing.T) {
 	registry := assets.NewRegistry()
 	pixels := buildHotbarTextureAtlas(registry)
-	for _, item := range []core.ItemID{
-		core.ItemStone, core.ItemDirt, core.ItemGrass, core.ItemStoneBrick,
-		core.ItemFurnace, core.ItemIronBlock, core.ItemChest,
-		core.ItemCobblestone, core.ItemSmoothStone, core.ItemSand, core.ItemGravel,
-		core.ItemOakLog, core.ItemOakPlanks, core.ItemLeaves, core.ItemGlass,
-		core.ItemBrick, core.ItemWhiteWool, core.ItemRoofTile, core.ItemClay,
-		core.ItemSnowBlock, core.ItemMossyCobblestone,
-	} {
+	for item := core.ItemID(0); item < core.ItemIDMax; item++ {
 		block, ok := core.ItemPlacement(item)
 		if !ok {
-			t.Fatalf("测试物品 %d 不可放置", item)
+			continue
 		}
 		source := registry.LayerRGBA(int(registry.Material(block, mesh.FacePosY)))
 		column := hotbarBlockColumnOffset + int(item)
-		for _, point := range [][2]int{{0, 0}, {5, 7}, {15, 15}} {
-			x, y := point[0], point[1]
-			src := (y*hotbarTextureSize + x) * 4
-			dst := (y*hotbarTextureWidth + column*hotbarTextureSize + x) * 4
-			if got, want := [4]byte(pixels[dst:dst+4]), [4]byte(source[src:src+4]); got != want {
-				t.Fatalf("物品 %d 像素 (%d,%d)=%v，想要注册表材质 %v", item, x, y, got, want)
+		for y := range hotbarTextureSize {
+			for x := range hotbarTextureSize {
+				src := (y*hotbarTextureSize + x) * 4
+				dst := (y*hotbarTextureWidth + column*hotbarTextureSize + x) * 4
+				if got, want := [4]byte(pixels[dst:dst+4]), [4]byte(source[src:src+4]); got != want {
+					t.Fatalf("物品 %d 像素 (%d,%d)=%v，想要注册表材质 %v", item, x, y, got, want)
+				}
 			}
 		}
 	}
@@ -113,8 +176,8 @@ func TestHotbarColumnUVStaysInsideItsOwnColumn(t *testing.T) {
 // 写错列号会覆盖爱心列，让生命条跟着变。
 func TestHotbarDrumstickColumnsAreDistinctAndSelfContained(t *testing.T) {
 	pixels := make([]byte, hotbarTextureWidth*hotbarTextureSize*4)
-	paintHotbarHeart(pixels, hotbarEmptyHeartColumn, false)
-	paintHotbarHeart(pixels, hotbarFullHeartColumn, true)
+	paintHotbarHeart(pixels, hotbarEmptyHeartColumn, heartEmpty)
+	paintHotbarHeart(pixels, hotbarFullHeartColumn, heartFull)
 	heartBefore := append([]byte(nil), pixels[:2*hotbarTextureSize*4]...)
 
 	paintHotbarDrumstick(pixels, hotbarEmptyDrumstickColumn, false)

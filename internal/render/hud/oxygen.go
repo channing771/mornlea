@@ -3,13 +3,9 @@ package hud
 import "github.com/channing771/mornlea/internal/core"
 
 const (
-	// 氧气条：一条背景 + 一条按权威比例填充的前景，共两个 quad。
-	oxygenQuads = 2
-	// 氧气条与生命条等宽（十颗爱心加九条间隙），因此两者左右边沿严格对齐。
-	oxygenBarWidth  = healthSegmentCount*healthHeartSize + (healthSegmentCount-1)*healthHeartGap
-	oxygenBarHeight = float32(6)
-	// 氧气条下沿到生命条上沿的间隔。
-	oxygenBarGap = float32(4)
+	// 氧气 HUD 的十个槽位各自直接选择空或满气泡。
+	oxygenQuads        = oxygenSegmentCount
+	oxygenSegmentCount = 10
 )
 
 // OxygenOverlay 是服务端已确认的氧气。它是 render 本地值，由 app 从 Predictor 的
@@ -20,18 +16,9 @@ type OxygenOverlay struct {
 	Value     uint16
 }
 
-// appendOxygenBar 在生命条正上方绘制氧气条。
-//
-// 三条契约（spec fluid-presentation-survival 的「氧气同步到客户端并在耗损时可见」）：
-//
-//   - **仅在未满时出现**：满氧（含未确认）时一个 quad 都不追加，界面完全不被占用。
-//     这不是"画一条满格的条"，两者在 quad 数上可区分。
-//   - **复用既有绘制阶段**：quad 追加进同一份 hotbarLayout，与快捷栏、生命条、
-//     采掘条走同一个 HUD pass 与同一份实例缓冲，没有第二条管线、第二个图集或
-//     第二块上传缓冲。它与 appendMiningBar 同形，是纯色 quad，因此连图集列都不占。
-//   - **呈现随权威值变化**：填充宽度与 oxygen/MaxOxygenTicks 成正比，不同的权威值
-//     给出不同的填充宽度。
-func appendOxygenBar(dst *hotbarLayout, oxygen OxygenOverlay, width, height float32) {
+// appendOxygenBar 只在权威氧气耗损时沿饥饿条右边缘绘制十段气泡；满氧与
+// 未确认值不占实例，但永久次行仍由共享几何保留，打开容器只改变外扩方向。
+func appendOxygenBar(dst *hotbarLayout, oxygen OxygenOverlay, open bool, width, height float32) {
 	if !oxygen.Confirmed || width <= 0 || height <= 0 {
 		return
 	}
@@ -39,20 +26,21 @@ func appendOxygenBar(dst *hotbarLayout, oxygen OxygenOverlay, width, height floa
 	if value >= core.MaxOxygenTicks {
 		return
 	}
-	// 与生命条共用一次 hudScale(false, …)：打开背包不改变它的尺度或位置。
-	scale := hudScale(false, width, height)
-	x := hudEdgeMargin * scale
-	healthTop := height - (hudEdgeMargin+healthHeartSize)*scale
-	y := healthTop - (oxygenBarGap+oxygenBarHeight)*scale
-	barWidth := oxygenBarWidth * scale
-	barHeight := oxygenBarHeight * scale
-	dst.quads = append(dst.quads, hotbarInstance{
-		X: x, Y: y, Width: barWidth, Height: barHeight,
-		Color: [4]float32{0.05, 0.07, 0.12, 0.78},
-	})
-	fraction := float32(value) / float32(core.MaxOxygenTicks)
-	dst.quads = append(dst.quads, hotbarInstance{
-		X: x, Y: y, Width: barWidth * fraction, Height: barHeight,
-		Color: [4]float32{0.42, 0.78, 1, 0.95},
-	})
+	_, right, _, y, scale := statusBarBounds(open, width, height)
+	bubbleSize := healthHeartSize * scale
+	bubbleGap := healthHeartGap * scale
+	filled := (int(value)*oxygenSegmentCount + int(core.MaxOxygenTicks) - 1) /
+		int(core.MaxOxygenTicks)
+	for segment := range oxygenSegmentCount {
+		uv := hotbarBubbleUV(segment < filled)
+		// 从共享右边缘反推每格位置，避免缩放后末格右沿因累计加法漂移。
+		x := right - float32(oxygenSegmentCount-segment)*bubbleSize -
+			float32(oxygenSegmentCount-1-segment)*bubbleGap
+		dst.quads = append(dst.quads, hotbarInstance{
+			X: x, Y: y,
+			Width: bubbleSize, Height: bubbleSize,
+			U0: uv[0], V0: uv[1], U1: uv[2], V1: uv[3],
+			Color: [4]float32{1, 1, 1, 1},
+		})
+	}
 }

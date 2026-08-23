@@ -17,7 +17,7 @@ type HungerOverlay struct {
 	Value     uint8
 }
 
-// appendHungerBar 在 framebuffer 右下角绘制一排鸡腿，与左下的生命条严格镜像。
+// appendHungerBar 从快捷栏右边缘向左绘制一排鸡腿。
 //
 // 三条契约：
 //
@@ -31,16 +31,18 @@ type HungerOverlay struct {
 //   - **半格粒度**：每格两点，奇数饥饿值末格画半个。因为整条是右下镜像、填充
 //     从右向左推进，半格露出的是鸡腿的**右**半边（U0 取中点、X 右移半格），
 //     与左下生命条的半颗爱心（露左半边）恰好对称。
-func appendHungerBar(dst *hotbarLayout, hunger HungerOverlay, width, height float32) {
+func appendHungerBar(
+	dst *hotbarLayout,
+	hunger HungerOverlay,
+	open bool,
+	width, height float32,
+) {
 	if !hunger.Confirmed || width <= 0 || height <= 0 {
 		return
 	}
-	// 与生命条共用一次 hudScale(false, …)：打开背包不改变它的尺度或位置。
-	scale := hudScale(false, width, height)
+	_, right, y, _, scale := statusBarBounds(open, width, height)
 	size := healthHeartSize * scale
 	gap := healthHeartGap * scale
-	right := width - hudEdgeMargin*scale
-	y := height - (hudEdgeMargin+healthHeartSize)*scale
 	// segmentX 返回自右向左第 segment 格的左边沿。
 	segmentX := func(segment int) float32 {
 		return right - float32(segment+1)*size - float32(segment)*gap

@@ -7,15 +7,17 @@ import (
 )
 
 const (
-	// HUD 图集前四格是代码生成的空心/实心爱心与空/满鸡腿，后续格按 ItemID
-	// 放置真实方块顶面。鸡腿与爱心同处同法（程序化、不进 internal/assets），
-	// 是因为 HUD 图集本就不在材质包覆盖范围内。
-	hotbarTextureSize          = 16
-	hotbarEmptyHeartColumn     = 0
-	hotbarFullHeartColumn      = 1
-	hotbarEmptyDrumstickColumn = 2
-	hotbarFullDrumstickColumn  = 3
-	hotbarBlockColumnOffset    = 4
+	// HUD 图集前七格是代码生成的固定生存图标，后续格按 `ItemID` 放置真实方块顶面。
+	hotbarEmptyHeartColumn = iota
+	hotbarHalfHeartColumn
+	hotbarFullHeartColumn
+	hotbarEmptyBubbleColumn
+	hotbarFullBubbleColumn
+	hotbarEmptyDrumstickColumn
+	hotbarFullDrumstickColumn
+	hotbarBlockColumnOffset
+
+	hotbarTextureSize = 16
 	// 列数按合法物品编号的独占上界 ItemIDMax 预留：追加新物品时图集自动扩出
 	// 空白列，与 core 枚举末项守护（item_test.go）保持同一穷举界，不再依赖
 	// 「某个具体物品恰为枚举末项」的脆弱假设。
@@ -25,8 +27,11 @@ const (
 
 func buildHotbarTextureAtlas(registry *assets.Registry) []byte {
 	pixels := make([]byte, hotbarTextureWidth*hotbarTextureSize*4)
-	paintHotbarHeart(pixels, hotbarEmptyHeartColumn, false)
-	paintHotbarHeart(pixels, hotbarFullHeartColumn, true)
+	paintHotbarHeart(pixels, hotbarEmptyHeartColumn, heartEmpty)
+	paintHotbarHeart(pixels, hotbarHalfHeartColumn, heartHalf)
+	paintHotbarHeart(pixels, hotbarFullHeartColumn, heartFull)
+	paintHotbarBubble(pixels, hotbarEmptyBubbleColumn, false)
+	paintHotbarBubble(pixels, hotbarFullBubbleColumn, true)
 	paintHotbarDrumstick(pixels, hotbarEmptyDrumstickColumn, false)
 	paintHotbarDrumstick(pixels, hotbarFullDrumstickColumn, true)
 	// 物品列按 ItemID 穷举到独占上界 ItemIDMax（与列数预留同一穷举界），
@@ -58,4 +63,11 @@ func hotbarItemUV(item core.ItemID) ([4]float32, bool) {
 		return [4]float32{}, false
 	}
 	return hotbarTextureUV(hotbarBlockColumnOffset + int(item)), true
+}
+
+func hotbarBubbleUV(full bool) [4]float32 {
+	if full {
+		return hotbarTextureUV(hotbarFullBubbleColumn)
+	}
+	return hotbarTextureUV(hotbarEmptyBubbleColumn)
 }

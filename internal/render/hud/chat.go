@@ -16,6 +16,9 @@ const (
 	chatLineHeight      = float32(28)
 	chatPanelGap        = float32(4)
 	chatHealthClearance = float32(8)
+	// `chatFitSlack` 比一个 framebuffer pixel 小 256 倍，正常尺寸不可见；它覆盖
+	// 最多 32 个 glyph 的 float32 pen 累加及 panel 坐标乘加误差。
+	chatFitSlack = float32(1.0 / 256.0)
 )
 
 // ChatOverlay 是调用方提供的固定聊天呈现值；Lines 只消费最后六条。
@@ -81,11 +84,41 @@ func appendChatOverlay(
 	if len(lines) == 0 && !overlay.Open {
 		return
 	}
-	scale := hudScale(false, width, height)
+	_, _, _, statusTop, survivalScale := statusBarBounds(false, width, height)
+	stackHeight := float32(0)
+	if len(lines) > 0 {
+		stackHeight = float32(len(lines))*chatLineHeight + 2*chatPadding
+	}
+	maxTextWidth := float32(0)
+	for _, line := range lines {
+		maxTextWidth = max(maxTextWidth, chatTextWidth(atlas, line, 1))
+	}
+	if overlay.Open {
+		stackHeight += chatLineHeight + 2*chatPadding
+		if len(lines) > 0 {
+			stackHeight += chatPanelGap
+		}
+		maxTextWidth = max(maxTextWidth, chatTextWidth(atlas, overlay.Input, 1))
+	}
+	// 状态行仍使用 survival scale；聊天栈只能在此基础上继续缩小，
+	// 且高度按本帧真实行数、宽度按最宽可见文本共同取界。
+	scale := survivalScale
+	if requiredHeight := stackHeight + chatHealthClearance; requiredHeight > 0 {
+		if bound := max(statusTop-chatFitSlack, 0) / requiredHeight; bound < scale {
+			scale = bound
+		}
+	}
+	if requiredWidth := hudEdgeMargin + 2*chatPadding + maxTextWidth; requiredWidth > 0 {
+		if bound := max(width-chatFitSlack, 0) / requiredWidth; bound < scale {
+			scale = bound
+		}
+	}
 	padding := chatPadding * scale
 	lineHeight := chatLineHeight * scale
 	x := hudEdgeMargin * scale
-	bottom := height - (hudEdgeMargin+healthHeartSize+chatHealthClearance)*scale
+	// 聊天的整个面板栈从关闭态永久两行状态栈上方向上生长，不依赖是否恰好
+	// 显示气泡实例，避免权威状态变化让已接受的聊天行突然被覆盖。
+	bottom := statusTop - chatHealthClearance*scale
 	inputHeight := lineHeight + 2*padding
 	if overlay.Open {
 		inputY := bottom - inputHeight
