@@ -29,7 +29,7 @@ func TestPlayerStatePathWithoutDevice(t *testing.T) {
 		t.Fatal("创建无设备 player 状态失败")
 	}
 	t.Cleanup(state.close)
-	pcm := synthesize(cueSpecs[CueMiningComplete])
+	pcm := synthesize(cueSpecs[CueEatingComplete])
 
 	for slot := 0; slot < 8; slot++ {
 		if status := state.play(pcm); status != audioPlayReady {
