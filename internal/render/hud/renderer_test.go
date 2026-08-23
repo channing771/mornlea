@@ -203,8 +203,8 @@ func TestHotbarMaximumBranchesAndEncodingContract(t *testing.T) {
 		t.Fatalf("打开最大分支 Prepare: %v", err)
 	}
 	openWant := openInventoryQuads + healthQuads + oxygenQuads + hungerQuads + maxChatQuads
-	if len(renderer.layout.quads) != openWant || len(renderer.layout.quads) != 265 || len(renderer.layout.quads) > maxHotbarQuads {
-		t.Fatalf("较大打开分支 quads=%d，想要 265 且不超过固定上限 %d", len(renderer.layout.quads), maxHotbarQuads)
+	if len(renderer.layout.quads) != openWant || len(renderer.layout.quads) != 266 || len(renderer.layout.quads) > maxHotbarQuads {
+		t.Fatalf("较大打开分支 quads=%d，想要 266 且不超过固定上限 %d", len(renderer.layout.quads), maxHotbarQuads)
 	}
 	viewport, quads, glyphs := renderer.FrameStreams()
 	if len(viewport) != hotbarViewportBytes || len(quads) != len(renderer.layout.quads)*hotbarInstanceBytes ||

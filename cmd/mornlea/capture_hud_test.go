@@ -19,19 +19,20 @@ func TestHUDCaptureScenesFixAllAuthoritativeSurvivalValues(t *testing.T) {
 		t.Fatalf("hud-hotbar-health HUD=%+v，想要满生命、满氧气与满饥饿", hotbar.HUD)
 	}
 
-	scene := captureSceneByName(t, "inventory-crafting")
-	if scene.HUD == nil {
-		t.Fatal("inventory-crafting 缺少已确认生命、耗损氧气与饥饿夹具")
-	}
-	if scene.HUD.Health != 5 {
-		t.Fatalf("inventory-crafting health=%d，想要低生命 5", scene.HUD.Health)
-	}
-	if scene.HUD.Oxygen != core.MaxOxygenTicks/3 {
-		t.Fatalf("inventory-crafting oxygen=%d，想要 %d",
-			scene.HUD.Oxygen, core.MaxOxygenTicks/3)
-	}
-	if scene.HUD.Hunger != 9 {
-		t.Fatalf("inventory-crafting hunger=%d，想要 9", scene.HUD.Hunger)
+	for _, name := range []string{"inventory-crafting", "chest-container", "furnace-container"} {
+		scene := captureSceneByName(t, name)
+		if scene.HUD == nil {
+			t.Fatalf("%s 缺少已确认生命、耗损氧气与饥饿夹具", name)
+		}
+		if scene.HUD.Health != 5 {
+			t.Fatalf("%s health=%d，想要低生命 5", name, scene.HUD.Health)
+		}
+		if scene.HUD.Oxygen != core.MaxOxygenTicks/3 {
+			t.Fatalf("%s oxygen=%d，想要 %d", name, scene.HUD.Oxygen, core.MaxOxygenTicks/3)
+		}
+		if scene.HUD.Hunger != 9 {
+			t.Fatalf("%s hunger=%d，想要 9", name, scene.HUD.Hunger)
+		}
 	}
 }
 

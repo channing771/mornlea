@@ -198,8 +198,8 @@ func TestHotbarLayoutStaysWithinFixedCapacity(t *testing.T) {
 	}
 
 	// 十行固定配方是打开分支的 quad 最大 overlay，并以合法来源高亮见证第二个
-	// 选中实例；加入饥饿后打开态以 265 见证合法最大，scenario v19 固定容量 267
-	// 仍保留 2 个 quad 余量。
+	// 选中实例；标题加入后打开态以 266 见证合法最大，scenario v19 固定容量 267
+	// 仍保留 1 个 quad 余量。
 	layoutInventory(
 		&layout, atlas, maxQuadTestInventory(), true, 5, nil, nil, MiningOverlay{}, 1280, 800,
 	)
@@ -208,8 +208,8 @@ func TestHotbarLayoutStaysWithinFixedCapacity(t *testing.T) {
 	appendHungerBar(&layout, HungerOverlay{Confirmed: true, Value: core.MaxHunger}, true, 1280, 800)
 	appendChatOverlay(&layout, atlas, chat, 1280, 800)
 	openWant := openInventoryQuads + healthQuads + oxygenQuads + hungerQuads + maxChatQuads
-	if len(layout.quads) != openWant || openWant != 265 || len(layout.quads) > maxHotbarQuads {
-		t.Fatalf("打开分支 quads=%d，想要 265 且不超过固定上限 %d", len(layout.quads), maxHotbarQuads)
+	if len(layout.quads) != openWant || openWant != 266 || len(layout.quads) > maxHotbarQuads {
+		t.Fatalf("打开分支 quads=%d，想要 266 且不超过固定上限 %d", len(layout.quads), maxHotbarQuads)
 	}
 
 	// glyph 上限由 36 格两位数量、满箱两位数量与七行聊天共同见证。
@@ -771,6 +771,145 @@ func TestInventorySlotAtBoundariesRemainHalfOpen(t *testing.T) {
 			} {
 				if got, ok := InventorySlotAt(point[0], point[1], size[0], size[1]); ok {
 					t.Fatalf("framebuffer %v slot %d 右/下边界 %v 意外命中 %d", size, slot, point, got)
+				}
+			}
+		}
+	}
+}
+
+// TestContainerSlotGeometryKeepsUnifiedHitTests 穷举三种容器的中心与边界外一点，
+// 锁定绘制 origin 和统一索引不会被 header 皮肤带偏。
+func TestContainerSlotGeometryKeepsUnifiedHitTests(t *testing.T) {
+	for _, size := range [][2]uint32{{1280, 800}, {240, 40}, {800, 17}} {
+		width, height := size[0], size[1]
+		for _, test := range []struct {
+			name   string
+			count  int
+			origin func(int) (float32, float32)
+			hit    func(float64, float64, uint32, uint32) (uint8, bool)
+		}{
+			{"背包", core.InventorySlots, func(slot int) (float32, float32) {
+				return inventorySlotOrigin(slot, true, float32(width), float32(height))
+			}, InventorySlotAt},
+			{"熔炉", core.FurnaceViewSlots, func(slot int) (float32, float32) {
+				if slot < core.InventorySlots {
+					return inventorySlotOrigin(slot, true, float32(width), float32(height))
+				}
+				return recipeSlotOrigin(slot-core.InventorySlots, float32(width), float32(height))
+			}, FurnaceSlotAt},
+			{"箱子", core.ChestViewSlots, func(slot int) (float32, float32) {
+				if slot < core.InventorySlots {
+					return inventorySlotOrigin(slot, true, float32(width), float32(height))
+				}
+				return chestSlotOrigin(slot-core.InventorySlots, float32(width), float32(height))
+			}, ChestSlotAt},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				slotSize := hotbarSlotSize * hudScale(true, float32(width), float32(height))
+				for slot := range test.count {
+					left, top := test.origin(slot)
+					for _, point := range [][2]float32{{left, top}, {left + slotSize/2, top + slotSize/2}} {
+						if got, ok := test.hit(float64(point[0]), float64(point[1]), width, height); !ok || int(got) != slot {
+							t.Fatalf("framebuffer %v slot %d 内点 %v 命中=%d,%t", size, slot, point, got, ok)
+						}
+					}
+					if got, ok := test.hit(float64(left-1), float64(top+slotSize/2), width, height); ok && int(got) == slot {
+						t.Fatalf("framebuffer %v slot %d 左侧 1px 仍命中当前格", size, slot)
+					}
+					for _, point := range [][2]float32{{left + slotSize, top + slotSize/2}, {left + slotSize/2, top + slotSize}} {
+						if _, ok := test.hit(float64(point[0]), float64(point[1]), width, height); ok {
+							t.Fatalf("framebuffer %v slot %d 右/下边界 %v 被命中", size, slot, point)
+						}
+					}
+				}
+			})
+		}
+	}
+}
+
+// TestContainerHeaderAvoidsHitCells 验证 header 只扩面板上沿，标题与所有可交互
+// 矩形保持分离，窄高与矮宽窗口仍由同一个 `hudScale` 收缩。
+func TestContainerHeaderAvoidsHitCells(t *testing.T) {
+	baseOpenHUDHeight := hotbarBottomMargin + hotbarSlotSize +
+		inventoryRowGap + 3*hotbarSlotSize + 2*hotbarSlotGap +
+		recipeRowGap + hotbarSlotSize +
+		float32(len(inventoryRecipeIDs)-1)*(hotbarSlotSize+hotbarSlotGap) +
+		hotbarPanelPadding + healthHeartSize + statusBarGap
+	if openHUDHeight-baseOpenHUDHeight != containerHeaderHeight {
+		t.Fatalf("openHUDHeight header=%v，想要 %v", openHUDHeight-baseOpenHUDHeight, containerHeaderHeight)
+	}
+
+	atlas := newFakeNameTagAtlas()
+	for _, size := range [][2]float32{{1280, 800}, {240, 40}, {800, 17}} {
+		for _, view := range []struct {
+			name    string
+			overlay *FurnaceOverlay
+			chest   *ChestOverlay
+			count   int
+			origin  func(int, float32, float32) (float32, float32)
+			panel   func(float32, float32) hotbarInstance
+		}{
+			{"合成", nil, nil, core.InventorySlots, func(slot int, width, height float32) (float32, float32) {
+				return inventorySlotOrigin(slot, true, width, height)
+			}, func(width, height float32) hotbarInstance {
+				scale := hudScale(true, width, height)
+				left, bottom := craftingRecipeSlotOrigin(0, 0, width, height)
+				_, top := craftingRecipeSlotOrigin(len(inventoryRecipeIDs)-1, 0, width, height)
+				buttonX, _ := craftingRecipeButtonOrigin(0, width, height)
+				padding := hotbarPanelPadding * scale
+				return hotbarInstance{X: left - padding, Y: top - padding, Width: buttonX + recipeButtonWidth*scale - left + 2*padding, Height: bottom + hotbarSlotSize*scale - top + 2*padding}
+			}},
+			{"熔炉", &FurnaceOverlay{}, nil, core.FurnaceViewSlots, func(slot int, width, height float32) (float32, float32) {
+				if slot < core.InventorySlots {
+					return inventorySlotOrigin(slot, true, width, height)
+				}
+				return recipeSlotOrigin(slot-core.InventorySlots, width, height)
+			}, func(width, height float32) hotbarInstance {
+				scale := hudScale(true, width, height)
+				panelX, slotY := recipeSlotOrigin(0, width, height)
+				_, barTop := furnaceBarOrigin(width, height)
+				padding := hotbarPanelPadding * scale
+				return hotbarInstance{X: panelX - padding, Y: barTop - padding, Width: (3*hotbarSlotSize+2*hotbarSlotGap)*scale + 2*padding, Height: slotY + hotbarSlotSize*scale - barTop + 2*padding}
+			}},
+			{"箱子", nil, &ChestOverlay{}, core.ChestViewSlots, func(slot int, width, height float32) (float32, float32) {
+				if slot < core.InventorySlots {
+					return inventorySlotOrigin(slot, true, width, height)
+				}
+				return chestSlotOrigin(slot-core.InventorySlots, width, height)
+			}, func(width, height float32) hotbarInstance {
+				scale := hudScale(true, width, height)
+				left, bottom := chestSlotOrigin(0, width, height)
+				_, top := chestSlotOrigin(core.ChestSlots-core.HotbarSlots, width, height)
+				padding := hotbarPanelPadding * scale
+				totalWidth := (core.HotbarSlots*hotbarSlotSize + (core.HotbarSlots-1)*hotbarSlotGap) * scale
+				return hotbarInstance{X: left - padding, Y: top - padding, Width: totalWidth + 2*padding, Height: bottom + hotbarSlotSize*scale - top + 2*padding}
+			}},
+		} {
+			var layout hotbarLayout
+			got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, view.overlay, view.chest, MiningOverlay{}, size[0], size[1])
+			oldPanel := view.panel(size[0], size[1])
+			panel := got.quads[openInventoryPanelQuads+1+core.InventorySlots]
+			yDelta := panel.Y - (oldPanel.Y - containerHeaderHeight*got.scale)
+			heightDelta := panel.Height - (oldPanel.Height + containerHeaderHeight*got.scale)
+			bottomDelta := panel.Y + panel.Height - oldPanel.Y - oldPanel.Height
+			if panel.X != oldPanel.X || panel.Width != oldPanel.Width || yDelta < -0.0001 || yDelta > 0.0001 ||
+				heightDelta < -0.0001 || heightDelta > 0.0001 || bottomDelta < -0.0001 || bottomDelta > 0.0001 {
+				t.Fatalf("framebuffer %v %s panel=%+v，旧 panel=%+v", size, view.name, panel, oldPanel)
+			}
+			title := got.quads[len(got.quads)-1]
+			slotSize := hotbarSlotSize * got.scale
+			for slot := range view.count {
+				left, top := view.origin(slot, size[0], size[1])
+				if rectanglesIntersect(title, hotbarInstance{X: left, Y: top, Width: slotSize, Height: slotSize}) {
+					t.Fatalf("framebuffer %v %s 标题与 slot %d 相交", size, view.name, slot)
+				}
+			}
+			if view.overlay == nil && view.chest == nil {
+				for row := range inventoryRecipeIDs {
+					left, top := craftingRecipeButtonOrigin(row, size[0], size[1])
+					if rectanglesIntersect(title, hotbarInstance{X: left, Y: top, Width: recipeButtonWidth * got.scale, Height: slotSize}) {
+						t.Fatalf("framebuffer %v 配方标题与按钮 %d 相交", size, row)
+					}
 				}
 			}
 		}
