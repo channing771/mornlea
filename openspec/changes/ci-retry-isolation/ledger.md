@@ -71,7 +71,13 @@ Task 2、3、4 的 workflow 静态契约脚本均通过，YAML 可解析；`BASE
 
 ### 真实 Actions 证据（待完成）
 
-本地执行不能证明 GitHub 的事件去重、concurrency 取消、真实 artifact 下载、matrix rerun 或 hosted-runner 墙钟。控制会话尚未授权本任务 push、创建/更新 PR、触发、重跑或取消 GitHub Actions，因此下列项目保持未完成，未用静态推断冒充实机证据：
+#### Concurrency 验收起点
+
+- PR：[#68](https://github.com/channing771/mornlea/pull/68)，分支 `codex/ci-retry-isolation`。
+- 初始观察 SHA：`cac9d3ccd36dbf8dd5ac690dcbff9088e682671f`；2026-08-23T10:58:19Z 查询到唯一一条 CI workflow：run [`32635108391`](https://github.com/channing771/mornlea/actions/runs/32635108391)，事件为 `pull_request`，整体仍为 queued。
+- 同一观察时 `linux-server` 已成功，`native-macos` 仍 queued；将在此前置 run 未完成时正常 push 本 ledger 证据提交，用新 SHA 验证 concurrency 取消，不改 workflow 或门禁制造失败。
+
+下列项目只按真实 GitHub 结果更新，不用静态推断冒充实机证据：
 
 | 验收项 | 状态 |
 |---|---|
