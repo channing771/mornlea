@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/audio"
+	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/go-gl/mathgl/mgl32"
@@ -144,6 +145,158 @@ func TestLocalAudioMiningOnlyAfterAppliedAirDeltaAtConfirmedTarget(t *testing.T)
 	recorder.want(t, audio.CueMiningComplete)
 }
 
+func TestLocalAudioMiningRequiresActuallyAppliedDelta(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		setup func(*application, network.ServerEndpoint, core.BlockPos)
+	}{
+		{
+			name: "revision 不匹配",
+			setup: func(app *application, endpoint network.ServerEndpoint, target core.BlockPos) {
+				sendInteractiveServerMessage(t, endpoint, network.BlockChanges{
+					Dimension: core.Overworld, Chunk: target.Chunk(), BaseRevision: 3, NewRevision: 4,
+					Changes: []network.BlockChange{{Position: target, Block: core.AirID}},
+				})
+				app.drainServerMessages(1)
+				sendInteractiveServerMessage(t, endpoint, audioChunkSnapshot(target.Chunk(), 3))
+				app.drainServerMessages(1)
+			},
+		},
+		{
+			name: "未加载区块",
+			setup: func(app *application, endpoint network.ServerEndpoint, target core.BlockPos) {
+				app.mirror = client.NewMirror()
+				sendInteractiveServerMessage(t, endpoint, network.BlockChanges{
+					Dimension: core.Overworld, Chunk: target.Chunk(), BaseRevision: 1, NewRevision: 2,
+					Changes: []network.BlockChange{{Position: target, Block: core.AirID}},
+				})
+				app.drainServerMessages(1)
+				sendInteractiveServerMessage(t, endpoint, audioChunkSnapshot(target.Chunk(), 1))
+				app.drainServerMessages(1)
+			},
+		},
+		{
+			name: "已 desync 区块",
+			setup: func(app *application, endpoint network.ServerEndpoint, target core.BlockPos) {
+				sendInteractiveServerMessage(t, endpoint, network.BlockChanges{
+					Dimension: core.Overworld, Chunk: target.Chunk(), BaseRevision: 3, NewRevision: 4,
+					Changes: []network.BlockChange{{Position: target, Block: core.StoneID}},
+				})
+				app.drainServerMessages(1)
+				sendInteractiveServerMessage(t, endpoint, network.BlockChanges{
+					Dimension: core.Overworld, Chunk: target.Chunk(), BaseRevision: 2, NewRevision: 3,
+					Changes: []network.BlockChange{{Position: target, Block: core.AirID}},
+				})
+				app.drainServerMessages(1)
+				sendInteractiveServerMessage(t, endpoint, audioChunkSnapshot(target.Chunk(), 2))
+				app.drainServerMessages(1)
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			app, endpoint := newInteractiveTestApplication(t)
+			app.loadedChunks = make(map[core.ChunkPos]struct{})
+			var recorder audioCueRecorder
+			app.playCue = recorder.play
+			target := core.BlockPos{X: 1, Y: 10, Z: 2}
+			loadInteractiveBlock(t, app, target, core.StoneID)
+			state := audioPlayerState(1, 20, 10, false)
+			state.MiningActive = true
+			state.MiningTarget = target
+			state.MiningProgressTicks = 1
+			state.MiningRequiredTicks = 2
+			state.MiningHarvestable = true
+			sendInteractiveServerMessage(t, endpoint, state)
+			app.drainServerMessages(1)
+
+			test.setup(app, endpoint, target)
+			recorder.want(t)
+			_, revision, loaded := app.mirror.Hash(core.Overworld, target.Chunk())
+			if !loaded {
+				t.Fatal("真实 delta 前区块未由 snapshot 恢复")
+			}
+			sendInteractiveServerMessage(t, endpoint, network.BlockChanges{
+				Dimension: core.Overworld, Chunk: target.Chunk(), BaseRevision: revision, NewRevision: revision + 1,
+				Changes: []network.BlockChange{{Position: target, Block: core.AirID}},
+			})
+			app.drainServerMessages(1)
+			recorder.want(t, audio.CueMiningComplete)
+		})
+	}
+}
+
+func TestLocalAudioPlacementRequiresBothConfirmedResults(t *testing.T) {
+	for _, inventoryFirst := range []bool{true, false} {
+		t.Run(map[bool]string{true: "InventoryState 先到", false: "BlockChanges 先到"}[inventoryFirst], func(t *testing.T) {
+			app, endpoint, recorder, target := newAudioPlacementApplication(t)
+			if inventoryFirst {
+				sendInteractiveServerMessage(t, endpoint, network.InventoryState{Inventory: audioInventory(core.ItemDirt, 1)})
+				app.drainServerMessages(1)
+				recorder.want(t)
+				sendInteractiveServerMessage(t, endpoint, audioPlacementDelta(target, 2, 3))
+			} else {
+				sendInteractiveServerMessage(t, endpoint, audioPlacementDelta(target, 2, 3))
+				app.drainServerMessages(1)
+				recorder.want(t)
+				sendInteractiveServerMessage(t, endpoint, network.InventoryState{Inventory: audioInventory(core.ItemDirt, 1)})
+			}
+			app.drainServerMessages(1)
+			recorder.want(t, audio.CueUIClick)
+		})
+	}
+}
+
+func TestLocalAudioPlacementFailuresStaySilent(t *testing.T) {
+	t.Run("拒绝和重复方块增量", func(t *testing.T) {
+		app, endpoint, recorder, target := newAudioPlacementApplication(t)
+		sendInteractiveServerMessage(t, endpoint, network.CommandRejected{Sequence: 1, Reason: network.RejectOccupied})
+		app.drainServerMessages(1)
+		sendInteractiveServerMessage(t, endpoint, audioPlacementDelta(target, 2, 3))
+		app.drainServerMessages(1)
+		sendInteractiveServerMessage(t, endpoint, network.InventoryState{Inventory: audioInventory(core.ItemDirt, 1)})
+		app.drainServerMessages(1)
+		recorder.want(t)
+
+		app, endpoint, recorder, target = newAudioPlacementApplication(t)
+		sendInteractiveServerMessage(t, endpoint, audioPlacementDelta(target, 2, 3))
+		app.drainServerMessages(1)
+		sendInteractiveServerMessage(t, endpoint, network.InventoryState{Inventory: audioInventory(core.ItemDirt, 1)})
+		app.drainServerMessages(1)
+		sendInteractiveServerMessage(t, endpoint, audioPlacementDelta(target, 2, 3))
+		app.drainServerMessages(1)
+		recorder.want(t, audio.CueUIClick)
+	})
+
+	t.Run("无关库存变化清除 pending", func(t *testing.T) {
+		app, endpoint, recorder, target := newAudioPlacementApplication(t)
+		sendInteractiveServerMessage(t, endpoint, audioPlacementDelta(target, 2, 3))
+		app.drainServerMessages(1)
+		sendInteractiveServerMessage(t, endpoint, network.InventoryState{Inventory: audioInventory(core.ItemDirt, 2)})
+		app.drainServerMessages(1)
+		sendInteractiveServerMessage(t, endpoint, network.InventoryState{Inventory: audioInventory(core.ItemDirt, 1)})
+		app.drainServerMessages(1)
+		recorder.want(t)
+	})
+
+	t.Run("reset 和关闭清除 pending", func(t *testing.T) {
+		app, endpoint, recorder, target := newAudioPlacementApplication(t)
+		sendInteractiveServerMessage(t, endpoint, audioPlayerState(2, 20, 10, true))
+		app.drainServerMessages(1)
+		sendInteractiveServerMessage(t, endpoint, audioPlacementDelta(target, 2, 3))
+		app.drainServerMessages(1)
+		sendInteractiveServerMessage(t, endpoint, network.InventoryState{Inventory: audioInventory(core.ItemDirt, 1)})
+		app.drainServerMessages(1)
+		recorder.want(t)
+
+		app, _, recorder, _ = newAudioPlacementApplication(t)
+		app.closeClientSession(nil)
+		if app.audioFeedback.placement.active {
+			t.Fatal("关闭会话后保留 pending placement")
+		}
+		recorder.want(t)
+	})
+}
+
 func TestLocalAudioConfirmationFailuresStaySilent(t *testing.T) {
 	t.Run("未确认采掘目标和非法增量", func(t *testing.T) {
 		app, endpoint := newInteractiveTestApplication(t)
@@ -250,5 +403,42 @@ func audioPlayerState(tick uint64, health, hunger uint8, reset bool) network.Pla
 	return network.PlayerState{
 		ServerTick: tick, Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 10, 0.5},
 		OnGround: true, Ready: true, Reset: reset, Health: health, Hunger: hunger,
+	}
+}
+
+func audioChunkSnapshot(chunk core.ChunkPos, revision uint64) network.ChunkSnapshot {
+	sections := make([]network.SectionData, core.SectionsPerChunk)
+	for index := range sections {
+		sections[index] = network.SectionData{Y: int32(index), Storage: network.SectionSingle, Single: core.StoneID}
+	}
+	return network.ChunkSnapshot{
+		Dimension: core.Overworld, Chunk: chunk, Revision: revision, Sections: sections,
+	}
+}
+
+func newAudioPlacementApplication(t *testing.T) (*application, network.ServerEndpoint, *audioCueRecorder, core.BlockPos) {
+	t.Helper()
+	app, endpoint := newInteractiveTestApplication(t)
+	recorder := new(audioCueRecorder)
+	app.playCue = recorder.play
+	if err := app.predictor.Begin(audioPlayerState(1, 20, 10, false)); err != nil {
+		t.Fatal(err)
+	}
+	app.camera = client.Camera{Pos: mgl32.Vec3{0.5, 10.5, 3.5}}
+	loadInteractiveBlock(t, app, core.BlockPos{X: 0, Y: 10, Z: 0}, core.StoneID)
+	if err := app.inventory.Apply(network.InventoryState{Inventory: audioInventory(core.ItemDirt, 2)}); err != nil {
+		t.Fatal(err)
+	}
+	app.placeBlock()
+	if _, ok := receiveInteractiveClientMessage(t, endpoint).(network.PlaceBlock); !ok {
+		t.Fatal("放置请求未发送")
+	}
+	return app, endpoint, recorder, core.BlockPos{X: 0, Y: 10, Z: 1}
+}
+
+func audioPlacementDelta(target core.BlockPos, base, revision uint64) network.BlockChanges {
+	return network.BlockChanges{
+		Dimension: core.Overworld, Chunk: target.Chunk(), BaseRevision: base, NewRevision: revision,
+		Changes: []network.BlockChange{{Position: target, Block: core.DirtID}},
 	}
 }

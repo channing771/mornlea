@@ -89,6 +89,12 @@ func (a *application) placeBlock() {
 		Slot:     hotbar.Selected,
 	}); err != nil {
 		slog.Warn("发送放置命令失败", "error", err)
+		return
+	}
+	if block, placeable := core.ItemPlacement(hotbar.Slots[hotbar.Selected].Item); placeable {
+		if target, known := placementTarget(hit); known && found {
+			a.audioFeedback.BeginPlacement(target, block, hotbar.Selected, hotbar.Slots[hotbar.Selected])
+		}
 	}
 }
 

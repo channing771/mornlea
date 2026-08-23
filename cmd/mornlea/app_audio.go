@@ -21,6 +21,19 @@ type localAudioFeedback struct {
 	stack           core.ItemStack
 	foodDecrease    bool
 	hungerIncrease  bool
+	placement       pendingPlacement
+}
+
+// pendingPlacement 保存单条已发送放置请求的本地证据；世界写入与扣料必须都确认。
+type pendingPlacement struct {
+	active    bool
+	target    core.BlockPos
+	block     core.BlockID
+	selected  uint8
+	item      core.ItemID
+	count     uint8
+	blockSeen bool
+	itemSeen  bool
 }
 
 // Reset 丢弃会话、重生或权威重置前的全部确认基线。
@@ -105,6 +118,64 @@ func (feedback *localAudioFeedback) ObserveBlockChanges(changes network.BlockCha
 	return 0, false
 }
 
+// BeginPlacement 用已成功发送请求时的本地只读快照替换上一条未完成放置。
+func (feedback *localAudioFeedback) BeginPlacement(
+	target core.BlockPos,
+	block core.BlockID,
+	selected uint8,
+	stack core.ItemStack,
+) {
+	feedback.placement = pendingPlacement{
+		active: true, target: target, block: block, selected: selected,
+		item: stack.Item, count: stack.Count,
+	}
+}
+
+// ClearPlacement 丢弃未完成放置，避免拒绝或会话边界与后续状态错误配对。
+func (feedback *localAudioFeedback) ClearPlacement() {
+	feedback.placement = pendingPlacement{}
+}
+
+// ObservePlacementBlockChanges 只接受精确目标写入预期方块的已应用世界增量。
+func (feedback *localAudioFeedback) ObservePlacementBlockChanges(changes network.BlockChanges) (audio.Cue, bool) {
+	pending := &feedback.placement
+	if !pending.active {
+		return 0, false
+	}
+	for _, change := range changes.Changes {
+		if change.Position == pending.target && change.Block == pending.block {
+			pending.blockSeen = true
+			if pending.itemSeen {
+				feedback.ClearPlacement()
+				return audio.CueUIClick, true
+			}
+			return 0, false
+		}
+	}
+	feedback.ClearPlacement()
+	return 0, false
+}
+
+// ObservePlacementInventoryState 只接受原选中放置物恰好扣减一件的权威库存。
+func (feedback *localAudioFeedback) ObservePlacementInventoryState(state network.InventoryState) (audio.Cue, bool) {
+	pending := &feedback.placement
+	if !pending.active {
+		return 0, false
+	}
+	stack := state.Inventory.Hotbar.Slots[pending.selected]
+	if state.Inventory.Hotbar.Selected != pending.selected ||
+		!itemStackDecreasedByOne(pending.item, pending.count, stack) {
+		feedback.ClearPlacement()
+		return 0, false
+	}
+	pending.itemSeen = true
+	if pending.blockSeen {
+		feedback.ClearPlacement()
+		return audio.CueUIClick, true
+	}
+	return 0, false
+}
+
 func (feedback *localAudioFeedback) clearEating() {
 	feedback.foodDecrease = false
 	feedback.hungerIncrease = false
@@ -124,6 +195,38 @@ func foodStackDecreasedByOne(previous, current core.ItemStack) bool {
 		return current == (core.ItemStack{})
 	}
 	return current.Item == previous.Item && current.Count == previous.Count-1
+}
+
+func itemStackDecreasedByOne(item core.ItemID, count uint8, current core.ItemStack) bool {
+	if item == core.ItemNone || count == 0 {
+		return false
+	}
+	if count == 1 {
+		return current == (core.ItemStack{})
+	}
+	return current.Item == item && current.Count == count-1
+}
+
+// placementTarget 复现权威放置的命中面邻格规则；无法表达的原点命中不建 pending。
+func placementTarget(hit core.RayHit) (core.BlockPos, bool) {
+	target := hit.Block
+	switch hit.Face {
+	case core.BlockFaceNegX:
+		target.X--
+	case core.BlockFacePosX:
+		target.X++
+	case core.BlockFaceNegY:
+		target.Y--
+	case core.BlockFacePosY:
+		target.Y++
+	case core.BlockFaceNegZ:
+		target.Z--
+	case core.BlockFacePosZ:
+		target.Z++
+	default:
+		return core.BlockPos{}, false
+	}
+	return target, target.Y >= core.MinY && target.Y < core.MaxY
 }
 
 // playLocalCue 把可选的本地播放器隔离在客户端边界；无声降级保持 nil 即可。

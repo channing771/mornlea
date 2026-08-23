@@ -79,6 +79,9 @@ func (a *application) drainServerMessages(maxMessages int) {
 			if cue, play := a.audioFeedback.ObserveInventoryState(state); play {
 				a.playLocalCue(cue)
 			}
+			if cue, play := a.audioFeedback.ObservePlacementInventoryState(state); play {
+				a.playLocalCue(cue)
+			}
 			continue
 		}
 		if state, ok := message.(network.FurnaceState); ok {
@@ -176,13 +179,22 @@ func (a *application) drainServerMessages(maxMessages int) {
 			}
 			continue
 		}
+		changes, isBlockChanges := message.(network.BlockChanges)
+		blockChangesApplied := false
+		if isBlockChanges {
+			chunk, loaded := a.mirror.Chunk(changes.Dimension, changes.Chunk)
+			blockChangesApplied = loaded && !chunk.Desynced && chunk.Revision == changes.BaseRevision
+		}
 		update, err := a.mirror.Apply(message)
 		if err != nil {
 			a.closeClientSession(err)
 			return
 		}
-		if changes, ok := message.(network.BlockChanges); ok {
+		if isBlockChanges && blockChangesApplied {
 			if cue, play := a.audioFeedback.ObserveBlockChanges(changes); play {
+				a.playLocalCue(cue)
+			}
+			if cue, play := a.audioFeedback.ObservePlacementBlockChanges(changes); play {
 				a.playLocalCue(cue)
 			}
 		}
@@ -205,6 +217,7 @@ func (a *application) drainServerMessages(maxMessages int) {
 			}
 		}
 		if update.Rejected != nil {
+			a.audioFeedback.ClearPlacement()
 			slog.Warn("权威命令被拒绝",
 				"sequence", update.Rejected.Sequence, "reason", update.Rejected.Reason)
 		}
