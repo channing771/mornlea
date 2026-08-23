@@ -32,3 +32,10 @@
 - 候选提交：`506395c95595b7187377888d4c914fe2608fd2d9`（`feat: add original container pixel primitives`）。Task reviewer 尚未派发；不得将本段视为 SPEC/QUALITY PASS。
 - `2026-08-23`：独立 reviewer `/root/container_task2_review` 在 `task-2-review.md` 对 `a87b5cc..fc4ea55` 给出 SPEC PASS / QUALITY FAIL；唯一 P2 是 `atlas.go` 的列说明遗漏六个 container cell。修复轮次 1 只改该注释，复审结论尚未发生。
 - 修复提交：`07f28e079cb2c8bfc5ef6981afcbaf3dcca5c485`（`docs: correct container atlas column comment`）；`gofmt`、brief HUD focused、strict OpenSpec 与 `git diff --check` 均通过。
+
+## Task 3 已发生事实
+
+- `2026-08-23`：fresh implementer `/root/container_task3_impl` 在 Task 2 修复提交基线上开始，先运行 `make rust`；未派生子代理或 reviewer。
+- RED：`go test ./internal/render/hud -run 'Test(ContainerTitles|ContainerSlotGeometry|Furnace.*Composition|RecipeButton)' -count=1` 因三个共享 header 常量尚不存在而编译失败。
+- GREEN：三种互斥 overlay 各追加一个 atlas 标题 quad；panel 只向上扩 20px，36/39/63 格及十条配方的 origin/hit-test 保持原路径；熔炉两项填充复用既有 bar quad，并分别按火焰自下向上、箭头自左向右同步裁剪实例与 UV。
+- 验证：同一 focused 命令、`go test ./internal/render/hud -race -count=1`、`go test ./internal/archcheck -count=1`、`go vet ./internal/render/hud`、目标 `gofmt -l` 与 `git diff --check` 均通过；`cmd/mornlea` 全包 race 仍在运行，结论不得据此提前声称。

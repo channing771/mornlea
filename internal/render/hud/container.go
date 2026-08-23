@@ -7,16 +7,16 @@ import (
 
 const (
 	// 固定配方：面板 + 每行两个栏位与双层物品色块、按钮和加号。
-	recipeQuads = 1 + len(inventoryRecipeIDs)*9
+	recipeQuads = 1 + len(inventoryRecipeIDs)*9 + 1
 	// 数量为 1 的栏位不画数字，其余每位数字画阴影与前景两个实例。
 	// 当前十条配方共 12 位数字：石砖 4/4、发光方块 4/4 各两位，其余各一位。
 	recipeGlyphs = 24
 	// 熔炉视图：面板、三个栏位、双层物品色块、两条进度条底与填充。
-	furnaceQuads = 1 + 3 + 3*2 + 4
+	furnaceQuads = 1 + 3 + 3*2 + 4 + 1
 	// 三个熔炉格各最多两位数量。
 	furnaceGlyphs = 12
 	// 箱子视图：面板、27 格背景，加最多 27 个双层物品色块。
-	chestQuads = 1 + core.ChestSlots + core.ChestSlots*2
+	chestQuads = 1 + core.ChestSlots + core.ChestSlots*2 + 1
 	// 箱子每格最多两位数量。
 	chestGlyphs = core.ChestSlots * 4
 
@@ -94,9 +94,9 @@ func appendFurnaceRow(
 	_, barTop := furnaceBarOrigin(width, height)
 	panelWidth := (3*hotbarSlotSize+2*hotbarSlotGap)*scale + 2*padding
 	dst.quads = append(dst.quads, hotbarInstance{
-		X: panelX - padding, Y: barTop - padding,
-		Width: panelWidth, Height: slotY + hotbarSlotSize*scale - barTop + 2*padding,
-		Color: [4]float32{0.025, 0.03, 0.035, 0.88},
+		X: panelX - padding, Y: barTop - padding - containerHeaderHeight*scale,
+		Width: panelWidth, Height: slotY + hotbarSlotSize*scale - barTop + 2*padding + containerHeaderHeight*scale,
+		Color: [4]float32{0.035, 0.05, 0.065, 0.96},
 	})
 	stacks := [3]core.ItemStack{overlay.Input, overlay.Fuel, overlay.Output}
 	slotUV := hotbarTextureUV(hotbarContainerSlotColumn)
@@ -118,12 +118,12 @@ func appendFurnaceRow(
 	// 两条进度条分别显示剩余燃烧量与当前熔炼进度。
 	bars := [2]struct {
 		fraction float32
-		color    [4]float32
+		uv       [4]float32
 	}{
 		{float32(overlay.BurnTicks) / float32(core.FurnaceBurnTicks),
-			[4]float32{0.95, 0.55, 0.15, 0.95}},
+			hotbarTextureUV(hotbarFurnaceFlameColumn)},
 		{float32(overlay.ProgressTicks) / float32(core.FurnaceSmeltTicks),
-			[4]float32{0.35, 0.75, 1, 0.95}},
+			hotbarTextureUV(hotbarFurnaceArrowColumn)},
 	}
 	barX, barTop := furnaceBarOrigin(width, height)
 	barWidth := (3*hotbarSlotSize + 2*hotbarSlotGap) * scale
@@ -133,15 +133,29 @@ func appendFurnaceRow(
 			X: barX, Y: y, Width: barWidth, Height: furnaceBarHeight * scale,
 			Color: [4]float32{0.05, 0.05, 0.06, 0.62},
 		})
-		if bar.fraction <= 0 {
+		fraction := min(bar.fraction, 1)
+		if fraction <= 0 {
 			continue
 		}
-		dst.quads = append(dst.quads, hotbarInstance{
-			X: barX, Y: y,
-			Width: barWidth * min(bar.fraction, 1), Height: furnaceBarHeight * scale,
-			Color: bar.color,
-		})
+		fill := hotbarInstance{U0: bar.uv[0], V0: bar.uv[1], U1: bar.uv[2], V1: bar.uv[3], Color: [4]float32{1, 1, 1, 1}}
+		if index == 0 {
+			fill.X, fill.Y = barX, y+furnaceBarHeight*scale*(1-fraction)
+			fill.Width, fill.Height = barWidth, furnaceBarHeight*scale*fraction
+			fill.V0 = bar.uv[1] + (bar.uv[3]-bar.uv[1])*(1-fraction)
+		} else {
+			fill.X, fill.Y = barX, y
+			fill.Width, fill.Height = barWidth*fraction, furnaceBarHeight*scale
+			fill.U1 = bar.uv[0] + (bar.uv[2]-bar.uv[0])*fraction
+		}
+		dst.quads = append(dst.quads, fill)
 	}
+	titleUV := hotbarTextureUV(hotbarFurnaceTitleColumn)
+	dst.quads = append(dst.quads, hotbarInstance{
+		X: panelX, Y: barTop - padding - containerHeaderHeight*scale + containerTitleGap*scale,
+		Width: containerTitleSize * scale, Height: containerTitleSize * scale,
+		U0: titleUV[0], V0: titleUV[1], U1: titleUV[2], V1: titleUV[3],
+		Color: [4]float32{1, 1, 1, 1},
+	})
 }
 
 // furnaceBarOrigin 返回两条进度条的左上角像素坐标。
@@ -190,9 +204,9 @@ func appendChestGrid(
 	_, top := chestSlotOrigin(core.ChestSlots-core.HotbarSlots, width, height)
 	totalWidth := (core.HotbarSlots*hotbarSlotSize + (core.HotbarSlots-1)*hotbarSlotGap) * scale
 	dst.quads = append(dst.quads, hotbarInstance{
-		X: left - padding, Y: top - padding,
-		Width: totalWidth + 2*padding, Height: bottomY + hotbarSlotSize*scale - top + 2*padding,
-		Color: [4]float32{0.025, 0.03, 0.035, 0.88},
+		X: left - padding, Y: top - padding - containerHeaderHeight*scale,
+		Width: totalWidth + 2*padding, Height: bottomY + hotbarSlotSize*scale - top + 2*padding + containerHeaderHeight*scale,
+		Color: [4]float32{0.035, 0.05, 0.065, 0.96},
 	})
 	slotUV := hotbarTextureUV(hotbarContainerSlotColumn)
 	for index := range core.ChestSlots {
@@ -212,6 +226,13 @@ func appendChestGrid(
 		appendItemTile(dst, stack.Item, x, y, scale)
 		appendHotbarCountScaled(dst, atlas, stack.Count, x, y, scale)
 	}
+	titleUV := hotbarTextureUV(hotbarChestTitleColumn)
+	dst.quads = append(dst.quads, hotbarInstance{
+		X: left, Y: top - padding - containerHeaderHeight*scale + containerTitleGap*scale,
+		Width: containerTitleSize * scale, Height: containerTitleSize * scale,
+		U0: titleUV[0], V0: titleUV[1], U1: titleUV[2], V1: titleUV[3],
+		Color: [4]float32{1, 1, 1, 1},
+	})
 }
 
 // chestSlotOrigin 返回箱子统一索引 0..26 对应格子的左上角像素坐标：3 行 9 列，
@@ -256,10 +277,10 @@ func appendRecipeRows(
 	_, top := craftingRecipeSlotOrigin(len(inventoryRecipeIDs)-1, 0, width, height)
 	buttonX, _ := craftingRecipeButtonOrigin(0, width, height)
 	dst.quads = append(dst.quads, hotbarInstance{
-		X: left - padding, Y: top - padding,
+		X: left - padding, Y: top - padding - containerHeaderHeight*scale,
 		Width:  buttonX + recipeButtonWidth*scale - left + 2*padding,
-		Height: bottomY + hotbarSlotSize*scale - top + 2*padding,
-		Color:  [4]float32{0.025, 0.03, 0.035, 0.88},
+		Height: bottomY + hotbarSlotSize*scale - top + 2*padding + containerHeaderHeight*scale,
+		Color:  [4]float32{0.035, 0.05, 0.065, 0.96},
 	})
 	slotUV := hotbarTextureUV(hotbarContainerSlotColumn)
 	for row, recipeID := range inventoryRecipeIDs {
@@ -309,6 +330,13 @@ func appendRecipeRows(
 			Width: 4 * scale, Height: 14 * scale, Color: markColor,
 		})
 	}
+	titleUV := hotbarTextureUV(hotbarCraftingTitleColumn)
+	dst.quads = append(dst.quads, hotbarInstance{
+		X: left, Y: top - padding - containerHeaderHeight*scale + containerTitleGap*scale,
+		Width: containerTitleSize * scale, Height: containerTitleSize * scale,
+		U0: titleUV[0], V0: titleUV[1], U1: titleUV[2], V1: titleUV[3],
+		Color: [4]float32{1, 1, 1, 1},
+	})
 }
 
 // recipeSlotOrigin 返回配方行第 index 个格子的左上角像素坐标。

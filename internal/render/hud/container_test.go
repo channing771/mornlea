@@ -70,6 +70,53 @@ func TestContainerPixelCellsUseSharedSlotUV(t *testing.T) {
 	}
 }
 
+// TestContainerTitlesUseAtlasCells 锁定每个互斥 overlay 只追加一个 atlas 标题，
+// 并且标题不借用动态 glyph 流。
+func TestContainerTitlesUseAtlasCells(t *testing.T) {
+	atlas := newFakeNameTagAtlas()
+	const width, height = float32(1280), float32(800)
+	for _, test := range []struct {
+		name    string
+		overlay *FurnaceOverlay
+		chest   *ChestOverlay
+		column  int
+		top     func() float32
+		glyphs  int
+	}{
+		{"合成", nil, nil, hotbarCraftingTitleColumn, func() float32 {
+			_, y := craftingRecipeSlotOrigin(len(inventoryRecipeIDs)-1, 0, width, height)
+			return y
+		}, recipeGlyphs},
+		{"熔炉", &FurnaceOverlay{}, nil, hotbarFurnaceTitleColumn, func() float32 { _, y := furnaceBarOrigin(width, height); return y }, 0},
+		{"箱子", nil, &ChestOverlay{}, hotbarChestTitleColumn, func() float32 { _, y := chestSlotOrigin(core.ChestSlots-core.HotbarSlots, width, height); return y }, 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var layout hotbarLayout
+			got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, test.overlay, test.chest, MiningOverlay{}, width, height)
+			wantUV := hotbarTextureUV(test.column)
+			left, _ := inventorySlotOrigin(0, true, width, height)
+			count := 0
+			for _, quad := range got.quads {
+				if [4]float32{quad.U0, quad.V0, quad.U1, quad.V1} != wantUV {
+					continue
+				}
+				count++
+				if quad.X != left ||
+					quad.Y != test.top()-hotbarPanelPadding*got.scale-containerHeaderHeight*got.scale+containerTitleGap*got.scale ||
+					quad.Width != containerTitleSize*got.scale || quad.Height != containerTitleSize*got.scale {
+					t.Fatalf("标题=%+v，未放在 panel 左上 header", quad)
+				}
+			}
+			if count != 1 {
+				t.Fatalf("标题 quad=%d，想要 1", count)
+			}
+			if len(got.glyphs) != test.glyphs {
+				t.Fatalf("标题意外进入 glyph 流：glyphs=%d，想要 %d", len(got.glyphs), test.glyphs)
+			}
+		})
+	}
+}
+
 // 杀死变异：遗漏任一配方行、错放按钮或忽略已确认背包都会改变实例布局。
 func TestInventoryLayoutDrawsAllFixedRecipeRows(t *testing.T) {
 	atlas := newFakeNameTagAtlas()
@@ -77,8 +124,8 @@ func TestInventoryLayoutDrawsAllFixedRecipeRows(t *testing.T) {
 		atlas.glyphs[char] = fakeNameTagGlyph(7)
 	}
 	var layout hotbarLayout
-	if len(inventoryRecipeIDs) != 10 || recipeQuads != 91 || recipeGlyphs != 24 {
-		t.Fatalf("十行配方容量 rows/quads/glyphs=%d/%d/%d，想要 10/91/24",
+	if len(inventoryRecipeIDs) != 10 || recipeQuads != 92 || recipeGlyphs != 24 {
+		t.Fatalf("十行配方容量 rows/quads/glyphs=%d/%d/%d，想要 10/92/24",
 			len(inventoryRecipeIDs), recipeQuads, recipeGlyphs)
 	}
 	if got := inventoryRecipeIDs[len(inventoryRecipeIDs)-1]; got != core.RecipeIronHoe {
@@ -199,6 +246,9 @@ func TestRecipeButtonHitTestMatchesDrawnGeometry(t *testing.T) {
 		if _, ok := InventorySlotAt(float64(cursorX), float64(cursorY), uint32(width), uint32(height)); ok {
 			t.Fatalf("配方 %d 按钮与背包格重叠", row)
 		}
+		if _, ok := RecipeButtonAt(float64(left+recipeButtonWidth*scale), float64(cursorY), uint32(width), uint32(height)); ok {
+			t.Fatalf("配方 %d 按钮右边界被判为命中", row)
+		}
 	}
 	left, top := craftingRecipeButtonOrigin(0, width, height)
 	if _, ok := RecipeButtonAt(float64(left)-1, float64(top)+1, uint32(width), uint32(height)); ok {
@@ -234,16 +284,64 @@ func TestFurnaceOverlayDrawsThreeSlotsAndTwoBars(t *testing.T) {
 		t.Fatalf("满熔炉数字 = %d，想要三组两位数含阴影共 12", len(full.glyphs))
 	}
 
-	// 进度条宽度必须随权威计时按比例变化。
-	half := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, &FurnaceOverlay{
-		BurnTicks: core.FurnaceBurnTicks / 2,
-	}, nil, MiningOverlay{}, 1280, 800)
-	// 满布局末尾是 [燃烧底, 燃烧填充, 熔炼底, 熔炼填充]；
-	// 半满布局的熔炼进度为 0 所以没有填充，末尾是 [燃烧底, 燃烧填充, 熔炼底]。
-	fullBar := full.quads[len(full.quads)-3]
-	halfBar := half.quads[len(half.quads)-2]
-	if halfBar.Width >= fullBar.Width || halfBar.Width <= 0 {
-		t.Fatalf("半满燃烧条宽度 = %f，满条 = %f", halfBar.Width, fullBar.Width)
+}
+
+// TestFurnaceBarCompositionCropsAtlasIcons 验证两个填充复用原有 bar quad，
+// 但同时裁剪实例与 UV，而不是缩放完整图标。
+func TestFurnaceBarCompositionCropsAtlasIcons(t *testing.T) {
+	atlas := newFakeNameTagAtlas()
+	var layout hotbarLayout
+	const width, height = float32(1280), float32(800)
+	got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, &FurnaceOverlay{
+		BurnTicks:     core.FurnaceBurnTicks / 2,
+		ProgressTicks: core.FurnaceSmeltTicks / 2,
+	}, nil, MiningOverlay{}, width, height)
+	barX, barTop := furnaceBarOrigin(width, height)
+	barWidth := (3*hotbarSlotSize + 2*hotbarSlotGap) * got.scale
+	barHeight := furnaceBarHeight * got.scale
+	fraction := float32(0.5)
+	for _, test := range []struct {
+		name string
+		uv   [4]float32
+		want hotbarInstance
+	}{
+		{
+			"火焰自下向上", hotbarTextureUV(hotbarFurnaceFlameColumn), hotbarInstance{
+				X: barX, Y: barTop + barHeight*(1-fraction), Width: barWidth, Height: barHeight * fraction,
+			},
+		},
+		{
+			"箭头自左向右", hotbarTextureUV(hotbarFurnaceArrowColumn), hotbarInstance{
+				X: barX, Y: barTop + (furnaceBarHeight+furnaceBarGap)*got.scale, Width: barWidth * fraction, Height: barHeight,
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			matches := 0
+			for _, quad := range got.quads {
+				if quad.U0 != test.uv[0] ||
+					(test.name == "火焰自下向上" && quad.V1 != test.uv[3]) ||
+					(test.name == "箭头自左向右" && quad.V0 != test.uv[1]) {
+					continue
+				}
+				matches++
+				if quad.X != test.want.X || quad.Y != test.want.Y || quad.Width != test.want.Width || quad.Height != test.want.Height {
+					t.Fatalf("填充=%+v，想要实例=%+v", quad, test.want)
+				}
+				if test.name == "火焰自下向上" && quad.V1 != test.uv[3] {
+					t.Fatalf("火焰 V1=%v，想要保留底边 %v", quad.V1, test.uv[3])
+				}
+				if test.name == "火焰自下向上" && quad.V0 != test.uv[1]+(test.uv[3]-test.uv[1])*(1-fraction) {
+					t.Fatalf("火焰 V0=%v，想要比例端点", quad.V0)
+				}
+				if test.name == "箭头自左向右" && quad.U1 != test.uv[0]+(test.uv[2]-test.uv[0])*fraction {
+					t.Fatalf("箭头 U1=%v，想要比例端点", quad.U1)
+				}
+			}
+			if matches != 1 {
+				t.Fatalf("填充 UV quad=%d，想要 1", matches)
+			}
+		})
 	}
 }
 func TestFurnaceOverlayReplacesRecipeRow(t *testing.T) {
@@ -341,7 +439,8 @@ func TestChestOverlayDraws27SlotsWithItemsAndCounts(t *testing.T) {
 	if len(got.glyphs) != 6 {
 		t.Fatalf("数字数量 = %d，想要 64/5 含阴影且隐藏 1，共 6 个实例", len(got.glyphs))
 	}
-	tiles := got.quads[emptyQuads:]
+	// 标题固定追加在 overlay 尾部，不属于物品色块序列。
+	tiles := got.quads[emptyQuads-1 : len(got.quads)-1]
 	wantItems := []core.ItemID{core.ItemStone, core.ItemCoal, core.ItemIronIngot}
 	for index, item := range wantItems {
 		face := tiles[index*2+1]

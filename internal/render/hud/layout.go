@@ -44,6 +44,10 @@ const (
 	miningNotchWidth    = float32(6)
 	// 背包界面在快捷栏之上再放 3 行，并与快捷栏留出一段间隔。
 	inventoryRowGap = float32(12)
+	// 三类容器共享的标题 header 只扩展 overlay 面板，不改变任何栏位原点或命中区域。
+	containerTitleSize    = float32(16)
+	containerTitleGap     = float32(4)
+	containerHeaderHeight = float32(20)
 
 	hudEdgeMargin = float32(8)
 	// openHUDHeight 是打开背包时从合成面板上沿到 framebuffer 下沿的设计高度，
@@ -57,7 +61,7 @@ const (
 		inventoryRowGap + 3*hotbarSlotSize + 2*hotbarSlotGap +
 		recipeRowGap + hotbarSlotSize +
 		float32(len(inventoryRecipeIDs)-1)*(hotbarSlotSize+hotbarSlotGap) +
-		hotbarPanelPadding + healthHeartSize + statusBarGap
+		hotbarPanelPadding + containerHeaderHeight + healthHeartSize + statusBarGap
 	// 关闭态联合高度从 framebuffer 下沿覆盖快捷栏、状态行和最坏采掘轨道；
 	// `hudScale` 用它保证快捷栏、永久两行状态栈和采掘轨道按同一比例缩小。
 	closedHUDHeight = hotbarBottomMargin + hotbarSlotSize + 2*(statusBarGap+healthHeartSize) +
