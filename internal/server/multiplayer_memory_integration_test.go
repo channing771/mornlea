@@ -10,7 +10,6 @@ import (
 	"math"
 	"reflect"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -65,17 +64,6 @@ type multiplayerRunResult struct {
 	ChunkRevision  uint64
 	MirrorHashes   [multiplayerClientCount][32]byte
 	MirrorRevision [multiplayerClientCount]uint64
-}
-
-type trackedMemoryStore struct {
-	*storage.MemoryStore
-	inFlight atomic.Int64
-}
-
-func (store *trackedMemoryStore) LoadChunk(ctx context.Context, key core.ChunkKey) (storage.StoredChunk, error) {
-	store.inFlight.Add(1)
-	defer store.inFlight.Add(-1)
-	return store.MemoryStore.LoadChunk(ctx, key)
 }
 
 func TestEightMemorySessionsAreDeterministicFor2000Ticks(t *testing.T) {
@@ -695,61 +683,6 @@ func multiplayerPacketStreams(
 		t.Fatalf("Accept TCP: %v", err)
 	}
 	return clientStream, serverStream, closeTransport
-}
-
-func manualMultiplayerStable(running *Server, store *trackedMemoryStore, clients []*multiplayerTCPClient, key core.ChunkKey) bool {
-	running.stepMu.Lock()
-	info, ready := running.engine.ChunkInfo(key)
-	queuesEmpty := len(running.pending) == 0 && len(running.jobs) == 0 && len(running.acquired) == 0 &&
-		len(running.generated) == 0 && len(running.incoming) == 0 && len(running.queued) == 0
-	allPlayersReady := true
-	for index := range clients {
-		update, ok := running.engine.Player(sim.SessionID(index + 1))
-		allPlayersReady = allPlayersReady && ok && update.Ready
-	}
-	running.stepMu.Unlock()
-	if !ready || info.State != sim.ChunkReady || !queuesEmpty || !allPlayersReady || store.inFlight.Load() != 0 {
-		return false
-	}
-	for _, connected := range clients {
-		if !connected.readyWithFootSnapshot() {
-			return false
-		}
-	}
-	return true
-}
-
-func drainMultiplayerClientsToTick(t *testing.T, ctx context.Context, transport string, clients []*multiplayerTCPClient, tick uint64) {
-	t.Helper()
-	for {
-		complete := true
-		progressed := false
-		for index, connected := range clients {
-			for connected.local.ServerTick < tick {
-				got, err := drainOneTask16(connected)
-				if err != nil {
-					t.Fatalf("%s tick %d drain player %d: %v\n%s", transport, tick, index, err, multiplayerDiagnosticsMany(clients))
-				}
-				if !got {
-					complete = false
-					break
-				}
-				progressed = true
-			}
-			if connected.local.ServerTick < tick {
-				complete = false
-			}
-		}
-		if complete {
-			return
-		}
-		if err := ctx.Err(); err != nil {
-			t.Fatalf("%s drain to tick %d: %v\n%s", transport, tick, err, multiplayerDiagnosticsMany(clients))
-		}
-		if !progressed {
-			time.Sleep(integrationPollInterval)
-		}
-	}
 }
 
 func multiplayerDiagnosticsMany(clients []*multiplayerTCPClient) string {
