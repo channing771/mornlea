@@ -1,5 +1,7 @@
 package core
 
+// raycast_helpers_test.go：独立 raycast DDA oracle，供生产 raycast 路径的对照测试复用。
+
 import (
 	"errors"
 	"math"

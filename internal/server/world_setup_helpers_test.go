@@ -1,5 +1,7 @@
 package server
 
+// world_setup_helpers_test.go：server 包共享的内存世界装配助手。
+
 import (
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/sim"

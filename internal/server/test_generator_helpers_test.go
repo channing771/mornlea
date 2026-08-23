@@ -1,5 +1,7 @@
 package server
 
+// test_generator_helpers_test.go：server 包共享的平坦地形测试生成器与障碍夹具。
+
 import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/world"

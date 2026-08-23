@@ -1,5 +1,7 @@
 package physics_test
 
+// collision_helpers_test.go：独立碰撞解析 oracle，供 native/collision 对照测试复用。
+
 import (
 	"math"
 

@@ -2,12 +2,16 @@
 
 package main
 
+// app_test_helpers_test.go：交互式窗口测试的共享替身与消息收发/镜像夹具，供 cmd/mornlea 交互类测试复用。
+
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/channing771/mornlea/internal/client"
+	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 )
 
@@ -62,4 +66,58 @@ func sendInteractiveServerMessage(
 	// The application intentionally drains a non-blocking Receiver; let its sole
 	// blocking reader hand this test message to the inbox before the frame drains.
 	time.Sleep(time.Millisecond)
+}
+
+func loadInteractiveBlock(
+	t *testing.T,
+	app *application,
+	position core.BlockPos,
+	block core.BlockID,
+) {
+	t.Helper()
+	sections := make([]network.SectionData, core.SectionsPerChunk)
+	for index := range sections {
+		sections[index] = network.SectionData{
+			Y: int32(index), Storage: network.SectionSingle, Single: core.AirID,
+		}
+	}
+	chunk := position.Chunk()
+	if _, err := app.mirror.Apply(network.ChunkSnapshot{
+		Dimension: core.Overworld, Chunk: chunk, Revision: 1, Sections: sections,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.mirror.Apply(network.BlockChanges{
+		Dimension: core.Overworld, Chunk: chunk, BaseRevision: 1, NewRevision: 2,
+		Changes: []network.BlockChange{{Position: position, Block: block}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func receiveInteractiveClientMessage(
+	t *testing.T,
+	endpoint network.ServerEndpoint,
+) network.ClientMessage {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	message, err := endpoint.Recv(ctx)
+	if err != nil {
+		t.Fatalf("接收客户端消息: %v", err)
+	}
+	return message
+}
+
+func assertNoInteractiveClientMessage(t *testing.T, endpoint network.ServerEndpoint) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	message, err := endpoint.Recv(ctx)
+	if err == nil {
+		t.Fatalf("意外客户端消息: %#v", message)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("检查无客户端消息: %v", err)
+	}
 }

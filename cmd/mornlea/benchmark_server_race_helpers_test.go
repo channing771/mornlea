@@ -2,7 +2,7 @@
 
 package main
 
-// raceEnabled 在 -race 构建下为 true，与 benchmark_server_norace_test.go 中
+// raceEnabled 在 -race 构建下为 true，与 benchmark_server_norace_helpers_test.go 中
 // 的 false 常量配对。服务端 benchmark 的 darwin-only 测试用它区分构建形态：
 // TestScenarioV7 的 50ms 实时调度门禁在 race 开销（5-20x）+ 全仓并行争核下
 // 测到的是机器负载而非产品行为（docs/superpowers/specs/2026-08-07-ci-stability-merge-gate-design.md §4

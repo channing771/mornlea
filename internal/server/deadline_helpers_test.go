@@ -1,5 +1,7 @@
 package server
 
+// deadline_helpers_test.go：server 包测试共用的活性等待期限常量与分类说明。
+
 import "time"
 
 // 活性等待期限：轮询直到条件成立、到点判失败的那一类等待用的期限。
@@ -26,7 +28,7 @@ import "time"
 //
 // internal/server 的测试跨 package server 与 package server_test
 // 两个包，未导出标识符无法共享，因此本组常量在
-// deadline_external_test.go 中另有一份逐字相同的定义。改动时必须同步。
+// deadline_external_helpers_test.go 中另有一份逐字相同的定义。改动时必须同步。
 const (
 	// shortWaitDeadline 用于单次保存启动等亚秒本机事件（原 100ms–500ms）。
 	shortWaitDeadline = 5 * time.Second

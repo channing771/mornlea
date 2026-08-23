@@ -1,5 +1,7 @@
 package server_test
 
+// world_setup_external_helpers_test.go：server_test 外部包共享的内存世界装配助手。
+
 import (
 	"fmt"
 

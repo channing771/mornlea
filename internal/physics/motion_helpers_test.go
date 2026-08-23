@@ -1,5 +1,7 @@
 package physics_test
 
+// motion_helpers_test.go：独立运动积分 oracle，供 native/step 对照测试复用。
+
 import (
 	"math"
 

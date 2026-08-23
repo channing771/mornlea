@@ -1,5 +1,7 @@
 package server_test
 
+// server_external_helpers_test.go：server_test 外部包共享的关服清理助手。
+
 import (
 	"context"
 	"testing"

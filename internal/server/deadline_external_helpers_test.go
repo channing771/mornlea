@@ -1,15 +1,17 @@
 package server_test
 
+// deadline_external_helpers_test.go：server_test 外部包测试共用的活性等待期限常量（与 deadline_helpers_test.go 同步）。
+
 import "time"
 
-// 活性等待期限，与 deadline_test.go 中的定义逐字相同。
+// 活性等待期限，与 deadline_helpers_test.go 中的定义逐字相同。
 //
 // internal/server 的测试跨 package server 与 package server_test
 // 两个包，未导出标识符无法跨包共享；为三个常量新建 internal 包并到
 // internal/archcheck/dependency_test.go 登记依赖，机械成本高于它解决的问题，
 // 因此选择重复定义。两份必须同步改动。
 //
-// 完整的五类分类说明与禁改区定义见 deadline_test.go（含没有机械
+// 完整的五类分类说明与禁改区定义见 deadline_helpers_test.go（含没有机械
 // 判据、必须读助手实现才能判定的"时长值断言"一类）。
 const (
 	// shortWaitDeadline 用于单次保存启动等亚秒本机事件（原 100ms–500ms）。

@@ -36,7 +36,7 @@ helper 落位规则与验收清单都在这里。条文是原则，本文件是�
 | `_oracle` 后缀 | 以测试 oracle 为基准 | `oracle_test.go` |
 | `_fuzz` 后缀 | Fuzz 入口 | `codec_fuzz_test.go` |
 | `_bench`/`_benchmark`/`_perf` 后缀 | Benchmark 入口 | `bench_test.go` |
-| `_external` 后缀 | `foo_test` 外部包专属视角 | `deadline_external_test.go` |
+| `_external` 后缀 | `foo_test` 外部包专属视角 | `attached_external_test.go` |
 | `_golden` 后缀 | golden 逐字节断言 | `codec_golden_test.go` |
 
 - 前缀表「被证性质」、后缀表「测试种类」，语义不同**不得叠加**（不写
@@ -101,10 +101,12 @@ helper 落位规则与验收清单都在这里。条文是原则，本文件是�
 | `memworld_test.go`（33 行纯 helper，无测试函数） | 并入 `helpers_test.go`（393 行） |
 | `queue_bounded_test.go` 顶部跨文件 helper | `sortItems`/`queuedDueTick` 入 `helpers_test.go`；`boundedPos` 单文件私有，留原处 |
 
-混装识别范例：`cmd/mornlea/app_input_test.go`（约 1300 行、39 个测试，前缀横跨输入
+混装识别范例：`cmd/mornlea/app_input_test.go`（约 1300 行、38 个测试，前缀横跨输入
 预测门控、挖掘 overlay、快捷栏放置、熔炉 UI、箱子 UI、合成、丢弃/进食/使用键七个
-功能域）是当前最典型的拆分候选（此例为识别示范，若该文件已被拆分则自然过时，以
-判据为准）。
+功能域）已于 2026-08 按本文件拆为 `app_input_prediction_test.go`、`app_mining_overlay_test.go`、
+`app_hotbar_placement_test.go`、`app_furnace_ui_test.go`、`app_chest_ui_test.go`、
+`app_inventory_crafting_test.go` 与 `app_use_key_test.go`，共享消息/镜像助手迁入
+`app_test_helpers_test.go`（此例为识别示范；新候选以判据为准）。
 
 ## Rust 映射
 
