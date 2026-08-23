@@ -15,4 +15,4 @@
 - 验证命令：`make rust`；`go test ./internal/sim -race -count=1`；`go test ./internal/network -count=1`；`go test ./... -race`；`go vet ./...`；`openspec validate authoritative-player-melee --strict --no-interactive`。
 - [x] 在 `sim` 实现 active 同维玩家的 3 格、最近命中、`SessionID` 平局、方块遮挡和流体穿透。
 - [x] 通过既有伤害入口结算 2 点伤害和 10 tick 目标冷却，并覆盖同 tick 意图快照与采掘抑制。
-- [ ] 验证单机与 TCP 共用权威路径。
+- [x] 验证单机与 TCP 共用权威路径。

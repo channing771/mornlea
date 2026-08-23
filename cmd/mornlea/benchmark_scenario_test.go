@@ -25,6 +25,9 @@ func TestScenarioV19ContainsSevenSortedUnicodeRemotePlayers(t *testing.T) {
 	if scenarioVersion != 19 {
 		t.Fatalf("scenarioVersion=%d, want 19", scenarioVersion)
 	}
+	if input := fixedBenchmarkPlayerInput(); input.Mining {
+		t.Fatalf("固定 benchmark PlayerInput.Mining=%t，想要 false", input.Mining)
+	}
 	scenario := newMultiplayerBenchmarkScenario()
 	if !scenario.LocalPlayerID.Valid() {
 		t.Fatalf("local PlayerID invalid: %x", scenario.LocalPlayerID)

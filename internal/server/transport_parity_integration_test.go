@@ -229,6 +229,7 @@ func runMiningParityScript(t *testing.T, transport string) miningParityResult {
 		_, messages := parityStep(t, host, endpoint, mirror)
 		for _, message := range messages {
 			applyMiningParityMessage(t, drops, message)
+			assertMiningParityHasNoRemotePlayers(t, message)
 			switch message := message.(type) {
 			case network.PlayerState:
 				assertValidIntegrationPlayerState(t, message)
@@ -380,6 +381,16 @@ func runMiningParityScript(t *testing.T, transport string) miningParityResult {
 		t.Fatalf("%s 断线持久化背包与最终快照不一致", transport)
 	}
 	return result
+}
+
+// assertMiningParityHasNoRemotePlayers 锁定旧采掘脚本是单玩家场景：所有 primary
+// action 都没有三格内玩家候选，因而必须完整走既有采掘状态机。
+func assertMiningParityHasNoRemotePlayers(t *testing.T, message network.ServerMessage) {
+	t.Helper()
+	switch message.(type) {
+	case network.RemotePlayerSpawn, network.RemotePlayerStates, network.RemotePlayerDespawn:
+		t.Fatalf("单玩家采掘 parity 收到远端玩家消息 %T", message)
+	}
 }
 
 func applyMiningParityMessage(t *testing.T, drops *client.ItemDrops, message network.ServerMessage) {

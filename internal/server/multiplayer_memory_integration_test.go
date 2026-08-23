@@ -30,6 +30,11 @@ var multiplayerNames = [...]string{"阿明", "Builder", "小麦", "Redstone", "�
 
 var multiplayerManualTarget = core.BlockPos{X: 0, Y: 1, Z: 6}
 
+var multiplayerStartPositions = [...]mgl32.Vec3{
+	{0.5, 1.001, 0.5}, {1.2, 1.001, 0.5}, {8.5, 1.001, 0.5}, {10.5, 1.001, 0.5},
+	{8.5, 1.001, 3.5}, {10.5, 1.001, 3.5}, {8.5, 1.001, 5.5}, {10.5, 1.001, 5.5},
+}
+
 type multiplayerManualGenerator struct{}
 
 func (multiplayerManualGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
@@ -77,6 +82,101 @@ func TestEightMemorySessionsAreDeterministicFor2000Ticks(t *testing.T) {
 	runEightMemorySessionsDeterminism(t, 2000)
 }
 
+func TestEightPlayersSameTickPrimaryInputKeepsSessionOrder(t *testing.T) {
+	const seed int64 = 160017
+	key := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{}}
+	memory := storage.NewMemory(storage.Metadata{FormatVersion: 2, Seed: seed, SpawnDimension: core.Overworld})
+	if _, err := memory.SaveBatch(context.Background(), []storage.ChunkSave{{
+		Key: key, Revision: 1, Chunk: multiplayerManualGenerator{}.GenerateChunk(key.Pos),
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	tracked := &trackedMemoryStore{MemoryStore: memory}
+	config := hostTestConfig()
+	config.Seed = seed
+	config.MaxPlayers = multiplayerClientCount
+	config.ViewRadius = 0
+	config.OutboxCapacity = 4096
+	running := NewWorld(config, multiplayerManualGenerator{}, tracked)
+	clients := make([]*multiplayerTCPClient, multiplayerClientCount)
+	t.Cleanup(func() {
+		for _, connected := range clients {
+			if connected != nil {
+				_ = closeTask16Client(connected)
+			}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), longWaitDeadline)
+		defer cancel()
+		if err := running.Shutdown(ctx); err != nil {
+			t.Errorf("关闭八人同 tick 近战服务端: %v", err)
+		}
+	})
+	for index := range clients {
+		identity := multiplayerIdentity(byte(0xa0+index), multiplayerNames[index])
+		clientEndpoint, serverEndpoint := network.NewMemoryPair(4096)
+		if _, err := running.AttachSession(eightMeleeSessionSpec(index, identity, serverEndpoint)); err != nil {
+			_ = clientEndpoint.Close()
+			_ = serverEndpoint.Close()
+			t.Fatalf("AttachSession player %d: %v", index, err)
+		}
+		clients[index] = &multiplayerTCPClient{
+			identity: identity, endpoint: clientEndpoint, receiver: client.NewReceiver(clientEndpoint, 4096),
+			mirror: client.NewMirror(), drops: client.NewItemDrops(), remotes: client.NewRemotePlayers(),
+		}
+	}
+	warmCtx, cancelWarm := context.WithTimeout(context.Background(), longWaitDeadline)
+	defer cancelWarm()
+	for !manualMultiplayerStable(running, tracked, clients, key) {
+		result := running.StepForTest()
+		drainMultiplayerClientsToTick(t, warmCtx, "eight-melee", clients, result.Tick)
+		if err := warmCtx.Err(); err != nil {
+			t.Fatalf("eight-melee warm-up: %v", err)
+		}
+	}
+	for index, connected := range clients {
+		ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
+		err := connected.endpoint.Send(ctx, network.PlayerInput{Sequence: 1, Yaw: 0, Pitch: 0, Mining: true})
+		cancel()
+		if err != nil {
+			t.Fatalf("player %d primary input: %v", index, err)
+		}
+	}
+	waitIntegrationCondition(t, "eight melee inputs queued", func() bool { return len(running.incoming) == multiplayerClientCount })
+	result := running.StepForTest()
+	drainCtx, cancelDrain := context.WithTimeout(context.Background(), waitDeadline)
+	drainMultiplayerClientsToTick(t, drainCtx, "eight-melee", clients, result.Tick)
+	cancelDrain()
+	running.stepMu.Lock()
+	sessionCount := len(running.sessions)
+	running.stepMu.Unlock()
+	if sessionCount != multiplayerClientCount {
+		t.Fatalf("同 tick primary action 后 session=%d，想要 %d", sessionCount, multiplayerClientCount)
+	}
+	for index, connected := range clients {
+		wantHealth := uint8(core.MaxHealth)
+		if index%2 == 1 {
+			wantHealth -= 2
+		}
+		if connected.local.LastInputSequence != 1 || connected.local.Health != wantHealth {
+			t.Fatalf("session %d state=%+v，想要 sequence=1 health=%d", index+1, connected.local, wantHealth)
+		}
+	}
+}
+
+func eightMeleeSessionSpec(index int, identity network.Identity, endpoint network.ServerEndpoint) SessionSpec {
+	pair := index / 2
+	position := mgl32.Vec3{float32(pair*4) + 0.5, 1.001, 4.5}
+	if index%2 == 1 {
+		position[2] = 2.5
+	}
+	location := sim.PlayerLocation{Dimension: core.Overworld, Position: position}
+	return SessionSpec{
+		ID: sim.SessionID(index + 1), Generation: 1,
+		PlayerID: identity.PlayerID, DisplayName: identity.DisplayName, Endpoint: endpoint,
+		Restore: sim.PlayerRestore{Current: &location, Safe: &location, SpawnDimension: core.Overworld},
+	}
+}
+
 func fixedEightPlayerScript(ticks uint64) []multiplayerScriptStep {
 	steps := make([]multiplayerScriptStep, 0, int(ticks)*multiplayerClientCount+int(ticks/20))
 	var miningUntil [multiplayerClientCount]uint64
@@ -84,9 +184,6 @@ func fixedEightPlayerScript(ticks uint64) []multiplayerScriptStep {
 		if tick%20 == 0 && (tick/20)%2 == 1 {
 			player := int((tick/20 - 1) % multiplayerClientCount)
 			miningUntil[player] = tick + 29
-			if tick == 20 {
-				miningUntil[1] = tick + 29
-			}
 		}
 		sign := int8(1)
 		if ((tick - 1) / 10 % 2) != 0 {
@@ -97,8 +194,8 @@ func fixedEightPlayerScript(ticks uint64) []multiplayerScriptStep {
 			if tick <= miningUntil[player] {
 				input.Yaw = math.Pi
 				input.Mining = true
-			} else if player < 2 && tick < 20 {
-				// 前两名玩家保持同一出生位置，以便 tick 20 竞争同一方块。
+			} else if (player == 0 && tick < 20) || (player == 1 && tick <= 49) {
+				// 首名玩家先停在固定方块前，第二名玩家一直停在射线外，避免首段采掘被近战分流。
 			} else {
 				switch player % 4 {
 				case 0:
@@ -385,7 +482,7 @@ func runEightManualMultiplayer(t *testing.T, transport string, ticks uint64) mul
 		drainMultiplayerClientsToTick(t, drainCtx, transport, clients, result.Tick)
 		drainCancel()
 		if tick == 49 {
-			assertMultiplayerMiningCompetition(t, transport, clients[:2])
+			assertMultiplayerMiningWithoutPlayerTarget(t, transport, clients[:1])
 		}
 		if got := len(running.incoming); got != 0 {
 			t.Fatalf("%s tick %d ends with incoming=%d\n%s", transport, tick, got, multiplayerDiagnosticsMany(clients))
@@ -437,7 +534,7 @@ func runEightManualMultiplayer(t *testing.T, transport string, ticks uint64) mul
 	return outcome
 }
 
-func assertMultiplayerMiningCompetition(t *testing.T, transport string, clients []*multiplayerTCPClient) {
+func assertMultiplayerMiningWithoutPlayerTarget(t *testing.T, transport string, clients []*multiplayerTCPClient) {
 	t.Helper()
 	blockIndex, ok := world.ChunkBlockIndex(multiplayerManualTarget)
 	if !ok {
@@ -464,7 +561,7 @@ func assertMultiplayerMiningCompetition(t *testing.T, transport string, clients 
 			}
 		}
 		if len(progress) != 29 {
-			t.Fatalf("%s 竞争玩家 %d 进度长度=%d，想要 29: %v", transport, index, len(progress), progress)
+			t.Fatalf("%s 采掘玩家 %d 进度长度=%d，想要 29: %v", transport, index, len(progress), progress)
 		}
 		for offset, got := range progress {
 			if want := uint16(offset + 1); got != want {
@@ -619,7 +716,7 @@ func assertRawBusinessTicks(
 }
 
 func multiplayerSessionSpec(index int, identity network.Identity, endpoint network.ServerEndpoint) SessionSpec {
-	location := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
+	location := sim.PlayerLocation{Dimension: core.Overworld, Position: multiplayerStartPositions[index]}
 	return SessionSpec{
 		ID: sim.SessionID(index + 1), Generation: 1,
 		PlayerID: identity.PlayerID, DisplayName: identity.DisplayName, Endpoint: endpoint,
