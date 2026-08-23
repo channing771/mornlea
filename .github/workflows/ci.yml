@@ -68,6 +68,8 @@ jobs:
     needs: native-macos
     runs-on: macos-latest
     steps:
+      - name: 记录开始时间
+        run: echo "CI_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
@@ -126,6 +128,13 @@ jobs:
           go vet ./...
           gofmt -l . | tee /tmp/fmt.txt
           test ! -s /tmp/fmt.txt
+      - name: 记录 quality 信息
+        if: ${{ always() }}
+        run: |
+          {
+            echo "quality seconds: $(( $(date +%s) - CI_START_EPOCH ))"
+            echo "runner: ${RUNNER_OS}/$(uname -m)"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   go-race:
     needs: native-macos
@@ -191,6 +200,65 @@ jobs:
             echo "runner: ${RUNNER_OS}/$(uname -m)"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  integration:
+    needs: native-macos
+    runs-on: macos-latest
+    steps:
+      - name: 记录开始时间
+        run: echo "CI_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: |
+            go.sum
+            engine/include/mornlea_engine.h
+            engine/include/mornlea_client.h
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-macos-${{ github.sha }}
+          path: engine/target/release
+      - name: 校验 native artifact
+        run: |
+          test -f engine/target/release/libmornlea_engine.dylib
+          test -f engine/target/release/libmornlea_client.dylib
+          test "$(cat engine/target/release/native-source-sha.txt)" = "$GITHUB_SHA"
+          test "$(wc -l < engine/target/release/native-artifact-manifest.txt | tr -d ' ')" = 3
+          {
+            IFS=' ' read -r kind sha extra
+            test "$kind" = sha
+            test "$sha" = "$GITHUB_SHA"
+            test -z "$extra"
+            validate_artifact() {
+              expected_path=$1
+              IFS=' ' read -r path size digest extra
+              test "$path" = "$expected_path"
+              test -z "$extra"
+              case "$size" in ''|*[!0-9]*) exit 1 ;; esac
+              test "$size" = "$(stat -f '%z' "$path")"
+              test "$digest" = "$(shasum -a 256 "$path" | awk '{print $1}')"
+            }
+            validate_artifact engine/target/release/libmornlea_engine.dylib
+            validate_artifact engine/target/release/libmornlea_client.dylib
+          } < engine/target/release/native-artifact-manifest.txt
+      - name: 50ms 服务端探针门禁
+        run: go test ./cmd/mornlea -run '^TestScenarioV7EightSessionServerProbeIsRealAndBounded$' -count=1
+      - name: TCP 重启与 Memory/TCP parity 重复门禁
+        run: go test ./internal/server -run 'TestTCPPlayerAndWorld|TestMemoryTCPParity' -race -count=10
+      - name: M3C v6 八玩家与性能报告门禁
+        run: go test ./internal/client ./internal/server ./cmd/mornlea ./cmd/perfcheck -run 'Test(PerfReportV6|ScenarioV6|PerfcheckV6|PerfcheckV5SameScenario|PerformanceThresholds|InterestObserver|HostStats|BenchmarkServerEpoch|BenchmarkServerMeasuredWindow)' -count=1
+      - name: 微基准与平台无关阈值
+        run: go test ./... -bench=. -benchtime=1x -run='^$'
+      - name: M3C 多人微基准可执行性
+        run: go test ./internal/network ./internal/server ./internal/render -run '^$' -bench '(RemotePlayerStateCodec|EightPlayerInterest|RemoteAvatarNameTag)' -benchmem -benchtime=100x -count=1
+      - name: 记录 integration 信息
+        if: ${{ always() }}
+        run: |
+          {
+            echo "integration seconds: $(( $(date +%s) - CI_START_EPOCH ))"
+            echo "runner: ${RUNNER_OS}/$(uname -m)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   linux-server:
     runs-on: ubuntu-latest
     steps:
@@ -248,3 +316,16 @@ jobs:
           test "$native_help_rc" -eq 1
           grep -F 'flag: help requested' /tmp/mornlea-server-help.txt
           ! grep -E 'error while loading shared libraries|cannot open shared object' /tmp/mornlea-server-help.txt
+
+  test:
+    if: ${{ always() }}
+    needs: [native-macos, quality, go-race, integration, linux-server]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 汇总全部必需门禁
+        run: |
+          test "${{ needs.native-macos.result }}" = success
+          test "${{ needs.quality.result }}" = success
+          test "${{ needs['go-race'].result }}" = success
+          test "${{ needs.integration.result }}" = success
+          test "${{ needs.linux-server.result }}" = success

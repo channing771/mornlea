@@ -41,3 +41,9 @@
 - `quality` 和 `go-race` 都只在 `native-macos` 成功后 checkout、安装 Go、下载 `native-macos-${{ github.sha }}` 到 `engine/target/release`，再以相同严格三行 manifest 校验当前 SHA、两条固定路径、字节数和 SHA-256；两者均不执行 `make rust`，只有 `quality` 安装 Node。
 - `quality` 独占 OpenSpec、hooks、四个既有 Go 门禁、`go vet ./...`、`gofmt`，并在同一 checkout 中比较三片 race 的完整包集合。
 - `go-race` 的 `cmd`、`internal-server`、`internal-rest` 三片以 `fail-fast: false` 执行原有 `-race -p=1`；仅 `cmd` 排除独立的 50ms probe，每片在 `always()` 中记录自身秒数和 runner OS/arch。
+
+### Task 4 已实现事实
+
+- `integration` 复用 `quality` 与 `go-race` 的严格三行 manifest 校验，并按原有参数依次执行独立 50ms probe、TCP/Memory parity、性能报告、全仓微基准及多人微基准；没有重建 Rust 或新增性能时长阈值。
+- `quality` 与 `integration` 均在 `always()` 中记录总墙钟秒数和 runner OS/arch；`linux-server` 正文逐行对照保持不变。
+- 最终 `test` 以 `always()` 依赖 `native-macos`、`quality`、`go-race`、`integration` 与 `linux-server`，逐项仅接受 `success`，因此 failure、cancelled、skipped 与缺失结果均 fail-closed，且没有 `continue-on-error` 或自动 retry。
