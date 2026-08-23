@@ -30,18 +30,24 @@ func (feedback *localAudioFeedback) Reset() {
 	*feedback = localAudioFeedback{}
 }
 
-// ObservePlayerState 在新鲜且已应用的权威状态上匹配伤害、采掘目标和进食另一半。
-func (feedback *localAudioFeedback) ObservePlayerState(state network.PlayerState) (audio.Cue, bool) {
+// ObservePlayerState 在新鲜且已应用的权威状态上独立匹配进食完成与伤害，
+// 同时维护采掘目标；两个返回位允许同一状态确认两种 cue，且保持零分配。
+func (feedback *localAudioFeedback) ObservePlayerState(state network.PlayerState) (eatingCompleted, damaged bool) {
 	if state.Reset || !state.Ready {
 		feedback.Reset()
-		return 0, false
+		return false, false
 	}
-	damaged := feedback.hasHealth && state.Health < feedback.health
+	damaged = feedback.hasHealth && state.Health < feedback.health
 	feedback.hasHealth = true
 	feedback.health = state.Health
 	if state.MiningActive {
 		feedback.hasMiningTarget = true
 		feedback.miningTarget = state.MiningTarget
+	} else {
+		// 服务端在同一 tick 先发成功方块增量、再发 inactive 玩家状态；
+		// 因此到达这里时正常完成 cue 已被消费，可以安全作废旧目标，避免
+		// 松键或拒绝后由其他玩家移除该格时误响。
+		feedback.hasMiningTarget = false
 	}
 	hungerIncrease := feedback.hasHunger && state.Hunger > feedback.hunger
 	feedback.hasHunger = true
@@ -49,19 +55,14 @@ func (feedback *localAudioFeedback) ObservePlayerState(state network.PlayerState
 	if hungerIncrease {
 		if feedback.foodDecrease {
 			feedback.clearEating()
-			if !damaged {
-				return audio.CueEatingComplete, true
-			}
+			eatingCompleted = true
 		} else {
 			feedback.hungerIncrease = true
 		}
 	} else {
 		feedback.foodDecrease = false
 	}
-	if damaged {
-		return audio.CueDamage, true
-	}
-	return 0, false
+	return eatingCompleted, damaged
 }
 
 // ObserveInventoryState 在已验证并镜像的背包状态上匹配选中食物恰减一件。

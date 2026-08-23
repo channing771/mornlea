@@ -137,12 +137,54 @@ func TestLocalAudioMiningOnlyAfterAppliedAirDeltaAtConfirmedTarget(t *testing.T)
 	app.drainServerMessages(1)
 	recorder.want(t, audio.CueMiningComplete)
 
+	// 服务端先发布成功方块增量、后发布 inactive 状态；后者不得吞掉已经播放的完成 cue。
+	sendInteractiveServerMessage(t, endpoint, audioPlayerState(2, 20, 10, false))
+	app.drainServerMessages(1)
+	recorder.want(t, audio.CueMiningComplete)
+
 	sendInteractiveServerMessage(t, endpoint, network.BlockChanges{
 		Dimension: core.Overworld, Chunk: target.Chunk(), BaseRevision: 4, NewRevision: 5,
 		Changes: []network.BlockChange{{Position: target, Block: core.AirID}},
 	})
 	app.drainServerMessages(1)
 	recorder.want(t, audio.CueMiningComplete)
+}
+
+func TestLocalAudioMiningInactiveStateInvalidatesConfirmedTarget(t *testing.T) {
+	for _, rejected := range []bool{false, true} {
+		t.Run(map[bool]string{false: "松开后", true: "拒绝后"}[rejected], func(t *testing.T) {
+			app, endpoint := newInteractiveTestApplication(t)
+			var recorder audioCueRecorder
+			app.playCue = recorder.play
+			target := core.BlockPos{X: 1, Y: 10, Z: 2}
+			loadInteractiveBlock(t, app, target, core.StoneID)
+
+			active := audioPlayerState(1, 20, 10, false)
+			active.MiningActive = true
+			active.MiningTarget = target
+			active.MiningProgressTicks = 1
+			active.MiningRequiredTicks = 2
+			active.MiningHarvestable = true
+			sendInteractiveServerMessage(t, endpoint, active)
+			app.drainServerMessages(1)
+			if rejected {
+				sendInteractiveServerMessage(t, endpoint, network.CommandRejected{
+					Sequence: 1,
+					Reason:   network.RejectNoTarget,
+				})
+				app.drainServerMessages(1)
+			}
+			sendInteractiveServerMessage(t, endpoint, audioPlayerState(2, 20, 10, false))
+			app.drainServerMessages(1)
+
+			sendInteractiveServerMessage(t, endpoint, network.BlockChanges{
+				Dimension: core.Overworld, Chunk: target.Chunk(), BaseRevision: 2, NewRevision: 3,
+				Changes: []network.BlockChange{{Position: target, Block: core.AirID}},
+			})
+			app.drainServerMessages(1)
+			recorder.want(t)
+		})
+	}
 }
 
 func TestLocalAudioMiningRequiresActuallyAppliedDelta(t *testing.T) {
@@ -365,6 +407,41 @@ func TestLocalAudioEatingMatchesEitherConfirmedMessageOrder(t *testing.T) {
 			}
 			recorder.want(t, audio.CueEatingComplete)
 		})
+	}
+}
+
+func TestLocalAudioPlayerStatePreservesEatingAndDamageCues(t *testing.T) {
+	app, endpoint := newInteractiveTestApplication(t)
+	var recorder audioCueRecorder
+	app.playCue = recorder.play
+
+	sendInteractiveServerMessage(t, endpoint, network.InventoryState{
+		Inventory: audioInventory(core.ItemBread, 2),
+	})
+	app.drainServerMessages(1)
+	sendInteractiveServerMessage(t, endpoint, audioPlayerState(1, 20, 10, false))
+	app.drainServerMessages(1)
+	sendInteractiveServerMessage(t, endpoint, network.InventoryState{
+		Inventory: audioInventory(core.ItemBread, 1),
+	})
+	app.drainServerMessages(1)
+	sendInteractiveServerMessage(t, endpoint, audioPlayerState(2, 19, 15, false))
+	app.drainServerMessages(1)
+
+	if len(recorder) != 2 {
+		t.Fatalf("同一状态的 cue=%v，想要进食与伤害各一次", recorder)
+	}
+	var eating, damage int
+	for _, cue := range recorder {
+		switch cue {
+		case audio.CueEatingComplete:
+			eating++
+		case audio.CueDamage:
+			damage++
+		}
+	}
+	if eating != 1 || damage != 1 {
+		t.Fatalf("同一状态的 cue=%v，进食=%d 伤害=%d，想要各 1", recorder, eating, damage)
 	}
 }
 

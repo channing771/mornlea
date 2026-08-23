@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"runtime"
 
+	"github.com/channing771/mornlea/internal/audio"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
@@ -42,8 +43,14 @@ func (a *application) drainServerMessages(maxMessages int) {
 			}
 			if state.Reset {
 				a.audioFeedback.Reset()
-			} else if cue, play := a.audioFeedback.ObservePlayerState(state); play {
-				a.playLocalCue(cue)
+			} else {
+				eatingCompleted, damaged := a.audioFeedback.ObservePlayerState(state)
+				if eatingCompleted {
+					a.playLocalCue(audio.CueEatingComplete)
+				}
+				if damaged {
+					a.playLocalCue(audio.CueDamage)
+				}
 			}
 			a.serverTick = state.ServerTick
 			a.worldTimeTicks = state.WorldTimeTicks
