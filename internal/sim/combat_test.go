@@ -129,6 +129,108 @@ func TestPlayerMeleeTarget(t *testing.T) {
 	})
 }
 
+// TestPlayerMeleeHeldResolvesDamageCooldownAndRelease 覆盖持续 primary action 的
+// 首次命中、目标冷却与松手三个可观察边界。
+func TestPlayerMeleeHeldResolvesDamageCooldownAndRelease(t *testing.T) {
+	engine, sessions := readyMeleePlayers(t, 2)
+	setMeleePlayer(engine, sessions[0], mgl32.Vec3{0.5, 1, 4.5}, 0)
+	setMeleePlayer(engine, sessions[1], mgl32.Vec3{0.5, 1, 2.5}, 0)
+	attacker := engine.sessions[sessions[0]].player
+	target := engine.sessions[sessions[1]].player
+	attacker.miningHeld = true
+
+	engine.Step()
+	if got := target.health; got != 18 {
+		t.Fatalf("首 tick health=%d，想要 18", got)
+	}
+	for range 9 {
+		engine.Step()
+	}
+	if got := target.health; got != 18 {
+		t.Fatalf("冷却内 health=%d，想要 18", got)
+	}
+	engine.Step()
+	if got := target.health; got != 16 {
+		t.Fatalf("第十个间隔 tick health=%d，想要 16", got)
+	}
+	attacker.miningHeld = false
+	engine.Step()
+	if got := target.health; got != 16 {
+		t.Fatalf("松手后 health=%d，想要保持 16", got)
+	}
+}
+
+// TestPlayerMeleeSimultaneousLethalIntents 覆盖同 tick 的所有意图必须在死亡结算
+// 之前收集：双方都只有两点生命时，相向 primary action 必须让双方都进入重生。
+func TestPlayerMeleeSimultaneousLethalIntents(t *testing.T) {
+	engine, sessions := readyMeleePlayers(t, 2)
+	setMeleePlayer(engine, sessions[0], mgl32.Vec3{0.5, 1, 4.5}, 0)
+	setMeleePlayer(engine, sessions[1], mgl32.Vec3{0.5, 1, 2.5}, math.Pi)
+	for _, id := range sessions {
+		player := engine.sessions[id].player
+		player.health = 2
+		player.miningHeld = true
+	}
+
+	result := engine.Step()
+	for _, id := range sessions {
+		player := engine.sessions[id].player
+		if player.health != core.MaxHealth || player.lifecycle != PlayerPendingSpawn {
+			t.Fatalf("session %d 死亡结算后 (health, lifecycle)=(%d, %d)，想要 (%d, %d)",
+				id, player.health, player.lifecycle, core.MaxHealth, PlayerPendingSpawn)
+		}
+	}
+	for _, update := range result.Players {
+		if update.Health == 0 {
+			t.Fatalf("发布了 health 0: %+v", update)
+		}
+	}
+}
+
+// TestPlayerMeleeCooldownBelongsToTarget 覆盖冷却不因换一名攻击者而失效。
+func TestPlayerMeleeCooldownBelongsToTarget(t *testing.T) {
+	engine, sessions := readyMeleePlayers(t, 3)
+	setMeleePlayer(engine, sessions[0], mgl32.Vec3{0.5, 1, 4.5}, 0)
+	setMeleePlayer(engine, sessions[1], mgl32.Vec3{0.5, 1, 2.5}, 0)
+	setMeleePlayer(engine, sessions[2], mgl32.Vec3{10.5, 1, 4.5}, 0)
+	engine.sessions[sessions[0]].player.miningHeld = true
+
+	engine.Step()
+	target := engine.sessions[sessions[1]].player
+	if target.health != 18 {
+		t.Fatalf("首次命中 health=%d，想要 18", target.health)
+	}
+	setMeleePlayer(engine, sessions[0], mgl32.Vec3{10.5, 1, 4.5}, 0)
+	setMeleePlayer(engine, sessions[2], mgl32.Vec3{0.5, 1, 4.5}, 0)
+	engine.sessions[sessions[0]].player.miningHeld = false
+	engine.sessions[sessions[2]].player.miningHeld = true
+
+	engine.Step()
+	if target.health != 18 {
+		t.Fatalf("换攻击者穿透目标冷却 health=%d，想要 18", target.health)
+	}
+}
+
+// TestPlayerMeleeEightPlayersResolveOneIntentEach 覆盖满员时意图使用 SessionID
+// 稳定顺序收集，且每名攻击者在同一 tick 至多写入一条意图。
+func TestPlayerMeleeEightPlayersResolveOneIntentEach(t *testing.T) {
+	engine, sessions := readyMeleePlayers(t, 8)
+	for pair := range 4 {
+		x := float32(pair * 4)
+		setMeleePlayer(engine, sessions[pair*2], mgl32.Vec3{x + 0.5, 1, 4.5}, 0)
+		setMeleePlayer(engine, sessions[pair*2+1], mgl32.Vec3{x + 0.5, 1, 2.5}, math.Pi)
+		engine.sessions[sessions[pair*2]].player.miningHeld = true
+		engine.sessions[sessions[pair*2+1]].player.miningHeld = true
+	}
+
+	engine.Step()
+	for _, id := range sessions {
+		if got := engine.sessions[id].player.health; got != 18 {
+			t.Fatalf("session %d health=%d，想要每人只受一次 2 点伤害后的 18", id, got)
+		}
+	}
+}
+
 func readyMeleePlayers(t *testing.T, count int) (*Engine, []SessionID) {
 	t.Helper()
 	engine, _ := readyMovementPlayer(t)

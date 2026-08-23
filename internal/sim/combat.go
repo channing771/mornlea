@@ -15,6 +15,49 @@ const (
 	playerMeleeCooldownTicks = uint8(10)
 )
 
+type meleeIntent struct {
+	attacker SessionID
+	target   SessionID
+}
+
+// advancePlayerMelee 在同一份已排序 active 会话快照上先收集全部有效近战意图，
+// 再统一结算伤害。收集与应用分开，确保同 tick 被打到零血的攻击者仍会提交已冻结
+// 的反击意图；死亡交给紧随其后的 `settleDeaths` 结算。
+func (engine *Engine) advancePlayerMelee() {
+	sessions := engine.sortedActiveSessions()
+	for _, id := range sessions {
+		player := engine.sessions[id].player
+		player.meleeSuppressedMining = false
+		if player.meleeCooldownTicks > 0 {
+			player.meleeCooldownTicks--
+		}
+	}
+
+	var intents [8]meleeIntent
+	count := 0
+	for _, id := range sessions {
+		attacker := engine.sessions[id].player
+		if !attacker.miningHeld {
+			continue
+		}
+		targetID, ok := engine.playerMeleeTarget(id, sessions)
+		if !ok {
+			continue
+		}
+		target := engine.sessions[targetID].player
+		if target.meleeCooldownTicks != 0 {
+			continue
+		}
+		attacker.meleeSuppressedMining = true
+		target.meleeCooldownTicks = playerMeleeCooldownTicks
+		intents[count] = meleeIntent{attacker: id, target: targetID}
+		count++
+	}
+	for _, intent := range intents[:count] {
+		engine.sessions[intent.target].player.applyDamage(playerMeleeDamage)
+	}
+}
+
 // rayAABBDistance 返回单位方向射线最早进入 bounds 的非负距离。近战只接受三格内
 // 命中；平行于某轴时，起点已落在该轴盒外就不可能命中。
 func rayAABBDistance(origin, direction mgl32.Vec3, bounds core.AABB) (float32, bool) {

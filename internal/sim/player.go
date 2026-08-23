@@ -707,6 +707,8 @@ func (player *playerState) beginReset() {
 	player.drownTicks = 0
 	player.input = physics.Input{}
 	player.miningHeld = false
+	player.meleeCooldownTicks = 0
+	player.meleeSuppressedMining = false
 	player.eatingHeld = false
 	player.mining = miningState{}
 	// 死亡与位置跳变都经这里，进食进度随之作废：重生后站在出生点继续吃完

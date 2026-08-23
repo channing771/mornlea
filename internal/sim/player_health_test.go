@@ -76,3 +76,27 @@ func TestPlayerRestoreMissingHealthDefaultsToFullThroughSnapshot(t *testing.T) {
 		t.Fatalf("PlayerSnapshot health=%d ok=%v，想要 %d", snapshot.Health, ok, core.MaxHealth)
 	}
 }
+
+// TestPlayerMeleeUsesDamageEntryPoint 覆盖近战经 `applyDamage` 生效，从而复用
+// 受伤重置回血计时和中断进食的既有副作用。
+func TestPlayerMeleeUsesDamageEntryPoint(t *testing.T) {
+	engine, sessions := readyMeleePlayers(t, 2)
+	setMeleePlayer(engine, sessions[0], mgl32.Vec3{0.5, 1, 4.5}, 0)
+	setMeleePlayer(engine, sessions[1], mgl32.Vec3{0.5, 1, 2.5}, 0)
+	attacker := engine.sessions[sessions[0]].player
+	target := engine.sessions[sessions[1]].player
+	attacker.miningHeld = true
+	target.ticksSinceDamage = 12
+	target.eating = eatingState{progressTicks: 7}
+	target.eatingHeld = true
+	target.hunger = 10
+	target.inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemBread, Count: 1}
+
+	engine.Step()
+	if target.ticksSinceDamage != 0 {
+		t.Fatalf("近战后回血计时=%d，想要 0", target.ticksSinceDamage)
+	}
+	if target.eating != (eatingState{}) {
+		t.Fatalf("近战后进食进度=%+v，想要零值", target.eating)
+	}
+}
