@@ -144,7 +144,7 @@ Task 2、3、4 的 workflow 静态契约脚本均通过，YAML 可解析；`BASE
 
 ### Task 6：远端既有 server 偶发测试根修
 
-- RED（hosted）：run `32636980593` attempt 1 的 Memory/TCP 事件内容与各自客户端 EventID 流一致，只在 EventID 6/7 的 recipient 0/1 跨流拼接顺序不同；attempt 2 的事件 `[1 3 9 4 5]` 表明开始节点 outcome 最终已发布 speech，且 `applyDialogueOutcome` 在发布前已清除 `dialogueInFlight`。固定 2ms Sleep 没有保证该 outcome 在后续 progress/completed 节点开始前就绪，因此这些后续节点当时仍可被单在途守卫合法跳过，完整节点集随之缺失。
+- RED（hosted）：run `32636980593` attempt 1 的 Memory/TCP 事件内容与各自客户端 EventID 流一致，只在 EventID 6/7 的 recipient 0/1 跨流拼接顺序不同；attempt 2 的事件 `[1 3 9 4 5]` 表明开始节点 outcome 已在 progress tick 由先执行的 `applyDialogueOutcomes` 落地：它先清除 `dialogueInFlight` 并发布 speech，随后 `advanceRunners` 触发的 progress 节点成功发起请求。固定 2ms Sleep 没有保证 progress outcome 在 completed tick 前就绪，因此 progress 请求跨到 completed，terminal 节点被单在途守卫合法跳过；随后到达的 progress outcome 又因任务已进入终态而作为过时结果丢弃，最终只观察到一条 speech。
 - RED（本地确定性）：新增等价双接收者交错回归测试在未规范化时失败；`TestCompanionDialogueOneInFlightPerCompanion -race -count=10` 稳定通过，证明测试若不建立 outcome-ready 边界就不能同时要求完整节点集。
 - 根修边界：先逐接收者断言原始流 EventID 严格递增，再仅按 `(EventID, recipient)` 规范化跨流比较；阶段验收使用既有 `dialogueResults` 有界通道作为条件边界，不放宽超时、不加重试、不改队列或产品台词语义。
 
