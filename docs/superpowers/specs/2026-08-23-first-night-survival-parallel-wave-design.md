@@ -2,7 +2,7 @@
 
 日期：2026-08-23
 
-状态：设计已批准，等待用户复核本文后再编写实施计划
+状态：设计已批准，实施计划已编写
 
 ## 背景
 
@@ -104,7 +104,7 @@ grid 非空期间，任何其他会增加玩家物品的成功路径也必须先
 
 火把零碰撞、非不透明、发光等级 14。`core.BlockEmission` 成为服务端生成判定与客户端 registry 的单一发光表来源；实际传播仍复用现有客户端静态方块光实现。
 
-engine ABI v7 的 registry 只增加一个有限 model tag，表达既有 cube/plant/fluid 口径以及火把方向、床方向与床半块。Rust 为火把发出固定上界的原创窄柱/墙面倾斜 quad，quad 仍为 8 bytes，继续走 terrain cutout pass，不新增 pipeline、动态 GPU 资源或任意模型格式。
+engine ABI v7 的 registry 只增加一个有限 model tag，表达既有 cube/plant 以及火把方向、床方向与床半块；流体仍使用 cube tag 和既有 `fluidHeight` 输入，不增加重复枚举。Rust 为火把发出固定上界的原创窄柱/墙面倾斜 quad，quad 仍为 8 bytes，继续走 terrain cutout pass，不新增 pipeline、动态 GPU 资源或任意模型格式。
 
 火把配方是煤炭位于木棍上方，产出 4 个火把。`torch-night` 场景同时覆盖落地与墙面形态、近远光衰减、支撑关系和封闭空间无漏光。
 
