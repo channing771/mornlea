@@ -31,8 +31,8 @@ var multiplayerNames = [...]string{"阿明", "Builder", "小麦", "Redstone", "�
 var multiplayerManualTarget = core.BlockPos{X: 0, Y: 1, Z: 6}
 
 var multiplayerStartPositions = [...]mgl32.Vec3{
-	{0.5, 1.001, 0.5}, {1.2, 1.001, 0.5}, {8.5, 1.001, 0.5}, {10.5, 1.001, 0.5},
-	{8.5, 1.001, 3.5}, {10.5, 1.001, 3.5}, {8.5, 1.001, 5.5}, {10.5, 1.001, 5.5},
+	{0.5, 1.001, 0.5}, {2.5, 1.001, 0.5}, {4.5, 1.001, 0.5}, {6.5, 1.001, 0.5},
+	{8.5, 1.001, 0.5}, {10.5, 1.001, 0.5}, {12.5, 1.001, 0.5}, {14.5, 1.001, 0.5},
 }
 
 type multiplayerManualGenerator struct{}
@@ -234,14 +234,11 @@ func fixedEightPlayerScript(ticks uint64) []multiplayerScriptStep {
 			} else if (player == 0 && tick < 20) || (player == 1 && tick <= 49) {
 				// 首名玩家先停在固定方块前，第二名玩家一直停在射线外，避免首段采掘被近战分流。
 			} else {
-				switch player % 4 {
-				case 0:
-					input.MoveX = sign
-				case 1:
-					input.MoveX = -sign
-				case 2:
+				// 采掘脚本的每名玩家各占一条 X 车道；移动只沿车道，令 `Mining`
+				// 期间的 +Z 射线始终没有其他 active 同维玩家候选。
+				if player%2 == 0 {
 					input.MoveZ = sign
-				case 3:
+				} else {
 					input.MoveZ = -sign
 				}
 			}

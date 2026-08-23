@@ -19,6 +19,13 @@ import (
 
 var multiplayerRestartTarget = core.BlockPos{X: 8, Y: 1, Z: 2}
 
+// multiplayerRestartStartPositions 为八名重启测试玩家分配独立 X 车道；首名玩家
+// 向 -Z 的 `Mining` 射线因而不会穿过另一个 active 同维玩家。
+var multiplayerRestartStartPositions = [...][3]float32{
+	{8.5, 1.001, 8.5}, {10.5, 1.001, 8.5}, {12.5, 1.001, 8.5}, {14.5, 1.001, 8.5},
+	{0.5, 1.001, 8.5}, {2.5, 1.001, 8.5}, {4.5, 1.001, 8.5}, {6.5, 1.001, 8.5},
+}
+
 type multiplayerRestartGenerator struct{}
 
 func (multiplayerRestartGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
@@ -74,7 +81,7 @@ func runEightPlayersSurviveDiskRestart(t *testing.T) {
 	}
 	for index := range identities {
 		identities[index] = multiplayerIdentity(byte(0xa0+index), multiplayerNames[index])
-		location := storage.PlayerLocation{Dimension: core.Overworld, Position: [3]float32{8.5, 1.001, 8.5}}
+		location := storage.PlayerLocation{Dimension: core.Overworld, Position: multiplayerRestartStartPositions[index]}
 		if _, err := seedStore.SavePlayer(context.Background(), wellFedPlayerSave(storage.PlayerSave{
 			PlayerID: identities[index].PlayerID, Revision: 1, DisplayName: identities[index].DisplayName,
 			Current: location, Safe: &location,
@@ -391,11 +398,12 @@ func storedMatchesSnapshot(stored storage.StoredPlayer, snapshot sim.PlayerSnaps
 
 func assertRestartDirection(t *testing.T, index int, direction [2]int8, position mgl32.Vec3) {
 	t.Helper()
-	deltaX := position.X() - 8.5
-	deltaZ := position.Z() - 8.5
+	start := multiplayerRestartStartPositions[index]
+	deltaX := position.X() - start[0]
+	deltaZ := position.Z() - start[2]
 	if direction[0] > 0 && deltaX <= 0 || direction[0] < 0 && deltaX >= 0 || direction[0] == 0 && deltaX != 0 ||
 		direction[1] > 0 && deltaZ >= 0 || direction[1] < 0 && deltaZ <= 0 || direction[1] == 0 && deltaZ != 0 {
-		t.Fatalf("player %d position=%v does not match direction=%v from [8.5 1.001 8.5]", index, position, direction)
+		t.Fatalf("player %d position=%v does not match direction=%v from %v", index, position, direction, start)
 	}
 }
 

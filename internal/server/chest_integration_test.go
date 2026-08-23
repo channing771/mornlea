@@ -15,8 +15,13 @@ import (
 	"github.com/channing771/mornlea/internal/world"
 )
 
-// chestScriptLookDown 是俯视脚下箱子的固定视角，与熔炉纵向测试共用同一常量值。
-const chestScriptLookDown = -float32(math.Pi)/2 + 0.01
+const (
+	// chestScriptLookDown 是破坏者俯视脚下箱子的固定视角，与熔炉纵向测试共用同一常量值。
+	chestScriptLookDown = -float32(math.Pi)/2 + 0.01
+	// chestScriptWatcherPitch 让位于箱子 +Z 侧的另一名查看者回看箱子；它不落在
+	// 破坏者的近乎竖直 primary-action 射线上。
+	chestScriptWatcherPitch = -0.5
+)
 
 // runChestSharedByTwoPlayersScript 是 Memory 与 TCP 共用的箱子纵向脚本：
 // 放置箱子 -> 两名玩家同时打开 -> 交错存取 -> 两端同见最终内容 ->
@@ -43,7 +48,7 @@ func runChestSharedByTwoPlayersScript(
 		Sequence: 10, Pitch: chestScriptLookDown,
 	})
 	sendIntegration(t, other.Endpoint, network.OpenContainer{
-		Sequence: 10, Pitch: chestScriptLookDown,
+		Sequence: 10, Pitch: chestScriptWatcherPitch,
 	})
 	breakerRef := waitChestState(t, breaker, func(network.ChestState) bool { return true }).Chest
 	otherRef := waitChestState(t, other, func(network.ChestState) bool { return true }).Chest
@@ -217,7 +222,8 @@ func TestChestSharedByTwoPlayersOverMemory(t *testing.T) {
 	go func() { _ = running.RunTicks(ctx) }()
 
 	breakerHotbar, otherHotbar := chestScriptHotbars()
-	loc := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
+	breakerLocation := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
+	otherLocation := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 3.5}}
 
 	breakerClientEndpoint, breakerServerEndpoint := network.NewMemoryPair(4096)
 	otherClientEndpoint, otherServerEndpoint := network.NewMemoryPair(4096)
@@ -225,10 +231,10 @@ func TestChestSharedByTwoPlayersOverMemory(t *testing.T) {
 		_ = breakerClientEndpoint.Close()
 		_ = otherClientEndpoint.Close()
 	})
-	if _, err := running.AttachSession(chestScriptSessionSpec(1, breakerServerEndpoint, loc, breakerHotbar)); err != nil {
+	if _, err := running.AttachSession(chestScriptSessionSpec(1, breakerServerEndpoint, breakerLocation, breakerHotbar)); err != nil {
 		t.Fatalf("附加破坏者: %v", err)
 	}
-	if _, err := running.AttachSession(chestScriptSessionSpec(2, otherServerEndpoint, loc, otherHotbar)); err != nil {
+	if _, err := running.AttachSession(chestScriptSessionSpec(2, otherServerEndpoint, otherLocation, otherHotbar)); err != nil {
 		t.Fatalf("附加另一名玩家: %v", err)
 	}
 
@@ -245,13 +251,14 @@ func TestChestSharedByTwoPlayersOverTCP(t *testing.T) {
 	breakerIdentity := integrationIdentity(0x93, "Breaker")
 	otherIdentity := integrationIdentity(0x94, "Watcher")
 	breakerHotbar, otherHotbar := chestScriptHotbars()
-	loc := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
+	breakerLocation := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
+	otherLocation := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 3.5}}
 
 	seedIntegrationPlayer(t, root, breakerIdentity, sim.PlayerSnapshot{
-		Current: loc, Inventory: core.Inventory{Hotbar: breakerHotbar},
+		Current: breakerLocation, Inventory: core.Inventory{Hotbar: breakerHotbar},
 	})
 	seedIntegrationPlayer(t, root, otherIdentity, sim.PlayerSnapshot{
-		Current: loc, Inventory: core.Inventory{Hotbar: otherHotbar},
+		Current: otherLocation, Inventory: core.Inventory{Hotbar: otherHotbar},
 	})
 
 	host := startDiskHost(t, root, "127.0.0.1:0", changedGenerator{})
