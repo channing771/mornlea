@@ -35,3 +35,9 @@
 - artifact 名为 `native-macos-${{ github.sha }}`，包含两个 macOS cdylib、内容严格等于 `GITHUB_SHA` 的 `native-source-sha.txt`，以及固定三行的 `native-artifact-manifest.txt`（SHA、每条相对路径、字节数、SHA-256）；下游校验与消费由后续任务实现。
 - `linux-server` 原始 job 已保存并与本任务后的 job 文本逐字比对一致。
 - Task 2 review 的 P1 manifest finding 已在修复轮次 1 补齐；尚未伪造独立复审结论。
+
+### Task 3 已实现事实
+
+- `quality` 和 `go-race` 都只在 `native-macos` 成功后 checkout、安装 Go、下载 `native-macos-${{ github.sha }}` 到 `engine/target/release`，再以相同严格三行 manifest 校验当前 SHA、两条固定路径、字节数和 SHA-256；两者均不执行 `make rust`，只有 `quality` 安装 Node。
+- `quality` 独占 OpenSpec、hooks、四个既有 Go 门禁、`go vet ./...`、`gofmt`，并在同一 checkout 中比较三片 race 的完整包集合。
+- `go-race` 的 `cmd`、`internal-server`、`internal-rest` 三片以 `fail-fast: false` 执行原有 `-race -p=1`；仅 `cmd` 排除独立的 50ms probe，每片在 `always()` 中记录自身秒数和 runner OS/arch。

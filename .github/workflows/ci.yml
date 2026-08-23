@@ -64,6 +64,133 @@ jobs:
             echo "runner: ${RUNNER_OS}/$(uname -m)"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  quality:
+    needs: native-macos
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: |
+            go.sum
+            engine/include/mornlea_engine.h
+            engine/include/mornlea_client.h
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-macos-${{ github.sha }}
+          path: engine/target/release
+      - name: 校验 native artifact
+        run: |
+          test -f engine/target/release/libmornlea_engine.dylib
+          test -f engine/target/release/libmornlea_client.dylib
+          test "$(cat engine/target/release/native-source-sha.txt)" = "$GITHUB_SHA"
+          test "$(wc -l < engine/target/release/native-artifact-manifest.txt | tr -d ' ')" = 3
+          {
+            IFS=' ' read -r kind sha extra
+            test "$kind" = sha
+            test "$sha" = "$GITHUB_SHA"
+            test -z "$extra"
+            validate_artifact() {
+              expected_path=$1
+              IFS=' ' read -r path size digest extra
+              test "$path" = "$expected_path"
+              test -z "$extra"
+              case "$size" in ''|*[!0-9]*) exit 1 ;; esac
+              test "$size" = "$(stat -f '%z' "$path")"
+              test "$digest" = "$(shasum -a 256 "$path" | awk '{print $1}')"
+            }
+            validate_artifact engine/target/release/libmornlea_engine.dylib
+            validate_artifact engine/target/release/libmornlea_client.dylib
+          } < engine/target/release/native-artifact-manifest.txt
+      - name: OpenSpec 规格门禁
+        run: npx --yes @fission-ai/openspec@1.7.0 validate --all --strict --no-interactive
+      - name: Agent Hooks 策略测试
+        run: node --test scripts/agent-hooks/guard.test.mjs
+      - name: 架构、存储与协议门禁
+        run: go test ./internal/archcheck ./internal/storage ./internal/network ./internal/physics -v
+      - name: Race 分片全集自检
+        run: |
+          go list ./... | sort -u > /tmp/all-packages.txt
+          {
+            go list ./cmd/...
+            printf '%s\n' github.com/channing771/mornlea/internal/server
+            go list ./internal/... | grep -v '/internal/server$'
+          } | sort -u > /tmp/sharded-packages.txt
+          diff -u /tmp/all-packages.txt /tmp/sharded-packages.txt
+      - name: 静态检查
+        run: |
+          go vet ./...
+          gofmt -l . | tee /tmp/fmt.txt
+          test ! -s /tmp/fmt.txt
+
+  go-race:
+    needs: native-macos
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: cmd
+            packages: ./cmd/...
+            extra: -skip '^TestScenarioV7EightSessionServerProbeIsRealAndBounded$'
+          - shard: internal-server
+            packages: ./internal/server
+            extra: ''
+          - shard: internal-rest
+            packages: "$(go list ./internal/... | grep -v '/internal/server$')"
+            extra: ''
+    steps:
+      - name: 记录开始时间
+        run: echo "CI_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: |
+            go.sum
+            engine/include/mornlea_engine.h
+            engine/include/mornlea_client.h
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-macos-${{ github.sha }}
+          path: engine/target/release
+      - name: 校验 native artifact
+        run: |
+          test -f engine/target/release/libmornlea_engine.dylib
+          test -f engine/target/release/libmornlea_client.dylib
+          test "$(cat engine/target/release/native-source-sha.txt)" = "$GITHUB_SHA"
+          test "$(wc -l < engine/target/release/native-artifact-manifest.txt | tr -d ' ')" = 3
+          {
+            IFS=' ' read -r kind sha extra
+            test "$kind" = sha
+            test "$sha" = "$GITHUB_SHA"
+            test -z "$extra"
+            validate_artifact() {
+              expected_path=$1
+              IFS=' ' read -r path size digest extra
+              test "$path" = "$expected_path"
+              test -z "$extra"
+              case "$size" in ''|*[!0-9]*) exit 1 ;; esac
+              test "$size" = "$(stat -f '%z' "$path")"
+              test "$digest" = "$(shasum -a 256 "$path" | awk '{print $1}')"
+            }
+            validate_artifact engine/target/release/libmornlea_engine.dylib
+            validate_artifact engine/target/release/libmornlea_client.dylib
+          } < engine/target/release/native-artifact-manifest.txt
+      - name: Race tests
+        run: go test ${{ matrix.packages }} -race -p=1 ${{ matrix.extra }}
+      - name: 记录 race 分片信息
+        if: ${{ always() }}
+        run: |
+          {
+            echo "go-race ${{ matrix.shard }} seconds: $(( $(date +%s) - CI_START_EPOCH ))"
+            echo "runner: ${RUNNER_OS}/$(uname -m)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   linux-server:
     runs-on: ubuntu-latest
     steps:
