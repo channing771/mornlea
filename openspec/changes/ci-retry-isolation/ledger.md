@@ -4,12 +4,12 @@
 
 | 旧 `test` step | 旧命令（逐字抄录） | 唯一目标 job/step | 迁移判定 |
 |---|---|---|---|
-| Rust 工具链身份 | `cd engine` | `native-macos / Rust 工具链身份` | 待实现 |
-| Rust 工具链身份 | `rustup show active-toolchain` | `native-macos / Rust 工具链身份` | 待实现 |
-| Rust 工具链身份 | `rustc --version` | `native-macos / Rust 工具链身份` | 待实现 |
-| Rust 工具链身份 | `cargo --version` | `native-macos / Rust 工具链身份` | 待实现 |
-| Rust 格式、静态检查与单测 | `make rust-check` | `native-macos / Rust 格式、静态检查与单测` | 待实现 |
-| 构建 Rust cdylib | `make rust` | `native-macos / 构建 Rust cdylib` | 待实现；唯一 macOS Rust build |
+| Rust 工具链身份 | `cd engine` | `native-macos / Rust 工具链身份` | 已实现 |
+| Rust 工具链身份 | `rustup show active-toolchain` | `native-macos / Rust 工具链身份` | 已实现 |
+| Rust 工具链身份 | `rustc --version` | `native-macos / Rust 工具链身份` | 已实现 |
+| Rust 工具链身份 | `cargo --version` | `native-macos / Rust 工具链身份` | 已实现 |
+| Rust 格式、静态检查与单测 | `make rust-check` | `native-macos / Rust 格式、静态检查与单测` | 已实现 |
+| 构建 Rust cdylib | `make rust` | `native-macos / 构建 Rust cdylib` | 已实现；唯一 macOS Rust build |
 | OpenSpec 规格门禁 | `npx --yes @fission-ai/openspec@1.7.0 validate --all --strict --no-interactive` | `quality / OpenSpec 规格门禁` | 待实现 |
 | Agent Hooks 策略测试 | `node --test scripts/agent-hooks/guard.test.mjs` | `quality / Agent Hooks 策略测试` | 待实现 |
 | 架构、存储与协议门禁 | `go test ./internal/archcheck ./internal/storage ./internal/network ./internal/physics -v` | `quality / 架构、存储与协议门禁` | 待实现 |
@@ -28,3 +28,9 @@
 - `linux-server` 不在上述表中，必须逐字保持现有 workflow。
 - `quality`、`go-race` 和 `integration` 只消费 `native-macos` 生成且经当前 SHA 校验的 artifact；不存在“顺便再构建一次 Rust”。
 - 旧命令的失败仍是失败；无 `continue-on-error`、无自动整 workflow retry、无阈值放宽。
+
+### Task 2 已实现事实
+
+- `native-macos` 仅记录起始时间、checkout、Rust 身份、`make rust-check`、一次 `make rust`、写入 SHA 文件、上传 artifact 与写入耗时/runner 摘要；未安装或运行 Go/Node。
+- artifact 名为 `native-macos-${{ github.sha }}`，只包含两个 macOS cdylib 与内容严格等于 `GITHUB_SHA` 的 `native-source-sha.txt`；下游校验与消费由后续任务实现。
+- `linux-server` 原始 job 已保存并与本任务后的 job 文本逐字比对一致。

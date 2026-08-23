@@ -2,27 +2,20 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  native-macos:
     runs-on: macos-latest
     steps:
+      - name: 记录开始时间
+        run: echo "CI_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.26'
-          # Go 的构建缓存不追踪 cgo `#include` 进来的 C 头文件，而 setup-go 默认只用
-          # go.sum 做缓存 key。engine ABI 升版只改头文件、不动 go.sum，于是缓存会命中
-          # 上一个 ABI 版本编译出的 internal/nativeabi 目标文件：运行时库报新版本、
-          # 编译进 Go 的常量仍是旧版本，表现为 ABI 版本不匹配，且因缓存命中有竞态而
-          # 时红时绿。把头文件纳入 key，ABI 变更即强制冷编译。
-          cache-dependency-path: |
-            go.sum
-            engine/include/mornlea_engine.h
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
 
       - name: Rust 工具链身份
         run: |
@@ -37,38 +30,27 @@ jobs:
       - name: 构建 Rust cdylib
         run: make rust
 
-      - name: OpenSpec 规格门禁
-        run: npx --yes @fission-ai/openspec@1.7.0 validate --all --strict --no-interactive
-
-      - name: Agent Hooks 策略测试
-        run: node --test scripts/agent-hooks/guard.test.mjs
-
-      - name: 架构、存储与协议门禁
-        run: go test ./internal/archcheck ./internal/storage ./internal/network ./internal/physics -v
-
-      - name: 单元与端到端测试
-        run: go test ./... -race -p=1 -skip '^TestScenarioV7EightSessionServerProbeIsRealAndBounded$'
-
-      - name: 50ms 服务端探针门禁
-        run: go test ./cmd/mornlea -run '^TestScenarioV7EightSessionServerProbeIsRealAndBounded$' -count=1
-
-      - name: TCP 重启与 Memory/TCP parity 重复门禁
-        run: go test ./internal/server -run 'TestTCPPlayerAndWorld|TestMemoryTCPParity' -race -count=10
-
-      - name: M3C v6 八玩家与性能报告门禁
-        run: go test ./internal/client ./internal/server ./cmd/mornlea ./cmd/perfcheck -run 'Test(PerfReportV6|ScenarioV6|PerfcheckV6|PerfcheckV5SameScenario|PerformanceThresholds|InterestObserver|HostStats|BenchmarkServerEpoch|BenchmarkServerMeasuredWindow)' -count=1
-
-      - name: 静态检查
+      - name: 写入构建 SHA
         run: |
-          go vet ./...
-          gofmt -l . | tee /tmp/fmt.txt
-          test ! -s /tmp/fmt.txt
+          echo "$GITHUB_SHA" > engine/target/release/native-source-sha.txt
 
-      - name: 微基准与平台无关阈值
-        run: go test ./... -bench=. -benchtime=1x -run='^$'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-macos-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 1
+          path: |
+            engine/target/release/libmornlea_engine.dylib
+            engine/target/release/libmornlea_client.dylib
+            engine/target/release/native-source-sha.txt
 
-      - name: M3C 多人微基准可执行性
-        run: go test ./internal/network ./internal/server ./internal/render -run '^$' -bench '(RemotePlayerStateCodec|EightPlayerInterest|RemoteAvatarNameTag)' -benchmem -benchtime=100x -count=1
+      - name: 记录 native 构建信息
+        if: ${{ always() }}
+        run: |
+          {
+            echo "native-macos seconds: $(( $(date +%s) - CI_START_EPOCH ))"
+            echo "runner: ${RUNNER_OS}/$(uname -m)"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   linux-server:
     runs-on: ubuntu-latest
