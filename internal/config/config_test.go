@@ -312,6 +312,70 @@ func TestFluidEnabledRejectsNonBoolValue(t *testing.T) {
 	}
 }
 
+func TestAudioVolumeDefaultsToPointSeven(t *testing.T) {
+	if got := config.Defaults().AudioVolume; got != 0.7 {
+		t.Fatalf("AudioVolume = %v，want 0.7", got)
+	}
+}
+
+func TestAudioVolumeLoadsAndRoundTrips(t *testing.T) {
+	for _, want := range []float32{0, 0.25, 1} {
+		t.Run(fmt.Sprintf("%g", want), func(t *testing.T) {
+			path := writeConfig(t, fmt.Sprintf(`{"version":1,"audioVolume":%g}`, want))
+			loaded, err := config.Load(path)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if loaded.AudioVolume != want {
+				t.Fatalf("AudioVolume = %v，want %v", loaded.AudioVolume, want)
+			}
+			if err := loaded.Save(path); err != nil {
+				t.Fatalf("Save: %v", err)
+			}
+			roundTripped, err := config.Load(path)
+			if err != nil {
+				t.Fatalf("Load after Save: %v", err)
+			}
+			if roundTripped.AudioVolume != want {
+				t.Fatalf("round-trip AudioVolume = %v，want %v", roundTripped.AudioVolume, want)
+			}
+		})
+	}
+}
+
+func TestAudioVolumeRejectsInvalidValues(t *testing.T) {
+	for _, value := range []string{"-0.01", "1.01", "null", `"loud"`} {
+		t.Run(value, func(t *testing.T) {
+			_, err := config.Load(writeConfig(t, `{"version":1,"audioVolume":`+value+`}`))
+			if err == nil || !strings.Contains(err.Error(), "audioVolume") {
+				t.Fatalf("Load error = %v，want audioVolume 字段错误", err)
+			}
+		})
+	}
+}
+
+func TestAudioVolumeIsKnownButNotNumeric(t *testing.T) {
+	previous := slog.Default()
+	var records bytes.Buffer
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&records, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	if _, err := config.Load(writeConfig(t, `{"version":1,"audioVolume":0.25}`)); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if strings.Contains(records.String(), `"field":"audioVolume"`) {
+		t.Fatalf("已识别 audioVolume 不得触发未知字段告警: %s", records.String())
+	}
+	for _, field := range config.Fields() {
+		if strings.EqualFold(field.Name, "audioVolume") {
+			t.Fatalf("audioVolume 不得进入数值 Fields: %+v", field)
+		}
+	}
+	if config.CurrentVersion != 1 {
+		t.Fatalf("CurrentVersion = %d，want 1", config.CurrentVersion)
+	}
+}
+
 func TestTexturePackDefaultsAreDisabled(t *testing.T) {
 	defaults := config.Defaults()
 	if defaults.TexturePackPath != "" || defaults.ResolvedTexturePackPath != "" {

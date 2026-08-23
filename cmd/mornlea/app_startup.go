@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
+	"github.com/channing771/mornlea/internal/audio"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/core"
@@ -171,6 +172,11 @@ func newApplicationWithDependencies(
 	if options.CaptureDir != "" {
 		width, height = captureWidth, captureHeight
 	}
+	var playCue func(audio.Cue)
+	var closeAudio func()
+	if !headless && dependencies.newAudioPlayer != nil {
+		playCue, closeAudio = dependencies.newAudioPlayer(options.AudioVolume)
+	}
 	if headless {
 		rustRenderer, err = dependencies.newOffscreenRenderer(width, height)
 	} else {
@@ -182,6 +188,9 @@ func newApplicationWithDependencies(
 		}
 	}
 	if err != nil {
+		if closeAudio != nil {
+			closeAudio()
+		}
 		if rustRenderer != nil {
 			rustRenderer.Close()
 		}
@@ -237,6 +246,8 @@ func newApplicationWithDependencies(
 			}
 			return options.BenchmarkTransport
 		}(),
+		playCue:    playCue,
+		closeAudio: closeAudio,
 	}
 	app.releaseResources = app.releaseOwnedResources
 	// 材质与 HUD 图集一次性上传;mesh 上传调度经 SectionScheduler 下沉。

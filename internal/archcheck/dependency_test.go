@@ -22,6 +22,7 @@ import (
 // 否则它会退化成 sim 的内部实现，丧失独立测试的意义。
 var allowed = map[string][]string{
 	"internal/archcheck": {},
+	"internal/audio":     {},
 	"internal/companion": {"internal/core"},
 	"internal/core":      {"internal/nativeabi"},
 	"internal/nativeabi": {},

@@ -92,6 +92,7 @@ func runWithDependencies(args []string, dependencies runDependencies) error {
 	options.Application.Dev = (options.Dev || options.CaptureDir != "") &&
 		!options.Application.Benchmark
 	options.Application.Render = effective.Render
+	options.Application.AudioVolume = effective.AudioVolume
 	options.Application.TexturePackPath = effective.ResolvedTexturePackPath
 	// 注水门控与用户配置的解耦由 resolveConfig 负责：benchmark 与抓帧两条路径
 	// 都强制返回 config.Defaults()，因此这里的 effective.FluidEnabled 在这两条

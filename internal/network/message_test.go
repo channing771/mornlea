@@ -76,8 +76,9 @@ func TestProtocolMessageShapesImplementSealedInterfaces(t *testing.T) {
 		network.CompanionSpawn{},
 		network.CompanionStates{},
 		network.CompanionDespawn{ID: companion.ID{}},
+		network.PlaceBlockSucceeded{Sequence: 1},
 	}
-	if len(clientMessages) != 8 || len(serverMessages) != 17 {
+	if len(clientMessages) != 8 || len(serverMessages) != 18 {
 		t.Fatal("消息集合不完整")
 	}
 }

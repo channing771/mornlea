@@ -142,6 +142,15 @@ func (server *Server) publishLocalResult(
 			return
 		}
 	}
+	for _, success := range result.PlacementSuccesses {
+		if success.Session != current.id {
+			continue
+		}
+		if !current.enqueue(network.PlaceBlockSucceeded{Sequence: success.Sequence}) {
+			server.closePublicationSessionLocked(current, errSessionOutboxFull)
+			return
+		}
+	}
 	// 完整物品状态只发给所属会话，并排在使客户端开始交互的 Ready 状态之前。
 	for _, update := range result.Inventories {
 		if update.Session != current.id {

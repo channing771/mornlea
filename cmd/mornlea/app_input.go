@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/channing771/mornlea/internal/audio"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
@@ -163,7 +164,9 @@ func (a *application) clickInventorySlot(cursorX, cursorY float64, width, height
 				Sequence: a.nextSequence(), Recipe: recipe,
 			}); err != nil {
 				slog.Warn("发送合成请求失败", "error", err)
+				return
 			}
+			a.playLocalCue(audio.CueUIClick)
 			return
 		}
 	}
@@ -183,11 +186,13 @@ func (a *application) clickInventorySlot(cursorX, cursorY float64, width, height
 	}
 	if a.inventorySource < 0 {
 		a.inventorySource = int(slot)
+		a.playLocalCue(audio.CueUIClick)
 		return
 	}
 	from := uint8(a.inventorySource)
 	a.inventorySource = -1
 	if from == slot {
+		a.playLocalCue(audio.CueUIClick)
 		return
 	}
 	if chestOpen {
@@ -195,7 +200,9 @@ func (a *application) clickInventorySlot(cursorX, cursorY float64, width, height
 			Sequence: a.nextSequence(), Container: chest.Chest, From: from, To: slot,
 		}); err != nil {
 			slog.Warn("发送箱子移动失败", "error", err)
+			return
 		}
+		a.playLocalCue(audio.CueUIClick)
 		return
 	}
 	if furnaceOpen {
@@ -206,14 +213,18 @@ func (a *application) clickInventorySlot(cursorX, cursorY float64, width, height
 			Sequence: a.nextSequence(), Container: furnace.Furnace, From: from, To: slot,
 		}); err != nil {
 			slog.Warn("发送熔炉移动失败", "error", err)
+			return
 		}
+		a.playLocalCue(audio.CueUIClick)
 		return
 	}
 	if err := a.send(network.MoveInventoryStack{
 		Sequence: a.nextSequence(), From: from, To: slot,
 	}); err != nil {
 		slog.Warn("发送背包移动失败", "error", err)
+		return
 	}
+	a.playLocalCue(audio.CueUIClick)
 }
 
 // selectHotbarSlot 只发送选择请求，不本地改写快捷栏镜像。

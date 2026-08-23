@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/channing771/mornlea/internal/assets"
+	"github.com/channing771/mornlea/internal/audio"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/render"
@@ -28,6 +29,7 @@ type applicationDependencies struct {
 	newWindowedRenderer  func(applicationWindow) (*client.Renderer, error)
 	newOffscreenRenderer func(int, int) (*client.Renderer, error)
 	newGlyphAtlas        func(render.GlyphSink) (*render.GlyphAtlas, error)
+	newAudioPlayer       func(float32) (play func(audio.Cue), close func())
 }
 
 func defaultApplicationDependencies() applicationDependencies {
@@ -69,5 +71,9 @@ func defaultApplicationDependencies() applicationDependencies {
 		},
 		newOffscreenRenderer: client.NewRenderer,
 		newGlyphAtlas:        render.NewGlyphAtlasWithSink,
+		newAudioPlayer: func(volume float32) (func(audio.Cue), func()) {
+			player := audio.NewPlayer(volume)
+			return player.Play, player.Close
+		},
 	}
 }

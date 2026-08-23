@@ -145,6 +145,8 @@ func serverPacketID(state State, packet ServerPacket) (uint32, bool) {
 			return 18, true
 		case CompanionDespawn:
 			return 19, true
+		case PlaceBlockSucceeded:
+			return 20, true
 		}
 	}
 	return 0, false
@@ -209,6 +211,8 @@ func serverPacketForID(state State, id uint32) (ServerPacket, bool) {
 			return CompanionStates{}, true
 		case 19:
 			return CompanionDespawn{}, true
+		case 20:
+			return PlaceBlockSucceeded{}, true
 		}
 	}
 	return nil, false

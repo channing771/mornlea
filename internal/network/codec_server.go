@@ -93,6 +93,8 @@ func encodeServerControlPayload(state State, packet ServerPacket) (packetID uint
 			reason, _ := commandRejectReasonID(message.Reason)
 			e.u64(message.Sequence)
 			e.u8(reason)
+		case PlaceBlockSucceeded:
+			e.u64(message.Sequence)
 		case KeepAlive:
 			e.u64(message.Token)
 		case Disconnect:
@@ -440,6 +442,10 @@ func decodeServerControlPayload(state State, packetID uint32, payload []byte) (S
 			var despawn CompanionDespawn
 			err = decodeFixedID(&d, despawn.ID[:])
 			packet = despawn
+		case 20:
+			var sequence uint64
+			sequence, err = d.u64()
+			packet = PlaceBlockSucceeded{Sequence: sequence}
 		default:
 			return nil, codecError("decode server", state, packetID, errUnknownPacketID)
 		}

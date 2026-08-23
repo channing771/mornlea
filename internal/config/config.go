@@ -95,6 +95,9 @@ type Config struct {
 	TexturePackPath string `json:"texturePackPath,omitempty"`
 	// ResolvedTexturePackPath 是相对配置文件目录解析后的客户端启动路径。
 	ResolvedTexturePackPath string `json:"-"`
+	// AudioVolume 是本机音频反馈的总音量，范围为闭区间 [0,1]。它是独立
+	// 顶层字段，不进入 `Fields`：调试面板只承载既有的数值调参分组。
+	AudioVolume float32 `json:"audioVolume"`
 
 	// FluidEnabled 控制世界生成是否在海平面及其以下注水（权威流体，变更
 	// authoritative-fluid）。它是独立顶层布尔开关，不进 Fields()/physics/sim
@@ -128,6 +131,7 @@ func Defaults() Config {
 			LodFarMultiplier: LodFarMultiplierDefault,
 			LodStep:          LodStepDefault,
 		},
+		AudioVolume: 0.7,
 		// 默认开启：fluid-presentation-survival 交付呈现与生存后，水已是
 		// 面向普通玩家的正常世界内容，见字段 GoDoc。
 		FluidEnabled: true,
@@ -235,6 +239,16 @@ func decodeConfig(path string, contents []byte) (Config, error) {
 				cfg.ResolvedTexturePackPath = resolved
 			}
 		}
+	}
+	if raw, ok := lookupCaseInsensitive(top, "audioVolume"); ok {
+		var volume *float32
+		if err := json.Unmarshal(raw, &volume); err != nil || volume == nil {
+			return Config{}, errors.New("config: 解析 audioVolume 字段: 必须是 0..1 数值")
+		}
+		if *volume < 0 || *volume > 1 {
+			return Config{}, fmt.Errorf("config: audioVolume 超出 0..1: %v", *volume)
+		}
+		cfg.AudioVolume = *volume
 	}
 	// fluidEnabled 是独立顶层布尔字段，不经 applyGroups 的数值钳制路径：
 	// 类型错误（如写成字符串）与 version 字段一样直接报错，不做静默降级——
@@ -840,7 +854,7 @@ func applyRenderLOD(render *Render, fields map[string]json.RawMessage) error {
 
 // warnUnknownTopLevel 对不认识的顶层分组名 slog.Warn。
 func warnUnknownTopLevel(top map[string]json.RawMessage) {
-	known := map[string]bool{"version": true, "logging": true, "physics": true, "sim": true, "render": true, "ai": true, "texturepackpath": true, "fluidenabled": true}
+	known := map[string]bool{"version": true, "logging": true, "physics": true, "sim": true, "render": true, "ai": true, "texturepackpath": true, "audiovolume": true, "fluidenabled": true}
 	for key := range top {
 		if !known[strings.ToLower(key)] {
 			slog.Warn("配置项未知字段已忽略", "field", key)

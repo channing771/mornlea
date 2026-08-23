@@ -4,7 +4,7 @@
 
 **Goal:** 为 Darwin 图形客户端增加四个原创、固定、代码生成的本地 PCM 提示音：有效 UI 操作、权威采掘完成、权威进食完成和权威受伤；支持 `audioVolume` 总音量与 0 静音。
 
-**Architecture:** 新包 `internal/audio` 用纯 Go 整数算法一次生成四段 PCM，并用 macOS AudioToolbox `AudioQueue` 的小型 C bridge 管理一个长生命周期输出队列和 8 个预分配 buffer。`cmd/mornlea` 只保存一对播放/关闭函数和一个本地确认 matcher；触发来源全部是已确认消息或有效 UI 行为，capture/benchmark/Linux/server 不创建音频设备。
+**Architecture:** 新包 `internal/audio` 用纯 Go 整数算法一次生成四段 PCM，并用 macOS AudioToolbox `AudioQueue` 的小型 C bridge 管理一个长生命周期输出队列和 8 个预分配 buffer。`cmd/mornlea` 只保存一对播放/关闭函数和有界确认状态；放置 cue 只消费协议 v26 新增的 session-local `PlaceBlockSucceeded` 序号应答，其余触发来源是已确认消息或有效 UI 行为；capture/benchmark/Linux/server 不创建音频设备。
 
 **Tech Stack:** Go 1.26、cgo、macOS AudioToolbox/AudioQueue、`internal/config` schema v1、现有 Darwin application lifecycle、OpenSpec。
 
@@ -12,8 +12,8 @@
 
 ## Global Constraints
 
-- [ ] 从五路共享 main 基线创建 `codex/darwin-local-audio-feedback` 独立 worktree/change；产品文件不得触及 HUD、sim、network、CI 或伙伴台词测试领地。新包只额外登记 `internal/archcheck/dependency_test.go` 的空内部依赖。
-- [ ] 不提交音频二进制，不新增第三方依赖、网络消息、服务端状态或配置 schema 版本；`audioVolume` 是 schema v1 的可选顶层字段，缺失默认 0.7，范围 0..1，0 即静音。
+- [ ] 从五路共享 main 基线创建 `codex/darwin-local-audio-feedback` 独立 worktree/change；并行的玩家近战已占用协议 v25，本分支必须堆叠在其上以 v26 交付。除最小的 network/sim/server 放置成功确认链外，产品文件不得触及 HUD、CI 或伙伴台词测试领地。新包只额外登记 `internal/archcheck/dependency_test.go` 的空内部依赖。
+- [ ] 不提交音频二进制，不新增第三方依赖、存档字段、ABI/benchmark 版本或配置 schema 版本；协议 v26 只新增 Play S→C ID 20 `PlaceBlockSucceeded{Sequence u64}`，ID 21 保持未分配。`audioVolume` 是 schema v1 的可选顶层字段，缺失默认 0.7，范围 0..1，0 即静音。
 - [ ] 稳定测试不打开真实设备；通过纯 PCM 测试和注入 `playCue func(audio.Cue)` 验证触发。只有最终人工验收可启动交互式客户端。
 - [ ] 设备创建/播放失败只告警一次并让当前 player 永久静音；队列忙时丢弃该次 cue，不视为设备失败；不得阻塞权威 tick、网络接收或渲染。
 - [ ] 每任务全新 implementer、独立 SPEC/QUALITY reviewer、最多 5 轮追加修复，证据入 ledger。
@@ -216,6 +216,23 @@ git commit -m "feat: play cues from confirmed client events"
 
 - [ ] 完成 task 双裁决与 ledger。
 
+### Task 4 fix round 3: v26 权威放置成功确认
+
+- [ ] 先写 network codec/registry/golden/fuzz/非法截断载荷红测，钉死 Play S→C ID 20 `PlaceBlockSucceeded{Sequence uint64}` 的 8-byte 小端载荷及 ID 21 未分配；协议升 v26 并拒绝 v25 及更早握手。
+- [ ] 先写 sim 红测：每个成功 `CommandPlaceBlock` 产生一个 `(Session, Sequence)` 成功结果，拒绝不产生；同 tick 与跨 tick 连续两个同 slot/item 放置均保留各自序号。
+- [ ] 先写 server Memory/TCP 红测：成功应答只发给发起会话，每次成功各一次，失败只发既有 `CommandRejected`，Memory/TCP wire 一致。
+- [ ] 先写客户端红测：首次新 sequence 播放一次，重复/旧 sequence、世界增量与库存拼接、拒绝、其他玩家放置全部无声；reset 后新会话可从低 sequence 重新开始。
+- [ ] 最小实现：`TickResult` 新增有界 placement success slice，仅权威放置原子成功后追加；server 沿用 local result/outbox 关闭规则发送；客户端删除 delta+inventory pending matcher，仅以 reset 清空的最高已消费 sequence 去重。不新增队列、map、timeout、retry 或通用 command-success 抽象。
+- [ ] 同步 AGENTS.md/CLAUDE.md 协议 v26 基线，保持两文件逐字节相同；存档、engine/client ABI 与 benchmark scenario 不变。
+
+### Task 4 fix round 4: 状态失效、同 tick 双 cue 与规格闭环
+
+- [ ] 先把完整音频栈从旧 melee base `56e5d6c` 安全重放到 PR #66 修复 HEAD `82eb03b`，以 `git range-diff` 证明全部音频提交内容等价；不 force-push。
+- [ ] 先写采掘 RED：active 目标后收到新鲜 inactive 状态，再由无关增量移除旧目标必须无声；拒绝后的 inactive 路径同样无声；服务端成功顺序“目标增量先、inactive 状态后”仍只播放一次。
+- [ ] 先写进食+伤害 RED：`InventoryState` 先确认食物恰减一件，下一条 `PlayerState` 同时 hunger 上升且 health 下降时，两种 cue 各播放一次；使用两个独立布尔位或等价定长、零分配结果，不使用 slice、队列或通用事件总线。
+- [ ] 在 active delta spec 明确有效本地 `CueUIClick`：可合成按钮发送成功、首次有效来源选择、同格取消和合法移动发送成功各响一次；空白、未确认/禁用、不可合成、熔炉输出作目标与发送失败无声。保留全部既有 UI 行为。
+- [ ] 保留 v26 placement 成功应答、reset/close、采掘/进食/伤害与 UI 的既有回归；运行 focused RED/GREEN、四包组合 race、archcheck、vet、gofmt、59 项严格 OpenSpec、diff/cmp，记录独立评审证据。
+
 ## Task 5: 全量验证、人工试听和终审
 
 **Files:**
@@ -238,6 +255,6 @@ git diff --check
 
 - [ ] 在非 Darwin 验证纯 Go 音频定义不要求 AudioToolbox：`GOOS=linux go test ./internal/audio`。Linux 专服 bundle 由 PR 的现有 `linux-server` CI job 运行 `make build-linux-server`；确认其依赖闭包不含 `internal/audio`。
 - [ ] 由用户/验收者显式启动交互客户端，分别试听四个 cue、`audioVolume=0.25` 和 `audioVolume=0`；记录设备、结果和“capture/benchmark 未请求设备”的证据。自动代理不得自行聚焦窗口。
-- [ ] 确认无音频资产、新依赖、网络/存档/schema/ABI/scenario 变化；`gofmt -l .` 无输出。
+- [ ] 确认无音频资产、新依赖、存档/schema/ABI/scenario 变化；协议唯一变化是 v26 Play S→C ID 20 的 8-byte 放置成功应答；`gofmt -l .` 无输出。
 - [ ] 提交 ledger/tasks，生成 committed review package 与 SHA-256，交给全新 reviewer 做整分支 SPEC/QUALITY 终审，修复不超过 5 轮。
 - [ ] 正常 push 并创建独立 PR；不自行归档。

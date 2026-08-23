@@ -193,7 +193,7 @@ func TestProtocolOutdatedHandshakeRejectMatchesMemoryAndTCP(t *testing.T) {
 	//
 	// `ProtocolVersion - 1` 是**刚退役的那一版**，写成表达式而不是字面量：
 	// 只列远古版本的话，升版当次退役的版本在两种传输上的拒绝行为无人覆盖
-	// （v25 退役 v24 时正是这个缺口）。
+	// （v26 退役 v25 时正是这个缺口）。
 	for _, version := range []uint32{15, 16, 17, ProtocolVersion - 1} {
 		for _, open := range transportOpeners {
 			t.Run(fmt.Sprintf("v%d/%s", version, open.name), func(t *testing.T) {

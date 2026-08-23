@@ -15,11 +15,123 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/assets"
+	"github.com/channing771/mornlea/internal/audio"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/server"
 	"github.com/channing771/mornlea/internal/storage"
 )
+
+// `TestNewApplicationCreatesAudioOnlyForWindowedMode` 防止无头 benchmark 或抓帧
+// 触碰本机音频设备；普通窗口路径则只构造一个播放器。
+func TestNewApplicationCreatesAudioOnlyForWindowedMode(t *testing.T) {
+	windowErr := errors.New("stop after audio setup")
+	for _, test := range []struct {
+		name      string
+		options   applicationOptions
+		configure func(*applicationDependencies)
+		wantCalls int
+	}{
+		{
+			name:    "窗口",
+			options: remoteConnectionOptions(),
+			configure: func(dependencies *applicationDependencies) {
+				stream := &connectionTestClientStream{}
+				endpoint, serverEndpoint := network.NewMemoryPair(1)
+				t.Cleanup(func() { _ = serverEndpoint.Close() })
+				dependencies.dialTCP = func(context.Context, string) (network.ClientPacketStream, error) {
+					return stream, nil
+				}
+				dependencies.loginClient = func(context.Context, network.ClientPacketStream, network.Identity) (network.ClientEndpoint, uint64, error) {
+					return endpoint, 0, nil
+				}
+				dependencies.newWindow = func(int, int, string) (applicationWindow, error) {
+					return nil, windowErr
+				}
+			},
+			wantCalls: 1,
+		},
+		{
+			name: "benchmark",
+			options: func() applicationOptions {
+				options := localConnectionOptions()
+				options.Benchmark = true
+				return options
+			}(),
+			configure: func(dependencies *applicationDependencies) {
+				dependencies.openStore = func(context.Context, applicationOptions) (storage.WorldStore, error) {
+					return newConnectionTestStore(42), nil
+				}
+				dependencies.newOffscreenRenderer = func(int, int) (*client.Renderer, error) {
+					return nil, windowErr
+				}
+			},
+		},
+		{
+			name: "抓帧",
+			options: func() applicationOptions {
+				options := remoteConnectionOptions()
+				options.CaptureDir = t.TempDir()
+				return options
+			}(),
+			configure: func(dependencies *applicationDependencies) {
+				stream := &connectionTestClientStream{}
+				endpoint, serverEndpoint := network.NewMemoryPair(1)
+				t.Cleanup(func() { _ = serverEndpoint.Close() })
+				dependencies.dialTCP = func(context.Context, string) (network.ClientPacketStream, error) {
+					return stream, nil
+				}
+				dependencies.loginClient = func(context.Context, network.ClientPacketStream, network.Identity) (network.ClientEndpoint, uint64, error) {
+					return endpoint, 0, nil
+				}
+				dependencies.newOffscreenRenderer = func(int, int) (*client.Renderer, error) {
+					return nil, windowErr
+				}
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dependencies := connectionTestDependencies(t)
+			calls, closes := 0, 0
+			dependencies.newAudioPlayer = func(volume float32) (func(audio.Cue), func()) {
+				calls++
+				if volume != 0 {
+					t.Fatalf("audio volume = %v，want 0", volume)
+				}
+				return func(audio.Cue) {}, func() { closes++ }
+			}
+			test.configure(&dependencies)
+
+			_, err := newApplicationWithDependencies(test.options, dependencies)
+			if !errors.Is(err, windowErr) {
+				t.Fatalf("newApplication error = %v，want %v", err, windowErr)
+			}
+			if calls != test.wantCalls {
+				t.Fatalf("audio constructor calls = %d，want %d", calls, test.wantCalls)
+			}
+			if closes != test.wantCalls {
+				t.Fatalf("audio close calls after failed startup = %d，want %d", closes, test.wantCalls)
+			}
+		})
+	}
+}
+
+// `TestApplicationCloseClosesAudioOnce` 防止重复 `Close` 重复释放播放器拥有的队列。
+func TestApplicationCloseClosesAudioOnce(t *testing.T) {
+	closes := 0
+	app := &application{itemDrops: client.NewItemDrops(), closeAudio: func() { closes++ }}
+	app.releaseResources = app.releaseOwnedResources
+
+	if err := app.Close(); err != nil {
+		t.Fatalf("first Close: %v", err)
+	}
+	if err := app.Close(); err != nil {
+		t.Fatalf("second Close: %v", err)
+	}
+	if closes != 1 {
+		t.Fatalf("audio close calls = %d，want 1", closes)
+	}
+}
 
 func TestNewApplicationReturnsRegistryErrorBeforeClientSideEffects(t *testing.T) {
 	want := errors.New("registry failure")

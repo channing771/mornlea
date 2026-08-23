@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"runtime"
 
+	"github.com/channing771/mornlea/internal/audio"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
@@ -40,6 +41,17 @@ func (a *application) drainServerMessages(maxMessages int) {
 				a.closeClientSession(err)
 				return
 			}
+			if state.Reset {
+				a.audioFeedback.Reset()
+			} else {
+				eatingCompleted, damaged := a.audioFeedback.ObservePlayerState(state)
+				if eatingCompleted {
+					a.playLocalCue(audio.CueEatingComplete)
+				}
+				if damaged {
+					a.playLocalCue(audio.CueDamage)
+				}
+			}
 			a.serverTick = state.ServerTick
 			a.worldTimeTicks = state.WorldTimeTicks
 			if state.Reset || !state.MiningActive {
@@ -70,6 +82,15 @@ func (a *application) drainServerMessages(maxMessages int) {
 			if err := a.inventory.Apply(state); err != nil {
 				a.closeClientSession(err)
 				return
+			}
+			if cue, play := a.audioFeedback.ObserveInventoryState(state); play {
+				a.playLocalCue(cue)
+			}
+			continue
+		}
+		if success, ok := message.(network.PlaceBlockSucceeded); ok {
+			if cue, play := a.audioFeedback.ObservePlacementSuccess(success); play {
+				a.playLocalCue(cue)
 			}
 			continue
 		}
@@ -168,10 +189,21 @@ func (a *application) drainServerMessages(maxMessages int) {
 			}
 			continue
 		}
+		changes, isBlockChanges := message.(network.BlockChanges)
+		blockChangesApplied := false
+		if isBlockChanges {
+			chunk, loaded := a.mirror.Chunk(changes.Dimension, changes.Chunk)
+			blockChangesApplied = loaded && !chunk.Desynced && chunk.Revision == changes.BaseRevision
+		}
 		update, err := a.mirror.Apply(message)
 		if err != nil {
 			a.closeClientSession(err)
 			return
+		}
+		if isBlockChanges && blockChangesApplied {
+			if cue, play := a.audioFeedback.ObserveBlockChanges(changes); play {
+				a.playLocalCue(cue)
+			}
 		}
 		switch message := message.(type) {
 		case network.ChunkSnapshot:
@@ -195,7 +227,9 @@ func (a *application) drainServerMessages(maxMessages int) {
 			slog.Warn("权威命令被拒绝",
 				"sequence", update.Rejected.Sequence, "reason", update.Rejected.Reason)
 		}
-		a.mesher.MarkDirty(update.Dirty...)
+		if a.mesher != nil {
+			a.mesher.MarkDirty(update.Dirty...)
+		}
 		for _, key := range update.Forgotten {
 			if key.Dimension != core.Overworld {
 				continue
