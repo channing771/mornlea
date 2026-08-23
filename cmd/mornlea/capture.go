@@ -78,6 +78,21 @@ type captureScene struct {
 	PinVolatile func(*application) error
 }
 
+// captureContainerInventory 返回箱子和熔炉场景共用的 36 格已确认背包，刻意在
+// 快捷栏与背包两段都放入物品，让两个容器画面能同时审查统一栏位与来源轮廓。
+func captureContainerInventory() core.Inventory {
+	inventory := core.Inventory{}
+	inventory.Hotbar.Selected = 4
+	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 64}
+	inventory.Hotbar.Slots[2] = core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: 40}
+	inventory.Hotbar.Slots[4] = core.ItemStack{Item: core.ItemChest, Count: 3}
+	inventory.Backpack[0] = core.ItemStack{Item: core.ItemDirt, Count: 48}
+	inventory.Backpack[2] = core.ItemStack{Item: core.ItemCoal, Count: 12}
+	inventory.Backpack[3] = core.ItemStack{Item: core.ItemRawIron, Count: 8}
+	inventory.Backpack[4] = core.ItemStack{Item: core.ItemIronIngot, Count: 9}
+	return inventory
+}
+
 // captureSettled 判定抓帧收敛。近环半部沿用 mesher stats + pending uploads；
 // lodBusy 是远环调度器的 Busy() 计数（未接线 LOD 的运行传 0）。远环 tile 的
 // 生成与上传完全异步，若不等它清零就回读，golden 里的远景带会随机器速度
@@ -235,6 +250,80 @@ var captureScenes = []captureScene{
 			inventory.Backpack[6] = core.ItemStack{Item: core.ItemGlass, Count: 4}
 			inventory.Backpack[9] = core.ItemStack{Item: core.ItemIronBlock, Count: 1}
 			return app.inventory.Apply(network.InventoryState{Inventory: inventory})
+		},
+		HUD: &captureHUDFixture{
+			Health: 5,
+			Oxygen: core.MaxOxygenTicks / 3,
+			Hunger: 9,
+		},
+	},
+	{
+		Name:         "chest-container",
+		WarmupFrames: 8,
+		Apply: func(app *application) error {
+			if err := resetCapturePresentation(app); err != nil {
+				return err
+			}
+			app.worldTimeTicks = 6000
+			app.camera = client.Camera{
+				Pos: mgl32.Vec3{0, 110, 0}, Pitch: -0.25,
+				FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
+				Near: 0.1, Far: 2000,
+			}
+			app.center = cameraChunk(app.camera.Pos)
+			app.inventoryOpen = true
+			app.inventorySource = core.ChestFirstSlot
+			if err := app.inventory.Apply(network.InventoryState{Inventory: captureContainerInventory()}); err != nil {
+				return fmt.Errorf("装入箱子场景背包: %w", err)
+			}
+			state := network.ChestState{Chest: core.ContainerRef{
+				Dimension: core.Overworld, Kind: core.ContainerKindChest, Slot: 2, Generation: 3,
+			}}
+			state.Items[0] = core.ItemStack{Item: core.ItemStone, Count: 64}
+			state.Items[8] = core.ItemStack{Item: core.ItemCoal, Count: 17}
+			state.Items[17] = core.ItemStack{Item: core.ItemRawIron, Count: 1}
+			state.Items[26] = core.ItemStack{Item: core.ItemIronIngot, Count: 64}
+			if err := app.chest.Apply(state); err != nil {
+				return fmt.Errorf("装入箱子场景镜像: %w", err)
+			}
+			return nil
+		},
+		HUD: &captureHUDFixture{
+			Health: 5,
+			Oxygen: core.MaxOxygenTicks / 3,
+			Hunger: 9,
+		},
+	},
+	{
+		Name:         "furnace-container",
+		WarmupFrames: 8,
+		Apply: func(app *application) error {
+			if err := resetCapturePresentation(app); err != nil {
+				return err
+			}
+			app.worldTimeTicks = 6000
+			app.camera = client.Camera{
+				Pos: mgl32.Vec3{0, 110, 0}, Pitch: -0.25,
+				FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
+				Near: 0.1, Far: 2000,
+			}
+			app.center = cameraChunk(app.camera.Pos)
+			app.inventoryOpen = true
+			app.inventorySource = core.FurnaceFuelSlot
+			if err := app.inventory.Apply(network.InventoryState{Inventory: captureContainerInventory()}); err != nil {
+				return fmt.Errorf("装入熔炉场景背包: %w", err)
+			}
+			if err := app.furnace.Apply(network.FurnaceState{
+				Furnace:       core.FurnaceRef{Dimension: core.Overworld, Slot: 3, Generation: 4},
+				Input:         core.ItemStack{Item: core.ItemRawIron, Count: 8},
+				Fuel:          core.ItemStack{Item: core.ItemCoal, Count: 12},
+				Output:        core.ItemStack{Item: core.ItemIronIngot, Count: 5},
+				ProgressTicks: 73,
+				BurnTicks:     911,
+			}); err != nil {
+				return fmt.Errorf("装入熔炉场景镜像: %w", err)
+			}
+			return nil
 		},
 		HUD: &captureHUDFixture{
 			Health: 5,

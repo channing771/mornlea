@@ -55,6 +55,117 @@ func TestCaptureSkylightTunnelFixtureUsesMirrorAndMesher(t *testing.T) {
 	}
 }
 
+// TestContainerCaptureFixturesUseIndependentConfirmedMirrors 锁住两个容器场景的
+// 已确认镜像、统一来源索引和跨场景 reset；漏掉任一状态都会让下一张 golden
+// 继承上一个容器或实体。
+func TestContainerCaptureFixturesUseIndependentConfirmedMirrors(t *testing.T) {
+	wantCamera := client.Camera{
+		Pos: mgl32.Vec3{0, 110, 0}, Pitch: -0.25,
+		FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
+		Near: 0.1, Far: 2000,
+	}
+	wantInventory := core.Inventory{}
+	wantInventory.Hotbar.Selected = 4
+	wantInventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 64}
+	wantInventory.Hotbar.Slots[2] = core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: 40}
+	wantInventory.Hotbar.Slots[4] = core.ItemStack{Item: core.ItemChest, Count: 3}
+	wantInventory.Backpack[0] = core.ItemStack{Item: core.ItemDirt, Count: 48}
+	wantInventory.Backpack[2] = core.ItemStack{Item: core.ItemCoal, Count: 12}
+	wantInventory.Backpack[3] = core.ItemStack{Item: core.ItemRawIron, Count: 8}
+	wantInventory.Backpack[4] = core.ItemStack{Item: core.ItemIronIngot, Count: 9}
+
+	wantChest := network.ChestState{Chest: core.ContainerRef{
+		Dimension: core.Overworld, Kind: core.ContainerKindChest, Slot: 2, Generation: 3,
+	}}
+	wantChest.Items[0] = core.ItemStack{Item: core.ItemStone, Count: 64}
+	wantChest.Items[8] = core.ItemStack{Item: core.ItemCoal, Count: 17}
+	wantChest.Items[17] = core.ItemStack{Item: core.ItemRawIron, Count: 1}
+	wantChest.Items[26] = core.ItemStack{Item: core.ItemIronIngot, Count: 64}
+
+	wantFurnace := network.FurnaceState{
+		Furnace:       core.FurnaceRef{Dimension: core.Overworld, Slot: 3, Generation: 4},
+		Input:         core.ItemStack{Item: core.ItemRawIron, Count: 8},
+		Fuel:          core.ItemStack{Item: core.ItemCoal, Count: 12},
+		Output:        core.ItemStack{Item: core.ItemIronIngot, Count: 5},
+		ProgressTicks: 73,
+		BurnTicks:     911,
+	}
+
+	for _, test := range []struct {
+		name   string
+		source int
+		assert func(*testing.T, *application)
+	}{
+		{
+			name: "chest-container", source: 36,
+			assert: func(t *testing.T, app *application) {
+				t.Helper()
+				if got, opened := app.chest.State(); !opened || got != wantChest {
+					t.Fatalf("chest=%+v opened=%v，想要 %+v/true", got, opened, wantChest)
+				}
+				if _, opened := app.furnace.State(); opened {
+					t.Fatal("箱子场景没有显式清空熔炉镜像")
+				}
+			},
+		},
+		{
+			name: "furnace-container", source: 37,
+			assert: func(t *testing.T, app *application) {
+				t.Helper()
+				if got, opened := app.furnace.State(); !opened || got != wantFurnace {
+					t.Fatalf("furnace=%+v opened=%v，想要 %+v/true", got, opened, wantFurnace)
+				}
+				if _, opened := app.chest.State(); opened {
+					t.Fatal("熔炉场景没有显式清空箱子镜像")
+				}
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			scene := captureSceneByName(t, test.name)
+			if scene.Apply == nil || scene.WarmupFrames != 8 {
+				t.Fatalf("场景=%+v，想要完整 8 帧夹具", scene)
+			}
+			app := newCaptureAICompanionState()
+			if err := app.remotePlayers.Apply(network.RemotePlayerSpawn{
+				PlayerID: core.PlayerID{6: 0x40, 8: 0x80, 15: 1}, DisplayName: "旧玩家",
+				ServerTick: 1, Position: mgl32.Vec3{1, 2, 3},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			app.panel.visible = true
+			app.camera = client.Camera{Pos: mgl32.Vec3{99, 99, 99}, Yaw: 1, Pitch: 1}
+			app.worldTimeTicks = 18000
+			if err := app.furnace.Apply(network.FurnaceState{
+				Furnace: core.FurnaceRef{Dimension: core.Overworld, Generation: 1},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := app.chest.Apply(network.ChestState{Chest: core.ContainerRef{
+				Dimension: core.Overworld, Kind: core.ContainerKindChest, Generation: 1,
+			}}); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := scene.Apply(app); err != nil {
+				t.Fatal(err)
+			}
+			if got, confirmed := app.inventory.State(); !confirmed || got != wantInventory {
+				t.Fatalf("inventory=%+v confirmed=%v，想要 %+v/true", got, confirmed, wantInventory)
+			}
+			if !app.inventoryOpen || app.inventorySource != test.source {
+				t.Fatalf("open/source=%v/%d，想要 true/%d", app.inventoryOpen, app.inventorySource, test.source)
+			}
+			if app.panel.visible || len(app.remotePlayers.Presentations()) != 0 ||
+				app.worldTimeTicks != 6000 || app.camera != wantCamera {
+				t.Fatalf("reset 后 panel=%v remotes=%d time=%d camera=%+v",
+					app.panel.visible, len(app.remotePlayers.Presentations()), app.worldTimeTicks, app.camera)
+			}
+			test.assert(t, app)
+		})
+	}
+}
+
 func TestCaptureMaterialsShowcaseFixtureUsesMirrorAndMesher(t *testing.T) {
 	var scene captureScene
 	for _, candidate := range captureScenes {
