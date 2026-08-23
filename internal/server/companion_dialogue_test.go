@@ -182,6 +182,17 @@ func waitForDialogueRequests(t *testing.T, model *fakeDialogueModel, want int) {
 	})
 }
 
+// waitForDialogueOutcomeQueued 只用于手动推进 tick 的测试同步：等待期间没有
+// 并发结果消费者，因此观察到 channel 非空后，下一个 `StepForTest` 必定
+// 能排空该结果。`len(channel)` 不得用作生产同步原语。
+func waitForDialogueOutcomeQueued(t *testing.T, host *Host) {
+	t.Helper()
+	manager := host.world.companionManager
+	waitIntegrationCondition(t, "台词结果进入 tick 队列", func() bool {
+		return len(manager.dialogueResults) > 0
+	})
+}
+
 // replaceDialogueForTest 把 manager 的台词客户端换成指向假台词模型的真
 // DialogueClient（对齐 replacePlannerForTest 的测试模式）。
 func (m *companionManager) replaceDialogueForTest(t *testing.T, model *fakeDialogueModel) {
@@ -333,17 +344,10 @@ func TestCompanionDialogueOneInFlightPerCompanion(t *testing.T) {
 
 	// 释放后结果在 tick 边界应用（D5 哨兵计数 +1），在途标记清除。
 	dialogue.releaseRequests()
-	applied := false
-	for range 50 {
-		stepResult := host.world.StepForTest()
-		receiveCompanionChatTick(t, client, stepResult.Tick)
-		if effects, inFlight := dialogueEffectCount(t, host, definitions[0].ID); effects == 1 && !inFlight {
-			applied = true
-			break
-		}
-	}
-	if !applied {
-		effects, inFlight := dialogueEffectCount(t, host, definitions[0].ID)
+	waitForDialogueOutcomeQueued(t, host)
+	stepResult := host.world.StepForTest()
+	receiveCompanionChatTick(t, client, stepResult.Tick)
+	if effects, inFlight := dialogueEffectCount(t, host, definitions[0].ID); effects != 1 || inFlight {
 		t.Fatalf("台词结果未在 tick 边界应用：effects=%d inFlight=%v", effects, inFlight)
 	}
 
@@ -390,10 +394,9 @@ func TestCompanionDialogueStaleOutcomeDiscarded(t *testing.T) {
 	host.world.stepMu.Unlock()
 
 	dialogue.releaseRequests()
-	for range 10 {
-		result := host.world.StepForTest()
-		receiveCompanionChatTick(t, client, result.Tick)
-	}
+	waitForDialogueOutcomeQueued(t, host)
+	result := host.world.StepForTest()
+	receiveCompanionChatTick(t, client, result.Tick)
 	effects, inFlight := dialogueEffectCount(t, host, definitions[0].ID)
 	if effects != 0 {
 		t.Fatalf("过时结果产生了副作用：effects=%d，想要 0", effects)
@@ -454,10 +457,9 @@ func TestCompanionDialogueGenerationBumpDiscardsOutcome(t *testing.T) {
 	host.world.stepMu.Unlock()
 
 	dialogue.releaseRequests()
-	for range 10 {
-		result := host.world.StepForTest()
-		receiveCompanionChatTick(t, client, result.Tick)
-	}
+	waitForDialogueOutcomeQueued(t, host)
+	result := host.world.StepForTest()
+	receiveCompanionChatTick(t, client, result.Tick)
 	effects, inFlight := dialogueEffectCount(t, host, definitions[0].ID)
 	if effects != 0 {
 		t.Fatalf("世代不匹配的结果产生了副作用：effects=%d，想要 0", effects)
