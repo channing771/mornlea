@@ -5,7 +5,7 @@
 | Task | Implementer | Candidate / fix commits | Reviewer | SPEC | QUALITY | 修复轮次 | 验证证据 | Controller ruling |
 |---|---|---|---|---|---|---:|---|---|
 | 1 OpenSpec change | `/root/hud_merge_impl`（本轮 fresh implementer） | `f36eb5bb3686403fa1e70cadb90688d4a27276bc`; `93a2d8d81a48777997d5ee11d3bb31e520d6fe3f` | `/root/container_task1_review`（`task-1-review.md`；修复轮次 1 复审见 `task-1-review-round-1.md`） | PASS（修复轮次 1 复审） | FAIL（修复轮次 1 复审） | 2/5 进行中 | change 创建前结构 RED；fix 1 strict/diff 通过；修复轮次 1 复审为 Spec PASS / Quality FAIL，1 finding | controller 只接受补齐 fix SHA 与 reviewer 审计事实，进入修复轮次 2；本轮复审待结论 |
-| 2 程序化容器 atlas | `/root/container_task2_impl`（本轮 fresh implementer） | `506395c95595b7187377888d4c914fe2608fd2d9` | 待派发 fresh task reviewer | 待评审 | 待评审 | 0/5 | RED、HUD race、archcheck、vet、format 与 diff check 已通过 | 待裁决 |
+| 2 程序化容器 atlas | `/root/container_task2_impl`（本轮 fresh implementer） | `506395c95595b7187377888d4c914fe2608fd2d9`; `07f28e079cb2c8bfc5ef6981afcbaf3dcca5c485` | `/root/container_task2_review`（`task-2-review.md`） | PASS | FAIL | 1/5 进行中 | RED、HUD race、archcheck、vet、format、diff check；fix 1 focused 与 strict 已通过 | 仅接受 P2 注释修复；同一 reviewer 复审待发生 |
 | 3 overlay/interaction redlines | 待派发 fresh implementer | 待执行 | 待派发 fresh task reviewer | 待评审 | 待评审 | 0/5 | 待执行 | 待裁决 |
 | 4 capture/golden | 待派发 fresh implementer | 待执行 | 待派发 fresh task reviewer | 待评审 | 待评审 | 0/5 | 待执行 | 待裁决 |
 | 5 closeout | 待派发 fresh implementer | 待执行 | 待派发 fresh whole-branch reviewer | 待评审 | 待评审 | 0/5 | 待执行 | 待裁决 |
@@ -30,3 +30,5 @@
 - GREEN：背包、合成、熔炉与箱子的栏位 surface 都采同一凹槽 UV；背包栏位的真实生产入口在 `layout.go`，故该最小 root-cause 修改与 `container.go` 同时提交，未改变坐标、hit-test、item tile、数量或耐久。
 - 验证：`go test ./internal/render/hud -run 'TestHotbarAtlas|TestContainer' -race -count=1`、`go test ./internal/render/hud -race -count=1`、`go test ./internal/archcheck -count=1`、`go vet ./internal/render/hud`、`gofmt -l`（目标文件）与 `git diff --check` 均通过。
 - 候选提交：`506395c95595b7187377888d4c914fe2608fd2d9`（`feat: add original container pixel primitives`）。Task reviewer 尚未派发；不得将本段视为 SPEC/QUALITY PASS。
+- `2026-08-23`：独立 reviewer `/root/container_task2_review` 在 `task-2-review.md` 对 `a87b5cc..fc4ea55` 给出 SPEC PASS / QUALITY FAIL；唯一 P2 是 `atlas.go` 的列说明遗漏六个 container cell。修复轮次 1 只改该注释，复审结论尚未发生。
+- 修复提交：`07f28e079cb2c8bfc5ef6981afcbaf3dcca5c485`（`docs: correct container atlas column comment`）；`gofmt`、brief HUD focused、strict OpenSpec 与 `git diff --check` 均通过。
