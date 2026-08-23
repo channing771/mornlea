@@ -64,6 +64,11 @@
 
 Task 2、3、4 的 workflow 静态契约脚本均通过，YAML 可解析；`BASE..604ad32` 只包含 `.github/workflows/ci.yml` 与本 change 的 OpenSpec 文件。
 
+### 整分支终审修复轮次 1
+
+- P2 已修复：`quality` 的 `actions/setup-node@v4` 从未批准的 Node 24 恢复为基线 Node 20；针对基线版本的静态断言在修复前失败、修复后通过，Task 2、3、4 的 workflow 静态契约仍全部通过。
+- 本修复不改变 DAG、artifact validator、race 包集合、integration 命令、最终汇总或外部验收状态。
+
 ### 真实 Actions 证据（待完成）
 
 本地执行不能证明 GitHub 的事件去重、concurrency 取消、真实 artifact 下载、matrix rerun 或 hosted-runner 墙钟。控制会话尚未授权本任务 push、创建/更新 PR、触发、重跑或取消 GitHub Actions，因此下列项目保持未完成，未用静态推断冒充实机证据：
