@@ -9,9 +9,11 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"math"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -73,6 +75,41 @@ type interactionExpectedEvent struct {
 	command    string
 	issuerName string
 	reason     network.ChatRejectReason
+}
+
+// canonicalInteractionTranscript 复制 transcript，供跨接收者规范化比较。
+func canonicalInteractionTranscript(transcript []companionChatTranscriptEvent) []companionChatTranscriptEvent {
+	canonical := slices.Clone(transcript)
+	slices.SortFunc(canonical, func(left, right companionChatTranscriptEvent) int {
+		if order := cmp.Compare(left.Event.EventID, right.Event.EventID); order != 0 {
+			return order
+		}
+		return cmp.Compare(left.Recipient, right.Recipient)
+	})
+	return canonical
+}
+
+// TestCanonicalInteractionTranscriptIgnoresCrossRecipientInterleaving 验证同一批
+// 广播事件按接收者流或按事件交错收集时，跨流比较不把无语义的拼接顺序当差异。
+func TestCanonicalInteractionTranscriptIgnoresCrossRecipientInterleaving(t *testing.T) {
+	event := func(recipient int, eventID uint64) companionChatTranscriptEvent {
+		return companionChatTranscriptEvent{
+			Recipient: recipient,
+			Event:     network.ChatEvent{EventID: eventID, Kind: network.ChatEventAccepted},
+		}
+	}
+	recipientMajor := []companionChatTranscriptEvent{
+		event(0, 1), event(0, 2), event(1, 1), event(1, 2),
+	}
+	eventMajor := []companionChatTranscriptEvent{
+		event(0, 1), event(1, 1), event(0, 2), event(1, 2),
+	}
+	if !reflect.DeepEqual(
+		canonicalInteractionTranscript(recipientMajor),
+		canonicalInteractionTranscript(eventMajor),
+	) {
+		t.Fatal("等价的双接收者事件流因采集交错不同而不一致")
+	}
 }
 
 // newInteractionParityHost 构造多人指挥 parity 用的 Host：存档预置一条与配置
@@ -313,6 +350,18 @@ func runCompanionInteractionParity(t *testing.T, transport string) interactionPa
 		float32(mineTarget.X) + 0.5, float32(mineTarget.Y) + 0.5, float32(mineTarget.Z) + 0.5,
 	}
 	result.ModelRequests, _, _, _ = model.snapshotCounts()
+	// 每个客户端自己的消息流仍必须保持严格 EventID 顺序；这里只把两个独立
+	// 流之间没有协议含义的采集交错规范为 (EventID, recipient)。
+	for recipient := range clients {
+		stream := make([]network.ChatEvent, 0, 13)
+		for _, entry := range result.Transcript {
+			if entry.Recipient == recipient {
+				stream = append(stream, entry.Event)
+			}
+		}
+		assertStrictlyIncreasingEventIDs(t, stream)
+	}
+	result.Transcript = canonicalInteractionTranscript(result.Transcript)
 	return result
 }
 
@@ -486,16 +535,6 @@ func TestCompanionInteractionMemoryTCPParity(t *testing.T) {
 			t.Fatalf("transcript[%d] Validate: %v", index, err)
 		}
 	}
-	for recipient := range 2 {
-		stream := make([]network.ChatEvent, 0, 13)
-		for _, entry := range memory.Transcript {
-			if entry.Recipient == recipient {
-				stream = append(stream, entry.Event)
-			}
-		}
-		assertStrictlyIncreasingEventIDs(t, stream)
-	}
-
 	// 单传输锁定：世界结果的过程事实。跟随阶段必须朝玩家甲真实位移；mine
 	// 完成后目标方块清空、煤炭恰好一件入包、石镐耐久 131→130，且最终位置
 	// 位于采掘目标的交互可达范围内。
