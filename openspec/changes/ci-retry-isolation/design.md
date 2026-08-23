@@ -37,3 +37,12 @@ Rust 构建是 macOS workflow 的唯一生产构建点；下游禁止再次运�
 ## Compatibility, rollback, and verification
 
 本 change 不改变协议、存档、客户端行为或生产测试断言，没有数据迁移。回退单个 workflow 提交即可恢复当前 job 编排。验证必须包括 workflow 静态检查、三片包集合与旧命令逐项 ledger 对照、artifact SHA 故障注入、单片失败到汇总失败、rerun failed jobs 的隔离检查，以及 `openspec validate ci-retry-isolation --strict --no-interactive` 和 `git diff --check`。
+
+## Task 6：远端既有 server 偶发测试根修
+
+最终文档 SHA 的两次 hosted attempt 分别暴露两个与 workflow 编排无关的既有测试夹具问题，修复只落在 `internal/server` 测试代码：
+
+- 多接收者伙伴交互 parity 仍逐条锁定每个客户端自身的 EventID 严格递增；跨客户端 transcript 比较只把没有协议顺序含义的流间交错规范为 `(EventID, recipient)`，不排序或删除任一客户端内部事件。
+- 阶段验收要求观察完整台词节点集，因此每个权威 tick 后若该伙伴存在台词请求在途，测试等待对应 outcome 已进入既有有界结果通道，再推进下一 tick；这替代固定 2ms 墙钟猜测，不改变生产“单伙伴在途时新节点跳过”的尽力而为语义。
+
+本根修不改产品代码、协议、队列容量、超时、重试或断言覆盖；回退两处测试夹具修改即可恢复原状。验证包括两项 focused race 各 `-count=10`、完整 `internal/server` race、架构门禁、vet、gofmt、OpenSpec strict 与 diff/基线文档一致性检查。

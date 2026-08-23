@@ -149,6 +149,36 @@ func assertStageAcceptanceParity(t *testing.T, memory, tcp stageAcceptanceResult
 	assertStageSequenceParity(t, "第二段事实", memory.secondFactKinds, tcp.secondFactKinds)
 }
 
+// collectStageAcceptanceDialogueEvents 在每个权威 tick 后等待已派发的台词
+// outcome 入队，再推进下一 tick。阶段验收要求观察完整节点集，而生产语义允许
+// 单伙伴仍有请求在途时跳过新节点；因此测试必须建立结果就绪边界，不能用固定
+// 墙钟 sleep 猜测本地 HTTP 已完成。
+func collectStageAcceptanceDialogueEvents(
+	t *testing.T,
+	host *Host,
+	client network.ClientEndpoint,
+	id companion.ID,
+	maxTicks int,
+	stop func(events []network.ChatEvent) bool,
+) []network.ChatEvent {
+	t.Helper()
+	var collected []network.ChatEvent
+	for range maxTicks {
+		result := host.world.StepForTest()
+		collected = append(collected,
+			companionChatEvents(receiveCompanionChatTick(t, client, result.Tick))...)
+		if _, inFlight := dialogueEffectCount(t, host, id); inFlight {
+			waitIntegrationCondition(t, "阶段验收台词 outcome", func() bool {
+				return len(host.world.companionManager.dialogueResults) > 0
+			})
+		}
+		if stop != nil && stop(collected) {
+			return collected
+		}
+	}
+	return collected
+}
+
 // TestM5StageAcceptancePersonaDialogueEndToEnd 是 M5A–M5D 的阶段总验收：
 // 见文件头注释的链路清单。两段生命周期共享同一磁盘存档目录与同一伙伴定义
 // （internal/server 侧的「同一 config/personas」等价物：定义在两次 NewHost
@@ -242,7 +272,7 @@ func TestM5StageAcceptancePersonaDialogueEndToEnd(t *testing.T) {
 		waitForIncomingChatDepth(t, host.world, 1)
 		// 三步计划的台词节点全集 = 开始 + 2 个进展（SelectProgressSteps(3)
 		// 全选 [0,1,2]，末步完成迁移产出 Completed、其表达由终态台词承载）+ 终态。
-		events := collectDialogueEvents(t, host, client, firstLifetimeTickBudget, func(events []network.ChatEvent) bool {
+		events := collectStageAcceptanceDialogueEvents(t, host, client, id, firstLifetimeTickBudget, func(events []network.ChatEvent) bool {
 			return countKind(events, network.ChatEventTaskCompleted) == 1 &&
 				countKind(events, network.ChatEventCompanionSpeech) == 4
 		})
@@ -407,7 +437,7 @@ func TestM5StageAcceptancePersonaDialogueEndToEnd(t *testing.T) {
 
 		sendIntegration(t, client2, network.ChatCommand{Text: "@阿木 再走两步"})
 		waitForIncomingChatDepth(t, host2.world, 1)
-		events2 := collectDialogueEvents(t, host2, client2, secondLifetimeTickBudget, func(events []network.ChatEvent) bool {
+		events2 := collectStageAcceptanceDialogueEvents(t, host2, client2, id, secondLifetimeTickBudget, func(events []network.ChatEvent) bool {
 			return countKind(events, network.ChatEventTaskCompleted) == 1 &&
 				countKind(events, network.ChatEventCompanionSpeech) == 3
 		})

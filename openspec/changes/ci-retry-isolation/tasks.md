@@ -19,3 +19,9 @@
 - [x] 3.4 连续 push 新提交，确认旧 SHA workflow 被 concurrency 取消，新 SHA 只留一份活动 workflow。
 - [x] 3.5 把真实 Actions 各 job 墙钟记入 `ledger.md`，只作记录。
 - [ ] 3.6 生成最终 `BASE..HEAD` committed review package 与 SHA-256，完成独立整分支终审；不自行归档。
+
+## 4. Task 6：远端既有 server 偶发测试根修
+
+- [x] 4.1 让 `TestCompanionInteractionMemoryTCPParity` 保留每接收者内部 EventID 顺序断言，并仅规范化无语义的跨接收者采集交错；添加可重复 RED/GREEN 回归测试。
+- [x] 4.2 让 `TestM5StageAcceptancePersonaDialogueEndToEnd` 在完整节点集验收中等待台词 outcome 就绪后再推进下一 tick，移除对固定 2ms HTTP 完成猜测的依赖，不改变产品单在途跳过语义。
+- [x] 4.3 运行两项 focused race 各 `-count=10`、`go test ./internal/server -race -count=1`、架构门禁、vet、gofmt、OpenSpec strict、`git diff --check` 与 `cmp AGENTS.md CLAUDE.md`；提交并生成独立 report/review package，交由控制会话评审。

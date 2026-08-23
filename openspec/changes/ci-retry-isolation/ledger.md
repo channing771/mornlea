@@ -142,4 +142,29 @@ Task 2、3、4 的 workflow 静态契约脚本均通过，YAML 可解析；`BASE
 - 控制会话“不要再 rerun”的消息到达前，attempt 3 已被提交；收到裁决后立即调用取消。GitHub API 将 attempt 3 记为 `cancelled`（11:52:07–11:53:39 UTC）：唯一新执行的 race `internal-server` job `97189958083` 在 Race tests 中被取消，最终 `test` job `97190119204` 按 cancelled 前置 fail-closed。该 attempt 不作为新的测试失败或验收绿灯证据，也没有继续 rerun。
 - 因此，本 change 的同 SHA 单 workflow、完整 job graph、artifact 下载/SHA 校验、concurrency 取消、failed-only 隔离与最终 fail-closed 均已有真实 Actions 证据；PR 当前远端 gate 仍因上述既有 `internal/server` 偶发测试为红，需由新的独立修复任务根治，不能把它记录成已通过。
 
+### Task 6：远端既有 server 偶发测试根修
+
+- RED（hosted）：run `32636980593` attempt 1 的 Memory/TCP 事件内容与各自客户端 EventID 流一致，只在 EventID 6/7 的 recipient 0/1 跨流拼接顺序不同；attempt 2 的事件 `[1 3 9 4 5]` 表明任务事实完成而开始台词仍在途，后续 progress/terminal 被既有单在途守卫合法跳过。
+- RED（本地确定性）：新增等价双接收者交错回归测试在未规范化时失败；`TestCompanionDialogueOneInFlightPerCompanion -race -count=10` 稳定通过，证明测试若不建立 outcome-ready 边界就不能同时要求完整节点集。
+- 根修边界：先逐接收者断言原始流 EventID 严格递增，再仅按 `(EventID, recipient)` 规范化跨流比较；阶段验收使用既有 `dialogueResults` 有界通道作为条件边界，不放宽超时、不加重试、不改队列或产品台词语义。
+
+#### Task 6 本地验证
+
+| 命令 | 结果 |
+|---|---|
+| `make rust` | EXIT 0；Rust 1.97.1 release 构建完成 |
+| `go test ./internal/server -run '^TestCanonicalInteractionTranscriptIgnoresCrossRecipientInterleaving$' -race -count=1`（GREEN 前） | 按预期 FAIL：等价跨接收者交错未规范化 |
+| `go test ./internal/server -run '^TestCompanionDialogueOneInFlightPerCompanion$' -race -count=10` | EXIT 0；锁定单在途期间新节点合法跳过 |
+| `go test ./internal/server -run '^TestCompanionInteractionMemoryTCPParity$' -race -count=10` | EXIT 0；5.862s |
+| `go test ./internal/server -run '^TestM5StageAcceptancePersonaDialogueEndToEnd$' -race -count=10` | EXIT 0；10.718s |
+| `go test ./internal/server -race -count=1` | EXIT 0；126.670s |
+| `go test ./internal/archcheck -count=1` | EXIT 0；2.986s |
+| `go vet ./...` | EXIT 0；无输出 |
+| `test -z "$(gofmt -l .)"` | EXIT 0；无输出 |
+| `openspec validate --all --strict --no-interactive` | EXIT 0；58/58 |
+| `git diff --check` | EXIT 0 |
+| `cmp -s AGENTS.md CLAUDE.md` | EXIT 0 |
+
+Task 6 未修改产品文件、workflow、协议、存档、超时、重试或队列容量；只修改两个 `internal/server` 测试关注点与本 change 的 design/tasks/ledger。
+
 Task 5 的 `1.3`、`3.2`–`3.5` 已按上述本地故障 fixture 与真实 Actions 证据完成；`3.6` 仍留给控制会话生成最终 committed review package 并完成独立整分支终审，本 implementer 不自审或归档。
