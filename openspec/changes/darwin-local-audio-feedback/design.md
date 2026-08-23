@@ -5,7 +5,9 @@
 ## Decisions
 
 - Darwin 实现使用单一 `AudioQueue`、8 个预分配 buffer、22050 Hz mono signed-int16 PCM；初始化后与每次播放均不得分配。
-- 四个 cue 分别对应：成功采掘完成、成功放置完成、成功进食完成、收到伤害确认。只有对应确认边界发生时才播放；被拒绝、预测或重复状态不得播放。
+- 四个 cue 分别对应：有效 UI/成功放置共用 `CueUIClick`，以及成功采掘完成、成功进食完成、收到伤害确认。有效本地 UI 只在动作生效且所需请求发送成功后播放；权威 cue 只有对应确认边界发生时才播放。空白、禁用、发送失败、被拒绝、预测或重复状态不得播放。
+- 新鲜的 `MiningActive=false` 状态在处理该状态前已按服务端 FIFO 消费完更早的成功方块增量，因此此时清除旧采掘目标既能阻止后来无关移除误响，也不会吞掉本人的正常完成 cue。
+- 同一 `PlayerState` 可同时确认进食与伤害；客户端观察函数返回两个独立布尔位的固定值结果，调用点分别播放，不使用 slice、队列或通用事件总线。
 - v26 在 Play S→C ID 20 新增 `PlaceBlockSucceeded{Sequence uint64}`，载荷恰为 8-byte little-endian u64，ID 21 保持未分配。模拟只在 `executePlacement` 已原子写方块并恰减一件后将 `(Session, Sequence)` 追加到当 tick 有界结果；server 只向该 session 发布。拒绝仍只有 `CommandRejected`。
 - 客户端删除放置目标增量+库存减量 matcher，只保存本会话最高已消费成功序号；首次更大序号播放，重复/旧序号无声，reset/close 清零。不新建队列、map、timeout、retry 或通用命令成功框架。
 - `audioVolume` 是 `Config` 的独立顶层 `float32`，默认 `0.7`，显式值必须为闭区间 `0..1`；它不进入 `Fields()` 或调试面板。

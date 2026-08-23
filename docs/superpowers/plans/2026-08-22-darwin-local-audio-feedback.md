@@ -225,6 +225,14 @@ git commit -m "feat: play cues from confirmed client events"
 - [ ] 最小实现：`TickResult` 新增有界 placement success slice，仅权威放置原子成功后追加；server 沿用 local result/outbox 关闭规则发送；客户端删除 delta+inventory pending matcher，仅以 reset 清空的最高已消费 sequence 去重。不新增队列、map、timeout、retry 或通用 command-success 抽象。
 - [ ] 同步 AGENTS.md/CLAUDE.md 协议 v26 基线，保持两文件逐字节相同；存档、engine/client ABI 与 benchmark scenario 不变。
 
+### Task 4 fix round 4: 状态失效、同 tick 双 cue 与规格闭环
+
+- [ ] 先把完整音频栈从旧 melee base `56e5d6c` 安全重放到 PR #66 修复 HEAD `82eb03b`，以 `git range-diff` 证明全部音频提交内容等价；不 force-push。
+- [ ] 先写采掘 RED：active 目标后收到新鲜 inactive 状态，再由无关增量移除旧目标必须无声；拒绝后的 inactive 路径同样无声；服务端成功顺序“目标增量先、inactive 状态后”仍只播放一次。
+- [ ] 先写进食+伤害 RED：`InventoryState` 先确认食物恰减一件，下一条 `PlayerState` 同时 hunger 上升且 health 下降时，两种 cue 各播放一次；使用两个独立布尔位或等价定长、零分配结果，不使用 slice、队列或通用事件总线。
+- [ ] 在 active delta spec 明确有效本地 `CueUIClick`：可合成按钮发送成功、首次有效来源选择、同格取消和合法移动发送成功各响一次；空白、未确认/禁用、不可合成、熔炉输出作目标与发送失败无声。保留全部既有 UI 行为。
+- [ ] 保留 v26 placement 成功应答、reset/close、采掘/进食/伤害与 UI 的既有回归；运行 focused RED/GREEN、四包组合 race、archcheck、vet、gofmt、59 项严格 OpenSpec、diff/cmp，记录独立评审证据。
+
 ## Task 5: 全量验证、人工试听和终审
 
 **Files:**

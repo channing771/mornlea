@@ -20,6 +20,14 @@
 - [x] 在 `cmd/mornlea` 写红测后删除放置 delta+库存 matcher，仅以 reset 清空的最高已消费 sequence 触发一次 cue；重复/旧序号、拒绝与无关状态无声。
 - [x] 同步 AGENTS.md/CLAUDE.md 的协议 v26 基线并保持逐字节相同；运行 `make rust`、受影响包 race 测试、`go test ./internal/archcheck -count=1`、`go vet ./...`、`gofmt -l .`、严格 OpenSpec 校验与 `git diff --check`。
 
+## 4A. Task 4 fix round 4
+
+- [ ] 安全重放完整音频栈到 melee PR #66 修复 HEAD `82eb03b`，保存旧 HEAD 备份，并以 `git range-diff` 核对 11 个提交内容等价。
+- [ ] 为 active→inactive/rejected→无关移除旧目标无声写 RED，并在成功增量优先顺序下保留正常采掘完成 cue。
+- [ ] 为同一 `PlayerState` 同时确认进食与伤害写 RED，以零分配定长结果独立返回并各播放一次。
+- [ ] 在 delta spec、design、plan 中补齐有效本地 UI click 与空白/禁用/发送失败静音契约，不删除既有行为。
+- [ ] 运行 focused RED/GREEN、四包组合 race、archcheck、vet、`gofmt -l .`、59 项严格 OpenSpec、`git diff --check` 与 AGENTS/CLAUDE 逐字节一致检查。
+
 ## 5. 收尾
 
 - [ ] 运行平台相关测试、`go test ./... -race`、`go vet ./...`、`gofmt -l .` 与 `openspec validate --all --strict --no-interactive`。
