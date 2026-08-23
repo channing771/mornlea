@@ -2,7 +2,7 @@
 
 ### Requirement: 三类容器使用统一的原创像素表面
 
-系统 SHALL 在既有 HUD pass 内为背包/合成、熔炉和箱子呈现统一的原创程序化像素框、栏位凹槽、标题和来源选择轮廓。凹槽与三个标题 MUST 来自既有 HUD atlas 的程序化 cell，不得来自二进制 UI 资产或 Mojang 像素；每个打开的 overlay MUST 恰好追加一个标题 quad，标题 MUST NOT 进入固定 700 glyph 流。既有 panel、slot 和 bar quad MUST 保持原几何，只可原位更换 UV 或颜色。
+系统 SHALL 在既有 HUD pass 内为背包/合成、熔炉和箱子呈现统一的原创程序化像素框、栏位凹槽、标题和来源选择轮廓。凹槽、三个标题、熔炉火焰与进度箭头 MUST 来自既有 HUD atlas 的六个固定程序化 cell，不得来自二进制 UI 资产或 Mojang 像素；每个打开的 overlay MUST 恰好追加一个标题 quad，标题 MUST NOT 进入固定 700 glyph 流。既有 slot、bar 与 hit-test 几何 MUST 保持不变；panel 只可向上扩出恰好 20px header，其他三条边 MUST 保持不变，且标题与 header MUST NOT 与任何命中区域相交。
 
 #### Scenario: 背包与合成使用像素框和程序化标题
 
@@ -18,7 +18,8 @@
 - **WHEN** HUD 绘制熔炉 overlay
 - **THEN** 三个栏位 MUST 使用与背包相同的原创凹槽，overlay MUST 追加恰好一个程序化标题 quad
 - **AND** 燃烧和熔炼进度 MUST 分别以原创火焰与箭头像素图示表达，空、部分和完成状态 MUST 可区分
-- **AND** 图示 MUST 复用既有进度 bar quad 的位置与数量，不得增加新的进度 quad 或 glyph
+- **AND** 图示 MUST 复用既有进度 bar quad 的位置与数量，燃烧填充以火焰 cell 自下向上裁剪，熔炼填充以箭头 cell 自左向右裁剪
+- **AND** 填充实例尺寸与 UV 端点 MUST 按同一进度比例收缩，不得压缩完整图标，也不得增加新的进度 quad 或 glyph
 
 #### Scenario: 箱子使用同一像素语言
 
@@ -72,5 +73,6 @@
 
 - **GIVEN** framebuffer 为零尺寸或现有支持的窄正尺寸
 - **WHEN** 任一容器 overlay 准备布局
-- **THEN** 零尺寸 MUST 不发出实例，正尺寸的全部实例 MUST 有限且严格位于 framebuffer 内
+- **THEN** 零尺寸 MUST 不发出实例，正尺寸的 `openHUDHeight` MUST 包含同一 20px header 高度，全部实例 MUST 有限且严格位于 framebuffer 内
+- **AND** 极窄或极矮正尺寸 MUST 继续由统一 HUD 缩放比缩放绘制与命中，标题、header 和所有命中矩形 MUST 保持不相交
 - **AND** 系统 MUST NOT 为容器换肤分配动态 GPU 资源或放宽固定容量

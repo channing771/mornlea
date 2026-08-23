@@ -7,7 +7,7 @@
 - 只为背包/合成、熔炉和箱子换用同一套原创程序化像素框、栏位凹槽、标题与来源轮廓；熔炉另以原创火焰/箭头图示区分燃烧和熔炼进度。
 - 保持玩家背包 `0..35` 共 36 格、熔炉统一 `0..38` 共 39 格、箱子统一 `0..62` 共 63 格的绘制与命中语义，固定 UI 配方仍恰好为 10 条。
 - 保持栏位移动的两次点击整堆语义：第一次只选择来源，第二次才发送恰好一个权威移动请求；客户端不预测扣增物品，服务端继续在应用前验证全部状态。
-- 在 `inventory-crafting` 之后依次新增 `furnace-container` 与 `chest-container` 两个确定性无窗口场景，使正式场景从 15 增为 17；既有其余顺序和 `water-surface-slope`、倒数第二 `far-horizon`、唯一末项 `water-underwater` 的尾序不变。
+- 在 `inventory-crafting` 之后依次新增 `chest-container` 与 `furnace-container` 两个确定性无窗口场景，使正式场景从 15 增为 17；既有其余顺序和 `water-surface-slope`、倒数第二 `far-horizon`、唯一末项 `water-underwater` 的尾序不变。
 
 非目标：不改变栏位坐标、命中区域、配方目录、物品移动规则、权威/预测边界、容器生命周期、HUD 状态行、网络/存档/配置格式或版本；不增加二进制 UI 美术、Mojang 像素、shader、GPU pass、动态资源、第三方依赖或主题/registry 抽象。
 
