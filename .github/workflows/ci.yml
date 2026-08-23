@@ -108,6 +108,9 @@ jobs:
             validate_artifact engine/target/release/libmornlea_engine.dylib
             validate_artifact engine/target/release/libmornlea_client.dylib
           } < engine/target/release/native-artifact-manifest.txt
+          mkdir -p engine/target/release/deps
+          cp engine/target/release/libmornlea_engine.dylib engine/target/release/deps/
+          cp engine/target/release/libmornlea_client.dylib engine/target/release/deps/
       - name: OpenSpec 规格门禁
         run: npx --yes @fission-ai/openspec@1.7.0 validate --all --strict --no-interactive
       - name: Agent Hooks 策略测试
@@ -190,6 +193,9 @@ jobs:
             validate_artifact engine/target/release/libmornlea_engine.dylib
             validate_artifact engine/target/release/libmornlea_client.dylib
           } < engine/target/release/native-artifact-manifest.txt
+          mkdir -p engine/target/release/deps
+          cp engine/target/release/libmornlea_engine.dylib engine/target/release/deps/
+          cp engine/target/release/libmornlea_client.dylib engine/target/release/deps/
       - name: Race tests
         run: go test ${{ matrix.packages }} -race -p=1 ${{ matrix.extra }}
       - name: 记录 race 分片信息
@@ -241,6 +247,9 @@ jobs:
             validate_artifact engine/target/release/libmornlea_engine.dylib
             validate_artifact engine/target/release/libmornlea_client.dylib
           } < engine/target/release/native-artifact-manifest.txt
+          mkdir -p engine/target/release/deps
+          cp engine/target/release/libmornlea_engine.dylib engine/target/release/deps/
+          cp engine/target/release/libmornlea_client.dylib engine/target/release/deps/
       - name: 50ms 服务端探针门禁
         run: go test ./cmd/mornlea -run '^TestScenarioV7EightSessionServerProbeIsRealAndBounded$' -count=1
       - name: TCP 重启与 Memory/TCP parity 重复门禁

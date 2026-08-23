@@ -69,7 +69,7 @@ Task 2、3、4 的 workflow 静态契约脚本均通过，YAML 可解析；`BASE
 - P2 已修复：`quality` 的 `actions/setup-node@v4` 从未批准的 Node 24 恢复为基线 Node 20；针对基线版本的静态断言在修复前失败、修复后通过，Task 2、3、4 的 workflow 静态契约仍全部通过。
 - 本修复不改变 DAG、artifact validator、race 包集合、integration 命令、最终汇总或外部验收状态。
 
-### 真实 Actions 证据（待完成）
+### 真实 Actions 证据
 
 #### Concurrency 验收起点
 
@@ -77,13 +77,39 @@ Task 2、3、4 的 workflow 静态契约脚本均通过，YAML 可解析；`BASE
 - 初始观察 SHA：`cac9d3ccd36dbf8dd5ac690dcbff9088e682671f`；2026-08-23T10:58:19Z 查询到唯一一条 CI workflow：run [`32635108391`](https://github.com/channing771/mornlea/actions/runs/32635108391)，事件为 `pull_request`，整体仍为 queued。
 - 同一观察时 `linux-server` 已成功，`native-macos` 仍 queued；将在此前置 run 未完成时正常 push 本 ledger 证据提交，用新 SHA 验证 concurrency 取消，不改 workflow 或门禁制造失败。
 
+#### Concurrency 与单 workflow
+
+- 上述旧 run 在 2026-08-23T10:58:52Z 结束为 `cancelled`。新提交 `58b3367b27a7d6a66d24939401df2d38f1f317c4` 对应唯一 CI run [`32635234402`](https://github.com/channing771/mornlea/actions/runs/32635234402)，证明连续正常 push 会取消旧 SHA，且新 SHA 没有重复 workflow。
+- 新 run 的逻辑图恰含 `native-macos`、`quality`、`go-race` 的 `cmd`/`internal-server`/`internal-rest` 三个 child、`integration`、`linux-server` 与 `test` 共八项。
+
+#### 自然失败、fail-closed 与 failed-jobs rerun
+
+- run `32635234402` attempt 1 中，`native-macos`、`quality` 与 `linux-server` 成功；三个 race child 与 `integration` 在各自 artifact 下载和 SHA/大小/摘要校验均成功后失败。最终 `test` job `97185844569` 因 `needs.go-race.result` 和 `needs.integration.result` 均为 `failure` 而失败，没有把前置失败转绿。
+- 四个失败 job 的共同日志是 macOS dyld 找不到 Cargo 产物声明的 `engine/target/release/deps/libmornlea_client.dylib`；producer artifact 只恢复顶层 dylib。局部二进制核对证明顶层与 `deps` 副本 SHA-256 相同，且 `LC_ID_DYLIB` 指向当前 checkout 的 `release/deps` 路径。修复因此只在严格校验后把两份已验证 dylib 复制到该路径，不增加 artifact 内容或 fallback build。
+- 对 attempt 1 使用 GitHub “Re-run failed jobs” 得到 [attempt 2](https://github.com/channing771/mornlea/actions/runs/32635234402/attempts/2)：仅四个失败 job 获得新的执行区间（`integration` `97185964501`、race `97185964589`/`97185964645`/`97185964671`），依赖它们的 `test` `97186289050` 随后重跑。成功的 `native-macos`、`quality`、`linux-server` 在 attempt 2 API 中保留 attempt 1 的原起止时间，未重新执行。
+
+#### Hosted runner 墙钟（run 32635234402 attempt 1）
+
+以下时长按 GitHub job `started_at` 到 `completed_at` 计算，只记录，不参与退出状态：
+
+| job | job ID | 起止时间（UTC） | 墙钟 |
+|---|---:|---|---:|
+| `native-macos` | 97183871320 | 11:10:02–11:11:52 | 110s |
+| `quality` | 97185403314 | 11:12:23–11:13:24 | 61s |
+| `go-race / cmd` | 97185403296 | 11:12:19–11:14:07 | 108s |
+| `go-race / internal-server` | 97185403287 | 11:11:56–11:12:43 | 47s |
+| `go-race / internal-rest` | 97185403344 | 11:12:26–11:15:39 | 193s |
+| `integration` | 97185403274 | 11:11:54–11:12:24 | 30s |
+| `linux-server` | 97183871357 | 10:58:54–10:59:54 | 60s |
+| `test` | 97185844569 | 11:15:41–11:15:45 | 4s |
+
 下列项目只按真实 GitHub 结果更新，不用静态推断冒充实机证据：
 
 | 验收项 | 状态 |
 |---|---|
-| 同一 PR SHA 只有一个 workflow，job graph 含全部 8 个逻辑 job/child | 待真实 PR run |
-| 至少两个下游成功下载并验证同 SHA artifact | 待真实 PR run |
-| 真实失败使最终 `test` 失败，rerun failed jobs 只重跑失败 job 与 `test` | 待自然失败或不放宽门禁的真实失败 |
-| 新 SHA 取消旧 SHA，且新 SHA 只留一份活动 workflow | 待连续正常 push |
-| `native-macos`、`quality`、3 个 race child、`integration`、`linux-server`、`test` 墙钟 | 待 Actions summary |
+| 同一 PR SHA 只有一个 workflow，job graph 含全部 8 个逻辑 job/child | run `32635234402` 已验证 |
+| 至少两个下游成功下载并验证同 SHA artifact | `quality`、`integration` 及三个 race child 均已验证 |
+| 真实失败使最终 `test` 失败，rerun failed jobs 只重跑失败 job 与 `test` | run `32635234402` attempts 1/2 已验证 |
+| 新 SHA 取消旧 SHA，且新 SHA 只留一份活动 workflow | runs `32635108391`→`32635234402` 已验证 |
+| `native-macos`、`quality`、3 个 race child、`integration`、`linux-server`、`test` 墙钟 | 上表已记录；修复后的成功 run 待补 |
 | 最终 `BASE..HEAD` review package、SHA-256 与独立整分支终审 | 待本收尾提交后由控制会话执行 |
