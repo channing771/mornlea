@@ -111,7 +111,9 @@ func TestEightPlayersSameTickPrimaryInputKeepsSessionOrder(t *testing.T) {
 			t.Errorf("关闭八人同 tick 近战服务端: %v", err)
 		}
 	})
-	for index := range clients {
+	// Session 2 先连接，若近战错误地按插入顺序而不是 `SessionID` 处理，下面的
+	// wire 采掘分流断言会恰好反转。
+	for _, index := range [...]int{1, 0, 2, 3, 4, 5, 6, 7} {
 		identity := multiplayerIdentity(byte(0xa0+index), multiplayerNames[index])
 		clientEndpoint, serverEndpoint := network.NewMemoryPair(4096)
 		if _, err := running.AttachSession(eightMeleeSessionSpec(index, identity, serverEndpoint)); err != nil {
