@@ -35,6 +35,8 @@ Raycast 生产路径同样由 Rust `mornlea_engine` 独占 DDA 遍历；`interna
 
 - 修改保持聚焦，优先复用现有抽象，不顺手重构无关代码。
 - 新增或修改行为时先写失败测试，再完成最小实现和重构。
+- 测试文件编排遵循「按关注点一文件」：测试与被测代码同目录（同包白盒或 `foo_test` 外部测试包），不做集中式 `tests/` 镜像目录——`go test` 只认同目录 `_test.go`，白盒断言也依赖同包。一个测试文件只装一个主题或一条被证性质；多主题巨型测试文件在因任何改动被触碰时应顺势按关注点拆分。拆分是零行为变化重组：测试函数名与子测试名一律不动，`go test -list` 的前后一致按**集合语义**验收（声明顺序随文件拆分必然改变）。命名判据：`property_` 前缀表「被证性质」，`_integration`/`_restart`/`_fuzz`/`_parity`/`_oracle` 等后缀表「测试种类」，两者语义不同，不得叠加出 `property_x_integration_test.go` 一类的名字。
+- 共享测试 helper 每包只设一个中心：优先扩展包内既有的 `*_helpers_test.go`，没有才新建 `helpers_test.go`，不得另立并行中心；纯 helper 文件必须以 `*_helpers_test.go` 命名，不得顶着普通测试文件名却不含任何测试函数。helper 落位前先 grep 其引用文件集合：被多于一个测试文件引用的才迁入中心，单文件私有的留在消费它的测试文件内；中心超过约 500 行或横跨两个以上不相干域时应按域再拆。范例：`internal/fluid` 的 `helpers_test.go` 与 `property_{rescan,budget,order,converge}_test.go`（由 805 行的 `property_test.go` 按被证性质拆出）。
 - Go 代码必须经过 `gofmt`；错误要保留上下文，生命周期资源必须可关闭且关闭应安全。
 - 长期基线文档（本文件的「项目定位」）只陈述**当前存在的能力与契约版本**。「本变更不做 X」是单个 OpenSpec change 的非目标，写在该 change 的 `proposal.md` 里并随它一起归档，不要写进这里：这类否定式断言在别处新增能力时会静默变假且现场没有任何信号——本文件就曾因此留着「伙伴不创建 Planner/FIFO/路径/persona/摘要」达四个里程碑，而那些能力早已交付。稳定的架构事实（「不追求兼容官方 Minecraft」「TCP 没有认证或加密」「没有生产 Go fallback」）是设计边界而非能力缺口，不在此列。契约版本号一侧由 `internal/archcheck` 的 `TestBaselineVersionsMatchCode` 兜底。
 - `AGENTS.md` 与 `CLAUDE.md` 必须**逐字节相同**，由 `internal/archcheck` 的 `TestBaselineDocsAreIdentical` 兜底。二者曾因只更新其中一份而分叉，导致 `CLAUDE.md` 的基线描述滞后四个里程碑——改任何一份都必须同步另一份。
