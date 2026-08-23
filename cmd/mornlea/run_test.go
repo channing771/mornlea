@@ -230,6 +230,32 @@ func TestRunWithDependenciesBypassesProfileForBenchmark(t *testing.T) {
 	}
 }
 
+// `TestRunWithDependenciesPassesConfiguredAudioVolume` 防止启动装配遗漏将生效配置
+// 传给本地音频；这样播放器才能只在创建时读取总音量。
+func TestRunWithDependenciesPassesConfiguredAudioVolume(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	cfg := config.Defaults()
+	cfg.AudioVolume = 0.25
+	if err := cfg.Save(configPath); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	var got float32
+	err := runWithDependencies([]string{"--config", configPath}, runDependencies{
+		loadIdentity: func(*string) (network.Identity, error) { return network.Identity{}, nil },
+		newApplication: func(options applicationOptions) (*application, error) {
+			got = options.AudioVolume
+			return nil, errors.New("stop before window")
+		},
+	})
+	if err == nil {
+		t.Fatal("runWithDependencies accepted injected construction failure")
+	}
+	if got != 0.25 {
+		t.Fatalf("application AudioVolume = %v，want 0.25", got)
+	}
+}
+
 // TestRunWithDependenciesDisablesDevForBenchmark 守住"benchmark 产出不应受
 // --dev 影响"：同时传 --benchmark 与 --dev 时，传给 newApplication 的
 // options.Dev 必须被强制为 false，不能给 benchmark 进程构造面板渲染器、

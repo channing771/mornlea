@@ -32,6 +32,10 @@ func (a *application) Close() error {
 }
 
 func (a *application) releaseOwnedResources() {
+	// 音频先于窗口和渲染器关闭，避免系统队列在图形宿主已经释放后仍持有回调。
+	if a.closeAudio != nil {
+		a.closeAudio()
+	}
 	// layouter(名牌/HUD/面板)无 GPU 资源,无需释放;字形图集停 worker,
 	// 渲染器句柄经 Close 归还 Rust。
 	if a.glyphAtlas != nil {

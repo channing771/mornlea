@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/channing771/mornlea/internal/audio"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/config"
@@ -45,6 +46,8 @@ type applicationOptions struct {
 	// Render 是渲染相关的生效配置（视距、FOV、鼠标灵敏度），由 cmd/mornlea 从
 	// 加载后的 config.Config 下传并自行消费——config.Config.Apply 不处理它。
 	Render config.Render
+	// `AudioVolume` 是本地确认提示音的总音量，只在图形客户端创建播放器时读取。
+	AudioVolume float32
 	// ConfigPath 是调试面板 F5 保存时的目标路径；只在 Dev 为真时使用。
 	ConfigPath string
 	// TexturePackPath 是客户端启动时读取的本地覆盖目录；空值只用内嵌默认材质。
@@ -147,6 +150,9 @@ type application struct {
 	clientSessionClosed     bool
 	blockTargetReset        bool
 	releaseResources        func()
+	// `playCue` 与 `closeAudio` 只拥有本地图形客户端的音频生命周期，不参与权威状态。
+	playCue    func(audio.Cue)
+	closeAudio func()
 	// render 是渲染相关的生效配置快照，在构造时从 applicationOptions.Render 复制，
 	// 供渲染热路径（DropOutside 视距、鼠标灵敏度等）读取，不随配置文件热更新。
 	render config.Render
