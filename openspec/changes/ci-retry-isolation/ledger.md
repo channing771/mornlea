@@ -31,6 +31,7 @@
 
 ### Task 2 已实现事实
 
-- `native-macos` 仅记录起始时间、checkout、Rust 身份、`make rust-check`、一次 `make rust`、写入 SHA 文件、上传 artifact 与写入耗时/runner 摘要；未安装或运行 Go/Node。
-- artifact 名为 `native-macos-${{ github.sha }}`，只包含两个 macOS cdylib 与内容严格等于 `GITHUB_SHA` 的 `native-source-sha.txt`；下游校验与消费由后续任务实现。
+- `native-macos` 仅记录起始时间、checkout、Rust 身份、`make rust-check`、一次 `make rust`、写入构建元数据、上传 artifact 与写入耗时/runner 摘要；未安装或运行 Go/Node。
+- artifact 名为 `native-macos-${{ github.sha }}`，包含两个 macOS cdylib、内容严格等于 `GITHUB_SHA` 的 `native-source-sha.txt`，以及固定三行的 `native-artifact-manifest.txt`（SHA、每条相对路径、字节数、SHA-256）；下游校验与消费由后续任务实现。
 - `linux-server` 原始 job 已保存并与本任务后的 job 文本逐字比对一致。
+- Task 2 review 的 P1 manifest finding 已在修复轮次 1 补齐；尚未伪造独立复审结论。

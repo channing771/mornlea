@@ -30,9 +30,20 @@ jobs:
       - name: 构建 Rust cdylib
         run: make rust
 
-      - name: 写入构建 SHA
+      - name: 写入构建元数据
         run: |
           echo "$GITHUB_SHA" > engine/target/release/native-source-sha.txt
+          {
+            printf 'sha %s\n' "$GITHUB_SHA"
+            for path in \
+              engine/target/release/libmornlea_engine.dylib \
+              engine/target/release/libmornlea_client.dylib; do
+              printf '%s %s %s\n' \
+                "$path" \
+                "$(stat -f '%z' "$path")" \
+                "$(shasum -a 256 "$path" | awk '{print $1}')"
+            done
+          } > engine/target/release/native-artifact-manifest.txt
 
       - uses: actions/upload-artifact@v4
         with:
@@ -43,6 +54,7 @@ jobs:
             engine/target/release/libmornlea_engine.dylib
             engine/target/release/libmornlea_client.dylib
             engine/target/release/native-source-sha.txt
+            engine/target/release/native-artifact-manifest.txt
 
       - name: 记录 native 构建信息
         if: ${{ always() }}
