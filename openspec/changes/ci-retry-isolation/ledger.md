@@ -133,4 +133,13 @@ Task 2、3、4 的 workflow 静态契约脚本均通过，YAML 可解析；`BASE
 | `linux-server` | 97186738778 | 11:23:32–11:24:25 | 53s |
 | `test` | 97187958294 | 11:34:18–11:34:22 | 4s |
 
+#### 最终文档 SHA 的隔离重跑与远端门禁状态
+
+- 最终已推送文档 SHA `45ac984e38ecc00649df657fed7e769e54a168a2` 对应唯一 workflow：[run `32636980593`](https://github.com/channing771/mornlea/actions/runs/32636980593)。attempt 1 仍是同一套八项逻辑图；`native-macos`、`linux-server`、`quality`、`integration`、race `cmd` 与 race `internal-rest` 成功，race `internal-server` job `97188336693` 失败，最终 `test` job `97189303173` 因此失败。
+- attempt 1 的实际失败来自既有 `TestCompanionInteractionMemoryTCPParity`：Memory/TCP transcript 的内容与 EventID 相同，但 recipient 0/1 的到达顺序发生漂移。它不是本 change 的 workflow、artifact 或包分片失败。
+- 对 attempt 1 使用 GitHub “Re-run failed jobs” 得到 attempt 2：只有失败的 race `internal-server` 获得新执行区间（job `97189356322`，11:46:46–11:51:14 UTC），其依赖 `test` 以 job `97189855142` 重跑；另外六个成功前置保留 attempt 1 的原始起止时间，未重新执行。这再次证明 failed-only 隔离语义，且 `test` 对失败前置继续 fail-closed。
+- attempt 2 命中另一个既有偶发测试 `TestM5StageAcceptancePersonaDialogueEndToEnd`：memory 模式第二段台词只观察到 1 个事件而预期 3 个，事件序列为 `[1 3 9 4 5]`。连续两个 attempt 命中不同的既有 server 偶发测试，因此不继续以 rerun 抽取绿灯，也不在本 change 中修改这些测试。
+- 控制会话“不要再 rerun”的消息到达前，attempt 3 已被提交；收到裁决后立即调用取消。GitHub API 将 attempt 3 记为 `cancelled`（11:52:07–11:53:39 UTC）：唯一新执行的 race `internal-server` job `97189958083` 在 Race tests 中被取消，最终 `test` job `97190119204` 按 cancelled 前置 fail-closed。该 attempt 不作为新的测试失败或验收绿灯证据，也没有继续 rerun。
+- 因此，本 change 的同 SHA 单 workflow、完整 job graph、artifact 下载/SHA 校验、concurrency 取消、failed-only 隔离与最终 fail-closed 均已有真实 Actions 证据；PR 当前远端 gate 仍因上述既有 `internal/server` 偶发测试为红，需由新的独立修复任务根治，不能把它记录成已通过。
+
 Task 5 的 `1.3`、`3.2`–`3.5` 已按上述本地故障 fixture 与真实 Actions 证据完成；`3.6` 仍留给控制会话生成最终 committed review package 并完成独立整分支终审，本 implementer 不自审或归档。
