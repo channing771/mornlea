@@ -7,7 +7,8 @@ import (
 )
 
 const (
-	// HUD 图集前七格是代码生成的固定生存图标，后续格按 `ItemID` 放置真实方块顶面。
+	// HUD 图集前七格是代码生成的固定 survival 图标，随后六格是 container cell，
+	// 其后从 `hotbarBlockColumnOffset` 开始按 `ItemID` 放置真实方块顶面。
 	hotbarEmptyHeartColumn = iota
 	hotbarHalfHeartColumn
 	hotbarFullHeartColumn
