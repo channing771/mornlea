@@ -8,7 +8,7 @@
 
 ## 方案边界
 
-后续只让上述三项测试等待可观察的 outcome 完成条件，同时持续推进 tick；不在产品代码、HTTP handler、worker 或测试中加入 sleep、超时重试或改变语义的人工调度。
+后续只让上述三项测试等待 outcome 进入 `dialogueResults`，再推进恰好一个 `StepForTest`；不在产品代码、HTTP handler、worker 或测试中加入 sleep、超时重试或改变语义的人工调度。
 
 ## 风险与验证
 
