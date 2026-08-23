@@ -2,37 +2,15 @@ package fluid
 
 import (
 	"runtime"
-	"sort"
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
 )
 
-// sortItems 就地按全序排序 items。
-//
-// 它曾经是 Queue.Advance 的生产实现（每 tick 遍历整张队列内容、收集全部到期项
-// 再整体排序），任务组 10b 把取批换成最小堆之后，生产路径不再需要它。这里刻意
-// 把它保留在**测试侧**：它是 lessItem 全序的一份与最小堆完全独立的第二实现，
-// queue_test.go 用它检查 lessItem 本身，本文件用它当「Advance 到底该取哪
-// budget 项」的 oracle——两条独立实现互相对照，比让 Advance 自己跟自己对照
-// 有意义得多。
-func sortItems(items []item) {
-	sort.Slice(items, func(i, j int) bool { return lessItem(items[i], items[j]) })
-}
-
-// queuedDueTick 读出 pos 当前排定的 dueTick，是**表示层**的测试助手。
-//
-// 任务组 10b 修复轮 2 之前，队列内容存放在 Queue.pending（map[BlockPos]uint64），
-// 测试直接写 q.pending[pos] 就能拿到 dueTick。改成索引最小堆之后，dueTick 的唯一
-// 存放处变成 q.order[q.index[pos]].dueTick——所有既有白盒断言想问的还是同一个问题
-// 「这个位置排定在哪个 tick」，只是问法要跟着表示走，故统一收敛到这个助手。
-func queuedDueTick(q *Queue, pos core.BlockPos) (uint64, bool) {
-	i, ok := q.index[pos]
-	if !ok {
-		return 0, false
-	}
-	return q.order[i].dueTick, true
-}
+// 本文件是 Queue 在大规模与预算受限场景下的结构性行为测试，全部使用白盒
+// 断言（`q.order`、`q.lastAdvanceExamined` 等）。跨测试文件共用的助手
+// （`sortItems`、`queuedDueTick`、`newMemWorld`、`newBasin` 等）在
+// helpers_test.go；本文件私有的 `boundedPos` 只在此处使用，留在原地。
 
 // boundedPos 把下标 i 映射到互不相同、跨多个区块分布的方块坐标。
 // (x, y, z) 三个分量分别取 i 的不同位段，因此该映射是单射：不同的 i 一定得到
