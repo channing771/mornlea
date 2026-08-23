@@ -297,7 +297,7 @@
 
 ### Requirement: 视觉基线覆盖三类容器像素界面
 
-系统 SHALL 在现有 15 个正式无窗口场景中，紧随 `inventory-crafting` 依次插入 `chest-container` 与 `furnace-container`，形成恰好 17 个正式场景。完整顺序 MUST 为 `terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`water-surface-slope`、`far-horizon`、`water-underwater`。既有显式更新、无窗口完整渲染链路和双阈值 MUST 保持不变；两张 far-horizon diagnostic controls MUST 继续不计入正式场景或 golden。
+系统 SHALL 具有恰好 17 个正式无窗口场景，`chest-container` 与 `furnace-container` MUST 依次紧随 `inventory-crafting`。完整顺序 MUST 为 `terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`water-surface-slope`、`far-horizon`、`water-underwater`。既有显式更新、无窗口完整渲染链路和双阈值 MUST 保持不变；两张 far-horizon diagnostic controls MUST 继续不计入正式场景或 golden。
 
 #### Scenario: 完整场景顺序固定为 17 项
 
