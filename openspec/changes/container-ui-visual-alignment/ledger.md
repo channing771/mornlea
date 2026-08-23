@@ -40,3 +40,6 @@
 - GREEN：三种互斥 overlay 各追加一个 atlas 标题 quad；panel 只向上扩 20px，36/39/63 格及十条配方的 origin/hit-test 保持原路径；熔炉两项填充复用既有 bar quad，并分别按火焰自下向上、箭头自左向右同步裁剪实例与 UV。
 - 验证：同一 focused 命令、`go test ./internal/render/hud -race -count=1`、`go test ./internal/archcheck -count=1`、`go vet ./internal/render/hud`、目标 `gofmt -l` 与 `git diff --check` 均通过。三次 `cmd/mornlea` race 被工具 30 秒回合限制留下重复运行，已精确停止；它们没有通过结论。
 - 候选提交：`79a98947b45bdb2818871ee01846a7564452ca85`（`feat: align container UI presentation`）。未进行 reviewer 双裁决，不得视为 SPEC/QUALITY PASS。
+- `2026-08-23`：独立审查 `task-3-review.md` 对候选范围给出 SPEC PASS / QUALITY FAIL；唯一 P2 指出三尺寸集缺少 panel 四边与 `InventorySlotAt`/`FurnaceSlotAt`/`ChestSlotAt` 半开命中证明。
+- 修复轮次 1：只扩展 `layout_test.go` 的既有表驱动测试。三种 framebuffer 直接读取三类 overlay panel，锁定旧 X/Width/底边不变及仅向上扩 `containerHeaderHeight*scale`；同一尺寸集穷举 36/39/63 格的左上闭、中心与右/下开命中。未改生产代码，复审结论尚未发生。
+- 修复轮次 1 验证：focused HUD、HUD race、archcheck、目标 `gofmt -l`、`git diff --check` 与 strict OpenSpec 均通过。
