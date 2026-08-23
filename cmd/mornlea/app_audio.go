@@ -27,6 +27,7 @@ type localAudioFeedback struct {
 // pendingPlacement 保存单条已发送放置请求的本地证据；世界写入与扣料必须都确认。
 type pendingPlacement struct {
 	active    bool
+	sequence  uint64
 	target    core.BlockPos
 	block     core.BlockID
 	selected  uint8
@@ -120,13 +121,14 @@ func (feedback *localAudioFeedback) ObserveBlockChanges(changes network.BlockCha
 
 // BeginPlacement 用已成功发送请求时的本地只读快照替换上一条未完成放置。
 func (feedback *localAudioFeedback) BeginPlacement(
+	sequence uint64,
 	target core.BlockPos,
 	block core.BlockID,
 	selected uint8,
 	stack core.ItemStack,
 ) {
 	feedback.placement = pendingPlacement{
-		active: true, target: target, block: block, selected: selected,
+		active: true, sequence: sequence, target: target, block: block, selected: selected,
 		item: stack.Item, count: stack.Count,
 	}
 }
@@ -134,6 +136,13 @@ func (feedback *localAudioFeedback) BeginPlacement(
 // ClearPlacement 丢弃未完成放置，避免拒绝或会话边界与后续状态错误配对。
 func (feedback *localAudioFeedback) ClearPlacement() {
 	feedback.placement = pendingPlacement{}
+}
+
+// RejectPlacement 仅清除同一条放置请求，避免无关命令拒绝吞掉已到达的一半确认。
+func (feedback *localAudioFeedback) RejectPlacement(sequence uint64) {
+	if feedback.placement.active && feedback.placement.sequence == sequence {
+		feedback.ClearPlacement()
+	}
 }
 
 // ObservePlacementBlockChanges 只接受精确目标写入预期方块的已应用世界增量。
@@ -152,7 +161,6 @@ func (feedback *localAudioFeedback) ObservePlacementBlockChanges(changes network
 			return 0, false
 		}
 	}
-	feedback.ClearPlacement()
 	return 0, false
 }
 
@@ -163,9 +171,7 @@ func (feedback *localAudioFeedback) ObservePlacementInventoryState(state network
 		return 0, false
 	}
 	stack := state.Inventory.Hotbar.Slots[pending.selected]
-	if state.Inventory.Hotbar.Selected != pending.selected ||
-		!itemStackDecreasedByOne(pending.item, pending.count, stack) {
-		feedback.ClearPlacement()
+	if !itemStackDecreasedByOne(pending.item, pending.count, stack) {
 		return 0, false
 	}
 	pending.itemSeen = true

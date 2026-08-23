@@ -217,7 +217,7 @@ func (a *application) drainServerMessages(maxMessages int) {
 			}
 		}
 		if update.Rejected != nil {
-			a.audioFeedback.ClearPlacement()
+			a.audioFeedback.RejectPlacement(update.Rejected.Sequence)
 			slog.Warn("权威命令被拒绝",
 				"sequence", update.Rejected.Sequence, "reason", update.Rejected.Reason)
 		}

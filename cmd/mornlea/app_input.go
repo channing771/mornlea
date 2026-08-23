@@ -82,8 +82,9 @@ func (a *application) placeBlock() {
 	if _, _, isFood := core.FoodValue(hotbar.Slots[hotbar.Selected].Item); isFood {
 		return
 	}
+	sequence := a.nextSequence()
 	if err := a.send(network.PlaceBlock{
-		Sequence: a.nextSequence(),
+		Sequence: sequence,
 		Yaw:      a.camera.Yaw,
 		Pitch:    a.camera.Pitch,
 		Slot:     hotbar.Selected,
@@ -93,7 +94,7 @@ func (a *application) placeBlock() {
 	}
 	if block, placeable := core.ItemPlacement(hotbar.Slots[hotbar.Selected].Item); placeable {
 		if target, known := placementTarget(hit); known && found {
-			a.audioFeedback.BeginPlacement(target, block, hotbar.Selected, hotbar.Slots[hotbar.Selected])
+			a.audioFeedback.BeginPlacement(sequence, target, block, hotbar.Selected, hotbar.Slots[hotbar.Selected])
 		}
 	}
 }
