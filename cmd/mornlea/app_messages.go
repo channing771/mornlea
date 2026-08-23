@@ -40,6 +40,11 @@ func (a *application) drainServerMessages(maxMessages int) {
 				a.closeClientSession(err)
 				return
 			}
+			if state.Reset {
+				a.audioFeedback.Reset()
+			} else if cue, play := a.audioFeedback.ObservePlayerState(state); play {
+				a.playLocalCue(cue)
+			}
 			a.serverTick = state.ServerTick
 			a.worldTimeTicks = state.WorldTimeTicks
 			if state.Reset || !state.MiningActive {
@@ -70,6 +75,9 @@ func (a *application) drainServerMessages(maxMessages int) {
 			if err := a.inventory.Apply(state); err != nil {
 				a.closeClientSession(err)
 				return
+			}
+			if cue, play := a.audioFeedback.ObserveInventoryState(state); play {
+				a.playLocalCue(cue)
 			}
 			continue
 		}
@@ -173,6 +181,11 @@ func (a *application) drainServerMessages(maxMessages int) {
 			a.closeClientSession(err)
 			return
 		}
+		if changes, ok := message.(network.BlockChanges); ok {
+			if cue, play := a.audioFeedback.ObserveBlockChanges(changes); play {
+				a.playLocalCue(cue)
+			}
+		}
 		switch message := message.(type) {
 		case network.ChunkSnapshot:
 			if message.Dimension == core.Overworld {
@@ -195,7 +208,9 @@ func (a *application) drainServerMessages(maxMessages int) {
 			slog.Warn("权威命令被拒绝",
 				"sequence", update.Rejected.Sequence, "reason", update.Rejected.Reason)
 		}
-		a.mesher.MarkDirty(update.Dirty...)
+		if a.mesher != nil {
+			a.mesher.MarkDirty(update.Dirty...)
+		}
 		for _, key := range update.Forgotten {
 			if key.Dimension != core.Overworld {
 				continue

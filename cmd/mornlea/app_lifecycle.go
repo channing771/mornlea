@@ -88,6 +88,7 @@ func (a *application) closeClientSession(cause error) {
 			a.window.SetCursorCaptured(true)
 		}
 		a.inventory.Reset()
+		a.audioFeedback.Reset()
 		a.furnace.Reset()
 		a.chest.Reset()
 		a.miningOverlay = hud.MiningOverlay{}

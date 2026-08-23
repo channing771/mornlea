@@ -153,6 +153,8 @@ type application struct {
 	// `playCue` 与 `closeAudio` 只拥有本地图形客户端的音频生命周期，不参与权威状态。
 	playCue    func(audio.Cue)
 	closeAudio func()
+	// audioFeedback 只匹配已应用的服务端确认，零值表示尚未收到本会话的基线。
+	audioFeedback localAudioFeedback
 	// render 是渲染相关的生效配置快照，在构造时从 applicationOptions.Render 复制，
 	// 供渲染热路径（DropOutside 视距、鼠标灵敏度等）读取，不随配置文件热更新。
 	render config.Render
