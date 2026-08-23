@@ -16,3 +16,9 @@
 - [x] 在 `sim` 实现 active 同维玩家的 3 格、最近命中、`SessionID` 平局、方块遮挡和流体穿透。
 - [x] 通过既有伤害入口结算 2 点伤害和 10 tick 目标冷却，并覆盖同 tick 意图快照与采掘抑制。
 - [x] 验证单机与 TCP 共用权威路径。
+
+## 3. 全量验证与整分支终审
+
+- 目标文件/包：`AGENTS.md`、`CLAUDE.md`、`docs/notes/progress.md`、`openspec/changes/authoritative-player-melee/` 与全仓。
+- 验证命令：`make rust`；`make rust-check`；`go test ./internal/network ./internal/sim ./internal/server -race -count=1`；`go test ./internal/archcheck -count=1`；`go test ./... -race`；`go vet ./...`；`gofmt -l .`；`cmp -s AGENTS.md CLAUDE.md`；`openspec validate --all --strict --no-interactive`；`git diff --check`。
+- [ ] 完成全量门禁、精确 committed review package 与独立整分支终审。
