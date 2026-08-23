@@ -19,6 +19,6 @@
 
 ## 3. 全量验证与整分支终审
 
-- 目标文件/包：`AGENTS.md`、`CLAUDE.md`、`docs/notes/progress.md`、`openspec/changes/authoritative-player-melee/` 与全仓。
+- 目标文件/包：`openspec/changes/authoritative-player-melee/` 与全仓；`AGENTS.md`、`CLAUDE.md` 只保留 Task 1 的 v25 机械版本同步，完整能力描述与 `docs/notes/progress.md` 留待串行归档。
 - 验证命令：`make rust`；`make rust-check`；`go test ./internal/network ./internal/sim ./internal/server -race -count=1`；`go test ./internal/archcheck -count=1`；`go test ./... -race`；`go vet ./...`；`gofmt -l .`；`cmp -s AGENTS.md CLAUDE.md`；`openspec validate --all --strict --no-interactive`；`git diff --check`。
 - [ ] 完成全量门禁、精确 committed review package 与独立整分支终审。

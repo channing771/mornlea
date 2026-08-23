@@ -123,8 +123,9 @@ func TestMeleeHitClearsMiningOnlyForThatTick(t *testing.T) {
 	player.mining = miningState{progressTicks: 3, requiredTicks: 5}
 	engine.RegisterSession(SessionID(2), core.Overworld, core.ChunkPos{})
 	engine.Step()
-	setMeleePlayer(engine, sessions[0], mgl32.Vec3{0.5, 1, 4.5}, 0)
-	setMeleePlayer(engine, SessionID(2), mgl32.Vec3{0.5, 1, 2.5}, 0)
+	setMeleePlayer(engine, sessions[0], mgl32.Vec3{0.5, 1, 8.5}, 0)
+	setMeleePlayer(engine, SessionID(2), mgl32.Vec3{0.5, 1, 7}, 0)
+	player.pitch = miningTestPitch
 	player.miningHeld = true
 
 	engine.Step()
@@ -133,6 +134,12 @@ func TestMeleeHitClearsMiningOnlyForThatTick(t *testing.T) {
 	}
 	if !player.miningHeld {
 		t.Fatal("命中玩家后 miningHeld 被清空")
+	}
+
+	setMeleePlayer(engine, SessionID(2), mgl32.Vec3{4.5, 1, 7}, 0)
+	engine.Step()
+	if player.mining.progressTicks != 1 {
+		t.Fatalf("目标移出射线后的下一 tick mining=%+v，想要 progress=1", player.mining)
 	}
 }
 
