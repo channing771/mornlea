@@ -2,6 +2,8 @@ package hud
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 
 	"github.com/channing771/mornlea/internal/assets"
@@ -34,12 +36,27 @@ func TestHotbarTextureAtlasUIIconsAreDistinctBinaryAndDeterministic(t *testing.T
 	if gotColumns != wantColumns {
 		t.Fatalf("HUD 图集列顺序=%v，想要 %v", gotColumns, wantColumns)
 	}
-	if hotbarBlockColumnOffset != len(wantColumns) {
-		t.Fatalf("物品列 offset=%d，想要紧随七个 UI cell 的 %d", hotbarBlockColumnOffset, len(wantColumns))
+	if hotbarContainerSlotColumn != len(wantColumns) {
+		t.Fatalf("容器首列=%d，想要紧随七个生存 cell 的 %d", hotbarContainerSlotColumn, len(wantColumns))
 	}
 
 	registry := assets.NewRegistry()
 	pixels := buildHotbarTextureAtlas(registry)
+	wantPixels := [...]string{
+		"bdb177bfce78a5bca1d04eed6b6ce954f222cfb0f41b43a8813ea32054ee4d26",
+		"9eef31f2c9548f026ce5988bf3b3f6cb5ad592c25b111d58a5adfc48272c6224",
+		"cb940fd384be20ccc48135828d0b7dcd9286130215295f73d2de3ebb276a4416",
+		"7aad989947193a882c88f7210afae1fbebce180ba22ea3d1926253b0b47af365",
+		"3d60edf7c03d74fa7c2bbf184f144a80105bfe743da689f21c45a320eeae50f9",
+		"deb1316bf75c14273ce8e47781bf12f4c93d2f0af03e034db6d57befe40e4e9a",
+		"ef98ab478ef3e8f276feacce353bd021012ba2ecfc6e9bf18eda47ea4510bfe5",
+	}
+	for column, want := range wantPixels {
+		got := sha256.Sum256(hotbarTextureCell(pixels, column))
+		if got := hex.EncodeToString(got[:]); got != want {
+			t.Fatalf("生存列 %d 像素摘要=%s，想要 %s", column, got, want)
+		}
+	}
 	if again := buildHotbarTextureAtlas(registry); !bytes.Equal(pixels, again) {
 		t.Fatal("连续构建的 hotbar 图集不相同")
 	}
@@ -69,6 +86,63 @@ func TestHotbarTextureAtlasUIIconsAreDistinctBinaryAndDeterministic(t *testing.T
 	}
 }
 
+// 杀死变异：容器图元少画、复用、出现半透明像素或挤占旧生存/物品列时，打开态
+// 会退化为无内容的纯色面板，或把既有 HUD 缩略图采到错误列。
+func TestHotbarAtlasContainerCellsKeepExistingPixelsAndStayDistinct(t *testing.T) {
+	wantColumns := [...]int{
+		7,  // slot
+		8,  // crafting title
+		9,  // chest title
+		10, // furnace title
+		11, // furnace flame
+		12, // furnace arrow
+	}
+	gotColumns := [...]int{
+		hotbarContainerSlotColumn,
+		hotbarCraftingTitleColumn,
+		hotbarChestTitleColumn,
+		hotbarFurnaceTitleColumn,
+		hotbarFurnaceFlameColumn,
+		hotbarFurnaceArrowColumn,
+	}
+	if gotColumns != wantColumns {
+		t.Fatalf("容器 cell 列顺序=%v，想要 %v", gotColumns, wantColumns)
+	}
+	if hotbarBlockColumnOffset != 13 {
+		t.Fatalf("物品列 offset=%d，想要 13", hotbarBlockColumnOffset)
+	}
+
+	registry := assets.NewRegistry()
+	pixels := buildHotbarTextureAtlas(registry)
+	if again := buildHotbarTextureAtlas(registry); !bytes.Equal(pixels, again) {
+		t.Fatal("连续构建的容器图集不相同")
+	}
+
+	cells := make([][]byte, len(wantColumns))
+	for index, column := range wantColumns {
+		cell := hotbarTextureCell(pixels, column)
+		cells[index] = cell
+		opaque := 0
+		for pixel := 3; pixel < len(cell); pixel += 4 {
+			if alpha := cell[pixel]; alpha != 0 && alpha != 255 {
+				t.Fatalf("容器列 %d alpha=%d，想要 0 或 255", column, alpha)
+			} else if alpha == 255 {
+				opaque++
+			}
+		}
+		if opaque == 0 {
+			t.Fatalf("容器列 %d 没有非透明像素", column)
+		}
+	}
+	for left := range cells {
+		for right := left + 1; right < len(cells); right++ {
+			if bytes.Equal(cells[left], cells[right]) {
+				t.Fatalf("容器列 %d 与 %d 的内容相同", wantColumns[left], wantColumns[right])
+			}
+		}
+	}
+}
+
 // hotbarTextureCell 返回图集指定 16×16 cell 的连续 RGBA 副本，便于逐字节比较。
 func hotbarTextureCell(pixels []byte, column int) []byte {
 	cell := make([]byte, hotbarTextureSize*hotbarTextureSize*4)
@@ -80,7 +154,7 @@ func hotbarTextureCell(pixels []byte, column int) []byte {
 }
 
 // 杀死变异：重新用近似色块或复制错误方块面的像素，都无法通过逐像素来源核对。
-func TestHotbarTextureAtlasCopiesRegisteredBlockTopFaces(t *testing.T) {
+func TestHotbarAtlasItemColumnsCopyRegisteredBlockTopFaces(t *testing.T) {
 	registry := assets.NewRegistry()
 	pixels := buildHotbarTextureAtlas(registry)
 	for item := core.ItemID(0); item < core.ItemIDMax; item++ {

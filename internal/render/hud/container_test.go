@@ -6,6 +6,70 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 )
 
+// 杀死变异：任一容器分支若继续使用纯色栏位、采样到错误 cell 或覆盖旧 item tile，
+// 同一套原创凹槽将无法统一 36/39/63 格与合成输入输出。
+func TestContainerPixelCellsUseSharedSlotUV(t *testing.T) {
+	atlas := newFakeNameTagAtlas()
+	for _, char := range hotbarDigits {
+		atlas.glyphs[char] = fakeNameTagGlyph(7)
+	}
+	const width, height = float32(1280), float32(800)
+	wantUV := hotbarTextureUV(hotbarContainerSlotColumn)
+	wantColor := [4]float32{1, 1, 1, 1}
+
+	assertSlot := func(t *testing.T, layout hotbarLayout, x, y float32) {
+		t.Helper()
+		for _, quad := range layout.quads {
+			if quad.X == x && quad.Y == y && quad.Width == hotbarSlotSize*layout.scale && quad.Height == hotbarSlotSize*layout.scale {
+				gotUV := [4]float32{quad.U0, quad.V0, quad.U1, quad.V1}
+				if gotUV != wantUV || quad.Color != wantColor {
+					t.Fatalf("栏位 (%f,%f)=%+v，想要凹槽 UV=%v", x, y, quad, wantUV)
+				}
+				return
+			}
+		}
+		t.Fatalf("没有栏位 quad (%f,%f)", x, y)
+	}
+
+	var layout hotbarLayout
+	for _, view := range []struct {
+		name    string
+		overlay *FurnaceOverlay
+		chest   *ChestOverlay
+	}{
+		{"合成", nil, nil},
+		{"熔炉", &FurnaceOverlay{}, nil},
+		{"箱子", nil, &ChestOverlay{}},
+	} {
+		t.Run(view.name, func(t *testing.T) {
+			got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, view.overlay, view.chest, MiningOverlay{}, width, height)
+			for slot := range core.InventorySlots {
+				x, y := inventorySlotOrigin(slot, true, width, height)
+				assertSlot(t, got, x, y)
+			}
+			switch {
+			case view.chest != nil:
+				for slot := range core.ChestSlots {
+					x, y := chestSlotOrigin(slot, width, height)
+					assertSlot(t, got, x, y)
+				}
+			case view.overlay != nil:
+				for slot := range 3 {
+					x, y := recipeSlotOrigin(slot, width, height)
+					assertSlot(t, got, x, y)
+				}
+			default:
+				for row := range inventoryRecipeIDs {
+					for slot := range 2 {
+						x, y := craftingRecipeSlotOrigin(row, slot, width, height)
+						assertSlot(t, got, x, y)
+					}
+				}
+			}
+		})
+	}
+}
+
 // 杀死变异：遗漏任一配方行、错放按钮或忽略已确认背包都会改变实例布局。
 func TestInventoryLayoutDrawsAllFixedRecipeRows(t *testing.T) {
 	atlas := newFakeNameTagAtlas()

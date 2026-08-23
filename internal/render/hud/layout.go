@@ -152,12 +152,14 @@ func layoutInventory(
 			})
 		}
 	}
+	slotUV := hotbarTextureUV(hotbarContainerSlotColumn)
 	for slot := range slots {
 		x, y := inventorySlotOrigin(slot, open, width, height)
 		dst.quads = append(dst.quads, hotbarInstance{
 			X: x, Y: y,
 			Width: slotSize, Height: slotSize,
-			Color: [4]float32{0.12, 0.13, 0.14, 0.90},
+			U0: slotUV[0], V0: slotUV[1], U1: slotUV[2], V1: slotUV[3],
+			Color: [4]float32{1, 1, 1, 1},
 		})
 	}
 	if !open {

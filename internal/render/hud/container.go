@@ -99,12 +99,14 @@ func appendFurnaceRow(
 		Color: [4]float32{0.025, 0.03, 0.035, 0.88},
 	})
 	stacks := [3]core.ItemStack{overlay.Input, overlay.Fuel, overlay.Output}
+	slotUV := hotbarTextureUV(hotbarContainerSlotColumn)
 	for index, stack := range stacks {
 		x, y := recipeSlotOrigin(index, width, height)
 		dst.quads = append(dst.quads, hotbarInstance{
 			X: x, Y: y,
 			Width: hotbarSlotSize * scale, Height: hotbarSlotSize * scale,
-			Color: [4]float32{0.12, 0.13, 0.14, 0.90},
+			U0: slotUV[0], V0: slotUV[1], U1: slotUV[2], V1: slotUV[3],
+			Color: [4]float32{1, 1, 1, 1},
 		})
 		if stack.Item == core.ItemNone {
 			continue
@@ -192,12 +194,14 @@ func appendChestGrid(
 		Width: totalWidth + 2*padding, Height: bottomY + hotbarSlotSize*scale - top + 2*padding,
 		Color: [4]float32{0.025, 0.03, 0.035, 0.88},
 	})
+	slotUV := hotbarTextureUV(hotbarContainerSlotColumn)
 	for index := range core.ChestSlots {
 		x, y := chestSlotOrigin(index, width, height)
 		dst.quads = append(dst.quads, hotbarInstance{
 			X: x, Y: y,
 			Width: hotbarSlotSize * scale, Height: hotbarSlotSize * scale,
-			Color: [4]float32{0.12, 0.13, 0.14, 0.90},
+			U0: slotUV[0], V0: slotUV[1], U1: slotUV[2], V1: slotUV[3],
+			Color: [4]float32{1, 1, 1, 1},
 		})
 	}
 	for index, stack := range overlay.Items {
@@ -257,6 +261,7 @@ func appendRecipeRows(
 		Height: bottomY + hotbarSlotSize*scale - top + 2*padding,
 		Color:  [4]float32{0.025, 0.03, 0.035, 0.88},
 	})
+	slotUV := hotbarTextureUV(hotbarContainerSlotColumn)
 	for row, recipeID := range inventoryRecipeIDs {
 		recipe, ok := core.Recipe(recipeID)
 		if !ok {
@@ -274,7 +279,8 @@ func appendRecipeRows(
 			dst.quads = append(dst.quads, hotbarInstance{
 				X: entry.x, Y: entry.y,
 				Width: hotbarSlotSize * scale, Height: hotbarSlotSize * scale,
-				Color: [4]float32{0.12, 0.13, 0.14, 0.90},
+				U0: slotUV[0], V0: slotUV[1], U1: slotUV[2], V1: slotUV[3],
+				Color: [4]float32{1, 1, 1, 1},
 			})
 			appendItemTile(dst, entry.stack.Item, entry.x, entry.y, scale)
 			appendHotbarCountScaled(dst, atlas, entry.stack.Count, entry.x, entry.y, scale)
