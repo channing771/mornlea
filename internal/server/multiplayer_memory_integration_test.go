@@ -134,8 +134,16 @@ func TestEightPlayersSameTickPrimaryInputKeepsSessionOrder(t *testing.T) {
 		}
 	}
 	for index, connected := range clients {
+		// 前两个会话共同瞄准第三个；第二个在目标冷却后必须转入既有采掘分支。
+		input := network.PlayerInput{Sequence: 1, Yaw: math.Pi, Pitch: -0.2, Mining: true}
+		if index%2 == 1 {
+			input.Yaw = 0
+		}
+		if index == 1 {
+			input.Yaw = float32(math.Pi - math.Atan2(0.7, 2))
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
-		err := connected.endpoint.Send(ctx, network.PlayerInput{Sequence: 1, Yaw: 0, Pitch: 0, Mining: true})
+		err := connected.endpoint.Send(ctx, input)
 		cancel()
 		if err != nil {
 			t.Fatalf("player %d primary input: %v", index, err)
@@ -153,21 +161,48 @@ func TestEightPlayersSameTickPrimaryInputKeepsSessionOrder(t *testing.T) {
 		t.Fatalf("同 tick primary action 后 session=%d，想要 %d", sessionCount, multiplayerClientCount)
 	}
 	for index, connected := range clients {
-		wantHealth := uint8(core.MaxHealth)
-		if index%2 == 1 {
-			wantHealth -= 2
+		if connected.local.LastInputSequence != 1 {
+			t.Fatalf("session %d sequence=%d，想要 1", index+1, connected.local.LastInputSequence)
 		}
-		if connected.local.LastInputSequence != 1 || connected.local.Health != wantHealth {
-			t.Fatalf("session %d state=%+v，想要 sequence=1 health=%d", index+1, connected.local, wantHealth)
+		switch index {
+		case 0:
+			if connected.local.Health != core.MaxHealth || connected.local.MiningActive {
+				t.Fatalf("较小 SessionID 攻击者 state=%+v，想要未受伤且采掘被抑制", connected.local)
+			}
+		case 1:
+			if connected.local.Health != core.MaxHealth || !connected.local.MiningActive ||
+				connected.local.MiningTarget != multiplayerManualTarget || connected.local.MiningProgressTicks != 1 {
+				t.Fatalf("较大 SessionID 攻击者 state=%+v，想要未受伤且继续采掘", connected.local)
+			}
+		case 2:
+			if connected.local.Health != core.MaxHealth-2 {
+				t.Fatalf("共享目标 state=%+v，想要只扣 2 血", connected.local)
+			}
+		default:
+			if connected.local.Health != core.MaxHealth {
+				t.Fatalf("容量玩家 %d state=%+v，想要满血", index+1, connected.local)
+			}
 		}
 	}
 }
 
 func eightMeleeSessionSpec(index int, identity network.Identity, endpoint network.ServerEndpoint) SessionSpec {
-	pair := index / 2
-	position := mgl32.Vec3{float32(pair*4) + 0.5, 1.001, 4.5}
-	if index%2 == 1 {
-		position[2] = 2.5
+	var position mgl32.Vec3
+	if index < 3 {
+		// 两名攻击者在第三名玩家前方并列，第二条斜射线在目标之后继续命中固定采掘墙。
+		position = mgl32.Vec3{1.5, 1.001, 0.5}
+		switch index {
+		case 1:
+			position[0] = 2.2
+		case 2:
+			position[2] = 2.5
+		}
+	} else {
+		pair := index / 2
+		position = mgl32.Vec3{float32(pair*4) + 0.5, 1.001, 4.5}
+		if index%2 == 1 {
+			position[2] = 2.5
+		}
 	}
 	location := sim.PlayerLocation{Dimension: core.Overworld, Position: position}
 	return SessionSpec{
