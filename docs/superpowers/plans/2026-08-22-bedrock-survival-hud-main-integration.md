@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 把 PR #64 的 Pixel Perfection HUD 与 `origin/main` 的服务端权威饥饿系统做一次原子语义合并，交付三列生存状态 HUD、完整的 15 场景视觉基线和最终 benchmark scenario v19 契约。
+**Goal:** 把 PR #64 的 Pixel Perfection HUD 与 `origin/main` 的服务端权威饥饿系统做一次原子语义合并，交付快捷栏两端对向的生命/饥饿主行、向外堆叠的氧气次行、完整的 15 场景视觉基线和最终 benchmark scenario v19 契约。
 
-**Architecture:** `origin/main` 继续独占饥饿、协议、存档、模拟、预测与版本推进；当前分支继续独占已经验收的心形/气泡、HUD 响应式布局、背包、聊天、采掘和 capture 行为。合并只在现有 `internal/render/hud` 纹理图集、CPU 布局和既有 hotbar pass 内组合两侧能力：三列共享一个 531 design-pixel 的居中几何，隐藏满氧气只释放实例、不改变列位置。
+**Architecture:** `origin/main` 继续独占饥饿、协议、存档、模拟、预测与版本推进；当前分支继续独占已经验收的心形/气泡、HUD 响应式布局、背包、聊天、采掘和 capture 行为。合并只在现有 `internal/render/hud` 纹理图集、CPU 布局和既有 hotbar pass 内组合两侧能力：生命/饥饿直接复用 `hotbarRowBounds` 的左右边缘，耗损氧气沿饥饿右边缘按 open/closed 向快捷栏外侧堆叠；满氧只释放实例，不收缩两行垂直几何。
 
 **Tech Stack:** Go 1.26、Rust 1.97.1、现有 `mornlea_engine`/`mornlea_client` ABI、OpenSpec、Go `testing`、无窗口 capture/golden、现有 SDD review-package helper。
 
@@ -16,15 +16,16 @@
 - 计划 MUST NOT 采用 rebase、force-push、整文件 `ours`/`theirs` 源码或文档覆盖，也 MUST NOT 对冲突 PNG 选择任一侧旧文件。
 - 最终协议版本为 v24、玩家 schema 为 v7、benchmark scenario 为 v19；engine ABI 保持 v6、client ABI 保持 v7、chunk schema 保持 v9、world metadata 保持 v2、`companions.ai` schema 保持 v4。
 - HUD 图集 MUST 在 item 区之前按固定顺序包含七个 16×16 UI cell：空心、半心、满心、空气泡、实气泡、空鸡腿、满鸡腿。
-- 生存状态组 MUST 按 health / depleted oxygen / hunger 排列；每列 169 design px，列间距 12 design px，总宽 531 design px，整体水平居中并共用 `hudScale`。
-- 满氧气隐藏实例但保留中间列几何。背包关闭时状态行在 hotbar 上方、采掘反馈在状态行上方；背包打开时状态行在 hotbar 下方，且不得改变或覆盖 36 个 `InventorySlotAt` 交互格。
+- 稳定主状态行 MUST 只含 health/hunger：两者各 169 design px，health 起点精确等于快捷栏左边缘，hunger 终点精确等于快捷栏右边缘；中间空间由 `hotbarRowBounds` 自然得出，MUST NOT 增加栏间宽度或主状态组 width 常量，并与 hotbar/mining 共用 `hudScale`。
+- depleted oxygen MUST 与 hunger 共享右边缘并向快捷栏外侧堆叠：closed 位于 hunger 上方一个 `healthHeartSize + statusBarGap` design row，open 位于 hunger 下方一个相同行距。满/未确认氧气隐藏实例但保留两行垂直几何；closed mining/chat 锚定完整栈，open bottom reservation 与高度约束增加恰好一个相同行距，且不得改变或覆盖 36 个 `InventorySlotAt` 交互格或 10 行配方。
 - 未确认饥饿值隐藏；已确认值钳制到 `0..core.MaxHunger`，绘制 10 个空槽及 `ceil(Hunger/2)` 个填充，奇数值末格只填右半边，不新增背景面板，饥饿最多 20 quad。
 - health 和 depleted oxygen 各自使用已决议的 10-quad 上限；满氧气时绘制 0 个气泡 quad。
 - scenario v19 固定为 `maxHotbarQuads = 267`、glyph capacity 700、glyph offset 13312 bytes、总容量 46912 bytes、instance size 48 bytes；所有固定 buffer offset 保持 256-byte 对齐。
-- 最终关闭/打开布局最大值分别是 96/265，即现有 76/245 加饥饿 20；聊天仍锚定关闭态状态行，并保留 `1/256` framebuffer-pixel slack。
+- 最终关闭/打开布局最大值分别是 96/265，即现有 76/245 加饥饿 20；聊天仍锚定关闭态完整两行状态栈，并保留 `1/256` framebuffer-pixel slack。
 - 不新增 shader、render pass、上传格式、API、ABI、配置、依赖、PNG 资源、材质注册表、主题系统、产品态测试接口或动态 GPU 资源。
 - capture 场景顺序固定为 15 项：`terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`water-surface-slope`、`far-horizon`、`water-underwater`。
-- `hud-hotbar-health` 固定为 10 个满心、满饥饿、满氧气隐藏；`hud-survival-feedback` 固定为生命 5、氧气 `core.MaxOxygenTicks / 3`、饥饿 9、磨损工具和受阻采掘 4/9；`inventory-crafting` 固定为生命 5、氧气三分之一、饥饿 9，并保证状态行避开 36 个背包格与 10 行配方。
+- `hud-hotbar-health` 固定为 10 个满心、满饥饿、满氧气隐藏，并验证 health/hunger 对齐快捷栏左右边缘且没有空水平 oxygen 栏；`hud-survival-feedback` 固定为生命 5、氧气 `core.MaxOxygenTicks / 3`、饥饿 9、磨损工具和受阻采掘 4/9，并验证 oxygen 沿 hunger 右边缘向上堆叠；`inventory-crafting` 固定为生命 5、氧气三分之一、饥饿 9，并验证 oxygen 沿同一右边缘向下堆叠且两行避开 36 个背包格与 10 行配方。
+- Minecraft 官方生存 HUD 页面 `https://www.minecraft.net/en-us/article/health-minecraft` 只用于比较生命/饥饿对向与氧气外侧堆叠的构图关系；七个 HUD cell 必须保持本项目原创程序化绘制，MUST NOT 下载、导入、描摹或复制 Mojang 像素。
 - capture fixture MUST 在成功、错误和重复 restore 路径中一起固定并恢复 predictor、mining 与 hunger 状态。
 - 所有 15 张 golden MUST 由最终合并二进制重新生成并逐张人工检查；不得放宽阈值，必须保留 LOD near-band 控制、`water-surface-slope`、倒数第二的 `far-horizon` 和最后的 `water-underwater`。
 - 任务 ledger 只在证据已经存在时更新 checkbox；每个阶段都要追加 implementer、reviewer、进度、findings、repairs、rulings 与 visual 证据。
@@ -174,7 +175,7 @@ cmd/mornlea/testdata/golden/water-underwater.png
 |---|---|---|
 | 饥饿规则、协议 v24、玩家 schema v7、network/sim/storage/predictor/app wiring、benchmark scenario v19 | `origin/main` | 保留 main 行为和版本推进 |
 | 心形/气泡、状态行响应式定位、背包、聊天、采掘、capture、远环/水景视觉 | 当前分支 | 保留已验收行为 |
-| atlas、三列状态布局、容量、capture fixture/goldens、长期基线文档 | 双方语义组合 | 按本计划测试先行重写冲突块 |
+| atlas、快捷栏边缘主行/向外氧气行、容量、capture fixture/goldens、长期基线文档 | 双方语义组合 | 按本计划测试先行重写冲突块 |
 
 #### Step 4: 手工消除文本 marker，建立可编译但尚未满足最终断言的 RED 基线
 
@@ -303,15 +304,16 @@ go test ./internal/render/hud -run 'TestHotbar(TextureAtlas|ColumnUV)|TestHunger
 
 Expected: 全部通过，且 deterministic atlas 测试连续构建结果逐字节一致。
 
-#### Step 7: 先写三列共享几何与饥饿呈现的失败测试
+#### Step 7: 先写快捷栏边缘主行与向外氧气行的失败测试
 
 - [ ] 在 `internal/render/hud/health_test.go`、`oxygen_test.go`、`hunger_test.go` 和 `layout_test.go` 写最终布局测试，至少包含这些可观察断言：
 
-  - 状态组宽度严格为 `(169*3 + 12*2) * hudScale`，整体水平居中。
-  - health、oxygen、hunger 分别占左、中、右列；列内不重叠。
-  - `oxygen.Confirmed && oxygen.Value == core.MaxOxygenTicks` 时 oxygen quad 数为 0，但 health/hunger 的 X 坐标与 depleted oxygen 情况逐项相同。
-  - closed 状态行在 hotbar 上方，mining 在状态行上方；open 状态行在 hotbar 下方。
-  - open 状态行不与 36 个 `InventorySlotAt` 命中矩形或 10 行配方重叠。
+  - health/hunger 各自设计宽度为 `169`；health 第一个 quad 的 X 精确等于 `hotbarRowBounds` 左边缘，hunger 的右边缘精确等于快捷栏右边缘，且生产代码不再声明独立 status group width/gap。
+  - oxygen 与 hunger 共享右边缘；closed 的 oxygen Y 比 hunger 小 `(healthHeartSize + statusBarGap) * hudScale`，open 的 oxygen Y 比 hunger 大同一值。
+  - `oxygen.Confirmed && oxygen.Value == core.MaxOxygenTicks` 时 oxygen quad 数为 0，但 health/hunger 的全部 X/Y、scale、mining/chat anchor 与 depleted oxygen 帧逐项相同。
+  - closed 从快捷栏向外依次为 health/hunger 主行、oxygen 次行、mining，chat 锚定完整两行栈；open 从快捷栏向外依次为 health/hunger 主行、oxygen 次行。
+  - open 两行状态不与 36 个 `InventorySlotAt` 命中矩形或 10 行配方重叠。
+  - `closedHUDHeight`、`openHUDHeight` 与打开态 bottom reservation 都相对单行布局增加恰好 `healthHeartSize + statusBarGap`，宽度缩放只使用既有 hotbar/panel content。
   - `HungerOverlay{Confirmed:false}` 为 0 quad；已确认值钳制到 `core.MaxHunger`。
   - 饥饿值 `0, 1, 2, 9, 19, 20, 255` 分别得到 10 个空槽加 `ceil(value/2)` 个 fill，奇数末格只填右半；绘制顺序从右向左。
   - health/oxygen 各自不超过 10 quad，hunger 不超过 20 quad。
@@ -319,9 +321,10 @@ Expected: 全部通过，且 deterministic atlas 测试连续构建结果逐字�
 建议新增精确测试名：
 
 ```text
-TestStatusColumnsStayCenteredWhenFullOxygenHides
-TestStatusColumnsUseExactDesignGeometry
-TestOpenStatusRowAvoidsInventoryHitCells
+TestStatusBarsAlignToHotbarEdges
+TestOxygenStacksOutwardFromHunger
+TestStatusGeometryDoesNotChangeWhenOxygenHides
+TestOpenStatusStackAvoidsInventoryHitCellsAndRecipes
 TestHungerBarUsesConfirmedClampedTwoPointSegments
 ```
 
@@ -331,52 +334,71 @@ TestHungerBarUsesConfirmedClampedTwoPointSegments
 go test ./internal/render/hud -run 'Test(Health|Oxygen|Hunger|Status|Responsive|InventorySlotAt)' -count=1
 ```
 
-Expected: 旧的独立左右锚点、旧 hunger mirror 或 open 状态缺失导致坐标、quad 数或半格断言失败。
+Expected: 当前 531px 三栏实现会因 health/hunger 未对齐 hotbar 边缘、oxygen 仍占水平中栏、两行高度/bottom reservation 缺失而失败；饥饿状态语义断言继续保持 GREEN。
 
-#### Step 8: 最小实现三列 531 design-pixel 状态组
+#### Step 8: 最小实现快捷栏边缘主行与两行响应式几何
 
 - [ ] 在 `internal/render/hud/layout.go` 增加一个共享几何 helper，不增加布局对象层级：
 
 ```go
 const (
-	statusColumnWidth = healthSegmentCount*healthHeartSize +
+	statusBarWidth = healthSegmentCount*healthHeartSize +
 		(healthSegmentCount-1)*healthHeartGap // 169
-	statusColumnGap = float32(12)
-	statusGroupWidth = statusColumnWidth*3 + statusColumnGap*2 // 531
+	statusRowStep = healthHeartSize + statusBarGap
 )
 
-func statusColumnOrigin(column int, open bool, width, height float32) (x, y, scale float32)
+func statusBarBounds(open bool, width, height float32) (
+	left, right, primaryY, oxygenY, scale float32,
+)
 ```
 
-`hudScale` 必须用现有标识符把宽度约束改成“既有内容与 531px 状态组取较大者”，高度约束仍复用现有 `openHUDHeight`/`closedHUDHeight`：
+`hudScale` 的宽度继续只使用既有 hotbar/panel content，不再 `max` 一个状态组宽度；open/closed 高度各增加一个 `statusRowStep`。`hotbarRowBounds` 的打开态 bottom reservation 同步增加同值：
 
 ```go
 hotbarContentWidth := core.HotbarSlots*hotbarSlotSize +
 	(core.HotbarSlots-1)*hotbarSlotGap + 2*hotbarPanelPadding
-contentWidth := max(hotbarContentWidth, statusGroupWidth)
-if available := width - 2*hudEdgeMargin; available < contentWidth {
-	scale = max(available/contentWidth, 0)
+if available := width - 2*hudEdgeMargin; available < hotbarContentWidth {
+	scale = max(available/hotbarContentWidth, 0)
 }
+
+openHUDHeight = hotbarBottomMargin + hotbarSlotSize +
+	inventoryRowGap + 3*hotbarSlotSize + 2*hotbarSlotGap +
+	recipeRowGap + hotbarSlotSize +
+	float32(len(inventoryRecipeIDs)-1)*(hotbarSlotSize+hotbarSlotGap) +
+	hotbarPanelPadding + statusRowStep
+closedHUDHeight = hotbarBottomMargin + hotbarSlotSize +
+	statusBarGap + healthHeartSize + statusRowStep +
+	miningBarGap + miningBarHeight
+
+bottomMargin := hotbarBottomMargin
+if open {
+	bottomMargin += statusRowStep
+}
+top = height - (bottomMargin+hotbarSlotSize)*scale
 ```
 
-`statusColumnOrigin` 只复用 `hotbarRowBounds` 得到同一个 `hudScale` 与 hotbar Y，公式固定为：
+`statusBarBounds` 只复用 `hotbarRowBounds` 得到同一个 `hudScale` 与快捷栏边缘，公式固定为：
 
 ```go
-func statusColumnOrigin(column int, open bool, width, height float32) (x, y, scale float32) {
-	_, hotbarY, _, scale := hotbarRowBounds(open, width, height)
-	x = (width-statusGroupWidth*scale)*0.5 +
-		float32(column)*(statusColumnWidth+statusColumnGap)*scale
-	y = hotbarY - (statusBarGap+healthHeartSize)*scale
+func statusBarBounds(open bool, width, height float32) (
+	left, right, primaryY, oxygenY, scale float32,
+) {
+	left, hotbarY, totalWidth, scale := hotbarRowBounds(open, width, height)
+	right = left + totalWidth
+	primaryY = hotbarY - statusRowStep*scale
 	if open {
-		y = hotbarY + (hotbarSlotSize+statusBarGap)*scale
+		primaryY = hotbarY + (hotbarSlotSize+statusBarGap)*scale
+		oxygenY = primaryY + statusRowStep*scale
+	} else {
+		oxygenY = primaryY - statusRowStep*scale
 	}
-	return x, y, scale
+	return left, right, primaryY, oxygenY, scale
 }
 ```
 
-调用者只传 0、1、2；不要为内部固定列索引增加错误类型、对象层级或第二套 scale。
+不要为固定左右边缘增加枚举、错误类型、对象层级或第二套 scale。`appendMiningBar` 从 `oxygenY` 再向上偏移 `(miningBarGap + miningBarHeight) * scale`；聊天使用同一个 closed `oxygenY` 作为完整状态栈顶，不根据 oxygen 是否实际发实例改变锚点。
 
-- [ ] 修改 `appendHealthBar`、`appendOxygenBar` 使用 column 0/1；修改 main 带入的 hunger 接口为：
+- [ ] 修改 `appendHealthBar`、`appendOxygenBar` 使用 `statusBarBounds` 返回的边缘/Y；保持 main 带入的 hunger 接口为：
 
 ```go
 func appendHungerBar(
@@ -387,7 +409,7 @@ func appendHungerBar(
 )
 ```
 
-并使用 column 2。饥饿在右列从右向左排 10 格；empty 先画，fill 后画；奇数最后一个 fill 必须同时右移半格、把屏幕宽度减半并取满鸡腿右半 U，不引入新纹理 cell：
+health 从 `left` 向右布局；hunger 与 oxygen 的 X 都是 `right - statusBarWidth*scale`，hunger 使用 `primaryY`，oxygen 使用 `oxygenY`。饥饿从右向左排 10 格；empty 先画，fill 后画；奇数最后一个 fill 必须同时右移半格、把屏幕宽度减半并取满鸡腿右半 U，不引入新纹理 cell：
 
 ```go
 x := segmentX(segment)
@@ -464,7 +486,7 @@ checks := []struct {
   - closed 最大实例数严格 96，open 最大实例数严格 265；不是只验证“小于容量”。
   - `TestHotbarPrepareReusesLayoutAndUploadStorage` 保持零热路径 allocation/资源复用契约。
   - `TestHotbarMaximumBranchesAndEncodingContract` 同时覆盖 health 10、depleted oxygen 10、hunger 20 和现有最大分支。
-  - `internal/render/hud/chat_test.go` 的 `TestChatOverlayStaysInFramebufferAndAboveClosedSurvivalStatus` 与 `assertEmbeddedChatStrictBounds` 都追加已确认的 `HungerOverlay{Value: core.MaxHunger}`；`statusCount` 必须为 `healthQuads + oxygenQuads + hungerQuads`，所有 health/oxygen/hunger quad 都使用同一个 closed status Y，且聊天仍要求 `1/256` framebuffer-pixel slack。测试 layout 的 quad capacity 也必须包含 `hungerQuads`。
+  - `internal/render/hud/chat_test.go` 的 `TestChatOverlayStaysInFramebufferAndAboveClosedSurvivalStatus` 与 `assertEmbeddedChatStrictBounds` 都追加已确认的 `HungerOverlay{Value: core.MaxHunger}`；`statusCount` 必须为 `healthQuads + oxygenQuads + hungerQuads`，health/hunger 使用同一个 closed primary Y，oxygen 使用其上方一个 `statusRowStep` 的 Y，聊天锚定完整两行栈顶且仍要求 `1/256` framebuffer-pixel slack。测试 layout 的 quad capacity 也必须包含 `hungerQuads`。
   - app 测试让权威 hunger 9 产生 10 health + 15 hunger quad；unconfirmed hunger 只保留 health 10，不能画 20 个空鸡腿。
   - depleted oxygen 的增量固定为 10 quad，不沿用 main 的旧气泡计数。
   - 保留 `TestFormatChatEventUnknownKindFallsBackToNeutralLine`。
@@ -486,7 +508,7 @@ Expected: 旧 247/12288/45888 容量、旧 closed/open 最大值、旧 main stat
 
 - [ ] 手工语义合并 `docs/notes/progress.md`，同时保留 Pixel Perfection HUD 完成记录和 authoritative hunger 的协议 v24/schema v7/scenario v19 记录。
 
-- [ ] 手工更新 `AGENTS.md` 后逐字节同步到 `CLAUDE.md`。长期基线必须同时陈述最终 v24/v7/v19、七 cell atlas、三列 HUD 和 15 场景顺序，不保留已经失真的否定式能力描述。
+- [ ] 手工更新 `AGENTS.md` 后逐字节同步到 `CLAUDE.md`。长期基线必须同时陈述最终 v24/v7/v19、七 cell atlas、快捷栏边缘 health/hunger 主行、向外堆叠 oxygen 次行和 15 场景顺序，不保留已经失真的否定式能力描述。
 
 - [ ] 运行 GREEN 与架构门禁：
 
@@ -595,11 +617,13 @@ make visual-update \
 
 Expected: 命令从最终未提交 merge 构建 capture，并更新 15 张正式 PNG；不得从任一 parent 复制冲突 PNG。
 
-- [ ] 核对输出与正式 golden 均恰好 15 张，并与固定场景集合一一对应：
+- [ ] 核对正式 golden 恰好 15 张，输出中的 15 张正式 scene 与其一一对应；既有 near-band guard 另写出的两张 `far-horizon-*-control.png` 只作为 diagnostic controls，不纳入正式 scene/golden 计数，也不得删除或放宽：
 
 ```bash
 find build/visual-bedrock-survival-hud-main-integration-update \
-  -maxdepth 1 -type f -name '*.png' -print | sort
+  -maxdepth 1 -type f -name '*.png' ! -name '*-control.png' -print | sort
+find build/visual-bedrock-survival-hud-main-integration-update \
+  -maxdepth 1 -type f -name '*-control.png' -print | sort
 find cmd/mornlea/testdata/golden \
   -maxdepth 1 -type f -name '*.png' -print | sort
 ```
@@ -609,10 +633,10 @@ find cmd/mornlea/testdata/golden \
 | 场景 | 必须看到且必须保持的最终语义 |
 |---|---|
 | `terrain-noon` | 默认注水世界、天空、云、Pixel Perfection 已映射材质与程序化 fallback 均正常 |
-| `hud-hotbar-health` | 10 个满心、20 饥饿、满氧气隐藏；三列组仍整体居中，hotbar/选中框正常 |
-| `hud-survival-feedback` | 生命 5、氧气三分之一、饥饿 9；磨损工具和受阻采掘 4/9 都可辨识且不重叠 |
+| `hud-hotbar-health` | 10 个满心、20 饥饿、满氧气隐藏；health/hunger 各 169 design px 并精确对齐 hotbar 左右边缘，呈现用户要求的 coordinated 对向主行且没有空水平 oxygen 栏；hotbar/选中框正常。“350px”只作视觉描述，不新增固定宽度判据 |
+| `hud-survival-feedback` | 生命 5、氧气三分之一、饥饿 9；oxygen 沿 hunger 右边缘向上堆叠，mining 位于完整两行栈上方；磨损工具和受阻采掘 4/9 都可辨识且不重叠 |
 | `avatar-nametag` | 远端玩家 silhouette、name tag、遮挡与背景保持当前分支结果 |
-| `inventory-crafting` | 三列状态在 hotbar 下方；36 格交互单元和 10 行配方无覆盖、无错位 |
+| `inventory-crafting` | health/hunger 主行在 hotbar 下方并对齐其左右边缘，oxygen 沿 hunger 右边缘向下堆叠；36 格交互单元和 10 行配方无覆盖、无错位 |
 | `debug-panel` | debug 字形、行距、背景和边缘留白完整，无裁切 |
 | `skylight-tunnel` | 天空光传播、隧道明暗层次和方块边界保持稳定 |
 | `block-light-room` | 静态方块光范围、强度层次与遮挡保持稳定 |
@@ -625,6 +649,8 @@ find cmd/mornlea/testdata/golden \
 | `water-underwater` | 水下 tint、可见半径、氧气 HUD 与水面边界正常；场景最后 |
 
 任一视觉问题都必须回到未提交 merge 修复、重跑相应 focused 测试并重新生成全部 15 张，不能调阈值掩盖。
+
+三个 HUD 场景另与 `https://www.minecraft.net/en-us/article/health-minecraft` 比较生命/饥饿对向和氧气外侧堆叠的构图关系；不得把该页面当作资产源，七个 HUD cell 必须保持本项目原创程序化像素，禁止导入、描摹或复制 Mojang 像素。
 
 #### Step 15: 运行一次 final visual check 与 benchmark producer
 

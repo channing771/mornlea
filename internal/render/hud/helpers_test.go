@@ -77,7 +77,7 @@ func assertHotbarItemFace(t *testing.T, face hotbarInstance, item core.ItemID) {
 func hotbarRecipeButtonQuads(layout hotbarLayout) []hotbarInstance {
 	buttons := make([]hotbarInstance, 0, 5)
 	for _, quad := range layout.quads {
-		if quad.Width == recipeButtonWidth && quad.Height == hotbarSlotSize {
+		if quad.Width == recipeButtonWidth*layout.scale && quad.Height == hotbarSlotSize*layout.scale {
 			buttons = append(buttons, quad)
 		}
 	}

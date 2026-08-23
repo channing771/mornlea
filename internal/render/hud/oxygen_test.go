@@ -70,26 +70,36 @@ func TestOxygenBarUsesConfirmedCeilingSegments(t *testing.T) {
 	}
 }
 
-// TestOxygenBarAnchorsToHotbar 防止气泡行与生命共用左锚点，或打开容器后消失。
+// TestOxygenBarAnchorsToHotbar 防止气泡脱离饥饿条右边缘，或没有从快捷栏向外堆叠。
 func TestOxygenBarAnchorsToHotbar(t *testing.T) {
 	for _, test := range []struct {
-		name  string
-		open  bool
-		wantY float32
+		name string
+		open bool
 	}{
-		{"关闭态位于快捷栏右上", false, 708},
-		{"打开态位于快捷栏右下", true, 780},
+		{"关闭态位于饥饿上方", false},
+		{"打开态位于饥饿下方", true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			left, hotbarY, totalWidth, scale := hotbarRowBounds(test.open, 1280, 800)
+			bubbleSize := healthHeartSize * scale
+			bubbleGap := healthHeartGap * scale
+			primaryY := hotbarY - (healthHeartSize+statusBarGap)*scale
+			wantY := primaryY - (healthHeartSize+statusBarGap)*scale
+			if test.open {
+				primaryY = hotbarY + (hotbarSlotSize+statusBarGap)*scale
+				wantY = primaryY + (healthHeartSize+statusBarGap)*scale
+			}
+			right := left + totalWidth
 			var layout hotbarLayout
 			appendOxygenBar(&layout, OxygenOverlay{Confirmed: true, Value: 1}, test.open, 1280, 800)
 			if len(layout.quads) != oxygenSegmentCount {
 				t.Fatalf("quads=%d，想要十个 resolved 气泡槽位", len(layout.quads))
 			}
 			for index, bubble := range layout.quads {
-				wantX := float32(703 + index%10*17)
-				if bubble.X != wantX || bubble.Y != test.wantY {
-					t.Fatalf("气泡 %d 锚点=(%v,%v)，想要快捷栏右对齐序列 (%v,%v)", index, bubble.X, bubble.Y, wantX, test.wantY)
+				wantX := right - float32(oxygenSegmentCount-index)*bubbleSize -
+					float32(oxygenSegmentCount-1-index)*bubbleGap
+				if bubble.X != wantX || bubble.Y != wantY {
+					t.Fatalf("气泡 %d 锚点=(%v,%v)，想要饥饿右边缘外扩序列 (%v,%v)", index, bubble.X, bubble.Y, wantX, wantY)
 				}
 			}
 		})

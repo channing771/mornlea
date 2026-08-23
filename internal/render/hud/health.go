@@ -28,19 +28,15 @@ type HealthOverlay struct {
 	Value     uint8
 }
 
-// appendHealthBar 以快捷栏左边沿为锚点绘制无背景的服务端确认爱心；关闭容器时
+// appendHealthBar 从快捷栏左边缘向右绘制无背景的服务端确认爱心；关闭容器时
 // 位于快捷栏上方，打开时移入快捷栏下方留白，不读取或推算任何游戏状态。
 func appendHealthBar(dst *hotbarLayout, health HealthOverlay, open bool, width, height float32) {
 	if !health.Confirmed || width <= 0 || height <= 0 {
 		return
 	}
-	x, hotbarY, _, scale := hotbarRowBounds(open, width, height)
+	x, _, y, _, scale := statusBarBounds(open, width, height)
 	heartSize := healthHeartSize * scale
 	heartGap := healthHeartGap * scale
-	y := hotbarY - (statusBarGap+healthHeartSize)*scale
-	if open {
-		y = hotbarY + (hotbarSlotSize+statusBarGap)*scale
-	}
 	value := min(health.Value, uint8(core.MaxHealth))
 	for segment := range healthSegmentCount {
 		fill := heartEmpty

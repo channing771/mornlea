@@ -36,13 +36,15 @@ func TestHotbarPrepareReusesLayoutAndUploadStorage(t *testing.T) {
 	// 氧气取未满值：只有这样预热路径才会真的走到氧气条，"零每帧分配、零新上传缓冲"
 	// 这条断言才对它成立。传零值（未确认）会让氧气条整条被跳过、断言退化成空转。
 	oxygen := OxygenOverlay{Confirmed: true, Value: 120}
+	// 饥饿取奇数值：预热路径必须走到半格分支，否则「零每帧分配」对它只是空转。
+	hunger := HungerOverlay{Confirmed: true, Value: 13}
 	budget := render.NewUploadBudget(1024)
-	if err := renderer.Prepare(inventory, true, true, 3, nil, nil, MiningOverlay{}, health, oxygen, ChatOverlay{}, 1280, 720, budget); err != nil {
+	if err := renderer.Prepare(inventory, true, true, 3, nil, nil, MiningOverlay{}, health, oxygen, hunger, ChatOverlay{}, 1280, 720, budget); err != nil {
 		t.Fatalf("warm Prepare: %v", err)
 	}
 	allocations := testing.AllocsPerRun(1000, func() {
 		source.requestCount = 0
-		if err := renderer.Prepare(inventory, true, true, 3, nil, nil, MiningOverlay{}, health, oxygen, ChatOverlay{}, 1280, 720, budget); err != nil {
+		if err := renderer.Prepare(inventory, true, true, 3, nil, nil, MiningOverlay{}, health, oxygen, hunger, ChatOverlay{}, 1280, 720, budget); err != nil {
 			panic(err)
 		}
 	})
@@ -65,7 +67,7 @@ func TestHotbarPrepareClosedMiningEncodesLayeredFeedback(t *testing.T) {
 	if err := renderer.Prepare(
 		core.Inventory{}, true, false, -1, nil, nil,
 		MiningOverlay{Active: true, ProgressTicks: 6, RequiredTicks: 15},
-		HealthOverlay{}, OxygenOverlay{}, ChatOverlay{}, 1280, 800, render.NewUploadBudget(1024),
+		HealthOverlay{}, OxygenOverlay{}, HungerOverlay{}, ChatOverlay{}, 1280, 800, render.NewUploadBudget(1024),
 	); err != nil {
 		t.Fatalf("关闭态 Prepare: %v", err)
 	}
@@ -88,18 +90,26 @@ func TestHotbarPrepareClosedMiningEncodesLayeredFeedback(t *testing.T) {
 	}
 }
 
-// TestHotbarFixedUploadLayoutMatchesCapacityContract 把合法最坏组合对应的固定上传
-// 容量钉成 benchmark scenario v18 数值；固定布局只能随新 benchmark scenario 显式迁移，
-// 不得随有界实例数静默更新，48-byte 编码契约保持不变。
-func TestHotbarFixedUploadLayoutMatchesCapacityContract(t *testing.T) {
+// TestHotbarFixedUploadLayoutMatchesScenarioVersion 把 Hotbar HUD 的**固定上传
+// 布局**钉成数值断言。
+//
+// 这三个数不是内部细节：bounded-benchmark-workload 主规格用「固定 GPU 上传
+// 布局、offset 与每帧写入字节数是否移动」来判定 benchmark scenario 要不要升版
+// （v15→v16、v17→v18 与 v18→v19 都是因它而升）。没有这条断言，改动 HUD 布局时无人会
+// 注意到 scenario 身份已经该动了——而那正是 v16 加氧气条那次发生过的事
+// （quad 236→238 恰好没跨过 256 字节对齐边界，offset 与总容量才没变）。
+//
+// 数值随 HUD 结构增长是正常的；改动本测试的期望值时必须同时判定 scenario
+// 版本要不要升，并把结论写进变更产物。
+func TestHotbarFixedUploadLayoutMatchesScenarioVersion(t *testing.T) {
 	for _, test := range []struct {
 		name      string
 		got, want int
 	}{
-		{"quad 容量", maxHotbarQuads, 247},
+		{"quad 容量", maxHotbarQuads, 267},
 		{"glyph 容量", maxHotbarGlyphs, 700},
-		{"glyph offset", hotbarGlyphOffset, 12288},
-		{"总容量", hotbarUploadBytes, 45888},
+		{"glyph offset", hotbarGlyphOffset, 13312},
+		{"总容量", hotbarUploadBytes, 46912},
 	} {
 		if test.got != test.want {
 			t.Errorf("%s=%d，想要固定容量 %d", test.name, test.got, test.want)
@@ -121,6 +131,7 @@ func TestResponsiveHotbarPrepareKeepsEveryInstanceInFramebuffer(t *testing.T) {
 			if err := renderer.Prepare(maxQuadTestInventory(), true, open, 5, nil, chest, mining,
 				HealthOverlay{Confirmed: true, Value: 7},
 				OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1},
+				HungerOverlay{Confirmed: true, Value: core.MaxHunger},
 				ChatOverlay{}, size[0], size[1], render.NewUploadBudget(1024)); err != nil {
 				t.Fatalf("framebuffer %v open=%v Prepare: %v", size, open, err)
 			}
@@ -141,7 +152,7 @@ func TestResponsiveHotbarPrepareKeepsEveryInstanceInFramebuffer(t *testing.T) {
 		renderer := newTestHotbarRenderer()
 		if err := renderer.Prepare(maxQuadTestInventory(), true, true, 5, nil, fullChestOverlay(), MiningOverlay{},
 			HealthOverlay{Confirmed: true, Value: 7}, OxygenOverlay{Confirmed: true, Value: 1},
-			ChatOverlay{}, size[0], size[1], render.NewUploadBudget(1024)); err != nil {
+			HungerOverlay{}, ChatOverlay{}, size[0], size[1], render.NewUploadBudget(1024)); err != nil {
 			t.Fatalf("framebuffer %v Prepare: %v", size, err)
 		}
 		if len(renderer.layout.quads) != 0 || len(renderer.layout.glyphs) != 0 {
@@ -154,8 +165,9 @@ func TestResponsiveHotbarPrepareKeepsEveryInstanceInFramebuffer(t *testing.T) {
 // TestHotbarMaximumBranchesAndEncodingContract 同时见证互斥分支容量、48-byte
 // 编码、256-byte 对齐与 `FrameStreams` 的实际实例前缀。
 func TestHotbarMaximumBranchesAndEncodingContract(t *testing.T) {
-	if healthQuads != 10 || oxygenQuads != 10 || hotbarInstanceBytes != 48 {
-		t.Fatalf("health/oxygen/instance=%d/%d/%d，想要 10/10/48", healthQuads, oxygenQuads, hotbarInstanceBytes)
+	if healthQuads != 10 || oxygenQuads != 10 || hungerQuads != 20 || hotbarInstanceBytes != 48 {
+		t.Fatalf("health/oxygen/hunger/instance=%d/%d/%d/%d，想要 10/10/20/48",
+			healthQuads, oxygenQuads, hungerQuads, hotbarInstanceBytes)
 	}
 	if hotbarViewportOffset%256 != 0 || hotbarQuadOffset%256 != 0 || hotbarGlyphOffset%256 != 0 ||
 		hotbarViewportOffset+hotbarViewportBytes > hotbarQuadOffset ||
@@ -173,24 +185,26 @@ func TestHotbarMaximumBranchesAndEncodingContract(t *testing.T) {
 	if err := renderer.Prepare(maxQuadTestInventory(), true, false, -1, nil, nil,
 		MiningOverlay{Active: true, ProgressTicks: 6, RequiredTicks: 15},
 		HealthOverlay{Confirmed: true, Value: core.MaxHealth},
-		OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1}, chat,
+		OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1},
+		HungerOverlay{Confirmed: true, Value: core.MaxHunger}, chat,
 		1280, 800, render.NewUploadBudget(1024)); err != nil {
 		t.Fatalf("关闭最大分支 Prepare: %v", err)
 	}
-	closedWant := closedHotbarQuads + healthQuads + oxygenQuads + maxChatQuads
-	if len(renderer.layout.quads) != closedWant || len(renderer.layout.quads) > maxHotbarQuads {
-		t.Fatalf("关闭分支 quads=%d，想要 %d 且不超过 %d", len(renderer.layout.quads), closedWant, maxHotbarQuads)
+	closedWant := closedHotbarQuads + healthQuads + oxygenQuads + hungerQuads + maxChatQuads
+	if len(renderer.layout.quads) != closedWant || closedWant != 96 || len(renderer.layout.quads) > maxHotbarQuads {
+		t.Fatalf("关闭分支 quads=%d，想要 96 且不超过 %d", len(renderer.layout.quads), maxHotbarQuads)
 	}
 
 	if err := renderer.Prepare(maxQuadTestInventory(), true, true, 5, nil, nil, MiningOverlay{},
 		HealthOverlay{Confirmed: true, Value: core.MaxHealth},
-		OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1}, chat,
+		OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1},
+		HungerOverlay{Confirmed: true, Value: core.MaxHunger}, chat,
 		1280, 800, render.NewUploadBudget(1024)); err != nil {
 		t.Fatalf("打开最大分支 Prepare: %v", err)
 	}
-	openWant := openInventoryQuads + healthQuads + oxygenQuads + maxChatQuads
-	if len(renderer.layout.quads) != openWant || len(renderer.layout.quads) != 245 || len(renderer.layout.quads) > maxHotbarQuads {
-		t.Fatalf("较大打开分支 quads=%d，想要 245 且不超过固定上限 %d", len(renderer.layout.quads), maxHotbarQuads)
+	openWant := openInventoryQuads + healthQuads + oxygenQuads + hungerQuads + maxChatQuads
+	if len(renderer.layout.quads) != openWant || len(renderer.layout.quads) != 265 || len(renderer.layout.quads) > maxHotbarQuads {
+		t.Fatalf("较大打开分支 quads=%d，想要 265 且不超过固定上限 %d", len(renderer.layout.quads), maxHotbarQuads)
 	}
 	viewport, quads, glyphs := renderer.FrameStreams()
 	if len(viewport) != hotbarViewportBytes || len(quads) != len(renderer.layout.quads)*hotbarInstanceBytes ||
@@ -200,7 +214,8 @@ func TestHotbarMaximumBranchesAndEncodingContract(t *testing.T) {
 	}
 
 	if err := renderer.Prepare(fullTestInventory(), true, true, 5, nil, fullChestOverlay(), MiningOverlay{},
-		HealthOverlay{Confirmed: true, Value: core.MaxHealth}, OxygenOverlay{Confirmed: true, Value: 0}, chat,
+		HealthOverlay{Confirmed: true, Value: core.MaxHealth}, OxygenOverlay{Confirmed: true, Value: 0},
+		HungerOverlay{Confirmed: true, Value: core.MaxHunger}, chat,
 		1280, 800, render.NewUploadBudget(1024)); err != nil {
 		t.Fatalf("glyph 最大分支 Prepare: %v", err)
 	}
@@ -210,7 +225,7 @@ func TestHotbarMaximumBranchesAndEncodingContract(t *testing.T) {
 	}
 
 	if err := renderer.Prepare(core.Inventory{}, true, false, -1, nil, nil, MiningOverlay{},
-		HealthOverlay{}, OxygenOverlay{}, ChatOverlay{}, 1280, 800, render.NewUploadBudget(1024)); err != nil {
+		HealthOverlay{}, OxygenOverlay{}, HungerOverlay{}, ChatOverlay{}, 1280, 800, render.NewUploadBudget(1024)); err != nil {
 		t.Fatalf("最小前缀 Prepare: %v", err)
 	}
 	_, quads, glyphs = renderer.FrameStreams()

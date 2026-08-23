@@ -7,12 +7,14 @@ import (
 )
 
 const (
-	// HUD 图集前五格是代码生成的固定生存图标，后续格按 `ItemID` 放置真实方块顶面。
+	// HUD 图集前七格是代码生成的固定生存图标，后续格按 `ItemID` 放置真实方块顶面。
 	hotbarEmptyHeartColumn = iota
 	hotbarHalfHeartColumn
 	hotbarFullHeartColumn
 	hotbarEmptyBubbleColumn
 	hotbarFullBubbleColumn
+	hotbarEmptyDrumstickColumn
+	hotbarFullDrumstickColumn
 	hotbarBlockColumnOffset
 
 	hotbarTextureSize = 16
@@ -30,6 +32,8 @@ func buildHotbarTextureAtlas(registry *assets.Registry) []byte {
 	paintHotbarHeart(pixels, hotbarFullHeartColumn, heartFull)
 	paintHotbarBubble(pixels, hotbarEmptyBubbleColumn, false)
 	paintHotbarBubble(pixels, hotbarFullBubbleColumn, true)
+	paintHotbarDrumstick(pixels, hotbarEmptyDrumstickColumn, false)
+	paintHotbarDrumstick(pixels, hotbarFullDrumstickColumn, true)
 	// 物品列按 ItemID 穷举到独占上界 ItemIDMax（与列数预留同一穷举界），
 	// 不可放置的物品没有对应列内容，保持空白。
 	for item := core.ItemStone; item < core.ItemIDMax; item++ {

@@ -47,27 +47,31 @@ func TestHealthBarUsesConfirmedClampedHeartCells(t *testing.T) {
 	}
 }
 
-// TestHealthBarAnchorsToHotbar 防止生命行重新漂回 framebuffer 左下角，或打开容器
-// 后继续覆盖快捷栏上方的可交互区域。
+// TestHealthBarAnchorsToHotbar 防止生命条脱离快捷栏左边缘，或打开容器后
+// 继续覆盖快捷栏上方的可交互区域。
 func TestHealthBarAnchorsToHotbar(t *testing.T) {
 	for _, test := range []struct {
-		name  string
-		open  bool
-		wantY float32
+		name string
+		open bool
 	}{
-		{"关闭态位于快捷栏上方", false, 708},
-		{"打开态位于快捷栏下方留白", true, 780},
+		{"关闭态位于快捷栏上方", false},
+		{"打开态位于快捷栏下方留白", true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			left, hotbarY, _, scale := hotbarRowBounds(test.open, 1280, 800)
+			wantY := hotbarY - (healthHeartSize+statusBarGap)*scale
+			if test.open {
+				wantY = hotbarY + (hotbarSlotSize+statusBarGap)*scale
+			}
 			var layout hotbarLayout
 			appendHealthBar(&layout, HealthOverlay{Confirmed: true, Value: 1}, test.open, 1280, 800)
 			if len(layout.quads) != healthSegmentCount {
 				t.Fatalf("quads=%d，想要十个 resolved 心形槽位", len(layout.quads))
 			}
 			for index, heart := range layout.quads {
-				wantX := float32(408 + index%10*17)
-				if heart.X != wantX || heart.Y != test.wantY {
-					t.Fatalf("爱心 %d 锚点=(%v,%v)，想要快捷栏左沿序列 (%v,%v)", index, heart.X, heart.Y, wantX, test.wantY)
+				wantX := left + float32(index)*(healthHeartSize+healthHeartGap)*scale
+				if heart.X != wantX || heart.Y != wantY {
+					t.Fatalf("爱心 %d 锚点=(%v,%v)，想要快捷栏左边缘序列 (%v,%v)", index, heart.X, heart.Y, wantX, wantY)
 				}
 			}
 		})

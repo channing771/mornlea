@@ -436,22 +436,46 @@ func TestChatEventFormattingIsStableForAcceptedInvalidAndUnknown(t *testing.T) {
 	}
 }
 
+// TestFormatChatEventUnknownKindFallsBackToNeutralLine 直接构造 wire 校验不可
+// 达的未知 kind 与未知拒绝理由，锁定 `formatChatEvent` 的防御兜底「未知事件」
+// （M5E 递延 3 的清偿）：kind switch 无 default 子句，未知 kind 落入二级
+// reason switch 的 default；未来新增 kind/reason 漏加 case 时本测试守住
+// 「宁可中性占位行也不静默复用其他行格式」的 E9/C2 契约。
+func TestFormatChatEventUnknownKindFallsBackToNeutralLine(t *testing.T) {
+	unknownKind := network.ChatEvent{
+		Kind: network.ChatEventKind(200), CompanionName: "阿木", Command: "挖石头",
+	}
+	if got, want := formatChatEvent(unknownKind), "未知事件"; got != want {
+		t.Fatalf("formatChatEvent(未知 kind) = %q, want %q", got, want)
+	}
+	unknownReason := network.ChatEvent{
+		Kind: network.ChatEventRejected, RejectReason: network.ChatRejectReason(200),
+		CompanionName: "阿木", Command: "挖石头",
+	}
+	if got, want := formatChatEvent(unknownReason), "未知事件"; got != want {
+		t.Fatalf("formatChatEvent(未知拒绝理由) = %q, want %q", got, want)
+	}
+}
+
 func TestApplicationRendersHealthBeforeInventoryConfirmation(t *testing.T) {
 	app := newRemoteRenderApplication(t, &integrationGlyphSource{})
 	if err := app.predictor.Begin(network.PlayerState{
 		ServerTick: 1, Dimension: core.Overworld,
-		// 氧气给满值：本用例只关心生命条的爱心实例数，未满氧气会额外画出氧气条。
+		// 氧气给满值：氧气条只在未满时出现，满值让它不占用 quad 流。饥饿条与之
+		// 相反、满值也常驻，所以饥饿给的是显式满值而不是靠零值蒙混——本用例数的
+		// 是「生命条 + 饥饿条」这个确定的总数。
 		Position: mgl32.Vec3{0.5, 10, 0.5}, Ready: true, Health: 12,
-		Oxygen: core.MaxOxygenTicks,
+		Oxygen: core.MaxOxygenTicks, Hunger: core.MaxHunger,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if rendered, err := app.renderFrame(1); err != nil || !rendered {
 		t.Fatalf("renderFrame=(%v,%v)", rendered, err)
 	}
-	// 未确认背包时 HUD 只画十个 resolved-slot 生命槽。
-	if _, quads, _ := app.hotbarRenderer.FrameStreams(); len(quads)/48 != int(healthQuadInstancesForHUDTest) {
-		t.Fatalf("unconfirmed inventory health quads=%d want=%d", len(quads)/48, healthQuadInstancesForHUDTest)
+	// 未确认背包时 HUD 只画生命条与饥饿条(quad 流恰为两条 bar 的实例数之和)。
+	want := healthQuadInstancesForHUDTest + hungerQuadInstancesForHUDTest
+	if _, quads, _ := app.hotbarRenderer.FrameStreams(); len(quads)/48 != want {
+		t.Fatalf("unconfirmed inventory health+hunger quads=%d want=%d", len(quads)/48, want)
 	}
 }
 

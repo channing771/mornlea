@@ -24,7 +24,7 @@ func TestChatOverlayShowsSixEventsAndInputWithinFixedCapacity(t *testing.T) {
 		upload: make([]byte, hotbarUploadBytes),
 	}
 	if err := renderer.Prepare(
-		core.Inventory{}, false, false, -1, nil, nil, MiningOverlay{}, HealthOverlay{}, OxygenOverlay{},
+		core.Inventory{}, false, false, -1, nil, nil, MiningOverlay{}, HealthOverlay{}, OxygenOverlay{}, HungerOverlay{},
 		ChatOverlay{Open: true, Input: line, Lines: lines},
 		1280, 720, render.NewUploadBudget(1<<20),
 	); err != nil {
@@ -56,7 +56,7 @@ func TestChatOverlayHotPathAllocations(t *testing.T) {
 	budget := render.NewUploadBudget(1024)
 	prepare := func() {
 		if err := renderer.Prepare(
-			core.Inventory{}, false, false, -1, nil, nil, MiningOverlay{}, HealthOverlay{}, OxygenOverlay{},
+			core.Inventory{}, false, false, -1, nil, nil, MiningOverlay{}, HealthOverlay{}, OxygenOverlay{}, HungerOverlay{},
 			overlay, 1280, 720, budget,
 		); err != nil {
 			panic(err)
@@ -149,20 +149,26 @@ func TestChatOverlayStaysInFramebufferAndAboveClosedSurvivalStatus(t *testing.T)
 				atlas := newFakeNameTagAtlas()
 				atlas.tofu = render.Glyph{Advance: 10, BearingY: 25, Width: 8, Height: 24}
 				layout := hotbarLayout{
-					quads:  make([]hotbarInstance, 0, healthQuads+oxygenQuads+maxChatQuads),
+					quads:  make([]hotbarInstance, 0, healthQuads+oxygenQuads+hungerQuads+maxChatQuads),
 					glyphs: make([]hotbarInstance, 0, maxChatGlyphs),
 				}
 				appendHealthBar(&layout, HealthOverlay{Confirmed: true, Value: 12}, false, size.width, size.height)
 				appendOxygenBar(&layout, OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks / 2}, false, size.width, size.height)
+				appendHungerBar(&layout, HungerOverlay{Confirmed: true, Value: core.MaxHunger}, false, size.width, size.height)
 				statusCount := len(layout.quads)
-				if statusCount != healthQuads+oxygenQuads {
-					t.Fatalf("status quads=%d want=%d", statusCount, healthQuads+oxygenQuads)
+				if statusCount != healthQuads+oxygenQuads+hungerQuads {
+					t.Fatalf("status quads=%d want=%d", statusCount, healthQuads+oxygenQuads+hungerQuads)
 				}
 				_, hotbarY, _, survivalScale := hotbarRowBounds(false, size.width, size.height)
-				statusTop := hotbarY - (statusBarGap+healthHeartSize)*survivalScale
+				primaryTop := hotbarY - (statusBarGap+healthHeartSize)*survivalScale
+				statusTop := primaryTop - (statusBarGap+healthHeartSize)*survivalScale
 				for index, quad := range layout.quads {
-					if quad.Y != statusTop {
-						t.Fatalf("status quad %d top=%v want shared closed anchor %v", index, quad.Y, statusTop)
+					wantTop := primaryTop
+					if index >= healthQuads && index < healthQuads+oxygenQuads {
+						wantTop = statusTop
+					}
+					if quad.Y != wantTop {
+						t.Fatalf("status quad %d top=%v want reserved stack row %v", index, quad.Y, wantTop)
 					}
 				}
 
@@ -264,11 +270,12 @@ func assertEmbeddedChatStrictBounds(
 	line := strings.Repeat(char, maxChatRunes)
 	lines := []string{line, line, line, line, line, line}
 	layout := hotbarLayout{
-		quads:  make([]hotbarInstance, 0, healthQuads+oxygenQuads+maxChatQuads),
+		quads:  make([]hotbarInstance, 0, healthQuads+oxygenQuads+hungerQuads+maxChatQuads),
 		glyphs: make([]hotbarInstance, 0, maxChatGlyphs),
 	}
 	appendHealthBar(&layout, HealthOverlay{Confirmed: true, Value: 12}, false, width, height)
 	appendOxygenBar(&layout, OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks / 2}, false, width, height)
+	appendHungerBar(&layout, HungerOverlay{Confirmed: true, Value: core.MaxHunger}, false, width, height)
 	statusCount := len(layout.quads)
 	appendChatOverlay(&layout, atlas, ChatOverlay{Open: open, Input: line, Lines: lines}, width, height)
 

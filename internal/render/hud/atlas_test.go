@@ -13,15 +13,29 @@ import (
 // 杀死变异：漏画任一固定 UI 图标、复用同一图标、引入半透明边缘或让构建读取不稳定
 // 状态，都会破坏生存状态行的固定图集契约。
 func TestHotbarTextureAtlasUIIconsAreDistinctBinaryAndDeterministic(t *testing.T) {
-	if got, want := [6]int{
+	wantColumns := [...]int{
+		0, // empty heart
+		1, // half heart
+		2, // full heart
+		3, // empty bubble
+		4, // full bubble
+		5, // empty drumstick
+		6, // full drumstick
+	}
+	gotColumns := [...]int{
 		hotbarEmptyHeartColumn,
 		hotbarHalfHeartColumn,
 		hotbarFullHeartColumn,
 		hotbarEmptyBubbleColumn,
 		hotbarFullBubbleColumn,
-		hotbarBlockColumnOffset,
-	}, [6]int{0, 1, 2, 3, 4, 5}; got != want {
-		t.Fatalf("HUD 图集列顺序=%v，想要 %v", got, want)
+		hotbarEmptyDrumstickColumn,
+		hotbarFullDrumstickColumn,
+	}
+	if gotColumns != wantColumns {
+		t.Fatalf("HUD 图集列顺序=%v，想要 %v", gotColumns, wantColumns)
+	}
+	if hotbarBlockColumnOffset != len(wantColumns) {
+		t.Fatalf("物品列 offset=%d，想要紧随七个 UI cell 的 %d", hotbarBlockColumnOffset, len(wantColumns))
 	}
 
 	registry := assets.NewRegistry()
@@ -30,15 +44,8 @@ func TestHotbarTextureAtlasUIIconsAreDistinctBinaryAndDeterministic(t *testing.T
 		t.Fatal("连续构建的 hotbar 图集不相同")
 	}
 
-	columns := []int{
-		hotbarEmptyHeartColumn,
-		hotbarHalfHeartColumn,
-		hotbarFullHeartColumn,
-		hotbarEmptyBubbleColumn,
-		hotbarFullBubbleColumn,
-	}
-	cells := make([][]byte, len(columns))
-	for index, column := range columns {
+	cells := make([][]byte, len(wantColumns))
+	for index, column := range wantColumns {
 		cell := hotbarTextureCell(pixels, column)
 		cells[index] = cell
 		opaque := 0
@@ -56,7 +63,7 @@ func TestHotbarTextureAtlasUIIconsAreDistinctBinaryAndDeterministic(t *testing.T
 	for left := range cells {
 		for right := left + 1; right < len(cells); right++ {
 			if bytes.Equal(cells[left], cells[right]) {
-				t.Fatalf("UI 列 %d 与 %d 的内容相同", columns[left], columns[right])
+				t.Fatalf("UI 列 %d 与 %d 的内容相同", wantColumns[left], wantColumns[right])
 			}
 		}
 	}
@@ -158,5 +165,55 @@ func TestHotbarColumnUVStaysInsideItsOwnColumn(t *testing.T) {
 		if right < wantRight-tolerance || right > wantRight+tolerance {
 			t.Fatalf("列 %d 右界 texel=%v，想要 %v±%v", column, right, wantRight, tolerance)
 		}
+	}
+}
+
+// TestHotbarDrumstickColumnsAreDistinctAndSelfContained 覆盖 HUD 图集新增的两列
+// 鸡腿（任务 5.2）。
+//
+// 三条断言各杀一种变异：空/满两列若逐像素相同，饥饿条画什么都看不出差别；
+// 画到轮廓之外会污染相邻列（图集是一条 16px 高的长带，越界即串味）；
+// 写错列号会覆盖爱心列，让生命条跟着变。
+func TestHotbarDrumstickColumnsAreDistinctAndSelfContained(t *testing.T) {
+	pixels := make([]byte, hotbarTextureWidth*hotbarTextureSize*4)
+	paintHotbarHeart(pixels, hotbarEmptyHeartColumn, heartEmpty)
+	paintHotbarHeart(pixels, hotbarFullHeartColumn, heartFull)
+	heartBefore := append([]byte(nil), pixels[:2*hotbarTextureSize*4]...)
+
+	paintHotbarDrumstick(pixels, hotbarEmptyDrumstickColumn, false)
+	paintHotbarDrumstick(pixels, hotbarFullDrumstickColumn, true)
+
+	if got := pixels[:2*hotbarTextureSize*4]; !bytes.Equal(got, heartBefore) {
+		t.Fatal("绘制鸡腿改写了爱心列的首行像素")
+	}
+	cell := func(column, x, y int) [4]byte {
+		offset := (y*hotbarTextureWidth + column*hotbarTextureSize + x) * 4
+		return [4]byte(pixels[offset : offset+4])
+	}
+	differing, painted := 0, 0
+	for y := range hotbarTextureSize {
+		for x := range hotbarTextureSize {
+			empty, full := cell(hotbarEmptyDrumstickColumn, x, y), cell(hotbarFullDrumstickColumn, x, y)
+			inside := hotbarDrumstickPixel(x, y)
+			if !inside {
+				if empty != ([4]byte{}) || full != ([4]byte{}) {
+					t.Fatalf("轮廓外像素 (%d,%d) 被写入：空=%v 满=%v", x, y, empty, full)
+				}
+				continue
+			}
+			painted++
+			if empty == ([4]byte{}) || full == ([4]byte{}) || empty[3] != 255 || full[3] != 255 {
+				t.Fatalf("轮廓内像素 (%d,%d) 不可见：空=%v 满=%v", x, y, empty, full)
+			}
+			if empty != full {
+				differing++
+			}
+		}
+	}
+	if painted < 64 {
+		t.Fatalf("鸡腿轮廓只覆盖 %d 个像素，图标过小无法辨认", painted)
+	}
+	if differing*2 < painted {
+		t.Fatalf("空/满两列只有 %d/%d 个像素不同，饱食度无法辨认", differing, painted)
 	}
 }

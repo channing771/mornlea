@@ -44,6 +44,7 @@ var captureSettleTimeout = 5 * time.Minute
 type captureHUDFixture struct {
 	Health uint8
 	Oxygen uint16
+	Hunger uint8
 	Mining hud.MiningOverlay
 }
 
@@ -139,6 +140,11 @@ var captureScenes = []captureScene{
 			inventory.Backpack[0] = core.ItemStack{Item: core.ItemCoal, Count: 12}
 			return app.inventory.Apply(network.InventoryState{Inventory: inventory})
 		},
+		HUD: &captureHUDFixture{
+			Health: core.MaxHealth,
+			Oxygen: core.MaxOxygenTicks,
+			Hunger: core.MaxHunger,
+		},
 	},
 	{
 		Name:         "hud-survival-feedback",
@@ -163,6 +169,7 @@ var captureScenes = []captureScene{
 		HUD: &captureHUDFixture{
 			Health: 5,
 			Oxygen: core.MaxOxygenTicks / 3,
+			Hunger: 9,
 			Mining: hud.MiningOverlay{
 				Active: true, ProgressTicks: 4, RequiredTicks: 9, Harvestable: false,
 			},
@@ -232,6 +239,7 @@ var captureScenes = []captureScene{
 		HUD: &captureHUDFixture{
 			Health: 5,
 			Oxygen: core.MaxOxygenTicks / 3,
+			Hunger: 9,
 		},
 	},
 	{
@@ -610,6 +618,7 @@ func applyCaptureHUDFixture(
 		Ready:     true,
 		Health:    fixture.Health,
 		Oxygen:    fixture.Oxygen,
+		Hunger:    fixture.Hunger,
 	}); err != nil {
 		return nil, fmt.Errorf("构造 capture HUD predictor: %w", err)
 	}

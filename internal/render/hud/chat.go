@@ -84,8 +84,7 @@ func appendChatOverlay(
 	if len(lines) == 0 && !overlay.Open {
 		return
 	}
-	_, hotbarY, _, survivalScale := hotbarRowBounds(false, width, height)
-	statusTop := hotbarY - (statusBarGap+healthHeartSize)*survivalScale
+	_, _, _, statusTop, survivalScale := statusBarBounds(false, width, height)
 	stackHeight := float32(0)
 	if len(lines) > 0 {
 		stackHeight = float32(len(lines))*chatLineHeight + 2*chatPadding
@@ -117,8 +116,8 @@ func appendChatOverlay(
 	padding := chatPadding * scale
 	lineHeight := chatLineHeight * scale
 	x := hudEdgeMargin * scale
-	// 聊天的整个面板栈从关闭态状态行上方向上生长，不依赖是否恰好
-	// 显示生命或氧气，避免权威状态变化让已接受的聊天行突然被覆盖。
+	// 聊天的整个面板栈从关闭态永久两行状态栈上方向上生长，不依赖是否恰好
+	// 显示气泡实例，避免权威状态变化让已接受的聊天行突然被覆盖。
 	bottom := statusTop - chatHealthClearance*scale
 	inputHeight := lineHeight + 2*padding
 	if overlay.Open {

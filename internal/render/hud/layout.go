@@ -7,12 +7,12 @@ import (
 
 const (
 	// 打开态与关闭态互斥；分别列出合法上限，防止后续样式变化悄悄突破 benchmark
-	// scenario v18 已锁定的 247 quad 固定上传容量。
+	// scenario v19 已锁定的 267 quad 固定上传容量。
 	openInventoryQuads = openInventoryPanelQuads + 2 + core.InventorySlots + core.InventorySlots*2 +
 		core.HotbarSlots*2 + maxOverlayQuads
 	closedHotbarQuads = closedHotbarPanelQuads + closedHotbarSelectionQuads + core.HotbarSlots +
 		core.HotbarSlots*2 + core.HotbarSlots*2 + miningBarQuads + miningWarningNotches
-	maxHotbarQuads = 247
+	maxHotbarQuads = 267
 	// 数量最多两位数（2..64），每个数字包含阴影与前景两个实例。
 	maxHotbarGlyphs = core.InventorySlots*4 + maxOverlayGlyphs + maxChatGlyphs
 
@@ -49,16 +49,18 @@ const (
 	// openHUDHeight 是打开背包时从合成面板上沿到 framebuffer 下沿的设计高度，
 	// hudScale 用它把整个界面缩进窗口。自下而上依次是：快捷栏下边距与一格、
 	// 背包三行与行间隔、合成行间隔与最下一条合成行、其余合成行、面板上边距。
+	// 底部另永久保留主状态行和向下外扩的氧气行；其中快捷栏既有 24px 下边距
+	// 已容纳主行，额外增加一行只为氧气，满氧隐藏时也不收缩。
 	// 写成随 len(inventoryRecipeIDs) 增长的表达式而不是字面量，否则每追加一条
 	// 配方最上面的行都会被挤出窗口上沿。
 	openHUDHeight = hotbarBottomMargin + hotbarSlotSize +
 		inventoryRowGap + 3*hotbarSlotSize + 2*hotbarSlotGap +
 		recipeRowGap + hotbarSlotSize +
 		float32(len(inventoryRecipeIDs)-1)*(hotbarSlotSize+hotbarSlotGap) +
-		hotbarPanelPadding
+		hotbarPanelPadding + healthHeartSize + statusBarGap
 	// 关闭态联合高度从 framebuffer 下沿覆盖快捷栏、状态行和最坏采掘轨道；
-	// `hudScale` 用它保证三者在矮窗口中按同一比例缩小。
-	closedHUDHeight = hotbarBottomMargin + hotbarSlotSize + statusBarGap + healthHeartSize +
+	// `hudScale` 用它保证快捷栏、永久两行状态栈和采掘轨道按同一比例缩小。
+	closedHUDHeight = hotbarBottomMargin + hotbarSlotSize + 2*(statusBarGap+healthHeartSize) +
 		miningBarGap + miningBarHeight
 )
 
@@ -319,17 +321,17 @@ type MiningOverlay struct {
 	Harvestable   bool
 }
 
-// appendMiningBar 在快捷栏上方绘制固定背景和权威比例填充。
+// appendMiningBar 在永久预留的两行状态栈上方绘制固定背景和权威比例填充。
 func appendMiningBar(dst *hotbarLayout, overlay MiningOverlay, width, height float32) {
 	if !overlay.Active || overlay.RequiredTicks == 0 {
 		return
 	}
-	left, hotbarY, totalWidth, scale := hotbarRowBounds(false, width, height)
+	left, _, totalWidth, scale := hotbarRowBounds(false, width, height)
 	barWidth := miningBarWidth * scale
 	barHeight := miningBarHeight * scale
 	x := left + (totalWidth-barWidth)*0.5
-	statusY := hotbarY - (statusBarGap+healthHeartSize)*scale
-	y := statusY - (miningBarGap+miningBarHeight)*scale
+	_, _, _, statusTop, _ := statusBarBounds(false, width, height)
+	y := statusTop - (miningBarGap+miningBarHeight)*scale
 	dst.quads = append(dst.quads, hotbarInstance{
 		X: x, Y: y, Width: barWidth, Height: barHeight,
 		Color: miningTrackColor,
@@ -390,18 +392,42 @@ func hotbarRowBounds(open bool, width, height float32) (left, top, totalWidth, s
 	scale = hudScale(open, width, height)
 	totalWidth = (core.HotbarSlots*hotbarSlotSize + (core.HotbarSlots-1)*hotbarSlotGap) * scale
 	left = (width - totalWidth) * 0.5
-	top = height - (hotbarBottomMargin+hotbarSlotSize)*scale
+	bottomMargin := hotbarBottomMargin
+	if open {
+		// 主状态行原本已由 24px 下边距容纳；再上移一行，给向下外扩的氧气
+		// 保留同样的 16px 高度和 4px 底部余量。
+		bottomMargin += healthHeartSize + statusBarGap
+	}
+	top = height - (bottomMargin+hotbarSlotSize)*scale
 	return left, top, totalWidth, scale
 }
+
+// statusBarBounds 返回快捷栏左右边缘、主状态行、向外氧气行与共享缩放。
+// 满氧只省略实例，这个几何始终保留，避免主行、采掘和聊天随气泡显隐跳动。
+func statusBarBounds(open bool, width, height float32) (
+	left, right, primaryY, oxygenY, scale float32,
+) {
+	left, hotbarY, totalWidth, scale := hotbarRowBounds(open, width, height)
+	right = left + totalWidth
+	rowStep := (statusBarGap + healthHeartSize) * scale
+	primaryY = hotbarY - rowStep
+	oxygenY = primaryY - rowStep
+	if open {
+		primaryY = hotbarY + (hotbarSlotSize+statusBarGap)*scale
+		oxygenY = primaryY + rowStep
+	}
+	return left, right, primaryY, oxygenY, scale
+}
+
 func hudScale(open bool, width, height float32) float32 {
 	if width <= 0 || height <= 0 {
 		return 1
 	}
 	scale := float32(1)
-	contentWidth := core.HotbarSlots*hotbarSlotSize +
+	hotbarContentWidth := core.HotbarSlots*hotbarSlotSize +
 		(core.HotbarSlots-1)*hotbarSlotGap + 2*hotbarPanelPadding
-	if available := width - 2*hudEdgeMargin; available < contentWidth {
-		scale = max(available/contentWidth, 0)
+	if available := width - 2*hudEdgeMargin; available < hotbarContentWidth {
+		scale = max(available/hotbarContentWidth, 0)
 	}
 	if open {
 		if available := height - 2*hudEdgeMargin; available < openHUDHeight {
