@@ -79,6 +79,17 @@ type pixelPerfectionProvenanceEntry struct {
 	Destination string `json:"destination"`
 	Source      string `json:"source"`
 	SHA256      string `json:"sha256"`
+	// Derived 记录逐文件的派生合成信息。内嵌默认包中的 grass_side.png 不再是
+	// 上游的原始 overlay，而是把草缘合成到 dirt 之上得到的完全不透明图——
+	// 派生必须被记录，不能假装是上游原样拷贝（TestOpaqueLayersAreFullyOpaque 与
+	// 这里的断言共同锁住这一点）。
+	Derived *pixelPerfectionProvenanceDerived `json:"derived,omitempty"`
+}
+
+// pixelPerfectionProvenanceDerived 描述一个派生材质文件由哪些上游素材如何合成而来。
+type pixelPerfectionProvenanceDerived struct {
+	Sources []string `json:"sources"`
+	Note    string   `json:"note"`
 }
 
 func TestEmbeddedDefaultPackProvenance(t *testing.T) {
@@ -163,6 +174,19 @@ func TestEmbeddedDefaultPackProvenance(t *testing.T) {
 		seen[logicalName] = true
 		if entry.Source != wantSource {
 			t.Errorf("%s source = %q，想要 %q", logicalName, entry.Source, wantSource)
+		}
+		if logicalName == "grass_side" {
+			if entry.Derived == nil {
+				t.Errorf("grass_side 缺少 derived 派生记录")
+			} else if len(entry.Derived.Sources) != 2 ||
+				entry.Derived.Sources[0] != "default/default_grass_side.png" ||
+				entry.Derived.Sources[1] != "default/default_dirt.png" {
+				t.Errorf("grass_side derived.sources = %v，想要 [default/default_grass_side.png default/default_dirt.png]", entry.Derived.Sources)
+			} else if entry.Derived.Note == "" {
+				t.Errorf("grass_side derived.note 为空")
+			}
+		} else if entry.Derived != nil {
+			t.Errorf("%s 出现了非预期的 derived 记录", logicalName)
 		}
 
 		file, err := root.Open(entry.Destination)
@@ -335,6 +359,50 @@ func assertBinaryAlpha(t *testing.T, pixels []byte, name string) {
 	for i := 3; i < len(pixels); i += 4 {
 		if pixels[i] != 0 && pixels[i] != 255 {
 			t.Fatalf("%s alpha[%d] = %d，想要 0 或 255", name, i/4, pixels[i])
+		}
+	}
+}
+
+// TestOpaqueLayersAreFullyOpaque 锁定"非 cutout 层必须全图不透明、cutout 层 alpha 必须二值"这条契约。
+//
+// 判据来源：engine/crates/mornlea_client/shaders/terrain.wgsl 的片段着色器对
+// alpha<0.5 的片段判 discard。不透明层（不在 `isCutoutLayer` 集合里）一旦带有透明
+// 像素，这一整块面就会被着色器丢弃，方块面出现看穿/破洞（历史上 grass_side.png
+// 就因此把草方块侧面的下半部整段丢弃）。cutout 层（leaves、glass、wheat_0..7）
+// 允许 0 与 255 二值 alpha，由 mip 链的 `downsampleCutout` 保住覆盖率。
+//
+// 唯一的例外是 `LayerWater`：它不带进不透明 terrain pass，而是被按 material 分流到
+// 半透明 water pass（见 render 的区段调度），在那里走 alpha blend 而非 cutout
+// discard，因此允许固定的中间 alpha（`waterAlpha`=160），不适用本测试的"不透明层必须
+// 全图不透明"约束，这里显式跳过。
+func TestOpaqueLayersAreFullyOpaque(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		registry *Registry
+	}{
+		{"程序化", NewRegistry()},
+		{"内嵌默认", NewDefaultRegistry()},
+	} {
+		for layer := 0; layer < tc.registry.LayerCount(); layer++ {
+			if layer == int(LayerWater) {
+				continue
+			}
+			pixels := tc.registry.LayerRGBA(layer)
+			if len(pixels) != 16*16*4 {
+				t.Fatalf("%s layer %d: 像素长度 = %d", tc.name, layer, len(pixels))
+			}
+			for i := 3; i < len(pixels); i += 4 {
+				switch {
+				case isCutoutLayer(layer):
+					if pixels[i] != 0 && pixels[i] != 255 {
+						t.Fatalf("%s layer %d (cutout): alpha[%d] = %d，想要 0 或 255", tc.name, layer, i/4, pixels[i])
+					}
+				default:
+					if pixels[i] != 255 {
+						t.Fatalf("%s layer %d (不透明): alpha[%d] = %d，想要 255", tc.name, layer, i/4, pixels[i])
+					}
+				}
+			}
 		}
 	}
 }

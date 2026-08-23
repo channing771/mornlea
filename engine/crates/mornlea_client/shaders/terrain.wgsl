@@ -23,10 +23,16 @@ fn axis_vec(axis: u32) -> vec3f {
     return vec3f(0.0, 0.0, 1.0);
 }
 
+// face_uv 把世界坐标分量投影到材质的 (u, v)。约定：wgpu 纹理坐标 v=0 是
+// 图像顶行、世界 y 轴向上，因此侧面（以及交叉斜面）的纵向分量必须取
+// -world.y，才能让纹理顶行（草缘、原木树皮的顶部等）落在方块顶部；否则
+// v=world.y 会让图像顶行落到方块底部（上下颠倒），±X 面把 u 当纵向更会把
+// 整张纹理旋转 90°。采样器地址模式为 Repeat，负 v 会正确环绕，世界坐标 UV 的
+// 相位仍然只由世界坐标决定、取负不改写连续性。
 fn face_uv(world: vec3f, axis: u32) -> vec2f {
-    if (axis == 0u) { return vec2f(world.y, world.z); }
-    if (axis == 1u) { return vec2f(world.z, world.x); }
-    return vec2f(world.x, world.y);
+    if (axis == 0u) { return vec2f(world.z, -world.y); } // ±X 面：水平=world.z、纵向=-world.y
+    if (axis == 1u) { return vec2f(world.z, world.x); }  // ±Y 面（顶/底）：两个水平轴，正确
+    return vec2f(world.x, -world.y);                     // ±Z 面：水平=world.x、纵向=-world.y
 }
 
 fn face_shade(face: u32) -> f32 {
@@ -106,12 +112,14 @@ fn vs_main(
     let sky_base = 0.08 + sky * (daylight - 0.08);
     let base = max(sky_base, block);
 
-    // 交叉斜面的 uv 显式取 (world.x, world.y)：一片斜面在这两轴上恰好各跨一格，
-    // 于是整张材质不多不少铺满一片。**不能**图省事交给 face_uv——那里的 axis
-    // 只有 0/1/2 三种语义，植物的 axis = face >> 1 = 3 只是碰巧落进 default。
+    // 交叉斜面的 uv 显式取 (world.x, -world.y)：一片斜面在这两轴上恰好各跨一格，
+    // 于是整张材质不多不少铺满一片。斜面的 v 轴正是纵向（world.y），必须与侧面
+    // 一样取 -world.y，才能让纹理顶行（草缘等）落在格子顶部，否则小麦等植物
+    // 纹理上下颠倒。**不能**图省事交给 face_uv——那里的 axis 只有 0/1/2 三种
+    // 语义，植物的 axis = face >> 1 = 3 只是碰巧落进 default。
     var uv = face_uv(world, axis);
     if (face >= 6u) {
-        uv = vec2f(world.x, world.y);
+        uv = vec2f(world.x, -world.y);
     }
 
     var out: VsOut;

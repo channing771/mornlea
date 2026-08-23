@@ -71,6 +71,13 @@ wheat_7
 
 缺失的已知文件先回退到客户端内嵌默认材质；内嵌包也未提供时，再回退到程序化材质。未知文件不会创建新材质或改变既有映射。
 
+材质文件的 alpha 通道有硬性要求，按它在渲染路径里的层分类（`internal/assets/blocks.go` 的 `isCutoutLayer`）区分：
+
+- **非 cutout 层**（默认，即不进入 `isCutoutLayer` 集合的所有层）：每一格的 alpha 必须全图等于 255，即完全不透明。这些层走不透明 terrain pass，片段着色器会丢弃 alpha<0.5 的片段；一旦混入透明像素，整个方块面就被丢弃，出现看穿/破洞，mip 降采样后远处整块面更会整块消失。
+- **cutout 层**（`leaves`、`glass`、`wheat_0`..`wheat_7`）：alpha 必须为 0 或 255（二值），不允许中间 alpha。这些层走 alpha cutout，由 mip 链的 `downsampleCutout` 保住覆盖率，中间 alpha 会被 `c.a < 0.5` 的判定丢弃。
+
+因此像 Minetest/Luanti 里那种 overlay 型纹理（比如 `grass_side` 只有顶部几行草缘不透明、其余为透明，靠与 `dirt` 用 `^` 合成后显示）**不能直接入库**。建议直接提供完整的「泥土+草缘」合成图——Mornlea 内嵌默认的 `grass_side.png` 就是这样：把草缘以 straight-alpha source-over 合成到 `dirt` 之上得到完全不透明的 16×16 图。需要 overlay 时请在打包前自行合成，客户端不会做任何像素合成。
+
 显式配置的目录、manifest 或已知材质文件不可读、无效、超限或尺寸错误时，客户端会直接启动失败，不会静默忽略整个用户包。清空 `texturePackPath` 可恢复内嵌默认与程序化回退。
 
 ## 配置与限制

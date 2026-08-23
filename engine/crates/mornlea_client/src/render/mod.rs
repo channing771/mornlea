@@ -22,6 +22,8 @@ pub mod pool;
 pub mod quads;
 pub mod shaders;
 #[cfg(test)]
+mod side_tests;
+#[cfg(test)]
 mod water_tests;
 
 use std::collections::HashMap;
