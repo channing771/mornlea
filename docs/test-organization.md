@@ -105,3 +105,61 @@ helper 落位规则与验收清单都在这里。条文是原则，本文件是�
 预测门控、挖掘 overlay、快捷栏放置、熔炉 UI、箱子 UI、合成、丢弃/进食/使用键七个
 功能域）是当前最典型的拆分候选（此例为识别示范，若该文件已被拆分则自然过时，以
 判据为准）。
+
+## Rust 映射
+
+上文判据、SOP 与验收清单是 Go 侧表述；Rust crate（`engine/crates/mornlea_engine`
+与 `engine/crates/mornlea_client`）按本节映射执行，原则同构：零行为变化、按主题
+拆分、helper 先 grep 引用集合再落位。
+
+### 存放与拆分形态
+
+- 测试以 `#[cfg(test)]` 子模块与被测代码**同 crate 同模块树**存放（内联
+  `mod tests` 或兄弟文件），不做 `tests/` 集成目录——与 Go 侧「不做集中式
+  `tests/` 镜像目录」同构；现状如此，保持。
+- 混主题的巨型内联 `mod tests` 按主题拆成**兄弟文件**：源文件目录化（如
+  `greedy.rs` → `greedy/mod.rs`）后在模块根挂载 `#[cfg(test)] mod
+  <主题>_tests;`，测试函数连同其 doc 注释、专属常量逐字搬入，`use` 按主题裁剪
+  到最小（clippy `-D warnings` 下 unused_imports 会红）。范例：engine
+  `engine/crates/mornlea_engine/src/greedy/`（2026-08 Rust 首个试点，commit
+  `b2a6edb`）；client `engine/crates/mornlea_client/src/render/water_tests.rs`
+  （既有先例，与 `render/plant_tests.rs` 同式，都在 `render/mod.rs` 以
+  `#[cfg(test)] mod …;` 挂载）。
+
+### helper 中心
+
+- 跟随既有先例，不另立并行中心；两种粒度：
+  - crate 级共享用 `#[cfg(test)] pub(crate) mod tests`（engine crate 的
+    `src/input.rs`；`light.rs` 与 `ffi.rs` 的测试经 `crate::input::tests::*`
+    复用其 `valid_input`/`ENTRY_BYTES` 夹具）；
+  - 模块内多测试文件共享用 `test_support.rs`（engine crate 的
+    `src/greedy/test_support.rs`，挂载为 `#[cfg(test)] mod test_support;`，
+    主题文件经 `super::test_support::*` 引用）。
+- 落位前同样先 grep 引用集合：被多于一个测试模块引用的 helper 才迁入中心，
+  单模块私有的留在消费它的测试文件内。
+- helper 必须有中文 doc 注释（`///`）说明用途；跨模块准入的注明消费者范围。
+
+### 验收清单（Rust 等价物）
+
+- [ ] `#[test]` 函数名逐字不变（Go 侧「子测试标签不变」在 Rust 无对应物）；
+- [ ] `cargo test -p <crate> -- --list` 的**裸函数名集合**改造前后一致——模块
+      路径前缀随兄弟文件挂载必然改变，属预期，与 Go 侧 `-list` 的集合语义
+      同构；
+- [ ] `cargo fmt --check`、`cargo clippy --workspace --all-targets --
+      -D warnings` 干净，crate 测试 `cargo test -p <crate> --locked` 全绿
+      （仓库根 `make rust-check` 三项一并覆盖）；
+- [ ] cdylib 出口不变：仓库根 `make rust`。
+
+裸名排序快照提取（在 `engine/` 下执行，`rust-toolchain.toml` 已钉 1.97.1；
+`grep` 滤掉汇总行，`sed` 截 `: test` 后缀，`awk` 取 `::` 末段）：
+
+```bash
+cargo test -p mornlea_engine -- --list \
+  | grep ': test$' | sed 's/: test$//' | awk -F'::' '{print $NF}' | sort
+```
+
+### 注意事项
+
+- 锁 C ABI 契约的测试模块不按主题重排：engine crate `src/ffi.rs` 的
+  `#[cfg(test)] mod tests` 是 engine C ABI 的契约回归面，排布对照 ABI 出口而
+  非功能主题，本节的按主题拆分 SOP 对它不适用，保持原状。
