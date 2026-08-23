@@ -16,6 +16,7 @@ import (
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -53,6 +54,19 @@ func TestMultiplayerTCPClientsSeeMoveEditAndDespawn(t *testing.T) {
 	cleanupMultiplayerTCPTest(t, host, &a, &b)
 	aIdentity := multiplayerIdentity(0xa1, "阿明")
 	bIdentity := multiplayerIdentity(0xb2, "Builder")
+	store, ok := host.Host.world.store.(*hostTestStore)
+	if !ok {
+		t.Fatalf("TCP 测试 store=%T，想要 *hostTestStore", host.Host.world.store)
+	}
+	observerLocation := storage.PlayerLocation{
+		Dimension: core.Overworld, Position: [3]float32{4.5, 1.001, 0.5},
+	}
+	if _, err := store.SavePlayer(context.Background(), wellFedPlayerSave(storage.PlayerSave{
+		PlayerID: bIdentity.PlayerID, Revision: 1, DisplayName: bIdentity.DisplayName,
+		Current: observerLocation, Safe: &observerLocation,
+	})); err != nil {
+		t.Fatalf("预置 TCP 观察者: %v", err)
+	}
 	a = mustConnectMultiplayerTCPClient(t, deadline, host.Addr, aIdentity)
 	b = mustConnectMultiplayerTCPClient(t, deadline, host.Addr, bIdentity)
 
@@ -87,6 +101,7 @@ func TestMultiplayerTCPClientsSeeMoveEditAndDespawn(t *testing.T) {
 	mustDrainMultiplayer(t, deadline, a, b, "B sees A move on increasing ticks", func() bool {
 		return b.sawRemoteMoveOnIncreasingTicks(aIdentity.PlayerID, aStart)
 	})
+	assertMultiplayerGameplayMiningPrecondition(t, a.local.Position, b.local.Position)
 
 	target := core.BlockPos{X: 0, Y: 1, Z: -6}
 	mustSendMultiplayer(t, deadline, a, network.PlayerInput{
@@ -698,6 +713,20 @@ func mirrorsConvergedAt(
 	return leftLoaded && rightLoaded && leftBlock == wantBlock && rightBlock == wantBlock &&
 		leftHashed && rightHashed && leftRevision == wantRevision && rightRevision == wantRevision &&
 		leftHash == rightHash
+}
+
+// assertMultiplayerGameplayMiningPrecondition 确保此旧采掘夹具的观察者既不与
+// 采掘者碰撞，也不在 yaw 为零时 X 坐标恒定的 primary-action 射线上。
+func assertMultiplayerGameplayMiningPrecondition(t *testing.T, miner, observer mgl32.Vec3) {
+	t.Helper()
+	minerBounds := physics.PlayerBounds(miner)
+	observerBounds := physics.PlayerBounds(observer)
+	if minerBounds.Min.X() <= observerBounds.Max.X() && observerBounds.Min.X() <= minerBounds.Max.X() {
+		t.Fatalf("采掘夹具玩家 X 包围盒重叠: miner=%v observer=%v", minerBounds, observerBounds)
+	}
+	if observerBounds.Min.X() <= miner.X() && miner.X() <= observerBounds.Max.X() {
+		t.Fatalf("采掘夹具观察者落在 yaw=0 的 primary-action 射线: miner=%v observer=%v", miner, observer)
+	}
 }
 
 func vec3BlockPos(position mgl32.Vec3) core.BlockPos {
