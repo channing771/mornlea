@@ -4,7 +4,7 @@
 
 | Task | Implementer | Candidate / fix commits | Reviewer | SPEC | QUALITY | 修复轮次 | 验证证据 | Controller ruling |
 |---|---|---|---|---|---|---:|---|---|
-| 1 OpenSpec change | `/root/hud_merge_impl`（本轮 fresh implementer） | `f36eb5bb3686403fa1e70cadb90688d4a27276bc` | `task-1-review.md`（reviewer 未署名） | FAIL（首轮报告） | FAIL（首轮报告） | 1/5 进行中 | change 创建前结构 RED；candidate strict validate 与 `git diff --check` 均成功；首轮 review 报告 4 findings | controller 接受四项规划契约修复进入第 1 轮；修复复审待结论 |
+| 1 OpenSpec change | `/root/hud_merge_impl`（本轮 fresh implementer） | `f36eb5bb3686403fa1e70cadb90688d4a27276bc`; `93a2d8d81a48777997d5ee11d3bb31e520d6fe3f` | `/root/container_task1_review`（`task-1-review.md`；修复轮次 1 复审见 `task-1-review-round-1.md`） | PASS（修复轮次 1 复审） | FAIL（修复轮次 1 复审） | 2/5 进行中 | change 创建前结构 RED；fix 1 strict/diff 通过；修复轮次 1 复审为 Spec PASS / Quality FAIL，1 finding | controller 只接受补齐 fix SHA 与 reviewer 审计事实，进入修复轮次 2；本轮复审待结论 |
 | 2 程序化容器 atlas | 待派发 fresh implementer | 待执行 | 待派发 fresh task reviewer | 待评审 | 待评审 | 0/5 | 待执行 | 待裁决 |
 | 3 overlay/interaction redlines | 待派发 fresh implementer | 待执行 | 待派发 fresh task reviewer | 待评审 | 待评审 | 0/5 | 待执行 | 待裁决 |
 | 4 capture/golden | 待派发 fresh implementer | 待执行 | 待派发 fresh task reviewer | 待评审 | 待评审 | 0/5 | 待执行 | 待裁决 |
@@ -20,3 +20,4 @@
 - `2026-08-23`：`openspec validate container-ui-visual-alignment --strict --no-interactive` 通过，`git diff --check` 零输出；apply instructions 确认规划产物 complete、后续实现进度 `0/23`，本 Task 不提前勾选。
 - `2026-08-23`：首轮独立 review 在 `task-1-review.md` 记录 SPEC FAIL / QUALITY FAIL；报告未署 reviewer 身份，ledger 不猜测。Controller ruling 只修正场景顺序、火焰/箭头 atlas cell 与裁剪接线、20px header 几何边界和 candidate SHA，未修改产品代码或 golden。
 - `2026-08-23`：修复轮次 1 的定向 strict validate 通过，全量 strict validate 为 58 passed / 0 failed，`git diff --check` 零输出；此证据不代表独立复审结论。
+- `2026-08-23`：独立 reviewer `/root/container_task1_review` 在 `task-1-review-round-1.md` 确认修复轮次 1 为 Spec PASS / Quality FAIL，唯一 finding 是 ledger 遗漏 fix commit `93a2d8d81a48777997d5ee11d3bb31e520d6fe3f` 与 reviewer 身份；修复轮次 2 只补这两项已发生事实，不声称尚未发生的复审 PASS。
