@@ -58,7 +58,8 @@ case "${1:-}" in
     CATEGORY="$(jq -r '.category // ""' "$REQ")"
     QUESTION="$(jq -r '.question // ""' "$REQ")"
     DESIGN="$(jq -r '.design // ""' "$REQ")"
-    TEXT="【Mornlea 内容确认】$TITLE\n分类：$CATEGORY\n问题：$QUESTION\n短设计：$DESIGN\n请回复：✅ 批准（或回复修改意见；精确指定请加 #${ID}）"
+    # 用 printf 生成真实换行：字面 \n 会被 jq 再转义成 \\n，飞书端显示为「\n」
+    TEXT="$(printf '【Mornlea 内容确认】%s\n分类：%s\n问题：%s\n短设计：%s\n请回复：✅ 批准（或回复修改意见；精确指定请加 #%s）' "$TITLE" "$CATEGORY" "$QUESTION" "$DESIGN" "$ID")"
     send_text "$TEXT"
     ;;
   *)

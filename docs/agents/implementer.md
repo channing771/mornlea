@@ -6,9 +6,11 @@
 
 - 手动：`make agent-implementer` 或 `scripts/agents/run-agent.sh implementer`（默认 `AGENT_MODE=pr`：创建 PR → 监听 CI 到全绿 → merge；`AGENT_MODE=merge` 才直接合并）。
 - 自动：控制会话/规划者点名（brief 中附任务行 ID 与来源）。
+- **接力循环**：`AGENT_LOOP=1` 启动后，每个实现者完成（自动收尾后）即 `relay.sh` 接力启动下一个实现者认领下一行，直到规划表无「未认领」任务自动终结。
 
 ## 第 1 步：认领
 
+0. **AGENT_LOOP=1（接力模式）**：启动时登记守卫 `echo $$ > ~/.mornlea/loop.guard`；若 guard 里已有存活 pid（其它循环会话还在跑）→ 直接退出，不得并发开循环。
 1. 读 `docs/feature-backlog.md`：选一行 `未认领` 且依赖行已满足；同一时间只认领一行。
 2. 编辑该行：`状态` → `已认领`，`认领人` → `<agent 标识> @ <分支名>`，备注声明独占文件集；docs-only 提交。
 3. 从 `main`（或批次共享 SHA）创建 isolation worktree/分支；确认工作区干净。
@@ -39,8 +41,8 @@
 机制见 `docs/agents/confirmation-channel.md`；通道由 `AGENT_CONFIRM_CHANNEL` 决定（未设则 auto 探测：有飞书配置用 feishu，否则 none）。
 
 1. **发起**：`confirm.sh ask --id X-xx --title "..." --category bounded|architectural --question "..." --design "..."` —— 配置了飞书时推送到你的设备；无飞书自动降级 discussion/none 并按提示处理。
-2. **等待**：`confirm.sh wait --id X-xx [--timeout-min 30]`。收到回复（approve/edit/reject + 文本）→ 把结论写入 OpenSpec change 的 proposal/design 与 brief → 从第 4 步继续。
-3. **自动续跑**：`feishu-listener.js`（常驻）收到回复后写 `<id>.reply.json`，并以 `AGENT_RESUME=<id>` 在后台重跑 `run-agent.sh implementer`——本会话若见 `AGENT_RESUME` 环境变量，直接读对应 reply 文件继续（不重新认领）。
+2. **等待**：`confirm.sh wait --id X-xx --timeout-min 2`——短等即可。收到回复（approve/edit/reject + 文本）→ 把结论写入 OpenSpec change 的 proposal/design 与 brief → 从第 4 步继续；**没收到就正常退出**，续跑交给 listener（见下），不要长等（避免与原会话双开）。
+3. **自动续跑**：`feishu-listener.js`（常驻）收到回复后写 `<id>.reply.json`，并以 `AGENT_RESUME=<id>` 在后台重跑 `run-agent.sh implementer`——本会话若见 `AGENT_RESUME` 环境变量，直接读对应 reply 文件继续（不重新认领）；这是 headless 下的**唯一**恢复入口。
 4. **超时/无通道**：降级 Discussion 协议——结构化评论发到 Discussion #71 对应行、backlog 该行备注标「待确认」，**停在确认点**，不得静默开工；用户回复后 `confirm.sh reply --id X-xx --action ...` 或下次调度恢复。
 5. **终端即时问答**（手动模式）：`AGENT_INTERACTIVE=1 scripts/agents/run-agent.sh implementer`（claude 交互模式，可直接对话确认后再开工）。
 
@@ -70,6 +72,8 @@
    → 本地修复并推送 → 重新监听；直到全绿，上限 10 轮，超限停止并报告
 □ CI 全绿后合并：gh pr merge --merge（--delete-branch 可选）
 □ 同步本地 main：git fetch origin && git checkout main && git pull --ff-only
+□ 接力循环（AGENT_LOOP=1 时）：rm -f ~/.mornlea/loop.guard && scripts/agents/relay.sh
+   —— 无未认领任务时 relay.sh 自动终结循环；手动单次运行（AGENT_LOOP=0）跳过
 (AGENT_MODE=merge 时跳过 PR，直接本地合并并推送 main，仍需本地全绿)
 ```
 
