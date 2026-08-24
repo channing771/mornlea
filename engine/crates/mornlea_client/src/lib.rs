@@ -14,6 +14,8 @@ pub mod input;
 #[cfg(target_os = "macos")]
 pub mod render;
 #[cfg(target_os = "macos")]
+pub mod ui;
+#[cfg(target_os = "macos")]
 mod window;
 
 #[cfg(target_os = "macos")]
