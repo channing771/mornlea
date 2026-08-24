@@ -101,3 +101,16 @@ Task 间文件/接口冲突检查：
 - Minor 递延（终审复核）：R1 新观察 x2（142B 夹具硬编码 1u32 常量建议用 UI_LAYOUT_VERSION/UI_FLAG_VISIBLE；42B 单按钮 case 未单独测试——tag 维度豁免覆盖充分）＋评审环境无 cargo 因素（Task 7 复跑）。
 - Ruling 8 落点已写进 design.md（TLV 文本段豁免 4 对齐）、tasks.md（main-menu 夹具错误行「存档无法打开」= 非对齐回圆）与 Task 5/6 brief（真实菜单跨语言编码锁 + capture 错误行夹具）。
 - 辅助记录：implementer 报告按仓库先例提交（.superpowers/sdd/add-egui-main-menu/task-4-report.md 已入仓）；Task 1-3 报告未入仓——终审收尾时按同一先例补交。review-gocache 目录（462MB，评审会话在仓根生成）收尾清理。
+
+## Task 5 执行与裁决
+
+- 2026-08-23 implementer(521fcf80)完成候选：d8a3f05a（feat: defer world boot behind main menu，只改 cmd/mornlea：app_menu.go/app_menu_test.go/app_startup.go/app.go/interactive.go/app_frame.go/main.go）。cmd/mornlea 全量 race 247.9s 通过（含 8 个新 menu 测试），archcheck 通过、vet 通过、gofmt 干净。
+- **dylib 核实（纠正给评审的 ⚠️）**：engine/target/release/libmornlea_client.dylib 时间戳 22:13（Task 5 测试运行前），nm 确认含 upload_ui_font 符号（计数 2）——Task 5 的 go test 实际链接 v8 dylib，v8 绑定真实覆盖；同时解释了 capture golden 未变（旧画面无 UI 段）。
+- Ruling 9（spec 措辞释读，接受实现）：「capture 路径仅在 main-menu 场景需要时上传字体并渲染菜单」读作「capture 上传字体的理由是 main-menu 场景需要它」；实现为 !Benchmark 时上传（交互+capture），egui 只在有 UI 段的帧运行。硬约束保持：benchmark 不上传/不渲染；非 main-menu 场景无 UI 段 → egui 零参与。若错：把上传挪到 main-menu 场景前置（Task 6 可做，成本小）。
+- 其他记录：menuVersion (devel)→"dev"；startWorld 失败经 releaseWorldConnection 清理半装配（可重试）；菜单期 Escape 由 egui 抢占（满足输入不生效，不提供退出，设计未要求）。
+
+## Task 5 完成
+
+- Task 5: complete（commits f3c078c6..d8a3f05a，review clean）。评审(bd40c86e)：SPEC ✅ / QUALITY Approved；无 Critical/Important；Minor 记录：(devel)→dev（可辩护）、capture 字体上传释读（Ruling 9）、starting 守卫防御性、捕获幂等重复。
+- ⚠️ 均已解决：dylib v8 已就绪（评审与控制器双向核实符号导出）；GPU 端到端 → Task 6；Rust 非对齐豁免 → Task 4 已测；全量 race → Task 7。
+task 5 status recorded
