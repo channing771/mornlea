@@ -18,16 +18,18 @@ use crate::window::ClientWindow;
 
 /// 当前 client ABI 版本。
 ///
-/// v7:终审修复波(Ruling 14/16)新增雾参数化 `render_set_lod_fog` 出口——
-/// 新增导出面即 bump,ABI 版本是"同版本 = 同表面"的不可混装契约(与
-/// engine v3→v4、client v4→5 同一先例);既有入口签名不变。
+/// v8:新增 egui 主菜单两条出口 `render_upload_ui_font`/`render_drain_ui_events`
+/// 与帧 TLV tag 9(egui 菜单段)——新增导出面即 bump,ABI 版本是
+/// "同版本 = 同表面"的不可混装契约(与 engine v3→v4、client v4→5 同一先例)。
+/// v7:终审修复波(Ruling 14/16)新增雾参数化 `render_set_lod_fog` 出口;
+/// 既有入口签名不变。
 /// v6:新增远环 `render_upload_lod_tile`/`render_drop_lod_tile` 出口。
 /// 变基重编说明:远环两项出口在旧基线上原编号 v5/v6,main 合并 fluid 系列
 /// 后 v5 已被 water pass(`mornlea_client_render_upload_section` 按 material
 /// 分成不透明与水面两条流,新增半透明 water pass)占用,故整体顺延一格。
 /// 必须与 `engine/include/mornlea_client.h` 的 `MORNLEA_CLIENT_ABI_VERSION`
 /// 逐版本一致。
-pub const CLIENT_ABI_VERSION: u32 = 7;
+pub const CLIENT_ABI_VERSION: u32 = 8;
 
 /// 调用成功。
 pub const MORNLEA_CLIENT_STATUS_OK: u32 = 0;
@@ -277,9 +279,9 @@ mod tests {
     // 校验拒绝路径:ABI 版本、参数校验与无效句柄。
 
     #[test]
-    fn abi_version_is_seven() {
-        // 变基重编:main 的 water pass 占用 v5,远环 tile 顺延 v6,雾 setter v7。
-        assert_eq!(mornlea_client_abi_version(), 7);
+    fn abi_version_is_eight() {
+        // v8 增加 egui 菜单两出口与帧 TLV tag 9;变基重编 v5..v7 参见 ABI 注释。
+        assert_eq!(mornlea_client_abi_version(), 8);
     }
 
     #[test]
@@ -582,12 +584,20 @@ const FRAME_TAG_HUD: u32 = 6;
 const FRAME_TAG_DEBUG: u32 = 7;
 /// 水下水色叠加段(4 个 f32:RGBA)。client ABI v5 内的追加 tag,不升 ABI 版本。
 const FRAME_TAG_WATER: u32 = 8;
+/// egui 菜单段(client ABI v8):layout v1 的 UI 段字节,见 [`crate::ui::decode_ui_frame`]。
+const FRAME_TAG_UI: u32 = 9;
 
 /// 解析 render_frame 输入;违约返回 None。
 ///
 /// header@188 是 layout version:0 为 v1(纯地形,精确长度),2 为 v2
 /// (可见列表之后跟 TLV pass 段序列:tag u32 + length u32 + bytes,
-/// length 4 对齐,未知 tag/越界/重复段拒绝)。
+/// 除 UI 段外各段 length 4 对齐,未知 tag/越界/重复段拒绝)。
+///
+/// UI 段(FRAME_TAG_UI)豁免 4 对齐:它是 UTF-8 字段序列(layout/flags/按钮数/
+/// 各按钮 id+label+enabled/title/version/error),长度由字段自身界定,不保证
+/// 4 对齐(如四按钮 + 中文 error 的 142 字节);其余 pass 段(avatar/drop/outline/
+/// 字样/水色)是定长实例数组,天然 4 对齐,故各段校验不变。UI 段内容合法性由
+/// decode_ui_frame 在解析层校验。
 fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
     if bytes.len() < FRAME_HEADER_BYTES {
         return None;
@@ -629,9 +639,10 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
     let mut name_tag_vertices = Vec::new();
     let mut hud_vertices = Vec::new();
     let mut debug_vertices = Vec::new();
+    let mut ui_segment = Vec::new();
     if layout == 2 {
         let mut cursor = sections_end;
-        let mut seen = [false; 9];
+        let mut seen = [false; 10];
         while cursor < bytes.len() {
             if bytes.len() - cursor < 8 {
                 return None;
@@ -639,13 +650,16 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
             let tag = read_u32(cursor);
             let length = read_u32(cursor + 4) as usize;
             cursor += 8;
-            if !length.is_multiple_of(4) || bytes.len() - cursor < length {
+            // 除 UI 段(UTF-8 字段序列,长度由字段界定)外,其余 pass 段均为定长
+            // 实例数组(长度天然 4 对齐),故对齐检查对非 UI 段保持一致;UI 段
+            // 只做越界检查,内容合法性由 decode_ui_frame 在解析层保证。
+            if (tag != FRAME_TAG_UI && !length.is_multiple_of(4)) || bytes.len() - cursor < length {
                 return None;
             }
             let payload = &bytes[cursor..cursor + length];
             cursor += length;
             let index = tag as usize;
-            if !(1..=8).contains(&index) || seen[index] {
+            if !(1..=9).contains(&index) || seen[index] {
                 return None;
             }
             seen[index] = true;
@@ -672,6 +686,15 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
                         );
                     }
                 }
+                FRAME_TAG_UI => {
+                    ui_segment = payload.to_vec();
+                    // UI 段语义校验在解析层完成:decode_ui_frame 违约即拒绝,
+                    // 先于渲染器状态、不触碰帧 target,与既有"未知 tag/越界/重复
+                    // 段拒绝"同一路径(ffi 层统一转 INVALID_ARGUMENT)。
+                    if crate::ui::decode_ui_frame(&ui_segment).is_err() {
+                        return None;
+                    }
+                }
                 _ => return None,
             }
         }
@@ -695,6 +718,7 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
         name_tag_vertices,
         hud_vertices,
         debug_vertices,
+        ui_segment,
     })
 }
 
@@ -927,9 +951,9 @@ mod frame_v2_tests {
         // 空 pass 段序列同样合法(v2 允许零段)。
         assert_eq!(parse_status(&v2_frame(&[])), MORNLEA_CLIENT_STATUS_WINDOW);
 
-        // 未知 tag。
+        // 未知 tag(10 超出白名单 1..=9)。
         assert_eq!(
-            parse_status(&v2_frame(&tlv(9, &[0u8; 4]))),
+            parse_status(&v2_frame(&tlv(10, &[0u8; 4]))),
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
         // 重复段。
@@ -975,6 +999,95 @@ mod frame_v2_tests {
         v1_trailing[188] = 0;
         assert_eq!(
             parse_status(&v1_trailing),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+    }
+    /// 最小合法 UI 段:layout v1 + visible + 0 按钮 + 三个空串(24 字节,4 对齐)。
+    fn ui_segment_minimal() -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(&crate::ui::UI_LAYOUT_VERSION.to_le_bytes());
+        out.extend_from_slice(&crate::ui::UI_FLAG_VISIBLE.to_le_bytes());
+        out.extend_from_slice(&0u32.to_le_bytes()); // 按钮数
+        out.extend_from_slice(&0u32.to_le_bytes()); // title len
+        out.extend_from_slice(&0u32.to_le_bytes()); // version len
+        out.extend_from_slice(&0u32.to_le_bytes()); // error len
+        out
+    }
+
+    #[test]
+    fn v2_ui_segment_parses_and_carries_bytes() {
+        // 合法 UI 段:解析通过(句柄未知停在 WINDOW 证明接受);无 tag 帧也合法,
+        // ui_segment 为空。
+        let seg = ui_segment_minimal();
+        assert_eq!(
+            parse_status(&v2_frame(&tlv(FRAME_TAG_UI, &seg))),
+            MORNLEA_CLIENT_STATUS_WINDOW
+        );
+        assert_eq!(parse_status(&v2_frame(&[])), MORNLEA_CLIENT_STATUS_WINDOW);
+    }
+
+    #[test]
+    fn v2_invalid_ui_segment_rejected_same_path() {
+        // 非法 UI 段(layout 版本错误)经 render_frame 回调 → INVALID_ARGUMENT,
+        // 与既有非法 pass 段同一拒绝种类。
+        let mut bad = Vec::new();
+        bad.extend_from_slice(&0u32.to_le_bytes()); // layout=0 非法
+        bad.extend_from_slice(&0u32.to_le_bytes()); // flags
+        bad.extend_from_slice(&0u32.to_le_bytes()); // 按钮数
+        bad.extend_from_slice(&0u32.to_le_bytes());
+        bad.extend_from_slice(&0u32.to_le_bytes());
+        bad.extend_from_slice(&0u32.to_le_bytes());
+        assert_eq!(
+            parse_status(&v2_frame(&tlv(FRAME_TAG_UI, &bad))),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+    }
+
+    /// 构造真实菜单 UI 段(四按钮 + 中文 error,与 Go EncodeUIMenu 同一语义):
+    /// 142 字节,非 4 对齐(142 % 4 == 2)。用于证明 parse 层接受非对齐 UI 段。
+    fn ui_segment_four_button_error() -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(&crate::ui::UI_LAYOUT_VERSION.to_le_bytes()); // layout
+        out.extend_from_slice(&crate::ui::UI_FLAG_VISIBLE.to_le_bytes()); // flags visible
+        out.extend_from_slice(&4u32.to_le_bytes()); // button count
+        let buttons = [
+            (1u32, "进入游戏", 1u32),
+            (2, "多人游戏", 0),
+            (3, "设置", 0),
+            (4, "退出游戏", 1),
+        ];
+        for (id, label, enabled) in buttons {
+            out.extend_from_slice(&id.to_le_bytes());
+            out.extend_from_slice(&(label.len() as u32).to_le_bytes());
+            out.extend_from_slice(label.as_bytes());
+            out.extend_from_slice(&enabled.to_le_bytes());
+        }
+        let title = "Mornlea";
+        out.extend_from_slice(&(title.len() as u32).to_le_bytes());
+        out.extend_from_slice(title.as_bytes());
+        let version = "dev";
+        out.extend_from_slice(&(version.len() as u32).to_le_bytes());
+        out.extend_from_slice(version.as_bytes());
+        let error = "存档无法打开";
+        out.extend_from_slice(&(error.len() as u32).to_le_bytes());
+        out.extend_from_slice(error.as_bytes());
+        out
+    }
+
+    #[test]
+    fn v2_ui_segment_non_aligned_length_accepted() {
+        // 真实菜单(四按钮 + 中文 error)编码为 142 字节,非 4 对齐。
+        let seg = ui_segment_four_button_error();
+        assert_eq!(seg.len(), 142);
+        assert_eq!(seg.len() % 4, 2);
+        // parse 层必须接受非对齐 UI 段:停在句柄层 WINDOW(而非 INVALID_ARGUMENT)。
+        assert_eq!(
+            parse_status(&v2_frame(&tlv(FRAME_TAG_UI, &seg))),
+            MORNLEA_CLIENT_STATUS_WINDOW
+        );
+        // 非 UI 段仍拒绝非对齐长度(既有 4 对齐守卫不因豁免而放松)。
+        assert_eq!(
+            parse_status(&v2_frame(&tlv(FRAME_TAG_NAME_TAG, &[0u8; 6]))),
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
     }
@@ -1422,4 +1535,264 @@ pub extern "C" fn mornlea_client_render_resize(
             MORNLEA_CLIENT_STATUS_OK
         })
     })
+}
+/// 上传 egui 菜单字体(client ABI v8 出口):字节负载须非空且 <= 32 MiB。
+///
+/// 入口校验(空指针、零长度 -> INVALID_ARGUMENT;超 32 MiB -> CAPACITY)
+/// 先于句柄查找(与 set_lod_fog 同一约定,无头可测);成功则安装到
+/// EguiPass 的 UiState(proportional + monospace 同族)。
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn mornlea_client_render_upload_ui_font(
+    abi_version: u32,
+    handle: u64,
+    bytes: *const u8,
+    len: usize,
+) -> u32 {
+    if abi_version != CLIENT_ABI_VERSION {
+        return MORNLEA_CLIENT_STATUS_ABI_VERSION;
+    }
+    if bytes.is_null() || len == 0 {
+        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+    }
+    if len > crate::render::egui::MAX_UI_FONT_BYTES {
+        return MORNLEA_CLIENT_STATUS_CAPACITY;
+    }
+    catch(|| {
+        with_renderer(handle, |renderer| {
+            // SAFETY: bytes 非空,调用方保证 len 字节可读。
+            let data = unsafe { std::slice::from_raw_parts(bytes, len) };
+            match renderer.upload_ui_font(data) {
+                Ok(()) => MORNLEA_CLIENT_STATUS_OK,
+                Err(_) => MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT,
+            }
+        })
+    })
+}
+
+/// 排空 egui 菜单点击事件(client ABI v8 出口):把按钮 id 序列按小端写进
+/// `out`,并把实际写入个数写进 `*out_count`,函数返回状态码。写满截断语义:
+/// 事件数超过 `out.len()/4` 时写满并丢弃余下(调用方每帧排空)。
+///
+/// 入口校验(ABI 版本、`out` 非空、`out_len` 为 4 的倍数、`out_count` 非空)
+/// 先于句柄查找,校验失败不触碰调用方缓冲与 `*out_count`;校验通过后经
+/// `with_renderer` 排空并计数,返回 `MORNLEA_CLIENT_STATUS_OK`。
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn mornlea_client_render_drain_ui_events(
+    abi_version: u32,
+    handle: u64,
+    out: *mut u8,
+    out_len: usize,
+    out_count: *mut u32,
+) -> u32 {
+    if abi_version != CLIENT_ABI_VERSION {
+        return MORNLEA_CLIENT_STATUS_ABI_VERSION;
+    }
+    if out.is_null() || !out_len.is_multiple_of(4) || out_count.is_null() {
+        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+    }
+    catch(|| {
+        with_renderer(handle, |renderer| {
+            let events = renderer.drain_ui_events();
+            // SAFETY: out 非空,长度已校验为 4 的倍数且可写;out_count 非空且可写。
+            let out = unsafe { std::slice::from_raw_parts_mut(out, out_len) };
+            write_ui_events_counted(out, out_count, &events);
+            MORNLEA_CLIENT_STATUS_OK
+        })
+    })
+}
+
+/// 把 `events`(u32 按钮 id)按小端写入 `out`,最多写 `out.len()/4` 个,
+/// 返回实际写入个数(超出容量的余下丢弃)。独立小函数以便无头单测截断语义。
+fn write_ui_events(out: &mut [u8], events: &[u32]) -> u32 {
+    let capacity = out.len() / 4;
+    let n = events.len().min(capacity);
+    for (index, event) in events.iter().take(n).enumerate() {
+        out[index * 4..index * 4 + 4].copy_from_slice(&event.to_le_bytes());
+    }
+    n as u32
+}
+
+/// 把 `events` 写入 `out`(截断语义同 `write_ui_events`)并把实际写入个数写进
+/// `*out_count`。独立小函数以便无头单测「计数写出」与「写满截断」两个语义;
+/// 纯函数 `write_ui_events` 保留返回个数的契约。
+fn write_ui_events_counted(out: &mut [u8], out_count: *mut u32, events: &[u32]) {
+    let n = write_ui_events(out, events);
+    // SAFETY: out_count 由出口先校验非空,或单测传入有效指针。
+    unsafe { out_count.write(n) };
+}
+
+#[cfg(test)]
+mod ui_ffi_tests {
+    use super::*;
+
+    // 菜单两条出口(client ABI v8)的无头校验:错误 ABI、非法参数先于句柄
+    // 查找被拒;写满截断由纯函数 write_ui_events 覆盖。
+
+    #[test]
+    fn upload_ui_font_rejects_bad_arguments_before_handle_lookup() {
+        // 错误 ABI 优先。
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_upload_ui_font(
+                    CLIENT_ABI_VERSION + 1,
+                    0xF00D,
+                    std::ptr::null(),
+                    0,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_ABI_VERSION
+        );
+        // 空指针 -> INVALID_ARGUMENT(先于句柄查找)。
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_upload_ui_font(
+                    CLIENT_ABI_VERSION,
+                    0xF00D,
+                    std::ptr::null(),
+                    4,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        // 零长度 -> INVALID_ARGUMENT。
+        let dummy = [0u8; 4];
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_upload_ui_font(CLIENT_ABI_VERSION, 0xF00D, dummy.as_ptr(), 0)
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        // 超 32 MiB -> CAPACITY。
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_upload_ui_font(
+                    CLIENT_ABI_VERSION,
+                    0xF00D,
+                    dummy.as_ptr(),
+                    crate::render::egui::MAX_UI_FONT_BYTES + 1,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_CAPACITY
+        );
+    }
+
+    #[test]
+    fn drain_ui_events_rejects_bad_arguments_before_handle_lookup() {
+        // 错误 ABI 优先。
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_drain_ui_events(
+                    CLIENT_ABI_VERSION + 1,
+                    0xF00D,
+                    std::ptr::null_mut(),
+                    0,
+                    std::ptr::null_mut(),
+                )
+            },
+            MORNLEA_CLIENT_STATUS_ABI_VERSION
+        );
+        // out 为 null -> INVALID_ARGUMENT(先于句柄查找),且不触碰 out_count。
+        let mut marker = 0xDEADBEEFu32;
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_drain_ui_events(
+                    CLIENT_ABI_VERSION,
+                    0xF00D,
+                    std::ptr::null_mut(),
+                    8,
+                    &mut marker,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(marker, 0xDEADBEEF);
+        // out_len 非 4 倍数 -> INVALID_ARGUMENT,且不触碰 out_count。
+        let mut out = [0u8; 8];
+        marker = 0xDEADBEEFu32;
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_drain_ui_events(
+                    CLIENT_ABI_VERSION,
+                    0xF00D,
+                    out.as_mut_ptr(),
+                    6,
+                    &mut marker,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(marker, 0xDEADBEEF);
+        // out_count 为 null -> INVALID_ARGUMENT。
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_drain_ui_events(
+                    CLIENT_ABI_VERSION,
+                    0xF00D,
+                    out.as_mut_ptr(),
+                    8,
+                    std::ptr::null_mut(),
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        // 参数全部合法但句柄未知 -> WINDOW,不触碰 out 与 out_count。
+        let mut out = [0xAAu8; 8];
+        let mut count = 0xBBBBBBBBu32;
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_drain_ui_events(
+                    CLIENT_ABI_VERSION,
+                    0xF00D,
+                    out.as_mut_ptr(),
+                    8,
+                    &mut count,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_WINDOW
+        );
+        assert!(out.iter().all(|&b| b == 0xAA));
+        assert_eq!(count, 0xBBBBBBBB);
+    }
+
+    #[test]
+    fn drain_write_truncates_to_capacity() {
+        let events = [1u32, 2, 3, 4, 5];
+        // 容量 2 个:写前两个,返回 2。
+        let mut small = [0u8; 8];
+        assert_eq!(write_ui_events(&mut small, &events), 2);
+        assert_eq!(u32::from_le_bytes(small[0..4].try_into().unwrap()), 1);
+        assert_eq!(u32::from_le_bytes(small[4..8].try_into().unwrap()), 2);
+        // 容量 5 个(20 字节):全写,返回 5。
+        let mut large = [0u8; 20];
+        assert_eq!(write_ui_events(&mut large, &events), 5);
+        assert_eq!(u32::from_le_bytes(large[16..20].try_into().unwrap()), 5);
+        // 空事件:返回 0,缓冲不动。
+        let mut empty = [0xAAu8; 8];
+        assert_eq!(write_ui_events(&mut empty, &[]), 0);
+        assert!(empty.iter().all(|&b| b == 0xAA));
+    }
+
+    #[test]
+    fn drain_writes_out_count() {
+        let events = [1u32, 2, 3, 4, 5];
+        // 容量 3(12 字节):写前三个,count=3,余下截断。
+        let mut out = [0u8; 12];
+        let mut count = 0u32;
+        write_ui_events_counted(&mut out, &mut count, &events);
+        assert_eq!(count, 3);
+        assert_eq!(u32::from_le_bytes(out[0..4].try_into().unwrap()), 1);
+        assert_eq!(u32::from_le_bytes(out[8..12].try_into().unwrap()), 3);
+        // 容量 8(32 字节):全写,count=5。
+        let mut large = [0u8; 32];
+        let mut count = 0u32;
+        write_ui_events_counted(&mut large, &mut count, &events);
+        assert_eq!(count, 5);
+        assert_eq!(u32::from_le_bytes(large[16..20].try_into().unwrap()), 5);
+        // 空事件:count=0,缓冲不动。
+        let mut empty = [0xAAu8; 8];
+        let mut count = 0u32;
+        write_ui_events_counted(&mut empty, &mut count, &[]);
+        assert_eq!(count, 0);
+        assert!(empty.iter().all(|&b| b == 0xAA));
+    }
 }

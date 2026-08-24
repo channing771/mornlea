@@ -32,11 +32,12 @@ struct VsOut {
 
 // 与近环 terrain.wgsl 的 face_uv 逐字同源：按面轴取世界坐标分量推导
 // terrain UV。远环 quad 无 UV 字段，UV 推导落在渲染侧且语义与近环一致
-//（世界坐标 UV，同一图集同一采样器），保证远/近环地表贴图连续。
+//（世界坐标 UV，同一图集同一采样器），保证远/近环地表贴图连续。纵向分量
+// 同样取 -world.y（见近环约定），让纹理顶行朝上、与近环逐像素同相。
 fn face_uv(world: vec3f, axis: u32) -> vec2f {
-    if (axis == 0u) { return vec2f(world.y, world.z); }
+    if (axis == 0u) { return vec2f(world.z, -world.y); }
     if (axis == 1u) { return vec2f(world.z, world.x); }
-    return vec2f(world.x, world.y);
+    return vec2f(world.x, -world.y);
 }
 
 @vertex

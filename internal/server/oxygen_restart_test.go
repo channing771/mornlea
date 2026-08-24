@@ -60,6 +60,9 @@ const oxygenReconnectTolerance = core.MaxOxygenTicks - 20
 // 「出水立即回满」就会把氧气填满，那时即便加载路径完全没初始化氧气，断言照样绿。
 // 让他一登录就在水里，「回满」那条分支根本不会执行，读到的值只能来自加载路径。
 func TestOxygenIsNotPersistedAcrossDiskRestart(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	root := t.TempDir()
 	identity := integrationIdentity(0x98, "Diver")
 	loc := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}

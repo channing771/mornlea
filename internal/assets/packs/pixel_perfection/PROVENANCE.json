@@ -13,7 +13,7 @@
     {"destination":"textures/farmland_wet.png","source":"farming/farming_soil_wet.png","sha256":"228ae90cc56c558fb4401ae0310d3c719f655602346eb7f22333ffe1193b5504"},
     {"destination":"textures/furnace.png","source":"default/default_furnace_front.png","sha256":"0deee90effd54166f2b4251376582c1e26863d73bb283f85e7f76037e347112f"},
     {"destination":"textures/glass.png","source":"default/default_glass.png","sha256":"3b20818f50cab34ff34565b3e07174a24d7b42fdf210add501591c9445b755f5"},
-    {"destination":"textures/grass_side.png","source":"default/default_grass_side.png","sha256":"b3fd55983115ff370358a47cd86f4041dce5e96a2174e412a63c46e0e5f9ef59"},
+    {"destination":"textures/grass_side.png","source":"default/default_grass_side.png","sha256":"57e11b043af8a3c262c2cbfbe6ccb63ea09cfa5cf0d392c2aea78de64de02b5e","derived":{"sources":["default/default_grass_side.png","default/default_dirt.png"],"note":"Straight-alpha source-over of the green grass fringe over default_dirt.png; output is a fully opaque 16x16 side texture."}},
     {"destination":"textures/grass_top.png","source":"default/default_grass.png","sha256":"c20722f5efab11df3d866f41966473a9dd171f8b70b4cc924f48238a977774e6"},
     {"destination":"textures/gravel.png","source":"default/default_gravel.png","sha256":"7af08888b7015a7f0d673e15a66b174645f78bd63c18b698db432ee687cdaa3a"},
     {"destination":"textures/iron_block.png","source":"default/default_steel_block.png","sha256":"7fef6a329aa3a1f68c97267c39504407766bda4a22fce8edbebc7f6acd329b33"},

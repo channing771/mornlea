@@ -151,6 +151,9 @@ func TestTextInputWhileChatClosedIsDrainedAndNeverLeaksIntoNextChat(t *testing.T
 }
 
 func TestChatOpenSuppressesMovementMiningPlacementInventoryAndHotbar(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	tests := []struct {
 		name  string
 		frame chatWindowFrame
@@ -207,6 +210,9 @@ func TestChatOpenSuppressesMovementMiningPlacementInventoryAndHotbar(t *testing.
 }
 
 func TestChatEnterSendsAndEscapeCancels(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	t.Run("send", func(t *testing.T) {
 		app, endpoint, window := newChatLoopApplication(t, []chatWindowFrame{
 			{keys: map[client.Key]bool{client.KeyEnter: true}},
@@ -279,6 +285,9 @@ func TestChatEscapeWinsOverSimultaneousEnter(t *testing.T) {
 }
 
 func TestChatCloseRecapturesCursorAndResetsMouseBaseline(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	for _, test := range []struct {
 		name   string
 		frames []chatWindowFrame
@@ -364,6 +373,9 @@ func TestChatInputAndFormattedLinesResetOnDisconnect(t *testing.T) {
 }
 
 func TestChatEnterDefersToOpenInventoryOrVisibleDebugPanel(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	for _, test := range []struct {
 		name  string
 		setup func(*testing.T, *application)

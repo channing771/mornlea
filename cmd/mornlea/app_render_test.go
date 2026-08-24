@@ -232,6 +232,9 @@ func TestApplicationBlockTargetStreamsAndCapacity(t *testing.T) {
 }
 
 func TestApplicationBlockTargetHiddenByUIAndSessionState(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	tests := []struct {
 		name string
 		hide func(*testing.T, *application)

@@ -34,10 +34,13 @@ fn axis_vec(axis: u32) -> vec3f {
     return vec3f(0.0, 0.0, 1.0);
 }
 
+// 与 terrain.wgsl 的 face_uv 逐字同源。纵向分量统一取 -world.y：wgpu 纹理
+// 坐标 v=0 是图像顶行、世界 y 向上，取负才能让纹理顶行落在水面侧边顶部；
+// 采样器 Repeat 使负坐标正确环绕，水面侧边与近环/远环地表保持同一相位约定。
 fn face_uv(world: vec3f, axis: u32) -> vec2f {
-    if (axis == 0u) { return vec2f(world.y, world.z); }
+    if (axis == 0u) { return vec2f(world.z, -world.y); }
     if (axis == 1u) { return vec2f(world.z, world.x); }
-    return vec2f(world.x, world.y);
+    return vec2f(world.x, -world.y);
 }
 
 fn face_shade(face: u32) -> f32 {

@@ -10,6 +10,9 @@ import (
 )
 
 func TestScenarioV12GPUCompletionAmortizesOverFixedBatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	app := newRemoteRenderApplication(t, &integrationGlyphSource{})
 	probe, err := newMultiplayerClientProbe(app)
 	if err != nil {
@@ -80,6 +83,9 @@ func TestScenarioV12GPUCompletionBatchIsLargeEnoughToAmortizePollTick(t *testing
 }
 
 func TestScenarioV12GPUCompletionBatchIsRecordedInReport(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	app := newRemoteRenderApplication(t, &integrationGlyphSource{})
 	probe, err := newMultiplayerClientProbe(app)
 	if err != nil {

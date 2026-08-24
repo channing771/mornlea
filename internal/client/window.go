@@ -28,6 +28,10 @@ package client
 #cgo nocallback mornlea_client_window_focus
 #cgo noescape mornlea_client_window_cancel_close
 #cgo nocallback mornlea_client_window_cancel_close
+#cgo noescape mornlea_client_render_upload_ui_font
+#cgo nocallback mornlea_client_render_upload_ui_font
+#cgo noescape mornlea_client_render_drain_ui_events
+#cgo nocallback mornlea_client_render_drain_ui_events
 #include "mornlea_client.h"
 */
 import "C"

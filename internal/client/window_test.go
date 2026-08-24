@@ -19,10 +19,11 @@ func buildSnapshot(mutate func([]byte)) []byte {
 }
 
 func TestClientABIVersionMatchesHeader(t *testing.T) {
-	// v7:雾参数化 render_set_lod_fog 出口加入;新增导出面即 bump。变基重编:
-	// v5 归 main 的 water pass,远环 tile 出口 v6、雾 setter v7。
-	if got := ClientABIVersion(); got != 7 {
-		t.Fatalf("client ABI version=%d,想要 7", got)
+	// v8:egui 菜单两出口(render_upload_ui_font/render_drain_ui_events)与帧
+	// UI 段加入;新增导出面即 bump。变基重编:v5 归 main 的 water pass,远环
+	// tile 出口 v6、雾 setter v7、菜单 UI v8。
+	if got := ClientABIVersion(); got != 8 {
+		t.Fatalf("client ABI version=%d,想要 8", got)
 	}
 }
 

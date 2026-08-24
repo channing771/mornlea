@@ -69,6 +69,8 @@ func runWithDependencies(args []string, dependencies runDependencies) error {
 	}), effective.Logging)
 	effective.Apply()
 	if options.Application.Connect == "" && !options.Application.Benchmark && options.CaptureDir == "" {
+		// 交互本地客户端启动停留在主菜单，世界装配延迟到「进入游戏」之后。
+		options.Application.StartAtMenu = true
 		options.Application.Companions = slices.Clone(effective.CompanionDefinitions())
 		// 模型设置与已解析密钥只注入普通本地模式，与伙伴注入共用同一分支：
 		// 远程、benchmark、capture 三条路径永远不携带半套 AI 运行时。配置层

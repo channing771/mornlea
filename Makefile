@@ -15,7 +15,7 @@ PIXEL_PERFECTION_NOTICE_DIR := internal/assets/packs/pixel_perfection
 PIXEL_PERFECTION_NOTICE_DEST := bin/third-party/pixel-perfection
 ARGS ?=
 
-.PHONY: help run build build-linux-server test test-race test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check
+.PHONY: help run build build-linux-server test test-race test-race-short test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check dev-check
 
 run test test-multiplayer bench-multiplayer visual-check visual-update: rust
 build: rust
@@ -29,6 +29,8 @@ help:
 		'  make build-linux-server 构建 Linux amd64 专服与同目录 Rust .so' \
 		'  make test             运行全部测试' \
 		'  make test-race        使用 race detector 运行全部测试' \
+		'  make test-race-short   race detector 快速冒烟(与 `-short` 同跳过重型测试)' \
+		'  make dev-check        迭代期快检:gofmt/vet/短测试与 Rust 静态检查' \
 		'  make test-multiplayer 运行 M3C 八玩家与 v6 报告测试' \
 		'  make bench-multiplayer 运行三组 M3C 多人微基准' \
 		'  make archcheck        验证依赖闭包与无图形服务端边界' \
@@ -74,6 +76,11 @@ test:
 test-race:
 	$(GO) test ./... -race
 
+# test-race-short:迭代期 race 冒烟——跳过与 `-short` 相同的重型测试,
+# 速度比 `test-race` 快一个数量级;提交前仍跑全量 `test-race`。
+test-race-short:
+	$(GO) test ./... -race -short
+
 test-multiplayer:
 	$(GO) test ./internal/client ./internal/server ./cmd/mornlea ./cmd/perfcheck \
 		-run 'Test(PerfReportV6|ScenarioV6|PerfcheckV6|PerfcheckV5SameScenario|PerformanceThresholds|InterestObserver|HostStats|BenchmarkServerEpoch|BenchmarkServerMeasuredWindow)' -count=1
@@ -85,6 +92,17 @@ bench-multiplayer:
 archcheck:
 	$(GO) test ./internal/archcheck -count=1
 	test -z "$$($(GO) list -deps ./cmd/mornlea-server | rg 'internal/(client|mesh|render|gfx)|glfw|webgpu|x/image/font')"
+
+# dev-check:迭代期快检——gofmt 检查、vet、全仓短测试(重型测试经 `-short` 跳过)
+# 与 Rust fmt/clippy/单测。完整门禁(test/test-race/visual-check/rust-check)
+# 仍留给 CI 与提交前,短模式不做任何正确性放宽。
+dev-check:
+	@unformatted=$$(gofmt -l .); if [ -n "$$unformatted" ]; then echo "gofmt 需要格式化: $$unformatted"; exit 1; fi
+	$(GO) vet ./...
+	$(GO) test ./... -short
+	cd $(RUST_DIR) && $(CARGO) fmt --check
+	cd $(RUST_DIR) && $(CARGO) clippy --workspace --all-targets -- -D warnings
+	cd $(RUST_DIR) && $(CARGO) test --workspace --locked
 
 fmt:
 	cd $(RUST_DIR) && $(CARGO) fmt

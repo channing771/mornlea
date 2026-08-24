@@ -63,7 +63,7 @@ func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 		"chest-container", "furnace-container",
 		"debug-panel", "skylight-tunnel", "block-light-room", "materials-showcase",
 		"target-block-feedback", "oak-grove", "ai-companion",
-		"water-surface-slope", "far-horizon", "water-underwater",
+		"water-surface-slope", "main-menu", "far-horizon", "water-underwater",
 	}
 	gotNames := make([]string, len(captureScenes))
 	for index, scene := range captureScenes {
@@ -131,6 +131,52 @@ func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 	}
 	if len(uniqueRunes) > 32 {
 		t.Fatalf("ai-companion 独特 rune=%d，想要不超过 32", len(uniqueRunes))
+	}
+}
+
+// TestMainMenuCaptureScenePosition 钉住 main-menu 场景的存在与位置。
+//
+// main-menu 是视觉场景表中唯一产生 egui UI 段的场景，必须排在 far-horizon
+// 之前（far-horizon 仍为倒数第二、water-underwater 仍为最后，另由
+// TestFarHorizonCaptureSceneIsRegistered 与 TestWaterUnderwaterCaptureSceneIsLast
+// 兜底）。断言写「位于 far-horizon 之前」而不是「在表里」：后者是存在性断言，
+// 插到 far-horizon 之后照样通过，正是要挡的那种改动。Menu 字段必须非 nil——
+// 菜单场景不注入菜单快照就没有任何意义。
+func TestMainMenuCaptureScenePosition(t *testing.T) {
+	scene := captureSceneByName(t, "main-menu")
+	if scene.Menu == nil {
+		t.Fatal("main-menu 场景必须携带 Menu 菜单快照")
+	}
+	menu := scene.Menu
+	if !menu.Visible || menu.Title != "Mornlea" || menu.Version != "dev" ||
+		menu.Error != "存档无法打开" {
+		t.Fatalf("main-menu Menu=%+v 与夹具不符", menu)
+	}
+	if len(menu.Buttons) != 4 {
+		t.Fatalf("main-menu 按钮数=%d，想要 4", len(menu.Buttons))
+	}
+	// 进入/退出可用、多人/设置禁用：复用交互主菜单的按钮表语义。
+	if menu.Buttons[0].Label != "进入游戏" || !menu.Buttons[0].Enabled ||
+		menu.Buttons[1].Label != "多人游戏" || menu.Buttons[1].Enabled ||
+		menu.Buttons[2].Label != "设置" || menu.Buttons[2].Enabled ||
+		menu.Buttons[3].Label != "退出游戏" || !menu.Buttons[3].Enabled {
+		t.Fatalf("main-menu 按钮表与既有交互菜单不一致: %+v", menu.Buttons)
+	}
+	if scene.WarmupFrames != 8 || scene.Apply == nil {
+		t.Fatalf("main-menu 场景不完整: %+v", scene)
+	}
+	indexOf := func(name string) int {
+		for i, s := range captureScenes {
+			if s.Name == name {
+				return i
+			}
+		}
+		t.Fatalf("场景 %q 不存在", name)
+		return -1
+	}
+	if indexOf("main-menu") >= indexOf("far-horizon") {
+		t.Fatalf("main-menu 必须排在 far-horizon 之前: main-menu=%d far-horizon=%d",
+			indexOf("main-menu"), indexOf("far-horizon"))
 	}
 }
 

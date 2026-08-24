@@ -179,6 +179,9 @@ func equalIntegrationSafe(left, right *sim.PlayerLocation) bool {
 }
 
 func TestTCPPlayerAndWorldSurviveDisconnectAndRestart(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	root := t.TempDir()
 	id := integrationPlayerID()
 	first := startDiskHost(t, root, "127.0.0.1:0", flatGenerator{})
@@ -210,6 +213,9 @@ func TestTCPPlayerAndWorldSurviveDisconnectAndRestart(t *testing.T) {
 }
 
 func TestCraftingSurvivesV2DiskRestartAndReconnectOrder(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	root := t.TempDir()
 	key := core.ChunkKey{Dimension: core.Overworld}
 	seedV2CraftingChunk(t, root, key)

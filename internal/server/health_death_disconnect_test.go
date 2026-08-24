@@ -39,6 +39,9 @@ func (airSpawnGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
 // 权威背包，此时断线落盘的必须是清空后的背包。若这段待重生窗口取不到权威快照，
 // 落盘的仍是死亡前的满背包，重连后一份物品就变成了两份——地上一份、背包一份。
 func TestDeathBeforeRespawnDisconnectDoesNotDuplicateInventory(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	root := t.TempDir()
 	identity := integrationIdentity(0x9d, "Doomed")
 	// 玩家远离出生锚点登录：死亡掉落留在远处的死亡区块，重生只能走出生候选列，

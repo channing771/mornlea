@@ -58,6 +58,26 @@ func TestRendererRoundtripOrSkip(t *testing.T) {
 	}
 }
 
+// TestDrainUIEventsEmptyAfterCreate 验证 `DrainUIEvents` 的正常路径:新建离屏
+// 渲染器尚无菜单事件时返回空切片(count=0),并走完 cgo 新签名(out_count 回读 +
+// 状态码)的全链路。参数校验由 Rust 层兜底,这里只测「状态码 OK + 计数 0 → 空切片」;
+// 无 GPU 适配器时跳过。
+func TestDrainUIEventsEmptyAfterCreate(t *testing.T) {
+	renderer, err := NewRenderer(32, 16)
+	if errors.Is(err, ErrNoGPUAdapter) {
+		t.Skip("无 GPU 适配器")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer renderer.Close()
+
+	events := renderer.DrainUIEvents()
+	if len(events) != 0 {
+		t.Fatalf("新渲染器 DrainUIEvents 应返回空切片, got %d 个事件", len(events))
+	}
+}
+
 // TestEncodeRenderFrameLayout 锁定 render_frame ABI 编码布局。
 func TestEncodeRenderFrameLayout(t *testing.T) {
 	frame := RenderFrame{
@@ -167,5 +187,96 @@ func TestEncodeRenderFrameWaterTintSegment(t *testing.T) {
 		if got != want {
 			t.Fatalf("水色分量 %d = %v，想要 %v", index, got, want)
 		}
+	}
+}
+
+// TestHasPassSegmentsIncludesUISegment 守住 UI 段计入 pass 段:UISegment 非空即
+// 切到 layout v2,否则 UI 段永不进 TLV。
+func TestHasPassSegmentsIncludesUISegment(t *testing.T) {
+	var frame RenderFrame
+	if frame.hasPassSegments() {
+		t.Fatal("空帧不应携带 pass 段")
+	}
+	frame.UISegment = []byte{1, 2, 3}
+	if !frame.hasPassSegments() {
+		t.Fatal("UISegment 非空应计入 pass 段(切到 layout v2)")
+	}
+}
+
+// TestEncodeRenderFrameUISegment 守住 UI 段编码为帧尾 TLV(tag 9,water 之后),
+// 负载与 EncodeUIMenu 产物逐字一致。
+func TestEncodeRenderFrameUISegment(t *testing.T) {
+	menu := EncodeUIMenu(UIMenu{
+		Visible: true,
+		Title:   "Mornlea",
+		Version: "dev",
+		Buttons: []UIButton{{ID: 1, Label: "进入游戏", Enabled: true}},
+	})
+	out := EncodeRenderFrame(RenderFrame{UISegment: menu})
+	if out[188] != 2 {
+		t.Fatalf("UI 段帧 layout=%d, want 2", out[188])
+	}
+	cursor := renderFrameHeaderBytes
+	readU32 := func() uint32 {
+		v := binary.LittleEndian.Uint32(out[cursor:])
+		cursor += 4
+		return v
+	}
+	var lastTag, lastLen uint32
+	for cursor < len(out) {
+		lastTag = readU32()
+		lastLen = readU32()
+		cursor += int(lastLen)
+	}
+	if lastTag != frameTagUI {
+		t.Fatalf("末段 tag=%d, want %d", lastTag, frameTagUI)
+	}
+	if int(lastLen) != len(menu) {
+		t.Fatalf("UI 段 len=%d, want %d", lastLen, len(menu))
+	}
+	payload := out[len(out)-int(lastLen):]
+	if string(payload) != string(menu) {
+		t.Fatal("UI 段负载与 EncodeUIMenu 产物不一致")
+	}
+}
+
+// TestEncodeRenderFrameUISegmentPreservesRealLength 守住 EncodeRenderFrame 对 UI 段的
+// 字节透传:真实菜单内容(四按钮 + 中文 error)编码后非 4 对齐(142 字节),TLV 长度
+// 字段必须等于实际载荷字节数——禁止未来偷偷填充到 4 对齐。跨语言侧 Rust 的 parse_frame
+// 已豁免 UI 段(FRAME_TAG_UI)的 4 对齐检查,这里锁 Go 侧原样透传、不填充。
+func TestEncodeRenderFrameUISegmentPreservesRealLength(t *testing.T) {
+	menu := EncodeUIMenu(UIMenu{
+		Visible: true,
+		Title:   "Mornlea",
+		Version: "dev",
+		Error:   "存档无法打开",
+		Buttons: []UIButton{
+			{ID: 1, Label: "进入游戏", Enabled: true},
+			{ID: 2, Label: "多人游戏", Enabled: false},
+			{ID: 3, Label: "设置", Enabled: false},
+			{ID: 4, Label: "退出游戏", Enabled: true},
+		},
+	})
+	if len(menu) != 142 || len(menu)%4 == 0 {
+		t.Fatalf("夹具长度=%d(%%4=%d), 应为 142 且非 4 对齐", len(menu), len(menu)%4)
+	}
+	out := EncodeRenderFrame(RenderFrame{UISegment: menu})
+	cursor := renderFrameHeaderBytes
+	var lastTag, lastLen uint32
+	for cursor < len(out) {
+		lastTag = binary.LittleEndian.Uint32(out[cursor:])
+		cursor += 4
+		lastLen = binary.LittleEndian.Uint32(out[cursor:])
+		cursor += 4
+		cursor += int(lastLen)
+	}
+	if lastTag != frameTagUI {
+		t.Fatalf("末段 tag=%d, want %d", lastTag, frameTagUI)
+	}
+	if int(lastLen) != len(menu) {
+		t.Fatalf("UI 段 TLV 长度=%d, 载荷=%d(应为真实字节长度,非 4 对齐也原样,禁止填充)", lastLen, len(menu))
+	}
+	if string(out[len(out)-int(lastLen):]) != string(menu) {
+		t.Fatal("UI 段负载与 EncodeUIMenu 产物不一致")
 	}
 }

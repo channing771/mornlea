@@ -60,7 +60,15 @@ func TestChatCommandAddressesExactConfiguredCompanionAtTickBoundary(t *testing.T
 		t.Fatal("ChatEvent 没有排在 tick 尾 PlayerState 之前")
 	}
 
-	// 相邻配置不能把合法前缀误当成伙伴名称。
+	// 相邻配置不能把合法前缀误当成伙伴名称。第一条命令的任务在 AI 未配置
+	// 环境下会异步广播 TaskFail(PlannerUnavailable),到达的 tick 不固定;先等
+	// 它落地再发第二条命令,避免异步事件与待测的「@阿 前缀拒绝」混进同一 tick。
+	for {
+		result = host.world.StepForTest()
+		if len(companionChatEvents(receiveCompanionChatTick(t, client, result.Tick))) != 0 {
+			break
+		}
+	}
 	sendIntegration(t, client, network.ChatCommand{Text: "@阿 挖石头"})
 	waitForIncomingChatDepth(t, host.world, 1)
 	result = host.world.StepForTest()
