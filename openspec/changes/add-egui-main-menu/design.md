@@ -62,7 +62,7 @@ egui-wgpu = { version = "0.35", default-features = false, features = ["macos-win
 - `CLIENT_ABI_VERSION = 8`；注释写明 v8 增量（两个新出口 + 帧 UI 段），v7/v6 历史保留。
 - `mornlea_client_render_upload_ui_font(abi, handle, bytes, len) -> u32`：ABI 校验 → 句柄 → 参数（bytes 非空、len ≤ 32 MiB）→ `egui_pass.upload_font`；状态码复用 OK/ABI/INVALID_ARGUMENT/WINDOW/PANIC，字体超限返回 CAPACITY（头文件已有该值）。
 - `mornlea_client_render_drain_ui_events(abi, handle, out, out_len, out_count) -> u32`：返回状态码，写入的 u32 事件数经 `out_count` 输出——**事件计数与状态码必须分离**（Ruling 7：首版把计数当返回值，与 WINDOW=3 等状态码冲突，无法区分「3 个事件」与「句柄错误」）；`out == null` 或 `out_len % 4 != 0` → INVALID_ARGUMENT；事件数超过 `out_len/4` 时写满并丢弃余下（调用方每帧排空）。
-- `parse_frame` 增加 TLV tag 9（`FRAME_TAG_UI`），`FrameInput.ui_segment` 原样携带（合法性由 `decode_ui_frame` 校验）。
+- `parse_frame` 增加 TLV tag 9（`FRAME_TAG_UI`；**Ruling 8：UI 段豁免 `length 4 对齐` 约束**——其余 pass 段是定长实例数组、长度天然 4 对齐，UI 段是 UTF-8 字段序列、长度由字段自身界定（中文错误串等产生非 4 对齐长度），豁免后真实菜单内容不会因对齐被拒），`FrameInput.ui_segment` 原样携带（合法性由 `decode_ui_frame` 校验）。
 - ffi 单测：abi_version_is_eight、非法 UI 段渲染拒绝、drain 长度校验。
 - `engine/include/mornlea_client.h`：`MORNLEA_CLIENT_ABI_VERSION 8u` + 两个出口声明 + 注释（v8 增量、v7 不可混装）；`lib.rs` 顶部文档更新。
 

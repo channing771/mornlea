@@ -47,7 +47,7 @@
 
 ## 6. capture 主菜单场景与既有 golden 零影响验证
 
-- [ ] 6.1 `captureScene` 增 `Menu *captureMenuFixture`；`captureSceneImage` 在 Prepare 前设置 `app.menuOverride = scene.Menu`（nil 清除）；`renderFrame` 在菜单态（override 或交互相位）生成 UI 段；新场景 `main-menu`（标题「Mornlea」、四按钮、版本 "dev"、错误空）插在 `far-horizon` 之前，Apply 调 `resetCapturePresentation` 并把相机钉在出生点上空。
+- [ ] 6.1 `captureScene` 增 `Menu *captureMenuFixture`；`captureSceneImage` 在 Prepare 前设置 `app.menuOverride = scene.Menu`（nil 清除）；`renderFrame` 在菜单态（override 或交互相位）生成 UI 段；新场景 `main-menu`（标题「Mornlea」、四按钮、版本 "dev"、**错误行为「存档无法打开」——非 4 对齐 UI 段的真实跨语言回圆**（Ruling 8：TLV 文本段豁免 4 对齐，golden 必须覆盖真实非对齐路径））插在 `far-horizon` 之前，Apply 调 `resetCapturePresentation` 并把相机钉在出生点上空。
 - [ ] 6.2 更新场景表断言：`capture_ai_companion_test.go` 的完整场景顺序列表加入 `main-menu`（位于 `far-horizon` 之前）；`far-horizon` 倒数第二、`water-underwater` 最后两断言不变；新增 `TestMainMenuCaptureScenePosition`。
 - [ ] 6.3 先跑无更新 capture（应只见 main-menu 缺少 golden 而失败、其余 16 场景与现有 golden 全绿 —— 证明既有场景逐字节不变）；再 `-capture -update` 生成新 golden；`git status` 确认只有 `main-menu.png` 为新增、无既有 golden 变动。
 - [ ] 6.4 运行 `go test ./cmd/mornlea -race -count=1`（含 capture 测试；无 `-short`）、`go test ./internal/archcheck -count=1`、`gofmt -l cmd/mornlea`、`git diff --check`；记录数值到 `ledger.md`。

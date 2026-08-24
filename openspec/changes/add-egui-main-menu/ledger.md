@@ -89,3 +89,15 @@ Task 间文件/接口冲突检查：
 - Ruling 7（load-bearing，下达 fix round 1）：DrainUIEvents 首版签名的返回值即事件数，与状态码空间（WINDOW=3 等）冲突——「3 个事件」与「窗口句柄错误」无法区分。裁决：签名改为 `drain_ui_events(abi, handle, out, out_len, out_count) -> status`，计数经 out_count 输出，Go 绑定经 r.check 判定状态并读计数。若错：ABI 是本 change 新引入、无历史格式承诺，改动成本低（ffi.rs/header/render.go + 测试）。
 - 其他记录：最小帧 24 字节（brief 28 之说以 Rust 真值为准并已锁定）；EmbeddedCJKFont 每次 16 MiB 副本（仅启动一次）；window_test.go 版本期望 7→8（必要一行）；cgo 序言重复声明（Go 容忍）。
 - 基线文档二次修正：TestBaselineVersionsMatchCode 用 FindAllStringSubmatch（**全部**匹配必须等于代码值），AGENTS/CLAUDE 第 13 行的历史「client ABI v7」同样会让门禁红——已改为不含该数字的历史表述（「client ABI 其后经 egui 主菜单变更升到 v8」），两份逐字节一致（工作区未提交，随后续 docs commit）。
+
+## Task 4 评审发现（Important）与 Ruling 8
+
+- 评审(be3ae096)：SPEC ✅ / QUALITY Approved + 1 Important：**帧级 4 字节对齐缺口**——parse_frame 对所有 TLV 段强制 length%4==0，而 EncodeUIMenu 的 UTF-8 字段序列不保证 4 对齐（四按钮+错误行=142、单按钮=42 等），真实菜单内容会把帧拒成 INVALID_ARGUMENT → Go panic；cross-lock 只在段内容层、未在帧封装层锁定。
+- Ruling 8（load-bearing，评审轮 R1 → Task 4 implementer）：**FRAME_TAG_UI 豁免 4 对齐**（TLV 长度以字段自身界定；其余 pass 段仍强制）。配套：Rust 单测（坏句柄 + 非 4 对齐 UI 段 → WINDOW 而非 INVALID_ARGUMENT，证明 parse 接受）+ Go 单测（真实菜单字节的 TLV 长度=实际载荷、不填充）；Task 5 brief 增补真实菜单跨语言回圆测试。否决的替代：EncodeUIMenu 内部补齐到 4 对齐（依赖 decode 的尾部宽容，把语义耦合到填充字节）、豁免改在 decode（治标不治本）。
+
+## Task 4 完成
+
+- Task 4: complete（commits f3b93252..f3c078c6，review clean）。评审(be3ae096)：SPEC ✅ / QUALITY Approved + 1 Important（Ruling 8 帧级 4 对齐缺口）；scoped re-review(d797042d)：ADDRESSED，无 open Critical/Important。
+- Minor 递延（终审复核）：R1 新观察 x2（142B 夹具硬编码 1u32 常量建议用 UI_LAYOUT_VERSION/UI_FLAG_VISIBLE；42B 单按钮 case 未单独测试——tag 维度豁免覆盖充分）＋评审环境无 cargo 因素（Task 7 复跑）。
+- Ruling 8 落点已写进 design.md（TLV 文本段豁免 4 对齐）、tasks.md（main-menu 夹具错误行「存档无法打开」= 非对齐回圆）与 Task 5/6 brief（真实菜单跨语言编码锁 + capture 错误行夹具）。
+- 辅助记录：implementer 报告按仓库先例提交（.superpowers/sdd/add-egui-main-menu/task-4-report.md 已入仓）；Task 1-3 报告未入仓——终审收尾时按同一先例补交。review-gocache 目录（462MB，评审会话在仓根生成）收尾清理。
