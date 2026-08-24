@@ -124,6 +124,10 @@ jobs:
             go list ./cmd/...
             printf '%s\n' github.com/channing771/mornlea/internal/server
             go list ./internal/... | grep -v '/internal/server$'
+            # scripts/ 是带 package main 的 Go 包（composite_grass_side.go 材质
+            # 合成工具），go list ./... 会包含它；分片联合集必须同源覆盖，否则本
+            # 自检在引入该工具后恒红。
+            printf '%s\n' github.com/channing771/mornlea/scripts
           } | sort -u > /tmp/sharded-packages.txt
           diff -u /tmp/all-packages.txt /tmp/sharded-packages.txt
       - name: 静态检查
@@ -153,7 +157,7 @@ jobs:
             packages: ./internal/server
             extra: ''
           - shard: internal-rest
-            packages: "$(go list ./internal/... | grep -v '/internal/server$')"
+            packages: "$(go list ./internal/... | grep -v '/internal/server$')" github.com/channing771/mornlea/scripts
             extra: ''
     steps:
       - name: 记录开始时间
