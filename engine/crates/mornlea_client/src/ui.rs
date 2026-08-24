@@ -76,9 +76,9 @@ pub const MENU_ERROR_COLOR: Color32 = Color32::from_rgb(240, 90, 90);
 
 /// 单个菜单按钮的 Rust 表示。
 ///
-/// `enabled` 在 ABI v1 线格式中并无逐按钮编码(见 [`decode_ui_frame`]);
-/// 解码侧一律置为 `true`,禁用态只能在 UI 语义层(Go 侧)或直接构造
-/// [`UiFrame`] 时表达——这是 v1 布局的已知留白,详见任务报告。
+/// `enabled` 在 ABI v1 线格式中逐按钮编码(见 [`decode_ui_frame`]):每按钮在
+/// `label` 之后带一个 u32 `enabled`(0=禁用,1=启用,其余值解码为 `Err`),
+/// 因此禁用态可以经 wire 从 Go 传到 Rust,`decode_ui_frame` 会据实填入。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UiButton {
     /// 按钮唯一 id,点击后经事件队列回传 Go。
@@ -128,12 +128,16 @@ pub fn decode_ui_frame(bytes: &[u8]) -> Result<UiFrame, ()> {
     let mut buttons = Vec::with_capacity(button_count);
     for _ in 0..button_count {
         let id = reader.u32()?;
-        // ABI v1 不携带逐按钮 enabled,解码侧一律视为可用。
         let label = reader.string_field(MAX_UI_LABEL_BYTES)?;
+        // ABI v1 逐按钮携带 enabled u32:只接受 0(禁用)/1(启用),其余视为非法。
+        let enabled = reader.u32()?;
+        if enabled > 1 {
+            return Err(());
+        }
         buttons.push(UiButton {
             id,
             label,
-            enabled: true,
+            enabled: enabled == 1,
         });
     }
     let title = reader.string_field(MAX_UI_TITLE_BYTES)?;
@@ -476,11 +480,14 @@ pub fn raw_input(
 mod tests {
     use super::*;
 
-    /// 测试用最小 ABI 编码器,与 Go `EncodeUIMenu` 的字节语义一致。
-    fn encode_frame(
+    /// 测试用最小 ABI 编码器(底层):第三个元素是**原始** u32 的 `enabled`(允许传
+    /// 越界值如 2,用于失败路径)。与 Go `EncodeUIMenu` 的字节语义一致:
+    /// layout u32、flags u32、按钮数 u32、每按钮 [id u32 + label_len u32 + label + enabled u32],
+    /// 随后 title/version/error 依次 [len u32 + bytes]。
+    fn encode_frame_raw(
         layout: u32,
         flags: u32,
-        buttons: &[(u32, &str)],
+        buttons: &[(u32, &str, u32)],
         title: &str,
         version: &str,
         error: &str,
@@ -489,10 +496,11 @@ mod tests {
         b.extend_from_slice(&layout.to_le_bytes());
         b.extend_from_slice(&flags.to_le_bytes());
         b.extend_from_slice(&(buttons.len() as u32).to_le_bytes());
-        for (id, label) in buttons {
+        for (id, label, enabled) in buttons {
             b.extend_from_slice(&id.to_le_bytes());
             b.extend_from_slice(&(label.len() as u32).to_le_bytes());
             b.extend_from_slice(label.as_bytes());
+            b.extend_from_slice(&enabled.to_le_bytes());
         }
         b.extend_from_slice(&(title.len() as u32).to_le_bytes());
         b.extend_from_slice(title.as_bytes());
@@ -503,15 +511,49 @@ mod tests {
         b
     }
 
+    /// 便捷高层封装:`bool` 的 `enabled` → 0/1,供成功路径与常规夹具使用。
+    fn encode_frame(
+        layout: u32,
+        flags: u32,
+        buttons: &[(u32, &str, bool)],
+        title: &str,
+        version: &str,
+        error: &str,
+    ) -> Vec<u8> {
+        let raw = buttons
+            .iter()
+            .map(|(id, label, enabled)| (*id, *label, if *enabled { 1 } else { 0 }))
+            .collect::<Vec<_>>();
+        encode_frame_raw(layout, flags, &raw, title, version, error)
+    }
+
+    /// 主菜单四按钮夹具(与 spec 一致:多人/设置禁用,进入/退出启用)。
     fn four_button_frame() -> Vec<u8> {
         encode_frame(
             UI_LAYOUT_VERSION,
             UI_FLAG_VISIBLE,
             &[
-                (1, "进入游戏"),
-                (2, "多人游戏"),
-                (3, "设置"),
-                (4, "退出游戏"),
+                (1, "进入游戏", true),
+                (2, "多人游戏", false),
+                (3, "设置", false),
+                (4, "退出游戏", true),
+            ],
+            "Mornlea",
+            "dev",
+            "",
+        )
+    }
+
+    /// 同布局但全部按钮启用的夹具(用于验证 enabled=1 的 wire 点击会返回 id)。
+    fn four_button_frame_all_enabled() -> Vec<u8> {
+        encode_frame(
+            UI_LAYOUT_VERSION,
+            UI_FLAG_VISIBLE,
+            &[
+                (1, "进入游戏", true),
+                (2, "多人游戏", true),
+                (3, "设置", true),
+                (4, "退出游戏", true),
             ],
             "Mornlea",
             "dev",
@@ -534,7 +576,7 @@ mod tests {
 
     #[test]
     fn decode_rejects_too_many_buttons() {
-        let many = (1..=9u32).map(|i| (i, "x")).collect::<Vec<_>>();
+        let many = (1..=9u32).map(|i| (i, "x", true)).collect::<Vec<_>>();
         assert!(
             decode_ui_frame(&encode_frame(
                 UI_LAYOUT_VERSION,
@@ -555,7 +597,7 @@ mod tests {
             decode_ui_frame(&encode_frame(
                 UI_LAYOUT_VERSION,
                 UI_FLAG_VISIBLE,
-                &[(1, &long_label)],
+                &[(1, &long_label, true)],
                 "",
                 "",
                 ""
@@ -639,7 +681,7 @@ mod tests {
 
     #[test]
     fn decode_maximal_success_fields_exact() {
-        let labels = (0..8u32).map(|i| (i, "button")).collect::<Vec<_>>();
+        let labels = (0..8u32).map(|i| (i, "button", true)).collect::<Vec<_>>();
         let title = "天".repeat(40); // 120 字节,<=128。
         let version = "v".repeat(64);
         let error = "错".repeat(40); // 120 字节,<=256。
@@ -660,6 +702,94 @@ mod tests {
         assert_eq!(frame.title, title);
         assert_eq!(frame.version, version);
         assert_eq!(frame.error, error);
+    }
+
+    #[test]
+    fn decode_four_button_with_enabled_fields_exact() {
+        // 四按钮 + 错误行的夹具:逐字段(含 enabled)精确断言。
+        let frame = decode_ui_frame(&encode_frame(
+            UI_LAYOUT_VERSION,
+            UI_FLAG_VISIBLE,
+            &[
+                (1, "进入游戏", true),
+                (2, "多人游戏", false),
+                (3, "设置", false),
+                (4, "退出游戏", true),
+            ],
+            "Mornlea",
+            "dev",
+            "存档无法打开",
+        ))
+        .unwrap();
+        assert!(frame.visible);
+        assert_eq!(frame.title, "Mornlea");
+        assert_eq!(frame.version, "dev");
+        assert_eq!(frame.error, "存档无法打开");
+        assert_eq!(frame.buttons.len(), 4);
+        assert_eq!(
+            frame.buttons[0],
+            UiButton {
+                id: 1,
+                label: "进入游戏".into(),
+                enabled: true
+            }
+        );
+        assert_eq!(
+            frame.buttons[1],
+            UiButton {
+                id: 2,
+                label: "多人游戏".into(),
+                enabled: false
+            }
+        );
+        assert_eq!(
+            frame.buttons[2],
+            UiButton {
+                id: 3,
+                label: "设置".into(),
+                enabled: false
+            }
+        );
+        assert_eq!(
+            frame.buttons[3],
+            UiButton {
+                id: 4,
+                label: "退出游戏".into(),
+                enabled: true
+            }
+        );
+    }
+
+    #[test]
+    fn decode_rejects_enabled_out_of_range() {
+        // enabled 只接受 0/1,其余值(如 2)视为非法。
+        assert!(
+            decode_ui_frame(&encode_frame_raw(
+                UI_LAYOUT_VERSION,
+                UI_FLAG_VISIBLE,
+                &[(1, "A", 2)],
+                "",
+                "",
+                ""
+            ))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn decode_rejects_enabled_truncated() {
+        // 单按钮 label "A"(1 字节)时,其 enabled u32 落在偏移 21..25;截断到
+        // 中间(22)或其后(21)都读不到完整字段 => Err。
+        let bytes = encode_frame(
+            UI_LAYOUT_VERSION,
+            UI_FLAG_VISIBLE,
+            &[(1, "A", true)],
+            "",
+            "",
+            "",
+        );
+        assert!(decode_ui_frame(&bytes[..21]).is_err());
+        assert!(decode_ui_frame(&bytes[..22]).is_err());
     }
 
     fn screen_rect() -> Rect {
@@ -712,9 +842,10 @@ mod tests {
         let frame = decode_ui_frame(&four_button_frame()).unwrap();
 
         let rects = menu_button_layout(screen_rect(), 4);
-        let target = rects[1].center();
+        // 点击启用的「退出游戏」(id=4)中心,应恰好回传该 id 一次。
+        let target = rects[3].center();
         click_button(&mut state, &frame, target);
-        assert_eq!(state.drain_events(), vec![2]);
+        assert_eq!(state.drain_events(), vec![4]);
         assert!(state.drain_events().is_empty());
     }
 
@@ -722,15 +853,19 @@ mod tests {
     fn menu_disabled_button_click_no_event() {
         let mut state = UiState::new();
         state.install_font(test_font());
-        // ABI v1 线格式不编码 enabled,故此处绕过 decode 直接构造禁用帧。
-        let mut frame = decode_ui_frame(&four_button_frame()).unwrap();
-        frame.buttons[1].enabled = false;
-
         let rects = menu_button_layout(screen_rect(), 4);
-        let target = rects[1].center();
-        // 用两帧完整点击(按下+释放),禁用按钮仍不应产生事件。
-        click_button(&mut state, &frame, target);
+
+        // 经 wire 的禁用路径:由 enabled=0 的字节解码出「多人游戏」禁用帧,点击其中心不产生事件。
+        let frame = decode_ui_frame(&four_button_frame()).unwrap();
+        assert!(!frame.buttons[1].enabled);
+        click_button(&mut state, &frame, rects[1].center());
         assert!(state.drain_events().is_empty());
+
+        // 同布局但 enabled=1:点击同样位置返回该按钮 id。
+        let frame2 = decode_ui_frame(&four_button_frame_all_enabled()).unwrap();
+        assert!(frame2.buttons[1].enabled);
+        click_button(&mut state, &frame2, rects[1].center());
+        assert_eq!(state.drain_events(), vec![2]);
     }
 
     #[test]
