@@ -497,7 +497,7 @@ func TestPerfcheckV15SameCommitExplicitCrossTransportComparison(t *testing.T) {
 	baseline := completeV15ComparableReport("memory")
 	current := completeV15ComparableReport("tcp")
 	if failures, err := compareReports(baseline, current, 0.20); err != nil || len(failures) != 0 {
-		t.Fatalf("v16 同 commit 显式跨 transport 比较 failures=%v err=%v", failures, err)
+		t.Fatalf("v15 同 commit 显式跨 transport 比较 failures=%v err=%v", failures, err)
 	}
 }
 
