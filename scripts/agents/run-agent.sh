@@ -4,6 +4,17 @@
 # 环境变量: AGENT_TOOL(默认 claude) / AGENT_MODEL(默认 CLI 配置中的模型) / CLAUDE_BIN / CODEX_BIN / AGENT_EXTRA_ARGS
 set -euo pipefail
 
+# launchd(listener 续跑)下 PATH 极简，claude/codex 常在 ~/.local/bin 或 /opt/homebrew/bin 等位置；
+# 按 PATH → 常见绝对路径依次解析，保证 headless 续跑能找到 CLI。
+resolve_cli() { # $1 = CLI 名称
+  local n="$1" p
+  if command -v "$n" >/dev/null 2>&1; then command -v "$n"; return 0; fi
+  for p in "$HOME/.local/bin/$n" "/opt/homebrew/bin/$n" "/usr/local/bin/$n" "/usr/bin/$n"; do
+    if [ -x "$p" ]; then echo "$p"; return 0; fi
+  done
+  return 1
+}
+
 ROLE="${1:-}"
 TOOL="${AGENT_TOOL:-claude}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -26,7 +37,7 @@ MODEL_ARGS=""
 
 case "$TOOL" in
   claude)
-    CLAUDE_BIN="${CLAUDE_BIN:-claude}"
+    CLAUDE_BIN="${CLAUDE_BIN:-$(resolve_cli claude || echo claude)}"
     # 默认 headless 打印模式；需要无人值守自动批准时用
     # AGENT_EXTRA_ARGS='--permission-mode acceptEdits'；需要终端交互问答时
     # 手动运行 claude（不带 -p）并粘贴提示词，或设置 AGENT_INTERACTIVE=1。
@@ -36,7 +47,7 @@ case "$TOOL" in
     exec "$CLAUDE_BIN" -p "$PROMPT" $MODEL_ARGS ${AGENT_EXTRA_ARGS:-}
     ;;
   codex)
-    CODEX_BIN="${CODEX_BIN:-codex}"
+    CODEX_BIN="${CODEX_BIN:-$(resolve_cli codex || echo codex)}"
     # codex 的 exec 为 headless；终端交互请直接运行 `codex`(交互式) 并粘贴提示词。
     exec "$CODEX_BIN" exec --full-auto $MODEL_ARGS "$PROMPT" ${AGENT_EXTRA_ARGS:-}
     ;;
