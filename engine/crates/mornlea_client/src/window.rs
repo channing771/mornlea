@@ -17,6 +17,7 @@ use winit::platform::pump_events::EventLoopExtPumpEvents;
 use winit::window::{CursorGrabMode, Window, WindowId, WindowLevel};
 
 use crate::input::InputState;
+use crate::ui;
 
 /// 窗口创建失败的稳定原因,FFI 层统一转为错误状态码。
 #[derive(Debug)]
@@ -37,6 +38,11 @@ struct App {
     /// IME 组合是否激活;激活期间按键的 `text` 不直接入队,以 `Ime::Commit`
     /// 为准,避免组合过程中的重复字符。
     ime_active: bool,
+    /// 菜单 UI 事件桥当前累积的修饰键状态(Shift/Control/Alt 左变体)。
+    ///
+    /// 由 [`ui::winit_to_ui_events`] 在每个键盘事件处理点先更新再发射,是
+    /// 进程内持续状态;与 `InputState` 的游戏按键状态彼此独立。
+    ui_modifiers: egui::Modifiers,
 }
 
 impl App {
@@ -48,6 +54,7 @@ impl App {
             width,
             height,
             ime_active: false,
+            ui_modifiers: egui::Modifiers::default(),
         }
     }
 
@@ -114,6 +121,21 @@ impl ApplicationHandler for App {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
+        // UI 事件桥:把 winit 事件翻译为 [`UiEvent`] 并压入输入队列,与游戏
+        // 输入(InputState)并存。`scale` 与既有 `InputState` 的
+        // `CursorMoved` 换算一致;这里**不判断菜单可见性**(渲染侧每帧 take,
+        // 菜单不可见时事件被丢弃是设计)。修饰键状态经
+        // [`ui::winit_to_ui_events`] 在此进程内累积。
+        let scale = self.window.as_ref().map_or(1.0_f64, |w| w.scale_factor());
+        for ui_event in ui::winit_to_ui_events(
+            std::slice::from_ref(&event),
+            scale,
+            self.ime_active,
+            &mut self.ui_modifiers,
+        ) {
+            ui::push_ui_event(ui_event);
+        }
+
         match event {
             WindowEvent::CloseRequested => self.input.request_close(),
             WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {

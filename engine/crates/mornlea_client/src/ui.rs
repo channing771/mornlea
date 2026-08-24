@@ -11,12 +11,16 @@
 //! ROOT 视口 [`ViewportInfo::native_pixels_per_point`] 读取缩放,故
 //! [`UiState::run_frame`] 负责把像素密度写进 viewport。
 
+use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use egui::{
     Align2, Color32, CornerRadius, Direction, FontData, FontDefinitions, FontFamily, FontId, Key,
     Layout, RawInput, Rect, RichText, UiBuilder, ViewportId, pos2, vec2,
 };
+use winit::event::{ElementState, Ime, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::keyboard::{KeyCode, PhysicalKey};
 
 // ---------------------------------------------------------------------------
 // ABI 布局常量(与 Go `EncodeUIMenu` 逐字节对应,小端;任何改动必须同时改 Go)。
@@ -474,6 +478,225 @@ pub fn raw_input(
         info.focused = Some(true);
     }
     raw
+}
+
+// ---------------------------------------------------------------------------
+// 输入队列:窗口事件桥与渲染器之间的进程内桥。
+// ---------------------------------------------------------------------------
+
+/// UI 事件队列容量上限:满时丢弃**最旧**事件,保留最近的事件。
+///
+/// 菜单属于即时模式 UI,只关心最新输入状态,积压的旧事件没有价值;把
+/// 上限做硬约束(而非无限增长)是为了防止菜单关闭期间(无 UI 段、渲染侧
+/// 仍然 take 丢弃)输入疯狂堆积造成无界内存占用。
+pub const UI_EVENT_QUEUE_CAPACITY: usize = 1024;
+
+thread_local! {
+    /// 菜单输入队列。
+    ///
+    /// 窗口事件桥与渲染器同线程(Go 主线程 `LockOSThread`),队列只是进程内
+    /// 桥,无跨线程暴露;渲染器在运行 egui 前经 [`take_ui_events`] 取走。用
+    /// [`VecDeque`] 是因为满时从头部丢弃最旧、尾部追加最新都是 O(1),若用
+    /// `Vec` 则在满时移除首元素是 O(n)。
+    static UI_EVENTS: RefCell<VecDeque<UiEvent>> = const { RefCell::new(VecDeque::new()) };
+}
+
+/// 把一个窗口事件翻译结果入队。
+///
+/// 超过 [`UI_EVENT_QUEUE_CAPACITY`] 时丢弃**最旧**事件(保持最近 1024 条),
+/// 由 [`VecDeque`] 的 `push_back`/`pop_front` 以 O(1) 完成。
+pub fn push_ui_event(event: UiEvent) {
+    UI_EVENTS.with(|q| {
+        let mut q = q.borrow_mut();
+        q.push_back(event);
+        while q.len() > UI_EVENT_QUEUE_CAPACITY {
+            q.pop_front();
+        }
+    });
+}
+
+/// 排空并返回队列里的全部事件(读前清空)。
+///
+/// 渲染器每帧在运行 egui 前调用一次;没有 UI 段的帧同样取走并丢弃,
+/// 防止菜单关闭期间的输入积压。
+pub fn take_ui_events() -> Vec<UiEvent> {
+    UI_EVENTS.with(|q| q.borrow_mut().drain(..).collect())
+}
+
+/// 清空队列,丢弃全部积压事件。
+pub fn clear_ui_events() {
+    UI_EVENTS.with(|q| q.borrow_mut().clear());
+}
+
+// ---------------------------------------------------------------------------
+// 窗口事件翻译:winit 事件 -> UiEvent。
+// ---------------------------------------------------------------------------
+
+/// 把 winit 物理键码映射为 egui 常用键。
+///
+/// 只映射菜单真正关心的键:导航/回车/退格、字母(`KeyA`..`KeyZ`)、数字
+/// (`Digit0`..`Digit9`)、空格与 `Shift`/`Control`/`Alt` 的左变体;其余返回
+/// `None`,调用方静默跳过(egui 侧不识别这些键,不产生事件,也不误报按键)。
+pub fn key_from(code: KeyCode) -> Option<Key> {
+    let key = match code {
+        KeyCode::Escape => Key::Escape,
+        KeyCode::Enter => Key::Enter,
+        KeyCode::Backspace => Key::Backspace,
+        KeyCode::ArrowUp => Key::ArrowUp,
+        KeyCode::ArrowDown => Key::ArrowDown,
+        KeyCode::ArrowLeft => Key::ArrowLeft,
+        KeyCode::ArrowRight => Key::ArrowRight,
+        KeyCode::Space => Key::Space,
+        KeyCode::ShiftLeft => Key::ShiftLeft,
+        KeyCode::ControlLeft => Key::ControlLeft,
+        KeyCode::AltLeft => Key::AltLeft,
+        KeyCode::KeyA => Key::A,
+        KeyCode::KeyB => Key::B,
+        KeyCode::KeyC => Key::C,
+        KeyCode::KeyD => Key::D,
+        KeyCode::KeyE => Key::E,
+        KeyCode::KeyF => Key::F,
+        KeyCode::KeyG => Key::G,
+        KeyCode::KeyH => Key::H,
+        KeyCode::KeyI => Key::I,
+        KeyCode::KeyJ => Key::J,
+        KeyCode::KeyK => Key::K,
+        KeyCode::KeyL => Key::L,
+        KeyCode::KeyM => Key::M,
+        KeyCode::KeyN => Key::N,
+        KeyCode::KeyO => Key::O,
+        KeyCode::KeyP => Key::P,
+        KeyCode::KeyQ => Key::Q,
+        KeyCode::KeyR => Key::R,
+        KeyCode::KeyS => Key::S,
+        KeyCode::KeyT => Key::T,
+        KeyCode::KeyU => Key::U,
+        KeyCode::KeyV => Key::V,
+        KeyCode::KeyW => Key::W,
+        KeyCode::KeyX => Key::X,
+        KeyCode::KeyY => Key::Y,
+        KeyCode::KeyZ => Key::Z,
+        KeyCode::Digit0 => Key::Num0,
+        KeyCode::Digit1 => Key::Num1,
+        KeyCode::Digit2 => Key::Num2,
+        KeyCode::Digit3 => Key::Num3,
+        KeyCode::Digit4 => Key::Num4,
+        KeyCode::Digit5 => Key::Num5,
+        KeyCode::Digit6 => Key::Num6,
+        KeyCode::Digit7 => Key::Num7,
+        KeyCode::Digit8 => Key::Num8,
+        KeyCode::Digit9 => Key::Num9,
+        _ => return None,
+    };
+    Some(key)
+}
+
+/// 把单个键盘事件翻译为 [`UiEvent`] 序列(纯输入,可无窗口单测)。
+///
+/// winit 的 `KeyEvent` 含 `pub(crate)` 字段,无法从 crate 外构造,因此键盘
+/// 翻译被拆成这个只依赖裸字段的辅助函数;`winit_to_ui_events` 从中取字段
+/// 调用。修饰键状态在此**先更新再发射**(顺序敏感),使事件携带的
+/// `modifiers` 反映该次按下/释放之后的累计状态。`repeat` 事件仍发射 `Key`
+/// (`pressed=true`);`UiEvent::Key` 依 design.md 不带 `repeat` 字段,故
+/// `repeat` 标志无法下传到 egui `Event::Key.repeat`(见报告)。
+fn key_event_to_ui_events(
+    code: KeyCode,
+    pressed: bool,
+    text: Option<&str>,
+    ime_active: bool,
+    modifiers: &mut egui::Modifiers,
+) -> Vec<UiEvent> {
+    // 先更新修饰键(左变体)再发射:Shift/Control/Alt 的按键动作本身也要让
+    // 后续事件携带已翻转的修饰状态,保证事件顺序敏感。
+    match code {
+        KeyCode::ShiftLeft => modifiers.shift = pressed,
+        KeyCode::ControlLeft => modifiers.ctrl = pressed,
+        KeyCode::AltLeft => modifiers.alt = pressed,
+        _ => {}
+    }
+    let mut out = Vec::new();
+    if let Some(key) = key_from(code) {
+        out.push(UiEvent::Key {
+            key,
+            pressed,
+            modifiers: *modifiers,
+        });
+    }
+    // IME 激活期间键盘文本改由 `Ime::Commit` 提供;重复事件同样压文本
+    // (与既有 `push_text` 域一致);控制字符一律过滤。
+    if !ime_active
+        && pressed
+        && let Some(text) = text
+    {
+        for ch in text.chars().filter(|ch| !ch.is_control()) {
+            out.push(UiEvent::Text(ch));
+        }
+    }
+    out
+}
+
+/// 把一批 winit 窗口事件翻译为 [`UiEvent`] 序列(纯函数,可无窗口单测)。
+///
+/// * `scale` 是窗口缩放因子,用于把物理像素坐标换算为 egui 逻辑坐标(与既有
+///   `InputState` 的 `CursorMoved` 换算一致);
+/// * `ime_active` 是当前 IME 组合状态:激活期间键盘 `text` 不发射(改由
+///   `Ime::Commit` 提供),避免组合过程重复字符;
+/// * `modifiers` 是进程内持续累积的修饰键状态,在事件处理点先更新再发射。
+///
+/// 本函数**不判断菜单可见性**:渲染侧每帧 `take` 队列;菜单不可见时事件被
+/// 丢弃是设计(菜单只在 Go 菜单相位产生 UI 段,游戏帧此时 egui 不消费)。
+pub fn winit_to_ui_events(
+    events: &[WindowEvent],
+    scale: f64,
+    ime_active: bool,
+    modifiers: &mut egui::Modifiers,
+) -> Vec<UiEvent> {
+    let mut out = Vec::with_capacity(events.len());
+    for event in events {
+        match event {
+            WindowEvent::CursorMoved { position, .. } => {
+                let logical = position.to_logical::<f64>(scale);
+                out.push(UiEvent::CursorMoved(logical.x, logical.y));
+            }
+            WindowEvent::CursorLeft { .. } => out.push(UiEvent::CursorGone),
+            WindowEvent::MouseInput { state, button, .. } => {
+                let pressed = *state == ElementState::Pressed;
+                match button {
+                    MouseButton::Left => out.push(UiEvent::MouseButton(true, pressed)),
+                    MouseButton::Right => out.push(UiEvent::MouseButton(false, pressed)),
+                    _ => {}
+                }
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                // egui 惯例:把「行」换算为「点」——egui 0.35 的
+                // `MouseWheelUnit::Point` 以逻辑点计,一行按 60 点;触控板
+                // 上报的像素增量则原样 f32 化。
+                let (dx, dy) = match delta {
+                    MouseScrollDelta::LineDelta(x, y) => (x * 60.0, y * 60.0),
+                    MouseScrollDelta::PixelDelta(p) => (p.x as f32, p.y as f32),
+                };
+                out.push(UiEvent::Scroll(dx, dy));
+            }
+            WindowEvent::KeyboardInput { event, .. } => {
+                if let PhysicalKey::Code(code) = event.physical_key {
+                    out.extend(key_event_to_ui_events(
+                        code,
+                        event.state.is_pressed(),
+                        event.text.as_deref(),
+                        ime_active,
+                        modifiers,
+                    ));
+                }
+            }
+            WindowEvent::Ime(Ime::Commit(text)) => {
+                for ch in text.chars().filter(|ch| !ch.is_control()) {
+                    out.push(UiEvent::Text(ch));
+                }
+            }
+            _ => {}
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -1008,5 +1231,309 @@ mod tests {
         assert!(state.has_font());
         assert!(state.install_font(test_font()));
         assert!(state.has_font());
+    }
+
+    // -----------------------------------------------------------------------
+    // Task 2:窗口事件桥与输入队列。
+    // -----------------------------------------------------------------------
+
+    use winit::dpi::PhysicalPosition;
+    use winit::event::{DeviceId, TouchPhase};
+
+    fn cursor_moved(x: f64, y: f64) -> WindowEvent {
+        WindowEvent::CursorMoved {
+            device_id: DeviceId::dummy(),
+            position: PhysicalPosition::new(x, y),
+        }
+    }
+
+    fn cursor_left() -> WindowEvent {
+        WindowEvent::CursorLeft {
+            device_id: DeviceId::dummy(),
+        }
+    }
+
+    fn mouse_input(button: MouseButton, state: ElementState) -> WindowEvent {
+        WindowEvent::MouseInput {
+            device_id: DeviceId::dummy(),
+            state,
+            button,
+        }
+    }
+
+    fn mouse_wheel_line(dx: f32, dy: f32) -> WindowEvent {
+        WindowEvent::MouseWheel {
+            device_id: DeviceId::dummy(),
+            delta: MouseScrollDelta::LineDelta(dx, dy),
+            phase: TouchPhase::Moved,
+        }
+    }
+
+    fn mouse_wheel_pixel(dx: f64, dy: f64) -> WindowEvent {
+        WindowEvent::MouseWheel {
+            device_id: DeviceId::dummy(),
+            delta: MouseScrollDelta::PixelDelta(PhysicalPosition::new(dx, dy)),
+            phase: TouchPhase::Moved,
+        }
+    }
+
+    fn ime_commit(text: &str) -> WindowEvent {
+        WindowEvent::Ime(Ime::Commit(text.to_owned()))
+    }
+
+    #[test]
+    fn winit_to_ui_events_cursor_uses_logical_coords_and_left() {
+        let mut mods = egui::Modifiers::default();
+        // scale=2:物理 (200,100) -> 逻辑 (100,50)。
+        let out = winit_to_ui_events(
+            &[cursor_moved(200.0, 100.0), cursor_left()],
+            2.0,
+            false,
+            &mut mods,
+        );
+        assert_eq!(
+            out,
+            vec![UiEvent::CursorMoved(100.0, 50.0), UiEvent::CursorGone]
+        );
+        assert!(mods.is_none());
+    }
+
+    #[test]
+    fn winit_to_ui_events_mouse_input_both_buttons() {
+        let mut mods = egui::Modifiers::default();
+        let out = winit_to_ui_events(
+            &[
+                mouse_input(MouseButton::Left, ElementState::Pressed),
+                mouse_input(MouseButton::Right, ElementState::Released),
+                mouse_input(MouseButton::Middle, ElementState::Pressed),
+            ],
+            1.0,
+            false,
+            &mut mods,
+        );
+        // 中键被忽略,只保留主/次键。
+        assert_eq!(
+            out,
+            vec![
+                UiEvent::MouseButton(true, true),
+                UiEvent::MouseButton(false, false)
+            ]
+        );
+    }
+
+    #[test]
+    fn winit_to_ui_events_mouse_wheel_line_and_pixel() {
+        let mut mods = egui::Modifiers::default();
+        let out = winit_to_ui_events(
+            &[mouse_wheel_line(1.0, -2.0), mouse_wheel_pixel(10.0, -20.0)],
+            1.0,
+            false,
+            &mut mods,
+        );
+        // Line 按 60 点换算;Pixel 原样 f32 化。
+        assert_eq!(
+            out,
+            vec![UiEvent::Scroll(60.0, -120.0), UiEvent::Scroll(10.0, -20.0)]
+        );
+    }
+
+    #[test]
+    fn winit_to_ui_events_ime_commit_emits_text_per_char() {
+        let mut mods = egui::Modifiers::default();
+        let out = winit_to_ui_events(
+            &[ime_commit("你好ab\n"), ime_commit("x")],
+            1.0,
+            false,
+            &mut mods,
+        );
+        // \n 是控制字符应被过滤;每个字符一个 Text。
+        assert_eq!(
+            out,
+            vec![
+                UiEvent::Text('你'),
+                UiEvent::Text('好'),
+                UiEvent::Text('a'),
+                UiEvent::Text('b'),
+                UiEvent::Text('x'),
+            ]
+        );
+    }
+
+    #[test]
+    fn key_events_accumulate_modifiers_in_order() {
+        let mut mods = egui::Modifiers::default();
+        // Shift 按下:先更新修饰状态,再发射 Key 事件(事件携带 shift=true)。
+        let shift_down = key_event_to_ui_events(KeyCode::ShiftLeft, true, None, false, &mut mods);
+        assert!(mods.shift);
+        assert_eq!(shift_down.len(), 1);
+        assert_eq!(
+            shift_down[0],
+            UiEvent::Key {
+                key: Key::ShiftLeft,
+                pressed: true,
+                modifiers: mods,
+            }
+        );
+
+        // Shift 按住时按下 A:Key 事件携带 shift=true,文本 'A' 也发射。
+        let a = key_event_to_ui_events(KeyCode::KeyA, true, Some("A"), false, &mut mods);
+        assert_eq!(a.len(), 2);
+        assert_eq!(
+            a[0],
+            UiEvent::Key {
+                key: Key::A,
+                pressed: true,
+                modifiers: mods,
+            }
+        );
+        assert_eq!(a[1], UiEvent::Text('A'));
+
+        // Shift 释放:状态翻回,Key 事件仍携带更新后的(无 shift)状态。
+        let shift_up = key_event_to_ui_events(KeyCode::ShiftLeft, false, None, false, &mut mods);
+        assert!(!mods.shift);
+        assert_eq!(
+            shift_up[0],
+            UiEvent::Key {
+                key: Key::ShiftLeft,
+                pressed: false,
+                modifiers: egui::Modifiers::default(),
+            }
+        );
+
+        // Control/Alt 左变体同样翻转各自位。
+        key_event_to_ui_events(KeyCode::ControlLeft, true, None, false, &mut mods);
+        assert!(mods.ctrl);
+        key_event_to_ui_events(KeyCode::AltLeft, true, None, false, &mut mods);
+        assert!(mods.alt);
+    }
+
+    #[test]
+    fn key_events_filter_control_chars() {
+        let mut mods = egui::Modifiers::default();
+        // 文本含换行/制表等控制字符,只保留可见字符 'a'。
+        let out = key_event_to_ui_events(KeyCode::KeyA, true, Some("a\n\t"), false, &mut mods);
+        assert_eq!(
+            out,
+            vec![
+                UiEvent::Key {
+                    key: Key::A,
+                    pressed: true,
+                    modifiers: egui::Modifiers::default(),
+                },
+                UiEvent::Text('a'),
+            ]
+        );
+    }
+
+    #[test]
+    fn key_events_ime_active_suppresses_text() {
+        let mut mods = egui::Modifiers::default();
+        // IME 激活期间键盘文本不发射(改由 Commit 提供),只留 Key 事件。
+        let out = key_event_to_ui_events(KeyCode::KeyA, true, Some("a"), true, &mut mods);
+        assert_eq!(out.len(), 1);
+        assert!(matches!(
+            out[0],
+            UiEvent::Key {
+                key: Key::A,
+                pressed: true,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn key_events_unknown_code_produces_no_event() {
+        let mut mods = egui::Modifiers::default();
+        // F1 不在映射表,不产生任何 Key 事件(文本亦无)。
+        let out = key_event_to_ui_events(KeyCode::F1, true, None, false, &mut mods);
+        assert!(out.is_empty());
+        // 未知键码的修饰键推导也不影响状态。
+        assert!(mods.is_none());
+    }
+
+    #[test]
+    fn key_from_maps_common_keys_and_unknown_none() {
+        // 常用键齐全:导航、回车/退格、空格、字幕、数字、修饰键左变体。
+        assert_eq!(key_from(KeyCode::Escape), Some(Key::Escape));
+        assert_eq!(key_from(KeyCode::Enter), Some(Key::Enter));
+        assert_eq!(key_from(KeyCode::Backspace), Some(Key::Backspace));
+        assert_eq!(key_from(KeyCode::ArrowUp), Some(Key::ArrowUp));
+        assert_eq!(key_from(KeyCode::ArrowDown), Some(Key::ArrowDown));
+        assert_eq!(key_from(KeyCode::ArrowLeft), Some(Key::ArrowLeft));
+        assert_eq!(key_from(KeyCode::ArrowRight), Some(Key::ArrowRight));
+        assert_eq!(key_from(KeyCode::Space), Some(Key::Space));
+        assert_eq!(key_from(KeyCode::ShiftLeft), Some(Key::ShiftLeft));
+        assert_eq!(key_from(KeyCode::ControlLeft), Some(Key::ControlLeft));
+        assert_eq!(key_from(KeyCode::AltLeft), Some(Key::AltLeft));
+        assert_eq!(key_from(KeyCode::KeyW), Some(Key::W));
+        assert_eq!(key_from(KeyCode::KeyZ), Some(Key::Z));
+        assert_eq!(key_from(KeyCode::Digit0), Some(Key::Num0));
+        assert_eq!(key_from(KeyCode::Digit9), Some(Key::Num9));
+        // 字母区间全覆盖(A..Z)。
+        for (code, key) in [
+            (KeyCode::KeyA, Key::A),
+            (KeyCode::KeyB, Key::B),
+            (KeyCode::KeyM, Key::M),
+            (KeyCode::KeyY, Key::Y),
+            (KeyCode::KeyZ, Key::Z),
+        ] {
+            assert_eq!(key_from(code), Some(key));
+        }
+        // 未知键返回 None。
+        assert_eq!(key_from(KeyCode::F1), None);
+        assert_eq!(key_from(KeyCode::Home), None);
+        assert_eq!(key_from(KeyCode::ShiftRight), None);
+        assert_eq!(key_from(KeyCode::ControlRight), None);
+        assert_eq!(key_from(KeyCode::AltRight), None);
+    }
+
+    #[test]
+    fn ui_queue_push_take_drains_in_order() {
+        clear_ui_events();
+        push_ui_event(UiEvent::CursorMoved(1.0, 2.0));
+        push_ui_event(UiEvent::CursorGone);
+        push_ui_event(UiEvent::Text('a'));
+        let taken = take_ui_events();
+        assert_eq!(
+            taken,
+            vec![
+                UiEvent::CursorMoved(1.0, 2.0),
+                UiEvent::CursorGone,
+                UiEvent::Text('a')
+            ]
+        );
+        // take 是排空语义:再次 take 为空。
+        assert!(take_ui_events().is_empty());
+    }
+
+    #[test]
+    fn ui_queue_capacity_keeps_latest_drops_oldest() {
+        clear_ui_events();
+        for i in 0..1000 {
+            push_ui_event(UiEvent::Text(char::from_u32('a' as u32 + i).unwrap_or('a')));
+        }
+        assert_eq!(take_ui_events().len(), 1000);
+
+        clear_ui_events();
+        // 塞满 1025 条:保留最近 1024 条,最旧的 1 条被丢弃。
+        for i in 0..(UI_EVENT_QUEUE_CAPACITY as u32 + 1) {
+            push_ui_event(UiEvent::CursorMoved(i as f64, 0.0));
+        }
+        let taken = take_ui_events();
+        assert_eq!(taken.len(), UI_EVENT_QUEUE_CAPACITY);
+        // 首元素是最新保留的最旧一条:i=1;末元素为最新 i=1024。
+        assert_eq!(taken[0], UiEvent::CursorMoved(1.0, 0.0));
+        assert_eq!(
+            taken[UI_EVENT_QUEUE_CAPACITY - 1],
+            UiEvent::CursorMoved(1024.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn ui_queue_clear_empties() {
+        clear_ui_events();
+        push_ui_event(UiEvent::Text('x'));
+        clear_ui_events();
+        assert!(take_ui_events().is_empty());
     }
 }
