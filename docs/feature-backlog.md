@@ -155,5 +155,5 @@
 | ID | 修复 | 简述 | 版本与契约影响 | 状态 | 认领人 | 来源与备注 |
 |---|---|---|---|---|---|---|
 | F-01 | 拒绝原因白名单补登记 | `client/mirror.go` 补登记 `RejectContainerCapacity`，服务端发该原因时客户端不再报 unknown | 无 wire 变更 | 未认领 | — | farming 遗留 15 |
-| F-02 | perfcheck 文案修正 | `cmd/perfcheck/migration_test.go` 的 v15 比较测试失败信息误写为 v16 | 无（一处字符串） | 未认领 | — | farming 遗留 22 |
+| F-02 | perfcheck 文案修正 | `cmd/perfcheck/migration_test.go` 的 v15 比较测试失败信息误写为 v16 | 无（一处字符串） | 已认领 | claude-implementer @ fix/F-02-perfcheck-v15-message | farming 遗留 22；独占文件集：`cmd/perfcheck/migration_test.go` |
 | F-03 | 「使用」键放置判定收敛 | 客户端按 `core.ItemPlacement` 决定是否发 `PlaceBlock`，不可放置物一律不发 | 无（客户端判定；钉住现状的 `TestUseKeyRisingEdgeSkipsPlaceWhileHoldingFood` 需同步调整） | 未认领 | — | hunger 遗留 11（独立小修，执行期 Ruling 28） |
