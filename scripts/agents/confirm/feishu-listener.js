@@ -9,7 +9,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
-const { WSClient, Client } = require('@larksuiteoapi/node-sdk');
+const { WSClient, Client, EventDispatcher } = require('@larksuiteoapi/node-sdk');
 
 const DIR = process.env.MORNLEA_CONFIRM_DIR || path.join(os.homedir(), '.mornlea', 'confirm');
 const CONFIG = path.join(DIR, 'feishu.json');
@@ -131,9 +131,10 @@ async function main() {
     onReconnecting: () => log('断线重连中…'),
     onReconnected: () => log('重连成功'),
   });
-  const dispatcher = {
-    im: { 'im.message.receive_v1': (data) => { try { handleMessage(cfg, data); } catch (e) { log('处理消息异常:', e && e.stack || e); } } },
-  };
+  // SDK 要求 EventDispatcher 实例（不能传裸对象），事件键为 im.message.receive_v1
+  const dispatcher = new EventDispatcher({}).register({
+    'im.message.receive_v1': (data) => { try { handleMessage(cfg, data); } catch (e) { log('处理消息异常:', e && e.stack || e); } },
+  });
   process.on('SIGINT', () => { log('收到 SIGINT，关闭'); try { ws.close(); } catch (e) {} process.exit(0); });
   process.on('SIGTERM', () => { log('收到 SIGTERM，关闭'); try { ws.close(); } catch (e) {} process.exit(0); });
   await ws.start({ eventDispatcher: dispatcher });
