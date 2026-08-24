@@ -103,3 +103,36 @@ ok  github.com/channing771/mornlea/internal/render  3.967s
 4. **越界修改了 `window_test.go`**：把 `TestClientABIVersionMatchesHeader` 期望 7→8。严格范围纪律是「只改 render.go/window.go/font_atlas.go」，但不更新它则 brief 自己要求的 `go test ./internal/client` 无法全绿（dylib 已是 v8）。这是必要的一行版本常量修正。
 5. **`EmbeddedCJKFont` 每次调用分配 ~16 MiB 拷贝**：只读安全、仅启动时上传一次，可接受；若未来频繁调用再考虑复用缓冲。
 6. **cgo noescape/nocallback 在两个序言重复声明**：Go cgo 容忍重复（测试与链接通过）；规范主位是 render.go（与既有「window.go 放链接标志、render.go 补 render 入口指令」模式相符），window.go 的重复是遵 brief「两个序言都要」。
+
+## Fix round 1（控制器 Ruling 7：drain 返回值与状态码空间冲突）
+
+### 问题
+mornlea_client_render_drain_ui_events 首版把「写入的事件数」当返回值，与状态码空间冲突（写 3 个事件返回 3 = MORNLEA_CLIENT_STATUS_WINDOW），Go 侧无法区分「3 个事件」与「句柄错误」。
+
+### 改动
+1. engine/crates/mornlea_client/src/ffi.rs：
+   - 签名改为 mornlea_client_render_drain_ui_events(abi, handle, out, out_len, out_count: *mut u32) -> u32。校验（ABI → out 非空 / out_len%4==0 / out_count 非空，均先于句柄查找）通过后把写入的 u32 事件数写入 *out_count，函数返回 MORNLEA_CLIENT_STATUS_OK（或既有错误状态码）；校验失败不触碰调用方缓冲与 *out_count。
+   - 新增纯函数 write_ui_events_counted(out, out_count, events)，把「计数写出 + 写满截断」语义集中，便于无头单测「计数写出」；write_ui_events 保留返回个数的纯函数契约。
+   - 更新无头单测：drain_ui_events_rejects_bad_arguments_before_handle_lookup（补 out_count 参数、out_count 为 null 案例、失败不触碰 out/out_count 的哨兵断言、参数合法但句柄未知 → WINDOW 且不触碰缓冲）；新增 drain_writes_out_count（截断 + 计数写出）。
+2. engine/include/mornlea_client.h：声明同步（追加 uint32_t *out_count），注释注明「返回值是状态码，事件数一律经 out_count 回读，避免与状态码空间冲突」。
+3. internal/client/render.go：DrainUIEvents() 改为 C 调用新签名：var count C.uint32_t 并传 &count；非 OK 状态走 r.check（panic 编程错误语义，恢复）；按 count 截断 out 并转 []uint32；#cgo noescape/nocallback 声明不变。
+4. internal/client/render_test.go：新增 TestDrainUIEventsEmptyAfterCreate（无窗口离屏渲染器返回空切片 count=0，走完新签名全链路；无 GPU 适配器跳过）。
+
+### 命令输出（实跑）
+- cd engine && cargo test --workspace --locked：160 passed; 0 failed。三个 drain 相关测试均在且通过：drain_ui_events_rejects_bad_arguments_before_handle_lookup、drain_write_truncates_to_capacity、drain_writes_out_count。
+- cargo clippy --workspace --all-targets -- -D warnings：exit 0。
+- cargo fmt --check：exit 0。
+- go test ./internal/client ./internal/render -race -count=1：ok client 7.800s；ok render 5.276s。
+- gofmt -l internal/client：无输出。
+- （补充）go vet ./internal/client ./internal/render：exit 0。
+
+### 新 HEAD
+3b5cf2952d973e4d2fe72631f5d9123922fd8bcc（fix: separate ui event drain count from status code in client ABI v8）
+
+### git status（提交后）
+?? docs/superpowers/specs/2026-08-23-egui-tool-ui-selection-design.md  <- 既有未跟踪，未触碰
+（本 fix 只提交 ffi.rs、mornlea_client.h、render.go、render_test.go 四个文件，均在允许范围；AGENTS.md/CLAUDE.md/ledger.md/design.md 由控制会话负责。）
+
+### 备注
+- 原遗留担忧 #2（drain 返回值与状态码冲突）已由本 fix 消除：事件数经 out_count 回读，返回值纯粹是状态码，Go 侧恢复 r.check panic 语义。
+- 原遗留担忧 #3（archcheck 基线红）已由控制会话在 a7fb64b5 修复（all-match baseline gate fix + design 更新，Ruling 7），TestBaselineVersionsMatchCode 应随之为绿；不在本 fix 范围。
