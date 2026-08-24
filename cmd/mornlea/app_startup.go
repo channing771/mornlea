@@ -59,6 +59,26 @@ func openApplicationStore(
 	return storage.OpenDisk(ctx, options.WorldPath, storage.OpenOptions{Create: metadata})
 }
 
+// buildApplicationServerConfig 依据 applicationOptions 构建本地权威服务端的
+// server.Config。供 newApplicationWithDependencies（非菜单路径）与 startWorld
+// （StartAtMenu 延迟装配）共用，保证两条路径产出同一份服务端配置（伙伴、
+// 模型运行时、视距半径、性能观察器）。
+func buildApplicationServerConfig(options applicationOptions, ticks *tickRecorder, saves *saveRecorder) server.Config {
+	config := server.DefaultConfig(options.Seed)
+	config.Companions = slices.Clone(options.Companions)
+	// 模型运行时与已解析密钥原样转发：均为值拷贝，不与 options 共享引用；
+	// NewHost 会在打开存档前对非空伙伴列表做完整性校验。
+	config.AIModel = options.AIModel
+	config.AIAPIKey = options.AIAPIKey
+	config.ViewRadius = options.Render.ViewDistance + 1
+	config.TrustedObserver = options.Benchmark
+	config.TickObserver = ticks.add
+	if saves != nil {
+		config.SaveObserver = saves.add
+	}
+	return config
+}
+
 func newApplication(options applicationOptions) (*application, error) {
 	return newApplicationWithDependencies(options, defaultApplicationDependencies())
 }
@@ -103,17 +123,14 @@ func newApplicationWithDependencies(
 	// Scheduler)。它是运行时事实而非配置,只在装配链路内传递。
 	var worldSeed uint64
 	ticks, saves := newPerformanceRecorders(options.Benchmark)
-	config := server.DefaultConfig(options.Seed)
-	config.Companions = slices.Clone(options.Companions)
-	// 模型运行时与已解析密钥原样转发：均为值拷贝，不与 options 共享引用；
-	// NewHost 会在打开存档前对非空伙伴列表做完整性校验。
-	config.AIModel = options.AIModel
-	config.AIAPIKey = options.AIAPIKey
-	config.ViewRadius = options.Render.ViewDistance + 1
-	config.TrustedObserver = options.Benchmark
-	config.TickObserver = ticks.add
-	if saves != nil {
-		config.SaveObserver = saves.add
+	// StartAtMenu（交互本地）在此跳过世界装配：服务端配置、store 打开、Host
+	// 与登录都延迟到「进入游戏」，由 startWorld 在菜单相位之后一次性完成。
+	// 其余路径在此构建与引入菜单前逐字相同的服务端配置（buildApplicationServerConfig
+	// 只是把既有装配常量收拢为一个函数，无行为变化）。
+	menuMode := options.StartAtMenu
+	var config server.Config
+	if !menuMode {
+		config = buildApplicationServerConfig(options, ticks, saves)
 	}
 	if options.Connect != "" {
 		if options.Identity == nil {
@@ -127,7 +144,7 @@ func newApplicationWithDependencies(
 		if err != nil {
 			return nil, errors.Join(fmt.Errorf("远程登录: %w", err), stream.Close())
 		}
-	} else {
+	} else if !menuMode {
 		store, err = dependencies.openStore(ctx, options)
 		if err != nil {
 			return nil, fmt.Errorf("打开世界存储: %w", err)
@@ -150,7 +167,7 @@ func newApplicationWithDependencies(
 		serverCancel = cancel
 		serverDone = make(chan error, 1)
 		go func() { serverDone <- running.Run(serverContext) }()
-	} else if options.Connect == "" {
+	} else if options.Connect == "" && !menuMode {
 		if options.Identity == nil {
 			_ = store.Close()
 			return nil, errors.New("本地世界缺少本机身份")
@@ -172,7 +189,10 @@ func newApplicationWithDependencies(
 		// TCP 远程同一条种子链路。
 		worldSeed = localSeed
 	}
-	receiver := client.NewReceiver(clientEndpoint, applicationReceiverCapacity)
+	var receiver *client.Receiver
+	if !menuMode {
+		receiver = client.NewReceiver(clientEndpoint, applicationReceiverCapacity)
+	}
 
 	var window applicationWindow
 	var rustRenderer *client.Renderer
@@ -210,7 +230,10 @@ func newApplicationWithDependencies(
 		if window != nil {
 			window.Close()
 		}
-		connectionErr := receiver.Close()
+		var connectionErr error
+		if receiver != nil {
+			connectionErr = receiver.Close()
+		}
 		if serverCancel != nil {
 			serverCancel()
 		}
@@ -227,6 +250,11 @@ func newApplicationWithDependencies(
 		Aspect: float32(width) / float32(height),
 		Near:   0.1,
 		Far:    2000,
+	}
+	// StartAtMenu 构造菜单相位，其余路径保持游戏相位（menuPhaseGame 为零值）。
+	appMenuPhase := menuPhaseGame
+	if menuMode {
+		appMenuPhase = menuPhaseMenu
 	}
 	app := &application{
 		window:          window,
@@ -259,8 +287,15 @@ func newApplicationWithDependencies(
 			}
 			return options.BenchmarkTransport
 		}(),
-		playCue:    playCue,
-		closeAudio: closeAudio,
+		playCue:        playCue,
+		closeAudio:     closeAudio,
+		startupOptions: options,
+		startupDeps:    dependencies,
+		menu: menuState{
+			phase:   appMenuPhase,
+			title:   "Mornlea",
+			version: menuVersion(),
+		},
 	}
 	app.releaseResources = app.releaseOwnedResources
 	// 材质与 HUD 图集一次性上传;mesh 上传调度经 SectionScheduler 下沉。
@@ -275,6 +310,12 @@ func newApplicationWithDependencies(
 	app.hotbarRenderer = hud.NewHotbarLayout(app.glyphAtlas, reg)
 	hudWidth, hudHeight, hudPixels := app.hotbarRenderer.AtlasPixels()
 	rustRenderer.UploadHUDAtlas(hudWidth, hudHeight, hudPixels)
+	// 菜单字体一次性上传：交互与 capture 路径（未 benchmark）在渲染器创建后上传内嵌
+	// Noto CJK，供 egui 主菜单渲染（spec「菜单字体只经 ABI 上传一次」）；benchmark 不参与
+	// 菜单、零上传。上传发生在任何 UI 段被渲染之前，否则 Rust 侧会以编程错误拒绝 UI 帧。
+	if !options.Benchmark {
+		rustRenderer.UploadUIFont(render.EmbeddedCJKFont())
+	}
 	app.configPath = options.ConfigPath
 	if options.Dev {
 		app.debugPanelRenderer = render.NewDebugPanelLayouter(app.glyphAtlas)
@@ -287,8 +328,10 @@ func newApplicationWithDependencies(
 	app.mesher = client.NewMesher(reg, max(1, runtime.NumCPU()-2))
 	// 远环 LOD 接线:登录种子→Scheduler 播种远环带→雾距离按配置推导下发。
 	// 禁用(lodEnabled=false)与 benchmark 观察者路径在此零参与。
-	if err := app.attachLodScheduler(worldSeed, options.FluidEnabled, options.Benchmark); err != nil {
-		return nil, errors.Join(fmt.Errorf("接线远环 LOD: %w", err), app.Close())
+	if !menuMode {
+		if err := app.attachLodScheduler(worldSeed, options.FluidEnabled, options.Benchmark); err != nil {
+			return nil, errors.Join(fmt.Errorf("接线远环 LOD: %w", err), app.Close())
+		}
 	}
 	if options.Benchmark {
 		if err := app.requestTrustedObserverCenter(app.center); err != nil {
@@ -300,6 +343,81 @@ func newApplicationWithDependencies(
 		}
 	}
 	return app, nil
+}
+
+// startWorld 在「进入游戏」点击后执行延迟的世界装配：打开世界存储、启动本地
+// 权威服务端、完成登录并把远环 LOD 播种器接线到登录种子。复用既有
+// openApplicationStore/assembleLocalApplicationConnection/attachLodScheduler 与既有
+// 错误包装；成功设置相位 menuPhaseGame 与 starting=false，失败返回 error（相位仍
+// 由调用方保持菜单并显示错误文本）。菜单构造阶段已存 startupOptions/startupDeps
+// 快照，此处用同一份配置与注入载体，保证与既有路径产出相同的服务端状态。
+func (a *application) startWorld() error {
+	options := a.startupOptions
+	dependencies := a.startupDeps
+	ctx := context.Background()
+	config := buildApplicationServerConfig(options, a.ticks, a.saves)
+
+	store, err := dependencies.openStore(ctx, options)
+	if err != nil {
+		return fmt.Errorf("打开世界存储: %w", err)
+	}
+	if options.Identity == nil {
+		_ = store.Close()
+		return errors.New("本地世界缺少本机身份")
+	}
+	endpoint, host, serverCancel, serverDone, localSeed, err := assembleLocalApplicationConnection(
+		ctx,
+		config,
+		worldgen.New(store.Metadata().Seed, options.FluidEnabled),
+		store,
+		*options.Identity,
+		dependencies,
+	)
+	if err != nil {
+		return fmt.Errorf("连接本地 Host: %w", err)
+	}
+	worldSeed := localSeed
+	receiver := client.NewReceiver(endpoint, applicationReceiverCapacity)
+
+	a.clientEndpoint = endpoint
+	a.host = host
+	a.serverCancel = serverCancel
+	a.serverDone = serverDone
+	a.receiver = receiver
+
+	if err := a.attachLodScheduler(worldSeed, options.FluidEnabled, options.Benchmark); err != nil {
+		cleanupErr := a.releaseWorldConnection(config.ShutdownTimeout)
+		return errors.Join(fmt.Errorf("接线远环 LOD: %w", err), cleanupErr)
+	}
+
+	a.menu.phase = menuPhaseGame
+	a.menu.starting = false
+	return nil
+}
+
+// releaseWorldConnection 在 startWorld 中途失败时释放已装配的半成品连接资源：
+// 关闭客户端接收器、取消服务端 Host、等待 hostDone 并 Shutdown host（host 拥有
+// store），随后把连接字段复位为 nil，使菜单相位可重试且不占用 clientCloseOnce。
+func (a *application) releaseWorldConnection(shutdownTimeout time.Duration) error {
+	var err error
+	if a.receiver != nil {
+		err = errors.Join(err, a.receiver.Close())
+	}
+	if a.serverCancel != nil {
+		a.serverCancel()
+	}
+	if a.serverDone != nil {
+		err = errors.Join(err, ignoreApplicationStartupCloseError(<-a.serverDone))
+	}
+	if a.host != nil {
+		err = errors.Join(err, shutdownApplicationHost(a.host, shutdownTimeout))
+	}
+	a.clientEndpoint = nil
+	a.host = nil
+	a.serverCancel = nil
+	a.serverDone = nil
+	a.receiver = nil
+	return err
 }
 
 // applicationUploadPerFrame 是每帧 mesh 上传字节预算,与旧渲染器默认一致。

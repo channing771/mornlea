@@ -15,7 +15,50 @@ import (
 	"github.com/channing771/mornlea/internal/physics"
 )
 
+// runInteractive 是交互客户端的入口循环，按主菜单相位路由：
+// menu != game（StartAtMenu 或未装配）时先跑菜单相位，装配成功（phase=game）后
+// 走既有游戏循环；否则（-connect/benchmark/capture 或直接构造的 application）
+// 直接进入游戏循环。菜单期「退出游戏」或窗口关闭返回 nil 正常退出。
 func runInteractive(app *application) error {
+	if app.menu.phase != menuPhaseGame {
+		if err := runMenuPhase(app); err != nil {
+			return err
+		}
+		if app.menu.phase != menuPhaseGame {
+			// 菜单期退出（退出游戏或窗口关闭），未进入游戏相位。
+			return nil
+		}
+	}
+	return runGamePhase(app)
+}
+
+// runMenuPhase 运行主菜单相位：不捕获光标、不读取 WASD/面板/聊天/快捷栏输入，
+// 每帧 Poll → DrainUIEvents → 分派（start/quit/其它 id 忽略）→ 渲染（含 UI 段）。
+// 「进入游戏」装配成功（startWorld 置 phase=game）后立即 SetCursorCaptured(true)
+// 并刷新鼠标基线，返回 nil 交给游戏相位；「退出游戏」或窗口关闭同样返回 nil。
+func runMenuPhase(app *application) error {
+	for !app.window.ShouldClose() {
+		app.window.Poll()
+		events := app.renderer.DrainUIEvents()
+		for _, id := range events {
+			if app.handleMenuEvent(id) {
+				return nil
+			}
+			if app.menu.phase == menuPhaseGame {
+				// 装配成功：handleMenuEvent 已捕获光标并刷新基线，交给游戏相位。
+				return nil
+			}
+		}
+		if _, err := app.renderFrame(steadyFrameMeshWorkMax); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// runGamePhase 是既有交互循环体（原 runInteractive 的遍历/输入/渲染主体）：捕获
+// 光标、处理 WASD/面板/聊天/快捷栏并每帧渲染。语义与引入主菜单之前逐字节一致。
+func runGamePhase(app *application) error {
 	app.window.SetCursorCaptured(true)
 	lastMouseX, lastMouseY := app.window.CursorPos()
 	lastFrame := time.Now()

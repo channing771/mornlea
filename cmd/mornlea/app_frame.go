@@ -264,6 +264,7 @@ func (a *application) renderFrame(workMax int) (bool, error) {
 		NameTagSegment:   nameTagSegment,
 		HUDSegment:       hudSegment,
 		DebugSegment:     debugSegment,
+		UISegment:        a.uiSegment(),
 	})
 	if !rendered {
 		return false, nil

@@ -56,6 +56,10 @@ type applicationOptions struct {
 	// worldgen.New 门控海平面注水。远程连接模式下不使用它——世界内容由
 	// 服务端权威决定。
 	FluidEnabled bool
+	// StartAtMenu 为真时交互客户端启动停留在主菜单，世界装配延迟到点击
+	// 「进入游戏」之后（spec egui-tool-ui「交互客户端启动停留在主菜单」）。
+	// 其余路径（-connect/benchmark/capture）保持 false，行为与引入菜单前一致。
+	StartAtMenu bool
 }
 
 type application struct {
@@ -158,6 +162,17 @@ type application struct {
 	// render 是渲染相关的生效配置快照，在构造时从 applicationOptions.Render 复制，
 	// 供渲染热路径（DropOutside 视距、鼠标灵敏度等）读取，不随配置文件热更新。
 	render config.Render
+	// startupOptions 是 StartAtMenu 装配路径保存的构造参数快照：newApplicationWithDependencies
+	// 在菜单相位跳过世界装配，把 options 与 dependencies 存入 application，供「进入游戏」
+	// 时的 startWorld 复用同一份配置与注入载体。
+	startupOptions applicationOptions
+	startupDeps    applicationDependencies
+	// menu 是主菜单的语义状态（相位/按钮/版本/错误），由 cmd/mornlea 拥有；只有
+	// StartAtMenu 路径在构造时初始化为菜单相位，其余路径保持零值（menuPhaseGame）。
+	menu menuState
+	// menuOverride 是 capture 场景注入的一帧菜单快照；非 nil 时 uiSegment 优先采用它，
+	// 交互路径保持 nil（正常相位逻辑）。每个场景在 Prepare 前设置或清除，无 teardown。
+	menuOverride *client.UIMenu
 }
 
 type applicationWindow interface {
