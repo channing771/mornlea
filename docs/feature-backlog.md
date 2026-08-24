@@ -3,6 +3,8 @@
 本表是 Mornlea 后续开发任务的**单一规划来源**：每一行 = 一个可独立认领、独立评审、独立验收的功能或工程任务，通常对应一条 OpenSpec change。控制会话与 implementer 子代理在开始任何开发前先读本表；认领后立即在行内打标记并提交，防止多个 agent 抢同一任务。本表只描述「要做什么、谁在做、依赖什么」，**不排时间表**。
 
 > 开发流程、工程约定与验证门禁以 `AGENTS.md`（与 `CLAUDE.md` 逐字节相同）与 `openspec/config.yaml` 为准。本表不重复、不替代二者；二者与代码矛盾时，以代码、测试与 `openspec/specs/` 主规格为真相。
+>
+> 以「相对 Minecraft 的功能缺口」视角的索引见 GitHub Discussion [#71 Mornlea 功能缺口拆解与任务认领池（规划）](https://github.com/channing771/mornlea/discussions/71)；两处状态不一致时以本文件为准并回改讨论。
 
 ## 状态图例
 
