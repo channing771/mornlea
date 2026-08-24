@@ -136,3 +136,34 @@ mornlea_client_render_drain_ui_events 首版把「写入的事件数」当返回
 ### 备注
 - 原遗留担忧 #2（drain 返回值与状态码冲突）已由本 fix 消除：事件数经 out_count 回读，返回值纯粹是状态码，Go 侧恢复 r.check panic 语义。
 - 原遗留担忧 #3（archcheck 基线红）已由控制会话在 a7fb64b5 修复（all-match baseline gate fix + design 更新，Ruling 7），TestBaselineVersionsMatchCode 应随之为绿；不在本 fix 范围。
+
+## Review round R1（控制器 Ruling 8：parse_frame 对 UI 段强制 4 对齐）
+
+### 问题
+parse_frame 对全部 TLV 段强制 length.is_multiple_of(4),但 EncodeUIMenu 的 UTF-8 字段序列不保证 4 对齐(四按钮 + 错误"存档无法打开"=142 字节、单按钮"设置"=42 字节)。真实菜单内容会把帧拒成 INVALID_ARGUMENT → Go 侧 panic。这是跨语言帧封装层缺陷。
+
+### 改动
+1. engine/crates/mornlea_client/src/ffi.rs parse_frame：FRAME_TAG_UI 豁免 4 对齐检查——其余 pass 段是定长实例数组、长度天然 4 对齐(约束不变);UI 段是 UTF-8 字段序列、长度由字段自身界定,只做越界检查,内容合法性由 decode_ui_frame 在解析层保证。更新解析层 doc 注释说明豁免原因。
+2. 新增 Rust 无头单测 v2_ui_segment_non_aligned_length_accepted(含 helper ui_segment_four_button_error)：构造 142 字节真实菜单 UI 段(layout v2 帧),用无效句柄断言状态为 WINDOW(句柄层)而非 INVALID_ARGUMENT(parse 层),证明 parse 接受非对齐 UI 段;另一断言非 UI 段(NAME_TAG 6 字节)仍拒绝非对齐长度(既有守卫不放松)。
+3. internal/client 无实现改动(EncodeUIMenu 保持真实长度、不填充);新增 Go 单测 TestEncodeRenderFrameUISegmentPreservesRealLength：真实菜单内容(四按钮 + 中文 error)经 EncodeRenderFrame 后,TLV 长度字段 == 实际载荷字节数(142、非 4 对齐),防未来偷偷填充。
+
+### 命令输出（实跑）
+- cd engine && cargo test --workspace --locked：97 passed(mornlea_client)+ 160 passed(mornlea_engine),0 failed;新增 v2_ui_segment_non_aligned_length_accepted 通过。
+- cargo clippy --workspace --all-targets -- -D warnings：exit 0。
+- cargo fmt --check：exit 0(修复一处 if 条件折行后通过)。
+- go test ./internal/client -race -count=1：ok 7.300s;新增 TestEncodeRenderFrameUISegmentPreservesRealLength 通过。
+- gofmt -l internal/client：无输出。
+
+### 新 HEAD
+7bf1dbf6c771055226a3d03072b0011e4afae307（fix: exempt ui segment from tlv length 4-alignment in parse_frame）
+
+### git status（提交后）
+- openspec/changes/add-egui-main-menu/{design.md,ledger.md,tasks.md}：控制会话改动(未触碰)。
+- .review-gocache/：评审/构建缓存(非我产出,未触碰)。
+- docs/superpowers/specs/2026-08-23-egui-tool-ui-selection-design.md：既有未跟踪 doc(未触碰)。
+- 本 fix 只提交 ffi.rs、render_test.go 两个文件,均在允许范围。
+
+### 备注
+- 无 internal/client/render.go 实现改动;EncodeUIMenu 不填充,真实长度透传。
+- 修复前该测试确实失败(parse 返回 INVALID_ARGUMENT=2 而非 WINDOW=3),修复后通过,证明缺陷与修复对应。
+- 该缺陷由评审 R1(Important)提出,本 fix 消除跨语言帧封装层的真实菜单拒绝问题。
