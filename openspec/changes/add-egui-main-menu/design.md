@@ -89,7 +89,7 @@ egui-wgpu = { version = "0.35", default-features = false, features = ["macos-win
 
 ### capture 场景
 
-- `captureScene` 增加可选字段 `Menu *captureMenuFixture`（Visible/Title/Version/Error + 按钮表；默认 nil）。`captureSceneImage` 在 Prepare 前把 `app.menuOverride` 置为 `scene.Menu`（nil 即清除），随后 settle 与最终帧在 `renderFrame` 里读取 override 生成 UI 段——每个场景天然清空上一场景的菜单，无 teardown 钩子。
+- `captureScene` 增加可选字段 `Menu *client.UIMenu`（nil = 无菜单；可见性/标题/版本/错误/按钮表与交互主菜单同构）。`captureSceneImage` 在 `scene.Apply` 之后、settle 循环之前无条件设 `app.menuOverride = scene.Menu`（nil 即清除），settle 与最终帧经 `renderFrame` 读取 override 生成 UI 段——每个场景天然清空上一场景的菜单，无 teardown 钩子；egui pass 只在 UI 段存在时运行，多数场景（nil）零参与、像素与引入菜单前逐字节一致。
 - 新场景 `main-menu`：`Name: "main-menu"`、`WarmupFrames: 8`、`Menu: &captureMenuFixture{标题「Mornlea」、四按钮（多人/设置禁用）、版本 "dev"}`、Apply：`resetCapturePresentation(app)` + 相机钉在出生点上方（面板不透明覆盖全屏）；插在 `far-horizon` **之前**（场景表顺序、`far-horizon` 倒数第二、`water-underwater` 最后不变）。
 - golden：仅新增 `main-menu.png`；其余 16 张 golden 文件不动，跑一遍黄金比对证明逐字节不变（egui pass 只在 UI 段存在时提交，是「既有场景零影响」的实现前提）。
 - 字体上传：`newApplication` 在渲染器创建后，`!options.Benchmark` 时 `rustRenderer.UploadUIFont(render.EmbeddedCJKFont())`（交互与 capture 都上传；benchmark 不上传、菜单零参与）。

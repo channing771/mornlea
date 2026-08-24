@@ -114,3 +114,11 @@ Task 间文件/接口冲突检查：
 - Task 5: complete（commits f3c078c6..d8a3f05a，review clean）。评审(bd40c86e)：SPEC ✅ / QUALITY Approved；无 Critical/Important；Minor 记录：(devel)→dev（可辩护）、capture 字体上传释读（Ruling 9）、starting 守卫防御性、捕获幂等重复。
 - ⚠️ 均已解决：dylib v8 已就绪（评审与控制器双向核实符号导出）；GPU 端到端 → Task 6；Rust 非对齐豁免 → Task 4 已测；全量 race → Task 7。
 task 5 status recorded
+
+## Task 6 完成
+
+- Task 6: complete（commits d8a3f05a..07997520，review clean）。评审(5954a09b resumed)：SPEC ✅ / QUALITY Approved；无 Critical/Important。
+- 评审发现的 change 产物漂移已由控制会话修正（design.md/tasks.md：Menu *captureMenuFixture → Menu *client.UIMenu、Prepare 前 → Apply 后/settle 前）。
+- Minor 递延（终审/收尾决策）：(a) 「Menu nil 清除」缺显式聚焦单测（现由 golden 逐字节不变间接证明）——可加 captureSceneImage 设 Menu 后复设 nil 断言 uiSegment 返 nil；(b) capture.go:119「应追加在列表末尾」通用注释未标注 main-menu 插入例外；(c) brief 文件归属措辞（无行为）。
+- ⚠️ 已核实：提交仅含 capture.go/capture_ai_companion_test.go/main-menu.png；长命令证据（18/18 绿、race ok 238.379s）由控制会话实跑。
+- 实施日志（控制器代跑）：Task 6 的子代理会话反复在长时命令（make visual-check 等）中段被终止——代码在三次中断前已完成，golden 由 implementer 的 visual-update 生成；控制会话完成剩余验证（visual-check 18/18 0/230400、race ok）并以 implementer 写的代码提交 07997520。评审仍经独立子代理完成（静态评审）。
