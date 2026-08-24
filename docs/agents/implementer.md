@@ -18,21 +18,32 @@
 
 按任务类型读取对应 skill（先 `using-superpowers` 再按需）：
 
+- **内容确认（必做）**：`brainstorming`——任何实现动作前先跑它（见第 3 步）
 - 规划类/契约类：`openspec-propose`、`openspec-apply-change`、`openspec-update-change`
 - 执行类：`subagent-driven-development`、`writing-plans`（复杂任务先写计划）
 - 分支类：`using-git-worktrees`、`finishing-a-development-branch`
 - 质量类：`test-driven-development`、`verification-before-completion`、`requesting-code-review`
 
-## 第 3 步：开发（子智能体驱动）
+## 第 3 步：内容确认（brainstorming 硬门禁）
 
-严格按 `docs/development-process.md` 阶段 1–4：
+认领后、**任何实现动作之前**（建 change、写代码、派发子代理都算实现动作），必须以 `brainstorming` skill 对任务内容做确认：
+
+1. **先分类**并说明路径：`spike`（可行性问题）/ `bounded`（仓库内既有流程的改动，对话内短设计）/ `architectural`（新子系统或重构，须写设计文档）；拿不准走重的那条，中途发现复杂度升级立即停下并重分类。
+2. **探索上下文**：读任务来源、相关代码/测试、既有规格，把「内容确认」建立在对 repo 现状的核对之上。
+3. **一次一个问题澄清**：目的、边界、成功标准、约束（版本号互斥、资源上限、版权红线）；问题一次只发一个，不要一次全丢。
+4. **呈现设计并等待显式批准**：bounded 在对话里给几段短设计；architectural 按节呈现并写 `docs/superpowers/specs/` 设计文档。批准来源 = 用户或控制会话对设计的显式确认。
+5. **未经批准不得开工**：简单任务只是设计更短，不是免批准。自动调度无人在线时，把设计方案发布到本行对应的 GitHub Discussion #71 评论并**停在确认点**，不得静默开工；收到批准后把确认结论写进 OpenSpec change 的 proposal/design 与后续 implementer brief。
+
+## 第 4 步：开发（子智能体驱动）
+
+严格按 `docs/development-process.md` 阶段 1–4（前置的「阶段 0.5 内容确认门禁」已通过）：
 
 1. 建 OpenSpec change（复杂功能必建；F 组小型修复走直接修改豁免）。
 2. 每个 Task 派发**全新** implementer 子代理；brief 必须自包含：当前 Task、契约 SHA、change 产物路径、全局约束（AGENTS.md 关键条款）、精确验证命令；禁止子代理自我派生。
 3. TDD；每 Task 后独立 SPEC + QUALITY 双评审；修复 ≤5 轮（R≤3 原实现者，R≥4 换新）；所有结论与 Ruling 写 `ledger.md`。
 4. 全部 Task 完成后整分支终审；跑 `scripts/agents/gates.sh` 全量门禁；改动域涉及渲染/tick/存储/协议时补 benchmark（数值只记录）、fuzz/golden、`make visual` 或 `perfcheck`。
 
-## 第 4 步：自动收尾（完成即执行）
+## 第 5 步：自动收尾（完成即执行）
 
 ```text
 □ openspec sync（delta 沉淀主规格）→ 逐 change openspec archive
@@ -46,6 +57,7 @@
 
 ## 收尾自查清单（提交前）
 
+0. `brainstorming` 确认已获显式批准，且确认结论已写入 proposal/design 与 brief。
 1. `go test -list` 集合语义一致；`gofmt -l .` 无输出；`go vet ./...` 干净。
 2. `openspec validate --all --strict --no-interactive` 通过；全部 Task 已勾选并核对。
 3. `AGENTS.md` 与 `CLAUDE.md` 逐字节相同（`TestBaselineDocsAreIdentical` 兜底）。

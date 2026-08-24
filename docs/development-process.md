@@ -8,7 +8,7 @@
 |---|---|---|
 | 控制会话 | 派发、协调、裁决（Ruling）；不实现 | 绕过子代理直接实现、代评审 |
 | 规划者 | 每日固定时间扩展/校对规划（见 `docs/agents/planner.md`） | 认领任务、修改功能代码、合并他人分支 |
-| 实现者 | 认领规划行并闭环开发（见 `docs/agents/implementer.md`） | 超出认领范围、跳过评审 |
+| 实现者 | 认领规划行，先 `brainstorming` 确认内容再闭环开发（见 `docs/agents/implementer.md`） | 超出认领范围、跳过内容确认或评审 |
 | 评审者 | SPEC 合规 / QUALITY 质量双裁决 | 自己实现与评审同一 Task |
 | 集成者 | 批次合流的实现者特例：独占版本基线、golden、`AGENTS.md`/`CLAUDE.md` | 在功能分支改上述文件 |
 
@@ -20,10 +20,22 @@
 
 ## 阶段 1：隔离分支与 OpenSpec change
 
+> 认领后先做「阶段 0.5」的内容确认，再进入本阶段建 change——确认结论决定 change 的 proposal/design。
+
 - 从 `main`（或批次指定共享 SHA）创建 isolation worktree/分支。
 - 复杂功能 / 新模块 / 跨包重构 / 存档 / 协议 / 性能契约 **必须**先建 OpenSpec change：`proposal.md` + delta specs + `design.md` + `tasks.md` + `ledger.md`，并 `openspec validate --all --strict --no-interactive`。
 - 小型修复（拼写、格式、一次性实验）可直接修改（见规划表 F 组「直接修改豁免」），仍须相称验证。
 - 先读对应 skill：`openspec-propose`、`openspec-apply-change`、`openspec-archive-change`、`openspec-sync-specs`（仓库内 `.claude/skills` 与 `.codex/skills`）。
+
+## 阶段 0.5：内容确认（brainstorming 硬门禁）
+
+认领后、**任何实现动作之前**（建 change、写代码、派发子代理都算实现动作），实现者**必须**以 `brainstorming` skill 与需求方（用户或控制会话）确认任务内容：
+
+1. **先分类并说明路径**：`spike`（可行性问题）/ `bounded`（仓库既有流程改动，对话内短设计）/ `architectural`（新子系统或重构，须写设计文档）；拿不准走重的那条，中途发现复杂度升级立即停下并重分类（路径只升不降）。
+2. **探索上下文**：读任务来源文档、相关代码/测试、既有主规格，把确认建立在对 repo 现状的核对之上。
+3. **一次一个问题澄清**：目的、边界、成功标准、约束（版本号互斥、资源上限、版权红线）；一次只发一个问题。
+4. **呈现设计并等待显式批准**：bounded 在对话里给短设计；architectural 按节呈现并写 `docs/superpowers/specs/` 设计文档。批准来源 = 用户或控制会话的显式确认，点头/明确同意即可。
+5. **批准是硬门禁，不随任务规模缩小**：简单任务只是设计更短，不是免批准。自动调度无人在线时，把设计方案发布到该行对应的 GitHub Discussion #71 评论并**停在确认点**，不得静默开工；收到批准后把结论写进 OpenSpec change 的 proposal/design 与 implementer brief，未经确认的内容不得在实现期悄悄变卦。
 
 ## 阶段 2：subagent-driven-development 执行
 
@@ -75,6 +87,7 @@ openspec validate --all --strict --no-interactive
 |---|---|---|
 | 0 认领 | 改 backlog 行 + docs-only 提交 | 状态/认领人 |
 | 1 契约 | worktree + OpenSpec change + strict validate | proposal/spec/design/tasks/ledger |
+| 0.5 确认 | `brainstorming` 分类→澄清→短设计→显式批准 | 设计结论（进 proposal/design 与 brief） |
 | 2 实现 | 每 Task fresh implementer + TDD | 提交 + 测试 |
 | 3 评审 | SPEC + QUALITY 双评审，≤5 轮 | ledger 结论与 Ruling |
 | 4 门禁 | gates.sh / 全量验证 + 视觉/基准 | 通过证据（记录数值） |
