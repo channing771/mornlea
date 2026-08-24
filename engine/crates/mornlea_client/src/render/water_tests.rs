@@ -654,7 +654,7 @@ fn water_is_the_only_added_render_pass() {
         .collect();
     assert_eq!(
         total,
-        5,
+        6,
         "src/render 下的 render pass 调用点总数变了（{}）：新增额外的半透明阶段\
          需要先修订 voxel-visual-presentation 的边界",
         per_file.join(" ")

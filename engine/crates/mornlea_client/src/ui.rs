@@ -284,6 +284,15 @@ impl UiState {
     pub fn drain_events(&mut self) -> Vec<u32> {
         std::mem::take(&mut self.pending_events)
     }
+
+    /// 暴露内部 egui 上下文,供 GPU 半部做 tessellation。
+    ///
+    /// egui 的 `Context::tessellate` 需要持有字体纹理图集的上下文,
+    /// 才能把 `FullOutput::shapes` 转成 GPU 可画的三角网格;该上下文
+    /// 由 [`UiState`] 私有持有,故只经此只读访问器对外暴露(不改写任何状态)。
+    pub fn ctx(&self) -> &egui::Context {
+        &self.ctx
+    }
 }
 
 // ---------------------------------------------------------------------------

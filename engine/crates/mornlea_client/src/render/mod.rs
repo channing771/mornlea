@@ -8,12 +8,16 @@
 //! 金字塔遮挡。uniform 布局、clear 值与 pass 顺序保持一致,保证同输入
 //! 同图像。远环 LOD 壳 pass(v6)绘制在天空与近环 terrain 之间:世界
 //! 坐标大 quad + 距离雾 + tile 级 CPU 视锥剔除,不进 HiZ/GPU culling。
+//! egui 菜单 pass(client ABI v8)排在整个帧的**最上层**(HUD/debug 之后),
+//! 纯 screen-space、无深度测试;只在帧 UI 段非空且字体已安装时提交,无 UI
+//! 段的帧零 GPU 工作(既有场景图像逐字节不变)。
 //!
 //! 约束:
 //! - color `Bgra8UnormSrgb`(Go capture 同格式),depth `Depth32Float`;
 //! - mesh packed face 字节只在 section 变脏时过境一次;
 //! - 每帧一次 [`OffscreenRenderer::render_frame`],帧内无逐 pass FFI。
 
+pub mod egui;
 pub mod entity;
 pub mod lod;
 #[cfg(test)]
@@ -28,6 +32,8 @@ mod water_tests;
 
 use std::collections::HashMap;
 
+use self::egui::{EguiError, EguiPass};
+use crate::ui::{decode_ui_frame, take_ui_events};
 use entity::{EntityPass, EntityPipelineKind};
 use lod::{Frustum, LodPass};
 use pool::{Alloc, Pool};
@@ -150,6 +156,11 @@ pub struct FrameInput {
     pub hud_vertices: Vec<u8>,
     /// 调试面板顶点流;空表示本帧无面板。
     pub debug_vertices: Vec<u8>,
+    /// egui 菜单段(ABI 帧 TLV tag 9 的原样字节);空表示本帧无 UI。
+    ///
+    /// 语义合法性由 [`decode_ui_frame`] 在 parse_frame 层校验(违约即拒绝并
+    /// 转 `INVALID_ARGUMENT`),此处原样携带供渲染器解码后驱动 egui pass。
+    pub ui_segment: Vec<u8>,
 }
 
 impl FrameInput {
@@ -512,6 +523,9 @@ pub struct OffscreenRenderer {
     hud_pass: QuadPass,
     /// 调试面板 pass。
     debug_pass: QuadPass,
+    /// egui 菜单 pass(client ABI v8);创建即 Some,离屏与窗口模式都构造。
+    /// 无 UI 段的帧其 run_and_record 返回零工作,不产生任何 GPU 提交。
+    egui_pass: Option<EguiPass>,
 
     /// 字形图集(R8,增量矩形上传);内容全部来自 Go 光栅化 worker。
     glyph_atlas: wgpu::Texture,
@@ -579,6 +593,13 @@ impl OffscreenRenderer {
             ..Default::default()
         }))
         .map_err(|_| RenderCreateError::Device)?;
+
+        // egui 菜单 pass 的初始像素密度:窗口模式取窗口 scale factor,
+        // 离屏固定 1.0(在 mode match 之前读取,因为 match 会 move windowed)。
+        let pixels_per_point = windowed
+            .as_ref()
+            .map(|(_, window)| window.scale_factor() as f32)
+            .unwrap_or(1.0);
 
         // 目标模式:窗口 surface(FIFO/BGRA sRGB,镜像 Go 配置)或离屏纹理。
         let mode = match windowed {
@@ -1090,6 +1111,16 @@ impl OffscreenRenderer {
             &dummy_hiz_view,
         );
 
+        // 先建 egui pass(借用 device/queue),再整体 move 进 Self;否则
+        // device 在 Ok(Self{..}) 中被 move 后就无法再借用构造 EguiPass。
+        let egui_pass = Some(EguiPass::new(
+            &device,
+            COLOR_FORMAT,
+            width,
+            height,
+            pixels_per_point,
+        ));
+
         Ok(Self {
             device,
             queue,
@@ -1129,6 +1160,7 @@ impl OffscreenRenderer {
             name_tag_pass,
             hud_pass,
             debug_pass,
+            egui_pass,
             overlay_uniform,
             water_tint_uniform,
             overlay_pipeline,
@@ -1975,6 +2007,39 @@ impl OffscreenRenderer {
                 glyphs,
             );
         }
+        // egui 菜单 pass(最上层,screen-space 无深度):只在 UI 段非空时运行。
+        // 输入事件队列在任何情况下都 take 并丢弃(防空段积压);字体未装而
+        // 菜单可见视为编程错误(Go 启动后上传一次),返回 Invalid。
+        let ui_events = take_ui_events();
+        if !input.ui_segment.is_empty() {
+            let frame = match decode_ui_frame(&input.ui_segment) {
+                Ok(frame) => frame,
+                // parse_frame 已校验通过;此处防御性返回 Invalid。
+                Err(_) => return FrameResult::Invalid,
+            };
+            let has_font = self
+                .egui_pass
+                .as_ref()
+                .map(|pass| pass.has_font())
+                .unwrap_or(false);
+            if frame.visible && !has_font {
+                return FrameResult::Invalid;
+            }
+            if let Some(egui_pass) = self.egui_pass.as_mut()
+                && egui_pass
+                    .run_and_record(
+                        &self.device,
+                        &self.queue,
+                        &mut encoder,
+                        &frame_view,
+                        &frame,
+                        ui_events,
+                    )
+                    .is_err()
+            {
+                return FrameResult::Invalid;
+            }
+        }
         self.last_pos = input.pos;
         self.last_view_proj = input.view_proj;
         self.have_last_camera = true;
@@ -1985,6 +2050,25 @@ impl OffscreenRenderer {
         FrameResult::Rendered
     }
 
+    /// 上传 egui 菜单字体(client ABI v8 出口)。
+    ///
+    /// 空/超上限字节由 [`EguiPass::upload_font`] 拒绝并返回 Err;成功则安装
+    /// 到 [`crate::ui::UiState`](proportional + monospace 同族)。
+    pub fn upload_ui_font(&mut self, bytes: &[u8]) -> Result<(), EguiError> {
+        self.egui_pass
+            .as_mut()
+            .expect("egui_pass 应已创建")
+            .upload_font(bytes)
+    }
+
+    /// 排空 egui 菜单点击事件(client ABI v8 出口),返回按钮 id 序列。
+    pub fn drain_ui_events(&mut self) -> Vec<u32> {
+        self.egui_pass
+            .as_mut()
+            .expect("egui_pass 应已创建")
+            .drain_events()
+    }
+
     /// 调整输出尺寸:重建 depth 与 HiZ,离屏重建 color,窗口重配 surface;
     /// HiZ 失效一帧(镜像 Go `Resize` 重置 haveLastCamera)。
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -1993,6 +2077,11 @@ impl OffscreenRenderer {
         }
         self.width = width;
         self.height = height;
+        // egui 像素密度:窗口模式取窗口 scale factor,离屏固定 1.0(与创建时一致)。
+        let pixels_per_point = match &self.mode {
+            TargetMode::Windowed { _window, .. } => _window.scale_factor() as f32,
+            _ => 1.0,
+        };
         let make_target = |device: &wgpu::Device, format, usage, label: &str| {
             device.create_texture(&wgpu::TextureDescriptor {
                 label: Some(label),
@@ -2047,6 +2136,10 @@ impl OffscreenRenderer {
         );
         self.cull_uses_hiz = false;
         self.have_last_camera = false;
+        // egui 菜单 pass 同步新尺寸与像素密度(离屏/离屏窗口共用一条路径)。
+        if let Some(egui_pass) = self.egui_pass.as_mut() {
+            egui_pass.set_size(width, height, pixels_per_point);
+        }
     }
 
     /// 阻塞回读离屏 color(BGRA,逐行紧密拼接);`out` 长度必须恰为
