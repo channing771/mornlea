@@ -19,14 +19,21 @@ RECV_ID="$(jq -r '.receive.id // .receive_id // empty' "$CONFIG")"
 
 TOKEN_FILE="$DIR/feishu-token.json"
 get_token() {
-  if [ -f "$TOKEN_FILE" ] && [ "$(date +%s)" -lt "$(jq -r '.expiresAt // 0' "$TOKEN_FILE")" ]; then
-    jq -r '.tenant_access_token // .token // empty' "$TOKEN_FILE" && return
+  # 缓存有效期内直接复用；空/损坏缓存视为过期（jq 失败时按 0 处理）
+  if [ -f "$TOKEN_FILE" ]; then
+    local exp
+    exp="$(jq -r '.expiresAt // 0' "$TOKEN_FILE" 2>/dev/null || echo 0)"
+    if [ "$exp" -gt "$(date +%s)" ]; then
+      local cached
+      cached="$(jq -r '.tenant_access_token // .token // empty' "$TOKEN_FILE" 2>/dev/null || true)"
+      if [ -n "$cached" ]; then echo "$cached"; return; fi
+    fi
   fi
   local resp tok
   resp="$(curl -sS --max-time 15 -X POST 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal'     -H 'Content-Type: application/json'     -d "$(jq -nc --arg a "$APP_ID" --arg s "$APP_SECRET" '{app_id:$a, app_secret:$s}')")"
   tok="$(echo "$resp" | jq -r '.tenant_access_token // empty')"
   [ -n "$tok" ] || die "获取 tenant_access_token 失败: $(echo "$resp" | jq -c .)"
-  echo "$resp" | jq --argjson exp "$(( $(date +%s) + 7000 ))" '{tenant_access_token: $tok, expiresAt: $exp}' > "$TOKEN_FILE"
+  echo "$resp" | jq --arg tok "$tok" --argjson exp "$(( $(date +%s) + 7000 ))" '{tenant_access_token: $tok, expiresAt: $exp}' > "$TOKEN_FILE"
   echo "$tok"
 }
 
