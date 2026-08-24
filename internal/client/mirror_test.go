@@ -181,6 +181,11 @@ func TestMirrorSurfacesCommandRejectionAndRejectsUnsupportedData(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(update.Rejected, &rejected) {
 		t.Fatalf("CommandRejected update=%+v err=%v", update, err)
 	}
+	capacity := network.CommandRejected{Sequence: 42, Reason: network.RejectContainerCapacity}
+	update, err = mirror.Apply(capacity)
+	if err != nil || !reflect.DeepEqual(update.Rejected, &capacity) {
+		t.Fatalf("RejectContainerCapacity update=%+v err=%v", update, err)
+	}
 	if _, err := mirror.Apply(network.CommandRejected{Reason: network.RejectReason("unknown")}); err == nil {
 		t.Fatal("未知拒绝原因未报错")
 	}
