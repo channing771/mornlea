@@ -69,6 +69,12 @@ type captureScene struct {
 	Apply func(*application) error
 	// HUD 是仅在 capture 收敛与最终帧期间生效的临时生存状态。
 	HUD *captureHUDFixture
+	// Menu 可选，非 nil 时本场景以该快照渲染一帧 egui 主菜单（capture 专用）。
+	// 默认 nil 表示无菜单。每个场景在 captureSceneImage 里于 Apply 之后、收敛
+	// 循环之前无条件设置 app.menuOverride = scene.Menu（nil 即清除），因此
+	// 场景表天然清空上一场景的菜单，不需要 teardown 钩子；egui pass 只在 UI 段
+	// 存在时运行，多数场景（nil）因此零参与、输出像素与引入菜单前逐字节一致。
+	Menu *client.UIMenu
 	// PinVolatile 可选，在字形收敛帧之后、最后一帧渲染之前执行，用来钉住那些
 	// 随机器速度变化、因而不属于场景三要素的量。
 	//
@@ -494,6 +500,50 @@ var captureScenes = []captureScene{
 		},
 	},
 	{
+		// main-menu 是 egui 主菜单的无窗口 capture 场景：含标题「Mornlea」、
+		// 版本行「dev」、真实装配错误行与四个按钮（进入/退出可用、多人/设置禁用）。
+		//
+		// Error 非空是有意的：一来覆盖真实装配错误行（菜单因打开不了存档而显示
+		// 错误文本），二来其内容「存档无法打开」是中文 UTF-8，整个 UI 段的字节长度
+		// 因此落在非 4 对齐上，专门走 Ruling 8 豁免的「非 4 对齐 TLV 文本段跨语言
+		// 回圆」路径——golden 由此覆盖一条真实菜单、也是 capture 路径第一条非 4 对齐
+		// 的 UI 段。
+		//
+		// Apply 里 resetCapturePresentation 清空前序场景（water-surface-slope）留下的
+		// 全部共享呈现状态，并把相机钉在出生点上空：菜单面板不透明地覆盖全屏，世界
+		// 内容不可见，相机位置只作确定性占位，不影响菜单像素。egui pass 只在 UI 段
+		// 存在时运行，本场景是场景表中唯一产生 UI 段的场景。
+		//
+		// 排序约束：本场景 MUST 排在 far-horizon 之前（far-horizon 仍为倒数第二、
+		// water-underwater 仍为最后），由 TestMainMenuCaptureScenePosition 兜底。
+		Name:         "main-menu",
+		WarmupFrames: 8,
+		Menu: &client.UIMenu{
+			Visible: true,
+			Title:   "Mornlea",
+			Version: "dev",
+			// 见上：真实错误行 + 非 4 对齐 UI 段（Ruling 8）。
+			Error: "存档无法打开",
+			// 复用交互主菜单的按钮表（四个按钮、进入/退出可用、多人/设置禁用）。
+			Buttons: menuButtons(),
+		},
+		Apply: func(app *application) error {
+			if err := resetCapturePresentation(app); err != nil {
+				return err
+			}
+			app.worldTimeTicks = 6000
+			// 相机钉在出生点上空（出生锚点为原点区块，y=110 高位）；菜单面板不透明
+			// 覆盖全屏，世界内容不可见，此处只是确定性的占位姿态。
+			app.camera = client.Camera{
+				Pos: mgl32.Vec3{0, 110, 0}, Yaw: 0, Pitch: -0.25,
+				FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
+				Near: 0.1, Far: 2000,
+			}
+			app.center = cameraChunk(app.camera.Pos)
+			return nil
+		},
+	},
+	{
 		// far-horizon 是远环 LOD 的长期视觉门禁(spec delta「MUST 新增
 		// far-horizon 视觉场景」):相机钉在近环边缘 -z 内侧的高空,朝
 		// 地平线观察,单帧同时覆盖近景地形(画面底部)、远环壳带(地平线
@@ -646,6 +696,12 @@ func captureSceneImage(app *application, scene captureScene) (*image.NRGBA, erro
 	if err := scene.Apply(app); err != nil {
 		return nil, fmt.Errorf("应用场景状态: %w", err)
 	}
+	// 菜单覆盖帧：在 Apply 之后、收敛循环之前设 app.menuOverride。无条件设置
+	//（含 nil 清除）是刻意而为：场景共用同一个 application，若不显式清除，上一
+	// 场景的菜单（如 main-menu）会静默留在本场景的画面上。nil 即清除，每个场景
+	// 因此天然清空上一场景的菜单，不需要 teardown 钩子。egui pass 只在 UI 段存在
+	//（menuOverride 非空、或交互相位 != game）时运行，多数场景（nil）零参与。
+	app.menuOverride = scene.Menu
 	if scene.HUD != nil {
 		restore, err := applyCaptureHUDFixture(app, scene.HUD)
 		if err != nil {
