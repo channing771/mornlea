@@ -100,6 +100,14 @@ confirm.sh list
 
 ## 监听器常驻（launchd 保活推荐）
 
+**一步到位：** 直接运行仓库内的一键安装器（自动生成真实路径的配置骨架 + launchd plist）：
+
+```bash
+scripts/agents/confirm/install-listener.sh
+```
+
+它做的事：生成本机路径（repo 根、node 路径 `$(which node)`）的 `com.mornlea.feishu-listener.plist`（KeepAlive=true，断线/崩溃自动拉起）与 `~/.mornlea/confirm/feishu.json` 骨架（mode 600；`resumeCmd` 已填真实仓库路径），有凭据时直接 launchctl load。等价的手工 plist 模板：
+
 ```
 cat > ~/Library/LaunchAgents/com.mornlea.feishu-listener.plist <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -107,19 +115,20 @@ cat > ~/Library/LaunchAgents/com.mornlea.feishu-listener.plist <<PLIST
 <plist version="1.0"><dict>
   <key>Label</key><string>com.mornlea.feishu-listener</string>
   <key>ProgramArguments</key><array>
-    <string>/usr/local/bin/node</string>
-    <string>/Users/you/minecraft-go/scripts/agents/confirm/feishu-listener.js</string>
+    <string>/opt/homebrew/bin/node</string>
+    <string>/Users/chen/chenwork/minecraft-go/scripts/agents/confirm/feishu-listener.js</string>
   </array>
   <key>KeepAlive</key><true/>
   <key>RunAtLoad</key><true/>
-  <key>StandardOutPath</key><string>/Users/you/Library/Logs/mornlea-listener.log</string>
-  <key>StandardErrorPath</key><string>/Users/you/Library/Logs/mornlea-listener.err.log</string>
+  <key>WorkingDirectory</key><string>/Users/chen/chenwork/minecraft-go</string>
+  <key>StandardOutPath</key><string>/Users/chen/Library/Logs/mornlea-listener.log</string>
+  <key>StandardErrorPath</key><string>/Users/chen/Library/Logs/mornlea-listener.err.log</string>
 </dict></plist>
 PLIST
 launchctl load ~/Library/LaunchAgents/com.mornlea.feishu-listener.plist
 ```
 
-（node 路径以 which node 为准；KeepAlive=true 保证断线/崩溃自动拉起，SDK 内建重连。）
+（本机实测 node 在 `/opt/homebrew/bin/node`；换机器时以 `which node` 为准。）
 
 ## 微信 / 企业微信备选
 
