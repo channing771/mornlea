@@ -131,3 +131,16 @@ task 5 status recorded
 - Ruling 10：终审 5 项可选 + 1 minor 用**一次 fix wave** 统一处理后做一次 scoped 复评（SDD 终审修复纪律）。若错：多一轮小改动，风险低。
 - 验证事实（控制会话实跑）：make visual-check 18/18 0/230400；go test ./... -race exit 0；make rust-check exit 0；go vet ./... 通过；gofmt -l . 无输出（清理 build/.gotmp、.review-gocache、.gocache-task5 后）；openspec validate 61/61；git diff --check 通过。
 - 收尾清理：缓存目录已删；golden 目录仅新增 main-menu.png；剩余工作树未跟踪文件仅 docs/superpowers/...selection-design.md（用户既有）。
+
+## 终审 fix wave 与 scoped 复评（Ruling 10 落地）
+
+- fix wave（e250d817）：fa4ddaf2（refactor: final review wave optional cleanups，6 文件 +75/-25）——_window→window、EguiPass font 冗余清理、142B 夹具常量、TestUISegmentMenuOverrideNilClear、capture.go 注释例外、标题无条件绘制（0 按钮分支新常量；n≥1 逐位不变，已证实 4 按钮 golden 不变）。cargo 98+160 全绿、clippy 0 警告、fmt 通过；go test ./cmd/mornlea -race ok 235.084s；go test ./internal/client -race ok 8.689s；gofmt/diff-check 干净。
+- scoped 复评（7208bc51）：6 项全部 ADDRESSED、无 open；无 New Critical/Important；New Minor 仅「0 按钮+非空 error 不画错误行」（有意的设计选择，无 spec/golden 覆盖）。
+- 控制会话复跑 `make visual-check`：exit 0（18/18 场景 0/230400，修复后 golden 逐位不变）。
+
+## 收尾状态
+
+- 分支 add-egui-main-menu（本地），HEAD fa4ddaf2；change 产物 tasks 全部勾选，openspec validate 61/61。
+- 全量门禁：go test ./... -race exit 0；make rust-check exit 0；go vet ./... 通过；gofmt -l . 无输出；git diff --check 通过。
+- 工作树未跟踪仅剩用户既有 docs/superpowers/specs/2026-08-23-egui-tool-ui-selection-design.md（保持未跟踪）。
+- 归档前置事项（按选型文档「归档时随基线同步」）：AGENTS/CLAUDE 的 client ABI 版本号已同步 v8（机械门禁所需）；能力描述（egui 工具型 UI 已交付）与 docs/notes/progress.md 里程碑段落留待归档步骤。
