@@ -3,6 +3,8 @@
 package render
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"image"
 	"math"
@@ -340,6 +342,29 @@ func TestGlyphAtlasEmbeddedFont(t *testing.T) {
 	}
 	if nonzeroUploads < 2 {
 		t.Fatalf("nonzero real glyph uploads = %d, want at least 2", nonzeroUploads)
+	}
+}
+
+// TestEmbeddedCJKFontProvenance 锁定菜单字体访问器的字节来源:长度与 sha256
+// 必须等于内嵌 Noto Sans CJK OTF 的 provenance 记录值,且每次调用返回独立副本
+// (调用方改写不得污染共享嵌入字节)。
+func TestEmbeddedCJKFontProvenance(t *testing.T) {
+	font := EmbeddedCJKFont()
+	if len(font) != 16437364 {
+		t.Fatalf("EmbeddedCJKFont 长度=%d, want 16437364", len(font))
+	}
+	sum := sha256.Sum256(font)
+	if got := hex.EncodeToString(sum[:]); got != "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b" {
+		t.Fatalf("sha256=%s, want 2c76254f...", got)
+	}
+	// 返回副本:改写第一个字节后,下一次调用必须仍返回原始字节。
+	font[0] ^= 0xff
+	second := EmbeddedCJKFont()
+	if second[0] == font[0] {
+		t.Fatal("EmbeddedCJKFont 应返回独立副本(改写一次不应影响下次)")
+	}
+	if len(second) != 16437364 {
+		t.Fatalf("第二次调用长度=%d, want 16437364", len(second))
 	}
 }
 

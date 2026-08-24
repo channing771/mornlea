@@ -169,3 +169,53 @@ func TestEncodeRenderFrameWaterTintSegment(t *testing.T) {
 		}
 	}
 }
+
+// TestHasPassSegmentsIncludesUISegment 守住 UI 段计入 pass 段:UISegment 非空即
+// 切到 layout v2,否则 UI 段永不进 TLV。
+func TestHasPassSegmentsIncludesUISegment(t *testing.T) {
+	var frame RenderFrame
+	if frame.hasPassSegments() {
+		t.Fatal("空帧不应携带 pass 段")
+	}
+	frame.UISegment = []byte{1, 2, 3}
+	if !frame.hasPassSegments() {
+		t.Fatal("UISegment 非空应计入 pass 段(切到 layout v2)")
+	}
+}
+
+// TestEncodeRenderFrameUISegment 守住 UI 段编码为帧尾 TLV(tag 9,water 之后),
+// 负载与 EncodeUIMenu 产物逐字一致。
+func TestEncodeRenderFrameUISegment(t *testing.T) {
+	menu := EncodeUIMenu(UIMenu{
+		Visible: true,
+		Title:   "Mornlea",
+		Version: "dev",
+		Buttons: []UIButton{{ID: 1, Label: "进入游戏", Enabled: true}},
+	})
+	out := EncodeRenderFrame(RenderFrame{UISegment: menu})
+	if out[188] != 2 {
+		t.Fatalf("UI 段帧 layout=%d, want 2", out[188])
+	}
+	cursor := renderFrameHeaderBytes
+	readU32 := func() uint32 {
+		v := binary.LittleEndian.Uint32(out[cursor:])
+		cursor += 4
+		return v
+	}
+	var lastTag, lastLen uint32
+	for cursor < len(out) {
+		lastTag = readU32()
+		lastLen = readU32()
+		cursor += int(lastLen)
+	}
+	if lastTag != frameTagUI {
+		t.Fatalf("末段 tag=%d, want %d", lastTag, frameTagUI)
+	}
+	if int(lastLen) != len(menu) {
+		t.Fatalf("UI 段 len=%d, want %d", lastLen, len(menu))
+	}
+	payload := out[len(out)-int(lastLen):]
+	if string(payload) != string(menu) {
+		t.Fatal("UI 段负载与 EncodeUIMenu 产物不一致")
+	}
+}

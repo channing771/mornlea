@@ -155,6 +155,17 @@ func embeddedGlyphFontData() []byte {
 	return embeddedGlyphFont
 }
 
+// EmbeddedCJKFont 返回内嵌 Noto Sans CJK OTF 字体字节的**只读副本**(供 client
+// ABI 的菜单字体上传):调用方把它传给 `Renderer.UploadUIFont` 即可。返回副本而非
+// 直接返回嵌入切片,是为了保证调用方无法改写共享的嵌入字节——同一份嵌入字节同时
+// 供字形图集生成使用,被改写会污染全部字形。每次调用返回独立副本(只在启动时
+// 上传一次,16 MiB 的一次性拷贝可接受)。
+func EmbeddedCJKFont() []byte {
+	out := make([]byte, len(embeddedGlyphFont))
+	copy(out, embeddedGlyphFont)
+	return out
+}
+
 func validateEmbeddedGlyphMetadata() error {
 	if !strings.Contains(embeddedGlyphLicense, "SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007") {
 		return fmt.Errorf("render: embedded glyph license metadata is missing or invalid")
