@@ -591,7 +591,13 @@ const FRAME_TAG_UI: u32 = 9;
 ///
 /// header@188 是 layout version:0 为 v1(纯地形,精确长度),2 为 v2
 /// (可见列表之后跟 TLV pass 段序列:tag u32 + length u32 + bytes,
-/// length 4 对齐,未知 tag/越界/重复段拒绝)。
+/// 除 UI 段外各段 length 4 对齐,未知 tag/越界/重复段拒绝)。
+///
+/// UI 段(FRAME_TAG_UI)豁免 4 对齐:它是 UTF-8 字段序列(layout/flags/按钮数/
+/// 各按钮 id+label+enabled/title/version/error),长度由字段自身界定,不保证
+/// 4 对齐(如四按钮 + 中文 error 的 142 字节);其余 pass 段(avatar/drop/outline/
+/// 字样/水色)是定长实例数组,天然 4 对齐,故各段校验不变。UI 段内容合法性由
+/// decode_ui_frame 在解析层校验。
 fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
     if bytes.len() < FRAME_HEADER_BYTES {
         return None;
@@ -644,7 +650,10 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
             let tag = read_u32(cursor);
             let length = read_u32(cursor + 4) as usize;
             cursor += 8;
-            if !length.is_multiple_of(4) || bytes.len() - cursor < length {
+            // 除 UI 段(UTF-8 字段序列,长度由字段界定)外,其余 pass 段均为定长
+            // 实例数组(长度天然 4 对齐),故对齐检查对非 UI 段保持一致;UI 段
+            // 只做越界检查,内容合法性由 decode_ui_frame 在解析层保证。
+            if (tag != FRAME_TAG_UI && !length.is_multiple_of(4)) || bytes.len() - cursor < length {
                 return None;
             }
             let payload = &bytes[cursor..cursor + length];
@@ -1030,6 +1039,55 @@ mod frame_v2_tests {
         bad.extend_from_slice(&0u32.to_le_bytes());
         assert_eq!(
             parse_status(&v2_frame(&tlv(FRAME_TAG_UI, &bad))),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+    }
+
+    /// 构造真实菜单 UI 段(四按钮 + 中文 error,与 Go EncodeUIMenu 同一语义):
+    /// 142 字节,非 4 对齐(142 % 4 == 2)。用于证明 parse 层接受非对齐 UI 段。
+    fn ui_segment_four_button_error() -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(&1u32.to_le_bytes()); // layout
+        out.extend_from_slice(&1u32.to_le_bytes()); // flags visible
+        out.extend_from_slice(&4u32.to_le_bytes()); // button count
+        let buttons = [
+            (1u32, "进入游戏", 1u32),
+            (2, "多人游戏", 0),
+            (3, "设置", 0),
+            (4, "退出游戏", 1),
+        ];
+        for (id, label, enabled) in buttons {
+            out.extend_from_slice(&id.to_le_bytes());
+            out.extend_from_slice(&(label.len() as u32).to_le_bytes());
+            out.extend_from_slice(label.as_bytes());
+            out.extend_from_slice(&enabled.to_le_bytes());
+        }
+        let title = "Mornlea";
+        out.extend_from_slice(&(title.len() as u32).to_le_bytes());
+        out.extend_from_slice(title.as_bytes());
+        let version = "dev";
+        out.extend_from_slice(&(version.len() as u32).to_le_bytes());
+        out.extend_from_slice(version.as_bytes());
+        let error = "存档无法打开";
+        out.extend_from_slice(&(error.len() as u32).to_le_bytes());
+        out.extend_from_slice(error.as_bytes());
+        out
+    }
+
+    #[test]
+    fn v2_ui_segment_non_aligned_length_accepted() {
+        // 真实菜单(四按钮 + 中文 error)编码为 142 字节,非 4 对齐。
+        let seg = ui_segment_four_button_error();
+        assert_eq!(seg.len(), 142);
+        assert_eq!(seg.len() % 4, 2);
+        // parse 层必须接受非对齐 UI 段:停在句柄层 WINDOW(而非 INVALID_ARGUMENT)。
+        assert_eq!(
+            parse_status(&v2_frame(&tlv(FRAME_TAG_UI, &seg))),
+            MORNLEA_CLIENT_STATUS_WINDOW
+        );
+        // 非 UI 段仍拒绝非对齐长度(既有 4 对齐守卫不因豁免而放松)。
+        assert_eq!(
+            parse_status(&v2_frame(&tlv(FRAME_TAG_NAME_TAG, &[0u8; 6]))),
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
     }

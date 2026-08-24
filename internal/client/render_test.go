@@ -239,3 +239,44 @@ func TestEncodeRenderFrameUISegment(t *testing.T) {
 		t.Fatal("UI 段负载与 EncodeUIMenu 产物不一致")
 	}
 }
+
+// TestEncodeRenderFrameUISegmentPreservesRealLength 守住 EncodeRenderFrame 对 UI 段的
+// 字节透传:真实菜单内容(四按钮 + 中文 error)编码后非 4 对齐(142 字节),TLV 长度
+// 字段必须等于实际载荷字节数——禁止未来偷偷填充到 4 对齐。跨语言侧 Rust 的 parse_frame
+// 已豁免 UI 段(FRAME_TAG_UI)的 4 对齐检查,这里锁 Go 侧原样透传、不填充。
+func TestEncodeRenderFrameUISegmentPreservesRealLength(t *testing.T) {
+	menu := EncodeUIMenu(UIMenu{
+		Visible: true,
+		Title:   "Mornlea",
+		Version: "dev",
+		Error:   "存档无法打开",
+		Buttons: []UIButton{
+			{ID: 1, Label: "进入游戏", Enabled: true},
+			{ID: 2, Label: "多人游戏", Enabled: false},
+			{ID: 3, Label: "设置", Enabled: false},
+			{ID: 4, Label: "退出游戏", Enabled: true},
+		},
+	})
+	if len(menu) != 142 || len(menu)%4 == 0 {
+		t.Fatalf("夹具长度=%d(%%4=%d), 应为 142 且非 4 对齐", len(menu), len(menu)%4)
+	}
+	out := EncodeRenderFrame(RenderFrame{UISegment: menu})
+	cursor := renderFrameHeaderBytes
+	var lastTag, lastLen uint32
+	for cursor < len(out) {
+		lastTag = binary.LittleEndian.Uint32(out[cursor:])
+		cursor += 4
+		lastLen = binary.LittleEndian.Uint32(out[cursor:])
+		cursor += 4
+		cursor += int(lastLen)
+	}
+	if lastTag != frameTagUI {
+		t.Fatalf("末段 tag=%d, want %d", lastTag, frameTagUI)
+	}
+	if int(lastLen) != len(menu) {
+		t.Fatalf("UI 段 TLV 长度=%d, 载荷=%d(应为真实字节长度,非 4 对齐也原样,禁止填充)", lastLen, len(menu))
+	}
+	if string(out[len(out)-int(lastLen):]) != string(menu) {
+		t.Fatal("UI 段负载与 EncodeUIMenu 产物不一致")
+	}
+}
