@@ -141,13 +141,15 @@ uint32_t mornlea_client_render_upload_ui_font(
     size_t len);
 
 /* 排空 egui 菜单点击事件(client ABI v8):把按钮 id(u32,小端)序列写进 out,
- * 返回写入个数;out 为空或 out_len 非 4 倍数返回 INVALID_ARGUMENT,
- * 事件多于容量时写满截断。 */
+ * 并把写入个数写进 *out_count,返回状态码;out 为空、out_len 非 4 倍数或
+ * out_count 为空返回 INVALID_ARGUMENT(均先于句柄查找),事件多于容量时写满
+ * 截断。返回值是状态码,事件数一律经 out_count 回读,避免与状态码空间冲突。 */
 uint32_t mornlea_client_render_drain_ui_events(
     uint32_t abi_version,
     uint64_t handle,
     uint8_t *out,
-    size_t out_len);
+    size_t out_len,
+    uint32_t *out_count);
 
 uint32_t mornlea_client_render_frame(
     uint32_t abi_version,

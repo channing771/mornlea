@@ -271,23 +271,26 @@ func (r *Renderer) UploadUIFont(font []byte) {
 }
 
 // DrainUIEvents 排空并返回累积的菜单点击事件 id(client ABI v8):每次调用
-// 读走全部累积事件(Rust 端排空语义)。返回值按写入的 u32 个数解码;缓冲容量
-// 按设计的事件上界(每帧 64 个)分配,超出容量的余下事件被 Rust 侧写满截断
-// 丢弃。
-//
-// 注意本出口的返回值是事件计数而非状态码,因此无法区分「恰好写了 1..7 个
-// 事件」与「句柄错误(状态码 WINDOW)」;绑定依赖渲染器句柄在合法程序里始终
-// 有效(与其余方法共用同一 `Renderer` 句柄),故不复用 `r.check`。
+// 读走全部累积事件(Rust 端排空语义)。事件数经 out_count 回读,与函数返回的
+// 状态码完全分离——非 OK 状态走 r.check panic(编程错误),据此不再有「写入
+// 1..7 个事件」与「状态码 WINDOW」的二义性。缓冲容量按设计的事件上界(每帧
+// 64 个)分配,超出容量的余下事件被 Rust 侧写满截断丢弃。
 func (r *Renderer) DrainUIEvents() []uint32 {
 	buf := make([]byte, maxUIEventsPerFrame*4)
-	count := uint32(C.mornlea_client_render_drain_ui_events(
+	var count C.uint32_t
+	r.check("drain ui events", uint32(C.mornlea_client_render_drain_ui_events(
 		C.MORNLEA_CLIENT_ABI_VERSION,
 		C.uint64_t(r.handle),
 		(*C.uint8_t)(unsafe.Pointer(unsafe.SliceData(buf))),
 		C.size_t(len(buf)),
-	))
-	events := make([]uint32, 0, count)
-	for index := uint32(0); index < count; index++ {
+		&count,
+	)))
+	n := int(count)
+	if n > maxUIEventsPerFrame {
+		panic("client: drain ui events 返回事件数越界")
+	}
+	events := make([]uint32, 0, n)
+	for index := 0; index < n; index++ {
 		events = append(events, binary.LittleEndian.Uint32(buf[index*4:index*4+4]))
 	}
 	return events

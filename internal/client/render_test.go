@@ -58,6 +58,26 @@ func TestRendererRoundtripOrSkip(t *testing.T) {
 	}
 }
 
+// TestDrainUIEventsEmptyAfterCreate 验证 `DrainUIEvents` 的正常路径:新建离屏
+// 渲染器尚无菜单事件时返回空切片(count=0),并走完 cgo 新签名(out_count 回读 +
+// 状态码)的全链路。参数校验由 Rust 层兜底,这里只测「状态码 OK + 计数 0 → 空切片」;
+// 无 GPU 适配器时跳过。
+func TestDrainUIEventsEmptyAfterCreate(t *testing.T) {
+	renderer, err := NewRenderer(32, 16)
+	if errors.Is(err, ErrNoGPUAdapter) {
+		t.Skip("无 GPU 适配器")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer renderer.Close()
+
+	events := renderer.DrainUIEvents()
+	if len(events) != 0 {
+		t.Fatalf("新渲染器 DrainUIEvents 应返回空切片, got %d 个事件", len(events))
+	}
+}
+
 // TestEncodeRenderFrameLayout 锁定 render_frame ABI 编码布局。
 func TestEncodeRenderFrameLayout(t *testing.T) {
 	frame := RenderFrame{
