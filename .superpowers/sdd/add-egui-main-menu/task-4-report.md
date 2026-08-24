@@ -69,7 +69,7 @@ ok  github.com/channing771/mornlea/internal/render  3.967s
 
 ### go test ./internal/archcheck -count=1
 - `TestCommentBacktickIdentifiersExist`：PASS（已处理 `render.go` 注释中 Rust 标识符 `decode_ui_frame` 的反引号包裹，避免被误判为 Go 标识符）。
-- `TestBaselineVersionsMatchCode`：FAIL —— AGENTS.md/CLAUDE.md 仍写 client ABI v7、代码为 8。属 Task 7.0 基线同步，不在本任务范围。
+- `TestBaselineVersionsMatchCode`：FAIL —— 唯一失败项。具体：AGENTS.md/CLAUDE.md **第 13 行**（「该材质能力沿用……client ABI v7 与 benchmark scenario v18，未推进这些版本」）仍写 `client ABI v7`，而代码为 8。注意第 7 行已由前置提交 ef691004 同步为 `client ABI v8`，本门禁用 FindAllStringSubmatch 会扫到两处，第 13 行的 v7 因此报滞后。属 Task 7.0 基线同步（需改这份「未推进这些版本」措辞或把 v7 改为参考历史版本写法），不在本任务范围。
 
 ## 提交 hash
 \`0df4778915db2eae64f23511c3b24dbed932a3cc\`
@@ -99,7 +99,7 @@ ok  github.com/channing771/mornlea/internal/render  3.967s
 ## 遗留担忧
 1. **brief「最小 28 字节 header」与实际 24 字节不一致**：零按钮、空串字段的最小帧实际为 24 字节（layout+flags+button_count+三个长度字段共六个 u32），与 Rust `encode_frame`/`decode_ui_frame` 一致。brief 的「28」多算一个 u32；我按 Rust 端真值实现（24 字节），`TestEncodeUIMenuMinimal` 已锁定。
 2. **`DrainUIEvents` 返回值是事件计数而非状态码**：无法区分「恰好写 1..7 个事件」与「句柄错误（状态码 WINDOW=3 等）」。绑定依赖渲染器句柄在合法程序中始终有效（与其余方法共用同一 `Renderer` 句柄），故不复用 `r.check`；若句柄失效会出现静默错误返回值。这是 Task 3 ABI 设计的固有取舍。
-3. **archcheck 基线红**（`TestBaselineVersionsMatchCode`）：AGENTS.md/CLAUDE.md 的「client ABI v7」需在 Task 7.0 同步为 v8，且两份必须逐字节相同。
+3. **archcheck 基线红**（`TestBaselineVersionsMatchCode`）：唯一失败项。AGENTS.md/CLAUDE.md **第 13 行**纹理贴图能力描述「……沿用……client ABI v7……未推进这些版本」仍写 `client ABI v7`（代码为 8）；第 7 行已由 ef691004 同步为 v8。门禁用 FindAllStringSubmatch 两处都扫，故 v7 触发滞后。需 Task 7.0 修订该句措辞或把 v7 改为历史版本写法（因该能力确实未推进、但 client ABI 已被后续 egui 菜单特性升到 v8），并保证两份逐字节相同。
 4. **越界修改了 `window_test.go`**：把 `TestClientABIVersionMatchesHeader` 期望 7→8。严格范围纪律是「只改 render.go/window.go/font_atlas.go」，但不更新它则 brief 自己要求的 `go test ./internal/client` 无法全绿（dylib 已是 v8）。这是必要的一行版本常量修正。
 5. **`EmbeddedCJKFont` 每次调用分配 ~16 MiB 拷贝**：只读安全、仅启动时上传一次，可接受；若未来频繁调用再考虑复用缓冲。
 6. **cgo noescape/nocallback 在两个序言重复声明**：Go cgo 容忍重复（测试与链接通过）；规范主位是 render.go（与既有「window.go 放链接标志、render.go 补 render 入口指令」模式相符），window.go 的重复是遵 brief「两个序言都要」。
