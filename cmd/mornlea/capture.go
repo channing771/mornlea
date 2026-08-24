@@ -119,6 +119,8 @@ func captureSettled(stats client.MesherStats, pending, lodBusy int) bool {
 // 场景、或在两者之间插入新场景，都会静默改变后续场景的期望像素。新增场景应
 // 追加在列表末尾；若确实需要调整顺序或插入位置，须用 --update-golden 重新
 // 生成所有受影响场景的基线，并逐张人眼确认。
+// 例外：`main-menu` 因 spec 排序约束（MUST 排在 `far-horizon` 之前）被插入
+// 表中部（water-surface-slope 与 far-horizon 之间），属 spec/brief 硬性例外。
 var captureScenes = []captureScene{
 	{
 		Name:         "terrain-noon",

@@ -99,7 +99,7 @@ enum TargetMode {
         surface: wgpu::Surface<'static>,
         config: wgpu::SurfaceConfiguration,
         /// 持有窗口共享所有权,保证 surface 生命周期内窗口存活。
-        _window: std::sync::Arc<winit::window::Window>,
+        window: std::sync::Arc<winit::window::Window>,
     },
 }
 
@@ -618,7 +618,7 @@ impl OffscreenRenderer {
                 TargetMode::Windowed {
                     surface,
                     config,
-                    _window: window,
+                    window,
                 }
             }
             None => {
@@ -2079,7 +2079,7 @@ impl OffscreenRenderer {
         self.height = height;
         // egui 像素密度:窗口模式取窗口 scale factor,离屏固定 1.0(与创建时一致)。
         let pixels_per_point = match &self.mode {
-            TargetMode::Windowed { _window, .. } => _window.scale_factor() as f32,
+            TargetMode::Windowed { window, .. } => window.scale_factor() as f32,
             _ => 1.0,
         };
         let make_target = |device: &wgpu::Device, format, usage, label: &str| {

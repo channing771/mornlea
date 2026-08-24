@@ -401,6 +401,28 @@ func TestUISegmentRealMenuEncodingLock(t *testing.T) {
 	}
 }
 
+// TestUISegmentMenuOverrideNilClear 锁定 menuOverride 的 nil 语义:非 nil(如 capture
+// 场景注入)时 uiSegment() 产出非空段;复位 nil 后切回既有相位判定(零值 application 的
+// menu.phase == menuPhaseGame),返回 nil——菜单覆盖只对一帧生效,场景切换后清除。
+func TestUISegmentMenuOverrideNilClear(t *testing.T) {
+	menu := client.UIMenu{
+		Visible: true,
+		Title:   "Mornlea",
+		Version: "dev",
+		Error:   "存档无法打开",
+		Buttons: menuButtons(),
+	}
+	app := &application{}
+	app.menuOverride = &menu
+	if segment := app.uiSegment(); len(segment) == 0 {
+		t.Fatal("menuOverride 非空时 uiSegment() 应产出非空 UI 段")
+	}
+	app.menuOverride = nil
+	if segment := app.uiSegment(); segment != nil {
+		t.Fatalf("menuOverride 复位 nil 后 uiSegment() 应为 nil,got %d 字节", len(segment))
+	}
+}
+
 // uiSegmentArithmeticLength 按 EncodeUIMenu 的字段布局算术计算段字节长度：
 // 固定 4 个 u32（layout/flags/buttonCount）+ 每按钮 [u32 id + u32 label_len + label + u32 enabled]
 // + 三个字符串字段 [u32 len + bytes]。

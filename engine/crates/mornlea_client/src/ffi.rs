@@ -1047,8 +1047,8 @@ mod frame_v2_tests {
     /// 142 字节,非 4 对齐(142 % 4 == 2)。用于证明 parse 层接受非对齐 UI 段。
     fn ui_segment_four_button_error() -> Vec<u8> {
         let mut out = Vec::new();
-        out.extend_from_slice(&1u32.to_le_bytes()); // layout
-        out.extend_from_slice(&1u32.to_le_bytes()); // flags visible
+        out.extend_from_slice(&crate::ui::UI_LAYOUT_VERSION.to_le_bytes()); // layout
+        out.extend_from_slice(&crate::ui::UI_FLAG_VISIBLE.to_le_bytes()); // flags visible
         out.extend_from_slice(&4u32.to_le_bytes()); // button count
         let buttons = [
             (1u32, "进入游戏", 1u32),

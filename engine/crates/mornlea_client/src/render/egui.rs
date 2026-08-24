@@ -32,7 +32,7 @@ pub enum EguiError {
     FontInvalid,
 }
 
-/// egui 的 GPU 呈现 pass:渲染器、屏幕描述、egui 状态与已上传字体。
+/// egui 的 GPU 呈现 pass:渲染器、屏幕描述与 egui 状态。
 pub struct EguiPass {
     /// egui-wgpu 渲染器;纹理表由它内部管理(update/free 维护)。
     renderer: egui_wgpu::Renderer,
@@ -41,11 +41,6 @@ pub struct EguiPass {
     screen: egui_wgpu::ScreenDescriptor,
     /// egui 上下文与点击事件队列(纯状态,无 GPU)。
     ui: UiState,
-    /// 已上传的字体字节;Some 表示字体已安装(见 EguiPass::has_font)。
-    ///
-    /// 与 UiState 的 font_loaded 一致,本字段单独保留一份字节副本,
-    /// 便于可选的重复安装;字体安装本身由 UiState::install_font 完成。
-    font: Option<Vec<u8>>,
 }
 
 impl EguiPass {
@@ -82,7 +77,6 @@ impl EguiPass {
             renderer,
             screen,
             ui: UiState::new(),
-            font: None,
         }
     }
 
@@ -96,10 +90,10 @@ impl EguiPass {
 
     /// 是否已安装字体(有字体的 UI 帧才可绘制)。
     pub fn has_font(&self) -> bool {
-        self.font.is_some() || self.ui.has_font()
+        self.ui.has_font()
     }
 
-    /// 上传字体字节到 UiState 并记住已安装。
+    /// 上传字体字节到 UiState 安装;已安装状态由 `UiState::install_font` 记录。
     ///
     /// 空字节或超过 MAX_UI_FONT_BYTES 返回 EguiError::FontInvalid;
     /// 成功则 UiState::install_font 安装(proportional+monospace 同族)。
@@ -109,7 +103,6 @@ impl EguiPass {
             return Err(EguiError::FontInvalid);
         }
         self.ui.install_font(bytes);
-        self.font = Some(bytes.to_vec());
         Ok(())
     }
 

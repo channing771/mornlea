@@ -67,6 +67,11 @@ pub const MENU_VERSION_MARGIN: f32 = 12.0;
 pub const MENU_TITLE_BUTTON_GAP: f32 = 24.0;
 /// 末按钮底边与错误行顶边的间距。
 pub const MENU_ERROR_BUTTON_GAP: f32 = 16.0;
+/// 按钮数为 0(标题独占)时标题底边距屏幕中心的向上偏移(逻辑点)。
+///
+/// 标题绘制不依赖按钮列几何:有按钮时标题锚在首按钮上方,无按钮时用此
+/// 固定偏移落在屏幕上半部,避免标题丢失。
+pub const MENU_TITLE_EMPTY_CENTER_GAP: f32 = 120.0;
 /// 全屏不透明深灰背景色(参考经典标题画面基调)。
 pub const MENU_BACKGROUND: Color32 = Color32::from_rgb(32, 36, 42);
 /// 标题/版本行的白色。
@@ -332,16 +337,20 @@ fn draw_menu(ui: &mut egui::Ui, frame: &UiFrame, pending: &mut Vec<u32>) {
 
     let rects = menu_button_layout(screen, frame.buttons.len());
 
-    // 标题:位于按钮列上方、水平居中。
-    if let Some(first) = rects.first() {
-        ui.painter().text(
-            pos2(screen.center().x, first.min.y - MENU_TITLE_BUTTON_GAP),
-            Align2::CENTER_BOTTOM,
-            &frame.title,
-            FontId::proportional(MENU_TITLE_FONT_SIZE),
-            MENU_TEXT_COLOR,
-        );
-    }
+    // 标题:位于按钮列上方、水平居中;始终绘制,不被按钮数 gating。
+    // 无按钮(标题独占)时用屏幕上半部固定偏移,有按钮时锚在首按钮上方。
+    let title_y = rects
+        .first()
+        .map_or(screen.center().y - MENU_TITLE_EMPTY_CENTER_GAP, |first| {
+            first.min.y - MENU_TITLE_BUTTON_GAP
+        });
+    ui.painter().text(
+        pos2(screen.center().x, title_y),
+        Align2::CENTER_BOTTOM,
+        &frame.title,
+        FontId::proportional(MENU_TITLE_FONT_SIZE),
+        MENU_TEXT_COLOR,
+    );
 
     // 中心纵排按钮列:固定宽高,`add_enabled` 实现禁用态。
     for (button, rect) in frame.buttons.iter().zip(rects.iter()) {
@@ -1210,6 +1219,30 @@ mod tests {
             "第二次同输入不应再上传纹理"
         );
         assert!(!first.shapes.is_empty());
+    }
+
+    #[test]
+    fn menu_title_drawn_with_zero_buttons() {
+        // 标题绘制不被按钮数 gating:按钮表为空(rects.first() 为 None)时标题仍绘制,
+        // 锚在屏幕上半部固定偏移,避免 0 按钮帧丢标题。
+        let mut state = UiState::new();
+        state.install_font(test_font());
+        let frame = decode_ui_frame(&encode_frame(
+            UI_LAYOUT_VERSION,
+            UI_FLAG_VISIBLE,
+            &[],
+            "Mornlea",
+            "dev",
+            "",
+        ))
+        .expect("0 按钮帧应可解码");
+        let full = state
+            .run_frame(raw_input(&[], screen_rect(), 1.0, None), &frame, 1.0)
+            .expect("应产出布局");
+        let has_title = full.shapes.iter().any(|clipped| {
+            matches!(&clipped.shape, egui::Shape::Text(t) if t.galley.job.text.contains("Mornlea"))
+        });
+        assert!(has_title, "按钮数为 0 时标题仍应绘制");
     }
 
     #[test]
