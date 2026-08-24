@@ -23,30 +23,30 @@
 
 ```toml
 egui = { version = "0.35", default-features = false }          # 关闭 default_fonts
-egui-wgpu = { version = "0.35", default-features = false, features = ["macos-window-resize-jitter-fix", "wgpu/default"] }
+egui-wgpu = { version = "0.35", default-features = false, features = ["macos-window-resize-jitter-fix"] }
 ```
 
 说明：egui-wgpu 的 wgpu 依赖 default-features=false（std/wgsl），仓库已有直接 wgpu=29（默认 feature，含 metal 后端）；"macos-window-resize-jitter-fix" 转发 wgpu/metal。不启用 "webgl"/"winit"/"capture" feature；不引入 egui-winit。
 
 ### `src/ui.rs`（新模块，纯状态 + egui Context，可无 GPU 单测）
 
-- `pub struct UiFrame`：`visible: bool`、`title: String`、`version: String`、`error: String`、`buttons: Vec<UiButton>`（`id: u32`、`label: String`、`enabled: bool`）。`decode_ui_frame(bytes: &[u8]) -> Result<UiFrame, ()>` 实现 ABI 解码与校验：layout v1（u32）、flags（u32，bit0=visible）、按钮数（u32，≤ `MAX_UI_BUTTONS=8`）、每按钮 `id u32 + label_len u32 + label UTF-8`（label ≤ 64 字节）、`title`（≤128 字节）、`version`（≤64 字节）、`error`（≤256 字节）；整段 ≤ `MAX_UI_SEGMENT_BYTES=4096`；任何越界/非 UTF-8 返回 Err（ffi 层转 INVALID_ARGUMENT）。
+- `pub struct UiFrame`：`visible: bool`、`title: String`、`version: String`、`error: String`、`buttons: Vec<UiButton>`（`id: u32`、`label: String`、`enabled: bool`）。`decode_ui_frame(bytes: &[u8]) -> Result<UiFrame, ()>` 实现 ABI 解码与校验：layout v1（u32）、flags（u32，bit0=visible）、按钮数（u32，≤ `MAX_UI_BUTTONS=8`）、每按钮 `id u32 + label_len u32 + label UTF-8 + enabled u32`（label ≤ 64 字节；enabled 只接受 0/1，其余 Err——禁用态是规范行为「禁用按钮不产生事件」的 wire 载体，Go 侧 `EncodeUIMenu` 逐字段对应写入；Ruling 1：Task 1 首版遗漏该字段，已补）、`title`（≤128 字节）、`version`（≤64 字节）、`error`（≤256 字节）；整段 ≤ `MAX_UI_SEGMENT_BYTES=4096`；任何越界/非 UTF-8 返回 Err（ffi 层转 INVALID_ARGUMENT）。
 - `pub struct UiState`：`egui::Context`、字体（`set_fonts` 在首次有字体字节时安装：proportional 与 monospace 族 = 上传的 Noto CJK，不装任何内嵌字体）、`pending_events: Vec<u32>`、`font_loaded: bool`。方法：
   - `install_font(&mut self, bytes: &[u8])`：每渲染器一次（重复上传幂等/替换）；
   - `run_frame(&mut self, raw: egui::RawInput, frame: &UiFrame, pixels_per_point: f32) -> Option<egui::FullOutput>`：`ctx.run` 内按 `frame` 绘制：全屏不透明深灰背景面板（MC 标题画面基调，egui Style 调参，不 hack shader）、大标题「Mornlea」（RichText heading 白字）、中心纵排按钮（宽约 220px、高约 40px，间距 8px，`add_enabled(enabled, Button)`，样式走 egui Style 常量）、底部版本行（小字，左下 12px 边距）。`frame.error` 非空时在按钮列下方显示红色错误行。点击响应（`response.clicked()`）把按钮 `id` 压入 `pending_events`；禁用按钮不产生点击事件。
   - `drain_events(&mut self) -> Vec<u32>`：排空前读取；
   - `has_font(&self) -> bool`。
-- `pub fn raw_input(events: &[UiEvent], screen_rect: egui::Rect, pixels_per_point: f32, time: Option<f64>) -> egui::RawInput`：把 `UiEvent` 翻译成 `egui::Event` 序列；`RawInput` 的 `screen_rect`、`pixels_per_point`、`viewports`（ROOT 视口 `inner_rect`）、`modifiers`（从事件推导）、`focused: true`；时间戳：菜单绘制无动画，固定 `time: None`（golden 确定性）。
+- `pub fn raw_input(events: &[UiEvent], screen_rect: egui::Rect, pixels_per_point: f32, time: Option<f64>) -> egui::RawInput`（0.35 实测校正：`Context::run_ui(raw, |ui| ...)` 是运行入口，`pixels_per_point` 写进 ROOT 视口的 `ViewportInfo::native_pixels_per_point`；`Context::default()` 构造；egui-wgpu 的 `wgpu/default` 是非法 Cargo 特性语法——本 crate 直接依赖 wgpu=29 已带 default 特性，egui-wgpu 只留 `macos-window-resize-jitter-fix`）：把 `UiEvent` 翻译成 `egui::Event` 序列；`RawInput` 的 `screen_rect`、`pixels_per_point`、`viewports`（ROOT 视口 `inner_rect`）、`modifiers`（从事件推导）、`focused: true`；时间戳：菜单绘制无动画，固定 `time: None`（golden 确定性）。
 - `pub enum UiEvent`：`CursorMoved(f64, f64)`、`MouseButton(bool /*primary*/, bool /*pressed*/)`、`Key { key: egui::Key, pressed: bool, modifiers: egui::Modifiers }`、`Text(char)`、`Scroll(f32, f32)`、`CursorGone`。翻译函数 `pub fn winit_to_ui_events(...)` 以纯函数形式存在以便单测（输入 winit 事件类型，输出 `Vec<UiEvent>`）。
 - 输入传输：`thread_local! { static UI_EVENTS: RefCell<Vec<UiEvent>> }`——`window.rs` 的 `App` 在事件回调里 push（仅当窗口与渲染器同线程；Go `LockOSThread` + 渲染器与窗口同栈，单测直接测翻译函数与队列 API，不建真实窗口）。`render_frame` 在运行 egui 前 `UI_EVENTS.take()`；**无 UI 段的帧同样 take 并丢弃**（防止积压：菜单只在 Go 菜单相位产生 UI 段，游戏帧丢弃窗口期输入是「菜单关闭时 egui 不消费」的实现）。
 - 单测（无 GPU）：decode_ui_frame 边界（截断/越界/非 UTF-8/空帧）、menu 布局与命中（给固定逻辑尺寸合成 `UiFrame`，用 `RawInput` 在按钮矩形中心派发 Press+Release，断言 `drain_events` 序列；禁用按钮无事件；同一指针点只命中一个按钮）、`raw_input` 翻译（事件 → egui::Event 精度）、字体安装后 `has_font`、无动画静态帧两次相等（same RawInput → same FullOutput shapes 摘要）。
 
 ### `src/render/egui.rs`（新模块，GPU 半部）
 
-- `pub struct EguiPass { renderer: egui_wgpu::Renderer, ui: UiState, textures: HashMap<egui::TextureId, wgpu::Texture>, font: Option<Vec<u8>>, screen: egui_wgpu::ScreenDescriptor }`。`new(device, color_format, width, height)`：`egui_wgpu::Renderer::new(device, color_format, None, 1, None)`（`None` = 不用 depth、不抖动）。
+- `pub struct EguiPass { renderer: egui_wgpu::Renderer, ui: UiState, font: Option<Vec<u8>>, screen: egui_wgpu::ScreenDescriptor }`——**纹理表不归 EguiPass 管**：egui-wgpu 0.35 的 `Renderer` 内部持有 texture 表，用 `update_texture(device, queue, id, image_delta)` 与 `free_texture(&id)` 维护（实测 0.35.0 源码 lib.rs/renderer.rs，2026-08-23 核对）。`new(device, color_format, width, height)`：`egui_wgpu::Renderer::new(device, COLOR_FORMAT, RendererOptions { msaa_samples: 1, depth_stencil_format: None, dithering: false, ..Default::default() })`——0.35 的构造签名是 RendererOptions 结构体（旧 0.32 的 (depth, msaa, dithering) 元组签名已变），dithering 关掉保证 capture golden 像素确定。
 - `set_size(&mut self, w, h)`：更新 `ScreenDescriptor` 与 `UiState` 的 screen 尺寸（resize 路径调用）。
 - `upload_font(&mut self, bytes: &[u8]) -> Result<(), ()>`：字节量校验（>0 且 ≤ 32 MiB），存 `font`，并 `UiState::install_font`。
-- `run_and_record(&mut self, device, queue, encoder, frame_view, frame: &UiFrame, events: Vec<UiEvent>, pixels_per_point, size) -> Option<()>`：无字体/无 UI 段均返回 None（零工作）；否则 `full = ui.run_frame(...)`；`full.textures_delta` 经 wgpu 建/删 `TextureId` 纹理（egui-wgpu 0.35 的 texture API 以 docs.rs 为准：`update_texture/free_texture` 或 `update_buffers` 内嵌路径）；tessellate 得 `PaintJobs`；`renderer.update_buffers(...)`；随后 `begin_render_pass(load: LoadOp::Load, store)` 且 `renderer.render(pass, jobs, screen_descriptor)`。pass 标签 `"egui pass"`，不写 depth、无 resolve。
+- `run_and_record(&mut self, device, queue, encoder, frame_view, frame: &UiFrame, events: Vec<UiEvent>, pixels_per_point, size) -> Option<()>`：无字体/无 UI 段均返回 None（零工作）；否则 `full = ui.run_frame(...)`；`full.textures_delta` 逐条调用 `renderer.update_texture(device, queue, id, delta)` 与 `renderer.free_texture(&id)`；tessellate 得 `PaintJobs`；`renderer.update_buffers(device, queue, encoder, &jobs, &screen)` **会返回 Vec<CommandBuffer>（回调相关，常规为空）——需随主 encoder 一起提交**；随后 `begin_render_pass(load: LoadOp::Load, store)` 且 `renderer.render(pass, jobs, screen_descriptor)`。pass 标签 `"egui pass"`，不写 depth、无 resolve。
 - `drain_events(&mut self) -> Vec<u32>`：转发 `UiState::drain_events`。
 
 ### `render/mod.rs` 集成
@@ -71,7 +71,7 @@ egui-wgpu = { version = "0.35", default-features = false, features = ["macos-win
 ### `internal/client/render.go`
 
 - `frameTagUI = 9`（TLV）；`RenderFrame.UISegment []byte`；`hasPassSegments` 计入。
-- `type UIButton struct { ID uint32; Label string; Enabled bool }`；`type UIMenu struct { Visible bool; Title, Version, Error string; Buttons []UIButton }`；`EncodeUIMenu(menu UIMenu) []byte`：与 Rust `decode_ui_frame` 逐字节对应（u32 layout=1、flags、按钮数、id+len+label、title、version、error）；超界（按钮 >8、label >64 字节、title >128、version >64、error >256）panic（编程错误，与既有 segment 编码口径一致）。`EncodeRenderFrame` 在 TLV 末尾（water 之后）追加 `frameTagUI`。
+- `type UIButton struct { ID uint32; Label string; Enabled bool }`；`type UIMenu struct { Visible bool; Title, Version, Error string; Buttons []UIButton }`；`EncodeUIMenu(menu UIMenu) []byte`：与 Rust `decode_ui_frame` 逐字节对应（u32 layout=1、flags、按钮数、id+len+label+enabled、title、version、error）；超界（按钮 >8、label >64 字节、title >128、version >64、error >256）panic（编程错误，与既有 segment 编码口径一致）。`EncodeRenderFrame` 在 TLV 末尾（water 之后）追加 `frameTagUI`。
 - `Renderer.UploadUIFont(font []byte)`、`Renderer.DrainUIEvents() []uint32`（每次调用排空）；cgo 序言追加 `noescape/nocallback` 声明。
 - 测试：`EncodeUIMenu` 的字节级 golden（含空按钮、含 error、最大规模）、越界 panic、`hasPassSegments` 计入 UI 段、drain 返回协议——Rust 解码侧有黄金字节夹具，Go 与 Rust 各持一份字节级测试，跨语言一致性由此锁定。
 

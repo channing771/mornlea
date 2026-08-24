@@ -20,3 +20,18 @@ Task 间文件/接口冲突检查：
 ## 执行进度
 
 （任务完成后按 Task 追加：Task N: complete（commits x..y, review clean）/ fix round 记录 / parked & Ruling 记录。）
+
+## Task 1（egui 依赖 + 无 GPU UI 模型）
+
+- 2026-08-23 控制会话：change 产物已提交（69534fa8）；Task 1 implementer 已派发（agent 1c74d3bc-9255-497e-b00e-f920046b85b4，brief: .superpowers/sdd/add-egui-main-menu/task-1-brief.md，report: task-1-report.md）；BASE = 69534fa8。
+- Ruling（预检）：design.md 与选型文档的 egui 版本差异——选型文档假定 0.36.1，实测 crates.io egui-wgpu 0.36.1 = wgpu ^30、0.35.x = wgpu ^29；按「绝不单侧升级 wgpu」采用 0.35.0。若错：后续 egui 升级需要带 wgpu 30 迁移一起做。
+- Ruling（预检）：egui default_fonts 关闭后单测无内嵌字体——先试空 FontDefinitions 布局；若 egui 无字体 panic，用 <=4KB 许可明确的小 TTF（include_bytes! 自 src/ui/testdata/）并注明来源。若错：测试字体依赖资产许可风险与体积增加。
+
+## Task 1 执行与裁决
+
+- 2026-08-23 implementer(1c74d3bc)完成：DONE_WITH_CONCERNS，候选 commit 9a8292f1（feat: add egui deps and headless menu ui model）。cargo test/clippy/fmt 全绿；cargo tree：wgpu 29.0.4、egui/egui-wgpu 0.35.0、无 egui-winit。实现：src/ui.rs（877 行 + 19 单测）、egui 依赖（default_fonts 关）、src/ui/testdata/demo.ttf（400B，取自 ttf-parser 0.25.1 测试夹具，MIT OR Apache-2.0，报告注明来源）。
+- Ruling 1（load-bearing，下达 fix round 1）：ABI 布局 v1 必须编码逐按钮 enabled u32（0/1；否则 Err）——「禁用按钮不产生事件」是规范 MUST，wire 不携带禁用态则该 MUST 不可达成。design.md 已更新（每按钮 id+label_len+label+enabled；Go EncodeUIMenu 同步）。若错：wire 兼容面多一个字段（两端正开发期，无历史格式承诺，代价低）。
+- Ruling 2（minor 记录，不修）：egui 0.35 按钮交互内边距使 8px 间隙点会命中相邻按钮；规范只约束「可见矩形内点击 → 恰好一次该按钮」与「同点最多命中一个」，间隙点击行为未规定。实现采用中心命中恰一次+远处不命中+互不重叠几何断言。若真需求变化：调 interact 矩形或间距。
+- Ruling 3（minor 记录，接受）：demo.ttf 是 ttf-parser 测试夹具（MIT OR Apache-2.0），400 字节、仅 'A' 字形；真实渲染由 Task 6 capture golden 以 ABI 上传的 Noto CJK 验收。若错：无头单测无法测真实字体渲染（已规划到 capture 层）。
+- API 校正（implementer 实测 0.35，控制会话已同步进 design.md）：Context::run_ui + ROOT 视口 native_pixels_per_point；Context::default()；egui-wgpu 的 wgpu/default 特性非法已去（wgpu 29 default 特性由直接依赖统一携带）；egui 点击需「Move→Press→Release」三帧序列。
+- Task 1 fix round 1/5：进行中（resume 原 implementer，Ruling 1 的 enabled 位与 wire 路径测试）。
