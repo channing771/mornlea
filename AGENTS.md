@@ -10,7 +10,7 @@
 
 Darwin 图形客户端提供本地确认音频：不引入第三方依赖或二进制音频资产，启动时预分配 `AudioQueue` 与固定 PCM，设备不可用、队列繁忙或播放失败均无声降级。顶层配置 `audioVolume` 控制总音量；采掘、放置、进食与受伤只在权威确认边界播放 cue。放置只消费 v26 `PlaceBlockSucceeded(sequence)`，重复或旧序号、拒绝、无关状态和其他会话均静音；capture、benchmark 与无图形专用服务端不请求音频设备。
 
-图形客户端默认在完整程序化材质注册表上应用内嵌的 Pixel Perfection 子集，未映射的 layer 最终回退到程序化材质。可选顶层配置 `texturePackPath` 只在启动时从本地目录读取 16×16 PNG 并按逻辑 layer 逐层覆盖；benchmark 与 capture 忽略本地覆盖，无图形专用服务端不加载客户端资产。该材质能力沿用远环 LOD 合入后的协议 v23、engine ABI v6、client ABI v7 与 benchmark scenario v18，未推进这些版本。
+图形客户端默认在完整程序化材质注册表上应用内嵌的 Pixel Perfection 子集，未映射的 layer 最终回退到程序化材质。可选顶层配置 `texturePackPath` 只在启动时从本地目录读取 16×16 PNG 并按逻辑 layer 逐层覆盖；benchmark 与 capture 忽略本地覆盖，无图形专用服务端不加载客户端资产。该材质能力沿用远环 LOD 合入后的协议 v23、engine ABI v6 与 benchmark scenario v18，未推进这些版本（client ABI 其后经 egui 主菜单变更升到 v8）。
 
 图形客户端已使用原创程序化生存 HUD：关闭容器时显示居中九格快捷栏，选中格以外扩高对比外框和强调色内框构成双层轮廓，数量与工具耐久继续显示权威镜像；采掘反馈以移动末端标记和固定警示缺口区分可采与不可采形状。HUD 图集在物品列前固定为空/半/满心、空/满气泡、空/满鸡腿七个程序化 cell；已确认生命与耗损氧气各用十个 resolved 单实例槽表达，已确认饥饿用十个常驻空槽加最多十个填充、奇数值只覆盖末个鸡腿右半边，未确认值不显示。生命与饥饿各以 169px 设计宽度锚定快捷栏左右边缘；满氧隐藏只省略气泡实例，耗损氧气沿饥饿右边缘向外堆叠，关闭态在其上方、打开态在其下方；永久两行状态栈参与缩放和采掘/聊天锚点，并避让可交互格，聊天面板与字形使用同一有界缩放比保持在 framebuffer 内且不与状态栈相交。HUD 保持 benchmark scenario v19 的 267 quad、700 glyph、13312-byte glyph offset 与 46912-byte 固定上传容量；15 个无窗口 capture 场景依次为 `terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`water-surface-slope`、`far-horizon`、`water-underwater`。
 

@@ -61,7 +61,7 @@ egui-wgpu = { version = "0.35", default-features = false, features = ["macos-win
 
 - `CLIENT_ABI_VERSION = 8`；注释写明 v8 增量（两个新出口 + 帧 UI 段），v7/v6 历史保留。
 - `mornlea_client_render_upload_ui_font(abi, handle, bytes, len) -> u32`：ABI 校验 → 句柄 → 参数（bytes 非空、len ≤ 32 MiB）→ `egui_pass.upload_font`；状态码复用 OK/ABI/INVALID_ARGUMENT/WINDOW/PANIC，字体超限返回 CAPACITY（头文件已有该值）。
-- `mornlea_client_render_drain_ui_events(abi, handle, out, out_len) -> u32`：返回写入的 u32 事件数；`out == null` 或 `out_len % 4 != 0` → INVALID_ARGUMENT；事件数超过 `out_len/4` 时写满并丢弃余下（调用方每帧排空）。
+- `mornlea_client_render_drain_ui_events(abi, handle, out, out_len, out_count) -> u32`：返回状态码，写入的 u32 事件数经 `out_count` 输出——**事件计数与状态码必须分离**（Ruling 7：首版把计数当返回值，与 WINDOW=3 等状态码冲突，无法区分「3 个事件」与「句柄错误」）；`out == null` 或 `out_len % 4 != 0` → INVALID_ARGUMENT；事件数超过 `out_len/4` 时写满并丢弃余下（调用方每帧排空）。
 - `parse_frame` 增加 TLV tag 9（`FRAME_TAG_UI`），`FrameInput.ui_segment` 原样携带（合法性由 `decode_ui_frame` 校验）。
 - ffi 单测：abi_version_is_eight、非法 UI 段渲染拒绝、drain 长度校验。
 - `engine/include/mornlea_client.h`：`MORNLEA_CLIENT_ABI_VERSION 8u` + 两个出口声明 + 注释（v8 增量、v7 不可混装）；`lib.rs` 顶部文档更新。
@@ -72,7 +72,7 @@ egui-wgpu = { version = "0.35", default-features = false, features = ["macos-win
 
 - `frameTagUI = 9`（TLV）；`RenderFrame.UISegment []byte`；`hasPassSegments` 计入。
 - `type UIButton struct { ID uint32; Label string; Enabled bool }`；`type UIMenu struct { Visible bool; Title, Version, Error string; Buttons []UIButton }`；`EncodeUIMenu(menu UIMenu) []byte`：与 Rust `decode_ui_frame` 逐字节对应（u32 layout=1、flags、按钮数、id+len+label+enabled、title、version、error）；超界（按钮 >8、label >64 字节、title >128、version >64、error >256）panic（编程错误，与既有 segment 编码口径一致）。`EncodeRenderFrame` 在 TLV 末尾（water 之后）追加 `frameTagUI`。
-- `Renderer.UploadUIFont(font []byte)`、`Renderer.DrainUIEvents() []uint32`（每次调用排空）；cgo 序言追加 `noescape/nocallback` 声明。
+- `Renderer.UploadUIFont(font []byte)`、`Renderer.DrainUIEvents() []uint32`（每次调用排空；状态码经 `r.check` 判定、计数经 `out_count` 读取）；cgo 序言追加 `noescape/nocallback` 声明。
 - 测试：`EncodeUIMenu` 的字节级 golden（含空按钮、含 error、最大规模）、越界 panic、`hasPassSegments` 计入 UI 段、drain 返回协议——Rust 解码侧有黄金字节夹具，Go 与 Rust 各持一份字节级测试，跨语言一致性由此锁定。
 
 ### `internal/render/font_atlas.go`

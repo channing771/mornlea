@@ -69,3 +69,23 @@ Task 间文件/接口冲突检查：
 - Ruling 5（load-bearing 提前裁决）：`TestBaselineVersionsMatchCode` 是机械门禁——client ABI 头文件已升 v8，AGENTS.md/CLAUDE.md 必须在本 change 内同步版本号为 v8（两份逐字节一致；能力描述按选型文档留到归档）。tasks.md Task 7 已增补 7.0。若错：门禁保持红、CI 无法合并。
 - 范围外最小改动记录（同 crate、功能必需）：src/ui.rs + pub fn ctx()（tessellate 需要 egui::Context）；src/render/water_tests.rs 的 render-pass 计数守卫 5→6（egui pass 是新增合法 render pass）。
 - 偏差记录：run_and_record/set_size/new 采用 brief 签名（ppp/尺寸存入 self.screen，语义等价）；raw_input 以 time:Option<f64>=None 调用；字体缺失 Invalid 在 debug pass 之后触发（不提交已录命令）。
+
+## Task 3 完成
+
+- Task 3: complete（commits 1f2c38c2..f3b93252，review clean）。评审(ba1fe12c)：SPEC ✅（1 Minor 偏差）/ QUALITY Approved；无 Critical/Important。
+- Minor 递延（终审复核）：
+  - _window 未改名 window（brief item 0；字段已被读取，_ 前缀误导）——Ruling 6：递延，可由终审 fix wave 一并处理（纯命名、零行为影响）。
+  - callback_buffers 先于主 encoder 提交（无 callback 时无害）。
+  - water_tests 断言消息措辞（「半透明」实为 egui screen-space pass）。
+  - EguiPass font 字段冗余（双真相源+双份字节副本，≤2×32MiB）。
+  - decode_ui_frame 每帧双调（<4KB，design 既定）。
+  - 早退帧不 take 事件（正常帧满足契约，队列上限防积压）。
+  - 范围微超（ui.rs/water_tests.rs 同 crate 必需最小改动）；report 漏列 M tasks.md（报告精度）。
+- ⚠️ 评审环境无 cargo（未复跑 test/clippy——由 Task 7 终审复跑）；GPU 端到端 → Task 6；archcheck 红 → 本会话已同步 AGENTS/CLAUDE（ef691004，Ruling 5 落地），Task 4-6 验证恢复全绿。
+
+## Task 4 执行与裁决
+
+- 2026-08-23 implementer(7d34c0ae)完成候选：0df47789（feat: bind client ABI v8 ui font and event drain in Go，7 文件 +432/-5，另附报告提交 b442edb4/f328d803）。Go 验证全绿（client/render race ok、vet ok、gofmt 干净）；跨语言 golden（Rust four_button_frame 124 字节）双重锁定。
+- Ruling 7（load-bearing，下达 fix round 1）：DrainUIEvents 首版签名的返回值即事件数，与状态码空间（WINDOW=3 等）冲突——「3 个事件」与「窗口句柄错误」无法区分。裁决：签名改为 `drain_ui_events(abi, handle, out, out_len, out_count) -> status`，计数经 out_count 输出，Go 绑定经 r.check 判定状态并读计数。若错：ABI 是本 change 新引入、无历史格式承诺，改动成本低（ffi.rs/header/render.go + 测试）。
+- 其他记录：最小帧 24 字节（brief 28 之说以 Rust 真值为准并已锁定）；EmbeddedCJKFont 每次 16 MiB 副本（仅启动一次）；window_test.go 版本期望 7→8（必要一行）；cgo 序言重复声明（Go 容忍）。
+- 基线文档二次修正：TestBaselineVersionsMatchCode 用 FindAllStringSubmatch（**全部**匹配必须等于代码值），AGENTS/CLAUDE 第 13 行的历史「client ABI v7」同样会让门禁红——已改为不含该数字的历史表述（「client ABI 其后经 egui 主菜单变更升到 v8」），两份逐字节一致（工作区未提交，随后续 docs commit）。
