@@ -122,3 +122,12 @@ task 5 status recorded
 - Minor 递延（终审/收尾决策）：(a) 「Menu nil 清除」缺显式聚焦单测（现由 golden 逐字节不变间接证明）——可加 captureSceneImage 设 Menu 后复设 nil 断言 uiSegment 返 nil；(b) capture.go:119「应追加在列表末尾」通用注释未标注 main-menu 插入例外；(c) brief 文件归属措辞（无行为）。
 - ⚠️ 已核实：提交仅含 capture.go/capture_ai_companion_test.go/main-menu.png；长命令证据（18/18 绿、race ok 238.379s）由控制会话实跑。
 - 实施日志（控制器代跑）：Task 6 的子代理会话反复在长时命令（make visual-check 等）中段被终止——代码在三次中断前已完成，golden 由 implementer 的 visual-update 生成；控制会话完成剩余验证（visual-check 18/18 0/230400、race ok）并以 implementer 写的代码提交 07997520。评审仍经独立子代理完成（静态评审）。
+
+## 终审（整分支）
+
+- 评审（68b86900）：**PASS（可以合并）**——无 Critical/Important/必须修项。三条 Requirement/场景逐条核查通过；AGENTS/CLAUDE 逐字节相同且 client ABI v8 双处；golden 仅新增 main-menu.png。
+- 递延 minor 三分类：必须修 0 项；可选 5 项（T3-_window 改名 Ruling 6、T3-EguiPass font 字段冗余、T4-142B 夹具硬编码常量、T6-a nil-clear 显式单测、T6-b capture.go:119 注释例外标注）；可不去动 23 项（T1 M1-M6、T2 M1-M5 含 Ruling 4、T3 其余、T4 42B、T5 四项、T6-c）。
+- 终审新增 minor：标题绘制被 `rects.first()` gating（主菜单恒 4 按钮，无实际影响）——并入 fix wave。
+- Ruling 10：终审 5 项可选 + 1 minor 用**一次 fix wave** 统一处理后做一次 scoped 复评（SDD 终审修复纪律）。若错：多一轮小改动，风险低。
+- 验证事实（控制会话实跑）：make visual-check 18/18 0/230400；go test ./... -race exit 0；make rust-check exit 0；go vet ./... 通过；gofmt -l . 无输出（清理 build/.gotmp、.review-gocache、.gocache-task5 后）；openspec validate 61/61；git diff --check 通过。
+- 收尾清理：缓存目录已删；golden 目录仅新增 main-menu.png；剩余工作树未跟踪文件仅 docs/superpowers/...selection-design.md（用户既有）。
