@@ -55,6 +55,7 @@
 
 ## 7. 收尾：全量门禁与变更产物核对
 
+- [ ] 7.0 同步 `AGENTS.md` 与 `CLAUDE.md`（两份必须逐字节相同）的项目定位中 `client ABI v7` → `client ABI v8`——`internal/archcheck` 的 `TestBaselineVersionsMatchCode` 是机械门禁，client ABI 升版后不改基线文档即红；能力描述（egui 工具型 UI 已交付）按选型文档留到归档时同步，本任务只改版本号。
 - [ ] 7.1 `make rust`（或 `cargo build --workspace`）+ `cargo test --workspace --locked` + `cargo clippy --workspace --all-targets -- -D warnings`。
 - [ ] 7.2 `gofmt -l .` 无输出；`go vet ./...` 通过；`go test ./... -race` 全绿（无 -short）。
 - [ ] 7.3 运行 `openspec validate --all --strict --no-interactive`；核对 tasks 全部勾选、spec/design 与代码一致（不一致先改 change 产物）。

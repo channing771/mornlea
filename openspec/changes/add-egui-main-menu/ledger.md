@@ -35,3 +35,37 @@ Task 间文件/接口冲突检查：
 - Ruling 3（minor 记录，接受）：demo.ttf 是 ttf-parser 测试夹具（MIT OR Apache-2.0），400 字节、仅 'A' 字形；真实渲染由 Task 6 capture golden 以 ABI 上传的 Noto CJK 验收。若错：无头单测无法测真实字体渲染（已规划到 capture 层）。
 - API 校正（implementer 实测 0.35，控制会话已同步进 design.md）：Context::run_ui + ROOT 视口 native_pixels_per_point；Context::default()；egui-wgpu 的 wgpu/default 特性非法已去（wgpu 29 default 特性由直接依赖统一携带）；egui 点击需「Move→Press→Release」三帧序列。
 - Task 1 fix round 1/5：进行中（resume 原 implementer，Ruling 1 的 enabled 位与 wire 路径测试）。
+
+## Task 1 完成
+
+- Task 1: complete（commits 69534fa8..64ec093f — 9a8292f1 候选 + 64ec093f enabled 修复，review clean）。
+- 评审（5919ff97）：SPEC ✅ / QUALITY Approved；无 Critical/Important；Minor 全部记入递延清单（终审复核）：
+  - M1 标题用 FontId::proportional(32) 而非 RichText::heading——行为满足，仅措辞差异。
+  - M2 错误行仅当 ≥1 按钮时绘制（主菜单恒有按钮，实际影响低）。
+  - M3 install_font doc 幂等机制表述不准（set_fonts 整体替换表）。
+  - M4 确定性测试只断言 shapes.len()（符合 brief 明确要求，弱于 design 措辞）。
+  - M5 decode 不校验段内尾部多余字节（TLV 界定段长，风险低）。
+  - M6 8px 间隙点子例未直接测（Ruling 2 已记录 egui 交互内边距行为）。
+- ⚠️ 跨任务项（各落点在 Task 2/3/4/5/6，已纳入对应 brief）：Go EncodeUIMenu enabled、ABI v8 出口、Noto 上传一次、winit_to_ui_events、真实字形渲染（capture）、design.md GPU 半部与跨语言 golden。
+
+## Task 2 执行与裁决
+
+- 2026-08-23 implementer(34e37a4e)完成候选：1f2c38c2（feat: bridge winit events into egui raw input）。cargo test 90+160 全绿、clippy 0 警告、fmt 通过。实现：ui.rs 输入队列（VecDeque 1024 丢最旧，push/take/clear）+ key_from + winit_to_ui_events + window.rs 接线；既有游戏输入路径逐字节不变。
+- 偏差记录（implementer 报告 §2）：(1) UiEvent::Key 无 repeat 字段、raw_input 固定 repeat:false——brief 要求按 winit repeat 填 egui Event::Key.repeat；(2) 未置快照 reserved overflow 位（tasks.md 提及、brief 未要求，且触碰 input.rs 超出 brief 范围）；(3) key_from 覆盖 KeyA..KeyZ（优于 brief 的 K..Z 措辞）；(4) winit KeyEvent 不可构造，键盘翻译拆私有辅助函数。
+- 控制会话预裁决（等评审确认后执行 fix round 1）：偏差(1) 按 brief 是明确要求，虽然本竖切菜单无文本输入、影响为 minor，但修复成本低且为后续菜单（服务器地址输入、设置）打底——fix 将 UiEvent::Key 增加 repeat: bool，raw_input 填充 egui::Event::Key.repeat，并补测试。若错：enum 字段无历史承诺、成本为一处测试调整。
+- 偏差(2)(3)(4) 记录为接受（(2) 超出 brief 范围且 tasks.md 措辞为「若改变既定布局则回退」，丢最旧已实现；(3) 更全集；(4) 实现选择）。
+
+## Task 2 完成
+
+- Task 2: complete（commits 64ec093f..1f2c38c2，review clean）。评审(da257db3)：SPEC ✅ / QUALITY Approved；无 Critical/Important。
+- Minor 递延（终审复核）：
+  - M1(UiEvent::Key 无 repeat；brief 要求、与 Task 1 固定枚举冲突)——**Ruling 4（修正早先预裁决）**：递延为 minor。理由：UiEvent 是 Rust 进程内枚举（非 wire），后续菜单加文本输入时补 repeat 字段成本为零；本竖切菜单无文本输入，run-time 影响近零。若错：未来加 repeat 需连带 raw_input 与测试，仍是一次小改动。
+  - M2 push_ui_event while→if（风格）；M3 每事件空 Vec 分配（可忽略）；M4 Modifiers.command/mac_cmd 恒 false（信息级；菜单语义在 Go）；M5 key_from A..Z 超集（信息级）。
+- ⚠️ W2（渲染侧 take_ui_events 的 drop 语义）→ Task 3 落点；W1/W3 已裁决接受/递延。
+
+## Task 3 执行与裁决
+
+- 2026-08-23 implementer(07d60249)完成候选：f3b93252（feat: egui wgpu pass and client ABI v8 exports，7 文件 +587/-20）。cargo test 160+95 全绿、clippy 0 警告、fmt 通过。新建 render/egui.rs（EguiPass），FrameInput.ui_segment + tag 9 校验、CLIENT_ABI_VERSION=8、两出口、header/lib.rs 同步。
+- Ruling 5（load-bearing 提前裁决）：`TestBaselineVersionsMatchCode` 是机械门禁——client ABI 头文件已升 v8，AGENTS.md/CLAUDE.md 必须在本 change 内同步版本号为 v8（两份逐字节一致；能力描述按选型文档留到归档）。tasks.md Task 7 已增补 7.0。若错：门禁保持红、CI 无法合并。
+- 范围外最小改动记录（同 crate、功能必需）：src/ui.rs + pub fn ctx()（tessellate 需要 egui::Context）；src/render/water_tests.rs 的 render-pass 计数守卫 5→6（egui pass 是新增合法 render pass）。
+- 偏差记录：run_and_record/set_size/new 采用 brief 签名（ppp/尺寸存入 self.screen，语义等价）；raw_input 以 time:Option<f64>=None 调用；字体缺失 Invalid 在 debug pass 之后触发（不提交已录命令）。
