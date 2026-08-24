@@ -157,7 +157,7 @@ jobs:
             packages: ./internal/server
             extra: ''
           - shard: internal-rest
-            packages: "$(go list ./internal/... | grep -v '/internal/server$')" github.com/channing771/mornlea/scripts
+            packages: "$(go list ./internal/... | grep -v '/internal/server$') github.com/channing771/mornlea/scripts"
             extra: ''
     steps:
       - name: 记录开始时间
