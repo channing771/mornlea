@@ -10,4 +10,4 @@ mkdir -p "$HOME/Library/Logs"
 LOG="$HOME/Library/Logs/mornlea-$ROLE.log"
 LINE="$MINUTE $HOUR * * * /bin/bash -lc '$ROOT/scripts/agents/run-agent.sh $ROLE >> $LOG 2>&1'"
 ( crontab -l 2>/dev/null | grep -v "run-agent.sh $ROLE" || true; echo "$LINE" ) | crontab -
-echo "已安装 cron（$ROLE）: $LINE"
+echo "已安装 cron（${ROLE}）: $LINE"

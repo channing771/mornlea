@@ -35,7 +35,7 @@
 2. **探索上下文**：读任务来源文档、相关代码/测试、既有主规格，把确认建立在对 repo 现状的核对之上。
 3. **一次一个问题澄清**：目的、边界、成功标准、约束（版本号互斥、资源上限、版权红线）；一次只发一个问题。
 4. **呈现设计并等待显式批准**：bounded 在对话里给短设计；architectural 按节呈现并写 `docs/superpowers/specs/` 设计文档。批准来源 = 用户或控制会话的显式确认，点头/明确同意即可。
-5. **批准是硬门禁，不随任务规模缩小**：简单任务只是设计更短，不是免批准。自动调度无人在线时，按实现者角色卡的「无人在线确认协议」执行——结构化确认请求发到该行对应的 GitHub Discussion #71 评论、该行备注标「待确认」、**停在确认点**，不得静默开工；收到批准后把结论写进 OpenSpec change 的 proposal/design 与 implementer brief，未经确认的内容不得在实现期悄悄变卦。
+5. **批准是硬门禁，不随任务规模缩小**：简单任务只是设计更短，不是免批准。确认通道**设备优先**（机制见 `docs/agents/confirmation-channel.md`）：`confirm.sh ask` 推送飞书 → 你在设备回复（approve/edit/reject）→ `feishu-listener.js` 写回复文件并自动续跑（`AGENT_RESUME`）。通道不可用或等待超时 → 降级 GitHub Discussion 评论协议（结构化请求发到对应评论、该行备注标「待确认」、**停在确认点**，不得静默开工）。收到批准后把结论写进 OpenSpec change 的 proposal/design 与 implementer brief，未经确认的内容不得在实现期悄悄变卦。
 
 ## 阶段 2：subagent-driven-development 执行
 

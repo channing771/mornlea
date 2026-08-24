@@ -74,6 +74,8 @@ scripts/agents/install-launchd.sh   # 生成 ~/Library/LaunchAgents/com.mornlea.
 | `CLAUDE_BIN` / `CODEX_BIN` | PATH 查找 | 覆盖 CLI 路径 |
 | `AGENT_MODE` | `merge` | 实现者收尾模式：`merge` 自动合入 main 并推送；`pr` 创建 PR 后暂停 |
 | `AGENT_INTERACTIVE` | `0` | `1` 时 claude 以终端交互模式运行（可用 `ask_user_question` 直接问你；仅 claude 支持）|
+| `AGENT_CONFIRM_CHANNEL` | `auto` | 内容确认通道：`feishu`（推送设备）/ `discussion`（GitHub 评论）/ `none`（本地记录）/ `auto`（有飞书配置则 feishu，否则 none）|
+| `MORNLEA_CONFIRM_DIR` | `~/.mornlea/confirm` | 确认请求/回复/飞书配置文件目录 |
 | `AGENT_EXTRA_ARGS` | 空 | 透传给 agent CLI 的附加参数（如 claude 的 `--permission-mode acceptEdits`）|
 
 ## 日志与追溯
@@ -86,7 +88,7 @@ scripts/agents/install-launchd.sh   # 生成 ~/Library/LaunchAgents/com.mornlea.
 
 - **讨论与仓库不一致**：以 `docs/feature-backlog.md` 为准，改讨论正文。
 - **模型如何选择**：不设 `AGENT_MODEL` 时用各 CLI 配置的默认模型（本机：claude → `claude-fable-5[1m]`；codex → `gpt-5.6-sol`）。需要更高能力或更快模型时用 `AGENT_MODEL=<模型名> make agent-planner` 覆盖；模型名称以对应 CLI 支持列表为准。
-- **brainstorm 需要用户选择怎么办**：headless 调度下实现者不能直接向你提问，按「无人在线确认协议」——把结构化确认请求（分类/一次一个问题/短设计/回复方式）发到 GitHub Discussion #71 对应评论，该行备注标「待确认」，然后停止等待；你在讨论里回复「✅ 批准」或修改意见后重跑 `make agent-implementer` 即恢复。想终端即时问答：`AGENT_INTERACTIVE=1 scripts/agents/run-agent.sh implementer`（claude 交互模式，可直接对话确认再做）。
+- **brainstorm 需要用户选择怎么办**：**设备优先**——实现者 `confirm.sh ask` 把内容确认请求推送到你的飞书，回复「✅ 批准」或修改意见后，常驻 `feishu-listener.js` 写回复文件并自动续跑任务（`AGENT_RESUME`）；通道未配置/发送失败/超时则降级为 GitHub Discussion #71 评论协议（发评论 + 停止等待，回复后 `confirm.sh reply` 恢复）。完整机制与飞书配置（约 10 分钟）见 `docs/agents/confirmation-channel.md`。想终端即时问答：`AGENT_INTERACTIVE=1 scripts/agents/run-agent.sh implementer`。
 - **版本号冲突**：认领前按 `docs/development-process.md`「版本号互斥」检查所有 `未认领` 行的契约影响列。
 - **多个实现者同时跑**：不同行在独立 worktree 互不干扰；同一行只有一个认领人；冲突时后到者让位。
 - **钩子拦截**：`.codex/hooks.json` 与 `.claude/settings.json` 共用 `scripts/agent-hooks/guard.mjs`，不得绕过；修复根因。

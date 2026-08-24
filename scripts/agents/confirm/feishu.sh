@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# 飞书应用消息发送器：把确认请求推送到你的设备。
+# 配置: ~/.mornlea/confirm/feishu.json（见 docs/agents/confirmation-channel.md）
+# 用法: feishu.sh send <请求ID>    （文本由 confirm.sh 从请求文件组装）
+set -euo pipefail
+
+DIR="${MORNLEA_CONFIRM_DIR:-$HOME/.mornlea/confirm}"
+CONFIG="$DIR/feishu.json"
+
+die() { echo "[feishu] $*" >&2; exit 1; }
+[ -f "$CONFIG" ] || die "缺少配置 ${CONFIG}（先按 docs/agents/confirmation-channel.md 配置飞书应用）"
+
+APP_ID="$(jq -r '.appId // .app_id // empty' "$CONFIG")"
+APP_SECRET="$(jq -r '.appSecret // .app_secret // empty' "$CONFIG")"
+RECV_TYPE="$(jq -r '.receive.type // .receive_type // empty' "$CONFIG")"
+RECV_ID="$(jq -r '.receive.id // .receive_id // empty' "$CONFIG")"
+[ -n "$APP_ID" ] && [ -n "$APP_SECRET" ] || die "feishu.json 缺 appId/appSecret"
+[ -n "$RECV_TYPE" ] && [ -n "$RECV_ID" ] || die "feishu.json 缺 receive.type/receive.id（先用 feishu-listener.js --bootstrap 或按文档填写）"
+
+TOKEN_FILE="$DIR/feishu-token.json"
+get_token() {
+  if [ -f "$TOKEN_FILE" ] && [ "$(date +%s)" -lt "$(jq -r '.expiresAt // 0' "$TOKEN_FILE")" ]; then
+    jq -r '.tenant_access_token // .token // empty' "$TOKEN_FILE" && return
+  fi
+  local resp tok
+  resp="$(curl -sS --max-time 15 -X POST 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal'     -H 'Content-Type: application/json'     -d "$(jq -nc --arg a "$APP_ID" --arg s "$APP_SECRET" '{app_id:$a, app_secret:$s}')")"
+  tok="$(echo "$resp" | jq -r '.tenant_access_token // empty')"
+  [ -n "$tok" ] || die "获取 tenant_access_token 失败: $(echo "$resp" | jq -c .)"
+  echo "$resp" | jq --argjson exp "$(( $(date +%s) + 7000 ))" '{tenant_access_token: $tok, expiresAt: $exp}' > "$TOKEN_FILE"
+  echo "$tok"
+}
+
+send_text() { # $1 = 消息文本
+  local tok recv_id resp msg_id
+  tok="$(get_token)" || return 1
+  recv_id="$RECV_ID"
+  resp="$(curl -sS --max-time 15 -X POST "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=$RECV_TYPE" \
+    -H "Authorization: Bearer $tok" -H 'Content-Type: application/json' \
+    -d "$(jq -nc --arg rid "$recv_id" --arg c "$(jq -nc --arg t "$1" '{text:$t}')" '{receive_id:$rid, msg_type:"text", content:$c}')")"
+  msg_id="$(echo "$resp" | jq -r '.data.message_id // empty')"
+  [ -n "$msg_id" ] || die "发送消息失败: $(echo "$resp" | jq -c .)"
+  echo "ok message_id=$msg_id"
+}
+
+case "${1:-}" in
+  send)
+    ID="${2:?用法: feishu.sh send <请求ID>}"
+    REQ="$DIR/$ID.json"
+    [ -f "$REQ" ] || die "找不到请求文件 ${REQ}（先 confirm.sh ask）"
+    TITLE="$(jq -r '.title // .id // ""' "$REQ")"
+    CATEGORY="$(jq -r '.category // ""' "$REQ")"
+    QUESTION="$(jq -r '.question // ""' "$REQ")"
+    DESIGN="$(jq -r '.design // ""' "$REQ")"
+    TEXT="【Mornlea 内容确认】$TITLE\n分类：$CATEGORY\n问题：$QUESTION\n短设计：$DESIGN\n请回复：✅ 批准（或回复修改意见；精确指定请加 #${ID}）"
+    send_text "$TEXT"
+    ;;
+  *)
+    echo "用法: feishu.sh send <请求ID>" >&2; exit 2 ;;
+esac

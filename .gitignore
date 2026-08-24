@@ -41,3 +41,7 @@ mem.prof
 /.superpowers/
 /gfxspike
 /midscene_run/
+
+# 设备确认通道（scripts/agents/confirm）的 Node 工具链产物
+**/node_modules/
+scripts/agents/.npm-cache/

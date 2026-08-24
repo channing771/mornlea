@@ -34,20 +34,15 @@
 4. **呈现设计并等待显式批准**：bounded 在对话里给几段短设计；architectural 按节呈现并写 `docs/superpowers/specs/` 设计文档。批准来源 = 用户或控制会话对设计的显式确认。
 5. **未经批准不得开工**：简单任务只是设计更短，不是免批准。
 
-### 无人在线（headless 定时调度）时的确认协议
+### 确认通道：设备优先，回复即续跑
 
-1. 把「内容确认请求」作为一条结构化评论发到 GitHub Discussion #71（或该任务行对应的评论下），模板：
+机制见 `docs/agents/confirmation-channel.md`；通道由 `AGENT_CONFIRM_CHANNEL` 决定（未设则 auto 探测：有飞书配置用 feishu，否则 none）。
 
-    内容确认：X-xx 功能名
-    状态：待确认（brainstorming 门禁）
-    分类：bounded / architectural
-    澄清问题（一次一个）：……
-    短设计（bounded 数段；architectural 附设计文档链接）：……
-    请回复：✅ 批准，或直接回复修改意见；回复后重跑 make agent-implementer 即可恢复。
-
-2. docs/feature-backlog.md 该行状态保持「已认领」，备注标注「待确认：见 Discussion #71 评论」；随后**停止**，不得静默开工。
-3. 恢复：用户回复后重跑 make agent-implementer（或等待下一次调度）；实现者读取讨论最新评论，找到「内容确认」块，辨认批准/修改意见，把结论写入 OpenSpec change 的 proposal/design 与 brief，从第 4 步继续。
-4. 想终端即时问答：AGENT_INTERACTIVE=1 scripts/agents/run-agent.sh implementer（claude 交互模式，可直接对话确认后再开工）。
+1. **发起**：`confirm.sh ask --id X-xx --title "..." --category bounded|architectural --question "..." --design "..."` —— 配置了飞书时推送到你的设备；无飞书自动降级 discussion/none 并按提示处理。
+2. **等待**：`confirm.sh wait --id X-xx [--timeout-min 30]`。收到回复（approve/edit/reject + 文本）→ 把结论写入 OpenSpec change 的 proposal/design 与 brief → 从第 4 步继续。
+3. **自动续跑**：`feishu-listener.js`（常驻）收到回复后写 `<id>.reply.json`，并以 `AGENT_RESUME=<id>` 在后台重跑 `run-agent.sh implementer`——本会话若见 `AGENT_RESUME` 环境变量，直接读对应 reply 文件继续（不重新认领）。
+4. **超时/无通道**：降级 Discussion 协议——结构化评论发到 Discussion #71 对应行、backlog 该行备注标「待确认」，**停在确认点**，不得静默开工；用户回复后 `confirm.sh reply --id X-xx --action ...` 或下次调度恢复。
+5. **终端即时问答**（手动模式）：`AGENT_INTERACTIVE=1 scripts/agents/run-agent.sh implementer`（claude 交互模式，可直接对话确认后再开工）。
 
 ## 第 4 步：开发（子智能体驱动）
 

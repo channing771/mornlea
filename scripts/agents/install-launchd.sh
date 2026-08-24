@@ -28,5 +28,5 @@ cat > "$PLIST" <<EOF2
 EOF2
 launchctl unload "$PLIST" 2>/dev/null || true
 launchctl load "$PLIST"
-echo "已安装 launchd（$ROLE 每日 $HOUR:$MINUTE）: $PLIST"
-echo "查看: launchctl list | grep com.mornlea ; 日志: $HOME/Library/Logs/mornlea-$ROLE.log"
+echo "已安装 launchd（${ROLE} 每日 ${HOUR}:${MINUTE}）: $PLIST"
+echo "查看: launchctl list | grep com.mornlea ; 日志: $HOME/Library/Logs/mornlea-${ROLE}.log"
