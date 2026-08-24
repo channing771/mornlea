@@ -25,29 +25,11 @@
 5. 按下方「开发流程」执行；合入 `main` 并归档后，把该行 `状态` → `已完成`（认领人保留履历）。
 6. 已认领行不得抢；转移必须经控制会话裁决并留档。
 
-## 开发流程（superpowers：subagent-driven-development）
+## 开发流程
 
-每个任务认领后**必须**以子智能体驱动方式执行，控制会话不直接实现：
+完整流程（认领 → OpenSpec change → subagent-driven-development 执行 → SPEC/QUALITY 双评审 → 门禁 → 归档收尾 → 并行冲突规则）在**唯一**的说明文档 [`docs/development-process.md`](development-process.md)；本表与 GitHub Discussion #71 只引用它，不再内嵌重复。
 
-1. **先建 OpenSpec change**（复杂功能 / 新模块 / 跨包重构 / 存档 / 协议 / 性能契约）：创建 `proposal.md`、delta specs、`design.md`、`tasks.md`、`ledger.md`，通过 `openspec validate --all --strict --no-interactive`。小型修复（拼写、格式、一次性实验）可直接修改，但仍须相称验证。
-2. **每 Task 派发全新 implementer 子代理**：任务 brief 是唯一需求来源（当前 Task + 共享契约 SHA + 对应计划 + change 产物 + 全局约束 + 精确验证命令）；implementer 不得自行派生子代理或评审者。
-3. **TDD（red → green → refactor）**；测试按关注点单文件、复用包内唯一 helper 中心。
-4. **每 Task 后独立双评审**：SPEC 合规评审 + QUALITY 代码评审（全新 reviewer）；修复循环单任务最多 5 轮（R≤3 续用原 implementer，R≥4 换新 implementer），超限逐条裁决。
-5. **一切进度、评审结论与裁决写入 `ledger.md`**（格式：Ruling — 决定什么 — 为什么 — 错在哪）。
-6. 全部 Task 完成后**整分支终审**，再执行全量门禁：
-
-   ```bash
-   make rust
-   go test ./... -race
-   go vet ./...
-   test -z "$(gofmt -l .)"
-   openspec validate --all --strict --no-interactive
-   # 渲染/tick/存储/协议热路径变化另加：benchmark（数值只记录）、fuzz/golden、perfcheck、
-   # make visual（capture 场景变化时必须逐图验收，禁止放宽阈值）
-   ```
-
-   迭代期可用 `make dev-check` / `make test-race-short` 快检；CI 与最终门禁不带 `-short`。
-7. **归档与合入**：`openspec sync` → archive → 同步 `AGENTS.md` 与 `CLAUDE.md`（**逐字节相同**，archcheck 兜底）与 `docs/notes/progress.md` → 合并 `main` → 本表该行 `已完成`。
+日常执行者：每日固定时间扩展规划的**规划者**、从本表认领并开发收尾的**实现者**——角色卡、调度与运行入口见 [`docs/agents/README.md`](agents/README.md)（`make agent-planner` / `make agent-implementer`）。收尾前可运行 `scripts/agents/gates.sh` 汇总标准门禁。
 
 ## 并行与冲突规则
 

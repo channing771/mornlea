@@ -15,7 +15,7 @@ PIXEL_PERFECTION_NOTICE_DIR := internal/assets/packs/pixel_perfection
 PIXEL_PERFECTION_NOTICE_DEST := bin/third-party/pixel-perfection
 ARGS ?=
 
-.PHONY: help run build build-linux-server test test-race test-race-short test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check dev-check
+.PHONY: help run build build-linux-server test test-race test-race-short test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check dev-check agent-planner agent-implementer agent-gates
 
 run test test-multiplayer bench-multiplayer visual-check visual-update: rust
 build: rust
@@ -40,6 +40,9 @@ help:
 		'  make visual-check     跑视觉场景并与 golden 基线比对' \
 		'  make visual-update    重新生成 golden 基线（VISUAL_OUT 覆盖输出目录）' \
 		'  make clean            删除 bin 目录' \
+		'  make agent-planner    手动运行规划者工作者(docs/agents/planner.md)' \
+		'  make agent-implementer 手动运行实现者工作者(docs/agents/implementer.md)' \
+		'  make agent-gates      运行标准门禁汇总(scripts/agents/gates.sh)' \
 		'  make help             显示此帮助'
 
 run:
@@ -119,3 +122,14 @@ visual-update:
 
 clean:
 	rm -rf bin
+
+# agent-*:工作者入口——角色卡见 docs/agents/,开发流程见 docs/development-process.md。
+# AGENT_TOOL=claude|codex(默认 claude);AGENT_EXTRA_ARGS 透传 CLI。
+agent-planner:
+	./scripts/agents/run-agent.sh planner
+
+agent-implementer:
+	./scripts/agents/run-agent.sh implementer
+
+agent-gates:
+	./scripts/agents/gates.sh
