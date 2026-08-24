@@ -2,7 +2,7 @@
 
 视觉验收覆盖新增的 egui 主菜单：为主菜单建立无窗口 capture 场景并锁定其场景表位置，同时钉死既有场景 golden 像素不变，防止 egui 新 pass 影响既有画面。
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: 主菜单无窗口 capture 场景
 

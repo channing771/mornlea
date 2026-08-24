@@ -335,7 +335,6 @@
 - **AND** 调用方 MUST 逐张人工复核 17 张图像后才能接受，且 MUST NOT 通过放宽双阈值接受差异
 - **AND** 抓帧 MUST NOT 创建或聚焦前台游戏窗口，MUST NOT 导入、临摹或复制 Mojang 像素
 
-
 ### Requirement: 视觉基线覆盖调试面板
 
 系统 SHALL 以独立的无窗口固定场景记录并比对调试面板的呈现。该场景 MUST 覆盖面板的只读读数区、参数分组段头、可编辑行与只读行的对比，以及当前选中行的高亮。
@@ -356,6 +355,7 @@
 - **WHEN** 抓取其余不涉及面板的场景
 - **THEN** 那些场景的画面 MUST NOT 出现面板
 - **AND** 它们的基线 MUST NOT 因面板渲染器的存在而改变
+
 ### Requirement: 天空光通道场景只在收敛后无窗口抓取
 
 抓帧场景清单 MUST 保留既有 `skylight-tunnel` 和 `block-light-room`，并 MUST 保留 `far-horizon` 为倒数第二个场景、`water-underwater` 为整个清单的唯一末场景。两个光照场景 MUST 通过与交互客户端相同的世界状态与呈现链路装入固定夹具，并在全部有限后台工作收敛后才抓取；抓帧 MUST NOT 创建或聚焦游戏窗口，既有视觉差异阈值 MUST 保持不变。设备型号 MUST NOT 作为该视觉语义验收的额外条件。`skylight-tunnel` MUST 保持露天入口、半遮蔽过渡区、超过传播距离的深处以及固定正午时间、相机位置和朝向。`block-light-room` MUST 是午夜的完整封闭房间，唯一照明源 MUST 是一个发光块；图像 MUST 显示室内由近到远的方块光衰减，房外和缺失邻区边界 MUST 无漏光。
@@ -390,3 +390,33 @@
 - **WHEN** 受支持设备的无窗口抓帧生成包含 `skylight-tunnel`、`block-light-room`、`target-block-feedback`、`oak-grove`、`ai-companion`、倒数第二的 `far-horizon` 与末尾 `water-underwater` 的新图像集
 - **THEN** 调用方 MUST 人工复核全部场景图像后才能接受新 golden，且任一场景未收敛、方块光、伙伴、水下或远环语义不成立，或比对超过既有阈值 MUST 失败
 - **AND** 由当前内嵌默认材质引起的既有 golden 变化 MAY 在完整复核后接受，设备型号 MUST NOT 成为额外的接受或拒绝条件
+
+### Requirement: 主菜单无窗口 capture 场景
+
+视觉场景表 SHALL 新增 `main-menu` 场景：以既有 640×360 离屏渲染路径渲染含标题「Mornlea」、四个按钮与版本行的主菜单帧，回读像素与 golden 按既有双阈值比对；场景 MUST 排在 `far-horizon` 之前，`far-horizon` 仍为倒数第二、`water-underwater` 仍为最后。
+
+#### Scenario: 场景表顺序与新场景产出
+
+- **GIVEN** `captureScenes` 场景表
+- **WHEN** 检查顺序
+- **THEN** `main-menu` 存在且位于 `far-horizon` 之前
+- **AND** `far-horizon` 仍为倒数第二、`water-underwater` 仍为最后
+- **AND** 抓帧目录含 `main-menu.png`
+
+#### Scenario: 新场景参与 golden 比对
+
+- **GIVEN** 非更新模式运行 capture
+- **WHEN** 执行到 `main-menu` 场景
+- **THEN** `main-menu.png` 与 golden 逐像素比对（同既有阈值与差异图产出）
+
+### Requirement: 既有场景 golden 逐字节不变
+
+egui 集成 MUST NOT 改变不含 UI 段的任何既有 capture 场景的输出像素；既有场景的 golden 图像 SHALL 保持逐字节不变。
+
+#### Scenario: 既有场景不受 egui 影响
+
+- **GIVEN** 全部既有场景（不含 `main-menu`）
+- **WHEN** 运行 capture 并与既有 golden 比对
+- **THEN** 每个场景与各自 golden 的像素差异为零（同一比对管线下的既有阈值）
+- **AND** 除新增 `main-menu.png` 外不产生任何新 golden 文件
+
