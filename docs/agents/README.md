@@ -72,7 +72,7 @@ scripts/agents/install-launchd.sh   # 生成 ~/Library/LaunchAgents/com.mornlea.
 | `AGENT_TOOL` | `claude` | 用 `claude` 或 `codex` 执行 |
 | `AGENT_MODEL` | CLI 各自默认 | 固定模型，未设置时用 CLI 配置（claude：`~/.claude/settings.json` 的 `model`；codex：`~/.codex/config.toml` 的 `model`）|
 | `CLAUDE_BIN` / `CODEX_BIN` | PATH 查找 | 覆盖 CLI 路径 |
-| `AGENT_MODE` | `merge` | 实现者收尾模式：`merge` 自动合入 main 并推送；`pr` 创建 PR 后暂停 |
+| `AGENT_MODE` | `pr` | 实现者收尾模式（默认）：`pr` = 创建 PR → 监听 CI 至全绿（失败自动修复重推）→ merge 到 main；`merge` = 本地全绿后直接合并推送 |
 | `AGENT_INTERACTIVE` | `0` | `1` 时 claude 以终端交互模式运行（可用 `ask_user_question` 直接问你；仅 claude 支持）|
 | `AGENT_CONFIRM_CHANNEL` | `auto` | 内容确认通道：`feishu`（推送设备）/ `discussion`（GitHub 评论）/ `none`（本地记录）/ `auto`（有飞书配置则 feishu，否则 none）|
 | `MORNLEA_CONFIRM_DIR` | `~/.mornlea/confirm` | 确认请求/回复/飞书配置文件目录 |

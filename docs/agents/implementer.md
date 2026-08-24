@@ -4,7 +4,7 @@
 
 ## 触发
 
-- 手动：`make agent-implementer` 或 `scripts/agents/run-agent.sh implementer`（创建 PR 模式：`AGENT_MODE=pr`）。
+- 手动：`make agent-implementer` 或 `scripts/agents/run-agent.sh implementer`（默认 `AGENT_MODE=pr`：创建 PR → 监听 CI 到全绿 → merge；`AGENT_MODE=merge` 才直接合并）。
 - 自动：控制会话/规划者点名（brief 中附任务行 ID 与来源）。
 
 ## 第 1 步：认领
@@ -56,13 +56,21 @@
 ## 第 5 步：自动收尾（完成即执行）
 
 ```text
+□ 全量门禁与整分支终审通过（gates.sh；改动域对应 benchmark/fuzz/golden/visual 已核）
 □ openspec sync（delta 沉淀主规格）→ 逐 change openspec archive
 □ AGENTS.md 与 CLAUDE.md 逐字节相同（cmp -s）且只写已验证事实
 □ docs/notes/progress.md 追加基线段落
 □ docs/feature-backlog.md 该行 → 已完成（认领人保留履历）；集成任务受影响时同步 A/I 行
 □ GitHub Discussion #71 对应状态更新（正文表格或追加评论）
 □ 门禁证据归档：ledger 补最终验证输出摘要（数值记录，不改基线）
-□ 合入 main 并推送（默认；AGENT_MODE=pr 时创建 PR 后暂停等待）
+□ 推送分支：git push -u origin <branch>
+□ 创建 PR：gh pr create --title "feat: <行 ID> <功能名>" --body "<OpenSpec change 链接 + 规划行 + 验证摘要>"
+□ 监听 CI：gh pr checks --watch --interval 30
+   失败 → gh run view <run-id> --log-failed（或 gh pr checks --json name,state,url）定位
+   → 本地修复并推送 → 重新监听；直到全绿，上限 10 轮，超限停止并报告
+□ CI 全绿后合并：gh pr merge --merge（--delete-branch 可选）
+□ 同步本地 main：git fetch origin && git checkout main && git pull --ff-only
+(AGENT_MODE=merge 时跳过 PR，直接本地合并并推送 main，仍需本地全绿)
 ```
 
 ## 收尾自查清单（提交前）
@@ -80,5 +88,5 @@
 - 已认领行不得抢；跨行依赖未满足不得开工。
 - 不得为通过测试放宽正确性、资源上限、报告完整性、真实 overflow 或数据丢失门禁；benchmark 数值不改变退出状态。
 - 不得绕过或不修改 `.codex/hooks.json` / `.claude/settings.json` 共享的 `scripts/agent-hooks/guard.mjs` 及其豁免变量。
-- 自动合入前确认无未推送功能分支依赖本行产出；集成批次按计划固定合流顺序，不机械 ours/theirs。
+- PR 合并前确认整分支终审与 `gates.sh` 全量门禁通过、无未推送功能分支依赖本行产出；集成批次按计划固定合流顺序，不机械 ours/theirs；多条流水线并行时逐条监听，任一失败都先修复再合并。
 - 自动测试不得启动或聚焦前台游戏窗口；视觉验收只在用户明确要求时人工跑。

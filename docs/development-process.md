@@ -71,7 +71,7 @@ openspec validate --all --strict --no-interactive
 2. `openspec sync` 把 delta 沉淀到主规格 → 逐 change `openspec archive`；
 3. 同步 `AGENTS.md` 与 `CLAUDE.md`（**逐字节相同**，`internal/archcheck` 的 `TestBaselineDocsAreIdentical` 兜底）与 `docs/notes/progress.md` 基线段——只写已集成且验证过的事实，不写本批次非目标；
 4. 回填 `docs/feature-backlog.md`：该行 `状态` → `已完成`（认领人保留履历）；若批次集成任务有变化，同步更新对应行与 GitHub Discussion #71；
-5. 合入 `main`（默认，需本地全绿）推送 `origin/main`；与在途分支冲突或用户要求走 PR 时，改为创建 PR 并暂停；
+5. **PR + CI 再合并（默认，`AGENT_MODE=pr`）**：推送分支 → `gh pr create`（标题含行 ID，body 附 change 链接与验证摘要）→ `gh pr checks --watch` 监听 CI，失败则读 `gh run view --log-failed` 定位、本地修复并推送、重新监听，**直到全绿**（上限 10 轮，超限停止并报告）→ `gh pr merge --merge` → 本地 `git checkout main && git pull --ff-only`；仅 `AGENT_MODE=merge` 时才跳过 PR 直接本地合并推送（仍需本地全绿）。
 6. 关闭遗留：未决项誊入「延期与放弃」，不静默丢弃。
 
 ## 并行与冲突规则
@@ -91,4 +91,4 @@ openspec validate --all --strict --no-interactive
 | 2 实现 | 每 Task fresh implementer + TDD | 提交 + 测试 |
 | 3 评审 | SPEC + QUALITY 双评审，≤5 轮 | ledger 结论与 Ruling |
 | 4 门禁 | gates.sh / 全量验证 + 视觉/基准 | 通过证据（记录数值） |
-| 5 收尾 | sync → archive → 基线同步 → 合入 → 回填 | 归档 change + backlog 标记 |
+| 5 收尾 | sync → archive → 基线同步 → PR → 监听 CI 至全绿 → merge → 回填 | 归档 change + 已合并 PR + backlog 标记 |
