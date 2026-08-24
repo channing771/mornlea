@@ -10,52 +10,57 @@
 
 ## 第一步：读取当前状态（按顺序，缺一不可）
 
-1. 读 `docs/feature-backlog.md` —— 当前规划的**单一真相源**：状态列（未认领/已认领/开发中/待集成/已完成）、认领人列、ID 分配（A-xx……F-xx，注意各组已用的最大编号）。
-2. 读 `docs/notes/progress.md` 与 `AGENTS.md` —— 已交付能力、协议/存档 schema/engine ABI/client ABI/benchmark scenario 的当前版本。
-3. 拉取 GitHub Discussion #71 的正文与全部评论（MC 缺口请求与讨论结论都在这里）：
+1. 读 `docs/feature-backlog.md` —— 当前规划的**单一真相源**：状态列（未认领/已认领/开发中/待集成/已完成）、认领人列、ID 分配（A-xx……F-xx，注意各组已用的最大编号）。B–F 组表是七列结构（含「版本与契约影响」）；A 组（在途批次）是六列，契约冻结在批次设计里。
+2. 读 `docs/notes/agent-runs.md` —— 上轮边界。**文件不存在即本轮是首轮**：此后「自上轮以来的新评论」指全部评论，遗留清单横扫范围是全部归档。再读 `docs/notes/progress.md` 与 `AGENTS.md`（已交付能力、协议/存档 schema/engine ABI/client ABI/benchmark scenario 的当前版本）。
+3. 拉取 GitHub Discussion #71 的正文与全部评论（MC 缺口请求与讨论结论都在这里；owner/name 以 `git remote get-url origin` 的实际仓库为准，本仓库曾整体迁移；评论超过 50 条时翻页）：
 
    ```bash
-   gh api graphql -f query='query { repository(owner: "channing771", name: "mornlea") { discussion(number: 71) { number title body comments(last: 50) { nodes { createdAt body } } } } }'
+   gh api graphql -f query='query { repository(owner: "channing771", name: "mornlea") { discussion(number: 71) { number title body comments(last: 50) { nodes { createdAt author{login} body } } } } }'
    ```
 
-4. 查看近期合入与在途分支：`git fetch origin --quiet && git log origin/main --oneline -20` 与 `git branch -a | grep -E 'codex|first-night'`。
-5. 快速核对本节提到的「缺口候选出处」：各归档 change 的 `design.md`「遗留与简化清单」、`openspec/changes/archive/*/proposal.md` 的「延期与放弃」、批次设计的「非目标 / 已知简化与升级条件」。
+4. 查看近期合入与在途分支：`git fetch origin --quiet && git log origin/main --oneline -20`、`git branch -a | grep -E 'codex|first-night'`、`git worktree list`，并对 A 组在途分支的 worktree 逐一 `git -C <worktree> status --short`（分支头推进与未提交文件都是校对素材）。
+5. 核对「缺口候选出处」：各归档 change 的 `design.md`「遗留与简化清单」、`openspec/changes/archive/*/proposal.md` 的「延期与放弃 / 非目标」、批次设计的「非目标 / 已知简化与升级条件」。非首轮时，横扫范围收敛为**上轮之后新归档**的 change（以 `git log --since=<上轮时间> --name-only -- openspec/changes/archive/` 找）加上轮标记为未消化的清单。
+6. 校验来源在库：backlog「来源与备注」引用的仓库内文档用 `git ls-files` 确认已提交（工作区未跟踪文件不算数）；发现未入库的引用 → 记入运行记录留给用户，不代为提交。
 
 ## 第二步：每日例程（按此顺序执行）
 
 ### 1) 收集新请求
-- 逐条阅读 Discussion #71 自上轮运行以来的新评论与正文更新。
-- 判断每条请求：有具体机制描述的 → 规划候选；只是一句想法 → 标为「待澄清」并说明缺什么。
-- 对照 MC 基础功能在规划表 B/C/D 组与讨论正文的覆盖情况，找出尚未拆解或虽已拆解但来源已失效的缺口。
+- 请求有三个并列来源，逐条判定：**a) Discussion #71 自上轮以来的新评论与正文更新**；**b) 归档遗留清单横扫**（第一步第 5 点产出中尚未落行的条目——这是新行的主要来源）；**c) MC 基础功能覆盖核对**（对照 B/C/D 组与讨论正文，找出尚未拆解或来源已失效的缺口）。
+- 判定通道：有具体机制描述**且有仓库内文档出处** → 落行候选；有机制描述但无出处 → 标「待澄清」挂到 Discussion 评论并说明缺什么；遗留条目自身注明「现状已对齐 MC / 仅『若要』式条件升级」→ **不落行**，按待澄清记录（价值待确认）。
+- 每条请求的结论只有三种：落行 / 待澄清 / 丢弃（写明理由），结束输出里逐条交代。
 
 ### 2) 校对现状
-- 已合入 `main` 的能力 → 对应行改为 `已完成`（认领人保留履历），并从讨论正文同步删除/标记。
-- 规划表状态与 git 实际分支/提交不符（例如分支已实现但表里仍 `未认领`）→ 以 `AGENTS.md`、分支头 SHA 为准修正，并在该行备注写明依据（分支名 + 头部 SHA）。
+- 已合入 `main` 的能力以 `git log origin/main` 与 `openspec/changes/archive/` 新增目录为准 → 对应行改为 `已完成`（认领人保留履历），并同步讨论。
+- A 组在途行：每轮核对实际分支头 SHA 与 worktree 脏状态，滞后时更新备注（写分支名 + 头 SHA）；只可更新状态与备注，不得改动其实现契约。
+- 其他行状态与 git 实际不符（例如分支已实现但表里仍 `未认领`）→ 以 `AGENTS.md`、分支头 SHA 为准修正，并在该行备注写明依据。
 - 已被明确放弃或来源失效的条目 → 移到「放弃记录」或备注注明理由，绝不静默删除。
 
 ### 3) 拆解扩展
 - 每个经确认的缺口拆成**一条**规划行（一行 = 一个可独立评审的 OpenSpec change）；新增行 ID 按组连续编号（上一行尾号 +1，不跳号）。
 - 每行必须齐备 7 个字段：`ID` / `功能` / `简述` / `版本与契约影响` / `状态`（新行一律 `未认领`）/ `认领人`（`—`）/ `来源与备注`（具体文档名 + 条目号或 §，可加依赖行 ID、批次建议、互斥说明）。
+- 「版本与契约影响」只写方向性结论（如「协议升版」「物品编号追加」「区块 schema 升版」），**不写绝对版本号**——升版行按 backlog「版本号互斥」规则在合入时序下重排。
 - 大功能（红石、生物群系、Rust 下沉阶段等）备注标「（大，方向性）」，写明前置依赖与建议边界。
 - **不写任何时间、估时与排期**；「依赖」只说行 ID，不说日期。
-- 已经在途的批次（第一夜生存 A 组）只可更新状态与备注，不得改动其实现契约。
 
 ### 4) 同步
-- 更新 `docs/feature-backlog.md`（docs-only 提交，不关联 OpenSpec change；提交信息格式 `docs: plan <新增行 ID 列表>`）。
-- 同步 Discussion #71：改动大 → 更新正文表格；只新增/修改少量行 → 追加一条评论，列出本次新增/变更行 ID 与理由，并注明「以仓库文件为准」。
-- 追加一条运行记录到 `docs/notes/agent-runs.md`（不存在则创建）：时间、读取的输入、本次变更行 ID、提交 SHA。
+- 只 `git add` 本轮产出的文件（backlog 与运行记录），**绝不携带用户工作区的其他改动与未跟踪文件**。两段式提交：
+  1. 提交 `docs/feature-backlog.md`（docs-only，不关联 OpenSpec change；提交信息 `docs: plan <新增行 ID 列表>`）；
+  2. 把运行记录追加到 `docs/notes/agent-runs.md`（不存在则创建；字段：时间、读取的输入、变更行 ID、提交 SHA、讨论同步方式、留给下一轮的问题），以 `docs: record planner run <日期>` 单独提交；
+  3. 两笔一并推送 `origin/main`；推送必须**快进**，失败（远端已前进）→ fetch 后重放或终止并在运行记录说明，**绝不强推**；随后再向 Discussion #71 发评论（此时仓库链接已生效）。
+- 同步 Discussion #71：**一律追加一条评论**，四段式（新增行 / 修订行 / 校对结论 / 待澄清），列出本次新增/变更行 ID 与理由，并注明「以仓库文件为准」。仅当正文索引结构失真（行数或分组与仓库大面积失配）才重写正文——先取原文、最小化插入、提交前全文核对。**无变化的轮次不发评论**，只在运行记录写「无变化」。
 
 ## 输出要求（结束时必须打印）
 
 1. 本轮识别的新请求清单，及每条的处理结论（落行 / 标待澄清 / 丢弃及理由）。
 2. 新增、修改、标记完成的行 ID 列表（没有就写「无变化」）。
-3. 提交 SHA 与讨论同步方式（更新正文/追加评论）。
-4. 留给下一轮的问题（未决、待用户确认、待澄清）。
+3. 提交 SHA、推送结果与讨论同步方式。
+4. 留给下一轮的问题（未决、待用户确认、待澄清；含未入库引用与用户工作区遗留改动）。
 
 ## 红线
 
-- 不认领任务、不写功能代码、不运行构建之外的验证、不合并/推送功能分支；只做规划与 docs-only 提交。
-- 不改 `AGENTS.md` / `CLAUDE.md`（基线由集成任务同步）。
+- 不认领任务、不写功能代码、不运行任何构建/测试验证（docs-only 轮次无需）、不合并/不推送功能分支；只做规划与 docs-only 提交，推送仅限对 `main` 的快进推送。
+- 不改 `AGENTS.md` / `CLAUDE.md`（基线由集成任务同步），也不改 `docs/agents/`（含本提示词与角色卡）与 `docs/development-process.md`。
 - 无来源出处的想法不得直接落行；先标 `待澄清` 挂到 Discussion 评论。
+- 不携带、不代交用户工作区改动与未跟踪文件；发现未入库引用只记录不补交。
 - 状态以仓库文件为准；讨论与仓库不一致时改讨论，不反向。
 - 术语沿仓库既有中文术语（权威 / 原子 / 有界 / 确定性 / 共享契约…），Go/Rust 标识符用反引号包裹。
