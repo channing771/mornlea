@@ -32,7 +32,22 @@
 2. **探索上下文**：读任务来源、相关代码/测试、既有规格，把「内容确认」建立在对 repo 现状的核对之上。
 3. **一次一个问题澄清**：目的、边界、成功标准、约束（版本号互斥、资源上限、版权红线）；问题一次只发一个，不要一次全丢。
 4. **呈现设计并等待显式批准**：bounded 在对话里给几段短设计；architectural 按节呈现并写 `docs/superpowers/specs/` 设计文档。批准来源 = 用户或控制会话对设计的显式确认。
-5. **未经批准不得开工**：简单任务只是设计更短，不是免批准。自动调度无人在线时，把设计方案发布到本行对应的 GitHub Discussion #71 评论并**停在确认点**，不得静默开工；收到批准后把确认结论写进 OpenSpec change 的 proposal/design 与后续 implementer brief。
+5. **未经批准不得开工**：简单任务只是设计更短，不是免批准。
+
+### 无人在线（headless 定时调度）时的确认协议
+
+1. 把「内容确认请求」作为一条结构化评论发到 GitHub Discussion #71（或该任务行对应的评论下），模板：
+
+    内容确认：X-xx 功能名
+    状态：待确认（brainstorming 门禁）
+    分类：bounded / architectural
+    澄清问题（一次一个）：……
+    短设计（bounded 数段；architectural 附设计文档链接）：……
+    请回复：✅ 批准，或直接回复修改意见；回复后重跑 make agent-implementer 即可恢复。
+
+2. docs/feature-backlog.md 该行状态保持「已认领」，备注标注「待确认：见 Discussion #71 评论」；随后**停止**，不得静默开工。
+3. 恢复：用户回复后重跑 make agent-implementer（或等待下一次调度）；实现者读取讨论最新评论，找到「内容确认」块，辨认批准/修改意见，把结论写入 OpenSpec change 的 proposal/design 与 brief，从第 4 步继续。
+4. 想终端即时问答：AGENT_INTERACTIVE=1 scripts/agents/run-agent.sh implementer（claude 交互模式，可直接对话确认后再开工）。
 
 ## 第 4 步：开发（子智能体驱动）
 

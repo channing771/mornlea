@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 通用工作者入口：读取 docs/agents/<role>-prompt.md（缺省回退 role 角色卡）作为提示词，调用 claude/codex 执行。
 # 用法: run-agent.sh <planner|implementer> [claude|codex]
-# 环境变量: AGENT_TOOL / CLAUDE_BIN / CODEX_BIN / AGENT_EXTRA_ARGS
+# 环境变量: AGENT_TOOL(默认 claude) / AGENT_MODEL(默认 CLI 配置中的模型) / CLAUDE_BIN / CODEX_BIN / AGENT_EXTRA_ARGS
 set -euo pipefail
 
 ROLE="${1:-}"
@@ -18,15 +18,26 @@ case "$ROLE" in planner|implementer) ;; *) usage ;; esac
 PROMPT="$(cat "$PROMPT_FILE")"
 cd "$ROOT"
 
+# 模型：AGENT_MODEL 未设置时用各 CLI 自身配置(claude: ~/.claude/settings.json 的 model;
+# codex: ~/.codex/config.toml 的 model)。需要固定模型时设置 AGENT_MODEL。
+MODEL_ARGS=()
+[ -n "${AGENT_MODEL:-}" ] && MODEL_ARGS=(--model "$AGENT_MODEL")
+
 case "$TOOL" in
   claude)
     CLAUDE_BIN="${CLAUDE_BIN:-claude}"
-    # 默认打印模式；需要自动批准时用 AGENT_EXTRA_ARGS='--permission-mode acceptEdits'
-    exec "$CLAUDE_BIN" -p "$PROMPT" ${AGENT_EXTRA_ARGS:-}
+    # 默认 headless 打印模式；需要无人值守自动批准时用
+    # AGENT_EXTRA_ARGS='--permission-mode acceptEdits'；需要终端交互问答时
+    # 手动运行 claude（不带 -p）并粘贴提示词，或设置 AGENT_INTERACTIVE=1。
+    if [ "${AGENT_INTERACTIVE:-0}" = "1" ]; then
+      exec "$CLAUDE_BIN" "$PROMPT" "${MODEL_ARGS[@]}" ${AGENT_EXTRA_ARGS:-}
+    fi
+    exec "$CLAUDE_BIN" -p "$PROMPT" "${MODEL_ARGS[@]}" ${AGENT_EXTRA_ARGS:-}
     ;;
   codex)
     CODEX_BIN="${CODEX_BIN:-codex}"
-    exec "$CODEX_BIN" exec --full-auto "$PROMPT" ${AGENT_EXTRA_ARGS:-}
+    # codex 的 exec 为 headless；终端交互请直接运行 `codex`(交互式) 并粘贴提示词。
+    exec "$CODEX_BIN" exec --full-auto "${MODEL_ARGS[@]}" "$PROMPT" ${AGENT_EXTRA_ARGS:-}
     ;;
   *) usage ;;
 esac
