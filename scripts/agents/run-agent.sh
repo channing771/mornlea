@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 通用工作者入口：读取 docs/agents/<role>.md 作为提示词，调用 claude/codex 执行。
+# 通用工作者入口：读取 docs/agents/<role>-prompt.md（缺省回退 role 角色卡）作为提示词，调用 claude/codex 执行。
 # 用法: run-agent.sh <planner|implementer> [claude|codex]
 # 环境变量: AGENT_TOOL / CLAUDE_BIN / CODEX_BIN / AGENT_EXTRA_ARGS
 set -euo pipefail
@@ -7,12 +7,13 @@ set -euo pipefail
 ROLE="${1:-}"
 TOOL="${AGENT_TOOL:-claude}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-PROMPT_FILE="$ROOT/docs/agents/$ROLE.md"
+PROMPT_FILE="$ROOT/docs/agents/$ROLE-prompt.md"
+[ -f "$PROMPT_FILE" ] || PROMPT_FILE="$ROOT/docs/agents/$ROLE.md"
 
 usage() { echo "用法: $(basename "$0") <planner|implementer> [claude|codex]" >&2; exit 2; }
 
 case "$ROLE" in planner|implementer) ;; *) usage ;; esac
-[ -f "$PROMPT_FILE" ] || { echo "缺少角色卡: $PROMPT_FILE" >&2; exit 3; }
+[ -f "$PROMPT_FILE" ] || { echo "缺少提示词/角色卡: $PROMPT_FILE" >&2; exit 3; }
 
 PROMPT="$(cat "$PROMPT_FILE")"
 cd "$ROOT"
