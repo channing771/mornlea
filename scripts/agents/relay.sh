@@ -25,7 +25,7 @@ trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
 if [ -f "$GUARD" ]; then
   OPID="$(cat "$GUARD" 2>/dev/null || echo 0)"
   if [ "${OPID:-0}" -gt 0 ] 2>/dev/null && kill -0 "$OPID" 2>/dev/null; then
-    log "活动实现者仍在运行（pid=$OPID），不接力"
+    log "活动实现者仍在运行（pid=${OPID}），不接力"
     exit 0
   fi
 fi
@@ -40,7 +40,7 @@ fi
 # 启动下一个实现者（detached）；成功交给它接管循环
 if [ -x "$ROOT/scripts/agents/run-agent.sh" ]; then
   (cd "$ROOT" && AGENT_LOOP=1 nohup scripts/agents/run-agent.sh implementer >> "$LOG" 2>&1 &)
-  log "已接力启动下一个实现者（AGENT_LOOP=1，日志 $LOG）"
+  log "已接力启动下一个实现者（AGENT_LOOP=1，日志 ${LOG}）"
   exit 0
 fi
 rm -f "$GUARD"
