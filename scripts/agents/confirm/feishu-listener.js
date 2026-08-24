@@ -78,15 +78,19 @@ async function sendAck(cfg, openId, text) {
   } catch (e) { log('ack 发送失败(忽略):', e && e.message); }
 }
 
+var LOOP_GUARD = process.env.MORNLEA_LOOP_GUARD || path.join(os.homedir(), '.mornlea', 'loop.guard');
+
 function spawnResume(cfg, requestId) {
   if (cfg.autoResume === false) { log('autoResume 已关闭，不自动续跑'); return; }
   const repo = path.resolve(__dirname, '..', '..', '..');
   const cmd = cfg.resumeCmd || ('cd ' + repo + ' && scripts/agents/run-agent.sh implementer');
+  // 接力循环：guard 存在说明有活动循环 → 继承 AGENT_LOOP=1，否则续跑会话不会在收尾触发 relay，链条会断
+  const inLoop = fs.existsSync(LOOP_GUARD);
   const logFile = fs.openSync(path.join(DIR, 'resume-' + requestId + '.log'), 'a');
   const child = spawn('/bin/bash', ['-lc', cmd], {
     detached: true,
     stdio: ['ignore', logFile, logFile],
-    env: Object.assign({}, process.env, { AGENT_RESUME: requestId, MORNLEA_CONFIRM_DIR: DIR }),
+    env: Object.assign({}, process.env, { AGENT_RESUME: requestId, MORNLEA_CONFIRM_DIR: DIR, AGENT_LOOP: inLoop ? '1' : (process.env.AGENT_LOOP || '0') }),
   });
   child.unref();
   log('已触发续跑(pid=' + child.pid + ')：' + cmd + ' (AGENT_RESUME=' + requestId + ')');
