@@ -2,14 +2,14 @@
 //!
 //! 控制权模型:Go 主线程每帧调用 [`ClientWindow::poll`],内部以零超时
 //! `pump_app_events` 处理完积压事件后立即返回并编码快照;winit 从不拥有
-//! 主循环。本模块依赖真实窗口系统,不做单元测试;可无头验证的逻辑全部
-//! 位于 [`crate::input`]。
+//! 主循环。窗口相关逻辑依赖真实窗口系统,单元测试只覆盖纯尺寸计算
+//! (`clamp_to_work_area`);事件桥接的可无头验证逻辑位于 [`crate::input`]。
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use winit::application::ApplicationHandler;
-use winit::dpi::LogicalSize;
+use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::event::{DeviceEvent, DeviceId, ElementState, Ime, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::PhysicalKey;
@@ -73,11 +73,30 @@ impl ApplicationHandler for App {
         }
         let attributes = Window::default_attributes()
             .with_title(self.title.clone())
-            .with_inner_size(LogicalSize::new(self.width, self.height));
+            .with_inner_size(LogicalSize::new(self.width, self.height))
+            // 最小尺寸与无窗口 capture 一致(640×360),防止窗口被拖得
+            // 过小导致 HUD 与交互几何出界。
+            .with_min_inner_size(LogicalSize::new(640.0, 360.0));
         match event_loop.create_window(attributes) {
             Ok(window) => {
                 // 聊天需要 IME 提交的 Unicode 文本(GLFW char 回调的等价物)。
                 window.set_ime_allowed(true);
+                // 超屏钳制:物理尺寸超过显示器可用区域时按原宽高比缩小,
+                // 保证 1x 屏/非整数缩放下窗口完整可见(标题栏不落到屏幕外)。
+                if let Some(monitor) = window.current_monitor() {
+                    let current = window.inner_size();
+                    let monitor_size = monitor.size();
+                    let limit = PhysicalSize::new(
+                        (monitor_size.width as f64 * DISPLAY_CLAMP_RATIO).round() as u32,
+                        (monitor_size.height as f64 * DISPLAY_CLAMP_RATIO).round() as u32,
+                    );
+                    let clamped = clamp_to_work_area(current, limit);
+                    if clamped != current {
+                        // 返回值是系统采用的新尺寸,这里不关心,与 `set_content_size`
+                        // 的丢弃口径一致。
+                        let _ = window.request_inner_size(clamped);
+                    }
+                }
                 // Arc 包装:渲染器 surface 需要共享窗口所有权(wgpu
                 // create_surface 的 'static 约束)。
                 self.window = Some(Arc::new(window));
@@ -258,5 +277,60 @@ impl ClientWindow {
             return None;
         }
         Some(ns_window as usize)
+    }
+}
+
+/// 超屏钳制的显示器边距系数:winit 0.30 的 `MonitorHandle` 不暴露工作区
+/// (系统菜单栏/Dock 之外的区域),按显示器全尺寸的 90% 近似,给系统栏与
+/// 窗口标题栏留出空间,保证钳制后窗口仍然完整可见。
+const DISPLAY_CLAMP_RATIO: f64 = 0.9;
+
+/// 把请求的物理尺寸钳制到给定上限内:两轴取最小缩放比、保持宽高比,不
+/// 超过上限时原样返回(绝不放大)。上限为 0 时返回原尺寸——窗口宁可照常
+/// 创建,也不把尺寸吞成 0。
+fn clamp_to_work_area(requested: PhysicalSize<u32>, work: PhysicalSize<u32>) -> PhysicalSize<u32> {
+    if requested.width == 0 || requested.height == 0 || work.width == 0 || work.height == 0 {
+        return requested;
+    }
+    let scale = (work.width as f64 / requested.width as f64)
+        .min(work.height as f64 / requested.height as f64)
+        .min(1.0);
+    PhysicalSize::new(
+        (requested.width as f64 * scale).round() as u32,
+        (requested.height as f64 * scale).round() as u32,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clamp_to_work_area;
+    use winit::dpi::PhysicalSize;
+
+    /// 超屏时按最小缩放比缩小,保持宽高比:16:9 请求在 16:9 工作区内两轴同比例。
+    #[test]
+    fn oversized_scales_down_preserving_aspect() {
+        let got = clamp_to_work_area(PhysicalSize::new(2560, 1440), PhysicalSize::new(1920, 1080));
+        assert_eq!(got, PhysicalSize::new(1920, 1080));
+    }
+
+    /// 比例不同的两轴取更小者,结果仍在工作区内。
+    #[test]
+    fn odd_work_area_uses_smallest_ratio() {
+        let got = clamp_to_work_area(PhysicalSize::new(1280, 720), PhysicalSize::new(1000, 800));
+        assert_eq!(got, PhysicalSize::new(1000, 563));
+    }
+
+    /// 尺寸不超过工作区时原样返回,绝不放大。
+    #[test]
+    fn fits_within_work_area_is_unchanged() {
+        let got = clamp_to_work_area(PhysicalSize::new(1280, 720), PhysicalSize::new(2560, 1440));
+        assert_eq!(got, PhysicalSize::new(1280, 720));
+    }
+
+    /// 工作区无效(0×0)时返回原尺寸,由调用方兜底,不吞掉窗口尺寸。
+    #[test]
+    fn zero_work_area_returns_requested() {
+        let got = clamp_to_work_area(PhysicalSize::new(1280, 720), PhysicalSize::new(0, 0));
+        assert_eq!(got, PhysicalSize::new(1280, 720));
     }
 }

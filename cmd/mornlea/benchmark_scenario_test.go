@@ -84,6 +84,9 @@ func TestBenchmarkScenarioV19AccountsForCompanionRendererUploadLayout(t *testing
 }
 
 func TestScenarioV8GPUCompletionStopsWhenTransportCloseFails(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	serverCloseErr := errors.New("注入服务端关闭失败")
 	clientCloseErr := errors.New("注入客户端关闭失败")
 	for _, test := range []struct {
@@ -150,6 +153,9 @@ func TestScenarioV8GPUCompletionStopsWhenTransportCloseFails(t *testing.T) {
 }
 
 func TestScenarioV8GPUCompletionStartsAfterTransportTeardown(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	app := newRemoteRenderApplication(t, &integrationGlyphSource{})
 	config := server.DefaultConfig(benchmarkSeed)
 	config.TrustedObserver = true
@@ -287,6 +293,9 @@ func TestScenarioV7NameTagFailurePublishesNoRenderTimingSample(t *testing.T) {
 // Mutation killed: still/flying 阶段若不再经过真实 renderFrame，terrain pass
 // 中由 sky pipeline 发出的 fullscreen triangle draw 不会出现。
 func TestScenarioV13StillFlyingFrameIncludesCelestialSkyDraw(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	for _, phase := range []struct {
 		name   string
 		flying bool

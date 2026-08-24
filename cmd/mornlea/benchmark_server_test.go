@@ -295,6 +295,9 @@ func TestCanonicalCountingServerStreamFreezesMeasurementAtSendStart(t *testing.T
 }
 
 func TestScenarioV7EightSessionServerProbeIsRealAndBounded(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	// race 构建下跳过：本测试起真实 Host + 8 客户端跑 200 个 50ms measured
 	// tick 的纯实时窗口，测量 goroutine 必须在「信号发布+50ms」前完成工作；
 	// race 检测开销（5-20x）叠加全仓并行争核时，被晾过 50ms 是机器负载而非

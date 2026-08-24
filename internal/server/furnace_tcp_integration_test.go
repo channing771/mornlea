@@ -13,6 +13,9 @@ import (
 // TestFurnaceSharedByTwoPlayersOverTCP 覆盖两名玩家共享同一个熔炉的完整闭环：
 // 同时打开、交错投料、推进出锭、一人取走后另一人看到输出为空，旧引用被拒绝。
 func TestFurnaceSharedByTwoPlayersOverTCP(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	root := t.TempDir()
 	key := core.ChunkKey{Dimension: core.Overworld}
 	firstIdentity := integrationIdentity(0x91, "Smelter")

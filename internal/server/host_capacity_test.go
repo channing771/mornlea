@@ -215,6 +215,9 @@ func TestHostListenerBoundsPreLoginGoroutines(t *testing.T) {
 }
 
 func TestLoginDeadlineCancelsBlockedHostPlayerLoad(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	store := newHostTestStore()
 	store.blockLoads()
 	defer store.releaseLoads()

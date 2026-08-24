@@ -258,8 +258,8 @@ func TestApplicationConnectionRemoteLoginSuccessReturnsOwnedApplicationAfterGrap
 	if windowCalls != 1 || rendererCalls != 1 {
 		t.Fatalf("remote success graphics calls window=%d renderer=%d, want 1/1", windowCalls, rendererCalls)
 	}
-	if windowTitle != "Mornlea — M3C multiplayer world" {
-		t.Fatalf("interactive window title = %q, want M3C title", windowTitle)
+	if windowTitle != applicationWindowTitle {
+		t.Fatalf("interactive window title = %q, want %q", windowTitle, applicationWindowTitle)
 	}
 	if got := endpoint.closeCalls.Load(); got != 0 {
 		t.Fatalf("live remote application endpoint Close calls=%d, want 0", got)

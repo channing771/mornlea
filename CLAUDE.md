@@ -77,6 +77,8 @@ gofmt -l .
 
 `gofmt -l .` 应无输出。渲染、tick、存储或协议热路径发生变化时，还要运行对应 benchmark、fuzz/golden 测试或 `cmd/perfcheck`，其性能数值只记录；报告完整性、真实 overflow 和数据丢失仍是门禁。
 
+迭代期（本地开发循环）用快检替代全量：`make dev-check` 依次执行 `gofmt -l .` 检查、`go vet ./...`、`go test ./... -short` 与 Rust `fmt --check`/`clippy --workspace --all-targets -- -D warnings`/`test --workspace --locked`。`-short` 只跳过实测耗时 ≥1.5 秒的重型测试（capture 场景、benchmark 场景、长 tick 集成/容量测试），是「快」与「正确性」分离的迭代工具：CI 与最终门禁不带 `-short`，短模式不放宽任何正确性门禁。按改动域定点测试的命令映射、Go 缓存与 `-count=1` 的使用纪律见 `docs/notes/test-quickstart.md`。需要 race 覆盖时用 `make test-race-short`（`go test ./... -race -short`，与 `-short` 跳过同一组重型测试，本机实测约 5 倍提速）；全量 `make test-race` 仍用于提交前与 CI。上述全量门禁（`make rust-check`、`go test ./... -race`、对应 golden/benchmark/`perfcheck`）保持不变。
+
 OpenSpec 产物提交前执行：
 
 ```bash

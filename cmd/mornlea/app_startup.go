@@ -25,6 +25,15 @@ import (
 	"github.com/channing771/mornlea/internal/worldgen"
 )
 
+// applicationReceiverCapacity 是客户端接收服务端消息的缓冲上限。登录成功后
+// 服务端立即按 `server.Config.SnapshotChunks`(默认 64 条/ tick)推送初始快照,
+// 视距 32 时快照约 4489 条 `ChunkSnapshot`,而窗口/渲染器初始化(冷启动还
+// 含着色器编译)需要数十秒,启动期没有消费方——旧的 256 容量会在构造完成前
+// 溢出,把「启动慢」误判成「consumer too slow」并关掉会话(表现为启动后闪
+// 退)。容量按«全量快照 + 一分钟的每 tick 状态»留足余量;运行期 fail-fast 语义
+// 不变:消费者仍不能落后太多,8192 条 ≈ 128 个权威 tick(约 2 秒)的积压。
+const applicationReceiverCapacity = 8192
+
 func openApplicationStore(
 	ctx context.Context,
 	options applicationOptions,
@@ -163,11 +172,13 @@ func newApplicationWithDependencies(
 		// TCP 远程同一条种子链路。
 		worldSeed = localSeed
 	}
-	receiver := client.NewReceiver(clientEndpoint, 256)
+	receiver := client.NewReceiver(clientEndpoint, applicationReceiverCapacity)
 
 	var window applicationWindow
 	var rustRenderer *client.Renderer
-	width, height := 2560, 1440
+	// 交互渲染的目标物理帧缓冲(见 `fitFramebuffer` 注释);benchmark 离屏
+	// 渲染沿用同一基准分辨率并在报告中固定钉住。
+	width, height := interactiveFramebufferWidth, interactiveFramebufferHeight
 	headless := options.Benchmark || options.CaptureDir != ""
 	if options.CaptureDir != "" {
 		width, height = captureWidth, captureHeight
@@ -180,9 +191,11 @@ func newApplicationWithDependencies(
 	if headless {
 		rustRenderer, err = dependencies.newOffscreenRenderer(width, height)
 	} else {
-		window, err = dependencies.newWindow(2560, 1440, "Mornlea — M3C multiplayer world")
+		// 初始逻辑尺寸 1280×720:Retina 2x 下物理即上述目标分辨率,1x 屏也
+		// 不超屏;创建后 `fitFramebuffer` 只在帧缓冲超过目标时再收缩。
+		window, err = dependencies.newWindow(windowLogicalWidth, windowLogicalHeight, applicationWindowTitle)
 		if err == nil {
-			fitFramebuffer(window, width, height)
+			fitFramebuffer(window, interactiveFramebufferWidth, interactiveFramebufferHeight)
 			width, height = window.FramebufferSize()
 			rustRenderer, err = dependencies.newWindowedRenderer(window)
 		}
@@ -496,14 +509,40 @@ func ignoreApplicationStartupCloseError(err error) error {
 	return err
 }
 
+// windowLogicalWidth/Height 是交互窗口的初始逻辑尺寸(16:9):Retina 2x 下物理
+// 分辨率恰好为 `interactiveFramebufferWidth`×`interactiveFramebufferHeight`,
+// 1x 屏幕上 1280×720 也不会超出常见显示器(Rust 侧另有超屏钳制兜底)。
+const (
+	windowLogicalWidth  = 1280
+	windowLogicalHeight = 720
+)
+
+// interactiveFramebufferWidth/Height 是交互渲染的目标物理帧缓冲分辨率:
+// `fitFramebuffer` 只在帧缓冲超过它时收缩,绝不放大。
+const (
+	interactiveFramebufferWidth  = 2560
+	interactiveFramebufferHeight = 1440
+)
+
+// applicationWindowTitle 是窗口中显示的产品名,不带内部里程碑代号。
+const applicationWindowTitle = "Mornlea"
+
+// fitFramebuffer 把窗口内容尺寸换算为使物理帧缓冲不多于目标分辨率,但只缩不
+// 放大:屏幕可用区域不足(1x 屏/小屏)时保持创建尺寸,绝不把窗口撑出屏幕。
+// 两轴都不变时同样跳过,不做无意义的 Resize 与 `Poll`。
 func fitFramebuffer(window applicationWindow, targetWidth, targetHeight int) {
 	contentWidth, contentHeight := window.ContentSize()
 	framebufferWidth, framebufferHeight := window.FramebufferSize()
 	if framebufferWidth <= 0 || framebufferHeight <= 0 {
 		return
 	}
-	contentWidth = max(1, int(math.Round(float64(targetWidth*contentWidth)/float64(framebufferWidth))))
-	contentHeight = max(1, int(math.Round(float64(targetHeight*contentHeight)/float64(framebufferHeight))))
-	window.SetContentSize(contentWidth, contentHeight)
+	wantWidth := max(1, int(math.Round(float64(targetWidth*contentWidth)/float64(framebufferWidth))))
+	wantHeight := max(1, int(math.Round(float64(targetHeight*contentHeight)/float64(framebufferHeight))))
+	// 任一轴需要放大(目标分辨率在屏内放不下)就整体跳过,避免混合轴缩放
+	// 把窗口推出屏幕。
+	if wantWidth >= contentWidth || wantHeight >= contentHeight {
+		return
+	}
+	window.SetContentSize(wantWidth, wantHeight)
 	window.Poll()
 }

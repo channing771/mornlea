@@ -48,6 +48,9 @@ type multiplayerRestartHost struct {
 }
 
 func TestEightPlayersSurviveDiskRestart(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	runEightPlayersSurviveDiskRestart(t)
 }
 

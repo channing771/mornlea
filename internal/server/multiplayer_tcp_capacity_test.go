@@ -15,6 +15,9 @@ import (
 )
 
 func TestEightTCPClientsSoakIsBounded(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	runEightTCPClientsSoakIsBounded(t)
 }
 

@@ -187,6 +187,9 @@ func waitHealth(
 }
 
 func TestHealthFallDeathAndPickupOverMemory(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	config := hostTestConfig()
 	config.MaxPlayers = 2
 	running := NewWorld(config, flatTestGenerator{}, testStore())
@@ -226,6 +229,9 @@ func TestHealthFallDeathAndPickupOverMemory(t *testing.T) {
 }
 
 func TestHealthFallDeathAndPickupOverTCP(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
 	root := t.TempDir()
 	fallerIdentity := integrationIdentity(0x95, "Faller")
 	otherIdentity := integrationIdentity(0x96, "Keeper")
