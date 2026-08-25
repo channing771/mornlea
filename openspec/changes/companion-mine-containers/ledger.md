@@ -21,3 +21,10 @@
 - **实现**（提交 `7a1d6cbc`）：`internal/sim/mining.go`——`companionMineableBlock` 删除容器拒绝分支（农业显式拒绝原样保留，GoDoc 改述为容器批量全或无语义）；`completeCompanionMining` 路由容器目标到新分叉 `completeCompanionContainerMining`（经 chunk record 的 `ChestAt`/`Chest`/`FurnaceAt`/`Furnace` 读取容器记录，对齐玩家路径；预演通过后同一权威 tick 内 `SetBlock(air)` + `DeactivateChest`/`DeactivateFurnace` + 背包提交副本 + `consumeToolDurability` + `recordChange`；区块失效/槽缺失/方块已移除时清零进度不结算）；导出纯函数 `CompanionMineContainerStaging`（D3：产物集合构造 + 本体在前/槽位序固定序 + 背包副本逐堆 `AddStack` 全或无预演，供 Task 3 Runner 复用）。
 - **测试取舍**：`companion_mining_test.go` 的 `TestCompanionMiningRejectsContainerTargets` 锁定的是本 change 显式废除的旧行为（与 delta spec 场景 3/4/5 直接矛盾），随本任务删除并由新文件的三组用例取代；`go test -list` 集合语义变化为「删 1 增 3」，待 Task 4.2 整分支核对。
 - **验证**（数值只记录）：`go test ./internal/sim -race -count=1` → ok（16.272s，复跑 15.405s）；`gofmt -l internal/sim` → 无输出；`go vet ./internal/sim` → 通过；附 `go test ./internal/archcheck -count=1` → ok（7.875s，注释标识符门禁通过）。侧证：`go test ./internal/companion -count=1` → ok（2.347s）；`go test ./internal/server -short -count=1` → ok（28.323s，此前一轮与基线各出现过 `TestAuthoritativeMiningMemoryLifecycle` 等 sandbox 计时型偶发失败，与本变更无关）。
+
+## Task 1 评审（2026-08-25）
+
+- SPEC 合规评审：**PASS**。逐项核对 delta spec sim 侧半边（谓词放开、农业回归、副本预演/固定序/全或无、四方不变+满格稳定、同 tick 五件套、`harvestable` 门控、`RejectNoTarget` 对齐、`core` 零变更、玩家路径不变、预演函数导出、旧测试删除正当）全部成立；独立复跑定点与全包 race、gofmt、vet、archcheck 均绿。两条非阻断观察：错误工具（`harvestable=false`）容器路径无直接用例；完成 tick 容器边缘（record 失效/槽缺失/`SetBlock` !changed）无容器专属用例。
+- QUALITY 质量评审：**PASS**。设计取舍（路由分叉零侵入、纯函数签名最小、D7-4 两条分支不合并且注释留痕）、并发边界（值语义副本、单写者 tick、固定序无 map 序依赖、容器访问同源）、测试锋利度（逐堆落位/顺序断言、四方逐项核对、全复用既有 helper）全部通过。三条 minor findings：新注释裸提标识符未反引号；`companionChestTicks` 命名只提箱子实覆盖熔炉；staging 对畸形堆（`Count==0` 已注册物品）静默放行（生产不可达）。
+- Ruling: 三条 minor 均不构成修复循环 — 反引号与常量名属风格债且门禁不拦（评审建议下次触碰顺手清）；畸形堆路径生产不可达（容器写入全经 `Valid()` 门禁），加固属镀金 — 修复循环只留给行为契约与合入质量阻断项，本任务零 blocker/major，进入 Task 2。
+- Ruling: 两条覆盖观察并入 Task 3 — 错误工具容器用例与 Runner 接线同域（`Harvestable` 信号两侧共享）；完成 tick 容器边缘用例随 Task 3 补强一并落 — 覆盖缺口不阻断但须在收尾前闭合。
