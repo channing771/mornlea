@@ -3,7 +3,7 @@
 //! 契约:
 //! - 所有入口第一个参数是调用方期望的 ABI 版本,不匹配立即返回
 //!   `MORNLEA_CLIENT_STATUS_ABI_VERSION`;当前版本见 [`CLIENT_ABI_VERSION`]
-//!   (v6 起远环 tile 出口加入,v7 起雾 setter 出口加入)。
+//!   (v6 起远环 tile 出口加入,v7 起雾 setter 出口加入,v9 起结构化 UI 事件)。
 //! - 窗口句柄存放在 thread-local 表中:句柄只在创建线程有效,跨线程调用
 //!   查不到句柄而返回 `MORNLEA_CLIENT_STATUS_WINDOW`——这同时兜住了 winit
 //!   macOS 的主线程约束(Go 侧已 `LockOSThread`)。
@@ -18,7 +18,8 @@ use crate::window::ClientWindow;
 
 /// 当前 client ABI 版本。
 ///
-/// v8:新增 egui 主菜单两条出口 `render_upload_ui_font`/`render_drain_ui_events`
+/// v9:设置页 layout v2 与结构化事件 batch 取代裸按钮 id，排空改为整批
+/// 容量门禁；v8:新增 egui 主菜单两条出口 `render_upload_ui_font`/`render_drain_ui_events`
 /// 与帧 TLV tag 9(egui 菜单段)——新增导出面即 bump,ABI 版本是
 /// "同版本 = 同表面"的不可混装契约(与 engine v3→v4、client v4→5 同一先例)。
 /// v7:终审修复波(Ruling 14/16)新增雾参数化 `render_set_lod_fog` 出口;
@@ -29,7 +30,7 @@ use crate::window::ClientWindow;
 /// 分成不透明与水面两条流,新增半透明 water pass)占用,故整体顺延一格。
 /// 必须与 `engine/include/mornlea_client.h` 的 `MORNLEA_CLIENT_ABI_VERSION`
 /// 逐版本一致。
-pub const CLIENT_ABI_VERSION: u32 = 8;
+pub const CLIENT_ABI_VERSION: u32 = 9;
 
 /// 调用成功。
 pub const MORNLEA_CLIENT_STATUS_OK: u32 = 0;
@@ -279,9 +280,9 @@ mod tests {
     // 校验拒绝路径:ABI 版本、参数校验与无效句柄。
 
     #[test]
-    fn abi_version_is_eight() {
-        // v8 增加 egui 菜单两出口与帧 TLV tag 9;变基重编 v5..v7 参见 ABI 注释。
-        assert_eq!(mornlea_client_abi_version(), 8);
+    fn abi_version_is_nine() {
+        // v9 增加设置 layout v2 与结构化事件 batch；v8 菜单出口保持。
+        assert_eq!(mornlea_client_abi_version(), 9);
     }
 
     #[test]
@@ -584,7 +585,7 @@ const FRAME_TAG_HUD: u32 = 6;
 const FRAME_TAG_DEBUG: u32 = 7;
 /// 水下水色叠加段(4 个 f32:RGBA)。client ABI v5 内的追加 tag,不升 ABI 版本。
 const FRAME_TAG_WATER: u32 = 8;
-/// egui 菜单段(client ABI v8):layout v1 的 UI 段字节,见 [`crate::ui::decode_ui_frame`]。
+/// egui UI 段(client ABI v9):layout v1/v2 字节,见 [`crate::ui::decode_ui_frame`]。
 const FRAME_TAG_UI: u32 = 9;
 
 /// 解析 render_frame 输入;违约返回 None。
@@ -746,6 +747,7 @@ pub unsafe extern "C" fn mornlea_client_render_frame(
             FrameResult::Rendered => MORNLEA_CLIENT_STATUS_OK,
             FrameResult::Skipped => MORNLEA_CLIENT_STATUS_SKIPPED,
             FrameResult::Invalid => MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT,
+            FrameResult::Capacity => MORNLEA_CLIENT_STATUS_CAPACITY,
         })
     })
 }
@@ -1039,6 +1041,50 @@ mod frame_v2_tests {
         bad.extend_from_slice(&0u32.to_le_bytes());
         assert_eq!(
             parse_status(&v2_frame(&tlv(FRAME_TAG_UI, &bad))),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+    }
+
+    fn ui_settings_segment() -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(&crate::ui::UI_SETTINGS_LAYOUT_VERSION.to_le_bytes());
+        out.extend_from_slice(&1u32.to_le_bytes());
+        out.extend_from_slice(&0.25f32.to_bits().to_le_bytes());
+        out.extend_from_slice(&2u32.to_le_bytes());
+        out.extend_from_slice(&11u32.to_le_bytes());
+        out.extend_from_slice(b"packs/local");
+        out.extend_from_slice(&1u32.to_le_bytes());
+        out.extend_from_slice(&0u32.to_le_bytes());
+        out.extend_from_slice(&0u32.to_le_bytes());
+        out
+    }
+
+    #[test]
+    fn v2_settings_ui_invalid_values_fail_before_handle_lookup() {
+        let valid = ui_settings_segment();
+        assert_eq!(
+            parse_status(&v2_frame(&tlv(FRAME_TAG_UI, &valid))),
+            MORNLEA_CLIENT_STATUS_WINDOW
+        );
+
+        for (name, offset, value) in [
+            ("flags", 4usize, 2u32),
+            ("nan audio", 8, f32::NAN.to_bits()),
+            ("window", 12, 99),
+            ("dirty", 31, 2),
+        ] {
+            let mut bad = valid.clone();
+            bad[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+            assert_eq!(
+                parse_status(&v2_frame(&tlv(FRAME_TAG_UI, &bad))),
+                MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT,
+                "case={name}"
+            );
+        }
+        let mut tail = valid;
+        tail.push(0);
+        assert_eq!(
+            parse_status(&v2_frame(&tlv(FRAME_TAG_UI, &tail))),
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
     }
@@ -1536,7 +1582,7 @@ pub extern "C" fn mornlea_client_render_resize(
         })
     })
 }
-/// 上传 egui 菜单字体(client ABI v8 出口):字节负载须非空且 <= 32 MiB。
+/// 上传 egui 菜单字体(client ABI v9 保留出口):字节负载须非空且 <= 32 MiB。
 ///
 /// 入口校验(空指针、零长度 -> INVALID_ARGUMENT;超 32 MiB -> CAPACITY)
 /// 先于句柄查找(与 set_lod_fog 同一约定,无头可测);成功则安装到
@@ -1569,64 +1615,57 @@ pub unsafe extern "C" fn mornlea_client_render_upload_ui_font(
     })
 }
 
-/// 排空 egui 菜单点击事件(client ABI v8 出口):把按钮 id 序列按小端写进
-/// `out`,并把实际写入个数写进 `*out_count`,函数返回状态码。写满截断语义:
-/// 事件数超过 `out.len()/4` 时写满并丢弃余下(调用方每帧排空)。
+/// 排空 client ABI v9 结构化 UI 事件：只有完整 batch 能装入 `out` 时才
+/// 写入并清空队列，把实际字节数写入 `*out_written`。容量不足返回
+/// `MORNLEA_CLIENT_STATUS_CAPACITY`，三个对象均保持不变。
 ///
-/// 入口校验(ABI 版本、`out` 非空、`out_len` 为 4 的倍数、`out_count` 非空)
-/// 先于句柄查找,校验失败不触碰调用方缓冲与 `*out_count`;校验通过后经
-/// `with_renderer` 排空并计数,返回 `MORNLEA_CLIENT_STATUS_OK`。
+/// 入口校验(ABI 版本、`out` 与 `out_written` 非空)先于句柄查找；校验失败
+/// 不触碰调用方对象。空队列仍输出 8 字节合法空 batch。
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn mornlea_client_render_drain_ui_events(
     abi_version: u32,
     handle: u64,
     out: *mut u8,
     out_len: usize,
-    out_count: *mut u32,
+    out_written: *mut usize,
 ) -> u32 {
     if abi_version != CLIENT_ABI_VERSION {
         return MORNLEA_CLIENT_STATUS_ABI_VERSION;
     }
-    if out.is_null() || !out_len.is_multiple_of(4) || out_count.is_null() {
+    if out.is_null() || out_written.is_null() {
         return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
     }
     catch(|| {
         with_renderer(handle, |renderer| {
-            let events = renderer.drain_ui_events();
-            // SAFETY: out 非空,长度已校验为 4 的倍数且可写;out_count 非空且可写。
+            // SAFETY: out 非空，调用方保证 `out_len` 字节可写。
             let out = unsafe { std::slice::from_raw_parts_mut(out, out_len) };
-            write_ui_events_counted(out, out_count, &events);
-            MORNLEA_CLIENT_STATUS_OK
+            finish_ui_event_drain(renderer.drain_ui_events(out), out_written)
         })
     })
 }
 
-/// 把 `events`(u32 按钮 id)按小端写入 `out`,最多写 `out.len()/4` 个,
-/// 返回实际写入个数(超出容量的余下丢弃)。独立小函数以便无头单测截断语义。
-fn write_ui_events(out: &mut [u8], events: &[u32]) -> u32 {
-    let capacity = out.len() / 4;
-    let n = events.len().min(capacity);
-    for (index, event) in events.iter().take(n).enumerate() {
-        out[index * 4..index * 4 + 4].copy_from_slice(&event.to_le_bytes());
+/// 把排空结果映射为 FFI 状态；只有成功才写 `out_written`，失败路径保持调用
+/// 方 marker 不变。调用方必须先保证指针非空且可写。
+fn finish_ui_event_drain(
+    result: Result<usize, crate::ui::UiOutputError>,
+    out_written: *mut usize,
+) -> u32 {
+    match result {
+        Ok(written) => {
+            // SAFETY:出口已校验指针；纯函数测试同样传入有效局部变量。
+            unsafe { out_written.write(written) };
+            MORNLEA_CLIENT_STATUS_OK
+        }
+        Err(crate::ui::UiOutputError::Capacity) => MORNLEA_CLIENT_STATUS_CAPACITY,
+        Err(crate::ui::UiOutputError::Invalid) => MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT,
     }
-    n as u32
-}
-
-/// 把 `events` 写入 `out`(截断语义同 `write_ui_events`)并把实际写入个数写进
-/// `*out_count`。独立小函数以便无头单测「计数写出」与「写满截断」两个语义;
-/// 纯函数 `write_ui_events` 保留返回个数的契约。
-fn write_ui_events_counted(out: &mut [u8], out_count: *mut u32, events: &[u32]) {
-    let n = write_ui_events(out, events);
-    // SAFETY: out_count 由出口先校验非空,或单测传入有效指针。
-    unsafe { out_count.write(n) };
 }
 
 #[cfg(test)]
 mod ui_ffi_tests {
     use super::*;
 
-    // 菜单两条出口(client ABI v8)的无头校验:错误 ABI、非法参数先于句柄
-    // 查找被拒;写满截断由纯函数 write_ui_events 覆盖。
+    // 菜单两条出口(client ABI v9)的无头校验:错误 ABI、非法参数先于句柄查找。
 
     #[test]
     fn upload_ui_font_rejects_bad_arguments_before_handle_lookup() {
@@ -1691,8 +1730,8 @@ mod ui_ffi_tests {
             },
             MORNLEA_CLIENT_STATUS_ABI_VERSION
         );
-        // out 为 null -> INVALID_ARGUMENT(先于句柄查找),且不触碰 out_count。
-        let mut marker = 0xDEADBEEFu32;
+        // out 为 null -> INVALID_ARGUMENT(先于句柄查找),且不触碰 out_written。
+        let mut marker = 0xDEADBEEFusize;
         assert_eq!(
             unsafe {
                 mornlea_client_render_drain_ui_events(
@@ -1706,23 +1745,23 @@ mod ui_ffi_tests {
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
         assert_eq!(marker, 0xDEADBEEF);
-        // out_len 非 4 倍数 -> INVALID_ARGUMENT,且不触碰 out_count。
+        // 任意字节长度都合法；参数合法但句柄未知 -> WINDOW，输出对象不变。
         let mut out = [0u8; 8];
-        marker = 0xDEADBEEFu32;
+        marker = 0xDEADBEEFusize;
         assert_eq!(
             unsafe {
                 mornlea_client_render_drain_ui_events(
                     CLIENT_ABI_VERSION,
                     0xF00D,
                     out.as_mut_ptr(),
-                    6,
+                    7,
                     &mut marker,
                 )
             },
-            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+            MORNLEA_CLIENT_STATUS_WINDOW
         );
         assert_eq!(marker, 0xDEADBEEF);
-        // out_count 为 null -> INVALID_ARGUMENT。
+        // out_written 为 null -> INVALID_ARGUMENT。
         assert_eq!(
             unsafe {
                 mornlea_client_render_drain_ui_events(
@@ -1735,9 +1774,9 @@ mod ui_ffi_tests {
             },
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
-        // 参数全部合法但句柄未知 -> WINDOW,不触碰 out 与 out_count。
+        // 参数全部合法但句柄未知 -> WINDOW,不触碰 out 与 out_written。
         let mut out = [0xAAu8; 8];
-        let mut count = 0xBBBBBBBBu32;
+        let mut written = 0xBBBBBBBBusize;
         assert_eq!(
             unsafe {
                 mornlea_client_render_drain_ui_events(
@@ -1745,54 +1784,27 @@ mod ui_ffi_tests {
                     0xF00D,
                     out.as_mut_ptr(),
                     8,
-                    &mut count,
+                    &mut written,
                 )
             },
             MORNLEA_CLIENT_STATUS_WINDOW
         );
         assert!(out.iter().all(|&b| b == 0xAA));
-        assert_eq!(count, 0xBBBBBBBB);
+        assert_eq!(written, 0xBBBBBBBB);
     }
 
     #[test]
-    fn drain_write_truncates_to_capacity() {
-        let events = [1u32, 2, 3, 4, 5];
-        // 容量 2 个:写前两个,返回 2。
-        let mut small = [0u8; 8];
-        assert_eq!(write_ui_events(&mut small, &events), 2);
-        assert_eq!(u32::from_le_bytes(small[0..4].try_into().unwrap()), 1);
-        assert_eq!(u32::from_le_bytes(small[4..8].try_into().unwrap()), 2);
-        // 容量 5 个(20 字节):全写,返回 5。
-        let mut large = [0u8; 20];
-        assert_eq!(write_ui_events(&mut large, &events), 5);
-        assert_eq!(u32::from_le_bytes(large[16..20].try_into().unwrap()), 5);
-        // 空事件:返回 0,缓冲不动。
-        let mut empty = [0xAAu8; 8];
-        assert_eq!(write_ui_events(&mut empty, &[]), 0);
-        assert!(empty.iter().all(|&b| b == 0xAA));
-    }
-
-    #[test]
-    fn drain_writes_out_count() {
-        let events = [1u32, 2, 3, 4, 5];
-        // 容量 3(12 字节):写前三个,count=3,余下截断。
-        let mut out = [0u8; 12];
-        let mut count = 0u32;
-        write_ui_events_counted(&mut out, &mut count, &events);
-        assert_eq!(count, 3);
-        assert_eq!(u32::from_le_bytes(out[0..4].try_into().unwrap()), 1);
-        assert_eq!(u32::from_le_bytes(out[8..12].try_into().unwrap()), 3);
-        // 容量 8(32 字节):全写,count=5。
-        let mut large = [0u8; 32];
-        let mut count = 0u32;
-        write_ui_events_counted(&mut large, &mut count, &events);
-        assert_eq!(count, 5);
-        assert_eq!(u32::from_le_bytes(large[16..20].try_into().unwrap()), 5);
-        // 空事件:count=0,缓冲不动。
-        let mut empty = [0xAAu8; 8];
-        let mut count = 0u32;
-        write_ui_events_counted(&mut empty, &mut count, &[]);
-        assert_eq!(count, 0);
-        assert!(empty.iter().all(|&b| b == 0xAA));
+    fn drain_capacity_does_not_write_out_written() {
+        let mut marker = 0xA5A5A5A5usize;
+        assert_eq!(
+            finish_ui_event_drain(Err(crate::ui::UiOutputError::Capacity), &mut marker),
+            MORNLEA_CLIENT_STATUS_CAPACITY
+        );
+        assert_eq!(marker, 0xA5A5A5A5);
+        assert_eq!(
+            finish_ui_event_drain(Ok(37), &mut marker),
+            MORNLEA_CLIENT_STATUS_OK
+        );
+        assert_eq!(marker, 37);
     }
 }

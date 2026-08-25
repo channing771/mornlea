@@ -34,7 +34,7 @@
 ## 并行与冲突规则
 
 - **同批并行必须共享契约**：参照第一夜批次先例——第一步在功能分支共同基线上冻结「追加编号 / 协议消息 / 有限模型 tag」的 append-only 共享契约提交，各功能分支从该 SHA 创建；`AGENTS.md`/`CLAUDE.md`、capture golden、benchmark scenario 与版本基线由**集成任务独占**，功能分支不得触碰（避免并行覆盖 PNG 与文档冲突）。
-- **版本号互斥**：协议 / 存档 schema / engine ABI / client ABI / benchmark scenario 的升版行互斥——同一时间只能被一个认领者持有；冲突时按实际合入顺序重排（例：第一夜批次设计写的 client ABI v8 已被 egui 主菜单占用，须重排为 v9）。
+- **版本号互斥**：协议 / 存档 schema / engine ABI / client ABI / benchmark scenario 的升版行互斥——同一时间只能被一个认领者持有；冲突时按实际合入顺序重排（例：第一夜批次原设计写 client ABI v8，先被 egui 主菜单占用 v8、再被设置页占用 v9，须重排为 v10）。
 - **文件所有权**：认领时在备注声明独占文件集；与本表其它已认领行重叠即换行或延迟。
 - **范围冻结**：认领后不得扩大范围；实现发现规格不成立时，先改该 change 的 OpenSpec 产物再继续编码。
 
@@ -42,7 +42,7 @@
 
 ## A. 第一夜生存批次（在途，不得重复认领）
 
-> 设计与计划见 `docs/superpowers/specs/2026-08-23-first-night-survival-parallel-wave-design.md` 与 `docs/superpowers/plans/2026-08-23-first-night-survival-parallel-wave.md`。原批次的五个功能分支仅存在于前一开发机的本地 worktree（`.worktrees/`）与本地 `codex/*` 分支（共享契约 SHA `785ea07b`），从未推送远端，已随机器迁移丢失；2026-08-25 经控制会话裁决将 A-01..A-05 全部重置为未认领、从当前 `main` 重做。版本目标不变：协议 v27、玩家 schema v8、世界 metadata v3、`hostile_mobs` schema v1、engine ABI v7、benchmark scenario v20；区块 schema v9 与 `companions.ai` v4 不变。
+> 设计与计划见 `docs/superpowers/specs/2026-08-23-first-night-survival-parallel-wave-design.md` 与 `docs/superpowers/plans/2026-08-23-first-night-survival-parallel-wave.md`。原批次的五个功能分支仅存在于前一开发机的本地 worktree（`.worktrees/`）与本地 `codex/*` 分支（共享契约 SHA `785ea07b`），从未推送远端，已随机器迁移丢失；2026-08-25 经控制会话裁决将 A-01..A-05 全部重置为未认领、从当前 `main` 重做。按当前基线重排后的版本目标为：协议 v27、玩家 schema v8、世界 metadata v3、`hostile_mobs` schema v1、engine ABI v7、client ABI v10、benchmark scenario v20；区块 schema v9 与 `companions.ai` v4 不变。
 
 | ID | 功能 | 简述 | 状态 | 认领人 | 来源与备注 |
 |---|---|---|---|---|---|
@@ -52,8 +52,8 @@
 | A-04 | 权威近战夜行者 | 确定性夜间生成、全服 64/每玩家 8 上限、A* + Rust 物理、灼烧/消失/腐肉掉落、`hostile_mobs` v1 | 已认领 | claude-implementer @ feat/A-04-hostile-nightwalker | 原分支头 `eb1923eb`（持久化修复两轮已提交）未推送远端已丢失；从当前 `main` 重做。独占文件集：`openspec/changes/authoritative-hostile-nightwalker`（新建）；`internal/storage`（新建 `hostile_types.go`/`hostile_codec.go`/`hostile_codec_*_test.go`/`hostile_store_test.go`，修改 `types.go`/`memory.go`/`disk.go`/`world_files*`/`backup*`）；`internal/sim`（新建 `hostile*.go`/`block_light_query*.go`，修改 `engine.go`/`engine_step.go`/`command.go`/`drop.go`/`tunables.go`）；`internal/core`（`hunger.go` 及测试——腐肉食物值与 `DisplayDayPhase`；`ItemRottenFlesh` 条目与 A-02 火把条目同属 `item.go` append-only 不同段，编号终值按 A-06 固定合并序裁决）；`internal/server`（新建 `hostile_manager`/`hostile_snapshot`/`hostile_path_worker`/`hostile_publication`/`hostile_persistence` 及各自测试/`hostile_restore_test`/`host_shutdown_test`，修改 `server.go`/`host.go`/`shutdown.go`/`persistence_status.go`；与 E-11 既有 `*_test.go` 等待助手不相交）；`internal/network`（新建 `message_hostile*.go`，修改 `codec_server.go`/`packet.go`/`registry.go`；不含 E-12 的 `codec_client.go`）；`internal/client`（新建 `hostiles*.go`，修改 `window*.go`）；`internal/render/avatar*.go`；`cmd/mornlea`（`app.go`/`app_messages.go`/`app_render.go`/`presentation_conversion_test.go`，`capture_scene*` 仅追加 `hostile-mob` 场景构造不写 golden）；`engine/crates/mornlea_client`（`src/render/entity.rs`/`src/ffi.rs`/`src/lib.rs`，与 A-02 的 `mornlea_engine` 不相交）；不触碰协议/存档/engine ABI/client ABI/scenario 版本号（A-07 独占）、golden PNG 与 `AGENTS.md`/`CLAUDE.md`/`progress.md` 基线（A-07 独占）；攻击先经既有 `applyDamage` 通道并以专用 damage test seam 验证 3 伤害/20 冷却，统一 combat settlement 由 A-06 接通（批次计划 Task 4 Step 4） |
 | A-05 | 床与睡眠 | 双格床八形态、同区块原子放置、全员睡眠跳夜（`DayTimeOffsetTicks`）、个人重生点 | 已认领 | codex-implementer @ feat/A-05-authoritative-bed-sleep | 原共享契约 SHA `785ea07b` 未推送远端已丢失（本无实现损失）；从当前 `main` 重做。独占文件集：OpenSpec change `authoritative-bed-sleep`；床配对/放置/破坏/碰撞、原创材质与独立 Rust bed emitter；metadata v3/player schema v8 的 offset 与床复活点；权威睡眠状态、`UseBed` 处理、客户端昼夜/睡眠 UI、`bed-sleep` 场景构造（不写 golden）；不触碰协议/ABI/scenario 最终版本号、golden PNG 与 `AGENTS.md`/`CLAUDE.md`/`progress.md`（A-07 独占），共享编号/消息/model tag 契约待批次控制会话裁决 |
 | A-06 | 五路合流集成 | 固定顺序合并 crafting→torches→swords→nightwalker→bed；TDD 接通剑×夜行者统一战斗、夜行者阻睡、bed model dispatcher；删除 `network.CraftRecipe` 过渡类型 | 未认领 | — | 依赖 A-01..A-05；按批次计划 Task 3 |
-| A-07 | 版本基线与视觉基线 | 协议 v27 / schema v8 / metadata v3 / `hostile_mobs` v1 / engine ABI v7 / benchmark v20 迁移 `19:20`；生成新 5 场景 golden；同步 `AGENTS.md`+`CLAUDE.md`+`progress.md` | 未认领 | — | 依赖 A-06。**认领时注意**：a) client ABI 设计值 v8 已被 egui 占用，按实际重排；b) 场景总数按合入时的实际清单（既有 18 + 新增 5 = 23，批次计划写 22 系编写时未含 main-menu） |
-| A-08 | 整分支终审、归档与推送 | 独立整分支终审（规格、上限、并发/持久化错误路径、wire 安全、22/23 图、无版权资源）、五个 change 归档、合入 `main` | 未认领 | — | 依赖 A-07；按批次计划 Task 5 |
+| A-07 | 版本基线与视觉基线 | 协议 v27 / schema v8 / metadata v3 / `hostile_mobs` v1 / engine ABI v7 / client ABI v10 / benchmark v20 迁移 `19:20`；生成新 5 场景 golden；同步 `AGENTS.md`+`CLAUDE.md`+`progress.md` | 未认领 | — | 依赖 A-06。client ABI 按已占用的 v8 主菜单、v9 设置页重排为 v10；场景总数按当前 19 个加新增 5 个计算为 24，批次历史计划中的 22 未含 `main-menu`/`settings-menu` |
+| A-08 | 整分支终审、归档与推送 | 独立整分支终审（规格、上限、并发/持久化错误路径、wire 安全、24 图、无版权资源）、五个 change 归档、合入 `main` | 未认领 | — | 依赖 A-07；按批次计划 Task 5 |
 
 ## B. 生存与世界深化（后续功能候选）
 
@@ -118,7 +118,7 @@
 
 | ID | 功能 | 简述 | 版本与契约影响 | 状态 | 认领人 | 来源与备注 |
 |---|---|---|---|---|---|---|
-| D-01 | 设置菜单 | 音量（`audioVolume`）、材质包目录（`texturePackPath`）、窗口等设置项 | 配置项暴露，无 wire 变更 | 未认领 | — | egui 集成约束与实施路径 |
+| D-01 | 设置菜单 | 音量（`audioVolume`）、材质包目录（`texturePackPath`）、窗口等设置项 | 配置项暴露，无 wire 变更 | 已完成 | codex-implementer @ codex/D-01-settings-menu | PR #86；change `settings-menu` 已归档并同步主规格。交付世界装配前的 committed/draft 设置页、三字段 raw JSON 原子 patch、材质候选预验证、音量/窗口保存后即时生效、client ABI v9 结构化有界事件批及 19 场景 capture；协议/schema、engine ABI、benchmark scenario 与配置版本均不变。完整验证与 baseline-equivalent 视觉门禁证据见归档 ledger。 |
 | D-02 | 暂停菜单 | 暂停/继续/退出；先设计单人权威模拟的暂停语义 | 视暂停语义裁决 | 未认领 | — | egui 实施路径 |
 | D-03 | 调试面板 egui 化 | 既有程序化 debug 面板迁入 egui 或并存；性能影响需评审 | 无 wire（呈现层） | 未认领 | — | egui 实施路径 |
 | D-04 | 合成面板分页/滚动 | 配方行数增长后按窗口高度自适应（当前 10 行，矮窗口整体缩小） | 无 wire；HUD 布局（capture 校验） | 未认领 | — | farming 遗留 20 |

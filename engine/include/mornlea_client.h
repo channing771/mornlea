@@ -4,13 +4,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* v8:新增 egui 主菜单两出口 render_upload_ui_font / render_drain_ui_events
+/* v9:新增设置页 layout v2，并把 render_drain_ui_events 升级为结构化事件
+ * batch 与整批容量门禁；v8:新增 egui 主菜单两出口
+ * render_upload_ui_font / render_drain_ui_events
  * 与帧 TLV tag 9(egui 菜单段);v7:终审修复波新增雾参数化
  * render_set_lod_fog 出口(新增导出面即 bump,同版本 = 同表面的不可混装
  * 契约);v6:新增远环 LOD tile 出口(render_upload_lod_tile/drop_lod_tile)。
  * 变基重编:远环两项出口在旧基线上原编号 v5/v6,main 的 water pass
  * (按 material 分流 + 半透明 water pass)占用 v5 后整体顺延一格。 */
-#define MORNLEA_CLIENT_ABI_VERSION 8u
+#define MORNLEA_CLIENT_ABI_VERSION 9u
 
 #define MORNLEA_CLIENT_STATUS_OK 0u
 #define MORNLEA_CLIENT_STATUS_ABI_VERSION 1u
@@ -132,7 +134,7 @@ uint32_t mornlea_client_render_set_lod_fog(
     float start,
     float full);
 
-/* 上传 egui 菜单字体(client ABI v8):bytes 非空、len>0 且 <= 32 MiB;
+/* 上传 egui 菜单字体(client ABI v9 保留出口):bytes 非空、len>0 且 <= 32 MiB;
  * 超上限返回 CAPACITY,其余违约返回 INVALID_ARGUMENT(先于句柄查找)。 */
 uint32_t mornlea_client_render_upload_ui_font(
     uint32_t abi_version,
@@ -140,16 +142,14 @@ uint32_t mornlea_client_render_upload_ui_font(
     const uint8_t *bytes,
     size_t len);
 
-/* 排空 egui 菜单点击事件(client ABI v8):把按钮 id(u32,小端)序列写进 out,
- * 并把写入个数写进 *out_count,返回状态码;out 为空、out_len 非 4 倍数或
- * out_count 为空返回 INVALID_ARGUMENT(均先于句柄查找),事件多于容量时写满
- * 截断。返回值是状态码,事件数一律经 out_count 回读,避免与状态码空间冲突。 */
+/* 排空 egui 结构化事件(client ABI v9):只有完整 batch 可装入 out 时才写入、
+ * 排空并把字节数写进 *out_written；容量不足返回 CAPACITY，三个对象均不变。 */
 uint32_t mornlea_client_render_drain_ui_events(
     uint32_t abi_version,
     uint64_t handle,
     uint8_t *out,
     size_t out_len,
-    uint32_t *out_count);
+    size_t *out_written);
 
 uint32_t mornlea_client_render_frame(
     uint32_t abi_version,

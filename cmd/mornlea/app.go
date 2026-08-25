@@ -48,10 +48,16 @@ type applicationOptions struct {
 	Render config.Render
 	// `AudioVolume` 是本地确认提示音的总音量，只在图形客户端创建播放器时读取。
 	AudioVolume float32
-	// ConfigPath 是调试面板 F5 保存时的目标路径；只在 Dev 为真时使用。
+	// ConfigPath 是设置页与调试面板 F5 的配置保存目标；benchmark/capture 不使用。
 	ConfigPath string
-	// TexturePackPath 是客户端启动时读取的本地覆盖目录；空值只用内嵌默认材质。
+	// TexturePackPath 是配置文件中的材质包目录原文，设置页必须无损回显与保存。
 	TexturePackPath string
+	// ResolvedTexturePackPath 是按配置文件目录解析后的启动材质路径；空值只用
+	// 内嵌默认材质。当前进程构造 registry 后不再热更新它。
+	ResolvedTexturePackPath string
+	// WindowSize 是交互式窗口的固定逻辑尺寸预设；benchmark/capture 只携带
+	// 配置默认值但不消费它，继续走固定离屏尺寸。
+	WindowSize config.WindowSize
 	// FluidEnabled 是配置 fluidEnabled 的生效值，下传给本地权威世界的
 	// worldgen.New 门控海平面注水。远程连接模式下不使用它——世界内容由
 	// 服务端权威决定。
@@ -170,6 +176,9 @@ type application struct {
 	// menu 是主菜单的语义状态（相位/按钮/版本/错误），由 cmd/mornlea 拥有；只有
 	// StartAtMenu 路径在构造时初始化为菜单相位，其余路径保持零值（menuPhaseGame）。
 	menu menuState
+	// settings 是世界启动前设置页的已保存值与草稿；仅 `menuPhaseSettings`
+	// 接受结构化设置事件，保存成功前不触碰运行态。
+	settings settingsState
 	// menuOverride 是 capture 场景注入的一帧菜单快照；非 nil 时 uiSegment 优先采用它，
 	// 交互路径保持 nil（正常相位逻辑）。每个场景在 Prepare 前设置或清除，无 teardown。
 	menuOverride *client.UIMenu
