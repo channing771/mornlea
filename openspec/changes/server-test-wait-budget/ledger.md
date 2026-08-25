@@ -10,7 +10,7 @@
 
 - Implementer：`/root/e11_task1_implementer`，冻结契约 `b8120ef4`。
 - RED：`GOCACHE=/private/tmp/mornlea-e11-go-cache /Users/chen/.gvm/gos/go1.26.0/bin/go test ./internal/server -run TestIntegrationLoginTickBudget -count=1` 按预期编译失败；`login_wait_budget_test.go` 的三处 `waitIntegrationLoginReady` 与三处 `integrationLoginTickBudget` 引用均报 `undefined`，包以 build failed 退出。
-- GREEN：在 `tcp_integration_helpers_test.go` 加入固定 `integrationLoginTickBudget = 3000`、最小 `Helper`/`Fatalf` 接口与只负责活性的 `waitIntegrationLoginReady`；同一命令通过（`ok github.com/channing771/mornlea/internal/server 1.014s`）。主题测试证明初始满足零推进、预算内恰好 7 次推进，以及永不满足时恰好 3000 次推进、动态诊断只求值一次且 `Fatalf` 只调用一次并包含场景标签/预算/最终状态。
+- GREEN：在 `tcp_integration_helpers_test.go` 加入固定 `integrationLoginTickBudget = 3000`、最小 `Helper`/`Fatalf` 接口与只负责活性的 `waitIntegrationLoginReady`；同一命令通过（`ok github.com/channing771/mornlea/internal/server 1.014s`）。R0 主题测试只证明初始满足零推进、预算内恰好 7 次推进，以及永不满足时恰好 3000 次推进、动态诊断只求值一次且 `Fatalf` 只调用一次；它尚未证明第 3000 次推进后成立仍成功，见下方初审与 R1 修复。
 - 迁移清单（十二个调用点）：
   1. `farming_loop_e2e_test.go`：Ready、非空背包发布、九区块镜像；删除 `farmingLoginBudget` 及其注释。
   2. `hunger_loop_e2e_test.go`：Ready、非空背包发布、九区块镜像；保留 `wireInventory` 更新，删除 `hungerLoopLoginBudget` 及其注释。
@@ -34,9 +34,11 @@
   - 首次 `go test ./... -race`：`internal/server` 再次通过（181.676s），唯一失败为既有 `cmd/mornlea` 包共享 10 分钟 timeout，栈停在 `TestScenarioV12GPUCompletionBatchIsRecordedInReport` 的 C 渲染调用，无 data race；该失败用例独立重跑通过（202.226s）。随后原命令重跑通过，`cmd/mornlea` 261.652s，其余包通过或复用同一源状态下首次运行的成功缓存。
   - `gofmt -l .`：通过，无输出。
   - `openspec validate --all --strict --no-interactive`：65 passed，0 failed。
-- SPEC review：待裁决。
-- QUALITY review：待裁决。
-- 修复轮次：0/5。
+- SPEC review：FAIL（Important）— R0 缺少第 `integrationLoginTickBudget` 次 `step` 后 `ready` 成立仍成功的精确边界用例；删除 helper 最后一次 `ready()` 检查时原测试仍绿。
+- QUALITY review：FAIL（Important）— 与 SPEC review 同项；此外耗尽测试只独立搜索字符串 `"3000"`，该数字可能来自调用方 diagnostics，未把预算绑定到 `Fatalf` 前缀。
+- R1/5 修复：在 `login_wait_budget_test.go` 保留普通 7 次预算内用例，并新增第 3000 次推进后才成立的边界用例，精确断言 `steps == integrationLoginTickBudget`、`Fatalf` 零次、diagnostics 零次；删除 helper 循环后的末次 `ready()` 检查会让 fake 记录一次 `Fatalf`，该变异不再存活。耗尽用例改为断言完整前缀 `等待 never-ready 登录就绪耗尽 3000 tick:`，并另行断言调用方动态诊断完整片段。
+- R1/5 验证：helper 非 race（1.464s）与 race（1.628s）定点测试通过；十二条指定 race 用例通过（9.381s）；完整 `internal/server -race -count=1` 通过（168.481s）；`gofmt -l .` 无输出，`git diff --check` 通过，OpenSpec strict 65 passed / 0 failed。全仓 race 按修复 brief 留给整分支 fresh 终审。
+- 修复轮次：1/5。
 
 ## 整分支终审与收尾
 

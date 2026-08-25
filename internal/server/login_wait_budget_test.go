@@ -53,6 +53,27 @@ func TestIntegrationLoginTickBudget(t *testing.T) {
 		}
 	})
 
+	t.Run("最后一次预算推进后成立仍成功", func(t *testing.T) {
+		recorder := &loginWaitRecorder{}
+		steps := 0
+		diagnosticsCalls := 0
+		waitIntegrationLoginReady(
+			recorder,
+			"last-budget-step-ready",
+			func() bool { return steps == integrationLoginTickBudget },
+			func() string {
+				diagnosticsCalls++
+				return fmt.Sprintf("steps=%d", steps)
+			},
+			func() { steps++ },
+		)
+		if recorder.helperCalls != 1 || recorder.fatalCalls != 0 ||
+			diagnosticsCalls != 0 || steps != integrationLoginTickBudget {
+			t.Fatalf("末次预算推进成立结果: helper=%d fatal=%d diagnostics=%d steps=%d，想要 fatal=0 diagnostics=0 steps=%d",
+				recorder.helperCalls, recorder.fatalCalls, diagnosticsCalls, steps, integrationLoginTickBudget)
+		}
+	})
+
 	t.Run("永不满足时耗尽预算并报告动态诊断", func(t *testing.T) {
 		recorder := &loginWaitRecorder{}
 		steps := 0
@@ -74,10 +95,12 @@ func TestIntegrationLoginTickBudget(t *testing.T) {
 				integrationLoginTickBudget, recorder.helperCalls, recorder.fatalCalls, diagnosticsCalls, steps, wantBudget, wantBudget)
 		}
 		diagnostic := fmt.Sprintf("steps=%d ready=false inventory=false view=false", wantBudget)
-		for _, fragment := range []string{"never-ready", fmt.Sprint(wantBudget), diagnostic} {
-			if !strings.Contains(recorder.fatal, fragment) {
-				t.Fatalf("预算耗尽诊断 %q 缺少 %q", recorder.fatal, fragment)
-			}
+		prefix := fmt.Sprintf("等待 never-ready 登录就绪耗尽 %d tick:", wantBudget)
+		if !strings.HasPrefix(recorder.fatal, prefix) {
+			t.Fatalf("预算耗尽诊断 %q 没有完整前缀 %q", recorder.fatal, prefix)
+		}
+		if !strings.Contains(recorder.fatal, diagnostic) {
+			t.Fatalf("预算耗尽诊断 %q 缺少调用方动态状态 %q", recorder.fatal, diagnostic)
 		}
 	})
 }
