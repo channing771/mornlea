@@ -172,7 +172,7 @@ func (m *companionManager) holdCompanionMining(
 		// 完全相同的产物预演判定 tick 边界背包能否容纳产物，不能即以稳定
 		// 原因失败；方块、耐久、背包在 sim 侧本就未变更。容器（箱子/熔炉）
 		// 与其余方块的判据分野与 harvestable 门槛的处理见
-		// companionMineCapacityExceeded。
+		// `companionMineCapacityExceeded`。
 		if m.companionMineCapacityExceeded(body, block, observed.Harvestable, target) {
 			m.applyQueueEvents(slot, slot.queue.FailRun(companion.TaskFailInventoryFull))
 			return
@@ -209,8 +209,8 @@ func (m *companionManager) companionMineCapacityExceeded(
 			// 失败，deadline 兜底（与上方目标区块未 ready 的处理同则）。
 			return false
 		}
-		_, _, staged := sim.CompanionMineContainerStaging(block, harvestable, contents, body.Inventory)
-		return !staged
+		_, _, stagedOK := sim.CompanionMineContainerStaging(block, harvestable, contents, body.Inventory)
+		return !stagedOK
 	default:
 		if !harvestable {
 			return false

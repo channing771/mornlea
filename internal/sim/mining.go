@@ -286,7 +286,7 @@ func (engine *Engine) advanceMining(
 // 实现：射线从伙伴眼睛指向目标方块中心，命中必须恰好是目标本身（被遮挡、超距
 // 或区块未就绪都会清空进度，与玩家的无效目标语义一致）。无掉落方块与农业
 // 方块在进度累积之前就被防御清单拒绝；箱子与熔炉是合法目标，完成 tick 经
-// completeCompanionMining 的容器分叉批量结算。
+// `completeCompanionMining` 的容器分叉批量结算。
 func (engine *Engine) advanceCompanionMining(
 	entry *companionState,
 	pending map[core.ChunkKey]*pendingChunkChanges,
@@ -383,7 +383,7 @@ func CompanionMineContainerStaging(
 // completeCompanionMining 在进度满格的 tick 结算伙伴采掘，三方必须原子成立：
 // 目标方块改为空气、按既有规则扣除工具耐久（含损坏形态）、可收获产物直入
 // 伙伴背包。普通方块与容器两条完成分叉：普通方块走单件结算；容器（箱子/
-// 熔炉）走 completeCompanionContainerMining 的批量全或无结算。容量前验先行
+// 熔炉）走 `completeCompanionContainerMining` 的批量全或无结算。容量前验先行
 // ——预演在背包副本上进行，余量非空则该 tick 整体不结算：方块不变、耐久
 // 不变、背包不变、进度保持满格，Manager 由此观察到"就绪但无容量"的稳定状态
 // （"任务失败"的判定属于 Manager，不在这里）。预演通过后 SetBlock 与内存提交

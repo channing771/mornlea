@@ -7,16 +7,12 @@
 package server
 
 import (
-	"context"
 	"reflect"
 	"testing"
-	"time"
 
-	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/sim"
-	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -228,46 +224,6 @@ type containerMineParityResult struct {
 	ModelRequests  int
 }
 
-// newContainerMineParityHost 构造容器采掘 parity 用的 Host：存档预置一条与配置
-// ID 匹配的伙伴身体记录（确定性出生位置与指定背包），心跳置为一小时以避免长
-// 推进窗口内的保活噪声（沿用 interaction parity 的先例）。
-func newContainerMineParityHost(
-	t *testing.T,
-	id companion.ID,
-	model *fakeCompanionModel,
-	inventory core.Inventory,
-) *Host {
-	t.Helper()
-	store := newHostTestStore()
-	seed := companion.Body{
-		ID:        id,
-		Dimension: core.Overworld,
-		Position:  interactionCompanionPosition,
-		Inventory: inventory,
-	}
-	if err := store.MemoryStore.SaveCompanions(
-		context.Background(), storage.CompanionSave{Revision: 1, Records: []companion.Body{seed}},
-	); err != nil {
-		t.Fatalf("种子伙伴身体: %v", err)
-	}
-	config := hostTestConfig()
-	config.Companions = []companion.Definition{{ID: id, Name: "阿木"}}
-	config.MaxPlayers = 2
-	config.OutboxCapacity = 4096
-	config.HeartbeatInterval = time.Hour
-	config.HeartbeatTimeout = time.Hour
-	config.AIModel.Endpoint = model.server.URL + "/v1"
-	host := mustNewHost(t, config, flatTestGenerator{}, store)
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), longWaitDeadline)
-		defer cancel()
-		if err := host.Shutdown(ctx); err != nil {
-			t.Errorf("Host.Shutdown: %v", err)
-		}
-	})
-	return host
-}
-
 // runContainerMineParity 在指定传输上执行容器采掘容量脚本并返回全部可比事实：
 // 指令一「挖空箱子」的批量（仅本体 1 堆）放得下、必须完成回收；指令二「挖
 // 装着燃料与产物的熔炉」的批量（本体 + 燃料 + 产物 3 堆互异）放不下，必须以
@@ -280,7 +236,7 @@ func runContainerMineParity(t *testing.T, transport string) containerMineParityR
 	t.Helper()
 	id := chatTestCompanionID(1)
 	model := newFakeCompanionModel(t)
-	host := newContainerMineParityHost(t, id, model, containerTightInventory())
+	host := newInteractionParityHost(t, id, model, containerTightInventory())
 	// 台词平面在本 parity 场景保持静默：为 dialogue 客户端接入持续 5xx 的独立
 	// 假台词模型，成功台词的 CompanionSpeech 事件到达 tick 取决于 HTTP 时序，
 	// 会破坏 transcript 的跨传输可比性（沿用 interaction parity 的先例）。
@@ -367,9 +323,9 @@ func runContainerMineParity(t *testing.T, transport string) containerMineParityR
 }
 
 // TestCompanionManagerContainerMineMemoryTCPParity 验证容器采掘容量判定的
-// Memory/TCP 传输一致性：同一脚本（批量放不下的箱子 → TaskFailInventoryFull 且
-// 方块连同内容物原样保留；随后批量放得下的空熔炉 → 完成回收入包）在两条传输
-// 上产出逐字节一致的 ChatEvent transcript 与完全一致的世界结果。
+// Memory/TCP 传输一致性：同一脚本（批量放得下的空箱子 → 完成回收入包；随后
+// 批量放不下的装料熔炉 → TaskFailInventoryFull 且方块连同内容物原样保留）在
+// 两条传输上产出逐字节一致的 ChatEvent transcript 与完全一致的世界结果。
 func TestCompanionManagerContainerMineMemoryTCPParity(t *testing.T) {
 	results := make(map[string]containerMineParityResult, 2)
 	for _, transport := range []string{"memory", "tcp"} {

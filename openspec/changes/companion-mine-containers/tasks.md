@@ -25,5 +25,5 @@
 
 ## Task 4: 整分支门禁与收尾
 
-- [ ] 4.1 全量：`go test ./... -race`、`go vet ./...`、`gofmt -l .` 无输出、`go test ./internal/archcheck -count=1`、`openspec validate --all --strict --no-interactive`。
-- [ ] 4.2 核对 delta specs 与实现一致；`go test -list` 集合语义核对（若有测试文件拆分）；ledger 补最终验证输出摘要（数值只记录）。
+- [x] 4.1 全量：`go test ./... -race`、`go vet ./...`、`gofmt -l .` 无输出、`go test ./internal/archcheck -count=1`、`openspec validate --all --strict --no-interactive`。
+- [x] 4.2 核对 delta specs 与实现一致；`go test -list` 集合语义核对（若有测试文件拆分）；ledger 补最终验证输出摘要（数值只记录）。
