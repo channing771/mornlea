@@ -48,3 +48,10 @@
 - `fc630c2e` sim: fix yield comment math and backtick identifiers (B-10 R1)
 - `138d92c2` server: align e2e assertions with hashed yield (B-10 task 2)
 - `7c8fbd68` docs(openspec): record task reviews and deferred items
+
+## 归档收尾（阶段 5，2026-08-25）
+
+- PR #81 以 merge `dd429667` 合入，CI run `32856760888` 8 项首跑全绿。
+- **Ruling: delta 场景名保持「收获成熟作物」** — archive 守卫拒绝把主规格既有场景改名（视为丢弃场景）；delta 场景「收获成熟作物数量有界」改回原名、有界断言并入场景体。机械性更名，无行为语义变化。
+- 基线同步：`AGENTS.md`/`CLAUDE.md` 掉落基线句改写为哈希驱动数量表述（逐字节相同校验通过）、`docs/notes/progress.md` 追加里程碑段、backlog B-10 行回填「已完成」。主规格 `authoritative-farming` 的收获条目随 archive 合入；strict 校验通过。
+- 遗留移交：`internal/core/item.go:222`、`internal/companion/plan_types.go:499` 两处失真注释见 proposal「延期与放弃」。
