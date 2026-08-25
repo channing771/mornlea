@@ -14,3 +14,4 @@
 
 - **SPEC 评审 PASS（0 MUST-FIX，S1–S8 全过）**；**QUALITY 评审 PASS（0 MUST-FIX，4 NIT）**。
 - **Ruling: NIT-4 升级采纳——饥饿已满门控显示 — 权威侧 `sim/eating.go` 在 `hunger >= MaxHunger` 时不推进，客户端派生不查饥饿会使进度条假满，与「随后随权威结算消失」的可观察结果在该边界不符；`app_frame.go` 既有 `a.predictor.Hunger()` 权威镜像就在构造块作用域内，一个门控条件即可对齐 — 记入延期清单不如修掉，delta spec 激活条件已同步补「且权威确认的饥饿值未满」并新增 Scenario「饥饿已满不呈现进度条」。** NIT-1/2/3（时钟倒退显式测试、裸数字 4 换命名常量、不可达分支措辞）一并采纳进 R1。
+- **R1 提交 `a216d9b6`**：饥饿门控落 `app_frame.go` 派生输入位（`hungerReady && hunger < core.MaxHunger`，仍在裁决点位内）+ 端到端用例（满时不出现 quad、降到 19 后正常起算；既有两用例适配未满饥饿；填充定位改按进食填充色扫描）；时钟倒退显式用例（半程→倒退帧仍 0.5→续帧精确 0.625）；裸 4 换 `closedHotbarPanelQuads + closedHotbarSelectionQuads + core.HotbarSlots`；不可达分支注释点明防零值误用。复跑 client/hud/cmd-short/archcheck 全绿、`gofmt`/`go vet` 干净。
