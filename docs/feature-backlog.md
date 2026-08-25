@@ -91,7 +91,7 @@
 | B-28 | 岩浆与造石 | 岩浆流体（发光、接触伤害/灼烧）、水×岩浆→石头/黑曜石 | 流体编号区间扩展 + 方块光/伤害规则；无新协议消息 | 未认领 | — | authoritative-fluid 与 fluid-presentation proposal 非目标（两处显式延期）；灼烧语义与 A-04 协调 |
 | B-29 | 水流推力 | 流动水对实体施加方向力与水面流向呈现 | 物理侧 tunable 追加；无 wire 变更 | 未认领 | — | 同上非目标（「水流对实体的推力与水流方向动画」）；衔接既有浸没物理 |
 | B-30 | 冲刺（疾跑） | 移动输入位与速度提升 | `PlayerInput` 追加输入位 → 协议升版 | 未认领 | — | hunger 遗留 6（「动作不存在」）；B-13 冲刺疲劳依赖本行 |
-| B-31 | 开箱中断进食 | 打开容器或视野未就绪时中断进食且不扣料 | 无契约变更（`advanceEating` 中断条件） | 未认领 | — | hunger 遗留 10；需补「开箱中断不扣料」Scenario |
+| B-31 | 开箱中断进食 | 打开容器或视野未就绪时中断进食且不扣料 | 无契约变更（`advanceEating` 中断条件） | 已认领 | zcode2-implementer @ feat/B-31-eating-container-interrupt | hunger 遗留 10；需补「开箱中断不扣料」Scenario；2026-08-25 认领。控制会话裁决：批准与 A-01 在 `internal/sim/player.go` 的最小受控重叠——仅限 `advanceEating` 调用点为传入 `viewContainer`/`hasView` 中断所需的最小参数改动，该文件其余内容不触碰。独占文件集：`internal/sim/eating.go`、同包新增测试文件、OpenSpec change 目录；刻意不触碰 `combat.go`/`hunger.go`（B-13）、`engine_step.go`/`drop.go`（A-04）与 `internal/core` 编号段（A-01/A-02/A-04） |
 | B-32 | 流体音效 cue | 涉水/流水音频，复用既有 cue 纪律（权威确认边界触发） | 无 wire 变更（客户端音频） | 未认领 | — | fluid-presentation proposal 非目标（不做流体音效） |
 
 ## C. 伙伴能力扩展（后续功能候选）
