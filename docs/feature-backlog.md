@@ -62,7 +62,7 @@
 | ID | 功能 | 简述 | 版本与契约影响 | 状态 | 认领人 | 来源与备注 |
 |---|---|---|---|---|---|---|
 | B-01 | 更多食物与作物 | 肉类生物掉落+熟食熔炉食谱、更多作物（编号+纹理+生长参数即可扩展） | 物品/方块编号与配方表追加，无 wire 结构变更 | 未认领 | — | hunger 遗留 1；farming 遗留 2；肉类依赖 B-27（被动生物） |
-| B-02 | 水桶（可搬运流体） | 舀水/倒水物品，解除「农业只能在天然水体 4 格内」约束 | 物品编号追加；无限水源规则随本行一并裁决 | 已认领 | codex-implementer @ feat/B-02-water-bucket | farming 遗留 25（显式非目标解除）；fluid proposal 非目标「两个源相邻生成新源」约定随水桶交付；独占文件集：`internal/core/`、`internal/fluid/`、`internal/sim/`、`internal/network/`、`internal/client/` 相关测试与 OpenSpec change `portable-water-bucket` |
+| B-02 | 水桶（可搬运流体） | 舀水/倒水物品，解除「农业只能在天然水体 4 格内」约束 | 物品编号追加；无限水源规则随本行一并裁决 | 未认领 | — | farming 遗留 25（显式非目标解除）；fluid proposal 非目标「两个源相邻生成新源」约定随水桶交付 |
 | B-03 | 骨粉 | 新物品 + 「立即推进 N 阶段」动作，走翻地同形命令路径 | 物品编号追加；命令段可能追加 | 未认领 | — | farming 遗留 3 |
 | B-04 | 草丛与除草掉种子 | 植物几何第二消费者；草丛掉落种子替代初始材料包供给 | 植物区间编号追加 | 未认领 | — | farming 遗留 6 |
 | B-05 | 踩踏破坏耕地 | 实体落地事件接进方块变更（物理侧已有落地判定） | 无 wire 变更 | 未认领 | — | farming 遗留 4 |
@@ -146,7 +146,7 @@
 | E-10 | `findSpawnInColumn` 读落脚盒顶面 | 出生点与 support/safe 存档点三处口径同步（耕地 1/16 空隙） | 无（出生点口径） | 未认领 | — | farming 遗留 14 |
 | E-11 | server 测试等待预算化 | 既有登录等待循环多数无界（5 分钟超时而非可读断言），统一有预算等待助手 | 无（测试基础设施） | 未认领 | — | farming 遗留 19（测试基础设施） |
 | E-12 | M5E 再递延字面同源化 | `capture_scene.go` 与 `capture_ai_companion_test.go` 的 `[32]network.ChatEvent` 字面；ChatCommand 编解码 1024 字面与错误文案 | 无（字面同源化） | 未认领 | — | m5e 归档 proposal「延期与放弃」递延 4、5 |
-| E-13 | benchmark 新 scenario record-only 报告 | 为已升版 scenario 补 Memory/TCP 记录报告并追加到 `perf-baseline.md`（数值只记录） | 无（报告只记录） | 未认领 | — | farming 遗留 23；执行前读 `docs/notes/perf-baseline.md` |
+| E-13 | benchmark 新 scenario record-only 报告 | 为已升版 scenario 补 Memory/TCP 记录报告并追加到 `perf-baseline.md`（数值只记录） | 无（报告只记录） | 已认领 | codex-implementer @ chore/E-13-benchmark-record-report | farming 遗留 23；执行前读 `docs/notes/perf-baseline.md`；独占文件集：`docs/notes/perf-baseline.md` 与本次 record-only 报告产物 |
 
 ## F. 小型修复队列（直接修改豁免，但同样认领登记）
 
