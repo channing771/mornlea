@@ -26,9 +26,9 @@
 - **AND** 校验成功只允许配置落盘，不得替换当前进程的 atlas、mesh 或 HUD 材质
 - **AND** 校验失败 MUST 拒绝保存且不得暴露部分应用的材质集合
 
-#### Scenario: 配置路径输入有固定字节上限
+#### Scenario: 配置路径输入有固定单行边界
 
-- **GIVEN** `texturePackPath` 的 UTF-8 编码超过 1024 字节
+- **GIVEN** `texturePackPath` 的 UTF-8 编码超过 1024 字节或包含 CR/LF
 - **WHEN** 客户端加载配置或设置页接收该候选
 - **THEN** 系统 MUST 返回或显示带字段上下文的错误
 - **AND** MUST NOT 访问该路径、写入配置或改变当前材质

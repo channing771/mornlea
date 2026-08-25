@@ -125,7 +125,7 @@
 
 ### Requirement: windowSize 兼容配置 v1
 
-顶层 `windowSize` SHALL 是配置 v1 的可选字符串；字段缺席 MUST 取 `1280x720`，三个预设 MUST 原样加载和保存，`null`、非字符串或其他值 MUST 返回带 `windowSize` 上下文的配置错误。顶层 `texturePackPath` MUST 拒绝超过 1024 个 UTF-8 字节的显式值并返回字段错误。专用服务端 MAY 解析这些字段，但 MUST NOT 创建窗口或消费其值。
+顶层 `windowSize` SHALL 是配置 v1 的可选字符串；字段缺席 MUST 取 `1280x720`，三个预设 MUST 原样加载和保存，`null`、非字符串或其他值 MUST 返回带 `windowSize` 上下文的配置错误。顶层 `texturePackPath` MUST 拒绝超过 1024 个 UTF-8 字节或包含 CR/LF 的显式值并返回字段错误，从而保证任何成功加载的路径均能无损进入单行设置草稿。专用服务端 MAY 解析这些字段，但 MUST NOT 创建窗口或消费其值。
 
 #### Scenario: 旧配置无迁移加载默认窗口
 
@@ -146,3 +146,11 @@
 - **WHEN** 系统加载配置
 - **THEN** MUST 返回包含 `texturePackPath` 的错误并停止使用该次加载结果
 - **AND** 用户缩短或清空该字段后 MUST 能按同一配置版本重新加载
+
+#### Scenario: 含换行材质路径在加载边界被拒绝
+
+- **GIVEN** 配置 v1 的 `texturePackPath` 包含 CR 或 LF，即使该名称在本机文件系统上存在
+- **WHEN** 系统加载配置
+- **THEN** MUST 返回包含 `texturePackPath` 的错误并停止使用该次加载结果
+- **AND** 用户清空字段或把目录改为单行名称后 MUST 能按同一配置版本重新加载
+- **AND** 成功加载的配置进入设置页 MUST NOT 因单行 ABI 校验 panic
