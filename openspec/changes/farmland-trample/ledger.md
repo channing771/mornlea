@@ -12,3 +12,13 @@
 - **Ruling: 上方作物按采掘同形规则连带掉落** — 踩踏语义是「毁田」：跳进麦田毁庄稼是该机制的玩法代价；掉落完全复用 `cropYieldRolls` 与 `PrepareDropBatch` 预演，同一株同一 tick 踩掉与挖掉数量必然相同，确定性域统一。被否决：只转耕地不处理上方作物（麦田穿行会留成片悬空作物）；独立哈希流（破坏与采掘的重放一致域统一）。
 - **Ruling: 掉落容量不足整格放弃（耕地保持原样）** — 采掘路径 `RejectDropCapacity`「绝不半掉落」先例的直接移植；踩踏无拒绝通道（非玩家命令），放弃即可观察且无信息丢失；重试机会=下一次落地边沿（跳一下），是「落地冲击」语义的自然读法。
 - **Ruling: 设计批准** — bounded 短设计经用户显式批准（2026-08-25）后开工；三处最小受控重叠的完整清单在批准后的设计落定中澄清（`engine.go` 一行为技术必要组成，同构于已批裁决精神，未另行打断）。
+
+## Task 1（sim 层踩踏收集与结算）
+
+- 实现提交 `69fa0f5b`：`trample.go`（`tramplePendingCell`/`noteTrampleLanding`/`settleTramples`/`settleTrampleCell`/`commitTrample`，支撑层 `floor(Y − physics.GroundProbe)`、内域相交 2×2 列枚举）、`trample_test.go` 四主题、`property_trample_yield_parity_test.go` 双测试、三处最小重叠接线（`player.go` 3 行 / `crop.go` 5 行 / `engine.go` 5 行，全部纯追加）。red-first：四个 Trample 用例实现前失败（耕地未变泥土）；容量用例为负向断言实现前天然通过。全包 `-race` ok（30.9s）、`gofmt`/`go vet` 干净、`go test -list` 406→412 纯增。环境备注：worktree 首跑 `make rust`；go 经 GVM go1.26.0。
+- 实现偏差（已核实可接受）：容量用例断言口径从 `DropsHash` 改为「物品计数 + 方块区 `Hash()` + revision」——预填掉落物在下落等待期合法老化会入 `DropsHash` 造成假红，方块区哈希不含掉落（`chunk.go:56`），口径等价且更锋利。
+- 评审：**SPEC PASS**（七条 Scenario 逐条锚定、`assertTrampleBroadcasted` 钉死 pending 汇入、tick 对齐论证核实：`Step` 末尾才 `tick.Add(1)`、`advanceMiningOnce` 不动 tick）；**QUALITY PASS**（三处重叠逐行核对纯追加、红线零触碰、ε 论证经 Rust `clip_against` 实证、`settleTramples` 在 `samples <= 0` 早退之前保证暂存每 tick 清空、archcheck 实跑通过）。评审者复跑全绿。
+- 评审 NB 与处置 Ruling：
+  - **Ruling: NB1 双玩家同格幂等测试补强划入 Task 2（新增条目 2.4）** — spec 需求正文的 MUST 幂等条款目前只有 `settleTrampleCell` 读判的结构性覆盖，补直接双玩家用例锚定。
+  - **Ruling: NB3 property 文件命名张力按关注点重组划入 Task 2（新增条目 2.5）** — 跨格覆盖是行为场景非被证性质，`tasks.md` 1.4 原文指派有误（控制会话转录失误），迁往 `trample_test.go` 零行为变化。
+  - **Ruling: NB2 red 证据誊录保持 Task 3 义务不变** — tasks.md 3.3 既定安排。

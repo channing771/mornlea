@@ -15,6 +15,8 @@
 - [ ] 2.1 `go test ./internal/server ./internal/client -race -count=1` 全绿（踩踏无协议变更，镜像应零感知；若既有 e2e 场景构造了「玩家落在耕地上」的世界，其断言可能需要按新行为修正——只改行为断言，不碰 E-11 的等待助手）。
 - [ ] 2.2 核对 capture 与 benchmark 路径不触及踩踏结算（静态场景无落地事件、benchmark 工作负载无耕地构造）；若有触及，在 ledger 记录数值观察义务。
 - [ ] 2.3 `go test ./internal/archcheck -count=1` 通过（注释标识符门禁与基线兜底）。
+- [ ] 2.4 补双玩家同格落地幂等测试（Task 1 评审 NB1，锚定 spec「同格被多名玩家的落地同时覆盖时结算 MUST 幂等且结果与结算次序无关」）：两名玩家同 tick 落地边沿覆盖同一耕地格，断言恰好一次结算、无双重掉落、耕地与作物状态与单玩家一致。
+- [ ] 2.5 把 `TestTrampleCrossCellCoverageSettlesAllCoveredFarmland` 从 `property_trample_yield_parity_test.go` 迁至 `trample_test.go`（Task 1 评审 NB3，零行为变化重组；`go test -list` 集合语义不变）。
 
 ## Task 3: 整分支门禁与收尾
 
