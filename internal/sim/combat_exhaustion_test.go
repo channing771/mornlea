@@ -11,9 +11,9 @@ import (
 // 本文件只证一个性质组：近战命中的疲劳代价（OpenSpec change attack-exhaustion）。
 //
 // 规则：成功近战命中时攻击者经 `playerState.applyExhaustion` 累积恰好 100 千分位
-// 疲劳；未命中的每一条路径都不累积。断言一律使用字面量数值——本文件是先于实现
-// 的 RED 测试，不得引用尚未存在的符号（exhaustionMeleeMilli，任务 2.1 才会
-// 落地；此处刻意不加反引号——archcheck 门禁禁止注释引用不存在的反引号标识符）。
+// 疲劳；未命中的每一条路径都不累积。断言一律使用字面量数值而非引用常量——这是
+// 为让 RED 阶段的失败是行为缺失而非符号未定义；如今 `exhaustionMeleeMilli`
+// 已落地，保留字面量以维持「规格钉死值」的显式性。
 
 // TestMeleeHitChargesAttackerExhaustionExactlyOnce 覆盖 Scenario「近战命中累积
 // 攻击者疲劳」：按住 primary input（v25 语义下 `miningHeld` 同时是近战意图）推进
