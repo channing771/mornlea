@@ -6,3 +6,10 @@
 - 认领提交 `5dd018d5`（main，docs-only）；Discussion #71 已发【状态变更】评论（`DC_kwDOToJS8M4BFPO7`）并 `refresh-discussion.py --update` 刷新正文（76 行）。
 - worktree `.worktrees/B-31-eating-container-interrupt`，分支 `feat/B-31-eating-container-interrupt`，基于 `main@5dd018d5`。
 - **Ruling: 阶段 1 短设计获批（bounded）— 用户显式批准 — 中断判据为 `session.viewContainer || !session.hasView`，与 `mining.go:212` 形态对齐；`player.go` 重叠压到一行；客户端输入抑制列为非目标。** 结论已写入 proposal.md 与 design.md。
+
+## 2026-08-25 Task 1：中断判据实现（SDD）
+
+- implementer 提交 `d53b87d2`（3 文件，+180/−10）：`eating.go` 签名追加 `suspended bool` 并入中断分支（结算保持短路之后）、`player.go` 恰好一行调用点传参、`eating_test.go` 新增 3 测试 4 用例（引擎级、经 `engine.Step()` 覆盖调用点接线）。TDD 先红后绿：桩实现下 4 个新用例红（进度未清空/结算 tick 扣料/两子用例首 tick 推进），实现后 `go test ./internal/sim -race -count=1 -run Eating` 与全包均绿；`gofmt -l internal/sim` 无输出。clean checkout 已预跑 `make rust`。
+- **SPEC 合规评审：PASS（0 MUST-FIX）**——S1–S8 全过：判据并入、中断优先于结算有专项测试、三个新 Scenario 均有精确断言测试网、既有五条语义无回归、恰好三文件与 `player.go` 一行裁决边界、无 wire/schema/ABI 越界；附注 NIT（夹具直写 `session.viewContainer` 与 `mining_test.go:240` 先例同形，不构成缺口）。
+- **QUALITY 评审：PASS（0 MUST-FIX，2 NIT）**——Q1–Q7 全过（注释反引号纪律、D1–D4 一致、断言强度与夹具自证、变异可杀性静态分析五类变异全杀、热路径零分配、测试组织、聚焦）；NIT-1/NIT-2 为测试注释措辞问题。
+- **Ruling: 两条注释 NIT 按先例采纳进 R1 修复轮（R≤3 续用原 implementer）— 纯文档修正、零行为变化、成本一行 — 评审者判定不阻断，采纳与否不影响 PASS。** R1 提交 `b7623286`（+5/−5 纯注释），复跑 `go test ./internal/sim -race -count=1 -run Eating` 绿。

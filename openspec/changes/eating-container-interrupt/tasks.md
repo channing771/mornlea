@@ -2,6 +2,8 @@
 
 ## Task 1: 进食中断判据（TDD red → green）
 
+- [x] 实现与测试完成（`d53b87d2` + R1 `b7623286`；SPEC/QUALITY 双评审 PASS，见 ledger）。
+
 - **目标文件**：`internal/sim/eating_test.go`（先写失败测试）、`internal/sim/eating.go`（`advanceEating` 追加 `suspended bool` 参数并入中断分支、更新中文注释）、`internal/sim/player.go`（仅 `internal/sim/player.go:496` 一处调用点传 `session.viewContainer || !session.hasView`）。
 - **测试内容**（遵循 design.md「测试策略」）：
   1. 进度在 `(0, 32)` 内、容器打开（`suspended=true`）且输入按住 → 进度清零、面包数与饥饿/饱和精确不变；
