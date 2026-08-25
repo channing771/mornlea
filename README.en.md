@@ -179,6 +179,23 @@ go run ./cmd/mornlea --connect 127.0.0.1:25565 --name PlayerA
 
 `mornlea`/`mornlea-server` read the same JSON config file on startup, defaulting to `os.UserConfigDir()/mornlea/config.json` (next to `profile.json`), overridable with `--config <path>`. If the file is missing, compiled defaults are used and **no file is created**; missing fields take defaults, out-of-range values are clamped with an `slog.Warn`, unknown fields are ignored, and JSON syntax errors or an unknown `version` abort startup. See the [rename migration notes](docs/notes/mornlea-migration.md) (Chinese) for old default-directory migration.
 
+See the [texture-pack guide](docs/texture-packs.md) (Chinese) for local overrides and the v1 directory format.
+
+### Client Settings
+
+The ordinary local client's main-menu Settings page exposes exactly three controls: master audio volume, texture-pack directory, and window size. Window size is limited to the fixed 16:9 presets `640x360`, `960x540`, and `1280x720`; an omitted `windowSize` defaults to `1280x720`. A minimal configuration looks like this:
+
+```json
+{
+  "version": 1,
+  "audioVolume": 0.7,
+  "texturePackPath": "packs/my-pack",
+  "windowSize": "1280x720"
+}
+```
+
+`audioVolume` ranges from `0` to `1`. The Settings page displays and saves the raw `texturePackPath`; it must be a single line no longer than 1024 UTF-8 bytes, and relative paths resolve against the config file's directory. After a successful save, audio volume and window size apply immediately to the running process. A changed, non-empty texture-pack candidate is fully validated before the file is written, but the active atlas is not hot-swapped; the saved pack loads on the next launch. A failed save preserves the on-screen draft and does not partially change the config or current runtime state.
+
 Four runtime groups plus one optional AI group:
 
 | Group | Contents |
