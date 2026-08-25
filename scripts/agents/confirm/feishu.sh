@@ -73,16 +73,24 @@ case "${1:-}" in
     CATEGORY="$(jq -r '.category // ""' "$REQ")"
     QUESTION="$(jq -r '.question // ""' "$REQ")"
     DESIGN="$(jq -r '.design // ""' "$REQ")"
+    KIND="$(jq -r '.kind // "approval"' "$REQ")"
+    if [ "$KIND" = "question" ]; then
+      HEAD_PREFIX="澄清提问："
+      NOTE="请直接回复你的答案（带 #$ID 可精确指定该提问）；回答后实现者会继续分析，可能还有后续提问"
+    else
+      HEAD_PREFIX="内容确认："
+      NOTE="请回复：✅ 批准（或直接回复修改意见；带 #$ID 可精确指定该任务）"
+    fi
     DESIGN_BODY="$(printf '%s' "$DESIGN" | fmt_design)"
-    CARD="$(jq -nc --arg id "$ID" --arg t "$TITLE" --arg c "$CATEGORY" --arg q "$QUESTION" --arg d "$DESIGN_BODY" '{
+    CARD="$(jq -nc --arg id "$ID" --arg t "$TITLE" --arg c "$CATEGORY" --arg q "$QUESTION" --arg d "$DESIGN_BODY" --arg hp "$HEAD_PREFIX" --arg note "$NOTE" '{
   config: { wide_screen_mode: true },
-  header: { template: "blue", title: { tag: "plain_text", content: ("内容确认：" + $id + " " + $t) } },
+  header: { template: "blue", title: { tag: "plain_text", content: ($hp + $id + " " + $t) } },
   elements: [
     { tag: "div", text: { tag: "lark_md", content: (
-      "**分类**：" + $c + "\n\n**问题**：\n" + $q + "\n\n**短设计**：\n" + $d
+      "**分类**：" + $c + "\n\n**问题**：\n" + $q + ($d | if . == "" then "" else "\n\n**短设计**：\n" + . end)
     ) } },
     { tag: "hr" },
-    { tag: "note", elements: [ { tag: "plain_text", content: ("请回复：✅ 批准（或直接回复修改意见；带 #" + $id + " 可精确指定该任务）") } ] }
+    { tag: "note", elements: [ { tag: "plain_text", content: $note } ] }
   ]
 }')"
     send_card "$CARD"

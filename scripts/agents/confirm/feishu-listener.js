@@ -44,10 +44,13 @@ function pendingRequests() {
   return list;
 }
 
-function classifyReply(text) {
+function classifyReply(text, kind) {
   const t = text.toLowerCase();
-  if (/批准|同意|认可|ok|lgtm|approve|继续|可以|确认|✅|👍/.test(t) && !/不|别|勿|修改/.test(t)) return 'approve';
   if (/驳回|拒绝|取消|reject|不行|不要|别做|❌/.test(t)) return 'reject';
+  // 澄清提问轮（kind=question）：除驳回外一律视为答案（answer），由实现者继续分析；
+  // 批准/同意同样算「答案」，避免在提问轮被误判成最终批准
+  if (kind === 'question') return 'answer';
+  if (/批准|同意|认可|ok|lgtm|approve|继续|可以|确认|✅|👍/.test(t) && !/不|别|勿|修改/.test(t)) return 'approve';
   return 'edit';
 }
 
@@ -116,10 +119,10 @@ function handleMessage(cfg, data) {
   const pending = pendingRequests();
   const target = m2 ? pending.find((p) => p.id === m2[1]) : pending[0];
   if (!target) { log('没有匹配的待确认请求（文本:' + text + '），忽略'); return; }
-  const action = classifyReply(text);
+  const action = classifyReply(text, target.kind || 'approval');
   const reply = writeReply(target.id, action, text, { senderOpenId: openId, chatId: m.chat_id, messageId: m.message_id });
   log('#HANDLED ' + target.id + ' action=' + action);
-  if (openId) sendAck(cfg, openId, '已收到对 ' + target.id + ' 的确认（' + action + '），实现者将从 ' + target.id + '.reply.json 继续。');
+  if (openId) { const label = (target.kind === 'question' ? '提问' : '确认') + '已收到（' + action + '）'; sendAck(cfg, openId, label + '，实现者将从 ' + target.id + '.reply.json 继续。'); }
   spawnResume(cfg, target.id);
 }
 
