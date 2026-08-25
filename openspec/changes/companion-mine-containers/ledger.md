@@ -22,6 +22,14 @@
 - **测试取舍**：`companion_mining_test.go` 的 `TestCompanionMiningRejectsContainerTargets` 锁定的是本 change 显式废除的旧行为（与 delta spec 场景 3/4/5 直接矛盾），随本任务删除并由新文件的三组用例取代；`go test -list` 集合语义变化为「删 1 增 3」，待 Task 4.2 整分支核对。
 - **验证**（数值只记录）：`go test ./internal/sim -race -count=1` → ok（16.272s，复跑 15.405s）；`gofmt -l internal/sim` → 无输出；`go vet ./internal/sim` → 通过；附 `go test ./internal/archcheck -count=1` → ok（7.875s，注释标识符门禁通过）。侧证：`go test ./internal/companion -count=1` → ok（2.347s）；`go test ./internal/server -short -count=1` → ok（28.323s，此前一轮与基线各出现过 `TestAuthoritativeMiningMemoryLifecycle` 等 sandbox 计时型偶发失败，与本变更无关）。
 
+### Task 2（2026-08-25，implementer zcode4 @ feat/C-01-companion-mine-containers）
+
+- **TDD red**：先改测试后实现——新增 `internal/companion/plan_types_containers_test.go`（单主题：计划契约层容器目标放行，对齐 Task 1 的 sim 侧文件先例），并把 `planner_test.go` 锁定旧拒绝行为的断言替换为放行断言，实现前运行确认三处失败：`TestPlanMineableBlockAllowsContainerTargets` 报 `planMineableBlock(9) = false`（ChestID）；`TestPlanDecodeKindMatrix` 的「合法 mine 容器目标（箱子）」报「mine 目标方块不可采掘（容器或无单一掉落）」；`TestPlannerSystemPromptHeadBytesStable` 报提示词头段字节漂移（旧文含「不能是箱子或熔炉」）。
+- **测试取舍**：`planner_test.go` 的 `TestPlanDecodeKindMatrix` 中「mine 目标是箱子」「mine 目标是熔炉」两条 invalid 用例锁定的是本 change 显式废除的旧行为（与 D2 两侧清单同步放开直接矛盾），随本任务删除并由合法段新增的「合法 mine 容器目标（箱子/熔炉）」两条 valid 用例取代（`go test -list` 集合语义不变，仅子用例增删）；`TestPlannerSystemPromptHeadBytesStable` 的期望文本同步为新文案。
+- **实现**：`internal/companion/plan_types.go`——`planMineableBlock` 删除容器拒绝分支（`core.BlockDrop` 对 ChestID/FurnaceID 本有单一产物登记，删除分支即自然放行，与 sim 侧 `companionMineableBlock` 同构），GoDoc 改述为容器批量全或无语义、删除「超出单一产物直入背包的结算形状」过时理由，农业显式拒绝原样保留；`PlanStepMine` 步骤注释同步。`internal/companion/planner.go`——mine 约束提示词改为「箱子与熔炉也允许」，解码路径拒绝理由文案从「（容器或无单一掉落）」改为「（农业方块或无单一掉落）」（无测试锁定该文案，grep 全仓核实）。
+- **测试形态**：新用例以全集枚举遍历 `core.BlockID(0)..core.BlockIDMax`，按 `core.IsCrop`/`core.IsFarmland` 命中断言仍拒绝（带 farmingSeen==10 计数守卫防谓词空转）、两容器编号断言放行，另点验 `core.BedrockID` 仍拒、`core.StoneID` 仍放行（单一 `BlockDrop` 判据不变）；农业回归同时由既有 `TestPlanMineableBlockRejectsFarmingBlocks` 保持锁定。
+- **验证**（数值只记录）：`go test ./internal/companion -race -count=1` → ok（4.969s）；`gofmt -l internal/companion` → 无输出；`go vet ./internal/companion` → 通过；附 `go test ./internal/server -short -count=1` → ok（29.812s，计划校验消费方无意外连锁）；`go test ./internal/archcheck -count=1` → ok（5.238s，注释标识符门禁通过）。
+
 ## Task 1 评审（2026-08-25）
 
 - SPEC 合规评审：**PASS**。逐项核对 delta spec sim 侧半边（谓词放开、农业回归、副本预演/固定序/全或无、四方不变+满格稳定、同 tick 五件套、`harvestable` 门控、`RejectNoTarget` 对齐、`core` 零变更、玩家路径不变、预演函数导出、旧测试删除正当）全部成立；独立复跑定点与全包 race、gofmt、vet、archcheck 均绿。两条非阻断观察：错误工具（`harvestable=false`）容器路径无直接用例；完成 tick 容器边缘（record 失效/槽缺失/`SetBlock` !changed）无容器专属用例。

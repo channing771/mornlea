@@ -68,7 +68,7 @@ const plannerSystemPromptHeadIntro = "你是体素游戏 Mornlea 里伙伴的行
 // 的包级 var 先例：初始化期一次求值，运行期与常量同样不可变；完整字节由
 // `TestPlannerSystemPromptHeadBytesStable` 锁定，插值常数变化必须连带更新。
 var plannerSystemPromptHead = plannerSystemPromptHeadIntro +
-	fmt.Sprintf("mine 的目标必须是伙伴周围水平 %d 格、垂直 %d 格内的普通方块，不能是箱子或熔炉；place 的 block 只能是以下名字之一：",
+	fmt.Sprintf("mine 的目标必须是伙伴周围水平 %d 格、垂直 %d 格内的普通方块，箱子与熔炉也允许；place 的 block 只能是以下名字之一：",
 		planEnvRadiusBlocks, planEnvVerticalBlocks)
 
 // plannerSystemPromptTail 是固定系统提示的尾段文本。y 范围用 core.MinY 与
@@ -472,7 +472,7 @@ func validatePlanStepsAgainstSnapshot(steps []PlanStep, snapshot PlanSnapshot) e
 				return fmt.Errorf("计划 steps[%d] mine 目标超出伙伴观察窗口", index)
 			}
 			if block, listed := exposed[target]; listed && !planMineableBlock(block) {
-				return fmt.Errorf("计划 steps[%d] mine 目标方块不可采掘（容器或无单一掉落）", index)
+				return fmt.Errorf("计划 steps[%d] mine 目标方块不可采掘（农业方块或无单一掉落）", index)
 			}
 		case PlanStepPlace:
 			item, ok := planPlaceBlocks[step.Block]

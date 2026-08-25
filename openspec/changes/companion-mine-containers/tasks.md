@@ -13,9 +13,9 @@
 
 ## Task 2: 计划侧放开容器
 
-- [ ] 2.1 TDD——`internal/companion` 新增/扩展计划校验测试（失败态）：`planMineableBlock` 对 ChestID/FurnaceID 返回真、农业十编号仍假；若既有测试锁定提示词文案则同步断言放开后的约束文案。
-- [ ] 2.2 最小实现：`internal/companion/plan_types.go` 的 `planMineableBlock` 同步放开（注释改写为批量全或无语义）；`internal/companion/planner.go` 提示词 mine 约束文案更新（允许箱子与熔炉）。
-- [ ] 2.3 验证：`go test ./internal/companion -race -count=1`；`gofmt -l internal/companion`；`go vet ./internal/companion`。
+- [x] 2.1 TDD——`internal/companion` 新增/扩展计划校验测试（失败态）：`planMineableBlock` 对 ChestID/FurnaceID 返回真、农业十编号仍假；若既有测试锁定提示词文案则同步断言放开后的约束文案。
+- [x] 2.2 最小实现：`internal/companion/plan_types.go` 的 `planMineableBlock` 同步放开（注释改写为批量全或无语义）；`internal/companion/planner.go` 提示词 mine 约束文案更新（允许箱子与熔炉）。
+- [x] 2.3 验证：`go test ./internal/companion -race -count=1`；`gofmt -l internal/companion`；`go vet ./internal/companion`。
 
 ## Task 3: Runner 饱和判定批量预演与 parity
 
