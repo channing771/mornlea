@@ -76,12 +76,13 @@ func encodeNativeInput(dst []byte, n *world.Neighborhood, snapshot RegistrySnaps
 			return 0, fmt.Errorf("mesh: 方块流体高度原值超过 14")
 		}
 		// 合法域是哨兵 0（满格）加 1..=14；15 会让 mesher 的「非零即短方块」
-		// 单一判定失效。Rust 侧 validate 同口径拒绝，这里提前给出可读错误。
+		// 单一判定失效。Rust 侧 `RegistryView::validate` 同口径拒绝，这里提前
+		// 给出可读错误。
 		if block.BlockTopRaw > 14 {
 			return 0, fmt.Errorf("mesh: 方块顶面高度原值超过 14")
 		}
 		// 流体与短方块互斥：流体的角高度由 mesher 邻域平均现算、短方块由
-		// BlockTopRaw 常量驱动，同一条目同时携带两套语义时行为无从定义。
+		// `BlockTopRaw` 常量驱动，同一条目同时携带两套语义时行为无从定义。
 		if block.FluidHeight != 0 && block.BlockTopRaw != 0 {
 			return 0, fmt.Errorf("mesh: 流体条目携带非零顶面高度原值")
 		}

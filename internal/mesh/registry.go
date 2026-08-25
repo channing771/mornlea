@@ -47,12 +47,12 @@ type BlockProperties struct {
 	// (h_raw+1)/16，由 mesher 的常量角高度路径消费（复用水面 quad 的角高度位）。
 	//
 	// 0 是「满格方块」哨兵：绝大多数方块是整格立方体，取 0 让既有条目零改动，
-	// 与 FluidHeight 的「0=非流体」同构；1..=14 表示全部可见面的上缘按该高度
+	// 与 `FluidHeight` 的「0=非流体」同构；1..=14 表示全部可见面的上缘按该高度
 	// 下沉（首个消费者是干/湿耕地的 14，即 15/16，恰等于物理碰撞高度）；15
 	// 必须被拒绝——满格只能用哨兵 0 表达，「非零即短方块」才能保持单一判定，
-	// Rust 侧 RegistryView::validate 同口径拒绝。
+	// Rust 侧 `RegistryView::validate` 同口径拒绝。
 	//
-	// 与 FluidHeight 互斥：流体的角高度由 mesher 邻域平均现算（含「上方也是
+	// 与 `FluidHeight` 互斥：流体的角高度由 mesher 邻域平均现算（含「上方也是
 	// 流体则取满格」规则）、短方块由本字段常量驱动，两条几何路径不得叠加在
 	// 同一条目上——编码两侧都按「二者不同时非零」拒绝。
 	BlockTopRaw uint8
@@ -102,13 +102,13 @@ func BuildRegistrySnapshot(ids []world.BlockID, reader RegistryReader) (Registry
 		}
 		// 合法域是哨兵 0（满格）加 1..=14（呈现高度 (h+1)/16）。15 无从表达任何
 		// 合法几何——满格必须写哨兵 0，「非零即短方块」是 mesher 的单一判定前提；
-		// Rust 侧 validate 同口径拒绝，这里提前给出可读错误。
+		// Rust 侧 `RegistryView::validate` 同口径拒绝，这里提前给出可读错误。
 		if block.BlockTopRaw > 14 {
 			return RegistrySnapshot{}, fmt.Errorf("mesh: block %d blockTopRaw=%d 超过 14", id, block.BlockTopRaw)
 		}
 		// 流体与短方块互斥：流体的角高度由 mesher 邻域平均现算、短方块由
-		// BlockTopRaw 常量驱动，同一条目同时携带两套语义时行为无从定义。
-		// Rust 侧 validate 同口径拒绝，这里提前给出可读错误。
+		// `BlockTopRaw` 常量驱动，同一条目同时携带两套语义时行为无从定义。
+		// Rust 侧 `RegistryView::validate` 同口径拒绝，这里提前给出可读错误。
 		if block.FluidHeight != 0 && block.BlockTopRaw != 0 {
 			return RegistrySnapshot{}, fmt.Errorf("mesh: block %d 流体条目携带非零 blockTopRaw=%d", id, block.BlockTopRaw)
 		}

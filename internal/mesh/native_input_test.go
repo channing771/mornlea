@@ -47,9 +47,9 @@ func (*snapshotTestReader) LightAttenuation(id world.BlockID) uint8 {
 	return 0
 }
 
-// 借石头当「短方块」给 blockTopRaw 一个与其余三个单字节字段都不同的取值，
+// 借石头当「短方块」给 `BlockTopRaw` 一个与其余三个单字节字段都不同的取值，
 // 任一字段被漏抄、错位或串位都会让 wantBlocks 对不上。不能用玻璃：它在下面
-// 两个方法里冒充流体（fluidHeight=9），而流体与短方块互斥，同一条目同时
+// 两个方法里冒充流体（`FluidHeight` 恒为 9），而流体与短方块互斥，同一条目同时
 // 携带两套语义会被 BuildRegistrySnapshot 正确地拒绝。
 func (*snapshotTestReader) BlockTopRaw(id world.BlockID) uint8 {
 	if id == core.StoneID {
