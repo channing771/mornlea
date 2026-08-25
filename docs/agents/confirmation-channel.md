@@ -1,12 +1,12 @@
 # 设备确认通道（飞书优先）
 
-brainstorm 内容确认（docs/development-process.md 阶段 0.5）要求「呈现设计 → 获得显式批准 → 才开工」。在 headless 定时调度下，实现者不能对着终端提问，本通道把确认请求**推送到你的手机**，你回复后**自动续跑**任务；无通道时降级为 GitHub Discussion 评论协议。
+brainstorm 内容确认（docs/development-process.md 阶段 1）要求「呈现设计 → 获得显式批准 → 才开工」。在 headless 定时调度下，实现者不能对着终端提问，本通道把确认请求**推送到你的手机**，你回复后**自动续跑**任务；无通道时降级为 GitHub Discussion 评论协议。
 
 ## 架构
 
 ```
 实现者（run-agent.sh implementer）
-  └─ 阶段 0.5 内容确认
+  └─ 阶段 1 内容确认
        │ confirm.sh ask --id B-02 --title ...     （写 ~/.mornlea/confirm/<id>.json）
        │ └─ feishu.sh send <id>                   （交互卡片 → 你的飞书：选项＝按钮 / 批准＝按钮 / 输入区＋发送）
        ▼
@@ -148,5 +148,5 @@ launchctl load ~/Library/LaunchAgents/com.mornlea.feishu-listener.plist
 ## 降级与失败恢复
 
 - confirm.sh ask 在 feishu 不可用时**自动降级**并在请求文件里记录 channel=discussion，打印发布与恢复命令。
-- confirm.sh wait 超时（默认 30 分钟）退出码 3：实现者按 docs/development-process.md 阶段 0.5 的 Discussion 协议发评论并停在确认点。
+- confirm.sh wait 超时（默认 30 分钟）退出码 3：实现者按 docs/development-process.md 阶段 1 的 Discussion 协议发评论并停在确认点。
 - listener 掉线：SDK 自动重连；launchd KeepAlive 兜底；回复文件是唯一的续跑事实源，任何时刻重跑 make agent-implementer 都可从既有 reply 恢复。

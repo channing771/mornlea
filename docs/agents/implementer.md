@@ -49,7 +49,7 @@
 
 ## 第 4 步：开发（子智能体驱动）
 
-严格按 `docs/development-process.md` 阶段 1–4（前置的「阶段 0.5 内容确认门禁」已通过）：
+严格按 `docs/development-process.md` 阶段 2–4（前置的「阶段 1 内容确认门禁」已通过）：
 
 1. 建 OpenSpec change（复杂功能必建；F 组小型修复走直接修改豁免）。
 2. 每个 Task 派发**全新** implementer 子代理；brief 必须自包含：当前 Task、契约 SHA、change 产物路径、全局约束（AGENTS.md 关键条款）、精确验证命令；禁止子代理自我派生。
