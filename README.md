@@ -232,7 +232,7 @@ go run ./cmd/mornlea --connect 127.0.0.1:25565 --name 玩家甲
 | --- | --- |
 | `logging` | 全局日志等级 `default` 与按模块覆盖的 `modules`（键为包路径末段，如 `render`、`storage`），等级为 `debug`/`info`/`warn`/`error` |
 | `physics` | 重力、行走/跳跃速度、加减速度、终端下落速度、视线高度等运动常量 |
-| `sim` | 交互距离、掉落物寿命与拾取延迟、生命回复间隔、出生半径、熔炉冶炼/燃烧 tick 等权威模拟常量 |
+| `sim` | 交互距离、掉落物寿命与拾取延迟、生命回复间隔、出生半径、熔炉冶炼/燃烧 tick 等权威模拟参数 |
 | `render` | `viewDistance`（重启生效，仅配置文件可改）、`fovDegrees`、`mouseSensitivity` |
 | `ai` | OpenAI-compatible `endpoint`/`model`、密钥环境变量名 `apiKeyEnv`、任务超时，以及 `0..4` 个带 canonical UUIDv4 `id`、唯一 `name` 和可选 `persona` 的伙伴定义；列表缺失或为空时 AI 关闭 |
 
