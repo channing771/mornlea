@@ -1,3 +1,5 @@
+//! 设置 ABI 测试：只关注 layout v2、结构化事件批与 layout v1 兼容门禁。
+
 use super::test_support::four_button_frame;
 use super::*;
 
