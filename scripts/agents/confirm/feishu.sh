@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# 飞书应用消息发送器：把确认请求推送到你的设备。
+# 飞书应用消息发送器：把确认请求以交互卡片推送到你的设备。
 # 配置: ~/.mornlea/confirm/feishu.json（见 docs/agents/confirmation-channel.md）
-# 用法: feishu.sh send <请求ID>    （文本由 confirm.sh 从请求文件组装）
+# 用法: feishu.sh send <请求ID>
 set -euo pipefail
 
 DIR="${MORNLEA_CONFIRM_DIR:-$HOME/.mornlea/confirm}"
@@ -30,23 +30,38 @@ get_token() {
     fi
   fi
   local resp tok
-  resp="$(curl -sS --max-time 15 -X POST 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal'     -H 'Content-Type: application/json'     -d "$(jq -nc --arg a "$APP_ID" --arg s "$APP_SECRET" '{app_id:$a, app_secret:$s}')")"
+  resp="$(curl -sS --max-time 15 -X POST "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -nc --arg a "$APP_ID" --arg s "$APP_SECRET" '{app_id:$a, app_secret:$s}')")"
   tok="$(echo "$resp" | jq -r '.tenant_access_token // empty')"
   [ -n "$tok" ] || die "获取 tenant_access_token 失败: $(echo "$resp" | jq -c .)"
   echo "$resp" | jq --arg tok "$tok" --argjson exp "$(( $(date +%s) + 7000 ))" '{tenant_access_token: $tok, expiresAt: $exp}' > "$TOKEN_FILE"
   echo "$tok"
 }
 
-send_text() { # $1 = 消息文本
+send_card() { # $1 = 卡片 JSON（jq -nc 生成）——interactive 卡片比纯文本清晰
   local tok recv_id resp msg_id
   tok="$(get_token)" || return 1
   recv_id="$RECV_ID"
   resp="$(curl -sS --max-time 15 -X POST "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=$RECV_TYPE" \
-    -H "Authorization: Bearer $tok" -H 'Content-Type: application/json' \
-    -d "$(jq -nc --arg rid "$recv_id" --arg c "$(jq -nc --arg t "$1" '{text:$t}')" '{receive_id:$rid, msg_type:"text", content:$c}')")"
+    -H "Authorization: Bearer $tok" -H "Content-Type: application/json" \
+    -d "$(jq -nc --arg rid "$recv_id" --arg c "$1" '{receive_id:$rid, msg_type:"interactive", content:$c}')")"
   msg_id="$(echo "$resp" | jq -r '.data.message_id // empty')"
   [ -n "$msg_id" ] || die "发送消息失败: $(echo "$resp" | jq -c .)"
   echo "ok message_id=$msg_id"
+}
+
+# 把 agent 写的大段短设计按句拆成条目行，卡片里更易读
+fmt_design() {
+  python3 -c '
+import sys, re
+text = sys.stdin.read()
+parts = [p.strip() for p in re.split(r"[；。]|\n", text) if p.strip()]
+if len(parts) > 8:
+    parts = parts[:8] + ["…（更多细节见请求文件）"]
+for p in parts:
+    print("- " + p)
+' | sed 's/^- - /- /' || true
 }
 
 case "${1:-}" in
@@ -58,9 +73,19 @@ case "${1:-}" in
     CATEGORY="$(jq -r '.category // ""' "$REQ")"
     QUESTION="$(jq -r '.question // ""' "$REQ")"
     DESIGN="$(jq -r '.design // ""' "$REQ")"
-    # 用 printf 生成真实换行：字面 \n 会被 jq 再转义成 \\n，飞书端显示为「\n」
-    TEXT="$(printf '【Mornlea 内容确认】%s\n分类：%s\n问题：%s\n短设计：%s\n请回复：✅ 批准（或回复修改意见；精确指定请加 #%s）' "$TITLE" "$CATEGORY" "$QUESTION" "$DESIGN" "$ID")"
-    send_text "$TEXT"
+    DESIGN_BODY="$(printf '%s' "$DESIGN" | fmt_design)"
+    CARD="$(jq -nc --arg id "$ID" --arg t "$TITLE" --arg c "$CATEGORY" --arg q "$QUESTION" --arg d "$DESIGN_BODY" '{
+  config: { wide_screen_mode: true },
+  header: { template: "blue", title: { tag: "plain_text", content: ("内容确认：" + $id + " " + $t) } },
+  elements: [
+    { tag: "div", text: { tag: "lark_md", content: (
+      "**分类**：" + $c + "\n\n**问题**：\n" + $q + "\n\n**短设计**：\n" + $d
+    ) } },
+    { tag: "hr" },
+    { tag: "note", elements: [ { tag: "plain_text", content: ("请回复：✅ 批准（或直接回复修改意见；带 #" + $id + " 可精确指定该任务）") } ] }
+  ]
+}')"
+    send_card "$CARD"
     ;;
   *)
     echo "用法: feishu.sh send <请求ID>" >&2; exit 2 ;;
