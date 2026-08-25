@@ -7,10 +7,10 @@
 
 ## 2. 玩家瞬态网格与回收不变量（`internal/sim`）
 
-- [ ] 2.1 新建 `internal/sim/crafting_test.go` 先写失败测试：grid↔inventory、grid↔grid 移动语义（同物品按栈上限合并、不同物品不合并、空源/同格拒绝）、统一视图两端都在背包区拒绝、个人格 `4..8` 拒绝、产物只由当前匹配派生、一次取出恰消费一次并把完整产物入背包、取出容量预演失败逐格不变；随后新建 `internal/sim/crafting.go` 实现 `moveCraftingStack` 与 `takeCraftingOutput`（复用 `ItemStack.Valid`、`ItemStackLimit`、`Inventory.Slot`/`SetSlot`，局部副本试算后写回并置 dirty 标志），接入 `internal/sim/command.go` 与 `engine_step.go`。验证：`go test ./internal/sim -run 'TestCrafting' -count=1` 由红转绿。
-- [ ] 2.2 在 `internal/sim/crafting_test.go` 写回收可打包失败测试（36 格接近满载、grid 同类可并栈、grid 需要空格、output 恰可放与少一格不可放），实现 `canRepackCrafting` 与 `tryAddPreservingCrafting`，并把产物取出、掉落物拾取、采掘掉落、作物多掉落与初始材料包全部收口到该入口（`internal/sim/player.go`、`drop.go`、`container.go`）；破坏不变量的拾取保留世界掉落、破坏不变量的主动移动拒绝。验证：`go test ./internal/sim -run 'TestCraftingRepack' -count=1`。
-- [ ] 2.3 在 `internal/sim/crafting_test.go`、`death_test.go`、`drop_test.go` 写生命周期失败测试并实现：关闭/离开距离/工作台被挖先回收格 `4..8` 再降尺寸（无法回收拒绝关闭）；断线持久化前与死亡清空前无损回收全部 9 格（`internal/sim/persistence.go`、`death.go`）。验证：`go test ./internal/sim -race -count=1`；`gofmt -w internal/sim`。
-- [ ] 2.4 在 `internal/sim/container.go`（`openContainer`）扩展识别 `WorkbenchID`：复用权威 raycast/触及距离/loaded chunk 校验，设置网格尺寸 3 与命中位置；不占用 `world.ContainerRef` 或区块槽位；玩家离开触及距离或工作台被挖时回到尺寸 2。同时在 `internal/sim/mining.go` 的 `miningRule` 为 `WorkbenchID` 补采掘分支（木质 tier，与 `OakPlanksID` 同价 15 tick）并配测试（SPEC 评审建议 2）。验证：`go test ./internal/sim -run 'TestWorkbench' -count=1`。
+- [x] 2.1 新建 `internal/sim/crafting_test.go` 先写失败测试：grid↔inventory、grid↔grid 移动语义（同物品按栈上限合并、不同物品不合并、空源/同格拒绝）、统一视图两端都在背包区拒绝、个人格 `4..8` 拒绝、产物只由当前匹配派生、一次取出恰消费一次并把完整产物入背包、取出容量预演失败逐格不变；随后新建 `internal/sim/crafting.go` 实现 `moveCraftingStack` 与 `takeCraftingOutput`（复用 `ItemStack.Valid`、`ItemStackLimit`、`Inventory.Slot`/`SetSlot`，局部副本试算后写回并置 dirty 标志），接入 `internal/sim/command.go` 与 `engine_step.go`。验证：`go test ./internal/sim -run 'TestCrafting' -count=1` 由红转绿。
+- [x] 2.2 在 `internal/sim/crafting_test.go` 写回收可打包失败测试（36 格接近满载、grid 同类可并栈、grid 需要空格、output 恰可放与少一格不可放），实现 `canRepackCrafting` 与 `tryAddPreservingCrafting`，并把产物取出、掉落物拾取、采掘掉落、作物多掉落与初始材料包全部收口到该入口（`internal/sim/player.go`、`drop.go`、`container.go`）；破坏不变量的拾取保留世界掉落、破坏不变量的主动移动拒绝。验证：`go test ./internal/sim -run 'TestCraftingRepack' -count=1`。
+- [x] 2.3 在 `internal/sim/crafting_test.go`、`death_test.go`、`drop_test.go` 写生命周期失败测试并实现：关闭/离开距离/工作台被挖先回收格 `4..8` 再降尺寸（无法回收拒绝关闭）；断线持久化前与死亡清空前无损回收全部 9 格（`internal/sim/persistence.go`、`death.go`）。验证：`go test ./internal/sim -race -count=1`；`gofmt -w internal/sim`。
+- [x] 2.4 在 `internal/sim/container.go`（`openContainer`）扩展识别 `WorkbenchID`：复用权威 raycast/触及距离/loaded chunk 校验，设置网格尺寸 3 与命中位置；不占用 `world.ContainerRef` 或区块槽位；玩家离开触及距离或工作台被挖时回到尺寸 2。同时在 `internal/sim/mining.go` 的 `miningRule` 为 `WorkbenchID` 补采掘分支（木质 tier，与 `OakPlanksID` 同价 15 tick）并配测试（SPEC 评审建议 2）。验证：`go test ./internal/sim -run 'TestWorkbench' -count=1`。
 
 ## 3. 协议消息、服务端接线与客户端镜像（`internal/network`、`internal/server`、`internal/client`）
 
