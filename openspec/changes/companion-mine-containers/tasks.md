@@ -2,14 +2,14 @@
 
 ## Task 1: sim 侧容器批量结算（全或无）
 
-- [ ] 1.1 TDD——先在 `internal/sim` 新增容器采掘测试文件（失败态）：
+- [x] 1.1 TDD——先在 `internal/sim` 新增容器采掘测试文件（失败态）：
   - `companionMineableBlock` 对 ChestID/FurnaceID 返回真、对农业十编号仍返回假（回归）；
   - `completeCompanionMining` 采掘空箱子：同 tick 方块变空气、容器槽停用、本体入背包、耐久扣减；
   - 采掘带内容物箱子（可容纳）：本体 + 全部内容物按固定序入背包；
   - 采掘箱子（内容物堆数超背包余量）：方块/内容物/耐久/背包全部不变，进度保持满格（稳定饱和）；
   - 采掘熔炉：本体 + 输入/燃料/输出三格一并入背包；不可容纳时全或无。
-- [ ] 1.2 最小实现：`internal/sim/mining.go`——`companionMineableBlock` 删除容器拒绝分支（农业原样），GoDoc 改写；`completeCompanionMining` 增加容器分支：读取容器记录（复用玩家路径的 `ChestAt`/`Chest`/`FurnaceAt`/`Furnace`）、背包副本逐堆 `AddStack` 预演（本体在前、槽位序）、通过后同 tick `SetBlock(air)` + `DeactivateChest`/`DeactivateFurnace` + 背包提交 + `consumeToolDurability`；导出预演纯函数供 Runner 复用（design.md D3）。
-- [ ] 1.3 验证：`go test ./internal/sim -race -count=1`；`gofmt -l internal/sim` 无输出；`go vet ./internal/sim`。
+- [x] 1.2 最小实现：`internal/sim/mining.go`——`companionMineableBlock` 删除容器拒绝分支（农业原样），GoDoc 改写；`completeCompanionMining` 增加容器分支：读取容器记录（复用玩家路径的 `ChestAt`/`Chest`/`FurnaceAt`/`Furnace`）、背包副本逐堆 `AddStack` 预演（本体在前、槽位序）、通过后同 tick `SetBlock(air)` + `DeactivateChest`/`DeactivateFurnace` + 背包提交 + `consumeToolDurability`；导出预演纯函数供 Runner 复用（design.md D3）。
+- [x] 1.3 验证：`go test ./internal/sim -race -count=1`；`gofmt -l internal/sim` 无输出；`go vet ./internal/sim`。
 
 ## Task 2: 计划侧放开容器
 
