@@ -76,12 +76,12 @@ case "${1:-}" in
     KIND="$(jq -r '.kind // "approval"' "$REQ")"
     if [ "$KIND" = "question" ]; then
       HEAD_PREFIX="澄清提问"; TPL="orange"
-      NOTE="点按下方按钮即答；其他答案请写入输入框或「回复」本卡片"
+      NOTE=""
     else
       HEAD_PREFIX="内容确认"; TPL="blue"
-      NOTE="点「批准 / 驳回」即答；修改意见请写入输入框或「回复」本卡片"
+      NOTE=""
     fi
-    NOTE="${ID} · ${CATEGORY} · ${NOTE}"
+    # 底部说明默认不展示（卡片保持干净）；仅选项超过 5 个时显示提示
     DESIGN_BODY="$(printf '%s' "$DESIGN" | fmt_design)"
     # 选项渲染为按钮：只显示按钮、不重复文本列表；按钮 label 去掉选项前缀编号、截断加省略号，
     # value 仍携带完整选项文本与请求 ID（listener 按 id 精确匹配，reply.text 是完整原文）。
@@ -95,7 +95,7 @@ case "${1:-}" in
           })) | .[0:5])[],
           { tag: "button", text: { tag: "plain_text", content: "驳回" }, type: "danger", value: { id: $id, action: "reject", text: "驳回" } }
         ]')"
-      [ "$(jq -r '.options | length // 0' "$REQ")" -gt 5 ] && NOTE="选项较多，仅显示前 5 个按钮；其余请以文本回复。$NOTE"
+      [ "$(jq -r '.options | length // 0' "$REQ")" -gt 5 ] && NOTE="选项共 $(jq -r '.options | length' "$REQ") 项，仅显示前 5 个按钮；其余请以文本回复"
     else
       ACTIONS="$(jq -nc --arg id "$ID" '[
         { tag: "button", text: { tag: "plain_text", content: "✅ 批准" }, type: "primary", value: { id: $id, action: "approve", text: "批准" } },
@@ -120,7 +120,7 @@ case "${1:-}" in
         is_required: false, max_length: 512 },
       { tag: "button", name: "submit", form_action_type: "submit", text: { tag: "plain_text", content: "发送" }, type: "primary" }
     ] },
-    { tag: "note", elements: [ { tag: "plain_text", content: $note } ] }
+    (($note | if . == "" then [] else [ { tag: "note", elements: [ { tag: "plain_text", content: $note } ] } ] end)[])
   ]
 }')"
     if SEND_OUT="$(send_card "$CARD")"; then
