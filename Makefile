@@ -15,7 +15,7 @@ PIXEL_PERFECTION_NOTICE_DIR := internal/assets/packs/pixel_perfection
 PIXEL_PERFECTION_NOTICE_DEST := bin/third-party/pixel-perfection
 ARGS ?=
 
-.PHONY: help run build build-linux-server test test-race test-race-short test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check dev-check agent-planner agent-implementer agent-gates
+.PHONY: help run build build-linux-server test test-race test-race-short test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check dev-check agent-planner agent-implementer agent-gates agent-dashboard
 
 run test test-multiplayer bench-multiplayer visual-check visual-update: rust
 build: rust
@@ -43,6 +43,7 @@ help:
 		'  make agent-planner    手动运行规划者工作者(docs/agents/planner.md)' \
 		'  make agent-implementer 手动运行实现者工作者(docs/agents/implementer.md)' \
 		'  make agent-gates      运行标准门禁汇总(scripts/agents/gates.sh)' \
+		'  make agent-dashboard   本地执行状态看板(cmd/mornlea-agent-board)' \
 		'  make help             显示此帮助'
 
 run:
@@ -133,3 +134,6 @@ agent-implementer:
 
 agent-gates:
 	./scripts/agents/gates.sh
+
+agent-dashboard:
+	go run ./cmd/mornlea-agent-board

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mornlea Agent 执行看板</title>
+<style>
+:root{--bg:#0f1115;--panel:#171a21;--panel2:#1d222b;--border:#2a303c;--text:#d8dee8;--muted:#8a93a6;--accent:#4f8cff;--unclaimed:#8a93a6;--claimed:#4f8cff;--develop:#f0a832;--integrate:#9b6dd6;--done:#3fbf6f;--other:#6a7280;--danger:#e05d5d;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;font-size:14px;line-height:1.5}
+a{color:var(--accent);text-decoration:none}
+header{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:16px;padding:12px 20px;background:rgba(15,17,21,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);flex-wrap:wrap}
+header h1{margin:0;font-size:18px;font-weight:600}
+.clock{color:var(--muted);font-variant-numeric:tabular-nums}
+.interval{color:var(--muted);font-size:12px;margin-left:auto}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px}
+button:hover{border-color:var(--accent)}
+.banner{background:var(--danger);color:#fff;text-align:center;padding:8px;font-weight:600}
+main{max-width:1280px;margin:0 auto;padding:18px 20px 60px}
+.chips{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px}
+.chip{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px 14px;min-width:120px}
+.chip .num{font-size:22px;font-weight:700;display:block}
+.chip .lbl{color:var(--muted);font-size:12px}
+section{margin-bottom:24px}
+.sec-title{display:flex;align-items:baseline;gap:10px;margin:0 0 10px;font-size:15px;font-weight:600}
+.sec-sub{color:var(--muted);font-size:12px;font-weight:400}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+table{width:100%;border-collapse:collapse;background:var(--panel);border-radius:10px}
+th,td{padding:8px 12px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:12px;background:var(--panel2)}
+tr:last-child td{border-bottom:none}
+.muted{color:var(--muted)}
+.tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;line-height:18px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.st-unclaimed{background:rgba(138,147,166,.18);color:#aeb6c4}
+.st-claimed{background:rgba(79,140,255,.18);color:#7fb0ff}
+.st-develop{background:rgba(240,168,50,.18);color:#f4bd62}
+.st-integrate{background:rgba(155,109,214,.18);color:#b893ea}
+.st-done{background:rgba(63,191,111,.18);color:#5fd188}
+.st-other{background:rgba(106,114,128,.2);color:#9aa3b2}
+.st-develop .dot{background:var(--develop);animation:pulse 1.6s ease-out infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(240,168,50,.6)}70%{box-shadow:0 0 0 6px rgba(240,168,50,0)}100%{box-shadow:0 0 0 0 rgba(240,168,50,0)}}
+.badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;margin-right:6px}
+.badge-approval{background:rgba(79,140,255,.18);color:#7fb0ff}
+.badge-question{background:rgba(155,109,214,.18);color:#b893ea}
+.task-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px}
+.task-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.task-card h4{margin:0 0 6px;font-size:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.task-card .meta{color:var(--muted);font-size:12px;margin:4px 0}
+.task-card .summary{margin:6px 0}
+.progress{display:inline-block;color:var(--muted);font-size:12px;margin-left:8px}
+.ledger{background:var(--panel2);border-left:3px solid var(--border);padding:6px 10px;font-size:12px;color:#aab2c0;margin-top:8px;white-space:pre-wrap;word-break:break-word}
+.confirm-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px}
+.confirm-card.waiting{border-color:var(--develop)}
+.confirm-card h4{margin:0 0 4px}
+.empty{color:var(--muted);padding:16px;text-align:center;background:var(--panel);border:1px dashed var(--border);border-radius:10px}
+.group-title{color:var(--muted);font-size:13px;font-weight:600;margin:14px 0 8px}
+.timeline{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.timeline h5{margin:0;padding:10px 14px;background:var(--panel2);font-size:13px;border-bottom:1px solid var(--border)}
+.timeline pre{margin:0;padding:10px 14px;font-size:12px;line-height:1.6;color:#aab2c0;white-space:pre-wrap;word-break:break-word;overflow:auto;max-height:280px;font-family:ui-monospace,Menlo,Consolas,monospace}
+.warn{color:var(--muted);font-size:12px}
+.errors-box{background:rgba(224,93,93,.12);border:1px solid rgba(224,93,93,.4);color:#e9a3a3;border-radius:8px;padding:8px 12px;margin:-8px 0 16px;font-size:12px}
+table.agents td.mono,td.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Mornlea Agent 执行看板</h1>
+  <span class="clock" id="clock"></span>
+  <span class="interval">每 5 秒自动刷新</span>
+  <button id="refreshBtn">手动刷新</button>
+</header>
+<div class="banner" id="banner" hidden>后端不可用，5 秒后自动重试…</div>
+<main>
+  <div class="chips" id="chips"></div>
+  <div id="errors" class="errors-box" hidden></div>
+  <section id="secAgents">
+    <h2 class="sec-title">执行中 AI <span class="sec-sub">ps 采样的 claude/codex/run-agent/relay/feishu-listener/pr-finalize 进程</span></h2>
+    <div id="agents"><div class="empty">当前没有 AI 在执行</div></div>
+  </section>
+  <section id="secChains">
+    <h2 class="sec-title">接力链 <span class="sec-sub">~/.mornlea/loop.guard*；注：pid 可能为会话临时 shell 的已知缺陷</span></h2>
+    <div id="chains"><div class="empty">无接力链</div></div>
+  </section>
+  <section id="secTasks">
+    <h2 class="sec-title">任务看板 <span class="sec-sub">docs/feature-backlog.md 按状态分组；worktree 按分支名关联</span></h2>
+    <div id="tasks"><div class="empty">任务表为空</div></div>
+  </section>
+  <section id="secConfirm">
+    <h2 class="sec-title">待确认 <span class="sec-sub">~/.mornlea/confirm 卡片（approval / question）</span></h2>
+    <div id="confirm"><div class="empty">无待确认卡片</div></div>
+  </section>
+  <section id="secPrs">
+    <h2 class="sec-title">PR 与 CI <span class="sec-sub">gh pr list --state open（尽力采集）</span></h2>
+    <div id="prs"><div class="empty">暂无打开 PR</div></div>
+  </section>
+  <section id="secLogs">
+    <h2 class="sec-title">最近动态 <span class="sec-sub">各日志末尾片段</span></h2>
+    <div id="logs"><div class="empty">无日志</div></div>
+  </section>
+</main>
+<script>
+var data = null;
+var STAT_STYLES = { '未认领':'unclaimed', '已认领':'claimed', '开发中':'develop', '待集成':'integrate', '已完成':'done', '其他':'other' };
+
+function esc(s){ if(s==null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function statusCls(st){ var k = STAT_STYLES[st]; return 'st-' + (k||'other'); }
+function statusTag(st){ var cls=statusCls(st); var dot = (st==='开发中')? '<span class="dot"></span>':''; return '<span class="tag '+cls+'">'+dot+esc(st||'其他')+'</span>'; }
+function fmtDur(sec){ if(sec==null) return ''; if(sec<60) return '刚刚'; if(sec<3600) return Math.floor(sec/60)+' 分钟前'; if(sec<86400) return Math.floor(sec/3600)+' 小时前'; return Math.floor(sec/86400)+' 天前'; }
+
+function wtForBranch(branch){
+  if(!branch) return null;
+  var b = String(branch).toLowerCase();
+  var wts = (data&&data.worktrees)||[];
+  for(var i=0;i<wts.length;i++){ if(wts[i].branch && wts[i].branch.toLowerCase().indexOf(b)>=0){ return wts[i]; } }
+  return null;
+}
+
+function renderChips(){
+  var agents=(data.agents||[]).length;
+  var chains=(data.chains||[]).filter(function(c){return c.alive;}).length;
+  var confirm=(data.confirm||[]).filter(function(c){return c.waiting;}).length;
+  var tasks=data.tasks||[];
+  function cnt(s){ var n=0; tasks.forEach(function(t){if(t.status===s)n++;}); return n; }
+  var prsAvail = Array.isArray(data.prs);
+  var prs = prsAvail ? data.prs.length : '—';
+  var chips = '';
+  chips += '<div class="chip"><span class="num">'+agents+'</span><span class="lbl">执行中 AI</span></div>';
+  chips += '<div class="chip"><span class="num">'+chains+'</span><span class="lbl">活跃接力链</span></div>';
+  chips += '<div class="chip"><span class="num">'+confirm+'</span><span class="lbl">待确认卡片</span></div>';
+  chips += '<div class="chip"><span class="num">'+cnt('开发中')+'</span><span class="lbl">开发中任务</span></div>';
+  chips += '<div class="chip"><span class="num">'+cnt('已认领')+'</span><span class="lbl">已认领任务</span></div>';
+  chips += '<div class="chip"><span class="num">'+cnt('待集成')+'</span><span class="lbl">待集成任务</span></div>';
+  chips += '<div class="chip"><span class="num">'+cnt('未认领')+'</span><span class="lbl">未认领任务</span></div>';
+  chips += '<div class="chip"><span class="num">'+prs+'</span><span class="lbl">打开 PR</span></div>';
+  document.getElementById('chips').innerHTML = chips;
+}
+
+function renderAgents(){
+  var el=document.getElementById('agents');
+  var list=data.agents||[];
+  if(list.length===0){ el.innerHTML='<div class="empty">当前没有 AI 在执行</div>'; return; }
+  var h='<table class="agents"><thead><tr><th>工具</th><th>角色</th><th>pid</th><th>运行时长</th><th>cwd</th><th>命令摘要</th></tr></thead><tbody>';
+  list.forEach(function(a){ h+='<tr><td>'+esc(a.tool)+'</td><td>'+esc(a.role)+'</td><td class="mono">'+esc(a.pid)+'</td><td>'+esc(a.uptime)+'</td><td class="mono">'+esc(a.cwd||'—')+'</td><td class="mono">'+esc(a.cmd||'')+'</td></tr>'; });
+  h+='</tbody></table>';
+  el.innerHTML=h;
+}
+
+function renderChains(){
+  var el=document.getElementById('chains');
+  var list=data.chains||[];
+  if(list.length===0){ el.innerHTML='<div class="empty">无接力链</div>'; return; }
+  var h='<table><thead><tr><th>链</th><th>pid</th><th>存活</th><th>守卫修改时间</th><th>注记</th></tr></thead><tbody>';
+  list.forEach(function(c){ var alive = c.alive ? '<span class="tag st-done">存活</span>' : '<span class="tag st-unclaimed">已死</span>'; h+='<tr><td>'+esc(c.id)+'</td><td class="mono">'+esc(c.pid||'')+'</td><td>'+alive+(c.stale?' <span class="muted">(stale)</span>':'')+'</td><td>'+esc(c.mtime||'')+'</td><td class="warn">'+esc(c.note||'')+'</td></tr>'; });
+  h+='</tbody></table>';
+  el.innerHTML=h;
+}
+
+function renderTasks(){
+  var el=document.getElementById('tasks');
+  var tasks=data.tasks||[];
+  if(tasks.length===0){ el.innerHTML='<div class="empty">任务表为空</div>'; return; }
+  var order=['开发中','已认领','待集成','未认领','已完成','其他'];
+  var groups={}; order.forEach(function(k){groups[k]=[];});
+  tasks.forEach(function(t){ var k=t.status; if(!groups[k]) groups[k]=[]; groups[k].push(t); });
+  var h='';
+  order.forEach(function(k){
+    if(groups[k].length===0) return;
+    h+='<div class="group-title">'+k+' ('+groups[k].length+')</div><div class="task-grid">';
+    groups[k].forEach(function(t){
+      var wt=wtForBranch(t.branch);
+      var commit=(wt&&wt.lastCommit)?('<div class="meta">最近提交：'+esc(wt.lastCommit.time||'')+' · '+esc(wt.lastCommit.author||'')+' · '+esc(wt.lastCommit.subject||'')+'</div>'):'';
+      var dirty=(wt&&wt.dirtyCount>0)?(' · 脏文件 '+wt.dirtyCount):'';
+      var ahead=(wt&&wt.hasAhead)?(' · 领先 main '+wt.aheadCount):'';
+      var prog='';
+      if(wt&&wt.changes&&wt.changes.length){
+        prog='<span class="progress">'+wt.changes.map(function(ch){return esc(ch.name)+' '+ch.done+'/'+ch.total;}).join(' · ')+'</span>';
+      }
+      var ledger='';
+      if(wt&&wt.changes){ wt.changes.forEach(function(ch){ if(ch.latestLedger){ ledger += '<div class="ledger">'+esc(ch.name)+' 最新 ledger：'+esc(ch.latestLedger)+'</div>'; } }); }
+      h+='<div class="task-card"><h4>'+esc(t.id)+' '+esc(t.feature)+' '+statusTag(t.status)+'</h4>';
+      h+='<div class="summary">'+esc(t.summary)+'</div>';
+      h+='<div class="meta">认领人：'+esc(t.claimant||'—')+'  · 分支：'+esc(t.branch||'—')+(wt?(' · '+esc(wt.path)):'')+'</div>';
+      h+=commit;
+      h+=(dirty||ahead)?('<div class="meta">'+esc(dirty)+esc(ahead)+'</div>'):'';
+      h+=(prog?('<div class="meta">'+prog+'</div>'):'');
+      h+=ledger;
+      h+='</div>';
+    });
+    h+='</div>';
+  });
+  el.innerHTML=h;
+}
+
+function renderConfirm(){
+  var el=document.getElementById('confirm');
+  var list=data.confirm||[];
+  if(list.length===0){ el.innerHTML='<div class="empty">无待确认卡片</div>'; return; }
+  var h='';
+  list.forEach(function(c){
+    var badge=c.kind==='question'?'<span class="badge badge-question">question</span>':'<span class="badge badge-approval">approval</span>';
+    var wait=c.waiting?('<span class="tag st-develop">等待中 '+fmtDur(c.waitSec)+'</span>') : (c.replyAction?('<span class="tag st-done">已回复 '+esc(c.replyAction)+'</span>'):'');
+    var reply=c.replyAction?('<div class="meta">回复动作：'+esc(c.replyAction)+' · '+esc(c.replyText||'')+'</div>'):'';
+    var q=c.question?('<div class="meta">'+esc(c.question)+'</div>'):'';
+    var d=c.design?('<div class="meta muted">设计：'+esc(c.design)+'</div>'):'';
+    var superseded=c.supersededBy?('<div class="meta warn">已被 '+esc(c.supersededBy)+' 取代</div>'):'';
+    h+='<div class="confirm-card'+(c.waiting?' waiting':'')+'"><h4>'+badge+' '+esc(c.id)+' <span class="muted">'+(c.category?esc(c.category):'')+'</span>'+wait+'</h4><div class="meta">'+esc(c.title||'')+'</div>'+q+d+reply+superseded+'</div>';
+  });
+  el.innerHTML=h;
+}
+
+function checkSummary(checks){
+  if(!checks||checks.length===0) return '—';
+  var ok=0; checks.forEach(function(c){ if(c.state==='success') ok++; });
+  var mark=(ok===checks.length)?' ✓':'';
+  return ok+'/'+checks.length+mark;
+}
+function renderPRs(){
+  var el=document.getElementById('prs');
+  if(!Array.isArray(data.prs)){ el.innerHTML='<div class="empty">gh 未登录或不可用，PR 数据降级。'+(data.errors&&data.errors.prs?(' '+esc(data.errors.prs)):'')+'</div>'; return; }
+  if(!data.prs.length){ el.innerHTML='<div class="empty">暂无打开 PR</div>'; return; }
+  var h='<table><thead><tr><th>#</th><th>标题</th><th>分支</th><th>mergeState</th><th>检查</th></tr></thead><tbody>';
+  data.prs.forEach(function(p){ h+='<tr><td>#'+p.number+'</td><td>'+(p.url?('<a href="'+esc(p.url)+'" target="_blank" rel="noopener">'+esc(p.title)+'</a>'):esc(p.title))+'</td><td class="mono">'+esc(p.branch||'')+'</td><td>'+esc(p.mergeState||'')+'</td><td>'+esc(checkSummary(p.checks))+'</td></tr>'; });
+  h+='</tbody></table>';
+  el.innerHTML=h;
+}
+
+function renderLogs(){
+  var el=document.getElementById('logs');
+  var logs=data.logs||{};
+  var keys=Object.keys(logs);
+  if(keys.length===0){ el.innerHTML='<div class="empty">无日志</div>'; return; }
+  var h='';
+  keys.forEach(function(k){
+    var lines=logs[k]||[];
+    h+='<div class="timeline"><h5>'+esc(k)+'（近 '+lines.length+' 行）</h5><pre>'+esc(lines.join('
+'))+'</pre></div>';
+  });
+  el.innerHTML=h;
+}
+
+function renderErrors(){
+  var el=document.getElementById('errors');
+  var e=data.errors||{};
+  var keys=Object.keys(e).filter(function(k){return e[k];});
+  if(keys.length===0){ el.hidden=true; el.innerHTML=''; return; }
+  var txt=keys.map(function(k){return k+': '+esc(e[k]);}).join(' ｜ ');
+  el.innerHTML='采集降级：'+txt;
+  el.hidden=false;
+}
+
+function render(){
+  if(!data) return;
+  renderChips();
+  renderErrors();
+  renderAgents();
+  renderChains();
+  renderTasks();
+  renderConfirm();
+  renderPRs();
+  renderLogs();
+  if(data.errors && Object.keys(data.errors).length){
+    // 输出采集小节的错误（可选：在控制台提示）。
+    console.log('mornlea-agent-board 采集告警：', data.errors);
+  }
+}
+
+function updateClock(){
+  var d=new Date();
+  var p=function(n){return (n<10?'0':'')+n;};
+  document.getElementById('clock').textContent = d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
+}
+
+async function refresh(){
+  try{
+    var r=await fetch('/api/status');
+    if(!r.ok) throw new Error('http '+r.status);
+    data=await r.json();
+    document.getElementById('banner').hidden=true;
+    render();
+  }catch(e){
+    document.getElementById('banner').hidden=false;
+  }
+}
+
+document.getElementById('refreshBtn').addEventListener('click', refresh);
+updateClock();
+setInterval(updateClock, 1000);
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

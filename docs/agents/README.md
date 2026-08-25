@@ -30,6 +30,21 @@ make agent-implementer
 scripts/agents/gates.sh
 ```
 
+## 执行状态看板（可选）
+
+这是一个只读的本地开发环境状态看板，展示当前哪些 AI（planner/implementer 工作者）正在执行及其执行状态。它是一个独立 Go 单二进制，零依赖，默认监听 `http://127.0.0.1:8787`。
+
+```bash
+# 启动（默认地址 127.0.0.1:8787）
+make agent-dashboard
+# 或直接
+go run ./cmd/mornlea-agent-board
+```
+
+- 地址覆盖：`BOARD_ADDR` 提供默认值、flag `--addr` 再覆盖，例如 `BOARD_ADDR=:9000 go run ./cmd/mornlea-agent-board` 或 `go run ./cmd/mornlea-agent-board --addr 127.0.0.1:9000`。
+- 数据范围：全部为本机采集（`ps`/`git`/`gh`/日志文件），无远程依赖；刷新间隔固定 5 秒。
+- gh 未登录或不可用时，PR 区自动降级为说明文字，不影响其它小节；该看板不会启动或影响任何 agent。
+
 ## 每天固定时间：cron
 
 ```cron
