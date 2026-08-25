@@ -25,7 +25,7 @@ func Replaceable(target core.BlockID, newLevel uint8) bool {
 		return true
 	}
 	if core.IsCrop(target) {
-		// 作物对流动水可替换。放行点必须在本函数而不能在 evalCell 里特判：
+		// 作物对流动水可替换。放行点必须在本函数而不能在 `evalCell` 里特判：
 		// 垂直优先、水平递减、存活判定、同 tick 冲突合并以及重扫的不动点捷径
 		// 全部经由这一个谓词读世界，改一处即全链一致；若捷径另用一套保守判定，
 		// 「邻作物的源」会被误判成不动点跳过入队，水面在农田边永久卡死

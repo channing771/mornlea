@@ -156,13 +156,13 @@ func TestConvergeRandomWaterBodiesReachFixedPoint(t *testing.T) {
 // 良基的支撑关系增加了一批一次性可消耗的叶节点，不引入新的环。这里做的是
 // 该论证的经验冒烟——若将来有人给本包加了能产出作物的路径，这条测试会先红。
 //
-// 夹具刻意不进 standardFixtures：作物会打破 assertNoLevelOverflow 的白名单
+// 夹具刻意不进 `standardFixtures`：作物会打破 `assertNoLevelOverflow` 的白名单
 // 前提（夹具只放空气/石头/流体），把它泄入预算、次序、重扫三组无关性质。
 // 独立构造的补偿是两条更强的断言——平衡态零作物残留，以及残留检查通过后
 // 白名单不变量照常成立（流体等级越界写出的编号恰好落在农业编号段
-// WaterSourceID+8..17 上，正是这条断言要抓的形态）。
+// `core.WaterSourceID`+8..17 上，正是这条断言要抓的形态）。
 func TestConvergeFloodedCropsReachFixedPoint(t *testing.T) {
-	// 与 TestConvergeRandomWaterBodiesReachFixedPoint 同一上界口径。
+	// 与 `TestConvergeRandomWaterBodiesReachFixedPoint` 同一上界口径。
 	const convergeMaxTicks = 1500
 
 	build := func() (*memWorld, []core.BlockPos) {
@@ -193,7 +193,7 @@ func TestConvergeFloodedCropsReachFixedPoint(t *testing.T) {
 			w, crops := build()
 			q := NewQueue()
 			// 只播种流体格就够：作物是被动的被替换方，水经相邻流体格的
-			// evalCell 写进作物格后，Advance 会把变更格连同六邻重新入队，
+			// `evalCell` 写进作物格后，`Advance` 会把变更格连同六邻重新入队，
 			// 洪水沿既有机制自然传播，不需要为作物单独入队。
 			seedFromFluid(w, q, 0, 0)
 
@@ -214,7 +214,7 @@ func TestConvergeFloodedCropsReachFixedPoint(t *testing.T) {
 						budget, pos, id-core.WheatStage0ID)
 				}
 			}
-			// 零作物残留已证，assertNoLevelOverflow 的白名单前提恢复成立：
+			// 零作物残留已证，`assertNoLevelOverflow` 的白名单前提恢复成立：
 			// 此时任何非空气/石头/流体的编号都只可能来自等级越界写入。
 			assertNoLevelOverflow(t, w, "作物淹没平衡态")
 			t.Logf("budget=%d：%d 格作物全部冲毁，%d tick 到达不动点，平衡态流体 %d 格",
