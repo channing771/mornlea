@@ -12,6 +12,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/world"
 )
 
 // interactionStepOf 返回任务当前步骤的 mine/place 形态；其他 kind（go_to、
@@ -117,8 +118,9 @@ func (m *companionManager) advanceInteractionRunner(
 //     规则也变化），Runner 观察到「进度回退或 RequiredTicks 变化」即以
 //     TaskFailWorldChanged 失败，新方块 MUST NOT 被破坏；
 //   - 背包无容量：sim 的容量前验拒绝结算时进度保持满格（稳定可观察状态），
-//     Runner 观察到满格饱和且 tick 边界背包无法容纳产物（与 sim 同一
-//     AddStack 判定）即以 TaskFailInventoryFull 失败，方块不变；
+//     Runner 观察到满格饱和且 tick 边界背包无法容纳产物（与 sim 同一预演判定：
+//     容器经 `sim.CompanionMineContainerStaging` 批量预演，其余方块单件
+//     `AddStack` 预演）即以 TaskFailInventoryFull 失败，方块不变；
 //   - 完成：sim 在结算 tick 清零采掘状态，Runner 观察到「未激活 + 方块已
 //     空 + 进度证据恰好差一格达标」判定为本方完成（完成 tick 三方原子由
 //     sim 保证，这里只观察）；方块已空而进度证据不足则是目标被其他 actor
@@ -164,21 +166,105 @@ func (m *companionManager) holdCompanionMining(
 		m.applyQueueEvents(slot, slot.queue.FailRun(companion.TaskFailWorldChanged))
 		return
 	}
-	if observed.Harvestable && observed.ProgressTicks == observed.RequiredTicks {
+	if observed.ProgressTicks == observed.RequiredTicks {
 		// 进度满格饱和且方块仍在：sim 的容量前验拒绝了结算（这是饱和唯一
 		// 的稳定成因——有容量时满格 tick 必然结算并清零进度）。用与 sim
-		// 完全相同的 AddStack 预演判定 tick 边界背包能否容纳产物，不能即
-		// 以稳定原因失败；方块、耐久、背包在 sim 侧本就未变更。
-		if item, hasDrop := core.BlockDrop(block); hasDrop {
-			if _, leftover := body.Inventory.AddStack(core.ItemStack{Item: item, Count: 1}); leftover.Count != 0 {
-				m.applyQueueEvents(slot, slot.queue.FailRun(companion.TaskFailInventoryFull))
-				return
-			}
+		// 完全相同的产物预演判定 tick 边界背包能否容纳产物，不能即以稳定
+		// 原因失败；方块、耐久、背包在 sim 侧本就未变更。容器（箱子/熔炉）
+		// 与其余方块的判据分野与 harvestable 门槛的处理见
+		// companionMineCapacityExceeded。
+		if m.companionMineCapacityExceeded(body, block, observed.Harvestable, target) {
+			m.applyQueueEvents(slot, slot.queue.FailRun(companion.TaskFailInventoryFull))
+			return
 		}
 	}
 	slot.mineProgress = observed.ProgressTicks
 	slot.mineRequired = observed.RequiredTicks
 	m.holdMining(slot, id, target)
+}
+
+// companionMineCapacityExceeded 报告满格饱和的 tick 边界背包是否无法容纳采掘
+// 产物——判定与 sim 完成分叉同源，「没有第二套规则」从单件推广到批量（change
+// companion-mine-containers 的 D3）：容器（箱子/熔炉）走 `sim.CompanionMineContainerStaging`
+// 的同一产物集合与固定序批量预演（产物中的容器内容物经 `containerContentsAt`
+// 从与 `blockAt` 同源的区块 record 读取）；其余方块维持既有的单件 `AddStack`
+// 预演，普通方块的饱和判定逐字节不变。
+//
+// 容器分支不以 harvestable 为门槛：错误工具（harvestable 为假）下内容物放不下
+// 时 sim 同样拒绝结算、进度同样饱和（产物集合只是不计容器本体），Runner 必须
+// 对这一形态给出同一失败；普通方块在 harvestable 为假时 sim 的完成分叉不做
+// 容量前验、必然结算，饱和只可能发生在可收获形态——default 分支维持既有门槛
+// 即与旧行为逐字节等价。
+func (m *companionManager) companionMineCapacityExceeded(
+	body companion.Body,
+	block core.BlockID,
+	harvestable bool,
+	target core.BlockPos,
+) bool {
+	switch block {
+	case core.ChestID, core.FurnaceID:
+		contents, ok := m.containerContentsAt(body.Dimension, target, block)
+		if !ok {
+			// 区块未 ready 或目标格没有活动容器槽：绝不基于半空观察裁决
+			// 失败，deadline 兜底（与上方目标区块未 ready 的处理同则）。
+			return false
+		}
+		_, _, staged := sim.CompanionMineContainerStaging(block, harvestable, contents, body.Inventory)
+		return !staged
+	default:
+		if !harvestable {
+			return false
+		}
+		item, hasDrop := core.BlockDrop(block)
+		if !hasDrop {
+			return false
+		}
+		_, leftover := body.Inventory.AddStack(core.ItemStack{Item: item, Count: 1})
+		return leftover.Count != 0
+	}
+}
+
+// containerContentsAt 读取目标格容器内容物的 tick 边界只读快照：与 `blockAt`
+// 同经 `CloneReadyChunk` 深拷贝，区块 record 里的箱子/熔炉槽就是 sim 完成分叉
+// 读取的同一权威容器状态，不存在第二套容器访问。返回按容器槽位序展开的内容物
+// 堆序列——箱子为 27 格槽位序、熔炉为输入/燃料/输出三格序，与 sim 完成分叉
+// 装配 contents 的顺序逐字一致（固定序是批量预演重放一致的前提）。区块未
+// ready、世界坐标越界或目标格没有活动容器槽时返回 false，调用方不裁决。
+// 只在满格饱和分支被调用：每饱和 tick 一次深拷贝，且容量不足时下一 tick 即
+// 终结任务，成本有界。
+func (m *companionManager) containerContentsAt(
+	dimension core.DimensionID,
+	position core.BlockPos,
+	block core.BlockID,
+) ([]core.ItemStack, bool) {
+	chunk, _, ready := m.engine.CloneReadyChunk(core.ChunkKey{
+		Dimension: dimension,
+		Pos:       position.Chunk(),
+	})
+	if !ready {
+		return nil, false
+	}
+	index, ok := world.ChunkBlockIndex(position)
+	if !ok {
+		return nil, false
+	}
+	switch block {
+	case core.ChestID:
+		slot, found := chunk.ChestAt(index)
+		if !found {
+			return nil, false
+		}
+		chest := chunk.Chest(slot)
+		return chest.Items[:], true
+	case core.FurnaceID:
+		slot, found := chunk.FurnaceAt(index)
+		if !found {
+			return nil, false
+		}
+		furnace := chunk.Furnace(slot)
+		return []core.ItemStack{furnace.Input, furnace.Fuel, furnace.Output}, true
+	}
+	return nil, false
 }
 
 // holdMining 提交一个采掘按住载荷并记录 sim 侧意图状态。sim 的按住语义
