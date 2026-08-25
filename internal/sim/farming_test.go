@@ -561,10 +561,12 @@ func harvestBlockAt(t *testing.T, record *ChunkRecord, target core.BlockPos) cor
 }
 
 // TestHarvestMatureWheatDropsWheatAndSeeds 覆盖 Scenario「收获成熟作物」与
-// 「任意手持状态一个 tick 内收获成熟作物」：1 tick 破坏，掉落 1 小麦 + 2 种子。
+// 「任意手持状态一个 tick 内收获成熟作物」：1 tick 破坏，两类掉落各落在 [1,3]
+// 区间（数量由确定性哈希决定；精确重放、区间取遍与双流独立由
+// property_crop_yield_test.go 的三条性质锁定）。
 //
-// 断言列的是**物品种类与精确数量**（len(got) == 2 一起钉）：只断言"掉落物非空"
-// 的话，未成熟路径的那 1 颗种子也能让它绿，多产物分支根本没被覆盖。
+// len(got) == 2 的形状断言仍然承重：只断言"掉落物非空"的话，未成熟路径的那 1
+// 颗种子也能让它绿，多产物分支根本没被覆盖。
 func TestHarvestMatureWheatDropsWheatAndSeeds(t *testing.T) {
 	_, result, record, target := harvest(t, core.WheatStage7ID, 1)
 
@@ -575,8 +577,10 @@ func TestHarvestMatureWheatDropsWheatAndSeeds(t *testing.T) {
 		t.Fatalf("一个 tick 后方块 = %d，想要空气", got)
 	}
 	got := miningDropTotals(record.Chunk)
-	if len(got) != 2 || got[core.ItemWheat] != 1 || got[core.ItemWheatSeeds] != 2 {
-		t.Fatalf("成熟小麦掉落 = %+v，想要恰好 1 小麦 + 2 种子", got)
+	if len(got) != 2 ||
+		got[core.ItemWheat] < 1 || got[core.ItemWheat] > 3 ||
+		got[core.ItemWheatSeeds] < 1 || got[core.ItemWheatSeeds] > 3 {
+		t.Fatalf("成熟小麦掉落 = %+v，想要 1..3 小麦 + 1..3 种子", got)
 	}
 }
 

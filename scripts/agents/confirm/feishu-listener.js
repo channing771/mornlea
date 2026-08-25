@@ -71,14 +71,25 @@ function writeReply(requestId, action, text, meta) {
   return reply;
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// 回执 ack 是用户在飞书侧感知「已收到」的唯一反馈面：单次失败常见于瞬时限流/网络抖动，
+// 有限重试（0.5s/1.5s 退避，共 3 次）并把真实原因写日志替代静默吞掉——
+// 之前「一次丢 + catch 忽略」会让按钮点了没反馈，用户只能反复点按。
 async function sendAck(cfg, openId, text) {
-  try {
-    const client = new Client({ appId: cfg.appId, appSecret: cfg.appSecret });
-    await client.im.message.create({
-      params: { receive_id_type: 'open_id' },
-      data: { receive_id: openId, msg_type: 'text', content: JSON.stringify({ text }) },
-    });
-  } catch (e) { log('ack 发送失败(忽略):', e && e.message); }
+  const client = new Client({ appId: cfg.appId, appSecret: cfg.appSecret });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await client.im.message.create({
+        params: { receive_id_type: 'open_id' },
+        data: { receive_id: openId, msg_type: 'text', content: JSON.stringify({ text }) },
+      });
+      return;
+    } catch (e) {
+      if (attempt < 2) { await sleep(attempt === 0 ? 500 : 1500); continue; }
+      log('ack 发送失败:', e && e.message);
+    }
+  }
 }
 
 var LOOP_GUARD = process.env.MORNLEA_LOOP_GUARD || path.join(os.homedir(), '.mornlea', 'loop.guard');
@@ -137,12 +148,19 @@ function handleMessage(cfg, data) {
     } else { log('没有匹配的待确认请求（文本:' + text + '），忽略'); }
     return;
   }
-  if (target.status !== 'pending') { log('请求 ' + target.id + ' 已答复，忽略回复（文本:' + text + '）'); return; }
+  if (target.status !== 'pending') {
+    log('请求 ' + target.id + ' 已答复，忽略回复（文本:' + text + '）');
+    // 重复点按也要有反馈——「已答复过」提示避免用户以为丢了、继续点
+    if (openId) sendAck(cfg, openId, '「' + target.id + '」已答复过，无需重复；实现者正在继续。');
+    return;
+  }
   const action = classifyReply(text, target.kind || 'approval');
   const reply = writeReply(target.id, action, text, { senderOpenId: openId, chatId: m.chat_id, messageId: m.message_id });
   log('#HANDLED ' + target.id + ' action=' + action);
-  if (openId) { const label = (target.kind === 'question' ? '提问' : '确认') + '已收到（' + action + '）'; sendAck(cfg, openId, label + '，实现者将从 ' + target.id + '.reply.json 继续。'); }
+  // 先本地续跑（快、关键路径），再回执 ack（外部网络、可慢可失败）——
+  // 顺序反了会让「续跑」被 ack 的网络延迟拖着
   spawnResume(cfg, target);
+  if (openId) { const label = (target.kind === 'question' ? '提问' : '确认') + '已收到（' + action + '）'; sendAck(cfg, openId, label + '，实现者将从 ' + target.id + '.reply.json 继续。'); }
 }
 
 // 卡片按钮回调：Feishu 回调配置（事件与回调→回调配置）开启后，按钮事件经同一长连接以
@@ -174,8 +192,18 @@ function handleCardAction(cfg, data) {
   // 按 value.id 精确匹配；无 id 时用 message_id 反查该卡片对应的请求
   let target = value.id ? pending.find((p) => p.id === value.id) || null : null;
   if (!target && ev.messageId) target = pending.find((p) => p.feishuMessageId === ev.messageId) || null;
-  if (!target) { log('卡片按钮无匹配请求（value=' + JSON.stringify(value) + '），忽略'); return; }
-  if (target.status !== 'pending') { log('请求 ' + target.id + ' 已答复，忽略按钮（value=' + JSON.stringify(value) + '）'); return; }
+  if (!target) {
+    log('卡片按钮无匹配请求（value=' + JSON.stringify(value) + '），忽略');
+    // 按钮回调到达但匹配不到（重复点击时请求已从 pending 移除、或消息 id 未记录）→
+    // 给点按者一个有反馈的提示，否则点按后无声无息，用户只会再点
+    if (ev.operator) sendAck(cfg, ev.operator, '未能匹配待确认请求：请点按对应卡片的按钮，或回复「#编号」；已答复过的请忽略。');
+    return;
+  }
+  if (target.status !== 'pending') {
+    log('请求 ' + target.id + ' 已答复，忽略按钮（value=' + JSON.stringify(value) + '）');
+    if (ev.operator) sendAck(cfg, ev.operator, '「' + target.id + '」已答复过，无需重复点按；实现者正在继续。');
+    return;
+  }
   // 手动输入区提交：以输入框文本为准，按文本规则判定动作（批准类：关键词→批准，其他→修改意见；提问类→答案）
   const manualText = (ev.formValue && ev.formValue.note) ? String(ev.formValue.note).trim() : '';
   let action = value.action || classifyReply(String(value.text || ''), target.kind || 'approval');
@@ -183,12 +211,14 @@ function handleCardAction(cfg, data) {
   if (manualText && action === 'manual') action = classifyReply(manualText, target.kind || 'approval');
   const reply = writeReply(target.id, action, text, { senderOpenId: ev.operator, chatId: ev.chatId, messageId: ev.messageId });
   log('#HANDLED-CARD ' + target.id + ' action=' + action);
-  if (ev.operator) { const label = (target.kind === 'question' ? '提问' : '确认') + '已收到（' + action + '）'; sendAck(cfg, ev.operator, label + '，实现者将从 ' + target.id + '.reply.json 继续。'); }
+  // 同 handleMessage：先本地续跑再回执（ack 网络延迟不拖实现者）
   spawnResume(cfg, target);
+  if (ev.operator) { const label = (target.kind === 'question' ? '提问' : '确认') + '已收到（' + action + '）'; sendAck(cfg, ev.operator, label + '，实现者将从 ' + target.id + '.reply.json 继续。'); }
 }
 
 async function main() {
-  const cfg = loadConfig();
+  // let 而非 const：事件回调里会 cfg = loadConfig() 按事件重载（见下方注释），const 会在首条消息即抛 TypeError。
+  let cfg = loadConfig();
   if (!cfg.appId || !cfg.appSecret) die('配置缺 appId/appSecret');
   log('启动监听（bootstrap=' + BOOTSTRAP + '；receive=' + JSON.stringify(cfg.receive || '未设置') + '）');
   const ws = new WSClient({

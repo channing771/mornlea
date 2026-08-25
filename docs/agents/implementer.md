@@ -14,8 +14,9 @@
 0. **AGENT_LOOP=1（接力模式）**：守卫登记与防重入已由 `run-agent.sh` 统一完成——启动时以**真实会话 pid** 写入本链守卫（`WORKER_ID` 未设置 → `~/.mornlea/loop.guard`；设置 → `~/.mornlea/loop.guard.$WORKER_ID`），本链守卫已有**存活** pid 则直接退出。**不要再手动 `echo $$`**（旧写法写入的是临时 bash 工具 shell 的 pid，命令一返回进程即死，"存活 pid 检查"永不命中，防重入形同虚设）。不同 WORKER_ID 的链互不排斥，可并行认领不同行。
 1. 读 `docs/feature-backlog.md`：选一行 `未认领` 且依赖行已满足；同一时间只认领一行。
 2. 编辑该行：`状态` → `已认领`，`认领人` → `<agent 标识> @ <分支名>`，备注声明独占文件集；docs-only 提交。
-3. 从 `main`（或批次共享 SHA）创建 isolation worktree/分支；确认工作区干净。
-4. 读任务来源文档（该行「来源」列指向的 design「遗留与简化清单」条目或设计文档章节），把来源细节带进 brief。
+3. 在 Discussion #71 追加一条【状态变更】评论（→ 已认领，模板见文末；「每条状态变化一条」含认领时点，不是收尾才补），并用 `python3 scripts/agents/refresh-discussion.py --update` 即时刷新正文列表。
+4. 从 `main`（或批次共享 SHA）创建 isolation worktree/分支；确认工作区干净。
+5. 读任务来源文档（该行「来源」列指向的 design「遗留与简化清单」条目或设计文档章节），把来源细节带进 brief。
 
 ## 第 2 步：加载 skill 上下文
 
@@ -49,7 +50,7 @@
 
 ## 第 4 步：开发（子智能体驱动）
 
-严格按 `docs/development-process.md` 阶段 1–4（前置的「阶段 0.5 内容确认门禁」已通过）：
+严格按 `docs/development-process.md` 阶段 2–4（前置的「阶段 1 内容确认门禁」已通过）：
 
 1. 建 OpenSpec change（复杂功能必建；F 组小型修复走直接修改豁免）。
 2. 每个 Task 派发**全新** implementer 子代理；brief 必须自包含：当前 Task、契约 SHA、change 产物路径、全局约束（AGENTS.md 关键条款）、精确验证命令；禁止子代理自我派生。
