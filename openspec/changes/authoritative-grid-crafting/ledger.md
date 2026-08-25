@@ -74,3 +74,12 @@
 
 - 2026-08-26 01:0x–01:1x：任务组 4 implementer 上报 `internal/render/hud/**` 10 文件与 `internal/companion/plan_types.go` 被外部进程持续写入（4.1/4.4 范围）。控制会话核实：分支出现外部**控制级**提交 `1b1e2773`（00:40:41，ledger 记录任务组 3 关闭，位于 `8db7e4d0` 与 `af436e44` 之间）——即存在第二个并行控制会话在同一 worktree 驱动同一 change（任务组 3 事件的并发写入者身份再次确认为此类）。处置：沿用任务组 3 ruling（不回退、指纹监控、收敛唯一提交）+ 强化指令（提交前 `git log fb17d63a..HEAD` 检查外部提交，有则停下上报；外部代码按评审级逐文件核对，implementer 对收敛提交负全责）。已升级用户处置其并行会话——**在用户停止重复会话前，本线的评审与关闭动作以先落盘者为准、后到者只补记不重复**。
 - 2026-08-26 01:2x：用户确认已停止重复的并行控制会话。自此本 worktree 恢复单写者（本线控制会话及其派发的 implementer）；后续任何新的外部写入均视为异常事件上报。任务组 4 继续按强化指令收敛。
+
+### 任务组 4：HUD 容器界面、输入路径、capture 场景与 companion 登记
+
+- Implementer：fresh 子代理，提交 `94405319`（`feat: present crafting grids`，23 文件 +1302/−535：cmd/mornlea 13、internal/render/hud 9、internal/companion 1）。验证：hud/cmd/companion 三包 `-race` 全绿、`go vet ./...`、archcheck、`go build ./...` 全过、工作区干净。并发事件：第二次并发写入的 11 个外部文件全部按评审级核对收敛、未回退；**修复外部代码 3 处真实缺陷**（网格 row 0 原锚底行致垂直不对称配方倒立——翻转为顶行在先；满工作台 quad 断言漏加基础 41；glyph 见证数量一位数到不了锁定值 40）。
+- 关键数值：新锁定最大打开态精确 quad **257 ≤267**（箱子见证 83 主导；3×3 合成最坏单独锁定 206）；glyph/offset/总容量 700/13312/46912 不变；capture wantNames 19 = 18 正式场景 + main-menu（与 delta spec「正式清单不含 main-menu」口径一致）；零 golden 写入。
+- use-key 落点：`app_input.go` 容器分支 `(FurnaceID||ChestID||WorkbenchID)` 复用同一 `OpenContainer` 路径；recipe-click 发送路径 grep 零残留；音频用例改走产物取出权威边界。
+- companion 登记名 `workbench`（`planPlaceItems` snake_case 惯例），`TestPlanDecodePlaceRegistryLock` 转绿。
+- 实现者偏离（待评审裁决）：1) 镜像不对称 capture 配方用石锄而非石镐（石镐水平镜像与自身相同，覆盖不到语义）；2) 网格朝向裁定顶行在先（delta specs 未钉朝向，按 proposal「熟悉的格子形状」意图）；3) `go test ./... -short` 的 `internal/server` 红经 stash 对照证实为基线负载抖动（两轮失败集不同），非本组新增。
+- 评审：待双评审记录。
