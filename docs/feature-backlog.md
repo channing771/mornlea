@@ -122,7 +122,7 @@
 | D-02 | 暂停菜单 | 暂停/继续/退出；先设计单人权威模拟的暂停语义 | 视暂停语义裁决 | 未认领 | — | egui 实施路径 |
 | D-03 | 调试面板 egui 化 | 既有程序化 debug 面板迁入 egui 或并存；性能影响需评审 | 无 wire（呈现层） | 未认领 | — | egui 实施路径 |
 | D-04 | 合成面板分页/滚动 | 配方行数增长后按窗口高度自适应（当前 10 行，矮窗口整体缩小） | 无 wire；HUD 布局（capture 校验） | 未认领 | — | farming 遗留 20 |
-| D-05 | HUD 物品图集 UV 对齐 | 按 texel 中心/整数像素计算，使图集扩列不影响既有图标 | 无 wire（UV 计算） | 未认领 | — | farming 遗留 18 |
+| D-05 | HUD 物品图集 UV 对齐 | 按 texel 中心/整数像素计算，使图集扩列不影响既有图标 | 无 wire（UV 计算） | 已认领 | ox-alpha-implementer @ fix/D-05-hud-atlas-texel-uv | farming 遗留 18；独占文件集：`internal/render/hud/atlas.go`、`internal/render/hud/atlas_test.go`（必要时按关注点拆出同目录新测试文件）与 OpenSpec change 目录；`hotbarTextureUV` 签名保持不变，A-01 独占的 `container.go`/`container_test.go` 及其余消费文件零改动；不触碰 golden PNG、benchmark scenario、协议/schema/ABI/scenario 版本号与 `AGENTS.md`/`CLAUDE.md`/`progress.md` |
 | D-06 | 材质包 v2 | HUD 图集覆盖（鸡腿/爱心/气泡可替换）、构建期许可校验与成果打包 | 配置语义扩展 + 构建期校验 | 未认领 | — | hunger 遗留 7；farming 遗留 12（贴图管线） |
 | D-07 | 耕地 mesh 顶面下沉 | 按 material 固定下移顶面，或复用水面角高度位 | capture golden 更新 | 未认领 | — | farming 遗留 13 |
 | D-08 | 农田+花草 capture 场景 | 植物种类增多后补视觉场景并记录差异来源 | capture 场景与 golden 追加 | 未认领 | — | farming 遗留 24 |
