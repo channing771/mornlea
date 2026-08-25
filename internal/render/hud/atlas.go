@@ -172,7 +172,7 @@ func copyHotbarTextureCell(dst []byte, column int, src []byte) {
 const hotbarUVInsetTexels = 1.0 / 256.0
 
 // hotbarColumnUV 把「列纹素边界 ± 亚纹素收进，再 ÷ 图集宽度」的计算参数化为
-// 任意宽度，返回该列的归一化 UV 区间 [left, 0, right, 1]。从 `hotbarTextureUV`
+// 任意宽度，返回该列的归一化 UV 区间 [`left`, 0, `right`, 1]。从 `hotbarTextureUV`
 // 中提取这个纯函数是为了可测性：图集宽度随物品表追加自动扩列，稳定性属性
 // 测试只有拿到宽度参数才能扫描「模拟未来扩列」的宽度集，在同一份计算上
 // 机械验证「扩列不改变既有列采样纹素集合」「相邻列区间互不侵入」的性质。

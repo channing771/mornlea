@@ -17,15 +17,25 @@ var stabilityAtlasWidths = [...]int{800, 816, 832, 1024, 4096}
 // （量级 W·2^-24 纹素）永不翻转采样归属。
 const stabilityMinMarginTexels = 1.0 / 512.0
 
-// TestHotbarColumnUVKeepsMarginFromColumnBoundaries 钉死 delta spec
-// 「HUD 图集列采样稳定性」Scenario「扩列后既有 cell 解码纹素集合不变」的
-// 前半句：任意宽度下任意列的解码左右界必须严格落在本列
-// [列×16, (列+1)×16) 内，且距两侧列边界各不少于 1/512 纹素。
+// stabilityMaxDeviationTexels 是 delta spec 第三条 Scenario 允许的最大边界偏差：
+// 解码界与精确列边界的偏差必须小于 1/64 纹素，防止收进量被放大或随宽度缩放
+// 后悄悄改变列的语义位置。
+const stabilityMaxDeviationTexels = 1.0 / 64.0
+
+// TestHotbarColumnUVKeepsMarginFromColumnBoundaries 同时承载 delta spec
+// 「HUD 图集列采样稳定性」两条 Scenario 的判据：
+//   - Scenario「扩列后既有 cell 解码纹素集合不变」的下界：任意宽度下任意列的
+//     解码左右界必须严格落在本列 [列×16, (列+1)×16) 内，且距两侧列边界各
+//     不少于 1/512 纹素；
+//   - Scenario「边界收进不破坏既有列界语义」的上界：解码界与精确列边界的
+//     偏差必须小于 1/64 纹素，保证收进只消除边界歧义而不挪动列的语义位置。
 //
 // 杀死的变异：删掉亚纹素收进回到精确边界计算（float32 除法舍入会让解码界
 // 贴到列边界上甚至越界），或把收进余量缩小到与重归一化噪声同量级——两者
 // 都让「距边界 ≥ 1/512 纹素」失守；既有容差 0.01 纹素的回归测试对这类贴边
-// 变异不敏感，本测试以 spec 裕度作为更紧的判据。
+// 变异不敏感，本测试以 spec 裕度作为更紧的判据。反方向上，把收进量放大或
+// 使其随宽度缩放的变异由上界断言杀死：解码偏差一旦达到 1/64 纹素即判定
+// 收进已经改变列界语义，而中点探针与纯裕度检查对这类变异均不敏感。
 func TestHotbarColumnUVKeepsMarginFromColumnBoundaries(t *testing.T) {
 	for _, width := range stabilityAtlasWidths {
 		columns := width / hotbarTextureSize
@@ -43,6 +53,14 @@ func TestHotbarColumnUVKeepsMarginFromColumnBoundaries(t *testing.T) {
 				t.Fatalf("宽度 %d 列 %d 右界解码 texel=%v，距列右界仅 %v，不足 %v",
 					width, column, right, margin, stabilityMinMarginTexels)
 			}
+			if deviation := left - start; deviation >= stabilityMaxDeviationTexels {
+				t.Fatalf("宽度 %d 列 %d 左界解码 texel=%v，偏离列左界 %v，超过上限 %v",
+					width, column, left, deviation, stabilityMaxDeviationTexels)
+			}
+			if deviation := end - right; deviation >= stabilityMaxDeviationTexels {
+				t.Fatalf("宽度 %d 列 %d 右界解码 texel=%v，偏离列右界 %v，超过上限 %v",
+					width, column, right, deviation, stabilityMaxDeviationTexels)
+			}
 		}
 	}
 }
@@ -52,8 +70,11 @@ func TestHotbarColumnUVKeepsMarginFromColumnBoundaries(t *testing.T) {
 // 后列左界的解码值——两列区间一旦在共享边界附近重叠，图标就会采到相邻列
 // 的材质而互相串味。
 //
-// 杀死的变异：左右两侧收进不对称（例如只收左界不收右界）、或某侧收进量取
-// 负值（外扩越界），都会使前列右界越过下列左界。
+// 杀死的变异：跨列界收进的代数和为负——例如左右两侧对称取负（外扩）会使
+// 前列右界越过下列左界，本断言据此直接钉死 spec 的「互不侵入」可观察性质。
+// 「只收一侧」这类不对称变异会让解码界先越过本列自身边界，由 margin 测试
+// 先行杀死；本断言的价值在于不依赖单列边界检查成立、以相邻区间关系独立
+// 表达第二条 Scenario。
 func TestHotbarAdjacentColumnUVsDoNotOverlap(t *testing.T) {
 	for _, width := range stabilityAtlasWidths {
 		columns := width / hotbarTextureSize
@@ -74,9 +95,11 @@ func TestHotbarAdjacentColumnUVsDoNotOverlap(t *testing.T) {
 // t_i = (i+0.5)/16，经该列 UV 区间线性插值、乘宽度、floor 映射回相对列起点的
 // 纹素下标，模拟 HUD quad 在非整数缩放下实际采到的纹素。
 //
-// 杀死的变异：任何让解码结果随图集宽度漂移的实现——收进量随宽度缩放、
-// 插值精度不足、或按宽度重排 UV——都会让同一列在不同宽度下解析到不同纹素
-// （甚至解码出 -1 或 16 这类列外下标），不同宽度的探针集合随之出现差异。
+// 杀死的变异：探针取纹素中点、距纹素边界恒 0.5 纹素，对亚纹素级的漂移
+// （如收进量随宽度缩放）天然不敏感——那类变异由 margin 测试的上界断言
+// 承接。本测试的实际守护对象是粗粒度的宽度相关错误：按宽度重排或错列 UV、
+// 让同一列在不同宽度下解析到不同纹素、乃至解码出 -1 或 16 这类列外下标；
+// 任何一种都会使探针集合随宽度出现差异，或直接触发列外下标断言。
 func TestHotbarColumnUVDecodesToSameTexelsAcrossAtlasWidths(t *testing.T) {
 	minColumns := stabilityAtlasWidths[0] / hotbarTextureSize
 	for _, width := range stabilityAtlasWidths {
@@ -84,7 +107,7 @@ func TestHotbarColumnUVDecodesToSameTexelsAcrossAtlasWidths(t *testing.T) {
 			minColumns = columns
 		}
 	}
-	// probeSet 返回指定列在指定图集宽度下 16 个均匀探针解码出的纹素下标集合；
+	// `probeSet` 返回指定列在指定图集宽度下 16 个均匀探针解码出的纹素下标集合；
 	// 合法值是 0..15 的某个子集，解码出列外下标直接判失败。
 	probeSet := func(width, column int) [16]bool {
 		uv := hotbarColumnUV(column, width)
