@@ -34,7 +34,7 @@
 
 ## 整分支终审与发布
 
-- 独立终审：PENDING
+- 独立终审：`d01_branch_final_review` 初审 FAIL（主线同步、raw JSON patch、真实 visibleFrame、renderer 外层输入重放、视觉 delta 完整性及机械文案）；修复后待复审
 - 最终门禁：PENDING
 - OpenSpec 同步/归档：PENDING
 - PR / CI / 合并：PENDING
@@ -55,3 +55,8 @@
 - R-011：当前 Apple M2/macOS 26.6.2 上 `make visual-check` 的 13 个非 UI 旧场景超阈值；在干净领取基线 `origin/main@345f6077` 上逐场景复现相同最大差、差异像素数与首差坐标，且基线与候选 17 张非主菜单实拍逐字节相同。判为继承的机器视觉基线失败，不刷新无关 golden、不放宽阈值；D-01 的 main/settings 两场景均 0 像素差。整分支门禁必须如实记为“全局 FAIL（baseline-equivalent）”，不得写成 PASS。
 - R-012：任务 5.2 已达到 5 轮修复上限。最终 QUALITY PASS，但 SPEC 指出的唯一剩余项有效：掉落 10/40 tick、1.25 格与 6000 tick 均为可配置 `sim` tunable 的编译默认值，README 不得写成固定常量。该阻断不豁免、不继续第 6 轮，拆为全新任务 5.3，由新 implementer 和独立双评审清偿；5.3 通过后再终结 5.2。
 - R-013：任务 5.3 已把四项掉落 tunable 全部限定为编译默认值，并把中文 `sim` 组从“常量”修为“参数”；独立双评审与原 5.2 双评审均最终 PASS，R-012 阻断正式关闭。
+- R-014：整分支终审时 branch 相对最新 `origin/main` 已分叉 `31/33` 并在基线文档/进度产生冲突；任务 6.1 必须先集成最新主线、人工融合当前能力，再做任何最终门禁，不能以旧基线通过代替可合并性。
+- R-015：设置保存契约中的“所有未暴露字段保持磁盘值”包含未知顶层/嵌套 JSON 与会被加载器钳制的已知字段原始值；typed `Config.Load` 后整份 `Save` 不合格，必须用经过完整验证的 raw JSON 三顶层字段原子 patch。
+- R-016：`rust-client-window` 明确要求当前显示器工作区；屏幕全尺寸 90% 近似不合格。Darwin 创建与运行期 resize 必须读取实际 `NSScreen.visibleFrame` 并正确处理逻辑 point/物理像素，或在实现前显式修改规格（当前 ruling 选择实现真实工作区）。
+- R-017：client 输出队列容量预检必须发生在 renderer 获取/清空窗口输入之前；只保护 `UiState` 内部瞬态不足以满足 R-008 的无损重放。
+- R-018：归档 delta 必须完整修改稳定视觉规格中所有精确数量/全序/尾序 requirement，不能让 19 场景与旧“恰好17/全部17”断言并存。
