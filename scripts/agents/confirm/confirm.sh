@@ -103,7 +103,7 @@ case "$CMD" in
       case "$1" in --id) ID="${2:-}"; shift 2 ;; --action) ACTION="${2:-}"; shift 2 ;; --text) TEXT="${2:-}"; shift 2 ;; *) echo "未知参数: $1" >&2; usage ;; esac
     done
     require_id "$ID"
-    case "$ACTION" in approve|edit|reject) ;; *) echo "--action 必须为 approve|edit|reject" >&2; usage ;; esac
+    case "$ACTION" in approve|edit|reject|answer) ;; *) echo "--action 必须为 approve|edit|reject|answer" >&2; usage ;; esac
     [ -f "$DIR/$ID.json" ] || { echo "请求不存在: $DIR/$ID.json" >&2; exit 4; }
     NOW="$(now_iso)"
     jq -nc --arg id "$ID" --arg a "$ACTION" --arg t "$TEXT" --arg n "$NOW"       '{id:$id, action:$a, text:$t, repliedAt:$n, source:"cli"}' > "$DIR/$ID.reply.json"
