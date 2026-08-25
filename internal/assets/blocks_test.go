@@ -477,6 +477,14 @@ func TestWorkbenchUsesDedicatedWoodenLayers(t *testing.T) {
 	side := registry.LayerRGBA(int(assets.LayerWorkbenchSide))
 	bottom := registry.LayerRGBA(int(assets.LayerWorkbenchBottom))
 	planks := registry.LayerRGBA(int(assets.LayerOakPlanks))
+	// 三层都不得落进植物 material 区间：Rust mesher 靠「material 在
+	// [PlantMaterialFirst, PlantMaterialLast] 内」决定出交叉斜面而非轴向面，
+	// 工作台是普通立方体，进区间就会被画成两片麦秆。
+	for _, layer := range []uint16{assets.LayerWorkbenchTop, assets.LayerWorkbenchSide, assets.LayerWorkbenchBottom} {
+		if mesh.PlantMaterial(layer) {
+			t.Fatalf("工作台材质层 %d 落进了植物区间：会被渲染成交叉斜面", layer)
+		}
+	}
 	for _, layer := range []struct {
 		name   string
 		pixels []byte

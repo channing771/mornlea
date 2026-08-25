@@ -65,6 +65,9 @@ func TestLocalAudioUIClicksOnlyForEffectiveActions(t *testing.T) {
 	if err := app.inventory.Apply(network.InventoryState{Inventory: core.Inventory{}}); err != nil {
 		t.Fatal(err)
 	}
+	// 过渡期（任务组 4.2 正式删除发送路径）：本地可合成性预检已删除，空背包
+	// 点击配方按钮也是一次有效发送（有确认镜像 + 发出请求），照常播点击 cue；
+	// 「不可合成」的拒绝权威在服务端，本地不从拒绝路径发声的纪律不变。
 	app.clickInventorySlot(recipeX, recipeY, width, height)
 	app.inventorySource = core.FurnaceInputSlot
 	if err := app.furnace.Apply(network.FurnaceState{
@@ -78,7 +81,8 @@ func TestLocalAudioUIClicksOnlyForEffectiveActions(t *testing.T) {
 	app.furnace.Reset()
 	app.inventorySource = 1
 	app.clickInventorySlot(targetX, targetY, width, height)
-	recorder.want(t, audio.CueUIClick, audio.CueUIClick, audio.CueUIClick, audio.CueUIClick, audio.CueUIClick)
+	recorder.want(t, audio.CueUIClick, audio.CueUIClick, audio.CueUIClick,
+		audio.CueUIClick, audio.CueUIClick, audio.CueUIClick)
 
 	silentApp, _ := newInteractiveTestApplication(t)
 	var silent audioCueRecorder

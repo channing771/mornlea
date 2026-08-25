@@ -135,70 +135,28 @@ func craftCommand(session sim.SessionID, sequence uint64, recipe core.RecipeID) 
 	}
 }
 
-func TestCraftPublishesOnceAndConsumesInputs(t *testing.T) {
-	var stocked core.Inventory
-	stocked.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 5}
-	engine, session := readyFlatPlayerWithInventory(t, stocked)
-	engine.Enqueue(craftCommand(session, 2, core.RecipeStoneBricks))
-
-	result := engine.Step()
-	if len(result.Rejected) != 0 || len(result.Inventories) != 1 {
-		t.Fatalf("合成 result=%+v", result)
-	}
-	got := result.Inventories[0].Inventory
-	if got.Hotbar.Slots[0] != (core.ItemStack{Item: core.ItemStone, Count: 1}) {
-		t.Fatalf("原料格 = %+v，想要剩余 1 个石头", got.Hotbar.Slots[0])
-	}
-	if got.Hotbar.Slots[1] != (core.ItemStack{Item: core.ItemStoneBrick, Count: 4}) {
-		t.Fatalf("产物格 = %+v，想要 4 个石砖", got.Hotbar.Slots[1])
-	}
-}
-
-func TestCraftRejectsWithoutChangingInventory(t *testing.T) {
-	var stocked core.Inventory
-	stocked.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 3}
-	cases := []struct {
-		name   string
-		recipe core.RecipeID
-	}{
-		{"原料不足", core.RecipeStoneBricks},
-		{"未知配方", core.RecipeID(200)},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			engine, session := readyFlatPlayerWithInventory(t, stocked)
-			engine.Enqueue(craftCommand(session, 2, tc.recipe))
-
-			result := engine.Step()
-			if len(result.Rejected) != 1 ||
-				result.Rejected[0].Reason != sim.RejectInvalidInput {
-				t.Fatalf("result=%+v，想要 invalid_input", result)
-			}
-			if len(result.Inventories) != 0 {
-				t.Fatalf("失败的合成仍发布状态: %+v", result.Inventories)
-			}
-			if got := currentInventory(t, engine, session); got != stocked {
-				t.Fatalf("失败的合成修改了物品状态: %+v", got)
-			}
-		})
-	}
-}
-
+// TestCraftIgnoresStaleSequence 锁定序列去重对被拒绝的合成命令同样生效：
+// recipe-click 按过渡语义稳定拒绝（design.md D6，见 crafting_test.go），
+// 但 sequence 照常在命令分发前推进——同一 sequence 的重复提交不得再次拒绝。
 func TestCraftIgnoresStaleSequence(t *testing.T) {
 	var stocked core.Inventory
 	stocked.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 8}
 	engine, session := readyFlatPlayerWithInventory(t, stocked)
 	engine.Enqueue(craftCommand(session, 2, core.RecipeStoneBricks))
-	engine.Step()
+	first := engine.Step()
+	if len(first.Rejected) != 1 || first.Rejected[0].Reason != sim.RejectInvalidInput {
+		t.Fatalf("首次提交 result=%+v，想要恰一条 invalid_input 拒绝", first)
+	}
 
-	// 重复使用同一 sequence，必须被既有去重规则丢弃。
+	// 重复使用同一 sequence，必须被既有去重规则丢弃（序列在命令分发前推进，
+	// 与命令被拒绝还是执行无关），而不是再次拒绝或再次发布。
 	engine.Enqueue(craftCommand(session, 2, core.RecipeStoneBricks))
 	result := engine.Step()
 	if len(result.Inventories) != 0 || len(result.Rejected) != 0 {
-		t.Fatalf("过期 sequence 被再次执行: %+v", result)
+		t.Fatalf("过期 sequence 被再次处理: %+v", result)
 	}
-	if got := currentInventory(t, engine, session).Hotbar.Slots[0].Count; got != 4 {
-		t.Fatalf("原料被扣除两次: 剩余 %d，想要 4", got)
+	if got := currentInventory(t, engine, session); got != stocked {
+		t.Fatalf("合成命令修改了物品状态: %+v", got)
 	}
 }
 

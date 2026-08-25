@@ -265,10 +265,14 @@ func ChestSlotAt(cursorX, cursorY float64, width, height uint32) (uint8, bool) {
 }
 
 // appendRecipeRows 绘制全部固定配方及各自的一次合成按钮。
+//
+// 过渡期实现（格子工作台变更，任务组 4 将以 2×2/3×3 格子与产物格正式替换
+// 本区）：聚合单输入与本地可合成性咨询已随聚合合成路径一并删除，输入图标
+// 改用形状的第一个非空材料与其出现次数作代表，按钮不再按可合成性变色（恒
+// 为中性色）——服务端对 recipe-click 的稳定拒绝是唯一的权威判定。
 func appendRecipeRows(
 	dst *hotbarLayout,
 	atlas render.GlyphSource,
-	inventory core.Inventory,
 	width, height float32,
 ) {
 	scale := hudScale(true, width, height)
@@ -288,14 +292,30 @@ func appendRecipeRows(
 		if !ok {
 			continue
 		}
+		// 代表材料 = 形状中行主序第一个非空格的物品；出现次数 = 该物品在
+		// 形状里的格数。多数配方（圆环、2×2、单格）的代表材料就是全部材料，
+		// 镐/锄的木棍省略——这是过渡展示，不是新的合成语义。
+		material := core.ItemNone
+		materialCount := uint8(0)
+		for _, cell := range recipe.Cells {
+			if cell == core.ItemNone {
+				continue
+			}
+			if material == core.ItemNone {
+				material = cell
+			}
+			if cell == material {
+				materialCount++
+			}
+		}
 		inputX, inputY := craftingRecipeSlotOrigin(row, 0, width, height)
 		outputX, outputY := craftingRecipeSlotOrigin(row, 1, width, height)
 		for _, entry := range [2]struct {
 			stack core.ItemStack
 			x, y  float32
 		}{
-			{recipe.Input, inputX, inputY},
-			{recipe.Output, outputX, outputY},
+			{stack: core.ItemStack{Item: material, Count: materialCount}, x: inputX, y: inputY},
+			{stack: recipe.Output, x: outputX, y: outputY},
 		} {
 			dst.quads = append(dst.quads, hotbarInstance{
 				X: entry.x, Y: entry.y,
@@ -307,13 +327,10 @@ func appendRecipeRows(
 			appendHotbarCountScaled(dst, atlas, entry.stack.Count, entry.x, entry.y, scale)
 		}
 
-		// 按钮颜色只表示是否可合成；服务端每次仍重新验证。
+		// 过渡期按钮恒为中性色：可合成性判定已归服务端（稳定拒绝），客户端
+		// 不再本地预测。
 		color := [4]float32{0.18, 0.19, 0.20, 0.94}
 		markColor := [4]float32{0.55, 0.57, 0.60, 0.96}
-		if _, craftable := inventory.Craft(recipeID); craftable {
-			color = [4]float32{0.22, 0.64, 0.32, 0.98}
-			markColor = [4]float32{0.90, 1, 0.90, 1}
-		}
 		buttonX, buttonY := craftingRecipeButtonOrigin(row, width, height)
 		dst.quads = append(dst.quads, hotbarInstance{
 			X: buttonX, Y: buttonY,

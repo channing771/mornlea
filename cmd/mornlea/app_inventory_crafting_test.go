@@ -5,7 +5,6 @@ package main
 // app_inventory_crafting_test.go：背包点击移动与合成请求——只读已确认背包、界面关闭与会话清理。
 
 import (
-	"fmt"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/render/hud"
@@ -95,49 +94,47 @@ func TestCraftRecipeClickUsesConfirmedInventory(t *testing.T) {
 	}
 }
 
-func TestUnavailableCraftRecipeClickDoesNothing(t *testing.T) {
-	for _, recipe := range []core.RecipeID{
-		core.RecipeStoneBricks, core.RecipeFurnace, core.RecipeIronBlock,
-	} {
-		t.Run(fmt.Sprintf("recipe_%d", recipe), func(t *testing.T) {
-			app, serverEndpoint := newInteractiveTestApplication(t)
+// TestCraftRecipeClickSendsWithoutLocalPredict 锁定过渡期语义：本地可合成性
+// 预检已随聚合合成路径删除（客户端不预测），确认镜像存在时点击一律发送
+// recipe-click 请求、镜像保持只读——空背包与满背包同样发送，权威判定
+// （当前为服务端的稳定拒绝）由对端给出。发送路径的正式删除归任务组 4.2。
+func TestCraftRecipeClickSendsWithoutLocalPredict(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		recipe    core.RecipeID
+		inventory core.Inventory
+	}{
+		{"空背包", core.RecipeStoneBricks, core.Inventory{}},
+		{"满背包", core.RecipeIronBlock, func() core.Inventory {
 			inventory := core.Inventory{}
-			if err := app.inventory.Apply(network.InventoryState{Inventory: inventory}); err != nil {
+			for slot := range inventory.Hotbar.Slots {
+				inventory.Hotbar.Slots[slot] = core.ItemStack{Item: core.ItemDirt, Count: core.MaxStackCount}
+			}
+			for slot := range inventory.Backpack {
+				inventory.Backpack[slot] = core.ItemStack{Item: core.ItemDirt, Count: core.MaxStackCount}
+			}
+			return inventory
+		}()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			app, serverEndpoint := newInteractiveTestApplication(t)
+			if err := app.inventory.Apply(network.InventoryState{Inventory: tc.inventory}); err != nil {
 				t.Fatal(err)
 			}
-			x, y := recipeButtonCenter(t, recipe, 1280, 720)
+			x, y := recipeButtonCenter(t, tc.recipe, 1280, 720)
 
 			app.clickInventorySlot(x, y, 1280, 720)
-			assertNoInteractiveClientMessage(t, serverEndpoint)
+			message := receiveInteractiveClientMessage(t, serverEndpoint)
+			craft, ok := message.(network.CraftRecipe)
+			if !ok || craft.Recipe != tc.recipe {
+				t.Fatalf("合成请求 = %#v，想要 recipe %d", message, tc.recipe)
+			}
 			got, confirmed := app.inventory.State()
-			if !confirmed || got != inventory {
-				t.Fatalf("不可用配方改写镜像: %+v, %v", got, confirmed)
+			if !confirmed || got != tc.inventory {
+				t.Fatalf("发送后本地改写镜像: %+v, %v", got, confirmed)
 			}
 		})
 	}
-
-	t.Run("产物无容量", func(t *testing.T) {
-		app, serverEndpoint := newInteractiveTestApplication(t)
-		inventory := core.Inventory{}
-		for slot := range inventory.Hotbar.Slots {
-			inventory.Hotbar.Slots[slot] = core.ItemStack{Item: core.ItemDirt, Count: core.MaxStackCount}
-		}
-		for slot := range inventory.Backpack {
-			inventory.Backpack[slot] = core.ItemStack{Item: core.ItemDirt, Count: core.MaxStackCount}
-		}
-		inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 5}
-		if err := app.inventory.Apply(network.InventoryState{Inventory: inventory}); err != nil {
-			t.Fatal(err)
-		}
-		x, y := recipeButtonCenter(t, core.RecipeStoneBricks, 1280, 720)
-
-		app.clickInventorySlot(x, y, 1280, 720)
-		assertNoInteractiveClientMessage(t, serverEndpoint)
-		got, confirmed := app.inventory.State()
-		if !confirmed || got != inventory {
-			t.Fatalf("产物无容量时改写镜像: %+v, %v", got, confirmed)
-		}
-	})
 }
 
 func TestCraftRecipeClickWaitsForConfirmedInventory(t *testing.T) {

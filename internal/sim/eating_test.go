@@ -427,35 +427,17 @@ func TestDeathClearsEatingProgressAndResetsHunger(t *testing.T) {
 	}
 }
 
-// TestCraftBreadFromWheatViaCommand 覆盖 Scenario「小麦合成面包」的 sim 层：
-// 3 个小麦经既有 `CommandCraftRecipe` 原子换成 1 个面包。
-//
-// core 层的配方表由 internal/core 的用例覆盖；这里守的是"进食的食物真的能从
-// 农业闭环的产物做出来"，也就是命令路径确实接了 `core.RecipeBread`。
-func TestCraftBreadFromWheatViaCommand(t *testing.T) {
-	engine, player := readyEatingPlayer(t, 12, 0)
-	setEatingSlot(player, 0, core.ItemStack{Item: core.ItemWheat, Count: 3})
-
-	engine.Enqueue(Command{
-		Session: eatingTestSession, Sequence: 2,
-		Kind: CommandCraftRecipe, Recipe: core.RecipeBread,
-	})
-	result := engine.Step()
-	if len(result.Rejected) != 0 {
-		t.Fatalf("合成面包被拒绝: %+v", result.Rejected)
-	}
-	want := core.ItemStack{Item: core.ItemBread, Count: 1}
-	if got := player.inventory.Hotbar.Slots[0]; got != want {
-		t.Fatalf("合成后 0 号格=%+v，想要 %+v（3 小麦原子换 1 面包）", got, want)
-	}
-}
-
 // TestEatingTicksComesFromTunableSnapshot 钉住「所需 tick 数来自本 tick 的
 // tunable 快照，不是写死的编译期常量」：同一份夹具在两个不同的 `EatingTicks`
 // 下必须在**各自**的那一 tick 结算。
 //
 // 这条直接调用 `advanceEating`（不经引擎）：引擎级用例只跑得到默认值 32，
 // 把 32 写死的实现在那里全绿。形状照 `TestApplyExhaustionReadsThresholdFromParameter`。
+//
+// 「小麦合成面包」的命令级用例（TestCraftBreadFromWheatViaCommand）已随
+// recipe-click 的过渡拒绝（design.md D6）移除：命令路径不再产出面包，「种地
+// → 合成 → 吃饭」的出口改由格子工作台路径承担（见 crafting_test.go 的过渡
+// 拒绝用例与任务组 2 的网格取出用例）。
 func TestEatingTicksComesFromTunableSnapshot(t *testing.T) {
 	for _, ticks := range []uint16{8, defaultEatingTicks} {
 		player := &playerState{hunger: 12, eatingHeld: true}

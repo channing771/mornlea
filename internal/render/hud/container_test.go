@@ -142,13 +142,15 @@ func TestInventoryLayoutDrawsAllFixedRecipeRows(t *testing.T) {
 		t.Fatalf("十条配方数字=%d，想要隐藏数量 1 并为其余数字绘制阴影共 24", len(open.glyphs))
 	}
 	overlay := open.quads[len(open.quads)-recipeQuads:]
+	// 输入列是过渡期「代表材料」（形状第一个非空材料）：熔炉改吃圆石圆环、
+	// 箱子改吃木板圆环后，代表材料随之变化；聚合输入已删除。
 	wantItems := [][2]core.ItemID{
 		{core.ItemStone, core.ItemStoneBrick},
-		{core.ItemStone, core.ItemFurnace},
+		{core.ItemCobblestone, core.ItemFurnace},
 		{core.ItemIronIngot, core.ItemIronBlock},
 		{core.ItemStone, core.ItemStonePickaxe},
 		{core.ItemIronIngot, core.ItemIronPickaxe},
-		{core.ItemStone, core.ItemChest},
+		{core.ItemOakPlanks, core.ItemChest},
 		{core.ItemOakLog, core.ItemOakPlanks},
 		{core.ItemGlass, core.ItemLightBlock},
 		{core.ItemStone, core.ItemStoneHoe},
@@ -172,63 +174,17 @@ func TestInventoryLayoutDrawsAllFixedRecipeRows(t *testing.T) {
 		t.Fatalf("配方按钮=%d，想要 %d", len(disabled), len(inventoryRecipeIDs))
 	}
 
-	var stone core.Inventory
-	stone.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 4}
-	stoneButtons := hotbarRecipeButtonQuads(layoutInventory(&layout, atlas, stone, true, -1, nil, nil, MiningOverlay{}, 1280, 800))
-	if disabled[0].Color == stoneButtons[0].Color {
-		t.Fatal("石砖可合成时按钮颜色未改变")
-	}
-	if disabled[1].Color != stoneButtons[1].Color || disabled[2].Color != stoneButtons[2].Color {
-		t.Fatal("石砖原料错误启用了其他配方")
-	}
-
-	stone.Hotbar.Slots[0].Count = 8
-	furnaceButtons := hotbarRecipeButtonQuads(layoutInventory(&layout, atlas, stone, true, -1, nil, nil, MiningOverlay{}, 1280, 800))
-	if disabled[1].Color == furnaceButtons[1].Color || disabled[2].Color != furnaceButtons[2].Color {
-		t.Fatal("熔炉配方可用颜色不独立")
-	}
-	stone.Hotbar.Slots[0].Count = 3
-	stonePickaxeButtons := hotbarRecipeButtonQuads(layoutInventory(&layout, atlas, stone, true, -1, nil, nil, MiningOverlay{}, 1280, 800))
-	if disabled[3].Color == stonePickaxeButtons[3].Color || disabled[4].Color != stonePickaxeButtons[4].Color {
-		t.Fatal("石镐配方可用颜色不独立")
-	}
-
-	var iron core.Inventory
-	iron.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemIronIngot, Count: 9}
-	ironButtons := hotbarRecipeButtonQuads(layoutInventory(&layout, atlas, iron, true, -1, nil, nil, MiningOverlay{}, 1280, 800))
-	if disabled[2].Color == ironButtons[2].Color || disabled[0].Color != ironButtons[0].Color ||
-		disabled[1].Color != ironButtons[1].Color {
-		t.Fatal("铁块配方可用颜色不独立")
-	}
-	iron.Hotbar.Slots[0].Count = 3
-	ironPickaxeButtons := hotbarRecipeButtonQuads(layoutInventory(&layout, atlas, iron, true, -1, nil, nil, MiningOverlay{}, 1280, 800))
-	if disabled[4].Color == ironPickaxeButtons[4].Color || disabled[3].Color != ironPickaxeButtons[3].Color {
-		t.Fatal("铁镐配方可用颜色不独立")
-	}
-
-	var glass core.Inventory
-	glass.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemGlass, Count: 4}
-	glassButtons := hotbarRecipeButtonQuads(layoutInventory(&layout, atlas, glass, true, -1, nil, nil, MiningOverlay{}, 1280, 800))
-	// 发光方块不再是末行（后面还有两条锄头），因此按 ID 查它所在的行，
-	// 不再用 len-1 顶替：否则追加配方会把断言悄悄挪到别的行上。
-	lightRow := -1
-	for index, recipeID := range inventoryRecipeIDs {
-		if recipeID == core.RecipeLightBlock {
-			lightRow = index
-		}
-	}
-	if lightRow < 0 {
-		t.Fatal("固定配方表缺少发光方块")
-	}
-	for index := range glassButtons {
-		if index == lightRow {
-			if disabled[index].Color == glassButtons[index].Color {
-				t.Fatal("四个玻璃未启用发光方块配方")
-			}
-			continue
-		}
-		if disabled[index].Color != glassButtons[index].Color {
-			t.Fatalf("四个玻璃错误启用了配方 %d", inventoryRecipeIDs[index])
+	// 过渡期（格子工作台变更）：本地可合成性咨询已删除，按钮不再随背包
+	// 内容变色——无论塞进什么原料都保持中性色；真正的判定只在服务端。
+	var stocked core.Inventory
+	stocked.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: core.MaxStackCount}
+	stocked.Hotbar.Slots[1] = core.ItemStack{Item: core.ItemIronIngot, Count: core.MaxStackCount}
+	stocked.Hotbar.Slots[2] = core.ItemStack{Item: core.ItemGlass, Count: core.MaxStackCount}
+	stockedButtons := hotbarRecipeButtonQuads(
+		layoutInventory(&layout, atlas, stocked, true, -1, nil, nil, MiningOverlay{}, 1280, 800))
+	for index := range stockedButtons {
+		if stockedButtons[index].Color != disabled[index].Color {
+			t.Fatalf("过渡期按钮 %d 随背包变色: %+v ≠ %+v", index, stockedButtons[index], disabled[index])
 		}
 	}
 }

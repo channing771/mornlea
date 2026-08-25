@@ -471,6 +471,7 @@ func TestConsumeRecipeRejectsDurablesAsMaterial(t *testing.T) {
 // 绝不留下部分扣减。
 func TestConsumeRecipeFailureReturnsOriginalGrid(t *testing.T) {
 	sticks, _ := core.Recipe(core.RecipeStick)
+	furnace, _ := core.Recipe(core.RecipeFurnace)
 	// 左右不对称且关闭镜像位的合成形状（注册表 1..13 没有这种组合——
 	// 不对称的工具配方全部关镜像、开镜像的形状全部对称，见 design.md D3），
 	// 专门证明消费层与匹配层共用同一条「镜像位即重试开关」纪律。
@@ -509,6 +510,15 @@ func TestConsumeRecipeFailureReturnsOriginalGrid(t *testing.T) {
 			craftingCell{0, core.ItemGlass, 2}, craftingCell{1, core.ItemStone, 2},
 			craftingCell{4, core.ItemDirt, 2},
 		), strictAsymmetric},
+		// 形状空洞被占：熔炉圆环的中格放着泥土（哪怕只占形状的空格、不撑大
+		// 包围盒），消费层也必须拒绝——空格上只允许零值空栈。
+		{"形状空洞被占", 3, buildConsumableGrid(
+			craftingCell{0, core.ItemCobblestone, 2}, craftingCell{1, core.ItemCobblestone, 2},
+			craftingCell{2, core.ItemCobblestone, 2}, craftingCell{3, core.ItemCobblestone, 2},
+			craftingCell{4, core.ItemDirt, 1},
+			craftingCell{5, core.ItemCobblestone, 2}, craftingCell{6, core.ItemCobblestone, 2},
+			craftingCell{7, core.ItemCobblestone, 2}, craftingCell{8, core.ItemCobblestone, 2},
+		), furnace},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

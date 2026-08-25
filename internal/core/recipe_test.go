@@ -201,6 +201,46 @@ func TestMatchCraftingGridEmptyGridHasNoMatch(t *testing.T) {
 	}
 }
 
+// TestMatchCraftingGridRejectsInvalidSize 锁定防御分支一：size 只允许 2 或 3。
+// 正常权威路径不会构造别的尺寸，但匹配器是纯函数，任何越界输入都必须无匹配
+// 而不是按错误的 stride 解读格布局（尺寸 4 会把格 9 读出数组界外，尺寸 0/1
+// 会把 2×2 形状错解）。对照组：同一网格在有效尺寸下匹配石砖配方。
+func TestMatchCraftingGridRejectsInvalidSize(t *testing.T) {
+	grid := buildCraftingGrid(
+		gridCell{0, core.ItemStone}, gridCell{1, core.ItemStone},
+		gridCell{2, core.ItemStone}, gridCell{3, core.ItemStone},
+	)
+	if id, _, ok := core.MatchCraftingGrid(2, grid); !ok || id != core.RecipeStoneBricks {
+		t.Fatalf("尺寸 2 的 2×2 石头匹配 = (%d, %v)，想要石砖配方（对照组）", id, ok)
+	}
+	for _, size := range []uint8{0, 1, 4, 255} {
+		if id, output, ok := core.MatchCraftingGrid(size, grid); ok || id != 0 || output != (core.ItemStack{}) {
+			t.Fatalf("非法尺寸 %d 产生了匹配: (%d, %+v, %v)", size, id, output, ok)
+		}
+	}
+}
+
+// TestMatchCraftingGridRejectsResidueBeyondEffectiveSize 锁定防御分支二：
+// 个人网格（尺寸 2）的格 4..8 残留任何物品时一律无匹配。权威移动路径保证
+// 缩容前先回收扩展格，这里是防御层——若残留未被回收（例如未来的生命周期
+// 缺口），旧内容绝不允许靠 3×3 布局继续匹配。
+func TestMatchCraftingGridRejectsResidueBeyondEffectiveSize(t *testing.T) {
+	personal := buildCraftingGrid(
+		gridCell{0, core.ItemStone}, gridCell{1, core.ItemStone},
+		gridCell{2, core.ItemStone}, gridCell{3, core.ItemStone},
+	)
+	if _, _, ok := core.MatchCraftingGrid(2, personal); !ok {
+		t.Fatal("对照组失败：干净的 2×2 石头必须匹配石砖配方")
+	}
+	for _, slot := range []uint8{4, 5, 6, 7, 8} {
+		withResidue := personal
+		withResidue[slot] = core.ItemStack{Item: core.ItemStone, Count: 1}
+		if _, _, ok := core.MatchCraftingGrid(2, withResidue); ok {
+			t.Fatalf("个人网格格 %d 残留物品仍产生匹配：扩展格内容必须被无视匹配拒绝", slot)
+		}
+	}
+}
+
 // TestMatchCraftingGridPersonalGridCannotMatchFullSizeRecipes 锁定 spec
 // Scenario「2×2 网格不能匹配 3×3 配方」：个人网格的四个合法格按 2×2 行主序
 // 解释，摆不下任何宽或高为 3 的形状——同样的三个格（0,1,2）在 3×3 下是横排
@@ -418,6 +458,50 @@ func TestRecipeRejectsUnknownIDs(t *testing.T) {
 		if _, ok := core.Recipe(id); ok {
 			t.Fatalf("规划中的 recipe %d 在合流前被注册", id)
 		}
+	}
+}
+
+// TestRegisteredRecipeCellsStayInsideShapeBounds 是通用注册表不变量：对全部
+// 已注册配方穷举断言——宽高落在 1..3、形状子矩形内至少有一个非空格、
+// Width×Height 子矩形之外的格恒为 `ItemNone`。第三条是匹配器的隐含前提：
+// `matchesPattern` 只比较子矩形内的格，若形状把材料写到子矩形外，那格会被
+// 静默忽略、配方从此少一份原料也照常匹配。本用例不冻结具体形状（那是
+// `TestRecipeShapeTableOneToThirteenIsFrozen` 的职责），只守结构不变量，
+// 未来追加 recipe 14..18 时自动生效；编号连续性断言同时钉住「注册表无空洞」。
+func TestRegisteredRecipeCellsStayInsideShapeBounds(t *testing.T) {
+	checked := 0
+	for id := core.RecipeID(1); ; id++ {
+		pattern, ok := core.Recipe(id)
+		if !ok {
+			break
+		}
+		if pattern.Width < 1 || pattern.Width > 3 || pattern.Height < 1 || pattern.Height > 3 {
+			t.Fatalf("recipe %d 宽高 = %d×%d，必须落在 1..3", id, pattern.Width, pattern.Height)
+		}
+		materials := 0
+		for y := uint8(0); y < 3; y++ {
+			for x := uint8(0); x < 3; x++ {
+				inside := x < pattern.Width && y < pattern.Height
+				cell := pattern.Cells[y*3+x]
+				if !inside && cell != core.ItemNone {
+					t.Fatalf("recipe %d 的格 (%d,%d)=%d 越出 %d×%d 子矩形：匹配器会静默忽略它",
+						id, x, y, cell, pattern.Width, pattern.Height)
+				}
+				if inside && cell != core.ItemNone {
+					materials++
+				}
+			}
+		}
+		if materials == 0 {
+			t.Fatalf("recipe %d 的形状没有任何材料格", id)
+		}
+		checked++
+	}
+	// 注册表从 1 起无空洞连续注册到末项常量：循环按「首个未注册即停」推进，
+	// 中间留洞会让后面的配方全部漏检，这里用计数把洞钉出来。
+	if checked != int(core.RecipeWorkbench) {
+		t.Fatalf("注册表枚举到 %d 条，想要与末项常量一致的 %d 条（注册表出现空洞？）",
+			checked, core.RecipeWorkbench)
 	}
 }
 

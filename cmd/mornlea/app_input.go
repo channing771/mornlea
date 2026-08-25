@@ -154,11 +154,10 @@ func (a *application) clickInventorySlot(cursorX, cursorY float64, width, height
 	chest, chestOpen := a.chest.State()
 	if !furnaceOpen && !chestOpen {
 		if recipe, ok := hud.RecipeButtonAt(cursorX, cursorY, width, height); ok {
-			inventory, confirmed := a.inventory.State()
-			if !confirmed {
-				return
-			}
-			if _, craftable := inventory.Craft(recipe); !craftable {
+			// 过渡期（任务组 4.2 正式删除发送路径）：本地可合成性预检已随
+			// 聚合合成路径删除——客户端不再预测可合成性，只保留「已有确认
+			// 镜像」这道门，权威判定由服务端给出（当前为稳定拒绝）。
+			if _, confirmed := a.inventory.State(); !confirmed {
 				return
 			}
 			a.inventorySource = -1

@@ -248,18 +248,16 @@ func (engine *Engine) Step() TickResult {
 				})
 				continue
 			}
-			player := session.player
-			next, ok := player.inventory.Craft(command.Recipe)
-			if !ok {
-				result.Rejected = append(result.Rejected, Rejection{
-					Session:  command.Session,
-					Sequence: command.Sequence,
-					Reason:   RejectInvalidInput,
-				})
-				continue
-			}
-			player.inventory = next
-			player.inventoryDirty = true
+			// recipe-click 的过渡语义（design.md D6）：格子工作台交付后本命令
+			// 不再有任何执行语义——按既有命令拒绝路径稳定回拒，玩家物品状态
+			// 与网格一字不变。命令类型、ingress 映射与客户端发送路径的删除
+			// 分别归任务组 3 与 4；在那之前必须「稳定拒绝」而非静默无响应。
+			// 不回加任何本地合成执行路径。
+			result.Rejected = append(result.Rejected, Rejection{
+				Session:  command.Session,
+				Sequence: command.Sequence,
+				Reason:   RejectInvalidInput,
+			})
 		case CommandDropSelectedItem:
 			if session.player == nil || session.player.lifecycle != PlayerActive {
 				result.Rejected = append(result.Rejected, Rejection{

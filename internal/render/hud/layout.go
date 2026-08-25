@@ -200,7 +200,7 @@ func layoutInventory(
 		case overlay != nil:
 			appendFurnaceRow(dst, atlas, *overlay, width, height)
 		default:
-			appendRecipeRows(dst, atlas, inventory, width, height)
+			appendRecipeRows(dst, atlas, width, height)
 		}
 	} else {
 		appendMiningBar(dst, mining, width, height)
