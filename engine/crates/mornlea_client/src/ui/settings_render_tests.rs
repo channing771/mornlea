@@ -242,6 +242,92 @@ fn settings_small_layout_is_bounded_non_overlapping_and_scroll_accessible() {
 }
 
 #[test]
+fn settings_small_default_frame_shows_actions_without_clipping() {
+    let mut state = UiState::new();
+    state.install_font(text_edit_font());
+    let frame = settings_frame(
+        0.25,
+        UiSettingsWindow::Size960x540,
+        "packs/local",
+        false,
+        "",
+        "",
+    );
+    let output = state
+        .run_frame(raw_input(&[], small_screen_rect(), 1.0, None), &frame, 1.0)
+        .unwrap()
+        .unwrap();
+    let panel = rect(&state, SettingsElement::Panel);
+    let viewport = rect(&state, SettingsElement::ScrollViewport);
+
+    let required = [
+        SettingsElement::Title,
+        SettingsElement::Audio,
+        SettingsElement::TexturePathLabel,
+        SettingsElement::TexturePath,
+        SettingsElement::MaterialHint,
+        SettingsElement::WindowSizeLabel,
+        SettingsElement::Window640x360,
+        SettingsElement::Window960x540,
+        SettingsElement::Window1280x720,
+        SettingsElement::Separator,
+        SettingsElement::Save,
+        SettingsElement::Cancel,
+        SettingsElement::Back,
+    ];
+    for element in required {
+        let response = rect(&state, element);
+        assert!(
+            panel.expand(0.01).contains_rect(response),
+            "首屏元素 {element:?} 越出面板：{response:?}"
+        );
+        assert!(
+            viewport.expand(0.01).contains_rect(response),
+            "首屏元素 {element:?} 被初始滚动裁剪：{response:?} / {viewport:?}"
+        );
+    }
+
+    let style = state.ctx.style_of(state.ctx.theme());
+    let button_font = egui::TextStyle::Button.resolve(&style);
+    let button_text_height = state.ctx.fonts_mut(|fonts| fonts.row_height(&button_font));
+    let required_button_height = button_text_height + style.spacing.button_padding.y * 2.0;
+    let actions = [
+        rect(&state, SettingsElement::Save),
+        rect(&state, SettingsElement::Cancel),
+        rect(&state, SettingsElement::Back),
+    ];
+    for (index, action) in actions.iter().enumerate() {
+        assert!(
+            action.height() >= required_button_height,
+            "动作按钮高度不足以容纳生产字体与 padding：{action:?} < {required_button_height}"
+        );
+        for other in actions.iter().skip(index + 1) {
+            assert!(!action.intersects(*other), "动作按钮互相重叠");
+        }
+    }
+    for label in ["保存", "取消更改", "返回"] {
+        let matches = output
+            .shapes
+            .iter()
+            .filter(|clipped| {
+                matches!(
+                    &clipped.shape,
+                    egui::Shape::Text(text) if text.galley.job.text == label
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(matches.len(), 1, "动作文字 {label:?} 应恰好绘制一次");
+        let clipped = matches[0];
+        assert!(
+            clipped
+                .clip_rect
+                .contains_rect(clipped.shape.visual_bounding_rect()),
+            "动作文字 {label:?} 被 clip rect 裁剪"
+        );
+    }
+}
+
+#[test]
 fn settings_audio_and_window_emit_complete_snapshots() {
     let mut audio_state = UiState::new();
     audio_state.install_font(test_font());

@@ -102,7 +102,10 @@ const SETTINGS_PANEL_MAX_HEIGHT: f32 = 620.0;
 /// 设置页面板与屏幕边缘的最小总留白。
 const SETTINGS_PANEL_SCREEN_GAP: f32 = 32.0;
 /// 设置页面板内边距。
-const SETTINGS_PANEL_PADDING: f32 = 20.0;
+///
+/// 12 点仍越过 8 点圆角的内切边界，并让标准 640×360 无反馈表单完整落入
+/// 首屏；额外状态、错误或更小可用高度继续由纵向滚动承载。
+const SETTINGS_PANEL_PADDING: f32 = 12.0;
 /// 设置页动作按钮高度。
 const SETTINGS_ACTION_HEIGHT: f32 = 36.0;
 /// 设置页深色面板背景。
@@ -170,11 +173,16 @@ enum SettingsElement {
     Panel,
     ScrollViewport,
     ScrollContent,
+    Title,
     Audio,
+    TexturePathLabel,
     TexturePath,
+    MaterialHint,
+    WindowSizeLabel,
     Window640x360,
     Window960x540,
     Window1280x720,
+    Separator,
     Save,
     Cancel,
     Back,
@@ -887,6 +895,15 @@ fn settings_window_button(
     response
 }
 
+fn settings_three_column_width(ui: &egui::Ui) -> f32 {
+    let spacing = ui.spacing().item_spacing.x;
+    // 向下取整吸收三列浮点除法的舍入误差，确保末列 response rect 不会
+    // 越过 ScrollArea clip 约 1/32 点；余下不足一点作为右侧安全余量。
+    ((ui.available_width() - spacing * 2.0) / 3.0)
+        .max(80.0)
+        .floor()
+}
+
 /// 绘制设置表单并把本帧控件的最终值写入 `draft`。
 ///
 /// `record` 只用于测试记录生产几何；生产传入空闭包。动作先汇总到
@@ -917,8 +934,11 @@ fn draw_settings(
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.heading(RichText::new("设置").size(28.0));
-                    ui.add_space(8.0);
+                    let title = ui.heading(RichText::new("设置").size(28.0));
+                    record(SettingsElement::Title, title.rect, Some(title.id));
+                    // 标题自身已有 egui item spacing，只补少量呼吸空间，避免
+                    // 在 640×360 首屏把动作行推入 clip 边界。
+                    ui.add_space(4.0);
 
                     let mut percent = draft.audio_volume * 100.0;
                     let audio = ui.add(
@@ -934,7 +954,12 @@ fn draw_settings(
                     record(SettingsElement::Audio, audio.rect, Some(audio.id));
                     ui.add_space(12.0);
 
-                    ui.label(RichText::new("材质包目录").strong());
+                    let path_label = ui.label(RichText::new("材质包目录").strong());
+                    record(
+                        SettingsElement::TexturePathLabel,
+                        path_label.rect,
+                        Some(path_label.id),
+                    );
                     let original_path = draft.texture_pack_path.clone();
                     let mut path = original_path.clone();
                     let path_response = ui.add_sized(
@@ -954,16 +979,21 @@ fn draw_settings(
                         path_response.rect,
                         Some(path_response.id),
                     );
-                    ui.label(
+                    let hint = ui.label(
                         RichText::new("材质包路径保存后将在下次启动生效")
                             .small()
                             .color(SETTINGS_MUTED_COLOR),
                     );
+                    record(SettingsElement::MaterialHint, hint.rect, Some(hint.id));
                     ui.add_space(12.0);
 
-                    ui.label(RichText::new("窗口大小").strong());
-                    let spacing = ui.spacing().item_spacing.x;
-                    let button_width = ((ui.available_width() - spacing * 2.0) / 3.0).max(80.0);
+                    let window_label = ui.label(RichText::new("窗口大小").strong());
+                    record(
+                        SettingsElement::WindowSizeLabel,
+                        window_label.rect,
+                        Some(window_label.id),
+                    );
+                    let button_width = settings_three_column_width(ui);
                     ui.horizontal(|ui| {
                         let response = settings_window_button(
                             ui,
@@ -1018,11 +1048,15 @@ fn draw_settings(
                         ui.label(RichText::new(&frame.error).strong().color(MENU_ERROR_COLOR));
                     }
                     ui.add_space(12.0);
-                    ui.separator();
+                    let separator = ui.separator();
+                    record(
+                        SettingsElement::Separator,
+                        separator.rect,
+                        Some(separator.id),
+                    );
                     ui.add_space(8.0);
 
-                    let spacing = ui.spacing().item_spacing.x;
-                    let button_width = ((ui.available_width() - spacing * 2.0) / 3.0).max(80.0);
+                    let button_width = settings_three_column_width(ui);
                     ui.horizontal(|ui| {
                         let save = ui.add_sized(
                             vec2(button_width, SETTINGS_ACTION_HEIGHT),
