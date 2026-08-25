@@ -37,6 +37,12 @@ func clientPacketID(state State, packet ClientPacket) (uint32, bool) {
 			return 12, true
 		case TillSoil:
 			return 13, true
+		// 格子工作台（authoritative-grid-crafting）的 in-branch 临时编号
+		//（design.md D1）：终值 7/14 由批次集成 A-06 锁定，本分支不重排。
+		case MoveCraftingStack:
+			return 14, true
+		case TakeCraftingOutput:
+			return 15, true
 		}
 	}
 	return 0, false
@@ -81,6 +87,10 @@ func clientPacketForID(state State, id uint32) (ClientPacket, bool) {
 			return ChatCommand{}, true
 		case 13:
 			return TillSoil{}, true
+		case 14:
+			return MoveCraftingStack{}, true
+		case 15:
+			return TakeCraftingOutput{}, true
 		}
 	}
 	return nil, false
@@ -147,6 +157,9 @@ func serverPacketID(state State, packet ServerPacket) (uint32, bool) {
 			return 19, true
 		case PlaceBlockSucceeded:
 			return 20, true
+		// 格子工作台的网格状态：始终完整 9 格 + 产物格，只发所属玩家。
+		case CraftingState:
+			return 21, true
 		}
 	}
 	return 0, false
@@ -213,6 +226,8 @@ func serverPacketForID(state State, id uint32) (ServerPacket, bool) {
 			return CompanionDespawn{}, true
 		case 20:
 			return PlaceBlockSucceeded{}, true
+		case 21:
+			return CraftingState{}, true
 		}
 	}
 	return nil, false

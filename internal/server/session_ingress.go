@@ -185,11 +185,30 @@ func translateClientMessage(
 			Kind:     sim.CommandDropSelectedItem,
 		}, true
 	case network.CraftRecipe:
+		// 过渡语义（design.md D6）：recipe-click 不再映射到任何执行路径——
+		// sim 对 `CommandCraftRecipe` 稳定拒绝且状态不变；类型与编号删除归 A-06。
 		return sim.Command{
 			Session:  id,
 			Sequence: message.Sequence,
 			Kind:     sim.CommandCraftRecipe,
 			Recipe:   message.Recipe,
+		}, true
+	case network.MoveCraftingStack:
+		// 网格移动的统一视图格直接搬运（网格 0..8、背包 9..44）；值域已在
+		// 网络层校验，尺寸相关拒绝（个人扩展格）与整堆语义由 sim 权威执行。
+		return sim.Command{
+			Session:  id,
+			Sequence: message.Sequence,
+			Kind:     sim.CommandMoveCraftingStack,
+			Slot:     message.From,
+			ToSlot:   message.To,
+		}, true
+	case network.TakeCraftingOutput:
+		// 只搬运序号：产物、扣料与容量全部由 sim 从权威网格派生。
+		return sim.Command{
+			Session:  id,
+			Sequence: message.Sequence,
+			Kind:     sim.CommandTakeCraftingOutput,
 		}, true
 	case network.MoveInventoryStack:
 		return sim.Command{

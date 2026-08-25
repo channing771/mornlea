@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -608,7 +609,7 @@ func parityReadinessTranscript(
 			lastState = message
 			hasState = true
 		case network.ChunkSnapshot, network.KeepAlive, network.InventoryState,
-			network.ItemDropUpserts, network.ItemDropRemoves:
+			network.ItemDropUpserts, network.ItemDropRemoves, network.CraftingState:
 		default:
 			t.Fatalf("unexpected parity readiness message %T", message)
 		}
@@ -760,10 +761,216 @@ func parityBusinessMessage(
 		return []string{fmt.Sprintf("PlaceBlockSucceeded:%+v", message)}
 	case network.InventoryState:
 		return []string{fmt.Sprintf("InventoryState:%+v", message.Inventory)}
+	case network.CraftingState:
+		return []string{fmt.Sprintf("CraftingState:%+v", message)}
 	case network.KeepAlive, network.Disconnect:
 		return nil
 	default:
 		t.Fatalf("unexpected parity business message %T", message)
 		return nil
 	}
+}
+
+// craftingGridParityResult 是网格命令脚本跑完后的可比结果：业务转写（含网格
+// 状态、物品状态与拒绝）、末态权威网格与服务端派生产物、末态权威背包。
+type craftingGridParityResult struct {
+	Transcript []string
+	FinalGrid  sim.CraftingGrid
+	FinalOuput core.ItemStack
+	Inventory  core.Inventory
+}
+
+// TestMemoryTCPCraftingGridConvergence 覆盖 spec「网格状态私有同步且有界」与
+// authoritative-crafting「合成遵循命令顺序并私有确认」的传输一致性要求：
+// 同一串「网格移动 → 值域内语义拒绝 → 过期序列重放 → 取出 → 空网格取出拒绝 →
+// 打开工作台 → 关闭工作台」命令在 Memory 与 TCP 两种传输下必须产生逐字段
+// 相同的转写与末态。脚本用石锄配方（2×2、关镜像位的工具形状）作驱动样本。
+func TestMemoryTCPCraftingGridConvergence(t *testing.T) {
+	memory := runCraftingGridParityScript(t, "memory")
+	tcp := runCraftingGridParityScript(t, "tcp")
+	if !reflect.DeepEqual(tcp, memory) {
+		t.Fatalf("网格 Memory/TCP 未收敛\nmemory=%+v\ntcp=%+v", memory, tcp)
+	}
+	// 夹具自证：转写必须真的记下了网格状态与两种拒绝，否则空切片也能"一致"。
+	// 成功且改变状态的命令恰有 7 条：4 次移动 + 1 次取出 + 打开 + 关闭；
+	// 两条被拒命令（空源移动、空网格取出）不发布网格状态。
+	states, rejects, inventoryStates := 0, 0, 0
+	for _, entry := range memory.Transcript {
+		switch {
+		case strings.HasPrefix(entry, "CraftingState:"):
+			states++
+		case strings.HasPrefix(entry, "CommandRejected:"):
+			rejects++
+		case strings.HasPrefix(entry, "InventoryState:"):
+			inventoryStates++
+		}
+	}
+	if states != 7 {
+		t.Fatalf("网格状态转写有 %d 条，想要恰好 7 条", states)
+	}
+	if rejects != 2 {
+		t.Fatalf("拒绝转写有 %d 条，想要恰好 2 条（空源移动 + 空网格取出）", rejects)
+	}
+	if inventoryStates != 6 {
+		t.Fatalf("物品状态转写有 %d 条，想要恰好 6 条（4 次移动 + 1 次取出 + 关闭回收）", inventoryStates)
+	}
+	full, _ := core.ItemMaxDurability(core.ItemStoneHoe)
+	wantHoe := core.ItemStack{Item: core.ItemStoneHoe, Count: 1, Durability: full}
+	if got := countItem(memory.Inventory, core.ItemStoneHoe); got != 1 ||
+		memory.Inventory.Hotbar.Slots[0] != wantHoe {
+		t.Fatalf("取出后背包 = %+v，0 号格想要满耐久石锄 %+v", memory.Inventory, wantHoe)
+	}
+	if countItem(memory.Inventory, core.ItemStone) != 0 || countItem(memory.Inventory, core.ItemStick) != 0 {
+		t.Fatalf("取出后原料未清零: %+v", memory.Inventory)
+	}
+	if memory.FinalGrid != (sim.CraftingGrid{Size: sim.CraftingGridSizePersonal}) {
+		t.Fatalf("末态网格 = %+v，想要个人尺寸空网格", memory.FinalGrid)
+	}
+}
+
+// runCraftingGridParityScript 在一种传输上跑完整段网格命令脚本并返回可比结果。
+// 脚本形状照 `runEatingParityScript`：登录就绪后逐条发命令并转写业务消息。
+func runCraftingGridParityScript(t *testing.T, transport string) craftingGridParityResult {
+	t.Helper()
+	identity := integrationIdentity(0x95, "GridCrafter")
+	store := storage.NewMemory(storage.Metadata{
+		FormatVersion: 2, Seed: 42, SpawnDimension: core.Overworld,
+	})
+	// 石锄的四个原料各占一格：整堆移动语义不能拆堆，同一物品的多格形状必须
+	// 由多个独立栈摆放（这正是两次点击整堆语义下的真实玩家操作形态）。
+	var initial core.Inventory
+	initial.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 1}
+	initial.Hotbar.Slots[1] = core.ItemStack{Item: core.ItemStone, Count: 1}
+	initial.Hotbar.Slots[2] = core.ItemStack{Item: core.ItemStick, Count: 1}
+	initial.Hotbar.Slots[3] = core.ItemStack{Item: core.ItemStick, Count: 1}
+	location := storage.PlayerLocation{Dimension: core.Overworld, Position: [3]float32{0.5, 1.001, 0.5}}
+	if _, err := store.SavePlayer(context.Background(), wellFedPlayerSave(storage.PlayerSave{
+		PlayerID: identity.PlayerID, Revision: 1, DisplayName: identity.DisplayName,
+		Current: location, Safe: &location, Inventory: initial,
+	})); err != nil {
+		t.Fatal(err)
+	}
+	config := hostTestConfig()
+	config.ViewRadius = 1
+	config.AutosaveTicks = 1000
+	host := mustNewHost(t, config, flatGenerator{}, store)
+	endpoint, acceptDone, closeTransport := openParityTransport(t, host, transport, identity)
+	defer closeTransport()
+	mirror := client.NewMirror()
+
+	ready := false
+	inventoryConfirmed := false
+	for !ready || !inventoryConfirmed || !parityViewLoaded(mirror) {
+		_, messages := parityStep(t, host, endpoint, mirror)
+		for _, message := range messages {
+			switch message := message.(type) {
+			case network.PlayerState:
+				assertValidIntegrationPlayerState(t, message)
+				ready = ready || message.Ready
+			case network.InventoryState:
+				inventoryConfirmed = message.Inventory == initial
+			}
+		}
+	}
+	// 脚本阶段在工作台脚手架就位后才开始：把出生支撑块换成工作台，供后半段
+	// 验证「打开把尺寸提到 3、关闭回收降回 2」的发布序列。
+	host.world.SetBlockForTest(core.BlockPos{}, core.WorkbenchID)
+
+	result := craftingGridParityResult{Transcript: make([]string, 0, 64)}
+	var lastGrid network.CraftingState
+	seenGrid := false
+	step := func(command network.ClientMessage) {
+		t.Helper()
+		if command != nil {
+			sendIntegration(t, endpoint, command)
+			waitIntegrationCondition(
+				t, fmt.Sprintf("%s grid crafting %T queued", transport, command),
+				func() bool { return len(host.world.incoming) > 0 },
+			)
+		}
+		_, messages := parityStep(t, host, endpoint, mirror)
+		for _, message := range messages {
+			result.Transcript = append(result.Transcript, parityBusinessMessage(t, mirror, message)...)
+			switch message := message.(type) {
+			case network.CraftingState:
+				lastGrid = message
+				seenGrid = true
+			case network.InventoryState:
+				result.Inventory = message.Inventory
+			}
+		}
+	}
+
+	sequence := uint64(0)
+	next := func() uint64 { sequence++; return sequence }
+
+	// 石锄形状（2×2、镜像位关闭）：格 0/2 是石头纵列，格 1/3 是木棍纵列。
+	step(network.MoveCraftingStack{Sequence: next(), From: 9, To: 0})
+	step(network.MoveCraftingStack{Sequence: next(), From: 10, To: 2})
+	// 值域内的语义拒绝：空源（0 号格已搬空）必须拒绝且状态不变。
+	step(network.MoveCraftingStack{Sequence: next(), From: 9, To: 1})
+	step(network.MoveCraftingStack{Sequence: next(), From: 11, To: 1})
+	step(network.MoveCraftingStack{Sequence: next(), From: 12, To: 3})
+	if !seenGrid || lastGrid.Output == (core.ItemStack{}) {
+		t.Fatalf("%s 摆满石锄形状后产物格 = %+v（seenGrid=%v），想要非空产物", transport, lastGrid.Output, seenGrid)
+	}
+	if id, _, matched := core.MatchCraftingGrid(lastGrid.Size, lastGrid.Slots); !matched || id != core.RecipeStoneHoe {
+		t.Fatalf("%s 摆满后网格匹配 = (%d, %v)，想要石锄配方", transport, id, matched)
+	}
+	// 过期序列重放：旧序号命令必须被静默丢弃（无新网格/物品发布、无拒绝）。
+	stepsBefore := len(result.Transcript)
+	step(network.MoveCraftingStack{Sequence: 1, From: 9, To: 0})
+	for _, entry := range result.Transcript[stepsBefore:] {
+		if strings.HasPrefix(entry, "CraftingState:") ||
+			strings.HasPrefix(entry, "InventoryState:") ||
+			strings.HasPrefix(entry, "CommandRejected:") {
+			t.Fatalf("%s 过期序列产生了新业务消息: %s", transport, entry)
+		}
+	}
+	// 取出：产物入包、网格按消费后剩余重派生（四个格各恰减 1 后全空）。
+	step(network.TakeCraftingOutput{Sequence: next()})
+	// 空网格再取出：必须稳定拒绝。
+	step(network.TakeCraftingOutput{Sequence: next()})
+	// 打开工作台：尺寸 3 的完整网格状态必须发布给本人。
+	step(network.OpenContainer{Sequence: next(), Pitch: -float32(math.Pi)/2 + 0.01})
+	if !seenGrid || lastGrid.Size != 3 {
+		t.Fatalf("%s 打开工作台后网格尺寸 = %d（seenGrid=%v），想要 3", transport, lastGrid.Size, seenGrid)
+	}
+	// 关闭工作台：先回收（网格本就为空）再把尺寸降回 2 并发布。
+	step(network.CloseContainer{Sequence: next()})
+	if !seenGrid || lastGrid.Size != 2 {
+		t.Fatalf("%s 关闭工作台后网格尺寸 = %d（seenGrid=%v），想要 2", transport, lastGrid.Size, seenGrid)
+	}
+
+	host.mu.Lock()
+	active := *host.activeByPlayer[identity.PlayerID]
+	host.mu.Unlock()
+	// engine 的网格只能在 `stepMu` 下读取：紧随其后的 endpoint 关闭会经
+	// `endpointReader`→`DetachSession`→`UnregisterSession` 异步执行断线回收的
+	// 网格写入，无锁读与该写入构成数据竞争（与 companion 测试的 `stepMu`
+	// 直读先例同锁）。
+	host.world.stepMu.Lock()
+	result.FinalGrid, result.FinalOuput, _ = host.world.engine.PlayerCrafting(active.Session)
+	host.world.stepMu.Unlock()
+	if result.Inventory == (core.Inventory{}) {
+		t.Fatalf("%s 脚本从未在 wire 上确认物品状态", transport)
+	}
+
+	if err := endpoint.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
+	defer cancel()
+	select {
+	case err := <-acceptDone:
+		if err != nil && !errors.Is(err, network.ErrClosed) {
+			t.Fatalf("%s grid crafting accept worker: %v", transport, err)
+		}
+	case <-ctx.Done():
+		t.Fatalf("%s grid crafting accept worker did not exit: %v", transport, ctx.Err())
+	}
+	if err := host.Shutdown(ctx); err != nil {
+		t.Fatalf("%s grid crafting Host.Shutdown: %v", transport, err)
+	}
+	return result
 }

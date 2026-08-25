@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
@@ -25,8 +26,10 @@ const (
 	hungerLoopFallHeight = float32(10)
 	// hungerLoopFallDamage 是上面那次落差的精确伤害点数。
 	hungerLoopFallDamage uint8 = 7
-	// hungerLoopWheat 是夹具直接放进快捷栏的小麦数，恰好是面包配方的用量。
-	hungerLoopWheat uint8 = 3
+	// hungerLoopWheatPerSlot 是夹具摊进快捷栏每格的小麦数：三格各 1 颗共 3 颗，
+	// 恰好是面包配方的用量——形状配方的三个横排格需要三个独立栈，整堆移动
+	// 不能把一叠 3 颗拆开摆放。
+	hungerLoopWheatPerSlot uint8 = 1
 	// hungerLoopLoginBudget 是等登录就绪（Ready + 背包发布 + 九个区块进镜像）
 	// 的 tick 预算，取值理由同 `farmingLoginBudget`：实测卡点是异步区块生成，
 	// 并发跑满包时会漂到 300 tick 以上，3000 给到一个数量级余量。
@@ -308,20 +311,32 @@ func TestHungerLoopEndToEndMemory(t *testing.T) {
 		}
 	}
 
-	// —— 第 5 步：夹具直给 3 小麦，合成面包 ——
+	// —— 第 5 步：夹具直给 3 小麦，网格合成面包 ——
+	//
+	// 面包是横排 3 格的形状配方：三颗小麦必须分属三个独立栈（整堆移动不能
+	// 拆堆），夹具因此把 3 小麦摊进快捷栏 0..2 各一颗。个人 2×2 网格摆不下
+	// 3 宽横排，脚本把出生支撑块换成工作台（夹具只摆地形）并向下俯视打开，
+	// 把网格提到 3×3 再摆顶排三格取出；产物经 AddStack 落进搬空后的 0 号格。
+	host.world.SetBlockForTest(core.BlockPos{}, core.WorkbenchID)
 	host.world.SetPlayerInventoryForTest(session, func(inventory core.Inventory) core.Inventory {
-		inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemWheat, Count: hungerLoopWheat}
+		inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemWheat, Count: hungerLoopWheatPerSlot}
+		inventory.Hotbar.Slots[1] = core.ItemStack{Item: core.ItemWheat, Count: hungerLoopWheatPerSlot}
+		inventory.Hotbar.Slots[2] = core.ItemStack{Item: core.ItemWheat, Count: hungerLoopWheatPerSlot}
 		return inventory
 	})
-	wantWheat := core.ItemStack{Item: core.ItemWheat, Count: hungerLoopWheat}
-	for ticks := 0; wireInventory.Hotbar.Slots[0] != wantWheat; ticks++ {
+	wantWheat := core.ItemStack{Item: core.ItemWheat, Count: hungerLoopWheatPerSlot}
+	for ticks := 0; !hungerLoopWheatStaged(wireInventory, wantWheat); ticks++ {
 		if ticks > hungerLoopSettleTicks {
-			t.Fatalf("夹具写入后等了 %d 个 tick，wire 上 0 号格仍是 %+v，想要 %+v",
-				ticks, wireInventory.Hotbar.Slots[0], wantWheat)
+			t.Fatalf("夹具写入后等了 %d tick，wire 上 0..2 格仍未摊好小麦，当前 = %+v",
+				ticks, wireInventory.Hotbar.Slots[:3])
 		}
 		step()
 	}
-	send(network.CraftRecipe{Sequence: 1, Recipe: core.RecipeBread})
+	send(network.OpenContainer{Sequence: 1, Pitch: -float32(math.Pi)/2 + 0.01})
+	send(network.MoveCraftingStack{Sequence: 2, From: 9, To: 0})
+	send(network.MoveCraftingStack{Sequence: 3, From: 10, To: 1})
+	send(network.MoveCraftingStack{Sequence: 4, From: 11, To: 2})
+	send(network.TakeCraftingOutput{Sequence: 5})
 	settle()
 	wantBread := core.ItemStack{Item: core.ItemBread, Count: 1}
 	if got := wireInventory.Hotbar.Slots[0]; got != wantBread {
@@ -331,7 +346,7 @@ func TestHungerLoopEndToEndMemory(t *testing.T) {
 		t.Fatalf("合成后剩余小麦 = %d，想要 0（一个面包恰好吃掉 3 个）", got)
 	}
 	// 进食只认权威选中格，把面包那一格显式选上。
-	send(network.SelectHotbar{Sequence: 2, Slot: 0})
+	send(network.SelectHotbar{Sequence: 6, Slot: 0})
 	settle()
 
 	// —— 第 6 步：长按整整 EatingTicks 个 tick，饥饿回满 ——
@@ -341,7 +356,7 @@ func TestHungerLoopEndToEndMemory(t *testing.T) {
 	// 结算提前一拍的实现只看末态是抓不住的。
 	for tick := 1; tick <= eatingTicks; tick++ {
 		if tick == 1 {
-			state = send(network.PlayerInput{Sequence: 3, Eating: true})
+			state = send(network.PlayerInput{Sequence: 7, Eating: true})
 		} else {
 			state = step()
 		}
@@ -408,4 +423,13 @@ func TestHungerLoopEndToEndMemory(t *testing.T) {
 				index+1, readings[index], stage.Reading, stage.Name)
 		}
 	}
+}
+
+// hungerLoopWheatStaged 报告夹具摊开的三颗小麦是否已经全部出现在 wire 上的
+// 快捷栏 0..2 格：夹具写入经 SetPlayerInventoryForTest 直接改权威状态，发布
+// 到 wire 需要一两个 tick，脚本必须等镜像齐了再开始搬上网格。
+func hungerLoopWheatStaged(inventory core.Inventory, want core.ItemStack) bool {
+	return inventory.Hotbar.Slots[0] == want &&
+		inventory.Hotbar.Slots[1] == want &&
+		inventory.Hotbar.Slots[2] == want
 }

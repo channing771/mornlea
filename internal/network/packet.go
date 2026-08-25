@@ -196,6 +196,10 @@ func ValidateClientPacket(state State, packet ClientPacket) error {
 			return clientPacket.Validate()
 		case TillSoil:
 			return clientPacket.Validate()
+		case MoveCraftingStack:
+			return clientPacket.Validate()
+		case TakeCraftingOutput:
+			return clientPacket.Validate()
 		case RequestChunkResync:
 			return clientPacket.Validate()
 		case KeepAliveReply:
@@ -258,6 +262,8 @@ func ValidateServerPacket(state State, packet ServerPacket) error {
 			return serverPacket.Validate()
 		case PlaceBlockSucceeded:
 			return nil
+		case CraftingState:
+			return serverPacket.Validate()
 		case KeepAlive:
 			if serverPacket.Token == 0 {
 				return errors.New("network: keep alive token is zero")

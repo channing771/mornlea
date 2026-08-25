@@ -42,7 +42,12 @@ func runMaterialProcessingScript(t *testing.T, transport string) materialProcess
 	initial.Hotbar.Slots[1] = core.ItemStack{Item: core.ItemSand, Count: 2}
 	initial.Hotbar.Slots[2] = core.ItemStack{Item: core.ItemClay, Count: 1}
 	initial.Hotbar.Slots[3] = core.ItemStack{Item: core.ItemCoal, Count: 1}
-	initial.Backpack[0] = core.ItemStack{Item: core.ItemGlass, Count: 4}
+	// 发光方块配方（2×2 玻璃）需要四个独立玻璃栈：整堆移动不能拆堆，夹具把
+	// 4 块玻璃摊进 backpack[0..3] 各一块（统一视图格 18..21）。
+	initial.Backpack[0] = core.ItemStack{Item: core.ItemGlass, Count: 1}
+	initial.Backpack[1] = core.ItemStack{Item: core.ItemGlass, Count: 1}
+	initial.Backpack[2] = core.ItemStack{Item: core.ItemGlass, Count: 1}
+	initial.Backpack[3] = core.ItemStack{Item: core.ItemGlass, Count: 1}
 	location := storage.PlayerLocation{
 		Dimension: core.Overworld,
 		Position:  [3]float32{0.5, 1.001, 0.5},
@@ -112,25 +117,38 @@ func runMaterialProcessingScript(t *testing.T, transport string) materialProcess
 		Generation: 1, Active: true, BlockIndex: index,
 	})
 
-	craftedMessages := step(network.CraftRecipe{Sequence: 1, Recipe: core.RecipeOakPlanks})
+	// 木板（recipe 7，1×1 原木）：把唯一的原木搬上网格再取出。
+	step(network.MoveCraftingStack{Sequence: 1, From: 9, To: 0})
+	craftedMessages := step(network.TakeCraftingOutput{Sequence: 2})
 	wantCrafted := initial
 	wantCrafted.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemOakPlanks, Count: 4}
 	if got, ok := materialProcessingInventory(craftedMessages); !ok || got != wantCrafted {
 		t.Fatalf("%s 原木合成后的背包 = %+v, %v，想要 %+v", transport, got, ok, wantCrafted)
 	}
-	lightMessages := step(network.CraftRecipe{Sequence: 2, Recipe: core.RecipeLightBlock})
+	// 发光方块（recipe 8，2×2 玻璃）：四个独立玻璃栈分别搬进格 0..3 再取出；
+	// 产物经 AddStack 落进搬空后仍被 0..3 占位的下一个空格——快捷栏 4。
+	step(network.MoveCraftingStack{Sequence: 3, From: 18, To: 0})
+	step(network.MoveCraftingStack{Sequence: 4, From: 19, To: 1})
+	step(network.MoveCraftingStack{Sequence: 5, From: 20, To: 2})
+	lightMessages := step(network.MoveCraftingStack{Sequence: 6, From: 21, To: 3})
+	lightMessages = append(lightMessages, step(network.TakeCraftingOutput{Sequence: 7})...)
 	wantLight := wantCrafted
 	wantLight.Backpack[0] = core.ItemStack{}
+	wantLight.Backpack[1] = core.ItemStack{}
+	wantLight.Backpack[2] = core.ItemStack{}
+	wantLight.Backpack[3] = core.ItemStack{}
 	wantLight.Hotbar.Slots[4] = core.ItemStack{Item: core.ItemLightBlock, Count: 4}
 	if got, ok := materialProcessingInventory(lightMessages); !ok || got != wantLight {
 		t.Fatalf("%s 发光方块合成后的背包 = %+v, %v，想要 %+v", transport, got, ok, wantLight)
 	}
-	sendIntegration(t, endpoint, network.CraftRecipe{Sequence: 3, Recipe: core.RecipeLightBlock})
-	waitIntegrationCondition(t, fmt.Sprintf("%s 发光方块拒绝合成 queued", transport), func() bool {
+	// 网格已随取出清空：对空网格再取出必须稳定拒绝（对应旧脚本「原料不足」
+	// 的拒绝路径）。
+	sendIntegration(t, endpoint, network.TakeCraftingOutput{Sequence: 8})
+	waitIntegrationCondition(t, fmt.Sprintf("%s 空网格取出拒绝 queued", transport), func() bool {
 		return len(host.world.incoming) > 0
 	})
 	_, rejectedMessages := parityStep(t, host, endpoint, mirror)
-	wantRejection := network.CommandRejected{Sequence: 3, Reason: network.RejectInvalidInput}
+	wantRejection := network.CommandRejected{Sequence: 8, Reason: network.RejectInvalidInput}
 	var rejection network.CommandRejected
 	foundRejection := false
 	for _, message := range rejectedMessages {
@@ -150,17 +168,17 @@ func runMaterialProcessingScript(t *testing.T, transport string) materialProcess
 	}
 
 	openedMessages := step(network.OpenContainer{
-		Sequence: 4, Pitch: -float32(math.Pi)/2 + 0.01,
+		Sequence: 9, Pitch: -float32(math.Pi)/2 + 0.01,
 	})
 	opened := materialProcessingFurnaceState(t, transport, openedMessages)
 	state := materialProcessingFurnaceState(t, transport, step(network.MoveContainerStack{
-		Sequence: 5, Container: opened.Furnace, From: 1, To: core.FurnaceInputSlot,
+		Sequence: 10, Container: opened.Furnace, From: 1, To: core.FurnaceInputSlot,
 	}))
 	if state.Input != (core.ItemStack{Item: core.ItemSand, Count: 2}) {
 		t.Fatalf("%s 沙子未进入熔炉: %+v", transport, state)
 	}
 	state = materialProcessingFurnaceState(t, transport, step(network.MoveContainerStack{
-		Sequence: 6, Container: opened.Furnace, From: 3, To: core.FurnaceFuelSlot,
+		Sequence: 11, Container: opened.Furnace, From: 3, To: core.FurnaceFuelSlot,
 	}))
 	if state.Fuel != (core.ItemStack{Item: core.ItemCoal, Count: 1}) {
 		t.Fatalf("%s 煤炭未进入熔炉: %+v", transport, state)
@@ -182,7 +200,7 @@ func runMaterialProcessingScript(t *testing.T, transport string) materialProcess
 	}
 
 	state = materialProcessingFurnaceState(t, transport, step(network.MoveContainerStack{
-		Sequence: 7, Container: opened.Furnace, From: 2, To: core.FurnaceInputSlot,
+		Sequence: 12, Container: opened.Furnace, From: 2, To: core.FurnaceInputSlot,
 	}))
 	if state.Input != (core.ItemStack{Item: core.ItemClay, Count: 1}) ||
 		state.Output != (core.ItemStack{Item: core.ItemGlass, Count: 1}) ||
@@ -191,7 +209,7 @@ func runMaterialProcessingScript(t *testing.T, transport string) materialProcess
 	}
 
 	glassMessages := step(network.MoveContainerStack{
-		Sequence: 8, Container: opened.Furnace, From: core.FurnaceOutputSlot, To: 5,
+		Sequence: 13, Container: opened.Furnace, From: core.FurnaceOutputSlot, To: 5,
 	})
 	state = materialProcessingFurnaceState(t, transport, glassMessages)
 	wantFinalInventory := wantLight

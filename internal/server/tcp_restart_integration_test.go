@@ -239,12 +239,24 @@ func TestCraftingSurvivesV2DiskRestartAndReconnectOrder(t *testing.T) {
 	witness := dialIntegrationClient(t, firstHost.Addr, secondIdentity)
 	waitClientReadyFor(t, firstHost, firstClient, firstIdentity.PlayerID)
 	waitClientReadyFor(t, firstHost, witness, secondIdentity.PlayerID)
-	waitIntegrationCondition(t, "从 v2 区块拾取 4 石头", func() bool {
-		return integrationItemCount(firstHost.PlayerSnapshot(t, firstIdentity.PlayerID).Inventory, core.ItemStone) == 4
-	})
-
-	sendIntegration(t, firstClient.Endpoint, network.CraftRecipe{
-		Sequence: 1, Recipe: core.RecipeStoneBricks,
+	// 从 v2 区块交错拾取四块石头并逐块搬上网格（石砖配方 2×2 需要四个独立
+	// 栈，掉落物的错开拾取延迟保证了「拾一块、搬一块」的窗口）。每一块都
+	// 走真实的 v2 存档掉落物解码与拾取路径；每条移动命令后都要等石头真的
+	// 离开物品栏再等下一块——轮询可比权威 tick 更快，不等结算会把同一块
+	// 石头搬两次，第二条命令因空源被拒。
+	for gridCell := uint8(0); gridCell < 4; gridCell++ {
+		waitIntegrationCondition(t, fmt.Sprintf("从 v2 区块拾取第 %d 块石头", gridCell+1), func() bool {
+			return integrationItemCount(firstHost.PlayerSnapshot(t, firstIdentity.PlayerID).Inventory, core.ItemStone) == 1
+		})
+		sendIntegration(t, firstClient.Endpoint, network.MoveCraftingStack{
+			Sequence: uint64(gridCell + 1), From: 9, To: gridCell,
+		})
+		waitIntegrationCondition(t, fmt.Sprintf("第 %d 块石头搬上网格", gridCell+1), func() bool {
+			return integrationItemCount(firstHost.PlayerSnapshot(t, firstIdentity.PlayerID).Inventory, core.ItemStone) == 0
+		})
+	}
+	sendIntegration(t, firstClient.Endpoint, network.TakeCraftingOutput{
+		Sequence: 5,
 	})
 	waitIntegrationInventory(t, firstClient, func(inventory core.Inventory) bool {
 		return integrationItemCount(inventory, core.ItemStoneBrick) == 4
@@ -268,7 +280,7 @@ func TestCraftingSurvivesV2DiskRestartAndReconnectOrder(t *testing.T) {
 	})
 
 	placed := make([]core.BlockPos, 0, 2)
-	for sequence := uint64(2); sequence <= 3; sequence++ {
+	for sequence := uint64(6); sequence <= 7; sequence++ {
 		sendIntegration(t, firstClient.Endpoint, network.PlaceBlock{
 			Sequence: sequence, Yaw: 0, Pitch: -0.2, Slot: 0,
 		})
@@ -294,27 +306,27 @@ func TestCraftingSurvivesV2DiskRestartAndReconnectOrder(t *testing.T) {
 	}
 
 	sendIntegration(t, firstClient.Endpoint, network.SelectHotbar{
-		Sequence: 4, Slot: 1,
+		Sequence: 8, Slot: 1,
 	})
 	waitIntegrationInventory(t, firstClient, func(inventory core.Inventory) bool {
 		return inventory.Hotbar.Selected == 1
 	})
 	sendIntegration(t, firstClient.Endpoint, network.PlayerInput{
-		Sequence: 5, Yaw: 0, Pitch: -0.2, Mining: true,
+		Sequence: 9, Yaw: 0, Pitch: -0.2, Mining: true,
 	})
 	waitIntegrationState(t, firstClient, func(message network.ServerMessage) bool {
 		return integrationChangeSeen(message, placed[1], core.AirID)
 	})
 	sendIntegration(t, firstClient.Endpoint, network.PlayerInput{
-		Sequence: 6, MoveZ: 1, Yaw: 0, Pitch: -0.2,
+		Sequence: 10, MoveZ: 1, Yaw: 0, Pitch: -0.2,
 	})
 	wantInventory := waitIntegrationInventory(t, firstClient, func(inventory core.Inventory) bool {
 		return integrationItemCount(inventory, core.ItemStoneBrick) == 3
 	})
-	sendIntegration(t, firstClient.Endpoint, network.PlayerInput{Sequence: 7, Yaw: 0, Pitch: -0.2})
+	sendIntegration(t, firstClient.Endpoint, network.PlayerInput{Sequence: 11, Yaw: 0, Pitch: -0.2})
 	waitIntegrationState(t, firstClient, func(message network.ServerMessage) bool {
 		state, ok := message.(network.PlayerState)
-		return ok && state.LastInputSequence >= 7
+		return ok && state.LastInputSequence >= 11
 	})
 
 	wantPlayer := firstHost.PlayerSnapshot(t, firstIdentity.PlayerID)
@@ -732,10 +744,17 @@ func seedV2CraftingChunk(t *testing.T, root string, key core.ChunkKey) {
 	if !ok {
 		t.Fatal("测试掉落物位置无区块索引")
 	}
-	chunk.SetDrop(0, world.DropSlot{
-		Generation: 1, Active: true,
-		Stack: core.ItemStack{Item: core.ItemStone, Count: 4}, BlockIndex: index,
-	})
+	// 石砖配方（2×2 石头）需要四个独立石头栈。整堆拾取会把同物品掉落并成
+	// 一叠，四个掉落物因此带上**错开的拾取延迟**（legacy 掉落物槽携带该字段），
+	// 让脚本可以「拾一块、搬一块」交错地把四块石头摆进网格四格。
+	for slot, delay := range map[int]uint8{0: 0, 1: 6, 2: 12, 3: 18} {
+		chunk.SetDrop(slot, world.DropSlot{
+			Generation: 1 + uint32(slot), Active: true,
+			Stack:            core.ItemStack{Item: core.ItemStone, Count: 1},
+			BlockIndex:       index,
+			PickupDelayTicks: delay,
+		})
+	}
 	store, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
 		FormatVersion: 2, Seed: 42, SpawnDimension: core.Overworld,
 	}})

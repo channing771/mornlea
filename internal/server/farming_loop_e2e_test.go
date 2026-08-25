@@ -42,6 +42,10 @@ const (
 	farmingSettleTicks = 3
 	// farmingPickupTicks 是等掉落物过完拾取延迟（默认 10 tick）并入包的 tick 数。
 	farmingPickupTicks = 40
+	// farmingPlayerDropPickupTicks 是等**玩家主动丢弃**的掉落物过拾取延迟
+	// （默认 40 tick，见 sim 的 `defaultPlayerDropPickupDelayTicks`）并入包的
+	// tick 预算；给一倍余量吸收掉落物入队那一两 tick 的滞后。
+	farmingPlayerDropPickupTicks = 80
 	// farmingLoginBudget 是等登录就绪（Ready + 背包发布 + 九个区块进镜像）的
 	// tick 预算。这个预算的**唯一职责**是把挂起变成一条读得懂的失败而不是
 	// go test 超时，因此它不是性能断言，宁可宽到几乎不可能误伤。
@@ -195,6 +199,59 @@ func TestFarmingLoopEndToEndMemory(t *testing.T) {
 	host.world.SetBlockForTest(farmingWater, core.WaterSourceID)
 
 	sequence := uint64(0)
+	// move/take 是网格合成的最小驱动：统一视图格（网格 0..8、物品栏 9..44，
+	// 其中快捷栏是 9..17、背包是 18..44——背包统一格 = 物品栏索引 + 9）上的
+	// 两次点击整堆移动与产物取出，全部走真实玩家命令。
+	move := func(from, to uint8) {
+		t.Helper()
+		sequence++
+		send(network.MoveCraftingStack{Sequence: sequence, From: from, To: to})
+	}
+	take := func() {
+		t.Helper()
+		sequence++
+		send(network.TakeCraftingOutput{Sequence: sequence})
+	}
+	// hotbarView/backpackView 是统一视图格的换算 helper，避免散落裸字面量。
+	hotbarView := func(slot int) uint8 { return uint8(9 + slot) }
+	backpackView := func(slot int) uint8 { return uint8(9 + core.HotbarSlots + slot) }
+
+	// —— 第 2a 步：用材料包自举出两叠木棍 ——
+	//
+	// 石锄配方（recipe 9，2×2、镜像位关闭）= 石头纵列 + 木棍纵列，木棍列的
+	// 两格需要**两个独立栈**。整堆移动不能拆堆、合成产物又会并入物品栏里
+	// 既有的部分栈（AddStack 先合并后占空），唯一能把一叠木棍拆成两叠的真实
+	// 机制是「单件丢弃 → 等拾取延迟 → 空手拾回」：丢弃时主栈还在手里，
+	// 拾回时主栈已经搬上网格、掉落物只能落进空格。夹具始终不碰背包：
+	// 木棍全部来自材料包自带的 64 原木 + 64 木板。
+	//
+	// 木板纵列（格 0/2）由「4 木板 + 材料包 64 木板」两叠构成——格内数量
+	// 不参与形状匹配，取出只对每格恰减 1。
+	move(backpackView(4), 0) // backpack[4] 原木×64 → 网格格 0
+	take()                   // 1×1 原木 → 木板×4 落进快捷栏 0（材料包的 64 木板已满，不并栈）
+	move(0, backpackView(4)) // 网格里的原木×63 整堆搬回空掉的 backpack[4]
+	move(hotbarView(0), 0)   // 快捷栏的木板×4 → 网格格 0（纵列上半格）
+	move(backpackView(5), 2) // backpack[5] 木板×64 → 网格格 2（纵列下半格）
+	take()                   // 木板纵列 → 木棍×4 落进已搬空的快捷栏 0
+	// 单件拆堆：从选中格丢出 1 根木棍（玩家丢弃有 40 tick 拾取延迟），
+	// 把手里剩下的 ×3 搬上网格后再等拾回——掉落物只能落进空格，第二叠就成了。
+	sequence++
+	send(network.SelectHotbar{Sequence: sequence, Slot: 0})
+	sequence++
+	send(network.DropSelectedItem{Sequence: sequence})
+	move(hotbarView(0), 1) // 主栈木棍×3 → 网格格 1（锄头形状的木棍列上半格）
+	for ticks := 0; countItem(authoritativeInventory(), core.ItemStick) != 1; ticks++ {
+		if ticks > farmingPlayerDropPickupTicks {
+			t.Fatalf("等了 %d 个 tick 仍未拾回丢弃的木棍，当前背包 = %+v",
+				ticks, authoritativeInventory())
+		}
+		step()
+	}
+	move(hotbarView(0), 3)    // 拾回的单根木棍 → 网格格 3：木棍纵列就位
+	move(2, backpackView(5))  // 网格格 2 的余量木板（×63）搬回空掉的 backpack[5]
+	move(0, backpackView(15)) // 网格格 0 的余量木板（×3）收进 backpack[15]，腾出网格与快捷栏
+	settle()
+
 	// 挖石头前把选中格切到空的第 9 格：拾到第一块石头之后，第 0 格里就有石头
 	// 了，而"手持石头挖石头"在采掘规则里是**错误工具**（30 tick、不掉落），
 	// 第二块石头会白挖。空手才是石头的合法采掘手。
@@ -216,24 +273,35 @@ func TestFarmingLoopEndToEndMemory(t *testing.T) {
 		sequence++
 		send(network.PlayerInput{Sequence: sequence, Pitch: tillSoilLookDown})
 	}
+	// 两块石头必须「拾一块、搬一块」交错：两块的掉落物都落在玩家脚边，若都
+	// 留在物品栏里会并成一叠——而一叠石头摆不出「石头纵列」这个两格形状。
 	mineOnce(farmingSurface)
-	mineOnce(farmingCrop)
-	for ticks := 0; countItem(authoritativeInventory(), core.ItemStone) != 2; ticks++ {
+	for ticks := 0; countItem(authoritativeInventory(), core.ItemStone) != 1; ticks++ {
 		if ticks > farmingPickupTicks {
-			t.Fatalf("等了 %d 个 tick 仍未拾满两块石头，当前背包 = %+v",
+			t.Fatalf("等了 %d 个 tick 仍未拾到第一块石头，当前背包 = %+v",
 				ticks, authoritativeInventory())
 		}
 		step()
 	}
+	move(hotbarView(0), 0) // 第一块石头 → 网格格 0
+	mineOnce(farmingCrop)
+	for ticks := 0; countItem(authoritativeInventory(), core.ItemStone) != 1; ticks++ {
+		if ticks > farmingPickupTicks {
+			t.Fatalf("等了 %d 个 tick 仍未拾到第二块石头，当前背包 = %+v",
+				ticks, authoritativeInventory())
+		}
+		step()
+	}
+	move(hotbarView(0), 2) // 第二块石头 → 网格格 2：石锄形状（石头列 0/2 + 木棍列 1/3）就位
 	// 井底那格草有没有被顺手挖掉，由后面的翻地步骤兜底：草没了玩家就落到石头
 	// 上，TillSoil 会被 RejectInvalidBlock 拒绝，而 step 对任何拒绝都直接 Fatal。
 	// 这里不读客户端镜像——夹具写入不经 recordChange，镜像里井底仍是原来的石头。
+	settle()
 
 	if core.RecipeStoneHoe != 9 {
 		t.Fatalf("RecipeStoneHoe = %d，端到端脚本按 recipe 9 合成石锄", core.RecipeStoneHoe)
 	}
-	sequence++
-	send(network.CraftRecipe{Sequence: sequence, Recipe: core.RecipeStoneHoe})
+	take()
 	settle()
 	full, _ := core.ItemMaxDurability(core.ItemStoneHoe)
 	wantHoe := core.ItemStack{Item: core.ItemStoneHoe, Count: 1, Durability: full}

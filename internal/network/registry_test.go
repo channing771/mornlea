@@ -41,9 +41,43 @@ func TestProtocolV1PacketIDsAreFrozen(t *testing.T) {
 	}
 }
 
+// TestGridCraftingPacketIDsAreFrozen 钉死格子工作台三条消息的 in-branch 临时
+// 编号（design.md D1 裁决）：C→S `MoveCraftingStack=14`、`TakeCraftingOutput=15`，
+// S→C `CraftingState=21`。终值 `MoveCraftingStack=7`（复用 `CraftRecipe` 释放的
+// 编号）由批次集成 A-06 锁定，本分支不重排；协议版本保持 v26 不动。
+// 上界断言写成「末项 +1」而不是裸字面量，下次追加 packet 时它会跟着末项走，
+// 不会静默退化成「测一个已合法的 ID」。
+func TestGridCraftingPacketIDsAreFrozen(t *testing.T) {
+	assertClientRegistry(t, []struct {
+		state  State
+		packet ClientPacket
+		id     uint32
+	}{
+		{StatePlay, MoveCraftingStack{}, 14},
+		{StatePlay, TakeCraftingOutput{}, 15},
+	})
+	assertServerRegistry(t, []struct {
+		state  State
+		packet ServerPacket
+		id     uint32
+	}{
+		{StatePlay, CraftingState{}, 21},
+	})
+	if _, ok := clientPacketForID(StatePlay, 15+1); ok {
+		t.Fatal("Play client packet ID 16 必须保持未分配")
+	}
+	if _, ok := serverPacketForID(StatePlay, 21+1); ok {
+		t.Fatal("Play server packet ID 22 必须保持未分配")
+	}
+	if ProtocolVersion != 26 {
+		t.Fatalf("协议版本 = %d，想要 26——格子工作台不升版（v27 归 A-07）", ProtocolVersion)
+	}
+}
+
 // TestProtocolV22TillSoilPacketIDIsFrozen 钉死 v22 唯一的 wire 变化：翻地命令
-// 占 Play/C→S 的 ID 13，且 14 仍未分配。上界断言写成 13+1 而不是裸字面量，
-// 下次追加客户端 packet 时它会跟着末项走，不会静默退化成「测一个已合法的 ID」。
+// 占 Play/C→S 的 ID 13。上界断言写成「翻地之后的相邻已分配编号」而不是裸
+// 字面量，下次追加客户端 packet 时它会跟着末项走，不会静默退化成「测一个
+// 已合法的 ID」。
 func TestProtocolV22TillSoilPacketIDIsFrozen(t *testing.T) {
 	id, ok := clientPacketID(StatePlay, TillSoil{})
 	if !ok || id != 13 {
@@ -56,8 +90,13 @@ func TestProtocolV22TillSoilPacketIDIsFrozen(t *testing.T) {
 	if _, isTill := packet.(TillSoil); !isTill {
 		t.Fatalf("Play client packet ID 13 = %T，想要 TillSoil", packet)
 	}
-	if _, ok := clientPacketForID(StatePlay, 13+1); ok {
-		t.Fatal("Play client packet ID 14 必须保持未分配")
+	// 14 已由格子工作台的 `MoveCraftingStack` 占用（`TestGridCraftingPacketIDsAreFrozen`
+	// 锁定其边界），这里改为断言「14 之后的 15 也是已分配编号且类型正确」，
+	// 保持「相邻编号不被静默占用」的门禁语义。
+	if move, ok := clientPacketForID(StatePlay, 13+2); !ok {
+		t.Fatal("Play client packet ID 15 必须保持分配给 TakeCraftingOutput")
+	} else if _, isTake := move.(TakeCraftingOutput); !isTake {
+		t.Fatalf("Play client packet ID 15 = %T，想要 TakeCraftingOutput", move)
 	}
 	if ProtocolVersion != 26 {
 		t.Fatalf("协议版本 = %d，想要 26——当前版本为 v26", ProtocolVersion)
@@ -104,7 +143,7 @@ func TestProtocolV1RegistryRejectsUnknownIDsAndStates(t *testing.T) {
 	if _, ok := clientPacketForID(StateHandshake, 1); ok {
 		t.Fatal("unknown handshake client packet ID accepted")
 	}
-	if _, ok := serverPacketForID(StatePlay, 21); ok {
+	if _, ok := serverPacketForID(StatePlay, 22); ok {
 		t.Fatal("unknown play server packet ID accepted")
 	}
 	if _, ok := clientPacketID(StateLogin, ClientHello{}); ok {
@@ -227,6 +266,12 @@ func sameClientPacketType(left, right ClientPacket) bool {
 	case ChatCommand:
 		_, ok := right.(ChatCommand)
 		return ok
+	case MoveCraftingStack:
+		_, ok := right.(MoveCraftingStack)
+		return ok
+	case TakeCraftingOutput:
+		_, ok := right.(TakeCraftingOutput)
+		return ok
 	}
 	return false
 }
@@ -307,6 +352,9 @@ func sameServerPacketType(left, right ServerPacket) bool {
 		return ok
 	case CompanionDespawn:
 		_, ok := right.(CompanionDespawn)
+		return ok
+	case CraftingState:
+		_, ok := right.(CraftingState)
 		return ok
 	}
 	return false

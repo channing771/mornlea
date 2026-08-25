@@ -76,6 +76,14 @@ func encodeClientPacketPayload(state State, packet ClientPacket) (packetID uint3
 			e.u64(message.Sequence)
 			e.f32(message.Yaw)
 			e.f32(message.Pitch)
+		// 格子工作台：网格移动是 u64 序号 + 两个 u8 统一视图格（From 在前），
+		// 取出只携带 u64 序号。值域校验在 Validate/编码入口完成。
+		case MoveCraftingStack:
+			e.u64(message.Sequence)
+			e.u8(message.From)
+			e.u8(message.To)
+		case TakeCraftingOutput:
+			e.u64(message.Sequence)
 		default:
 			return 0, nil, codecError("encode client", state, packetID, invalidClientPacket(state, packet))
 		}
@@ -255,6 +263,20 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 				till.Pitch, err = d.f32()
 			}
 			packet = till
+		case 14:
+			var move MoveCraftingStack
+			move.Sequence, err = d.u64()
+			if err == nil {
+				move.From, err = d.u8()
+			}
+			if err == nil {
+				move.To, err = d.u8()
+			}
+			packet = move
+		case 15:
+			var take TakeCraftingOutput
+			take.Sequence, err = d.u64()
+			packet = take
 		default:
 			return nil, codecError("decode client", state, packetID, errUnknownPacketID)
 		}

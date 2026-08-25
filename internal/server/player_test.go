@@ -317,6 +317,28 @@ func TestTranslatePlayerMessage(t *testing.T) {
 				Pitch:    0.3,
 			},
 		},
+		{
+			// 网格移动的统一视图格必须逐字段搬运：`From`→`Slot`、`To`→`ToSlot`——
+			// e2e 只能证明「移动生效」，调换两个字段会让网格与背包互换角色。
+			name:    "move crafting stack carries both unified slots",
+			message: network.MoveCraftingStack{Sequence: 24, From: 9, To: 0},
+			want: sim.Command{
+				Session:  testSessionID,
+				Sequence: 24,
+				Kind:     sim.CommandMoveCraftingStack,
+				Slot:     9,
+				ToSlot:   0,
+			},
+		},
+		{
+			name:    "take crafting output carries only the sequence",
+			message: network.TakeCraftingOutput{Sequence: 25},
+			want: sim.Command{
+				Session:  testSessionID,
+				Sequence: 25,
+				Kind:     sim.CommandTakeCraftingOutput,
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -406,6 +428,7 @@ func TestPlayerStatePublicationOrder(t *testing.T) {
 		recvServerMessage(t, client),
 		recvServerMessage(t, client),
 		recvServerMessage(t, client),
+		recvServerMessage(t, client),
 	}
 	if _, ok := readyMessages[0].(network.ChunkSnapshot); !ok {
 		t.Fatalf("Ready tick 首消息 = %T，想要 ChunkSnapshot", readyMessages[0])
@@ -415,7 +438,14 @@ func TestPlayerStatePublicationOrder(t *testing.T) {
 		state.Inventory != (core.Inventory{}) {
 		t.Fatalf("Ready tick 次消息 = %#v，想要空物品状态", readyMessages[1])
 	}
-	readyState, ok := readyMessages[2].(network.PlayerState)
+	// 初始合成网格与物品状态同序：注册即 dirty，玩家首个 Active tick 发布
+	// 一次空的个人网格（尺寸 2），客户端因此总有完整初始状态。
+	if grid, ok := readyMessages[2].(network.CraftingState); !ok ||
+		grid.Size != 2 || grid.Slots != ([core.CraftingGridSlots]core.ItemStack{}) ||
+		grid.Output != (core.ItemStack{}) {
+		t.Fatalf("Ready tick 第三消息 = %#v，想要尺寸 2 的空网格", readyMessages[2])
+	}
+	readyState, ok := readyMessages[3].(network.PlayerState)
 	if !ok || readyState.ServerTick != ready.Tick ||
 		readyState.LastInputSequence != 0 ||
 		readyState.Dimension != core.Overworld ||
@@ -423,7 +453,7 @@ func TestPlayerStatePublicationOrder(t *testing.T) {
 		readyState.Velocity != (mgl32.Vec3{}) ||
 		readyState.Yaw != 0 || readyState.Pitch != 0 ||
 		!readyState.OnGround || !readyState.Ready || !readyState.Reset {
-		t.Fatalf("Ready tick 尾消息 = %#v", readyMessages[2])
+		t.Fatalf("Ready tick 尾消息 = %#v", readyMessages[3])
 	}
 
 	running.engine.Enqueue(sim.Command{

@@ -1,6 +1,10 @@
 package network
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/channing771/mornlea/internal/core"
+)
 
 func FuzzSmallPacketCodec(f *testing.F) {
 	f.Add(uint8(StateHandshake), uint32(0), []byte{2})
@@ -43,6 +47,39 @@ func FuzzSmallPacketCodec(f *testing.F) {
 	// v26 放置成功确认只携带原命令序号。
 	if id, payload, err := encodeServerControlPayload(StatePlay, PlaceBlockSucceeded{
 		Sequence: 0x0102030405060708,
+	}); err == nil {
+		f.Add(uint8(StatePlay), id, payload)
+	}
+	// 格子工作台三条消息的种子同样由编码器现算：网格移动取「背包→网格」与
+	// 「网格→网格」两种形态，网格状态取尺寸 3 且格 0/4 非空的样本——尺寸字节、
+	// 扩展格与产物格都进入语料。
+	if id, payload, err := encodeClientPacketPayload(StatePlay, MoveCraftingStack{
+		Sequence: 0x0102030405060708, From: 9, To: 0,
+	}); err == nil {
+		f.Add(uint8(StatePlay), id, payload)
+	}
+	if id, payload, err := encodeClientPacketPayload(StatePlay, TakeCraftingOutput{
+		Sequence: 0x0102030405060708,
+	}); err == nil {
+		f.Add(uint8(StatePlay), id, payload)
+	}
+	if id, payload, err := encodeServerControlPayload(StatePlay, CraftingState{
+		Size: 3,
+		Slots: [core.CraftingGridSlots]core.ItemStack{
+			0: {Item: core.ItemStone, Count: 2},
+			4: {Item: core.ItemStick, Count: 1},
+		},
+		Output: core.ItemStack{Item: core.ItemStoneBrick, Count: 4},
+	}); err == nil {
+		f.Add(uint8(StatePlay), id, payload)
+	}
+	// 尺寸 2 的空扩展格样本：把尺寸字节从 3 改回 2 即得到合法变体，帮助 fuzzer
+	// 在「尺寸边界 × 扩展格残留」的邻域里立刻撞上拒绝路径。
+	if id, payload, err := encodeServerControlPayload(StatePlay, CraftingState{
+		Size: 2,
+		Slots: [core.CraftingGridSlots]core.ItemStack{
+			0: {Item: core.ItemStone, Count: 1},
+		},
 	}); err == nil {
 		f.Add(uint8(StatePlay), id, payload)
 	}
