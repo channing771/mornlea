@@ -27,6 +27,14 @@ if ! mkdir "$LOCK" 2>/dev/null; then
 fi
 trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
 
+# 暂停认领：有人工暂停标志（~/.mornlea/claims.paused）时，本链在此终结，不再接力下一行；
+# 在飞/已认领任务可继续完成，但不会有新行被认领（run-agent.sh 同样拒绝启动新循环）。
+if [ -f "$HOME/.mornlea/claims.paused" ]; then
+  log "检测到暂停认领标志（~/.mornlea/claims.paused），本链终结——继续完成的已认领任务不受影响"
+  rm -f "$GUARD"
+  exit 0
+fi
+
 # 保护：guard 里若还有存活 pid（其它活动循环会话）则不应接力——正常流程里收尾已 rm guard，
 # 这里的检查兜住「忘记释放」的情况。
 if [ -f "$GUARD" ]; then

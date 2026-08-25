@@ -55,6 +55,11 @@ fi
 # kill -0 判活准确——旧做法让 agent 自己 echo $$ 写入的是临时 shell pid，命令一返回即失效，
 # 防重入形同虚设）。若本链 guard 已有存活 pid 则直接退出，杜绝并发双开。
 if [ "${AGENT_LOOP:-0}" = "1" ]; then
+  # 暂停认领：人工暂停标志存在时拒绝启动任何新循环（含手动/cron/接力触发的新会话）
+  if [ -f "$HOME/.mornlea/claims.paused" ]; then
+    echo "[run-agent] 已在暂停认领（~/.mornlea/claims.paused）——不启动新实现者循环；删除该文件可恢复" >&2
+    exit 0
+  fi
   if [ -n "${WORKER_ID:-}" ]; then LIVE_GUARD="$HOME/.mornlea/loop.guard.$WORKER_ID"; else LIVE_GUARD="$HOME/.mornlea/loop.guard"; fi
   mkdir -p "$HOME/.mornlea"
   if [ -f "$LIVE_GUARD" ]; then
