@@ -13,4 +13,9 @@
 
 ## Task 执行与评审
 
-（随执行追加）
+- Task 1 原实现者 `agent-a8bdaef7ca25296e6` 在 2026-08-25T05:09Z 完成 RED：`TestMiningHoeHarvestMatureCropKeepsDurability`（石锄/铁锄）与 `TestMiningHoeHarvestImmatureCropKeepsDurability` 因既有扣耐久行为按预期失败；石镐与非作物两个防外溢对照通过。随后写入最小 GREEN，尚未复测/提交时因会话额度中断。
+- 故障恢复保留上述 RED 证据与两文件 WIP，并派发全新实现者 `/root/e09_task1_impl` 完成 GREEN、回归、自审与提交；没有重新认领或重写已批准设计。
+- Task 1 实现：`0030c371`；focused GREEN、`go test ./internal/sim -race -count=1`、`go vet ./internal/sim` 与 gofmt 检查通过。
+- Task 1 初评：SPEC ✅；QUALITY 要求澄清 `hoeHarvestDurabilityExempt` 注释中“锄头只在翻地时磨损”的误导表述。
+- Task 1 fix round 1/5：`fbf5d82c`；原实现者把注释改为“作物 × 完好锄头是唯一豁免”，focused race 与 gofmt 通过；scoped re-review 判定 finding ADDRESSED、无新破坏。
+- Task 1 complete（`f22d2f82..fbf5d82c`，SPEC + QUALITY review clean）。
