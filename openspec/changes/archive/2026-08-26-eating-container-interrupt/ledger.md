@@ -26,3 +26,4 @@
 - `openspec archive eating-container-interrupt -y`：`authoritative-hunger` 主规格 1 requirement modified 落位，change 归档为 `2026-08-26-eating-container-interrupt`。
 - 基线同步：`AGENTS.md` 与 `CLAUDE.md`「项目定位」同句插入「打开容器界面或视野未就绪」与中断优先序括号句（`TestBaselineDocsAreIdentical` 兜底）；`docs/notes/progress.md` 追加 B-31 段落。
 - backlog B-31 → 已完成；Discussion #71 状态评论与正文刷新随合并执行。
+- **合并证据（finalize）**：PR #83 以 merge `e1c725e8` 合入 `main`，CI 8/8 首跑全绿（native-macos / linux-server / quality / go-race 三分片 / integration / test）；`pr-finalize.sh` 守护第 1 轮即全绿合并。backlog B-31 → 已完成、`docs/notes/progress.md` B-31 段落补 PR 证据句随本 finalize 提交。
