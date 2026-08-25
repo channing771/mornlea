@@ -14,3 +14,5 @@
 - record-only benchmark（Apple M5）：`BenchmarkEngineStepPlayer` 5865 ns/op、504 B/op、18 allocs/op；`BenchmarkEngineStepFourCompanions` 4069 ns/op、1536 B/op、28 allocs/op。改动只在 PendingSpawn 扫描，活跃 tick benchmark 不改变退出状态或基线。
 - 规格沉淀：delta 已同步为主规格 `authoritative-spawn-support`，change 归档为 `2026-08-24-fix-spawn-support-top`；归档后 `openspec validate --all --strict --no-interactive` 为 63/63 通过。
 - 自动收尾门禁：归档与基线同步提交后再次运行 `scripts/agents/gates.sh`，gofmt、`go vet ./...`、archcheck（3.292s）、OpenSpec strict（63/63）、`make rust` 与全量 `go test ./... -race` 全部通过；全量 race 中 archcheck 为 16.845s，其余包全部通过。
+- PR 集成：origin/main 合入 E-09 后，fresh 集成实现者以 merge `ca8138f1` 解决唯一冲突 `docs/feature-backlog.md`，同时保留 E-09/E-10 完成态与两边规格/基线事实；定点 OpenSpec 63/63、archcheck 与 sim race 通过。
+- 集成后最终门禁：再次运行 `scripts/agents/gates.sh` 全部通过；全量 race 中 `cmd/mornlea` 192.700s、`internal/server` 148.487s、`internal/archcheck` 20.941s、`internal/sim` 8.491s，其余包全部通过。
