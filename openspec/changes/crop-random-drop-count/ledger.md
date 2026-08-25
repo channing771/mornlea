@@ -38,7 +38,8 @@
 
 - 门禁（2026-08-25，worktree 内 `scripts/agents/gates.sh` + 补跑）：gofmt 无输出、`go vet ./...` 通过、archcheck ok、OpenSpec strict 65/65、`make rust`（固定 1.97.1）通过、全量 `go test ./... -race` 全绿（含 `cmd/mornlea` 600s 重型套件）。
 - 备注：本机 Go 经 gvm（go1.26.0）、node 经 fnm（v24.19.0）；非交互 shell 需显式拼 PATH，否则 gates 第 4/6 步因命令缺失误报 FAIL（已复核为工具可用性问题，非校验失败）。
-- 整分支终审：（待终审 reviewer 结论回填）
+- 整分支终审：**PASS**（全新 reviewer，8 条清单全过）——规格合规与主规格替换自洽；范围/上限无放宽；并发与重放契约成立；wire/存档零触碰（network/storage/core/companion diff 为空）；注释与产物内部一致；测试组织合规；提交卫生合格。non-blocking 三条：① design.md D2 的 `crop.go:251` 行号漂移（标识符正确）；② 终审期一次高负载下 server 等待预算偶发超时（隔离复跑 0.1s，本分支零触碰文件，属 E-11 领域）；③ 合入→归档间的基线句失真窗口，合入与归档宜紧耦合。**合入建议：可直接 PR**。
+- 归档收尾待办（阶段 5，合入后执行）：同步 `AGENTS.md`+`CLAUDE.md` 掉落基线句与 `docs/notes/progress.md` → 回填 backlog B-10 行为「已完成」→ `openspec sync` + `openspec archive`。
 
 ## 分支提交履历
 
