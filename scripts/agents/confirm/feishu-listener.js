@@ -83,20 +83,24 @@ async function sendAck(cfg, openId, text) {
 
 var LOOP_GUARD = process.env.MORNLEA_LOOP_GUARD || path.join(os.homedir(), '.mornlea', 'loop.guard');
 
-function spawnResume(cfg, requestId) {
+function spawnResume(cfg, request) {
   if (cfg.autoResume === false) { log('autoResume 已关闭，不自动续跑'); return; }
+  const requestId = request && request.id;
   const repo = path.resolve(__dirname, '..', '..', '..');
   const cmd = cfg.resumeCmd || ('cd ' + repo + ' && scripts/agents/run-agent.sh implementer');
   // 接力循环：guard 存在说明有活动循环 → 继承 AGENT_LOOP=1，否则续跑会话不会在收尾触发 relay，链条会断
   const inLoop = fs.existsSync(LOOP_GUARD);
+  // 链身份：确认请求记录了发起链条的 tool/workerId（confirm.sh ask 写入），续跑必须保持同一链
+  const chainTool = (request && request.workerTool) || 'claude';
+  const chainId = (request && request.workerId) || '';
   const logFile = fs.openSync(path.join(DIR, 'resume-' + requestId + '.log'), 'a');
   const child = spawn('/bin/bash', ['-lc', cmd], {
     detached: true,
     stdio: ['ignore', logFile, logFile],
-    env: Object.assign({}, process.env, { AGENT_RESUME: requestId, MORNLEA_CONFIRM_DIR: DIR, AGENT_LOOP: inLoop ? '1' : (process.env.AGENT_LOOP || '0') }),
+    env: Object.assign({}, process.env, { AGENT_RESUME: requestId, MORNLEA_CONFIRM_DIR: DIR, AGENT_LOOP: inLoop ? '1' : (process.env.AGENT_LOOP || '0'), AGENT_TOOL: chainTool, WORKER_ID: chainId }),
   });
   child.unref();
-  log('已触发续跑(pid=' + child.pid + ')：' + cmd + ' (AGENT_RESUME=' + requestId + ')');
+  log('已触发续跑(pid=' + child.pid + ')：' + cmd + ' (AGENT_RESUME=' + requestId + ', tool=' + chainTool + ', worker=' + chainId + ')');
 }
 
 function handleMessage(cfg, data) {
@@ -123,7 +127,7 @@ function handleMessage(cfg, data) {
   const reply = writeReply(target.id, action, text, { senderOpenId: openId, chatId: m.chat_id, messageId: m.message_id });
   log('#HANDLED ' + target.id + ' action=' + action);
   if (openId) { const label = (target.kind === 'question' ? '提问' : '确认') + '已收到（' + action + '）'; sendAck(cfg, openId, label + '，实现者将从 ' + target.id + '.reply.json 继续。'); }
-  spawnResume(cfg, target.id);
+  spawnResume(cfg, target);
 }
 
 async function main() {

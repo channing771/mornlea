@@ -54,7 +54,7 @@ case "$CMD" in
     case "$ID" in feishu|feishu-token|pending) echo "ID 与通道保留名冲突，请换 ID" >&2; exit 2 ;; esac
     if [ -f "$DIR/$ID.reply.json" ]; then echo "该行已有回复文件（$DIR/$ID.reply.json），请先清理或等待续跑" >&2; exit 3; fi
     NOW="$(now_iso)"
-    jq -nc --arg id "$ID" --arg t "$TITLE" --arg c "$CATEGORY" --arg q "$QUESTION" --arg d "$DESIGN" --arg ch "$CH" --arg k "$KIND" --arg o "$OPTIONS_V" --arg n "$NOW"       '{id:$id, title:$t, category:$c, kind:$k, question:$q, options:($o | if . == "" then [] else split("|") end), design:$d, status:"pending", channel:$ch, createdAt:$n, updatedAt:$n}' > "$DIR/$ID.json"
+    jq -nc --arg id "$ID" --arg t "$TITLE" --arg c "$CATEGORY" --arg q "$QUESTION" --arg d "$DESIGN" --arg ch "$CH" --arg k "$KIND" --arg o "$OPTIONS_V" --arg wt "${AGENT_TOOL:-claude}" --arg wi "${WORKER_ID:-}" --arg n "$NOW"       '{id:$id, title:$t, category:$c, kind:$k, question:$q, options:($o | if . == "" then [] else split("|") end), design:$d, workerTool:$wt, workerId:$wi, status:"pending", channel:$ch, createdAt:$n, updatedAt:$n}' > "$DIR/$ID.json"
     echo "[confirm] 已登记请求: $DIR/${ID}.json（channel=${CH}）"
     case "$CH" in
       feishu|auto)
