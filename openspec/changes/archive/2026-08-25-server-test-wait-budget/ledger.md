@@ -44,6 +44,12 @@
 
 ## 整分支终审与收尾
 
-- 整分支终审：待执行。
-- 最终门禁：待执行。
-- 归档、规划回填与 PR/CI：待执行。
+- 远端基线卫生：2026-08-25 `git fetch origin` 后确认 `28272178` 已是 `origin/main` 祖先，因此无需剥离并行 E-12 proposal；最终 `git merge-base HEAD origin/main` 为 `0989103a`，符合 E-11 从认领提交起独立叠加的假设。
+- 旧→新提交主题映射（未发生 rebase，SHA 保持不变）：`0989103a`→`0989103a` `docs: claim E-11 server test wait budget`；`b8120ef4`→`b8120ef4` `docs(openspec): propose server test wait budget`；`0834fb8b`→`0834fb8b` `test(server): bound login tick waits`；`44c7506d`→`44c7506d` `test(server): cover exact login wait boundary`；`92304d39`→`92304d39` `docs: record E-11 task review`。
+- 整分支终审：PASS；0 Critical、0 Important、0 Minor findings。Task 1、R1、SPEC/QUALITY re-review 均已闭合，准许以 fresh gates 全绿为前置进入归档。
+- 最终门禁：2026-08-25 第 1 轮 `scripts/agents/gates.sh` fresh 全绿，无任何跳过或豁免变量；`gofmt` 无输出、`go vet ./...` 通过、archcheck 通过（3.510s）、OpenSpec strict 65 passed / 0 failed、`make rust` 通过、完整 `go test ./... -race` 通过（其中 `cmd/mornlea` 282.012s、`internal/server` 178.069s）。无需失败用例复跑或第 2 轮 gates。
+- 归档复核：`openspec status --change server-test-wait-budget --json` 显示 proposal/design/tasks 为 `done`、specs 为 `skipped`，`tasks.md` 无 `- [ ]`；`artifactPaths.specs.existingOutputPaths` 为空，明确结论为 **No delta specs**，未运行 sync，也未修改主规格。
+- 归档路径：`openspec/changes/archive/2026-08-25-server-test-wait-budget`，完整保留 `.openspec.yaml`。
+- Ruling: archive operation guidance 中同步 `AGENTS.md`/`CLAUDE.md`/`docs/notes/progress.md` 对本变更不适用 — proposal 明确本变更只整理测试基础设施，不新增 capability、不改变产品行为或任何契约版本，长期基线不得写入非产品能力 — 强行同步会把测试实现细节误记为产品能力；因此三份文件均不改，并以 `cmp -s AGENTS.md CLAUDE.md` 通过确认现有双文档仍逐字节一致。
+- 规划回填：`docs/feature-backlog.md` 的 E-11 已更新为“已完成”，认领人履历保留；PR/CI 待执行。
+- 归档后验证：OpenSpec strict 64 passed / 0 failed，`go test ./internal/archcheck -count=1` 通过（3.997s），`gofmt -l .` 无输出，`git diff --check` 通过；归档目录内 `.openspec.yaml` 存在。
