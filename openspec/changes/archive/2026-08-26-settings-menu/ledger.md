@@ -37,8 +37,8 @@
 - 独立终审：`d01_branch_final_review` 最终 PASS（两次阻断审查、两次 PASS 快照确认）
 - 最终门禁：除 R-011 的 baseline-equivalent `make visual-check` 非零外全部 PASS；全仓 race 最终 PASS 581s
 - OpenSpec 同步/归档：COMPLETE（5 份 delta 全部合入稳定规格；归档为 `2026-08-26-settings-menu`）
-- PR / CI / 合并：PR #86；首轮最终汇总 8/8 PASS（`internal-server` 继承重启等待 flake 经 failed-only 重跑一次通过）；因并发主线推进，已融合 `origin/main@9d702dbb`，最终 CI / 合并 PENDING
-- Discussion 完成回报：PENDING
+- PR / CI / 合并：PR #86 已以 merge `68155a78` 合入 `main`；融合 `origin/main@9d702dbb` 后的最终 CI run `32882378034` 为 8/8 PASS（`internal-server` 继承伙伴台词等待 flake 经诊断与 failed-only 重跑一次通过）
+- Discussion 完成回报：COMPLETE（https://github.com/channing771/mornlea/discussions/71#discussioncomment-18152318；正文已刷新）
 
 ## Rulings
 
@@ -66,3 +66,4 @@
 - R-022：所有 planning artifact 完整、8/8 tasks 已完成且主规格同步后，将 change 归档为 `openspec/changes/archive/2026-08-26-settings-menu`；归档后 strict validation 仅校验稳定规格与其他活动 change，不再重复计入 D-01 活动 change。
 - R-023：PR #86 首轮 CI 的 `internal-server` race 在未被 D-01 修改的 `TestDropSurvivesShutdownAndRestart` 等待 Ready 90 秒后超时；本地同一 race 用例 `count=20` 全绿且分支相对当时主线在 `internal/server` 零差异，failed-only 重跑通过，最终汇总 8/8 PASS。合并瞬间主线由 `c2b799ce` 推进到 `9d702dbb`（B-13 attack exhaustion），融合只在 `AGENTS.md`/`CLAUDE.md` 与进度文档产生语义冲突：基线取 B-13 六项疲劳来源与 D-01 client ABI v9/设置页描述的并集，两份基线文档继续逐字节相同；生产代码自动无冲突合入。
 - R-024：`origin/main@9d702dbb` 融合快照经 `d01_branch_final_review` 再次独立整分支复审 PASS（无 P0/P1/P2）；确认 D-01 生产实现未被 merge 改动、B-13 生产文件与主线一致、ABI 三端 v9、capture 19 场景、golden 差异仍只含 `main-menu.png` 与新增 `settings-menu.png`。融合后 archcheck、`internal/sim -race`、OpenSpec strict 65/65、diff-check 与基线文档一致性均 PASS。
+- R-025：最新主线融合后的 PR CI run `32882378034` 首次执行仅 `internal-server` race 失败：既有 `TestCompanionDialogueTerminalCoversFourTerminalStates/Stopped` 等待假台词模型请求 60 秒超时。D-01 相对 `origin/main@9d702dbb` 在 `internal/server` 零差异；本地独立单次 race 2.859s PASS，`count=20` 能复现同一主线时序 flake，故不越界修改生产或共享测试。failed-only 重跑后该分片 4m20s PASS，最终汇总 8/8 全绿；PR #86 随后以 merge `68155a78` 合入 `main`，Discussion #71 完成评论与正文刷新均成功。
