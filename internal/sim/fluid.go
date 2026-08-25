@@ -132,6 +132,10 @@ func (w *fluidWorld) BlockAt(position core.BlockPos) core.BlockID {
 
 // SetBlock 实现 fluid.FluidWorld：写入区块并把变更汇入本 tick 的
 // pendingChunkChanges，与放置、采掘、掉落物、熔炉共用同一批广播与存盘。
+//
+// 目标格是作物而新值是流体时，写入改道 settleFloodedCrop 结算冲毁（design.md
+// D2：这里是全部流体写入的唯一汇聚点，每目标格每 tick 恰好一次最终生效写入，
+// 冲毁因此恰好结算一次）；范围外防御分支先行不变。
 func (w *fluidWorld) SetBlock(position core.BlockPos, id core.BlockID) {
 	record := w.record(position)
 	if record == nil {
@@ -141,7 +145,11 @@ func (w *fluidWorld) SetBlock(position core.BlockPos, id core.BlockID) {
 		return
 	}
 	x, _, z := position.Local()
-	if record.Chunk.BlockAt(x, position.Y, z) == id {
+	old := record.Chunk.BlockAt(x, position.Y, z)
+	if old == id {
+		return
+	}
+	if settleFloodedCrop(w, record, position, old, id) {
 		return
 	}
 	record.Chunk.SetBlock(x, position.Y, z, id)
