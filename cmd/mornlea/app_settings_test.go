@@ -5,9 +5,10 @@ package main
 // app_settings_test.go：设置页的 Go 草稿状态机、保存事务与运行时资源替换测试。
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -20,7 +21,6 @@ import (
 	"github.com/channing771/mornlea/internal/audio"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/config"
-	"github.com/channing771/mornlea/internal/logging"
 	"github.com/channing771/mornlea/internal/network"
 )
 
@@ -218,6 +218,126 @@ func TestSettingsSaveDefaultCreatesConfigV1(t *testing.T) {
 	}
 }
 
+func TestSettingsSavePreservesRawUnexposedConfiguration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	body := []byte(`{
+  "version": 1,
+  "audioVolume": 0.7,
+  "texturePackPath": "packs/old",
+  "windowSize": "1280x720",
+  "futureTop": { "keep": [1, {"raw": true}] },
+  "render": { "viewDistance": 999, "fovDegrees": 70, "mouseSensitivity": 1, "lodEnabled": true, "lodFarMultiplier": 3, "lodStep": 4, "futureNested": {"keep": "verbatim"} }
+}`)
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var before map[string]json.RawMessage
+	if err := json.Unmarshal(body, &before); err != nil {
+		t.Fatal(err)
+	}
+
+	app := newSettingsStateTestApplication(settingsValues{
+		audioVolume: 0.7, texturePackPath: "packs/old", windowSize: config.WindowSize1280x720,
+	})
+	app.startupOptions.ConfigPath = path
+	app.settings.draft = settingsValues{
+		audioVolume: 0.25, texturePackPath: "packs/new", windowSize: config.WindowSize960x540,
+	}
+	app.startupDeps = defaultApplicationDependencies()
+	app.startupDeps.newRegistry = func(string) (*assets.Registry, error) {
+		return assets.NewDefaultRegistry(), nil
+	}
+	if err := app.saveSettings(); err != nil {
+		t.Fatalf("saveSettings: %v", err)
+	}
+
+	afterBody, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var after map[string]json.RawMessage
+	if err := json.Unmarshal(afterBody, &after); err != nil {
+		t.Fatalf("保存结果不是合法 JSON: %v", err)
+	}
+	for _, key := range []string{"futureTop", "render"} {
+		if !bytes.Equal(before[key], after[key]) {
+			t.Fatalf("%s raw value changed:\nbefore=%s\nafter=%s", key, before[key], after[key])
+		}
+	}
+	if got := string(after["audioVolume"]); got != "0.25" {
+		t.Fatalf("audioVolume=%s", got)
+	}
+	if got := string(after["texturePackPath"]); got != `"packs/new"` {
+		t.Fatalf("texturePackPath=%s", got)
+	}
+	if got := string(after["windowSize"]); got != `"960x540"` {
+		t.Fatalf("windowSize=%s", got)
+	}
+}
+
+func TestSettingsSaveProductionPatchFailureKeepsDiskDraftAndRuntime(t *testing.T) {
+	want := settingsValues{audioVolume: 0.7, windowSize: config.WindowSize1280x720}
+	for _, test := range []struct {
+		name    string
+		prepare func(*testing.T) (path string, verify func(*testing.T))
+	}{
+		{
+			name: "damaged JSON",
+			prepare: func(t *testing.T) (string, func(*testing.T)) {
+				path := filepath.Join(t.TempDir(), "config.json")
+				body := []byte(`{"version":1,"render":`)
+				if err := os.WriteFile(path, body, 0o600); err != nil {
+					t.Fatal(err)
+				}
+				return path, func(t *testing.T) {
+					got, err := os.ReadFile(path)
+					if err != nil || !bytes.Equal(got, body) {
+						t.Fatalf("damaged config changed: body=%q err=%v", got, err)
+					}
+				}
+			},
+		},
+		{
+			name: "I/O failure",
+			prepare: func(t *testing.T) (string, func(*testing.T)) {
+				parent := filepath.Join(t.TempDir(), "not-a-directory")
+				if err := os.WriteFile(parent, []byte("sentinel"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				return filepath.Join(parent, "config.json"), func(t *testing.T) {
+					got, err := os.ReadFile(parent)
+					if err != nil || string(got) != "sentinel" {
+						t.Fatalf("I/O sentinel changed: body=%q err=%v", got, err)
+					}
+				}
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			path, verify := test.prepare(t)
+			app := newSettingsStateTestApplication(want)
+			app.startupOptions.ConfigPath = path
+			app.settings.draft = settingsValues{audioVolume: 0.25, windowSize: config.WindowSize640x360}
+			window := &settingsTestWindow{}
+			app.window = window
+			audioCreates := 0
+			app.startupDeps = defaultApplicationDependencies()
+			app.startupDeps.newAudioPlayer = func(float32) (func(audio.Cue), func()) {
+				audioCreates++
+				return nil, nil
+			}
+			if err := app.saveSettings(); err == nil {
+				t.Fatal("saveSettings unexpectedly succeeded")
+			}
+			verify(t)
+			if app.settings.committed != want || !app.settings.dirty() || audioCreates != 0 || window.setCalls != 0 {
+				t.Fatalf("failure changed state/runtime: state=%+v audio=%d window=%d",
+					app.settings, audioCreates, window.setCalls)
+			}
+		})
+	}
+}
+
 func TestSettingsSaveOrderPatchesLatestAndAppliesAfterDisk(t *testing.T) {
 	var events []string
 	committed := settingsValues{audioVolume: 0.7, texturePackPath: "packs/old", windowSize: config.WindowSize1280x720}
@@ -241,23 +361,15 @@ func TestSettingsSaveOrderPatchesLatestAndAppliesAfterDisk(t *testing.T) {
 		events = append(events, "close old audio")
 	}
 
-	latest := config.Defaults()
-	latest.Render.ViewDistance = 19
-	latest.FluidEnabled = false
-	latest.Logging = logging.Config{Default: slog.LevelWarn, Modules: map[string]slog.Level{"sim": slog.LevelError}}
-	var saved config.Config
+	var saved config.SettingsPatch
 	app.startupDeps = applicationDependencies{
 		newRegistry: func(path string) (*assets.Registry, error) {
 			events = append(events, "registry "+path)
 			return assets.NewDefaultRegistry(), nil
 		},
-		loadConfig: func(path string) (config.Config, error) {
-			events = append(events, "load "+path)
-			return latest, nil
-		},
-		saveConfig: func(cfg config.Config, path string) error {
-			events = append(events, "save "+path)
-			saved = cfg
+		patchSettings: func(path string, patch config.SettingsPatch) error {
+			events = append(events, "patch "+path)
+			saved = patch
 			return nil
 		},
 		newAudioPlayer: func(volume float32) (func(audio.Cue), func()) {
@@ -275,8 +387,7 @@ func TestSettingsSaveOrderPatchesLatestAndAppliesAfterDisk(t *testing.T) {
 	}
 	wantEvents := []string{
 		"registry " + wantCandidate,
-		"load " + configPath,
-		"save " + configPath,
+		"patch " + configPath,
 		"audio 0.25",
 		"close old audio",
 		"window 960x540",
@@ -287,9 +398,6 @@ func TestSettingsSaveOrderPatchesLatestAndAppliesAfterDisk(t *testing.T) {
 	}
 	if saved.AudioVolume != draft.audioVolume || saved.TexturePackPath != draft.texturePackPath || saved.WindowSize != draft.windowSize {
 		t.Fatalf("三项 patch 错误: %+v", saved)
-	}
-	if saved.Render.ViewDistance != latest.Render.ViewDistance || saved.FluidEnabled != latest.FluidEnabled || !reflect.DeepEqual(saved.Logging, latest.Logging) {
-		t.Fatalf("保存覆盖了最新磁盘其他字段: saved=%+v latest=%+v", saved, latest)
 	}
 	if app.settings.committed != draft || app.settings.dirty() {
 		t.Fatalf("成功后 committed/draft 错误: %+v", app.settings)
@@ -356,8 +464,7 @@ func TestSettingsCandidateValidationPathAndSkipRules(t *testing.T) {
 					}
 					return assets.NewDefaultRegistry(), nil
 				},
-				loadConfig: func(string) (config.Config, error) { return config.Defaults(), nil },
-				saveConfig: func(config.Config, string) error { return nil },
+				patchSettings: func(string, config.SettingsPatch) error { return nil },
 			}
 			if err := app.saveSettings(); err != nil {
 				t.Fatalf("saveSettings: %v", err)
@@ -371,7 +478,7 @@ func TestSettingsCandidateValidationPathAndSkipRules(t *testing.T) {
 
 func TestSettingsSaveFailuresHaveNoRuntimeSideEffectsAndKeepDraft(t *testing.T) {
 	wantErr := errors.New(strings.Repeat("材质配置损坏🙂", 40))
-	for _, stage := range []string{"candidate", "load", "save"} {
+	for _, stage := range []string{"candidate", "patch"} {
 		t.Run(stage, func(t *testing.T) {
 			committed := settingsValues{audioVolume: 0.7, texturePackPath: "old", windowSize: config.WindowSize1280x720}
 			draft := settingsValues{audioVolume: 0.2, texturePackPath: "new", windowSize: config.WindowSize640x360}
@@ -390,14 +497,8 @@ func TestSettingsSaveFailuresHaveNoRuntimeSideEffectsAndKeepDraft(t *testing.T) 
 					}
 					return assets.NewDefaultRegistry(), nil
 				},
-				loadConfig: func(string) (config.Config, error) {
-					if stage == "load" {
-						return config.Config{}, wantErr
-					}
-					return config.Defaults(), nil
-				},
-				saveConfig: func(config.Config, string) error {
-					if stage == "save" {
+				patchSettings: func(string, config.SettingsPatch) error {
+					if stage == "patch" {
 						return wantErr
 					}
 					return nil

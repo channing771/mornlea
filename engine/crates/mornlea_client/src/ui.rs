@@ -621,6 +621,23 @@ impl UiState {
         self.font_loaded
     }
 
+    /// 报告输出队列能否容纳指定布局一帧的最坏事件数。renderer 外层必须在
+    /// 排空 window-input 队列前调用，才能让容量失败保留完整输入供下帧重试。
+    pub fn has_frame_capacity(&self, frame: &UiFrame) -> bool {
+        self.pending_events
+            .has_frame_capacity(max_output_events_per_frame(frame))
+    }
+
+    /// 测试专用：用合法 action 填充输出队列。
+    #[cfg(test)]
+    pub(crate) fn test_fill_actions(&mut self, count: usize) {
+        for action in 0..count {
+            self.pending_events
+                .enqueue(UiOutputEvent::Action(action as u32))
+                .expect("测试填充不得超过输出队列上限");
+        }
+    }
+
     /// 运行一帧 UI:无字体或当前布局不可见时返回 `None`(零工作)。
     ///
     /// `pixels_per_point` 被写进 ROOT 视口的 `native_pixels_per_point`,
@@ -637,10 +654,7 @@ impl UiState {
         if !self.font_loaded || !frame.visible() {
             return Ok(None);
         }
-        let max_frame_events = match frame {
-            UiFrame::Menu(_) => MAX_MENU_OUTPUT_EVENTS_PER_FRAME,
-            UiFrame::Settings(_) => MAX_SETTINGS_OUTPUT_EVENTS_PER_FRAME,
-        };
+        let max_frame_events = max_output_events_per_frame(frame);
         if !self.pending_events.has_frame_capacity(max_frame_events) {
             return Err(UiOutputError::Capacity);
         }
@@ -718,6 +732,13 @@ impl UiState {
     /// 由 [`UiState`] 私有持有,故只经此只读访问器对外暴露(不改写任何状态)。
     pub fn ctx(&self) -> &egui::Context {
         &self.ctx
+    }
+}
+
+fn max_output_events_per_frame(frame: &UiFrame) -> usize {
+    match frame {
+        UiFrame::Menu(_) => MAX_MENU_OUTPUT_EVENTS_PER_FRAME,
+        UiFrame::Settings(_) => MAX_SETTINGS_OUTPUT_EVENTS_PER_FRAME,
     }
 }
 
@@ -1245,6 +1266,12 @@ pub fn push_ui_event(event: UiEvent) {
 /// 防止菜单关闭期间的输入积压。
 pub fn take_ui_events() -> Vec<UiEvent> {
     UI_EVENTS.with(|q| q.borrow_mut().drain(..).collect())
+}
+
+/// 返回当前 window-input 队列长度；只供 renderer 外层容量重试测试使用。
+#[cfg(test)]
+pub fn pending_ui_event_count() -> usize {
+    UI_EVENTS.with(|q| q.borrow().len())
 }
 
 /// 清空队列,丢弃全部积压事件。

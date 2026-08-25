@@ -116,7 +116,7 @@ func configWindowFromUI(window client.UISettingsWindow) (config.WindowSize, bool
 	}
 }
 
-// saveSettings 严格按「草稿校验 → 变化材质候选校验 → 读取最新磁盘配置 →
+// saveSettings 严格按「草稿校验 → 变化材质候选校验 → 校验并 patch 最新磁盘配置 →
 // 原子落盘 → 更新 committed → 替换运行时音频和窗口」执行。前四步失败时
 // committed 与所有运行时资源均保持原状。
 func (a *application) saveSettings() error {
@@ -139,22 +139,13 @@ func (a *application) saveSettings() error {
 		}
 	}
 
-	loadConfig := a.startupDeps.loadConfig
-	if loadConfig == nil {
-		loadConfig = config.Load
+	patchSettings := a.startupDeps.patchSettings
+	if patchSettings == nil {
+		patchSettings = config.PatchSettings
 	}
-	latest, err := loadConfig(a.startupOptions.ConfigPath)
-	if err != nil {
-		return fmt.Errorf("重新加载配置: %w", err)
-	}
-	latest.AudioVolume = draft.audioVolume
-	latest.TexturePackPath = draft.texturePackPath
-	latest.WindowSize = draft.windowSize
-	saveConfig := a.startupDeps.saveConfig
-	if saveConfig == nil {
-		saveConfig = func(cfg config.Config, path string) error { return cfg.Save(path) }
-	}
-	if err := saveConfig(latest, a.startupOptions.ConfigPath); err != nil {
+	if err := patchSettings(a.startupOptions.ConfigPath, config.SettingsPatch{
+		AudioVolume: draft.audioVolume, TexturePackPath: draft.texturePackPath, WindowSize: draft.windowSize,
+	}); err != nil {
 		return fmt.Errorf("原子保存配置: %w", err)
 	}
 

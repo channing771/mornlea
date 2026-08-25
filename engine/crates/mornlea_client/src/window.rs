@@ -88,14 +88,17 @@ impl ApplicationHandler for App {
             Ok(window) => {
                 // 聊天需要 IME 提交的 Unicode 文本(GLFW char 回调的等价物)。
                 window.set_ime_allowed(true);
-                // 超屏钳制:物理尺寸超过显示器可用区域时按原宽高比缩小,
-                // 保证 1x 屏/非整数缩放下窗口完整可见(标题栏不落到屏幕外)。
+                // AppKit 的 `NSScreen.visibleFrame` 以逻辑 point 给出扣除菜单栏与
+                // Dock 的真实工作区；窗口预设同样以 point 表达，先在同一单位
+                // 内钳制，再只在 request 边界转换为物理像素。
+                let scale = window.scale_factor();
                 let current = window.inner_size();
-                let clamped = clamp_to_current_monitor(&window, current);
-                if clamped != current {
+                let requested: LogicalSize<u32> = current.to_logical(scale);
+                let clamped = clamp_logical_to_current_work_area(&window, requested);
+                if clamped != requested {
                     // 返回值是系统采用的新尺寸,这里不关心,与 `set_content_size`
                     // 的丢弃口径一致。
-                    let _ = window.request_inner_size(clamped);
+                    let _ = window.request_inner_size(clamped.to_physical::<u32>(scale));
                 }
                 // Arc 包装:渲染器 surface 需要共享窗口所有权(wgpu
                 // create_surface 的 'static 约束)。
@@ -239,11 +242,13 @@ impl ClientWindow {
     /// 请求修改 content 尺寸(逻辑点);实际生效经 Resized 事件回写快照。
     pub fn set_content_size(&mut self, width: u32, height: u32) {
         if let Some(window) = &self.app.window {
-            // 设置页传入逻辑尺寸；先按当前 scale factor 换算成物理像素，再
-            // 复用创建期的显示器工作区钳制，避免运行期放大把窗口推出屏幕。
-            let requested = LogicalSize::new(width, height).to_physical(window.scale_factor());
-            let clamped = clamp_to_current_monitor(window, requested);
-            let _ = window.request_inner_size(clamped);
+            // 设置页传入逻辑 point；运行期与创建期共用真实 visibleFrame 钳制，
+            // 最后才按当前 scale factor 转为 winit 请求的物理尺寸。Retina 的
+            // 物理 2x 上限另由 Go `fitFramebuffer` 负责，职责不在此混合。
+            let scale = window.scale_factor();
+            let requested = LogicalSize::new(width, height);
+            let clamped = clamp_logical_to_current_work_area(window, requested);
+            let _ = window.request_inner_size(clamped.to_physical::<u32>(scale));
         }
         self.app.refresh_sizes();
     }
@@ -299,28 +304,88 @@ impl ClientWindow {
     }
 }
 
-/// 超屏钳制的显示器边距系数:winit 0.30 的 `MonitorHandle` 不暴露工作区
-/// (系统菜单栏/Dock 之外的区域),按显示器全尺寸的 90% 近似,给系统栏与
-/// 窗口标题栏留出空间,保证钳制后窗口仍然完整可见。
+/// AppKit 不可用时的保守显示器边距系数。正常 Darwin 路径读取当前 NSWindow
+/// 所在 `NSScreen.visibleFrame`；只有句柄、screen 或返回值无效时才退回此值。
 const DISPLAY_CLAMP_RATIO: f64 = 0.9;
 
-/// 按窗口当前显示器的保守工作区钳制请求；无法取得显示器时保持原请求。
-fn clamp_to_current_monitor(window: &Window, requested: PhysicalSize<u32>) -> PhysicalSize<u32> {
-    let Some(monitor) = window.current_monitor() else {
-        return requested;
-    };
-    let monitor_size = monitor.size();
-    let limit = PhysicalSize::new(
-        (monitor_size.width as f64 * DISPLAY_CLAMP_RATIO).round() as u32,
-        (monitor_size.height as f64 * DISPLAY_CLAMP_RATIO).round() as u32,
-    );
-    clamp_to_work_area(requested, limit)
+/// 按当前窗口所在屏幕的逻辑工作区钳制请求。真实 visibleFrame 获取失败时，
+/// 从 winit monitor 的物理像素与 scale factor 推导保守 point 上限；若连 monitor
+/// 也不可用，退到最小 640×360，绝不完全跳过钳制。
+fn clamp_logical_to_current_work_area(
+    window: &Window,
+    requested: LogicalSize<u32>,
+) -> LogicalSize<u32> {
+    let work = visible_work_area_points(window).unwrap_or_else(|| {
+        window
+            .current_monitor()
+            .map_or(LogicalSize::new(640, 360), |monitor| {
+                fallback_work_area_points(monitor.size(), window.scale_factor())
+            })
+    });
+    clamp_logical_to_work_area(requested, work)
 }
 
-/// 把请求的物理尺寸钳制到给定上限内:两轴取最小缩放比、保持宽高比,不
+/// 从 NSWindow 沿 `screen` 关系读取 `NSScreen.visibleFrame` 的逻辑 point 尺寸。
+///
+/// SAFETY：raw-window-handle 的 NSView 只在活动窗口生命周期内使用；三条
+/// Objective-C 消息均在创建该 winit 窗口的主线程执行。任一对象为 nil、返回
+/// 非有限数或非正尺寸都会返回 `None`，由有界 fallback 接管，不解引用悬空指针。
+fn visible_work_area_points(window: &Window) -> Option<LogicalSize<u32>> {
+    use objc2::runtime::AnyObject;
+    use objc2_foundation::NSRect;
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    let handle = window.window_handle().ok()?.as_raw();
+    let RawWindowHandle::AppKit(appkit) = handle else {
+        return None;
+    };
+    let ns_view: *mut AnyObject = appkit.ns_view.as_ptr().cast();
+    // SAFETY:见函数安全说明；nil 在每一步都显式拒绝。
+    let ns_window: *mut AnyObject = unsafe { objc2::msg_send![ns_view, window] };
+    if ns_window.is_null() {
+        return None;
+    }
+    // SAFETY:NSWindow 的 `screen` 是借用返回值；只在本调用栈内立即读取。
+    let screen: *mut AnyObject = unsafe { objc2::msg_send![ns_window, screen] };
+    if screen.is_null() {
+        return None;
+    }
+    // SAFETY:NSScreen `visibleFrame` 返回按值 NSRect，ABI 编码由
+    // objc2-foundation 与当前 objc2 0.6 同线提供。
+    let visible: NSRect = unsafe { objc2::msg_send![screen, visibleFrame] };
+    let width = visible.size.width;
+    let height = visible.size.height;
+    if !width.is_finite() || !height.is_finite() || width < 1.0 || height < 1.0 {
+        return None;
+    }
+    Some(LogicalSize::new(
+        width.floor().min(u32::MAX as f64) as u32,
+        height.floor().min(u32::MAX as f64) as u32,
+    ))
+}
+
+/// 在 AppKit 查询失败时，把物理 monitor 尺寸除以 scale factor 后再保守收进
+/// 90%。返回单位始终是逻辑 point，Retina 2x 不会误把像素当 point。
+fn fallback_work_area_points(monitor: PhysicalSize<u32>, scale_factor: f64) -> LogicalSize<u32> {
+    let scale = if scale_factor.is_finite() && scale_factor > 0.0 {
+        scale_factor
+    } else {
+        1.0
+    };
+    let logical: LogicalSize<f64> = monitor.to_logical(scale);
+    LogicalSize::new(
+        (logical.width * DISPLAY_CLAMP_RATIO).round().max(1.0) as u32,
+        (logical.height * DISPLAY_CLAMP_RATIO).round().max(1.0) as u32,
+    )
+}
+
+/// 把请求的逻辑 point 尺寸钳制到给定上限内:两轴取最小缩放比、保持宽高比,不
 /// 超过上限时原样返回(绝不放大)。上限为 0 时返回原尺寸——窗口宁可照常
 /// 创建,也不把尺寸吞成 0。
-fn clamp_to_work_area(requested: PhysicalSize<u32>, work: PhysicalSize<u32>) -> PhysicalSize<u32> {
+fn clamp_logical_to_work_area(
+    requested: LogicalSize<u32>,
+    work: LogicalSize<u32>,
+) -> LogicalSize<u32> {
     if requested.width == 0 || requested.height == 0 || work.width == 0 || work.height == 0 {
         return requested;
     }
@@ -338,7 +403,7 @@ fn clamp_to_work_area(requested: PhysicalSize<u32>, work: PhysicalSize<u32>) -> 
     if units == 0 {
         return requested;
     }
-    PhysicalSize::new(unit_width * units, unit_height * units)
+    LogicalSize::new(unit_width * units, unit_height * units)
 }
 
 fn greatest_common_divisor(mut left: u32, mut right: u32) -> u32 {
@@ -350,35 +415,68 @@ fn greatest_common_divisor(mut left: u32, mut right: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::clamp_to_work_area;
-    use winit::dpi::PhysicalSize;
+    use super::{clamp_logical_to_work_area, fallback_work_area_points};
+    use winit::dpi::{LogicalSize, PhysicalSize};
 
     /// 超屏时按最小缩放比缩小,保持宽高比:16:9 请求在 16:9 工作区内两轴同比例。
     #[test]
     fn oversized_scales_down_preserving_aspect() {
-        let got = clamp_to_work_area(PhysicalSize::new(2560, 1440), PhysicalSize::new(1920, 1080));
-        assert_eq!(got, PhysicalSize::new(1920, 1080));
+        let got =
+            clamp_logical_to_work_area(LogicalSize::new(2560, 1440), LogicalSize::new(1920, 1080));
+        assert_eq!(got, LogicalSize::new(1920, 1080));
     }
 
     /// 比例不同的两轴取更小者,结果仍在工作区内。
     #[test]
     fn odd_work_area_uses_smallest_ratio() {
-        let got = clamp_to_work_area(PhysicalSize::new(1280, 720), PhysicalSize::new(1000, 800));
-        assert_eq!(got, PhysicalSize::new(992, 558));
+        let got =
+            clamp_logical_to_work_area(LogicalSize::new(1280, 720), LogicalSize::new(1000, 800));
+        assert_eq!(got, LogicalSize::new(992, 558));
         assert_eq!(got.width * 9, got.height * 16);
     }
 
     /// 尺寸不超过工作区时原样返回,绝不放大。
     #[test]
     fn fits_within_work_area_is_unchanged() {
-        let got = clamp_to_work_area(PhysicalSize::new(1280, 720), PhysicalSize::new(2560, 1440));
-        assert_eq!(got, PhysicalSize::new(1280, 720));
+        let got =
+            clamp_logical_to_work_area(LogicalSize::new(1280, 720), LogicalSize::new(2560, 1440));
+        assert_eq!(got, LogicalSize::new(1280, 720));
     }
 
     /// 工作区无效(0×0)时返回原尺寸,由调用方兜底,不吞掉窗口尺寸。
     #[test]
     fn zero_work_area_returns_requested() {
-        let got = clamp_to_work_area(PhysicalSize::new(1280, 720), PhysicalSize::new(0, 0));
-        assert_eq!(got, PhysicalSize::new(1280, 720));
+        let got = clamp_logical_to_work_area(LogicalSize::new(1280, 720), LogicalSize::new(0, 0));
+        assert_eq!(got, LogicalSize::new(1280, 720));
+    }
+
+    /// `visibleFrame` 的 point 尺寸远小于全屏 90% 时必须直接使用真实工作区。
+    #[test]
+    fn real_visible_frame_beats_full_screen_ninety_percent() {
+        let got =
+            clamp_logical_to_work_area(LogicalSize::new(1280, 720), LogicalSize::new(900, 600));
+        assert_eq!(got, LogicalSize::new(896, 504));
+    }
+
+    /// fallback 才从物理 monitor/scale 推导保守 point 工作区；Retina 2x 不得
+    /// 把物理 2880×1800 误作逻辑点再交给窗口 API。
+    #[test]
+    fn fallback_separates_retina_pixels_from_logical_points() {
+        let got = fallback_work_area_points(PhysicalSize::new(2880, 1800), 2.0);
+        assert_eq!(got, LogicalSize::new(1296, 810));
+    }
+
+    /// 三个产品预设均保持精确 16:9，工作区足够时不放大也不缩小。
+    #[test]
+    fn all_presets_keep_sixteen_by_nine_without_upscale() {
+        for requested in [
+            LogicalSize::new(640, 360),
+            LogicalSize::new(960, 540),
+            LogicalSize::new(1280, 720),
+        ] {
+            let got = clamp_logical_to_work_area(requested, LogicalSize::new(1600, 900));
+            assert_eq!(got, requested);
+            assert_eq!(got.width * 9, got.height * 16);
+        }
     }
 }

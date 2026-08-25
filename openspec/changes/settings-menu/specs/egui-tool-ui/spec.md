@@ -79,4 +79,3 @@
 
 - FROM: `### Requirement: client ABI v8 扩展`
 - TO: `### Requirement: client ABI v9 结构化设置事件扩展`
-

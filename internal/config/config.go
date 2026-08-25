@@ -6,17 +6,21 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
+	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
@@ -148,6 +152,19 @@ type Config struct {
 	//
 	// 显式写 false 仍然有效，用来生成不含水的世界（例如复现旧存档的地形）。
 	FluidEnabled bool `json:"fluidEnabled"`
+}
+
+// SettingsPatch 是设置页唯一允许持久化的三个顶层字段。
+//
+// 它与 `Config` 分离，避免设置页把加载时钳制后的运行值重新序列化，从而
+// 覆盖同一文件里不属于设置页的未知扩展或未暴露配置。
+type SettingsPatch struct {
+	// AudioVolume 是要写入 `audioVolume` 的本机总音量。
+	AudioVolume float32
+	// TexturePackPath 是要写入 `texturePackPath` 的未解析单行路径原文。
+	TexturePackPath string
+	// WindowSize 是要写入 `windowSize` 的固定逻辑尺寸预设。
+	WindowSize WindowSize
 }
 
 // Defaults 返回全部字段取编译期默认值的配置。它是配置文件缺省或字段缺失时的
@@ -961,10 +978,118 @@ func lookupCaseInsensitive(m map[string]json.RawMessage, key string) (json.RawMe
 	return nil, false
 }
 
+// PatchSettings 从磁盘读取并完整校验当前 v1 配置，然后只原子替换设置页拥有的
+// `audioVolume`、`texturePackPath` 与 `windowSize` 三个顶层成员。其他成员的
+// json.RawMessage 原样写回；即使加载阶段会把某个运行值钳制，保存设置也不会
+// 把钳制结果反写。文件缺失时以 `Defaults` 构造一份可再次加载的 v1 配置。
+func PatchSettings(path string, patch SettingsPatch) error {
+	if math.IsNaN(float64(patch.AudioVolume)) || math.IsInf(float64(patch.AudioVolume), 0) ||
+		patch.AudioVolume < 0 || patch.AudioVolume > 1 {
+		return fmt.Errorf("config: audioVolume 必须是 0..1 的有限数值，实际 %v", patch.AudioVolume)
+	}
+	if !patch.WindowSize.valid() {
+		return fmt.Errorf("config: windowSize 不支持预设 %q", patch.WindowSize)
+	}
+	if len(patch.TexturePackPath) > MaxTexturePackPathBytes {
+		return fmt.Errorf("config: texturePackPath 的 %d 个 UTF-8 字节超过上限 %d",
+			len(patch.TexturePackPath), MaxTexturePackPathBytes)
+	}
+	if !utf8.ValidString(patch.TexturePackPath) {
+		return errors.New("config: texturePackPath 必须是合法 UTF-8")
+	}
+	if strings.ContainsAny(patch.TexturePackPath, "\r\n") {
+		return errors.New("config: texturePackPath 必须是单行字符串")
+	}
+
+	contents, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		contents, err = json.MarshalIndent(Defaults(), "", "  ")
+	}
+	if err != nil {
+		return fmt.Errorf("config: 读取设置待更新文件 %s: %w", path, err)
+	}
+	// 必须在修改 raw object 前走与 `Load` 相同的完整验证；验证只消费本次
+	// 已读取的字节，避免二次读取引入 TOCTOU 窗口。
+	if _, err := decodeConfig(path, contents); err != nil {
+		return err
+	}
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(contents, &top); err != nil {
+		return fmt.Errorf("config: 解析设置待更新文件: %w", err)
+	}
+	for key := range top {
+		if strings.EqualFold(key, "audioVolume") || strings.EqualFold(key, "texturePackPath") ||
+			strings.EqualFold(key, "windowSize") {
+			delete(top, key)
+		}
+	}
+	values := map[string]any{
+		"audioVolume":     patch.AudioVolume,
+		"texturePackPath": patch.TexturePackPath,
+		"windowSize":      patch.WindowSize,
+	}
+	for key, value := range values {
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return fmt.Errorf("config: 序列化设置字段 %s: %w", key, err)
+		}
+		top[key] = raw
+	}
+	body, err := marshalRawObject(top)
+	if err != nil {
+		return err
+	}
+	return writeAtomic(path, body)
+}
+
+// marshalRawObject 只重建顶层对象的标点与成员次序，成员值直接复制
+// json.RawMessage。这样未知嵌套结构和会被 `Load` 钳制的原始数值都不会
+// 被二次 marshal 改写；排序只为让新文件与测试输出确定。
+func marshalRawObject(top map[string]json.RawMessage) ([]byte, error) {
+	keys := make([]string, 0, len(top))
+	for key := range top {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	var body bytes.Buffer
+	body.WriteString("{\n")
+	for index, key := range keys {
+		raw := top[key]
+		if !json.Valid(raw) {
+			return nil, fmt.Errorf("config: 顶层字段 %s 的原始 JSON 非法", key)
+		}
+		encodedKey, err := json.Marshal(key)
+		if err != nil {
+			return nil, fmt.Errorf("config: 序列化顶层字段名 %s: %w", key, err)
+		}
+		body.WriteString("  ")
+		body.Write(encodedKey)
+		body.WriteString(": ")
+		body.Write(raw)
+		if index+1 != len(keys) {
+			body.WriteByte(',')
+		}
+		body.WriteByte('\n')
+	}
+	body.WriteByte('}')
+	return body.Bytes(), nil
+}
+
 // Save 把配置原子写入 path：先在同目录创建临时文件、写入并 Sync，再 rename
 // 到目标路径，避免进程崩溃或掉电时留下半截文件覆盖旧配置。失败路径会清理
 // 临时文件。
 func (c Config) Save(path string) error {
+	body, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return fmt.Errorf("config: 序列化配置: %w", err)
+	}
+	return writeAtomic(path, body)
+}
+
+// writeAtomic 是 `Config.Save` 与 `PatchSettings` 共用的持久化边界：临时文件
+// 与目标同目录，权限固定为仅用户可读写，文件数据和目录项均同步；rename 前
+// 的任意失败都会清理临时文件且保持旧目标不变。
+func writeAtomic(path string, body []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("config: 创建配置目录: %w", err)
@@ -974,12 +1099,10 @@ func (c Config) Save(path string) error {
 		return fmt.Errorf("config: 创建临时文件: %w", err)
 	}
 	tempPath := temp.Name()
-	defer os.Remove(tempPath) // rename 成功后 tempPath 已不存在，Remove 静默失败；仅在失败路径实际清理。
-
-	body, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
+	defer os.Remove(tempPath) // rename 成功后路径已不存在；失败路径由此清理。
+	if err := temp.Chmod(0o600); err != nil {
 		temp.Close()
-		return fmt.Errorf("config: 序列化配置: %w", err)
+		return fmt.Errorf("config: 设置临时文件权限: %w", err)
 	}
 	if _, err := temp.Write(body); err != nil {
 		temp.Close()
@@ -994,6 +1117,17 @@ func (c Config) Save(path string) error {
 	}
 	if err := os.Rename(tempPath, path); err != nil {
 		return fmt.Errorf("config: 替换配置文件: %w", err)
+	}
+	directory, err := os.Open(dir)
+	if err != nil {
+		return fmt.Errorf("config: 打开配置目录以同步: %w", err)
+	}
+	if err := directory.Sync(); err != nil {
+		directory.Close()
+		return fmt.Errorf("config: 同步配置目录: %w", err)
+	}
+	if err := directory.Close(); err != nil {
+		return fmt.Errorf("config: 关闭配置目录: %w", err)
 	}
 	return nil
 }

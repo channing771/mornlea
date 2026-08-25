@@ -31,10 +31,9 @@ type applicationDependencies struct {
 	newOffscreenRenderer func(int, int) (*client.Renderer, error)
 	newGlyphAtlas        func(render.GlyphSink) (*render.GlyphAtlas, error)
 	newAudioPlayer       func(float32) (play func(audio.Cue), close func())
-	// `loadConfig`/`saveConfig` 是设置保存事务的可测试边界；生产实现仍直接复用
-	// `config.Load` 与 `Config.Save` 的既有原子替换语义。
-	loadConfig func(string) (config.Config, error)
-	saveConfig func(config.Config, string) error
+	// `patchSettings` 是设置保存事务的可测试边界；生产实现只原子 patch
+	// 设置页拥有的三个 raw JSON 顶层成员，不重写同文件的其他字段。
+	patchSettings func(string, config.SettingsPatch) error
 }
 
 func defaultApplicationDependencies() applicationDependencies {
@@ -80,9 +79,6 @@ func defaultApplicationDependencies() applicationDependencies {
 			player := audio.NewPlayer(volume)
 			return player.Play, player.Close
 		},
-		loadConfig: config.Load,
-		saveConfig: func(cfg config.Config, path string) error {
-			return cfg.Save(path)
-		},
+		patchSettings: config.PatchSettings,
 	}
 }

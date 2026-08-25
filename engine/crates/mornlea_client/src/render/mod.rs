@@ -28,6 +28,8 @@ pub mod shaders;
 #[cfg(test)]
 mod side_tests;
 #[cfg(test)]
+mod ui_replay_tests;
+#[cfg(test)]
 mod water_tests;
 
 use std::collections::HashMap;
@@ -2010,9 +2012,9 @@ impl OffscreenRenderer {
             );
         }
         // egui 菜单 pass(最上层,screen-space 无深度):只在 UI 段非空时运行。
-        // 输入事件队列在任何情况下都 take 并丢弃(防空段积压);字体未装而
-        // 菜单可见视为编程错误(Go 启动后上传一次),返回 Invalid。
-        let ui_events = take_ui_events();
+        // 空段仍 take 并丢弃以防游戏期积压；可见段必须先完成输出最坏容量
+        // 预检，再 take window input。否则 Capacity 会清空 click/text/scroll，
+        // 下一帧虽能重试输出却永远无法重放用户输入。
         if !input.ui_segment.is_empty() {
             let frame = match decode_ui_frame(&input.ui_segment) {
                 Ok(frame) => frame,
@@ -2027,6 +2029,12 @@ impl OffscreenRenderer {
             if frame.visible() && !has_font {
                 return FrameResult::Invalid;
             }
+            if let Some(egui_pass) = self.egui_pass.as_ref()
+                && !egui_pass.has_frame_capacity(&frame)
+            {
+                return FrameResult::Capacity;
+            }
+            let ui_events = take_ui_events();
             if let Some(egui_pass) = self.egui_pass.as_mut() {
                 match egui_pass.run_and_record(
                     &self.device,
@@ -2043,6 +2051,8 @@ impl OffscreenRenderer {
                     }
                 }
             }
+        } else {
+            let _ = take_ui_events();
         }
         self.last_pos = input.pos;
         self.last_view_proj = input.view_proj;
@@ -2071,6 +2081,15 @@ impl OffscreenRenderer {
             .as_mut()
             .expect("egui_pass 应已创建")
             .drain_events(out)
+    }
+
+    /// 测试专用：填充 UI 输出队列以覆盖 renderer 外层输入重试边界。
+    #[cfg(test)]
+    pub(crate) fn test_fill_ui_actions(&mut self, count: usize) {
+        self.egui_pass
+            .as_mut()
+            .expect("egui_pass 应已创建")
+            .test_fill_actions(count);
     }
 
     /// 调整输出尺寸:重建 depth 与 HiZ,离屏重建 color,窗口重配 surface;

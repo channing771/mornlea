@@ -2,7 +2,7 @@
 
 见 `proposal.md` 的 Why。当前 `cmd/mornlea` 在普通本地交互启动时先构造窗口、Rust renderer、材质 registry、HUD/字体和本地音频，再停留在主菜单；世界 store、Host 与登录延迟到「进入游戏」。Go 的 `menuState` 拥有菜单语义，client ABI v8 的 UI layout v1 把标题、按钮和错误行下发给 Rust，Rust 用 egui 呈现并只回传按钮 `u32` id。
 
-这条边界无法直接承载设置表单：文本框和滑块必须把值回传 Go，裸按钮 id 既不能无损表达 UTF-8 路径，也无法证明同帧「编辑后保存」的顺序。现有配置已有 `audioVolume`、`texturePackPath` 和原子 `Config.Save`；窗口已有创建、`SetContentSize` 和尺寸快照；材质 registry 只在 application 构造时上传，音频播放器则可通过既有工厂安全替换。
+这条边界无法直接承载设置表单：文本框和滑块必须把值回传 Go，裸按钮 id 既不能无损表达 UTF-8 路径，也无法证明同帧「编辑后保存」的顺序。现有配置已有 `audioVolume`、`texturePackPath` 和原子 `Config.Save`；窗口已有创建、`SetContentSize` 和尺寸快照；材质 registry 只在 application 构造时上传，音频播放器则可通过既有工厂安全替换。设置页不能把 `Config.Load` 得到的钳制后快照整份 `Save` 回磁盘，否则未知扩展、已知组内未知字段及未暴露的越界原文都会被静默重写。
 
 ## Goals / Non-Goals
 
@@ -17,7 +17,7 @@
 **Non-Goals:**
 
 - 不把设置入口加入游戏内或远程 `-connect` 路径，不建设暂停语义。
-- 不引入通用表单 DSL、Rust 配置读写、原生文件选择器、剪贴板、`egui-winit` 或新 crate。
+- 不引入通用表单 DSL、Rust 配置读写、原生文件选择器、剪贴板或 `egui-winit`；窗口只把依赖图中已有、与 `objc2` 0.6 同线的 `objc2-foundation` 提升为直接依赖以安全接收 `NSRect`。
 - 不热重载材质，不在保存后重建 application；不扩展到任意窗口尺寸、全屏、VSync、显示器、FOV、视距或键位。
 - 不改变线上协议、存档、engine ABI、benchmark scenario 或 HUD 固定上传布局。
 
@@ -45,7 +45,7 @@
 
 1. 防御性验证 draft 的音量、窗口枚举、单行 UTF-8 路径和字节上限。
 2. 仅当材质原文相对 committed 发生变化且非空时，按配置文件所在目录解析路径，并通过 `applicationDependencies.newRegistry` 完整构造候选 registry 后立即丢弃；空值不访问用户目录，未变化值不重复读取。该读取仍位于世界启动前菜单阶段，当前材质不会被替换。
-3. 重新 `config.Load(configPath)`，只覆盖三项字段，再调用既有 `Config.Save` 原子替换。这样保存时并发发生的其他配置字段修改不会被 application 启动快照覆盖；若文件此时损坏，保存失败而不是重建默认文件。
+3. 调用 `config.PatchSettings` 只读取磁盘一次并先执行与 `Load` 相同的完整 v1 验证；随后在顶层 `map[string]json.RawMessage` 中只替换三项，其他顶层成员及其嵌套 raw value 原样保留，再复用与 `Config.Save` 同源的临时文件、文件 `Sync`、`chmod`、rename 与目录 `Sync` 原子边界。这样保存时并发发生的其他配置字段修改不会被 application 启动快照覆盖，加载时会钳制的数值也不会反写；若文件此时损坏，保存失败而不是重建默认文件，文件缺失才从 `Defaults` 构造合法 v1。
 4. 落盘成功后才更新 committed。若音量变化，通过既有 `newAudioPlayer` 创建新播放/关闭闭包，先完成替换再关闭旧播放器；零音量沿用不请求设备的无声路径。若窗口变化，调用 `SetContentSize`、`Poll` 和既有物理 framebuffer 上限收缩。材质只记录“下次启动生效”提示。
 
 错误完整写入日志；UI 错误在 Go 侧按 UTF-8 边界截到 256 字节，避免任意路径错误触发 UI 编码 panic。音频设备不可用继续按既有无声降级，不把设备状态变成配置保存失败。
@@ -64,7 +64,7 @@
 - action payload：一个 `u32 action_id`，覆盖主菜单与设置页按钮/Escape。
 - settings-changed payload：`audio f32`、`window u32`、`path [u32 len + bytes]`，是一帧控件变化后的完整最终草稿。
 
-Rust 每个 egui 帧最多发一个 settings-changed，再按控件绘制顺序追加 action，因此同帧编辑后点击保存时 change 必然在 save 前。全局输出队列固定 64 条；超过容量时当前 UI 帧返回 `CAPACITY`，不得丢最旧或最新事件。单条最大 payload 由 1024 字节路径决定，Go renderer 持有按最大 64 条推导的一块复用 scratch，不在每帧动态增长。
+Rust 每个 egui 帧最多发一个 settings-changed，再按控件绘制顺序追加 action，因此同帧编辑后点击保存时 change 必然在 save 前。全局输出队列固定 64 条；超过容量时当前 UI 帧返回 `CAPACITY`，不得丢最旧或最新事件。renderer 外层必须在 `take_ui_events` 清空 window-input 队列前复用布局的单帧最坏输出上界做预检，因此容量失败保留 click/text/scroll 原序供重试，不能只依赖 `UiState` 内层拒绝。单条最大 payload 由 1024 字节路径决定，Go renderer 持有按最大 64 条推导的一块复用 scratch，不在每帧动态增长。
 
 排空 C 出口把最后一个指针解释为 `out_written` 字节数。只有整个 batch 能装入调用方缓冲时才编码并 pop；不足返回 `CAPACITY`，out、`out_written` 和队列均不变。Go 解码器再次验证版本、计数、长度、UTF-8、数值域和尾随字节，返回 `[]client.UIEvent`。这是函数语义与事件线格式的破坏性变化，故必须 v8 → v9，不能只改 layout 常量却继续标 v8。
 
@@ -80,7 +80,7 @@ Rust 每个 egui 帧最多发一个 settings-changed，再按控件绘制顺序�
 
 ### 6. 窗口创建和运行期调整复用同一预设与双重钳制
 
-`runWithDependencies` 把生效的原始设置传入 application；交互窗口创建前用 `WindowSize.Dimensions` 取逻辑宽高。Rust `ClientWindow::set_content_size` 与创建路径共用当前 monitor 工作区钳制，Go 随后复用 `fitFramebuffer` 确保 Retina 等高缩放下物理 framebuffer 不超过 `2560×1440`，只缩不放大。benchmark/capture 不消费 `WindowSize`，继续走固定离屏尺寸。
+`runWithDependencies` 把生效的原始设置传入 application；交互窗口创建前用 `WindowSize.Dimensions` 取逻辑宽高。Rust 创建与 `ClientWindow::set_content_size` 从当前 NSWindow 所在 `NSScreen.visibleFrame` 读取真实逻辑 point 工作区，先保持 16:9、只缩不放大地钳制；AppKit 查询失败时才从 monitor 物理像素除以 scale factor 后取 90% 保守 fallback，连 monitor 都不可用时退到 640×360。Go 随后复用 `fitFramebuffer` 确保 Retina 等高缩放下物理 framebuffer 不超过 `2560×1440`，物理像素职责不与 Rust 的 point 工作区混合。benchmark/capture 不消费 `WindowSize`，继续走固定离屏尺寸。
 
 运行期 API 只承诺发出受约束的尺寸请求；窗口管理器可按平台规则调整最终尺寸。设置保存发生在同一锁定 OS 主线程，没有新增 goroutine 或跨线程窗口访问。
 

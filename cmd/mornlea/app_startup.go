@@ -120,11 +120,8 @@ func newApplicationWithDependencies(
 	if dependencies.newRegistry == nil {
 		dependencies.newRegistry = defaultApplicationDependencies().newRegistry
 	}
-	if dependencies.loadConfig == nil {
-		dependencies.loadConfig = config.Load
-	}
-	if dependencies.saveConfig == nil {
-		dependencies.saveConfig = func(cfg config.Config, path string) error { return cfg.Save(path) }
+	if dependencies.patchSettings == nil {
+		dependencies.patchSettings = config.PatchSettings
 	}
 	reg, registryErr := dependencies.newRegistry(options.ResolvedTexturePackPath)
 	if registryErr != nil {

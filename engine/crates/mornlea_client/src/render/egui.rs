@@ -115,6 +115,17 @@ impl EguiPass {
         self.ui.drain_events(out)
     }
 
+    /// 在消费输入前预检指定帧的最坏输出容量。
+    pub fn has_frame_capacity(&self, frame: &UiFrame) -> bool {
+        self.ui.has_frame_capacity(frame)
+    }
+
+    /// 测试专用：用合法 action 填充输出队列，构造 renderer 外层容量失败。
+    #[cfg(test)]
+    pub(crate) fn test_fill_actions(&mut self, count: usize) {
+        self.ui.test_fill_actions(count);
+    }
+
     /// 运行一帧菜单并在 encoder 上录制 egui pass。
     ///
     /// 输入事件 events 来自 crate::ui::take_ui_events(本帧已取走)。
