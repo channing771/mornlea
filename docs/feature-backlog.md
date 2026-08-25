@@ -47,7 +47,7 @@
 | ID | 功能 | 简述 | 状态 | 认领人 | 来源与备注 |
 |---|---|---|---|---|---|
 | A-01 | 权威格子工作台 | 背包 2×2 + 工作台 3×3 形状配方、权威产物取出、关闭/断线装回不变量、七条新配方 | 未认领 | — | 原分支头 `a657c1cb`（实现与整功能评审完成）未推送远端已丢失；从当前 `main` 重做 |
-| A-02 | 可放置火把 | 落地 + 四向墙面五形态、支撑约束与移除反应、发光等级 14、mesh model tag 与窄柱几何 | 未认领 | — | 原分支头 `b2115a64`（实现与整功能评审完成）未推送远端已丢失；从当前 `main` 重做 |
+| A-02 | 可放置火把 | 落地 + 四向墙面五形态、支撑约束与移除反应、发光等级 14、mesh model tag 与窄柱几何 | 已认领 | ox-alpha-implementer @ feat/A-02-placeable-torches | 原分支头 `b2115a64`（实现与整功能评审完成）未推送远端已丢失；从当前 `main` 重做。独占文件集：`internal/core` 方块属性/物品/配方登记、`internal/assets`、`internal/sim` 火把放置与支撑、`internal/world/chunk.go`、`internal/mesh`、`internal/nativeabi`、`engine/crates/mornlea_engine`、`openspec/changes/placeable-torches`；`cmd/mornlea/capture_scene*` 仅追加 `torch-night` 场景构造不写 golden（与 E-12 已认领的字面同源化关注点不相交，合并序按集成裁决）；共享契约文件（`internal/network` 编号预留等）归属待确认裁决后在 change 中记录 |
 | A-03 | 三级剑与统一战斗 | 木/石/铁剑（4/5/6 伤害）、统一候选（≤72）与冷却/击退/耐久、CombatHit 私有确认 | 未认领 | — | 原分支头 `42f3dead`（SPEC/QUALITY PASS）未推送远端已丢失；recipe 15..17 依赖 A-01 合流；从当前 `main` 重做 |
 | A-04 | 权威近战夜行者 | 确定性夜间生成、全服 64/每玩家 8 上限、A* + Rust 物理、灼烧/消失/腐肉掉落、`hostile_mobs` v1 | 未认领 | — | 原分支头 `eb1923eb`（持久化修复两轮已提交）未推送远端已丢失；从当前 `main` 重做 |
 | A-05 | 床与睡眠 | 双格床八形态、同区块原子放置、全员睡眠跳夜（`DayTimeOffsetTicks`）、个人重生点 | 未认领 | — | 原共享契约 SHA `785ea07b` 未推送远端已丢失（本无实现损失）；从当前 `main` 重做 |
