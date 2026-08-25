@@ -7,6 +7,7 @@
 - 手动：`make agent-implementer` 或 `scripts/agents/run-agent.sh implementer`（默认 `AGENT_MODE=pr`：创建 PR → 监听 CI 到全绿 → merge；`AGENT_MODE=merge` 才直接合并）。
 - 自动：控制会话/规划者点名（brief 中附任务行 ID 与来源）。
 - **接力循环**：`AGENT_LOOP=1` 启动后，每个实现者完成（自动收尾后）即 `relay.sh` 接力启动下一个实现者认领下一行，直到规划表无「未认领」任务自动终结。
+- **故障恢复**：会话以退出码 1 结束且日志含 `You've hit your session limit`（claude 账号用量上限，消息里给出 reset 时间）或其它异常中断时：先查 worktree/分支与 `~/.claude/projects/...` 会话 jsonl 判断**当前行进度**，等 reset 后用 `AGENT_RESUME=<该行最近确认请求ID> AGENT_LOOP=1 scripts/agents/run-agent.sh implementer` 续跑**同一行**（不重新认领；未完成的 worktree 继续用）。
 
 ## 第 1 步：认领
 
