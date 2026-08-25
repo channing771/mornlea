@@ -1,7 +1,7 @@
 ## 1. 属性测试先行（RED）
 
 - [x] 1.1 在 `internal/render/hud/atlas.go` 提取包内私有 `hotbarColumnUV(column, width int) [4]float32`（精确边界计算，行为与现状逐位相同），`hotbarTextureUV` 改为钉死 `hotbarTextureWidth` 的薄包装；签名对外不变。验证：`go test ./internal/render/hud -count=1` 全绿（纯重构零行为变化）。
-- [x] 1.2 新建 `internal/render/hud/atlas_uv_stability_test.go`，按 design D2 写三条失败的性质测试：解码界在本列内且距边界 ≥ 1/512 纹素；相邻列区间无重叠；同一列在宽度集 {当前 800, 816, 832(2 的幂倍), 1024, 4096} 下以列内均匀探针解码得到相同纹素下标集合。验证：`go test ./internal/render/hud -run TestHotbarColumnUV -count=1` 确认新性质测试失败（RED）。
+- [x] 1.2 新建 `internal/render/hud/atlas_uv_stability_test.go`，按 design D2 写三条失败的性质测试：解码界在本列内且距边界 ≥ 1/512 纹素；相邻列区间无重叠；同一列在宽度集 {当前 800, 816, 832, 1024, 4096}（含 2 的幂与非 2 幂）下以列内均匀探针解码得到相同纹素下标集合。验证：`go test ./internal/render/hud -run TestHotbarColumnUV -count=1` 确认新性质测试失败（RED）。
 
 ## 2. 收进实现（GREEN）
 
@@ -13,5 +13,5 @@
 
 ## 4. 收尾门禁
 
-- [ ] 4.1 运行 `gofmt -l .`（无输出）、`go vet ./...`、`go test ./... -race` 与 `go test ./internal/archcheck -count=1`。验证：全部通过。
-- [ ] 4.2 运行 `openspec validate --all --strict --no-interactive` 并把任务勾选状态、评审结论写入 ledger.md。验证：校验通过且 ledger 完整。
+- [x] 4.1 运行 `gofmt -l .`（无输出）、`go vet ./...`、`go test ./... -race` 与 `go test ./internal/archcheck -count=1`。验证：全部通过。
+- [x] 4.2 运行 `openspec validate --all --strict --no-interactive` 并把任务勾选状态、评审结论写入 ledger.md。验证：校验通过且 ledger 完整。
