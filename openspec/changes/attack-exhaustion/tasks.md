@@ -11,5 +11,5 @@
 
 ## 3. 收尾门禁
 
-- [ ] 3.1 包级定点验证：`go test ./internal/sim ./internal/archcheck -race -count=1`；`go vet ./...`；`gofmt -l .` 无输出；`openspec validate --all --strict --no-interactive` 通过。
-- [ ] 3.2 全量验证：`go test ./... -race -count=1` 全绿并记录结果；确认无协议/存档/golden 影响（本 change 不触碰 capture/benchmark 路径）。
+- [x] 3.1 包级定点验证：`go test ./internal/sim ./internal/archcheck -race -count=1`；`go vet ./...`；`gofmt -l .` 无输出；`openspec validate --all --strict --no-interactive` 通过。
+- [x] 3.2 全量验证：`go test ./... -race -count=1` 全绿并记录结果；确认无协议/存档/golden 影响（本 change 不触碰 capture/benchmark 路径）。

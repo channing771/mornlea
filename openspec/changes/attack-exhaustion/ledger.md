@@ -10,14 +10,21 @@
 
 - Ruling: 判定点选在意图冻结处而非伤害结算循环 — 冻结即收费与该处既有副作用聚合点（采掘抑制、目标冷却写入）同位，且结算循环保持 `applyDamage` 单一职责，未来 A-06 统一战斗调整结算顺序时疲劳语义不被动漂移 — 放结算循环会让资源语义寄生在伤害结算顺序上。
 
+## Rulings（续）
+
+- Ruling: 测试断言用字面量 100 而非引用尚未存在的 `exhaustionMeleeMilli` 常量 — 保证 RED 是「行为缺失失败」而非编译失败 — 代价是实现改值须同步断言，由 spec 固定值兜底。
+- Ruling: `TestMemoryTCPFluidDamBreakBroadcastParity` 的偶发失败为既有负载敏感型 TCP 对齐竞态，不属本 change 修复范围 — 交替二进制对照实验证明失败率只随机器负载波动、与代码版本无关（HEAD 与 merge-base 在静载窗口同为 0/30），且该测试不发送输入、近战路径不可达 — 不修则 PR CI 偶发重试（F-03 先例）；修复归属 E-11 独占的 `internal/server/*_test.go`，认领行不得抢。
+
 ## 任务进度
 
-- Task 1.1：待执行
-- Task 1.2：待执行
-- Task 2.1：待执行
-- Task 3.1：待执行
-- Task 3.2：待执行
+- Task 1.1：✅ e07a015c（helper 迁移字节级一致，`go test -list` 集合一致）
+- Task 1.2：✅ 1ac97f12（RED 三性质测试，断言失败形态正确）
+- Task 2.1：✅ cfb7ef72（GREEN：常量行 + 意图冻结处调用；包内 -race 零回归）
+- Task 3.1：✅（sim/archcheck -race、vet、gofmt、openspec strict 65/65 全过）
+- Task 3.2：✅（全量 -race 一度遇上述既有 flake，静载重跑全绿）
 
 ## 评审结论
 
-- （尚未进入评审）
+- Task A 评审：Spec ✅ / Quality Approved（两条 Minor 记账：RED 转录行号偏一位；相邻双人布置可选去重）。
+- Task B 评审：Spec ✅ / Quality Approved（一条 Minor 记账：新注释三处标识符未加反引号）。
+- Task C 评审：见终审前补充。
