@@ -59,3 +59,10 @@
 - 修复轮 R1（原 implementer 已终结，由新 implementer 承载同一 brief）：两处注释改写闭合，提交 `d4f8a49a`。
 - R1 复核：**PASS**。新 GoDoc 与实判据逐点一致、全包 grep 零「非容器」残留、零行为改动、复跑全绿。
 - Ruling: Task 2 修复循环 1 轮收口 — major 是注释级失真而非行为缺陷，两行修复即达合入质量 — 教训：改语义时同一函数内错误文案与 GoDoc 必须同轮改写，注释失真机械门禁不覆盖、只能靠评审抓。
+
+## Task 3 评审（2026-08-25）
+
+- SPEC 合规评审：**PASS**。偏离 1（饱和分支外层条件收敛）经逐形态推演证明普通方块行为逐字节不变（harvestable=false 的普通方块饱和在 sim 侧不可达，default 分支 `!harvestable` 早退与旧外层短路等价）；D3「同一预演」结构性成立（Runner 与 sim 共用 `CompanionMineContainerStaging`，contents 装配逐字一致、`CloneReadyChunk` 深拷贝同源读取）；全或无失败链与真双传输 parity 断言到位；Task 1 遗留补强（错误工具/完成边缘）与玩家路径语义同构；文件集与依赖方向合规。1 条 minor：parity 测试函数头注释把脚本顺序写反（`companion_interact_container_test.go:369-372`）。
+- QUALITY 质量评审：**PASS**（3 minor）。设计取舍与「同一预演」结构表达通过（零堆构造残留、深拷贝成本披露如实）；测试锋利（精确事件序列、六事件链、真双传输 `reflect.DeepEqual`）；回归面零溢出（纯新增 5 测试、更名零残留）。minor：`companion_interact.go:175` 裸提 `companionMineCapacityExceeded`（连续第三轮出现）；`mining.go:288-289、385-386` 两处容器相关裸提未在 4b 清偿范围内（清偿声明与事实不完全相符）；`newContainerMineParityHost` 与既有 helper 约 30 行重复。观察：`_, _, staged :=` 与第二返回值撞名。
+- Ruling: 五条 minor 全部并入 Task 4 收尾清理，不构成修复循环 — 全部为注释债/命名噪点/测试构造重复，零行为影响且门禁不拦；裸标识符连续三轮出现，收尾清零避免带入整分支终审 — 修复循环只留行为契约阻断项。
+- Ruling: helper 30 行重复的处置授权 Task 4 implementer 现场裁量 — 参数化推广若为纯机械改动（改参数签名+全引用点同步）则做，若牵动既有 parity 测试语义则不做并誊入「延期与放弃」— 复制重复是风格债，为去重在收尾期引入回归风险本末倒置。
