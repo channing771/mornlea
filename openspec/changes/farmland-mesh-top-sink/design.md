@@ -26,6 +26,18 @@ registry 是方块呈现属性的唯一数据通道（先例：`emission`、`lig
 - 不贪心合并：合并条件从 `if !cell.fluid` 扩为 `if !(cell.fluid || cell.short)`。理由同流体注释——合并后 `w/h` 位无法同时表达尺寸与角高度。
 - 光照/AO：沿用普通方块路径不变（耕地仍按不透明方块遮挡与采样，只改几何上缘）。
 
+### D2a 客户端解码半边（Task 1 实现期发现的必要补充）
+
+mesher 只解决几何编码；**呈现要到达屏幕还必须改客户端 shader**。现状（实现期核实）：只有 `water.wgsl` 携带角高度解码器，`terrain.wgsl:63-64` 把 bit 12..19 当 `w/h` 尺寸读——带角高度的耕地 quad 进入 opaque 流会被放大成巨型石板；`cull.wgsl` 的 AABB 判定同样基于尺寸位。
+
+- **判别方式：material 区间**（沿用植物的既定模式「判别不占任何 quad 位」，bit 63 必须留空、无位可用）。Go 侧 `LayerFarmlandDry/LayerFarmlandDryWet` 层号为人手同步常量，Rust 客户端侧以区间常量复述并由跨语言测试钉住——与 `PLANT_MATERIAL_FIRST/LAST` 三处手工同步纪律同构。
+- `terrain.wgsl`：material 落入耕地区间时走角高度路径（顶点 y 上移 `(raw+1)/16`，与 water.wgsl 同公式），否则保持 w/h 尺寸路径；两条路径互斥由区间判定保证。
+- `cull.wgsl`：耕地 quad 按**满格 AABB 处理**（保守正确——下沉 1/16 对剔除不可见，无需精确盒），即落入区间时忽略角位按整格出盒，避免误读尺寸位。
+- client ABI 不变：shader 内部分支不新增导出，v8 不动。
+
+被否替代一：给 quad 增设「短方块标志位」——bit 63 是唯一空位且被 `voxel-visual-presentation` 钉死必须留空，无位可用。
+被否替代二：把耕地也路由进 water pass——半透明混合、深度写关与排序语义全错，耕地是不透明刚体。
+
 **回归边界**：不含非零 `block_top_raw` 条目的输入 MUST 产出与 v6 逐位一致的 packed quads——由跨语言 oracle parity 测试钉住（喂既有夹具 + 新增耕地夹具）。
 
 ## D3 ABI 升版

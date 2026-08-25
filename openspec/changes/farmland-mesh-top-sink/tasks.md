@@ -11,6 +11,15 @@
 - [ ] 1.5 测试：`water_corner_tests.rs` 同目录新增耕地几何主题文件（顶面四角、四侧上缘两角、底面不动、相邻不合并）；oracle parity——既有夹具 v7 输出逐位等于 v6 期望 + 新增干/湿耕地 neighborhood 跨语言 parity
 - [ ] 1.6 验证：`cargo test -p mornlea_engine --locked && cargo clippy --workspace --all-targets -- -D warnings`；`go test ./internal/assets ./internal/mesh -count=1`（喂满 48 条的容量测试全绿）；`go test ./internal/nativeabi -count=1`
 
+## Task 1b: 客户端解码半边（terrain/cull shader 分支）
+
+> Task 1 实现期发现（见 ledger）：角高度解码器只存在于 `water.wgsl`，`terrain.wgsl:63-64` 把 bit 12..19 当 w/h 尺寸读，耕地 quad 不补此半边会渲染成巨型石板。design D2a 是本任务依据。
+
+- [ ] 1b.1 Rust 客户端侧新增耕地区间常量（复述 Go `LayerFarmlandDry/Wet` 层号，仿 `PLANT_MATERIAL_FIRST/LAST` 手工同步纪律），跨语言一致性测试钉住
+- [ ] 1b.2 `terrain.wgsl`：material 落入耕地区间走角高度路径（`(raw+1)/16` 上移公式与 water.wgsl 同源），否则保持既有 w/h 尺寸路径
+- [ ] 1b.3 `cull.wgsl`：区间内 quad 按满格 AABB 处理（保守正确），不误读尺寸位
+- [ ] 1b.4 client ABI 不变（无新导出）；验证：`cargo test -p mornlea_client --locked && cargo clippy --workspace --all-targets -- -D warnings`，`make visual-check` 确认既有 18 景零回归（耕地尚未入景）
+
 ## Task 2: materials-showcase 扩展与 golden 再生
 
 - [ ] 2.1 `cmd/mornlea/capture_scene.go`：夹具追加干/湿耕地各一个 2×1 可见列（不移动既有方块）；场景清单顺序不变
