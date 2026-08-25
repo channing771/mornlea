@@ -270,6 +270,9 @@ func decodeConfig(path string, contents []byte) (Config, error) {
 			return Config{}, fmt.Errorf("config: 解析 texturePackPath 字段: %d 个 UTF-8 字节超过上限 %d",
 				len(*texturePackPath), MaxTexturePackPathBytes)
 		}
+		if strings.ContainsAny(*texturePackPath, "\r\n") {
+			return Config{}, errors.New("config: 解析 texturePackPath 字段: 必须是单行字符串")
+		}
 		cfg.TexturePackPath = *texturePackPath
 		if cfg.TexturePackPath != "" {
 			if filepath.IsAbs(cfg.TexturePackPath) {

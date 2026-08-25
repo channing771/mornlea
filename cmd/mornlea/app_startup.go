@@ -94,6 +94,20 @@ func newApplicationWithDependencies(
 	if options.Render.ViewDistance == 0 {
 		options.Render = config.Defaults().Render
 	}
+	// `applicationOptions` 也可能由测试或其他包内装配点直接构造，不能假设
+	// 一定经过 `config.Load`。空窗口值按缺省预设补齐；其余三项原始设置在
+	// registry、音频、窗口与 UI 资源产生任何副作用前复用设置页同一校验。
+	if options.WindowSize == "" {
+		options.WindowSize = config.WindowSize1280x720
+	}
+	initialSettings := settingsValues{
+		audioVolume:     options.AudioVolume,
+		texturePackPath: options.TexturePackPath,
+		windowSize:      options.WindowSize,
+	}
+	if err := initialSettings.validate(); err != nil {
+		return nil, fmt.Errorf("校验客户端设置: %w", err)
+	}
 	if dependencies.newGlyphAtlas == nil {
 		dependencies.newGlyphAtlas = render.NewGlyphAtlasWithSink
 	}
@@ -111,9 +125,6 @@ func newApplicationWithDependencies(
 	}
 	if dependencies.saveConfig == nil {
 		dependencies.saveConfig = func(cfg config.Config, path string) error { return cfg.Save(path) }
-	}
-	if width, height := options.WindowSize.Dimensions(); width == 0 || height == 0 {
-		options.WindowSize = config.WindowSize1280x720
 	}
 	reg, registryErr := dependencies.newRegistry(options.ResolvedTexturePackPath)
 	if registryErr != nil {
@@ -306,14 +317,7 @@ func newApplicationWithDependencies(
 			title:   "Mornlea",
 			version: menuVersion(),
 		},
-		settings: func() settingsState {
-			values := settingsValues{
-				audioVolume:     options.AudioVolume,
-				texturePackPath: options.TexturePackPath,
-				windowSize:      options.WindowSize,
-			}
-			return settingsState{committed: values, draft: values}
-		}(),
+		settings: settingsState{committed: initialSettings, draft: initialSettings},
 	}
 	app.releaseResources = app.releaseOwnedResources
 	// 材质与 HUD 图集一次性上传;mesh 上传调度经 SectionScheduler 下沉。

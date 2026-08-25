@@ -466,6 +466,96 @@ func TestNewApplicationUsesConfiguredWindowPreset(t *testing.T) {
 	}
 }
 
+func TestNewApplicationRejectsInvalidSettingsBeforeResourceSideEffects(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		configure func(*applicationOptions)
+	}{
+		{name: "LF path", configure: func(options *applicationOptions) { options.TexturePackPath = "pack\nname" }},
+		{name: "CR path", configure: func(options *applicationOptions) { options.TexturePackPath = "pack\rname" }},
+		{name: "oversized path", configure: func(options *applicationOptions) {
+			options.TexturePackPath = strings.Repeat("a", config.MaxTexturePackPathBytes+1)
+		}},
+		{name: "non-finite audio", configure: func(options *applicationOptions) {
+			options.AudioVolume = float32(math.NaN())
+		}},
+		{name: "unknown window", configure: func(options *applicationOptions) {
+			options.WindowSize = config.WindowSize("1920x1080")
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			options := applicationOptions{
+				Render: config.Defaults().Render, StartAtMenu: true,
+				WindowSize: config.WindowSize1280x720,
+			}
+			test.configure(&options)
+			resourceCalls := 0
+			_, err := newApplicationWithDependencies(options, applicationDependencies{
+				newRegistry: func(string) (*assets.Registry, error) {
+					resourceCalls++
+					return nil, errors.New("不应访问 registry")
+				},
+				newAudioPlayer: func(float32) (func(audio.Cue), func()) {
+					resourceCalls++
+					return nil, nil
+				},
+				newWindow: func(int, int, string) (applicationWindow, error) {
+					resourceCalls++
+					return nil, errors.New("不应创建窗口")
+				},
+			})
+			if err == nil || !strings.Contains(err.Error(), "设置") {
+				t.Fatalf("newApplicationWithDependencies error=%v，want 设置校验错误", err)
+			}
+			if resourceCalls != 0 {
+				t.Fatalf("非法设置触发资源副作用 %d 次", resourceCalls)
+			}
+		})
+	}
+}
+
+func TestLoadedConfigEntersSettingsAndEncodesLayoutV2(t *testing.T) {
+	configPath := writeSettingsApplicationConfig(t, `{
+		"version": 1,
+		"audioVolume": 0.25,
+		"windowSize": "960x540"
+	}`)
+	loaded, err := config.Load(configPath)
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+	renderer := requireMenuTestRenderer(t)
+	t.Cleanup(func() { renderer.Close() })
+	identity := connectionTestIdentity()
+	deps := newMenuWindowedTestDeps(t, renderer)
+	app, err := newApplicationWithDependencies(applicationOptions{
+		Identity: &identity, Render: loaded.Render, StartAtMenu: true,
+		ConfigPath: configPath, AudioVolume: loaded.AudioVolume,
+		TexturePackPath: loaded.TexturePackPath, ResolvedTexturePackPath: loaded.ResolvedTexturePackPath,
+		WindowSize: loaded.WindowSize,
+	}, deps)
+	if err != nil {
+		t.Fatalf("newApplicationWithDependencies: %v", err)
+	}
+	t.Cleanup(func() { _ = app.Close() })
+	app.handleMenuEvent(menuActionSettings)
+	want := client.EncodeUISettings(client.UISettings{
+		Visible: true, AudioVolume: 0.25, Window: client.UISettingsWindow960x540,
+	})
+	if got := app.uiSegment(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("正常配置 settings layout v2 不符:\ngot=%v\nwant=%v", got, want)
+	}
+}
+
+func writeSettingsApplicationConfig(t *testing.T, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("写配置: %v", err)
+	}
+	return path
+}
+
 func TestSettingsRuntimeWindowResizeFitsPhysicalLimitAndKeeps16By9(t *testing.T) {
 	window := &settingsTestWindow{
 		contentWidth: 960, contentHeight: 540,

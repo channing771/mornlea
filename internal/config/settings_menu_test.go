@@ -129,3 +129,42 @@ func TestTexturePackPathByteLimit(t *testing.T) {
 			config.MaxTexturePackPathBytes+1, err)
 	}
 }
+
+func TestTexturePackPathRejectsCRAndLFBeforeFilesystemUse(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		separator string
+	}{
+		{name: "LF", separator: "\n"},
+		{name: "CR", separator: "\r"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			// Darwin 文件系统允许目录名包含 CR/LF；即使目标真实存在，配置
+			// 边界也必须拒绝原文，而不是把它解析成可使用路径。
+			packPath := filepath.Join(t.TempDir(), "pack"+test.separator+"dir")
+			if err := os.Mkdir(packPath, 0o700); err != nil {
+				t.Fatalf("创建含 %s 的真实目录: %v", test.name, err)
+			}
+			_, err := config.Load(writeConfig(t,
+				fmt.Sprintf(`{"version":1,"texturePackPath":%q}`, packPath)))
+			if err == nil || !strings.Contains(err.Error(), "texturePackPath") {
+				t.Fatalf("Load 含 %s 的真实目录 error=%v，want texturePackPath 字段错误", test.name, err)
+			}
+		})
+	}
+}
+
+func TestTexturePackPathAcceptsOrdinarySingleLineValue(t *testing.T) {
+	path := writeConfig(t, `{"version":1,"texturePackPath":"packs/local"}`)
+	loaded, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load 单行路径: %v", err)
+	}
+	if loaded.TexturePackPath != "packs/local" {
+		t.Fatalf("TexturePackPath=%q，want packs/local", loaded.TexturePackPath)
+	}
+	want := filepath.Join(filepath.Dir(path), "packs/local")
+	if loaded.ResolvedTexturePackPath != want {
+		t.Fatalf("ResolvedTexturePackPath=%q，want %q", loaded.ResolvedTexturePackPath, want)
+	}
+}

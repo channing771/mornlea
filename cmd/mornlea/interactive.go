@@ -61,7 +61,7 @@ func runMenuPhase(app *application) error {
 	return nil
 }
 
-// menuUIEventDisposition 描述 typed UI 事件在任务 2 暂态分派器中的结果。
+// menuUIEventDisposition 描述正式 typed UI 路由是否处理或忽略本条事件。
 type menuUIEventDisposition uint8
 
 const (
