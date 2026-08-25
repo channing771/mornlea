@@ -9,7 +9,7 @@
 
 ## 3. 视觉基线对比（golden 零触碰）
 
-- [ ] 3.1 在本 worktree 本地运行 capture 场景 hud-hotbar-health、hud-survival-feedback、inventory-crafting、chest-container、furnace-container、debug-panel，输出与仓库内 golden PNG 逐字节对比并记录结果；若存在字节差，按 design D3 停下升级裁决，不得修改任何 golden。验证：对比记录写入 ledger.md（零差或已升级裁决）。
+- [x] 3.1 在本 worktree 本地运行 capture 场景 hud-hotbar-health、hud-survival-feedback、inventory-crafting、chest-container、furnace-container、debug-panel，输出与仓库内 golden PNG 逐字节对比并记录结果；若存在字节差，按 design D3 停下升级裁决，不得修改任何 golden。验证：对比记录写入 ledger.md（零差或已升级裁决）。
 
 ## 4. 收尾门禁
 
