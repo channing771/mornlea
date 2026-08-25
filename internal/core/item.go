@@ -56,6 +56,17 @@ const (
 	// 不是任何方块的掉落物。恢复值见 FoodValue。同样只能追加在 ItemIDMax
 	// 哨兵之前。
 	ItemBread
+	// 以下是格子工作台批次（authoritative-grid-crafting）追加的两个物品，
+	// 只能追加在既有序列末尾（ItemIDMax 哨兵之前）：插入会平移后续物品 ID，
+	// 破坏既有存档与线上字节。
+	//
+	// ItemStick 是木棍：镐、锄等工具配方的中间材料，可堆叠 64、不可放置、
+	// 没有耐久（损坏形态只属于工具）。
+	ItemStick
+	// ItemWorkbench 是工作台物品：放置成 WorkbenchID，采掘工作台方块掉回
+	// 恰好 1 个。工作台不是容器——打开只把玩家合成网格的有效尺寸从 2 提到 3，
+	// 不占用任何容器引用或区块槽位。
+	ItemWorkbench
 	// ItemIDMax 是合法物品编号的独占上界（最后一个合法 ItemID + 1），本身不是
 	// 物品枚举成员。它供测试以「item < ItemIDMax」穷举全部物品，替代依赖
 	//「某个具体物品恰为枚举末项」的脆弱写法；放在 core 是因为物品注册表归属
@@ -224,6 +235,9 @@ func BlockDrop(block BlockID) (ItemID, bool) {
 	// （变更 authoritative-farming 的任务组 5）。不在这里发明新的多产物形状。
 	case WheatStage7ID:
 		return ItemWheat, true
+	// 工作台采掘掉回恰好 1 个工作台物品（数量语义在掉落路径，这里只给物品）。
+	case WorkbenchID:
+		return ItemWorkbench, true
 	default:
 		return ItemNone, false
 	}
@@ -237,7 +251,8 @@ func ItemStackLimit(item ItemID) (uint8, bool) {
 		ItemCobblestone, ItemSmoothStone, ItemSand, ItemGravel, ItemOakLog,
 		ItemOakPlanks, ItemLeaves, ItemGlass, ItemBrick, ItemWhiteWool,
 		ItemRoofTile, ItemClay, ItemSnowBlock, ItemMossyCobblestone,
-		ItemWheatSeeds, ItemWheat, ItemBread:
+		ItemWheatSeeds, ItemWheat, ItemBread,
+		ItemStick, ItemWorkbench:
 		return MaxStackCount, true
 	case ItemStonePickaxe, ItemIronPickaxe,
 		ItemBrokenStonePickaxe, ItemBrokenIronPickaxe,
@@ -343,6 +358,9 @@ func ItemPlacement(item ItemID) (BlockID, bool) {
 	// 因此不出现在本表里：耕地只能由锄头翻出，作物只能由种子长成。
 	case ItemWheatSeeds:
 		return WheatStage0ID, true
+	// 工作台放置成普通完整立方体 WorkbenchID；木棍是纯材料，不可放置。
+	case ItemWorkbench:
+		return WorkbenchID, true
 	default:
 		return AirID, false
 	}

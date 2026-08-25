@@ -21,13 +21,13 @@ func TestCanonicalItemIDsStayStable(t *testing.T) {
 }
 
 // TestItemIDMaxGuardsExhaustiveEnumeration 锁定 ItemIDMax 独占哨兵与枚举末项的
-// 关系：当前最后一个合法物品必须是 ItemBread。物品演进纪律是只能在
+// 关系：当前最后一个合法物品必须是 ItemWorkbench。物品演进纪律是只能在
 // 哨兵之前追加；将来追加新物品时第一个断言变红，迫使开发者同步审视全部以
 // 「item < ItemIDMax」为穷举界的测试（例如 companion 的 place 注册表覆盖测试），
 // 而不是让穷举测试静默失去对新物品的覆盖。
 func TestItemIDMaxGuardsExhaustiveEnumeration(t *testing.T) {
-	if core.ItemBread != core.ItemIDMax-1 {
-		t.Fatalf("ItemID 枚举末项不再是 ItemBread（ItemIDMax-1 = %d）；"+
+	if core.ItemWorkbench != core.ItemIDMax-1 {
+		t.Fatalf("ItemID 枚举末项不再是 ItemWorkbench（ItemIDMax-1 = %d）；"+
 			"新增物品必须同步审视全部以 ItemIDMax 为穷举界的测试", core.ItemIDMax-1)
 	}
 	// 哨兵之外不得再出现已注册物品：若有人把新物品追加在哨兵之后，穷举界会
@@ -468,6 +468,79 @@ func TestBrokenToolsAreRegisteredAndUnstackable(t *testing.T) {
 		if limit, ok := core.ItemStackLimit(item); !ok || limit != 1 {
 			t.Fatalf("损坏物品 %d 单格上限 = (%d,%v)，想要 (1,true)", item, limit, ok)
 		}
+	}
+}
+
+// TestGridCraftingIDsAppendBeforeSentinels 锁定 A-01 格子工作台批次追加的三个
+// 稳定编号：木棍 `ItemStick=37`、工作台物品 `ItemWorkbench=38`（两者都紧贴
+// `ItemIDMax` 哨兵之前、哨兵后移到 39），工作台方块 `WorkbenchID=45`（紧贴
+// `BlockIDMax` 之前、哨兵后移到 46）。编号是协议稳定值：插入或重排会平移后续
+// 编号，破坏既有存档与线上字节。
+func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
+	if core.ItemStick != 37 {
+		t.Fatalf("ItemStick = %d，必须稳定为 37 且紧随 ItemBread(%d)",
+			core.ItemStick, core.ItemBread)
+	}
+	if core.ItemWorkbench != core.ItemStick+1 {
+		t.Fatalf("ItemWorkbench = %d，必须紧随 ItemStick(%d)",
+			core.ItemWorkbench, core.ItemStick)
+	}
+	if core.ItemWorkbench != 38 {
+		t.Fatalf("ItemWorkbench = %d，必须稳定为 38", core.ItemWorkbench)
+	}
+	if core.ItemIDMax != 39 {
+		t.Fatalf("ItemIDMax = %d，必须紧随 ItemWorkbench(%d) 后移到 39",
+			core.ItemIDMax, core.ItemWorkbench)
+	}
+	if core.WorkbenchID != 45 {
+		t.Fatalf("WorkbenchID = %d，必须稳定为 45 且紧随 WheatStage7ID(%d)",
+			core.WorkbenchID, core.WheatStage7ID)
+	}
+	if core.BlockIDMax != 46 {
+		t.Fatalf("BlockIDMax = %d，必须紧随 WorkbenchID(%d) 后移到 46",
+			core.BlockIDMax, core.WorkbenchID)
+	}
+}
+
+// TestStickIsStackableMaterialAndNeverPlaceable 锁定木棍的物品语义：合成的
+// 中间材料，可堆叠 64、不可放置、没有耐久也不是任何工具。
+func TestStickIsStackableMaterialAndNeverPlaceable(t *testing.T) {
+	limit, ok := core.ItemStackLimit(core.ItemStick)
+	if !ok || limit != core.MaxStackCount {
+		t.Fatalf("ItemStackLimit(木棍) = (%d,%v)，想要 (%d,true)",
+			limit, ok, core.MaxStackCount)
+	}
+	if _, hasDurability := core.ItemMaxDurability(core.ItemStick); hasDurability {
+		t.Fatal("木棍不应该有耐久上限")
+	}
+	if block, ok := core.ItemPlacement(core.ItemStick); ok {
+		t.Fatalf("ItemPlacement(木棍) = (%d,%v)，木棍不可放置", block, ok)
+	}
+	if stack := (core.ItemStack{Item: core.ItemStick, Count: 1}); !stack.Valid() {
+		t.Fatal("单根木棍物品栈必须合法")
+	}
+}
+
+// TestWorkbenchItemPlacesAndDropsBack 锁定工作台物品的完整闭环：可堆叠 64、
+// 没有耐久，放置写入 `WorkbenchID`，采掘工作台方块掉回恰好 1 个工作台物品。
+func TestWorkbenchItemPlacesAndDropsBack(t *testing.T) {
+	limit, ok := core.ItemStackLimit(core.ItemWorkbench)
+	if !ok || limit != core.MaxStackCount {
+		t.Fatalf("ItemStackLimit(工作台) = (%d,%v)，想要 (%d,true)",
+			limit, ok, core.MaxStackCount)
+	}
+	if _, hasDurability := core.ItemMaxDurability(core.ItemWorkbench); hasDurability {
+		t.Fatal("工作台物品不应该有耐久上限")
+	}
+	block, ok := core.ItemPlacement(core.ItemWorkbench)
+	if !ok || block != core.WorkbenchID {
+		t.Fatalf("ItemPlacement(工作台) = (%d,%v)，想要 (%d,true)",
+			block, ok, core.WorkbenchID)
+	}
+	item, ok := core.BlockDrop(core.WorkbenchID)
+	if !ok || item != core.ItemWorkbench {
+		t.Fatalf("BlockDrop(工作台) = (%d,%v)，想要 (%d,true)",
+			item, ok, core.ItemWorkbench)
 	}
 }
 

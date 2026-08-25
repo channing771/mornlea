@@ -12,6 +12,7 @@ func TestBlockDisplayNameCoversRegisteredBlocks(t *testing.T) {
 		"干耕地", "湿耕地",
 		"小麦阶段0", "小麦阶段1", "小麦阶段2", "小麦阶段3",
 		"小麦阶段4", "小麦阶段5", "小麦阶段6", "小麦阶段7",
+		"工作台",
 	}
 	// want 必须与注册表等长：循环上界用 BlockIDMax 表达「全部已注册方块」，
 	// 若只推进上界而忘了补显示名，下面的索引会越界 panic 而不是静默漏测；

@@ -86,6 +86,11 @@ const (
 	WheatStage5ID
 	WheatStage6ID
 	WheatStage7ID
+	// WorkbenchID 是工作台方块（格子工作台批次追加，只能追加在 WheatStage7ID
+	// 之后）：普通完整立方体、不透明、不发光，可放置可采掘并掉回 1 个工作台
+	// 物品。打开工作台只把玩家合成网格的有效尺寸从 2 提到 3——它是普通方块
+	// 而不是容器，不占用容器引用或区块槽位，也不持久化任何槽位记录。
+	WorkbenchID
 	// BlockIDMax 是合法方块编号的独占上界（最后一个合法 BlockID + 1），本身不是
 	// 方块枚举成员，与物品侧的 ItemIDMax 同形。它供哨兵与穷举测试以
 	// 「id < BlockIDMax」表达「全部已注册方块」，替代「某个具体编号恰为枚举末项」

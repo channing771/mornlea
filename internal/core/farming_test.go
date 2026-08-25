@@ -33,7 +33,7 @@ func TestFarmingBlockIDsAppendAfterFluids(t *testing.T) {
 }
 
 // TestBlockIDMaxGuardsExhaustiveEnumeration 锁定 BlockIDMax 独占哨兵与枚举末项
-// 的关系（与 ItemIDMax 同形）：当前最后一个合法方块必须是 WheatStage7ID。
+// 的关系（与 ItemIDMax 同形）：当前最后一个合法方块必须是 WorkbenchID。
 // 方块演进纪律是只能在哨兵之前追加；将来追加新编号时这条位次断言变红，迫使开发者
 // 同步审视全部以「id < BlockIDMax」为穷举界的测试与哨兵，而不是让它们静默退化
 // 成子集——历史上以 MossyCobblestoneID、WaterLevel7ID 为界写死的循环上界正是这
@@ -45,8 +45,8 @@ func TestFarmingBlockIDsAppendAfterFluids(t *testing.T) {
 // 计数比对抓住；追加但不登记显示名的方块完全惰性、一用就在别处炸开，不值得
 // 为这种自毁式误用另建守卫。
 func TestBlockIDMaxGuardsExhaustiveEnumeration(t *testing.T) {
-	if core.WheatStage7ID != core.BlockIDMax-1 {
-		t.Fatalf("BlockID 枚举末项不再是 WheatStage7ID（BlockIDMax-1 = %d）；"+
+	if core.WorkbenchID != core.BlockIDMax-1 {
+		t.Fatalf("BlockID 枚举末项不再是 WorkbenchID（BlockIDMax-1 = %d）；"+
 			"新增方块必须同步审视全部以 BlockIDMax 为穷举界的测试与哨兵", core.BlockIDMax-1)
 	}
 }

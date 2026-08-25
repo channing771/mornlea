@@ -317,6 +317,212 @@ func TestInventoryMoveStackRejectsInvalidRequests(t *testing.T) {
 	}
 }
 
+// craftingCell 是合成网格消费测试夹具的一条放置记录：把 count 个 item 放进
+// slot。与 recipe_test.go 的 `gridCell` 分开是因为这里需要非 1 的数量。
+type craftingCell struct {
+	slot  uint8
+	item  core.ItemID
+	count uint8
+}
+
+// buildConsumableGrid 按放置记录铺一个合成网格，未列出的格保持空。
+func buildConsumableGrid(cells ...craftingCell) [core.CraftingGridSlots]core.ItemStack {
+	var grid [core.CraftingGridSlots]core.ItemStack
+	for _, cell := range cells {
+		grid[cell.slot] = core.ItemStack{Item: cell.item, Count: cell.count}
+	}
+	return grid
+}
+
+// gridItemCount 统计网格内全部物品总数，用于「消费恰减、产物不回流」的守恒
+// 断言。
+func gridItemCount(grid [core.CraftingGridSlots]core.ItemStack) int {
+	total := 0
+	for _, stack := range grid {
+		total += int(stack.Count)
+	}
+	return total
+}
+
+// TestConsumeRecipeDecrementsEachCoveredCellOnce 覆盖 spec Requirement「产物取出
+// 一次恰合成一次且原子」的消费半边：石砖配方（2×2 石头）摆在 3×3 右下角，
+// 消费对被形状覆盖的四个格各恰减 1、形状之外的格保持空、网格总物品数恰减 4，
+// 且产物不写回网格（本函数根本不接触背包）。
+func TestConsumeRecipeDecrementsEachCoveredCellOnce(t *testing.T) {
+	pattern, ok := core.Recipe(core.RecipeStoneBricks)
+	if !ok {
+		t.Fatal("石砖配方不可用")
+	}
+	grid := buildConsumableGrid(
+		craftingCell{4, core.ItemStone, 5}, craftingCell{5, core.ItemStone, 5},
+		craftingCell{7, core.ItemStone, 5}, craftingCell{8, core.ItemStone, 5},
+	)
+	next, ok := core.ConsumeRecipe(3, grid, pattern)
+	if !ok {
+		t.Fatal("匹配形状的消费失败")
+	}
+	for _, slot := range []uint8{4, 5, 7, 8} {
+		if next[slot] != (core.ItemStack{Item: core.ItemStone, Count: 4}) {
+			t.Fatalf("被覆盖格 %d = %+v，想要 5−1=4 个石头", slot, next[slot])
+		}
+	}
+	for _, slot := range []uint8{0, 1, 2, 3, 6} {
+		if next[slot] != (core.ItemStack{}) {
+			t.Fatalf("形状之外的格 %d 不再是空栈: %+v", slot, next[slot])
+		}
+	}
+	if got, want := gridItemCount(next), gridItemCount(grid)-4; got != want {
+		t.Fatalf("消费后网格物品总数 = %d，想要恰减 4 到 %d（产物不得写回网格）", got, want)
+	}
+	if grid[4].Count != 5 {
+		t.Fatal("ConsumeRecipe 修改了调用方的原网格")
+	}
+}
+
+// TestConsumeRecipeClearsEmptiedCells 锁定「扣到零的格规范化为空栈」：单格
+// 原木配方的消费把那格清成零值，而不是留下数量 0 的残留栈。
+func TestConsumeRecipeClearsEmptiedCells(t *testing.T) {
+	pattern, ok := core.Recipe(core.RecipeOakPlanks)
+	if !ok {
+		t.Fatal("木板配方不可用")
+	}
+	grid := buildConsumableGrid(craftingCell{4, core.ItemOakLog, 1})
+	next, ok := core.ConsumeRecipe(3, grid, pattern)
+	if !ok {
+		t.Fatal("单格原木消费失败")
+	}
+	if next[4] != (core.ItemStack{}) {
+		t.Fatalf("扣空的格 = %+v，想要零值空栈", next[4])
+	}
+}
+
+// TestConsumeRecipeAlignsWithActualPlacement 锁定消费跟随实际摆放的对齐：木棍
+// 配方（纵向两木板）摆在中列，消费扣的是中列两格而不是形状的规范化位置
+// （左上角）；镜像位开启的合成形状按镜像对齐消费。
+func TestConsumeRecipeAlignsWithActualPlacement(t *testing.T) {
+	sticks, ok := core.Recipe(core.RecipeStick)
+	if !ok {
+		t.Fatal("木棍配方不可用")
+	}
+	grid := buildConsumableGrid(
+		craftingCell{1, core.ItemOakPlanks, 2}, craftingCell{4, core.ItemOakPlanks, 2},
+	)
+	next, ok := core.ConsumeRecipe(3, grid, sticks)
+	if !ok {
+		t.Fatal("中列木棍摆放的消费失败")
+	}
+	if next[1] != (core.ItemStack{Item: core.ItemOakPlanks, Count: 1}) ||
+		next[4] != (core.ItemStack{Item: core.ItemOakPlanks, Count: 1}) {
+		t.Fatalf("消费未对齐实际摆放: %+v / %+v", next[1], next[4])
+	}
+
+	// 合成的左右不对称形状（开镜像位）：镜像摆放必须经镜像对齐被消费。
+	asymmetric := core.RecipePattern{
+		Width: 2, Height: 2, Mirror: true,
+		Cells: [core.CraftingGridSlots]core.ItemID{
+			core.ItemStone, core.ItemGlass, core.ItemNone,
+			core.ItemDirt, core.ItemNone, core.ItemNone,
+		},
+		Output: core.ItemStack{Item: core.ItemStoneBrick, Count: 1},
+	}
+	// 镜像摆放 = 形状逐列翻转：G/S 顶排、泥土落在 (x1,y1) 即格 4。
+	mirrored := buildConsumableGrid(
+		craftingCell{0, core.ItemGlass, 2}, craftingCell{1, core.ItemStone, 2},
+		craftingCell{4, core.ItemDirt, 2},
+	)
+	next, ok = core.ConsumeRecipe(3, mirrored, asymmetric)
+	if !ok {
+		t.Fatal("镜像摆放的消费失败：镜像位开启的形状必须按镜像对齐消费")
+	}
+	for _, slot := range []uint8{0, 1, 4} {
+		if next[slot].Count != 1 {
+			t.Fatalf("镜像对齐消费后格 %d = %+v，想要数量 1", slot, next[slot])
+		}
+	}
+}
+
+// TestConsumeRecipeRejectsDurablesAsMaterial 覆盖 spec Scenario「耐久物品不作为
+// 材料」的消费层防御：石镐占了形状覆盖的格时，即使其余三格是石头、形状对齐
+// 看似完整，消费也必须失败且网格一字不改（匹配层 `MatchCraftingGrid` 同样
+// 拒绝，这里直接喂 pattern 证明消费层不依赖匹配层先行把关）。
+func TestConsumeRecipeRejectsDurablesAsMaterial(t *testing.T) {
+	pattern, ok := core.Recipe(core.RecipeStoneBricks)
+	if !ok {
+		t.Fatal("石砖配方不可用")
+	}
+	grid := buildConsumableGrid(
+		craftingCell{0, core.ItemStone, 2}, craftingCell{1, core.ItemStone, 2},
+		craftingCell{3, core.ItemStone, 2},
+		craftingCell{4, core.ItemStonePickaxe, 1},
+	)
+	grid[4].Durability = 131
+	next, ok := core.ConsumeRecipe(3, grid, pattern)
+	if ok {
+		t.Fatal("带耐久的工具被当作材料消费")
+	}
+	if next != grid {
+		t.Fatalf("失败消费修改了原网格: %+v", next)
+	}
+}
+
+// TestConsumeRecipeFailureReturnsOriginalGrid 锁定全部失败路径的原子性：空
+// 网格、宽高不符、被覆盖格物品不同、被覆盖格数量为零、有效尺寸之外的格有
+// 残留、非法尺寸与「镜像位关闭却按镜像摆放」——一律返回原网格与 false，
+// 绝不留下部分扣减。
+func TestConsumeRecipeFailureReturnsOriginalGrid(t *testing.T) {
+	sticks, _ := core.Recipe(core.RecipeStick)
+	// 左右不对称且关闭镜像位的合成形状（注册表 1..13 没有这种组合——
+	// 不对称的工具配方全部关镜像、开镜像的形状全部对称，见 design.md D3），
+	// 专门证明消费层与匹配层共用同一条「镜像位即重试开关」纪律。
+	strictAsymmetric := core.RecipePattern{
+		Width: 2, Height: 2, Mirror: false,
+		Cells: [core.CraftingGridSlots]core.ItemID{
+			core.ItemStone, core.ItemGlass, core.ItemNone,
+			core.ItemDirt, core.ItemNone, core.ItemNone,
+		},
+		Output: core.ItemStack{Item: core.ItemStoneBrick, Count: 1},
+	}
+	cases := []struct {
+		name    string
+		size    uint8
+		grid    [core.CraftingGridSlots]core.ItemStack
+		pattern core.RecipePattern
+	}{
+		{"空网格", 3, [core.CraftingGridSlots]core.ItemStack{}, sticks},
+		{"宽高不符", 3, buildConsumableGrid(
+			craftingCell{0, core.ItemOakPlanks, 2}, craftingCell{1, core.ItemOakPlanks, 2},
+		), sticks},
+		{"覆盖格物品不同", 3, buildConsumableGrid(
+			craftingCell{0, core.ItemOakPlanks, 2}, craftingCell{3, core.ItemDirt, 2},
+		), sticks},
+		{"覆盖格数量为零", 3, buildConsumableGrid(
+			craftingCell{0, core.ItemOakPlanks, 2}, craftingCell{3, core.ItemOakPlanks, 0},
+		), sticks},
+		{"个人网格扩展格残留", 2, buildConsumableGrid(
+			craftingCell{0, core.ItemOakPlanks, 2}, craftingCell{3, core.ItemOakPlanks, 2},
+			craftingCell{5, core.ItemDirt, 1},
+		), sticks},
+		{"非法尺寸", 4, buildConsumableGrid(
+			craftingCell{0, core.ItemOakPlanks, 2}, craftingCell{3, core.ItemOakPlanks, 2},
+		), sticks},
+		{"镜像位关闭的镜像摆放", 3, buildConsumableGrid(
+			craftingCell{0, core.ItemGlass, 2}, craftingCell{1, core.ItemStone, 2},
+			craftingCell{4, core.ItemDirt, 2},
+		), strictAsymmetric},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			next, ok := core.ConsumeRecipe(tc.size, tc.grid, tc.pattern)
+			if ok {
+				t.Fatalf("非法消费被接受: %+v", next)
+			}
+			if next != tc.grid {
+				t.Fatalf("失败消费修改了原网格: %+v", next)
+			}
+		})
+	}
+}
+
 func BenchmarkInventoryAddStack(b *testing.B) {
 	var inventory core.Inventory
 	for slot := range inventory.Hotbar.Slots {
