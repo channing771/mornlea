@@ -20,6 +20,6 @@
 
 ## Task 3: 整分支门禁与收尾
 
-- [ ] 3.1 `gofmt -l .` 无输出；`go vet ./...` 通过；`go test ./... -race` 全绿。
-- [ ] 3.2 `openspec validate --all --strict --no-interactive` 通过；勾选本文件全部任务。
-- [ ] 3.3 更新 `ledger.md`：评审结论、裁决与验证证据；确认无未决项需誊入 proposal「延期与放弃」。
+- [x] 3.1 `gofmt -l .` 无输出；`go vet ./...` 通过；`go test ./... -race` 全绿。
+- [x] 3.2 `openspec validate --all --strict --no-interactive` 通过；勾选本文件全部任务。
+- [x] 3.3 更新 `ledger.md`：评审结论、裁决与验证证据；确认无未决项需誊入 proposal「延期与放弃」。

@@ -28,3 +28,15 @@
 - 实现提交 `ec985e43`：仅改 `internal/sim/trample_test.go`（+132：`TestTrampleDualPlayerLandingSameCellIsIdempotent` 与 helper `landBothPlayersFromAbove`、迁入跨格覆盖用例）与 `property_trample_yield_parity_test.go`（−23：迁出跨格覆盖用例）。2.1 server/client 回归全绿零改动（179s/5s `-race`）；2.2 不触及证据链——cmd 层零耕地构造、耕地唯一生产来源是 `TillSoil`（`farming.go:100`）、worldgen 无 farmland/wheat、benchmark `fixedBenchmarkPlayerInput` 的 `Jump:true` 只产生空候选结算（无数值观察义务）；2.3 archcheck 通过；2.4 幂等锚定测试首跑即绿（Task 1 读判实现已满足 MUST 条款，无实现缺陷）；2.5 纯迁移逐字节一致、`go test -list` 集合 400→401 唯一增量是新测试。
 - 实现偏差（已核实可接受）：双玩家落地无法复用 `landPlayerAt`（`onlyMovementPlayer` 硬断言恰好一名玩家），新增最小 helper `landBothPlayersFromAbove`；按「单文件私有 helper 留在消费文件」落位。
 - 评审：**SPEC PASS**（2.1–2.5 逐条独立核实：不触及证据三环复核、幂等测试五重锚定核实——真实双会话/同 tick 落地/覆盖格逐格相同/三重堵死双重结算/tick 对齐断言）；**QUALITY PASS**（helper 白盒直读权威状态是同包普遍模式、注释合规、红线零越界、复跑全绿）。评审者 NB：ledger/tasks 勾选待评审后誊录（本条即该誊录，流程节奏与 Task 1 一致）。
+
+## Task 3（整分支门禁与收尾）
+
+- 本任务无代码提交（收尾门禁：只改本 change 的 `tasks.md`/`ledger.md` 产物）。
+- **3.1 门禁证据**（GVM go1.26.0，worktree 复用既有 Rust 构建产物）：
+  - `gofmt -l .` 无输出（exit 0）；`go vet ./...` 无告警（5.1s）。
+  - `go test ./... -race` 全量两次运行：
+    - run 1（全冷跑，总 6:12.86）：26 包 ok——`cmd/mornlea` 364.272s、`internal/archcheck` 60.203s、`internal/mesh` 45.201s、`internal/storage` 39.468s、`internal/worldgen` 37.952s、`internal/sim` 23.642s（本 change 自身包，绿）等；唯一失败 `internal/server` 268.599s：`TestCompanionDialogueTerminalCoversFourTerminalStates/Stopped`（61.98s）在 `companion_dialogue_wiring_test.go:295` 的 `waitDialogueRequests(t, dialogue, 2)` 处按 60s `longWaitDeadline` 超时。
+    - run 2（同命令复跑，总 2:58.80）：`internal/server` 全新执行 ok 177.139s，其余包复用 run 1 的 ok 缓存——即每个包都已在完全相同的门禁命令下真实通过至少一次，exit 0。
+- **Ruling: 3.1 门禁采信复跑** — 决定：run 1 的 `TestCompanionDialogueTerminalCoversFourTerminalStates/Stopped` 超时认定为与 B-05 无关的既有台词域负载 flake，同命令复跑全绿即作为 3.1 的门禁证据；双数据点（run 1 红 / run 2 绿、负载观察）如实誊录，不稀释表述。为什么：五环证据链——① 本分支 diff 仅 `internal/sim` 五文件与 openspec 产物，`internal/server` 及失败测试文件零触碰（其最后修改为基线提交 `25f69af3`/`4292201f`）；② 该测试无任何 farmland/trample 语义（grep 零引用、测试世界无耕地，踩踏在其世界零工作量）；③ 该测试隔离复跑 `go test ./internal/server -race -run … -count=1` 2.767s 全绿；④ Task 2 已在本分支跑过 `./internal/server -race -count=1` 全绿（179s）；⑤ 仓史 `ci-retry-isolation` Task 6 已根修过同类台词「单在途守卫 + outcome 就绪时序」负载 flake（`7cb3d0cc`/`0b1712b6`/`25f69af3`/`07389b07`）。且 run 1 满载（191% CPU）下 server 包 268.6s vs 复跑 177.1s 的耗时差与 60s `longWaitDeadline` 超时吻合负载诱发；控制会话另引 F-03 收尾先例（CI 首跑 1 flake、重跑后 8/8 全绿，同一测试域）。错在：非本 change 缺陷——若归因本 change，则范围隔离、语义隔离与隔离复跑全绿三环均无法解释。
+- **3.2** `openspec validate --all --strict --no-interactive`：勾选前后各跑一次，均 65 passed / 0 failed（含 `change/farmland-trample`）。
+- **3.3 未决项清偿确认**：Task 1 评审 NB1→2.4、NB3→2.5 已在 Task 2 完成并双评审 PASS；NB2（red 证据誊录）由本节清偿——Task 1 节已含 red-first 记录（四个 Trample 用例实现前失败、容量用例为负向断言天然通过），终审引用即可。**无任何未决项需誊入 proposal「延期与放弃」**；proposal 既有「非目标」三条（伙伴踩踏、采掘耕地连带、流体冲毁联动）为认领阶段 Ruling 产物，非收尾新增欠账。
