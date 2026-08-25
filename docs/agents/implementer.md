@@ -63,7 +63,8 @@
 □ AGENTS.md 与 CLAUDE.md 逐字节相同（cmp -s）且只写已验证事实
 □ docs/notes/progress.md 追加基线段落
 □ docs/feature-backlog.md 该行 → 已完成（认领人保留履历）；集成任务受影响时同步 A/I 行
-□ GitHub Discussion #71 对应状态更新（正文表格或追加评论）
+□ GitHub Discussion #71 **追加状态评论**（每次状态变化都要，含 F 组；正文表格留给规划者全量同步）
+   gh api graphql --input <(jq -n --rawfile b /tmp/disc-note.md --arg q 'mutation($b:String!){ addDiscussionComment(input:{discussionId:"D_kwDOToJS8M4Aou6G", body:$b}){ comment { id } } }' '{query:$q, variables:{b:$b}}')
 □ 门禁证据归档：ledger 补最终验证输出摘要（数值记录，不改基线）
 □ 推送分支：git push -u origin <branch>
 □ 创建 PR：gh pr create --title "feat: <行 ID> <功能名>" --body "<OpenSpec change 链接 + 规划行 + 验证摘要>"
