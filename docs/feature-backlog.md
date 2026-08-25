@@ -4,7 +4,7 @@
 
 > 开发流程、工程约定与验证门禁以 `AGENTS.md`（与 `CLAUDE.md` 逐字节相同）与 `openspec/config.yaml` 为准。本表不重复、不替代二者；二者与代码矛盾时，以代码、测试与 `openspec/specs/` 主规格为真相。
 >
-> 以「相对 Minecraft 的功能缺口」视角的索引见 GitHub Discussion [#71 Mornlea 功能缺口拆解与任务认领池（规划）](https://github.com/channing771/mornlea/discussions/71)；两处状态不一致时以本文件为准并回改讨论。
+> 状态列表镜像（按状态分组、每轮刷新）见 GitHub Discussion [#71 Mornlea 功能缺口拆解与任务认领池（规划）](https://github.com/channing771/mornlea/discussions/71)；两处状态不一致时以本文件为准并回改讨论。
 
 ## 状态图例
 
