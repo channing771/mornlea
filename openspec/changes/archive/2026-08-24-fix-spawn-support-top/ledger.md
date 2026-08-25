@@ -12,3 +12,4 @@
 - 整分支终审：0 Critical、0 Important、3 Minor；提交 `fd384fc2` 收紧 safe 字面断言、删除 design 中未实现的“去重”表述并清理 delta 尾部空白。唯一 scoped re-review 判定 3/3 ADDRESSED、无新 breakage，APPROVE。
 - 控制会话最终门禁：`scripts/agents/gates.sh` 全部通过——gofmt、`go vet ./...`、archcheck、OpenSpec strict 63/63、`make rust`、`go test ./... -race` 均 exit 0；其中 `internal/sim` race 7.515s、archcheck race 17.380s。
 - record-only benchmark（Apple M5）：`BenchmarkEngineStepPlayer` 5865 ns/op、504 B/op、18 allocs/op；`BenchmarkEngineStepFourCompanions` 4069 ns/op、1536 B/op、28 allocs/op。改动只在 PendingSpawn 扫描，活跃 tick benchmark 不改变退出状态或基线。
+- 规格沉淀：delta 已同步为主规格 `authoritative-spawn-support`，change 归档为 `2026-08-24-fix-spawn-support-top`；归档后 `openspec validate --all --strict --no-interactive` 为 63/63 通过。
