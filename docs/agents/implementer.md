@@ -43,7 +43,7 @@
 1. **发起**：`confirm.sh ask --id X-xx --title "..." --category bounded|architectural --question "..." --design "..."` —— 配置了飞书时推送到你的设备；无飞书自动降级 discussion/none 并按提示处理。
 2. **等待**：`confirm.sh wait --id X-xx --timeout-min 2`——短等即可。收到回复（approve/edit/reject + 文本）→ 把结论写入 OpenSpec change 的 proposal/design 与 brief → 从第 4 步继续；**没收到就正常退出**，续跑交给 listener（见下），不要长等（避免与原会话双开）。
 3. **自动续跑**：`feishu-listener.js`（常驻）收到回复后写 `<id>.reply.json`，并以 `AGENT_RESUME=<id>` 在后台重跑 `run-agent.sh implementer`——本会话若见 `AGENT_RESUME` 环境变量，直接读对应 reply 文件继续（不重新认领）；这是 headless 下的**唯一**恢复入口。
-4. **超时/无通道**：降级 Discussion 协议——结构化评论发到 Discussion #71 对应行、backlog 该行备注标「待确认」，**停在确认点**，不得静默开工；用户回复后 `confirm.sh reply --id X-xx --action ...` 或下次调度恢复。
+4. **无通道/发送失败**（请求 channel 为 discussion|none）：才降级 Discussion 协议——结构化评论发到 Discussion #71 对应行、backlog 该行备注标「待确认」，**停在确认点**，不得静默开工；用户回复后 `confirm.sh reply --id X-xx --action ...` 或下次调度恢复。**注意**：飞书卡片已送达但用户暂未回复（wait 超时）**不是**无通道——只停确认点等 listener 续跑，**不要**往 Discussion 写卡片转录；讨论区只承载【状态变更】与规划者记录，不承载澄清提问/内容确认的正文。
 5. **终端即时问答**（手动模式）：`AGENT_INTERACTIVE=1 scripts/agents/run-agent.sh implementer`（claude 交互模式，可直接对话确认后再开工）。
 
 ## 第 4 步：开发（子智能体驱动）

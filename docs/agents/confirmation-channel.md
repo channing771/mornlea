@@ -28,7 +28,7 @@ feishu-listener.js（长连接事件订阅，常驻 daemon）
 | 优先级 | 通道 | 触发 | 说明 |
 |---|---|---|---|
 | 1 | feishu | 配置了 ~/.mornlea/confirm/feishu.json（AGENT_CONFIRM_CHANNEL=feishu 或 auto 探测到） | 推送设备，回复即续跑 |
-| 2 | discussion | 飞书发送失败 / 显式指定 / 等待超时 | 发布到 GitHub Discussion #71 对应评论，用户回复后 confirm.sh reply 或下次调度恢复 |
+| 2 | discussion | 飞书发送失败 / 显式指定（channel=discussion） | 发布到 GitHub Discussion #71 对应评论——**仅通道不可用时**；卡片已送达而用户暂未回复不属于降级（等 listener 续跑，不写讨论）。用户回复后 confirm.sh reply 或下次调度恢复 |
 | 3 | none | 未配置任何通道 | 本地记录；confirm.sh reply 模拟回复（测试用） |
 
 > 从零搬一台新机器（clone → 依赖 → 飞书应用 → 定时 → 继电器链）的完整步骤见 [setup-new-machine.md](setup-new-machine.md)；本文件只讲确认通道本身。
