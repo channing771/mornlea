@@ -10,6 +10,7 @@ import (
 	"github.com/channing771/mornlea/internal/assets"
 	"github.com/channing771/mornlea/internal/audio"
 	"github.com/channing771/mornlea/internal/client"
+	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/render"
 	"github.com/channing771/mornlea/internal/server"
@@ -30,6 +31,10 @@ type applicationDependencies struct {
 	newOffscreenRenderer func(int, int) (*client.Renderer, error)
 	newGlyphAtlas        func(render.GlyphSink) (*render.GlyphAtlas, error)
 	newAudioPlayer       func(float32) (play func(audio.Cue), close func())
+	// `patchSettings` 是设置保存事务的可测试边界；生产实现只原子 patch
+	// 设置页拥有的三个 raw JSON 顶层成员，不重写同文件的其他字段。返回的
+	// `PersistenceResult` 明确标记 rename 是否已提交，防止目录同步警告被误判。
+	patchSettings func(string, config.SettingsPatch) (config.PersistenceResult, error)
 }
 
 func defaultApplicationDependencies() applicationDependencies {
@@ -75,5 +80,6 @@ func defaultApplicationDependencies() applicationDependencies {
 			player := audio.NewPlayer(volume)
 			return player.Play, player.Close
 		},
+		patchSettings: config.PatchSettings,
 	}
 }

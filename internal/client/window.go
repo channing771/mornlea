@@ -92,6 +92,11 @@ func ClientABIVersion() uint32 {
 	return uint32(C.mornlea_client_abi_version())
 }
 
+// clientABIHeaderVersion 返回编译时 C header 的 ABI 常量，供三端一致性测试。
+func clientABIHeaderVersion() uint32 {
+	return uint32(C.MORNLEA_CLIENT_ABI_VERSION)
+}
+
 // snapshot 是一帧输入快照的解码结果。
 type snapshot struct {
 	keys              uint64

@@ -91,7 +91,7 @@ openspec validate --all --strict --no-interactive
 
 ## 并行与冲突规则
 
-- **版本号互斥**：协议 / 存档 schema / engine ABI / client ABI / benchmark scenario 的升版行互斥——同一时间只能一个认领者持有；冲突按实际合入顺序重排（例：第一夜批次设计写 client ABI v8，已被 egui 主菜单占用，须重排为 v9）。
+- **版本号互斥**：协议 / 存档 schema / engine ABI / client ABI / benchmark scenario 的升版行互斥——同一时间只能一个认领者持有；冲突按实际合入顺序重排（例：第一夜批次原设计写 client ABI v8，先被 egui 主菜单占用 v8、再被设置页占用 v9，须重排为 v10）。
 - **同批并行先共享契约**：第一步在共同基线上冻结 append-only 共享契约提交（追加编号 / 协议消息 / 有限模型 tag），功能分支从该 SHA 创建；capture golden、benchmark scenario 与 `AGENTS.md`/`CLAUDE.md` 由**集成任务独占**，功能分支不得触碰。
 - **文件所有权**：认领时声明独占文件集；与其它已认领行重叠则换行或延迟。
 - **范围冻结**：认领后不得扩大范围；实现发现规格不成立时，先改 OpenSpec 产物再继续。

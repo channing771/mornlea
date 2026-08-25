@@ -8,7 +8,7 @@
 //! 金字塔遮挡。uniform 布局、clear 值与 pass 顺序保持一致,保证同输入
 //! 同图像。远环 LOD 壳 pass(v6)绘制在天空与近环 terrain 之间:世界
 //! 坐标大 quad + 距离雾 + tile 级 CPU 视锥剔除,不进 HiZ/GPU culling。
-//! egui 菜单 pass(client ABI v8)排在整个帧的**最上层**(HUD/debug 之后),
+//! egui 菜单 pass(client ABI v9)排在整个帧的**最上层**(HUD/debug 之后),
 //! 纯 screen-space、无深度测试;只在帧 UI 段非空且字体已安装时提交,无 UI
 //! 段的帧零 GPU 工作(既有场景图像逐字节不变)。
 //!
@@ -27,6 +27,8 @@ pub mod quads;
 pub mod shaders;
 #[cfg(test)]
 mod side_tests;
+#[cfg(test)]
+mod ui_replay_tests;
 #[cfg(test)]
 mod water_tests;
 
@@ -81,6 +83,8 @@ pub const GLYPH_ATLAS_SIZE: u32 = 1024;
 pub enum FrameResult {
     /// 输入违约,未触碰任何 GPU 状态。
     Invalid,
+    /// 结构化 UI 输出队列容量不足，本帧事件未入队。
+    Capacity,
     /// 窗口 surface 获取失败(遮挡/过期),本帧跳过。
     Skipped,
     /// 渲染完成(窗口模式已 present)。
@@ -523,7 +527,7 @@ pub struct OffscreenRenderer {
     hud_pass: QuadPass,
     /// 调试面板 pass。
     debug_pass: QuadPass,
-    /// egui 菜单 pass(client ABI v8);创建即 Some,离屏与窗口模式都构造。
+    /// egui 菜单 pass(client ABI v9);创建即 Some,离屏与窗口模式都构造。
     /// 无 UI 段的帧其 run_and_record 返回零工作,不产生任何 GPU 提交。
     egui_pass: Option<EguiPass>,
 
@@ -2008,9 +2012,9 @@ impl OffscreenRenderer {
             );
         }
         // egui 菜单 pass(最上层,screen-space 无深度):只在 UI 段非空时运行。
-        // 输入事件队列在任何情况下都 take 并丢弃(防空段积压);字体未装而
-        // 菜单可见视为编程错误(Go 启动后上传一次),返回 Invalid。
-        let ui_events = take_ui_events();
+        // 空段仍 take 并丢弃以防游戏期积压；可见段必须先完成输出最坏容量
+        // 预检，再 take window input。否则 Capacity 会清空 click/text/scroll，
+        // 下一帧虽能重试输出却永远无法重放用户输入。
         if !input.ui_segment.is_empty() {
             let frame = match decode_ui_frame(&input.ui_segment) {
                 Ok(frame) => frame,
@@ -2022,23 +2026,33 @@ impl OffscreenRenderer {
                 .as_ref()
                 .map(|pass| pass.has_font())
                 .unwrap_or(false);
-            if frame.visible && !has_font {
+            if frame.visible() && !has_font {
                 return FrameResult::Invalid;
             }
-            if let Some(egui_pass) = self.egui_pass.as_mut()
-                && egui_pass
-                    .run_and_record(
-                        &self.device,
-                        &self.queue,
-                        &mut encoder,
-                        &frame_view,
-                        &frame,
-                        ui_events,
-                    )
-                    .is_err()
+            if let Some(egui_pass) = self.egui_pass.as_ref()
+                && !egui_pass.has_frame_capacity(&frame)
             {
-                return FrameResult::Invalid;
+                return FrameResult::Capacity;
             }
+            let ui_events = take_ui_events();
+            if let Some(egui_pass) = self.egui_pass.as_mut() {
+                match egui_pass.run_and_record(
+                    &self.device,
+                    &self.queue,
+                    &mut encoder,
+                    &frame_view,
+                    &frame,
+                    ui_events,
+                ) {
+                    Ok(_) => {}
+                    Err(EguiError::OutputCapacity) => return FrameResult::Capacity,
+                    Err(EguiError::FontInvalid | EguiError::OutputInvalid) => {
+                        return FrameResult::Invalid;
+                    }
+                }
+            }
+        } else {
+            let _ = take_ui_events();
         }
         self.last_pos = input.pos;
         self.last_view_proj = input.view_proj;
@@ -2050,7 +2064,7 @@ impl OffscreenRenderer {
         FrameResult::Rendered
     }
 
-    /// 上传 egui 菜单字体(client ABI v8 出口)。
+    /// 上传 egui 菜单字体(client ABI v9 保留出口)。
     ///
     /// 空/超上限字节由 [`EguiPass::upload_font`] 拒绝并返回 Err;成功则安装
     /// 到 [`crate::ui::UiState`](proportional + monospace 同族)。
@@ -2061,12 +2075,21 @@ impl OffscreenRenderer {
             .upload_font(bytes)
     }
 
-    /// 排空 egui 菜单点击事件(client ABI v8 出口),返回按钮 id 序列。
-    pub fn drain_ui_events(&mut self) -> Vec<u32> {
+    /// 把 client ABI v9 结构化 UI 事件完整排空到 `out`。
+    pub fn drain_ui_events(&mut self, out: &mut [u8]) -> Result<usize, crate::ui::UiOutputError> {
         self.egui_pass
             .as_mut()
             .expect("egui_pass 应已创建")
-            .drain_events()
+            .drain_events(out)
+    }
+
+    /// 测试专用：填充 UI 输出队列以覆盖 renderer 外层输入重试边界。
+    #[cfg(test)]
+    pub(crate) fn test_fill_ui_actions(&mut self, count: usize) {
+        self.egui_pass
+            .as_mut()
+            .expect("egui_pass 应已创建")
+            .test_fill_actions(count);
     }
 
     /// 调整输出尺寸:重建 depth 与 HiZ,离屏重建 color,窗口重配 surface;
