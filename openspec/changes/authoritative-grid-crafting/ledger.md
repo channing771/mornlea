@@ -16,8 +16,17 @@
 
 ## 基线证据
 
-- 待补：首个 implementer 任务开始前在 worktree 运行 `make rust` 与 `go test ./internal/core ./internal/sim ./internal/network ./internal/render/hud ./cmd/mornlea -race -count=1`，命令与结果誊入本节。
+- 2026-08-25 worktree `main`（`16ac2fe7`）基线：`make rust` 退出码 0（全量 cdylib 构建）；`internal/core`、`internal/assets`、`internal/physics` 于任务组 1 开工前处于已验证的干净绿态（任务组 1 的红→绿流程以此为前提）。focused Go 全组基线随任务组 2 的 sim 接入一并记录（任务组 1 删除 `Inventory.Craft` 前全仓编译依赖 sim/server/hud 未受影响）。
 
 ## 评审与执行记录
 
-- 待任务派发后逐条记录（implementer 提交、SPEC/QUALITY 结论、修复循环轮次）。
+### 任务组 1：形状注册表与工作台方块
+
+- Implementer：fresh 子代理，提交 `615818b6`（`feat: add shaped crafting recipes`，17 文件）。验证：`go test ./internal/core ./internal/assets ./internal/physics -race -count=1` 全绿；`gofmt -l` 无输出；`go vet` 三包通过。
+- 红→绿证据：`Test(RecipePattern|MatchCraftingGrid)`、`TestRecipeShapeTableOneToThirteenIsFrozen`、5 个 `TestConsumeRecipe*`、`TestWorkbench*` 全部先红后绿。
+- 实现者偏离记录（1：编号注册前置——工具/新配方形状引用 `ItemStick`/`ItemWorkbench`，不前置无法编译；2：新增白盒 `recipe_shape_internal_test.go`——注册表内无「不对称且开镜像」形状，镜像正例只能对私有 `matchesPattern` 直接证明；3：`MatchCraftingGrid`/`ConsumeRecipe` 带 `size` 参数——2×2 个人格在 3×3 行主序下是 L 形，匹配器必须知道有效尺寸；4：`pack_test.go` 追加三行绑定；5：非工具配方 `Mirror=true`、工具关镜像，锄头方向锁定「材料列在左、木棍列在右」）。
+- 已知中间态（预期）：`Inventory.Craft`/`CraftingRecipe` 删除使 `internal/sim/engine_step.go:252`、`internal/render/hud/container.go:297,313`、`cmd/mornlea/app_input.go:161` 编译失败，任务组 2/3/4 接续修复；`internal/network`/`internal/mesh`/`internal/world`/`internal/storage` 保持绿。
+- 评审：QUALITY **PASS**（独立评审者，2026-08-25）：七项清单全过——匹配器零分配固定循环、Consume 七条失败路径原子、GoDoc/编号纪律达标、测试锋利（冻结表完整结构体相等 + 配位次断言）、一文件一主题、无越界、gofmt/vet/-race 亲测复核通过。非阻塞建议 4 条：1) `inventory.go:213` 注释与匹配层 `Count==0` 归一化语义相反，会误导「Match 通过则 Consume 必通过」假设（消费层更严，应改写注释或补锁定用例）；2) `MatchCraftingGrid` 两个防御分支（非法 size、个人格 4..8 残留）缺直接测试；3) `ConsumeRecipe` 在 `Mirror=false` 时冗余重跑正向尝试（无害不对称）；4) 可补通用注册表不变量测试（Cells 不越 Width×Height 子矩形），未来追加 14..18 自动生效。
+- 评审：SPEC **FAIL → 进入修复循环 R1**（独立评审者，2026-08-25）：形状表/匹配语义/原子性/编号/拒绝/方块属性/无放宽七项全 PASS；唯一必改项 N1——`Inventory.Craft` 删除未给 `internal/sim/engine_step.go:252`、`internal/render/hud/container.go:297,313`、`cmd/mornlea/app_input.go:161` 留可编译过渡，全仓 `go build ./...`、`go vet ./...`、`internal/archcheck` 三重门禁在本提交失效；「已知中间态」披露不等于合规，任务组 2 的红→绿也无法在不可编译包上执行。
+- Ruling: N1 立即修复而非接受中间态 — 门禁失效违反「每个任务可单独验证」的子代理纪律，且修复方向（sim 合成命令转稳定拒绝）正是 design.md D6 的目标语义 — 修复循环 R1（≤3 轮续用原 implementer）授权临时越界：仅限上述三个调用点及其测试的最小编译过渡，不得回加任何 `Craft` 双路径；`hud` 侧只去掉对已删符号的咨询，配方列表 UI 的正式替换归任务组 4。
+- Ruling: SPEC 建议 1 采纳——`authoritative-grid-crafting` delta 的「匹配 MUST 允许水平镜像」与 D3 按配方 `Mirror` 位存在文本张力（注册表内无可实例化「不对称且三列」形状），控制会话已把 MUST 改写为「镜像等价性由每条配方的镜像位声明」，避免归档时沉淀被冻结行为直接违反的主规格。SPEC 建议 2 采纳——`WorkbenchID` 采掘规则缺失登记进 tasks.md 2.4（木 tier 15 tick）。建议 3/4 与 QUALITY 建议 1/2 合并进 R1 修复（core 同包文件）；QUALITY 建议 4 一并进 R1。
