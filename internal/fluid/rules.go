@@ -5,14 +5,18 @@ import "github.com/channing771/mornlea/internal/core"
 // Replaceable 报告：若把流体等级为 newLevel 的流动水（newLevel 取 1..7）写入
 // target 所在的格，target 现有的内容是否允许被改写。
 //
-// 判定表（对应 task-2-brief.md 2.1 与 spec.md「流动规则」的多条 Scenario）：
+// 判定表（对应 task-2-brief.md 2.1 与 spec.md「流动规则」的多条 Scenario；
+// 作物行为由 flood-destroys-crops 引入，见 design.md D1/D5）：
 //
 //	目标格                        可替换？
 //	空气                          是
 //	流体等级更大（更弱）的流动水    是
+//	作物（小麦任意生长阶段）        是——水淹即冲毁；冲毁后的掉落结算由权威写入侧
+//	                                （sim）在流体写入汇聚点完成，本包不感知物品
 //	源方块                        否——「源不可被流动方块替换」
 //	流体等级更小或相等的流动水      否——防止弱水倒灌强水，也防止无意义的同值改写
-//	任意其他非空气方块（实心）      否——「实心方块不可替换」
+//	非作物的实心方块                否——「实心方块不可替换」；作物已在上方单独
+//	                                放行，故此行适用范围不含作物
 //
 // newLevel 由调用方按当前正在做的传播（垂直恒为 1，水平为 N+1）算出，本函数
 // 不关心它是如何得来的，只做纯粹的比较。
@@ -20,8 +24,17 @@ func Replaceable(target core.BlockID, newLevel uint8) bool {
 	if target == core.AirID {
 		return true
 	}
+	if core.IsCrop(target) {
+		// 作物对流动水可替换。放行点必须在本函数而不能在 evalCell 里特判：
+		// 垂直优先、水平递减、存活判定、同 tick 冲突合并以及重扫的不动点捷径
+		// 全部经由这一个谓词读世界，改一处即全链一致；若捷径另用一套保守判定，
+		// 「邻作物的源」会被误判成不动点跳过入队，水面在农田边永久卡死
+		// （design.md D1 的被否决方案）。本包只回答「能不能写」，作物被冲毁后
+		// 的掉落结算是权威写入侧（sim）的职责，fluid 包不感知物品。
+		return true
+	}
 	if !core.IsFluid(target) {
-		// 非空气、非流体：实心方块，一律不可替换。
+		// 非空气、非作物、非流体：非作物的实心方块，一律不可替换。
 		return false
 	}
 	if target == core.WaterSourceID {

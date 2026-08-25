@@ -203,8 +203,11 @@ func advanceToFixedPoint(t *testing.T, q *Queue, w FluidWorld, start uint64, bud
 //     里的全部格。
 //  2. 判据原先是 !core.RegisteredBlock(id)。农业编号追加之后
 //     WaterSourceID+8 == FarmlandDryID **已经是已注册方块**，越界写入不再会被
-//     RegisteredBlock 拒绝。现在改为白名单：本包的夹具只放空气、石头与流体，
-//     出现其它任何编号都只可能来自流体规则的越界写入。
+//     RegisteredBlock 拒绝。现在改为白名单：本包的夹具只放空气、石头与流体
+//     （唯一的例外是 TestConvergeFloodedCropsReachFixedPoint 的作物淹没场景，
+//     它在调用本断言前已先证明平衡态零作物残留），出现其它任何编号都只可能
+//     来自流体规则的越界写入——越界写出的编号恰好落在农业编号段
+//     WaterSourceID+8..17 上，正是这个白名单要抓的形态。
 func assertNoLevelOverflow(t *testing.T, w *memWorld, label string) {
 	t.Helper()
 	for _, pos := range allPositions(w) {
