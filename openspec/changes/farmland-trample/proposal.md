@@ -1,0 +1,39 @@
+# Proposal: farmland-trample
+
+## Why
+
+`authoritative-farming` 首版交付了耕地与作物，但耕地是「永久」的：没有任何机制能把它踩坏。功能积压表 B-05（farming 遗留 4）要求把实体落地事件接进方块变更——物理侧已有落地判定（摔落伤害在用），只差一条钩子。没有踩踏，麦田没有「请绕行」的玩法张力，耕地与自然泥土在生存体验上没有区别。
+
+## What Changes
+
+- 玩家从空中落地的边沿（上一权威 tick 不在地面、本 tick 在地面，与摔落伤害共用同一次判定）时，权威模拟把其碰撞盒水平覆盖的下方格中的耕地（干或湿）变回泥土；被踩格正上方的作物一并移除并按采掘同形规则产出掉落物（成熟作物走 `cropYieldRolls` 确定性双产物、未成熟作物 1 颗种子），耕地转泥土本身不产生掉落。
+- 结算与掉落原子成立：掉落容量不足时整格放弃（耕地与作物保持原样），绝不出现部分掉落或作物凭空消失；踩踏只在落地边沿触发一次，持续站立期间不重复触发。
+- 变更经既有 `recordChange` 汇入同一批 pending/revision/广播；客户端与协议零改动：无新消息、无方块/物品编号变更、无存档 schema 与 ABI 变更，capture golden 与 benchmark scenario 不变。
+
+### 用户可观察结果
+
+- 跳进自家麦田会踩坏脚下的耕地：耕地变回泥土，其上的庄稼被毁并掉落成熟度对应的产物；同一株作物在同一权威 tick 被踩掉与被挖掉，掉落数量完全相同。
+- 走在泥土、草或石头上没有任何变化；站在耕地上不重复破坏，跳起再落地才会再次判定。
+
+## Capabilities
+
+### New Capabilities
+
+（无）
+
+### Modified Capabilities
+
+- `authoritative-farming`: 新增「玩家落在耕地上会把耕地踩回泥土」要求（踩踏事件的边沿语义、原子结算、容量不足不破坏、掉落与采掘同形且确定性一致）。
+
+## Impact
+
+- **代码**：`internal/sim` 新建 `trample.go`（落脚几何判定、事件暂存与结算）与主题测试文件 `trample_test.go`、`property_trample_yield_parity_test.go`；三处最小受控重叠——`internal/sim/player.go` 落地结算区插入一行收集调用、`internal/sim/crop.go` 的 `advanceCrops` 首部插入一行结算调用（B-10 已归档、无在途独占，认领备注已据此修正）、`internal/sim/engine.go` 的 `Engine` 结构体追加一行暂存字段声明（终审 NB1 补记：认领时低估为两处，第三处经 ledger Ruling 4 澄清）。
+- **兼容性**：无协议、存档、区块 schema、编号或 ABI 变更；已存档世界无需迁移；踩踏是即时结算，不入档。
+- **性能**：每次落地边沿新增一次碰撞盒覆盖格枚举（至多 2×2 格读取）与暂存追加；结算每格 O(1) 读加至多两次 `SetBlock` 与一次掉落批次提交。落地是低频事件，不触及任何热路径预算；benchmark scenario v19 不变，数值波动按惯例只记录。
+- **并行边界**：不触碰 A-01/A-04 已认领的 `engine_step.go`/`drop.go`/`tunables.go`/`command.go`/`engine.go`、B-13 的 `combat.go`/`hunger.go`、B-07 的 `internal/fluid` 与 sim 作物冲毁新文件；`player.go` 仅裁决许可的一行、`crop.go` 仅 `advanceCrops` 首部一行。
+
+## 非目标
+
+- **伙伴踩踏**：companion 物理路径没有现成落地边沿（伙伴无摔落伤害语义），为其新建边沿检测超出本行最小闭环与认领独占集；待真实需要时另行立项（先例：B-13 冲刺半边延期待 B-30）。
+- **采掘耕地上方作物的连带处理**：现状采掘耕地不处理上方作物（作物悬空是既有不变式允许的状态）；本 change 不改采掘路径。
+- **流体冲毁作物的联动**：B-07 已认领且关注点不相交；本 change 的结算只由玩家落地边沿驱动。

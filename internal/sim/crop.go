@@ -293,6 +293,11 @@ func farmlandIsWet(dimension *Dimension, position core.BlockPos) bool {
 // 真实成本就会随作物数量增长，而按格数计的那条测试不会红。届时必须把计量口径
 // 一并改成方块读取次数。
 func (engine *Engine) advanceCrops(pending map[core.ChunkKey]*pendingChunkChanges) {
+	// 踩踏结算（trample.go）：落地边沿在物理阶段收集（reconcileSubscriptions
+	// 之前），方块写入必须延迟到这里的区块写入区，且与耕地干湿转换共用同一份
+	// pending。排在下方随机 tick 抽样之前：本 tick 被踩成泥土的格不再是耕地，
+	// 抽样天然跳过。
+	engine.settleTramples(pending)
 	engine.cropCellsExamined = 0
 	samples := int(engine.tunables.RandomTicksPerSection)
 	if samples <= 0 {
