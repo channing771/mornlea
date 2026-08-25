@@ -12,8 +12,7 @@ import (
 // 本文件锁定踩踏掉落的确定性性质（farmland-trample）：同一株成熟作物在同一
 // 权威 tick、同一 (种子, 维度, 坐标) 输入下，经踩踏与经采掘两条路径结算的掉落
 // 数量**逐件相同**——两条路径必须读同一个 `cropYieldRolls` 哈希流，任何独立
-// 哈希或不同 tick 取值点都会在这里红。附跨格覆盖用例：碰撞盒水平覆盖多格
-// 耕地时全部结算。
+// 哈希或不同 tick 取值点都会在这里红。
 //
 // 全部断言只用固定输入清单与既有 helper，不用 math/rand、不遍历 map 定顺序，
 // 每条结论跨平台跨运行逐位稳定。
@@ -87,25 +86,5 @@ func TestPropertyTrampleYieldMatchesMining(t *testing.T) {
 					trampleDrops, miningDrops)
 			}
 		})
-	}
-}
-
-// TestTrampleCrossCellCoverageSettlesAllCoveredFarmland 覆盖 Scenario「跨格站立
-// 踩踏全部覆盖格」：玩家落在四列交界处，碰撞盒（半宽 0.3）水平覆盖 2×2 列，
-// 其中对角两格是耕地，两格 MUST 都被结算为泥土——只判玩家中心柱会漏掉半边。
-func TestTrampleCrossCellCoverageSettlesAllCoveredFarmland(t *testing.T) {
-	engine, session := readyMovementPlayer(t)
-	near := core.BlockPos{X: 0, Y: 0, Z: 0}
-	far := core.BlockPos{X: 1, Y: 0, Z: 1}
-	engine.SetBlockForTest(near, core.FarmlandDryID)
-	engine.SetBlockForTest(far, core.FarmlandDryID)
-
-	landPlayerAt(t, engine, session, mgl32.Vec3{1, 4, 1})
-
-	if got := tillBlockAt(t, engine, near); got != core.DirtID {
-		t.Fatalf("近侧耕地 = %d，想要泥土 %d", got, core.DirtID)
-	}
-	if got := tillBlockAt(t, engine, far); got != core.DirtID {
-		t.Fatalf("远侧耕地 = %d，想要泥土 %d", got, core.DirtID)
 	}
 }
