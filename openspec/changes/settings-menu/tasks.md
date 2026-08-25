@@ -4,7 +4,7 @@
 
 ## 2. client ABI v9 与结构化事件
 
-- [ ] 2.1 在 `internal/client` 与 `engine/crates/mornlea_client` 以测试先行方式实现设置页 layout v2、结构化 uplink 批次、64 条有界队列、整批容量门禁及 client ABI v9；覆盖非法布局、未知事件、非法 UTF-8、NaN/越界音量、非法窗口枚举、尾随字节、同帧 change-before-save 顺序与容量不足不消费；运行 `make rust`、`go test ./internal/client -race -count=1` 和相应 Rust 单元测试。
+- [x] 2.1 在 `internal/client` 与 `engine/crates/mornlea_client` 以测试先行方式实现设置页 layout v2、结构化 uplink 批次、64 条有界队列、整批容量门禁及 client ABI v9；覆盖非法布局、未知事件、非法 UTF-8、NaN/越界音量、非法窗口枚举、尾随字节、同帧 change-before-save 顺序与容量不足不消费；运行 `make rust`、`go test ./internal/client -race -count=1` 和相应 Rust 单元测试。
 
 ## 3. Rust egui 设置页呈现
 

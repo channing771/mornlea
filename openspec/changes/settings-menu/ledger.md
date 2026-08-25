@@ -24,7 +24,7 @@
 | 任务 | Implementer | 候选/修复提交 | SPEC reviewer | QUALITY reviewer | 修复轮次 | 验证 | 控制会话 ruling |
 | --- | --- | --- | --- | --- | ---: | --- | --- |
 | 1.1 配置契约 | `d01_t1_config_impl` | `e1bfaa89` | `d01_t1_spec_review`：PASS | `d01_t1_quality_review`：PASS | 0 | RED 编译失败；`make rust`、`go test ./internal/config -race -count=1`、`go vet ./internal/config`、archcheck、gofmt、diff-check PASS | ACCEPTED |
-| 2.1 client ABI v9 | 待派发 | — | — | — | 0 | — | PENDING |
+| 2.1 client ABI v9 | `d01_t2_abi_impl` | `79623956`；修复 `e0e08099`、`c0b5e5d0` | `d01_t2_spec_review`：FAIL→PASS→PASS | `d01_t2_quality_review`：FAIL→FAIL→PASS | 2 | RED 编译失败；Rust 105 tests、clippy/fmt、`make rust`、client race、cmd compile/action routing、diff-check PASS；Rust 测试名集合不变 | ACCEPTED |
 | 3.1 Rust egui 设置页 | 待派发 | — | — | — | 0 | — | PENDING |
 | 4.1 Go 事务与接线 | 待派发 | — | — | — | 0 | — | PENDING |
 | 5.1 视觉基线 | 待派发 | — | — | — | 0 | — | PENDING |
@@ -46,3 +46,5 @@
 - R-003：持久化成功是运行时音频/窗口应用的前置条件；保存失败时磁盘、committed 状态与运行时均保持不变。
 - R-004：client ABI v9 使用整批结构化事件与原子容量门禁；不得以旧 raw button ID 通道夹带设置值。
 - R-005：接受非法直接构造的 `WindowSize.Dimensions()` 返回 `(0, 0)`；所有配置与 UI 输入边界负责先拒绝非法枚举，合法三预设映射已由测试锁定。
+- R-006：client ABI 升级任务必须让现存 `cmd/mornlea` 保持可编译；在设置业务接入前，typed action 继续路由，settings-changed 只进入显式 deferred 分支且不得误触按钮。
+- R-007：因本任务大量触碰既有混装 Rust UI 测试模块，按项目硬规范在同一任务拆成关注点文件并保留测试名集合；漏写主题头注释按阻断项修复，不以“仅测试”降级。
