@@ -6,3 +6,6 @@
 - Ruling：任务组标题采用 `Task 1` 形式，以兼容 SDD 的 `task-brief` 提取器；任务内容与 OpenSpec checkbox 编号不变 — 这是执行工具的格式要求 — 若判断错误只影响 brief 生成，不改变产品行为。
 - 实现：先加入 `spawn_support_top_test.go` 三条真实耕地行为测试；focused RED 通过（出生实际为 `y=1`，期望 `y=0.9375`），随后 `findSpawnInColumn` 按最多 8 个碰撞盒顶面降序枚举，并复用 `playerBoundsAreFree` 与 `playerSupport` 的完整支撑判定。
 - GREEN/门禁：focused GREEN、`go test ./internal/sim -race -count=1`、`go test ./internal/archcheck -count=1`、`go vet ./...`、`test -z "$(gofmt -l .)"` 与 `openspec validate --all --strict --no-interactive` 通过；fresh `go test ./... -race` 退出码 0，通过 `cmd/mornlea`（206.389s）、`internal/archcheck`（20.854s）、`internal/sim`（cached）及其余全部包。
+- Task 1 初审：SPEC 核心行为通过，QUALITY 提出 2 个 Important——SDD scratch report 被误提交、全量 race 缺最终证据。
+- Task 1 修复 R1/5：提交 `12635638` 从 Git 索引移除 report，并补录 fresh 全量 race exit 0；scoped re-review 判定 2/2 ADDRESSED、无新 breakage，APPROVE。
+- Task 1 完成：提交范围 `3b67935e..12635638`，任务级 SPEC + QUALITY 双评审 clean。
