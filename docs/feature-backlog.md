@@ -73,7 +73,7 @@
 | B-10 | 作物随机掉落数量 | `hash(worldSeed, tick, pos)` 定数量，与生长抽样共用哈希 | 无 wire 变更 | 已认领 | ox-alpha-implementer @ feat/B-10-crop-drop-hash | farming 遗留 10；2026-08-25 认领。独占文件集：`internal/sim/mining.go`（成熟小麦多产物结算）、`internal/sim/crop.go`（splitmix64 哈希流复用）、同包 `*_test.go` 与新建 OpenSpec change；刻意不触碰 `tunables.go`/`drop.go`/`hunger.go` 与 `internal/core` 编号段（A-01/A-04 已认领） |
 | B-11 | 难度系统 | 困难难度饿死、和平回满、刷怪门控等难度分支 | 配置格式追加难度项 | 未认领 | — | hunger 遗留 4；批次设计非目标 |
 | B-12 | 饱和抖动提示 | `PlayerState` 追加 `SaturationZero` 一位 | 协议升版（`PlayerState` 追加字段） | 未认领 | — | hunger 遗留 3 |
-| B-13 | 冲刺与攻击疲劳 | 对应动作出现后疲劳表加行 | 无 wire（疲劳表加行） | 未认领 | — | hunger 遗留 6；近战（v25）已上线、攻击疲劳半边已可先行；冲刺半边依赖 B-30 |
+| B-13 | 冲刺与攻击疲劳 | 对应动作出现后疲劳表加行 | 无 wire（疲劳表加行） | 已认领 | ox-alpha-implementer @ feat/B-13-attack-exhaustion | hunger 遗留 6；近战（v25）已上线、攻击疲劳半边已可先行；冲刺半边依赖 B-30。2026-08-25 本会话认领，范围冻结为攻击疲劳半边（冲刺半边待 B-30 落地后另行认领）。独占文件集：`internal/sim/combat.go`、`internal/sim/hunger.go`、同包新增测试文件与 OpenSpec change 目录；刻意不触碰 `tunables.go`（固定表不加 tunable）、`player.go`/`engine_step.go`/`drop.go`（A-01/A-04）、`mining.go`/`crop.go`（B-10）与 `internal/core` 编号段（A-01/A-02/A-04） |
 | B-14 | 进食动画/音效/进度 HUD | 复用采掘进度条呈现形状 + 既有音频确认边界 | 无 wire（呈现层） | 未认领 | — | hunger 遗留 2 |
 | B-15 | 伙伴饥饿与自动进食 | 伙伴接三层状态 + 疲劳表 + 自动进食计划步骤 | `companions.ai` schema 可能升版 | 未认领 | — | hunger 遗留 5；依赖伙伴能力扩展组 |
 | B-16 | 横向原木与薄雪层 | 方向/高度/碰撞/选取/协议/存档状态编码（现为全方块方向固定） | 区块 schema 升版（方向状态编码） | 未认领 | — | common-block-materials 延期项 |
