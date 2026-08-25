@@ -40,3 +40,8 @@
 - **Ruling: 3.1 门禁采信复跑** — 决定：run 1 的 `TestCompanionDialogueTerminalCoversFourTerminalStates/Stopped` 超时认定为与 B-05 无关的既有台词域负载 flake，同命令复跑全绿即作为 3.1 的门禁证据；双数据点（run 1 红 / run 2 绿、负载观察）如实誊录，不稀释表述。为什么：五环证据链——① 本分支 diff 仅 `internal/sim` 五文件与 openspec 产物，`internal/server` 及失败测试文件零触碰（其最后修改为基线提交 `25f69af3`/`4292201f`）；② 该测试无任何 farmland/trample 语义（grep 零引用、测试世界无耕地，踩踏在其世界零工作量）；③ 该测试隔离复跑 `go test ./internal/server -race -run … -count=1` 2.767s 全绿；④ Task 2 已在本分支跑过 `./internal/server -race -count=1` 全绿（179s）；⑤ 仓史 `ci-retry-isolation` Task 6 已根修过同类台词「单在途守卫 + outcome 就绪时序」负载 flake（`7cb3d0cc`/`0b1712b6`/`25f69af3`/`07389b07`）。且 run 1 满载（191% CPU）下 server 包 268.6s vs 复跑 177.1s 的耗时差与 60s `longWaitDeadline` 超时吻合负载诱发；控制会话另引 F-03 收尾先例（CI 首跑 1 flake、重跑后 8/8 全绿，同一测试域）。错在：非本 change 缺陷——若归因本 change，则范围隔离、语义隔离与隔离复跑全绿三环均无法解释。
 - **3.2** `openspec validate --all --strict --no-interactive`：勾选前后各跑一次，均 65 passed / 0 failed（含 `change/farmland-trample`）。
 - **3.3 未决项清偿确认**：Task 1 评审 NB1→2.4、NB3→2.5 已在 Task 2 完成并双评审 PASS；NB2（red 证据誊录）由本节清偿——Task 1 节已含 red-first 记录（四个 Trample 用例实现前失败、容量用例为负向断言天然通过），终审引用即可。**无任何未决项需誊入 proposal「延期与放弃」**；proposal 既有「非目标」三条均有据：伙伴踩踏对应认领阶段 Ruling，采掘耕地连带与流体冲毁联动两条为设计批准的短设计内容（proposal 正文为依据），非收尾新增欠账（终审 NB2 表述收窄）。
+
+## 整分支终审（2026-08-25）
+
+- **整分支终审 PASS**（独立终审者，范围 `cbe0b9ad..04d6ab36` 全部 8 文件 +696/−11）：清单七项逐项通过——spec↔实现↔tasks↔ledger 自洽（七条 Scenario 全锚定、13 条任务全勾、12 条 Ruling 齐全）、Impact 四项与 diff 吻合、范围零漂移（diff 文件全集=认领声明）、门禁证据链完整（终审者复跑 validate 65/65 与 sim 抽查全绿）、延期与放弃无静默丢弃、三处重叠纯追加逐一核实、注释标识符门禁抽读通过。
+- 终审 NB 处置：**NB1** proposal Impact 补记第三处重叠与两个测试文件（提交 `c94b7f5e`）；**NB2** ledger 3.3 非目标表述收窄为「一条对应 Ruling、两条为设计批准的短设计内容」（提交 `14437715`）；**NB3** 认领/批准类 Ruling 无「错在哪」段——采纳为格式观察（无错可纠，硬凑失真），不改。
