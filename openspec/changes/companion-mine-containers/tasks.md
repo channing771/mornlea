@@ -19,9 +19,9 @@
 
 ## Task 3: Runner 饱和判定批量预演与 parity
 
-- [ ] 3.1 TDD——`internal/server` 新增测试（失败态）：`holdCompanionMining` 满格饱和分支对容器目标调用与 sim 同一的批量预演——可容纳时任务正常完成（不误报容量失败）；不可容纳时 `TaskFailInventoryFull` 且方块不变；Memory 与 TCP 两条传输 parity 一致。
-- [ ] 3.2 最小实现：`internal/server/companion_interact.go` 饱和分支从单件 `AddStack` 预演改为调用 Task 1 导出的 sim 预演函数（同一产物集合与固定序）；容器内容物从镜像读取。
-- [ ] 3.3 验证：`go test ./internal/server -race -count=1`；`gofmt -l internal/server`；`go vet ./internal/server`。
+- [x] 3.1 TDD——`internal/server` 新增测试（失败态）：`holdCompanionMining` 满格饱和分支对容器目标调用与 sim 同一的批量预演——可容纳时任务正常完成（不误报容量失败）；不可容纳时 `TaskFailInventoryFull` 且方块不变；Memory 与 TCP 两条传输 parity 一致。
+- [x] 3.2 最小实现：`internal/server/companion_interact.go` 饱和分支从单件 `AddStack` 预演改为调用 Task 1 导出的 sim 预演函数（同一产物集合与固定序）；容器内容物从镜像读取。
+- [x] 3.3 验证：`go test ./internal/server -race -count=1`；`gofmt -l internal/server`；`go vet ./internal/server`。
 
 ## Task 4: 整分支门禁与收尾
 
