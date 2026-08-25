@@ -16,6 +16,8 @@
 
 ## Task 2: 变异验证与全量门禁收尾
 
+- [x] 完成见 ledger（双向变异各杀 4 用例、全量门禁全绿、冻结集核对通过）。
+
 - **变异验证**：临时把调用点改为恒传 `false`（或删除 `eating.go` 的 `suspended` 判据）跑 `go test ./internal/sim -race -count=1 -run Eating`，确认新增用例变红；恢复后复绿（变异不提交）。
 - **全量门禁**：`gofmt -l .` 无输出、`go vet ./...`、`go test ./... -race -count=1`、`openspec validate --all --strict --no-interactive`。
 - **收尾核对**：`git diff` 只含 design.md 冻结集文件；本 tasks.md 全部勾选；ledger 记录门禁输出摘要（数值只记录）。
