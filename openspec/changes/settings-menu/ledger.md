@@ -25,7 +25,7 @@
 | --- | --- | --- | --- | --- | ---: | --- | --- |
 | 1.1 配置契约 | `d01_t1_config_impl` | `e1bfaa89` | `d01_t1_spec_review`：PASS | `d01_t1_quality_review`：PASS | 0 | RED 编译失败；`make rust`、`go test ./internal/config -race -count=1`、`go vet ./internal/config`、archcheck、gofmt、diff-check PASS | ACCEPTED |
 | 2.1 client ABI v9 | `d01_t2_abi_impl` | `79623956`；修复 `e0e08099`、`c0b5e5d0` | `d01_t2_spec_review`：FAIL→PASS→PASS | `d01_t2_quality_review`：FAIL→FAIL→PASS | 2 | RED 编译失败；Rust 105 tests、clippy/fmt、`make rust`、client race、cmd compile/action routing、diff-check PASS；Rust 测试名集合不变 | ACCEPTED |
-| 3.1 Rust egui 设置页 | `d01_t3_rust_ui_impl` | `0c656133`；修复 `c79150f6` | `d01_t3_spec_review`：PASS→PASS | `d01_t3_quality_review`：FAIL→PASS | 1 | RED 44 个编译错误 + 容量预检测试失败；`make rust-check`（client 118、engine 160）、release Rust、client race、fmt/clippy/diff-check PASS | ACCEPTED |
+| 3.1 Rust egui 设置页 | `d01_t3_rust_ui_impl` | `0c656133`；修复 `c79150f6`、`3643b0bf` | `d01_t3_spec_review`：PASS→PASS→PASS | `d01_t3_quality_review`：FAIL→PASS→PASS | 2 | RED 44 个编译错误 + 容量预检失败 + action 超 viewport 17pt；`make rust-check`（client 119、engine 160）、release Rust、client race、fmt/clippy/diff-check PASS | ACCEPTED |
 | 4.1 Go 事务与接线 | `d01_t4_go_settings_impl` | `844c9f9c`；规格协调 `ddaa419e`；修复 `9819d823` | `d01_t4_spec_review`：PASS→PASS | `d01_t4_quality_review`：FAIL→PASS | 1 | RED 缺少状态类型 + CR/LF/资源前置测试失败；cmd full race 279.221s、short race、config/client race、Rust 118、clippy/fmt、vet/diff-check PASS | ACCEPTED |
 | 5.1 视觉基线 | 待派发 | — | — | — | 0 | — | PENDING |
 | 5.2 长期文档 | 待派发 | — | — | — | 0 | — | PENDING |
@@ -50,3 +50,4 @@
 - R-007：因本任务大量触碰既有混装 Rust UI 测试模块，按项目硬规范在同一任务拆成关注点文件并保留测试名集合；漏写主题头注释按阻断项修复，不以“仅测试”降级。
 - R-008：egui UI 帧在消费 RawInput 前按布局保守预留最坏事件数（主菜单 8、设置页 4）；剩余容量不足时允许提前显式 `CAPACITY`，以换取队列、焦点、光标与滚动状态可无损重放。空队列始终可运行正常帧。
 - R-009：`texturePackPath` 的单行不变量必须在 `Config.Load` 与 application 直接 options 构造两层防御；Darwin 上真实存在但名称含 CR/LF 的目录也拒绝，以保证任何 committed/draft 均可安全编码 layout v2。该兼容性收紧已同步 proposal/spec/design，配置版本保持 v1。
+- R-010：Task 5 正式 640×360 图像发现三动作底部被裁 17pt，判为 Task 3 呈现回归而非 capture 可接受差异；由原 Task 3 implementer 修复并复审后再生成 golden，capture implementer 不越界改 Rust UI。
