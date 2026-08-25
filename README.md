@@ -294,20 +294,21 @@ make visual-update             # 重新生成基线，写入 cmd/mornlea/testdat
 
 ## Rust 与 Go 的职责划分
 
-区块网格、光照、碰撞解析与方块射线 DDA 的生产实现位于固定 Rust 1.97.1 `cdylib`；Go 仍拥有游戏状态、输入、tunable、碰撞 snapshot 编码以及 raycast 校验、归一化、callback 与 Point。两者经 `engine/include/mornlea_engine.h` 声明的唯一 C ABI（engine ABI v6）协作，只有 `internal/nativeabi` 直接接触 engine C ABI，`internal/mesh`、`internal/physics` 与 `internal/core` 是领域调用方。
+固定 Rust 1.97.1 workspace 同时包含 `mornlea_engine` 与 `mornlea_client` 两个 `cdylib`，形成两条独立的 C ABI 与 release-unit 边界：`engine/include/mornlea_engine.h` 定义 engine ABI v6，`engine/include/mornlea_client.h` 定义 client ABI v9。Go binary 必须与构建时匹配的两个 Rust 库配套，任一 ABI 均不可跨版本混装。
 
-| 语言 | 职责 |
+| 语言 / 组件 | 职责 |
 | --- | --- |
-| Rust（`engine/crates/mornlea_engine`） | 确定性区段网格、传播光照、共享碰撞解析与方块射线 DDA 的**唯一生产实现**：贪心网格与 AO（`greedy/mod.rs`）、天空光与方块光（`light.rs`）、碰撞与 step（`collision.rs`）、64-record cursor batch raycast（`raycast.rs`）、native 输入解析和 C ABI。panic 不穿过 ABI，非法输入在发布结果前拒绝；workspace 只含该 crate，normal dependency 只有 `std`。 |
-| Go | 应用装配、世界与区块数据模型、权威模拟、网络与存档、客户端镜像与预测、GPU 渲染、世界生成、资产与配置，以及物理 state/input/tunable、碰撞 snapshot 编码和 raycast 校验/归一化/callback/Point。`internal/nativeabi` 是唯一 engine C header/symbol bridge；`internal/mesh`、`internal/physics` 和 `internal/core` 持有各自领域 API 与缓冲区。 |
+| Rust `mornlea_engine` | mesh/light、collision resolver、raycast、physics tick 积分与 worldgen（地形、矿石、橡树、海平面注水和远环壳）的**唯一生产实现**；panic 不穿过 ABI，非法输入在发布结果前拒绝。 |
+| Rust `mornlea_client` | Darwin 客户端窗口、事件循环与全部 GPU 渲染（terrain、sky、云、culling、HiZ、实体、文本、HUD 与 egui；窗口 surface 与离屏）的**唯一生产实现**。 |
+| Go | 拥有 app、world、sim、network、storage，以及 render 的 CPU 半部（布局、编码与上传调度）、客户端镜像与预测、资产与配置、物理 state/input/tunable/snapshot 编码、yaw 三角与 prism 构建、worldgen seed→perm 播种和 `world.Chunk` 回写。Go 不接触 GPU API，也没有生产 fallback。 |
 
 边界规则：
 
-- 只有 `internal/nativeabi` 可以为 engine `import "C"`（darwin/linux + cgo 构建约束）；其余包通过领域 Go API 使用结果；
-- 调用结束后任何语言都不得保留对方指针；没有生产 Go fallback——Go 侧网格/光照/碰撞/raycast oracle 仅存在于测试；
-- 网格与光照结果不进入网络协议或存档；collision 被客户端预测和服务端权威模拟共用，专用服务端因此使用 Rust 动态库但仍不依赖图形栈。
+- `internal/nativeabi` 是 engine C ABI 的唯一 Go bridge；`internal/mesh`、`internal/physics` 与 `internal/core` 通过领域 API 调用它。client C ABI 则只由 `internal/client` 接触，其他 Go 层只使用其 `Window`、`Renderer` 等领域接口；
+- 调用结束后任何语言都不得保留对方指针；旧 Go 积分、worldgen、网格、光照、碰撞与 raycast 实现仅作测试 oracle，不是生产 fallback；
+- 网格与光照结果不进入网络协议或存档；collision 被客户端预测和服务端权威模拟共用。专用服务端因此使用 `mornlea_engine`，但不链接 `mornlea_client` 或图形栈。
 
-构建：`make run`/`build`/`test` 等目标先自动执行 `cargo build --locked --release`（`rust-toolchain.toml` 固定 1.97.1）；`make build` 生成 macOS 客户端与专服，并把 `libmornlea_engine.dylib` 复制到 `bin/`，二者通过 `@loader_path` 加载；`make build-linux-server` 原生构建 Linux amd64 专服与相邻 `libmornlea_engine.so`，通过 `$ORIGIN` 加载。binary 与动态库是不可跨版本混装的 release unit；专服依赖闭包仍不含 mesh/client/render/gfx（`make archcheck` 验证）。`make rust-check` 运行 Rust 格式、clippy 与单测。
+构建：`make run`/`build`/`test` 等目标先自动构建完整 Rust workspace（`rust-toolchain.toml` 固定 1.97.1）。macOS 图形客户端同时跨 engine ABI v6 与 client ABI v9 两条边界；`make build` 生成两个 Go binary，并把 `libmornlea_engine.dylib` 复制到 `bin/`，图形 binary 同时链接 workspace 构建的 `mornlea_client`。`make build-linux-server` 只打包 Linux amd64 专服与相邻 `libmornlea_engine.so`，通过 `$ORIGIN` 加载。两条 ABI 各自都是不可跨版本混装的 release-unit 边界；专服依赖闭包不含 client/render/gfx（`make archcheck` 验证）。`make rust-check` 运行 Rust 格式、clippy 与单测。
 
 ## 当前限制
 

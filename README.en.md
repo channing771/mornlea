@@ -280,20 +280,21 @@ Most of these are in Chinese.
 
 ## Rust & Go Responsibilities
 
-Production chunk meshing, light, collision resolution, and block-ray DDA live in a pinned Rust 1.97.1 `cdylib`; Go still owns game state, inputs, tunables, collision snapshot encoding, plus ray validation, normalization, callbacks, and hit points. The two languages cooperate through the single C ABI declared in `engine/include/mornlea_engine.h` (engine ABI v6); only `internal/nativeabi` directly touches the engine C ABI, while `internal/mesh`, `internal/physics`, and `internal/core` are its domain callers.
+The Rust 1.97.1 workspace contains two `cdylib` crates, `mornlea_engine` and `mornlea_client`, with two independent C ABI and release-unit boundaries: `engine/include/mornlea_engine.h` defines engine ABI v6, while `engine/include/mornlea_client.h` defines client ABI v9. Go binaries must use the matching Rust libraries from the same build; neither ABI may be mixed across versions.
 
-| Language | Responsibilities |
+| Language / component | Responsibilities |
 | --- | --- |
-| Rust (`engine/crates/mornlea_engine`) | The **only production implementation** of deterministic section meshing, propagated light, shared collision/step resolution, and 64-record cursor-batch block-ray DDA. Panics never cross the ABI, and invalid inputs are rejected before results are published. The workspace contains only this crate, with `std` as its only normal dependency. |
-| Go | Application assembly, world/chunk state, authoritative simulation, networking/storage, client mirror/prediction, rendering, generation, assets/config, plus physics state/input/tunables, collision snapshot encoding, and ray validation/normalization/callback/Point handling. `internal/nativeabi` is the only engine C bridge; `internal/mesh`, `internal/physics`, and `internal/core` own their domain APIs and caller buffers. |
+| Rust `mornlea_engine` | The **only production implementation** of mesh/light, collision resolution, raycast, physics-tick integration, and world generation (terrain, ores, oaks, sea-level water, and the far-LOD shell). Panics never cross the ABI, and invalid inputs are rejected before results are published. |
+| Rust `mornlea_client` | The **only production implementation** of the Darwin client window, event loop, and all GPU rendering (terrain, sky, clouds, culling, HiZ, entities, text, HUD, and egui; window surfaces and offscreen rendering). |
+| Go | Owns app, world, simulation, networking, storage, and the CPU half of rendering (layout, encoding, and upload scheduling), as well as the client mirror/prediction, assets/configuration, physics state/input/tunable/snapshot encoding, yaw triangles and prism construction, worldgen seed-to-permutation setup, and `world.Chunk` writeback. Go does not touch GPU APIs and has no production fallback. |
 
 Boundary rules:
 
-- Only `internal/nativeabi` may `import "C"` for the engine (darwin/linux + cgo build constraint); other packages consume results through their domain Go APIs;
-- After a call returns, neither language may retain the other's pointers; there is no production Go fallback — Go mesh/light/collision/raycast oracles exist only in tests;
-- Mesh and light results never enter the network protocol or saves. Collision is shared by client prediction and authoritative server simulation, so the dedicated server uses Rust while remaining free of the graphics stack.
+- `internal/nativeabi` is the engine C ABI's only Go bridge; `internal/mesh`, `internal/physics`, and `internal/core` call it through domain APIs. The client C ABI is touched only by `internal/client`; other Go layers use domain interfaces such as `Window` and `Renderer`;
+- After a call returns, neither language may retain the other's pointers. Legacy Go integration, worldgen, mesh, light, collision, and raycast implementations are test oracles only, not production fallbacks;
+- Mesh and light results never enter the network protocol or saves. Collision is shared by client prediction and authoritative server simulation. The dedicated server therefore uses `mornlea_engine` but does not link `mornlea_client` or the graphics stack.
 
-Build: `make run`/`build`/`test` first run `cargo build --locked --release` automatically (`rust-toolchain.toml` pins 1.97.1). `make build` produces both macOS binaries and an adjacent `libmornlea_engine.dylib`, loaded through `@loader_path`; `make build-linux-server` natively builds the Linux amd64 server and adjacent `libmornlea_engine.so`, loaded through `$ORIGIN`. Each binary/library pair is one release unit and cannot be mixed across versions. The headless server's dependency closure still excludes mesh/client/render/gfx (verified by `make archcheck`); `make rust-check` runs Rust fmt, clippy, and tests.
+Build: `make run`/`build`/`test` first build the complete Rust workspace automatically (`rust-toolchain.toml` pins 1.97.1). The macOS graphical client crosses both the engine ABI v6 and client ABI v9 boundaries. `make build` produces both Go binaries, copies `libmornlea_engine.dylib` into `bin/`, and links the graphical binary to the workspace-built `mornlea_client`. `make build-linux-server` packages only the Linux amd64 server and adjacent `libmornlea_engine.so`, loaded through `$ORIGIN`. Each ABI is its own release-unit boundary and cannot be mixed across versions. The headless server's dependency closure excludes client/render/gfx (verified by `make archcheck`); `make rust-check` runs Rust fmt, clippy, and tests.
 
 ## Current Limitations
 
