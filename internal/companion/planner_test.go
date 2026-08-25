@@ -755,7 +755,7 @@ func TestPlanDecodeKindMatrix(t *testing.T) {
 			want: []PlanStep{{Kind: PlanStepMine, X: 6, Y: 64, Z: 0}},
 		},
 		// 容器目标自 change companion-mine-containers 起合法（与 sim 侧
-		// companionMineableBlock 同步放开，D2 两侧清单必须一致）。
+		// `companionMineableBlock` 同步放开，D2 两侧清单必须一致）。
 		{
 			name:   "合法 mine 容器目标（箱子）",
 			steps:  validMineListed,

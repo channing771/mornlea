@@ -445,7 +445,8 @@ func decodePlanStep(index int, step planWireStep) (PlanStep, error) {
 
 // validatePlanStepsAgainstSnapshot 校验依赖规划快照的步骤契约：follow 目标必须
 // 来自快照在线玩家集合；mine 目标必须落在伙伴观察窗口内，且目标恰好列入
-// ExposedBlocks 时方块必须满足单一掉落与非容器；place 方块必须能在快照背包
+// ExposedBlocks 时方块必须满足 `planMineableBlock` 判据——非农业且具单一
+// `core.BlockDrop`，箱子与熔炉作为容器目标放行；place 方块必须能在快照背包
 // 中找到对应物品。「follow 必须是最后一步」是结构约束，已由 validPlanSteps
 // 校验，这里不重复。
 func validatePlanStepsAgainstSnapshot(steps []PlanStep, snapshot PlanSnapshot) error {

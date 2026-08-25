@@ -36,3 +36,10 @@
 - QUALITY 质量评审：**PASS**。设计取舍（路由分叉零侵入、纯函数签名最小、D7-4 两条分支不合并且注释留痕）、并发边界（值语义副本、单写者 tick、固定序无 map 序依赖、容器访问同源）、测试锋利度（逐堆落位/顺序断言、四方逐项核对、全复用既有 helper）全部通过。三条 minor findings：新注释裸提标识符未反引号；`companionChestTicks` 命名只提箱子实覆盖熔炉；staging 对畸形堆（`Count==0` 已注册物品）静默放行（生产不可达）。
 - Ruling: 三条 minor 均不构成修复循环 — 反引号与常量名属风格债且门禁不拦（评审建议下次触碰顺手清）；畸形堆路径生产不可达（容器写入全经 `Valid()` 门禁），加固属镀金 — 修复循环只留给行为契约与合入质量阻断项，本任务零 blocker/major，进入 Task 2。
 - Ruling: 两条覆盖观察并入 Task 3 — 错误工具容器用例与 Runner 接线同域（`Harvestable` 信号两侧共享）；完成 tick 容器边缘用例随 Task 3 补强一并落 — 覆盖缺口不阻断但须在收尾前闭合。
+
+## Task 2 修复轮 R1（2026-08-25，implementer zcode4 @ feat/C-01-companion-mine-containers）
+
+- 背景：Task 2 QUALITY 评审 **FAIL**，两条 findings 均为注释级（major 1 / minor 1）；本轮只改注释，不动代码逻辑与测试断言。执行记录，无 Ruling。
+- Finding 1（major，`internal/companion/planner.go` 的 `validatePlanStepsAgainstSnapshot` GoDoc）：残留旧判据「方块必须满足单一掉落与非容器」，「非容器」与 `planMineableBlock` 已放行 `core.ChestID`/`core.FurnaceID` 直接矛盾。修复：该句改写为「方块必须满足 `planMineableBlock` 判据——非农业且具单一 `core.BlockDrop`，箱子与熔炉作为容器目标放行」，与 `internal/companion/plan_types.go` 现判据（农业显式拒绝 + `core.BlockDrop` 存在性，两容器经单一掉落登记自然放行）逐点核对一致，改动前后「恰好列入 ExposedBlocks」限定与其余子句零变化。
+- Finding 2（minor，`internal/companion/planner_test.go` 容器目标用例前的注释）：裸提 `companionMineableBlock` 未反引号。修复：补反引号。
+- 验证（数值只记录）：`go test ./internal/companion -race -count=1` → ok（5.383s）；`gofmt -l internal/companion` → 无输出；`go vet ./internal/companion` → 通过；`go test ./internal/archcheck -count=1` → ok（5.694s，注释标识符门禁通过）。
