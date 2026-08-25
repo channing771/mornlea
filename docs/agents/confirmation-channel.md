@@ -31,6 +31,8 @@ feishu-listener.js（长连接事件订阅，常驻 daemon）
 | 2 | discussion | 飞书发送失败 / 显式指定 / 等待超时 | 发布到 GitHub Discussion #71 对应评论，用户回复后 confirm.sh reply 或下次调度恢复 |
 | 3 | none | 未配置任何通道 | 本地记录；confirm.sh reply 模拟回复（测试用） |
 
+> 从零搬一台新机器（clone → 依赖 → 飞书应用 → 定时 → 继电器链）的完整步骤见 [setup-new-machine.md](setup-new-machine.md)；本文件只讲确认通道本身。
+
 ## 配置飞书（一次性，约 10 分钟）
 
 1. 打开 <https://open.feishu.cn> → 开发者后台 → **创建企业自建应用**（个人可用企业版飞书免费注册）。
