@@ -26,5 +26,5 @@
 
 ## 5. 功能线终审与移交
 
-- [ ] 5.1 运行功能线验证并把结果记入 `ledger.md`：`make rust`；`go test ./internal/core ./internal/network ./internal/storage ./internal/sim ./internal/server ./internal/client ./internal/render/hud ./cmd/mornlea -race -count=1`；`go test ./internal/archcheck -count=1`；`openspec validate --all --strict --no-interactive`；`git diff --check`。
-- [ ] 5.2 独立 SPEC/QUALITY 双评审通过后勾选全部任务、在 `ledger.md` 记录 commit SHA 与评审结论，移交批次集成（A-06）；不自行合入 `main`、不更新 golden 与基线文档。
+- [x] 5.1 运行功能线验证并把结果记入 `ledger.md`：`make rust`；`go test ./internal/core ./internal/network ./internal/storage ./internal/sim ./internal/server ./internal/client ./internal/render/hud ./cmd/mornlea -race -count=1`；`go test ./internal/archcheck -count=1`；`openspec validate --all --strict --no-interactive`；`git diff --check`。
+- [x] 5.2 独立 SPEC/QUALITY 双评审通过后勾选全部任务、在 `ledger.md` 记录 commit SHA 与评审结论，移交批次集成（A-06）；不自行合入 `main`、不更新 golden 与基线文档。
