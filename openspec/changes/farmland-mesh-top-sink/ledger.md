@@ -22,3 +22,11 @@
 - 2026-08-26 Task 1 由全新 implementer 子代理完成（提交 `a936cff3`）：Go registry/编码/快照校验 + Rust input/mesher/ABI v7 + 耕地几何主题测试 + 跨语言 parity；验证全绿（engine 164 tests、clippy -D warnings、mesh/assets/nativeabi go test、gofmt 无输出）。
 - Ruling: 追加 Task 1b（客户端 shader 解码半边）——implementer 发现角高度解码器只在 water.wgsl，terrain.wgsl 把 bit 12..19 当 w/h 尺寸读，耕地 quad 会渲染成巨型石板；控制会话已核实（terrain.wgsl:63-64、water.wgsl:69、cull.wgsl:132）。这是控制会话在 D2 写「客户端不变」时的错误假设，非实现者偏离——按「发现规格不成立先改产物」修正 design（新增 D2a）与 tasks，client ABI 经裁决保持 v8 不动（shader 内部分支无新导出）。
 - 备忘：改 mornlea_engine.h 后 cgo 缓存不自动失效，门禁前需 `go clean -cache`（Task 1 实测踩坑）。
+
+### Task 1 双评审与修复循环
+
+- SPEC 评审：PASS。建议两条：(a) ledger 补记 known-red——`TestBaselineVersionsMatchCode` 在 Task 3.1 前必然红（AGENTS.md/CLAUDE.md 尚写 v6），属计划内过渡态；(b) Task 2 golden 再生前必须先做 D4 基线偏差归因（已写入 tasks 2.2）。
+- QUALITY 评审：FAIL（1 阻断：quad.rs/quad.go 六处「角高度位=水面专属」注释被本提交证伪；2 建议：叠放回归钉、新注释标识符反引号）。
+- 修复轮 R1（原 implementer，`21794e67`）：六处措辞改「带角高度的 quad（流体或短方块）」+ 双类互斥论证；新增 covered/farmland_under_fluid 两测钉住「上方方块/水不拉平到 15」；反引号补齐。验证全绿（engine 166 tests、clippy -D warnings、gofmt 零输出）。
+- R1 复核：PASS——diff 纯注释+测试，无行为变更；断言实钉（缺面即 panic、夹具互斥数据核实）；残留「水面」字样均为真实水路径描述非排他主张。
+- 结论：Task 1 关闭（SPEC PASS + QUALITY PASS，1 轮修复）。已知过渡态红：archcheck `TestBaselineVersionsMatchCode` 待 Task 3.1 消解。
