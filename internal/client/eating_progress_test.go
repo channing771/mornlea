@@ -131,6 +131,25 @@ func TestEatingProgressResetsOnSlotItemAndCountChange(t *testing.T) {
 	}
 }
 
+func TestEatingProgressIgnoresBackwardClockSample(t *testing.T) {
+	var tracker EatingProgressTracker
+	base := time.Now()
+	sample := EatingSample{Eating: true, Slot: 0, Item: core.ItemBread, Count: 5}
+	tracker.Observe(base, sample)
+	if _, progress := tracker.Observe(base.Add(800*time.Millisecond), sample); progress != 0.5 {
+		t.Fatalf("前置进度=%v，想要半程", progress)
+	}
+
+	// now 早于上一帧采样：按零增量处理，已累积进度绝不回退。
+	if active, progress := tracker.Observe(base.Add(700*time.Millisecond), sample); !active || progress != 0.5 {
+		t.Fatalf("时钟倒退帧 active/progress=%v/%v，想要保持 0.5 不回退", active, progress)
+	}
+	// 倒退帧把基线推到该时刻，随后正常向前推进：elapsed=800+200=1000ms。
+	if active, progress := tracker.Observe(base.Add(900*time.Millisecond), sample); !active || progress != 0.625 {
+		t.Fatalf("倒退续帧 active/progress=%v/%v，想要 1000/1600=0.625", active, progress)
+	}
+}
+
 func TestEatingProgressSnapshotMirrorsWithoutAdvancing(t *testing.T) {
 	var tracker EatingProgressTracker
 	base := time.Now()

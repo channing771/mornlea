@@ -75,7 +75,10 @@ func (tracker *EatingProgressTracker) Observe(now time.Time, sample EatingSample
 		return false, 0
 	}
 	if tracker.lastSample.IsZero() {
-		// 理论上起算路径总会写入基线；这行只为零值 Time 的时钟防御。
+		// 经公有 API 不可达：零值 tracker 的 `eating` 为假，首次 `Observe` 必走
+		// 上面的中断分支写入基线。保留这条分支只为防御零值结构体被绕过
+		// `Observe` 直接改写内部状态后的续用——那种误用会把零时刻当有效基线，
+		// 第一段「帧间 elapsed」变成自 1970 年起的天文数字。
 		tracker.lastSample = now
 		return false, 0
 	}

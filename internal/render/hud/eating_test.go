@@ -147,8 +147,11 @@ func TestLayoutInventoryDrawsEatingBarOnlyWhenClosed(t *testing.T) {
 	var layout hotbarLayout
 	closed := layoutInventory(&layout, atlas, core.Inventory{}, false, -1, nil, nil,
 		MiningOverlay{}, eating, 1280, 800)
-	if got := len(closed.quads); got != 4+core.HotbarSlots+eatingBarQuads {
-		t.Fatalf("关闭态进食 quads=%d，想要基线 %d + %d", got, 4+core.HotbarSlots, eatingBarQuads)
+	// 关闭态基线 = 双层面板 + 双层选中框 + 九格（与 `appendEatingBar` 无关的
+	// 既有常量显式列出，裸数字会让后续样式微调时悄悄失真）。
+	closedBase := closedHotbarPanelQuads + closedHotbarSelectionQuads + core.HotbarSlots
+	if got := len(closed.quads); got != closedBase+eatingBarQuads {
+		t.Fatalf("关闭态进食 quads=%d，想要基线 %d + %d", got, closedBase, eatingBarQuads)
 	}
 	var opened hotbarLayout
 	open := layoutInventory(&opened, atlas, core.Inventory{}, true, -1, nil, nil,
