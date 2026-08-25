@@ -27,7 +27,7 @@
 
 ## Impact
 
-- 只修改 `internal/physics`、`internal/core`、`internal/worldgen` 的 `*_test.go`、`AGENTS.md`/`CLAUDE.md`/`openspec/config.yaml` 的 oracle 表述与本 change 产物；**不修改任何生产 Go/Rust 代码**（勘察确认：旧实现早已只存在于测试副本，`generator.go` 无死代码）。
+- 只修改 `internal/physics`、`internal/core`、`internal/worldgen` 的 `*_test.go`、`AGENTS.md`/`CLAUDE.md`/`openspec/config.yaml` 的 oracle 表述与本 change 产物；**不修改任何生产逻辑**（勘察确认：旧实现早已只存在于测试副本，`generator.go` 无死代码；diff 中生产文件的触碰仅限 archcheck 门禁强制的注释级修订，见 design「基线文档」表）。
 - 不改变协议、存档 schema、engine/client ABI、benchmark scenario、依赖或配置格式，也不生成视觉 golden。
 - 门禁不净放宽：被删的是「生产==冻结副本」迁移差分网（§15 明文 sanction 其消亡）；行为性质网（确定性、区间、不变量、布局锁、纯性质 fuzz、e2e parity）全部保留，physics 确定性子集升级为位级 golden 向量。
 - `internal/mesh` 切片延迟至 A 批次合流后另行认领；届时独立评审。
