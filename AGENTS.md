@@ -20,6 +20,8 @@ Darwin 图形客户端提供本地确认音频：不引入第三方依赖或二�
 
 Raycast 生产路径同样由 Rust `mornlea_engine` 独占 DDA 遍历；`internal/core` 只保留输入校验、一次归一化、64-record batch 驱动、惰性 callback 与 `RayHit.Point`，旧 Go DDA 只是测试 oracle，没有生产 fallback。
 
+出生支撑已清偿 farming 遗留：`findSpawnInColumn` 枚举候选方块提供的全部碰撞盒，按真实盒顶从高到低复用 `playerBoundsAreFree` 与 `playerSupport` 的完整支撑判定；玩家与伙伴共用该出生路径，登录恢复与 grounded safe 点也沿用同一支撑语义。协议、存档 schema、engine/client ABI 与 benchmark scenario 均不变。
+
 ## 开始工作前
 
 1. 阅读 `openspec/config.yaml`。

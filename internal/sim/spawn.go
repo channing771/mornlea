@@ -462,19 +462,36 @@ func findSpawnInColumn(
 		if block == core.AirID || boxes.Count == 0 {
 			continue
 		}
-		position := mgl32.Vec3{float32(candidate.X) + 0.5, float32(y) + 1, float32(candidate.Z) + 0.5}
-		free, neighborsReady := playerBoundsAreFree(position, source)
-		if !neighborsReady {
-			return mgl32.Vec3{}, spawnTierNone, false
+		count := min(int(boxes.Count), len(boxes.Boxes))
+		var tops [8]float32
+		for index := 0; index < count; index++ {
+			top := boxes.Boxes[index].Max.Y()
+			insert := index
+			for insert > 0 && tops[insert-1] < top {
+				tops[insert] = tops[insert-1]
+				insert--
+			}
+			tops[insert] = top
 		}
-		if !free {
-			continue
+		for index := 0; index < count; index++ {
+			position := mgl32.Vec3{float32(candidate.X) + 0.5, float32(y) + tops[index], float32(candidate.Z) + 0.5}
+			free, neighborsReady := playerBoundsAreFree(position, source)
+			if !neighborsReady {
+				return mgl32.Vec3{}, spawnTierNone, false
+			}
+			if !free {
+				continue
+			}
+			completeSupport, _ := playerSupport(position, source)
+			if !completeSupport {
+				continue
+			}
+			tier := spawnTierOf(position, source)
+			if tier == spawnTierDry {
+				return position, spawnTierDry, true
+			}
+			best.consider(position, tier)
 		}
-		tier := spawnTierOf(position, source)
-		if tier == spawnTierDry {
-			return position, spawnTierDry, true
-		}
-		best.consider(position, tier)
 	}
 	return best.position, best.tier, true
 }
