@@ -146,7 +146,7 @@
 | E-10 | `findSpawnInColumn` 读落脚盒顶面 | 出生点与 support/safe 存档点三处口径同步（耕地 1/16 空隙） | 无（出生点口径） | 未认领 | — | farming 遗留 14 |
 | E-11 | server 测试等待预算化 | 既有登录等待循环多数无界（5 分钟超时而非可读断言），统一有预算等待助手 | 无（测试基础设施） | 未认领 | — | farming 遗留 19（测试基础设施） |
 | E-12 | M5E 再递延字面同源化 | `capture_scene.go` 与 `capture_ai_companion_test.go` 的 `[32]network.ChatEvent` 字面；ChatCommand 编解码 1024 字面与错误文案 | 无（字面同源化） | 未认领 | — | m5e 归档 proposal「延期与放弃」递延 4、5 |
-| E-13 | benchmark 新 scenario record-only 报告 | 为已升版 scenario 补 Memory/TCP 记录报告并追加到 `perf-baseline.md`（数值只记录） | 无（报告只记录） | 已认领 | codex-implementer @ chore/E-13-benchmark-record-report | farming 遗留 23；执行前读 `docs/notes/perf-baseline.md`；独占文件集：`docs/notes/perf-baseline.md` 与本次 record-only 报告产物 |
+| E-13 | benchmark 新 scenario record-only 报告 | 为已升版 scenario 补 Memory/TCP 记录报告并追加到 `perf-baseline.md`（数值只记录） | 无（报告只记录） | 已认领 | codex-implementer @ chore/E-13-benchmark-record-report | farming 遗留 23；执行前读 `docs/notes/perf-baseline.md`；独占文件集：`docs/notes/perf-baseline.md` 与本次 record-only 报告产物；待确认：`E-13-q1`（是否在当前冻结提交重跑 Memory/TCP 两份） |
 
 ## F. 小型修复队列（直接修改豁免，但同样认领登记）
 
