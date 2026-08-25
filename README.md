@@ -4,10 +4,10 @@
   <img src="https://img.shields.io/badge/Go-1.26-00ADD8" alt="Go 1.26">
   <img src="https://img.shields.io/badge/Rust-1.97.1-f74c00" alt="Rust 1.97.1">
   <img src="https://img.shields.io/badge/platform-macOS-9cf" alt="macOS">
-  <img src="https://img.shields.io/badge/protocol-v16-blue" alt="协议 v16">
+  <img src="https://img.shields.io/badge/protocol-v26-blue" alt="协议 v26">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
-  <img src="https://github.com/channing771/minecraft-go/actions/workflows/ci.yml/badge.svg" alt="CI">
-  <img src="https://img.shields.io/github/v/release/channing771/minecraft-go" alt="release">
+  <img src="https://github.com/channing771/mornlea/actions/workflows/ci.yml/badge.svg" alt="CI">
+  <img src="https://img.shields.io/github/v/release/channing771/mornlea" alt="release">
 </p>
 
 > [English](README.en.md) · 简体中文（本文）
@@ -17,11 +17,11 @@
 <details>
 <summary>English overview</summary>
 
-Mornlea is an original voxel game written from scratch in Go 1.26 — no Mojang assets, protocol, or saves. It ships a custom client, an authoritative server, world storage, physics, and a WebGPU renderer; chunk meshing, light production, collision resolution, and block-ray DDA live in a pinned Rust 1.97.1 cdylib. The current M5A baseline adds up to four named, server-authoritative idle companions alongside eight players, protocol v16, `companions.ai` schema v1, deterministic `@name command` addressing, unified Avatar/NameTag presentation, a bounded Unicode chat HUD, the `ai-companion` golden, and benchmark scenario v16. M5A records addressing facts only: it does not call a model, plan, queue, move, mine, place, or follow. It inherits M4Q's Mornlea identity, player schema v6, chunk schema v8, world metadata v2, and the existing gameplay systems. The graphical client is macOS-only; the headless Linux dedicated-server bundle uses CGO and an adjacent `libmornlea_engine.so`. MIT licensed.
+Mornlea is an original voxel game written from scratch in Go 1.26 — no Mojang assets, protocol, or saves. It ships a custom client, an authoritative server, persistent worlds, physics, and a Rust wgpu renderer. The current baseline uses protocol v26, player schema v7, chunk schema v9, world metadata v2, `companions.ai` schema v4, engine ABI v6, client ABI v9, and benchmark scenario v19. Up to four named, server-authoritative companions can plan and persist queued `go_to`/`follow`/`mine`/`place` tasks and speak through a separate bounded persona/dialogue path; the survival loop includes water, farming, hunger, and local confirmation audio. The ordinary local client starts at an egui main menu with a three-control Settings page. The graphical client is macOS-only; the headless Linux dedicated-server bundle uses CGO and an adjacent `libmornlea_engine.so`. MIT licensed.
 
 ```bash
-git clone https://github.com/channing771/minecraft-go.git
-cd minecraft-go
+git clone https://github.com/channing771/mornlea.git
+cd mornlea
 make run          # graphical client with a built-in authoritative server
 ```
 
@@ -30,7 +30,7 @@ Milestone history lives in [实现进度](docs/notes/progress.md); the LAN serve
 
 项目仍处于早期开发阶段，已经具备程序化地形、GPU 地形渲染、玩家移动与碰撞、客户端预测、方块挖掘与放置、内置权威服务端、世界持久化、有界二进制协议、TCP 直连、无图形专用服务端与稳定玩家状态存档；已交付里程碑与协议/存档版本演进见[实现进度](docs/notes/progress.md)。
 
-当前基线为 M5A：在 M4Q 的 Mornlea 项目身份和固定 Rust 1.97.1 `mornlea_engine` cdylib 基础上，新增最多四个服务端权威 idle 具名伙伴、协议 v16、独立 `companions.ai` schema v1、确定性 `@伙伴名 指令` 寻址、统一伙伴呈现、有界 Unicode 聊天 HUD、`ai-companion` 视觉基线和 benchmark scenario v16。M5A 只确认寻址事实，不调用模型、不规划、不排队，也不执行移动、采掘、放置或跟随。基线细节与下一步方向见[实现进度](docs/notes/progress.md)。
+当前基线使用协议 v26、玩家 schema v7、区块 schema v9、世界 metadata v2、`companions.ai` schema v4、engine ABI v6、client ABI v9 与 benchmark scenario v19。最多四个具名伙伴由服务端权威执行并持久化 `go_to`/`follow`/`mine`/`place` 队列任务，性格台词走独立有界表达路径；生存循环已经包含水、农业、饥饿与本地确认音效。普通本地客户端从 egui 主菜单进入游戏，并提供只含三项的设置页。完整里程碑和版本演进见[实现进度](docs/notes/progress.md)。
 
 ## 截图
 
@@ -66,8 +66,8 @@ xcode-select --install
 ## 快速开始
 
 ```bash
-git clone https://github.com/channing771/minecraft-go.git
-cd minecraft-go
+git clone https://github.com/channing771/mornlea.git
+cd mornlea
 make run
 ```
 
@@ -193,7 +193,7 @@ go run ./cmd/mornlea --connect 127.0.0.1:25565 --name 玩家甲
 
 ## 配置文件与调试面板
 
-`mornlea`/`mornlea-server` 启动时读取同一份 JSON 配置文件，默认路径 `os.UserConfigDir()/mornlea/config.json`（与 `profile.json` 同目录），可用 `--config <path>` 覆盖。文件不存在时全部使用编译默认值，**不会自动创建文件**；字段缺失取默认值，越界值被钳制并 `slog.Warn`，未知字段被忽略，JSON 语法错误或不认识的 `version` 会导致启动失败。旧默认目录的迁移规则见[改名迁移说明](docs/notes/mornlea-migration.md)。
+`mornlea`/`mornlea-server` 启动时读取同一份 JSON 配置文件，默认路径 `os.UserConfigDir()/mornlea/config.json`（与 `profile.json` 同目录），可用 `--config <path>` 覆盖。文件不存在时全部使用编译默认值，**不会自动创建文件**；字段缺失取默认值，只有声明为可钳制的数值调参越界时才会钳制并 `slog.Warn`，未知字段被忽略。JSON 语法错误、不认识的 `version`、字段类型错误、非法 `windowSize`，以及超长或含 CR/LF 的 `texturePackPath` 都会导致加载失败。旧默认目录的迁移规则见[改名迁移说明](docs/notes/mornlea-migration.md)。
 
 本地材质覆盖的配置与 v1 目录格式见[材质包说明](docs/texture-packs.md)。
 
@@ -228,13 +228,13 @@ go run ./cmd/mornlea --connect 127.0.0.1:25565 --name 玩家甲
 
 加 `--dev` 后按 `F3` 切换面板显隐，面板按分组显示段头（如 `── physics ──`）加裸字段名（如 `gravity`，而非 `physics.gravity`）；方向键选行/步进，`Shift` 粗调 ×10，`Alt` 细调 ×0.1，`Enter` 重置当前行，`F5` 保存到配置文件，`F6` 全部重置。联机（`--connect`）时 `physics`/`sim` 两组灰显只读并标注服务端控制，`render` 组仍可写；`viewDistance` 无论是否联机都只读，只能通过配置文件调整并重启生效。
 
-普通本地模式的内置服务端和 `mornlea-server` 都消费同一配置中的 `logging`、`physics`、`sim` 与可选 `ai`；专用服务端不消费 `render`。`--connect` 客户端不会按本机 `ai` 配置创建伙伴，只呈现远端服务端通过协议 v16 发布的伙伴。
+普通本地模式的内置服务端和 `mornlea-server` 都消费同一配置中的 `logging`、`physics`、`sim` 与可选 `ai`；专用服务端不消费 `render`。`--connect` 客户端不会按本机 `ai` 配置创建伙伴，只呈现远端服务端通过协议 v26 发布的伙伴。
 
 **联机时本机配置文件里的 `physics`/`sim` 必须与服务端所用的一致**，否则客户端预测会与权威模拟持续分歧（位置回弹）。面板在联机时锁住这两组，但配置文件不受该锁约束——它始终生效。局域网下让 `mornlea` 与 `mornlea-server` 读同一份配置文件即可满足这条要求；`mornlea` 检测到"`--connect` + 这两组偏离默认值"时会打印一条 `slog.Warn` 提醒。
 
 ## 视觉验证
 
-`--capture <目录>` 让 `mornlea` 走无头 offscreen 路径，依次跑完 `cmd/mornlea/capture.go` 里表驱动的固定场景（`terrain-noon`、`hud-hotbar-health`、`avatar-nametag`、`inventory-crafting`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`materials-showcase`、`target-block-feedback`、`oak-grove`、末尾的 `ai-companion`），把每张 640×360 PNG 与 `cmd/mornlea/testdata/golden/` 下的基线比对。比对用双阈值（单像素最大通道差、差异像素占比，定义见 `cmd/mornlea/visual_compare.go`），两项都在阈值内才算通过；具体数值与实测漂移分布见[视觉验证设计文档](docs/superpowers/specs/2026-08-07-visual-verification-design.md) §6。
+`--capture <目录>` 让 `mornlea` 走无头 offscreen 路径，依次跑完 `cmd/mornlea/capture.go` 里表驱动的 19 个固定场景：`terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`water-surface-slope`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`。每张 640×360 PNG 都与 `cmd/mornlea/testdata/golden/` 下的基线比对；双阈值是单像素最大通道差与差异像素占比（定义见 `cmd/mornlea/visual_compare.go`），两项都在阈值内才算通过。具体数值与实测漂移分布见[视觉验证设计文档](docs/superpowers/specs/2026-08-07-visual-verification-design.md) §6。
 
 ```bash
 make visual-check              # 抓帧并与基线比对，输出目录默认 build/visual
@@ -313,7 +313,6 @@ make visual-update             # 重新生成基线，写入 cmd/mornlea/testdat
 
 - 可运行客户端目前仅支持 macOS；
 - TCP 多人联机仅面向可信局域网，协议没有认证或加密，不能暴露到公网；
-- M5A 伙伴保持静止 idle；聊天只确认大小写精确的 `@伙伴名 指令` 寻址，不调用模型、不创建任务/FIFO，也不移动、采掘、放置或跟随；
 - 尚无服务器发现、游戏内连接菜单或断线自动重连；
 - 程序化占位材质用于开发验证，仓库不包含官方 Minecraft 美术资源；
 - 快捷栏固定 9 格；可用镐与对应损坏物品每格最多 1 个，其他当前物品每格最多 64 个；快捷栏装满时仍可挖掘，物品留在地面；
@@ -333,11 +332,11 @@ make visual-update             # 重新生成基线，写入 cmd/mornlea/testdat
 
 ## 兼容性与升级
 
-- 线上协议为 v16；v15 及所有其他不匹配版本都会在握手阶段、进入 Play 前被稳定拒绝，不提供版本协商或降级解码。v15→v16 保持全部旧 message ID 与既有 payload 布局不变，只追加 Client `ChatCommand` ID 12，以及 Server `ChatEvent`、`CompanionSpawn`、`CompanionStates`、`CompanionDespawn` ID 16..19；已废止的 Play client packet ID `1` 继续保持未分配；
+- 线上协议为 v26；所有不匹配版本都会在握手阶段、进入 Play 前被稳定拒绝，不提供版本协商或降级解码。最近一次 v25→v26 迁移新增仅回发成功放置发起会话的 `PlaceBlockSucceeded(sequence)` 序号确认；
 - 世界 metadata 保持 v2，记录绝对世界时间。既有 v1 世界可直接打开，世界时间从 `0` 开始，并在下一次正常自动保存或关服时写为 v2；只认识旧版本的程序遇到未来 metadata 必须稳定拒绝且不得覆盖原文件；
-- 玩家存档保持 schema v6：读取 v5 后执行 identity migration，既有背包不会被补发材料；区块存档保持 schema v8，读取含静态发光块的 v7 后按原 payload 语义迁移。只认识旧 schema 的程序必须把 v6 玩家或 v8 区块作为 future schema 拒绝且不得覆盖。伙伴身体独立写入世界根目录的 `companions.ai` schema v1，active 与 inactive 合计最多 64 条；名称始终来自当前配置，文件不保存聊天、任务、FIFO、计划或摘要。AI 配置为空时不读取、不保存也不改写已有 `companions.ai`；
+- 玩家存档保持 schema v7，区块存档保持 schema v9；受支持的旧版本沿既有迁移链读取，未来版本必须稳定拒绝且不得覆盖。伙伴状态独立写入世界根目录的 `companions.ai` schema v4，active 与 inactive 身体记录合计最多 64 条；active 记录可持久化当前任务、FIFO 与近期对话摘要，名称和生效 persona 始终来自当前配置；
 - 列顶高度表、天空光和静态方块光仍只从权威方块镜像取得，不写入区块、玩家或伙伴存档，也不进入网络 payload；程序化天空仍只消费既有权威世界时间；
-- **备份与回退**：升级前必须正常关服，等待玩家、伙伴与世界存储刷写完成并备份完整世界目录，再启动 v16 程序。回退时必须先停服，再恢复升级前的完整备份；不承诺把 schema v8 区块、schema v6 玩家档、`companions.ai` 或新物品降级写回，不能让旧程序直接打开已升级目录后继续写入。异常退出时玩家、伙伴与区块文件各自原子，但它们之间没有跨文件事务；
+- **备份与回退**：升级前必须正常关服，等待玩家、伙伴与世界存储刷写完成并备份完整世界目录，再启动 v26 程序。回退时必须先停服，再恢复升级前的完整备份；不承诺把 schema v9 区块、schema v7 玩家档、`companions.ai` v4 或新物品降级写回，不能让旧程序直接打开已升级目录后继续写入。异常退出时玩家、伙伴与区块文件各自原子，但它们之间没有跨文件事务；
 - benchmark producer 为 scenario v19，固定输入仍是七名远端玩家、零伙伴，且 benchmark 世界仍显式钉死不注水、不含农业方块；版本变化记录的是被测进程本身的改变（HUD 新增饥饿条使 Hotbar HUD 固定上传布局再次移动——quad 容量 247→267、glyph offset 12288→13312、总容量 45888→46912 bytes，HUD 图集新增空/满两列鸡腿，权威 tick 多出饥饿三层状态的推进与结算）。当前唯一显式迁移是 `18:19`，v6..v18 历史报告仍可同版本读取。M5A v16 Memory/TCP 报告仅为 record-only 证据，M2 v15 与 M5 v14 baseline JSON 未提升；性能数值只记录，报告结构、身份、真实 overflow、数据丢失和 I/O 错误仍失败。跨 transport 比较只在显式请求时执行。
 
 ## 使用 OpenSpec 开发

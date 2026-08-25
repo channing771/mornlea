@@ -4,17 +4,17 @@
   <img src="https://img.shields.io/badge/Go-1.26-00ADD8" alt="Go 1.26">
   <img src="https://img.shields.io/badge/Rust-1.97.1-f74c00" alt="Rust 1.97.1">
   <img src="https://img.shields.io/badge/platform-macOS-9cf" alt="macOS">
-  <img src="https://img.shields.io/badge/protocol-v16-blue" alt="protocol v16">
+  <img src="https://img.shields.io/badge/protocol-v26-blue" alt="protocol v26">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
-  <img src="https://github.com/channing771/minecraft-go/actions/workflows/ci.yml/badge.svg" alt="CI">
-  <img src="https://img.shields.io/github/v/release/channing771/minecraft-go" alt="release">
+  <img src="https://github.com/channing771/mornlea/actions/workflows/ci.yml/badge.svg" alt="CI">
+  <img src="https://img.shields.io/github/v/release/channing771/mornlea" alt="release">
 </p>
 
 > English · [简体中文](README.md)
 
 Mornlea is an original voxel game written from scratch in Go. It ships its own client, an authoritative server, world storage, and a WebGPU rendering pipeline. It does **not** aim for compatibility with Minecraft's protocol, saves, or copyrighted assets.
 
-The project is still in early development, but already includes an authoritative server, persistent worlds, direct TCP connections, a headless dedicated server, and LAN sessions for up to eight players. The current baseline is **M5A**: it adds up to four named, server-authoritative idle companions, protocol v16, an independent `companions.ai` schema v1 save, deterministic `@name command` addressing, unified Avatar/NameTag presentation, a bounded Unicode chat HUD, the `ai-companion` golden, and benchmark scenario v16. M5A records addressing facts only; it does not call a model, plan, queue, move, mine, place, or follow. It inherits M4Q's Mornlea identity, the pinned Rust 1.97.1 `mornlea_engine` cdylib for mesh/light, collision resolution, and block-ray DDA, player schema v6, chunk schema v8, world metadata v2, and all existing gameplay systems. See [实现进度](docs/notes/progress.md) for the full milestone history.
+The project is still in early development, but already includes an authoritative server, persistent worlds, direct TCP connections, a headless dedicated server, and LAN sessions for up to eight players. The current baseline uses protocol v26, player schema v7, chunk schema v9, world metadata v2, `companions.ai` schema v4, engine ABI v6, client ABI v9, and benchmark scenario v19. Up to four named, server-authoritative companions can plan and persist queued `go_to`/`follow`/`mine`/`place` tasks and speak through a separate bounded persona/dialogue path; the survival loop includes water, farming, hunger, and local confirmation audio. The ordinary local client starts at an egui main menu with a three-control Settings page. See [实现进度](docs/notes/progress.md) for the full milestone history.
 
 ## Screenshots
 
@@ -50,8 +50,8 @@ xcode-select --install
 ## Quick Start
 
 ```bash
-git clone https://github.com/channing771/minecraft-go.git
-cd minecraft-go
+git clone https://github.com/channing771/mornlea.git
+cd mornlea
 make run
 ```
 
@@ -177,7 +177,7 @@ go run ./cmd/mornlea --connect 127.0.0.1:25565 --name PlayerA
 
 ## Config File & Debug Panel
 
-`mornlea`/`mornlea-server` read the same JSON config file on startup, defaulting to `os.UserConfigDir()/mornlea/config.json` (next to `profile.json`), overridable with `--config <path>`. If the file is missing, compiled defaults are used and **no file is created**; missing fields take defaults, out-of-range values are clamped with an `slog.Warn`, unknown fields are ignored, and JSON syntax errors or an unknown `version` abort startup. See the [rename migration notes](docs/notes/mornlea-migration.md) (Chinese) for old default-directory migration.
+`mornlea`/`mornlea-server` read the same JSON config file on startup, defaulting to `os.UserConfigDir()/mornlea/config.json` (next to `profile.json`), overridable with `--config <path>`. If the file is missing, compiled defaults are used and **no file is created**; missing fields take defaults, only numeric tuning fields declared clampable are clamped with an `slog.Warn`, and unknown fields are ignored. JSON syntax errors, an unknown `version`, invalid field types, an unknown `windowSize`, or a `texturePackPath` that is too long or contains CR/LF abort loading. See the [rename migration notes](docs/notes/mornlea-migration.md) (Chinese) for old default-directory migration.
 
 See the [texture-pack guide](docs/texture-packs.md) (Chinese) for local overrides and the v1 directory format.
 
@@ -212,13 +212,13 @@ Four runtime groups plus one optional AI group:
 
 With `--dev`, press `F3` to toggle the panel; it shows group headers (e.g. `── physics ──`) and bare field names (e.g. `gravity`, not `physics.gravity`); arrow keys navigate/step, `Shift` coarse ×10, `Alt` fine ×0.1, `Enter` resets the row, `F5` saves to the config file, `F6` resets everything. When connected (`--connect`), the `physics`/`sim` groups are greyed out as read-only and marked server-controlled, while `render` stays writable; `viewDistance` is always read-only in the panel and changes only via the config file plus a restart.
 
-The built-in server in ordinary local mode and `mornlea-server` both consume `logging`, `physics`, `sim`, and optional `ai`; the dedicated server does not consume `render`. A `--connect` client never creates companions from its local `ai` config and only presents companions published by the remote v16 server.
+The built-in server in ordinary local mode and `mornlea-server` both consume `logging`, `physics`, `sim`, and optional `ai`; the dedicated server does not consume `render`. A `--connect` client never creates companions from its local `ai` config and only presents companions published by the remote v26 server.
 
 **When connected, your local `physics`/`sim` values must match the server's**, otherwise client prediction diverges from authoritative simulation (position snapping). The panel locks those two groups while connected, but the config file is not bound by that lock — it always applies. On a LAN, pointing `mornlea` and `mornlea-server` at the same config file satisfies this; `mornlea` prints an `slog.Warn` when it detects `--connect` plus non-default values in those two groups.
 
 ## Visual Verification
 
-`--capture <dir>` makes `mornlea` run a headless offscreen path over the table-driven fixed scenes in `cmd/mornlea/capture.go` (`terrain-noon`, `hud-hotbar-health`, `avatar-nametag`, `inventory-crafting`, `debug-panel`, `skylight-tunnel`, `block-light-room`, `materials-showcase`, `target-block-feedback`, `oak-grove`, and the final `ai-companion`), comparing each 640×360 PNG against the baselines in `cmd/mornlea/testdata/golden/`. Comparison uses dual thresholds (max per-pixel channel delta and the ratio of differing pixels, defined in `cmd/mornlea/visual_compare.go`); both must pass. See the [visual verification design doc](docs/superpowers/specs/2026-08-07-visual-verification-design.md) (Chinese) §6 for exact numbers.
+`--capture <dir>` makes `mornlea` run a headless offscreen path over the 19 table-driven scenes in `cmd/mornlea/capture.go`, in this exact order: `terrain-noon`, `hud-hotbar-health`, `hud-survival-feedback`, `avatar-nametag`, `inventory-crafting`, `chest-container`, `furnace-container`, `debug-panel`, `skylight-tunnel`, `block-light-room`, `materials-showcase`, `target-block-feedback`, `oak-grove`, `ai-companion`, `water-surface-slope`, `main-menu`, `settings-menu`, `far-horizon`, `water-underwater`. Each 640×360 PNG is compared against the corresponding baseline in `cmd/mornlea/testdata/golden/`. Comparison uses dual thresholds (max per-pixel channel delta and the ratio of differing pixels, defined in `cmd/mornlea/visual_compare.go`); both must pass. See the [visual verification design doc](docs/superpowers/specs/2026-08-07-visual-verification-design.md) (Chinese) §6 for exact numbers.
 
 ```bash
 make visual-check              # capture frames and compare; output defaults to build/visual
@@ -299,7 +299,6 @@ Build: `make run`/`build`/`test` first run `cargo build --locked --release` auto
 
 - The runnable client currently supports macOS only;
 - TCP multiplayer targets trusted LANs only; the protocol has no authentication or encryption and must not be exposed to the public internet;
-- M5A companions remain idle. Chat only confirms exact, case-sensitive `@name command` addressing; it does not call a model, create tasks or a FIFO, move, mine, place, or follow;
 - No server discovery, in-game connection menu, or automatic reconnect;
 - Procedural placeholder materials serve development validation; the repository contains no official Minecraft art assets;
 - The hotbar is fixed at 9 slots; usable pickaxes and their damaged counterparts stack to at most 1 per slot, other current items to 64; mining still works with a full hotbar, items stay on the ground;
@@ -319,11 +318,11 @@ Build: `make run`/`build`/`test` first run `cargo build --locked --release` auto
 
 ## Compatibility & Upgrades
 
-- The wire protocol is v16; v15 and every other mismatch are stably rejected before Play with no negotiation or downgrade decoding. v15→v16 preserves every existing message ID and payload layout, adding only Client `ChatCommand` ID 12 and Server `ChatEvent`, `CompanionSpawn`, `CompanionStates`, and `CompanionDespawn` IDs 16..19; retired Play client packet ID `1` remains unassigned;
+- The wire protocol is v26; every mismatch is stably rejected before Play with no negotiation or downgrade decoding. The latest v25→v26 migration adds `PlaceBlockSucceeded(sequence)`, sent only to the session that initiated a successful placement;
 - World metadata remains v2 and records absolute world time. Existing v1 worlds open directly at time `0` and are written as v2 on the next normal autosave or shutdown; older programs must reject future metadata without overwriting it;
-- Player saves remain schema v6: v5 is read with an identity migration and existing inventories are never re-granted materials. Chunk saves remain schema v8, reading v7 with static light blocks by the original payload semantics; programs that only know older schemas must reject v6 players or v8 chunks as future schemas without overwriting them. Companion bodies are stored independently in world-root `companions.ai` schema v1, with at most 64 active plus inactive records. Names come from current configuration; chat, tasks, FIFOs, plans, and summaries are never stored. An empty AI configuration does not read, save, or modify an existing file;
+- Player saves remain schema v7 and chunk saves schema v9; supported older versions follow the existing migration chains, while future versions must be rejected without overwriting them. Companion state is stored independently in world-root `companions.ai` schema v4, with at most 64 active plus inactive body records; active records may persist the current task, FIFO, and recent dialogue summary, while names and effective personas always come from current configuration;
 - Skylight, static block light, and column-top data remain client-derived from the authoritative block mirror and never enter network or save payloads;
-- **Backup & rollback**: shut down normally, wait for player, companion, and world storage flushes, and back up the whole world directory before starting v16. Rollback requires stopping the server and restoring that complete pre-upgrade backup; downgrading schema v8 chunks, schema v6 player files, `companions.ai`, or new items is not promised, and old programs must not reopen an upgraded directory and keep writing. On abnormal exit, player, companion, and chunk files are individually atomic, but there is no cross-file transaction;
+- **Backup & rollback**: shut down normally, wait for player, companion, and world storage flushes, and back up the whole world directory before starting v26. Rollback requires stopping the server and restoring that complete pre-upgrade backup; downgrading schema v9 chunks, schema v7 player files, `companions.ai` v4, or new items is not promised, and old programs must not reopen an upgraded directory and keep writing. On abnormal exit, player, companion, and chunk files are individually atomic, but there is no cross-file transaction;
 - The producer is benchmark scenario v19 with the fixed seven-player, zero-companion workload; the benchmark world still pins fluid generation off and contains no farming blocks. The version bump records changes to the measured process itself (a new hunger bar that moves the Hotbar HUD fixed upload layout again — quad capacity 247→267, glyph offset 12288→13312, total 45888→46912 bytes — two new programmatic drumstick columns in the HUD atlas, and the three-layer hunger advance in the authoritative tick). The only current explicit migration is `18:19`; historical v6..v18 reports remain same-version readable. M5A v16 Memory/TCP reports are record-only evidence and do not promote the unchanged M2 v15 or M5 v14 baseline JSON. Performance numbers are recorded only; malformed reports, identity mismatch, real overflow, data loss, and I/O errors still fail. Cross-transport comparison is explicit only.
 
 ## Developing with OpenSpec
