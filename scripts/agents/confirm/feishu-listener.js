@@ -88,8 +88,10 @@ function spawnResume(cfg, request) {
   const requestId = request && request.id;
   const repo = path.resolve(__dirname, '..', '..', '..');
   const cmd = cfg.resumeCmd || ('cd ' + repo + ' && scripts/agents/run-agent.sh implementer');
-  // 接力循环：guard 存在说明有活动循环 → 继承 AGENT_LOOP=1，否则续跑会话不会在收尾触发 relay，链条会断
-  const inLoop = fs.existsSync(LOOP_GUARD);
+  // 接力循环：guard 存在说明有活动循环 → 继承 AGENT_LOOP=1，否则续跑会话不会在收尾触发 relay，链条会断。
+  // 链守卫按链身份取：有 workerId 用 loop.guard.<workerId>，否则主链 loop.guard。
+  const chainGuard = request && request.workerId ? path.join(os.homedir(), '.mornlea', 'loop.guard.' + request.workerId) : LOOP_GUARD;
+  const inLoop = fs.existsSync(chainGuard);
   // 链身份：确认请求记录了发起链条的 tool/workerId（confirm.sh ask 写入），续跑必须保持同一链
   const chainTool = (request && request.workerTool) || 'claude';
   const chainId = (request && request.workerId) || '';

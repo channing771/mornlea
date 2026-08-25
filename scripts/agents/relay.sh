@@ -47,7 +47,8 @@ fi
 # 启动下一个实现者（detached）；成功交给它接管循环
 if [ -x "$ROOT/scripts/agents/run-agent.sh" ]; then
   # 保持链身份：同 WORKER_ID、同工具（WORKER_TOOL 默认 claude）
-  (cd "$ROOT" && AGENT_LOOP=1 WORKER_ID="$WORKER_ID" AGENT_TOOL="${WORKER_TOOL:-claude}" nohup scripts/agents/run-agent.sh implementer >> "$LOG" 2>&1 &)
+  # 链身份：WORKER_TOOL 未设时回退 AGENT_TOOL（链路通常只带 AGENT_TOOL=codex/claude），再回退 claude
+  (cd "$ROOT" && AGENT_LOOP=1 WORKER_ID="$WORKER_ID" AGENT_TOOL="${WORKER_TOOL:-${AGENT_TOOL:-claude}}" nohup scripts/agents/run-agent.sh implementer >> "$LOG" 2>&1 &)
   log "已接力启动下一个实现者（AGENT_LOOP=1，日志 ${LOG}）"
   exit 0
 fi

@@ -10,7 +10,7 @@
 
 ## 第 1 步：认领
 
-0. **AGENT_LOOP=1（接力模式）**：启动时登记守卫——`WORKER_ID` 未设置时写 `~/.mornlea/loop.guard`（主链），设置时写 `~/.mornlea/loop.guard.$WORKER_ID`（多工作者并行各自独立链）；若**本链** guard 里已有存活 pid → 直接退出，不得并发开同一链。不同 WORKER_ID 的链互不排斥，可并行认领不同行。
+0. **AGENT_LOOP=1（接力模式）**：守卫登记与防重入已由 `run-agent.sh` 统一完成——启动时以**真实会话 pid** 写入本链守卫（`WORKER_ID` 未设置 → `~/.mornlea/loop.guard`；设置 → `~/.mornlea/loop.guard.$WORKER_ID`），本链守卫已有**存活** pid 则直接退出。**不要再手动 `echo $$`**（旧写法写入的是临时 bash 工具 shell 的 pid，命令一返回进程即死，"存活 pid 检查"永不命中，防重入形同虚设）。不同 WORKER_ID 的链互不排斥，可并行认领不同行。
 1. 读 `docs/feature-backlog.md`：选一行 `未认领` 且依赖行已满足；同一时间只认领一行。
 2. 编辑该行：`状态` → `已认领`，`认领人` → `<agent 标识> @ <分支名>`，备注声明独占文件集；docs-only 提交。
 3. 从 `main`（或批次共享 SHA）创建 isolation worktree/分支；确认工作区干净。
@@ -73,7 +73,7 @@
    → 全绿后 gh pr merge --merge；实现者随后只需确认合并结果（gh pr view <PR> --json state）
    如需主动修复：gh run view <run-id> --log-failed（或 gh pr checks --json name,state,url）定位 → 本地修复并推送 → 守护会自动重跑
 □ 确认合并后同步本地 main：git fetch origin && git checkout main && git pull --ff-only
-□ 接力循环（AGENT_LOOP=1 时）：rm -f ~/.mornlea/loop.guard && scripts/agents/relay.sh
+□ 接力循环（AGENT_LOOP=1 时）：rm -f ~/.mornlea/loop.guard${WORKER_ID:+.${WORKER_ID}} && scripts/agents/relay.sh（清**本链**守卫；relay 按同一链身份接力，工具继承 AGENT_TOOL）
    —— 无未认领任务时 relay.sh 自动终结循环；手动单次运行（AGENT_LOOP=0）跳过
 (AGENT_MODE=merge 时跳过 PR，直接本地合并并推送 main，仍需本地全绿)
 ```

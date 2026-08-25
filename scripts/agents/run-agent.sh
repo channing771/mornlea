@@ -51,6 +51,23 @@ else
   esac
 fi
 
+# 接力循环守卫：AGENT_LOOP=1 时以**本进程 pid** 登记链守卫（exec 后 CLI 与守卫同 pid，
+# kill -0 判活准确——旧做法让 agent 自己 echo $$ 写入的是临时 shell pid，命令一返回即失效，
+# 防重入形同虚设）。若本链 guard 已有存活 pid 则直接退出，杜绝并发双开。
+if [ "${AGENT_LOOP:-0}" = "1" ]; then
+  if [ -n "${WORKER_ID:-}" ]; then LIVE_GUARD="$HOME/.mornlea/loop.guard.$WORKER_ID"; else LIVE_GUARD="$HOME/.mornlea/loop.guard"; fi
+  mkdir -p "$HOME/.mornlea"
+  if [ -f "$LIVE_GUARD" ]; then
+    OPID="$(cat "$LIVE_GUARD" 2>/dev/null || echo 0)"
+    if [ "${OPID:-0}" -gt 0 ] 2>/dev/null && [ "$OPID" != "$$" ] && kill -0 "$OPID" 2>/dev/null; then
+      echo "[run-agent] 链守卫 ${LIVE_GUARD} 已有存活 pid=${OPID}，本会话退出（防双开）" >&2
+      exit 0
+    fi
+  fi
+  echo "$$" > "$LIVE_GUARD"
+  echo "[run-agent] 已登记链守卫 ${LIVE_GUARD} (pid=$$)"
+fi
+
 case "$TOOL" in
   claude)
     CLAUDE_BIN="${CLAUDE_BIN:-$(resolve_cli claude || echo claude)}"
