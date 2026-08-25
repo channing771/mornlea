@@ -44,10 +44,6 @@ func (state miningState) update() MiningUpdate {
 	}
 }
 
-// wheatSeedDropCount 是收获一株成熟小麦额外产出的种子数（design.md D9：掉落
-// 数量固定，不随机）。固定值同时保证「误挖不亏种子」——耕种循环不会死。
-const wheatSeedDropCount = uint8(2)
-
 func miningRule(block core.BlockID, held core.ItemID) (uint16, bool) {
 	// 农业方块与手持无关（锄头不是采掘工具，作物与耕地徒手即可收）：作物 1
 	// tick、耕地 5 tick（与泥土同价，翻地这一步撤销得和挖泥土一样费力）。
@@ -164,8 +160,8 @@ func companionMineableBlock(block core.BlockID) bool {
 	}
 	// 农业方块（八个作物阶段 + 干湿耕地）必须**显式**拒绝，不能指望"单一
 	// BlockDrop"这条判据顺手挡住（design.md D7 / Ruling 5）：core.BlockDrop 对
-	// 十个编号都有单一产物登记，成熟小麦的第二份产物（2 种子）只存在于
-	// completeMining 的分支里，编号层面读不出来——巧合性安全不成立。
+	// 十个编号都有单一产物登记，成熟小麦的第二份种子产物只存在于 completeMining
+	// 的分支里，编号层面读不出来——巧合性安全不成立。
 	// 伙伴的农业语义（种什么、何时收、成熟度判断）尚未裁决（design.md 遗留 11），
 	// 在裁决之前十个编号一律不可作为伙伴采掘目标。
 	if core.IsCrop(block) || core.IsFarmland(block) {
@@ -494,18 +490,27 @@ func (engine *Engine) completeMining(
 		return 0, false
 	}
 
-	// 成熟小麦是全仓唯一的多产物方块：1 小麦 + 2 种子。多产物**刻意不进
-	// core.BlockDrop**——那张表的返回形状是单一产物，改成多产物会波及它的全部
-	// 消费者（伙伴采掘与放置的防御清单、planner 的 place 注册表交叉校验、
-	// 客户端镜像），而收益只是这一个方块（Ruling 5）。因此 core 只登记主产物
-	// 小麦，额外的种子在这里按方块编号补发，多产物的知识只存在于权威结算路径。
+	// 成熟小麦是全仓唯一的多产物方块：1–3 个小麦加 1–3 颗种子，具体数量由
+	// cropYieldRolls 对 (worldSeed, 完成本次采掘的权威 tick, 维度, 目标坐标)
+	// 的纯整数哈希给出。tick 取值点就是这一行 `engine.tick.Load()`：tick 在
+	// Step 内单调推进且单线程读写，completeMining 只在完成 tick 被调用一次，
+	// 因此同一株作物在同一权威 tick 上重新结算必然得到同一串数量，不依赖任何
+	// 进程级随机源或 map 遍历顺序（change crop-random-drop-count design.md D2）。
+	// 该决策接替 authoritative-farming design.md D9 的「掉落数量固定」；种子的
+	// 下限 1 升格为规格条款「始终不亏种子」，耕种循环不会因随机性中断。
+	// 多产物本身**刻意不进 core.BlockDrop**——那张表的返回形状是单一产物，改成
+	// 多产物会波及它的全部消费者（伙伴采掘与放置的防御清单、planner 的 place
+	// 注册表交叉校验、客户端镜像），而收益只是这一个方块（Ruling 5）。因此 core
+	// 只登记主产物小麦，种子在这里按方块编号补发，多产物与数量的知识只存在于
+	// 权威结算路径。
 	//
 	// 批量预演复用破坏熔炉/箱子的 PrepareDropBatch：任一堆放不下就整体返回
 	// false，方块与掉落槽逐字节不变，绝不出现"小麦掉了、种子没掉"的半掉落。
 	if block == core.WheatStage7ID && harvestable {
+		wheatCount, seedCount := cropYieldRolls(engine.seed, engine.tick.Load(), dimensionID, target)
 		stacks := [2]core.ItemStack{
-			{Item: item, Count: 1},
-			{Item: core.ItemWheatSeeds, Count: wheatSeedDropCount},
+			{Item: item, Count: wheatCount},
+			{Item: core.ItemWheatSeeds, Count: seedCount},
 		}
 		next, capacityOK := record.Chunk.PrepareDropBatch(
 			stacks[:], blockIndex, engine.tunables.DropPickupDelayTicks,
