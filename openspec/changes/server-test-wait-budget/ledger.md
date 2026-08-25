@@ -8,10 +8,32 @@
 
 ## Task 1
 
-- Implementer：待派发。
-- RED/GREEN：待记录。
-- 迁移清单：待记录。
-- 定点与全量门禁：待记录。
+- Implementer：`/root/e11_task1_implementer`，冻结契约 `b8120ef4`。
+- RED：`GOCACHE=/private/tmp/mornlea-e11-go-cache /Users/chen/.gvm/gos/go1.26.0/bin/go test ./internal/server -run TestIntegrationLoginTickBudget -count=1` 按预期编译失败；`login_wait_budget_test.go` 的三处 `waitIntegrationLoginReady` 与三处 `integrationLoginTickBudget` 引用均报 `undefined`，包以 build failed 退出。
+- GREEN：在 `tcp_integration_helpers_test.go` 加入固定 `integrationLoginTickBudget = 3000`、最小 `Helper`/`Fatalf` 接口与只负责活性的 `waitIntegrationLoginReady`；同一命令通过（`ok github.com/channing771/mornlea/internal/server 1.014s`）。主题测试证明初始满足零推进、预算内恰好 7 次推进，以及永不满足时恰好 3000 次推进、动态诊断只求值一次且 `Fatalf` 只调用一次并包含场景标签/预算/最终状态。
+- 迁移清单（十二个调用点）：
+  1. `farming_loop_e2e_test.go`：Ready、非空背包发布、九区块镜像；删除 `farmingLoginBudget` 及其注释。
+  2. `hunger_loop_e2e_test.go`：Ready、非空背包发布、九区块镜像；保留 `wireInventory` 更新，删除 `hungerLoopLoginBudget` 及其注释。
+  3. `farming_integration_test.go`：Ready、初始背包等值、九区块镜像。
+  4. `till_soil_integration_test.go`：Ready、初始背包等值、九区块镜像。
+  5. `material_processing_integration_test.go`：Ready、初始背包等值、九区块镜像；复用原 `step(nil)`。
+  6. `eating_parity_test.go`：合法 Ready 状态、初始背包确认、九区块镜像。
+  7. `transport_parity_integration_test.go` 采掘登录：合法 Ready 状态、初始背包确认、九区块镜像；保留掉落镜像与无远端玩家断言。
+  8. `transport_parity_integration_test.go` 业务 transcript 登录：Ready、九区块镜像；保留 readiness 消息录制。
+  9. `fluid_transport_parity_test.go`：Ready、九区块镜像。
+  10. `block_light_integration_test.go`：Ready、初始背包确认、独立光照镜像九区块加载；保留双镜像应用。
+  11. `placement_success_integration_test.go`：Ready、初始背包确认、九区块镜像。
+  12. `player_melee_parity_test.go`：攻击者与目标双方 Ready；后续固定十次远端位置等待保持原样。
+- 定点与全量门禁：
+  - `make rust`：通过。
+  - helper GREEN 命令：通过（1.014s）。
+  - 十二条受影响用例的指定 `go test ./internal/server -race -count=1 -run ...`：通过（9.265s）。
+  - `go test ./internal/server -race -count=1`：通过（174.919s）。
+  - `go test ./internal/archcheck -count=1`：通过（15.134s）。
+  - `go vet ./...`：通过，无输出。
+  - 首次 `go test ./... -race`：`internal/server` 再次通过（181.676s），唯一失败为既有 `cmd/mornlea` 包共享 10 分钟 timeout，栈停在 `TestScenarioV12GPUCompletionBatchIsRecordedInReport` 的 C 渲染调用，无 data race；该失败用例独立重跑通过（202.226s）。随后原命令重跑通过，`cmd/mornlea` 261.652s，其余包通过或复用同一源状态下首次运行的成功缓存。
+  - `gofmt -l .`：通过，无输出。
+  - `openspec validate --all --strict --no-interactive`：65 passed，0 failed。
 - SPEC review：待裁决。
 - QUALITY review：待裁决。
 - 修复轮次：0/5。

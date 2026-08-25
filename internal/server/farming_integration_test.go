@@ -124,17 +124,25 @@ func runPlantingParityScript(t *testing.T, transport string) plantingParityResul
 	}
 
 	ready, inventoryReady := false, false
-	for !ready || !inventoryReady || !parityViewLoaded(mirror) {
-		_, messages := parityStep(t, host, endpoint, mirror)
-		for _, message := range messages {
-			switch message := message.(type) {
-			case network.PlayerState:
-				ready = ready || message.Ready
-			case network.InventoryState:
-				inventoryReady = inventoryReady || message.Inventory == initial
+	waitIntegrationLoginReady(
+		t,
+		fmt.Sprintf("%s plant seeds", transport),
+		func() bool { return ready && inventoryReady && parityViewLoaded(mirror) },
+		func() string {
+			return fmt.Sprintf("ready=%v inventoryReady=%v viewLoaded=%v", ready, inventoryReady, parityViewLoaded(mirror))
+		},
+		func() {
+			_, messages := parityStep(t, host, endpoint, mirror)
+			for _, message := range messages {
+				switch message := message.(type) {
+				case network.PlayerState:
+					ready = ready || message.Ready
+				case network.InventoryState:
+					inventoryReady = inventoryReady || message.Inventory == initial
+				}
 			}
-		}
-	}
+		},
+	)
 
 	// 合成石锄：两块石头换一把满耐久石锄，落回第 0 格。
 	send(network.CraftRecipe{Sequence: 1, Recipe: core.RecipeStoneHoe})

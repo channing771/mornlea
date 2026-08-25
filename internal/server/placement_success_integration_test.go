@@ -76,17 +76,25 @@ func runPlacementSuccessScript(t *testing.T, transport string) placementSuccessT
 
 	mirror := client.NewMirror()
 	ready, inventoryReady := false, false
-	for !ready || !inventoryReady || !parityViewLoaded(mirror) {
-		_, messages := parityStep(t, host, endpoint, mirror)
-		for _, message := range messages {
-			switch message := message.(type) {
-			case network.PlayerState:
-				ready = ready || message.Ready
-			case network.InventoryState:
-				inventoryReady = inventoryReady || message.Inventory == inventory
+	waitIntegrationLoginReady(
+		t,
+		fmt.Sprintf("%s placement success", transport),
+		func() bool { return ready && inventoryReady && parityViewLoaded(mirror) },
+		func() string {
+			return fmt.Sprintf("ready=%v inventoryReady=%v viewLoaded=%v", ready, inventoryReady, parityViewLoaded(mirror))
+		},
+		func() {
+			_, messages := parityStep(t, host, endpoint, mirror)
+			for _, message := range messages {
+				switch message := message.(type) {
+				case network.PlayerState:
+					ready = ready || message.Ready
+				case network.InventoryState:
+					inventoryReady = inventoryReady || message.Inventory == inventory
+				}
 			}
-		}
-	}
+		},
+	)
 
 	transcript := placementSuccessTranscript{Successes: make([]uint64, 0, 4)}
 	step := func() {

@@ -42,15 +42,6 @@ const (
 	farmingSettleTicks = 3
 	// farmingPickupTicks 是等掉落物过完拾取延迟（默认 10 tick）并入包的 tick 数。
 	farmingPickupTicks = 40
-	// farmingLoginBudget 是等登录就绪（Ready + 背包发布 + 九个区块进镜像）的
-	// tick 预算。这个预算的**唯一职责**是把挂起变成一条读得懂的失败而不是
-	// go test 超时，因此它不是性能断言，宁可宽到几乎不可能误伤。
-	//
-	// 实测卡点是异步区块生成：九个区块从入队到进镜像在空闲机器上约 202 tick，
-	// 在并发跑满包的机器上会涨到 300 tick 以上，且随负载继续漂。600 只有
-	// 2–3 倍余量，在 CI 上会变成假失败源；3000 给到一个数量级余量，而真正
-	// 的挂起（登录握手不返回、区块永不就绪）仍会在预算内被拦成可读断言。
-	farmingLoginBudget = 3000
 )
 
 // TestFarmingLoopEndToEndMemory 是组 1–6 的集成回归：一名**从未存在过**的玩家
@@ -152,21 +143,25 @@ func TestFarmingLoopEndToEndMemory(t *testing.T) {
 	// 材料包被改成不发种子时这个循环会一直空转到 go test 超时，而超时是一种
 	// 读不出原因的红。等待有 tick 预算，断言留给下面的显式比较。
 	ready, inventoryReady := false, false
-	for ticks := 0; !ready || !inventoryReady || !parityViewLoaded(mirror); ticks++ {
-		if ticks > farmingLoginBudget {
-			t.Fatalf("登录 %d 个 tick 后仍未就绪: ready=%v 背包已发布=%v 视野已加载=%v",
-				ticks, ready, inventoryReady, parityViewLoaded(mirror))
-		}
-		_, messages := parityStep(t, host, endpoint, mirror)
-		for _, message := range messages {
-			switch message := message.(type) {
-			case network.PlayerState:
-				ready = ready || message.Ready
-			case network.InventoryState:
-				inventoryReady = inventoryReady || message.Inventory != core.Inventory{}
+	waitIntegrationLoginReady(
+		t,
+		"farming loop",
+		func() bool { return ready && inventoryReady && parityViewLoaded(mirror) },
+		func() string {
+			return fmt.Sprintf("ready=%v 背包已发布=%v 视野已加载=%v", ready, inventoryReady, parityViewLoaded(mirror))
+		},
+		func() {
+			_, messages := parityStep(t, host, endpoint, mirror)
+			for _, message := range messages {
+				switch message := message.(type) {
+				case network.PlayerState:
+					ready = ready || message.Ready
+				case network.InventoryState:
+					inventoryReady = inventoryReady || message.Inventory != core.Inventory{}
+				}
 			}
-		}
-	}
+		},
+	)
 	start := authoritativeInventory()
 	wantSeeds := core.ItemStack{Item: core.ItemWheatSeeds, Count: core.MaxStackCount}
 	if got := start.Backpack[starterSeedSlot]; got != wantSeeds {
