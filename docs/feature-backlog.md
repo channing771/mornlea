@@ -65,7 +65,7 @@
 | B-02 | 水桶（可搬运流体） | 舀水/倒水物品，解除「农业只能在天然水体 4 格内」约束 | 物品编号追加；无限水源规则随本行一并裁决 | 未认领 | — | farming 遗留 25（显式非目标解除）；fluid proposal 非目标「两个源相邻生成新源」约定随水桶交付 |
 | B-03 | 骨粉 | 新物品 + 「立即推进 N 阶段」动作，走翻地同形命令路径 | 物品编号追加；命令段可能追加 | 未认领 | — | farming 遗留 3 |
 | B-04 | 草丛与除草掉种子 | 植物几何第二消费者；草丛掉落种子替代初始材料包供给 | 植物区间编号追加 | 未认领 | — | farming 遗留 6 |
-| B-05 | 踩踏破坏耕地 | 实体落地事件接进方块变更（物理侧已有落地判定） | 无 wire 变更 | 未认领 | — | farming 遗留 4 |
+| B-05 | 踩踏破坏耕地 | 实体落地事件接进方块变更（物理侧已有落地判定） | 无 wire 变更 | 已完成 | zcode3-implementer @ feat/B-05-trample-farmland | farming 遗留 4；2026-08-25 认领。控制会话裁决：三处最小受控重叠——`internal/sim/player.go` 仅限摔落/落地结算区插入踩踏判定调用、`internal/sim/crop.go` 仅限 `advanceCrops` 首部一处结算调用（B-10 已归档无在途独占）、`internal/sim/engine.go` 仅限 `Engine` 结构体追加一行暂存字段声明（append-only，详见 change `farmland-trample` ledger Ruling）。独占文件集：`internal/sim` 新建踩踏结算文件与同包新增测试、OpenSpec change 目录；踩踏触发的作物掉落只调用既有导出掉落 API；刻意不触碰 `combat.go`/`hunger.go`（B-13）、`engine_step.go`/`drop.go`/`tunables.go`（A-04）、`mining.go`（C-01）与 `internal/core` 编号段（A-01/A-02/A-04）；2026-08-25 当日完成：PR #85 已合并（CI 8/8 全绿，run `32874791885`），`farmland-trample` 已归档并 sync 进 `authoritative-farming` 主规格，基线段已同步 |
 | B-06 | 干耕地退回泥土 | 需第三个耕地编号或附加状态字节 | 方块编号追加或状态编码 | 未认领 | — | farming 遗留 5 |
 | B-07 | 水冲毁作物 | 流体可流入作物格并触发掉落；需同步流体的确定性论证与不动点论证 | 流体 `evalCell` 规则变更，论证同步更新 | 已认领 | ox-alpha-implementer @ feat/B-07-flood-destroys-crops | farming 遗留 1；2026-08-25 认领。独占文件集：`internal/fluid` 全部（`evalCell` 作物流入规则、确定性/不动点论证与测试）、`internal/sim` 新建作物冲毁结算文件（只调用既有导出掉落 API，不改 A-01/A-04/B-10 已认领的 `drop.go`/`mining.go`/`crop.go`/`engine_step.go`）、OpenSpec change 目录；无 wire 变更、无编号追加，不触碰 A 批次任何独占文件集 |
 | B-08 | 地下农场 | 服务端可查询的极简方块光模型，或重新裁决「服务端不计算光照」禁令 | 视裁决（spec 禁令重裁或新可查模型） | 未认领 | — | farming 遗留 7 |
@@ -73,8 +73,8 @@
 | B-10 | 作物随机掉落数量 | `hash(worldSeed, tick, pos)` 定数量，与生长抽样共用哈希 | 无 wire 变更 | 已完成 | ox-alpha-implementer @ feat/B-10-crop-drop-hash | farming 遗留 10；2026-08-25 认领并当日完成：PR #81 已合并（CI 8/8 首跑全绿），`crop-random-drop-count` 已归档；成熟小麦 1–3 小麦 + 1–3 种子、重放确定，D9 固定掉落决策由其接替 |
 | B-11 | 难度系统 | 困难难度饿死、和平回满、刷怪门控等难度分支 | 配置格式追加难度项 | 未认领 | — | hunger 遗留 4；批次设计非目标 |
 | B-12 | 饱和抖动提示 | `PlayerState` 追加 `SaturationZero` 一位 | 协议升版（`PlayerState` 追加字段） | 未认领 | — | hunger 遗留 3 |
-| B-13 | 冲刺与攻击疲劳 | 对应动作出现后疲劳表加行 | 无 wire（疲劳表加行） | 已认领 | ox-alpha-implementer @ feat/B-13-attack-exhaustion | hunger 遗留 6；近战（v25）已上线、攻击疲劳半边已可先行；冲刺半边依赖 B-30。2026-08-25 本会话认领，范围冻结为攻击疲劳半边（冲刺半边待 B-30 落地后另行认领）。独占文件集：`internal/sim/combat.go`、`internal/sim/hunger.go`、同包新增测试文件与 OpenSpec change 目录；刻意不触碰 `tunables.go`（固定表不加 tunable）、`player.go`/`engine_step.go`/`drop.go`（A-01/A-04）、`mining.go`/`crop.go`（B-10）与 `internal/core` 编号段（A-01/A-02/A-04） |
-| B-14 | 进食动画/音效/进度 HUD | 复用采掘进度条呈现形状 + 既有音频确认边界 | 无 wire（呈现层） | 未认领 | — | hunger 遗留 2 |
+| B-13 | 冲刺与攻击疲劳 | 对应动作出现后疲劳表加行 | 无 wire（疲劳表加行） | 已完成 | ox-alpha-implementer @ feat/B-13-attack-exhaustion | hunger 遗留 6；攻击疲劳半边随 change `attack-exhaustion` 交付并归档：固定表第六行 `exhaustionMeleeMilli=100`，判定点在意图冻结分叉。PR #84 以 merge `04bd58ad` 合入，run `32878866254` 的 8 项全绿；SPEC/QUALITY 双评审与整分支终审通过（终审三项文档级发现经一轮修复波清偿）。冲刺半边依赖 B-30 协议升版，另行认领 |
+| B-14 | 进食动画/音效/进度 HUD | 复用采掘进度条呈现形状 + 既有音频确认边界 | 无 wire（呈现层） | 已认领 | zcode2-implementer @ feat/B-14-eating-progress-hud | hunger 遗留 2；2026-08-26 认领。控制会话裁决：三点位最小受控重叠——`cmd/mornlea/app.go` 仅追加 eating overlay 与本地进度计数的字段声明行、`app_frame.go` 仅 `Prepare` 实参处构造并传入 eating overlay 的行、`app_lifecycle.go` 仅复位行（B-05 先例同形），其余 app 文件内容不触碰。独占文件集：`internal/render/hud/layout.go`、`renderer.go`（eating bar 呈现与 overlay 参数）及同包测试、OpenSpec change 目录；刻意不触碰 `hud/container.go`（A-01）、`capture_scene*.go`（E-12）、`internal/audio` 与音频装配（进食完成 cue 已交付，列为非目标）、`combat.go`/`hunger.go`（B-13）、`engine_step.go`/`drop.go`（A-04）；无 wire 变更（进度为客户端预测，不升协议）、不动 golden（无既有场景进食） |
 | B-15 | 伙伴饥饿与自动进食 | 伙伴接三层状态 + 疲劳表 + 自动进食计划步骤 | `companions.ai` schema 可能升版 | 未认领 | — | hunger 遗留 5；依赖伙伴能力扩展组 |
 | B-16 | 横向原木与薄雪层 | 方向/高度/碰撞/选取/协议/存档状态编码（现为全方块方向固定） | 区块 schema 升版（方向状态编码） | 未认领 | — | common-block-materials 延期项 |
 | B-17 | 门 | 方块 + 交互开合，原创模型 | 方块编号追加 + 开合状态编码 | 未认领 | — | 批次设计非目标 |
@@ -91,7 +91,7 @@
 | B-28 | 岩浆与造石 | 岩浆流体（发光、接触伤害/灼烧）、水×岩浆→石头/黑曜石 | 流体编号区间扩展 + 方块光/伤害规则；无新协议消息 | 未认领 | — | authoritative-fluid 与 fluid-presentation proposal 非目标（两处显式延期）；灼烧语义与 A-04 协调 |
 | B-29 | 水流推力 | 流动水对实体施加方向力与水面流向呈现 | 物理侧 tunable 追加；无 wire 变更 | 未认领 | — | 同上非目标（「水流对实体的推力与水流方向动画」）；衔接既有浸没物理 |
 | B-30 | 冲刺（疾跑） | 移动输入位与速度提升 | `PlayerInput` 追加输入位 → 协议升版 | 未认领 | — | hunger 遗留 6（「动作不存在」）；B-13 冲刺疲劳依赖本行 |
-| B-31 | 开箱中断进食 | 打开容器或视野未就绪时中断进食且不扣料 | 无契约变更（`advanceEating` 中断条件） | 未认领 | — | hunger 遗留 10；需补「开箱中断不扣料」Scenario |
+| B-31 | 开箱中断进食 | 打开容器或视野未就绪时中断进食且不扣料 | 无契约变更（`advanceEating` 中断条件） | 已完成 | zcode2-implementer @ feat/B-31-eating-container-interrupt | hunger 遗留 10；需补「开箱中断不扣料」Scenario；2026-08-25 认领。控制会话裁决：批准与 A-01 在 `internal/sim/player.go` 的最小受控重叠——仅限 `advanceEating` 调用点为传入 `viewContainer`/`hasView` 中断所需的最小参数改动，该文件其余内容不触碰。独占文件集：`internal/sim/eating.go`、同包新增测试文件、OpenSpec change 目录；刻意不触碰 `combat.go`/`hunger.go`（B-13）、`engine_step.go`/`drop.go`（A-04）与 `internal/core` 编号段（A-01/A-02/A-04） |；2026-08-26 完成：PR #83 已合并（CI 8/8 首跑全绿 · merge e1c725e8），change 归档为 archive/2026-08-26-eating-container-interrupt 并 sync 进 authoritative-hunger 主规格，中断清单第五条与「中断优先于同 tick 结算」契约落地
 | B-32 | 流体音效 cue | 涉水/流水音频，复用既有 cue 纪律（权威确认边界触发） | 无 wire 变更（客户端音频） | 未认领 | — | fluid-presentation proposal 非目标（不做流体音效） |
 
 ## C. 伙伴能力扩展（后续功能候选）
@@ -100,7 +100,7 @@
 
 | ID | 功能 | 简述 | 版本与契约影响 | 状态 | 认领人 | 来源与备注 |
 |---|---|---|---|---|---|---|
-| C-01 | 伙伴采掘容器/多掉落方块 | `mine` 从「单一 `BlockDrop` 且非容器」扩展到容器与多掉落，需先定原子容量语义 | 视实现（`mine` 语义扩展，可能无 wire 变更） | 未认领 | — | §16 + 伙伴 mine 首版明确留给后续单独设计 |
+| C-01 | 伙伴采掘容器/多掉落方块 | `mine` 从「单一 `BlockDrop` 且非容器」扩展到容器与多掉落，需先定原子容量语义 | 视实现（`mine` 语义扩展，可能无 wire 变更） | 已认领 | zcode4-implementer @ feat/C-01-companion-mine-containers | §16 + 伙伴 mine 首版明确留给后续单独设计；2026-08-25 认领。范围冻结：仅放开容器（箱子/熔炉）与多掉落方块作为伙伴 `mine` 目标；农业十编号的显式拒绝保持不变（C-11 另行裁决）；原子容量语义（全或无 / 部分结算掉世界）在 brainstorming 短设计中定案。独占文件集：`internal/sim/mining.go`（`companionMineableBlock` 与容器内容物结算复用 `PrepareDropBatch`）、`internal/sim/companion_action.go`、`internal/companion/plan_types.go`、`internal/companion/planner.go`、`internal/server/companion_interact.go`、同包新增测试文件与 OpenSpec change 目录；刻意不触碰 `internal/core` 的 `recipe.go`/`inventory.go`/`item.go`（A-01）、`engine_step.go`/`engine.go`/`command.go`/`drop.go`/`tunables.go`（A-04）、`combat.go`/`hunger.go`（B-13）、`eating.go`（B-31）、`crop.go` 与新建踩踏/冲毁文件（B-05/B-07）、`internal/mesh` 与 engine/client crate（A-02/A-04）；无 wire 变更、计划 kind 不扩、`companions.ai` schema v4 不变 |
 | C-02 | 伙伴自动拾取 | 世界掉落物入伙伴背包，须先验证 grid/背包装回不变量 | 视实现（背包不变量） | 未认领 | — | §16 |
 | C-03 | 伙伴背包整理/合成/熔炼/开容器 | 自动合成与熔炼需服务端权威语义 | 视实现（`companions.ai` 可能升版） | 未认领 | — | §16 |
 | C-04 | 伙伴自动挖障碍/搭桥/游泳/无限世界寻路 | 寻路与计划能力扩展 | 计划步骤扩展 → `companions.ai` schema 升版 | 未认领 | — | §16 |
@@ -124,7 +124,7 @@
 | D-04 | 合成面板分页/滚动 | 配方行数增长后按窗口高度自适应（当前 10 行，矮窗口整体缩小） | 无 wire；HUD 布局（capture 校验） | 未认领 | — | farming 遗留 20 |
 | D-05 | HUD 物品图集 UV 对齐 | 按 texel 中心/整数像素计算，使图集扩列不影响既有图标 | 无 wire（UV 计算） | 已完成 | ox-alpha-implementer @ fix/D-05-hud-atlas-texel-uv | farming 遗留 18；PR #82 已合并（CI 8/8 全绿），change `hud-atlas-texel-stable-uv` 已归档并 sync 进 `survival-hud-presentation` 主规格；最终方案为对称亚纹素收进 1/256 纹素（半纹素中心对齐被否决），两景心形区 golden 经用户裁决外科手术式再生 |
 | D-06 | 材质包 v2 | HUD 图集覆盖（鸡腿/爱心/气泡可替换）、构建期许可校验与成果打包 | 配置语义扩展 + 构建期校验 | 未认领 | — | hunger 遗留 7；farming 遗留 12（贴图管线） |
-| D-07 | 耕地 mesh 顶面下沉 | 按 material 固定下移顶面，或复用水面角高度位 | capture golden 更新 | 未认领 | — | farming 遗留 13 |
+| D-07 | 耕地 mesh 顶面下沉 | 按 material 固定下移顶面，或复用水面角高度位 | capture golden 更新 | 已认领 | ox-alpha-implementer @ feat/D-07-farmland-mesh-top-sink | farming 遗留 13；2026-08-26 认领。独占文件集：`engine/crates/mornlea_engine/`（mesher 顶面几何与测试）、受影响 capture golden 与 change 产物；不触碰 wire/schema/registry 名额与 `internal/physics`（碰撞侧已是 15/16） |
 | D-08 | 农田+花草 capture 场景 | 植物种类增多后补视觉场景并记录差异来源 | capture 场景与 golden 追加 | 未认领 | — | farming 遗留 24 |
 | D-09 | 第三人称与角色姿态呈现 | 第三人称相机模式与角色姿态（游泳等） | client ABI 可能扩展（相机/姿态） | 未认领 | — | fluid-presentation proposal 非目标（不做游泳姿态动画与第三人称呈现）；avatar pass 为基础 |
 

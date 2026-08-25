@@ -15,7 +15,7 @@ PIXEL_PERFECTION_NOTICE_DIR := internal/assets/packs/pixel_perfection
 PIXEL_PERFECTION_NOTICE_DEST := bin/third-party/pixel-perfection
 ARGS ?=
 
-.PHONY: help run build build-linux-server test test-race test-race-short test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check dev-check agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev
+.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check dev-check agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev
 
 run test test-multiplayer bench-multiplayer visual-check visual-update: rust
 build: rust
@@ -30,6 +30,7 @@ help:
 		'  make test             运行全部测试' \
 		'  make test-race        使用 race detector 运行全部测试' \
 		'  make test-race-short   race detector 快速冒烟(与 `-short` 同跳过重型测试)' \
+		'  make test-race-changed 只对改动包及其反向依赖跑 race(T1 层;RACE_BASE=ref 换基线)' \
 		'  make dev-check        迭代期快检:gofmt/vet/短测试与 Rust 静态检查' \
 		'  make test-multiplayer 运行 M3C 八玩家与 v6 报告测试' \
 		'  make bench-multiplayer 运行三组 M3C 多人微基准' \
@@ -85,6 +86,12 @@ test-race:
 # 速度比 `test-race` 快一个数量级;提交前仍跑全量 `test-race`。
 test-race-short:
 	$(GO) test ./... -race -short
+
+# test-race-changed:测试分层纪律的 T1 层——只对「改动包及其反向依赖」跑
+# race(集合由 scripts/agents/race-changed.sh 从 git diff 求,恒含 archcheck),
+# 绝大多数改动秒级到分钟级;全量 `test-race` 留给 T3 与 CI。RACE_BASE 覆盖基线。
+test-race-changed: rust
+	scripts/agents/race-changed.sh $(if $(RACE_BASE),--base $(RACE_BASE),)
 
 test-multiplayer:
 	$(GO) test ./internal/client ./internal/server ./cmd/mornlea ./cmd/perfcheck \
