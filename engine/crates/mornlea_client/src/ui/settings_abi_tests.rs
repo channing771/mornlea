@@ -1,3 +1,4 @@
+use super::test_support::four_button_frame;
 use super::*;
 
 fn string_field(out: &mut Vec<u8>, value: &[u8]) {
@@ -107,7 +108,7 @@ fn settings_layout_v2_rejects_invalid_matrix_and_tail() {
 
 #[test]
 fn menu_layout_v1_rejects_unknown_flags_and_tail_without_wire_drift() {
-    let valid = super::tests::four_button_frame();
+    let valid = four_button_frame();
     assert!(matches!(decode_ui_frame(&valid), Ok(UiFrame::Menu(_))));
 
     let mut flags = valid.clone();

@@ -33,15 +33,26 @@ func runInteractive(app *application) error {
 }
 
 // runMenuPhase 运行主菜单相位：不捕获光标、不读取 WASD/面板/聊天/快捷栏输入，
-// 每帧 Poll → DrainUIEvents → 分派（start/quit/其它 id 忽略）→ 渲染（含 UI 段）。
+// 每帧 Poll → DrainUIEvents → typed 分派（action/暂缓 settings change）→ 渲染（含 UI 段）。
 // 「进入游戏」装配成功（startWorld 置 phase=game）后立即 SetCursorCaptured(true)
 // 并刷新鼠标基线，返回 nil 交给游戏相位；「退出游戏」或窗口关闭同样返回 nil。
 func runMenuPhase(app *application) error {
 	for !app.window.ShouldClose() {
 		app.window.Poll()
 		events := app.renderer.DrainUIEvents()
-		for _, id := range events {
-			if app.handleMenuEvent(id) {
+		for _, event := range events {
+			quit, disposition := app.handleMenuUIEvent(event)
+			if disposition == menuUIEventDeferred {
+				// 任务 2 先完成 ABI；真实设置控件由任务 3 接入，Go 草稿事务由
+				// 任务 4 接管。在此之前显式识别并暂缓，绝不误作按钮 id。
+				slog.Debug("设置草稿事件尚未接入 Go 状态机，已暂缓")
+				continue
+			}
+			if disposition == menuUIEventIgnored {
+				slog.Warn("忽略未知 UI 事件", "kind", event.Kind)
+				continue
+			}
+			if quit {
 				return nil
 			}
 			if app.menu.phase == menuPhaseGame {
@@ -54,6 +65,29 @@ func runMenuPhase(app *application) error {
 		}
 	}
 	return nil
+}
+
+// menuUIEventDisposition 描述 typed UI 事件在任务 2 暂态分派器中的结果。
+type menuUIEventDisposition uint8
+
+const (
+	menuUIEventIgnored menuUIEventDisposition = iota
+	menuUIEventHandled
+	menuUIEventDeferred
+)
+
+// handleMenuUIEvent 把 client ABI v9 的 typed 事件接到既有主菜单 action。
+// `settings-changed` 在完整 Go 草稿状态机落地前显式返回 deferred，既不 panic、
+// 不改菜单，也绝不把其负载或 `ActionID` 误当按钮；未知 kind 明确返回 ignored。
+func (a *application) handleMenuUIEvent(event client.UIEvent) (quit bool, disposition menuUIEventDisposition) {
+	switch event.Kind {
+	case client.UIEventAction:
+		return a.handleMenuEvent(event.ActionID), menuUIEventHandled
+	case client.UIEventSettingsChanged:
+		return false, menuUIEventDeferred
+	default:
+		return false, menuUIEventIgnored
+	}
 }
 
 // runGamePhase 是既有交互循环体（原 runInteractive 的遍历/输入/渲染主体）：捕获

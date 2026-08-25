@@ -137,6 +137,46 @@ func TestStartAtMenuConstructsMenuWithoutWorld(t *testing.T) {
 	}
 }
 
+// TestHandleMenuUIEventRoutesAction 锁定 client ABI v9 action 仍路由到既有
+// `handleMenuEvent`，而不是把 typed event 本身当按钮 id。
+func TestHandleMenuUIEventRoutesAction(t *testing.T) {
+	app := &application{menu: menuState{phase: menuPhaseMenu}}
+	quit, disposition := app.handleMenuUIEvent(client.UIEvent{
+		Kind:     client.UIEventAction,
+		ActionID: menuActionQuit,
+	})
+	if !quit || disposition != menuUIEventHandled {
+		t.Fatalf("quit=%v disposition=%v", quit, disposition)
+	}
+}
+
+// TestHandleMenuUIEventDefersNonAction 锁定任务 2 暂态策略：settings change
+// 被显式标成 deferred，未知 kind 被标成 ignored；即使伪造退出 `ActionID` 也
+// 不得误路由、panic 或改变菜单状态。
+func TestHandleMenuUIEventDefersNonAction(t *testing.T) {
+	app := &application{menu: menuState{phase: menuPhaseMenu, error: "保留"}}
+	quit, disposition := app.handleMenuUIEvent(client.UIEvent{
+		Kind:     client.UIEventSettingsChanged,
+		ActionID: menuActionQuit,
+		Settings: client.UISettingsValues{
+			AudioVolume:     0.25,
+			Window:          client.UISettingsWindow960x540,
+			TexturePackPath: "packs/local",
+		},
+	})
+	if quit || disposition != menuUIEventDeferred {
+		t.Fatalf("settings quit=%v disposition=%v", quit, disposition)
+	}
+	if app.menu.phase != menuPhaseMenu || app.menu.error != "保留" {
+		t.Fatalf("settings change 修改了菜单: %+v", app.menu)
+	}
+
+	quit, disposition = app.handleMenuUIEvent(client.UIEvent{Kind: client.UIEventKind(99), ActionID: menuActionQuit})
+	if quit || disposition != menuUIEventIgnored {
+		t.Fatalf("unknown quit=%v disposition=%v", quit, disposition)
+	}
+}
+
 // startWorldSuccessDeps 为 startWorld 提供可成功的连接依赖：内存 store、Host、内存流对与登录。
 func startWorldSuccessDeps(t *testing.T) applicationDependencies {
 	t.Helper()
