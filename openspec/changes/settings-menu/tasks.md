@@ -16,7 +16,7 @@
 
 ## 5. 视觉基线与长期文档
 
-- [ ] 5.1 新增 `settings-menu` capture 并启用 `main-menu` 的设置按钮，保持 `far-horizon` 倒数第二、`water-underwater` 最后；更新 `main-menu.png`、新增 `settings-menu.png`，证明其余既有 golden 逐字节不变，人工检查两张图；运行 `make visual-update`、`make visual-check` 和相关 capture 测试。
+- [x] 5.1 新增 `settings-menu` capture 并启用 `main-menu` 的设置按钮，保持 `far-horizon` 倒数第二、`water-underwater` 最后；更新 `main-menu.png`、新增 `settings-menu.png`，证明其余既有 golden 逐字节不变，人工检查两张图；运行 `make visual-update`、`make visual-check` 和相关 capture 测试。
 - [ ] 5.2 更新 README、材质包/进度说明及 `AGENTS.md`/`CLAUDE.md` 的当前能力与 client ABI v9 基线，保持两份基线文档逐字节相同；运行 `cmp -s AGENTS.md CLAUDE.md` 与 `go test ./internal/archcheck -count=1`。
 
 ## 6. 整分支收尾

@@ -27,7 +27,7 @@
 | 2.1 client ABI v9 | `d01_t2_abi_impl` | `79623956`；修复 `e0e08099`、`c0b5e5d0` | `d01_t2_spec_review`：FAIL→PASS→PASS | `d01_t2_quality_review`：FAIL→FAIL→PASS | 2 | RED 编译失败；Rust 105 tests、clippy/fmt、`make rust`、client race、cmd compile/action routing、diff-check PASS；Rust 测试名集合不变 | ACCEPTED |
 | 3.1 Rust egui 设置页 | `d01_t3_rust_ui_impl` | `0c656133`；修复 `c79150f6`、`3643b0bf` | `d01_t3_spec_review`：PASS→PASS→PASS | `d01_t3_quality_review`：FAIL→PASS→PASS | 2 | RED 44 个编译错误 + 容量预检失败 + action 超 viewport 17pt；`make rust-check`（client 119、engine 160）、release Rust、client race、fmt/clippy/diff-check PASS | ACCEPTED |
 | 4.1 Go 事务与接线 | `d01_t4_go_settings_impl` | `844c9f9c`；规格协调 `ddaa419e`；修复 `9819d823` | `d01_t4_spec_review`：PASS→PASS | `d01_t4_quality_review`：FAIL→PASS | 1 | RED 缺少状态类型 + CR/LF/资源前置测试失败；cmd full race 279.221s、short race、config/client race、Rust 118、clippy/fmt、vet/diff-check PASS | ACCEPTED |
-| 5.1 视觉基线 | 待派发 | — | — | — | 0 | — | PENDING |
+| 5.1 视觉基线 | `d01_t5_visual_impl` | `845250f2`、`ce98240d`；修复 `7c72527f`（另触发 Task 3 `3643b0bf`） | `d01_t5_spec_review`：PASS→PASS | `d01_t5_quality_review`：FAIL→PASS | 1 | RED 缺少 Settings fixture；19场景、focused/short race、两张 UI 0差、17张旧 PNG hash不变、人工检查 PASS；全局 visual-check 的13个旧场景继承失败见 R-011 | ACCEPTED（变更特定视觉门禁通过） |
 | 5.2 长期文档 | 待派发 | — | — | — | 0 | — | PENDING |
 | 6.1 整分支收尾 | 待派发 | — | — | — | 0 | — | PENDING |
 
@@ -51,3 +51,4 @@
 - R-008：egui UI 帧在消费 RawInput 前按布局保守预留最坏事件数（主菜单 8、设置页 4）；剩余容量不足时允许提前显式 `CAPACITY`，以换取队列、焦点、光标与滚动状态可无损重放。空队列始终可运行正常帧。
 - R-009：`texturePackPath` 的单行不变量必须在 `Config.Load` 与 application 直接 options 构造两层防御；Darwin 上真实存在但名称含 CR/LF 的目录也拒绝，以保证任何 committed/draft 均可安全编码 layout v2。该兼容性收紧已同步 proposal/spec/design，配置版本保持 v1。
 - R-010：Task 5 正式 640×360 图像发现三动作底部被裁 17pt，判为 Task 3 呈现回归而非 capture 可接受差异；由原 Task 3 implementer 修复并复审后再生成 golden，capture implementer 不越界改 Rust UI。
+- R-011：当前 Apple M2/macOS 26.6.2 上 `make visual-check` 的 13 个非 UI 旧场景超阈值；在干净领取基线 `origin/main@345f6077` 上逐场景复现相同最大差、差异像素数与首差坐标，且基线与候选 17 张非主菜单实拍逐字节相同。判为继承的机器视觉基线失败，不刷新无关 golden、不放宽阈值；D-01 的 main/settings 两场景均 0 像素差。整分支门禁必须如实记为“全局 FAIL（baseline-equivalent）”，不得写成 PASS。
