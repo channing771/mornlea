@@ -2,8 +2,8 @@
 //!
 //! 控制权模型:Go 主线程每帧调用 [`ClientWindow::poll`],内部以零超时
 //! `pump_app_events` 处理完积压事件后立即返回并编码快照;winit 从不拥有
-//! 主循环。窗口相关逻辑依赖真实窗口系统,单元测试只覆盖纯尺寸计算
-//! (`clamp_to_work_area`);事件桥接的可无头验证逻辑位于 [`crate::input`]。
+//! 主循环。窗口相关逻辑依赖真实窗口系统,单元测试只覆盖纯尺寸与位置计算；
+//! 事件桥接的可无头验证逻辑位于 [`crate::input`]。
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -81,25 +81,16 @@ impl ApplicationHandler for App {
         let attributes = Window::default_attributes()
             .with_title(self.title.clone())
             .with_inner_size(LogicalSize::new(self.width, self.height))
-            // 最小尺寸与无窗口 capture 一致(640×360),防止窗口被拖得
-            // 过小导致 HUD 与交互几何出界。
-            .with_min_inner_size(LogicalSize::new(640.0, 360.0));
+            // 真实工作区可能小于最小产品预设。最小值只锁定 16:9 的一个比例
+            // 单元，避免 winit 的 640×360 下限反过来阻止 AppKit 安全缩窗。
+            .with_min_inner_size(LogicalSize::new(16.0, 9.0));
         match event_loop.create_window(attributes) {
             Ok(window) => {
                 // 聊天需要 IME 提交的 Unicode 文本(GLFW char 回调的等价物)。
                 window.set_ime_allowed(true);
-                // AppKit 的 `NSScreen.visibleFrame` 以逻辑 point 给出扣除菜单栏与
-                // Dock 的真实工作区；窗口预设同样以 point 表达，先在同一单位
-                // 内钳制，再只在 request 边界转换为物理像素。
-                let scale = window.scale_factor();
-                let current = window.inner_size();
-                let requested: LogicalSize<u32> = current.to_logical(scale);
-                let clamped = clamp_logical_to_current_work_area(&window, requested);
-                if clamped != requested {
-                    // 返回值是系统采用的新尺寸,这里不关心,与 `set_content_size`
-                    // 的丢弃口径一致。
-                    let _ = window.request_inner_size(clamped.to_physical::<u32>(scale));
-                }
+                // 创建与运行期调整共用 AppKit outer-frame 路径：真实
+                // visibleFrame、当前 style/chrome 与窗口位置一次处理。
+                apply_content_size_to_work_area(&window, LogicalSize::new(self.width, self.height));
                 // Arc 包装:渲染器 surface 需要共享窗口所有权(wgpu
                 // create_surface 的 'static 约束)。
                 self.window = Some(Arc::new(window));
@@ -242,13 +233,10 @@ impl ClientWindow {
     /// 请求修改 content 尺寸(逻辑点);实际生效经 Resized 事件回写快照。
     pub fn set_content_size(&mut self, width: u32, height: u32) {
         if let Some(window) = &self.app.window {
-            // 设置页传入逻辑 point；运行期与创建期共用真实 visibleFrame 钳制，
-            // 最后才按当前 scale factor 转为 winit 请求的物理尺寸。Retina 的
-            // 物理 2x 上限另由 Go `fitFramebuffer` 负责，职责不在此混合。
-            let scale = window.scale_factor();
-            let requested = LogicalSize::new(width, height);
-            let clamped = clamp_logical_to_current_work_area(window, requested);
-            let _ = window.request_inner_size(clamped.to_physical::<u32>(scale));
+            // 设置页传入逻辑 point。AppKit 成功时直接调整 outer frame 并重定位；
+            // `request_inner_size` 仅用于无法取得 Cocoa 句柄时的有界 fallback。
+            // Retina 物理上限仍由 Go `fitFramebuffer` 独立负责。
+            apply_content_size_to_work_area(window, LogicalSize::new(width, height));
         }
         self.app.refresh_sizes();
     }
@@ -308,60 +296,227 @@ impl ClientWindow {
 /// 所在 `NSScreen.visibleFrame`；只有句柄、screen 或返回值无效时才退回此值。
 const DISPLAY_CLAMP_RATIO: f64 = 0.9;
 
-/// 按当前窗口所在屏幕的逻辑工作区钳制请求。真实 visibleFrame 获取失败时，
-/// 从 winit monitor 的物理像素与 scale factor 推导保守 point 上限；若连 monitor
-/// 也不可用，退到最小 640×360，绝不完全跳过钳制。
-fn clamp_logical_to_current_work_area(
-    window: &Window,
-    requested: LogicalSize<u32>,
-) -> LogicalSize<u32> {
-    let work = visible_work_area_points(window).unwrap_or_else(|| {
-        window
-            .current_monitor()
-            .map_or(LogicalSize::new(640, 360), |monitor| {
-                fallback_work_area_points(monitor.size(), window.scale_factor())
-            })
-    });
-    clamp_logical_to_work_area(requested, work)
+/// AppKit 不可用且 winit 也没有 monitor 时采用的有界 content fallback。
+const FALLBACK_CONTENT_SIZE: LogicalSize<u32> = LogicalSize::new(640, 360);
+
+/// monitor fallback 无法查询真实标题栏高度，保守预留 64 point；宽度 chrome
+/// 通常为零，保留为常量便于纯函数明确职责。
+const FALLBACK_CHROME_HEIGHT: f64 = 64.0;
+
+/// AppKit 逻辑 point 坐标系中的矩形。与 `NSRect` 分离后，负 origin、位置约束
+/// 与 chrome 扣减均可在无窗口单元测试里验证。
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct LogicalRect {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
 }
 
-/// 从 NSWindow 沿 `screen` 关系读取 `NSScreen.visibleFrame` 的逻辑 point 尺寸。
+impl LogicalRect {
+    const fn new(x: f64, y: f64, width: f64, height: f64) -> Self {
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    fn valid(self) -> bool {
+        self.x.is_finite()
+            && self.y.is_finite()
+            && self.width.is_finite()
+            && self.height.is_finite()
+            && self.width >= 1.0
+            && self.height >= 1.0
+    }
+}
+
+/// 创建与运行期共用的窗口调整入口。正常路径把 content 请求转换为 AppKit
+/// outer frame 并重定位；Cocoa 查询失败才回退到 winit 尺寸请求。
+fn apply_content_size_to_work_area(window: &Window, requested: LogicalSize<u32>) {
+    if apply_appkit_content_frame(window, requested) {
+        return;
+    }
+    let fallback = fallback_content_size(
+        requested,
+        window.current_monitor().map(|monitor| monitor.size()),
+        window.scale_factor(),
+    );
+    let _ = window.request_inner_size(fallback.to_physical::<u32>(window.scale_factor()));
+}
+
+/// 读取当前 NSWindow、NSScreen visibleFrame、outer frame 与当前 style 对应的
+/// chrome，把 content 等比缩入可用区域，再经 AppKit 位置约束设置 outer frame。
 ///
-/// SAFETY：raw-window-handle 的 NSView 只在活动窗口生命周期内使用；三条
-/// Objective-C 消息均在创建该 winit 窗口的主线程执行。任一对象为 nil、返回
-/// 非有限数或非正尺寸都会返回 `None`，由有界 fallback 接管，不解引用悬空指针。
-fn visible_work_area_points(window: &Window) -> Option<LogicalSize<u32>> {
+/// SAFETY：raw-window-handle 的 NSView 与由它借出的 NSWindow/NSScreen 只在活动
+/// winit 窗口生命周期、本次调用栈内使用；`ClientWindow` 的 FFI thread-local
+/// 约束保证这些消息在创建窗口的 OS 主线程发出。所有指针逐级判 nil，所有按值
+/// `NSRect` 都验证有限性和正尺寸；失败立即进入有界 fallback，不持有 ObjC 借用。
+fn apply_appkit_content_frame(window: &Window, requested: LogicalSize<u32>) -> bool {
     use objc2::runtime::AnyObject;
-    use objc2_foundation::NSRect;
+    use objc2_foundation::{NSPoint, NSRect, NSSize};
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-    let handle = window.window_handle().ok()?.as_raw();
+    let Ok(handle) = window.window_handle() else {
+        return false;
+    };
+    let handle = handle.as_raw();
     let RawWindowHandle::AppKit(appkit) = handle else {
-        return None;
+        return false;
     };
     let ns_view: *mut AnyObject = appkit.ns_view.as_ptr().cast();
-    // SAFETY:见函数安全说明；nil 在每一步都显式拒绝。
+    // SAFETY：见函数安全说明；NSView 来自当前活动 winit 窗口。
     let ns_window: *mut AnyObject = unsafe { objc2::msg_send![ns_view, window] };
     if ns_window.is_null() {
-        return None;
+        return false;
     }
-    // SAFETY:NSWindow 的 `screen` 是借用返回值；只在本调用栈内立即读取。
+    // SAFETY：NSWindow 的 `screen` 是借用返回值，只在当前调用栈立即使用。
     let screen: *mut AnyObject = unsafe { objc2::msg_send![ns_window, screen] };
     if screen.is_null() {
-        return None;
+        return false;
     }
-    // SAFETY:NSScreen `visibleFrame` 返回按值 NSRect，ABI 编码由
-    // objc2-foundation 与当前 objc2 0.6 同线提供。
+    // SAFETY：以下 `NSRect` 按值返回 ABI 由与 objc2 0.6 同线的
+    // objc2-foundation 0.3 描述，不借用 ObjC 内存。
     let visible: NSRect = unsafe { objc2::msg_send![screen, visibleFrame] };
-    let width = visible.size.width;
-    let height = visible.size.height;
-    if !width.is_finite() || !height.is_finite() || width < 1.0 || height < 1.0 {
-        return None;
+    let current_outer: NSRect = unsafe { objc2::msg_send![ns_window, frame] };
+    let visible = logical_rect_from_ns(visible);
+    let current_outer = logical_rect_from_ns(current_outer);
+    if !visible.valid() || !current_outer.valid() {
+        return false;
     }
-    Some(LogicalSize::new(
-        width.floor().min(u32::MAX as f64) as u32,
-        height.floor().min(u32::MAX as f64) as u32,
-    ))
+
+    // 显式读取 style mask 以锁定当前 NSWindow chrome 语境；实例方法
+    // `frameRectForContentRect:` 会按该当前 style 计算标题栏/边框，而不是使用
+    // 固定 magic 高度。
+    let _style_mask: usize = unsafe { objc2::msg_send![ns_window, styleMask] };
+    let requested_content = NSRect::new(
+        NSPoint::new(0.0, 0.0),
+        NSSize::new(requested.width as f64, requested.height as f64),
+    );
+    // SAFETY：按值传入/返回 `NSRect`；receiver 是上方判 nil 的当前 NSWindow。
+    let requested_outer: NSRect =
+        unsafe { objc2::msg_send![ns_window, frameRectForContentRect: requested_content] };
+    let chrome = LogicalSize::new(
+        (requested_outer.size.width - requested.width as f64).max(0.0),
+        (requested_outer.size.height - requested.height as f64).max(0.0),
+    );
+    if !chrome.width.is_finite() || !chrome.height.is_finite() {
+        return false;
+    }
+    let fitted_content = fit_content_to_visible_frame(requested, visible, chrome);
+    let fitted_content_rect = NSRect::new(
+        NSPoint::new(0.0, 0.0),
+        NSSize::new(fitted_content.width as f64, fitted_content.height as f64),
+    );
+    // SAFETY：再次让当前 style 计算缩小后 content 的精确 outer 尺寸。
+    let fitted_outer: NSRect =
+        unsafe { objc2::msg_send![ns_window, frameRectForContentRect: fitted_content_rect] };
+    if !fitted_outer.size.width.is_finite()
+        || !fitted_outer.size.height.is_finite()
+        || fitted_outer.size.width < 1.0
+        || fitted_outer.size.height < 1.0
+    {
+        return false;
+    }
+    let desired = constrain_outer_frame(
+        LogicalRect::new(
+            current_outer.x,
+            current_outer.y,
+            fitted_outer.size.width,
+            fitted_outer.size.height,
+        ),
+        visible,
+    );
+    let desired_ns = ns_rect_from_logical(desired);
+    // SAFETY：AppKit 的约束方法使用同一个当前 NSScreen，处理多屏菜单栏、Dock
+    // 与系统保留边缘。返回位置再过纯函数防御，避免异常系统值把窗口推出区域。
+    let system_constrained: NSRect =
+        unsafe { objc2::msg_send![ns_window, constrainFrameRect: desired_ns, toScreen: screen] };
+    let system = logical_rect_from_ns(system_constrained);
+    let final_frame = if system.valid() {
+        constrain_outer_frame(
+            LogicalRect::new(system.x, system.y, desired.width, desired.height),
+            visible,
+        )
+    } else {
+        desired
+    };
+    // SAFETY：`setFrame:display:` 同步设置当前窗口 outer frame，不转移所有权；
+    // bool 由 objc2 按 Objective-C BOOL ABI 转换。此调用不请求聚焦窗口。
+    let _: () = unsafe {
+        objc2::msg_send![ns_window, setFrame: ns_rect_from_logical(final_frame), display: true]
+    };
+    true
+}
+
+fn logical_rect_from_ns(rect: objc2_foundation::NSRect) -> LogicalRect {
+    LogicalRect::new(
+        rect.origin.x,
+        rect.origin.y,
+        rect.size.width,
+        rect.size.height,
+    )
+}
+
+fn ns_rect_from_logical(rect: LogicalRect) -> objc2_foundation::NSRect {
+    use objc2_foundation::{NSPoint, NSRect, NSSize};
+    NSRect::new(
+        NSPoint::new(rect.x, rect.y),
+        NSSize::new(rect.width, rect.height),
+    )
+}
+
+/// 从 visibleFrame 扣除当前 style 的 chrome 后钳制 content；计算只处理逻辑
+/// point，不接触 scale factor，因此 Retina 物理像素职责不会混入这里。
+fn fit_content_to_visible_frame(
+    requested: LogicalSize<u32>,
+    visible: LogicalRect,
+    chrome: LogicalSize<f64>,
+) -> LogicalSize<u32> {
+    if !visible.valid()
+        || !chrome.width.is_finite()
+        || !chrome.height.is_finite()
+        || chrome.width < 0.0
+        || chrome.height < 0.0
+    {
+        return requested;
+    }
+    let available_width = (visible.width - chrome.width).floor();
+    let available_height = (visible.height - chrome.height).floor();
+    if available_width < 1.0 || available_height < 1.0 {
+        return requested;
+    }
+    clamp_logical_to_work_area(
+        requested,
+        LogicalSize::new(
+            available_width.min(u32::MAX as f64) as u32,
+            available_height.min(u32::MAX as f64) as u32,
+        ),
+    )
+}
+
+/// 只移动 outer frame 使四边落入 visibleFrame，不改变尺寸。origin 可为负，
+/// 因而多屏排列在主屏左侧或下方时仍使用真实 NSScreen 坐标。
+fn constrain_outer_frame(outer: LogicalRect, visible: LogicalRect) -> LogicalRect {
+    if !outer.valid()
+        || !visible.valid()
+        || outer.width > visible.width
+        || outer.height > visible.height
+    {
+        return outer;
+    }
+    LogicalRect::new(
+        outer
+            .x
+            .clamp(visible.x, visible.x + visible.width - outer.width),
+        outer
+            .y
+            .clamp(visible.y, visible.y + visible.height - outer.height),
+        outer.width,
+        outer.height,
+    )
 }
 
 /// 在 AppKit 查询失败时，把物理 monitor 尺寸除以 scale factor 后再保守收进
@@ -376,6 +531,25 @@ fn fallback_work_area_points(monitor: PhysicalSize<u32>, scale_factor: f64) -> L
     LogicalSize::new(
         (logical.width * DISPLAY_CLAMP_RATIO).round().max(1.0) as u32,
         (logical.height * DISPLAY_CLAMP_RATIO).round().max(1.0) as u32,
+    )
+}
+
+/// AppKit 失败时的纯 fallback：有 monitor 时从物理像素除 scale 得到 point，
+/// 再保守扣除 chrome；无 monitor 时钳到 640×360。两条路径都保持请求比例且
+/// 只缩不放大，不会完全跳过限制。
+fn fallback_content_size(
+    requested: LogicalSize<u32>,
+    monitor: Option<PhysicalSize<u32>>,
+    scale_factor: f64,
+) -> LogicalSize<u32> {
+    let Some(monitor) = monitor else {
+        return clamp_logical_to_work_area(requested, FALLBACK_CONTENT_SIZE);
+    };
+    let work = fallback_work_area_points(monitor, scale_factor);
+    fit_content_to_visible_frame(
+        requested,
+        LogicalRect::new(0.0, 0.0, work.width as f64, work.height as f64),
+        LogicalSize::new(0.0, FALLBACK_CHROME_HEIGHT),
     )
 }
 
@@ -415,7 +589,10 @@ fn greatest_common_divisor(mut left: u32, mut right: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{clamp_logical_to_work_area, fallback_work_area_points};
+    use super::{
+        LogicalRect, clamp_logical_to_work_area, constrain_outer_frame, fallback_content_size,
+        fallback_work_area_points, fit_content_to_visible_frame,
+    };
     use winit::dpi::{LogicalSize, PhysicalSize};
 
     /// 超屏时按最小缩放比缩小,保持宽高比:16:9 请求在 16:9 工作区内两轴同比例。
@@ -478,5 +655,47 @@ mod tests {
             assert_eq!(got, requested);
             assert_eq!(got.width * 9, got.height * 16);
         }
+    }
+
+    /// 工作区内容恰为 16:9 仍不能直接塞入同尺寸 content：标题栏属于 outer
+    /// frame，必须先从 visibleFrame 扣除 chrome 再保持 16:9 缩小。
+    #[test]
+    fn chrome_reduces_content_even_when_visible_frame_is_sixteen_by_nine() {
+        let got = fit_content_to_visible_frame(
+            LogicalSize::new(1280, 720),
+            LogicalRect::new(0.0, 0.0, 1280.0, 720.0),
+            LogicalSize::new(0.0, 38.0),
+        );
+        assert_eq!(got, LogicalSize::new(1200, 675));
+    }
+
+    /// 位于右下边缘的窗口放大后必须平移回 visibleFrame；不能只改 inner size
+    /// 而把新增的右边或上边留在工作区外。
+    #[test]
+    fn resize_near_bottom_right_repositions_outer_frame() {
+        let got = constrain_outer_frame(
+            LogicalRect::new(900.0, 650.0, 800.0, 500.0),
+            LogicalRect::new(100.0, 50.0, 1000.0, 700.0),
+        );
+        assert_eq!(got, LogicalRect::new(300.0, 250.0, 800.0, 500.0));
+    }
+
+    /// 左侧或下侧显示器可以使用负 origin；约束必须在 NSScreen 坐标系内完成，
+    /// 不能错误地把屏幕原点假定为 (0,0)。
+    #[test]
+    fn negative_visible_origin_is_preserved_when_repositioning() {
+        let got = constrain_outer_frame(
+            LogicalRect::new(-500.0, 700.0, 1000.0, 600.0),
+            LogicalRect::new(-1440.0, -100.0, 1440.0, 900.0),
+        );
+        assert_eq!(got, LogicalRect::new(-1000.0, 200.0, 1000.0, 600.0));
+    }
+
+    /// AppKit 获取失败且没有 monitor 时，fallback 仍把任意大请求限制到有界的
+    /// 640×360 content；不会完全跳过钳制。
+    #[test]
+    fn fallback_without_monitor_is_bounded() {
+        let got = fallback_content_size(LogicalSize::new(2560, 1440), None, 2.0);
+        assert_eq!(got, LogicalSize::new(640, 360));
     }
 }

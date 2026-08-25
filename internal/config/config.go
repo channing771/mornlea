@@ -167,6 +167,38 @@ type SettingsPatch struct {
 	WindowSize WindowSize
 }
 
+// PersistenceResult 描述一次原子配置写入是否已经越过 rename 提交点。
+//
+// `Committed` 为 false 时目标路径仍是调用前的字节；为 true 时新文件已经替换
+// 目标，即使随后父目录 `Sync` 或 `Close` 报错，调用方也必须按新配置更新内存
+// 与运行时，只把错误作为掉电持久性未完全确认的警告。
+type PersistenceResult struct {
+	Committed bool
+}
+
+// PersistenceError 是原子配置写入的带提交点错误。普通校验和读取错误发生在
+// rename 前；持久性同步错误发生在 rename 后。`Config.Save` 因历史签名只返回
+// error，生产调用方可通过 `Committed` 区分“未保存”与“已保存但同步异常”。
+type PersistenceError struct {
+	committed bool
+	err       error
+}
+
+// Error 返回保留完整 I/O 上下文的错误文本。
+func (err *PersistenceError) Error() string {
+	return err.err.Error()
+}
+
+// Unwrap 返回底层 I/O 错误，供标准库错误链判定使用。
+func (err *PersistenceError) Unwrap() error {
+	return err.err
+}
+
+// Committed 报告错误发生时 rename 提交点是否已经完成。
+func (err *PersistenceError) Committed() bool {
+	return err != nil && err.committed
+}
+
 // Defaults 返回全部字段取编译期默认值的配置。它是配置文件缺省或字段缺失时的
 // 取值，也是调试面板“重置”的目标值。
 func Defaults() Config {
@@ -982,23 +1014,31 @@ func lookupCaseInsensitive(m map[string]json.RawMessage, key string) (json.RawMe
 // `audioVolume`、`texturePackPath` 与 `windowSize` 三个顶层成员。其他成员的
 // json.RawMessage 原样写回；即使加载阶段会把某个运行值钳制，保存设置也不会
 // 把钳制结果反写。文件缺失时以 `Defaults` 构造一份可再次加载的 v1 配置。
-func PatchSettings(path string, patch SettingsPatch) error {
+func PatchSettings(path string, patch SettingsPatch) (PersistenceResult, error) {
+	return patchSettingsWithFileOps(path, patch, defaultAtomicFileOps())
+}
+
+func patchSettingsWithFileOps(
+	path string,
+	patch SettingsPatch,
+	ops atomicFileOps,
+) (PersistenceResult, error) {
 	if math.IsNaN(float64(patch.AudioVolume)) || math.IsInf(float64(patch.AudioVolume), 0) ||
 		patch.AudioVolume < 0 || patch.AudioVolume > 1 {
-		return fmt.Errorf("config: audioVolume 必须是 0..1 的有限数值，实际 %v", patch.AudioVolume)
+		return PersistenceResult{}, fmt.Errorf("config: audioVolume 必须是 0..1 的有限数值，实际 %v", patch.AudioVolume)
 	}
 	if !patch.WindowSize.valid() {
-		return fmt.Errorf("config: windowSize 不支持预设 %q", patch.WindowSize)
+		return PersistenceResult{}, fmt.Errorf("config: windowSize 不支持预设 %q", patch.WindowSize)
 	}
 	if len(patch.TexturePackPath) > MaxTexturePackPathBytes {
-		return fmt.Errorf("config: texturePackPath 的 %d 个 UTF-8 字节超过上限 %d",
+		return PersistenceResult{}, fmt.Errorf("config: texturePackPath 的 %d 个 UTF-8 字节超过上限 %d",
 			len(patch.TexturePackPath), MaxTexturePackPathBytes)
 	}
 	if !utf8.ValidString(patch.TexturePackPath) {
-		return errors.New("config: texturePackPath 必须是合法 UTF-8")
+		return PersistenceResult{}, errors.New("config: texturePackPath 必须是合法 UTF-8")
 	}
 	if strings.ContainsAny(patch.TexturePackPath, "\r\n") {
-		return errors.New("config: texturePackPath 必须是单行字符串")
+		return PersistenceResult{}, errors.New("config: texturePackPath 必须是单行字符串")
 	}
 
 	contents, err := os.ReadFile(path)
@@ -1006,16 +1046,28 @@ func PatchSettings(path string, patch SettingsPatch) error {
 		contents, err = json.MarshalIndent(Defaults(), "", "  ")
 	}
 	if err != nil {
-		return fmt.Errorf("config: 读取设置待更新文件 %s: %w", path, err)
+		return PersistenceResult{}, fmt.Errorf("config: 读取设置待更新文件 %s: %w", path, err)
 	}
 	// 必须在修改 raw object 前走与 `Load` 相同的完整验证；验证只消费本次
 	// 已读取的字节，避免二次读取引入 TOCTOU 窗口。
 	if _, err := decodeConfig(path, contents); err != nil {
-		return err
+		return PersistenceResult{}, err
 	}
 	var top map[string]json.RawMessage
 	if err := json.Unmarshal(contents, &top); err != nil {
-		return fmt.Errorf("config: 解析设置待更新文件: %w", err)
+		return PersistenceResult{}, fmt.Errorf("config: 解析设置待更新文件: %w", err)
+	}
+	if top == nil {
+		// 顶层 JSON null 由既有 `Load` 语义视为“全部字段缺失”，因此完整验证
+		// 已成功。patch 前必须从 Defaults 重建含 version 的 raw object；只分配
+		// 空 map 会生成缺少版本及其他默认字段的半份配置。
+		defaultsBody, err := json.Marshal(Defaults())
+		if err != nil {
+			return PersistenceResult{}, fmt.Errorf("config: 序列化 null 配置默认值: %w", err)
+		}
+		if err := json.Unmarshal(defaultsBody, &top); err != nil {
+			return PersistenceResult{}, fmt.Errorf("config: 构造 null 配置默认对象: %w", err)
+		}
 	}
 	for key := range top {
 		if strings.EqualFold(key, "audioVolume") || strings.EqualFold(key, "texturePackPath") ||
@@ -1031,15 +1083,15 @@ func PatchSettings(path string, patch SettingsPatch) error {
 	for key, value := range values {
 		raw, err := json.Marshal(value)
 		if err != nil {
-			return fmt.Errorf("config: 序列化设置字段 %s: %w", key, err)
+			return PersistenceResult{}, fmt.Errorf("config: 序列化设置字段 %s: %w", key, err)
 		}
 		top[key] = raw
 	}
 	body, err := marshalRawObject(top)
 	if err != nil {
-		return err
+		return PersistenceResult{}, err
 	}
-	return writeAtomic(path, body)
+	return writeAtomicWithFileOps(path, body, ops)
 }
 
 // marshalRawObject 只重建顶层对象的标点与成员次序，成员值直接复制
@@ -1079,57 +1131,137 @@ func marshalRawObject(top map[string]json.RawMessage) ([]byte, error) {
 // 到目标路径，避免进程崩溃或掉电时留下半截文件覆盖旧配置。失败路径会清理
 // 临时文件。
 func (c Config) Save(path string) error {
-	body, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return fmt.Errorf("config: 序列化配置: %w", err)
-	}
-	return writeAtomic(path, body)
+	_, err := c.saveWithFileOps(path, defaultAtomicFileOps())
+	return err
 }
 
-// writeAtomic 是 `Config.Save` 与 `PatchSettings` 共用的持久化边界：临时文件
-// 与目标同目录，权限固定为仅用户可读写，文件数据和目录项均同步；rename 前
-// 的任意失败都会清理临时文件且保持旧目标不变。
-func writeAtomic(path string, body []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("config: 创建配置目录: %w", err)
-	}
-	temp, err := os.CreateTemp(dir, "config-*.json.tmp")
+func (c Config) saveWithFileOps(path string, ops atomicFileOps) (PersistenceResult, error) {
+	body, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
-		return fmt.Errorf("config: 创建临时文件: %w", err)
+		return PersistenceResult{}, fmt.Errorf("config: 序列化配置: %w", err)
+	}
+	return writeAtomicWithFileOps(path, body, ops)
+}
+
+type atomicFile interface {
+	Name() string
+	Chmod(os.FileMode) error
+	Write([]byte) (int, error)
+	Sync() error
+	Close() error
+}
+
+type syncDirectory interface {
+	Sync() error
+	Close() error
+}
+
+type atomicFileOps struct {
+	mkdirAll      func(string, os.FileMode) error
+	createTemp    func(string, string) (atomicFile, error)
+	openDirectory func(string) (syncDirectory, error)
+	rename        func(string, string) error
+	remove        func(string) error
+}
+
+func defaultAtomicFileOps() atomicFileOps {
+	return atomicFileOps{
+		mkdirAll: os.MkdirAll,
+		createTemp: func(dir, pattern string) (atomicFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		openDirectory: func(path string) (syncDirectory, error) {
+			return os.Open(path)
+		},
+		rename: os.Rename,
+		remove: os.Remove,
+	}
+}
+
+func persistenceFailure(committed bool, err error) (PersistenceResult, error) {
+	return PersistenceResult{Committed: committed}, &PersistenceError{committed: committed, err: err}
+}
+
+// writeAtomicWithFileOps 是 `Config.Save` 与 `PatchSettings` 共用的持久化边界：
+// 临时文件与目标同目录，权限固定为仅用户可读写，文件数据和目录项均同步。
+// 父目录在 rename 前打开，使所有可前置失败都发生在旧目标仍完整时；rename 是
+// 唯一提交点。提交后的目录 `Sync`/`Close` 错误仍完整返回并标记 Committed，
+// 因为此时回滚目标既不安全也不能再向上层宣称“未保存”。
+func writeAtomicWithFileOps(path string, body []byte, ops atomicFileOps) (
+	result PersistenceResult,
+	returnErr error,
+) {
+	dir := filepath.Dir(path)
+	if err := ops.mkdirAll(dir, 0o700); err != nil {
+		return persistenceFailure(false, fmt.Errorf("config: 创建配置目录: %w", err))
+	}
+	temp, err := ops.createTemp(dir, "config-*.json.tmp")
+	if err != nil {
+		return persistenceFailure(false, fmt.Errorf("config: 创建临时文件: %w", err))
 	}
 	tempPath := temp.Name()
-	defer os.Remove(tempPath) // rename 成功后路径已不存在；失败路径由此清理。
+	defer func() {
+		if err := ops.remove(tempPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			cleanupErr := fmt.Errorf("config: 清理临时文件 %s: %w", tempPath, err)
+			if returnErr == nil {
+				result, returnErr = persistenceFailure(result.Committed, cleanupErr)
+			} else {
+				result, returnErr = persistenceFailure(result.Committed, errors.Join(returnErr, cleanupErr))
+			}
+		}
+	}()
 	if err := temp.Chmod(0o600); err != nil {
-		temp.Close()
-		return fmt.Errorf("config: 设置临时文件权限: %w", err)
+		closeErr := temp.Close()
+		return persistenceFailure(false, errors.Join(
+			fmt.Errorf("config: 设置临时文件权限: %w", err), closeErr))
 	}
-	if _, err := temp.Write(body); err != nil {
-		temp.Close()
-		return fmt.Errorf("config: 写入临时文件: %w", err)
+	written, err := temp.Write(body)
+	if err == nil && written != len(body) {
+		err = io.ErrShortWrite
+	}
+	if err != nil {
+		closeErr := temp.Close()
+		return persistenceFailure(false, errors.Join(
+			fmt.Errorf("config: 写入临时文件: %w", err), closeErr))
 	}
 	if err := temp.Sync(); err != nil {
-		temp.Close()
-		return fmt.Errorf("config: 落盘临时文件: %w", err)
+		closeErr := temp.Close()
+		return persistenceFailure(false, errors.Join(
+			fmt.Errorf("config: 落盘临时文件: %w", err), closeErr))
 	}
 	if err := temp.Close(); err != nil {
-		return fmt.Errorf("config: 关闭临时文件: %w", err)
+		return persistenceFailure(false, fmt.Errorf("config: 关闭临时文件: %w", err))
 	}
-	if err := os.Rename(tempPath, path); err != nil {
-		return fmt.Errorf("config: 替换配置文件: %w", err)
-	}
-	directory, err := os.Open(dir)
+	// 目录句柄在 rename 前取得；打开失败仍处于未提交状态且目标字节不变。
+	directory, err := ops.openDirectory(dir)
 	if err != nil {
-		return fmt.Errorf("config: 打开配置目录以同步: %w", err)
+		return persistenceFailure(false, fmt.Errorf("config: 打开配置目录以同步: %w", err))
 	}
-	if err := directory.Sync(); err != nil {
-		directory.Close()
-		return fmt.Errorf("config: 同步配置目录: %w", err)
+	if err := ops.rename(tempPath, path); err != nil {
+		closeErr := directory.Close()
+		return persistenceFailure(false, errors.Join(
+			fmt.Errorf("config: 替换配置文件: %w", err), closeErr))
 	}
-	if err := directory.Close(); err != nil {
-		return fmt.Errorf("config: 关闭配置目录: %w", err)
+	result.Committed = true
+	syncErr := directory.Sync()
+	closeErr := directory.Close()
+	if syncErr != nil || closeErr != nil {
+		return persistenceFailure(true, errors.Join(
+			func() error {
+				if syncErr == nil {
+					return nil
+				}
+				return fmt.Errorf("config: 同步配置目录: %w", syncErr)
+			}(),
+			func() error {
+				if closeErr == nil {
+					return nil
+				}
+				return fmt.Errorf("config: 关闭配置目录: %w", closeErr)
+			}(),
+		))
 	}
-	return nil
+	return result, nil
 }
 
 // Apply 把当前配置值写入 physics 与 sim 的运行时快照，供权威 tick 立即生效。

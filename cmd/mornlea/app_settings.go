@@ -117,8 +117,9 @@ func configWindowFromUI(window client.UISettingsWindow) (config.WindowSize, bool
 }
 
 // saveSettings 严格按「草稿校验 → 变化材质候选校验 → 校验并 patch 最新磁盘配置 →
-// 原子落盘 → 更新 committed → 替换运行时音频和窗口」执行。前四步失败时
-// committed 与所有运行时资源均保持原状。
+// rename 提交 → 更新 committed → 替换运行时音频和窗口」执行。rename 前失败时
+// committed 与所有运行时资源均保持原状；rename 后父目录同步失败只降低掉电
+// 持久性置信度，新字节已经可见，故仍提交内存和运行时并显示有界警告。
 func (a *application) saveSettings() error {
 	draft := a.settings.draft
 	if err := draft.validate(); err != nil {
@@ -143,16 +144,29 @@ func (a *application) saveSettings() error {
 	if patchSettings == nil {
 		patchSettings = config.PatchSettings
 	}
-	if err := patchSettings(a.startupOptions.ConfigPath, config.SettingsPatch{
+	result, persistenceErr := patchSettings(a.startupOptions.ConfigPath, config.SettingsPatch{
 		AudioVolume: draft.audioVolume, TexturePackPath: draft.texturePackPath, WindowSize: draft.windowSize,
-	}); err != nil {
-		return fmt.Errorf("原子保存配置: %w", err)
+	})
+	if persistenceErr != nil && !result.Committed {
+		return fmt.Errorf("原子保存配置: %w", persistenceErr)
+	}
+	if persistenceErr == nil && !result.Committed {
+		return errors.New("原子保存配置: 写入器成功返回但未越过 rename 提交点")
+	}
+	if persistenceErr != nil {
+		// 完整错误只进日志；UI 使用下面的固定有界提示，避免路径或底层错误把
+		// client ABI 的设置文本撑破。此路径绝不能再走普通失败处理，否则会
+		// 在磁盘已是新值时错误保留旧 runtime。
+		slog.Warn("设置已保存但父目录持久性同步异常", "error", persistenceErr)
 	}
 
 	previous := a.settings.committed
 	a.settings.committed = draft
 	a.settings.error = ""
 	a.settings.status = boundedSettingsMessage("设置已保存")
+	if persistenceErr != nil {
+		a.settings.status = boundedSettingsMessage("设置已保存但持久性同步异常")
+	}
 	a.startupOptions.AudioVolume = draft.audioVolume
 	a.startupOptions.TexturePackPath = draft.texturePackPath
 	a.startupOptions.WindowSize = draft.windowSize
@@ -163,7 +177,11 @@ func (a *application) saveSettings() error {
 		a.applyWindowSize(draft.windowSize)
 	}
 	if textureChanged {
-		a.settings.status = boundedSettingsMessage("设置已保存；材质包将在下次启动时生效")
+		status := "设置已保存；材质包将在下次启动时生效"
+		if persistenceErr != nil {
+			status = "设置已保存但持久性同步异常；材质包将在下次启动时生效"
+		}
+		a.settings.status = boundedSettingsMessage(status)
 	}
 	return nil
 }

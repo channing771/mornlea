@@ -25,10 +25,14 @@ func TestPatchSettingsPreservesRawValuesOutsideOwnedMembers(t *testing.T) {
 	}
 	before := decodeRawSettingsObject(t, body)
 
-	if err := config.PatchSettings(path, config.SettingsPatch{
+	result, err := config.PatchSettings(path, config.SettingsPatch{
 		AudioVolume: 0.25, TexturePackPath: "next", WindowSize: config.WindowSize960x540,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("PatchSettings: %v", err)
+	}
+	if !result.Committed {
+		t.Fatal("PatchSettings 成功却未标记提交")
 	}
 	afterBody, err := os.ReadFile(path)
 	if err != nil {
@@ -51,8 +55,12 @@ func TestPatchSettingsMissingFileCreatesLoadableDefaults(t *testing.T) {
 	patch := config.SettingsPatch{
 		AudioVolume: 0.5, TexturePackPath: "packs/local", WindowSize: config.WindowSize640x360,
 	}
-	if err := config.PatchSettings(path, patch); err != nil {
+	result, err := config.PatchSettings(path, patch)
+	if err != nil {
 		t.Fatalf("PatchSettings: %v", err)
+	}
+	if !result.Committed {
+		t.Fatal("PatchSettings 成功却未标记提交")
 	}
 	loaded, err := config.Load(path)
 	if err != nil {
@@ -75,7 +83,7 @@ func TestPatchSettingsRejectsDamagedOrUnreadableTargetWithoutMutation(t *testing
 		if err := os.WriteFile(path, before, 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if err := config.PatchSettings(path, patch); err == nil {
+		if _, err := config.PatchSettings(path, patch); err == nil {
 			t.Fatal("damaged config unexpectedly accepted")
 		}
 		after, err := os.ReadFile(path)
@@ -92,7 +100,7 @@ func TestPatchSettingsRejectsDamagedOrUnreadableTargetWithoutMutation(t *testing
 			t.Fatal(err)
 		}
 		path := filepath.Join(parentFile, "config.json")
-		if err := config.PatchSettings(path, patch); err == nil {
+		if _, err := config.PatchSettings(path, patch); err == nil {
 			t.Fatal("I/O failure unexpectedly accepted")
 		}
 		after, err := os.ReadFile(parentFile)

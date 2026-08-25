@@ -208,7 +208,7 @@ The ordinary local client's main-menu Settings page exposes exactly three contro
 }
 ```
 
-`audioVolume` ranges from `0` to `1`. The Settings page displays and saves the raw `texturePackPath`; it must be a single line no longer than 1024 UTF-8 bytes, and relative paths resolve against the config file's directory. After a successful save, audio volume and window size apply immediately to the running process. A changed, non-empty texture-pack candidate is fully validated before the file is written, but the active atlas is not hot-swapped; the saved pack loads on the next launch. A failed save preserves the on-screen draft and does not partially change the config or current runtime state.
+`audioVolume` ranges from `0..1`. The page displays and saves the original `texturePackPath`; it must be a single line of at most 1,024 UTF-8 bytes, and relative paths resolve from the config file's directory. After a successful save, audio volume and window size apply immediately, while a changed non-empty texture-pack candidate is fully validated before writing and takes effect only on the next launch. Failures before the rename commit point preserve the draft, old file, and old runtime. If parent-directory durability synchronization fails after rename, the page reports that the settings were saved with a durability warning and still applies the new audio/window values to match disk.
 
 Beyond the three client settings, the config has four runtime groups, one optional AI group, and top-level `fluidEnabled`:
 

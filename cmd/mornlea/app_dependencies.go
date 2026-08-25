@@ -32,8 +32,9 @@ type applicationDependencies struct {
 	newGlyphAtlas        func(render.GlyphSink) (*render.GlyphAtlas, error)
 	newAudioPlayer       func(float32) (play func(audio.Cue), close func())
 	// `patchSettings` 是设置保存事务的可测试边界；生产实现只原子 patch
-	// 设置页拥有的三个 raw JSON 顶层成员，不重写同文件的其他字段。
-	patchSettings func(string, config.SettingsPatch) error
+	// 设置页拥有的三个 raw JSON 顶层成员，不重写同文件的其他字段。返回的
+	// `PersistenceResult` 明确标记 rename 是否已提交，防止目录同步警告被误判。
+	patchSettings func(string, config.SettingsPatch) (config.PersistenceResult, error)
 }
 
 func defaultApplicationDependencies() applicationDependencies {

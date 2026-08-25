@@ -45,8 +45,9 @@
 
 1. 防御性验证 draft 的音量、窗口枚举、单行 UTF-8 路径和字节上限。
 2. 仅当材质原文相对 committed 发生变化且非空时，按配置文件所在目录解析路径，并通过 `applicationDependencies.newRegistry` 完整构造候选 registry 后立即丢弃；空值不访问用户目录，未变化值不重复读取。该读取仍位于世界启动前菜单阶段，当前材质不会被替换。
-3. 调用 `config.PatchSettings` 只读取磁盘一次并先执行与 `Load` 相同的完整 v1 验证；随后在顶层 `map[string]json.RawMessage` 中只替换三项，其他顶层成员及其嵌套 raw value 原样保留，再复用与 `Config.Save` 同源的临时文件、文件 `Sync`、`chmod`、rename 与目录 `Sync` 原子边界。这样保存时并发发生的其他配置字段修改不会被 application 启动快照覆盖，加载时会钳制的数值也不会反写；若文件此时损坏，保存失败而不是重建默认文件，文件缺失才从 `Defaults` 构造合法 v1。
-4. 落盘成功后才更新 committed。若音量变化，通过既有 `newAudioPlayer` 创建新播放/关闭闭包，先完成替换再关闭旧播放器；零音量沿用不请求设备的无声路径。若窗口变化，调用 `SetContentSize`、`Poll` 和既有物理 framebuffer 上限收缩。材质只记录“下次启动生效”提示。
+3. 调用 `config.PatchSettings` 只读取磁盘一次并先执行与 `Load` 相同的完整 v1 验证；随后在顶层 `map[string]json.RawMessage` 中只替换三项，其他顶层成员及其嵌套 raw value 原样保留。顶层 `null` 既然可被 `Load` 接受为 defaults，patch 就先从 `Defaults` 重建含 version 的 raw object，避免 nil map panic 或生成缺版本的空对象。若文件此时损坏，保存失败而不是重建默认文件，文件缺失才从 `Defaults` 构造合法 v1。
+4. `PatchSettings` 与 `Config.Save` 共用可注入 fileops 的临时文件、文件 `Sync`、`chmod`、rename 与目录 `Sync` 原子边界。父目录在 rename 前打开，使可前置的目录错误不会触碰目标；rename 是唯一提交点。结果与 typed error 都携带 `Committed`：提交前错误保持旧目标，提交后目录 `Sync`/`Close` 错误仍完整上报但不得伪装成未保存。调试面板的普通 `Config.Save` 调用点同样识别该 typed error，避免把已提交写入记录成失败。
+5. rename 成功后才更新 committed。若随后出现持久性同步警告，application 仍更新 committed、应用音量/窗口并给 UI 固定有界提示，同时把完整 I/O 错误写日志。若音量变化，通过既有 `newAudioPlayer` 创建新播放/关闭闭包，先完成替换再关闭旧播放器；零音量沿用不请求设备的无声路径。若窗口变化，调用 `SetContentSize`、`Poll` 和既有物理 framebuffer 上限收缩。材质只记录“下次启动生效”提示。
 
 错误完整写入日志；UI 错误在 Go 侧按 UTF-8 边界截到 256 字节，避免任意路径错误触发 UI 编码 panic。音频设备不可用继续按既有无声降级，不把设备状态变成配置保存失败。
 
@@ -80,7 +81,7 @@ Rust 每个 egui 帧最多发一个 settings-changed，再按控件绘制顺序�
 
 ### 6. 窗口创建和运行期调整复用同一预设与双重钳制
 
-`runWithDependencies` 把生效的原始设置传入 application；交互窗口创建前用 `WindowSize.Dimensions` 取逻辑宽高。Rust 创建与 `ClientWindow::set_content_size` 从当前 NSWindow 所在 `NSScreen.visibleFrame` 读取真实逻辑 point 工作区，先保持 16:9、只缩不放大地钳制；AppKit 查询失败时才从 monitor 物理像素除以 scale factor 后取 90% 保守 fallback，连 monitor 都不可用时退到 640×360。Go 随后复用 `fitFramebuffer` 确保 Retina 等高缩放下物理 framebuffer 不超过 `2560×1440`，物理像素职责不与 Rust 的 point 工作区混合。benchmark/capture 不消费 `WindowSize`，继续走固定离屏尺寸。
+`runWithDependencies` 把生效的原始设置传入 application；交互窗口创建前用 `WindowSize.Dimensions` 取逻辑宽高。Rust 创建与 `ClientWindow::set_content_size` 从当前 NSWindow 所在 `NSScreen.visibleFrame` 保留 origin 与 size，并读取当前 outer frame；`frameRectForContentRect:` 按真实 style 计算标题栏/边框 chrome，先从工作区扣除 chrome 后保持 16:9、只缩不放大，再用 `constrainFrameRect:toScreen:` 和纯函数防御把 outer frame（包括负 origin 多屏）移入工作区，最后 `setFrame:display:`。因此正常路径不只是 `request_inner_size`。AppKit 查询失败时才从 monitor 物理像素除以 scale factor 后取 90% 并预留保守 chrome，连 monitor 都不可用时退到有界 640×360 content。Go 随后复用 `fitFramebuffer` 确保 Retina 等高缩放下物理 framebuffer 不超过 `2560×1440`，物理像素职责不与 Rust 的 point 工作区混合。benchmark/capture 不消费 `WindowSize`，继续走固定离屏尺寸。
 
 运行期 API 只承诺发出受约束的尺寸请求；窗口管理器可按平台规则调整最终尺寸。设置保存发生在同一锁定 OS 主线程，没有新增 goroutine 或跨线程窗口访问。
 
@@ -103,6 +104,7 @@ client ABI v9 和用户能力需同步 `AGENTS.md` 与 `CLAUDE.md`（逐字节�
 - [窗口管理器可能不完全接受请求尺寸] → 契约限定为受双重钳制的请求；下一次快照据实更新 renderer aspect，不伪造结果。
 - [主菜单 golden 合法变化可能掩盖其他漂移] → 只允许 `main-menu.png` 和新增 `settings-menu.png`，其余 PNG 逐字节守卫；两个 UI 图人工复核。
 - [保存同步 I/O 会短暂停顿菜单帧] → 世界和权威 tick 尚未启动，操作由用户显式触发且全部输入有界；不引入后台写入与生命周期竞态。
+- [rename 已成功但目录同步失败时无法安全回滚] → 把 rename 定义为提交点，以 typed `Committed` 结果通知 application 应用新运行态；完整 I/O 错误写日志并显示持久性警告，不制造“磁盘新值、内存旧值”的假失败。
 
 ## Migration Plan
 

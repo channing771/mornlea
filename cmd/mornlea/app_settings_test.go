@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -218,6 +219,56 @@ func TestSettingsSaveDefaultCreatesConfigV1(t *testing.T) {
 	}
 }
 
+func TestSettingsSaveProductionPatchRepairsTopLevelNull(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte("null"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	committed := settingsValues{
+		audioVolume: 0.7, texturePackPath: "packs/old", windowSize: config.WindowSize1280x720,
+	}
+	draft := settingsValues{
+		audioVolume: 0.25, texturePackPath: "", windowSize: config.WindowSize960x540,
+	}
+	app := newSettingsStateTestApplication(committed)
+	app.startupOptions.ConfigPath = path
+	app.settings.draft = draft
+	app.startupDeps = defaultApplicationDependencies()
+	var events []string
+	app.window = &settingsTestWindow{events: &events}
+	app.closeAudio = func() { events = append(events, "close old audio") }
+	app.startupDeps.newAudioPlayer = func(volume float32) (func(audio.Cue), func()) {
+		loaded, err := config.Load(path)
+		if err != nil {
+			t.Fatalf("音频应用前重载配置: %v", err)
+		}
+		if loaded.AudioVolume != draft.audioVolume || loaded.WindowSize != draft.windowSize {
+			t.Fatalf("运行态先于磁盘提交: %+v", loaded)
+		}
+		events = append(events, fmt.Sprintf("audio %.2f", volume))
+		return nil, nil
+	}
+
+	if err := app.saveSettings(); err != nil {
+		t.Fatalf("saveSettings: %v", err)
+	}
+	loaded, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if loaded.Version != config.CurrentVersion || loaded.AudioVolume != draft.audioVolume ||
+		loaded.TexturePackPath != draft.texturePackPath || loaded.WindowSize != draft.windowSize {
+		t.Fatalf("保存后的 null 配置=%+v", loaded)
+	}
+	if app.settings.committed != draft || app.settings.dirty() {
+		t.Fatalf("保存后的设置状态=%+v", app.settings)
+	}
+	wantEvents := []string{"audio 0.25", "close old audio", "window 960x540", "poll"}
+	if !reflect.DeepEqual(events, wantEvents) {
+		t.Fatalf("null 保存副作用顺序=%v want=%v", events, wantEvents)
+	}
+}
+
 func TestSettingsSavePreservesRawUnexposedConfiguration(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	body := []byte(`{
@@ -367,10 +418,10 @@ func TestSettingsSaveOrderPatchesLatestAndAppliesAfterDisk(t *testing.T) {
 			events = append(events, "registry "+path)
 			return assets.NewDefaultRegistry(), nil
 		},
-		patchSettings: func(path string, patch config.SettingsPatch) error {
+		patchSettings: func(path string, patch config.SettingsPatch) (config.PersistenceResult, error) {
 			events = append(events, "patch "+path)
 			saved = patch
-			return nil
+			return config.PersistenceResult{Committed: true}, nil
 		},
 		newAudioPlayer: func(volume float32) (func(audio.Cue), func()) {
 			events = append(events, fmt.Sprintf("audio %.2f", volume))
@@ -464,7 +515,9 @@ func TestSettingsCandidateValidationPathAndSkipRules(t *testing.T) {
 					}
 					return assets.NewDefaultRegistry(), nil
 				},
-				patchSettings: func(string, config.SettingsPatch) error { return nil },
+				patchSettings: func(string, config.SettingsPatch) (config.PersistenceResult, error) {
+					return config.PersistenceResult{Committed: true}, nil
+				},
 			}
 			if err := app.saveSettings(); err != nil {
 				t.Fatalf("saveSettings: %v", err)
@@ -497,11 +550,11 @@ func TestSettingsSaveFailuresHaveNoRuntimeSideEffectsAndKeepDraft(t *testing.T) 
 					}
 					return assets.NewDefaultRegistry(), nil
 				},
-				patchSettings: func(string, config.SettingsPatch) error {
+				patchSettings: func(string, config.SettingsPatch) (config.PersistenceResult, error) {
 					if stage == "patch" {
-						return wantErr
+						return config.PersistenceResult{}, wantErr
 					}
-					return nil
+					return config.PersistenceResult{Committed: true}, nil
 				},
 				newAudioPlayer: func(float32) (func(audio.Cue), func()) {
 					audioCreates++
@@ -519,6 +572,75 @@ func TestSettingsSaveFailuresHaveNoRuntimeSideEffectsAndKeepDraft(t *testing.T) 
 			if audioCreates != 0 || audioCloses != 0 || window.setCalls != 0 || window.pollCalls != 0 {
 				t.Fatalf("失败产生运行时副作用 audio create/close=%d/%d window=%d/%d",
 					audioCreates, audioCloses, window.setCalls, window.pollCalls)
+			}
+		})
+	}
+}
+
+func TestSettingsSavePersistenceStagesMatchCommitResult(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		committed bool
+	}{
+		{name: "directory open"},
+		{name: "rename"},
+		{name: "directory sync", committed: true},
+		{name: "directory close", committed: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			committed := settingsValues{audioVolume: 0.7, windowSize: config.WindowSize1280x720}
+			draft := settingsValues{audioVolume: 0.25, windowSize: config.WindowSize960x540}
+			app := newSettingsStateTestApplication(committed)
+			app.handleMenuEvent(menuActionSettings)
+			app.settings.draft = draft
+			window := &settingsTestWindow{}
+			app.window = window
+			audioCreates := 0
+			var logs bytes.Buffer
+			previousLogger := slog.Default()
+			slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+			t.Cleanup(func() { slog.SetDefault(previousLogger) })
+			wantErr := fmt.Errorf("%s failed", test.name)
+			app.startupDeps = applicationDependencies{
+				patchSettings: func(string, config.SettingsPatch) (config.PersistenceResult, error) {
+					return config.PersistenceResult{Committed: test.committed}, wantErr
+				},
+				newAudioPlayer: func(float32) (func(audio.Cue), func()) {
+					audioCreates++
+					return nil, nil
+				},
+			}
+
+			app.handleMenuEvent(menuActionSettingsSave)
+			if !strings.Contains(logs.String(), wantErr.Error()) {
+				t.Fatalf("完整持久性错误未写日志: %s", logs.String())
+			}
+			if test.committed {
+				if app.settings.committed != draft || app.settings.dirty() {
+					t.Fatalf("已提交警告未更新设置状态: %+v", app.settings)
+				}
+				if app.startupOptions.AudioVolume != draft.audioVolume || app.startupOptions.WindowSize != draft.windowSize {
+					t.Fatalf("已提交警告未更新启动镜像: %+v", app.startupOptions)
+				}
+				if audioCreates != 1 || window.setCalls != 1 || window.pollCalls != 1 {
+					t.Fatalf("已提交警告未应用运行态: audio=%d window=%d poll=%d", audioCreates, window.setCalls, window.pollCalls)
+				}
+				if app.settings.error != "" || !strings.Contains(app.settings.status, "已保存但持久性同步异常") {
+					t.Fatalf("已提交警告 UI 文案错误: status=%q error=%q", app.settings.status, app.settings.error)
+				}
+				return
+			}
+			if app.settings.committed != committed || !app.settings.dirty() {
+				t.Fatalf("提交前失败修改设置状态: %+v", app.settings)
+			}
+			if app.startupOptions.AudioVolume != committed.audioVolume || app.startupOptions.WindowSize != committed.windowSize {
+				t.Fatalf("提交前失败修改启动镜像: %+v", app.startupOptions)
+			}
+			if audioCreates != 0 || window.setCalls != 0 || window.pollCalls != 0 {
+				t.Fatalf("提交前失败产生运行态副作用: audio=%d window=%d poll=%d", audioCreates, window.setCalls, window.pollCalls)
+			}
+			if app.settings.error == "" || app.settings.status != "" {
+				t.Fatalf("提交前失败 UI 文案错误: status=%q error=%q", app.settings.status, app.settings.error)
 			}
 		})
 	}

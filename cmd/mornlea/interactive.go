@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"log/slog"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/companion"
+	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/physics"
@@ -217,7 +219,12 @@ func runGamePhase(app *application) error {
 			// 面板关着时误触 F5 不该在 config.DefaultPath() 悄悄创建/覆盖它。
 			if keys.Save && app.panel.visible {
 				if err := app.panel.save(app.configPath); err != nil {
-					slog.Warn("保存调试面板配置失败", "error", err)
+					var persistenceError *config.PersistenceError
+					if errors.As(err, &persistenceError) && persistenceError.Committed() {
+						slog.Warn("调试面板配置已保存但父目录持久性同步异常", "error", err)
+					} else {
+						slog.Warn("保存调试面板配置失败", "error", err)
+					}
 				}
 			}
 		}
