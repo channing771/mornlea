@@ -493,7 +493,7 @@ func (engine *Engine) advanceActivePlayers() {
 		// 像是伤害没能打断进食。它同样放在 `reset` 短路之前：`reset` 只是位置跳变
 		// 的当 tick 标记，而"位置跳变中断进食"由 `advanceEating` 自己的 `reset`
 		// 判据表达，不靠这里的短路代劳。
-		player.advanceEating(engine.tunables.EatingTicks)
+		player.advanceEating(engine.tunables.EatingTicks, session.viewContainer || !session.hasView)
 		if player.reset {
 			continue
 		}
