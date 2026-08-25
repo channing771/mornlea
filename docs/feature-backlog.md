@@ -141,7 +141,7 @@
 | E-05 | 世界 goroutine 区域分片 | 吞吐瓶颈缓解（单核 world goroutine 是硬上限）；严格限界后按维度/区域分片 | 并发结构重构，无 wire | 未认领 | — | `2026-07-26-minecraft-go-design.md` §8.1（方向性） |
 | E-06 | 图形客户端平台扩展 | Windows/Linux 客户端构建与验收（当前 engine 只承诺 Apple Silicon/macOS 正式验收） | 平台构建矩阵 | 未认领 | — | rust-engine-go-rules §16 平台链接差异 |
 | E-07 | 存档 Flush 恒脏自旋修复 | `playerPersistence.Flush` 去重键去掉 revision 或「连续 N 次重派无进展即放弃」 | 无（持久化循环修复） | 已完成 | claude-implementer @ fix/E-07-flush-stall-guard | hunger 遗留 9；独占文件集：`internal/server/player_flush.go` 及 `internal/server/` 相关测试 + OpenSpec change `fix-player-flush-stall` |
-| E-08 | `HighestOpaque` 语义改名/钉死 | 返回最高非空气方块，名不副实；跨包改名或 GoDoc 首句钉死语义 | 无（跨包改名或 GoDoc） | 未认领 | — | farming 遗留 17 |
+| E-08 | `HighestOpaque` 语义改名/钉死 | 返回最高非空气方块，名不副实；跨包改名或 GoDoc 首句钉死语义 | 无（跨包改名或 GoDoc） | 已认领 | codex-implementer @ chore/E-08-highest-opaque-semantics | farming 遗留 17；独占文件集：`internal/world/height.go`、`internal/world/height_test.go`、E-08 OpenSpec 产物与规划/基线收尾文档 |
 | E-09 | 作物×锄头耐久豁免 | 对齐 MC：手持锄头收获不扣耐久，`completeMining` 加豁免表并配测试 | 无（豁免表 + 测试） | 未认领 | — | farming 遗留 16 |
 | E-10 | `findSpawnInColumn` 读落脚盒顶面 | 出生点与 support/safe 存档点三处口径同步（耕地 1/16 空隙） | 无（出生点口径） | 未认领 | — | farming 遗留 14 |
 | E-11 | server 测试等待预算化 | 既有登录等待循环多数无界（5 分钟超时而非可读断言），统一有预算等待助手 | 无（测试基础设施） | 未认领 | — | farming 遗留 19（测试基础设施） |
