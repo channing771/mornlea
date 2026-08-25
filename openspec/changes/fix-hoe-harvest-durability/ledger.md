@@ -19,3 +19,7 @@
 - Task 1 初评：SPEC ✅；QUALITY 要求澄清 `hoeHarvestDurabilityExempt` 注释中“锄头只在翻地时磨损”的误导表述。
 - Task 1 fix round 1/5：`fbf5d82c`；原实现者把注释改为“作物 × 完好锄头是唯一豁免”，focused race 与 gofmt 通过；scoped re-review 判定 finding ADDRESSED、无新破坏。
 - Task 1 complete（`f22d2f82..fbf5d82c`，SPEC + QUALITY review clean）。
+- Task 2 实现：`7e3d5d51`；`AGENTS.md` / `CLAUDE.md` 逐字节同步唯一豁免事实，`docs/notes/progress.md` 追加交付记录。
+- Task 2 门禁：cmp、全仓 gofmt、`go vet ./...`、archcheck、change/all OpenSpec strict 与 `scripts/agents/gates.sh` 全部通过；标准门禁包含 `make rust` 与 `go test ./... -race`，未设置跳过变量。
+- Task 2 评审：SPEC ✅，QUALITY Approved，Critical/Important/Minor 均无 finding。
+- Task 2 complete（`b3a95333..7e3d5d51`，review clean）；OpenSpec 2.3 的整分支终审待控制会话 final reviewer 裁决后勾选。
