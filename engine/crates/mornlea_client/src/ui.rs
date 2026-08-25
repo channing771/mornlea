@@ -3,7 +3,7 @@
 //! 本模块是纯状态逻辑,不创建真实窗口或 GPU 资源,可无头单测。设计目标:
 //! 客户端菜单的所有**呈现**(按钮几何、标题/版本/错误行的确定性布局)与
 //! **输入翻译**([`UiEvent`] -> egui 事件)都归 Rust,而菜单**语义**(相位、
-//! 按钮 id/禁用、文本)留在 Go,经 client ABI v8 的 UI 段与事件出口双向传递。
+//! 按钮 id/禁用、文本)留在 Go,经 client ABI v9 的 UI 段与结构化事件出口双向传递。
 //!
 //! 无 GPU 时 egui 的 [`egui::Context`] 仍可跑纯 CPU 布局(字体经
 //! [`UiState::install_font`] 上传,不依赖 default_fonts),因此本模块的所有
@@ -26,8 +26,10 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 // ABI 布局常量(与 Go `EncodeUIMenu` 逐字节对应,小端;任何改动必须同时改 Go)。
 // ---------------------------------------------------------------------------
 
-/// UI 段布局版本。
+/// 主菜单 UI 段布局版本。
 pub const UI_LAYOUT_VERSION: u32 = 1;
+/// 设置页 UI 段布局版本。
+pub const UI_SETTINGS_LAYOUT_VERSION: u32 = 2;
 /// flags 中表示「菜单可见」的位(bit0)。
 pub const UI_FLAG_VISIBLE: u32 = 1;
 /// 一帧菜单允许的最大按钮数。
@@ -42,6 +44,10 @@ pub const MAX_UI_TITLE_BYTES: usize = 128;
 pub const MAX_UI_VERSION_BYTES: usize = 64;
 /// 错误行字节上界。
 pub const MAX_UI_ERROR_BYTES: usize = 256;
+/// 设置页状态提示的字节上界。
+pub const MAX_UI_STATUS_BYTES: usize = 256;
+/// 设置页材质路径的字节上界。
+pub const MAX_UI_SETTINGS_PATH_BYTES: usize = 1024;
 
 // ---------------------------------------------------------------------------
 // 菜单布局常量(全部为逻辑点,绘制函数里确定性计算,不依赖字体度量)。
@@ -98,9 +104,9 @@ pub struct UiButton {
     pub enabled: bool,
 }
 
-/// 一帧完整菜单的 Rust 表示,由 [`decode_ui_frame`] 从 ABI 段解码。
+/// 一帧完整主菜单的 Rust 表示。
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct UiFrame {
+pub struct UiMenuFrame {
     /// 菜单是否可见;不可见时 [`UiState::run_frame`] 返回 `None`。
     pub visible: bool,
     /// 大标题文本。
@@ -111,6 +117,75 @@ pub struct UiFrame {
     pub error: String,
     /// 中心纵排的按钮列表。
     pub buttons: Vec<UiButton>,
+}
+
+/// 设置页固定窗口预设。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UiSettingsWindow {
+    /// 640×360 逻辑像素。
+    Size640x360,
+    /// 960×540 逻辑像素。
+    Size960x540,
+    /// 1280×720 逻辑像素。
+    Size1280x720,
+}
+
+impl UiSettingsWindow {
+    fn decode(value: u32) -> Result<Self, ()> {
+        match value {
+            1 => Ok(Self::Size640x360),
+            2 => Ok(Self::Size960x540),
+            3 => Ok(Self::Size1280x720),
+            _ => Err(()),
+        }
+    }
+
+    fn encode(self) -> u32 {
+        match self {
+            Self::Size640x360 => 1,
+            Self::Size960x540 => 2,
+            Self::Size1280x720 => 3,
+        }
+    }
+}
+
+/// 一帧完整设置页的 Rust 表示。
+#[derive(Debug, Clone, PartialEq)]
+pub struct UiSettingsFrame {
+    /// 设置页是否可见。
+    pub visible: bool,
+    /// 总音量，闭区间 `[0,1]`。
+    pub audio_volume: f32,
+    /// 固定窗口预设。
+    pub window: UiSettingsWindow,
+    /// 材质包目录原文。
+    pub texture_pack_path: String,
+    /// 草稿是否相对已保存值有变化。
+    pub dirty: bool,
+    /// 非错误状态提示。
+    pub status: String,
+    /// 有界错误提示。
+    pub error: String,
+}
+
+/// 一帧 UI 下行快照；client ABI v9 保留主菜单 layout v1 并新增设置页
+/// layout v2。
+#[derive(Debug, Clone, PartialEq)]
+pub enum UiFrame {
+    /// 主菜单 layout v1。
+    Menu(UiMenuFrame),
+    /// 设置页 layout v2。
+    Settings(UiSettingsFrame),
+}
+
+impl UiFrame {
+    /// 报告当前布局是否可见。
+    pub fn visible(&self) -> bool {
+        match self {
+            Self::Menu(frame) => frame.visible,
+            Self::Settings(frame) => frame.visible,
+        }
+    }
 }
 
 /// 越界/截断/非 UTF-8/layout 版本错误统一映射为 `Err(())`,FFI 层再转
@@ -125,11 +200,20 @@ pub fn decode_ui_frame(bytes: &[u8]) -> Result<UiFrame, ()> {
     }
     let mut reader = Reader::new(bytes);
     let layout = reader.u32()?;
-    if layout != UI_LAYOUT_VERSION {
+    let frame = match layout {
+        UI_LAYOUT_VERSION => UiFrame::Menu(decode_menu_frame(&mut reader)?),
+        UI_SETTINGS_LAYOUT_VERSION => UiFrame::Settings(decode_settings_frame(&mut reader)?),
+        _ => return Err(()),
+    };
+    if !reader.done() {
         return Err(());
     }
+    Ok(frame)
+}
+
+fn decode_menu_frame(reader: &mut Reader<'_>) -> Result<UiMenuFrame, ()> {
     let flags = reader.u32()?;
-    let visible = flags & UI_FLAG_VISIBLE != 0;
+    let visible = decode_bool(flags)?;
     let button_count = reader.u32()? as usize;
     if button_count > MAX_UI_BUTTONS {
         return Err(());
@@ -139,26 +223,56 @@ pub fn decode_ui_frame(bytes: &[u8]) -> Result<UiFrame, ()> {
         let id = reader.u32()?;
         let label = reader.string_field(MAX_UI_LABEL_BYTES)?;
         // ABI v1 逐按钮携带 enabled u32:只接受 0(禁用)/1(启用),其余视为非法。
-        let enabled = reader.u32()?;
-        if enabled > 1 {
-            return Err(());
-        }
-        buttons.push(UiButton {
-            id,
-            label,
-            enabled: enabled == 1,
-        });
+        let enabled = decode_bool(reader.u32()?)?;
+        buttons.push(UiButton { id, label, enabled });
     }
     let title = reader.string_field(MAX_UI_TITLE_BYTES)?;
     let version = reader.string_field(MAX_UI_VERSION_BYTES)?;
     let error = reader.string_field(MAX_UI_ERROR_BYTES)?;
-    Ok(UiFrame {
+    Ok(UiMenuFrame {
         visible,
         title,
         version,
         error,
         buttons,
     })
+}
+
+fn decode_settings_frame(reader: &mut Reader<'_>) -> Result<UiSettingsFrame, ()> {
+    let visible = decode_bool(reader.u32()?)?;
+    let audio_volume = reader.f32()?;
+    if !valid_audio(audio_volume) {
+        return Err(());
+    }
+    let window = UiSettingsWindow::decode(reader.u32()?)?;
+    let texture_pack_path = reader.string_field(MAX_UI_SETTINGS_PATH_BYTES)?;
+    if texture_pack_path.contains(['\r', '\n']) {
+        return Err(());
+    }
+    let dirty = decode_bool(reader.u32()?)?;
+    let status = reader.string_field(MAX_UI_STATUS_BYTES)?;
+    let error = reader.string_field(MAX_UI_ERROR_BYTES)?;
+    Ok(UiSettingsFrame {
+        visible,
+        audio_volume,
+        window,
+        texture_pack_path,
+        dirty,
+        status,
+        error,
+    })
+}
+
+fn decode_bool(value: u32) -> Result<bool, ()> {
+    match value {
+        0 => Ok(false),
+        1 => Ok(true),
+        _ => Err(()),
+    }
+}
+
+fn valid_audio(value: f32) -> bool {
+    value.is_finite() && (0.0..=1.0).contains(&value)
 }
 
 /// 无符号小端游标读取器;任何读越界都能安全返回 `Err(())` 而不 panic。
@@ -187,6 +301,12 @@ impl<'a> Reader<'a> {
         Ok(val)
     }
 
+    /// 读一个 f32(小端)；数值域由调用方校验。
+    #[allow(clippy::result_unit_err)]
+    fn f32(&mut self) -> Result<f32, ()> {
+        Ok(f32::from_bits(self.u32()?))
+    }
+
     /// 读一个「u32 长度 + UTF-8 字节」字符串字段;长度不过上界、字节在界内且合法。
     #[allow(clippy::result_unit_err)]
     fn string_field(&mut self, max_bytes: usize) -> Result<String, ()> {
@@ -200,21 +320,183 @@ impl<'a> Reader<'a> {
         self.pos += len;
         Ok(s)
     }
+
+    fn done(&self) -> bool {
+        self.pos == self.bytes.len()
+    }
 }
 
 // ---------------------------------------------------------------------------
 // egui 上下文状态:字体、绘制、事件队列。
 // ---------------------------------------------------------------------------
 
-/// 持有 [`egui::Context`] 与菜单点击事件队列的纯状态容器。
+/// 上行 `settings-changed` 事件携带的完整设置草稿。
+#[derive(Debug, Clone, PartialEq)]
+pub struct UiSettingsValues {
+    /// 总音量，闭区间 `[0,1]`。
+    pub audio_volume: f32,
+    /// 固定窗口预设。
+    pub window: UiSettingsWindow,
+    /// 材质包目录原文。
+    pub texture_pack_path: String,
+}
+
+/// client ABI v9 的结构化 UI 上行事件。
+#[derive(Debug, Clone, PartialEq)]
+pub enum UiOutputEvent {
+    /// 由 Go 解释的动作 id。
+    Action(u32),
+    /// 一帧控件变化后的完整最终草稿。
+    SettingsChanged(UiSettingsValues),
+}
+
+/// 结构化 UI 输出队列失败原因。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UiOutputError {
+    /// 入队或排空缓冲容量不足。
+    Capacity,
+    /// 事件内部值违反线格式边界。
+    Invalid,
+}
+
+/// 每个 renderer 最多积压的结构化 UI 输出事件数。
+pub const UI_OUTPUT_QUEUE_CAPACITY: usize = 64;
+/// 结构化事件 batch 的布局版本。
+pub const UI_EVENT_BATCH_LAYOUT: u32 = 1;
+/// action 事件类型编号。
+pub const UI_EVENT_KIND_ACTION: u32 = 1;
+/// settings-changed 事件类型编号。
+pub const UI_EVENT_KIND_SETTINGS_CHANGED: u32 = 2;
+
+/// 每个 renderer 私有的 64 条有界结构化输出队列。
+#[derive(Debug)]
+pub struct UiOutputQueue {
+    pending: VecDeque<UiOutputEvent>,
+}
+
+impl Default for UiOutputQueue {
+    fn default() -> Self {
+        Self {
+            pending: VecDeque::with_capacity(UI_OUTPUT_QUEUE_CAPACITY),
+        }
+    }
+}
+
+impl UiOutputQueue {
+    /// 创建空队列。
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 返回当前待排空事件数。
+    pub fn len(&self) -> usize {
+        self.pending.len()
+    }
+
+    /// 报告队列是否为空。
+    pub fn is_empty(&self) -> bool {
+        self.pending.is_empty()
+    }
+
+    /// 入队单条事件。第 65 条显式返回 [`UiOutputError::Capacity`]，既不
+    /// 丢最旧也不丢最新；非法设置快照返回 [`UiOutputError::Invalid`]。
+    pub fn enqueue(&mut self, event: UiOutputEvent) -> Result<(), UiOutputError> {
+        self.enqueue_frame(std::slice::from_ref(&event))
+    }
+
+    /// 原子追加同一 egui 帧生成的一组事件。整组放不下时队列保持不变，
+    /// 从而保证 change-before-save 既不重排也不部分入队。
+    pub fn enqueue_frame(&mut self, events: &[UiOutputEvent]) -> Result<(), UiOutputError> {
+        if events.iter().any(|event| !valid_output_event(event)) {
+            return Err(UiOutputError::Invalid);
+        }
+        if events.len() > UI_OUTPUT_QUEUE_CAPACITY - self.pending.len() {
+            return Err(UiOutputError::Capacity);
+        }
+        self.pending.extend(events.iter().cloned());
+        Ok(())
+    }
+
+    /// 把完整 batch 写进 `out` 并仅在成功后清空队列。容量不足时 `out` 与
+    /// 队列均不变；空队列仍编码为 8 字节合法空 batch。
+    pub fn drain_into(&mut self, out: &mut [u8]) -> Result<usize, UiOutputError> {
+        let required = self.encoded_len();
+        if out.len() < required {
+            return Err(UiOutputError::Capacity);
+        }
+        let mut cursor = 0;
+        write_u32(out, &mut cursor, UI_EVENT_BATCH_LAYOUT);
+        write_u32(out, &mut cursor, self.pending.len() as u32);
+        for event in &self.pending {
+            match event {
+                UiOutputEvent::Action(action_id) => {
+                    write_u32(out, &mut cursor, UI_EVENT_KIND_ACTION);
+                    write_u32(out, &mut cursor, 4);
+                    write_u32(out, &mut cursor, *action_id);
+                }
+                UiOutputEvent::SettingsChanged(settings) => {
+                    let payload_len = 12 + settings.texture_pack_path.len();
+                    write_u32(out, &mut cursor, UI_EVENT_KIND_SETTINGS_CHANGED);
+                    write_u32(out, &mut cursor, payload_len as u32);
+                    write_u32(out, &mut cursor, settings.audio_volume.to_bits());
+                    write_u32(out, &mut cursor, settings.window.encode());
+                    write_u32(out, &mut cursor, settings.texture_pack_path.len() as u32);
+                    let end = cursor + settings.texture_pack_path.len();
+                    out[cursor..end].copy_from_slice(settings.texture_pack_path.as_bytes());
+                    cursor = end;
+                }
+            }
+        }
+        debug_assert_eq!(cursor, required);
+        self.pending.clear();
+        Ok(required)
+    }
+
+    fn encoded_len(&self) -> usize {
+        8 + self
+            .pending
+            .iter()
+            .map(|event| match event {
+                UiOutputEvent::Action(_) => 8 + 4,
+                UiOutputEvent::SettingsChanged(settings) => {
+                    8 + 12 + settings.texture_pack_path.len()
+                }
+            })
+            .sum::<usize>()
+    }
+
+    #[cfg(test)]
+    fn events(&self) -> Vec<UiOutputEvent> {
+        self.pending.iter().cloned().collect()
+    }
+}
+
+fn valid_output_event(event: &UiOutputEvent) -> bool {
+    match event {
+        UiOutputEvent::Action(_) => true,
+        UiOutputEvent::SettingsChanged(settings) => {
+            valid_audio(settings.audio_volume)
+                && settings.texture_pack_path.len() <= MAX_UI_SETTINGS_PATH_BYTES
+                && !settings.texture_pack_path.contains(['\r', '\n'])
+        }
+    }
+}
+
+fn write_u32(out: &mut [u8], cursor: &mut usize, value: u32) {
+    let end = *cursor + 4;
+    out[*cursor..end].copy_from_slice(&value.to_le_bytes());
+    *cursor = end;
+}
+
+/// 持有 [`egui::Context`] 与结构化 UI 输出队列的纯状态容器。
 ///
 /// 不建窗口、不碰 GPU;`run_frame` 全 CPU 布局,`install_font` 上传字体,
-/// `drain_events` 把点击 id 交给 Go。字体字节经 ABI 从 Go 一次性上传,
+/// `drain_events` 把 action/settings-changed batch 交给 Go。字体字节经 ABI 从 Go 一次性上传,
 /// Rust 侧不内嵌字体二进制。
 pub struct UiState {
     ctx: egui::Context,
-    /// 点击回传 Go 的按钮 id 队列。
-    pending_events: Vec<u32>,
+    /// 结构化事件输出队列。
+    pending_events: UiOutputQueue,
     /// 字体是否已成功安装(空字节安装失败保持 false)。
     font_loaded: bool,
 }
@@ -230,7 +512,7 @@ impl UiState {
     pub fn new() -> Self {
         Self {
             ctx: egui::Context::default(),
-            pending_events: Vec::new(),
+            pending_events: UiOutputQueue::new(),
             font_loaded: false,
         }
     }
@@ -262,7 +544,7 @@ impl UiState {
         self.font_loaded
     }
 
-    /// 运行一帧菜单:无字体或菜单不可见时返回 `None`(零工作)。
+    /// 运行一帧 UI:无字体或当前布局不可见时返回 `None`(零工作)。
     ///
     /// `pixels_per_point` 被写进 ROOT 视口的 `native_pixels_per_point`,
     /// 这是 egui 0.35 的缩放来源(不再作为 `run_ui` 的独立参数)。
@@ -271,23 +553,28 @@ impl UiState {
         mut raw: RawInput,
         frame: &UiFrame,
         pixels_per_point: f32,
-    ) -> Option<egui::FullOutput> {
-        if !self.font_loaded || !frame.visible {
-            return None;
+    ) -> Result<Option<egui::FullOutput>, UiOutputError> {
+        if !self.font_loaded || !frame.visible() {
+            return Ok(None);
         }
         if let Some(info) = raw.viewports.get_mut(&ViewportId::ROOT) {
             info.native_pixels_per_point = Some(pixels_per_point);
         }
-        // 字段级分离借用:ctx 只读,pending_events 可变,二者互不冲突。
-        let pending = &mut self.pending_events;
-        let frame_ref = frame;
-        let output = self.ctx.run_ui(raw, |ui| draw_menu(ui, frame_ref, pending));
-        Some(output)
+        let mut frame_events = Vec::new();
+        let output = match frame {
+            UiFrame::Menu(frame) => self
+                .ctx
+                .run_ui(raw, |ui| draw_menu(ui, frame, &mut frame_events)),
+            // 设置页控件由任务 3 接入；任务 2 只建立可验证的 layout 与事件核心。
+            UiFrame::Settings(_) => self.ctx.run_ui(raw, |_| {}),
+        };
+        self.pending_events.enqueue_frame(&frame_events)?;
+        Ok(Some(output))
     }
 
-    /// 排空并返回累积的点击事件 id(读前清空)。
-    pub fn drain_events(&mut self) -> Vec<u32> {
-        std::mem::take(&mut self.pending_events)
+    /// 把累积结构化事件按 client ABI v9 完整 batch 排空到 `out`。
+    pub fn drain_events(&mut self, out: &mut [u8]) -> Result<usize, UiOutputError> {
+        self.pending_events.drain_into(out)
     }
 
     /// 暴露内部 egui 上下文,供 GPU 半部做 tessellation。
@@ -327,8 +614,8 @@ fn menu_button_layout(screen: Rect, n: usize) -> Vec<Rect> {
 /// 全部布局几何由 [`menu_button_layout`] 确定性计算;文本用 `Painter::text`
 /// 以固定锚点定位(不参与流式布局,因此不受字体度量影响),按钮用
 /// `scope_builder + add_enabled` 落在固定矩形并响应点击。已点击且
-/// `enabled` 的按钮 id 压入 `pending`。
-fn draw_menu(ui: &mut egui::Ui, frame: &UiFrame, pending: &mut Vec<u32>) {
+/// `enabled` 的按钮 id 以 [`UiOutputEvent::Action`] 压入 `pending`。
+fn draw_menu(ui: &mut egui::Ui, frame: &UiMenuFrame, pending: &mut Vec<UiOutputEvent>) {
     let screen = ui.max_rect();
 
     // 全屏不透明深灰背景。
@@ -364,7 +651,7 @@ fn draw_menu(ui: &mut egui::Ui, frame: &UiFrame, pending: &mut Vec<u32>) {
             })
             .inner;
         if button.enabled && response.clicked() {
-            pending.push(button.id);
+            pending.push(UiOutputEvent::Action(button.id));
         }
     }
 
@@ -718,6 +1005,10 @@ pub fn winit_to_ui_events(
 }
 
 #[cfg(test)]
+#[path = "ui/settings_abi_tests.rs"]
+mod settings_abi_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -769,7 +1060,7 @@ mod tests {
     }
 
     /// 主菜单四按钮夹具(与 spec 一致:多人/设置禁用,进入/退出启用)。
-    fn four_button_frame() -> Vec<u8> {
+    pub(super) fn four_button_frame() -> Vec<u8> {
         encode_frame(
             UI_LAYOUT_VERSION,
             UI_FLAG_VISIBLE,
@@ -800,6 +1091,20 @@ mod tests {
             "dev",
             "",
         )
+    }
+
+    fn menu(frame: &UiFrame) -> &UiMenuFrame {
+        match frame {
+            UiFrame::Menu(menu) => menu,
+            UiFrame::Settings(_) => panic!("测试夹具应为主菜单"),
+        }
+    }
+
+    fn take_output_events(state: &mut UiState) -> Vec<UiOutputEvent> {
+        let events = state.pending_events.events();
+        let mut out = vec![0u8; 4096];
+        state.drain_events(&mut out).unwrap();
+        events
     }
 
     #[test]
@@ -913,6 +1218,7 @@ mod tests {
             "",
         ))
         .unwrap();
+        let frame = menu(&frame);
         assert!(frame.visible);
         assert_eq!(frame.title, "");
         assert_eq!(frame.version, "");
@@ -935,6 +1241,7 @@ mod tests {
             &error,
         ))
         .unwrap();
+        let frame = menu(&frame);
         assert!(frame.visible);
         assert_eq!(frame.buttons.len(), 8);
         assert_eq!(frame.buttons[7].id, 7);
@@ -962,6 +1269,7 @@ mod tests {
             "存档无法打开",
         ))
         .unwrap();
+        let frame = menu(&frame);
         assert!(frame.visible);
         assert_eq!(frame.title, "Mornlea");
         assert_eq!(frame.version, "dev");
@@ -1053,7 +1361,7 @@ mod tests {
             1.0,
             None,
         );
-        state.run_frame(move_only, frame, 1.0);
+        state.run_frame(move_only, frame, 1.0).unwrap();
         let press = raw_input(
             &[
                 UiEvent::CursorMoved(center.x as f64, center.y as f64),
@@ -1063,7 +1371,7 @@ mod tests {
             1.0,
             None,
         );
-        state.run_frame(press, frame, 1.0);
+        state.run_frame(press, frame, 1.0).unwrap();
         let release = raw_input(
             &[
                 UiEvent::CursorMoved(center.x as f64, center.y as f64),
@@ -1073,7 +1381,7 @@ mod tests {
             1.0,
             None,
         );
-        state.run_frame(release, frame, 1.0);
+        state.run_frame(release, frame, 1.0).unwrap();
     }
 
     #[test]
@@ -1086,8 +1394,11 @@ mod tests {
         // 点击启用的「退出游戏」(id=4)中心,应恰好回传该 id 一次。
         let target = rects[3].center();
         click_button(&mut state, &frame, target);
-        assert_eq!(state.drain_events(), vec![4]);
-        assert!(state.drain_events().is_empty());
+        assert_eq!(
+            take_output_events(&mut state),
+            vec![UiOutputEvent::Action(4)]
+        );
+        assert!(take_output_events(&mut state).is_empty());
     }
 
     #[test]
@@ -1098,15 +1409,18 @@ mod tests {
 
         // 经 wire 的禁用路径:由 enabled=0 的字节解码出「多人游戏」禁用帧,点击其中心不产生事件。
         let frame = decode_ui_frame(&four_button_frame()).unwrap();
-        assert!(!frame.buttons[1].enabled);
+        assert!(!menu(&frame).buttons[1].enabled);
         click_button(&mut state, &frame, rects[1].center());
-        assert!(state.drain_events().is_empty());
+        assert!(take_output_events(&mut state).is_empty());
 
         // 同布局但 enabled=1:点击同样位置返回该按钮 id。
         let frame2 = decode_ui_frame(&four_button_frame_all_enabled()).unwrap();
-        assert!(frame2.buttons[1].enabled);
+        assert!(menu(&frame2).buttons[1].enabled);
         click_button(&mut state, &frame2, rects[1].center());
-        assert_eq!(state.drain_events(), vec![2]);
+        assert_eq!(
+            take_output_events(&mut state),
+            vec![UiOutputEvent::Action(2)]
+        );
     }
 
     #[test]
@@ -1119,11 +1433,14 @@ mod tests {
         // 指针落在首按钮中心:恰好只命中按钮 1,且只产生一次事件。
         let center = rects[0].center();
         click_button(&mut state, &frame, center);
-        assert_eq!(state.drain_events(), vec![1]);
+        assert_eq!(
+            take_output_events(&mut state),
+            vec![UiOutputEvent::Action(1)]
+        );
 
         // 指针落在距所有按钮都远的点(屏幕上方标题区):不命中任何按钮。
         click_button(&mut state, &frame, egui::pos2(640.0, 40.0));
-        assert!(state.drain_events().is_empty());
+        assert!(take_output_events(&mut state).is_empty());
     }
 
     #[test]
@@ -1211,8 +1528,12 @@ mod tests {
 
         let first = state
             .run_frame(raw.clone(), &frame, 1.0)
+            .expect("事件队列应有容量")
             .expect("应产出布局");
-        let second = state.run_frame(raw, &frame, 1.0).expect("应产出布局");
+        let second = state
+            .run_frame(raw, &frame, 1.0)
+            .expect("事件队列应有容量")
+            .expect("应产出布局");
         assert_eq!(first.shapes.len(), second.shapes.len());
         assert!(
             second.textures_delta.is_empty(),
@@ -1238,6 +1559,7 @@ mod tests {
         .expect("0 按钮帧应可解码");
         let full = state
             .run_frame(raw_input(&[], screen_rect(), 1.0, None), &frame, 1.0)
+            .expect("事件队列应有容量")
             .expect("应产出布局");
         let has_title = full.shapes.iter().any(|clipped| {
             matches!(&clipped.shape, egui::Shape::Text(t) if t.galley.job.text.contains("Mornlea"))
@@ -1252,14 +1574,19 @@ mod tests {
         assert!(
             state
                 .run_frame(raw_input(&[], screen_rect(), 1.0, None), &frame, 1.0)
+                .expect("事件队列应有容量")
                 .is_none()
         );
         state.install_font(test_font());
         let mut hidden = frame.clone();
-        hidden.visible = false;
+        match &mut hidden {
+            UiFrame::Menu(menu) => menu.visible = false,
+            UiFrame::Settings(_) => panic!("测试夹具应为主菜单"),
+        }
         assert!(
             state
                 .run_frame(raw_input(&[], screen_rect(), 1.0, None), &hidden, 1.0)
+                .expect("事件队列应有容量")
                 .is_none()
         );
     }
