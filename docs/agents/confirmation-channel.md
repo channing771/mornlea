@@ -98,7 +98,7 @@ confirm.sh list
 
 | kind | 语义 | 你的回复 | 判定 |
 |---|---|---|---|
-| `question` 澄清提问 | brainstorm 的细节问题（一次一个）：选 A/B、边界、数值等 | 直接回复答案（如「A」） | action=`answer`（文本进 reply.text，实现者继续分析/追问；同任务澄清 ≤5 轮）|
+| `question` 澄清提问 | brainstorm 的细节问题（一次一个）：选 A/B、边界、数值等；带选项时用 `--option` 逐项传，卡片按编号逐行渲染 | 直接回复答案（如「A」） | action=`answer`（文本进 reply.text，实现者继续分析/追问；同任务澄清 ≤5 轮）|
 | `approval` 内容确认 | 设计敲定后的批准请求 | ✅/批准/同意/ok/approve/继续/可以/确认 | action=`approve`（开工）|
 | approval | 修改意见 | 其他文本 | action=`edit`（修订设计后重新确认）|
 | 任一 | 终止 | ❌/驳回/拒绝/取消/reject/不行 | action=`reject`（停在确认点）|

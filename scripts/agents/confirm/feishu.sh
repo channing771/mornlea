@@ -82,12 +82,15 @@ case "${1:-}" in
       NOTE="请回复：✅ 批准（或直接回复修改意见；带 #$ID 可精确指定该任务）"
     fi
     DESIGN_BODY="$(printf '%s' "$DESIGN" | fmt_design)"
-    CARD="$(jq -nc --arg id "$ID" --arg t "$TITLE" --arg c "$CATEGORY" --arg q "$QUESTION" --arg d "$DESIGN_BODY" --arg hp "$HEAD_PREFIX" --arg note "$NOTE" '{
+    # 选项数组原样传入（每个选项渲染为独立编号行；无选项则不渲染该区）
+    CARD="$(jq -nc --arg id "$ID" --arg t "$TITLE" --arg c "$CATEGORY" --arg q "$QUESTION" --argjson o "$(jq -c '.options // []' "$REQ")" --arg d "$DESIGN_BODY" --arg hp "$HEAD_PREFIX" --arg note "$NOTE" '{
   config: { wide_screen_mode: true },
   header: { template: "blue", title: { tag: "plain_text", content: ($hp + $id + " " + $t) } },
   elements: [
     { tag: "div", text: { tag: "lark_md", content: (
-      "**分类**：" + $c + "\n\n**问题**：\n" + $q + ($d | if . == "" then "" else "\n\n**短设计**：\n" + . end)
+      "**分类**：" + $c + "\n\n**问题**：\n" + $q
+      + ($o | if length == 0 then "" else "\n\n**选项**：\n" + (to_entries | map("- " + (.key + 1 | tostring) + ". " + .value) | join("\n")) end)
+      + ($d | if . == "" then "" else "\n\n**短设计**：\n" + . end)
     ) } },
     { tag: "hr" },
     { tag: "note", elements: [ { tag: "plain_text", content: $note } ] }
