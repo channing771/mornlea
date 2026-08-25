@@ -79,7 +79,8 @@ scripts/agents/install-launchd.sh   # 生成 ~/Library/LaunchAgents/com.mornlea.
 | `AGENT_INTERACTIVE` | `0` | `1` 时 claude 以终端交互模式运行（可用 `ask_user_question` 直接问你；仅 claude 支持）|
 | `AGENT_CONFIRM_CHANNEL` | `auto` | 内容确认通道：`feishu`（推送设备）/ `discussion`（GitHub 评论）/ `none`（本地记录）/ `auto`（有飞书配置则 feishu，否则 none）|
 | `MORNLEA_CONFIRM_DIR` | `~/.mornlea/confirm` | 确认请求/回复/飞书配置文件目录 |
-| `AGENT_EXTRA_ARGS` | 空 | 透传给 agent CLI 的附加参数（如 claude 的 `--permission-mode acceptEdits`）|
+| `AGENT_EXTRA_ARGS` | 空 | 透传给 agent CLI 的附加参数 |
+| `AGENT_SAFE` | `0` | 权限模式：`0`（默认）= 最高权限（claude `--dangerously-skip-permissions`；codex `--dangerously-bypass-approvals-and-sandbox`，经用户明确要求）；`1` = 受限（claude 逐项批准 / codex `--approve-for-me`）。仓库 hooks 始终独立生效 |
 
 ## 日志与追溯
 
