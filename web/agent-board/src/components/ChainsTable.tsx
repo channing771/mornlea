@@ -1,21 +1,19 @@
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { EmptyHint } from '@/components/EmptyHint';
 import type { ChainStatus } from '@/api';
 
-// ChainsTable 展示接力链；存活绿、已死灰，stale 额外标记。
+// ChainsTable 展示接力链；存活绿（emerald）、已死中性 slate，stale 以小号 muted 副标呈现。
 function ChainsTable({ chains }: { chains: ChainStatus[] }) {
   if (!chains || chains.length === 0) {
-    return (
-      <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-        无接力链
-      </div>
-    );
+    return <EmptyHint>无接力链</EmptyHint>;
   }
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>链</TableHead>
+    <div className="overflow-hidden rounded-md border border-border bg-card">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>链</TableHead>
           <TableHead>pid</TableHead>
           <TableHead>存活</TableHead>
           <TableHead>守卫修改时间</TableHead>
@@ -25,22 +23,23 @@ function ChainsTable({ chains }: { chains: ChainStatus[] }) {
       <TableBody>
         {chains.map((c, i) => (
           <TableRow key={c.id || i}>
-            <TableCell>{c.id}</TableCell>
-            <TableCell className="font-mono text-xs">{c.pid || ''}</TableCell>
+            <TableCell className="font-mono text-xs">{c.id}</TableCell>
+            <TableCell className="font-mono text-xs">{c.pid || '-'}</TableCell>
             <TableCell>
               {c.alive ? (
-                <Badge variant="success" className="rounded-full">存活</Badge>
+                <Badge variant="success">存活</Badge>
               ) : (
-                <Badge variant="secondary" className="rounded-full">已死</Badge>
+                <Badge variant="secondary">已死</Badge>
               )}
               {c.stale && <span className="ml-2 text-xs text-muted-foreground">(stale)</span>}
             </TableCell>
-            <TableCell className="font-mono text-xs">{c.mtime || ''}</TableCell>
-            <TableCell className="text-xs text-muted-foreground">{c.note || ''}</TableCell>
+            <TableCell className="font-mono text-xs">{c.mtime || '-'}</TableCell>
+            <TableCell className="text-xs text-muted-foreground">{c.note || '-'}</TableCell>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 

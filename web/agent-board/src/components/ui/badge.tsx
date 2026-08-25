@@ -2,8 +2,9 @@ import * as React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
+// 徽章一律 full-pill（rounded-full），无 hover 变化，故不设 transition（符合动效纪律：只允许 opacity/transform 过渡）。
 const badgeVariants = cva(
-  'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors',
+  'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium',
   {
     variants: {
       variant: {
