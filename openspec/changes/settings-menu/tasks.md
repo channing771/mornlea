@@ -12,7 +12,7 @@
 
 ## 4. Go 设置事务与运行时接线
 
-- [ ] 4.1 在 `cmd/mornlea` 以测试先行方式实现 Go 所有的 committed/draft 状态机、最新配置 patch-save、材质候选预验证、错误保留、成功后音频替换与窗口 resize，并把设置入口接入普通本地主菜单；覆盖取消、clean/dirty 返回、保存顺序、失败原子性、相对路径、配置加载与直接注入对 CR/LF 路径的防御、现存额外配置字段保留、`-connect`/benchmark/capture 隔离及启动窗口预设；运行 `go test ./cmd/mornlea -race -count=1`。
+- [x] 4.1 在 `cmd/mornlea` 以测试先行方式实现 Go 所有的 committed/draft 状态机、最新配置 patch-save、材质候选预验证、错误保留、成功后音频替换与窗口 resize，并把设置入口接入普通本地主菜单；覆盖取消、clean/dirty 返回、保存顺序、失败原子性、相对路径、配置加载与直接注入对 CR/LF 路径的防御、现存额外配置字段保留、`-connect`/benchmark/capture 隔离及启动窗口预设；运行 `go test ./cmd/mornlea -race -count=1`。
 
 ## 5. 视觉基线与长期文档
 
