@@ -379,8 +379,8 @@ func (engine *Engine) completeCompanionMining(
 // hoeHarvestDurabilityExempt 报告一次玩家采掘完成是否豁免扣耐久：被移除的方块
 // 是作物（`core.IsCrop`，小麦八个生长阶段）且完成时选中物是完好锄头
 // （`core.TillingTool`）。这是 authoritative-farming 遗留 16 所说的「作物 × 锄头」
-// 豁免表——当前唯一条目，锄头只在翻地时磨损；第二个「方块 × 工具」条目出现时
-// 再考虑表结构。损坏形态被 `core.TillingTool` 显式排除（它只枚举两个完好锄头
+// 豁免表——当前唯一条目；锄头破坏非作物仍沿用既有扣耐久规则。第二个「方块 × 工具」
+// 条目出现时再考虑表结构。损坏形态被 `core.TillingTool` 显式排除（它只枚举两个完好锄头
 // 编号），因此持损坏锄头收获作物走不进豁免——本就没有耐久可扣。伙伴采掘路径
 // （`completeCompanionMining`）不设本守卫：`companionMineableBlock` 的防御清单
 // 已显式拒绝全部农业方块，豁免在伙伴侧不可达，加守卫是死代码。
