@@ -152,11 +152,16 @@ function cardEventData(data) {
   const raw = action.value !== undefined ? action.value : (ev.action_value !== undefined ? ev.action_value : '');
   let value = raw;
   if (typeof raw === 'string') { try { value = JSON.parse(raw); } catch (_) { /* 保留原串 */ } }
+  // 手动输入区（form 容器）：点「发送」时回调携带 form_value（JSON 字符串，键为 input 的 name）
+  const rawForm = action.form_value !== undefined ? action.form_value : (ev.form_value !== undefined ? ev.form_value : '');
+  let formValue = rawForm;
+  if (typeof rawForm === 'string' && rawForm) { try { formValue = JSON.parse(rawForm); } catch (_) { /* 保留原串 */ } }
   return {
     operator: (ev.operator && ev.operator.open_id) || ev.operator_id || '',
     messageId: ctx.message_id || ctx.open_message_id || ev.message_id || '',
     chatId: ctx.chat_id || ev.chat_id || '',
     value,
+    formValue: (formValue && typeof formValue === 'object') ? formValue : {},
   };
 }
 
@@ -169,8 +174,11 @@ function handleCardAction(cfg, data) {
   if (!target && ev.messageId) target = pending.find((p) => p.feishuMessageId === ev.messageId) || null;
   if (!target) { log('卡片按钮无匹配请求（value=' + JSON.stringify(value) + '），忽略'); return; }
   if (target.status !== 'pending') { log('请求 ' + target.id + ' 已答复，忽略按钮（value=' + JSON.stringify(value) + '）'); return; }
-  const action = value.action || classifyReply(String(value.text || ''), target.kind || 'approval');
-  const text = value.text !== undefined ? String(value.text) : '';
+  // 手动输入区提交：以输入框文本为准，按文本规则判定动作（批准类：关键词→批准，其他→修改意见；提问类→答案）
+  const manualText = (ev.formValue && ev.formValue.note) ? String(ev.formValue.note).trim() : '';
+  let action = value.action || classifyReply(String(value.text || ''), target.kind || 'approval');
+  let text = manualText || (value.text !== undefined ? String(value.text) : '');
+  if (manualText && action === 'manual') action = classifyReply(manualText, target.kind || 'approval');
   const reply = writeReply(target.id, action, text, { senderOpenId: ev.operator, chatId: ev.chatId, messageId: ev.messageId });
   log('#HANDLED-CARD ' + target.id + ' action=' + action);
   if (ev.operator) { const label = (target.kind === 'question' ? '提问' : '确认') + '已收到（' + action + '）'; sendAck(cfg, ev.operator, label + '，实现者将从 ' + target.id + '.reply.json 继续。'); }

@@ -76,10 +76,10 @@ case "${1:-}" in
     KIND="$(jq -r '.kind // "approval"' "$REQ")"
     if [ "$KIND" = "question" ]; then
       HEAD_PREFIX="澄清提问："
-      NOTE="点按下方按钮直接回答；也可点本卡片消息「回复」输入文字（自动锁定本提问）或带 #\${ID}"
+      NOTE="点按下方按钮直接回答；有补充/其他答案请在输入框写好后点「发送」，或「回复」本卡片消息（自动锁定本提问）"
     else
       HEAD_PREFIX="内容确认："
-      NOTE="点按下方按钮批准/驳回；如需修改意见，点本卡片消息「回复」写下意见（自动锁定本任务）或带 #\${ID}"
+      NOTE="点按下方按钮批准/驳回；如需修改意见，在下方输入框写下意见后点「发送」（或「回复」本卡片消息）"
     fi
     DESIGN_BODY="$(printf '%s' "$DESIGN" | fmt_design)"
     # 选项渲染为可点按按钮（value 携带请求 ID 与选中项，点哪个答哪个，多待确认也不会答错）；
@@ -104,6 +104,8 @@ case "${1:-}" in
         { tag: "button", text: { tag: "plain_text", content: "❌ 驳回" }, type: "danger", value: { id: $id, action: "reject", text: "驳回" } }
       ]')"
     fi
+    # 手动输入区：form 容器 + input + 发送按钮；点「发送」时回调携带 form_value（JSON 字符串，
+    # 键为 input 的 name=note），listener 按文本规则判定（批准类：关键词→批准，其他→修改意见；提问类→答案）
     CARD="$(jq -nc --arg id "$ID" --arg t "$TITLE" --arg c "$CATEGORY" --arg q "$QUESTION" --argjson o "$(jq -c '.options // []' "$REQ")" --argjson actions "$ACTIONS" --arg d "$DESIGN_BODY" --arg hp "$HEAD_PREFIX" --arg note "$NOTE" '{
   config: { wide_screen_mode: true },
   header: { template: "blue", title: { tag: "plain_text", content: ($hp + $id + " " + $t) } },
@@ -114,6 +116,13 @@ case "${1:-}" in
       + ($d | if . == "" then "" else "\n\n**短设计**：\n" + . end)
     ) } },
     { tag: "action", actions: $actions },
+    { tag: "form", name: "manual", elements: [
+      { tag: "input", name: "note",
+        label: { tag: "plain_text", content: "手动输入（修改意见 / 补充说明 / 完整答案）" },
+        placeholder: { tag: "plain_text", content: "在这里输入…（输入后点下方「发送」）" },
+        is_required: false, max_length: 512 },
+      { tag: "button", name: "submit", form_action_type: "submit", text: { tag: "plain_text", content: "发送输入内容" }, type: "primary" }
+    ] },
     { tag: "hr" },
     { tag: "note", elements: [ { tag: "plain_text", content: $note } ] }
   ]
