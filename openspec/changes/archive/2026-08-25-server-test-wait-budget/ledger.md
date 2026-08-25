@@ -53,3 +53,4 @@
 - Ruling: archive operation guidance 中同步 `AGENTS.md`/`CLAUDE.md`/`docs/notes/progress.md` 对本变更不适用 — proposal 明确本变更只整理测试基础设施，不新增 capability、不改变产品行为或任何契约版本，长期基线不得写入非产品能力 — 强行同步会把测试实现细节误记为产品能力；因此三份文件均不改，并以 `cmp -s AGENTS.md CLAUDE.md` 通过确认现有双文档仍逐字节一致。
 - 规划回填：`docs/feature-backlog.md` 的 E-11 已更新为“已完成”，认领人履历保留；PR/CI 待执行。
 - 归档后验证：OpenSpec strict 64 passed / 0 failed，`go test ./internal/archcheck -count=1` 通过（3.997s），`gofmt -l .` 无输出，`git diff --check` 通过；归档目录内 `.openspec.yaml` 存在。
+- PR：[#80](https://github.com/channing771/mornlea/pull/80)，标题 `test: E-11 budget server login waits`；最新 head 的 CI pending。
