@@ -28,6 +28,42 @@ import (
 // CurrentVersion 是本程序认识的配置文件版本。
 const CurrentVersion = 1
 
+// MaxTexturePackPathBytes 是 `texturePackPath` 原文允许的最大 UTF-8 字节数。
+// 配置加载与设置界面共用这一边界，避免固定大小的跨语言设置快照被路径撑破。
+const MaxTexturePackPathBytes = 1024
+
+// WindowSize 是交互式客户端窗口的逻辑尺寸预设。
+type WindowSize string
+
+const (
+	// WindowSize640x360 是最小的 16:9 窗口预设。
+	WindowSize640x360 WindowSize = "640x360"
+	// WindowSize960x540 是中等的 16:9 窗口预设。
+	WindowSize960x540 WindowSize = "960x540"
+	// WindowSize1280x720 是默认的 16:9 窗口预设。
+	WindowSize1280x720 WindowSize = "1280x720"
+)
+
+// Dimensions 返回预设对应的逻辑宽高；无效值返回零尺寸。配置加载会拒绝
+// 无效值，零尺寸只为直接构造 `WindowSize` 的调用方保留可检测的失败结果。
+func (size WindowSize) Dimensions() (width, height int) {
+	switch size {
+	case WindowSize640x360:
+		return 640, 360
+	case WindowSize960x540:
+		return 960, 540
+	case WindowSize1280x720:
+		return 1280, 720
+	default:
+		return 0, 0
+	}
+}
+
+func (size WindowSize) valid() bool {
+	width, height := size.Dimensions()
+	return width != 0 && height != 0
+}
+
 // 远环 LOD 调参项的合法域（rust-engine-lod-shell design「Go 编排」裁决）。
 // 这组常量是 multiplier 钳制与 step 离散集的唯一权威：Load 的解析、
 // NormalizeLOD 与 cmd/mornlea 的接线推导都从这里取值，不另写第二份数字。
@@ -98,6 +134,8 @@ type Config struct {
 	// AudioVolume 是本机音频反馈的总音量，范围为闭区间 [0,1]。它是独立
 	// 顶层字段，不进入 `Fields`：调试面板只承载既有的数值调参分组。
 	AudioVolume float32 `json:"audioVolume"`
+	// WindowSize 是交互式客户端使用的固定逻辑窗口尺寸，不进入 `Fields`。
+	WindowSize WindowSize `json:"windowSize"`
 
 	// FluidEnabled 控制世界生成是否在海平面及其以下注水（权威流体，变更
 	// authoritative-fluid）。它是独立顶层布尔开关，不进 Fields()/physics/sim
@@ -132,6 +170,7 @@ func Defaults() Config {
 			LodStep:          LodStepDefault,
 		},
 		AudioVolume: 0.7,
+		WindowSize:  WindowSize1280x720,
 		// 默认开启：fluid-presentation-survival 交付呈现与生存后，水已是
 		// 面向普通玩家的正常世界内容，见字段 GoDoc。
 		FluidEnabled: true,
@@ -227,6 +266,10 @@ func decodeConfig(path string, contents []byte) (Config, error) {
 		if texturePackPath == nil {
 			return Config{}, errors.New("config: 解析 texturePackPath 字段: 必须是字符串")
 		}
+		if len(*texturePackPath) > MaxTexturePackPathBytes {
+			return Config{}, fmt.Errorf("config: 解析 texturePackPath 字段: %d 个 UTF-8 字节超过上限 %d",
+				len(*texturePackPath), MaxTexturePackPathBytes)
+		}
 		cfg.TexturePackPath = *texturePackPath
 		if cfg.TexturePackPath != "" {
 			if filepath.IsAbs(cfg.TexturePackPath) {
@@ -249,6 +292,16 @@ func decodeConfig(path string, contents []byte) (Config, error) {
 			return Config{}, fmt.Errorf("config: audioVolume 超出 0..1: %v", *volume)
 		}
 		cfg.AudioVolume = *volume
+	}
+	if raw, ok := lookupCaseInsensitive(top, "windowSize"); ok {
+		var windowSize *WindowSize
+		if err := json.Unmarshal(raw, &windowSize); err != nil || windowSize == nil {
+			return Config{}, errors.New("config: 解析 windowSize 字段: 必须是窗口尺寸字符串")
+		}
+		if !windowSize.valid() {
+			return Config{}, fmt.Errorf("config: 解析 windowSize 字段: 不支持的预设 %q", *windowSize)
+		}
+		cfg.WindowSize = *windowSize
 	}
 	// fluidEnabled 是独立顶层布尔字段，不经 applyGroups 的数值钳制路径：
 	// 类型错误（如写成字符串）与 version 字段一样直接报错，不做静默降级——
@@ -854,7 +907,7 @@ func applyRenderLOD(render *Render, fields map[string]json.RawMessage) error {
 
 // warnUnknownTopLevel 对不认识的顶层分组名 slog.Warn。
 func warnUnknownTopLevel(top map[string]json.RawMessage) {
-	known := map[string]bool{"version": true, "logging": true, "physics": true, "sim": true, "render": true, "ai": true, "texturepackpath": true, "audiovolume": true, "fluidenabled": true}
+	known := map[string]bool{"version": true, "logging": true, "physics": true, "sim": true, "render": true, "ai": true, "texturepackpath": true, "audiovolume": true, "windowsize": true, "fluidenabled": true}
 	for key := range top {
 		if !known[strings.ToLower(key)] {
 			slog.Warn("配置项未知字段已忽略", "field", key)
