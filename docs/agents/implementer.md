@@ -64,7 +64,8 @@
 □ AGENTS.md 与 CLAUDE.md 逐字节相同（cmp -s）且只写已验证事实
 □ docs/notes/progress.md 追加基线段落
 □ docs/feature-backlog.md 该行 → 已完成（认领人保留履历）；集成任务受影响时同步 A/I 行
-□ GitHub Discussion #71 **追加状态评论**（每次状态变化都要，含 F 组；正文表格留给规划者全量同步）
+□ GitHub Discussion #71 **追加状态评论**（每次状态变化都要，含 F 组）；
+□ **同步正文**：python3 scripts/agents/refresh-discussion.py --update（正文列表随仓库状态**即时**刷新；脚本幂等，规划者每轮仍会全量对账）
    gh api graphql --input <(jq -n --rawfile b /tmp/disc-note.md --arg q 'mutation($b:String!){ addDiscussionComment(input:{discussionId:"D_kwDOToJS8M4Aou6G", body:$b}){ comment { id } } }' '{query:$q, variables:{b:$b}}')
 □ 门禁证据归档：ledger 补最终验证输出摘要（数值记录，不改基线）
 □ 推送分支：git push -u origin <branch>
@@ -87,7 +88,7 @@
 - 认领人：<agent> @ <分支名>
 - 关键证据：PR #<n>（CI n/n 全绿 · merge <sha 前 7 位>）｜ commit <sha 前 7 位>｜ OpenSpec change <名称>
 - 备注：<一句话结果/用途>（例如：独占文件集：<files>；flake 重跑一次后全绿）
-（状态以仓库 `docs/feature-backlog.md` 为准；正文列表由规划者每轮刷新）
+（状态以仓库 `docs/feature-backlog.md` 为准；正文列表已由实现者同步，规划者每轮仍全量对账）
 ```
 
 完成态示例（可直接套用）：
