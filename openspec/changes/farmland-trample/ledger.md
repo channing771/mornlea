@@ -22,3 +22,9 @@
   - **Ruling: NB1 双玩家同格幂等测试补强划入 Task 2（新增条目 2.4）** — spec 需求正文的 MUST 幂等条款目前只有 `settleTrampleCell` 读判的结构性覆盖，补直接双玩家用例锚定。
   - **Ruling: NB3 property 文件命名张力按关注点重组划入 Task 2（新增条目 2.5）** — 跨格覆盖是行为场景非被证性质，`tasks.md` 1.4 原文指派有误（控制会话转录失误），迁往 `trample_test.go` 零行为变化。
   - **Ruling: NB2 red 证据誊录保持 Task 3 义务不变** — tasks.md 3.3 既定安排。
+
+## Task 2（回归与不触及核对）
+
+- 实现提交 `ec985e43`：仅改 `internal/sim/trample_test.go`（+132：`TestTrampleDualPlayerLandingSameCellIsIdempotent` 与 helper `landBothPlayersFromAbove`、迁入跨格覆盖用例）与 `property_trample_yield_parity_test.go`（−23：迁出跨格覆盖用例）。2.1 server/client 回归全绿零改动（179s/5s `-race`）；2.2 不触及证据链——cmd 层零耕地构造、耕地唯一生产来源是 `TillSoil`（`farming.go:100`）、worldgen 无 farmland/wheat、benchmark `fixedBenchmarkPlayerInput` 的 `Jump:true` 只产生空候选结算（无数值观察义务）；2.3 archcheck 通过；2.4 幂等锚定测试首跑即绿（Task 1 读判实现已满足 MUST 条款，无实现缺陷）；2.5 纯迁移逐字节一致、`go test -list` 集合 400→401 唯一增量是新测试。
+- 实现偏差（已核实可接受）：双玩家落地无法复用 `landPlayerAt`（`onlyMovementPlayer` 硬断言恰好一名玩家），新增最小 helper `landBothPlayersFromAbove`；按「单文件私有 helper 留在消费文件」落位。
+- 评审：**SPEC PASS**（2.1–2.5 逐条独立核实：不触及证据三环复核、幂等测试五重锚定核实——真实双会话/同 tick 落地/覆盖格逐格相同/三重堵死双重结算/tick 对齐断言）；**QUALITY PASS**（helper 白盒直读权威状态是同包普遍模式、注释合规、红线零越界、复跑全绿）。评审者 NB：ledger/tasks 勾选待评审后誊录（本条即该誊录，流程节奏与 Task 1 一致）。
