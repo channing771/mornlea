@@ -15,13 +15,24 @@
 
 - 机器迁移丢失 node/npm 与全局 `openspec` CLI；经用户确认后经 fnm 提供的 node v24.19.0 重装钉死版本 `@fission-ai/openspec@1.7.0`（docs/openspec.md:18）。
 
-## Task 1
+## Task 1（sim 层 yield 哈希与收获接入）
 
-（待实现派发后填写）
+- 实现提交 `af1b3a76`：`cropYieldRollSalt`/`cropYieldRolls`（crop.go）、mining.go 接入、`property_crop_yield_test.go` 三性质（重放确定 / 区间穷举 5376 样本 / 双流独立）、farming_test.go 断言区间化。red-first：实现前 `-run TestCropYield` 构建失败，green 后全包 `-race` ok。
+- **Ruling: 范围偏差接受（mining_test.go 孪生断言）** — brief 文件清单漏列 `internal/sim/mining_test.go:494` 的同模式精确断言；该文件属认领裁决独占集「同包 `*_test.go`」，修复为最小镜像（断言+注释各一处）。brief 窄化转录失误，非实现越权。
+- 评审：SPEC PASS；QUALITY FAIL（blocking：crop.go 取模偏差注释「比 `%100` 小十余个数量级」数学失真）。
+- 修复循环 R1（1/5）：提交 `fc630c2e`——删除失真比较从句、design.md D1 数字对齐（`1e-17`→`1/2^64` 上界表述）、新增行裸词标识符补反引号。QUALITY 复核 PASS。
+- **遗留（冻结集外，待 Task 3 / 集成裁决清偿）**：
+  - `internal/core/item.go:222` 与 `internal/companion/plan_types.go:499` 的「1 小麦 + 2 种子」固定掉落注释因本变更失真；前者属 A-01 独占文件，只能由后续 change/集成处理；
+  - `AGENTS.md`/`CLAUDE.md` 基线句「掉落固定不随机：成熟作物 1 小麦 + 2 种子」在本 change 合入后失真——归档收尾须同步两份基线与 `progress.md`（若与第一批次 A-06/A-07 合流窗口冲突，按集成裁决顺延）；
+  - server e2e 断言失配为 Task 2 计划内状态（SPEC 评审已核实仅 `TestFarmingLoopEndToEndMemory` 受影响）。
 
-## Task 2
+## Task 2（server e2e 断言同步）
 
-（待实现派发后填写）
+- 实现提交 `138d92c2`：仅 `internal/server/farming_loop_e2e_test.go`——等待循环改区间成员判定（骨架与 tick 上界保留）、小麦 [1,3]、种子增量锚定 `seedsAfterPlant+[1,3]`、再种存量 `seedsAfterHarvest-1`、自持断言从「净赚」改回规格本义「不亏」。
+- **Ruling: 自持断言语义修正** — 主规格与 delta 从未承诺净赚，旧断言是固定掉落时代的超规格强化；种子下限 1 下最坏打平合法，「不亏 ⟹ 存量单调不减 ⟹ 循环不死」逐字对齐规格。非放松门禁。
+- **Ruling: 断言位置超出 brief 引用行号** — 第 7 步两条产量相关精确断言在 :349-358（brief 写约 ：315-338）；属 brief 授权的「同函数内依赖产量的精确断言」范围，按区间化一并处理。
+- 评审：QUALITY PASS（含 `-count=3` 无 flake、生长预算 10 倍余量论证）；SPEC PASS（覆盖无删减、E-11 边界零触碰、`cmd/` 复核 0 命中权威采掘结算——tasks 2.3 关闭，无 benchmark/capture 观察义务）。
+- 环境备注：本机 Go 经 gvm（go1.26.0）。
 
 ## Task 3 / 整分支终审
 
