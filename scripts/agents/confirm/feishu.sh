@@ -76,14 +76,35 @@ case "${1:-}" in
     KIND="$(jq -r '.kind // "approval"' "$REQ")"
     if [ "$KIND" = "question" ]; then
       HEAD_PREFIX="澄清提问："
-      NOTE="请直接回复你的答案（带 #$ID 可精确指定该提问）；回答后实现者会继续分析，可能还有后续提问"
+      NOTE="点按下方按钮直接回答；也可点本卡片消息「回复」输入文字（自动锁定本提问）或带 #\${ID}"
     else
       HEAD_PREFIX="内容确认："
-      NOTE="请回复：✅ 批准（或直接回复修改意见；带 #$ID 可精确指定该任务）"
+      NOTE="点按下方按钮批准/驳回；如需修改意见，点本卡片消息「回复」写下意见（自动锁定本任务）或带 #\${ID}"
     fi
     DESIGN_BODY="$(printf '%s' "$DESIGN" | fmt_design)"
-    # 选项数组原样传入（每个选项渲染为独立编号行；无选项则不渲染该区）
-    CARD="$(jq -nc --arg id "$ID" --arg t "$TITLE" --arg c "$CATEGORY" --arg q "$QUESTION" --argjson o "$(jq -c '.options // []' "$REQ")" --arg d "$DESIGN_BODY" --arg hp "$HEAD_PREFIX" --arg note "$NOTE" '{
+    # 选项渲染为可点按按钮（value 携带请求 ID 与选中项，点哪个答哪个，多待确认也不会答错）；
+    # 按钮 value 在回调里以 JSON 字符串返回，listener 反序列化后按 id 精确匹配请求。
+    if [ "$KIND" = "question" ]; then
+      # 注意：jq 1.7 数组构造器内出现 "as $n |" 时，后续 "+ [...]" 会被吞进数组（变嵌套）；
+      # 改用 [ 迭代器[] , 尾元素 ] 的逗号元素形式生成平铺按钮列表。
+      ACTIONS="$(jq -nc --arg id "$ID" --argjson o "$(jq -c '.options // []' "$REQ")" '
+        [ (($o | to_entries | map({
+            tag: "button",
+            text: { tag: "plain_text", content: ((.key + 1 | tostring) + ". " + (.value | .[0:36])) },
+            type: (if .key == 0 then "primary" else "default" end),
+            value: { id: $id, action: "answer", text: .value }
+          })) | .[0:5])[],
+          { tag: "button", text: { tag: "plain_text", content: "驳回 / 终止" }, type: "danger", value: { id: $id, action: "reject", text: "驳回" } }
+        ]')"
+      [ "$(jq -r '.options | length // 0' "$REQ")" -gt 5 ] && NOTE="选项较多，按钮只显示前 5 个；其余请「回复」本卡片输入完整答案。$NOTE"
+    else
+      # 批准/驳回按钮；修改意见走「回复」文字（需要具体内容，按钮无法携带）
+      ACTIONS="$(jq -nc --arg id "$ID" '[
+        { tag: "button", text: { tag: "plain_text", content: "✅ 批准" }, type: "primary", value: { id: $id, action: "approve", text: "批准" } },
+        { tag: "button", text: { tag: "plain_text", content: "❌ 驳回" }, type: "danger", value: { id: $id, action: "reject", text: "驳回" } }
+      ]')"
+    fi
+    CARD="$(jq -nc --arg id "$ID" --arg t "$TITLE" --arg c "$CATEGORY" --arg q "$QUESTION" --argjson o "$(jq -c '.options // []' "$REQ")" --argjson actions "$ACTIONS" --arg d "$DESIGN_BODY" --arg hp "$HEAD_PREFIX" --arg note "$NOTE" '{
   config: { wide_screen_mode: true },
   header: { template: "blue", title: { tag: "plain_text", content: ($hp + $id + " " + $t) } },
   elements: [
@@ -92,11 +113,19 @@ case "${1:-}" in
       + ($o | if length == 0 then "" else "\n\n**选项**：\n" + (to_entries | map("- " + (.key + 1 | tostring) + ". " + .value) | join("\n")) end)
       + ($d | if . == "" then "" else "\n\n**短设计**：\n" + . end)
     ) } },
+    { tag: "action", actions: $actions },
     { tag: "hr" },
     { tag: "note", elements: [ { tag: "plain_text", content: $note } ] }
   ]
 }')"
-    send_card "$CARD"
+    if SEND_OUT="$(send_card "$CARD")"; then
+      # 记录下发消息的 message_id：listener 用「回复该消息」的 parent_id 精确反查请求
+      MID="$(printf '%s' "$SEND_OUT" | sed -n 's/^ok message_id=//p')"
+      [ -n "$MID" ] && jq --arg mid "$MID" '.feishuMessageId=$mid' "$REQ" > "$REQ.tmp" && mv "$REQ.tmp" "$REQ"
+      echo "$SEND_OUT"
+    else
+      exit 1
+    fi
     ;;
   *)
     echo "用法: feishu.sh send <请求ID>" >&2; exit 2 ;;

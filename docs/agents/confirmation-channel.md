@@ -8,21 +8,22 @@ brainstorm 内容确认（docs/development-process.md 阶段 0.5）要求「呈�
 实现者（run-agent.sh implementer）
   └─ 阶段 0.5 内容确认
        │ confirm.sh ask --id B-02 --title ...     （写 ~/.mornlea/confirm/<id>.json）
-       │ └─ feishu.sh send <id>                   （飞书应用消息 API → 你的飞书）
+       │ └─ feishu.sh send <id>                   （交互卡片 → 你的飞书：选项＝按钮 / 批准＝按钮）
        ▼
-你的飞书收到：【Mornlea 内容确认】... 请回复：✅ 批准 或 修改意见
+你的飞书收到：【Mornlea 内容确认】… 点按卡片按钮即可回答（value 携带请求 ID，
+点哪个答哪个；也可「回复」该卡片消息输入文字，自动锁定该问题）
        ▼
 你的回复（文本，可带 #B-02 指定请求）
        ▼
 feishu-listener.js（长连接事件订阅，常驻 daemon）
-       │ 解析动作（approve/edit/reject）→ 写 <id>.reply.json
+       │ 卡片按钮：card.action.trigger 按 value.id 精确匹配（重复点按已作答忽略）\n       │ 文本回复：回复消息(parent_id) → #ID → 仅一个待确认；多待确认不猜、ack 提示指明\n       │ 解析动作（approve/edit/reject/answer）→ 写 <id>.reply.json
        │ 发 ack「已收到确认…」
        └─ 自动续跑：AGENT_RESUME=<id> 后台执行 run-agent.sh implementer
        ▼
 实现者恢复：读 <id>.reply.json → 结论写入 OpenSpec 产物 → 继续开发
 ```
 
-## 通道与降级链
+> 卡片按钮回调（card.action.trigger）经同一长连接送达，需在飞书开发者后台「事件与回调 → 回调配置」开启（本仓库应用已开启）；未开启时按钮无回传，但「回复」文本路径不受影响。\n\n## 通道与降级链
 
 | 优先级 | 通道 | 触发 | 说明 |
 |---|---|---|---|
@@ -98,12 +99,12 @@ confirm.sh list
 
 | kind | 语义 | 你的回复 | 判定 |
 |---|---|---|---|
-| `question` 澄清提问 | brainstorm 的细节问题（一次一个）：选 A/B、边界、数值等；带选项时用 `--option` 逐项传，卡片按编号逐行渲染 | 直接回复答案（如「A」） | action=`answer`（文本进 reply.text，实现者继续分析/追问；同任务澄清 ≤5 轮）|
+| `question` 澄清提问 | brainstorm 的细节问题（一次一个）：选 A/B、边界、数值等；带选项时用 `--option` 逐项传，卡片把选项渲染成**按钮**（≤5 个+驳回；更多走文本） | 点按选项按钮；或「回复」该卡片输入答案 | action=`answer`（文本进 reply.text，实现者继续分析/追问；同任务澄清 ≤5 轮）|
 | `approval` 内容确认 | 设计敲定后的批准请求 | ✅/批准/同意/ok/approve/继续/可以/确认 | action=`approve`（开工）|
 | approval | 修改意见 | 其他文本 | action=`edit`（修订设计后重新确认）|
 | 任一 | 终止 | ❌/驳回/拒绝/取消/reject/不行 | action=`reject`（停在确认点）|
 
-受理优先级：文本带 `#ID` 精确指定；否则匹配最新 pending；已 answered 的请求再次回复会被忽略。
+回复匹配优先级（自高至低）：① **点按卡片按钮**（value 携带请求 ID，精确到问的那一个问题）② 「回复」某条卡片消息后输入文字（parent_id 反查该请求）③ 文本带 `#ID` ④ 只有 1 个待确认时直接回文本；**多个待确认且①②③都无法定位时不猜**——ack 列出待确认 ID 并提示指明。已 answered 的请求再次回复/点按会被忽略（含重复点按保护）。
 
 ## 监听器常驻（launchd 保活推荐）
 

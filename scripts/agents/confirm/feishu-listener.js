@@ -118,15 +118,62 @@ function handleMessage(cfg, data) {
     log('已捕获 receive=' + recv.type + ':' + recv.id + ' chat_id=' + m.chat_id + '，请检查 ' + CONFIG + ' 后重启监听');
     process.exit(0);
   }
-  // 匹配请求：文本带 #ID 则精确指定；否则取最新 pending
-  const m2 = text.match(/#([A-F]-\d{2})/);
+  // 匹配请求优先级：①「回复」某条卡片消息（parent_id 精确锁定，最不易错）
+  // ② 文本带 #ID ③ 只有一个 pending ④ 多个 pending 且无法精确匹配 → 不猜，提示用户指明
   const pending = pendingRequests();
-  const target = m2 ? pending.find((p) => p.id === m2[1]) : pending[0];
-  if (!target) { log('没有匹配的待确认请求（文本:' + text + '），忽略'); return; }
+  let target = null;
+  if (m.parent_id) target = pending.find((p) => p.feishuMessageId === m.parent_id) || null;
+  if (!target) {
+    const m2 = text.match(/#([A-F]-\d{2})/);
+    if (m2) target = pending.find((p) => p.id === m2[1]) || null;
+  }
+  if (!target && pending.length === 1) target = pending[0];
+  if (!target) {
+    if (pending.length > 1) {
+      log('多 pending 且无精确匹配（parent_id/#ID），忽略并提示（文本:' + text + '）');
+      if (openId) sendAck(cfg, openId, '有 ' + pending.length + ' 个待确认请求：' + pending.map((p) => p.id).join('、') + '。请点按对应卡片的按钮，或「回复」那条卡片消息，或回复时带 #' + pending[0].id + ' 之类的编号。');
+    } else { log('没有匹配的待确认请求（文本:' + text + '），忽略'); }
+    return;
+  }
+  if (target.status !== 'pending') { log('请求 ' + target.id + ' 已答复，忽略回复（文本:' + text + '）'); return; }
   const action = classifyReply(text, target.kind || 'approval');
   const reply = writeReply(target.id, action, text, { senderOpenId: openId, chatId: m.chat_id, messageId: m.message_id });
   log('#HANDLED ' + target.id + ' action=' + action);
   if (openId) { const label = (target.kind === 'question' ? '提问' : '确认') + '已收到（' + action + '）'; sendAck(cfg, openId, label + '，实现者将从 ' + target.id + '.reply.json 继续。'); }
+  spawnResume(cfg, target);
+}
+
+// 卡片按钮回调：Feishu 回调配置（事件与回调→回调配置）开启后，按钮事件经同一长连接以
+// card.action.trigger 送达。按钮 value（{id, action, text}）在回调里是 JSON 字符串。
+function cardEventData(data) {
+  const ev = (data && data.event) || data || {};
+  const action = ev.action || {};
+  const ctx = ev.context || {};
+  const raw = action.value !== undefined ? action.value : (ev.action_value !== undefined ? ev.action_value : '');
+  let value = raw;
+  if (typeof raw === 'string') { try { value = JSON.parse(raw); } catch (_) { /* 保留原串 */ } }
+  return {
+    operator: (ev.operator && ev.operator.open_id) || ev.operator_id || '',
+    messageId: ctx.message_id || ctx.open_message_id || ev.message_id || '',
+    chatId: ctx.chat_id || ev.chat_id || '',
+    value,
+  };
+}
+
+function handleCardAction(cfg, data) {
+  const ev = cardEventData(data);
+  const value = (ev.value && typeof ev.value === 'object') ? ev.value : {};
+  const pending = pendingRequests();
+  // 按 value.id 精确匹配；无 id 时用 message_id 反查该卡片对应的请求
+  let target = value.id ? pending.find((p) => p.id === value.id) || null : null;
+  if (!target && ev.messageId) target = pending.find((p) => p.feishuMessageId === ev.messageId) || null;
+  if (!target) { log('卡片按钮无匹配请求（value=' + JSON.stringify(value) + '），忽略'); return; }
+  if (target.status !== 'pending') { log('请求 ' + target.id + ' 已答复，忽略按钮（value=' + JSON.stringify(value) + '）'); return; }
+  const action = value.action || classifyReply(String(value.text || ''), target.kind || 'approval');
+  const text = value.text !== undefined ? String(value.text) : '';
+  const reply = writeReply(target.id, action, text, { senderOpenId: ev.operator, chatId: ev.chatId, messageId: ev.messageId });
+  log('#HANDLED-CARD ' + target.id + ' action=' + action);
+  if (ev.operator) { const label = (target.kind === 'question' ? '提问' : '确认') + '已收到（' + action + '）'; sendAck(cfg, ev.operator, label + '，实现者将从 ' + target.id + '.reply.json 继续。'); }
   spawnResume(cfg, target);
 }
 
@@ -142,9 +189,11 @@ async function main() {
     onReconnecting: () => log('断线重连中…'),
     onReconnected: () => log('重连成功'),
   });
-  // SDK 要求 EventDispatcher 实例（不能传裸对象），事件键为 im.message.receive_v1
+  // SDK 要求 EventDispatcher 实例（不能传裸对象）。im.message.receive_v1 收文本回复；
+  // card.action.trigger 收卡片按钮点按（需在飞书开发者后台「事件与回调→回调配置」开启）。
   const dispatcher = new EventDispatcher({}).register({
     'im.message.receive_v1': (data) => { try { handleMessage(cfg, data); } catch (e) { log('处理消息异常:', e && e.stack || e); } },
+    'card.action.trigger': (data) => { try { handleCardAction(cfg, data); } catch (e) { log('处理卡片回调异常:', e && e.stack || e); } },
   });
   process.on('SIGINT', () => { log('收到 SIGINT，关闭'); try { ws.close(); } catch (e) {} process.exit(0); });
   process.on('SIGTERM', () => { log('收到 SIGTERM，关闭'); try { ws.close(); } catch (e) {} process.exit(0); });
