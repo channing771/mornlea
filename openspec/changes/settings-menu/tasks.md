@@ -22,4 +22,4 @@
 
 ## 6. 整分支收尾
 
-- [ ] 6.1 对照 proposal、delta specs、design 与 ledger 完成整分支独立终审，修复所有阻断项，并执行 `gofmt -l .`、`go vet ./...`、`make rust-check`、`go test ./... -race`、`make visual-check` 与 `openspec validate --all --strict --no-interactive`。
+- [x] 6.1 对照 proposal、delta specs、design 与 ledger 完成整分支独立终审，修复所有阻断项，并执行 `gofmt -l .`、`go vet ./...`、`make rust-check`、`go test ./... -race`、`make visual-check` 与 `openspec validate --all --strict --no-interactive`。

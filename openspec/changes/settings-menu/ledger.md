@@ -30,12 +30,12 @@
 | 5.1 视觉基线 | `d01_t5_visual_impl` | `845250f2`、`ce98240d`；修复 `7c72527f`（另触发 Task 3 `3643b0bf`） | `d01_t5_spec_review`：PASS→PASS | `d01_t5_quality_review`：FAIL→PASS | 1 | RED 缺少 Settings fixture；19场景、focused/short race、两张 UI 0差、17张旧 PNG hash不变、人工检查 PASS；全局 visual-check 的13个旧场景继承失败见 R-011 | ACCEPTED（变更特定视觉门禁通过） |
 | 5.2 长期文档 | `d01_t5_docs_impl` | `e929388a`；修复 `f096cb33`、`7496406d`、`1b2c1f0c`、`e41e328d`、`2ced2d37`；5.3 后终审 | `d01_t5_docs_spec_review`：PASS→FAIL→FAIL→PASS→FAIL→FAIL→PASS | `d01_t5_docs_quality_review`：FAIL→PASS→PASS→FAIL→FAIL→PASS→PASS | 5（达到上限） | archcheck、OpenSpec strict、两语 JSON/链接、AGENTS/CLAUDE cmp、版本/场景扫描、diff-check PASS | ACCEPTED（剩余项由5.3清偿） |
 | 5.3 README tunable 勘误 | `d01_t5_tunable_docs_impl` | `42c94f41`；修复 `45118bb0` | `d01_t5_tunable_spec_review`：FAIL→PASS | `d01_t5_tunable_quality_review`：PASS→PASS | 1 | 文档 RED/GREEN 断言、JSON/链接、archcheck、OpenSpec strict、cmp、diff-check PASS | ACCEPTED |
-| 6.1 整分支收尾 | 待派发 | — | — | — | 0 | — | PENDING |
+| 6.1 整分支收尾 | `d01_finalizer` | 主线融合至 `c2b799ce`；修复 `13318afc`、`ad347b84`、`8f639e7a`；最终 HEAD `b41bc2e9` | `d01_branch_final_review` 综合终审：FAIL→FAIL→PASS→PASS | 同左（整分支规格+质量双域） | 1 | Rust 127+160、全仓 race 581s、vet、gofmt、archcheck、OpenSpec 65/65、cmp、diff/golden/status PASS；visual 见 R-011 | ACCEPTED |
 
 ## 整分支终审与发布
 
-- 独立终审：`d01_branch_final_review` 初审 FAIL（主线同步、raw JSON patch、真实 visibleFrame、renderer 外层输入重放、视觉 delta 完整性及机械文案）；修复后待复审
-- 最终门禁：PENDING
+- 独立终审：`d01_branch_final_review` 最终 PASS（两次阻断审查、两次 PASS 快照确认）
+- 最终门禁：除 R-011 的 baseline-equivalent `make visual-check` 非零外全部 PASS；全仓 race 最终 PASS 581s
 - OpenSpec 同步/归档：PENDING
 - PR / CI / 合并：PENDING
 - Discussion 完成回报：PENDING
@@ -52,7 +52,7 @@
 - R-008：egui UI 帧在消费 RawInput 前按布局保守预留最坏事件数（主菜单 8、设置页 4）；剩余容量不足时允许提前显式 `CAPACITY`，以换取队列、焦点、光标与滚动状态可无损重放。空队列始终可运行正常帧。
 - R-009：`texturePackPath` 的单行不变量必须在 `Config.Load` 与 application 直接 options 构造两层防御；Darwin 上真实存在但名称含 CR/LF 的目录也拒绝，以保证任何 committed/draft 均可安全编码 layout v2。该兼容性收紧已同步 proposal/spec/design，配置版本保持 v1。
 - R-010：Task 5 正式 640×360 图像发现三动作底部被裁 17pt，判为 Task 3 呈现回归而非 capture 可接受差异；由原 Task 3 implementer 修复并复审后再生成 golden，capture implementer 不越界改 Rust UI。
-- R-011：当前 Apple M2/macOS 26.6.2 上 `make visual-check` 的 13 个非 UI 旧场景超阈值；在干净领取基线 `origin/main@345f6077` 上逐场景复现相同最大差、差异像素数与首差坐标，且基线与候选 17 张非主菜单实拍逐字节相同。判为继承的机器视觉基线失败，不刷新无关 golden、不放宽阈值；D-01 的 main/settings 两场景均 0 像素差。整分支门禁必须如实记为“全局 FAIL（baseline-equivalent）”，不得写成 PASS。
+- R-011：冻结主线 `origin/main@c2b799ce` 与 D-01 在同机完整运行 `make visual-check` 均 exit 2；18 个同名场景的 `(maxdiff, count, first)` 逐项完全一致，双方同为 15 个旧场景非零、11 个超阈值。D-01 `main-menu` 对其新 golden 为 0 差，并新增 0 差的 `settings-menu`；其余 17 张主线 golden blob 不变。判为继承的机器视觉基线失败，不刷新无关 golden、不放宽阈值；整分支门禁如实记为“全局 FAIL（baseline-equivalent）”。
 - R-012：任务 5.2 已达到 5 轮修复上限。最终 QUALITY PASS，但 SPEC 指出的唯一剩余项有效：掉落 10/40 tick、1.25 格与 6000 tick 均为可配置 `sim` tunable 的编译默认值，README 不得写成固定常量。该阻断不豁免、不继续第 6 轮，拆为全新任务 5.3，由新 implementer 和独立双评审清偿；5.3 通过后再终结 5.2。
 - R-013：任务 5.3 已把四项掉落 tunable 全部限定为编译默认值，并把中文 `sim` 组从“常量”修为“参数”；独立双评审与原 5.2 双评审均最终 PASS，R-012 阻断正式关闭。
 - R-014：整分支终审时 branch 相对最新 `origin/main` 已分叉 `31/33` 并在基线文档/进度产生冲突；任务 6.1 必须先集成最新主线、人工融合当前能力，再做任何最终门禁，不能以旧基线通过代替可合并性。
@@ -60,3 +60,5 @@
 - R-016：`rust-client-window` 明确要求当前显示器工作区；屏幕全尺寸 90% 近似不合格。Darwin 创建与运行期 resize 必须读取实际 `NSScreen.visibleFrame` 并正确处理逻辑 point/物理像素，或在实现前显式修改规格（当前 ruling 选择实现真实工作区）。
 - R-017：client 输出队列容量预检必须发生在 renderer 获取/清空窗口输入之前；只保护 `UiState` 内部瞬态不足以满足 R-008 的无损重放。
 - R-018：归档 delta 必须完整修改稳定视觉规格中所有精确数量/全序/尾序 requirement，不能让 19 场景与旧“恰好17/全部17”断言并存。
+- R-019：最终全仓 race 首跑 354s 唯一失败 `TestRemoteMessagesRouteOnlyToRoster`；该生产/测试路径与主线相同，单测 race `count=50`、完整 `cmd/mornlea` race、后续两次全仓 race（含冻结主线后的 581s 最终跑）均 PASS。判为共享 helper 固定 1ms 等待在满载 race 下的继承时序脆弱，不在 D-01 越界修改，但首次失败与全部复现证据必须保留。
+- R-020：任务 6.1 修复 top-level `null` raw patch、rename commit-point 的 pre/postcommit 结果、真实 `NSScreen.visibleFrame` outer-frame/位置约束、renderer 外层输入重放及完整视觉 delta；冻结主线合并后独立整分支终审最终 PASS。
