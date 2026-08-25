@@ -7,11 +7,11 @@ M5C 交付伙伴 `mine` 时把容器（箱子/熔炉）与多掉落方块显式�
 ## What Changes
 
 - 伙伴 `mine` 的合法目标集合扩展：箱子与熔炉成为合法目标；其余普通方块仍要求具有单一 `BlockDrop`；农业十编号（八个作物阶段 + 干湿耕地）的显式拒绝**保持不变**（其语义属 C-11，另行裁决）。
-- 容器采掘的批量结算：完成 tick 在伙伴背包副本上预演「容器本体 1 堆 + 全部内容物堆」（箱子最多 1+63 堆、熔炉 1+3 堆），任一堆放不下则该 tick 整体不结算——方块不变、容器内容物不变、耐久不变、背包不变、进度保持满格（全或无，方案 A）。
+- 容器采掘的批量结算：完成 tick 在伙伴背包副本上预演「容器本体 1 堆 + 全部内容物堆」（箱子最多 1+27 堆（`core.ChestSlots`）、熔炉 1+3 堆），任一堆放不下则该 tick 整体不结算——方块不变、容器内容物不变、耐久不变、背包不变、进度保持满格（全或无，方案 A）。
 - 预演通过时同一权威 tick 内原子完成：目标方块改空气、停用对应容器槽（`DeactivateChest`/`DeactivateFurnace`，对齐玩家路径）、按既有规则扣工具耐久、背包提交产物。
 - Task Runner 的满格饱和判定同步扩展：观察到进度满格且方块仍在时，用与 sim 同一的批量预演判定容量，不能容纳即以既有 `TaskFailInventoryFull` 失败（wire 枚举零变更）。
 - Planner 提示词与计划契约校验（`planMineableBlock`）放开容器；观察快照与契约的其余约束不动。
-- 满容器内容物堆数（最多 64 堆）超过伙伴 36 格背包是方案 A 的固有结果：实践中伙伴只能回收空/半空容器（同类物品并堆后所需格数 ≤ 64）。
+- 满容器内容物堆数（最多 28 堆）可能超过伙伴背包余量是方案 A 的固有结果：实践中伙伴只能回收空/半空容器（同类物品并堆后所需格数 ≤ 28）。
 
 ### 用户可观察结果
 
@@ -34,7 +34,7 @@ M5C 交付伙伴 `mine` 时把容器（箱子/熔炉）与多掉落方块显式�
 
 - **代码**：`internal/sim/mining.go`（`companionMineableBlock` 放开容器；`completeCompanionMining` 容器批量分支与容器槽停用）、`internal/companion/plan_types.go`（`planMineableBlock`）、`internal/companion/planner.go`（提示词约束文案）、`internal/server/companion_interact.go`（Runner 饱和分支批量预演）、同包新增测试文件。
 - **兼容性**：无协议、存档、区块 schema、`companions.ai` schema、物品/方块编号或 `core.BlockDrop` 表形状变更；`TaskFailInventoryFull` 为既有 v18 wire 枚举，零升版；已存档世界无需迁移，容器采掘是即时结算不入档。
-- **性能**：完成 tick 一次容器批量预演为内存 `AddStack` 逐堆操作（≤64 堆 × O(36) 格），无分配风暴、无热路径新预算；benchmark scenario v19 不变。
+- **性能**：完成 tick 一次容器批量预演为内存 `AddStack` 逐堆操作（≤28 堆 × O(36) 格），无分配风暴、无热路径新预算；benchmark scenario v19 不变。
 - **并行边界**：不触碰 A-01/A-04 已认领的 `internal/core`（`recipe.go`/`inventory.go`/`item.go`）、`engine*.go`/`drop.go`/`command.go`/`tunables.go`；不触碰 B-13 的 `combat.go`/`hunger.go`、B-31 的 `eating.go`、B-05/B-07 的 `crop.go` 与新建踩踏/冲毁文件；不触碰 A-02/A-04 的 `internal/mesh` 与 engine/client crate。
 - **测试**：新增 sim 批量原子性与预演失败四方不变测试、companion 计划侧放开测试、server Runner 批量预演与 Memory/TCP parity 测试、农业拒绝回归测试。
 
