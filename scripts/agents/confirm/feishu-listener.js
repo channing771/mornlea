@@ -202,8 +202,10 @@ async function main() {
   // SDK 要求 EventDispatcher 实例（不能传裸对象）。im.message.receive_v1 收文本回复；
   // card.action.trigger 收卡片按钮点按（需在飞书开发者后台「事件与回调→回调配置」开启）。
   const dispatcher = new EventDispatcher({}).register({
-    'im.message.receive_v1': (data) => { try { handleMessage(cfg, data); } catch (e) { log('处理消息异常:', e && e.stack || e); } },
-    'card.action.trigger': (data) => { try { handleCardAction(cfg, data); } catch (e) { log('处理卡片回调异常:', e && e.stack || e); } },
+    // 每个事件重载配置（loadConfig）：autoResume 等键可能被人工/脚本中途修改，
+    // 缓存启动时快照会导致「配置已改但行为不变」的滞留（曾吞掉两次续跑）。
+    'im.message.receive_v1': (data) => { try { cfg = loadConfig(); handleMessage(cfg, data); } catch (e) { log('处理消息异常:', e && e.stack || e); } },
+    'card.action.trigger': (data) => { try { cfg = loadConfig(); handleCardAction(cfg, data); } catch (e) { log('处理卡片回调异常:', e && e.stack || e); } },
   });
   process.on('SIGINT', () => { log('收到 SIGINT，关闭'); try { ws.close(); } catch (e) {} process.exit(0); });
   process.on('SIGTERM', () => { log('收到 SIGTERM，关闭'); try { ws.close(); } catch (e) {} process.exit(0); });
