@@ -34,3 +34,11 @@
 - Ruling: R1 遗留的 `internal/server` 六个 e2e 红接受为**有主中间态**，不追加 R1 轮次 — 六个失败全部是「e2e 以 recipe-click 命令驱动合成执行」与 D6 稳定拒绝的正确冲突，其修复不是过渡补丁而是把测试驱动迁移到网格路径（`MoveCraftingStack`/`TakeCraftingOutput`），这正是任务组 3.2 的 parity 工作内容（`transport_parity_integration_test.go` 本就在任务组 3 文件集内）；在 R1 越界授权内顺手改它们会扩大越界范围。任务组 3 brief 须显式包含「迁移六个 e2e 到网格驱动并恢复绿」；任务组 5 终审以全仓 `-race` 全绿为门。
 - R1 复核（原 SPEC 评审者定向复核，worktree HEAD `40d73807`）：**N1 已解除，任务组 1 SPEC 改判 PASS**。亲测复跑全部门禁命令全绿；三处过渡最小、无 `Craft` 双路径回加、hud 未越权预支任务组 4 的 UI 替换（266 quad 容量门原样通过）；顺带修复抽查 6 条全落地；镜像位措辞修订（`ddde0885`）张力消除；server 六 e2e 红接受为 N1 范围外独立债务（红测试≠门禁失效，根因确证为 recipe-click 驱动，归属任务组 3）。**任务组 1 关闭（双评审 PASS）**。
 - 已知并行负载抖动清单（隔离重跑均秒级通过，与本变更无语义关联，任务组 5 终审留意）：`TestAuthoritativePlayerConvergesAfterThreeTickStateDelay`、`TestAuthoritativePlayer` 系 Replay 确定性用例、`TestPersistentShutdownReturnsAllGoroutinesWithinSharedDeadline`（后者由 SPEC 复核者补记）。
+
+### 任务组 2：玩家瞬态网格与回收不变量
+
+- Implementer：fresh 子代理，提交 `d0f292bb`（`feat: make crafting grid authoritative`，10 文件，全部 `internal/sim/**`）。验证：`go test ./internal/sim -race -count=1`、`go test ./internal/core ./internal/sim -race -count=1` 全绿；`go vet`/`gofmt -l`/`archcheck`/`go build ./...` 通过；server 8 红与既有记录一致（6 e2e 归任务组 3 + 2 并行抖动）。
+- 红→绿证据：2.1 移动/取出 12 用例；2.2 回收不变量 5 用例（含 tick 末性质测试与独立 oracle 复算）+ 自引入缺陷修复（`repackCraftingSlots` 双重计数改与 `canRepackCrafting` 逐字同序原子提交）；2.3 生命周期 8 用例（关闭/走远/被挖同 tick、断线快照前回收、死亡先回收再清空、不可能回收 panic 内部错误路径）；2.4 工作台 4 用例（无容器引用、15 tick 采掘恰掉 1、双人独立）。
+- 实现者偏离（待评审裁决）：1) 断线回收挂钩 `player.go` 的 `UnregisterSession`（`persistence.go` 只管区块持久化，取快照前回收即满足「断线持久化之前」）；2) 跨容器移动（箱/炉→背包）也加不变量守卫（spec 五入口未列，但 tick 末不变量是无条件 SHALL 且为真实可达破坏路径）；3) 采掘/作物掉落收口在拾取层（玩家采掘产物本就只生成世界掉落，入包唯一通道是拾取），初始材料包在 `RegisterPlayer` 时网格恒空无需运行时守卫；4) 「工作台被挖」用例自挖（双人同点位触发 v25 近战抑制采掘）；5) 2.3 断线用例归 `crafting_test.go`（一文件一主题）。
+- 给任务组 3 的接口：`CommandMoveCraftingStack`（Slot=from/ToSlot=to）、`CommandTakeCraftingOutput`（只带 Sequence）、`TickResult.Craftings []CraftingUpdate`（`publishCraftings` 在 `publishInventories` 后、Active+dirty、latest-wins、发布即清、注册初始为真）、`Engine.PlayerCrafting` 只读访问器、`CraftingGrid{Size, Slots[9]}` 不入快照/存档/哈希。
+- 评审：待双评审记录。
