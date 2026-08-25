@@ -114,13 +114,21 @@ func runStaticBlockLightScript(t *testing.T, transport string) staticBlockLightR
 
 	ready := false
 	inventoryReady := false
-	for !ready || !inventoryReady || !parityViewLoaded(lightMirror) {
-		state, messages := step(nil)
-		ready = ready || state.Ready
-		if current, ok := staticBlockLightInventory(messages); ok && current == inventory {
-			inventoryReady = true
-		}
-	}
+	waitIntegrationLoginReady(
+		t,
+		fmt.Sprintf("%s block light", transport),
+		func() bool { return ready && inventoryReady && parityViewLoaded(lightMirror) },
+		func() string {
+			return fmt.Sprintf("ready=%v inventoryReady=%v viewLoaded=%v", ready, inventoryReady, parityViewLoaded(lightMirror))
+		},
+		func() {
+			state, messages := step(nil)
+			ready = ready || state.Ready
+			if current, ok := staticBlockLightInventory(messages); ok && current == inventory {
+				inventoryReady = true
+			}
+		},
+	)
 	beforeRevision := staticBlockLightRevision(t, lightMirror, placed.Chunk())
 	result := staticBlockLightResult{
 		BeforeLight: awaitStaticBlockLight(t, mesher, lightMirror, sampled, beforeRevision, "放置前"),

@@ -111,14 +111,22 @@ func recordDamParity(t *testing.T, transport string) damParityRecord {
 	mirror := client.NewMirror()
 	record := damParityRecord{Ticks: make([][]string, 0, damParityTicks)}
 	ready := false
-	for !ready || !parityViewLoaded(mirror) {
-		_, messages := parityStep(t, host, endpoint, mirror)
-		for _, message := range messages {
-			if state, ok := message.(network.PlayerState); ok && state.Ready {
-				ready = true
+	waitIntegrationLoginReady(
+		t,
+		fmt.Sprintf("%s fluid dam", transport),
+		func() bool { return ready && parityViewLoaded(mirror) },
+		func() string {
+			return fmt.Sprintf("ready=%v viewLoaded=%v", ready, parityViewLoaded(mirror))
+		},
+		func() {
+			_, messages := parityStep(t, host, endpoint, mirror)
+			for _, message := range messages {
+				if state, ok := message.(network.PlayerState); ok && state.Ready {
+					ready = true
+				}
 			}
-		}
-	}
+		},
+	)
 
 	for range damParityTicks {
 		_, messages := parityStep(t, host, endpoint, mirror)

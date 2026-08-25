@@ -106,17 +106,25 @@ func runTillSoilParityScript(t *testing.T, transport string) tillSoilParityResul
 	}
 
 	ready, inventoryReady := false, false
-	for !ready || !inventoryReady || !parityViewLoaded(mirror) {
-		_, messages := parityStep(t, host, endpoint, mirror)
-		for _, message := range messages {
-			switch message := message.(type) {
-			case network.PlayerState:
-				ready = ready || message.Ready
-			case network.InventoryState:
-				inventoryReady = inventoryReady || message.Inventory == initial
+	waitIntegrationLoginReady(
+		t,
+		fmt.Sprintf("%s till soil", transport),
+		func() bool { return ready && inventoryReady && parityViewLoaded(mirror) },
+		func() string {
+			return fmt.Sprintf("ready=%v inventoryReady=%v viewLoaded=%v", ready, inventoryReady, parityViewLoaded(mirror))
+		},
+		func() {
+			_, messages := parityStep(t, host, endpoint, mirror)
+			for _, message := range messages {
+				switch message := message.(type) {
+				case network.PlayerState:
+					ready = ready || message.Ready
+				case network.InventoryState:
+					inventoryReady = inventoryReady || message.Inventory == initial
+				}
 			}
-		}
-	}
+		},
+	)
 
 	// 第一次翻地：脚下那格草必须变成耕地并扣一点耐久。
 	send(network.TillSoil{Sequence: 1, Pitch: tillSoilLookDown})

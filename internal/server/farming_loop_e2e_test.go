@@ -42,15 +42,6 @@ const (
 	farmingSettleTicks = 3
 	// farmingPickupTicks 是等掉落物过完拾取延迟（默认 10 tick）并入包的 tick 数。
 	farmingPickupTicks = 40
-	// farmingLoginBudget 是等登录就绪（Ready + 背包发布 + 九个区块进镜像）的
-	// tick 预算。这个预算的**唯一职责**是把挂起变成一条读得懂的失败而不是
-	// go test 超时，因此它不是性能断言，宁可宽到几乎不可能误伤。
-	//
-	// 实测卡点是异步区块生成：九个区块从入队到进镜像在空闲机器上约 202 tick，
-	// 在并发跑满包的机器上会涨到 300 tick 以上，且随负载继续漂。600 只有
-	// 2–3 倍余量，在 CI 上会变成假失败源；3000 给到一个数量级余量，而真正
-	// 的挂起（登录握手不返回、区块永不就绪）仍会在预算内被拦成可读断言。
-	farmingLoginBudget = 3000
 )
 
 // TestFarmingLoopEndToEndMemory 是组 1–6 的集成回归：一名**从未存在过**的玩家
@@ -62,9 +53,11 @@ const (
 //  1. **成熟必须靠生长跑出来**。脚本只写入 WheatStage0ID，随后把生长概率置
 //     100、抽样率置上限，再推进权威 tick 等它自己走到 WheatStage7ID。直接
 //     SetBlock 成熟阶段的话，组 6 的生长规则一行都没被覆盖。
-//  2. **循环自持断言的是精确数列 63 → 65 → 64**，不是「种子还剩一些」。
-//     成熟小麦少掉一颗种子（收获后 64、再种后 63）在「> 0」下照样全绿，
-//     而那正是闭环从自持变成净亏的分界。
+//  2. **收获计数钉在哈希产量的完整区间上**，不是「种子还剩一些」。成熟小麦
+//     的两类掉落数量由 `sim.cropYieldRolls` 的纯整数哈希决定、各自落在闭区间
+//     [1,3]，脚本据此把收获后种子钉在「种下后存量 + [1,3]」的上下界内：
+//     下界是规格「始终不亏种子」在闭环里的体现，掉 0 颗或越过上界都会红，
+//     「> 0」式的宽松断言挡不住这两类回归。
 //  3. **掉落物必须走既有拾取路径**。脚本不往背包里塞收获产物，只是站在原地
 //     等 DropPickupDelayTicks 过去；因此「收获产出」与「产出真的进得了背包」
 //     是两件被同时钉住的事。
@@ -152,21 +145,25 @@ func TestFarmingLoopEndToEndMemory(t *testing.T) {
 	// 材料包被改成不发种子时这个循环会一直空转到 go test 超时，而超时是一种
 	// 读不出原因的红。等待有 tick 预算，断言留给下面的显式比较。
 	ready, inventoryReady := false, false
-	for ticks := 0; !ready || !inventoryReady || !parityViewLoaded(mirror); ticks++ {
-		if ticks > farmingLoginBudget {
-			t.Fatalf("登录 %d 个 tick 后仍未就绪: ready=%v 背包已发布=%v 视野已加载=%v",
-				ticks, ready, inventoryReady, parityViewLoaded(mirror))
-		}
-		_, messages := parityStep(t, host, endpoint, mirror)
-		for _, message := range messages {
-			switch message := message.(type) {
-			case network.PlayerState:
-				ready = ready || message.Ready
-			case network.InventoryState:
-				inventoryReady = inventoryReady || message.Inventory != core.Inventory{}
+	waitIntegrationLoginReady(
+		t,
+		"farming loop",
+		func() bool { return ready && inventoryReady && parityViewLoaded(mirror) },
+		func() string {
+			return fmt.Sprintf("ready=%v 背包已发布=%v 视野已加载=%v", ready, inventoryReady, parityViewLoaded(mirror))
+		},
+		func() {
+			_, messages := parityStep(t, host, endpoint, mirror)
+			for _, message := range messages {
+				switch message := message.(type) {
+				case network.PlayerState:
+					ready = ready || message.Ready
+				case network.InventoryState:
+					inventoryReady = inventoryReady || message.Inventory != core.Inventory{}
+				}
 			}
-		}
-	}
+		},
+	)
 	start := authoritativeInventory()
 	wantSeeds := core.ItemStack{Item: core.ItemWheatSeeds, Count: core.MaxStackCount}
 	if got := start.Backpack[starterSeedSlot]; got != wantSeeds {
@@ -312,7 +309,12 @@ func TestFarmingLoopEndToEndMemory(t *testing.T) {
 			got, core.FarmlandWetID)
 	}
 
-	// —— 第 6 步：收获，1 小麦 + 2 种子经既有拾取路径入包 ——
+	// —— 第 6 步：收获，哈希产量的两类产物经既有拾取路径入包 ——
+	//
+	// 成熟小麦掉多少由 `sim.cropYieldRolls` 对 (世界种子, 完成采掘的权威 tick,
+	// 维度, 坐标) 的哈希决定，小麦与种子各落在闭区间 [1,3]；两类产物在同一
+	// 完成 tick 经 `PrepareDropBatch`/`CommitDropBatch` 一起入掉落区、共享同一
+	// 拾取延迟，因此小麦一到包里，种子的数量也同时可读。
 	sequence++
 	send(network.PlayerInput{Sequence: sequence, Pitch: tillSoilLookDown, Mining: true})
 	sequence++
@@ -320,26 +322,35 @@ func TestFarmingLoopEndToEndMemory(t *testing.T) {
 	if got := mirrorBlock(farmingCrop); got != core.AirID {
 		t.Fatalf("收获后作物格 = %d，想要空气（成熟作物 1 tick 破坏）", got)
 	}
-	for ticks := 0; countItem(authoritativeInventory(), core.ItemWheat) != 1; ticks++ {
+	// 等待条件从「恰好拾到 1 个」改成区间成员判定：上界吸收多件产物，下界
+	// 继续把「颗粒无收」挡在成功之外；tick 上界结构不变。
+	wheatInYieldRange := func() bool {
+		got := countItem(authoritativeInventory(), core.ItemWheat)
+		return got >= 1 && got <= 3
+	}
+	for ticks := 0; !wheatInYieldRange(); ticks++ {
 		if ticks > farmingPickupTicks {
-			t.Fatalf("等了 %d 个 tick 仍未拾到小麦，当前背包 = %+v",
+			t.Fatalf("等了 %d 个 tick 小麦仍未进入 [1,3]，当前背包 = %+v",
 				ticks, authoritativeInventory())
 		}
 		step()
 	}
 	harvested := authoritativeInventory()
-	if got := countItem(harvested, core.ItemWheat); got != 1 {
-		t.Fatalf("收获后小麦 = %d，想要恰好 1", got)
+	if got := countItem(harvested, core.ItemWheat); got < 1 || got > 3 {
+		t.Fatalf("收获后小麦 = %d，想要落在闭区间 [1,3]", got)
 	}
+	// 种子断言锚定在种下后的真实存量上而不是写死某个总数：掉落 [1,3] 意味着
+	// 合法终值是 [存量+1, 存量+3]，其中下界正是「一轮种收不亏种子」的契约。
 	seedsAfterHarvest := countItem(harvested, core.ItemWheatSeeds)
-	if seedsAfterHarvest != 65 {
-		t.Fatalf("收获后种子 = %d，想要 65（种下后 63 + 掉落 2）", seedsAfterHarvest)
+	if seedsAfterHarvest < seedsAfterPlant+1 || seedsAfterHarvest > seedsAfterPlant+3 {
+		t.Fatalf("收获后种子 = %d，想要 [%d,%d]（种下后 %d + 掉落 [1,3]）",
+			seedsAfterHarvest, seedsAfterPlant+1, seedsAfterPlant+3, seedsAfterPlant)
 	}
 	if got := mirrorBlock(farmingGround); !core.IsFarmland(got) {
 		t.Fatalf("收获后落脚格 = %d，想要仍是耕地", got)
 	}
 
-	// —— 第 7 步：再种一颗，断言循环自持 ——
+	// —— 第 7 步：再种一颗，断言循环至少打平（不亏）——
 	sequence++
 	send(network.PlaceBlock{Sequence: sequence, Pitch: tillSoilLookDown, Slot: 1})
 	settle()
@@ -347,13 +358,15 @@ func TestFarmingLoopEndToEndMemory(t *testing.T) {
 		t.Fatalf("再种后作物格 = %d，想要第一阶段 %d", got, core.WheatStage0ID)
 	}
 	seedsAfterReplant := countItem(authoritativeInventory(), core.ItemWheatSeeds)
-	if seedsAfterReplant != 64 {
-		t.Fatalf("再种后种子 = %d，想要 64", seedsAfterReplant)
+	if seedsAfterReplant != seedsAfterHarvest-1 {
+		t.Fatalf("再种后种子 = %d，想要 %d（收获后存量减去种下的一颗）",
+			seedsAfterReplant, seedsAfterHarvest-1)
 	}
-	// 精确数列 63 → 65 → 64 已逐点断言；这一条把「自持」这个结论本身也写下来：
-	// 种一收一之后手里的种子比种下那一刻**多**，闭环才是净赚而不是净亏。
-	if seedsAfterReplant <= seedsAfterPlant {
-		t.Fatalf("一轮种收之后种子 %d → %d，闭环没有自持",
+	// 掉落区间的下界 1 把旧的「精确数列自持」弱化成「不亏」：最坏情况（只掉
+	// 1 颗种子）下种一收一恰好打平。这一条钉住的就是这条底线——一轮种收之后
+	// 手里的种子绝不能比种下那一刻少，闭环才不会因随机性走向净亏。
+	if seedsAfterReplant < seedsAfterPlant {
+		t.Fatalf("一轮种收之后种子 %d → %d，闭环出现净亏",
 			seedsAfterPlant, seedsAfterReplant)
 	}
 }
