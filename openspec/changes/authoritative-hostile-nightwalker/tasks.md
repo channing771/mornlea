@@ -9,15 +9,15 @@
 
 ## 2. 发光/衰减单一表迁入 core 与 DisplayDayPhase、腐肉食物
 
-- [ ] 2.1 在 `internal/core` 新增 `BlockEmission(block core.BlockID) uint8` 与 `BlockLightAttenuation(block core.BlockID) uint8` 失败测试（light block 15/其余 0；流体 1/其余 0；未来 torch 条目由 A-02 追加）；若 A-02 契约已落地（signature 与值一致）则直接消费不重复创建并记录
-- [ ] 2.2 实现 core 单一表并让 `internal/assets`（`Registry.Emission`）与 `internal/mesh`（`LightAttenuation`）改为委托 core；`go test ./internal/core ./internal/assets ./internal/mesh -race -count=1`
+- [ ] 2.1 在 `internal/core` 新增 `BlockEmission(block core.BlockID) uint8`、`BlockLightAttenuation(block core.BlockID) uint8`、`BlockOpaque(block core.BlockID) bool` 失败测试（light block 15/其余 0；流体 1/其余 0；不透明谓词与既有 `assets.Registry.Opaque` 逐值一致；未来 torch 条目由 A-02 追加）；若 A-02 契约已落地（signature 与值一致）则直接消费不重复创建并记录
+- [ ] 2.2 实现 core 单一表并让 `internal/assets`（`Registry.Emission`/`Registry.Opaque`）与 `internal/mesh`（`LightAttenuation`）改为委托 core；`go test ./internal/core ./internal/assets ./internal/mesh -race -count=1`
 - [ ] 2.3 在 `internal/core` 新增 overflow-safe `DisplayDayPhase(worldTime uint64, offset uint16) uint16`（先 `%24000` 再相加取模）失败测试（边界：MaxUint64、offset 23999）并实现；`go test ./internal/core -race -count=1`
 - [ ] 2.4 在 `internal/core` 登记 `ItemRottenFlesh`（堆叠 64）与食物表条目（饥饿 4、饱和 0），更新「只有面包」穷举测试为精确两种食物；`go test ./internal/core -race -count=1`
 
 ## 3. hostile_mobs.bin schema v1 与存储契约
 
-- [ ] 3.1 失败测试：文件布局（32-byte 头 magic `MHST`/envelope 1/schema 1/revision u64/count u16/payloadLen u32/CRC-32C；≤64×72-byte 记录；总长 ≤4640 bytes；记录 ID 非零严格升序；round trip）
-- [ ] 3.2 失败测试：字段校验矩阵（future schema/envelope、截断、尾随、坏 CRC、count>64、重复/逆序/零 ID、未知 dimension、NaN/Inf、health 0 或 >20、非法 bool、无目标却带 PlayerID、有目标非 UUIDv4、cooldown/burn/despawn 越界、world Y 越界、payload 读空）
+- [ ] 3.1 失败测试：文件布局（32-byte 头 magic `MHST`/envelope 1/schema 1/revision u64/count u32/payloadLen u32/CRC-32C；CRC 覆盖 `data[8:28]`+payload；≤64×72-byte 记录；总长 ≤4640 bytes；记录 ID 非零严格升序；round trip）
+- [ ] 3.2 失败测试：字段校验矩阵（future schema/envelope、截断、尾随、坏 CRC、count>64、重复/逆序/零 ID、未知 dimension、NaN/Inf、health 0 或 >20、非法 bool、无目标却带 PlayerID、有目标非 UUIDv4、cooldown/burn/despawn 越界、position.Y 不在 `[core.MinY, core.MaxY)`、payload 读空）
 - [ ] 3.3 实现固定 binary codec（复用既有 `appendU32`/`byteDecoder`/CRC helper；不使用 JSON/gob/reflection；`physics.State` 只编码 position/velocity/onGround；保留字段零）
 - [ ] 3.4 实现 `HostileMobStore`（`LoadHostileMobs`/`SaveHostileMobs`；missing 返回独立 `ErrHostileMobsNotFound`）与 Memory/Disk 契约（temp+fsync+rename、0600、revision 冲突与损坏保护、`hostile_mobs.bin` 路径、WorldStore 组合、backup 复制正式文件忽略 temp）
 - [ ] 3.5 `hostile_codec_fuzz_test.go`/故障注入（截断、bit-flip 不 panic；golden round trip）；`gofmt -w internal/storage`、`go test ./internal/storage -race -count=1`；SPEC+QUALITY 双评审后提交 `feat: persist hostile nightwalkers`（评审写入 ledger）
@@ -26,7 +26,7 @@
 
 - [ ] 4.1 失败测试：固定集合（插入/恢复按 ID 排序、重复/第 65 只拒绝、`hostileState` 容量 64）；与玩家/伙伴同一 per-actor `physics.Step`（顺序玩家→伙伴→夜行者 ID 序、复用 `SubmersionFlags` 与同一 tunables）
 - [ ] 4.2 实现最小 `hostileState`（排序 slice + 复用 scratch + restore/snapshot/测试入口；不建 map/ECS；AABB 与玩家相同、输入仅水平+jump）
-- [ ] 4.3 失败测试：预分配 29³ 16-bucket BFS 局部区块光（半径 14、发射值、每步 −1 −`BlockLightAttenuation`、opaque 阻挡、fluid 额外 −1、unknown/unloaded 当阻挡；与既有客户端/Rust 光 oracle 小夹具一致；重复调用 allocations=0）并实现 `block_light_query.go`
+- [ ] 4.3 失败测试：预分配 29³ 16-bucket BFS 局部区块光（半径 14、发射值、每步 −1 −`BlockLightAttenuation`、`core.BlockOpaque` 阻挡、fluid 额外 −1、unknown/unloaded 当阻挡；与既有客户端/Rust 光 oracle 小夹具逐位一致——真实差异必须记录并裁决，不得静默采用两套规则；重复调用 allocations=0）并实现 `block_light_query.go`
 - [ ] 4.4 失败测试：spawn 决定（active sessions 排序后 `WorldTimeTicks % n` 选锚点；splitmix64 派生半径/轴向/坐标；hash 低 8 位 <13 才尝试；24..48 距离窗；双格空气/下方 solid/非流体/loaded；night/day；light 7/8；global64；nearby 8；相同输入重放；每 tick 读取候选 ≤1）并实现 spawn 与稳定 ID（ID 同一 hash 非零；冲突重散列 ≤64 次）
 - [ ] 4.5 失败测试：灼烧（露天白昼每 20 tick 扣 1、遮顶/夜间重置）、despawn（>64 格累计 600、回 50 格清零）、死亡掉落（同 tick 移除、死亡 chunk 环形尝试放 1 腐肉、全满确定性省略）；扩展 `core.FoodValue` 两食物更新后实现
 - [ ] 4.6 `engine_step.go` 新增 hostile 阶段并把 spawn/burn/despawn/drop 接入；`gofmt -w internal/core internal/sim`、`make rust`、`go test ./internal/core ./internal/sim -race -count=1`；双评审后提交 `feat: simulate hostile nightwalkers`
@@ -34,7 +34,7 @@
 ## 5. server 有界追逐 worker 与路径执行
 
 - [ ] 5.1 失败测试：目标选择（最近 active 同维 live player、等距按 `PlayerID` 字节序）；每 tick 至多 2 份快照（ID 最小且到期），其余顺延；快照覆盖 33×9×33 与 revisions；第三份不得读取世界
-- [ ] 5.2 实现两槽 worker（复用 `companion.NewPathGrid`/`FindPath`；channel cap 2；结果按 ID 序在 tick 边界应用；旧 generation/target/revision 变化丢弃；权威 tick 只发快照不等待 A*）
+- [ ] 5.2 实现两槽 worker（复用 `companion.NewPathGrid`/`FindPath`；channel cap 2；**投递 MUST 非阻塞 select**——满槽时该 mob 本次顺延、下一 tick 重规划；结果按 ID 序在 tick 边界应用；已过期（generation/target/revision 变化）的结果丢弃；权威 tick 只发快照不等待 A*；补满槽非阻塞用例）
 - [ ] 5.3 失败测试：路径执行（目标超窗口钳到朝玩家方向窗缘可站立格；每 waypoint 前重验 revisions 与当前 cell；失效清 path 且 `NextRepathTick` 下一 tick；到 1.8 停移并冻结一次攻击意图；无路径不穿墙直线移动）并实现 `HostileAction{MoveX,MoveZ,Jump,AttackTarget}` 消费
 - [ ] 5.4 极简 damage seam：sim 内 test-only 通道验证 3 伤害/20 tick 冷却（同 tick 意图冻结、按 ID 升序、既有 `applyDamage`）；`gofmt -w internal/server internal/sim`、`go test ./internal/companion ./internal/server ./internal/sim -race -count=1`；双评审后提交 `feat: drive bounded nightwalker AI`（seam 与 A-03 统一 combat 的接通交由 A-06，删除主体也归集成）
 
@@ -57,5 +57,5 @@
 ## 8. 视觉场景构造与功能线终审
 
 - [ ] 8.1 `hostile-mob` 场景构造（夜间火把边缘 8 只夜行者、1 只受击 1 只追逐；无 nametag 断言；插入 `ai-companion` 与 `water-surface-slope` 之间；不写 golden——缺失 golden 时分支模式跳过该场景逐图比对、顺序与不变量测试照常）
-- [ ] 8.2 功能线验证：`make rust`、`go test ./internal/core ./internal/companion ./internal/network ./internal/storage ./internal/sim ./internal/server ./internal/client ./internal/render ./internal/nativeabi ./cmd/mornlea -race -count=1`、`go test ./internal/archcheck -count=1`、`go vet ./...`、`gofmt -l .` 无输出、`openspec validate --all --strict --no-interactive`、`git diff --check`
+- [ ] 8.2 功能线验证：`make rust`、`go test ./internal/core ./internal/companion ./internal/network ./internal/storage ./internal/sim ./internal/server ./internal/client ./internal/render ./internal/nativeabi ./cmd/mornlea -race -count=1`、`go test ./... -race`（本分支非合并态；批次集成时由 A-06/A-07 以最终合并态再跑全量）、`go test ./internal/archcheck -count=1`、`go vet ./...`、`gofmt -l .` 无输出、`openspec validate --all --strict --no-interactive`、`git diff --check`；另记录 benchmark scenario v19 或 `cmd/perfcheck` 输出摘要（tick 热路径变更，数值只记录、不改基线）
 - [ ] 8.3 独立整分支终审（规格合规 + 上限 + worker 不阻 tick + spawn 重放 + 暗度 oracle + schema 错误矩阵 + 重启 + wire 订阅 + 75-body ABI + 无 nametag + 无版权资源）；终审结论与验证输出摘要写入 `ledger.md`；提交后交集成控制器（不自行合入 main、不更新 golden）

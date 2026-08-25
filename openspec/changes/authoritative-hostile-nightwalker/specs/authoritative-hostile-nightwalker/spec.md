@@ -82,7 +82,7 @@
 
 ### Requirement: 追逐最近的 active 玩家且路径结果有界重验
 
-夜行者 SHALL 选择最近的 active 同维 live 玩家作为目标（等距按 `PlayerID` 字节序）。每 tick 系统 MUST 至多为到期夜行者构造 2 份不可变路径快照，其余顺延；路径结果 MUST 在 tick 边界按 ID 升序应用，旧 generation、目标变化或 path revision 失效的结果 MUST 被丢弃；每个 waypoint 到达前 MUST 重验对应 chunk revision；目标超出路径窗口时终点 MUST 钳到朝玩家方向的窗口边缘可站立格；距目标水平 1.8 格内 MUST 停止移动并冻结一次攻击意图；无可用路径时夜行者 MUST NOT 进行穿墙直线移动。
+夜行者 SHALL 选择最近的 active 同维 live 玩家作为目标（等距按 `PlayerID` 字节序）。每 tick 系统 MUST 至多为到期夜行者构造 2 份不可变路径快照，其余顺延；路径结果 MUST 在 tick 边界按 ID 升序应用，已过期（目标变化、路径上下文变化或路径已重算）的结果 MUST 被丢弃；每个路径点到达前 MUST 重验对应 chunk revision；目标超出路径窗口时终点 MUST 钳到朝玩家方向的窗口边缘可站立格；距目标水平 1.8 格内 MUST 停止移动并冻结一次攻击意图；无可用路径时夜行者 MUST NOT 进行穿墙直线移动。
 
 #### Scenario: 选择最近玩家
 
@@ -98,14 +98,14 @@
 
 #### Scenario: 过期路径结果被丢弃
 
-- **GIVEN** 夜行者的一个旧 generation 路径结果在最新结果之后到达
+- **GIVEN** 夜行者的一个已过期路径结果在最新结果之后到达
 - **WHEN** tick 边界应用路径结果
-- **THEN** 旧结果 MUST 被丢弃，移动 MUST 使用最新结果
+- **THEN** 过期结果 MUST 被丢弃，移动 MUST 使用最新结果
 
 #### Scenario: revision 失效触发重规划
 
-- **GIVEN** 夜行者正沿路径移动且其前方 waypoint 所在 chunk revision 已变化
-- **WHEN** 系统重验该 waypoint
+- **GIVEN** 夜行者正沿路径移动且其前方路径点所在 chunk revision 已变化
+- **WHEN** 系统重验该路径点
 - **THEN** 夜行者 MUST 停止沿旧路径移动，路径清空，下一 tick 排入重算
 
 #### Scenario: 到达攻击距离停止移动

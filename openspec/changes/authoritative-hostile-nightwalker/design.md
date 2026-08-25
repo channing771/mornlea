@@ -40,15 +40,15 @@
 
 ### D2：发光/衰减单一表迁入 `internal/core`（裁决 A-04-q2 路径 A）
 
-`core` 新增 `BlockEmission(block core.BlockID) uint8` 与 `BlockLightAttenuation(block core.BlockID) uint8`（当前值：light block 15 / 其余 0；流体 1 / 其余 0；torch 14 属 A-02 追加段），`internal/assets` 与 `internal/mesh` 改为委托 core。若 A-02 契约提交先行落地（其 `core.BlockEmission` 已存在且语义一致），则本分支直接消费其表，不重复创建；实现期以「函数已存在且签名/值一致」为判据在 tasks 中留检测步骤。
+`core` 新增 `BlockEmission(block core.BlockID) uint8`、`BlockLightAttenuation(block core.BlockID) uint8` 与 `BlockOpaque(block core.BlockID) bool`（当前值：light block 15 / 其余 0；流体 1 / 其余 0；不透明谓词与既有 `assets.Registry.Opaque` 一致——registered 且非 air/glass/leaves/fluid/作物；torch 14 属 A-02 追加段），`internal/assets` 与 `internal/mesh` 改为委托 core。若 A-02 契约提交先行落地（其 `core.BlockEmission` 已存在且签名/值一致），则本分支消费其表，不重复创建（同一判据应用于 `BlockOpaque`）；实现期以「函数已存在且签名/值一致」为判据在 tasks 中留检测步骤。
 
-**否决**：把表留在 assets/mesh 而 sim 复制同值表（双源漂移）；等待 A-02 阻塞（本分支需独立可验证）。
+**否决**：把表留在 assets/mesh 而 sim 复制同值表（双源漂移）；等待 A-02 阻塞（本分支需独立可验证）；以碰撞盒近似 opacity（glass/leaves 在客户端光传播中透光，碰撞盒近似会造成伺服不一致）。
 
 ### D3：局部区块光用预分配 29³ 16-bucket BFS
 
-规则：半径 14、初始值=发射值（发光方块 15、火把 14 属 A-02 段）、每格每步衰减 = 1 + `BlockLightAttenuation`（流体额外 1）、opaque 阻挡（有碰撞盒且不透明——按既有 `BlockCollisionBoxes`/透明度语义）、unknown/unloaded 按阻挡；取候选中心值为 ≤7 判定。`Engine` 持 29³ 的 light/visited/bucket scratch，每次调用零分配；不保存跨 tick 缓存。与客户端既有静态方块光传播的**位守恒差异必须在设计评审时以 oracle 测试钉住**（Rust 侧方块光实现作为 oracle；若存在逐位差异，以 sim 侧为权威并记录）。
+规则：半径 14、初始值=发射值（发光方块 15、火把 14 属 A-02 段）、每格每步衰减 = 1 + `BlockLightAttenuation`（流体额外 1）、opaque 阻挡（单源谓词 `core.BlockOpaque`，与客户端光传播同一语义）、unknown/unloaded 按阻挡；取候选中心值为 ≤7 判定。`Engine` 持 29³ 的 light/visited/bucket scratch，每次调用零分配；不保存跨 tick 缓存。传播规则 MUST 与客户端/Rust 方块光 oracle 在固定小夹具上逐位一致；若实现中发现任何真实差异，记录差异来源并裁决（不得静默采用两套不一致规则）。
 
-**风险**：与客户端传播语义发生漂移 → mitigation：oracle 对照测试 + 设计评审记录差异来源。
+**风险**：与客户端传播语义发生漂移 → mitigation：oracle 对照测试 + 差异必须记录并裁决。
 
 **否决**：服务端全世界光照缓存（内存与 tick 成本）；把判定委托给客户端（服务端不能读客户端）。
 
@@ -65,6 +65,7 @@
 - 目标选择在 server manager（按会话镜像的 active 玩家），每 tick 为 ID 最小且到期的至多两只构造快照。
 - waypoint 执行在 sim（经 `HostileActions` 轴量）——即 sim 消费 server 输出的 `HostileAction{MoveX,MoveZ,Jump,AttackTarget}`；移动经既有 per-actor `physics.Step`（顺序玩家→伙伴→夜行者 ID 序）；到 1.8 内停移 + 冻结攻击意图。
 - 攻击结算：sim 的 `advanceHostileMelee` 先冻结全部意图，再按 ID 升序经 `applyDamage` 结算 3 点 + 攻击冷却 20；本次的损伤测试 seam 为包内测试专用（`hostile_combat_test.go` 通过 sim 内部 `damageHostileTarget` 之类的 test-only 通道验证数值），A-06 接入统一 combat settlement 时删除。
+- 快照请求投递：权威 tick 端向两槽 channel 的发送 MUST 为非阻塞投递（select）；channel 满时该夜行者本次顺延、下一 tick 排入重规划（per-ID latest-wins 语义），MUST NOT 阻塞权威 tick 等待 A*。
 
 ### D6：网络与呈现
 
@@ -76,8 +77,8 @@
 
 ### D7：持久化与备份
 
-- 头 32 字节（magic `MHST` + envelope1 + schema1 + revision u64 + count u16 + payloadLen u32 + CRC-32C）；记录 72 字节固定（ID/状态/生命/冷却/…）；CRC 范围按 companion_codec 先例（header 段+payload 或 payload-only——实现期以 `companionChecksum` 的惯例为准并写 golden 测试）。
-- 路径 `hostile_mobs.bin`；`replaceFileAtomicallyWithPatternAndHooks` 复用（temp+fsync+rename+目录 fsync、0600）；backup 自动复制（新增文件走既有全树复制，忽略 `*.tmp-*`）。
+- 头 32 字节 = magic(4) + envelope u32(4) + schema u32(4) + revision u64(8) + count u32(4) + payloadLen u32(4) + CRC-32C(4)（与 `companion_codec.go` 的 `companionHeaderLength`=32 先例一致）；记录 72 字节固定（ID u64/dimension u32/State position+velocity 各 12/onGround 1/yaw f32/health·attack·hurt·burn 各 1/hasTarget 1/PlayerID 16/NextRepath u64/Distant u16 —— 恰好无填充）；CRC-32C 覆盖范围钉死为 `data[8:28]`（schema..revision..count..payloadLen 段）+ payload 段（同 `companionChecksum` 惯例）。world Y 越界判据：record 的 position.Y 不在 `[core.MinY, core.MaxY)`（即 `-64..319`）。
+- 路径 `hostile_mobs.bin`；`replaceFileAtomicallyWithPatternAndHooks` 复用（temp+fsync+rename+目录 fsync、0600，临时文件名按既有带前导点约定 `.hostile_mobs.bin.tmp-*`）；backup 自动复制（全树复制，忽略 `.*.tmp-*`）。
 - 损坏/未来版本：`Host` 构造失败（启动即拒），不得以空集合覆盖。
 
 ### D8：批量基线（用于 Task 1 的证明）

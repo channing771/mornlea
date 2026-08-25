@@ -2,13 +2,13 @@
 
 ## Purpose
 
-定义夜行者存档 `hostile_mobs.bin` 的稳定格式、校验错误矩阵、存储契约与重启恢复语义。夜行者的路径与规划 generation 是运行时派生物，不落盘。
+定义夜行者存档 `hostile_mobs.bin` 的稳定格式、校验错误矩阵、存储契约与重启恢复语义。夜行者的路径与规划批次（generation）是运行时派生物，不落盘。
 
 ## ADDED Requirements
 
 ### Requirement: 文件由固定头与最多 64 条固定记录构成
 
-归档文件 SHALL 由 32-byte 头与最多 64 条 72-byte 记录组成，文件总长 MUST 不超过 4640 bytes。头 MUST 依次包含：magic `MHST`、envelope 版本 u32（恒为 1）、schema 版本 u32（恒为 1）、revision u64、count u16、payload 长度 u32 与 CRC-32C。记录 MUST 按 ID 严格升序且 ID MUST 非零。编码后解码 MUST 恢复出与输入逐字段一致的全部记录。
+归档文件 SHALL 由 32-byte 头与最多 64 条 72-byte 记录组成，文件总长 MUST 不超过 4640 bytes。头 MUST 依次包含：magic `MHST`、envelope 版本 u32（恒为 1）、schema 版本 u32（恒为 1）、revision u64、count u32、payload 长度 u32 与 CRC-32C；CRC 覆盖范围 MUST 按既有 `companion` 存档惯例固定（头部 `[8:28]` 段与 payload 段）。记录 MUST 按 ID 严格升序且 ID MUST 非零。编码后解码 MUST 恢复出与输入逐字段一致的全部记录。
 
 #### Scenario: 编码解码 round trip
 
@@ -80,7 +80,7 @@
 
 #### Scenario: 备份包含正式文件并忽略临时文件
 
-- **GIVEN** 世界目录中有 `hostile_mobs.bin` 与一个 `hostile_mobs.bin.tmp-*` 临时文件
+- **GIVEN** 世界目录中有 `hostile_mobs.bin` 与一个按既有临时文件命名约定的 `.hostile_mobs.bin.tmp-*` 临时文件
 - **WHEN** 执行世界备份
 - **THEN** 备份目录 MUST 含正式 `hostile_mobs.bin`，MUST NOT 含临时文件
 

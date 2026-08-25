@@ -13,11 +13,11 @@
 - **白昼灼烧与消失**：显示相位为白昼且露天（上方依次无实体遮挡方块）时每 20 tick 扣 1 生命，遮顶或夜间重置计时；距全部 active 玩家 >64 格累计 600 active tick 后 despawn（回到范围内清零）。
 - **死亡掉落**：健康归零同 tick 移除，经既有 `PrepareDropBatch` 在死亡 chunk 环形尝试（按已排序 Ready chunk）放 1 个腐肉；全满时确定性省略掉落但仍完成死亡。
 - **腐肉食物**：新增 `ItemRottenFlesh`（stack 64）与食物表条目（饥饿 4、饱和 0），复用既有 `advanceEating` 状态机；本批不引入中毒或任何状态效果系统。
-- **持久化**：新增独立 `hostile_mobs.bin`（magic `MHST`、envelope v1、schema v1、revision u64、count u16、payload u32、CRC-32C，最多 64 条 72-byte 记录）；记录按 ID 严格升序；未来版本/损坏/非法状态/越界在起点稳定拒绝且不得覆盖旧文件；Memory 与 Disk 同构实现；异步保存 worker 复用 `companion` 持久化状态机形状（jobs/completions 容量 1、revision、dirty/inFlight/retry、autosave tick、`Flush`/`Close`，关服屏障失败返回错误）；路径与 worker generation 不落盘。
+- **持久化**：新增独立 `hostile_mobs.bin`（32-byte 头：magic `MHST`、envelope v1、schema v1、revision u64、count u32、payload u32、CRC-32C，最多 64 条 72-byte 记录）；记录按 ID 严格升序；未来版本/损坏/非法状态/越界在起点稳定拒绝且不得覆盖旧文件；Memory 与 Disk 同构实现；异步保存 worker 复用 `companion` 持久化状态机形状（jobs/completions 容量 1、revision、dirty/inFlight/retry、autosave tick、`Flush`/`Close`，关服屏障失败返回错误）；路径与 worker generation 不落盘。
 - **协议（追加消息，版本号不变）**：S→C 新增 `HostileSpawn`/`HostileState`/`HostileDespawn` 三类消息（`ServerTick` u64 + count u8 + ≤64 条 record、record 按 ID 严格升序；spawn 携带 ID/dimension/position/yaw/health，state 携带 ID/position/velocity/yaw/health，despawn 携带 ID）；按会话已订阅 chunk 订阅发布（进入视野发 spawn、持续发 state、离开/死亡发 despawn）；协议版本号本分支保持 v26，v27 由 A-07 集成任务统一升；消息编号终值由 A-06 按固定合流顺序锁定。
 - **客户端呈现**：latest-wins 镜像（spawn 建立、state 只接受更新 tick、despawn 删除；未知 state 请求下一 spawn 不隐式造实体）；移动插值复用远端玩家/伙伴的既有时间边界；avatar pass 容量 11→75 bodies（66→450 个 80-byte instance），新增 `EntityHostile` kind（原创暗青/灰紫调色、不同头身比例、仍恰好 6 cuboids）；**永远不**为夜行者生成 nametag。
 - **client ABI v8→v9**：本分支在 `engine/crates/mornlea_client` 与客户端边界同步升版（ABI 常量、容量与尺寸对齐、早期拒绝旧动态库），并按 A-02-q2 裁决先例对 `AGENTS.md`/`CLAUDE.md` 做**最小同步**：只改 client ABI 版本那一处、两份逐字节相同；其余基线内容、协议 v27、`hostile_mobs` v1 版本基线、golden 与 benchmark scenario 仍归 A-07。
-- **单一发光表**：`internal/core` 新增 `BlockEmission`/`BlockLightAttenuation` 单一表（把现有 `internal/assets`/`internal/mesh` 同名逻辑改为委托 core；若 A-02 契约（`core.BlockEmission`）先行落地，则直接消费其表、本分支不重复创建）。
+- **单一发光/透明度表**：`internal/core` 新增 `BlockEmission`/`BlockLightAttenuation`/`BlockOpaque` 单一表（把现有 `internal/assets`/`internal/mesh` 的发光、衰减与不透明谓词逻辑改为委托 core；若 A-02 契约（`core.BlockEmission`）先行落地，则直接消费其表、本分支不重复创建，`BlockOpaque` 同判据）。
 - **视觉场景构造**：`cmd/mornlea` 追加 `hostile-mob` capture 场景构造（固定夜间火把边缘 8 只夜行者，其中一只受击、一只追逐；无 nametag 断言），插入 `ai-companion` 与 `water-surface-slope` 之间；**不写 golden PNG**（golden 归一 A-07）。
 
 ## Capabilities
