@@ -44,3 +44,9 @@
 
 - `make rust` 通过（release 4.36s）；`go vet ./...` 无输出；`gofmt -l .` 无输出；`openspec validate --all --strict --no-interactive` 65 passed / 0 failed。
 - `go test ./... -race -count=1`：24 包 ok，2 失败均按负载 flake 分诊协议单独复跑通过——`TestMemoryTCPFluidDamBreakBroadcastParity`（internal/server，全量下 4.72s 败、单跑 ok）与 `TestInteractiveInputPresentsDrainedLargeCorrectionInSameFrame`（cmd/mornlea，全量下撞包级 600s timeout、单跑 ok；E-11 ledger 有同型先例）。两者均在 fluid/server 与客户端呈现域，与本变更 test-only diff 无因果路径。
+
+## 归档收尾（2026-08-26）
+
+- PR #87 以 merge `c2aed88c` 合入，CI run `32885347564` 8 项首跑全绿；归档前 strict 校验 65/65。
+- 合并序：分支存续期间 origin/main 三次前移（B-13/B-05/B-31、D-01），AGENTS.md/CLAUDE.md 同段文本冲突两次均按 design D3 解法取并集（main 全文为底 + 重施两处 oracle 从句删除），archcheck 逐字节一致门禁随行验证。
+- 移交项见 proposal「延期与放弃」：mesh oracle 切片（待 A 批次合流）、三份已归档 rust-engine-* spec 的 oracle 措辞卫生（spec-hygiene 独立 change）、两处「collision oracle」注释措辞顺手清理。
