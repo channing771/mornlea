@@ -11,7 +11,7 @@
 - 进食输入持续满足（手持食物、按住使用、未打开容器/菜单）时，生存 HUD 在两行状态栈上方——**与采掘进度条同一锚点**——呈现进食进度条：固定轨道 + 比例填充，几何常量与 `appendMiningBar` 同源（复用呈现形状）。
 - 进度值为**客户端预测**：按连续输入时长以权威 tick 周期（`physics.FixedDelta`，50 ms / 20 TPS）累积，分母为与权威 `EatingTicks` 默认值同源的呈现层常量 32；不新增协议字段、不升版本。
 - 与采掘反馈**互斥**：采掘条激活时优先采掘条，进食条不出现——进食条最多 2 quad（轨道+填充）不超过采掘条激活时的 3 quad，固定上传容量 267 quad / 46912 bytes 与 benchmark scenario v19 均不变。
-- 预测进度的中断镜像：`Eating` 输入位归零（松手/开箱/菜单，经 `interactive.go` 的 `allowActions` 天然覆盖）、选中栏位变化、栏位物品变化 → 立即清零。
+- 预测进度的中断镜像：`Eating` 输入位归零（松手/开箱/菜单，经 `interactive.go` 的 `allowActions` 天然覆盖）、选中栏位变化、栏位物品变化 → 立即清零；权威确认饥饿已满时不呈现（对齐权威侧「饥饿已满不推进」）。
 - 客户端 hud 包新增关注点文件 `eating.go`（`EatingOverlay` 类型 + `appendEatingBar`），`internal/client` 新建进食进度小状态机。
 
 ### 用户可观察结果
