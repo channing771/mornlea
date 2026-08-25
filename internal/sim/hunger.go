@@ -33,7 +33,7 @@ const defaultRegenHungerThreshold = 18
 
 // 疲劳来源固定表（单位：千分位）。
 //
-// 这五个数值**刻意不做 tunable**：它们之间的比例关系就是玩法本身（跳一次抵
+// 这些数值**刻意不做 tunable**：它们之间的比例关系就是玩法本身（跳一次抵
 // 十次挖掘、回一点血抵 120 次挖掘），逐个可调只会制造互相矛盾的配置组合，
 // 而任何一种组合都没有对应的验收标准。新增疲劳来源是给这张表加一行，
 // 并在对应的**成功路径**上调用 applyExhaustion。
@@ -58,6 +58,12 @@ const (
 	// 它比阈值（4000）大，因此**一次调用会跨过多个阈值**——applyExhaustion
 	// 必须循环处理，只减一次阈值会让回血的代价凭空少掉三分之一。
 	exhaustionRegenPerHealthMilli uint16 = 6000
+	// exhaustionMeleeMilli 是一次成功近战命中的疲劳。判定点：advancePlayerMelee
+	// 的意图冻结分叉（落空、被方块遮挡、目标冷却免疫的输入不形成命中，不累积）。
+	//
+	// 取 100 与参考实现同口径：参考实现的攻击疲劳是 0.1，按本表统一的 ×1000
+	// 换算成千分位，与既有五行同一换算口径。
+	exhaustionMeleeMilli uint16 = 100
 )
 
 // swimExhaustionMilli 把一次物理步的水平位移换算成游泳疲劳（千分位）。

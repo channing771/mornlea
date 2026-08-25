@@ -50,6 +50,9 @@ func (engine *Engine) advancePlayerMelee() {
 		}
 		attacker.meleeSuppressedMining = true
 		target.meleeCooldownTicks = playerMeleeCooldownTicks
+		// 疲劳在意图冻结时收取而不是留到结算循环：同 tick 被反击致死的攻击者
+		// 仍要为已成功的命中付费，结算循环因此保持只做 applyDamage。
+		attacker.applyExhaustion(exhaustionMeleeMilli, engine.tunables.ExhaustionThresholdMilli)
 		intents[count] = meleeIntent{attacker: id, target: targetID}
 		count++
 	}
