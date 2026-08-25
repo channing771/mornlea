@@ -8,7 +8,7 @@
 
 ## 3. Rust egui 设置页呈现
 
-- [ ] 3.1 在 Rust `mornlea_client` 的 egui 层以 headless 测试先行方式实现音量、材质包路径、窗口预设、保存/取消/返回、dirty 提示、状态/错误文案及 Escape 行为；验证 640×360 下可访问且无重叠、路径输入有界、同帧事件顺序稳定、未引入 `egui-winit`；运行 `make rust-check`。
+- [x] 3.1 在 Rust `mornlea_client` 的 egui 层以 headless 测试先行方式实现音量、材质包路径、窗口预设、保存/取消/返回、dirty 提示、状态/错误文案及 Escape 行为；验证 640×360 下可访问且无重叠、路径输入有界、同帧事件顺序稳定、未引入 `egui-winit`；运行 `make rust-check`。
 
 ## 4. Go 设置事务与运行时接线
 

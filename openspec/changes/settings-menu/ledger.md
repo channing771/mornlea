@@ -25,7 +25,7 @@
 | --- | --- | --- | --- | --- | ---: | --- | --- |
 | 1.1 配置契约 | `d01_t1_config_impl` | `e1bfaa89` | `d01_t1_spec_review`：PASS | `d01_t1_quality_review`：PASS | 0 | RED 编译失败；`make rust`、`go test ./internal/config -race -count=1`、`go vet ./internal/config`、archcheck、gofmt、diff-check PASS | ACCEPTED |
 | 2.1 client ABI v9 | `d01_t2_abi_impl` | `79623956`；修复 `e0e08099`、`c0b5e5d0` | `d01_t2_spec_review`：FAIL→PASS→PASS | `d01_t2_quality_review`：FAIL→FAIL→PASS | 2 | RED 编译失败；Rust 105 tests、clippy/fmt、`make rust`、client race、cmd compile/action routing、diff-check PASS；Rust 测试名集合不变 | ACCEPTED |
-| 3.1 Rust egui 设置页 | 待派发 | — | — | — | 0 | — | PENDING |
+| 3.1 Rust egui 设置页 | `d01_t3_rust_ui_impl` | `0c656133`；修复 `c79150f6` | `d01_t3_spec_review`：PASS→PASS | `d01_t3_quality_review`：FAIL→PASS | 1 | RED 44 个编译错误 + 容量预检测试失败；`make rust-check`（client 118、engine 160）、release Rust、client race、fmt/clippy/diff-check PASS | ACCEPTED |
 | 4.1 Go 事务与接线 | 待派发 | — | — | — | 0 | — | PENDING |
 | 5.1 视觉基线 | 待派发 | — | — | — | 0 | — | PENDING |
 | 5.2 长期文档 | 待派发 | — | — | — | 0 | — | PENDING |
@@ -48,3 +48,4 @@
 - R-005：接受非法直接构造的 `WindowSize.Dimensions()` 返回 `(0, 0)`；所有配置与 UI 输入边界负责先拒绝非法枚举，合法三预设映射已由测试锁定。
 - R-006：client ABI 升级任务必须让现存 `cmd/mornlea` 保持可编译；在设置业务接入前，typed action 继续路由，settings-changed 只进入显式 deferred 分支且不得误触按钮。
 - R-007：因本任务大量触碰既有混装 Rust UI 测试模块，按项目硬规范在同一任务拆成关注点文件并保留测试名集合；漏写主题头注释按阻断项修复，不以“仅测试”降级。
+- R-008：egui UI 帧在消费 RawInput 前按布局保守预留最坏事件数（主菜单 8、设置页 4）；剩余容量不足时允许提前显式 `CAPACITY`，以换取队列、焦点、光标与滚动状态可无损重放。空队列始终可运行正常帧。
