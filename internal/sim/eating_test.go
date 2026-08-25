@@ -441,8 +441,9 @@ func TestEatingContainerOpenInterruptsAndRestartsAfterClose(t *testing.T) {
 			player.hunger, player.saturationMilli)
 	}
 
-	// 关箱：容器界面是玩家自己关的，不是引用失效被权威清除的，夹具直接置回
-	// false 表达这一观察。进食输入始终没松。
+	// 关箱：零值容器引用在开箱那一 tick 末尾已被 `publishContainers` 判失效
+	// 清掉，这里的显式置回 false 表达"玩家主动关箱"的观察，使重启语义不依赖
+	// 标志因何变 false。进食输入始终没松。
 	engine.sessions[eatingTestSession].viewContainer = false
 	for range defaultEatingTicks - 1 {
 		engine.Step()
@@ -468,9 +469,8 @@ func TestEatingContainerOpenInterruptsAndRestartsAfterClose(t *testing.T) {
 // tick 打开容器不结算」，钉住 design.md D4 的优先序：中断条件与结算条件在同一
 // tick 同时成立时，中断必须先短路。
 //
-// 只断言"面包数不变"挡不住把 `suspended` 判定挪到结算之后的实现——那种实现
-// 会先扣料回饱、再把进度清零，面包数一样少一个。饥饿/饱和的精确不变才是这条
-// 用例真正承重的读数，进度清零是中断语义自身的核对。
+// 只断言"状态清零"挡不住先结算后清零的实现——那种实现面包少一个、饥饿 +5，
+// 状态却照样为空；面包数与饥饿/饱和的精确不变是本用例的双重承重读数。
 func TestEatingContainerOpenOnSettlementTickDoesNotSettle(t *testing.T) {
 	engine, player := readyEatingPlayer(t, 12, 0)
 	setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
