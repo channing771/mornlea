@@ -12,9 +12,14 @@ import (
 // 结算前在伙伴背包副本上按固定序逐堆预演，任一堆放不下即该 tick 整体不结算
 // ——方块、容器内容物、工具耐久、背包与采掘进度满格状态全部保持。
 
-// companionChestTicks 是铁镐对箱子/熔炉的权威采掘计时（miningRule），
-// 完成分叉恰好发生在第 companionChestTicks 次 advanceMiningOnce。
-const companionChestTicks = 8
+// companionContainerTicks 是铁镐对箱子/熔炉的权威采掘计时（miningRule），
+// 完成分叉恰好发生在第 companionContainerTicks 次 advanceMiningOnce。
+const companionContainerTicks = 8
+
+// companionContainerBareHandTicks 是空手（错误工具档）对箱子/熔炉的权威采掘
+// 计时（miningRule 的 default 分支），harvestable 为假——错误工具用例的完成
+// 分叉恰好发生在第 companionContainerBareHandTicks 次 advanceMiningOnce。
+const companionContainerBareHandTicks = 30
 
 // readyCompanionChestMining 在公共采掘场景（readyCompanionMining）的目标格上
 // 激活一个箱子槽并装入指定内容物，返回场景与写入的完整箱子槽（供前后比对）。
@@ -104,7 +109,7 @@ func TestCompanionMiningChestBatchIsAtomic(t *testing.T) {
 		entry := fixture.entry
 		full, _ := core.ItemMaxDurability(core.ItemIronPickaxe)
 
-		for tick := 1; tick < companionChestTicks; tick++ {
+		for tick := 1; tick < companionContainerTicks; tick++ {
 			advanceMiningOnce(fixture.engine)
 			if got := companionMiningBlockAt(t, fixture); got != core.ChestID {
 				t.Fatalf("tick %d 箱子提前破坏=%d", tick, got)
@@ -155,7 +160,7 @@ func TestCompanionMiningChestBatchIsAtomic(t *testing.T) {
 		fixture, _ := readyCompanionChestMining(t, core.ItemIronPickaxe, items)
 		entry := fixture.entry
 
-		for range companionChestTicks {
+		for range companionContainerTicks {
 			advanceMiningOnce(fixture.engine)
 		}
 
@@ -205,7 +210,7 @@ func TestCompanionMiningChestBatchIsAtomic(t *testing.T) {
 		entry.inventory.Hotbar.Slots[2] = core.ItemStack{}
 		before := entry.inventory
 
-		for tick := 0; tick < 3*companionChestTicks; tick++ {
+		for tick := 0; tick < 3*companionContainerTicks; tick++ {
 			advanceMiningOnce(fixture.engine)
 		}
 
@@ -224,7 +229,7 @@ func TestCompanionMiningChestBatchIsAtomic(t *testing.T) {
 		if entry.inventoryDirty {
 			t.Fatal("无容量期间标记了 inventoryDirty")
 		}
-		if entry.mining.requiredTicks != companionChestTicks ||
+		if entry.mining.requiredTicks != companionContainerTicks ||
 			entry.mining.progressTicks != entry.mining.requiredTicks {
 			t.Fatalf("无容量时进度没有保持满格: %+v", entry.mining)
 		}
@@ -243,7 +248,7 @@ func TestCompanionMiningFurnaceBatchIsAtomic(t *testing.T) {
 		entry := fixture.entry
 		full, _ := core.ItemMaxDurability(core.ItemIronPickaxe)
 
-		for tick := 1; tick < companionChestTicks; tick++ {
+		for tick := 1; tick < companionContainerTicks; tick++ {
 			advanceMiningOnce(fixture.engine)
 			if got := companionMiningBlockAt(t, fixture); got != core.FurnaceID {
 				t.Fatalf("tick %d 熔炉提前破坏=%d", tick, got)
@@ -290,7 +295,7 @@ func TestCompanionMiningFurnaceBatchIsAtomic(t *testing.T) {
 		entry.inventory.Hotbar.Slots[1] = core.ItemStack{}
 		before := entry.inventory
 
-		for tick := 0; tick < 3*companionChestTicks; tick++ {
+		for tick := 0; tick < 3*companionContainerTicks; tick++ {
 			advanceMiningOnce(fixture.engine)
 		}
 
@@ -309,9 +314,122 @@ func TestCompanionMiningFurnaceBatchIsAtomic(t *testing.T) {
 		if entry.inventoryDirty {
 			t.Fatal("无容量期间标记了 inventoryDirty")
 		}
-		if entry.mining.requiredTicks != companionChestTicks ||
+		if entry.mining.requiredTicks != companionContainerTicks ||
 			entry.mining.progressTicks != entry.mining.requiredTicks {
 			t.Fatalf("无容量时进度没有保持满格: %+v", entry.mining)
+		}
+	})
+}
+
+// TestCompanionMiningContainerWrongToolSkipsBody 锁定错误工具（harvestable 为
+// 假）的容器完成语义，对齐玩家路径 `completeMining` 的可收获判定：空手挖箱子
+// 30 tick 且不可收获，完成 tick 方块仍被破坏、容器槽停用、全部内容物入包，
+// 但容器本体不入包——`CompanionMineContainerStaging` 的产物集合在 harvestable
+// 为假时不计本体（错误工具挖掉的是「箱子方块加内容物」，不是「一件箱子物品
+// 加内容物」）。
+func TestCompanionMiningContainerWrongToolSkipsBody(t *testing.T) {
+	var items [core.ChestSlots]core.ItemStack
+	items[0] = core.ItemStack{Item: core.ItemGlass, Count: 2}
+	items[4] = core.ItemStack{Item: core.ItemOakPlanks, Count: 3}
+	fixture, _ := readyCompanionChestMining(t, core.ItemNone, items)
+	entry := fixture.entry
+
+	for tick := 1; tick < companionContainerBareHandTicks; tick++ {
+		advanceMiningOnce(fixture.engine)
+		if got := companionMiningBlockAt(t, fixture); got != core.ChestID {
+			t.Fatalf("tick %d 箱子提前破坏=%d", tick, got)
+		}
+	}
+	advanceMiningOnce(fixture.engine)
+
+	if got := companionMiningBlockAt(t, fixture); got != core.AirID {
+		t.Fatalf("完成 tick 方块=%d，想要空气（错误工具仍破坏方块）", got)
+	}
+	if got := companionChestAt(t, fixture); got != (world.ChestSlot{Generation: 3}) {
+		t.Fatalf("完成 tick 箱子槽未停用且保留 generation: %+v", got)
+	}
+	if got := companionItemCount(entry, core.ItemChest); got != 0 {
+		t.Fatalf("错误工具完成时本体入包=%d，想要 0（harvestable 为假不计本体）", got)
+	}
+	if got := companionItemCount(entry, core.ItemGlass); got != 2 {
+		t.Fatalf("内容物玻璃=%d，想要 2", got)
+	}
+	if got := companionItemCount(entry, core.ItemOakPlanks); got != 3 {
+		t.Fatalf("内容物木板=%d，想要 3", got)
+	}
+	if entry.mining != (miningState{}) {
+		t.Fatalf("完成后进度未清零: %+v", entry.mining)
+	}
+}
+
+// TestCompanionMiningContainerEdgeClearsProgressWithoutSettlement 锁定完成 tick 的
+// 容器边缘：目标格的容器槽缺失（方块编号是箱子却没有活动箱子槽的不一致世界）
+// 或完成前方块已被移除时，对齐玩家路径的 RejectNoTarget/无效目标语义——清零
+// 进度、不结算、方块与既有容器槽都不被触碰（无容器槽泄漏）。
+func TestCompanionMiningContainerEdgeClearsProgressWithoutSettlement(t *testing.T) {
+	t.Run("完成tick容器槽缺失清零进度不结算", func(t *testing.T) {
+		// 箱子方块存在但目标格没有活动箱子槽；另在别的方块索引上放一个带内容物
+		// 的活动槽作哨兵——失败路径绝不能停用或改写它。
+		fixture := readyCompanionMining(t, core.ChestID, core.ItemIronPickaxe)
+		entry := fixture.entry
+		decoyIndex, ok := world.ChunkBlockIndex(core.BlockPos{
+			X: fixture.target.X + 2, Y: fixture.target.Y, Z: fixture.target.Z,
+		})
+		if !ok {
+			t.Fatalf("哨兵位置 %+v 没有区块索引", fixture.target)
+		}
+		var decoyItems [core.ChestSlots]core.ItemStack
+		decoyItems[0] = core.ItemStack{Item: core.ItemGlass, Count: 2}
+		decoy := world.ChestSlot{
+			Generation: 4, Active: true, BlockIndex: decoyIndex, Items: decoyItems,
+		}
+		fixture.engine.SetChunkChestForTest(
+			core.ChunkKey{Dimension: core.Overworld, Pos: fixture.target.Chunk()}, 0, decoy)
+
+		for tick := 1; tick <= companionContainerTicks; tick++ {
+			advanceMiningOnce(fixture.engine)
+		}
+
+		if got := companionMiningBlockAt(t, fixture); got != core.ChestID {
+			t.Fatalf("容器槽缺失却破坏了箱子=%d", got)
+		}
+		if entry.mining != (miningState{}) {
+			t.Fatalf("完成 tick 进度未清零: %+v", entry.mining)
+		}
+		if got := companionChestAt(t, fixture); got != decoy {
+			t.Fatalf("哨兵容器槽被改动: %+v，想要原样保留 %+v", got, decoy)
+		}
+		if got := companionItemCount(entry, core.ItemChest); got != 0 {
+			t.Fatalf("容器槽缺失却把本体入包=%d", got)
+		}
+	})
+
+	t.Run("完成前方块被移除清零进度不结算", func(t *testing.T) {
+		var items [core.ChestSlots]core.ItemStack
+		items[0] = core.ItemStack{Item: core.ItemGlass, Count: 2}
+		fixture, chest := readyCompanionChestMining(t, core.ItemIronPickaxe, items)
+		entry := fixture.entry
+		for tick := 1; tick < companionContainerTicks; tick++ {
+			advanceMiningOnce(fixture.engine)
+		}
+		if got := entry.mining.progressTicks; got != companionContainerTicks-1 {
+			t.Fatalf("前置进度=%d，想要 %d", got, companionContainerTicks-1)
+		}
+
+		fixture.engine.SetBlockForTest(fixture.target, core.AirID)
+		advanceMiningOnce(fixture.engine)
+
+		if entry.mining != (miningState{}) {
+			t.Fatalf("方块移除后进度未清零: %+v", entry.mining)
+		}
+		if got := companionMiningBlockAt(t, fixture); got != core.AirID {
+			t.Fatalf("移除后方块=%d", got)
+		}
+		if got := companionChestAt(t, fixture); got != chest || !got.Active {
+			t.Fatalf("方块移除后容器槽被改动: %+v", got)
+		}
+		if got := companionItemCount(entry, core.ItemGlass); got != 0 {
+			t.Fatalf("内容物提前入包=%d", got)
 		}
 	})
 }

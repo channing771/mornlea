@@ -152,10 +152,10 @@ func blockRaycastSampler(dimension *Dimension) func(core.BlockPos) (bool, error)
 }
 
 // companionMineableBlock 是伙伴采掘目标的防御清单：箱子与熔炉是合法目标——
-// 其产物是「容器本体 + 全部内容物堆」的批量，由 completeCompanionMining 的
+// 其产物是「容器本体 + 全部内容物堆」的批量，由 `completeCompanionMining` 的
 // 容器分支在背包副本上逐堆预演、全或无原子结算（任一堆放不下即整体不结算，
 // 进度保持满格），容量安全由结算形状承担而不是由目标清单承担。其余方块仍
-// 要求具有单一 BlockDrop。Planner 契约之外，权威模拟在这里完成第二重校验。
+// 要求具有单一 `core.BlockDrop`。Planner 契约之外，权威模拟在这里完成第二重校验。
 func companionMineableBlock(block core.BlockID) bool {
 	// 农业方块（八个作物阶段 + 干湿耕地）必须**显式**拒绝，不能指望"单一
 	// BlockDrop"这条判据顺手挡住（design.md D7 / Ruling 5）：core.BlockDrop 对
@@ -333,17 +333,17 @@ func (engine *Engine) advanceCompanionMining(
 // CompanionMineContainerStaging 构造容器采掘（箱子/熔炉）的产物堆序列，并在
 // 伙伴背包副本上预演批量结算——方案 A 全或无（change companion-mine-containers
 // 的 D1 裁决）。产物集合与固定序：容器本体 1 堆在前（harvestable 为假时不计，
-// 对齐玩家路径 completeMining 的可收获判定），内容物按调用方传入的容器槽位序
+// 对齐玩家路径 `completeMining` 的可收获判定），内容物按调用方传入的容器槽位序
 // 在后（箱子为 27 格槽位序、熔炉为输入/燃料/输出三格序）；空堆跳过。预演在
-// 副本上逐堆 core.Inventory.AddStack，任一堆余量非空即整体失败（ok=false，
+// 副本上逐堆 `core.Inventory.AddStack`，任一堆余量非空即整体失败（ok=false，
 // staged 为传入背包原值）——调用方必须放弃全部结算，绝不产生部分入包。
-// 固定序使同一世界状态的重放逐字节一致（AddStack 的并堆结果与提交顺序相关，
+// 固定序使同一世界状态的重放逐字节一致（`AddStack` 的并堆结果与提交顺序相关，
 // 先到堆优先合并），与全仓确定性纪律对齐。
 //
-// sim 的完成分叉 completeCompanionContainerMining 与 server 包 Runner 的满格
+// sim 的完成分叉 `completeCompanionContainerMining` 与 server 包 Runner 的满格
 // 饱和判定共用本函数：同一产物集合构造、同一固定序、同一预演，「没有第二套
-// 规则」的约束从单件推广到批量即落在此处。block 必须是 core.ChestID 或
-// core.FurnaceID，其余编号返回 ok=false。
+// 规则」的约束从单件推广到批量即落在此处。block 必须是 `core.ChestID` 或
+// `core.FurnaceID`，其余编号返回 ok=false。
 func CompanionMineContainerStaging(
 	block core.BlockID,
 	harvestable bool,
@@ -428,18 +428,18 @@ func (engine *Engine) completeCompanionMining(
 }
 
 // completeCompanionContainerMining 是容器目标（箱子/熔炉）的完成分叉：产物是
-// 「本体 + 全部内容物」的批量，按方案 A 全或无结算——CompanionMineContainerStaging
+// 「本体 + 全部内容物」的批量，按方案 A 全或无结算——`CompanionMineContainerStaging`
 // 在伙伴背包副本上按固定序逐堆预演，任一堆放不下即该 tick 整体不结算（方块、
 // 容器内容物、耐久、背包全部不变，进度保持满格）；预演通过后同一权威 tick 内
-// SetBlock 空气 + 停用容器槽（DeactivateChest/DeactivateFurnace，对齐玩家路径
-// completeMining 的顺序）+ 背包提交副本 + consumeToolDurability，随后经
-// recordChange 汇入既有 pendingChunkChanges 广播，不新增协议消息。
+// `SetBlock` 空气 + 停用容器槽（`DeactivateChest`/`DeactivateFurnace`，对齐玩家
+// 路径 `completeMining` 的顺序）+ 背包提交副本 + `consumeToolDurability`，随后经
+// `recordChange` 汇入既有 `pendingChunkChanges` 广播，不新增协议消息。
 //
-// 容器记录经 chunk record 读取（ChestAt/Chest/FurnaceAt/Furnace），与玩家路径
-// 同源，不存在第二套容器访问。区块失效、容器槽缺失或方块已被同 tick 更早
-// actor 移除时对齐既有 RejectNoTarget 语义：清零进度、不结算、无容器槽泄漏。
+// 容器记录经 chunk record 读取（`ChestAt`/`Chest`/`FurnaceAt`/`Furnace`），与玩家
+// 路径同源，不存在第二套容器访问。区块失效、容器槽缺失或方块已被同 tick 更早
+// actor 移除时对齐既有 `RejectNoTarget` 语义：清零进度、不结算、无容器槽泄漏。
 // 两条路径刻意不合并为参数化单实现：玩家侧产物是世界掉落物批量预演
-// （PrepareDropBatch），伙伴侧是背包副本逐堆 AddStack，去向不同（见 proposal
+// （`PrepareDropBatch`），伙伴侧是背包副本逐堆 `AddStack`，去向不同（见 proposal
 // 的「延期与放弃」）。
 func (engine *Engine) completeCompanionContainerMining(
 	entry *companionState,
@@ -453,8 +453,8 @@ func (engine *Engine) completeCompanionContainerMining(
 		return
 	}
 	// 内容物按容器槽位序快照：箱子为 27 格槽位序，熔炉为输入/燃料/输出三格序
-	// （与玩家路径 completeMining 装配掉落批次的顺序一致，固定序是重放一致的
-	// 前提，见 CompanionMineContainerStaging 的注释）。
+	// （与玩家路径 `completeMining` 装配掉落批次的顺序一致，固定序是重放一致的
+	// 前提，见 `CompanionMineContainerStaging` 的注释）。
 	var contents []core.ItemStack
 	chestSlot, furnaceSlot := 0, 0
 	switch entry.mining.block {
@@ -482,7 +482,7 @@ func (engine *Engine) completeCompanionContainerMining(
 	)
 	if !ok {
 		// 全或无：进度保持满格，作为「就绪但无容量」的稳定可观察状态；失败
-		// 判定属于 Manager（Runner 侧用同一 CompanionMineContainerStaging 判定）。
+		// 判定属于 Manager（Runner 侧用同一 `CompanionMineContainerStaging` 判定）。
 		return
 	}
 	_, changed, err := dimension.SetBlock(entry.mining.target, core.AirID)
