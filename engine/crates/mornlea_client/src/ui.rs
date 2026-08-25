@@ -113,6 +113,8 @@ const SETTINGS_MUTED_COLOR: Color32 = Color32::from_rgb(184, 190, 200);
 const SETTINGS_STATUS_COLOR: Color32 = Color32::from_rgb(134, 210, 160);
 /// 设置页脏草稿提示颜色。
 const SETTINGS_DIRTY_COLOR: Color32 = Color32::from_rgb(244, 196, 96);
+/// 材质路径 TextEdit 的跨帧稳定 id 来源。
+const SETTINGS_TEXTURE_PATH_ID_SOURCE: &str = "mornlea-settings-texture-path";
 
 // ---------------------------------------------------------------------------
 // 菜单帧数据模型与 ABI 解码。
@@ -409,6 +411,10 @@ pub enum UiOutputError {
 
 /// 每个 renderer 最多积压的结构化 UI 输出事件数。
 pub const UI_OUTPUT_QUEUE_CAPACITY: usize = 64;
+/// 主菜单单帧最大输出数：最多八个按钮都各产生一个 action。
+const MAX_MENU_OUTPUT_EVENTS_PER_FRAME: usize = MAX_UI_BUTTONS;
+/// 设置页单帧最大输出数：一个最终草稿 change 加保存/取消/返回三个 action。
+const MAX_SETTINGS_OUTPUT_EVENTS_PER_FRAME: usize = 1 + 3;
 /// 结构化事件 batch 的布局版本。
 pub const UI_EVENT_BATCH_LAYOUT: u32 = 1;
 /// action 事件类型编号。
@@ -444,6 +450,11 @@ impl UiOutputQueue {
     /// 报告队列是否为空。
     pub fn is_empty(&self) -> bool {
         self.pending.is_empty()
+    }
+
+    /// 报告队列能否完整容纳下一帧的保守事件上界。
+    fn has_frame_capacity(&self, required: usize) -> bool {
+        required <= UI_OUTPUT_QUEUE_CAPACITY - self.pending.len()
     }
 
     /// 入队单条事件。第 65 条显式返回 [`UiOutputError::Capacity`]，既不
@@ -550,6 +561,9 @@ pub struct UiState {
     /// 最近一帧设置页关键几何；只供无头测试验证生产布局。
     #[cfg(test)]
     settings_layout: Vec<(SettingsElement, Rect, Option<Id>)>,
+    /// 下一帧在同一 egui pass 内设置的材质路径字符光标；只供无头测试。
+    #[cfg(test)]
+    settings_cursor_override: Option<usize>,
 }
 
 impl Default for UiState {
@@ -567,6 +581,8 @@ impl UiState {
             font_loaded: false,
             #[cfg(test)]
             settings_layout: Vec::new(),
+            #[cfg(test)]
+            settings_cursor_override: None,
         }
     }
 
@@ -601,6 +617,9 @@ impl UiState {
     ///
     /// `pixels_per_point` 被写进 ROOT 视口的 `native_pixels_per_point`,
     /// 这是 egui 0.35 的缩放来源(不再作为 `run_ui` 的独立参数)。
+    /// 可见布局会在消费 RawInput 前按其单帧最大事件数保守预留队列；即使本帧
+    /// 实际不会产生事件，只要最坏情况装不下也返回 [`UiOutputError::Capacity`]。
+    /// 这项刻意的提前拒绝换取可重试语义：错误时焦点、光标、滚动均未推进。
     pub fn run_frame(
         &mut self,
         mut raw: RawInput,
@@ -609,6 +628,13 @@ impl UiState {
     ) -> Result<Option<egui::FullOutput>, UiOutputError> {
         if !self.font_loaded || !frame.visible() {
             return Ok(None);
+        }
+        let max_frame_events = match frame {
+            UiFrame::Menu(_) => MAX_MENU_OUTPUT_EVENTS_PER_FRAME,
+            UiFrame::Settings(_) => MAX_SETTINGS_OUTPUT_EVENTS_PER_FRAME,
+        };
+        if !self.pending_events.has_frame_capacity(max_frame_events) {
+            return Err(UiOutputError::Capacity);
         }
         if let Some(info) = raw.viewports.get_mut(&ViewportId::ROOT) {
             info.native_pixels_per_point = Some(pixels_per_point);
@@ -631,11 +657,25 @@ impl UiState {
                 let mut actions = SettingsActions::default();
                 #[cfg(test)]
                 let settings_layout = &mut self.settings_layout;
+                #[cfg(test)]
+                let settings_cursor_override = &mut self.settings_cursor_override;
                 let output = self.ctx.run_ui(raw, |ui| {
                     // egui 在需要重排时可能重跑同一帧；动作使用布尔汇总、草稿只保留
                     // 最终值，从源头保证每帧最多一个 change 和每种 action 一个事件。
                     #[cfg(test)]
                     settings_layout.clear();
+                    #[cfg(test)]
+                    if let Some(char_index) = settings_cursor_override.take() {
+                        let id = Id::new(SETTINGS_TEXTURE_PATH_ID_SOURCE);
+                        let mut text_state = egui::TextEdit::load_state(ui.ctx(), id)
+                            .expect("设置页 TextEdit 状态应已初始化");
+                        text_state
+                            .cursor
+                            .set_char_range(Some(egui::text::CCursorRange::one(
+                                egui::text::CCursor::new(char_index),
+                            )));
+                        egui::TextEdit::store_state(ui.ctx(), id, text_state);
+                    }
                     #[cfg(test)]
                     draw_settings(
                         ui,
@@ -900,7 +940,8 @@ fn draw_settings(
                     let path_response = ui.add_sized(
                         vec2(ui.available_width(), 30.0),
                         egui::TextEdit::singleline(&mut path)
-                            .id_salt("mornlea-settings-texture-path")
+                            // 显式全局 id 让焦点/字符光标状态跨帧稳定。
+                            .id(Id::new(SETTINGS_TEXTURE_PATH_ID_SOURCE))
                             .hint_text("留空使用内嵌材质")
                             .desired_width(f32::INFINITY),
                     );

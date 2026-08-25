@@ -1,7 +1,17 @@
 //! 设置页无头呈现与交互测试：控件、滚动布局、有界输入和事件顺序。
 
-use super::test_support::{screen_rect, small_screen_rect, test_font};
+use super::test_support::{click_ui, screen_rect, take_output_events, test_font};
 use super::*;
+
+fn small_screen_rect() -> Rect {
+    Rect::from_min_size(pos2(0.0, 0.0), vec2(640.0, 360.0))
+}
+
+fn text_edit_font() -> &'static [u8] {
+    // 400-byte demo 字体没有真实字符 advance，egui 会把所有字符光标钳到 0；
+    // 中部光标测试复用生产已授权的 Noto CJK 字体，验证真实 UTF-8 位置。
+    include_bytes!("../../../../../internal/render/assets/NotoSansCJKsc-Regular.otf")
+}
 
 fn settings_frame(
     audio_volume: f32,
@@ -29,13 +39,6 @@ fn render(state: &mut UiState, frame: &UiFrame, screen: Rect, events: &[UiEvent]
         .expect("设置页应产出布局");
 }
 
-fn take_output_events(state: &mut UiState) -> Vec<UiOutputEvent> {
-    let events = state.pending_events.events();
-    let mut out = vec![0u8; 70_000];
-    state.drain_events(&mut out).unwrap();
-    events
-}
-
 fn rect(state: &UiState, element: SettingsElement) -> Rect {
     state
         .settings_layout
@@ -52,31 +55,37 @@ fn response_id(state: &UiState, element: SettingsElement) -> egui::Id {
         .unwrap_or_else(|| panic!("设置页缺少 {element:?} response id"))
 }
 
-fn click(state: &mut UiState, frame: &UiFrame, screen: Rect, center: egui::Pos2) {
-    render(
-        state,
-        frame,
-        screen,
-        &[UiEvent::CursorMoved(center.x as f64, center.y as f64)],
+fn request_path_focus(state: &mut UiState, frame: &UiFrame, screen: Rect) -> egui::Id {
+    let id = response_id(state, SettingsElement::TexturePath);
+    state.ctx.memory_mut(|memory| memory.request_focus(id));
+    render(state, frame, screen, &[]);
+    assert!(state.ctx.memory(|memory| memory.has_focus(id)));
+    assert_eq!(id, Id::new(SETTINGS_TEXTURE_PATH_ID_SOURCE));
+    id
+}
+
+fn focus_path_at(
+    state: &mut UiState,
+    frame: &UiFrame,
+    screen: Rect,
+    char_index: usize,
+) -> egui::Id {
+    let id = request_path_focus(state, frame, screen);
+    // 在生产 `run_frame` 的同一 egui pass 内设置真实 TextEditState，规避
+    // egui 对 pass 外状态写入的 begin-pass 重置；该字段不进入非测试构建。
+    state.settings_cursor_override = Some(char_index);
+    render(state, frame, screen, &[]);
+    assert_eq!(
+        egui::TextEdit::load_state(&state.ctx, id)
+            .unwrap()
+            .cursor
+            .char_range()
+            .unwrap()
+            .primary
+            .index,
+        char_index.into()
     );
-    render(
-        state,
-        frame,
-        screen,
-        &[
-            UiEvent::CursorMoved(center.x as f64, center.y as f64),
-            UiEvent::MouseButton(true, true),
-        ],
-    );
-    render(
-        state,
-        frame,
-        screen,
-        &[
-            UiEvent::CursorMoved(center.x as f64, center.y as f64),
-            UiEvent::MouseButton(true, false),
-        ],
-    );
+    id
 }
 
 fn shape_text(shape: &egui::Shape, out: &mut String) {
@@ -275,7 +284,7 @@ fn settings_audio_and_window_emit_complete_snapshots() {
     window_state.install_font(test_font());
     render(&mut window_state, &frame, screen_rect(), &[]);
     let target = rect(&window_state, SettingsElement::Window640x360).center();
-    click(&mut window_state, &frame, screen_rect(), target);
+    click_ui(&mut window_state, &frame, screen_rect(), target);
     assert_eq!(
         take_output_events(&mut window_state),
         vec![UiOutputEvent::SettingsChanged(UiSettingsValues {
@@ -287,56 +296,98 @@ fn settings_audio_and_window_emit_complete_snapshots() {
 }
 
 #[test]
-fn settings_path_enforces_utf8_byte_bound_and_filters_crlf() {
-    let mut accepted = UiState::new();
-    accepted.install_font(test_font());
+fn settings_path_filters_crlf_without_hiding_regular_input() {
+    let mut state = UiState::new();
+    state.install_font(text_edit_font());
+    let frame = settings_frame(0.5, UiSettingsWindow::Size960x540, "pack", false, "", "");
+    render(&mut state, &frame, screen_rect(), &[]);
+    focus_path_at(&mut state, &frame, screen_rect(), 4);
+    render(
+        &mut state,
+        &frame,
+        screen_rect(),
+        &[
+            UiEvent::Text('x'),
+            UiEvent::Text('\r'),
+            UiEvent::Text('\n'),
+            UiEvent::Text('y'),
+        ],
+    );
+    assert_eq!(
+        take_output_events(&mut state),
+        vec![UiOutputEvent::SettingsChanged(UiSettingsValues {
+            audio_volume: 0.5,
+            window: UiSettingsWindow::Size960x540,
+            texture_pack_path: "packxy".to_owned(),
+        })]
+    );
+}
+
+#[test]
+fn settings_path_middle_multibyte_insert_preserves_both_sides() {
+    let mut state = UiState::new();
+    state.install_font(text_edit_font());
     let frame = settings_frame(
         0.5,
         UiSettingsWindow::Size960x540,
-        &"a".repeat(1021),
+        "ab世界cd",
         false,
         "",
         "",
     );
-    render(&mut accepted, &frame, screen_rect(), &[]);
-    let path_id = response_id(&accepted, SettingsElement::TexturePath);
-    accepted
-        .ctx
-        .memory_mut(|memory| memory.request_focus(path_id));
-    render(&mut accepted, &frame, screen_rect(), &[UiEvent::Text('界')]);
-    let events = take_output_events(&mut accepted);
+    render(&mut state, &frame, screen_rect(), &[]);
+    let path_id = focus_path_at(&mut state, &frame, screen_rect(), 3);
+    render(&mut state, &frame, screen_rect(), &[UiEvent::Text('好')]);
+    assert_eq!(
+        response_id(&state, SettingsElement::TexturePath),
+        path_id,
+        "TextEdit id 必须跨帧稳定"
+    );
+    let events = take_output_events(&mut state);
+    let UiOutputEvent::SettingsChanged(settings) = &events[0] else {
+        panic!("中部多字节插入应产生变化：{events:?}");
+    };
+    assert_eq!(settings.texture_pack_path, "ab世好界cd");
+    assert!(
+        settings
+            .texture_pack_path
+            .is_char_boundary(settings.texture_pack_path.len())
+    );
+}
+
+#[test]
+fn settings_path_accepts_exact_utf8_byte_limit() {
+    let mut state = UiState::new();
+    state.install_font(test_font());
+    let original = "a".repeat(1021);
+    let frame = settings_frame(0.5, UiSettingsWindow::Size960x540, &original, false, "", "");
+    render(&mut state, &frame, screen_rect(), &[]);
+    request_path_focus(&mut state, &frame, screen_rect());
+    render(&mut state, &frame, screen_rect(), &[UiEvent::Text('界')]);
+    let events = take_output_events(&mut state);
     let UiOutputEvent::SettingsChanged(settings) = &events[0] else {
         panic!("1024-byte 多字节路径应产生变化：{events:?}");
     };
     assert_eq!(settings.texture_pack_path.len(), 1024);
     assert!(settings.texture_pack_path.is_char_boundary(1024));
+}
 
-    let mut rejected = UiState::new();
-    rejected.install_font(test_font());
-    let frame = settings_frame(
-        0.5,
-        UiSettingsWindow::Size960x540,
-        &"a".repeat(1022),
-        false,
-        "",
-        "",
-    );
-    render(&mut rejected, &frame, screen_rect(), &[]);
-    let path_id = response_id(&rejected, SettingsElement::TexturePath);
-    rejected
-        .ctx
-        .memory_mut(|memory| memory.request_focus(path_id));
-    render(
-        &mut rejected,
-        &frame,
-        screen_rect(),
-        &[
-            UiEvent::Text('界'),
-            UiEvent::Text('\r'),
-            UiEvent::Text('\n'),
-        ],
-    );
-    assert!(take_output_events(&mut rejected).is_empty());
+#[test]
+fn settings_path_over_limit_rolls_back_whole_edit() {
+    let mut state = UiState::new();
+    state.install_font(test_font());
+    let original = "a".repeat(1022);
+    let frame = settings_frame(0.5, UiSettingsWindow::Size960x540, &original, false, "", "");
+    render(&mut state, &frame, screen_rect(), &[]);
+    request_path_focus(&mut state, &frame, screen_rect());
+    render(&mut state, &frame, screen_rect(), &[UiEvent::Text('界')]);
+    assert!(take_output_events(&mut state).is_empty());
+    let text_state = egui::TextEdit::load_state(
+        &state.ctx,
+        response_id(&state, SettingsElement::TexturePath),
+    )
+    .unwrap();
+    assert!(text_state.cursor.char_range().is_some());
 }
 
 #[test]
@@ -374,49 +425,115 @@ fn settings_same_frame_change_precedes_save_and_capacity_is_atomic() {
         events.get(1),
         Some(&UiOutputEvent::Action(UI_ACTION_SETTINGS_SAVE))
     );
+}
 
-    let mut full = UiState::new();
-    full.install_font(test_font());
-    for id in 0..63 {
-        full.pending_events
+fn prepared_scrolled_text_state(frame: &UiFrame) -> (UiState, egui::Id, egui::Pos2) {
+    let mut state = UiState::new();
+    state.install_font(test_font());
+    let screen = small_screen_rect();
+    render(&mut state, frame, screen, &[]);
+    let viewport = rect(&state, SettingsElement::ScrollViewport);
+    render(
+        &mut state,
+        frame,
+        screen,
+        &[
+            UiEvent::CursorMoved(viewport.center().x as f64, viewport.center().y as f64),
+            UiEvent::Scroll(0.0, -1_000.0),
+        ],
+    );
+    render(&mut state, frame, screen, &[]);
+    let save = rect(&state, SettingsElement::Save).center();
+    render(
+        &mut state,
+        frame,
+        screen,
+        &[UiEvent::CursorMoved(save.x as f64, save.y as f64)],
+    );
+    let path_id = request_path_focus(&mut state, frame, screen);
+    (state, path_id, save)
+}
+
+fn text_and_save_input(save: egui::Pos2) -> RawInput {
+    raw_input(
+        &[
+            UiEvent::Text('x'),
+            UiEvent::CursorMoved(save.x as f64, save.y as f64),
+            UiEvent::MouseButton(true, true),
+            UiEvent::MouseButton(true, false),
+        ],
+        small_screen_rect(),
+        1.0,
+        None,
+    )
+}
+
+#[test]
+fn settings_capacity_preflight_preserves_transient_state_and_replay() {
+    let frame = settings_frame(
+        0.5,
+        UiSettingsWindow::Size960x540,
+        "pack",
+        true,
+        "材质将在下次启动生效",
+        "用于形成滚动内容的错误提示",
+    );
+
+    let (mut clean, _, clean_save) = prepared_scrolled_text_state(&frame);
+    clean
+        .run_frame(text_and_save_input(clean_save), &frame, 1.0)
+        .unwrap();
+    let clean_events = take_output_events(&mut clean);
+
+    let (mut blocked, path_id, save) = prepared_scrolled_text_state(&frame);
+    for id in 0..61 {
+        blocked
+            .pending_events
             .enqueue(UiOutputEvent::Action(id))
             .unwrap();
     }
-    render(&mut full, &frame, screen_rect(), &[]);
-    let path_id = response_id(&full, SettingsElement::TexturePath);
-    let save = rect(&full, SettingsElement::Save).center();
-    full.ctx.memory_mut(|memory| memory.request_focus(path_id));
-    render(
-        &mut full,
-        &frame,
-        screen_rect(),
-        &[UiEvent::CursorMoved(save.x as f64, save.y as f64)],
+    let pending_before = blocked.pending_events.events();
+    let layout_before = blocked.settings_layout.clone();
+    let cursor_before = egui::TextEdit::load_state(&blocked.ctx, path_id)
+        .unwrap()
+        .cursor
+        .char_range();
+    assert!(blocked.ctx.memory(|memory| memory.has_focus(path_id)));
+
+    assert!(matches!(
+        blocked.run_frame(text_and_save_input(save), &frame, 1.0),
+        Err(UiOutputError::Capacity)
+    ));
+    assert_eq!(blocked.pending_events.events(), pending_before);
+    assert_eq!(blocked.settings_layout, layout_before);
+    assert!(blocked.ctx.memory(|memory| memory.has_focus(path_id)));
+    assert_eq!(
+        egui::TextEdit::load_state(&blocked.ctx, path_id)
+            .unwrap()
+            .cursor
+            .char_range(),
+        cursor_before
     );
-    let before = full.pending_events.events();
-    let result = full.run_frame(
-        raw_input(
-            &[
-                UiEvent::Text('x'),
-                UiEvent::CursorMoved(save.x as f64, save.y as f64),
-                UiEvent::MouseButton(true, true),
-                UiEvent::MouseButton(true, false),
-            ],
-            screen_rect(),
-            1.0,
-            None,
-        ),
-        &frame,
-        1.0,
-    );
-    assert!(matches!(result, Err(UiOutputError::Capacity)));
-    assert_eq!(full.pending_events.events(), before);
+
+    let _ = take_output_events(&mut blocked);
+    blocked
+        .run_frame(text_and_save_input(save), &frame, 1.0)
+        .unwrap();
+    assert_eq!(take_output_events(&mut blocked), clean_events);
 }
 
 #[test]
 fn settings_escape_and_back_emit_back_action() {
     let mut state = UiState::new();
-    state.install_font(test_font());
-    let frame = settings_frame(0.5, UiSettingsWindow::Size1280x720, "", false, "", "");
+    state.install_font(text_edit_font());
+    let frame = settings_frame(0.5, UiSettingsWindow::Size1280x720, "pack", false, "", "");
+    render(&mut state, &frame, screen_rect(), &[]);
+    let path_id = focus_path_at(&mut state, &frame, screen_rect(), 2);
+    let cursor_before = egui::TextEdit::load_state(&state.ctx, path_id)
+        .unwrap()
+        .cursor
+        .char_range();
+    assert!(state.ctx.memory(|memory| memory.has_focus(path_id)));
     render(
         &mut state,
         &frame,
@@ -431,10 +548,20 @@ fn settings_escape_and_back_emit_back_action() {
         take_output_events(&mut state),
         vec![UiOutputEvent::Action(UI_ACTION_SETTINGS_BACK)]
     );
+    // Escape 产生返回 action，同时按 egui 单行编辑惯例释放文本焦点；Go 若因
+    // dirty 阻止离页，草稿和字符光标仍保留，用户可再次点击继续编辑。
+    assert!(!state.ctx.memory(|memory| memory.has_focus(path_id)));
+    assert_eq!(
+        egui::TextEdit::load_state(&state.ctx, path_id)
+            .unwrap()
+            .cursor
+            .char_range(),
+        cursor_before
+    );
 
     render(&mut state, &frame, screen_rect(), &[]);
     let target = rect(&state, SettingsElement::Back).center();
-    click(&mut state, &frame, screen_rect(), target);
+    click_ui(&mut state, &frame, screen_rect(), target);
     assert_eq!(
         take_output_events(&mut state),
         vec![UiOutputEvent::Action(UI_ACTION_SETTINGS_BACK)]
@@ -448,7 +575,7 @@ fn settings_cancel_emits_cancel_action_and_dependency_stays_manual() {
     let frame = settings_frame(0.5, UiSettingsWindow::Size1280x720, "", true, "", "");
     render(&mut state, &frame, screen_rect(), &[]);
     let target = rect(&state, SettingsElement::Cancel).center();
-    click(&mut state, &frame, screen_rect(), target);
+    click_ui(&mut state, &frame, screen_rect(), target);
     assert_eq!(
         take_output_events(&mut state),
         vec![UiOutputEvent::Action(UI_ACTION_SETTINGS_CANCEL)]

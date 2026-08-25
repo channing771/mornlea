@@ -1,4 +1,4 @@
-//! UI 主题测试共享夹具：layout v1 编码、主菜单解包与固定屏幕。
+//! UI 主题测试共享夹具：帧编码、固定屏幕、输出排空与三帧点击。
 //!
 //! 仅放被 menu ABI、menu render、raw input 或 settings ABI 中至少两个主题
 //! 共同消费的 helper；单主题 helper 留在对应测试文件。
@@ -84,7 +84,33 @@ pub(super) fn screen_rect() -> Rect {
     Rect::from_min_size(pos2(0.0, 0.0), vec2(1280.0, 720.0))
 }
 
-/// 返回 UI 最小支持尺寸 640×360 的逻辑屏幕。
-pub(super) fn small_screen_rect() -> Rect {
-    Rect::from_min_size(pos2(0.0, 0.0), vec2(640.0, 360.0))
+/// 返回并排空当前结构化输出事件。
+pub(super) fn take_output_events(state: &mut UiState) -> Vec<UiOutputEvent> {
+    let events = state.pending_events.events();
+    let max_batch_bytes = 8 + UI_OUTPUT_QUEUE_CAPACITY * (8 + 12 + MAX_UI_SETTINGS_PATH_BYTES);
+    let mut out = vec![0u8; max_batch_bytes];
+    state.drain_events(&mut out).unwrap();
+    events
+}
+
+/// 在 `center` 完成移动、按下、释放三帧点击。
+///
+/// egui 需要移动帧先建立悬浮，后续按下/释放才能稳定登记 click；所有 UI
+/// 命中测试共用这一条生产输入路径，避免各主题复制时序细节。
+pub(super) fn click_ui(state: &mut UiState, frame: &UiFrame, screen: Rect, center: egui::Pos2) {
+    for events in [
+        vec![UiEvent::CursorMoved(center.x as f64, center.y as f64)],
+        vec![
+            UiEvent::CursorMoved(center.x as f64, center.y as f64),
+            UiEvent::MouseButton(true, true),
+        ],
+        vec![
+            UiEvent::CursorMoved(center.x as f64, center.y as f64),
+            UiEvent::MouseButton(true, false),
+        ],
+    ] {
+        state
+            .run_frame(raw_input(&events, screen, 1.0, None), frame, 1.0)
+            .unwrap();
+    }
 }
