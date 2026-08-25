@@ -1,91 +1,126 @@
 package main
 
-// 本文件主题：内嵌首页 dashboard.html 的完整性。
+// 本文件主题：页面服务完整性——从 dist 目录读盘提供前端产物，dist 缺失时返回「前端未构建」指引页。
 //
-// 背景：renderLogs 曾把 '\\n' 写成真实换行，导致内嵌 <script> 整段语法
-// 错误、浏览器一个数据都不渲染（后端 /api/status 一切正常）。本文件锁定
-// 三类可静态断言的性质：标题与六分区存在、零外部资源、内嵌脚本无跨行字符串
-// （本页 JS 全部单引号字符串都应在同一行闭合，出现奇数个未转义单引号即失败）。
+// 重构后看板不再内嵌 HTML，而是由新前端包 web/agent-board 的构建产物（dist/）提供。
+// 这里注入 t.TempDir() 的假 dist，分别验证「dist 缺失→指引页」与「dist 就绪→逐文件读盘」两类契约。
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// TestEmbeddedPageCoreSections 断言内嵌页包含标题与六个数据分区锚点，且不引用
-// 任何外部资源（无 http(s):// 与 <link>），保证页面离线可渲染。
-func TestEmbeddedPageCoreSections(t *testing.T) {
-	raw, err := os.ReadFile("dashboard.html")
-	if err != nil {
-		t.Fatalf("读取内嵌页面失败: %v", err)
+// TestServeIndexDistMissing 验证 dist 缺失（空目录，无 index.html）时 GET / 返回 200，
+// 且是「前端未构建」指引页，提示使用者先运行 make agent-dashboard。
+func TestServeIndexDistMissing(t *testing.T) {
+	dist := t.TempDir() // 空目录：没有 index.html
+	h := newStatusHandlerWithDist(&fakeCollector{}, dist)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("dist 缺失也应返回 200，得到 %d", rr.Code)
 	}
-	page := string(raw)
-	for _, want := range []string{
-		"Mornlea Agent 执行看板",
-		`id="agents"`, `id="chains"`, `id="tasks"`,
-		`id="confirm"`, `id="prs"`, `id="logs"`,
-		`setInterval(refresh, 5000)`,
-	} {
-		if !strings.Contains(page, want) {
-			t.Errorf("内嵌页面缺少 %q", want)
-		}
+	if ct := rr.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("Content-Type = %q", ct)
 	}
-	if strings.Contains(page, "http://") || strings.Contains(page, "https://") {
-		t.Errorf("内嵌页面引用了外部资源（http:// 或 https://），违反离线单页约束")
+	if !strings.Contains(rr.Body.String(), "make agent-dashboard") {
+		t.Errorf("指引页应包含文案 «make agent-dashboard»")
 	}
 }
 
-// TestInlineScriptNoUnclosedString 提取 <script> 段，逐行统计未转义单引号：
-// 本页 JS 无合法跨行字符串，任一行出现奇数个单引号即意味着字符串未闭合
-// （历史上 lines.join(' 后跟真实换行导致的整页白屏即此类缺陷）。
-func TestInlineScriptNoUnclosedString(t *testing.T) {
-	raw, err := os.ReadFile("dashboard.html")
-	if err != nil {
-		t.Fatalf("读取内嵌页面失败: %v", err)
+// TestServeIndexFromDist 验证 dist 就绪时 GET / 返回 dist/index.html 内容，
+// 且 /assets/<file> 能读盘命中真实产物文件。
+func TestServeIndexFromDist(t *testing.T) {
+	dist := t.TempDir()
+	index := "<!DOCTYPE html><html><head><title>Mornlea Agent 执行看板</title></head><body><div id=\"root\">前端构建产物</div></body></html>"
+	if err := os.WriteFile(filepath.Join(dist, "index.html"), []byte(index), 0o644); err != nil {
+		t.Fatalf("写 index.html 失败：%v", err)
 	}
-	script := extractScript(string(raw))
-	if script == "" {
-		t.Fatal("未找到内嵌 <script> 段")
+	assets := filepath.Join(dist, "assets")
+	if err := os.MkdirAll(assets, 0o755); err != nil {
+		t.Fatalf("mkdir assets 失败：%v", err)
 	}
-	for i, line := range strings.Split(script, "\n") {
-		n := countUnescapedQuotes(line)
-		if n%2 != 0 {
-			t.Errorf("第 %d 行单引号数量为奇数（字符串未闭合或跨行）: %q", i+1, line)
-		}
+	if err := os.WriteFile(filepath.Join(assets, "app.js"), []byte("console.log('app')"), 0o644); err != nil {
+		t.Fatalf("写 app.js 失败：%v", err)
+	}
+
+	h := newStatusHandlerWithDist(&fakeCollector{}, dist)
+
+	// GET / 返回 dist/index.html 内容。
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET / = %d，想要 200", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "<div id=\"root\">") {
+		t.Errorf("GET / 应返回 dist/index.html 内容，实际：%s", rr.Body.String())
+	}
+
+	// GET /assets/app.js 返回该文件内容。
+	req2 := httptest.NewRequest(http.MethodGet, "/assets/app.js", nil)
+	rr2 := httptest.NewRecorder()
+	h.ServeHTTP(rr2, req2)
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("GET /assets/app.js = %d，想要 200", rr2.Code)
+	}
+	if !strings.Contains(rr2.Body.String(), "console.log('app')") {
+		t.Errorf("GET /assets/app.js 应返回文件内容，实际：%s", rr2.Body.String())
 	}
 }
 
-// extractScript 返回 dashboard.html 中首对 <script> 与 </script> 之间的内容。
-func extractScript(page string) string {
-	start := strings.Index(page, "<script>")
-	if start < 0 {
-		return ""
+// TestServeIndexMethodNotAllowed 验证非 GET/HEAD 请求 / 被拒绝（沿用既有端点语义）。
+func TestServeIndexMethodNotAllowed(t *testing.T) {
+	h := newStatusHandlerWithDist(&fakeCollector{}, t.TempDir())
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST / 应返回 405，得到 %d", rr.Code)
 	}
-	start += len("<script>")
-	end := strings.Index(page[start:], "</script>")
-	if end < 0 {
-		return ""
-	}
-	return page[start : start+end]
 }
 
-// countUnescapedQuotes 统计一行中未被反斜杠转义的单引号数量。
-func countUnescapedQuotes(line string) int {
-	n := 0
-	escaped := false
-	for _, r := range line {
-		if escaped {
-			escaped = false
-			continue
-		}
-		if r == '\\' {
-			escaped = true
-			continue
-		}
-		if r == '\'' {
-			n++
+// TestServeAssetsDirNotFound 验证 /assets/ 的目录请求与穿越请求返回 404（绝不暴露目录列表），
+// 且真实文件仍返回 200。
+func TestServeAssetsDirNotFound(t *testing.T) {
+	dist := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dist, "index.html"), []byte("<html><body>index</body></html>"), 0o644); err != nil {
+		t.Fatalf("写 index.html 失败：%v", err)
+	}
+	assets := filepath.Join(dist, "assets")
+	if err := os.MkdirAll(assets, 0o755); err != nil {
+		t.Fatalf("mkdir assets 失败：%v", err)
+	}
+	if err := os.WriteFile(filepath.Join(assets, "app.js"), []byte("x"), 0o644); err != nil {
+		t.Fatalf("写 app.js 失败：%v", err)
+	}
+	h := newStatusHandlerWithDist(&fakeCollector{}, dist)
+
+	// 目录请求：/assets/（整除目录）与 /assets（不匹配前缀）都应 404。
+	for _, p := range []string{"/assets/", "/assets"} {
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, p, nil))
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("GET %s = %d，想要 404", p, rr.Code)
 		}
 	}
-	return n
+	// 穿越请求应 404。
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/assets/../index.html", nil))
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("GET /assets/../index.html = %d，想要 404", rr.Code)
+	}
+	// 真实文件仍 200。
+	rr2 := httptest.NewRecorder()
+	h.ServeHTTP(rr2, httptest.NewRequest(http.MethodGet, "/assets/app.js", nil))
+	if rr2.Code != http.StatusOK {
+		t.Errorf("GET /assets/app.js = %d，想要 200", rr2.Code)
+	}
 }
