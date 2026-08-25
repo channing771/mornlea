@@ -560,6 +560,9 @@ func (engine *Engine) advanceActivePlayers() {
 		if player.state.OnGround {
 			if !wasOnGround {
 				player.applyFallDamage()
+				// 落地边沿同时收集踩踏候选格（trample.go）：物理阶段只收集，
+				// 方块写入由 advanceCrops 首部的结算统一完成（阶段顺序契约）。
+				engine.noteTrampleLanding(session, player)
 			}
 			player.peakY = player.state.Position.Y()
 		} else if y := player.state.Position.Y(); y > player.peakY {
