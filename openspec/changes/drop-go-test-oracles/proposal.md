@@ -39,6 +39,12 @@
 - 不改任何 tunable、常量、ABI 编码或生产行为；不动 benchmark/capture/golden。
 - 不做 AGENTS.md 版本号段落重写（A-07 集成任务独占）；只改本 change 使失效的三句 oracle 表述。
 
+## 延期与放弃
+
+- `internal/mesh` greedy/light oracle 切片：因 A-02 正在演进 Rust mesher 而延迟，待 A 批次合流后另行认领（认领备注已声明）。
+- 归档主规格的 oracle 措辞卫生：`rust-engine-physics-step`、`rust-engine-collision-raycast-ci-stability`、`rust-engine-worldgen` 三份已归档 spec 的验收场景仍引用「Go 测试 oracle」，属迁移规格冻结惯例而非本变更引入；待后续 spec-hygiene 独立 change 统一修订（届时含 mesh 切片对应的第四份）。
+- `internal/server/companion_snapshot.go` 与 `internal/companion/pathfind.go` 注释中「collision oracle」措辞指向本变更删除的对象，属顺手清理级，不阻塞。
+
 ## 用户可观察结果
 
 游戏行为完全不变。仓库不再保有三份与生产并行的旧 Go 引擎副本；`go test` 维持全绿，physics 获得位级确定性 golden 向量与 raycast 性质 fuzz 的两条新不变量作为长期回归网。

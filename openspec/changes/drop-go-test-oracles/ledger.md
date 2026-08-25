@@ -33,3 +33,14 @@
 ## 终审
 
 （待整分支终审）
+
+## 整分支终审（阶段 4）
+
+- 终审者：fresh 子代理（会话 `ses_fc5f75e04ffeoyz7kfi7n3WVTv`）。裁决 **PASS**：规格与实现一致、门禁完整性（位级 golden/几何不变量/黑盒改写三层网独立复核）、跨切片同标准、回退性（四提交逐个 revert 后终树与基线逐字节一致）、合并安全（与 A 批次/E-12/B-13 零文件交集）。
+- 合并序处理：origin/main 前移（B-31/B-05/B-13 合入），AGENTS.md/CLAUDE.md 单段文本冲突按 design D3 预期解法取并集——main 全文为底、重施两处 oracle 从句删除（`--theirs` 曾回滚 Raycast 段自动合并结果，已补删并 amend）；CLAUDE.md `cp` 后 `cmp` 一致；config.yaml 干净自动合并。
+- 移交项（记入 proposal「延期与放弃」）：① 归档主规格 `rust-engine-{physics-step,collision-raycast,worldgen}/spec.md` 验收场景仍引用「Go 测试 oracle」（迁移规格冻结惯例，非本变更引入；建议后续 spec-hygiene 独立修订，含将来 mesh 切片的第四份）；② `internal/server/companion_snapshot.go` 与 `internal/companion/pathfind.go` 的「collision oracle」措辞现指向已删对象，可顺手清理。
+
+## 收尾门禁（阶段 4.1）
+
+- `make rust` 通过（release 4.36s）；`go vet ./...` 无输出；`gofmt -l .` 无输出；`openspec validate --all --strict --no-interactive` 65 passed / 0 failed。
+- `go test ./... -race -count=1`：24 包 ok，2 失败均按负载 flake 分诊协议单独复跑通过——`TestMemoryTCPFluidDamBreakBroadcastParity`（internal/server，全量下 4.72s 败、单跑 ok）与 `TestInteractiveInputPresentsDrainedLargeCorrectionInSameFrame`（cmd/mornlea，全量下撞包级 600s timeout、单跑 ok；E-11 ledger 有同型先例）。两者均在 fluid/server 与客户端呈现域，与本变更 test-only diff 无因果路径。
