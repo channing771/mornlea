@@ -294,7 +294,7 @@ make visual-update             # 重新生成基线，写入 cmd/mornlea/testdat
 
 ## Rust 与 Go 的职责划分
 
-区块网格、光照、碰撞解析与方块射线 DDA 的生产实现位于固定 Rust 1.97.1 `cdylib`；Go 仍拥有游戏状态、输入、tunable、碰撞 snapshot 编码以及 raycast 校验、归一化、callback 与 Point。两者经 `engine/include/mornlea_engine.h` 声明的唯一 C ABI（ABI version 1）协作，只有 `internal/nativeabi` 直接接触 engine C ABI，`internal/mesh`、`internal/physics` 与 `internal/core` 是领域调用方。
+区块网格、光照、碰撞解析与方块射线 DDA 的生产实现位于固定 Rust 1.97.1 `cdylib`；Go 仍拥有游戏状态、输入、tunable、碰撞 snapshot 编码以及 raycast 校验、归一化、callback 与 Point。两者经 `engine/include/mornlea_engine.h` 声明的唯一 C ABI（engine ABI v6）协作，只有 `internal/nativeabi` 直接接触 engine C ABI，`internal/mesh`、`internal/physics` 与 `internal/core` 是领域调用方。
 
 | 语言 | 职责 |
 | --- | --- |

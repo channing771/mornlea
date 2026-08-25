@@ -280,7 +280,7 @@ Most of these are in Chinese.
 
 ## Rust & Go Responsibilities
 
-Production chunk meshing, light, collision resolution, and block-ray DDA live in a pinned Rust 1.97.1 `cdylib`; Go still owns game state, inputs, tunables, collision snapshot encoding, plus ray validation, normalization, callbacks, and hit points. The two languages cooperate through the single C ABI declared in `engine/include/mornlea_engine.h` (ABI version 1); only `internal/nativeabi` directly touches the engine C ABI, while `internal/mesh`, `internal/physics`, and `internal/core` are its domain callers.
+Production chunk meshing, light, collision resolution, and block-ray DDA live in a pinned Rust 1.97.1 `cdylib`; Go still owns game state, inputs, tunables, collision snapshot encoding, plus ray validation, normalization, callbacks, and hit points. The two languages cooperate through the single C ABI declared in `engine/include/mornlea_engine.h` (engine ABI v6); only `internal/nativeabi` directly touches the engine C ABI, while `internal/mesh`, `internal/physics`, and `internal/core` are its domain callers.
 
 | Language | Responsibilities |
 | --- | --- |
