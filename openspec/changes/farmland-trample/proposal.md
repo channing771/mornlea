@@ -27,7 +27,7 @@
 
 ## Impact
 
-- **代码**：`internal/sim` 新建 `trample.go`（落脚几何判定、事件暂存与结算）与主题测试文件；`internal/sim/player.go` 落地结算区插入一行收集调用（控制会话裁决的最小受控重叠）；`internal/sim/crop.go` 的 `advanceCrops` 首部插入一行结算调用（B-10 已归档、无在途独占，认领备注已据此修正）。
+- **代码**：`internal/sim` 新建 `trample.go`（落脚几何判定、事件暂存与结算）与主题测试文件 `trample_test.go`、`property_trample_yield_parity_test.go`；三处最小受控重叠——`internal/sim/player.go` 落地结算区插入一行收集调用、`internal/sim/crop.go` 的 `advanceCrops` 首部插入一行结算调用（B-10 已归档、无在途独占，认领备注已据此修正）、`internal/sim/engine.go` 的 `Engine` 结构体追加一行暂存字段声明（终审 NB1 补记：认领时低估为两处，第三处经 ledger Ruling 4 澄清）。
 - **兼容性**：无协议、存档、区块 schema、编号或 ABI 变更；已存档世界无需迁移；踩踏是即时结算，不入档。
 - **性能**：每次落地边沿新增一次碰撞盒覆盖格枚举（至多 2×2 格读取）与暂存追加；结算每格 O(1) 读加至多两次 `SetBlock` 与一次掉落批次提交。落地是低频事件，不触及任何热路径预算；benchmark scenario v19 不变，数值波动按惯例只记录。
 - **并行边界**：不触碰 A-01/A-04 已认领的 `engine_step.go`/`drop.go`/`tunables.go`/`command.go`/`engine.go`、B-13 的 `combat.go`/`hunger.go`、B-07 的 `internal/fluid` 与 sim 作物冲毁新文件；`player.go` 仅裁决许可的一行、`crop.go` 仅 `advanceCrops` 首部一行。
