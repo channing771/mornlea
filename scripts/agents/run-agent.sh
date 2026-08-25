@@ -55,8 +55,9 @@ fi
 # kill -0 判活准确——旧做法让 agent 自己 echo $$ 写入的是临时 shell pid，命令一返回即失效，
 # 防重入形同虚设）。若本链 guard 已有存活 pid 则直接退出，杜绝并发双开。
 if [ "${AGENT_LOOP:-0}" = "1" ]; then
-  # 暂停认领：人工暂停标志存在时拒绝启动任何新循环（含手动/cron/接力触发的新会话）
-  if [ -f "$HOME/.mornlea/claims.paused" ]; then
+  # 暂停认领：仅拦截【新认领】会话（无 AGENT_RESUME 的新循环启动，含手动/cron/接力触发）；
+  # 已认领任务的续跑（AGENT_RESUME 存在）不受影响——用户要求"停止认领"时在飞任务仍应做完。
+  if [ -z "${AGENT_RESUME:-}" ] && [ -f "$HOME/.mornlea/claims.paused" ]; then
     echo "[run-agent] 已在暂停认领（~/.mornlea/claims.paused）——不启动新实现者循环；删除该文件可恢复" >&2
     exit 0
   fi
