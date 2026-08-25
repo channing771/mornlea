@@ -5,7 +5,14 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-GUARD="${MORNLEA_LOOP_GUARD:-$HOME/.mornlea/loop.guard}"
+# 多工作者并行：WORKER_ID 唯一时各自独立守卫链（loop.guard.<id>），互不排斥；
+# 未设置 WORKER_ID 时用主链 ~/.mornlea/loop.guard（默认 claude 工作者的向后兼容路径）。
+WORKER_ID="${WORKER_ID:-}"
+if [ -n "$WORKER_ID" ]; then
+  GUARD="${MORNLEA_LOOP_GUARD:-$HOME/.mornlea/loop.guard.$WORKER_ID}"
+else
+  GUARD="${MORNLEA_LOOP_GUARD:-$HOME/.mornlea/loop.guard}"
+fi
 LOCK="$GUARD.lock"
 LOGDIR="$HOME/Library/Logs"
 LOG="${MORNLEA_LOOP_LOG:-$LOGDIR/mornlea-implementer-loop.log}"
@@ -39,7 +46,8 @@ fi
 
 # 启动下一个实现者（detached）；成功交给它接管循环
 if [ -x "$ROOT/scripts/agents/run-agent.sh" ]; then
-  (cd "$ROOT" && AGENT_LOOP=1 nohup scripts/agents/run-agent.sh implementer >> "$LOG" 2>&1 &)
+  # 保持链身份：同 WORKER_ID、同工具（WORKER_TOOL 默认 claude）
+  (cd "$ROOT" && AGENT_LOOP=1 WORKER_ID="$WORKER_ID" AGENT_TOOL="${WORKER_TOOL:-claude}" nohup scripts/agents/run-agent.sh implementer >> "$LOG" 2>&1 &)
   log "已接力启动下一个实现者（AGENT_LOOP=1，日志 ${LOG}）"
   exit 0
 fi

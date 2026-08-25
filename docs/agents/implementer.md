@@ -10,7 +10,7 @@
 
 ## 第 1 步：认领
 
-0. **AGENT_LOOP=1（接力模式）**：启动时登记守卫 `echo $$ > ~/.mornlea/loop.guard`；若 guard 里已有存活 pid（其它循环会话还在跑）→ 直接退出，不得并发开循环。
+0. **AGENT_LOOP=1（接力模式）**：启动时登记守卫——`WORKER_ID` 未设置时写 `~/.mornlea/loop.guard`（主链），设置时写 `~/.mornlea/loop.guard.$WORKER_ID`（多工作者并行各自独立链）；若**本链** guard 里已有存活 pid → 直接退出，不得并发开同一链。不同 WORKER_ID 的链互不排斥，可并行认领不同行。
 1. 读 `docs/feature-backlog.md`：选一行 `未认领` 且依赖行已满足；同一时间只认领一行。
 2. 编辑该行：`状态` → `已认领`，`认领人` → `<agent 标识> @ <分支名>`，备注声明独占文件集；docs-only 提交。
 3. 从 `main`（或批次共享 SHA）创建 isolation worktree/分支；确认工作区干净。
