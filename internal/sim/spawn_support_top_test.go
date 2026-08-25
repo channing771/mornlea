@@ -61,7 +61,10 @@ func TestSafeFarmlandSupportTop(t *testing.T) {
 	engine.sessions[id].player.state.Position = mgl32.Vec3{2.5, 0.9375, 0.5}
 	engine.sessions[id].player.state.OnGround = true
 	engine.Step()
-	if got := engine.sessions[id].player.safe; got == nil || got.Position != engine.sessions[id].player.state.Position {
+	if engine.sessions[id].player.state.Position != (mgl32.Vec3{2.5, 0.9375, 0.5}) {
+		t.Fatalf("player position=%v, want farmland top", engine.sessions[id].player.state.Position)
+	}
+	if got := engine.sessions[id].player.safe; got == nil || got.Position != (mgl32.Vec3{2.5, 0.9375, 0.5}) {
 		t.Fatalf("safe=%+v, want farmland top", got)
 	}
 }
