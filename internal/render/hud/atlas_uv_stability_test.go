@@ -107,8 +107,9 @@ func TestHotbarColumnUVDecodesToSameTexelsAcrossAtlasWidths(t *testing.T) {
 			minColumns = columns
 		}
 	}
-	// `probeSet` 返回指定列在指定图集宽度下 16 个均匀探针解码出的纹素下标集合；
-	// 合法值是 0..15 的某个子集，解码出列外下标直接判失败。
+	// 探针集合由本测试内的闭包就地计算：返回指定列在指定图集宽度下
+	// 16 个均匀探针解码出的纹素下标集合；合法值是 0..15 的某个子集，
+	// 解码出列外下标直接判失败。
 	probeSet := func(width, column int) [16]bool {
 		uv := hotbarColumnUV(column, width)
 		var set [16]bool
