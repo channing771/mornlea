@@ -31,10 +31,12 @@ func main() {
 	}
 
 	collector := &liveCollector{root: root}
+	// distDir 为前端构建产物目录（web/agent-board/dist）；未构建时 / 会返回指引页。
+	distDir := filepath.Join(root, "web", "agent-board", "dist")
 	// ReadHeaderTimeout 限制读取请求头的时间，避免慢速/伪造连接长期占用连接，提升健壮性。
 	server := &http.Server{
 		Addr:              *addr,
-		Handler:           newStatusHandler(collector),
+		Handler:           newStatusHandlerWithDist(collector, distDir),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

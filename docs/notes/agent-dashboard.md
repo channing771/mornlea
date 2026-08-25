@@ -8,7 +8,8 @@
 
 ## 产物
 
-- `cmd/mornlea-agent-board/`：`main.go`（flag/根发现/优雅关停）、`collect.go`（`liveCollector` 真采集，best-effort + 超时）、`parse.go`（纯解析函数与 JSON 结构）、`web.go`（`Collector` 接口、`/` 与 `/api/status`）、`dashboard.html`（深色单页，全中文，零外部资源）、测试按主题单文件（`parse_backlog_test.go`/`parse_ps_test.go`/`parse_tasks_test.go`/`parse_confirm_test.go`/`web_test.go`/`root_test.go`/`guard_test.go`）。
+- `cmd/mornlea-agent-board/`：`main.go`（flag/根发现/优雅关停）、`collect.go`（`liveCollector` 真采集，best-effort + 超时）、`parse.go`（纯解析函数与 JSON 结构）、`web.go`（`Collector` 接口、`/`、`/assets/*` 与 `/api/status`，从 `web/agent-board/dist` 读盘服务前端产物）、测试按主题单文件（`parse_backlog_test.go`/`parse_ps_test.go`/`parse_tasks_test.go`/`parse_confirm_test.go`/`web_test.go`/`root_test.go`/`guard_test.go`）。
+- `web/agent-board/`：独立前端包（`@mornlea/agent-board`，React 19 + Vite 7 + TypeScript 5 + Tailwind 4 + shadcn/ui），由 `make agent-dashboard` 经 `npm ci` + `npm run build` 产出 `dist/`；Go 后端从该目录读盘提供前端产物；`node_modules/` 与 `dist/` 不入 git。
 - `Makefile`：`make agent-dashboard`（`.PHONY` + help + target 三处一致）。
 - `docs/agents/README.md`：「执行状态看板（可选）」小节（默认地址、`BOARD_ADDR`/`--addr` 覆盖、gh 降级说明）。
 
@@ -50,8 +51,19 @@ go run ./cmd/mornlea-agent-board --addr 127.0.0.1:9000
 - 根因：`dashboard.html` 的 `renderLogs` 中 `lines.join('` 后跟了真实换行（`'\n'` 被写成两行），整段 `<script>` 语法错误，浏览器不执行任何 JS。
 - 修复：恢复为单行 `esc(lines.join('\n'))`；新增 `dashboard_test.go` 防回归（内嵌脚本逐行单引号配对、标题/六分区/零外部资源静态断言）。副课：评审与冒烟均只 curl 了 HTML 与 JSON，未校验 JS 语法；后续验收必须对服务下发的 `<script>` 跑 `node --check`。
 
+## 前端包抽取重构（2026-08-25）
+
+把内嵌单页（`cmd/mornlea-agent-board/dashboard.html` + `//go:embed`）抽离为独立前沿包 `web/agent-board/`，Go 侧改为从构建产物读盘；`/api/status` 契约（`parse.go` 的 `Status` 及各实体字段）保持不变。
+
+- **新包位置**：`web/agent-board/`（`@mornlea/agent-board`）。栈为 React 19 + Vite 7 + TypeScript 5 + Tailwind CSS 4 + shadcn/ui 风格组件（`@radix-ui/react-tabs` 驱动 LogsTabs，`lucide-react`、`clsx`、`tailwind-merge`、`class-variance-authority`）；测试用 Vitest + Testing Library + jsdom；`/api/status` 的 JSON 契约保持不变，接口字符串仍由 React 默认转义。
+- **为什么 dist 读盘而非 embed**：`go:embed` 不能跨包目录（产物在 `web/agent-board/dist`，与 `cmd/mornlea-agent-board` 不同包，无法直接嵌入），且构建产物（`dist/`）随前端源码变更加载、不应进 git（已加 `.gitignore`）。因此 Go 侧在 `main.go` 用 `<root>/web/agent-board/dist` 作为 `distDir` 传入 handler；`/` 返回 `dist/index.html`，`/assets/*` 由 `http.FileServer`（`StripPrefix /assets/`）读盘，目录请求一律 404；dist 缺失或无 `index.html` 时 `/` 返回 200 的「前端未构建：请运行 make agent-dashboard」指引页，`/api/status` 仍可用。
+- **Go 侧改动点**：`web.go` 删除 `//go:embed dashboard.html`，新增 `newStatusHandlerWithDist(collector, distDir)` 与 `/assets/*` 读盘、dist 缺失指引页；保留 `newStatusHandler(collector)` 便利签名（仅用于 `web_test.go` 既有断言）；`main.go` 拼接 dist 路径传给 handler；既有测试文件（含 `web_test.go`）未改。`dashboard_test.go` 重写为「页面服务完整性」单主题（空 dist→指引页；dist 就绪→`/` 与 `/assets/app.js` 读盘命中；目录请求 404）；原「内嵌页/引号配对」测试删除，改由前端 `tsc` + Vitest 守门。`collect.go`、`parse.go` 未改动。
+- **运行入口**：`make agent-dashboard` 以 `npm ci`、生产构建、Go 后端启动的顺序运行；`make agent-ui-dev` 只启动 5173 Vite 开发服务器并把 `/api` 代理到 8787。
+- **验证证据**：Node v26.5.0 / npm v11.17.0 下 `npm ci` 安装 188 个包且 0 漏洞；Vitest 2 个文件 15 个测试全绿；Vite 7.3.6 构建 1,857 个模块成功；`gofmt -l cmd/mornlea-agent-board` 无输出、`go vet ./cmd/mornlea-agent-board` 与 `go test ./cmd/mornlea-agent-board -race -count=1` 通过。18787 实跑 `/`、`/api/status` 与真实 CSS asset 均 200（本轮采集 tasks=76、errors 为空）；临时挪开 `dist` 后 18788 的 `/` 返回含 `make agent-dashboard` 的指引页，随后已恢复目录并优雅停止两个测试进程。当前运行环境没有可用浏览器实例，故未取得截图式视觉证据。
+
 ## 已知限制
 
 - 看板读取的是「运行看板这台机器」的进程/日志/守卫文件；远端或容器环境需相应可达。
 - `gh` 未登录/超时 → PR 区降级为说明；`ps`/`lsof` 权限受限 → 执行中 AI 区降级进 `errors`。
 - guard pid 存的是会话启动 shell pid（已知缺陷），存活性判定仅供参考。
+- 前端运行依赖 Node/npm；`node_modules/` 与 `dist/` 均不入库，首次启动必须经 `make agent-dashboard` 构建。npm 11 会对 esbuild/fsevents 的 install script allowlist 给出提示，但本轮安装与构建不受影响。

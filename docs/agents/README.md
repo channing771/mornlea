@@ -32,15 +32,19 @@ scripts/agents/gates.sh
 
 ## 执行状态看板（可选）
 
-这是一个只读的本地开发环境状态看板，展示当前哪些 AI（planner/implementer 工作者）正在执行及其执行状态。它是一个独立 Go 单二进制，零依赖，默认监听 `http://127.0.0.1:8787`。
+这是一个只读的本地开发环境状态看板，展示当前哪些 AI（planner/implementer 工作者）正在执行及其执行状态。Go 后端默认监听 `http://127.0.0.1:8787`，React 前端位于 `web/agent-board/`。
 
 ```bash
-# 启动（默认地址 127.0.0.1:8787）
+# 安装锁定依赖、构建前端并启动 Go 后端（默认地址 127.0.0.1:8787）
 make agent-dashboard
-# 或直接
-go run ./cmd/mornlea-agent-board
+
+# 只启动 Vite 开发服务器（127.0.0.1:5173，/api 代理到 8787）
+# 需另开终端运行已构建的 agent-dashboard 或 Go 后端
+make agent-ui-dev
 ```
 
+- 前端改动流程：在 `web/agent-board/` 修改 TypeScript/Tailwind/shadcn/ui 源码，运行 `npm --prefix web/agent-board test` 与 `npm --prefix web/agent-board run build`；`package-lock.json` 入库，`node_modules/` 与 `dist/` 不入库。
+- Go 后端从 `web/agent-board/dist/` 读盘提供 `/` 与 `/assets/*`。若前端尚未构建，`/` 返回指引页并提示运行 `make agent-dashboard`，`/api/status` 仍可用。
 - 地址覆盖：`BOARD_ADDR` 提供默认值、flag `--addr` 再覆盖，例如 `BOARD_ADDR=:9000 go run ./cmd/mornlea-agent-board` 或 `go run ./cmd/mornlea-agent-board --addr 127.0.0.1:9000`。
 - 数据范围：全部为本机采集（`ps`/`git`/`gh`/日志文件），无远程依赖；刷新间隔固定 5 秒。
 - gh 未登录或不可用时，PR 区自动降级为说明文字，不影响其它小节；该看板不会启动或影响任何 agent。

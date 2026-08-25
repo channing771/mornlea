@@ -142,7 +142,7 @@
 | E-06 | 图形客户端平台扩展 | Windows/Linux 客户端构建与验收（当前 engine 只承诺 Apple Silicon/macOS 正式验收） | 平台构建矩阵 | 未认领 | — | rust-engine-go-rules §16 平台链接差异 |
 | E-07 | 存档 Flush 恒脏自旋修复 | `playerPersistence.Flush` 去重键去掉 revision 或「连续 N 次重派无进展即放弃」 | 无（持久化循环修复） | 已完成 | claude-implementer @ fix/E-07-flush-stall-guard | hunger 遗留 9；独占文件集：`internal/server/player_flush.go` 及 `internal/server/` 相关测试 + OpenSpec change `fix-player-flush-stall` |
 | E-08 | `HighestOpaque` 语义改名/钉死 | 返回最高非空气方块，名不副实；跨包改名或 GoDoc 首句钉死语义 | 无（跨包改名或 GoDoc） | 已完成 | codex-implementer @ chore/E-08-highest-opaque-semantics | 完成证据：GoDoc 自 `7a7253e7` 已钉死“最高非空气”；既有 world/crop 测试覆盖；零代码变更 |
-| E-09 | 作物×锄头耐久豁免 | 对齐 MC：手持锄头收获不扣耐久，`completeMining` 加豁免表并配测试 | 无（豁免表 + 测试） | 已认领 | codex2-implementer @ fix/E-09-hoe-harvest-durability | farming 遗留 16；独占文件集：`internal/sim/mining.go` 及 `internal/sim/` 相关测试 + OpenSpec change `fix-hoe-harvest-durability`；接替自 claude-implementer（claude 工作者已关闭），沿用既有 worktree（未提交改动在 `.worktrees/E-09`） |
+| E-09 | 作物×锄头耐久豁免 | 对齐 MC：手持锄头收获不扣耐久，`completeMining` 加豁免表并配测试 | 无（豁免表 + 测试） | 已完成 | codex2-implementer @ fix/E-09-hoe-harvest-durability | farming 遗留 16；`fix-hoe-harvest-durability` 已归档；SPEC/QUALITY 与整分支终审通过，`scripts/agents/gates.sh` 全绿 |
 | E-10 | `findSpawnInColumn` 读落脚盒顶面 | 出生点与 support/safe 存档点三处口径同步（耕地 1/16 空隙） | 无（出生点口径） | 已完成 | codex-implementer @ fix/E-10-spawn-support-top | farming 遗留 14；`fix-spawn-support-top` 已归档；真实耕地出生/恢复/safe 测试、SPEC/QUALITY 双评审与整分支 `gates.sh` 均通过 |
 | E-11 | server 测试等待预算化 | 既有登录等待循环多数无界（5 分钟超时而非可读断言），统一有预算等待助手 | 无（测试基础设施） | 未认领 | — | farming 遗留 19（测试基础设施） |
 | E-12 | M5E 再递延字面同源化 | `capture_scene.go` 与 `capture_ai_companion_test.go` 的 `[32]network.ChatEvent` 字面；ChatCommand 编解码 1024 字面与错误文案 | 无（字面同源化） | 未认领 | — | m5e 归档 proposal「延期与放弃」递延 4、5 |

@@ -1,8 +1,8 @@
 // Package main 实现「Mornlea Agent 执行看板」本地 Web 应用。
 //
-// 本包是 cmd/mornlea-agent-board 的 main 包，只依赖 Go 标准库：通过
-// net/http + //go:embed 内嵌单页 HTML，对外提供 /（看板）与 /api/status
-// （JSON 状态）两个接口。它聚合本机开发环境里「执行中的 AI 进程、接力链、
+// 本包是 cmd/mornlea-agent-board 的 main 包，只依赖 Go 标准库：服务端已改为
+// 从 web/agent-board/dist 目录读盘服务前端产物，对外提供 /（看板）、/assets/*（静态产物）
+// 与 /api/status（JSON 状态）三个接口。它聚合本机开发环境里「执行中的 AI 进程、接力链、
 // 功能规划表任务、worktree 活动、OpenSpec change 进度、待确认卡片、PR/CI、
 // 日志时间线」等数据。所有采集均 best-effort：任一环节失败只写入响应
 // errors 字段，绝不拖垮整个页面，绝不返回 5xx。

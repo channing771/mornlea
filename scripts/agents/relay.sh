@@ -47,8 +47,12 @@ fi
 # 启动下一个实现者（detached）；成功交给它接管循环
 if [ -x "$ROOT/scripts/agents/run-agent.sh" ]; then
   # 保持链身份：同 WORKER_ID、同工具（WORKER_TOOL 默认 claude）
-  # 链身份：WORKER_TOOL 未设时回退 AGENT_TOOL（链路通常只带 AGENT_TOOL=codex/claude），再回退 claude
-  (cd "$ROOT" && AGENT_LOOP=1 WORKER_ID="$WORKER_ID" AGENT_TOOL="${WORKER_TOOL:-${AGENT_TOOL:-claude}}" nohup scripts/agents/run-agent.sh implementer >> "$LOG" 2>&1 &)
+  # 链身份：WORKER_TOOL 未设时回退 AGENT_TOOL（链路通常只带 AGENT_TOOL=codex/claude），再回退 claude。
+  # 关键：用 setsid 让下一棒脱离宿主 agent 会话的进程组——实现者收尾退出时会清理整组，
+  # nohup 只能挡 SIGHUP、挡不住组杀（listener 续跑用 detached:true 同理）；脱离后接力会话才能存活。
+  CHAIN_TOOL="${WORKER_TOOL:-${AGENT_TOOL:-claude}}"
+  (cd "$ROOT" && AGENT_LOOP=1 WORKER_ID="$WORKER_ID" AGENT_TOOL="$CHAIN_TOOL" SPAWN_ROOT="$ROOT" SPAWN_LOG="$LOG" \
+    python3 -c 'import os,subprocess; os.setsid(); env=os.environ.copy(); f=open(env.get("SPAWN_LOG","/dev/null"),"a"); subprocess.Popen(["/bin/bash","-lc","cd \\\"%s\\\" && scripts/agents/run-agent.sh implementer" % env.get("SPAWN_ROOT",".")], env=env, stdout=f, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)' >/dev/null 2>&1 &)
   log "已接力启动下一个实现者（AGENT_LOOP=1，日志 ${LOG}）"
   exit 0
 fi

@@ -244,6 +244,9 @@ func (engine *Engine) advanceMining(
 			continue
 		}
 		// 完成分叉（玩家侧）：产物成为世界掉落物，语义与 M5C 之前逐字相同。
+		// 被移除的方块编号必须在状态重置**之前**留底：下方的耐久豁免判定要用它，
+		// 而 `player.mining` 在结算后立即清零。
+		minedBlock := player.mining.block
 		reason, rejected := engine.completeMining(
 			session.dimension,
 			player.mining.target,
@@ -261,9 +264,15 @@ func (engine *Engine) advanceMining(
 		// 疲劳表（见 hunger.go）：采掘完成累积固定疲劳。它压在拒绝分支**之后**、
 		// 与扣耐久同处，理由也相同——被拒绝或中断的采掘不改变任何玩家资源。
 		// 这里只在玩家分叉上：伙伴的完成分叉是 completeCompanionMining，没有
-		// 也不得有这一行。
+		// 也不得有这一行。疲劳刻意不进下方的耐久豁免：疲劳的判定点是「玩家的
+		// 成功采掘」，与工具磨损语义无关。
 		player.applyExhaustion(exhaustionMiningMilli, engine.tunables.ExhaustionThresholdMilli)
-		if consumeToolDurability(&player.actorState) {
+		// 完成时选中物与 `consumeToolDurability` 读的是同一个栏位（采掘中途换手
+		// 会重置进度，不存在「开始持锄、完成持镐」的窗口），豁免与扣耐久必然
+		// 判定同一件工具。
+		held := player.inventory.Hotbar.Slots[player.inventory.Hotbar.Selected].Item
+		if !hoeHarvestDurabilityExempt(minedBlock, held) &&
+			consumeToolDurability(&player.actorState) {
 			player.inventoryDirty = true
 		}
 	}
@@ -365,6 +374,18 @@ func (engine *Engine) completeCompanionMining(
 		entry.inventoryDirty = true
 	}
 	entry.mining = miningState{}
+}
+
+// hoeHarvestDurabilityExempt 报告一次玩家采掘完成是否豁免扣耐久：被移除的方块
+// 是作物（`core.IsCrop`，小麦八个生长阶段）且完成时选中物是完好锄头
+// （`core.TillingTool`）。这是 authoritative-farming 遗留 16 所说的「作物 × 锄头」
+// 豁免表——当前唯一条目；锄头破坏非作物仍沿用既有扣耐久规则。第二个「方块 × 工具」
+// 条目出现时再考虑表结构。损坏形态被 `core.TillingTool` 显式排除（它只枚举两个完好锄头
+// 编号），因此持损坏锄头收获作物走不进豁免——本就没有耐久可扣。伙伴采掘路径
+// （`completeCompanionMining`）不设本守卫：`companionMineableBlock` 的防御清单
+// 已显式拒绝全部农业方块，豁免在伙伴侧不可达，加守卫是死代码。
+func hoeHarvestDurabilityExempt(block core.BlockID, item core.ItemID) bool {
+	return core.IsCrop(block) && core.TillingTool(item)
 }
 
 // consumeToolDurability 在成功破坏方块后扣减选中工具的耐久。
