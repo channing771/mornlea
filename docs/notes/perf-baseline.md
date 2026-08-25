@@ -31,6 +31,36 @@ producer 打印了两条以「性能记录:」开头的绝对阈值记录——`
 
 provenance 说明：生成时工作区有用户在 `AGENTS.md`/`CLAUDE.md`「验证」节的 16 行未提交改动，两者都是文档、不进入二进制，其余被跟踪文件与 `5c76ebb` 一致。
 
+## E-13 scenario v19 Memory/TCP 累计记录（record-only，非新基线）
+
+2026-08-24 在冻结且 tracked-clean 的提交 `923fa0d7f6f1d594ccbf8c88173280148041e4f1` 上，用固定 Rust 1.97.1 与 Go 1.26 构建无窗口 producer，并在唯一临时目录 `/private/tmp/mornlea-e13-v19-923fa0d.277EcY` 各生成一次 Memory/TCP scenario v19 报告：
+
+```bash
+make rust
+TERM=xterm-256color zsh -ic 'gvm use go1.26 >/dev/null && make build'
+./bin/mornlea --benchmark --benchmark-transport memory --perf-output /private/tmp/mornlea-e13-v19-923fa0d.277EcY/memory-v19.json
+./bin/mornlea --benchmark --benchmark-transport tcp --perf-output /private/tmp/mornlea-e13-v19-923fa0d.277EcY/tcp-v19.json
+```
+
+```bash
+TERM=xterm-256color zsh -ic "gvm use go1.26 >/dev/null && go run ./cmd/perfcheck --baseline '/private/tmp/mornlea-e13-v19-923fa0d.277EcY/memory-v19.json' --current '/private/tmp/mornlea-e13-v19-923fa0d.277EcY/memory-v19.json' --max-regression 0.20"
+TERM=xterm-256color zsh -ic "gvm use go1.26 >/dev/null && go run ./cmd/perfcheck --baseline '/private/tmp/mornlea-e13-v19-923fa0d.277EcY/tcp-v19.json' --current '/private/tmp/mornlea-e13-v19-923fa0d.277EcY/tcp-v19.json' --max-regression 0.20"
+TERM=xterm-256color zsh -ic "gvm use go1.26 >/dev/null && go run ./cmd/perfcheck --baseline '/private/tmp/mornlea-e13-v19-923fa0d.277EcY/memory-v19.json' --current '/private/tmp/mornlea-e13-v19-923fa0d.277EcY/tcp-v19.json' --max-regression 0.20"
+```
+
+两次 producer 均退出 0。两份报告都记录 `scenario_version=19`、各自 transport、`Apple M5 / 24GiB`、`macOS 26.5.1`、`go1.26.0 darwin/arm64`、`2560x1440` 与上述完整 `git_commit`。Memory JSON 为 3,286 bytes，SHA-256 `8a4f023a23b0d8c25f4ef1e212e219ef7fa6b2f93a922fc372565a8c692c7ad3`；TCP JSON 为 3,284 bytes，SHA-256 `1f584106a4785b611240ce6dd6119e739aa2fa6451cf8eed953f89bd632d9532`。
+
+| transport / 阶段 | frames | FPS | p50 | p95 | p99 | max | Peak RSS |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Memory / still | 14,369 | 239.5 | 3.925ms | 4.663ms | 6.531ms | 279.837ms | 1464.4MiB |
+| Memory / flying | 47,293 | 394.4 | 1.061ms | 8.568ms | 29.728ms | 339.080ms | 1480.8MiB |
+| TCP / still | 13,941 | 232.4 | 4.252ms | 4.726ms | 5.348ms | 25.087ms | 1446.3MiB |
+| TCP / flying | 39,620 | 330.3 | 1.217ms | 10.682ms | 35.955ms | 176.562ms | 1714.1MiB |
+
+Memory/TCP 的 load 为 `34.126561208/36.130276042s`，snapshot 为 `17.135731667/17.288044209s`，cooldown 均为 `30s`。权威 tick 各有 200 帧，p99 为 `3.876958/0.555042ms`；区块持久化各有 `5,271/5,291` 次快照，p99 为 `41.183000/29.927125ms`；玩家持久化各有 256 次快照，p99 为 `0.012791/0.004291ms`；协议 encode/decode p99 为 `0.002125/0.000125ms` 与 `0.000958/0.000125ms`，均记录 43,008 bytes。`remote_gpu_complete` 均为 128 个样本、每样本 256 次绘制，p99 为 `5.058398/5.120131ms`。八会话服务端 outbound 为 `617,127/616,828` bytes，outbox 高水位均为 1，player jobs/done 高水位均为 6/2，peak RSS 为 `1,862,090,752/1,913,896,960` bytes。
+
+两份报告分别以自身为 baseline/current 运行 `cmd/perfcheck`，再以 Memory 为 baseline、TCP 为 current 做同 commit 显式跨 transport 比较；三次均退出 0并输出「同场景性能记录完成」。两次自比较只记录各自 flying p99 超过 12ms；跨 transport 另记录 TCP flying p95/p99 相对 Memory 退化 `24.7%/20.9%`。这些都是 record-only 数值，不改变退出状态；报告结构、身份、样本、真实 overflow、数据丢失与 I/O 门禁均通过。M2 v15 与 M5 v14 基线文件未覆盖，SHA-256 仍分别为 `9691d9752f309795e77176c6f959c357c4c97f1f7daaa4a5a6fddff8bf164d78` 与 `5a34fe091cb1aacfee0172db90b5a7f66571202d230e7542660dd8e703132483`。
+
 ## M5A scenario v16 记录（record-only，非新基线）
 
 M5A 段落记录的是 producer 还停在 scenario v16 时的证据。M5A 已在同一 Apple M5 / 24GiB、2560×1440 和同一提交上独立生成完整 Memory/TCP v16 报告，分别通过自比较，并通过一次显式跨 transport 比较；Linux GPU source-set 修复后的最新 Rust kernel 累计门禁已在 2026-08-15 从冻结 producer `931c57a7d4d017e37a94baf19eee833b042c68ce` 完整重跑，输出见 [Apple M5 性能记录](perf-baseline-m5.md)。这些报告只作可重复生成的 record-only 证据，不提升基线。当前已接受的 M2 Memory v15 与 M5 Memory v14 baseline JSON 路径、字节和 SHA-256 均保持不变；性能数值只记录，报告结构、身份、真实 overflow、数据丢失和 I/O 错误仍失败。
