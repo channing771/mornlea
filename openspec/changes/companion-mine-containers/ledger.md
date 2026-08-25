@@ -43,3 +43,11 @@
 - Finding 1（major，`internal/companion/planner.go` 的 `validatePlanStepsAgainstSnapshot` GoDoc）：残留旧判据「方块必须满足单一掉落与非容器」，「非容器」与 `planMineableBlock` 已放行 `core.ChestID`/`core.FurnaceID` 直接矛盾。修复：该句改写为「方块必须满足 `planMineableBlock` 判据——非农业且具单一 `core.BlockDrop`，箱子与熔炉作为容器目标放行」，与 `internal/companion/plan_types.go` 现判据（农业显式拒绝 + `core.BlockDrop` 存在性，两容器经单一掉落登记自然放行）逐点核对一致，改动前后「恰好列入 ExposedBlocks」限定与其余子句零变化。
 - Finding 2（minor，`internal/companion/planner_test.go` 容器目标用例前的注释）：裸提 `companionMineableBlock` 未反引号。修复：补反引号。
 - 验证（数值只记录）：`go test ./internal/companion -race -count=1` → ok（5.383s）；`gofmt -l internal/companion` → 无输出；`go vet ./internal/companion` → 通过；`go test ./internal/archcheck -count=1` → ok（5.694s，注释标识符门禁通过）。
+
+## Task 2 评审与修复（2026-08-25）
+
+- SPEC 合规评审：**PASS**。两侧防御清单逐字同构（删除拒绝分支而非白名单，`core.BlockDrop` 存在性判据天然放行容器）、农业双保险（新全集枚举 + `farmingSeen==10` 计数守卫、既有具名回归）、提示词/解码文案/字节稳定测试三处消费面同步、invalid→valid 等价替换无门禁净放宽、文件集零溢出。
+- QUALITY 质量评审：**FAIL**（1 major + 1 minor）。major：`planner.go` `validatePlanStepsAgainstSnapshot` GoDoc 残留「单一掉落与非容器」旧判据，与同函数已改的错误文案三行之隔自相矛盾；minor：`planner_test.go:758` 裸提 `companionMineableBlock` 无反引号（Task 1 minor 同类重复）。
+- 修复轮 R1（原 implementer 已终结，由新 implementer 承载同一 brief）：两处注释改写闭合，提交 `d4f8a49a`。
+- R1 复核：**PASS**。新 GoDoc 与实判据逐点一致、全包 grep 零「非容器」残留、零行为改动、复跑全绿。
+- Ruling: Task 2 修复循环 1 轮收口 — major 是注释级失真而非行为缺陷，两行修复即达合入质量 — 教训：改语义时同一函数内错误文案与 GoDoc 必须同轮改写，注释失真机械门禁不覆盖、只能靠评审抓。
