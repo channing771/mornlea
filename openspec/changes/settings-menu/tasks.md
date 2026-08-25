@@ -1,6 +1,6 @@
 ## 1. 配置契约
 
-- [ ] 1.1 在 `internal/config` 以测试先行方式加入固定窗口尺寸预设与 `texturePackPath` 1,024-byte 上限：覆盖缺省值、三个合法值、非法值/类型/null、1,024/1,025-byte 边界、保存再加载及 `Fields()` 不泄露新增字段；运行 `go test ./internal/config -race -count=1`。
+- [x] 1.1 在 `internal/config` 以测试先行方式加入固定窗口尺寸预设与 `texturePackPath` 1,024-byte 上限：覆盖缺省值、三个合法值、非法值/类型/null、1,024/1,025-byte 边界、保存再加载及 `Fields()` 不泄露新增字段；运行 `go test ./internal/config -race -count=1`。
 
 ## 2. client ABI v9 与结构化事件
 
@@ -22,4 +22,3 @@
 ## 6. 整分支收尾
 
 - [ ] 6.1 对照 proposal、delta specs、design 与 ledger 完成整分支独立终审，修复所有阻断项，并执行 `gofmt -l .`、`go vet ./...`、`make rust-check`、`go test ./... -race`、`make visual-check` 与 `openspec validate --all --strict --no-interactive`。
-
