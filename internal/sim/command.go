@@ -28,6 +28,13 @@ const (
 	// CommandTillSoil 请求把视线内的泥土或草翻成耕地。只带朝向：目标格由权威
 	// 射线决定，作用的锄头取权威选中的快捷栏格。CommandKind 只追加不重排。
 	CommandTillSoil
+	// CommandMoveCraftingStack 在合成网格与背包之间执行一次两次点击整堆移动。
+	// `Slot`/`ToSlot` 是统一视图格（网格 0..8、背包 9..44），语义见 crafting.go
+	// 的 `applyMoveCraftingStack`。
+	CommandMoveCraftingStack
+	// CommandTakeCraftingOutput 请求取出当前网格匹配派生的完整产物；只携带
+	// 序号，产物、扣料与容量全部由权威侧决定。
+	CommandTakeCraftingOutput
 )
 
 // LookDirection 把玩家 look 角转换为单位方向；yaw=0、pitch=0 朝向 -Z。
@@ -152,7 +159,10 @@ type TickResult struct {
 	// Chests 是本 tick 发给箱子查看者的完整权威状态；关闭通知与熔炉共用 FurnaceEnds，
 	// 因为 ContainerRef 本身携带 Kind，一份关闭列表足以表达两种容器。
 	Chests []ChestUpdate
-	Tick   uint64
+	// Craftings 是本 tick 发给网格所属玩家的完整权威合成网格状态
+	//（latest-wins、不广播，见 crafting.go 的 `publishCraftings`）。
+	Craftings []CraftingUpdate
+	Tick      uint64
 	// WorldTimeTicks 是本 tick 结束时的权威绝对世界时间。
 	WorldTimeTicks uint64
 }

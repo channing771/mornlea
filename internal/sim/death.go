@@ -36,6 +36,12 @@ func (engine *Engine) settleDeath(
 	pending map[core.ChunkKey]*pendingChunkChanges,
 ) {
 	player := session.player
+	// 死亡回收先于清空（spec「死亡回收先于清空」）：先把全部 9 格无损装回
+	// 背包，网格物品才能随既有死亡规则一并掉进世界。回收不变量保证这里必然
+	// 成功；失败 MUST 以 panic 暴露内部错误，绝不静默丢物。
+	if !player.repackCraftingAll() {
+		panic("sim: 死亡结算时网格回收失败（回收不变量被破坏）")
+	}
 	engine.dropInventoryOnDeath(session, pending)
 	player.health = core.MaxHealth
 	player.resetRegenTimer()

@@ -525,3 +525,60 @@ func readyFlatWorld(
 	t.Fatal("玩家未在 20 tick 内出生")
 	return nil, 0
 }
+
+// TestDeathRepacksCraftingGridBeforeClearingInventory 覆盖 spec 场景「死亡回收
+// 先于清空」：死亡结算前网格 MUST 已无损并入背包，网格物品随既有死亡规则一并
+// 掉进世界；重生后网格为空且尺寸回到 2。
+func TestDeathRepacksCraftingGridBeforeClearingInventory(t *testing.T) {
+	inventory := core.Inventory{}
+	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 10}
+	engine, session := readyFlatWorld(t, 0, inventory)
+	engine.Enqueue(sim.Command{
+		Session:  session,
+		Sequence: 2,
+		Kind:     sim.CommandMoveCraftingStack,
+		Slot:     9,
+		ToSlot:   1,
+	})
+	if result := engine.Step(); len(result.Rejected) != 0 {
+		t.Fatalf("死亡夹具的网格移动被拒绝: %+v", result.Rejected)
+	}
+
+	killByFall(t, engine, session)
+
+	// 背包剩余 7 个 + 网格回收 3 个：两堆按死亡掉落规则合并成一堆 10 个。
+	drops := activeDrops(t, engine, core.ChunkKey{Dimension: core.Overworld})
+	if len(drops) != 1 ||
+		drops[0].Stack != (core.ItemStack{Item: core.ItemStone, Count: 10}) {
+		t.Fatalf("死亡掉落 = %+v，想要恰一堆 10 个石头（含网格回收）", drops)
+	}
+
+	respawnPlayer(t, engine, session)
+	grid, _, ok := engine.PlayerCrafting(session)
+	if !ok || grid.Size != 2 {
+		t.Fatalf("重生后网格 = %+v ok=%v，想要空的个人网格", grid, ok)
+	}
+	for slot := uint8(0); slot < core.CraftingGridSlots; slot++ {
+		if grid.Slots[slot] != (core.ItemStack{}) {
+			t.Fatalf("重生后网格格 %d = %+v，想要空", slot, grid.Slots[slot])
+		}
+	}
+}
+
+// TestDeathCraftingRepackFailureIsInternalError 锁定死亡回收的内部错误路径：
+// 回收不变量保证合法状态不可达；不可回收状态一旦出现（钩子构造），
+// 死亡结算 MUST 以 panic 暴露而不是静默丢物。
+func TestDeathCraftingRepackFailureIsInternalError(t *testing.T) {
+	engine, session := readyFlatWorld(t, 0, fullTestInventory())
+	engine.SetPlayerCraftingGridForTest(session, func(grid sim.CraftingGrid) sim.CraftingGrid {
+		grid.Slots[1] = core.ItemStack{Item: core.ItemCobblestone, Count: core.MaxStackCount}
+		return grid
+	})
+
+	defer func() {
+		if recover() == nil {
+			t.Fatal("不可回收的死亡结算必须 panic 暴露内部错误")
+		}
+	}()
+	killByFall(t, engine, session)
+}

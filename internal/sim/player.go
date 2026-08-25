@@ -162,6 +162,20 @@ type playerState struct {
 	// 它同样留在 playerState 而不是上移 actorState：伙伴不进食。
 	eating eatingState
 
+	// crafting 是本玩家的瞬态权威合成网格（见 crafting.go）：个人 2×2、对
+	// 工作台完成权威射线交互后 3×3。它 MUST NOT 进入快照/哈希/存档——断线
+	// 持久化前与死亡清空前由生命周期路径先无损回收进背包。伙伴没有网格，
+	// 因此它留在 playerState 而不是 actorState。
+	crafting CraftingGrid
+	// craftingDirty 标记网格自上次发布以来的变化（移动、取出、尺寸切换、
+	// 回收），由 `publishCraftings` 在 tick 末清除；初始为真，让玩家首个
+	// Active tick 发布一次空网格，客户端因此总有完整的初始状态。
+	craftingDirty bool
+	// workbench 记录当前打开的工作台方块位置，仅在 `crafting.Size == 3`
+	// 时有意义：打开只设置尺寸与命中位置，不占任何容器引用或区块槽位
+	//（design.md D5）。离开触及距离或方块被挖时按关闭规则回收。
+	workbench core.BlockPos
+
 	restoreCandidates []restoreCandidate
 	nextRestore       int
 	restoreWanted     map[core.ChunkKey]struct{}
@@ -203,7 +217,11 @@ func (engine *Engine) RegisterPlayer(id SessionID, restore PlayerRestore) {
 			yaw: restore.Yaw, pitch: restore.Pitch,
 			inventory:      restore.Inventory,
 			inventoryDirty: true},
-		health: health,
+		// 网格不跨重启保留（spec「网格不入存档」）：注册一律得到空的个人 2×2。
+		// 与 inventoryDirty 同理置初始真，首个 Active tick 发布完整初始状态。
+		crafting:      CraftingGrid{Size: CraftingGridSizePersonal},
+		craftingDirty: true,
+		health:        health,
 		// 氧气不在 PlayerRestore 里，也不会出现在存档中：登录一律满值。
 		// 这条初始化是「氧气不跨重启保留」唯一的来源，不能依赖第一个 tick 的
 		// 「出水立即回满」代劳——在水里重生的玩家不会走那条分支。
@@ -304,6 +322,12 @@ func (engine *Engine) UnregisterSession(id SessionID) (PlayerSnapshot, bool) {
 	var snapshot PlayerSnapshot
 	hasSnapshot := session.player != nil && session.player.persistable()
 	if hasSnapshot {
+		// 断线持久化之前先无损回收全部 9 格（spec「断线后物品回到背包」）：
+		// 网格不落盘，回收是网格物品跨断线保留的唯一通道。回收不变量保证
+		// 这里必然成功；失败 MUST 以 panic 暴露内部错误，绝不静默丢物。
+		if !session.player.repackCraftingAll() {
+			panic("sim: 断线持久化时网格回收失败（回收不变量被破坏）")
+		}
 		snapshot = session.player.snapshot(session.dimension)
 	}
 	delete(engine.sessions, id)

@@ -68,7 +68,8 @@ func miningRule(block core.BlockID, held core.ItemID) (uint16, bool) {
 	case core.DirtID, core.GrassID, core.SandID, core.GravelID, core.LeavesID,
 		core.GlassID, core.WhiteWoolID, core.ClayID, core.SnowBlockID:
 		return 5, true
-	case core.OakLogID, core.OakPlanksID:
+	case core.OakLogID, core.OakPlanksID, core.WorkbenchID:
+		// 工作台与橡木木板同价：木质 tier、15 tick、与手持无关。
 		return 15, true
 	case core.StoneID, core.CobblestoneID, core.SmoothStoneID, core.BrickID,
 		core.RoofTileID, core.MossyCobblestoneID:

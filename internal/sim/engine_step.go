@@ -236,7 +236,17 @@ func (engine *Engine) Step() TickResult {
 			// 跨容器移动会改动区块，必须与其他交互共享同一批 pending 变化。
 			containerMoves = append(containerMoves, command)
 		case CommandCloseFurnace:
-			// 关闭永远成功：客户端可以随时结束查看关系。
+			// 关闭容器对玩家永远成功；关闭工作台要先按关闭规则回收格 4..8，
+			// 无法完整回收时拒绝关闭请求且状态不变（正常路径下回收不变量
+			// 保证必然成功，这是防御分支）。
+			if session.player != nil && !session.player.closeWorkbench() {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectInvalidInput,
+				})
+				continue
+			}
 			session.viewContainer = false
 			session.container = core.ContainerRef{}
 		case CommandCraftRecipe:
@@ -258,6 +268,50 @@ func (engine *Engine) Step() TickResult {
 				Sequence: command.Sequence,
 				Reason:   RejectInvalidInput,
 			})
+		case CommandMoveCraftingStack:
+			// 网格移动只读写玩家自身状态，不触碰区块，直接在命令阶段结算；
+			// 值域拒绝沿用既有稳定拒绝路径。
+			if session.player == nil || session.player.lifecycle != PlayerActive {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectPlayerNotReady,
+				})
+				continue
+			}
+			if reason, ok := craftingMoveCommandReasons(
+				session.player.crafting.Size, command.Slot, command.ToSlot,
+			); !ok {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   reason,
+				})
+				continue
+			}
+			if !session.player.applyMoveCraftingStack(command.Slot, command.ToSlot) {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectInvalidInput,
+				})
+			}
+		case CommandTakeCraftingOutput:
+			if session.player == nil || session.player.lifecycle != PlayerActive {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectPlayerNotReady,
+				})
+				continue
+			}
+			if !session.player.applyTakeCraftingOutput() {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectInvalidInput,
+				})
+			}
 		case CommandDropSelectedItem:
 			if session.player == nil || session.player.lifecycle != PlayerActive {
 				result.Rejected = append(result.Rejected, Rejection{
@@ -395,12 +449,17 @@ func (engine *Engine) Step() TickResult {
 		}
 	}
 	engine.advanceMining(pending, &result)
+	// 工作台生命周期校验排在最后一个方块写者（advanceMining）之后：同 tick
+	// 被采掘的工作台在这里已经变空气，打开者随即回收降级（含同 tick 变空气）。
+	// 它只写玩家自身状态，不触碰区块。
+	engine.advanceWorkbenchLifecycle()
 	engine.finishChanges(pending, &result)
 	sortChunkKeys(result.Ready)
 
 	result.Tick = engine.tick.Add(1)
 	result.WorldTimeTicks = engine.advanceWorldTime()
 	engine.publishInventories(&result)
+	engine.publishCraftings(&result)
 	engine.publishContainers(&result)
 	engine.publishPlayers(&result)
 	engine.publishCompanions(&result)
