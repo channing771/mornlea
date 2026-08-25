@@ -286,6 +286,10 @@ var fluidSealedSourceOffsets = [5][3]int32{
 // 三段合起来：水源产生写入 ⟺ 下方或四个水平邻格中至少有一个可被等级 1 替换。
 // 全部五个邻格都不可替换时，evalCell 返回空 map，本格是不动点。
 //
+// 作物自 flood-destroys-crops 起对流动水可替换（见 `fluid.Replaceable` 判定表），
+// 因此邻格含作物的水源不再满足「五邻均不可替换」，本判据返回假、该源照常入队
+// ——这是捷径随谓词自动收紧而非放宽（design.md D5），增量正比于农田临水面。
+//
 //  4. 判据只在「读到不可替换」时才跳过，而 fluidRescanBlockAt 的读数绝不会比
 //     Advance 时 fluidWorld 的读数更实心（见该函数注释）。因此本函数说"不可
 //     替换"时，Advance 时也一定不可替换——误差只可能落在"本函数保守地判定成
