@@ -63,12 +63,13 @@ func TestInteractiveDropSendsOnlyWhenReadyAndAllowed(t *testing.T) {
 	}
 }
 
-// TestUseKeySendsTillSoilOnlyForHoeAgainstSoil 覆盖任务 4.7：手持锄头对着
-// 泥土或草按「使用」键必须发翻地命令，其余手持物与目标组合的行为一字不变。
+// TestUseKeySendsTillSoilOnlyForHoeAgainstSoil 覆盖「使用」键的三路分流：手持
+// 锄头对着泥土或草必须发翻地命令；手持可放置方块仍发放置；翻地条件不满足的
+// 锄头、损坏锄头与镐都是不可放置物，一条命令也不发——服务端本来就会拒绝，
+// 客户端不发只是不刷无谓的拒绝（判定与权威侧共用 `core.ItemPlacement`）。
 //
-// 表里既有"必须发翻地"的行，也有四行"必须仍发放置"的对照（普通方块、镐、
-// 损坏锄头、锄头对着石头）。只测翻地那一行的话，一个把所有「使用」都改发
-// 翻地的实现也会全绿。
+// 表里三类行都有对照：只测翻地行的话，一个把所有「使用」都改发翻地的实现也会
+// 全绿；只测「不发」行的话，一个把放置整个删掉的实现也会全绿。
 func TestUseKeySendsTillSoilOnlyForHoeAgainstSoil(t *testing.T) {
 	stoneFull, _ := core.ItemMaxDurability(core.ItemStonePickaxe)
 	hoeFull, _ := core.ItemMaxDurability(core.ItemStoneHoe)
@@ -76,20 +77,24 @@ func TestUseKeySendsTillSoilOnlyForHoeAgainstSoil(t *testing.T) {
 		name   string
 		target core.BlockID
 		held   core.ItemStack
-		till   bool
+		// want 是「使用」键必须发出的命令；nil 表示一条命令也不发。
+		want any
 	}{
 		{"锄头对草发翻地", core.GrassID,
-			core.ItemStack{Item: core.ItemStoneHoe, Count: 1, Durability: hoeFull}, true},
+			core.ItemStack{Item: core.ItemStoneHoe, Count: 1, Durability: hoeFull},
+			network.TillSoil{Sequence: 1}},
 		{"锄头对泥土发翻地", core.DirtID,
-			core.ItemStack{Item: core.ItemIronHoe, Count: 1, Durability: 3}, true},
-		{"锄头对石头仍发放置", core.StoneID,
-			core.ItemStack{Item: core.ItemStoneHoe, Count: 1, Durability: hoeFull}, false},
-		{"损坏锄头对草仍发放置", core.GrassID,
-			core.ItemStack{Item: core.ItemBrokenStoneHoe, Count: 1}, false},
-		{"镐对草仍发放置", core.GrassID,
-			core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: stoneFull}, false},
+			core.ItemStack{Item: core.ItemIronHoe, Count: 1, Durability: 3},
+			network.TillSoil{Sequence: 1}},
+		{"锄头对石头不发命令", core.StoneID,
+			core.ItemStack{Item: core.ItemStoneHoe, Count: 1, Durability: hoeFull}, nil},
+		{"损坏锄头对草不发命令", core.GrassID,
+			core.ItemStack{Item: core.ItemBrokenStoneHoe, Count: 1}, nil},
+		{"镐对草不发命令", core.GrassID,
+			core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: stoneFull}, nil},
 		{"普通方块对草仍发放置", core.GrassID,
-			core.ItemStack{Item: core.ItemDirt, Count: 1}, false},
+			core.ItemStack{Item: core.ItemDirt, Count: 1},
+			network.PlaceBlock{Sequence: 1, Slot: 4}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			app, serverEndpoint := newInteractiveTestApplication(t)
@@ -110,15 +115,12 @@ func TestUseKeySendsTillSoilOnlyForHoeAgainstSoil(t *testing.T) {
 			}
 
 			app.placeBlock()
-			message := receiveInteractiveClientMessage(t, serverEndpoint)
-			if tc.till {
-				till, ok := message.(network.TillSoil)
-				if !ok || till != (network.TillSoil{Sequence: 1}) {
-					t.Fatalf("请求 = %#v，想要 sequence 1 的翻地命令", message)
+			if tc.want != nil {
+				if message := receiveInteractiveClientMessage(t, serverEndpoint); message != tc.want {
+					t.Fatalf("请求 = %#v，想要 %#v", message, tc.want)
 				}
-			} else if place, ok := message.(network.PlaceBlock); !ok ||
-				place != (network.PlaceBlock{Sequence: 1, Slot: 4}) {
-				t.Fatalf("请求 = %#v，想要放置已确认栏位 4", message)
+			} else if app.sequence != 0 {
+				t.Fatalf("不发命令的组合分配了序号：sequence=%d", app.sequence)
 			}
 			// 客户端绝不预测式改方块：目标格必须仍是服务端发来的那个编号。
 			if got, loaded := app.mirror.BlockAt(core.Overworld, target); !loaded ||
@@ -131,11 +133,12 @@ func TestUseKeySendsTillSoilOnlyForHoeAgainstSoil(t *testing.T) {
 	}
 }
 
-// TestUseKeyHeldEatsOnlyWhileHoldingFood 覆盖任务 5.1：手持食物时「使用」键
-// **按住**必须把 `PlayerInput.Eating` 置位，其余手持物的既有行为一字不变。
+// TestUseKeyHeldEatsOnlyWhileHoldingFood 钉死「使用」键**按住**的进食位语义：
+// 手持食物才把 `PlayerInput.Eating` 置位，其余手持物一律不置。
 //
 // 表里既有「面包按住置位」，也有「小麦/锄头/方块都不置位」的对照，且锄头那行
-// 同时断言仍然发出 `TillSoil`、方块那行断言仍然发出 `PlaceBlock`——只断言
+// 同时断言仍然发出 `TillSoil`、方块那行断言仍然发出 `PlaceBlock`、小麦那行断言
+// 一条命令也不发（小麦不可放置，放置判定收敛后上升沿不再发放置）——只断言
 // 「没置进食位」的话，一个把食物分支条件写死为 false 的实现也会全绿。
 func TestUseKeyHeldEatsOnlyWhileHoldingFood(t *testing.T) {
 	hoeFull, _ := core.ItemMaxDurability(core.ItemStoneHoe)
@@ -147,8 +150,7 @@ func TestUseKeyHeldEatsOnlyWhileHoldingFood(t *testing.T) {
 		wantUse any
 	}{
 		{"手持面包按住即进食", core.ItemStack{Item: core.ItemBread, Count: 2}, true, nil},
-		{"手持小麦不进食", core.ItemStack{Item: core.ItemWheat, Count: 3}, false,
-			network.PlaceBlock{Sequence: 1, Slot: 4}},
+		{"手持小麦不进食", core.ItemStack{Item: core.ItemWheat, Count: 3}, false, nil},
 		{"手持锄头仍翻地", core.ItemStack{Item: core.ItemStoneHoe, Count: 1, Durability: hoeFull},
 			false, network.TillSoil{Sequence: 1}},
 		{"手持方块仍放置", core.ItemStack{Item: core.ItemDirt, Count: 9}, false,
@@ -213,10 +215,12 @@ func TestUseKeyHeldEatsOnlyWhileHoldingFood(t *testing.T) {
 	}
 }
 
-// TestUseKeyRisingEdgeSkipsPlaceWhileHoldingFood 单独钉死「手持食物时使用键的
-// 上升沿不再发放置命令」：食物不可放置，服务端本来就会拒，客户端不发只是为了
-// 不刷无谓的拒绝。用未确认快捷栏做对照——分支只读**已确认**的权威快捷栏。
-func TestUseKeyRisingEdgeSkipsPlaceWhileHoldingFood(t *testing.T) {
+// TestUseKeyRisingEdgeSkipsPlaceForNonPlaceableItem 单独钉死「使用」键上升沿的
+// 放置判定收敛：判定与服务端权威放置共用 `core.ItemPlacement` 这同一份事实源，
+// 不可放置物（面包这类食物、小麦这类原料）一律不发放置命令也不分配序号——
+// 服务端本来就会拒绝，客户端不发只是不刷无谓的拒绝。用未确认快捷栏做对照——
+// 分支只读**已确认**的权威快捷栏。
+func TestUseKeyRisingEdgeSkipsPlaceForNonPlaceableItem(t *testing.T) {
 	app, serverEndpoint := newInteractiveTestApplication(t)
 	if err := app.predictor.Begin(network.PlayerState{
 		ServerTick: 1, Dimension: core.Overworld,
@@ -235,15 +239,21 @@ func TestUseKeyRisingEdgeSkipsPlaceWhileHoldingFood(t *testing.T) {
 	}
 	assertNoInteractiveClientMessage(t, serverEndpoint)
 
-	var inventory core.Inventory
-	inventory.Hotbar.Selected = 2
-	inventory.Hotbar.Slots[2] = core.ItemStack{Item: core.ItemBread, Count: 1}
-	if err := app.inventory.Apply(network.InventoryState{Inventory: inventory}); err != nil {
-		t.Fatal(err)
-	}
-	app.placeBlock()
-	assertNoInteractiveClientMessage(t, serverEndpoint)
-	if app.sequence != 1 {
-		t.Fatalf("手持食物的使用键上升沿分配了序号：sequence=%d", app.sequence)
+	// 上面那帧 `PlayerInput` 已消耗序号 1；下面每次跳过的放置都不得再分配。
+	for _, held := range []core.ItemStack{
+		{Item: core.ItemBread, Count: 1},
+		{Item: core.ItemWheat, Count: 3},
+	} {
+		var inventory core.Inventory
+		inventory.Hotbar.Selected = 2
+		inventory.Hotbar.Slots[2] = held
+		if err := app.inventory.Apply(network.InventoryState{Inventory: inventory}); err != nil {
+			t.Fatal(err)
+		}
+		app.placeBlock()
+		assertNoInteractiveClientMessage(t, serverEndpoint)
+		if app.sequence != 1 {
+			t.Fatalf("手持物品 %d 的使用键上升沿分配了序号：sequence=%d", held.Item, app.sequence)
+		}
 	}
 }
