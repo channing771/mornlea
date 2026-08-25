@@ -46,3 +46,7 @@
 
 - Verdict: With fixes → 修复波 ef3f8cc1（6 文件 +8/−8，零行为变化）→ scoped re-review ALL ADDRESSED, no new breakage。
 - Deferred minors（终审 triage）：RED 转录行号偏移 defer；双人布置去重 defer。
+
+## 合流
+
+- PR #84 以 merge `04bd58ad` 合入 `main`；首跑 CI 因 runner 负载 flake（`TestTCPPlayerAndWorldSaveFailureRecovery` 位置恢复 0.8 vs 0.6，本地 -race ×3 复跑通过；同期 B-05 合并 run 败于另一用例，失败随负载漂移）按 F-03 先例重跑后 8/8 全绿（run `32878866254`）。合并前经两次 origin/main 合入解决 AGENTS.md/CLAUDE.md/progress.md 文档冲突，基线双文件逐字节一致由 archcheck 兜底。
