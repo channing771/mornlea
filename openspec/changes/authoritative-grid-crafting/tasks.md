@@ -1,9 +1,9 @@
 ## 1. 形状注册表与工作台方块（`internal/core`、`internal/assets`）
 
-- [ ] 1.1 在 `internal/core/recipe_test.go` 先写失败测试：裁边归一化（同一形状四角等价、外围空行列忽略、内部空洞保留）、仅水平镜像、垂直翻转失败、额外物品失败、空网格无匹配、2×2 不匹配 3×3 配方；随后在 `internal/core/recipe.go` 实现 `RecipePattern`、`MatchCraftingGrid` 与私有 `trimPattern`/`matchesPattern`（固定 9 格循环、无 map/slice 分配）。验证：`go test ./internal/core -run 'Test(RecipePattern|MatchCraftingGrid)' -count=1` 由红转绿。
-- [ ] 1.2 在 `internal/core/recipe_test.go` 写 18 项形状表中的 `1..13` 失败测试（含木棍 `12`、工作台 `13` 与「查询 `14..18` 稳定拒绝」），在 `internal/core/recipe.go` 把 recipe `1..11` 改为形状语义并追加 `12..13`，`Recipe` 返回 `RecipePattern`；同步删除 `CraftingRecipe` 聚合类型与 `Inventory.Craft` 并修正全部调用测试（`internal/core/inventory_test.go`、`item_test.go`），不留双重合成路径。验证：`go test ./internal/core -race -count=1`。
-- [ ] 1.3 在 `internal/core/inventory.go`/`inventory_test.go` 写并实现网格原子消费 `ConsumeRecipe`：对每个非空 pattern cell 恰减 1、耐久物品不参与材料、失败返回原 grid、输出不直接进入背包。验证：`go test ./internal/core -run 'TestConsumeRecipe' -count=1`。
-- [ ] 1.4 在 `internal/core/item.go`/`item_test.go` 与 `internal/assets/blocks.go`/`blocks_test.go` 追加 `ItemStick=37`、`ItemWorkbench=38`（可放置、采掘掉回 1 个、完整立方体碰撞、opaque、emission 0、普通 cube model、原创程序化木质顶/侧/底纹理），`internal/physics/collision_test.go` 锁定完整立方体碰撞。验证：`go test ./internal/core ./internal/assets ./internal/physics -race -count=1`；`gofmt -w internal/core internal/assets`。
+- [x] 1.1 在 `internal/core/recipe_test.go` 先写失败测试：裁边归一化（同一形状四角等价、外围空行列忽略、内部空洞保留）、仅水平镜像、垂直翻转失败、额外物品失败、空网格无匹配、2×2 不匹配 3×3 配方；随后在 `internal/core/recipe.go` 实现 `RecipePattern`、`MatchCraftingGrid` 与私有 `trimPattern`/`matchesPattern`（固定 9 格循环、无 map/slice 分配）。验证：`go test ./internal/core -run 'Test(RecipePattern|MatchCraftingGrid)' -count=1` 由红转绿。
+- [x] 1.2 在 `internal/core/recipe_test.go` 写 18 项形状表中的 `1..13` 失败测试（含木棍 `12`、工作台 `13` 与「查询 `14..18` 稳定拒绝」），在 `internal/core/recipe.go` 把 recipe `1..11` 改为形状语义并追加 `12..13`，`Recipe` 返回 `RecipePattern`；同步删除 `CraftingRecipe` 聚合类型与 `Inventory.Craft` 并修正全部调用测试（`internal/core/inventory_test.go`、`item_test.go`），不留双重合成路径。验证：`go test ./internal/core -race -count=1`。
+- [x] 1.3 在 `internal/core/inventory.go`/`inventory_test.go` 写并实现网格原子消费 `ConsumeRecipe`：对每个非空 pattern cell 恰减 1、耐久物品不参与材料、失败返回原 grid、输出不直接进入背包。验证：`go test ./internal/core -run 'TestConsumeRecipe' -count=1`。
+- [x] 1.4 在 `internal/core/item.go`/`item_test.go` 与 `internal/assets/blocks.go`/`blocks_test.go` 追加 `ItemStick=37`、`ItemWorkbench=38`（可放置、采掘掉回 1 个、完整立方体碰撞、opaque、emission 0、普通 cube model、原创程序化木质顶/侧/底纹理），`internal/physics/collision_test.go` 锁定完整立方体碰撞。验证：`go test ./internal/core ./internal/assets ./internal/physics -race -count=1`；`gofmt -w internal/core internal/assets`。
 
 ## 2. 玩家瞬态网格与回收不变量（`internal/sim`）
 
