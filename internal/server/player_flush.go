@@ -15,20 +15,26 @@ type playerSaveKey struct {
 	revision uint64
 }
 
-// errPlayerFlushStalled 是 `Flush` 的失速哨兵：某玩家在本次 `Flush` 内已用尽双类派发
-// 名额（见 `playerFlushSlots`）但仍处于脏状态且没有被记录任何保存失败。方案 A′ 用它
-// 把「恒脏态」（保存结果永不等于当前快照，`playerFlushJob` 每轮铸出新 revision）显式
-// 上报给调用方，而不是掩盖残余脏状态静默成功返回，或沿旧的 `(playerID, revision)` 精
-// 确键无界追派——脏状态、快照与冻结的 `cachedPlayer.retry` 全部原样保留，供下一次
-// `Flush` 正常重试。
+// errPlayerFlushStalled 是 `Flush` 的失速哨兵。`Flush` 在 `!inFlight && !dispatched`
+// 退出路径（见 `recordFlushStallLocked`）返回前，为每个仍处于脏状态、且本次 `Flush`
+// 未记录该玩家任何保存失败的玩家计入一次本错误——这既覆盖恒脏态（保存结果永不等于
+// 当前快照，`playerFlushJob` 每轮铸出新 revision、双类名额用尽后不再派发），也覆盖
+// 从未被成功派发过的玩家（例如 `dispatchFlushLocked` 因 `p.scheduler.TrySubmit` 被拒
+// 而返回 false，玩家从未占用任何名额）。旧实现在这两种情形下都会掩盖残余脏状态、
+// 静默成功返回；这里改为显式带错误返回是方案 A′ 有意的收紧（design.md「附带收紧」），
+// 用户可见变化是原本静默成功的 Flush 调用可能开始返回错误——脏状态、快照与冻结的
+// `cachedPlayer.retry` 全部原样保留，不影响下一次 `Flush` 正常重试。
 var errPlayerFlushStalled = errors.New("server: player flush stalled: still dirty after bounded dispatches")
 
 // playerFlushSlots 记录单个玩家在本次 `Flush` 调用内已占用的派发类。旧实现用
 // `(playerID, revision)` 精确键去重，但 `applyCompletionWithDispatchLocked` 在恒脏态下
 // 让 `player.persisted` 单调递增、`playerFlushJob` 每轮铸出全新 revision，精确键永远
 // 不会重复命中，导致 `Flush` 无界重派。playerFlushSlots 改按玩家身份记账，把名额分成
-// retry 与 fresh 两类而非单一名额，是因为三条既有钉住测试要求「冻结重试成功后仍可追
-// 派最新快照」「fresh 派发失败冻结后本次 Flush 不得重派」——单名额会破坏这两条语义。
+// retry 与 fresh 两类而非单一名额，是因为三条既有钉住测试要求的语义单名额会破坏：
+// `TestPlayerFlushFailureRetainsFrozenJobForLaterRetry`（冻结重试成功后仍需追派最新
+// 快照）、`TestPlayerFlushWaitsForInheritedRevisionAndAttemptsOnlyLatestFollowup`（继承
+// in-flight 完成后需追派最新快照）、`TestPlayerFlushInheritedFailureDoesNotDispatchForcedFollowup`
+// （继承失败冻结的 retry 不得在同次 Flush 内重派）。
 type playerFlushSlots struct {
 	// retry 为真表示：本次 Flush 内该玩家的冻结重试类名额已占用——或是 `player.retry != nil`
 	// 时的一次重派，或是 Flush 开始时继承的 in-flight 快照的预占（继承的保存本身就是一次
@@ -175,9 +181,10 @@ func (p *playerPersistence) waitInheritedFlushCompletions(
 // recordFlushStallLocked 在 `Flush` 即将以「无 in-flight 且本轮未派发」退出前，为每个
 // 仍处于脏状态、且本次 Flush 未记录任何保存失败的玩家计入一次 `errPlayerFlushStalled`。
 // 已有失败记录的玩家（`failures` 中已存在同 `playerID` 的键）只保留原错误，不重复上
-// 报，逐字匹配既有测试对错误文本的断言。收集顺序经 `sortedPlayersLocked` 按玩家 ID
-// 排序，保证同一失速状态下多次调用产生确定性的 `failures` 内容（最终仍由
-// `joinPlayerFlushErrors` 排序拼接）。调用方必须持有 `p.mu`。
+// 报，逐字匹配既有测试对错误文本的断言。结果的确定性来自「每个脏玩家至多产出一条以
+// 自身 `playerID` 为键的记录」这一事实本身，与收集顺序无关；这里用 `sortedPlayersLocked`
+// 只是为了让枚举顺序稳定、便于调试和复现，不承担保证确定性的作用（最终 `failures` 仍
+// 由 `joinPlayerFlushErrors` 按键排序拼接成错误文本）。调用方必须持有 `p.mu`。
 func (p *playerPersistence) recordFlushStallLocked(failures map[playerSaveKey]error) {
 	for _, player := range p.sortedPlayersLocked(func(player *cachedPlayer) bool {
 		return !player.loading && player.dirty

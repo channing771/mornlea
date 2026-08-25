@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/channing771/mornlea/internal/core"
 )
 
 // TestPlayerFlushStallReturnsBoundedErrorAndKeepsDirty 捕获：`Flush` 面对恒脏玩家
@@ -70,4 +72,68 @@ func TestPlayerFlushStallReturnsBoundedErrorAndKeepsDirty(t *testing.T) {
 	case <-time.After(waitDeadline):
 		t.Fatal("Flush after stall did not return")
 	}
+}
+
+// TestPlayerFlushStallOnlyReportsStalledPlayerAlongsideExistingFailure 钉住 spec 的
+// 「已有失败只报原错误」Scenario：同一次 Flush 内玩家 A 的保存失败并冻结 retry（本次
+// Flush 已记录失败），玩家 B 恒脏失速。断言最终错误里 A 只出现一次原始失败文本、不被
+// `recordFlushStallLocked` 追加 `errPlayerFlushStalled`，B 则恰好计入一条失速错误——
+// 二者互不覆盖、互不影响对方在 `failures` 里的记录。
+func TestPlayerFlushStallOnlyReportsStalledPlayerAlongsideExistingFailure(t *testing.T) {
+	store := newControllablePlayerStore()
+	idA, idB := playerID(41), playerID(42) // idA 字节序小于 idB，主循环按 ID 升序先选中 A。
+	store.loaded[idA] = storedPlayerForTest(idA, 7, "A", testPlayerSnapshot(3))
+	store.loaded[idB] = storedPlayerForTest(idB, 7, "B", testPlayerSnapshot(4))
+	persistence := newPlayerPersistence(store, playerPersistenceTestConfig())
+	t.Cleanup(persistence.CloseWorker)
+	for _, setup := range []struct {
+		id   core.PlayerID
+		name string
+	}{{idA, "A"}, {idB, "B"}} {
+		if _, err := persistence.Prepare(context.Background(), setup.id, setup.name, testMetadata()); err != nil {
+			t.Fatal(err)
+		}
+		if err := persistence.Observe(setup.id, setup.name, testPlayerSnapshot(10), 0, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	flushed := make(chan error, 1)
+	go func() { flushed <- persistence.Flush(context.Background()) }()
+
+	// 主循环按 ID 升序单选一个候选派发：A 先被选中（fresh，revision 8），失败后冻结
+	// retry；A 的 retry 名额随之占满，下一轮候选让给 B。
+	firstSave := receivePlayerSave(t, store)
+	if firstSave.PlayerID != idA || firstSave.Revision != 8 {
+		t.Fatalf("first save=%+v, want player A revision 8", firstSave)
+	}
+	wantErr := errors.New("disk full")
+	store.complete(wantErr)
+
+	// B 被选中派发（fresh，revision 8）；完成前再 Observe 一个不同快照制造恒脏，
+	// B 的 fresh 名额随完成而用尽，之后不再具备可派发的候选。
+	secondSave := receivePlayerSave(t, store)
+	if secondSave.PlayerID != idB || secondSave.Revision != 8 {
+		t.Fatalf("second save=%+v, want player B revision 8", secondSave)
+	}
+	if err := persistence.Observe(idB, "B", testPlayerSnapshot(20), 0, false); err != nil {
+		t.Fatal(err)
+	}
+	store.complete(nil)
+
+	var err error
+	select {
+	case err = <-flushed:
+	case <-time.After(waitDeadline):
+		t.Fatal("mixed-stall Flush did not return")
+	}
+	wantText := "save player " + idA.String() + " revision 8: " + wantErr.Error() + "\n" +
+		"save player " + idB.String() + " revision 9: " + errPlayerFlushStalled.Error()
+	if err == nil || err.Error() != wantText {
+		t.Fatalf("Flush error=%q, want %q", err, wantText)
+	}
+	if !errors.Is(err, wantErr) || !errors.Is(err, errPlayerFlushStalled) {
+		t.Fatalf("Flush error=%v does not retain both roots", err)
+	}
+	assertNoPlayerSaveStarted(t, store)
 }
