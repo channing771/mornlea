@@ -75,56 +75,52 @@ case "${1:-}" in
     DESIGN="$(jq -r '.design // ""' "$REQ")"
     KIND="$(jq -r '.kind // "approval"' "$REQ")"
     if [ "$KIND" = "question" ]; then
-      HEAD_PREFIX="澄清提问："
-      NOTE="点按下方按钮直接回答；有补充/其他答案请在输入框写好后点「发送」，或「回复」本卡片消息（自动锁定本提问）"
+      HEAD_PREFIX="澄清提问"; TPL="orange"
+      NOTE=""
     else
-      HEAD_PREFIX="内容确认："
-      NOTE="点按下方按钮批准/驳回；如需修改意见，在下方输入框写下意见后点「发送」（或「回复」本卡片消息）"
+      HEAD_PREFIX="内容确认"; TPL="blue"
+      NOTE=""
     fi
+    # 底部说明默认不展示（卡片保持干净）；仅选项超过 5 个时显示提示
     DESIGN_BODY="$(printf '%s' "$DESIGN" | fmt_design)"
-    # 选项渲染为可点按按钮（value 携带请求 ID 与选中项，点哪个答哪个，多待确认也不会答错）；
-    # 按钮 value 在回调里以 JSON 字符串返回，listener 反序列化后按 id 精确匹配请求。
+    # 选项渲染为按钮：只显示按钮、不重复文本列表；按钮 label 去掉选项前缀编号、截断加省略号，
+    # value 仍携带完整选项文本与请求 ID（listener 按 id 精确匹配，reply.text 是完整原文）。
     if [ "$KIND" = "question" ]; then
-      # 注意：jq 1.7 数组构造器内出现 "as $n |" 时，后续 "+ [...]" 会被吞进数组（变嵌套）；
-      # 改用 [ 迭代器[] , 尾元素 ] 的逗号元素形式生成平铺按钮列表。
       ACTIONS="$(jq -nc --arg id "$ID" --argjson o "$(jq -c '.options // []' "$REQ")" '
         [ (($o | to_entries | map({
             tag: "button",
-            text: { tag: "plain_text", content: ((.key + 1 | tostring) + ". " + (.value | .[0:36])) },
+            text: { tag: "plain_text", content: ((.key + 1 | tostring) + ". " + (.value | sub("^[A-Za-z0-9]\\s*[.、]\\s*"; "") | .[0:22]) + (if (.value | length) > 24 then "…" else "" end)) },
             type: (if .key == 0 then "primary" else "default" end),
             value: { id: $id, action: "answer", text: .value }
           })) | .[0:5])[],
-          { tag: "button", text: { tag: "plain_text", content: "驳回 / 终止" }, type: "danger", value: { id: $id, action: "reject", text: "驳回" } }
+          { tag: "button", text: { tag: "plain_text", content: "驳回" }, type: "danger", value: { id: $id, action: "reject", text: "驳回" } }
         ]')"
-      [ "$(jq -r '.options | length // 0' "$REQ")" -gt 5 ] && NOTE="选项较多，按钮只显示前 5 个；其余请「回复」本卡片输入完整答案。$NOTE"
+      [ "$(jq -r '.options | length // 0' "$REQ")" -gt 5 ] && NOTE="选项共 $(jq -r '.options | length' "$REQ") 项，仅显示前 5 个按钮；其余请以文本回复"
     else
-      # 批准/驳回按钮；修改意见走「回复」文字（需要具体内容，按钮无法携带）
       ACTIONS="$(jq -nc --arg id "$ID" '[
         { tag: "button", text: { tag: "plain_text", content: "✅ 批准" }, type: "primary", value: { id: $id, action: "approve", text: "批准" } },
         { tag: "button", text: { tag: "plain_text", content: "❌ 驳回" }, type: "danger", value: { id: $id, action: "reject", text: "驳回" } }
       ]')"
     fi
-    # 手动输入区：form 容器 + input + 发送按钮；点「发送」时回调携带 form_value（JSON 字符串，
-    # 键为 input 的 name=note），listener 按文本规则判定（批准类：关键词→批准，其他→修改意见；提问类→答案）
-    CARD="$(jq -nc --arg id "$ID" --arg t "$TITLE" --arg c "$CATEGORY" --arg q "$QUESTION" --argjson o "$(jq -c '.options // []' "$REQ")" --argjson actions "$ACTIONS" --arg d "$DESIGN_BODY" --arg hp "$HEAD_PREFIX" --arg note "$NOTE" '{
+    # 卡片结构（分层，不再堆一个 div）：标题行 → 问题/短设计 → 按钮 → 手动输入区 → 底部说明；
+    # form 提交按钮为 Card 2.0 写法（name + form_action_type=submit），回调带 form_value（JSON 字符串，键=note）。
+    CARD="$(jq -nc --arg id "$ID" --arg t "$TITLE" --arg q "$QUESTION" --argjson o "$(jq -c '.options // []' "$REQ")" --argjson actions "$ACTIONS" --arg d "$DESIGN_BODY" --arg hp "$HEAD_PREFIX" --arg tpl "$TPL" --arg note "$NOTE" '{
   config: { wide_screen_mode: true },
-  header: { template: "blue", title: { tag: "plain_text", content: ($hp + $id + " " + $t) } },
+  header: { template: $tpl, title: { tag: "plain_text", content: ($hp + " · " + $id) } },
   elements: [
     { tag: "div", text: { tag: "lark_md", content: (
-      "**分类**：" + $c + "\n\n**问题**：\n" + $q
-      + ($o | if length == 0 then "" else "\n\n**选项**：\n" + (to_entries | map("- " + (.key + 1 | tostring) + ". " + .value) | join("\n")) end)
-      + ($d | if . == "" then "" else "\n\n**短设计**：\n" + . end)
+      "**" + $t + "**\n\n**问题**\n" + $q
+      + ($d | if . == "" then "" else "\n\n**短设计**\n" + . end)
     ) } },
     { tag: "action", actions: $actions },
     { tag: "form", name: "manual", elements: [
       { tag: "input", name: "note",
-        label: { tag: "plain_text", content: "手动输入（修改意见 / 补充说明 / 完整答案）" },
-        placeholder: { tag: "plain_text", content: "在这里输入…（输入后点下方「发送」）" },
+        label: { tag: "plain_text", content: "修改意见 / 其他答案" },
+        placeholder: { tag: "plain_text", content: "写在这里，点「发送」提交" },
         is_required: false, max_length: 512 },
-      { tag: "button", name: "submit", form_action_type: "submit", text: { tag: "plain_text", content: "发送输入内容" }, type: "primary" }
+      { tag: "button", name: "submit", form_action_type: "submit", text: { tag: "plain_text", content: "发送" }, type: "primary" }
     ] },
-    { tag: "hr" },
-    { tag: "note", elements: [ { tag: "plain_text", content: $note } ] }
+    (($note | if . == "" then [] else [ { tag: "note", elements: [ { tag: "plain_text", content: $note } ] } ] end)[])
   ]
 }')"
     if SEND_OUT="$(send_card "$CARD")"; then

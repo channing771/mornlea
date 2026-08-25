@@ -44,6 +44,12 @@ BOARD_ADDR=:9000 go run ./cmd/mornlea-agent-board
 go run ./cmd/mornlea-agent-board --addr 127.0.0.1:9000
 ```
 
+## 缺陷修复（2026-08-25）：内嵌 JS 字符串跨行导致整页空白
+
+- 症状：页面顶栏与六个分区骨架可见，但无任何数据（后端 `/api/status` 正常）。
+- 根因：`dashboard.html` 的 `renderLogs` 中 `lines.join('` 后跟了真实换行（`'\n'` 被写成两行），整段 `<script>` 语法错误，浏览器不执行任何 JS。
+- 修复：恢复为单行 `esc(lines.join('\n'))`；新增 `dashboard_test.go` 防回归（内嵌脚本逐行单引号配对、标题/六分区/零外部资源静态断言）。副课：评审与冒烟均只 curl 了 HTML 与 JSON，未校验 JS 语法；后续验收必须对服务下发的 `<script>` 跑 `node --check`。
+
 ## 已知限制
 
 - 看板读取的是「运行看板这台机器」的进程/日志/守卫文件；远端或容器环境需相应可达。

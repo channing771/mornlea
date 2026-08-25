@@ -7,6 +7,7 @@
 - 手动：`make agent-implementer` 或 `scripts/agents/run-agent.sh implementer`（默认 `AGENT_MODE=pr`：创建 PR → 监听 CI 到全绿 → merge；`AGENT_MODE=merge` 才直接合并）。
 - 自动：控制会话/规划者点名（brief 中附任务行 ID 与来源）。
 - **接力循环**：`AGENT_LOOP=1` 启动后，每个实现者完成（自动收尾后）即 `relay.sh` 接力启动下一个实现者认领下一行，直到规划表无「未认领」任务自动终结。
+- **故障恢复**：会话以退出码 1 结束且日志含 `You've hit your session limit`（claude 账号用量上限，消息里给出 reset 时间）或其它异常中断时：先查 worktree/分支与 `~/.claude/projects/...` 会话 jsonl 判断**当前行进度**，等 reset 后用 `AGENT_RESUME=<该行最近确认请求ID> AGENT_LOOP=1 scripts/agents/run-agent.sh implementer` 续跑**同一行**（不重新认领；未完成的 worktree 继续用）。
 
 ## 第 1 步：认领
 
@@ -63,7 +64,8 @@
 □ AGENTS.md 与 CLAUDE.md 逐字节相同（cmp -s）且只写已验证事实
 □ docs/notes/progress.md 追加基线段落
 □ docs/feature-backlog.md 该行 → 已完成（认领人保留履历）；集成任务受影响时同步 A/I 行
-□ GitHub Discussion #71 **追加状态评论**（每次状态变化都要，含 F 组；正文表格留给规划者全量同步）
+□ GitHub Discussion #71 **追加状态评论**（每次状态变化都要，含 F 组）；
+□ **同步正文**：python3 scripts/agents/refresh-discussion.py --update（正文列表随仓库状态**即时**刷新；脚本幂等，规划者每轮仍会全量对账）
    gh api graphql --input <(jq -n --rawfile b /tmp/disc-note.md --arg q 'mutation($b:String!){ addDiscussionComment(input:{discussionId:"D_kwDOToJS8M4Aou6G", body:$b}){ comment { id } } }' '{query:$q, variables:{b:$b}}')
 □ 门禁证据归档：ledger 补最终验证输出摘要（数值记录，不改基线）
 □ 推送分支：git push -u origin <branch>
@@ -86,7 +88,7 @@
 - 认领人：<agent> @ <分支名>
 - 关键证据：PR #<n>（CI n/n 全绿 · merge <sha 前 7 位>）｜ commit <sha 前 7 位>｜ OpenSpec change <名称>
 - 备注：<一句话结果/用途>（例如：独占文件集：<files>；flake 重跑一次后全绿）
-（状态以仓库 `docs/feature-backlog.md` 为准；正文列表由规划者每轮刷新）
+（状态以仓库 `docs/feature-backlog.md` 为准；正文列表已由实现者同步，规划者每轮仍全量对账）
 ```
 
 完成态示例（可直接套用）：

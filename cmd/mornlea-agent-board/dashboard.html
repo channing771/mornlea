@@ -233,8 +233,7 @@ function renderLogs(){
   var h='';
   keys.forEach(function(k){
     var lines=logs[k]||[];
-    h+='<div class="timeline"><h5>'+esc(k)+'（近 '+lines.length+' 行）</h5><pre>'+esc(lines.join('
-'))+'</pre></div>';
+    h+='<div class="timeline"><h5>'+esc(k)+'（近 '+lines.length+' 行）</h5><pre>'+esc(lines.join('\n'))+'</pre></div>';
   });
   el.innerHTML=h;
 }
