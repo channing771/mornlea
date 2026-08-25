@@ -10,7 +10,7 @@
 
 ### D1: 独立 salt 的 yield 哈希流
 
-新增 `cropYieldRollSalt` 与 `cropYieldRolls(seed, tick, dimension, position)`，链式折叠方式逐字复用 `cropGrowthRoll`（crop.go:113）的 splitmix64 模式。独立 salt 的理由与既有 `cropGrowthRollSalt` 注释完全同构：没有它，「这一格被抽中生长」与「这一格掉落数量」会在相同 `(seed, tick)` 前缀上同源，可能出现结构性相关。函数返回两个独立的 `[1,3]` 值（各一次抽取、各 `% 3 + 1`）；`% 3` 的取模偏差量级约 1e-17，沿用既有注释的论证拒绝拒绝采样循环。
+新增 `cropYieldRollSalt` 与 `cropYieldRolls(seed, tick, dimension, position)`，链式折叠方式逐字复用 `cropGrowthRoll`（crop.go:113）的 splitmix64 模式。独立 salt 的理由与既有 `cropGrowthRollSalt` 注释完全同构：没有它，「这一格被抽中生长」与「这一格掉落数量」会在相同 `(seed, tick)` 前缀上同源，可能出现结构性相关。函数返回两个独立的 `[1,3]` 值（各一次抽取、各 `% 3 + 1`）；`% 3` 每个余数的概率偏离理想值至多 1 个计数（绝对偏差上界 `1/2^64`），沿用既有注释的论证拒绝拒绝采样循环。
 
 ### D2: tick 取值点
 
