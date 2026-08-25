@@ -20,9 +20,9 @@
 
 ## 4. HUD 容器界面与输入路径（`internal/render/hud`、`cmd/mornlea`）
 
-- [ ] 4.1 在 `internal/render/hud/container_test.go` 先写布局/命中失败测试：个人面板恰好 2×2、工作台恰好 3×3、产物格独立且不是普通移动目标、36 格栏位保持原位、全部格在受支持最窄 framebuffer 内可见且命中矩形与绘制矩形一致、最大打开态精确 quad 数锁定且 ≤267、glyph/offset/总容量不变；随后在 `internal/render/hud/container.go` 以 grid size 参数与产物格替换十条配方行（复用 `appendItemTile` 与既有 atlas）。验证：`go test ./internal/render/hud -race -count=1`。
-- [ ] 4.2 在 `cmd/mornlea/app_inventory_crafting_test.go` 先写失败测试：格点击组 `MoveCraftingStack`、产物格点击发 `TakeCraftingOutput`、确认前不本地改写、recipe-click 发送路径删除；随后改 `cmd/mornlea/app.go`、`app_input.go`、`app_messages.go` 接通输入与权威镜像。验证：`go test ./cmd/mornlea -run 'TestInventory|TestCrafting' -count=1`。
-- [ ] 4.3 更新 `cmd/mornlea/capture_scene.go`/`capture_scene_test.go`：`inventory-crafting` 改为 2×2 实物配方与非空产物格，新增 `workbench-crafting` 构造（3×3、镜像不对称配方、合法产物）插在其后、`chest-container` 之前；只加场景与像素不变量测试，不写 golden PNG。验证：`go test ./cmd/mornlea -run 'TestCaptureScene' -count=1`；`gofmt -w internal/render/hud cmd/mornlea`。
+- [x] 4.1 在 `internal/render/hud/container_test.go` 先写布局/命中失败测试：个人面板恰好 2×2、工作台恰好 3×3、产物格独立且不是普通移动目标、36 格栏位保持原位、全部格在受支持最窄 framebuffer 内可见且命中矩形与绘制矩形一致、最大打开态精确 quad 数锁定且 ≤267、glyph/offset/总容量不变；随后在 `internal/render/hud/container.go` 以 grid size 参数与产物格替换十条配方行（复用 `appendItemTile` 与既有 atlas）。验证：`go test ./internal/render/hud -race -count=1`。
+- [x] 4.2 在 `cmd/mornlea/app_inventory_crafting_test.go` 先写失败测试：格点击组 `MoveCraftingStack`、产物格点击发 `TakeCraftingOutput`、确认前不本地改写、recipe-click 发送路径删除；随后改 `cmd/mornlea/app.go`、`app_input.go`、`app_messages.go` 接通输入与权威镜像。验证：`go test ./cmd/mornlea -run 'TestInventory|TestCrafting' -count=1`。
+- [x] 4.3 更新 `cmd/mornlea/capture_scene.go`/`capture_scene_test.go`：`inventory-crafting` 改为 2×2 实物配方与非空产物格，新增 `workbench-crafting` 构造（3×3、镜像不对称配方、合法产物）插在其后、`chest-container` 之前；只加场景与像素不变量测试，不写 golden PNG。验证：`go test ./cmd/mornlea -run 'TestCaptureScene' -count=1`；`gofmt -w internal/render/hud cmd/mornlea`。
 
 ## 5. 功能线终审与移交
 
