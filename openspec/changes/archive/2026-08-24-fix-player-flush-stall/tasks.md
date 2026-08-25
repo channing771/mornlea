@@ -6,6 +6,6 @@
 
 ## 2. 收尾
 
-- [ ] 2.1 `gofmt -l .` 无输出；`go vet ./...`；`go test ./internal/archcheck -count=1`。
-- [ ] 2.2 `openspec validate fix-player-flush-stall --strict --no-interactive`。
-- [ ] 2.3 `scripts/agents/gates.sh` 全量门禁（含 `make rust` 与全仓 race）；整分支终审；结论记入 `ledger.md`。
+- [x] 2.1 `gofmt -l .` 无输出；`go vet ./...`；`go test ./internal/archcheck -count=1`。
+- [x] 2.2 `openspec validate fix-player-flush-stall --strict --no-interactive`。
+- [x] 2.3 `scripts/agents/gates.sh` 全量门禁（含 `make rust` 与全仓 race）；整分支终审；结论记入 `ledger.md`。
