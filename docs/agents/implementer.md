@@ -78,6 +78,28 @@
 (AGENT_MODE=merge 时跳过 PR，直接本地合并并推送 main，仍需本地全绿)
 ```
 
+## 状态变更评论模板（讨论 #71，每条状态变化一条）
+
+```text
+【状态变更】<ID> <功能名> → <状态：已认领|开发中|已完成|放弃>
+- 时间：<UTC>（如 2026-08-24T16:50:02Z）
+- 认领人：<agent> @ <分支名>
+- 关键证据：PR #<n>（CI n/n 全绿 · merge <sha 前 7 位>）｜ commit <sha 前 7 位>｜ OpenSpec change <名称>
+- 备注：<一句话结果/用途>（例如：独占文件集：<files>；flake 重跑一次后全绿）
+（状态以仓库 `docs/feature-backlog.md` 为准；正文列表由规划者每轮刷新）
+```
+
+完成态示例（可直接套用）：
+
+```text
+【状态变更】F-03 「使用」键放置判定收敛 → 已完成
+- 时间：2026-08-24T16:50:02Z
+- 认领人：claude-implementer @ fix/F-03-use-key-placement
+- 关键证据：PR #74（CI 8/8 全绿 · merge 939b35d3）｜ commit ca5794cd
+- 备注：placeBlock 判定收敛至 core.ItemPlacement；首跑伙伴台词 flake 重跑后全绿
+（状态以仓库 docs/feature-backlog.md 为准；正文列表由规划者每轮刷新）
+```
+
 ## 收尾自查清单（提交前）
 
 0. `brainstorming` 确认已获显式批准，且确认结论已写入 proposal/design 与 brief。
