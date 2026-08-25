@@ -67,11 +67,11 @@
 □ 门禁证据归档：ledger 补最终验证输出摘要（数值记录，不改基线）
 □ 推送分支：git push -u origin <branch>
 □ 创建 PR：gh pr create --title "feat: <行 ID> <功能名>" --body "<OpenSpec change 链接 + 规划行 + 验证摘要>"
-□ 监听 CI：gh pr checks --watch --interval 30
-   失败 → gh run view <run-id> --log-failed（或 gh pr checks --json name,state,url）定位
-   → 本地修复并推送 → 重新监听；直到全绿，上限 10 轮，超限停止并报告
-□ CI 全绿后合并：gh pr merge --merge（--delete-branch 可选）
-□ 同步本地 main：git fetch origin && git checkout main && git pull --ff-only
+□ 启动 PR 收尾守护（detached，会话退出也不丢）：nohup scripts/agents/pr-finalize.sh <PR号> >> ~/Library/Logs/mornlea-pr-finalize.log 2>&1 &
+   守护职责：监听 CI 至完成 → 失败自动 failed-only 重跑（最多 3 轮，flaky 免疫）→ 仍失败保持 OPEN 并在日志登记
+   → 全绿后 gh pr merge --merge；实现者随后只需确认合并结果（gh pr view <PR> --json state）
+   如需主动修复：gh run view <run-id> --log-failed（或 gh pr checks --json name,state,url）定位 → 本地修复并推送 → 守护会自动重跑
+□ 确认合并后同步本地 main：git fetch origin && git checkout main && git pull --ff-only
 □ 接力循环（AGENT_LOOP=1 时）：rm -f ~/.mornlea/loop.guard && scripts/agents/relay.sh
    —— 无未认领任务时 relay.sh 自动终结循环；手动单次运行（AGENT_LOOP=0）跳过
 (AGENT_MODE=merge 时跳过 PR，直接本地合并并推送 main，仍需本地全绿)
