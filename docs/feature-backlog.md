@@ -118,7 +118,7 @@
 
 | ID | 功能 | 简述 | 版本与契约影响 | 状态 | 认领人 | 来源与备注 |
 |---|---|---|---|---|---|---|
-| D-01 | 设置菜单 | 音量（`audioVolume`）、材质包目录（`texturePackPath`）、窗口等设置项 | 配置项暴露，无 wire 变更 | 已认领 | codex-implementer @ codex/D-01-settings-menu | egui 集成约束与实施路径；独占文件集：OpenSpec change `settings-menu`；`internal/config` 的设置持久化与测试；`internal/client` 的工具 UI 段/事件桥及测试；`cmd/mornlea` 的设置菜单状态、交互接线、capture 场景与相关测试；`engine/crates/mornlea_client` 的设置 UI 解码、egui 呈现、事件与 FFI 测试；如设计确认需要 client ABI/capture 基线演进，则同步独占对应版本常量、golden、`AGENTS.md`/`CLAUDE.md` 与 `docs/notes/progress.md` 本变更段落；不触碰线上 wire、世界/玩家存档或 benchmark 语义。 |
+| D-01 | 设置菜单 | 音量（`audioVolume`）、材质包目录（`texturePackPath`）、窗口等设置项 | 配置项暴露，无 wire 变更 | 已完成 | codex-implementer @ codex/D-01-settings-menu | PR #86；change `settings-menu` 已归档并同步主规格。交付世界装配前的 committed/draft 设置页、三字段 raw JSON 原子 patch、材质候选预验证、音量/窗口保存后即时生效、client ABI v9 结构化有界事件批及 19 场景 capture；协议/schema、engine ABI、benchmark scenario 与配置版本均不变。完整验证与 baseline-equivalent 视觉门禁证据见归档 ledger。 |
 | D-02 | 暂停菜单 | 暂停/继续/退出；先设计单人权威模拟的暂停语义 | 视暂停语义裁决 | 未认领 | — | egui 实施路径 |
 | D-03 | 调试面板 egui 化 | 既有程序化 debug 面板迁入 egui 或并存；性能影响需评审 | 无 wire（呈现层） | 未认领 | — | egui 实施路径 |
 | D-04 | 合成面板分页/滚动 | 配方行数增长后按窗口高度自适应（当前 10 行，矮窗口整体缩小） | 无 wire；HUD 布局（capture 校验） | 未认领 | — | farming 遗留 20 |

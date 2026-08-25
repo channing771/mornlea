@@ -37,7 +37,7 @@
 - 独立终审：`d01_branch_final_review` 最终 PASS（两次阻断审查、两次 PASS 快照确认）
 - 最终门禁：除 R-011 的 baseline-equivalent `make visual-check` 非零外全部 PASS；全仓 race 最终 PASS 581s
 - OpenSpec 同步/归档：COMPLETE（5 份 delta 全部合入稳定规格；归档为 `2026-08-26-settings-menu`）
-- PR / CI / 合并：PENDING
+- PR / CI / 合并：PR #86 已创建；CI / 合并 PENDING
 - Discussion 完成回报：PENDING
 
 ## Rulings
