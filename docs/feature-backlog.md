@@ -42,15 +42,15 @@
 
 ## A. 第一夜生存批次（在途，不得重复认领）
 
-> 设计与计划见 `docs/superpowers/specs/2026-08-23-first-night-survival-parallel-wave-design.md` 与 `docs/superpowers/plans/2026-08-23-first-night-survival-parallel-wave.md`。五个功能分支与集成分支均已存在于本地 worktree（`.worktrees/`）与 `codex/*` 分支；共享契约 SHA 为 `785ea07b`（`fix: address shared contract review`）。最终版本：协议 v27、玩家 schema v8、世界 metadata v3、`hostile_mobs` schema v1、engine ABI v7、benchmark scenario v20；区块 schema v9 与 `companions.ai` v4 不变。
+> 设计与计划见 `docs/superpowers/specs/2026-08-23-first-night-survival-parallel-wave-design.md` 与 `docs/superpowers/plans/2026-08-23-first-night-survival-parallel-wave.md`。原批次的五个功能分支仅存在于前一开发机的本地 worktree（`.worktrees/`）与本地 `codex/*` 分支（共享契约 SHA `785ea07b`），从未推送远端，已随机器迁移丢失；2026-08-25 经控制会话裁决将 A-01..A-05 全部重置为未认领、从当前 `main` 重做。版本目标不变：协议 v27、玩家 schema v8、世界 metadata v3、`hostile_mobs` schema v1、engine ABI v7、benchmark scenario v20；区块 schema v9 与 `companions.ai` v4 不变。
 
 | ID | 功能 | 简述 | 状态 | 认领人 | 来源与备注 |
 |---|---|---|---|---|---|
-| A-01 | 权威格子工作台 | 背包 2×2 + 工作台 3×3 形状配方、权威产物取出、关闭/断线装回不变量、七条新配方 | 待集成 | 前批实现线 `codex/authoritative-grid-crafting` | 分支头 `a657c1cb`，实现与整功能评审完成 |
-| A-02 | 可放置火把 | 落地 + 四向墙面五形态、支撑约束与移除反应、发光等级 14、mesh model tag 与窄柱几何 | 待集成 | 前批实现线 `codex/placeable-torches` | 分支头 `b2115a64`，实现与整功能评审完成 |
-| A-03 | 三级剑与统一战斗 | 木/石/铁剑（4/5/6 伤害）、统一候选（≤72）与冷却/击退/耐久、CombatHit 私有确认 | 待集成 | 前批实现线 `codex/tiered-swords-combat` | 分支头 `42f3dead`；SPEC/QUALITY PASS，recipe 15..17 依赖 A-01 合流 |
-| A-04 | 权威近战夜行者 | 确定性夜间生成、全服 64/每玩家 8 上限、A* + Rust 物理、灼烧/消失/腐肉掉落、`hostile_mobs` v1 | 开发中 | 前批实现线 `codex/authoritative-hostile-nightwalker` | 分支头 `eb1923eb`（持久化修复两轮已提交、worktree 干净；2026-08-24 规划者核对） |
-| A-05 | 床与睡眠 | 双格床八形态、同区块原子放置、全员睡眠跳夜（`DayTimeOffsetTicks`）、个人重生点 | 已认领 | 前批实现线 `codex/authoritative-bed-sleep` | 分支头 `785ea07b` = 共享契约，**尚无实现**；从共享 SHA 继续 |
+| A-01 | 权威格子工作台 | 背包 2×2 + 工作台 3×3 形状配方、权威产物取出、关闭/断线装回不变量、七条新配方 | 未认领 | — | 原分支头 `a657c1cb`（实现与整功能评审完成）未推送远端已丢失；从当前 `main` 重做 |
+| A-02 | 可放置火把 | 落地 + 四向墙面五形态、支撑约束与移除反应、发光等级 14、mesh model tag 与窄柱几何 | 未认领 | — | 原分支头 `b2115a64`（实现与整功能评审完成）未推送远端已丢失；从当前 `main` 重做 |
+| A-03 | 三级剑与统一战斗 | 木/石/铁剑（4/5/6 伤害）、统一候选（≤72）与冷却/击退/耐久、CombatHit 私有确认 | 未认领 | — | 原分支头 `42f3dead`（SPEC/QUALITY PASS）未推送远端已丢失；recipe 15..17 依赖 A-01 合流；从当前 `main` 重做 |
+| A-04 | 权威近战夜行者 | 确定性夜间生成、全服 64/每玩家 8 上限、A* + Rust 物理、灼烧/消失/腐肉掉落、`hostile_mobs` v1 | 未认领 | — | 原分支头 `eb1923eb`（持久化修复两轮已提交）未推送远端已丢失；从当前 `main` 重做 |
+| A-05 | 床与睡眠 | 双格床八形态、同区块原子放置、全员睡眠跳夜（`DayTimeOffsetTicks`）、个人重生点 | 未认领 | — | 原共享契约 SHA `785ea07b` 未推送远端已丢失（本无实现损失）；从当前 `main` 重做 |
 | A-06 | 五路合流集成 | 固定顺序合并 crafting→torches→swords→nightwalker→bed；TDD 接通剑×夜行者统一战斗、夜行者阻睡、bed model dispatcher；删除 `network.CraftRecipe` 过渡类型 | 未认领 | — | 依赖 A-01..A-05；按批次计划 Task 3 |
 | A-07 | 版本基线与视觉基线 | 协议 v27 / schema v8 / metadata v3 / `hostile_mobs` v1 / engine ABI v7 / benchmark v20 迁移 `19:20`；生成新 5 场景 golden；同步 `AGENTS.md`+`CLAUDE.md`+`progress.md` | 未认领 | — | 依赖 A-06。**认领时注意**：a) client ABI 设计值 v8 已被 egui 占用，按实际重排；b) 场景总数按合入时的实际清单（既有 18 + 新增 5 = 23，批次计划写 22 系编写时未含 main-menu） |
 | A-08 | 整分支终审、归档与推送 | 独立整分支终审（规格、上限、并发/持久化错误路径、wire 安全、22/23 图、无版权资源）、五个 change 归档、合入 `main` | 未认领 | — | 依赖 A-07；按批次计划 Task 5 |
@@ -145,7 +145,7 @@
 | E-09 | 作物×锄头耐久豁免 | 对齐 MC：手持锄头收获不扣耐久，`completeMining` 加豁免表并配测试 | 无（豁免表 + 测试） | 已完成 | codex2-implementer @ fix/E-09-hoe-harvest-durability | farming 遗留 16；`fix-hoe-harvest-durability` 已归档；SPEC/QUALITY 与整分支终审通过，`scripts/agents/gates.sh` 全绿 |
 | E-10 | `findSpawnInColumn` 读落脚盒顶面 | 出生点与 support/safe 存档点三处口径同步（耕地 1/16 空隙） | 无（出生点口径） | 已完成 | codex-implementer @ fix/E-10-spawn-support-top | farming 遗留 14；`fix-spawn-support-top` 已归档；真实耕地出生/恢复/safe 测试、SPEC/QUALITY 双评审与整分支 `gates.sh` 均通过 |
 | E-11 | server 测试等待预算化 | 既有登录等待循环多数无界（5 分钟超时而非可读断言），统一有预算等待助手 | 无（测试基础设施） | 未认领 | — | farming 遗留 19（测试基础设施） |
-| E-12 | M5E 再递延字面同源化 | `capture_scene.go` 与 `capture_ai_companion_test.go` 的 `[32]network.ChatEvent` 字面；ChatCommand 编解码 1024 字面与错误文案 | 无（字面同源化） | 已认领 | codex-implementer @ chore/E-12-companion-limits | m5e 归档 proposal「延期与放弃」递延 4、5；独占文件集：`cmd/mornlea/capture_scene.go`、`cmd/mornlea/capture_ai_companion_test.go`、`internal/network/codec_client.go` 及相关定点测试 + OpenSpec change `m5e-literal-single-source` |
+| E-12 | M5E 再递延字面同源化 | `capture_scene.go` 与 `capture_ai_companion_test.go` 的 `[32]network.ChatEvent` 字面；ChatCommand 编解码 1024 字面与错误文案 | 无（字面同源化） | 未认领 | — | m5e 归档 proposal「延期与放弃」递延 4、5；独占文件集：`cmd/mornlea/capture_scene.go`、`cmd/mornlea/capture_ai_companion_test.go`、`internal/network/codec_client.go` 及相关定点测试 + OpenSpec change `m5e-literal-single-source`；2026-08-25 原认领（chore/E-12-companion-limits）无推送记录，随机器迁移重置重认领 |
 | E-13 | benchmark 新 scenario record-only 报告 | 为已升版 scenario 补 Memory/TCP 记录报告并追加到 `perf-baseline.md`（数值只记录） | 无（报告只记录） | 已完成 | codex-implementer @ chore/E-13-benchmark-record-report | farming 遗留 23；`E-13-approval2` 批准 bounded 短设计；冻结 `923fa0d7` 生成并自检 Memory/TCP v19 报告及跨 transport 比较，SPEC/QUALITY PASS，`gates.sh` 全绿；基线 JSON 未覆盖 |
 
 ## F. 小型修复队列（直接修改豁免，但同样认领登记）
