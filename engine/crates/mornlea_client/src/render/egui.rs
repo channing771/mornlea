@@ -19,7 +19,7 @@
 //! 约束:不引入 egui-winit;egui/egui-wgpu 钉死 0.35(声明 wgpu ^29,与仓库
 //! 直接 wgpu 29 同线);不升级 wgpu。
 
-use crate::ui::{UiEvent, UiFrame, UiState};
+use crate::ui::{UiEvent, UiFrame, UiOutputError, UiState};
 use egui::{Rect, pos2, vec2};
 
 /// 字体一次上传的字节上界(32 MiB;实际 Noto CJK OTF 约 16 MiB,留两倍余量)。
@@ -30,6 +30,10 @@ pub const MAX_UI_FONT_BYTES: usize = 32 * 1024 * 1024;
 pub enum EguiError {
     /// 字体负载非法:空字节或超过 MAX_UI_FONT_BYTES。
     FontInvalid,
+    /// 结构化 UI 输出队列容量不足。
+    OutputCapacity,
+    /// 结构化 UI 输出事件内部值非法。
+    OutputInvalid,
 }
 
 /// egui 的 GPU 呈现 pass:渲染器、屏幕描述与 egui 状态。
@@ -106,9 +110,20 @@ impl EguiPass {
         Ok(())
     }
 
-    /// 排空点击事件队列(读前清空),返回按钮 id 序列。
-    pub fn drain_events(&mut self) -> Vec<u32> {
-        self.ui.drain_events()
+    /// 把结构化 UI 输出队列完整排空到 `out`。
+    pub fn drain_events(&mut self, out: &mut [u8]) -> Result<usize, UiOutputError> {
+        self.ui.drain_events(out)
+    }
+
+    /// 在消费输入前预检指定帧的最坏输出容量。
+    pub fn has_frame_capacity(&self, frame: &UiFrame) -> bool {
+        self.ui.has_frame_capacity(frame)
+    }
+
+    /// 测试专用：用合法 action 填充输出队列，构造 renderer 外层容量失败。
+    #[cfg(test)]
+    pub(crate) fn test_fill_actions(&mut self, count: usize) {
+        self.ui.test_fill_actions(count);
     }
 
     /// 运行一帧菜单并在 encoder 上录制 egui pass。
@@ -129,7 +144,7 @@ impl EguiPass {
         frame: &UiFrame,
         events: Vec<UiEvent>,
     ) -> Result<bool, EguiError> {
-        if !frame.visible || !self.has_font() {
+        if !frame.visible() || !self.has_font() {
             return Ok(false);
         }
         let ppp = self.screen.pixels_per_point;
@@ -139,9 +154,11 @@ impl EguiPass {
         // 菜单无动画,time 固定 None 以保 golden 确定性。
         let raw = crate::ui::raw_input(&events, screen_rect, ppp, None);
         let full = match self.ui.run_frame(raw, frame, ppp) {
-            Some(full) => full,
+            Ok(Some(full)) => full,
             // 无字体/不可见:run_frame 返回 None,本 pass 零工作。
-            None => return Ok(false),
+            Ok(None) => return Ok(false),
+            Err(UiOutputError::Capacity) => return Err(EguiError::OutputCapacity),
+            Err(UiOutputError::Invalid) => return Err(EguiError::OutputInvalid),
         };
         let egui::FullOutput {
             shapes,

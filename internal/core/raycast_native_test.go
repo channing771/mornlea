@@ -1,10 +1,16 @@
 package core
 
+// raycast_native_test.go：native raycast 出口的 ABI 布局锁与 batch 驱动行为锁。
+//
+// 旧 Go DDA oracle 已随 change drop-go-test-oracles 删除，本文件不再做
+// 「生产==冻结副本」差分对照；记录序列完整性改由布局锁（字节级编码断言）、
+// 行为锁（回调传播、batch 边界、并发一致性）与 `FuzzRaycastBlocks` 的性质网
+// 共同把守（design D2）。
+
 import (
 	"encoding/binary"
 	"errors"
 	"math"
-	"math/rand"
 	"strconv"
 	"sync"
 	"testing"
@@ -60,69 +66,15 @@ func TestRaycastInputCursorAndRecordLayoutV1(t *testing.T) {
 	}
 }
 
-func TestNativeRaycastMatchesGoOracle(t *testing.T) {
-	origin := mgl32.Vec3{0.5, 5.5, 2.5}
-	direction := mgl32.Vec3{-1, 0, 0}
-	assertNativeRaycastMatchesOracle(t, origin, direction, 6)
-}
-
-func TestNativeRaycastMatchesGoOracleDeterministicCorpus(t *testing.T) {
-	negativeZero := math.Float32frombits(0x8000_0000)
-	for _, test := range []struct {
-		name              string
-		origin, direction mgl32.Vec3
-		maximum           float32
-	}{
-		{name: "origin signed zero", origin: mgl32.Vec3{negativeZero, 0.5, negativeZero}, direction: mgl32.Vec3{1, 0, 0}, maximum: 2},
-		{name: "boundary zero-distance face", origin: mgl32.Vec3{1, negativeZero, 0.5}, direction: mgl32.Vec3{-1, negativeZero, 0}, maximum: 2},
-		{name: "positive X", origin: mgl32.Vec3{0.5, 0.5, 0.5}, direction: mgl32.Vec3{1, 0, 0}, maximum: 2},
-		{name: "negative X", origin: mgl32.Vec3{0.5, 0.5, 0.5}, direction: mgl32.Vec3{-1, 0, 0}, maximum: 2},
-		{name: "positive Y", origin: mgl32.Vec3{0.5, 0.5, 0.5}, direction: mgl32.Vec3{0, 1, 0}, maximum: 2},
-		{name: "negative Y", origin: mgl32.Vec3{0.5, 0.5, 0.5}, direction: mgl32.Vec3{0, -1, 0}, maximum: 2},
-		{name: "positive Z", origin: mgl32.Vec3{0.5, 0.5, 0.5}, direction: mgl32.Vec3{0, 0, 1}, maximum: 2},
-		{name: "negative Z", origin: mgl32.Vec3{0.5, 0.5, 0.5}, direction: mgl32.Vec3{0, 0, -1}, maximum: 2},
-		{name: "negative floor", origin: mgl32.Vec3{-0.25, -1.75, -2.5}, direction: mgl32.Vec3{-1, 0.5, -0.25}, maximum: 8},
-		{name: "XYZ tie", origin: mgl32.Vec3{0.5, 0.5, 0.5}, direction: mgl32.Vec3{1, 1, 1}, maximum: 4},
-		{name: "exact endpoint", origin: mgl32.Vec3{0, 0.5, 0.5}, direction: mgl32.Vec3{1, 0, 0}, maximum: 6},
-		{name: "next-float endpoint", origin: mgl32.Vec3{6 - math.Nextafter32(6, float32(math.Inf(1))), 0.5, 0.5}, direction: mgl32.Vec3{1, 0, 0}, maximum: 6},
-		{name: "multiple batches", origin: mgl32.Vec3{0.5, 0.5, 0.5}, direction: mgl32.Vec3{1, 0, 0}, maximum: 130},
-		{name: "int32 wrapping", origin: mgl32.Vec3{float32(math.MinInt32), 0.5, 0.5}, direction: mgl32.Vec3{-1, 0, 0}, maximum: 3},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			assertNativeRaycastMatchesOracle(t, test.origin, test.direction, test.maximum)
-		})
-	}
-}
-
-func TestNativeRaycastMatchesGoOracleFixedRandomCorpus(t *testing.T) {
-	random := rand.New(rand.NewSource(0x5241_5943_4153_5431))
-	for index := range 64 {
-		origin := mgl32.Vec3{
-			random.Float32()*2048 - 1024,
-			random.Float32()*2048 - 1024,
-			random.Float32()*2048 - 1024,
-		}
-		direction := mgl32.Vec3{
-			random.Float32()*2 - 1,
-			random.Float32()*2 - 1,
-			random.Float32()*2 - 1,
-		}
-		if direction.Len() < 1e-3 {
-			direction[0] = 1
-		}
-		maximum := 0.01 + random.Float32()*127.99
-		t.Run(strconv.Itoa(index), func(t *testing.T) {
-			assertNativeRaycastMatchesOracle(t, origin, direction, maximum)
-		})
-	}
-}
-
 func TestNativeRaycastConcurrentCalls(t *testing.T) {
 	const workers = 32
 	type testCase struct {
 		origin, direction mgl32.Vec3
 		want              []raycastRecord
 	}
+	// 期望基线由同一条 native 路径在单线程下预先采集：本测试锁的是
+	// 「并发 batch 调用与顺序调用逐位一致」（cursor 各自独立、互不串写），
+	// 数据竞争本身由 -race 兜底；oracle 差分已由 drop-go-test-oracles 整体移除。
 	corpus := make([]testCase, workers)
 	for worker := range workers {
 		origin := mgl32.Vec3{float32(worker%7) - 3.25, float32(worker%5) + 0.5, -2.75}
@@ -130,7 +82,7 @@ func TestNativeRaycastConcurrentCalls(t *testing.T) {
 		corpus[worker] = testCase{
 			origin:    origin,
 			direction: direction,
-			want:      oracleRaycastRecords(t, origin, direction, 96),
+			want:      nativeRaycastRecords(origin, direction, 96),
 		}
 	}
 	start := make(chan struct{})
@@ -179,7 +131,6 @@ func TestRaycastBlocksExtremeFiniteInputPreservesSecondCallbackError(t *testing.
 		name    string
 		raycast func(mgl32.Vec3, mgl32.Vec3, float32, func(BlockPos) (bool, error)) (RayHit, bool, error)
 	}{
-		{name: "oracle", raycast: oracleRaycastBlocks},
 		{name: "native", raycast: RaycastBlocks},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -209,12 +160,10 @@ func TestRaycastBlocksExtremeFiniteInputPreservesSecondCellHit(t *testing.T) {
 	origin := mgl32.Vec3{float32(math.MaxInt32), 0.5, 0.5}
 	direction := mgl32.Vec3{1e-30, 1, 0}
 	target := BlockPos{X: math.MinInt32 + 1}
-	var oracleHit RayHit
 	for _, test := range []struct {
 		name    string
 		raycast func(mgl32.Vec3, mgl32.Vec3, float32, func(BlockPos) (bool, error)) (RayHit, bool, error)
 	}{
-		{name: "oracle", raycast: oracleRaycastBlocks},
 		{name: "native", raycast: RaycastBlocks},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -223,18 +172,11 @@ func TestRaycastBlocksExtremeFiniteInputPreservesSecondCellHit(t *testing.T) {
 				calls++
 				return calls == 2, nil
 			})
+			// int32 回绕场景下真实 tMax 溢出，权威契约允许派生的 −Inf 距离
+			// （见 `raycastRecordDistanceIsValid`），此处连同命中格与进入面一起钉住。
 			if err != nil || !found || calls != 2 || hit.Block != target || hit.Face != BlockFaceNegX ||
 				!math.IsInf(float64(hit.Distance), -1) {
 				t.Fatalf("hit/found/err/calls=%+v/%v/%v/%d", hit, found, err, calls)
-			}
-			if test.name == "oracle" {
-				oracleHit = hit
-				return
-			}
-			for axis := range 3 {
-				if math.Float32bits(hit.Point[axis]) != math.Float32bits(oracleHit.Point[axis]) {
-					t.Fatalf("Point[%d] bits=%08x，oracle=%08x", axis, math.Float32bits(hit.Point[axis]), math.Float32bits(oracleHit.Point[axis]))
-				}
 			}
 		})
 	}
@@ -253,40 +195,24 @@ func TestRaycastBlocksExtremeFiniteInputContinuesAcrossBatch(t *testing.T) {
 		{name: "untouched infinite delta after NaN", origin: mgl32.Vec3{extreme, extreme, 0.5}, direction: mgl32.Vec3{1e-40, 1e-40, 1}, target: BlockPos{X: math.MinInt32 + 64, Y: math.MinInt32}},
 	} {
 		t.Run(ray.name, func(t *testing.T) {
-			var oracleVisited [65]BlockPos
-			for _, test := range []struct {
-				name    string
-				raycast func(mgl32.Vec3, mgl32.Vec3, float32, func(BlockPos) (bool, error)) (RayHit, bool, error)
-			}{
-				{name: "oracle", raycast: oracleRaycastBlocks},
-				{name: "native", raycast: RaycastBlocks},
-			} {
-				t.Run(test.name, func(t *testing.T) {
-					sentinel := errors.New("cross-batch sentinel")
-					calls := 0
-					var visited [65]BlockPos
-					_, found, err := test.raycast(ray.origin, ray.direction, 1, func(position BlockPos) (bool, error) {
-						if calls < len(visited) {
-							visited[calls] = position
-						}
-						calls++
-						if calls == 65 {
-							return false, sentinel
-						}
-						return false, nil
-					})
-					if err != sentinel || found || calls != 65 {
-						t.Fatalf("found/err/calls=%v/%v/%d，想要 false/sentinel/65", found, err, calls)
-					}
-					if visited[64] != ray.target {
-						t.Fatalf("callback[64]=%+v，想要 %+v", visited[64], ray.target)
-					}
-					if test.name == "oracle" {
-						oracleVisited = visited
-					} else if visited != oracleVisited {
-						t.Fatalf("native callback 顺序=%+v，oracle=%+v", visited, oracleVisited)
-					}
-				})
+			sentinel := errors.New("cross-batch sentinel")
+			calls := 0
+			var visited [65]BlockPos
+			_, found, err := RaycastBlocks(ray.origin, ray.direction, 1, func(position BlockPos) (bool, error) {
+				if calls < len(visited) {
+					visited[calls] = position
+				}
+				calls++
+				if calls == 65 {
+					return false, sentinel
+				}
+				return false, nil
+			})
+			if err != sentinel || found || calls != 65 {
+				t.Fatalf("found/err/calls=%v/%v/%d，想要 false/sentinel/65", found, err, calls)
+			}
+			if visited[64] != ray.target {
+				t.Fatalf("callback[64]=%+v，想要 %+v", visited[64], ray.target)
 			}
 		})
 	}
@@ -339,19 +265,6 @@ func TestDecodeRaycastRecordAllowsDerivedOverflowAfterCellWrap(t *testing.T) {
 	}
 }
 
-func assertNativeRaycastMatchesOracle(
-	t *testing.T,
-	origin, direction mgl32.Vec3,
-	maximum float32,
-) {
-	t.Helper()
-	actual := nativeRaycastRecords(origin, direction, maximum)
-	want := oracleRaycastRecords(t, origin, direction, maximum)
-	if mismatch := raycastRecordMismatch(actual, want); mismatch != "" {
-		t.Fatal(mismatch)
-	}
-}
-
 func nativeRaycastRecords(origin, direction mgl32.Vec3, maximum float32) []raycastRecord {
 	length := math.Hypot(math.Hypot(float64(direction[0]), float64(direction[1])), float64(direction[2]))
 	direction = direction.Mul(float32(1 / length))
@@ -370,32 +283,6 @@ func nativeRaycastRecords(origin, direction mgl32.Vec3, maximum float32) []rayca
 			return records
 		}
 	}
-}
-
-func oracleRaycastRecords(
-	t *testing.T,
-	origin, direction mgl32.Vec3,
-	maximum float32,
-) []raycastRecord {
-	t.Helper()
-	var visited []BlockPos
-	if _, _, err := oracleRaycastBlocks(origin, direction, maximum, func(position BlockPos) (bool, error) {
-		visited = append(visited, position)
-		return false, nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	records := make([]raycastRecord, 0, len(visited))
-	for _, target := range visited {
-		hit, found, err := oracleRaycastBlocks(origin, direction, maximum, func(position BlockPos) (bool, error) {
-			return position == target, nil
-		})
-		if err != nil || !found {
-			t.Fatalf("oracle target=%+v found=%v err=%v", target, found, err)
-		}
-		records = append(records, raycastRecord{block: hit.Block, face: hit.Face, distance: hit.Distance})
-	}
-	return records
 }
 
 func raycastRecordMismatch(actual, want []raycastRecord) string {

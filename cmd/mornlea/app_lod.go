@@ -136,7 +136,7 @@ func (sink rendererLodSink) DropLodTile(x, z int32) {
 // 不落 config。禁用路径零参与:直接返回,不建 `Scheduler`、不消费种子。
 // benchmark 观察者由调用方传入 benchmark=true 显式关闭。
 //
-// `fluidEnabled`(变基整合)与近环权威世界的 `worldgen.New` 取同一来源
+// 注水门控(变基整合)与近环权威世界的 `worldgen.New` 取同一来源
 // (`applicationOptions.FluidEnabled`):远环 header 必须与近环生成器逐字节
 // 一致,材料表里的 water 编号(关闭时为 air,见 fluid 门控 design D6)决定
 // 远环壳的海平面钳制语义是否生效。远程模式下近环世界由服务端权威决定,
