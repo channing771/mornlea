@@ -48,6 +48,41 @@ fn face_shade(face: u32) -> f32 {
     }
 }
 
+// 耕地材质层闭区间（干/湿两态）。material 落入区间 ⟺ 这条 quad 是 registry
+// block_top_raw 非零的短方块，bit 12..19/55..62 是角高度原值而不是 w/h 尺寸。
+//
+// 判别为什么走 material 区间：quad 布局只剩 bit 63 一个空闲位且必须留空，
+// 「是不是短方块」占不到任何位；植物又把 face 6/7 占为交叉斜面判别。耕地是
+// 轴向面（face 0..5），与植物按 face 天然互斥，material 区间是唯一不冲突的
+// 判别通道。数值真值源是 Go internal/assets 的 LayerFarmlandDry/Wet（29/30），
+// Rust 侧复述见 src/render/shaders.rs 的 FARMLAND_MATERIAL_FIRST/LAST，三方由
+// render/farmland_tests.rs 钉在一起——在这里改数字必须同步另外两处。
+fn farmland_material(mat: u32) -> bool {
+    return mat >= 29u && mat <= 30u;
+}
+
+// corner_height 取出第 vi 个顶点的 4-bit 角高度原值，与 water.wgsl 逐字同源
+// （WGSL 没有 include，两个 pass 各持一份；改位布局必须两边一起改）。位布局与
+// engine 的 quad.rs（SHIFT_W / SHIFT_H / SHIFT_CORNER2 / SHIFT_CORNER3）逐位对应：
+//
+//   | quad 位 | 内容   | 本着色器读法          |
+//   |---------|--------|-----------------------|
+//   | 12..15  | 角 0   | lo >> 12              |
+//   | 16..19  | 角 1   | lo >> 16              |
+//   | 55..58  | 角 2   | hi >> 23（55 - 32）   |
+//   | 59..62  | 角 3   | hi >> 27（59 - 32）   |
+//
+// 角顺序与 cu/cv 表一致，即局部 (u,v) 的 (0,0) (1,0) (1,1) (0,1)，于是顶点
+// 索引 vi 直接就是角索引。
+fn corner_height(lo: u32, hi: u32, vi: u32) -> u32 {
+    switch vi {
+        case 0u:  { return (lo >> 12u) & 0xFu; }
+        case 1u:  { return (lo >> 16u) & 0xFu; }
+        case 2u:  { return (hi >> 23u) & 0xFu; }
+        default:  { return (hi >> 27u) & 0xFu; }
+    }
+}
+
 @vertex
 fn vs_main(
     @builtin(vertex_index)   vi: u32,
@@ -60,8 +95,6 @@ fn vs_main(
     let x     = f32( lo          & 0xFu);
     let y     = f32((lo >>  4u) & 0xFu);
     let z     = f32((lo >>  8u) & 0xFu);
-    let w     = f32(((lo >> 12u) & 0xFu) + 1u);
-    let h     = f32(((lo >> 16u) & 0xFu) + 1u);
     let face  =      (lo >> 20u) & 0x7u;
     let mat   = ((lo >> 23u) & 0x1FFu) | ((hi & 0x7Fu) << 9u);
     let ao    = (hi >>  7u) & 0xFFu;
@@ -75,10 +108,21 @@ fn vs_main(
     var cu = array<f32, 4>(0.0, 1.0, 1.0, 0.0);
     var cv = array<f32, 4>(0.0, 0.0, 1.0, 1.0);
 
-    // face 6/7 是植物的交叉斜面。**必须在这里绕开 w/h**：植物 quad 借走了
-    // bit 12..19 装正/背标志与保留位，上面算出来的 `w`/`h` 是把标志位当尺寸
-    // 读出来的垃圾值。水面当年就栽在同一处——角高度上线后着色器仍按 `w-1`/
+    // face 6/7 是植物的交叉斜面。这条分支**绝不解码尺寸**：植物 quad 借走了
+    // bit 12..19 装正/背标志与保留位，按 `w-1`/`h-1` 解码得到的是把标志位当
+    // 尺寸读的垃圾值。水面当年就栽在同一处——角高度上线后着色器仍按 `w-1`/
     // `h-1` 解码，每片水被画成 8×8 到 16×16 的巨型石板。
+    //
+    // 耕地（及一切 registry block_top_raw 非零的短方块）是同一坑的第三个受害者
+    // 候选：mesher 对带角高度的 quad 不贪心合并、恒 1×1 出面，bit 12..19/55..62
+    // 装的是四角高度原值，沿用 `w/h` 解码同样会摊成巨型石板。因此 material 落入
+    // 耕地区间时走与 water.wgsl 同源的角高度路径：满格水平范围 + 顶面顶点抬升
+    // `(raw+1)/16`（raw=14 即 15/16，恰等于耕地碰撞盒高度）。与流体的邻域平均
+    // 不同，耕地四角取同一常量、没有斜面，直接查位即可。
+    //
+    // `w`/`h` 因此只在普通轴向面的分支里解码：三条路径互斥，由 face ∈ {6,7} 与
+    // 耕地 material 区间保证（植物 material 只允许出现在 face 6/7 上，短方块
+    // material 只允许落在耕地区间内，都是 mesher 打包时当场强制的格式）。
     //
     // 两条对角线（`cu[vi]` 是水平参数 s，`cv[vi]` 是竖直参数 t）：
     //
@@ -95,7 +139,21 @@ fn vs_main(
             px = x + 1.0 - s;
         }
         local = vec3f(px, y + cv[vi], z + s);
+    } else if (farmland_material(mat)) {
+        local = vec3f(x, y, z)
+            + axis_vec(axis) * positive
+            + axis_vec(ua) * cu[vi]
+            + axis_vec(va) * cv[vi];
+        // 角高度非零 ⟺ 该顶点落在这一格的顶面那一层（侧面的下沿顶点与底面
+        // 顶点语义上在方块底面、记 0；mesher 只给 y == 格顶的顶点写常量）。
+        // 实际高度是 (raw+1)/16：raw=14 即 15/16。
+        let raw = corner_height(lo, hi, vi);
+        if (raw != 0u) {
+            local.y = y + (f32(raw) + 1.0) / 16.0;
+        }
     } else {
+        let w = f32(((lo >> 12u) & 0xFu) + 1u);
+        let h = f32(((lo >> 16u) & 0xFu) + 1u);
         local = vec3f(x, y, z)
             + axis_vec(axis) * positive
             + axis_vec(ua) * (cu[vi] * w)

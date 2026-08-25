@@ -19,6 +19,8 @@
 
 pub mod egui;
 pub mod entity;
+#[cfg(test)]
+mod farmland_tests;
 pub mod lod;
 #[cfg(test)]
 mod plant_tests;
