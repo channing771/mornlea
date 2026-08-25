@@ -67,7 +67,7 @@
 | B-04 | 草丛与除草掉种子 | 植物几何第二消费者；草丛掉落种子替代初始材料包供给 | 植物区间编号追加 | 未认领 | — | farming 遗留 6 |
 | B-05 | 踩踏破坏耕地 | 实体落地事件接进方块变更（物理侧已有落地判定） | 无 wire 变更 | 未认领 | — | farming 遗留 4 |
 | B-06 | 干耕地退回泥土 | 需第三个耕地编号或附加状态字节 | 方块编号追加或状态编码 | 未认领 | — | farming 遗留 5 |
-| B-07 | 水冲毁作物 | 流体可流入作物格并触发掉落；需同步流体的确定性论证与不动点论证 | 流体 `evalCell` 规则变更，论证同步更新 | 未认领 | — | farming 遗留 1 |
+| B-07 | 水冲毁作物 | 流体可流入作物格并触发掉落；需同步流体的确定性论证与不动点论证 | 流体 `evalCell` 规则变更，论证同步更新 | 已认领 | ox-alpha-implementer @ feat/B-07-flood-destroys-crops | farming 遗留 1；2026-08-25 认领。独占文件集：`internal/fluid` 全部（`evalCell` 作物流入规则、确定性/不动点论证与测试）、`internal/sim` 新建作物冲毁结算文件（只调用既有导出掉落 API，不改 A-01/A-04/B-10 已认领的 `drop.go`/`mining.go`/`crop.go`/`engine_step.go`）、OpenSpec change 目录；无 wire 变更、无编号追加，不触碰 A 批次任何独占文件集 |
 | B-08 | 地下农场 | 服务端可查询的极简方块光模型，或重新裁决「服务端不计算光照」禁令 | 视裁决（spec 禁令重裁或新可查模型） | 未认领 | — | farming 遗留 7 |
 | B-09 | 湿润判定即时化 | 水源移除后扇出的有界化（与流体队列同构），或耕地湿度缓存；成本计量口径改为方块读取次数 | 无 wire；成本契约计量口径调整 | 未认领 | — | farming 遗留 9、21 |
 | B-10 | 作物随机掉落数量 | `hash(worldSeed, tick, pos)` 定数量，与生长抽样共用哈希 | 无 wire 变更 | 已认领 | ox-alpha-implementer @ feat/B-10-crop-drop-hash | farming 遗留 10；2026-08-25 认领。独占文件集：`internal/sim/mining.go`（成熟小麦多产物结算）、`internal/sim/crop.go`（splitmix64 哈希流复用）、同包 `*_test.go` 与新建 OpenSpec change；刻意不触碰 `tunables.go`/`drop.go`/`hunger.go` 与 `internal/core` 编号段（A-01/A-04 已认领） |
