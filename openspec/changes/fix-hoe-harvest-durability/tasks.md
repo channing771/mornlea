@@ -10,4 +10,4 @@
 
 - [x] 2.1 `gofmt -l .` 无输出；`go vet ./...`；`go test ./internal/archcheck -count=1`。
 - [x] 2.2 `openspec validate fix-hoe-harvest-durability --strict --no-interactive`。
-- [ ] 2.3 `scripts/agents/gates.sh` 全量门禁；基线文档（`AGENTS.md` + `CLAUDE.md` 判据句补豁免注记，逐字节相同）与 `docs/notes/progress.md` 基线段落同步；整分支终审；结论记入 `ledger.md`。
+- [x] 2.3 `scripts/agents/gates.sh` 全量门禁；基线文档（`AGENTS.md` + `CLAUDE.md` 判据句补豁免注记，逐字节相同）与 `docs/notes/progress.md` 基线段落同步；整分支终审；结论记入 `ledger.md`。

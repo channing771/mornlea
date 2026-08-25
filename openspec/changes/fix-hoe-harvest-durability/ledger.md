@@ -23,3 +23,6 @@
 - Task 2 门禁：cmp、全仓 gofmt、`go vet ./...`、archcheck、change/all OpenSpec strict 与 `scripts/agents/gates.sh` 全部通过；标准门禁包含 `make rust` 与 `go test ./... -race`，未设置跳过变量。
 - Task 2 评审：SPEC ✅，QUALITY Approved，Critical/Important/Minor 均无 finding。
 - Task 2 complete（`b3a95333..7e3d5d51`，review clean）；OpenSpec 2.3 的整分支终审待控制会话 final reviewer 裁决后勾选。
+- 整分支终审（`c49cc50b..81e55579`）确认代码与测试满足契约，但发现 proposal 与 delta spec 的“锄头只在翻地时磨损”同“锄头破坏非作物仍磨损”自相矛盾，判为 Important。
+- 唯一 final fix wave：`fbeb82e9` 把两处措辞限定为“使用完好锄头收获作物不磨损”；change/all OpenSpec strict 与 `git diff --check` 通过。scoped re-review 判定 finding ADDRESSED、无新破坏，整分支 APPROVE。
+- 最终结论：全部 6 项任务完成；无 Critical/Important/Minor 遗留，无 parked finding，无 Ruling。实现与文档范围内不涉及协议、存档 schema、ABI、benchmark、配置或 golden 迁移。
