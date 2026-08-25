@@ -459,6 +459,138 @@ func TestMiningWrongToolStillConsumesDurability(t *testing.T) {
 	}
 }
 
+// TestMiningHoeHarvestMatureCropKeepsDurability 覆盖 Scenario「锄头收获作物不扣
+// 耐久」的成熟分支：完好石锄/铁锄收获成熟小麦，耐久保持满值（整 `core.ItemStack`
+// 比较钉死栏位不变）、掉落仍是恰好 1 小麦 + 2 种子、`inventoryDirty` 保持 false
+// ——掉落进世界不触碰背包，豁免路径没有任何背包变化需要发布。
+func TestMiningHoeHarvestMatureCropKeepsDurability(t *testing.T) {
+	tests := []struct {
+		name string
+		tool core.ItemID
+	}{
+		{name: "石锄", tool: core.ItemStoneHoe},
+		{name: "铁锄", tool: core.ItemIronHoe},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			engine, sessions, targets := readyMiningPlayers(t, 1)
+			player := engine.sessions[sessions[0]].player
+			target := targets[0]
+			engine.SetBlockForTest(target, core.WheatStage7ID)
+			setMiningHeldItem(player, test.tool)
+			full, _ := core.ItemMaxDurability(test.tool)
+
+			result := advanceMiningOnce(engine)
+
+			if len(result.Rejected) != 0 {
+				t.Fatalf("锄头收获成熟小麦被拒绝 = %+v", result.Rejected)
+			}
+			record := miningTargetRecord(t, engine, target)
+			x, _, z := target.Local()
+			if got := record.Chunk.BlockAt(x, target.Y, z); got != core.AirID {
+				t.Fatalf("收获后方块 = %d，想要空气", got)
+			}
+			got := miningDropTotals(record.Chunk)
+			if len(got) != 2 || got[core.ItemWheat] != 1 || got[core.ItemWheatSeeds] != 2 {
+				t.Fatalf("成熟小麦掉落 = %+v，想要恰好 1 小麦 + 2 种子", got)
+			}
+			want := core.ItemStack{Item: test.tool, Count: 1, Durability: full}
+			if slot := player.inventory.Hotbar.Slots[0]; slot != want {
+				t.Fatalf("锄头收获作物后栏位 = %+v，想要耐久保持 %d", slot, full)
+			}
+			if player.inventoryDirty {
+				t.Fatal("豁免路径不改背包，inventoryDirty 应保持 false")
+			}
+		})
+	}
+}
+
+// TestMiningHoeHarvestImmatureCropKeepsDurability 覆盖 Scenario「锄头收获作物不扣
+// 耐久」的未成熟分支：豁免判据是 `core.IsCrop`（全部八个生长阶段），不是"成熟"；
+// 未成熟掉落仍是恰好 1 颗种子。
+func TestMiningHoeHarvestImmatureCropKeepsDurability(t *testing.T) {
+	engine, sessions, targets := readyMiningPlayers(t, 1)
+	player := engine.sessions[sessions[0]].player
+	target := targets[0]
+	engine.SetBlockForTest(target, core.WheatStage3ID)
+	setMiningHeldItem(player, core.ItemStoneHoe)
+	full, _ := core.ItemMaxDurability(core.ItemStoneHoe)
+
+	result := advanceMiningOnce(engine)
+
+	if len(result.Rejected) != 0 {
+		t.Fatalf("锄头收获未成熟作物被拒绝 = %+v", result.Rejected)
+	}
+	record := miningTargetRecord(t, engine, target)
+	x, _, z := target.Local()
+	if got := record.Chunk.BlockAt(x, target.Y, z); got != core.AirID {
+		t.Fatalf("收获后方块 = %d，想要空气", got)
+	}
+	got := miningDropTotals(record.Chunk)
+	if len(got) != 1 || got[core.ItemWheatSeeds] != 1 {
+		t.Fatalf("未成熟作物掉落 = %+v，想要恰好 1 颗种子", got)
+	}
+	want := core.ItemStack{Item: core.ItemStoneHoe, Count: 1, Durability: full}
+	if slot := player.inventory.Hotbar.Slots[0]; slot != want {
+		t.Fatalf("锄头收获未成熟作物后栏位 = %+v，想要耐久保持 %d", slot, full)
+	}
+	if player.inventoryDirty {
+		t.Fatal("豁免路径不改背包，inventoryDirty 应保持 false")
+	}
+}
+
+// TestMiningHoeHarvestExemptionExcludesPickaxe 是豁免的工具侧对照：持石镐收获
+// 成熟作物仍按既有规则扣恰好一点耐久并标记 `inventoryDirty`——豁免只认锄头
+// （`core.TillingTool`），不外溢到其他工具。
+func TestMiningHoeHarvestExemptionExcludesPickaxe(t *testing.T) {
+	engine, sessions, targets := readyMiningPlayers(t, 1)
+	player := engine.sessions[sessions[0]].player
+	engine.SetBlockForTest(targets[0], core.WheatStage7ID)
+	setMiningHeldItem(player, core.ItemStonePickaxe)
+	full, _ := core.ItemMaxDurability(core.ItemStonePickaxe)
+
+	result := advanceMiningOnce(engine)
+
+	if len(result.Rejected) != 0 {
+		t.Fatalf("石镐收获成熟作物被拒绝 = %+v", result.Rejected)
+	}
+	want := core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: full - 1}
+	if slot := player.inventory.Hotbar.Slots[0]; slot != want {
+		t.Fatalf("石镐收获作物后栏位 = %+v，想要耐久 %d", slot, full-1)
+	}
+	if !player.inventoryDirty {
+		t.Fatal("石镐收获作物扣减耐久没有标记 inventoryDirty")
+	}
+}
+
+// TestMiningHoeHarvestExemptionExcludesNonCrop 是豁免的方块侧对照：持完好石锄
+// 破坏泥土（5 tick）仍扣恰好一点耐久——豁免只认作物（`core.IsCrop`），不外溢
+// 到非作物方块。
+func TestMiningHoeHarvestExemptionExcludesNonCrop(t *testing.T) {
+	engine, sessions, targets := readyMiningPlayers(t, 1)
+	player := engine.sessions[sessions[0]].player
+	engine.SetBlockForTest(targets[0], core.DirtID)
+	setMiningHeldItem(player, core.ItemStoneHoe)
+	full, _ := core.ItemMaxDurability(core.ItemStoneHoe)
+
+	for range 5 {
+		advanceMiningOnce(engine)
+	}
+
+	record := miningTargetRecord(t, engine, targets[0])
+	x, _, z := targets[0].Local()
+	if got := record.Chunk.BlockAt(x, targets[0].Y, z); got != core.AirID {
+		t.Fatalf("石锄破坏泥土后方块 = %d，想要空气", got)
+	}
+	want := core.ItemStack{Item: core.ItemStoneHoe, Count: 1, Durability: full - 1}
+	if slot := player.inventory.Hotbar.Slots[0]; slot != want {
+		t.Fatalf("石锄破坏泥土后栏位 = %+v，想要耐久 %d", slot, full-1)
+	}
+	if !player.inventoryDirty {
+		t.Fatal("石锄破坏泥土扣减耐久没有标记 inventoryDirty")
+	}
+}
+
 func TestMiningTurnsToolIntoBrokenFormAtZero(t *testing.T) {
 	tests := []struct {
 		name     string
