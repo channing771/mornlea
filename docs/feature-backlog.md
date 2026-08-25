@@ -107,7 +107,7 @@
 | C-05 | 伙伴自主目标/自动采集/自动建造 | 无指令自主行为 | 契约待设计（大） | 未认领 | — | §16（大） |
 | C-06 | 玩家创建伙伴与所有权 | 创建 UI、所有权、ACL（计费不在范围内） | 配置与 schema 待设计 | 未认领 | — | §16 |
 | C-07 | 完整聊天历史/RAG/长期人格演化 | 存储与检索（现仅 ≤2 KiB 近期摘要） | `companions.ai` schema 升版 | 未认领 | — | §16 |
-| C-08 | 伙伴空闲随机聊天 | 非任务触发台词 | 协议 `ChatEvent` kind 可能追加 | 未认领 | — | §16 |
+| C-08 | 伙伴空闲随机聊天 | 非任务触发台词 | 复用既有 `CompanionSpeech`，无 wire 变更 | 已认领 | opencode-implementer @ feat/C-08-companion-idle-dialogue | §16；2026-08-26 认领。范围冻结为伙伴空闲 Dialogue 的确定性触发、既有模型并发纪律复用与广播接线。独占文件集：`internal/companion/dialogue_nodes.go`、`dialogue_types.go`、`dialogue_client.go` 及相关定点测试，`internal/server/companion_manager.go`、`companion_dialogue.go`、新建 `companion_idle_dialogue*.go` 及相关测试，OpenSpec change `companion-idle-dialogue`；刻意不触碰 Planner/任务/FIFO、`internal/network`、`internal/storage`、协议/schema/ABI/scenario 版本号、capture golden 与 `AGENTS.md`/`CLAUDE.md`/`progress.md` |
 | C-09 | 伙伴主动修改世界/动态任务/世界事件 | 世界事件系统 | 契约待设计（大） | 未认领 | — | §16 |
 | C-10 | 多 Agent 协商/模型代码与工具执行 | 伙伴间自主协商、模型代码执行 | 契约待设计（大） | 未认领 | — | §16（大） |
 | C-11 | 伙伴参与农业 | 种什么/何时收/成熟度判断语义未裁决；放开三处防御清单前必须先决定语义 | 视裁决（放开三处防御清单） | 未认领 | — | farming 遗留 11（先裁决再开工） |
