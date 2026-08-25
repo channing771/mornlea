@@ -36,7 +36,7 @@
 
 - 独立终审：`d01_branch_final_review` 最终 PASS（两次阻断审查、两次 PASS 快照确认）
 - 最终门禁：除 R-011 的 baseline-equivalent `make visual-check` 非零外全部 PASS；全仓 race 最终 PASS 581s
-- OpenSpec 同步/归档：PENDING
+- OpenSpec 同步/归档：主规格同步完成（5 份 delta 全部合入并通过 strict validation）；归档 PENDING
 - PR / CI / 合并：PENDING
 - Discussion 完成回报：PENDING
 
@@ -62,3 +62,4 @@
 - R-018：归档 delta 必须完整修改稳定视觉规格中所有精确数量/全序/尾序 requirement，不能让 19 场景与旧“恰好17/全部17”断言并存。
 - R-019：最终全仓 race 首跑 354s 唯一失败 `TestRemoteMessagesRouteOnlyToRoster`；该生产/测试路径与主线相同，单测 race `count=50`、完整 `cmd/mornlea` race、后续两次全仓 race（含冻结主线后的 581s 最终跑）均 PASS。判为共享 helper 固定 1ms 等待在满载 race 下的继承时序脆弱，不在 D-01 越界修改，但首次失败与全部复现证据必须保留。
 - R-020：任务 6.1 修复 top-level `null` raw patch、rename commit-point 的 pre/postcommit 结果、真实 `NSScreen.visibleFrame` outer-frame/位置约束、renderer 外层输入重放及完整视觉 delta；冻结主线合并后独立整分支终审最终 PASS。
+- R-021：OpenSpec 主规格同步覆盖 `egui-tool-ui`、`rust-client-window`、新建 `settings-menu`、`texture-pack-loading` 与 `visual-verification` 五个规格；保留 ABI 字体缺失这一未被 delta 推翻的既有场景，其余 delta requirement 与稳定规格逐项一致，strict validation 66/66 PASS。
