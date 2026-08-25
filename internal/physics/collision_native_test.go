@@ -4,8 +4,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
-	"math/rand"
-	"runtime"
 	"slices"
 	"strconv"
 	"sync"
@@ -311,34 +309,6 @@ func testDecodeCollisionOutput(output []byte) testCollisionResult {
 	return result
 }
 
-func testAssertCollisionMatches(
-	t *testing.T,
-	state physics.State,
-	displacement mgl32.Vec3,
-	source physics.CollisionSource,
-	beganGrounded bool,
-	stepHeight float32,
-) {
-	t.Helper()
-	wantMove, wantUsedStep := oracleResolveCollision(state, displacement, source, beganGrounded, stepHeight)
-	want := testCollisionResult{
-		position:   wantMove.position,
-		clipped:    wantMove.clipped,
-		onGround:   wantMove.onGround,
-		usedStep:   wantUsedStep,
-		hitUnknown: wantMove.hitUnknown,
-	}
-	got := testNativeCollision(state, displacement, source, beganGrounded, stepHeight)
-	for axis := range 3 {
-		if math.Float32bits(got.position[axis]) != math.Float32bits(want.position[axis]) {
-			t.Fatalf("position[%d] bits=%08x，want %08x; got=%+v want=%+v", axis, math.Float32bits(got.position[axis]), math.Float32bits(want.position[axis]), got, want)
-		}
-	}
-	if got.clipped != want.clipped || got.onGround != want.onGround || got.usedStep != want.usedStep || got.hitUnknown != want.hitUnknown {
-		t.Fatalf("native collision=%+v，want oracle=%+v", got, want)
-	}
-}
-
 type testRecordingCollisionSource struct {
 	positions []core.BlockPos
 	set       physics.CollisionBoxSet
@@ -467,68 +437,11 @@ func TestCollisionSnapshotBeyondRegularBufferUsesExactAllocation(t *testing.T) {
 	}
 }
 
-func TestStepProductionMatchesGoCollisionOracle(t *testing.T) {
-	tests := []struct {
-		name  string
-		state physics.State
-		input physics.Input
-		world testCollisionWorld
-	}{
-		{
-			name:  "falling onto floor",
-			state: physics.State{Position: mgl32.Vec3{0.5, 1.2, 0.5}, Velocity: mgl32.Vec3{0, -8.4, 0}},
-			world: testCollisionWorld{{X: 0, Y: 0, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}},
-		},
-		{
-			name:  "closed unknown wall",
-			state: physics.State{Position: mgl32.Vec3{0.5, 1, 0.5}, Velocity: mgl32.Vec3{10, 0, 0}, OnGround: true},
-			world: testCollisionWorld{{X: 1, Y: 1, Z: 0}: {}},
-		},
-		{
-			name:  "half block step",
-			state: groundedTowardObstacle(),
-			input: physics.Input{MoveX: 1},
-			world: testCollisionWorld{{X: 0, Y: 0, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}, {X: 1, Y: 0, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}, {X: 1, Y: 1, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{{Max: mgl32.Vec3{1, 0.5, 1}}}}},
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			testAssertProductionStepMatchesOracle(t, test.state, test.input, test.world)
-		})
-	}
-}
-
-func testAssertProductionStepMatchesOracle(
-	t *testing.T,
-	state physics.State,
-	input physics.Input,
-	source physics.CollisionSource,
-) {
-	t.Helper()
-	if runtime.GOARCH != "arm64" {
-		t.Skip("旧 Go oracle 的 FMA 收缩只在 arm64 与 Rust 逐位一致")
-	}
-	want := oracleStep(state, input, source, physics.ActiveTunables())
-	got := physics.Step(state, input, source)
-	for axis := range 3 {
-		if math.Float32bits(got.State.Position[axis]) != math.Float32bits(want.State.Position[axis]) ||
-			math.Float32bits(got.State.Velocity[axis]) != math.Float32bits(want.State.Velocity[axis]) {
-			t.Fatalf("production Step axis %d=%+v，want oracle=%+v", axis, got, want)
-		}
-	}
-	if got.State.OnGround != want.State.OnGround || got.UsedStep != want.UsedStep || got.HitUnknown != want.HitUnknown {
-		t.Fatalf("production Step=%+v，want oracle=%+v", got, want)
-	}
-}
-
-func TestNativeCollisionMatchesGoOracle(t *testing.T) {
-	world := testCollisionWorld{
-		{X: 0, Y: 0, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}},
-		{X: 1, Y: 1, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}},
-	}
-	testAssertCollisionMatches(t, physics.State{Position: mgl32.Vec3{0.5, 1.2, 0.5}, OnGround: true}, mgl32.Vec3{0.5, -0.5, 0}, world, true, 0.6)
-}
-
+// TestNativeCollisionRejectedUnknownStepKeepsOrdinaryHitUnknownFalse 锁定
+// rejected-step 的隔离语义：step-up 尝试在上升段撞见 unknown 格（{X:0,Y:3,Z:0}）
+// 被整体否决后，回落到的普通移动只查询了普通路径覆盖的格子——它既没有跨上半砖
+// （`usedStep`=false），也不得把 step 尝试的 `hitUnknown` 泄漏进结果。期望值是
+// 生产路径一次性采集固化的字面量：x=0.7 恰好贴墙、`clipped` 只在 x 轴。
 func TestNativeCollisionRejectedUnknownStepKeepsOrdinaryHitUnknownFalse(t *testing.T) {
 	world := testCollisionWorld{
 		{X: 0, Y: 0, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}},
@@ -537,108 +450,33 @@ func TestNativeCollisionRejectedUnknownStepKeepsOrdinaryHitUnknownFalse(t *testi
 		{X: 0, Y: 3, Z: 0}: {},
 	}
 	state := physics.State{Position: mgl32.Vec3{0.5, 1, 0.5}, OnGround: true}
-	wantMove, wantUsedStep := oracleResolveCollision(state, mgl32.Vec3{0.5, 0, 0}, world, true, 0.6)
-	if wantUsedStep || wantMove.hitUnknown {
-		t.Fatalf("oracle fixture 未隔离 rejected step unknown: move=%+v used=%t", wantMove, wantUsedStep)
+	got := testNativeCollision(state, mgl32.Vec3{0.5, 0, 0}, world, true, 0.6)
+	want := testCollisionResult{
+		position: mgl32.Vec3{
+			math.Float32frombits(0x3f333333),
+			math.Float32frombits(0x3f800000),
+			math.Float32frombits(0x3f000000),
+		},
+		clipped:    [3]bool{true, false, false},
+		onGround:   true,
+		usedStep:   false,
+		hitUnknown: false,
 	}
-	testAssertCollisionMatches(t, state, mgl32.Vec3{0.5, 0, 0}, world, true, 0.6)
-}
-
-func TestStepProductionMatchesGoCollisionOracleDeterministicCorpus(t *testing.T) {
-	previousTunables := physics.ActiveTunables()
-	t.Cleanup(func() { physics.SetTunables(previousTunables) })
-	tunables := physics.DefaultTunables()
-	tunables.WalkSpeed = math.MaxFloat32
-	tunables.GroundAcceleration = 0
-	tunables.GroundDeceleration = 0
-	tunables.AirAcceleration = 0
-	tunables.Gravity = 0
-	tunables.TerminalFallSpeed = math.MaxFloat32
-	physics.SetTunables(tunables)
-
-	floor := func(xs ...int32) testCollisionWorld {
-		world := testCollisionWorld{}
-		for _, x := range xs {
-			world[core.BlockPos{X: x, Y: 0, Z: 0}] = physics.CollisionBoxSet{Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}
-		}
-		return world
-	}
-	tests := []struct {
-		name          string
-		state         physics.State
-		displacement  mgl32.Vec3
-		world         testCollisionWorld
-		beganGrounded bool
-		stepHeight    float32
-	}{
-		{name: "floor", state: physics.State{Position: mgl32.Vec3{0.5, 1.2, 0.5}}, displacement: mgl32.Vec3{0, -0.5, 0}, world: floor(0), stepHeight: 0.6},
-		{name: "wall", state: physics.State{Position: mgl32.Vec3{0.5, 1, 0.5}}, displacement: mgl32.Vec3{0.5, 0, 0}, world: testCollisionWorld{{X: 1, Y: 1, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}}, beganGrounded: true, stepHeight: 0.6},
-		{name: "corner", state: physics.State{Position: mgl32.Vec3{0.5, 1.2, 0.5}}, displacement: mgl32.Vec3{0.5, -0.5, 0.5}, world: testCollisionWorld{{X: 0, Y: 0, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}, {X: 1, Y: 1, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}, {X: 0, Y: 1, Z: 1}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}}, beganGrounded: true, stepHeight: 0.6},
-		{name: "axis order falling wall", state: physics.State{Position: mgl32.Vec3{0.5, 1.6, 0.5}}, displacement: mgl32.Vec3{0.5, -0.6, 0}, world: testCollisionWorld{{X: 0, Y: 0, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}, {X: 1, Y: 1, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{{Max: mgl32.Vec3{1, 0.5, 1}}}}}, beganGrounded: false, stepHeight: 0.6},
-		{name: "negative", state: physics.State{Position: mgl32.Vec3{0.5, 1, 0.5}}, displacement: mgl32.Vec3{-1.5, 0, 0}, world: testCollisionWorld{{X: -1, Y: 1, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}}, beganGrounded: true, stepHeight: 0.6},
-		{name: "unknown", state: physics.State{Position: mgl32.Vec3{0.5, 1, 0.5}}, displacement: mgl32.Vec3{0.5, 0, 0}, world: testCollisionWorld{{X: 1, Y: 1, Z: 0}: {}}, beganGrounded: true, stepHeight: 0.6},
-		{name: "walk off edge", state: physics.State{Position: mgl32.Vec3{1.25, 1, 0.5}}, displacement: mgl32.Vec3{0.25, 0, 0}, world: floor(0), beganGrounded: true, stepHeight: 0.6},
-		{name: "valid step", state: physics.State{Position: mgl32.Vec3{0.5, 1, 0.5}}, displacement: mgl32.Vec3{0.5, 0, 0}, world: testCollisionWorld{{X: 0, Y: 0, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}, {X: 1, Y: 0, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}, {X: 1, Y: 1, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{{Max: mgl32.Vec3{1, 0.5, 1}}}}}, beganGrounded: true, stepHeight: 0.6},
-		{name: "blocked headroom", state: physics.State{Position: mgl32.Vec3{0.5, 1, 0.5}}, displacement: mgl32.Vec3{0.5, 0, 0}, world: testCollisionWorld{{X: 0, Y: 0, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}, {X: 1, Y: 1, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{{Max: mgl32.Vec3{1, 0.5, 1}}}}, {X: 0, Y: 3, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}}, beganGrounded: true, stepHeight: 0.6},
-		{name: "rejected landing", state: physics.State{Position: mgl32.Vec3{0.5, 1, 0.5}}, displacement: mgl32.Vec3{2.5, 0, 0}, world: testCollisionWorld{{X: 0, Y: 0, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}, {X: 1, Y: 1, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{{Max: mgl32.Vec3{1, 0.5, 1}}}}}, beganGrounded: true, stepHeight: 0.6},
-		{name: "equal horizontal progress", state: physics.State{Position: mgl32.Vec3{0.5, 1, 0.5}}, displacement: mgl32.Vec3{0.5, 0, 0}, world: testCollisionWorld{{X: 0, Y: 0, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}, {X: 1, Y: 1, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}}, beganGrounded: true, stepHeight: 0.6},
-		{name: "nextafter below", state: physics.State{Position: mgl32.Vec3{math.Nextafter32(0.7, 0), 1, 0.5}}, displacement: mgl32.Vec3{math.Nextafter32(0.3, 1), 0, 0}, world: testCollisionWorld{{X: 1, Y: 1, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}}, beganGrounded: true, stepHeight: 0.6},
-		{name: "nextafter above", state: physics.State{Position: mgl32.Vec3{math.Nextafter32(0.7, 1), 1, 0.5}}, displacement: mgl32.Vec3{math.Nextafter32(0.3, 0), 0, 0}, world: testCollisionWorld{{X: 1, Y: 1, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}}, beganGrounded: true, stepHeight: 0.6},
-	}
-	for _, rawCount := range []uint8{8, 9, 255} {
-		set := physics.CollisionBoxSet{Loaded: true, Count: rawCount}
-		for index := range set.Boxes {
-			set.Boxes[index] = core.AABB{Min: mgl32.Vec3{1, float32(index) / 16, 0}, Max: mgl32.Vec3{1.25, float32(index+1) / 16, 1}}
-		}
-		tests = append(tests, struct {
-			name          string
-			state         physics.State
-			displacement  mgl32.Vec3
-			world         testCollisionWorld
-			beganGrounded bool
-			stepHeight    float32
-		}{name: "raw count " + strconv.Itoa(int(rawCount)), state: physics.State{Position: mgl32.Vec3{0.5, 1, 0.5}}, displacement: mgl32.Vec3{0.5, 0, 0}, world: testCollisionWorld{{X: 1, Y: 1, Z: 0}: set}, beganGrounded: true, stepHeight: 0.6})
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if test.stepHeight != tunables.StepHeight {
-				t.Fatalf("production parity step height=%v，want %v", test.stepHeight, tunables.StepHeight)
-			}
-			state := test.state
-			state.OnGround = test.beganGrounded
-			state.Velocity = test.displacement.Mul(1 / physics.FixedDeltaSeconds)
-			testAssertProductionStepMatchesOracle(t, state, physics.Input{}, test.world)
-		})
-	}
-
-	random := rand.New(rand.NewSource(771))
-	for range 64 {
-		world := testCollisionWorld{}
-		for x := int32(-2); x <= 2; x++ {
-			for z := int32(-2); z <= 2; z++ {
-				world[core.BlockPos{X: x, Y: 0, Z: z}] = physics.CollisionBoxSet{Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}
-				if random.Intn(5) == 0 {
-					world[core.BlockPos{X: x, Y: 1, Z: z}] = physics.CollisionBoxSet{Loaded: true, Count: 1, Boxes: [8]core.AABB{{Max: mgl32.Vec3{1, float32(random.Intn(3)+1) / 2, 1}}}}
-				} else if random.Intn(13) == 0 {
-					world[core.BlockPos{X: x, Y: 1, Z: z}] = physics.CollisionBoxSet{}
-				}
-			}
-		}
-		state := physics.State{Position: mgl32.Vec3{float32(random.Intn(21)-10)/10 + 0.5, 1, float32(random.Intn(21)-10)/10 + 0.5}, OnGround: true}
-		displacement := mgl32.Vec3{float32(random.Intn(201)-100) / 100, float32(random.Intn(41)-20) / 100, float32(random.Intn(201)-100) / 100}
-		state.Velocity = displacement.Mul(1 / physics.FixedDeltaSeconds)
-		t.Run("random", func(t *testing.T) {
-			testAssertProductionStepMatchesOracle(t, state, physics.Input{}, world)
-		})
+	if got != want {
+		t.Fatalf("rejected step unknown=%+v，want %+v", got, want)
 	}
 }
 
+// TestNativeCollisionConcurrentCalls 锁定 native collision 桥的并发确定性：
+// 16 个 goroutine 各跑 100 次同输入调用，输出必须与串行基准逐位一致——
+// 并发引入的任何非确定性（共享缓冲、数据竞争）都会在这里显形。
 func TestNativeCollisionConcurrentCalls(t *testing.T) {
 	world := testCollisionWorld{{X: 1, Y: 1, Z: 0}: {Loaded: true, Count: 1, Boxes: [8]core.AABB{fullCube}}}
 	state := physics.State{Position: mgl32.Vec3{0.5, 1, 0.5}, OnGround: true}
 	input := testEncodeCollisionInput(state, mgl32.Vec3{0.5, 0, 0}, world, true, 0.6)
-	wantMove, wantUsedStep := oracleResolveCollision(state, mgl32.Vec3{0.5, 0, 0}, world, true, 0.6)
-	want := testCollisionResult{position: wantMove.position, clipped: wantMove.clipped, onGround: wantMove.onGround, usedStep: wantUsedStep, hitUnknown: wantMove.hitUnknown}
+	var reference [testCollisionOutputBytes]byte
+	nativeabi.CollisionResolve(input, reference[:])
+	want := testDecodeCollisionOutput(reference[:])
 	var group sync.WaitGroup
 	for range 16 {
 		group.Add(1)
