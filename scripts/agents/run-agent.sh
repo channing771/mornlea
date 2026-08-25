@@ -48,9 +48,9 @@ case "$TOOL" in
     ;;
   codex)
     CODEX_BIN="${CODEX_BIN:-$(resolve_cli codex || echo codex)}"
-    # 新版 codex exec：--full-auto 已移除，用 -s workspace-write + --approve-for-me（自动评审批准）；
+    # 新版 codex exec：--full-auto 已移除。--approve-for-me 自带 workspace-write 沙箱自动评审（与 -s 互斥）；
     # 需要跳过审批时可 AGENT_EXTRA_ARGS='--dangerously-bypass-approvals-and-sandbox'（谨慎）。
-    exec "$CODEX_BIN" exec -s workspace-write --approve-for-me $MODEL_ARGS "$PROMPT" ${AGENT_EXTRA_ARGS:-}
+    exec "$CODEX_BIN" exec --approve-for-me $MODEL_ARGS "$PROMPT" ${AGENT_EXTRA_ARGS:-}
     ;;
   *) usage ;;
 esac
