@@ -28,8 +28,8 @@
 | 3.1 Rust egui 设置页 | `d01_t3_rust_ui_impl` | `0c656133`；修复 `c79150f6`、`3643b0bf` | `d01_t3_spec_review`：PASS→PASS→PASS | `d01_t3_quality_review`：FAIL→PASS→PASS | 2 | RED 44 个编译错误 + 容量预检失败 + action 超 viewport 17pt；`make rust-check`（client 119、engine 160）、release Rust、client race、fmt/clippy/diff-check PASS | ACCEPTED |
 | 4.1 Go 事务与接线 | `d01_t4_go_settings_impl` | `844c9f9c`；规格协调 `ddaa419e`；修复 `9819d823` | `d01_t4_spec_review`：PASS→PASS | `d01_t4_quality_review`：FAIL→PASS | 1 | RED 缺少状态类型 + CR/LF/资源前置测试失败；cmd full race 279.221s、short race、config/client race、Rust 118、clippy/fmt、vet/diff-check PASS | ACCEPTED |
 | 5.1 视觉基线 | `d01_t5_visual_impl` | `845250f2`、`ce98240d`；修复 `7c72527f`（另触发 Task 3 `3643b0bf`） | `d01_t5_spec_review`：PASS→PASS | `d01_t5_quality_review`：FAIL→PASS | 1 | RED 缺少 Settings fixture；19场景、focused/short race、两张 UI 0差、17张旧 PNG hash不变、人工检查 PASS；全局 visual-check 的13个旧场景继承失败见 R-011 | ACCEPTED（变更特定视觉门禁通过） |
-| 5.2 长期文档 | `d01_t5_docs_impl` | `e929388a`；修复 `f096cb33`、`7496406d`、`1b2c1f0c`、`e41e328d`、`2ced2d37` | `d01_t5_docs_spec_review`：PASS→FAIL→FAIL→PASS→FAIL→FAIL | `d01_t5_docs_quality_review`：FAIL→PASS→PASS→FAIL→FAIL→PASS | 5（达到上限） | archcheck、OpenSpec strict、两语 JSON/链接、AGENTS/CLAUDE cmp、diff-check PASS | PENDING：剩余有效阻断转任务 5.3 |
-| 5.3 README tunable 勘误 | 待派发 | — | — | — | 0 | — | PENDING |
+| 5.2 长期文档 | `d01_t5_docs_impl` | `e929388a`；修复 `f096cb33`、`7496406d`、`1b2c1f0c`、`e41e328d`、`2ced2d37`；5.3 后终审 | `d01_t5_docs_spec_review`：PASS→FAIL→FAIL→PASS→FAIL→FAIL→PASS | `d01_t5_docs_quality_review`：FAIL→PASS→PASS→FAIL→FAIL→PASS→PASS | 5（达到上限） | archcheck、OpenSpec strict、两语 JSON/链接、AGENTS/CLAUDE cmp、版本/场景扫描、diff-check PASS | ACCEPTED（剩余项由5.3清偿） |
+| 5.3 README tunable 勘误 | `d01_t5_tunable_docs_impl` | `42c94f41`；修复 `45118bb0` | `d01_t5_tunable_spec_review`：FAIL→PASS | `d01_t5_tunable_quality_review`：PASS→PASS | 1 | 文档 RED/GREEN 断言、JSON/链接、archcheck、OpenSpec strict、cmp、diff-check PASS | ACCEPTED |
 | 6.1 整分支收尾 | 待派发 | — | — | — | 0 | — | PENDING |
 
 ## 整分支终审与发布
@@ -54,3 +54,4 @@
 - R-010：Task 5 正式 640×360 图像发现三动作底部被裁 17pt，判为 Task 3 呈现回归而非 capture 可接受差异；由原 Task 3 implementer 修复并复审后再生成 golden，capture implementer 不越界改 Rust UI。
 - R-011：当前 Apple M2/macOS 26.6.2 上 `make visual-check` 的 13 个非 UI 旧场景超阈值；在干净领取基线 `origin/main@345f6077` 上逐场景复现相同最大差、差异像素数与首差坐标，且基线与候选 17 张非主菜单实拍逐字节相同。判为继承的机器视觉基线失败，不刷新无关 golden、不放宽阈值；D-01 的 main/settings 两场景均 0 像素差。整分支门禁必须如实记为“全局 FAIL（baseline-equivalent）”，不得写成 PASS。
 - R-012：任务 5.2 已达到 5 轮修复上限。最终 QUALITY PASS，但 SPEC 指出的唯一剩余项有效：掉落 10/40 tick、1.25 格与 6000 tick 均为可配置 `sim` tunable 的编译默认值，README 不得写成固定常量。该阻断不豁免、不继续第 6 轮，拆为全新任务 5.3，由新 implementer 和独立双评审清偿；5.3 通过后再终结 5.2。
+- R-013：任务 5.3 已把四项掉落 tunable 全部限定为编译默认值，并把中文 `sim` 组从“常量”修为“参数”；独立双评审与原 5.2 双评审均最终 PASS，R-012 阻断正式关闭。
