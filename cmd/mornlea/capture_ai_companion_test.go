@@ -155,10 +155,10 @@ func TestMainMenuCaptureScenePosition(t *testing.T) {
 	if len(menu.Buttons) != 4 {
 		t.Fatalf("main-menu 按钮数=%d，想要 4", len(menu.Buttons))
 	}
-	// 进入/退出可用、多人/设置禁用：复用交互主菜单的按钮表语义。
+	// 进入/设置/退出可用、多人禁用：复用交互主菜单的按钮表语义。
 	if menu.Buttons[0].Label != "进入游戏" || !menu.Buttons[0].Enabled ||
 		menu.Buttons[1].Label != "多人游戏" || menu.Buttons[1].Enabled ||
-		menu.Buttons[2].Label != "设置" || menu.Buttons[2].Enabled ||
+		menu.Buttons[2].Label != "设置" || !menu.Buttons[2].Enabled ||
 		menu.Buttons[3].Label != "退出游戏" || !menu.Buttons[3].Enabled {
 		t.Fatalf("main-menu 按钮表与既有交互菜单不一致: %+v", menu.Buttons)
 	}

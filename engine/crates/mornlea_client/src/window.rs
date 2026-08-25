@@ -90,19 +90,12 @@ impl ApplicationHandler for App {
                 window.set_ime_allowed(true);
                 // 超屏钳制:物理尺寸超过显示器可用区域时按原宽高比缩小,
                 // 保证 1x 屏/非整数缩放下窗口完整可见(标题栏不落到屏幕外)。
-                if let Some(monitor) = window.current_monitor() {
-                    let current = window.inner_size();
-                    let monitor_size = monitor.size();
-                    let limit = PhysicalSize::new(
-                        (monitor_size.width as f64 * DISPLAY_CLAMP_RATIO).round() as u32,
-                        (monitor_size.height as f64 * DISPLAY_CLAMP_RATIO).round() as u32,
-                    );
-                    let clamped = clamp_to_work_area(current, limit);
-                    if clamped != current {
-                        // 返回值是系统采用的新尺寸,这里不关心,与 `set_content_size`
-                        // 的丢弃口径一致。
-                        let _ = window.request_inner_size(clamped);
-                    }
+                let current = window.inner_size();
+                let clamped = clamp_to_current_monitor(&window, current);
+                if clamped != current {
+                    // 返回值是系统采用的新尺寸,这里不关心,与 `set_content_size`
+                    // 的丢弃口径一致。
+                    let _ = window.request_inner_size(clamped);
                 }
                 // Arc 包装:渲染器 surface 需要共享窗口所有权(wgpu
                 // create_surface 的 'static 约束)。
@@ -246,7 +239,11 @@ impl ClientWindow {
     /// 请求修改 content 尺寸(逻辑点);实际生效经 Resized 事件回写快照。
     pub fn set_content_size(&mut self, width: u32, height: u32) {
         if let Some(window) = &self.app.window {
-            let _ = window.request_inner_size(LogicalSize::new(width, height));
+            // 设置页传入逻辑尺寸；先按当前 scale factor 换算成物理像素，再
+            // 复用创建期的显示器工作区钳制，避免运行期放大把窗口推出屏幕。
+            let requested = LogicalSize::new(width, height).to_physical(window.scale_factor());
+            let clamped = clamp_to_current_monitor(window, requested);
+            let _ = window.request_inner_size(clamped);
         }
         self.app.refresh_sizes();
     }
@@ -307,6 +304,19 @@ impl ClientWindow {
 /// 窗口标题栏留出空间,保证钳制后窗口仍然完整可见。
 const DISPLAY_CLAMP_RATIO: f64 = 0.9;
 
+/// 按窗口当前显示器的保守工作区钳制请求；无法取得显示器时保持原请求。
+fn clamp_to_current_monitor(window: &Window, requested: PhysicalSize<u32>) -> PhysicalSize<u32> {
+    let Some(monitor) = window.current_monitor() else {
+        return requested;
+    };
+    let monitor_size = monitor.size();
+    let limit = PhysicalSize::new(
+        (monitor_size.width as f64 * DISPLAY_CLAMP_RATIO).round() as u32,
+        (monitor_size.height as f64 * DISPLAY_CLAMP_RATIO).round() as u32,
+    );
+    clamp_to_work_area(requested, limit)
+}
+
 /// 把请求的物理尺寸钳制到给定上限内:两轴取最小缩放比、保持宽高比,不
 /// 超过上限时原样返回(绝不放大)。上限为 0 时返回原尺寸——窗口宁可照常
 /// 创建,也不把尺寸吞成 0。
@@ -314,13 +324,28 @@ fn clamp_to_work_area(requested: PhysicalSize<u32>, work: PhysicalSize<u32>) -> 
     if requested.width == 0 || requested.height == 0 || work.width == 0 || work.height == 0 {
         return requested;
     }
-    let scale = (work.width as f64 / requested.width as f64)
-        .min(work.height as f64 / requested.height as f64)
-        .min(1.0);
-    PhysicalSize::new(
-        (requested.width as f64 * scale).round() as u32,
-        (requested.height as f64 * scale).round() as u32,
-    )
+    if requested.width <= work.width && requested.height <= work.height {
+        return requested;
+    }
+    // 以最简宽高比的整数倍缩小，避免两个轴分别 round 后产生一像素的比例
+    // 漂移。D-01 的三个请求均为 16:9，因此运行期与创建期都保持精确比例。
+    let divisor = greatest_common_divisor(requested.width, requested.height);
+    let unit_width = requested.width / divisor;
+    let unit_height = requested.height / divisor;
+    let units = (work.width / unit_width)
+        .min(work.height / unit_height)
+        .min(divisor);
+    if units == 0 {
+        return requested;
+    }
+    PhysicalSize::new(unit_width * units, unit_height * units)
+}
+
+fn greatest_common_divisor(mut left: u32, mut right: u32) -> u32 {
+    while right != 0 {
+        (left, right) = (right, left % right);
+    }
+    left
 }
 
 #[cfg(test)]
@@ -339,7 +364,8 @@ mod tests {
     #[test]
     fn odd_work_area_uses_smallest_ratio() {
         let got = clamp_to_work_area(PhysicalSize::new(1280, 720), PhysicalSize::new(1000, 800));
-        assert_eq!(got, PhysicalSize::new(1000, 563));
+        assert_eq!(got, PhysicalSize::new(992, 558));
+        assert_eq!(got.width * 9, got.height * 16);
     }
 
     /// 尺寸不超过工作区时原样返回,绝不放大。
