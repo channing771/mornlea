@@ -30,19 +30,26 @@ type eatingState struct {
 }
 
 // advanceEating 推进一名玩家一个 tick 的进食状态机，与 `advanceStarvation`
-// 同形：固定整数运算、不分配、由调用方传入本 tick 的 tunable 快照值。
+// 同形：固定整数运算、不分配、由调用方传入本 tick 的 tunable 快照值与挂起标记。
 //
 // 规则（spec authoritative-hunger「进食是持续输入驱动的权威动作」）：
 //
-//   - 中断：进食输入未按住、位置跳变（`reset`）、选中格里不是食物、或饥饿值
-//     已满——四条里任一条成立就清空状态且**不扣料**。它们合并成同一个判断，
+//   - 中断：进食输入未按住、位置跳变（`reset`）、选中格里不是食物、饥饿值
+//     已满、或会话打开容器界面/视野尚未就绪（`suspended`）——五条里任一条
+//     成立就清空状态且**不扣料**。它们合并成同一个判断，
 //     因为"中断"与"根本没开始"在观察上是同一件事：进度归零、背包不变。
+//     `suspended` 由调用点以 `session.viewContainer || !session.hasView` 求值，
+//     与 `stepMiningProgress` 的中断形态同源（采掘在 `advanceMining` 里用同
+//     一对会话字段中断）：手持食物对准容器按「使用」会打开界面的同一刻输入
+//     往往还按着，进食必须与采掘一样让位给容器交互。
 //   - 开始/推进：`(slot, item)` 与记录的一致且已在进行中就 `progressTicks++`，
 //     否则从这一格重新开始并把进度置 1。**开始的那一 tick 就算第 1 tick**，
 //     与 `stepMiningProgress` 逐字同构：两个持续输入状态机的"第 N tick"必须
 //     是同一个意思，否则采掘进度条与进食进度在客户端上永远差一格。
 //   - 结算：进度达到 `EatingTicks` 时在**这一个 tick 内原子完成**扣 1 件、
-//     加饥饿、加饱和、清空状态。
+//     加饥饿、加饱和、清空状态。中断优先于结算：进度恰在本 tick 达到
+//     `EatingTicks` 且中断条件成立时，上面的短路先发生，本 tick 不扣料
+//     不回饱。
 //
 // 结算的次序是**先加饥饿再钳饱和**：饱和度的上界是"当前饥饿值"，用吃之前的
 // 饥饿值去钳会凭空少给一截饱和度（吃满一块面包时差 5000）。
@@ -57,11 +64,12 @@ type eatingState struct {
 //
 // eatingTicks 取 max(…, 1)：配置层已把下限钳到 1，但 sim 按架构约束不得导入
 // config，取 0 会让进度永远够不到结算（`progressTicks` 从 1 起）。
-func (player *playerState) advanceEating(eatingTicks uint16) {
+func (player *playerState) advanceEating(eatingTicks uint16, suspended bool) {
 	selected := player.inventory.Hotbar.Selected
 	item := player.inventory.Hotbar.Slots[selected].Item
 	hungerGain, saturationGain, edible := core.FoodValue(item)
-	if !player.eatingHeld || player.reset || !edible || player.hunger >= core.MaxHunger {
+	if !player.eatingHeld || player.reset || !edible || player.hunger >= core.MaxHunger ||
+		suspended {
 		player.eating = eatingState{}
 		return
 	}

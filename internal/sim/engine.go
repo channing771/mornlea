@@ -87,6 +87,11 @@ type Engine struct {
 	// 方块结果本来就不同），只能靠一个显式计数。生产代码只写不读，包内测试读。
 	cropCellsExamined int
 
+	// tramplePending 是本权威 tick 内落地边沿收集的踩踏候选格（trample.go）：
+	// 物理阶段收集、区块写入区结算的跨阶段载体。瞬态暂存、不持久化、不进快照
+	// 或哈希，每 tick 由 `settleTramples` 结算后清空，重启无残留语义。
+	tramplePending []tramplePendingCell
+
 	// 掉落物 tick 的复用 scratch，避免每 tick 分配固定上限集合。
 	dropKeySeen            map[core.ChunkKey]struct{}
 	dropKeyScratch         []core.ChunkKey
