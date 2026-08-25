@@ -2,7 +2,7 @@
 
 ## Why
 
-既有通用规则对任何成功破坏方块的持握工具扣减一点耐久（`consumeToolDurability`），因此手持锄头收获作物（采掘 1 tick）也磨损锄头；对齐的目标语义是「锄头只在翻地时磨损」。这是 `authoritative-farming` design「遗留与简化清单」第 16 条（规划表 E-09）。
+既有通用规则对任何成功破坏方块的持握工具扣减一点耐久（`consumeToolDurability`），因此手持锄头收获作物（采掘 1 tick）也磨损锄头；对齐的目标语义是「使用完好锄头收获作物不磨损」。这是 `authoritative-farming` design「遗留与简化清单」第 16 条（规划表 E-09）。
 
 ## What Changes
 
