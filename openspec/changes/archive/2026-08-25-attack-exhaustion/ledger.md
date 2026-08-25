@@ -28,3 +28,21 @@
 - Task A 评审：Spec ✅ / Quality Approved（两条 Minor 记账：RED 转录行号偏一位；相邻双人布置可选去重）。
 - Task B 评审：Spec ✅ / Quality Approved（一条 Minor 记账：新注释三处标识符未加反引号）。
 - Task C 评审：见终审前补充。
+
+## 任务进度（终稿）
+
+- Task 3.1/3.2：✅ gates.sh 全绿（`GOFLAGS=-timeout=30m`，exit=0）；全量 `-race` 含 internal/server 全 ok。
+- Task C 评审：Spec ✅ / Approved（实现者零越权，BLOCKED 证据保真）。
+
+## Rulings（终审与收尾补充）
+
+- Ruling: AGENTS.md/CLAUDE.md 基线句随本变更更新为六项固定表（终审 Important 发现；A-batch 各行声明不触碰基线文档、A-07 未认领，本行独立 change 不受其集成独占约束）——不同句子的改动 git 可自行调和。
+- Ruling: design.md「由聚焦测试锁定该语义」改为结构保证措辞——死亡结算 `resetHunger` 抹平濒死者读数，该语义跨 tick 边界不可观察，虚指测试属计划产物失准，先改产物再继续。
+- Ruling: 新增注释两处交叉引用补反引号、测试文件 RED 时态理由句刷新；既有行的裸标识符按最小 diff 不动。
+- Ruling: 跳过 GUI benchmark 实测记录——固定工作负载无战斗输入，本变更不可观察；全量门禁绿已覆盖（数值只记录原则下如需正式 v19 刷新可随时补跑）。
+- Ruling: `TestMemoryTCPFluidDamBreakBroadcastParity` flake 为既有负载敏感竞态，归属 E-11 独占文件集，不在本 change 修复（证据链：HEAD 高负载 ~4/30 vs 静载双二进制各 0/30；夹具不发输入近战路径不可达）。
+
+## 整分支终审
+
+- Verdict: With fixes → 修复波 ef3f8cc1（6 文件 +8/−8，零行为变化）→ scoped re-review ALL ADDRESSED, no new breakage。
+- Deferred minors（终审 triage）：RED 转录行号偏移 defer；双人布置去重 defer。
