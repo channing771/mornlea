@@ -531,7 +531,7 @@ var captureScenes = []captureScene{
 			Version: "dev",
 			// 见上：真实错误行 + 非 4 对齐 UI 段（Ruling 8）。
 			Error: "存档无法打开",
-			// 复用交互主菜单的按钮表（四个按钮、进入/退出可用、多人/设置禁用）。
+			// 复用交互主菜单的按钮表（四个按钮、进入/设置/退出可用、多人禁用）。
 			Buttons: menuButtons(),
 		},
 		Apply: func(app *application) error {
