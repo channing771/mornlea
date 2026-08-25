@@ -100,7 +100,7 @@
 
 | ID | 功能 | 简述 | 版本与契约影响 | 状态 | 认领人 | 来源与备注 |
 |---|---|---|---|---|---|---|
-| C-01 | 伙伴采掘容器/多掉落方块 | `mine` 从「单一 `BlockDrop` 且非容器」扩展到容器与多掉落，需先定原子容量语义 | 视实现（`mine` 语义扩展，可能无 wire 变更） | 未认领 | — | §16 + 伙伴 mine 首版明确留给后续单独设计 |
+| C-01 | 伙伴采掘容器/多掉落方块 | `mine` 从「单一 `BlockDrop` 且非容器」扩展到容器与多掉落，需先定原子容量语义 | 视实现（`mine` 语义扩展，可能无 wire 变更） | 已认领 | zcode4-implementer @ feat/C-01-companion-mine-containers | §16 + 伙伴 mine 首版明确留给后续单独设计；2026-08-25 认领。范围冻结：仅放开容器（箱子/熔炉）与多掉落方块作为伙伴 `mine` 目标；农业十编号的显式拒绝保持不变（C-11 另行裁决）；原子容量语义（全或无 / 部分结算掉世界）在 brainstorming 短设计中定案。独占文件集：`internal/sim/mining.go`（`companionMineableBlock` 与容器内容物结算复用 `PrepareDropBatch`）、`internal/sim/companion_action.go`、`internal/companion/plan_types.go`、`internal/companion/planner.go`、`internal/server/companion_interact.go`、同包新增测试文件与 OpenSpec change 目录；刻意不触碰 `internal/core` 的 `recipe.go`/`inventory.go`/`item.go`（A-01）、`engine_step.go`/`engine.go`/`command.go`/`drop.go`/`tunables.go`（A-04）、`combat.go`/`hunger.go`（B-13）、`eating.go`（B-31）、`crop.go` 与新建踩踏/冲毁文件（B-05/B-07）、`internal/mesh` 与 engine/client crate（A-02/A-04）；无 wire 变更、计划 kind 不扩、`companions.ai` schema v4 不变 |
 | C-02 | 伙伴自动拾取 | 世界掉落物入伙伴背包，须先验证 grid/背包装回不变量 | 视实现（背包不变量） | 未认领 | — | §16 |
 | C-03 | 伙伴背包整理/合成/熔炼/开容器 | 自动合成与熔炼需服务端权威语义 | 视实现（`companions.ai` 可能升版） | 未认领 | — | §16 |
 | C-04 | 伙伴自动挖障碍/搭桥/游泳/无限世界寻路 | 寻路与计划能力扩展 | 计划步骤扩展 → `companions.ai` schema 升版 | 未认领 | — | §16 |
