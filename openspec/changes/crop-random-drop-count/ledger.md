@@ -36,4 +36,14 @@
 
 ## Task 3 / 整分支终审
 
-（待收尾填写）
+- 门禁（2026-08-25，worktree 内 `scripts/agents/gates.sh` + 补跑）：gofmt 无输出、`go vet ./...` 通过、archcheck ok、OpenSpec strict 65/65、`make rust`（固定 1.97.1）通过、全量 `go test ./... -race` 全绿（含 `cmd/mornlea` 600s 重型套件）。
+- 备注：本机 Go 经 gvm（go1.26.0）、node 经 fnm（v24.19.0）；非交互 shell 需显式拼 PATH，否则 gates 第 4/6 步因命令缺失误报 FAIL（已复核为工具可用性问题，非校验失败）。
+- 整分支终审：（待终审 reviewer 结论回填）
+
+## 分支提交履历
+
+- `988871f9` docs(openspec): propose crop-random-drop-count
+- `af1b3a76` sim: hash-driven mature wheat yield (B-10 task 1)
+- `fc630c2e` sim: fix yield comment math and backtick identifiers (B-10 R1)
+- `138d92c2` server: align e2e assertions with hashed yield (B-10 task 2)
+- `7c8fbd68` docs(openspec): record task reviews and deferred items
