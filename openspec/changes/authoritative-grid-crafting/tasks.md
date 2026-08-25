@@ -14,8 +14,8 @@
 
 ## 3. 协议消息、服务端接线与客户端镜像（`internal/network`、`internal/server`、`internal/client`）
 
-- [x] 3.1 在 `internal/network/codec_inventory_test.go`、`registry_test.go` 先写失败测试：`MoveCraftingStack` 值域（统一格 `0..44`、`From≠To`、至少一端 <9、个人扩展格拒绝）、`TakeCraftingOutput` 非零 Sequence、`CraftingState`（Size 仅 2/3、Size=2 时格 `4..8` 空、全部栈与 Output 合法、固定 9 格编码、拒绝截断/尾随/未知 size）；随后在 `internal/network/message_inventory.go`、`codec_client.go`、`codec_server.go`、`packet.go` 实现三条消息（临时编号 C→S 14/15、S→C 21，版本保持 v26），完成 registry、Validate 与 Memory/TCP round trip，并在 `codec_fuzz_test.go` 追加 seed。验证：`go test ./internal/network -race -count=1`。
-- [x] 3.2 在 `internal/server/session_ingress.go` 把两条 C→S 消息映射到 sim 命令、`CraftRecipe` 改为稳定拒绝且不映射任何命令；在 `internal/server/publication.go` 只在网格 dirty、尺寸切换或产物变化时向所属 session 发完整 `CraftingState`（不广播）；`transport_parity_integration_test.go` 追加网格命令序列的 Memory/TCP 逐字段一致测试。验证：`go test ./internal/server -race -count=1`。
+- [x] 3.1 在 `internal/network/codec_inventory_test.go`、`registry_test.go` 先写失败测试：`MoveCraftingStack` 值域（统一格 `0..44`、`From≠To`、至少一端 <9、个人扩展格拒绝——落 sim 权威层，网络层不知网格尺寸不重复校验，见 ledger 裁决）、`TakeCraftingOutput` 非零 Sequence、`CraftingState`（Size 仅 2/3、Size=2 时格 `4..8` 空、全部栈与 Output 合法、固定 9 格编码、拒绝截断/尾随/未知 size）；随后在 `internal/network/message_inventory.go`、`codec_client.go`、`codec_server.go`、`packet.go` 实现三条消息（临时编号 C→S 14/15、S→C 21，版本保持 v26），完成 registry、Validate 与 Memory/TCP round trip，并在 `codec_fuzz_test.go` 追加 seed。验证：`go test ./internal/network -race -count=1`。
+- [x] 3.2 在 `internal/server/session_ingress.go` 把两条 C→S 消息映射到 sim 命令、`CraftRecipe` 继续映射既有命令 kind、由 sim 稳定拒绝（观察等价于 D6，见 ledger 裁决）；在 `internal/server/publication.go` 只在网格 dirty、尺寸切换或产物变化时向所属 session 发完整 `CraftingState`（不广播）；`transport_parity_integration_test.go` 追加网格命令序列的 Memory/TCP 逐字段一致测试。验证：`go test ./internal/server -race -count=1`。
 - [x] 3.3 在 `internal/client/inventory.go`/`inventory_mirror_test.go` 保存最后合法完整网格状态（latest-wins、断线清空、不预测），测试同一命令序列经 Memory 与 TCP 得到相同 grid、output、inventory 与拒绝结果。验证：`go test ./internal/client -race -count=1`；`gofmt -w internal/network internal/server internal/client`。
 
 ## 4. HUD 容器界面与输入路径（`internal/render/hud`、`cmd/mornlea`）
