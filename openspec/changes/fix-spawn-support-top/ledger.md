@@ -9,3 +9,4 @@
 - Task 1 初审：SPEC 核心行为通过，QUALITY 提出 2 个 Important——SDD scratch report 被误提交、全量 race 缺最终证据。
 - Task 1 修复 R1/5：提交 `12635638` 从 Git 索引移除 report，并补录 fresh 全量 race exit 0；scoped re-review 判定 2/2 ADDRESSED、无新 breakage，APPROVE。
 - Task 1 完成：提交范围 `3b67935e..12635638`，任务级 SPEC + QUALITY 双评审 clean。
+- 整分支终审：0 Critical、0 Important、3 Minor；提交 `fd384fc2` 收紧 safe 字面断言、删除 design 中未实现的“去重”表述并清理 delta 尾部空白。唯一 scoped re-review 判定 3/3 ADDRESSED、无新 breakage，APPROVE。
