@@ -295,6 +295,142 @@ func TestCaptureMaterialsShowcaseFixtureUsesMirrorAndMesher(t *testing.T) {
 	}
 }
 
+// TestCraftingCaptureScenePosition 锁住 workbench-crafting 的表内位置：紧随
+// inventory-crafting 且在 chest-container 之前（spec visual-verification
+// 「完整场景顺序」）。
+func TestCraftingCaptureScenePosition(t *testing.T) {
+	indexOf := func(name string) int {
+		for index, scene := range captureScenes {
+			if scene.Name == name {
+				return index
+			}
+		}
+		t.Fatalf("场景 %q 不存在", name)
+		return -1
+	}
+	personal := indexOf("inventory-crafting")
+	workbench := indexOf("workbench-crafting")
+	chest := indexOf("chest-container")
+	if workbench != personal+1 {
+		t.Fatalf("workbench-crafting=%d 必须紧随 inventory-crafting=%d", workbench, personal)
+	}
+	if workbench >= chest {
+		t.Fatalf("workbench-crafting=%d 必须在 chest-container=%d 之前", workbench, chest)
+	}
+}
+
+// TestCraftingCaptureScenesCoverGridsAndLegalOutputs 锁住两个合成场景的构造：
+// inventory-crafting 呈现已匹配的 2×2 实物配方、非空产物格与已选来源格；
+// workbench-crafting 呈现 3×3 工作台网格与一条水平镜像不对称配方的合法摆放
+// （石锄：Mirror 关闭，镜像摆放不匹配）。两个场景都不依赖前一场景留下的容器
+// 或网格状态，产物格内容都与形状匹配器的派生值一致（客户端不预测）。
+func TestCraftingCaptureScenesCoverGridsAndLegalOutputs(t *testing.T) {
+	personalGrid := network.CraftingState{Size: 2}
+	for slot := range 4 {
+		personalGrid.Slots[slot] = core.ItemStack{Item: core.ItemStone, Count: 1}
+	}
+	personalRecipe, ok := core.Recipe(core.RecipeStoneBricks)
+	if !ok {
+		t.Fatal("石砖配方不存在")
+	}
+	personalGrid.Output = personalRecipe.Output
+
+	// 石锄是形状表里真正水平镜像不对称的工具配方（石头纵列在左、木棍纵列
+	// 在右，Mirror 关闭，镜像摆放不匹配），摆在 3×3 网格左上 2×2。镐类配方
+	//（顶排 + 中列）整形镜像后与自身相同，覆盖不到镜像不对称语义——
+	// brief 的「如石镐」示例因此按实测纠正为石锄。
+	workbenchGrid := network.CraftingState{Size: 3}
+	for _, slot := range []int{0, 3} {
+		workbenchGrid.Slots[slot] = core.ItemStack{Item: core.ItemStone, Count: 1}
+	}
+	for _, slot := range []int{1, 4} {
+		workbenchGrid.Slots[slot] = core.ItemStack{Item: core.ItemStick, Count: 1}
+	}
+	// 产物格直接取形状表的产物（工具带满耐久）：场景注入值与匹配器派生值
+	// 逐字段一致，不复制任何魔数。
+	workbenchRecipe, ok := core.Recipe(core.RecipeStoneHoe)
+	if !ok {
+		t.Fatal("石锄配方不存在")
+	}
+	workbenchGrid.Output = workbenchRecipe.Output
+
+	// 场景注入的网格必须是真实合法匹配：产物格来自形状匹配器的派生值。
+	id, output, matched := core.MatchCraftingGrid(2, personalGrid.Slots)
+	if !matched || id != core.RecipeStoneBricks || output != personalGrid.Output {
+		t.Fatalf("个人场景网格匹配 = %d/%+v/%v，想要石砖 ×4", id, output, matched)
+	}
+	id, output, matched = core.MatchCraftingGrid(3, workbenchGrid.Slots)
+	if !matched || id != core.RecipeStoneHoe || output != workbenchGrid.Output {
+		t.Fatalf("工作台场景网格匹配 = %d/%+v/%v，想要石锄 ×1", id, output, matched)
+	}
+	// 石锄是水平镜像不对称配方：同一形状镜像摆放（木棍列在左）必须不匹配，
+	// 这是本场景选它的原因——3×3 网格必须按原方向摆放。
+	mirrored := workbenchGrid
+	mirrored.Slots[0], mirrored.Slots[1] = mirrored.Slots[1], mirrored.Slots[0]
+	mirrored.Slots[3], mirrored.Slots[4] = mirrored.Slots[4], mirrored.Slots[3]
+	if _, _, matched := core.MatchCraftingGrid(3, mirrored.Slots); matched {
+		t.Fatal("石锄形状被水平镜像匹配，场景不再覆盖镜像不对称语义")
+	}
+
+	for _, test := range []struct {
+		name      string
+		wantGrid  network.CraftingState
+		wantIndex int
+	}{
+		{"inventory-crafting", personalGrid, 12},
+		{"workbench-crafting", workbenchGrid, 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			scene := captureSceneByName(t, test.name)
+			if scene.Apply == nil || scene.WarmupFrames != 8 {
+				t.Fatalf("场景=%+v，想要完整 8 帧夹具", scene)
+			}
+			app := newCaptureAICompanionState()
+			// 预置前一个场景可能留下的全部共享状态：Apply 必须全部覆盖。
+			if err := app.crafting.Apply(network.CraftingState{
+				Size:  2,
+				Slots: [9]core.ItemStack{0: {Item: core.ItemDirt, Count: 9}},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := app.furnace.Apply(network.FurnaceState{
+				Furnace: core.FurnaceRef{Dimension: core.Overworld, Generation: 1},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := app.chest.Apply(network.ChestState{Chest: core.ContainerRef{
+				Dimension: core.Overworld, Kind: core.ContainerKindChest, Generation: 1,
+			}}); err != nil {
+				t.Fatal(err)
+			}
+			app.inventoryOpen = false
+			app.inventorySource = 44
+
+			if err := scene.Apply(app); err != nil {
+				t.Fatalf("应用场景: %v", err)
+			}
+			got, confirmed := app.crafting.State()
+			if !confirmed || got != test.wantGrid {
+				t.Fatalf("网格=%+v confirmed=%v，想要 %+v/true", got, confirmed, test.wantGrid)
+			}
+			if !app.inventoryOpen || app.inventorySource != test.wantIndex {
+				t.Fatalf("open/source=%v/%d，想要 true/%d",
+					app.inventoryOpen, app.inventorySource, test.wantIndex)
+			}
+			if _, opened := app.furnace.State(); opened {
+				t.Fatal("合成场景没有显式清空熔炉镜像")
+			}
+			if _, opened := app.chest.State(); opened {
+				t.Fatal("合成场景没有显式清空箱子镜像")
+			}
+			inventory, confirmed := app.inventory.State()
+			if !confirmed || inventory.Hotbar.Slots[0].Item != core.ItemStone {
+				t.Fatalf("背包=%+v confirmed=%v，想要含石头的固定背包", inventory, confirmed)
+			}
+		})
+	}
+}
+
 // 杀死变异：遗漏目标反馈场景、未装入唯一砖块、绕过 Mirror/Mesher、未固定相机，
 // 或继承上个场景的 UI 与远端玩家状态都会改变这些可观察结果。
 func TestCaptureTargetBlockFeedbackFindsSceneByName(t *testing.T) {

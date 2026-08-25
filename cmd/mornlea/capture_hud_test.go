@@ -19,7 +19,7 @@ func TestHUDCaptureScenesFixAllAuthoritativeSurvivalValues(t *testing.T) {
 		t.Fatalf("hud-hotbar-health HUD=%+v，想要满生命、满氧气与满饥饿", hotbar.HUD)
 	}
 
-	for _, name := range []string{"inventory-crafting", "chest-container", "furnace-container"} {
+	for _, name := range []string{"inventory-crafting", "workbench-crafting", "chest-container", "furnace-container"} {
 		scene := captureSceneByName(t, name)
 		if scene.HUD == nil {
 			t.Fatalf("%s 缺少已确认生命、耗损氧气与饥饿夹具", name)

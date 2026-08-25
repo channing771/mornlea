@@ -126,6 +126,16 @@ func (a *application) renderFrame(workMax int) (bool, error) {
 		return false, fmt.Errorf("准备世界名牌: %w", err)
 	}
 	inventory, inventoryConfirmed := a.inventory.State()
+	// 合成视图只画最后确认的权威网格；未确认时传 nil，HUD 按空的个人 2×2
+	// 呈现——3×3 工作台视图只在收到尺寸 3 的权威状态后出现，绝不预测。
+	var craftingOverlay *hud.CraftingOverlay
+	if crafting, confirmed := a.crafting.State(); confirmed {
+		craftingOverlay = &hud.CraftingOverlay{
+			Size:   crafting.Size,
+			Slots:  crafting.Slots,
+			Output: crafting.Output,
+		}
+	}
 	var overlay *hud.FurnaceOverlay
 	if furnace, opened := a.furnace.State(); opened {
 		overlay = &hud.FurnaceOverlay{
@@ -150,7 +160,7 @@ func (a *application) renderFrame(workMax int) (bool, error) {
 		chatOverlay.Open || len(chatOverlay.Lines) != 0
 	if hudVisible {
 		if err := a.hotbarRenderer.Prepare(
-			inventory, inventoryConfirmed, a.inventoryOpen, a.inventorySource, overlay, chestOverlay,
+			inventory, inventoryConfirmed, a.inventoryOpen, a.inventorySource, craftingOverlay, overlay, chestOverlay,
 			a.miningOverlay, hud.HealthOverlay{Confirmed: healthReady, Value: health},
 			hud.OxygenOverlay{Confirmed: oxygenReady, Value: oxygen},
 			hud.HungerOverlay{Confirmed: hungerReady, Value: hunger}, chatOverlay,

@@ -21,6 +21,7 @@ func (renderer *HotbarRenderer) Prepare(
 	inventoryConfirmed bool,
 	open bool,
 	source int,
+	crafting *CraftingOverlay,
 	overlay *FurnaceOverlay,
 	chest *ChestOverlay,
 	mining MiningOverlay,
@@ -44,7 +45,7 @@ func (renderer *HotbarRenderer) Prepare(
 	}
 	if inventoryConfirmed {
 		layoutInventory(
-			&renderer.layout, renderer.atlas, inventory, open, source, overlay, chest, mining,
+			&renderer.layout, renderer.atlas, inventory, open, source, crafting, overlay, chest, mining,
 			float32(width), float32(height),
 		)
 	} else {

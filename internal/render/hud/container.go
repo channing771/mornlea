@@ -6,11 +6,11 @@ import (
 )
 
 const (
-	// 固定配方：面板 + 每行两个栏位与双层物品色块、按钮和加号。
-	recipeQuads = 1 + len(inventoryRecipeIDs)*9 + 1
-	// 数量为 1 的栏位不画数字，其余每位数字画阴影与前景两个实例。
-	// 当前十条配方共 12 位数字：石砖 4/4、发光方块 4/4 各两位，其余各一位。
-	recipeGlyphs = 24
+	// 合成视图：面板、9 个网格格与产物格背景、最多 10 个双层物品色块与标题。
+	// 个人 2×2 只画其中 4 个网格格，容量按 3×3 最坏组合锁定。
+	craftingQuads = 1 + (core.CraftingGridSlots + 1) + (core.CraftingGridSlots+1)*2 + 1
+	// 网格与产物各最多两位数量。
+	craftingGlyphs = (core.CraftingGridSlots + 1) * 4
 	// 熔炉视图：面板、三个栏位、双层物品色块、两条进度条底与填充。
 	furnaceQuads = 1 + 3 + 3*2 + 4 + 1
 	// 三个熔炉格各最多两位数量。
@@ -20,55 +20,80 @@ const (
 	// 箱子每格最多两位数量。
 	chestGlyphs = core.ChestSlots * 4
 
-	maxOverlayQuads  = max(recipeQuads, furnaceQuads, chestQuads)
-	maxOverlayGlyphs = max(recipeGlyphs, furnaceGlyphs, chestGlyphs)
+	maxOverlayQuads  = max(craftingQuads, furnaceQuads, chestQuads)
+	maxOverlayGlyphs = max(craftingGlyphs, furnaceGlyphs, chestGlyphs)
 
-	// 合成行位于背包最上一行之上。
-	recipeRowGap      = float32(16)
-	recipeButtonWidth = float32(96)
+	// 合成区（网格与产物格）位于背包最上一行之上，与熔炉/箱子行共用同一行锚点。
+	recipeRowGap = float32(16)
 	// 熔炉三格与两条进度条排在背包最上一行之上。
 	furnaceBarHeight = float32(10)
 	furnaceBarGap    = float32(6)
 )
 
-// ponytail: 当前只有十条固定配方；需要分页或分类时再引入共享目录。
-var inventoryRecipeIDs = [...]core.RecipeID{
-	core.RecipeStoneBricks,
-	core.RecipeFurnace,
-	core.RecipeIronBlock,
-	core.RecipeStonePickaxe,
-	core.RecipeIronPickaxe,
-	core.RecipeChest,
-	core.RecipeOakPlanks,
-	core.RecipeLightBlock,
-	// 两条锄头配方按 ID 顺序追加在末尾；没有它们玩家在 UI 里拿不到锄头，
-	// 也就翻不了地，整条农业闭环在客户端不可达。
-	core.RecipeStoneHoe,
-	core.RecipeIronHoe,
+// craftingGridSizeWorkbench 是合成网格的最大有效尺寸；与 `sim.CraftingGridSizeWorkbench`
+// 同值。render 不依赖 sim（archcheck 依赖边界），两侧各自硬编码、由布局与命中
+// 测试共同锁定。
+const craftingGridSizeWorkbench = 3
+
+// normalizeCraftingGridSize 把权威网格尺寸归一为 2 或 3：绘制与命中必须共用同一
+// 个归一（未确认镜像的零值按个人 2×2 呈现），否则命中矩形会漂移到不画的格上。
+func normalizeCraftingGridSize(size int) int {
+	if size != craftingGridSizeWorkbench {
+		return 2
+	}
+	return craftingGridSizeWorkbench
 }
 
 // containerSourceOrigin 返回来源高亮格的左上角像素坐标；索引落在当前打开的容器视图之外
 // 时返回 false。overlay 与 chest 至多一个非 nil，分别把索引 36 之后解释为熔炉三格或
-// 箱子 27 格。
+// 箱子 27 格；两者都为 nil 时是合成视图，索引按统一视图解释（网格 0..8、背包 9..44）。
 func containerSourceOrigin(
 	source int,
+	crafting *CraftingOverlay,
 	overlay *FurnaceOverlay,
 	chest *ChestOverlay,
 	width, height float32,
 ) (float32, float32, bool) {
 	switch {
-	case source < core.InventorySlots:
+	case chest != nil:
+		if source >= core.InventorySlots && source < core.ChestViewSlots {
+			x, y := chestSlotOrigin(source-core.InventorySlots, width, height)
+			return x, y, true
+		}
+	case overlay != nil:
+		if source >= core.InventorySlots && source < core.FurnaceViewSlots {
+			x, y := recipeSlotOrigin(source-core.InventorySlots, width, height)
+			return x, y, true
+		}
+	default:
+		// 合成视图的统一索引：网格 0..8（个人尺寸只认可 size*size 以内的格）、
+		// 背包 9..44。
+		if source >= 0 && source < core.CraftingGridSlots {
+			size := normalizeCraftingGridSize(craftingSize(crafting))
+			if source < size*size {
+				x, y := craftingGridSlotOrigin(source, size, width, height)
+				return x, y, true
+			}
+			return 0, 0, false
+		}
+		if source >= core.CraftingGridSlots && source < core.CraftingGridSlots+core.InventorySlots {
+			x, y := inventorySlotOrigin(source-core.CraftingGridSlots, true, width, height)
+			return x, y, true
+		}
+	}
+	if source >= 0 && source < core.InventorySlots {
 		x, y := inventorySlotOrigin(source, true, width, height)
 		return x, y, true
-	case chest != nil && source < core.ChestViewSlots:
-		x, y := chestSlotOrigin(source-core.InventorySlots, width, height)
-		return x, y, true
-	case overlay != nil && source < core.FurnaceViewSlots:
-		x, y := recipeSlotOrigin(source-core.InventorySlots, width, height)
-		return x, y, true
-	default:
-		return 0, 0, false
 	}
+	return 0, 0, false
+}
+
+// craftingSize 读取合成叠加值的尺寸；未确认（nil）时按个人 2×2 呈现。
+func craftingSize(crafting *CraftingOverlay) int {
+	if crafting == nil {
+		return 2
+	}
+	return normalizeCraftingGridSize(int(crafting.Size))
 }
 
 // FurnaceOverlay 是熔炉界面需要显示的全部权威值。
@@ -236,7 +261,7 @@ func appendChestGrid(
 }
 
 // chestSlotOrigin 返回箱子统一索引 0..26 对应格子的左上角像素坐标：3 行 9 列，
-// 紧贴在背包最上一行之上，index 0 在最下面一行、与熔炉/配方行共用同一起点。
+// 紧贴在背包最上一行之上，index 0 在最下面一行、与熔炉/合成行共用同一起点。
 func chestSlotOrigin(index int, width, height float32) (float32, float32) {
 	row := index / core.HotbarSlots
 	column := index % core.HotbarSlots
@@ -264,89 +289,57 @@ func ChestSlotAt(cursorX, cursorY float64, width, height uint32) (uint8, bool) {
 	return 0, false
 }
 
-// appendRecipeRows 绘制全部固定配方及各自的一次合成按钮。
-//
-// 过渡期实现（格子工作台变更，任务组 4 将以 2×2/3×3 格子与产物格正式替换
-// 本区）：聚合单输入与本地可合成性咨询已随聚合合成路径一并删除，输入图标
-// 改用形状的第一个非空材料与其出现次数作代表，按钮不再按可合成性变色（恒
-// 为中性色）——服务端对 recipe-click 的稳定拒绝是唯一的权威判定。
-func appendRecipeRows(
+// CraftingOverlay 是背包/合成界面需要显示的全部权威网格值：有效尺寸、统一 9 格
+// 与服务端派生的产物。它是 render 本地值，由 app 从已确认镜像转换，渲染层不依赖
+// 协议类型；Size 归一为 2 或 3，产物格内容只画镜像里的权威值，客户端不预测。
+type CraftingOverlay struct {
+	Size   uint8
+	Slots  [core.CraftingGridSlots]core.ItemStack
+	Output core.ItemStack
+}
+
+// appendCraftingGrid 绘制合成区：尺寸 × 尺寸 的网格格与一个独立产物格（设计上
+// 与网格之间隔一列、垂直居中），替代既有十条固定配方行。网格格与产物格复用与
+// 全部栏位相同的凹槽 cell 与 `appendItemTile` 双层物品色块；数量走既有数字流。
+func appendCraftingGrid(
 	dst *hotbarLayout,
 	atlas render.GlyphSource,
+	overlay CraftingOverlay,
 	width, height float32,
 ) {
+	size := normalizeCraftingGridSize(int(overlay.Size))
 	scale := hudScale(true, width, height)
 	padding := hotbarPanelPadding * scale
-	left, bottomY := craftingRecipeSlotOrigin(0, 0, width, height)
-	_, top := craftingRecipeSlotOrigin(len(inventoryRecipeIDs)-1, 0, width, height)
-	buttonX, _ := craftingRecipeButtonOrigin(0, width, height)
+	// slot 0 在最上一行、最左一列；最下一行（row size-1）锚在容器行上。
+	left, top := craftingGridSlotOrigin(0, size, width, height)
+	_, bottomY := craftingGridSlotOrigin((size-1)*size, size, width, height)
+	outputX, outputY := craftingOutputOrigin(size, width, height)
 	dst.quads = append(dst.quads, hotbarInstance{
 		X: left - padding, Y: top - padding - containerHeaderHeight*scale,
-		Width:  buttonX + recipeButtonWidth*scale - left + 2*padding,
+		Width:  outputX + hotbarSlotSize*scale - left + 2*padding,
 		Height: bottomY + hotbarSlotSize*scale - top + 2*padding + containerHeaderHeight*scale,
 		Color:  [4]float32{0.035, 0.05, 0.065, 0.96},
 	})
 	slotUV := hotbarTextureUV(hotbarContainerSlotColumn)
-	for row, recipeID := range inventoryRecipeIDs {
-		recipe, ok := core.Recipe(recipeID)
-		if !ok {
-			continue
-		}
-		// 代表材料 = 形状中行主序第一个非空格的物品；出现次数 = 该物品在
-		// 形状里的格数。多数配方（圆环、2×2、单格）的代表材料就是全部材料，
-		// 镐/锄的木棍省略——这是过渡展示，不是新的合成语义。
-		material := core.ItemNone
-		materialCount := uint8(0)
-		for _, cell := range recipe.Cells {
-			if cell == core.ItemNone {
-				continue
-			}
-			if material == core.ItemNone {
-				material = cell
-			}
-			if cell == material {
-				materialCount++
-			}
-		}
-		inputX, inputY := craftingRecipeSlotOrigin(row, 0, width, height)
-		outputX, outputY := craftingRecipeSlotOrigin(row, 1, width, height)
-		for _, entry := range [2]struct {
-			stack core.ItemStack
-			x, y  float32
-		}{
-			{stack: core.ItemStack{Item: material, Count: materialCount}, x: inputX, y: inputY},
-			{stack: recipe.Output, x: outputX, y: outputY},
-		} {
-			dst.quads = append(dst.quads, hotbarInstance{
-				X: entry.x, Y: entry.y,
-				Width: hotbarSlotSize * scale, Height: hotbarSlotSize * scale,
-				U0: slotUV[0], V0: slotUV[1], U1: slotUV[2], V1: slotUV[3],
-				Color: [4]float32{1, 1, 1, 1},
-			})
-			appendItemTile(dst, entry.stack.Item, entry.x, entry.y, scale)
-			appendHotbarCountScaled(dst, atlas, entry.stack.Count, entry.x, entry.y, scale)
-		}
-
-		// 过渡期按钮恒为中性色：可合成性判定已归服务端（稳定拒绝），客户端
-		// 不再本地预测。
-		color := [4]float32{0.18, 0.19, 0.20, 0.94}
-		markColor := [4]float32{0.55, 0.57, 0.60, 0.96}
-		buttonX, buttonY := craftingRecipeButtonOrigin(row, width, height)
+	appendCraftingCell := func(stack core.ItemStack, x, y float32) {
 		dst.quads = append(dst.quads, hotbarInstance{
-			X: buttonX, Y: buttonY,
-			Width: recipeButtonWidth * scale, Height: hotbarSlotSize * scale,
-			Color: color,
+			X: x, Y: y,
+			Width: hotbarSlotSize * scale, Height: hotbarSlotSize * scale,
+			U0: slotUV[0], V0: slotUV[1], U1: slotUV[2], V1: slotUV[3],
+			Color: [4]float32{1, 1, 1, 1},
 		})
-		centerX := buttonX + recipeButtonWidth*scale*0.5
-		centerY := buttonY + hotbarSlotSize*scale*0.5
-		dst.quads = append(dst.quads, hotbarInstance{
-			X: centerX - 7*scale, Y: centerY - 2*scale,
-			Width: 14 * scale, Height: 4 * scale, Color: markColor,
-		}, hotbarInstance{
-			X: centerX - 2*scale, Y: centerY - 7*scale,
-			Width: 4 * scale, Height: 14 * scale, Color: markColor,
-		})
+		if stack.Item == core.ItemNone {
+			return
+		}
+		appendItemTile(dst, stack.Item, x, y, scale)
+		appendHotbarCountScaled(dst, atlas, stack.Count, x, y, scale)
 	}
+	for slot := range size * size {
+		x, y := craftingGridSlotOrigin(slot, size, width, height)
+		appendCraftingCell(overlay.Slots[slot], x, y)
+	}
+	appendCraftingCell(overlay.Output, outputX, outputY)
+
 	titleUV := hotbarTextureUV(hotbarCraftingTitleColumn)
 	dst.quads = append(dst.quads, hotbarInstance{
 		X: left, Y: top - padding - containerHeaderHeight*scale + containerTitleGap*scale,
@@ -356,38 +349,66 @@ func appendRecipeRows(
 	})
 }
 
-// recipeSlotOrigin 返回配方行第 index 个格子的左上角像素坐标。
+// craftingGridSlotOrigin 返回统一网格格 0..8 的左上角像素坐标：行主序、
+// row 0 在最上一行，与形状表（design.md D2，顶排在先）的阅读方向一致——
+// 工具类配方（镐/锄）因此以直立形态呈现在画面上，玩家按配方表摆放即所见；
+// 网格最下一行与箱子行共用同一起点，个人尺寸 2 只有格 0..3 有意义。
+func craftingGridSlotOrigin(slot, size int, width, height float32) (float32, float32) {
+	size = normalizeCraftingGridSize(size)
+	row := slot / size
+	column := slot % size
+	x, y := recipeSlotOrigin(column, width, height)
+	return x, y - float32(size-1-row)*(hotbarSlotSize+hotbarSlotGap)*hudScale(true, width, height)
+}
+
+// craftingOutputOrigin 返回产物格的左上角像素坐标：在网格右侧隔一列、垂直居中
+// （2×2 取底行、3×3 取中行），与网格格保持互不相交。
+func craftingOutputOrigin(size int, width, height float32) (float32, float32) {
+	size = normalizeCraftingGridSize(size)
+	x, baseY := recipeSlotOrigin(size+1, width, height)
+	y := baseY - float32((size-1)/2)*(hotbarSlotSize+hotbarSlotGap)*hudScale(true, width, height)
+	return x, y
+}
+
+// CraftingSlotAt 把光标像素坐标映射为合成界面的统一索引：网格 0..8、背包
+// 9..44。个人尺寸 2 的扩展格 4..8 既不画也不命中；界外返回 false。它与绘制共用
+// 同一套几何常量与尺寸归一。
+func CraftingSlotAt(cursorX, cursorY float64, width, height uint32, size int) (uint8, bool) {
+	if slot, ok := InventorySlotAt(cursorX, cursorY, width, height); ok {
+		return slot + core.CraftingGridSlots, true
+	}
+	if width == 0 || height == 0 {
+		return 0, false
+	}
+	size = normalizeCraftingGridSize(size)
+	x, y := float32(cursorX), float32(cursorY)
+	slotSize := hotbarSlotSize * hudScale(true, float32(width), float32(height))
+	for slot := range size * size {
+		left, top := craftingGridSlotOrigin(slot, size, float32(width), float32(height))
+		if x >= left && x < left+slotSize && y >= top && y < top+slotSize {
+			return uint8(slot), true
+		}
+	}
+	return 0, false
+}
+
+// CraftingOutputAt 报告光标是否命中产物格。产物格不是普通移动目标：两次点击
+// 整堆移动经 `CraftingSlotAt` 组成，产物取出是独立的 `TakeCraftingOutput` 路径。
+func CraftingOutputAt(cursorX, cursorY float64, width, height uint32, size int) bool {
+	if width == 0 || height == 0 {
+		return false
+	}
+	x, y := float32(cursorX), float32(cursorY)
+	slotSize := hotbarSlotSize * hudScale(true, float32(width), float32(height))
+	left, top := craftingOutputOrigin(size, float32(width), float32(height))
+	return x >= left && x < left+slotSize && y >= top && y < top+slotSize
+}
+
+// recipeSlotOrigin 返回容器叠加区第 index 个格子的左上角像素坐标：熔炉三格、
+// 箱子每行与合成网格列共用这一行锚点，index 0 与背包最上一行对齐。
 func recipeSlotOrigin(index int, width, height float32) (float32, float32) {
 	x, _ := inventorySlotOrigin(index, true, width, height)
 	_, topRowY := inventorySlotOrigin(core.HotbarSlots, true, width, height)
 	scale := hudScale(true, width, height)
 	return x, topRowY - (recipeRowGap+hotbarSlotSize)*scale
-}
-
-// craftingRecipeSlotOrigin 返回第 row 条配方中第 index 个格子的左上角像素坐标。
-func craftingRecipeSlotOrigin(row, index int, width, height float32) (float32, float32) {
-	x, y := recipeSlotOrigin(index, width, height)
-	return x, y - float32(row)*(hotbarSlotSize+hotbarSlotGap)*hudScale(true, width, height)
-}
-
-// craftingRecipeButtonOrigin 返回第 row 条配方按钮的左上角像素坐标。
-func craftingRecipeButtonOrigin(row int, width, height float32) (float32, float32) {
-	return craftingRecipeSlotOrigin(row, 2, width, height)
-}
-
-// RecipeButtonAt 报告光标是否命中任一固定合成按钮，命中时返回配方 ID。
-// 它与绘制共用同一套几何常量。
-func RecipeButtonAt(cursorX, cursorY float64, width, height uint32) (core.RecipeID, bool) {
-	if width == 0 || height == 0 {
-		return 0, false
-	}
-	x, y := float32(cursorX), float32(cursorY)
-	scale := hudScale(true, float32(width), float32(height))
-	for row, recipe := range inventoryRecipeIDs {
-		left, top := craftingRecipeButtonOrigin(row, float32(width), float32(height))
-		if x >= left && x < left+recipeButtonWidth*scale && y >= top && y < top+hotbarSlotSize*scale {
-			return recipe, true
-		}
-	}
-	return 0, false
 }

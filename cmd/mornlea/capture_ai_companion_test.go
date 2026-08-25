@@ -60,7 +60,7 @@ func TestWaterUnderwaterCaptureSceneIsLast(t *testing.T) {
 func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 	wantNames := []string{
 		"terrain-noon", "hud-hotbar-health", "hud-survival-feedback", "avatar-nametag", "inventory-crafting",
-		"chest-container", "furnace-container",
+		"workbench-crafting", "chest-container", "furnace-container",
 		"debug-panel", "skylight-tunnel", "block-light-room", "materials-showcase",
 		"target-block-feedback", "oak-grove", "ai-companion",
 		"water-surface-slope", "main-menu", "far-horizon", "water-underwater",

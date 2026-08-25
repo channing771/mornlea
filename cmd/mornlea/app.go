@@ -115,10 +115,13 @@ type application struct {
 	// configPath 是调试面板 F5 保存时的目标路径，来自 applicationOptions.ConfigPath。
 	configPath string
 	// panelLastFrameAt 是上一帧调试面板读数的采样时刻，用于计算 PanelReadout.FrameMillis。
-	panelLastFrameAt  time.Time
-	inventory         client.InventoryMirror
-	furnace           client.FurnaceMirror
-	chest             client.ChestMirror
+	panelLastFrameAt time.Time
+	inventory        client.InventoryMirror
+	furnace          client.FurnaceMirror
+	chest            client.ChestMirror
+	// crafting 是权威合成网格的 latest-wins 只读镜像：网格内容、产物与有效
+	// 尺寸全部以服务端状态为准，客户端不预测；尺寸 3 表示工作台视图。
+	crafting          client.CraftingMirror
 	miningOverlay     hud.MiningOverlay
 	itemDrops         *client.ItemDrops
 	itemDropInstances []render.ItemDrop

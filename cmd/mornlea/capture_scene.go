@@ -59,6 +59,9 @@ func applyAICompanionCaptureState(app *application) error {
 	app.inventorySource = -1
 	app.furnace.Reset()
 	app.chest.Reset()
+	// 合成网格镜像一并清空：ai-companion 场景不呈现容器与网格，前序容器
+	// 场景（含 workbench-crafting 的尺寸 3 状态）不得静默渗入。
+	app.crafting.Reset()
 	app.miningOverlay = hud.MiningOverlay{}
 	app.damageFeedback.Reset()
 	app.damageStrength = 0
@@ -502,6 +505,7 @@ func resetCapturePresentation(app *application) error {
 	app.damageStrength = 0
 	app.furnace.Reset()
 	app.chest.Reset()
+	app.crafting.Reset()
 	app.inventoryOpen = false
 	app.inventorySource = -1
 	app.blockTargetReset = false
