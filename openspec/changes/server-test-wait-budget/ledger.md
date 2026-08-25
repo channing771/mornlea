@@ -38,6 +38,8 @@
 - QUALITY review：FAIL（Important）— 与 SPEC review 同项；此外耗尽测试只独立搜索字符串 `"3000"`，该数字可能来自调用方 diagnostics，未把预算绑定到 `Fatalf` 前缀。
 - R1/5 修复：在 `login_wait_budget_test.go` 保留普通 7 次预算内用例，并新增第 3000 次推进后才成立的边界用例，精确断言 `steps == integrationLoginTickBudget`、`Fatalf` 零次、diagnostics 零次；删除 helper 循环后的末次 `ready()` 检查会让 fake 记录一次 `Fatalf`，该变异不再存活。耗尽用例改为断言完整前缀 `等待 never-ready 登录就绪耗尽 3000 tick:`，并另行断言调用方动态诊断完整片段。
 - R1/5 验证：helper 非 race（1.464s）与 race（1.628s）定点测试通过；十二条指定 race 用例通过（9.381s）；完整 `internal/server -race -count=1` 通过（168.481s）；`gofmt -l .` 无输出，`git diff --check` 通过，OpenSpec strict 65 passed / 0 failed。全仓 race 按修复 brief 留给整分支 fresh 终审。
+- R1/5 scoped re-review：原 SPEC reviewer 判定 `ADDRESSED`、无新 finding、最终 SPEC PASS；原 QUALITY reviewer 判定 `ADDRESSED`、无新 finding、最终 QUALITY PASS。两者均允许进入整分支终审。
+- Task 1 完成：实现提交 `0834fb8b`，R1 修复提交 `44c7506d`；任务级 SPEC + QUALITY 双评审 clean。
 - 修复轮次：1/5。
 
 ## 整分支终审与收尾
