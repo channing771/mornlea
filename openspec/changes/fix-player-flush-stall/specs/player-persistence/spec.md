@@ -24,7 +24,7 @@
 
 ### Requirement: Flush stall is reported instead of masked
 
-Flush 返回时若仍有玩家处于脏状态且本次 Flush 未记录该玩家的任何保存失败，Flush SHALL 为该玩家计入一次 `errPlayerFlushStalled` 失败并带错误返回；MUST NOT 静默成功返回残余脏状态。该玩家的脏状态、快照与冻结 retry MUST 完整保留，供后续 Flush 重试。已记录保存失败的玩家 MUST 只上报原错误，既有错误文本逐字不变。
+Flush 在「无 in-flight 保存且本轮未产生新派发」的退出路径上返回时，若仍有玩家处于脏状态且本次 Flush 未记录该玩家的任何保存失败，Flush SHALL 为该玩家计入一次 `errPlayerFlushStalled` 失败并带错误返回；MUST NOT 静默成功返回残余脏状态（ctx 或 scheduler 取消的提前返回本就携带非 nil 终止错误，不属于静默掩盖）。该玩家的脏状态、快照与冻结 retry MUST 完整保留，供后续 Flush 重试。已记录保存失败的玩家 MUST 只上报原错误，既有错误文本逐字不变。
 
 #### Scenario: 恒脏失速带错误返回
 
