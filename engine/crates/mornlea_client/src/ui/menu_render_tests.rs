@@ -1,11 +1,7 @@
 //! 主菜单无头呈现与交互测试：命中、禁用态、布局、字体和确定性输出。
 
-use super::test_support::{encode_frame, four_button_frame, menu_frame, screen_rect};
+use super::test_support::{encode_frame, four_button_frame, menu_frame, screen_rect, test_font};
 use super::*;
-
-fn test_font() -> &'static [u8] {
-    include_bytes!("testdata/demo.ttf")
-}
 
 /// 返回同主菜单夹具但全部按钮启用的 layout v1 帧。
 fn four_button_frame_all_enabled() -> Vec<u8> {
@@ -102,6 +98,37 @@ fn menu_disabled_button_click_no_event() {
     assert_eq!(
         take_output_events(&mut state),
         vec![UiOutputEvent::Action(2)]
+    );
+}
+
+#[test]
+fn menu_settings_button_obeys_enabled_field() {
+    let mut state = UiState::new();
+    state.install_font(test_font());
+    let rects = menu_button_layout(screen_rect(), 4);
+
+    let disabled = decode_ui_frame(&four_button_frame()).unwrap();
+    click_button(&mut state, &disabled, rects[2].center());
+    assert!(take_output_events(&mut state).is_empty());
+
+    let enabled = decode_ui_frame(&encode_frame(
+        UI_LAYOUT_VERSION,
+        UI_FLAG_VISIBLE,
+        &[
+            (1, "进入游戏", true),
+            (2, "多人游戏", false),
+            (3, "设置", true),
+            (4, "退出游戏", true),
+        ],
+        "Mornlea",
+        "dev",
+        "",
+    ))
+    .unwrap();
+    click_button(&mut state, &enabled, rects[2].center());
+    assert_eq!(
+        take_output_events(&mut state),
+        vec![UiOutputEvent::Action(3)]
     );
 }
 

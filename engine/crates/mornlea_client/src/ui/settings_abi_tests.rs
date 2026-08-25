@@ -124,7 +124,7 @@ fn menu_layout_v1_rejects_unknown_flags_and_tail_without_wire_drift() {
 #[test]
 fn structured_batch_cross_language_golden_preserves_change_before_action() {
     let changed = UiOutputEvent::SettingsChanged(settings_values("packs/local"));
-    let save = UiOutputEvent::Action(7);
+    let save = UiOutputEvent::Action(UI_ACTION_SETTINGS_SAVE);
     let mut queue = UiOutputQueue::new();
     queue
         .enqueue_frame(&[changed.clone(), save.clone()])
@@ -144,7 +144,7 @@ fn structured_batch_cross_language_golden_preserves_change_before_action() {
     string_field(&mut want, b"packs/local");
     want.extend_from_slice(&1u32.to_le_bytes());
     want.extend_from_slice(&4u32.to_le_bytes());
-    want.extend_from_slice(&7u32.to_le_bytes());
+    want.extend_from_slice(&UI_ACTION_SETTINGS_SAVE.to_le_bytes());
     assert_eq!(out, want);
     assert!(queue.is_empty());
 }

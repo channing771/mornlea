@@ -5,6 +5,11 @@
 
 use super::*;
 
+/// 返回 UI 无头呈现测试共用的小型测试字体。
+pub(super) fn test_font() -> &'static [u8] {
+    include_bytes!("testdata/demo.ttf")
+}
+
 /// 编码允许注入原始 `enabled` 值的 layout v1 主菜单帧。
 pub(super) fn encode_frame_raw(
     layout: u32,
@@ -77,4 +82,9 @@ pub(super) fn menu_frame(frame: &UiFrame) -> &UiMenuFrame {
 /// 返回 UI 无头测试共用的 1280×720 逻辑屏幕。
 pub(super) fn screen_rect() -> Rect {
     Rect::from_min_size(pos2(0.0, 0.0), vec2(1280.0, 720.0))
+}
+
+/// 返回 UI 最小支持尺寸 640×360 的逻辑屏幕。
+pub(super) fn small_screen_rect() -> Rect {
+    Rect::from_min_size(pos2(0.0, 0.0), vec2(640.0, 360.0))
 }

@@ -16,8 +16,8 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 use egui::{
-    Align2, Color32, CornerRadius, Direction, FontData, FontDefinitions, FontFamily, FontId, Key,
-    Layout, RawInput, Rect, RichText, UiBuilder, ViewportId, pos2, vec2,
+    Align, Align2, Color32, CornerRadius, Direction, FontData, FontDefinitions, FontFamily, FontId,
+    Id, Key, Layout, RawInput, Rect, RichText, UiBuilder, ViewportId, pos2, vec2,
 };
 use winit::event::{ElementState, Ime, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};
@@ -48,6 +48,12 @@ pub const MAX_UI_ERROR_BYTES: usize = 256;
 pub const MAX_UI_STATUS_BYTES: usize = 256;
 /// 设置页材质路径的字节上界。
 pub const MAX_UI_SETTINGS_PATH_BYTES: usize = 1024;
+/// 设置页「保存」动作编号；延续主菜单动作 1..=4。
+pub const UI_ACTION_SETTINGS_SAVE: u32 = 5;
+/// 设置页「取消更改」动作编号。
+pub const UI_ACTION_SETTINGS_CANCEL: u32 = 6;
+/// 设置页「返回」与 Escape 共用的动作编号。
+pub const UI_ACTION_SETTINGS_BACK: u32 = 7;
 
 // ---------------------------------------------------------------------------
 // 菜单布局常量(全部为逻辑点,绘制函数里确定性计算,不依赖字体度量)。
@@ -84,6 +90,29 @@ pub const MENU_BACKGROUND: Color32 = Color32::from_rgb(32, 36, 42);
 pub const MENU_TEXT_COLOR: Color32 = Color32::WHITE;
 /// 错误行红色。
 pub const MENU_ERROR_COLOR: Color32 = Color32::from_rgb(240, 90, 90);
+
+// ---------------------------------------------------------------------------
+// 设置页布局常量。
+// ---------------------------------------------------------------------------
+
+/// 设置页面板最大宽度。
+const SETTINGS_PANEL_MAX_WIDTH: f32 = 560.0;
+/// 设置页面板最大高度。
+const SETTINGS_PANEL_MAX_HEIGHT: f32 = 620.0;
+/// 设置页面板与屏幕边缘的最小总留白。
+const SETTINGS_PANEL_SCREEN_GAP: f32 = 32.0;
+/// 设置页面板内边距。
+const SETTINGS_PANEL_PADDING: f32 = 20.0;
+/// 设置页动作按钮高度。
+const SETTINGS_ACTION_HEIGHT: f32 = 36.0;
+/// 设置页深色面板背景。
+const SETTINGS_PANEL_BACKGROUND: Color32 = Color32::from_rgb(43, 48, 56);
+/// 设置页次要说明文字颜色。
+const SETTINGS_MUTED_COLOR: Color32 = Color32::from_rgb(184, 190, 200);
+/// 设置页正常状态文字颜色。
+const SETTINGS_STATUS_COLOR: Color32 = Color32::from_rgb(134, 210, 160);
+/// 设置页脏草稿提示颜色。
+const SETTINGS_DIRTY_COLOR: Color32 = Color32::from_rgb(244, 196, 96);
 
 // ---------------------------------------------------------------------------
 // 菜单帧数据模型与 ABI 解码。
@@ -128,6 +157,25 @@ pub enum UiSettingsWindow {
     Size960x540,
     /// 1280×720 逻辑像素。
     Size1280x720,
+}
+
+/// 设置页 headless 测试记录的关键几何标识。
+///
+/// 生产绘制同样走这些标识，但记录闭包为空；这样测试观测的是唯一生产布局，
+/// 不需要复制一套会漂移的坐标算法。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SettingsElement {
+    Panel,
+    ScrollViewport,
+    ScrollContent,
+    Audio,
+    TexturePath,
+    Window640x360,
+    Window960x540,
+    Window1280x720,
+    Save,
+    Cancel,
+    Back,
 }
 
 impl UiSettingsWindow {
@@ -499,6 +547,9 @@ pub struct UiState {
     pending_events: UiOutputQueue,
     /// 字体是否已成功安装(空字节安装失败保持 false)。
     font_loaded: bool,
+    /// 最近一帧设置页关键几何；只供无头测试验证生产布局。
+    #[cfg(test)]
+    settings_layout: Vec<(SettingsElement, Rect, Option<Id>)>,
 }
 
 impl Default for UiState {
@@ -514,6 +565,8 @@ impl UiState {
             ctx: egui::Context::default(),
             pending_events: UiOutputQueue::new(),
             font_loaded: false,
+            #[cfg(test)]
+            settings_layout: Vec::new(),
         }
     }
 
@@ -560,13 +613,46 @@ impl UiState {
         if let Some(info) = raw.viewports.get_mut(&ViewportId::ROOT) {
             info.native_pixels_per_point = Some(pixels_per_point);
         }
+        if matches!(frame, UiFrame::Settings(_)) {
+            filter_settings_text_events(&mut raw);
+        }
         let mut frame_events = Vec::new();
         let output = match frame {
             UiFrame::Menu(frame) => self
                 .ctx
                 .run_ui(raw, |ui| draw_menu(ui, frame, &mut frame_events)),
-            // 设置页控件由任务 3 接入；任务 2 只建立可验证的 layout 与事件核心。
-            UiFrame::Settings(_) => self.ctx.run_ui(raw, |_| {}),
+            UiFrame::Settings(frame) => {
+                let initial = UiSettingsValues {
+                    audio_volume: frame.audio_volume,
+                    window: frame.window,
+                    texture_pack_path: frame.texture_pack_path.clone(),
+                };
+                let mut draft = initial.clone();
+                let mut actions = SettingsActions::default();
+                #[cfg(test)]
+                let settings_layout = &mut self.settings_layout;
+                let output = self.ctx.run_ui(raw, |ui| {
+                    // egui 在需要重排时可能重跑同一帧；动作使用布尔汇总、草稿只保留
+                    // 最终值，从源头保证每帧最多一个 change 和每种 action 一个事件。
+                    #[cfg(test)]
+                    settings_layout.clear();
+                    #[cfg(test)]
+                    draw_settings(
+                        ui,
+                        frame,
+                        &mut draft,
+                        &mut actions,
+                        &mut |element, rect, id| settings_layout.push((element, rect, id)),
+                    );
+                    #[cfg(not(test))]
+                    draw_settings(ui, frame, &mut draft, &mut actions, &mut |_, _, _| {});
+                });
+                if draft != initial {
+                    frame_events.push(UiOutputEvent::SettingsChanged(draft));
+                }
+                actions.append_events(&mut frame_events);
+                output
+            }
         };
         self.pending_events.enqueue_frame(&frame_events)?;
         Ok(Some(output))
@@ -584,6 +670,27 @@ impl UiState {
     /// 由 [`UiState`] 私有持有,故只经此只读访问器对外暴露(不改写任何状态)。
     pub fn ctx(&self) -> &egui::Context {
         &self.ctx
+    }
+}
+
+#[derive(Default)]
+struct SettingsActions {
+    save: bool,
+    cancel: bool,
+    back: bool,
+}
+
+impl SettingsActions {
+    fn append_events(&self, pending: &mut Vec<UiOutputEvent>) {
+        if self.save {
+            pending.push(UiOutputEvent::Action(UI_ACTION_SETTINGS_SAVE));
+        }
+        if self.cancel {
+            pending.push(UiOutputEvent::Action(UI_ACTION_SETTINGS_CANCEL));
+        }
+        if self.back {
+            pending.push(UiOutputEvent::Action(UI_ACTION_SETTINGS_BACK));
+        }
     }
 }
 
@@ -676,6 +783,243 @@ fn draw_menu(ui: &mut egui::Ui, frame: &UiMenuFrame, pending: &mut Vec<UiOutputE
             MENU_ERROR_COLOR,
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// 设置页绘制（Go 草稿回显为权威，Rust 仅持有 egui 瞬态状态）。
+// ---------------------------------------------------------------------------
+
+fn settings_panel_rect(screen: Rect) -> Rect {
+    let width = screen
+        .width()
+        .min(SETTINGS_PANEL_MAX_WIDTH)
+        .min((screen.width() - SETTINGS_PANEL_SCREEN_GAP).max(1.0));
+    let height = screen
+        .height()
+        .min(SETTINGS_PANEL_MAX_HEIGHT)
+        .min((screen.height() - SETTINGS_PANEL_SCREEN_GAP).max(1.0));
+    Rect::from_center_size(screen.center(), vec2(width, height))
+}
+
+/// 删除换行，并在本帧编辑越过 ABI 上限时拒绝该次编辑。
+///
+/// 下行 `original` 已被 ABI 解码器证明合法；越界时恢复它，能避免用户在文本
+/// 中部插入多字节字符后由「截断末尾」误删原有路径内容。恢复的是完整合法
+/// UTF-8 字符串，所以不可能落在字符中间。
+fn sanitize_settings_path(original: &str, path: &mut String) {
+    path.retain(|ch| ch != '\r' && ch != '\n');
+    if path.len() > MAX_UI_SETTINGS_PATH_BYTES {
+        original.clone_into(path);
+    }
+}
+
+/// 在 `TextEdit::singleline` 把换行折叠为空格之前先移除 CR/LF。
+///
+/// 这条门禁既覆盖手工 RawInput，也覆盖未来可能接入的粘贴事件；随后
+/// [`sanitize_settings_path`] 仍做最终防御，保证任何 egui 行为变化都不会把
+/// 多行或超长字符串送入上行事件。
+fn filter_settings_text_events(raw: &mut RawInput) {
+    for event in &mut raw.events {
+        match event {
+            egui::Event::Text(text) | egui::Event::Paste(text) => {
+                text.retain(|ch| ch != '\r' && ch != '\n');
+            }
+            _ => {}
+        }
+    }
+}
+
+fn settings_window_button(
+    ui: &mut egui::Ui,
+    draft: &mut UiSettingsValues,
+    value: UiSettingsWindow,
+    label: &str,
+    width: f32,
+) -> egui::Response {
+    let selected = draft.window == value;
+    let response = ui.add_sized(
+        vec2(width, 32.0),
+        egui::Button::new(label).selected(selected),
+    );
+    if response.clicked() {
+        draft.window = value;
+    }
+    response
+}
+
+/// 绘制设置表单并把本帧控件的最终值写入 `draft`。
+///
+/// `record` 只用于测试记录生产几何；生产传入空闭包。动作先汇总到
+/// `actions`，由 [`UiState::run_frame`] 在完整草稿事件之后统一追加。
+fn draw_settings(
+    ui: &mut egui::Ui,
+    frame: &UiSettingsFrame,
+    draft: &mut UiSettingsValues,
+    actions: &mut SettingsActions,
+    record: &mut impl FnMut(SettingsElement, Rect, Option<Id>),
+) {
+    let screen = ui.max_rect();
+    ui.painter()
+        .rect_filled(screen, CornerRadius::ZERO, MENU_BACKGROUND);
+
+    let panel = settings_panel_rect(screen);
+    record(SettingsElement::Panel, panel, None);
+    ui.painter()
+        .rect_filled(panel, CornerRadius::same(8), SETTINGS_PANEL_BACKGROUND);
+    let inner = panel.shrink(SETTINGS_PANEL_PADDING);
+    let child = UiBuilder::new()
+        .max_rect(inner)
+        .layout(Layout::top_down(Align::Min));
+    let scroll = ui
+        .scope_builder(child, |ui| {
+            egui::ScrollArea::vertical()
+                .id_salt("mornlea-settings-scroll")
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.heading(RichText::new("设置").size(28.0));
+                    ui.add_space(8.0);
+
+                    let mut percent = draft.audio_volume * 100.0;
+                    let audio = ui.add(
+                        egui::Slider::new(&mut percent, 0.0..=100.0)
+                            .text("总音量")
+                            .suffix("%")
+                            .max_decimals(0)
+                            .step_by(1.0),
+                    );
+                    if audio.changed() {
+                        draft.audio_volume = (percent / 100.0).clamp(0.0, 1.0);
+                    }
+                    record(SettingsElement::Audio, audio.rect, Some(audio.id));
+                    ui.add_space(12.0);
+
+                    ui.label(RichText::new("材质包目录").strong());
+                    let original_path = draft.texture_pack_path.clone();
+                    let mut path = original_path.clone();
+                    let path_response = ui.add_sized(
+                        vec2(ui.available_width(), 30.0),
+                        egui::TextEdit::singleline(&mut path)
+                            .id_salt("mornlea-settings-texture-path")
+                            .hint_text("留空使用内嵌材质")
+                            .desired_width(f32::INFINITY),
+                    );
+                    sanitize_settings_path(&original_path, &mut path);
+                    if path != draft.texture_pack_path {
+                        draft.texture_pack_path = path;
+                    }
+                    record(
+                        SettingsElement::TexturePath,
+                        path_response.rect,
+                        Some(path_response.id),
+                    );
+                    ui.label(
+                        RichText::new("材质包路径保存后将在下次启动生效")
+                            .small()
+                            .color(SETTINGS_MUTED_COLOR),
+                    );
+                    ui.add_space(12.0);
+
+                    ui.label(RichText::new("窗口大小").strong());
+                    let spacing = ui.spacing().item_spacing.x;
+                    let button_width = ((ui.available_width() - spacing * 2.0) / 3.0).max(80.0);
+                    ui.horizontal(|ui| {
+                        let response = settings_window_button(
+                            ui,
+                            draft,
+                            UiSettingsWindow::Size640x360,
+                            "640 × 360",
+                            button_width,
+                        );
+                        record(
+                            SettingsElement::Window640x360,
+                            response.rect,
+                            Some(response.id),
+                        );
+                        let response = settings_window_button(
+                            ui,
+                            draft,
+                            UiSettingsWindow::Size960x540,
+                            "960 × 540",
+                            button_width,
+                        );
+                        record(
+                            SettingsElement::Window960x540,
+                            response.rect,
+                            Some(response.id),
+                        );
+                        let response = settings_window_button(
+                            ui,
+                            draft,
+                            UiSettingsWindow::Size1280x720,
+                            "1280 × 720",
+                            button_width,
+                        );
+                        record(
+                            SettingsElement::Window1280x720,
+                            response.rect,
+                            Some(response.id),
+                        );
+                    });
+                    ui.add_space(12.0);
+
+                    if frame.dirty {
+                        ui.label(
+                            RichText::new("有未保存的更改")
+                                .strong()
+                                .color(SETTINGS_DIRTY_COLOR),
+                        );
+                    }
+                    if !frame.status.is_empty() {
+                        ui.label(RichText::new(&frame.status).color(SETTINGS_STATUS_COLOR));
+                    }
+                    if !frame.error.is_empty() {
+                        ui.label(RichText::new(&frame.error).strong().color(MENU_ERROR_COLOR));
+                    }
+                    ui.add_space(12.0);
+                    ui.separator();
+                    ui.add_space(8.0);
+
+                    let spacing = ui.spacing().item_spacing.x;
+                    let button_width = ((ui.available_width() - spacing * 2.0) / 3.0).max(80.0);
+                    ui.horizontal(|ui| {
+                        let save = ui.add_sized(
+                            vec2(button_width, SETTINGS_ACTION_HEIGHT),
+                            egui::Button::new("保存"),
+                        );
+                        actions.save |= save.clicked();
+                        record(SettingsElement::Save, save.rect, Some(save.id));
+
+                        let cancel = ui.add_sized(
+                            vec2(button_width, SETTINGS_ACTION_HEIGHT),
+                            egui::Button::new("取消更改"),
+                        );
+                        actions.cancel |= cancel.clicked();
+                        record(SettingsElement::Cancel, cancel.rect, Some(cancel.id));
+
+                        let back = ui.add_sized(
+                            vec2(button_width, SETTINGS_ACTION_HEIGHT),
+                            egui::Button::new("返回"),
+                        );
+                        actions.back |= back.clicked();
+                        record(SettingsElement::Back, back.rect, Some(back.id));
+                    });
+                    ui.add_space(4.0);
+                })
+        })
+        .inner;
+    record(SettingsElement::ScrollViewport, scroll.inner_rect, None);
+    record(
+        SettingsElement::ScrollContent,
+        Rect::from_min_size(
+            scroll.inner_rect.min - scroll.state.offset,
+            scroll.content_size,
+        ),
+        None,
+    );
+
+    // Escape 与返回按钮只产生同一个 typed action；是否允许离开由 Go 决定。
+    actions.back |= ui.input(|input| input.key_pressed(Key::Escape));
 }
 
 // ---------------------------------------------------------------------------
@@ -1020,6 +1364,9 @@ mod raw_input_tests;
 #[cfg(test)]
 #[path = "ui/settings_abi_tests.rs"]
 mod settings_abi_tests;
+#[cfg(test)]
+#[path = "ui/settings_render_tests.rs"]
+mod settings_render_tests;
 #[cfg(test)]
 #[path = "ui/test_support.rs"]
 mod test_support;
