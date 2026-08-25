@@ -19,3 +19,10 @@
 - **变异验证（双向、均未提交）**：调用点恒传 `false` 与 `eating.go` 删 `|| suspended` 两个变异各使同一组 4 用例红（`TestEatingContainerOpenInterruptsAndRestartsAfterClose`、`TestEatingContainerOpenOnSettlementTickDoesNotSettle`、`TestEatingHoldsAtZeroWhileContainerOpenOrViewNotReady` 两子用例），恢复后复绿——测试网从实参与判据两端被证明真实守护。
 - **全量门禁**：`gofmt -l .` 无输出；`go vet ./...` 干净；`go test ./... -race -count=1` 首跑仅 `internal/server` 的 `TestMemoryTCPFluidDamBreakBroadcastParity` 红（TCP 录像对齐晚一拍的时序 flake：分支 diff 与 `internal/server`/`internal/fluid`/`internal/network` 零交集、单测复跑 5 次绿、独占机器复跑全量 26 包全绿，退出码 0）；`openspec validate --all --strict` 65/65；`internal/archcheck` ok。
 - **收尾核对**：以 merge-base `5dd018d5` 计的真实独有 diff 恰为冻结集（`internal/sim` 三文件 + change 产物，+370/−10）；`git diff main --stat` 中 `docs/feature-backlog.md` 差异系 main 分叉后其他行的认领提交（B-05/C-01），非本分支改动。
+
+## 2026-08-26 整分支终审与归档收尾
+
+- **整分支终审：PASS（0 MUST-FIX）**——独立终审者亲自复跑 `go test ./internal/sim -race -count=1`（全包）、`internal/archcheck`、`go vet`、`gofmt -l .`、`openspec validate --all --strict` 65/65；五 commit 叙事与产物自洽、冻结集外零改动、`player.go` 恰好一行、`suspended` 两来源均为命令流派生状态（重放确定性成立）、双向变异静态推演与 ledger 记录吻合、delta 与主规格逐字比对可无冲突落位、红线（版权/门禁放宽/版本号）全过。
+- `openspec archive eating-container-interrupt -y`：`authoritative-hunger` 主规格 1 requirement modified 落位，change 归档为 `2026-08-26-eating-container-interrupt`。
+- 基线同步：`AGENTS.md` 与 `CLAUDE.md`「项目定位」同句插入「打开容器界面或视野未就绪」与中断优先序括号句（`TestBaselineDocsAreIdentical` 兜底）；`docs/notes/progress.md` 追加 B-31 段落。
+- backlog B-31 → 已完成；Discussion #71 状态评论与正文刷新随合并执行。
