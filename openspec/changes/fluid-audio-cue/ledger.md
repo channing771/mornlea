@@ -15,5 +15,5 @@
 
 ## 任务记录
 
-- Task A：待派发。
-- Task B：待派发。
+- Task A（RED）：`d529e30a` 六性质测试 + 机械桩；SPEC PASS、QUALITY FAIL→修复 `6a78d6f8`（`audioPlayerState` 迁入 `app_test_helpers_test.go` 中心）→scoped 复核 ALL ADDRESSED。
+- Task B（GREEN）：待派发。

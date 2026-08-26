@@ -2,8 +2,8 @@
 
 ## 1. Task A（RED）：边沿性质失败测试
 
-- [ ] 1.1 在 `cmd/mornlea` 为 `localAudioFeedback` 的入水边沿新增测试文件，覆盖六条性质：上升沿恰响一次、持续浸没静默、出水静默、出水后再入水重新触发、`Reset` 清基线后首次在水中不触发、未就绪/Reset 路径重置基线。断言只用字面量布尔返回值，不引用尚不存在的 `CueWaterSplash`。验证：`go test ./cmd/mornlea -run 'WaterSplash' -count=1` 失败且为编译外行为缺失。
-- [ ] 1.2 运行 `gofmt -l .` 与 `go vet ./cmd/mornlea ./internal/audio`。
+- [x] 1.1 在 `cmd/mornlea` 为 `localAudioFeedback` 的入水边沿新增测试文件，覆盖六条性质：上升沿恰响一次、持续浸没静默、出水静默、出水后再入水重新触发、`Reset` 清基线后首次在水中不触发、未就绪/Reset 路径重置基线。断言只用字面量布尔返回值，不引用尚不存在的 `CueWaterSplash`。验证：`go test ./cmd/mornlea -run 'WaterSplash' -count=1` 失败且为编译外行为缺失。
+- [x] 1.2 运行 `gofmt -l .` 与 `go vet ./cmd/mornlea ./internal/audio`。
 
 ## 2. Task B（GREEN）：最小实现
 
