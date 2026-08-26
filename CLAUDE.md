@@ -8,7 +8,7 @@
 
 当前协议演进明确为：v26 新增只回发成功放置发起者的 `PlaceBlockSucceeded(sequence)` 序号确认；v25 把既有 `Mining` 连续输入定义为 primary action；v24 新增 `PlayerInput.Eating` 与 `PlayerState.Hunger`。v25 的服务端权威玩家近战在同一维的 active 玩家中取 3 格内射线最近命中，等距以 `SessionID` 决定；固体方块遮挡、流体穿透，每次命中经既有伤害入口结算 2 点伤害并给目标施加 10 tick 冷却。同 tick 先冻结全部近战意图再统一结算，命中者该 tick 抑制采掘、下一 tick 由连续输入重新判定；Memory 与 TCP 复用同一权威路径。
 
-Darwin 图形客户端提供本地确认音频：不引入第三方依赖或二进制音频资产，启动时预分配 `AudioQueue` 与固定 PCM，设备不可用、队列繁忙或播放失败均无声降级。顶层配置 `audioVolume` 控制总音量；采掘、放置、进食与受伤只在权威确认边界播放 cue。放置只消费 v26 `PlaceBlockSucceeded(sequence)`，重复或旧序号、拒绝、无关状态和其他会话均静音；capture、benchmark 与无图形专用服务端不请求音频设备。
+Darwin 图形客户端提供本地确认音频：不引入第三方依赖或二进制音频资产，启动时预分配 `AudioQueue` 与固定 PCM，设备不可用、队列繁忙或播放失败均无声降级。顶层配置 `audioVolume` 控制总音量；采掘、放置、进食、受伤与入水上升沿只在权威确认边界播放 cue。放置只消费 v26 `PlaceBlockSucceeded(sequence)`，重复或旧序号、拒绝、无关状态和其他会话均静音；capture、benchmark 与无图形专用服务端不请求音频设备。
 
 图形客户端默认在完整程序化材质注册表上应用内嵌的 Pixel Perfection 子集，未映射的 layer 最终回退到程序化材质。可选顶层配置 `texturePackPath` 只在启动时从本地目录读取 16×16 PNG 并按逻辑 layer 逐层覆盖；benchmark 与 capture 忽略本地覆盖，无图形专用服务端不加载客户端资产。该材质能力沿用远环 LOD 合入后的协议 v23、engine ABI v6 与 benchmark scenario v18，未推进这些版本（client ABI 其后经 egui 主菜单变更升到 v8）。
 
