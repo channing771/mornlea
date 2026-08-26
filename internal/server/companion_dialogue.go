@@ -40,10 +40,10 @@ type dialogueOutcome struct {
 }
 
 // requestDialogue 是台词派发在 tick 边界的唯一入口（调用方必须持有 stepMu）。
-// 守卫顺序：未知槽位/inactive 伙伴/任务预算耗尽跳过；每伙伴在途跳过（不取消
-// 在途）；共享槽 try-acquire 失败跳过（不排队、不重试）。成功则置在途标记、
-// 计入每任务预算并 spawn worker。terminal 标志由 node.Kind 派生（结构性事实，
-// 不接受调用方另行声明——D5 评审 Minor-1 的冗余自由度在此收紧为零）。
+// 守卫顺序：未知槽位/非 idle 任务预算耗尽/每伙伴在途/inactive 伙伴/共享槽；
+// 任一失败都直接跳过（不取消、不排队、不重试）。成功则置在途标记，非 idle
+// 节点计入每任务预算并 spawn worker。terminal 标志由 node.Kind 派生（结构性
+// 事实，不接受调用方另行声明——D5 评审 Minor-1 的冗余自由度在此收紧为零）。
 //
 // 触发时机契约（D6 接线，companion_manager.go 的 dispatchDialogueNode 与
 // advanceFollowRunner）：任务进入 Running、被选中的计划步骤完成、持续跟随
@@ -65,7 +65,8 @@ func (m *companionManager) requestDialogue(id companion.ID, node companion.Dialo
 		slog.Error("台词派发找不到伙伴槽位", "companion", id)
 		return
 	}
-	if slot.dialogueRequests >= companion.MaxDialogueRequestsPerTask {
+	taskNode := node.Kind != companion.DialogueNodeIdle
+	if taskNode && slot.dialogueRequests >= companion.MaxDialogueRequestsPerTask {
 		// 每任务预算（本进程计数，不持久化——design.md 裁决）：结构上
 		// 1+≤6+1 封顶，计数只防御未来接线缺陷，不参与正常路径。
 		return
@@ -101,7 +102,9 @@ func (m *companionManager) requestDialogue(id companion.ID, node companion.Dialo
 		return
 	}
 	slot.dialogueInFlight = true
-	slot.dialogueRequests++
+	if taskNode {
+		slot.dialogueRequests++
+	}
 	m.waitGroup.Add(1)
 	go m.dialogueWorker(id, slot.queue.Generation(), node, slot.currentIssuer, request)
 }
