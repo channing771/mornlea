@@ -14,6 +14,6 @@
 
 ## 收尾（控制会话）
 
-- [ ] 3.1 `gofmt -l .` 无输出、`go vet ./...`、`go test ./internal/archcheck -count=1`。
-- [ ] 3.2 `openspec validate --all --strict --no-interactive`。
-- [ ] 3.3 整分支门禁 `GOFLAGS=-timeout=30m scripts/agents/gates.sh`。
+- [x] 3.1 `gofmt -l .` 无输出、`go vet ./...`、`go test ./internal/archcheck -count=1`。
+- [x] 3.2 `openspec validate --all --strict --no-interactive`。
+- [x] 3.3 整分支门禁 `GOFLAGS=-timeout=30m scripts/agents/gates.sh`。

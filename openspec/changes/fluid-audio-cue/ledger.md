@@ -15,6 +15,8 @@
 2. **race-changed.sh main 侧损坏**：origin/main `3db2f03e` 起脚本尾行把包列表当单参数传给 go test（malformed import path），影响全链任务闭环 race 覆盖；本分支手工跑其打印闭包等价通过，main 侧修复由控制会话另行处理。
 3. **音色不锁哈希**：splash PCM 刻意只做性质断言（design.md Decision 3 实现自由度），注释已自说明。
 
+4. **gates 首跑 server 包负载 flake**：`TestCompanionDialogueTerminalCoversFourTerminalStates/Stopped` 60s 等待超时（gates 日志 /tmp/opencode/gates-b32.log），与 B-05 合并 run 失败同款；本分支 diff 零触碰 server/companion 路径。按分诊协议单独重跑：该用例 2.3s 过、`go test ./internal/server -race -count=1` 整包 165s 过；gates 其余步骤首跑即绿。CI 为最终共享门禁。
+
 ## 任务记录
 
 - Task A（RED）：`d529e30a` 六性质测试 + 机械桩；SPEC PASS、QUALITY FAIL→修复 `6a78d6f8`（`audioPlayerState` 迁入 `app_test_helpers_test.go` 中心）→scoped 复核 ALL ADDRESSED。
