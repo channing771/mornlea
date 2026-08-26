@@ -17,7 +17,7 @@ function StatCards({ status }: { status: Status }) {
     { label: '开发中任务', value: count('开发中'), strong: true },
     { label: '已认领任务', value: count('已认领'), strong: false },
     { label: '待集成任务', value: count('待集成'), strong: false },
-    { label: '未认领任务', value: count('未认领'), strong: false },
+    { label: '就绪任务', value: count('就绪'), strong: false },
     { label: '打开 PR', value: prs, strong: false },
   ];
   return (

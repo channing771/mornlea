@@ -17,7 +17,7 @@
 
 1. 执行中 AI：`ps -axo pid=,ppid=,etime=,command=` 过滤 claude/codex/run-agent.sh/relay.sh/feishu-listener.js/pr-finalize.sh；工具/角色从 `run-agent <role>` 参数与 prompt 文件路径推断；cwd 用 lsof 并行尽力取。
 2. 接力链：`~/.mornlea/loop.guard*`（排除 `.bak`）；kill -0 存活探测；已知缺陷注记「pid 可能为会话临时 shell」。
-3. 任务状态：`docs/feature-backlog.md` 表行（6/7 列两种布局），状态归一为 未认领/已认领/开发中/待集成/已完成/其他；形似任务行但解析失败记 `errors[tasks]`。
+3. 任务状态：`docs/feature-backlog.md` 表行（6/7 列两种布局），状态归一为就绪/已认领/开发中/待集成/排队/设计候选/已完成/已取消/其他；`就绪` 以绿色表示可领取，排队与设计候选只展示、不调度；形似任务行但解析失败记 `errors[tasks]`。
 4. Worktree：`git worktree list --porcelain` + 每 worktree 并行（3s 超时）的最近提交/dirty 计数/领先 main 数。
 5. change 进度：每 worktree `openspec/changes/*/tasks.md` 勾选计数 + `ledger.md` 末条非空行（≤200 字符）。
 6. 待确认：`~/.mornlea/confirm/<id>.json`（含 `.round<N>` 归并）与 `<id>.reply.json`；等待时长与回复动作。

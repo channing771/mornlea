@@ -3,7 +3,7 @@ import { EmptyHint } from '@/components/EmptyHint';
 import type { BacklogTask, WorktreeStatus } from '@/api';
 
 // 分组展示顺序；不在枚举内的状态归入「其他」。
-const groupOrder = ['开发中', '已认领', '待集成', '未认领', '已完成', '其他'];
+const groupOrder = ['开发中', '已认领', '待集成', '就绪', '排队', '设计候选', '已完成', '已取消', '其他'];
 
 function findWorktree(worktrees: WorktreeStatus[], branch: string): WorktreeStatus | undefined {
   if (!branch) return undefined;
