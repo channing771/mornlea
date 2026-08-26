@@ -6,7 +6,7 @@
 |---|---|---|---|---:|---|
 | 1 | `ses_fc3afd2a2ffeq80iW8UIKYPasR` | approved | approved | 0 | complete |
 | 2 | `ses_fc39ce278ffew8TsrLujyjLcba` | approved | approved | 0 | complete |
-| 3 | pending | pending | pending | 0 | pending |
+| 3 | `ses_fc38ab39dffeZ3omLdaHb19SUl` | approved | approved | 1 | complete |
 | 4 | pending | pending | pending | 0 | pending |
 | 5 | control | pending | pending | 0 | pending |
 
@@ -17,6 +17,7 @@
 | B09-T1-R1 | 1 | Brief 中的原始 hash 命令同时散列 `go test` 的动态耗时汇总行，未改代码连续运行也会得到不同 hash | 保留原始命令结果，并另用排除 `ok` 汇总行的排序入口 hash 裁决测试集合；不改测试或生产代码迎合不稳定 hash | split 后原始 hash 连续为 `b11a78ad...`、`9b9138ce...`；稳定入口 hash 为 `dc4e65d...`，逐声明重构与 `HEAD:internal/sim/crop_test.go` 仅差文件头 import/空行 |
 | B09-T1-R2 | 1 | Reviewer 无法从 diff 验证 feature branch commit 是否获得授权 | 控制会话确认用户在 Task 1 派发前已显式授权 B-09 每任务 commit，授权不含 push/merge/PR；无需代码修复 | 对话授权选择“授权任务 commits”；commit `db2a6a7d` 只含 Task 1 文件 |
 | B09-T2-R1 | 2 | Reviewer 无法只从 commit diff 验证 RED 时序、命令输出与提交后 worktree 状态 | 接受 implementer 在 ignored SDD report 中保留的逐命令证据，并以控制会话观察到的 clean status 补足；无需重跑或修改代码 | `task-2-report.md` 第 76–223 行记录 RED/GREEN，控制会话在 `5fb868f8` 后运行 `git status --short --branch` 仅输出 branch header |
+| B09-T3-R1 | 3 | Required `TestFluid` 回归揭示 brief 文件表外的 `fluid_crop_test.go` 仍要求“耕地保持干态”，与同 tick 湿润契约冲突 | 接受只更新这两条直接冲突的集成断言；不扩大生产范围 | 首轮 reviewer 裁定该范围必要且聚焦；`go test ./internal/sim -run 'TestFluid' -race -count=1` 修复后通过 |
 
 ## Verification
 
@@ -90,7 +91,7 @@ Task 2 已通过独立规格评审与质量评审；实现没有提前进入 Tas
 - fresh engine 恢复与区块重入集成测试经完整 `Step` 驱动：逐 tick 断言湿度读取不超过 65,536；重入测试在半截 job 离开后断言游标清零，并以再次进入后的首 tick 游标恰为 65,536 证明从零重启。
 - 流体性能样本改为分别记录 `phaseFluidAdvance`→`phaseFarmlandMoistureAdvance` 与 moisture→`phaseCropAdvance`；`step` 总耗时、队列规模坐标、风险下界与 overflow/完整性守卫均未放宽。
 - `fluid_crop_test.go` 的旧随机延迟断言随 Task 3 的真实作物→流体 membership 写入更新为同 tick 湿润；未修改 Task 4 的 `crop.go` 随机 tick 逻辑或成本指标。
-- 协议、存档 schema、engine/client ABI、benchmark scenario 与 capture golden 均未修改；Task 3 规格评审和质量评审保持 pending。
+- 协议、存档 schema、engine/client ABI、benchmark scenario 与 capture golden 均未修改；Task 3 已在一轮测试证明修复后通过规格评审和质量评审。
 
 ## Task 3 RED Evidence
 
@@ -119,7 +120,7 @@ Task 2 已通过独立规格评审与质量评审；实现没有提前进入 Tas
 
 ## Task 3 Review Repair Round 1
 
-Task 3 规格评审与质量评审仍保持 pending；本轮只修复测试证明与注释，不修改生产行为，不勾选 `tasks.md`。
+本轮只修复测试证明与注释，不修改生产行为；复审已通过，不勾选 `tasks.md` 留待 change 收尾统一核对。
 
 | Finding | Disposition | Evidence / Repair |
 |---|---|---|
@@ -159,3 +160,4 @@ Task 3 规格评审与质量评审仍保持 pending；本轮只修复测试证�
 | `gofmt -l` on all repair Go files | pass | no output |
 | `git diff --check` | pass | no output |
 | `openspec validate --all --strict --no-interactive` | pass | `Totals: 66 passed, 0 failed (66 items)` |
+| Task 3 independent spec/quality re-review | approved | repair round 1 关闭 2 Important 与 2 Minor；无新增 finding |
