@@ -22,15 +22,37 @@
 
 ### 2. layout v3 段编码：定宽行记录
 
-**决定**：layout v3 段 = 段头（`layout=3` + flags[visible] + mode 名 + rows 计数）+ 每行定宽记录（`label[24]` + `value[24]` + flags[readonly/selected/editable/editing] + 值编辑原文[编辑时]+编辑光标）。标签/值各截断 24 字节；段按 4 字节对齐零填充，同 v1/v2。
+**决定**：layout v3 段 = 段头（layout=3 + flags[visible] + **结构化读数区** + mode 名 + rows 计数）+ 每行定宽记录（`label[24]` + `value[24]` + flags[readonly/selected/editable/editing] + 值编辑原文[编辑时]+编辑光标）。标签/值固定 24 字节、UTF-8 截断后零填充；段尾允许 ≤3 字节零填充（4 对齐）；段长度受 `MAX_UI_SEGMENT_BYTES=4096` 上界。字节级契约（小端，Task 1 解码器与 Task 2 编码器逐字节对应）：
 
-**理由**：定宽记录与现有 v1/v2 布局风格一致，解码器（Rust `decode_ui_frame`）可在迭代器中直接按偏移解析；行级 TLV 更灵活但无既有先例、解码路径更复杂。
+```
+u32 layout = 3
+u32 flags                         bit0=visible；未知位拒绝
+f64 frame_millis                  有限且 ≥0
+f32 position x/y/z               均有限
+f32 yaw, pitch（度）             均有限
+u64 tick
+u64 world_time
+u32 loaded_chunks
+string mode                       u32 长度 + UTF-8，≤64 字节、非空、单行
+u32 row_count                     ≤64
+每行记录:
+  label[24] value[24]             零填充定宽，首个 NUL 后必须全零，整体合法 UTF-8
+  u32 row flags                   bit0=readonly、bit1=selected、bit2=editable、
+                                  bit3=editing；未知位拒绝；editing→editable、
+                                  selected→!readonly 必须成立
+  [编辑态] string edit_value      u32 长度 + UTF-8，≤64 字节、单行
+             u32 edit_cursor      字节偏移，≤len 且落在字符边界
+```
 
-**被否方案**：行级 TLV——自描述但增加边界检查与解析路径，违背 v1/v2 既有编码惯例。
+**读数区归属**：顶部只读读数（帧时、位置、朝向、tick、时刻、区块数、模式）是结构化段头字段，Rust 侧用固定标签呈现（「模式」行的值即段头 `mode`）；`rows` 只装参数行（分组段头行 + `config.Fields()` 行），行数上限 64 只约束参数行——这是对 spec「行数截断：config.Fields() 多于 64 行仅前 64 行可见」的落实。
+
+**理由**：定宽记录与现有 v1/v2 布局风格一致，解码器（Rust `decode_ui_frame`）可在迭代器中直接按偏移解析；行级 TLV 更灵活但无既有先例、解码路径更复杂。读数区若放进 rows，Rust 无法确定哪些行是读数、哪些是参数，也就无法实现「顶部只读读数区 + 参数行列表」的两段式面板。
+
+**被否方案**：行级 TLV——自描述但增加边界检查与解析路径，违背 v1/v2 既有编码惯例；读数区以只读行塞进 rows——行边界无法结构性区分。
 
 ### 3. 编辑态存储：Go 拥有本地草稿
 
-**决定**：Go 侧仍然拥有面板状态（`panelState`），Rust 只呈现 layout v3 传来的每帧状态并回传动作。编辑中的文本留在 Rust 文本框；写入确认（Enter）时事件批带上新值字符串，Go `applyPanelChange` 校验并写回。Esc 取消时 Go 恢复原值。
+**决定**：Go 侧仍然拥有面板状态（`panelState`），Rust 只呈现 layout v3 传来的每帧状态并回传动作。编辑中的文本留在 Rust 文本框；写入确认（Enter）时事件批带上新值字符串，Go `applyPanelChange` 校验并写回。Esc 取消时 Go 恢复原值。编辑会话期 `edit_value`/`edit_cursor` 是下行播种值（进入编辑的初始文本与光标），Rust 草稿以段内值初始化后不再被下行覆盖，直至 Go 翻转 `editing` 结束会话。
 
 **理由**：面板值写回涉及 `config.Fields()` 的既有校验与本地 physics/sim tunables 更新——这些必须在 Go 侧（无权 Rust 侧），且避免 Rust 直接接触 Go 配置结构。D-01 设置页同构。
 
@@ -42,7 +64,7 @@
 
 ### 5. 不升 client ABI
 
-**决定**：client ABI 维持 v9；在 ln v9 内新增 `UI_DEBUG_LAYOUT_VERSION=3` 常量与解码分支，事件批沿用 v9 结构化格式。
+**决定**：client ABI 维持 v9；在 ln v9 内新增 `UI_DEBUG_LAYOUT_VERSION=3` 常量与解码分支，事件批沿用 v9 结构化格式。调试动作是新事件类型 `UI_EVENT_KIND_DEBUG_ACTION=3`，payload = `u32 action` + `u32 value_len` + UTF-8 value（仅 EDIT_VALUE/CONFIRM 携带值，其余空）；`action` 取 `DEBUG_PANEL_ACTION_*`（SELECT_NEXT=1、SELECT_PREV=2、ENTER_EDIT=3、EDIT_VALUE=4、CONFIRM=5、CANCEL=6、CLOSE=7），未知 action 与超界/多行 value 由队列拒绝（Invalid）。固定生成顺序：选中移动 → 进入编辑 → 编辑值 → 确认 → 取消 → 关闭（同帧多键按此排列）。
 
 **理由**：D-01 先在 v9 上加 layout v2 设置页未升 ABI；layout 是 UI 段内部字段，非 ABI 版本边界。升 ABI 则与其它功能行互斥且无必要。
 

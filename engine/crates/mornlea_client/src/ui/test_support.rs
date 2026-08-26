@@ -75,7 +75,7 @@ pub(super) fn four_button_frame() -> Vec<u8> {
 pub(super) fn menu_frame(frame: &UiFrame) -> &UiMenuFrame {
     match frame {
         UiFrame::Menu(menu) => menu,
-        UiFrame::Settings(_) => panic!("测试夹具应为主菜单"),
+        UiFrame::Settings(_) | UiFrame::Debug(_) => panic!("测试夹具应为主菜单"),
     }
 }
 
@@ -112,5 +112,21 @@ pub(super) fn click_ui(state: &mut UiState, frame: &UiFrame, screen: Rect, cente
         state
             .run_frame(raw_input(&events, screen, 1.0, None), frame, 1.0)
             .unwrap();
+    }
+}
+
+/// 扁平收集 FullOutput 里所有文本段(设置页与调试面板主题共用)。
+pub(super) fn shape_text(shape: &egui::Shape, out: &mut String) {
+    match shape {
+        egui::Shape::Text(text) => {
+            out.push_str(&text.galley.job.text);
+            out.push('\n');
+        }
+        egui::Shape::Vec(shapes) => {
+            for shape in shapes {
+                shape_text(shape, out);
+            }
+        }
+        _ => {}
     }
 }
