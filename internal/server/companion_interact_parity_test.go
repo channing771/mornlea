@@ -112,13 +112,14 @@ func TestCanonicalInteractionTranscriptIgnoresCrossRecipientInterleaving(t *test
 	}
 }
 
-// newInteractionParityHost 构造多人指挥 parity 用的 Host：存档预置一条与配置
-// ID 匹配的伙伴身体记录（确定性出生位置与石镐背包——mine 阶段的工具事实），
-// 心跳置为一小时以避免长推进窗口内的保活噪声。
+// newInteractionParityHost 构造 parity 用的 Host：存档预置一条与配置 ID 匹配
+// 的伙伴身体记录（确定性出生位置与调用方指定的背包——mine 阶段的工具/容量
+// 事实由各 parity 场景自定），心跳置为一小时以避免长推进窗口内的保活噪声。
 func newInteractionParityHost(
 	t *testing.T,
 	id companion.ID,
 	model *fakeCompanionModel,
+	inventory core.Inventory,
 ) *Host {
 	t.Helper()
 	store := newHostTestStore()
@@ -126,7 +127,7 @@ func newInteractionParityHost(
 		ID:        id,
 		Dimension: core.Overworld,
 		Position:  interactionCompanionPosition,
-		Inventory: pickaxeInventory(),
+		Inventory: inventory,
 	}
 	if err := store.MemoryStore.SaveCompanions(
 		context.Background(), storage.CompanionSave{Revision: 1, Records: []companion.Body{seed}},
@@ -189,7 +190,7 @@ func runCompanionInteractionParity(t *testing.T, transport string) interactionPa
 	t.Helper()
 	id := chatTestCompanionID(1)
 	model := newFakeCompanionModel(t)
-	host := newInteractionParityHost(t, id, model)
+	host := newInteractionParityHost(t, id, model, pickaxeInventory())
 	// 台词平面在本 parity 场景保持静默：为 dialogue 客户端接入持续 5xx 的
 	// 独立假台词模型。规划与台词共用 endpoint 配置，若不分离，台词请求会
 	// 消耗假模型的逐请求计划脚本并污染 ModelRequests 计数；而成功台词的

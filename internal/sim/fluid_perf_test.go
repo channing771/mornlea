@@ -10,7 +10,7 @@ import (
 )
 
 // 本文件是变更 fluid-presentation-survival 任务组 10「流动前沿性能复测」的测量
-// 夹具。`fluidEnabled` 默认翻为 true 之后，流体从实验特性变成所有玩家都会跑到的
+// 夹具。顶层配置键 fluidEnabled 默认翻为 true 之后，流体从实验特性变成所有玩家都会跑到的
 // 代码路径，因此需要在真实权威 tick 上复测流动前沿的单 tick 成本。
 //
 // 三条纪律，改动本文件时必须保持：

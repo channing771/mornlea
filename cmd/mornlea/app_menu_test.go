@@ -10,6 +10,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"sync/atomic"
 	"testing"
@@ -125,7 +126,7 @@ func TestStartAtMenuConstructsMenuWithoutWorld(t *testing.T) {
 	wantButtons := []client.UIButton{
 		{ID: menuActionStart, Label: "进入游戏", Enabled: true},
 		{ID: menuActionMultiplayer, Label: "多人游戏", Enabled: false},
-		{ID: menuActionSettings, Label: "设置", Enabled: false},
+		{ID: menuActionSettings, Label: "设置", Enabled: true},
 		{ID: menuActionQuit, Label: "退出游戏", Enabled: true},
 	}
 	if !reflect.DeepEqual(menu.Buttons, wantButtons) {
@@ -134,6 +135,45 @@ func TestStartAtMenuConstructsMenuWithoutWorld(t *testing.T) {
 
 	if segment := app.uiSegment(); len(segment) == 0 {
 		t.Fatal("菜单相位 uiSegment() 应产出非空 UI 段")
+	}
+}
+
+// TestHandleMenuUIEventRoutesAction 锁定 client ABI v9 action 仍路由到既有
+// `handleMenuEvent`，而不是把 typed event 本身当按钮 id。
+func TestHandleMenuUIEventRoutesAction(t *testing.T) {
+	app := &application{menu: menuState{phase: menuPhaseMenu}}
+	quit, disposition := app.handleMenuUIEvent(client.UIEvent{
+		Kind:     client.UIEventAction,
+		ActionID: menuActionQuit,
+	})
+	if !quit || disposition != menuUIEventHandled {
+		t.Fatalf("quit=%v disposition=%v", quit, disposition)
+	}
+}
+
+// TestHandleMenuUIEventIgnoresNonActionOutsideSettings 锁定错相位 settings change
+// 与未知 kind 都被忽略；即使伪造退出 `ActionID` 也不得误路由或改变菜单状态。
+func TestHandleMenuUIEventIgnoresNonActionOutsideSettings(t *testing.T) {
+	app := &application{menu: menuState{phase: menuPhaseMenu, error: "保留"}}
+	quit, disposition := app.handleMenuUIEvent(client.UIEvent{
+		Kind:     client.UIEventSettingsChanged,
+		ActionID: menuActionQuit,
+		Settings: client.UISettingsValues{
+			AudioVolume:     0.25,
+			Window:          client.UISettingsWindow960x540,
+			TexturePackPath: "packs/local",
+		},
+	})
+	if quit || disposition != menuUIEventIgnored {
+		t.Fatalf("settings quit=%v disposition=%v", quit, disposition)
+	}
+	if app.menu.phase != menuPhaseMenu || app.menu.error != "保留" {
+		t.Fatalf("settings change 修改了菜单: %+v", app.menu)
+	}
+
+	quit, disposition = app.handleMenuUIEvent(client.UIEvent{Kind: client.UIEventKind(99), ActionID: menuActionQuit})
+	if quit || disposition != menuUIEventIgnored {
+		t.Fatalf("unknown quit=%v disposition=%v", quit, disposition)
 	}
 }
 
@@ -294,7 +334,7 @@ func TestHandleMenuEventQuitRequestsClose(t *testing.T) {
 // TestHandleMenuEventUnknownIDIgnored 验证未知/禁用按钮 id 被忽略，不改变菜单状态。
 func TestHandleMenuEventUnknownIDIgnored(t *testing.T) {
 	app := newStartWorldTestApp(t, startWorldSuccessDeps(t))
-	for _, id := range []uint32{menuActionMultiplayer, menuActionSettings, 99} {
+	for _, id := range []uint32{menuActionMultiplayer, 99} {
 		if quit := app.handleMenuEvent(id); quit {
 			t.Fatalf("禁用/未知 id %d 不应请求退出", id)
 		}
@@ -338,34 +378,39 @@ func (window *menuInputSpyWindow) SetCursorCaptured(bool)      { window.cursorCa
 func (window *menuInputSpyWindow) FramebufferSize() (int, int) { return 64, 64 }
 func (window *menuInputSpyWindow) ContentSize() (int, int)     { return 64, 64 }
 
-// TestMenuPhaseInputIsolation 验证菜单相位不读取游戏输入（WASD/点击/文本）、不捕获光标，
-// 从而规格「菜单期间游戏输入不生效」。用真实离屏渲染器跑一帧菜单循环。
+// TestMenuPhaseInputIsolation 验证主菜单与设置页都不读取游戏输入
+// （WASD/点击/文本）、不捕获光标。用真实离屏渲染器各跑一帧菜单循环。
 func TestMenuPhaseInputIsolation(t *testing.T) {
-	renderer := requireMenuTestRenderer(t)
-	t.Cleanup(func() { renderer.Close() })
+	for _, phase := range []menuPhase{menuPhaseMenu, menuPhaseSettings} {
+		t.Run(fmt.Sprintf("phase-%d", phase), func(t *testing.T) {
+			renderer := requireMenuTestRenderer(t)
+			t.Cleanup(func() { renderer.Close() })
 
-	spy := &menuInputSpyWindow{}
-	options := applicationOptions{
-		Seed: 42, WorldPath: t.TempDir(), Identity: func() *network.Identity {
-			id := connectionTestIdentity()
-			return &id
-		}(),
-		Render: config.Defaults().Render, StartAtMenu: true,
-	}
-	app, err := newApplicationWithDependencies(options, newMenuWindowedTestDepsWithWindow(t, renderer, spy))
-	if err != nil {
-		t.Fatalf("newApplicationWithDependencies: %v", err)
-	}
-	t.Cleanup(func() { _ = app.Close() })
+			spy := &menuInputSpyWindow{}
+			options := applicationOptions{
+				Seed: 42, WorldPath: t.TempDir(), Identity: func() *network.Identity {
+					id := connectionTestIdentity()
+					return &id
+				}(),
+				Render: config.Defaults().Render, StartAtMenu: true,
+			}
+			app, err := newApplicationWithDependencies(options, newMenuWindowedTestDepsWithWindow(t, renderer, spy))
+			if err != nil {
+				t.Fatalf("newApplicationWithDependencies: %v", err)
+			}
+			t.Cleanup(func() { _ = app.Close() })
+			app.menu.phase = phase
 
-	if err := runInteractive(app); err != nil {
-		t.Fatalf("runInteractive 菜单相位: %v", err)
-	}
-	if got := spy.gameKeyQueries.Load(); got != 0 {
-		t.Fatalf("菜单相位不应读取游戏输入键/按钮/文本，查询 = %d", got)
-	}
-	if got := spy.cursorCaptureCalls.Load(); got != 0 {
-		t.Fatalf("菜单相位（未点击进入游戏）不应捕获光标，捕获 = %d", got)
+			if err := runInteractive(app); err != nil {
+				t.Fatalf("runInteractive 菜单相位: %v", err)
+			}
+			if got := spy.gameKeyQueries.Load(); got != 0 {
+				t.Fatalf("菜单相位不应读取游戏输入键/按钮/文本，查询 = %d", got)
+			}
+			if got := spy.cursorCaptureCalls.Load(); got != 0 {
+				t.Fatalf("菜单相位（未点击进入游戏）不应捕获光标，捕获 = %d", got)
+			}
+		})
 	}
 }
 

@@ -18,15 +18,19 @@ type menuPhase int
 const (
 	menuPhaseGame     menuPhase = iota // 世界已装配，游戏相位（默认）
 	menuPhaseMenu                      // 主菜单可见，等待「进入游戏」
+	menuPhaseSettings                  // 设置页可见，世界仍未装配
 	menuPhaseStarting                  // 世界装配进行中（同步，防重入标记）
 )
 
 // 主菜单按钮 id 常量：与 client.UIButton.ID 及 Rust 侧回传的菜单点击事件一一对应。
 const (
-	menuActionStart       uint32 = 1 // 进入游戏
-	menuActionMultiplayer uint32 = 2 // 多人游戏（本版本禁用）
-	menuActionSettings    uint32 = 3 // 设置（本版本禁用）
-	menuActionQuit        uint32 = 4 // 退出游戏
+	menuActionStart          uint32 = 1 // 进入游戏
+	menuActionMultiplayer    uint32 = 2 // 多人游戏（本版本禁用）
+	menuActionSettings       uint32 = 3 // 设置
+	menuActionQuit           uint32 = 4 // 退出游戏
+	menuActionSettingsSave   uint32 = 5 // 保存设置
+	menuActionSettingsCancel uint32 = 6 // 取消更改
+	menuActionSettingsBack   uint32 = 7 // 返回或 Escape
 )
 
 // menuState 是主菜单的语义状态。Go 侧（cmd/mornlea，package main）拥有全部菜单
@@ -59,13 +63,13 @@ func menuVersion() string {
 	return "dev"
 }
 
-// menuButtons 返回主菜单的按钮表：进入游戏与退出游戏可用，多人游戏与设置禁用
-// （本版本尚未实现，禁用态由 Rust 侧呈现为灰色且不产生点击事件）。
+// menuButtons 返回主菜单的按钮表：进入游戏、设置与退出游戏可用，多人游戏
+// 继续禁用（禁用态由 Rust 侧呈现为灰色且不产生点击事件）。
 func menuButtons() []client.UIButton {
 	return []client.UIButton{
 		{ID: menuActionStart, Label: "进入游戏", Enabled: true},
 		{ID: menuActionMultiplayer, Label: "多人游戏", Enabled: false},
-		{ID: menuActionSettings, Label: "设置", Enabled: false},
+		{ID: menuActionSettings, Label: "设置", Enabled: true},
 		{ID: menuActionQuit, Label: "退出游戏", Enabled: true},
 	}
 }
@@ -83,24 +87,53 @@ func (menu menuState) uiMenu() client.UIMenu {
 
 // uiSegment 返回本帧渲染帧的 egui 主菜单段字节（client.EncodeUIMenu 产物）。
 //
-// menuOverride 非空时（capture 场景用）优先采用；否则交互相位在菜单可见
-// （phase != game）时用 menu 状态生成；游戏相位返回 nil，契约上不携带 UI 段。
+// menuOverride 非空时（capture 场景用）优先采用；否则主菜单与设置页分别
+// 编码 layout v1/v2；游戏相位返回 nil，契约上不携带 UI 段。
 func (a *application) uiSegment() []byte {
 	if a.menuOverride != nil {
 		return client.EncodeUIMenu(*a.menuOverride)
 	}
-	if a.menu.phase != menuPhaseGame {
+	switch a.menu.phase {
+	case menuPhaseSettings:
+		return client.EncodeUISettings(a.settings.uiSettings())
+	case menuPhaseMenu, menuPhaseStarting:
 		return client.EncodeUIMenu(a.menu.uiMenu())
+	default:
+		return nil
 	}
-	return nil
 }
 
 // handleMenuEvent 处理一个菜单点击事件 id，返回 true 表示请求关闭客户端（退出游戏）。
 //
 // start：置 starting 防重入后调用 startWorld；成功时相位由 startWorld 置为
 // menuPhaseGame，失败时回退到菜单相位并记录错误文本。quit：返回 true 让交互循环
-// 正常退出。其余 id（多人/设置等禁用按钮或未知 id）忽略，不改变菜单状态。
+// 正常退出。设置相位只接受 save/cancel/back，其他错相位或未知 id 均忽略。
 func (a *application) handleMenuEvent(id uint32) (quit bool) {
+	if a.menu.phase == menuPhaseSettings {
+		switch id {
+		case menuActionSettingsSave:
+			if err := a.saveSettings(); err != nil {
+				a.reportSettingsError(err)
+			}
+		case menuActionSettingsCancel:
+			a.settings.draft = a.settings.committed
+			a.settings.status = ""
+			a.settings.error = ""
+		case menuActionSettingsBack:
+			if a.settings.dirty() {
+				a.settings.status = boundedSettingsMessage("请先保存或取消更改")
+				a.settings.error = ""
+			} else {
+				a.settings.status = ""
+				a.settings.error = ""
+				a.menu.phase = menuPhaseMenu
+			}
+		}
+		return false
+	}
+	if a.menu.phase == menuPhaseGame {
+		return false
+	}
 	switch id {
 	case menuActionStart:
 		if a.menu.starting {
@@ -122,7 +155,20 @@ func (a *application) handleMenuEvent(id uint32) (quit bool) {
 			_, _ = a.window.CursorPos()
 		}
 		return false
+	case menuActionSettings:
+		if a.menu.phase != menuPhaseMenu {
+			return false
+		}
+		a.settings.draft = a.settings.committed
+		a.settings.status = ""
+		a.settings.error = ""
+		a.menu.error = ""
+		a.menu.phase = menuPhaseSettings
+		return false
 	case menuActionQuit:
+		if a.menu.phase != menuPhaseMenu {
+			return false
+		}
 		return true
 	default:
 		return false
