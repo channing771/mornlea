@@ -15,11 +15,13 @@ use crate::worldgen::{
     parse_chunk_input, parse_probe_input, run_probe,
 };
 
-/// engine ABI v6:v5(mesh registry 扩容,fluid 系列)之上新增
-/// `mornlea_lod_shell` 远环壳出口;既有入口签名与语义不变。变基重编:该
-/// 出口在旧基线上原编号 v4,main 的 fluid 系列已占用 v4/v5,故顺延为 v6,
-/// Go 侧版本断言由 rust-engine-lod-shell 2.2 同步。
-pub(crate) const ABI_VERSION: u32 = 6;
+/// engine ABI v7:v6(`mornlea_lod_shell` 远环壳出口)之上把 mesh `MGM1` 输入的
+/// 单条 registry 条目从 18 字节扩到 19 字节——末尾追加 `block_top_raw`(4-bit
+/// 顶面高度原值,0 为满格哨兵,与 fluid_height 互斥),承载耕地等非满格方块的
+/// 常量角高度几何。既有入口签名与语义不变;旧 dylib 与新二进制混装被版本
+/// 握手拒绝(二者本就是同一不可跨版本混装的 release unit)。v5 与 v4 已被
+/// mesh registry 扩容(fluid 系列)与 worldgen 注水占用。
+pub(crate) const ABI_VERSION: u32 = 7;
 
 // 输入长度校验委托给 step::step_input_is_valid（内部使用 STEP_HEADER_BYTES），此常量保留供 ABI 文档对齐。
 #[allow(dead_code)]
@@ -945,14 +947,16 @@ mod mesh_tests {
     use super::*;
 
     #[test]
-    fn exported_version_is_six() {
-        // engine ABI v6:v5(mesh registry 扩容,fluid 系列)之上新增 mornlea_lod_shell
-        // 远环壳出口;变基重编详见 ABI_VERSION 的 doc comment。mesh registry 条目
-        // 上限不在 engine ABI 版本契约内:Go/Rust 两侧数值是否一致由容量同步测试
-        // TestNativeAcceptsRegistryAtGoCapacity 守护,跨版本混装由 release unit 纪律
-        // 兜底,上限变化不需要跟着升本版本号。历史记录(仅记账,不代表升级触发条件):
-        // v5 时 27 → 35(流体进入 registry 快照),后续变更 35 → 48。
-        assert_eq!(mornlea_engine_abi_version(), 6);
+    fn exported_version_is_seven() {
+        // engine ABI v7:v6(lod_shell 出口)之上把 mesh registry 条目从 18 字节
+        // 扩到 19 字节(末尾追加 block_top_raw,承载耕地等非满格方块的常量角
+        // 高度几何),详见 ABI_VERSION 的 doc comment。mesh registry 条目上限
+        // 不在 engine ABI 版本契约内:Go/Rust 两侧数值是否一致由容量同步测试
+        // TestNativeAcceptsRegistryAtGoCapacity 守护,跨版本混装由 release unit
+        // 纪律兜底,上限变化不需要跟着升版本号。历史记录(仅记账,不代表升级
+        // 触发条件):v5 时 27 → 35(流体进入 registry 快照)且条目 16 → 18 字节,
+        // 后续变更 35 → 48、18 → 19 字节(v7)。
+        assert_eq!(mornlea_engine_abi_version(), 7);
     }
 }
 #[cfg(test)]

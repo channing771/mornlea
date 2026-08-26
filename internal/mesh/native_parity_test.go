@@ -313,3 +313,78 @@ func TestNativeOracleParityWaterSurface(t *testing.T) {
 		t.Fatal("没有任何带角高度的水面顶面：斜面几何整体缺失")
 	}
 }
+
+// TestNativeOracleParityFarmlandTopSink 覆盖非满格短方块（registry
+// block_top_raw 非零）的跨语言一致性：干/湿耕地填 14，呈现高度 15/16 与
+// 物理碰撞体一致。
+//
+// 夹具放三组几何：两块孤立耕地（干、湿各一）钉「顶面四角 + 侧面上缘 +
+// 底面不动」，一对水平相邻同材质耕地钉「不贪心合并」。与水面 parity 相同，
+// 一致性断言守的是端到端编码事实（第 19 字节过 ABI、常量角赋值两侧逐位
+// 相同），真正的行为由末尾的形状守卫承重——若 Rust 侧丢了 block_top_raw
+// 或走了错误的角高度规则，这里会读到零角或错位角。
+func TestNativeOracleParityFarmlandTopSink(t *testing.T) {
+	registry := assets.NewRegistry()
+	center := world.NewSection()
+	center.Blocks.Set(8, 8, 8, core.FarmlandDryID)
+	center.Blocks.Set(11, 8, 11, core.FarmlandWetID)
+	// 相邻对：共享侧面因耕地不透明而不出面，其余面照常。
+	center.Blocks.Set(4, 8, 4, core.FarmlandDryID)
+	center.Blocks.Set(5, 8, 4, core.FarmlandDryID)
+	n := solidNeighbors(center)
+
+	quads := assertNativeOracleParity(t, n, registry)
+
+	// 四格耕地的顶面都必须存在、按 1×1 出面、四角恒为生产值 14。
+	const farmlandRaw = 14
+	tops := 0
+	for _, quad := range quads {
+		isFarmlandTop := quad.Face == mesh.FacePosY &&
+			quad.Corners == [4]uint8{farmlandRaw, farmlandRaw, farmlandRaw, farmlandRaw}
+		if !isFarmlandTop {
+			continue
+		}
+		tops++
+		if quad.W != 1 || quad.H != 1 {
+			t.Fatalf("耕地顶面 %+v 被贪心合并成 %dx%d", quad, quad.W, quad.H)
+		}
+	}
+	if tops != 4 {
+		t.Fatalf("带常量角高度的耕地顶面 = %d 条，想要 4（干、湿与相邻两格各一）", tops)
+	}
+
+	// 孤立干耕地的侧面上缘两角下沉、底面保持整格：与碰撞盒逐面一致。
+	for _, tc := range []struct {
+		face mesh.Face
+		want [4]uint8
+	}{
+		{mesh.FaceNegX, [4]uint8{0, farmlandRaw, farmlandRaw, 0}},
+		{mesh.FaceNegZ, [4]uint8{0, 0, farmlandRaw, farmlandRaw}},
+		{mesh.FaceNegY, [4]uint8{}},
+	} {
+		found := false
+		for _, quad := range quads {
+			if quad.Face == tc.face && quad.X == 8 && quad.Y == 8 && quad.Z == 8 {
+				found = true
+				if quad.Corners != tc.want {
+					t.Fatalf("耕地 %v 面 corners=%v，想要 %v", tc.face, quad.Corners, tc.want)
+				}
+			}
+		}
+		if !found {
+			t.Fatalf("孤立耕地缺少 %v 面", tc.face)
+		}
+	}
+
+	// 防空转守卫：若整段输出里根本没有非零角高度的 quad，上面的顶面断言
+	// 就是恒真的空转（例如 block_top_raw 在编码层整体丢失时）。
+	cornered := 0
+	for _, quad := range quads {
+		if quad.Corners != ([4]uint8{}) {
+			cornered++
+		}
+	}
+	if cornered == 0 {
+		t.Fatal("没有任何携带角高度的 quad：block_top_raw 通道整体缺失")
+	}
+}

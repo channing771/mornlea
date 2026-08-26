@@ -1,6 +1,26 @@
 //! WGSL 内嵌:R2c 起 shader 归属本 crate(`shaders/` 目录),Rust 渲染器
 //! 是唯一消费方。路径失效或文件清空由本模块单测(非空且含入口点)兜底。
 
+/// 耕地材质层的闭区间:`material ∈ [FIRST, LAST]` 的 quad 携带角高度
+/// (registry `block_top_raw` 非零的短方块,当前即干/湿耕地),terrain.wgsl
+/// 据此把 bit 12..19/55..62 解码成顶点抬升而不是 `w/h` 尺寸。
+///
+/// 判别为什么走 material 区间:quad 布局只剩 bit 63 一个空闲位且被
+/// `voxel-visual-presentation` 钉死必须留空,「是不是短方块」占不到任何位;
+/// 植物(区间 31..38)已借走 face 6/7 当交叉斜面判别。耕地是轴向面(face
+/// 0..5),与植物按 face 天然互斥,material 区间是唯一不冲突的判别通道。
+///
+/// 数值的真值源是 Go 侧 `internal/assets` 的层枚举 `LayerFarmlandDry`/
+/// `LayerFarmlandWet`(iota,当前 29/30)。三处没有共享定义也没有生成步骤,
+/// 只能人手同步——Go 枚举、本常量、terrain.wgsl 里 `farmland_material` 的
+/// 硬编码字面量。Go 侧钉子是 internal/assets 的
+/// `TestFarmlandLayerNumbersMatchClientShaderContract`,本 crate 由
+/// render/farmland_tests.rs 把常量与 shader 字面量一起钉住。在 Go 层枚举的
+/// 耕地**之前**插层会整体平移这段区间,那两处守卫就是仅有的报警点。
+pub const FARMLAND_MATERIAL_FIRST: u16 = 29;
+/// 耕地材质层闭区间的上界(湿耕地),见 [`FARMLAND_MATERIAL_FIRST`]。
+pub const FARMLAND_MATERIAL_LAST: u16 = 30;
+
 /// 地形 pass(实例化紧凑 quad)。
 pub const TERRAIN: &str = include_str!("../../shaders/terrain.wgsl");
 /// 水面 pass(半透明,与 terrain 共享 atlas 与世界坐标 UV)。
