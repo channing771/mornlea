@@ -92,16 +92,16 @@ scripts/agents/install-launchd.sh planner
 ```bash
 # 主链（默认 claude，full-permission 模式；AGENT_SAFE=1 可回受限模式）
 AGENT_LOOP=1 make agent-implementer
-# 任意多条并行链：WORKER_ID 唯一即可（守卫 = ~/.mornlea/loop.guard.<WORKER_ID>）
+# 仅无版本影响且文件集合确实不交叠时开并行链；WORKER_ID 必须唯一
 WORKER_ID=codex AGENT_TOOL=codex AGENT_LOOP=1 make agent-implementer
 WORKER_ID=codex2 AGENT_TOOL=codex AGENT_LOOP=1 make agent-implementer   # 第三/四条同理
 # 其他 CLI 工具（如 zcode/glm-cli）接入：run-agent.sh 加 TOOL 分支后
 #   AGENT_TOOL=zcode WORKER_ID=zcode AGENT_LOOP=1 … 同样开链；飞书确认与 relay 自动继承
 ```
 
-继电器行为：`relay.sh` 用原子锁 + `~/.mornlea/loop.guard[.$WORKER_ID]` 防止同链并发；下一棒以 **setsid 独立会话**拉起（脱离宿主 agent 会话进程组，收尾退出不会连带杀它）；实现者收尾时自动接力下一行，无「未认领」任务自动终结。**守卫由 `run-agent.sh` 统一以真实会话 pid 登记**（启动/接力/续跑都会检查存活 pid，防同一链双开）；链身份（WORKER_ID + AGENT_TOOL）经 relay 与 listener 续跑自动继承。
+继电器行为：`relay.sh` 用原子锁 + `~/.mornlea/loop.guard[.$WORKER_ID]` 防止同链并发；下一棒以 **setsid 独立会话**拉起（脱离宿主 agent 会话进程组，收尾退出不会连带杀它）；实现者收尾时自动接力下一行，无「就绪」任务自动终结。**守卫由 `run-agent.sh` 统一以真实会话 pid 登记**（启动/接力/续跑都会检查存活 pid，防同一链双开）；链身份（WORKER_ID + AGENT_TOOL）经 relay 与 listener 续跑自动继承。
 
-> ⚠️ **claude 账号有用量上限**：会话撞限时以 `session limit` 提示退出（exit 1）——等 reset 时间后用 `AGENT_RESUME=<该行最近确认请求ID> … run-agent.sh implementer` 续跑**同一行**（详见 `docs/agents/implementer.md` 故障恢复）。建议 codex 作主力多链，claude 只留 1 条。
+> ⚠️ **claude 账号有用量上限**：会话撞限时以 `session limit` 提示退出（exit 1）——等 reset 时间后用 `AGENT_RESUME=<该行最近确认请求ID> … run-agent.sh implementer` 续跑**同一行**（详见 `docs/agents/implementer.md` 故障恢复）。符合并行条件时建议 codex 作主力多链，claude 只留 1 条。
 
 ## 4. Linux 落地差异
 
