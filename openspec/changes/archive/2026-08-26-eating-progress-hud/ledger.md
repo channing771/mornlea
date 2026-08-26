@@ -27,3 +27,4 @@
 - **整分支终审：PASS（0 MUST-FIX，1 NIT——delta 半角标点）**——独立终审者复跑 client/hud/cmd-Eating/archcheck/validate 全绿；八 commit 叙事自洽、冻结集外零改动、三点位未越裁决边界、无头零影响为结构不变式（headless window nil → 输入位恒假）、容量常量断言零改动、协议/存档/ABI/scenario/golden 零变更属实、主规格 ADDED 落位无冲突。
 - NIT 采纳：delta 正文逗号/分号归一为主规格的全角风格（`Scenario:` 标题半角冒号保留）后归档；`survival-hud-presentation` 主规格 +1 requirement。
 - 基线同步：`AGENTS.md`/`CLAUDE.md` 两处插入句（survival HUD 段能力主描述 + authoritative-hunger 段遗留清偿指回）；`docs/notes/progress.md` 追加 B-14 段落。
+- **合并证据（finalize）**：PR #89 以 merge `bb65a28e` 合入 `main`，CI 8/8 全绿（native-macos / linux-server / quality / go-race 三分片 / integration / test）。期间 main 侧合入 B-13/D-01/E-04/C-01 四行，分支以 `git merge origin/main` 一次性解冲突（AGENTS/CLAUDE/progress 取 main 版重放本 change 插入、backlog 取 main 版、Rust 动态库重建后全绿）；`pr-finalize.sh` 守护在早期 CONFLICTING 阶段误停，全绿后由控制会话直接合并。backlog B-14 → 已完成、progress B-14 段落补 PR 证据句随本 finalize 提交。
