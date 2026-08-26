@@ -32,3 +32,12 @@
   - 五条 deferred minors triage：①rules.go 注释枚举失真→本波次修复（见 T1）；②`internal/fluid/helpers_test.go:218` Fatalf 消息未同步作物例外前提→文件在 fluid 独占域（本波次仅豁免 rules.go 一处注释），deferred 随 fluid 包后续维护上报；③组2 报告跨文件标识符清单漏报 ClearDrop/WheatStage3ID→纯报告完整性瑕疵、无代码影响，关闭；④server parity 用例单跑压 -short 档线→随重型测试管理统一处置，deferred；⑤容量重试用例断言队列非空而非目标格精确排程→由收敛性质兜底，接受现状。
   - M-3/M-4：ledger 回填（本节）、tasks.md 复选框全数核对勾选（4.2 注记满负载 flake 处置）。
 - 终审波次验证：`go build ./...` 通过；`go test ./internal/fluid ./internal/sim -race -count=1` 全绿；`go test ./internal/server -race -run 'Parity|FluidCrop' -count=1` 全绿；`gofmt -l .` 无输出；`go vet ./...` 通过；`openspec validate --all --strict --no-interactive` 通过。rebase 触及 cmd/mornlea 两个 golden PNG（hud-hotbar-health / hud-survival-feedback，来自主线侧），按要求补跑 `go test ./cmd/mornlea -race -run 'Capture|Golden' -count=1 -timeout 20m` 通过（摘要见 task-final-fix-report）。
+
+### 终审修复波次（2026-08-26，分支变基到当时 main 尖端 e57dc60c 后）
+
+- 变基后终审发现主线 B-10/B-05 已落地：`Ruling: 冲毁产量接入包内共享 cropYieldRolls（与 trample 同形），弃固定 1+2 镜像 — 消除「双点镜像靠注释维系」的漂移风险，spec「同表」语义由共享哈希流结构性保证 — 若维持固定表则与采掘逐件不一致且编译失败`
+- `Ruling: parity 双宿主就绪差导致绝对 tick 错位 → 开录前空转至共同绝对 tick 256（超限显式 Fatal）— 对齐不放宽，DeepEqual 严格性保留 — 若放宽断言则掩盖真实传输分歧`
+- 修复波次 e52927c5（I-1/M-1/T1）+ 8d0234f8（M-3/M-4）；scoped 复审五条全 ADDRESSED
+- `Ruling: 复审新发现两条记录完整性 Important（基线哈希不实、死哈希混用）→ 678e627c 更正为变基后可达值并加注记 — ledger 是唯一跨会话记录，死哈希在干净克隆不可解析 — 不修则归档历史固化失真`
+- 复审轮 2 通过；deferred minors triage：T1 已顺手修、②④ 维持 deferred 待归属方、③⑤ 拒绝升级
+- 门禁：gofmt/vet/archcheck/OpenSpec strict/make rust 全 PASS；全量 -race 除 cmd/mornlea GPU 场景满负载超时外全绿，该包 focused 111s 与整包 812s 单独复跑均过——按分诊协议判定为负载 flake 非回归
