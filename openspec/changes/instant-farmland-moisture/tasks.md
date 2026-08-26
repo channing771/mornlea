@@ -6,7 +6,7 @@
 
 ## 2. 有界候选队列与恢复重扫
 
-- [ ] 2.1 在 `internal/sim/farmland_moisture_queue_test.go` 先写失败测试，覆盖反向 `9×9×2` 枚举的 `y,z,x` 顺序、世界 Y 边界、FIFO 去重、消费压紧和离开 active Ready scope 后丢弃；运行 `go test ./internal/sim -run 'TestFarmlandMoisture(ReverseWindow|Queue)' -count=1` 验证失败。
+- [ ] 2.1 在 `internal/sim/farmland_moisture_queue_test.go` 先写失败测试，覆盖反向 `9×9×2` 枚举的 `y,z,x` 顺序、世界 Y 边界、FIFO 去重、消费 rebase、离开 active Ready scope 后丢弃，并以 surviving element 地址不变证明 rebase 没有复制后缀；临时恢复旧 copy 实现证明测试失败后还原，运行 `go test ./internal/sim -run 'TestFarmlandMoisture(ReverseWindow|Queue)' -count=1`。
 - [ ] 2.2 在 `internal/sim/farmland_moisture.go` 与 `engine.go` 实现 `farmlandMoistureState`、独立固定的 `65,536` 候选检查与 `65,536` 方块读取预算、候选入队/处理和聚合状态字段；消费前缀达到既有阈值时做 O(1) slice rebase，排空复位，不复制剩余后缀；运行上一步定点测试至通过。
 - [ ] 2.3 在 `internal/sim/farmland_moisture_budget_test.go` 先写失败测试，覆盖目标读取、162 次最坏邻域查询、余额不足保留队首、超过 `65,536` 个范围外候选按检查预算顺延且不计方块读取、单 tick 两项预算均不越界、大于预算的待办最终排空及相同输入逐 tick 结果一致；实现最小处理逻辑并运行 `go test ./internal/sim -run 'TestFarmlandMoisture(Budget|Inspection|Determin)' -race -count=1`。
 - [ ] 2.4 在 `internal/sim/farmland_moisture_rescan_test.go` 先写失败测试，覆盖完整高度 `24×24` halo 的 `y,z,x` 游标、事件优先、跨 tick 续扫、离开 scope 丢弃、重新进入从头扫描以及重扫候选只接受 active Ready 耕地；实现独立重扫状态并运行 `go test ./internal/sim -run 'TestFarmlandMoistureRescan' -race -count=1`。
@@ -14,7 +14,7 @@
 ## 3. 生产触发点与 tick 阶段
 
 - [ ] 3.1 在 `internal/sim/farmland_moisture_integration_test.go` 先写失败测试，通过真实 `fluidWorld.SetBlock` 覆盖非流体↔流体触发、流体等级↔流体等级不触发、距离 4/5、同层/上一层/下一层及跨区块边界；运行 `go test ./internal/sim -run 'TestFarmlandMoistureFluid' -count=1` 验证失败。
-- [ ] 3.2 修改 `internal/sim/fluid.go`，在 `fluidWorld.SetBlock` 的真实写入路径按 old/new `core.IsFluid` membership 生产候选，并在 `advanceFluids` 识别新 scope key 时登记独立湿度重扫；运行 3.1 定点测试至通过，同时运行 `go test ./internal/sim -run 'TestFluid' -race -count=1` 防止流体回归。
+- [ ] 3.2 修改 `internal/sim/fluid.go`，在 `fluidWorld.SetBlock` 的真实写入路径按 old/new `core.IsFluid` membership 生产候选，并在 `advanceFluids` 识别新 scope key 时登记独立湿度重扫；另在 `farmland_moisture_integration_test.go` 先用真实 `CommandPlaceBlock` 写失败回归，覆盖玩家成功以固体替换最后灌溉水后同 tick 变干、成功确认与原子扣料，再修改 `engine_placement.go` 只在成功 changed 放置的 old/new membership 变化时复用同一候选入口；运行定点 placement/moisture 测试及 `go test ./internal/sim -run 'TestFluid' -race -count=1`。
 - [ ] 3.3 扩展 `internal/sim/farming_test.go` 的成功/拒绝对照，先证明范围内有水的成功翻地未在同 tick 发布湿耕地；修改 `farming.go` 仅在真实成功写入后入队目标，运行 `go test ./internal/sim -run 'TestTill' -race -count=1` 至通过。
 - [ ] 3.4 在 `internal/sim/companion_action_test.go` 增加 `phaseFarmlandMoistureAdvance` 顺序期望，在重启/重入集成测试中覆盖陈旧湿度恢复；修改 `engine_step.go` 令阶段固定为 fluid→moisture→crop，并在 `fluid_perf_test.go` 把流体净耗时结束边界改为新阶段。运行 `go test ./internal/sim -run 'TestStepPhaseOrder|TestFarmlandMoisture(Restart|Reentry)' -race -count=1`。
 

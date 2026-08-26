@@ -62,11 +62,14 @@ FIFO 用切片保存插入顺序、map 只做存在性查询。消费后删除 m
 
 ### 5.1 流体 membership 变化
 
-`fluidWorld.SetBlock` 在写入前已有旧方块、写入参数是新方块。仅当
-`core.IsFluid(old) != core.IsFluid(new)` 时唤醒湿度队列：
+`fluidWorld.SetBlock` 在写入前已有旧方块、写入参数是新方块。`executePlacement` 也已把
+目标旧值保存在 `block`，并允许普通玩家用固体覆盖流体；它只在 `Dimension.SetBlock` 成功且
+`changed=true` 后比较 `block` 与 `placement`。两条路径仅当
+`core.IsFluid(old) != core.IsFluid(new)` 时复用 `enqueueFarmlandMoistureAroundFluid` 唤醒湿度队列：
 
 - 流体等级之间互换不改变“附近是否有流体”，不得入队；
 - 空气/作物等非流体变流体、流体退为空气均入队；
+- 玩家放置成功以固体覆盖流体时入队；拒绝、写入错误与未变化放置不入队；
 - B-07 对 `internal/fluid` 规则的修改仍经 `fluidWorld.SetBlock`，无需第二挂点。
 
 若变化流体位于 `(x,y,z)`，可能受影响的耕地恰好是：
@@ -87,8 +90,11 @@ farmlandZ ∈ [z-4, z+4]
 
 湿耕地与干耕地互转不再次入队；湿度方块不是流体，其变化也不影响邻格，禁止形成反馈环。
 
-当前没有水桶或其他玩家可写流体路径。未来新增流体写者时，必须复用“old/new membership
-变化”挂点，而不是依赖普通 `recordChange`；该约束由挂点枚举测试守卫。
+writer audit 的生产 membership 写者恰有两条：`fluidWorld.SetBlock` 可双向改变，
+`executePlacement` 可把流体覆盖为非流体。伙伴放置只接受空气目标，玩家/伙伴采掘不命中
+流体，翻地、湿度、作物与踩踏只在非流体农业编号间转换；加载/生成由 active Ready 重扫恢复，
+`SetBlockForTest` 不是生产写者。未来新增 writer 时必须复用 old/new membership 语义，而不是
+依赖普通 `recordChange`；该约束由真实命令与挂点枚举测试守卫。
 
 ## 6. tick 阶段顺序
 
@@ -149,10 +155,10 @@ active Ready scope 时，把它加入候选 FIFO。halo 使新进入区块里的
 重扫用事件候选处理后的剩余预算，可跨 tick 保存游标。重扫产生的候选从下一 tick 开始按
 FIFO 处理；未扫到前保留存档中的既有湿/干方块，不同步全扫、不伪造中间状态。
 
-事件持续优先于重扫。当前唯一有 162 格 fanout 的生产源是有限 active Ready 范围内必然
-收敛且无自持更新环的权威流体推进；成功翻地每次只登记目标自身，玩家不能放置流体物品，
-不存在持续占满读取预算的合法事件源。因此事件工作最终排空，不会永久饿死重扫；若未来
-引入永久 membership 事件源，必须重新裁决调度公平性。
+事件持续优先于重扫。在停止新增玩家命令后，有限 active Ready 范围内的权威流体推进必然
+收敛且无自持更新环；玩家放置每次只能移除一格既有流体 membership，不能从物品创建流体；
+成功翻地每次只登记目标自身。因此固定输入产生的事件工作最终排空，不会永久饿死重扫；
+若未来引入无需新命令即可永久产生 membership 变化的机制，必须重新裁决调度公平性。
 
 ## 9. 随机作物阶段与成本契约
 
@@ -197,13 +203,15 @@ scenario 均不变，无数据迁移。
 
 - 反向窗口精确覆盖水平距离 4、`y-1/y` 两层，距离 5 与越界 Y 不入队；
 - 流体↔非流体触发，流体等级↔流体等级不触发；
-- FIFO 插入/去重/消费顺序确定，同一输入重放得到相同顺序和方块结果；
+- FIFO 插入/去重/消费顺序确定，rebase 前后 surviving element 地址不变以证明不复制后缀，
+  同一输入重放得到相同顺序和方块结果；
 - 单 tick 读取计数从不超过 65,536，额度不足的队首保留且下一 tick 继续；
 - 大于预算的待办全部最终处理，无丢失、重复写或回绕。
 
 ### 12.2 tick 集成
 
 - 放水与失水在无积压时同 tick 使半径内耕地变湿/干；
+- 真实 `CommandPlaceBlock` 成功以固体覆盖最后灌溉水时，同 tick 变干并保留成功确认与扣料；
 - 水平距离 5、下一层流体仍不湿润；跨区块半径边界保持；
 - 翻地成功同 tick 判湿，拒绝翻地不入队；
 - 流体→作物冲毁等 B-07 路径仍通过同一 membership 挂点；
@@ -239,7 +247,7 @@ openspec validate --all --strict --no-interactive
 - **每耕地维护邻水计数缓存**：更新快，但新增大 map、计数失效、区块加载重建和更多写入
   挂点；湿/干方块已经是缓存，不需要第二份事实。
 - **所有 `recordChange` 都展开 162 个候选**：会让采掘、作物生长、踩踏等无关变化制造
-  大量待办；只挂真实流体 membership 变化与新耕地。
+  大量待办；只挂 `fluidWorld.SetBlock`、成功 changed 的 `executePlacement` 与新耕地。
 - **保留随机 tick 作为恢复兜底**：无法消除密集耕地单样本 162 次读取，也不能给恢复延迟
   明确预算。
 - **加载时同步全扫**：大批区块同时 Ready 会击穿 tick；必须用可续游标。
@@ -250,7 +258,8 @@ openspec validate --all --strict --no-interactive
 
 最初认领备注把 `engine_changes.go` 列为中央挂点。设计核实后否决：该函数不知道写入前的旧
 方块，若对所有变化展开候选，会把无关写入放大 162 倍。控制会话批准把挂点改为
-`internal/sim/fluid.go` 的 old/new membership 转换与 `farming.go` 的成功翻地，并补充
+`internal/sim/fluid.go` 与 `engine_placement.go` 的 old/new membership 转换及 `farming.go` 的
+成功翻地，并补充 `farmland_moisture_integration_test.go` 的真实玩家命令回归和
 `fluid_perf_test.go`/`companion_action_test.go` 的阶段边界守卫。随机作物阶段不再维护干湿后，
 `tunables.go` 的既有注释会失真，故另批准仅更正 `RandomTicksPerSection` 说明的受控重叠，字段、
 默认值与校验不动。

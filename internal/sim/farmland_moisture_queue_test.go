@@ -99,6 +99,7 @@ func TestFarmlandMoistureQueueCompactsConsumedPrefix(t *testing.T) {
 		t.Fatalf("未达到一半时队列长度=%d，想要 8193", got)
 	}
 
+	firstSurvivor := &engine.farmlandMoisture.pending[4097]
 	engine.farmlandMoisture.pop()
 	if got := engine.farmlandMoisture.head; got != 0 {
 		t.Fatalf("达到压紧门槛后的队首=%d，想要 0", got)
@@ -108,6 +109,10 @@ func TestFarmlandMoistureQueueCompactsConsumedPrefix(t *testing.T) {
 	}
 	if got := engine.farmlandMoisture.pending[0].position.X; got != 4097 {
 		t.Fatalf("压紧后的首个 X=%d，想要 4097", got)
+	}
+	if got := &engine.farmlandMoisture.pending[0]; got != firstSurvivor {
+		t.Fatalf("rebase 后首个 surviving element 地址=%p，想要保留原地址 %p（不得复制后缀）",
+			got, firstSurvivor)
 	}
 
 	for len(engine.farmlandMoisture.pending) > 0 {

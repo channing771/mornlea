@@ -3,6 +3,8 @@ package sim
 import (
 	"testing"
 
+	"github.com/go-gl/mathgl/mgl32"
+
 	"github.com/channing771/mornlea/internal/core"
 )
 
@@ -47,6 +49,76 @@ func TestFarmlandMoistureFluidMembershipChanges(t *testing.T) {
 	engine.advanceFarmlandMoisture(adapter.pending)
 	if got := cropBlockAt(t, engine, farmland); got != core.FarmlandDryID {
 		t.Fatalf("同 tick 失水后耕地=%s，想要干耕地", blockLabel(got))
+	}
+}
+
+// TestPlayerPlacementRemovingLastIrrigationDriesFarmlandSameTick 锁定普通玩家放置
+// 覆盖最后一格灌溉水时，经真实命令路径在同一权威 tick 重判附近耕地。
+func TestPlayerPlacementRemovingLastIrrigationDriesFarmlandSameTick(t *testing.T) {
+	t.Cleanup(func() { SetTunables(DefaultTunables()) })
+	tunables := DefaultTunables()
+	tunables.RandomTicksPerSection = 0
+	SetTunables(tunables)
+	engine, session := readyMovementPlayer(t)
+	for tick := 0; len(engine.farmlandMoisture.rescans.pending) > 0; tick++ {
+		if tick == 8 {
+			t.Fatalf("初始湿度重扫 8 tick 后仍有 %d 个 job", len(engine.farmlandMoisture.rescans.pending))
+		}
+		engine.Step()
+	}
+	if pending := len(engine.farmlandMoisture.pending) - engine.farmlandMoisture.head; pending != 0 {
+		t.Fatalf("放置前仍有 %d 个旧湿度候选", pending)
+	}
+
+	water := core.BlockPos{X: 0, Y: -1, Z: 1}
+	farmland := core.BlockPos{X: 1, Y: -1, Z: 1}
+	support := core.BlockPos{X: 0, Y: -2, Z: 1}
+	engine.SetBlockForTest(core.BlockPos{X: 0, Y: 0, Z: 0}, core.AirID)
+	engine.SetBlockForTest(core.BlockPos{X: 0, Y: 0, Z: 1}, core.AirID)
+	engine.SetBlockForTest(support, core.StoneID)
+	engine.SetBlockForTest(core.BlockPos{X: 0, Y: -1, Z: 0}, core.StoneID)
+	engine.SetBlockForTest(core.BlockPos{X: 0, Y: -1, Z: 2}, core.StoneID)
+	engine.SetBlockForTest(farmland, core.FarmlandWetID)
+	engine.SetBlockForTest(water, core.WaterSourceID)
+	player := engine.sessions[session].player
+	player.inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 2}
+	eye := player.state.Position.Add(mgl32.Vec3{0, engine.physicsTunables.EyeHeight, 0})
+	yaw, pitch := lookAtBlockCenter(eye, support)
+	watch := watchFarmlandMoistureCandidateAtPhase(engine, farmlandMoistureKey{
+		dimension: core.Overworld,
+		position:  farmland,
+	})
+
+	engine.Enqueue(Command{
+		Session: session, Sequence: 2, Kind: CommandPlaceBlock,
+		Yaw: yaw, Pitch: pitch, Slot: 0,
+	})
+	result := engine.Step()
+
+	if got := cropBlockAt(t, engine, water); got != core.StoneID {
+		t.Fatalf("放置目标=%s，想要石头", blockLabel(got))
+	}
+	if !watch.phaseSeen || !watch.candidateSeen {
+		t.Fatalf("湿度阶段未观察到耕地候选：phaseSeen=%v candidateSeen=%v",
+			watch.phaseSeen, watch.candidateSeen)
+	}
+	if got := cropBlockAt(t, engine, farmland); got != core.FarmlandDryID {
+		t.Fatalf("覆盖最后灌溉水的同 tick 耕地=%s，想要干耕地；reads=%d inspections=%d",
+			blockLabel(got), engine.farmlandMoisture.blockReads,
+			engine.farmlandMoisture.candidateInspections)
+	}
+	if len(result.Rejected) != 0 || len(result.PlacementSuccesses) != 1 ||
+		result.PlacementSuccesses[0] != (PlacementSuccess{Session: session, Sequence: 2}) {
+		t.Fatalf("放置确认不正确：rejected=%+v successes=%+v",
+			result.Rejected, result.PlacementSuccesses)
+	}
+	wantStack := core.ItemStack{Item: core.ItemStone, Count: 1}
+	if got := player.inventory.Hotbar.Slots[0]; got != wantStack {
+		t.Fatalf("放置后栏位=%+v，想要恰好扣一件后的 %+v", got, wantStack)
+	}
+	if len(result.Inventories) != 1 || result.Inventories[0].Session != session ||
+		result.Inventories[0].Inventory.Hotbar.Slots[0] != wantStack {
+		t.Fatalf("放置没有发布扣料后的背包：%+v", result.Inventories)
 	}
 }
 

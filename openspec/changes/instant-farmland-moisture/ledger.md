@@ -405,3 +405,102 @@ SDD report 已写入 ignored 路径 `.superpowers/sdd/2026-08-26-instant-farmlan
 - `git diff --name-only HEAD -- internal/fluid internal/network internal/storage internal/nativeabi engine client cmd/mornlea/testdata **/testdata`
   无输出；无协议、存档、ABI、Rust、scenario、capture 或 golden 改动。
 - ignored Task 5 report 已追加本 repair round，不进入 tracked status。
+
+## Task 5 Final Re-review Repair Round 2
+
+本轮固定 checkout 为 `feat/B-09-instant-farmland-moisture`，起始 HEAD
+`078a6a6db09b6d3e1e1d95eff100efdfb1787b84`，起始 `git status --short` 无输出。
+用户明确授权本 repair round 不派发 subagent，该指令覆盖 change apply guidance 的 subagent
+流程；控制会话直接执行并把证据记入本 ledger。proposal、delta spec、design、tasks 与历史
+writer audit 均先于生产代码更新；所有 task checkbox 继续保持未勾选，Task 5 final review
+继续 pending。
+
+### Findings And Writer-audit Ruling
+
+| ID | Finding | Decision | Evidence |
+|---|---|---|---|
+| B09-T5-R2-I1 | `executePlacement` 合法允许固体覆盖流体，但该路径绕过 `fluidWorld.SetBlock`，成功写入只经 `recordChange` 唤醒流体队列，未生产反向湿度候选 | 接受。在已有 `block` 旧值和 `placement` 新值上，仅于 `Dimension.SetBlock` 成功且 `changed=true` 的分支比较 `core.IsFluid` membership，并复用 `enqueueFarmlandMoistureAroundFluid`；拒绝、错误与 no-op 结构上不入队；协议与既有成功确认/扣料不变 | 真实 `CommandPlaceBlock` 回归覆盖 contained last irrigation water、无旧候选/重扫 backlog、active Ready scope、同 tick 变干、`PlacementSuccess(sequence=2)`、扣一件与 inventory publication |
+| B09-T5-R2-I2 | `TestFarmlandMoistureQueueCompactsConsumedPrefix` 只断言值与长度，旧 suffix copy 同样通过，不能证明 O(1) rebase | 接受。跨过 4096/half 阈值前保存首个 surviving element 地址，rebase 后断言 `pending[0]` 地址完全相同 | 临时恢复旧 copy 后测试以地址不同失败；恢复 rebase 后通过 |
+
+本轮 writer audit 纠正上一轮 `B09-T5-FR-I2` 中“`fluidWorld.SetBlock` 是唯一 membership
+hook”的失真实证：生产运行期 membership 写者恰有两条，`fluidWorld.SetBlock` 可双向改变，
+`executePlacement` 可把流体覆盖为非流体。伙伴放置只接受空气目标；玩家/伙伴采掘不命中
+流体；翻地、湿度、作物和踩踏只转换非流体农业编号；加载/生成由 active Ready 重扫恢复；
+`SetBlockForTest` 仅供测试。仍否决把挂点扩到全部 `recordChange` writers，也不为两条路径
+新增抽象。
+
+### RED, Mutation, And Focused GREEN
+
+1. 首个 placement 夹具虽以“耕地仍湿”失败，但加入生产 hook 后仍失败；phase/target 守卫
+   证明射线先命中玩家原落脚格，实际没有覆盖目标水，因此该次失败判为无效 RED，不作为
+   行为证据。只修正夹具：打开射线途经的两格竖井，保留玩家同 tick 物理与真实 DDA。
+2. corrected fixture 下临时移除唯一新增 hook；水格已成功变石头，但 focused test 按预期失败：
+   `湿度阶段未观察到耕地候选：phaseSeen=true candidateSeen=false`，package `FAIL`
+   (`0.812s`)。恢复最小 hook 后同一测试通过，package `0.804s`。
+3. queue no-copy 测试在当前 rebase 上先通过，package `0.361s`；临时恢复旧
+   `pending[:copy(...)]` 后按预期失败：rebase 后地址与原 surviving element 地址不同，
+   package `FAIL` (`0.848s`)；恢复 O(1) rebase 后再次通过，package `0.335s`。
+4. focused combined race：
+   `go test ./internal/sim -run '^(TestPlayerPlacementRemovingLastIrrigationDriesFarmlandSameTick|TestFarmlandMoistureQueueCompactsConsumedPrefix)$' -race -count=1`
+   → `ok github.com/channing771/mornlea/internal/sim 1.824s`。
+5. broader focused placement/queue race：
+   `go test ./internal/sim -run 'Test(PlayerPlacement|PlaceBlockThroughFluid|RejectedPlayerPlacement|FarmlandMoistureQueue)' -race -count=1`
+   → `ok github.com/channing771/mornlea/internal/sim 2.009s`。
+
+### Step 1-3 Verification And Triage
+
+首次完整序列的 `internal/sim` race 通过（`36.541s`），随后 archcheck 确定性失败：新生产
+注释把局部变量 `placement` 写进反引号，而 `TestCommentBacktickIdentifiersExist` 只接受全仓
+Go 声明。该失败不是 wait-budget/load flake；改为不引用局部名字的“写前与写后方块编号”后，
+从 Step 1 完整重启，未继续在失败树上运行后续门禁。
+
+| Stage | Command | Result | Evidence |
+|---|---|---|---|
+| clean preflight | `make rust` | pass | `Finished release profile [optimized] target(s) in 0.29s` |
+| initial Step 1 | `gofmt -l .` | pass | no formatter output |
+| initial Step 1 | `go test ./internal/sim -race -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 36.541s` |
+| initial Step 1 | `go test ./internal/archcheck -count=1` | fail | only failure `TestCommentBacktickIdentifiersExist` at `engine_placement.go:92:57`；package `4.767s` |
+| final Step 1 | `gofmt -l .` | pass | no formatter output |
+| final Step 1 | `go test ./internal/sim -race -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 36.298s` |
+| final Step 1 | `go test ./internal/archcheck -count=1` | pass | `ok github.com/channing771/mornlea/internal/archcheck 4.514s` |
+| final Step 2 | `make rust` | pass | `Finished release profile [optimized] target(s) in 0.28s` |
+| final Step 2 | `go test ./... -race` | pass | all packages passed；`cmd/mornlea 271.161s`、`internal/server 209.635s`、`internal/sim 43.782s`、`internal/archcheck 33.048s` |
+| final Step 2 | `go vet ./...` | pass | no diagnostic output |
+| Step 3 | `go test ./internal/sim -run '^$' -bench 'BenchmarkCropAdvance' -benchmem -count=5` | pass | 20/20 samples；package `25.073s`；全部 `0 B/op`、`0 allocs/op` |
+| Step 3 guarded verbose | `MORNLEA_FLUID_PERF=1 go test ./internal/sim -run '^TestFluidPerf' -count=1 -v` | pass | three reports complete；package `19.448s` |
+
+### Crop Benchmark Record
+
+| Benchmark | ns/op samples | median ns/op | block_reads/op samples | median block_reads/op | cells/op | Workload coordinates |
+|---|---|---:|---|---:|---:|---|
+| FullInterestBarren | 177896, 178619, 178136, 178543, 178755 | 178543 | 14400, 14400, 14400, 14400, 14400 | 14400 | 14400 | 200 chunks, 0 crops |
+| FullInterestPlanted | 179702, 185495, 180028, 180066, 179841 | 180028 | 14400, 14400, 14400, 14400, 14402 | 14400 | 14400 | 200 chunks, 256 crops |
+| FullInterestDense | 183470, 182344, 183177, 183203, 183400 | 183203 | 14441, 14437, 14439, 14436, 14442 | 14439 | 14400 | 200 chunks, 51200 crops |
+| AllFarmland | 2242, 2220, 2217, 2251, 2226 | 2226 | 72, 72, 72, 72, 72 | 72 | 72 | 1 Ready chunk, 98304 farmland, 0 crops |
+
+### Guarded Fluid Performance Record
+
+| Scenario | Samples | Peak queue | Scale gate | Worst Step | Worst fluid | Worst moisture |
+|---|---:|---:|---|---:|---:|---:|
+| 大坝溃决 | 12,000 | 140,122 | breach enqueue 10,608；peak risk ratio 70.1% | 12.817041ms | 5.807292ms | 3.002292ms |
+| 瀑布 | 12,000 | 501,587 | initial frontier 402；peak risk ratio 250.8% | 14.754375ms | 9.340792ms | 3.679583ms |
+| 合成 20 万项 | 10 | 200,000 | exact risk scale 200,000 | 1.831959ms | 1.009417ms | 865.917µs |
+
+三组 verbose 报告均含整 tick、fluid、moisture、queue before/after、map 与排序口径；fixture
+规模、报告完整性、只读探针、真实 overflow 和数据丢失门禁均未放宽。墙钟数值只记录。
+
+### Step 4 And Scope Audit
+
+| Command | Result | Evidence |
+|---|---|---|
+| `openspec status --change instant-farmland-moisture` | pass | schema `spec-driven`，4/4 artifacts complete |
+| `openspec validate --all --strict --no-interactive` | pass | `Totals: 66 passed, 0 failed (66 items)` |
+| `git diff --check` | pass | no output |
+| `git status --short` | recorded | 9 intended tracked files modified；ignored Task 5 report absent |
+| restricted scope audit | pass | `git diff --name-only HEAD -- internal/fluid internal/network internal/storage internal/nativeabi engine client cmd/mornlea/testdata **/testdata` 无输出 |
+
+- `tasks.md` 所有复选框仍为 `[ ]`；Task 5 final review 保持 pending。
+- repair diff 仅含 active/historical B-09 artifacts、ledger、`engine_placement.go`、真实 placement
+  integration 回归与 queue no-copy proof。
+- 协议保持 v26；区块 schema v9、玩家 schema v7、world metadata v2、`companions.ai`
+  schema v4、engine/client ABI、benchmark scenario、capture 与 golden 均未变化。

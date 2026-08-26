@@ -88,7 +88,8 @@ func (engine *Engine) executePlacement(
 	// 放置必须直接把它覆盖掉（与 Minecraft 系的「向水里放方块」同语义）。覆盖
 	// 走的是下面同一条 SetBlock → recordChange 路径，因此该格及其六个面邻格会被
 	// enqueueFluidUpdate 重新入队，被切断的下游流动水才会按规则变干，水面不会
-	// 留下一个不会被填回的洞。
+	// 留下一个不会被填回的洞。湿度候选不能挂在通用 `recordChange`；`SetBlock`
+	// 确认写入变化后，还要用本处已有的写前与写后方块编号单独判流体 membership。
 	occupied := (block != core.AirID && !core.IsFluid(block)) || placementOverlapsPlayer(
 		placement,
 		target,
@@ -161,6 +162,9 @@ func (engine *Engine) executePlacement(
 			placement,
 			pending,
 		)
+		if core.IsFluid(block) != core.IsFluid(placement) {
+			engine.enqueueFarmlandMoistureAroundFluid(dimensionID, target)
+		}
 		if reserveFurnace {
 			targetRecord.Chunk.CommitFurnace(furnaceSlot, targetIndex)
 		}
