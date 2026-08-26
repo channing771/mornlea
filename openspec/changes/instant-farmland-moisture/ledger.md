@@ -5,7 +5,7 @@
 | Task | Implementer | Spec Review | Quality Review | Repair Rounds | Status |
 |---|---|---|---|---:|---|
 | 1 | `ses_fc3afd2a2ffeq80iW8UIKYPasR` | approved | approved | 0 | complete |
-| 2 | OpenCode implementer（按用户要求不派生子代理） | pending | pending | 0 | implemented |
+| 2 | `ses_fc39ce278ffew8TsrLujyjLcba` | approved | approved | 0 | complete |
 | 3 | pending | pending | pending | 0 | pending |
 | 4 | pending | pending | pending | 0 | pending |
 | 5 | control | pending | pending | 0 | pending |
@@ -16,6 +16,7 @@
 |---|---|---|---|---|
 | B09-T1-R1 | 1 | Brief 中的原始 hash 命令同时散列 `go test` 的动态耗时汇总行，未改代码连续运行也会得到不同 hash | 保留原始命令结果，并另用排除 `ok` 汇总行的排序入口 hash 裁决测试集合；不改测试或生产代码迎合不稳定 hash | split 后原始 hash 连续为 `b11a78ad...`、`9b9138ce...`；稳定入口 hash 为 `dc4e65d...`，逐声明重构与 `HEAD:internal/sim/crop_test.go` 仅差文件头 import/空行 |
 | B09-T1-R2 | 1 | Reviewer 无法从 diff 验证 feature branch commit 是否获得授权 | 控制会话确认用户在 Task 1 派发前已显式授权 B-09 每任务 commit，授权不含 push/merge/PR；无需代码修复 | 对话授权选择“授权任务 commits”；commit `db2a6a7d` 只含 Task 1 文件 |
+| B09-T2-R1 | 2 | Reviewer 无法只从 commit diff 验证 RED 时序、命令输出与提交后 worktree 状态 | 接受 implementer 在 ignored SDD report 中保留的逐命令证据，并以控制会话观察到的 clean status 补足；无需重跑或修改代码 | `task-2-report.md` 第 76–223 行记录 RED/GREEN，控制会话在 `5fb868f8` 后运行 `git status --short --branch` 仅输出 branch header |
 
 ## Verification
 
@@ -75,5 +76,7 @@
 | `go test ./internal/archcheck -count=1` | pass | `ok github.com/channing771/mornlea/internal/archcheck 7.579s` |
 | `go vet ./internal/sim` | pass | no output |
 | `git diff --check` | pass | no output |
+| `openspec validate --all --strict --no-interactive` (Task 2) | pass | `Totals: 66 passed, 0 failed (66 items)` |
+| Task 2 independent spec/quality review | approved | no Critical/Important/Minor；diff 外证据项经 `B09-T2-R1` 裁决 |
 
-Task 2 的独立规格评审与质量评审尚待控制会话执行；本实现没有提前进入 Task 3。
+Task 2 已通过独立规格评审与质量评审；实现没有提前进入 Task 3。
