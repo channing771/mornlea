@@ -282,6 +282,91 @@ func TestFarmlandMoistureReentryRestartsRescan(t *testing.T) {
 		blockLabel(cropBlockAt(t, engine, farmland)))
 }
 
+// TestFarmlandMoistureReentryRecoversStaleWetFarmland 覆盖边界耕地离开相关 scope
+// 期间失去邻块流体，并在邻块重新进入 active Ready 后由有界重扫恢复为干耕地。
+func TestFarmlandMoistureReentryRecoversStaleWetFarmland(t *testing.T) {
+	center := core.ChunkPos{}
+	right := core.ChunkPos{X: 1}
+	rightKey := core.ChunkKey{Dimension: core.Overworld, Pos: right}
+	farmland := core.BlockPos{X: 15, Y: 1, Z: 8}
+	water := core.BlockPos{X: 16, Y: 1, Z: 8}
+	engine, sessions := readyCropWorldAt(t, center, right)
+	engine.SetBlockForTest(farmland, core.FarmlandWetID)
+	placeContainedWater(t, engine, water)
+	engine.farmlandMoisture = farmlandMoistureState{}
+	step := func(stage string) TickResult {
+		result := engine.Step()
+		if reads := engine.farmlandMoisture.blockReads; reads > farmlandMoistureReadsPerTick {
+			t.Fatalf("%s 湿度读取=%d，超过预算 %d", stage, reads, farmlandMoistureReadsPerTick)
+		}
+		return result
+	}
+
+	if got := cropBlockAt(t, engine, water); got != core.WaterSourceID {
+		t.Fatalf("邻块离开前水格=%s，想要水源", blockLabel(got))
+	}
+	engine.UnregisterSession(sessions[1])
+	step("邻块离开 tick")
+	if info, ok := engine.ChunkInfo(rightKey); ok && info.State == ChunkReady {
+		t.Fatalf("邻块注销后仍是 Ready：%+v", info)
+	}
+	if got := cropBlockAt(t, engine, farmland); got != core.FarmlandWetID {
+		t.Fatalf("邻块离开后陈旧耕地=%s，想要在重扫前保持湿耕地", blockLabel(got))
+	}
+	// 邻块不在 Ready scope 时直接改测试夹具，模拟存档侧失水；这条写入刻意不经过
+	// `fluidWorld.SetBlock`，因此不会生产事件，恢复只能来自后续重扫。
+	rightRecord := engine.dimensions[core.Overworld].records[right]
+	if rightRecord == nil || rightRecord.State == ChunkReady || rightRecord.Chunk == nil {
+		t.Fatalf("邻块离开后记录不适合模拟失水：%+v", rightRecord)
+	}
+	waterX, _, waterZ := water.Local()
+	rightRecord.Chunk.SetBlock(waterX, water.Y, waterZ, core.AirID)
+	farmlandKey := farmlandMoistureKey{dimension: core.Overworld, position: farmland}
+	if _, queued := engine.farmlandMoisture.queued[farmlandKey]; queued {
+		t.Fatal("邻块重入前已有耕地候选，无法证明恢复来自重扫")
+	}
+
+	engine.RegisterSession(sessions[1], core.Overworld, right)
+	reentered := false
+	queuedByRescan := false
+	for tick := 1; tick <= 16; tick++ {
+		result := step("邻块无水重入 tick")
+		for _, key := range result.Acquire {
+			engine.SubmitAcquired(AcquiredChunk{Key: key, Missing: true})
+		}
+		for _, key := range result.Generate {
+			engine.SubmitGenerated(GeneratedChunk{
+				Dimension: key.Dimension,
+				Pos:       key.Pos,
+				Chunk:     cropFlatChunk(key.Pos),
+			})
+		}
+		if _, ready := engine.fluidScope[rightKey]; ready {
+			reentered = true
+			block, blockReady := engine.dimensions[core.Overworld].BlockAt(water)
+			if !blockReady || core.IsFluid(block) {
+				t.Fatalf("邻块重入后水格 ready=%v block=%s，想要已失去流体",
+					blockReady, blockLabel(block))
+			}
+		}
+		if _, queued := engine.farmlandMoisture.queued[farmlandKey]; queued {
+			queuedByRescan = true
+		}
+		if cropBlockAt(t, engine, farmland) != core.FarmlandDryID {
+			continue
+		}
+		if !reentered {
+			t.Fatal("邻块尚未重新进入 active Ready，耕地就已变干")
+		}
+		if !queuedByRescan {
+			t.Fatal("耕地变干前未观察到重扫候选")
+		}
+		return
+	}
+	t.Fatalf("邻块无水重入 16 tick 后边界耕地=%s，想要恢复为干耕地",
+		blockLabel(cropBlockAt(t, engine, farmland)))
+}
+
 // —— Scenario：耕地的干湿由邻近流体决定并双向转换 ——
 
 // TestFarmlandTurnsWetWithWaterInRange 覆盖 Scenario「水源在范围内使耕地变湿」。

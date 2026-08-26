@@ -205,3 +205,44 @@ Task 2 已通过独立规格评审与质量评审；实现没有提前进入 Tas
 | `openspec validate --all --strict --no-interactive` | pass | `Totals: 66 passed, 0 failed (66 items)` |
 
 Task 4 实现与验证完成，但按用户约束不勾选 `tasks.md`，规格/质量裁决与 Task Status 仍留待控制会话评审。
+
+## Task 4 Review Repair Round 1
+
+### Finding Disposition
+
+| Finding | Disposition | Evidence / Repair |
+|---|---|---|
+| Important：Task 4 删除旧「邻块未加载后随机 tick 变干」断言，却没有等价的重入 wet-to-dry 有界恢复覆盖；现有 reentry 只证明 dry-to-wet | valid，已补测试；生产代码无需修改 | active delta 的「区块重入后恢复边界湿度」明确覆盖离开期间**失去或获得**邻块流体；新增 `TestFarmlandMoistureReentryRecoversStaleWetFarmland` 以完整 `Engine.Step` 卸出含水邻块，在非 Ready scope 内无事件地移除水，重入后观察重扫候选并在每 tick 65,536 读取上限内把陈旧湿耕地改干；原 dry-to-wet 测试保持不变 |
+
+### Test-First / Mutation Evidence
+
+- 初次新增场景运行先暴露夹具问题：注销 dirty 生成区块会进入 `ChunkUnloading`，重入取消卸载并保留原水源，故测试以 `邻块重入后水格 ready=true block=水源` 失败；修正为在邻块非 Ready 时直接改底层测试区块，刻意不经过 `fluidWorld.SetBlock`、不生产事件，准确模拟 scope 缺席期间失水。
+- 修正夹具后，新测试通过：`go test ./internal/sim -run '^TestFarmlandMoistureReentryRecoversStaleWetFarmland$' -count=1` → `ok github.com/channing771/mornlea/internal/sim 0.919s`。
+- 瞬态 mutation 把 `runFarmlandMoistureRescans` 的 active farmland 入队条件改为 `active && false`；同一新测试按预期失败：`邻块无水重入 16 tick 后边界耕地=湿耕地，想要恢复为干耕地`，package `FAIL` (`0.624s`)。
+- 恢复 mutation 后生产文件与 `HEAD` 无 diff，新测试再次通过：`ok github.com/channing771/mornlea/internal/sim 0.778s`。最终 repair diff 只含测试与本 ledger。
+
+### Repair Verification
+
+| Command | Result | Evidence |
+|---|---|---|
+| `gofmt -w internal/sim/farmland_moisture_integration_test.go` + `gofmt -l` | pass | format check no output |
+| `go test ./internal/sim -run 'TestCrop\|TestFarmland' -race -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 3.894s` |
+| `go test ./internal/sim -race -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 35.518s` |
+| `make rust` | pass | `Finished release profile [optimized] target(s) in 0.43s` |
+| `go test ./internal/archcheck -count=1` | pass | `ok github.com/channing771/mornlea/internal/archcheck 4.242s` |
+| `go vet ./internal/sim` | pass | no output |
+| `git diff --check` | pass | no output |
+| `openspec validate --all --strict --no-interactive` | pass | `Totals: 66 passed, 0 failed (66 items)` |
+
+### Repair Benchmark Evidence
+
+命令：`go test ./internal/sim -run '^$' -bench 'BenchmarkCropAdvance' -benchmem -count=5`；结果 `PASS`，package `ok` 为 `24.824s`。20/20 条样本继续同时打印 `cells/op` 与 `block_reads/op`，且全部为 `0 B/op`、`0 allocs/op`。
+
+| Benchmark | ns/op samples | median ns/op | block_reads/op samples | median block_reads/op | cells/op |
+|---|---|---:|---|---:|---:|
+| FullInterestBarren | 172558, 172715, 172531, 172650, 172942 | 172650 | 14400, 14400, 14400, 14400, 14400 | 14400 | 14400 |
+| FullInterestPlanted | 173295, 172640, 172427, 171939, 172850 | 172640 | 14400, 14400, 14400, 14401, 14400 | 14400 | 14400 |
+| FullInterestDense | 176728, 175182, 179040, 177588, 176539 | 176728 | 14438, 14437, 14438, 14434, 14431 | 14437 | 14400 |
+| AllFarmland | 2184, 2170, 2174, 2171, 2169 | 2171 | 72, 72, 72, 72, 72 | 72 | 72 |
+
+Repair round 1 已修复 finding，但 Task 4 review 仍按用户要求保持 pending，`tasks.md` 不勾选，等待控制会话复审。
