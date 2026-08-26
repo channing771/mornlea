@@ -1,0 +1,31 @@
+## Why
+
+耕地干湿目前只在随机 tick 抽中时重判，放水或失水后的玩家可见结果存在随机延迟；同时抽中耕地会额外读取最多 162 个方块，而现有成本门禁只统计抽样格数。需要把湿度维护改为事件驱动且有固定读取预算的权威阶段，在缩短普通变化延迟的同时保留 tick 工作上界。
+
+## What Changes
+
+- 流体“有/无”状态变化主动唤醒所有可能受影响的耕地；流体等级之间互换不重复唤醒。
+- 成功翻地后主动判定新耕地湿度；拒绝路径不产生待办。
+- 增加每 tick 最多 65,536 次方块读取的耕地湿度阶段。无旧积压的单点流体变化在同一权威 tick 完成，批量变化按确定性顺序跨 tick 顺延且不丢失。
+- 队列不持久化；区块首次进入或重新进入 active Ready 范围时，通过同一预算分摊的 halo 重扫恢复正确湿度。
+- 从随机作物阶段移除耕地湿度扫描，并把农业成本契约扩展为真实方块读取次数上界。
+- 不改变湿润几何、干湿方块编号、流体规则、作物生长条件或方块变更广播语义。
+- 不新增配置项，不修改协议、存档 schema、engine/client ABI、benchmark scenario 或 capture golden。
+
+## Capabilities
+
+### New Capabilities
+
+无。
+
+### Modified Capabilities
+
+- `authoritative-farming`: 把耕地干湿更新从随机 tick 改为流体/翻地事件驱动的有界阶段，并明确重启恢复、兴趣边界和方块读取成本契约。
+
+## Impact
+
+- 权威模拟：新增 `internal/sim/farmland_moisture*.go`，修改流体写入适配器、翻地成功路径、作物推进、`Engine` 状态和 `Step` 阶段顺序。
+- 测试与性能：新增队列、预算、重扫、重启/重入和阶段顺序测试；`internal/sim/crop_perf_test.go` 同时记录抽样格数与方块读取次数。
+- 并发与所有权：全部状态继续由权威 tick 单写者持有，不增加 goroutine、锁或跨包依赖。
+- 兼容性：协议保持 v26，区块 schema v9、玩家 schema v7、世界 metadata v2、`companions.ai` schema v4 及现有 ABI/scenario 均不变；现有湿/干耕地方块无需迁移。
+- 回退：删除新阶段并恢复随机 tick 的耕地分支即可，现有存档保持可读。
