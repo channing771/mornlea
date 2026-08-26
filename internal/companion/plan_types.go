@@ -354,8 +354,9 @@ const (
 	// 之后的步骤都无从执行。
 	PlanStepFollow
 	// PlanStepMine 是「采掘整数方块坐标处的方块」步骤：目标必须位于伙伴观察
-	// 窗口内且是具有单一掉落、非容器的普通方块；执行侧复用玩家的采掘计时
-	// 与工具规则。
+	// 窗口内且是可采掘方块——单一掉落的普通方块，或箱子/熔炉等容器（产物为
+	// 本体加全部内容物的批量，容量不足时任务整体失败）；执行侧复用玩家的采掘
+	// 计时与工具规则。
 	PlanStepMine
 	// PlanStepPlace 是「在整数方块坐标放置一个方块」步骤：方块名必须来自
 	// 固定注册表且快照背包显示伙伴持有对应物品；执行侧复用玩家的放置校验
@@ -485,15 +486,14 @@ func buildPlanPlaceBlocks() map[core.BlockID]core.ItemID {
 	return blocks
 }
 
-// planMineableBlock 报告 block 是否是 planner 契约允许的 mine 目标：必须具有
-// 单一 core.BlockDrop 且不是箱子/熔炉——容器破坏会产出本体加内容物的多份
-// 产物，超出「单一产物直入背包」的结算形状；无掉落的方块（如基岩）同样不可
-// 作为目标。与 internal/sim 采掘完成分叉处的防御清单是同一规则的两处实现
+// planMineableBlock 报告 block 是否是 planner 契约允许的 mine 目标：箱子与
+// 熔炉是合法目标——其产物是「容器本体 + 全部内容物堆」的批量，由 sim 侧
+// 采掘完成路径在伙伴背包副本上逐堆预演、全或无原子结算（任一堆放不下即整体
+// 不结算），容量安全由结算形状承担而不是由目标清单承担；其余方块仍要求具有
+// 单一 core.BlockDrop，无掉落的方块（如基岩）同样不可作为目标。与 internal/sim
+// 采掘完成分叉处的 `companionMineableBlock` 是同一规则的两处实现
 // （companion 不得依赖 sim，依赖方向相反），两处必须保持一致。
 func planMineableBlock(block core.BlockID) bool {
-	if block == core.ChestID || block == core.FurnaceID {
-		return false
-	}
 	// 农业方块（八个作物阶段 + 干湿耕地）必须**显式**拒绝，不能指望"单一
 	// BlockDrop"这条判据顺手挡住（design.md D7 / Ruling 5）：core.BlockDrop 对
 	// 十个编号都有单一产物登记，成熟小麦的第二份产物（2 种子）只存在于

@@ -1,29 +1,12 @@
-# companion-world-actions Specification
+## REMOVED Requirements
 
-## Purpose
-定义伙伴采掘与放置的权威原子性：动作复用玩家的全部既有规则（计时、工具、耐久、放置校验），其多方可观察变更在同一权威 tick 内原子成立或整体不发生。
-## Requirements
-### Requirement: 伙伴放置单 tick 原子扣料写入
+### Requirement: 伙伴采掘复用玩家计时规则且三方原子
 
-`place` 步骤 SHALL 先把伙伴带入目标位置的交互距离，随后在单一权威 tick 内完成：按既有玩家放置规则校验（目标为空气、放置合法性与碰撞判定、Ready 区块），从伙伴背包原子扣除一件对应物品并写入方块；任一校验不通过时 MUST NOT 扣料。放置的方块 MUST 来自固定注册表且快照背包显示伙伴持有；任务执行中背包已无对应物品时任务 MUST 以稳定原因失败。
+**Reason**: 本 change 解除 M5C 对容器目标的拒绝：箱子与熔炉成为合法 `mine` 目标并引入批量全或无结算，原 Requirement 的「双重拒绝容器与多掉落方块」条款与「容器与多掉落方块被拒绝」场景被显式废除；契约实质重写，故整条替换为同名新 Requirement（场景集合同步扩充为七个）。
 
-#### Scenario: 放置成功原子扣料
+**Migration**: 无协议、存档或 schema 迁移（`TaskFailInventoryFull` 复用既有 v18 wire 枚举）；已存档世界中的箱子/熔炉在新规则下即刻可被伙伴采掘，旧防御清单行为随本 change 一并消失。
 
-- **GIVEN** 伙伴背包有三件橡木板且交互距离内的目标位置为空气
-- **WHEN** 放置在权威 tick 执行
-- **THEN** 目标位置 MUST 出现橡木板方块，背包对应堆 MUST 恰好减少一件，二者 MUST 在同一 tick 内成立
-
-#### Scenario: 校验失败不扣料
-
-- **GIVEN** 伙伴背包持有物品但目标位置已被其他 actor 放置方块
-- **WHEN** 任务执行放置
-- **THEN** 放置 MUST 被拒绝，背包 MUST 保持不变，任务 MUST 以稳定原因失败或按目标变化语义处理
-
-#### Scenario: 物品耗尽令任务失败
-
-- **GIVEN** 计划包含两次连续 `place` 同种方块而伙伴背包只剩一件
-- **WHEN** 第一次放置完成后执行第二次
-- **THEN** 第二次放置 MUST NOT 发生，任务 MUST 以稳定原因失败，背包与世界的已成交变更 MUST 保留
+## ADDED Requirements
 
 ### Requirement: 伙伴采掘复用玩家计时规则且原子结算
 
@@ -72,4 +55,3 @@
 - **GIVEN** 伙伴正在采掘一个方块且进度已过半
 - **WHEN** 其他 actor 在完成前替换了该位置的方块
 - **THEN** 既有进度 MUST 失效，任务 MUST 按目标变化语义处理，新方块 MUST NOT 被破坏或继承进度
-
