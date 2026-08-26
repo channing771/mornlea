@@ -432,30 +432,19 @@ func TestFluidCropFloodPreservesFarmland(t *testing.T) {
 	floodFluidCropFrom(engine, fluidCropFloodSourceAbove())
 
 	stepUntilFluidCropFlooded(t, engine, fluidCropCell, core.WaterLevel1ID)
-	if got := fluidBlockAt(t, engine, fluidCropFarmland); got != core.FarmlandDryID {
-		t.Fatalf("耕地格=%d，想要保持 %d", got, core.FarmlandDryID)
+	if got := fluidBlockAt(t, engine, fluidCropFarmland); !core.IsFarmland(got) {
+		t.Fatalf("耕地格=%d，想要保持为耕地", got)
 	}
 }
 
-// TestFluidCropFloodedFarmlandTurnsWet 覆盖湿判定联动：冲毁完成后，留在原格的
-// 耕地在随机 tick 抽中时按既有规则转为湿耕地。
-//
-// 推进方式复用既有农业测试（readyCropWorld / TestFarmlandWetnessRangeBoundary）
-// 的做法：调高 `RandomTicksPerSection` 让抽样快速命中耕地格，再用
-// stepUntilBlock 等待转换完成——干湿转换挂在随机 tick 上，固定几步内命不中是
-// 抽样机制的固有性质而非缺陷。
+// TestFluidCropFloodedFarmlandTurnsWet 覆盖湿判定联动：冲毁写入产生流体 membership
+// 变化后，留在原格的耕地必须在同一 tick 转为湿耕地。
 func TestFluidCropFloodedFarmlandTurnsWet(t *testing.T) {
 	engine, _ := readyFluidCropWorld(t, core.WheatStage3ID)
 	floodFluidCropFrom(engine, fluidCropFloodSourceAbove())
 	stepUntilFluidCropFlooded(t, engine, fluidCropCell, core.WaterLevel1ID)
 
-	t.Cleanup(func() { SetTunables(DefaultTunables()) })
-	wetSampling := ActiveTunables()
-	wetSampling.RandomTicksPerSection = 64
-	SetTunables(wetSampling)
-
-	if _, ok := stepUntilBlock(engine, fluidCropFarmland, core.FarmlandWetID); !ok {
-		t.Fatalf("冲毁后的耕地未被抽中转湿，仍是 %d",
-			fluidBlockAt(t, engine, fluidCropFarmland))
+	if got := fluidBlockAt(t, engine, fluidCropFarmland); got != core.FarmlandWetID {
+		t.Fatalf("冲毁后的耕地未在同 tick 转湿，仍是 %d", got)
 	}
 }

@@ -80,3 +80,39 @@
 | Task 2 independent spec/quality review | approved | no Critical/Important/Minor；diff 外证据项经 `B09-T2-R1` 裁决 |
 
 Task 2 已通过独立规格评审与质量评审；实现没有提前进入 Task 3。
+
+## Task 3 Implementation Evidence
+
+- `fluidWorld.SetBlock` 仅在真实写入完成且 old/new `core.IsFluid` membership 改变后反向登记湿度候选；相同编号与流体等级互换均不登记。作物冲毁分支在掉落容量可能拒绝写入的前提下读回最终方块，再决定是否登记，避免失败写入产生假候选。
+- `advanceFluids` 在既有稳定新 scope 循环中同时登记独立湿度重扫，直接复用 `Engine.fluidScope`，未修改 `internal/fluid`、due-tick、`recordChange` 或流体预算。
+- `executeTillSoil` 只在 `Dimension.SetBlock` 返回 `changed=true` 且 `recordChange` 完成后登记目标，位置早于疲劳与耐久结算；既有拒绝表验证不增加湿度待办。
+- `Engine.Step` 新增 `phaseFarmlandMoistureAdvance`，固定顺序为 fluid → moisture → crop；三个阶段继续共用同一 `pendingChunkChanges` map，成功翻地同 tick 只发布最终湿耕地变更。
+- fresh engine 恢复与区块重入集成测试经完整 `Step` 驱动：逐 tick 断言湿度读取不超过 65,536；重入测试在半截 job 离开后断言游标清零，并以再次进入后的首 tick 游标恰为 65,536 证明从零重启。
+- 流体性能样本改为分别记录 `phaseFluidAdvance`→`phaseFarmlandMoistureAdvance` 与 moisture→`phaseCropAdvance`；`step` 总耗时、队列规模坐标、风险下界与 overflow/完整性守卫均未放宽。
+- `fluid_crop_test.go` 的旧随机延迟断言随 Task 3 的真实作物→流体 membership 写入更新为同 tick 湿润；未修改 Task 4 的 `crop.go` 随机 tick 逻辑或成本指标。
+- 协议、存档 schema、engine/client ABI、benchmark scenario 与 capture golden 均未修改；Task 3 规格评审和质量评审保持 pending。
+
+## Task 3 RED Evidence
+
+| Stage | Command | Expected failure |
+|---|---|---|
+| fluid membership | `go test ./internal/sim -run 'TestFarmlandMoistureFluid' -count=1` | `TestFarmlandMoistureFluidMembershipChanges`、距离 4 同层/上一层、作物冲毁和跨区块用例均失败：真实流体写入后耕地仍为干；流体等级互换控制用例通过 |
+| till | `go test ./internal/sim -run 'TestTill(InWaterRange\|Rejects)' -count=1` | `TestTillInWaterRangePublishesWetFarmland` 失败：翻地结果为干耕地；既有拒绝表的待办不变断言通过 |
+| phase/recovery | `go test ./internal/sim -run 'TestCompanionActionAppliesInIDOrderAfterPlayers\|TestFarmlandMoisture(Restart\|Reentry)' -count=1` | compile failed：`undefined: phaseFarmlandMoistureAdvance`，证明 standalone phase 尚未存在 |
+
+## Task 3 GREEN Evidence
+
+| Command | Result | Evidence |
+|---|---|---|
+| `make rust` | pass | `Finished release profile [optimized] target(s) in 0.28s` |
+| `go test ./internal/sim -run 'TestFarmlandMoistureFluid' -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 1.065s` |
+| `go test ./internal/sim -run 'TestTill(InWaterRange\|Rejects)' -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 0.389s` |
+| `go test ./internal/sim -run 'TestCompanionActionAppliesInIDOrderAfterPlayers\|TestFarmlandMoisture(Restart\|Reentry)' -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 0.981s` |
+| `gofmt -w internal/sim/fluid.go internal/sim/farming.go internal/sim/engine_step.go internal/sim/farmland_moisture_integration_test.go internal/sim/farming_test.go internal/sim/companion_action_test.go internal/sim/fluid_perf_test.go` | pass | no output |
+| `go test ./internal/sim -run 'TestFarmlandMoistureFluid\|TestTill\|TestCompanionActionAppliesInIDOrderAfterPlayers\|TestFarmlandMoisture(Restart\|Reentry)' -race -count=1` | pass | final rerun: `ok github.com/channing771/mornlea/internal/sim 2.680s` |
+| `go test ./internal/sim -run 'TestFluid' -race -count=1` | pass | final rerun: `ok github.com/channing771/mornlea/internal/sim 7.768s`; first run exposed and led to correction of the stale dry-farmland integration expectation |
+| `go test ./internal/archcheck -count=1` | pass | `ok github.com/channing771/mornlea/internal/archcheck 4.178s` |
+| `go vet ./internal/sim` | pass | no output |
+| `gofmt -l` on all Task 3 Go files including `fluid_crop_test.go` | pass | no output |
+| `git diff --check` | pass | no output |
+| `openspec validate --all --strict --no-interactive` | pass | `Totals: 66 passed, 0 failed (66 items)` |

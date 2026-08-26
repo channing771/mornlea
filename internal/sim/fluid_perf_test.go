@@ -167,28 +167,18 @@ type fluidTickSample struct {
 	// 10b 把取批换成最小堆之后，budget=0 意味着取批循环**一次都不执行**，两个
 	// 探针双双退化成 O(1)，读数落在几十到几百纳秒。这不是探针失效，恰恰是 10b
 	// 要证的结论：「遍历整张 map」与「排序整批到期项」这两项工作已经不存在了。
-	// 因此在 10b 之后的报告里，承重的数字是 fluidTail 与 step，scan / scanSort
+	// 因此在 10b 之后的报告里，承重的数字是 `fluid` 与 `step`，`scan` / `scanSort`
 	// 两列读作「≈0，该工作已被结构性消除」。
 	//
 	// 保留而不删除，是为了让「修复前 / 修复后」两次测量输出同一张表、可以逐列
 	// 对照；测量代码一行未改，改的只是这段说明。
 	scan     time.Duration
 	scanSort time.Duration
-	// fluidTail 是从 `phaseFluidAdvance` 进入到 `Step` 返回的墙钟时间，即
-	// `advanceFluids` + `advanceCrops` + 容器移动 + 采掘推进 + `finishChanges`。
-	//
-	// 无命令时容器移动、采掘推进与 `finishChanges` 近乎为零，但 `advanceCrops`
-	// **不是**：作物阶段每 tick 枚举全部活动区段，成本正比于区段数而与有没有
-	// 作物几乎无关，因此它非零、且随活动兴趣范围内的区段数增长（量级读数见
-	// `BenchmarkCropAdvanceFullInterestBarren` 一组 benchmark；这里不复制具体
-	// 数值，那种数字会随机器与配置漂移，且没有任何门禁守着它）。
-	// 所以这一列**含**作物阶段，只能读作 `advanceFluids` 的**更保守**上界，
-	// 不能读作流体的净耗时。
-	//
-	// 要把两者分开，用 `stepPhaseObserver` 同时记录 `phaseFluidAdvance` 与
-	// `phaseCropAdvance` 的进入时刻：前者到后者是流体净耗时，后者到 `Step` 返回
-	// 是作物及其余。本文件只需要一个保守上界，故没有引入第二个时刻。
-	fluidTail time.Duration
+	// `fluid` 是 `phaseFluidAdvance` 到 `phaseFarmlandMoistureAdvance` 的净耗时；
+	// `moisture` 是湿度阶段到 `phaseCropAdvance` 的净耗时。两个阶段必须分开记录，
+	// 否则恢复重扫的固定预算成本会被误算进流体。
+	fluid    time.Duration
+	moisture time.Duration
 	// step 是整个权威 tick 的墙钟时间，与 20 TPS 的 50 ms 预算直接可比。
 	step time.Duration
 }
@@ -214,10 +204,15 @@ func measureFluidTicks(t *testing.T, engine *Engine, ticks int) []fluidTickSampl
 	}
 	adapter := fluidPerfAdapter(engine)
 
-	var phaseAt time.Time
+	var fluidAt, moistureAt, cropAt time.Time
 	engine.stepPhaseObserver = func(phase stepPhase) {
-		if phase == phaseFluidAdvance {
-			phaseAt = time.Now()
+		switch phase {
+		case phaseFluidAdvance:
+			fluidAt = time.Now()
+		case phaseFarmlandMoistureAdvance:
+			moistureAt = time.Now()
+		case phaseCropAdvance:
+			cropAt = time.Now()
 		}
 	}
 	defer func() { engine.stepPhaseObserver = nil }()
@@ -241,14 +236,18 @@ func measureFluidTicks(t *testing.T, engine *Engine, ticks int) []fluidTickSampl
 			t.Fatalf("排序探针改变了状态: changed=%d, Len %d→%d", len(changed), before, queue.Len())
 		}
 
-		phaseAt = time.Time{}
+		fluidAt = time.Time{}
+		moistureAt = time.Time{}
+		cropAt = time.Time{}
 		start = time.Now()
 		engine.Step()
 		step := time.Since(start)
-		stepEnd := time.Now()
-		var tail time.Duration
-		if !phaseAt.IsZero() {
-			tail = stepEnd.Sub(phaseAt)
+		var fluidDuration, moistureDuration time.Duration
+		if !fluidAt.IsZero() && !moistureAt.IsZero() {
+			fluidDuration = moistureAt.Sub(fluidAt)
+		}
+		if !moistureAt.IsZero() && !cropAt.IsZero() {
+			moistureDuration = cropAt.Sub(moistureAt)
 		}
 
 		samples = append(samples, fluidTickSample{
@@ -257,7 +256,8 @@ func measureFluidTicks(t *testing.T, engine *Engine, ticks int) []fluidTickSampl
 			queueAfter:  queue.Len(),
 			scan:        scan,
 			scanSort:    scanSort,
-			fluidTail:   tail,
+			fluid:       fluidDuration,
+			moisture:    moistureDuration,
 			step:        step,
 		})
 	}
@@ -275,13 +275,16 @@ func reportFluidSamples(t *testing.T, name string, samples []fluidTickSample) fl
 	if len(samples) == 0 {
 		t.Fatalf("%s: 没有采到任何样本", name)
 	}
-	worstStep, worstTail, peakQueue := samples[0], samples[0], samples[0]
+	worstStep, worstFluid, worstMoisture, peakQueue := samples[0], samples[0], samples[0], samples[0]
 	for _, sample := range samples[1:] {
 		if sample.step > worstStep.step {
 			worstStep = sample
 		}
-		if sample.fluidTail > worstTail.fluidTail {
-			worstTail = sample
+		if sample.fluid > worstFluid.fluid {
+			worstFluid = sample
+		}
+		if sample.moisture > worstMoisture.moisture {
+			worstMoisture = sample
 		}
 		if sample.queueBefore > peakQueue.queueBefore {
 			peakQueue = sample
@@ -295,16 +298,17 @@ func reportFluidSamples(t *testing.T, name string, samples []fluidTickSample) fl
 		sample fluidTickSample
 	}{
 		{"整 tick 最慢", worstStep},
-		{"流体段最慢", worstTail},
+		{"流体段最慢", worstFluid},
+		{"湿度段最慢", worstMoisture},
 		{"队列最大", peakQueue},
 	} {
 		s := item.sample
 		// 两个只读探针与真实 Advance 是三次独立的墙钟测量，差值在处理成本
 		// 低于测量噪声时可能为负；按 0 记并如实标注，不倒填一个好看的正数。
-		t.Logf("[%s] %s: tick=%d 队列 %d→%d 项 | Step=%v 流体段=%v | 遍历 map=%v 排序=%v 处理及其余=%v",
+		t.Logf("[%s] %s: tick=%d 队列 %d→%d 项 | Step=%v 流体段=%v 湿度段=%v | 遍历 map=%v 排序=%v 流体处理及其余=%v",
 			name, item.label, s.tick, s.queueBefore, s.queueAfter,
-			s.step, s.fluidTail, s.scan,
-			clampNonNegative(s.scanSort-s.scan), clampNonNegative(s.fluidTail-s.scanSort))
+			s.step, s.fluid, s.moisture, s.scan,
+			clampNonNegative(s.scanSort-s.scan), clampNonNegative(s.fluid-s.scanSort))
 	}
 	return peakQueue
 }
