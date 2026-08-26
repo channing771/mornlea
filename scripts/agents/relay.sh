@@ -46,7 +46,11 @@ if [ -f "$GUARD" ]; then
 fi
 
 # 终结判据：规划表没有状态单元格为「就绪」的任务行。
-if ! grep -E '^\| [A-F]-[0-9]{2} \|' "$ROOT/docs/feature-backlog.md" | grep -q '| 就绪 |'; then
+if ! awk -F '|' '
+  /^\| A-[0-9][0-9] \|/ && $5 ~ /^[[:space:]]*就绪[[:space:]]*$/ { ready = 1 }
+  /^\| [B-F]-[0-9][0-9] \|/ && $6 ~ /^[[:space:]]*就绪[[:space:]]*$/ { ready = 1 }
+  END { exit !ready }
+' "$ROOT/docs/feature-backlog.md"; then
   rm -f "$GUARD"
   log "规划表已无就绪任务，循环终结"
   exit 0
