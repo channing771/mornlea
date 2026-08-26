@@ -36,3 +36,10 @@
 - 全新 implementer 子代理交付 `213443e6`：terrain.wgsl 耕地区间角高度路径（29..30 判别、公式与 water.wgsl 同源）、shaders.rs 区间常量、离屏真实 GPU 差分渲染测试 4 条（含巨型石板回归锁与顶缘位移实测）、Go 跨语言层号钉子。
 - Ruling: cull.wgsl 以注释+源码扫描钉代替新分支 —— 实现期核实现行剔除只读 face 平面、从不读 bit 12..19，行为已是 D2a 要求的语义；D2a 的「AABB 基于尺寸位」前提系控制会话误判，design 已同步改写 —— 加死分支只会污染热路径。
 - 验证：client 103 tests / engine 166 tests / clippy -D warnings 全绿；visual-check 改动前后差异集合逐一相同（18 景既有机型偏差无新增）。
+
+### Task 1b 双评审与修复循环
+
+- SPEC 评审：PASS（5 建议）。QUALITY 评审：FAIL（1 阻断：cull.wgsl 顶面保守性论证方向写反——实际保留集 ⊆ 真实可见集、只漏画不多画；评审同时确认三方钉子双向超配、深度并列陷阱有明文、性能净收益）。
+- 修复轮 R1（原 implementer，`82d70e49`）：cull 论证按真实几何改写（含误差带可达性与深下沉边界警告）；sink 测试 doc 改斜率表述；反引号补齐；got→want 对调；打包期断言表述如实化；扫描钉边界说明。验证全绿（client 103 tests、clippy -D warnings、gofmt 零输出）。
+- R1 复核：PASS——两份 wgsl 剥离注释后逐位一致（语义零变化），新论证与剔除代码逐句吻合。
+- 结论：Task 1b 关闭（SPEC PASS + QUALITY PASS，1 轮修复）。
