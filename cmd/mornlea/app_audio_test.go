@@ -451,13 +451,6 @@ func audioInventory(item core.ItemID, count uint8) core.Inventory {
 	return inventory
 }
 
-func audioPlayerState(tick uint64, health, hunger uint8, reset bool) network.PlayerState {
-	return network.PlayerState{
-		ServerTick: tick, Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 10, 0.5},
-		OnGround: true, Ready: true, Reset: reset, Health: health, Hunger: hunger,
-	}
-}
-
 func audioChunkSnapshot(chunk core.ChunkPos, revision uint64) network.ChunkSnapshot {
 	sections := make([]network.SectionData, core.SectionsPerChunk)
 	for index := range sections {
