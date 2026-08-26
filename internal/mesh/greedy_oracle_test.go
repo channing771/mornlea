@@ -14,7 +14,27 @@ type oracleMaskCell struct {
 	ao      uint8
 	light   uint8
 	fluid   bool
+	short   bool
 	corners [4]uint8
+}
+
+// oracleBlockTopCorners 是 engine greedy/mod.rs short_block_corners 的 Go 对照
+// 实现：非满格短方块的面四角只有落在该格顶层（世界 y == p[1]+1）的顶点取
+// registry 常量 top，其余角为 0——顶面四角全下沉、侧面上缘两角下沉、底面不动。
+func oracleBlockTopCorners(p [3]int, face mesh.Face, axis, u, v, top int) [4]uint8 {
+	var corners [4]uint8
+	for i, c := range [4][2]int{{-1, -1}, {1, -1}, {1, 1}, {-1, 1}} {
+		vertex := p
+		if face.Positive() {
+			vertex[axis]++
+		}
+		vertex[u] += (c[0] + 1) / 2
+		vertex[v] += (c[1] + 1) / 2
+		if vertex[1] == p[1]+1 {
+			corners[i] = uint8(top)
+		}
+	}
+	return corners
 }
 
 // oracleFullFluidHeight 是水柱内部（上方也是流体）的满格高度原值。
@@ -109,15 +129,22 @@ func meshSectionGoOracle(n *world.Neighborhood, reg mesh.Registry, light *goLigh
 						continue
 					}
 					fluid := reg.FluidHeight(id) != 0
+					// 非满格短方块（registry block_top_raw 非零）：与流体互斥，
+					// 走常量角高度路径（engine short_block_corners）。
+					topRaw := reg.BlockTopRaw(id)
+					short := !fluid && topRaw != 0
 					cell := oracleMaskCell{
 						used:  true,
 						mat:   reg.Material(id, face),
 						ao:    computeAOOracle(n, reg, p, axis, u, v, step),
 						light: light.at(q[0], q[1], q[2]),
 						fluid: fluid,
+						short: short,
 					}
 					if fluid {
 						cell.corners = oracleFluidCorners(n, reg, p, face, axis, u, v)
+					} else if short {
+						cell.corners = oracleBlockTopCorners(p, face, axis, u, v, int(topRaw))
 					}
 					mask[vi][ui] = cell
 					any = true
@@ -135,9 +162,10 @@ func meshSectionGoOracle(n *world.Neighborhood, reg mesh.Registry, light *goLigh
 						continue
 					}
 
-					// 水面按 1×1 出面，不贪心合并（见 engine greedy/mod.rs 的同名说明）。
+					// 水面与非满格短方块都按 1×1 出面，不贪心合并（见 engine
+					// greedy/mod.rs 的同名说明）：两者的角高度都借走了 w/h 位。
 					w, h := 1, 1
-					if !c.fluid {
+					if !c.fluid && !c.short {
 						for ui+w < 16 && mask[vi][ui+w] == c {
 							w++
 						}

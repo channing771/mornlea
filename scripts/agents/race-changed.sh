@@ -115,5 +115,6 @@ if [ -n "$heavy" ]; then
   echo "提示：集合含重型包（${heavy}），预计分钟级；仅迭代验证可改用 --diff 后手动加 -short" >&2
 fi
 
-# shellcheck disable=SC2086 —— 包列表需要按空白展开为多个参数。
-go test "$closure" -race -count=1
+# shellcheck disable=SC2086 —— 包列表需要按空白展开为多个参数（不可加引号：
+# 引号会把换行分隔的整个列表折叠成单个 malformed import path 参数）。
+go test $closure -race -count=1

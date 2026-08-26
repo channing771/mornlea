@@ -18,6 +18,8 @@ const (
 	CueEatingComplete
 	// CueDamage 对应收到的一次权威伤害确认。
 	CueDamage
+	// CueWaterSplash 对应本地玩家身体从干燥进入流体的权威确认上升沿（入水水花）。
+	CueWaterSplash
 	cueCount
 )
 
@@ -33,6 +35,8 @@ var cueSpecs = [cueCount]cueSpec{
 	CueMiningComplete: {samples: 2646, startHz: 180, endHz: 90, amplitude: 10000},
 	CueEatingComplete: {samples: 3087, startHz: 440, endHz: 660, amplitude: 8000},
 	CueDamage:         {samples: 2205, startHz: 95, endHz: 60, amplitude: 12000},
+	// 水花复用方波下滑音：约 91 ms，比伤害/采掘亮、比 UI click 长（design.md Decision 3）。
+	CueWaterSplash: {samples: 2000, startHz: 800, endHz: 220, amplitude: 11000},
 }
 
 func (cue Cue) valid() bool {

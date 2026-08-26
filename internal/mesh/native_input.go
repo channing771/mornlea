@@ -13,9 +13,10 @@ const (
 	nativeHeightColumns        = 3 * 3
 	// nativeRegistryEntryBytes 与 Rust 的 REGISTRY_ENTRY_BYTES 逐字节对应：
 	// id(u16) + opaque(u8) + emission(u8) + material[6](u16) + fluidHeight(u8)
-	// + lightAttenuation(u8) = 18。两侧各自硬编码，改动即构成一次 engine ABI
-	// 变更（本次扩容仍在 v5 内完成）。
-	nativeRegistryEntryBytes = 2 + 1 + 1 + 6*2 + 1 + 1
+	// + lightAttenuation(u8) + blockTopRaw(u8) = 19。两侧各自硬编码，改动即
+	// 构成一次 engine ABI 变更：16→18 的扩容发生在 v5，追加 blockTopRaw 的
+	// 本次扩容升到 v7（v6 被 lod_shell 出口占用）。
+	nativeRegistryEntryBytes = 2 + 1 + 1 + 6*2 + 1 + 1 + 1
 	// nativeMaxRegistryEntries 必须与 Rust 端硬编码的
 	// engine/crates/mornlea_engine/src/input.rs 的 MAX_REGISTRY_ENTRIES
 	// (=48) 保持一致——两侧各自独立定义，没有共享常量或生成步骤，全靠人
@@ -73,6 +74,17 @@ func encodeNativeInput(dst []byte, n *world.Neighborhood, snapshot RegistrySnaps
 		}
 		if block.FluidHeight > 14 {
 			return 0, fmt.Errorf("mesh: 方块流体高度原值超过 14")
+		}
+		// 合法域是哨兵 0（满格）加 1..=14；15 会让 mesher 的「非零即短方块」
+		// 单一判定失效。Rust 侧 `RegistryView::validate` 同口径拒绝，这里提前
+		// 给出可读错误。
+		if block.BlockTopRaw > 14 {
+			return 0, fmt.Errorf("mesh: 方块顶面高度原值超过 14")
+		}
+		// 流体与短方块互斥：流体的角高度由 mesher 邻域平均现算、短方块由
+		// `BlockTopRaw` 常量驱动，同一条目同时携带两套语义时行为无从定义。
+		if block.FluidHeight != 0 && block.BlockTopRaw != 0 {
+			return 0, fmt.Errorf("mesh: 流体条目携带非零顶面高度原值")
 		}
 		// 上界 1 来自 Rust light::build_sky 的分桶证明（每格扣减只能是 1 或 2），
 		// 不是天空光值域；详见 registry.go 同名校验与 build_sky 的注释。
@@ -165,7 +177,8 @@ func encodeNativeInput(dst []byte, n *world.Neighborhood, snapshot RegistrySnaps
 		}
 		dst[offset] = block.FluidHeight
 		dst[offset+1] = block.LightAttenuation
-		offset += 2
+		dst[offset+2] = block.BlockTopRaw
+		offset += 3
 	}
 	for _, word := range snapshot.Visibility {
 		binary.LittleEndian.PutUint64(dst[offset:offset+8], word)
