@@ -32,7 +32,7 @@ mesher 只解决几何编码；**呈现要到达屏幕还必须改客户端 shad
 
 - **判别方式：material 区间**（沿用植物的既定模式「判别不占任何 quad 位」，bit 63 必须留空、无位可用）。Go 侧 `LayerFarmlandDry/LayerFarmlandDryWet` 层号为人手同步常量，Rust 客户端侧以区间常量复述并由跨语言测试钉住——与 `PLANT_MATERIAL_FIRST/LAST` 三处手工同步纪律同构。
 - `terrain.wgsl`：material 落入耕地区间时走角高度路径（顶点 y 上移 `(raw+1)/16`，与 water.wgsl 同公式），否则保持 w/h 尺寸路径；两条路径互斥由区间判定保证。
-- `cull.wgsl`：耕地 quad 按**满格 AABB 处理**（保守正确——下沉 1/16 对剔除不可见，无需精确盒），即落入区间时忽略角位按整格出盒，避免误读尺寸位。
+- `cull.wgsl`：实现期核实其轴向面剔除只读 face 平面、**从不读 bit 12..19**，行为天然就是「忽略角位按整格处理」；故不新增分支（冗余分支只会给热路径加死代码），以注释固化该不变量并用源码扫描测试机械钉住。原「AABB 基于尺寸位」的前提系控制会话误判，已由 Task 1b 实现者纠正。
 - client ABI 不变：shader 内部分支不新增导出，v8 不动。
 
 被否替代一：给 quad 增设「短方块标志位」——bit 63 是唯一空位且被 `voxel-visual-presentation` 钉死必须留空，无位可用。

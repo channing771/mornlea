@@ -30,3 +30,9 @@
 - 修复轮 R1（原 implementer，`21794e67`）：六处措辞改「带角高度的 quad（流体或短方块）」+ 双类互斥论证；新增 covered/farmland_under_fluid 两测钉住「上方方块/水不拉平到 15」；反引号补齐。验证全绿（engine 166 tests、clippy -D warnings、gofmt 零输出）。
 - R1 复核：PASS——diff 纯注释+测试，无行为变更；断言实钉（缺面即 panic、夹具互斥数据核实）；残留「水面」字样均为真实水路径描述非排他主张。
 - 结论：Task 1 关闭（SPEC PASS + QUALITY PASS，1 轮修复）。已知过渡态红：archcheck `TestBaselineVersionsMatchCode` 待 Task 3.1 消解。
+
+### Task 1b 执行
+
+- 全新 implementer 子代理交付 `213443e6`：terrain.wgsl 耕地区间角高度路径（29..30 判别、公式与 water.wgsl 同源）、shaders.rs 区间常量、离屏真实 GPU 差分渲染测试 4 条（含巨型石板回归锁与顶缘位移实测）、Go 跨语言层号钉子。
+- Ruling: cull.wgsl 以注释+源码扫描钉代替新分支 —— 实现期核实现行剔除只读 face 平面、从不读 bit 12..19，行为已是 D2a 要求的语义；D2a 的「AABB 基于尺寸位」前提系控制会话误判，design 已同步改写 —— 加死分支只会污染热路径。
+- 验证：client 103 tests / engine 166 tests / clippy -D warnings 全绿；visual-check 改动前后差异集合逐一相同（18 景既有机型偏差无新增）。
