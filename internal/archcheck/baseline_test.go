@@ -9,15 +9,15 @@ import (
 	"testing"
 )
 
-// baselineVersionMapping 描述 `CLAUDE.md` 中一条基线版本断言与其代码权威来源的对应关系。
+// baselineVersionMapping 描述 `AGENTS.md` 中一条基线版本断言与其代码权威来源的对应关系。
 //
-// 两侧都是"从文件里读"：docPattern 从 `CLAUDE.md` 正文捕获文档声称的版本号，
+// 两侧都是"从文件里读"：docPattern 从 `AGENTS.md` 正文捕获文档声称的版本号，
 // codePattern 从权威来源文件的源码文本捕获真实值。任何一侧写死期望值都会让本门禁
 // 在下次升版时静默失效——那恰恰是它要防的事。
 type baselineVersionMapping struct {
 	// name 是断言的可读名，只用于失败信息。
 	name string
-	// docPattern 在 `CLAUDE.md` 中定位该断言，捕获组 1 为文档声称的版本号。
+	// docPattern 在 `AGENTS.md` 中定位该断言，捕获组 1 为文档声称的版本号。
 	docPattern string
 	// sourcePath 是权威来源文件，相对模块根。
 	sourcePath string
@@ -28,7 +28,7 @@ type baselineVersionMapping struct {
 	why string
 }
 
-// baselineVersionMappings 是 `CLAUDE.md`「项目定位」段声明的全部契约版本号。
+// baselineVersionMappings 是 `AGENTS.md`「项目与契约」段声明的全部契约版本号。
 //
 // 这份文件会被每个 agent 会话读进上下文，它说什么后续工作就按什么假设推进；
 // 而"归档时更新基线"此前只是一条建议，没有任何机械检查兜底，结果基线一次滞后了
@@ -92,7 +92,7 @@ var baselineVersionMappings = []baselineVersionMapping{
 	},
 }
 
-// TestBaselineVersionsMatchCode 把 `CLAUDE.md`「项目定位」段的契约版本号与代码里的
+// TestBaselineVersionsMatchCode 把 `AGENTS.md`「项目与契约」段的契约版本号与代码里的
 // 权威常量逐条比对，防止长期基线文档在归档后悄悄滞后。
 //
 // 两条实现约束：
@@ -101,39 +101,33 @@ var baselineVersionMappings = []baselineVersionMapping{
 //     版本不匹配若同时让某条正则失配，守卫会先报出"断言未找到"这个误导性诊断，
 //     把下一个人引向错误方向。
 func TestBaselineVersionsMatchCode(t *testing.T) {
-	root := moduleRoot(t)
-	// 两份基线文档必须逐字节相同（见 TestBaselineDocsAreIdentical），这里仍然各校验一遍：
-	// 一致性测试若将来被删或被跳过，版本号一侧不应随之失去防护。
-	for _, name := range baselineDocNames {
-		t.Run(name, func(t *testing.T) {
-			assertBaselineVersions(t, root, name)
-		})
-	}
+	assertBaselineVersions(t, moduleRoot(t), baselineDocName)
 }
 
-// baselineDocNames 是两份必须保持逐字节相同的长期基线文档。
-var baselineDocNames = []string{"AGENTS.md", "CLAUDE.md"}
+const baselineDocName = "AGENTS.md"
 
-// TestBaselineDocsAreIdentical 锁定 `AGENTS.md` 与 `CLAUDE.md` 逐字节相同。
-//
-// 二者曾因归档时只更新其中一份而分叉：`AGENTS.md` 维护到了 M5E，`CLAUDE.md` 停在 M5A，
-// 基线描述滞后四个里程碑且无人察觉。孪生文件的真实失效模式是"只改了一份"，
-// 所以这条一致性断言比任何单文件检查都更贴根因。
-func TestBaselineDocsAreIdentical(t *testing.T) {
+const claudeAgentImport = `# CLAUDE.md
+
+本作用域的 Agent 指南位于 [AGENTS.md](AGENTS.md)，供 Claude Code、Codex、OpenCode 及其他编码代理共享。Claude Code 在下方导入该指南。
+
+@AGENTS.md
+`
+
+var claudeImportDocs = []string{
+	"CLAUDE.md",
+	filepath.Join("internal", "CLAUDE.md"),
+	filepath.Join("engine", "CLAUDE.md"),
+	filepath.Join("cmd", "mornlea", "CLAUDE.md"),
+}
+
+func TestClaudeImportsAgentGuidance(t *testing.T) {
 	root := moduleRoot(t)
-	if len(baselineDocNames) < 2 {
-		t.Fatalf("基线文档只登记了 %d 份，一致性断言无从谈起", len(baselineDocNames))
-	}
-	reference := baselineDocNames[0]
-	referenceText := readBaselineDoc(t, root, reference)
-	for _, name := range baselineDocNames[1:] {
-		text := readBaselineDoc(t, root, name)
-		if text == referenceText {
-			continue
-		}
-		t.Errorf("%s 与 %s 内容不同：两份长期基线文档必须逐字节相同，改任何一份都要同步另一份"+
-			"（%s %d 字节，%s %d 字节）",
-			reference, name, reference, len(referenceText), name, len(text))
+	for _, name := range claudeImportDocs {
+		t.Run(name, func(t *testing.T) {
+			if text := readBaselineDoc(t, root, name); text != claudeAgentImport {
+				t.Errorf("%s 不是规范的 AGENTS.md 薄导入（want %d bytes, got %d bytes）：\n%s", name, len(claudeAgentImport), len(text), text)
+			}
+		})
 	}
 }
 

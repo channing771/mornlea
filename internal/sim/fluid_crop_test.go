@@ -322,6 +322,11 @@ func fillFluidCropDropSlots(t *testing.T, engine *Engine) {
 func TestFluidCropCapacityFullRejectsAndRetriesUntilSlotFreed(t *testing.T) {
 	engine, session := readyFluidCropWorld(t, core.WheatStage3ID)
 	fillFluidCropDropSlots(t, engine)
+	engine.farmlandMoisture = farmlandMoistureState{}
+	watch := watchFarmlandMoistureCandidateAtPhase(engine, farmlandMoistureKey{
+		dimension: core.Overworld,
+		position:  fluidCropFarmland,
+	})
 	full := fluidCropChunkSlots(engine)
 	active := 0
 	for _, view := range full {
@@ -337,6 +342,7 @@ func TestFluidCropCapacityFullRejectsAndRetriesUntilSlotFreed(t *testing.T) {
 	for range 40 {
 		engine.Step()
 	}
+	engine.stepPhaseObserver = nil
 	if got := fluidBlockAt(t, engine, fluidCropCell); got != core.WheatStage3ID {
 		t.Fatalf("槽满期间作物格被改写为 %d，作物必须保持存在", got)
 	}
@@ -346,6 +352,12 @@ func TestFluidCropCapacityFullRejectsAndRetriesUntilSlotFreed(t *testing.T) {
 	}
 	if got := overworldFluidQueue(t, engine).Len(); got == 0 {
 		t.Fatal("拒绝之后目标格没有被重新排程，释放槽位后将永远无法完成冲毁")
+	}
+	if !watch.phaseSeen {
+		t.Fatal("容量拒绝窗口未经过湿度阶段观察点")
+	}
+	if watch.candidateSeen {
+		t.Fatal("容量拒绝的作物写入在湿度阶段消费前产生了耕地候选")
 	}
 
 	// 释放一个槽位：重试到期后冲毁应当完成，种子占据腾出的槽位。
@@ -432,30 +444,19 @@ func TestFluidCropFloodPreservesFarmland(t *testing.T) {
 	floodFluidCropFrom(engine, fluidCropFloodSourceAbove())
 
 	stepUntilFluidCropFlooded(t, engine, fluidCropCell, core.WaterLevel1ID)
-	if got := fluidBlockAt(t, engine, fluidCropFarmland); got != core.FarmlandDryID {
-		t.Fatalf("耕地格=%d，想要保持 %d", got, core.FarmlandDryID)
+	if got := fluidBlockAt(t, engine, fluidCropFarmland); !core.IsFarmland(got) {
+		t.Fatalf("耕地格=%d，想要保持为耕地", got)
 	}
 }
 
-// TestFluidCropFloodedFarmlandTurnsWet 覆盖湿判定联动：冲毁完成后，留在原格的
-// 耕地在随机 tick 抽中时按既有规则转为湿耕地。
-//
-// 推进方式复用既有农业测试（readyCropWorld / TestFarmlandWetnessRangeBoundary）
-// 的做法：调高 `RandomTicksPerSection` 让抽样快速命中耕地格，再用
-// stepUntilBlock 等待转换完成——干湿转换挂在随机 tick 上，固定几步内命不中是
-// 抽样机制的固有性质而非缺陷。
+// TestFluidCropFloodedFarmlandTurnsWet 覆盖湿判定联动：冲毁写入产生流体 membership
+// 变化后，留在原格的耕地必须在同一 tick 转为湿耕地。
 func TestFluidCropFloodedFarmlandTurnsWet(t *testing.T) {
 	engine, _ := readyFluidCropWorld(t, core.WheatStage3ID)
 	floodFluidCropFrom(engine, fluidCropFloodSourceAbove())
 	stepUntilFluidCropFlooded(t, engine, fluidCropCell, core.WaterLevel1ID)
 
-	t.Cleanup(func() { SetTunables(DefaultTunables()) })
-	wetSampling := ActiveTunables()
-	wetSampling.RandomTicksPerSection = 64
-	SetTunables(wetSampling)
-
-	if _, ok := stepUntilBlock(engine, fluidCropFarmland, core.FarmlandWetID); !ok {
-		t.Fatalf("冲毁后的耕地未被抽中转湿，仍是 %d",
-			fluidBlockAt(t, engine, fluidCropFarmland))
+	if got := fluidBlockAt(t, engine, fluidCropFarmland); got != core.FarmlandWetID {
+		t.Fatalf("冲毁后的耕地未在同 tick 转湿，仍是 %d", got)
 	}
 }

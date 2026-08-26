@@ -150,9 +150,16 @@ func (w *fluidWorld) SetBlock(position core.BlockPos, id core.BlockID) {
 		return
 	}
 	if settleFloodedCrop(w, record, position, old, id) {
+		// 冲毁可能因掉落容量不足而拒绝写入，必须读回最终值后再判定 membership。
+		if next := record.Chunk.BlockAt(x, position.Y, z); core.IsFluid(old) != core.IsFluid(next) {
+			w.engine.enqueueFarmlandMoistureAroundFluid(w.id, position)
+		}
 		return
 	}
 	record.Chunk.SetBlock(x, position.Y, z, id)
+	if core.IsFluid(old) != core.IsFluid(id) {
+		w.engine.enqueueFarmlandMoistureAroundFluid(w.id, position)
+	}
 	w.engine.recordChange(w.id, position, id, w.pending)
 }
 
@@ -600,6 +607,7 @@ func (engine *Engine) advanceFluids(pending map[core.ChunkKey]*pendingChunkChang
 			continue
 		}
 		engine.fluidRescan.enqueueChunk(key)
+		engine.farmlandMoisture.rescans.enqueueChunk(key)
 	}
 	engine.fluidScope, engine.fluidScopeNext = engine.fluidScopeNext, engine.fluidScope
 	engine.runFluidRescans(now, delay)

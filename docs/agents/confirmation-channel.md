@@ -57,14 +57,13 @@ feishu-listener.js（长连接事件订阅，常驻 daemon）
   "appId": "cli_xxxxxxxxxxxx",
   "appSecret": "xxxxxxxxxxxxxxxx",
   "receive": { "type": "open_id", "id": "ou_xxxxxxxxxxxx" },
-  "autoResume": true,
-  "resumeCmd": "cd /Users/you/minecraft-go && scripts/agents/run-agent.sh implementer"
+  "autoResume": true
 }
 ```
 
 - receive：type 取 open_id（bootstrap 自动写入）或 chat_id；id 为对应值。
 - autoResume：收到回复后是否自动后台续跑实现者（默认 true；关闭时只写回复文件，需手动 make agent-implementer）。
-- resumeCmd：续跑命令（默认 = 当前仓库的 run-agent.sh implementer，可覆盖）。
+- resumeCmd：可选续跑命令；省略时使用当前仓库的 `run-agent.sh implementer`，安装脚本会自动填入解析出的仓库根。
 
 ## 常用命令
 
@@ -116,29 +115,7 @@ confirm.sh list
 scripts/agents/confirm/install-listener.sh
 ```
 
-它做的事：生成本机路径（repo 根、node 路径 `$(which node)`）的 `com.mornlea.feishu-listener.plist`（KeepAlive=true，断线/崩溃自动拉起）与 `~/.mornlea/confirm/feishu.json` 骨架（mode 600；`resumeCmd` 已填真实仓库路径），有凭据时直接 launchctl load。等价的手工 plist 模板：
-
-```
-cat > ~/Library/LaunchAgents/com.mornlea.feishu-listener.plist <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>com.mornlea.feishu-listener</string>
-  <key>ProgramArguments</key><array>
-    <string>/opt/homebrew/bin/node</string>
-    <string>/Users/chen/chenwork/minecraft-go/scripts/agents/confirm/feishu-listener.js</string>
-  </array>
-  <key>KeepAlive</key><true/>
-  <key>RunAtLoad</key><true/>
-  <key>WorkingDirectory</key><string>/Users/chen/chenwork/minecraft-go</string>
-  <key>StandardOutPath</key><string>/Users/chen/Library/Logs/mornlea-listener.log</string>
-  <key>StandardErrorPath</key><string>/Users/chen/Library/Logs/mornlea-listener.err.log</string>
-</dict></plist>
-PLIST
-launchctl load ~/Library/LaunchAgents/com.mornlea.feishu-listener.plist
-```
-
-（本机实测 node 在 `/opt/homebrew/bin/node`；换机器时以 `which node` 为准。）
+`scripts/agents/confirm/install-listener.sh` 是 canonical 安装入口。脚本通过当前仓库根和 `which node` 生成 plist 的 `ProgramArguments`、`WorkingDirectory` 与日志路径，并生成 mode 600 的 `~/.mornlea/confirm/feishu.json` 骨架；有凭据时直接加载 listener。安装后可检查 `~/Library/LaunchAgents/com.mornlea.feishu-listener.plist` 中的实际路径。
 
 ## 微信 / 企业微信备选
 
