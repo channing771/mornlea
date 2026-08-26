@@ -7,7 +7,7 @@
 | 1 | `ses_fc3afd2a2ffeq80iW8UIKYPasR` | approved | approved | 0 | complete |
 | 2 | `ses_fc39ce278ffew8TsrLujyjLcba` | approved | approved | 0 | complete |
 | 3 | `ses_fc38ab39dffeZ3omLdaHb19SUl` | approved | approved | 1 | complete |
-| 4 | pending | pending | pending | 0 | pending |
+| 4 | `ses_fc35b03a0ffeMSdnFaxeADUFhQ` | approved | approved | 1 | complete |
 | 5 | control | pending | pending | 0 | pending |
 
 ## Rulings
@@ -18,6 +18,7 @@
 | B09-T1-R2 | 1 | Reviewer 无法从 diff 验证 feature branch commit 是否获得授权 | 控制会话确认用户在 Task 1 派发前已显式授权 B-09 每任务 commit，授权不含 push/merge/PR；无需代码修复 | 对话授权选择“授权任务 commits”；commit `db2a6a7d` 只含 Task 1 文件 |
 | B09-T2-R1 | 2 | Reviewer 无法只从 commit diff 验证 RED 时序、命令输出与提交后 worktree 状态 | 接受 implementer 在 ignored SDD report 中保留的逐命令证据，并以控制会话观察到的 clean status 补足；无需重跑或修改代码 | `task-2-report.md` 第 76–223 行记录 RED/GREEN，控制会话在 `5fb868f8` 后运行 `git status --short --branch` 仅输出 branch header |
 | B09-T3-R1 | 3 | Required `TestFluid` 回归揭示 brief 文件表外的 `fluid_crop_test.go` 仍要求“耕地保持干态”，与同 tick 湿润契约冲突 | 接受只更新这两条直接冲突的集成断言；不扩大生产范围 | 首轮 reviewer 裁定该范围必要且聚焦；`go test ./internal/sim -run 'TestFluid' -race -count=1` 修复后通过 |
+| B09-T4-R1 | 4 | Brief 文件表未列 `farmland_moisture.go`、`crop_growth_test.go` 与 `farmland_moisture_rescan_test.go`，但显式任务与必跑门禁要求迁移常量并清理剩余随机湿度夹具 | 接受常量迁移及两处测试夹具最小修正；不接受额外生产行为 | 首轮 reviewer 裁定三处范围聚焦且有必要；完整 sim race 与 `TestCrop|TestFarmland` race 均通过 |
 
 ## Verification
 
@@ -204,7 +205,7 @@ Task 2 已通过独立规格评审与质量评审；实现没有提前进入 Tas
 | `git diff --check` | pass | no output |
 | `openspec validate --all --strict --no-interactive` | pass | `Totals: 66 passed, 0 failed (66 items)` |
 
-Task 4 实现与验证完成，但按用户约束不勾选 `tasks.md`，规格/质量裁决与 Task Status 仍留待控制会话评审。
+Task 4 实现与验证完成，并在一轮恢复覆盖修复后通过规格与质量评审；`tasks.md` 留待 change 收尾统一核对。
 
 ## Task 4 Review Repair Round 1
 
@@ -245,4 +246,6 @@ Task 4 实现与验证完成，但按用户约束不勾选 `tasks.md`，规格/�
 | FullInterestDense | 176728, 175182, 179040, 177588, 176539 | 176728 | 14438, 14437, 14438, 14434, 14431 | 14437 | 14400 |
 | AllFarmland | 2184, 2170, 2174, 2171, 2169 | 2171 | 72, 72, 72, 72, 72 | 72 | 72 |
 
-Repair round 1 已修复 finding，但 Task 4 review 仍按用户要求保持 pending，`tasks.md` 不勾选，等待控制会话复审。
+Repair round 1 已修复 finding 并通过复审；`tasks.md` 留待 change 收尾统一核对。
+
+Task 4 independent spec/quality re-review：approved；1 Important 已关闭，无新增 finding。
