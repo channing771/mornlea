@@ -43,3 +43,26 @@
 - 修复轮 R1（原 implementer，`82d70e49`）：cull 论证按真实几何改写（含误差带可达性与深下沉边界警告）；sink 测试 doc 改斜率表述；反引号补齐；got→want 对调；打包期断言表述如实化；扫描钉边界说明。验证全绿（client 103 tests、clippy -D warnings、gofmt 零输出）。
 - R1 复核：PASS——两份 wgsl 剥离注释后逐位一致（语义零变化），新论证与剔除代码逐句吻合。
 - 结论：Task 1b 关闭（SPEC PASS + QUALITY PASS，1 轮修复）。
+
+### Task 1b R2 与 Task 2 双评审
+
+- Task 1b R2（`43eb43b2`）：archcheck 反引号门禁语义为「反引号名必须存在于全仓 Go 声明」（comment_identifier_test.go:202），R1 给 wgsl/Rust 名加反引号必然红——Ruling: 非 Go 标识符一律纯文本、仅 Go 声明用反引号；全大写豁免意味着零保护，一并去除。反引号门禁单独复验 PASS。
+- Ruling: 场景表真值修正——main 实际为 18 景（capture_ai_companion_test.go:62 钉死，`main-menu` 在 `water-surface-slope` 与 `far-horizon` 之间）；delta 初稿漏 `main-menu` 已改。连带发现：AGENTS.md「19 个正式场景…settings-menu」描述的 settings-menu capture 只存在于未合入的 D-01 分支（golden 仅在 codex/D-01-settings-menu 等分支），系 main 基线文档既有失真，非本变更引入；Task 3.1 同步基线文档时按「只写已集成事实」一并修正该句并在 progress 记录。
+- Task 2 双评审：SPEC PASS + QUALITY PASS（0 阻断）。评审独立复核：golden 新旧逐像素解码比对（72/1700px 精确吻合、1667px 聚集新增列投影区）、红链 overlay 实证、俯角算术定量成立（z=-1 可辨 vs z=-8 亚像素）、湿/干列顶面色可区分。
+- 建议（转入 Task 3 清账）：(a) ledger 补逐景机器偏差基线指标；(b) 俯角注释「约 18°」可精确为 17°（16.6–17.8°）——低价值，随顺手改动处理或保留；(c) 越界哨兵覆盖边界已在测试注释说明，无需扩展。
+
+## 附：本机 visual-check 基线差异集合（Task 2 时点，供归因对账）
+
+| 场景 | 最大通道差/差异像素数 |
+|---|---|
+| terrain-noon / avatar-nametag / inventory-crafting / chest-container / furnace-container | 7/10 @(423,123) |
+| debug-panel | 3/6 |
+| skylight-tunnel / target-block-feedback / water-surface-slope | 1/7 |
+| block-light-room | 1/4 |
+| water-underwater | 4/4 |
+| oak-grove | 86/56 @(12,99) |
+| ai-companion | 1/39 @(490,8) |
+| far-horizon | 18/32 @(518,132) |
+| materials-showcase | 0/0（Task 2 再生后；此前 1/35 本机偏差随再生消除） |
+
+阈值外超阈景共 10 景；hud-hotbar-health / hud-survival-feedback / main-menu 为 0/0。
