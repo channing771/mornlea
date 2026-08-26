@@ -40,6 +40,9 @@ func newRemoteRenderApplication(t *testing.T, glyphs render.GlyphSource) *applic
 	reg := assets.NewRegistry()
 	layers, pixels := reg.AtlasPixels()
 	renderer.UploadAtlas(layers, pixels)
+	// 与 app_startup 的非 benchmark 渲染器保持一致：UI 字体先上传，否则
+	// 面板可见的游戏相位帧携带 layout v3 段时被 Rust 以缺字体拒绝。
+	renderer.UploadUIFont(render.EmbeddedCJKFont())
 	app := &application{
 		renderer:        renderer,
 		scheduler:       render.NewSectionScheduler(renderer, applicationUploadPerFrame),

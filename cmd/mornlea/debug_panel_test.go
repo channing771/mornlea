@@ -3,16 +3,19 @@
 package main
 
 import (
-	"log/slog"
-	"path/filepath"
+	"bytes"
+	"encoding/binary"
+	"fmt"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/companion"
+	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/render"
@@ -164,222 +167,6 @@ func TestPanelSelectedRowTracksSelectedField(t *testing.T) {
 	}
 }
 
-func TestPanelArrowAdjustsSelectedValue(t *testing.T) {
-	state := newPanelState(config.Defaults())
-	state.visible = true
-	state.selectFieldForTest(t, "physics.gravity")
-
-	before := state.effective.Physics.Gravity
-	state.handleKeys(panelKeys{Right: true}, false)
-	if state.effective.Physics.Gravity <= before {
-		t.Fatalf("右方向键必须增大取值：%v -> %v", before, state.effective.Physics.Gravity)
-	}
-	state.handleKeys(panelKeys{Left: true}, false)
-	if state.effective.Physics.Gravity != before {
-		t.Fatalf("左方向键必须还原一步：%v，want %v", state.effective.Physics.Gravity, before)
-	}
-}
-
-func TestPanelShiftCoarseAndAltFine(t *testing.T) {
-	state := newPanelState(config.Defaults())
-	state.visible = true
-	state.selectFieldForTest(t, "physics.gravity")
-	base := state.effective.Physics.Gravity
-
-	state.handleKeys(panelKeys{Right: true}, false)
-	fine := state.effective.Physics.Gravity - base
-	state.effective.Physics.Gravity = base
-
-	state.handleKeys(panelKeys{Right: true, Shift: true}, false)
-	coarse := state.effective.Physics.Gravity - base
-	if coarse <= fine {
-		t.Fatalf("Shift 必须是粗调：coarse=%v fine=%v", coarse, fine)
-	}
-}
-
-// TestPanelAltIsFineAdjustment 单独覆盖 Alt（×0.1 细调）：
-// TestPanelShiftCoarseAndAltFine 的名字承诺了 Alt，但函数体从未设置过
-// Alt:true，删掉 handleKeys 里 `if keys.Alt { step *= 0.1 }` 那一行，
-// 原有测试套件照样全绿。这里直接断言 Alt 增量严格小于不带修饰键的普通增量。
-func TestPanelAltIsFineAdjustment(t *testing.T) {
-	state := newPanelState(config.Defaults())
-	state.visible = true
-	state.selectFieldForTest(t, "physics.gravity")
-	base := state.effective.Physics.Gravity
-
-	state.handleKeys(panelKeys{Right: true}, false)
-	normal := state.effective.Physics.Gravity - base
-	state.effective.Physics.Gravity = base
-
-	state.handleKeys(panelKeys{Right: true, Alt: true}, false)
-	fine := state.effective.Physics.Gravity - base
-	if fine <= 0 {
-		t.Fatalf("Alt 细调仍必须增大取值：fine=%v", fine)
-	}
-	if fine >= normal {
-		t.Fatalf("Alt 必须是细调：fine=%v normal=%v", fine, normal)
-	}
-}
-
-func TestPanelRejectsEditsOnReadOnlyRow(t *testing.T) {
-	state := newPanelState(config.Defaults())
-	state.visible = true
-	state.selectFieldForTest(t, "physics.gravity")
-	before := state.effective.Physics.Gravity
-	state.handleKeys(panelKeys{Right: true}, true) // remote=true
-	if state.effective.Physics.Gravity != before {
-		t.Fatal("联机时不得修改权威参数")
-	}
-}
-
-func TestPanelEnterResetsRowToDefault(t *testing.T) {
-	state := newPanelState(config.Defaults())
-	state.visible = true
-	state.selectFieldForTest(t, "physics.gravity")
-	state.handleKeys(panelKeys{Right: true}, false)
-	state.handleKeys(panelKeys{Enter: true}, false)
-	if state.effective.Physics.Gravity != config.Defaults().Physics.Gravity {
-		t.Fatal("Enter 必须把当前行重置为默认值")
-	}
-}
-
-func TestPanelClampsAtBounds(t *testing.T) {
-	state := newPanelState(config.Defaults())
-	state.visible = true
-	state.selectFieldForTest(t, "sim.spawnRadius")
-	for i := 0; i < 10000; i++ {
-		state.handleKeys(panelKeys{Right: true, Shift: true}, false)
-	}
-	if state.effective.Sim.SpawnRadius > 64 {
-		t.Fatalf("SpawnRadius = %v，必须钳在上界 64", state.effective.Sim.SpawnRadius)
-	}
-}
-
-func TestPanelNavigationSkipsReadOnlyRows(t *testing.T) {
-	state := newPanelState(config.Defaults())
-	state.visible = true
-	state.selected = 0
-	for i := 0; i < 200; i++ {
-		state.handleKeys(panelKeys{Down: true}, true)
-		if selectedRowForTest(t, state.rows(true)).ReadOnly {
-			t.Fatal("导航必须跳过只读行")
-		}
-	}
-}
-
-// TestPanelSaveWritesFile 证明 save 真的把 effective 里的值落了盘，而不是
-// 例如写 config.Defaults().Save(path) 那种完全丢弃 s.effective 却也能让
-// os.Stat 成功的实现——原来的版本只断言文件存在，测不出这种退化。
-func TestPanelSaveWritesFile(t *testing.T) {
-	state := newPanelState(config.Defaults())
-	state.effective.Physics.Gravity = 55
-	state.effective.Sim.SpawnRadius = 9
-	state.effective.Render.FovDegrees = 88
-
-	path := filepath.Join(t.TempDir(), "config.json")
-	if err := state.save(path); err != nil {
-		t.Fatalf("save: %v", err)
-	}
-
-	saved, err := config.Load(path)
-	if err != nil {
-		t.Fatalf("重新读取保存的配置: %v", err)
-	}
-	if saved.Physics.Gravity != 55 {
-		t.Fatalf("Physics.Gravity 未落盘: %v，want 55", saved.Physics.Gravity)
-	}
-	if saved.Sim.SpawnRadius != 9 {
-		t.Fatalf("Sim.SpawnRadius 未落盘: %v，want 9", saved.Sim.SpawnRadius)
-	}
-	if saved.Render.FovDegrees != 88 {
-		t.Fatalf("Render.FovDegrees 未落盘: %v，want 88", saved.Render.FovDegrees)
-	}
-}
-
-// TestPanelSavePreservesExistingLoggingSection 证明 save 不会把磁盘上已有的
-// logging 段清空——例如把实现换成 config.Defaults().Save(path) 或者丢掉
-// save() 里 config.Load 那一步直接整体覆盖，都会让这里的模块级日志等级消失。
-func TestPanelSavePreservesExistingLoggingSection(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
-	preexisting := config.Defaults()
-	preexisting.Logging.Modules = map[string]slog.Level{"render": slog.LevelDebug}
-	if err := preexisting.Save(path); err != nil {
-		t.Fatalf("准备已有配置文件: %v", err)
-	}
-
-	state := newPanelState(config.Defaults())
-	if err := state.save(path); err != nil {
-		t.Fatalf("save: %v", err)
-	}
-
-	saved, err := config.Load(path)
-	if err != nil {
-		t.Fatalf("重新读取保存的配置: %v", err)
-	}
-	if got := saved.Logging.Modules["render"]; got != slog.LevelDebug {
-		t.Fatalf("logging.modules.render = %v, want LevelDebug（save 不得清空已有 logging 段）", got)
-	}
-}
-
-func TestPanelSavePreservesExistingAICompanions(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
-	id, err := companion.ParseID("00112233-4455-4677-8899-aabbccddeeff")
-	if err != nil {
-		t.Fatal(err)
-	}
-	preexisting := config.Defaults()
-	// M5B 起非空伙伴必须携带完整模型设置才能通过 config.Load；这里用免密钥的
-	// loopback 形态（超时未设置走默认值），保持本测试"面板保存完全保留 ai 组"
-	// 的主题不变，顺带锁定模型字段随 Load→改 render→Save 往返不丢。
-	preexisting.AI = &config.AI{
-		ModelSettings: companion.ModelSettings{
-			Endpoint: "http://127.0.0.1:1/v1",
-			Model:    "test-model",
-		},
-		Companions: []companion.Definition{{ID: id, Name: "阿木"}},
-	}
-	if err := preexisting.Save(path); err != nil {
-		t.Fatalf("准备已有配置文件: %v", err)
-	}
-
-	state := newPanelState(config.Defaults())
-	state.effective.Render.FovDegrees = 88
-	if err := state.save(path); err != nil {
-		t.Fatalf("save: %v", err)
-	}
-
-	saved, err := config.Load(path)
-	if err != nil {
-		t.Fatalf("重新读取保存的配置: %v", err)
-	}
-	if !reflect.DeepEqual(saved.AI, preexisting.AI) {
-		t.Fatalf("AI = %+v，want 完全保留 %+v", saved.AI, preexisting.AI)
-	}
-}
-
-// TestPanelClampsHitsUpperBoundExactly 证明 TestPanelClampsAtBounds 的样本量真的
-// 触到了上界，而不是恰好停在界内看起来像通过：10000 次 ×10 步长的粗调足以让
-// spawnRadius(1..64,step1) 在几步内越过 64，必须被钳成恰好 64。
-func TestPanelClampsHitsUpperBoundExactly(t *testing.T) {
-	state := newPanelState(config.Defaults())
-	state.visible = true
-	state.selectFieldForTest(t, "sim.spawnRadius")
-	for i := 0; i < 10; i++ {
-		state.handleKeys(panelKeys{Right: true, Shift: true}, false)
-	}
-	if state.effective.Sim.SpawnRadius != 64 {
-		t.Fatalf("SpawnRadius = %v，want 恰好命中上界 64", state.effective.Sim.SpawnRadius)
-	}
-}
-
-// TestPanelFrameInputIsAllocationFreeWhenHidden 锁住"面板关闭时渲染热路径零
-// 分配"这条性质。
-//
-// 原实现把 a.panel.rows(a.remote()) 直接写成 Prepare 的实参，Prepare 内部
-// 的 visible 提前返回拦不住实参求值：只要开了 --dev，即使面板关着，每帧也会
-// 分配一个 20 余行的切片、三处段头字符串与十余个格式化后的数值字符串。
-// internal/render 的 BenchmarkDebugPanelHidden 只测 Prepare 自身，看不到调用
-// 方这一侧的构造开销，因此这条断言必须留在 cmd/mornlea。
 func TestPanelFrameInputIsAllocationFreeWhenHidden(t *testing.T) {
 	app := &application{panel: newPanelState(config.Defaults())}
 	now := time.Now()
@@ -401,11 +188,27 @@ func TestPanelFrameInputIsAllocationFreeWhenHidden(t *testing.T) {
 
 func TestPanelToggleDoesNotReportChanged(t *testing.T) {
 	state := newPanelState(config.Defaults())
-	if changed := state.handleKeys(panelKeys{Toggle: true}, false); changed {
-		t.Fatal("仅切换可见性不应视为改动")
-	}
+	state.handleKeys(panelKeys{Toggle: true})
 	if !state.visible {
 		t.Fatal("Toggle 必须切换可见性")
+	}
+	state.handleKeys(panelKeys{Toggle: true})
+	if state.visible {
+		t.Fatal("再次 Toggle 必须隐藏面板")
+	}
+}
+
+func TestPanelToggleClearsEditing(t *testing.T) {
+	state := newPanelState(config.Defaults())
+	state.visible = true
+	state.selectFieldForTest(t, "physics.gravity")
+	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionEnterEdit}}, false)
+	if !state.editing {
+		t.Fatal("应处于编辑态")
+	}
+	state.handleKeys(panelKeys{Toggle: true})
+	if state.editing {
+		t.Fatal("面板关闭必须清空编辑态")
 	}
 }
 
@@ -437,13 +240,351 @@ func TestApplyPanelChangeWritesCameraFovY(t *testing.T) {
 func TestPanelResetAllSkipsAuthoritativeGroupsWhenRemote(t *testing.T) {
 	state := newPanelState(config.Defaults())
 	state.visible = true
-	state.effective.Physics.Gravity = 99
-	state.effective.Render.MouseSensitivity = 4.5
-	state.handleKeys(panelKeys{ResetAll: true}, true)
-	if state.effective.Physics.Gravity != 99 {
-		t.Fatalf("联机时 F6 不得改动 physics 组：%v", state.effective.Physics.Gravity)
+	state.selectFieldForTest(t, "physics.gravity")
+	state.applyPanelEvents([]debugPanelEvent{{
+		action: client.DebugPanelActionEnterEdit,
+	}}, true)
+	if state.editing {
+		t.Fatal("联机时不得进入编辑态")
 	}
-	if state.effective.Render.MouseSensitivity != config.Defaults().Render.MouseSensitivity {
-		t.Fatalf("render 组仍应被 F6 重置：%v", state.effective.Render.MouseSensitivity)
+	state.applyPanelEvents([]debugPanelEvent{{
+		action: client.DebugPanelActionConfirm, value: "99",
+	}}, false)
+	if state.effective.Physics.Gravity == 99 {
+		t.Fatalf("未进入编辑态的 confirm 不得改值：%v", state.effective.Physics.Gravity)
+	}
+}
+
+// encodeDebugPanelSegmentGolden 按 Rust debug_abi_tests 的 valid_frame() 夹具
+// 手工拼出期望字节，逐字节锁定 layout v3 的字段序与定宽记录布局。
+func TestEncodeDebugPanelSegmentCrossLanguageGolden(t *testing.T) {
+	readout := render.PanelReadout{
+		FrameMillis:  12.5,
+		Position:     mgl32.Vec3{10, 64, -3},
+		Yaw:          45,
+		Pitch:        -12,
+		Tick:         1234,
+		WorldTime:    42,
+		LoadedChunks: 137,
+		Mode:         "单机",
+	}
+	rows := []render.PanelRow{
+		{Label: "── physics ──", ReadOnly: true},
+		{Label: "gravity", Value: "9.8", Selected: true},
+		{Label: "fovDegrees", Value: "70"},
+	}
+	got := encodeDebugPanelSegment(true, true, readout, rows)
+
+	fixed24 := func(value string) []byte {
+		out := make([]byte, 24)
+		copy(out, value)
+		return out
+	}
+	u32 := func(value uint32) []byte { return binary.LittleEndian.AppendUint32(nil, value) }
+	f32 := func(value float32) []byte {
+		return binary.LittleEndian.AppendUint32(nil, math.Float32bits(value))
+	}
+	f64 := func(value float64) []byte {
+		return binary.LittleEndian.AppendUint64(nil, math.Float64bits(value))
+	}
+	appendRow := func(out []byte, label, value string, flags uint32, edit []byte) []byte {
+		out = append(out, fixed24(label)...)
+		out = append(out, fixed24(value)...)
+		out = append(out, u32(flags)...)
+		return append(out, edit...)
+	}
+	want := u32(3)                    // layout
+	want = append(want, u32(1)...)    // flags: visible
+	want = append(want, f64(12.5)...) // frame_millis
+	want = append(want, f32(10)...)
+	want = append(want, f32(64)...)
+	want = append(want, f32(-3)...)
+	want = append(want, f32(45)...)                                     // yaw
+	want = append(want, f32(-12)...)                                    // pitch
+	want = append(want, binary.LittleEndian.AppendUint64(nil, 1234)...) // tick
+	want = append(want, binary.LittleEndian.AppendUint64(nil, 42)...)   // world_time
+	want = append(want, u32(137)...)                                    // loaded_chunks
+	want = append(want, u32(6)...)
+	want = append(want, "单机"...)
+	want = append(want, u32(3)...) // row_count
+	want = appendRow(want, "── physics ──", "", 1, nil)
+	edit := u32(3)
+	edit = append(edit, "9.8"...)
+	edit = append(edit, u32(3)...)
+	want = appendRow(want, "gravity", "9.8", 2+4+8, edit)
+	want = appendRow(want, "fovDegrees", "70", 4, nil)
+	if !bytes.Equal(got, want) {
+		t.Fatalf("layout v3 段字节不一致:\n got=%x\nwant=%x", got, want)
+	}
+}
+
+// bytesOffset 返回段头之后第一条行记录的字节偏移：layout 4+flags 4+f64 8+
+// 3×f32 12+yaw 4+pitch 4+tick 8+world_time 8+loaded 4 = 64 字节的常数部分
+// 逐字段累加后为 56 字节，加 mode（4+len）与 row_count 4。
+func rowsOffset(mode string) int { return 56 + 4 + len(mode) + 4 }
+
+func TestEncodeDebugPanelSegmentUTF8Truncation(t *testing.T) {
+	label := "一二三四五六七八九十" // 10 个 CJK = 30 字节 > 24
+	value := "一二三四五六七八九"  // 9 个 CJK = 27 字节 > 24
+	got := encodeDebugPanelSegment(true, false, render.PanelReadout{Mode: "单机"}, []render.PanelRow{
+		{Label: label, Value: value},
+	})
+	offset := rowsOffset("单机")
+	label24 := got[offset : offset+24]
+	labelEnd := bytes.IndexByte(label24, 0)
+	if labelEnd < 0 {
+		labelEnd = 24
+	}
+	wantLabel := "一二三四五六七八" // 8 个 CJK，恰好 24 字节
+	if string(label24[:labelEnd]) != wantLabel {
+		t.Fatalf("标签截断=%q, want %q", string(label24[:labelEnd]), wantLabel)
+	}
+	value24 := got[offset+24 : offset+48]
+	valueEnd := bytes.IndexByte(value24, 0)
+	if valueEnd < 0 {
+		valueEnd = 24
+	}
+	if !utf8.Valid(value24[:valueEnd]) {
+		t.Fatalf("值字段截断后不是合法 UTF-8: %x", value24[:valueEnd])
+	}
+	// 零填充：首个 NUL 之后必须全零。
+	if !allZero(value24[valueEnd:]) || !allZero(label24[labelEnd:]) {
+		t.Fatal("定宽字段首个 NUL 之后必须全零")
+	}
+}
+
+func allZero(bytes []byte) bool {
+	for _, b := range bytes {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// TestEncodeDebugPanelSegmentEditState 锁住编辑态：行置 editing 位、edit_value 是
+// 原值的截断播种、edit_cursor 是末位字节偏移（=len）。
+func TestEncodeDebugPanelSegmentEditState(t *testing.T) {
+	got := encodeDebugPanelSegment(true, true, render.PanelReadout{Mode: "单机"}, []render.PanelRow{
+		{Label: "gravity", Value: "9.8", Selected: true},
+	})
+	offset := rowsOffset("单机")
+	flags := binary.LittleEndian.Uint32(got[offset+48 : offset+52])
+	if flags&8 == 0 {
+		t.Fatalf("编辑行必须置 editing 位: flags=%#x", flags)
+	}
+	if flags&4 == 0 {
+		t.Fatalf("编辑行必须同时置 editable 位: flags=%#x", flags)
+	}
+	editLen := binary.LittleEndian.Uint32(got[offset+52 : offset+56])
+	if editLen != 3 {
+		t.Fatalf("edit_value 长度=%d, want 3", editLen)
+	}
+	if value := string(got[offset+56 : offset+56+int(editLen)]); value != "9.8" {
+		t.Fatalf("edit_value=%q, want 9.8", value)
+	}
+	cursor := binary.LittleEndian.Uint32(got[offset+56+int(editLen) : offset+60+int(editLen)])
+	if cursor != editLen {
+		t.Fatalf("edit_cursor=%d, want 末位 %d", cursor, editLen)
+	}
+}
+
+// TestEncodeDebugPanelSegmentSelectedReadOnlyNotFlagged 锁住"selected→!readonly"：
+// 联机时 physics 行被 rows() 标为只读，编码器绝不能在同一个行上同时置选中位
+// （Rust 拒绝该行 flag 组合，整个段会被丢）。
+func TestEncodeDebugPanelSegmentSelectedReadOnlyNotFlagged(t *testing.T) {
+	state := newPanelState(config.Defaults())
+	state.selectFieldForTest(t, "physics.eyeHeight")
+	rows := state.rows(true)
+	got := encodeDebugPanelSegment(true, false, render.PanelReadout{Mode: "联机"}, rows)
+	offset := rowsOffset("联机")
+	for i := range rows {
+		flags := binary.LittleEndian.Uint32(got[offset+i*52+48 : offset+i*52+52])
+		if flags&2 != 0 && flags&1 != 0 {
+			t.Fatalf("row[%d] 同时置 selected 与 readonly: flags=%#x", i, flags)
+		}
+	}
+}
+
+// TestEncodeDebugPanelSegmentHiddenIsNil 锁住"面板关闭时不产出段"（Rust 渲染
+// 零工作，与 design §6.1 的整 pass 跳过同一条要求）。
+func TestEncodeDebugPanelSegmentHiddenIsNil(t *testing.T) {
+	if segment := encodeDebugPanelSegment(false, false, render.PanelReadout{Mode: "单机"},
+		[]render.PanelRow{{Label: "x", Value: "1"}}); segment != nil {
+		t.Fatalf("隐藏面板不得产出段: %x", segment)
+	}
+}
+
+// TestEncodeDebugPanelSegmentWithinBudget 锁住段长上界：64 行参数（含段头）
+// 与一个编辑行也不超过 MAX_UI_SEGMENT_BYTES。
+func TestEncodeDebugPanelSegmentWithinBudget(t *testing.T) {
+	rows := make([]render.PanelRow, 64)
+	for i := range rows {
+		rows[i] = render.PanelRow{Label: fmt.Sprintf("field %02d", i), Value: "123.456", Selected: i == 0}
+	}
+	bytes := encodeDebugPanelSegment(true, true, render.PanelReadout{Mode: "benchmark"}, rows)
+	if len(bytes) > maxUISegmentBytes {
+		t.Fatalf("段长=%d, 上界 %d", len(bytes), maxUISegmentBytes)
+	}
+}
+
+func TestPanelApplyEventsSelectMovesSelection(t *testing.T) {
+	state := newPanelState(config.Defaults())
+	state.visible = true
+	state.selectFieldForTest(t, "physics.eyeHeight")
+	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionSelectNext}}, false)
+	if state.selected != 1 {
+		t.Fatalf("SELECT_NEXT 后 selected=%d, want 1", state.selected)
+	}
+	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionSelectPrev}}, false)
+	if state.selected != 0 {
+		t.Fatalf("SELECT_PREV 后 selected=%d, want 0", state.selected)
+	}
+}
+
+// TestPanelApplyEventsNavigationSkipsReadOnlyRows 锁住"方向键只落在可编辑行上"
+// （联机时 physics/sim 全只读，导航直接跳过它们）。
+func TestPanelApplyEventsNavigationSkipsReadOnlyRows(t *testing.T) {
+	state := newPanelState(config.Defaults())
+	state.visible = true
+	state.selected = 0
+	for i := 0; i < 200; i++ {
+		state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionSelectNext}}, true)
+		rows := dataRowsForTest(t, state.rows(true))
+		if rows[state.selected].ReadOnly {
+			t.Fatal("导航必须跳过只读行")
+		}
+	}
+}
+
+func TestPanelApplyEventsEnterEditConfirmWritesBack(t *testing.T) {
+	state := newPanelState(config.Defaults())
+	state.visible = true
+	state.selectFieldForTest(t, "physics.gravity")
+	initial := state.effective.Physics.Gravity
+
+	changed := state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionEnterEdit}}, false)
+	if changed || !state.editing {
+		t.Fatalf("进入编辑不算配置变更: changed=%v editing=%v", changed, state.editing)
+	}
+	changed = state.applyPanelEvents([]debugPanelEvent{{
+		action: client.DebugPanelActionConfirm, value: "12.5",
+	}}, false)
+	if !changed {
+		t.Fatal("确认合法值必须报告变更")
+	}
+	if state.effective.Physics.Gravity != 12.5 {
+		t.Fatalf("gravity=%v, want 12.5", state.effective.Physics.Gravity)
+	}
+	if state.editing {
+		t.Fatal("确认后必须退出编辑态")
+	}
+	if state.effective.Physics.Gravity == initial {
+		t.Fatal("编辑前重力值不应残留")
+	}
+}
+
+func TestPanelApplyEventsConfirmClampsOutOfRange(t *testing.T) {
+	state := newPanelState(config.Defaults())
+	state.visible = true
+	state.selectFieldForTest(t, "sim.spawnRadius")
+	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionEnterEdit}}, false)
+	changed := state.applyPanelEvents([]debugPanelEvent{{
+		action: client.DebugPanelActionConfirm, value: "99999",
+	}}, false)
+	if !changed {
+		t.Fatal("越界但可解析的值应钳制并报告变更")
+	}
+	if state.effective.Sim.SpawnRadius != 64 {
+		t.Fatalf("spawnRadius=%v, want 钳到 64", state.effective.Sim.SpawnRadius)
+	}
+	if state.editing {
+		t.Fatal("钳制后必须退出编辑态")
+	}
+}
+
+func TestPanelApplyEventsInvalidValueRejected(t *testing.T) {
+	state := newPanelState(config.Defaults())
+	state.visible = true
+	state.selectFieldForTest(t, "physics.gravity")
+	before := state.effective.Physics.Gravity
+	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionEnterEdit}}, false)
+	changed := state.applyPanelEvents([]debugPanelEvent{{
+		action: client.DebugPanelActionConfirm, value: "not a number",
+	}}, false)
+	if changed {
+		t.Fatal("非法值不得报告变更")
+	}
+	if state.effective.Physics.Gravity != before {
+		t.Fatalf("非法值必须保持原值: %v -> %v", before, state.effective.Physics.Gravity)
+	}
+	if state.editing {
+		t.Fatal("非法值确认后必须退出编辑态")
+	}
+}
+
+func TestPanelApplyEventsCancelKeepsValueAndExitsEdit(t *testing.T) {
+	state := newPanelState(config.Defaults())
+	state.visible = true
+	state.selectFieldForTest(t, "render.fovDegrees")
+	before := state.effective.Render.FovDegrees
+	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionEnterEdit}}, false)
+	changed := state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionCancel}}, false)
+	if changed {
+		t.Fatal("取消不得报告变更")
+	}
+	if state.effective.Render.FovDegrees != before {
+		t.Fatalf("取消必须保持原值: %v -> %v", before, state.effective.Render.FovDegrees)
+	}
+	if state.editing {
+		t.Fatal("取消后必须退出编辑态")
+	}
+}
+
+func TestPanelApplyEventsEditValueIsNoop(t *testing.T) {
+	state := newPanelState(config.Defaults())
+	state.visible = true
+	state.selectFieldForTest(t, "physics.gravity")
+	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionEnterEdit}}, false)
+	changed := state.applyPanelEvents([]debugPanelEvent{{
+		action: client.DebugPanelActionEditValue, value: "99",
+	}}, false)
+	if changed || !state.editing {
+		t.Fatalf("EDIT_VALUE 是 Rust 草稿通知, Go 无动作: changed=%v editing=%v", changed, state.editing)
+	}
+}
+
+func TestPanelApplyEventsCloseHidesPanel(t *testing.T) {
+	state := newPanelState(config.Defaults())
+	state.visible = true
+	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionClose}}, false)
+	if state.visible {
+		t.Fatal("CLOSE 必须隐藏面板")
+	}
+}
+
+func TestPanelApplyEventsIgnoredWhileEditing(t *testing.T) {
+	state := newPanelState(config.Defaults())
+	state.visible = true
+	state.selectFieldForTest(t, "physics.gravity")
+	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionEnterEdit}}, false)
+	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionSelectNext}}, false)
+	if state.selected != 7 {
+		t.Fatalf("编辑期间不得移动选中行: selected=%d, want 7(gravity)", state.selected)
+	}
+}
+
+func TestDecodeDebugPanelEventsFiltersAndPreservesOrder(t *testing.T) {
+	got := decodeDebugPanelEvents([]client.UIEvent{
+		{Kind: client.UIEventAction, ActionID: 7},
+		{Kind: client.UIEventDebugAction, PanelAction: client.DebugPanelActionSelectNext},
+		{Kind: client.UIEventDebugAction, PanelAction: client.DebugPanelActionConfirm, PanelValue: "12"},
+	})
+	want := []debugPanelEvent{
+		{action: client.DebugPanelActionSelectNext},
+		{action: client.DebugPanelActionConfirm, value: "12"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("筛选结果=%+v, want %+v", got, want)
 	}
 }

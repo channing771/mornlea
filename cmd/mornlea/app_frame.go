@@ -182,13 +182,19 @@ func (a *application) renderFrame(workMax int) (bool, error) {
 			return false, fmt.Errorf("准备快捷栏 HUD: %w", err)
 		}
 	}
-	if a.debugPanelRenderer != nil {
+	var panelUISegment []byte
+	if a.panel != nil {
+		// 面板读数与参数行只构造一次：既喂给 layout v3 段（egui 面板），
+		// 也喂给旧程序化渲染器（其路径由后续任务删除）。
 		readout, rows := a.panelFrameInput(time.Now())
-		if err := a.debugPanelRenderer.Prepare(
-			a.panel.visible, readout, rows,
-			uint32(width), uint32(height), a.scheduler.UploadBudget(),
-		); err != nil {
-			return false, fmt.Errorf("准备调试面板: %w", err)
+		panelUISegment = encodeDebugPanelSegment(a.panel.visible, a.panel.editing, readout, rows)
+		if a.debugPanelRenderer != nil {
+			if err := a.debugPanelRenderer.Prepare(
+				a.panel.visible, readout, rows,
+				uint32(width), uint32(height), a.scheduler.UploadBudget(),
+			); err != nil {
+				return false, fmt.Errorf("准备调试面板: %w", err)
+			}
 		}
 	}
 	a.scheduler.DropOutside(a.center, a.render.ViewDistance)
@@ -268,6 +274,12 @@ func (a *application) renderFrame(workMax int) (bool, error) {
 		debugSegment = client.EncodeQuadSegment(panelViewport, panelQuads, panelGlyphs, 48)
 	}
 
+	// UI 段：菜单相位走 layout v1/v2；游戏相位的调试面板走 layout v3，
+	// 两种相位互斥，优先级为菜单段优先。
+	uiSegment := a.uiSegment()
+	if uiSegment == nil {
+		uiSegment = panelUISegment
+	}
 	rendered := a.renderer.RenderFrame(client.RenderFrame{
 		ViewProj:         viewProj,
 		ViewProjInv:      viewProjInv,
@@ -287,7 +299,7 @@ func (a *application) renderFrame(workMax int) (bool, error) {
 		NameTagSegment:   nameTagSegment,
 		HUDSegment:       hudSegment,
 		DebugSegment:     debugSegment,
-		UISegment:        a.uiSegment(),
+		UISegment:        uiSegment,
 	})
 	if !rendered {
 		return false, nil

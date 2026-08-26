@@ -335,7 +335,6 @@ func newApplicationWithDependencies(
 	if !options.Benchmark {
 		rustRenderer.UploadUIFont(render.EmbeddedCJKFont())
 	}
-	app.configPath = options.ConfigPath
 	if options.Dev {
 		app.debugPanelRenderer = render.NewDebugPanelLayouter(app.glyphAtlas)
 		// 面板的初始生效值取当前已生效的 physics/sim 快照（main.go 在构造
