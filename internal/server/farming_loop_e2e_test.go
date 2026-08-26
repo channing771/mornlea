@@ -36,7 +36,7 @@ const (
 	farmingMineBudget = 60
 	// farmingGrowthBudget 是七次作物阶段推进的 tick 预算。
 	// RandomTicksPerSection 置到上限 64 时单格每 tick 被抽中约 1/64，
-	// 八次命中期望约 512 tick；预算给到 6000 以吸收哈希分布的抖动。
+	// 七次命中期望约 448 tick；预算给到 6000 以吸收哈希分布的抖动。
 	farmingGrowthBudget = 6000
 	// farmingSettleTicks 是一条命令之后让方块变更与背包发布收敛的 tick 数。
 	farmingSettleTicks = 3

@@ -8,11 +8,12 @@ const (
 	farmlandWetRadius = 4
 	// farmlandWetLayersAbove 是除耕地自身所在层外向上扫描的层数；取 1 表示只读
 	// 同层与上一层。
-	farmlandWetLayersAbove       = 1
-	farmlandMoistureReadsPerTick = 65_536
-	farmlandWetNeighborReads     = (2*farmlandWetRadius + 1) * (2*farmlandWetRadius + 1) * (farmlandWetLayersAbove + 1)
-	farmlandMoistureRescanSide   = core.SectionSize + 2*farmlandWetRadius
-	farmlandMoistureRescanCells  = farmlandMoistureRescanSide * farmlandMoistureRescanSide * core.SectionsPerChunk * core.SectionSize
+	farmlandWetLayersAbove            = 1
+	farmlandMoistureCandidatesPerTick = 65_536
+	farmlandMoistureReadsPerTick      = 65_536
+	farmlandWetNeighborReads          = (2*farmlandWetRadius + 1) * (2*farmlandWetRadius + 1) * (farmlandWetLayersAbove + 1)
+	farmlandMoistureRescanSide        = core.SectionSize + 2*farmlandWetRadius
+	farmlandMoistureRescanCells       = farmlandMoistureRescanSide * farmlandMoistureRescanSide * core.SectionsPerChunk * core.SectionSize
 )
 
 type farmlandMoistureKey struct {
@@ -69,14 +70,15 @@ func (state *farmlandMoistureRescanState) pop() {
 
 // farmlandMoistureState 是候选 FIFO、去重集合与恢复重扫的单写者状态。
 type farmlandMoistureState struct {
-	pending    []farmlandMoistureKey
-	head       int
-	queued     map[farmlandMoistureKey]struct{}
-	rescans    farmlandMoistureRescanState
-	blockReads int
+	pending              []farmlandMoistureKey
+	head                 int
+	queued               map[farmlandMoistureKey]struct{}
+	rescans              farmlandMoistureRescanState
+	candidateInspections int
+	blockReads           int
 }
 
-// pop 删除当前队首，并在消费前缀足够大时稳定压紧切片。
+// pop 删除当前队首，并在消费前缀足够大时以 O(1) rebase 丢弃该前缀。
 func (state *farmlandMoistureState) pop() {
 	key := state.pending[state.head]
 	delete(state.queued, key)
@@ -87,7 +89,7 @@ func (state *farmlandMoistureState) pop() {
 		return
 	}
 	if state.head >= 4096 && state.head*2 >= len(state.pending) {
-		state.pending = state.pending[:copy(state.pending, state.pending[state.head:])]
+		state.pending = state.pending[state.head:]
 		state.head = 0
 	}
 }
@@ -191,14 +193,17 @@ func (engine *Engine) runFarmlandMoistureRescans(budget int) {
 	}
 }
 
-// advanceFarmlandMoisture 在固定读取预算内按 FIFO 处理湿度候选。
+// advanceFarmlandMoisture 在独立的候选检查与读取预算内按 FIFO 处理湿度候选。
 func (engine *Engine) advanceFarmlandMoisture(
 	pending map[core.ChunkKey]*pendingChunkChanges,
 ) {
 	state := &engine.farmlandMoisture
+	state.candidateInspections = 0
 	state.blockReads = 0
-	for state.blockReads < farmlandMoistureReadsPerTick && state.head < len(state.pending) {
+	for state.candidateInspections < farmlandMoistureCandidatesPerTick &&
+		state.blockReads < farmlandMoistureReadsPerTick && state.head < len(state.pending) {
 		key := state.pending[state.head]
+		state.candidateInspections++
 		chunkKey := core.ChunkKey{Dimension: key.dimension, Pos: key.position.Chunk()}
 		if _, active := engine.fluidScope[chunkKey]; !active {
 			state.pop()

@@ -176,8 +176,9 @@ func BenchmarkCropAdvanceFullInterestDense(b *testing.B) {
 
 // BenchmarkCropAdvanceAllFarmland 锁定随机作物阶段不再扫描耕地湿润邻域。
 // 单个区块的 24 个区段全部填满干耕地，因此每条样本都必须只读取自身一次；
-// benchmark 同时保留该极端夹具的墙钟记录，并以解析式读取等式作为正确性门禁。
+// benchmark 同时守卫并报告 Ready 区块、耕地与作物数，以解析式读取等式作为正确性门禁。
 func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
+	const wantFarmland = core.SectionsPerChunk * core.BlocksPerSection
 	b.Cleanup(func() { SetTunables(DefaultTunables()) })
 	SetTunables(DefaultTunables())
 
@@ -204,6 +205,41 @@ func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 			}
 		}
 	}
+	readyChunks := 0
+	for _, key := range engine.activeInterestKeys() {
+		dimension := engine.dimensions[key.Dimension]
+		if dimension == nil {
+			continue
+		}
+		record := dimension.records[key.Pos]
+		if record != nil && record.State == ChunkReady && record.Chunk != nil {
+			readyChunks++
+		}
+	}
+	if readyChunks != 1 {
+		b.Fatalf("Ready 区块数=%d，想要 1", readyChunks)
+	}
+	record := engine.dimensions[core.Overworld].records[core.ChunkPos{}]
+	if record == nil || record.State != ChunkReady || record.Chunk == nil {
+		b.Fatal("原点区块未 Ready")
+	}
+	farmland, crops := 0, 0
+	for y := int32(core.MinY); y < int32(core.MaxY); y++ {
+		for x := range core.SectionSize {
+			for z := range core.SectionSize {
+				block := record.Chunk.BlockAt(x, y, z)
+				if core.IsFarmland(block) {
+					farmland++
+				}
+				if core.IsCrop(block) {
+					crops++
+				}
+			}
+		}
+	}
+	if farmland != wantFarmland || crops != 0 {
+		b.Fatalf("工作负载耕地/作物=%d/%d，想要 %d/0", farmland, crops, wantFarmland)
+	}
 
 	pending := make(map[core.ChunkKey]*pendingChunkChanges)
 	b.ReportAllocs()
@@ -213,6 +249,9 @@ func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 		engine.advanceCrops(pending)
 	}
 	b.StopTimer()
+	b.ReportMetric(float64(readyChunks), "chunks")
+	b.ReportMetric(float64(farmland), "farmland")
+	b.ReportMetric(float64(crops), "crops")
 	if len(pending) != 0 {
 		b.Fatalf("全耕地世界不该产生方块变更（没有水源，干耕地保持干），实得 %d 个区块", len(pending))
 	}

@@ -335,3 +335,73 @@ fixture 完整性与风险规模守卫通过；性能数值未参与退出判定
 | `git status --short` | recorded | ` M internal/server/farming_loop_e2e_test.go`；` M openspec/changes/instant-farmland-moisture/ledger.md`；real `0.05s` |
 
 SDD report 已写入 ignored 路径 `.superpowers/sdd/2026-08-26-instant-farmland-moisture/task-5-report.md`，不出现在 tracked status 中。未 commit、amend、push、merge、PR 或 archive。
+
+## Task 5 Final Review Repair Round 2
+
+本轮固定 checkout 为 `feat/B-09-instant-farmland-moisture`，起始 HEAD
+`873ae45a2933f6c06cda2d7b4463562d68b1ade7`，起始 `git status --short` 无输出。
+先更新 proposal、delta spec、design 与 tasks，再写测试和生产代码；`tasks.md` 全部复选框
+继续保持未勾选，Task 5 独立整分支终审仍为 pending。
+
+### Findings And Rulings
+
+| ID | Finding | Decision | Evidence |
+|---|---|---|---|
+| B09-T5-FR-I1 | 湿度事件循环只受方块读取预算约束，范围外/维度缺失候选可以零读取无界出队；`farmlandMoistureState.pop` 每消费 4096 项且过半时复制剩余后缀 | 接受。增加独立固定 `65,536` 候选检查预算与每 tick 计数；每次查看队首先计数，再做 scope/dimension 查询；稳定 copy 改为 O(1) slice rebase，排空、FIFO、去重和既有 compaction 行为保持 | 新回归以 65,537 个范围外候选证明首 tick 检查 65,536、读取 0、留 1，次 tick 检查 1 并排空；focused race、整包 race 与 mutation 均通过 |
+| B09-T5-FR-I2 | 建议为重扫增加固定公平份额，防止事件持续优先导致 starvation | 否决当前改动。保留 event-first：`fluidWorld.SetBlock` 只在流体 membership 实际变化时产生 162 格 fanout；`authoritative-fluid` 主规格限定只在有限 active Ready 范围推进并要求重扫最终收敛到平衡不动点；成功翻地只产生目标自身一项；主规格同时拒绝玩家或伙伴把任何物品放为流体。当前合法生产源有限，事件最终排空；未来新增永久 membership 生产者时再引入公平配额 | `internal/sim/fluid.go` 的唯一 membership hooks 位于最终写入汇聚点；`internal/sim/farming.go` 只有成功翻地单项 hook；`openspec/specs/authoritative-fluid/spec.md` 的“流体不可放置”“活动兴趣范围”“重启后收敛/不动点”契约；active/historical design 与 Risks 已写入该 ruling |
+| B09-T5-FR-I3 | 全耕地 benchmark 没有报告或守卫工作负载规模 | 接受。计数并守卫 active Ready 区块恰为 1、真实耕地恰为 `98,304`、作物恰为 0，并在 `ResetTimer` 后报告 `chunks`/`farmland`/`crops`，保留读取等式与只记录墙钟语义 | 五次样本都打印 `1.000 chunks`、`98304 farmland`、`0 crops`、`72 block_reads/op`、`72 cells/op`、`0 B/op`、`0 allocs/op` |
+| B09-T5-FR-M1 | farming E2E growth 注释仍写八次命中/约 512 tick | 接受 comment-only 修正为七次命中/约 448 tick | focused server race 与全量 race 通过 |
+| B09-T5-FR-M2 | 历史 design 要求防御性不可达 `SetBlock` 错误记录日志，与实现静默路径不符 | 接受文档修正，不给 tick 热路径增加理论不可达日志 | 历史 design 明确该分支静默删除候选且不广播未落地变化；生产语义不变 |
+| B09-T5-FR-M3 | active design Affected Files 未列 B-07 helper/test 重叠及 Task 5 server E2E 修复 | 接受文档修正 | Affected Files 现明确 `fluid_crop_test.go`、共享 `helpers_test.go` 与 `internal/server/farming_loop_e2e_test.go` |
+
+### TDD And Mutation Evidence
+
+1. 添加范围外积压测试后，focused RED 因 `farmlandMoistureCandidatesPerTick` 与
+   `candidateInspections` 不存在而编译失败。
+2. 最小实现候选检查计数/上限与 O(1) rebase 后，
+   `go test ./internal/sim -run '^TestFarmlandMoistureInspectionBudgetDefersOutOfScopeBacklog$' -count=1`
+   通过，package `0.588s`。
+3. 瞬态 mutation 把候选检查上限从 `65,536` 改为 `65,537`；同一测试按预期失败：
+   `首 tick 候选检查=65537，想要 65536`，package `FAIL` (`0.674s`)。
+4. 恢复 mutation 后同一测试再次通过；focused queue/budget/determinism race 通过，
+   `ok github.com/channing771/mornlea/internal/sim 2.508s`。
+
+### Refreshed Verification
+
+| Stage | Command | Result | Evidence |
+|---|---|---|---|
+| focused | `go test ./internal/server -run '^TestFarmingLoopEndToEndMemory$' -race -count=1` | pass | `ok github.com/channing771/mornlea/internal/server 3.169s` |
+| Step 1 | `gofmt -l .` | pass | no formatter output |
+| Step 1 | `go test ./internal/sim -race -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 35.747s` |
+| Step 1 | `go test ./internal/archcheck -count=1` | pass | `ok github.com/channing771/mornlea/internal/archcheck 4.349s` |
+| Step 2 | `make rust` | pass | `Finished release profile [optimized] target(s) in 0.28s` |
+| Step 2 | `go test ./... -race` | pass | all packages passed；`cmd/mornlea 276.864s`、`internal/server 214.521s`、`internal/sim 48.297s`、`internal/archcheck 36.353s` |
+| Step 2 | `go vet ./...` | pass | no diagnostic output |
+| Step 3 | `go test ./internal/sim -run '^$' -bench 'BenchmarkCropAdvance' -benchmem -count=5` | pass | 20/20 samples，package `25.309s`；全部 `0 B/op`、`0 allocs/op` |
+| Step 3 guarded | `MORNLEA_FLUID_PERF=1 go test ./internal/sim -run '^TestFluidPerf' -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 20.816s` |
+| Step 4 | `openspec status --change instant-farmland-moisture` | pass | schema `spec-driven`，4/4 artifacts complete |
+| Step 4 | `openspec validate --all --strict --no-interactive` | pass | `Totals: 66 passed, 0 failed (66 items)` |
+
+### Refreshed Crop Benchmark Record
+
+| Benchmark | ns/op samples | median ns/op | block_reads/op samples | median block_reads/op | cells/op | Workload coordinates |
+|---|---|---:|---|---:|---:|---|
+| FullInterestBarren | 184714, 184253, 187004, 184236, 183583 | 184253 | 14400, 14400, 14400, 14400, 14400 | 14400 | 14400 | 200 chunks, 0 crops |
+| FullInterestPlanted | 189095, 190552, 188846, 184825, 184796 | 188846 | 14400, 14400, 14400, 14400, 14401 | 14400 | 14400 | 200 chunks, 256 crops |
+| FullInterestDense | 188744, 188226, 191264, 191687, 189009 | 189009 | 14440, 14436, 14436, 14427, 14440 | 14436 | 14400 | 200 chunks, 51200 crops |
+| AllFarmland | 2400, 2254, 2182, 2187, 2188 | 2188 | 72, 72, 72, 72, 72 | 72 | 72 | 1 Ready chunk, 98304 farmland, 0 crops |
+
+墙钟数值只记录；解析式读取门禁、真实 workload 坐标、报告完整性、overflow 与数据丢失门禁
+均未放宽。协议 v26、区块 schema v9、世界 metadata v2、玩家 schema v7、
+`companions.ai` schema v4、engine/client ABI 与 benchmark scenario 均未改变。
+
+### Repair Scope Audit
+
+- `gofmt -l .` 与 `git diff --check` 均无输出；最终 OpenSpec strict 复跑仍为
+  `66 passed, 0 failed`。
+- `tasks.md` 不含 `[x]`/`[X]`，所有任务保持未勾选。
+- repair diff 只涉及 active/historical B-09 文档、ledger、湿度队列实现/预算测试、作物
+  benchmark 与 Task 5 farming E2E 注释。
+- `git diff --name-only HEAD -- internal/fluid internal/network internal/storage internal/nativeabi engine client cmd/mornlea/testdata **/testdata`
+  无输出；无协议、存档、ABI、Rust、scenario、capture 或 golden 改动。
+- ignored Task 5 report 已追加本 repair round，不进入 tracked status。

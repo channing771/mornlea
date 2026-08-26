@@ -9,7 +9,7 @@
 **Goals:**
 
 - 让无旧积压的单格流体 membership 变化和成功翻地在同 tick 完成湿度判定。
-- 用固定 `65,536` 次规则查询读取约束事件处理与恢复重扫的合计工作。
+- 用固定 `65,536` 次候选检查约束事件 FIFO 工作，并用独立的 `65,536` 次规则查询读取约束事件处理与恢复重扫的合计工作。
 - 保持候选、重扫与跨 tick 恢复顺序确定，且不依赖 map 遍历。
 - 让随机作物阶段只推进作物，并显式报告样本数和规则查询读取数。
 
@@ -23,11 +23,11 @@
 
 ### 1. 用 FIFO 候选与去重集合维护湿度待办
 
-在 `Engine` 中追加一个 `farmlandMoistureState` 聚合字段。状态持有 `(DimensionID, BlockPos)` 候选 FIFO、同集合的去重 map、消费下标、重扫状态和最近一个 tick 的读取计数。切片决定行为顺序，map 只做 O(1) 存在性查询；消费前缀达到固定阈值且占切片至少一半时稳定压紧，避免持续流动时长期保留已消费容量。
+在 `Engine` 中追加一个 `farmlandMoistureState` 聚合字段。状态持有 `(DimensionID, BlockPos)` 候选 FIFO、同集合的去重 map、消费下标、重扫状态，以及最近一个 tick 的候选检查与读取计数。切片决定行为顺序，map 只做 O(1) 存在性查询；消费前缀达到固定阈值且占切片至少一半时以 `pending = pending[head:]` 做 O(1) rebase，排空时复位为空切片供后续复用。键不含指针，rebase 保留 backing array 不会保留其他堆对象。
 
-候选按首次入队顺序处理。处理前先检查候选所属区块仍在当前 active Ready scope；不在则删除，重新进入时由重扫恢复。读取目标格一次；非耕地立即删除。若目标是耕地而本 tick 剩余额度不足最坏 162 次湿润邻域查询，则保留队首并结束本 tick，下一 tick 从完整判断重新开始。额度足够时沿既有 `dy,z,x` 顺序查询邻域，遇到首个流体提前结束；状态变化经 `Dimension.SetBlock` 与 `recordChange` 汇入当前 `pendingChunkChanges`。
+候选按首次入队顺序处理。每次查看 FIFO 队首先计一次候选检查，每 tick 最多 `65,536` 次；检查后再确认候选所属区块仍在当前 active Ready scope，不在则删除，重新进入时由重扫恢复。读取目标格一次；非耕地立即删除。若目标是耕地而本 tick 剩余额度不足最坏 162 次湿润邻域查询，则保留队首并结束本 tick，下一 tick 从完整判断重新开始。额度足够时沿既有 `dy,z,x` 顺序查询邻域，遇到首个流体提前结束；状态变化经 `Dimension.SetBlock` 与 `recordChange` 汇入当前 `pendingChunkChanges`。
 
-预算计量的是规则为作出决定而读取的方块编号：候选目标、湿润邻域、重扫格、作物随机样本及其下方格。`SetBlock` 为防御性比较旧值所做的内部读取不属于第二次规则查询，也不重复计费。候选先读后发现余额不足时，该次读取仍计费，下一 tick 重新读取；每 tick 计数始终不超过 `65,536`。
+候选检查预算计量每次 FIFO 队首查看，包括范围外、维度缺失、非 Ready 和因读取余额不足而保留的候选。读取预算只计规则为作出决定而读取的方块编号：候选目标、湿润邻域、重扫格、作物随机样本及其下方格；active scope 与维度 map 查询不是方块读取。`SetBlock` 为防御性比较旧值所做的内部读取不属于第二次规则查询，也不重复计费。候选先读后发现余额不足时，该次读取仍计费，下一 tick 重新读取；两个独立计数每 tick 都不超过 `65,536`。
 
 **否决方案：** 每格邻水计数需要第二份可失效事实和加载重建；每格缓存判定 tick 仍留下随机延迟；优先队列没有 deadline，仅增加排序成本。
 
@@ -78,7 +78,7 @@ finishChanges
 
 每检查一格消耗一次共享读取预算。读到耕地时，只有耕地自身所属区块仍在当前 scope 才加入候选 FIFO；halo 既让新进入区块里的水唤醒邻块边缘耕地，也让新进入区块里的耕地在后续候选处理时读取邻块水体。事件候选先消费预算，剩余额度推进重扫；重扫产生的候选从下一 tick 起处理。未扫到前保留区块中已有的湿/干编号，不制造中间状态。
 
-事件优先可能延迟重扫，但当前活动范围内的流体规则会收敛且没有永久事件源，待办最终排空。未来若增加持续产生 membership 变化的机制，必须重新裁决事件与重扫的公平配额。
+事件优先可能延迟重扫，但当前唯一有 162 格 fanout 的生产源是有限 active Ready 范围内的权威流体推进；现有流体规则收敛且无自持更新环，因此该 membership 事件流有限。成功翻地每次只登记目标自身，玩家又不能放置流体物品，无法形成持续占满读取预算的流体事件源。当前事件工作最终排空，剩余读取预算随后推进重扫；未来若增加永久产生 membership 变化的机制，必须重新裁决事件与重扫的公平配额。
 
 **否决方案：** 同步全扫会让批量 Ready 击穿 tick；只扫目标区块会漏跨区块半径；只扫表面需要维护额外耕地索引；持久化游标只保存调度状态却要求 schema 迁移。
 
@@ -92,7 +92,7 @@ crop block reads <= 2 × crop cells examined
 farmland moisture block reads <= 65,536
 ```
 
-`cropCellsExamined` 保留，新增 `cropBlockReads` 与湿度阶段读取计数供包内测试和 benchmark 使用。`crop_perf_test.go` 的各场景同时报告 `cells/op`、`block_reads/op`、区块数与作物数；全耕地 benchmark 改为证明每个样本只读取一次、不再扫描 162 格。性能墙钟只记录，解析式读取上界是 correctness 门禁。
+`cropCellsExamined` 保留，新增 `cropBlockReads` 与湿度阶段读取计数供包内测试和 benchmark 使用。`crop_perf_test.go` 的各场景同时报告 `cells/op`、`block_reads/op`、区块数与作物数；全耕地 benchmark 还精确守卫并报告一个 Ready 区块、全世界高度列的 `98,304` 格耕地与零作物，证明每个样本只读取一次、不再扫描 162 格。性能墙钟只记录，解析式读取上界和工作负载规模是 correctness 门禁。
 
 `tunables.go` 中关于 `RandomTicksPerSection` 同时控制耕地干湿的注释将做最小文字更正；字段、默认值、校验和 A-04 新增 tunable 区域不变。
 
@@ -107,8 +107,8 @@ farmland moisture block reads <= 65,536
 ## Risks / Trade-offs
 
 - [流体写入每格最多展开 162 次 map 去重] → 展开次数是固定常数并受流体处理预算约束；benchmark 记录新增湿度阶段，不放宽流体门禁。
-- [事件 FIFO 在极端流动中可跨多个 tick 积压] → 坐标去重、固定消费预算和 active scope 丢弃保证不丢当前有效工作；同输入的积压顺序完全确定。
-- [事件持续优先可能推迟恢复重扫] → 当前流体规则在有限 active 范围内收敛；增加永久生产者时必须引入显式公平配额并更新规格。
+- [事件 FIFO 在极端流动中可跨多个 tick 积压] → 坐标去重、固定候选检查与读取预算、active scope 丢弃保证每 tick 工作有界且不丢当前有效工作；同输入的积压顺序完全确定。
+- [事件持续优先可能推迟恢复重扫] → 当前 fanout 事件只来自有限范围内必然收敛的流体推进，翻地只产生单候选且玩家不能放置流体，因此没有永久占满预算的合法生产者；增加永久 membership 生产者时必须引入显式公平配额并更新规格。
 - [复用名为 `fluidScope` 的通用 Ready 集合形成隐式耦合] → 固定阶段顺序、scope 构造测试和重入测试锁定前置；不为一次消费重命名全套流体状态。
 - [初次进入一个区块的完整 halo 重扫约 22 万格，需要数个 tick] → 共享 65,536 预算跨 tick 保存游标，期间保留存档状态，最终恢复而不阻塞 tick。
 - [A-04 同时修改 `engine.go`、`engine_step.go` 与 `tunables.go`] → 只在已登记区域追加一个聚合字段、一个阶段和两段现有农业注释；合并时逐处裁决，不覆盖 hostile 状态或 tunable。
@@ -126,6 +126,6 @@ farmland moisture block reads <= 65,536
 
 - 新建：`internal/sim/farmland_moisture.go` 及按 queue/budget/rescan/integration 关注点组织的测试。
 - 修改：`internal/sim/fluid.go`、`farming.go`、`crop.go`、`engine.go`、`engine_step.go`。
-- 修改测试/测量：`crop_test.go`（按关注点拆分）、`crop_perf_test.go`、`fluid_perf_test.go`、`companion_action_test.go`。
+- 修改测试/测量：`crop_test.go`（按关注点拆分）、`crop_perf_test.go`、`fluid_perf_test.go`、`companion_action_test.go`；B-07 重叠仅限 `fluid_crop_test.go` 与共享 `helpers_test.go` 的湿度挂点证明；Task 5 修复另含 `internal/server/farming_loop_e2e_test.go` 的即时湿润期望与准确注释。
 - 注释-only 受控重叠：`internal/sim/tunables.go` 的 `RandomTicksPerSection` 说明。
 - 规划与记录：本 change 目录、`docs/superpowers/specs/2026-08-26-instant-farmland-moisture-design.md`、`docs/superpowers/plans/2026-08-26-instant-farmland-moisture.md`、执行 ledger。

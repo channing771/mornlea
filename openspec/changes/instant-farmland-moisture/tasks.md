@@ -7,8 +7,8 @@
 ## 2. 有界候选队列与恢复重扫
 
 - [ ] 2.1 在 `internal/sim/farmland_moisture_queue_test.go` 先写失败测试，覆盖反向 `9×9×2` 枚举的 `y,z,x` 顺序、世界 Y 边界、FIFO 去重、消费压紧和离开 active Ready scope 后丢弃；运行 `go test ./internal/sim -run 'TestFarmlandMoisture(ReverseWindow|Queue)' -count=1` 验证失败。
-- [ ] 2.2 在 `internal/sim/farmland_moisture.go` 与 `engine.go` 实现 `farmlandMoistureState`、固定 `65,536` 读取预算、候选入队/处理和聚合状态字段；运行上一步定点测试至通过。
-- [ ] 2.3 在 `internal/sim/farmland_moisture_budget_test.go` 先写失败测试，覆盖目标读取、162 次最坏邻域查询、余额不足保留队首、单 tick 不越预算、大于预算的待办最终排空及相同输入逐 tick 结果一致；实现最小处理逻辑并运行 `go test ./internal/sim -run 'TestFarmlandMoisture(Budget|Determin)' -race -count=1`。
+- [ ] 2.2 在 `internal/sim/farmland_moisture.go` 与 `engine.go` 实现 `farmlandMoistureState`、独立固定的 `65,536` 候选检查与 `65,536` 方块读取预算、候选入队/处理和聚合状态字段；消费前缀达到既有阈值时做 O(1) slice rebase，排空复位，不复制剩余后缀；运行上一步定点测试至通过。
+- [ ] 2.3 在 `internal/sim/farmland_moisture_budget_test.go` 先写失败测试，覆盖目标读取、162 次最坏邻域查询、余额不足保留队首、超过 `65,536` 个范围外候选按检查预算顺延且不计方块读取、单 tick 两项预算均不越界、大于预算的待办最终排空及相同输入逐 tick 结果一致；实现最小处理逻辑并运行 `go test ./internal/sim -run 'TestFarmlandMoisture(Budget|Inspection|Determin)' -race -count=1`。
 - [ ] 2.4 在 `internal/sim/farmland_moisture_rescan_test.go` 先写失败测试，覆盖完整高度 `24×24` halo 的 `y,z,x` 游标、事件优先、跨 tick 续扫、离开 scope 丢弃、重新进入从头扫描以及重扫候选只接受 active Ready 耕地；实现独立重扫状态并运行 `go test ./internal/sim -run 'TestFarmlandMoistureRescan' -race -count=1`。
 
 ## 3. 生产触发点与 tick 阶段
@@ -22,7 +22,7 @@
 
 - [ ] 4.1 在拆分后的作物成本测试中先增加 `cropBlockReads <= 2×cropCellsExamined` 和全耕地 `cropBlockReads == cropCellsExamined` 断言，验证当前随机耕地扫描使测试失败。
 - [ ] 4.2 修改 `internal/sim/crop.go`，删除 `advanceCropCell` 的耕地分支与随机湿润扫描，只保留作物样本和正下方读取，并维护 `cropBlockReads`；对 `tunables.go` 的 `RandomTicksPerSection` 现有农业注释做最小准确性更正，不改字段、默认值或校验。运行 `go test ./internal/sim -run 'TestCrop|TestFarmland' -race -count=1`。
-- [ ] 4.3 更新 `internal/sim/crop_perf_test.go`，让全部场景报告 `block_reads/op`，把全耕地场景改为“一样本一次读取”的回归证据；更新 `fluid_perf_test.go` 同时记录 fluid/moisture/crop 阶段边界，不放宽任何 correctness 门禁。
+- [ ] 4.3 更新 `internal/sim/crop_perf_test.go`，让全部场景报告 `block_reads/op`，把全耕地场景改为“一样本一次读取”的回归证据，并精确守卫/报告一个 Ready 区块、`98,304` 格耕地与零作物；更新 `fluid_perf_test.go` 同时记录 fluid/moisture/crop 阶段边界，不放宽任何 correctness 门禁。
 - [ ] 4.4 运行 `go test ./internal/sim -run '^$' -bench 'Benchmark(CropAdvance|CropAdvanceAllFarmland|Fluid)' -benchmem -count=5`，记录性能数值并确认 `cells/op`、`block_reads/op`、真实 overflow 与报告完整性均有效。
 
 ## 5. 验证与评审收尾

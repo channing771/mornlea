@@ -59,6 +59,40 @@ func TestFarmlandMoistureBudgetCapsReadsAndEventuallyDrains(t *testing.T) {
 	}
 }
 
+// TestFarmlandMoistureInspectionBudgetDefersOutOfScopeBacklog 锁定范围查询也受独立检查预算约束。
+func TestFarmlandMoistureInspectionBudgetDefersOutOfScopeBacklog(t *testing.T) {
+	const backlog = 65_537
+	engine := NewEngine(0, 0, 0)
+	for index := range backlog {
+		engine.enqueueFarmlandMoisture(core.Overworld, core.BlockPos{
+			X: int32(index),
+			Y: core.MinY,
+		})
+	}
+
+	engine.advanceFarmlandMoisture(make(map[core.ChunkKey]*pendingChunkChanges))
+	if got := engine.farmlandMoisture.candidateInspections; got != 65_536 {
+		t.Fatalf("首 tick 候选检查=%d，想要 65536", got)
+	}
+	if got := engine.farmlandMoisture.blockReads; got != 0 {
+		t.Fatalf("首 tick 方块读取=%d，想要 0", got)
+	}
+	if got := farmlandMoisturePendingLen(&engine.farmlandMoisture); got != 1 {
+		t.Fatalf("首 tick 剩余候选=%d，想要 1", got)
+	}
+
+	engine.advanceFarmlandMoisture(make(map[core.ChunkKey]*pendingChunkChanges))
+	if got := engine.farmlandMoisture.candidateInspections; got != 1 {
+		t.Fatalf("次 tick 候选检查=%d，想要 1", got)
+	}
+	if got := engine.farmlandMoisture.blockReads; got != 0 {
+		t.Fatalf("次 tick 方块读取=%d，想要 0", got)
+	}
+	if got := farmlandMoisturePendingLen(&engine.farmlandMoisture); got != 0 {
+		t.Fatalf("次 tick 剩余候选=%d，想要 0", got)
+	}
+}
+
 // TestFarmlandMoistureBudgetDoesNotStorePartialNeighborhood 锁定邻域判断不可跨 tick 拆分。
 func TestFarmlandMoistureBudgetDoesNotStorePartialNeighborhood(t *testing.T) {
 	engine, _ := readyCropWorld(t)
