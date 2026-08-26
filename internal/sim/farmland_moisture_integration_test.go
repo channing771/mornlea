@@ -286,14 +286,17 @@ func TestFarmlandMoistureReentryRestartsRescan(t *testing.T) {
 
 // TestFarmlandTurnsWetWithWaterInRange 覆盖 Scenario「水源在范围内使耕地变湿」。
 func TestFarmlandTurnsWetWithWaterInRange(t *testing.T) {
-	engine := newCropWorld(t, cropFixture{
-		farmland:      core.FarmlandDryID,
-		crop:          core.AirID,
-		waterDistance: 4,
-	})
-	if _, ok := stepUntilBlock(engine, cropFixtureFarmland, core.FarmlandWetID); !ok {
-		t.Fatalf("%d 个 tick 后耕地仍是 %s，范围内有水时必须变湿",
-			cropFixtureTicks, blockLabel(cropBlockAt(t, engine, cropFixtureFarmland)))
+	engine, _ := readyCropWorld(t)
+	farmland := cropFixtureFarmland
+	water := farmland
+	water.X += farmlandWetRadius
+	engine.SetBlockForTest(farmland, core.FarmlandDryID)
+	adapter := farmlandMoistureFluidAdapter(t, engine, water)
+
+	adapter.SetBlock(water, core.WaterSourceID)
+	engine.advanceFarmlandMoisture(adapter.pending)
+	if got := cropBlockAt(t, engine, farmland); got != core.FarmlandWetID {
+		t.Fatalf("同 tick 放水后耕地=%s，范围内有水时必须变湿", blockLabel(got))
 	}
 }
 
@@ -301,20 +304,23 @@ func TestFarmlandTurnsWetWithWaterInRange(t *testing.T) {
 //
 // 夹具**先证明它湿过**再移除水：若起手就是干耕地，「改不改都是干」，断言恒真。
 func TestFarmlandTurnsDryAfterWaterRemoved(t *testing.T) {
-	engine := newCropWorld(t, cropFixture{
-		farmland:      core.FarmlandDryID,
-		crop:          core.AirID,
-		waterDistance: 4,
-	})
-	if _, ok := stepUntilBlock(engine, cropFixtureFarmland, core.FarmlandWetID); !ok {
-		t.Fatalf("前置失败：耕地始终没有变湿，「变干」无从谈起")
+	engine, _ := readyCropWorld(t)
+	farmland := cropFixtureFarmland
+	water := farmland
+	water.X += farmlandWetRadius
+	engine.SetBlockForTest(farmland, core.FarmlandDryID)
+	adapter := farmlandMoistureFluidAdapter(t, engine, water)
+
+	adapter.SetBlock(water, core.WaterSourceID)
+	engine.advanceFarmlandMoisture(adapter.pending)
+	if got := cropBlockAt(t, engine, farmland); got != core.FarmlandWetID {
+		t.Fatalf("前置失败：放水后耕地=%s，「变干」无从谈起", blockLabel(got))
 	}
-	water := cropFixtureFarmland
-	water.X += 4
-	engine.SetBlockForTest(water, core.AirID)
-	if _, ok := stepUntilBlock(engine, cropFixtureFarmland, core.FarmlandDryID); !ok {
-		t.Fatalf("%d 个 tick 后耕地仍是 %s，范围内无水时必须变干",
-			cropFixtureTicks, blockLabel(cropBlockAt(t, engine, cropFixtureFarmland)))
+
+	adapter.SetBlock(water, core.AirID)
+	engine.advanceFarmlandMoisture(adapter.pending)
+	if got := cropBlockAt(t, engine, farmland); got != core.FarmlandDryID {
+		t.Fatalf("同 tick 移除最后一格水后耕地=%s，范围内无水时必须变干", blockLabel(got))
 	}
 }
 
@@ -340,16 +346,19 @@ func TestFarmlandWetnessRangeBoundary(t *testing.T) {
 		{"只在下一层的水不使耕地变湿", 4, -1, core.FarmlandDryID},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			engine := newCropWorld(t, cropFixture{
-				farmland:      core.FarmlandDryID,
-				crop:          core.AirID,
-				waterDistance: tc.distance,
-				waterDY:       tc.dy,
-			})
-			stepCropTicks(engine)
-			if got := cropBlockAt(t, engine, cropFixtureFarmland); got != tc.want {
-				t.Fatalf("%d 个 tick 后耕地是 %s，想要 %s",
-					cropFixtureTicks, blockLabel(got), blockLabel(tc.want))
+			engine, _ := readyCropWorld(t)
+			farmland := cropFixtureFarmland
+			water := farmland
+			water.X += tc.distance
+			water.Y += tc.dy
+			engine.SetBlockForTest(farmland, core.FarmlandDryID)
+			adapter := farmlandMoistureFluidAdapter(t, engine, water)
+
+			adapter.SetBlock(water, core.WaterSourceID)
+			engine.advanceFarmlandMoisture(adapter.pending)
+			if got := cropBlockAt(t, engine, farmland); got != tc.want {
+				t.Fatalf("同 tick 真实流体写入后耕地=%s，想要 %s",
+					blockLabel(got), blockLabel(tc.want))
 			}
 		})
 	}
@@ -362,38 +371,18 @@ func TestFarmlandWetnessRangeBoundary(t *testing.T) {
 var (
 	cropCrossFarmland = core.BlockPos{X: 0, Y: 1, Z: 8}
 	cropCrossWater    = core.BlockPos{X: -2, Y: 1, Z: 8}
-	cropCrossChunk    = core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: -1}}
 )
 
-// TestFarmlandWetnessCrossesChunkBoundary 覆盖湿润窗口跨区块的两半语义，
-// 两半互相咬合、缺一条都会让另一条失去意义：
-//
-//   - **邻块已加载**：窗口必须真的读进邻块。跳过跨区块邻格的实现在这一半红。
-//   - **邻块未加载**：按「无水」保守处理。夹具让邻块离开活动兴趣范围后转为
-//     非 Ready，**而水方块本身一格都没动**——这正是该约定唯一可观察的后果。
-//     把未加载读作"可能有水"的实现在这一半红。
-//
-// 只写第一半的话，「未加载按无水」没人守；只写第二半的话，一个从不跨区块读的
-// 实现（永远判干）照样全绿。
+// TestFarmlandWetnessCrossesChunkBoundary 覆盖流体事件唤醒邻块耕地，并由湿度规则
+// 跨区块读取水源。区块离开再进入后的恢复由重扫专用测试锁定，不再等待随机 tick。
 func TestFarmlandWetnessCrossesChunkBoundary(t *testing.T) {
-	engine, sessions := readyCropWorldAt(t, core.ChunkPos{}, core.ChunkPos{X: -1})
+	engine, _ := readyCropWorldAt(t, core.ChunkPos{}, core.ChunkPos{X: -1})
 	engine.SetBlockForTest(cropCrossFarmland, core.FarmlandDryID)
-	placeContainedWater(t, engine, cropCrossWater)
+	adapter := farmlandMoistureFluidAdapter(t, engine, cropCrossWater)
 
-	if _, ok := stepUntilBlock(engine, cropCrossFarmland, core.FarmlandWetID); !ok {
-		t.Fatalf("邻块已加载时耕地仍是 %s：湿润窗口没有读进相邻区块",
-			blockLabel(cropBlockAt(t, engine, cropCrossFarmland)))
-	}
-
-	// 注销锚在 (-1,0) 的会话：该区块随即离开活动兴趣范围与订阅集合。
-	// **水方块没有被删除**，改变的只有"它所在的区块还在不在线上"。
-	engine.UnregisterSession(sessions[1])
-	engine.Step()
-	if info, ok := engine.ChunkInfo(cropCrossChunk); ok && info.State == ChunkReady {
-		t.Fatalf("邻块仍是 Ready（State=%d），本用例根本没造出「未加载」条件", info.State)
-	}
-	if _, ok := stepUntilBlock(engine, cropCrossFarmland, core.FarmlandDryID); !ok {
-		t.Fatalf("邻块卸载后耕地仍是 %s：未加载的邻块被当成了有水",
-			blockLabel(cropBlockAt(t, engine, cropCrossFarmland)))
+	adapter.SetBlock(cropCrossWater, core.WaterSourceID)
+	engine.advanceFarmlandMoisture(adapter.pending)
+	if got := cropBlockAt(t, engine, cropCrossFarmland); got != core.FarmlandWetID {
+		t.Fatalf("同 tick 邻块放水后耕地=%s：湿润窗口没有读进相邻区块", blockLabel(got))
 	}
 }

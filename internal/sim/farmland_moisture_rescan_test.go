@@ -130,6 +130,8 @@ func TestFarmlandMoistureRescanOnlyQueuesActiveReadyFarmland(t *testing.T) {
 	leftKey := core.ChunkKey{Dimension: core.Overworld, Pos: left}
 	centerFarmland := core.BlockPos{X: 0, Y: core.MinY, Z: 0}
 	leftFarmland := core.BlockPos{X: -1, Y: core.MinY, Z: 0}
+	// `readyCropWorldAt` 已经推进过初始重扫；清空它，确保本用例的新 job 从游标零开始。
+	engine.farmlandMoisture = farmlandMoistureState{}
 	engine.SetBlockForTest(centerFarmland, core.FarmlandWetID)
 	engine.SetBlockForTest(leftFarmland, core.FarmlandWetID)
 

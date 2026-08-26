@@ -3,6 +3,12 @@ package sim
 import "github.com/channing771/mornlea/internal/core"
 
 const (
+	// farmlandWetRadius 是判定湿润时向四周扫描的水平切比雪夫距离，4 对应 9×9
+	// 的水平窗口。
+	farmlandWetRadius = 4
+	// farmlandWetLayersAbove 是除耕地自身所在层外向上扫描的层数；取 1 表示只读
+	// 同层与上一层。
+	farmlandWetLayersAbove       = 1
 	farmlandMoistureReadsPerTick = 65_536
 	farmlandWetNeighborReads     = (2*farmlandWetRadius + 1) * (2*farmlandWetRadius + 1) * (farmlandWetLayersAbove + 1)
 	farmlandMoistureRescanSide   = core.SectionSize + 2*farmlandWetRadius

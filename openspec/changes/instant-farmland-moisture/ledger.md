@@ -161,3 +161,47 @@ Task 2 已通过独立规格评审与质量评审；实现没有提前进入 Tas
 | `git diff --check` | pass | no output |
 | `openspec validate --all --strict --no-interactive` | pass | `Totals: 66 passed, 0 failed (66 items)` |
 | Task 3 independent spec/quality re-review | approved | repair round 1 关闭 2 Important 与 2 Minor；无新增 finding |
+
+## Task 4 Implementation Evidence
+
+- `advanceCrops` 每阶段入口只重置一次 `cropCellsExamined` 与 `cropBlockReads`；每条随机样本的 `Chunk.BlockAt` 计一次，只有作物再为正下方的 `Dimension.BlockAt` 计一次。
+- `advanceCropCell` 对非作物读取一次后立即返回；已删除随机耕地分支和 `crop.go` 内的 `farmlandIsWet`，湿润几何常量移到 `farmland_moisture.go` 与唯一查询实现同处。
+- 作物 benchmark 全部以解析式守卫 `cropBlockReads <= 2*cropCellsExamined` 并同时报告 `cells/op`、`block_reads/op`；全耕地 benchmark 额外要求两者精确相等，未增加墙钟阈值。
+- 旧湿度用例改经真实 `fluidWorld.SetBlock` 生产 membership 事件并在无积压时同阶段断言；`TestFarmlandTurnsDryAfterWaterRemoved` 不再用 `SetBlockForTest` 移水，fixture-only writer 语义未修改。
+- 随机作物测试夹具改为显式写入一致的持久化干/湿编号；未增加兼容 fallback，未改湿度队列、预算、阶段顺序、流体 hook、协议/schema/ABI/scenario/golden。
+
+## Task 4 RED / GREEN Evidence
+
+| Stage | Command | Result | Evidence |
+|---|---|---|---|
+| RED | `go test ./internal/sim -run 'TestCrop(TickCost\|AllFarmlandReads)' -count=1` | expected fail | `TestCropAllFarmlandReadsEachSampleOnce`: `全耕地阶段读取=0，想要每个样本一次、共 1536`; package `FAIL` |
+| focused GREEN | same command after crop-only implementation | pass | `ok github.com/channing771/mornlea/internal/sim 0.849s` |
+| stale fixture probe | `go test ./internal/sim -run 'TestCrop\|TestFarmland' -race -count=1` | expected adaptation failures | replay field made no changes because all persisted farmland IDs were dry；rescan scope test reused an already-advanced initial cursor |
+| fixture GREEN | individual replay/rescan tests after fixture correction | pass | `ok .../internal/sim 0.859s`; `ok .../internal/sim 0.342s` |
+| full-package probe | `go test ./internal/sim -count=1` | exposed one stale test | `TestZeroGrowthChanceNeverAdvancesCrop` still expected random ticks to wet dry farmland |
+| final focused GREEN | `go test ./internal/sim -run 'TestCrop\|TestFarmland' -race -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 4.125s` |
+| final full GREEN | `go test ./internal/sim -race -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 35.512s` |
+
+## Task 4 Benchmark Evidence
+
+命令：`go test ./internal/sim -run '^$' -bench 'BenchmarkCropAdvance' -benchmem -count=5`；结果 `PASS`，package `ok` 为 `25.231s`。20/20 条 benchmark 样本均同时打印 `cells/op` 与 `block_reads/op`，全部 `0 B/op`、`0 allocs/op`。
+
+| Benchmark | ns/op samples | median ns/op | block_reads/op samples | median block_reads/op | cells/op |
+|---|---|---:|---|---:|---:|
+| FullInterestBarren | 174196, 172912, 172741, 176981, 175544 | 174196 | 14400, 14400, 14400, 14400, 14400 | 14400 | 14400 |
+| FullInterestPlanted | 174037, 176932, 173847, 173600, 173041 | 173847 | 14400, 14400, 14401, 14400, 14400 | 14400 | 14400 |
+| FullInterestDense | 175827, 175634, 176171, 176244, 175967 | 175967 | 14448, 14439, 14430, 14435, 14437 | 14437 | 14400 |
+| AllFarmland | 2172, 2167, 2170, 2239, 2169 | 2170 | 72, 72, 72, 72, 72 | 72 | 72 |
+
+## Task 4 Verification
+
+| Command | Result | Evidence |
+|---|---|---|
+| `gofmt -w` + `gofmt -l` on all Task 4 Go files | pass | no output from format check |
+| `make rust` | pass | `Finished release profile [optimized] target(s) in 0.44s` |
+| `go test ./internal/archcheck -count=1` | pass | `ok github.com/channing771/mornlea/internal/archcheck 4.247s` |
+| `go vet ./internal/sim` | pass | no output |
+| `git diff --check` | pass | no output |
+| `openspec validate --all --strict --no-interactive` | pass | `Totals: 66 passed, 0 failed (66 items)` |
+
+Task 4 实现与验证完成，但按用户约束不勾选 `tasks.md`，规格/质量裁决与 Task Status 仍留待控制会话评审。

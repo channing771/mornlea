@@ -12,8 +12,8 @@ import (
 // 耕地会变湿、更远的会变干，一次夹具同时覆盖两个方向的转换。
 var cropFieldWater = core.BlockPos{X: 8, Y: 1, Z: 8}
 
-// plantCropField 在整个区块的 y=1 铺满耕地、y=2 铺满阶段 0 的小麦，并在正中
-// 放一格水源，共 255 株作物。
+// plantCropField 在整个区块的 y=1 铺满持久化干/湿状态正确的耕地、y=2 铺满
+// 阶段 0 的小麦，并在正中放一格水源，共 255 株作物。
 func plantCropField(engine *Engine) {
 	for x := range int32(core.SectionSize) {
 		for z := range int32(core.SectionSize) {
@@ -22,7 +22,12 @@ func plantCropField(engine *Engine) {
 				engine.SetBlockForTest(ground, core.WaterSourceID)
 				continue
 			}
-			engine.SetBlockForTest(ground, core.FarmlandDryID)
+			farmland := core.FarmlandDryID
+			if x >= cropFieldWater.X-farmlandWetRadius && x <= cropFieldWater.X+farmlandWetRadius &&
+				z >= cropFieldWater.Z-farmlandWetRadius && z <= cropFieldWater.Z+farmlandWetRadius {
+				farmland = core.FarmlandWetID
+			}
+			engine.SetBlockForTest(ground, farmland)
 			engine.SetBlockForTest(core.BlockPos{X: x, Y: 2, Z: z}, core.WheatStage0ID)
 		}
 	}
@@ -86,6 +91,11 @@ func TestCropTickCostIsIndependentOfCropCount(t *testing.T) {
 		t.Fatalf("考察量随作物数量变化：0 株世界 %d 格，255 株世界 %d 格",
 			barren.cropCellsExamined, planted.cropCellsExamined)
 	}
+	for name, engine := range map[string]*Engine{"空世界": barren, "种植世界": planted} {
+		if engine.cropBlockReads > 2*engine.cropCellsExamined {
+			t.Fatalf("%s 作物读取=%d，超过 2×%d", name, engine.cropBlockReads, engine.cropCellsExamined)
+		}
+	}
 	// 考察量必须正好是「已就绪区块数 × 区段数 × 每区段抽样数」。这条把
 	// 「相等」升级成「等于一个与作物无关的解析式」，堵住"两边都退化成 0"
 	// 以外的其他共同漂移。
@@ -93,5 +103,28 @@ func TestCropTickCostIsIndependentOfCropCount(t *testing.T) {
 	if barren.cropCellsExamined != want {
 		t.Fatalf("单 tick 考察量 %d，想要 %d（1 个已就绪区块 × %d 区段 × 64 抽样）",
 			barren.cropCellsExamined, want, core.SectionsPerChunk)
+	}
+}
+
+// TestCropAllFarmlandReadsEachSampleOnce 锁定非作物样本只读取样本格一次，不再
+// 进入耕地湿润邻域扫描。
+func TestCropAllFarmlandReadsEachSampleOnce(t *testing.T) {
+	engine, _ := readyCropWorld(t)
+	for y := int32(core.MinY); y < int32(core.MaxY); y++ {
+		for x := range int32(core.SectionSize) {
+			for z := range int32(core.SectionSize) {
+				engine.SetBlockForTest(core.BlockPos{X: x, Y: y, Z: z}, core.FarmlandDryID)
+			}
+		}
+	}
+
+	engine.advanceCrops(make(map[core.ChunkKey]*pendingChunkChanges))
+
+	if engine.cropCellsExamined == 0 {
+		t.Fatal("全耕地世界一格都没考察，读取等式无法证明成本")
+	}
+	if engine.cropBlockReads != engine.cropCellsExamined {
+		t.Fatalf("全耕地阶段读取=%d，想要每个样本一次、共 %d",
+			engine.cropBlockReads, engine.cropCellsExamined)
 	}
 }

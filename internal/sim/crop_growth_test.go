@@ -127,10 +127,9 @@ func TestCoveredCropDoesNotGrow(t *testing.T) {
 // 同样是「只改一个条件」的成对用例：对照在范围内放水（耕地保持湿），
 // 主用例不放水（耕地保持干），其余完全相同。
 //
-// **farmland 与 waterDistance 必须一起改，这不是"改了两个条件"。** 干湿是由
-// 邻近流体双向决定的：只改 farmland 不放水，湿耕地会被第一次随机 tick 改回干；
-// 只放水不改 farmland，干耕地会被改成湿。两个字段合起来才是「耕地的湿度」这
-// 一个条件，拆开任何一半都会被双向转换自动改回去。后人请勿"修正"成单字段。
+// **`farmland` 与 `waterDistance` 一起描述同一个一致的湿度环境。** 作物阶段只读
+// 持久化的干/湿编号，不维护湿度；正向夹具写湿耕地和范围内水，负向夹具写干耕地
+// 且不放水，避免用陈旧方块状态测试生长规则。
 func TestCropOnDryFarmlandDoesNotGrow(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
@@ -183,9 +182,8 @@ func TestMatureCropStaysMature(t *testing.T) {
 
 // TestZeroGrowthChanceNeverAdvancesCrop 覆盖「0 = 永不推进」的端到端语义。
 //
-// 夹具起手是**干**耕地加范围内的水：于是耕地必须在测试期间转成湿。这条附带
-// 断言是本用例的反空转手段——它证明随机 tick 一直在照常抽样，「作物没长」因此
-// 只可能是概率判定拒绝，不可能是抽样停摆。对照把概率改成 100，同夹具必须长。
+// 两条用例使用相同的持久化湿耕地夹具和确定性抽样序列；概率 100 的对照必须生长，
+// 证明夹具作物确实被抽中过，因此概率 0 不生长只能来自概率判定拒绝。
 func TestZeroGrowthChanceNeverAdvancesCrop(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -197,16 +195,12 @@ func TestZeroGrowthChanceNeverAdvancesCrop(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			engine := newCropWorld(t, cropFixture{
-				farmland:      core.FarmlandDryID,
+				farmland:      core.FarmlandWetID,
 				crop:          core.WheatStage0ID,
 				waterDistance: 4,
 			})
 			setCropGrowthChance(tc.percent)
 			stepCropTicks(engine)
-			if got := cropBlockAt(t, engine, cropFixtureFarmland); got != core.FarmlandWetID {
-				t.Fatalf("耕地是 %s，想要湿耕地——随机 tick 没在照常抽样，"+
-					"「作物没长」的断言失去意义", blockLabel(got))
-			}
 			assertCropGrowth(t, engine, core.WheatStage0ID, tc.wantGrowth)
 		})
 	}
