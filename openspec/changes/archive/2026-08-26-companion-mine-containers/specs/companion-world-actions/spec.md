@@ -1,6 +1,14 @@
-## MODIFIED Requirements
+## REMOVED Requirements
 
 ### Requirement: 伙伴采掘复用玩家计时规则且三方原子
+
+**Reason**: 本 change 解除 M5C 对容器目标的拒绝：箱子与熔炉成为合法 `mine` 目标并引入批量全或无结算，原 Requirement 的「双重拒绝容器与多掉落方块」条款与「容器与多掉落方块被拒绝」场景被显式废除；契约实质重写，故整条替换为同名新 Requirement（场景集合同步扩充为七个）。
+
+**Migration**: 无协议、存档或 schema 迁移（`TaskFailInventoryFull` 复用既有 v18 wire 枚举）；已存档世界中的箱子/熔炉在新规则下即刻可被伙伴采掘，旧防御清单行为随本 change 一并消失。
+
+## ADDED Requirements
+
+### Requirement: 伙伴采掘复用玩家计时规则且原子结算
 
 `mine` 步骤 SHALL 先把伙伴带入目标方块的交互距离（复用 `go_to` 的移动与寻路语义），随后按既有玩家采掘规则持续采掘：所需 tick 由 `miningRule`（方块、持握工具）唯一决定，交互距离与 Ready 区块校验与玩家共用同一实现。采掘完成的同一权威 tick 内 MUST 原子完成三方：目标方块改为空气（容器目标 MUST 同时停用其容器槽）、按既有规则扣除工具耐久（含损坏形态）、可收获产物直接加入伙伴 36 格背包；任一方无法完成时该 tick MUST NOT 变更任何一方。
 
