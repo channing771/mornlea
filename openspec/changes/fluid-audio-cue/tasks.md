@@ -7,10 +7,10 @@
 
 ## 2. Task B（GREEN）：最小实现
 
-- [ ] 2.1 `internal/audio/cue.go` 新增 `CueWaterSplash` 常量与 `cueSpecs` 条目；补一条合成性质测试（非零、末样本衰减到零附近）。
-- [ ] 2.2 `cmd/mornlea/app_audio.go`：`ObservePlayerState` 增加 `bodyInFluid bool` 参数与 splash 返回位，按设计 Decision 2 实现边沿检测；既有调用点与测试同步。
-- [ ] 2.3 `cmd/mornlea/app_messages.go`：应用状态处以 `client.MirrorCollisionSource` 就地求值并接线 cue 分支。
-- [ ] 2.4 验证：`go test ./internal/audio ./cmd/mornlea -race -count=1` 全绿；`make test-race-changed RACE_BASE=origin/main`。
+- [x] 2.1 `internal/audio/cue.go` 新增 `CueWaterSplash` 常量与 `cueSpecs` 条目；补一条合成性质测试（非零、末样本衰减到零附近）。
+- [x] 2.2 `cmd/mornlea/app_audio.go`：`ObservePlayerState` 增加 `bodyInFluid bool` 参数与 splash 返回位，按设计 Decision 2 实现边沿检测；既有调用点与测试同步。
+- [x] 2.3 `cmd/mornlea/app_messages.go`：应用状态处以 `client.MirrorCollisionSource` 就地求值并接线 cue 分支。
+- [x] 2.4 验证：`go test ./internal/audio ./cmd/mornlea -race -count=1` 全绿；`make test-race-changed RACE_BASE=origin/main`。
 
 ## 收尾（控制会话）
 
