@@ -32,7 +32,7 @@
 | Task | Implementer | Spec Review | Quality Review | Repair Rounds | Status |
 |---|---|---|---|---:|---|
 | OpenSpec planning | control session | approved (`ses_fc0f2b5d2ffe47hJ7tMMWCV64G`) | approved (same review) | 2 | complete |
-| 1 Idle node contract | — | pending | pending | 0 | pending |
+| 1 Idle node contract | `ses_fc0dbc81dffe0u3tj65YfW1cXN` | approved (`ses_fc0d74a4affeN0kkoo0FPgXyDJ`) | approved (`ses_fc0d74a37ffeZe7a5DYuWS0gxb`) | 0 | complete |
 | 2 Schedule and dispatch | — | pending | pending | 0 | pending |
 | 3 Outcome and parity | — | pending | pending | 0 | pending |
 | 4 Whole-branch gate | control session | pending | pending | 0 | pending |
@@ -62,6 +62,17 @@
 | `openspec validate --all --strict --no-interactive` | pass | `Totals: 67 passed, 0 failed (67 items)` before planning review |
 | OpenSpec planning independent review | pass | repair round 2 后 reviewer 明确 `PASS`；无 Critical、Important 或 Minor finding |
 | backlog `开发中` transition | pass | `refresh_discussion_test.py` 5/5、`relay_test.py` 3/3；Discussion #71 正文刷新为 82 行，状态评论 `DC_kwDOToJS8M4BFS_p` |
+| Task 1 RED focused | expected fail | `DialogueNodeIdle` 未定义导致 5 处 build error |
+| Task 1 GREEN focused | pass | `go test ./internal/companion -run 'TestDialogueNodeValidateMatrix|TestDialogueClientIdleNodePayload' -count=1` → `ok .../internal/companion 0.674s`；reviewer 重跑 `0.593s` |
+| Task 1 companion race | pass | `go test ./internal/companion -race -count=1` → implementer `4.093s`；SPEC reviewer 重跑 `4.011s` |
+| Task 1 diff and scope | pass | `git diff --check` 无输出；`09354e4a..a20b06e8` 仅含 4 个计划内 `internal/companion` 文件 |
+| Task 1 independent reviews | approved | SPEC 与 QUALITY 均无 Critical、Important 或 Minor finding |
+
+## Task 1 Implementation Evidence
+
+- Commit：`a20b06e8a367da5b50411173b97196fbb981fc89 feat(companion): add idle dialogue node`。
+- `DialogueNodeIdle` 追加在既有枚举末尾；零 payload 合法，三个任务 payload 字段任一非零均拒绝，HTTP kind 固定为 `"idle"`。
+- 未修改系统提示、响应 schema、terminal 判定、server、协议或既有节点数值；Task 2–3 才接入调度与结果应用。
 
 ## Execution Notes
 

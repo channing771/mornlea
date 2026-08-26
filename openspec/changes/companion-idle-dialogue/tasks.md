@@ -1,8 +1,8 @@
 ## 1. Idle Dialogue 节点契约
 
-- [ ] 1.1 在 `internal/companion/dialogue_nodes_test.go` 与 `dialogue_client_test.go` 先写失败测试，覆盖 idle 零载荷合法矩阵、任何任务载荷拒绝及稳定 payload kind `"idle"`；运行 `go test ./internal/companion -run 'TestDialogueNodeValidateMatrix|TestDialogueClientIdleNodePayload' -count=1` 证明 RED。
-- [ ] 1.2 在 `internal/companion/dialogue_nodes.go` 与 `dialogue_client.go` 追加枚举末尾的 `DialogueNodeIdle`、零载荷校验和稳定文本映射；不改系统提示、响应 schema 或任务节点数值。
-- [ ] 1.3 运行 `go test ./internal/companion -run 'TestDialogueNodeValidateMatrix|TestDialogueClientIdleNodePayload' -count=1` 与 `go test ./internal/companion -race -count=1`；经独立 SPEC/QUALITY 双评审通过后记录 commit、RED/GREEN 与裁决到 `ledger.md`。
+- [x] 1.1 在 `internal/companion/dialogue_nodes_test.go` 与 `dialogue_client_test.go` 先写失败测试，覆盖 idle 零载荷合法矩阵、任何任务载荷拒绝及稳定 payload kind `"idle"`；运行 `go test ./internal/companion -run 'TestDialogueNodeValidateMatrix|TestDialogueClientIdleNodePayload' -count=1` 证明 RED。
+- [x] 1.2 在 `internal/companion/dialogue_nodes.go` 与 `dialogue_client.go` 追加枚举末尾的 `DialogueNodeIdle`、零载荷校验和稳定文本映射；不改系统提示、响应 schema 或任务节点数值。
+- [x] 1.3 运行 `go test ./internal/companion -run 'TestDialogueNodeValidateMatrix|TestDialogueClientIdleNodePayload' -count=1` 与 `go test ./internal/companion -race -count=1`；经独立 SPEC/QUALITY 双评审通过后记录 commit、RED/GREEN 与裁决到 `ledger.md`。
 
 ## 2. 确定性空闲期限与派发
 
