@@ -13,7 +13,8 @@ import (
 //	流体等级更大的流动水（更弱）      是
 //	源方块                          否
 //	流体等级更小或相等的流动水        否
-//	任意其他非空气方块（实心）        否
+//	非作物的实心方块                 否（作物对流动水可替换，另见
+//	                                rules_replaceable_crop_test.go）
 func TestReplaceable(t *testing.T) {
 	cases := []struct {
 		name     string

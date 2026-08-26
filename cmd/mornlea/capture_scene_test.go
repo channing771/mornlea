@@ -235,6 +235,15 @@ func TestCaptureMaterialsShowcaseFixtureUsesMirrorAndMesher(t *testing.T) {
 	for y := int32(1); y <= 3; y++ {
 		assertBlock(core.BlockPos{X: 7, Y: y, Z: -1}, core.OakLogID)
 	}
+	// 耕地两态列：干（x=-6..-5）与湿（x=-8..-7）各一个 2 格宽的单层列，
+	// 与草地条同层（y=0）、同深（z=-1）。规格断言锁的是坐标与块型本身；
+	// 下沉顶面的呈现由 golden 视觉门禁验收。
+	assertBlock(core.BlockPos{X: -6, Y: 0, Z: -1}, core.FarmlandDryID)
+	assertBlock(core.BlockPos{X: -5, Y: 0, Z: -1}, core.FarmlandDryID)
+	assertBlock(core.BlockPos{X: -8, Y: 0, Z: -1}, core.FarmlandWetID)
+	assertBlock(core.BlockPos{X: -7, Y: 0, Z: -1}, core.FarmlandWetID)
+	// 列外一格必须仍是空气：耕地不得越出声明的 2×2 格范围。
+	assertBlock(core.BlockPos{X: -9, Y: 0, Z: -1}, core.AirID)
 	if got := app.mesher.Stats().DirtySections; got == 0 {
 		t.Fatal("材料展示装入后 mesher 没有 dirty section")
 	}

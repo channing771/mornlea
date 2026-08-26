@@ -149,9 +149,32 @@ func (a *application) renderFrame(workMax int) (bool, error) {
 	hudVisible := inventoryConfirmed || (healthReady && !a.clientSessionClosed) ||
 		chatOverlay.Open || len(chatOverlay.Lines) != 0
 	if hudVisible {
+		// B-14 进食进度条：纯客户端预测。输入位在 `renderFrame` 作用域没有现成的
+		// 当帧 `Control.Eating`，故按 `interactive.go` 置位的同源状态派生（光标
+		// 捕获 + 次键按住 + 已确认手持食物 + 权威确认饥饿未满）：开箱/菜单/聊天
+		// 都会释放光标，天然归零；唯一偏差是刚刚重新捕获的那一帧会超前一个帧
+		// 时长，不可感知。饥饿门控对齐权威侧 `sim/eating.go` 的「饥饿已满不
+		// 推进」——满值时输入位恒为假，进度条不出现（spec Scenario「饥饿已满
+		// 不呈现进度条」）。tracker 以帧间 elapsed 按权威 tick 周期累积，切格/
+		// 换物/数量变化（权威结算吃掉一件）由状态机清零；无头路径（benchmark/
+		// capture）window 为 nil，输入位恒为假，既有场景输出逐字节不变。
+		eatingSample := client.EatingSample{}
+		if hotbar, confirmed := a.inventory.Hotbar(); confirmed {
+			stack := hotbar.Slots[hotbar.Selected]
+			_, _, food := core.FoodValue(stack.Item)
+			eatingSample = client.EatingSample{
+				Eating: food && hungerReady && hunger < core.MaxHunger &&
+					a.window != nil && a.window.CursorCaptured() &&
+					a.window.SecondaryButtonDown(),
+				Slot: hotbar.Selected, Item: stack.Item, Count: stack.Count,
+			}
+		}
+		eatingActive, eatingProgress := a.eatingTracker.Observe(time.Now(), eatingSample)
 		if err := a.hotbarRenderer.Prepare(
 			inventory, inventoryConfirmed, a.inventoryOpen, a.inventorySource, overlay, chestOverlay,
-			a.miningOverlay, hud.HealthOverlay{Confirmed: healthReady, Value: health},
+			a.miningOverlay,
+			hud.EatingOverlay{Active: eatingActive, Progress: eatingProgress},
+			hud.HealthOverlay{Confirmed: healthReady, Value: health},
 			hud.OxygenOverlay{Confirmed: oxygenReady, Value: oxygen},
 			hud.HungerOverlay{Confirmed: hungerReady, Value: hunger}, chatOverlay,
 			uint32(width), uint32(height), a.scheduler.UploadBudget(),

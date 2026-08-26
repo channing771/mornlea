@@ -16,6 +16,7 @@ type RegistryReader interface {
 	Emission(world.BlockID) uint8
 	FluidHeight(world.BlockID) uint8
 	LightAttenuation(world.BlockID) uint8
+	BlockTopRaw(world.BlockID) uint8
 }
 
 // Registry 提供网格化需要的方块属性及其不可变快照。
@@ -26,8 +27,9 @@ type Registry interface {
 
 // BlockProperties 是单个方块在网格化期间使用的冻结属性。
 //
-// FluidHeight 与 LightAttenuation 跟 Emission 同形状：每方块一个字节，随快照一起
-// 编码进 native 输入（见 encodeNativeInput 与 Rust 的 REGISTRY_ENTRY_BYTES）。
+// FluidHeight、LightAttenuation 与 BlockTopRaw 跟 Emission 同形状：每方块一个
+// 字节，随快照一起编码进 native 输入（见 encodeNativeInput 与 Rust 的
+// REGISTRY_ENTRY_BYTES）。
 type BlockProperties struct {
 	ID       world.BlockID
 	Opaque   bool
@@ -41,7 +43,20 @@ type BlockProperties struct {
 	// LightAttenuation 是天空光穿过该方块时的额外衰减，供 Rust 光照 BFS 使用。
 	// 本字段只负责把值送过 ABI 边界，衰减行为由后续变更实现。
 	LightAttenuation uint8
-	Materials        [6]uint16
+	// BlockTopRaw 是非满格方块的 4-bit 顶面高度原值，实际呈现高度为
+	// (h_raw+1)/16，由 mesher 的常量角高度路径消费（复用水面 quad 的角高度位）。
+	//
+	// 0 是「满格方块」哨兵：绝大多数方块是整格立方体，取 0 让既有条目零改动，
+	// 与 `FluidHeight` 的「0=非流体」同构；1..=14 表示全部可见面的上缘按该高度
+	// 下沉（首个消费者是干/湿耕地的 14，即 15/16，恰等于物理碰撞高度）；15
+	// 必须被拒绝——满格只能用哨兵 0 表达，「非零即短方块」才能保持单一判定，
+	// Rust 侧 `RegistryView::validate` 同口径拒绝。
+	//
+	// 与 `FluidHeight` 互斥：流体的角高度由 mesher 邻域平均现算（含「上方也是
+	// 流体则取满格」规则）、短方块由本字段常量驱动，两条几何路径不得叠加在
+	// 同一条目上——编码两侧都按「二者不同时非零」拒绝。
+	BlockTopRaw uint8
+	Materials   [6]uint16
 }
 
 // RegistrySnapshot 是按方块 ID 排序的网格 registry 快照。
@@ -68,6 +83,7 @@ func BuildRegistrySnapshot(ids []world.BlockID, reader RegistryReader) (Registry
 			Emission:         reader.Emission(id),
 			FluidHeight:      reader.FluidHeight(id),
 			LightAttenuation: reader.LightAttenuation(id),
+			BlockTopRaw:      reader.BlockTopRaw(id),
 		}
 		if block.Emission > 15 {
 			return RegistrySnapshot{}, fmt.Errorf("mesh: block %d emission=%d 超过 15", id, block.Emission)
@@ -83,6 +99,18 @@ func BuildRegistrySnapshot(ids []world.BlockID, reader RegistryReader) (Registry
 		// 上的 panic。Rust 侧 RegistryView::validate 同口径拒绝，这里提前给可读错误。
 		if block.LightAttenuation > 1 {
 			return RegistrySnapshot{}, fmt.Errorf("mesh: block %d lightAttenuation=%d 超过 1", id, block.LightAttenuation)
+		}
+		// 合法域是哨兵 0（满格）加 1..=14（呈现高度 (h+1)/16）。15 无从表达任何
+		// 合法几何——满格必须写哨兵 0，「非零即短方块」是 mesher 的单一判定前提；
+		// Rust 侧 `RegistryView::validate` 同口径拒绝，这里提前给出可读错误。
+		if block.BlockTopRaw > 14 {
+			return RegistrySnapshot{}, fmt.Errorf("mesh: block %d blockTopRaw=%d 超过 14", id, block.BlockTopRaw)
+		}
+		// 流体与短方块互斥：流体的角高度由 mesher 邻域平均现算、短方块由
+		// `BlockTopRaw` 常量驱动，同一条目同时携带两套语义时行为无从定义。
+		// Rust 侧 `RegistryView::validate` 同口径拒绝，这里提前给出可读错误。
+		if block.FluidHeight != 0 && block.BlockTopRaw != 0 {
+			return RegistrySnapshot{}, fmt.Errorf("mesh: block %d 流体条目携带非零 blockTopRaw=%d", id, block.BlockTopRaw)
 		}
 		for face := Face(0); face < 6; face++ {
 			block.Materials[face] = reader.Material(id, face)
