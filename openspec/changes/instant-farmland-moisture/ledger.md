@@ -544,3 +544,36 @@ Task 5 及 change 执行任务现已全部完成。保持 OpenSpec change active
 `180820`、all-farmland `2198`；读取中位数依次为 `14400`、`14400`、`14437`、`72`。
 全耕地五次样本均报告 `1.000 chunks`、`98304 farmland`、`0 crops`、
 `72 block_reads/op == 72 cells/op`。数值只记录，所有解析式与报告完整性门禁继续生效。
+
+## Pull Request Integration Verification
+
+用户选择创建 PR 后，控制会话先刷新真实远端基线，再把 `origin/main` 的
+`eed30581ca3557e89ca78429b33f81da8cfc96a5` 无冲突合入 feature branch；merge commit 为
+`53a51262730f4305e0afc13f9119b72732a3a0f1`。本地 `main` 自身已与远端分叉，故未作为集成
+来源，也未把其未共享提交带入 PR。
+
+### Integration Ruling
+
+| ID | Finding | Decision | Evidence |
+|---|---|---|---|
+| B09-PR-R1 | 合并 `origin/main` 的 engine ABI v7 后，首次 sim race 在 `PhysicsStep` 返回 ABI mismatch；B-09 与 `origin/main` 的 native/physics/Rust ABI 文件无 diff，v7 dylib 自报版本正确，nativeabi test variant 通过 | 判定为 Go/cgo 普通依赖 archive 仍复用合并前 ABI v6 header 的本机构建缓存，不改代码；执行 `go clean -cache` 后从干净 Go build cache 重跑 | 原始 `TestMeleeHitChargesAttackerExhaustionExactlyOnce` 清缓存前稳定 panic，清缓存后定点通过；随后 sim race、archcheck 与全仓 race 从零通过 |
+
+### Integrated-Tree Gates
+
+| Command | Result | Evidence |
+|---|---|---|
+| `gofmt -l .` | pass | no output |
+| `make rust` | pass | ABI v7 integrated tree release build `0.28s` |
+| `go test ./internal/sim -race -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 37.247s` |
+| `go test ./internal/archcheck -count=1` | pass | `ok github.com/channing771/mornlea/internal/archcheck 9.898s` |
+| `go test ./... -race` | pass | clean-cache run；`cmd/mornlea 277.871s`、`internal/server 210.779s`、`internal/sim 47.541s`、`internal/archcheck 38.307s`，其余全部通过 |
+| `go vet ./...` | pass | no diagnostic output |
+| `go test ./internal/sim -run '^$' -bench 'BenchmarkCropAdvance' -benchmem -count=5` | pass | 20/20 samples；package `25.525s`；全部 `0 B/op`、`0 allocs/op` |
+| `MORNLEA_FLUID_PERF=1 go test ./internal/sim -run '^TestFluidPerf' -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 21.432s` |
+| `openspec status --change instant-farmland-moisture` | pass | 4/4 artifacts complete |
+| `openspec validate --all --strict --no-interactive` | pass | `Totals: 67 passed, 0 failed (67 items)` |
+
+集成树 crop benchmark 的 `ns/op` 中位数依次为 barren `187255`、planted `192164`、dense
+`194557`、all-farmland `2305`；读取中位数依次为 `14400`、`14401`、`14443`、`72`。
+全耕地五次样本继续精确报告一个 Ready 区块、`98,304` 格耕地、零作物及
+`72 block_reads/op == 72 cells/op`。墙钟只记录，所有 correctness 门禁保持有效。
