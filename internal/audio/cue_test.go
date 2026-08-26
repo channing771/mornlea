@@ -83,7 +83,7 @@ func TestCueWaterSplashSynthesisProperty(t *testing.T) {
 }
 
 // checkBasicPCM 断言合成 PCM 的基础性质：全程非零、无 int16 溢出且峰值恰为
-// 振幅。供 `TestCuePMC` 与 `TestCueWaterSplashSynthesisProperty` 共用。
+// 振幅。供 `TestCuePCM` 与 `TestCueWaterSplashSynthesisProperty` 共用。
 func checkBasicPCM(t *testing.T, pcm []int16, amplitude int16) {
 	t.Helper()
 	var nonZero bool
