@@ -104,3 +104,12 @@
 - 建议 (c) 越界哨兵覆盖边界：评审已确认测试注释说明充分，无需扩展，清零。
 - tasks 3.1 中「docs/notes/progress.md 补段」按计划留待归档阶段执行，非遗留。
 - 除上述外无未决项；proposal 未设「延期与放弃」节亦无内容需誊入。
+
+## 集成记录：变基合入演进后的 main
+
+- 分支基线 `13912e5c` 落后 origin/main 135 个提交（其间合入 PR #84 B-13 近战疲劳、#86 D-01 设置菜单、#87 E-04 删 Go oracles、#88 C-01 伙伴采掘容器、#89 B-14 进食进度 HUD、#90 B-07 冲毁作物）。执行 `git merge origin/main`：
+  - 代码全部自动合并；engine ABI 在 main 侧仍为 v6——本分支 v7 无版本碰撞；client ABI 已被 D-01 升至 v9，本分支未触 client ABI，无碰撞。
+  - 冲突仅 AGENTS.md/CLAUDE.md 两处巨型基线段。Ruling: 取 main 侧为底、重放本变更两处语义编辑（M5A 句 engine ABI 演进链 v6→v7 含 `block_top_raw` 条目；D-01 段契约枚举删去 `engine ABI v6` 项）——文档以集成后事实为准，任何残留「engine ABI v6」都会使 archcheck 版本门禁变红。
+  - 先期裁决作废重裁：Task 2 期间「main 实际 18 景、settings-menu 未合入」系基于过时分支基线的误判——集成后 main 实际 19 景（含 settings-menu），delta 场景清单已改为 19 景真值。
+- 集成树验证：Go mesh/assets/nativeabi/archcheck 全 ok；Rust engine 166 tests / client 132 tests 全绿（双方测试共存）；E-04 删除的是 physics/worldgen oracle，mesh oracle 及本变更 parity 测试幸存。
+- 集成树 visual-check：19 景全抓，materials-showcase 与再生 golden 0/0 逐字节一致（证明无关合并未影响地形渲染），失败集恰为本机既有 10 景偏差（坐标与指标逐一吻合 ledger 基线表），零新增漂移。

@@ -9,7 +9,7 @@
 - 方块 registry 条目追加 1 字节 `block_top_raw`（0 = 满格哨兵，1..=14 为 4-bit 顶面高度原值），条目从 18 字节扩到 19 字节；engine ABI 随输入布局 **v6 → v7**
 - mesher 对非零 `block_top_raw` 的方块走常量角高度路径：全部可见面的上缘按 `(h_raw+1)/16` 下沉（耕地填 14 → 15/16，恰等于碰撞高度），该类方块不参与贪心合并，quad 仍是 8 字节
 - Go 侧 `internal/assets` 填充干/湿耕地的高度字节，`internal/mesh/native_input.go` 编码并做域校验；Rust 侧 `input.rs` 解析、域校验并与 fluid 互斥
-- `materials-showcase` capture 夹具追加干耕地与湿耕地两列，使本行为进入视觉回归网；对应 golden 单景再生，其余 17 景必须逐字节不变
+- `materials-showcase` capture 夹具追加干耕地与湿耕地两列，使本行为进入视觉回归网；对应 golden 单景再生，其余 18 景必须逐字节不变
 
 ## Capabilities
 
