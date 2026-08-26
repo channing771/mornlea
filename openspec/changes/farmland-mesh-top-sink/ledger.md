@@ -113,3 +113,10 @@
   - 先期裁决作废重裁：Task 2 期间「main 实际 18 景、settings-menu 未合入」系基于过时分支基线的误判——集成后 main 实际 19 景（含 settings-menu），delta 场景清单已改为 19 景真值。
 - 集成树验证：Go mesh/assets/nativeabi/archcheck 全 ok；Rust engine 166 tests / client 132 tests 全绿（双方测试共存）；E-04 删除的是 physics/worldgen oracle，mesh oracle 及本变更 parity 测试幸存。
 - 集成树 visual-check：19 景全抓，materials-showcase 与再生 golden 0/0 逐字节一致（证明无关合并未影响地形渲染），失败集恰为本机既有 10 景偏差（坐标与指标逐一吻合 ledger 基线表），零新增漂移。
+
+## 集成树门禁证据
+
+- gofmt 0 输出；go vet 干净；cargo clippy -D warnings 与 fmt --check 干净。
+- 全量 `go test ./... -race`：唯一失败为 `TestCompanionDialogueTerminalCoversFourTerminalStates/Stopped` 等待预算超时——flake 分诊协议判定：该测试单独重跑 2.9s ok、internal/server 整包 -race 重跑 175s ok，与 D-05 期间归档的同一负载性 flake 同签名（高并发下假台词模型请求计数等待超时），非本变更引入，不进修复循环。
+- openspec validate --all --strict：66/66 通过。
+- 结论：集成树全部门禁绿（含既有偏差豁免项），具备 PR 条件。
