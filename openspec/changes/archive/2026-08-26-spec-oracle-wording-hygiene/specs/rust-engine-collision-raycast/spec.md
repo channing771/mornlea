@@ -1,9 +1,5 @@
-# rust-engine-collision-raycast Specification
+## MODIFIED Requirements
 
-## Purpose
-
-在不改变 Go 的世界、玩家状态和公开 API 所有权前提下，为 Rust collision 与 raycast 建立可验证、可回退且跨平台一致的唯一生产 kernel 契约。
-## Requirements
 ### Requirement: Rust collision 保持共享物理结果
 系统 MUST 让 Rust 唯一生产 kernel 对同一 state、displacement 与 collision snapshot 产生由位级 golden 向量与采集自生产的字面量期望钉住的确定性位置、clipped mask、OnGround、UsedStep 与 HitUnknown，任意平台的重放 MUST 逐位复现这些冻结值（见 internal/physics/step_golden_vectors_test.go 与 internal/physics/collision_native_test.go）；解析顺序 MUST 为 Y/X/Z，unknown MUST 作为闭合边界，step 只在水平进度严格更大时选中。
 
@@ -18,17 +14,6 @@
 - **WHEN** Go 编码 snapshot
 - **THEN** MUST 只编码前八个 AABB
 - **AND** 9 或 255 MUST NOT 因 count 本身被拒绝
-
-### Requirement: collision snapshot 具有硬资源上限
-系统 MUST 在 source 查询、分配、native 调用和状态发布前以 checked arithmetic 计算完整 prism，并 MUST 原子拒绝超过 4096 cell、整数溢出或不可表示的输入。
-
-#### Scenario: 上限内完整编码
-- **WHEN** prism 恰含 4096 cell
-- **THEN** 系统 MUST 完整编码且不得截断
-
-#### Scenario: 超过上限在查询前 panic
-- **WHEN** prism 需要 4097 cell
-- **THEN** 系统 MUST 在零次 CollisionSource 查询后稳定 panic
 
 ### Requirement: Rust raycast 保持惰性 callback 契约
 系统 MUST 让 Rust 以最多 64 record 的 caller-owned cursor batch 执行 DDA，同时由 Go 按现有顺序调用 callback、传播第一个 error 并计算最终 Point。
@@ -65,4 +50,3 @@
 - **THEN** unwind MUST 不跨越 C ABI
 - **AND** 在两个 result metadata 指针本身有效时，raycast 的 `output_count`/`done` MUST 清零
 - **AND** collision output 与 raycast output/cursor、Go State MUST 保持未发布
-
