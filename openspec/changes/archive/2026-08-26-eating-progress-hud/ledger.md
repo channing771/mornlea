@@ -21,3 +21,9 @@
 - **三变异各杀专属用例（均未提交、恢复后 `git status` 干净）**：互斥短路注释 → `TestAppendEatingBarMutuallyExclusiveWithMining` + cmd 端到端互斥帧断言红；slot 复位删除 → `TestEatingProgressResetsOnSlotItemAndCountChange/切换栏位清零` 红；饥饿门控注释 → `TestApplicationEatingOverlayGatedOnAuthoritativeHunger` 红。
 - **全量门禁**：`gofmt -l .` 无输出；`go vet ./...` 干净；`go test ./... -race -count=1` 首跑仅 `internal/server` 的 `TestCompanionDialogueTerminalCoversFourTerminalStates/Stopped` 红（假台词模型请求数等待 60s 超时——满负载时序 flake：单测复跑 5/5 绿、独占复跑 `internal/server` 全包 ok 214s，该族有 ci-retry-isolation 既往史且分支 diff 与 `internal/server` 零交集）；其余 25 包首跑全 ok；`openspec validate --all --strict` 65/65；`internal/archcheck` ok。
 - **分支 diff 核对**（merge-base `369d1c94` → HEAD，22 文件 +1073/−68）：冻结集全部在位（含 5 个既有 hud 测试机械插入）。**Ruling: `docs/feature-backlog.md` 的 1 行分支 diff 源于认领提交 `cbf60ef3` 属分支历史且内容与 main 逐字一致 — 认领提交先落 main 再分叉是本流程既定做法（B-31 同形），main 侧其后由他行推进产生 merge-base 偏移 — 无需处理，PR 合并时该行为空差异。**
+
+## 2026-08-26 整分支终审与归档收尾
+
+- **整分支终审：PASS（0 MUST-FIX，1 NIT——delta 半角标点）**——独立终审者复跑 client/hud/cmd-Eating/archcheck/validate 全绿；八 commit 叙事自洽、冻结集外零改动、三点位未越裁决边界、无头零影响为结构不变式（headless window nil → 输入位恒假）、容量常量断言零改动、协议/存档/ABI/scenario/golden 零变更属实、主规格 ADDED 落位无冲突。
+- NIT 采纳：delta 正文逗号/分号归一为主规格的全角风格（`Scenario:` 标题半角冒号保留）后归档；`survival-hud-presentation` 主规格 +1 requirement。
+- 基线同步：`AGENTS.md`/`CLAUDE.md` 两处插入句（survival HUD 段能力主描述 + authoritative-hunger 段遗留清偿指回）；`docs/notes/progress.md` 追加 B-14 段落。
