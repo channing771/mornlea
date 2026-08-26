@@ -252,9 +252,9 @@ fn segment_after(src: &str, marker: &str) -> String {
 #[test]
 fn farmland_range_constants_match_go_layer_enum() {
     // 这两个字面量与 internal/assets/blocks.go 的层枚举 iota 逐一对应：
-    // …LayerWater(28)、LayerFarmlandDry(29)、LayerFarmlandWet(30)、LayerWheat0(31)…
-    assert_eq!(FARMLAND_MATERIAL_FIRST, 29, "Go LayerFarmlandDry=29");
-    assert_eq!(FARMLAND_MATERIAL_LAST, 30, "Go LayerFarmlandWet=30");
+    // …`LayerWater`(28)、`LayerFarmlandDry`(29)、`LayerFarmlandWet`(30)、`LayerWheat0`(31)…
+    assert_eq!(FARMLAND_MATERIAL_FIRST, 29, "Go `LayerFarmlandDry`=29");
+    assert_eq!(FARMLAND_MATERIAL_LAST, 30, "Go `LayerFarmlandWet`=30");
     // 区间必须恰好覆盖干湿两层：放宽会把水层(28)或小麦层(31)卷进角高度路径。
     assert_eq!(
         FARMLAND_MATERIAL_LAST - FARMLAND_MATERIAL_FIRST,
@@ -280,9 +280,12 @@ fn shader_sources_stay_pinned_to_the_range_constants() {
         "terrain.wgsl 的耕地区间上界与本 crate 常量不一致：\n{seg}"
     );
 
-    // cull.wgsl 对耕地 quad 按**满格**做背面剔除（保守正确）：bit 16..19 在
-    // 耕地 quad 上是角高度、在普通 quad 上是 h 尺寸，两种语义都不该被剔除
-    // 路径读到。若有人给 cull 补上「尺寸」解码，这里当场红。
+    // cull.wgsl 对耕地 quad 按**满格**做背面剔除（误差有界、只可能漏画，
+    // 论证见 shader 内注释）：bit 16..19 在耕地 quad 上是角高度、在普通
+    // quad 上是 h 尺寸，两种语义都不该被剔除路径读到。若有人给 cull 补上
+    // 「尺寸」解码，这里当场红。覆盖边界：本钉是**字面形态**扫描，只拦
+    // `>> 16u` 这一种写法——bit 12/55..62 的解码与不带 u 后缀的等价写法
+    // （如 `>> 16`）不在钉内，须靠评审。
     assert!(
         !CULL.contains(">> 16u"),
         "cull.wgsl 不得解码 bit 16..19：耕地 quad 上那是角高度、普通 quad 上那是 \
@@ -337,11 +340,15 @@ fn farmland_top_face_covers_only_its_own_cell() {
 /// 耕地顶面必须真的下沉，且幅度对得上位布局：与满格对照差恰好 1/16 世界高度。
 ///
 /// 斜视投影把世界 `y` 以斜率 2 掺进 `clip.y`，高度差 1/16 即屏幕 4 行。断言
-/// 位移落在 3..=6 行：
+/// 位移落在 3..=6 行。本用例钉住的是两个性质：**斜率**（顶点高度每差一个
+/// raw 单位，屏幕位移恰为 1/16 格）与**完全不解码为 0 位移**；两帧差分对
+/// 仿射偏移不敏感——任何斜率正确的公式（无论常数项）位移都恒 4 行，因此
+/// 绝对高度在这里没有锚点，「公式抄错但斜率不变」的形态要靠常量与公式两侧
+/// 的源码钉子和评审兜住：
 ///
 /// - 完全不解码角高度（顶点恒在 y+1）→ 两版重合，位移 0，红；
 /// - 沿用 `w/h` 解码 → 面变成 15×15/16×16 石板，首行差异远超带宽或直接出屏，红；
-/// - 公式抄错（例如漏掉 +1）→ 位移偏离 4 行，红。
+/// - 斜率抄错（例如漏掉 /16）→ 位移偏离 4 行带宽，红。
 #[test]
 fn farmland_top_edge_sinks_below_a_full_height_control() {
     for material in [MAT_FARMLAND_DRY, MAT_FARMLAND_WET] {

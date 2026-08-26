@@ -54,9 +54,10 @@ fn face_shade(face: u32) -> f32 {
 // 判别为什么走 material 区间：quad 布局只剩 bit 63 一个空闲位且必须留空，
 // 「是不是短方块」占不到任何位；植物又把 face 6/7 占为交叉斜面判别。耕地是
 // 轴向面（face 0..5），与植物按 face 天然互斥，material 区间是唯一不冲突的
-// 判别通道。数值真值源是 Go internal/assets 的 LayerFarmlandDry/Wet（29/30），
-// Rust 侧复述见 src/render/shaders.rs 的 FARMLAND_MATERIAL_FIRST/LAST，三方由
-// render/farmland_tests.rs 钉在一起——在这里改数字必须同步另外两处。
+// 判别通道。数值真值源是 Go internal/assets 的 `LayerFarmlandDry`/`LayerFarmlandWet`
+// （29/30），Rust 侧复述见 src/render/shaders.rs 的
+// `FARMLAND_MATERIAL_FIRST`/`FARMLAND_MATERIAL_LAST`，三方由 render/farmland_tests.rs
+// 钉在一起——在这里改数字必须同步另外两处。
 fn farmland_material(mat: u32) -> bool {
     return mat >= 29u && mat <= 30u;
 }
@@ -121,8 +122,12 @@ fn vs_main(
     // 不同，耕地四角取同一常量、没有斜面，直接查位即可。
     //
     // `w`/`h` 因此只在普通轴向面的分支里解码：三条路径互斥，由 face ∈ {6,7} 与
-    // 耕地 material 区间保证（植物 material 只允许出现在 face 6/7 上，短方块
-    // material 只允许落在耕地区间内，都是 mesher 打包时当场强制的格式）。
+    // 耕地 material 区间保证。两条保证的强度不同，如实记录：植物 material 只
+    // 出现在 face 6/7 上是 mesher 打包期显式断言（两侧同口径当场拒绝）；而
+    // 「短方块的 material 都落在耕地区间内」不是打包期查得出来的——它是 Go
+    // registry 数据的传递性事实（当前只有耕地条目 block_top_raw 非零），区间外
+    // 的未来短方块会**静默**走 w/h 路径、顶面不下沉。这是 D2a 选定 material
+    // 判别时已接受的边界：新增短方块必须同步扩宽本区间并更新三处钉子。
     //
     // 两条对角线（`cu[vi]` 是水平参数 s，`cv[vi]` 是竖直参数 t）：
     //

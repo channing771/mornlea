@@ -14,19 +14,20 @@ import (
 //
 // 区间的数值真值源是本包 blocks.go 的层枚举，但 Rust 客户端在
 // engine/crates/mornlea_client 的 src/render/shaders.rs
-// （FARMLAND_MATERIAL_FIRST/LAST = 29/30）与其 terrain.wgsl 的
-// farmland_material 各硬编码了一份——WGSL 没有常量注入机制，三处没有共享
-// 定义也没有生成步骤，只能人手同步。在 LayerFarmlandDry **之前**插层会整体
-// 平移这段区间，客户端会把耕地当普通满格方块渲染（顶面不下沉）、甚至把相邻
-// 层误判成短方块而误读尺寸位；本条与 Rust 侧 render/farmland_tests.rs 的
-// farmland_range_constants_match_go_layer_enum 是仅有的两处报警点。
+// （`FARMLAND_MATERIAL_FIRST`/`FARMLAND_MATERIAL_LAST` = 29/30）与其
+// terrain.wgsl 的 `farmland_material` 各硬编码了一份——WGSL 没有常量注入
+// 机制，三处没有共享定义也没有生成步骤，只能人手同步。在
+// `LayerFarmlandDry` **之前**插层会整体平移这段区间，客户端会把耕地当普通
+// 满格方块渲染（顶面不下沉）、甚至把相邻层误判成短方块而误读尺寸位；本条与
+// Rust 侧 render/farmland_tests.rs 的
+// `farmland_range_constants_match_go_layer_enum` 是仅有的两处报警点。
 func TestFarmlandLayerNumbersMatchClientShaderContract(t *testing.T) {
 	// 字面量与 Rust 客户端 shaders.rs 的两个常量逐一对应，改任何一侧必须同步。
-	if got := uint16(29); assets.LayerFarmlandDry != got {
-		t.Fatalf("LayerFarmlandDry=%d，Rust 客户端 FARMLAND_MATERIAL_FIRST=29", got)
+	if want := uint16(29); assets.LayerFarmlandDry != want {
+		t.Fatalf("客户端耕地区间下界应为 %d（Rust 客户端 FARMLAND_MATERIAL_FIRST），实测 LayerFarmlandDry=%d", want, assets.LayerFarmlandDry)
 	}
-	if got := uint16(30); assets.LayerFarmlandWet != got {
-		t.Fatalf("LayerFarmlandWet=%d，Rust 客户端 FARMLAND_MATERIAL_LAST=30", got)
+	if want := uint16(30); assets.LayerFarmlandWet != want {
+		t.Fatalf("客户端耕地区间上界应为 %d（Rust 客户端 FARMLAND_MATERIAL_LAST），实测 LayerFarmlandWet=%d", want, assets.LayerFarmlandWet)
 	}
 	// 区间必须恰好覆盖干湿两层、且与两侧邻居紧贴：水层在前、小麦层在后，
 	// 插层必然撞上这三条断言之一。
