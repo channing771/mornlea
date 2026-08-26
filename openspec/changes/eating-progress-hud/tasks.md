@@ -12,6 +12,8 @@
 
 ## Task 2: 变异验证与全量门禁收尾
 
+- [x] 完成见 ledger（三变异各杀专属用例、全量门禁全绿、冻结集核对通过）。
+
 - **变异验证**（不提交）：a) 注释互斥判定 → 互斥/容量用例红；b) 去掉任一复位源 → 对应复位用例红；c) 分母或周期常量改错 → 速率用例红。恢复后复绿。
 - **全量门禁**：`gofmt -l .`、`go vet ./...`、`go test ./... -race -count=1`、`openspec validate --all --strict --no-interactive`、`go test ./internal/archcheck -count=1`。
 - **收尾核对**：merge-base 计的分支 diff 恰为冻结集；本 tasks.md 全勾；ledger 记录门禁输出摘要。
