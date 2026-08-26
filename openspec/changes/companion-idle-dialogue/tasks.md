@@ -6,10 +6,10 @@
 
 ## 2. 确定性空闲期限与派发
 
-- [ ] 2.1 新建 `internal/server/companion_idle_dialogue_test.go` 并先写失败测试，覆盖 FNV-1a golden `1369`、`1200..2400` 边界、`uint64` tick 回绕、水平 16 格边界、离线/inactive/恢复合成身份、current/pending 重置、槽满/单在途跳过及 idle 不消耗任务八次预算；另从无期限开始断言首个空闲 tick 只设置精确 deadline，晚于旧 deadline 执行时仍从旧 deadline 精确递推，并在任务重置后从再次空闲 tick 精确重建；运行 `go test ./internal/server -run 'TestIdleDialogueInterval|TestIdleDialogueDue|TestIdleDialogueAudience|TestIdleDialogueDispatch' -count=1` 证明 RED。
-- [ ] 2.2 新建 `internal/server/companion_idle_dialogue.go`，在 `companion_manager.go` 增加两个运行期期限字段和 server-only issuer `restored` 标记，并把 `dispatchIdleDialogues` 固定接在 `dispatchPlanning` 之后；所有 tick 工作按 `orderedIDs` 扫描且最多 4 个 slot。
-- [ ] 2.3 修改 `internal/server/companion_dialogue.go`，让 idle 复用既有 inactive、单在途、四槽、请求构造和 worker 路径，但不检查或递增 `dialogueRequests`；任何期限机会在派发资格判断前先安排下一期限。
-- [ ] 2.4 运行 `gofmt -w internal/server/companion_idle_dialogue.go internal/server/companion_idle_dialogue_test.go internal/server/companion_manager.go internal/server/companion_dialogue.go`、上述定点测试、`go test ./internal/server -race -count=1` 与 `go test ./internal/archcheck -count=1`；经独立 SPEC/QUALITY 双评审通过后更新 `ledger.md`。
+- [x] 2.1 新建 `internal/server/companion_idle_dialogue_test.go` 并先写失败测试，覆盖 FNV-1a golden `1369`、`1200..2400` 边界、`uint64` tick 回绕、水平 16 格边界、离线/inactive/恢复合成身份、current/pending 重置、槽满/单在途跳过及 idle 不消耗任务八次预算；另从无期限开始断言首个空闲 tick 只设置精确 deadline，晚于旧 deadline 执行时仍从旧 deadline 精确递推，并在任务重置后从再次空闲 tick 精确重建；运行 `go test ./internal/server -run 'TestIdleDialogueInterval|TestIdleDialogueDue|TestIdleDialogueAudience|TestIdleDialogueDispatch' -count=1` 证明 RED。
+- [x] 2.2 新建 `internal/server/companion_idle_dialogue.go`，在 `companion_manager.go` 增加两个运行期期限字段和 server-only issuer `restored` 标记，并把 `dispatchIdleDialogues` 固定接在 `dispatchPlanning` 之后；所有 tick 工作按 `orderedIDs` 扫描且最多 4 个 slot。
+- [x] 2.3 修改 `internal/server/companion_dialogue.go`，让 idle 复用既有 inactive、单在途、四槽、请求构造和 worker 路径，但不检查或递增 `dialogueRequests`；任何期限机会在派发资格判断前先安排下一期限。
+- [x] 2.4 运行 `gofmt -w internal/server/companion_idle_dialogue.go internal/server/companion_idle_dialogue_test.go internal/server/companion_manager.go internal/server/companion_dialogue.go`、上述定点测试、`go test ./internal/server -race -count=1` 与 `go test ./internal/archcheck -count=1`；经独立 SPEC/QUALITY 双评审通过后更新 `ledger.md`。
 
 ## 3. idle 结果重验、广播与 parity
 
