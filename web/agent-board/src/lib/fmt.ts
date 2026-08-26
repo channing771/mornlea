@@ -14,7 +14,7 @@ export function fmtDur(sec: number | null | undefined): string {
 
 // statusClassMap 把任务状态映射为徽章用的 Tailwind 类（背景 + 文字色）。
 const statusClassMap: Record<TaskStatus, string> = {
-  '就绪': 'bg-status-unclaimed/15 text-status-unclaimed',
+  '就绪': 'bg-status-done/15 text-status-done',
   '已认领': 'bg-status-claimed/15 text-status-claimed',
   '开发中': 'bg-status-develop/15 text-status-develop',
   '待集成': 'bg-status-integrate/15 text-status-integrate',

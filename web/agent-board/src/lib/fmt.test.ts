@@ -19,7 +19,7 @@ describe('statusClass', () => {
   });
 
   it('当前规划状态都有稳定样式', () => {
-    expect(statusClass('就绪')).toContain('text-status-unclaimed');
+    expect(statusClass('就绪')).toContain('text-status-done');
     for (const status of ['排队', '设计候选', '已取消']) {
       expect(statusClass(status)).toContain('text-status-other');
     }
