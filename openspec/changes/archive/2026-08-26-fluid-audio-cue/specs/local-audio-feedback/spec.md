@@ -1,10 +1,6 @@
-# local-audio-feedback Specification
+# fluid-audio-cue Delta
 
-## Purpose
-
-在不影响模拟、网络与渲染的前提下，为图形客户端的有效本地操作和权威确认提供有界、可静音降级的本地音频反馈。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: 本地 cue 只在确认或有效本地操作边界播放
 
@@ -81,55 +77,3 @@
 - **GIVEN** 玩家处于身体浸没中收到 `Reset` 或未就绪状态
 - **WHEN** 随后第一条新鲜权威状态仍显示身体浸没
 - **THEN** 基线缺席 MUST NOT 视为上升沿，MUST NOT 播放 cue；此后须先离开水中再入水才重新触发
-
-### Requirement: 放置成功确认建立唯一因果边界
-
-协议 v26 SHALL 在 Play S→C ID 20 定义载荷恰为 `Sequence u64` 的 `PlaceBlockSucceeded`，并保持 ID 21 未分配。服务端只能在某 `PlaceBlock` 已于同一权威 tick 原子完成世界写入和恰减一件物品后，向发起会话发送恰好一个同序号成功确认。拒绝或失败 MUST 只发既有 `CommandRejected`，不得同时产生成功确认。
-
-#### Scenario: 连续放置分别确认
-
-- **GIVEN** 同一会话使用同一 slot/item 连续发起两个可成功放置命令
-- **WHEN** 两个命令在同 tick 或跨 tick 完成
-- **THEN** 发起会话 MUST 收到两个各自序号的成功确认，其他会话 MUST NOT 收到
-
-#### Scenario: 拒绝放置没有成功确认
-
-- **GIVEN** 某 `PlaceBlock` 被权威模拟拒绝
-- **WHEN** 服务端发布本 tick 结果
-- **THEN** 发起会话 MUST 只收到同序号 `CommandRejected`，且任何会话 MUST NOT 收到该序号成功确认
-
-### Requirement: 协议 v26 拒绝旧对端
-
-客户端与服务端 SHALL 只接受协议 v26，并 MUST 在 Play 之前拒绝 v25 及更早版本。此次升版 MUST NOT 修改存档 schema、engine/client ABI 或 benchmark scenario。
-
-#### Scenario: v25 对端在握手阶段被拒绝
-
-- **GIVEN** 客户端或服务端声明协议 v25
-- **WHEN** 对端处理握手
-- **THEN** MUST 在进入 Play 前以版本不匹配拒绝
-
-### Requirement: 总音量严格配置
-
-系统 SHALL 将顶层 `audioVolume` 作为本地 cue 总音量。字段缺席时 MUST 为 `0.7`；`0`、`0.25` 与 `1` MUST 原样加载并保存往返；小于 `0`、大于 `1`、`null` 和非数值 MUST 使配置加载失败。该字段 MUST NOT 被报告为未知字段，也 MUST NOT 出现在数值 `Fields()` 或调试面板中，且配置版本 MUST 保持 `1`。
-
-#### Scenario: 合法音量往返
-
-- **GIVEN** 含任一合法 `audioVolume` 值的配置
-- **WHEN** 系统加载后保存并再次加载
-- **THEN** 音量 MUST 保持相同值
-
-#### Scenario: 非法音量失败
-
-- **GIVEN** `audioVolume` 为 `-0.01`、`1.01`、`null` 或字符串
-- **WHEN** 系统加载配置
-- **THEN** MUST 返回带 `audioVolume` 上下文的错误
-
-### Requirement: 不可用音频无声降级
-
-系统 SHALL 在无头、非 Darwin 或 Darwin 设备初始化失败时构造无声播放路径。该路径 MUST 零初始化、不得创建音频设备，并且 MUST NOT 阻止客户端启动、模拟、网络或渲染。
-
-#### Scenario: 平台或设备不可用
-
-- **GIVEN** 无头、非 Darwin 平台或不可用的 Darwin 音频设备
-- **WHEN** 客户端初始化本地音频
-- **THEN** 系统 MUST 使用无声路径并继续启动

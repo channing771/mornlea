@@ -187,3 +187,11 @@ func assertCaptureAICompanionState(t *testing.T, app *application) {
 		t.Fatalf("chat input=%+v", app.chatInput)
 	}
 }
+
+// `audioPlayerState` 为音频与水花主题测试构造最小合法的权威玩家状态。
+func audioPlayerState(tick uint64, health, hunger uint8, reset bool) network.PlayerState {
+	return network.PlayerState{
+		ServerTick: tick, Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 10, 0.5},
+		OnGround: true, Ready: true, Reset: reset, Health: health, Hunger: hunger,
+	}
+}
