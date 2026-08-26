@@ -96,3 +96,8 @@
 - 裁决：**PASS（可合入）**。范围冻结（12 提交 15 文件全落独占集、基线文档/golden/版本号零触碰）、规格一致性（7 Scenario 锚定抽查属实、「延期与放弃」四条未越界）、正确性与上限（纯函数固定序、有界 ≤28 堆、无资源上限放宽）、并发/持久化错误路径（单写者 tick、深拷贝只读、容器槽 generation 语义无泄漏、storage 零变更）、wire 安全（`internal/network` 零变更、复用 v18 枚举）、无版权资源、`go test -list` 删 1 增 9 与记录精确吻合、8 条 Ruling 全在案。
 - Findings：1 minor——proposal/design 把容器 UI 总格数 63 误当箱子存储格数（真实 `core.ChestSlots`=27、堆数上界 1+27=28）；行为边界比声明更紧、方向安全。已在归档前修正两文件共 5 处数字（63→27 语义、64→28 堆），delta spec 不含该数字故无主规格影响。
 - 环境备注：Task 4 聚合 race 的两次超时有完整 flake 证据链（文件集无关、并发负载实测、隔离复跑 30 包全绿）；CI 全量门禁为最终兜底。
+
+## 收尾门禁（2026-08-26）
+
+- `scripts/agents/gates.sh` 全量六项 PASS：gofmt 无输出、`go vet ./...`、archcheck、OpenSpec strict 65/65、`make rust`（Rust 1.97.1）、全量 `go test ./... -race` 28 包 ok（`cmd/mornlea` 333.804s 通过）。
+- 首轮 gates 的 race 失败（`cmd/mornlea` 包级超时 + overlay 单测失败）取证为并行会话同机跑全量 race 的负载 flake：失败时段实测另一 `go test ./... -race` 进程（load 15、`mornlea.test` 140% CPU），overlay 测试隔离 `-count=3` 全绿、GPU 测试安静机器 63.52s 通过（超时时为 10 分钟未完成）；本分支文件集零涉及 `cmd/mornlea`。CI 全量门禁为最终兜底。
