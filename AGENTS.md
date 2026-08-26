@@ -6,7 +6,7 @@ Agent 指南沿目录祖先链叠加生效；离目标文件最近的 `AGENTS.md
 
 ## 项目与契约
 
-Mornlea 是使用 Go 1.26 编写的独立体素游戏，Go module 为 `github.com/channing771/mornlea`，包含自研客户端、权威服务端、世界存储、物理和 Rust wgpu 渲染；项目不兼容官方 Minecraft 协议、存档或版权资源。当前基线已经包含协议 v26；玩家 schema v7、区块 schema v9、世界 metadata v2、独立 `companions.ai` schema v4、engine ABI v7、client ABI v9，benchmark scenario 为 v19。
+Mornlea 是使用 Go 1.26 编写的独立体素游戏，Go module 为 `github.com/channing771/mornlea`，包含自研客户端、权威服务端、世界存储、物理、Rust `mornlea_engine` 数值引擎和 Rust `mornlea_client` wgpu 渲染客户端；项目不兼容官方 Minecraft 协议、存档或版权资源。当前基线已经包含协议 v26；玩家 schema v7、区块 schema v9、世界 metadata v2、独立 `companions.ai` schema v4、engine ABI v7、client ABI v9，benchmark scenario 为 v19。
 
 ## 真相优先级
 

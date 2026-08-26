@@ -201,7 +201,7 @@ scripts/
 
 ## 10. 最小 archcheck 适配
 
-`internal/archcheck/baseline_test.go` 是唯一允许修改的非文档文件。
+`internal/archcheck/baseline_test.go` 与 `internal/archcheck/identity_test.go` 是仅有的两个允许修改的非文档文件。
 
 ### 10.1 版本门禁
 
@@ -225,13 +225,17 @@ scripts/
 
 实现保持在现有 `baseline_test.go` 内，不新增检查包、通用解析器或测试文件。
 
+### 10.3 原生引擎身份门禁
+
+`TestNativeEngineLibraryIdentity` 保留 crate、产物、Makefile、cgo、README、OpenSpec 配置和进度文档的全部身份检查，以及对 `libmornlea_mesh` 的拒绝。当前指南身份改为跟随根 `AGENTS.md`；根 `CLAUDE.md` 只负责导入同目录指南，不再承担原生引擎身份正文。
+
 ## 11. 验证边界
 
 按用户确认，本变更不运行全仓测试。只执行薄导入迁移直接依赖的定点测试：
 
 ```bash
 go test ./internal/archcheck \
-  -run 'TestBaselineVersionsMatchCode|TestClaudeImportsAgentGuidance' \
+  -run 'TestNativeEngineLibraryIdentity|TestBaselineVersionsMatchCode|TestClaudeImportsAgentGuidance' \
   -count=1
 ```
 

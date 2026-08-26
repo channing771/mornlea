@@ -15,7 +15,7 @@
 - `AGENTS.md` 是 Agent 规则的唯一内容源；`CLAUDE.md` 不复制版本、能力或工作流正文。
 - 当前契约保持协议 v26、玩家 schema v7、区块 schema v9、世界 metadata v2、`companions.ai` schema v4、engine ABI v7、client ABI v9、benchmark scenario v19。
 - 不修改生产代码、Hook、gate、构建、发布、CI、协议、schema、ABI、scenario 或视觉 golden。
-- 唯一允许修改的非文档文件是 `internal/archcheck/baseline_test.go`。
+- 仅允许修改两个非文档文件：`internal/archcheck/baseline_test.go` 与 `internal/archcheck/identity_test.go`。
 - 不批量修订 `docs/superpowers/`（本设计和计划除外）、归档 OpenSpec 或历史证据。
 - 不增加指南 manifest、字节预算、祖先链预算、链接扫描器或新测试文件。
 - 只运行计划明确列出的 focused archcheck；不运行 `make dev-check`、全仓 Go/Rust 测试、benchmark、capture 或图形客户端。
@@ -28,12 +28,13 @@
 
 **Files:**
 - Modify: `internal/archcheck/baseline_test.go`
+- Modify: `internal/archcheck/identity_test.go`
 - Modify: `AGENTS.md`
 - Modify: `CLAUDE.md`
 
 **Interfaces:**
-- Consumes: 现有 `baselineVersionMappings`、`assertBaselineVersions` 和 `readBaselineDoc`。
-- Produces: 根方向层；`baselineDocName = "AGENTS.md"`；`claudeAgentImport`；初始只校验根 shim 的 `TestClaudeImportsAgentGuidance`。
+- Consumes: 现有 `baselineVersionMappings`、`assertBaselineVersions`、`readBaselineDoc` 和 `TestNativeEngineLibraryIdentity`。
+- Produces: 根方向层；`baselineDocName = "AGENTS.md"`；`claudeAgentImport`；初始只校验根 shim 的 `TestClaudeImportsAgentGuidance`；原生引擎身份门禁以根 `AGENTS.md` 为指南来源。
 
 - [ ] **Step 1: 将版本映射注释切换到 `AGENTS.md` 单一来源**
 
@@ -71,17 +72,19 @@ func TestClaudeImportsAgentGuidance(t *testing.T) {
 }
 ```
 
+同时在 `internal/archcheck/identity_test.go` 的当前文档身份列表中只删除根 `CLAUDE.md`：它改为 import-only adapter，不再承载 `mornlea_engine` 正文。根 `AGENTS.md` 继续作为指南身份来源；crate、产物、Makefile、cgo、README、OpenSpec 配置、进度文档检查和对 `libmornlea_mesh` 的拒绝全部保留。
+
 - [ ] **Step 3: 运行定点测试确认旧全文镜像失败**
 
 Run:
 
 ```bash
 go test ./internal/archcheck \
-  -run 'TestBaselineVersionsMatchCode|TestClaudeImportsAgentGuidance' \
+  -run 'TestNativeEngineLibraryIdentity|TestBaselineVersionsMatchCode|TestClaudeImportsAgentGuidance' \
   -count=1
 ```
 
-Expected: `TestBaselineVersionsMatchCode` PASS；`TestClaudeImportsAgentGuidance/CLAUDE.md` FAIL，诊断显示当前 `CLAUDE.md` 不是规范薄导入。
+Expected: `TestNativeEngineLibraryIdentity` 与 `TestBaselineVersionsMatchCode` PASS；`TestClaudeImportsAgentGuidance/CLAUDE.md` FAIL，诊断显示当前 `CLAUDE.md` 不是规范薄导入。
 
 - [ ] **Step 4: 把根 `AGENTS.md` 改写为方向层**
 
@@ -89,7 +92,7 @@ Expected: `TestBaselineVersionsMatchCode` PASS；`TestClaudeImportsAgentGuidance
 
 1. `# Mornlea 项目指南`
 2. `## 指南作用域`：说明祖先链叠加、最近指南补充父级、局部规则不得降低全局安全和正确性门禁。
-3. `## 项目与契约`：用一段短文保留项目身份，并包含能被现有正则匹配的精确事实：
+3. `## 项目与契约`：用一段短文保留项目身份，明确 Rust `mornlea_engine` 与 Rust `mornlea_client`，并包含能被现有正则匹配的精确事实：
 
 ```text
 当前基线已经包含协议 v26；玩家 schema v7、区块 schema v9、世界 metadata v2、独立 `companions.ai` schema v4、engine ABI v7、client ABI v9，benchmark scenario 为 v19。
@@ -116,18 +119,18 @@ Run:
 
 ```bash
 go test ./internal/archcheck \
-  -run 'TestBaselineVersionsMatchCode|TestClaudeImportsAgentGuidance' \
+  -run 'TestNativeEngineLibraryIdentity|TestBaselineVersionsMatchCode|TestClaudeImportsAgentGuidance' \
   -count=1
 ```
 
-Expected: 两项 PASS；八条版本映射都从根 `AGENTS.md` 成功解析。
+Expected: 三项 PASS；八条版本映射都从根 `AGENTS.md` 成功解析，原生引擎身份检查也只把根 `AGENTS.md` 作为指南身份来源。
 
 - [ ] **Step 7: 任务级自检**
 
 Run:
 
 ```bash
-git diff --check -- AGENTS.md CLAUDE.md internal/archcheck/baseline_test.go
+git diff --check -- AGENTS.md CLAUDE.md internal/archcheck/baseline_test.go internal/archcheck/identity_test.go
 ```
 
 Expected: exit 0，无输出。
@@ -464,7 +467,7 @@ Run:
 
 ```bash
 go test ./internal/archcheck \
-  -run 'TestBaselineVersionsMatchCode|TestClaudeImportsAgentGuidance' \
+  -run 'TestNativeEngineLibraryIdentity|TestBaselineVersionsMatchCode|TestClaudeImportsAgentGuidance' \
   -count=1
 ```
 
@@ -479,4 +482,4 @@ git diff --check
 git status --short
 ```
 
-Expected: `git diff --check` exit 0；`git status --short` 只显示本计划列出的文档、四个 `CLAUDE.md` shim 和 `internal/archcheck/baseline_test.go`，以及开始前已经存在且未被修改的用户内容。
+Expected: `git diff --check` exit 0；`git status --short` 只显示本计划列出的文档、四个 `CLAUDE.md` shim、`internal/archcheck/baseline_test.go` 和 `internal/archcheck/identity_test.go`，以及开始前已经存在且未被修改的用户内容。
