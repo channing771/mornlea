@@ -20,6 +20,6 @@
 ## 4. 收尾门禁
 
 - [x] 4.1 `gofmt -l .` 无输出、`go vet ./...` 通过
-- [x] 4.2 `go test ./... -race` 全绿（cmd/mornlea GPU 场景满负载 flake 已按 test-quickstart 分诊协议单独复跑通过：focused 111s、整包 812s，见 ledger 终审节）
+- [x] 4.2 `go test ./... -race` 全绿（cmd/mornlea GPU 场景满负载 flake 已按 test-quickstart 分诊协议单独复跑通过：focused 111s、整包 812s，见 ledger 执行节）
 - [x] 4.3 `openspec validate --all --strict --no-interactive` 通过
 - [x] 4.4 `scripts/agents/gates.sh` 全绿；性能数值若有变化仅记录

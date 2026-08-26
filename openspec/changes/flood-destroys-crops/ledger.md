@@ -15,7 +15,8 @@
 
 ## 执行（阶段 3）
 
-- 组1（任务 1.x）：DONE_WITH_CONCERNS @ `6cd469c6`；评审 SPEC ✅ / QUALITY 1 Important + 2 Minor；Important 为注释反引号纪律，修复于 `dbd5be00` 后评审 clean，任务收尾 `029af13a..b65fbe6f`。
+- 2026-08-26 分支变基到当时 main 尖端 `e57dc60c`（原 BASE bcc900fb 之后主线推进），下列哈希为变基后可达值
+- 组1（任务 1.x）：DONE_WITH_CONCERNS @ `55a0a715`；评审 SPEC ✅ / QUALITY 1 Important + 2 Minor；Important 为注释反引号纪律，修复于 `dbd5be00` 后评审 clean，任务收尾 `02067d29..dbd5be00`。
 - 组2（任务 2.x）：DONE_WITH_CONCERNS @ `a1435c46`+`05ab4b3d`（parity 落点 server 新主题文件，brief 许可）；评审 SPEC ✅ / QUALITY Approved，0 Important / 3 Minor。裁决：TDD 红证据采信报告文字（红绿单提交）；D2 单次提交论据由行为级测试与既有 property 背书，控制会话确认。
 - 组3（任务 3.1）：@ `9770b1fc`（仅 fluid.go 注释）；评审 SPEC ✅ / QUALITY Approved / Findings None。
 - 组4 门禁：gofmt / vet / archcheck / OpenSpec strict / make rust 全 PASS。全量 `-race` 唯一失败为 cmd/mornlea GPU 场景测试 10m 超时——Ruling: 满负载 flake（focused 重跑 111s 过、整包重跑 812s 过），按 test-quickstart 分诊协议不进修复循环。
@@ -23,7 +24,7 @@
 
 ## 终审与收尾（阶段 4–5）
 
-- 变基：分支变基到 main `9770b1fc`。分支点后主线落地 B-10/B-05：`wheatSeedDropCount` 删除、成熟收获数量改为 `cropYieldRolls`(worldSeed, tick, 维度, 坐标) 确定性哈希——本分支 `settleFloodedCrop` 仍镜像旧固定表，编译失败且语义失配。终审 findings 一波清偿：
+- 变基：分支变基到当时 main 尖端 `e57dc60c`（propose 提交 `02067d29` 的父；原 BASE bcc900fb 之后主线推进）。分支点后主线落地 B-10/B-05：`wheatSeedDropCount` 删除、成熟收获数量改为 `cropYieldRolls`(worldSeed, tick, 维度, 坐标) 确定性哈希——本分支 `settleFloodedCrop` 仍镜像旧固定表，编译失败且语义失配。终审 findings 一波清偿：
   - I-1：`settleFloodedCrop` 成熟分支改调包内共享 `cropYieldRolls`（tick 取值点 `Engine.tick.Load()` 与 `completeMining` 同一读取路径）；sim 侧确值断言改为按夹具已知 `(seed, 结算 tick, 维度, position)` 现算（`stepUntilFluidCropFlooded` 改为返回结算 tick）；spec 场景改「与玩家采掘该作物的掉落表完全相同（含其数量语义）」级表述；design.md D4 同步。
   - M-1：新增 `TestFluidCropSameTickDualSourceMergesToStrongestAndSettlesOnce`——等级 1 垂直候选 × 等级 2 水平候选同批写同一成熟作物格，断言最终值取最强者、作物格全程恰好一笔广播变更、掉落恰好一批且与 `cropYieldRolls` 现算值逐件相等。红证据：临时变异 `internal/fluid/queue.go` 合并分支为「先到先得」后用例 3/3 确定性红（弱候选先落笔冲毁、强候选次批改写 ⇒ 两笔广播），还原后绿；变异仅本地演示，未进入任何提交。
   - T1：`internal/fluid/rules.go` 作物分支注释把「存活判定、同 tick 冲突合并」误列入「全部经由谓词」——收窄为承重路径（垂直/水平写入判定 + `fluidSourceIsFixedPoint` / `fluidSectionIsFixedPoint` 两个 rescan 捷径）；design.md D1 同句同改。

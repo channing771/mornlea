@@ -1,6 +1,6 @@
 # B-07 flood-destroys-crops 整分支终审修复报告（单波次）
 
-状态：DONE。工作目录 `.worktrees/feat/B-07-flood-destroys-crops`，变基基线 main `9770b1fc`。
+状态：DONE。工作目录 `.worktrees/feat/B-07-flood-destroys-crops`，变基基线为当时 main 尖端 `e57dc60c`（propose 提交 `02067d29` 的父；本分支现行任务 3 提交 `9770b1fc` 不在 main 上）。
 
 ## Findings 处置
 
@@ -44,3 +44,12 @@ B-10 后成熟产量按 `(seed, 权威绝对 tick, 维度, 坐标)` 取哈希。
 
 - 五条 deferred minors 中 ②（`internal/fluid/helpers_test.go:218` Fatalf 消息未同步作物例外前提）与 ④（server parity 用例压 `-short` 档线）维持 deferred，需后续归属方接手；其余三条已闭环（①本波次修复、③关闭、⑤接受现状）。
 - `TestMemoryTCPFluidDamBreakBroadcastParity` 既有 flaky 属 E-11 独占域，本轮 `Parity|FluidCrop` 两轮实跑均过，仍建议向需求方上报。
+
+## 复审更正记录（2026-08-26）
+
+终审修复提交（`e52927c5`/`8d0234f8`）经复审确认五条 findings 全部 ADDRESSED，但修复产物自身引入两条 Important（记录完整性），本节随更正提交一并落账：
+
+1. 基线表述不实：ledger 终审节与本报告首行原写「变基到 main `9770b1fc`」——`git merge-base --is-ancestor` 实证 `9770b1fc` 不在 main 上，它是本分支变基重放后的任务 3 提交；真实基线是当时 main 尖端 `e57dc60c`（`git branch --contains` 与 `merge-base --is-ancestor e57dc60c main` 双证）。两处已更正。
+2. ledger「执行」节死哈希：组1 行的 `6cd469c6` / 收尾范围端点 `b65fbe6f` 为变基前死哈希（`git merge-base --is-ancestor <hash> HEAD` 判不可达），同句却混用现行可达的 `dbd5be00`。按「变基重放保消息不变、标题匹配」核实对应：`6cd469c6`「feat(fluid): 作物格对流动水可替换（B-07 任务1）」→ `55a0a715`；`b65fbe6f`「docs(fluid): 补齐注释反引号纪律（B-07 任务1 R1）」→ `dbd5be00`；收尾范围起点 `029af13a`（propose）→ `02067d29`。已全部替换为变基后可达值，并在「执行」节首行加注记。
+
+顺手更正不计级 nit：tasks.md 4.2 的指引由「见 ledger 终审节」改为「见 ledger 执行节」（满负载 flake 裁决实际记录在执行节）。
