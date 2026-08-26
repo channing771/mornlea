@@ -597,7 +597,10 @@ impl<'a> Reader<'a> {
     #[allow(clippy::result_unit_err)]
     fn fixed24_string(&mut self) -> Result<String, ()> {
         let bytes = self.bytes_slice(MAX_DEBUG_PANEL_RUNES_PER_SIDE)?;
-        let end = bytes.iter().position(|byte| *byte == 0).unwrap_or(bytes.len());
+        let end = bytes
+            .iter()
+            .position(|byte| *byte == 0)
+            .unwrap_or(bytes.len());
         if !bytes[end..].iter().all(|byte| *byte == 0) {
             return Err(());
         }
@@ -1096,10 +1099,12 @@ struct DebugActions {
 
 impl DebugActions {
     fn append_events(&self, pending: &mut Vec<UiOutputEvent>) {
-        let bare = |action| UiOutputEvent::DebugPanel(UiDebugPanelEvent {
-            action,
-            value: String::new(),
-        });
+        let bare = |action| {
+            UiOutputEvent::DebugPanel(UiDebugPanelEvent {
+                action,
+                value: String::new(),
+            })
+        };
         if self.select_next {
             pending.push(bare(DEBUG_PANEL_ACTION_SELECT_NEXT));
         }
@@ -1506,8 +1511,7 @@ const DEBUG_PANEL_VALUE_X: f32 = 260.0;
 /// 面板文本字号。
 const DEBUG_PANEL_FONT_SIZE: f32 = 14.0;
 /// 半透明深灰面板背景。
-const DEBUG_PANEL_BACKGROUND: Color32 =
-    Color32::from_rgba_unmultiplied_const(10, 10, 13, 209);
+const DEBUG_PANEL_BACKGROUND: Color32 = Color32::from_rgba_unmultiplied_const(10, 10, 13, 209);
 /// 只读行文本颜色。
 const DEBUG_PANEL_READONLY_COLOR: Color32 = Color32::from_rgb(128, 128, 128);
 /// 普通行文本颜色。
@@ -1516,7 +1520,8 @@ const DEBUG_PANEL_TEXT_COLOR: Color32 = Color32::WHITE;
 const DEBUG_PANEL_SELECTED_BACKGROUND: Color32 =
     Color32::from_rgba_unmultiplied_const(77, 158, 242, 89);
 /// 顶部读数区固定标签;值来自段头结构化字段。
-const DEBUG_PANEL_READOUT_LABELS: [&str; 7] = ["帧时", "坐标", "朝向", "Tick", "时刻", "区块数", "模式"];
+const DEBUG_PANEL_READOUT_LABELS: [&str; 7] =
+    ["帧时", "坐标", "朝向", "Tick", "时刻", "区块数", "模式"];
 
 /// 绘制一帧调试面板(layout v3 下行 → egui 呈现)。
 ///
@@ -1533,8 +1538,10 @@ fn draw_debug_panel(
     let screen = ui.max_rect();
     let width = DEBUG_PANEL_WIDTH.min((screen.width() - DEBUG_PANEL_MARGIN * 2.0).max(1.0));
     let height = (screen.height() - DEBUG_PANEL_MARGIN * 2.0).max(1.0);
-    let panel =
-        Rect::from_min_size(pos2(DEBUG_PANEL_MARGIN, DEBUG_PANEL_MARGIN), vec2(width, height));
+    let panel = Rect::from_min_size(
+        pos2(DEBUG_PANEL_MARGIN, DEBUG_PANEL_MARGIN),
+        vec2(width, height),
+    );
     ui.painter()
         .rect_filled(panel, CornerRadius::same(6), DEBUG_PANEL_BACKGROUND);
     let inner = panel.shrink(DEBUG_PANEL_PADDING);
@@ -1677,13 +1684,7 @@ fn debug_row_text_pair(ui: &mut egui::Ui, label: &str, value: &str, color: Color
 }
 
 fn debug_row_text_pair_at(ui: &mut egui::Ui, rect: Rect, label: &str, value: &str, color: Color32) {
-    debug_row_text_at(
-        ui,
-        rect,
-        label,
-        color,
-        DEBUG_PANEL_TEXT_PADDING_X,
-    );
+    debug_row_text_at(ui, rect, label, color, DEBUG_PANEL_TEXT_PADDING_X);
     debug_row_text_at(ui, rect, value, color, DEBUG_PANEL_VALUE_X);
 }
 

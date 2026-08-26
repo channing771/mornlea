@@ -240,7 +240,18 @@ fn debug_panel_layout_v3_rejects_invalid_readout_values() {
     ));
     cases.push((
         "inf position",
-        debug_frame_raw(1, 0.0, [f32::INFINITY, 0.0, 0.0], 0.0, 0.0, 0, 0, 0, b"m", &[]),
+        debug_frame_raw(
+            1,
+            0.0,
+            [f32::INFINITY, 0.0, 0.0],
+            0.0,
+            0.0,
+            0,
+            0,
+            0,
+            b"m",
+            &[],
+        ),
     ));
     cases.push((
         "nan yaw",
@@ -304,21 +315,35 @@ fn debug_panel_layout_v3_rejects_fixed_field_padding_and_utf8() {
     let cases: Vec<(&str, Vec<Vec<u8>>)> = vec![
         (
             "label nonzero tail",
-            vec![row_raw(&label_tail, &fixed_field(b"value"), DEBUG_PANEL_ROW_FLAG_READONLY)],
+            vec![row_raw(
+                &label_tail,
+                &fixed_field(b"value"),
+                DEBUG_PANEL_ROW_FLAG_READONLY,
+            )],
         ),
         (
             "label utf8",
-            vec![
-                row_raw(&bad_utf8, &fixed_field(b"value"), DEBUG_PANEL_ROW_FLAG_READONLY),
-            ],
+            vec![row_raw(
+                &bad_utf8,
+                &fixed_field(b"value"),
+                DEBUG_PANEL_ROW_FLAG_READONLY,
+            )],
         ),
         (
             "value nonzero tail",
-            vec![row_raw(&fixed_field(b"label"), &value_tail, DEBUG_PANEL_ROW_FLAG_READONLY)],
+            vec![row_raw(
+                &fixed_field(b"label"),
+                &value_tail,
+                DEBUG_PANEL_ROW_FLAG_READONLY,
+            )],
         ),
         (
             "value utf8",
-            vec![row_raw(&fixed_field(b"label"), &bad_value, DEBUG_PANEL_ROW_FLAG_READONLY)],
+            vec![row_raw(
+                &fixed_field(b"label"),
+                &bad_value,
+                DEBUG_PANEL_ROW_FLAG_READONLY,
+            )],
         ),
     ];
     for (name, rows) in cases {

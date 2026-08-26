@@ -24,7 +24,14 @@ fn text_edit_font() -> &'static [u8] {
     include_bytes!("../../../../../internal/render/assets/NotoSansCJKsc-Regular.otf")
 }
 
-fn row(label: &str, value: &str, readonly: bool, selected: bool, editable: bool, editing: bool) -> UiDebugRow {
+fn row(
+    label: &str,
+    value: &str,
+    readonly: bool,
+    selected: bool,
+    editable: bool,
+    editing: bool,
+) -> UiDebugRow {
     let editing = editing && editable;
     UiDebugRow {
         label: label.to_owned(),
@@ -33,7 +40,11 @@ fn row(label: &str, value: &str, readonly: bool, selected: bool, editable: bool,
         selected,
         editable,
         editing,
-        edit_value: if editing { value.to_owned() } else { String::new() },
+        edit_value: if editing {
+            value.to_owned()
+        } else {
+            String::new()
+        },
         edit_cursor: if editing { value.len() } else { 0 },
     }
 }
@@ -138,7 +149,11 @@ fn debug_panel_arrow_keys_emit_select_events_in_key_order() {
     let mut state = UiState::new();
     state.install_font(test_font());
     let frame = sample_frame();
-    render(&mut state, &frame, &[key(Key::ArrowDown), key(Key::ArrowUp)]);
+    render(
+        &mut state,
+        &frame,
+        &[key(Key::ArrowDown), key(Key::ArrowUp)],
+    );
     let events = take_output_events(&mut state);
     assert_eq!(
         events,
@@ -209,15 +224,13 @@ fn debug_panel_editing_types_value_and_confirms_on_enter() {
     render(&mut state, &frame, &[key(Key::Enter)]);
     let events = take_output_events(&mut state);
     assert!(
-        events
-            .iter()
-            .any(|event| matches!(
-                event,
-                UiOutputEvent::DebugPanel(UiDebugPanelEvent {
-                    action: DEBUG_PANEL_ACTION_CONFIRM,
-                    value,
-                }) if value == "705"
-            )),
+        events.iter().any(|event| matches!(
+            event,
+            UiOutputEvent::DebugPanel(UiDebugPanelEvent {
+                action: DEBUG_PANEL_ACTION_CONFIRM,
+                value,
+            }) if value == "705"
+        )),
         "缺少确认事件：{events:?}"
     );
 }
@@ -230,7 +243,11 @@ fn debug_panel_editing_escape_cancels_and_blocks_navigation() {
     render(&mut state, &frame, &[]);
 
     // 编辑期间方向键只移动文本光标,不产生行选中动作…
-    render(&mut state, &frame, &[key(Key::ArrowDown), key(Key::ArrowUp)]);
+    render(
+        &mut state,
+        &frame,
+        &[key(Key::ArrowDown), key(Key::ArrowUp)],
+    );
     assert!(take_output_events(&mut state).is_empty());
 
     // …Esc 产生取消(而非关闭)。
@@ -277,7 +294,11 @@ fn debug_panel_capacity_preflight_rejects_before_consuming_input() {
     }
     let pending_before = state.pending_events.events();
     assert!(matches!(
-        state.run_frame(raw_input(&[key(Key::ArrowDown)], screen_rect(), 1.0, None), &frame, 1.0),
+        state.run_frame(
+            raw_input(&[key(Key::ArrowDown)], screen_rect(), 1.0, None),
+            &frame,
+            1.0
+        ),
         Err(UiOutputError::Capacity)
     ));
     assert_eq!(state.pending_events.events(), pending_before);
