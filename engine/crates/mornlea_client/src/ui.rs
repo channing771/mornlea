@@ -471,6 +471,10 @@ fn decode_debug_frame(reader: &mut Reader<'_>) -> Result<UiDebugFrame, ()> {
     for _ in 0..row_count {
         rows.push(decode_debug_row(reader)?);
     }
+    // spec：一次最多一个编辑行（editing 无行级不变量可保证，需整体约束）。
+    if rows.iter().filter(|r| r.editing).count() > 1 {
+        return Err(());
+    }
     let trailing_len = reader.remaining_bytes().len();
     if trailing_len > 3 || reader.remaining_bytes().iter().any(|byte| *byte != 0) {
         return Err(());
@@ -954,6 +958,11 @@ impl UiState {
         pixels_per_point: f32,
     ) -> Result<Option<egui::FullOutput>, UiOutputError> {
         if !self.font_loaded || !frame.visible() {
+            // 面板隐藏即使 Go 未把 editing 翻 0，也视为编辑会话结束：
+            // 清空草稿，避免 reopen 后 `fresh` 播种陈旧会话文本。
+            if matches!(frame, UiFrame::Debug(_)) {
+                self.debug_edit_buffers.clear();
+            }
             return Ok(None);
         }
         let max_frame_events = max_output_events_per_frame(frame);
@@ -1630,10 +1639,13 @@ fn draw_debug_row(
         if fresh {
             let id = Id::new(("mornlea-debug-edit", index));
             let mut state = egui::text_edit::TextEditState::default();
+            // `edit_cursor` 是字节偏移且落在字符边界；`CCursor` 以字符索引计，
+            // 必须换算成 `chars().count()`，否则多字节值里光标会被钳到末尾。
+            let char_index = row.edit_value[..row.edit_cursor].chars().count();
             state
                 .cursor
                 .set_char_range(Some(egui::text::CCursorRange::one(
-                    egui::text::CCursor::new(row.edit_cursor),
+                    egui::text::CCursor::new(char_index),
                 )));
             egui::TextEdit::store_state(ui.ctx(), id, state);
             ui.ctx().memory_mut(|memory| memory.request_focus(id));

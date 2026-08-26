@@ -303,6 +303,39 @@ fn debug_panel_layout_v3_rejects_invalid_row_flags() {
 }
 
 #[test]
+fn debug_panel_layout_v3_rejects_multiple_editing_rows() {
+    // spec：一次最多一个编辑行；行级 flag 只校验了单行不变量，双编辑行也要拒绝。
+    let bytes = debug_frame_raw(
+        1,
+        12.5,
+        [10.0, 64.0, -3.0],
+        45.0,
+        -12.0,
+        1234,
+        42,
+        137,
+        "单机".as_bytes(),
+        &[
+            row(
+                "fov",
+                "70",
+                DEBUG_PANEL_ROW_FLAG_SELECTED
+                    | DEBUG_PANEL_ROW_FLAG_EDITABLE
+                    | DEBUG_PANEL_ROW_FLAG_EDITING,
+                Some(("70", 2)),
+            ),
+            row(
+                "fps",
+                "60",
+                DEBUG_PANEL_ROW_FLAG_EDITABLE | DEBUG_PANEL_ROW_FLAG_EDITING,
+                Some(("60", 2)),
+            ),
+        ],
+    );
+    assert!(decode_ui_frame(&bytes).is_err(), "超过一个编辑行应被拒绝");
+}
+
+#[test]
 fn debug_panel_layout_v3_rejects_fixed_field_padding_and_utf8() {
     // 标签/值字段是 24 字节零填充:首个 NUL 之后必须全为零,且首段必须合法 UTF-8;
     // 超界内容在定宽帧中无法编码(结构上不可能),由 Go 编码器截断保障。

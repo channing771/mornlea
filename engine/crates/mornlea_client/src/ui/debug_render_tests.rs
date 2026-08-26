@@ -236,6 +236,56 @@ fn debug_panel_editing_types_value_and_confirms_on_enter() {
 }
 
 #[test]
+fn debug_panel_editing_seeds_cursor_from_byte_offset_at_char_boundary() {
+    let mut state = UiState::new();
+    state.install_font(text_edit_font());
+    let frame = debug_frame(vec![UiDebugRow {
+        label: "name".to_owned(),
+        value: "世界".to_owned(),
+        readonly: false,
+        selected: true,
+        editable: true,
+        editing: true,
+        edit_value: "世界".to_owned(),
+        edit_cursor: 3,
+    }]);
+    render(&mut state, &frame, &[]);
+
+    // edit_cursor=3 是「世」后「界」前的字节偏移，对应字符索引 1：
+    // 键入必须插入到正确位置，而不是被字节偏移误当成字符索引钳到末尾。
+    render(&mut state, &frame, &[UiEvent::Text('5')]);
+    let events = take_output_events(&mut state);
+    assert_eq!(
+        events,
+        vec![UiOutputEvent::DebugPanel(UiDebugPanelEvent {
+            action: DEBUG_PANEL_ACTION_EDIT_VALUE,
+            value: "世5界".to_owned(),
+        })]
+    );
+}
+
+#[test]
+fn debug_panel_hide_clears_edit_buffers() {
+    let mut state = UiState::new();
+    state.install_font(test_font());
+    let mut frame = debug_frame(vec![row("fovDegrees", "70", false, true, true, true)]);
+    render(&mut state, &frame, &[]);
+    assert_eq!(state.debug_edit_buffers.len(), 1);
+
+    let UiFrame::Debug(debug) = &mut frame else {
+        unreachable!();
+    };
+    debug.visible = false;
+    state
+        .run_frame(raw_input(&[], screen_rect(), 1.0, None), &frame, 1.0)
+        .expect("隐藏面板事件队列也应有余量");
+    assert!(
+        state.debug_edit_buffers.is_empty(),
+        "面板隐藏时必须清空编辑草稿，避免 reopen 后播种陈旧会话文本"
+    );
+}
+
+#[test]
 fn debug_panel_editing_escape_cancels_and_blocks_navigation() {
     let mut state = UiState::new();
     state.install_font(text_edit_font());
