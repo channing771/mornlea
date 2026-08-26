@@ -80,3 +80,39 @@ func pcmSHA256(pcm []int16) string {
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:])
 }
+
+// TestCueWaterSplashSynthesisProperty 证水花提示音的合成性质：常量紧随
+// `CueDamage` 之后，PCM 全程非零、无 int16 溢出、峰值恰为振幅，且线性衰减
+// 包络把末样本压到零附近（单个包络步长以内），不会在播放结束时突兀截断。
+func TestCueWaterSplashSynthesisProperty(t *testing.T) {
+	if CueWaterSplash != CueDamage+1 {
+		t.Fatalf("CueWaterSplash = %d, want %d（必须排在 CueDamage 之后）", CueWaterSplash, CueDamage+1)
+	}
+	spec := cueSpecs[CueWaterSplash]
+	pcm := synthesize(spec)
+	if len(pcm) != spec.samples {
+		t.Fatalf("samples = %d, want %d", len(pcm), spec.samples)
+	}
+	var nonZero bool
+	peak := 0
+	for _, sample := range pcm {
+		if sample != 0 {
+			nonZero = true
+		}
+		if sample == -1<<15 {
+			t.Fatalf("sample overflows int16 magnitude: %d", sample)
+		}
+		magnitude := max(int(sample), -int(sample))
+		peak = max(peak, magnitude)
+	}
+	if !nonZero {
+		t.Fatal("PCM must not be silent")
+	}
+	if peak != int(spec.amplitude) {
+		t.Fatalf("PCM peak = %d, want %d", peak, spec.amplitude)
+	}
+	last := max(int(pcm[len(pcm)-1]), -int(pcm[len(pcm)-1]))
+	if step := int(spec.amplitude) / spec.samples; last > step {
+		t.Fatalf("末样本幅度 = %d, want <= %d（线性包络末步）", last, step)
+	}
+}

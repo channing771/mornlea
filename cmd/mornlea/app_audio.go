@@ -23,6 +23,8 @@ type localAudioFeedback struct {
 	hungerIncrease       bool
 	hasPlacementSequence bool
 	placementSequence    uint64
+	hasBodyInFluid       bool
+	bodyInFluid          bool
 }
 
 // Reset 丢弃会话、重生或权威重置前的全部确认基线。
@@ -30,10 +32,11 @@ func (feedback *localAudioFeedback) Reset() {
 	*feedback = localAudioFeedback{}
 }
 
-// ObservePlayerState 在新鲜且已应用的权威状态上独立匹配进食完成与伤害，
-// 同时维护采掘目标；各返回位允许同一状态确认多种 cue，且保持零分配。
-// `bodyInFluid` 是权威位置上的身体浸没标志；入水边沿检测尚未接线，
-// 当前 RED 桩阶段 `splashed` 恒为 false。
+// ObservePlayerState 在新鲜且已应用的权威状态上独立匹配进食完成、伤害与入水
+// 水花，同时维护采掘目标；各返回位允许同一状态确认多种 cue，且保持零分配。
+// `bodyInFluid` 是权威位置上的身体浸没标志：上一条干燥且本条浸没时判定为
+// 入水上升沿；`hasBodyInFluid` 缺席（首观测、`Reset` 或未就绪早退之后）一律
+// 不算上升沿——裸 `bodyInFluid=false` 无法区分「确认干燥」与「基线缺席」。
 func (feedback *localAudioFeedback) ObservePlayerState(state network.PlayerState, bodyInFluid bool) (eatingCompleted, damaged, splashed bool) {
 	if state.Reset || !state.Ready {
 		feedback.Reset()
@@ -64,7 +67,10 @@ func (feedback *localAudioFeedback) ObservePlayerState(state network.PlayerState
 	} else {
 		feedback.foodDecrease = false
 	}
-	return eatingCompleted, damaged, false
+	splashed = feedback.hasBodyInFluid && !feedback.bodyInFluid && bodyInFluid
+	feedback.hasBodyInFluid = true
+	feedback.bodyInFluid = bodyInFluid
+	return eatingCompleted, damaged, splashed
 }
 
 // ObserveInventoryState 在已验证并镜像的背包状态上匹配选中食物恰减一件。

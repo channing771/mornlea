@@ -10,6 +10,7 @@ import (
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/render/hud"
 )
 
@@ -33,10 +34,11 @@ func (a *application) drainServerMessages(maxMessages int) {
 			if state.ServerTick <= a.serverTick {
 				continue
 			}
-			result, err := a.predictor.ApplyPlayerState(state, client.MirrorCollisionSource{
+			source := client.MirrorCollisionSource{
 				Mirror:    a.mirror,
 				Dimension: core.Overworld,
-			})
+			}
+			result, err := a.predictor.ApplyPlayerState(state, source)
 			if err != nil {
 				a.closeClientSession(err)
 				return
@@ -44,13 +46,18 @@ func (a *application) drainServerMessages(maxMessages int) {
 			if state.Reset {
 				a.audioFeedback.Reset()
 			} else {
-				// 浸没标志求值在 fluid-audio-cue 后续任务接线，先传干燥占位。
-				eatingCompleted, damaged, _ := a.audioFeedback.ObservePlayerState(state, false)
+				// 浸没标志在权威位置上对只读镜像就地求值，与预测共用
+				// `physics.SubmersionFlags` 唯一实现；缺块按干燥（宁可漏响不假响）。
+				_, bodyInFluid := physics.SubmersionFlags(state.Position, source)
+				eatingCompleted, damaged, splashed := a.audioFeedback.ObservePlayerState(state, bodyInFluid)
 				if eatingCompleted {
 					a.playLocalCue(audio.CueEatingComplete)
 				}
 				if damaged {
 					a.playLocalCue(audio.CueDamage)
+				}
+				if splashed {
+					a.playLocalCue(audio.CueWaterSplash)
 				}
 			}
 			a.serverTick = state.ServerTick

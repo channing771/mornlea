@@ -25,11 +25,12 @@ func TestWaterSplashRisingEdgeFiresExactlyOnce(t *testing.T) {
 }
 
 // TestWaterSplashStaysSilentWhileSubmerged 证持续浸没静默：
-// 建立基线后连续多条水中状态全部无声。
+// 入水上升沿恰响一次后，连续多条水中状态全部无声。
 func TestWaterSplashStaysSilentWhileSubmerged(t *testing.T) {
 	feedback := &localAudioFeedback{}
 	feedback.ObservePlayerState(audioPlayerState(1, 20, 10, false), false)
-	for tick := uint64(2); tick <= 6; tick++ {
+	feedback.ObservePlayerState(audioPlayerState(2, 20, 10, false), true)
+	for tick := uint64(3); tick <= 6; tick++ {
 		if _, _, splashed := feedback.ObservePlayerState(audioPlayerState(tick, 20, 10, false), true); splashed {
 			t.Fatalf("tick=%d 持续浸没触发了水花", tick)
 		}
