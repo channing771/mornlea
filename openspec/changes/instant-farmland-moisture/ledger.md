@@ -8,7 +8,7 @@
 | 2 | `ses_fc39ce278ffew8TsrLujyjLcba` | approved | approved | 0 | complete |
 | 3 | `ses_fc38ab39dffeZ3omLdaHb19SUl` | approved | approved | 1 | complete |
 | 4 | `ses_fc35b03a0ffeMSdnFaxeADUFhQ` | approved | approved | 1 | complete |
-| 5 | control | pending | pending | 0 | pending |
+| 5 | `ses_fc3255961ffevR5E7w69UMj8wQ` | approved | approved | 2 | complete |
 
 ## Rulings
 
@@ -410,10 +410,9 @@ SDD report 已写入 ignored 路径 `.superpowers/sdd/2026-08-26-instant-farmlan
 
 本轮固定 checkout 为 `feat/B-09-instant-farmland-moisture`，起始 HEAD
 `078a6a6db09b6d3e1e1d95eff100efdfb1787b84`，起始 `git status --short` 无输出。
-用户明确授权本 repair round 不派发 subagent，该指令覆盖 change apply guidance 的 subagent
-流程；控制会话直接执行并把证据记入本 ledger。proposal、delta spec、design、tasks 与历史
-writer audit 均先于生产代码更新；所有 task checkbox 继续保持未勾选，Task 5 final review
-继续 pending。
+本轮沿用 Task 5 implementer `ses_fc3255961ffevR5E7w69UMj8wQ` 执行修复；implementer 按 brief
+不得再派生 subagent，独立终审仍由控制会话持有的 reviewer 席执行。proposal、delta spec、
+design、tasks 与历史 writer audit 均先于生产代码更新；修复时所有 task checkbox 保持未勾选。
 
 ### Findings And Writer-audit Ruling
 
@@ -504,3 +503,44 @@ Go 声明。该失败不是 wait-budget/load flake；改为不引用局部名字
   integration 回归与 queue no-copy proof。
 - 协议保持 v26；区块 schema v9、玩家 schema v7、world metadata v2、`companions.ai`
   schema v4、engine/client ABI、benchmark scenario、capture 与 golden 均未变化。
+
+## Task 5 Final Review And Closure
+
+| Item | Result | Evidence |
+|---|---|---|
+| Independent reviewer | approved | `ses_fc3076d9dffeR6y7fE3YoM6G5l` 对 `153b16f4..7fce9926` 复审 |
+| Seven final gates | 7/7 pass | production/test 覆盖、双预算、确定性顺序、无持久队列恢复、crop 解耦、A-04/B-07 重叠与文档/回退声明全部通过 |
+| Findings after repair round 2 | none | 0 Critical、0 Important、0 Minor |
+| Merge readiness | yes | reviewer 最终结论 `Ready to merge? Yes` |
+
+### Closure Rulings
+
+| ID | Finding | Decision | Evidence |
+|---|---|---|---|
+| B09-T5-C1 | `tasks.md` 4.4 的历史组合 benchmark selector 写有 `Fluid`，仓库实际流体性能门禁是环境变量守卫的 `TestFluidPerf*`，不是 Go benchmark | 以五轮 `BenchmarkCropAdvance*` 加显式 `MORNLEA_FLUID_PERF=1 TestFluidPerf*` 作为等价且更强的完成证据；前者提供 crop metrics，后者提供真实 queue scale、overflow、只读探针与报告完整性门禁 | repair round 2 最新 crop 20/20 samples 与三份完整 guarded fluid reports 全部通过；终审认可性能声明准确 |
+| B09-T5-C2 | 最终终审前 checklist 按流程保持未勾选 | 仅在 `7fce9926` 终审 7/7 通过且最新 Steps 1–4 证据齐全后统一勾选 20 项 | 本节与 `tasks.md` 同一次 closure 更新；change 不归档 |
+
+Task 5 及 change 执行任务现已全部完成。保持 OpenSpec change active；未 archive、push、merge 或创建 PR。
+
+### Post-Closure Verification
+
+控制会话在勾选 checklist 后独立重跑最终门禁，不依赖 implementer 报告：
+
+| Command | Result | Evidence |
+|---|---|---|
+| `gofmt -l .` | pass | no output |
+| `make rust` | pass | `Finished release profile [optimized] target(s) in 0.30s` |
+| `go test ./internal/sim -race -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 36.681s` |
+| `go test ./internal/archcheck -count=1` | pass | `ok github.com/channing771/mornlea/internal/archcheck 4.414s` |
+| `go test ./... -race` | pass | all packages passed；`internal/archcheck 26.898s`，其余通过或命中同代码 revision 的 race cache |
+| `go vet ./...` | pass | no diagnostic output |
+| `go test ./internal/sim -run '^$' -bench 'BenchmarkCropAdvance' -benchmem -count=5` | pass | 20/20 samples；package `25.545s`；全部 `0 B/op`、`0 allocs/op` |
+| `MORNLEA_FLUID_PERF=1 go test ./internal/sim -run '^TestFluidPerf' -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 20.592s` |
+| `openspec status --change instant-farmland-moisture` | pass | 4/4 artifacts complete |
+| `openspec validate --all --strict --no-interactive` | pass | `Totals: 66 passed, 0 failed (66 items)` |
+| `git diff --check` | pass | no output |
+
+最新 crop benchmark 的 `ns/op` 中位数依次为 barren `190792`、planted `190816`、dense
+`180820`、all-farmland `2198`；读取中位数依次为 `14400`、`14400`、`14437`、`72`。
+全耕地五次样本均报告 `1.000 chunks`、`98304 farmland`、`0 crops`、
+`72 block_reads/op == 72 cells/op`。数值只记录，所有解析式与报告完整性门禁继续生效。
