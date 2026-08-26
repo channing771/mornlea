@@ -66,3 +66,41 @@
 | materials-showcase | 0/0（Task 2 再生后；此前 1/35 本机偏差随再生消除） |
 
 阈值外超阈景共 10 景；hud-hotbar-health / hud-survival-feedback / main-menu 为 0/0。
+
+## Task 3 执行与收口
+
+- 2026-08-26 Task 3 由全新 implementer 子代理完成（基线文档 engine ABI 同步 + 全量门禁 + mesh 基准记录）。
+
+### 基线文档同步（3.1）
+
+- AGENTS.md 与 CLAUDE.md 经 `cp` 同步后 `cmp` 验证逐字节相同；共三处最小修订，全部围绕「engine ABI v6」表述：
+  - M5A 段演进链：`engine ABI v6——v6 新增 mornlea_lod_shell 远环壳出口` 扩为 `engine ABI v7——v7 新增 registry 条目 block_top_raw 一字节承载非满格方块顶面高度（耕地短方块呈现），v6 新增 mornlea_lod_shell 远环壳出口，v5 与 v4 已被 fluid 系列占用`，保持「vN 新增 X」链式句式。
+  - 材质包段：原句「沿用……协议 v23、engine ABI v6 与 benchmark scenario v18，未推进这些版本」改为「沿用远环 LOD 合入后的协议 v23 与 benchmark scenario v18，二者未再推进（engine ABI 其后经耕地顶面呈现升到 v7，client ABI 其后经 egui 主菜单变更升到 v8）」。原因：archcheck 对文档中**每一处** `engine ABI vN` 与头文件宏做全量比对（baseline_test.go 用 FindAllStringSubmatch），历史句保留 v6 字样必然红，只能以括注承载升版事实。
+  - egui 段契约枚举「benchmark scenario 保持 v19、协议 v26、engine ABI v6、区块 schema v9……不变」删去 `engine ABI v6、` 一项——该段是「egui 交付时未动的契约」历史枚举，改写 v7 反而失真；engine ABI 升版事实已由上一条括注承载。
+- 场景计数项核查（brief 预期修正「19 个正式场景 / settings-menu」失真）：**本分支不存在该失真**。D07 基线的两份文档已写「18 个正式场景、`main-menu` 插在 `water-surface-slope` 之后、`far-horizon` 之前」，与 `capture_ai_companion_test.go:62` 钉死的 18 景顺序逐字吻合且全文无 settings-menu（仅 `.claude/settings.json` 一处路径含 settings 字样）；「19 景 + settings-menu」文本只存在于携带未合入 D-01 产物的工作树。判定：无需修改，如实记录。
+
+### 门禁输出摘要（3.2）
+
+- `go clean -cache`：先于门禁执行（Task 1 备忘：mornlea_engine.h ABI 常量变更后 cgo 缓存不自动失效）。
+- `scripts/agents/gates.sh` 总退出码 1，六阶段结论：
+  1. gofmt 检查 PASS；
+  2. `go vet ./...` PASS；
+  3. archcheck PASS——`TestBaselineVersionsMatchCode` 同步前红（每份文档三处 v6 vs 代码 7），同步后转绿（`go test ./internal/archcheck -count=1` ok 16.282s，含依赖边界与文档一致性）；
+  4. OpenSpec strict PASS（65 passed, 0 failed）；
+  5. `make rust` PASS；
+  6. 全量 `go test ./... -race` FAIL——唯一失败包 cmd/mornlea 触发包级默认 10m 超时 panic（`TestScenarioV12GPUCompletionBatchIsRecordedInReport` 运行 2m25s 时告警，栈停在 cgo `mornlea_client_render_frame` 真实 GPU 调用），其余 24 个有测试的包全部 ok。
+- 分诊复跑（按 `docs/notes/test-quickstart.md` 负载 flake 协议单独重跑失败包，不进修复循环）：`go test ./cmd/mornlea -race -count=1` 单独重跑 **ok（583s ≈ 9m43s）**。判定：**既有负载类等待预算边缘失败**——该包单独运行即贴近 10 分钟包预算上限，全量并发下任何额外负载都会越限；非本次引入（本次 diff 仅两份基线文档与 ledger），未调整任何超时、阈值或 golden。
+- `openspec validate --all --strict --no-interactive`：65 passed, 0 failed（与 gates.sh 第 4 阶段同命令同结果）。
+- 说明：gates.sh 步骤本身不含视觉门禁（`make visual-check` 不在其六阶段内）；本机既有机型偏差以上文附表为准，本次未重跑视觉、未触碰任何 golden。
+
+### 性能记录（record-only，不设阈值）
+
+- internal/mesh 既有唯一基准 `BenchmarkMeshTerrainSection`（16×16×8 伪随机地形 section 的 `mesh.MeshSection` CPU 网格化，夹具不含耕地、registry 高度字节全零，代表本变更后的常规地形路径）。本机 Apple M2，`go test ./internal/mesh -bench . -benchtime 1x -run '^$' -benchmem`：**2,052,791 ns/op、2016 quads/op、16128 upload_bytes/op、32,992 B/op、4 allocs/op**。单次迭代样本噪声大，仅作后续对比锚点；registry +1 字节与耕地 short 分支对该路径无可测影响预期（分支判别走 material 区间比较）。
+
+### 遗留清零确认
+
+- Task 2 双评审建议 (a) 逐景机器偏差基线指标：已由上文「附：本机 visual-check 基线差异集合」表承载，清零。
+- 建议 (b) 俯角注释「约 18°」精确化为 17°：低价值润色，本任务硬约束限定只碰基线文档与 ledger 三文件、代码注释不在其列，按评审原话「随顺手改动处理或保留」选择保留；不构成行为或门禁欠账。
+- 建议 (c) 越界哨兵覆盖边界：评审已确认测试注释说明充分，无需扩展，清零。
+- tasks 3.1 中「docs/notes/progress.md 补段」按计划留待归档阶段执行，非遗留。
+- 除上述外无未决项；proposal 未设「延期与放弃」节亦无内容需誊入。
