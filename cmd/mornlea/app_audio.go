@@ -31,11 +31,13 @@ func (feedback *localAudioFeedback) Reset() {
 }
 
 // ObservePlayerState 在新鲜且已应用的权威状态上独立匹配进食完成与伤害，
-// 同时维护采掘目标；两个返回位允许同一状态确认两种 cue，且保持零分配。
-func (feedback *localAudioFeedback) ObservePlayerState(state network.PlayerState) (eatingCompleted, damaged bool) {
+// 同时维护采掘目标；各返回位允许同一状态确认多种 cue，且保持零分配。
+// `bodyInFluid` 是权威位置上的身体浸没标志；入水边沿检测尚未接线，
+// 当前 RED 桩阶段 `splashed` 恒为 false。
+func (feedback *localAudioFeedback) ObservePlayerState(state network.PlayerState, bodyInFluid bool) (eatingCompleted, damaged, splashed bool) {
 	if state.Reset || !state.Ready {
 		feedback.Reset()
-		return false, false
+		return false, false, false
 	}
 	damaged = feedback.hasHealth && state.Health < feedback.health
 	feedback.hasHealth = true
@@ -62,7 +64,7 @@ func (feedback *localAudioFeedback) ObservePlayerState(state network.PlayerState
 	} else {
 		feedback.foodDecrease = false
 	}
-	return eatingCompleted, damaged
+	return eatingCompleted, damaged, false
 }
 
 // ObserveInventoryState 在已验证并镜像的背包状态上匹配选中食物恰减一件。

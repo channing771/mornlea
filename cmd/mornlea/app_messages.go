@@ -44,7 +44,8 @@ func (a *application) drainServerMessages(maxMessages int) {
 			if state.Reset {
 				a.audioFeedback.Reset()
 			} else {
-				eatingCompleted, damaged := a.audioFeedback.ObservePlayerState(state)
+				// 浸没标志求值在 fluid-audio-cue 后续任务接线，先传干燥占位。
+				eatingCompleted, damaged, _ := a.audioFeedback.ObservePlayerState(state, false)
 				if eatingCompleted {
 					a.playLocalCue(audio.CueEatingComplete)
 				}
