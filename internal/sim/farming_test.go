@@ -141,6 +141,37 @@ func TestTillTurnsGrassIntoFarmlandAndSpendsOneDurability(t *testing.T) {
 	}
 }
 
+// TestTillInWaterRangePublishesWetFarmland 覆盖范围内已有水时，成功翻地在同一
+// tick 只发布合并后的湿耕地状态。
+func TestTillInWaterRangePublishesWetFarmland(t *testing.T) {
+	t.Cleanup(func() { SetTunables(DefaultTunables()) })
+	tunables := DefaultTunables()
+	tunables.RandomTicksPerSection = 0
+	SetTunables(tunables)
+	full, _ := core.ItemMaxDurability(core.ItemStoneHoe)
+	held := core.ItemStack{Item: core.ItemStoneHoe, Count: 1, Durability: full}
+	engine, session, yaw, pitch := readyTillPlayer(t, held, core.DirtID, core.AirID)
+	water := tillTarget
+	water.X += farmlandWetRadius
+	placeContainedWater(t, engine, water)
+	engine.farmlandMoisture = farmlandMoistureState{}
+
+	result := till(engine, session, yaw, pitch)
+
+	if len(result.Rejected) != 0 {
+		t.Fatalf("范围内有水的合法翻地被拒绝: %+v", result.Rejected)
+	}
+	if got := tillBlockAt(t, engine, tillTarget); got != core.FarmlandWetID {
+		t.Fatalf("翻地结果=%s，想要湿耕地", blockLabel(got))
+	}
+	if len(result.Changes) != 1 || len(result.Changes[0].Changes) != 1 ||
+		result.Changes[0].Changes[0] != (BlockChange{
+			Position: tillTarget, Block: core.FarmlandWetID,
+		}) {
+		t.Fatalf("翻地未只发布合并后的湿耕地变更: %+v", result.Changes)
+	}
+}
+
 // TestTillFinalDurabilityStillTillsAndBreaksHoe 钉死"耐久 1 → 0"的语义：本次
 // 翻地仍然生效，锄头同时转为损坏形态（与采掘完全一致）。
 func TestTillFinalDurabilityStillTillsAndBreaksHoe(t *testing.T) {
@@ -181,8 +212,14 @@ func TestTillRejectsWhenBlockAboveIsNotAir(t *testing.T) {
 			full, _ := core.ItemMaxDurability(core.ItemStoneHoe)
 			held := core.ItemStack{Item: core.ItemStoneHoe, Count: 1, Durability: full}
 			engine, session, yaw, pitch := readyTillPlayer(t, held, core.DirtID, tc.above)
+			engine.farmlandMoisture = farmlandMoistureState{}
+			watch := watchFarmlandMoistureCandidateAtPhase(engine, farmlandMoistureKey{
+				dimension: core.Overworld,
+				position:  tillTarget,
+			})
 
 			result := till(engine, session, yaw, pitch)
+			engine.stepPhaseObserver = nil
 
 			if len(result.Rejected) != 1 || result.Rejected[0].Reason != RejectOccupied {
 				t.Fatalf("Rejected = %+v，想要恰好一条 RejectOccupied", result.Rejected)
@@ -192,6 +229,12 @@ func TestTillRejectsWhenBlockAboveIsNotAir(t *testing.T) {
 			}
 			if got := engine.sessions[session].player.inventory.Hotbar.Slots[0]; got != held {
 				t.Fatalf("被拒绝的翻地磨损了锄头: %+v，想要一字不变的 %+v", got, held)
+			}
+			if !watch.phaseSeen {
+				t.Fatal("被拒绝的翻地未经过湿度阶段观察点")
+			}
+			if watch.candidateSeen {
+				t.Fatal("被拒绝的翻地在湿度阶段消费前产生了目标候选")
 			}
 		})
 	}
@@ -216,8 +259,14 @@ func TestTillRejectsNonHoeHeldItems(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			engine, session, yaw, pitch := readyTillPlayer(t, tc.held, core.GrassID, core.AirID)
+			engine.farmlandMoisture = farmlandMoistureState{}
+			watch := watchFarmlandMoistureCandidateAtPhase(engine, farmlandMoistureKey{
+				dimension: core.Overworld,
+				position:  tillTarget,
+			})
 
 			result := till(engine, session, yaw, pitch)
+			engine.stepPhaseObserver = nil
 
 			if len(result.Rejected) != 1 || result.Rejected[0].Reason != RejectInvalidBlock {
 				t.Fatalf("Rejected = %+v，想要恰好一条 RejectInvalidBlock", result.Rejected)
@@ -231,6 +280,12 @@ func TestTillRejectsNonHoeHeldItems(t *testing.T) {
 			}
 			if len(result.Inventories) != 0 {
 				t.Fatalf("被拒绝的翻地发布了背包变化: %+v", result.Inventories)
+			}
+			if !watch.phaseSeen {
+				t.Fatal("被拒绝的翻地未经过湿度阶段观察点")
+			}
+			if watch.candidateSeen {
+				t.Fatal("被拒绝的翻地在湿度阶段消费前产生了目标候选")
 			}
 		})
 	}
@@ -247,8 +302,14 @@ func TestTillRejectsTargetsThatAreNotDirtOrGrass(t *testing.T) {
 		full, _ := core.ItemMaxDurability(core.ItemIronHoe)
 		held := core.ItemStack{Item: core.ItemIronHoe, Count: 1, Durability: full}
 		engine, session, yaw, pitch := readyTillPlayer(t, held, target, core.AirID)
+		engine.farmlandMoisture = farmlandMoistureState{}
+		watch := watchFarmlandMoistureCandidateAtPhase(engine, farmlandMoistureKey{
+			dimension: core.Overworld,
+			position:  tillTarget,
+		})
 
 		result := till(engine, session, yaw, pitch)
+		engine.stepPhaseObserver = nil
 
 		if len(result.Rejected) != 1 || result.Rejected[0].Reason != RejectInvalidBlock {
 			t.Fatalf("目标 %d 的 Rejected = %+v，想要恰好一条 RejectInvalidBlock",
@@ -259,6 +320,12 @@ func TestTillRejectsTargetsThatAreNotDirtOrGrass(t *testing.T) {
 		}
 		if got := engine.sessions[session].player.inventory.Hotbar.Slots[0]; got != held {
 			t.Fatalf("目标 %d 被拒绝时磨损了锄头: %+v，想要 %+v", target, got, held)
+		}
+		if !watch.phaseSeen {
+			t.Fatalf("目标 %d 被拒绝后未经过湿度阶段观察点", target)
+		}
+		if watch.candidateSeen {
+			t.Fatalf("目标 %d 被拒绝后在湿度阶段消费前产生了候选", target)
 		}
 	}
 }

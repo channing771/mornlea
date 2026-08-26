@@ -34,9 +34,9 @@ const (
 	// farmingMineBudget 是单块石头徒手采掘的 tick 预算。规则是 30 tick，
 	// 外加下落与掉落物拾取延迟，60 已经宽裕；超出即判定脚本卡住而不是慢。
 	farmingMineBudget = 60
-	// farmingGrowthBudget 是「耕地转湿 + 七次阶段推进」的 tick 预算。
+	// farmingGrowthBudget 是七次作物阶段推进的 tick 预算。
 	// RandomTicksPerSection 置到上限 64 时单格每 tick 被抽中约 1/64，
-	// 八次命中期望约 512 tick；预算给到 6000 以吸收哈希分布的抖动。
+	// 七次命中期望约 448 tick；预算给到 6000 以吸收哈希分布的抖动。
 	farmingGrowthBudget = 6000
 	// farmingSettleTicks 是一条命令之后让方块变更与背包发布收敛的 tick 数。
 	farmingSettleTicks = 3
@@ -263,8 +263,8 @@ func TestFarmingLoopEndToEndMemory(t *testing.T) {
 	sequence++
 	send(network.TillSoil{Sequence: sequence, Pitch: tillSoilLookDown})
 	settle()
-	if got := mirrorBlock(farmingGround); got != core.FarmlandDryID {
-		t.Fatalf("翻地后落脚格 = %d，想要干耕地 %d", got, core.FarmlandDryID)
+	if got := mirrorBlock(farmingGround); got != core.FarmlandWetID {
+		t.Fatalf("翻地后落脚格 = %d，想要湿耕地 %d", got, core.FarmlandWetID)
 	}
 	wantWornHoe := core.ItemStack{Item: core.ItemStoneHoe, Count: 1, Durability: full - 1}
 	if got := authoritativeInventory().Hotbar.Slots[0]; got != wantWornHoe {

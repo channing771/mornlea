@@ -18,7 +18,8 @@ import (
 //     TestCropTickCostIsIndependentOfCropCount 断言，不由这里的耗时数字断言。
 //  2. **每个耗时数字必须附带规模坐标。**一次「测了但没测到风险区间」的测量与
 //     不测等价，而它看起来像测过了。因此每条 benchmark 都用 ReportMetric 打出
-//     本次实际触及的格数（cells/op）与已就绪区块数，耗时永远与这两个坐标一起读。
+//     本次实际触及的格数（cells/op）、方块读取数（block_reads/op）与已就绪区块数，
+//     耗时永远与这些坐标一起读。
 //
 // Benchmark 而不是 gated Test：`go test ./...` 默认不跑 benchmark，无需再加
 // fluid_perf_test.go 那样的环境变量门（那里是 Test 函数，不加门会拖垮常规单测）。
@@ -82,12 +83,10 @@ func cropPerfEngine(b *testing.B) *Engine {
 // cropPerfPlant 把 chunks 个活动区块的整层 y=1 改成干耕地、y=2 种上小麦，
 // 返回实际种下的株数。
 //
-// 刻意用**干**耕地而不是湿耕地：干耕地会把 9×9×2 = 162 格的湿润扫描**整个扫完**
-// 才得出"无水"（湿耕地一碰到水就短路返回），因此这是耕地分支的最坏成本；同时
-// 世界里没有水源意味着 advanceCropCell 对耕地算出的下一状态就是它当前的状态、
-// 对作物算出 !wet 不推进，两条分支都**不产生任何方块写入**。于是各条 benchmark
-// 之间唯一的变量就是「世界里有多少作物」，不掺进 recordChange 与 pending 累积
-// 的成本（runCropPerf 尾部的 pending 守卫钉死这一点）。
+// **刻意用干耕地**：作物读取正下方的持久化编号后不会推进，耕地样本则读取自身
+// 一次后立即跳过，因此夹具不产生任何方块写入。各条 benchmark 之间唯一的变量
+// 是「世界里有多少作物」，不掺进 `recordChange` 与 `pending` 累积的成本
+// （`runCropPerf` 尾部的守卫钉死这一点）。
 func cropPerfPlant(engine *Engine, chunks int) int {
 	planted := 0
 	for index, key := range engine.activeInterestKeys() {
@@ -134,7 +133,12 @@ func runCropPerf(b *testing.B, engine *Engine, crops int) {
 			engine.cropCellsExamined, want, cropPerfChunks, core.SectionsPerChunk,
 			DefaultTunables().RandomTicksPerSection)
 	}
+	if engine.cropBlockReads > 2*engine.cropCellsExamined {
+		b.Fatalf("单 tick 方块读取 %d，超过考察格数 %d 的两倍",
+			engine.cropBlockReads, engine.cropCellsExamined)
+	}
 	b.ReportMetric(float64(engine.cropCellsExamined), "cells/op")
+	b.ReportMetric(float64(engine.cropBlockReads), "block_reads/op")
 	b.ReportMetric(float64(cropPerfChunks), "chunks")
 	b.ReportMetric(float64(crops), "crops")
 }
@@ -163,25 +167,18 @@ func BenchmarkCropAdvanceFullInterestPlanted(b *testing.B) {
 // 51200 株小麦 + 51200 格干耕地，作物数是 Planted 的 200 倍。
 //
 // 这条才是「耗时不随作物数增长」的墙钟侧证据：此时每 tick 约有 75 次抽样落在
-// 耕地或作物上（而不是 Planted 的 0.4 次），其中落在耕地上的每一次都要付满
-// 162 格的湿润扫描。若成本真的随作物数增长，差异会在这个规模上显形。
+// 耕地或作物上（而不是 Planted 的 0.4 次）。作物样本只多读一次正下方方块，
+// 若成本仍随作物数增长，差异会在这个规模上显形。
 func BenchmarkCropAdvanceFullInterestDense(b *testing.B) {
 	engine := cropPerfEngine(b)
 	runCropPerf(b, engine, cropPerfPlant(engine, cropPerfChunks))
 }
 
-// BenchmarkCropAdvanceAllFarmland 量的是**每条落在耕地上的抽样**要付多少钱。
-//
-// 为什么需要它：advanceCrops 的成本契约按「被抽中的格数」计量，而那个数确实
-// 与作物数无关（三条 FullInterest benchmark 的 cells/op 逐个相等）。但每格的
-// **单价**并不相同——抽中空气或石头是一次方块读取，抽中耕地要再扫 9×9×2 = 162
-// 格判湿润。Dense 比 Barren 慢 40% 正是这条单价差的体现。
-//
-// 这条 benchmark 把世界做成极端：单个区块的 24 个区段全部填满干耕地，于是
-// **每一条抽样都落在耕地上**，ns/op ÷ cells/op 就是耕地样本的单价上界。
-// 它回答的是「假如玩家把整个活动范围铺成耕地，作物阶段的墙钟上界是多少」，
-// 数值只记录（见 design.md 遗留清单 21）。
+// BenchmarkCropAdvanceAllFarmland 锁定随机作物阶段不再扫描耕地湿润邻域。
+// 单个区块的 24 个区段全部填满干耕地，因此每条样本都必须只读取自身一次；
+// benchmark 同时守卫并报告 Ready 区块、耕地与作物数，以解析式读取等式作为正确性门禁。
 func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
+	const wantFarmland = core.SectionsPerChunk * core.BlocksPerSection
 	b.Cleanup(func() { SetTunables(DefaultTunables()) })
 	SetTunables(DefaultTunables())
 
@@ -208,6 +205,41 @@ func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 			}
 		}
 	}
+	readyChunks := 0
+	for _, key := range engine.activeInterestKeys() {
+		dimension := engine.dimensions[key.Dimension]
+		if dimension == nil {
+			continue
+		}
+		record := dimension.records[key.Pos]
+		if record != nil && record.State == ChunkReady && record.Chunk != nil {
+			readyChunks++
+		}
+	}
+	if readyChunks != 1 {
+		b.Fatalf("Ready 区块数=%d，想要 1", readyChunks)
+	}
+	record := engine.dimensions[core.Overworld].records[core.ChunkPos{}]
+	if record == nil || record.State != ChunkReady || record.Chunk == nil {
+		b.Fatal("原点区块未 Ready")
+	}
+	farmland, crops := 0, 0
+	for y := int32(core.MinY); y < int32(core.MaxY); y++ {
+		for x := range core.SectionSize {
+			for z := range core.SectionSize {
+				block := record.Chunk.BlockAt(x, y, z)
+				if core.IsFarmland(block) {
+					farmland++
+				}
+				if core.IsCrop(block) {
+					crops++
+				}
+			}
+		}
+	}
+	if farmland != wantFarmland || crops != 0 {
+		b.Fatalf("工作负载耕地/作物=%d/%d，想要 %d/0", farmland, crops, wantFarmland)
+	}
 
 	pending := make(map[core.ChunkKey]*pendingChunkChanges)
 	b.ReportAllocs()
@@ -217,6 +249,9 @@ func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 		engine.advanceCrops(pending)
 	}
 	b.StopTimer()
+	b.ReportMetric(float64(readyChunks), "chunks")
+	b.ReportMetric(float64(farmland), "farmland")
+	b.ReportMetric(float64(crops), "crops")
 	if len(pending) != 0 {
 		b.Fatalf("全耕地世界不该产生方块变更（没有水源，干耕地保持干），实得 %d 个区块", len(pending))
 	}
@@ -224,5 +259,10 @@ func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 	if engine.cropCellsExamined != want {
 		b.Fatalf("单 tick 触及 %d 格，想要 %d", engine.cropCellsExamined, want)
 	}
+	if engine.cropBlockReads != engine.cropCellsExamined {
+		b.Fatalf("全耕地阶段读取=%d，想要每个样本一次、共 %d",
+			engine.cropBlockReads, engine.cropCellsExamined)
+	}
 	b.ReportMetric(float64(engine.cropCellsExamined), "cells/op")
+	b.ReportMetric(float64(engine.cropBlockReads), "block_reads/op")
 }

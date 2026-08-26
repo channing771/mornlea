@@ -76,6 +76,8 @@ type Engine struct {
 	fluidDimensionScratch []core.DimensionID
 	// fluidRescan 是跨 tick 的边界重扫待办，见 fluidRescanState。
 	fluidRescan fluidRescanState
+	// farmlandMoisture 是耕地湿度候选与恢复重扫的瞬态状态，只由权威 tick 读写。
+	farmlandMoisture farmlandMoistureState
 
 	// cropCellScratch 是作物随机 tick 抽样下标的复用缓冲；抽样每 tick 执行
 	// 「活动区块数 × 24 个区段」次，不复用就会在权威 tick 上产生同量级的分配。
@@ -86,6 +88,8 @@ type Engine struct {
 	// 这条成本契约的可读计数：该断言无法从方块结果观察（两个世界的作物数不同，
 	// 方块结果本来就不同），只能靠一个显式计数。生产代码只写不读，包内测试读。
 	cropCellsExamined int
+	// cropBlockReads 是最近一个作物阶段为规则判定读取的方块编号数。
+	cropBlockReads int
 
 	// tramplePending 是本权威 tick 内落地边沿收集的踩踏候选格（trample.go）：
 	// 物理阶段收集、区块写入区结算的跨阶段载体。瞬态暂存、不持久化、不进快照
