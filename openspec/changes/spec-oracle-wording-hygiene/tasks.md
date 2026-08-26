@@ -9,7 +9,7 @@
 
 ## 2. 验证门禁
 
-- [x] 2.1 `openspec validate --all --strict --no-interactive` 全绿（65+ 通过、0 失败）。
+- [x] 2.1 `openspec validate --all --strict --no-interactive` 全绿（67 通过、0 失败；归档阶段 validate 总数变化以实跑为准）。
 - [x] 2.2 `go test ./internal/archcheck -count=1` 通过（基线版本与基线文档门禁不受影响）。
 - [x] 2.3 `git status` 确认改动只含本 change 目录；单提交 `docs(spec): correct stale Go-oracle gate wording in rust-engine main specs (E-14)`。
 

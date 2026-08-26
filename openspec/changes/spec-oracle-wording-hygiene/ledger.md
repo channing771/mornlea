@@ -8,7 +8,14 @@
 ## Task 1
 
 - Implementer：本会话。通读三份主规格全文、三个测试文件（`step_golden_vectors_test.go` 13 向量、`raycast_fuzz_test.go` 五不变量 + 孪生、`parity_test.go`/`tree_test.go`/`generator_test.go` 黑盒网）与归档 change `2026-08-26-drop-go-test-oracles` 全部产物后落笔；每条 THEN 按真实测试断言粒度书写（如黄金摘要 GIVEN 收敛到固定语料、「两个平台逐位一致」WHEN 收敛掉随机差分语料）。
-- 结论：（待评审）
+- 结论：SPEC review PASS；QUALITY review PASS（三条 nit，见 R1）。
+
+## R1 修复
+
+- 来源：SPEC/QUALITY 双评审 PASS 后遗留三条 nit——①delta worldgen「单点查询与整块生成一致」THEN 出处括注漏 `generator_test.go`（该文件确含 `TestBaseBlockAtMatchesGeneratedChunk` 等稠密双出口对照）；②「跨区块橡树一致」的树高区间缺具体数值「4..6」，与 design 映射表不一致；③tasks.md 2.1 写「65+ 通过」与实跑 67 不符。
+- 处置：三处按 nit 原样清偿（worldgen delta 两行、tasks.md 一行）；未触碰 openspec/specs/、代码、测试、golden 与 mesh 规格。
+- 门禁实跑：`openspec validate --all --strict --no-interactive` → **67 passed, 0 failed (67 items)**；`go test ./internal/archcheck -count=1` → ok。
+- 提交：（本节随修复提交一并落盘）
 
 ## 终审
 

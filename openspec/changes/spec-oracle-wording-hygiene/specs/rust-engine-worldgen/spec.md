@@ -19,12 +19,13 @@
 - GIVEN 任意种子、世界坐标 (wx,wz) 与合法 Y
 - WHEN 分别调用 HeightAt/TerrainBlockAt/BaseBlockAt 与 GenerateChunk
 - THEN 单点结果与该坐标所在生成区块的对应方块一致,对照由区块稠密输出与单点查询
-  两条生产公共出口互检(internal/worldgen/tree_test.go、parity_test.go)
+  两条生产公共出口互检(internal/worldgen/generator_test.go、tree_test.go、
+  parity_test.go)
 
 #### Scenario: 跨区块橡树一致
 
 - GIVEN 一棵候选橡树的树冠横跨相邻两个区块
 - WHEN 分别生成这两个区块
 - THEN 两个区块内该树的原木与树叶方块拼合后与同种子单点查询语义逐格一致,
-  根列树高保持冻结区间,原木优先、树叶仅覆盖空气的规则保持不变
+  根列树高保持冻结区间 4..6,原木优先、树叶仅覆盖空气的规则保持不变
   (internal/worldgen/parity_test.go 的跨界树对照与 tree_test.go 的树冠几何性质)
