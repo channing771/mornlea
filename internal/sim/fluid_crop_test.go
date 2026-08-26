@@ -322,6 +322,11 @@ func fillFluidCropDropSlots(t *testing.T, engine *Engine) {
 func TestFluidCropCapacityFullRejectsAndRetriesUntilSlotFreed(t *testing.T) {
 	engine, session := readyFluidCropWorld(t, core.WheatStage3ID)
 	fillFluidCropDropSlots(t, engine)
+	engine.farmlandMoisture = farmlandMoistureState{}
+	watch := watchFarmlandMoistureCandidateAtPhase(engine, farmlandMoistureKey{
+		dimension: core.Overworld,
+		position:  fluidCropFarmland,
+	})
 	full := fluidCropChunkSlots(engine)
 	active := 0
 	for _, view := range full {
@@ -337,6 +342,7 @@ func TestFluidCropCapacityFullRejectsAndRetriesUntilSlotFreed(t *testing.T) {
 	for range 40 {
 		engine.Step()
 	}
+	engine.stepPhaseObserver = nil
 	if got := fluidBlockAt(t, engine, fluidCropCell); got != core.WheatStage3ID {
 		t.Fatalf("槽满期间作物格被改写为 %d，作物必须保持存在", got)
 	}
@@ -346,6 +352,12 @@ func TestFluidCropCapacityFullRejectsAndRetriesUntilSlotFreed(t *testing.T) {
 	}
 	if got := overworldFluidQueue(t, engine).Len(); got == 0 {
 		t.Fatal("拒绝之后目标格没有被重新排程，释放槽位后将永远无法完成冲毁")
+	}
+	if !watch.phaseSeen {
+		t.Fatal("容量拒绝窗口未经过湿度阶段观察点")
+	}
+	if watch.candidateSeen {
+		t.Fatal("容量拒绝的作物写入在湿度阶段消费前产生了耕地候选")
 	}
 
 	// 释放一个槽位：重试到期后冲毁应当完成，种子占据腾出的槽位。

@@ -193,8 +193,12 @@ func TestFarmlandMoistureReentryRestartsRescan(t *testing.T) {
 		return result
 	}
 
-	if _, ok := engine.UnregisterSession(sessions[1]); !ok {
-		t.Fatal("邻块会话注销失败")
+	if engine.sessions[sessions[1]] == nil {
+		t.Fatal("邻块离开前会话不存在")
+	}
+	engine.UnregisterSession(sessions[1])
+	if _, exists := engine.sessions[sessions[1]]; exists {
+		t.Fatal("邻块会话未被删除")
 	}
 	step("邻块离开 tick")
 	if info, ok := engine.ChunkInfo(rightKey); ok && info.State == ChunkReady {
@@ -254,8 +258,19 @@ func TestFarmlandMoistureReentryRestartsRescan(t *testing.T) {
 		t.Fatalf("离开 scope 后重扫未清零：pending=%d cursor=%d",
 			len(engine.farmlandMoisture.rescans.pending), engine.farmlandMoisture.rescans.cursor)
 	}
+	engine.SetBlockForTest(farmland, core.FarmlandDryID)
+	if got := cropBlockAt(t, engine, farmland); got != core.FarmlandDryID {
+		t.Fatalf("再次重入前耕地=%s，想要强制的陈旧干耕地", blockLabel(got))
+	}
+	farmlandKey := farmlandMoistureKey{dimension: core.Overworld, position: farmland}
+	if _, queued := engine.farmlandMoisture.queued[farmlandKey]; queued {
+		t.Fatal("再次重入前已有耕地候选，无法证明恢复来自重扫")
+	}
 	if cursor := restore(sessions[1]); cursor != farmlandMoistureReadsPerTick {
 		t.Fatalf("再次重入游标=%d，想要从零推进到 %d", cursor, farmlandMoistureReadsPerTick)
+	}
+	if _, queued := engine.farmlandMoisture.queued[farmlandKey]; !queued {
+		t.Fatal("再次重入的重扫没有发现并登记边界耕地")
 	}
 	for range 8 {
 		step("重入收敛 tick")

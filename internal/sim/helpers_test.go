@@ -35,3 +35,28 @@ func setMeleePlayer(engine *Engine, id SessionID, position mgl32.Vec3, yaw float
 	player.health = core.MaxHealth
 	player.reset = false
 }
+
+// farmlandMoistureCandidateWatch 记录湿度阶段开始前是否观察到指定候选。
+type farmlandMoistureCandidateWatch struct {
+	phaseSeen     bool
+	candidateSeen bool
+}
+
+// watchFarmlandMoistureCandidateAtPhase 在 `advanceFarmlandMoisture` 消费队列前，
+// 记录 `key` 是否曾经位于去重集合中。
+func watchFarmlandMoistureCandidateAtPhase(
+	engine *Engine,
+	key farmlandMoistureKey,
+) *farmlandMoistureCandidateWatch {
+	watch := &farmlandMoistureCandidateWatch{}
+	engine.stepPhaseObserver = func(phase stepPhase) {
+		if phase != phaseFarmlandMoistureAdvance {
+			return
+		}
+		watch.phaseSeen = true
+		if _, queued := engine.farmlandMoisture.queued[key]; queued {
+			watch.candidateSeen = true
+		}
+	}
+	return watch
+}

@@ -213,9 +213,13 @@ func TestTillRejectsWhenBlockAboveIsNotAir(t *testing.T) {
 			held := core.ItemStack{Item: core.ItemStoneHoe, Count: 1, Durability: full}
 			engine, session, yaw, pitch := readyTillPlayer(t, held, core.DirtID, tc.above)
 			engine.farmlandMoisture = farmlandMoistureState{}
-			pendingBefore := len(engine.farmlandMoisture.pending)
+			watch := watchFarmlandMoistureCandidateAtPhase(engine, farmlandMoistureKey{
+				dimension: core.Overworld,
+				position:  tillTarget,
+			})
 
 			result := till(engine, session, yaw, pitch)
+			engine.stepPhaseObserver = nil
 
 			if len(result.Rejected) != 1 || result.Rejected[0].Reason != RejectOccupied {
 				t.Fatalf("Rejected = %+v，想要恰好一条 RejectOccupied", result.Rejected)
@@ -226,8 +230,11 @@ func TestTillRejectsWhenBlockAboveIsNotAir(t *testing.T) {
 			if got := engine.sessions[session].player.inventory.Hotbar.Slots[0]; got != held {
 				t.Fatalf("被拒绝的翻地磨损了锄头: %+v，想要一字不变的 %+v", got, held)
 			}
-			if got := len(engine.farmlandMoisture.pending); got != pendingBefore {
-				t.Fatalf("被拒绝的翻地产生了湿度候选：%d→%d", pendingBefore, got)
+			if !watch.phaseSeen {
+				t.Fatal("被拒绝的翻地未经过湿度阶段观察点")
+			}
+			if watch.candidateSeen {
+				t.Fatal("被拒绝的翻地在湿度阶段消费前产生了目标候选")
 			}
 		})
 	}
@@ -253,9 +260,13 @@ func TestTillRejectsNonHoeHeldItems(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			engine, session, yaw, pitch := readyTillPlayer(t, tc.held, core.GrassID, core.AirID)
 			engine.farmlandMoisture = farmlandMoistureState{}
-			pendingBefore := len(engine.farmlandMoisture.pending)
+			watch := watchFarmlandMoistureCandidateAtPhase(engine, farmlandMoistureKey{
+				dimension: core.Overworld,
+				position:  tillTarget,
+			})
 
 			result := till(engine, session, yaw, pitch)
+			engine.stepPhaseObserver = nil
 
 			if len(result.Rejected) != 1 || result.Rejected[0].Reason != RejectInvalidBlock {
 				t.Fatalf("Rejected = %+v，想要恰好一条 RejectInvalidBlock", result.Rejected)
@@ -270,8 +281,11 @@ func TestTillRejectsNonHoeHeldItems(t *testing.T) {
 			if len(result.Inventories) != 0 {
 				t.Fatalf("被拒绝的翻地发布了背包变化: %+v", result.Inventories)
 			}
-			if got := len(engine.farmlandMoisture.pending); got != pendingBefore {
-				t.Fatalf("被拒绝的翻地产生了湿度候选：%d→%d", pendingBefore, got)
+			if !watch.phaseSeen {
+				t.Fatal("被拒绝的翻地未经过湿度阶段观察点")
+			}
+			if watch.candidateSeen {
+				t.Fatal("被拒绝的翻地在湿度阶段消费前产生了目标候选")
 			}
 		})
 	}
@@ -289,9 +303,13 @@ func TestTillRejectsTargetsThatAreNotDirtOrGrass(t *testing.T) {
 		held := core.ItemStack{Item: core.ItemIronHoe, Count: 1, Durability: full}
 		engine, session, yaw, pitch := readyTillPlayer(t, held, target, core.AirID)
 		engine.farmlandMoisture = farmlandMoistureState{}
-		pendingBefore := len(engine.farmlandMoisture.pending)
+		watch := watchFarmlandMoistureCandidateAtPhase(engine, farmlandMoistureKey{
+			dimension: core.Overworld,
+			position:  tillTarget,
+		})
 
 		result := till(engine, session, yaw, pitch)
+		engine.stepPhaseObserver = nil
 
 		if len(result.Rejected) != 1 || result.Rejected[0].Reason != RejectInvalidBlock {
 			t.Fatalf("目标 %d 的 Rejected = %+v，想要恰好一条 RejectInvalidBlock",
@@ -303,8 +321,11 @@ func TestTillRejectsTargetsThatAreNotDirtOrGrass(t *testing.T) {
 		if got := engine.sessions[session].player.inventory.Hotbar.Slots[0]; got != held {
 			t.Fatalf("目标 %d 被拒绝时磨损了锄头: %+v，想要 %+v", target, got, held)
 		}
-		if got := len(engine.farmlandMoisture.pending); got != pendingBefore {
-			t.Fatalf("目标 %d 被拒绝时产生了湿度候选：%d→%d", target, pendingBefore, got)
+		if !watch.phaseSeen {
+			t.Fatalf("目标 %d 被拒绝后未经过湿度阶段观察点", target)
+		}
+		if watch.candidateSeen {
+			t.Fatalf("目标 %d 被拒绝后在湿度阶段消费前产生了候选", target)
 		}
 	}
 }

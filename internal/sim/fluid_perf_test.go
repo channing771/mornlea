@@ -267,9 +267,9 @@ func measureFluidTicks(t *testing.T, engine *Engine, ticks int) []fluidTickSampl
 // reportFluidSamples 打印场景的规模坐标与最坏 tick 的耗时构成，并返回队列规模
 // 最大的那条样本，供调用方做夹具有效性守卫。
 //
-// 报告三条不同口径的「最坏」：整 tick 最慢、流体段最慢、队列最大。三者常常不是
-// 同一个 tick，只报其中一条会掩盖另外两条——本次复测里「整 tick 最慢」与「队列
-// 最大」就落在相差近两千 tick 的两个位置上。
+// 报告四条不同口径的「最坏」：整 tick 最慢、流体段最慢、湿度段最慢、队列最大。
+// 四者常常不是同一个 tick，只报其中一条会掩盖另外三条——本次复测里「整 tick
+// 最慢」与「队列最大」就落在相差近两千 tick 的两个位置上。
 func reportFluidSamples(t *testing.T, name string, samples []fluidTickSample) fluidTickSample {
 	t.Helper()
 	if len(samples) == 0 {

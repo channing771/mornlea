@@ -116,3 +116,46 @@ Task 2 已通过独立规格评审与质量评审；实现没有提前进入 Tas
 | `gofmt -l` on all Task 3 Go files including `fluid_crop_test.go` | pass | no output |
 | `git diff --check` | pass | no output |
 | `openspec validate --all --strict --no-interactive` | pass | `Totals: 66 passed, 0 failed (66 items)` |
+
+## Task 3 Review Repair Round 1
+
+Task 3 规格评审与质量评审仍保持 pending；本轮只修复测试证明与注释，不修改生产行为，不勾选 `tasks.md`。
+
+| Finding | Disposition | Evidence / Repair |
+|---|---|---|
+| Important 1：重入测试以湿耕地开始并恢复有水，cursor 可在未发现耕地时假绿 | valid，已修复 | 再次恢复邻块前用 `SetBlockForTest` 强制边界耕地为陈旧干态，并证明无旧候选；恢复首 tick 既断言 cursor 从 0 到 65,536，又断言重扫明确登记该耕地，后续完整 `Step` 必须把它改湿 |
+| Important 2：拒绝翻地与容量满冲毁的 no-enqueue 证明在消费后观察 | 核心问题 valid；capacity 描述部分不实 | 翻地测试原先确实在完整 `Step` 后比较 `pending` 长度，会漏掉被同 tick 消费的错误候选；但当前 capacity 测试此前完全没有湿度候选断言，并非“消费后断言”。新增共享 phase watcher，在 `phaseFarmlandMoistureAdvance` 通知点、`advanceFarmlandMoisture` 调用前按目标 key 累计观察；三个翻地拒绝表与 capacity-full 窗口均要求未见候选 |
+| Minor 3：性能报告注释仍称三条最坏口径 | valid，已修复 | 注释改为四条，并列出整 tick、流体、湿度与队列四种口径 |
+| Minor 4：首次 `UnregisterSession` 把 bool 当删除成功 | valid，已修复 | `UnregisterSession` 的 bool 是 `hasSnapshot`；首次与第二次注销现在都在调用前后直接检查 `engine.sessions`，不再以 bool 推断删除 |
+
+### Repair Mutation Evidence
+
+常规 RED 对本轮不成立：生产行为在 `3f86925a` 已正确，本轮修的是测试对错误实现的辨别力。按 review 要求使用瞬态 faulty setup / mutation 验证测试会红，随后逐项恢复；最终 `git diff` 不含任何生产文件。
+
+| Mutation / Faulty Setup | Command | Expected failure |
+|---|---|---|
+| 保留重扫 cursor 推进但临时跳过 `runFarmlandMoistureRescans` 的耕地入队 | `go test ./internal/sim -run '^TestFarmlandMoistureReentryRestartsRescan$' -count=1` | fail：`再次重入的重扫没有发现并登记边界耕地`；证明 cursor 单独移动已不能让测试假绿 |
+| watcher 注册时临时注入目标候选，模拟拒绝路径错误入队 | `go test ./internal/sim -run '^TestTillRejects' -count=1` | 三组拒绝表均 fail：`在湿度阶段消费前产生了目标候选` |
+| 同一 watcher 临时注入边界耕地候选，模拟 capacity-full 写入错误入队 | `go test ./internal/sim -run '^TestFluidCropCapacityFullRejectsAndRetriesUntilSlotFreed$' -count=1` | fail：`容量拒绝的作物写入在湿度阶段消费前产生了耕地候选` |
+
+### Repair Focused GREEN
+
+| Command | Result | Evidence |
+|---|---|---|
+| `go test ./internal/sim -run '^TestFarmlandMoistureReentryRestartsRescan$' -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 0.657s` |
+| `go test ./internal/sim -run '^TestTillRejects' -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 0.910s` |
+| `go test ./internal/sim -run '^TestFluidCropCapacityFullRejectsAndRetriesUntilSlotFreed$' -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 0.397s` |
+
+### Repair Verification
+
+| Command | Result | Evidence |
+|---|---|---|
+| `make rust` | pass | `Finished release profile [optimized] target(s) in 0.31s` |
+| `gofmt -w internal/sim/helpers_test.go internal/sim/farming_test.go internal/sim/fluid_crop_test.go internal/sim/farmland_moisture_integration_test.go internal/sim/fluid_perf_test.go` | pass | no output |
+| `go test ./internal/sim -run 'TestFarmlandMoistureFluid\|TestTill\|TestCompanionActionAppliesInIDOrderAfterPlayers\|TestFarmlandMoisture(Restart\|Reentry)' -race -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 3.091s` |
+| `go test ./internal/sim -run 'TestFluid' -race -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 7.498s` |
+| `go test ./internal/archcheck -count=1` | pass | `ok github.com/channing771/mornlea/internal/archcheck 4.393s` |
+| `go vet ./internal/sim` | pass | no output |
+| `gofmt -l` on all repair Go files | pass | no output |
+| `git diff --check` | pass | no output |
+| `openspec validate --all --strict --no-interactive` | pass | `Totals: 66 passed, 0 failed (66 items)` |
