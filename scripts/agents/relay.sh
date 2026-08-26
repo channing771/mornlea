@@ -45,10 +45,10 @@ if [ -f "$GUARD" ]; then
   fi
 fi
 
-# 终结判据：规划表不再有「未认领」行（认领人在「未认领」状态列之后）
-if ! grep -E '^\| [A-F]-[0-9]{2} \|' "$ROOT/docs/feature-backlog.md" | grep -q '未认领'; then
+# 终结判据：规划表没有状态单元格为「就绪」的任务行。
+if ! grep -E '^\| [A-F]-[0-9]{2} \|' "$ROOT/docs/feature-backlog.md" | grep -q '| 就绪 |'; then
   rm -f "$GUARD"
-  log "规划表已无未认领任务，循环终结"
+  log "规划表已无就绪任务，循环终结"
   exit 0
 fi
 
