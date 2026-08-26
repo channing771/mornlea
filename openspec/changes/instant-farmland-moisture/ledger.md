@@ -249,3 +249,89 @@ Task 4 实现与验证完成，并在一轮恢复覆盖修复后通过规格与�
 Repair round 1 已修复 finding 并通过复审；`tasks.md` 留待 change 收尾统一核对。
 
 Task 4 independent spec/quality re-review：approved；1 Important 已关闭，无新增 finding。
+
+## Task 5 Steps 1-4 Verification Evidence
+
+Task 5 本轮只执行 brief 的 Steps 1-4；未执行 Step 5 独立整分支终审，未勾选
+`tasks.md`，Task 5 状态继续为 pending。固定 checkout 为
+`feat/B-09-instant-farmland-moisture`，起始 HEAD
+`9c9bb2e06feb9c64769c036a8d9557c59a745f1f`，起始 `git status --short` 无输出。
+
+### Task 5 Failure Triage And Ruling
+
+| ID | Finding | Decision | Evidence |
+|---|---|---|---|
+| B09-T5-R1 | 首次全量 race 中 `TestFarmingLoopEndToEndMemory` 在已有距离 2 水源的夹具下仍要求翻地后为干耕地；这与本 change 的“范围内有水时成功翻地同 tick 发布湿耕地”契约冲突。该失败不是等待预算/超时类 load flake | 接受只修改 `internal/server/farming_loop_e2e_test.go` 的一条期望和一条已失真的 growth budget 注释；不改生产代码、不走负载重跑裁决。修复后从 Step 1 重新执行 Steps 1-4 | focused RED：`go test ./internal/server -run '^TestFarmingLoopEndToEndMemory$' -race -count=1 -v` 以 `落脚格 = 36，想要干耕地 35` 失败；focused GREEN：同命令通过并记录成熟用 519 tick；重启后的全量 race 通过，`internal/server` 为 `197.940s` |
+
+### Task 5 Command Evidence
+
+所有需要 runtime 的命令用 `/usr/bin/time -p` 只读包裹；表中命令列保留 brief
+要求的实际子命令。首次全量 race 失败后按顺序停止，未在失败树上运行 `go vet`；
+完成 `B09-T5-R1` 后从 Step 1 完整重启。
+
+| Stage | Command | Result | Complete evidence / runtime |
+|---|---|---|---|
+| initial Step 1 | `gofmt -l .` | pass | no formatter output；real `0.17s` |
+| initial Step 1 | `go test ./internal/sim -race -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 37.324s`；real `115.98s` |
+| initial Step 1 | `go test ./internal/archcheck -count=1` | pass | `ok github.com/channing771/mornlea/internal/archcheck 3.922s`；real `4.47s` |
+| initial Step 2 | `make rust` | pass | `Finished release profile [optimized] target(s) in 0.28s`；real `0.34s` |
+| initial Step 2 | `go test ./... -race` | fail | only failure `TestFarmingLoopEndToEndMemory`：`翻地后落脚格 = 36，想要干耕地 35`；real `288.40s` |
+| repair RED | `go test ./internal/server -run '^TestFarmingLoopEndToEndMemory$' -race -count=1 -v` | expected fail | same stale expectation reproduced；package `1.648s`；real `3.29s` |
+| repair GREEN | same command after minimal test repair | pass | `作物由随机 tick 从 stage0 长到成熟用了 519 个权威 tick`；package `3.361s`；real `7.36s` |
+| final Step 1 | `gofmt -l .` | pass | no formatter output；real `0.18s` |
+| final Step 1 | `go test ./internal/sim -race -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 35.572s`；real `36.04s` |
+| final Step 1 | `go test ./internal/archcheck -count=1` | pass | `ok github.com/channing771/mornlea/internal/archcheck 4.171s`；real `4.62s` |
+| final Step 2 | `make rust` | pass | `Finished release profile [optimized] target(s) in 0.29s`；real `0.36s` |
+| final Step 2 | `go test ./... -race` | pass | all packages passed；`internal/server 197.940s`，`internal/archcheck 27.136s`，其余命中本次相同 race 构建缓存或通过；real `199.48s` |
+| final Step 2 | `go vet ./...` | pass | no output；real `3.48s` |
+| Step 3 | `go test ./internal/sim -run '^$' -bench 'BenchmarkCropAdvance' -benchmem -count=5` | pass | 20/20 samples；package `25.300s`；real `26.05s` |
+| Step 3 guarded | `MORNLEA_FLUID_PERF=1 go test ./internal/sim -run '^TestFluidPerf' -count=1` | pass | `ok github.com/channing771/mornlea/internal/sim 18.955s`；real `19.37s` |
+| Step 3 report | guarded command with supplemental `-v` | pass | all three tests passed；package `18.263s`；real `18.71s`；完整日志保存在 Task 5 report |
+| Step 4 | `openspec status --change instant-farmland-moisture` | pass | schema `spec-driven`，4/4 artifacts complete；real `1.48s` |
+| Step 4 | `openspec validate --all --strict --no-interactive` | pass | `Totals: 66 passed, 0 failed (66 items)`；real `1.30s` |
+| Step 4 | `git diff --check` | pass | no output；real `0.02s` |
+| Step 4 snapshot | `git status --short` | recorded | before ledger/report write: ` M internal/server/farming_loop_e2e_test.go`；real `0.03s` |
+
+### Task 5 Crop Benchmark Record
+
+全部样本均为 `0 B/op`、`0 allocs/op`；20/20 条均有 `cells/op` 与
+`block_reads/op`。前三组另有 `chunks=200` 和 `crops` 规模坐标。墙钟数值只记录；
+解析式门禁要求 `cells/op=14,400`、`block_reads/op<=28,800`，全耕地额外要求
+`block_reads/op=cells/op=72`，本轮全部满足。
+
+| Benchmark | ns/op samples | median ns/op | block_reads/op samples | median block_reads/op | cells/op |
+|---|---|---:|---|---:|---:|
+| FullInterestBarren | 177480, 178194, 177606, 177343, 177452 | 177480 | 14400, 14400, 14400, 14400, 14400 | 14400 | 14400 |
+| FullInterestPlanted | 178939, 177559, 178439, 178541, 178694 | 178541 | 14400, 14400, 14400, 14400, 14400 | 14400 | 14400 |
+| FullInterestDense | 182252, 184581, 182887, 184142, 182217 | 182887 | 14440, 14430, 14427, 14433, 14433 | 14433 | 14400 |
+| AllFarmland | 2219, 2221, 2219, 2216, 2165 | 2219 | 72, 72, 72, 72, 72 | 72 | 72 |
+
+### Task 5 Fluid Performance Record And Gates
+
+| Scenario | Samples | Peak queue | Scale gate | Worst Step | Worst fluid | Worst moisture |
+|---|---:|---:|---|---:|---:|---:|
+| 大坝溃决 | 12,000 | 140,122 | breach enqueue 10,608 >= 10,000；peak >= 100,000 | 11.458458ms | 3.927875ms | 2.304292ms |
+| 瀑布 | 12,000 | 501,587 | peak >= 200,000 | 15.938667ms | 10.08975ms | 1.198333ms |
+| 合成 20 万项 | 10 | 200,000 | peak >= 200,000 | 1.461792ms | 651.208µs | 839.791µs |
+
+三组报告均包含整 tick、fluid、moisture 与 queue 四种最坏口径及每条样本的
+queue before/after 坐标。只读探针的 `changed`/queue length 不变守卫未触发，全部
+fixture 完整性与风险规模守卫通过；性能数值未参与退出判定，也未放宽 overflow、
+状态突变或数据丢失类失败。
+
+### Task 5 Scope Audit
+
+- merge base：`153b16f4ae82a12f3614a7403b876426af8abb2e`；相对该基线含本轮未提交修复共 32 个文件，`3643 insertions(+), 1030 deletions(-)`。
+- 变更范围仅为 B-09 规划/历史文档、`internal/sim` 实现与测试，以及 `B09-T5-R1` 的 `internal/server/farming_loop_e2e_test.go`。
+- `git diff --name-only <base> -- internal/fluid` 无输出；`internal/sim/fluid.go` 是 sim 适配器生产 hook，不是 `internal/fluid` 包。
+- 对 `internal/network`、`internal/storage`、`internal/nativeabi`、Rust `engine`/`client` 与 `**/testdata` 的同一 name-only 审计无输出；文件清单无协议、schema、ABI、benchmark scenario、capture 或 golden 文件。
+- `internal/archcheck` 与 OpenSpec strict 同时通过，未发现基线版本漂移。Step 5 独立整分支终审明确留给 controller。
+
+### Task 5 Delivered Worktree Snapshot
+
+| Command | Result | Complete evidence |
+|---|---|---|
+| `git diff --check` | pass | no output；real `0.02s` |
+| `git status --short` | recorded | ` M internal/server/farming_loop_e2e_test.go`；` M openspec/changes/instant-farmland-moisture/ledger.md`；real `0.05s` |
+
+SDD report 已写入 ignored 路径 `.superpowers/sdd/2026-08-26-instant-farmland-moisture/task-5-report.md`，不出现在 tracked status 中。未 commit、amend、push、merge、PR 或 archive。
