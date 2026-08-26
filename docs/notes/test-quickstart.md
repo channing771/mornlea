@@ -11,7 +11,7 @@
 | **T0 编辑循环** | 每次改动后 | 改动包定点 `-run` 测试（见下表），不带 `-race`/`-count=1`；Rust 用 `cargo test -p <crate>` | 秒级 |
 | **T1 任务闭环** | 每个 Task/修复完成 | `make test-race-changed`（改动包及其反向依赖，恒含 `internal/archcheck`；`RACE_BASE=ref` 换基线） | 秒级–分钟级 |
 | **T2 推送前** | 分支完成、开 PR 前 | `make dev-check` + `make test-race-short` | ~2–3 分钟 |
-| **T3 提交前/风险域** | 触碰并发时敏域，或需本地复现 CI 失败 | `scripts/agents/gates.sh`（含全量 race） | ~5 分钟 |
+| **T3 提交前/风险域** | 触碰并发时敏域，或需本地复现 CI 失败 | `scripts/agents/gates.sh`（gofmt/vet/archcheck/OpenSpec/`make rust`，未跳过时含 full race） | ~5 分钟 |
 
 要点：
 
@@ -28,7 +28,7 @@
 | 协议 / 网络 / 存档 | `go test ./internal/network ./internal/storage ./internal/core` |
 | 服务端 tick / 伙伴 / 农业 | `go test ./internal/server ./internal/sim -run '关键词'` |
 | 资产 / 材质包 / provenance | `go test ./internal/assets` |
-| 视觉 golden | `make visual-check`（仅当渲染输出可能变化） |
+| 视觉 golden | 预期不变：`make visual-check`；预期变化：逐图确认后 `make visual-update`，再运行 `make visual-check` |
 | 依赖边界 / 文档一致性 | `go test ./internal/archcheck` |
 
 要点：
@@ -61,7 +61,9 @@ make dev-check         # gofmt + go vet + go test ./... -short + Rust fmt/clippy
 
 ```bash
 scripts/agents/gates.sh     # gofmt/vet/archcheck/OpenSpec/rust/全量 race
-make visual-check           # 渲染输出可能变化时（本机对 main 即可能有固有机器偏差，先归因再处置）
+make rust-check             # 完整提交前单独运行；gates.sh 当前不包含此项
 ```
 
-最终门禁顺序按 AGENTS.md：`make rust-check` → `go test ./... -race` → 对应 benchmark/golden/`perfcheck`（性能数值只记录）。
+`scripts/agents/gates.sh` 当前依次执行 gofmt、vet、archcheck、OpenSpec、`make rust`，并在未设置 `GATES_SKIP_RACE=1` 时执行 full race；它不包含 `make rust-check`。预期视觉不变时运行 `make visual-check`；预期视觉变化时先逐图确认，再运行 `make visual-update`，随后重新运行 `make visual-check`。
+
+完整提交前：`make rust-check` → `go test ./... -race` → 对应 benchmark/golden/`perfcheck`（性能数值只记录）。

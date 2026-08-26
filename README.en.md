@@ -14,7 +14,7 @@
 
 Mornlea is an original voxel game written from scratch in Go. It ships its own client, an authoritative server, world storage, and a Rust wgpu rendering pipeline. It does **not** aim for compatibility with Minecraft's protocol, saves, or copyrighted assets.
 
-The project is still in early development, but already includes an authoritative server, persistent worlds, direct TCP connections, a headless dedicated server, and LAN sessions for up to eight players. The current baseline uses protocol v26, player schema v7, chunk schema v9, world metadata v2, `companions.ai` schema v4, engine ABI v6, client ABI v9, and benchmark scenario v19. Up to four named, server-authoritative companions can plan and persist queued `go_to`/`follow`/`mine`/`place` tasks and speak through a separate bounded persona/dialogue path; the survival loop includes water, farming, hunger, and local confirmation audio. The ordinary local client starts at an egui main menu with a three-control Settings page. See [实现进度](docs/notes/progress.md) for the full milestone history.
+The project is still in early development, but already includes an authoritative server, persistent worlds, direct TCP connections, a headless dedicated server, and LAN sessions for up to eight players. The current baseline uses protocol v26, player schema v7, chunk schema v9, world metadata v2, `companions.ai` schema v4, engine ABI v7, client ABI v9, and benchmark scenario v19. Up to four named, server-authoritative companions can plan and persist queued `go_to`/`follow`/`mine`/`place` tasks and speak through a separate bounded persona/dialogue path; the survival loop includes water, farming, hunger, and local confirmation audio. The ordinary local client starts at an egui main menu with a three-control Settings page. See [实现进度](docs/notes/progress.md) for the full milestone history.
 
 ## Screenshots
 
@@ -287,7 +287,7 @@ On mismatch, the actual and diff images (differing pixels painted red, the rest 
 └── docs/               design, implementation plans, performance records & progress
 ```
 
-Architecture & technology choices: [project design doc](docs/superpowers/specs/2026-07-26-minecraft-go-design.md) (Chinese). Other docs:
+Architecture & technology choices: [current architecture](docs/architecture.md) (Chinese). See the [documentation map](docs/README.md) for the complete index. The [early project design](docs/superpowers/specs/2026-07-26-minecraft-go-design.md) is historical background only. Other common entries:
 
 - [实现进度 / progress](docs/notes/progress.md): delivered milestones, current baseline, next steps;
 - [LAN dedicated server](docs/notes/lan-server.md): startup, identity, saves, security boundaries;
@@ -300,7 +300,7 @@ Most of these are in Chinese.
 
 ## Rust & Go Responsibilities
 
-The Rust 1.97.1 workspace contains two `cdylib` crates, `mornlea_engine` and `mornlea_client`, with two independent C ABI and release-unit boundaries: `engine/include/mornlea_engine.h` defines engine ABI v6, while `engine/include/mornlea_client.h` defines client ABI v9. The macOS graphical `mornlea` binary requires matching engine and client libraries from the same build; `mornlea-server` requires only the matching engine library. Neither ABI may be mixed across versions.
+The Rust 1.97.1 workspace contains two `cdylib` crates, `mornlea_engine` and `mornlea_client`, with two independent C ABI and release-unit boundaries: `engine/include/mornlea_engine.h` defines engine ABI v7, while `engine/include/mornlea_client.h` defines client ABI v9. The macOS graphical `mornlea` binary requires matching engine and client libraries from the same build; `mornlea-server` requires only the matching engine library. Neither ABI may be mixed across versions.
 
 | Language / component | Responsibilities |
 | --- | --- |
@@ -314,7 +314,7 @@ Boundary rules:
 - After a call returns, neither language may retain the other's pointers. Legacy Go integration, worldgen, mesh, light, collision, and raycast implementations are test oracles only, not production fallbacks;
 - Mesh and light results never enter the network protocol or saves. Collision is shared by client prediction and authoritative server simulation. The dedicated server therefore uses `mornlea_engine` but does not link `mornlea_client` or the graphics stack.
 
-Build: `make run`/`build`/`test` first build the complete Rust workspace automatically (`rust-toolchain.toml` pins 1.97.1). The macOS graphical client crosses both the engine ABI v6 and client ABI v9 boundaries. `make build` produces both Go binaries, copies `libmornlea_engine.dylib` into `bin/`, links the graphical binary to the workspace-built `mornlea_client`, and links the server binary only to `mornlea_engine`. `make build-linux-server` packages only the Linux amd64 server and adjacent `libmornlea_engine.so`, loaded through `$ORIGIN`. Each ABI is its own release-unit boundary and cannot be mixed across versions. The headless server's dependency closure excludes client/render (verified by `make archcheck`); `make rust-check` runs Rust fmt, clippy, and tests.
+Build: `make run`/`build`/`test` first build the complete Rust workspace automatically (`rust-toolchain.toml` pins 1.97.1). The macOS graphical client crosses both the engine ABI v7 and client ABI v9 boundaries. `make build` produces both Go binaries, copies `libmornlea_engine.dylib` into `bin/`, links the graphical binary to the workspace-built `mornlea_client`, and links the server binary only to `mornlea_engine`. `make build-linux-server` packages only the Linux amd64 server and adjacent `libmornlea_engine.so`, loaded through `$ORIGIN`. Each ABI is its own release-unit boundary and cannot be mixed across versions. The headless server's dependency closure excludes client/render (verified by `make archcheck`); `make rust-check` runs Rust fmt, clippy, and tests.
 
 ## Current Limitations
 

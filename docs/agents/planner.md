@@ -51,7 +51,7 @@
 5. **来源必填且入库**：每行来源可回溯到已提交文档（design 遗留清单 §/proposal 非目标/批次设计章节）；未入库引用只记录不代交。
 6. **评论样式**：状态变化一律单条结构化评论（模板见 `docs/agents/implementer.md`）；正文刷新 = 脚本；评论 = 变更记录；不重复堆叠旧状态。
 7. **不排时间**：不写日期/估时/排期；依赖用行 ID 表达。
-8. **只改规划**：不改代码/A GENTS/CLAUDE/docs/agents/development-process；docs-only 快进推送 main。
+8. **只改规划**：不改代码、根 `AGENTS.md` 版本矩阵、局部 `AGENTS.md`、`CLAUDE.md` 薄导入、`docs/agents/` 或 `docs/development-process.md`；docs-only 快进推送 main。
 
 ## 产出规范
 
@@ -63,7 +63,7 @@
 ## 约束（红线）
 
 - 不认领任务、不写功能代码、不运行构建/测试验证（docs-only 轮次无需）、不合并任何功能分支；推送仅限对 `main` 的 docs-only 快进推送。
-- 不改 `AGENTS.md`/`CLAUDE.md`（基线两处必须由集成任务同步），也不改 `docs/agents/`（含本卡与提示词）与 `docs/development-process.md`。
+- 不改根 `AGENTS.md` 版本矩阵或局部 `AGENTS.md`（由集成任务按相关作用域更新），也不改只作薄导入的 `CLAUDE.md`、`docs/agents/`（含本卡与提示词）或 `docs/development-process.md`。
 - 不把「讨论里的想法」直接写成已确认规划：没有来源出处的行必须先标记 `待澄清` 并挂到 Discussion 相应评论，确认后再落行。
 - 不携带、不代交用户工作区改动与未跟踪文件；未入库引用只记录不补交。
 - 认领状态一律以仓库文件为准；与讨论正文冲突时改讨论，不反向。

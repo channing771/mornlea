@@ -53,16 +53,16 @@
 严格按 `docs/development-process.md` 阶段 2–4（前置的「阶段 1 内容确认门禁」已通过）：
 
 1. 建 OpenSpec change（复杂功能必建；F 组小型修复走直接修改豁免）。
-2. 每个 Task 派发**全新** implementer 子代理；brief 必须自包含：当前 Task、契约 SHA、change 产物路径、全局约束（AGENTS.md 关键条款）、精确验证命令；禁止子代理自我派生。
+2. 每个 Task 派发**全新** implementer 子代理；brief 必须自包含：当前 Task、契约 SHA、change 产物路径、全局约束（对应作用域 `AGENTS.md` 的关键条款）、精确验证命令；禁止子代理自我派生。
 3. TDD；每 Task 后独立 SPEC + QUALITY 双评审；修复 ≤5 轮（R≤3 原实现者，R≥4 换新）；所有结论与 Ruling 写 `ledger.md`。
-4. 全部 Task 完成后整分支终审；跑 `scripts/agents/gates.sh` 全量门禁；改动域涉及渲染/tick/存储/协议时补 benchmark（数值只记录）、fuzz/golden、`make visual` 或 `perfcheck`。
+4. 全部 Task 完成后整分支终审；`scripts/agents/gates.sh` 当前执行 gofmt、vet、archcheck、OpenSpec、`make rust` 和未跳过时的 full race，完整提交前另跑 `make rust-check`。改动域涉及渲染/tick/存储/协议时补 benchmark（数值只记录）、fuzz/golden 或 `perfcheck`；预期视觉不变时运行 `make visual-check`，预期视觉变化时先逐图确认，再运行 `make visual-update`，随后重新运行 `make visual-check`。
 
 ## 第 5 步：自动收尾（完成即执行）
 
 ```text
-□ 全量门禁与整分支终审通过（gates.sh；改动域对应 benchmark/fuzz/golden/visual 已核）
+□ 全量门禁与整分支终审通过（gates.sh + 单独的 make rust-check；改动域对应 benchmark/fuzz/golden/visual 已核）
 □ openspec sync（delta 沉淀主规格）→ 逐 change openspec archive
-□ AGENTS.md 与 CLAUDE.md 逐字节相同（cmp -s）且只写已验证事实
+□ 只在对应作用域的 AGENTS.md 写已验证事实；同级 CLAUDE.md 保持薄导入（TestClaudeImportsAgentGuidance focused 门禁）
 □ docs/notes/progress.md 追加基线段落
 □ docs/feature-backlog.md 该行 → 已完成（认领人保留履历）；集成任务受影响时同步 A/I 行
 □ GitHub Discussion #71 **追加状态评论**（每次状态变化都要，含 F 组）；
@@ -108,7 +108,7 @@
 0. `brainstorming` 确认已获显式批准，且确认结论已写入 proposal/design 与 brief。
 1. `go test -list` 集合语义一致；`gofmt -l .` 无输出；`go vet ./...` 干净。
 2. `openspec validate --all --strict --no-interactive` 通过；全部 Task 已勾选并核对。
-3. `AGENTS.md` 与 `CLAUDE.md` 逐字节相同（`TestBaselineDocsAreIdentical` 兜底）。
+3. 规则只更新对应作用域的 `AGENTS.md`；同级 `CLAUDE.md` 保持薄导入，并通过 `TestClaudeImportsAgentGuidance` focused 门禁。
 4. 无超范围改动：git diff 只含本行声明的独占文件集（+ 基线文档同步）。
 5. 未决项已誊入「延期与放弃」；ledger 的最终裁决已写。
 6. 本行 `已完成` 已在仓库与讨论两处同步。
@@ -118,5 +118,5 @@
 - 已认领行不得抢；跨行依赖未满足不得开工。
 - 不得为通过测试放宽正确性、资源上限、报告完整性、真实 overflow 或数据丢失门禁；benchmark 数值不改变退出状态。
 - 不得绕过或不修改 `.codex/hooks.json` / `.claude/settings.json` 共享的 `scripts/agent-hooks/guard.mjs` 及其豁免变量。
-- PR 合并前确认整分支终审与 `gates.sh` 全量门禁通过、无未推送功能分支依赖本行产出；集成批次按计划固定合流顺序，不机械 ours/theirs；多条流水线并行时逐条监听，任一失败都先修复再合并。
-- 自动测试不得启动或聚焦前台游戏窗口；视觉验收只在用户明确要求时人工跑。
+- PR 合并前确认整分支终审、`scripts/agents/gates.sh` 门禁子集与单独的 `make rust-check` 均通过，且无未推送功能分支依赖本行产出；集成批次按计划固定合流顺序，不机械 ours/theirs；多条流水线并行时逐条监听，任一失败都先修复再合并。
+- 自动测试不得启动或聚焦前台游戏窗口；`make visual-update` 只能在逐图人工确认预期变化后运行。

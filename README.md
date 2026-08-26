@@ -17,7 +17,7 @@
 <details>
 <summary>English overview</summary>
 
-Mornlea is an original voxel game written from scratch in Go 1.26 — no Mojang assets, protocol, or saves. It ships a custom client, an authoritative server, persistent worlds, physics, and a Rust wgpu renderer. The current baseline uses protocol v26, player schema v7, chunk schema v9, world metadata v2, `companions.ai` schema v4, engine ABI v6, client ABI v9, and benchmark scenario v19. Up to four named, server-authoritative companions can plan and persist queued `go_to`/`follow`/`mine`/`place` tasks and speak through a separate bounded persona/dialogue path; the survival loop includes water, farming, hunger, and local confirmation audio. The ordinary local client starts at an egui main menu with a three-control Settings page. The graphical client is macOS-only; the headless Linux dedicated-server bundle uses CGO and an adjacent `libmornlea_engine.so`. MIT licensed.
+Mornlea is an original voxel game written from scratch in Go 1.26 — no Mojang assets, protocol, or saves. It ships a custom client, an authoritative server, persistent worlds, physics, and a Rust wgpu renderer. The current baseline uses protocol v26, player schema v7, chunk schema v9, world metadata v2, `companions.ai` schema v4, engine ABI v7, client ABI v9, and benchmark scenario v19. Up to four named, server-authoritative companions can plan and persist queued `go_to`/`follow`/`mine`/`place` tasks and speak through a separate bounded persona/dialogue path; the survival loop includes water, farming, hunger, and local confirmation audio. The ordinary local client starts at an egui main menu with a three-control Settings page. The graphical client is macOS-only; the headless Linux dedicated-server bundle uses CGO and an adjacent `libmornlea_engine.so`. MIT licensed.
 
 ```bash
 git clone https://github.com/channing771/mornlea.git
@@ -30,7 +30,7 @@ Milestone history lives in [实现进度](docs/notes/progress.md); the LAN serve
 
 项目仍处于早期开发阶段，已经具备程序化地形、GPU 地形渲染、玩家移动与碰撞、客户端预测、方块挖掘与放置、内置权威服务端、世界持久化、有界二进制协议、TCP 直连、无图形专用服务端与稳定玩家状态存档；已交付里程碑与协议/存档版本演进见[实现进度](docs/notes/progress.md)。
 
-当前基线使用协议 v26、玩家 schema v7、区块 schema v9、世界 metadata v2、`companions.ai` schema v4、engine ABI v6、client ABI v9 与 benchmark scenario v19。最多四个具名伙伴由服务端权威执行并持久化 `go_to`/`follow`/`mine`/`place` 队列任务，性格台词走独立有界表达路径；生存循环已经包含水、农业、饥饿与本地确认音效。普通本地客户端从 egui 主菜单进入游戏，并提供只含三项的设置页。完整里程碑和版本演进见[实现进度](docs/notes/progress.md)。
+当前基线使用协议 v26、玩家 schema v7、区块 schema v9、世界 metadata v2、`companions.ai` schema v4、engine ABI v7、client ABI v9 与 benchmark scenario v19。最多四个具名伙伴由服务端权威执行并持久化 `go_to`/`follow`/`mine`/`place` 队列任务，性格台词走独立有界表达路径；生存循环已经包含水、农业、饥饿与本地确认音效。普通本地客户端从 egui 主菜单进入游戏，并提供只含三项的设置页。完整里程碑和版本演进见[实现进度](docs/notes/progress.md)。
 
 ## 截图
 
@@ -303,7 +303,7 @@ make visual-update             # 重新生成基线，写入 cmd/mornlea/testdat
 └── docs/              设计、实施计划、性能记录与实现进度
 ```
 
-整体架构与技术选型见[项目设计文档](docs/superpowers/specs/2026-07-26-minecraft-go-design.md)。其余文档导览：
+整体架构与技术选型见[当前架构说明](docs/architecture.md)，完整文档导览见[文档地图](docs/README.md)。[早期项目设计文档](docs/superpowers/specs/2026-07-26-minecraft-go-design.md)仅作历史设计背景。其他常用入口：
 
 - [实现进度](docs/notes/progress.md)：已交付里程碑、当前基线与下一步方向；
 - [局域网专用服务端](docs/notes/lan-server.md)：`mornlea-server` 的启动、身份、存档与安全边界；
@@ -314,7 +314,7 @@ make visual-update             # 重新生成基线，写入 cmd/mornlea/testdat
 
 ## Rust 与 Go 的职责划分
 
-固定 Rust 1.97.1 workspace 同时包含 `mornlea_engine` 与 `mornlea_client` 两个 `cdylib`，形成两条独立的 C ABI 与 release-unit 边界：`engine/include/mornlea_engine.h` 定义 engine ABI v6，`engine/include/mornlea_client.h` 定义 client ABI v9。macOS 图形 `mornlea` 必须配套同一次构建的 engine 与 client 库；`mornlea-server` 只配套同一次构建的 engine 库。任一 ABI 均不可跨版本混装。
+固定 Rust 1.97.1 workspace 同时包含 `mornlea_engine` 与 `mornlea_client` 两个 `cdylib`，形成两条独立的 C ABI 与 release-unit 边界：`engine/include/mornlea_engine.h` 定义 engine ABI v7，`engine/include/mornlea_client.h` 定义 client ABI v9。macOS 图形 `mornlea` 必须配套同一次构建的 engine 与 client 库；`mornlea-server` 只配套同一次构建的 engine 库。任一 ABI 均不可跨版本混装。
 
 | 语言 / 组件 | 职责 |
 | --- | --- |
@@ -328,7 +328,7 @@ make visual-update             # 重新生成基线，写入 cmd/mornlea/testdat
 - 调用结束后任何语言都不得保留对方指针；旧 Go 积分、worldgen、网格、光照、碰撞与 raycast 实现仅作测试 oracle，不是生产 fallback；
 - 网格与光照结果不进入网络协议或存档；collision 被客户端预测和服务端权威模拟共用。专用服务端因此使用 `mornlea_engine`，但不链接 `mornlea_client` 或图形栈。
 
-构建：`make run`/`build`/`test` 等目标先自动构建完整 Rust workspace（`rust-toolchain.toml` 固定 1.97.1）。macOS 图形客户端同时跨 engine ABI v6 与 client ABI v9 两条边界；`make build` 生成两个 Go binary，并把 `libmornlea_engine.dylib` 复制到 `bin/`，图形 binary 同时链接 workspace 构建的 `mornlea_client`，专服 binary 只链接 `mornlea_engine`。`make build-linux-server` 只打包 Linux amd64 专服与相邻 `libmornlea_engine.so`，通过 `$ORIGIN` 加载。两条 ABI 各自都是不可跨版本混装的 release-unit 边界；专服依赖闭包不含 client/render（`make archcheck` 验证）。`make rust-check` 运行 Rust 格式、clippy 与单测。
+构建：`make run`/`build`/`test` 等目标先自动构建完整 Rust workspace（`rust-toolchain.toml` 固定 1.97.1）。macOS 图形客户端同时跨 engine ABI v7 与 client ABI v9 两条边界；`make build` 生成两个 Go binary，并把 `libmornlea_engine.dylib` 复制到 `bin/`，图形 binary 同时链接 workspace 构建的 `mornlea_client`，专服 binary 只链接 `mornlea_engine`。`make build-linux-server` 只打包 Linux amd64 专服与相邻 `libmornlea_engine.so`，通过 `$ORIGIN` 加载。两条 ABI 各自都是不可跨版本混装的 release-unit 边界；专服依赖闭包不含 client/render（`make archcheck` 验证）。`make rust-check` 运行 Rust 格式、clippy 与单测。
 
 ## 当前限制
 

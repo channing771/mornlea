@@ -26,9 +26,12 @@
 make agent-planner
 make agent-implementer
 
-# 标准门禁汇总（实现者收尾前必跑）
+# 完整提交前门禁（两项都必须通过）
 scripts/agents/gates.sh
+make rust-check
 ```
+
+`scripts/agents/gates.sh` 汇总 gofmt、vet、archcheck、OpenSpec、`make rust` 和未跳过时的 full race；它不包含 `make rust-check`，两者都通过才构成完整提交前门禁。
 
 ## 执行状态看板（可选）
 
@@ -51,38 +54,20 @@ make agent-ui-dev
 
 ## 每天固定时间：cron
 
-```cron
-# 每天 09:00 运行规划者（改第一行即可调时间）
-0 9 * * * /bin/bash -lc '/Users/chen/chenwork/minecraft-go/scripts/agents/run-agent.sh planner >> /Users/chen/Library/Logs/mornlea-planner.log 2>&1'
+```bash
+scripts/agents/install-cron.sh planner
+crontab -l
 ```
 
-安装：`crontab -e` 粘贴上行；或 `scripts/agents/install-cron.sh planner` 自动写入 crontab。
+`scripts/agents/install-cron.sh planner` 是 canonical 安装入口；脚本自动解析当前仓库根并把绝对路径写入 crontab。默认每天 09:00，可用 `CRON_HOUR` / `CRON_MIN` 覆盖；安装后用 `crontab -l` 检查结果。
 
 ## 每天固定时间：launchd（macOS 推荐）
 
 ```bash
-scripts/agents/install-launchd.sh   # 生成 ~/Library/LaunchAgents/com.mornlea.planner.plist 并 load
+scripts/agents/install-launchd.sh
 ```
 
-生成的 plist 等价于（Hour/Minute 即固定时间）：
-
-```xml
-<plist version="1.0">
-  <dict>
-    <key>Label</key><string>com.mornlea.planner</string>
-    <key>ProgramArguments</key>
-    <array>
-      <string>/bin/bash</string>
-      <string>-lc</string>
-      <string>/Users/chen/chenwork/minecraft-go/scripts/agents/run-agent.sh planner</string>
-    </array>
-    <key>StartCalendarInterval</key>
-    <dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
-    <key>StandardOutPath</key><string>/Users/chen/Library/Logs/mornlea-planner.log</string>
-    <key>StandardErrorPath</key><string>/Users/chen/Library/Logs/mornlea-planner.err.log</string>
-  </dict>
-</plist>
-```
+`scripts/agents/install-launchd.sh` 是 canonical 安装入口；脚本自动解析当前仓库根、写入绝对路径并生成和加载 `~/Library/LaunchAgents/com.mornlea.planner.plist`。默认每天 09:00，可用 `PLANNER_AT_HOUR` / `PLANNER_AT_MINUTE` 覆盖；安装后直接检查生成的 plist。
 
 ## 环境变量
 
@@ -116,4 +101,4 @@ scripts/agents/install-launchd.sh   # 生成 ~/Library/LaunchAgents/com.mornlea.
 - **多工作者并行（如 claude + codex 各一条链）**：第二条链用 `WORKER_ID=codex AGENT_TOOL=codex AGENT_LOOP=1 scripts/agents/run-agent.sh implementer` 启动——`WORKER_ID` 唯一即独立守卫，两条链互不排斥；接力时用 `WORKER_TOOL` 保持各自工具。**认领安全**：两链可能同时选中同一行——以仓库 git 提交先后为准，被拒/冲突的一方让位并改选其它行。
 - **版本号冲突**：认领前按 `docs/development-process.md`「版本号互斥」检查所有 `未认领` 行的契约影响列。
 - **多个实现者同时跑**：不同行在独立 worktree 互不干扰；同一行只有一个认领人；冲突时后到者让位。
-- **钩子拦截**：`.codex/hooks.json` 与 `.claude/settings.json` 共用 `scripts/agent-hooks/guard.mjs`，不得绕过；修复根因。
+- **钩子拦截**：`.codex/hooks.json` 与 `.claude/settings.json` 共用 `scripts/agent-hooks/guard.mjs`，两者都配置 `PreToolUse` 与 `PostToolUse`，当前只有 Codex 配置 `Stop`；不得绕过，失败时修复根因。
