@@ -577,3 +577,63 @@ Task 5 及 change 执行任务现已全部完成。保持 OpenSpec change active
 `194557`、all-farmland `2305`；读取中位数依次为 `14400`、`14401`、`14443`、`72`。
 全耕地五次样本继续精确报告一个 Ready 区块、`98,304` 格耕地、零作物及
 `72 block_reads/op == 72 cells/op`。墙钟只记录，所有 correctness 门禁保持有效。
+
+## Archive Preparation And Spec Sync
+
+本轮只准备归档材料，保持 change active，未执行 archive。`openspec status --change
+instant-farmland-moisture --json` 确认 `planningHome.root` 为当前 checkout，且
+`artifactPaths.specs.existingOutputPaths` 只有 `authoritative-farming/spec.md` 一项；按调用方已提供的
+有效 specs-rule snapshot 合并，未再次获取 instructions。
+
+- 主规格仍使用单一 `## Requirements`，不含 delta operation header；只完整替换 delta 指名的
+  「耕地的干湿由邻近流体决定并双向转换」与「生长推进完全确定且成本与作物数量无关」两块，
+  其余 requirement/scenario 保持原位。
+- 逐 requirement 正文归一化末尾空白后比较，两个 delta block 均与主规格对应 block 相同，输出
+  `semantic delta: none`。
+- `AGENTS.md` 与 `CLAUDE.md` 同步加入 B-09 当前能力及版本事实并保持逐字节相同；
+  `docs/notes/progress.md` 按现有时间顺序追加交付和集成树验证记录。
+- 归档同步报告写入 ignored 路径
+  `.superpowers/sdd/2026-08-26-instant-farmland-moisture/archive-sync-report.md`。
+
+### Archive-preparation Verification
+
+| Command | Result | Evidence |
+|---|---|---|
+| delta requirement comparison | pass | 两个 requirement 均输出 `matched delta requirement`；最终 `semantic delta: none` |
+| main-spec delta-header scan | pass | 无匹配 |
+| `cmp AGENTS.md CLAUDE.md` | pass | no output |
+| `go test ./internal/archcheck -count=1` | pass | `ok github.com/channing771/mornlea/internal/archcheck 5.530s` |
+| `openspec validate --all --strict --no-interactive` | pass | `Totals: 67 passed, 0 failed (67 items)` |
+| `git diff --check` | pass | no output |
+
+本轮未修改生产/测试代码、协议/schema/ABI 常量、benchmark scenario、capture 或 golden；未 commit、
+push、merge、archive 或创建 PR，归档动作留给独立评审后的 controller。
+
+## Archive Preparation Review Repair
+
+- Finding：独立评审发现 `AGENTS.md` 与 `CLAUDE.md` 的既有 authoritative-farming 基线段仍称
+  随机 tick 抽中耕地时重判干湿，与 B-09 段和主规格冲突。
+- Fix：两份文件同步把该段收敛为 fluid→moisture→crop 阶段顺序；随机 section 抽样只推进作物，
+  作物读取已维护的耕地状态且不扫描湿润邻域。未重复 B-09 段中的队列和预算细节。
+- Verification：精确短语守卫确认两份文件均无旧 claim 且具备当前 phase/crop-read claim；
+  `cmp AGENTS.md CLAUDE.md` 与 `git diff --check` 无输出；`go test ./internal/archcheck -count=1`
+  通过（`6.791s`）；OpenSpec strict 为 `67 passed, 0 failed`。
+
+change 继续保持 active；本修复未执行 archive、commit、push、merge 或 PR 操作。
+
+## Archive Finalization
+
+- 独立归档同步评审在一轮修复后批准；该轮修复清除了长期基线中仍称随机 tick 重判耕地干湿的旧表述，复审无遗留 finding。
+- 主规格此前已手工同步并经独立评审批准，因此归档使用 `--skip-specs`，避免重复应用同一 delta。
+- 控制会话成功执行 `openspec archive instant-farmland-moisture --skip-specs --yes`：任务状态 complete；规格因已手工同步并独立批准而 skipped；归档名为 `2026-08-26-instant-farmland-moisture`。
+- 最终归档路径为 `openspec/changes/archive/2026-08-26-instant-farmland-moisture/`。
+
+### Post-archive Checks
+
+| Command | Result | Evidence |
+|---|---|---|
+| `openspec validate --all --strict --no-interactive` | pass | `Totals: 66 passed, 0 failed (66 items)` |
+| `cmp AGENTS.md CLAUDE.md` | pass | no output |
+| `go test ./internal/archcheck -count=1` | pass | `ok github.com/channing771/mornlea/internal/archcheck 4.875s` |
+| `git diff --check` | pass | no output |
+| `git status --short` and diff scope | recorded | active change deletion plus `openspec/changes/archive/2026-08-26-instant-farmland-moisture/` addition; only synchronized specs/baselines, the B-09 backlog row, and archive records are in finalization scope；无生产或测试代码变更 |
