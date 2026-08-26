@@ -23,7 +23,7 @@
 
 ## Execution Protocol
 
-- 控制会话开始 Task 1 前创建 `docs/superpowers/plans/2026-08-26-basic-gameplay-backlog-replan-ledger.md`，记录每个任务的 implementer、规格评审、质量评审、修复轮次和裁决。
+- 控制会话开始 Task 1 前用 `scripts/sdd-workspace` 创建本计划专属的 ignored `progress.md`，记录每个任务的 implementer、规格评审、质量评审、修复轮次和裁决；整分支终审后再生成同内容的 `docs/superpowers/plans/2026-08-26-basic-gameplay-backlog-replan-ledger.md`。
 - Task 1..4 各派一个 fresh implementer；任务 brief 是该子代理唯一需求来源，implementer 不得派生其它代理。
 - 每个任务实现后依次派独立规格评审与质量评审；发现问题回到同一 implementer 修复，单任务最多 5 轮。
 - Task 1..4 全部通过后派 fresh final reviewer 审查 `origin/main...HEAD`；控制会话只协调、验证和维护 ledger，不直接实现任务文件。
@@ -532,7 +532,7 @@ git commit -m "feat(agent-board): display planned backlog states"
 
 **Files:**
 - Verify: all files from Tasks 1..4
-- Create and maintain: `docs/superpowers/plans/2026-08-26-basic-gameplay-backlog-replan-ledger.md`
+- Create after final review: `docs/superpowers/plans/2026-08-26-basic-gameplay-backlog-replan-ledger.md`
 - Remote update after merge: GitHub Discussion #71
 
 **Interfaces:**
@@ -600,11 +600,11 @@ git log --oneline origin/main..HEAD
 git diff --stat origin/main...HEAD
 ```
 
-Expected: 没有未提交文件；提交只包含设计、计划、backlog、agent 自动化/文档和 agent board 状态消费者，不包含游戏代码、协议、ABI 或 golden。
+Expected: 没有未提交的 tracked 文件；SDD ignored workspace 不计入 Git 状态。提交只包含设计、计划、backlog、agent 自动化/文档和 agent board 状态消费者，不包含游戏代码、协议、ABI 或 golden。
 
 - [ ] **Step 5: 完成整分支终审并提交 ledger**
 
-派 fresh final reviewer 检查 `origin/main...HEAD` 的规格合规、状态一致性、脚本失败语义、看板兼容性和测试缺口。把 verdict、findings、修复轮次和所有控制会话裁决写入 ledger；存在 finding 时先回到对应 implementer 修复并重跑 Task 5 Step 2。
+派 fresh final reviewer 检查 `origin/main...HEAD` 的规格合规、状态一致性、脚本失败语义、看板兼容性和测试缺口。把 verdict、findings、修复轮次和所有控制会话裁决写入 SDD `progress.md`；存在 finding 时先回到对应 implementer 修复并重跑 Task 5 Step 2。终审通过后把完整记录整理为仓库内 ledger。
 
 终审通过后提交 ledger：
 
