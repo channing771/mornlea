@@ -64,7 +64,7 @@ Before dispatching Task 1, create change `companion-idle-dialogue` with these ex
 - `proposal.md`: goal is one deterministic, bounded idle speech loop; non-goals are persistence, summaries, task autonomy, movement, protocol/schema/ABI/scenario and UI changes.
 - delta `companion-dialogue/spec.md`: add requirements for deterministic 1200..2400 tick opportunities, queue-idle versus dispatch eligibility, real recent issuer/online/16-block gates, restored-issuer exclusion, schedule reset on task arrival, skip-and-reschedule failure semantics, idle nonterminal response, and result-time stale checks.
 - `design.md`: reference the approved design and record FNV-1a input order, modular due comparison, tick phase, data ownership, no-preemption tradeoff and rollback.
-- `tasks.md`: mirror Tasks 1–3 below, then focused/full verification, sync/archive and backlog/Discussion completion.
+- `tasks.md`: mirror Tasks 1–3 below, then focused/full verification and archive readiness；spec sync、archive 与 backlog/Discussion completion 由文末集成门禁在全部 checkbox 完成后执行。
 - `ledger.md`: record baseline commits `87928315` and `3f91fc31`, baseline commands (`make rust`, companion race, server race), user approvals, and an initially empty Ruling/review table.
 
 Run and require success:
@@ -270,8 +270,9 @@ slot.hasIdleDialogueAtTick = true
 beforeBudget := slot.dialogueRequests
 ```
 
-- Due and eligible: one request whose recorded `NodeKind` is `idle`; next deadline differs; `dialogueRequests == beforeBudget`.
-- Current or pending task: `hasIdleDialogueAtTick` becomes false and no request starts.
+- First idle tick with a real issuer and no deadline: no request starts immediately; exact deadline becomes `now + idleDialogueInterval(id, now)`.
+- Due and eligible: one request whose recorded `NodeKind` is `idle`; exact next deadline is `oldDeadline + idleDialogueInterval(id, oldDeadline)`; `dialogueRequests == beforeBudget`. Evaluate one case after `now` has advanced past `oldDeadline` to prove recurrence stays anchored to the old deadline rather than the late observation tick.
+- Current or pending task: `hasIdleDialogueAtTick` becomes false and no request starts. After the queue becomes empty again, the next tick arms exactly `now + idleDialogueInterval(id, now)` without immediate speech.
 - No real issuer: no deadline is armed.
 - Inactive body, full semaphore, or `dialogueInFlight=true`: no request starts, but due deadline advances once.
 - `dialogueRequests == companion.MaxDialogueRequestsPerTask`: idle still dispatches and budget remains unchanged.
@@ -462,7 +463,7 @@ if len(facts) != 1 || facts[0].speech != "今天天气适合走走" || facts[0].
 Use fresh hosts for stale subtests. Starting from the same valid arrangement, mutate exactly one property before applying the outcome:
 
 - enqueue one pending command;
-- begin a next task so generation changes;
+- construct the outcome with a generation different from the still-empty queue, without starting or enqueueing a task;
 - replace `currentIssuer` with another real identity;
 - set `currentIssuer = restoredIssuerIdentity`;
 - make `onlinePlayers` return nil;
@@ -471,7 +472,7 @@ Use fresh hosts for stale subtests. Starting from the same valid arrangement, mu
 
 Every stale case must clear `dialogueInFlight`, leave effects/events/summary unchanged, and produce no speech.
 
-Add one eligible outcome with `err=companion.ErrDialogueUnavailable`; assert the same no-effect result while `dialogueInFlight` still clears. This proves idle model failure does not fall through to broadcast or summary mutation.
+Add one eligible outcome with `err=companion.ErrDialogueUnavailable`; record the already-scheduled next idle deadline before applying it, then assert the same no-effect result, exact deadline preservation and `dialogueInFlight` clearing. This proves idle model failure does not fall through to broadcast, summary mutation or an extra reschedule.
 
 - [ ] **Step 2: Write a failing no-preemption transition test**
 
@@ -578,7 +579,13 @@ After each Task commit, the control session must:
 After Task 3 passes dual review, dispatch an independent whole-branch reviewer against the merge base. Resolve all blocking findings through the same bounded repair loop, then run:
 
 ```bash
+gofmt -w internal/companion/dialogue_nodes.go internal/companion/dialogue_nodes_test.go internal/companion/dialogue_client.go internal/companion/dialogue_client_test.go internal/server/companion_idle_dialogue.go internal/server/companion_idle_dialogue_test.go internal/server/companion_manager.go internal/server/companion_dialogue.go internal/server/companion_dialogue_wiring_test.go
 test -z "$(gofmt -l internal/companion internal/server)"
+git diff --check c60e8f69...HEAD
+git diff --check
+git diff --cached --check
+test -z "$(git status --porcelain)"
+git diff --name-only c60e8f69...HEAD
 go test ./internal/companion ./internal/server -race -count=1
 go test ./internal/archcheck -count=1
 go vet ./...
@@ -586,8 +593,9 @@ go test ./... -race
 make rust-check
 openspec validate --all --strict --no-interactive
 scripts/agents/gates.sh
-git diff --check
 ```
+
+The clean-worktree assertion is a precondition for the range audit；it prevents staged、unstaged or untracked paths from bypassing `git diff --name-only c60e8f69...HEAD`。Audit every range path against the approved plan：only the listed Go files、`openspec/changes/companion-idle-dialogue/`、this plan and the C-08 row in `docs/feature-backlog.md` are allowed before archive。Any version、schema、ABI、scenario、capture or golden path is a hard failure；do not rely on OpenSpec validation to prove file immutability。
 
 No benchmark is required: the tick path scans at most `companion.MaxActive == 4` slots and performs the existing bounded environment scan only at a due, eligible opportunity. Record command outputs and any measured durations in the ledger; do not weaken timeouts or thresholds.
 
