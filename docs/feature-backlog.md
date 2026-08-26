@@ -124,7 +124,7 @@
 | D-04 | 合成面板分页/滚动 | 配方行数增长后按窗口高度自适应（当前 10 行，矮窗口整体缩小） | 无 wire；HUD 布局（capture 校验） | 未认领 | — | farming 遗留 20 |
 | D-05 | HUD 物品图集 UV 对齐 | 按 texel 中心/整数像素计算，使图集扩列不影响既有图标 | 无 wire（UV 计算） | 已完成 | ox-alpha-implementer @ fix/D-05-hud-atlas-texel-uv | farming 遗留 18；PR #82 已合并（CI 8/8 全绿），change `hud-atlas-texel-stable-uv` 已归档并 sync 进 `survival-hud-presentation` 主规格；最终方案为对称亚纹素收进 1/256 纹素（半纹素中心对齐被否决），两景心形区 golden 经用户裁决外科手术式再生 |
 | D-06 | 材质包 v2 | HUD 图集覆盖（鸡腿/爱心/气泡可替换）、构建期许可校验与成果打包 | 配置语义扩展 + 构建期校验 | 未认领 | — | hunger 遗留 7；farming 遗留 12（贴图管线） |
-| D-07 | 耕地 mesh 顶面下沉 | 按 material 固定下移顶面，或复用水面角高度位 | capture golden 更新 | 已认领 | ox-alpha-implementer @ feat/D-07-farmland-mesh-top-sink | farming 遗留 13；2026-08-26 认领。独占文件集：`engine/crates/mornlea_engine/`（mesher 顶面几何与测试）、受影响 capture golden 与 change 产物；不触碰 wire/schema/registry 名额与 `internal/physics`（碰撞侧已是 15/16） |
+| D-07 | 耕地 mesh 顶面下沉 | 按 material 固定下移顶面，或复用水面角高度位 | capture golden 更新 | 已完成 | ox-alpha-implementer @ feat/D-07-farmland-mesh-top-sink | farming 遗留 13；2026-08-26 认领并当日完成：PR #91 已合并（CI 8/8 首跑全绿），change `farmland-mesh-top-sink` 已归档；registry +1 字节 `block_top_raw`（engine ABI v7）、terrain.wgsl 客户端解码半边、showcase 扩两列并单景再生 golden；执行期发现并补齐客户端解码缺口（design D2a），与演进后 main 变基集成零版本碰撞 |
 | D-08 | 农田+花草 capture 场景 | 植物种类增多后补视觉场景并记录差异来源 | capture 场景与 golden 追加 | 未认领 | — | farming 遗留 24 |
 | D-09 | 第三人称与角色姿态呈现 | 第三人称相机模式与角色姿态（游泳等） | client ABI 可能扩展（相机/姿态） | 未认领 | — | fluid-presentation proposal 非目标（不做游泳姿态动画与第三人称呈现）；avatar pass 为基础 |
 
