@@ -61,6 +61,7 @@
 | `openspec validate companion-idle-dialogue --strict --no-interactive` | pass | change valid during artifact creation |
 | `openspec validate --all --strict --no-interactive` | pass | `Totals: 67 passed, 0 failed (67 items)` before planning review |
 | OpenSpec planning independent review | pass | repair round 2 后 reviewer 明确 `PASS`；无 Critical、Important 或 Minor finding |
+| backlog `开发中` transition | pass | `refresh_discussion_test.py` 5/5、`relay_test.py` 3/3；Discussion #71 正文刷新为 82 行，状态评论 `DC_kwDOToJS8M4BFS_p` |
 
 ## Execution Notes
 
