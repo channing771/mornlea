@@ -146,3 +146,97 @@ func TestConvergeRandomWaterBodiesReachFixedPoint(t *testing.T) {
 		}
 	}
 }
+
+// TestConvergeFloodedCropsReachFixedPoint 证明 flood-destroys-crops（design.md
+// D5）对「有限收敛」性质的声明：作物格对流动水放行之后，含作物的流场仍在
+// 明确的 tick 上界内到达不动点，不产生「水↔作物」振荡。
+//
+// 论证依据是单调性而非本测试：冲毁把作物格变成普通流体格，此后它只服从既有
+// 流动规则；本包不存在任何「重新长出作物」的写入来源，故作物的加入只是给
+// 良基的支撑关系增加了一批一次性可消耗的叶节点，不引入新的环。这里做的是
+// 该论证的经验冒烟——若将来有人给本包加了能产出作物的路径，这条测试会先红。
+//
+// 夹具刻意不进 `standardFixtures`：作物会打破 `assertNoLevelOverflow` 的白名单
+// 前提（夹具只放空气/石头/流体），把它泄入预算、次序、重扫三组无关性质。
+// 独立构造的补偿是两条更强的断言——平衡态零作物残留，以及残留检查通过后
+// 白名单不变量照常成立（流体等级越界写出的编号恰好落在农业编号段
+// `core.WaterSourceID`+8..17 上，正是这条断言要抓的形态）。
+func TestConvergeFloodedCropsReachFixedPoint(t *testing.T) {
+	// 与 `TestConvergeRandomWaterBodiesReachFixedPoint` 同一上界口径。
+	const convergeMaxTicks = 1500
+
+	build := func() (*memWorld, []core.BlockPos) {
+		// 内部 15×15 的封闭盆地，源在正中 (7,1,7)：底面是整块实心，洪水只沿
+		// 面邻接水平扩散且等级上界为 7，可达域是以源为中心、曼哈顿距离 ≤ 7
+		// 的菱形。作物全部种在菱形内并覆盖各档位：距离 1 被最强的等级 1 直接
+		// 冲毁，距离 7 的两条边中点只被最弱的等级 7 够到——判定表两端都在
+		// 真实传播路径上被行使。（角落的曼哈顿距离是 14，永远在洪水之外，
+		// 不能用来测「必被冲毁」。）
+		w := newBasin(0, 0, 14, 14, 0, 6)
+		source := core.BlockPos{X: 7, Y: 1, Z: 7}
+		w.SetBlock(source, core.WaterSourceID)
+		crops := []core.BlockPos{
+			{X: 6, Y: 1, Z: 7}, // 距源 1：最强档
+			{X: 4, Y: 1, Z: 4}, // 距源 6：对角路径
+			{X: 7, Y: 1, Z: 1}, // 距源 6：直线远端
+			{X: 0, Y: 1, Z: 7}, // 距源 7：最弱档
+			{X: 7, Y: 1, Z: 0},
+		}
+		for _, pos := range crops {
+			w.SetBlock(pos, core.WheatStage3ID)
+		}
+		return w, crops
+	}
+
+	for _, budget := range []int{unboundedBudget, testBudget} {
+		t.Run(fmt.Sprintf("budget=%d", budget), func(t *testing.T) {
+			w, crops := build()
+			q := NewQueue()
+			// 只播种流体格就够：作物是被动的被替换方，水经相邻流体格的
+			// `evalCell` 写进作物格后，`Advance` 会把变更格连同六邻重新入队，
+			// 洪水沿既有机制自然传播，不需要为作物单独入队。
+			seedFromFluid(w, q, 0, 0)
+
+			planted := 0
+			for _, pos := range crops {
+				if core.IsCrop(w.BlockAt(pos)) {
+					planted++
+				}
+			}
+			if planted != len(crops) {
+				t.Fatalf("夹具自检失败：种下 %d 格作物，实际只有 %d 格在位", len(crops), planted)
+			}
+
+			now, ticks := advanceToFixedPoint(t, q, w, 1, budget, testDelay, convergeMaxTicks)
+			for _, pos := range allPositions(w) {
+				if id := w.BlockAt(pos); core.IsCrop(id) {
+					t.Fatalf("budget=%d：平衡态仍残留作物格 %+v（阶段 %d）：洪水未及或冲毁路径断裂",
+						budget, pos, id-core.WheatStage0ID)
+				}
+			}
+			// 零作物残留已证，`assertNoLevelOverflow` 的白名单前提恢复成立：
+			// 此时任何非空气/石头/流体的编号都只可能来自等级越界写入。
+			assertNoLevelOverflow(t, w, "作物淹没平衡态")
+			t.Logf("budget=%d：%d 格作物全部冲毁，%d tick 到达不动点，平衡态流体 %d 格",
+				budget, len(crops), ticks, len(fluidPositions(w)))
+
+			// 复检：作物淹没后的平衡态同样是边界重扫的不动点（D5「无需改任何
+			// rescan 代码」的经验对照）。
+			before := snapshot(w)
+			q.Clear()
+			rescanEnqueue(w, q, now, 0)
+			for i := 0; i < convergeMaxTicks && q.Len() > 0; i++ {
+				if changed := q.Advance(now, w, unboundedBudget, testDelay); len(changed) != 0 {
+					t.Fatalf("budget=%d：作物淹没后的平衡态不是重扫的不动点，第 %d 次推进产生 %d 处变更：%v",
+						budget, i+1, len(changed), changed[:min(len(changed), 10)])
+				}
+				now++
+			}
+			if diffs := diffWorlds(before, snapshot(w)); len(diffs) != 0 {
+				t.Fatalf("budget=%d：重扫后世界状态发生变化：%s", budget, reportDiff(diffs))
+			}
+
+			requireNoExamineLimitHits(t, q, fmt.Sprintf("budget=%d 的作物淹没推进", budget))
+		})
+	}
+}

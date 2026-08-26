@@ -204,7 +204,8 @@ func TestNewApplicationReturnsRegistryErrorBeforeClientSideEffects(t *testing.T)
 				test.configure(&dependencies, called)
 			}
 
-			test.options.TexturePackPath = "/missing/texture-pack"
+			test.options.TexturePackPath = "/raw/missing/texture-pack"
+			test.options.ResolvedTexturePackPath = "/missing/texture-pack"
 			_, err := newApplicationWithDependencies(test.options, dependencies)
 			for _, name := range []string{
 				"openStore", "dialTCP", "loginClient", "newHost", "newMemoryStreamPair",

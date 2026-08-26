@@ -22,8 +22,8 @@ var fluidTestChunks = []core.ChunkPos{
 	{X: 0, Z: 0}, {X: 1, Z: 0}, {X: -1, Z: -1}, {X: 37, Z: -104}, {X: -8, Z: 5},
 }
 
-// seaLevelY 是世界生成的海平面 Y,与 engine `SEA_LEVEL_Y` 及 oracle
-// `oracleSeaLevel` 同值。注水范围是 [core.MinY, seaLevelY]。
+// seaLevelY 是世界生成的海平面 Y,与 engine 的 `SEA_LEVEL_Y` 常量同值。
+// 注水范围是 [core.MinY, seaLevelY]。
 const seaLevelY int32 = 64
 
 // TestFluidGateOffProducesNoFluid 覆盖 spec 场景「开关关闭时世界与当前基线

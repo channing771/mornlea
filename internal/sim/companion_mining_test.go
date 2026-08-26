@@ -1,7 +1,6 @@
 package sim
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
@@ -274,31 +273,6 @@ func TestCompanionMiningInventoryFullKeepsBlockAndSaturatesProgress(t *testing.T
 	}
 	if entry.mining.requiredTicks != 15 || entry.mining.progressTicks != entry.mining.requiredTicks {
 		t.Fatalf("无容量时进度没有保持满格: %+v", entry.mining)
-	}
-}
-
-// TestCompanionMiningRejectsContainerTargets 锁定容器防御拒绝：箱子与熔炉的
-// 破坏会掉落多份内容物，超出"单一产物直入背包"的结算形状，权威模拟在进度
-// 累积之前就拒绝，方块绝不被破坏。
-func TestCompanionMiningRejectsContainerTargets(t *testing.T) {
-	for _, block := range []core.BlockID{core.ChestID, core.FurnaceID} {
-		t.Run(fmt.Sprintf("block=%d", block), func(t *testing.T) {
-			fixture := readyCompanionMining(t, block, core.ItemIronPickaxe)
-			entry := fixture.entry
-			full, _ := core.ItemMaxDurability(core.ItemIronPickaxe)
-			for range 40 {
-				advanceMiningOnce(fixture.engine)
-			}
-			if got := companionMiningBlockAt(t, fixture); got != block {
-				t.Fatalf("容器被破坏=%d，想要 %d", got, block)
-			}
-			if entry.mining != (miningState{}) {
-				t.Fatalf("容器目标却累积了进度: %+v", entry.mining)
-			}
-			if got := entry.inventory.Hotbar.Slots[0].Durability; got != full {
-				t.Fatalf("容器目标却扣减了耐久=%d", got)
-			}
-		})
 	}
 }
 

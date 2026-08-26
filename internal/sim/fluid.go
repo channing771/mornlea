@@ -132,6 +132,10 @@ func (w *fluidWorld) BlockAt(position core.BlockPos) core.BlockID {
 
 // SetBlock 实现 fluid.FluidWorld：写入区块并把变更汇入本 tick 的
 // pendingChunkChanges，与放置、采掘、掉落物、熔炉共用同一批广播与存盘。
+//
+// 目标格是作物而新值是流体时，写入改道 settleFloodedCrop 结算冲毁（design.md
+// D2：这里是全部流体写入的唯一汇聚点，每目标格每 tick 恰好一次最终生效写入，
+// 冲毁因此恰好结算一次）；范围外防御分支先行不变。
 func (w *fluidWorld) SetBlock(position core.BlockPos, id core.BlockID) {
 	record := w.record(position)
 	if record == nil {
@@ -141,7 +145,11 @@ func (w *fluidWorld) SetBlock(position core.BlockPos, id core.BlockID) {
 		return
 	}
 	x, _, z := position.Local()
-	if record.Chunk.BlockAt(x, position.Y, z) == id {
+	old := record.Chunk.BlockAt(x, position.Y, z)
+	if old == id {
+		return
+	}
+	if settleFloodedCrop(w, record, position, old, id) {
 		return
 	}
 	record.Chunk.SetBlock(x, position.Y, z, id)
@@ -277,6 +285,10 @@ var fluidSealedSourceOffsets = [5][3]int32{
 //
 // 三段合起来：水源产生写入 ⟺ 下方或四个水平邻格中至少有一个可被等级 1 替换。
 // 全部五个邻格都不可替换时，evalCell 返回空 map，本格是不动点。
+//
+// 作物自 flood-destroys-crops 起对流动水可替换（见 `fluid.Replaceable` 判定表），
+// 因此邻格含作物的水源不再满足「五邻均不可替换」，本判据返回假、该源照常入队
+// ——这是捷径随谓词自动收紧而非放宽（design.md D5），增量正比于农田临水面。
 //
 //  4. 判据只在「读到不可替换」时才跳过，而 fluidRescanBlockAt 的读数绝不会比
 //     Advance 时 fluidWorld 的读数更实心（见该函数注释）。因此本函数说"不可

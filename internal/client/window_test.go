@@ -19,11 +19,14 @@ func buildSnapshot(mutate func([]byte)) []byte {
 }
 
 func TestClientABIVersionMatchesHeader(t *testing.T) {
-	// v8:egui 菜单两出口(render_upload_ui_font/render_drain_ui_events)与帧
-	// UI 段加入;新增导出面即 bump。变基重编:v5 归 main 的 water pass,远环
-	// tile 出口 v6、雾 setter v7、菜单 UI v8。
-	if got := ClientABIVersion(); got != 8 {
-		t.Fatalf("client ABI version=%d,想要 8", got)
+	// v9:设置页 layout v2 与结构化事件批取代裸按钮 id；v8 是 egui 菜单
+	// 两出口与帧 UI 段。变基重编:v5 归 main 的 water pass,远环 tile 出口
+	// v6、雾 setter v7、菜单 UI v8、设置事件 v9。
+	if got := ClientABIVersion(); got != 9 {
+		t.Fatalf("client ABI version=%d,想要 9", got)
+	}
+	if got := clientABIHeaderVersion(); got != 9 {
+		t.Fatalf("client header ABI version=%d,想要 9", got)
 	}
 }
 

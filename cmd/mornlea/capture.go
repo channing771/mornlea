@@ -11,6 +11,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/client"
+	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/physics"
@@ -75,6 +76,10 @@ type captureScene struct {
 	// 场景表天然清空上一场景的菜单，不需要 teardown 钩子；egui pass 只在 UI 段
 	// 存在时运行，多数场景（nil）因此零参与、输出像素与引入菜单前逐字节一致。
 	Menu *client.UIMenu
+	// Settings 可选，非 nil 时本场景通过正常的设置相位与 `uiSegment` 路径编码
+	// layout v2。它与 Menu 互斥；每个场景都会显式重置菜单相位，避免设置页污染
+	// 后续共用同一 application 的场景。
+	Settings *settingsState
 	// PinVolatile 可选，在字形收敛帧之后、最后一帧渲染之前执行，用来钉住那些
 	// 随机器速度变化、因而不属于场景三要素的量。
 	//
@@ -119,8 +124,9 @@ func captureSettled(stats client.MesherStats, pending, lodBusy int) bool {
 // 场景、或在两者之间插入新场景，都会静默改变后续场景的期望像素。新增场景应
 // 追加在列表末尾；若确实需要调整顺序或插入位置，须用 --update-golden 重新
 // 生成所有受影响场景的基线，并逐张人眼确认。
-// 例外：`main-menu` 因 spec 排序约束（MUST 排在 `far-horizon` 之前）被插入
-// 表中部（water-surface-slope 与 far-horizon 之间），属 spec/brief 硬性例外。
+// 例外：`main-menu` 与紧随其后的 `settings-menu` 因 spec 排序约束（MUST 排在
+// `far-horizon` 之前）共同插入表中部（water-surface-slope 与 far-horizon
+// 之间），属 spec/brief 硬性例外。
 var captureScenes = []captureScene{
 	{
 		Name:         "terrain-noon",
@@ -503,7 +509,7 @@ var captureScenes = []captureScene{
 	},
 	{
 		// main-menu 是 egui 主菜单的无窗口 capture 场景：含标题「Mornlea」、
-		// 版本行「dev」、真实装配错误行与四个按钮（进入/退出可用、多人/设置禁用）。
+		// 版本行「dev」、真实装配错误行与四个按钮（进入/设置/退出可用、多人禁用）。
 		//
 		// Error 非空是有意的：一来覆盖真实装配错误行（菜单因打开不了存档而显示
 		// 错误文本），二来其内容「存档无法打开」是中文 UTF-8，整个 UI 段的字节长度
@@ -514,7 +520,7 @@ var captureScenes = []captureScene{
 		// Apply 里 resetCapturePresentation 清空前序场景（water-surface-slope）留下的
 		// 全部共享呈现状态，并把相机钉在出生点上空：菜单面板不透明地覆盖全屏，世界
 		// 内容不可见，相机位置只作确定性占位，不影响菜单像素。egui pass 只在 UI 段
-		// 存在时运行，本场景是场景表中唯一产生 UI 段的场景。
+		// 存在时运行，本场景与紧随其后的 settings-menu 是仅有的 UI 场景。
 		//
 		// 排序约束：本场景 MUST 排在 far-horizon 之前（far-horizon 仍为倒数第二、
 		// water-underwater 仍为最后），由 TestMainMenuCaptureScenePosition 兜底。
@@ -526,7 +532,7 @@ var captureScenes = []captureScene{
 			Version: "dev",
 			// 见上：真实错误行 + 非 4 对齐 UI 段（Ruling 8）。
 			Error: "存档无法打开",
-			// 复用交互主菜单的按钮表（四个按钮、进入/退出可用、多人/设置禁用）。
+			// 复用交互主菜单的按钮表（四个按钮、进入/设置/退出可用、多人禁用）。
 			Buttons: menuButtons(),
 		},
 		Apply: func(app *application) error {
@@ -536,6 +542,38 @@ var captureScenes = []captureScene{
 			app.worldTimeTicks = 6000
 			// 相机钉在出生点上空（出生锚点为原点区块，y=110 高位）；菜单面板不透明
 			// 覆盖全屏，世界内容不可见，此处只是确定性的占位姿态。
+			app.camera = client.Camera{
+				Pos: mgl32.Vec3{0, 110, 0}, Yaw: 0, Pitch: -0.25,
+				FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
+				Near: 0.1, Far: 2000,
+			}
+			app.center = cameraChunk(app.camera.Pos)
+			return nil
+		},
+	},
+	{
+		// settings-menu 复用正式设置相位与 client ABI v9 layout v2，不另画测试
+		// 专用表单。夹具使用一组已保存的非默认值，因此三个控件都有明确选择，
+		// 同时保持 clean/空状态，让 640×360 首屏能完整显示三枚动作按钮。
+		Name:         "settings-menu",
+		WarmupFrames: 8,
+		Settings: &settingsState{
+			committed: settingsValues{
+				audioVolume:     0.25,
+				texturePackPath: "packs/local",
+				windowSize:      config.WindowSize960x540,
+			},
+			draft: settingsValues{
+				audioVolume:     0.25,
+				texturePackPath: "packs/local",
+				windowSize:      config.WindowSize960x540,
+			},
+		},
+		Apply: func(app *application) error {
+			if err := resetCapturePresentation(app); err != nil {
+				return err
+			}
+			app.worldTimeTicks = 6000
 			app.camera = client.Camera{
 				Pos: mgl32.Vec3{0, 110, 0}, Yaw: 0, Pitch: -0.25,
 				FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
@@ -698,12 +736,20 @@ func captureSceneImage(app *application, scene captureScene) (*image.NRGBA, erro
 	if err := scene.Apply(app); err != nil {
 		return nil, fmt.Errorf("应用场景状态: %w", err)
 	}
-	// 菜单覆盖帧：在 Apply 之后、收敛循环之前设 app.menuOverride。无条件设置
-	//（含 nil 清除）是刻意而为：场景共用同一个 application，若不显式清除，上一
-	// 场景的菜单（如 main-menu）会静默留在本场景的画面上。nil 即清除，每个场景
-	// 因此天然清空上一场景的菜单，不需要 teardown 钩子。egui pass 只在 UI 段存在
-	//（menuOverride 非空、或交互相位 != game）时运行，多数场景（nil）零参与。
+	// UI 覆盖在 Apply 之后、收敛循环之前装入。无条件清理菜单覆盖与相位是刻意
+	// 而为：场景共用同一个 application，若不显式清除，上一场景的主菜单或设置页
+	// 会静默留在后续画面上。设置场景仍走正式 `uiSegment` layout v2 路径；多数
+	// 场景恢复 game 相位，因此 egui pass 零参与。
+	if scene.Menu != nil && scene.Settings != nil {
+		return nil, fmt.Errorf("场景 %s 同时设置 Menu 与 Settings", scene.Name)
+	}
 	app.menuOverride = scene.Menu
+	if scene.Settings != nil {
+		app.menu.phase = menuPhaseSettings
+		app.settings = *scene.Settings
+	} else {
+		app.menu.phase = menuPhaseGame
+	}
 	if scene.HUD != nil {
 		restore, err := applyCaptureHUDFixture(app, scene.HUD)
 		if err != nil {
