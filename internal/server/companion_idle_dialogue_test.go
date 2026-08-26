@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/companion"
+	"github.com/channing771/mornlea/internal/network"
 )
 
 func TestIdleDialogueIntervalGoldenAndBounds(t *testing.T) {
@@ -374,6 +375,161 @@ func TestIdleDialogueDispatchIgnoresTaskBudget(t *testing.T) {
 	releaseIdleDialogueRequest(t, host, dialogue, id)
 }
 
+func TestIdleDialogueDispatchPlanningPrecedesIdleAtAuthorityTick(t *testing.T) {
+	plannerDefinition := companion.Definition{ID: chatTestCompanionID(1), Name: "规划伙伴"}
+	idleDefinition := companion.Definition{ID: chatTestCompanionID(2), Name: "空闲伙伴"}
+	host := newCompanionManagerHost(t,
+		[]companion.Definition{plannerDefinition, idleDefinition}, nil, nil)
+	client := openCompanionChatClient(t, host, "memory", integrationIdentity(0x71, "在线玩家"))
+	waitForCompanionChatWorld(t, host, []network.ClientEndpoint{client}, 2)
+	manager := host.world.companionManager
+
+	host.world.stepMu.Lock()
+	manager.refreshBodies()
+	plannerBody, plannerActive := manager.body(plannerDefinition.ID)
+	idleBody, idleActive := manager.body(idleDefinition.ID)
+	host.world.stepMu.Unlock()
+	if !plannerActive || !idleActive {
+		t.Fatalf("测试伙伴未全部激活：planner=%v idle=%v", plannerActive, idleActive)
+	}
+	plannerCell := standingCellOf(plannerBody.Position)
+	planner := newFakeCompanionModel(t, [3]int32{plannerCell.X, plannerCell.Y, plannerCell.Z})
+	planner.holdRequests()
+	t.Cleanup(planner.releaseRequests)
+	manager.replacePlannerForTest(t, planner)
+	dialogue := newFakeDialogueModel(t)
+	dialogue.holdRequests()
+	t.Cleanup(dialogue.releaseRequests)
+	manager.replaceDialogueForTest(t, dialogue)
+	plannerIssuer := stopTestIssuer(integrationIdentity(0x72, "规划发令者"))
+	idleIssuer := stopTestIssuer(integrationIdentity(0x73, "空闲发令者"))
+
+	host.world.stepMu.Lock()
+	if !manager.enqueueCommand(plannerDefinition, companion.TaskCommand("规划任务"), plannerIssuer) {
+		host.world.stepMu.Unlock()
+		t.Fatal("构造 pending Planner 请求失败")
+	}
+	idleSlot := manager.slots[idleDefinition.ID]
+	idleSlot.currentIssuer = idleIssuer
+	oldDeadline := manager.engine.TickCount()
+	idleSlot.idleDialogueAtTick = oldDeadline
+	idleSlot.hasIdleDialogueAtTick = true
+	manager.onlinePlayers = func() []companion.PlanPlayer {
+		return []companion.PlanPlayer{{ID: idleIssuer.playerID, Position: idleBody.Position}}
+	}
+	releaseReserved := reserveIdleDialogueModelSlots(t, manager, cap(manager.semaphore)-1)
+	host.world.stepMu.Unlock()
+
+	result := host.world.StepForTest()
+	receiveCompanionChatTick(t, client, result.Tick)
+	host.world.stepMu.Lock()
+	plannerInFlight := manager.slots[plannerDefinition.ID].planningInFlight
+	idleInFlight := idleSlot.dialogueInFlight
+	gotDeadline := idleSlot.idleDialogueAtTick
+	hasDeadline := idleSlot.hasIdleDialogueAtTick
+	host.world.stepMu.Unlock()
+	if !plannerInFlight {
+		t.Fatal("Planner 未在 authority tick 先取得最后一个共享模型槽")
+	}
+	if idleInFlight {
+		t.Fatal("Planner 取得最后槽位后 idle 仍发起了请求")
+	}
+	wantDeadline := oldDeadline + idleDialogueInterval(idleDefinition.ID, oldDeadline)
+	if !hasDeadline || gotDeadline != wantDeadline {
+		t.Fatalf("槽满跳过后的 idle 期限=%d/%v，want %d/true",
+			gotDeadline, hasDeadline, wantDeadline)
+	}
+
+	waitForModelRequests(t, planner, 1)
+	if requests, _, inFlight, _ := planner.snapshotCounts(); requests != 1 || inFlight != 1 {
+		t.Fatalf("Planner 请求状态 requests=%d inFlight=%d，want 1/1", requests, inFlight)
+	}
+	if requests, _, _ := dialogue.snapshotCounts(); requests != 0 {
+		t.Fatalf("最后槽位被 Planner 占用后 idle 请求数=%d，want 0", requests)
+	}
+	planner.releaseRequests()
+	waitIntegrationCondition(t, "Planner 结果进入 tick 队列", func() bool {
+		return len(manager.plannerResults) == 1
+	})
+	releaseReserved()
+}
+
+func TestIdleDialogueDispatchUsesOrderedIDs(t *testing.T) {
+	firstID := chatTestCompanionID(1)
+	laterID := chatTestCompanionID(2)
+	definitions := []companion.Definition{
+		{ID: laterID, Name: "后序伙伴", ResolvedPersona: "canonical-later"},
+		{ID: firstID, Name: "先序伙伴", ResolvedPersona: "canonical-first"},
+	}
+	host := newCompanionManagerHost(t, definitions, nil, nil)
+	client := openCompanionChatClient(t, host, "memory", integrationIdentity(0x71, "在线玩家"))
+	waitForCompanionChatWorld(t, host, []network.ClientEndpoint{client}, 2)
+	manager := host.world.companionManager
+	dialogue := newFakeDialogueModel(t)
+	dialogue.holdRequests()
+	t.Cleanup(dialogue.releaseRequests)
+	manager.replaceDialogueForTest(t, dialogue)
+	firstIssuer := stopTestIssuer(integrationIdentity(0x74, "先序发令者"))
+	laterIssuer := stopTestIssuer(integrationIdentity(0x75, "后序发令者"))
+
+	host.world.stepMu.Lock()
+	manager.refreshBodies()
+	firstBody, firstActive := manager.body(firstID)
+	laterBody, laterActive := manager.body(laterID)
+	if !firstActive || !laterActive {
+		host.world.stepMu.Unlock()
+		t.Fatalf("测试伙伴未全部激活：first=%v later=%v", firstActive, laterActive)
+	}
+	if len(manager.orderedIDs) != 2 || manager.orderedIDs[0] != firstID || manager.orderedIDs[1] != laterID {
+		host.world.stepMu.Unlock()
+		t.Fatalf("测试定义未形成 canonical 顺序：%v", manager.orderedIDs)
+	}
+	firstSlot := manager.slots[firstID]
+	laterSlot := manager.slots[laterID]
+	firstSlot.currentIssuer = firstIssuer
+	laterSlot.currentIssuer = laterIssuer
+	oldDeadline := manager.engine.TickCount()
+	firstSlot.idleDialogueAtTick = oldDeadline
+	firstSlot.hasIdleDialogueAtTick = true
+	laterSlot.idleDialogueAtTick = oldDeadline
+	laterSlot.hasIdleDialogueAtTick = true
+	manager.onlinePlayers = func() []companion.PlanPlayer {
+		return []companion.PlanPlayer{
+			{ID: firstIssuer.playerID, Position: firstBody.Position},
+			{ID: laterIssuer.playerID, Position: laterBody.Position},
+		}
+	}
+	releaseReserved := reserveIdleDialogueModelSlots(t, manager, cap(manager.semaphore)-1)
+	host.world.stepMu.Unlock()
+
+	result := host.world.StepForTest()
+	receiveCompanionChatTick(t, client, result.Tick)
+	host.world.stepMu.Lock()
+	firstInFlight := firstSlot.dialogueInFlight
+	laterInFlight := laterSlot.dialogueInFlight
+	firstDeadline := firstSlot.idleDialogueAtTick
+	laterDeadline := laterSlot.idleDialogueAtTick
+	host.world.stepMu.Unlock()
+	if !firstInFlight || laterInFlight {
+		t.Fatalf("canonical idle 获槽状态 first=%v later=%v，want true/false",
+			firstInFlight, laterInFlight)
+	}
+	wantFirstDeadline := oldDeadline + idleDialogueInterval(firstID, oldDeadline)
+	wantLaterDeadline := oldDeadline + idleDialogueInterval(laterID, oldDeadline)
+	if firstDeadline != wantFirstDeadline || laterDeadline != wantLaterDeadline {
+		t.Fatalf("ordered idle 下一期限 first=%d later=%d，want %d/%d",
+			firstDeadline, laterDeadline, wantFirstDeadline, wantLaterDeadline)
+	}
+
+	waitForDialogueRequests(t, dialogue, 1)
+	records := dialogue.snapshotDialogueRequests()
+	if len(records) != 1 || records[0].Persona != "canonical-first" || records[0].NodeKind != "idle" {
+		t.Fatalf("唯一 idle 请求=%+v，want canonical-first idle", records)
+	}
+	releaseIdleDialogueRequest(t, host, dialogue, firstID)
+	releaseReserved()
+}
+
 func idleDialogueDispatchRig(
 	t *testing.T,
 ) (*Host, *fakeDialogueModel, companion.ID, companion.Body, companionTaskIssuer) {
@@ -420,4 +576,27 @@ func releaseIdleDialogueRequest(
 	if inFlight {
 		t.Fatal("idle 结果未清除台词在途标记")
 	}
+}
+
+func reserveIdleDialogueModelSlots(
+	t *testing.T,
+	manager *companionManager,
+	count int,
+) func() {
+	t.Helper()
+	for range count {
+		manager.semaphore <- struct{}{}
+	}
+	released := false
+	release := func() {
+		if released {
+			return
+		}
+		for range count {
+			<-manager.semaphore
+		}
+		released = true
+	}
+	t.Cleanup(release)
+	return release
 }
