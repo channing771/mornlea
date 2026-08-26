@@ -20,3 +20,14 @@
 ## 终审
 
 （待整分支终审）
+
+## 整分支终审与门禁
+
+- SPEC 合规评审 PASS（零 blocking；nit：worldgen 出处括注未列 generator_test.go）；QUALITY 评审 PASS（零 blocking；nit：树高区间缺数值、tasks 65+ 表述）。R1（原 implementer 返场，`f8bd9f22`）三条全清偿。
+- 门禁实跑：`openspec validate --all --strict --no-interactive` 67 passed / 0 failed（实现期）、66/0（归档后）；`go test ./internal/archcheck -count=1` ok。docs-only，无 Rust/Go 热路径变化，benchmark/capture 不适用。
+
+## 归档收尾
+
+- `openspec archive spec-oracle-wording-hygiene --yes`：+0 ~6 -0，change 移入 `archive/2026-08-26-spec-oracle-wording-hygiene`。
+- 按 design D2 执行归档阶段五行直编（physics Purpose 1 句 + 2 个 Scenario 标题、worldgen Purpose 1 句 + 1 个 Scenario 标题），替换文本与 D2 表逐字一致。
+- 验证：三份主规格 `rg "oracle|Oracle"` 零命中；`rust-engine-mesh/spec.md` 保持 2 处（oracle 实存，措辞为真）；validate strict 66 passed / 0 failed。
