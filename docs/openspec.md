@@ -119,13 +119,13 @@ OpenSpec 产物、归档和生成的项目级 AI 集成文件都应与代码一�
 
 ## 自动 Hook 约束
 
-Claude Code 与 Codex 使用同一个实现：`scripts/agent-hooks/guard.mjs`。配置分别位于 `.claude/settings.json` 和 `.codex/hooks.json`。
+Claude Code 与 Codex 使用同一个实现：`scripts/agent-hooks/guard.mjs`。配置分别位于 `.claude/settings.json` 和 `.codex/hooks.json`；两者都配置 `PreToolUse` 与 `PostToolUse`，当前只有 `.codex/hooks.json` 配置 `Stop`。
 
-| 生命周期 | 自动约束 |
-|---|---|
-| `PreToolUse` | 拦截 `git reset --hard`、强制 `git clean`、强制推送，以及针对 `/`、仓库根目录或主目录的递归强制删除 |
-| `PostToolUse` | 编辑文件后检查所有改动中的 Go 文件是否已执行 `gofmt` |
-| `Stop` | 执行 `git diff --check`；需要时校验 OpenSpec、架构依赖、受影响包 race 测试和 `go vet` |
+| 生命周期 | 当前配置 | 自动约束 |
+|---|---|---|
+| `PreToolUse` | Claude Code、Codex | 拦截 `git reset --hard`、强制 `git clean`、强制推送，以及针对 `/`、仓库根目录或主目录的递归强制删除 |
+| `PostToolUse` | Claude Code、Codex | 编辑文件后检查所有改动中的 Go 文件是否已执行 `gofmt` |
+| `Stop` | 仅 Codex | 执行 `git diff --check`；需要时校验 OpenSpec、架构依赖、受影响包 race 测试和 `go vet` |
 
 以下改动在停止前必须存在包含 proposal、delta specs 和 tasks 的 active OpenSpec change：
 
@@ -135,7 +135,7 @@ Claude Code 与 Codex 使用同一个实现：`scripts/agent-hooks/guard.mjs`。
 首次加载项目 Hook：
 
 - Codex：打开 `/hooks`，检查来源和命令后信任当前 `.codex/hooks.json`；文件内容变化后需要重新审查。
-- Claude Code：打开 `/hooks`，确认 Project 来源的三类 Hook 已加载。
+- Claude Code：打开 `/hooks`，确认 Project 来源的 `PreToolUse` 与 `PostToolUse` 两类 Hook 已加载。
 
 只有用户明确批准某次无 Spec 例外时，才能在启动 AI 工具前设置 `MORNLEA_HOOKS_ALLOW_NO_SPEC=1`。该变量只跳过 OpenSpec change 要求，不会关闭破坏性命令或质量检查。
 

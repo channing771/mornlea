@@ -57,7 +57,7 @@
 3. **状态词五种**：`未认领`/`已认领`/`开发中`/`待集成`/`已完成`；「待确认」等过程态写进备注而非状态列。
 4. **ID 连续**（组内 +1，不跳号、不复用）；**来源必填且已入库**（可回溯到已提交文档，未入库引用只记录不代交）。
 5. **不排时间**：不写日期/估时/排期；依赖用行 ID。
-6. **红线不变**：不认领/不实现/不改代码/不改 `AGENTS.md`/`CLAUDE.md`/`docs/agents/`/`docs/development-process.md`；docs-only 快进推送 main。
+6. **红线不变**：不认领/不实现/不改代码/不改根 `AGENTS.md` 版本矩阵、局部 `AGENTS.md`、`CLAUDE.md` 薄导入、`docs/agents/` 或 `docs/development-process.md`；docs-only 快进推送 main。
 
 ## 输出要求（结束时必须打印）
 
@@ -69,7 +69,7 @@
 ## 红线
 
 - 不认领任务、不写功能代码、不运行任何构建/测试验证（docs-only 轮次无需）、不合并/不推送功能分支；只做规划与 docs-only 提交，推送仅限对 `main` 的快进推送。
-- 不改 `AGENTS.md` / `CLAUDE.md`（基线由集成任务同步），也不改 `docs/agents/`（含本提示词与角色卡）与 `docs/development-process.md`。
+- 不改根 `AGENTS.md` 版本矩阵或局部 `AGENTS.md`（由集成任务按相关作用域更新），也不改只作薄导入的 `CLAUDE.md`、`docs/agents/`（含本提示词与角色卡）或 `docs/development-process.md`。
 - 无来源出处的想法不得直接落行；先标 `待澄清` 挂到 Discussion 评论。
 - 不携带、不代交用户工作区改动与未跟踪文件；发现未入库引用只记录不补交。
 - 状态以仓库文件为准；讨论与仓库不一致时改讨论，不反向。

@@ -45,7 +45,7 @@ git clone 后运行 `scripts/agents/confirm/install-listener.sh`（macOS）即�
 
 ```bash
 # 1. clone 并进入仓库
-git clone https://github.com/channing771/minecraft-go.git && cd minecraft-go
+git clone https://github.com/channing771/mornlea.git && cd mornlea
 
 # 2. 安装确认通道依赖（用 lock 文件保证与开发机一致的 SDK 版本）
 cd scripts/agents/confirm && npm ci && cd ../..

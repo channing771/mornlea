@@ -1,6 +1,6 @@
 # Mornlea 开发流程（唯一说明）
 
-> 本文件是全仓开发流程的**唯一说明文档**：`docs/feature-backlog.md`、工作者角色卡（`docs/agents/`）、GitHub Discussion #71 与各任务 brief 只引用本文件，不再内嵌流程。基线职责见 `AGENTS.md`（与 `CLAUDE.md` 逐字节相同）与 `openspec/config.yaml`；与代码冲突时以代码、测试与 `openspec/specs/` 主规格为真相。
+> 本文件是全仓开发流程的**唯一说明文档**：`docs/feature-backlog.md`、工作者角色卡（`docs/agents/`）、GitHub Discussion #71 与各任务 brief 只引用本文件，不再内嵌流程。基线职责见根 `AGENTS.md`、对应作用域的局部 `AGENTS.md` 与 `openspec/config.yaml`；规则只更新对应作用域的 `AGENTS.md`，同级 `CLAUDE.md` 保持薄导入。与代码冲突时以代码、测试与 `openspec/specs/` 主规格为真相。
 
 ## 流程主线：superpowers 技能链
 
@@ -28,7 +28,7 @@
 | 规划者 | 每日固定时间扩展/校对规划（见 `docs/agents/planner.md`） | 认领任务、修改功能代码、合并他人分支 |
 | 实现者 | 认领规划行，先 `brainstorming` 确认内容再闭环开发（见 `docs/agents/implementer.md`） | 超出认领范围、跳过内容确认或评审 |
 | 评审者 | SPEC 合规 / QUALITY 质量双裁决 | 自己实现与评审同一 Task |
-| 集成者 | 批次合流的实现者特例：独占版本基线、golden、`AGENTS.md`/`CLAUDE.md` | 在功能分支改上述文件 |
+| 集成者 | 批次合流的实现者特例：独占版本基线、golden、根 `AGENTS.md` 版本矩阵与相关局部指南 | 在功能分支改上述文件 |
 
 ## 阶段 0：认领
 
@@ -76,15 +76,15 @@ test -z "$(gofmt -l .)"          # 无输出
 openspec validate --all --strict --no-interactive
 ```
 
-- 渲染 / tick / 存储 / 协议热路径变化另加：对应 benchmark（**数值只记录，不改变退出状态**）、fuzz/golden 测试、`cmd/perfcheck`；capture 场景变化必须 `make visual` 逐图验收，**禁止放宽阈值**（阈值调整须有实测数据依据）。
+- 渲染 / tick / 存储 / 协议热路径变化另加：对应 benchmark（**数值只记录，不改变退出状态**）、fuzz/golden 测试、`cmd/perfcheck`。预期视觉不变时运行 `make visual-check`；预期视觉变化时先逐图确认，再运行 `make visual-update`，随后重新运行 `make visual-check`。**禁止放宽阈值**（阈值调整须有实测数据依据）。
 - 平台专属或性能变更补充相应门禁；报告完整性、身份、真实 overflow、数据丢失和 I/O 错误是硬门禁。
-- 可直接运行 `scripts/agents/gates.sh` 汇总执行上述标准门禁。
+- `scripts/agents/gates.sh` 当前依次执行 gofmt、vet、archcheck、OpenSpec、`make rust`，并在未跳过时执行 full race；完整提交前的 Rust 门禁 `make rust-check` 仍须单独运行。
 
 ## 阶段 5：归档收尾（实现者自动执行）
 
 1. 若拆分过测试文件，确认 `go test -list` 前后集合一致；
 2. `openspec sync` 把 delta 沉淀到主规格 → 逐 change `openspec archive`；
-3. 同步 `AGENTS.md` 与 `CLAUDE.md`（**逐字节相同**，`internal/archcheck` 的 `TestBaselineDocsAreIdentical` 兜底）与 `docs/notes/progress.md` 基线段——只写已集成且验证过的事实，不写本批次非目标；
+3. 按作用域更新根 `AGENTS.md` 版本矩阵和相关局部 `AGENTS.md`，并同步 `docs/notes/progress.md` 基线段——只写已集成且验证过的事实，不写本批次非目标；同级 `CLAUDE.md` 只保留薄导入，由 `internal/archcheck` 的 `TestClaudeImportsAgentGuidance` focused 门禁兜底；
 4. 回填 `docs/feature-backlog.md`：该行 `状态` → `已完成`（认领人保留履历）；若批次集成任务有变化，同步更新对应行与 GitHub Discussion #71；
 5. **PR + CI 再合并（默认，`AGENT_MODE=pr`）**：推送分支 → `gh pr create`（标题含行 ID，body 附 change 链接与验证摘要）→ `gh pr checks --watch` 监听 CI，失败则读 `gh run view --log-failed` 定位、本地修复并推送、重新监听，**直到全绿**（上限 10 轮，超限停止并报告）→ `gh pr merge --merge` → 本地 `git checkout main && git pull --ff-only`；仅 `AGENT_MODE=merge` 时才跳过 PR 直接本地合并推送（仍需本地全绿）。
 6. 关闭遗留：未决项誊入「延期与放弃」，不静默丢弃。
@@ -92,7 +92,7 @@ openspec validate --all --strict --no-interactive
 ## 并行与冲突规则
 
 - **版本号互斥**：协议 / 存档 schema / engine ABI / client ABI / benchmark scenario 的升版行互斥——同一时间只能一个认领者持有；冲突按实际合入顺序重排（例：第一夜批次原设计写 client ABI v8，先被 egui 主菜单占用 v8、再被设置页占用 v9，须重排为 v10）。
-- **同批并行先共享契约**：第一步在共同基线上冻结 append-only 共享契约提交（追加编号 / 协议消息 / 有限模型 tag），功能分支从该 SHA 创建；capture golden、benchmark scenario 与 `AGENTS.md`/`CLAUDE.md` 由**集成任务独占**，功能分支不得触碰。
+- **同批并行先共享契约**：第一步在共同基线上冻结 append-only 共享契约提交（追加编号 / 协议消息 / 有限模型 tag），功能分支从该 SHA 创建；capture golden、benchmark scenario、根 `AGENTS.md` 版本矩阵与相关局部指南由**集成任务独占**，功能分支不得触碰。
 - **文件所有权**：认领时声明独占文件集；与其它已认领行重叠则换行或延迟。
 - **范围冻结**：认领后不得扩大范围；实现发现规格不成立时，先改 OpenSpec 产物再继续。
 
