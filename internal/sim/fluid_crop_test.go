@@ -56,22 +56,27 @@ func fluidCropFloodSourceAbove() core.BlockPos {
 	return core.BlockPos{X: fluidCropCell.X, Y: fluidCropCell.Y + 1, Z: fluidCropCell.Z}
 }
 
-// stepUntilFluidCropFlooded 推进权威 tick 直到 position 变成 want；超过上界仍未
-// 变化直接失败，避免在不收敛的场景里静默通过。
+// stepUntilFluidCropFlooded 推进权威 tick 直到 position 变成 want；返回发生该次
+// 写入的权威 tick 值（结算 tick）。Step 返回时 `Engine.tick.Load()` 已指向下一
+// tick，而步内的一切读取——含 `settleFloodedCrop` 调 `cropYieldRolls` 的取值点
+// ——都发生在自增之前，因此返回值恰为「观察到翻转的那一步的 Load() − 1」，供
+// 用例按夹具已知输入现算期望产量。超过上界仍未变化直接失败，避免在不收敛的
+// 场景里静默通过。
 func stepUntilFluidCropFlooded(
 	t *testing.T,
 	engine *Engine,
 	position core.BlockPos,
 	want core.BlockID,
-) {
+) uint64 {
 	t.Helper()
 	for range 200 {
 		engine.Step()
 		if got := fluidBlockAt(t, engine, position); got == want {
-			return
+			return engine.tick.Load() - 1
 		}
 	}
 	t.Fatalf("推进 200 tick 后 %+v 仍未变成 %d", position, want)
+	return 0
 }
 
 // fluidCropStack 是掉落物集合比较用的投影：只保留「哪一堆、什么物品、多少个」，
@@ -139,15 +144,21 @@ func expectFluidCropDrops(
 
 // TestFluidCropVerticalFloodYieldsMatureHarvest 覆盖 spec Scenario
 // 「冲毁按采掘同表产出掉落物」的成熟分支：水源悬在成熟小麦正上方，垂直传播把
-// 作物格写成最强流动水，产出必须与玩家采掘完全相同——1 小麦 + 2 种子。
+// 作物格写成最强流动水。期望数量不硬编码：按夹具已知的 (seed, 结算 tick, 维度,
+// 坐标) 调包内共享的 `cropYieldRolls` 现算（与 trample_test 同做法）——本用例
+// 锁的是「冲毁读的是与采掘同一条产量哈希流」，与 mining 路径的数值对齐由
+// property 级 parity 测试锁定。
 func TestFluidCropVerticalFloodYieldsMatureHarvest(t *testing.T) {
 	engine, session := readyFluidCropWorld(t, core.WheatStage7ID)
 	floodFluidCropFrom(engine, fluidCropFloodSourceAbove())
 
-	stepUntilFluidCropFlooded(t, engine, fluidCropCell, core.WaterLevel1ID)
+	settleTick := stepUntilFluidCropFlooded(t, engine, fluidCropCell, core.WaterLevel1ID)
+	wheatCount, seedCount := cropYieldRolls(
+		engine.seed, settleTick, core.Overworld, fluidCropCell,
+	)
 	expectFluidCropDrops(t, engine, session,
-		fluidCropStack{Item: core.ItemWheat, Count: 1},
-		fluidCropStack{Item: core.ItemWheatSeeds, Count: 2},
+		fluidCropStack{Item: core.ItemWheat, Count: wheatCount},
+		fluidCropStack{Item: core.ItemWheatSeeds, Count: seedCount},
 	)
 }
 
@@ -164,6 +175,88 @@ func TestFluidCropHorizontalFloodYieldsImmatureSeed(t *testing.T) {
 	stepUntilFluidCropFlooded(t, engine, fluidCropCell, core.WaterLevel1ID)
 	expectFluidCropDrops(t, engine, session,
 		fluidCropStack{Item: core.ItemWheatSeeds, Count: 1},
+	)
+}
+
+// fluidCropDualSourceFloor 是双源夹具里水平候选 F 的承重底：泥土保证 F 下方
+// 不可替换，`evalCell` 因此走水平传播分支而不是垂直分支。
+var fluidCropDualSourceFloor = core.BlockPos{X: 1, Y: 0, Z: 8}
+
+// fluidCropFeeder 是双源夹具的水平候选源：持有等级 1 流动水的 F 格，向西侧的
+// 作物格写入等级 2 候选。
+var fluidCropFeeder = core.BlockPos{X: 1, Y: 1, Z: 8}
+
+// fluidCropFeederSupport 是 F 正上方的隐藏水源：只为 `flowingSurvives` 提供存活
+// 支撑，刻意不直接入队——它一旦求值就会向西铺开等级 1 的水，破坏「两个候选
+// 同一批到达」的前提。fluidWorld 只读方块不看队列，支撑判定照常成立。
+var fluidCropFeederSupport = core.BlockPos{X: 1, Y: 2, Z: 8}
+
+// TestFluidCropSameTickDualSourceMergesToStrongestAndSettlesOnce 锁定 spec
+// Scenario「同 tick 冲突写入取最强者」的 AND 子句：写往同一作物格的多个候选按
+// 同一规则合并，冲毁结算恰好发生一次。
+//
+// 夹具让两个**不同等级**的候选在同一批 Advance 里争抢同一成熟作物格：
+//
+//   - 垂直候选 A（fluidCropFloodSourceAbove）：作物正上方的水源，垂直优先
+//     写入等级 1；
+//   - 水平候选 F（fluidCropFeeder）：东侧相邻的等级 1 流动水（上方藏一格
+//     不入队的水源作支撑、下方泥土挡住垂直分支），水平递减写入等级 2。
+//
+// 两格在同一个准备步内入队（同一 now、同一 delay），因此两个候选落在同一次
+// 合并批次里。断言三件事：
+//
+//  1. 作物格在整个收敛窗口内恰好广播一笔变更——合并发生在提交之前；若实现
+//     退化成「逐候选直接落笔」，弱候选先冲毁一次、强候选再改写一次，两笔变更
+//     在这里必红；
+//  2. 最终生效值是最强者等级 1——合并语义本身；
+//  3. 掉落物恰好一批且与 `cropYieldRolls` 在结算 tick 上的现算值逐件相等
+//     ——冲毁恰好结算一次，且读的仍是采掘同一条产量哈希流。
+func TestFluidCropSameTickDualSourceMergesToStrongestAndSettlesOnce(t *testing.T) {
+	engine, session := readyFluidCropWorld(t, core.WheatStage7ID)
+	engine.SetBlockForTest(fluidCropDualSourceFloor, core.DirtID)
+	engine.SetBlockForTest(fluidCropFeederSupport, core.WaterSourceID)
+	engine.SetBlockForTest(fluidCropFeeder, core.WaterLevel1ID)
+	engine.SetBlockForTest(fluidCropFloodSourceAbove(), core.WaterSourceID)
+
+	// 同一时刻入队两个候选源。enqueueFluidUpdate 的六邻扩散会把夹具周边一并
+	// 入队，但那些格要么非流体（空写入）、要么不指向作物格，不影响断言。
+	engine.enqueueFluidUpdate(core.Overworld, fluidCropFloodSourceAbove())
+	engine.enqueueFluidUpdate(core.Overworld, fluidCropFeeder)
+
+	const settleTicks = 200
+	const stabilizeTicks = 16
+	cropWrites := 0
+	settleTick := uint64(0)
+	flooded := false
+	for range settleTicks + stabilizeTicks {
+		result := engine.Step()
+		for _, batch := range result.Changes {
+			for _, change := range batch.Changes {
+				if change.Position == fluidCropCell {
+					cropWrites++
+				}
+			}
+		}
+		if !flooded && core.IsFluid(fluidBlockAt(t, engine, fluidCropCell)) {
+			flooded = true
+			settleTick = engine.tick.Load() - 1
+		}
+	}
+	if !flooded {
+		t.Fatalf("收敛窗口内作物格未被冲毁，仍是 %d", fluidBlockAt(t, engine, fluidCropCell))
+	}
+	if cropWrites != 1 {
+		t.Fatalf("作物格被广播 %d 笔变更，想要恰好 1（合并先于提交）", cropWrites)
+	}
+	if got := fluidBlockAt(t, engine, fluidCropCell); got != core.WaterLevel1ID {
+		t.Fatalf("作物格最终为 %d，想要最强候选 %d", got, core.WaterLevel1ID)
+	}
+	wheatCount, seedCount := cropYieldRolls(
+		engine.seed, settleTick, core.Overworld, fluidCropCell,
+	)
+	expectFluidCropDrops(t, engine, session,
+		fluidCropStack{Item: core.ItemWheat, Count: wheatCount},
+		fluidCropStack{Item: core.ItemWheatSeeds, Count: seedCount},
 	)
 }
 
@@ -313,10 +406,14 @@ func TestFluidCropSettlesAtomicallyInSingleTick(t *testing.T) {
 		after := fluidBlockAt(t, engine, fluidCropCell)
 		if after != before && !core.IsCrop(after) {
 			// 方块在本 tick 翻转：这是唯一允许冲毁生效的时刻，
-			// 掉落物必须在同一个 tick 内已经就位。
+			// 掉落物必须在同一个 tick 内已经就位；期望数量按夹具已知输入调
+			// `cropYieldRolls` 现算（取值点说明见 stepUntilFluidCropFlooded）。
+			wheatCount, seedCount := cropYieldRolls(
+				engine.seed, engine.tick.Load()-1, core.Overworld, fluidCropCell,
+			)
 			expectFluidCropDrops(t, engine, session,
-				fluidCropStack{Item: core.ItemWheat, Count: 1},
-				fluidCropStack{Item: core.ItemWheatSeeds, Count: 2},
+				fluidCropStack{Item: core.ItemWheat, Count: wheatCount},
+				fluidCropStack{Item: core.ItemWheatSeeds, Count: seedCount},
 			)
 			return
 		}

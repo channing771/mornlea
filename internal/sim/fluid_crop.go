@@ -20,12 +20,16 @@ import (
 //
 // # 掉落表与原子序完全镜像采掘路径（design.md D4）
 //
-// 成熟 = 1 小麦 + `wheatSeedDropCount` 颗种子，未成熟 = 1 颗种子，与 mining.go
-// 的权威采掘分支同表：主产物查 `core.BlockDrop`，成熟的额外种子按方块编号在此
-// 补发——多产物的知识只存在于权威结算路径，`core.BlockDrop` 的单一产物返回形状
-// 不动。执行顺序照抄多产物先例：`world.Chunk.PrepareDropBatch` 在副本上预演 →
-// 写区块 + `recordChange` → `CommitDropBatch`，单 tick 内三者同时成立，绝不出现
-// 「方块已变、产物未出」或「小麦掉了、种子没掉」的半结算可观察态。
+// 成熟 = `cropYieldRolls` 对 (worldSeed, 完成本次冲毁的权威 tick, 维度, 作物
+// 坐标) 的纯整数哈希给出的 1–3 小麦 + 1–3 种子，未成熟 = `core.BlockDrop` 的
+// 单产物（1 颗种子），与 mining.go 的权威采掘分支、trample.go 的踩踏分支同表
+// 同流：tick 取值点同为 `Engine.tick.Load()` 这一条读取路径，因此同一株作物在
+// 同一权威 tick 上被冲毁、被踩掉或被挖掉的产物逐件相同，重放一致。主产物查
+// `core.BlockDrop`，成熟的多产物与数量知识只存在于权威结算路径，
+// `core.BlockDrop` 的单一产物返回形状不动。执行顺序照抄多产物先例：
+// `world.Chunk.PrepareDropBatch` 在副本上预演 → 写区块 + `recordChange` →
+// `CommitDropBatch`，单 tick 内三者同时成立，绝不出现「方块已变、产物未出」
+// 或「小麦掉了、种子没掉」的半结算可观察态。
 //
 // # 容量满必须拒绝而非丢弃（design.md D3）
 //
@@ -54,16 +58,23 @@ func settleFloodedCrop(
 	}
 	x, _, z := position.Local()
 
-	// 组批掉落，形状镜像 mining.go：固定数组切片是 PrepareDropBatch 文档要求
-	// 的传入方式，堆数上限由其内部的 maxDropBatchStacks 把关（2 远小于上限）。
+	// 组批掉落，形状镜像 mining.go 与 trample.go：固定数组切片是
+	// PrepareDropBatch 文档要求的传入方式，堆数上限由其内部的 maxDropBatchStacks
+	// 把关（2 远小于上限）。
 	item, harvestable := core.BlockDrop(old)
 	var stacks [2]core.ItemStack
 	count := 0
 	if harvestable {
-		stacks[count] = core.ItemStack{Item: item, Count: 1}
-		count++
 		if old == core.WheatStage7ID {
-			stacks[count] = core.ItemStack{Item: core.ItemWheatSeeds, Count: wheatSeedDropCount}
+			wheatCount, seedCount := cropYieldRolls(
+				w.engine.seed, w.engine.tick.Load(), w.id, position,
+			)
+			stacks[count] = core.ItemStack{Item: item, Count: wheatCount}
+			count++
+			stacks[count] = core.ItemStack{Item: core.ItemWheatSeeds, Count: seedCount}
+			count++
+		} else {
+			stacks[count] = core.ItemStack{Item: item, Count: 1}
 			count++
 		}
 	}

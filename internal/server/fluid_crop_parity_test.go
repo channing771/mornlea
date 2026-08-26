@@ -31,6 +31,15 @@ import (
 // 同一条行走脚本把玩家走进夹具的兴趣范围，边界重扫唤醒种子水源，冲毁在两侧落在
 // 完全相同的相对 tick 上。
 //
+// 就绪耗时不同还意味着两侧在录制开始时的**绝对 tick** 不同（实测差约十几 tick，
+// 高负载下更大）。方块变更与 revision 都只依赖相对次序，这无关紧要；但成熟作物
+// 的掉落数量自 crop-random-drop-count 起按 (seed, 权威绝对 tick, 维度, 坐标) 取
+// 哈希——绝对 tick 不对齐，同一株小麦在两种传输下会收到不同的「合法」产量，逐件
+// 比对就会假红。因此两侧就绪后、开录前各自空转到同一个绝对 tick
+// （floodCropParityAlignTicks）：对齐后行走脚本的每个事件都落在相同的绝对 tick
+// 上，冲毁结算与产量哈希的输入逐项相同。空转期间世界完全静止（随机 tick 已置零、
+// 兴趣范围内无流体），不产生任何录像内容。
+//
 // 对时间平移**不**不变的唯一剩余活动是作物的随机 tick（抽样哈希含绝对 tick）：
 // 耕地干湿转换会在不可预测的相对位置插进录像，破坏逐 tick 比对。录制前用
 // `sim.SetTunables` 把 `RandomTicksPerSection` 置零（farming_loop_e2e_test.go 的
@@ -63,6 +72,13 @@ const (
 	// floodCropParityTicks 是整段录像的长度：行走段加上冲毁与铺开的收敛段，
 	// 末尾自然留出静默期。
 	floodCropParityTicks = 400
+
+	// floodCropParityAlignTicks 是两侧录制开始前共同空转到的绝对 tick。取值
+	// 只需同时满足两个不等式：大于任何可预期的就绪耗时（实测几十 tick，留出
+	// 一个数量级以上余量），又远小于会让测试明显变慢的量级（每 tick 亚毫秒级）。
+	// 就绪耗时一旦超过它，测试会带着明确指示失败——那是「对齐前提失效」的响亮
+	// 报警，不是可以静默重试的 flake。
+	floodCropParityAlignTicks = 256
 )
 
 // floodCropGenerator 生成 y=0 一层草地的世界，并在区块 (3,0) 内种下
@@ -125,7 +141,11 @@ func TestMemoryTCPFluidCropFloodBroadcastParity(t *testing.T) {
 
 	// 夹具前提守卫排在真实断言之后（与溃坝先例同一纪律）：真实的传输差异必须
 	// 先报出自己的诊断，而不是被「夹具没水」抢先误导。这里同时钉住本测试的
-	// 业务内容——冲毁确实发生在录制窗口内，且产出恰是采掘同表的种子 + 小麦。
+	// 业务内容——冲毁确实发生在录制窗口内，且产出是采掘同表的小麦 + 种子两类
+	// 各一堆，数量由 (seed, 结算 tick, 维度, 坐标) 的确定性哈希给出、各落在
+	// [1,3]。两侧的绝对 tick 已在开录前对齐，跨传输逐件一致由上面的 DeepEqual
+	// 锁定；这组结构断言是独立于比对的形状守卫，精确重放另由 sim 侧按
+	// `cropYieldRolls` 现算的用例锁定。
 	if !memory.Flood {
 		t.Fatal("夹具失效：整个录制窗口内没有出现作物格被写成流动水的变更")
 	}
@@ -133,14 +153,25 @@ func TestMemoryTCPFluidCropFloodBroadcastParity(t *testing.T) {
 	if !indexed {
 		t.Fatal("作物格没有区块索引")
 	}
-	// want 按 fluidCropDropProjection 的排序键（Item 升序）排列：
-	// core.ItemWheatSeeds 的编号小于 core.ItemWheat。
-	want := []fluidCropDropEntry{
-		{BlockIndex: cropIndex, Item: core.ItemWheatSeeds, Count: 2},
-		{BlockIndex: cropIndex, Item: core.ItemWheat, Count: 1},
+	hasWheat, hasSeeds := false, false
+	for _, entry := range memory.Drops {
+		switch {
+		case entry.BlockIndex == cropIndex && entry.Item == core.ItemWheat:
+			hasWheat = true
+			if entry.Count < 1 || entry.Count > 3 {
+				t.Fatalf("小麦数量=%d，想要 [1,3]（全集=%+v）", entry.Count, memory.Drops)
+			}
+		case entry.BlockIndex == cropIndex && entry.Item == core.ItemWheatSeeds:
+			hasSeeds = true
+			if entry.Count < 1 || entry.Count > 3 {
+				t.Fatalf("种子数量=%d，想要 [1,3]（全集=%+v）", entry.Count, memory.Drops)
+			}
+		default:
+			t.Fatalf("意外掉落物 %+v，想要作物格上的小麦与种子", entry)
+		}
 	}
-	if !reflect.DeepEqual(memory.Drops, want) {
-		t.Fatalf("最终掉落物=%+v，想要 %+v", memory.Drops, want)
+	if !hasWheat || !hasSeeds {
+		t.Fatalf("最终掉落物=%+v，想要采掘同表的小麦与种子各一堆", memory.Drops)
 	}
 }
 
@@ -178,6 +209,7 @@ func recordFluidCropParity(t *testing.T, transport string) fluidCropParityRecord
 	drops := client.NewItemDrops()
 	record := fluidCropParityRecord{Ticks: make([][]string, 0, floodCropParityTicks)}
 	ready := false
+	readySteps := 0
 	for !ready || !parityViewLoaded(mirror) ||
 		!fluidCropFixtureLoaded(mirror) {
 		_, messages := parityStep(t, host, endpoint, mirror)
@@ -187,6 +219,19 @@ func recordFluidCropParity(t *testing.T, transport string) fluidCropParityRecord
 				ready = true
 			}
 		}
+		readySteps++
+	}
+	if readySteps > floodCropParityAlignTicks {
+		t.Fatalf("%s 就绪耗时 %d tick 已超过对齐预算 %d：绝对 tick 对齐前提失效，"+
+			"请上调 floodCropParityAlignTicks 而不是放宽比对", transport, readySteps,
+			floodCropParityAlignTicks)
+	}
+	// 绝对 tick 对齐（见文件头注释）：空转到两侧共用的开录绝对 tick。空转期间
+	// 世界静止、不产生值得关心的消息，但仍照常应用到镜像，保持与录制段同一套
+	// 消费纪律。
+	for step := readySteps; step < floodCropParityAlignTicks; step++ {
+		_, messages := parityStep(t, host, endpoint, mirror)
+		applyFluidCropParityMessages(t, drops, messages)
 	}
 
 	// 行走脚本：yaw=-π/2 让 forward=(1,0,0)（physics 的 forward=(-sin yaw,

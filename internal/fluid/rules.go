@@ -26,8 +26,9 @@ func Replaceable(target core.BlockID, newLevel uint8) bool {
 	}
 	if core.IsCrop(target) {
 		// 作物对流动水可替换。放行点必须在本函数而不能在 `evalCell` 里特判：
-		// 垂直优先、水平递减、存活判定、同 tick 冲突合并以及重扫的不动点捷径
-		// 全部经由这一个谓词读世界，改一处即全链一致；若捷径另用一套保守判定，
+		// 垂直优先与水平递减这两处写入判定，加上 sim 重扫侧的两个不动点捷径
+		// （`fluidSourceIsFixedPoint` 与 `fluidSectionIsFixedPoint`），全部经由
+		// 这一个谓词读世界，改一处即全链一致；若捷径另用一套保守判定，
 		// 「邻作物的源」会被误判成不动点跳过入队，水面在农田边永久卡死
 		// （design.md D1 的被否决方案）。本包只回答「能不能写」，作物被冲毁后
 		// 的掉落结算是权威写入侧（sim）的职责，fluid 包不感知物品。
