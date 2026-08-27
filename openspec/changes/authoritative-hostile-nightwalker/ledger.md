@@ -26,7 +26,9 @@
 
 ## 评审记录（Task 1 起，逐 Task 追加）
 
-- （待逐 Task 填：SPEC 合规结论 / QUALITY 结论 / 修复轮 R1..Rn / 对应 Ruling）
+- **Task 1（基线验证）**：完成，提交 `de1e4e1e`。`make rust` 与 11 包 `-race` 全绿（数值见下方验证小节）；事实核对 a–f 与重定基线裁决一致（S→C 22/23/24 空闲、`BlockEmission`/`BlockLightAttenuation` 在 core、`BlockOpaque`/`DisplayDayPhase` 缺位、`ItemTorch`=44、`BlockIDMax`=76、client ABI 9、协议 29）。控制会话抽查通过。
+- **Task 2（core 单一表/显示相位/腐肉）**：实现提交 `74e999b2`；评审 SPEC PASS + QUALITY PASS。`DisplayDayPhase(worldTime uint64, offset uint16) uint16` 签名与「先 `%24000` 再相加取模」语义经独立复算锁定（MaxUint64+23999 分水岭用例）；`BlockOpaque` 与迁移前 `Registry.Opaque` 逐值恒等（判据含门/火把排除，design D2 括注已补齐，提交 `8668a312`）；腐肉=45、食物表精确五食物；assets 转调 core、mesh 经接口天然单一源。非阻塞建议（D2 括注）已落实，其余两条留归档期参考。修复轮：0。
+- **Task 3（hostile_mobs.bin 存储契约）**：实现提交 `ef85bf96`；评审 SPEC PASS + QUALITY PASS。spec 16 类错误矩阵逐例拒绝归因复核为真（`repairHostileCRC` 保证拒绝来自字段校验）；Memory/Disk 同构契约测试、原子写四处故障注入、backup 过滤临时文件；fuzz 10s 97.8 万 execs 0 失败；「起点拒绝且不覆盖旧文件」落在 `DiskStore.LoadHostileMobs`/`SaveHostileMobs`，可被 Task 6 直接复用。加强项（revision=0 拒绝、冷却 ≤20、Distant ≤600、UUIDv4、dimension 白名单）与 spec 相容。非阻塞建议三条留归档期参考（`putF32NoRepair` 文档注释措辞、防御断言标注、目录 fsync 失败语义的 spec 措辞区分）。修复轮：0。
 
 ## 最终验证输出摘要（收尾补）
 
