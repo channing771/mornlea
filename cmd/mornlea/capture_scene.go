@@ -50,7 +50,7 @@ func applyAICompanionCaptureState(app *application) error {
 	app.companions.Reset()
 	app.chatEvents.Reset()
 	app.chatInput.Cancel()
-	app.chatEventBuffer = [32]network.ChatEvent{}
+	app.chatEventBuffer = [client.ChatEventCapacity]network.ChatEvent{}
 	app.chatLines = [6]string{}
 	app.chatLineCount = 0
 	app.formattedChatEventID = 0
@@ -500,7 +500,7 @@ func resetCapturePresentation(app *application) error {
 	app.companions.Reset()
 	app.chatEvents.Reset()
 	app.chatInput.Cancel()
-	app.chatEventBuffer = [32]network.ChatEvent{}
+	app.chatEventBuffer = [client.ChatEventCapacity]network.ChatEvent{}
 	app.chatLines = [6]string{}
 	app.chatLineCount = 0
 	app.formattedChatEventID = 0

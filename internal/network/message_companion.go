@@ -22,6 +22,10 @@ const (
 	// 常量同源（E7）：Planner 指令上限变化时本 wire 上限自动随动，不再依赖
 	// 裸字面量与注释约定。数值当前冻结为 1026。
 	chatCommandMaxWireBytes = companion.MaxPlanCommandBytes + 2
+	// chatCommandTextMaxBytes 是 ChatCommand 文本槽位的编码/解码字节上限，与校验端
+	// `validateCommandText` 及 wire 上限推导 `chatCommandMaxWireBytes` 同源于
+	// `companion.MaxPlanCommandBytes`，三处不可能漂移。
+	chatCommandTextMaxBytes = companion.MaxPlanCommandBytes
 	// chatEventMaxWireBytes 是 ChatEvent 载荷的固定 wire 上限。推导：8 event
 	// ID（u64）+ 16 玩家 ID + 130 玩家名（128-byte 名称上限 + 2-byte uvarint
 	// 前缀）+ 16 伙伴 ID + 130 伙伴名 + 1 kind + 1 reason + 文本槽位

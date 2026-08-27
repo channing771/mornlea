@@ -1,7 +1,7 @@
 package network
 
 import (
-	"errors"
+	"fmt"
 
 	"github.com/channing771/mornlea/internal/core"
 )
@@ -71,7 +71,7 @@ func encodeClientPacketPayload(state State, packet ClientPacket) (packetID uint3
 		case KeepAliveReply:
 			e.u64(message.Token)
 		case ChatCommand:
-			e.string(message.Text, 1024)
+			e.string(message.Text, chatCommandTextMaxBytes)
 		case TillSoil:
 			e.u64(message.Sequence)
 			e.f32(message.Yaw)
@@ -94,7 +94,8 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 		return nil, codecError("decode client", state, packetID, err)
 	}
 	if state == StatePlay && packetID == 12 && len(payload) > chatCommandMaxWireBytes {
-		return nil, codecError("decode client", state, packetID, errors.New("network: chat command payload exceeds 1026 bytes"))
+		return nil, codecError("decode client", state, packetID,
+			fmt.Errorf("network: chat command payload exceeds %d bytes", chatCommandMaxWireBytes))
 	}
 	d := byteDecoder{data: payload}
 	var packet ClientPacket
@@ -247,7 +248,9 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 			packet = drop
 		case 12:
 			var command ChatCommand
-			command.Text, err = d.string(1024, 1024)
+			// `d.string` 的两参分别是字节上限与 rune 上限；此处同值系现状保持，
+			// 并非两个独立上限恰好相等的巧合约束。
+			command.Text, err = d.string(chatCommandTextMaxBytes, chatCommandTextMaxBytes)
 			packet = command
 		case 13:
 			var till TillSoil
