@@ -149,10 +149,11 @@ func (engine *Engine) Step() TickResult {
 			}
 			yaw := normalizeYaw(command.Yaw)
 			player.input = physics.Input{
-				MoveX: command.MoveX,
-				MoveZ: command.MoveZ,
-				Jump:  command.Jump,
-				Yaw:   yaw,
+				MoveX:     command.MoveX,
+				MoveZ:     command.MoveZ,
+				Jump:      command.Jump,
+				Yaw:       yaw,
+				Sprinting: command.Sprinting,
 			}
 			player.miningHeld = command.Mining
 			player.eatingHeld = command.Eating

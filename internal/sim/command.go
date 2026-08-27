@@ -90,6 +90,9 @@ type Command struct {
 	// Eating 是 CommandPlayerInput 携带的持续进食意图，对应协议 v24 的
 	// `PlayerInput.Eating`；与 `Mining` 同形，只表达"按住了进食键"。
 	Eating bool
+	// Sprinting 是 CommandPlayerInput 携带的持续疾跑意图，对应协议 v28 的
+	// `PlayerInput.Sprinting`；门控见 sprint spec。
+	Sprinting bool
 }
 
 type GeneratedChunk struct {
