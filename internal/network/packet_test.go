@@ -83,8 +83,8 @@ func TestProtocolV1StateAndErrorCodesAreFrozen(t *testing.T) {
 			t.Fatalf("%s state = %d, want %d", tc.name, tc.got, tc.want)
 		}
 	}
-	if ProtocolVersion != 26 {
-		t.Fatalf("protocol version = %d, want 26", ProtocolVersion)
+	if ProtocolVersion != 27 {
+		t.Fatalf("protocol version = %d, want 27", ProtocolVersion)
 	}
 
 	codes := []struct {

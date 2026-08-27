@@ -56,11 +56,28 @@ func TestProtocolV22TillSoilPacketIDIsFrozen(t *testing.T) {
 	if _, isTill := packet.(TillSoil); !isTill {
 		t.Fatalf("Play client packet ID 13 = %T，想要 TillSoil", packet)
 	}
-	if _, ok := clientPacketForID(StatePlay, 13+1); ok {
-		t.Fatal("Play client packet ID 14 必须保持未分配")
+	if _, ok := clientPacketForID(StatePlay, 13+1); !ok {
+		t.Fatal("Play client packet ID 14 必须已分配给 BoneMeal")
 	}
-	if ProtocolVersion != 26 {
-		t.Fatalf("协议版本 = %d，想要 26——当前版本为 v26", ProtocolVersion)
+	if ProtocolVersion != 27 {
+		t.Fatalf("协议版本 = %d，想要 27——当前版本为 v27", ProtocolVersion)
+	}
+}
+
+func TestProtocolV27BoneMealPacketIDIsFrozen(t *testing.T) {
+	id, ok := clientPacketID(StatePlay, BoneMeal{})
+	if !ok || id != 14 {
+		t.Fatalf("BoneMeal ID = %d, ok=%v，想要 14, true", id, ok)
+	}
+	packet, ok := clientPacketForID(StatePlay, 14)
+	if !ok {
+		t.Fatal("Play client packet ID 14 未注册")
+	}
+	if _, isBone := packet.(BoneMeal); !isBone {
+		t.Fatalf("Play client packet ID 14 = %T，想要 BoneMeal", packet)
+	}
+	if _, ok := clientPacketForID(StatePlay, 14+1); ok {
+		t.Fatal("Play client packet ID 15 必须保持未分配")
 	}
 }
 
@@ -226,6 +243,12 @@ func sameClientPacketType(left, right ClientPacket) bool {
 		return ok
 	case ChatCommand:
 		_, ok := right.(ChatCommand)
+		return ok
+	case TillSoil:
+		_, ok := right.(TillSoil)
+		return ok
+	case BoneMeal:
+		_, ok := right.(BoneMeal)
 		return ok
 	}
 	return false

@@ -171,6 +171,14 @@ func translateClientMessage(
 			Yaw:      message.Yaw,
 			Pitch:    message.Pitch,
 		}, true
+	case network.BoneMeal:
+		return sim.Command{
+			Session:  id,
+			Sequence: message.Sequence,
+			Kind:     sim.CommandBoneMeal,
+			Yaw:      message.Yaw,
+			Pitch:    message.Pitch,
+		}, true
 	case network.CloseContainer:
 		return sim.Command{
 			Session:  id,

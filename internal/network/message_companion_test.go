@@ -66,9 +66,9 @@ func TestCompanionMessageIDsAreAppendOnly(t *testing.T) {
 	if _, ok := clientPacketForID(StatePlay, 1); ok {
 		t.Fatal("Play client packet ID 1 必须保持未分配")
 	}
-	// v22 把 13 分配给了 TillSoil；本表的「下一个仍未分配」上界随之推进到 14。
-	if _, ok := clientPacketForID(StatePlay, 14); ok {
-		t.Fatal("未知 client packet ID 14 被接受")
+	// v27 把 14 分配给了 BoneMeal；本表的「下一个仍未分配」上界随之推进到 15。
+	if _, ok := clientPacketForID(StatePlay, 15); ok {
+		t.Fatal("未知 client packet ID 15 被接受")
 	}
 	if _, ok := serverPacketForID(StatePlay, 21); ok {
 		t.Fatal("未知 server packet ID 21 被接受")
