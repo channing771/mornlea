@@ -30,6 +30,6 @@
 ## 3. 收尾（实现者）
 
 - [x] 3.1 `gofmt -l .` 无输出；`go vet ./...` 干净。
-- [ ] 3.2 `go test ./... -race`（或 `make test-race-short` 迭代 + 提交前全量）通过。
-- [ ] 3.3 `openspec validate --all --strict --no-interactive` 通过；本表全部勾选核对。
-- [ ] 3.4 ledger 记录评审结论、终审证据与最终裁决；未决项誊入 proposal「延期与放弃」。
+- [x] 3.2 `go test ./... -race`（或 `make test-race-short` 迭代 + 提交前全量）通过。
+- [x] 3.3 `openspec validate --all --strict --no-interactive` 通过；本表全部勾选核对。
+- [x] 3.4 ledger 记录评审结论、终审证据与最终裁决；未决项誊入 proposal「延期与放弃」。

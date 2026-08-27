@@ -25,4 +25,9 @@
 
 ## 终审与修复波
 
-（待门禁与整分支终审后登记）
+### 整分支终审（2026-08-27）
+
+- 终审者（fresh 独立）：**PASS**。净 diff `main..HEAD` 恰为四个授权代码文件 + change 产物；合流语义抽查（ChatCommand 三点取值自常量、`errors`→`fmt` 机械替换、相邻命令分支未扰动）；零行为变化经独立通读复核；proposal「延期与放弃」两条顺延誊写核对一致。findings：Minor＝终审登记与勾选须随归档落盘（即本批）；NIT＝骨架占位重复标题（已清理）。
+- 门禁插曲与定位：合流 `ef2b6aed` 后首轮并行 gates 中四个 nativeabi 关联包报「ABI 版本不匹配」。取证定性为 **GOCACHE 陈旧 cgo 翻译单元**：合并使 `engine/include/mornlea_engine.h` 自 v6 换代 v7，被复用的旧编译产物令 Go 侧常量停驻 6 而 Rust 导出 7；源码侧 `git diff main..HEAD` 对相关包为零差异，与本行改动无涉。`go clean -cache` 后逐包立即转绿。
+- Ruling: 最终门禁一律单任务串行执行 —— 并行的 cargo 构建与 go race 套件在同一 worktree 的 target/GOCACHE 上存在争持风险，本轮以合流后串行 fresh 重跑为准。
+- 最终门禁证据：gates.sh 六项 PASS（gofmt 无输出、vet 干净、archcheck ok、OpenSpec strict 66 passed、`make rust` ok、全量 `go test ./... -race` 25 包首跑 ok）；`make rust-check` 全绿（fmt + clippy `-D warnings` + cargo test：mornlea_client 132、mornlea_engine 166 tests 含 `exported_version_is_seven`）。
