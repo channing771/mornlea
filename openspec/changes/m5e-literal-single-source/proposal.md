@@ -48,3 +48,12 @@ M5E（2026-08-18 归档）「延期与放弃」递延清单尚余两项未清偿
 - Go 代码：`cmd/mornlea/capture_scene.go`、`cmd/mornlea/capture_ai_companion_test.go`、
   `internal/network/message_companion.go`、`internal/network/codec_client.go`。
 - 规格：零 delta（skip_specs）；无 Rust 面改动；无存档/协议迁移；无并发或性能契约变化。
+
+## 延期与放弃
+
+- 顺延①：`codec_client.go` 解码端「两参同值」注释的措辞打磨（双评审 QUALITY NIT）——
+  双重否定可正向化并点明「rune 上限不会先于字节上限构成实际约束、调整须两参随动」；
+  纯注释语感，不改语义，避免为它稀释已验证状态。
+- 顺延②：`message_companion.go` 指令槽位仍直引 `companion.MaxPlanCommandBytes` 与
+  `chatCommandTextMaxBytes` 别名并存（双评审 SPEC/QUALITY NIT）——既有风格的收口候选，
+  在授权文件集外扩展即超范围，留待下一次触碰该常量块的行为性变更一并统一。
