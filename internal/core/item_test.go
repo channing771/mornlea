@@ -497,8 +497,8 @@ func TestBrokenToolsAreRegisteredAndUnstackable(t *testing.T) {
 
 // TestGridCraftingIDsAppendBeforeSentinels 锁定格子工作台批次追加的稳定编号：
 // 木棍 `ItemStick=37`、工作台物品 `ItemWorkbench=38`、骨粉 `ItemBoneMeal=39`
-// （三者都紧贴 `ItemIDMax` 哨兵之前、哨兵后移到 40），工作台方块
-// `WorkbenchID=45`（紧贴 `BlockIDMax` 之前、哨兵后移到 46）。编号是协议稳定值：
+// （三者 + 马铃薯/胡萝卜/毒土豆都紧贴 `ItemIDMax` 哨兵之前、哨兵后移到 43），工作台方块
+// `WorkbenchID=45`（紧随 `WheatStage7ID`，后接马铃薯/胡萝卜，`BlockIDMax` 后移到 62）。编号是协议稳定值：
 // 插入或重排会平移后续编号，破坏既有存档与线上字节。
 func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 	if core.ItemStick != 37 {
@@ -516,17 +516,37 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 		t.Fatalf("ItemBoneMeal = %d，必须紧随 ItemWorkbench(%d)",
 			core.ItemBoneMeal, core.ItemWorkbench)
 	}
-	if core.ItemIDMax != 40 {
-		t.Fatalf("ItemIDMax = %d，必须紧随 ItemBoneMeal(%d) 后移到 40",
-			core.ItemIDMax, core.ItemBoneMeal)
+	if core.ItemPotato != core.ItemBoneMeal+1 {
+		t.Fatalf("ItemPotato = %d，必须紧随 ItemBoneMeal(%d)",
+			core.ItemPotato, core.ItemBoneMeal)
+	}
+	if core.ItemCarrot != core.ItemPotato+1 {
+		t.Fatalf("ItemCarrot = %d，必须紧随 ItemPotato(%d)",
+			core.ItemCarrot, core.ItemPotato)
+	}
+	if core.ItemPoisonousPotato != core.ItemCarrot+1 {
+		t.Fatalf("ItemPoisonousPotato = %d，必须紧随 ItemCarrot(%d)",
+			core.ItemPoisonousPotato, core.ItemCarrot)
+	}
+	if core.ItemIDMax != 43 {
+		t.Fatalf("ItemIDMax = %d，必须紧随 ItemPoisonousPotato(%d) 后移到 43",
+			core.ItemIDMax, core.ItemPoisonousPotato)
 	}
 	if core.WorkbenchID != 45 {
 		t.Fatalf("WorkbenchID = %d，必须稳定为 45 且紧随 WheatStage7ID(%d)",
 			core.WorkbenchID, core.WheatStage7ID)
 	}
-	if core.BlockIDMax != 46 {
-		t.Fatalf("BlockIDMax = %d，必须紧随 WorkbenchID(%d) 后移到 46",
-			core.BlockIDMax, core.WorkbenchID)
+	if core.PotatoStage0ID != core.WorkbenchID+1 {
+		t.Fatalf("PotatoStage0ID = %d，必须紧随 WorkbenchID(%d)",
+			core.PotatoStage0ID, core.WorkbenchID)
+	}
+	if core.CarrotStage0ID != core.PotatoStage7ID+1 {
+		t.Fatalf("CarrotStage0ID = %d，必须紧随 PotatoStage7ID(%d)",
+			core.CarrotStage0ID, core.PotatoStage7ID)
+	}
+	if core.BlockIDMax != 62 {
+		t.Fatalf("BlockIDMax = %d，必须紧随 CarrotStage7ID(%d) 后移到 62",
+			core.BlockIDMax, core.CarrotStage7ID)
 	}
 }
 

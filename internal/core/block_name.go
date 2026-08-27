@@ -19,6 +19,7 @@ var blockDisplayNames = [...]string{
 	"马铃薯阶段4", "马铃薯阶段5", "马铃薯阶段6", "马铃薯阶段7",
 	"胡萝卜阶段0", "胡萝卜阶段1", "胡萝卜阶段2", "胡萝卜阶段3",
 	"胡萝卜阶段4", "胡萝卜阶段5", "胡萝卜阶段6", "胡萝卜阶段7",
+}
 
 // BlockDisplayName 返回已注册方块的中文显示名。
 func BlockDisplayName(id BlockID) (string, bool) {

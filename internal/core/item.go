@@ -268,6 +268,7 @@ func ItemStackLimit(item ItemID) (uint8, bool) {
 		ItemWheatSeeds, ItemWheat, ItemBread,
 		ItemStick, ItemWorkbench, ItemBoneMeal,
 		ItemPotato, ItemCarrot, ItemPoisonousPotato:
+		return MaxStackCount, true
 	case ItemStonePickaxe, ItemIronPickaxe,
 		ItemBrokenStonePickaxe, ItemBrokenIronPickaxe,
 		ItemStoneHoe, ItemIronHoe,
