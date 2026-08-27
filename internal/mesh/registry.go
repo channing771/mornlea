@@ -19,6 +19,20 @@ type RegistryReader interface {
 	BlockTopRaw(world.BlockID) uint8
 }
 
+// ModelReader 是 RegistryReader 的可选扩展：实现它的 registry 会被
+// `BuildRegistrySnapshot` 逐方块询问有限模型 tag；未实现的 reader 整体回落
+// tag 0（默认，无模型覆写），既有快照零改动。
+//
+// 为什么是可选接口而不是并进 `RegistryReader`：tag 的唯一生产来源是
+// `internal/assets.Registry`，在它登记火把材质之前，`internal/mesh` 的全部
+// 测试夹具与任何其他 `RegistryReader` 实现都不应被迫陪绑一个恒 0 的方法。
+type ModelReader interface {
+	// Model 返回方块的有限模型 tag：0=默认、1=火把落地、2..5=火把墙面
+	// +X/−X/+Z/−Z（与火把方块编号 63..66 同序）。合法域与 Rust 侧
+	// `RegistryView::validate` 同口径（6=床保留即拒绝、其余未知拒绝）。
+	Model(id world.BlockID) uint8
+}
+
 // Registry 提供网格化需要的方块属性及其不可变快照。
 type Registry interface {
 	RegistryReader
@@ -56,7 +70,13 @@ type BlockProperties struct {
 	// 流体则取满格」规则）、短方块由本字段常量驱动，两条几何路径不得叠加在
 	// 同一条目上——编码两侧都按「二者不同时非零」拒绝。
 	BlockTopRaw uint8
-	Materials   [6]uint16
+	// Model 是方块的有限模型 tag：0=默认（无模型覆写，满格/短方块/流体/植物
+	// 继续走既有判定），1..5=火把五种形态（1=落地、2..5=墙面 +X/−X/+Z/−Z，
+	// 与火把方块编号 63..66 同序），由 Rust greedy 的 model dispatcher 消费。
+	// 6（床，保留）与未知值在快照与编码两侧都被拒绝；Rust 侧
+	// `RegistryView::validate` 同口径。
+	Model     uint8
+	Materials [6]uint16
 }
 
 // RegistrySnapshot 是按方块 ID 排序的网格 registry 快照。
@@ -76,6 +96,9 @@ func BuildRegistrySnapshot(ids []world.BlockID, reader RegistryReader) (Registry
 	}
 
 	blocks := make([]BlockProperties, len(sorted))
+	// model 走可选接口 `ModelReader`：类型断言对整个 reader 做一次而不是逐方块，
+	// 快照构建只在 registry 冻结时执行一次，不在任何热路径上。
+	modelReader, hasModel := reader.(ModelReader)
 	for i, id := range sorted {
 		block := BlockProperties{
 			ID:               id,
@@ -84,6 +107,9 @@ func BuildRegistrySnapshot(ids []world.BlockID, reader RegistryReader) (Registry
 			FluidHeight:      reader.FluidHeight(id),
 			LightAttenuation: reader.LightAttenuation(id),
 			BlockTopRaw:      reader.BlockTopRaw(id),
+		}
+		if hasModel {
+			block.Model = modelReader.Model(id)
 		}
 		if block.Emission > 15 {
 			return RegistrySnapshot{}, fmt.Errorf("mesh: block %d emission=%d 超过 15", id, block.Emission)
@@ -111,6 +137,12 @@ func BuildRegistrySnapshot(ids []world.BlockID, reader RegistryReader) (Registry
 		// Rust 侧 `RegistryView::validate` 同口径拒绝，这里提前给出可读错误。
 		if block.FluidHeight != 0 && block.BlockTopRaw != 0 {
 			return RegistrySnapshot{}, fmt.Errorf("mesh: block %d 流体条目携带非零 blockTopRaw=%d", id, block.BlockTopRaw)
+		}
+		// model tag 的封闭集合：0=默认、1..5=火把五形态；6 保留给床功能行，
+		// 出现即拒绝，其余未知值同样拒绝——放行会让 Rust 侧静默回退默认几何。
+		// Rust 侧 `RegistryView::validate` 同口径拒绝，这里提前给出可读错误。
+		if block.Model > 5 {
+			return RegistrySnapshot{}, fmt.Errorf("mesh: block %d model=%d 超出封闭集合 0..5", id, block.Model)
 		}
 		for face := Face(0); face < 6; face++ {
 			block.Materials[face] = reader.Material(id, face)

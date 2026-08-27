@@ -4,9 +4,10 @@ const HEIGHTS_BYTES: usize = 9 * 256 * 2;
 /// 单条 registry 条目的字节数。
 ///
 /// 布局（小端）：`id: u16` | `opaque: u8` | `emission: u8` | `material: [u16; 6]`
-/// | `fluid_height: u8` | `light_attenuation: u8` | `block_top_raw: u8`，共 19 字节。
+/// | `fluid_height: u8` | `light_attenuation: u8` | `block_top_raw: u8`
+/// | `model: u8`，共 20 字节。
 ///
-/// 后三个字节与 `emission` 同形状——每方块一个字节、由 Go 侧
+/// 后四个字节与 `emission` 同形状——每方块一个字节、由 Go 侧
 /// `internal/mesh.BlockProperties` 烘焙、`encodeNativeInput` 按同一顺序写出：
 ///
 /// - `fluid_height`：该格**孤立时**的 4-bit 高度原值 `h_raw`（实际高度 `(h_raw+1)/16`）。
@@ -25,7 +26,14 @@ const HEIGHTS_BYTES: usize = 9 * 256 * 2;
 ///   哨兵 0，「非零即短方块」才能保持单一判定。本字段与 `fluid_height` 互斥：
 ///   流体的角高度由 mesher 邻域平均现算、短方块由本字段常量驱动，两条几何路径
 ///   不得叠加在同一条目上（见 `RegistryView::validate`）。
-const REGISTRY_ENTRY_BYTES: usize = 19;
+/// - `model`：有限模型 tag 的封闭集合。`0` 是「默认」——无模型覆写，满格、短
+///   方块、流体与植物继续走既有判定（植物仍按 material 区间识别），火把是
+///   model tag 的第一个消费者，故 0 取「默认」而非「cube」，避免为既有四条
+///   几何路径重复造 tag；`1..=5` 是火把五种形态（1=落地、2..=5=墙面
+///   +X/−X/+Z/−Z，与火把方块编号 63..66 同序）；`6` 保留给床功能行，**出现
+///   即拒绝**；其余值未知拒绝。这是固定 tag 而不是数据驱动格式——见
+///   `RegistryView::validate` 与 greedy 的 model dispatcher。
+const REGISTRY_ENTRY_BYTES: usize = 20;
 /// registry 条目表的容量上限。
 ///
 /// 80 是**上限**而不是当前条目数：Go 侧 `internal/assets.NewRegistry()` 把
@@ -238,6 +246,13 @@ impl RegistryView<'_> {
             if self.entries[offset + 16] != 0 && self.entries[offset + 18] != 0 {
                 return Err(InputError::Registry);
             }
+            // model tag 的封闭集合：0=默认、1..=5=火把五形态。6 保留给床功能
+            // 行，**出现即拒绝**；其余值未知拒绝——两者返回相同的 Registry 拒
+            // 绝，放行任何一个都会让 mesher 静默回退到默认几何。拒绝发生在
+            // parse 期、任何几何产出之前，Go 侧编码器同口径。
+            if self.entries[offset + 19] > 5 {
+                return Err(InputError::Registry);
+            }
             has_air |= id == air_id;
             has_barrier |= id == barrier_id;
             previous = Some(id);
@@ -305,6 +320,16 @@ impl RegistryView<'_> {
             0 => None,
             raw => Some(raw),
         }
+    }
+
+    /// model 返回该方块的有限模型 tag。
+    ///
+    /// 封闭集合见 `REGISTRY_ENTRY_BYTES` 的布局说明：`0` 是默认（无模型覆写），
+    /// `1..=5` 是火把五形态；`6` 与未知值在 `validate` 就被拒绝，走不到这里。
+    /// 未登记的方块编号返回默认 0（与 `opaque`/`emission` 的缺省口径一致）。
+    pub(crate) fn model(&self, id: u16) -> u8 {
+        self.index(id)
+            .map_or(0, |index| self.entries[index * REGISTRY_ENTRY_BYTES + 19])
     }
 
     pub(crate) fn material(&self, id: u16, face: usize) -> Option<u16> {
@@ -479,6 +504,47 @@ pub(crate) mod tests {
         assert_eq!(parsed.registry.light_attenuation(30000), 0);
         assert!(parsed.registry.face_visible(1, 40000));
         assert!(!parsed.registry.face_visible(30000, 0));
+    }
+
+    /// model tag 的域读回：第 20 字节（offset 19）真的跨过 ABI 边界。
+    ///
+    /// 夹具刻意不改 `valid_input` 本身——它被 greedy/light/ffi 多个主题共享，
+    /// 而是把石头（id=1）的 model 改写成 3（火把墙 −X）做局部验证：若编码
+    /// 丢失会读回 0（默认），与未登记编号的缺省口径一致。
+    #[test]
+    fn model_byte_is_parsed_from_offset_nineteen() {
+        let mut tagged = valid_input();
+        tagged[REGISTRY_OFFSET + ENTRY_BYTES + 19] = 3;
+        let parsed = MeshInput::parse(&tagged).unwrap();
+        assert_eq!(parsed.registry.model(1), 3);
+        assert_eq!(parsed.registry.model(0), 0, "空气条目保持默认 model 0");
+        assert_eq!(parsed.registry.model(30000), 0, "未登记编号缺省为默认 0");
+
+        // 边界对照：五个火把 tag（1..=5）全部合法，逐个改写都要放行。
+        for tag in 1_u8..=5 {
+            let mut bytes = valid_input();
+            bytes[REGISTRY_OFFSET + ENTRY_BYTES + 19] = tag;
+            assert!(
+                MeshInput::parse(&bytes).is_ok(),
+                "火把 model tag={tag} 必须合法"
+            );
+        }
+    }
+
+    /// model tag 的封闭集合：床（6，保留给床功能行）与任何未知值（>= 7）都
+    /// 必须在条目校验就被拒绝，且两者返回**相同**的拒绝——放行会留下静默
+    /// 回退到默认几何的隐患。拒绝发生在 parse 期、任何几何产出之前。
+    #[test]
+    fn unknown_and_bed_model_tags_are_rejected() {
+        for tag in [6_u8, 7, 8, 255] {
+            let mut bytes = valid_input();
+            bytes[REGISTRY_OFFSET + ENTRY_BYTES + 19] = tag;
+            assert_eq!(
+                MeshInput::parse(&bytes).unwrap_err(),
+                InputError::Registry,
+                "model tag={tag} 未被拒绝"
+            );
+        }
     }
 
     /// block_top_raw 的域读回、fluid 互斥与哨兵语义。

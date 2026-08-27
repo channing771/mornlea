@@ -13,10 +13,10 @@ const (
 	nativeHeightColumns        = 3 * 3
 	// nativeRegistryEntryBytes 与 Rust 的 REGISTRY_ENTRY_BYTES 逐字节对应：
 	// id(u16) + opaque(u8) + emission(u8) + material[6](u16) + fluidHeight(u8)
-	// + lightAttenuation(u8) + blockTopRaw(u8) = 19。两侧各自硬编码，改动即
-	// 构成一次 engine ABI 变更：16→18 的扩容发生在 v5，追加 blockTopRaw 的
-	// 本次扩容升到 v7（v6 被 lod_shell 出口占用）。
-	nativeRegistryEntryBytes = 2 + 1 + 1 + 6*2 + 1 + 1 + 1
+	// + lightAttenuation(u8) + blockTopRaw(u8) + model(u8) = 20。两侧各自硬编码，
+	// 改动即构成一次 engine ABI 变更：16→18 的扩容发生在 v5，追加 blockTopRaw
+	// 的扩容升到 v7（v6 被 lod_shell 出口占用），追加 model 的扩容升到 v8。
+	nativeRegistryEntryBytes = 2 + 1 + 1 + 6*2 + 1 + 1 + 1 + 1
 	// nativeMaxRegistryEntries 必须与 Rust 端硬编码的
 	// engine/crates/mornlea_engine/src/input.rs 的 MAX_REGISTRY_ENTRIES
 	// (=80) 保持一致——两侧各自独立定义，没有共享常量或生成步骤，全靠人
@@ -90,6 +90,11 @@ func encodeNativeInput(dst []byte, n *world.Neighborhood, snapshot RegistrySnaps
 		// 不是天空光值域；详见 registry.go 同名校验与 build_sky 的注释。
 		if block.LightAttenuation > 1 {
 			return 0, fmt.Errorf("mesh: 方块光衰减超过 1")
+		}
+		// model tag 的封闭集合：0=默认、1..5=火把五形态；6（床，保留）与未知值
+		// 在此拒绝，Rust 侧 `RegistryView::validate` 同口径，这里提前给出可读错误。
+		if block.Model > 5 {
+			return 0, fmt.Errorf("mesh: 方块 model tag=%d 超出封闭集合 0..5", block.Model)
 		}
 		air = air || block.ID == core.AirID
 		barrier = barrier || block.ID == core.BarrierID
@@ -178,7 +183,10 @@ func encodeNativeInput(dst []byte, n *world.Neighborhood, snapshot RegistrySnaps
 		dst[offset] = block.FluidHeight
 		dst[offset+1] = block.LightAttenuation
 		dst[offset+2] = block.BlockTopRaw
-		offset += 3
+		// model 追加在条目末尾（offset 19），与 Rust 的 REGISTRY_ENTRY_BYTES
+		// 布局注释逐字节对应。
+		dst[offset+3] = block.Model
+		offset += 4
 	}
 	for _, word := range snapshot.Visibility {
 		binary.LittleEndian.PutUint64(dst[offset:offset+8], word)

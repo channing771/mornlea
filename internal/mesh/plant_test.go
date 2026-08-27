@@ -246,19 +246,17 @@ func TestPlantQuadsSurviveTheUploadRoundTrip(t *testing.T) {
 }
 
 // TestPlantQuadEncodingRejectsIllegalCombinations 覆盖 quad.go 作为 native 结果
-// 信任边界的三条拒绝规则。
+// 信任边界的拒绝规则。
+//
+// face 6/7 携带非植物 material 自火把落地形态起是**合法**编码（交叉斜面是
+// 「格内居中」的通用编组，材质判别只保持「植物 material 必须在 face 6/7 上」
+// 的单向约束），不再列入拒绝——火把 quad 的解包往返由 torch_test.go 钉住。
 func TestPlantQuadEncodingRejectsIllegalCombinations(t *testing.T) {
 	plantMat := mesh.PlantMaterialFirst
 	for _, tt := range []struct {
 		name   string
 		packed uint64
 	}{
-		{
-			// face 6 落在非植物 material 上：着色器会把一块普通方块画成穿模斜板。
-			"face6 非植物 material",
-			mesh.Quad{X: 1, Y: 1, Z: 1, W: 1, H: 1, Face: mesh.FacePlantDiagA, Mat: plantMat}.Pack() &^
-				(uint64(0xFFFF) << 23),
-		},
 		{
 			// 保留位 13..19 非零。
 			"植物保留位非零",
@@ -267,10 +265,10 @@ func TestPlantQuadEncodingRejectsIllegalCombinations(t *testing.T) {
 		{
 			// 植物 material 落在轴向 face 上,而且还是一条贪心合并过的 5×4:
 			// 着色器按 `face >= 6` 判别,会把它当普通方块画成一整块石板。
-			// 这是 `face ∈ {6,7} ⟺ material ∈ 植物区间` 的**反方向**,只强制一半
+			// 这是「植物 material 必须出现在 face 6/7 上」的单向约束,只强制一半
 			// 等于着色器那条"按 face 判别与按 material 判别等价"的前提不成立。
 			"植物 material 配轴向 face",
-			// Pack 现在同样拒绝这个组合,所以只能先打包一条 Mat=0 的合法 quad,
+			// Pack 同样拒绝这个组合,所以只能先打包一条 Mat=0 的合法 quad,
 			// 再把植物 material 按位或进去。
 			mesh.Quad{X: 1, Y: 2, Z: 3, W: 5, H: 4, Face: mesh.FacePosY}.Pack() | uint64(plantMat)<<23,
 		},

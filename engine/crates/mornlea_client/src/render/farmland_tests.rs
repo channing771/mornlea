@@ -12,7 +12,9 @@
 //! **material 区间**分流到与 water.wgsl 同源的角高度路径，并把区间常量、
 //! Go 层枚举与 shader 字面量三方钉在一起。
 
-use super::shaders::{CULL, FARMLAND_MATERIAL_FIRST, FARMLAND_MATERIAL_LAST, TERRAIN};
+use super::shaders::{
+    CULL, FARMLAND_MATERIAL_FIRST, FARMLAND_MATERIAL_LAST, TERRAIN, TORCH_MATERIAL,
+};
 use super::*;
 
 /// PosY（朝上的顶面）的 face 编号，与 `quad.rs` 的 `Face::PosY` 一致。
@@ -278,6 +280,14 @@ fn shader_sources_stay_pinned_to_the_range_constants() {
     assert!(
         seg.contains(&format!("<= {FARMLAND_MATERIAL_LAST}u")),
         "terrain.wgsl 的耕地区间上界与本 crate 常量不一致：\n{seg}"
+    );
+
+    // 火把层是角高度路径的第二个消费者(墙面火把倾斜薄板),同一套「Go 枚举、
+    // 本 crate 常量、terrain.wgsl 字面量」三方手工同步,同一处扫描一并钉住。
+    let torch_seg = segment_after(TERRAIN, "fn torch_material");
+    assert!(
+        torch_seg.contains(&format!("== {TORCH_MATERIAL}u")),
+        "terrain.wgsl 的火把层号与本 crate 常量不一致：\n{torch_seg}"
     );
 
     // cull.wgsl 对耕地 quad 按**满格**做背面剔除（误差有界、只可能漏画，

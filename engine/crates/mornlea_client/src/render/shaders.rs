@@ -21,6 +21,18 @@ pub const FARMLAND_MATERIAL_FIRST: u16 = 29;
 /// 耕地材质层闭区间的上界(湿耕地),见 [`FARMLAND_MATERIAL_FIRST`]。
 pub const FARMLAND_MATERIAL_LAST: u16 = 30;
 
+/// 火把材质层:墙面火把的倾斜薄板携带角高度(支撑侧 9/16、远离侧 14/16),
+/// terrain.wgsl 据此把 bit 12..19/55..62 解码成顶点抬升而不是 `w/h` 尺寸——
+/// 与耕地共用同一条角高度解码路径,判别同样走 material(火把薄板是轴向面
+/// face 0..5,与植物的 face 6/7 按 face 天然互斥)。
+///
+/// 数值的真值源是 Go 侧 `internal/assets` 层枚举末位追加的 `LayerTorch`
+/// (iota,当前 58)。三处没有共享定义也没有生成步骤,只能人手同步——Go 枚举、
+/// 本常量、terrain.wgsl 里 `torch_material` 的硬编码字面量,由
+/// render/farmland_tests.rs 的源码扫描钉在一起。在 Go 层枚举的火把之前插层
+/// 会平移这个编号,那处守卫就是仅有的报警点之一。
+pub const TORCH_MATERIAL: u16 = 58;
+
 /// 地形 pass(实例化紧凑 quad)。
 pub const TERRAIN: &str = include_str!("../../shaders/terrain.wgsl");
 /// 水面 pass(半透明,与 terrain 共享 atlas 与世界坐标 UV)。

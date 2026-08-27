@@ -138,7 +138,8 @@ impl Quad {
             // 反方向的强制：植物 material 只允许出现在 face 6/7 上。缺了它，一条
             // 贪心合并过的植物轴向面能干净流出 mesher，而着色器按 `face >= 6`
             // 判别、会把它画成一整块普通石板。与 Go 侧 `quad.go` 的 Pack/UnpackQuad
-            // 同口径，两侧都把这条双向等价当成格式的一部分。
+            // 同口径，两侧都把这条单向约束当成格式的一部分——正方向（face 6/7
+            // 携带非植物 material）不设强制：落地火把的交叉斜面共用该编组。
             assert!(
                 !plant_material(self.material),
                 "植物 material 只允许出现在 face 6/7 上"

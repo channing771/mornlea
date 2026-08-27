@@ -40,7 +40,7 @@ id(u16) opaque(u8) emission(u8) material[6](u16) fluidHeight(u8) lightAttenuatio
 └─0..1──┘ └─2────┘ └─3────────┘ └─4..15────────────┘ └─16──────────┘ └─17──────────────┘ └─18─────────┘ └─19───┘
 ```
 
-- 基线校准：当前 main 的 entry 已是 19 bytes（`blockTopRaw` 占 offset 18，ABI v7 由短方块顶面扩展占用），条目上限已为 64。本变更加第 20 字节 `model`（offset 19），并把上限 64 → 80——62 个既有注册方块 + 5 个火把形态 = 67 已越过 64，80 同时给床（8 形态，将来 75 条）留余量，避免连续变更都动同一处上限。
+- 基线校准：当前 main 的 entry 已是 19 bytes（`blockTopRaw` 占 offset 18，ABI v7 由短方块顶面扩展占用）；条目上限已在更早提交的 v7 期内提前升至 80（62 个既有注册方块 + 5 个火把形态 = 67 越过 64 所迫，80 同时给床等多形态方块留余量），不属本次升版记账。本变更只做两件事：加第 20 字节 `model`（offset 19），并把 engine ABI 升到 v8。
 - model 封闭集合：0=默认（无模型覆写：cube/短方块/流体/植物仍走既有判定，植物继续按 material 区间识别）、1=火把落地、2..5=火把墙 +X/−X/+Z/−Z（与方块编号 63..66 同序）、6=床（保留，出现即拒绝）、其余值未知拒绝。火把是 model tag 的第一个消费者，故 0 语义取「默认」而非「cube」，避免为既有四条几何路径重复造 tag。
 - Go：`nativeRegistryEntryBytes = 2 + 1 + 1 + 6*2 + 1 + 1 + 1 + 1`；`nativeMaxRegistryEntries` 64 → 80；`nativeMaxRegistryWords` 随上限变为 2 words/行、`maxNativeInputBytes` 随之更新（文档注释同步）。
 - Rust：`engine/crates/mornlea_engine/src/input.rs` 的 `REGISTRY_ENTRY_BYTES`、`MAX_REGISTRY_ENTRIES`；`greedy` 增加 model dispatcher；`encode` 端与 Go 解包各按 20 字节布局。

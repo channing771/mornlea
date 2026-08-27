@@ -252,11 +252,11 @@ func TestEncodeNativeInputUsesExactLittleEndianLayout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 225925 = 16 + 27*4096*2 + 9 + 9*256*2 + 4*19 + 4*8：条目从 18 字节扩到
-	// 19 字节后总长必然变化，这个数就是「blockTopRaw 字节真的被写进去了」
-	// 的算术证据（上一版 3 条 ×18 字节时是 225895）。
-	if length != 225925 {
-		t.Fatalf("input length=%d，想要 225925", length)
+	// 225929 = 16 + 27*4096*2 + 9 + 9*256*2 + 4*20 + 4*8：条目从 19 字节扩到
+	// 20 字节后总长必然变化，这个数就是「model 字节真的被写进去了」的算术
+	// 证据（上一版 4 条 ×19 字节时是 225925）。
+	if length != 225929 {
+		t.Fatalf("input length=%d，想要 225929", length)
 	}
 	if got := string(dst[0:4]); got != "MGM1" {
 		t.Fatalf("magic=%q，想要 MGM1", got)
@@ -297,37 +297,37 @@ func TestEncodeNativeInputUsesExactLittleEndianLayout(t *testing.T) {
 	}
 
 	const registryOffset = 225817
-	// 第三条条目起点 = registryOffset + 2*19 = +38；条目内偏移 0/3/4/16/17/18
+	// 第三条条目起点 = registryOffset + 2*20 = +40；条目内偏移 0/3/4/16/17/18
 	// 分别是 id/emission/material[0]/fluidHeight/lightAttenuation/blockTopRaw。
-	if got := binary.LittleEndian.Uint16(dst[registryOffset+38:]); got != 40000 {
+	if got := binary.LittleEndian.Uint16(dst[registryOffset+40:]); got != 40000 {
 		t.Fatalf("third registry ID=%d，想要 40000", got)
 	}
-	if got := dst[registryOffset+41]; got != 7 {
+	if got := dst[registryOffset+43]; got != 7 {
 		t.Fatalf("third registry emission=%d，想要 7", got)
 	}
-	if got := binary.LittleEndian.Uint16(dst[registryOffset+42:]); got != 20 {
+	if got := binary.LittleEndian.Uint16(dst[registryOffset+44:]); got != 20 {
 		t.Fatalf("third registry material[0]=%d，想要 20", got)
 	}
-	if got := dst[registryOffset+38+16]; got != 11 {
+	if got := dst[registryOffset+40+16]; got != 11 {
 		t.Fatalf("third registry fluidHeight=%d，想要 11", got)
 	}
-	if got := dst[registryOffset+38+17]; got != 1 {
+	if got := dst[registryOffset+40+17]; got != 1 {
 		t.Fatalf("third registry lightAttenuation=%d，想要 1", got)
 	}
 	// 前三条条目的 blockTopRaw 字节必须仍是 0：证明写入没有跨条目串位，
-	// 且流体条目（40000）按互斥规则保持满格哨兵。条目步长 19。
+	// 且流体条目（40000）按互斥规则保持满格哨兵。条目步长 20。
 	for entryIndex := 0; entryIndex < 3; entryIndex++ {
-		if got := dst[registryOffset+entryIndex*19+18]; got != 0 {
+		if got := dst[registryOffset+entryIndex*20+18]; got != 0 {
 			t.Fatalf("registry 条目 %d 的 blockTopRaw=%d，想要哨兵 0", entryIndex, got)
 		}
 	}
-	if got := binary.LittleEndian.Uint16(dst[registryOffset+57:]); got != 40001 {
+	if got := binary.LittleEndian.Uint16(dst[registryOffset+60:]); got != 40001 {
 		t.Fatalf("fourth registry ID=%d，想要 40001", got)
 	}
-	if got := dst[registryOffset+57+18]; got != 5 {
+	if got := dst[registryOffset+60+18]; got != 5 {
 		t.Fatalf("fourth registry blockTopRaw=%d，想要 5", got)
 	}
-	if got := binary.LittleEndian.Uint64(dst[registryOffset+4*19+8:]); got != 5 {
+	if got := binary.LittleEndian.Uint64(dst[registryOffset+4*20+8:]); got != 5 {
 		t.Fatalf("visibility row 1=%d，想要 5", got)
 	}
 }
