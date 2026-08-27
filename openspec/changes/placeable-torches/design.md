@@ -5,6 +5,7 @@
 - `internal/core` 是方块/物品属性和放置映射的**唯一事实源**：`BlockEmission`（发光判定）、`BlockLightAttenuation`（天空光额外衰减）、`PlaceableBlockAtFace`（物品×命中面 → 方块形态）、`BlockDrop`（火把掉落回一个火把）都落在 core；`internal/assets` 的 `Registry.Emission`/`LightAttenuation` 只做转调（本次删除 assets 内两处重复 switch，见 `internal/assets/blocks.go` 现 `Emission`/`LightAttenuation` 实现）。
 - `internal/sim` 是放置与支撑失效的唯一执行者：`executePlacement`（`internal/sim/engine_placement.go`）对火把物品先经 `torchSupport(block, pos) (supportPos, bool)` 校验支撑，再走既有世界写入 + `recordChange` + 扣物品原子路径；不建立 block behavior interface（两个消费者不足以支撑抽象，见否决记录）。
 - 支撑失效复核挂在**本 tick 已变化位置**上：`finishChanges`（`internal/sim/engine_changes.go`）之前对 pending block changes 的位置排序去重，逐个检查精确六邻居；邻居是火把且 `torchSupport` 指回该变化格 → `recordChange` 写成空气 + 既有掉落 append。`recordChange` 是权威 tick 内方块变化的唯一汇聚点（流体入队也挂在这里），在它之后、`finishChanges` 之前复核一次即可覆盖全部写者。火把零碰撞、不可能成为支撑源，新移除的火把不会被循环传播 → 不需要递归队列，边界严格 = 六邻居 × 单级。
+- 掉落槽容量不足的取舍：移除火把前先 `PrepareDrop` 预检，容量不足时**整体保留火把**（不写空气、不掉落、无半结算），该格下一次权威变化重新触发复核自愈。与采掘完成路径的 `RejectDropCapacity` 同构——宁可让火把多停留一拍，也不产生「方块消失而物品无声丢失」的半结算；静默丢物品在任何路径都是硬失败语义，悬空火把只是可自愈的瞬态。邻居所在区块未加载时本轮跳过：火把所在区块必然已就绪才会被放置，未就绪意味着整列已随区块卸载，没有可复核的权威状态。
 - 灯光能量（发光 14）经 mesh registry 快照送 Rust，与 15 级发光方块同路径；服务端将来夜行者的黑暗判定读同一张 `core.BlockEmission`，不再建服务端光源表。
 - 火把配方完全复用 A-01 的格子合成闭环：core 的 recipe 表追加 `RecipeTorch`=14 后，网格匹配（裁边 + 镜像位）、产物取出、回收不变量、`CraftingState` 同步全部走既有路径；sim 不为火把写任何合成专用分支。
 

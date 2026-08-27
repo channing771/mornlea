@@ -101,6 +101,18 @@ func TestFluidBlocksHaveNoCollision(t *testing.T) {
 	}
 }
 
+// TestTorchFormsHaveNoCollision 锁定火把五形态的零碰撞契约：落地与四向墙面
+// 形态都与流体、作物同形状——已加载但零碰撞体。零碰撞不豁免射线瞄准，
+// 瞄准判定由交互射线的目标谓词负责，碰撞表不参与。
+func TestTorchFormsHaveNoCollision(t *testing.T) {
+	for id := core.TorchStandingID; id <= core.TorchWallNegZID; id++ {
+		boxes := physics.BlockCollisionBoxes(id, true)
+		if !boxes.Loaded || boxes.Count != 0 {
+			t.Fatalf("BlockCollisionBoxes(%d, true) = %+v，想要 (Loaded:true, Count:0)", id, boxes)
+		}
+	}
+}
+
 // idSource 按方块 ID 而非直接给碰撞体建模一个只读世界，经
 // physics.BlockCollisionBoxes 转换——用来在 Step 级别端到端验证「实体的碰撞体
 // 与流体格重叠时可自由穿行」。
@@ -132,6 +144,20 @@ func TestEntityPassesThroughFluidBlock(t *testing.T) {
 	}, physics.Input{}, waterWorld).State
 	if passed.Position.X() <= 0.7+1e-5 {
 		t.Fatalf("流体阻挡了实体穿行: %+v", passed)
+	}
+}
+
+// TestEntityPassesThroughTorchBlock 端到端验证火把零碰撞：同一堵墙，石头会
+// 挡住实体，换成火把（落地形态）则实体可自由穿行——与流体同一判定路径。
+func TestEntityPassesThroughTorchBlock(t *testing.T) {
+	torchWorld := idSource{{X: 1, Y: 1, Z: 0}: core.TorchStandingID}
+	passed := physics.Step(physics.State{
+		Position: mgl32.Vec3{0.5, 1, 0.5},
+		Velocity: mgl32.Vec3{10, 0, 0},
+		OnGround: true,
+	}, physics.Input{}, torchWorld).State
+	if passed.Position.X() <= 0.7+1e-5 {
+		t.Fatalf("火把阻挡了实体穿行: %+v", passed)
 	}
 }
 

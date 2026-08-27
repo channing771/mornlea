@@ -503,7 +503,10 @@ func planMineableBlock(block core.BlockID) bool {
 	// 十个编号都有单一产物登记，成熟小麦的第二份产物（2 种子）只存在于
 	// internal/sim 采掘完成路径的分支里，编号层面读不出来——巧合性安全不成立。
 	// 伙伴的农业语义尚未裁决（design.md 遗留 11），在裁决之前一律不可作为目标。
-	if core.IsCrop(block) || core.IsFarmland(block) {
+	// 火把五形态同理必须显式拒绝（可放置火把的伙伴防御清单）：core.BlockDrop
+	// 对它们都有单一产物登记，通用判据会放行；火把的处置语义扩给伙伴之前
+	// 一律不可作为 mine 目标。
+	if core.IsCrop(block) || core.IsFarmland(block) || core.IsTorch(block) {
 		return false
 	}
 	_, ok := core.BlockDrop(block)
