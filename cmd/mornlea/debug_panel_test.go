@@ -17,6 +17,8 @@ import (
 
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/config"
+	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/render"
 	"github.com/channing771/mornlea/internal/sim"
@@ -237,7 +239,7 @@ func TestApplyPanelChangeWritesCameraFovY(t *testing.T) {
 	}
 }
 
-func TestPanelResetAllSkipsAuthoritativeGroupsWhenRemote(t *testing.T) {
+func TestPanelRemoteRejectsAuthoritativeEnterEdit(t *testing.T) {
 	state := newPanelState(config.Defaults())
 	state.visible = true
 	state.selectFieldForTest(t, "physics.gravity")
@@ -318,9 +320,10 @@ func TestEncodeDebugPanelSegmentCrossLanguageGolden(t *testing.T) {
 	}
 }
 
-// bytesOffset 返回段头之后第一条行记录的字节偏移：layout 4+flags 4+f64 8+
-// 3×f32 12+yaw 4+pitch 4+tick 8+world_time 8+loaded 4 = 64 字节的常数部分
-// 逐字段累加后为 56 字节，加 mode（4+len）与 row_count 4。
+// rowsOffset 返回段头之后第一条行记录的字节偏移：常数部分 56 字节
+// （layout 4 + flags 4 + frame_millis 8 + position 3×f32 12 + yaw 4 +
+// pitch 4 + tick 8 + world_time 8 + loaded_chunks 4），加 mode
+// （4 字节长度 + 文本）与 row_count 4。
 func rowsOffset(mode string) int { return 56 + 4 + len(mode) + 4 }
 
 func TestEncodeDebugPanelSegmentUTF8Truncation(t *testing.T) {
@@ -422,9 +425,9 @@ func TestEncodeDebugPanelSegmentWithinBudget(t *testing.T) {
 	for i := range rows {
 		rows[i] = render.PanelRow{Label: fmt.Sprintf("field %02d", i), Value: "123.456", Selected: i == 0}
 	}
-	bytes := encodeDebugPanelSegment(true, true, render.PanelReadout{Mode: "benchmark"}, rows)
-	if len(bytes) > maxUISegmentBytes {
-		t.Fatalf("段长=%d, 上界 %d", len(bytes), maxUISegmentBytes)
+	segment := encodeDebugPanelSegment(true, true, render.PanelReadout{Mode: "benchmark"}, rows)
+	if len(segment) > maxUISegmentBytes {
+		t.Fatalf("段长=%d, 上界 %d", len(segment), maxUISegmentBytes)
 	}
 }
 
@@ -586,5 +589,144 @@ func TestDecodeDebugPanelEventsFiltersAndPreservesOrder(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("筛选结果=%+v, want %+v", got, want)
+	}
+}
+
+// editSeedForTest 从段字节里提取编辑行的 edit_value。定位 rows 被标记
+// Selected 的行（rows() 不变量：恒有且仅有一个），其记录在 rowsOffset 之后
+// 每行定长 52 字节（label 24 + value 24 + flags 4），编辑载荷紧随 flags：
+// u32 len + value + u32 cursor。
+func editSeedForTest(t *testing.T, segment []byte, rows []render.PanelRow) string {
+	t.Helper()
+	for i, row := range rows {
+		if !row.Selected {
+			continue
+		}
+		base := rowsOffset("单机") + i*52
+		editLen := int(binary.LittleEndian.Uint32(segment[base+52 : base+56]))
+		end := base + 56 + editLen
+		if end > len(segment) {
+			t.Fatalf("edit_value 越界: len=%d end=%d", len(segment), end)
+		}
+		return string(segment[base+56 : end])
+	}
+	t.Fatal("段中没有 Selected 行")
+	return ""
+}
+
+// TestPanelEditSeedFullPrecisionDoesNotDrift 锁住 M-2 修法：编辑器向 Rust
+// 播种的 edit_value 必须来自字段的全精度原始值，而不是 4 位有效数字的展示值
+// ——用户不改文本直接 CONFIRM 时，确认事件原样回传播种文本，两者写回结果
+// 必须一致。展示值 9.807 回写会令 9.80665 悄悄漂移为显示形式。测试走
+// rows()→编码器→种子提取→applyPanelEvents 全链路，直击真实输入路径。
+func TestPanelEditSeedFullPrecisionDoesNotDrift(t *testing.T) {
+	state := newPanelState(config.Defaults())
+	state.visible = true
+	state.selectFieldForTest(t, "physics.gravity")
+	state.effective.Physics.Gravity = 9.80665
+	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionEnterEdit}}, false)
+	rows := state.rows(false)
+	seed := editSeedForTest(t, encodeDebugPanelSegment(true, true, render.PanelReadout{Mode: "单机"}, rows), rows)
+	state.applyPanelEvents([]debugPanelEvent{{
+		action: client.DebugPanelActionConfirm, value: seed,
+	}}, false)
+	if state.effective.Physics.Gravity != 9.80665 {
+		t.Fatalf("确认播种值不得漂移有效值: got %v, want 9.80665", state.effective.Physics.Gravity)
+	}
+	if state.editing {
+		t.Fatal("确认后必须退出编辑态")
+	}
+}
+
+// TestPanelVisibleCapturesGameKeysAtFrameLoopLevel 锁住 spec 2.3 的核心断言
+// 「面板可见时游戏键 MUST NOT 产生上行，位置与朝向不变」在帧循环层的落实：
+// panelVisible() 的四条接线分支（Esc 不释放光标、相机旋转冻结、动作抑制、
+// 移动归零）只有走 runGamePhase 才会被真实执行，unit 级 panelState 测试
+// 覆盖不到。帧 0 面板可见时按 W+左键+E 并把光标移到 (200,150)：上行必须
+// 全为中性输入，相机必须纹丝不动；帧 1 Esc 必须保持光标捕获；帧 2 F3
+// 隐藏面板；帧 3 W 必须恢复移动上行。
+func TestPanelVisibleCapturesGameKeysAtFrameLoopLevel(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
+	drainInputs := func(messages []network.ClientMessage) []network.PlayerInput {
+		var inputs []network.PlayerInput
+		for _, message := range messages {
+			input, ok := message.(network.PlayerInput)
+			if !ok {
+				t.Fatalf("意外上行消息 %#v，want PlayerInput", message)
+			}
+			inputs = append(inputs, input)
+		}
+		return inputs
+	}
+	var serverEndpoint network.ServerEndpoint
+	var visiblePhase []network.PlayerInput
+	app, endpoint, window := newChatLoopApplication(t, []chatWindowFrame{
+		{
+			delay:   55 * time.Millisecond,
+			keys:    map[client.Key]bool{client.KeyW: true, client.KeyE: true},
+			primary: true,
+			cursorX: 200,
+			cursorY: 150,
+		},
+		{
+			delay: 55 * time.Millisecond,
+			keys:  map[client.Key]bool{client.KeyEscape: true},
+			onPoll: func() {
+				visiblePhase = drainInputs(drainChatClientMessages(serverEndpoint))
+			},
+		},
+		{delay: 55 * time.Millisecond, keys: map[client.Key]bool{client.KeyF3: true}},
+		{delay: 55 * time.Millisecond, keys: map[client.Key]bool{client.KeyW: true}},
+	})
+	app.panel = newPanelState(config.Defaults())
+	app.panel.visible = true
+	if err := app.predictor.Begin(network.PlayerState{
+		ServerTick: 1, Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 10, 0.5},
+		OnGround: true, Ready: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	serverEndpoint = endpoint
+	app.camera.Yaw, app.camera.Pitch = 0.5, -0.3
+	app.render.MouseSensitivity = 1
+	if err := runInteractive(app); err != nil {
+		t.Fatal(err)
+	}
+	if app.panel.visible {
+		t.Fatal("F3 必须隐藏面板")
+	}
+	if app.inventoryOpen {
+		t.Fatal("面板可见期间 E 必须被抑制，背包不得打开")
+	}
+	if app.camera.Yaw != 0.5 || app.camera.Pitch != -0.3 {
+		t.Fatalf("面板可见期间相机不得被鼠标旋转: yaw=%v pitch=%v", app.camera.Yaw, app.camera.Pitch)
+	}
+	if !window.captured {
+		t.Fatal("面板可见期间 Esc 不得释放光标")
+	}
+	if len(window.captureHistory) != 1 || !window.captureHistory[0] {
+		t.Fatalf("光标捕获历史=%v, want 仅入口捕获一次、绝无释放", window.captureHistory)
+	}
+	if len(visiblePhase) == 0 {
+		t.Fatal("面板可见帧没有产生上行（中性输入本身也不该缺席）")
+	}
+	for _, input := range visiblePhase {
+		if input.MoveX != 0 || input.MoveZ != 0 || input.Jump || input.Mining || input.Eating {
+			t.Fatalf("面板可见时的上行必须全为中性输入: %+v", input)
+		}
+	}
+	restored := false
+	for _, input := range drainInputs(drainChatClientMessages(endpoint)) {
+		if input.MoveZ != 0 {
+			restored = true
+		}
+		if input.Mining || input.Eating {
+			t.Fatalf("隐藏面板后的上行不得再带动作: %+v", input)
+		}
+	}
+	if !restored {
+		t.Fatal("隐藏面板后 W 必须恢复移动上行")
 	}
 }

@@ -158,11 +158,13 @@ func (s *panelState) rows(remote bool) []render.PanelRow {
 			rows = append(rows, panelSectionHeaderRow(field.Group))
 			lastGroup = field.Group
 		}
+		value := fieldValue(&s.effective, field)
 		rows = append(rows, render.PanelRow{
-			Label:    field.Name,
-			Value:    formatFieldValue(fieldValue(&s.effective, field)),
-			ReadOnly: s.fieldReadOnly(field, remote),
-			Selected: i == s.selected,
+			Label:     field.Name,
+			Value:     formatFieldValue(value),
+			EditValue: formatFieldValuePrecise(value),
+			ReadOnly:  s.fieldReadOnly(field, remote),
+			Selected:  i == s.selected,
 		})
 	}
 	return rows
@@ -280,6 +282,18 @@ func formatFieldValue(v reflect.Value) string {
 	}
 }
 
+// formatFieldValuePrecise 是 formatFieldValue 的全精度变体：浮点用最短往返
+// 表示（FormatFloat 'g' -1），整数与布尔与展示形式完全相同。编辑态的播种
+// 文本必须走这个变体——展示值只有 4 位有效数字，用户在 TextEdit 里不改文本
+// 直接 CONFIRM 时，确认事件回传的播种文本若是展示形式，会把有效值悄悄写成
+// 显示形式（9.80665 → "9.807" → 9.807，见 TestPanelEditSeedFullPrecisionDoesNotDrift）。
+func formatFieldValuePrecise(v reflect.Value) string {
+	if v.Kind() == reflect.Float32 || v.Kind() == reflect.Float64 {
+		return strconv.FormatFloat(v.Float(), 'g', -1, 64)
+	}
+	return formatFieldValue(v)
+}
+
 func clampFloat(value, min, max float64) float64 {
 	if value < min {
 		return min
@@ -377,7 +391,14 @@ func encodeDebugPanelSegment(
 		}
 		out = binary.LittleEndian.AppendUint32(out, flags)
 		if editRow {
-			seed := truncateDebugText(row.Value, debugPanelEditValueMaxLen)
+			// 播种全精度原始值而非展示值（展示值已按 4 位有效数字舍入），
+			// 否则「不改文本直接确认」会把有效值写成显示形式。EditValue 由
+			// panelState.rows 填充；手构造的行（测试夹具）为空时回退展示值。
+			seed := row.EditValue
+			if seed == "" {
+				seed = row.Value
+			}
+			seed = truncateDebugText(seed, debugPanelEditValueMaxLen)
 			out = binary.LittleEndian.AppendUint32(out, uint32(len(seed)))
 			out = append(out, seed...)
 			out = binary.LittleEndian.AppendUint32(out, uint32(len(seed)))

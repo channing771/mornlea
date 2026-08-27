@@ -51,9 +51,14 @@ const (
 
 // PanelRow 是调试面板中一条参数行：标签、当前值，以及是否只读、是否被选中。
 // 按键交互（移动选中项、编辑数值）属于后续任务，本渲染器只按传入状态绘制。
+// EditValue 是编辑态向 Rust 播种的原始值文本（通常与 Value 展示文本不同：
+// 浮点展示会舍入到 4 位有效数字，播种必须用全精度形式，见 cmd/mornlea
+// debug_panel 的 formatFieldValuePrecise）。
 type PanelRow struct {
-	Label, Value       string
-	ReadOnly, Selected bool
+	Label, Value string
+	EditValue    string
+	ReadOnly     bool
+	Selected     bool
 }
 
 // PanelReadout 是面板顶部固定的只读状态读数：一帧耗时、玩家位置与朝向、
