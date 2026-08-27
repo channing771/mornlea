@@ -232,7 +232,7 @@ func TestSleepThroughNightJumpsPhaseToDayStart(t *testing.T) {
 	if len(result.Rejected) != 0 {
 		t.Fatalf("入睡被拒绝: %+v", result.Rejected)
 	}
-	//入睡命令与跳夜结算在同一个 tick 内完成：相位从周期起点起步。
+	// 入睡命令与跳夜结算在同一个 tick 内完成：相位从周期起点起步。
 	if got := engine.DayPhaseOffset(); got != uint16((24000-(18000+1)%24000)%24000) {
 		t.Fatalf("跳夜 offset = %d，想要 %d", got, (24000-(18000+1)%24000)%24000)
 	}

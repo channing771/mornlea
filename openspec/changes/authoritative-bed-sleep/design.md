@@ -26,7 +26,7 @@
 
 ### D1：offset 是「显示相位偏移」，不是时间回拨
 
-`DayPhaseOffset`（uint16，0..23999）只进入显示相位计算 `(worldTime + offset) % 24000`；`WorldTimeTicks` 的推进、持久化与全部既有消费者不变。跳夜设置 offset = `(24000 − worldTime % 24000) % 24000`，使相位立即落在周期起点（白昼）。再次入睡重新计算覆盖旧值。
+`DayPhaseOffset`（uint16，0..23999）只进入显示相位计算 `(worldTime + offset) % 24000`；`WorldTimeTicks` 的推进、持久化与全部既有消费者不变。跳夜设置 offset = `(24000 − (worldTime+1) % 24000) % 24000`（以本 tick 完成后的绝对时间为基准，实现期修正：`advanceWorldTime` 之后相位须恰为 0，spec scenario「服务端完成该 tick」的可观察语义），使相位立即落在周期起点（白昼）。再次入睡重新计算覆盖旧值。
 
 **否决**：直接把 `WorldTimeTicks` 向前加（破坏「每 tick 恰好 +1」契约、错误加速作物/流体与掉落寿命）；引入负向时间（回放与确定性全部破坏）。
 
