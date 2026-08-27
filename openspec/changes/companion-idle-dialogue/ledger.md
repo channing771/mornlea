@@ -74,6 +74,21 @@
 | Task 2 archcheck | pass | 初版 `4.802s`；repair 后 `4.907s`；reviewer 重跑通过 |
 | Task 2 diff and scope | pass | cumulative `bea17388..dee6be55` 只含 4 个计划内 server 文件；repair 只改 idle 测试；diff/status clean |
 | Task 2 independent reviews | approved | repair round 1 后 SPEC 与 QUALITY 均无 Critical、Important 或 Minor finding |
+| Task 3 RED focused | expected fail | `TestIdleDialogueOutcomeValidBroadcastsWithoutSummary` facts 为空、双广播 0/0、parity 无 idle speech；3 个既有语义锁定用例按预期 PASS |
+| Task 3 GREEN focused | pass | 初版 `1.016s`；repair 后控制会话 `-count=5` `2.110s` 复跑通过 |
+| Task 3 companion+server race | pass | `internal/companion 3.802s`；`internal/server 209.030s` |
+| Task 3 archcheck | pass | `ok 5.069s` |
+| Task 3 diff and scope | pass | `40db7160` 只含 3 个计划内文件（439+/1-）；repair `10ee96c1` 只改 2 个测试文件 |
+| Task 3 independent reviews | approved | SPEC 与 QUALITY 均 PASS、无 Critical/Important；各 2-4 条 Minor，其中 2 条经 repair round 1（`10ee96c1`）修复后 focused `-count=5` 全绿 |
+
+## Task 3 Implementation Evidence
+
+- 实现 commit：`40db7160cc8964906ca91b2b54fa30928d11bd0a feat(server): publish valid idle companion speech`。
+- 评审修复 commit：`10ee96c1cfa97fff698e06618c24d0641ffd048c test(server): sharpen idle dialogue test synchronization`。
+- `applyDialogueOutcome` node switch 追加 `DialogueNodeIdle` 分支，按 D7 重验空队列、真实同一 issuer（playerID+name）、非 restored、active 身体与在线+水平 16 格受众；generation 预检仍在 switch 前、err 处理在其后，任务节点分支未动。
+- 有效 idle 复用 `applyDialogueEffect` 广播 speech；summary 仅 terminal 节点写入，idle 天然不摘要。模型失败不补发、不重排期。
+- 测试覆盖：有效广播、七类 stale、`ErrDialogueUnavailable` 期限精确保持、idle 在途时任务启动不抢占（requests=1/inFlight=1/cancels=0）、双玩家广播逐字段一致、Memory/TCP parity 投影精确比较。
+- 实现者两处编排偏离均经 SPEC reviewer 裁决为必要/加强：idle 请求须先于任务指令派发（否则 dispatch 清期限）；任务计划用六步保持 Running 避免断言窗口混入任务台词。
 
 ## Task 1 Implementation Evidence
 

@@ -13,10 +13,10 @@
 
 ## 3. idle 结果重验、广播与 parity
 
-- [ ] 3.1 在 `internal/server/companion_idle_dialogue_test.go` 先写失败测试，覆盖有效结果、pending/current/issuer/恢复身份/离线/超距/inactive 过时结果、摘要与事实不变，以及 idle 在途时新任务不取消且不发第二请求；generation 场景保持 queue 空闲而只让 outcome generation 不匹配，模型错误场景断言已经安排的下一 deadline 精确不变；运行 `go test ./internal/server -run 'TestIdleDialogueOutcome|TestIdleDialogueTaskStartDoesNotPreempt' -count=1` 证明 RED。
-- [ ] 3.2 修改 `internal/server/companion_dialogue.go` 的 outcome switch，在 generation 检查后重验空队列、真实同一 issuer、active、在线与水平 16 格；有效结果只复用 `applyDialogueEffect` 广播 speech，非 terminal 语义保证 summary 不变。
-- [ ] 3.3 在 `internal/server/companion_dialogue_wiring_test.go` 先补双在线玩家广播测试和受控 fake 模型的 Memory/TCP 业务事件投影 parity；不比较绝对落地 tick 或跨传输 EventID。
-- [ ] 3.4 运行 `gofmt -w internal/server/companion_idle_dialogue_test.go internal/server/companion_dialogue.go internal/server/companion_dialogue_wiring_test.go`、`go test ./internal/server -run 'TestIdleDialogueOutcome|TestIdleDialogueTaskStartDoesNotPreempt|TestCompanionIdleDialogueBroadcastsToAllPlayers|TestCompanionIdleDialogueMemoryTCPParity' -count=1`、`go test ./internal/companion ./internal/server -race -count=1` 与 archcheck；经独立 SPEC/QUALITY 双评审通过后更新 `ledger.md`。
+- [x] 3.1 在 `internal/server/companion_idle_dialogue_test.go` 先写失败测试，覆盖有效结果、pending/current/issuer/恢复身份/离线/超距/inactive 过时结果、摘要与事实不变，以及 idle 在途时新任务不取消且不发第二请求；generation 场景保持 queue 空闲而只让 outcome generation 不匹配，模型错误场景断言已经安排的下一 deadline 精确不变；运行 `go test ./internal/server -run 'TestIdleDialogueOutcome|TestIdleDialogueTaskStartDoesNotPreempt' -count=1` 证明 RED。
+- [x] 3.2 修改 `internal/server/companion_dialogue.go` 的 outcome switch，在 generation 检查后重验空队列、真实同一 issuer、active、在线与水平 16 格；有效结果只复用 `applyDialogueEffect` 广播 speech，非 terminal 语义保证 summary 不变。
+- [x] 3.3 在 `internal/server/companion_dialogue_wiring_test.go` 先补双在线玩家广播测试和受控 fake 模型的 Memory/TCP 业务事件投影 parity；不比较绝对落地 tick 或跨传输 EventID。
+- [x] 3.4 运行 `gofmt -w internal/server/companion_idle_dialogue_test.go internal/server/companion_dialogue.go internal/server/companion_dialogue_wiring_test.go`、`go test ./internal/server -run 'TestIdleDialogueOutcome|TestIdleDialogueTaskStartDoesNotPreempt|TestCompanionIdleDialogueBroadcastsToAllPlayers|TestCompanionIdleDialogueMemoryTCPParity' -count=1`、`go test ./internal/companion ./internal/server -race -count=1` 与 archcheck；经独立 SPEC/QUALITY 双评审通过后更新 `ledger.md`。
 
 ## 4. 整分支评审与门禁
 
