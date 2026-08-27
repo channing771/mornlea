@@ -148,7 +148,7 @@ func stepMiningProgress(actor *actorState, target core.BlockPos, block core.Bloc
 // 实现——流体豁免只在这一处写，任何调用点都不可能漏掉。
 //
 // 门上半（`DoorUpper`）无方向且单 ID：其固体性由下半 `IsDoorOpen` 决定
-//（`!Open` 实心、`Open` 可穿透），若下半不存在或未就绪则按关闭处理。
+// （`!Open` 实心、`Open` 可穿透），若下半不存在或未就绪则按关闭处理。
 func blockRaycastSampler(dimension *Dimension) func(core.BlockPos) (bool, error) {
 	return func(position core.BlockPos) (bool, error) {
 		block, ready := dimension.BlockAt(position)

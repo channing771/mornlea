@@ -148,15 +148,15 @@ func TestDoorQuad(t *testing.T) {
 	const eps = float32(1e-6)
 	closed := map[core.BlockID][2]float32{
 		core.DoorLowerSouthClosed: {1 - thickness, 1}, // Z 高边
-		core.DoorLowerWestClosed:  {0, thickness},      // X 低边
-		core.DoorLowerNorthClosed: {0, thickness},      // Z 低边
-		core.DoorLowerEastClosed:  {1 - thickness, 1},  // X 高边
+		core.DoorLowerWestClosed:  {0, thickness},     // X 低边
+		core.DoorLowerNorthClosed: {0, thickness},     // Z 低边
+		core.DoorLowerEastClosed:  {1 - thickness, 1}, // X 高边
 	}
 	open := map[core.BlockID][2]float32{
 		core.DoorLowerSouthOpen: {1 - thickness, 1}, // 南开→东
 		core.DoorLowerWestOpen:  {1 - thickness, 1}, // 西开→南（Z）
-		core.DoorLowerNorthOpen: {0, thickness},      // 北开→西
-		core.DoorLowerEastOpen:  {0, thickness},      // 东开→北（Z）
+		core.DoorLowerNorthOpen: {0, thickness},     // 北开→西
+		core.DoorLowerEastOpen:  {0, thickness},     // 东开→北（Z）
 	}
 	for id, want := range closed {
 		boxes := physics.BlockCollisionBoxes(id, true)
