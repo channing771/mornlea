@@ -17,13 +17,14 @@ const (
 	phasePlayerCommands stepPhase = iota + 1
 	phaseCompanionActions
 	phasePhysicsAdvance
-	// phaseHostileAdvance 是夜行者的固定次序编排（生成 → 移动 → 灼烧 → 远离
-	// → 死亡掉落，见 advanceHostiles）。相对统一物理，它保持「玩家 → 伙伴 →
-	// 夜行者」的逐 actor 积分顺序；通知次序（物理之后、流体之前）与常量次序
-	// 一致，而实际代码位置按「一切区块写者位于 reconcileSubscriptions 之后」
-	// 的阶段顺序契约放在收敛点之后——死亡掉落是区块写者，必须与其它写者共享
-	// 同一批 revision、广播与存盘。它同样位于 advancePlayerMelee 之前，为后续
-	// 夜行者近战意图的同 tick 结算保留次序。
+	// phaseHostileAdvance 是夜行者的固定次序编排（生成 → 意图消费 → 移动 →
+	// 近战结算 → 灼烧 → 远离 → 死亡掉落，见 advanceHostiles）。相对统一物理，
+	// 它保持「玩家 → 伙伴 → 夜行者」的逐 actor 积分顺序；通知次序（物理之后、
+	// 流体之前）与常量次序一致，而实际代码位置按「一切区块写者位于
+	// reconcileSubscriptions 之后」的阶段顺序契约放在收敛点之后——死亡掉落是
+	// 区块写者，必须与其它写者共享同一批 revision、广播与存盘。它同样位于
+	// advancePlayerMelee 之前：夜行者近战意图在同 tick 内先冻结先结算，再走
+	// 玩家近战，两类近战共享同一份受击保护计时。
 	phaseHostileAdvance
 	// phaseFluidAdvance 位于熔炉推进之后、容器移动之前。
 	//

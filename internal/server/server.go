@@ -44,6 +44,7 @@ type Server struct {
 	companionsByName map[string]companion.Definition
 	nextChatEventID  uint64
 	companionManager *companionManager
+	hostileManager   *hostileManager
 	inputBoundary    atomic.Pointer[inputIngressBoundary]
 	jobs             chan chunkJob
 	acquired         chan sim.AcquiredChunk
@@ -189,6 +190,10 @@ func newWorld(
 		// Validating 归一为 Queued，Running 保留进度且路径留空待重算）。
 		server.companionManager.restoreQueues(loadedQueues)
 	}
+	// 夜行者有界追逐编排独立于伙伴配置存在；目标事实同样经会话注册表注入，
+	// manager 只消费这一权威源。
+	server.hostileManager = newHostileManager(server.engine)
+	server.hostileManager.onlinePlayers = server.onlineHostileTargets
 
 	server.workers.Add(config.Workers)
 	for range config.Workers {
@@ -312,6 +317,9 @@ func (server *Server) step(scheduled time.Time) sim.TickResult {
 	// 任务编排位于聊天 drain 之后（Accepted 指令刚入队即可同 tick 派发规划）、
 	// engine.Step 之前（伙伴移动输入必须先进 inbox 才能被本 tick 消费）。
 	taskDeliveries := server.advanceCompanionTasks()
+	// 夜行者编排同样先于 engine.Step：有界追逐的移动/攻击意图必须先进
+	// inbox 才能被同 tick 的夜行者阶段消费；派发绝不等待 A*。
+	server.advanceHostileChase()
 	result := server.engine.Step()
 	if server.companionManager != nil {
 		// 采掘进度只在 TickResult.Companions 发布（CompanionBodies 不含采掘

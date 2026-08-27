@@ -116,6 +116,7 @@ type Engine struct {
 	inboxMu          sync.Mutex
 	commands         []Command
 	companionActions []CompanionAction
+	hostileActions   []HostileAction
 	acquired         []AcquiredChunk
 	generated        []GeneratedChunk
 	tick             atomic.Uint64

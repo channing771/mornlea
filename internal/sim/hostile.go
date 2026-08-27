@@ -50,10 +50,17 @@ type hostileState struct {
 	hurtCooldown   uint8
 	burnCooldown   uint8
 	// hasTarget 与 targetPlayer 成对表达追逐目标；无目标时 `targetPlayer`
-	// 必须为零值，与存档记录的成对约束一致。
+	// 必须为零值，与存档记录的成对约束一致。目标选择由 server 编排层做出并经
+	// `PlanHostileChase` 写回权威事实；`nextRepathTicks` 是持久化世界时间轴上
+	// 的下一次重规划 tick，重规划节奏因此跨重启保留。
 	hasTarget       bool
 	targetPlayer    core.PlayerID
 	nextRepathTicks uint64
+	// attackIntent 与 attackTargetSession 是本 tick 已冻结的攻击意图（瞬态，
+	// 不进快照或存档）：由 applyHostileActions 在 tick 边界统一写定，由
+	// advanceHostileMelee 在同 tick 稍后统一结算并清零。
+	attackIntent        bool
+	attackTargetSession SessionID
 	// distantTicks 是距全部 active 玩家水平超过 despawn 半径的累计 tick，
 	// 回到范围内即清零。
 	distantTicks uint16
@@ -267,17 +274,50 @@ func (engine *Engine) advanceHostileMovement() {
 	}
 }
 
+// PlanHostileChase 把一次有界追逐的目标选择与重规划节奏写回权威事实：目标成
+// 对约束与存档记录一致（无目标时玩家 ID 必须为零、有目标时必须是合法
+// UUIDv4），`nextRepathTicks` 是持久化世界时间轴上的下一次重规划 tick。唯一
+// 调用方是持有 `stepMu` 的 server 编排层（tick 边界单写者）；未知 ID 或成对
+// 约束不成立时整体拒绝并返回 false，绝不留下半更新的追逐事实。
+func (engine *Engine) PlanHostileChase(
+	id uint64,
+	hasTarget bool,
+	target core.PlayerID,
+	nextRepathTicks uint64,
+) bool {
+	index := engine.hostiles.findIndex(id)
+	if index < 0 {
+		return false
+	}
+	if !hasTarget {
+		if target != (core.PlayerID{}) {
+			return false
+		}
+	} else if !target.Valid() {
+		return false
+	}
+	entry := &engine.hostiles.entries[index]
+	entry.hasTarget = hasTarget
+	entry.targetPlayer = target
+	entry.nextRepathTicks = nextRepathTicks
+	return true
+}
+
 // advanceHostiles 是夜行者阶段的固定次序编排，由 `Engine.Step` 在订阅收敛
 // 之后、玩家近战之前调用：生成（tick 边界判定，先于物理语义，新个体下一
-// tick 才积分）→ 移动（与玩家/伙伴同一积分出口，ID 升序）→ 灼烧（白昼露天
-// 每 20 tick 扣 1）→ 远离消失（>64 格累计 600 active tick，无掉落）→ 死亡
-// 掉落（同 tick 移除，环形尝试放 1 个腐肉）。灼烧致死的个体由死亡结算统一
-// 移除，因此「烧死」与「被打死」走完全相同的移除与掉落路径。所有子步骤的
-// 成本都有固定上界（候选 ≤1、个体 ≤64、掉落尝试以已加载区块封顶），不随
-// 世界规模放大。
+// tick 才积分）→ 意图消费（有界追逐 worker 提交的移动/攻击意图，本 tick 的
+// 全部攻击意图在此冻结）→ 移动（与玩家/伙伴同一积分出口，ID 升序）→ 近战
+// 结算（先冻结的意图按 ID 升序统一结算）→ 灼烧（白昼露天每 20 tick 扣 1）→
+// 远离消失（>64 格累计 600 active tick，无掉落）→ 死亡掉落（同 tick 移除，
+// 环形尝试放 1 个腐肉）。灼烧致死的个体由死亡结算统一移除，因此「烧死」与
+// 「被打死」走完全相同的移除与掉落路径。夜行者近战结算先于玩家近战执行，同
+// tick 两类近战共享同一份受击保护计时。所有子步骤的成本都有固定上界（候选
+// ≤1、个体 ≤64、意图 ≤64、掉落尝试以已加载区块封顶），不随世界规模放大。
 func (engine *Engine) advanceHostiles(pending map[core.ChunkKey]*pendingChunkChanges) {
 	engine.advanceHostileSpawn()
+	engine.applyHostileActions(engine.takeHostileActions())
 	engine.advanceHostileMovement()
+	engine.advanceHostileMelee()
 	engine.advanceHostileBurn(engine.worldTime.Load())
 	engine.advanceHostileDistant()
 	engine.settleHostileDeaths(pending)

@@ -70,6 +70,9 @@ func (server *Server) Shutdown(ctx context.Context) error {
 		if server.companionManager != nil {
 			server.companionManager.beginShutdown()
 		}
+		if server.hostileManager != nil {
+			server.hostileManager.beginShutdown()
+		}
 		server.engine.Step()
 		if server.companions != nil {
 			server.companions.Observe(
@@ -139,6 +142,9 @@ func (server *Server) Shutdown(ctx context.Context) error {
 	}
 	if server.companionManager != nil {
 		server.companionManager.close()
+	}
+	if server.hostileManager != nil {
+		server.hostileManager.close()
 	}
 	server.cancelSaves()
 	<-server.saveDone

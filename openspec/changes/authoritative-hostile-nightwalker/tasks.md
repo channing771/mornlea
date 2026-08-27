@@ -33,10 +33,10 @@
 
 ## 5. server 有界追逐 worker 与路径执行
 
-- [ ] 5.1 失败测试：目标选择（最近 active 同维 live player、等距按 `PlayerID` 字节序）；每 tick 至多 2 份快照（ID 最小且到期），其余顺延；快照覆盖 33×9×33 与 revisions；第三份不得读取世界
-- [ ] 5.2 实现两槽 worker（复用 `companion.NewPathGrid`/`FindPath`；channel cap 2；**投递 MUST 非阻塞 select**——满槽时该 mob 本次顺延、下一 tick 重规划；结果按 ID 序在 tick 边界应用；已过期（generation/target/revision 变化）的结果丢弃；权威 tick 只发快照不等待 A*；补满槽非阻塞用例）
-- [ ] 5.3 失败测试：路径执行（目标超窗口钳到朝玩家方向窗缘可站立格；每 waypoint 前重验 revisions 与当前 cell；失效清 path 且 `NextRepathTick` 下一 tick；到 1.8 停移并冻结一次攻击意图；无路径不穿墙直线移动）并实现 `HostileAction{MoveX,MoveZ,Jump,AttackTarget}` 消费
-- [ ] 5.4 极简 damage seam：sim 内 test-only 通道验证 3 伤害/20 tick 冷却（同 tick 意图冻结、按 ID 升序、既有 `applyDamage`）；`gofmt -w internal/server internal/sim`、`go test ./internal/companion ./internal/server ./internal/sim -race -count=1`；双评审后提交 `feat: drive bounded nightwalker AI`（seam 待 A-03 统一战斗落地后收编删除）
+- [x] 5.1 失败测试：目标选择（最近 active 同维 live player、等距按 `PlayerID` 字节序）；每 tick 至多 2 份快照（ID 最小且到期），其余顺延；快照覆盖 33×9×33 与 revisions；第三份不得读取世界
+- [x] 5.2 实现两槽 worker（复用 `companion.NewPathGrid`/`FindPath`；channel cap 2；**投递 MUST 非阻塞 select**——满槽时该 mob 本次顺延、下一 tick 重规划；结果按 ID 序在 tick 边界应用；已过期（generation/target/revision 变化）的结果丢弃；权威 tick 只发快照不等待 A*；补满槽非阻塞用例）
+- [x] 5.3 失败测试：路径执行（目标超窗口钳到朝玩家方向窗缘可站立格；每 waypoint 前重验 revisions 与当前 cell；失效清 path 且 `NextRepathTick` 下一 tick；到 1.8 停移并冻结一次攻击意图；无路径不穿墙直线移动）并实现 `HostileAction{MoveX,MoveZ,Jump,AttackTarget}` 消费
+- [x] 5.4 极简 damage seam：sim 内 test-only 通道验证 3 伤害/20 tick 冷却（同 tick 意图冻结、按 ID 升序、既有 `applyDamage`）；`gofmt -w internal/server internal/sim`、`go test ./internal/companion ./internal/server ./internal/sim -race -count=1`；双评审后提交 `feat: drive bounded nightwalker AI`（seam 待 A-03 统一战斗落地后收编删除）
 
 ## 6. 持久化装配、启动恢复与错误路径
 
