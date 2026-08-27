@@ -50,10 +50,10 @@ func encodeUIPauseSegment(remote bool) []byte {
 	return out
 }
 
-// pauseState 承载一个开合周期内的恢复防重入哨兵。打开覆盖层时武装；Esc 边沿
-// 与 Rust 回传的返回动作可能在同一帧相继到达（同一物理按键的两条上游通路），
-// 哨兵保证只有第一条真正触发恢复，其余全部按幂等忽略——即规格「重复触发
-// MUST 只生效一次」。
+// pauseState 承载一个开合周期内的恢复防重入哨兵。打开覆盖层时武装；Esc 键位
+// 边沿与「返回游戏」按钮点击可能同帧相继到达（Escape 键事件由 Go 键位栈裁决，
+// Rust 侧不合成返回动作），哨兵保证只有第一条真正触发恢复，其余全部按幂等
+// 忽略——即规格「重复触发 MUST 只生效一次」。
 type pauseState struct {
 	resumable bool
 }
