@@ -184,6 +184,53 @@ func cropYieldRolls(
 	return wheat, seeds
 }
 
+// cropYieldPotatoSalt 让马铃薯产量的哈希流与小麦及胡萝卜互相独立。
+const cropYieldPotatoSalt = 0x70a70a515eedface
+
+// cropYieldCarrotSalt 让胡萝卜产量的哈希流与马铃薯及小麦互相独立。
+const cropYieldCarrotSalt = 0xca7707701ace5eed
+
+// poisonPotatoSalt 让毒土豆 2% 判定的哈希流与两种作物的产量流互相独立。
+const poisonPotatoSalt = 0xdeadbeefcafe1234
+
+// cropYieldRollsPotato 返回位置上成熟马铃薯在 tick 结算时的块数，落在 [1,4]。
+//
+// 链式 splitmix64 形状复用 `cropYieldRolls` 的确定性模式，仅 salt 不同，保证
+// 马铃薯与胡萝卜、小麦及毒土豆判定相互独立，可重放。
+func cropYieldRollsPotato(seed int64, tick uint64, dim core.DimensionID, pos core.BlockPos) uint8 {
+	hash := splitmix64(uint64(seed) ^ cropYieldPotatoSalt)
+	hash = splitmix64(hash ^ tick)
+	hash = splitmix64(hash ^ uint64(uint32(dim)))
+	hash = splitmix64(hash ^ uint64(uint32(pos.X)))
+	hash = splitmix64(hash ^ uint64(uint32(pos.Y)))
+	hash = splitmix64(hash ^ uint64(uint32(pos.Z)))
+	return uint8(hash%4) + 1
+}
+
+// cropYieldRollsCarrot 返回位置上成熟胡萝卜在 tick 结算时的块数，落在 [1,4]。
+func cropYieldRollsCarrot(seed int64, tick uint64, dim core.DimensionID, pos core.BlockPos) uint8 {
+	hash := splitmix64(uint64(seed) ^ cropYieldCarrotSalt)
+	hash = splitmix64(hash ^ tick)
+	hash = splitmix64(hash ^ uint64(uint32(dim)))
+	hash = splitmix64(hash ^ uint64(uint32(pos.X)))
+	hash = splitmix64(hash ^ uint64(uint32(pos.Y)))
+	hash = splitmix64(hash ^ uint64(uint32(pos.Z)))
+	return uint8(hash%4) + 1
+}
+
+// poisonRoll 报告位置上成熟马铃薯是否额外掉落 1 个毒土豆（2% 概率）。
+//
+// 同为 splitmix64 链，用独立 salt 保证与产量流解耦；`hash%50==0` 即 2%。
+func poisonRoll(seed int64, tick uint64, dim core.DimensionID, pos core.BlockPos) bool {
+	hash := splitmix64(uint64(seed) ^ poisonPotatoSalt)
+	hash = splitmix64(hash ^ tick)
+	hash = splitmix64(hash ^ uint64(uint32(dim)))
+	hash = splitmix64(hash ^ uint64(uint32(pos.X)))
+	hash = splitmix64(hash ^ uint64(uint32(pos.Y)))
+	hash = splitmix64(hash ^ uint64(uint32(pos.Z)))
+	return hash%50 == 0
+}
+
 // growCrop 是生长规则本身：给定方块与它所处的环境，返回下一个方块编号与是否
 // 发生变化。
 //
@@ -193,15 +240,18 @@ func cropYieldRolls(
 //
 // 四条规则：
 //   - 非作物 → 原样返回（耕地也在此列，见 core.IsCrop 的说明）；
-//   - 成熟作物（WheatStage7ID）→ 原样返回；
+//   - 成熟作物（WheatStage7ID / PotatoStage7ID / CarrotStage7ID）→ 原样返回；
 //   - 未成熟作物且湿润且露天 → 推进一个阶段；
 //   - 其余（缺湿或被遮挡）→ 原样返回。
 //
-// 「推进一个阶段」写成 block+1 是合法的：八个阶段占一段连续的稳定方块编号
-// （core/block.go 的 WheatStage0ID..WheatStage7ID），而上面的成熟分支已经保证
+// 「推进一个阶段」写成 block+1 是合法的：三种作物各自占一段连续的稳定方块编号
+// （core/block.go 的 Wheat/Potato/Carrot Stage0..7），而上面的成熟分支已经保证
 // 加一不会越过区间上界。
 func growCrop(block core.BlockID, wet, skyExposed bool) (next core.BlockID, changed bool) {
-	if !core.IsCrop(block) || block == core.WheatStage7ID {
+	if !core.IsCrop(block) {
+		return block, false
+	}
+	if block == core.WheatStage7ID || block == core.PotatoStage7ID || block == core.CarrotStage7ID {
 		return block, false
 	}
 	if !wet || !skyExposed {
