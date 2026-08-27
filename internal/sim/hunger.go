@@ -137,6 +137,7 @@ func (player *playerState) applyExhaustion(milli, thresholdMilli uint16) {
 		}
 	}
 	player.exhaustionMilli = uint16(total)
+	player.saturationZero = player.saturationMilli == 0
 }
 
 // advanceStarvation 推进一名玩家一个 tick 的饥饿伤害结算，与 advanceOxygen
@@ -182,4 +183,5 @@ func (player *playerState) resetHunger() {
 	player.saturationMilli = core.InitialSaturationMilli
 	player.exhaustionMilli = 0
 	player.starvationTicks = 0
+	player.saturationZero = false
 }

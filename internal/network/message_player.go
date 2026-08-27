@@ -32,10 +32,14 @@ type PlayerState struct {
 	// 只发给玩家本人，且不进存档：断线重连后服务端一律重新初始化为满值。
 	Oxygen uint16
 	// Hunger 是权威饥饿值，协议 v24 起随玩家状态同步（wire 上紧跟 `Oxygen` 之后、
-	// WorldTimeTicks 之前）；合法区间是 0..`core.MaxHunger`。它与 `Health`、
-	// `Oxygen` 一样只发给玩家本人。三层饥饿状态里**只有它上线**：饱和度与疲劳值
+	// `SaturationZero` 之前）；合法区间是 0..`core.MaxHunger`。它与 `Health`、
+	// `Oxygen` 一样只发给玩家本人。三层饥饿状态里只有它与零提示位上线：饱和度与疲劳值
 	// 是纯服务端推进量，界面不呈现，因而不占 wire 字段。
 	Hunger uint8
+	// SaturationZero 是饱和度归零提示位，协议 v29 起随玩家状态同步（wire 上紧跟
+	// `Hunger` 之后、`WorldTimeTicks` 之前）；为真时表示 `saturationMilli==0`。
+	// 它只驱动 HUD 抖动提示，不持久化、不进存档。
+	SaturationZero bool
 	// WorldTimeTicks 是本 tick 结束时的权威绝对世界时间，协议 v9 起随玩家状态同步。
 	WorldTimeTicks uint64
 }

@@ -55,6 +55,7 @@ func (p *Predictor) ApplyPlayerState(
 	p.health = message.Health
 	p.oxygen = message.Oxygen
 	p.hunger = message.Hunger
+	p.saturationZero = message.SaturationZero
 	if p.suspended {
 		p.history = p.history[:0]
 		p.accumulator = 0
@@ -111,6 +112,7 @@ func (p *Predictor) clearForNotReady(message network.PlayerState) {
 	// 与生命值同法清零：Ready 之间的会话不共享镜像值，留着旧饥饿值会让下一次
 	// 就绪前的一帧显示上一条会话的读数。
 	p.hunger = 0
+	p.saturationZero = false
 }
 
 func validatePlayerState(message network.PlayerState, maxSentInput uint64) (physics.State, error) {
