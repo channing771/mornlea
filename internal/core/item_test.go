@@ -21,13 +21,13 @@ func TestCanonicalItemIDsStayStable(t *testing.T) {
 }
 
 // TestItemIDMaxGuardsExhaustiveEnumeration 锁定 ItemIDMax 独占哨兵与枚举末项的
-// 关系：当前最后一个合法物品必须是 ItemWorkbench。物品演进纪律是只能在
+// 关系：当前最后一个合法物品必须是 ItemBoneMeal。物品演进纪律是只能在
 // 哨兵之前追加；将来追加新物品时第一个断言变红，迫使开发者同步审视全部以
 // 「item < ItemIDMax」为穷举界的测试（例如 companion 的 place 注册表覆盖测试），
 // 而不是让穷举测试静默失去对新物品的覆盖。
 func TestItemIDMaxGuardsExhaustiveEnumeration(t *testing.T) {
-	if core.ItemWorkbench != core.ItemIDMax-1 {
-		t.Fatalf("ItemID 枚举末项不再是 ItemWorkbench（ItemIDMax-1 = %d）；"+
+	if core.ItemBoneMeal != core.ItemIDMax-1 {
+		t.Fatalf("ItemID 枚举末项不再是 ItemBoneMeal（ItemIDMax-1 = %d）；"+
 			"新增物品必须同步审视全部以 ItemIDMax 为穷举界的测试", core.ItemIDMax-1)
 	}
 	// 哨兵之外不得再出现已注册物品：若有人把新物品追加在哨兵之后，穷举界会
@@ -471,11 +471,11 @@ func TestBrokenToolsAreRegisteredAndUnstackable(t *testing.T) {
 	}
 }
 
-// TestGridCraftingIDsAppendBeforeSentinels 锁定 A-01 格子工作台批次追加的三个
-// 稳定编号：木棍 `ItemStick=37`、工作台物品 `ItemWorkbench=38`（两者都紧贴
-// `ItemIDMax` 哨兵之前、哨兵后移到 39），工作台方块 `WorkbenchID=45`（紧贴
-// `BlockIDMax` 之前、哨兵后移到 46）。编号是协议稳定值：插入或重排会平移后续
-// 编号，破坏既有存档与线上字节。
+// TestGridCraftingIDsAppendBeforeSentinels 锁定格子工作台批次追加的稳定编号：
+// 木棍 `ItemStick=37`、工作台物品 `ItemWorkbench=38`、骨粉 `ItemBoneMeal=39`
+// （三者都紧贴 `ItemIDMax` 哨兵之前、哨兵后移到 40），工作台方块
+// `WorkbenchID=45`（紧贴 `BlockIDMax` 之前、哨兵后移到 46）。编号是协议稳定值：
+// 插入或重排会平移后续编号，破坏既有存档与线上字节。
 func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 	if core.ItemStick != 37 {
 		t.Fatalf("ItemStick = %d，必须稳定为 37 且紧随 ItemBread(%d)",
@@ -488,9 +488,13 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 	if core.ItemWorkbench != 38 {
 		t.Fatalf("ItemWorkbench = %d，必须稳定为 38", core.ItemWorkbench)
 	}
-	if core.ItemIDMax != 39 {
-		t.Fatalf("ItemIDMax = %d，必须紧随 ItemWorkbench(%d) 后移到 39",
-			core.ItemIDMax, core.ItemWorkbench)
+	if core.ItemBoneMeal != core.ItemWorkbench+1 {
+		t.Fatalf("ItemBoneMeal = %d，必须紧随 ItemWorkbench(%d)",
+			core.ItemBoneMeal, core.ItemWorkbench)
+	}
+	if core.ItemIDMax != 40 {
+		t.Fatalf("ItemIDMax = %d，必须紧随 ItemBoneMeal(%d) 后移到 40",
+			core.ItemIDMax, core.ItemBoneMeal)
 	}
 	if core.WorkbenchID != 45 {
 		t.Fatalf("WorkbenchID = %d，必须稳定为 45 且紧随 WheatStage7ID(%d)",

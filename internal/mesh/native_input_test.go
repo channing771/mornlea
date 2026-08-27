@@ -47,6 +47,17 @@ func (*snapshotTestReader) LightAttenuation(id world.BlockID) uint8 {
 	return 0
 }
 
+// 借石头当「短方块」给 `BlockTopRaw` 一个与其余三个单字节字段都不同的取值，
+// 任一字段被漏抄、错位或串位都会让 wantBlocks 对不上。不能用玻璃：它在下面
+// 两个方法里冒充流体（`FluidHeight` 恒为 9），而流体与短方块互斥，同一条目同时
+// 携带两套语义会被 BuildRegistrySnapshot 正确地拒绝。
+func (*snapshotTestReader) BlockTopRaw(id world.BlockID) uint8 {
+	if id == core.StoneID {
+		return 13
+	}
+	return 0
+}
+
 func TestBuildRegistrySnapshotSortsAndFreezesVisibility(t *testing.T) {
 	snapshot, err := BuildRegistrySnapshot(
 		[]world.BlockID{core.StoneID, core.AirID, core.GlassID},
@@ -103,8 +114,67 @@ func (attenuationRegistry) FluidHeight(id world.BlockID) uint8 {
 	return internalTestRegistry{}.FluidHeight(id)
 }
 func (r attenuationRegistry) LightAttenuation(world.BlockID) uint8 { return uint8(r) }
+func (r attenuationRegistry) BlockTopRaw(world.BlockID) uint8      { return 0 }
 func (attenuationRegistry) MeshSnapshot() RegistrySnapshot {
 	panic("attenuationRegistry.MeshSnapshot 不应被调用")
+}
+
+// topRawRegistry 返回一个除顶面高度/流体高度两个字段外与 internalTestRegistry
+// 完全一致的 reader，专门喂 block_top_raw 的域校验与互斥校验。
+type topRawRegistry struct {
+	top   uint8
+	fluid uint8
+}
+
+func (topRawRegistry) Opaque(id world.BlockID) bool { return internalTestRegistry{}.Opaque(id) }
+func (topRawRegistry) FaceVisible(id, adjacent world.BlockID) bool {
+	return internalTestRegistry{}.FaceVisible(id, adjacent)
+}
+func (topRawRegistry) Material(id world.BlockID, f Face) uint16 {
+	return internalTestRegistry{}.Material(id, f)
+}
+func (topRawRegistry) Emission(id world.BlockID) uint8 {
+	return internalTestRegistry{}.Emission(id)
+}
+func (r topRawRegistry) FluidHeight(world.BlockID) uint8    { return r.fluid }
+func (topRawRegistry) LightAttenuation(world.BlockID) uint8 { return 0 }
+func (r topRawRegistry) BlockTopRaw(world.BlockID) uint8    { return r.top }
+func (topRawRegistry) MeshSnapshot() RegistrySnapshot {
+	panic("topRawRegistry.MeshSnapshot 不应被调用")
+}
+
+// TestBuildRegistrySnapshotRejectsBlockTopRawAboveFourteen 把「顶面高度原值
+// 15 进不了快照」钉住。
+//
+// 合法域是哨兵 0（满格）加 1..=14（呈现高度 (h+1)/16）。15 无从表达任何
+// 合法几何——满格必须写哨兵 0，「非零即短方块」是 mesher 的单一判定前提；
+// Rust 侧 RegistryView::validate 同口径拒绝，这里提前给出可读错误。14 必须
+// 放行：那是干/湿耕地的生产取值（15/16 呈现高度）。
+func TestBuildRegistrySnapshotRejectsBlockTopRawAboveFourteen(t *testing.T) {
+	if _, err := BuildRegistrySnapshot(
+		[]world.BlockID{core.AirID, core.BarrierID},
+		topRawRegistry{top: 15},
+	); err == nil {
+		t.Fatal("blockTopRaw=15 未被拒绝")
+	}
+	if _, err := BuildRegistrySnapshot(
+		[]world.BlockID{core.AirID, core.BarrierID},
+		topRawRegistry{top: 14},
+	); err != nil {
+		t.Fatalf("blockTopRaw=14 被拒绝：%v", err)
+	}
+}
+
+// TestBuildRegistrySnapshotRejectsFluidWithBlockTopRaw 钉住流体与短方块的
+// 互斥：流体的角高度由 mesher 邻域平均现算、block_top_raw 由常量驱动，
+// 同一条目同时携带两套语义时行为无从定义，必须在编码两侧一致地拒绝。
+func TestBuildRegistrySnapshotRejectsFluidWithBlockTopRaw(t *testing.T) {
+	if _, err := BuildRegistrySnapshot(
+		[]world.BlockID{core.AirID, core.BarrierID},
+		topRawRegistry{top: 1, fluid: 9},
+	); err == nil {
+		t.Fatal("流体条目携带非零 blockTopRaw 未被拒绝")
+	}
 }
 
 func TestBuildRegistrySnapshotRejectsDuplicateIDs(t *testing.T) {
@@ -128,7 +198,7 @@ func TestBuildRegistrySnapshotCopiesAndFreezesProperties(t *testing.T) {
 	}
 	wantBlocks := []BlockProperties{
 		{ID: core.AirID, Materials: [6]uint16{0, 1, 2, 3, 4, 5}},
-		{ID: core.StoneID, Opaque: true, Materials: [6]uint16{200, 201, 202, 203, 204, 205}},
+		{ID: core.StoneID, Opaque: true, BlockTopRaw: 13, Materials: [6]uint16{200, 201, 202, 203, 204, 205}},
 		{ID: core.GlassID, Emission: 7, FluidHeight: 9, LightAttenuation: 1, Materials: [6]uint16{2000, 2001, 2002, 2003, 2004, 2005}},
 	}
 	if !reflect.DeepEqual(snapshot.Blocks, wantBlocks) {
@@ -171,18 +241,22 @@ func TestEncodeNativeInputUsesExactLittleEndianLayout(t *testing.T) {
 			{ID: core.AirID, Materials: [6]uint16{1, 2, 3, 4, 5, 6}},
 			{ID: core.BarrierID, Opaque: true, Materials: [6]uint16{10, 11, 12, 13, 14, 15}},
 			{ID: 40000, Emission: 7, FluidHeight: 11, LightAttenuation: 1, Materials: [6]uint16{20, 21, 22, 23, 24, 25}},
+			// 第四条专门驮 blockTopRaw：它与 FluidHeight 互斥，不能搭 40000
+			// 那条流体便车，只能自占一条来证明第 19 字节真的被编码写出。
+			{ID: 40001, BlockTopRaw: 5, Materials: [6]uint16{26, 27, 28, 29, 30, 31}},
 		},
-		Visibility: []uint64{2, 5, 1},
+		Visibility: []uint64{2, 5, 1, 7},
 	}
 	dst := make([]byte, 300000)
 	length, err := encodeNativeInput(dst, n, snapshot)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 225895 = 16 + 27*4096*2 + 9 + 9*256*2 + 3*18 + 3*8：条目从 16 字节扩到 18
-	// 字节后总长必然变化，这个数就是「两个新字节真的被写进去了」的算术证据。
-	if length != 225895 {
-		t.Fatalf("input length=%d，想要 225895", length)
+	// 225925 = 16 + 27*4096*2 + 9 + 9*256*2 + 4*19 + 4*8：条目从 18 字节扩到
+	// 19 字节后总长必然变化，这个数就是「blockTopRaw 字节真的被写进去了」
+	// 的算术证据（上一版 3 条 ×18 字节时是 225895）。
+	if length != 225925 {
+		t.Fatalf("input length=%d，想要 225925", length)
 	}
 	if got := string(dst[0:4]); got != "MGM1" {
 		t.Fatalf("magic=%q，想要 MGM1", got)
@@ -190,8 +264,8 @@ func TestEncodeNativeInputUsesExactLittleEndianLayout(t *testing.T) {
 	if got := int32(binary.LittleEndian.Uint32(dst[4:8])); got != -32 {
 		t.Fatalf("sectionOriginY=%d，想要 -32", got)
 	}
-	if got := binary.LittleEndian.Uint16(dst[8:10]); got != 3 {
-		t.Fatalf("registryCount=%d，想要 3", got)
+	if got := binary.LittleEndian.Uint16(dst[8:10]); got != 4 {
+		t.Fatalf("registryCount=%d，想要 4", got)
 	}
 	if got := binary.LittleEndian.Uint16(dst[10:12]); got != 1 {
 		t.Fatalf("registryWordsPerRow=%d，想要 1", got)
@@ -223,29 +297,37 @@ func TestEncodeNativeInputUsesExactLittleEndianLayout(t *testing.T) {
 	}
 
 	const registryOffset = 225817
-	// 第三条条目起点 = registryOffset + 2*18 = +36；条目内偏移 0/3/4/16/17
-	// 分别是 id/emission/material[0]/fluidHeight/lightAttenuation。
-	if got := binary.LittleEndian.Uint16(dst[registryOffset+36:]); got != 40000 {
+	// 第三条条目起点 = registryOffset + 2*19 = +38；条目内偏移 0/3/4/16/17/18
+	// 分别是 id/emission/material[0]/fluidHeight/lightAttenuation/blockTopRaw。
+	if got := binary.LittleEndian.Uint16(dst[registryOffset+38:]); got != 40000 {
 		t.Fatalf("third registry ID=%d，想要 40000", got)
 	}
-	if got := dst[registryOffset+39]; got != 7 {
+	if got := dst[registryOffset+41]; got != 7 {
 		t.Fatalf("third registry emission=%d，想要 7", got)
 	}
-	if got := binary.LittleEndian.Uint16(dst[registryOffset+40:]); got != 20 {
+	if got := binary.LittleEndian.Uint16(dst[registryOffset+42:]); got != 20 {
 		t.Fatalf("third registry material[0]=%d，想要 20", got)
 	}
-	if got := dst[registryOffset+36+16]; got != 11 {
+	if got := dst[registryOffset+38+16]; got != 11 {
 		t.Fatalf("third registry fluidHeight=%d，想要 11", got)
 	}
-	if got := dst[registryOffset+36+17]; got != 1 {
+	if got := dst[registryOffset+38+17]; got != 1 {
 		t.Fatalf("third registry lightAttenuation=%d，想要 1", got)
 	}
-	// 前两条条目的两个新字节必须仍是 0：证明写入没有跨条目串位。
-	if dst[registryOffset+16] != 0 || dst[registryOffset+17] != 0 ||
-		dst[registryOffset+18+16] != 0 || dst[registryOffset+18+17] != 0 {
-		t.Fatal("前两条 registry 条目的 fluidHeight/lightAttenuation 应为 0")
+	// 前三条条目的 blockTopRaw 字节必须仍是 0：证明写入没有跨条目串位，
+	// 且流体条目（40000）按互斥规则保持满格哨兵。条目步长 19。
+	for entryIndex := 0; entryIndex < 3; entryIndex++ {
+		if got := dst[registryOffset+entryIndex*19+18]; got != 0 {
+			t.Fatalf("registry 条目 %d 的 blockTopRaw=%d，想要哨兵 0", entryIndex, got)
+		}
 	}
-	if got := binary.LittleEndian.Uint64(dst[registryOffset+3*18+8:]); got != 5 {
+	if got := binary.LittleEndian.Uint16(dst[registryOffset+57:]); got != 40001 {
+		t.Fatalf("fourth registry ID=%d，想要 40001", got)
+	}
+	if got := dst[registryOffset+57+18]; got != 5 {
+		t.Fatalf("fourth registry blockTopRaw=%d，想要 5", got)
+	}
+	if got := binary.LittleEndian.Uint64(dst[registryOffset+4*19+8:]); got != 5 {
 		t.Fatalf("visibility row 1=%d，想要 5", got)
 	}
 }
@@ -314,6 +396,8 @@ func TestEncodeNativeInputRejectsInvalidInputs(t *testing.T) {
 		{"bad visibility size", make([]byte, 300000), fullyLoadedAirNeighborhood(), RegistrySnapshot{Blocks: valid.Blocks, Visibility: []uint64{0}}},
 		{"overbright emission", make([]byte, 300000), fullyLoadedAirNeighborhood(), RegistrySnapshot{Blocks: []BlockProperties{{ID: core.AirID}, {ID: core.BarrierID, Emission: 16}}, Visibility: []uint64{0, 0}}},
 		{"fluid height above 14", make([]byte, 300000), fullyLoadedAirNeighborhood(), RegistrySnapshot{Blocks: []BlockProperties{{ID: core.AirID}, {ID: core.BarrierID, FluidHeight: 15}}, Visibility: []uint64{0, 0}}},
+		{"block top raw above 14", make([]byte, 300000), fullyLoadedAirNeighborhood(), RegistrySnapshot{Blocks: []BlockProperties{{ID: core.AirID}, {ID: core.BarrierID, BlockTopRaw: 15}}, Visibility: []uint64{0, 0}}},
+		{"fluid with block top raw", make([]byte, 300000), fullyLoadedAirNeighborhood(), RegistrySnapshot{Blocks: []BlockProperties{{ID: core.AirID}, {ID: core.BarrierID, FluidHeight: 9, BlockTopRaw: 1}}, Visibility: []uint64{0, 0}}},
 		{"light attenuation above 1", make([]byte, 300000), fullyLoadedAirNeighborhood(), RegistrySnapshot{Blocks: []BlockProperties{{ID: core.AirID}, {ID: core.BarrierID, LightAttenuation: 2}}, Visibility: []uint64{0, 0}}},
 		{"short destination", make([]byte, 16), fullyLoadedAirNeighborhood(), valid},
 	}

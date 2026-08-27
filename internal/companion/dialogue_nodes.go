@@ -31,7 +31,8 @@ const (
 // DialogueNodeKind 是台词触发节点的类别。开始节点 = 任务进入 Running；进展
 // 节点 = 一个被选中的计划步骤完成；终止节点 = 任务进入四种终态之一
 // （Completed/Failed/TimedOut/Stopped 全部视为终止节点——主动停止是玩家的
-// 成功意图，与失败终态一样值得一句收尾台词）。
+// 成功意图，与失败终态一样值得一句收尾台词）；空闲节点是不携带任务载荷的
+// 非终态表达机会。
 type DialogueNodeKind uint8
 
 const (
@@ -48,6 +49,8 @@ const (
 	// 因此不携带步骤类型，与 Progress 携带 follow（D3 锁定非法）严格区分；
 	// 「首次」的判定基准（距离边界的第一次进入）由 manager 侧接线持有。
 	DialogueNodeFirstArrival
+	// DialogueNodeIdle 是完全空闲伙伴的一次非任务台词机会，不携带任务载荷。
+	DialogueNodeIdle
 )
 
 // DialogueNode 是一次台词请求携带的当前事实节点：类别 + 类别专属载荷。
@@ -115,6 +118,11 @@ func (n DialogueNode) Validate() error {
 		// 载荷，节点身份由类别唯一表达。
 		if n.StepKind != 0 || n.State != 0 || n.Reason != TaskFailNone {
 			return fmt.Errorf("companion: 首次到达台词节点不得携带载荷")
+		}
+		return nil
+	case DialogueNodeIdle:
+		if n.StepKind != 0 || n.State != 0 || n.Reason != TaskFailNone {
+			return fmt.Errorf("companion: 空闲台词节点不得携带载荷")
 		}
 		return nil
 	default:

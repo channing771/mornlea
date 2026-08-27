@@ -24,6 +24,15 @@ import (
 // 任何等待语义或引入新的超时风险。
 const integrationPollInterval = 500 * time.Microsecond
 
+// `integrationLoginTickBudget` 是主动推进权威模拟的登录等待上限。它只负责把
+// 永不收敛的测试变成可诊断失败，不是登录性能门禁。
+const integrationLoginTickBudget = 3000
+
+type integrationLoginWaitTB interface {
+	Helper()
+	Fatalf(format string, args ...any)
+}
+
 type integrationHost struct {
 	Host *Host
 	Addr string
@@ -283,6 +292,30 @@ func waitIntegrationCondition(t *testing.T, label string, condition func() bool)
 	case <-deadline.C:
 		t.Fatalf("timed out waiting for %s", label)
 	}
+}
+
+// `waitIntegrationLoginReady` 在登录条件尚未成立时最多推进
+// `integrationLoginTickBudget` 次权威模拟；最后一次推进后的条件仍会被接纳，
+// 且耗尽后不会发生额外推进。就绪语义和动态诊断由调用方保留。
+func waitIntegrationLoginReady(
+	t integrationLoginWaitTB,
+	label string,
+	ready func() bool,
+	diagnostics func() string,
+	step func(),
+) {
+	t.Helper()
+	for range integrationLoginTickBudget {
+		if ready() {
+			return
+		}
+		step()
+	}
+	if ready() {
+		return
+	}
+	t.Fatalf("等待 %s 登录就绪耗尽 %d tick: %s", label, integrationLoginTickBudget, diagnostics())
+	return
 }
 
 // `manualMultiplayerStable` 为八人确定性集成测试与同 tick 近战顺序测试确认服务端、

@@ -130,17 +130,25 @@ func runPlantingParityScript(t *testing.T, transport string) plantingParityResul
 	}
 
 	ready, inventoryReady := false, false
-	for !ready || !inventoryReady || !parityViewLoaded(mirror) {
-		_, messages := parityStep(t, host, endpoint, mirror)
-		for _, message := range messages {
-			switch message := message.(type) {
-			case network.PlayerState:
-				ready = ready || message.Ready
-			case network.InventoryState:
-				inventoryReady = inventoryReady || message.Inventory == initial
+	waitIntegrationLoginReady(
+		t,
+		fmt.Sprintf("%s plant seeds", transport),
+		func() bool { return ready && inventoryReady && parityViewLoaded(mirror) },
+		func() string {
+			return fmt.Sprintf("ready=%v inventoryReady=%v viewLoaded=%v", ready, inventoryReady, parityViewLoaded(mirror))
+		},
+		func() {
+			_, messages := parityStep(t, host, endpoint, mirror)
+			for _, message := range messages {
+				switch message := message.(type) {
+				case network.PlayerState:
+					ready = ready || message.Ready
+				case network.InventoryState:
+					inventoryReady = inventoryReady || message.Inventory == initial
+				}
 			}
-		}
-	}
+		},
+	)
 
 	// 合成石锄（网格驱动）：石头纵列摆进格 0/2、木棍纵列摆进格 1/3（个人
 	// 2×2 网格，行主序），取出后四个源格全部搬空，满耐久石锄经 AddStack 落在

@@ -95,7 +95,9 @@ func runWithDependencies(args []string, dependencies runDependencies) error {
 		!options.Application.Benchmark
 	options.Application.Render = effective.Render
 	options.Application.AudioVolume = effective.AudioVolume
-	options.Application.TexturePackPath = effective.ResolvedTexturePackPath
+	options.Application.TexturePackPath = effective.TexturePackPath
+	options.Application.ResolvedTexturePackPath = effective.ResolvedTexturePackPath
+	options.Application.WindowSize = effective.WindowSize
 	// 注水门控与用户配置的解耦由 resolveConfig 负责：benchmark 与抓帧两条路径
 	// 都强制返回 config.Defaults()，因此这里的 effective.FluidEnabled 在这两条
 	// 路径上是编译期常量，不会随谁的配置文件漂移。
@@ -108,7 +110,9 @@ func runWithDependencies(args []string, dependencies runDependencies) error {
 	// 视觉门禁，把水排除在外等于让门禁看不见默认开启的主要世界内容。翻默认值
 	// 因此必须连带重新生成 golden——这正是期望行为。
 	options.Application.FluidEnabled = effective.FluidEnabled && !options.Application.Benchmark
-	// 面板 F5 保存需要落盘路径；benchmark 与抓帧路径不进交互循环，不需要它。
+	// ConfigPath 是设置页（D-01）的配置保存目标；调试面板 F5 保存已随 D-03
+	// 移除（面板不落盘配置），不再需要保存路径的只有不进交互循环的
+	// benchmark 与抓帧路径。
 	if !options.Application.Benchmark && options.CaptureDir == "" {
 		configPath, err := resolveConfigPath(options)
 		if err != nil {

@@ -136,9 +136,6 @@ func sameClientPacket(got, want ClientPacket) bool {
 	case DropSelectedItem:
 		other, ok := want.(DropSelectedItem)
 		return ok && got == other
-	case CraftRecipe:
-		other, ok := want.(CraftRecipe)
-		return ok && got == other
 	case OpenContainer:
 		other, ok := want.(OpenContainer)
 		return ok && got == other
@@ -159,6 +156,9 @@ func sameClientPacket(got, want ClientPacket) bool {
 		return ok && got == other
 	case TakeCraftingOutput:
 		other, ok := want.(TakeCraftingOutput)
+		return ok && got == other
+	case BoneMeal:
+		other, ok := want.(BoneMeal)
 		return ok && got == other
 	default:
 		return false

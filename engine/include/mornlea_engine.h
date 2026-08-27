@@ -4,7 +4,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* ABI v6:新增 `mornlea_lod_shell` 远环壳出口(rust-engine-lod-shell 变更),
+/* ABI v7:mesh `MGM1` 输入的单条 registry 条目由 18 字节扩到 19 字节,末尾追加
+ * `block_top_raw`(该方块的 4-bit 顶面高度原值:0 为「满格」哨兵,1..=14 表示
+ * 全部可见面的上缘按 (h_raw+1)/16 下沉,15 非法;与 fluid_height 互斥)。承载
+ * 耕地(干/湿填 14,呈现高度 15/16 与碰撞体一致)等非满格方块的常量角高度
+ * 几何。既有入口签名与语义不变。engine 与 Go 侧是同一不可跨版本混装的
+ * release unit。
+ * ABI v6:新增 `mornlea_lod_shell` 远环壳出口(rust-engine-lod-shell 变更),
  * 既有入口签名与语义不变。变基重编说明:该出口在旧基线上原编号 v4,main
  * 合并 fluid 系列已占用 v4(worldgen 注水)与 v5(mesh registry 扩容),故
  * 顺延重编为 v6;engine 与 Go 侧是同一不可跨版本混装的 release unit。
@@ -16,7 +22,7 @@
  * release unit。
  * ABI v4:worldgen `MGW1` header 的材料表由 13 项扩到 14 项(末项 water,
  * 占用 v3 的 reserved 槽,header 总长仍为 564 字节)。 */
-#define MORNLEA_ENGINE_ABI_VERSION 6u
+#define MORNLEA_ENGINE_ABI_VERSION 7u
 
 #define MORNLEA_STATUS_OK 0u
 #define MORNLEA_STATUS_ABI_VERSION 1u

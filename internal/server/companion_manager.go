@@ -48,6 +48,7 @@ type companionPlanner interface {
 type companionTaskIssuer struct {
 	playerID   core.PlayerID
 	name       string
+	restored   bool
 	position   [3]float32
 	yaw        float32
 	pitch      float32
@@ -61,9 +62,11 @@ type companionTaskSlot struct {
 	queue      companion.TaskQueue
 	// issuers 与 queue.pending 一一配对：入队时追加，BeginHead 时消费，
 	// 使事件能回溯每条指令的发令者。
-	issuers        []companionTaskIssuer
-	currentIssuer  companionTaskIssuer
-	currentCommand companion.TaskCommand
+	issuers               []companionTaskIssuer
+	currentIssuer         companionTaskIssuer
+	currentCommand        companion.TaskCommand
+	idleDialogueAtTick    uint64
+	hasIdleDialogueAtTick bool
 
 	// planningInFlight 表示该伙伴有一个规划请求在途；在途期间绝不发起第二个。
 	planningInFlight bool
@@ -374,6 +377,7 @@ func (server *Server) advanceCompanionTasks() []chatDelivery {
 	manager.expireTasks()
 	manager.advanceRunners()
 	manager.dispatchPlanning()
+	manager.dispatchIdleDialogues()
 	manager.dispatchPathRequests()
 	return server.taskEventDeliveries(manager.takeEventFacts())
 }
@@ -1042,7 +1046,8 @@ func (m *companionManager) taskStates() []companion.TaskQueueState {
 // restoredIssuerIdentity 是恢复任务的合成发令者事实：指令的真实发令者
 // （玩家 ID/名称/位置）不落盘，重启后无法回溯；任务事件又必须携带合法
 // 玩家身份才能通过 ChatEvent.Validate 发布，因此使用固定的「未知发令者」
-// 身份。位置沿用 captureIssuer 的有界缺省。
+// 身份。位置沿用 `captureIssuer` 的有界缺省；server-only `restored` 标记阻止
+// 该合成身份被空闲台词复用为真实受众。
 //
 // playerID 的两个非零字节是满足 core.PlayerID.Valid() 的最小合成形态：
 // 该不变量要求 ID 非全零、byte[6] 的高半字节为 4（UUIDv4 version 位）且
@@ -1053,6 +1058,7 @@ var restoredIssuerIdentity = companionTaskIssuer{
 	playerID: core.PlayerID{0, 0, 0, 0, 0, 0, 0x40, 0, 0x80, 0, 0, 0, 0, 0, 0, 0},
 	name:     "未知发令者",
 	position: [3]float32{0, 1, 0},
+	restored: true,
 }
 
 // restoreQueues 把启动加载的任务域载荷恢复进对应槽位（newWorld 在构造

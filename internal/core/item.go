@@ -56,10 +56,6 @@ const (
 	// 不是任何方块的掉落物。恢复值见 FoodValue。同样只能追加在 ItemIDMax
 	// 哨兵之前。
 	ItemBread
-	// 以下是格子工作台批次（authoritative-grid-crafting）追加的两个物品，
-	// 只能追加在既有序列末尾（ItemIDMax 哨兵之前）：插入会平移后续物品 ID，
-	// 破坏既有存档与线上字节。
-	//
 	// ItemStick 是木棍：镐、锄等工具配方的中间材料，可堆叠 64、不可放置、
 	// 没有耐久（损坏形态只属于工具）。
 	ItemStick
@@ -67,6 +63,9 @@ const (
 	// 恰好 1 个。工作台不是容器——打开只把玩家合成网格的有效尺寸从 2 提到 3，
 	// 不占用任何容器引用或区块槽位。
 	ItemWorkbench
+	// ItemBoneMeal 是骨粉，用于催熟小麦；沿用食物与种子的堆叠与放置语义（不可
+	// 放置，堆叠 64），同样只能追加在 ItemIDMax 哨兵之前。
+	ItemBoneMeal
 	// ItemIDMax 是合法物品编号的独占上界（最后一个合法 ItemID + 1），本身不是
 	// 物品枚举成员。它供测试以「item < ItemIDMax」穷举全部物品，替代依赖
 	//「某个具体物品恰为枚举末项」的脆弱写法；放在 core 是因为物品注册表归属
@@ -252,7 +251,7 @@ func ItemStackLimit(item ItemID) (uint8, bool) {
 		ItemOakPlanks, ItemLeaves, ItemGlass, ItemBrick, ItemWhiteWool,
 		ItemRoofTile, ItemClay, ItemSnowBlock, ItemMossyCobblestone,
 		ItemWheatSeeds, ItemWheat, ItemBread,
-		ItemStick, ItemWorkbench:
+		ItemStick, ItemWorkbench, ItemBoneMeal:
 		return MaxStackCount, true
 	case ItemStonePickaxe, ItemIronPickaxe,
 		ItemBrokenStonePickaxe, ItemBrokenIronPickaxe,

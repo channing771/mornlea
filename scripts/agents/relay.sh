@@ -45,11 +45,33 @@ if [ -f "$GUARD" ]; then
   fi
 fi
 
-# 终结判据：规划表不再有「未认领」行（认领人在「未认领」状态列之后）
-if ! grep -E '^\| [A-F]-[0-9]{2} \|' "$ROOT/docs/feature-backlog.md" | grep -q '未认领'; then
+# 终结判据：规划表没有状态单元格为「就绪」的任务行。
+if ! awk -F '|' '
+  /^\| A-[0-9][0-9] \|/ && $5 ~ /^[[:space:]]*就绪[[:space:]]*$/ { ready = 1 }
+  /^\| [B-F]-[0-9][0-9] \|/ && $6 ~ /^[[:space:]]*就绪[[:space:]]*$/ { ready = 1 }
+  END { exit !ready }
+' "$ROOT/docs/feature-backlog.md"; then
   rm -f "$GUARD"
-  log "规划表已无未认领任务，循环终结"
+  log "规划表已无就绪任务，循环终结"
   exit 0
+fi
+
+# 链名迁移映射（接力落点改名）：主链（无 WORKER_ID）→ opus、claude2 → opus-b。
+# 只在 relay 启动下一棒的落点替换，不改变在飞当前行的旧名（如 A-02 以 claude2 身份
+# 走到收尾，收尾 relay 时这一棒才以 opus-b 接力）。MORNLEA_CHAIN_RENAME 可整体覆盖
+# 映射表（逗号分隔 old=new，如 "=opus,opus=main"；k 为空串匹配主链），未设置用内置表。
+CHAIN_ID="${WORKER_ID:-}"
+if [ -n "${MORNLEA_CHAIN_RENAME:-}" ]; then
+  for PAIR in $(printf '%s' "$MORNLEA_CHAIN_RENAME" | tr ',' ' '); do
+    [ -n "$PAIR" ] || continue
+    OLD="${PAIR%%=*}"; NEW="${PAIR#*=}"
+    if [ "$OLD" = "$CHAIN_ID" ]; then CHAIN_ID="$NEW"; break; fi
+  done
+else
+  case "$CHAIN_ID" in
+    "") CHAIN_ID="opus" ;;
+    claude2) CHAIN_ID="opus-b" ;;
+  esac
 fi
 
 # 启动下一个实现者（detached）；成功交给它接管循环
@@ -59,7 +81,7 @@ if [ -x "$ROOT/scripts/agents/run-agent.sh" ]; then
   # 关键：用 setsid 让下一棒脱离宿主 agent 会话的进程组——实现者收尾退出时会清理整组，
   # nohup 只能挡 SIGHUP、挡不住组杀（listener 续跑用 detached:true 同理）；脱离后接力会话才能存活。
   CHAIN_TOOL="${WORKER_TOOL:-${AGENT_TOOL:-claude}}"
-  (cd "$ROOT" && AGENT_LOOP=1 WORKER_ID="$WORKER_ID" AGENT_TOOL="$CHAIN_TOOL" SPAWN_ROOT="$ROOT" SPAWN_LOG="$LOG" \
+  (cd "$ROOT" && AGENT_LOOP=1 WORKER_ID="$CHAIN_ID" AGENT_TOOL="$CHAIN_TOOL" SPAWN_ROOT="$ROOT" SPAWN_LOG="$LOG" \
     python3 -c 'import os,subprocess; os.setsid(); env=os.environ.copy(); f=open(env.get("SPAWN_LOG","/dev/null"),"a"); subprocess.Popen(["/bin/bash","-lc","cd \\\"%s\\\" && scripts/agents/run-agent.sh implementer" % env.get("SPAWN_ROOT",".")], env=env, stdout=f, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)' >/dev/null 2>&1 &)
   log "已接力启动下一个实现者（AGENT_LOOP=1，日志 ${LOG}）"
   exit 0

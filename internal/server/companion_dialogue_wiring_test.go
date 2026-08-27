@@ -778,3 +778,170 @@ func TestCompanionDialogueSpeechMemoryTCPParity(t *testing.T) {
 		t.Fatalf("没有任何 Speech 事件（投影=%v）", memoryProjection)
 	}
 }
+
+// TestCompanionIdleDialogueBroadcastsToAllPlayers 验证一次到期且合格的 idle
+// 机会产出恰好一条 CompanionSpeech 并广播给全部在线玩家：两名客户端收到
+// 完全一致的事件（伙伴身份、台词、发令者 PlayerID/PlayerName、reason None），
+// 非发令者也照常收到。
+func TestCompanionIdleDialogueBroadcastsToAllPlayers(t *testing.T) {
+	definitions := []companion.Definition{{ID: chatTestCompanionID(1), Name: "阿木"}}
+	host := newCompanionManagerHost(t, definitions, nil, nil)
+	issuerIdentity := integrationIdentity(0x71, "发令者")
+	issuer := openCompanionChatClient(t, host, "memory", issuerIdentity)
+	observer := openCompanionChatClient(t, host, "memory", integrationIdentity(0x87, "旁观者"))
+	clients := []network.ClientEndpoint{issuer, observer}
+	body := stepUntilCompanionManagerReady(t, host, clients, definitions[0].ID)
+	dialogue := newFakeDialogueModel(t)
+	host.world.companionManager.replaceDialogueForTest(t, dialogue)
+
+	host.world.stepMu.Lock()
+	manager := host.world.companionManager
+	slot := manager.slots[definitions[0].ID]
+	slot.currentIssuer = stopTestIssuer(issuerIdentity)
+	slot.idleDialogueAtTick = manager.engine.TickCount()
+	slot.hasIdleDialogueAtTick = true
+	manager.onlinePlayers = func() []companion.PlanPlayer {
+		return []companion.PlanPlayer{{ID: issuerIdentity.PlayerID, Position: body.Position}}
+	}
+	host.world.stepMu.Unlock()
+
+	var issuerEvents, observerEvents []network.ChatEvent
+	for range 200 {
+		result := host.world.StepForTest()
+		issuerEvents = append(issuerEvents,
+			companionChatEvents(receiveCompanionChatTick(t, issuer, result.Tick))...)
+		observerEvents = append(observerEvents,
+			companionChatEvents(receiveCompanionChatTick(t, observer, result.Tick))...)
+		time.Sleep(2 * time.Millisecond)
+		if countKind(issuerEvents, network.ChatEventCompanionSpeech) == 1 {
+			break
+		}
+	}
+	issuerSpeech := eventsWithKind(issuerEvents, network.ChatEventCompanionSpeech)
+	observerSpeech := eventsWithKind(observerEvents, network.ChatEventCompanionSpeech)
+	if len(issuerSpeech) != 1 || len(observerSpeech) != 1 {
+		t.Fatalf("idle Speech 广播数 issuer=%d observer=%d（issuer 事件=%v），想要各 1",
+			len(issuerSpeech), len(observerSpeech), chatEventKinds(issuerEvents))
+	}
+	event := issuerSpeech[0]
+	if event.CompanionID != definitions[0].ID || event.CompanionName != "阿木" ||
+		event.RejectReason != network.ChatRejectNone ||
+		event.PlayerID != issuerIdentity.PlayerID || event.PlayerName != "发令者" {
+		t.Fatalf("idle Speech 事件字段=%+v，想要伙伴身份+发令者身份+reason None", event)
+	}
+	if err := event.Validate(); err != nil {
+		t.Fatalf("idle Speech Validate: %v", err)
+	}
+	if observerSpeech[0] != event {
+		t.Fatalf("非发令者收到的 idle Speech 不一致：issuer=%+v observer=%+v",
+			event, observerSpeech[0])
+	}
+}
+
+// TestCompanionIdleDialogueMemoryTCPParity 验证 Memory 与 TCP 两传输下的
+// idle 台词业务事件投影完全一致：先完成一个确定性任务确立真实最近发令者，
+// 排空任务事件后武装一次到期 idle 机会，只投影该机会产出的 ChatEvent；
+// 不比较绝对落地 tick 或跨传输 EventID（每传输内仍须严格递增）。
+func TestCompanionIdleDialogueMemoryTCPParity(t *testing.T) {
+	run := func(transport string) []network.ChatEvent {
+		definitions := []companion.Definition{{ID: chatTestCompanionID(1), Name: "阿木"}}
+		host := newCompanionManagerHost(t, definitions, nil, nil)
+		issuerIdentity := integrationIdentity(0x95, "发令者")
+		client := openCompanionChatClient(t, host, transport, issuerIdentity)
+		body := stepUntilCompanionManagerReady(t, host, []network.ClientEndpoint{client}, definitions[0].ID)
+		planner := newFakeCompanionModel(t,
+			[3]int32{int32(body.Position[0]) + 2, int32(body.Position[1]), int32(body.Position[2])})
+		host.world.companionManager.replacePlannerForTest(t, planner)
+		taskDialogue := newFakeDialogueModel(t)
+		host.world.companionManager.replaceDialogueForTest(t, taskDialogue)
+
+		// 第一步：完成一个确定性任务，确立真实最近发令者（BeginHead 消费
+		// 聊天发令者事实写入 currentIssuer）。
+		sendIntegration(t, client, network.ChatCommand{Text: "@阿木 走一步"})
+		waitForIncomingChatDepth(t, host.world, 1)
+		events := collectDialogueEvents(t, host, client, 600, func(events []network.ChatEvent) bool {
+			return countKind(events, network.ChatEventTaskCompleted) == 1
+		})
+		if countKind(events, network.ChatEventTaskCompleted) != 1 {
+			t.Fatalf("%s 传输的基准任务未完成：事件=%v", transport, chatEventKinds(events))
+		}
+		// 第二步：泵 tick 直到任务台词全部落地（结果只在 tick 边界应用，
+		// 连续两个 tick 无在途即收敛），再排空残余事件至无事件 tick。
+		settled := 0
+		for range 200 {
+			stepDialogueTick(t, host, []network.ClientEndpoint{client})
+			_, inFlightModel, _ := taskDialogue.snapshotCounts()
+			_, inFlightSlot := dialogueEffectCount(t, host, definitions[0].ID)
+			if inFlightModel == 0 && !inFlightSlot {
+				settled++
+				if settled >= 2 {
+					break
+				}
+			} else {
+				settled = 0
+			}
+		}
+		if settled < 2 {
+			t.Fatalf("%s 传输的任务台词未在 200 tick 内收敛", transport)
+		}
+		drained := false
+		for range 200 {
+			if tickEvents := stepDialogueTick(t, host, []network.ClientEndpoint{client}); len(tickEvents) == 0 {
+				drained = true
+				break
+			}
+		}
+		if !drained {
+			t.Fatalf("%s 传输的残余事件在 200 tick 内未排空", transport)
+		}
+		// 第三步：换上全新的假台词模型（响应文本稳定），武装一次到期机会。
+		idleDialogue := newFakeDialogueModel(t)
+		host.world.companionManager.replaceDialogueForTest(t, idleDialogue)
+		host.world.stepMu.Lock()
+		manager := host.world.companionManager
+		slot := manager.slots[definitions[0].ID]
+		if slot.currentIssuer.restored || !slot.currentIssuer.playerID.Valid() {
+			host.world.stepMu.Unlock()
+			t.Fatalf("%s 传输未确立真实最近发令者：%+v", transport, slot.currentIssuer)
+		}
+		slot.idleDialogueAtTick = manager.engine.TickCount()
+		slot.hasIdleDialogueAtTick = true
+		host.world.stepMu.Unlock()
+
+		// 第四步：只收集该武装机会产出的 ChatEvent，恰好一条 CompanionSpeech。
+		idleEvents := collectDialogueEvents(t, host, client, 200, func(events []network.ChatEvent) bool {
+			return countKind(events, network.ChatEventCompanionSpeech) == 1
+		})
+		if countKind(idleEvents, network.ChatEventCompanionSpeech) != 1 {
+			t.Fatalf("%s 传输的 idle 机会未产出 Speech：事件=%v", transport, chatEventKinds(idleEvents))
+		}
+		assertStrictlyIncreasingEventIDs(t, idleEvents)
+		return idleEvents
+	}
+
+	memory := run("memory")
+	tcp := run("tcp")
+	memoryProjection := projectDialogueParityEvents(memory)
+	tcpProjection := projectDialogueParityEvents(tcp)
+	if len(memoryProjection) == 0 {
+		t.Fatal("Memory 传输没有任何事件")
+	}
+	if len(memoryProjection) != len(tcpProjection) {
+		t.Fatalf("idle 事件数不一致 memory=%v tcp=%v", memoryProjection, tcpProjection)
+	}
+	for index := range memoryProjection {
+		if memoryProjection[index] != tcpProjection[index] {
+			t.Fatalf("idle 事件 %d 不一致：memory=%+v tcp=%+v",
+				index, memoryProjection[index], tcpProjection[index])
+		}
+	}
+	speech := 0
+	for _, projection := range memoryProjection {
+		if projection.Kind == network.ChatEventCompanionSpeech {
+			speech++
+		}
+	}
+	if speech != 1 {
+		t.Fatalf("idle 投影 Speech 数=%d（投影=%v），想要 1", speech, memoryProjection)
+	}
+}

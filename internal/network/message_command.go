@@ -69,22 +69,6 @@ func (command SelectHotbar) Validate() error {
 	return nil
 }
 
-// CraftRecipe 按稳定配方 ID 请求一次合成；原料与产物完全由服务端决定。
-type CraftRecipe struct {
-	Sequence uint64
-	Recipe   core.RecipeID
-}
-
-func (CraftRecipe) clientMessage() {}
-func (CraftRecipe) clientPacket()  {}
-
-func (command CraftRecipe) Validate() error {
-	if _, ok := core.Recipe(command.Recipe); !ok {
-		return errors.New("network: unknown crafting recipe")
-	}
-	return nil
-}
-
 type RequestChunkResync struct {
 	Sequence     uint64
 	Dimension    core.DimensionID
@@ -129,6 +113,25 @@ func (TillSoil) clientPacket()  {}
 func (command TillSoil) Validate() error {
 	if !finite32(command.Yaw) || !finite32(command.Pitch) {
 		return errors.New("network: till soil has non-finite rotation")
+	}
+	return nil
+}
+
+// BoneMeal 请求用骨粉催熟视线内的作物。
+//
+// 与 TillSoil 同形：只带序号与朝向。客户端不声明目标格、也不声明栏位
+// ——目标由服务端的权威射线决定，作用的骨粉一律取权威选中的快捷栏格。
+type BoneMeal struct {
+	Sequence   uint64
+	Yaw, Pitch float32
+}
+
+func (BoneMeal) clientMessage() {}
+func (BoneMeal) clientPacket()  {}
+
+func (command BoneMeal) Validate() error {
+	if !finite32(command.Yaw) || !finite32(command.Pitch) {
+		return errors.New("network: bone meal has non-finite rotation")
 	}
 	return nil
 }

@@ -20,7 +20,6 @@ const (
 	CommandResync
 	CommandSelectHotbar
 	CommandMoveInventoryStack
-	CommandCraftRecipe
 	CommandOpenFurnace
 	CommandCloseFurnace
 	CommandMoveFurnaceStack
@@ -28,6 +27,9 @@ const (
 	// CommandTillSoil 请求把视线内的泥土或草翻成耕地。只带朝向：目标格由权威
 	// 射线决定，作用的锄头取权威选中的快捷栏格。CommandKind 只追加不重排。
 	CommandTillSoil
+	// CommandBoneMeal 请求用骨粉催熟视线内的作物。只带朝向：目标格由权威
+	// 射线决定，作用的骨粉取权威选中的快捷栏格。CommandKind 只追加不重排。
+	CommandBoneMeal
 	// CommandMoveCraftingStack 在合成网格与背包之间执行一次两次点击整堆移动。
 	// `Slot`/`ToSlot` 是统一视图格（网格 0..8、背包 9..44），语义见 crafting.go
 	// 的 `applyMoveCraftingStack`。

@@ -7,9 +7,10 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 )
 
-// ProtocolVersion 是当前唯一支持的协议版本；v26 新增 Play S→C ID 20
-// `PlaceBlockSucceeded`，其 8-byte 载荷只携带原 `PlaceBlock` 的序号，
-// 用于确认世界写入与恰减一件物品已在同一权威 tick 原子完成。
+// ProtocolVersion 是当前唯一支持的协议版本；v27 新增 Play C→S ID 14
+// `BoneMeal`（骨粉催熟，与 `TillSoil` 同形：u64 序号 + 两个 f32 朝向），
+// v26 新增 Play S→C ID 20 `PlaceBlockSucceeded`，其 8-byte 载荷只携带原
+// `PlaceBlock` 的序号，用于确认世界写入与恰减一件物品已在同一权威 tick 原子完成。
 // v25 只扩展既有 `Mining` 位的语义：它表示持续 primary action，服务端在
 // 每个 tick 决定这次意图攻击玩家还是采掘方块，不新增 wire 字段或 packet。
 // v24 上线权威饥饿（`PlayerInput`
@@ -32,7 +33,7 @@ import (
 // v21 在 `PlayerState` 末尾追加 2 字节权威氧气（只发给玩家本人的权威
 // 值）；v20 追加 8 个流体方块编号（只扩方块 ID 集合，wire 形状不变），流体
 // 变更走既有区块变更通道（design.md D8）。
-const ProtocolVersion uint32 = 26
+const ProtocolVersion uint32 = 27
 
 // State 标识连接当前允许交换的 packet 集合。
 type State uint8
@@ -182,8 +183,6 @@ func ValidateClientPacket(state State, packet ClientPacket) error {
 			return clientPacket.Validate()
 		case MoveInventoryStack:
 			return clientPacket.Validate()
-		case CraftRecipe:
-			return clientPacket.Validate()
 		case OpenContainer:
 			return clientPacket.Validate()
 		case MoveContainerStack:
@@ -195,6 +194,8 @@ func ValidateClientPacket(state State, packet ClientPacket) error {
 		case ChatCommand:
 			return clientPacket.Validate()
 		case TillSoil:
+			return clientPacket.Validate()
+		case BoneMeal:
 			return clientPacket.Validate()
 		case MoveCraftingStack:
 			return clientPacket.Validate()

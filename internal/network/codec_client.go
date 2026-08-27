@@ -48,9 +48,6 @@ func encodeClientPacketPayload(state State, packet ClientPacket) (packetID uint3
 			e.u8(message.To)
 		case DropSelectedItem:
 			e.u64(message.Sequence)
-		case CraftRecipe:
-			e.u64(message.Sequence)
-			e.u8(uint8(message.Recipe))
 		case OpenContainer:
 			e.u64(message.Sequence)
 			e.f32(message.Yaw)
@@ -76,8 +73,10 @@ func encodeClientPacketPayload(state State, packet ClientPacket) (packetID uint3
 			e.u64(message.Sequence)
 			e.f32(message.Yaw)
 			e.f32(message.Pitch)
-		// 格子工作台：网格移动是 u64 序号 + 两个 u8 统一视图格（From 在前），
-		// 取出只携带 u64 序号。值域校验在 Validate/编码入口完成。
+		case BoneMeal:
+			e.u64(message.Sequence)
+			e.f32(message.Yaw)
+			e.f32(message.Pitch)
 		case MoveCraftingStack:
 			e.u64(message.Sequence)
 			e.u8(message.From)
@@ -211,13 +210,15 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 			}
 			packet = MoveInventoryStack{Sequence: sequence, From: from, To: to}
 		case 7:
-			var sequence uint64
-			var recipe uint8
-			sequence, err = d.u64()
+			var move MoveCraftingStack
+			move.Sequence, err = d.u64()
 			if err == nil {
-				recipe, err = d.u8()
+				move.From, err = d.u8()
 			}
-			packet = CraftRecipe{Sequence: sequence, Recipe: core.RecipeID(recipe)}
+			if err == nil {
+				move.To, err = d.u8()
+			}
+			packet = move
 		case 8:
 			var open OpenContainer
 			open.Sequence, err = d.u64()
@@ -264,15 +265,15 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 			}
 			packet = till
 		case 14:
-			var move MoveCraftingStack
-			move.Sequence, err = d.u64()
+			var meal BoneMeal
+			meal.Sequence, err = d.u64()
 			if err == nil {
-				move.From, err = d.u8()
+				meal.Yaw, err = d.f32()
 			}
 			if err == nil {
-				move.To, err = d.u8()
+				meal.Pitch, err = d.f32()
 			}
-			packet = move
+			packet = meal
 		case 15:
 			var take TakeCraftingOutput
 			take.Sequence, err = d.u64()

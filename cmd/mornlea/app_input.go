@@ -67,6 +67,18 @@ func (a *application) placeBlock() {
 			}
 			return
 		}
+		// 手持骨粉对着作物时，「使用」键发催熟命令。与翻地同形：只读本地镜像
+		// 与已确认快捷栏，目标是否为作物与权威侧共用 core.IsCrop。
+		if hotbar, confirmed := a.inventory.Hotbar(); loaded && confirmed &&
+			core.IsCrop(block) &&
+			hotbar.Slots[hotbar.Selected].Item == core.ItemBoneMeal {
+			if err := a.send(network.BoneMeal{
+				Sequence: a.nextSequence(), Yaw: a.camera.Yaw, Pitch: a.camera.Pitch,
+			}); err != nil {
+				slog.Warn("发送骨粉命令失败", "error", err)
+			}
+			return
+		}
 	}
 	// 放置引用最后一个已确认的选中栏位；尚未确认时不发送。
 	hotbar, confirmed := a.inventory.Hotbar()

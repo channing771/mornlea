@@ -32,7 +32,8 @@ function fmtTime(d: Date): string {
   return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
 }
 
-// AppShell 顶栏 + 错误提示 + 统计卡片 + 各分区，是看板整体布局。
+// AppShell 顶栏 + 错误提示 + 统计指标带 + 各分区，是看板整体布局。
+// 分区一律「hairline 分隔」：每个分区顶部 border-t，不再套同尺寸卡片壳。
 function AppShell({ status, loading, error, updatedAt, onRefresh }: AppShellProps) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -44,19 +45,25 @@ function AppShell({ status, loading, error, updatedAt, onRefresh }: AppShellProp
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-10 border-b border-border bg-background/90 backdrop-blur">
+      <header className="sticky top-0 z-10 border-b border-border bg-card/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-3">
           <h1 className="text-lg font-semibold">Mornlea Agent 执行看板</h1>
-          <span className="text-sm tabular-nums text-muted-foreground">{fmtClock(now)}</span>
-          <span className="ml-auto text-xs text-muted-foreground">
+          <span className="font-mono text-xs tabular-nums text-muted-foreground">{fmtClock(now)}</span>
+          <span className="ml-auto font-mono text-xs text-muted-foreground">
             {updatedAt ? '上次更新 ' + fmtTime(updatedAt) : '尚未更新'}
           </span>
-          <Button size="sm" variant="outline" onClick={onRefresh}>
-            <RefreshCw className="h-4 w-4" /> 刷新
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onRefresh}
+            aria-label="刷新状态"
+            className="active:scale-[0.98]"
+          >
+            <RefreshCw strokeWidth={1.5} className="h-4 w-4" /> 刷新
           </Button>
         </div>
       </header>
-      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6">
+      <main className="mx-auto max-w-7xl space-y-8 px-4 py-6">
         {error && (
           <Alert variant="destructive">
             后端不可用：{error}（5 秒后自动重试…）
@@ -68,10 +75,16 @@ function AppShell({ status, loading, error, updatedAt, onRefresh }: AppShellProp
           </Alert>
         )}
         {loading && !status ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-16" />
-            ))}
+          // 加载骨架与最终指标条同形状：白色面板 + 8 个占位块。
+          <div className="rounded-md border border-border bg-card" role="status" aria-label="加载中">
+            <div className="grid grid-cols-2 divide-x divide-border sm:grid-cols-4 xl:grid-cols-8">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="px-4 py-3">
+                  <Skeleton className="mb-2 h-7 w-12" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+              ))}
+            </div>
           </div>
         ) : status ? (
           <>
@@ -101,14 +114,16 @@ function AppShell({ status, loading, error, updatedAt, onRefresh }: AppShellProp
   );
 }
 
+// Section 分区容器：仅标题行（sans 标题 + 右侧 muted 说明小字），不套分区外壳——
+// 面板化由各分区组件自己承担（表格面板/任务组面板/卡片/日志面板），避免六个一模一样的外壳。
 function Section({ title, sub, children }: { title: string; sub?: string; children: ReactNode }) {
   return (
-    <section className="space-y-2">
+    <section>
       <h2 className="flex flex-wrap items-baseline gap-2 text-sm font-semibold">
         {title}
         {sub && <span className="text-xs font-normal text-muted-foreground">{sub}</span>}
       </h2>
-      {children}
+      <div className="mt-2">{children}</div>
     </section>
   );
 }

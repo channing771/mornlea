@@ -15,6 +15,10 @@ struct MaskCell {
     light: u8,
     /// 该面所属方块是否是流体：为真时禁止贪心合并（见 mesh_section 的说明）。
     fluid: bool,
+    /// 该面所属方块是否是非满格短方块（registry `block_top_raw` 非零）：
+    /// 同样禁止贪心合并——常量角高度与流体共用 w/h 那 8 bit，且相邻格的
+    /// 下沉上缘必须逐格保持，合并会抹成一张跨格平面。
+    short: bool,
     /// 四个顶点的 4-bit 高度原值，顺序见 `Quad::corners`。
     corners: [u8; 4],
 }
@@ -86,14 +90,18 @@ pub(crate) fn mesh_section(
                         continue;
                     };
                     let fluid = input.registry.fluid_height(id).is_some();
+                    let top_raw = input.registry.block_top_raw(id);
                     mask[(vi * 16 + ui) as usize] = MaskCell {
                         used: true,
                         material,
                         ao: compute_ao(input, p, axis, u, v, step),
                         light: light.at(q[0], q[1], q[2]),
                         fluid,
+                        short: !fluid && top_raw.is_some(),
                         corners: if fluid {
                             fluid_corners(input, p, face, axis, u, v)
+                        } else if let Some(raw) = top_raw {
+                            short_block_corners(p, face, axis, u, v, raw)
                         } else {
                             [0; 4]
                         },
@@ -114,12 +122,13 @@ pub(crate) fn mesh_section(
                         continue;
                     }
 
-                    // 水面按 1×1 出面，不贪心合并：角高度逐格不同，合并会把相邻格
-                    // 的高度抹平成一张平面；而且合并后 w/h 那 8 bit 已被角高度占用，
-                    // 尺寸再也无法表达（见 Quad::corners 的位布局）。
+                    // 流体与非满格短方块都按 1×1 出面，不贪心合并：两者的角
+                    // 高度都借走了 w/h 那 8 bit（见 Quad::corners 的位布局），
+                    // 合并后尺寸再也无法表达；而且短方块的下沉上缘是逐格属性，
+                    // 合并会把相邻格抹成一张跨格平面。
                     let mut width = 1;
                     let mut height = 1;
-                    if !cell.fluid {
+                    if !cell.fluid && !cell.short {
                         while ui + width < 16 && mask[vi * 16 + ui + width] == cell {
                             width += 1;
                         }
@@ -314,6 +323,39 @@ fn fluid_corners(
     corners
 }
 
+/// short_block_corners 求一个非满格短方块的面四个顶点的高度原值，顺序见
+/// `Quad::corners`。
+///
+/// 形状与 `fluid_corners` 一致：只有落在该格顶层（世界 y == `p[1] + 1`）的顶点
+/// 才带高度——于是顶面四角全下沉、四个侧面上缘两角下沉、底面四角为 0，
+/// 与短方块的碰撞盒（底面整格、顶面 (h_raw+1)/16）逐面一致。
+///
+/// 与流体的差异：不走 `corner_height` 邻域平均，直接采用 registry 常量
+/// `raw`。短方块是刚体方块，相邻同类格的高度由 registry 保证恒等，不存在
+/// 需要插值的斜面；这也天然规避了流体规则里「上方也是流体则取满格 15」的
+/// 污染——贴着上方方块的耕地不会被错误拉平。
+fn short_block_corners(
+    p: [i32; 3],
+    face: Face,
+    axis: usize,
+    u: usize,
+    v: usize,
+    raw: u8,
+) -> [u8; 4] {
+    let mut corners = [0; 4];
+    for (index, [du, dv]) in [[-1, -1], [1, -1], [1, 1], [-1, 1]].into_iter().enumerate() {
+        let mut vertex = p;
+        // 正方向面贴在方块的 +1 边，负方向面贴在 0 边。
+        vertex[axis] += i32::from((face as u8) & 1);
+        vertex[u] += (du + 1) / 2;
+        vertex[v] += (dv + 1) / 2;
+        if vertex[1] == p[1] + 1 {
+            corners[index] = raw;
+        }
+    }
+    corners
+}
+
 pub(crate) fn center_is_air(input: &MeshInput<'_>) -> bool {
     for y in 0..16 {
         for z in 0..16 {
@@ -358,6 +400,8 @@ fn compute_ao(
     ao
 }
 
+#[cfg(test)]
+mod farmland_top_tests;
 #[cfg(test)]
 mod merge_tests;
 #[cfg(test)]

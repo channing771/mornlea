@@ -41,10 +41,10 @@ func TestProtocolV1PacketIDsAreFrozen(t *testing.T) {
 	}
 }
 
-// TestGridCraftingPacketIDsAreFrozen 钉死格子工作台三条消息的 in-branch 临时
-// 编号（design.md D1 裁决）：C→S `MoveCraftingStack=14`、`TakeCraftingOutput=15`，
-// S→C `CraftingState=21`。终值 `MoveCraftingStack=7`（复用 `CraftRecipe` 释放的
-// 编号）由批次集成 A-06 锁定，本分支不重排；协议版本保持 v26 不动。
+// TestGridCraftingPacketIDsAreFrozen 钉死格子工作台三条消息的最终编号：
+// C→S `MoveCraftingStack=7`（复用已删除 recipe-click 消息释放的旧槽位）、
+// `TakeCraftingOutput=15`、S→C `CraftingState=21`。协议版本保持主基线 v27
+// 不变，这些消息类型是既有扩展不升版。
 // 上界断言写成「末项 +1」而不是裸字面量，下次追加 packet 时它会跟着末项走，
 // 不会静默退化成「测一个已合法的 ID」。
 func TestGridCraftingPacketIDsAreFrozen(t *testing.T) {
@@ -53,7 +53,7 @@ func TestGridCraftingPacketIDsAreFrozen(t *testing.T) {
 		packet ClientPacket
 		id     uint32
 	}{
-		{StatePlay, MoveCraftingStack{}, 14},
+		{StatePlay, MoveCraftingStack{}, 7},
 		{StatePlay, TakeCraftingOutput{}, 15},
 	})
 	assertServerRegistry(t, []struct {
@@ -69,8 +69,8 @@ func TestGridCraftingPacketIDsAreFrozen(t *testing.T) {
 	if _, ok := serverPacketForID(StatePlay, 21+1); ok {
 		t.Fatal("Play server packet ID 22 必须保持未分配")
 	}
-	if ProtocolVersion != 26 {
-		t.Fatalf("协议版本 = %d，想要 26——格子工作台不升版（v27 归 A-07）", ProtocolVersion)
+	if ProtocolVersion != 27 {
+		t.Fatalf("协议版本 = %d，想要 27——基线既有 v27，格子工作台不升版", ProtocolVersion)
 	}
 }
 
@@ -90,16 +90,37 @@ func TestProtocolV22TillSoilPacketIDIsFrozen(t *testing.T) {
 	if _, isTill := packet.(TillSoil); !isTill {
 		t.Fatalf("Play client packet ID 13 = %T，想要 TillSoil", packet)
 	}
-	// 14 已由格子工作台的 `MoveCraftingStack` 占用（`TestGridCraftingPacketIDsAreFrozen`
-	// 锁定其边界），这里改为断言「14 之后的 15 也是已分配编号且类型正确」，
+	// 14 已由骨粉催熟占用；15 由格子工作台的 `TakeCraftingOutput` 占用，
 	// 保持「相邻编号不被静默占用」的门禁语义。
-	if move, ok := clientPacketForID(StatePlay, 13+2); !ok {
-		t.Fatal("Play client packet ID 15 必须保持分配给 TakeCraftingOutput")
-	} else if _, isTake := move.(TakeCraftingOutput); !isTake {
-		t.Fatalf("Play client packet ID 15 = %T，想要 TakeCraftingOutput", move)
+	if packet, ok := clientPacketForID(StatePlay, 14); !ok {
+		t.Fatal("Play client packet ID 14 必须已分配给 BoneMeal")
+	} else if _, isMeal := packet.(BoneMeal); !isMeal {
+		t.Fatalf("Play client packet ID 14 = %T，想要 BoneMeal", packet)
 	}
-	if ProtocolVersion != 26 {
-		t.Fatalf("协议版本 = %d，想要 26——当前版本为 v26", ProtocolVersion)
+	if packet, ok := clientPacketForID(StatePlay, 15); !ok {
+		t.Fatal("Play client packet ID 15 必须保持分配给 TakeCraftingOutput")
+	} else if _, isTake := packet.(TakeCraftingOutput); !isTake {
+		t.Fatalf("Play client packet ID 15 = %T，想要 TakeCraftingOutput", packet)
+	}
+	if ProtocolVersion != 27 {
+		t.Fatalf("协议版本 = %d，想要 27——当前版本为 v27", ProtocolVersion)
+	}
+}
+
+func TestProtocolV27BoneMealPacketIDIsFrozen(t *testing.T) {
+	id, ok := clientPacketID(StatePlay, BoneMeal{})
+	if !ok || id != 14 {
+		t.Fatalf("BoneMeal ID = %d, ok=%v，想要 14, true", id, ok)
+	}
+	packet, ok := clientPacketForID(StatePlay, 14)
+	if !ok {
+		t.Fatal("Play client packet ID 14 未注册")
+	}
+	if _, isBone := packet.(BoneMeal); !isBone {
+		t.Fatalf("Play client packet ID 14 = %T，想要 BoneMeal", packet)
+	}
+	if _, ok := clientPacketForID(StatePlay, 14+2); ok {
+		t.Fatal("Play client packet ID 16 必须保持未分配")
 	}
 }
 
@@ -248,9 +269,6 @@ func sameClientPacketType(left, right ClientPacket) bool {
 	case MoveInventoryStack:
 		_, ok := right.(MoveInventoryStack)
 		return ok
-	case CraftRecipe:
-		_, ok := right.(CraftRecipe)
-		return ok
 	case OpenContainer:
 		_, ok := right.(OpenContainer)
 		return ok
@@ -271,6 +289,12 @@ func sameClientPacketType(left, right ClientPacket) bool {
 		return ok
 	case TakeCraftingOutput:
 		_, ok := right.(TakeCraftingOutput)
+		return ok
+	case TillSoil:
+		_, ok := right.(TillSoil)
+		return ok
+	case BoneMeal:
+		_, ok := right.(BoneMeal)
 		return ok
 	}
 	return false

@@ -99,7 +99,8 @@ type hotbarLayout struct {
 // 产出固定上限的实例；关闭时只有底部 9 格 HUD。overlay 与 chest 至多一个非 nil：
 // overlay 非 nil 时画熔炉三格与两条进度条，chest 非 nil 时画箱子 27 格，
 // 两者都为 nil 时画合成网格与产物格（crafting 为 nil 表示网格镜像尚未确认，
-// 按空的个人 2×2 呈现）。
+// 按空的个人 2×2 呈现）。mining 与 eating 是两条互斥的进度条叠加值
+// （采掘激活时进食条让位，见 `appendEatingBar`），只在关闭态出现。
 func layoutInventory(
 	dst *hotbarLayout,
 	atlas render.GlyphSource,
@@ -110,6 +111,7 @@ func layoutInventory(
 	overlay *FurnaceOverlay,
 	chest *ChestOverlay,
 	mining MiningOverlay,
+	eating EatingOverlay,
 	width, height float32,
 ) hotbarLayout {
 	if dst == nil {
@@ -210,6 +212,7 @@ func layoutInventory(
 		}
 	} else {
 		appendMiningBar(dst, mining, width, height)
+		appendEatingBar(dst, eating, mining, width, height)
 	}
 	return *dst
 }

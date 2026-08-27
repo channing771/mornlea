@@ -22,6 +22,13 @@ const (
 )
 
 func TestABIValuesMatchEngineContract(t *testing.T) {
+	// 显式钉住 v7：上面的相等断言在 header 与 dylib 同源时恒真（二者一起停在
+	// 旧版本不会被发现），本条把「本次布局扩容确实升了版」变成可执行契约。
+	// v7 承载 mesh registry 条目 18→19 字节的布局扩展（末尾追加 block_top_raw，
+	// 承载耕地等非满格方块的常量角高度几何）。
+	if ABIVersion != 7 {
+		t.Fatalf("engine ABI=%d，想要 7", ABIVersion)
+	}
 	if got := EngineABIVersion(); got != ABIVersion {
 		t.Fatalf("engine ABI version=%d，想要 %d", got, ABIVersion)
 	}

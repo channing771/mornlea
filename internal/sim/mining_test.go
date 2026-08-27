@@ -461,8 +461,9 @@ func TestMiningWrongToolStillConsumesDurability(t *testing.T) {
 
 // TestMiningHoeHarvestMatureCropKeepsDurability 覆盖 Scenario「锄头收获作物不扣
 // 耐久」的成熟分支：完好石锄/铁锄收获成熟小麦，耐久保持满值（整 `core.ItemStack`
-// 比较钉死栏位不变）、掉落仍是恰好 1 小麦 + 2 种子、`inventoryDirty` 保持 false
-// ——掉落进世界不触碰背包，豁免路径没有任何背包变化需要发布。
+// 比较钉死栏位不变）、两类掉落各落在 [1,3] 区间（数量由确定性哈希决定）、
+// `inventoryDirty` 保持 false——掉落进世界不触碰背包，豁免路径没有任何背包变化
+// 需要发布。
 func TestMiningHoeHarvestMatureCropKeepsDurability(t *testing.T) {
 	tests := []struct {
 		name string
@@ -491,8 +492,10 @@ func TestMiningHoeHarvestMatureCropKeepsDurability(t *testing.T) {
 				t.Fatalf("收获后方块 = %d，想要空气", got)
 			}
 			got := miningDropTotals(record.Chunk)
-			if len(got) != 2 || got[core.ItemWheat] != 1 || got[core.ItemWheatSeeds] != 2 {
-				t.Fatalf("成熟小麦掉落 = %+v，想要恰好 1 小麦 + 2 种子", got)
+			if len(got) != 2 ||
+				got[core.ItemWheat] < 1 || got[core.ItemWheat] > 3 ||
+				got[core.ItemWheatSeeds] < 1 || got[core.ItemWheatSeeds] > 3 {
+				t.Fatalf("成熟小麦掉落 = %+v，想要 1..3 小麦 + 1..3 种子", got)
 			}
 			want := core.ItemStack{Item: test.tool, Count: 1, Durability: full}
 			if slot := player.inventory.Hotbar.Slots[0]; slot != want {

@@ -8,8 +8,8 @@ import (
 )
 
 // stepPhase 标识 `Step` 内部的固定处理阶段。权威 tick 的阶段顺序是规格契约：
-// 玩家命令 → 伙伴 action → 统一物理与世界变更 → 流体推进 → 作物推进；各阶段
-// 写互不相交的状态，无法从外部结果观察先后，因此用 `stepPhaseObserver` 探针
+// 玩家命令 → 伙伴 action → 统一物理与世界变更 → 流体推进 → 耕地湿度推进 →
+// 作物推进；阶段边界无法只从外部结果完整观察，因此用 `stepPhaseObserver` 探针
 // 显式锁定。下面的常量是这份顺序的唯一权威，本段说明必须与之逐项对齐。
 type stepPhase uint8
 
@@ -30,10 +30,12 @@ const (
 	// 唯一承重的约束是必须早于 finishChanges：流动写入要与其他方块变更共用同一批
 	// revision、广播与存盘（design.md D8）。
 	phaseFluidAdvance
-	// phaseCropAdvance 位于流体推进之后、容器移动之前。排在流体之后是承重的：
-	// 耕地干湿判定读的是流体方块，同 tick 内先流动后判湿才能看到本 tick 的水位
-	// （design.md D1/D6）。它同样必须早于 finishChanges——生长与干湿转换要与
-	// 其他方块变更共用同一批 revision、广播与存盘。
+	// phaseFarmlandMoistureAdvance 在流体之后、作物之前按固定预算更新耕地干湿。
+	phaseFarmlandMoistureAdvance
+	// phaseCropAdvance 位于湿度推进之后、容器移动之前。排在湿度之后是承重的：
+	// 作物生长读取正下方的耕地编号，必须看到本 tick 最终的干湿状态。它同样必须
+	// 早于 finishChanges——生长与干湿转换要与其他方块变更共用同一批 revision、
+	// 广播与存盘。
 	//
 	// 单独登记这个阶段而不是折进 phaseFluidAdvance，是为了让 benchmark 能把
 	// 作物阶段的墙钟耗时与流体分开计量：两者的成本模型完全不同（流体正比于
@@ -224,6 +226,24 @@ func (engine *Engine) Step() TickResult {
 				continue
 			}
 			interactions = append(interactions, command)
+		case CommandBoneMeal:
+			if session.player == nil || session.player.lifecycle != PlayerActive {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectPlayerNotReady,
+				})
+				continue
+			}
+			if !validPlayerLook(command.Yaw, command.Pitch) {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectInvalidInput,
+				})
+				continue
+			}
+			interactions = append(interactions, command)
 		case CommandOpenFurnace:
 			if reason, rejected := engine.openContainer(command.Session, command); rejected {
 				result.Rejected = append(result.Rejected, Rejection{
@@ -249,25 +269,6 @@ func (engine *Engine) Step() TickResult {
 			}
 			session.viewContainer = false
 			session.container = core.ContainerRef{}
-		case CommandCraftRecipe:
-			if session.player == nil || session.player.lifecycle != PlayerActive {
-				result.Rejected = append(result.Rejected, Rejection{
-					Session:  command.Session,
-					Sequence: command.Sequence,
-					Reason:   RejectPlayerNotReady,
-				})
-				continue
-			}
-			// recipe-click 的过渡语义（design.md D6）：格子工作台交付后本命令
-			// 不再有任何执行语义——按既有命令拒绝路径稳定回拒，玩家物品状态
-			// 与网格一字不变。命令类型、ingress 映射与客户端发送路径的删除
-			// 分别归任务组 3 与 4；在那之前必须「稳定拒绝」而非静默无响应。
-			// 不回加任何本地合成执行路径。
-			result.Rejected = append(result.Rejected, Rejection{
-				Session:  command.Session,
-				Sequence: command.Sequence,
-				Reason:   RejectInvalidInput,
-			})
 		case CommandMoveCraftingStack:
 			// 网格移动只读写玩家自身状态，不触碰区块，直接在命令阶段结算；
 			// 值域拒绝沿用既有稳定拒绝路径。
@@ -414,6 +415,14 @@ func (engine *Engine) Step() TickResult {
 					Reason:   reason,
 				})
 			}
+		case CommandBoneMeal:
+			if reason, rejected := engine.executeBoneMeal(command, pending); rejected {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   reason,
+				})
+			}
 		case CommandSelectHotbar:
 			player := engine.sessions[command.Session].player
 			if player.inventory.Hotbar.Selected != command.Slot {
@@ -434,10 +443,11 @@ func (engine *Engine) Step() TickResult {
 	engine.advanceFurnaces(pending)
 	engine.notifyStepPhase(phaseFluidAdvance)
 	engine.advanceFluids(pending)
+	engine.notifyStepPhase(phaseFarmlandMoistureAdvance)
+	engine.advanceFarmlandMoisture(pending)
 	engine.notifyStepPhase(phaseCropAdvance)
-	// 作物随机 tick 紧跟流体：耕地的干湿判定读的是流体方块，排在流动之后能在
-	// 同一 tick 内看到本 tick 的水位。它同样必须早于 finishChanges——生长与
-	// 干湿转换要与其他方块变更共用同一批 revision、广播与存盘（design.md D1）。
+	// 作物随机 tick 紧跟湿度阶段，因此生长判定能读到同 tick 最终的耕地编号。
+	// 三个阶段的写入共用 `pending`，在 finishChanges 前按位置合并为一次发布。
 	engine.advanceCrops(pending)
 	for _, command := range containerMoves {
 		if reason, rejected := engine.applyContainerMove(command.Session, command, pending); rejected {

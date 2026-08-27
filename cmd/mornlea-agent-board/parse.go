@@ -91,7 +91,7 @@ type BacklogTask struct {
 	Feature string `json:"feature"`
 	// Summary 为简述。
 	Summary string `json:"summary"`
-	// Status 为规范化状态（未认领|已认领|开发中|待集成|已完成|其他）。
+	// Status 为规范化状态（就绪|已认领|开发中|待集成|排队|设计候选|已完成|已取消|其他）。
 	Status string `json:"status"`
 	// StatusRaw 为列中被识别的原始状态文本（未知状态时保留原样，便于排查）。
 	StatusRaw string `json:"statusRaw"`
@@ -228,7 +228,8 @@ type confirmReply struct {
 // -----------------------------------------
 
 var knownStatus = map[string]bool{
-	"未认领": true, "已认领": true, "开发中": true, "待集成": true, "已完成": true,
+	"就绪": true, "已认领": true, "开发中": true, "待集成": true,
+	"排队": true, "设计候选": true, "已完成": true, "已取消": true,
 }
 
 // splitCells 把一行 Markdown 表格拆成单元格切片（去掉首尾竖线、trim 空格）。

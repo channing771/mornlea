@@ -94,6 +94,20 @@ func newApplicationWithDependencies(
 	if options.Render.ViewDistance == 0 {
 		options.Render = config.Defaults().Render
 	}
+	// `applicationOptions` 也可能由测试或其他包内装配点直接构造，不能假设
+	// 一定经过 `config.Load`。空窗口值按缺省预设补齐；其余三项原始设置在
+	// registry、音频、窗口与 UI 资源产生任何副作用前复用设置页同一校验。
+	if options.WindowSize == "" {
+		options.WindowSize = config.WindowSize1280x720
+	}
+	initialSettings := settingsValues{
+		audioVolume:     options.AudioVolume,
+		texturePackPath: options.TexturePackPath,
+		windowSize:      options.WindowSize,
+	}
+	if err := initialSettings.validate(); err != nil {
+		return nil, fmt.Errorf("校验客户端设置: %w", err)
+	}
 	if dependencies.newGlyphAtlas == nil {
 		dependencies.newGlyphAtlas = render.NewGlyphAtlasWithSink
 	}
@@ -106,9 +120,12 @@ func newApplicationWithDependencies(
 	if dependencies.newRegistry == nil {
 		dependencies.newRegistry = defaultApplicationDependencies().newRegistry
 	}
-	reg, registryErr := dependencies.newRegistry(options.TexturePackPath)
+	if dependencies.patchSettings == nil {
+		dependencies.patchSettings = config.PatchSettings
+	}
+	reg, registryErr := dependencies.newRegistry(options.ResolvedTexturePackPath)
 	if registryErr != nil {
-		return nil, fmt.Errorf("加载材质包 %q: %w", options.TexturePackPath, registryErr)
+		return nil, fmt.Errorf("加载材质包 %q: %w", options.ResolvedTexturePackPath, registryErr)
 	}
 	ctx := context.Background()
 	var store storage.WorldStore
@@ -211,9 +228,10 @@ func newApplicationWithDependencies(
 	if headless {
 		rustRenderer, err = dependencies.newOffscreenRenderer(width, height)
 	} else {
-		// 初始逻辑尺寸 1280×720:Retina 2x 下物理即上述目标分辨率,1x 屏也
-		// 不超屏;创建后 `fitFramebuffer` 只在帧缓冲超过目标时再收缩。
-		window, err = dependencies.newWindow(windowLogicalWidth, windowLogicalHeight, applicationWindowTitle)
+		// 初始逻辑尺寸来自三个固定 16:9 预设；Rust 先按显示器工作区钳制，
+		// 创建后 `fitFramebuffer` 再只缩不放大地守住物理帧缓冲上限。
+		logicalWidth, logicalHeight := options.WindowSize.Dimensions()
+		window, err = dependencies.newWindow(logicalWidth, logicalHeight, applicationWindowTitle)
 		if err == nil {
 			fitFramebuffer(window, interactiveFramebufferWidth, interactiveFramebufferHeight)
 			width, height = window.FramebufferSize()
@@ -296,6 +314,7 @@ func newApplicationWithDependencies(
 			title:   "Mornlea",
 			version: menuVersion(),
 		},
+		settings: settingsState{committed: initialSettings, draft: initialSettings},
 	}
 	app.releaseResources = app.releaseOwnedResources
 	// 材质与 HUD 图集一次性上传;mesh 上传调度经 SectionScheduler 下沉。
@@ -316,9 +335,7 @@ func newApplicationWithDependencies(
 	if !options.Benchmark {
 		rustRenderer.UploadUIFont(render.EmbeddedCJKFont())
 	}
-	app.configPath = options.ConfigPath
 	if options.Dev {
-		app.debugPanelRenderer = render.NewDebugPanelLayouter(app.glyphAtlas)
 		// 面板的初始生效值取当前已生效的 physics/sim 快照（main.go 在构造
 		// application 之前已经调用过 config.Config.Apply）与调用方传入的
 		// Render，三组合起来与启动时真正生效的参数保持一致，不需要额外
@@ -627,14 +644,6 @@ func ignoreApplicationStartupCloseError(err error) error {
 	return err
 }
 
-// windowLogicalWidth/Height 是交互窗口的初始逻辑尺寸(16:9):Retina 2x 下物理
-// 分辨率恰好为 `interactiveFramebufferWidth`×`interactiveFramebufferHeight`,
-// 1x 屏幕上 1280×720 也不会超出常见显示器(Rust 侧另有超屏钳制兜底)。
-const (
-	windowLogicalWidth  = 1280
-	windowLogicalHeight = 720
-)
-
 // interactiveFramebufferWidth/Height 是交互渲染的目标物理帧缓冲分辨率:
 // `fitFramebuffer` 只在帧缓冲超过它时收缩,绝不放大。
 const (
@@ -661,6 +670,14 @@ func fitFramebuffer(window applicationWindow, targetWidth, targetHeight int) {
 	if wantWidth >= contentWidth || wantHeight >= contentHeight {
 		return
 	}
+	// D-01 的交互窗口只允许 16:9 预设。高缩放显示器上的独立四舍五入可能
+	// 产生 853×480 一类一像素漂移，因此向下吸附到最大的 16×9 整数倍；
+	// 只会再缩小，不会突破上面的物理像素上限或把窗口推出工作区。
+	units := min(wantWidth/16, wantHeight/9)
+	if units == 0 {
+		return
+	}
+	wantWidth, wantHeight = units*16, units*9
 	window.SetContentSize(wantWidth, wantHeight)
 	window.Poll()
 }

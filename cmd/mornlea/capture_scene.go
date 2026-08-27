@@ -288,6 +288,19 @@ func prepareMaterialsShowcase(app *application) error {
 	for x := int32(-4); x <= 3; x++ {
 		setBlock(core.BlockPos{X: x, Y: 0, Z: -1}, core.GrassID)
 	}
+	// 耕地两态列：与草地条同层（y=0）向左延伸，干（x=-6..-5）与湿（x=-8..-7）
+	// 各一个 2 格宽、单层高的列。registry 给耕地填 block_top_raw=14，顶面因此
+	// 下沉到 15/16——本场景把它纳入视觉回归网的意义所在。刻意放在相机近处的
+	// 空地而不是远处 z=-8 的材料柱网格：相机在 (0.5,5.8,13.5) 以约 -0.12 rad
+	// 俯视，z=-1 列的顶面俯角约 18°，1/16 格的下沉清晰可辨；z=-8 柱顶俯角
+	// 不足 8°，同样的下沉会退化成亚像素噪声。该区域在既有夹具中全空，
+	// 不移动、不覆盖任何既有方块。
+	for x := int32(-8); x <= -7; x++ {
+		setBlock(core.BlockPos{X: x, Y: 0, Z: -1}, core.FarmlandWetID)
+	}
+	for x := int32(-6); x <= -5; x++ {
+		setBlock(core.BlockPos{X: x, Y: 0, Z: -1}, core.FarmlandDryID)
+	}
 	for z := int32(-2); z <= 0; z++ {
 		for x := int32(0); x <= 3; x++ {
 			setBlock(core.BlockPos{X: x, Y: 4, Z: z}, core.StoneID)

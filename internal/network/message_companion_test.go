@@ -29,7 +29,7 @@ func TestCompanionMessageIDsAreAppendOnly(t *testing.T) {
 		{StatePlay, KeepAliveReply{}, 4},
 		{StatePlay, SelectHotbar{}, 5},
 		{StatePlay, MoveInventoryStack{}, 6},
-		{StatePlay, CraftRecipe{}, 7},
+		{StatePlay, MoveCraftingStack{}, 7},
 		{StatePlay, OpenContainer{}, 8},
 		{StatePlay, MoveContainerStack{}, 9},
 		{StatePlay, CloseContainer{}, 10},
@@ -66,9 +66,9 @@ func TestCompanionMessageIDsAreAppendOnly(t *testing.T) {
 	if _, ok := clientPacketForID(StatePlay, 1); ok {
 		t.Fatal("Play client packet ID 1 必须保持未分配")
 	}
-	// v22 把 13 分配给了 TillSoil，格子工作台把 14/15 分配给
-	// `MoveCraftingStack`/`TakeCraftingOutput`（in-branch 临时编号，design.md
-	// D1）；本表的「下一个仍未分配」上界随之推进到 16。
+	// v22 把 13 分配给了 TillSoil，v27 把 14 分配给了 BoneMeal，格子工作台把
+	// 15 分配给 `TakeCraftingOutput`（`MoveCraftingStack` 复用 7）；本表的
+	// 「下一个仍未分配」上界随之推进到 16。
 	if _, ok := clientPacketForID(StatePlay, 16); ok {
 		t.Fatal("未知 client packet ID 16 被接受")
 	}

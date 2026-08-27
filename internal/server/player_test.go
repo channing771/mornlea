@@ -221,13 +221,14 @@ func TestTranslatePlayerMessage(t *testing.T) {
 			},
 		},
 		{
-			name:    "craft recipe carries only the recipe id",
-			message: network.CraftRecipe{Sequence: 16, Recipe: core.RecipeStoneBricks},
+			name:    "move crafting stack carries only the view slots",
+			message: network.MoveCraftingStack{Sequence: 16, From: 9, To: 0},
 			want: sim.Command{
 				Session:  testSessionID,
 				Sequence: 16,
-				Kind:     sim.CommandCraftRecipe,
-				Recipe:   core.RecipeStoneBricks,
+				Kind:     sim.CommandMoveCraftingStack,
+				Slot:     9,
+				ToSlot:   0,
 			},
 		},
 		{

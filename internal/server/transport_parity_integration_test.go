@@ -226,20 +226,28 @@ func runMiningParityScript(t *testing.T, transport string) miningParityResult {
 	drops := client.NewItemDrops()
 	inventoryConfirmed := false
 	ready := false
-	for !ready || !inventoryConfirmed || !parityViewLoaded(mirror) {
-		_, messages := parityStep(t, host, endpoint, mirror)
-		for _, message := range messages {
-			applyMiningParityMessage(t, drops, message)
-			assertMiningParityHasNoRemotePlayers(t, message)
-			switch message := message.(type) {
-			case network.PlayerState:
-				assertValidIntegrationPlayerState(t, message)
-				ready = ready || message.Ready
-			case network.InventoryState:
-				inventoryConfirmed = message.Inventory == inventory
+	waitIntegrationLoginReady(
+		t,
+		fmt.Sprintf("%s mining parity", transport),
+		func() bool { return ready && inventoryConfirmed && parityViewLoaded(mirror) },
+		func() string {
+			return fmt.Sprintf("ready=%v inventoryConfirmed=%v viewLoaded=%v", ready, inventoryConfirmed, parityViewLoaded(mirror))
+		},
+		func() {
+			_, messages := parityStep(t, host, endpoint, mirror)
+			for _, message := range messages {
+				applyMiningParityMessage(t, drops, message)
+				assertMiningParityHasNoRemotePlayers(t, message)
+				switch message := message.(type) {
+				case network.PlayerState:
+					assertValidIntegrationPlayerState(t, message)
+					ready = ready || message.Ready
+				case network.InventoryState:
+					inventoryConfirmed = message.Inventory == inventory
+				}
 			}
-		}
-	}
+		},
+	)
 
 	step := func(command network.ClientMessage) (network.PlayerState, []network.ServerMessage) {
 		if command != nil {
@@ -491,21 +499,29 @@ func runParityTranscript(t *testing.T, transport string) parityResult {
 	readinessMessages := make([]network.ServerMessage, 0, 64)
 
 	ready := false
-	for !ready || !parityViewLoaded(mirror) {
-		_, messages := parityStep(t, host, endpoint, mirror)
-		for _, message := range messages {
-			readinessMessages = append(readinessMessages, message)
-			if state, ok := message.(network.PlayerState); ok && state.Ready {
-				ready = true
+	waitIntegrationLoginReady(
+		t,
+		fmt.Sprintf("%s business parity", transport),
+		func() bool { return ready && parityViewLoaded(mirror) },
+		func() string {
+			return fmt.Sprintf("ready=%v viewLoaded=%v", ready, parityViewLoaded(mirror))
+		},
+		func() {
+			_, messages := parityStep(t, host, endpoint, mirror)
+			for _, message := range messages {
+				readinessMessages = append(readinessMessages, message)
+				if state, ok := message.(network.PlayerState); ok && state.Ready {
+					ready = true
+				}
 			}
-		}
-	}
+		},
+	)
 	transcript = append(transcript, parityReadinessTranscript(t, mirror, readinessMessages)...)
 
 	commands := []network.ClientMessage{
 		network.PlayerInput{Sequence: 1, MoveX: 1, Yaw: 0, Pitch: -0.2},
-		network.CraftRecipe{Sequence: 2, Recipe: core.RecipeStoneBricks},
-		network.CraftRecipe{Sequence: 3, Recipe: core.RecipeStoneBricks},
+		network.MoveCraftingStack{Sequence: 2, From: 9, To: 0},
+		network.MoveCraftingStack{Sequence: 3, From: 9, To: 1},
 		network.PlaceBlock{Sequence: 4, Yaw: 0, Pitch: -0.2, Slot: 0},
 	}
 	for sequence := uint64(5); sequence < 35; sequence++ {

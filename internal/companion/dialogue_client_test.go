@@ -186,6 +186,17 @@ func TestDialogueClientRoundTripAndIsolation(t *testing.T) {
 	}
 }
 
+func TestDialogueClientIdleNodePayload(t *testing.T) {
+	req, err := NewDialogueRequest("", "", DialogueNode{Kind: DialogueNodeIdle}, DialogueEnvDigest{})
+	if err != nil {
+		t.Fatalf("构造空闲台词请求: %v", err)
+	}
+	payload := buildDialogueUserPayload(req)
+	if payload.Node != (dialogueWireNode{Kind: "idle"}) {
+		t.Fatalf("空闲节点 payload=%+v，want 仅 kind=idle", payload.Node)
+	}
+}
+
 // decodeUserObject 把用户消息解码为通用 object；顶层不是 object 即失败。
 func decodeUserObject(t *testing.T, content string) map[string]any {
 	t.Helper()

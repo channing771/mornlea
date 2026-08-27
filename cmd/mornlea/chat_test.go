@@ -393,8 +393,10 @@ func TestChatEnterDefersToOpenInventoryOrVisibleDebugPanel(t *testing.T) {
 			app.panel.selectFieldForTest(t, "render.fovDegrees")
 			app.panel.effective.Render.FovDegrees = 42
 		}, func(t *testing.T, app *application) {
-			if got, want := app.panel.effective.Render.FovDegrees, config.Defaults().Render.FovDegrees; got != want {
-				t.Fatalf("panel Enter reset fov=%v want=%v", got, want)
+			// Enter 归面板所有（egui 语义，经事件批回传），Go 侧不得打开聊天
+			// 也不得自行改写行值——第 0 帧的 42 应原样保留。
+			if got, want := app.panel.effective.Render.FovDegrees, float32(42); got != want {
+				t.Fatalf("panel fov=%v want=%v", got, want)
 			}
 		}},
 	} {

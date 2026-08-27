@@ -33,15 +33,20 @@ func runInteractive(app *application) error {
 }
 
 // runMenuPhase 运行主菜单相位：不捕获光标、不读取 WASD/面板/聊天/快捷栏输入，
-// 每帧 Poll → DrainUIEvents → 分派（start/quit/其它 id 忽略）→ 渲染（含 UI 段）。
+// 每帧 Poll → DrainUIEvents → typed 分派 → 渲染（含 UI 段）。
 // 「进入游戏」装配成功（startWorld 置 phase=game）后立即 SetCursorCaptured(true)
 // 并刷新鼠标基线，返回 nil 交给游戏相位；「退出游戏」或窗口关闭同样返回 nil。
 func runMenuPhase(app *application) error {
 	for !app.window.ShouldClose() {
 		app.window.Poll()
 		events := app.renderer.DrainUIEvents()
-		for _, id := range events {
-			if app.handleMenuEvent(id) {
+		for _, event := range events {
+			quit, disposition := app.handleMenuUIEvent(event)
+			if disposition == menuUIEventIgnored {
+				slog.Warn("忽略未知 UI 事件", "kind", event.Kind)
+				continue
+			}
+			if quit {
 				return nil
 			}
 			if app.menu.phase == menuPhaseGame {
@@ -56,6 +61,38 @@ func runMenuPhase(app *application) error {
 	return nil
 }
 
+// menuUIEventDisposition 描述正式 typed UI 路由是否处理或忽略本条事件。
+type menuUIEventDisposition uint8
+
+const (
+	menuUIEventIgnored menuUIEventDisposition = iota
+	menuUIEventHandled
+)
+
+// handleMenuUIEvent 把 client ABI v9 的 typed 事件接到 Go 菜单语义。设置变化
+// 只在设置相位接受；非法、未知或错相位事件明确忽略，不把 `ActionID` 误执行。
+func (a *application) handleMenuUIEvent(event client.UIEvent) (quit bool, disposition menuUIEventDisposition) {
+	switch event.Kind {
+	case client.UIEventAction:
+		return a.handleMenuEvent(event.ActionID), menuUIEventHandled
+	case client.UIEventSettingsChanged:
+		if a.menu.phase != menuPhaseSettings {
+			return false, menuUIEventIgnored
+		}
+		values, err := settingsValuesFromUI(event.Settings)
+		if err != nil {
+			slog.Warn("忽略非法设置草稿事件", "error", err)
+			return false, menuUIEventIgnored
+		}
+		a.settings.draft = values
+		a.settings.status = ""
+		a.settings.error = ""
+		return false, menuUIEventHandled
+	default:
+		return false, menuUIEventIgnored
+	}
+}
+
 // runGamePhase 是既有交互循环体（原 runInteractive 的遍历/输入/渲染主体）：捕获
 // 光标、处理 WASD/面板/聊天/快捷栏并每帧渲染。语义与引入主菜单之前逐字节一致。
 func runGamePhase(app *application) error {
@@ -65,14 +102,8 @@ func runGamePhase(app *application) error {
 	escapeWasDown := false
 	clickWasDown := false
 	panelToggleWasDown := false
-	panelUpWasDown := false
-	panelDownWasDown := false
-	panelLeftWasDown := false
-	panelRightWasDown := false
 	enterWasDown := false
 	backspaceWasDown := false
-	panelSaveWasDown := false
-	panelResetAllWasDown := false
 	var input client.InputState
 	// `textInputBuffer` 与 `chatInput.runes` 同以 `companion.MaxPlanCommandBytes`
 	// 为界（M5E 递延 2 的清偿，E7 同源化收口）：rune 编码后每字符至少 1 字节，
@@ -126,6 +157,9 @@ func runGamePhase(app *application) error {
 				app.setInventoryOpen(false)
 				lastMouseX, lastMouseY = app.window.CursorPos()
 				justCaptured = true
+			case app.panelVisible():
+				// 面板期间的 Esc 由 Rust egui 消费（编辑中取消编辑、非编辑
+				// 态关闭面板），Go 不释放光标；CLOSE 事件回传后由本侧复位。
 			default:
 				app.window.SetCursorCaptured(false)
 			}
@@ -139,49 +173,18 @@ func runGamePhase(app *application) error {
 		}
 		backspaceWasDown = backspaceDown
 
-		// 调试面板按键：F3/F5/F6、方向键与 Enter 都是边沿触发（按一下走一步），
-		// Shift/Alt 是电平读取的修饰键。面板不存在时（未开 --dev）整段直接跳过，
-		// 方向键既不驱动面板、也从不驱动玩家移动（移动只读 WASD）。
+		// 调试面板：F3 边沿仍由 Go 检测；选中/编辑/确认/取消/关闭由 Rust egui
+		// 处理并回传结构化事件，这里按序消费并同步运行时快照。面板不存在时
+		// （未开 --dev）整段直接跳过。
 		if app.panel != nil {
 			toggleDown := app.window.KeyDown(client.KeyF3)
-			upDown := app.window.KeyDown(client.KeyUp)
-			downDown := app.window.KeyDown(client.KeyDown)
-			leftDown := app.window.KeyDown(client.KeyLeft)
-			rightDown := app.window.KeyDown(client.KeyRight)
-			saveDown := app.window.KeyDown(client.KeyF5)
-			resetAllDown := app.window.KeyDown(client.KeyF6)
 			panelBlocked := chatWasOpen || app.chatInput.open
-
-			keys := panelKeys{
-				Toggle: !panelBlocked && toggleDown && !panelToggleWasDown,
-				Up:     !panelBlocked && upDown && !panelUpWasDown,
-				Down:   !panelBlocked && downDown && !panelDownWasDown,
-				Left:   !panelBlocked && leftDown && !panelLeftWasDown,
-				Right:  !panelBlocked && rightDown && !panelRightWasDown,
-				Enter: !panelBlocked && !app.inventoryOpen && !app.containerOpen() &&
-					enterPressed && app.panel.visible,
-				Save:     !panelBlocked && saveDown && !panelSaveWasDown,
-				ResetAll: !panelBlocked && resetAllDown && !panelResetAllWasDown,
-				Shift:    app.window.KeyDown(client.KeyLeftShift),
-				Alt:      app.window.KeyDown(client.KeyLeftAlt),
-			}
+			keys := panelKeys{Toggle: !panelBlocked && toggleDown && !panelToggleWasDown}
 			panelToggleWasDown = toggleDown
-			panelUpWasDown = upDown
-			panelDownWasDown = downDown
-			panelLeftWasDown = leftDown
-			panelRightWasDown = rightDown
-			panelSaveWasDown = saveDown
-			panelResetAllWasDown = resetAllDown
-
-			if app.panel.handleKeys(keys, app.remote()) {
+			app.panel.handleKeys(keys)
+			events := decodeDebugPanelEvents(app.renderer.DrainUIEvents())
+			if len(events) != 0 && app.panel.applyPanelEvents(events, app.remote()) {
 				app.applyPanelChange()
-			}
-			// 面板隐藏时 F5 不落盘：设计文档要求配置文件"不自动创建"，
-			// 面板关着时误触 F5 不该在 config.DefaultPath() 悄悄创建/覆盖它。
-			if keys.Save && app.panel.visible {
-				if err := app.panel.save(app.configPath); err != nil {
-					slog.Warn("保存调试面板配置失败", "error", err)
-				}
 			}
 		}
 
@@ -215,7 +218,7 @@ func runGamePhase(app *application) error {
 		}
 		clickWasDown = clickDown
 		captured := app.window.CursorCaptured()
-		if captured && !justCaptured && !app.inventoryOpen && !app.chatInput.open {
+		if captured && !justCaptured && !app.inventoryOpen && !app.chatInput.open && !app.panelVisible() {
 			mouseX, mouseY := app.window.CursorPos()
 			// baseMouseSensitivity 是键鼠灵敏度默认为 1 时对应的原始弧度/像素系数；
 			// Render.MouseSensitivity 是相对该基线的倍率，默认值 1 保持行为不变。
@@ -232,9 +235,9 @@ func runGamePhase(app *application) error {
 		actions := input.Update(
 			clickDown, app.window.SecondaryButtonDown(), number,
 			app.window.KeyDown(client.KeyE), app.window.KeyDown(client.KeyQ),
-			app.inventoryOpen || chatBlockedThisFrame,
+			app.inventoryOpen || chatBlockedThisFrame || app.panelVisible(),
 		)
-		if actions.ToggleInventory && !chatBlockedThisFrame {
+		if actions.ToggleInventory && !chatBlockedThisFrame && !app.panelVisible() {
 			app.setInventoryOpen(!app.inventoryOpen)
 			if !app.inventoryOpen {
 				lastMouseX, lastMouseY = app.window.CursorPos()
@@ -253,8 +256,9 @@ func runGamePhase(app *application) error {
 			app.window.KeyDown(client.KeyD),
 			app.window.KeyDown(client.KeySpace),
 		)
-		if app.inventoryOpen || chatBlockedThisFrame {
-			// 界面打开时持续发送中性输入，避免服务端沿用上一帧移动。
+		if app.inventoryOpen || chatBlockedThisFrame || app.panelVisible() {
+			// 界面打开时持续发送中性输入，避免服务端沿用上一帧移动；
+			// 面板可见时游戏键整体捕获（spec「游戏键 MUST NOT 产生上行」）。
 			movement = client.Movement{}
 		}
 		app.applyInteractiveCursorInput(

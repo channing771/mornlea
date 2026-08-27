@@ -188,9 +188,9 @@
 
 系统 SHALL 通过既有无窗口固定场景记录并比对当前产品默认方块材质与 HUD 呈现。地形场景 MUST 覆盖内嵌默认 layer 与没有内嵌映射时的程序化回退，HUD 场景 MUST 覆盖居中九格快捷栏、从同一生效 registry 采样的真实方块缩略图、数量阴影、工具耐久、双层选中边框、无背景的十段生命行、耗损氧气、常驻饥饿与具有颜色及形状差异的采掘进度，并 MUST 以独立场景覆盖打开的背包与合成区域；更新基线时 MUST 继续执行既有显式更新与双阈值规则。状态构图 MUST 与 Minecraft 官方生存 HUD 参考中“生命/饥饿分居快捷栏两侧、气泡堆叠在饥饿外侧”的可观察关系比较，官方参考 `https://www.minecraft.net/en-us/article/health-minecraft` 只可作为构图证据。心形、气泡、鸡腿与其他 HUD 像素 MUST 继续由本项目原创程序化绘制或既有授权来源生成，MUST NOT 从 Mojang 或官方参考导入、临摹或复制像素资产。
 
-`materials-showcase` MUST 保持既有固定正午、固定相机和确定性夹具，并经与交互客户端相同的完整呈现链路收敛后无窗口抓取，不得创建或聚焦前台游戏窗口。夹具 MUST 同时覆盖 14 种新材料、八格连续草地、相邻玻璃、相邻树叶，以及原木顶面年轮与侧面树皮。既有双阈值 MUST 保持不变。
+`materials-showcase` MUST 保持既有固定正午、固定相机和确定性夹具，并经与交互客户端相同的完整呈现链路收敛后无窗口抓取，不得创建或聚焦前台游戏窗口。夹具 MUST 同时覆盖 14 种新材料、八格连续草地、相邻玻璃、相邻树叶、原木顶面年轮与侧面树皮，以及干耕地与湿耕地各至少一个可见列（含下沉顶面的完整几何）。既有双阈值 MUST 保持不变。
 
-抓帧场景清单 MUST 按以下完整顺序运行：`terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`water-surface-slope`、`far-horizon`、`water-underwater`。清单 MUST 保留 `target-block-feedback`、`oak-grove` 与 `ai-companion` 的既有名称及相对顺序，`ai-companion` MUST 继续紧随 `oak-grove`，并 MUST 保留当前末尾的 `water-surface-slope`、倒数第二的 `far-horizon` 与唯一末场景 `water-underwater`。`target-block-feedback` MUST 使用固定正午、固定相机和确定性夹具，且经与交互客户端相同的完整呈现链路收敛后无窗口抓取。它 MUST 命中一个已注册材料方块，并同时可审查细轮廓、中文名称和正确的遮挡关系；抓帧或比对 MUST NOT 使用隐藏目标提示的专用开关。`inventory-crafting` 因打开背包而隐藏目标提示，其目标提示隐藏状态、背包与合成区域语义 MUST 保持不变；若内嵌默认材质、程序化回退或共享地形背景改变可观察像素，其 golden MAY 在逐图复核后更新。`oak-grove` MUST 使用固定世界种子、固定生成区块、固定正午和固定相机，并经与交互客户端相同的完整呈现链路收敛后无窗口抓取，不得创建或聚焦前台游戏窗口。`ai-companion` MUST 使用固定世界时间、相机、伙伴身份、维度、位置与朝向，显示中文名牌“阿木”、一条 accepted ChatEvent 和打开的 `@阿木 挖石头` 输入，并经统一的人形、名牌和聊天 HUD 呈现链路无窗口抓取。
+抓帧场景清单 MUST 按以下完整顺序运行（19 景）：`terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`water-surface-slope`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`。清单 MUST 保留 `target-block-feedback`、`oak-grove` 与 `ai-companion` 的既有名称及相对顺序，`ai-companion` MUST 继续紧随 `oak-grove`，并 MUST 保留当前尾段的 `water-surface-slope`、`main-menu`、`settings-menu`、倒数第二的 `far-horizon` 与唯一末场景 `water-underwater`。`settings-menu` MUST 紧随 `main-menu`，`target-block-feedback` MUST 使用固定正午、固定相机和确定性夹具，且经与交互客户端相同的完整呈现链路收敛后无窗口抓取。它 MUST 命中一个已注册材料方块，并同时可审查细轮廓、中文名称和正确的遮挡关系；抓帧或比对 MUST NOT 使用隐藏目标提示的专用开关。`inventory-crafting` 因打开背包而隐藏目标提示，其目标提示隐藏状态、背包与合成区域语义 MUST 保持不变；若内嵌默认材质、程序化回退或共享地形背景改变可观察像素，其 golden MAY 在逐图复核后更新。`oak-grove` MUST 使用固定世界种子、固定生成区块、固定正午和固定相机，并经与交互客户端相同的完整呈现链路收敛后无窗口抓取，不得创建或聚焦前台游戏窗口。`ai-companion` MUST 使用固定世界时间、相机、伙伴身份、维度、位置与朝向，显示中文名牌“阿木”、一条 accepted ChatEvent 和打开的 `@阿木 挖石头` 输入，并经统一的人形、名牌和聊天 HUD 呈现链路无窗口抓取。
 
 #### Scenario: 地形与 HUD 风格变化产生可审查基线
 
@@ -207,7 +207,7 @@
 
 - **GIVEN** 完整无窗口 capture 场景清单
 - **WHEN** 检查全部场景名称与顺序
-- **THEN** 清单 MUST 依次为 `terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`water-surface-slope`、`far-horizon`、`water-underwater`
+- **THEN** 清单 MUST 依次为 `terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`water-surface-slope`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`
 - **AND** `far-horizon` MUST 是倒数第二个场景，`water-underwater` MUST 是唯一末场景
 
 #### Scenario: 生存反馈场景固定且不污染后续场景
@@ -235,7 +235,7 @@
 
 - **GIVEN** `materials-showcase` 的固定夹具已装入客户端镜像
 - **WHEN** `materials-showcase` 完成网格和上传收敛并抓帧
-- **THEN** 图像 MUST 同时显示 14 种新材料各一个近景样本及多方块表面、跨至少一个 AO 或天空光拆分边界的八格连续草地、两个相邻玻璃方块、两个相邻树叶方块，以及原木顶面年轮与侧面树皮
+- **THEN** 图像 MUST 同时显示 14 种新材料各一个近景样本及多方块表面、跨至少一个 AO 或天空光拆分边界的八格连续草地、两个相邻玻璃方块、两个相邻树叶方块，以及原木顶面年轮与侧面树皮、干耕地与湿耕地各一个可见列（两列顶面呈现在下沉高度而非整格顶面）
 - **AND** 玻璃后方方块 MUST 可见，树叶孔洞和光照 MUST 可辨认，相同 cutout 方块的内部面 MUST 不可见
 
 #### Scenario: 材料展示只走无窗口完整链路
@@ -249,15 +249,15 @@
 
 - **GIVEN** 当前分支的 Pixel Perfection HUD 与 main 的 authoritative hunger 已语义合并
 - **WHEN** 显式更新视觉基线
-- **THEN** 系统 MUST 按既有完整顺序重新生成全部 17 张正式 golden
-- **AND** 调用方 MUST 逐张人工复核全部 17 张图像后才能接受更新，且既有双阈值 MUST 保持不变
+- **THEN** 系统 MUST 按既有完整顺序重新生成全部 19 张正式 golden
+- **AND** 调用方 MUST 逐张人工复核全部 19 张图像后才能接受更新，且既有双阈值 MUST 保持不变
 
 #### Scenario: 伙伴场景与当前末尾顺序并存
 
 - **GIVEN** 完整无窗口场景清单
 - **WHEN** 检查 `target-block-feedback` 之后的场景名称与顺序
 - **THEN** `oak-grove` 与 `ai-companion` MUST 保持既有名称，且 `ai-companion` MUST 紧随 `oak-grove`
-- **AND** `water-surface-slope` MUST 位于 `ai-companion` 之后，`far-horizon` MUST 是倒数第二个场景，`water-underwater` MUST 是唯一末场景
+- **AND** `water-surface-slope` MUST 位于 `ai-companion` 之后，`main-menu` 与 `settings-menu` MUST 依次相邻并位于 `far-horizon` 之前，`far-horizon` MUST 是倒数第二个场景，`water-underwater` MUST 是唯一末场景
 
 #### Scenario: 橡树林通过正常渲染链路抓取
 
@@ -292,19 +292,19 @@
 
 - **GIVEN** 调用方在合并后的 Pixel Perfection + hunger 基线上更新全部正式 golden
 - **WHEN** 检查生成结果和比较配置
-- **THEN** `water-surface-slope`、倒数第二的 `far-horizon` 与唯一末场景 `water-underwater` 的尾序 MUST 保持不变
+- **THEN** `water-surface-slope`、`main-menu`、`settings-menu`、倒数第二的 `far-horizon` 与唯一末场景 `water-underwater` 的尾序 MUST 保持不变
 - **AND** 既有双阈值 MUST 保持不变，任何差异 MUST 经逐图人工复核而不得通过放宽阈值接受
 
 ### Requirement: 视觉基线覆盖三类容器像素界面
 
-系统 SHALL 具有恰好 17 个正式无窗口场景，`chest-container` 与 `furnace-container` MUST 依次紧随 `inventory-crafting`。完整顺序 MUST 为 `terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`water-surface-slope`、`far-horizon`、`water-underwater`。既有显式更新、无窗口完整渲染链路和双阈值 MUST 保持不变；两张 far-horizon diagnostic controls MUST 继续不计入正式场景或 golden。
+系统 SHALL 具有恰好 19 个正式无窗口场景，`chest-container` 与 `furnace-container` MUST 依次紧随 `inventory-crafting`。完整顺序 MUST 为 `terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`water-surface-slope`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`。既有显式更新、无窗口完整渲染链路和双阈值 MUST 保持不变；两张 far-horizon diagnostic controls MUST 继续不计入正式场景或 golden。
 
-#### Scenario: 完整场景顺序固定为 17 项
+#### Scenario: 完整场景顺序固定为 19 项
 
 - **GIVEN** 完整正式 capture 场景清单
 - **WHEN** 检查场景数量、名称与顺序
-- **THEN** 清单 MUST 恰好包含上述 17 项，`chest-container` 与 `furnace-container` MUST 依次紧随 `inventory-crafting`
-- **AND** `water-surface-slope` MUST 保持倒数第三，`far-horizon` MUST 保持倒数第二，`water-underwater` MUST 保持唯一末项
+- **THEN** 清单 MUST 恰好包含上述 19 项，`chest-container` 与 `furnace-container` MUST 依次紧随 `inventory-crafting`
+- **AND** `water-surface-slope` MUST 位于相邻的 `main-menu` 与 `settings-menu` 之前，`far-horizon` MUST 保持倒数第二，`water-underwater` MUST 保持唯一末项
 
 #### Scenario: 背包与合成场景覆盖普通容器皮肤
 
@@ -331,8 +331,8 @@
 
 - **GIVEN** 容器 atlas 与三类 overlay 的最终实现已经通过聚焦测试
 - **WHEN** 显式更新视觉基线
-- **THEN** 系统 MUST 重新生成全部 17 张正式 golden，并只提交实际场景文件
-- **AND** 调用方 MUST 逐张人工复核 17 张图像后才能接受，且 MUST NOT 通过放宽双阈值接受差异
+- **THEN** 系统 MUST 重新生成全部 19 张正式 golden，并只提交实际场景文件
+- **AND** 调用方 MUST 逐张人工复核 19 张图像后才能接受，且 MUST NOT 通过放宽双阈值接受差异
 - **AND** 抓帧 MUST NOT 创建或聚焦前台游戏窗口，MUST NOT 导入、临摹或复制 Mojang 像素
 
 ### Requirement: 视觉基线覆盖调试面板
@@ -391,32 +391,33 @@
 - **THEN** 调用方 MUST 人工复核全部场景图像后才能接受新 golden，且任一场景未收敛、方块光、伙伴、水下或远环语义不成立，或比对超过既有阈值 MUST 失败
 - **AND** 由当前内嵌默认材质引起的既有 golden 变化 MAY 在完整复核后接受，设备型号 MUST NOT 成为额外的接受或拒绝条件
 
-### Requirement: 主菜单无窗口 capture 场景
+### Requirement: 主菜单与设置菜单无窗口 capture 场景
 
-视觉场景表 SHALL 新增 `main-menu` 场景：以既有 640×360 离屏渲染路径渲染含标题「Mornlea」、四个按钮与版本行的主菜单帧，回读像素与 golden 按既有双阈值比对；场景 MUST 排在 `far-horizon` 之前，`far-horizon` 仍为倒数第二、`water-underwater` 仍为最后。
+视觉场景表 SHALL 包含 `main-menu` 与紧随其后的 `settings-menu`：两者均以既有 `640x360` 离屏渲染路径运行，回读像素并与 golden 按既有双阈值比对。`main-menu` MUST 显示启用的「设置」按钮；`settings-menu` MUST 以确定性的非默认音量、短材质路径和窗口预设覆盖全部首版控件。两场景 MUST 依次排在 `far-horizon` 之前，`far-horizon` 仍为倒数第二、`water-underwater` 仍为最后。
 
-#### Scenario: 场景表顺序与新场景产出
+#### Scenario: 场景表顺序与两张 UI 图产出
 
 - **GIVEN** `captureScenes` 场景表
-- **WHEN** 检查顺序
-- **THEN** `main-menu` 存在且位于 `far-horizon` 之前
-- **AND** `far-horizon` 仍为倒数第二、`water-underwater` 仍为最后
-- **AND** 抓帧目录含 `main-menu.png`
+- **WHEN** 检查 UI 场景与尾序
+- **THEN** `main-menu` 与 `settings-menu` MUST 依次相邻并位于 `far-horizon` 之前
+- **AND** `far-horizon` MUST 仍为倒数第二、`water-underwater` MUST 仍为最后
+- **AND** 抓帧目录 MUST 含 `main-menu.png` 与 `settings-menu.png`
 
-#### Scenario: 新场景参与 golden 比对
+#### Scenario: 两个 UI 场景参与 golden 比对
 
 - **GIVEN** 非更新模式运行 capture
-- **WHEN** 执行到 `main-menu` 场景
-- **THEN** `main-menu.png` 与 golden 逐像素比对（同既有阈值与差异图产出）
+- **WHEN** 执行到 `main-menu` 与 `settings-menu`
+- **THEN** 两张 PNG MUST 分别与对应 golden 逐像素比对
+- **AND** MUST 继续使用既有阈值与差异图产出规则
 
-### Requirement: 既有场景 golden 逐字节不变
+### Requirement: 未受影响场景 golden 逐字节不变
 
-egui 集成 MUST NOT 改变不含 UI 段的任何既有 capture 场景的输出像素；既有场景的 golden 图像 SHALL 保持逐字节不变。
+本变更 MAY 只更新因「设置」启用而改变的 `main-menu.png` 并新增 `settings-menu.png`；所有不携带设置 UI 的既有正式场景 golden SHALL 保持逐字节不变。
 
-#### Scenario: 既有场景不受 egui 影响
+#### Scenario: 非设置场景不受变更影响
 
-- **GIVEN** 全部既有场景（不含 `main-menu`）
-- **WHEN** 运行 capture 并与既有 golden 比对
-- **THEN** 每个场景与各自 golden 的像素差异为零（同一比对管线下的既有阈值）
-- **AND** 除新增 `main-menu.png` 外不产生任何新 golden 文件
+- **GIVEN** 全部既有正式场景（不含 `main-menu`）
+- **WHEN** 运行 capture 并与变更前 golden 比对
+- **THEN** 每个场景的 PNG 字节 MUST 保持不变
+- **AND** 除更新 `main-menu.png` 与新增 `settings-menu.png` 外 MUST NOT 产生其他 golden 变更
 

@@ -163,22 +163,26 @@ func TestHungerLoopEndToEndMemory(t *testing.T) {
 	// 等待条件刻意只看「发布过一份非空背包」，**不**看具体物品：条件里写物品的话，
 	// 材料包被改动时这个循环会一直空转到 go test 超时，而超时是一种读不出原因的红。
 	ready, inventoryReady := false, false
-	for ticks := 0; !ready || !inventoryReady || !parityViewLoaded(mirror); ticks++ {
-		if ticks > hungerLoopLoginBudget {
-			t.Fatalf("登录 %d 个 tick 后仍未就绪: ready=%v 背包已发布=%v 视野已加载=%v",
-				ticks, ready, inventoryReady, parityViewLoaded(mirror))
-		}
-		_, messages := parityStep(t, host, endpoint, mirror)
-		for _, message := range messages {
-			switch message := message.(type) {
-			case network.PlayerState:
-				ready = ready || message.Ready
-			case network.InventoryState:
-				wireInventory = message.Inventory
-				inventoryReady = inventoryReady || message.Inventory != core.Inventory{}
+	waitIntegrationLoginReady(
+		t,
+		"hunger loop",
+		func() bool { return ready && inventoryReady && parityViewLoaded(mirror) },
+		func() string {
+			return fmt.Sprintf("ready=%v 背包已发布=%v 视野已加载=%v", ready, inventoryReady, parityViewLoaded(mirror))
+		},
+		func() {
+			_, messages := parityStep(t, host, endpoint, mirror)
+			for _, message := range messages {
+				switch message := message.(type) {
+				case network.PlayerState:
+					ready = ready || message.Ready
+				case network.InventoryState:
+					wireInventory = message.Inventory
+					inventoryReady = inventoryReady || message.Inventory != core.Inventory{}
+				}
 			}
-		}
-	}
+		},
+	)
 	wantSeeds := core.ItemStack{Item: core.ItemWheatSeeds, Count: core.MaxStackCount}
 	if got := wireInventory.Backpack[starterSeedSlot]; got != wantSeeds {
 		t.Fatalf("登录后材料包第 %d 格 = %+v，想要 %+v",

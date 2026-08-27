@@ -23,7 +23,7 @@ func clientPacketID(state State, packet ClientPacket) (uint32, bool) {
 			return 5, true
 		case MoveInventoryStack:
 			return 6, true
-		case CraftRecipe:
+		case MoveCraftingStack:
 			return 7, true
 		case OpenContainer:
 			return 8, true
@@ -37,9 +37,7 @@ func clientPacketID(state State, packet ClientPacket) (uint32, bool) {
 			return 12, true
 		case TillSoil:
 			return 13, true
-		// 格子工作台（authoritative-grid-crafting）的 in-branch 临时编号
-		//（design.md D1）：终值 7/14 由批次集成 A-06 锁定，本分支不重排。
-		case MoveCraftingStack:
+		case BoneMeal:
 			return 14, true
 		case TakeCraftingOutput:
 			return 15, true
@@ -74,7 +72,7 @@ func clientPacketForID(state State, id uint32) (ClientPacket, bool) {
 		case 6:
 			return MoveInventoryStack{}, true
 		case 7:
-			return CraftRecipe{}, true
+			return MoveCraftingStack{}, true
 		case 8:
 			return OpenContainer{}, true
 		case 9:
@@ -88,7 +86,7 @@ func clientPacketForID(state State, id uint32) (ClientPacket, bool) {
 		case 13:
 			return TillSoil{}, true
 		case 14:
-			return MoveCraftingStack{}, true
+			return BoneMeal{}, true
 		case 15:
 			return TakeCraftingOutput{}, true
 		}

@@ -93,6 +93,31 @@ func TestFluidHeightMapsLevelToRawHeightExhaustively(t *testing.T) {
 	}
 }
 
+// TestBlockTopRawSinksFarmlandOnly 钉住顶面高度通道的第一个消费者：干/湿
+// 耕地填 14（呈现高度 15/16，与物理碰撞体 farmlandCollisionHeight 一致），
+// 其余全部已注册方块——含 8 个流体编号——都是「满格」哨兵 0。
+//
+// 流体的 0 不只是缺省：mesher 对流体走邻域平均角高度、对 block_top_raw 走
+// 常量，两条几何路径互斥，这里从数据源头保证流体永远不进常量路径。
+func TestBlockTopRawSinksFarmlandOnly(t *testing.T) {
+	registry := assets.NewRegistry()
+	for _, id := range []core.BlockID{core.FarmlandDryID, core.FarmlandWetID} {
+		if got := registry.BlockTopRaw(id); got != 14 {
+			t.Fatalf("耕地 %d 的 BlockTopRaw=%d，想要 14（15/16 呈现高度）", id, got)
+		}
+	}
+	// 上界必须是「全部已注册方块」：写死某个具体末位编号会在追加新方块时
+	// 静默退化成子集，新方块就漏出「非耕地必须为哨兵 0」的检查。
+	for id := core.AirID; id < core.BlockIDMax; id++ {
+		if id == core.FarmlandDryID || id == core.FarmlandWetID {
+			continue
+		}
+		if got := registry.BlockTopRaw(id); got != 0 {
+			t.Fatalf("非耕地 %d 的 BlockTopRaw=%d，想要满格哨兵 0", id, got)
+		}
+	}
+}
+
 func TestRegistryMeshSnapshotMatchesRegistry(t *testing.T) {
 	registry := assets.NewRegistry()
 	snapshot := registry.MeshSnapshot()
@@ -103,8 +128,9 @@ func TestRegistryMeshSnapshotMatchesRegistry(t *testing.T) {
 	}
 	for id := core.AirID; id < core.BlockIDMax; id++ {
 		block := snapshot.Blocks[int(id)]
-		if block.FluidHeight != registry.FluidHeight(id) || block.LightAttenuation != registry.LightAttenuation(id) {
-			t.Fatalf("block %d snapshot 的流体/衰减字段=%+v", id, block)
+		if block.FluidHeight != registry.FluidHeight(id) || block.LightAttenuation != registry.LightAttenuation(id) ||
+			block.BlockTopRaw != registry.BlockTopRaw(id) {
+			t.Fatalf("block %d snapshot 的流体/衰减/顶面高度字段=%+v", id, block)
 		}
 		if block.ID != id || block.Opaque != registry.Opaque(id) || block.Emission != registry.Emission(id) {
 			t.Fatalf("block %d snapshot=%+v", id, block)

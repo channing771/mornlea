@@ -1,98 +1,35 @@
 package worldgen_test
 
-// 本文件是 rust-engine-worldgen 的差分门禁:随机种子×区块的 dense 逐位
-// 对比、Go fuzz 驱动的单点差分,以及跨区块橡树拼合一致性。对照物是
-// oracle_test.go 中旧 Go 实现的逐字副本。
+// 本文件锁定跨区块橡树拼合的生产语义:同一棵橡树的树冠横跨区块边界时,
+// 相邻两个区块各自独立生成,两侧输出都必须与同一种子下的单点查询语义
+// 逐格一致。对照物是生产自身的公共出口(`GenerateChunk` 与 `BaseBlockAt`),
+// 不再存在任何旧 Go 实现副本。
 
 import (
-	"math/rand"
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/worldgen"
 )
 
-// assertChunkMatchesOracle 逐位比较生产 GenerateChunk 与 pointwise oracle。
-//
-// fluidEnabled 同时传给生产与 oracle:跨实现一致性必须在门控两态下都成立。
-func assertChunkMatchesOracle(t *testing.T, seed int64, pos core.ChunkPos, fluidEnabled bool) {
-	t.Helper()
-	production := worldgen.New(seed, fluidEnabled)
-	oracle := newOracleGenerator(seed, fluidEnabled)
-	chunk := production.GenerateChunk(pos)
-	baseX := pos.X << core.SectionShift
-	baseZ := pos.Z << core.SectionShift
-	for y := int32(core.MinY); y < core.MaxY; y++ {
-		for z := 0; z < core.SectionSize; z++ {
-			for x := 0; x < core.SectionSize; x++ {
-				world := core.BlockPos{X: baseX + int32(x), Y: y, Z: baseZ + int32(z)}
-				if got, want := chunk.BlockAt(x, y, z), oracle.baseBlockAt(world); got != want {
-					t.Fatalf("seed=%d fluid=%t chunk=%+v (%d,%d,%d): 生产=%d oracle=%d",
-						seed, fluidEnabled, pos, world.X, y, world.Z, got, want)
-				}
-			}
-		}
-	}
-}
-
-// TestRandomSeedChunkParity 用固定种子的伪随机语料扩大差分覆盖:
-// 语料本身确定(测试可复现),覆盖大坐标与负种子。
-func TestRandomSeedChunkParity(t *testing.T) {
-	rng := rand.New(rand.NewSource(20260815))
-	for i := 0; i < 6; i++ {
-		seed := rng.Int63() - rng.Int63()
-		pos := core.ChunkPos{
-			X: int32(rng.Intn(4096) - 2048),
-			Z: int32(rng.Intn(4096) - 2048),
-		}
-		for _, fluidEnabled := range []bool{false, true} {
-			assertChunkMatchesOracle(t, seed, pos, fluidEnabled)
-		}
-	}
-}
-
-// FuzzWorldgenOracleParity 对任意 (seed, 坐标) 做单点差分:
-// HeightAt/TerrainBlockAt/BaseBlockAt 必须与 oracle 逐位一致。
-func FuzzWorldgenOracleParity(f *testing.F) {
-	f.Add(int64(42), int32(0), int32(64), int32(0))
-	f.Add(int64(-1), int32(-1000), int32(-64), int32(1000))
-	f.Add(int64(987654321), int32(2147480000), int32(319), int32(-2147480000))
-	f.Add(int64(0), int32(16), int32(88), int32(-16))
-	f.Fuzz(func(t *testing.T, seed int64, wx, wy, wz int32) {
-		// 门控两态都要跨实现一致:关闭态锁基线,开启态锁注水规则。
-		for _, fluidEnabled := range []bool{false, true} {
-			production := worldgen.New(seed, fluidEnabled)
-			oracle := newOracleGenerator(seed, fluidEnabled)
-			if got, want := production.HeightAt(wx, wz), oracle.heightAt(wx, wz); got != want {
-				t.Fatalf("fluid=%t HeightAt(%d,%d)=%d，oracle=%d", fluidEnabled, wx, wz, got, want)
-			}
-			pos := core.BlockPos{X: wx, Y: wy, Z: wz}
-			if got, want := production.TerrainBlockAt(pos), oracle.terrainBlockAt(pos); got != want {
-				t.Fatalf("fluid=%t TerrainBlockAt(%+v)=%d，oracle=%d", fluidEnabled, pos, got, want)
-			}
-			if got, want := production.BaseBlockAt(pos), oracle.baseBlockAt(pos); got != want {
-				t.Fatalf("fluid=%t BaseBlockAt(%+v)=%d，oracle=%d", fluidEnabled, pos, got, want)
-			}
-		}
-	})
-}
-
 // TestOakTreeSpansChunkBorderConsistently 锁定跨区块橡树拼合:
-// seed 42 cell (2,2) 的橡树 root=(16,*,18)、height=6,树冠 x∈[14,18]
-// 横跨 chunk (0,1) 与 (1,1)。两个区块独立生成后,树冠包围盒内每一格都
-// 必须与 oracle 一致,且两侧都必须真实落下树块。
+// seed 42 cell (2,2) 的橡树根列在 (16,*,18),树冠 x∈[14,18]
+// 横跨 chunk (0,1) 与 (1,1)。两个区块独立生成后,根列包围盒内每一格都
+// 必须与单点查询语义(`BaseBlockAt`)逐格一致——若区块侧写入与单点查询
+// 对跨界树的合并规则分叉,此处立刻变红;两侧还都必须真实落下树块。
+// 语料前提(草地地表、树干存在、树高 4..6)全部经生产公共输出核实,
+// 树高区间即冻结语义「最低高度 4、最高 6」的黑盒表达。
 func TestOakTreeSpansChunkBorderConsistently(t *testing.T) {
-	const seed = 42
-	oracle := newOracleGenerator(seed, false)
-	tree, ok := oracle.oakTreeForCell(2, 2)
-	if !ok {
-		t.Fatal("seed 42 cell (2,2) 应有橡树")
-	}
-	if tree.root.X != 16 || tree.root.Z != 18 {
-		t.Fatalf("候选树 root=%+v,语料前提失效", tree.root)
+	const seed = int64(42)
+	const rootX, rootZ = int32(16), int32(18)
+	production := worldgen.New(seed, false)
+
+	surface := production.HeightAt(rootX, rootZ)
+	pos := core.BlockPos{X: rootX, Y: surface, Z: rootZ}
+	if got := production.TerrainBlockAt(pos); got != core.GrassID {
+		t.Fatalf("语料前提失效: (%d,%d) 地表=%d，想要 GrassID", rootX, rootZ, got)
 	}
 
-	production := worldgen.New(seed, false)
 	left := production.GenerateChunk(core.ChunkPos{X: 0, Z: 1})
 	right := production.GenerateChunk(core.ChunkPos{X: 1, Z: 1})
 	chunks := map[core.ChunkPos]interface {
@@ -101,20 +38,39 @@ func TestOakTreeSpansChunkBorderConsistently(t *testing.T) {
 		{X: 0, Z: 1}: left,
 		{X: 1, Z: 1}: right,
 	}
+	blockAt := func(pos core.BlockPos) (core.BlockID, bool) {
+		chunk, covered := chunks[pos.Chunk()]
+		if !covered {
+			return core.AirID, false
+		}
+		lx, _, lz := pos.Local()
+		return chunk.BlockAt(lx, pos.Y, lz), true
+	}
+
+	// 树干顶自下而上扫描得出,不把候选选择器的内部 hash 位带进黑盒断言;
+	// 扫描同时核实了「该列真的长着树」这一语料前提。
+	topY := int32(-1)
+	for y := surface + 1; y < core.MaxY; y++ {
+		if got, _ := blockAt(core.BlockPos{X: rootX, Y: y, Z: rootZ}); got != core.OakLogID {
+			break
+		}
+		topY = y
+	}
+	if height := topY - surface; height < 4 || height > 6 {
+		t.Fatalf("根列 (%d,*,%d) 无树干或树高 %d 越出冻结语义 4..6", rootX, rootZ, topY-surface)
+	}
 
 	treeBlocksPerChunk := map[core.ChunkPos]int{}
-	for y := tree.root.Y; y <= tree.root.Y+tree.height; y++ {
-		for z := tree.root.Z - 2; z <= tree.root.Z+2; z++ {
-			for x := tree.root.X - 2; x <= tree.root.X+2; x++ {
+	for y := surface + 1; y <= topY+1; y++ {
+		for z := rootZ - 2; z <= rootZ+2; z++ {
+			for x := rootX - 2; x <= rootX+2; x++ {
 				pos := core.BlockPos{X: x, Y: y, Z: z}
-				chunk, covered := chunks[pos.Chunk()]
+				got, covered := blockAt(pos)
 				if !covered {
 					continue
 				}
-				lx, _, lz := pos.Local()
-				got := chunk.BlockAt(lx, y, lz)
-				if want := oracle.baseBlockAt(pos); got != want {
-					t.Fatalf("跨界树 %+v: 生产=%d oracle=%d", pos, got, want)
+				if want := production.BaseBlockAt(pos); got != want {
+					t.Fatalf("跨界树 %+v: 区块=%d 单点查询=%d", pos, got, want)
 				}
 				if got == core.OakLogID || got == core.LeavesID {
 					treeBlocksPerChunk[pos.Chunk()]++

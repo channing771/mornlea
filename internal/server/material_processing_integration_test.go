@@ -95,17 +95,25 @@ func runMaterialProcessingScript(t *testing.T, transport string) materialProcess
 	}
 
 	ready, inventoryReady := false, false
-	for !ready || !inventoryReady || !parityViewLoaded(mirror) {
-		messages := step(nil)
-		for _, message := range messages {
-			switch message := message.(type) {
-			case network.PlayerState:
-				ready = ready || message.Ready
-			case network.InventoryState:
-				inventoryReady = inventoryReady || message.Inventory == initial
+	waitIntegrationLoginReady(
+		t,
+		fmt.Sprintf("%s material processing", transport),
+		func() bool { return ready && inventoryReady && parityViewLoaded(mirror) },
+		func() string {
+			return fmt.Sprintf("ready=%v inventoryReady=%v viewLoaded=%v", ready, inventoryReady, parityViewLoaded(mirror))
+		},
+		func() {
+			messages := step(nil)
+			for _, message := range messages {
+				switch message := message.(type) {
+				case network.PlayerState:
+					ready = ready || message.Ready
+				case network.InventoryState:
+					inventoryReady = inventoryReady || message.Inventory == initial
+				}
 			}
-		}
-	}
+		},
+	)
 
 	key := core.ChunkKey{Dimension: core.Overworld}
 	index, ok := world.ChunkBlockIndex(core.BlockPos{})

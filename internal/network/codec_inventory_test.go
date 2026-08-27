@@ -77,8 +77,8 @@ func TestGridCraftingMoveValueDomain(t *testing.T) {
 			t.Fatalf("合法移动 %+v 被拒绝: %v", command, err)
 		}
 		id, payload, err := encodeClientPacketPayload(StatePlay, command)
-		if err != nil || id != 14 {
-			t.Fatalf("编码 %+v = id %d, err %v，想要 id=14", command, id, err)
+		if err != nil || id != 7 {
+			t.Fatalf("编码 %+v = id %d, err %v，想要 id=7", command, id, err)
 		}
 		round, err := decodeClientPacketPayload(StatePlay, id, payload)
 		if err != nil || round != (ClientPacket)(command) {
@@ -107,7 +107,7 @@ func TestGridCraftingMoveValueDomain(t *testing.T) {
 		{1, 0, 0, 0, 0, 0, 0, 0, gridCraftingViewSlots, 0},
 		{1, 0, 0, 0, 0, 0, 0, 0, 9, 10},
 	} {
-		if packet, err := decodeClientPacketPayload(StatePlay, 14, wire); err == nil {
+		if packet, err := decodeClientPacketPayload(StatePlay, 7, wire); err == nil {
 			t.Fatalf("非法移动 wire %x 解码为 %+v", wire, packet)
 		}
 	}

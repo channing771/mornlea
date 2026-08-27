@@ -159,9 +159,32 @@ func (a *application) renderFrame(workMax int) (bool, error) {
 	hudVisible := inventoryConfirmed || (healthReady && !a.clientSessionClosed) ||
 		chatOverlay.Open || len(chatOverlay.Lines) != 0
 	if hudVisible {
+		// B-14 进食进度条：纯客户端预测。输入位在 `renderFrame` 作用域没有现成的
+		// 当帧 `Control.Eating`，故按 `interactive.go` 置位的同源状态派生（光标
+		// 捕获 + 次键按住 + 已确认手持食物 + 权威确认饥饿未满）：开箱/菜单/聊天
+		// 都会释放光标，天然归零；唯一偏差是刚刚重新捕获的那一帧会超前一个帧
+		// 时长，不可感知。饥饿门控对齐权威侧 `sim/eating.go` 的「饥饿已满不
+		// 推进」——满值时输入位恒为假，进度条不出现（spec Scenario「饥饿已满
+		// 不呈现进度条」）。tracker 以帧间 elapsed 按权威 tick 周期累积，切格/
+		// 换物/数量变化（权威结算吃掉一件）由状态机清零；无头路径（benchmark/
+		// capture）window 为 nil，输入位恒为假，既有场景输出逐字节不变。
+		eatingSample := client.EatingSample{}
+		if hotbar, confirmed := a.inventory.Hotbar(); confirmed {
+			stack := hotbar.Slots[hotbar.Selected]
+			_, _, food := core.FoodValue(stack.Item)
+			eatingSample = client.EatingSample{
+				Eating: food && hungerReady && hunger < core.MaxHunger &&
+					a.window != nil && a.window.CursorCaptured() &&
+					a.window.SecondaryButtonDown(),
+				Slot: hotbar.Selected, Item: stack.Item, Count: stack.Count,
+			}
+		}
+		eatingActive, eatingProgress := a.eatingTracker.Observe(time.Now(), eatingSample)
 		if err := a.hotbarRenderer.Prepare(
 			inventory, inventoryConfirmed, a.inventoryOpen, a.inventorySource, craftingOverlay, overlay, chestOverlay,
-			a.miningOverlay, hud.HealthOverlay{Confirmed: healthReady, Value: health},
+			a.miningOverlay,
+			hud.EatingOverlay{Active: eatingActive, Progress: eatingProgress},
+			hud.HealthOverlay{Confirmed: healthReady, Value: health},
 			hud.OxygenOverlay{Confirmed: oxygenReady, Value: oxygen},
 			hud.HungerOverlay{Confirmed: hungerReady, Value: hunger}, chatOverlay,
 			uint32(width), uint32(height), a.scheduler.UploadBudget(),
@@ -169,14 +192,11 @@ func (a *application) renderFrame(workMax int) (bool, error) {
 			return false, fmt.Errorf("准备快捷栏 HUD: %w", err)
 		}
 	}
-	if a.debugPanelRenderer != nil {
+	var panelUISegment []byte
+	if a.panel != nil {
+		// 面板读数与参数行只构造一次：喂给 layout v3 段（egui 面板）。
 		readout, rows := a.panelFrameInput(time.Now())
-		if err := a.debugPanelRenderer.Prepare(
-			a.panel.visible, readout, rows,
-			uint32(width), uint32(height), a.scheduler.UploadBudget(),
-		); err != nil {
-			return false, fmt.Errorf("准备调试面板: %w", err)
-		}
+		panelUISegment = encodeDebugPanelSegment(a.panel.visible, a.panel.editing, readout, rows)
 	}
 	a.scheduler.DropOutside(a.center, a.render.ViewDistance)
 	// 远环半部:跨 tile 边界增量入队 → BeginFrame → FlushUploads →
@@ -249,12 +269,12 @@ func (a *application) renderFrame(workMax int) (bool, error) {
 		hudViewport, hudQuads, hudGlyphs := a.hotbarRenderer.FrameStreams()
 		hudSegment = client.EncodeQuadSegment(hudViewport, hudQuads, hudGlyphs, 48)
 	}
-	var debugSegment []byte
-	if a.debugPanelRenderer != nil {
-		panelViewport, panelQuads, panelGlyphs := a.debugPanelRenderer.FrameStreams()
-		debugSegment = client.EncodeQuadSegment(panelViewport, panelQuads, panelGlyphs, 48)
+	// UI 段：菜单相位走 layout v1/v2；游戏相位的调试面板走 layout v3，
+	// 两种相位互斥，优先级为菜单段优先。
+	uiSegment := a.uiSegment()
+	if uiSegment == nil {
+		uiSegment = panelUISegment
 	}
-
 	rendered := a.renderer.RenderFrame(client.RenderFrame{
 		ViewProj:         viewProj,
 		ViewProjInv:      viewProjInv,
@@ -273,8 +293,7 @@ func (a *application) renderFrame(workMax int) (bool, error) {
 		WaterTint:        underwater.Tint,
 		NameTagSegment:   nameTagSegment,
 		HUDSegment:       hudSegment,
-		DebugSegment:     debugSegment,
-		UISegment:        a.uiSegment(),
+		UISegment:        uiSegment,
 	})
 	if !rendered {
 		return false, nil

@@ -93,6 +93,8 @@ func dialogueNodeKindText(kind DialogueNodeKind) string {
 		return "terminal"
 	case DialogueNodeFirstArrival:
 		return "first_arrival"
+	case DialogueNodeIdle:
+		return "idle"
 	default:
 		return "unknown"
 	}
