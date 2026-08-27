@@ -52,13 +52,20 @@ const (
 	// ItemWheat 是成熟小麦的收获产物，本身不可放置。
 	ItemWheatSeeds
 	ItemWheat
-	// ItemBread 是唯一的食物，只能由小麦合成（RecipeBread），本身不可放置、
+	// ItemBread 是食物之一，只能由小麦合成（RecipeBread），本身不可放置、
 	// 不是任何方块的掉落物。恢复值见 FoodValue。同样只能追加在 ItemIDMax
 	// 哨兵之前。
 	ItemBread
 	// ItemBoneMeal 是骨粉，用于催熟小麦；沿用食物与种子的堆叠与放置语义（不可
 	// 放置，堆叠 64），同样只能追加在 ItemIDMax 哨兵之前。
 	ItemBoneMeal
+	// ItemPotato / ItemCarrot 是马铃薯与胡萝卜：二者与小麦种子同形，可放置成
+	// 对应的 PotatoStage0ID / CarrotStage0ID，堆叠 64，同样只能追加在
+	// ItemIDMax 哨兵之前。ItemPoisonousPotato 是毒土豆——马铃薯成熟收获时 2%
+	// 概率的额外掉落，本身不可放置，食物值 2/1200（中毒效果延期至 B-25）。
+	ItemPotato
+	ItemCarrot
+	ItemPoisonousPotato
 	// ItemIDMax 是合法物品编号的独占上界（最后一个合法 ItemID + 1），本身不是
 	// 物品枚举成员。它供测试以「item < ItemIDMax」穷举全部物品，替代依赖
 	//「某个具体物品恰为枚举末项」的脆弱写法；放在 core 是因为物品注册表归属
@@ -240,7 +247,8 @@ func ItemStackLimit(item ItemID) (uint8, bool) {
 		ItemCobblestone, ItemSmoothStone, ItemSand, ItemGravel, ItemOakLog,
 		ItemOakPlanks, ItemLeaves, ItemGlass, ItemBrick, ItemWhiteWool,
 		ItemRoofTile, ItemClay, ItemSnowBlock, ItemMossyCobblestone,
-		ItemWheatSeeds, ItemWheat, ItemBread, ItemBoneMeal:
+		ItemWheatSeeds, ItemWheat, ItemBread, ItemBoneMeal,
+		ItemPotato, ItemCarrot, ItemPoisonousPotato:
 		return MaxStackCount, true
 	case ItemStonePickaxe, ItemIronPickaxe,
 		ItemBrokenStonePickaxe, ItemBrokenIronPickaxe,
@@ -346,6 +354,10 @@ func ItemPlacement(item ItemID) (BlockID, bool) {
 	// 因此不出现在本表里：耕地只能由锄头翻出，作物只能由种子长成。
 	case ItemWheatSeeds:
 		return WheatStage0ID, true
+	case ItemPotato:
+		return PotatoStage0ID, true
+	case ItemCarrot:
+		return CarrotStage0ID, true
 	default:
 		return AirID, false
 	}

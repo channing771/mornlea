@@ -36,8 +36,9 @@ func ValidHunger(hunger uint8) bool {
 // 它是食物的**唯一固定表**：进食状态机的准入判定（手持物是不是食物）、结算时
 // 的恢复量、以及「非食物不可进食」的穷举守护都查这一处，不存在第二份数值。
 //
-// 目前只有面包一种食物：一种已经足以验证三层状态与进食状态机的全部路径，肉类
-// 需要生物、熟食需要熔炉食谱，两者都不在当前范围内。新增食物是给本表加一行。
+// 目前有面包、马铃薯、胡萝卜、毒土豆四种食物：面包足以验证三层状态与进食
+// 状态机的全部路径，肉类需要生物、熟食需要熔炉食谱，两者都不在当前范围内；
+// 马铃薯系在 B-01 追加，毒土豆的中毒效果延期至 B-25。新增食物是给本表加一行。
 func FoodValue(item ItemID) (uint8, uint16, bool) {
 	switch item {
 	// 面包 (5, 6.0)：与参考实现同值。饱和度大于饥饿点数是刻意的——刚吃饱的
@@ -45,6 +46,12 @@ func FoodValue(item ItemID) (uint8, uint16, bool) {
 	// 的来源。
 	case ItemBread:
 		return 5, 6 * SaturationMilliPerPoint, true
+	case ItemPotato:
+		return 1, 600, true
+	case ItemCarrot:
+		return 3, 3600, true
+	case ItemPoisonousPotato:
+		return 2, 1200, true // ponytail: poison effect deferred to B-25
 	default:
 		return 0, 0, false
 	}

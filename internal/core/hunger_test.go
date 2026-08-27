@@ -66,23 +66,36 @@ func TestBreadIsRegisteredStackableAndNotPlaceable(t *testing.T) {
 	}
 }
 
-// TestFoodValueCoversOnlyBread 是食物表的穷举守护：全部合法物品里只有面包是
-// 食物，且它的两个恢复值精确等于 (5, 6000 千分位)。
+// TestFoodValueCoversOnlyBread 是食物表的穷举守护：全部合法物品里只有面包、
+// 马铃薯、胡萝卜、毒土豆四种食物，且各自的恢复值精确等于 Bread(5,6000)、
+// Potato(1,600)、Carrot(3,3600)、PoisonousPotato(2,1200)（千分位）。
 //
 // 穷举界用 ItemIDMax 独占哨兵而不是「<= 枚举末项」：追加新物品时 core 的枚举
-// 末项守护断言会先变红，迫使开发者回来审视这条穷举是否还表达了「只有面包」。
+// 末项守护断言会先变红，迫使开发者回来审视这条穷举是否还表达了预期集合。
 func TestFoodValueCoversOnlyBread(t *testing.T) {
 	for item := core.ItemID(0); item < core.ItemIDMax; item++ {
 		hunger, saturation, ok := core.FoodValue(item)
-		if item == core.ItemBread {
+		switch item {
+		case core.ItemBread:
 			if !ok || hunger != 5 || saturation != 6000 {
 				t.Fatalf("FoodValue(ItemBread) = (%d,%d,%v)，想要 (5,6000,true)", hunger, saturation, ok)
 			}
-			continue
-		}
-		if ok || hunger != 0 || saturation != 0 {
-			t.Fatalf("FoodValue(%d) = (%d,%d,%v)，想要 (0,0,false)：面包是唯一食物",
-				item, hunger, saturation, ok)
+		case core.ItemPotato:
+			if !ok || hunger != 1 || saturation != 600 {
+				t.Fatalf("FoodValue(ItemPotato) = (%d,%d,%v)，想要 (1,600,true)", hunger, saturation, ok)
+			}
+		case core.ItemCarrot:
+			if !ok || hunger != 3 || saturation != 3600 {
+				t.Fatalf("FoodValue(ItemCarrot) = (%d,%d,%v)，想要 (3,3600,true)", hunger, saturation, ok)
+			}
+		case core.ItemPoisonousPotato:
+			if !ok || hunger != 2 || saturation != 1200 {
+				t.Fatalf("FoodValue(ItemPoisonousPotato) = (%d,%d,%v)，想要 (2,1200,true)", hunger, saturation, ok)
+			}
+		default:
+			if ok || hunger != 0 || saturation != 0 {
+				t.Fatalf("FoodValue(%d) = (%d,%d,%v)，想要 (0,0,false)：非食物", item, hunger, saturation, ok)
+			}
 		}
 	}
 	// 哨兵之外的未注册编号同样不得是食物。
@@ -90,5 +103,17 @@ func TestFoodValueCoversOnlyBread(t *testing.T) {
 		if _, _, ok := core.FoodValue(item); ok {
 			t.Fatalf("未注册物品 %d 被登记为食物", item)
 		}
+	}
+}
+
+func TestFoodValuePotatoCarrot(t *testing.T) {
+	if h, s, ok := core.FoodValue(core.ItemPotato); !ok || h != 1 || s != 600 {
+		t.Fatalf("potato %d %d %v", h, s, ok)
+	}
+	if h, s, ok := core.FoodValue(core.ItemCarrot); !ok || h != 3 || s != 3600 {
+		t.Fatalf("carrot %d %d %v", h, s, ok)
+	}
+	if h, s, ok := core.FoodValue(core.ItemPoisonousPotato); !ok || h != 2 || s != 1200 {
+		t.Fatalf("poisonous %d %d %v", h, s, ok)
 	}
 }

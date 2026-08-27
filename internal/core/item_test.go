@@ -21,13 +21,13 @@ func TestCanonicalItemIDsStayStable(t *testing.T) {
 }
 
 // TestItemIDMaxGuardsExhaustiveEnumeration 锁定 ItemIDMax 独占哨兵与枚举末项的
-// 关系：当前最后一个合法物品必须是 ItemBoneMeal。物品演进纪律是只能在
+// 关系：当前最后一个合法物品必须是 ItemPoisonousPotato。物品演进纪律是只能在
 // 哨兵之前追加；将来追加新物品时第一个断言变红，迫使开发者同步审视全部以
 // 「item < ItemIDMax」为穷举界的测试（例如 companion 的 place 注册表覆盖测试），
 // 而不是让穷举测试静默失去对新物品的覆盖。
 func TestItemIDMaxGuardsExhaustiveEnumeration(t *testing.T) {
-	if core.ItemBoneMeal != core.ItemIDMax-1 {
-		t.Fatalf("ItemID 枚举末项不再是 ItemBoneMeal（ItemIDMax-1 = %d）；"+
+	if core.ItemPoisonousPotato != core.ItemIDMax-1 {
+		t.Fatalf("ItemID 枚举末项不再是 ItemPoisonousPotato（ItemIDMax-1 = %d）；"+
 			"新增物品必须同步审视全部以 ItemIDMax 为穷举界的测试", core.ItemIDMax-1)
 	}
 	// 哨兵之外不得再出现已注册物品：若有人把新物品追加在哨兵之后，穷举界会
@@ -36,6 +36,30 @@ func TestItemIDMaxGuardsExhaustiveEnumeration(t *testing.T) {
 		if core.RegisteredItem(item) {
 			t.Fatalf("物品 %d 注册在 ItemIDMax 哨兵之外，独占穷举界失效", item)
 		}
+	}
+}
+
+func TestItemIDsAppendOnly(t *testing.T) {
+	if core.ItemPoisonousPotato != core.ItemIDMax-1 {
+		t.Fatal("Poisonous must be last before Max")
+	}
+	if _, ok := core.ItemStackLimit(core.ItemPotato); !ok {
+		t.Fatal("potato stack missing")
+	}
+	if _, ok := core.ItemStackLimit(core.ItemCarrot); !ok {
+		t.Fatal("carrot stack missing")
+	}
+	if _, ok := core.ItemStackLimit(core.ItemPoisonousPotato); !ok {
+		t.Fatal("poisonous potato stack missing")
+	}
+	if block, ok := core.ItemPlacement(core.ItemPotato); !ok || block != core.PotatoStage0ID {
+		t.Fatalf("ItemPlacement(ItemPotato)=(%d,%v), want (%d,true)", block, ok, core.PotatoStage0ID)
+	}
+	if block, ok := core.ItemPlacement(core.ItemCarrot); !ok || block != core.CarrotStage0ID {
+		t.Fatalf("ItemPlacement(ItemCarrot)=(%d,%v), want (%d,true)", block, ok, core.CarrotStage0ID)
+	}
+	if block, ok := core.ItemPlacement(core.ItemPoisonousPotato); ok || block != core.AirID {
+		t.Fatalf("ItemPlacement(ItemPoisonousPotato)=(%d,%v), want (AirID,false): poisonous not placeable", block, ok)
 	}
 }
 
