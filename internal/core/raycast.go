@@ -202,5 +202,22 @@ func raycastFloorToI32(value float32) int32 {
 // 可采掘、放置的落点是否被占用，仍由各调用点自己的规则判定（例如放置把流体格
 // 视作可覆盖的空位，见 internal/sim 的 executePlacement）。
 func InteractionTarget(id BlockID) bool {
-	return id != AirID && !IsFluid(id)
+	if id == AirID || IsFluid(id) {
+		return false
+	}
+	// 门：关闭实心可命中，开启可穿透
+	if IsDoor(id) {
+		if IsDoorUpper(id) {
+			// 上半无方向，视为实心以便可命中（交互会映射到下半翻转）；开启时
+			// 下半已可穿透，整体仍可穿过下半，此处保持实心不影响开启穿透语义
+			return true
+		}
+		switch id {
+		case DoorLowerSouthOpen, DoorLowerWestOpen, DoorLowerNorthOpen, DoorLowerEastOpen:
+			return false
+		default:
+			return true
+		}
+	}
+	return true
 }

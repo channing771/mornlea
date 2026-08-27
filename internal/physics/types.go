@@ -135,6 +135,9 @@ func PlayerBounds(position mgl32.Vec3) core.AABB {
 // 耕地（core.IsFarmland）是全仓唯一的非满立方体碰撞：单盒，顶面压到
 // farmlandCollisionHeight。
 //
+// 门是第二类非满碰撞：关闭时厚 3/16 贴方向边，开启时旋转 90° 薄边；上半无方向，
+// 按空气处理（下半已阻挡时上半无需再阻挡，也避免双格厚度叠加）。
+//
 // 三条分支的形状差异全部由 prism 的逐格 AABB 数组承载（每格 box count + 每 box
 // 24 字节），Rust 侧按 count 循环读任意包围盒，因此新增非满方块形状不触及 FFI
 // 编码，也不升 engine ABI。
@@ -144,6 +147,60 @@ func BlockCollisionBoxes(id core.BlockID, loaded bool) CollisionBoxSet {
 	}
 	if id == core.AirID || core.IsFluid(id) || core.IsCrop(id) {
 		return CollisionBoxSet{Loaded: true}
+	}
+	// 门碰撞：关闭贴边、开启旋转 90°，厚度 3/16
+	if core.IsDoor(id) {
+		if core.IsDoorUpper(id) {
+			return CollisionBoxSet{Loaded: true}
+		}
+		const thickness = float32(3.0 / 16.0)
+		dir := core.DoorDir(id)
+		isOpen := false
+		switch id {
+		case core.DoorLowerSouthOpen, core.DoorLowerWestOpen, core.DoorLowerNorthOpen, core.DoorLowerEastOpen:
+			isOpen = true
+		}
+		var min, max mgl32.Vec3
+		if !isOpen {
+			// 关闭：贴方向边
+			switch dir {
+			case 0: // 南贴南 (Z 高)
+				min = mgl32.Vec3{0, 0, 1 - thickness}
+				max = mgl32.Vec3{1, 1, 1}
+			case 1: // 西贴西 (X 低)
+				min = mgl32.Vec3{0, 0, 0}
+				max = mgl32.Vec3{thickness, 1, 1}
+			case 2: // 北贴北 (Z 低)
+				min = mgl32.Vec3{0, 0, 0}
+				max = mgl32.Vec3{1, 1, thickness}
+			case 3: // 东贴东 (X 高)
+				min = mgl32.Vec3{1 - thickness, 0, 0}
+				max = mgl32.Vec3{1, 1, 1}
+			default:
+				min = mgl32.Vec3{0, 0, 1 - thickness}
+				max = mgl32.Vec3{1, 1, 1}
+			}
+		} else {
+			// 开启：旋转 90° 到铰链边（左铰链）
+			switch dir {
+			case 0: // 南→东
+				min = mgl32.Vec3{1 - thickness, 0, 0}
+				max = mgl32.Vec3{1, 1, 1}
+			case 1: // 西→南
+				min = mgl32.Vec3{0, 0, 1 - thickness}
+				max = mgl32.Vec3{1, 1, 1}
+			case 2: // 北→西
+				min = mgl32.Vec3{0, 0, 0}
+				max = mgl32.Vec3{thickness, 1, 1}
+			case 3: // 东→北
+				min = mgl32.Vec3{0, 0, 0}
+				max = mgl32.Vec3{1, 1, thickness}
+			default:
+				min = mgl32.Vec3{1 - thickness, 0, 0}
+				max = mgl32.Vec3{1, 1, 1}
+			}
+		}
+		return CollisionBoxSet{Loaded: true, Count: 1, Boxes: [8]core.AABB{{Min: min, Max: max}}}
 	}
 	top := float32(1)
 	if core.IsFarmland(id) {
