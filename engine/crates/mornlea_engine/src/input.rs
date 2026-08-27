@@ -42,7 +42,7 @@ const REGISTRY_ENTRY_BYTES: usize = 19;
 ///
 /// **注意**：本文件开头 `BLOCKS_BYTES = 27 * 4096 * 2` 里的 27 是 3×3×3 邻域的
 /// 区段数，与本常量只是数字撞了，两者语义无关，改一个绝不能牵动另一个。
-const MAX_REGISTRY_ENTRIES: usize = 64;
+const MAX_REGISTRY_ENTRIES: usize = 71;
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum InputError {
