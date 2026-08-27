@@ -106,8 +106,8 @@ func TestCropTickCostIsIndependentOfCropCount(t *testing.T) {
 	}
 }
 
-// TestCropAllFarmlandReadsEachSampleOnce 锁定非作物样本只读取样本格一次，不再
-// 进入耕地湿润邻域扫描。
+// TestCropAllFarmlandReadsEachSampleOnce 锁定非作物样本的读取上界：干耕地退化（B-06）
+// 复用同一抽样本轮，需额外读取正上方是否为 `core.AirID`，因此每样本至多两次读取。
 func TestCropAllFarmlandReadsEachSampleOnce(t *testing.T) {
 	engine, _ := readyCropWorld(t)
 	for y := int32(core.MinY); y < int32(core.MaxY); y++ {
@@ -123,8 +123,8 @@ func TestCropAllFarmlandReadsEachSampleOnce(t *testing.T) {
 	if engine.cropCellsExamined == 0 {
 		t.Fatal("全耕地世界一格都没考察，读取等式无法证明成本")
 	}
-	if engine.cropBlockReads != engine.cropCellsExamined {
-		t.Fatalf("全耕地阶段读取=%d，想要每个样本一次、共 %d",
-			engine.cropBlockReads, engine.cropCellsExamined)
+	if engine.cropBlockReads != 2*engine.cropCellsExamined {
+		t.Fatalf("全耕地阶段读取=%d，想要每个样本两次（含上方空气判定）、共 %d",
+			engine.cropBlockReads, 2*engine.cropCellsExamined)
 	}
 }

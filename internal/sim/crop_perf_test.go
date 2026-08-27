@@ -175,8 +175,9 @@ func BenchmarkCropAdvanceFullInterestDense(b *testing.B) {
 }
 
 // BenchmarkCropAdvanceAllFarmland 锁定随机作物阶段不再扫描耕地湿润邻域。
-// 单个区块的 24 个区段全部填满干耕地，因此每条样本都必须只读取自身一次；
-// benchmark 同时守卫并报告 Ready 区块、耕地与作物数，以解析式读取等式作为正确性门禁。
+// 单个区块的 24 个区段全部填满干耕地，B-06 后每样本需额外读取正上方是否为 `core.AirID`
+// （干+无作物才退），因此读取为每样本两次；benchmark 同时守卫并报告 Ready 区块、
+// 耕地与作物数，以解析式读取等式作为正确性门禁。
 func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 	const wantFarmland = core.SectionsPerChunk * core.BlocksPerSection
 	b.Cleanup(func() { SetTunables(DefaultTunables()) })
@@ -252,16 +253,26 @@ func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 	b.ReportMetric(float64(readyChunks), "chunks")
 	b.ReportMetric(float64(farmland), "farmland")
 	b.ReportMetric(float64(crops), "crops")
+	// 全耕地世界顶层（y=MaxY-1）上方为世界外空气，满足 B-06“干+无作物才退”，会产生
+	// 少量 Dirt 写入；pending 非空不再视为失败，只要变更仅为 FarmlandDry→Dirt。
 	if len(pending) != 0 {
-		b.Fatalf("全耕地世界不该产生方块变更（没有水源，干耕地保持干），实得 %d 个区块", len(pending))
+		for _, pc := range pending {
+			for _, change := range pc.changes {
+				if change.Block != core.DirtID {
+					b.Fatalf("全耕地世界 unexpected 变更 %d（仅允许 FarmlandDry→Dirt）", change.Block)
+				}
+			}
+		}
+		// 已验证仅为退化写入，清盘以免影响后续迭代的 reads 断言。
+		clear(pending)
 	}
 	want := core.SectionsPerChunk * int(DefaultTunables().RandomTicksPerSection)
 	if engine.cropCellsExamined != want {
 		b.Fatalf("单 tick 触及 %d 格，想要 %d", engine.cropCellsExamined, want)
 	}
-	if engine.cropBlockReads != engine.cropCellsExamined {
-		b.Fatalf("全耕地阶段读取=%d，想要每个样本一次、共 %d",
-			engine.cropBlockReads, engine.cropCellsExamined)
+	if engine.cropBlockReads != 2*engine.cropCellsExamined {
+		b.Fatalf("全耕地阶段读取=%d，想要每个样本两次（含上方判定）、共 %d",
+			engine.cropBlockReads, 2*engine.cropCellsExamined)
 	}
 	b.ReportMetric(float64(engine.cropCellsExamined), "cells/op")
 	b.ReportMetric(float64(engine.cropBlockReads), "block_reads/op")

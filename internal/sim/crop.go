@@ -296,9 +296,11 @@ func (engine *Engine) advanceCrops(pending map[core.ChunkKey]*pendingChunkChange
 	}
 }
 
-// advanceCropCell 只处理被随机 tick 抽中的作物，其余方块读取一次后立即跳过。
-// 作物的湿润条件读取正下方已经持久化的干/湿耕地编号；湿度维护由独立的有界阶段
-// 负责，本阶段不扫描流体邻域。
+// advanceCropCell 只处理被随机 tick 抽中的作物与满足“干+上方为空气”的干耕地退化；
+// 其余方块读取一次后立即跳过。作物的湿润条件读取正下方已经持久化的干/湿耕地编号；
+// 湿度维护由独立的有界阶段负责，本阶段不扫描流体邻域。干耕地退化（B-06）复用同一
+// 抽样本轮与有界性（`RandomTicksPerSection`），命中后以 `farmlandRevertRoll` 的
+// 固定概率退回泥土，有作物覆盖时永不触发，零掉落、原子写入。
 func (engine *Engine) advanceCropCell(
 	dimension *Dimension,
 	dimensionID core.DimensionID,
@@ -310,29 +312,46 @@ func (engine *Engine) advanceCropCell(
 	localX, _, localZ := position.Local()
 	block := chunk.BlockAt(localX, position.Y, localZ)
 	engine.cropBlockReads++
-	if !core.IsCrop(block) {
+	if core.IsCrop(block) {
+		below := position
+		below.Y--
+		belowBlock, ready := dimension.BlockAt(below)
+		engine.cropBlockReads++
+		wet := ready && belowBlock == core.FarmlandWetID
+		grown, changed := growCrop(block, wet, cropSkyExposed(chunk, position))
+		if !changed {
+			return
+		}
+		if !cropGrowthRoll(
+			engine.seed, tick, dimensionID, position,
+			engine.tunables.CropGrowthChancePercent,
+		) {
+			return
+		}
+		if _, changed, err := dimension.SetBlock(position, grown); err != nil || !changed {
+			// 位置来自本区块自身的抽样、区块已就绪，两条失败路径都走不到；真走到
+			// 了说明枚举范围与写入范围发生了分歧，此时丢弃这次写入比继续广播一条
+			// 没有落地的方块变更安全。
+			return
+		}
+		engine.recordChange(dimensionID, position, grown, pending)
 		return
 	}
-	below := position
-	below.Y--
-	belowBlock, ready := dimension.BlockAt(below)
-	engine.cropBlockReads++
-	wet := ready && belowBlock == core.FarmlandWetID
-	grown, changed := growCrop(block, wet, cropSkyExposed(chunk, position))
-	if !changed {
-		return
+	// 干耕地退化：仅当抽中格为干耕地且正上方为空气时，以固定概率退回泥土。
+	if block == core.FarmlandDryID {
+		above := position
+		above.Y++
+		aboveBlock, ready := dimension.BlockAt(above)
+		engine.cropBlockReads++
+		if !ready || aboveBlock != core.AirID {
+			return
+		}
+		if !farmlandRevertRoll(engine.seed, tick, dimensionID, position) {
+			return
+		}
+		if _, changed, err := dimension.SetBlock(position, core.DirtID); err != nil || !changed {
+			return
+		}
+		engine.recordChange(dimensionID, position, core.DirtID, pending)
 	}
-	if !cropGrowthRoll(
-		engine.seed, tick, dimensionID, position,
-		engine.tunables.CropGrowthChancePercent,
-	) {
-		return
-	}
-	if _, changed, err := dimension.SetBlock(position, grown); err != nil || !changed {
-		// 位置来自本区块自身的抽样、区块已就绪，两条失败路径都走不到；真走到
-		// 了说明枚举范围与写入范围发生了分歧，此时丢弃这次写入比继续广播一条
-		// 没有落地的方块变更安全。
-		return
-	}
-	engine.recordChange(dimensionID, position, grown, pending)
 }
