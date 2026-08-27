@@ -6,8 +6,8 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 )
 
-// TestFarmingBlockIDsAppendAfterFluids 锁定 10 个农业方块编号的稳定位次：它们
-// 必须紧随 WaterLevel7ID 连续追加（顺序固定为干耕地、湿耕地、小麦阶段 0..7），
+// TestFarmingBlockIDsAppendAfterFluids 锁定 26 个农业方块编号的稳定位次：它们
+// 必须紧随 WaterLevel7ID 连续追加（顺序固定为干耕地、湿耕地、小麦阶段 0..7、马铃薯阶段 0..7、胡萝卜阶段 0..7），
 // 全部已注册且都有中文显示名。位次是协议稳定值——重排会让既有存档与线上字节
 // 指向别的方块。
 func TestFarmingBlockIDsAppendAfterFluids(t *testing.T) {
@@ -15,6 +15,10 @@ func TestFarmingBlockIDsAppendAfterFluids(t *testing.T) {
 		core.FarmlandDryID, core.FarmlandWetID,
 		core.WheatStage0ID, core.WheatStage1ID, core.WheatStage2ID, core.WheatStage3ID,
 		core.WheatStage4ID, core.WheatStage5ID, core.WheatStage6ID, core.WheatStage7ID,
+		core.PotatoStage0ID, core.PotatoStage1ID, core.PotatoStage2ID, core.PotatoStage3ID,
+		core.PotatoStage4ID, core.PotatoStage5ID, core.PotatoStage6ID, core.PotatoStage7ID,
+		core.CarrotStage0ID, core.CarrotStage1ID, core.CarrotStage2ID, core.CarrotStage3ID,
+		core.CarrotStage4ID, core.CarrotStage5ID, core.CarrotStage6ID, core.CarrotStage7ID,
 	}
 	for i, id := range ordered {
 		if want := core.WaterLevel7ID + 1 + core.BlockID(i); id != want {

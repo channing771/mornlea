@@ -45,7 +45,7 @@ func TestDownsampleCutoutPreservesCoverageAndRGBMean(t *testing.T) {
 	}
 }
 
-// TestWheatLayersTakeTheCutoutMipPath 是**位置性**断言：小麦层必须真的走
+// TestWheatLayersTakeTheCutoutMipPath 是**位置性**断言：植物层（小麦/马铃薯/胡萝卜共 24 层）必须真的走
 // downsampleCutout 那条分支，而不是仅仅"存在一条 mip 链"。
 //
 // 只断言链长或最后一层非空是恒真的——两条分支都给得出。这里比的是同一层在两条
@@ -53,7 +53,7 @@ func TestDownsampleCutoutPreservesCoverageAndRGBMean(t *testing.T) {
 // `c.a < 0.5` 的 discard 远处整片作物就消失了，而保覆盖率降采样给 255。
 func TestWheatLayersTakeTheCutoutMipPath(t *testing.T) {
 	r := NewRegistry()
-	for layer := LayerWheat0; layer <= LayerWheat7; layer++ {
+	for layer := LayerWheat0; layer <= LayerCarrot7; layer++ {
 		chain := r.layerMipChain(int(layer))
 		if len(chain) != atlasMips {
 			t.Fatalf("小麦层 %d 的 mip 链长度 = %d，想要 %d", layer, len(chain), atlasMips)
@@ -75,7 +75,7 @@ func TestWheatLayersTakeTheCutoutMipPath(t *testing.T) {
 func TestCutoutMipChainKeepsOpaqueCoverage(t *testing.T) {
 	r := NewRegistry()
 	layers := []uint16{LayerLeaves, LayerGlass}
-	for layer := LayerWheat0; layer <= LayerWheat7; layer++ {
+	for layer := LayerWheat0; layer <= LayerCarrot7; layer++ {
 		layers = append(layers, layer)
 	}
 	for _, layer := range layers {

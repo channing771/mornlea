@@ -152,8 +152,10 @@ func (v companionChunkView) revisionAt(chunkX, chunkZ int32) uint64 {
 // 分支是同一条决定的两半，必须同进同出；那里写着同样的两条退出条件。
 func productionCompanionPassableBlocks() map[core.BlockID]bool {
 	passable := map[core.BlockID]bool{core.AirID: true}
-	for id := core.WheatStage0ID; id <= core.WheatStage7ID; id++ {
-		passable[id] = true
+	for id := core.WheatStage0ID; id <= core.CarrotStage7ID; id++ {
+		if core.IsCrop(id) {
+			passable[id] = true
+		}
 	}
 	return passable
 }

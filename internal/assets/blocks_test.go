@@ -405,9 +405,13 @@ func TestPlantMaterialLayersMatchMeshContract(t *testing.T) {
 //
 // 每一条都是**位置性**的：耕地作为同批新增的农业方块留在对照组里，它必须仍然
 // 不透明、仍然照常出面。若把作物的规则误写成"整批农业方块"，耕地那半边立刻红。
+// 覆盖小麦/马铃薯/胡萝卜全部 24 个阶段（3×8），新增作物必须同为 cutout 且不出轴向面。
 func TestCropsAreCutoutAndEmitNoAxialFaces(t *testing.T) {
 	r := assets.NewRegistry()
-	for id := core.WheatStage0ID; id <= core.WheatStage7ID; id++ {
+	for id := core.WheatStage0ID; id <= core.CarrotStage7ID; id++ {
+		if !core.IsCrop(id) {
+			continue
+		}
 		if r.Opaque(id) {
 			t.Fatalf("作物 %d 是不透明的：它必须与玻璃、树叶同类，否则会挡死下方耕地的天空光", id)
 		}
@@ -443,14 +447,17 @@ func TestCropsAreCutoutAndEmitNoAxialFaces(t *testing.T) {
 	}
 }
 
-// TestCropsUseDedicatedWheatMaterialLayers 钉住八个阶段各占一层、六面同层。
+// TestCropsUseDedicatedWheatMaterialLayers 钉住 24 个阶段各占一层、六面同层（小麦/马铃薯/胡萝卜各 8）。
 //
 // 六面同层不是可有可无的细节：Rust 的 is_plant 只读 face 0 的 material，某个面
 // 被写成别的层就会让那一面在别处被当成普通方块。
 func TestCropsUseDedicatedWheatMaterialLayers(t *testing.T) {
 	r := assets.NewRegistry()
 	seen := map[uint16]world.BlockID{}
-	for id := core.WheatStage0ID; id <= core.WheatStage7ID; id++ {
+	for id := core.WheatStage0ID; id <= core.CarrotStage7ID; id++ {
+		if !core.IsCrop(id) {
+			continue
+		}
 		want := r.Material(id, mesh.FaceNegX)
 		if !mesh.PlantMaterial(want) {
 			t.Fatalf("作物 %d 的 material=%d 不在植物区间内", id, want)
@@ -461,12 +468,12 @@ func TestCropsUseDedicatedWheatMaterialLayers(t *testing.T) {
 			}
 		}
 		if other, ok := seen[want]; ok {
-			t.Fatalf("作物 %d 与 %d 共用材质层 %d：八个阶段必须各占一层", id, other, want)
+			t.Fatalf("作物 %d 与 %d 共用材质层 %d：24 个阶段必须各占一层", id, other, want)
 		}
 		seen[want] = id
 	}
-	if len(seen) != 8 {
-		t.Fatalf("八个阶段只用了 %d 个材质层", len(seen))
+	if len(seen) != 24 {
+		t.Fatalf("24 个阶段只用了 %d 个材质层", len(seen))
 	}
 	// 耕地干湿必须各占一层，且都不是小麦层。
 	dry := r.Material(core.FarmlandDryID, mesh.FacePosY)
