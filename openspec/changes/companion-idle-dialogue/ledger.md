@@ -34,7 +34,7 @@
 | OpenSpec planning | control session | approved (`ses_fc0f2b5d2ffe47hJ7tMMWCV64G`) | approved (same review) | 2 | complete |
 | 1 Idle node contract | `ses_fc0dbc81dffe0u3tj65YfW1cXN` | approved (`ses_fc0d74a4affeN0kkoo0FPgXyDJ`) | approved (`ses_fc0d74a37ffeZe7a5DYuWS0gxb`) | 0 | complete |
 | 2 Schedule and dispatch | `ses_fc0d26fa8ffeUK5NbFSQdKC4z9` | approved (`ses_fc0bf6f63ffeYfIPRx7r9rFHJg`) | approved (`ses_fc0bf6f59ffe4jfnuZOUEyubUX`) | 1 | complete |
-| 3 Outcome and parity | — | pending | pending | 0 | pending |
+| 3 Outcome and parity | `agent_981f0876` | approved (`agent_65bb652e`) | approved (`agent_a894e655`) | 1 | complete |
 | 4 Whole-branch gate | control session | pending | pending | 0 | pending |
 
 ## Rulings
