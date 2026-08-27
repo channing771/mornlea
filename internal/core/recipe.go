@@ -41,6 +41,8 @@ const (
 	// 工作台把玩家合成网格的有效尺寸从 2 提到 3，是形状合成的自举配方：
 	// 2×2 网格摆得出的最大形状就是它自己。
 	RecipeWorkbench
+	// RecipeDoor 用两列满的 6 个橡木木板（2×3）合成 3 个木门。
+	RecipeDoor
 	// RecipeTorch 纵向 2 格、煤炭位于木棍正上方，合成 4 个火把。
 	//
 	// 它是夜间照明的前置：1 煤 + 1 木棍换 4 枚火把，原料走采掘与伐木两条既有
@@ -207,6 +209,17 @@ func recipePattern(id RecipeID) (RecipePattern, bool) {
 			},
 			Output: ItemStack{Item: ItemWorkbench, Count: 1},
 		}, true
+	// 木门：2×3 两列满木板合成 3 个木门。
+	case RecipeDoor:
+		return RecipePattern{
+			Width: 2, Height: 3, Mirror: true,
+			Cells: [CraftingGridSlots]ItemID{
+				ItemOakPlanks, ItemOakPlanks, ItemNone,
+				ItemOakPlanks, ItemOakPlanks, ItemNone,
+				ItemOakPlanks, ItemOakPlanks, ItemNone,
+			},
+			Output: ItemStack{Item: ItemDoor, Count: 3},
+		}, true
 	// 火把：煤炭位于木棍正上方的纵向两格（1×2），产出 4 个火把。
 	case RecipeTorch:
 		return RecipePattern{
@@ -235,7 +248,7 @@ func recipePattern(id RecipeID) (RecipePattern, bool) {
 // 或有效尺寸之外的格（个人网格的格 4..8）残留物品时，一律判定无匹配——
 // 正常权威路径不会构造出这两种输入，这里是防御层。
 //
-// 实现是固定 14 条 × 至多 9 格的纯值循环，无 map/slice 分配，不建通用矩阵包
+// 实现是固定 15 条 × 至多 9 格的纯值循环，无 map/slice 分配，不建通用矩阵包
 // （design.md D3）。
 func MatchCraftingGrid(size uint8, slots [CraftingGridSlots]ItemStack) (RecipeID, ItemStack, bool) {
 	if size != 2 && size != 3 {

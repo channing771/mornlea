@@ -97,3 +97,50 @@
 - 最终门禁（串行全绿）：`make rust-check`（fmt+clippy+333 tests）；8 包 race（core/assets/mesh/nativeabi/sim/world/client/cmd/mornlea，cmd 429.451s）；`go test ./... -race` exit 0；`go vet ./...`；`gofmt -l .` 空；`git diff --check` 干净；`scripts/agents/gates.sh` 全部门禁通过；`openspec validate --all --strict` 68 passed。
 - 版本矩阵终态：协议 v27、玩家 schema v7、区块 schema v9、世界 metadata v2、companions.ai v4、engine ABI v7→**v8**（唯一变更）、client ABI v9、benchmark scenario v19、capture golden 19→**20** 张（torch-night.png 唯一新增）。
 - 上报不属本变更的基线债务：main 上 capture compare 既有超阈值（inventory/chest/furnace 36%/49%/32% 等）与 workbench-crafting golden 缺失——A-02 经改前/改后逐字节对比证明对全部既有场景渲染零影响；`internal/companion/plan_types.go:467` 历史任务编号字样。
+
+## 集成重订段（merge main，2026-08-27）
+
+PR #107 因 main 前进 CONFLICTING，worktree `A-02-torches` 执行 merge origin/main（16 个 UU 冲突逐一解决）。控制会话在合并前核定编号重订终值，集成 implementer 按终值执行。
+
+### 撞号与重订终值
+
+main 期间合入：木门批次（方块 62..70、`ItemDoor`=43、`RecipeDoor`=14、`LayerDoor`=55 与工作台三层 56..58——工作台层自 A-01 的 55..57 后移）、B-12（协议 v28→v29：`PlayerState` 尾部追加 `SaturationZero` 提示位）、D-02 暂停菜单、B-30 疾跑、F-05 golden 全面再生（含补齐 `workbench-crafting.png`）。A-02 原始编号与门批次撞号，重订终值（方向不变、仍为 append-only）：
+
+| 项 | A-02 原值（`cc385d22` 基线） | 集成重订终值 |
+| --- | --- | --- |
+| 火把五形态方块 | 62..66 | **71..75**（门 62..70 之后追加） |
+| `BlockIDMax` | 62→67 | **71→76** |
+| `ItemTorch` | 43 | **44**（`ItemDoor`=43 之后） |
+| `ItemIDMax` | 43→44 | **44→45** |
+| `RecipeTorch` | 14 | **15**（`RecipeDoor`=14 之后），`MatchCraftingGrid` 循环上界同步；规划暂缺段 15..18 → 16..18 |
+| `LayerTorch` | 58 | **59**（`LayerWorkbenchBottom`=58 之后）；terrain.wgsl `torch_material` 门控、shaders.rs `TORCH_MATERIAL`、Go 层号钉子三处同步 |
+| mesh registry entry | 19→20 bytes、model@19、上限 80 | **不变**（main 侧仍 19 bytes/上限 71，方向不变；注释中「当前 67/71 条」更新为 76 条） |
+| engine ABI | v7→v8 | **不变**（main 侧仍 v7） |
+| 协议表述 | v27 | **v29**（main 现状；AGENTS.md 冲突保留 main 全部新内容，仅 engine ABI v7→v8） |
+
+### 冲突解决要点（按文件）
+
+- `internal/core/block.go`、`item.go`、`recipe.go`、`block_name.go`（及各自测试、`farming_test.go`）：门与火把并存——门枚举/`ItemDoor`/`RecipeDoor`/显示名在前，火把紧随其后；哨兵末项守护统一为 TorchWallNegZID（`BlockIDMax`=76）、`ItemTorch`（`ItemIDMax`=45）、`RecipeTorch`（15 条无空洞）；`farming_test.go` 的 `TestDoorIntervalOrdered` 门区间 62..70 保持、哨兵断言 71→76。
+- `internal/assets/blocks.go`、`pack_test.go`：LayerDoor/工作台三层与 `LayerTorch`=59 并存；`Opaque` 同时排除 door 与 torch；材质绑定顺序 door→workbench×3→torch；`pack_test` 打开顺序清单同步。
+- `internal/mesh/native_input.go`、`native_input_test.go`：上限保持 80（main 侧曾升至 71），容量夹具沿用「条目数 × 每行字数」推导；注释 67→76 条。
+- `engine/crates/mornlea_engine/src/input.rs`：`MAX_REGISTRY_ENTRIES`=80、`REGISTRY_ENTRY_BYTES`=20 保持；注释 67→76 条、火把 model 序号 72..75。
+- `internal/physics/types.go`：门碰撞（下半 3/16 薄板、上半零碰撞）与火把零碰撞并存（仅注释合并，函数体自动合并成功）。
+- `internal/server/companion_snapshot.go`：passable 表同时含 `DoorUpper`（零碰撞对齐）与五火把形态。
+- `AGENTS.md`：保留 main 全部新内容（协议 v29 等），仅 engine ABI v7→v8。
+- 附带机械同步（非 UU、编号钉子/注释）：`block_properties_test.go`（71..75/76）、`item_test.go`（44/45、门位次）、`recipe_test.go`（15、暂缺段 16..18）、`blocks_test.go` 层号钉子 59 与 model tag 注释、`torch_test.go` 夹具序号注释、Rust `torch_tests.rs` 夹具 ID 71..75、`terrain.wgsl`/`shaders.rs` 门控 59。
+
+### B-12 兼容性核对
+
+B-12（`5b4b23cb`）的「bounded A zero flag 28→29」是协议侧 `PlayerState` 追加 `SaturationZero` 提示位并把 `ProtocolVersion` v28→v29，与 quad 位布局、AO 字段（bit 39..46）毫无交集；A-02 的 quad.go/quad.rs 注释（bit 13..19 保留位、W/H 借用、`plantReservedMask`、角高度 12..19/55..62、bit 63 留空）经逐条核对仍准确，torch.rs 的 `ao: 0xff` 语义不变。无实质冲突，无需改几何代码。
+
+### F-05/golden 处理
+
+golden 以 merge 自动合入的 main F-05 版本为准（20 张，含 `workbench-crafting.png`）+ A-02 的 `torch-night.png` = 21 张。`LayerTorch` 58→59 只是枚举值位移、纹理内容与画面不变；集成后在无头 compare 模式跑全部 21 个场景，每张「最大通道差 0、差异像素 0/230400」，未再生任何 golden。产物口径同步为 20→21 张（proposal/design/tasks/visual-verification delta）。
+
+### 集成验证
+
+- `make rust`；`cd engine && cargo test --workspace --locked`（全部通过，见下方记录）。
+- `go test ./internal/core ./internal/assets ./internal/mesh ./internal/nativeabi ./internal/sim ./internal/world ./internal/physics ./internal/companion ./internal/server ./internal/client ./cmd/mornlea -race -count=1` 全绿。
+- `go test ./internal/archcheck -count=1` 绿（版本矩阵 v29/v8 与代码一致）。
+- `openspec validate placeable-torches --strict --no-interactive` 通过。
+- 无头 capture compare 21 场景全部零差异（见上）。

@@ -117,6 +117,16 @@ func (engine *Engine) executePlacement(
 	//
 	// 「手持物不适用于当前目标」与「选中物品不产生可放置方块」是同一类事实，
 	// 复用放置路径与翻地已在用的 RejectInvalidBlock，不新增 wire 值。
+	if core.IsDoor(placement) {
+		dir := yawToDoorDir(command.Yaw)
+		reason, rejected := engine.tryPlaceDoor(dimensionID, target, dir, pending)
+		if rejected {
+			return reason, true
+		}
+		player.inventory.Hotbar = consumed
+		player.inventoryDirty = true
+		return 0, false
+	}
 	if core.IsCrop(placement) {
 		// 种子不复用上面「流体可覆盖」的通用放置语义：规格字面写死种子 MUST
 		// NOT 被放置在非空气格，流体也不例外——往水里种麦子没有玩法意义，

@@ -97,5 +97,6 @@ func (player *playerState) advanceEating(eatingTicks uint16, suspended bool) {
 		uint32(player.saturationMilli)+uint32(saturationGain),
 		hunger*uint32(core.SaturationMilliPerPoint),
 	))
+	player.saturationZero = player.saturationMilli == 0
 	player.eating = eatingState{}
 }

@@ -79,15 +79,17 @@ const (
 	LayerCarrot5
 	LayerCarrot6
 	LayerCarrot7
+	LayerDoor
 	// LayerWorkbenchTop / LayerWorkbenchSide / LayerWorkbenchBottom 是工作台的
 	// 顶/侧/底三个原创程序化木质层（格子工作台批次追加）。工作台是普通不透明
 	// 立方体，三面各占一层、互不复用也不复用橡木木板层；按 LayerWheat0 处注释
-	// 的纪律，新层一律追加在 LayerCarrot7 之后以保持植物区间连续。
+	// 的纪律，新层一律追加在 LayerCarrot7 之后以保持植物区间连续；LayerDoor
+	// 作为首个非植物层紧接 LayerCarrot7（55），工作台三层随之后移，保持 Plant 31..54 连续。
 	LayerWorkbenchTop
 	LayerWorkbenchSide
 	LayerWorkbenchBottom
 	// LayerTorch 是五种火把形态共用的一张竖直火柄 cutout 材质层（窄木柄 +
-	// 暖色火芯）。层号冻结为 58：Rust client 的 terrain.wgsl 火把材质门控
+	// 暖色火芯）。层号冻结为 59：Rust client 的 terrain.wgsl 火把材质门控
 	// （torch_material 函数）与 shaders.rs 的 TORCH_MATERIAL 常量各自硬编码
 	// 该值，三处没有共享定义也没有生成步骤，改层号必须同批同步。仍按
 	// LayerWheat0 处注释的纪律追加在枚举末位，不扰动植物区间。
@@ -156,6 +158,7 @@ var textureBindings = [...]textureBinding{
 	{name: "carrot_5", layer: LayerCarrot5},
 	{name: "carrot_6", layer: LayerCarrot6},
 	{name: "carrot_7", layer: LayerCarrot7},
+	{name: "door", layer: LayerDoor},
 	{name: "workbench_top", layer: LayerWorkbenchTop},
 	{name: "workbench_side", layer: LayerWorkbenchSide},
 	{name: "workbench_bottom", layer: LayerWorkbenchBottom},
@@ -213,6 +216,7 @@ func NewRegistry() *Registry {
 	for stage := 0; stage < wheatStageCount; stage++ {
 		r.layers[LayerCarrot0+uint16(stage)] = carrotTexture(stage)
 	}
+	r.layers[LayerDoor] = doorTexture()
 	r.layers[LayerWorkbenchTop] = workbenchTopTexture()
 	r.layers[LayerWorkbenchSide] = workbenchSideTexture()
 	r.layers[LayerWorkbenchBottom] = workbenchBottomTexture()
@@ -223,7 +227,7 @@ func NewRegistry() *Registry {
 	// RegistryView::face_visible 只做位图查表、缺条目一律判不可见，漏掉谁就等于
 	// 谁永远不出面（流体当年正是这样差点画不出水）。
 	// 条目数必须不超过 internal/mesh.nativeMaxRegistryEntries 与 Rust 的
-	// MAX_REGISTRY_ENTRIES（当前已注册 67 个方块，上限 80；上限扩容必须
+	// MAX_REGISTRY_ENTRIES（当前已注册 76 个方块，上限 80；上限扩容必须
 	// Go/Rust 两侧同批同步）。
 	ids := make([]world.BlockID, 0, int(core.BlockIDMax))
 	for id := core.AirID; id < core.BlockIDMax; id++ {
@@ -254,7 +258,8 @@ func NewRegistry() *Registry {
 // 遮挡邻面，且自身是发光体，被判成不透明会同时挡死邻域光照与出面。
 func (r *Registry) Opaque(id world.BlockID) bool {
 	return core.RegisteredBlock(id) && id != core.AirID && id != core.GlassID &&
-		id != core.LeavesID && !core.IsFluid(id) && !core.IsCrop(id) && !core.IsTorch(id)
+		id != core.LeavesID && !core.IsFluid(id) && !core.IsCrop(id) && !core.IsDoor(id) &&
+		!core.IsTorch(id)
 }
 
 // FaceVisible 返回当前方块朝向相邻方块的面是否可绘制。实现 mesh.Registry。
@@ -289,6 +294,20 @@ func (r *Registry) FaceVisible(id, adjacent world.BlockID) bool {
 	}
 	if core.IsCrop(id) {
 		return false
+	}
+	// 门是厚度 3/16 的薄板，非不透明。关闭时门面贴合方块边缘，开启时薄边旋转 90°。
+	// 两态在 FaceVisible 层面均按“薄板”处理：本身非不透明，朝向空气的面可见，
+	// 朝向不透明邻居的面已被上方 Opaque(adjacent) 拦下；其余方向（包括门对门、
+	// 门对水/作物）按薄板语义可见，避免门被相邻非不透明方块错误剔除。
+	// 方向相关的贴边/旋转剔除由几何阶段按 DoorDir 决定，此处只保留薄板可见性
+	// 基准，不引入方向分支，保持快照位图与后续几何一致。
+	if core.IsDoor(id) {
+		if adjacent == core.AirID {
+			return true
+		}
+		// 门对非不透明方块（水、玻璃、树叶、另一扇门等）仍需出面，否则门面会在
+		// 这些方块旁消失；门对门的内部面由两侧几何各自决定，此处不过滤。
+		return true
 	}
 	if adjacent == core.AirID {
 		return true
@@ -353,6 +372,9 @@ func (r *Registry) Material(id world.BlockID, f mesh.Face) uint16 {
 		return LayerSnowSide
 	case core.MossyCobblestoneID:
 		return LayerMossyCobblestone
+	// 门：上下半共用同一木门层，单值材质，无方向分支。
+	case core.DoorLowerSouthClosed, core.DoorLowerSouthOpen, core.DoorLowerWestClosed, core.DoorLowerWestOpen, core.DoorLowerNorthClosed, core.DoorLowerNorthOpen, core.DoorLowerEastClosed, core.DoorLowerEastOpen, core.DoorUpper:
+		return LayerDoor
 	// 工作台：顶面是操作台面、底面是素箱底、四侧共用侧面板——与原木、雪块
 	// 同形的「按轴分层」立方体。
 	case core.WorkbenchID:
@@ -470,7 +492,7 @@ func (r *Registry) MeshSnapshot() mesh.RegistrySnapshot { return r.meshSnapshot 
 // Model 返回方块的有限模型 tag，实现 mesh.ModelReader（可选扩展接口）。
 //
 // 封闭集合：0=默认（无模型覆写，满格/短方块/流体/植物继续走既有判定）、
-// 1=火把落地、2..5=火把墙面 +X/−X/+Z/−Z——与火把方块编号 62..66 严格同序，
+// 1=火把落地、2..5=火把墙面 +X/−X/+Z/−Z——与火把方块编号 71..75 严格同序，
 // 因此映射就是「编号相对首形态的偏移 +1」。其余全部方块（含未注册与越界
 // 编号）恒 0；tag 经 BuildRegistrySnapshot 冻结进快照，由 Rust greedy 的
 // model dispatcher 消费（6=床与未知值在快照与 Rust 两侧都被拒绝）。

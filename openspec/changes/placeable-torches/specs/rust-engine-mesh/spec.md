@@ -2,7 +2,7 @@
 
 ### Requirement: registry entry 追加 model 字段
 
-mesh registry entry MUST 从 19 字节扩展为 20 字节：既有布局 `id(u16) + opaque(u8) + emission(u8) + material[6](u16) + fluidHeight(u8) + lightAttenuation(u8) + blockTopRaw(u8)` 保持逐字节不变（`blockTopRaw` 仍在 offset 18），新增 `model(u8)` 位于 offset 19。registry 条目上限 MUST 从 64 提升到 80（追加五种火把形态后已注册方块为 67，越过 64；80 同时为后续多形态方块留余量）。Go（`nativeRegistryEntryBytes`/`nativeMaxRegistryEntries`/`nativeMaxRegistryWords`/`maxNativeInputBytes`）与 Rust（`REGISTRY_ENTRY_BYTES`/`MAX_REGISTRY_ENTRIES` 等）多处硬编码 MUST 手工同步一致，两侧一致 MUST 由喂满一次跨 FFI 的容量夹具测试守护。未来/未知 model 值 MUST 被拒绝，不得静默回退。
+mesh registry entry MUST 从 19 字节扩展为 20 字节：既有布局 `id(u16) + opaque(u8) + emission(u8) + material[6](u16) + fluidHeight(u8) + lightAttenuation(u8) + blockTopRaw(u8)` 保持逐字节不变（`blockTopRaw` 仍在 offset 18），新增 `model(u8)` 位于 offset 19。registry 条目上限 MUST 从 64 提升到 80（集成重订后追加五种火把形态的已注册方块为 76，越过 64；80 同时为后续多形态方块留余量）。Go（`nativeRegistryEntryBytes`/`nativeMaxRegistryEntries`/`nativeMaxRegistryWords`/`maxNativeInputBytes`）与 Rust（`REGISTRY_ENTRY_BYTES`/`MAX_REGISTRY_ENTRIES` 等）多处硬编码 MUST 手工同步一致，两侧一致 MUST 由喂满一次跨 FFI 的容量夹具测试守护。未来/未知 model 值 MUST 被拒绝，不得静默回退。
 
 #### Scenario: 条目布局逐字节锁定
 
@@ -25,7 +25,7 @@ mesh registry entry MUST 从 19 字节扩展为 20 字节：既有布局 `id(u16
 
 ### Requirement: 限五向火把的有限模型 dispatcher
 
-model 值 MUST 是有限的封闭集合：0=默认（无模型覆写，满格、短方块、流体与植物继续走既有判定，植物仍按 material 区间识别）、1..5=火把五种形态（1=落地、2..5=墙面 +X/−X/+Z/−Z，与火把方块编号 63..66 同序）、6=床（保留给床功能行）；流体 MUST 继续使用既有路径与 `fluidHeight`/`blockTopRaw` 输入，不增加重复枚举。Rust MUST 有一个最小 model dispatcher：0 走既有几何，1..5 走新的 `emit_torch` 发射；bed model 与任何未知值 MUST 返回相同的拒绝。MUST NOT 建立 trait/object 层次或任意模型描述语言。
+model 值 MUST 是有限的封闭集合：0=默认（无模型覆写，满格、短方块、流体与植物继续走既有判定，植物仍按 material 区间识别）、1..5=火把五种形态（1=落地、2..5=墙面 +X/−X/+Z/−Z，与火把方块编号 72..75 同序）、6=床（保留给床功能行）；流体 MUST 继续使用既有路径与 `fluidHeight`/`blockTopRaw` 输入，不增加重复枚举。Rust MUST 有一个最小 model dispatcher：0 走既有几何，1..5 走新的 `emit_torch` 发射；bed model 与任何未知值 MUST 返回相同的拒绝。MUST NOT 建立 trait/object 层次或任意模型描述语言。
 
 #### Scenario: 默认模型输出逐位不变
 

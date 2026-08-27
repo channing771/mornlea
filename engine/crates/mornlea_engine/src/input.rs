@@ -30,7 +30,7 @@ const HEIGHTS_BYTES: usize = 9 * 256 * 2;
 ///   方块、流体与植物继续走既有判定（植物仍按 material 区间识别），火把是
 ///   model tag 的第一个消费者，故 0 取「默认」而非「cube」，避免为既有四条
 ///   几何路径重复造 tag；`1..=5` 是火把五种形态（1=落地、2..=5=墙面
-///   +X/−X/+Z/−Z，与火把方块编号 63..66 同序）；`6` 保留给床功能行，**出现
+///   +X/−X/+Z/−Z，与火把方块编号 72..75 同序）；`6` 保留给床功能行，**出现
 ///   即拒绝**；其余值未知拒绝。这是固定 tag 而不是数据驱动格式——见
 ///   `RegistryView::validate` 与 greedy 的 model dispatcher。
 const REGISTRY_ENTRY_BYTES: usize = 20;
@@ -38,7 +38,8 @@ const REGISTRY_ENTRY_BYTES: usize = 20;
 ///
 /// 80 是**上限**而不是当前条目数：Go 侧 `internal/assets.NewRegistry()` 把
 /// `core.AirID..core.BlockIDMax-1` 的全部已注册方块烘焙进 mesh snapshot，今天
-/// 是 67 条（27 个 M4 材料 + 8 个流体 + 27 个农业编号含工作台 + 5 个火把形态）。
+/// 是 76 条（27 个 M4 材料 + 8 个流体 + 27 个农业编号含工作台 + 9 个门编号 +
+/// 5 个火把形态）。
 /// 留出余量是为了避免每次追加方块编号都要做一次跨语言的常量同步。
 ///
 /// 本常量此前是 35，即"恰好等于当时的条目数"；那种写法会在 Go 侧追加编号时

@@ -66,11 +66,12 @@ fn farmland_material(mat: u32) -> bool {
 // （支撑侧 9/16、远离侧 14/16，贴面帽四角全 0），与耕地共用同一条角高度解码
 // 路径——判别同样走 material：火把薄板是轴向面（face 0..5），与植物（face 6/7）
 // 按 face 天然互斥，material 是唯一不冲突的判别通道。数值真值源是 Go
-// internal/assets 的 `LayerTorch`（层枚举末位追加，iota 当前 58），Rust 侧复述
+// internal/assets 的 `LayerTorch`（层枚举末位追加，iota 当前 59，门层 55 与
+// 工作台三层 56..58 之后），Rust 侧复述
 // 见 src/render/shaders.rs 的 `TORCH_MATERIAL`，由 render/farmland_tests.rs 的
 // 源码扫描钉在一起——在这里改数字必须同步另外两处。
 fn torch_material(mat: u32) -> bool {
-    return mat == 58u;
+    return mat == 59u;
 }
 
 // corner_height 取出第 vi 个顶点的 4-bit 角高度原值，与 water.wgsl 逐字同源

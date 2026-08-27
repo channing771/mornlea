@@ -3,13 +3,13 @@
 //! 输入布局与偏移以 `docs/superpowers/specs/2026-08-15-rust-engine-physics-step-design.md`
 //! 第 4 节为准：header（magic MGP1 + layout 版本）+ 每 cell 196 字节；header 现为 v2、160 字节。
 
-/// StepInput header 长度。v1 的 128 字节已排满，v2 追加浸没标志与四个水中
-/// tunable，故扩到 160（仍是 32 的整数倍）。这是同一个 engine ABI v5 内的
-/// header 扩展，ABI 版本不变。
+/// StepInput header 长度。v1 128，v2 160（浸没标志+水中 tunable），v3
+/// 复用保留区追加疾跑位与倍率（129 位 + 148..152 multiplier），总长保持 160
+/// （32 整数倍），仍是同一 engine ABI v5 内的 header 扩展。
 pub(crate) const STEP_HEADER_BYTES: usize = 160;
 
-/// StepInput header 的布局版本。v1 → v2 的唯一差异见 STEP_HEADER_BYTES。
-const STEP_LAYOUT_VERSION: u32 = 2;
+/// StepInput header 的布局版本。v2 → v3 追加疾跑位与倍率。
+const STEP_LAYOUT_VERSION: u32 = 3;
 pub(crate) const STEP_OUTPUT_BYTES: usize = 32;
 pub(crate) const STEP_MAX_CELLS: usize = 4096;
 
@@ -57,6 +57,8 @@ pub(crate) struct StepInput<'a> {
     /// 身体浸没标志。流体没有碰撞盒，prism 里区分不出水与空气，因此由 Go
     /// 调用方从各自的方块镜像算好后随 header 传入（design D4）。
     pub(crate) body_in_fluid: bool,
+    /// 疾跑位（地面+前移+非浸没时提升目标速度）。
+    pub(crate) sprinting: bool,
     /// 水中重力，替换 gravity。
     pub(crate) fluid_gravity: f32,
     /// 水中垂直终端下沉速度，替换 terminal_fall_speed。
@@ -65,6 +67,8 @@ pub(crate) struct StepInput<'a> {
     pub(crate) fluid_ascend_speed: f32,
     /// 水中水平阻力系数，每 tick 乘在水平速度上。
     pub(crate) fluid_horizontal_drag: f32,
+    /// 疾跑倍率（默认 1.3）。
+    pub(crate) sprint_speed_multiplier: f32,
     pub(crate) sweep_min: [f32; 3],
     pub(crate) sweep_max: [f32; 3],
     pub(crate) origin: [i32; 3],
@@ -113,10 +117,12 @@ impl<'a> StepInput<'a> {
             gravity: tunables[6],
             terminal_fall_speed: tunables[7],
             body_in_fluid: bytes[128] == 1,
+            sprinting: bytes[129] == 1,
             fluid_gravity: read_f32(bytes, 132),
             fluid_sink_speed: read_f32(bytes, 136),
             fluid_ascend_speed: read_f32(bytes, 140),
             fluid_horizontal_drag: read_f32(bytes, 144),
+            sprint_speed_multiplier: read_f32(bytes, 148),
             sweep_min,
             sweep_max,
             origin,
@@ -132,21 +138,21 @@ pub(crate) fn step_input_is_valid(bytes: &[u8]) -> bool {
         || bytes[32] > 1
         || bytes[33] > 1
         || bytes[128] > 1
-        // v2 的两段保留区必须逐字节为 0：将来在这里扩字段时，旧编码器写出的
-        // 非零垃圾或新编码器漏置零都会立刻被挡下，而不是被静默解读成参数。
-        || bytes[129..132].iter().any(|&byte| byte != 0)
-        || bytes[148..STEP_HEADER_BYTES].iter().any(|&byte| byte != 0)
+        || bytes[129] > 1
+        // v3 保留区：130..132 与 152..160 必须为 0，129 为疾跑位、148..152 为倍率已在别处校验。
+        || bytes[130..132].iter().any(|&byte| byte != 0)
+        || bytes[152..STEP_HEADER_BYTES].iter().any(|&byte| byte != 0)
         || !(-1..=1).contains(&(bytes[34] as i8))
         || !(-1..=1).contains(&(bytes[35] as i8))
     {
         return false;
     }
-    // position/velocity（8..32）、yaw_sin/yaw_cos/dt（36/40/44）、tunables 与 sweep bounds（48..104）必须全部有限
+    // position/velocity（8..32）、yaw_sin/yaw_cos/dt（36/40/44）、tunables 与 sweep bounds（48..104）与水中/疾跑倍率必须全部有限
     for offset in (8..32)
         .step_by(4)
         .chain((36..=44).step_by(4))
         .chain((48..104).step_by(4))
-        .chain((132..148).step_by(4))
+        .chain((132..152).step_by(4))
     {
         if !read_f32(bytes, offset).is_finite() {
             return false;
@@ -256,10 +262,16 @@ fn movement_target(move_x: i8, move_z: i8, walk_speed: f32, yaw_sin: f32, yaw_co
 pub(crate) fn integrate(input: &StepInput<'_>) -> (Vector, Vector) {
     let dt = input.fixed_delta_seconds;
     let mut velocity = input.velocity;
+    let effective_walk_speed =
+        if input.sprinting && input.move_z > 0 && input.on_ground && !input.body_in_fluid {
+            input.walk_speed * input.sprint_speed_multiplier
+        } else {
+            input.walk_speed
+        };
     let target = movement_target(
         input.move_x,
         input.move_z,
-        input.walk_speed,
+        effective_walk_speed,
         input.yaw_sin,
         input.yaw_cos,
     );

@@ -64,6 +64,13 @@ const (
 	// 取 100 与参考实现同口径：参考实现的攻击疲劳是 0.1，按本表统一的 ×1000
 	// 换算成千分位，与既有五行同一换算口径。
 	exhaustionMeleeMilli uint16 = 100
+	// exhaustionSprintMilli 是一次疾跑 tick 的疲劳。判定点：`advanceActivePlayers`
+	// 中本 tick 实际按 1.3× 加速时（门控全过），与游泳同为“运动中每 tick”来源。
+	//
+	// 取 80：按阈值 4000，连续疾跑 50 tick（2.5 秒）消耗 1 饱和度，与跳 80 次
+	// （4000/50）等价，略快于游泳每格 10 的换算，符合“疾跑比行走更耗体力”的
+	// 手感定位。
+	exhaustionSprintMilli uint16 = 80
 )
 
 // swimExhaustionMilli 把一次物理步的水平位移换算成游泳疲劳（千分位）。
@@ -130,6 +137,7 @@ func (player *playerState) applyExhaustion(milli, thresholdMilli uint16) {
 		}
 	}
 	player.exhaustionMilli = uint16(total)
+	player.saturationZero = player.saturationMilli == 0
 }
 
 // advanceStarvation 推进一名玩家一个 tick 的饥饿伤害结算，与 advanceOxygen
@@ -175,4 +183,5 @@ func (player *playerState) resetHunger() {
 	player.saturationMilli = core.InitialSaturationMilli
 	player.exhaustionMilli = 0
 	player.starvationTicks = 0
+	player.saturationZero = false
 }

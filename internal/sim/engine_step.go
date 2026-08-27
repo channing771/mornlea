@@ -149,10 +149,11 @@ func (engine *Engine) Step() TickResult {
 			}
 			yaw := normalizeYaw(command.Yaw)
 			player.input = physics.Input{
-				MoveX: command.MoveX,
-				MoveZ: command.MoveZ,
-				Jump:  command.Jump,
-				Yaw:   yaw,
+				MoveX:     command.MoveX,
+				MoveZ:     command.MoveZ,
+				Jump:      command.Jump,
+				Yaw:       yaw,
+				Sprinting: command.Sprinting,
 			}
 			player.miningHeld = command.Mining
 			player.eatingHeld = command.Eating
@@ -227,6 +228,24 @@ func (engine *Engine) Step() TickResult {
 			}
 			interactions = append(interactions, command)
 		case CommandBoneMeal:
+			if session.player == nil || session.player.lifecycle != PlayerActive {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectPlayerNotReady,
+				})
+				continue
+			}
+			if !validPlayerLook(command.Yaw, command.Pitch) {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectInvalidInput,
+				})
+				continue
+			}
+			interactions = append(interactions, command)
+		case CommandInteractDoor:
 			if session.player == nil || session.player.lifecycle != PlayerActive {
 				result.Rejected = append(result.Rejected, Rejection{
 					Session:  command.Session,
@@ -431,6 +450,14 @@ func (engine *Engine) Step() TickResult {
 			}
 		case CommandDropSelectedItem:
 			if reason, rejected := engine.dropSelectedItem(engine.sessions[command.Session], pending); rejected {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   reason,
+				})
+			}
+		case CommandInteractDoor:
+			if reason, rejected := engine.executeInteractDoor(command, pending); rejected {
 				result.Rejected = append(result.Rejected, Rejection{
 					Session:  command.Session,
 					Sequence: command.Sequence,

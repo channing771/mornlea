@@ -108,10 +108,23 @@ const (
 	CarrotStage5ID
 	CarrotStage6ID
 	CarrotStage7ID
-	// 以下五个是火把方块编号（落地 + 四向墙面形态），只能追加在 CarrotStage7ID
+	// DoorLowerSouthClosed..DoorLowerEastOpen 是木门下半的 8 个定向开合态
+	// （4 方向 × 2 开关），DoorUpper 是上半单一编号。
+	// 上半无方向，其朝向由下半决定；9 个编号紧随 CarrotStage7ID 追加，
+	// BlockIDMax 后移，协议稳定且追加在哨兵之前。
+	DoorLowerSouthClosed
+	DoorLowerSouthOpen
+	DoorLowerWestClosed
+	DoorLowerWestOpen
+	DoorLowerNorthClosed
+	DoorLowerNorthOpen
+	DoorLowerEastClosed
+	DoorLowerEastOpen
+	DoorUpper
+	// 以下五个是火把方块编号（落地 + 四向墙面形态），只能追加在 DoorUpper
 	// 之后：方块 ID 是协议稳定值，重排会破坏既有存档与线上字节。TorchStandingID
 	// 是落地形态（支撑格在正下方）；TorchWallPosXID..TorchWallNegZID 是贴墙形态，
-	// 形态名与放置时的命中面同名（火把贴在支撑块的哪个侧面），63..66 按
+	// 形态名与放置时的命中面同名（火把贴在支撑块的哪个侧面），72..75 按
 	// +X/−X/+Z/−Z 顺序冻结。墙面形态的支撑格位于火把的命中面反方向
 	// （face.Opposite()），由放置执行方消费；命中面 → 形态的唯一映射窗口是
 	// PlaceableBlockAtFace。火把按契约不提供碰撞体（physics 侧接线后恒为空）、
@@ -135,6 +148,42 @@ const (
 // RegisteredBlock 报告 id 是否是已注册的稳定方块编号。
 func RegisteredBlock(id BlockID) bool {
 	return id < BlockIDMax
+}
+
+// IsDoor 报告 id 是否是门方块（下半 62..69 或上半 70）。
+func IsDoor(id BlockID) bool { return id >= DoorLowerSouthClosed && id <= DoorUpper }
+
+// IsDoorLower 报告 id 是否是门下半（62..69）。
+func IsDoorLower(id BlockID) bool { return id >= DoorLowerSouthClosed && id <= DoorLowerEastOpen }
+
+// IsDoorUpper 报告 id 是否是门上半（70）。
+func IsDoorUpper(id BlockID) bool { return id == DoorUpper }
+
+// DoorDir 返回门下半的方向编码：南 0、西 1、北 2、东 3。
+// 非下半门返回 -1。
+func DoorDir(id BlockID) int {
+	switch id {
+	case DoorLowerSouthClosed, DoorLowerSouthOpen:
+		return 0
+	case DoorLowerWestClosed, DoorLowerWestOpen:
+		return 1
+	case DoorLowerNorthClosed, DoorLowerNorthOpen:
+		return 2
+	case DoorLowerEastClosed, DoorLowerEastOpen:
+		return 3
+	default:
+		return -1
+	}
+}
+
+// IsDoorOpen 报告门下半是否处于开启态（仅对下半有效）。
+func IsDoorOpen(id BlockID) bool {
+	switch id {
+	case DoorLowerSouthOpen, DoorLowerWestOpen, DoorLowerNorthOpen, DoorLowerEastOpen:
+		return true
+	default:
+		return false
+	}
 }
 
 const (

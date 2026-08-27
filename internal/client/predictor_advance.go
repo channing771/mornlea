@@ -57,16 +57,22 @@ func (p *Predictor) Advance(
 			p.correctionRemaining = 0
 			return p.sendNeutral(control, nextSequence, send)
 		}
-
+		// 疾跑饥饿门控与服务端同阈值：镜像饥饿<6 时不触发加速，客户端预测与
+		// 服务端权威因此同向，避免“客户端以为在跑、服务端按走”的持续纠偏。
+		sprinting := control.Sprinting
+		if p.hunger < 6 {
+			sprinting = false
+		}
 		message := network.PlayerInput{
-			Sequence: nextSequence(),
-			MoveX:    control.MoveX,
-			MoveZ:    control.MoveZ,
-			Jump:     control.Jump,
-			Yaw:      control.Yaw,
-			Pitch:    control.Pitch,
-			Mining:   control.Mining,
-			Eating:   control.Eating,
+			Sequence:  nextSequence(),
+			MoveX:     control.MoveX,
+			MoveZ:     control.MoveZ,
+			Jump:      control.Jump,
+			Yaw:       control.Yaw,
+			Pitch:     control.Pitch,
+			Mining:    control.Mining,
+			Eating:    control.Eating,
+			Sprinting: sprinting,
 		}
 		if err := send(message); err != nil {
 			return err
@@ -75,10 +81,11 @@ func (p *Predictor) Advance(
 		p.history = append(p.history, predictedInput{
 			sequence: message.Sequence,
 			input: physics.Input{
-				MoveX: message.MoveX,
-				MoveZ: message.MoveZ,
-				Jump:  message.Jump,
-				Yaw:   message.Yaw,
+				MoveX:     message.MoveX,
+				MoveZ:     message.MoveZ,
+				Jump:      message.Jump,
+				Yaw:       message.Yaw,
+				Sprinting: sprinting,
 			},
 		})
 		p.previous = p.current

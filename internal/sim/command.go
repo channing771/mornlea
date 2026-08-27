@@ -37,6 +37,8 @@ const (
 	// CommandTakeCraftingOutput 请求取出当前网格匹配派生的完整产物；只携带
 	// 序号，产物、扣料与容量全部由权威侧决定。
 	CommandTakeCraftingOutput
+	// CommandInteractDoor 请求与门交互（右键开合），目标由权威射线决定。
+	CommandInteractDoor
 )
 
 // LookDirection 把玩家 look 角转换为单位方向；yaw=0、pitch=0 朝向 -Z。
@@ -88,6 +90,9 @@ type Command struct {
 	// Eating 是 CommandPlayerInput 携带的持续进食意图，对应协议 v24 的
 	// `PlayerInput.Eating`；与 `Mining` 同形，只表达"按住了进食键"。
 	Eating bool
+	// Sprinting 是 CommandPlayerInput 携带的持续疾跑意图，对应协议 v28 的
+	// `PlayerInput.Sprinting`；门控见 sprint spec。
+	Sprinting bool
 }
 
 type GeneratedChunk struct {

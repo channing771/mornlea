@@ -66,6 +66,12 @@ const (
 	PlantMaterialLast  uint16 = 54
 )
 
+// DoorMaterial 是门的单值材质层，紧接植物区间之后。
+const DoorMaterial uint16 = 55
+
+// DoorMaterial 报告材质层是否属于门。
+func IsDoorMaterial(mat uint16) bool { return mat == DoorMaterial }
+
 // PlantMaterial 报告某个材质层是否属于植物集合。
 func PlantMaterial(mat uint16) bool {
 	return mat >= PlantMaterialFirst && mat <= PlantMaterialLast

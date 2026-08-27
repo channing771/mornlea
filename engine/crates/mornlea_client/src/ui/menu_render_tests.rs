@@ -217,7 +217,9 @@ fn menu_hidden_or_no_font_returns_none() {
     let mut hidden = frame.clone();
     match &mut hidden {
         UiFrame::Menu(menu) => menu.visible = false,
-        UiFrame::Settings(_) | UiFrame::Debug(_) => panic!("测试夹具应为主菜单"),
+        UiFrame::Settings(_) | UiFrame::Debug(_) | UiFrame::Pause(_) => {
+            panic!("测试夹具应为主菜单")
+        }
     }
     assert!(
         state

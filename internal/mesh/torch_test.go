@@ -128,7 +128,7 @@ func TestEncodeNativeInputRejectsUnknownModelTags(t *testing.T) {
 const torchFixtureMaterial uint16 = 90
 
 // torchModelRegistry 是带 model tag 的火把网格夹具：五种火把形态分别登记
-// model 1..5（与方块编号 62..66 同序），材质共用 torchFixtureMaterial，
+// model 1..5（与方块编号 71..75 同序），材质共用 torchFixtureMaterial，
 // 发光 14 与 core.BlockEmission 的生产取值一致。
 type torchModelRegistry struct{ internalTestRegistry }
 

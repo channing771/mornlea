@@ -28,6 +28,9 @@ type Control struct {
 	// 逐固定步原样上行给服务端；客户端**不做任何本地预测**——既不扣食物也不
 	// 改饥饿值，界面显示的永远是服务端确认回来的那个数。
 	Eating bool
+	// Sprinting 是本帧是否请求疾跑。门控见 sprint spec：地面+前移+非浸没+饥饿≥6 时
+	// 才在物理侧提升目标速度，客户端只上行意图，服务端与预测侧各自按权威/镜像饥饿门控。
+	Sprinting bool
 }
 
 // ReconcileResult 描述权威状态和解对视角的影响。
@@ -59,6 +62,7 @@ type Predictor struct {
 	health              uint8
 	oxygen              uint16
 	hunger              uint8
+	saturationZero      bool
 	// eyeInFluid 是最近一次浸没判定给出的眼睛浸没标志。它由 stepWithSubmersion
 	// 与权威状态和解共同写入，是水下视觉唯一的判定来源。见 EyeInFluid。
 	eyeInFluid bool
@@ -111,6 +115,7 @@ func (p *Predictor) Begin(message network.PlayerState) error {
 	p.health = message.Health
 	p.oxygen = message.Oxygen
 	p.hunger = message.Hunger
+	p.saturationZero = message.SaturationZero
 	// Begin 只有权威位置、没有方块视图，浸没标志留待第一次固定步或和解算出。
 	p.eyeInFluid = false
 	return nil
@@ -139,6 +144,12 @@ func (p *Predictor) Oxygen() (uint16, bool) {
 // 本地既不推进疲劳也不结算进食，界面显示的永远是服务端认可的那个数。
 func (p *Predictor) Hunger() (uint8, bool) {
 	return p.hunger, p.ready
+}
+
+// SaturationZero 返回饱和度归零提示位以及预测器是否已就绪。
+// 同饥饿值：零提示位只接受服务端确认值，客户端不据本地饱和度推导。
+func (p *Predictor) SaturationZero() (bool, bool) {
+	return p.saturationZero, p.ready
 }
 
 // EyeInFluid 报告最近一次浸没判定认为相机所在格是不是流体。

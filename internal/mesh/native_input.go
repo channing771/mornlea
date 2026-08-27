@@ -27,13 +27,14 @@ const (
 	//
 	// 这里是**上限**而不是当前条目数：internal/assets.NewRegistry() 把
 	// core.AirID..core.BlockIDMax-1 的全部已注册方块烘焙进 mesh snapshot
-	// （见 internal/assets/blocks.go），今天是 67 条（火把五形态合入后）。
+	// （见 internal/assets/blocks.go），今天是 76 条（门 9 个与火把五形态
+	// 合入后）。
 	// 本常量此前写成 `int(core.WaterLevel7ID)+1`，即"恰好等于当前条目数"，
 	// 于是追加方块编号时 Go 侧会自己长大而 Rust 侧不会，两侧静默分叉。改成
 	// 显式上限后，「条目数不得超过上限」由 TestRegistryCapacityCoversEveryRegisteredBlock
 	// 的位置性断言守住，「Rust 上限不小于本上限」由
 	// TestNativeAcceptsRegistryAtGoCapacity 真的喂满一次跨语言调用守住。
-	// 留到 80 而不是紧贴 67，是给后续批次（床的多形态等）预留，避免连续变更
+	// 留到 80 而不是紧贴 76，是给后续批次（床的多形态等）预留，避免连续变更
 	// 都动同一处上限。两侧一旦不同步，Go 端喂进的条目数会被 Rust 侧
 	// registry_count > MAX_REGISTRY_ENTRIES 校验直接拒绝整次 mesh 调用。
 	// 顺带一提：input.rs 的 BLOCKS_BYTES = 27*4096*2 里也有一个 27，但那

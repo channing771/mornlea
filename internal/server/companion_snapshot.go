@@ -162,6 +162,10 @@ func productionCompanionPassableBlocks() map[core.BlockID]bool {
 			passable[id] = true
 		}
 	}
+	// 门上半在 `physics.BlockCollisionBoxes` 中按空气处理（零碰撞体，下半已阻挡时上半无需再阻挡，避免双格厚度叠加），寻路阻挡表需与其对齐，否则 `TestCompanionManagerPathBlockTableMatchesCollisionOracle` 逐编号对齐失败。
+	if core.DoorUpper != 0 {
+		passable[core.DoorUpper] = true
+	}
 	for id := core.TorchStandingID; id <= core.TorchWallNegZID; id++ {
 		if core.IsTorch(id) {
 			passable[id] = true

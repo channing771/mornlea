@@ -10,17 +10,18 @@ use crate::quad::{Face, Quad};
 
 // ---- 火把有限模型 --------------------------------------------------
 //
-// 夹具 registry：id 0 = 空气、id 1 = 石头（同时是 barrier）、id 62..66 = 五种
-// 火把形态（model tag 1..5，与方块编号 62..66 同序）。可见性位图按
+// 夹具 registry：id 0 = 空气、id 1 = 石头（同时是 barrier）、id 71..75 = 五种
+// 火把形态（model tag 1..5，与方块编号 71..75 同序，门批次占 62..70 之后）。
+// 可见性位图按
 // assets.FaceVisible 的规则烘焙：石头对空气与全部火把出面，**火把对谁都不出
 // 轴向面**——几何全部来自 emit_torch（与植物同一豁免路径）。
 
 const TORCH_ENTRIES: usize = 7;
-const TORCH_STANDING_ID: u16 = 62;
-const TORCH_WALL_POS_X_ID: u16 = 63;
-const TORCH_WALL_NEG_X_ID: u16 = 64;
-const TORCH_WALL_POS_Z_ID: u16 = 65;
-const TORCH_WALL_NEG_Z_ID: u16 = 66;
+const TORCH_STANDING_ID: u16 = 71;
+const TORCH_WALL_POS_X_ID: u16 = 72;
+const TORCH_WALL_NEG_X_ID: u16 = 73;
+const TORCH_WALL_POS_Z_ID: u16 = 74;
+const TORCH_WALL_NEG_Z_ID: u16 = 75;
 /// 夹具里火把共用的材质层：刻意取植物区间 [31,54] 与耕地区间 [29,30] 之外，
 /// 证明火把 quad 的判别完全依赖 registry model tag、不与任何 material 区间
 /// 判别串味。

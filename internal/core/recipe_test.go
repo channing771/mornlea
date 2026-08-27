@@ -420,6 +420,13 @@ func TestRecipeShapeTableOneToThirteenIsFrozen(t *testing.T) {
 				core.ItemOakPlanks, core.ItemOakPlanks, core.ItemNone,
 			},
 			Output: core.ItemStack{Item: core.ItemWorkbench, Count: 1}}},
+		{14, core.RecipePattern{Width: 2, Height: 3, Mirror: true,
+			Cells: [core.CraftingGridSlots]core.ItemID{
+				core.ItemOakPlanks, core.ItemOakPlanks, core.ItemNone,
+				core.ItemOakPlanks, core.ItemOakPlanks, core.ItemNone,
+				core.ItemOakPlanks, core.ItemOakPlanks, core.ItemNone,
+			},
+			Output: core.ItemStack{Item: core.ItemDoor, Count: 3}}},
 	}
 	for _, tc := range frozen {
 		pattern, ok := core.Recipe(tc.id)
@@ -430,15 +437,15 @@ func TestRecipeShapeTableOneToThirteenIsFrozen(t *testing.T) {
 			t.Fatalf("recipe %d 产物 %+v 不是合法物品栈", tc.id, pattern.Output)
 		}
 	}
-	// 编号位次一并冻结：1..13 连续且新末项紧随面包配方（11）之后。
-	if core.RecipeStick != core.RecipeBread+1 || core.RecipeWorkbench != core.RecipeStick+1 {
-		t.Fatalf("新配方位次 = stick %d / workbench %d，必须紧随 RecipeBread(%d) 连续追加",
-			core.RecipeStick, core.RecipeWorkbench, core.RecipeBread)
+	// 编号位次一并冻结：1..14 连续且新末项紧随面包配方（11）之后。
+	if core.RecipeStick != core.RecipeBread+1 || core.RecipeWorkbench != core.RecipeStick+1 || core.RecipeDoor != core.RecipeWorkbench+1 {
+		t.Fatalf("新配方位次 = stick %d / workbench %d / door %d，必须紧随 RecipeBread(%d) 连续追加",
+			core.RecipeStick, core.RecipeWorkbench, core.RecipeDoor, core.RecipeBread)
 	}
 }
 
 // TestRecipeRejectsUnknownIDs 覆盖 spec Scenario「未登记配方被拒绝」：
-// recipe 0、批次其余功能线尚未合流的 `15..18`（三把剑与白床）以及任意更大
+// recipe 0、批次其余功能线尚未合流的编号段（三把剑与白床）以及任意更大
 // 编号都必须稳定拒绝且不产生产物。写成 `RecipeTorch+1` 起步而不是裸字面量，
 // 下次追加配方时这段循环自动跟着末项走。
 func TestRecipeRejectsUnknownIDs(t *testing.T) {
@@ -452,9 +459,9 @@ func TestRecipeRejectsUnknownIDs(t *testing.T) {
 			t.Fatalf("recipe %d 被接受为 %+v：表末之后的编号必须稳定拒绝", id, pattern)
 		}
 	}
-	// 15..18 是批次计划里的既定编号段（三把剑、白床，归各自功能行）：
+	// 16..18 是批次计划里的既定编号段（三把剑、白床，归各自功能行）：
 	// 在它们合流之前逐个点名拒绝，比「表末 +1」更能钉住「暂缺但已规划」。
-	for id := core.RecipeID(15); id <= 18; id++ {
+	for id := core.RecipeID(16); id <= 18; id++ {
 		if _, ok := core.Recipe(id); ok {
 			t.Fatalf("规划中的 recipe %d 在合流前被注册", id)
 		}
@@ -530,16 +537,16 @@ func TestPickaxeRecipesOutputFullDurability(t *testing.T) {
 	}
 }
 
-// TestRecipeTorchShapeIsFrozen 锁定火把配方的稳定语义：recipe 14，形状为宽 1
-// 高 2 的纵向两格——煤炭位于木棍正上方，产出 4 个火把。编号紧随工作台配方
-// （13）追加；recipe ID 是协议稳定值，重排会让已发出的请求指向别的配方。
+// TestRecipeTorchShapeIsFrozen 锁定火把配方的稳定语义：recipe 15，形状为宽 1
+// 高 2 的纵向两格——煤炭位于木棍正上方，产出 4 个火把。编号紧随门配方
+// （14）追加；recipe ID 是协议稳定值，重排会让已发出的请求指向别的配方。
 func TestRecipeTorchShapeIsFrozen(t *testing.T) {
-	if core.RecipeTorch != core.RecipeWorkbench+1 {
-		t.Fatalf("RecipeTorch = %d，必须紧随 RecipeWorkbench(%d)",
-			core.RecipeTorch, core.RecipeWorkbench)
+	if core.RecipeTorch != core.RecipeDoor+1 {
+		t.Fatalf("RecipeTorch = %d，必须紧随 RecipeDoor(%d)",
+			core.RecipeTorch, core.RecipeDoor)
 	}
-	if core.RecipeTorch != 14 {
-		t.Fatalf("RecipeTorch = %d，必须稳定为 14", core.RecipeTorch)
+	if core.RecipeTorch != 15 {
+		t.Fatalf("RecipeTorch = %d，必须稳定为 15", core.RecipeTorch)
 	}
 	want := core.RecipePattern{
 		Width: 1, Height: 2, Mirror: true,

@@ -7,7 +7,7 @@
 - 支撑失效复核挂在**本 tick 已变化位置**上：`finishChanges`（`internal/sim/engine_changes.go`）之前对 pending block changes 的位置排序去重，逐个检查精确六邻居；邻居是火把且 `torchSupport` 指回该变化格 → `recordChange` 写成空气 + 既有掉落 append。`recordChange` 是权威 tick 内方块变化的唯一汇聚点（流体入队也挂在这里），在它之后、`finishChanges` 之前复核一次即可覆盖全部写者。火把零碰撞、不可能成为支撑源，新移除的火把不会被循环传播 → 不需要递归队列，边界严格 = 六邻居 × 单级。
 - 掉落槽容量不足的取舍：移除火把前先 `PrepareDrop` 预检，容量不足时**整体保留火把**（不写空气、不掉落、无半结算），该格下一次权威变化重新触发复核自愈。与采掘完成路径的 `RejectDropCapacity` 同构——宁可让火把多停留一拍，也不产生「方块消失而物品无声丢失」的半结算；静默丢物品在任何路径都是硬失败语义，悬空火把只是可自愈的瞬态。邻居所在区块未加载时本轮跳过：火把所在区块必然已就绪才会被放置，未就绪意味着整列已随区块卸载，没有可复核的权威状态。
 - 灯光能量（发光 14）经 mesh registry 快照送 Rust，与 15 级发光方块同路径；服务端将来夜行者的黑暗判定读同一张 `core.BlockEmission`，不再建服务端光源表。
-- 火把配方完全复用 A-01 的格子合成闭环：core 的 recipe 表追加 `RecipeTorch`=14 后，网格匹配（裁边 + 镜像位）、产物取出、回收不变量、`CraftingState` 同步全部走既有路径；sim 不为火把写任何合成专用分支。
+- 火把配方完全复用 A-01 的格子合成闭环：core 的 recipe 表追加 `RecipeTorch`=15（紧随门配方 14）后，网格匹配（裁边 + 镜像位）、产物取出、回收不变量、`CraftingState` 同步全部走既有路径；sim 不为火把写任何合成专用分支。
 
 ## 方向映射（冻结）
 
@@ -22,13 +22,14 @@
 
 墙面火把的**形态名 = 命中面名**（火把贴在支撑块的哪个侧面），而火把的支撑格位于 `face.Opposite()` 方向（`BlockFace.Opposite()` 已存在于 `internal/core/block.go`）：命中 +X 面 → 火把在支撑块 +X 侧、支撑在火把的 −X 侧。墙外观向远离支撑的方向倾斜（Rust 几何侧），碰撞恒空。
 
-## 编号契约（最终锁定）
+## 编号契约（最终锁定，集成重订后）
 
-append-only 契约以当前 main（`cc385d22`）的枚举末尾为准，无集成期重排：
+append-only 契约以集成基线（main 合入木门批次后）的枚举末尾为准，无集成期重排；原始产物曾按 `cc385d22` 锁定 62..66/43/14，与 main 的门编号撞车后整体后移：
 
-- 方块（`BlockIDMax` 62 → 67）：既有 0..61 不动；火把落地=62、墙+X=63、墙−X=64、墙+Z=65、墙−Z=66。
-- 物品（`ItemIDMax` 43 → 44）：`ItemTorch`=43（`ItemPoisonousPotato`=42 之后）；原料 `ItemStick`=37、`ItemCoal`=5 为既有编号。
-- 配方：`RecipeTorch`=14（recipe 表 1..13 既有不变；15..18 留给剑与床功能行，追加前查询稳定拒绝）。
+- 方块（`BlockIDMax` 71 → 76）：既有 0..70 不动（门占 62..70）；火把落地=71、墙+X=72、墙−X=73、墙+Z=74、墙−Z=75。
+- 物品（`ItemIDMax` 44 → 45）：`ItemTorch`=44（`ItemDoor`=43、`ItemPoisonousPotato`=42 之后）；原料 `ItemStick`=37、`ItemCoal`=5 为既有编号。
+- 配方：`RecipeTorch`=15（recipe 表 1..14 既有不变，`RecipeDoor`=14；16..18 留给剑与床功能行，追加前查询稳定拒绝）。
+- 纹理层：`LayerTorch`=59（`LayerDoor`=55 与工作台三层 56..58 之后追加；原始值 58 与工作台底层撞号后移）。
 - 「0..`BlockIDMax`-1 全注册」是既有不变量（mesh snapshot 烘焙全部已注册方块），五个火把形态各自登记完整 registry 条目。
 
 ## mesh registry wire（v8）
@@ -40,8 +41,8 @@ id(u16) opaque(u8) emission(u8) material[6](u16) fluidHeight(u8) lightAttenuatio
 └─0..1──┘ └─2────┘ └─3────────┘ └─4..15────────────┘ └─16──────────┘ └─17──────────────┘ └─18─────────┘ └─19───┘
 ```
 
-- 基线校准：当前 main 的 entry 已是 19 bytes（`blockTopRaw` 占 offset 18，ABI v7 由短方块顶面扩展占用）；条目上限已在更早提交的 v7 期内提前升至 80（62 个既有注册方块 + 5 个火把形态 = 67 越过 64 所迫，80 同时给床等多形态方块留余量），不属本次升版记账。本变更只做两件事：加第 20 字节 `model`（offset 19），并把 engine ABI 升到 v8。
-- model 封闭集合：0=默认（无模型覆写：cube/短方块/流体/植物仍走既有判定，植物继续按 material 区间识别）、1=火把落地、2..5=火把墙 +X/−X/+Z/−Z（与方块编号 63..66 同序）、6=床（保留，出现即拒绝）、其余值未知拒绝。火把是 model tag 的第一个消费者，故 0 语义取「默认」而非「cube」，避免为既有四条几何路径重复造 tag。
+- 基线校准：集成基线 main 的 entry 已是 19 bytes（`blockTopRaw` 占 offset 18，ABI v7 由短方块顶面扩展占用）；条目上限已在更早提交的 v7 期内提前升至 80（集成重订后 71 个既有注册方块 + 5 个火把形态 = 76 越过 64 所迫，80 同时给床等多形态方块留余量），不属本次升版记账。本变更只做两件事：加第 20 字节 `model`（offset 19），并把 engine ABI 升到 v8（main 侧仍 v7）。
+- model 封闭集合：0=默认（无模型覆写：cube/短方块/流体/植物仍走既有判定，植物继续按 material 区间识别）、1=火把落地、2..5=火把墙 +X/−X/+Z/−Z（与方块编号 72..75 同序）、6=床（保留，出现即拒绝）、其余值未知拒绝。火把是 model tag 的第一个消费者，故 0 语义取「默认」而非「cube」，避免为既有四条几何路径重复造 tag。
 - Go：`nativeRegistryEntryBytes = 2 + 1 + 1 + 6*2 + 1 + 1 + 1 + 1`；`nativeMaxRegistryEntries` 64 → 80；`nativeMaxRegistryWords` 随上限变为 2 words/行、`maxNativeInputBytes` 随之更新（文档注释同步）。
 - Rust：`engine/crates/mornlea_engine/src/input.rs` 的 `REGISTRY_ENTRY_BYTES`、`MAX_REGISTRY_ENTRIES`；`greedy` 增加 model dispatcher；`encode` 端与 Go 解包各按 20 字节布局。
 - `mornlea_engine_abi_version()`（`engine/crates/mornlea_engine/src/ffi.rs`）、C header（`engine/include/mornlea_engine.h`）与 Go `internal/nativeabi` 常量 → 8。
@@ -53,7 +54,7 @@ id(u16) opaque(u8) emission(u8) material[6](u16) fluidHeight(u8) lightAttenuatio
 - standing：竖直居中窄柱（两片双面 quad 或四片薄片，按固定上界）；wall：贴近对应支撑面、向远离支撑方向倾斜的窄柱。坐标全部限制在本格内；双面（正背各一片，惯用 plant 的 face 编组）；alpha cutout 走既有 terrain pass；不参与 greedy merge（与短方块、植物同一豁免路径）。
 - light/AO/材质均来自 registry 与邻域既有规则（无火把专属光照公式）；quad 仍是 8 字节、bit 63 空闲。
 - **交叉斜面编组通用化**：落地火把复用植物的 face 6/7 交叉斜面编组表达竖直窄柱，Go `internal/mesh/quad.go` 的打包断言因此从双向（face 6/7 ⟺ 植物区间 material）放宽为**单向**——植物区间的 material 只允许出现在 face 6/7 上，反方向不设限，与 Rust `quad.rs` 的 pack 断言同口径。被否方案：为火把新开 face 值会耗尽 3 位 face 字段（0..7 仅剩 6/7 可用），新开 bit 则侵犯预留的 bit 63。
-- **客户端解码半边**：火把斜面携带角高度（斜顶边），`mornlea_client` 的 terrain.wgsl 角高度解码门控必须认识火把材质——扩 `torch_material`（==58，即纹理层的火把层号）进门控、`shaders.rs` 增加 `TORCH_MATERIAL` 常量；已知渲染边界：世界坐标锁定 UV 使共用竖直火柄纹理保持竖直，墙面倾斜体现在斜板的斜顶边。贴面帽的法线朝向支撑块，经 cull 背面剔除与支撑块遮挡后实际近乎不可见，墙面火把的正面观感由两片斜板承担；该观感边界交 `torch-night` golden 与逐图人工复核把关。
+- **客户端解码半边**：火把斜面携带角高度（斜顶边），`mornlea_client` 的 terrain.wgsl 角高度解码门控必须认识火把材质——扩 `torch_material`（==59，即纹理层的火把层号，集成重订前为 58）进门控、`shaders.rs` 增加 `TORCH_MATERIAL` 常量；已知渲染边界：世界坐标锁定 UV 使共用竖直火柄纹理保持竖直，墙面倾斜体现在斜板的斜顶边。贴面帽的法线朝向支撑块，经 cull 背面剔除与支撑块遮挡后实际近乎不可见，墙面火把的正面观感由两片斜板承担；该观感边界交 `torch-night` golden 与逐图人工复核把关。
 
 ## 纹理
 
@@ -74,10 +75,10 @@ id(u16) opaque(u8) emission(u8) material[6](u16) fluidHeight(u8) lightAttenuatio
 
 ## 兼容性与迁移
 
-- chunk schema v9 结构不变（火把只是既有方块数组里的新取值）；协议 v27、metadata v2、玩家 schema v7、`companions.ai` v4、client ABI v9、benchmark scenario v19 全部不变；不新增协议命令（A-01 已锁 `MoveCraftingStack`/`TakeCraftingOutput`，火把放置沿用既有放置命令）。
+- chunk schema v9 结构不变（火把只是既有方块数组里的新取值）；协议 v29（集成基线，B-12 在 main 侧已升 v29）、metadata v2、玩家 schema v7、`companions.ai` v4、client ABI v9、benchmark scenario v19 全部不变；不新增协议命令（A-01 已锁 `MoveCraftingStack`/`TakeCraftingOutput`，火把放置沿用既有放置命令）。
 - engine ABI v7 → v8：只有 mesh registry entry 布局与条目上限变化；release unit 纪律（`libmornlea_engine` 与二进制同版本捆绑）不变。主规格 `short-block-presentation` 的「engine ABI 升版」条目仍描述 v6→v7 那次历史升版，其版本句与本次 v8 的关系在归档收尾时按仓库惯例裁决（见 ledger 待办）。
 - `AGENTS.md`/`CLAUDE.md`：只机械同步「engine ABI v7 → v8」的版本表述（以 `TestBaselineVersionsMatchCode` 转绿的最小集合为准），两份逐字节相同；其余基线内容不变。
-- capture：场景表插入 `torch-night`（`block-light-room` 之后、`materials-showcase` 之前，表内第 12 位，总项数 20 → 21）；本变更经显式基线更新写入 `torch-night.png` 一张 golden（19 → 20 张），逐图人工复核；`workbench-crafting` 的 golden 是 A-01 遗留缺口（原批次集成任务已取消），本变更不补。
+- capture：场景表插入 `torch-night`（`block-light-room` 之后、`materials-showcase` 之前，表内第 12 位，总项数 20 → 21）；本变更经显式基线更新写入 `torch-night.png` 一张 golden（集成基线 20 → 21 张，main 侧已补齐 `workbench-crafting` 并经 F-05 再生其余基线），逐图人工复核。
 
 ## 验证
 

@@ -24,6 +24,18 @@ func Replaceable(target core.BlockID, newLevel uint8) bool {
 	if target == core.AirID {
 		return true
 	}
+	if core.IsDoor(target) {
+		// 门：开启可流入（视作空气），关闭实心不可流入，上半视作实心
+		if target == core.DoorUpper {
+			return false
+		}
+		switch target {
+		case core.DoorLowerSouthOpen, core.DoorLowerWestOpen, core.DoorLowerNorthOpen, core.DoorLowerEastOpen:
+			return true
+		default:
+			return false
+		}
+	}
 	if core.IsCrop(target) {
 		// 作物对流动水可替换。放行点必须在本函数而不能在 `evalCell` 里特判：
 		// 垂直优先与水平递减这两处写入判定，加上 sim 重扫侧的两个不动点捷径
@@ -35,7 +47,7 @@ func Replaceable(target core.BlockID, newLevel uint8) bool {
 		return true
 	}
 	if !core.IsFluid(target) {
-		// 非空气、非作物、非流体：非作物的实心方块，一律不可替换。
+		// 非空气、非作物、非流体、非可流入开启门：非作物的实心方块，一律不可替换。
 		return false
 	}
 	if target == core.WaterSourceID {

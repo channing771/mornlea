@@ -27,11 +27,11 @@ pub const FARMLAND_MATERIAL_LAST: u16 = 30;
 /// face 0..5,与植物的 face 6/7 按 face 天然互斥)。
 ///
 /// 数值的真值源是 Go 侧 `internal/assets` 层枚举末位追加的 `LayerTorch`
-/// (iota,当前 58)。三处没有共享定义也没有生成步骤,只能人手同步——Go 枚举、
-/// 本常量、terrain.wgsl 里 `torch_material` 的硬编码字面量,由
-/// render/farmland_tests.rs 的源码扫描钉在一起。在 Go 层枚举的火把之前插层
-/// 会平移这个编号,那处守卫就是仅有的报警点之一。
-pub const TORCH_MATERIAL: u16 = 58;
+/// (iota,当前 59,门层 55 与工作台三层 56..58 之后)。三处没有共享定义也没有
+/// 生成步骤,只能人手同步——Go 枚举、本常量、terrain.wgsl 里 `torch_material`
+/// 的硬编码字面量,由 render/farmland_tests.rs 的源码扫描钉在一起。在 Go 层
+/// 枚举的火把之前插层会平移这个编号,那处守卫就是仅有的报警点之一。
+pub const TORCH_MATERIAL: u16 = 59;
 
 /// 地形 pass(实例化紧凑 quad)。
 pub const TERRAIN: &str = include_str!("../../shaders/terrain.wgsl");

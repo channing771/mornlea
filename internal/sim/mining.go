@@ -45,6 +45,10 @@ func (state miningState) update() MiningUpdate {
 }
 
 func miningRule(block core.BlockID, held core.ItemID) (uint16, bool) {
+	// 门是木质薄板，与木板同价 15 tick，与工具无关。
+	if core.IsDoor(block) {
+		return 15, true
+	}
 	// 农业方块与手持无关（锄头不是采掘工具，作物与耕地徒手即可收）：作物 1
 	// tick、耕地 5 tick（与泥土同价，翻地这一步撤销得和挖泥土一样费力）。
 	//
@@ -142,11 +146,22 @@ func stepMiningProgress(actor *actorState, target core.BlockPos, block core.Bloc
 // 目标）。玩家采掘、玩家放置、伙伴采掘的视线遮挡与开启容器四条路径共用它，
 // 同一份交互距离（InteractionReach）加同一份 solid 谓词，保证没有第二套规则
 // 实现——流体豁免只在这一处写，任何调用点都不可能漏掉。
+//
+// 门上半（`DoorUpper`）无方向且单 ID：其固体性由下半 `IsDoorOpen` 决定
+// （`!Open` 实心、`Open` 可穿透），若下半不存在或未就绪则按关闭处理。
 func blockRaycastSampler(dimension *Dimension) func(core.BlockPos) (bool, error) {
 	return func(position core.BlockPos) (bool, error) {
 		block, ready := dimension.BlockAt(position)
 		if !ready {
 			return false, ErrChunkNotReady
+		}
+		if core.IsDoorUpper(block) {
+			below := core.BlockPos{X: position.X, Y: position.Y - 1, Z: position.Z}
+			lower, lowerReady := dimension.BlockAt(below)
+			if !lowerReady || !core.IsDoorLower(lower) {
+				return true, nil
+			}
+			return core.IsDoorOpen(lower) == false, nil
 		}
 		return core.InteractionTarget(block), nil
 	}
@@ -558,6 +573,63 @@ func (engine *Engine) completeMining(
 	blockIndex, indexOK := world.ChunkBlockIndex(target)
 	if !recordOK || record.State != ChunkReady || record.Chunk == nil || !indexOK {
 		return RejectChunkNotReady, true
+	}
+
+	// 门双格原子破坏：命中任一半均双清，掉落 1 门（DoDrop 为假时仍双清零掉落）
+	if core.IsDoor(block) {
+		var lowerPos, upperPos core.BlockPos
+		if core.IsDoorUpper(block) {
+			lowerPos = core.BlockPos{X: target.X, Y: target.Y - 1, Z: target.Z}
+			upperPos = target
+		} else {
+			lowerPos = target
+			upperPos = core.BlockPos{X: target.X, Y: target.Y + 1, Z: target.Z}
+		}
+		lowerRecord, lowerOK := dimension.records[lowerPos.Chunk()]
+		upperRecord, upperOK := dimension.records[upperPos.Chunk()]
+		if !lowerOK || lowerRecord.State != ChunkReady || lowerRecord.Chunk == nil ||
+			!upperOK || upperRecord.State != ChunkReady || upperRecord.Chunk == nil {
+			return RejectChunkNotReady, true
+		}
+		lowerIndex, lowerIndexed := world.ChunkBlockIndex(lowerPos)
+		upperIndex, upperIndexed := world.ChunkBlockIndex(upperPos)
+		if !lowerIndexed || !upperIndexed {
+			return RejectChunkNotReady, true
+		}
+		// 容量预演：单堆 ItemDoor，使用 lower 位置的区块掉落槽
+		var nextDrops [core.DropsPerChunk]world.DropSlot
+		var hasNext bool
+		if harvestable {
+			stacks := [1]core.ItemStack{{Item: core.ItemDoor, Count: 1}}
+			next, ok := lowerRecord.Chunk.PrepareDropBatch(stacks[:], lowerIndex, engine.tunables.DropPickupDelayTicks)
+			if !ok {
+				return RejectDropCapacity, true
+			}
+			nextDrops = next
+			hasNext = true
+		}
+		// 原子双清：任一半失败回滚已改的另一半
+		oldLower, _ := dimension.BlockAt(lowerPos)
+		oldUpper, _ := dimension.BlockAt(upperPos)
+		_, _, errLower := dimension.SetBlock(lowerPos, core.AirID)
+		if errLower != nil {
+			return mapSetBlockError(errLower), true
+		}
+		_, _, errUpper := dimension.SetBlock(upperPos, core.AirID)
+		if errUpper != nil {
+			// 回滚 lower
+			_, _, _ = dimension.SetBlock(lowerPos, oldLower)
+			_, _ = dimension.BlockAt(lowerPos)
+			_ = oldUpper
+			_ = upperIndex
+			return mapSetBlockError(errUpper), true
+		}
+		engine.recordChange(dimensionID, lowerPos, core.AirID, pending)
+		engine.recordChange(dimensionID, upperPos, core.AirID, pending)
+		if hasNext {
+			lowerRecord.Chunk.CommitDropBatch(nextDrops)
+		}
+		return 0, false
 	}
 
 	if block == core.FurnaceID {

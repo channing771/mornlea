@@ -117,16 +117,17 @@ func translateClientMessage(
 	switch message := message.(type) {
 	case network.PlayerInput:
 		return sim.Command{
-			Session:  id,
-			Sequence: message.Sequence,
-			Kind:     sim.CommandPlayerInput,
-			MoveX:    message.MoveX,
-			MoveZ:    message.MoveZ,
-			Jump:     message.Jump,
-			Yaw:      message.Yaw,
-			Pitch:    message.Pitch,
-			Mining:   message.Mining,
-			Eating:   message.Eating,
+			Session:   id,
+			Sequence:  message.Sequence,
+			Kind:      sim.CommandPlayerInput,
+			MoveX:     message.MoveX,
+			MoveZ:     message.MoveZ,
+			Jump:      message.Jump,
+			Yaw:       message.Yaw,
+			Pitch:     message.Pitch,
+			Mining:    message.Mining,
+			Eating:    message.Eating,
+			Sprinting: message.Sprinting,
 		}, true
 	case network.PlaceBlock:
 		return sim.Command{

@@ -100,6 +100,20 @@ pub const UI_EVENT_KIND_DEBUG_ACTION: u32 = 3;
 const MAX_DEBUG_OUTPUT_EVENTS_PER_FRAME: usize = 8;
 
 // ---------------------------------------------------------------------------
+// 暂停覆盖层 ABI 布局常量(layout v4;Go 侧编码须逐值对齐本节并互指)。
+// ---------------------------------------------------------------------------
+
+/// 暂停页 UI 段布局版本。沿设置页/调试面板的页面级布局版本先例,既有
+/// 主菜单 1/设置页 2/调试面板 3 与各自线格式不动。
+pub const UI_PAUSE_LAYOUT_VERSION: u32 = 4;
+/// 暂停页「返回游戏」与 Escape 共用的动作编号;延续主菜单动作表 1..=7
+/// 之后且互不重叠。这是跨语言契约数字,Go 侧消费方以同值常量对齐,任何
+/// 一侧不得单方面改动。
+pub const UI_ACTION_PAUSE_BACK: u32 = 8;
+/// 暂停页「退回主菜单」动作编号;跨语言契约数字,约束同上。
+pub const UI_ACTION_PAUSE_QUIT_TO_MENU: u32 = 9;
+
+// ---------------------------------------------------------------------------
 // 菜单布局常量(全部为逻辑点,绘制函数里确定性计算,不依赖字体度量)。
 // ---------------------------------------------------------------------------
 
@@ -322,6 +336,20 @@ pub struct UiDebugFrame {
     pub rows: Vec<UiDebugRow>,
 }
 
+/// 一帧暂停覆盖层的 Rust 表示(layout v4)。
+///
+/// 页面语义极简:标题与两个固定按钮的文案、几何都在 Rust 侧确定(沿设置
+/// 页「静态文案归 Rust」先例),唯一来自 Go 的动态信息是会话传输形态——
+/// `remote` 置位表示 TCP 远程会话,页面须注明远程世界不会随本机打开暂停层
+/// 而停止;未置位(本地嵌入服)时 Go 已真实冻结权威模拟,不呈现注明行。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UiPauseFrame {
+    /// 暂停层是否可见;不可见时 [`UiState::run_frame`] 返回 `None`(零工作)。
+    pub visible: bool,
+    /// 当前会话是否为 TCP 远程形态;决定注明行的有无。
+    pub remote: bool,
+}
+
 /// 一帧 UI 下行快照；client ABI v9 保留主菜单 layout v1 并新增设置页
 /// layout v2。
 #[derive(Debug, Clone, PartialEq)]
@@ -332,6 +360,8 @@ pub enum UiFrame {
     Settings(UiSettingsFrame),
     /// 调试面板 layout v3。
     Debug(UiDebugFrame),
+    /// 暂停覆盖层 layout v4。
+    Pause(UiPauseFrame),
 }
 
 impl UiFrame {
@@ -341,6 +371,7 @@ impl UiFrame {
             Self::Menu(frame) => frame.visible,
             Self::Settings(frame) => frame.visible,
             Self::Debug(frame) => frame.visible,
+            Self::Pause(frame) => frame.visible,
         }
     }
 }
@@ -361,6 +392,7 @@ pub fn decode_ui_frame(bytes: &[u8]) -> Result<UiFrame, ()> {
         UI_LAYOUT_VERSION => UiFrame::Menu(decode_menu_frame(&mut reader)?),
         UI_SETTINGS_LAYOUT_VERSION => UiFrame::Settings(decode_settings_frame(&mut reader)?),
         UI_DEBUG_LAYOUT_VERSION => UiFrame::Debug(decode_debug_frame(&mut reader)?),
+        UI_PAUSE_LAYOUT_VERSION => UiFrame::Pause(decode_pause_frame(&mut reader)?),
         _ => return Err(()),
     };
     if !reader.done() {
@@ -550,6 +582,17 @@ fn valid_audio(value: f32) -> bool {
     value.is_finite() && (0.0..=1.0).contains(&value)
 }
 
+/// 解码 layout v4 暂停页段:版本号之后仅两个 u32 布尔——可见位与远程位。
+///
+/// 布局无变长字段,段内任何越界读与外层 `done()` 的尾随字节拒绝都由既有
+/// 机制兜底,严格度与 v1/v2 一致。
+#[allow(clippy::result_unit_err)]
+fn decode_pause_frame(reader: &mut Reader<'_>) -> Result<UiPauseFrame, ()> {
+    let visible = decode_bool(reader.u32()?)?;
+    let remote = decode_bool(reader.u32()?)?;
+    Ok(UiPauseFrame { visible, remote })
+}
+
 /// 无符号小端游标读取器;任何读越界都能安全返回 `Err(())` 而不 panic。
 struct Reader<'a> {
     bytes: &'a [u8],
@@ -699,6 +742,8 @@ pub const UI_OUTPUT_QUEUE_CAPACITY: usize = 64;
 const MAX_MENU_OUTPUT_EVENTS_PER_FRAME: usize = MAX_UI_BUTTONS;
 /// 设置页单帧最大输出数：一个最终草稿 change 加保存/取消/返回三个 action。
 const MAX_SETTINGS_OUTPUT_EVENTS_PER_FRAME: usize = 1 + 3;
+/// 暂停页单帧最大输出数：「返回游戏」「退回主菜单」各至多一个 action。
+const MAX_PAUSE_OUTPUT_EVENTS_PER_FRAME: usize = 2;
 /// 结构化事件 batch 的布局版本。
 pub const UI_EVENT_BATCH_LAYOUT: u32 = 1;
 /// action 事件类型编号。
@@ -1041,6 +1086,14 @@ impl UiState {
                 actions.append_events(&mut frame_events);
                 output
             }
+            UiFrame::Pause(frame) => {
+                let mut actions = PauseActions::default();
+                let output = self
+                    .ctx
+                    .run_ui(raw, |ui| draw_pause(ui, frame, &mut actions));
+                actions.append_events(&mut frame_events);
+                output
+            }
         };
         self.pending_events.enqueue_frame(&frame_events)?;
         Ok(Some(output))
@@ -1066,6 +1119,7 @@ fn max_output_events_per_frame(frame: &UiFrame) -> usize {
         UiFrame::Menu(_) => MAX_MENU_OUTPUT_EVENTS_PER_FRAME,
         UiFrame::Settings(_) => MAX_SETTINGS_OUTPUT_EVENTS_PER_FRAME,
         UiFrame::Debug(_) => MAX_DEBUG_OUTPUT_EVENTS_PER_FRAME,
+        UiFrame::Pause(_) => MAX_PAUSE_OUTPUT_EVENTS_PER_FRAME,
     }
 }
 
@@ -1086,6 +1140,24 @@ impl SettingsActions {
         }
         if self.back {
             pending.push(UiOutputEvent::Action(UI_ACTION_SETTINGS_BACK));
+        }
+    }
+}
+
+/// 一帧暂停页动作汇总;布尔汇总保证 egui 同帧重排时每种 action 至多一个事件。
+#[derive(Default)]
+struct PauseActions {
+    back: bool,
+    quit_to_menu: bool,
+}
+
+impl PauseActions {
+    fn append_events(&self, pending: &mut Vec<UiOutputEvent>) {
+        if self.back {
+            pending.push(UiOutputEvent::Action(UI_ACTION_PAUSE_BACK));
+        }
+        if self.quit_to_menu {
+            pending.push(UiOutputEvent::Action(UI_ACTION_PAUSE_QUIT_TO_MENU));
         }
     }
 }
@@ -1497,6 +1569,89 @@ fn draw_settings(
 
     // Escape 与返回按钮只产生同一个 typed action；是否允许离开由 Go 决定。
     actions.back |= ui.input(|input| input.key_pressed(Key::Escape));
+}
+
+// ---------------------------------------------------------------------------
+// 暂停覆盖层绘制(半透明遮罩 + 标题 + 两固定按钮 + 可选远程注明行)。
+// ---------------------------------------------------------------------------
+
+/// 暂停覆盖层的半透明深灰遮罩;背后世界帧保持隐约可见是暂停层语义。
+const PAUSE_OVERLAY_BACKGROUND: Color32 = Color32::from_rgba_unmultiplied_const(10, 10, 13, 209);
+/// 远程注明行文字颜色(琥珀色,与错误红、正文白区分,表明提示而非故障)。
+const PAUSE_REMOTE_NOTE_COLOR: Color32 = Color32::from_rgb(244, 196, 96);
+/// 暂停页固定标题文案。
+const PAUSE_TITLE_TEXT: &str = "已暂停";
+/// 「返回游戏」按钮文案。
+const PAUSE_BACK_LABEL: &str = "返回游戏";
+/// 「退回主菜单」按钮文案。
+const PAUSE_QUIT_TO_MENU_LABEL: &str = "退回主菜单";
+/// TCP 远程会话的注明行文案;本地单机不下发此行。
+const PAUSE_REMOTE_NOTE_TEXT: &str = "远程世界不会暂停，服务端仍在推进";
+
+/// 绘制一帧暂停覆盖层(layout v4 下行 → egui 呈现)。
+///
+/// 半透明遮罩之上复用 [`menu_button_layout`] 居中放置标题与两枚固定按钮,
+/// 布局确定性沿用主菜单口径(不依赖字体度量);注明行只在远程形态呈现,
+/// 锚位沿主菜单错误行的「末按钮下方固定间距」。点击先汇总进 `actions`,
+/// 由 [`UiState::run_frame`] 统一追加事件;恢复或拆链的裁决权在 Go 相位机,
+/// 本函数只把按钮点击翻译成 typed action。
+fn draw_pause(ui: &mut egui::Ui, frame: &UiPauseFrame, actions: &mut PauseActions) {
+    let screen = ui.max_rect();
+    ui.painter()
+        .rect_filled(screen, CornerRadius::ZERO, PAUSE_OVERLAY_BACKGROUND);
+
+    let rects = menu_button_layout(screen, 2);
+
+    let title_y = rects
+        .first()
+        .map_or(screen.center().y - MENU_TITLE_EMPTY_CENTER_GAP, |first| {
+            first.min.y - MENU_TITLE_BUTTON_GAP
+        });
+    ui.painter().text(
+        pos2(screen.center().x, title_y),
+        Align2::CENTER_BOTTOM,
+        PAUSE_TITLE_TEXT,
+        FontId::proportional(MENU_TITLE_FONT_SIZE),
+        MENU_TEXT_COLOR,
+    );
+
+    if pause_overlay_button(ui, rects[0], PAUSE_BACK_LABEL) {
+        actions.back = true;
+    }
+    if pause_overlay_button(ui, rects[1], PAUSE_QUIT_TO_MENU_LABEL) {
+        actions.quit_to_menu = true;
+    }
+
+    if frame.remote
+        && let Some(last) = rects.last()
+    {
+        ui.painter().text(
+            pos2(screen.center().x, last.max.y + MENU_ERROR_BUTTON_GAP),
+            Align2::CENTER_TOP,
+            PAUSE_REMOTE_NOTE_TEXT,
+            FontId::proportional(MENU_ERROR_FONT_SIZE),
+            PAUSE_REMOTE_NOTE_COLOR,
+        );
+    }
+
+    // Esc 关闭由 Go 键位栈在暂停相位裁决,本函数不把 Escape 合成为返回动作:
+    // 宿主 winit 泵同一帧既更新 Go 键位快照、又把按键入队为 UI 键事件,
+    // 这里若再合成会把开层当帧的回声放大成「开层即闭」。设置页的
+    // Esc≡back 合成先例仅适用于菜单相位(Go 在该相位不处理 Esc),不可照搬。
+}
+
+/// 在固定矩形内绘制一枚启用态暂停按钮,返回本帧是否被点击。
+fn pause_overlay_button(ui: &mut egui::Ui, rect: Rect, label: &str) -> bool {
+    let child = UiBuilder::new()
+        .max_rect(rect)
+        .layout(Layout::centered_and_justified(Direction::TopDown));
+    let response = ui
+        .scope_builder(child, |ui| {
+            let label = RichText::new(label).size(MENU_BUTTON_FONT_SIZE);
+            ui.add_enabled(true, egui::Button::new(label))
+        })
+        .inner;
+    response.clicked()
 }
 
 // ---------------------------------------------------------------------------
@@ -2070,6 +2225,12 @@ mod menu_abi_tests;
 #[cfg(test)]
 #[path = "ui/menu_render_tests.rs"]
 mod menu_render_tests;
+#[cfg(test)]
+#[path = "ui/pause_abi_tests.rs"]
+mod pause_abi_tests;
+#[cfg(test)]
+#[path = "ui/pause_render_tests.rs"]
+mod pause_render_tests;
 #[cfg(test)]
 #[path = "ui/raw_input_tests.rs"]
 mod raw_input_tests;

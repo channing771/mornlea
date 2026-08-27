@@ -2,7 +2,7 @@
 
 ### Requirement: 视觉基线覆盖三类容器像素界面
 
-系统 SHALL 具有恰好 21 个正式无窗口场景，`workbench-crafting` MUST 紧随 `inventory-crafting`，`chest-container` 与 `furnace-container` MUST 依次紧随 `workbench-crafting`，`torch-night` MUST 紧随 `block-light-room` 且先于 `materials-showcase`。完整顺序 MUST 为 `terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`workbench-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`torch-night`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`water-surface-slope`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`。既有显式更新、无窗口完整渲染链路和双阈值 MUST 保持不变；两张 far-horizon diagnostic controls MUST 继续不计入正式场景或 golden。golden 基线 SHALL 为 20 张：既有 19 张加上本变更新增的 `torch-night.png`；`workbench-crafting` 的 golden 缺口是既有状态（场景构造已交付、golden 待其后续基线任务补齐），不在本口径内，本变更 MUST NOT 顺手补齐或借机放宽任何阈值。
+系统 SHALL 具有恰好 21 个正式无窗口场景，`workbench-crafting` MUST 紧随 `inventory-crafting`，`chest-container` 与 `furnace-container` MUST 依次紧随 `workbench-crafting`，`torch-night` MUST 紧随 `block-light-room` 且先于 `materials-showcase`。完整顺序 MUST 为 `terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`workbench-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`torch-night`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`water-surface-slope`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`。既有显式更新、无窗口完整渲染链路和双阈值 MUST 保持不变；两张 far-horizon diagnostic controls MUST 继续不计入正式场景或 golden。golden 基线 SHALL 为 21 张：集成基线的既有 20 张（含 main 侧已补齐的 `workbench-crafting.png` 与经 F-05 再生的其余基线）加上本变更新增的 `torch-night.png`；本变更 MUST NOT 借机放宽任何阈值。
 
 #### Scenario: 完整场景顺序固定为 21 项
 
@@ -46,14 +46,14 @@
 - **GIVEN** 非更新模式运行 capture
 - **WHEN** 执行到 `torch-night`
 - **THEN** 该场景 MUST 与对应 golden 按既有双阈值比对，差异图规则与其它场景一致
-- **AND** golden 目录 MUST 存在 `torch-night.png`，正式 golden 总数 MUST 为 20 张
+- **AND** golden 目录 MUST 存在 `torch-night.png`，正式 golden 总数 MUST 为 21 张
 
 #### Scenario: 未受影响场景 golden 逐字节不变
 
-- **GIVEN** 本变更的显式基线更新只新增 `torch-night.png`
-- **WHEN** 运行 capture 并与变更前 golden 比对
-- **THEN** 除新增 `torch-night.png` 外，每个既有 golden 的 PNG 字节 MUST 保持不变
-- **AND** `workbench-crafting` 的 golden 缺口 MUST 保持既有状态，不得由本变更补齐
+- **GIVEN** 本变更的显式基线更新只新增 `torch-night.png`（集成期既有 golden 以 main 的 F-05 再生版本为基线）
+- **WHEN** 运行 capture 并与本变更合入前的 golden 比对
+- **THEN** 除新增 `torch-night.png` 外，本变更 MUST NOT 改动任何既有 golden 的内容
+- **AND** 集成后全部 21 张 golden 在 compare 模式下 MUST 全部通过既有双阈值
 
 ## ADDED Requirements
 

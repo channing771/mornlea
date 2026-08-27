@@ -22,6 +22,10 @@ type PlayerInput struct {
 	// 吃的是哪个栏位、哪件物品、进度到哪一 tick 全由服务端权威决定，
 	// 因而这里既不带栏位也不带物品编号。
 	Eating bool
+	// Sprinting 是持续疾跑输入位，协议 v28 起随玩家输入上行（wire 上紧跟
+	// `Eating` 之后）。判定门控见 sprint spec：地面+前移+非浸没+饥饿≥6 时
+	// 才在物理侧提升目标速度，无门控时该位不产生效果。
+	Sprinting bool
 }
 
 func (PlayerInput) clientMessage() {}

@@ -12,9 +12,13 @@ const hungerQuads = healthSegmentCount * 2
 // HungerOverlay 是服务端已确认的饥饿值。它是 render 本地值，由 app 从
 // Predictor 的已确认镜像转换；Confirmed 为 false 时表示尚未收到权威状态，
 // 渲染器不画任何饥饿元素——饥饿是权威值，客户端绝不显示预测或陈旧的数值。
+//
+// SaturationZero 为 true 时追加 1×scale 的垂直抖动偏移（B-12 仅呈现分支，
+// 不新增绘制管线，false 时像素逐字节一致）。
 type HungerOverlay struct {
-	Confirmed bool
-	Value     uint8
+	Confirmed      bool
+	Value          uint8
+	SaturationZero bool
 }
 
 // appendHungerBar 从快捷栏右边缘向左绘制一排鸡腿。
@@ -41,6 +45,9 @@ func appendHungerBar(
 		return
 	}
 	_, right, y, _, scale := statusBarBounds(open, width, height)
+	if hunger.SaturationZero {
+		y += scale
+	}
 	size := healthHeartSize * scale
 	gap := healthHeartGap * scale
 	// segmentX 返回自右向左第 segment 格的左边沿。

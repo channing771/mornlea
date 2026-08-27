@@ -7,9 +7,9 @@ import (
 )
 
 // TestTorchBlockIDsAppendAfterCrops 锁定火把方块的稳定编号：五种形态（落地 +
-// 四向墙面）必须紧随 CarrotStage7ID 连续追加，顺序冻结为 62=落地、63..66=
-// 墙 +X/−X/+Z/−Z，全部已注册且都有中文显示名。编号是协议稳定值：插入或重排
-// 会平移后续编号，破坏既有存档与线上字节。
+// 四向墙面）必须紧随 DoorUpper（门方块批次占 62..70）连续追加，顺序冻结为
+// 71=落地、72..75=墙 +X/−X/+Z/−Z，全部已注册且都有中文显示名。编号是协议
+// 稳定值：插入或重排会平移后续编号，破坏既有存档与线上字节。
 func TestTorchBlockIDsAppendAfterCrops(t *testing.T) {
 	ordered := []core.BlockID{
 		core.TorchStandingID,
@@ -19,8 +19,8 @@ func TestTorchBlockIDsAppendAfterCrops(t *testing.T) {
 		core.TorchWallNegZID,
 	}
 	for i, id := range ordered {
-		if want := core.CarrotStage7ID + 1 + core.BlockID(i); id != want {
-			t.Fatalf("火把形态 %d 的编号 = %d，想要紧随胡萝卜阶段 7 之后的 %d", i, id, want)
+		if want := core.DoorUpper + 1 + core.BlockID(i); id != want {
+			t.Fatalf("火把形态 %d 的编号 = %d，想要紧随 DoorUpper 之后的 %d", i, id, want)
 		}
 		if !core.RegisteredBlock(id) {
 			t.Fatalf("火把形态 %d 未注册", id)
@@ -35,15 +35,15 @@ func TestTorchBlockIDsAppendAfterCrops(t *testing.T) {
 			t.Fatalf("火把形态 %d 没有显示名", id)
 		}
 	}
-	if core.TorchStandingID != 62 {
-		t.Fatalf("TorchStandingID = %d，必须稳定为 62", core.TorchStandingID)
+	if core.TorchStandingID != 71 {
+		t.Fatalf("TorchStandingID = %d，必须稳定为 71", core.TorchStandingID)
 	}
 	if core.BlockIDMax != core.TorchWallNegZID+1 {
 		t.Fatalf("BlockIDMax = %d，必须紧随 TorchWallNegZID(%d)",
 			core.BlockIDMax, core.TorchWallNegZID)
 	}
-	if core.BlockIDMax != 67 {
-		t.Fatalf("BlockIDMax = %d，必须后移到 67", core.BlockIDMax)
+	if core.BlockIDMax != 76 {
+		t.Fatalf("BlockIDMax = %d，必须后移到 76", core.BlockIDMax)
 	}
 	// 形态编号两两不同：五种命中面必须解析为五个不同的方块。
 	seen := map[core.BlockID]bool{}

@@ -29,6 +29,9 @@ type Tunables struct {
 	FluidSinkSpeed      float32 `json:"fluidSinkSpeed"`
 	FluidAscendSpeed    float32 `json:"fluidAscendSpeed"`
 	FluidHorizontalDrag float32 `json:"fluidHorizontalDrag"`
+
+	// SprintSpeedMultiplier 是疾跑时水平目标速度的倍率（仅地面+前移+非浸没+饥饿≥6 时生效）。
+	SprintSpeedMultiplier float32 `json:"sprintSpeedMultiplier"`
 }
 
 // DefaultTunables 返回编译期默认参数。它是配置文件缺省时的取值，
@@ -45,10 +48,11 @@ func DefaultTunables() Tunables {
 		Gravity:            defaultGravity,
 		TerminalFallSpeed:  defaultTerminalFallSpeed,
 
-		FluidGravity:        defaultFluidGravity,
-		FluidSinkSpeed:      defaultFluidSinkSpeed,
-		FluidAscendSpeed:    defaultFluidAscendSpeed,
-		FluidHorizontalDrag: defaultFluidHorizontalDrag,
+		FluidGravity:          defaultFluidGravity,
+		FluidSinkSpeed:        defaultFluidSinkSpeed,
+		FluidAscendSpeed:      defaultFluidAscendSpeed,
+		FluidHorizontalDrag:   defaultFluidHorizontalDrag,
+		SprintSpeedMultiplier: defaultSprintSpeedMultiplier,
 	}
 }
 

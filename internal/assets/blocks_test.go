@@ -557,15 +557,15 @@ func TestTorchEmissionEntersMeshSnapshot(t *testing.T) {
 
 // TestTorchFormsUseDedicatedCutoutLayer 锁定火把的原创程序化材质契约：
 // 五种形态六面共用同一层（Rust mesher 的 model dispatcher 只读 face 0 的
-// material，六面同层才不会在某一面串味）、层号冻结为 58（terrain.wgsl 的
+// material，六面同层才不会在某一面串味）、层号冻结为 59（terrain.wgsl 的
 // torch_material 门控函数与 Rust 侧的 TORCH_MATERIAL 常量各自硬编码该值，
 // 本断言是 Go 侧的唯一机械钉子）、alpha 只取 0/255 的 cutout 语义、与既有
 // 全部层逐像素不同；默认材质包不覆盖该层——火把像素只来自程序化生成路径，
 // 不存在任何外部 PNG 依赖。
 func TestTorchFormsUseDedicatedCutoutLayer(t *testing.T) {
 	registry := assets.NewRegistry()
-	if got := assets.LayerTorch; got != 58 {
-		t.Fatalf("LayerTorch=%d，想要冻结值 58（Rust 着色器门控与常量都硬编码该层号）", got)
+	if got := assets.LayerTorch; got != 59 {
+		t.Fatalf("LayerTorch=%d，想要冻结值 59（Rust 着色器门控与常量都硬编码该层号）", got)
 	}
 	if mesh.PlantMaterial(assets.LayerTorch) {
 		t.Fatalf("火把材质层 %d 落进植物区间：会被渲染成交叉斜面而非模型几何", assets.LayerTorch)
@@ -679,7 +679,7 @@ func TestTorchTextureIsNarrowHandleWithWarmFlame(t *testing.T) {
 }
 
 // TestTorchFormsModelTags 锁定有限模型 tag 的生产登记：五种火把形态按方块
-// 编号顺序 62..66 → tag 1..5（1=落地、2..5=墙面 +X/−X/+Z/−Z），其余全部
+// 编号顺序 71..75 → tag 1..5（1=落地、2..5=墙面 +X/−X/+Z/−Z），其余全部
 // 已注册方块与越界编号保持默认 0；tag 随 registry 快照冻结送过 ABI 边界。
 func TestTorchFormsModelTags(t *testing.T) {
 	registry := assets.NewRegistry()
