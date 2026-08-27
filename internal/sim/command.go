@@ -39,6 +39,9 @@ const (
 	CommandTakeCraftingOutput
 	// CommandInteractDoor 请求与门交互（右键开合），目标由权威射线决定。
 	CommandInteractDoor
+	// CommandInteractBed 请求与床交互（右键入睡），目标由权威射线决定。目标
+	// 是床时按显示相位判定入睡并记录床尾重生点；CommandKind 只追加不重排。
+	CommandInteractBed
 )
 
 // LookDirection 把玩家 look 角转换为单位方向；yaw=0、pitch=0 朝向 -Z。

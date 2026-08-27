@@ -339,7 +339,7 @@ func phaseIsDay(phase uint16) bool {
 // 「已灼烧的累计从 0 重新开始」）。生命归零的个体由本 tick 稍后的
 // settleHostileDeaths 统一移除与掉落。
 func (engine *Engine) advanceHostileBurn(worldTime uint64) {
-	phase := core.DisplayDayPhase(worldTime, engine.dayPhaseOffset)
+	phase := core.DisplayDayPhase(worldTime, engine.DayPhaseOffset())
 	if !phaseIsDay(phase) {
 		engine.resetHostileBurnTimers()
 		return

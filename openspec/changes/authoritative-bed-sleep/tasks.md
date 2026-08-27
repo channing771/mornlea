@@ -22,10 +22,10 @@
 
 ## 4. 入睡、跳夜与个人重生点（sim 权威）
 
-- [ ] 4.1 失败测试：入睡判定（夜间相位经 `core.DisplayDayPhase(ticks, offset)` ∈ 13000..23000；白天右键 `CommandRejected` 不消耗；入睡记录床尾重生点）；移动输入或受击取消 sleeping
-- [ ] 4.2 失败测试：全员跳夜（全部活跃玩家 sleeping → tick 边界设 offset 使相位到 0 并清全部 sleeping；单机即一人；有玩家未入睡则相位不变；offset 覆盖旧值；`WorldTimeTicks` 推进不受影响——作物/流体随机 tick 节奏不变的对拍用例）
-- [ ] 4.3 失败测试：死亡重生（重生点两格仍为同属一床 → 回床尾格；床已破坏/半破坏 → 回出生锚点且 present 清 0；`beginReset` 路径复用）
-- [ ] 4.4 引擎 `dayPhaseOffset` 原子单值接入 `DisplayDayPhase` 全部消费点（本行与 A-04 敌怪判夜自动一致的对拍用例）；`gofmt -w internal/sim`、`go test ./internal/sim -race -count=1`；SPEC+QUALITY 双评审后提交 `feat: sleep through the night`
+- [x] 4.1 失败测试：入睡判定（夜间相位经 `core.DisplayDayPhase(ticks, offset)` ∈ 13000..23000；白天右键 `CommandRejected` 不消耗；入睡记录床尾重生点）；移动输入或受击取消 sleeping
+- [x] 4.2 失败测试：全员跳夜（全部活跃玩家 sleeping → tick 边界设 offset 使相位到 0 并清全部 sleeping；单机即一人；有玩家未入睡则相位不变；offset 覆盖旧值；`WorldTimeTicks` 推进不受影响——作物/流体随机 tick 节奏不变的对拍用例）
+- [x] 4.3 失败测试：死亡重生（重生点两格仍为同属一床 → 回床尾格；床已破坏/半破坏 → 回出生锚点且 present 清 0；`beginReset` 路径复用）
+- [x] 4.4 引擎 `dayPhaseOffset` 原子单值接入 `DisplayDayPhase` 全部消费点（本行与 A-04 敌怪判夜自动一致的对拍用例）；`gofmt -w internal/sim`、`go test ./internal/sim -race -count=1`；SPEC+QUALITY 双评审后提交 `feat: sleep through the night`
 
 ## 5. 持久化：玩家 schema v8 与 metadata v3
 

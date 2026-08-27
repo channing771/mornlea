@@ -168,6 +168,18 @@ type playerState struct {
 	// 它同样留在 playerState 而不是上移 actorState：伙伴不进食。
 	eating eatingState
 
+	// sleeping 是该玩家的入睡位（每玩家一个布尔位，跳夜结算与取消路径的唯一
+	// 权威状态）。置位只发生在夜间对床右键的命令路径；移动输入、受击与跳夜
+	// 完成都会清零。它不持久化：重连即清醒，且跳夜只看当期活跃玩家。
+	sleeping bool
+	// 以下三个字段是该玩家的个人重生点（内存态，持久化由存档批次承接）：
+	// `respawnPresent` 为真时表示 `respawnPos`/`respawnDim` 有效，死亡重生时
+	// 延迟校验「两格仍为同属一床」后回到床尾格，失效则回落世界出生锚点并清
+	// present 位。`respawnPos` 恒为床尾格（入睡判定的记录基准）。
+	respawnPresent bool
+	respawnPos     core.BlockPos
+	respawnDim     core.DimensionID
+
 	// crafting 是本玩家的瞬态权威合成网格（见 crafting.go）：个人 2×2、对
 	// 工作台完成权威射线交互后 3×3。它 MUST NOT 进入快照/哈希/存档——断线
 	// 持久化前与死亡清空前由生命周期路径先无损回收进背包。伙伴没有网格，
@@ -640,6 +652,9 @@ func (player *playerState) applyDamage(damage int32) {
 	// 因此都必须排在非正伤害的短路**之后**——摔落曲线在安全高度每次落地都会
 	// 算出负值，写在函数第一行会让"跳一下"打断进食。清空只丢进度，不碰背包。
 	player.eating = eatingState{}
+	// 真正挨一下会惊醒入睡的玩家（spec「受到伤害 SHALL 取消其入睡状态」）；
+	// 同样排在非正伤害短路之后。重生点刻意保留：受击只打断睡觉，不否定床。
+	player.sleeping = false
 	if damage >= int32(player.health) {
 		player.health = 0
 		return
@@ -760,6 +775,9 @@ func (player *playerState) beginReset() {
 	// 死亡与位置跳变都经这里，进食进度随之作废：重生后站在出生点继续吃完
 	// 死前那半块面包没有任何语义，与 `mining` 上一行同理。
 	player.eating = eatingState{}
+	// 重生一律清醒：入睡位不跨「待重生」窗口保留，否则重生即睡会让下一次
+	// 全员跳夜判定混入一个不在世界里的玩家。
+	player.sleeping = false
 	player.reset = false
 	player.inventoryDirty = true
 	player.nextCandidate = 0

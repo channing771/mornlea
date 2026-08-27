@@ -168,6 +168,12 @@ func (engine *Engine) Step() TickResult {
 			player.eatingHeld = command.Eating
 			player.yaw = yaw
 			player.pitch = command.Pitch
+			// 移动分量惊醒入睡玩家（spec「发出移动输入 SHALL 取消入睡」）：
+			// 只认 MoveX/MoveZ/Jump 这些真正的移动意图，转头与疾跑位不清入睡；
+			// 非法输入路径保持中立——被拒绝的输入不构成「发出移动输入」。
+			if command.MoveX != 0 || command.MoveZ != 0 || command.Jump {
+				player.sleeping = false
+			}
 		case CommandSelectHotbar:
 			if session.player == nil || session.player.lifecycle != PlayerActive {
 				result.Rejected = append(result.Rejected, Rejection{
@@ -255,6 +261,26 @@ func (engine *Engine) Step() TickResult {
 			}
 			interactions = append(interactions, command)
 		case CommandInteractDoor:
+			if session.player == nil || session.player.lifecycle != PlayerActive {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectPlayerNotReady,
+				})
+				continue
+			}
+			if !validPlayerLook(command.Yaw, command.Pitch) {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectInvalidInput,
+				})
+				continue
+			}
+			interactions = append(interactions, command)
+		case CommandInteractBed:
+			// 与门同形的两段式：命令阶段只做玩家与朝向的廉价校验，真正的射线
+			// 与入睡判定推迟到 interactions 循环（阶段顺序契约）。
 			if session.player == nil || session.player.lifecycle != PlayerActive {
 				result.Rejected = append(result.Rejected, Rejection{
 					Session:  command.Session,
@@ -478,8 +504,19 @@ func (engine *Engine) Step() TickResult {
 					Reason:   reason,
 				})
 			}
+		case CommandInteractBed:
+			if reason, rejected := engine.executeInteractBed(command); rejected {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   reason,
+				})
+			}
 		}
 	}
+	// 跳夜结算：固定在玩家命令全部结算之后（同 tick 入睡即刻参与全员判定），
+	// O(activePlayers)，见 settleSleepThroughNight 的边界说明。
+	engine.settleSleepThroughNight()
 	engine.advanceDrops(pending)
 	engine.advanceFurnaces(pending)
 	engine.notifyStepPhase(phaseFluidAdvance)
