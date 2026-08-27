@@ -545,10 +545,6 @@ func (engine *Engine) completeMining(
 	harvestable bool,
 	pending map[core.ChunkKey]*pendingChunkChanges,
 ) (RejectReason, bool) {
-	item, ok := core.BlockDrop(block)
-	if !ok {
-		return RejectProtectedBlock, true
-	}
 	dimension := engine.dimensions[dimensionID]
 	if dimension == nil {
 		return RejectChunkNotReady, true
@@ -621,6 +617,135 @@ func (engine *Engine) completeMining(
 		record.Chunk.DeactivateChest(chestSlot)
 		record.Chunk.CommitDropBatch(next)
 		return 0, false
+	}
+
+	// 马铃薯与胡萝卜的收获分支：成熟产 1..4（独立 salt），马铃薯额外 2% 毒土豆；
+	// 未成熟各产 1 自身。全部经 PrepareDropBatch 原子预演，容量不足整体回滚，与
+	// 熔炉/箱子/小麦同形；harvestable 为假时仅移除方块不产生掉落。
+	if block == core.PotatoStage7ID {
+		if !harvestable {
+			_, changed, err := dimension.SetBlock(target, core.AirID)
+			if err != nil {
+				return mapSetBlockError(err), true
+			}
+			if !changed {
+				return RejectNoTarget, true
+			}
+			engine.recordChange(dimensionID, target, core.AirID, pending)
+			return 0, false
+		}
+		n := cropYieldRollsPotato(engine.seed, engine.tick.Load(), dimensionID, target)
+		var stacks [2]core.ItemStack
+		stacks[0] = core.ItemStack{Item: core.ItemPotato, Count: n}
+		stackCount := 1
+		if poisonRoll(engine.seed, engine.tick.Load(), dimensionID, target) {
+			stacks[1] = core.ItemStack{Item: core.ItemPoisonousPotato, Count: 1}
+			stackCount = 2
+		}
+		next, capacityOK := record.Chunk.PrepareDropBatch(stacks[:stackCount], blockIndex, engine.tunables.DropPickupDelayTicks)
+		if !capacityOK {
+			return RejectDropCapacity, true
+		}
+		_, changed, err := dimension.SetBlock(target, core.AirID)
+		if err != nil {
+			return mapSetBlockError(err), true
+		}
+		if !changed {
+			return RejectNoTarget, true
+		}
+		engine.recordChange(dimensionID, target, core.AirID, pending)
+		record.Chunk.CommitDropBatch(next)
+		return 0, false
+	}
+	if block == core.CarrotStage7ID {
+		if !harvestable {
+			_, changed, err := dimension.SetBlock(target, core.AirID)
+			if err != nil {
+				return mapSetBlockError(err), true
+			}
+			if !changed {
+				return RejectNoTarget, true
+			}
+			engine.recordChange(dimensionID, target, core.AirID, pending)
+			return 0, false
+		}
+		n := cropYieldRollsCarrot(engine.seed, engine.tick.Load(), dimensionID, target)
+		stacks := [1]core.ItemStack{{Item: core.ItemCarrot, Count: n}}
+		next, capacityOK := record.Chunk.PrepareDropBatch(stacks[:], blockIndex, engine.tunables.DropPickupDelayTicks)
+		if !capacityOK {
+			return RejectDropCapacity, true
+		}
+		_, changed, err := dimension.SetBlock(target, core.AirID)
+		if err != nil {
+			return mapSetBlockError(err), true
+		}
+		if !changed {
+			return RejectNoTarget, true
+		}
+		engine.recordChange(dimensionID, target, core.AirID, pending)
+		record.Chunk.CommitDropBatch(next)
+		return 0, false
+	}
+	if block >= core.PotatoStage0ID && block <= core.PotatoStage6ID {
+		if !harvestable {
+			_, changed, err := dimension.SetBlock(target, core.AirID)
+			if err != nil {
+				return mapSetBlockError(err), true
+			}
+			if !changed {
+				return RejectNoTarget, true
+			}
+			engine.recordChange(dimensionID, target, core.AirID, pending)
+			return 0, false
+		}
+		stacks := [1]core.ItemStack{{Item: core.ItemPotato, Count: 1}}
+		next, capacityOK := record.Chunk.PrepareDropBatch(stacks[:], blockIndex, engine.tunables.DropPickupDelayTicks)
+		if !capacityOK {
+			return RejectDropCapacity, true
+		}
+		_, changed, err := dimension.SetBlock(target, core.AirID)
+		if err != nil {
+			return mapSetBlockError(err), true
+		}
+		if !changed {
+			return RejectNoTarget, true
+		}
+		engine.recordChange(dimensionID, target, core.AirID, pending)
+		record.Chunk.CommitDropBatch(next)
+		return 0, false
+	}
+	if block >= core.CarrotStage0ID && block <= core.CarrotStage6ID {
+		if !harvestable {
+			_, changed, err := dimension.SetBlock(target, core.AirID)
+			if err != nil {
+				return mapSetBlockError(err), true
+			}
+			if !changed {
+				return RejectNoTarget, true
+			}
+			engine.recordChange(dimensionID, target, core.AirID, pending)
+			return 0, false
+		}
+		stacks := [1]core.ItemStack{{Item: core.ItemCarrot, Count: 1}}
+		next, capacityOK := record.Chunk.PrepareDropBatch(stacks[:], blockIndex, engine.tunables.DropPickupDelayTicks)
+		if !capacityOK {
+			return RejectDropCapacity, true
+		}
+		_, changed, err := dimension.SetBlock(target, core.AirID)
+		if err != nil {
+			return mapSetBlockError(err), true
+		}
+		if !changed {
+			return RejectNoTarget, true
+		}
+		engine.recordChange(dimensionID, target, core.AirID, pending)
+		record.Chunk.CommitDropBatch(next)
+		return 0, false
+	}
+
+	item, ok := core.BlockDrop(block)
+	if !ok {
+		return RejectProtectedBlock, true
 	}
 
 	// 成熟小麦是全仓唯一的多产物方块：1–3 个小麦加 1–3 颗种子，具体数量由

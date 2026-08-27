@@ -1262,3 +1262,256 @@ func TestMiningRuleOrdinaryItemsAreNotBareHand(t *testing.T) {
 		}
 	}
 }
+
+func TestHarvestPotatoMature1to4(t *testing.T) {
+	engine, sessions, targets := readyMiningPlayers(t, 1)
+	target := targets[0]
+	engine.SetBlockForTest(target, core.PotatoStage7ID)
+	tickBefore := engine.tick.Load()
+	seed := engine.SeedForTest()
+	result := advanceMiningOnce(engine)
+	if len(result.Rejected) != 0 {
+		t.Fatalf("PotatoStage7 mature harvest rejected=%+v", result.Rejected)
+	}
+	record := miningTargetRecord(t, engine, target)
+	x, _, z := target.Local()
+	if got := record.Chunk.BlockAt(x, target.Y, z); got != core.AirID {
+		t.Fatalf("PotatoStage7 harvest后方块=%d, want Air", got)
+	}
+	drops := miningDropTotals(record.Chunk)
+	n := drops[core.ItemPotato]
+	if n < 1 || n > 4 {
+		t.Fatalf("PotatoStage7 mature count=%d not in [1,4] drops=%+v", n, drops)
+	}
+	expected := cropYieldRollsPotato(seed, tickBefore, core.Overworld, target)
+	if n != expected {
+		t.Fatalf("Potato yield %d != expected hash %d seed=%d tick=%d pos=%v", n, expected, seed, tickBefore, target)
+	}
+	// 重放一致
+	a := cropYieldRollsPotato(seed, tickBefore, core.Overworld, target)
+	b := cropYieldRollsPotato(seed, tickBefore, core.Overworld, target)
+	if a != b {
+		t.Fatalf("cropYieldRollsPotato not deterministic %d vs %d", a, b)
+	}
+	// 未成熟应只掉1个自身
+	engine2, _, targets2 := readyMiningPlayers(t, 1)
+	target2 := targets2[0]
+	engine2.SetBlockForTest(target2, core.PotatoStage3ID)
+	result2 := advanceMiningOnce(engine2)
+	if len(result2.Rejected) != 0 {
+		t.Fatalf("PotatoStage3 harvest rejected=%+v", result2.Rejected)
+	}
+	drops2 := miningDropTotals(miningTargetRecord(t, engine2, target2).Chunk)
+	if drops2[core.ItemPotato] != 1 || len(drops2) != 1 {
+		t.Fatalf("PotatoStage3 unripe drops=%+v want 1 potato", drops2)
+	}
+	_ = sessions
+}
+
+func TestHarvestCarrotMature1to4(t *testing.T) {
+	engine, _, targets := readyMiningPlayers(t, 1)
+	target := targets[0]
+	engine.SetBlockForTest(target, core.CarrotStage7ID)
+	tickBefore := engine.tick.Load()
+	seed := engine.SeedForTest()
+	result := advanceMiningOnce(engine)
+	if len(result.Rejected) != 0 {
+		t.Fatalf("CarrotStage7 mature harvest rejected=%+v", result.Rejected)
+	}
+	record := miningTargetRecord(t, engine, target)
+	x, _, z := target.Local()
+	if got := record.Chunk.BlockAt(x, target.Y, z); got != core.AirID {
+		t.Fatalf("CarrotStage7 harvest后方块=%d, want Air", got)
+	}
+	drops := miningDropTotals(record.Chunk)
+	n := drops[core.ItemCarrot]
+	if n < 1 || n > 4 {
+		t.Fatalf("CarrotStage7 mature count=%d not in [1,4] drops=%+v", n, drops)
+	}
+	expected := cropYieldRollsCarrot(seed, tickBefore, core.Overworld, target)
+	if n != expected {
+		t.Fatalf("Carrot yield %d != expected %d seed=%d tick=%d", n, expected, seed, tickBefore)
+	}
+	a := cropYieldRollsCarrot(seed, tickBefore, core.Overworld, target)
+	b := cropYieldRollsCarrot(seed, tickBefore, core.Overworld, target)
+	if a != b {
+		t.Fatalf("cropYieldRollsCarrot not deterministic")
+	}
+	// 未成熟
+	engine2, _, targets2 := readyMiningPlayers(t, 1)
+	target2 := targets2[0]
+	engine2.SetBlockForTest(target2, core.CarrotStage3ID)
+	result2 := advanceMiningOnce(engine2)
+	if len(result2.Rejected) != 0 {
+		t.Fatalf("CarrotStage3 harvest rejected=%+v", result2.Rejected)
+	}
+	drops2 := miningDropTotals(miningTargetRecord(t, engine2, target2).Chunk)
+	if drops2[core.ItemCarrot] != 1 || len(drops2) != 1 {
+		t.Fatalf("CarrotStage3 unripe drops=%+v want 1 carrot", drops2)
+	}
+}
+
+func TestPoisonousPotato2Percent(t *testing.T) {
+	// 枚举 200 个 pos，统计 poisonRoll 为真者 ≈2%，且同一输入重放一致
+	trues := 0
+	total := 0
+	for x := int32(0); x < 200; x++ {
+		pos := core.BlockPos{X: x, Y: 2, Z: 5}
+		a := poisonRoll(42, 100, core.Overworld, pos)
+		b := poisonRoll(42, 100, core.Overworld, pos)
+		if a != b {
+			t.Fatalf("poisonRoll not deterministic at %v %v vs %v", pos, a, b)
+		}
+		if a {
+			trues++
+		}
+		total++
+	}
+	if trues == 0 || trues == total {
+		t.Fatalf("poisonRoll degenerated trues=%d total=%d", trues, total)
+	}
+	ratio := float64(trues) / float64(total)
+	if ratio < 0.005 || ratio > 0.05 {
+		t.Fatalf("poisonRoll ratio %.3f not ~0.02 trues=%d total=%d", ratio, trues, total)
+	}
+	// 集成：对成熟马铃薯的实际收获验证毒土豆与收获数量一致
+	// 在同一区块内寻找 poison 为真与为假的坐标，避免跨区块未就绪
+	engine, _, targets := readyMiningPlayers(t, 1)
+	session := SessionID(1)
+	tickBefore := engine.tick.Load()
+	seed := engine.SeedForTest()
+	var truePos, falsePos *core.BlockPos
+	for x := int32(0); x < 16; x++ {
+		for z := int32(0); z < 16; z++ {
+			pos := core.BlockPos{X: x, Y: 1, Z: z}
+			if pos.Chunk() != targets[0].Chunk() {
+				continue
+			}
+			isPoison := poisonRoll(seed, tickBefore, core.Overworld, pos)
+			if isPoison && truePos == nil {
+				cp := pos
+				truePos = &cp
+			}
+			if !isPoison && falsePos == nil {
+				cp := pos
+				falsePos = &cp
+			}
+			if truePos != nil && falsePos != nil {
+				break
+			}
+		}
+		if truePos != nil && falsePos != nil {
+			break
+		}
+	}
+	if truePos == nil || falsePos == nil {
+		t.Fatalf("failed to find true/false poison pos in chunk seed=%d tick=%d", seed, tickBefore)
+	}
+	// 真值位置收获应有毒土豆
+	target := *truePos
+	player := engine.sessions[session].player
+	player.state.Position = mgl32.Vec3{float32(target.X) + 0.5, 1, float32(target.Z) + 3.5}
+	player.yaw = 0
+	player.pitch = miningTestPitch
+	engine.SetBlockForTest(target, core.PotatoStage7ID)
+	wantPoison := poisonRoll(seed, tickBefore, core.Overworld, target)
+	result := advanceMiningOnce(engine)
+	if len(result.Rejected) != 0 {
+		t.Fatalf("potato mature at truePos rejected=%+v", result.Rejected)
+	}
+	drops := miningDropTotals(miningTargetRecord(t, engine, target).Chunk)
+	if wantPoison {
+		if drops[core.ItemPoisonousPotato] != 1 {
+			t.Fatalf("expected poisonous at %v drops=%+v", target, drops)
+		}
+	} else {
+		if drops[core.ItemPoisonousPotato] != 0 {
+			t.Fatalf("unexpected poisonous at %v drops=%+v", target, drops)
+		}
+	}
+	// 假值位置：新建引擎保持同一 tick/seed 以重放一致
+	engine2, _, targets2 := readyMiningPlayers(t, 1)
+	// 调整 tick 到与第一个引擎相同的 tickBefore（readyMiningPlayers 每次 tick 可能相同，但显式对齐）
+	engine2.tick.Store(tickBefore)
+	seed2 := engine2.SeedForTest()
+	target2 := *falsePos
+	if target2.Chunk() != targets2[0].Chunk() {
+		t.Fatalf("falsePos chunk mismatch")
+	}
+	player2 := engine2.sessions[session].player
+	player2.state.Position = mgl32.Vec3{float32(target2.X) + 0.5, 1, float32(target2.Z) + 3.5}
+	player2.yaw = 0
+	player2.pitch = miningTestPitch
+	engine2.SetBlockForTest(target2, core.PotatoStage7ID)
+	tickBefore2 := engine2.tick.Load()
+	wantPoison2 := poisonRoll(seed2, tickBefore2, core.Overworld, target2)
+	result2 := advanceMiningOnce(engine2)
+	if len(result2.Rejected) != 0 {
+		t.Fatalf("potato mature at falsePos rejected=%+v", result2.Rejected)
+	}
+	drops2 := miningDropTotals(miningTargetRecord(t, engine2, target2).Chunk)
+	if wantPoison2 && drops2[core.ItemPoisonousPotato] != 1 {
+		t.Fatalf("expected poisonous at falsePos but got %v poison=%v", drops2, wantPoison2)
+	}
+	if !wantPoison2 && drops2[core.ItemPoisonousPotato] != 0 {
+		t.Fatalf("unexpected poisonous at falsePos %v", drops2)
+	}
+}
+
+func TestHarvestPotatoMatureCapacityIsAtomic(t *testing.T) {
+	engine, _, targets := readyMiningPlayers(t, 1)
+	target := targets[0]
+	engine.SetBlockForTest(target, core.PotatoStage7ID)
+	fillMiningDrops(engine, target)
+	record := miningTargetRecord(t, engine, target)
+	beforeHash := record.Chunk.Hash()
+	beforeDrops := record.Chunk.DropsHash()
+	beforeRevision := record.Revision
+	result := advanceMiningOnce(engine)
+	if len(result.Rejected) != 1 || result.Rejected[0].Reason != RejectDropCapacity {
+		t.Fatalf("potato mature capacity reject=%+v want DropCapacity", result.Rejected)
+	}
+	if got := record.Chunk.Hash(); got != beforeHash || record.Revision != beforeRevision {
+		t.Fatalf("potato capacity failure changed block hash=%x/%x rev=%d/%d", got, beforeHash, record.Revision, beforeRevision)
+	}
+	if got := record.Chunk.DropsHash(); got != beforeDrops {
+		t.Fatalf("potato capacity failure changed drops %x vs %x", got, beforeDrops)
+	}
+	x, _, z := target.Local()
+	if got := record.Chunk.BlockAt(x, target.Y, z); got != core.PotatoStage7ID {
+		t.Fatalf("potato capacity failure removed block %d", got)
+	}
+}
+
+func TestHarvestCarrotMatureCapacityIsAtomic(t *testing.T) {
+	engine, _, targets := readyMiningPlayers(t, 1)
+	target := targets[0]
+	engine.SetBlockForTest(target, core.CarrotStage7ID)
+	fillMiningDrops(engine, target)
+	record := miningTargetRecord(t, engine, target)
+	beforeHash := record.Chunk.Hash()
+	beforeRevision := record.Revision
+	result := advanceMiningOnce(engine)
+	if len(result.Rejected) != 1 || result.Rejected[0].Reason != RejectDropCapacity {
+		t.Fatalf("carrot mature capacity reject=%+v", result.Rejected)
+	}
+	if got := record.Chunk.Hash(); got != beforeHash || record.Revision != beforeRevision {
+		t.Fatalf("carrot capacity changed hash")
+	}
+}
+
+func TestHarvestPotatoUnripeCapacityIsAtomic(t *testing.T) {
+	engine, _, targets := readyMiningPlayers(t, 1)
+	target := targets[0]
+	engine.SetBlockForTest(target, core.PotatoStage2ID)
+	fillMiningDrops(engine, target)
+	record := miningTargetRecord(t, engine, target)
+	beforeHash := record.Chunk.Hash()
+	result := advanceMiningOnce(engine)
+	if len(result.Rejected) != 1 || result.Rejected[0].Reason != RejectDropCapacity {
+		t.Fatalf("potato unripe capacity reject=%+v", result.Rejected)
+	}
+	if got := record.Chunk.Hash(); got != beforeHash {
+		t.Fatalf("unripe capacity changed hash")
+	}
+}
