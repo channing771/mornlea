@@ -514,6 +514,38 @@ var captureScenes = []captureScene{
 		},
 	},
 	{
+		// torch-night 是火把的无窗口夜景 capture 场景：固定夜晚（18000 tick）
+		// 的全封闭石室，室内唯一光源是火把的方块光（等级 14，与发光方块同
+		// 一传播路径）。画面同时呈现落地形态与两面墙上的墙面形态（左右墙
+		// 各一朵 ±X 形态）；近处地板被照亮、远角沿距离衰减变暗，火把本体
+		// 是窄柄加暖色火芯的 cutout 精灵（边缘透明，透过可见背景）。
+		//
+		// 排序约束：紧随 block-light-room、先于 materials-showcase（spec
+		// visual-verification「完整场景顺序固定为 21 项」），由
+		// TestTorchNightCaptureScenePosition 兜底。
+		Name:         "torch-night",
+		WarmupFrames: 8,
+		Prepare:      prepareTorchNightRoom,
+		Apply: func(app *application) error {
+			app.worldTimeTicks = 18000
+			app.camera.Pos = mgl32.Vec3{0.5, 2.8, 0.5}
+			app.camera.Yaw = 0
+			app.camera.Pitch = 0
+			app.inventoryOpen = false
+			if app.panel != nil {
+				app.panel.visible = false
+			}
+			if err := app.inventory.Apply(network.InventoryState{Inventory: core.Inventory{}}); err != nil {
+				return fmt.Errorf("重置物品栏: %w", err)
+			}
+			app.remotePlayers.Reset()
+			app.furnace.Reset()
+			app.chest.Reset()
+			app.crafting.Reset()
+			return nil
+		},
+	},
+	{
 		Name:         "materials-showcase",
 		WarmupFrames: 8,
 		Prepare:      prepareMaterialsShowcase,

@@ -24,7 +24,7 @@ func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 	wantNames := []string{
 		"terrain-noon", "hud-hotbar-health", "hud-survival-feedback", "avatar-nametag", "inventory-crafting",
 		"workbench-crafting", "chest-container", "furnace-container",
-		"debug-panel", "skylight-tunnel", "block-light-room", "materials-showcase",
+		"debug-panel", "skylight-tunnel", "block-light-room", "torch-night", "materials-showcase",
 		"target-block-feedback", "oak-grove", "ai-companion",
 		"water-surface-slope", "main-menu", "settings-menu", "far-horizon", "water-underwater",
 	}
@@ -94,5 +94,29 @@ func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 	}
 	if len(uniqueRunes) > 32 {
 		t.Fatalf("ai-companion 独特 rune=%d，想要不超过 32", len(uniqueRunes))
+	}
+}
+
+// TestTorchNightCaptureScenePosition 锁住 torch-night 的表内位置：紧随
+// block-light-room 且先于 materials-showcase（spec visual-verification
+// 「完整场景顺序固定为 21 项」）。
+func TestTorchNightCaptureScenePosition(t *testing.T) {
+	indexOf := func(name string) int {
+		for index, scene := range captureScenes {
+			if scene.Name == name {
+				return index
+			}
+		}
+		t.Fatalf("场景 %q 不存在", name)
+		return -1
+	}
+	blockLight := indexOf("block-light-room")
+	torchNight := indexOf("torch-night")
+	materials := indexOf("materials-showcase")
+	if torchNight != blockLight+1 {
+		t.Fatalf("torch-night=%d 必须紧随 block-light-room=%d", torchNight, blockLight)
+	}
+	if torchNight >= materials {
+		t.Fatalf("torch-night=%d 必须在 materials-showcase=%d 之前", torchNight, materials)
 	}
 }

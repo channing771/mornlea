@@ -238,6 +238,40 @@ func waterTexture() []byte {
 	return px
 }
 
+// torchTexture 生成火把五种形态共用的 cutout 材质：竖直窄木柄（中间两列、
+// 自图像底部向上）＋顶部暖色火芯（外橙内黄），其余像素 alpha=0。
+//
+// 两处几何约束决定了像素位置：
+//   - 世界坐标锁定 UV 下纹理第 0 行对应方块顶面、第 15 行对应底面，木柄
+//     因此自底（第 15 行）向上生长，火芯落在图像顶部；
+//   - 墙面形态的斜板顶缘只抬到 (13+1)/16，纹理前两行被几何裁掉，火芯必须
+//     全部画在第 2 行及以下，四种墙面火把才看得到火焰。
+//
+// alpha 只取 0/255（terrain pass 的 `c.a < 0.5` discard），mip 链由
+// `downsampleCutout` 保住窄柄覆盖率——守卫见 TestCutoutLayersUseBinaryAlpha
+// 与 TestTorchFormsUseDedicatedCutoutLayer。
+func torchTexture() []byte {
+	px := make([]byte, texSize*texSize*4)
+	// 木柄：第 7..15 行 × 第 7..8 列，棕色底带纵向木纹噪声。
+	for y := 7; y < texSize; y++ {
+		for _, x := range [...]int{7, 8} {
+			n := int32(hash2(uint32(x), uint32(y), 0x70C1)%17) - 8
+			paint(px, x, y, rgb{
+				R: clamp8(118 + n),
+				G: clamp8(82 + n),
+				B: clamp8(46 + n),
+			})
+		}
+	}
+	// 火芯：第 2..5 行的暖色火苗——外圈橙、核心黄，第 6 行是暗色余烬收口。
+	fill(px, 7, 2, 9, 3, rgb{R: 232, G: 120, B: 30})
+	fill(px, 6, 3, 10, 5, rgb{R: 232, G: 120, B: 30})
+	fill(px, 7, 3, 9, 4, rgb{R: 250, G: 170, B: 60})
+	fill(px, 7, 4, 9, 6, rgb{R: 255, G: 220, B: 110})
+	fill(px, 7, 6, 9, 7, rgb{R: 128, G: 52, B: 28})
+	return px
+}
+
 func cobblestoneTexture() []byte {
 	px := noisyTexture(rgb{R: 116, G: 118, B: 120}, 10, 0xC0B1)
 	seam := rgb{R: 70, G: 72, B: 74}
