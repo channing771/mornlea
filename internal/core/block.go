@@ -65,7 +65,7 @@ const (
 	WaterLevel5ID
 	WaterLevel6ID
 	WaterLevel7ID
-	// 以下 10 个是农业方块编号，只能追加在 WaterLevel7ID 之后：方块 ID 是协议
+	// 以下 26 个是农业方块编号，只能追加在 WaterLevel7ID 之后：方块 ID 是协议
 	// 稳定值，重排会破坏既有存档与线上字节。
 	//
 	// FarmlandDryID / FarmlandWetID 是锄头翻地得到的耕地，只有干湿两态：湿润
@@ -86,6 +86,22 @@ const (
 	WheatStage5ID
 	WheatStage6ID
 	WheatStage7ID
+	PotatoStage0ID
+	PotatoStage1ID
+	PotatoStage2ID
+	PotatoStage3ID
+	PotatoStage4ID
+	PotatoStage5ID
+	PotatoStage6ID
+	PotatoStage7ID
+	CarrotStage0ID
+	CarrotStage1ID
+	CarrotStage2ID
+	CarrotStage3ID
+	CarrotStage4ID
+	CarrotStage5ID
+	CarrotStage6ID
+	CarrotStage7ID
 	// BlockIDMax 是合法方块编号的独占上界（最后一个合法 BlockID + 1），本身不是
 	// 方块枚举成员，与物品侧的 ItemIDMax 同形。它供哨兵与穷举测试以
 	// 「id < BlockIDMax」表达「全部已注册方块」，替代「某个具体编号恰为枚举末项」
