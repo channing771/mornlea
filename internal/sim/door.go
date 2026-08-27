@@ -37,16 +37,6 @@ func doorLowerID(dir int, open bool) core.BlockID {
 	}
 }
 
-// isDoorOpen 报告下半门是否处于开启态。
-func isDoorOpen(id core.BlockID) bool {
-	switch id {
-	case core.DoorLowerSouthOpen, core.DoorLowerWestOpen, core.DoorLowerNorthOpen, core.DoorLowerEastOpen:
-		return true
-	default:
-		return false
-	}
-}
-
 // yawToDoorDir 把 yaw 映射到门的四向编码：南0、西1、北2、东3。
 func yawToDoorDir(yaw float32) int {
 	normalized := math.Mod(float64(yaw)+math.Pi, 2*math.Pi)
@@ -67,15 +57,11 @@ func yawToDoorDir(yaw float32) int {
 	return 3
 }
 
-// isSolidSupport 报告方块是否可作为门的下方支撑（Opaque/Farmland 语义的最小实现）。
+// isSolidSupport 报告方块是否可作为门的下方支撑（复用 Opaque 权威语义）。
 func isSolidSupport(id core.BlockID) bool {
-	if id == core.AirID || core.IsFluid(id) || core.IsCrop(id) || core.IsDoor(id) {
-		return false
-	}
-	if id == core.GlassID || id == core.LeavesID {
-		return false
-	}
-	return core.RegisteredBlock(id)
+	// Farmland 干/湿均为实心支撑（与 assets.Registry.Opaque 一致，Opaque 对耕地为 true）。
+	// sim 不直接依赖 assets 以避免循环，此处显式复用 Opaque 判定式并以 Farmland 正例断言守护。
+	return core.IsFarmland(id) || (core.RegisteredBlock(id) && id != core.AirID && id != core.GlassID && id != core.LeavesID && !core.IsFluid(id) && !core.IsCrop(id) && !core.IsDoor(id))
 }
 
 // tryPlaceDoor 尝试在 lower 放置下半门并在 upper 放置上半。
@@ -165,7 +151,7 @@ func handleInteractDoor(engine *Engine, dimensionID core.DimensionID, pos core.B
 	if dir < 0 {
 		return false
 	}
-	open := isDoorOpen(lowerID)
+	open := core.IsDoorOpen(lowerID)
 	newLower := doorLowerID(dir, !open)
 	_, _, err := dimension.SetBlock(lowerPos, newLower)
 	if err != nil {

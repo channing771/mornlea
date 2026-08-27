@@ -155,11 +155,7 @@ func BlockCollisionBoxes(id core.BlockID, loaded bool) CollisionBoxSet {
 		}
 		const thickness = float32(3.0 / 16.0)
 		dir := core.DoorDir(id)
-		isOpen := false
-		switch id {
-		case core.DoorLowerSouthOpen, core.DoorLowerWestOpen, core.DoorLowerNorthOpen, core.DoorLowerEastOpen:
-			isOpen = true
-		}
+		isOpen := core.IsDoorOpen(id)
 		var min, max mgl32.Vec3
 		if !isOpen {
 			// 关闭：贴方向边

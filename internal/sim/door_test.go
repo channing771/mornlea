@@ -284,6 +284,22 @@ func TestDoorPlaceSupportEnumerations(t *testing.T) {
 			t.Fatalf("below %d should be rejected as non-solid support", belowID)
 		}
 	}
+	// Farmland 干/湿均为实心支撑（isSolidSupport 显式复用 Opaque 语义的正例守护）。
+	for _, belowID := range []core.BlockID{core.FarmlandDryID, core.FarmlandWetID} {
+		if !isSolidSupport(belowID) {
+			t.Fatalf("below %d should be solid support (Farmland)", belowID)
+		}
+		engine, _, _ := doorTestReadyEngine(t, hotbarWithDoor(1))
+		below := core.BlockPos{X: 2, Y: 1, Z: 4}
+		engine.SetBlockForTest(below, belowID)
+		engine.SetBlockForTest(core.BlockPos{X: 2, Y: 2, Z: 4}, core.AirID)
+		engine.SetBlockForTest(core.BlockPos{X: 2, Y: 3, Z: 4}, core.AirID)
+		pending := make(map[core.ChunkKey]*pendingChunkChanges)
+		_, rejected := engine.tryPlaceDoor(core.Overworld, core.BlockPos{X: 2, Y: 2, Z: 4}, 0, pending)
+		if rejected {
+			t.Fatalf("below Farmland %d should be accepted as solid support", belowID)
+		}
+	}
 }
 
 func TestDoorInteractViaRaycast(t *testing.T) {
