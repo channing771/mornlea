@@ -8,7 +8,7 @@
 
 | 单元 | 所有权 | 职责 |
 | --- | --- | --- |
-| 权威暂停门 | `internal/server/server.go` | 原子布尔门 + 导出 `Pause()`/`Resume()`；`RunTicks` 每个 ticker 到期先读门，置位时跳过 `step(scheduled)`（整个 tick 不存在：世界时间、随机 tick、作物、流体、实体、持久化调度全部停走）。消息接收 goroutine 与既有缓冲不受影响 |
+| 权威暂停门 | `internal/server/server.go` + `host.go` | 原子布尔门 + 导出 `Pause()`/`Resume()`；`RunTicks` 每个 ticker 到期先读门，置位时跳过 `step(scheduled)`（整个 tick 不存在：世界时间、随机 tick、作物、流体、实体、持久化调度全部停走）。消息接收 goroutine 与既有缓冲不受影响。单机交互路径（主菜单延迟装配与直接本地装配）持有的权威世界是 `server.Host`，故 `Host` 提供 `Pause()`/`Resume()` 幂等直通转发到内持 `Server` 同一门——这是门的唯一宿主暴露面，不另开设其他取回通道 |
 | 暂停相位机 | `cmd/mornlea/app_menu.go` + 新增 `app_pause*.go` | `menuPhasePaused` 相位；按钮 id 常量沿用主菜单编号约定（下一空闲号）；防重入标记仿 `starting` |
 | Esc 栈扩展 | `cmd/mornlea/interactive.go` 仅一处 switch 分支 | 游戏相位默认档从「仅释放光标」升级为「打开暂停菜单」（本身必须释放光标）；暂停相位下 Esc = 返回游戏。优先级保持在聊天/背包/egui 面板之后——暂停期不新开聊天，打开动作只在默认档触发 |
 | 会话拆链 | 复用既有 closeClientSession 路径 | 「退回主菜单」= 先安全恢复/关闭会话（等价窗口关闭路径），再复位到 `menuPhaseMenu`，「进入游戏」可重新装配 |
@@ -33,7 +33,7 @@
 
 ## 受影响文件
 
-`internal/server/server.go`、`internal/server/*_test.go`（新增暂停门测试）；`cmd/mornlea/app_menu.go`、`interactive.go`、新增 `app_pause*.go` 与测试、宿主装配微调；`engine/crates/mornlea_client/src/ui.rs`、`src/ui/` 新增页模块与测试；OpenSpec change 目录。
+`internal/server/server.go`、`host.go`、同包测试（暂停门 + `Host` 直通）；`cmd/mornlea/app_menu.go`、`interactive.go`、新增 `app_pause*.go` 与测试、宿主装配微调；`engine/crates/mornlea_client/src/ui.rs`、`src/ui/` 新增页模块与测试；OpenSpec change 目录。
 
 ## 兼容 / 风险 / 回退
 
