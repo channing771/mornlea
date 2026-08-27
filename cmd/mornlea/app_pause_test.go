@@ -81,6 +81,11 @@ func TestPauseTransitionMatrixEscapeOpensReleasesCursorAndPauses(t *testing.T) {
 	if len(segment) != 12 {
 		t.Fatalf("暂停相位 UI 段长度 = %d，want 12（版本+两布尔）", len(segment))
 	}
+	// 版本字正向断言：跨语言互钉数字 4 的 Go 半边显式化（Rust
+	// UI_PAUSE_LAYOUT_VERSION 同值，任何一侧不得单方面改动）。
+	if got := binary.LittleEndian.Uint32(segment[:4]); got != 4 {
+		t.Fatalf("暂停段布局版本 = %d，want 4", got)
+	}
 }
 
 // TestPauseTransitionMatrixEscOrButtonResumesOnce 锁定关侧防重入：Esc 边沿与
@@ -277,5 +282,48 @@ func TestPauseSegmentAbsentOutsidePausedPhase(t *testing.T) {
 	game := &application{menu: menuState{phase: menuPhaseGame}}
 	if segment := game.uiSegment(); segment != nil {
 		t.Fatalf("裸游戏相位应保持无 UI 段契约，got %d 字节", len(segment))
+	}
+}
+
+// TestPauseMutesEnterUntilResume 用四帧按键脚本锁定「暂停期不新开聊天」：
+// 第 1 帧（已暂停）的 Enter 必须被静音；第 2 帧 Esc 走暂停关闭档回到游戏——
+// 若第 1 帧违规开了聊天，该 Esc 会被更高优先级的聊天取消档吃掉、相位回不到
+// 游戏，因此「终态相位=游戏」本身就是静音成立的判别器；第 3 帧 Enter 在恢复
+// 后正常打开聊天作对照，排除全局按键失灵的假绿。
+func TestPauseMutesEnterUntilResume(t *testing.T) {
+	app, _, _ := newChatLoopApplication(t, []chatWindowFrame{
+		{keys: map[client.Key]bool{client.KeyEscape: true}},
+		{keys: map[client.Key]bool{client.KeyEnter: true}},
+		{keys: map[client.Key]bool{client.KeyEscape: true}},
+		{keys: map[client.Key]bool{client.KeyEnter: true}},
+	})
+	app.panel = nil
+
+	if err := runInteractive(app); err != nil {
+		t.Fatal(err)
+	}
+	if !app.chatInput.open || app.menu.phase != menuPhaseGame {
+		t.Fatalf("暂停期 Enter 静音破坏: chat=%v phase=%v", app.chatInput.open, app.menu.phase)
+	}
+}
+
+// TestPauseMutesPanelToggleUntilResume 同型锁定 F3：面板切换在暂停期被整体
+// 抑制，恢复后的首次 F3 恰好切换一次。若抑制缺失，两次 F3 相互抵消且 Esc 会
+// 被面板档截走，终态 visible=false 与相位停摆都会暴露违规。
+func TestPauseMutesPanelToggleUntilResume(t *testing.T) {
+	app, _, _ := newChatLoopApplication(t, []chatWindowFrame{
+		{keys: map[client.Key]bool{client.KeyEscape: true}},
+		{keys: map[client.Key]bool{client.KeyF3: true}},
+		{keys: map[client.Key]bool{client.KeyEscape: true}},
+		{keys: map[client.Key]bool{client.KeyF3: true}},
+	})
+	app.panel = newPanelState(config.Config{Render: config.Defaults().Render})
+
+	if err := runInteractive(app); err != nil {
+		t.Fatal(err)
+	}
+	if !app.panel.visible || app.menu.phase != menuPhaseGame {
+		t.Fatalf("暂停期 F3 抑制破坏: visible=%v phase=%v",
+			app.panel.visible, app.menu.phase)
 	}
 }
