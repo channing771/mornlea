@@ -155,6 +155,7 @@ func (a *application) renderFrame(workMax int) (bool, error) {
 	oxygen, oxygenReady := a.predictor.Oxygen()
 	// 饥饿值同生命值与氧气：只取权威确认镜像，客户端不推算也不预测。
 	hunger, hungerReady := a.predictor.Hunger()
+	saturationZero, _ := a.predictor.SaturationZero()
 	chatOverlay := a.chatOverlay()
 	hudVisible := inventoryConfirmed || (healthReady && !a.clientSessionClosed) ||
 		chatOverlay.Open || len(chatOverlay.Lines) != 0
@@ -186,7 +187,7 @@ func (a *application) renderFrame(workMax int) (bool, error) {
 			hud.EatingOverlay{Active: eatingActive, Progress: eatingProgress},
 			hud.HealthOverlay{Confirmed: healthReady, Value: health},
 			hud.OxygenOverlay{Confirmed: oxygenReady, Value: oxygen},
-			hud.HungerOverlay{Confirmed: hungerReady, Value: hunger}, chatOverlay,
+			hud.HungerOverlay{Confirmed: hungerReady, Value: hunger, SaturationZero: saturationZero}, chatOverlay,
 			uint32(width), uint32(height), a.scheduler.UploadBudget(),
 		); err != nil {
 			return false, fmt.Errorf("准备快捷栏 HUD: %w", err)

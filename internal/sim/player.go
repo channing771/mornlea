@@ -38,6 +38,9 @@ type PlayerUpdate struct {
 	// `Oxygen`，只发布给玩家本人。三层饥饿状态里只有它随协议上线：饱和度与
 	// 疲劳值是纯服务端推进量，界面不呈现。
 	Hunger uint8
+	// SaturationZero 是 `saturationMilli==0` 的瞬态提示位，随 `Hunger` 同频下发
+	// （`ProtocolVersion 29` 尾部 1 bool），仅驱动 HUD 抖动呈现。
+	SaturationZero bool
 	// WorldTimeTicks 是本 tick 结束时的权威绝对世界时间。
 	WorldTimeTicks uint64
 }
@@ -148,6 +151,9 @@ type playerState struct {
 	// starvationTicks 是饥饿值归零后距离下一次饥饿伤害已经过的 tick 数，
 	// 瞬态字段，语义同 drownTicks。见 hunger.go 的 advanceStarvation。
 	starvationTicks uint32
+	// saturationZero 是饱和度归零的瞬态提示位（`saturationMilli==0` 时 true），
+	// 每 tick 定格后随 `PlayerState` 下发，不持久化、不进快照/哈希。
+	saturationZero bool
 	// eatingHeld 是玩家本 tick 的持续进食意图，来自 `Command.Eating`
 	// （协议 v24 的 `PlayerInput.Eating`），语义与 `miningHeld` 完全对称：
 	// 有效输入写入、中性输入与非法输入清零、重生清零。
@@ -427,6 +433,9 @@ func (player *playerState) update(
 	session *sessionState,
 	worldTime uint64,
 ) PlayerUpdate {
+	// 每 tick 定格饱和度归零提示位：`applyExhaustion`/`eating`/`resetHunger`
+	// 均已在权威阶段内完成写入，此处统一收敛，不在各写者处分散同步。
+	player.saturationZero = player.saturationMilli == 0
 	return PlayerUpdate{
 		WorldTimeTicks:    worldTime,
 		Session:           id,
@@ -442,6 +451,7 @@ func (player *playerState) update(
 		Health:            player.health,
 		Oxygen:            player.oxygen,
 		Hunger:            player.hunger,
+		SaturationZero:    player.saturationZero,
 	}
 }
 

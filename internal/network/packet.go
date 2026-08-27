@@ -7,19 +7,15 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 )
 
-// ProtocolVersion 是当前唯一支持的协议版本；v28 在 `PlayerInput` 尾部追加
-// `Sprinting` 疾跑位（紧跟 `Eating` 之后）；v27 新增 Play C→S ID 14 `BoneMeal`，
-// v26 新增 Play S→C ID 20 `PlaceBlockSucceeded`，v25 只扩展既有 `Mining` 位
-// 语义不新增字段，v24 上线权威饥饿 Eating/Hunger 并拒绝 v23 及更早登录。
+// ProtocolVersion 是当前唯一支持的协议版本；v29 在 `PlayerState` 尾部追加
+// `SaturationZero` 饱和度归零提示位（紧跟 `Hunger` 之后、`WorldTimeTicks` 之前）；v28 在 `PlayerInput` 尾部追加 `Sprinting` 疾跑位（紧跟 `Eating` 之后）；v27 新增 Play C→S ID 14 `BoneMeal`，v26 新增 Play S→C ID 20 `PlaceBlockSucceeded`，v25 只扩展既有 `Mining` 位语义不新增字段，v24 上线权威饥饿 Eating/Hunger 并拒绝 v23 及更早登录。
 //
-// v28 与 v24 同为既有 packet 尾部追加，不新增消息类型、不新增
+// v29/v28/v24 同为既有 packet 尾部追加，不新增消息类型、不新增
 // `RejectReason`，其余 packet 的 wire 形状与全部长度上限都不变：
 //
 //   - `PlayerInput`（Play/C→S ID 0）末尾追加 1 字节 `Sprinting`，紧跟 `Eating` 之后。
 //     三者同形：客户端只声明按键意图，权威结算全在服务端。
-//   - `PlayerState`（Play/S→C ID 3）在 v24 已追加 1 字节 `Hunger`，落在 `Oxygen` 之后、
-//     `WorldTimeTicks` 之前。三层饥饿状态里只有饥饿值上线，饱和度与疲劳值
-//     是纯服务端量、不占 wire 字段（design.md D6）。
+//   - `PlayerState`（Play/S→C ID 3）在 v24 已追加 1 字节 `Hunger`，在 v29 再追加 1 字节 `SaturationZero`，落在 `Hunger` 之后、`WorldTimeTicks` 之前。三层饥饿状态里只有饥饿值与零提示位上线，饱和度与疲劳值是纯服务端量、不占 wire 字段（design.md D6，B-12 仅追加 1 位抖动提示）。
 //
 // 历史：v23 在 `LoginSuccess` 追加 `WorldSeed`（u64，wire 上紧跟 `PlayerID` 之后），
 // 供客户端确定性生成远环壳——该段在旧基线上原编号 v18，main 合并 fluid 系列
@@ -29,7 +25,7 @@ import (
 // v21 在 `PlayerState` 末尾追加 2 字节权威氧气（只发给玩家本人的权威
 // 值）；v20 追加 8 个流体方块编号（只扩方块 ID 集合，wire 形状不变），流体
 // 变更走既有区块变更通道（design.md D8）。
-const ProtocolVersion uint32 = 28
+const ProtocolVersion uint32 = 29
 
 // State 标识连接当前允许交换的 packet 集合。
 type State uint8

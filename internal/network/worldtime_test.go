@@ -8,8 +8,8 @@ import (
 )
 
 func TestProtocolVersionIsTwentySix(t *testing.T) {
-	if ProtocolVersion != 28 {
-		t.Fatalf("协议版本=%d，想要 28", ProtocolVersion)
+	if ProtocolVersion != 29 {
+		t.Fatalf("协议版本=%d，想要 29", ProtocolVersion)
 	}
 }
 
@@ -247,9 +247,9 @@ func TestProtocolV10DropSelectedItemRegistryIsFrozen(t *testing.T) {
 	}
 }
 
-// PlayerState wire 载荷尾部各字段的字节宽度（v24 起）：
+// PlayerState wire 载荷尾部各字段的字节宽度（v29 起）：
 //
-//	… | Health u8 | Oxygen u16 | Hunger u8 | WorldTimeTicks u64
+//	… | Health u8 | Oxygen u16 | Hunger u8 | SaturationZero u8 | WorldTimeTicks u64
 //
 // 下面三个 helper 由末尾向前**链式**求偏移，而不是各写一串 `len(payload)-8-2-1`
 // 这样的裸算式。理由是血的教训：v21 追加 `Oxygen` 时，`playerStateHealthOffset`
@@ -257,15 +257,16 @@ func TestProtocolV10DropSelectedItemRegistryIsFrozen(t *testing.T) {
 // 仍然发生）；v24 追加 `Hunger` 时同一个坑会再来一次。链式表达让「尾部又多了
 // 一个字段」只需要改最外层一处，其余偏移自动跟上。
 const (
-	playerStateWorldTimeBytes = 8
-	playerStateHungerBytes    = 1
-	playerStateOxygenBytes    = 2
-	playerStateHealthBytes    = 1
+	playerStateWorldTimeBytes      = 8
+	playerStateSaturationZeroBytes = 1
+	playerStateHungerBytes         = 1
+	playerStateOxygenBytes         = 2
+	playerStateHealthBytes         = 1
 )
 
 // playerStateHungerOffset 返回饥饿值字节在 `PlayerState` 载荷中的下标。
 func playerStateHungerOffset(payloadLen int) int {
-	return payloadLen - playerStateWorldTimeBytes - playerStateHungerBytes
+	return payloadLen - playerStateWorldTimeBytes - playerStateSaturationZeroBytes - playerStateHungerBytes
 }
 
 // playerStateOxygenOffset 返回氧气低字节在 `PlayerState` 载荷中的下标。

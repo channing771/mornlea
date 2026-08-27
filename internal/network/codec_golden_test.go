@@ -19,7 +19,7 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		wantID  uint32
 		wantHex string
 	}{
-		{"hello", StateHandshake, ClientHello{ProtocolVersion: 28}, 0, "1c"},
+		{"hello", StateHandshake, ClientHello{ProtocolVersion: 29}, 0, "1d"},
 		{"login start", StateLogin, LoginStart{PlayerID: id, DisplayName: "Chen"}, 0, "00112233445546778899aabbccddeeff044368656e"},
 		{"input", StatePlay, PlayerInput{Sequence: 1, MoveX: -1, MoveZ: 1, Jump: true, Yaw: 1.5, Pitch: -0.5, Mining: true}, 0, "0100000000000000ff01010000c03f000000bf" + "01" + "00" + "00"},
 		// v24 新增：进食位是载荷最末一字节。夹具刻意取 Mining=false、
@@ -64,21 +64,22 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		wantID  uint32
 		wantHex string
 	}{
-		{"server hello", StateHandshake, ServerHello{ProtocolVersion: 28}, 0, "1c"},
-		{"handshake reject", StateHandshake, HandshakeReject{ServerProtocolVersion: 28, Code: HandshakeVersionMismatch, Message: "no"}, 1, "1c01026e6f"},
+		{"server hello", StateHandshake, ServerHello{ProtocolVersion: 29}, 0, "1d"},
+		{"handshake reject", StateHandshake, HandshakeReject{ServerProtocolVersion: 29, Code: HandshakeVersionMismatch, Message: "no"}, 1, "1d01026e6f"},
 		{"login success", StateLogin, LoginSuccess{PlayerID: id, WorldSeed: 0x1122334455667788}, 0, "00112233445546778899aabbccddeeff8877665544332211"},
 		{"login reject", StateLogin, LoginReject{Code: LoginInvalidIdentity, Message: "no"}, 1, "02026e6f"},
 		{"block changes", StatePlay, BlockChanges{Dimension: core.Overworld, Chunk: core.ChunkPos{X: 1, Z: -1}, BaseRevision: 1, NewRevision: 2, Changes: []BlockChange{{Position: core.BlockPos{X: 16, Y: -64, Z: -1}, Block: core.StoneID}}}, 1, "0000000001000000ffffffff010000000000000002000000000000000110000000c0ffffffffffffff0200"},
 		{"forget chunks", StatePlay, ForgetChunks{Dimension: core.Overworld, Chunks: []core.ChunkPos{{X: 1, Z: -1}, {X: 2, Z: 3}}}, 2, "000000000201000000ffffffff0200000003000000"},
-		{"inactive player state", StatePlay, PlayerState{}, 3, "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" + "00" + "0000" + "00" + "0000000000000000"},
-		{"active player state", StatePlay, PlayerState{Dimension: core.Overworld, MiningActive: true, MiningTarget: core.BlockPos{X: 1, Y: 2, Z: 3}, MiningProgressTicks: 6, MiningRequiredTicks: 15, MiningHarvestable: true, Health: 15, Oxygen: core.MaxOxygenTicks, WorldTimeTicks: 24000}, 3, "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000101000000020000000300000006000f0001" + "0f" + "2c01" + "00" + "c05d000000000000"},
+		{"inactive player state", StatePlay, PlayerState{}, 3, "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" + "00" + "0000" + "00" + "00" + "0000000000000000"},
+		{"active player state", StatePlay, PlayerState{Dimension: core.Overworld, MiningActive: true, MiningTarget: core.BlockPos{X: 1, Y: 2, Z: 3}, MiningProgressTicks: 6, MiningRequiredTicks: 15, MiningHarvestable: true, Health: 15, Oxygen: core.MaxOxygenTicks, WorldTimeTicks: 24000}, 3, "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000101000000020000000300000006000f0001" + "0f" + "2c01" + "00" + "00" + "c05d000000000000"},
 		// 氧气取一个既非 0 也非满值的中间值，锁死它确实按 u16 小端落在 Health 之后：
 		// 取 0 会与相邻字节的零值混淆，取满值又会与"未初始化即满"的实现巧合重合。
-		{"partially drowned player state", StatePlay, PlayerState{Dimension: core.Overworld, Health: 15, Oxygen: 0x0101, WorldTimeTicks: 24000}, 3, "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" + "0f" + "0101" + "00" + "c05d000000000000"},
+		{"partially drowned player state", StatePlay, PlayerState{Dimension: core.Overworld, Health: 15, Oxygen: 0x0101, WorldTimeTicks: 24000}, 3, "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" + "0f" + "0101" + "00" + "00" + "c05d000000000000"},
 		// v24 新增：饥饿值取 12（0x0c）这个既非 0 也非满值的中间值，锁死它确实
 		// 按 u8 落在 Oxygen 之后、WorldTimeTicks 之前。取 0 与「编码器根本没写
 		// 这个字段」不可分辨，取满值又与「未初始化即吃饱」的实现巧合重合。
-		{"hungry player state", StatePlay, PlayerState{Dimension: core.Overworld, Health: 15, Oxygen: core.MaxOxygenTicks, Hunger: 12, WorldTimeTicks: 24000}, 3, "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" + "0f" + "2c01" + "0c" + "c05d000000000000"},
+		// v29 新增：`SaturationZero` 尾部 1 bool 在 `Hunger` 之后，false 时 0x00。
+		{"hungry player state", StatePlay, PlayerState{Dimension: core.Overworld, Health: 15, Oxygen: core.MaxOxygenTicks, Hunger: 12, WorldTimeTicks: 24000}, 3, "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" + "0f" + "2c01" + "0c" + "00" + "c05d000000000000"},
 		{"command rejected", StatePlay, CommandRejected{Sequence: 7, Reason: RejectOccupied}, 4, "070000000000000006"},
 		{"place block succeeded", StatePlay, PlaceBlockSucceeded{Sequence: 0x1122334455667788}, 20, "8877665544332211"},
 		{"keep alive", StatePlay, KeepAlive{Token: 8}, 5, "0800000000000000"},
