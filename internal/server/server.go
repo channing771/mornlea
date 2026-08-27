@@ -283,11 +283,9 @@ func (server *Server) step(scheduled time.Time) sim.TickResult {
 	if server.lifecycle != serverRunning {
 		return sim.TickResult{}
 	}
-	// 暂停门放在编排最前面、observer 计时登记之前：被跳过的周期对外必须
-	// 表现为「tick 从未发生」——不发时长样本、不产生任何持久化副作用。
-	// 门覆盖包括显式 `Step` 在内的全部推进点，任何调用方都无法在暂停期
-	// 让世界时间前进；调度层的前置读只是省去暂停期对 `stepMu` 的争用，
-	// 两处共享同一份原子位。
+	// 暂停门放在编排最前面、observer 计时登记之前：被跳过的周期不发时长
+	// 样本、无持久化副作用。这里与 `RunTicks` 的前置读共享同一份原子位，
+	// 因此包括显式 `Step` 在内的全部推进点都受同一道门约束。
 	if server.paused.Load() {
 		return sim.TickResult{}
 	}
@@ -357,13 +355,13 @@ func (server *Server) StepForTest() sim.TickResult {
 }
 
 // Pause 置位权威暂停门。幂等：重复调用只是重复写入同一个布尔位，不排队、
-// 不计数，因此不会产生额外的状态变化。
+// 不计数，因此不会产生额外的状态变化。门覆盖所有 tick 推进点（`RunTicks`
+// 的调度周期与显式的 `Step` 调用），保证暂停期间任何调用方都无法让世界
+// 时间前进；关服路径不经本门，`Shutdown` 行为不受影响。
 //
-// 边界：本门冻结的是「权威模拟推进」这一事件本身，覆盖所有 tick 推进点
-// （`RunTicks` 的调度周期与显式的 `Step` 调用），保证暂停期间任何调用方都
-// 无法让世界时间前进；但它不关闭消息通路、不暂停 worker goroutine、也不
-// 参与生命周期关服路径（`Shutdown` 照常工作）。暂停时长由人工交互决定，
-// 期间不产生任何周期性工作。
+// 并发边界：对与在途 tick 并发的调用方，`Pause()` 返回时已经开始执行的
+// 一个 step 仍会跑完本轮编排，其后的周期才被短路——这是门不持锁的固有
+// 语义。
 func (server *Server) Pause() {
 	server.paused.Store(true)
 }
@@ -390,10 +388,8 @@ func (server *Server) RunTicks(ctx context.Context) error {
 				return ctx.Err()
 			}
 		case scheduled := <-ticker.C:
-			// 每个 ticker 到期先读暂停门：置位时本周期整个权威 tick 不存在
-			// （世界时间、随机 tick、持久化调度都不发生），而不是空转一个
-			// 降级 tick。真正的短路判定在 `step` 内共享，这里的前置读让
-			// 暂停期完全不触碰 `stepMu`。
+			// 每个 ticker 到期先读暂停门：置位则整段跳过本周期、不进入编排，
+			// 让暂停期完全不触碰 `stepMu`（跳过语义见 `step` 内注释）。
 			if server.paused.Load() {
 				continue
 			}

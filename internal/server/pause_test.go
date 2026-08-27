@@ -21,11 +21,11 @@ const (
 	// 50ms，该值覆盖多个周期；只要期间观察到的已执行 tick 数不增加，就证明
 	// 「整个 tick 不存在」而非「tick 空转」。
 	pauseObserverDwell = 300 * time.Millisecond
-	// pauseDeterminismSeed 是孪生世界共用的种子，重放对照以此对齐。
-	pauseDeterminismSeed = int64(42)
 )
 
-func TestPauseFreezesWorldTimeAcrossSchedulerCycles(t *testing.T) {
+// TestPauseFreezesWorldTimeAcrossExplicitSteps 验证显式推进点在暂停期被
+// 短路（真实调度循环的对应性质由 RunTicks 观察者测试覆盖）。
+func TestPauseFreezesWorldTimeAcrossExplicitSteps(t *testing.T) {
 	running := newDefaultTestServer(t)
 	warmup := running.StepForTest()
 	if warmup.WorldTimeTicks == 0 {
@@ -190,7 +190,7 @@ func TestPausedIntervalPreservesDeterministicContinuation(t *testing.T) {
 // 暂停窗口内 ScheduledTickObserver 不再收到样本——本周期连编排入口都未进入。
 func TestRunTicksSchedulerDoesNotExecuteTickWhilePaused(t *testing.T) {
 	_, endpoint := network.NewMemoryPair(32)
-	config := DefaultConfig(pauseDeterminismSeed)
+	config := DefaultConfig(42)
 	config.ViewRadius = 0
 	config.Workers = 1
 	var scheduled atomic.Uint64
@@ -255,9 +255,11 @@ func waitUntilScheduledCount(t *testing.T, counter *atomic.Uint64, want uint64, 
 // 出生锚，出生区块经手动投递推进到 Ready，保证相对 tick 序不含异步竞态）。
 func newDeterminismTwinServers(t *testing.T) (*Server, *Server) {
 	t.Helper()
+	// 孪生世界对照的硬性要求只有共用同一种子，具体取值无关紧要。
+	const twinWorldSeed = int64(42)
 	newTwin := func() *Server {
 		_, endpoint := network.NewMemoryPair(32)
-		config := DefaultConfig(pauseDeterminismSeed)
+		config := DefaultConfig(twinWorldSeed)
 		config.ViewRadius = 0
 		config.Workers = 1
 		return newMemoryAttachedWorldForTest(config, endpoint, playerTestGenerator{})
