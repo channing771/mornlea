@@ -28,4 +28,4 @@
 - 验证通过：`gofmt -w internal/archcheck/dependency_test.go internal/archcheck/source_guards_test.go`；`go test ./internal/archcheck -count=1`；`git diff --check`。
 - 调用方检查：`git grep -nE 'network\.(ListenTCP|DialTCP)' -- '*.go' ':!internal/archcheck/source_guards_test.go'` 无输出；source guard 包含 `networktcp.ListenTCP(` 且不再包含 `network.ListenTCP(`。
 - 评审结论：改动限定于本任务的 archcheck、架构文档、网络包指南和 ledger；保留既有共享登录状态机要求及 no-WebGPU、ABI 边界。
-- 当前实现提交 ID 将在提交完成后补记；未发现需要升级的风险或未解决问题。
+- 实现提交：`553b6b72`（`docs(network): record TCP package boundary`）；未发现需要升级的风险或未解决问题。
