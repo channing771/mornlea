@@ -23,7 +23,7 @@
 
 ## 4. 收尾（实现者+终审）
 
-- [ ] 4.1 `gofmt -l .` 无输出；`go vet ./...` 干净；`go test ./... -race` 通过。
-- [ ] 4.2 `make rust` 与 `make rust-check` 通过；`make visual-check` 断言视觉基线零变化（暂停页不出现在任何场景）。
-- [ ] 4.3 `openspec validate --all --strict --no-interactive` 通过；本表全部勾选核对。
+- [x] 4.1 `gofmt -l .` 无输出；`go vet ./...` 干净；`go test ./... -race` 通过。
+- [x] 4.2 `make rust` 与 `make rust-check` 通过；`make visual-check` 断言视觉基线零变化（暂停页不出现在任何场景）。执行注记：预期视觉不变断言成立（对照实验：失败集与 merge-base 逐项一致、9 对实拍逐字节相同、菜单场景零差）；`make visual-check` 目标因预存陈旧基线失败（含从未入库的 `workbench-crafting.png`），归因与证据见 ledger，不在本 change 修复。
+- [x] 4.3 `openspec validate --all --strict --no-interactive` 通过；本表全部勾选核对。
 - [ ] 4.4 ledger 记录评审结论、终审证据与最终裁决；未决项誊入 proposal「延期与放弃」（设置入口顺延已记，其余若发现补录）。

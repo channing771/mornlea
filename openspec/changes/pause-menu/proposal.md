@@ -39,3 +39,8 @@
 - 不做暂停页内设置入口（D-01 设置页当前假设世界未装配，游戏中途进设置属新语义，顺延另立）。
 - 不做暂停期聊天输入、截图遮罩或音频静音策略。
 - 不改变基准 scenario、benchmark 工作负载或任何视觉基线。
+
+## 延期与放弃
+
+- **顺延**：暂停页标题「已暂停」的绘制锚位与 `draw_menu` 的字面重复——两者共用的标题锚位 helper 抽取顺延（防漂移；R2 收尾轮控制会话裁决，记录见 ledger 同日行）。
+- **仓库级预存问题移交（非本变更引入，证据见 ledger「4 收尾门禁」行）**：`make visual-check` 在不含本变更的 merge-base `b10bbfe7` 上即以同一失败集失败——`workbench-crafting.png` golden 从未入库（A-06/A-07 取消后无人再生）与 9 张陈旧 golden（terrain-noon、avatar-nametag、inventory-crafting、chest-container、furnace-container、oak-grove、ai-companion、far-horizon、water-underwater）需再生。本变更仅断言「暂停页不出现在任何 capture 场景、视觉零变化」并已由对照实验证实；基线修复不在本变更范围，留 golden 职责行/用户裁决。
