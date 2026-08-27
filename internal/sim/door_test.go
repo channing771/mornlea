@@ -1,6 +1,7 @@
 package sim
 
 import (
+	"math"
 	"reflect"
 	"testing"
 
@@ -78,12 +79,8 @@ func doorTestReadyMiningPlayers(t *testing.T) (*Engine, SessionID, core.BlockPos
 	return engine, session, target
 }
 
-// mimic mgl32.Vec3 minimal for test helper – use real mgl32 via helper
-// we need real vector; import mgl32
-
 // TestDoorPlaceAndToggle 覆盖门 placement / toggle / mining / raycast 全链。
 func TestDoorPlaceAndToggle(t *testing.T) {
-	// 1. 四向放置成功：lower Closed + upper — 直接调用 tryPlaceDoor 避免射线与 yaw 耦合
 	for dir, wantLower := range map[int]core.BlockID{
 		0: core.DoorLowerSouthClosed,
 		1: core.DoorLowerWestClosed,
@@ -109,8 +106,6 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 			t.Fatalf("dir %d upper=%d want DoorUpper", dir, got)
 		}
 	}
-
-	// 2. 上方占用拒绝
 	{
 		engine, _, _ := doorTestReadyEngine(t, hotbarWithDoor(1))
 		engine.SetBlockForTest(core.BlockPos{X: 0, Y: 3, Z: 4}, core.StoneID)
@@ -120,8 +115,6 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 			t.Fatal("上方占用应拒绝")
 		}
 	}
-
-	// 3. 下方非实心拒绝
 	{
 		engine, _, _ := doorTestReadyEngine(t, hotbarWithDoor(1))
 		below := core.BlockPos{X: 0, Y: 1, Z: 4}
@@ -134,8 +127,6 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 			t.Fatal("下方非实心应拒绝")
 		}
 	}
-
-	// 4. Interact 翻转 Closed<->Open
 	{
 		engine, _, _ := doorTestReadyEngine(t, hotbarWithDoor(0))
 		lower := core.BlockPos{X: 1, Y: 2, Z: 4}
@@ -156,8 +147,6 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 			t.Fatalf("toggle back to closed got %d", got)
 		}
 	}
-
-	// 5. 破坏下半双清掉1，破上半同
 	for _, hitUpper := range []bool{false, true} {
 		engine, _, _ := doorTestReadyMiningPlayers(t)
 		var target core.BlockPos
@@ -191,15 +180,12 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 			t.Fatalf("hitUpper %v drop ItemDoor=%d want 1", hitUpper, found)
 		}
 	}
-
-	// 6. 开启可穿透射线（IsSolidForRaycast=false）
 	if core.InteractionTarget(core.DoorLowerSouthClosed) == false {
 		t.Fatal("closed should be InteractionTarget true")
 	}
 	if core.InteractionTarget(core.DoorLowerSouthOpen) == true {
 		t.Fatal("open should be InteractionTarget false")
 	}
-	// collision: closed thick 3/16贴边, open旋转
 	closedBoxes := physics.BlockCollisionBoxes(core.DoorLowerSouthClosed, true)
 	if closedBoxes.Count != 1 {
 		t.Fatalf("closed collision count %d want 1", closedBoxes.Count)
@@ -218,8 +204,6 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 		t.Fatal("open collision should differ from closed")
 	}
 	_ = physics.BlockCollisionBoxes(core.DoorUpper, true)
-
-	// 6b. DoDrop=false 仍双清但零掉落
 	{
 		engine, _, _ := doorTestReadyMiningPlayers(t)
 		lowerPos := core.BlockPos{X: 0, Y: 2, Z: 5}
@@ -244,8 +228,6 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 			t.Fatalf("DoDrop false drop %d want 0", got)
 		}
 	}
-
-	// 7. fluid: 关不可流入，开可流入
 	if fluid.Replaceable(core.DoorLowerSouthClosed, 1) {
 		t.Fatal("closed door should not be Replaceable")
 	}
@@ -254,6 +236,295 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 	}
 	if fluid.Replaceable(core.DoorUpper, 1) {
 		t.Fatal("upper should not be Replaceable (solid)")
+	}
+}
+
+func TestDoorYawToDirBoundaries(t *testing.T) {
+	cases := []struct {
+		yaw  float32
+		want int
+	}{
+		{-180, 2},
+		{-135, 3},
+		{-45, 0},
+		{0, 0},
+		{45, 1},
+		{135, 2},
+		{180, 2},
+	}
+	for _, c := range cases {
+		yawRad := c.yaw * float32(math.Pi) / 180
+		got := yawToDoorDir(yawRad)
+		if got != c.want {
+			t.Fatalf("yaw %v° (%v rad) => dir %d want %d", c.yaw, yawRad, got, c.want)
+		}
+	}
+}
+
+func TestDoorPlaceSupportEnumerations(t *testing.T) {
+	unsupported := []core.BlockID{
+		core.GlassID,
+		core.LeavesID,
+		core.WaterSourceID,
+		core.WaterLevel1ID,
+		core.WheatStage0ID,
+		core.DoorLowerSouthClosed,
+		core.DoorUpper,
+		core.AirID,
+	}
+	for _, belowID := range unsupported {
+		engine, _, _ := doorTestReadyEngine(t, hotbarWithDoor(1))
+		below := core.BlockPos{X: 2, Y: 1, Z: 4}
+		engine.SetBlockForTest(below, belowID)
+		engine.SetBlockForTest(core.BlockPos{X: 2, Y: 2, Z: 4}, core.AirID)
+		engine.SetBlockForTest(core.BlockPos{X: 2, Y: 3, Z: 4}, core.AirID)
+		pending := make(map[core.ChunkKey]*pendingChunkChanges)
+		_, rejected := engine.tryPlaceDoor(core.Overworld, core.BlockPos{X: 2, Y: 2, Z: 4}, 0, pending)
+		if !rejected {
+			t.Fatalf("below %d should be rejected as non-solid support", belowID)
+		}
+	}
+}
+
+func TestDoorInteractViaRaycast(t *testing.T) {
+	engine, session, _ := doorTestReadyEngine(t, hotbarWithDoor(0))
+	lower := core.BlockPos{X: 0, Y: 2, Z: 5}
+	upper := core.BlockPos{X: 0, Y: 3, Z: 5}
+	engine.SetBlockForTest(core.BlockPos{X: 0, Y: 1, Z: 5}, core.StoneID)
+	engine.SetBlockForTest(lower, core.DoorLowerSouthClosed)
+	engine.SetBlockForTest(upper, core.DoorUpper)
+	player := engine.sessions[session].player
+	player.state.Position = mgl32.Vec3{0.5, 1, 8.5}
+	eye := player.state.Position.Add(mgl32.Vec3{0, engine.physicsTunables.EyeHeight, 0})
+	targetCenter := mgl32.Vec3{0.5, 2.5, 5.5}
+	dir := targetCenter.Sub(eye).Normalize()
+	yaw := float32(math.Atan2(float64(-dir[0]), float64(-dir[2])))
+	pitch := float32(math.Asin(float64(dir[1])))
+	player.yaw = yaw
+	player.pitch = pitch
+	engine.Enqueue(Command{Session: session, Sequence: 100, Kind: CommandInteractDoor, Yaw: yaw, Pitch: pitch})
+	result := engine.Step()
+	if len(result.Rejected) != 0 {
+		t.Fatalf("interact via ray rejected %+v", result.Rejected)
+	}
+	if got, _ := engine.dimensions[core.Overworld].BlockAt(lower); got != core.DoorLowerSouthOpen {
+		t.Fatalf("ray interact lower: got %d want open", got)
+	}
+	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	if !handleInteractDoor(engine, core.Overworld, upper, pending) {
+		t.Fatal("interact upper should succeed to toggle back")
+	}
+	engine.finishChanges(pending, &TickResult{})
+	if got, _ := engine.dimensions[core.Overworld].BlockAt(lower); got != core.DoorLowerSouthClosed {
+		t.Fatalf("upper interact toggle back: got %d want closed", got)
+	}
+	if got, _ := engine.dimensions[core.Overworld].BlockAt(upper); got != core.DoorUpper {
+		t.Fatalf("upper should stay DoorUpper got %d", got)
+	}
+}
+
+func TestDoorUpperInteractDirPreserved(t *testing.T) {
+	for dir, closed := range map[int]core.BlockID{
+		0: core.DoorLowerSouthClosed,
+		1: core.DoorLowerWestClosed,
+		2: core.DoorLowerNorthClosed,
+		3: core.DoorLowerEastClosed,
+	} {
+		engine, _, _ := doorTestReadyEngine(t, hotbarWithDoor(0))
+		lower := core.BlockPos{X: 5, Y: 2, Z: 5}
+		upper := core.BlockPos{X: 5, Y: 3, Z: 5}
+		engine.SetBlockForTest(core.BlockPos{X: 5, Y: 1, Z: 5}, core.StoneID)
+		engine.SetBlockForTest(lower, closed)
+		engine.SetBlockForTest(upper, core.DoorUpper)
+		pending := make(map[core.ChunkKey]*pendingChunkChanges)
+		if !handleInteractDoor(engine, core.Overworld, upper, pending) {
+			t.Fatalf("dir %d upper interact should succeed", dir)
+		}
+		engine.finishChanges(pending, &TickResult{})
+		got, _ := engine.dimensions[core.Overworld].BlockAt(lower)
+		if core.DoorDir(got) != dir {
+			t.Fatalf("dir %d after upper toggle got dir %d block %d", dir, core.DoorDir(got), got)
+		}
+		if !core.IsDoorOpen(got) {
+			t.Fatalf("dir %d should be open after upper toggle", dir)
+		}
+	}
+}
+
+func TestDoorCollisionFourDirections(t *testing.T) {
+	const thickness = float32(3.0 / 16.0)
+	const eps = float32(0.001)
+	cases := []struct {
+		closed core.BlockID
+		open   core.BlockID
+		dir    int
+	}{
+		{core.DoorLowerSouthClosed, core.DoorLowerSouthOpen, 0},
+		{core.DoorLowerWestClosed, core.DoorLowerWestOpen, 1},
+		{core.DoorLowerNorthClosed, core.DoorLowerNorthOpen, 2},
+		{core.DoorLowerEastClosed, core.DoorLowerEastOpen, 3},
+	}
+	for _, c := range cases {
+		closed := physics.BlockCollisionBoxes(c.closed, true)
+		if !closed.Loaded || closed.Count != 1 {
+			t.Fatalf("dir %d closed Loaded %v Count %d want 1", c.dir, closed.Loaded, closed.Count)
+		}
+		open := physics.BlockCollisionBoxes(c.open, true)
+		if !open.Loaded || open.Count != 1 {
+			t.Fatalf("dir %d open Loaded %v Count %d want 1", c.dir, open.Loaded, open.Count)
+		}
+		if open.Boxes[0] == closed.Boxes[0] {
+			t.Fatalf("dir %d open should differ from closed", c.dir)
+		}
+		switch c.dir {
+		case 0:
+			if math.Abs(float64(closed.Boxes[0].Min.Z()-(1-thickness))) > float64(eps) || math.Abs(float64(closed.Boxes[0].Max.Z()-1)) > float64(eps) {
+				t.Fatalf("south closed z %v want [%.4f,1]", closed.Boxes[0], 1-thickness)
+			}
+		case 1:
+			if math.Abs(float64(closed.Boxes[0].Min.X()-0)) > float64(eps) || math.Abs(float64(closed.Boxes[0].Max.X()-thickness)) > float64(eps) {
+				t.Fatalf("west closed x %v want [0,%.4f]", closed.Boxes[0], thickness)
+			}
+		case 2:
+			if math.Abs(float64(closed.Boxes[0].Min.Z()-0)) > float64(eps) || math.Abs(float64(closed.Boxes[0].Max.Z()-thickness)) > float64(eps) {
+				t.Fatalf("north closed z %v want [0,%.4f]", closed.Boxes[0], thickness)
+			}
+		case 3:
+			if math.Abs(float64(closed.Boxes[0].Min.X()-(1-thickness))) > float64(eps) || math.Abs(float64(closed.Boxes[0].Max.X()-1)) > float64(eps) {
+				t.Fatalf("east closed x %v want [%.4f,1]", closed.Boxes[0], 1-thickness)
+			}
+		}
+		switch c.dir {
+		case 0:
+			if math.Abs(float64(open.Boxes[0].Min.X()-(1-thickness))) > float64(eps) {
+				t.Fatalf("south open x min %v want %.4f", open.Boxes[0], 1-thickness)
+			}
+		case 1:
+			if math.Abs(float64(open.Boxes[0].Min.Z()-(1-thickness))) > float64(eps) {
+				t.Fatalf("west open z min %v want %.4f", open.Boxes[0], 1-thickness)
+			}
+		case 2:
+			if math.Abs(float64(open.Boxes[0].Max.X()-thickness)) > float64(eps) {
+				t.Fatalf("north open x max %v want %.4f", open.Boxes[0], thickness)
+			}
+		case 3:
+			if math.Abs(float64(open.Boxes[0].Max.Z()-thickness)) > float64(eps) {
+				t.Fatalf("east open z max %v want %.4f", open.Boxes[0], thickness)
+			}
+		}
+	}
+	upper := physics.BlockCollisionBoxes(core.DoorUpper, true)
+	if !upper.Loaded || upper.Count != 0 {
+		t.Fatalf("DoorUpper collision Loaded %v Count %d want 0 true", upper.Loaded, upper.Count)
+	}
+	unloaded := physics.BlockCollisionBoxes(core.DoorLowerSouthClosed, false)
+	if unloaded.Loaded || unloaded.Count != 0 {
+		t.Fatalf("unloaded should be not loaded count 0 got %+v", unloaded)
+	}
+}
+
+func TestDoorPhysicsFluidDivergence(t *testing.T) {
+	upperPhys := physics.BlockCollisionBoxes(core.DoorUpper, true)
+	if upperPhys.Count != 0 || !upperPhys.Loaded {
+		t.Fatalf("upper physics Count %d Loaded %v want 0 true", upperPhys.Count, upperPhys.Loaded)
+	}
+	if fluid.Replaceable(core.DoorUpper, 1) {
+		t.Fatal("DoorUpper should not be Replaceable (fluid solid)")
+	}
+	lowerClosedPhys := physics.BlockCollisionBoxes(core.DoorLowerSouthClosed, true)
+	if lowerClosedPhys.Count != 1 {
+		t.Fatalf("closed lower physics Count %d want 1", lowerClosedPhys.Count)
+	}
+	if fluid.Replaceable(core.DoorLowerSouthClosed, 1) {
+		t.Fatal("closed lower should not be Replaceable")
+	}
+	lowerOpenPhys := physics.BlockCollisionBoxes(core.DoorLowerSouthOpen, true)
+	if lowerOpenPhys.Count != 1 {
+		t.Fatalf("open lower physics Count %d want 1", lowerOpenPhys.Count)
+	}
+	if !fluid.Replaceable(core.DoorLowerSouthOpen, 1) {
+		t.Fatal("open lower should be Replaceable")
+	}
+	if !core.InteractionTarget(core.DoorUpper) {
+		t.Fatal("DoorUpper InteractionTarget should be true (fallback closed)")
+	}
+	engine, _, _ := doorTestReadyEngine(t, hotbarWithDoor(0))
+	lower := core.BlockPos{X: 0, Y: 2, Z: 5}
+	upper := core.BlockPos{X: 0, Y: 3, Z: 5}
+	engine.SetBlockForTest(core.BlockPos{X: 0, Y: 1, Z: 5}, core.StoneID)
+	engine.SetBlockForTest(lower, core.DoorLowerSouthClosed)
+	engine.SetBlockForTest(upper, core.DoorUpper)
+	sampler := blockRaycastSampler(engine.dimensions[core.Overworld])
+	if solid, _ := sampler(lower); !solid {
+		t.Fatal("closed lower sampler should be solid")
+	}
+	if solid, _ := sampler(upper); !solid {
+		t.Fatal("closed upper via lower sampler should be solid")
+	}
+	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	handleInteractDoor(engine, core.Overworld, lower, pending)
+	engine.finishChanges(pending, &TickResult{})
+	if solid, _ := sampler(lower); solid {
+		t.Fatal("open lower sampler should be not solid")
+	}
+	if solid, _ := sampler(upper); solid {
+		t.Fatal("open upper via lower sampler should be not solid")
+	}
+}
+
+func TestDoorMiningDropCapacity(t *testing.T) {
+	engine, _, _ := doorTestReadyMiningPlayers(t)
+	lowerPos := core.BlockPos{X: 0, Y: 2, Z: 5}
+	upperPos := core.BlockPos{X: 0, Y: 3, Z: 5}
+	engine.SetBlockForTest(lowerPos, core.DoorLowerSouthClosed)
+	engine.SetBlockForTest(upperPos, core.DoorUpper)
+	fillMiningDrops(engine, lowerPos)
+	record := miningTargetRecord(t, engine, lowerPos)
+	beforeHash := record.Chunk.Hash()
+	beforeRevision := record.Revision
+	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	block, _ := engine.dimensions[core.Overworld].BlockAt(lowerPos)
+	reason, rejected := engine.completeMining(core.Overworld, lowerPos, block, true, pending)
+	if !rejected || reason != RejectDropCapacity {
+		t.Fatalf("full drops should reject DropCapacity got %d rejected %v", reason, rejected)
+	}
+	if got := record.Chunk.Hash(); got != beforeHash {
+		t.Fatal("capacity failure should not modify chunk")
+	}
+	if record.Revision != beforeRevision {
+		t.Fatal("capacity failure should not bump revision")
+	}
+	if len(pending) != 0 {
+		t.Fatal("capacity failure should not produce pending")
+	}
+	pending2 := make(map[core.ChunkKey]*pendingChunkChanges)
+	block2, _ := engine.dimensions[core.Overworld].BlockAt(upperPos)
+	reason2, rejected2 := engine.completeMining(core.Overworld, upperPos, block2, true, pending2)
+	if !rejected2 || reason2 != RejectDropCapacity {
+		t.Fatalf("upper full drops should also reject got %d %v", reason2, rejected2)
+	}
+}
+
+func TestDoorPlaceUpperRollback(t *testing.T) {
+	engine, _, _ := doorTestReadyEngine(t, hotbarWithDoor(1))
+	lower := core.BlockPos{X: 3, Y: 2, Z: 4}
+	upper := core.BlockPos{X: 3, Y: 3, Z: 4}
+	engine.SetBlockForTest(upper, core.StoneID)
+	engine.SetBlockForTest(lower, core.AirID)
+	engine.SetBlockForTest(core.BlockPos{X: 3, Y: 1, Z: 4}, core.StoneID)
+	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	_, rejected := engine.tryPlaceDoor(core.Overworld, lower, 0, pending)
+	if !rejected {
+		t.Fatal("upper occupied should be rejected")
+	}
+	if got, _ := engine.dimensions[core.Overworld].BlockAt(lower); got != core.AirID {
+		t.Fatalf("rollback should keep lower Air got %d", got)
+	}
+	if got, _ := engine.dimensions[core.Overworld].BlockAt(upper); got != core.StoneID {
+		t.Fatalf("upper should stay Stone got %d", got)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("rejected place should not produce pending %+v", pending)
 	}
 }
 

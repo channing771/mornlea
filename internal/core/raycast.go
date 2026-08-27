@@ -205,19 +205,17 @@ func InteractionTarget(id BlockID) bool {
 	if id == AirID || IsFluid(id) {
 		return false
 	}
-	// 门：关闭实心可命中，开启可穿透
+	// 门：关闭实心可命中，开启可穿透（`isDoorSolidForRaycast = !Open`）。
+	// 上半单 ID 无方向，真实固体性由下半 `IsDoorOpen` 决定（见 `sim.blockRaycastSampler` 的 y-1 查询）；
+	// 此处无世界上下文，仅作孤立 ID 的回退：若下半不存在则按关闭处理，保持可命中以便交互映射到下半翻转。
 	if IsDoor(id) {
 		if IsDoorUpper(id) {
-			// 上半无方向，视为实心以便可命中（交互会映射到下半翻转）；开启时
-			// 下半已可穿透，整体仍可穿过下半，此处保持实心不影响开启穿透语义
 			return true
 		}
-		switch id {
-		case DoorLowerSouthOpen, DoorLowerWestOpen, DoorLowerNorthOpen, DoorLowerEastOpen:
+		if IsDoorOpen(id) {
 			return false
-		default:
-			return true
 		}
+		return true
 	}
 	return true
 }

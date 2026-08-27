@@ -146,11 +146,22 @@ func stepMiningProgress(actor *actorState, target core.BlockPos, block core.Bloc
 // 目标）。玩家采掘、玩家放置、伙伴采掘的视线遮挡与开启容器四条路径共用它，
 // 同一份交互距离（InteractionReach）加同一份 solid 谓词，保证没有第二套规则
 // 实现——流体豁免只在这一处写，任何调用点都不可能漏掉。
+//
+// 门上半（`DoorUpper`）无方向且单 ID：其固体性由下半 `IsDoorOpen` 决定
+//（`!Open` 实心、`Open` 可穿透），若下半不存在或未就绪则按关闭处理。
 func blockRaycastSampler(dimension *Dimension) func(core.BlockPos) (bool, error) {
 	return func(position core.BlockPos) (bool, error) {
 		block, ready := dimension.BlockAt(position)
 		if !ready {
 			return false, ErrChunkNotReady
+		}
+		if core.IsDoorUpper(block) {
+			below := core.BlockPos{X: position.X, Y: position.Y - 1, Z: position.Z}
+			lower, lowerReady := dimension.BlockAt(below)
+			if !lowerReady || !core.IsDoorLower(lower) {
+				return true, nil
+			}
+			return core.IsDoorOpen(lower) == false, nil
 		}
 		return core.InteractionTarget(block), nil
 	}

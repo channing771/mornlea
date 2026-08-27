@@ -163,6 +163,16 @@ func DoorDir(id BlockID) int {
 	}
 }
 
+// IsDoorOpen 报告门下半是否处于开启态（仅对下半有效）。
+func IsDoorOpen(id BlockID) bool {
+	switch id {
+	case DoorLowerSouthOpen, DoorLowerWestOpen, DoorLowerNorthOpen, DoorLowerEastOpen:
+		return true
+	default:
+		return false
+	}
+}
+
 const (
 	BlockFaceNegX BlockFace = iota
 	BlockFacePosX
