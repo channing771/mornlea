@@ -210,6 +210,15 @@ func newApplicationWithDependencies(
 	if !menuMode {
 		receiver = client.NewReceiver(clientEndpoint, applicationReceiverCapacity)
 	}
+	// 暂停门捕获：benchmark 形态取同进程可信服，本地装配形态取嵌入宿主，
+	// 远程与菜单延迟装配形态在此保持 nil（后者由 startWorld 装配点补捕获）。
+	// 类型断言失败即 nil，相位机按「无权威模拟可冻结」的口径处理。
+	var pauseControl any
+	if running != nil {
+		pauseControl = running
+	} else if host != nil {
+		pauseControl = host
+	}
 
 	var window applicationWindow
 	var rustRenderer *client.Renderer
@@ -309,6 +318,7 @@ func newApplicationWithDependencies(
 		closeAudio:     closeAudio,
 		startupOptions: options,
 		startupDeps:    dependencies,
+		pauseGate:      applicationPauseGateOf(pauseControl),
 		menu: menuState{
 			phase:   appMenuPhase,
 			title:   "Mornlea",
@@ -370,6 +380,13 @@ func newApplicationWithDependencies(
 // 快照，此处用同一份配置与注入载体，保证与既有路径产出相同的服务端状态。
 func (a *application) startWorld() error {
 	options := a.startupOptions
+	// 远程连接形态的世界由远端持有：进程内没有可打开的本地存档，放行会在
+	// Host 构造处以 nil store panic。迟回主菜单（暂停页「退回主菜单」）的
+	// 联机会话再点「进入游戏」必须在这里优雅拒绝并落菜单错误行。
+	if options.Connect != "" {
+		a.menu.error = errRemoteStartWorldRejected.Error()
+		return errRemoteStartWorldRejected
+	}
 	dependencies := a.startupDeps
 	ctx := context.Background()
 	config := buildApplicationServerConfig(options, a.ticks, a.saves)
@@ -401,11 +418,26 @@ func (a *application) startWorld() error {
 	a.serverCancel = serverCancel
 	a.serverDone = serverDone
 	a.receiver = receiver
+	// 宿主若具备暂停控制能力即捕获成门；测试替身或能力缺失时为 nil，相位机按
+	// 「无权威模拟可冻结」的远程口径处理。
+	a.pauseGate = applicationPauseGateOf(host)
 
 	if err := a.attachLodScheduler(worldSeed, options.FluidEnabled, options.Benchmark); err != nil {
 		cleanupErr := a.releaseWorldConnection(config.ShutdownTimeout)
 		return errors.Join(fmt.Errorf("接线远环 LOD: %w", err), cleanupErr)
 	}
+
+	// 每次装配都是一条全新会话：世界镜像、预测器与已加载区块表不得携带上一台
+	// 已析构世界的任何状态——退回主菜单再进入是首次出现的二次装配路径，构造
+	// 函数只在进程生命周期赋值这些字段一次，这里负责会话间的同样初始化。
+	a.mirror = client.NewMirror()
+	a.predictor = client.NewPredictor()
+	a.loadedChunks = make(map[core.ChunkPos]struct{})
+	a.sequence = 0
+	a.serverTick = 0
+	a.worldTimeTicks = 0
+	a.observerFloor = 0
+	a.clientSessionClosed = false
 
 	a.menu.phase = menuPhaseGame
 	a.menu.starting = false

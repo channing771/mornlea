@@ -16,10 +16,10 @@
 
 ## 3. 相位机与接线（`cmd/mornlea`）
 
-- [ ] 3.0 前置补全（Task1 暴露面缺口，控制会话裁决扩展）：`internal/server/host.go` 增 `Pause()`/`Resume()` 幂等直通转发到内持 `Server` 同一门——单机交互路径经 `Host` 持有权威世界，这是门的唯一宿主暴露面；配同包直测；验证 `go test ./internal/server -race -count=1`。
-- [ ] 3.1 先写失败测试：`menuPhasePaused` 转换矩阵（Esc 开 / Esc 或按钮关、防重入只恢复一次）、退回主菜单复用会话拆链后主菜单可再次装配、TCP 形态下注明标志下发且不调用本地服务端暂停接口。
-- [ ] 3.2 `app_menu.go` 增相位与按钮 id 常量；新增 `app_pause*.go` 承载暂停状态与动作处理；`interactive.go` 仅在 Esc switch 默认档接入打开动作、暂停档处理关闭；宿主装配处把嵌入服的门暴露给相位机。
-- [ ] 3.3 验证：`go test ./cmd/mornlea -race -count=1`。
+- [x] 3.0 前置补全（Task1 暴露面缺口，控制会话裁决扩展）：`internal/server/host.go` 增 `Pause()`/`Resume()` 幂等直通转发到内持 `Server` 同一门——单机交互路径经 `Host` 持有权威世界，这是门的唯一宿主暴露面；配同包直测；验证 `go test ./internal/server -race -count=1`。
+- [x] 3.1 先写失败测试：`menuPhasePaused` 转换矩阵（Esc 开 / Esc 或按钮关、防重入只恢复一次）、退回主菜单复用会话拆链后主菜单可再次装配、TCP 形态下注明标志下发且不调用本地服务端暂停接口。
+- [x] 3.2 `app_menu.go` 增相位与按钮 id 常量；新增 `app_pause*.go` 承载暂停状态与动作处理；`interactive.go` 仅在 Esc switch 默认档接入打开动作、暂停档处理关闭；宿主装配处把嵌入服的门暴露给相位机。
+- [x] 3.3 验证：`go test ./cmd/mornlea -race -count=1`。
 
 ## 4. 收尾（实现者+终审）
 

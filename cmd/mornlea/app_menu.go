@@ -20,6 +20,7 @@ const (
 	menuPhaseMenu                      // 主菜单可见，等待「进入游戏」
 	menuPhaseSettings                  // 设置页可见，世界仍未装配
 	menuPhaseStarting                  // 世界装配进行中（同步，防重入标记）
+	menuPhasePaused                    // 暂停覆盖层可见，权威模拟已冻结（远程形态仅呈现）
 )
 
 // 主菜单按钮 id 常量：与 client.UIButton.ID 及 Rust 侧回传的菜单点击事件一一对应。
@@ -31,6 +32,16 @@ const (
 	menuActionSettingsSave   uint32 = 5 // 保存设置
 	menuActionSettingsCancel uint32 = 6 // 取消更改
 	menuActionSettingsBack   uint32 = 7 // 返回或 Escape
+)
+
+// 暂停覆盖层按钮 id 常量：跨语言契约数字与 engine/crates/mornlea_client/src/ui.rs
+// 的 UI_ACTION_PAUSE_BACK / UI_ACTION_PAUSE_QUIT_TO_MENU 同值互钉，延续主菜单
+// 动作表 1..7 之后且互不重叠；Escape 键在暂停相位由 Rust egui 合成为返回动作
+// （沿设置页 Esc≡返回的先例），Go 侧不另设键位编号。两侧任何一方不得单方面
+// 改动数字。
+const (
+	menuActionPauseBack       uint32 = 8 // 返回游戏或 Escape
+	menuActionPauseQuitToMenu uint32 = 9 // 退回主菜单
 )
 
 // menuState 是主菜单的语义状态。Go 侧（cmd/mornlea，package main）拥有全部菜单
@@ -98,6 +109,8 @@ func (a *application) uiSegment() []byte {
 		return client.EncodeUISettings(a.settings.uiSettings())
 	case menuPhaseMenu, menuPhaseStarting:
 		return client.EncodeUIMenu(a.menu.uiMenu())
+	case menuPhasePaused:
+		return encodeUIPauseSegment(a.remote())
 	default:
 		return nil
 	}
@@ -107,8 +120,18 @@ func (a *application) uiSegment() []byte {
 //
 // start：置 starting 防重入后调用 startWorld；成功时相位由 startWorld 置为
 // menuPhaseGame，失败时回退到菜单相位并记录错误文本。quit：返回 true 让交互循环
-// 正常退出。设置相位只接受 save/cancel/back，其他错相位或未知 id 均忽略。
+// 正常退出。设置相位只接受 save/cancel/back；暂停相位只接受返回/退回主菜单，
+// 且防重入保证重复事件只生效一次。其他错相位或未知 id 均忽略。
 func (a *application) handleMenuEvent(id uint32) (quit bool) {
+	if a.menu.phase == menuPhasePaused {
+		switch id {
+		case menuActionPauseBack:
+			a.closePauseOverlay()
+		case menuActionPauseQuitToMenu:
+			a.quitToMenuFromPause()
+		}
+		return false
+	}
 	if a.menu.phase == menuPhaseSettings {
 		switch id {
 		case menuActionSettingsSave:

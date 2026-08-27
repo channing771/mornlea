@@ -122,6 +122,21 @@ func (h *Host) RunAtInputBoundary(
 	}
 }
 
+// Pause 把权威暂停门经宿主转发到内持世界。单机交互客户端经 cmd/mornlea 的
+// `applicationHost` 接口只持有 `*Host`，这是暂停门唯一的宿主暴露面——不另
+// 设取回内持 `*Server` 的通道，冻结与恢复的全部语义（整个权威 tick 不存在、
+// 消息通路存活、关服路径不受门影响）以 server 包 `paused` 字段注释为单一落点。
+// 幂等：重复置位只是重复写同一原子位。
+func (h *Host) Pause() {
+	h.world.Pause()
+}
+
+// Resume 清除宿主转发的暂停门：模拟从冻结时刻确定性续跑。幂等：对未暂停的
+// 世界重复调用同样无害。
+func (h *Host) Resume() {
+	h.world.Resume()
+}
+
 func NewHost(
 	ctx context.Context,
 	config Config,

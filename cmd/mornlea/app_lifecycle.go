@@ -69,39 +69,53 @@ func (a *application) closeClientSession(cause error) {
 		} else if a.clientEndpoint != nil {
 			a.clientCloseErr = a.clientEndpoint.Close()
 		}
-		if a.remotePlayers != nil {
-			a.remotePlayers.Reset()
-		}
-		if a.companions != nil {
-			a.companions.Reset()
-		}
-		if a.chatEvents != nil {
-			a.chatEvents.Reset()
-		}
-		chatWasOpen := a.chatInput.open
-		a.chatInput.Cancel()
-		a.clearFormattedChatLines()
-		// 容量与 client.ChatEventCapacity 同源（E9/C9）：与 application 字段声明
-		// 共用同一常量，断线重置不会因字面量漂移而改变缓冲长度。
-		a.chatEventBuffer = [client.ChatEventCapacity]network.ChatEvent{}
-		if chatWasOpen && a.window != nil {
+		// 拆链发生在游戏内时聊天输入框可能开着——镜像复位后按原状态恢复光标。
+		wasChatOpen := a.chatInput.open
+		a.resetSessionOwnedState()
+		if wasChatOpen && a.window != nil {
 			a.window.SetCursorCaptured(true)
 		}
-		a.inventory.Reset()
-		a.audioFeedback.Reset()
-		a.furnace.Reset()
-		a.chest.Reset()
-		// 合成网格镜像随会话一并清空：断线后不继承任何已确认网格状态
-		//（spec authoritative-grid-crafting「断线清空客户端镜像」）。
-		a.crafting.Reset()
-		a.miningOverlay = hud.MiningOverlay{}
-		// 进食进度是纯呈现预测，随会话一起清零，不得漏进重连后的第一帧。
-		a.eatingTracker.Reset()
-		a.damageFeedback.Reset()
-		a.damageStrength = 0
-		a.inventoryOpen = false
-		a.inventorySource = -1
-		a.itemDrops.Reset()
-		a.clientSessionClosed = true
 	})
+}
+
+// resetSessionOwnedState 清空全部会话态：客户端镜像、伙伴/聊天事件环、输入框、
+// 背包与容器视图、进食/受击呈现、掉落物等，并把 `clientSessionClosed` 置位。
+//
+// 它与端点关闭解耦成独立方法，因为拆链有两个入口共用同一份收摊语义：断线/
+// 窗口关闭路径经 `closeClientSession`（进程生命周期内一次），暂停页「退回主菜
+// 单」直接调用本方法——后者必须允许跨开合周期重复执行（第二次进入游戏再退回
+// 时 `clientCloseOnce` 已耗尽），同时把端点/接收器与 Host 生命周期的关闭交给
+// `releaseWorldConnection` 负责。光标是否恢复由调用方按相位意图决定，不在本
+// 方法内处理。
+func (a *application) resetSessionOwnedState() {
+	if a.remotePlayers != nil {
+		a.remotePlayers.Reset()
+	}
+	if a.companions != nil {
+		a.companions.Reset()
+	}
+	if a.chatEvents != nil {
+		a.chatEvents.Reset()
+	}
+	a.chatInput.Cancel()
+	a.clearFormattedChatLines()
+	// 容量与 client.ChatEventCapacity 同源（E9/C9）：与 application 字段声明
+	// 共用同一常量，断线重置不会因字面量漂移而改变缓冲长度。
+	a.chatEventBuffer = [client.ChatEventCapacity]network.ChatEvent{}
+	a.inventory.Reset()
+	a.audioFeedback.Reset()
+	a.furnace.Reset()
+	a.chest.Reset()
+	// 合成网格镜像随会话一并清空：断线后不继承任何已确认网格状态
+	//（spec authoritative-grid-crafting「断线清空客户端镜像」）。
+	a.crafting.Reset()
+	a.miningOverlay = hud.MiningOverlay{}
+	// 进食进度是纯呈现预测，随会话一起清零，不得漏进重连后的第一帧。
+	a.eatingTracker.Reset()
+	a.damageFeedback.Reset()
+	a.damageStrength = 0
+	a.inventoryOpen = false
+	a.inventorySource = -1
+	a.itemDrops.Reset()
+	a.clientSessionClosed = true
 }

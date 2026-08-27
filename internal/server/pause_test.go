@@ -297,3 +297,64 @@ func readySpawnChunkForDeterministicReplay(t *testing.T, running *Server) {
 		t.Fatalf("Ready = %+v，想要 [%+v]", ready.Ready, spawnKey)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Host 暂停门直通测试。单机交互客户端经 `applicationHost` 只持有 `*Host`，
+// 因此宿主必须把暂停门转发到内持 `*Server` 的同一原子位；这里用行为断言
+// 钉住转发落点与幂等性（冻结语义本身以 Server 侧 pause 测试为准，不重复
+// 孪生世界对照）。
+// ---------------------------------------------------------------------------
+
+func TestHostPausePassthroughFreezesWorldUntilResume(t *testing.T) {
+	host := newTestHost(t)
+
+	warmup := host.world.StepForTest()
+	if warmup.WorldTimeTicks == 0 {
+		t.Fatalf("预热 tick 世界时间 = %d，想要非零", warmup.WorldTimeTicks)
+	}
+	frozenAt := host.world.TickCount()
+
+	host.Pause()
+	if result := host.world.StepForTest(); !reflect.DeepEqual(result, sim.TickResult{}) {
+		t.Fatalf("宿主暂停后 tick 未被跳过: %+v", result)
+	}
+	if got := host.world.TickCount(); got != frozenAt {
+		t.Fatalf("宿主暂停后世界推进: 冻结于 %d，实际 %d", frozenAt, got)
+	}
+
+	host.Resume()
+	resumed := host.world.StepForTest()
+	wantTick, wantWorldTime := frozenAt+1, warmup.WorldTimeTicks+1
+	if resumed.Tick != wantTick || resumed.WorldTimeTicks != wantWorldTime {
+		t.Fatalf("宿主恢复后首个 tick=(%d,%d)，想要 (%d,%d)",
+			resumed.Tick, resumed.WorldTimeTicks, wantTick, wantWorldTime)
+	}
+}
+
+func TestHostPausePassthroughIsIdempotent(t *testing.T) {
+	host := newTestHost(t)
+	warmup := host.world.StepForTest()
+	frozenAt := host.world.TickCount()
+
+	// 置位侧幂等：重复 Pause 只写同一原子位，不排队、不计数。
+	host.Pause()
+	host.Pause()
+	if result := host.world.StepForTest(); !reflect.DeepEqual(result, sim.TickResult{}) {
+		t.Fatalf("重复 Pause 后 tick 未被跳过: %+v", result)
+	}
+	if got := host.world.TickCount(); got != frozenAt {
+		t.Fatalf("重复 Pause 改变了状态: 冻结于 %d，实际 %d", frozenAt, got)
+	}
+
+	// 恢复侧幂等：对刚恢复的世界再调一次 Resume 同样无害，直接续接增量。
+	host.Resume()
+	host.Resume()
+	for offset := uint64(1); offset <= 2; offset++ {
+		resumed := host.world.StepForTest()
+		wantTick, wantWorldTime := frozenAt+offset, warmup.WorldTimeTicks+offset
+		if resumed.Tick != wantTick || resumed.WorldTimeTicks != wantWorldTime {
+			t.Fatalf("恢复后第 %d 个 tick=(%d,%d)，想要 (%d,%d)",
+				offset, resumed.Tick, resumed.WorldTimeTicks, wantTick, wantWorldTime)
+		}
+	}
+}
