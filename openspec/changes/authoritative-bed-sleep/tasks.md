@@ -1,11 +1,11 @@
 # Tasks：authoritative-bed-sleep
 
-> 执行规范：每 Task 派发全新 implementer 子代理（brief 自包含）；TDD（red→green→refactor）；Task 完成后 SPEC+QUALITY 双评审，修复 ≤5 轮（R≤3 原实现者、R≥4 换新）；结论记入 `ledger.md`。协议版本号与编号终值以实现期 `main` 实占为准，撞号按 A-02 先例由后合并者重订。**前置检查：本行依赖 A-04 已交付 `core.DisplayDayPhase`（合并序 A-04 先）；Task 1 若发现该函数缺失，停手上报控制会话裁决。**
+> 执行规范：每 Task 派发全新 implementer 子代理（brief 自包含）；TDD（red→green→refactor）；Task 完成后 SPEC+QUALITY 双评审，修复 ≤5 轮（R≤3 原实现者、R≥4 换新）；结论记入 `ledger.md`。协议版本号与编号终值以实现期 `main` 实占为准，撞号按 A-02 先例由后合并者重订。**前置检查（2026-08-28 并行裁决）：`core.DisplayDayPhase(worldTime uint64, offset uint16) uint16` 允许本行与夜行者行各自交付——若实现期该函数尚不在本分支，按此钉定签名与「先 `%24000` 再相加取模」语义自带（含边界测试），rebase 合并时与先行行去重（保留一份）。**
 
 ## 1. 基线验证与契约核对
 
 - [ ] 1.1 运行 `git status --short`（worktree 干净）并记录 `make rust`、`go test ./internal/core ./internal/sim ./internal/storage ./internal/network ./internal/client ./internal/render ./internal/assets ./internal/mesh ./cmd/mornlea -race -count=1` 输出摘要到 `ledger.md`（数值只记录）
-- [ ] 1.2 核对 `core.DisplayDayPhase` 已存在且签名为 `(worldTime uint64, offset uint16) uint16`；核对 `core.BlockEmission`/`BlockLightAttenuation`/`BlockOpaque` 可用；核对方块/物品/配方段末常量与 S→C 实占编号，记录本行将取用的编号于 `ledger.md`；`openspec validate --all --strict --no-interactive` 与 `git diff --check` 通过
+- [ ] 1.2 核对 `core.DisplayDayPhase` 是否已存在：已存在则核对其签名为 `(worldTime uint64, offset uint16) uint16` 并直接消费；不存在则按头部前置检查的钉定签名记入本行自带清单（rebase 去重）；核对 `core.BlockEmission`/`BlockLightAttenuation`/`BlockOpaque` 可用性；核对方块/物品/配方段末常量与 S→C 实占编号，记录本行将取用的编号于 `ledger.md`；`openspec validate --all --strict --no-interactive` 与 `git diff --check` 通过
 
 ## 2. 床方块、物品、配方与碰撞
 
