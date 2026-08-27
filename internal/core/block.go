@@ -114,8 +114,8 @@ const (
 	// 形态名与放置时的命中面同名（火把贴在支撑块的哪个侧面），63..66 按
 	// +X/−X/+Z/−Z 顺序冻结。墙面形态的支撑格位于火把的命中面反方向
 	// （face.Opposite()），由放置执行方消费；命中面 → 形态的唯一映射窗口是
-	// PlaceableBlockAtFace。火把零碰撞、非不透明、非流体、发光 14，光照与
-	// 瞄准属性见 block_properties.go。
+	// PlaceableBlockAtFace。火把按契约不提供碰撞体（physics 侧接线后恒为空）、
+	// 非不透明、非流体、发光 14，光照与瞄准属性见 block_properties.go。
 	TorchStandingID
 	TorchWallPosXID
 	TorchWallNegXID

@@ -28,7 +28,7 @@ func TestTorchBlockIDsAppendAfterCrops(t *testing.T) {
 		if core.IsFluid(id) {
 			t.Fatalf("火把形态 %d 被判成流体", id)
 		}
-		if core.IsTorch(id) != true {
+		if !core.IsTorch(id) {
 			t.Fatalf("火把形态 %d 未被 IsTorch 覆盖", id)
 		}
 		if name, ok := core.BlockDisplayName(id); !ok || name == "" {

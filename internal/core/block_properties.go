@@ -12,8 +12,9 @@ func IsTorch(id BlockID) bool {
 // 其余（含未知与越界编号）0。
 //
 // 本函数是全仓唯一的「方块发光」判定表：客户端注册表（internal/assets 的
-// Emission 只做转调）与服务端生成判定（夜行者的黑暗判定）都消费这一张表，
-// 经 mesh registry 快照送过 ABI 边界；新增发光方块只允许改这里。
+// Emission 只做转调）现在就消费这一张表并经 mesh registry 快照送过 ABI 边界；
+// 服务端生成判定（夜行者的黑暗判定）的消费者尚未存在，将来落地时同样只消费
+// 这里、不建第二套；新增发光方块只允许改这里。
 func BlockEmission(id BlockID) uint8 {
 	switch {
 	case id == LightBlockID:

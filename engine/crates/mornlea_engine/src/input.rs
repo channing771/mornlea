@@ -28,10 +28,10 @@ const HEIGHTS_BYTES: usize = 9 * 256 * 2;
 const REGISTRY_ENTRY_BYTES: usize = 19;
 /// registry 条目表的容量上限。
 ///
-/// 64 是**上限**而不是当前条目数：Go 侧 `internal/assets.NewRegistry()` 把
+/// 80 是**上限**而不是当前条目数：Go 侧 `internal/assets.NewRegistry()` 把
 /// `core.AirID..core.BlockIDMax-1` 的全部已注册方块烘焙进 mesh snapshot，今天
-/// 是 61 条（27 个 M4 材料 + 8 个流体 + 26 个农业编号）。留出余量是为了避免
-/// 每次追加方块编号都要做一次跨语言的常量同步。
+/// 是 67 条（27 个 M4 材料 + 8 个流体 + 27 个农业编号含工作台 + 5 个火把形态）。
+/// 留出余量是为了避免每次追加方块编号都要做一次跨语言的常量同步。
 ///
 /// 本常量此前是 35，即"恰好等于当时的条目数"；那种写法会在 Go 侧追加编号时
 /// 静默分叉，因为 Go 侧的对应常量当时是从末位方块编号推导出来的、会自己长大。
@@ -42,7 +42,7 @@ const REGISTRY_ENTRY_BYTES: usize = 19;
 ///
 /// **注意**：本文件开头 `BLOCKS_BYTES = 27 * 4096 * 2` 里的 27 是 3×3×3 邻域的
 /// 区段数，与本常量只是数字撞了，两者语义无关，改一个绝不能牵动另一个。
-const MAX_REGISTRY_ENTRIES: usize = 64;
+const MAX_REGISTRY_ENTRIES: usize = 80;
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum InputError {

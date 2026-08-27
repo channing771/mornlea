@@ -213,7 +213,8 @@ func NewRegistry() *Registry {
 	// RegistryView::face_visible 只做位图查表、缺条目一律判不可见，漏掉谁就等于
 	// 谁永远不出面（流体当年正是这样差点画不出水）。
 	// 条目数必须不超过 internal/mesh.nativeMaxRegistryEntries 与 Rust 的
-	// MAX_REGISTRY_ENTRIES（今天是 64 <= 64）。
+	// MAX_REGISTRY_ENTRIES（当前已注册 67 个方块，上限 80；上限扩容必须
+	// Go/Rust 两侧同批同步）。
 	ids := make([]world.BlockID, 0, int(core.BlockIDMax))
 	for id := core.AirID; id < core.BlockIDMax; id++ {
 		ids = append(ids, id)
