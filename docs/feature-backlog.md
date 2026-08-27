@@ -80,7 +80,7 @@
 
 | ID | 功能 | 简述 | 版本与契约影响 | 状态 | 认领人 | 来源与备注 |
 |---|---|---|---|---|---|---|
-| B-01 | 更多作物 | 在既有小麦之外追加作物，按编号、纹理和生长参数分别形成闭环 | 方块/物品编号与配方表追加，无 wire 结构变更 | 设计候选 | — | farming 遗留 2；hunger 遗留 1 的肉类与熟食已收敛到 B-27，本行不再重复；原作物范围曾因与 A-02 文件及 mesh registry 容量冲突而延迟，须重新设计后再进入队列 |
+| B-01 | 更多作物 | 在既有小麦之外追加作物，按编号、纹理和生长参数分别形成闭环 | 方块/物品编号与配方表追加，无 wire 结构变更 | 已认领 | opencode-implementer @ feat/B-01-more-crops | farming 遗留 2；hunger 遗留 1 的肉类与熟食已收敛到 B-27，本行不再重复；原作物范围曾因与 A-02 文件及 mesh registry 容量冲突而延迟，须重新设计后再进入队列；2026-08-27 控制会话晋升设计候选→就绪→已认领。独占文件集：`internal/core (BlockID/ItemID), internal/sim (crop/mining/bone_meal), internal/assets, internal/mesh, internal/storage` |
 | B-02 | 水桶（可搬运流体） | 舀水/倒水物品，解除「农业只能在天然水体 4 格内」约束 | 物品编号追加；无限水源规则随本行一并裁决 | 排队 | — | farming 遗留 25（显式非目标解除）；fluid proposal 非目标「两个源相邻生成新源」约定随水桶交付；依赖 B-04 |
 | B-03 | 骨粉 | 新物品 + 「立即推进 N 阶段」动作，走翻地同形命令路径 | 物品编号追加；命令段可能追加 | 已完成 | opencode-implementer @ feat/B-03-bone-meal | farming 遗留 3；2026-08-27 控制会话晋升排队→已完成，bounded：`ItemBoneMeal` + `BoneMeal` 命令（`Yaw/Pitch`，目标由射线决定，`ProtocolVersion 26→27`）立即推进 `WheatStage0..6→下一阶段` 1 阶，`Stage7` 不变，消耗 1，拒绝零消耗。独占文件集：`internal/core/item.go`（`ItemBoneMeal` append-only）、`internal/network`（`message_command.go`/`packet.go`/`registry.go`/`codec_client.go`）、`internal/sim/command.go`+`bone_meal.go`及测试、`internal/server/session_ingress.go`、`cmd/mornlea/app_input.go`；2026-08-27 归档为 `openspec/changes/archive/2026-08-27-bone-meal/` 并 sync 进 `authoritative-farming` 主规格（`openspec validate --all --strict` 67 passed），`go test ./... -short` 全绿 |
 | B-04 | 草丛与除草掉种子 | 植物几何第二消费者；草丛掉落种子替代初始材料包供给 | 植物区间编号追加 | 排队 | — | farming 遗留 6；依赖 A-05；同一行取消固定 64 种子赠送 |
