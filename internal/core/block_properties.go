@@ -39,15 +39,17 @@ func BlockLightAttenuation(id BlockID) uint8 {
 }
 
 // BlockOpaque 返回方块是否完全不透明（遮挡邻面、阻断光照传播）：已注册的普通
-// 实心立方体 true；空气、玻璃、树叶、八个流体、全部作物、九个门形态与五种
-// 火把形态 false；未注册与越界编号一律 false。
+// 实心立方体 true；空气、玻璃、树叶、八个流体、全部作物、九个门形态、五种
+// 火把形态与八个床形态 false；未注册与越界编号一律 false。
 //
 // 判据逐值承接自 internal/assets 的 Registry.Opaque 迁移前的实际实现（迁移前
 // 的穷举矩阵由 block_properties_test.go 锁定），两处差异都有几何成因，不得
 // 「简化」掉：门是厚度 3/16 的薄板、火把是零碰撞的发光形态，二者都不填满
 // 格子，与玻璃/树叶/作物同属透明类；屏障虽不可见，但作为普通实心立方体保持
 // true。作物非不透明还承托着「作物下方耕地仍被照亮」——客户端天空光 BFS 的
-// 阻断判据就是本表经注册表的转调。
+// 阻断判据就是本表经注册表的转调。床是 9/16 半高方块，只占格子的下半，与门
+// 同属「不满格即不遮光」的透明分类：判成不透明会让床上方格的派生天空光归零、
+// 床面在夜间反而被错误压暗。
 //
 // 本函数是全仓唯一的「方块不透明」判定表：客户端注册表（internal/assets 的
 // Opaque 只做转调，值再经 mesh registry 快照送过 ABI 边界）与服务端夜行者的
@@ -55,7 +57,8 @@ func BlockLightAttenuation(id BlockID) uint8 {
 // 判定分支。
 func BlockOpaque(id BlockID) bool {
 	return RegisteredBlock(id) && id != AirID && id != GlassID &&
-		id != LeavesID && !IsFluid(id) && !IsCrop(id) && !IsDoor(id) && !IsTorch(id)
+		id != LeavesID && !IsFluid(id) && !IsCrop(id) && !IsDoor(id) &&
+		!IsTorch(id) && !IsBed(id)
 }
 
 // PlaceableBlockAtFace 是「物品 × 命中面 → 写入方块形态」的唯一映射窗口：

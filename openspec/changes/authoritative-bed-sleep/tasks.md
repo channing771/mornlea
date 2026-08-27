@@ -9,10 +9,10 @@
 
 ## 2. 床方块、物品、配方与碰撞
 
-- [ ] 2.1 失败测试：8 个床 `BlockID`（床尾/床头 × 4 朝向）与 `ItemBed`（堆叠 64）登记、`BlockIDMax`/物品段顺延、放置/采掘/朝向映射的纯函数表；`go test ./internal/core -race -count=1` 后实现
-- [ ] 2.2 失败测试：`RecipeBed`（3×3 顶排 3 小麦 + 下排 3 橡木木板 → 床 ×1，镜像位自身等价；与门 2×3 形状互不匹配；裁边语义不受摆放位置影响）后实现；`go test ./internal/core -race -count=1`
-- [ ] 2.3 失败测试：床半高 9/16 碰撞体（`physics.BlockCollisionBoxes`）、raycast 命中两格、流体视床为占据格；`go test ./internal/physics ./internal/core ./internal/fluid -race -count=1` 后实现
-- [ ] 2.4 `internal/assets` 程序化纹理层（原创橡木配色）与 `internal/mesh` model tag 追加（容量内，不升 engine ABI，门先例；容量断言测试）；`gofmt -w internal/core internal/physics internal/fluid internal/assets internal/mesh`、`make rust`、`go test ./internal/assets ./internal/mesh ./internal/engine -race -count=1`；SPEC+QUALITY 双评审后提交 `feat: add bed blocks and recipe`（评审写入 ledger）
+- [x] 2.1 失败测试：8 个床 `BlockID`（床尾/床头 × 4 朝向）与 `ItemBed`（堆叠 64）登记、`BlockIDMax`/物品段顺延、放置/采掘/朝向映射的纯函数表；`go test ./internal/core -race -count=1` 后实现
+- [x] 2.2 失败测试：`RecipeBed`（3×3 顶排 3 小麦 + 下排 3 橡木木板 → 床 ×1，镜像位自身等价；与门 2×3 形状互不匹配；裁边语义不受摆放位置影响）后实现；`go test ./internal/core -race -count=1`
+- [x] 2.3 失败测试：床半高 9/16 碰撞体（`physics.BlockCollisionBoxes`）、raycast 命中两格、流体视床为占据格；`go test ./internal/physics ./internal/core ./internal/fluid -race -count=1` 后实现
+- [x] 2.4 `internal/assets` 程序化纹理层（原创橡木配色）与 `internal/mesh` model tag 追加（容量内，不升 engine ABI，门先例；容量断言测试）；`gofmt -w internal/core internal/physics internal/fluid internal/assets internal/mesh`、`make rust`、`go test ./internal/assets ./internal/mesh ./internal/engine -race -count=1`；SPEC+QUALITY 双评审后提交 `feat: add bed blocks and recipe`（评审写入 ledger）
 
 ## 3. 放置、采掘与支撑（门先例同构）
 

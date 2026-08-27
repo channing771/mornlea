@@ -85,6 +85,11 @@ const (
 	// 它不出现在 BlockDrop 表：世界上没有任何方块采掘出腐肉，唯一来源是权威
 	// 模拟在夜行者死亡 chunk 的掉落放置。同样只能追加在 ItemIDMax 哨兵之前。
 	ItemRottenFlesh
+	// ItemBed 是床物品：由 RecipeBed 合成（顶排 3 小麦 + 下排 3 橡木木板）、
+	// 可堆叠 64、没有耐久也不是食物/工具。与 ItemDoor 同形：ItemPlacement 给出
+	// 默认形态（南向床尾），床头格的展开、朝向选择与双格原子写入由放置执行方
+	// 消费；八个床形态采掘都掉回恰好 1 个本物品（见 BlockDrop）。
+	ItemBed
 	// ItemIDMax 是合法物品编号的独占上界（最后一个合法 ItemID + 1），本身不是
 	// 物品枚举成员。它供测试以「item < ItemIDMax」穷举全部物品，替代依赖
 	//「某个具体物品恰为枚举末项」的脆弱写法；放在 core 是因为物品注册表归属
@@ -272,6 +277,12 @@ func BlockDrop(block BlockID) (ItemID, bool) {
 	// 形态产生额外产物或损耗（支撑失效的移除路径同样掉这一枚）。
 	case TorchStandingID, TorchWallPosXID, TorchWallNegXID, TorchWallPosZID, TorchWallNegZID:
 		return ItemTorch, true
+	// 床的八个形态（床尾/床头 × 四向）都掉回恰好 1 个床物品：床尾与床头只是
+	// 双格中的位置差异，采掘任一半都会整床回收，掉落不因朝向或半边产生额外
+	// 产物或损耗（数量语义在掉落路径，这里只给物品）。
+	case BedFootSouthID, BedFootWestID, BedFootNorthID, BedFootEastID,
+		BedHeadSouthID, BedHeadWestID, BedHeadNorthID, BedHeadEastID:
+		return ItemBed, true
 	default:
 		return ItemNone, false
 	}
@@ -288,7 +299,7 @@ func ItemStackLimit(item ItemID) (uint8, bool) {
 		ItemWheatSeeds, ItemWheat, ItemBread,
 		ItemStick, ItemWorkbench, ItemBoneMeal,
 		ItemPotato, ItemCarrot, ItemPoisonousPotato, ItemDoor,
-		ItemTorch, ItemRottenFlesh:
+		ItemTorch, ItemRottenFlesh, ItemBed:
 		return MaxStackCount, true
 	case ItemStonePickaxe, ItemIronPickaxe,
 		ItemBrokenStonePickaxe, ItemBrokenIronPickaxe,
@@ -403,6 +414,10 @@ func ItemPlacement(item ItemID) (BlockID, bool) {
 		return CarrotStage0ID, true
 	case ItemDoor:
 		return DoorLowerSouthClosed, true
+	// 床与门同形：单值放置映射给出默认形态（南向床尾），床头格与朝向的展开
+	// 由放置执行方经 BedHeadID/BedHeadNeighbor 原子完成。
+	case ItemBed:
+		return BedFootSouthID, true
 	default:
 		return AirID, false
 	}

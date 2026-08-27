@@ -19,7 +19,7 @@ const (
 	nativeRegistryEntryBytes = 2 + 1 + 1 + 6*2 + 1 + 1 + 1 + 1
 	// nativeMaxRegistryEntries 必须与 Rust 端硬编码的
 	// engine/crates/mornlea_engine/src/input.rs 的 MAX_REGISTRY_ENTRIES
-	// (=80) 保持一致——两侧各自独立定义，没有共享常量或生成步骤，全靠人
+	// (=96) 保持一致——两侧各自独立定义，没有共享常量或生成步骤，全靠人
 	// 手动同步。条目上限不在 engine ABI 版本契约内，改动上限不需要跟着升
 	// ABI 版本号；Go/Rust 两侧数值是否一致，由容量同步测试
 	// TestNativeAcceptsRegistryAtGoCapacity 真的喂满一次跨语言调用来守护，
@@ -27,20 +27,21 @@ const (
 	//
 	// 这里是**上限**而不是当前条目数：internal/assets.NewRegistry() 把
 	// core.AirID..core.BlockIDMax-1 的全部已注册方块烘焙进 mesh snapshot
-	// （见 internal/assets/blocks.go），今天是 76 条（门 9 个与火把五形态
-	// 合入后）。
+	// （见 internal/assets/blocks.go），今天是 84 条（门 9 个、火把五形态与
+	// 床八形态合入后）。
 	// 本常量此前写成 `int(core.WaterLevel7ID)+1`，即"恰好等于当前条目数"，
 	// 于是追加方块编号时 Go 侧会自己长大而 Rust 侧不会，两侧静默分叉。改成
 	// 显式上限后，「条目数不得超过上限」由 TestRegistryCapacityCoversEveryRegisteredBlock
 	// 的位置性断言守住，「Rust 上限不小于本上限」由
 	// TestNativeAcceptsRegistryAtGoCapacity 真的喂满一次跨语言调用守住。
-	// 留到 80 而不是紧贴 76，是给后续批次（床的多形态等）预留，避免连续变更
-	// 都动同一处上限。两侧一旦不同步，Go 端喂进的条目数会被 Rust 侧
+	// 80 的余量本为床八形态预留，实际落点 84 超出 4 条；床批次同批把上限
+	// 顺延到 96（沿 35→48→64→80 的扩容节奏），继续给后续批次留余量，避免
+	// 连续变更都动同一处上限。两侧一旦不同步，Go 端喂进的条目数会被 Rust 侧
 	// registry_count > MAX_REGISTRY_ENTRIES 校验直接拒绝整次 mesh 调用。
 	// 顺带一提：input.rs 的 BLOCKS_BYTES = 27*4096*2 里也有一个 27，但那
 	// 是 3×3×3 邻域区段数，跟这里的 registry 条目数上限只是数字撞了，两者
 	// 无关，改一个不需要牵动另一个。
-	nativeMaxRegistryEntries = 80
+	nativeMaxRegistryEntries = 96
 	nativeMaxRegistryWords   = (nativeMaxRegistryEntries + 63) / 64
 	nativeLightVolume        = 48 * 48 * 48
 	nativeScratchPadding     = (4 - nativeLightVolume%4) % 4
@@ -92,10 +93,11 @@ func encodeNativeInput(dst []byte, n *world.Neighborhood, snapshot RegistrySnaps
 		if block.LightAttenuation > 1 {
 			return 0, fmt.Errorf("mesh: 方块光衰减超过 1")
 		}
-		// model tag 的封闭集合：0=默认、1..5=火把五形态；6（床，保留）与未知值
-		// 在此拒绝，Rust 侧 `RegistryView::validate` 同口径，这里提前给出可读错误。
-		if block.Model > 5 {
-			return 0, fmt.Errorf("mesh: 方块 model tag=%d 超出封闭集合 0..5", block.Model)
+		// model tag 的封闭集合：0=默认、1..5=火把五形态、6=床（床尾/床头 ×
+		// 四向八形态共用同一床几何）；7 起的未知值在此拒绝，Rust 侧
+		// `RegistryView::validate` 同口径，这里提前给出可读错误。
+		if block.Model > 6 {
+			return 0, fmt.Errorf("mesh: 方块 model tag=%d 超出封闭集合 0..6", block.Model)
 		}
 		air = air || block.ID == core.AirID
 		barrier = barrier || block.ID == core.BarrierID

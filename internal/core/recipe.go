@@ -49,6 +49,14 @@ const (
 	// 线。形状宽 1 高 2，恰好放进 2×2 个人网格（无需先造工作台），镜像与自身
 	// 相同；倒置（木棍在煤炭上方）是垂直翻转，永不匹配。
 	RecipeTorch
+	// RecipeBed 顶排 3 小麦、中排空、下排 3 橡木木板，合成 1 个床。
+	//
+	// 它是睡眠闭环的前置：小麦经面包之外获得第二个用途，床成为「种地」与
+	// 「过夜」之间的通路。形状占满 3×3、中排空是形状的一部分（裁边语义不吞
+	// 内部空行，压掉中排的 3×2 摆放不匹配）；三行各自左右对称，因此镜像位按
+	// 「形状自身水平镜像等价」声明（与 RecipeTorch 的声明方式同形），与门
+	// 2×3 两列木板形状互不误配。
+	RecipeBed
 )
 
 // Recipe 返回 id 的固定形状配方；未知 ID 返回 false。
@@ -230,6 +238,19 @@ func recipePattern(id RecipeID) (RecipePattern, bool) {
 			},
 			Output: ItemStack{Item: ItemTorch, Count: 4},
 		}, true
+	// 床：顶排 3 小麦、中排空、下排 3 橡木木板（3×3），产出 1 个床。中排空是
+	// 形状的内部空洞，裁边语义与熔炉圆环同构；三行各自左右对称，镜像与自身
+	// 相同。
+	case RecipeBed:
+		return RecipePattern{
+			Width: 3, Height: 3, Mirror: true,
+			Cells: [CraftingGridSlots]ItemID{
+				ItemWheat, ItemWheat, ItemWheat,
+				ItemNone, ItemNone, ItemNone,
+				ItemOakPlanks, ItemOakPlanks, ItemOakPlanks,
+			},
+			Output: ItemStack{Item: ItemBed, Count: 1},
+		}, true
 	default:
 		return RecipePattern{}, false
 	}
@@ -248,8 +269,9 @@ func recipePattern(id RecipeID) (RecipePattern, bool) {
 // 或有效尺寸之外的格（个人网格的格 4..8）残留物品时，一律判定无匹配——
 // 正常权威路径不会构造出这两种输入，这里是防御层。
 //
-// 实现是固定 15 条 × 至多 9 格的纯值循环，无 map/slice 分配，不建通用矩阵包
-// （design.md D3）。
+// 实现是固定 16 条 × 至多 9 格的纯值循环，无 map/slice 分配，不建通用矩阵包
+// （design.md D3）。循环上界用命名常量 RecipeBed 而非字面量：追加新配方时
+// 它随注册表自然延伸（与 BlockIDMax 同形的哨兵纪律）。
 func MatchCraftingGrid(size uint8, slots [CraftingGridSlots]ItemStack) (RecipeID, ItemStack, bool) {
 	if size != 2 && size != 3 {
 		return 0, ItemStack{}, false
@@ -271,7 +293,7 @@ func MatchCraftingGrid(size uint8, slots [CraftingGridSlots]ItemStack) (RecipeID
 	if !ok {
 		return 0, ItemStack{}, false
 	}
-	for id := RecipeStoneBricks; id <= RecipeTorch; id++ {
+	for id := RecipeStoneBricks; id <= RecipeBed; id++ {
 		pattern, registered := recipePattern(id)
 		if !registered {
 			continue

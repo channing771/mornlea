@@ -38,10 +38,11 @@ func (modelTagRegistry) MeshSnapshot() RegistrySnapshot {
 }
 
 // TestBuildRegistrySnapshotModelTagDomain 把 model tag 的封闭集合钉在快照层：
-// 0（默认）与 1..5（火把五形态）合法，6（床，保留即拒绝）与任何未知值被拒。
-// Rust 侧 `RegistryView::validate` 同口径拒绝，这里提前给出可读错误。
+// 0（默认）、1..5（火把五形态）与 6（床八形态共用的单值床几何）合法，7 起
+// 的未知值被拒。Rust 侧 `RegistryView::validate` 同口径拒绝，这里提前给出
+// 可读错误。
 func TestBuildRegistrySnapshotModelTagDomain(t *testing.T) {
-	for _, tag := range []uint8{0, 1, 2, 3, 4, 5} {
+	for _, tag := range []uint8{0, 1, 2, 3, 4, 5, 6} {
 		if _, err := BuildRegistrySnapshot(
 			[]world.BlockID{core.AirID, core.BarrierID},
 			modelTagRegistry(tag),
@@ -49,7 +50,7 @@ func TestBuildRegistrySnapshotModelTagDomain(t *testing.T) {
 			t.Fatalf("model tag=%d 被拒绝：%v", tag, err)
 		}
 	}
-	for _, tag := range []uint8{6, 7, 255} {
+	for _, tag := range []uint8{7, 8, 255} {
 		if _, err := BuildRegistrySnapshot(
 			[]world.BlockID{core.AirID, core.BarrierID},
 			modelTagRegistry(tag),
@@ -108,7 +109,7 @@ func TestEncodeNativeInputWritesModelByteAtOffsetNineteen(t *testing.T) {
 // TestEncodeNativeInputRejectsUnknownModelTags 是上一条的编码侧镜像：
 // 未通过 BuildRegistrySnapshot 预检的手工快照同样在编码期被拒绝。
 func TestEncodeNativeInputRejectsUnknownModelTags(t *testing.T) {
-	for _, tag := range []uint8{6, 7, 255} {
+	for _, tag := range []uint8{7, 8, 255} {
 		snapshot := RegistrySnapshot{
 			Blocks: []BlockProperties{
 				{ID: core.AirID},
