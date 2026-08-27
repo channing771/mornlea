@@ -884,10 +884,15 @@ func TestCompanionIdleDialogueMemoryTCPParity(t *testing.T) {
 		if settled < 2 {
 			t.Fatalf("%s 传输的任务台词未在 200 tick 内收敛", transport)
 		}
-		for {
+		drained := false
+		for range 200 {
 			if tickEvents := stepDialogueTick(t, host, []network.ClientEndpoint{client}); len(tickEvents) == 0 {
+				drained = true
 				break
 			}
+		}
+		if !drained {
+			t.Fatalf("%s 传输的残余事件在 200 tick 内未排空", transport)
 		}
 		// 第三步：换上全新的假台词模型（响应文本稳定），武装一次到期机会。
 		idleDialogue := newFakeDialogueModel(t)

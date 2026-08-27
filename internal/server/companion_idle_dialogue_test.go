@@ -598,6 +598,8 @@ func TestIdleDialogueOutcomeStaleDiscarded(t *testing.T) {
 		},
 		{
 			name: "世代变化",
+			// 世代预检位于 node switch 之前、对全部节点生效：本用例只递增
+			// outcome.generation，队列保持空，证明 idle 分支不依赖世代兜底。
 			mutate: func(_ *companionManager, _ *companionTaskSlot, _ companion.ID, _ companion.Body, outcome *dialogueOutcome) {
 				outcome.generation++
 			},
@@ -764,8 +766,6 @@ func TestIdleDialogueTaskStartDoesNotPreemptIdle(t *testing.T) {
 	if countKind(started, network.ChatEventTaskStarted) != 1 {
 		t.Fatalf("idle 在途期间任务未开始：事件=%v", chatEventKinds(started))
 	}
-	// idle 请求先于断言确定抵达假模型（HTTP 到达是墙钟事件）。
-	waitForDialogueRequests(t, dialogue, 1)
 	requests, inFlight, cancels := dialogue.snapshotCounts()
 	if requests != 1 || inFlight != 1 || cancels != 0 {
 		t.Fatalf("idle 在途后任务启动：requests=%d inFlight=%d cancels=%d", requests, inFlight, cancels)
