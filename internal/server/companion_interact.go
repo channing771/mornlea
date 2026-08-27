@@ -458,10 +458,11 @@ func (m *companionManager) interactionGoal(body companion.Body, step companion.P
 }
 
 // standingCellInView 按 PathGrid.standing 的语义判定候选站立格：feet 与 head
-// 可通过、正下方支撑实心。生产阻挡表只有空气可通过（见
-// productionCompanionPassableBlocks），因此「可通过」在这里等价于「是空气」
-// ——与寻路侧判定同义而不重复实现表格。区块未 ready 的列判为不站立：宁可
-// 顺延到寻路阶段的重试语义，也不基于未知地形选终点。
+// 可通过、正下方支撑实心。这里刻意比生产阻挡表（见
+// productionCompanionPassableBlocks）更严：作物与火把虽零碰撞「可通过」，但
+// 作为交互终点的站立/头顶格仍要求是空气——零碰撞编号逐块对齐 collision
+// oracle 的约束只落在寻路阻挡表上，不由本判定承担。区块未 ready 的列判为不
+// 站立：宁可顺延到寻路阶段的重试语义，也不基于未知地形选终点。
 func standingCellInView(view companionChunkView, cell companion.PathCell) bool {
 	feet, ok := view.blockAt(cell.X, cell.Y, cell.Z)
 	if !ok || feet != core.AirID {
