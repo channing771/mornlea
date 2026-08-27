@@ -16,11 +16,11 @@
 
 ## 3. hostile_mobs.bin schema v1 与存储契约
 
-- [ ] 3.1 失败测试：文件布局（32-byte 头 magic `MHST`/envelope 1/schema 1/revision u64/count u32/payloadLen u32/CRC-32C；CRC 覆盖 `data[8:28]`+payload；≤64×72-byte 记录；总长 ≤4640 bytes；记录 ID 非零严格升序；round trip）
-- [ ] 3.2 失败测试：字段校验矩阵（future schema/envelope、截断、尾随、坏 CRC、count>64、重复/逆序/零 ID、未知 dimension、NaN/Inf、health 0 或 >20、非法 bool、无目标却带 PlayerID、有目标非 UUIDv4、cooldown/burn/despawn 越界、position.Y 不在 `[core.MinY, core.MaxY)`、payload 读空）
-- [ ] 3.3 实现固定 binary codec（复用既有 `appendU32`/`byteDecoder`/CRC helper；不使用 JSON/gob/reflection；`physics.State` 只编码 position/velocity/onGround；保留字段零）
-- [ ] 3.4 实现 `HostileMobStore`（`LoadHostileMobs`/`SaveHostileMobs`；missing 返回独立 `ErrHostileMobsNotFound`）与 Memory/Disk 契约（temp+fsync+rename、0600、revision 冲突与损坏保护、`hostile_mobs.bin` 路径、WorldStore 组合、backup 复制正式文件忽略 temp）
-- [ ] 3.5 `hostile_codec_fuzz_test.go`/故障注入（截断、bit-flip 不 panic；golden round trip）；`gofmt -w internal/storage`、`go test ./internal/storage -race -count=1`；SPEC+QUALITY 双评审后提交 `feat: persist hostile nightwalkers`（评审写入 ledger）
+- [x] 3.1 失败测试：文件布局（32-byte 头 magic `MHST`/envelope 1/schema 1/revision u64/count u32/payloadLen u32/CRC-32C；CRC 覆盖 `data[8:28]`+payload；≤64×72-byte 记录；总长 ≤4640 bytes；记录 ID 非零严格升序；round trip）
+- [x] 3.2 失败测试：字段校验矩阵（future schema/envelope、截断、尾随、坏 CRC、count>64、重复/逆序/零 ID、未知 dimension、NaN/Inf、health 0 或 >20、非法 bool、无目标却带 PlayerID、有目标非 UUIDv4、cooldown/burn/despawn 越界、position.Y 不在 `[core.MinY, core.MaxY)`、payload 读空）
+- [x] 3.3 实现固定 binary codec（复用既有 `appendU32`/`byteDecoder`/CRC helper；不使用 JSON/gob/reflection；`physics.State` 只编码 position/velocity/onGround；保留字段零）
+- [x] 3.4 实现 `HostileMobStore`（`LoadHostileMobs`/`SaveHostileMobs`；missing 返回独立 `ErrHostileMobsNotFound`）与 Memory/Disk 契约（temp+fsync+rename、0600、revision 冲突与损坏保护、`hostile_mobs.bin` 路径、WorldStore 组合、backup 复制正式文件忽略 temp）
+- [x] 3.5 `hostile_codec_fuzz_test.go`/故障注入（截断、bit-flip 不 panic；golden round trip）；`gofmt -w internal/storage`、`go test ./internal/storage -race -count=1`；SPEC+QUALITY 双评审后提交 `feat: persist hostile nightwalkers`（评审写入 ledger）
 
 ## 4. sim 夜行者身体、spawn、局部暗度与生命周期
 

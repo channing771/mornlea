@@ -17,6 +17,7 @@ type MemoryStore struct {
 	chunks     map[core.ChunkKey]memoryChunk
 	players    map[core.PlayerID]memoryPlayer
 	companions memoryCompanions
+	hostiles   memoryHostiles
 }
 
 type memoryChunk struct {
@@ -37,6 +38,13 @@ type memoryPlayer struct {
 }
 
 type memoryCompanions struct {
+	revision uint64
+	encoded  []byte
+}
+
+// memoryHostiles 与 memoryCompanions 同构：聚合文件在内存中只保留规范化
+// 编码字节与 revision，加载走与磁盘一致的解码路径，保证双实现同构。
+type memoryHostiles struct {
 	revision uint64
 	encoded  []byte
 }
@@ -290,6 +298,52 @@ func (store *MemoryStore) SaveCompanions(ctx context.Context, save CompanionSave
 		}
 	}
 	store.companions = memoryCompanions{revision: save.Revision, encoded: bytes.Clone(encoded)}
+	return nil
+}
+
+func (store *MemoryStore) LoadHostileMobs(ctx context.Context) (StoredHostileMobs, error) {
+	if err := ctx.Err(); err != nil {
+		return StoredHostileMobs{}, err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return StoredHostileMobs{}, err
+	}
+	if len(store.hostiles.encoded) == 0 {
+		return StoredHostileMobs{}, ErrHostileMobsNotFound
+	}
+	return decodeHostileMobs(bytes.Clone(store.hostiles.encoded))
+}
+
+func (store *MemoryStore) SaveHostileMobs(ctx context.Context, save HostileMobsSave) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	encoded, err := encodeHostileMobs(save)
+	if err != nil {
+		return err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if stored := store.hostiles; len(stored.encoded) != 0 {
+		switch {
+		case save.Revision < stored.revision:
+			return fmt.Errorf(
+				"%w: hostile revision %d is below %d",
+				ErrRevisionConflict, save.Revision, stored.revision,
+			)
+		case save.Revision == stored.revision:
+			if !bytes.Equal(encoded, stored.encoded) {
+				return fmt.Errorf("%w: hostile revision %d", ErrRevisionConflict, save.Revision)
+			}
+			return nil
+		}
+	}
+	store.hostiles = memoryHostiles{revision: save.Revision, encoded: bytes.Clone(encoded)}
 	return nil
 }
 
