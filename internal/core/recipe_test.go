@@ -438,12 +438,12 @@ func TestRecipeShapeTableOneToThirteenIsFrozen(t *testing.T) {
 }
 
 // TestRecipeRejectsUnknownIDs 覆盖 spec Scenario「未登记配方被拒绝」：
-// recipe 0、批次其余功能线尚未合流的 `14..18`（火把与三把剑、白床）以及
-// 任意更大编号都必须稳定拒绝且不产生产物。写成 `RecipeWorkbench+1` 起步而
-// 不是裸字面量，下次追加配方时这段循环自动跟着末项走。
+// recipe 0、批次其余功能线尚未合流的 `15..18`（三把剑与白床）以及任意更大
+// 编号都必须稳定拒绝且不产生产物。写成 `RecipeTorch+1` 起步而不是裸字面量，
+// 下次追加配方时这段循环自动跟着末项走。
 func TestRecipeRejectsUnknownIDs(t *testing.T) {
 	unknown := []core.RecipeID{0}
-	for id := core.RecipeWorkbench + 1; id <= core.RecipeWorkbench+6; id++ {
+	for id := core.RecipeTorch + 1; id <= core.RecipeTorch+5; id++ {
 		unknown = append(unknown, id)
 	}
 	unknown = append(unknown, 200, 255)
@@ -452,12 +452,16 @@ func TestRecipeRejectsUnknownIDs(t *testing.T) {
 			t.Fatalf("recipe %d 被接受为 %+v：表末之后的编号必须稳定拒绝", id, pattern)
 		}
 	}
-	// 14..18 是批次计划里的既定编号段（火把/剑/床，归 A-02/A-03/A-05）：
+	// 15..18 是批次计划里的既定编号段（三把剑、白床，归各自功能行）：
 	// 在它们合流之前逐个点名拒绝，比「表末 +1」更能钉住「暂缺但已规划」。
-	for id := core.RecipeID(14); id <= 18; id++ {
+	for id := core.RecipeID(15); id <= 18; id++ {
 		if _, ok := core.Recipe(id); ok {
 			t.Fatalf("规划中的 recipe %d 在合流前被注册", id)
 		}
+	}
+	// 对照组：火把配方是当前表末，必须可查询。
+	if _, ok := core.Recipe(core.RecipeTorch); !ok {
+		t.Fatal("火把配方未注册")
 	}
 }
 
@@ -466,8 +470,9 @@ func TestRecipeRejectsUnknownIDs(t *testing.T) {
 // Width×Height 子矩形之外的格恒为 `ItemNone`。第三条是匹配器的隐含前提：
 // `matchesPattern` 只比较子矩形内的格，若形状把材料写到子矩形外，那格会被
 // 静默忽略、配方从此少一份原料也照常匹配。本用例不冻结具体形状（那是
-// `TestRecipeShapeTableOneToThirteenIsFrozen` 的职责），只守结构不变量，
-// 未来追加 recipe 14..18 时自动生效；编号连续性断言同时钉住「注册表无空洞」。
+// `TestRecipeShapeTableOneToThirteenIsFrozen` 与火把配方用例的职责），只守结构
+// 不变量，未来追加 recipe 15..18 时自动生效；编号连续性断言同时钉住「注册表
+// 无空洞」。
 func TestRegisteredRecipeCellsStayInsideShapeBounds(t *testing.T) {
 	checked := 0
 	for id := core.RecipeID(1); ; id++ {
@@ -499,9 +504,9 @@ func TestRegisteredRecipeCellsStayInsideShapeBounds(t *testing.T) {
 	}
 	// 注册表从 1 起无空洞连续注册到末项常量：循环按「首个未注册即停」推进，
 	// 中间留洞会让后面的配方全部漏检，这里用计数把洞钉出来。
-	if checked != int(core.RecipeWorkbench) {
+	if checked != int(core.RecipeTorch) {
 		t.Fatalf("注册表枚举到 %d 条，想要与末项常量一致的 %d 条（注册表出现空洞？）",
-			checked, core.RecipeWorkbench)
+			checked, core.RecipeTorch)
 	}
 }
 
@@ -522,6 +527,79 @@ func TestPickaxeRecipesOutputFullDurability(t *testing.T) {
 			t.Fatalf("Recipe(%d) 产物 = %+v, %v，想要合法满耐久工具 %+v",
 				test.id, pattern.Output, ok, test.want)
 		}
+	}
+}
+
+// TestRecipeTorchShapeIsFrozen 锁定火把配方的稳定语义：recipe 14，形状为宽 1
+// 高 2 的纵向两格——煤炭位于木棍正上方，产出 4 个火把。编号紧随工作台配方
+// （13）追加；recipe ID 是协议稳定值，重排会让已发出的请求指向别的配方。
+func TestRecipeTorchShapeIsFrozen(t *testing.T) {
+	if core.RecipeTorch != core.RecipeWorkbench+1 {
+		t.Fatalf("RecipeTorch = %d，必须紧随 RecipeWorkbench(%d)",
+			core.RecipeTorch, core.RecipeWorkbench)
+	}
+	if core.RecipeTorch != 14 {
+		t.Fatalf("RecipeTorch = %d，必须稳定为 14", core.RecipeTorch)
+	}
+	want := core.RecipePattern{
+		Width: 1, Height: 2, Mirror: true,
+		Cells: [core.CraftingGridSlots]core.ItemID{
+			core.ItemCoal, core.ItemNone, core.ItemNone,
+			core.ItemStick, core.ItemNone, core.ItemNone,
+		},
+		Output: core.ItemStack{Item: core.ItemTorch, Count: 4},
+	}
+	pattern, ok := core.Recipe(core.RecipeTorch)
+	if !ok || pattern != want {
+		t.Fatalf("Recipe(火把) = %+v, %v，想要 %+v", pattern, ok, want)
+	}
+	if !pattern.Output.Valid() || pattern.Output.Durability != 0 {
+		t.Fatalf("火把配方产物 %+v 必须是合法的零耐久物品栈", pattern.Output)
+	}
+}
+
+// TestMatchCraftingGridTorchPersonalGrid 覆盖 spec Scenario「火把配方可查询且
+// 可在个人网格摆放」：宽 1 高 2 的形状在 2×2 个人网格的两列位置都能匹配并产
+// 出 4 个火把；倒置（木棍在煤炭上方）是垂直翻转，永不参与匹配。
+func TestMatchCraftingGridTorchPersonalGrid(t *testing.T) {
+	for _, column := range []struct {
+		name      string
+		coalSlot  uint8
+		stickSlot uint8
+	}{
+		{"左列", 0, 2},
+		{"右列", 1, 3},
+	} {
+		t.Run(column.name, func(t *testing.T) {
+			grid := buildCraftingGrid(
+				gridCell{column.coalSlot, core.ItemCoal},
+				gridCell{column.stickSlot, core.ItemStick},
+			)
+			id, output, ok := core.MatchCraftingGrid(2, grid)
+			if !ok || id != core.RecipeTorch {
+				t.Fatalf("个人网格匹配 = (%d, %v)，想要火把配方 %d", id, ok, core.RecipeTorch)
+			}
+			if output != (core.ItemStack{Item: core.ItemTorch, Count: 4}) {
+				t.Fatalf("火把配方产物 = %+v，想要 4 个火把", output)
+			}
+		})
+	}
+	// 工作台 3×3 网格同样匹配（纵向两格摆在左列中间）。
+	grid := buildCraftingGrid(
+		gridCell{3, core.ItemCoal},
+		gridCell{6, core.ItemStick},
+	)
+	if id, output, ok := core.MatchCraftingGrid(3, grid); !ok || id != core.RecipeTorch ||
+		output != (core.ItemStack{Item: core.ItemTorch, Count: 4}) {
+		t.Fatalf("工作台网格匹配 = (%d, %+v, %v)，想要火把配方与 4 个火把", id, output, ok)
+	}
+	// 倒置（木棍在煤炭上方）是垂直翻转，必须失配。
+	inverted := buildCraftingGrid(
+		gridCell{0, core.ItemStick},
+		gridCell{2, core.ItemCoal},
+	)
+	if _, _, ok := core.MatchCraftingGrid(2, inverted); ok {
+		t.Fatal("倒置摆放产生了匹配：垂直翻转永不参与匹配")
 	}
 }
 

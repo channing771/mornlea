@@ -21,13 +21,13 @@ func TestCanonicalItemIDsStayStable(t *testing.T) {
 }
 
 // TestItemIDMaxGuardsExhaustiveEnumeration 锁定 ItemIDMax 独占哨兵与枚举末项的
-// 关系：当前最后一个合法物品必须是 ItemPoisonousPotato。物品演进纪律是只能在
+// 关系：当前最后一个合法物品必须是 ItemTorch。物品演进纪律是只能在
 // 哨兵之前追加；将来追加新物品时第一个断言变红，迫使开发者同步审视全部以
 // 「item < ItemIDMax」为穷举界的测试（例如 companion 的 place 注册表覆盖测试），
 // 而不是让穷举测试静默失去对新物品的覆盖。
 func TestItemIDMaxGuardsExhaustiveEnumeration(t *testing.T) {
-	if core.ItemPoisonousPotato != core.ItemIDMax-1 {
-		t.Fatalf("ItemID 枚举末项不再是 ItemPoisonousPotato（ItemIDMax-1 = %d）；"+
+	if core.ItemTorch != core.ItemIDMax-1 {
+		t.Fatalf("ItemID 枚举末项不再是 ItemTorch（ItemIDMax-1 = %d）；"+
 			"新增物品必须同步审视全部以 ItemIDMax 为穷举界的测试", core.ItemIDMax-1)
 	}
 	// 哨兵之外不得再出现已注册物品：若有人把新物品追加在哨兵之后，穷举界会
@@ -40,8 +40,8 @@ func TestItemIDMaxGuardsExhaustiveEnumeration(t *testing.T) {
 }
 
 func TestItemIDsAppendOnly(t *testing.T) {
-	if core.ItemPoisonousPotato != core.ItemIDMax-1 {
-		t.Fatal("Poisonous must be last before Max")
+	if core.ItemTorch != core.ItemIDMax-1 {
+		t.Fatal("Torch must be last before Max")
 	}
 	if _, ok := core.ItemStackLimit(core.ItemPotato); !ok {
 		t.Fatal("potato stack missing")
@@ -497,9 +497,10 @@ func TestBrokenToolsAreRegisteredAndUnstackable(t *testing.T) {
 
 // TestGridCraftingIDsAppendBeforeSentinels 锁定格子工作台批次追加的稳定编号：
 // 木棍 `ItemStick=37`、工作台物品 `ItemWorkbench=38`、骨粉 `ItemBoneMeal=39`
-// （三者 + 马铃薯/胡萝卜/毒土豆都紧贴 `ItemIDMax` 哨兵之前、哨兵后移到 43），工作台方块
-// `WorkbenchID=45`（紧随 `WheatStage7ID`，后接马铃薯/胡萝卜，`BlockIDMax` 后移到 62）。编号是协议稳定值：
-// 插入或重排会平移后续编号，破坏既有存档与线上字节。
+// （三者 + 马铃薯/胡萝卜/毒土豆都紧贴 `ItemIDMax` 哨兵之前，该批次落定后哨兵为
+// 43；火把物品追加后现为 44），工作台方块 `WorkbenchID=45`（紧随 `WheatStage7ID`，
+// 后接马铃薯/胡萝卜，该批次落定后 `BlockIDMax` 为 62；火把五形态追加后现为 67）。
+// 编号是协议稳定值：插入或重排会平移后续编号，破坏既有存档与线上字节。
 func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 	if core.ItemStick != 37 {
 		t.Fatalf("ItemStick = %d，必须稳定为 37 且紧随 ItemBread(%d)",
@@ -528,9 +529,15 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 		t.Fatalf("ItemPoisonousPotato = %d，必须紧随 ItemCarrot(%d)",
 			core.ItemPoisonousPotato, core.ItemCarrot)
 	}
-	if core.ItemIDMax != 43 {
-		t.Fatalf("ItemIDMax = %d，必须紧随 ItemPoisonousPotato(%d) 后移到 43",
-			core.ItemIDMax, core.ItemPoisonousPotato)
+	// 火把物品紧随毒土豆追加（面向相关的可放置物品，放置映射走
+	// PlaceableBlockAtFace），哨兵随之后移到 44。
+	if core.ItemTorch != core.ItemPoisonousPotato+1 {
+		t.Fatalf("ItemTorch = %d，必须紧随 ItemPoisonousPotato(%d)",
+			core.ItemTorch, core.ItemPoisonousPotato)
+	}
+	if core.ItemIDMax != 44 {
+		t.Fatalf("ItemIDMax = %d，必须紧随 ItemTorch(%d) 后移到 44",
+			core.ItemIDMax, core.ItemTorch)
 	}
 	if core.WorkbenchID != 45 {
 		t.Fatalf("WorkbenchID = %d，必须稳定为 45 且紧随 WheatStage7ID(%d)",
@@ -544,9 +551,14 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 		t.Fatalf("CarrotStage0ID = %d，必须紧随 PotatoStage7ID(%d)",
 			core.CarrotStage0ID, core.PotatoStage7ID)
 	}
-	if core.BlockIDMax != 62 {
-		t.Fatalf("BlockIDMax = %d，必须紧随 CarrotStage7ID(%d) 后移到 62",
-			core.BlockIDMax, core.CarrotStage7ID)
+	// 火把五形态紧随胡萝卜阶段 7 追加，方块侧哨兵随之后移到 67。
+	if core.TorchStandingID != core.CarrotStage7ID+1 {
+		t.Fatalf("TorchStandingID = %d，必须紧随 CarrotStage7ID(%d)",
+			core.TorchStandingID, core.CarrotStage7ID)
+	}
+	if core.BlockIDMax != 67 {
+		t.Fatalf("BlockIDMax = %d，必须紧随 TorchWallNegZID(%d) 后移到 67",
+			core.BlockIDMax, core.TorchWallNegZID)
 	}
 }
 
@@ -589,6 +601,70 @@ func TestWorkbenchItemPlacesAndDropsBack(t *testing.T) {
 	if !ok || item != core.ItemWorkbench {
 		t.Fatalf("BlockDrop(工作台) = (%d,%v)，想要 (%d,true)",
 			item, ok, core.ItemWorkbench)
+	}
+}
+
+// TestTorchItemIsRegisteredStackableMaterial 锁定火把物品语义：编号 43（紧随
+// 毒土豆、ItemIDMax 后移到 44）、堆叠 64、没有耐久、不是工具、不是食物。
+// 放置不经 ItemPlacement（面向无关的旧窗口），只经 PlaceableBlockAtFace 的
+// 面 → 形态映射——因此火把对 ItemPlacement 必须保持不可放置，防止任何调用方
+// 绕开面映射直接写出「默认形态」。
+func TestTorchItemIsRegisteredStackableMaterial(t *testing.T) {
+	if core.ItemTorch != 43 {
+		t.Fatalf("ItemTorch = %d，必须稳定为 43 且紧随 ItemPoisonousPotato(%d)",
+			core.ItemTorch, core.ItemPoisonousPotato)
+	}
+	if core.ItemTorch != core.ItemPoisonousPotato+1 {
+		t.Fatalf("ItemTorch = %d，必须紧随 ItemPoisonousPotato(%d)",
+			core.ItemTorch, core.ItemPoisonousPotato)
+	}
+	if core.ItemIDMax != core.ItemTorch+1 {
+		t.Fatalf("ItemIDMax = %d，必须紧随 ItemTorch(%d)",
+			core.ItemIDMax, core.ItemTorch)
+	}
+	if core.ItemIDMax != 44 {
+		t.Fatalf("ItemIDMax = %d，必须后移到 44", core.ItemIDMax)
+	}
+	if !core.RegisteredItem(core.ItemTorch) {
+		t.Fatal("ItemTorch 未注册")
+	}
+	if limit, ok := core.ItemStackLimit(core.ItemTorch); !ok || limit != core.MaxStackCount {
+		t.Fatalf("ItemStackLimit(火把) = (%d, %v)，想要 (%d, true)",
+			limit, ok, core.MaxStackCount)
+	}
+	if _, hasDurability := core.ItemMaxDurability(core.ItemTorch); hasDurability {
+		t.Fatal("火把不应有耐久上限")
+	}
+	if _, isTool := core.ItemBrokenForm(core.ItemTorch); isTool {
+		t.Fatal("火把不是工具，没有损坏形态")
+	}
+	if _, _, isFood := core.FoodValue(core.ItemTorch); isFood {
+		t.Fatal("火把不是食物")
+	}
+	if stack := (core.ItemStack{Item: core.ItemTorch, Count: 1}); !stack.Valid() {
+		t.Fatal("单个火把物品栈必须合法")
+	}
+	if block, ok := core.ItemPlacement(core.ItemTorch); ok || block != core.AirID {
+		t.Fatalf("ItemPlacement(火把) = (%d, %v)，火把放置只走 PlaceableBlockAtFace 面映射",
+			block, ok)
+	}
+}
+
+// TestTorchFormsDropBackOneTorch 锁定五种火把形态的掉落映射：采掘任何形态都
+// 掉回恰好一个火把物品，形态差异不产生额外产物或损耗。
+func TestTorchFormsDropBackOneTorch(t *testing.T) {
+	for _, block := range []core.BlockID{
+		core.TorchStandingID,
+		core.TorchWallPosXID,
+		core.TorchWallNegXID,
+		core.TorchWallPosZID,
+		core.TorchWallNegZID,
+	} {
+		item, ok := core.BlockDrop(block)
+		if !ok || item != core.ItemTorch {
+			t.Fatalf("BlockDrop(火把形态 %d) = (%d, %v)，想要 (%d, true)",
+				block, item, ok, core.ItemTorch)
+		}
 	}
 }
 

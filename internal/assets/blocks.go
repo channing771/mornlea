@@ -239,9 +239,11 @@ func NewRegistry() *Registry {
 // 内部的两片交叉斜面，既不填满格子也不该挡光。这一条直接决定了「作物下方的耕地
 // 仍被照亮」——Rust 天空光 BFS 的阻断判据就是本函数（light.rs 的 build_sky 只看
 // opaque），作物一旦不透明，它下方那格的派生天空光会归零、耕地顶面变全黑。
+// 火把（core.IsTorch）与作物同类排除：零碰撞的窄柱/贴墙形态既不填满格子也不
+// 遮挡邻面，且自身是发光体，被判成不透明会同时挡死邻域光照与出面。
 func (r *Registry) Opaque(id world.BlockID) bool {
 	return core.RegisteredBlock(id) && id != core.AirID && id != core.GlassID &&
-		id != core.LeavesID && !core.IsFluid(id) && !core.IsCrop(id)
+		id != core.LeavesID && !core.IsFluid(id) && !core.IsCrop(id) && !core.IsTorch(id)
 }
 
 // FaceVisible 返回当前方块朝向相邻方块的面是否可绘制。实现 mesh.Registry。
@@ -385,11 +387,12 @@ func (r *Registry) Material(id world.BlockID, f mesh.Face) uint16 {
 }
 
 // Emission 返回方块固定发出的方块光等级。实现 mesh.Registry。
+//
+// 发光判定完全转调 core.BlockEmission——那是全仓唯一的光源表（发光方块 15、
+// 五种火把形态 14、其余 0），本包不得保留任何重复分支；新增发光方块只改
+// core 一张表，这里与 mesh registry 快照自动跟随。
 func (r *Registry) Emission(id world.BlockID) uint8 {
-	if id == core.LightBlockID {
-		return 15
-	}
-	return 0
+	return core.BlockEmission(id)
 }
 
 // fluidSourceHeightRaw 是源方块（level 0）的 4-bit 高度原值。
@@ -414,14 +417,12 @@ func (r *Registry) FluidHeight(id world.BlockID) uint8 {
 
 // LightAttenuation 返回天空光穿过该方块时的额外衰减。实现 mesh.Registry。
 //
-// 流体额外衰减 1、其余方块 0。值经 registry 快照送过 ABI 边界，由 Rust 的天空光
-// BFS 逐步查表扣减——竖直向下穿过流体因此不再无损。方块光模型不消费本值：水与
-// 玻璃一样直接阻断。
+// 衰减判定完全转调 core.BlockLightAttenuation——与发光表同为 core 的单一事实
+// 源（八个流体编号 1、其余 0），本包不得保留任何重复分支。值经 registry 快照
+// 送过 ABI 边界，由 Rust 的天空光 BFS 逐步查表扣减——竖直向下穿过流体因此
+// 不再无损。方块光模型不消费本值：水与玻璃一样直接阻断。
 func (r *Registry) LightAttenuation(id world.BlockID) uint8 {
-	if core.IsFluid(id) {
-		return 1
-	}
-	return 0
+	return core.BlockLightAttenuation(id)
 }
 
 // farmlandTopRaw 是干/湿耕地共用的 4-bit 顶面高度原值。

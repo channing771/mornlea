@@ -73,6 +73,11 @@ const (
 	ItemPotato
 	ItemCarrot
 	ItemPoisonousPotato
+	// ItemTorch 是火把物品：可合成（煤炭位于木棍正上方，产出 4 个）、可堆叠 64、
+	// 没有耐久也不是食物/工具。放置是面向相关的（顶面落地、四向侧面贴墙），
+	// 因此它不出现在面向无关的 ItemPlacement 表里——命中面 → 方块形态的唯一
+	// 映射窗口是 PlaceableBlockAtFace，任何放置方都不得绕开该窗口为它选形态。
+	ItemTorch
 	// ItemIDMax 是合法物品编号的独占上界（最后一个合法 ItemID + 1），本身不是
 	// 物品枚举成员。它供测试以「item < ItemIDMax」穷举全部物品，替代依赖
 	//「某个具体物品恰为枚举末项」的脆弱写法；放在 core 是因为物品注册表归属
@@ -252,6 +257,10 @@ func BlockDrop(block BlockID) (ItemID, bool) {
 	case CarrotStage0ID, CarrotStage1ID, CarrotStage2ID, CarrotStage3ID,
 		CarrotStage4ID, CarrotStage5ID, CarrotStage6ID, CarrotStage7ID:
 		return ItemCarrot, true
+	// 火把五形态都掉回恰好 1 个火把物品：贴墙与落地只是形态差异，掉落不因
+	// 形态产生额外产物或损耗（支撑失效的移除路径同样掉这一枚）。
+	case TorchStandingID, TorchWallPosXID, TorchWallNegXID, TorchWallPosZID, TorchWallNegZID:
+		return ItemTorch, true
 	default:
 		return ItemNone, false
 	}
@@ -267,7 +276,8 @@ func ItemStackLimit(item ItemID) (uint8, bool) {
 		ItemRoofTile, ItemClay, ItemSnowBlock, ItemMossyCobblestone,
 		ItemWheatSeeds, ItemWheat, ItemBread,
 		ItemStick, ItemWorkbench, ItemBoneMeal,
-		ItemPotato, ItemCarrot, ItemPoisonousPotato:
+		ItemPotato, ItemCarrot, ItemPoisonousPotato,
+		ItemTorch:
 		return MaxStackCount, true
 	case ItemStonePickaxe, ItemIronPickaxe,
 		ItemBrokenStonePickaxe, ItemBrokenIronPickaxe,

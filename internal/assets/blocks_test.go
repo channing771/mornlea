@@ -486,6 +486,75 @@ func TestCropsUseDedicatedWheatMaterialLayers(t *testing.T) {
 	}
 }
 
+// TestRegistryLightDelegatesToCore 锁定「唯一发光判定表」：Registry 的
+// Emission/LightAttenuation 对全部已注册方块与越界编号都必须与 core 的两张表
+// 逐点恒等——assets 不得保留任何与 core 重复的判定分支，服务端生成判定与
+// 客户端注册表都只消费 core 这一张表。
+func TestRegistryLightDelegatesToCore(t *testing.T) {
+	registry := assets.NewRegistry()
+	for id := core.AirID; id < core.BlockIDMax; id++ {
+		if got, want := registry.Emission(id), core.BlockEmission(id); got != want {
+			t.Fatalf("Emission(%d) = %d，与 core.BlockEmission 的 %d 不一致", id, got, want)
+		}
+		if got, want := registry.LightAttenuation(id), core.BlockLightAttenuation(id); got != want {
+			t.Fatalf("LightAttenuation(%d) = %d，与 core.BlockLightAttenuation 的 %d 不一致", id, got, want)
+		}
+	}
+	// 越界编号（哨兵与其后一格、远端编号）同样转调恒等，均为 0。
+	for _, id := range []world.BlockID{core.BlockIDMax, core.BlockIDMax + 1, world.BlockID(65535)} {
+		if got := registry.Emission(id); got != 0 {
+			t.Fatalf("Emission(越界 %d) = %d，想要 0", id, got)
+		}
+		if got := registry.LightAttenuation(id); got != 0 {
+			t.Fatalf("LightAttenuation(越界 %d) = %d，想要 0", id, got)
+		}
+	}
+	// 关键取值点名：发光方块 15、五种火把 14、流体衰减 1。
+	if got := registry.Emission(core.LightBlockID); got != 15 {
+		t.Fatalf("Emission(发光方块) = %d，想要 15", got)
+	}
+	for id := core.TorchStandingID; id <= core.TorchWallNegZID; id++ {
+		if got := registry.Emission(id); got != 14 {
+			t.Fatalf("Emission(火把形态 %d) = %d，想要 14", id, got)
+		}
+	}
+	for id := core.WaterSourceID; id <= core.WaterLevel7ID; id++ {
+		if got := registry.LightAttenuation(id); got != 1 {
+			t.Fatalf("LightAttenuation(流体 %d) = %d，想要 1", id, got)
+		}
+	}
+}
+
+// TestTorchFormsAreNotOpaque 锁定火把方块的注册表属性：五种形态全部非不透明
+// （与玻璃、树叶、作物同属透明类），否则会遮挡邻面、阻断光照。
+func TestTorchFormsAreNotOpaque(t *testing.T) {
+	registry := assets.NewRegistry()
+	for id := core.TorchStandingID; id <= core.TorchWallNegZID; id++ {
+		if registry.Opaque(id) {
+			t.Fatalf("火把形态 %d 是不透明方块：火把必须与玻璃、作物同类", id)
+		}
+	}
+}
+
+// TestTorchEmissionEntersMeshSnapshot 锁定「火把与发光方块的 emission 经同一
+// 张表进入 mesh registry 快照」：快照是发光值送过 ABI 边界的唯一通道，五种
+// 形态都必须以 14 冻结在快照里。
+func TestTorchEmissionEntersMeshSnapshot(t *testing.T) {
+	registry := assets.NewRegistry()
+	snapshot := registry.MeshSnapshot()
+	if got, want := len(snapshot.Blocks), int(core.BlockIDMax); got != want {
+		t.Fatalf("snapshot block 数 = %d，想要覆盖全部已注册方块的 %d", got, want)
+	}
+	for id := core.TorchStandingID; id <= core.TorchWallNegZID; id++ {
+		if got := snapshot.Blocks[int(id)].Emission; got != 14 {
+			t.Fatalf("snapshot 中火把形态 %d 的 Emission = %d，想要 14", id, got)
+		}
+	}
+	if got := snapshot.Blocks[int(core.LightBlockID)].Emission; got != 15 {
+		t.Fatalf("snapshot 中发光方块的 Emission = %d，想要 15", got)
+	}
+}
+
 // TestWorkbenchUsesDedicatedWoodenLayers 锁定 spec Requirement「工作台方块与
 // 打开生命周期」的呈现契约：顶/侧/底三面各用独立的原创程序化木质层，互不
 // 共用、也不与既有橡木木板层复用；工作台是不发光的普通不透明立方体，朝
