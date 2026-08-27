@@ -24,12 +24,12 @@
 
 ## 4. sim 夜行者身体、spawn、局部暗度与生命周期
 
-- [ ] 4.1 失败测试：固定集合（插入/恢复按 ID 排序、重复/第 65 只拒绝、`hostileState` 容量 64）；与玩家/伙伴同一 per-actor `physics.Step`（顺序玩家→伙伴→夜行者 ID 序、复用 `SubmersionFlags` 与同一 tunables）
-- [ ] 4.2 实现最小 `hostileState`（排序 slice + 复用 scratch + restore/snapshot/测试入口；不建 map/ECS；AABB 与玩家相同、输入仅水平+jump）
-- [ ] 4.3 失败测试：预分配 29³ 16-bucket BFS 局部区块光（半径 14、发射值、每步 −1 −`BlockLightAttenuation`、`core.BlockOpaque` 阻挡、fluid 额外 −1、unknown/unloaded 当阻挡；与既有客户端/Rust 光 oracle 小夹具逐位一致——真实差异必须记录并裁决，不得静默采用两套规则；重复调用 allocations=0）并实现 `block_light_query.go`
-- [ ] 4.4 失败测试：spawn 决定（active sessions 排序后 `WorldTimeTicks % n` 选锚点；splitmix64 派生半径/轴向/坐标；hash 低 8 位 <13 才尝试；24..48 距离窗；双格空气/下方 solid/非流体/loaded；night/day；light 7/8；global64；nearby 8；相同输入重放；每 tick 读取候选 ≤1）并实现 spawn 与稳定 ID（ID 同一 hash 非零；冲突重散列 ≤64 次）
-- [ ] 4.5 失败测试：灼烧（露天白昼每 20 tick 扣 1、遮顶/夜间重置）、despawn（>64 格累计 600、回 50 格清零）、死亡掉落（同 tick 移除、死亡 chunk 环形尝试放 1 腐肉、全满确定性省略）；扩展 `core.FoodValue` 两食物更新后实现
-- [ ] 4.6 `engine_step.go` 新增 hostile 阶段并把 spawn/burn/despawn/drop 接入；`gofmt -w internal/core internal/sim`、`make rust`、`go test ./internal/core ./internal/sim -race -count=1`；双评审后提交 `feat: simulate hostile nightwalkers`
+- [x] 4.1 失败测试：固定集合（插入/恢复按 ID 排序、重复/第 65 只拒绝、`hostileState` 容量 64）；与玩家/伙伴同一 per-actor `physics.Step`（顺序玩家→伙伴→夜行者 ID 序、复用 `SubmersionFlags` 与同一 tunables）
+- [x] 4.2 实现最小 `hostileState`（排序 slice + 复用 scratch + restore/snapshot/测试入口；不建 map/ECS；AABB 与玩家相同、输入仅水平+jump）
+- [x] 4.3 失败测试：预分配 29³ 16-bucket BFS 局部区块光（半径 14、发射值、每步 −1 −`BlockLightAttenuation`、`core.BlockOpaque` 阻挡、fluid 额外 −1、unknown/unloaded 当阻挡；与既有客户端/Rust 光 oracle 小夹具逐位一致——真实差异必须记录并裁决，不得静默采用两套规则；重复调用 allocations=0）并实现 `block_light_query.go`
+- [x] 4.4 失败测试：spawn 决定（active sessions 排序后 `WorldTimeTicks % n` 选锚点；splitmix64 派生半径/轴向/坐标；hash 低 8 位 <13 才尝试；24..48 距离窗；双格空气/下方 solid/非流体/loaded；night/day；light 7/8；global64；nearby 8；相同输入重放；每 tick 读取候选 ≤1）并实现 spawn 与稳定 ID（ID 同一 hash 非零；冲突重散列 ≤64 次）
+- [x] 4.5 失败测试：灼烧（露天白昼每 20 tick 扣 1、遮顶/夜间重置）、despawn（>64 格累计 600、回 50 格清零）、死亡掉落（同 tick 移除、死亡 chunk 环形尝试放 1 腐肉、全满确定性省略）；扩展 `core.FoodValue` 两食物更新后实现
+- [x] 4.6 `engine_step.go` 新增 hostile 阶段并把 spawn/burn/despawn/drop 接入；`gofmt -w internal/core internal/sim`、`make rust`、`go test ./internal/core ./internal/sim -race -count=1`；双评审后提交 `feat: simulate hostile nightwalkers`
 
 ## 5. server 有界追逐 worker 与路径执行
 

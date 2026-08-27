@@ -8,7 +8,7 @@ import (
 )
 
 // stepPhase 标识 `Step` 内部的固定处理阶段。权威 tick 的阶段顺序是规格契约：
-// 玩家命令 → 伙伴 action → 统一物理与世界变更 → 流体推进 → 耕地湿度推进 →
+// 玩家命令 → 伙伴 action → 统一物理 → 夜行者推进 → 流体推进 → 耕地湿度推进 →
 // 作物推进；阶段边界无法只从外部结果完整观察，因此用 `stepPhaseObserver` 探针
 // 显式锁定。下面的常量是这份顺序的唯一权威，本段说明必须与之逐项对齐。
 type stepPhase uint8
@@ -17,6 +17,14 @@ const (
 	phasePlayerCommands stepPhase = iota + 1
 	phaseCompanionActions
 	phasePhysicsAdvance
+	// phaseHostileAdvance 是夜行者的固定次序编排（生成 → 移动 → 灼烧 → 远离
+	// → 死亡掉落，见 advanceHostiles）。相对统一物理，它保持「玩家 → 伙伴 →
+	// 夜行者」的逐 actor 积分顺序；通知次序（物理之后、流体之前）与常量次序
+	// 一致，而实际代码位置按「一切区块写者位于 reconcileSubscriptions 之后」
+	// 的阶段顺序契约放在收敛点之后——死亡掉落是区块写者，必须与其它写者共享
+	// 同一批 revision、广播与存盘。它同样位于 advancePlayerMelee 之前，为后续
+	// 夜行者近战意图的同 tick 结算保留次序。
+	phaseHostileAdvance
 	// phaseFluidAdvance 位于熔炉推进之后、容器移动之前。
 	//
 	// **在 FluidFlowDelayTicks >= 1 时**，它在 Step 内相对其他方块写者（放置、
@@ -390,6 +398,11 @@ func (engine *Engine) Step() TickResult {
 	if viewChanged {
 		engine.reconcileSubscriptions(&result)
 	}
+
+	// 夜行者阶段（通知次序见 phaseHostileAdvance）：生成判定先于物理语义，
+	// 新生个体下一 tick 才积分；死亡掉落与其它区块写者共用同一份 pending。
+	engine.notifyStepPhase(phaseHostileAdvance)
+	engine.advanceHostiles(pending)
 
 	// 阶段顺序契约：所有区块写者必须位于 reconcileSubscriptions 之后。近战先冻结
 	// 伤害意图，再立刻结算死亡；两者都不写区块，死亡掉落与其后的其他写者仍在

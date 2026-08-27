@@ -55,10 +55,21 @@ type Engine struct {
 	//
 	// 权威模拟不 import storage（archcheck 的依赖白名单禁止），因此种子只能经
 	// 构造参数注入，不在 sim 内引入第二个种子来源。测试一律传 0。
-	seed               int64
-	dimensions         map[core.DimensionID]*Dimension
-	sessions           map[SessionID]*sessionState
-	companions         map[companion.ID]*companionState
+	seed       int64
+	dimensions map[core.DimensionID]*Dimension
+	sessions   map[SessionID]*sessionState
+	companions map[companion.ID]*companionState
+	// hostiles 是夜行者的权威身体集合（按 ID 严格升序、容量 64 的切片，
+	// 见 hostile.go）。
+	hostiles hostileSet
+	// hostileLight 是局部区块光查询的预分配 scratch（见 block_light_query.go），
+	// 每次判定原地重建、重复调用零分配。
+	hostileLight *blockLightScratch
+	// dayPhaseOffset 是 `core.DisplayDayPhase` 的显示相位偏移：夜行者的夜间
+	// 生成窗口与白昼灼烧都按「拨过偏移后的显示相位」判定。偏移的生产端属于
+	// 床与睡眠功能行，本行消费恒 0 且不提供 setter——字段先于生产端存在，
+	// 是为了让两行只共享这一个窄契约。
+	dayPhaseOffset     uint16
 	wanted             map[core.ChunkKey]struct{}
 	inFlightSaves      map[core.ChunkKey]persistenceInFlight
 	subscriptionsDirty bool
@@ -136,6 +147,8 @@ func NewEngine(viewRadius int, worldTime uint64, seed int64) *Engine {
 		},
 		sessions:      make(map[SessionID]*sessionState),
 		companions:    make(map[companion.ID]*companionState),
+		hostiles:      newHostileSet(),
+		hostileLight:  newBlockLightScratch(),
 		wanted:        make(map[core.ChunkKey]struct{}),
 		inFlightSaves: make(map[core.ChunkKey]persistenceInFlight),
 	}
