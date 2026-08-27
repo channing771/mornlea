@@ -236,18 +236,18 @@ func BenchmarkCompanionMessageCodec(b *testing.B) {
 
 func BenchmarkWorstLegalChunkSnapshot(b *testing.B) {
 	snapshot := worstLegalBenchmarkSnapshot()
-	logical := make([]byte, logicalSnapshotSize(snapshot))
 	codec := benchmarkCodec(b)
 	defer codec.Close()
 	packetID, payload, err := codec.EncodeServer(network.StatePlay, snapshot)
 	if err != nil {
 		b.Fatal(err)
 	}
+	logicalBytes := binary.LittleEndian.Uint32(payload[:4])
 	b.Run("Encode", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		b.ReportMetric(float64(len(logical))/float64(len(payload)), "compression-ratio")
-		b.ReportMetric(float64(len(logical)), "logical-bytes")
+		b.ReportMetric(float64(logicalBytes)/float64(len(payload)), "compression-ratio")
+		b.ReportMetric(float64(logicalBytes), "logical-bytes")
 		b.ReportMetric(float64(len(payload)), "wire-bytes")
 		for range b.N {
 			_, encoded, err := codec.EncodeServer(network.StatePlay, snapshot)
@@ -260,8 +260,8 @@ func BenchmarkWorstLegalChunkSnapshot(b *testing.B) {
 	b.Run("Decode", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		b.ReportMetric(float64(len(logical))/float64(len(payload)), "compression-ratio")
-		b.ReportMetric(float64(len(logical)), "logical-bytes")
+		b.ReportMetric(float64(logicalBytes)/float64(len(payload)), "compression-ratio")
+		b.ReportMetric(float64(logicalBytes), "logical-bytes")
 		b.ReportMetric(float64(len(payload)), "wire-bytes")
 		for range b.N {
 			decoded, err := codec.DecodeServer(network.StatePlay, packetID, payload)
@@ -406,24 +406,4 @@ func validAcceptedChatEvent() network.ChatEvent {
 
 func testCompanionID(last byte) companion.ID {
 	return companion.ID{0: 0x10, 6: 0x40, 8: 0x80, 15: last}
-}
-
-func logicalSnapshotSize(snapshot network.ChunkSnapshot) int {
-	size := 20 + canonicalUvarintLength(uint32(len(snapshot.Sections)))
-	for _, section := range snapshot.Sections {
-		size += 2 + section.PayloadBytes()
-		switch section.Storage {
-		case network.SectionIndexed:
-			size += 1 + canonicalUvarintLength(uint32(len(section.Palette))) +
-				canonicalUvarintLength(uint32(len(section.Packed)))
-		case network.SectionDirect:
-			size += 1 + canonicalUvarintLength(uint32(len(section.Packed)))
-		}
-	}
-	return size
-}
-
-func canonicalUvarintLength(value uint32) int {
-	var encoded [binary.MaxVarintLen64]byte
-	return binary.PutUvarint(encoded[:], uint64(value))
 }

@@ -78,7 +78,7 @@ stream, err := networktcp.DialTCP(ctx, address)
 - `cmd/mornlea-server` 的 listener 默认实现。
 - `internal/client`、`internal/server` 和网络 benchmark 中直接创建 TCP
   listener 或 stream 的测试与辅助代码。
-- 根包的跨 transport 一致性测试保留在 `internal/network`，通过
+- 根包的跨 transport 一致性测试迁入 `internal/network/tcp`，并在那里通过
   `networktcp` 打开 TCP stream。
 
 `network.NewMemoryPair` 和 `network.NewMemoryStreamPair` 不迁移，因此 Memory
@@ -91,8 +91,11 @@ stream, err := networktcp.DialTCP(ctx, address)
   `internal/network/tcp/tcp_test.go`，包名改为 `tcp`，以继续覆盖 TCP 私有
   实现。
 - 测试函数名、子测试标签和断言保持不变。
-- `internal/network/transport_consistency_test.go` 留在根包，继续验证
-  Memory/TCP 在同一登录协议上的 transcript 一致性。
+- `internal/network/transport_consistency_test.go` 整体迁入
+  `internal/network/tcp` 并改为 `package tcp`，因为其中的非法 wire transcript
+  需要访问 TCP 私有 stream；其中正常 transcript 仍通过公开接口使用真实的
+  `network.NewMemoryStreamPair` 与 TCP opener，不得用 raw Memory 替代。非法 wire
+  用例仅在测试中使用受限 raw injector，并另以真实 Memory 测试锁住其发送侧校验。
 - Memory 测试留在根包；codec、login 和 packet 测试不迁移。
 - 新包加入 `internal/archcheck` 依赖白名单，仅允许其依赖
   `internal/network`。

@@ -56,9 +56,12 @@ TCP listener、dial、socket 配置和错误归类。`transport.go` 还包含根
 
 `internal/network/tcp_test.go` 移至
 `internal/network/tcp/tcp_test.go`，包名改为 `tcp`，因此对
-`tcpStream`、`tcpListener` 和测试替身的白盒覆盖不丢失。根包的
-`transport_consistency_test.go` 和 TCP benchmark 留在根包，因为它们测试登录
-协议与两种 transport 的组合；只把 TCP opener 改为调用 `networktcp`。
+`tcpStream`、`tcpListener` 和测试替身的白盒覆盖不丢失。
+`transport_consistency_test.go` 整体迁入 `internal/network/tcp` 并改为
+`package tcp`，因为其中的非法 wire transcript 需要访问 TCP 私有 stream；正常
+transcript 仍通过公开接口使用真实的 `network.NewMemoryStreamPair` 与 TCP
+opener。非法 wire 用例仅使用测试专用 raw injector，并增加真实 Memory 的发送
+侧校验测试，避免 parity 覆盖被 raw 替身取代。
 
 ### 5. 依赖守卫和架构文档同步
 

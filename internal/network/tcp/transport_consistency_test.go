@@ -405,26 +405,7 @@ func openTCPStreamPair(t *testing.T) (network.ClientPacketStream, network.Server
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = listener.Close() })
-	clientDone := make(chan struct {
-		stream network.ClientPacketStream
-		err    error
-	}, 1)
-	go func() {
-		stream, err := DialTCP(context.Background(), listener.Addr())
-		clientDone <- struct {
-			stream network.ClientPacketStream
-			err    error
-		}{stream, err}
-	}()
-	server, err := listener.Accept(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := <-clientDone
-	if client.err != nil {
-		t.Fatal(client.err)
-	}
-	return client.stream, server
+	return dialAndAccept(t, listener)
 }
 
 func testIdentity(last byte) network.Identity {

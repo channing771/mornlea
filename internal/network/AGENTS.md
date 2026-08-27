@@ -17,5 +17,5 @@
 
 ## 定点验证与入口
 
-- 测试：`go test ./internal/network -race -count=1`。
+- 测试：`go test ./internal/network/... -race -count=1`。
 - 当前文档入口：`docs/notes/lan-server.md`。

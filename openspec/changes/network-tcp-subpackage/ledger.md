@@ -17,8 +17,8 @@
 
 ## Review Log
 
-- 设计已获用户确认。
-- OpenSpec proposal、delta spec、design 和 tasks 已创建，待实现阶段逐任务记录规格与质量评审结论。
+- Task 1：`ffd3e5fa` 完成 TCP 子包提取，`a27ef8e7` 让 raw transport close 确定化，`5b16ca49` 在 fix round 补真实 `network.NewMemoryStreamPair` 的旧握手发送侧拒绝覆盖；`go test ./internal/network/... -race -count=1`、真实 Memory/跨 transport 定点测试和 `go vet ./internal/network/...` 通过，最终 SPEC PASS / QUALITY APPROVED。
+- Task 2：`5e25830f` 完成仓库调用方迁移；排除 `internal/archcheck/source_guards_test.go` 后旧构造调用搜索无输出，命令包编译与受影响包 race 测试通过。剩余命中只是 source guard 字面量，按范围留给 Task 3 更新；最终 SPEC PASS / QUALITY APPROVED。
 
 ## Task 3: Architecture Guard and Documentation
 
@@ -29,3 +29,19 @@
 - 调用方检查：`git grep -nE 'network\.(ListenTCP|DialTCP)' -- '*.go' ':!internal/archcheck/source_guards_test.go'` 无输出；source guard 包含 `networktcp.ListenTCP(` 且不再包含 `network.ListenTCP(`。
 - 评审结论：改动限定于本任务的 archcheck、架构文档、网络包指南和 ledger；保留既有共享登录状态机要求及 no-WebGPU、ABI 边界。
 - 实现提交：`553b6b72`（`docs(network): record TCP package boundary`）；未发现需要升级的风险或未解决问题。
+
+## Task 4: Final Verification and Handoff
+
+- 入口对比：重新运行根包与子包的 `go test -list '.*'` 均成功；`/tmp/network-tcp-before.txt` 中 185 个 Test、Benchmark、Fuzz 入口全部保留在当前根包/子包并集中，唯一非入口基线行是旧包结果。新增入口仅为 `TestMemoryTransportRejectsOutdatedHandshakeBeforeDelivery` 与 `TestTCPConstructorsExposeNetworkInterfaces`；原有 `t.Run` 标签未重命名。全仓搜索 Go 文件中的 `network.ListenTCP` 与 `network.DialTCP` 无匹配。
+- diff 边界：基线仍为 `123c51f1`，计划内网络包、调用方、archcheck、文档与 OpenSpec 文件构成 change diff；`internal/sim/door_test.go` 和 `.superpowers` 报告不在 change diff。未修改协议、存档、ABI、生产行为或无关测试。
+- 并发负载分诊：原始 `go test ./... -race -count=1` 只在跨包聚合负载下出现以下失败：`cmd/mornlea` 包级 GPU 测试达到 10 分钟超时；`TestApplicationAdvancesCompanionsExactlyOnceInFrameAndInteractiveLoops/interactive` 命中 `interactive companion x = %f, want one elapsed advance`；`internal/server/TestCompanionInteractionMemoryTCPParity/memory` 命中 `非法计划未以 TaskFailed 终结`，随后顶层断言 `Memory/TCP 多人指挥 transcript 不一致`；`TestCraftingSurvivesV2DiskRestartAndReconnectOrder` 命中 `player %s snapshot unavailable`。每个失败测试或包单独运行均通过，符合 `docs/notes/test-quickstart.md` 的负载 flake 分诊规则；未为这些失败修改生产代码或无关测试。
+- Ruling: 本 change 的本地完整 race 门禁采用 `go test ./... -race -p=1 -count=1`。该命令执行相同的完整 package/test 并集，并与 CI race 分片的 `-p=1` 包调度一致；命令退出 0，所有包通过。关键耗时：`cmd/mornlea` 318.738s、`internal/server` 216.840s、`internal/network` 2.286s、`internal/network/tcp` 2.335s。
+- 其余收尾门禁：`make rust` 退出 0（release build 0.41s）；`gofmt -l .` 退出 0 且无输出；`go vet ./...` 退出 0 且无输出；`git diff --check` 退出 0 且无输出；`make rust-check` 退出 0，Rust fmt/clippy、159 个 client 测试、166 个 engine 测试及 doc tests 全部通过；`openspec validate --all --strict --no-interactive` 为 68 passed、0 failed。
+- 子包指南复审：未跟踪的 `internal/network/tcp/AGENTS.md` 在一轮标识符格式修正后获得 scoped SPEC PASS / QUALITY APPROVED；`git diff --no-index --check -- /dev/null internal/network/tcp/AGENTS.md` 无 whitespace 错误。该指南不作为本计划的新任务，本轮未编辑它。
+- Whole-branch 终审初轮：规格评审与质量评审均为 FAIL；接受的问题包括历史 design、plan 和 ledger 的陈旧或重复描述，`openTCPStreamPair` 的多余 dial goroutine，根网络指南遗漏子包测试，以及 benchmark 重复计算 logical size。
+- 终审修复轮：更正历史 design 的一致性测试位置，清理 plan 的重复 move 与已删除 gofmt 路径，补 Task 1/2 评审记录，复用 `dialAndAccept`，将根网络命令改为 `./internal/network/...`，并从已编码 snapshot envelope 读取 logical size、删除重复 helper；未修改生产代码或生产行为。
+- 定点验证通过：`gofmt -w internal/network/benchmark_test.go internal/network/tcp/transport_consistency_test.go`；`go test ./internal/network/... -race -count=1`；`go vet ./internal/network/...`；`go test ./internal/archcheck -count=1`；`git diff --check`；`openspec validate --all --strict --no-interactive`（68 passed、0 failed）。
+- Whole-branch 最终复审：SPEC PASS / VERDICT PASS，无剩余重要需求问题，先前 design、plan 与 ledger 问题均已关闭；QUALITY APPROVED / VERDICT PASS，无剩余 blocker、high 或 medium 问题，先前五项质量问题均已关闭。
+- 最终复审未重跑耗时的全仓门禁，既有 gate 证据与 accepted race ruling 保持不变。
+- 最终树补充门禁：review fix round 后 controller 重新运行 accepted serialized full race gate `go test ./... -race -p=1 -count=1`，退出 0 且全部包通过；关键耗时为 `cmd/mornlea` 312.091s、`internal/archcheck` 40.337s、`internal/network` 2.269s、`internal/network/tcp` 2.024s、`internal/server` 212.077s、`internal/sim` 46.809s、`internal/storage` 23.453s。
+- 当前状态：handoff 已完成，OpenSpec tasks 5.1/5.2 保持完成；HEAD 仍为 `6bd33df52b2adec984805427f18fb650961d1681`，final artifacts 与 fix-round changes 均未 stage、未 commit。

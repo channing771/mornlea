@@ -18,7 +18,7 @@
 - MUST preserve every existing Test、Benchmark、Fuzz function name and `t.Run` label；TCP white-box tests may change package path but not names。
 - MUST NOT modify `internal/sim/door_test.go` or any pre-existing unrelated worktree change。
 - Go comments and documentation added in production code MUST be Chinese；task identifiers may appear only in planning artifacts。
-- Every task ends with its scoped `gofmt`/test command before it is marked complete；final task also runs `go vet ./...`、`go test ./... -race` and strict OpenSpec validation。
+- Every task ends with its scoped `gofmt`/test command before it is marked complete；final task also runs `go vet ./...`、`go test ./... -race -p=1 -count=1` and strict OpenSpec validation。
 
 ---
 
@@ -30,14 +30,16 @@
 - `internal/network/tcp/stream.go`: TCP stream、read/write owner gate、frame receive/send、deadline and close lifecycle。
 - `internal/network/tcp/contract_test.go`: compile-time/runtime assertions that child constructors return root interfaces。
 - `internal/network/tcp/tcp_test.go`: moved TCP white-box tests from `internal/network/tcp_test.go`。
+- `internal/network/tcp/transport_consistency_test.go`: moved consistency tests, including the TCP-private malformed-wire cases。
 
 **Modify:**
 
 - `internal/network/stream.go`: retain only shared packet stream and listener interfaces。
-- `internal/network/transport_consistency_test.go`: import `network/tcp` for TCP opener。
+- `internal/network/transport_consistency_test.go`: move to `internal/network/tcp` as `package tcp` so malformed-wire cases retain TCP private access; normal Memory cases must use `network.NewMemoryStreamPair`。
 - `internal/network/benchmark_test.go`: import `network/tcp` for TCP benchmark pair creation。
 - TCP constructor call sites in `cmd/mornlea`、`cmd/mornlea-server`、`internal/client` and `internal/server`。
 - `internal/archcheck/dependency_test.go`: register the child-to-root dependency。
+- `internal/archcheck/source_guards_test.go`: update the benchmark TCP constructor source guard to the child-package import path。
 - `docs/architecture.md` and `internal/network/AGENTS.md`: document the new ownership boundary。
 
 **Do not modify:** packet/message/codec/frame implementation, login implementation, Memory implementation, Rust code, protocol constants, storage files, or unrelated user changes。
@@ -49,8 +51,8 @@
 - Create: `internal/network/tcp/tcp.go`
 - Create: `internal/network/tcp/stream.go`
 - Move: `internal/network/tcp_test.go` → `internal/network/tcp/tcp_test.go`
+- Move: `internal/network/transport_consistency_test.go` → `internal/network/tcp/transport_consistency_test.go`
 - Modify: `internal/network/stream.go`
-- Modify: `internal/network/transport_consistency_test.go`
 - Modify: `internal/network/benchmark_test.go`
 
 **Interfaces:**
@@ -109,9 +111,9 @@ Expected: the contract test passes; root package tests may still fail until the 
 
 - [ ] **Step 4: Move TCP tests and update root transport tests**
 
-Move `internal/network/tcp_test.go` to `internal/network/tcp/tcp_test.go`, change its package declaration to `package tcp`, import `internal/network`, and qualify root packet/codec/frame/interface symbols with `network.` while leaving child private symbols unqualified. Update only the TCP constructor references in `transport_consistency_test.go` and `benchmark_test.go` to use the `networktcp` import; leave Memory constructors and all test names unchanged。
+Move `internal/network/tcp_test.go` to `internal/network/tcp/tcp_test.go`, change its package declaration to `package tcp`, import `internal/network`, and qualify root packet/codec/frame/interface symbols with `network.` while leaving child private symbols unqualified. Move `transport_consistency_test.go` into the child package because its malformed-wire cases require TCP private stream access. Keep normal Memory/TCP parity cases on the real `network.NewMemoryStreamPair` and TCP opener; raw Memory injection is allowed only for malformed-wire cases, with separate tests covering real Memory send-side validation. Update `benchmark_test.go` to use the `networktcp` import; leave all test names and labels unchanged。
 
-Run `gofmt -w internal/network/tcp internal/network/transport_consistency_test.go internal/network/benchmark_test.go && go test ./internal/network/... -race -count=1`. Expected: root and child network packages pass。
+Run `gofmt -w internal/network/tcp internal/network/benchmark_test.go && go test ./internal/network/... -race -count=1`. Expected: root and child network packages pass。
 
 - [ ] **Step 5: Commit the isolated extraction**
 
@@ -156,10 +158,10 @@ Expected: both packages compile with no test execution。
 Apply the same import-only constructor migration to the listed client/server/cmd test files and every file found by:
 
 ```bash
-git grep -nE 'network\.(ListenTCP|DialTCP)' -- '*.go'
+git grep -nE 'network\.(ListenTCP|DialTCP)' -- '*.go' ':!internal/archcheck/source_guards_test.go'
 ```
 
-Do not change assertions, transport setup, login calls, test names or test labels. The command must produce no output after the edit。
+Do not change assertions, transport setup, login calls, test names or test labels. The direct-caller command must produce no output after the edit; the unchanged architecture-guard literal is handled by Task 3。
 
 - [ ] **Step 3: Run affected package tests**
 
@@ -199,6 +201,13 @@ Add exactly one entry to `allowed` in `internal/archcheck/dependency_test.go`:
 
 Do not add `internal/network/tcp` to any other package's allowed dependencies and do not alter existing entries. Run `go test ./internal/archcheck -count=1`; Expected: PASS。
 
+- [ ] **Step 1b: Update the constructor source guard**
+
+In `internal/archcheck/source_guards_test.go`, change only the `cmd/mornlea`
+benchmark TCP constructor requirement from `network.ListenTCP(` to
+`networktcp.ListenTCP(`. Keep the shared login-state-machine requirements
+unchanged. Run `go test ./internal/archcheck -count=1`; Expected: PASS。
+
 - [ ] **Step 2: Update current architecture documentation**
 
 In `docs/architecture.md` section 4, state that `internal/network` owns packet、codec、login、shared interfaces and Memory, while `internal/network/tcp` owns TCP listener/dial/stream implementation and depends only on `internal/network`。In the same section, retain the existing no-WebGPU and ABI boundaries. In `internal/network/AGENTS.md`, update the transport ownership sentence to name both packages and state that TCP remains a transport-only implementation。
@@ -221,6 +230,7 @@ git commit -m "docs(network): record TCP package boundary"
 **Files:**
 - Verify: all files in the change diff
 - Modify: `openspec/changes/network-tcp-subpackage/tasks.md` and `openspec/changes/network-tcp-subpackage/ledger.md` only to record completed work and evidence
+- Include existing approved controller corrections in `docs/superpowers/plans/2026-08-27-network-tcp-subpackage.md`, `docs/superpowers/specs/2026-08-27-network-tcp-subpackage-design.md`, `openspec/changes/network-tcp-subpackage/design.md`, and `openspec/changes/network-tcp-subpackage/tasks.md` when committing the final change artifacts
 
 **Interfaces:**
 - Consumes: completed Tasks 1–3, the approved design, and all OpenSpec artifacts。
@@ -254,12 +264,12 @@ Expected: only the planned network package, caller, archcheck, documentation and
 make rust
 gofmt -l .
 go vet ./...
-go test ./... -race -count=1
+go test ./... -race -p=1 -count=1
 make rust-check
 openspec validate --all --strict --no-interactive
 ```
 
-Expected: `gofmt -l .` prints nothing and every command exits 0. Record the complete command results and any benchmark values in `ledger.md`; do not change thresholds or golden files。
+Expected: `gofmt -l .` prints nothing, the serial-package full-race command covers the complete package/test union and exits 0, and every other command exits 0. Record the complete command results and any benchmark values in `ledger.md`; do not change thresholds or golden files。
 
 - [ ] **Step 4: Complete OpenSpec and handoff**
 
