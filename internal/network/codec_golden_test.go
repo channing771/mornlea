@@ -19,12 +19,13 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		wantID  uint32
 		wantHex string
 	}{
-		{"hello", StateHandshake, ClientHello{ProtocolVersion: 27}, 0, "1b"},
+		{"hello", StateHandshake, ClientHello{ProtocolVersion: 28}, 0, "1c"},
 		{"login start", StateLogin, LoginStart{PlayerID: id, DisplayName: "Chen"}, 0, "00112233445546778899aabbccddeeff044368656e"},
-		{"input", StatePlay, PlayerInput{Sequence: 1, MoveX: -1, MoveZ: 1, Jump: true, Yaw: 1.5, Pitch: -0.5, Mining: true}, 0, "0100000000000000ff01010000c03f000000bf" + "01" + "00"},
+		{"input", StatePlay, PlayerInput{Sequence: 1, MoveX: -1, MoveZ: 1, Jump: true, Yaw: 1.5, Pitch: -0.5, Mining: true}, 0, "0100000000000000ff01010000c03f000000bf" + "01" + "00" + "00"},
 		// v24 新增：进食位是载荷最末一字节。夹具刻意取 Mining=false、
 		// Eating=true——同真同假的样本无法分辨「两个布尔字节写反」的实现。
-		{"input eating", StatePlay, PlayerInput{Sequence: 2, Eating: true}, 0, "0200000000000000" + "00" + "00" + "00" + "00000000" + "00000000" + "00" + "01"},
+		// v28 追加 Sprinting 位（最末字节），此处取 Sprinting=false 以锁死尾部追加语义。
+		{"input eating", StatePlay, PlayerInput{Sequence: 2, Eating: true}, 0, "0200000000000000" + "00" + "00" + "00" + "00000000" + "00000000" + "00" + "01" + "00"},
 		{"place", StatePlay, PlaceBlock{Sequence: 3, Yaw: 2, Pitch: -1, Slot: 4}, 2, "030000000000000000000040000080bf04"},
 		{"resync", StatePlay, RequestChunkResync{Sequence: 4, Dimension: core.Overworld, Chunk: core.ChunkPos{X: -2, Z: 3}, HaveRevision: 5}, 3, "040000000000000000000000feffffff030000000500000000000000"},
 		{"keep alive reply", StatePlay, KeepAliveReply{Token: 6}, 4, "0600000000000000"},
@@ -63,8 +64,8 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		wantID  uint32
 		wantHex string
 	}{
-		{"server hello", StateHandshake, ServerHello{ProtocolVersion: 27}, 0, "1b"},
-		{"handshake reject", StateHandshake, HandshakeReject{ServerProtocolVersion: 27, Code: HandshakeVersionMismatch, Message: "no"}, 1, "1b01026e6f"},
+		{"server hello", StateHandshake, ServerHello{ProtocolVersion: 28}, 0, "1c"},
+		{"handshake reject", StateHandshake, HandshakeReject{ServerProtocolVersion: 28, Code: HandshakeVersionMismatch, Message: "no"}, 1, "1c01026e6f"},
 		{"login success", StateLogin, LoginSuccess{PlayerID: id, WorldSeed: 0x1122334455667788}, 0, "00112233445546778899aabbccddeeff8877665544332211"},
 		{"login reject", StateLogin, LoginReject{Code: LoginInvalidIdentity, Message: "no"}, 1, "02026e6f"},
 		{"block changes", StatePlay, BlockChanges{Dimension: core.Overworld, Chunk: core.ChunkPos{X: 1, Z: -1}, BaseRevision: 1, NewRevision: 2, Changes: []BlockChange{{Position: core.BlockPos{X: 16, Y: -64, Z: -1}, Block: core.StoneID}}}, 1, "0000000001000000ffffffff010000000000000002000000000000000110000000c0ffffffffffffff0200"},

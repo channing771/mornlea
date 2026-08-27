@@ -57,6 +57,8 @@ const (
 	defaultFluidSinkSpeed      = float32(3)
 	defaultFluidAscendSpeed    = float32(4)
 	defaultFluidHorizontalDrag = float32(0.8)
+
+	defaultSprintSpeedMultiplier = float32(1.3)
 )
 
 // State 是玩家在固定步开始时的物理状态；位置表示脚底中心。
@@ -92,6 +94,8 @@ type Input struct {
 	MoveZ int8
 	Jump  bool
 	Yaw   float32
+	// Sprinting 为真时本步在门控全过时提升水平目标速度至 WalkSpeed*SprintSpeedMultiplier。
+	Sprinting bool
 	// BodyInFluid 为真时本步走水中积分：重力衰减、垂直终端速度压低、
 	// 水平速度乘阻力、Jump 变为持续上浮。
 	BodyInFluid bool

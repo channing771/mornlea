@@ -329,6 +329,8 @@ func (a *application) applyInteractiveInput(
 		// 手持食物时「使用」键按住即进食，这是进食位**唯一**的置位来源。
 		// 客户端只上行意图：不扣本地背包、不改本地饥饿值，服务端才是权威。
 		Eating: allowActions && actions.Use && a.holdingFood(),
+		// 疾跑键按住即上行意图，门控在服务端/预测侧（饥饿≥6/地面/前移/非浸没）统一判定。
+		Sprinting: allowActions && a.window != nil && (a.window.KeyDown(client.KeyLeftControl) || a.window.KeyDown(client.KeyLeftShift)),
 	}
 	if err := a.predictor.Advance(
 		elapsed,

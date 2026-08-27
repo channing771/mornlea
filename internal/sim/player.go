@@ -536,6 +536,11 @@ func (engine *Engine) advanceActivePlayers() {
 		// 再随 Input 传进物理步——流体没有碰撞盒，prism 里区分不出水与空气。
 		input := player.input
 		input.BodyInFluid, input.EyeInFluid = physics.SubmersionFlags(player.state.Position, source)
+		// 疾跑饥饿门控：饥饿<6 时不触发加速与疲劳（与 MC 同阈值），sim 侧清位
+		// 后 physics 侧的地面/前移/浸没复核仍各做一遍，保证 sweep bounds 自检一致。
+		if player.hunger < 6 {
+			input.Sprinting = false
+		}
 		// 氧气按「本 tick 开始时的眼睛浸没标志」结算，与传给物理步的是同一个值：
 		// 水下视觉、水中积分与溺水三处共用这一份判定，不存在第二套。
 		player.advanceOxygen(input.EyeInFluid, engine.tunables.DrownDamageIntervalTicks)
@@ -575,6 +580,10 @@ func (engine *Engine) advanceActivePlayers() {
 				swimExhaustionMilli(positionBeforeStep, player.state.Position),
 				engine.tunables.ExhaustionThresholdMilli,
 			)
+		}
+		// 疾跑：仅当本 tick 实际按 1.3× 加速时（门控全过）按固定表计费，未加速不计费。
+		if input.Sprinting && input.MoveZ > 0 && wasOnGround && !input.BodyInFluid {
+			player.applyExhaustion(exhaustionSprintMilli, engine.tunables.ExhaustionThresholdMilli)
 		}
 		// 落点也要判一次：水浅、下落又快时，本步开始时玩家还在水面之上、结束
 		// 时已经踩到水底，只看步首标志会让这一跤照旧结算摔落伤害。

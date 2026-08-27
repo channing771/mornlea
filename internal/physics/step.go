@@ -11,17 +11,18 @@ import (
 )
 
 const (
-	// stepHeaderBytes 是 StepInput header v2 的长度：v1 的 128 字节已被排满，
-	// 浸没标志与四个水中 tunable 需要新的字节，故扩到 160（仍是 32 的整数倍）。
-	// 这是同一个 engine ABI v5 内的 header 扩展，不再升 ABI 版本。
+	// stepHeaderBytes 是 StepInput header v3 的长度：v1 128，v2 160（浸没标志+
+	// 水中 tunable），v3 复用 v2 保留区承载疾跑位与倍率（129 位 + 148..152
+	// multiplier），总长保持 160（32 整数倍），仍是同一 engine ABI v5 内的
+	// header 扩展，不再升 ABI 版本。
 	stepHeaderBytes  = 160
 	stepOutputBytes  = 32
 	stepRegularCells = 135
 	stepRegularBytes = stepHeaderBytes + stepRegularCells*collisionCellBytes
 
-	// stepLayoutVersion 是 StepInput header 的布局版本。v1 → v2 的唯一差异是
-	// 追加浸没标志与四个水中 tunable；Rust 侧只接受当前版本，混装立即报错。
-	stepLayoutVersion = 2
+	// stepLayoutVersion 是 StepInput header 的布局版本。v2 → v3 追加疾跑位与
+	// SprintSpeedMultiplier；Rust 侧只接受当前版本，混装立即报错。
+	stepLayoutVersion = 3
 )
 
 // Step 推进一个固定步：校验与编码在 Go，积分 + 碰撞解析 + 速度裁剪在 Rust engine。
@@ -64,7 +65,11 @@ func movementTargetFromYaw(moveX, moveZ int8, walkSpeed, yawSin, yawCos float32)
 // 垂直轴按 jump/fallen/−terminal 分支取凸包。界必须与 Rust 积分逐位一致，
 // 由 step 级差分测试锁定。
 func stepSweepBounds(state State, input Input, tunables Tunables, yawSin, yawCos float32) (mgl32.Vec3, mgl32.Vec3) {
-	target := movementTargetFromYaw(input.MoveX, input.MoveZ, tunables.WalkSpeed, yawSin, yawCos)
+	walkSpeed := tunables.WalkSpeed
+	if input.Sprinting && input.MoveZ > 0 && state.OnGround && !input.BodyInFluid {
+		walkSpeed *= tunables.SprintSpeedMultiplier
+	}
+	target := movementTargetFromYaw(input.MoveX, input.MoveZ, walkSpeed, yawSin, yawCos)
 	horizontal := mgl32.Vec3{state.Velocity.X(), 0, state.Velocity.Z()}
 	if state.OnGround {
 		if target.Len() == 0 {
@@ -166,11 +171,15 @@ func encodeStepInput(
 	for index, value := range prism.dimensions {
 		binary.LittleEndian.PutUint32(bytes[116+index*4:120+index*4], value)
 	}
-	// v2 新增区：128 是身体浸没标志，129..132 保留为 0；132..148 是四个水中
-	// tunable；148..160 同样保留为 0。保留字节由上面的 clear 置零，Rust 侧
-	// 逐字节要求为 0，未来扩字段时会立刻暴露版本不匹配。
+	// v3 新增区：128 是身体浸没标志，129 是疾跑位，130..132 保留为 0；
+	// 132..148 是四个水中 tunable；148..152 是疾跑倍率，152..160 保留为 0。
+	// 保留字节由上面的 clear 置零，Rust 侧逐字节要求为 0，未来扩字段时会
+	// 立刻暴露版本不匹配。
 	if input.BodyInFluid {
 		bytes[128] = 1
+	}
+	if input.Sprinting {
+		bytes[129] = 1
 	}
 	for index, value := range [...]float32{
 		tunables.FluidGravity, tunables.FluidSinkSpeed,
@@ -178,6 +187,7 @@ func encodeStepInput(
 	} {
 		putCollisionFloat(bytes[132+index*4:136+index*4], value)
 	}
+	putCollisionFloat(bytes[148:152], tunables.SprintSpeedMultiplier)
 
 	offset := stepHeaderBytes
 	for y := uint32(0); y < prism.dimensions[1]; y++ {

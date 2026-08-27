@@ -8,8 +8,8 @@ import (
 )
 
 func TestProtocolVersionIsTwentySix(t *testing.T) {
-	if ProtocolVersion != 27 {
-		t.Fatalf("协议版本=%d，想要 27", ProtocolVersion)
+	if ProtocolVersion != 28 {
+		t.Fatalf("协议版本=%d，想要 28", ProtocolVersion)
 	}
 }
 
