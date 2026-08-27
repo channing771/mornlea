@@ -182,3 +182,4 @@
 | F-01 | 拒绝原因白名单补登记 | `client/mirror.go` 补登记 `RejectContainerCapacity`，服务端发该原因时客户端不再报 unknown | 无 wire 变更 | 已完成 | claude-implementer @ fix/F-01-reject-container-capacity | farming 遗留 15；PR #73 已合并（CI 8/8 全绿） |
 | F-02 | perfcheck 文案修正 | `cmd/perfcheck/migration_test.go` 的 v15 比较测试失败信息误写为 v16 | 无（一处字符串） | 已完成 | claude-implementer @ fix/F-02-perfcheck-v15-message | PR #72 已合并（CI 8/8 全绿） |
 | F-03 | 「使用」键放置判定收敛 | 客户端按 `core.ItemPlacement` 决定是否发 `PlaceBlock`，不可放置物一律不发 | 无（客户端判定；钉住现状的 `TestUseKeyRisingEdgeSkipsPlaceWhileHoldingFood` 需同步调整） | 已完成 | claude-implementer @ fix/F-03-use-key-placement | PR #74 已合并（CI 首跑 1 flake 重跑后 8/8 全绿） |
+| F-04 | LAN 专用服务端事实同步 | 校正 `docs/notes/lan-server.md` 中过时的启动方式、玩法能力、伙伴行为、版本矩阵与安全边界 | 无（docs-only） | 已认领 | opencode-implementer @ docs/F-04-lan-server-facts | 独占文件集：`docs/notes/lan-server.md`；依据代码、测试、`openspec/specs/`、`README.md` 与 `docs/notes/progress.md`，不改实现、协议、存档、ABI、benchmark 或 golden |
