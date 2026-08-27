@@ -13,10 +13,10 @@ import (
 
 // captureShellTopY 是远环壳内容在世界 Y 轴上的解析上界,用作近处不变
 // 断言的截止推导输入:worldgen 地表高度 = 海平面 64 + fbm×振幅 48
-// (见 internal/worldgen oracle 的 `oracleSeaLevel`/`oracleTerrainAmp`),
-// |fbm| ≤ 1 故高度 ≤ 112;壳的断差裙边只向下延伸、不抬高上界。取解析
-// 界而非实测最值,让断言对任意种子都成立——若未来 worldgen 振幅改变,
-// 本常量必须同步。
+// (海平面与振幅是 worldgen 冻结的地形语义,由 internal/worldgen 的生产
+// 黑盒测试锁定),|fbm| ≤ 1 故高度 ≤ 112;壳的断差裙边只向下延伸、不抬高
+// 上界。取解析界而非实测最值,让断言对任意种子都成立——若未来 worldgen
+// 振幅改变,本常量必须同步。
 const captureShellTopY = 64 + 48
 
 // captureShellBottomY 是远环壳内容在世界 Y 轴上的解析下界(与上界

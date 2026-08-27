@@ -24,6 +24,7 @@ func (renderer *HotbarRenderer) Prepare(
 	overlay *FurnaceOverlay,
 	chest *ChestOverlay,
 	mining MiningOverlay,
+	eating EatingOverlay,
 	health HealthOverlay,
 	oxygen OxygenOverlay,
 	hunger HungerOverlay,
@@ -44,7 +45,7 @@ func (renderer *HotbarRenderer) Prepare(
 	}
 	if inventoryConfirmed {
 		layoutInventory(
-			&renderer.layout, renderer.atlas, inventory, open, source, overlay, chest, mining,
+			&renderer.layout, renderer.atlas, inventory, open, source, overlay, chest, mining, eating,
 			float32(width), float32(height),
 		)
 	} else {

@@ -4,8 +4,9 @@
 // 自 rust-engine-worldgen 起,噪声求值、地表分层、矿石与橡树的全部计算由
 // Rust `mornlea_engine` 独占生产;本包只保留 seed→perm 表播种(Go
 // `math/rand` 语义)、`MGW1` 请求编码、native 调用与结果解码,没有生产
-// Go fallback。旧 Go 实现的逐字副本存放在 `oracle_test.go`,作为
-// "同种子逐位一致"差分门禁的对照物。
+// Go fallback。生成语义的确定性由生产黑盒测试兜底:`GenerateChunk` 与
+// `BaseBlockAt` 两种出口的一致性断言、区块输出的 golden 字节锁以及服务端
+// e2e parity 共同构成回归网。
 package worldgen
 
 import (
@@ -59,7 +60,7 @@ type Generator struct {
 // perm 表播种保持 Go `math/rand` 语义:这是既有世界的确定性来源,
 // 不迁入 Rust,保证相同 seed 在迁移前后产生相同世界。
 //
-// fluidEnabled 是配置 `fluidEnabled` 的取值,门控海平面注水。门控在 Go 侧
+// 参数 fluidEnabled 是顶层配置同名键的取值,门控海平面注水。门控在 Go 侧
 // 以"材料表 water 字段填什么编号"的形式实现(design D6):关闭时填 core.AirID,
 // engine 的注水步就退化为把空气写回空气,生成结果与未引入流体的基线逐位一致;
 // engine 侧因此没有任何开关分支。

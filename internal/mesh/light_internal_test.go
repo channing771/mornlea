@@ -70,6 +70,9 @@ func (internalTestRegistry) LightAttenuation(id world.BlockID) uint8 {
 	return 0
 }
 
+// BlockTopRaw 恒为满格哨兵 0：光照夹具不涉及非满格方块。
+func (internalTestRegistry) BlockTopRaw(world.BlockID) uint8 { return 0 }
+
 func (internalTestRegistry) Emission(id world.BlockID) uint8 {
 	if id == core.LightBlockID {
 		return 15
@@ -128,6 +131,7 @@ func (r *countingRegistry) Emission(world.BlockID) uint8 {
 
 func (*countingRegistry) FluidHeight(world.BlockID) uint8      { return 0 }
 func (*countingRegistry) LightAttenuation(world.BlockID) uint8 { return 0 }
+func (*countingRegistry) BlockTopRaw(world.BlockID) uint8      { return 0 }
 
 func (*countingRegistry) MeshSnapshot() RegistrySnapshot {
 	panic("countingRegistry.MeshSnapshot 不应被调用")

@@ -65,7 +65,7 @@ case "$CMD" in
           if "$HERE/feishu.sh" send "$ID"; then
             echo "[confirm] 已推送到飞书。等待回复: confirm.sh wait --id $ID"
           else
-            echo "[confirm] 飞书发送失败 → 降级为 GitHub Discussion 协议（见 docs/development-process.md 阶段 0.5）"
+            echo "[confirm] 飞书发送失败 → 降级为 GitHub Discussion 协议（见 docs/development-process.md 阶段 1）"
             jq '.channel="discussion"' "$DIR/$ID.json" > "$DIR/$ID.json.tmp" && mv "$DIR/$ID.json.tmp" "$DIR/$ID.json"
             echo "[confirm] 请把请求内容发到 Discussion #71 对应评论；用户回复后运行: confirm.sh reply --id $ID --action <approve|edit|reject> --text "...""
           fi

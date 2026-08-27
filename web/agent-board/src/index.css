@@ -1,36 +1,48 @@
 @import "tailwindcss";
 
-/* 深色主题 tokens：全部用 CSS 变量承载，@theme inline 映射为 Tailwind 颜色工具类，
-   与 shadcn/ui 的 CSS 变量约定一致。页面根容器由 body 强制深色。 */
+/* 浅色 surface-based ops console 主题：冷灰纸底（非暖米色）、白色面板、hairline 分隔、
+   单一 accent（去饱和 azure 深字）。颜色由 CSS 变量承载并经 @theme inline 映射为 Tailwind 工具类，
+   与 shadcn/ui 的 CSS 变量约定一致。
+   color-scheme: light 告知浏览器这是浅色页面。 */
 :root {
-  --background: 220 16% 6%;
-  --foreground: 220 20% 90%;
-  --card: 220 18% 11%;
-  --card-foreground: 220 20% 90%;
-  --popover: 220 18% 11%;
-  --popover-foreground: 220 20% 90%;
-  --primary: 217 100% 65%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 220 15% 15%;
-  --secondary-foreground: 220 20% 90%;
-  --muted: 220 14% 40%;
-  --muted-foreground: 220 12% 62%;
-  --accent: 220 15% 16%;
-  --accent-foreground: 220 20% 90%;
-  --destructive: 0 63% 55%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 220 14% 18%;
-  --input: 220 14% 18%;
-  --ring: 217 100% 65%;
-  --radius: 0.5rem;
+  color-scheme: light;
 
-  /* 任务状态徽章专用色 */
-  --status-unclaimed: 214 16% 58%;
-  --status-claimed: 217 100% 65%;
-  --status-develop: 37 86% 57%;
-  --status-integrate: 265 55% 63%;
-  --status-done: 141 50% 50%;
-  --status-other: 218 9% 46%;
+  /* 基底：冷灰纸底（非暖米色）；foreground 为墨色 ink */
+  --background: 220 16% 94%;
+  --foreground: 221 26% 16%;
+  --card: 220 18% 99%;
+  --card-foreground: 221 26% 16%;
+  --popover: 220 18% 99%;
+  --popover-foreground: 221 26% 16%;
+
+  /* 唯一 accent：去饱和 azure（加深以适配浅底）。所有交互强调只许用它 */
+  --primary: 207 70% 42%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 14% 90%;
+  --secondary-foreground: 221 20% 30%;
+  --muted: 220 12% 60%;
+  --muted-foreground: 220 10% 45%;
+  --accent: 220 14% 91%;
+  --accent-foreground: 221 20% 30%;
+
+  /* 破坏性：玫瑰色改为浅底深红字（L32%，对 10% 红底实测对比度 ≥4.5:1） */
+  --destructive: 2 60% 32%;
+  --destructive-foreground: 0 0% 99%;
+
+  /* hairline：1px、tint 到纸底 */
+  --border: 220 14% 87%;
+  --input: 220 14% 87%;
+  --ring: 207 70% 42%;
+
+  /* 任务状态徽章专用色：浅底深字语义（chip 由 /15 透明度自动变淡彩）：
+     未认领 slate / 已认领 azure（= accent）/ 开发中 amber 深字 /
+     待集成 teal 深字 / 已完成 emerald 深字 / 其他 muted slate */
+  --status-unclaimed: 220 12% 42%;
+  --status-claimed: 207 70% 42%;
+  --status-develop: 32 80% 30%;
+  --status-integrate: 185 65% 26%;
+  --status-done: 152 50% 26%;
+  --status-other: 220 10% 44%;
 }
 
 @theme inline {
@@ -59,10 +71,18 @@
   --color-status-integrate: hsl(var(--status-integrate));
   --color-status-done: hsl(var(--status-done));
   --color-status-other: hsl(var(--status-other));
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+
+  /* 字体：系统字体栈，零 npm 包、零外部资源。sans 负责文案，mono 纪律要求
+     所有数据（数字、pid、时长、path、分支、任务 id、check 计数、日志）用 font-mono */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Menlo", monospace;
+
+  /* 形状锁（全仓一致规则）：容器与按钮 6px 圆角（rounded-md 级别）、
+     状态徽章走 full-pill（rounded-full），禁止混出第三种半径；不新增任何投影 */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.375rem;
+  --radius-xl: 0.5rem;
 }
 
 @layer base {

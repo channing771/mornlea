@@ -323,7 +323,7 @@ func TestRunWithDependenciesAlwaysEnablesDevForCapture(t *testing.T) {
 	}
 }
 
-func TestRunPassesResolvedTexturePackPathToLocalAndRemoteClients(t *testing.T) {
+func TestRunPassesRawAndResolvedTexturePackPathToLocalAndRemoteClients(t *testing.T) {
 	configDir := t.TempDir()
 	configPath := filepath.Join(configDir, "config.json")
 	cfg := config.Defaults()
@@ -341,19 +341,21 @@ func TestRunPassesResolvedTexturePackPathToLocalAndRemoteClients(t *testing.T) {
 		{name: "远程", args: []string{"--config", configPath, "--connect", "127.0.0.1:25565"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			var gotPath string
+			var gotRaw, gotResolved string
 			err := runWithDependencies(test.args, runDependencies{
 				loadIdentity: func(*string) (network.Identity, error) { return network.Identity{}, nil },
 				newApplication: func(options applicationOptions) (*application, error) {
-					gotPath = options.TexturePackPath
+					gotRaw = options.TexturePackPath
+					gotResolved = options.ResolvedTexturePackPath
 					return nil, errors.New("stop before window")
 				},
 			})
 			if err == nil {
 				t.Fatal("runWithDependencies succeeded, want construction error")
 			}
-			if gotPath != wantPath {
-				t.Fatalf("TexturePackPath = %q，want %q", gotPath, wantPath)
+			if gotRaw != "packs/local" || gotResolved != wantPath {
+				t.Fatalf("TexturePackPath/Resolved = %q/%q，want %q/%q",
+					gotRaw, gotResolved, "packs/local", wantPath)
 			}
 		})
 	}
@@ -378,19 +380,20 @@ func TestRunAutomationTexturePackIsolation(t *testing.T) {
 		{name: "capture", args: []string{"--config", configPath, "--capture", t.TempDir()}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			var gotPath string
+			var gotRaw, gotResolved string
 			err := runWithDependencies(test.args, runDependencies{
 				loadIdentity: func(*string) (network.Identity, error) { return network.Identity{}, nil },
 				newApplication: func(options applicationOptions) (*application, error) {
-					gotPath = options.TexturePackPath
+					gotRaw = options.TexturePackPath
+					gotResolved = options.ResolvedTexturePackPath
 					return nil, errors.New("stop before window")
 				},
 			})
 			if err == nil {
 				t.Fatal("runWithDependencies succeeded, want construction error")
 			}
-			if gotPath != "" {
-				t.Fatalf("TexturePackPath = %q，want empty", gotPath)
+			if gotRaw != "" || gotResolved != "" {
+				t.Fatalf("TexturePackPath/Resolved = %q/%q，want empty", gotRaw, gotResolved)
 			}
 		})
 	}

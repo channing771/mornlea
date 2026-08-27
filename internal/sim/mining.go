@@ -44,10 +44,6 @@ func (state miningState) update() MiningUpdate {
 	}
 }
 
-// wheatSeedDropCount 是收获一株成熟小麦额外产出的种子数（design.md D9：掉落
-// 数量固定，不随机）。固定值同时保证「误挖不亏种子」——耕种循环不会死。
-const wheatSeedDropCount = uint8(2)
-
 func miningRule(block core.BlockID, held core.ItemID) (uint16, bool) {
 	// 农业方块与手持无关（锄头不是采掘工具，作物与耕地徒手即可收）：作物 1
 	// tick、耕地 5 tick（与泥土同价，翻地这一步撤销得和挖泥土一样费力）。
@@ -155,17 +151,16 @@ func blockRaycastSampler(dimension *Dimension) func(core.BlockPos) (bool, error)
 	}
 }
 
-// companionMineableBlock 是伙伴采掘目标的防御清单：必须具有单一 BlockDrop 且
-// 不是箱子/熔炉——容器破坏会掉落本体加全部内容物的多份产物，超出"单一产物
-// 直入背包"的结算形状。Planner 契约之外，权威模拟在这里完成第二重拒绝。
+// companionMineableBlock 是伙伴采掘目标的防御清单：箱子与熔炉是合法目标——
+// 其产物是「容器本体 + 全部内容物堆」的批量，由 `completeCompanionMining` 的
+// 容器分支在背包副本上逐堆预演、全或无原子结算（任一堆放不下即整体不结算，
+// 进度保持满格），容量安全由结算形状承担而不是由目标清单承担。其余方块仍
+// 要求具有单一 `core.BlockDrop`。Planner 契约之外，权威模拟在这里完成第二重校验。
 func companionMineableBlock(block core.BlockID) bool {
-	if block == core.ChestID || block == core.FurnaceID {
-		return false
-	}
 	// 农业方块（八个作物阶段 + 干湿耕地）必须**显式**拒绝，不能指望"单一
 	// BlockDrop"这条判据顺手挡住（design.md D7 / Ruling 5）：core.BlockDrop 对
-	// 十个编号都有单一产物登记，成熟小麦的第二份产物（2 种子）只存在于
-	// completeMining 的分支里，编号层面读不出来——巧合性安全不成立。
+	// 十个编号都有单一产物登记，成熟小麦的第二份种子产物只存在于 `completeMining`
+	// 的分支里，编号层面读不出来——巧合性安全不成立。
 	// 伙伴的农业语义（种什么、何时收、成熟度判断）尚未裁决（design.md 遗留 11），
 	// 在裁决之前十个编号一律不可作为伙伴采掘目标。
 	if core.IsCrop(block) || core.IsFarmland(block) {
@@ -289,8 +284,9 @@ func (engine *Engine) advanceMining(
 // advanceCompanionMining 推进一个 active 伙伴的采掘。交互距离、Ready 区块与
 // 视线遮挡复用玩家的 core.RaycastBlocks + InteractionReach + blockRaycastSampler
 // 实现：射线从伙伴眼睛指向目标方块中心，命中必须恰好是目标本身（被遮挡、超距
-// 或区块未就绪都会清空进度，与玩家的无效目标语义一致）。容器与多掉落方块在
-// 进度累积之前就被防御拒绝。完成 tick 经 completeCompanionMining 分叉结算。
+// 或区块未就绪都会清空进度，与玩家的无效目标语义一致）。无掉落方块与农业
+// 方块在进度累积之前就被防御清单拒绝；箱子与熔炉是合法目标，完成 tick 经
+// `completeCompanionMining` 的容器分叉批量结算。
 func (engine *Engine) advanceCompanionMining(
 	entry *companionState,
 	pending map[core.ChunkKey]*pendingChunkChanges,
@@ -334,19 +330,74 @@ func (engine *Engine) advanceCompanionMining(
 	engine.completeCompanionMining(entry, pending)
 }
 
+// CompanionMineContainerStaging 构造容器采掘（箱子/熔炉）的产物堆序列，并在
+// 伙伴背包副本上预演批量结算——方案 A 全或无（change companion-mine-containers
+// 的 D1 裁决）。产物集合与固定序：容器本体 1 堆在前（harvestable 为假时不计，
+// 对齐玩家路径 `completeMining` 的可收获判定），内容物按调用方传入的容器槽位序
+// 在后（箱子为 27 格槽位序、熔炉为输入/燃料/输出三格序）；空堆跳过。预演在
+// 副本上逐堆 `core.Inventory.AddStack`，任一堆余量非空即整体失败（ok=false，
+// staged 为传入背包原值）——调用方必须放弃全部结算，绝不产生部分入包。
+// 固定序使同一世界状态的重放逐字节一致（`AddStack` 的并堆结果与提交顺序相关，
+// 先到堆优先合并），与全仓确定性纪律对齐。
+//
+// sim 的完成分叉 `completeCompanionContainerMining` 与 server 包 Runner 的满格
+// 饱和判定共用本函数：同一产物集合构造、同一固定序、同一预演，「没有第二套
+// 规则」的约束从单件推广到批量即落在此处。block 必须是 `core.ChestID` 或
+// `core.FurnaceID`，其余编号返回 ok=false。
+func CompanionMineContainerStaging(
+	block core.BlockID,
+	harvestable bool,
+	contents []core.ItemStack,
+	inventory core.Inventory,
+) (yields []core.ItemStack, staged core.Inventory, ok bool) {
+	var body core.ItemID
+	switch block {
+	case core.ChestID:
+		body = core.ItemChest
+	case core.FurnaceID:
+		body = core.ItemFurnace
+	default:
+		return nil, inventory, false
+	}
+	yields = make([]core.ItemStack, 0, 1+len(contents))
+	if harvestable {
+		yields = append(yields, core.ItemStack{Item: body, Count: 1})
+	}
+	for _, stack := range contents {
+		if stack == (core.ItemStack{}) {
+			continue
+		}
+		yields = append(yields, stack)
+	}
+	staged = inventory
+	for _, stack := range yields {
+		var leftover core.ItemStack
+		staged, leftover = staged.AddStack(stack)
+		if leftover.Count != 0 {
+			return yields, inventory, false
+		}
+	}
+	return yields, staged, true
+}
+
 // completeCompanionMining 在进度满格的 tick 结算伙伴采掘，三方必须原子成立：
 // 目标方块改为空气、按既有规则扣除工具耐久（含损坏形态）、可收获产物直入
-// 伙伴背包。容量前验先行——AddStack 在背包副本上预演，余量非空则该 tick 整体
-// 不结算：方块不变、耐久不变、背包不变、进度保持满格，Manager 由此观察到
-// "就绪但无容量"的稳定状态（"任务失败"的判定属于 Manager，不在这里）。
-// 预演通过后 SetBlock 与内存提交在单写者 tick 内不再有失败路径，三方在同一
-// tick 内同时成立。
+// 伙伴背包。普通方块与容器两条完成分叉：普通方块走单件结算；容器（箱子/
+// 熔炉）走 `completeCompanionContainerMining` 的批量全或无结算。容量前验先行
+// ——预演在背包副本上进行，余量非空则该 tick 整体不结算：方块不变、耐久
+// 不变、背包不变、进度保持满格，Manager 由此观察到"就绪但无容量"的稳定状态
+// （"任务失败"的判定属于 Manager，不在这里）。预演通过后 SetBlock 与内存提交
+// 在单写者 tick 内不再有失败路径，三方在同一 tick 内同时成立。
 func (engine *Engine) completeCompanionMining(
 	entry *companionState,
 	pending map[core.ChunkKey]*pendingChunkChanges,
 ) {
 	if !companionMineableBlock(entry.mining.block) {
 		entry.mining = miningState{}
+		return
+	}
+	if entry.mining.block == core.ChestID || entry.mining.block == core.FurnaceID {
+		engine.completeCompanionContainerMining(entry, pending)
 		return
 	}
 	item, _ := core.BlockDrop(entry.mining.block)
@@ -370,6 +421,84 @@ func (engine *Engine) completeCompanionMining(
 		entry.inventory = staged
 		entry.inventoryDirty = true
 	}
+	if consumeToolDurability(&entry.actorState) {
+		entry.inventoryDirty = true
+	}
+	entry.mining = miningState{}
+}
+
+// completeCompanionContainerMining 是容器目标（箱子/熔炉）的完成分叉：产物是
+// 「本体 + 全部内容物」的批量，按方案 A 全或无结算——`CompanionMineContainerStaging`
+// 在伙伴背包副本上按固定序逐堆预演，任一堆放不下即该 tick 整体不结算（方块、
+// 容器内容物、耐久、背包全部不变，进度保持满格）；预演通过后同一权威 tick 内
+// `SetBlock` 空气 + 停用容器槽（`DeactivateChest`/`DeactivateFurnace`，对齐玩家
+// 路径 `completeMining` 的顺序）+ 背包提交副本 + `consumeToolDurability`，随后经
+// `recordChange` 汇入既有 `pendingChunkChanges` 广播，不新增协议消息。
+//
+// 容器记录经 chunk record 读取（`ChestAt`/`Chest`/`FurnaceAt`/`Furnace`），与玩家
+// 路径同源，不存在第二套容器访问。区块失效、容器槽缺失或方块已被同 tick 更早
+// actor 移除时对齐既有 `RejectNoTarget` 语义：清零进度、不结算、无容器槽泄漏。
+// 两条路径刻意不合并为参数化单实现：玩家侧产物是世界掉落物批量预演
+// （`PrepareDropBatch`），伙伴侧是背包副本逐堆 `AddStack`，去向不同（见 proposal
+// 的「延期与放弃」）。
+func (engine *Engine) completeCompanionContainerMining(
+	entry *companionState,
+	pending map[core.ChunkKey]*pendingChunkChanges,
+) {
+	dimension := engine.dimensions[entry.dimension]
+	record, recordOK := dimension.records[entry.mining.target.Chunk()]
+	blockIndex, indexOK := world.ChunkBlockIndex(entry.mining.target)
+	if !recordOK || record.State != ChunkReady || record.Chunk == nil || !indexOK {
+		entry.mining = miningState{}
+		return
+	}
+	// 内容物按容器槽位序快照：箱子为 27 格槽位序，熔炉为输入/燃料/输出三格序
+	// （与玩家路径 `completeMining` 装配掉落批次的顺序一致，固定序是重放一致的
+	// 前提，见 `CompanionMineContainerStaging` 的注释）。
+	var contents []core.ItemStack
+	chestSlot, furnaceSlot := 0, 0
+	switch entry.mining.block {
+	case core.ChestID:
+		slot, found := record.Chunk.ChestAt(blockIndex)
+		if !found {
+			entry.mining = miningState{}
+			return
+		}
+		chestSlot = slot
+		chest := record.Chunk.Chest(slot)
+		contents = chest.Items[:]
+	case core.FurnaceID:
+		slot, found := record.Chunk.FurnaceAt(blockIndex)
+		if !found {
+			entry.mining = miningState{}
+			return
+		}
+		furnaceSlot = slot
+		furnace := record.Chunk.Furnace(slot)
+		contents = []core.ItemStack{furnace.Input, furnace.Fuel, furnace.Output}
+	}
+	_, staged, ok := CompanionMineContainerStaging(
+		entry.mining.block, entry.mining.harvestable, contents, entry.inventory,
+	)
+	if !ok {
+		// 全或无：进度保持满格，作为「就绪但无容量」的稳定可观察状态；失败
+		// 判定属于 Manager（Runner 侧用同一 `CompanionMineContainerStaging` 判定）。
+		return
+	}
+	_, changed, err := dimension.SetBlock(entry.mining.target, core.AirID)
+	if err != nil || !changed {
+		entry.mining = miningState{}
+		return
+	}
+	engine.recordChange(entry.dimension, entry.mining.target, core.AirID, pending)
+	switch entry.mining.block {
+	case core.ChestID:
+		record.Chunk.DeactivateChest(chestSlot)
+	case core.FurnaceID:
+		record.Chunk.DeactivateFurnace(furnaceSlot)
+	}
+	entry.inventory = staged
+	entry.inventoryDirty = true
 	if consumeToolDurability(&entry.actorState) {
 		entry.inventoryDirty = true
 	}
@@ -494,18 +623,27 @@ func (engine *Engine) completeMining(
 		return 0, false
 	}
 
-	// 成熟小麦是全仓唯一的多产物方块：1 小麦 + 2 种子。多产物**刻意不进
-	// core.BlockDrop**——那张表的返回形状是单一产物，改成多产物会波及它的全部
-	// 消费者（伙伴采掘与放置的防御清单、planner 的 place 注册表交叉校验、
-	// 客户端镜像），而收益只是这一个方块（Ruling 5）。因此 core 只登记主产物
-	// 小麦，额外的种子在这里按方块编号补发，多产物的知识只存在于权威结算路径。
+	// 成熟小麦是全仓唯一的多产物方块：1–3 个小麦加 1–3 颗种子，具体数量由
+	// `cropYieldRolls` 对 (worldSeed, 完成本次采掘的权威 tick, 维度, 目标坐标)
+	// 的纯整数哈希给出。tick 取值点就是这一行 `engine.tick.Load()`：tick 在
+	// `Step` 内单调推进且单线程读写，`completeMining` 只在完成 tick 被调用一次，
+	// 因此同一株作物在同一权威 tick 上重新结算必然得到同一串数量，不依赖任何
+	// 进程级随机源或 map 遍历顺序（change crop-random-drop-count design.md D2）。
+	// 该决策接替 authoritative-farming design.md D9 的「掉落数量固定」；种子的
+	// 下限 1 升格为规格条款「始终不亏种子」，耕种循环不会因随机性中断。
+	// 多产物本身**刻意不进 `core.BlockDrop`**——那张表的返回形状是单一产物，改成
+	// 多产物会波及它的全部消费者（伙伴采掘与放置的防御清单、planner 的 place
+	// 注册表交叉校验、客户端镜像），而收益只是这一个方块（Ruling 5）。因此 core
+	// 只登记主产物小麦，种子在这里按方块编号补发，多产物与数量的知识只存在于
+	// 权威结算路径。
 	//
 	// 批量预演复用破坏熔炉/箱子的 PrepareDropBatch：任一堆放不下就整体返回
 	// false，方块与掉落槽逐字节不变，绝不出现"小麦掉了、种子没掉"的半掉落。
 	if block == core.WheatStage7ID && harvestable {
+		wheatCount, seedCount := cropYieldRolls(engine.seed, engine.tick.Load(), dimensionID, target)
 		stacks := [2]core.ItemStack{
-			{Item: item, Count: 1},
-			{Item: core.ItemWheatSeeds, Count: wheatSeedDropCount},
+			{Item: item, Count: wheatCount},
+			{Item: core.ItemWheatSeeds, Count: seedCount},
 		}
 		next, capacityOK := record.Chunk.PrepareDropBatch(
 			stacks[:], blockIndex, engine.tunables.DropPickupDelayTicks,

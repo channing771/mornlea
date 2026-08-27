@@ -13,9 +13,9 @@ import (
 )
 
 // TestCompanionActionAppliesInIDOrderAfterPlayers 锁定权威 tick 的固定阶段顺序：
-// 玩家命令 → 按 ID 字节序的伙伴 action → 统一物理推进 → 流体推进 → 作物推进。
-// 五个阶段写互不相交的状态，仅凭外部结果无法观察先后，因此用
-// stepPhaseObserver 探针直接断言 Step
+// 玩家命令 → 按 ID 字节序的伙伴 action → 统一物理推进 → 流体推进 → 湿度推进
+// → 作物推进。仅凭外部结果无法完整观察六个阶段的边界，因此用
+// `stepPhaseObserver` 探针直接断言 `Step`
 // 进入阶段的次序（这也是突变验证的锚点），同时用两名玩家与两个伙伴的位移验证
 // 同 tick 双方都被处理、action 按 CompanionID 正确寻址且两次相同输入的重放
 // 产生完全一致的可观察结果。
@@ -78,9 +78,9 @@ func TestCompanionActionAppliesInIDOrderAfterPlayers(t *testing.T) {
 	firstPhases, firstPlayers, firstCompanions := run()
 	if !reflect.DeepEqual(firstPhases, []stepPhase{
 		phasePlayerCommands, phaseCompanionActions, phasePhysicsAdvance, phaseFluidAdvance,
-		phaseCropAdvance,
+		phaseFarmlandMoistureAdvance, phaseCropAdvance,
 	}) {
-		t.Fatalf("阶段顺序=%v，想要 [玩家命令 伙伴action 统一物理 流体推进 作物推进]", firstPhases)
+		t.Fatalf("阶段顺序=%v，想要 [玩家命令 伙伴action 统一物理 流体推进 湿度推进 作物推进]", firstPhases)
 	}
 	// 玩家命令必须在同 tick 生效：玩家 A 沿 +X、玩家 B 沿 +Z 移动。
 	if firstPlayers[0].State.Position.X() <= 0.5 {

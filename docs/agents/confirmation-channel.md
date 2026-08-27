@@ -1,12 +1,12 @@
 # 设备确认通道（飞书优先）
 
-brainstorm 内容确认（docs/development-process.md 阶段 0.5）要求「呈现设计 → 获得显式批准 → 才开工」。在 headless 定时调度下，实现者不能对着终端提问，本通道把确认请求**推送到你的手机**，你回复后**自动续跑**任务；无通道时降级为 GitHub Discussion 评论协议。
+brainstorm 内容确认（docs/development-process.md 阶段 1）要求「呈现设计 → 获得显式批准 → 才开工」。在 headless 定时调度下，实现者不能对着终端提问，本通道把确认请求**推送到你的手机**，你回复后**自动续跑**任务；无通道时降级为 GitHub Discussion 评论协议。
 
 ## 架构
 
 ```
 实现者（run-agent.sh implementer）
-  └─ 阶段 0.5 内容确认
+  └─ 阶段 1 内容确认
        │ confirm.sh ask --id B-02 --title ...     （写 ~/.mornlea/confirm/<id>.json）
        │ └─ feishu.sh send <id>                   （交互卡片 → 你的飞书：选项＝按钮 / 批准＝按钮 / 输入区＋发送）
        ▼
@@ -57,14 +57,13 @@ feishu-listener.js（长连接事件订阅，常驻 daemon）
   "appId": "cli_xxxxxxxxxxxx",
   "appSecret": "xxxxxxxxxxxxxxxx",
   "receive": { "type": "open_id", "id": "ou_xxxxxxxxxxxx" },
-  "autoResume": true,
-  "resumeCmd": "cd /Users/you/minecraft-go && scripts/agents/run-agent.sh implementer"
+  "autoResume": true
 }
 ```
 
 - receive：type 取 open_id（bootstrap 自动写入）或 chat_id；id 为对应值。
 - autoResume：收到回复后是否自动后台续跑实现者（默认 true；关闭时只写回复文件，需手动 make agent-implementer）。
-- resumeCmd：续跑命令（默认 = 当前仓库的 run-agent.sh implementer，可覆盖）。
+- resumeCmd：可选续跑命令；省略时使用当前仓库的 `run-agent.sh implementer`，安装脚本会自动填入解析出的仓库根。
 
 ## 常用命令
 
@@ -116,29 +115,7 @@ confirm.sh list
 scripts/agents/confirm/install-listener.sh
 ```
 
-它做的事：生成本机路径（repo 根、node 路径 `$(which node)`）的 `com.mornlea.feishu-listener.plist`（KeepAlive=true，断线/崩溃自动拉起）与 `~/.mornlea/confirm/feishu.json` 骨架（mode 600；`resumeCmd` 已填真实仓库路径），有凭据时直接 launchctl load。等价的手工 plist 模板：
-
-```
-cat > ~/Library/LaunchAgents/com.mornlea.feishu-listener.plist <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>com.mornlea.feishu-listener</string>
-  <key>ProgramArguments</key><array>
-    <string>/opt/homebrew/bin/node</string>
-    <string>/Users/chen/chenwork/minecraft-go/scripts/agents/confirm/feishu-listener.js</string>
-  </array>
-  <key>KeepAlive</key><true/>
-  <key>RunAtLoad</key><true/>
-  <key>WorkingDirectory</key><string>/Users/chen/chenwork/minecraft-go</string>
-  <key>StandardOutPath</key><string>/Users/chen/Library/Logs/mornlea-listener.log</string>
-  <key>StandardErrorPath</key><string>/Users/chen/Library/Logs/mornlea-listener.err.log</string>
-</dict></plist>
-PLIST
-launchctl load ~/Library/LaunchAgents/com.mornlea.feishu-listener.plist
-```
-
-（本机实测 node 在 `/opt/homebrew/bin/node`；换机器时以 `which node` 为准。）
+`scripts/agents/confirm/install-listener.sh` 是 canonical 安装入口。脚本通过当前仓库根和 `which node` 生成 plist 的 `ProgramArguments`、`WorkingDirectory` 与日志路径，并生成 mode 600 的 `~/.mornlea/confirm/feishu.json` 骨架；有凭据时直接加载 listener。安装后可检查 `~/Library/LaunchAgents/com.mornlea.feishu-listener.plist` 中的实际路径。
 
 ## 微信 / 企业微信备选
 
@@ -148,5 +125,5 @@ launchctl load ~/Library/LaunchAgents/com.mornlea.feishu-listener.plist
 ## 降级与失败恢复
 
 - confirm.sh ask 在 feishu 不可用时**自动降级**并在请求文件里记录 channel=discussion，打印发布与恢复命令。
-- confirm.sh wait 超时（默认 30 分钟）退出码 3：实现者按 docs/development-process.md 阶段 0.5 的 Discussion 协议发评论并停在确认点。
+- confirm.sh wait 超时（默认 30 分钟）退出码 3：实现者按 docs/development-process.md 阶段 1 的 Discussion 协议发评论并停在确认点。
 - listener 掉线：SDK 自动重连；launchd KeepAlive 兜底；回复文件是唯一的续跑事实源，任何时刻重跑 make agent-implementer 都可从既有 reply 恢复。

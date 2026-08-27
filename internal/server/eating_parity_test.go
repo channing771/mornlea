@@ -99,18 +99,26 @@ func runEatingParityScript(t *testing.T, transport string) eatingParityResult {
 
 	ready := false
 	inventoryConfirmed := false
-	for !ready || !inventoryConfirmed || !parityViewLoaded(mirror) {
-		_, messages := parityStep(t, host, endpoint, mirror)
-		for _, message := range messages {
-			switch message := message.(type) {
-			case network.PlayerState:
-				assertValidIntegrationPlayerState(t, message)
-				ready = ready || message.Ready
-			case network.InventoryState:
-				inventoryConfirmed = message.Inventory == inventory
+	waitIntegrationLoginReady(
+		t,
+		fmt.Sprintf("%s eating", transport),
+		func() bool { return ready && inventoryConfirmed && parityViewLoaded(mirror) },
+		func() string {
+			return fmt.Sprintf("ready=%v inventoryConfirmed=%v viewLoaded=%v", ready, inventoryConfirmed, parityViewLoaded(mirror))
+		},
+		func() {
+			_, messages := parityStep(t, host, endpoint, mirror)
+			for _, message := range messages {
+				switch message := message.(type) {
+				case network.PlayerState:
+					assertValidIntegrationPlayerState(t, message)
+					ready = ready || message.Ready
+				case network.InventoryState:
+					inventoryConfirmed = message.Inventory == inventory
+				}
 			}
-		}
-	}
+		},
+	)
 
 	result := eatingParityResult{Transcript: make([]string, 0, 64)}
 	hotbar := inventory.Hotbar

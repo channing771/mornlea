@@ -34,6 +34,10 @@ func (testRegistry) LightAttenuation(id world.BlockID) uint8 {
 	return 0
 }
 
+// BlockTopRaw 恒为满格哨兵 0：本夹具没有非满格方块，短方块路径由
+// assets.Registry（耕地）与专门的 parity 用例覆盖。
+func (testRegistry) BlockTopRaw(world.BlockID) uint8 { return 0 }
+
 func (testRegistry) Emission(id world.BlockID) uint8 {
 	if id == core.LightBlockID {
 		return 15

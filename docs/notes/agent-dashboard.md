@@ -17,7 +17,7 @@
 
 1. 执行中 AI：`ps -axo pid=,ppid=,etime=,command=` 过滤 claude/codex/run-agent.sh/relay.sh/feishu-listener.js/pr-finalize.sh；工具/角色从 `run-agent <role>` 参数与 prompt 文件路径推断；cwd 用 lsof 并行尽力取。
 2. 接力链：`~/.mornlea/loop.guard*`（排除 `.bak`）；kill -0 存活探测；已知缺陷注记「pid 可能为会话临时 shell」。
-3. 任务状态：`docs/feature-backlog.md` 表行（6/7 列两种布局），状态归一为 未认领/已认领/开发中/待集成/已完成/其他；形似任务行但解析失败记 `errors[tasks]`。
+3. 任务状态：`docs/feature-backlog.md` 表行（6/7 列两种布局），状态归一为就绪/已认领/开发中/待集成/排队/设计候选/已完成/已取消/其他；`就绪` 以绿色表示可领取，排队与设计候选只展示、不调度；形似任务行但解析失败记 `errors[tasks]`。
 4. Worktree：`git worktree list --porcelain` + 每 worktree 并行（3s 超时）的最近提交/dirty 计数/领先 main 数。
 5. change 进度：每 worktree `openspec/changes/*/tasks.md` 勾选计数 + `ledger.md` 末条非空行（≤200 字符）。
 6. 待确认：`~/.mornlea/confirm/<id>.json`（含 `.round<N>` 归并）与 `<id>.reply.json`；等待时长与回复动作。
@@ -67,3 +67,24 @@ go run ./cmd/mornlea-agent-board --addr 127.0.0.1:9000
 - `gh` 未登录/超时 → PR 区降级为说明；`ps`/`lsof` 权限受限 → 执行中 AI 区降级进 `errors`。
 - guard pid 存的是会话启动 shell pid（已知缺陷），存活性判定仅供参考。
 - 前端运行依赖 Node/npm；`node_modules/` 与 `dist/` 均不入库，首次启动必须经 `make agent-dashboard` 构建。npm 11 会对 esbuild/fsevents 的 install script allowlist 给出提示，但本轮安装与构建不受影响。
+
+## 界面重设计（2026-08-25，taste 设计技能）
+
+- **需求**：用户要求用 taste 设计技能重新优化看板。按要求走 subagent-driven-development（bounded 任务，无 OpenSpec change；实现派发全新 implementer 子代理，SPEC/QUALITY 双评审，R1 修复轮，全部裁决留痕于此）。
+- **设计读案**（taste 技能 0.B/11；技能第 13 节声明 dashboard 不在主范围，诚实声明只取适用于 dashboard 的规则——Anti-Slop 门禁、配色/形状/主题三锁、密度与 mono 纪律、空/错/加载态、可访问性）：面向单一运营者的运维状态看板重设计（overhaul 视觉、保留信息架构与 `/api/status` 契约），dark tech / ops-console 语汇；三档拨盘 VARIANCE 4 / MOTION 2 / DENSITY 7（cockpit）。
+- **改动范围**：仅 `web/agent-board/src/`（16 改 + 1 删 + 1 新增）；Go 后端、`api.ts`、`main.tsx`、`vite.config.ts`、`tsconfig*.json`、`index.html`（title/lang）零改动；零新 npm 依赖。
+- **实现的要点**：背景 off-black `hsl(213 20% 4.5%)`、唯一 accent 去饱和 azure `hsl(205 75% 60%)`（饱和 ≤80%）；语义状态色全去饱和且「待集成」由旧 AI 紫 265° 换 teal；统计区 8 个默认态 Card → 单条 mono 指标带（`divide-x` hairline）；任务卡网格 → 按状态分组行列表（组头 + 计数 + 组间 hairline，行 2 为 gap chips，无 middle-dot 串）；等待中确认卡琥珀左轨 3px rail；三张表去 Card 外壳、行间单 hairline；LogsTabs 去默认灰底改 hairline 底线 + accent 下划线；分区改为顶部 `border-t` + 标题行 + 右侧 muted sub；数字/pid/path 全 mono；形状锁「容器与按钮 6px、徽章 full-pill」；动效仅语义脉冲 + `:active` 微压 + 150ms transform/opacity 过渡（全 `motion-reduce` 降级）；`ui/card.tsx` 删除（零引用）、新增 `EmptyHint.tsx`（六空态文案在调用处逐字保留）。
+- **SPEC 合规评审**：PASS（14 项逐条核验）。硬约束 A–F 全过：零新依赖（package.json/lock 零 diff）、Go 侧零 diff（逐个文件验证）、测试断言零改动且 15/15、数据零降级（统计 8 项与各表全字段保留，truncate 补 `title`）、无 em-dash/middle-dot（占位符统一改 `-`）、无新资产。非阻断 FINDING 1 条：PR 链接 `rounded-sm` 为第三种半径（已入 R1 修复）。
+- **QUALITY 评审**：PASS(无 MUST-FIX)。10 条 NIT，其中两处贴线对比度差 0.05（`--status-other` 4.45:1、destructive Alert 4.46:1）为真实 AA 违例，入 R1；其余装饰性 NIT 采纳 7 条、拒绝 4 条（裁决见下）。
+- **R1 修复轮**（9 项，实现子代理执行后 15/15 与构建复绿）：`--status-other` L56→58%、`--destructive` L60→62%；PR 链接 `rounded-sm`→`rounded-md`；`errors &&` 永真死守删除；`text-[12px]`→`text-xs`；replyText truncate 补 `title`；工具/角色列补 `font-mono text-xs`；骨架补 `role="status"`；`ui/table.tsx` 去掉 TableHeader 与 TableRow 的重复 `border-b` 声明。
+- **已裁决不采纳**（记录理由）：supersededBy 加 mono（句中自然语言序列，非独立数据单元）；`--radius-sm`/`--radius-xl` token 压缩（shadcn 标准刻度、页面零消费者，保留）；CSS 内容快照测试（dist 已构建验证 token，必要性不足）；AppShell 每秒 `setNow`（基线既有行为，看板规模下无感，仅记录）。
+- **终审（控制会话）**：`npm test` 15/15、`npm run build` 成功（CSS 21.29 kB / JS 266.96 kB）；`go test ./cmd/mornlea-agent-board -race -count=1` ok、`go vet`、`gofmt -l` 干净（Go 侧本应零动，回归确认）；实跑冒烟：`/` 200 + 标题正确、`/assets/index-rMxOEA68.js` 200、`/api/status` 200（实时采集正常），随后已杀进程。
+- **运行环境注记**：本机 Go 由 gvm 管理（`~/.gvm/gos/go1.26.0/bin`）、Node 由 fnm 管理（`~/.local/share/fnm/node-versions/v24.19.0/installation/bin`），非交互 shell 需显式 PATH；副作用：`dist/` 已重建（gitignore 忽略）。
+
+## 视觉迭代 R2（2026-08-25 晚，用户视觉反馈驱动）
+
+- **用户反馈**：「风格还是很丑，黑的不行，你不是多模态吗，边看边改」。用户否定深色主题并要求视觉验收。
+- **视觉诊断（控制会话截图）**：用 Chrome headless 对 8787 实测截图（`--force-device-scale-factor=2`，`/tmp/board-fold.png`、`/tmp/board-full.png`）。确认：指标带/行列表/hairline 结构正确，但近纯黑底（4.5%）令 hairlines 隐形、零表面分层、深红告警贴黑底成一团、日志 `bg-black/30` 不可辨——「黑色这条路」被判失败。
+- **R2 方案（控制会话裁决）**：整页翻转 surface-based 浅色 ops console（taste 主题锁：整页一主题，锁浅色）。全部改动落在 token 变量层与面板壳层：`--background 220 16% 94%` 冷灰纸（禁暖米/奶油系）、`--foreground 221 26% 16%` 墨色、`--card 220 18% 99%` off-white 面板、`--border 220 14% 87%`、aux azure 加深 `207 70% 42%`、destructive 浅底深红字 `2 60% 32%`、`--status-*` 全部转深字语义（`bg-status-*/15` 芯片靠透明度自动淡彩，`fmt.ts` 与组件类零改、`text-status-develop` 保活）；`color-scheme: light`；面板化表面：指标带白面板 + `divide-x`、三张表白面板 hairline 行、任务组每组分面板、待确认等待卡琥珀左轨 + `bg-status-develop/10`、日志浅色 inset、header `bg-card/95` 白化；消灭 `bg-black/bg-foreground/bg-background` 残留的深色语义用法。
+- **验证（R2 后）**：`npm test` 15/15（断言零修改）、`npm run build` 成功（CSS 20.93 kB / JS 267.51 kB）；控制会话再次截图 `/tmp/board-light-1/2.png` 人工核验（浅色面板分层、告警可读、任务/确认/日志面板内容完整、数据零缺失），随后交付用户。
+- **本轮隐含工程处理**：原 8787 上的服务为外部会话启动（`go run`），全程未占用端口、未重启，dist 按请求读盘故构建后自动生效——已确认为无害并发。`docs/agents/README.md`、CLAUDE.md 基线不涉及（看板非游戏主能力），无需更新。

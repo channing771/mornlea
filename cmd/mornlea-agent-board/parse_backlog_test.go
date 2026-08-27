@@ -79,10 +79,27 @@ func TestParseBacklogRowSevenCol(t *testing.T) {
 	}
 }
 
+// TestParseBacklogRowCurrentStatuses 锁定当前规划状态不会降级为「其他」。
+func TestParseBacklogRowCurrentStatuses(t *testing.T) {
+	statuses := []string{"就绪", "已认领", "开发中", "待集成", "排队", "设计候选", "已完成", "已取消"}
+	for _, status := range statuses {
+		t.Run(status, func(t *testing.T) {
+			row := "| B-33 | 功能 | 简述 | 无 | " + status + " | — | 备注 |"
+			task, ok := parseBacklogRow(row)
+			if !ok {
+				t.Fatal("任务行未被识别")
+			}
+			if task.Status != status {
+				t.Fatalf("Status = %q, want %q", task.Status, status)
+			}
+		})
+	}
+}
+
 // TestParseBacklogRowEmptyClaimant 锁定「—」/「-」/空串认领人解析为空。
 func TestParseBacklogRowEmptyClaimant(t *testing.T) {
 	for _, claim := range []string{"—", "-", ""} {
-		row := "| C-01 | 功能 | 简述 | 未认领 | " + claim + " | 备注 |"
+		row := "| C-01 | 功能 | 简述 | 就绪 | " + claim + " | 备注 |"
 		task, ok := parseBacklogRow(row)
 		if !ok {
 			t.Fatalf("认领人 %q 的行应被识别", claim)
@@ -90,7 +107,7 @@ func TestParseBacklogRowEmptyClaimant(t *testing.T) {
 		if task.Claimant != "" || task.Branch != "" {
 			t.Errorf("claim=%q branch=%q 应为空", task.Claimant, task.Branch)
 		}
-		if task.Status != "未认领" {
+		if task.Status != "就绪" {
 			t.Errorf("Status = %q", task.Status)
 		}
 	}
@@ -120,7 +137,7 @@ func TestParseBacklogRowNonTableAndLegend(t *testing.T) {
 		t.Errorf("无竖线行应判为非数据行")
 	}
 	// 「状态图例」三列布局（状态/含义/谁可继续）列数不符，判为非数据行。
-	if _, ok := parseBacklogRow("| 未认领 | 等待认领 | 任意 agent 可认领 |"); ok {
+	if _, ok := parseBacklogRow("| 就绪 | 等待认领 | 任意 agent 可认领 |"); ok {
 		t.Errorf("三列图例行应判为非数据行")
 	}
 }

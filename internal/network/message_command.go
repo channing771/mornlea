@@ -132,3 +132,22 @@ func (command TillSoil) Validate() error {
 	}
 	return nil
 }
+
+// BoneMeal 请求用骨粉催熟视线内的作物。
+//
+// 与 TillSoil 同形：只带序号与朝向。客户端不声明目标格、也不声明栏位
+// ——目标由服务端的权威射线决定，作用的骨粉一律取权威选中的快捷栏格。
+type BoneMeal struct {
+	Sequence   uint64
+	Yaw, Pitch float32
+}
+
+func (BoneMeal) clientMessage() {}
+func (BoneMeal) clientPacket()  {}
+
+func (command BoneMeal) Validate() error {
+	if !finite32(command.Yaw) || !finite32(command.Pitch) {
+		return errors.New("network: bone meal has non-finite rotation")
+	}
+	return nil
+}

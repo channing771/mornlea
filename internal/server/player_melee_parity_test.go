@@ -214,12 +214,18 @@ func runPlayerMeleeWireScript(t *testing.T, transport string) meleeWireTranscrip
 	clients := [2]network.ClientEndpoint{attackerEndpoint, targetEndpoint}
 	identities := [2]core.PlayerID{attacker.PlayerID, target.PlayerID}
 	ready := [2]bool{}
-	for !ready[0] || !ready[1] {
-		states, _ := meleeWireTick(t, host, clients, identities)
-		for index, state := range states {
-			ready[index] = ready[index] || state.Ready
-		}
-	}
+	waitIntegrationLoginReady(
+		t,
+		fmt.Sprintf("%s melee wire", transport),
+		func() bool { return ready[0] && ready[1] },
+		func() string { return fmt.Sprintf("ready=%v", ready) },
+		func() {
+			states, _ := meleeWireTick(t, host, clients, identities)
+			for index, state := range states {
+				ready[index] = ready[index] || state.Ready
+			}
+		},
+	)
 	remoteReady := false
 	for range 10 {
 		_, remotes := meleeWireTick(t, host, clients, identities)

@@ -356,6 +356,28 @@ func (r *Registry) LightAttenuation(id world.BlockID) uint8 {
 	return 0
 }
 
+// farmlandTopRaw 是干/湿耕地共用的 4-bit 顶面高度原值。
+//
+// 取 14 而非更小的值：实际呈现高度是 (14+1)/16 = 15/16，与 internal/physics
+// 的耕地碰撞体高度（`farmlandCollisionHeight` = 0.9375）完全一致——可见几何与
+// 碰撞边界从此同线，玩家站在耕地上时脚部位置与顶面齐平。14 也是高度域
+// 1..=14 的上界：15 非法（满格必须用哨兵 0 表达），没有再高的选择余地。
+const farmlandTopRaw = 14
+
+// BlockTopRaw 返回方块的 4-bit 顶面高度原值。实现 mesh.RegistryReader。
+//
+// 只有干/湿耕地返回非零（见 `farmlandTopRaw`）；其余方块——包括全部流体——
+// 返回「满格」哨兵 0。流体的 0 不只是缺省：mesher 对流体的角高度走邻域
+// 平均、对 block_top_raw 走常量，两条几何路径互斥，编码两侧的域校验同样按
+// 「`FluidHeight` 与 `BlockTopRaw` 不同时非零」拒绝（见 internal/mesh 的
+// `BuildRegistrySnapshot` 与 Rust 的 `RegistryView::validate`）。
+func (r *Registry) BlockTopRaw(id world.BlockID) uint8 {
+	if id == core.FarmlandDryID || id == core.FarmlandWetID {
+		return farmlandTopRaw
+	}
+	return 0
+}
+
 // MeshSnapshot 返回构造时冻结的网格 registry 快照。
 func (r *Registry) MeshSnapshot() mesh.RegistrySnapshot { return r.meshSnapshot }
 

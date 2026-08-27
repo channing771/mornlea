@@ -28,6 +28,9 @@ const (
 	// CommandTillSoil 请求把视线内的泥土或草翻成耕地。只带朝向：目标格由权威
 	// 射线决定，作用的锄头取权威选中的快捷栏格。CommandKind 只追加不重排。
 	CommandTillSoil
+	// CommandBoneMeal 请求用骨粉催熟视线内的作物。只带朝向：目标格由权威
+	// 射线决定，作用的骨粉取权威选中的快捷栏格。CommandKind 只追加不重排。
+	CommandBoneMeal
 )
 
 // LookDirection 把玩家 look 角转换为单位方向；yaw=0、pitch=0 朝向 -Z。

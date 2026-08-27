@@ -77,6 +77,11 @@ fi
 case "$TOOL" in
   claude)
     CLAUDE_BIN="${CLAUDE_BIN:-$(resolve_cli claude || echo claude)}"
+    # claude headless 打印模式有「后台任务仍在运行 600 秒即终止宿主会话」的兜底：
+    # 实现者链等待子代理跑长任务（TDD 常 10-30 分钟）会被它反复掐断（E-12/A-02 已两次因此中断，
+    # 最后一次 A-02 宿主死于「Background tasks still running after 600s; terminating」）。
+    # 默认 0 = 无限等待（链要活着等子代理），可用 CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS 显式覆盖。
+    export CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS="${CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS:-0}"
     # 默认 headless 打印模式；需要终端交互问答时设置 AGENT_INTERACTIVE=1。
     if [ "${AGENT_INTERACTIVE:-0}" = "1" ]; then
       exec "$CLAUDE_BIN" "$PROMPT" $MODEL_ARGS $BYpass ${AGENT_EXTRA_ARGS:-}

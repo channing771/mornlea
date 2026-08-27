@@ -76,6 +76,10 @@ func encodeClientPacketPayload(state State, packet ClientPacket) (packetID uint3
 			e.u64(message.Sequence)
 			e.f32(message.Yaw)
 			e.f32(message.Pitch)
+		case BoneMeal:
+			e.u64(message.Sequence)
+			e.f32(message.Yaw)
+			e.f32(message.Pitch)
 		default:
 			return 0, nil, codecError("encode client", state, packetID, invalidClientPacket(state, packet))
 		}
@@ -258,6 +262,16 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 				till.Pitch, err = d.f32()
 			}
 			packet = till
+		case 14:
+			var meal BoneMeal
+			meal.Sequence, err = d.u64()
+			if err == nil {
+				meal.Yaw, err = d.f32()
+			}
+			if err == nil {
+				meal.Pitch, err = d.f32()
+			}
+			packet = meal
 		default:
 			return nil, codecError("decode client", state, packetID, errUnknownPacketID)
 		}

@@ -154,10 +154,40 @@ func copyHotbarTextureCell(dst []byte, column int, src []byte) {
 		copy(dst[dstStart:dstStart+hotbarTextureSize*4], src[srcStart:srcStart+hotbarTextureSize*4])
 	}
 }
-func hotbarTextureUV(column int) [4]float32 {
-	left := float32(column*hotbarTextureSize) / float32(hotbarTextureWidth)
-	right := float32((column+1)*hotbarTextureSize) / float32(hotbarTextureWidth)
+
+// hotbarUVInsetTexels 是每列左右 UV 界向列内对称收进的亚纹素余量（1/256 纹素）。
+//
+// 为什么是 1/256：归一化 UV 在图集扩列时被 float32 重归一化，解码回纹素空间
+// 的噪声上界为 `W·2^-24` 纹素且随宽度线性增长；适用域 `W <= 2^15` 纹素
+// （2048 列）内，收进后解码界距列边界恒 >= delta spec 要求的 1/512 纹素。
+// 当前真实宽度 800 纹素下噪声 <= 4.8e-5 纹素，实际裕度比 >80×。物品表规模
+// 一旦可能超出该适用域，必须重审余量而不是沿用本常量。
+//
+// 收进同时消除「采样点恰好落在列边界」的实现定义 tie-break：不收进时边界
+// 采样归属哪一列取决于采样器的舍入方向，扩列即可翻转；收进后任何采样点
+// 与列边界的距离恒大于重归一化噪声上界，归属完全确定。
+//
+// v 轴不收进：图集是单行、仅 16 纹素高，v ∈ [0,1] 内部不存在列界歧义，
+// 上下边缘由采样器的 ClampToEdge 兜底，无需对称处理。
+const hotbarUVInsetTexels = 1.0 / 256.0
+
+// hotbarColumnUV 把「列纹素边界 ± 亚纹素收进，再 ÷ 图集宽度」的计算参数化为
+// 任意宽度，返回该列的归一化 UV 区间 [`left`, 0, `right`, 1]。从 `hotbarTextureUV`
+// 中提取这个纯函数是为了可测性：图集宽度随物品表追加自动扩列，稳定性属性
+// 测试只有拿到宽度参数才能扫描「模拟未来扩列」的宽度集，在同一份计算上
+// 机械验证「扩列不改变既有列采样纹素集合」「相邻列区间互不侵入」的性质。
+// 生产路径不得绕过 `hotbarTextureUV` 直接调用本函数。
+func hotbarColumnUV(column, width int) [4]float32 {
+	left := (float32(column*hotbarTextureSize) + hotbarUVInsetTexels) / float32(width)
+	right := (float32((column+1)*hotbarTextureSize) - hotbarUVInsetTexels) / float32(width)
 	return [4]float32{left, 0, right, 1}
+}
+
+// hotbarTextureUV 是 UV 计算的唯一生产入口，签名 `(column int) [4]float32`
+// 保持不变（消费方零改动）；它只是把当前图集宽度 `hotbarTextureWidth`
+// 钉进 `hotbarColumnUV` 的薄包装。
+func hotbarTextureUV(column int) [4]float32 {
+	return hotbarColumnUV(column, hotbarTextureWidth)
 }
 func hotbarItemUV(item core.ItemID) ([4]float32, bool) {
 	if _, ok := core.ItemPlacement(item); !ok {

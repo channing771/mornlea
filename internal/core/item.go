@@ -56,6 +56,9 @@ const (
 	// 不是任何方块的掉落物。恢复值见 FoodValue。同样只能追加在 ItemIDMax
 	// 哨兵之前。
 	ItemBread
+	// ItemBoneMeal 是骨粉，用于催熟小麦；沿用食物与种子的堆叠与放置语义（不可
+	// 放置，堆叠 64），同样只能追加在 ItemIDMax 哨兵之前。
+	ItemBoneMeal
 	// ItemIDMax 是合法物品编号的独占上界（最后一个合法 ItemID + 1），本身不是
 	// 物品枚举成员。它供测试以「item < ItemIDMax」穷举全部物品，替代依赖
 	//「某个具体物品恰为枚举末项」的脆弱写法；放在 core 是因为物品注册表归属
@@ -237,7 +240,7 @@ func ItemStackLimit(item ItemID) (uint8, bool) {
 		ItemCobblestone, ItemSmoothStone, ItemSand, ItemGravel, ItemOakLog,
 		ItemOakPlanks, ItemLeaves, ItemGlass, ItemBrick, ItemWhiteWool,
 		ItemRoofTile, ItemClay, ItemSnowBlock, ItemMossyCobblestone,
-		ItemWheatSeeds, ItemWheat, ItemBread:
+		ItemWheatSeeds, ItemWheat, ItemBread, ItemBoneMeal:
 		return MaxStackCount, true
 	case ItemStonePickaxe, ItemIronPickaxe,
 		ItemBrokenStonePickaxe, ItemBrokenIronPickaxe,

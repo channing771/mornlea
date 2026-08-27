@@ -37,6 +37,8 @@ func clientPacketID(state State, packet ClientPacket) (uint32, bool) {
 			return 12, true
 		case TillSoil:
 			return 13, true
+		case BoneMeal:
+			return 14, true
 		}
 	}
 	return 0, false
@@ -81,6 +83,8 @@ func clientPacketForID(state State, id uint32) (ClientPacket, bool) {
 			return ChatCommand{}, true
 		case 13:
 			return TillSoil{}, true
+		case 14:
+			return BoneMeal{}, true
 		}
 	}
 	return nil, false

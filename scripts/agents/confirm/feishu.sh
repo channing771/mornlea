@@ -83,9 +83,12 @@ case "${1:-}" in
     fi
     # 底部说明默认不展示（卡片保持干净）；仅选项超过 5 个时显示提示
     DESIGN_BODY="$(printf '%s' "$DESIGN" | fmt_design)"
-    # 选项渲染为按钮：只显示按钮、不重复文本列表；按钮 label 去掉选项前缀编号、截断加省略号，
-    # value 仍携带完整选项文本与请求 ID（listener 按 id 精确匹配，reply.text 是完整原文）。
+    # 选项渲染为按钮 + 正文完整列表：按钮只作快捷路径（label 去掉编号前缀、截断加省略号，
+    # value 仍携带完整选项文本与请求 ID，listener 按 id 精确匹配），**全部**选项永远在正文
+    # 「选项」段完整列出——之前按钮截断加省略号、且隐藏的选项正文也没有，用户看不到全貌。
     if [ "$KIND" = "question" ]; then
+      # 正文完整列表：每行「编号. 完整文本」，不截断（选项可能很长）
+      OPT_TEXT="$(jq -r 'if (.options // []) | length == 0 then "" else (.options | to_entries | map((.key + 1 | tostring) + ". " + .value) | join("\n")) end' "$REQ")"
       ACTIONS="$(jq -nc --arg id "$ID" --argjson o "$(jq -c '.options // []' "$REQ")" '
         [ (($o | to_entries | map({
             tag: "button",
@@ -95,7 +98,7 @@ case "${1:-}" in
           })) | .[0:5])[],
           { tag: "button", text: { tag: "plain_text", content: "驳回" }, type: "danger", value: { id: $id, action: "reject", text: "驳回" } }
         ]')"
-      [ "$(jq -r '.options | length // 0' "$REQ")" -gt 5 ] && NOTE="选项共 $(jq -r '.options | length' "$REQ") 项，仅显示前 5 个按钮；其余请以文本回复"
+      [ "$(jq -r '.options | length // 0' "$REQ")" -gt 5 ] && NOTE="选项共 $(jq -r '.options | length' "$REQ") 项，已完整列出在上方；点对应按钮，或回复「编号」即可"
     else
       ACTIONS="$(jq -nc --arg id "$ID" '[
         { tag: "button", text: { tag: "plain_text", content: "✅ 批准" }, type: "primary", value: { id: $id, action: "approve", text: "批准" } },
@@ -104,13 +107,14 @@ case "${1:-}" in
     fi
     # 卡片结构（分层，不再堆一个 div）：标题行 → 问题/短设计 → 按钮 → 手动输入区 → 底部说明；
     # form 提交按钮为 Card 2.0 写法（name + form_action_type=submit），回调带 form_value（JSON 字符串，键=note）。
-    CARD="$(jq -nc --arg id "$ID" --arg t "$TITLE" --arg q "$QUESTION" --argjson o "$(jq -c '.options // []' "$REQ")" --argjson actions "$ACTIONS" --arg d "$DESIGN_BODY" --arg hp "$HEAD_PREFIX" --arg tpl "$TPL" --arg note "$NOTE" '{
+    CARD="$(jq -nc --arg id "$ID" --arg t "$TITLE" --arg q "$QUESTION" --argjson o "$(jq -c '.options // []' "$REQ")" --argjson actions "$ACTIONS" --arg d "$DESIGN_BODY" --arg hp "$HEAD_PREFIX" --arg tpl "$TPL" --arg note "$NOTE" --arg opt "${OPT_TEXT:-}" '{
   config: { wide_screen_mode: true },
   header: { template: $tpl, title: { tag: "plain_text", content: ($hp + " · " + $id) } },
   elements: [
     { tag: "div", text: { tag: "lark_md", content: (
       "**" + $t + "**\n\n**问题**\n" + $q
       + ($d | if . == "" then "" else "\n\n**短设计**\n" + . end)
+      + ($opt | if . == "" then "" else "\n\n**选项**\n" + . end)
     ) } },
     { tag: "action", actions: $actions },
     { tag: "form", name: "manual", elements: [

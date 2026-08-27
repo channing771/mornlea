@@ -4,9 +4,9 @@ const HEIGHTS_BYTES: usize = 9 * 256 * 2;
 /// 单条 registry 条目的字节数。
 ///
 /// 布局（小端）：`id: u16` | `opaque: u8` | `emission: u8` | `material: [u16; 6]`
-/// | `fluid_height: u8` | `light_attenuation: u8`，共 18 字节。
+/// | `fluid_height: u8` | `light_attenuation: u8` | `block_top_raw: u8`，共 19 字节。
 ///
-/// 后两个字节与 `emission` 同形状——每方块一个字节、由 Go 侧
+/// 后三个字节与 `emission` 同形状——每方块一个字节、由 Go 侧
 /// `internal/mesh.BlockProperties` 烘焙、`encodeNativeInput` 按同一顺序写出：
 ///
 /// - `fluid_height`：该格**孤立时**的 4-bit 高度原值 `h_raw`（实际高度 `(h_raw+1)/16`）。
@@ -17,7 +17,15 @@ const HEIGHTS_BYTES: usize = 9 * 256 * 2;
 /// - `light_attenuation`：天空光穿过该方块时的额外衰减，由 `light::build_sky` 消费
 ///   （每格扣减 = 1 + 本值）。合法域只有 `0..=1`，上界来自 `build_sky` 的分桶证明
 ///   而不是天空光值域，见 `RegistryView::validate`。方块光不读它。
-const REGISTRY_ENTRY_BYTES: usize = 18;
+/// - `block_top_raw`：非满格方块的 4-bit 顶面高度原值（实际高度 `(h_raw+1)/16`），
+///   由 mesher 的常量角高度路径消费。`0` 是「满格方块」哨兵：绝大多数方块是整格
+///   立方体，取 0 让既有条目零改动，与 `fluid_height` 的「0=非流体」同构；
+///   `1..=14` 表示全部可见面的上缘按该高度下沉（首个消费者是干/湿耕地的 14，
+///   即 15/16，恰等于物理碰撞高度）；`15` 无从表达任何合法几何——满格必须写
+///   哨兵 0，「非零即短方块」才能保持单一判定。本字段与 `fluid_height` 互斥：
+///   流体的角高度由 mesher 邻域平均现算、短方块由本字段常量驱动，两条几何路径
+///   不得叠加在同一条目上（见 `RegistryView::validate`）。
+const REGISTRY_ENTRY_BYTES: usize = 19;
 /// registry 条目表的容量上限。
 ///
 /// 48 是**上限**而不是当前条目数：Go 侧 `internal/assets.NewRegistry()` 把
@@ -217,6 +225,19 @@ impl RegistryView<'_> {
             if self.entries[offset + 17] > 1 {
                 return Err(InputError::Registry);
             }
+            // block_top_raw 的合法域是 0..=14：0 是「满格」哨兵，非零即短方块。
+            // 15 一旦出现就是编码方写错——满格必须写哨兵 0，放行会破坏 mesher
+            // 「非零即短」的单一判定，让满格方块被错误下沉。
+            if self.entries[offset + 18] > 14 {
+                return Err(InputError::Registry);
+            }
+            // 与 fluid_height 互斥：流体的角高度由 mesher 的邻域平均现算（含
+            // 「上方也是流体则取满格」规则），短方块由本字段常量驱动。同一
+            // 条目同时携带两套语义时行为无从定义（水下的耕地该听谁的？），
+            // 必须在最前面拒绝，Go 侧编码器同口径。
+            if self.entries[offset + 16] != 0 && self.entries[offset + 18] != 0 {
+                return Err(InputError::Registry);
+            }
             has_air |= id == air_id;
             has_barrier |= id == barrier_id;
             previous = Some(id);
@@ -270,6 +291,20 @@ impl RegistryView<'_> {
     pub(crate) fn light_attenuation(&self, id: u16) -> u8 {
         self.index(id)
             .map_or(0, |index| self.entries[index * REGISTRY_ENTRY_BYTES + 17])
+    }
+
+    /// block_top_raw 返回该方块非满格时的 4-bit 顶面高度原值，满格返回 `None`。
+    ///
+    /// 见 `REGISTRY_ENTRY_BYTES` 的布局说明：`0` 是满格哨兵，mesher 的常量角
+    /// 高度路径只对 `Some(raw)` 的方块下沉（首个消费者是干/湿耕地的 14，即
+    /// 15/16）。未登记的方块编号同样返回 `None`（与 `opaque`/`emission` 的
+    /// 缺省口径一致）。
+    pub(crate) fn block_top_raw(&self, id: u16) -> Option<u8> {
+        let index = self.index(id)?;
+        match self.entries[index * REGISTRY_ENTRY_BYTES + 18] {
+            0 => None,
+            raw => Some(raw),
+        }
     }
 
     pub(crate) fn material(&self, id: u16, face: usize) -> Option<u16> {
@@ -446,6 +481,41 @@ pub(crate) mod tests {
         assert!(!parsed.registry.face_visible(30000, 0));
     }
 
+    /// block_top_raw 的域读回、fluid 互斥与哨兵语义。
+    ///
+    /// 夹具刻意不改 `valid_input` 本身——它被 greedy/light/ffi 多个主题共享，
+    /// 把其中的石头改成短方块会让那些主题的期望集体失真——而是在本用例内
+    /// 做局部改写。
+    #[test]
+    fn block_top_raw_readback_mutex_and_sentinel() {
+        // 非流体条目（id=1 的石头）携带 14 合法，且能原样读回：证明第 19 字节
+        // 真的跨过了 ABI 边界（若编码丢失会读回 None）。0 是满格哨兵、未登记
+        // 编码同样返回 None，与 opaque/emission 的缺省口径一致。
+        let mut sinkable = valid_input();
+        sinkable[REGISTRY_OFFSET + ENTRY_BYTES + 18] = 14;
+        let parsed = MeshInput::parse(&sinkable).unwrap();
+        assert_eq!(parsed.registry.block_top_raw(1), Some(14));
+        assert_eq!(parsed.registry.block_top_raw(0), None);
+        assert_eq!(parsed.registry.block_top_raw(40000), None);
+        assert_eq!(parsed.registry.block_top_raw(30000), None);
+
+        // 与 fluid_height 互斥：id=40000 冒充流体（h_raw=9），再塞非零顶面
+        // 高度必须整体拒绝——流体的角高度由 mesher 邻域平均现算，两条几何
+        // 路径不得叠加在同一条目上。
+        let mut conflict = valid_input();
+        conflict[REGISTRY_OFFSET + 2 * ENTRY_BYTES + 18] = 1;
+        assert_eq!(
+            MeshInput::parse(&conflict).unwrap_err(),
+            InputError::Registry
+        );
+
+        // 边界对照：同一条目把顶面高度写回哨兵 0 后恢复合法，证明拒绝确实
+        // 来自互斥规则而不是别的字段。
+        let mut fluid_plain = valid_input();
+        fluid_plain[REGISTRY_OFFSET + 2 * ENTRY_BYTES + 18] = 0;
+        assert!(MeshInput::parse(&fluid_plain).is_ok());
+    }
+
     #[test]
     fn rejects_wrong_length_and_magic_as_input_errors() {
         let input = valid_input();
@@ -513,6 +583,16 @@ pub(crate) mod tests {
         let mut attenuation_one = valid_input();
         attenuation_one[REGISTRY_OFFSET + 2 * ENTRY_BYTES + 17] = 1;
         assert!(MeshInput::parse(&attenuation_one).is_ok());
+
+        // block_top_raw 的合法域是 0..=14：0 是「满格」哨兵，非零即短方块；
+        // 15 无从表达任何合法几何（满格必须写哨兵 0），放行会破坏 mesher
+        // 「非零即短」的单一判定。
+        let mut block_top_raw = valid_input();
+        block_top_raw[REGISTRY_OFFSET + ENTRY_BYTES + 18] = 15;
+        assert_eq!(
+            MeshInput::parse(&block_top_raw).unwrap_err(),
+            InputError::Registry
+        );
 
         let mut same_air_and_barrier = valid_input();
         same_air_and_barrier[14..16].copy_from_slice(&0_u16.to_le_bytes());

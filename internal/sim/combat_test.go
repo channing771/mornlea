@@ -230,28 +230,3 @@ func TestPlayerMeleeEightPlayersResolveOneIntentEach(t *testing.T) {
 		}
 	}
 }
-
-func readyMeleePlayers(t *testing.T, count int) (*Engine, []SessionID) {
-	t.Helper()
-	engine, _ := readyMovementPlayer(t)
-	for id := count; id >= 2; id-- {
-		engine.RegisterSession(SessionID(id), core.Overworld, core.ChunkPos{})
-	}
-	if count > 1 {
-		engine.Step()
-	}
-	sessions := make([]SessionID, count)
-	for index := range count {
-		sessions[index] = SessionID(index + 1)
-	}
-	return engine, sessions
-}
-
-func setMeleePlayer(engine *Engine, id SessionID, position mgl32.Vec3, yaw float32) {
-	player := engine.sessions[id].player
-	player.state.Position = position
-	player.yaw = yaw
-	player.pitch = 0
-	player.health = core.MaxHealth
-	player.reset = false
-}
