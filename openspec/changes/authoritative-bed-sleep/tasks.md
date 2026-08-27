@@ -4,8 +4,8 @@
 
 ## 1. 基线验证与契约核对
 
-- [ ] 1.1 运行 `git status --short`（worktree 干净）并记录 `make rust`、`go test ./internal/core ./internal/sim ./internal/storage ./internal/network ./internal/client ./internal/render ./internal/assets ./internal/mesh ./cmd/mornlea -race -count=1` 输出摘要到 `ledger.md`（数值只记录）
-- [ ] 1.2 核对 `core.DisplayDayPhase` 是否已存在：已存在则核对其签名为 `(worldTime uint64, offset uint16) uint16` 并直接消费；不存在则按头部前置检查的钉定签名记入本行自带清单（rebase 去重）；核对 `core.BlockEmission`/`BlockLightAttenuation`/`BlockOpaque` 可用性；核对方块/物品/配方段末常量与 S→C 实占编号，记录本行将取用的编号于 `ledger.md`；`openspec validate --all --strict --no-interactive` 与 `git diff --check` 通过
+- [x] 1.1 运行 `git status --short`（worktree 干净）并记录 `make rust`、`go test ./internal/core ./internal/sim ./internal/storage ./internal/network ./internal/client ./internal/render ./internal/assets ./internal/mesh ./cmd/mornlea -race -count=1` 输出摘要到 `ledger.md`（数值只记录）
+- [x] 1.2 核对 `core.DisplayDayPhase` 是否已存在：已存在则核对其签名为 `(worldTime uint64, offset uint16) uint16` 并直接消费；不存在则按头部前置检查的钉定签名记入本行自带清单（rebase 去重）；核对 `core.BlockEmission`/`BlockLightAttenuation`/`BlockOpaque` 可用性；核对方块/物品/配方段末常量与 S→C 实占编号，记录本行将取用的编号于 `ledger.md`；`openspec validate --all --strict --no-interactive` 与 `git diff --check` 通过
 
 ## 2. 床方块、物品、配方与碰撞
 
