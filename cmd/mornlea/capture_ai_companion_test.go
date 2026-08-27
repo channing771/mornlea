@@ -258,7 +258,7 @@ func TestCaptureAICompanionClearsPriorClientState(t *testing.T) {
 			len(app.remotePresentations), len(app.companionPresentations), len(app.remoteAvatars),
 			len(app.remoteNameTags), len(app.itemDropInstances), app.blockTargetReset, app.center)
 	}
-	if app.chatEventBuffer != ([32]network.ChatEvent{}) || app.chatLines != ([6]string{}) ||
+	if app.chatEventBuffer != ([client.ChatEventCapacity]network.ChatEvent{}) || app.chatLines != ([6]string{}) ||
 		app.chatLineCount != 0 || app.formattedChatEventID != 0 {
 		t.Fatalf("旧聊天缓存未清空: buffer=%+v lines=%+v count=%d id=%d",
 			app.chatEventBuffer, app.chatLines, app.chatLineCount, app.formattedChatEventID)
