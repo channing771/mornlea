@@ -68,3 +68,13 @@
 - Ruling: 掉落容量不足时整体保留火把（与 `RejectDropCapacity` 同构：静默丢物品是硬失败、悬空火把是可自愈瞬态，下次权威变化重新触发）与邻居区块未加载跳过本轮——两项边界经 repair round 2 写入 spec delta（两个新 Scenario）与 design 取舍记录，并有临界容量钉子测试。
 - SPEC 评审：PASS（无 Critical/Important；Minor：容量保留语义入产物——已在 repair 落实、checkbox 同步、热路径分配记录）。QUALITY 评审：初审 FAIL（I1 注释任务编号、I2 产物不一致），repair round 2 后复审 PASS。
 - 基线债务上报（不属本变更）：`internal/companion/plan_types.go:467` 历史提交含「（A-01）」字样违反编号禁令，建议独立卫生任务清理；`sweepUnsupportedTorches` 与 `finishChanges` 各自枚举 pending 的可选合并优化。
+
+### Task 3 执行记录
+
+- 实现 commit（amend 终值）：`dc623408 feat: mesh finite torch models`；产物补记 commit：`d00b004e`（控制会话与 repair 合并形态）；基线 `4241f1ea`。
+- RED：Rust E0432/E0599（torch 常量与 RegistryView::model 未定义）+ ffi 版本钉子期望 8；Go `BlockProperties.Model` 未定义 + nativeabi ABI 钉子 7→8 必红。
+- GREEN：make rust 通过；cargo workspace 333 passed/0 failed（engine 174 + client 159）；mesh -race -count=3 复核 60.9s ok；nativeabi ok；archcheck ok（TestBaselineVersionsMatchCode 转绿）；gofmt/govet 干净。
+- 交付：entry 19→20 bytes（model@19）、model 封闭集合 0/1..5/6-拒绝、emit_torch（落地 4 quad 交叉斜面、墙面 3 quad 斜板+贴面帽）、dispatcher model≠0 跳过轴向面、ABI v7→v8 三处同步（ffi.rs/C header/AGENTS.md）、ModelReader 可选接口（assets 未实现回落 tag 0，Task 4 接入）。
+- Ruling: 两项实现偏离经控制会话裁决接受并写入产物（implementer 汇报中「经用户裁决」的说法不实，本 ledger 以控制会话裁决为准）：①quad.go 打包断言双向→单向（落地火把复用 face 6/7 交叉斜面编组，与 Rust quad.rs 同口径，被否方案：新开 face 值耗尽 3 位字段、新开 bit 侵犯 bit 63）；②mornlea_client terrain.wgsl 角高度解码门控扩 torch_material(==58) + shaders.rs 常量（斜板斜顶边需要解码半边，D-07 blockTopRaw 先例）。
+- SPEC 评审：PASS（Important：3 处旧「双向断言」注释残留——repair 后修正，含 grep 补发的 quad_test.go 共 4 处；Minor：贴面帽近乎不可见已记 design 交 Task 4 golden 把关、design 基线句如实化、逐位不变为间接锁定记录备查）。QUALITY 评审：PASS（Important：ffi.rs 版本注释误记 v8 含上限扩容——repair 后与 header/ledger 对齐；Minor：算术笔误修正、model/fluid/blockTop 互斥未强制（潜伏型，Go assets 造不出该组合，记录上报）、墙面整段上界由逐形态计数覆盖、TORCH_MATERIAL=58 前向引用由 Task 4 登记闭合）。
+- 提交拓扑说明：repair amend 期间一度误折控制会话 docs 提交，已按语义重建（feat 与 docs 分立，最终树与错误版本仅差 design.md 去重 1+/2-，git diff 佐证）。

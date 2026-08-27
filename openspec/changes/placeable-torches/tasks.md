@@ -21,9 +21,9 @@
 
 - 目标文件/包：`internal/mesh`（`native_input.go`、`native_abi.go`、`registry.go`、`quad.go`（交叉斜面编组通用化的单向断言，见 design）、`native_input_test.go`、`native_abi_test.go`、`native_capacity_test.go`、`native_parity_test.go`、`greedy_test.go`、`plant_test.go`（单向断言同步）、新建 `torch_test.go`）；`internal/nativeabi`（`native.go`、`native_test.go`）；`engine/crates/mornlea_engine`（`src/input.rs`、`src/greedy/mod.rs`、新建 `src/greedy/torch.rs`、`src/greedy/torch_tests.rs`、`src/ffi.rs`）；`engine/crates/mornlea_client`（`shaders/terrain.wgsl`、`shaders/cull.wgsl` 注释、`src/render/shaders.rs` 的 `TORCH_MATERIAL`、`src/render/farmland_tests.rs` pin 扩展——角高度解码半边，见 design）；`engine/include/mornlea_engine.h`；`AGENTS.md`（engine ABI v7→v8 版本表述最小同步，`TestBaselineVersionsMatchCode` 转绿为准；`CLAUDE.md` 为薄导入无需改动，`cmp` 命令作废以 `TestClaudeImportsAgentGuides` 为准）。
 - 验证命令：`make rust`；`cd engine && cargo test --workspace --locked`；`go test ./internal/mesh ./internal/nativeabi -race -count=1`；`go test ./internal/archcheck -count=1`。
-- [ ] RED：registry entry 20 bytes 布局逐字节（id=0..1、opaque=2、emission=3、material=4..15、fluidHeight=16、lightAttenuation=17、blockTopRaw=18、model=19）、80 entries、未知 tag（≥7）与床 tag（6）失败、ABI 8；Go/Rust 同一 80 项容量夹具跨 FFI 成功、第 81 项 Go 侧失败；五形态火把 in-air 邻域固定数量双面 cutout quad、坐标全在本格、8-byte/bit63 结构、落地竖直居中/墙面贴面外倾、不参与 merge；无 model 覆写的既有方块（cube/短方块/流体/植物）输出逐位不变。
-- [ ] GREEN：model dispatcher（0=既有路径，1..5 → `emit_torch`，6 与未知回 invalid/unsupported 错误）；`emit_torch` 窄柱/墙斜几何；`REGISTRY_ENTRY_BYTES`=20、`MAX_REGISTRY_ENTRIES`=80、ABI 常数、C header 与 Go 常量 → 8；`nativeRegistryWords`/`maxNativeInputBytes` 与全部硬编码布局注释同步。
-- [ ] Go/Rust parity 核对（Go 解包对 model quad 的材料/光值）与双评审后提交 `feat: mesh finite torch models`；结论记入 ledger。
+- [x] RED：registry entry 20 bytes 布局逐字节（id=0..1、opaque=2、emission=3、material=4..15、fluidHeight=16、lightAttenuation=17、blockTopRaw=18、model=19）、80 entries、未知 tag（≥7）与床 tag（6）失败、ABI 8；Go/Rust 同一 80 项容量夹具跨 FFI 成功、第 81 项 Go 侧失败；五形态火把 in-air 邻域固定数量双面 cutout quad、坐标全在本格、8-byte/bit63 结构、落地竖直居中/墙面贴面外倾、不参与 merge；无 model 覆写的既有方块（cube/短方块/流体/植物）输出逐位不变。
+- [x] GREEN：model dispatcher（0=既有路径，1..5 → `emit_torch`，6 与未知回 invalid/unsupported 错误）；`emit_torch` 窄柱/墙斜几何；`REGISTRY_ENTRY_BYTES`=20、`MAX_REGISTRY_ENTRIES`=80、ABI 常数、C header 与 Go 常量 → 8；`nativeRegistryWords`/`maxNativeInputBytes` 与全部硬编码布局注释同步。
+- [x] Go/Rust parity 核对（Go 解包对 model quad 的材料/光值）与双评审后提交 `feat: mesh finite torch models`；结论记入 ledger。
 
 ## 4. 火把纹理、`torch-night` 场景与 golden、整分支门禁
 
