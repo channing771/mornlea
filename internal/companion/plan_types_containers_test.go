@@ -33,8 +33,8 @@ func TestPlanMineableBlockAllowsContainerTargets(t *testing.T) {
 			}
 		}
 	}
-	if farmingSeen != 10 {
-		t.Fatalf("农业编号全集计数 = %d，want 10（谓词空转会让回归断言失效）", farmingSeen)
+	if farmingSeen != 26 {
+		t.Fatalf("农业编号全集计数 = %d，want 26（谓词空转会让回归断言失效）", farmingSeen)
 	}
 	// 单一掉落判据回归：无掉落方块仍拒绝、普通方块仍放行，容器放行不是
 	// 「全域放开」。

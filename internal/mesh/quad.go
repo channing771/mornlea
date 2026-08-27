@@ -61,7 +61,7 @@ func (f Face) Positive() bool { return f&1 == 1 }
 //     而少一份跨语言常量就少一处会静默分叉的地方。
 const (
 	PlantMaterialFirst uint16 = 31
-	PlantMaterialLast  uint16 = 38
+	PlantMaterialLast  uint16 = 54
 )
 
 // PlantMaterial 报告某个材质层是否属于植物集合。

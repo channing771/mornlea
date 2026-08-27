@@ -543,3 +543,78 @@ func wheatTexture(stage int) []byte {
 	}
 	return px
 }
+
+// potatoTexture 生成马铃薯第 stage 阶段的 cutout 材质，复用小麦同形。
+//
+// 颜色自深绿向成熟黄绿插值，叶形与小麦同为 5 根直秆，阶段 >=5 同样加宽麦穗
+// 效果以保持远处覆盖率；占位纯色但保持二值 alpha 契约。
+func potatoTexture(stage int) []byte {
+	px := make([]byte, texSize*texSize*4)
+	young := rgb{R: 68, G: 132, B: 48}
+	ripe := rgb{R: 96, G: 168, B: 58}
+	base := rgb{
+		R: lerp8(young.R, ripe.R, stage, wheatStageCount-1),
+		G: lerp8(young.G, ripe.G, stage, wheatStageCount-1),
+		B: lerp8(young.B, ripe.B, stage, wheatStageCount-1),
+	}
+	height := 2 + 2*stage
+	salt := 0x3D58 + uint32(stage)
+	speck := func(x, y int) {
+		n := int32(hash2(uint32(x), uint32(y), salt)%25) - 12
+		paint(px, x, y, rgb{
+			R: clamp8(int32(base.R) + n),
+			G: clamp8(int32(base.G) + n),
+			B: clamp8(int32(base.B) + n),
+		})
+	}
+	for _, x := range [...]int{1, 4, 7, 10, 13} {
+		for y := 0; y < height; y++ {
+			speck(x, y)
+		}
+		if stage < 5 {
+			continue
+		}
+		for y := height - 3; y < height; y++ {
+			speck(x-1, y)
+			speck(x+1, y)
+		}
+	}
+	return px
+}
+
+// carrotTexture 生成胡萝卜第 stage 阶段的 cutout 材质，复用小麦同形。
+//
+// 颜色自嫩绿向成熟橙绿插值，阶段越高橙色分量越重以示成熟，结构与小麦同形。
+func carrotTexture(stage int) []byte {
+	px := make([]byte, texSize*texSize*4)
+	young := rgb{R: 74, G: 142, B: 52}
+	ripe := rgb{R: 198, G: 132, B: 42}
+	base := rgb{
+		R: lerp8(young.R, ripe.R, stage, wheatStageCount-1),
+		G: lerp8(young.G, ripe.G, stage, wheatStageCount-1),
+		B: lerp8(young.B, ripe.B, stage, wheatStageCount-1),
+	}
+	height := 2 + 2*stage
+	salt := 0x3D59 + uint32(stage)
+	speck := func(x, y int) {
+		n := int32(hash2(uint32(x), uint32(y), salt)%25) - 12
+		paint(px, x, y, rgb{
+			R: clamp8(int32(base.R) + n),
+			G: clamp8(int32(base.G) + n),
+			B: clamp8(int32(base.B) + n),
+		})
+	}
+	for _, x := range [...]int{1, 4, 7, 10, 13} {
+		for y := 0; y < height; y++ {
+			speck(x, y)
+		}
+		if stage < 5 {
+			continue
+		}
+		for y := height - 3; y < height; y++ {
+			speck(x-1, y)
+			speck(x+1, y)
+		}
+	}
+	return px
+}

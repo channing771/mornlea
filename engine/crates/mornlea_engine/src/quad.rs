@@ -55,7 +55,7 @@ const PLANT_RESERVED_MASK: u64 = (0xff << SHIFT_W) ^ (1 << SHIFT_PLANT_BACK);
 /// mesher 的 `TestNativeOracleParityWheatCrossPlanes` 兜底。在 Go 的层枚举里
 /// 往小麦**之前**插层会整体平移这段区间，那两条守卫就是唯一会报警的地方。
 pub(crate) const PLANT_MATERIAL_FIRST: u16 = 31;
-pub(crate) const PLANT_MATERIAL_LAST: u16 = 38;
+pub(crate) const PLANT_MATERIAL_LAST: u16 = 54;
 
 /// plant_material 报告某个材质层是否属于植物集合。
 pub(crate) fn plant_material(material: u16) -> bool {

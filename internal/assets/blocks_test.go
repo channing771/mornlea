@@ -386,13 +386,13 @@ func TestPlantMaterialLayersMatchMeshContract(t *testing.T) {
 	if assets.LayerWheat0 != mesh.PlantMaterialFirst {
 		t.Fatalf("LayerWheat0=%d，mesh.PlantMaterialFirst=%d", assets.LayerWheat0, mesh.PlantMaterialFirst)
 	}
-	if assets.LayerWheat7 != mesh.PlantMaterialLast {
-		t.Fatalf("LayerWheat7=%d，mesh.PlantMaterialLast=%d", assets.LayerWheat7, mesh.PlantMaterialLast)
+	if assets.LayerCarrot7 != mesh.PlantMaterialLast {
+		t.Fatalf("LayerCarrot7=%d，mesh.PlantMaterialLast=%d", assets.LayerCarrot7, mesh.PlantMaterialLast)
 	}
-	// 区间必须恰好覆盖八个小麦层，一个不多一个不少：区间放宽会把相邻的耕地层
+	// 区间必须恰好覆盖 24 个作物层（小麦 8 + 马铃薯 8 + 胡萝卜 8），一个不多一个不少：区间放宽会把相邻的耕地层
 	// 也当成植物，那两层会被渲染成交叉斜面。
-	if got := int(mesh.PlantMaterialLast - mesh.PlantMaterialFirst + 1); got != 8 {
-		t.Fatalf("植物 material 区间覆盖 %d 层，想要 8", got)
+	if got := int(mesh.PlantMaterialLast - mesh.PlantMaterialFirst + 1); got != 24 {
+		t.Fatalf("植物 material 区间覆盖 %d 层，想要 24", got)
 	}
 	for _, layer := range []uint16{assets.LayerFarmlandDry, assets.LayerFarmlandWet, assets.LayerWater, assets.LayerLeaves} {
 		if mesh.PlantMaterial(layer) {
