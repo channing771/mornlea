@@ -7,9 +7,10 @@ make build-linux-server
 ./bin/mornlea-server --listen :25565 --world worlds/lan --seed 42 --max-players 8
 ```
 
-源码 checkout 可直接运行：
+源码 checkout 首次运行需先构建 Rust engine：
 
 ```sh
+make rust
 go run ./cmd/mornlea-server --listen :25565 --world worlds/lan --seed 42 --max-players 8
 ```
 
