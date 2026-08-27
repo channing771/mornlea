@@ -35,7 +35,7 @@
 | 1 Idle node contract | `ses_fc0dbc81dffe0u3tj65YfW1cXN` | approved (`ses_fc0d74a4affeN0kkoo0FPgXyDJ`) | approved (`ses_fc0d74a37ffeZe7a5DYuWS0gxb`) | 0 | complete |
 | 2 Schedule and dispatch | `ses_fc0d26fa8ffeUK5NbFSQdKC4z9` | approved (`ses_fc0bf6f63ffeYfIPRx7r9rFHJg`) | approved (`ses_fc0bf6f59ffe4jfnuZOUEyubUX`) | 1 | complete |
 | 3 Outcome and parity | `agent_981f0876` | approved (`agent_65bb652e`) | approved (`agent_a894e655`) | 1 | complete |
-| 4 Whole-branch gate | control session | pending | pending | 0 | pending |
+| 4 Whole-branch gate | control session | approved (`agent_ad6d0e78`) | same review | 1 | complete |
 
 ## Rulings
 
@@ -110,3 +110,10 @@
 - 每个 Task 使用 fresh implementer；SPEC 与 QUALITY 使用彼此独立且未实现该 Task 的 fresh reviewer。
 - 修复轮次 R1–R3 续用原 implementer，R4–R5 换 fresh implementer；超过 5 轮停止并逐条裁决。
 - tasks checkbox 只在实现、focused verification、SPEC review 与 QUALITY review 全部通过后勾选。
+
+## Whole-Branch Gate Evidence
+
+- 整分支终审（merge base `c60e8f69`，reviewer `agent_ad6d0e78`）：PASS；changed-file 审计 17 个路径全部计划内，无 version/schema/ABI/scenario/capture/golden/network/storage；唯一 Important 为 ledger Task 3 状态行漏更新，已由控制会话修复（commit "docs(openspec): sync C-08 task 3 status"）。
+- 4.2：`gofmt -w` 9 个计划内 Go 文件后 `gofmt -l` 无输出；`git diff --check c60e8f69...HEAD`、工作树与 staged diff 均无空白错误；clean worktree 后 range 审计只含计划内文件。
+- 4.3：`go test ./internal/companion ./internal/server -race -count=1`（3.913s/203.371s）、`go test ./internal/archcheck -count=1`（4.291s）、`go vet ./...`、`go test ./... -race`（exit 0）、`make rust-check`（exit 0）与 `scripts/agents/gates.sh`（全部门禁通过）全部 pass。
+- 4.4：`openspec validate --all --strict --no-interactive` → `Totals: 67 passed, 0 failed`；协议 v26、玩家 schema v7、区块 schema v9、world metadata v2、`companions.ai` schema v4、engine ABI v7、client ABI v9、benchmark scenario v19 与 capture golden 均未出现在分支 diff 中。

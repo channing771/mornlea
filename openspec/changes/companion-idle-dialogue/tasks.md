@@ -20,7 +20,7 @@
 
 ## 4. 整分支评审与门禁
 
-- [ ] 4.1 派发独立整分支终审，逐项核对 proposal、delta spec、design、实现、测试与本任务表；修复循环最多 5 轮，把所有 finding、repair、Ruling 和复审结论写入 `ledger.md`。
-- [ ] 4.2 对本 change 的 9 个计划内 Go 文件运行显式 `gofmt -w`，再运行 `test -z "$(gofmt -l internal/companion internal/server)"`、`git diff --check c60e8f69...HEAD`、工作树 `git diff --check` 与 `git diff --cached --check`；提交所有计划内修改后以 `test -z "$(git status --porcelain)"` 要求 clean worktree，再审核 `git diff --name-only c60e8f69...HEAD`，只允许计划内 Go 文件、`openspec/changes/companion-idle-dialogue/`、本实现计划和 `docs/feature-backlog.md` 的 C-08 行，任何 version/schema/ABI/scenario/capture/golden 路径均硬失败。
-- [ ] 4.3 依次运行 `go test ./internal/companion ./internal/server -race -count=1`、`go test ./internal/archcheck -count=1`、`go vet ./...`、`go test ./... -race`、`make rust-check` 与 `scripts/agents/gates.sh`；任何失败修复根因，不调整正确性门禁或超时规避失败。
-- [ ] 4.4 运行 `openspec validate --all --strict --no-interactive`；结合 4.2 的 changed-file 审核确认协议 v26、玩家 schema v7、区块 schema v9、world metadata v2、`companions.ai` schema v4、engine ABI v7、client ABI v9、benchmark scenario v19 与 capture golden 均未变化，在 fresh 证据齐全后完成任务状态。
+- [x] 4.1 派发独立整分支终审，逐项核对 proposal、delta spec、design、实现、测试与本任务表；修复循环最多 5 轮，把所有 finding、repair、Ruling 和复审结论写入 `ledger.md`。
+- [x] 4.2 对本 change 的 9 个计划内 Go 文件运行显式 `gofmt -w`，再运行 `test -z "$(gofmt -l internal/companion internal/server)"`、`git diff --check c60e8f69...HEAD`、工作树 `git diff --check` 与 `git diff --cached --check`；提交所有计划内修改后以 `test -z "$(git status --porcelain)"` 要求 clean worktree，再审核 `git diff --name-only c60e8f69...HEAD`，只允许计划内 Go 文件、`openspec/changes/companion-idle-dialogue/`、本实现计划和 `docs/feature-backlog.md` 的 C-08 行，任何 version/schema/ABI/scenario/capture/golden 路径均硬失败。
+- [x] 4.3 依次运行 `go test ./internal/companion ./internal/server -race -count=1`、`go test ./internal/archcheck -count=1`、`go vet ./...`、`go test ./... -race`、`make rust-check` 与 `scripts/agents/gates.sh`；任何失败修复根因，不调整正确性门禁或超时规避失败。
+- [x] 4.4 运行 `openspec validate --all --strict --no-interactive`；结合 4.2 的 changed-file 审核确认协议 v26、玩家 schema v7、区块 schema v9、world metadata v2、`companions.ai` schema v4、engine ABI v7、client ABI v9、benchmark scenario v19 与 capture golden 均未变化，在 fresh 证据齐全后完成任务状态。
