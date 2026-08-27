@@ -73,10 +73,16 @@ type Server struct {
 	stepMu          sync.Mutex
 	shutdownGate    chan struct{}
 	lifecycle       serverLifecycle
-	runtimeDone     chan struct{}
-	saveDone        chan struct{}
-	closedDone      chan struct{}
-	storePhase      storeShutdownPhase
+	// paused 是权威暂停门：置位时整个权威 tick 不被调度执行——世界时间、
+	// 随机 tick、作物、流体、实体与持久化调度全部停走，而消息接收 goroutine、
+	// chunk/save worker 与既有缓冲保持存活，暂停期到达的命令在恢复后按序结算。
+	// 门本身不持锁：`RunTicks` 调度层与 `step` 内的所有推进点只做一次原子读，
+	// 热路径零分配、零锁竞争；幂等由布尔语义天然保证。
+	paused      atomic.Bool
+	runtimeDone chan struct{}
+	saveDone    chan struct{}
+	closedDone  chan struct{}
+	storePhase  storeShutdownPhase
 }
 
 func NewWorld(config Config, generator Generator, store storage.Store) *Server {
@@ -277,6 +283,14 @@ func (server *Server) step(scheduled time.Time) sim.TickResult {
 	if server.lifecycle != serverRunning {
 		return sim.TickResult{}
 	}
+	// 暂停门放在编排最前面、observer 计时登记之前：被跳过的周期对外必须
+	// 表现为「tick 从未发生」——不发时长样本、不产生任何持久化副作用。
+	// 门覆盖包括显式 `Step` 在内的全部推进点，任何调用方都无法在暂停期
+	// 让世界时间前进；调度层的前置读只是省去暂停期对 `stepMu` 的争用，
+	// 两处共享同一份原子位。
+	if server.paused.Load() {
+		return sim.TickResult{}
+	}
 	started := time.Now()
 	if server.config.TickObserver != nil ||
 		(server.config.ScheduledTickObserver != nil && !scheduled.IsZero()) {
@@ -342,6 +356,25 @@ func (server *Server) StepForTest() sim.TickResult {
 	return server.Step()
 }
 
+// Pause 置位权威暂停门。幂等：重复调用只是重复写入同一个布尔位，不排队、
+// 不计数，因此不会产生额外的状态变化。
+//
+// 边界：本门冻结的是「权威模拟推进」这一事件本身，覆盖所有 tick 推进点
+// （`RunTicks` 的调度周期与显式的 `Step` 调用），保证暂停期间任何调用方都
+// 无法让世界时间前进；但它不关闭消息通路、不暂停 worker goroutine、也不
+// 参与生命周期关服路径（`Shutdown` 照常工作）。暂停时长由人工交互决定，
+// 期间不产生任何周期性工作。
+func (server *Server) Pause() {
+	server.paused.Store(true)
+}
+
+// Resume 清除权威暂停门：模拟从冻结时刻确定性续跑——恢复后的第一个 tick
+// 恰好接在冻结前的最后一个已执行 tick 之后，暂停段不留下任何可观察痕迹。
+// 幂等：对未暂停的世界重复调用同样无害。
+func (server *Server) Resume() {
+	server.paused.Store(false)
+}
+
 func (server *Server) RunTicks(ctx context.Context) error {
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
@@ -357,6 +390,13 @@ func (server *Server) RunTicks(ctx context.Context) error {
 				return ctx.Err()
 			}
 		case scheduled := <-ticker.C:
+			// 每个 ticker 到期先读暂停门：置位时本周期整个权威 tick 不存在
+			// （世界时间、随机 tick、持久化调度都不发生），而不是空转一个
+			// 降级 tick。真正的短路判定在 `step` 内共享，这里的前置读让
+			// 暂停期完全不触碰 `stepMu`。
+			if server.paused.Load() {
+				continue
+			}
 			server.step(scheduled)
 		}
 	}

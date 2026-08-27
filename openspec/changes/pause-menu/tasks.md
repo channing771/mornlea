@@ -4,9 +4,9 @@
 
 ## 1. 权威暂停门（`internal/server`）
 
-- [ ] 1.1 先写失败测试：新建 `internal/server/pause_test.go`——Pause 后连续多个调度周期世界时间 ticks 不变、重复 Pause 幂等、Resume 续接增量、同种子重放对照暂停段不改变后续结算结果。
-- [ ] 1.2 `internal/server/server.go` 实现原子暂停门并导出 `Pause()`/`Resume()`；`RunTicks` 每 ticker 到期先读门，置位时跳过本周期 `step(scheduled)`。
-- [ ] 1.3 验证：`go test ./internal/server -race -count=1` 全绿且既有测试零改动语义漂移。
+- [x] 1.1 先写失败测试：新建 `internal/server/pause_test.go`——Pause 后连续多个调度周期世界时间 ticks 不变、重复 Pause 幂等、Resume 续接增量、同种子重放对照暂停段不改变后续结算结果。
+- [x] 1.2 `internal/server/server.go` 实现原子暂停门并导出 `Pause()`/`Resume()`；`RunTicks` 每 ticker 到期先读门，置位时跳过本周期 `step(scheduled)`。
+- [x] 1.3 验证：`go test ./internal/server -race -count=1` 全绿且既有测试零改动语义漂移。
 
 ## 2. Rust 暂停页（`mornlea_client`）
 
