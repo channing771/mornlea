@@ -508,6 +508,10 @@ func (engine *Engine) Step() TickResult {
 	// 位置做一次有界六邻居复核，失去支撑的火把与原变化共享同一批 revision、
 	// 广播与存档（见 sweepUnsupportedTorches 的有界性论证）。
 	engine.sweepUnsupportedTorches(pending)
+	// 床支撑失效复核：与火把同一挂点、排在火把之后——火把复核的移除也是
+	// 权威变化，叠在其上的床当 tick 即被复核（见 sweepUnsupportedBeds 的
+	// 级联边界论证）。
+	engine.sweepUnsupportedBeds(pending)
 	engine.finishChanges(pending, &result)
 	sortChunkKeys(result.Ready)
 

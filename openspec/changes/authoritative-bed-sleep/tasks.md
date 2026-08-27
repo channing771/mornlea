@@ -16,9 +16,9 @@
 
 ## 3. 放置、采掘与支撑（门先例同构）
 
-- [ ] 3.1 失败测试：`tryPlaceBed` 同区块原子双格写入（床尾 + 朝向侧床头；两格空气、各自下方 `isSolidSupport`；跨区块未就绪整单拒绝不消耗；`pending` 合并先例）
-- [ ] 3.2 失败测试：采掘任一半双清两格、恰好掉落 1 个 `ItemBed`（含耐久/掉落路径无交互）；支撑失效清除（比照门）；接 `executePlace`/采掘分派
-- [ ] 3.3 `gofmt -w internal/sim`、`go test ./internal/sim -race -count=1`；SPEC+QUALITY 双评审后提交 `feat: place and break beds atomically`
+- [x] 3.1 失败测试：`tryPlaceBed` 同区块原子双格写入（床尾 + 朝向侧床头；两格空气、各自下方 `isSolidSupport`；跨区块未就绪整单拒绝不消耗；`pending` 合并先例）
+- [x] 3.2 失败测试：采掘任一半双清两格、恰好掉落 1 个 `ItemBed`（含耐久/掉落路径无交互）；支撑失效清除（比照门）；接 `executePlace`/采掘分派
+- [x] 3.3 `gofmt -w internal/sim`、`go test ./internal/sim -race -count=1`；SPEC+QUALITY 双评审后提交 `feat: place and break beds atomically`
 
 ## 4. 入睡、跳夜与个人重生点（sim 权威）
 
