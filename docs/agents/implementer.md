@@ -111,7 +111,7 @@
 ## 收尾自查清单（提交前）
 
 0. `brainstorming` 确认已获显式批准，且确认结论已写入 proposal/design 与 brief。
-1. `go test -list` 集合语义一致；`gofmt -l .` 无输出；`go vet ./...` 干净。
+1. 代码注释、GoDoc、Rust doc comment 中无任务标识（`[A-F]-[0-9]{2}` 如 `A-01`），溯源仅出现在 `docs/feature-backlog.md`、Discussion #71、OpenSpec 产物等规划层；`go test -list` 集合语义一致；`gofmt -l .` 无输出；`go vet ./...` 干净。
 2. `openspec validate --all --strict --no-interactive` 通过；全部 Task 已勾选并核对。
 3. 规则只更新对应作用域的 `AGENTS.md`；同级 `CLAUDE.md` 保持薄导入，并通过 `TestClaudeImportsAgentGuidance` focused 门禁。
 4. 无超范围改动：git diff 只含本行声明的独占文件集（+ 基线文档同步）。
