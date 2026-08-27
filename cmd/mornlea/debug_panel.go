@@ -327,9 +327,9 @@ const (
 
 // encodeDebugPanelSegment 把一帧面板状态编码为 client ABI v9 layout v3 段字节
 // （小端），与 Rust decode_debug_frame 逐字节对应。visible 为假时返回 nil
-// （面板关闭时整个 UI 段缺席，Rust 运行零工作）。编辑态行的 edit_value 字段取
-// 该行当前展示值并按 rune 边界截断到 64 字节，edit_cursor 为末位字节偏移
-// （=len），与 Rust 的字符边界校验一致。
+// （面板关闭时整个 UI 段缺席，Rust 运行零工作）。编辑态行的 edit_value 字段取该行
+// 全精度原始值（rows 填的 EditValue，缺失时回退展示值）并按 rune 边界截断到 64
+// 字节，edit_cursor 为末位字节偏移（=len），与 Rust 的字符边界校验一致。
 //
 // 输入违约（非空/单行/有限数）是调用方编程错误，按既有段落编码口径 panic；
 // 段长受 maxUISegmentBytes 上界约束（64 行 × ≤120 字节记录 + 段头 ≤128 字节

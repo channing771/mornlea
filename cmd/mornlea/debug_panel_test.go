@@ -730,3 +730,189 @@ func TestPanelVisibleCapturesGameKeysAtFrameLoopLevel(t *testing.T) {
 		t.Fatal("隐藏面板后 W 必须恢复移动上行")
 	}
 }
+
+// TestPanelF3ToggleFromHiddenCapturesAtFrameLoopLevel 是 2.3 的对称路径：
+// TestPanelVisibleCapturesGameKeysAtFrameLoopLevel 从「面板已可见」开始，只覆盖
+// 可见→隐藏→恢复；本测试从隐藏开始，锁住 F3 上升沿在同一帧内切换可见并立即
+// 整帧捕获（F3 与游戏键同帧时游戏键 MUST NOT 产生上行、相机 MUST NOT 旋转）。
+// 帧 0 W 必须产生移动上行；帧 1 F3 打开面板；帧 2 W+鼠标移动被捕获（中性
+// 上行+相机不动）；帧 3 F3 关闭；帧 4 W 恢复移动上行。
+func TestPanelF3ToggleFromHiddenCapturesAtFrameLoopLevel(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	}
+	drainInputs := func(messages []network.ClientMessage) []network.PlayerInput {
+		var inputs []network.PlayerInput
+		for _, message := range messages {
+			input, ok := message.(network.PlayerInput)
+			if !ok {
+				t.Fatalf("意外上行消息 %#v，want PlayerInput", message)
+			}
+			inputs = append(inputs, input)
+		}
+		return inputs
+	}
+	var serverEndpoint network.ServerEndpoint
+	var beforeToggle []network.PlayerInput
+	var duringVisible []network.PlayerInput
+	app, endpoint, window := newChatLoopApplication(t, []chatWindowFrame{
+		{delay: 55 * time.Millisecond, keys: map[client.Key]bool{client.KeyW: true}},
+		{
+			delay: 55 * time.Millisecond,
+			keys:  map[client.Key]bool{client.KeyF3: true},
+			onPoll: func() {
+				beforeToggle = drainInputs(drainChatClientMessages(serverEndpoint))
+			},
+		},
+		{
+			delay:   55 * time.Millisecond,
+			keys:    map[client.Key]bool{client.KeyW: true},
+			cursorX: 200,
+			cursorY: 150,
+			onPoll: func() {
+				// 帧 1（F3 打开）的上行：无按键位移，必为中性。
+				drainInputs(drainChatClientMessages(serverEndpoint))
+			},
+		},
+		{
+			delay: 55 * time.Millisecond,
+			keys:  map[client.Key]bool{client.KeyF3: true},
+			onPoll: func() {
+				// 帧 2（W+鼠标移动）的正加上行：整帧捕获后必为中性。
+				duringVisible = drainInputs(drainChatClientMessages(serverEndpoint))
+			},
+		},
+		{delay: 55 * time.Millisecond, keys: map[client.Key]bool{client.KeyW: true}},
+	})
+	serverEndpoint = endpoint
+	app.panel = newPanelState(config.Defaults())
+	if err := app.predictor.Begin(network.PlayerState{
+		ServerTick: 1, Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 10, 0.5},
+		OnGround: true, Ready: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	app.camera.Yaw, app.camera.Pitch = 0.5, -0.3
+	app.render.MouseSensitivity = 1
+	if err := runInteractive(app); err != nil {
+		t.Fatal(err)
+	}
+	if app.panel.visible {
+		t.Fatal("最后一帧 F3 必须关闭面板")
+	}
+	if len(beforeToggle) == 0 {
+		t.Fatal("打开面板前的 W 帧必须产生上行")
+	}
+	for _, input := range beforeToggle {
+		if input.MoveZ == 0 {
+			t.Fatalf("打开面板前的上行必须携带移动: %+v", input)
+		}
+	}
+	if len(duringVisible) == 0 {
+		t.Fatal("面板可见帧没有产生上行（中性输入本身也不该缺席）")
+	}
+	for _, input := range duringVisible {
+		if input.MoveX != 0 || input.MoveZ != 0 || input.Jump || input.Mining || input.Eating {
+			t.Fatalf("面板可见时的上行必须全为中性输入: %+v", input)
+		}
+	}
+	if app.camera.Yaw != 0.5 || app.camera.Pitch != -0.3 {
+		t.Fatalf("面板可见期间相机不得被鼠标旋转: yaw=%v pitch=%v", app.camera.Yaw, app.camera.Pitch)
+	}
+	if !window.captured {
+		t.Fatal("面板可见期间光标必须保持捕获")
+	}
+	restored := false
+	for _, input := range drainInputs(drainChatClientMessages(endpoint)) {
+		if input.MoveZ != 0 {
+			restored = true
+		}
+	}
+	if !restored {
+		t.Fatal("面板关闭后 W 必须恢复移动上行")
+	}
+}
+
+// TestPanelFrameInputReopenStartsFreshFrameTimer 锁住「面板隐藏复位」：关闭期间
+// panelLastFrameAt 被清零，重开后的第一帧帧时从 0 重新起算，而不是把整段关闭
+// 时长记成帧时（面板重开第一帧会显示数十秒的帧时）。
+func TestPanelFrameInputReopenStartsFreshFrameTimer(t *testing.T) {
+	app := &application{panel: newPanelState(config.Defaults())}
+	start := time.Now()
+	app.panel.visible = true
+	if readout, _ := app.panelFrameInput(start); readout.FrameMillis != 0 {
+		t.Fatalf("打开面板的第一帧帧时=%v, want 0", readout.FrameMillis)
+	}
+	app.panel.visible = false
+	if readout, _ := app.panelFrameInput(start.Add(time.Hour)); readout.FrameMillis != 0 {
+		t.Fatalf("关闭面板不得产出读数: %v", readout.FrameMillis)
+	}
+	app.panel.visible = true
+	if readout, _ := app.panelFrameInput(start.Add(time.Hour + time.Millisecond)); readout.FrameMillis != 0 {
+		t.Fatalf("重开面板第一帧帧时=%v, want 0（关闭时长不得计入）", readout.FrameMillis)
+	}
+}
+
+// TestPanelRemoteAllowsRenderEdit 锁住 ruling 修正后的 spec「联机呈现组可编辑」
+// 场景：remote() 只禁 physics/sim 权威组（避免本地预测偏离服务端），render.*
+// 纯本地呈现（FOV、灵敏度）在联机时仍可编辑并在当前进程生效。
+func TestPanelRemoteAllowsRenderEdit(t *testing.T) {
+	state := newPanelState(config.Defaults())
+	state.visible = true
+	state.selectFieldForTest(t, "render.fovDegrees")
+	if state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionEnterEdit}}, true); !state.editing {
+		t.Fatal("联机时 render 行必须可进入编辑态")
+	}
+	changed := state.applyPanelEvents([]debugPanelEvent{{
+		action: client.DebugPanelActionConfirm, value: "42",
+	}}, true)
+	if !changed {
+		t.Fatal("联机时 render 分组确认合法值必须报告变更")
+	}
+	if state.effective.Render.FovDegrees != 42 {
+		t.Fatalf("fovDegrees=%v, want 42（仅本地呈现，不产生网络上行）", state.effective.Render.FovDegrees)
+	}
+	if state.editing {
+		t.Fatal("确认后必须退出编辑态")
+	}
+}
+
+// TestEncodeDebugPanelSegmentRejectsInvalidInput 锁住编码器侧的非法值拒绝：
+// Rust 解码器对 NaN/Inf、非法 mode 逐项拒绝（整个段被丢），Go 编码器必须在
+// 出口处 panic（这些输入只能来自编程错误，绝不允许产出 Rust 会拒绝的失败段）。
+func TestEncodeDebugPanelSegmentRejectsInvalidInput(t *testing.T) {
+	readout := render.PanelReadout{Mode: "单机"}
+	run := func(name string, fn func()) {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatal("非法输入必须 panic")
+				}
+			}()
+			fn()
+		})
+	}
+	run("负帧时", func() {
+		invalid := readout
+		invalid.FrameMillis = -1
+		encodeDebugPanelSegment(true, false, invalid, nil)
+	})
+	run("NaN 帧时", func() {
+		invalid := readout
+		invalid.FrameMillis = math.NaN()
+		encodeDebugPanelSegment(true, false, invalid, nil)
+	})
+	run("Inf 朝向", func() {
+		invalid := readout
+		invalid.Yaw = float32(math.Inf(1))
+		encodeDebugPanelSegment(true, false, invalid, nil)
+	})
+	run("空模式名", func() {
+		encodeDebugPanelSegment(true, false, render.PanelReadout{}, nil)
+	})
+	run("多行模式名", func() {
+		invalid := readout
+		invalid.Mode = "单机\n机"
+		encodeDebugPanelSegment(true, false, invalid, nil)
+	})
+}
