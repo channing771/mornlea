@@ -290,6 +290,31 @@ func TestProtocolOutdatedHandshakeRejectMatchesMemoryAndTCP(t *testing.T) {
 	}
 }
 
+func TestMemoryTransportRejectsOutdatedHandshakeBeforeDelivery(t *testing.T) {
+	client, server := network.NewMemoryStreamPair(1)
+	t.Cleanup(func() { _ = client.Close(); _ = server.Close() })
+
+	if err := client.Send(context.Background(), network.StateHandshake, network.ClientHello{
+		ProtocolVersion: network.ProtocolVersion - 1,
+	}); err == nil {
+		t.Fatal("outdated ClientHello was accepted by Memory")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if packet, err := server.Recv(ctx, network.StateHandshake); packet != nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("rejected ClientHello reached Memory peer = (%#v, %v)", packet, err)
+	}
+
+	if err := server.Send(context.Background(), network.StateHandshake, network.ServerHello{
+		ProtocolVersion: network.ProtocolVersion - 1,
+	}); err == nil {
+		t.Fatal("outdated ServerHello was accepted by Memory")
+	}
+	if packet, err := client.Recv(ctx, network.StateHandshake); packet != nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("rejected ServerHello reached Memory peer = (%#v, %v)", packet, err)
+	}
+}
+
 func TestV26ClientRejectsPriorServerAcrossTransports(t *testing.T) {
 	legacyVersions := []uint32{17, network.ProtocolVersion - 1}
 	for _, legacy := range legacyVersions {
