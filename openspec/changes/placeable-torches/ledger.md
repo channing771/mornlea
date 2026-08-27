@@ -88,3 +88,12 @@
 - 超清单同步（裁决接受）：`internal/assets/pack_test.go` 追加 textures/torch.png 绑定哨兵一行（材质包覆盖槽机制的最小机械同步）；`internal/assets/procedural.go`/`procedural_test.go` 落入 Task 4 语义范围（纹理层实现与测试，修订版清单的合理包含）。
 - 事实核实与上报（控制会话在本机 main 上复跑 --capture compare 确认）：main 既有基线债务——inventory-crafting/chest-container/furnace-container 在 main 上 compare 即超阈值（36%/49%/32%）、workbench-crafting golden 缺失、terrain-noon/avatar-nametag/oak-grove/ai-companion/far-horizon/water-underwater 亦有超阈值差异；A-02 用改前/改后逐字节对比证明对全部既有场景渲染零影响。该债务不属本变更，上报后续独立基线任务处理。
 - SPEC 评审：PASS（无 Critical/Important；Minor：「三面墙」注释失实——repair 修正为两面墙；阈值机相关观察已记录）。QUALITY 评审：PASS（无 Critical/Important；Minor：ceiling 阈值余量最紧记录、crafting 重置断言为既有共性缺口、纹理前两行约束由场景级间接兜底）。
+
+### 整分支终审与门禁执行记录
+
+- 整分支终审（merge base `cc385d22` → `562a6ed8`，reviewer 独立）：PASS，无 Critical/Important；57 个变更文件逐个判定全部计划内/裁决内；协议 v27、区块 schema v9、世界 metadata v2、玩家 schema v7、companions.ai v4、benchmark scenario v19、client ABI v9 零触碰；engine ABI v7→v8 为唯一版本变更且三处同步；三条 Minor（ledger 措辞微偏差、proposal「延期与放弃」占位句、tasks 措辞历史性偏差）均记录不改代码。
+- 门禁修复三连（终审后）：①`cargo fmt` 两处格式 + clippy `too_many_arguments`（emit_wall/emit_standing 坐标合并为 `[i32;3]`，无 allow）→ `d445b2c4`；②`internal/server` 伙伴寻路可通过表漏纳火把（physics 零碰撞的一致性消费者，oracle 测试守护）→ `67fa2c2c`，Task 2 验证面回补 server race；③一次 TestScenarioV12 GPU panic 经复跑 3 次确认为控制会话并发跑两条重型验证管线的资源冲突（非代码问题），此后全部串行执行。
+- 教训入 ledger：重型验证管线（全量 race、gates.sh、GPU capture 测试）严禁并发执行；验证输出必须完整审查 FAIL 行（一次全量 race 的 FAIL 被 head 截断漏看）。
+- 最终门禁（串行全绿）：`make rust-check`（fmt+clippy+333 tests）；8 包 race（core/assets/mesh/nativeabi/sim/world/client/cmd/mornlea，cmd 429.451s）；`go test ./... -race` exit 0；`go vet ./...`；`gofmt -l .` 空；`git diff --check` 干净；`scripts/agents/gates.sh` 全部门禁通过；`openspec validate --all --strict` 68 passed。
+- 版本矩阵终态：协议 v27、玩家 schema v7、区块 schema v9、世界 metadata v2、companions.ai v4、engine ABI v7→**v8**（唯一变更）、client ABI v9、benchmark scenario v19、capture golden 19→**20** 张（torch-night.png 唯一新增）。
+- 上报不属本变更的基线债务：main 上 capture compare 既有超阈值（inventory/chest/furnace 36%/49%/32% 等）与 workbench-crafting golden 缺失——A-02 经改前/改后逐字节对比证明对全部既有场景渲染零影响；`internal/companion/plan_types.go:467` 历史任务编号字样。
