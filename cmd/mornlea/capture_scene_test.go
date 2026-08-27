@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"image"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,8 +12,11 @@ import (
 
 	"github.com/channing771/mornlea/internal/assets"
 	"github.com/channing771/mornlea/internal/client"
+	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/internal/render"
+	"github.com/channing771/mornlea/internal/render/hud"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -809,4 +814,363 @@ func TestCaptureSkylightTunnelUnsettledErrorNamesScene(t *testing.T) {
 	if _, statErr := os.Stat(filepath.Join(dir, scene.Name+".png")); !os.IsNotExist(statErr) {
 		t.Fatalf("未收敛场景不应写图，statErr = %v", statErr)
 	}
+}
+
+// TestTorchNightCaptureSceneIsRegistered 锁住 torch-night 场景条目的完整性：
+// 与其余世界场景一样走「Prepare 装夹具 + Apply 定状态 + 8 帧预热」的完整链路。
+func TestTorchNightCaptureSceneIsRegistered(t *testing.T) {
+	scene := captureSceneByName(t, "torch-night")
+	if scene.Prepare == nil || scene.Apply == nil {
+		t.Fatalf("场景=%+v，想要完整 torch-night", scene)
+	}
+	if scene.WarmupFrames != 8 {
+		t.Fatalf("torch-night WarmupFrames=%d，想要 8", scene.WarmupFrames)
+	}
+	if scene.HUD != nil || scene.Menu != nil || scene.Settings != nil || scene.PinVolatile != nil {
+		t.Fatalf("torch-night 不应携带 HUD/菜单/设置/易变钉住夹具: %+v", scene)
+	}
+}
+
+// TestPrepareTorchNightUsesMirrorAndMesher 穷举核对火把夜景夹具的全封闭长
+// 石室与三朵火把的位置、形态与支撑：落地一朵在相机近处，左右墙各一朵
+// 墙面形态（+X / −X），支撑格全部是实心石块。
+func TestPrepareTorchNightUsesMirrorAndMesher(t *testing.T) {
+	airMesher := client.NewMesher(assets.NewRegistry(), 1)
+	t.Cleanup(airMesher.Close)
+	app := &application{mirror: client.NewMirror(), mesher: airMesher}
+
+	if err := prepareCaptureAirNeighborhood(app); err != nil {
+		t.Fatal(err)
+	}
+	roomMesher := client.NewMesher(assets.NewRegistry(), 1)
+	t.Cleanup(roomMesher.Close)
+	app.mesher = roomMesher
+	if got := roomMesher.Stats().DirtySections; got != 0 {
+		t.Fatalf("施加房间变化前 dirty sections = %d，想要 0", got)
+	}
+	if err := applyCaptureTorchNightChanges(app); err != nil {
+		t.Fatal(err)
+	}
+	for z := int32(-1); z <= 1; z++ {
+		for x := int32(-1); x <= 1; x++ {
+			chunk, ok := app.mirror.Chunk(core.Overworld, core.ChunkPos{X: x, Z: z})
+			if !ok || chunk.Revision != 2 {
+				t.Fatalf("chunk (%d,%d) = (%v,%v)，想要 revision 2", x, z, chunk, ok)
+			}
+		}
+	}
+	torches := map[core.BlockPos]core.BlockID{
+		{X: 2, Y: 1, Z: -3}:  core.TorchStandingID,
+		{X: -5, Y: 2, Z: -5}: core.TorchWallPosXID,
+		{X: 5, Y: 2, Z: -6}:  core.TorchWallNegXID,
+	}
+	for y := int32(0); y <= 6; y++ {
+		for z := int32(-16); z <= 2; z++ {
+			for x := int32(-6); x <= 6; x++ {
+				position := core.BlockPos{X: x, Y: y, Z: z}
+				want := core.AirID
+				if y == 0 || y == 6 || x == -6 || x == 6 || z == -16 || z == 2 {
+					want = core.StoneID
+				}
+				if torch, ok := torches[position]; ok {
+					want = torch
+				}
+				got, loaded := app.mirror.BlockAt(core.Overworld, position)
+				if !loaded || got != want {
+					t.Fatalf("BlockAt(%+v) = (%d,%v)，想要 (%d,true)", position, got, loaded, want)
+				}
+			}
+		}
+	}
+	// 火把之外不再有任何非空气/非石头方块：夹具的可见变化只有这三朵火把。
+	for _, position := range []core.BlockPos{
+		{X: -7, Y: 3, Z: -6},
+		{X: 0, Y: 3, Z: 3},
+		{X: 0, Y: 7, Z: -6},
+	} {
+		if got, loaded := app.mirror.BlockAt(core.Overworld, position); !loaded || got != core.AirID {
+			t.Fatalf("房外 BlockAt(%+v) = (%d,%v)，想要 (AirID,true)", position, got, loaded)
+		}
+	}
+	// 支撑格逐一验证：落地火把踩在地板上，两朵墙面火把的支撑（形态反方向
+	// 一格）都是石墙——夹具因此与放置规则的支撑契约一致，不是悬空摆拍。
+	for _, support := range []core.BlockPos{
+		{X: 2, Y: 0, Z: -3},
+		{X: -6, Y: 2, Z: -5},
+		{X: 6, Y: 2, Z: -6},
+	} {
+		if got, loaded := app.mirror.BlockAt(core.Overworld, support); !loaded || got != core.StoneID {
+			t.Fatalf("火把支撑 BlockAt(%+v) = (%d,%v)，想要 (StoneID,true)", support, got, loaded)
+		}
+	}
+	if got := roomMesher.Stats().DirtySections; got == 0 {
+		t.Fatal("火把夜景装入后 mesher 没有 dirty section")
+	}
+}
+
+// TestTorchNightApplyResetsSharedPresentationState 与 block-light-room 的同名
+// 断言同构：前序场景留下的全部共享呈现状态都必须被 Apply 显式清空，夜晚
+// 时间与相机姿态固定。
+func TestTorchNightApplyResetsSharedPresentationState(t *testing.T) {
+	scene := captureSceneByName(t, "torch-night")
+	if scene.Apply == nil {
+		t.Fatal("缺少 torch-night")
+	}
+	remotePlayers := client.NewRemotePlayers()
+	if err := remotePlayers.Apply(network.RemotePlayerSpawn{
+		PlayerID: core.PlayerID{6: 0x40, 8: 0x80, 15: 1}, DisplayName: "测试Player",
+		ServerTick: 1, Position: mgl32.Vec3{0.5, 2, 0.5},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	app := &application{
+		remotePlayers: remotePlayers,
+		panel:         &panelState{visible: true},
+		inventoryOpen: true,
+	}
+	inventory := core.Inventory{}
+	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 1}
+	if err := app.inventory.Apply(network.InventoryState{Inventory: inventory}); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.furnace.Apply(network.FurnaceState{Furnace: core.FurnaceRef{
+		Dimension: core.Overworld, Generation: 1,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.chest.Apply(network.ChestState{Chest: core.ContainerRef{
+		Dimension: core.Overworld, Kind: core.ContainerKindChest, Generation: 1,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := scene.Apply(app); err != nil {
+		t.Fatal(err)
+	}
+	if app.worldTimeTicks != 18000 {
+		t.Fatalf("world time = %d，想要 18000（夜晚：室内亮度只由方块光决定）", app.worldTimeTicks)
+	}
+	if app.camera.Pos != (mgl32.Vec3{0.5, 2.8, 0.5}) || app.camera.Yaw != 0 || app.camera.Pitch != 0 {
+		t.Fatalf("camera = %+v yaw=%v pitch=%v", app.camera.Pos, app.camera.Yaw, app.camera.Pitch)
+	}
+	if got, confirmed := app.inventory.State(); !confirmed || got != (core.Inventory{}) {
+		t.Fatalf("inventory = %+v confirmed=%v，想要已确认空物品栏", got, confirmed)
+	}
+	if got := app.remotePlayers.Presentations(); len(got) != 0 {
+		t.Fatalf("远端玩家未清空: %+v", got)
+	}
+	if _, opened := app.furnace.State(); opened {
+		t.Fatal("熔炉镜像未清空")
+	}
+	if _, opened := app.chest.State(); opened {
+		t.Fatal("箱子镜像未清空")
+	}
+	if app.inventoryOpen || app.panel.visible {
+		t.Fatalf("共享界面状态未清空: inventoryOpen=%v panelVisible=%v",
+			app.inventoryOpen, app.panel.visible)
+	}
+}
+
+// newTorchNightRenderApplication 构造与正式 capture 同尺寸（640×360）的最小
+// 离屏渲染 application：torch-night 的像素断言经它复用 captureSceneImage 的
+// 完整链路（预热、装夹具、收敛、回读）。渲染器是离屏设备，不创建也不聚焦
+// 任何前台窗口；无 GPU 适配器时跳过（与既有渲染测试同口径）。材质用内嵌
+// 默认材质包，与 golden 抓帧路径看到的是同一份像素。
+func newTorchNightRenderApplication(t *testing.T) *application {
+	t.Helper()
+	renderer, err := client.NewRenderer(captureWidth, captureHeight)
+	if errors.Is(err, client.ErrNoGPUAdapter) {
+		t.Skip("无 GPU 适配器")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := assets.NewDefaultRegistry()
+	layers, pixels := registry.AtlasPixels()
+	renderer.UploadAtlas(layers, pixels)
+	renderer.UploadUIFont(render.EmbeddedCJKFont())
+	glyphs := &integrationGlyphSource{}
+	app := &application{
+		renderer:        renderer,
+		scheduler:       render.NewSectionScheduler(renderer, applicationUploadPerFrame),
+		frameWidth:      captureWidth,
+		frameHeight:     captureHeight,
+		nameTagRenderer: render.NewNameTagLayouter(glyphs),
+		hotbarRenderer:  hud.NewHotbarLayout(glyphs, registry),
+		itemDrops:       client.NewItemDrops(),
+		remotePlayers:   client.NewRemotePlayers(),
+		companions:      &client.Companions{},
+		remoteNameTags:  make([]render.NameTag, 0, maxFrameNameTags),
+		mirror:          client.NewMirror(),
+		predictor:       client.NewPredictor(),
+		mesher:          client.NewMesher(registry, 1),
+		camera: client.Camera{
+			FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
+			Near: 0.1, Far: 2000,
+		},
+		loadedChunks: make(map[core.ChunkPos]struct{}),
+		// 渲染配置取默认值（视距 32）：零值会让 scheduler.DropOutside 在每帧
+		// 把相机区块之外的区段全部丢弃，场景只剩出生区块的一角。
+		render: config.Defaults().Render,
+	}
+	app.releaseResources = app.releaseOwnedResources
+	t.Cleanup(func() { _ = app.Close() })
+	return app
+}
+
+// torchNightProject 把世界坐标投影到 capture 屏幕像素（y 轴向下）。相机取
+// Apply 之后的实例，投影矩阵与渲染用的 `Camera.ViewProj` 同一实现，不另写
+// 一套。
+func torchNightProject(t *testing.T, camera client.Camera, p mgl32.Vec3) image.Point {
+	t.Helper()
+	clip := camera.ViewProj().Mul4x1(mgl32.Vec4{p.X(), p.Y(), p.Z(), 1})
+	if clip.W() <= 0 {
+		t.Fatalf("采样点 %v 落在相机身后", p)
+	}
+	x := int((clip.X()/clip.W()*0.5 + 0.5) * float32(captureWidth))
+	y := int((1 - (clip.Y()/clip.W()*0.5 + 0.5)) * float32(captureHeight))
+	return image.Pt(x, y)
+}
+
+// torchNightCellRect 返回一个方块格八 corner 投影后的屏幕外接矩形。
+func torchNightCellRect(t *testing.T, camera client.Camera, cell core.BlockPos) image.Rectangle {
+	t.Helper()
+	minX, minY, maxX, maxY := 0, 0, 0, 0
+	for index, corner := range [8]mgl32.Vec3{
+		{0, 0, 0}, {1, 0, 0}, {0, 1, 0}, {1, 1, 0},
+		{0, 0, 1}, {1, 0, 1}, {0, 1, 1}, {1, 1, 1},
+	} {
+		point := torchNightProject(t, camera, mgl32.Vec3{
+			float32(cell.X) + corner.X(),
+			float32(cell.Y) + corner.Y(),
+			float32(cell.Z) + corner.Z(),
+		})
+		if index == 0 {
+			minX, minY, maxX, maxY = point.X, point.Y, point.X, point.Y
+			continue
+		}
+		minX, minY = min(minX, point.X), min(minY, point.Y)
+		maxX, maxY = max(maxX, point.X), max(maxY, point.Y)
+	}
+	return image.Rect(minX, minY, maxX+1, maxY+1)
+}
+
+// torchNightPatchLuma 返回屏幕上以 center 为中心的 11×11 像素平均亮度。
+func torchNightPatchLuma(t *testing.T, img *image.NRGBA, center image.Point) int {
+	t.Helper()
+	const radius = 5
+	sum, count := 0, 0
+	for dy := -radius; dy <= radius; dy++ {
+		for dx := -radius; dx <= radius; dx++ {
+			x, y := center.X+dx, center.Y+dy
+			if x < 0 || y < 0 || x >= img.Bounds().Dx() || y >= img.Bounds().Dy() {
+				t.Fatalf("采样块 (%d,%d) 越出图像边界", x, y)
+			}
+			i := img.PixOffset(x, y)
+			sum += (int(img.Pix[i]) + int(img.Pix[i+1]) + int(img.Pix[i+2])) / 3
+			count++
+		}
+	}
+	return sum / count
+}
+
+// torchNightFlamePixels 收集屏幕矩形内判为「火芯暖色」的像素：亮暖（R 显著
+// 高于 B）。石面被火把照亮是中性灰（R≈B），木柄暗棕达不到亮度门槛，两者
+// 都不会被误判成火芯。
+func torchNightFlamePixels(img *image.NRGBA, rect image.Rectangle) []image.Point {
+	var flames []image.Point
+	rect = rect.Intersect(img.Bounds())
+	for y := rect.Min.Y; y < rect.Max.Y; y++ {
+		for x := rect.Min.X; x < rect.Max.X; x++ {
+			i := img.PixOffset(x, y)
+			r, b := int(img.Pix[i]), int(img.Pix[i+2])
+			if r >= 160 && r-b >= 80 {
+				flames = append(flames, image.Pt(x, y))
+			}
+		}
+	}
+	return flames
+}
+
+// TestTorchNightScenePixelsShowLightFalloffAndCutout 是 torch-night 的场景内
+// 像素断言（spec visual-verification「无窗口夜景场景」的 Scenario）：
+//
+//   - 近亮远暗：火把旁的地板采样块明显亮于远角的同材质地板采样块。阈值按
+//     输出经过 sRGB gamma 编码标定——线性光在画面里被压缩，25 点亮度差已经
+//     对应数级方块光衰减；
+//   - 透明边缘：落地火把格的屏幕外接矩形里，火芯像素只占小部分、四角都
+//     不是火芯——16×16 图层的其余像素 alpha=0，透过它能看到背景；
+//   - 封墙暗室：无火把照到的远端天花板保持暗——若天空光灌进封闭房间或
+//     方块光误穿墙体，该采样块会明显亮起来。
+//
+// 同时核对落地与左右两墙火把的火芯都真实出现在各自的屏幕格内（墙面形态经
+// model tag 2..3 的贴面斜板几何渲染，而不是只有落地形态在画）。
+func TestTorchNightScenePixelsShowLightFalloffAndCutout(t *testing.T) {
+	app := newTorchNightRenderApplication(t)
+	scene := captureSceneByName(t, "torch-night")
+	img, err := captureSceneImage(app, scene)
+	if err != nil {
+		t.Fatalf("抓取 torch-night: %v", err)
+	}
+	if got := img.Bounds(); got != image.Rect(0, 0, captureWidth, captureHeight) {
+		t.Fatalf("抓帧尺寸=%v，想要 %dx%d", got, captureWidth, captureHeight)
+	}
+	camera := app.camera
+
+	t.Run("近亮远暗", func(t *testing.T) {
+		near := torchNightPatchLuma(t, img, torchNightProject(t, camera, mgl32.Vec3{1.0, 1.0, -3.0}))
+		far := torchNightPatchLuma(t, img, torchNightProject(t, camera, mgl32.Vec3{5.0, 1.0, -15.0}))
+		if near < 70 {
+			t.Fatalf("火把旁地板亮度=%d，想要至少 70：火把没有点亮近处", near)
+		}
+		if near-far < 25 {
+			t.Fatalf("近处亮度=%d 远处=%d，衰减梯度不足 25", near, far)
+		}
+		if far < 12 {
+			t.Fatalf("远角亮度=%d，火把的方块光应衰减到达而不是缺席", far)
+		}
+	})
+	t.Run("封墙暗室无漏光", func(t *testing.T) {
+		ceiling := torchNightPatchLuma(t, img, torchNightProject(t, camera, mgl32.Vec3{4.0, 6.0, -12.0}))
+		if ceiling >= 70 {
+			t.Fatalf("远端天花板亮度=%d，封闭暗室的未照到面应当保持暗色", ceiling)
+		}
+	})
+	t.Run("透明边缘非实心矩形", func(t *testing.T) {
+		rect := torchNightCellRect(t, camera, core.BlockPos{X: 2, Y: 1, Z: -3})
+		flames := torchNightFlamePixels(img, rect)
+		if len(flames) < 8 {
+			t.Fatalf("落地火把格内火芯像素=%d，想要至少 8（矩形=%v）", len(flames), rect)
+		}
+		area := rect.Dx() * rect.Dy()
+		if len(flames)*2 >= area {
+			t.Fatalf("火芯像素=%d 占格子矩形 %d 的一半以上：火把被画成实心矩形", len(flames), area)
+		}
+		for _, corner := range []image.Point{rect.Min, {rect.Max.X - 1, rect.Min.Y}, rect.Max.Sub(image.Pt(1, 1)), {rect.Min.X, rect.Max.Y - 1}} {
+			// 相机贴地时格子外接矩形会越出画面下缘，角落采样先钳回帧内。
+			x := min(max(corner.X, 0), captureWidth-1)
+			y := min(max(corner.Y, 0), captureHeight-1)
+			i := img.PixOffset(x, y)
+			r, b := int(img.Pix[i]), int(img.Pix[i+2])
+			if r >= 160 && r-b >= 80 {
+				t.Fatalf("落地火把格角落 (%d,%d) 是火芯色：cutout 的透明边缘应露出背景", x, y)
+			}
+		}
+	})
+	t.Run("墙面火把可见", func(t *testing.T) {
+		for _, wall := range []struct {
+			name string
+			cell core.BlockPos
+		}{
+			{"左墙 +X 形态", core.BlockPos{X: -5, Y: 2, Z: -5}},
+			{"右墙 −X 形态", core.BlockPos{X: 5, Y: 2, Z: -6}},
+		} {
+			t.Run(wall.name, func(t *testing.T) {
+				flames := torchNightFlamePixels(img, torchNightCellRect(t, camera, wall.cell))
+				if len(flames) < 4 {
+					t.Fatalf("墙面火把格内火芯像素=%d，想要至少 4：贴面斜板几何没有渲染", len(flames))
+				}
+			})
+		}
+	})
 }

@@ -48,8 +48,11 @@ func (engine *Engine) executePlacement(
 	if command.Slot >= core.HotbarSlots {
 		return RejectInvalidSlot, true
 	}
-	placement, ok := core.ItemPlacement(player.inventory.Hotbar.Slots[command.Slot].Item)
-	if !ok {
+	item := player.inventory.Hotbar.Slots[command.Slot].Item
+	// 火把是唯一面向相关的物品：最终形态由命中面决定，这里只先确认「它是
+	// 可放置物品」，真正的形态解析推迟到射线命中之后经
+	// core.PlaceableBlockAtFace 统一完成。非火把物品不经过这个特判，行为不变。
+	if _, ok := core.ItemPlacement(item); !ok && item != core.ItemTorch {
 		return RejectInvalidBlock, true
 	}
 	consumed, ok := player.inventory.Hotbar.Consume(command.Slot)
@@ -75,6 +78,13 @@ func (engine *Engine) executePlacement(
 
 	if hit.Face == core.BlockFaceNone {
 		return RejectOccupied, true
+	}
+	// 形态解析的唯一窗口：物品 × 命中面 → 写入方块。火把在底面（与非法面值）
+	// 没有可放置形态，在这里拒绝；其余物品的形状与面无关，对任意合法面恒返回
+	// 与 ItemPlacement 相同的方块，预检通过的它们不会在这里新增拒绝路径。
+	placement, placeable := core.PlaceableBlockAtFace(item, hit.Face)
+	if !placeable {
+		return RejectInvalidBlock, true
 	}
 	target := adjacentBlock(hit.Block, hit.Face)
 	if target.Y < core.MinY || target.Y >= core.MaxY {
@@ -133,6 +143,34 @@ func (engine *Engine) executePlacement(
 			return RejectChunkNotReady, true
 		}
 		if !core.IsFarmland(belowBlock) {
+			return RejectInvalidBlock, true
+		}
+	}
+	// 火把的「落脚支撑」前置，与种子同类：追加在通用校验之后，因此非火把
+	// 物品的放置行为一字不变。四条拒绝都不扣物品（扣料提交在最后一段）：
+	//   - 目标格为流体：通用放置允许把方块直接放进水里，火把例外——它零碰撞
+	//     且不允许水进入其格，盖进水里等于造出一格悬浊的矛盾状态；
+	//   - 目标格玩家占位：火把零碰撞，通用占位判据（逐碰撞盒求交）对它恒空，
+	//     单独用整格 AABB 判交；
+	//   - 支撑格未加载：沿用未就绪拒绝语义；
+	//   - 支撑格非实心（空气、流体、作物、火把自身）：形态映射给出的支撑格
+	//     必须真的能承载火把。
+	if core.IsTorch(placement) {
+		if core.IsFluid(block) {
+			return RejectInvalidBlock, true
+		}
+		if torchCellOverlapsPlayer(target, player.state.Position) {
+			return RejectOccupied, true
+		}
+		support, hasSupport := torchSupport(placement, target)
+		if !hasSupport {
+			return RejectInvalidBlock, true
+		}
+		supportBlock, supportReady := dimension.BlockAt(support)
+		if !supportReady {
+			return RejectChunkNotReady, true
+		}
+		if !torchSupportBlockSolid(supportBlock) {
 			return RejectInvalidBlock, true
 		}
 	}

@@ -486,6 +486,235 @@ func TestCropsUseDedicatedWheatMaterialLayers(t *testing.T) {
 	}
 }
 
+// TestRegistryLightDelegatesToCore 锁定「唯一发光判定表」：Registry 的
+// Emission/LightAttenuation 对全部已注册方块与越界编号都必须与 core 的两张表
+// 逐点恒等——assets 不得保留任何与 core 重复的判定分支，服务端生成判定与
+// 客户端注册表都只消费 core 这一张表。
+func TestRegistryLightDelegatesToCore(t *testing.T) {
+	registry := assets.NewRegistry()
+	for id := core.AirID; id < core.BlockIDMax; id++ {
+		if got, want := registry.Emission(id), core.BlockEmission(id); got != want {
+			t.Fatalf("Emission(%d) = %d，与 core.BlockEmission 的 %d 不一致", id, got, want)
+		}
+		if got, want := registry.LightAttenuation(id), core.BlockLightAttenuation(id); got != want {
+			t.Fatalf("LightAttenuation(%d) = %d，与 core.BlockLightAttenuation 的 %d 不一致", id, got, want)
+		}
+	}
+	// 越界编号（哨兵与其后一格、远端编号）同样转调恒等，均为 0。
+	for _, id := range []world.BlockID{core.BlockIDMax, core.BlockIDMax + 1, world.BlockID(65535)} {
+		if got := registry.Emission(id); got != 0 {
+			t.Fatalf("Emission(越界 %d) = %d，想要 0", id, got)
+		}
+		if got := registry.LightAttenuation(id); got != 0 {
+			t.Fatalf("LightAttenuation(越界 %d) = %d，想要 0", id, got)
+		}
+	}
+	// 关键取值点名：发光方块 15、五种火把 14、流体衰减 1。
+	if got := registry.Emission(core.LightBlockID); got != 15 {
+		t.Fatalf("Emission(发光方块) = %d，想要 15", got)
+	}
+	for id := core.TorchStandingID; id <= core.TorchWallNegZID; id++ {
+		if got := registry.Emission(id); got != 14 {
+			t.Fatalf("Emission(火把形态 %d) = %d，想要 14", id, got)
+		}
+	}
+	for id := core.WaterSourceID; id <= core.WaterLevel7ID; id++ {
+		if got := registry.LightAttenuation(id); got != 1 {
+			t.Fatalf("LightAttenuation(流体 %d) = %d，想要 1", id, got)
+		}
+	}
+}
+
+// TestTorchFormsAreNotOpaque 锁定火把方块的注册表属性：五种形态全部非不透明
+// （与玻璃、树叶、作物同属透明类），否则会遮挡邻面、阻断光照。
+func TestTorchFormsAreNotOpaque(t *testing.T) {
+	registry := assets.NewRegistry()
+	for id := core.TorchStandingID; id <= core.TorchWallNegZID; id++ {
+		if registry.Opaque(id) {
+			t.Fatalf("火把形态 %d 是不透明方块：火把必须与玻璃、作物同类", id)
+		}
+	}
+}
+
+// TestTorchEmissionEntersMeshSnapshot 锁定「火把与发光方块的 emission 经同一
+// 张表进入 mesh registry 快照」：快照是发光值送过 ABI 边界的唯一通道，五种
+// 形态都必须以 14 冻结在快照里。
+func TestTorchEmissionEntersMeshSnapshot(t *testing.T) {
+	registry := assets.NewRegistry()
+	snapshot := registry.MeshSnapshot()
+	if got, want := len(snapshot.Blocks), int(core.BlockIDMax); got != want {
+		t.Fatalf("snapshot block 数 = %d，想要覆盖全部已注册方块的 %d", got, want)
+	}
+	for id := core.TorchStandingID; id <= core.TorchWallNegZID; id++ {
+		if got := snapshot.Blocks[int(id)].Emission; got != 14 {
+			t.Fatalf("snapshot 中火把形态 %d 的 Emission = %d，想要 14", id, got)
+		}
+	}
+	if got := snapshot.Blocks[int(core.LightBlockID)].Emission; got != 15 {
+		t.Fatalf("snapshot 中发光方块的 Emission = %d，想要 15", got)
+	}
+}
+
+// TestTorchFormsUseDedicatedCutoutLayer 锁定火把的原创程序化材质契约：
+// 五种形态六面共用同一层（Rust mesher 的 model dispatcher 只读 face 0 的
+// material，六面同层才不会在某一面串味）、层号冻结为 59（terrain.wgsl 的
+// torch_material 门控函数与 Rust 侧的 TORCH_MATERIAL 常量各自硬编码该值，
+// 本断言是 Go 侧的唯一机械钉子）、alpha 只取 0/255 的 cutout 语义、与既有
+// 全部层逐像素不同；默认材质包不覆盖该层——火把像素只来自程序化生成路径，
+// 不存在任何外部 PNG 依赖。
+func TestTorchFormsUseDedicatedCutoutLayer(t *testing.T) {
+	registry := assets.NewRegistry()
+	if got := assets.LayerTorch; got != 59 {
+		t.Fatalf("LayerTorch=%d，想要冻结值 59（Rust 着色器门控与常量都硬编码该层号）", got)
+	}
+	if mesh.PlantMaterial(assets.LayerTorch) {
+		t.Fatalf("火把材质层 %d 落进植物区间：会被渲染成交叉斜面而非模型几何", assets.LayerTorch)
+	}
+	for id := core.TorchStandingID; id <= core.TorchWallNegZID; id++ {
+		for face := mesh.Face(0); face < 6; face++ {
+			if got := registry.Material(id, face); got != assets.LayerTorch {
+				t.Fatalf("火把形态 %d 的 face %d 材质层=%d，想要共用 LayerTorch(%d)",
+					id, face, got, assets.LayerTorch)
+			}
+		}
+	}
+	// 反向守卫：非火把方块的任何面都不得落到火把层。
+	for id := core.AirID; id < core.BlockIDMax; id++ {
+		if core.IsTorch(id) {
+			continue
+		}
+		for face := mesh.Face(0); face < 6; face++ {
+			if got := registry.Material(id, face); got == assets.LayerTorch {
+				t.Fatalf("非火把方块 %d 的 face %d 落到了火把材质层", id, face)
+			}
+		}
+	}
+
+	px := registry.LayerRGBA(int(assets.LayerTorch))
+	if len(px) != 16*16*4 {
+		t.Fatalf("火把材质长度=%d，想要 %d", len(px), 16*16*4)
+	}
+	opaque, transparent := 0, 0
+	for i := 3; i < len(px); i += 4 {
+		switch px[i] {
+		case 0:
+			transparent++
+		case 255:
+			opaque++
+		default:
+			t.Fatalf("火把层像素 %d 的 alpha=%d，cutout 只允许 0/255", i/4, px[i])
+		}
+	}
+	if opaque == 0 || transparent == 0 {
+		t.Fatalf("火把层不同时包含透明(%d)与不透明(%d)像素", transparent, opaque)
+	}
+	for layer := 0; layer < registry.LayerCount(); layer++ {
+		if uint16(layer) == assets.LayerTorch {
+			continue
+		}
+		if string(px) == string(registry.LayerRGBA(layer)) {
+			t.Fatalf("火把层与既有第 %d 层逐像素相同", layer)
+		}
+	}
+	// 无外部 PNG：内嵌默认材质包没有火把贴图可覆盖，程序化像素原样存活；
+	// 一旦有人往 packs 里塞 torch.png，这里会先于 golden 变红。
+	if got := assets.NewDefaultRegistry().LayerRGBA(int(assets.LayerTorch)); string(got) != string(px) {
+		t.Fatal("默认材质包覆盖了火把层：火把纹理必须只来自程序化生成路径")
+	}
+}
+
+// TestTorchTextureIsNarrowHandleWithWarmFlame 锁定火把图层的像素结构：窄木柄
+// （中列棕柄自底向上）+ 顶部暖色火芯（外橙内黄），其余透明。火芯刻意画在
+// 第 2 行及以下：墙面形态的斜板顶缘只抬到 14/16，纹理前两行被几何裁掉，
+// 火芯再往上画墙面火把就只剩木柄。
+func TestTorchTextureIsNarrowHandleWithWarmFlame(t *testing.T) {
+	px := assets.NewRegistry().LayerRGBA(int(assets.LayerTorch))
+	if len(px) != 16*16*4 {
+		t.Fatalf("火把材质长度=%d，想要 %d", len(px), 16*16*4)
+	}
+	opaqueColumns := map[int]bool{}
+	opaque := 0
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			if alphaAt(px, x, y) == 0 {
+				continue
+			}
+			opaque++
+			opaqueColumns[x] = true
+		}
+	}
+	for x := range opaqueColumns {
+		if x < 6 || x > 9 {
+			t.Fatalf("第 %d 列出现不透明像素：火把必须是窄柄（仅中间 4 列）", x)
+		}
+	}
+	if opaque < 20 || opaque > 64 {
+		t.Fatalf("不透明像素=%d，窄柄火把应在 20..64 之间", opaque)
+	}
+	// 木柄行（第 7 行及以下）只有中间两列。
+	for y := 7; y < 16; y++ {
+		for _, x := range [...]int{5, 6, 9, 10} {
+			if alphaAt(px, x, y) != 0 {
+				t.Fatalf("木柄行 %d 的第 %d 列不透明：柄身必须只有中间两列", y, x)
+			}
+		}
+	}
+	flame := pixel(px, 7, 4)
+	if flame[0] < 230 || int(flame[0])-int(flame[2]) < 120 {
+		t.Fatalf("火芯核心颜色=%v，想要亮暖色（R>=230 且 R-B>=120）", flame)
+	}
+	edge := pixel(px, 6, 3)
+	if edge[0] < 210 || int(edge[0])-int(edge[2]) < 150 {
+		t.Fatalf("火芯外圈颜色=%v，想要橙色（R>=210 且 R-B>=150）", edge)
+	}
+	wood := pixel(px, 7, 12)
+	if wood[0] < 90 || wood[0] > 150 || wood[2] > 80 || int(wood[0])-int(wood[2]) < 30 {
+		t.Fatalf("木柄颜色=%v，想要棕色（R 90..150、B<=80、R-B>=30）", wood)
+	}
+	for _, corner := range [][2]int{{0, 0}, {15, 0}, {0, 15}, {15, 15}, {4, 9}} {
+		if alphaAt(px, corner[0], corner[1]) != 0 {
+			t.Fatalf("角落 (%d,%d) 不透明：火把图层边缘必须透明", corner[0], corner[1])
+		}
+	}
+}
+
+// TestTorchFormsModelTags 锁定有限模型 tag 的生产登记：五种火把形态按方块
+// 编号顺序 71..75 → tag 1..5（1=落地、2..5=墙面 +X/−X/+Z/−Z），其余全部
+// 已注册方块与越界编号保持默认 0；tag 随 registry 快照冻结送过 ABI 边界。
+func TestTorchFormsModelTags(t *testing.T) {
+	registry := assets.NewRegistry()
+	// Registry 必须实现可选的 mesh.ModelReader：BuildRegistrySnapshot 靠类型
+	// 断言接入，未实现则所有方块静默回落 tag 0，火把永远不出模型几何。
+	var reader mesh.RegistryReader = registry
+	if _, ok := reader.(mesh.ModelReader); !ok {
+		t.Fatal("assets.Registry 未实现 mesh.ModelReader：火把模型 tag 无法进入快照")
+	}
+	for id := core.AirID; id < core.BlockIDMax; id++ {
+		want := uint8(0)
+		if core.IsTorch(id) {
+			want = uint8(id - core.TorchStandingID + 1)
+		}
+		if got := registry.Model(id); got != want {
+			t.Fatalf("Model(%d)=%d，想要 %d", id, got, want)
+		}
+	}
+	for _, id := range []world.BlockID{core.BlockIDMax, world.BlockID(65535)} {
+		if got := registry.Model(id); got != 0 {
+			t.Fatalf("越界编号 %d 的 Model=%d，想要 0", id, got)
+		}
+	}
+	snapshot := registry.MeshSnapshot()
+	for id := core.AirID; id < core.BlockIDMax; id++ {
+		want := uint8(0)
+		if core.IsTorch(id) {
+			want = uint8(id - core.TorchStandingID + 1)
+		}
+		if got := snapshot.Blocks[int(id)].Model; got != want {
+			t.Fatalf("快照中方块 %d 的 Model=%d，想要 %d", id, got, want)
+		}
+	}
+}
+
 // TestWorkbenchUsesDedicatedWoodenLayers 锁定 spec Requirement「工作台方块与
 // 打开生命周期」的呈现契约：顶/侧/底三面各用独立的原创程序化木质层，互不
 // 共用、也不与既有橡木木板层复用；工作台是不发光的普通不透明立方体，朝

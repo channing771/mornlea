@@ -490,6 +490,10 @@ func (engine *Engine) Step() TickResult {
 	// 被采掘的工作台在这里已经变空气，打开者随即回收降级（含同 tick 变空气）。
 	// 它只写玩家自身状态，不触碰区块。
 	engine.advanceWorkbenchLifecycle()
+	// 火把支撑失效复核：全部方块写者之后、finishChanges 之前对本 tick 已变
+	// 位置做一次有界六邻居复核，失去支撑的火把与原变化共享同一批 revision、
+	// 广播与存档（见 sweepUnsupportedTorches 的有界性论证）。
+	engine.sweepUnsupportedTorches(pending)
 	engine.finishChanges(pending, &result)
 	sortChunkKeys(result.Ready)
 

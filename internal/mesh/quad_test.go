@@ -23,7 +23,7 @@ func TestQuadPackRoundTrip(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	for i := 0; i < 100000; i++ {
 		mat := uint16(rng.Intn(65536))
-		// 植物 material 只允许出现在 face 6/7 上（quad.go 的双向约束），随机的
+		// 植物 material 只允许出现在 face 6/7 上（quad.go 的单向约束），随机的
 		// 轴向面必须避开那 8 个值，否则 Pack 会按约定拒绝。植物 quad 自身的往返
 		// 由 TestPlantQuadsSurviveTheUploadRoundTrip 覆盖。
 		if mesh.PlantMaterial(mat) {

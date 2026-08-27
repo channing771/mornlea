@@ -4,7 +4,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* ABI v7:mesh `MGM1` 输入的单条 registry 条目由 18 字节扩到 19 字节,末尾追加
+/* ABI v8:mesh `MGM1` 输入的单条 registry 条目由 19 字节扩到 20 字节,末尾追加
+ * `model`(有限模型 tag 的封闭集合:0=默认、1..=5=火把五形态[1=落地、2..=5=墙面
+ * +X/−X/+Z/−Z,与火把方块编号 63..66 同序]、6=床保留即拒绝、其余未知拒绝),由
+ * greedy 的 model dispatcher 消费:0 走既有几何,1..5 走 emit_torch 发射。条目上限
+ * 64→80 已在 v7 期内提前完成,不随本次升版重复记账。既有入口签名与语义不变。
+ * engine 与 Go 侧是同一不可跨版本混装的 release unit。
+ * ABI v7:mesh `MGM1` 输入的单条 registry 条目由 18 字节扩到 19 字节,末尾追加
  * `block_top_raw`(该方块的 4-bit 顶面高度原值:0 为「满格」哨兵,1..=14 表示
  * 全部可见面的上缘按 (h_raw+1)/16 下沉,15 非法;与 fluid_height 互斥)。承载
  * 耕地(干/湿填 14,呈现高度 15/16 与碰撞体一致)等非满格方块的常量角高度
@@ -22,7 +28,7 @@
  * release unit。
  * ABI v4:worldgen `MGW1` header 的材料表由 13 项扩到 14 项(末项 water,
  * 占用 v3 的 reserved 槽,header 总长仍为 564 字节)。 */
-#define MORNLEA_ENGINE_ABI_VERSION 7u
+#define MORNLEA_ENGINE_ABI_VERSION 8u
 
 #define MORNLEA_STATUS_OK 0u
 #define MORNLEA_STATUS_ABI_VERSION 1u

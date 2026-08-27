@@ -15,13 +15,13 @@ use crate::worldgen::{
     parse_chunk_input, parse_probe_input, run_probe,
 };
 
-/// engine ABI v7:v6(`mornlea_lod_shell` 远环壳出口)之上把 mesh `MGM1` 输入的
-/// 单条 registry 条目从 18 字节扩到 19 字节——末尾追加 `block_top_raw`(4-bit
-/// 顶面高度原值,0 为满格哨兵,与 fluid_height 互斥),承载耕地等非满格方块的
-/// 常量角高度几何。既有入口签名与语义不变;旧 dylib 与新二进制混装被版本
-/// 握手拒绝(二者本就是同一不可跨版本混装的 release unit)。v5 与 v4 已被
-/// mesh registry 扩容(fluid 系列)与 worldgen 注水占用。
-pub(crate) const ABI_VERSION: u32 = 7;
+/// engine ABI v8:v7(`block_top_raw` 短方块几何)之上把 mesh `MGM1` 输入的
+/// 单条 registry 条目从 19 字节扩到 20 字节——末尾追加 `model`(有限模型 tag
+/// 的封闭集合:0=默认、1..=5=火把五形态、6=床保留即拒绝、其余未知拒绝),
+/// 由 greedy 的 model dispatcher 消费。条目上限 64→80 已在 v7 期内提前完成,
+/// 不随本次升版重复记账。既有入口签名与语义不变;旧 dylib 与新二进制混装被
+/// 版本握手拒绝(二者本就是同一不可跨版本混装的 release unit)。
+pub(crate) const ABI_VERSION: u32 = 8;
 
 // 输入长度校验委托给 step::step_input_is_valid（内部使用 STEP_HEADER_BYTES），此常量保留供 ABI 文档对齐。
 #[allow(dead_code)]
@@ -947,16 +947,18 @@ mod mesh_tests {
     use super::*;
 
     #[test]
-    fn exported_version_is_seven() {
-        // engine ABI v7:v6(lod_shell 出口)之上把 mesh registry 条目从 18 字节
-        // 扩到 19 字节(末尾追加 block_top_raw,承载耕地等非满格方块的常量角
-        // 高度几何),详见 ABI_VERSION 的 doc comment。mesh registry 条目上限
-        // 不在 engine ABI 版本契约内:Go/Rust 两侧数值是否一致由容量同步测试
+    fn exported_version_is_eight() {
+        // engine ABI v8:v7(block_top_raw 短方块几何)之上把 mesh `MGM1` 输入的
+        // 单条 registry 条目从 19 字节扩到 20 字节——末尾追加 `model`(有限模型
+        // tag:0=默认、1..=5=火把五形态、6=床保留即拒绝、其余未知拒绝),详见
+        // ABI_VERSION 的 doc comment。mesh registry 条目上限不在 engine ABI
+        // 版本契约内:Go/Rust 两侧数值是否一致由容量同步测试
         // TestNativeAcceptsRegistryAtGoCapacity 守护,跨版本混装由 release unit
-        // 纪律兜底,上限变化不需要跟着升版本号。历史记录(仅记账,不代表升级
-        // 触发条件):v5 时 27 → 35(流体进入 registry 快照)且条目 16 → 18 字节,
-        // 后续变更 35 → 48、18 → 19 字节(v7)。
-        assert_eq!(mornlea_engine_abi_version(), 7);
+        // 纪律兜底。历史记录(仅记账,不代表升级触发条件):v5 时 27 → 35(流体
+        // 进入 registry 快照)且条目 16 → 18 字节,后续变更 35 → 48、18 → 19
+        // 字节(v7)、19 → 20 字节(v8);条目上限 64 → 80 已在 v7 期内提前完成,
+        // 不属 v8 记账。
+        assert_eq!(mornlea_engine_abi_version(), 8);
     }
 }
 #[cfg(test)]

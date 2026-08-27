@@ -133,23 +133,25 @@ func PlayerBounds(position mgl32.Vec3) core.AABB {
 }
 
 // BlockCollisionBoxes 返回当前方块的局部碰撞体。
-// 流体（core.IsFluid）、作物（core.IsCrop）与空气同形状——已加载但零碰撞体：
-// spec Requirement「流体方块编码」要求流体 MUST NOT 提供碰撞体，Requirement
-// 「作物不提供碰撞体，耕地略低于满方块」对作物提出同一要求，实体必须能自由穿行。
-// 耕地（core.IsFarmland）是全仓唯一的非满立方体碰撞：单盒，顶面压到
+// 流体（core.IsFluid）、作物（core.IsCrop）、火把（core.IsTorch 五形态）与空气
+// 同形状——已加载但零碰撞体：spec Requirement「流体方块编码」要求流体 MUST NOT
+// 提供碰撞体，Requirement「作物不提供碰撞体，耕地略低于满方块」对作物提出同一
+// 要求，可放置火把的需求同样写死五形态零碰撞，实体必须能自由穿行。零碰撞不
+// 豁免瞄准：火把仍是交互射线的合法命中目标，那由射线的目标谓词决定，与碰撞表
+// 无关。耕地（core.IsFarmland）是全仓唯一的非满立方体碰撞：单盒，顶面压到
 // farmlandCollisionHeight。
 //
 // 门是第二类非满碰撞：关闭时厚 3/16 贴方向边，开启时旋转 90° 薄边；上半无方向，
 // 按空气处理（下半已阻挡时上半无需再阻挡，也避免双格厚度叠加）。
 //
-// 三条分支的形状差异全部由 prism 的逐格 AABB 数组承载（每格 box count + 每 box
+// 各分支的形状差异全部由 prism 的逐格 AABB 数组承载（每格 box count + 每 box
 // 24 字节），Rust 侧按 count 循环读任意包围盒，因此新增非满方块形状不触及 FFI
 // 编码，也不升 engine ABI。
 func BlockCollisionBoxes(id core.BlockID, loaded bool) CollisionBoxSet {
 	if !loaded {
 		return CollisionBoxSet{}
 	}
-	if id == core.AirID || core.IsFluid(id) || core.IsCrop(id) {
+	if id == core.AirID || core.IsFluid(id) || core.IsCrop(id) || core.IsTorch(id) {
 		return CollisionBoxSet{Loaded: true}
 	}
 	// 门碰撞：关闭贴边、开启旋转 90°，厚度 3/16

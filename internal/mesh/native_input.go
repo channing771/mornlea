@@ -13,13 +13,13 @@ const (
 	nativeHeightColumns        = 3 * 3
 	// nativeRegistryEntryBytes 与 Rust 的 REGISTRY_ENTRY_BYTES 逐字节对应：
 	// id(u16) + opaque(u8) + emission(u8) + material[6](u16) + fluidHeight(u8)
-	// + lightAttenuation(u8) + blockTopRaw(u8) = 19。两侧各自硬编码，改动即
-	// 构成一次 engine ABI 变更：16→18 的扩容发生在 v5，追加 blockTopRaw 的
-	// 本次扩容升到 v7（v6 被 lod_shell 出口占用）。
-	nativeRegistryEntryBytes = 2 + 1 + 1 + 6*2 + 1 + 1 + 1
+	// + lightAttenuation(u8) + blockTopRaw(u8) + model(u8) = 20。两侧各自硬编码，
+	// 改动即构成一次 engine ABI 变更：16→18 的扩容发生在 v5，追加 blockTopRaw
+	// 的扩容升到 v7（v6 被 lod_shell 出口占用），追加 model 的扩容升到 v8。
+	nativeRegistryEntryBytes = 2 + 1 + 1 + 6*2 + 1 + 1 + 1 + 1
 	// nativeMaxRegistryEntries 必须与 Rust 端硬编码的
 	// engine/crates/mornlea_engine/src/input.rs 的 MAX_REGISTRY_ENTRIES
-	// (=64) 保持一致——两侧各自独立定义，没有共享常量或生成步骤，全靠人
+	// (=80) 保持一致——两侧各自独立定义，没有共享常量或生成步骤，全靠人
 	// 手动同步。条目上限不在 engine ABI 版本契约内，改动上限不需要跟着升
 	// ABI 版本号；Go/Rust 两侧数值是否一致，由容量同步测试
 	// TestNativeAcceptsRegistryAtGoCapacity 真的喂满一次跨语言调用来守护，
@@ -27,19 +27,20 @@ const (
 	//
 	// 这里是**上限**而不是当前条目数：internal/assets.NewRegistry() 把
 	// core.AirID..core.BlockIDMax-1 的全部已注册方块烘焙进 mesh snapshot
-	// （见 internal/assets/blocks.go），今天是 61 条。本常量此前写成
-	// `int(core.WaterLevel7ID)+1`，即"恰好等于当前条目数"，于是追加方块编号
-	// 时 Go 侧会自己长大而 Rust 侧不会，两侧静默分叉。改成显式上限后，
-	// 「条目数不得超过上限」由 TestRegistryCapacityCoversEveryRegisteredBlock
+	// （见 internal/assets/blocks.go），今天是 76 条（门 9 个与火把五形态
+	// 合入后）。
+	// 本常量此前写成 `int(core.WaterLevel7ID)+1`，即"恰好等于当前条目数"，
+	// 于是追加方块编号时 Go 侧会自己长大而 Rust 侧不会，两侧静默分叉。改成
+	// 显式上限后，「条目数不得超过上限」由 TestRegistryCapacityCoversEveryRegisteredBlock
 	// 的位置性断言守住，「Rust 上限不小于本上限」由
 	// TestNativeAcceptsRegistryAtGoCapacity 真的喂满一次跨语言调用守住。
-	// 留到 64 而不是 61，是给后续花草树苗预留，避免连续变更都动同一处上限。
-	// 两侧一旦不同步，Go 端喂进的条目数会被 Rust 侧
+	// 留到 80 而不是紧贴 76，是给后续批次（床的多形态等）预留，避免连续变更
+	// 都动同一处上限。两侧一旦不同步，Go 端喂进的条目数会被 Rust 侧
 	// registry_count > MAX_REGISTRY_ENTRIES 校验直接拒绝整次 mesh 调用。
 	// 顺带一提：input.rs 的 BLOCKS_BYTES = 27*4096*2 里也有一个 27，但那
 	// 是 3×3×3 邻域区段数，跟这里的 registry 条目数上限只是数字撞了，两者
 	// 无关，改一个不需要牵动另一个。
-	nativeMaxRegistryEntries = 71
+	nativeMaxRegistryEntries = 80
 	nativeMaxRegistryWords   = (nativeMaxRegistryEntries + 63) / 64
 	nativeLightVolume        = 48 * 48 * 48
 	nativeScratchPadding     = (4 - nativeLightVolume%4) % 4
@@ -90,6 +91,11 @@ func encodeNativeInput(dst []byte, n *world.Neighborhood, snapshot RegistrySnaps
 		// 不是天空光值域；详见 registry.go 同名校验与 build_sky 的注释。
 		if block.LightAttenuation > 1 {
 			return 0, fmt.Errorf("mesh: 方块光衰减超过 1")
+		}
+		// model tag 的封闭集合：0=默认、1..5=火把五形态；6（床，保留）与未知值
+		// 在此拒绝，Rust 侧 `RegistryView::validate` 同口径，这里提前给出可读错误。
+		if block.Model > 5 {
+			return 0, fmt.Errorf("mesh: 方块 model tag=%d 超出封闭集合 0..5", block.Model)
 		}
 		air = air || block.ID == core.AirID
 		barrier = barrier || block.ID == core.BarrierID
@@ -178,7 +184,10 @@ func encodeNativeInput(dst []byte, n *world.Neighborhood, snapshot RegistrySnaps
 		dst[offset] = block.FluidHeight
 		dst[offset+1] = block.LightAttenuation
 		dst[offset+2] = block.BlockTopRaw
-		offset += 3
+		// model 追加在条目末尾（offset 19），与 Rust 的 REGISTRY_ENTRY_BYTES
+		// 布局注释逐字节对应。
+		dst[offset+3] = block.Model
+		offset += 4
 	}
 	for _, word := range snapshot.Visibility {
 		binary.LittleEndian.PutUint64(dst[offset:offset+8], word)

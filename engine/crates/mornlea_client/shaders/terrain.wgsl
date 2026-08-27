@@ -62,6 +62,18 @@ fn farmland_material(mat: u32) -> bool {
     return mat >= 29u && mat <= 30u;
 }
 
+// 火把材质层（五种形态共用一张竖直火柄纹理）。墙面火把的倾斜薄板携带角高度
+// （支撑侧 9/16、远离侧 14/16，贴面帽四角全 0），与耕地共用同一条角高度解码
+// 路径——判别同样走 material：火把薄板是轴向面（face 0..5），与植物（face 6/7）
+// 按 face 天然互斥，material 是唯一不冲突的判别通道。数值真值源是 Go
+// internal/assets 的 `LayerTorch`（层枚举末位追加，iota 当前 59，门层 55 与
+// 工作台三层 56..58 之后），Rust 侧复述
+// 见 src/render/shaders.rs 的 `TORCH_MATERIAL`，由 render/farmland_tests.rs 的
+// 源码扫描钉在一起——在这里改数字必须同步另外两处。
+fn torch_material(mat: u32) -> bool {
+    return mat == 59u;
+}
+
 // corner_height 取出第 vi 个顶点的 4-bit 角高度原值，与 water.wgsl 逐字同源
 // （WGSL 没有 include，两个 pass 各持一份；改位布局必须两边一起改）。位布局与
 // engine 的 quad.rs（SHIFT_W / SHIFT_H / SHIFT_CORNER2 / SHIFT_CORNER3）逐位对应：
@@ -122,12 +134,14 @@ fn vs_main(
     // 不同，耕地四角取同一常量、没有斜面，直接查位即可。
     //
     // `w`/`h` 因此只在普通轴向面的分支里解码：三条路径互斥，由 face ∈ {6,7} 与
-    // 耕地 material 区间保证。两条保证的强度不同，如实记录：植物 material 只
+    // 耕地/火把 material 集合保证。两条保证的强度不同，如实记录：植物 material 只
     // 出现在 face 6/7 上是 mesher 打包期显式断言（两侧同口径当场拒绝）；而
     // 「短方块的 material 都落在耕地区间内」不是打包期查得出来的——它是 Go
     // registry 数据的传递性事实（当前只有耕地条目 block_top_raw 非零），区间外
     // 的未来短方块会**静默**走 w/h 路径、顶面不下沉。这是 D2a 选定 material
-    // 判别时已接受的边界：新增短方块必须同步扩宽本区间并更新三处钉子。
+    // 判别时已接受的边界：新增短方块必须同步扩宽本区间并更新三处钉子。火把
+    // 倾斜薄板（角高度承载「向远离支撑方向倾斜」）是同一判别通道的第二个
+    // 消费者，走 `torch_material` 同一条角高度路径。
     //
     // 两条对角线（`cu[vi]` 是水平参数 s，`cv[vi]` 是竖直参数 t）：
     //
@@ -144,7 +158,7 @@ fn vs_main(
             px = x + 1.0 - s;
         }
         local = vec3f(px, y + cv[vi], z + s);
-    } else if (farmland_material(mat)) {
+    } else if (farmland_material(mat) || torch_material(mat)) {
         local = vec3f(x, y, z)
             + axis_vec(axis) * positive
             + axis_vec(ua) * cu[vi]

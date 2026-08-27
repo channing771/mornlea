@@ -193,6 +193,61 @@ func prepareBlockLightRoom(app *application) error {
 	return applyCaptureBlockLightRoomChanges(app)
 }
 
+// prepareTorchNightRoom 装入火把夜景夹具：一间全封闭的长石室（地板 y=0、
+// 天花板 y=6、四壁合围，纵深 z=-16..2），室内空气从 y=1..5、x=-5..5、
+// z=-15..1。封闭是硬要求：场景在夜晚（18000 tick）抓帧，天空光贡献近乎
+// 为零，室内亮度完全由火把的方块光决定；墙体一旦留洞，室外的夜空会混进
+// 画面，光衰减梯度就不再只由火把解释。纵深刻意拉长：相机在房间一端平视
+// 另一端，远角与近处火把的距离差足够大，近亮远暗在画面里是一段可测的
+// 梯度而不是两个相邻色块。夹具经客户端只读镜像装入，不依赖任何服务端
+// 模拟推进。
+func prepareTorchNightRoom(app *application) error {
+	if err := prepareCaptureAirNeighborhood(app); err != nil {
+		return err
+	}
+	return applyCaptureTorchNightChanges(app)
+}
+
+// applyCaptureTorchNightChanges 写入石室外壳与三朵火把：落地一朵在相机近处
+// 右侧，左右墙各一朵墙面形态。形态与支撑格的关系按放置规则的冻结方向表
+// （墙面形态名 = 命中面名，支撑位于火把的反方向一格），三朵的支撑全是实心
+// 石块，夹具因此与真实放置结果一致、不是悬空摆拍。墙面形态选 ±X 两种：
+// 这两种形态的可见斜板朝 ±Z，正对纵深方向平视的相机恰好各看到一片完整
+// 的火柄斜影。
+func applyCaptureTorchNightChanges(app *application) error {
+	blocks := make(map[core.ChunkPos]map[core.BlockPos]core.BlockID)
+	setBlock := func(position core.BlockPos, block core.BlockID) {
+		chunk := position.Chunk()
+		if blocks[chunk] == nil {
+			blocks[chunk] = make(map[core.BlockPos]core.BlockID)
+		}
+		blocks[chunk][position] = block
+	}
+	for z := int32(-16); z <= 2; z++ {
+		for x := int32(-6); x <= 6; x++ {
+			setBlock(core.BlockPos{X: x, Y: 0, Z: z}, core.StoneID)
+			setBlock(core.BlockPos{X: x, Y: 6, Z: z}, core.StoneID)
+		}
+		for y := int32(1); y <= 5; y++ {
+			setBlock(core.BlockPos{X: -6, Y: y, Z: z}, core.StoneID)
+			setBlock(core.BlockPos{X: 6, Y: y, Z: z}, core.StoneID)
+		}
+	}
+	for y := int32(1); y <= 5; y++ {
+		for x := int32(-6); x <= 6; x++ {
+			setBlock(core.BlockPos{X: x, Y: y, Z: -16}, core.StoneID)
+			setBlock(core.BlockPos{X: x, Y: y, Z: 2}, core.StoneID)
+		}
+	}
+	// 落地一朵（支撑是正下方地板）＋左右墙各一朵：左墙 +X 形态（支撑在
+	// 火把 −X 侧）、右墙 −X 形态（支撑在 +X 侧）。相机在 (0.5,2.8,0.5)
+	// 朝 -Z 平视，三个形态全部在画面内。
+	setBlock(core.BlockPos{X: 2, Y: 1, Z: -3}, core.TorchStandingID)
+	setBlock(core.BlockPos{X: -5, Y: 2, Z: -5}, core.TorchWallPosXID)
+	setBlock(core.BlockPos{X: 5, Y: 2, Z: -6}, core.TorchWallNegXID)
+	return applyCaptureBlocks(app, blocks, captureWaterBasinChunkRadius, "火把夜景")
+}
+
 func applyCaptureBlockLightRoomChanges(app *application) error {
 	blocks := make(map[core.ChunkPos]map[core.BlockPos]core.BlockID)
 	setBlock := func(position core.BlockPos, block core.BlockID) {

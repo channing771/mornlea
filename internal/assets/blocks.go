@@ -88,6 +88,12 @@ const (
 	LayerWorkbenchTop
 	LayerWorkbenchSide
 	LayerWorkbenchBottom
+	// LayerTorch 是五种火把形态共用的一张竖直火柄 cutout 材质层（窄木柄 +
+	// 暖色火芯）。层号冻结为 59：Rust client 的 terrain.wgsl 火把材质门控
+	// （torch_material 函数）与 shaders.rs 的 TORCH_MATERIAL 常量各自硬编码
+	// 该值，三处没有共享定义也没有生成步骤，改层号必须同批同步。仍按
+	// LayerWheat0 处注释的纪律追加在枚举末位，不扰动植物区间。
+	LayerTorch
 	layerCount
 )
 
@@ -156,6 +162,9 @@ var textureBindings = [...]textureBinding{
 	{name: "workbench_top", layer: LayerWorkbenchTop},
 	{name: "workbench_side", layer: LayerWorkbenchSide},
 	{name: "workbench_bottom", layer: LayerWorkbenchBottom},
+	// 火把层的绑定只是材质包覆盖的命名槽位：仓库自身不携带任何 torch.png，
+	// 内嵌默认包与用户包未提供该文件时程序化像素原样生效。
+	{name: "torch", layer: LayerTorch},
 }
 
 // Registry 是方块属性与材质的注册表。
@@ -211,13 +220,15 @@ func NewRegistry() *Registry {
 	r.layers[LayerWorkbenchTop] = workbenchTopTexture()
 	r.layers[LayerWorkbenchSide] = workbenchSideTexture()
 	r.layers[LayerWorkbenchBottom] = workbenchBottomTexture()
+	r.layers[LayerTorch] = torchTexture()
 	// ids 覆盖 core 的全部已注册方块编号，上界一律用独占哨兵 core.BlockIDMax
 	// 表达——写死某个具体末位编号（历史上写过 WaterLevel7ID）会在追加新编号时
 	// 静默退化成子集，新方块就永远进不了快照。Rust 侧的
 	// RegistryView::face_visible 只做位图查表、缺条目一律判不可见，漏掉谁就等于
 	// 谁永远不出面（流体当年正是这样差点画不出水）。
 	// 条目数必须不超过 internal/mesh.nativeMaxRegistryEntries 与 Rust 的
-	// MAX_REGISTRY_ENTRIES（今天是 71 <= 71，新增 Door 9 ID 后 71 条）。
+	// MAX_REGISTRY_ENTRIES（当前已注册 76 个方块，上限 80；上限扩容必须
+	// Go/Rust 两侧同批同步）。
 	ids := make([]world.BlockID, 0, int(core.BlockIDMax))
 	for id := core.AirID; id < core.BlockIDMax; id++ {
 		ids = append(ids, id)
@@ -243,9 +254,12 @@ func NewRegistry() *Registry {
 // 内部的两片交叉斜面，既不填满格子也不该挡光。这一条直接决定了「作物下方的耕地
 // 仍被照亮」——Rust 天空光 BFS 的阻断判据就是本函数（light.rs 的 build_sky 只看
 // opaque），作物一旦不透明，它下方那格的派生天空光会归零、耕地顶面变全黑。
+// 火把（core.IsTorch）与作物同类排除：零碰撞的窄柱/贴墙形态既不填满格子也不
+// 遮挡邻面，且自身是发光体，被判成不透明会同时挡死邻域光照与出面。
 func (r *Registry) Opaque(id world.BlockID) bool {
 	return core.RegisteredBlock(id) && id != core.AirID && id != core.GlassID &&
-		id != core.LeavesID && !core.IsFluid(id) && !core.IsCrop(id) && !core.IsDoor(id)
+		id != core.LeavesID && !core.IsFluid(id) && !core.IsCrop(id) && !core.IsDoor(id) &&
+		!core.IsTorch(id)
 }
 
 // FaceVisible 返回当前方块朝向相邻方块的面是否可绘制。实现 mesh.Registry。
@@ -401,16 +415,23 @@ func (r *Registry) Material(id world.BlockID, f mesh.Face) uint16 {
 		if core.IsCrop(id) {
 			return LayerWheat0 + uint16(core.CropStage(id))
 		}
+		// 五种火把形态共用同一张竖直火柄 cutout 层：Rust 的 model dispatcher
+		// 只读 face 0 的 material，几何（交叉斜面/贴面斜板）由 model tag 决定，
+		// 材质六面同层不会串味。
+		if core.IsTorch(id) {
+			return LayerTorch
+		}
 		return LayerStone
 	}
 }
 
 // Emission 返回方块固定发出的方块光等级。实现 mesh.Registry。
+//
+// 发光判定完全转调 core.BlockEmission——那是全仓唯一的光源表（发光方块 15、
+// 五种火把形态 14、其余 0），本包不得保留任何重复分支；新增发光方块只改
+// core 一张表，这里与 mesh registry 快照自动跟随。
 func (r *Registry) Emission(id world.BlockID) uint8 {
-	if id == core.LightBlockID {
-		return 15
-	}
-	return 0
+	return core.BlockEmission(id)
 }
 
 // fluidSourceHeightRaw 是源方块（level 0）的 4-bit 高度原值。
@@ -435,14 +456,12 @@ func (r *Registry) FluidHeight(id world.BlockID) uint8 {
 
 // LightAttenuation 返回天空光穿过该方块时的额外衰减。实现 mesh.Registry。
 //
-// 流体额外衰减 1、其余方块 0。值经 registry 快照送过 ABI 边界，由 Rust 的天空光
-// BFS 逐步查表扣减——竖直向下穿过流体因此不再无损。方块光模型不消费本值：水与
-// 玻璃一样直接阻断。
+// 衰减判定完全转调 core.BlockLightAttenuation——与发光表同为 core 的单一事实
+// 源（八个流体编号 1、其余 0），本包不得保留任何重复分支。值经 registry 快照
+// 送过 ABI 边界，由 Rust 的天空光 BFS 逐步查表扣减——竖直向下穿过流体因此
+// 不再无损。方块光模型不消费本值：水与玻璃一样直接阻断。
 func (r *Registry) LightAttenuation(id world.BlockID) uint8 {
-	if core.IsFluid(id) {
-		return 1
-	}
-	return 0
+	return core.BlockLightAttenuation(id)
 }
 
 // farmlandTopRaw 是干/湿耕地共用的 4-bit 顶面高度原值。
@@ -470,13 +489,27 @@ func (r *Registry) BlockTopRaw(id world.BlockID) uint8 {
 // MeshSnapshot 返回构造时冻结的网格 registry 快照。
 func (r *Registry) MeshSnapshot() mesh.RegistrySnapshot { return r.meshSnapshot }
 
+// Model 返回方块的有限模型 tag，实现 mesh.ModelReader（可选扩展接口）。
+//
+// 封闭集合：0=默认（无模型覆写，满格/短方块/流体/植物继续走既有判定）、
+// 1=火把落地、2..5=火把墙面 +X/−X/+Z/−Z——与火把方块编号 71..75 严格同序，
+// 因此映射就是「编号相对首形态的偏移 +1」。其余全部方块（含未注册与越界
+// 编号）恒 0；tag 经 BuildRegistrySnapshot 冻结进快照，由 Rust greedy 的
+// model dispatcher 消费（6=床与未知值在快照与 Rust 两侧都被拒绝）。
+func (r *Registry) Model(id world.BlockID) uint8 {
+	if !core.IsTorch(id) {
+		return 0
+	}
+	return uint8(id - core.TorchStandingID + 1)
+}
+
 // isCutoutLayer 报告某个材质层是否走 alpha cutout（二值 alpha + 保覆盖率降采样）。
 //
 // 判据必须与 terrain.wgsl 里 `c.a < 0.5` 那条 discard 覆盖的层集合一致：这些层的
 // mip 链要用 downsampleCutout 保住覆盖率，否则远处的细结构会整片消失。
 func isCutoutLayer(layer int) bool {
 	return layer == int(LayerLeaves) || layer == int(LayerGlass) ||
-		(layer >= int(LayerWheat0) && layer <= int(LayerCarrot7))
+		(layer >= int(LayerWheat0) && layer <= int(LayerCarrot7)) || layer == int(LayerTorch)
 }
 
 func (r *Registry) LayerCount() int { return int(layerCount) }

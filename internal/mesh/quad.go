@@ -18,7 +18,8 @@ const (
 	FacePosY
 	FaceNegZ
 	FacePosZ
-	// FacePlantDiagA / FacePlantDiagB 是植物的两条交叉斜面。
+	// FacePlantDiagA / FacePlantDiagB 是格内居中交叉斜面的两条对角线，植物与
+	// 落地火把共用这一编组。
 	//
 	// 为什么落在 face 字段而不是新开一位：quad 实例 MUST 保持 8 字节，而 bit 63
 	// 是布局里仅存的空闲位、必须留空（角高度已经吃掉 55..62）。face 是 3 位
@@ -56,9 +57,10 @@ func (f Face) Positive() bool { return f&1 == 1 }
 //     它据此决定哪些格跳过轴向面、改出 4 条交叉斜面；跨语言一致性由真的喂一次
 //     Rust mesher 的 TestNativeOracleParityWheatCrossPlanes 兜底；
 //   - 着色器：terrain.wgsl 与 cull.wgsl **不**复制这段数值，改按 `face >= 6`
-//     判别。二者等价——本文件的 Pack 与 UnpackQuad **双向**强制
-//     `face ∈ {6,7} ⟺ material ∈ 植物区间`（两个方向各有一条 panic），
-//     而少一份跨语言常量就少一处会静默分叉的地方。
+//     判别。二者等价——本文件的 Pack 与 UnpackQuad **单向**强制「植物区间的
+//     material 只允许出现在 face 6/7 上」；反方向不设限（face 6/7 可携带非
+//     植物 material，落地火把的交叉斜面共用该编组）。少一份跨语言常量就
+//     少一处会静默分叉的地方。
 const (
 	PlantMaterialFirst uint16 = 31
 	PlantMaterialLast  uint16 = 54
@@ -110,8 +112,9 @@ const (
 	// bit 63 仍然留空，**quad 实例保持 8 字节**。
 	shiftCorner2 = 55
 	shiftCorner3 = 59
-	// 植物 quad 的正/背面标志位：同样借走恒为 1 的 W/H 那 8 bit，只用最低一位。
-	// bit 13..19 是保留位、MUST 为 0——留着给后续植物形态（例如高作物的上下半格）
+	// 交叉斜面 quad（植物与落地火把）的正/背面标志位：同样借走恒为 1 的
+	// W/H 那 8 bit，只用最低一位。
+	// bit 13..19 是保留位、MUST 为 0——留着给后续形态（例如高作物的上下半格）
 	// 用，现在任何非零值都是编码错误，打包与解包两侧都当场拒绝。
 	shiftPlantBack = shiftW
 	// plantReservedMask 覆盖 bit 13..19，即 W/H 那 8 bit 里除正背标志之外的部分。
@@ -133,11 +136,11 @@ func (q Quad) Pack() uint64 {
 		if q.Corners != [4]uint8{} {
 			panic("mesh: 植物 quad 不得带角高度")
 		}
-		// face 6/7 只允许出现在植物 material 上：着色器与 cull 都据此把顶点摆到
-		// 对角面，落在别的 material 上等于把普通方块画成一片穿模的斜板。
-		if !PlantMaterial(q.Mat) {
-			panic("mesh: face 6/7 只允许出现在植物 material 上")
-		}
+		// face 6/7 是「格内居中交叉斜面」的通用编组，不是植物专属：落地火把等
+		// cutout 几何同样借它表达（材质区间的火把层在植物区间外）。约束因此只
+		// 保持**单向**——植物区间的 material 只允许出现在 face 6/7 上（见
+		// default 分支），反方向（face 6/7 携带非植物 material）不设限，与
+		// engine quad.rs 的 pack 断言同口径。
 		low = 0
 		if q.Back {
 			low = 1 << shiftPlantBack
@@ -158,9 +161,11 @@ func (q Quad) Pack() uint64 {
 	default:
 		// 反方向的强制：植物 material 只允许出现在 face 6/7 上。缺了这一条，
 		// 一条贪心合并过的 5×4 小麦轴向石板能干净穿过信任边界，而着色器按
-		// `face >= 6` 判别、会把它当普通方块画成一整块石板——`face ∈ {6,7} ⟺
-		// material ∈ 植物区间` 这条双向等价正是着色器不必复制 material 区间的
-		// 前提，只强制一半等于没有前提。它同时把「植物 quad 被贪心合并」堵死。
+		// `face >= 6` 判别、会把它当普通方块画成一整块石板——「植物区间的
+		// material 必须出现在 face 6/7 上」这条单向前提正是着色器不必复制
+		// material 区间的原因，不强制它等于没有前提。它同时把「植物 quad 被
+		// 贪心合并」堵死。（正方向不设对称强制：face 6/7 携带非植物 material
+		// 自火把落地形态起是合法编码，见上面 FacePlantDiagA 的注释。）
 		if PlantMaterial(q.Mat) {
 			panic("mesh: 植物 material 只允许出现在 face 6/7 上")
 		}
@@ -184,11 +189,15 @@ func (q Quad) Pack() uint64 {
 //
 // 三条判别互斥、按顺序生效：
 //
-//  1. face ∈ {6,7} → 植物交叉斜面，W/H 那 8 bit 是正背标志加保留位。判别是
-//     **双向**的：植物 material 配轴向 face 与轴向 material 配 face 6/7 一样被拒；
-//  2. 角 2（bit 55..58）非零 → 带角高度的 quad（流体或短方块）。角 2 在任何面
-//     朝向下都是顶面顶点，而两类原值均非零——流体 h_raw 恒 >= 7、短方块的
-//     registry 常量在 1..=14——普通 quad 的这 4 bit 则恒为 0，不必额外花标志位；
+//  1. face ∈ {6,7} → 格内居中的交叉斜面（植物与落地火把共用这一编组），
+//     W/H 那 8 bit 是正背标志加保留位。material 约束是**单向**的：植物区间
+//     的 material 只允许出现在 face 6/7 上（反向不设限——火把层等区间外的
+//     cutout 材质同样走交叉斜面），与 engine quad.rs 的 pack 断言同口径；
+//  2. 角 2（bit 55..58）非零 → 带角高度的 quad（流体、短方块或墙面火把的
+//     倾斜薄板）。角 2 在任何面朝向下都是顶面顶点，而三类原值均非零——
+//     流体 h_raw 恒 >= 7、短方块的 registry 常量在 `1..=14`、火把薄板的
+//     远离支撑侧角在 `1..=14`——普通 quad 的这 4 bit 则恒为 0，不必额外
+//     花标志位；
 //  3. 其余 → 普通 quad，W/H 照常解为 w-1 / h-1。
 //
 // 本函数同时是 native 结果的信任边界：非法编码当场 panic，而不是静默产出一条
@@ -214,9 +223,6 @@ func UnpackQuad(v uint64) Quad {
 		panic("mesh: 植物 material 只允许出现在 face 6/7 上")
 	}
 	if q.Face.Plant() {
-		if !PlantMaterial(q.Mat) {
-			panic("mesh: face 6/7 只允许出现在植物 material 上")
-		}
 		if v&plantReservedMask != 0 {
 			panic("mesh: 植物 quad 的保留位 13..19 必须为 0")
 		}

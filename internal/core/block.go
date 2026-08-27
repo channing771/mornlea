@@ -111,7 +111,7 @@ const (
 	// DoorLowerSouthClosed..DoorLowerEastOpen 是木门下半的 8 个定向开合态
 	// （4 方向 × 2 开关），DoorUpper 是上半单一编号。
 	// 上半无方向，其朝向由下半决定；9 个编号紧随 CarrotStage7ID 追加，
-	// BlockIDMax 后移至 71，协议稳定且追加在哨兵之前。
+	// BlockIDMax 后移，协议稳定且追加在哨兵之前。
 	DoorLowerSouthClosed
 	DoorLowerSouthOpen
 	DoorLowerWestClosed
@@ -121,6 +121,19 @@ const (
 	DoorLowerEastClosed
 	DoorLowerEastOpen
 	DoorUpper
+	// 以下五个是火把方块编号（落地 + 四向墙面形态），只能追加在 DoorUpper
+	// 之后：方块 ID 是协议稳定值，重排会破坏既有存档与线上字节。TorchStandingID
+	// 是落地形态（支撑格在正下方）；TorchWallPosXID..TorchWallNegZID 是贴墙形态，
+	// 形态名与放置时的命中面同名（火把贴在支撑块的哪个侧面），72..75 按
+	// +X/−X/+Z/−Z 顺序冻结。墙面形态的支撑格位于火把的命中面反方向
+	// （face.Opposite()），由放置执行方消费；命中面 → 形态的唯一映射窗口是
+	// PlaceableBlockAtFace。火把按契约不提供碰撞体（physics 侧接线后恒为空）、
+	// 非不透明、非流体、发光 14，光照与瞄准属性见 block_properties.go。
+	TorchStandingID
+	TorchWallPosXID
+	TorchWallNegXID
+	TorchWallPosZID
+	TorchWallNegZID
 	// BlockIDMax 是合法方块编号的独占上界（最后一个合法 BlockID + 1），本身不是
 	// 方块枚举成员，与物品侧的 ItemIDMax 同形。它供哨兵与穷举测试以
 	// 「id < BlockIDMax」表达「全部已注册方块」，替代「某个具体编号恰为枚举末项」
