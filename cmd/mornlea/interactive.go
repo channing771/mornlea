@@ -18,18 +18,30 @@ import (
 // runInteractive 是交互客户端的入口循环，按主菜单相位路由：
 // menu != game（StartAtMenu 或未装配）时先跑菜单相位，装配成功（phase=game）后
 // 走既有游戏循环；否则（-connect/benchmark/capture 或直接构造的 application）
-// 直接进入游戏循环。菜单期「退出游戏」或窗口关闭返回 nil 正常退出。
+// 直接进入游戏循环。暂停页「退回主菜单」把相位送回菜单，外层循环据此在两条
+// 相位循环之间往返；「退出游戏」或窗口关闭返回 nil 正常退出。
 func runInteractive(app *application) error {
-	if app.menu.phase != menuPhaseGame {
-		if err := runMenuPhase(app); err != nil {
+	for !app.window.ShouldClose() {
+		if app.menu.phase != menuPhaseGame {
+			if err := runMenuPhase(app); err != nil {
+				return err
+			}
+			if app.menu.phase != menuPhaseGame {
+				// 菜单期退出（退出游戏或窗口关闭），未进入游戏相位。
+				return nil
+			}
+			continue
+		}
+		if err := runGamePhase(app); err != nil {
 			return err
 		}
-		if app.menu.phase != menuPhaseGame {
-			// 菜单期退出（退出游戏或窗口关闭），未进入游戏相位。
+		if app.menu.phase == menuPhaseGame {
+			// 游戏循环只随窗口关闭自然耗尽；相位未变即原有正常退出路径。
 			return nil
 		}
+		// 暂停页退回主菜单：会话已拆链，回到菜单相位继续装配循环。
 	}
-	return runGamePhase(app)
+	return nil
 }
 
 // runMenuPhase 运行主菜单相位：不捕获光标、不读取 WASD/面板/聊天/快捷栏输入，
@@ -160,8 +172,17 @@ func runGamePhase(app *application) error {
 			case app.panelVisible():
 				// 面板期间的 Esc 由 Rust egui 消费（编辑中取消编辑、非编辑
 				// 态关闭面板），Go 不释放光标；CLOSE 事件回传后由本侧复位。
+			case app.pauseVisible():
+				// 暂停覆盖层占据栈顶时 Esc 即返回游戏；与「返回游戏」按钮
+				// 动作共用防重入哨兵，双通路同帧到达只生效一次。Esc 关闭
+				// 由本侧键位栈裁决，Rust 不合成 Escape 动作。
+				app.closePauseOverlay()
+				lastMouseX, lastMouseY = app.window.CursorPos()
+				justCaptured = true
 			default:
-				app.window.SetCursorCaptured(false)
+				// 游戏相位的默认档：Esc 从「仅释放光标」升级为打开暂停层，
+				// 打开动作本身必须释放光标（spec egui-tool-ui）。
+				app.openPauseOverlay()
 			}
 		}
 		if chatCanceled {
@@ -173,10 +194,31 @@ func runGamePhase(app *application) error {
 		}
 		backspaceWasDown = backspaceDown
 
+		// 暂停相位接管整帧 typed UI 事件：「返回游戏」「退回主菜单」按钮动作
+		// 都从这里消费（Esc 关闭由键位栈直呼，不经该队列）。非暂停相位的
+		// drain 归调试面板段独占（语义不变），两个分支因 F3 在暂停期被抑制
+		// 而互斥。
+		if app.pauseVisible() {
+			for _, event := range app.renderer.DrainUIEvents() {
+				_, disposition := app.handleMenuUIEvent(event)
+				if disposition == menuUIEventIgnored {
+					slog.Warn("忽略暂停相位 UI 事件", "kind", event.Kind)
+					continue
+				}
+				if app.menu.phase == menuPhaseMenu {
+					// 「退回主菜单」已拆链：会话资源不复存在，立即收敛交给
+					// 菜单相位，不再触碰已释放的世界状态。
+					return nil
+				}
+			}
+		}
+		pausedUI := app.pauseVisible()
+
 		// 调试面板：F3 边沿仍由 Go 检测；选中/编辑/确认/取消/关闭由 Rust egui
 		// 处理并回传结构化事件，这里按序消费并同步运行时快照。面板不存在时
-		// （未开 --dev）整段直接跳过。
-		if app.panel != nil {
+		// （未开 --dev）整段直接跳过。暂停期不再叠加新界面：切换边沿被整体
+		// 抑制，恢复后需重新按下才生效。
+		if app.panel != nil && !pausedUI {
 			toggleDown := app.window.KeyDown(client.KeyF3)
 			panelBlocked := chatWasOpen || app.chatInput.open
 			keys := panelKeys{Toggle: !panelBlocked && toggleDown && !panelToggleWasDown}
@@ -199,8 +241,8 @@ func runGamePhase(app *application) error {
 					lastMouseX, lastMouseY = app.window.CursorPos()
 					justCaptured = true
 				}
-			case app.inventoryOpen || app.containerOpen() || (app.panel != nil && app.panel.visible):
-				// 更高优先级的界面消费 Enter。
+			case app.inventoryOpen || pausedUI || app.containerOpen() || (app.panel != nil && app.panel.visible):
+				// 更高优先级的界面消费 Enter；暂停期不新开聊天。
 			default:
 				app.chatInput.Open()
 				app.window.SetCursorCaptured(false)
@@ -211,7 +253,8 @@ func runGamePhase(app *application) error {
 		chatBlockedThisFrame := chatWasOpen || app.chatInput.open
 
 		clickDown := app.window.PrimaryButtonDown()
-		if clickDown && !clickWasDown && !app.window.CursorCaptured() && !app.inventoryOpen && !app.chatInput.open {
+		if clickDown && !clickWasDown && !app.window.CursorCaptured() &&
+			!pausedUI && !app.inventoryOpen && !app.chatInput.open {
 			app.window.SetCursorCaptured(true)
 			lastMouseX, lastMouseY = app.window.CursorPos()
 			justCaptured = true
@@ -235,9 +278,9 @@ func runGamePhase(app *application) error {
 		actions := input.Update(
 			clickDown, app.window.SecondaryButtonDown(), number,
 			app.window.KeyDown(client.KeyE), app.window.KeyDown(client.KeyQ),
-			app.inventoryOpen || chatBlockedThisFrame || app.panelVisible(),
+			app.inventoryOpen || chatBlockedThisFrame || pausedUI || app.panelVisible(),
 		)
-		if actions.ToggleInventory && !chatBlockedThisFrame && !app.panelVisible() {
+		if actions.ToggleInventory && !chatBlockedThisFrame && !pausedUI && !app.panelVisible() {
 			app.setInventoryOpen(!app.inventoryOpen)
 			if !app.inventoryOpen {
 				lastMouseX, lastMouseY = app.window.CursorPos()
@@ -256,9 +299,10 @@ func runGamePhase(app *application) error {
 			app.window.KeyDown(client.KeyD),
 			app.window.KeyDown(client.KeySpace),
 		)
-		if app.inventoryOpen || chatBlockedThisFrame || app.panelVisible() {
+		if app.inventoryOpen || chatBlockedThisFrame || pausedUI || app.panelVisible() {
 			// 界面打开时持续发送中性输入，避免服务端沿用上一帧移动；
 			// 面板可见时游戏键整体捕获（spec「游戏键 MUST NOT 产生上行」）。
+			// 暂停期同理：本地权威冻结期间不产生任何玩法上行。
 			movement = client.Movement{}
 		}
 		app.applyInteractiveCursorInput(

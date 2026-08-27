@@ -182,6 +182,13 @@ type application struct {
 	// settings 是世界启动前设置页的已保存值与草稿；仅 `menuPhaseSettings`
 	// 接受结构化设置事件，保存成功前不触碰运行态。
 	settings settingsState
+	// pause 是暂停覆盖层的开合周期状态（恢复防重入哨兵），与相位机同属 Go 侧
+	// 菜单语义；远程形态下除哨兵外不产生任何权威副作用。
+	pause pauseState
+	// pauseGate 是装配点捕获的可选暂停门：本地形态指向嵌入宿主（或 benchmark
+	// 可信服）内持的权威世界，远程 TCP 形态恒为 nil。nil 即「本会话无权威模拟
+	// 可冻结」，开层只呈现、不调用任何服务端接口。
+	pauseGate applicationPauseGate
 	// menuOverride 是 capture 场景注入的一帧菜单快照；非 nil 时 uiSegment 优先采用它，
 	// 交互路径保持 nil（正常相位逻辑）。每个场景在 Prepare 前设置或清除，无 teardown。
 	menuOverride *client.UIMenu
