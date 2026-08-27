@@ -169,7 +169,7 @@ func TestRenderLODKeysAreKnownFields(t *testing.T) {
 	}
 }
 
-// TestRenderLODRoundTrip 验证 `Save`/`Load` 往返保留 LOD 三字段——调试面板 F5
+// TestRenderLODRoundTrip 验证 `Save`/`Load` 往返保留 LOD 三字段——设置页（D-01）
 // 的保存路径按整组 `Render` 落盘,读回必须不丢。
 func TestRenderLODRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")

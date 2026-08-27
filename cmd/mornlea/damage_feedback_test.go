@@ -12,7 +12,6 @@ import (
 	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/render"
 )
 
 func TestDamageFeedbackUsesOnlyConfirmedDecrease(t *testing.T) {
@@ -80,7 +79,6 @@ func applyDamageFeedbackHealth(t *testing.T, app *application, tick uint64, heal
 func TestApplicationDamageOverlayUsesConfirmedHealthAndStaysBelowHUD(t *testing.T) {
 	glyphs := &integrationGlyphSource{}
 	app := newRemoteRenderApplication(t, glyphs)
-	app.debugPanelRenderer = render.NewDebugPanelLayouter(glyphs)
 	app.panel = newPanelStateFromActive(config.Defaults().Render)
 	app.panel.visible = true
 	if err := app.remotePlayers.Apply(remoteSpawn(1, "Remote-1", 1, mgl32.Vec3{1, 2, 3})); err != nil {

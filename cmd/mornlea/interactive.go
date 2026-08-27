@@ -3,7 +3,6 @@
 package main
 
 import (
-	"errors"
 	"log/slog"
 	"time"
 
@@ -11,7 +10,6 @@ import (
 
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/physics"
@@ -104,14 +102,8 @@ func runGamePhase(app *application) error {
 	escapeWasDown := false
 	clickWasDown := false
 	panelToggleWasDown := false
-	panelUpWasDown := false
-	panelDownWasDown := false
-	panelLeftWasDown := false
-	panelRightWasDown := false
 	enterWasDown := false
 	backspaceWasDown := false
-	panelSaveWasDown := false
-	panelResetAllWasDown := false
 	var input client.InputState
 	// `textInputBuffer` 与 `chatInput.runes` 同以 `companion.MaxPlanCommandBytes`
 	// 为界（M5E 递延 2 的清偿，E7 同源化收口）：rune 编码后每字符至少 1 字节，
@@ -165,6 +157,9 @@ func runGamePhase(app *application) error {
 				app.setInventoryOpen(false)
 				lastMouseX, lastMouseY = app.window.CursorPos()
 				justCaptured = true
+			case app.panelVisible():
+				// 面板期间的 Esc 由 Rust egui 消费（编辑中取消编辑、非编辑
+				// 态关闭面板），Go 不释放光标；CLOSE 事件回传后由本侧复位。
 			default:
 				app.window.SetCursorCaptured(false)
 			}
@@ -178,54 +173,18 @@ func runGamePhase(app *application) error {
 		}
 		backspaceWasDown = backspaceDown
 
-		// 调试面板按键：F3/F5/F6、方向键与 Enter 都是边沿触发（按一下走一步），
-		// Shift/Alt 是电平读取的修饰键。面板不存在时（未开 --dev）整段直接跳过，
-		// 方向键既不驱动面板、也从不驱动玩家移动（移动只读 WASD）。
+		// 调试面板：F3 边沿仍由 Go 检测；选中/编辑/确认/取消/关闭由 Rust egui
+		// 处理并回传结构化事件，这里按序消费并同步运行时快照。面板不存在时
+		// （未开 --dev）整段直接跳过。
 		if app.panel != nil {
 			toggleDown := app.window.KeyDown(client.KeyF3)
-			upDown := app.window.KeyDown(client.KeyUp)
-			downDown := app.window.KeyDown(client.KeyDown)
-			leftDown := app.window.KeyDown(client.KeyLeft)
-			rightDown := app.window.KeyDown(client.KeyRight)
-			saveDown := app.window.KeyDown(client.KeyF5)
-			resetAllDown := app.window.KeyDown(client.KeyF6)
 			panelBlocked := chatWasOpen || app.chatInput.open
-
-			keys := panelKeys{
-				Toggle: !panelBlocked && toggleDown && !panelToggleWasDown,
-				Up:     !panelBlocked && upDown && !panelUpWasDown,
-				Down:   !panelBlocked && downDown && !panelDownWasDown,
-				Left:   !panelBlocked && leftDown && !panelLeftWasDown,
-				Right:  !panelBlocked && rightDown && !panelRightWasDown,
-				Enter: !panelBlocked && !app.inventoryOpen && !app.containerOpen() &&
-					enterPressed && app.panel.visible,
-				Save:     !panelBlocked && saveDown && !panelSaveWasDown,
-				ResetAll: !panelBlocked && resetAllDown && !panelResetAllWasDown,
-				Shift:    app.window.KeyDown(client.KeyLeftShift),
-				Alt:      app.window.KeyDown(client.KeyLeftAlt),
-			}
+			keys := panelKeys{Toggle: !panelBlocked && toggleDown && !panelToggleWasDown}
 			panelToggleWasDown = toggleDown
-			panelUpWasDown = upDown
-			panelDownWasDown = downDown
-			panelLeftWasDown = leftDown
-			panelRightWasDown = rightDown
-			panelSaveWasDown = saveDown
-			panelResetAllWasDown = resetAllDown
-
-			if app.panel.handleKeys(keys, app.remote()) {
+			app.panel.handleKeys(keys)
+			events := decodeDebugPanelEvents(app.renderer.DrainUIEvents())
+			if len(events) != 0 && app.panel.applyPanelEvents(events, app.remote()) {
 				app.applyPanelChange()
-			}
-			// 面板隐藏时 F5 不落盘：设计文档要求配置文件"不自动创建"，
-			// 面板关着时误触 F5 不该在 config.DefaultPath() 悄悄创建/覆盖它。
-			if keys.Save && app.panel.visible {
-				if err := app.panel.save(app.configPath); err != nil {
-					var persistenceError *config.PersistenceError
-					if errors.As(err, &persistenceError) && persistenceError.Committed() {
-						slog.Warn("调试面板配置已保存但父目录持久性同步异常", "error", err)
-					} else {
-						slog.Warn("保存调试面板配置失败", "error", err)
-					}
-				}
 			}
 		}
 
@@ -259,7 +218,7 @@ func runGamePhase(app *application) error {
 		}
 		clickWasDown = clickDown
 		captured := app.window.CursorCaptured()
-		if captured && !justCaptured && !app.inventoryOpen && !app.chatInput.open {
+		if captured && !justCaptured && !app.inventoryOpen && !app.chatInput.open && !app.panelVisible() {
 			mouseX, mouseY := app.window.CursorPos()
 			// baseMouseSensitivity 是键鼠灵敏度默认为 1 时对应的原始弧度/像素系数；
 			// Render.MouseSensitivity 是相对该基线的倍率，默认值 1 保持行为不变。
@@ -276,9 +235,9 @@ func runGamePhase(app *application) error {
 		actions := input.Update(
 			clickDown, app.window.SecondaryButtonDown(), number,
 			app.window.KeyDown(client.KeyE), app.window.KeyDown(client.KeyQ),
-			app.inventoryOpen || chatBlockedThisFrame,
+			app.inventoryOpen || chatBlockedThisFrame || app.panelVisible(),
 		)
-		if actions.ToggleInventory && !chatBlockedThisFrame {
+		if actions.ToggleInventory && !chatBlockedThisFrame && !app.panelVisible() {
 			app.setInventoryOpen(!app.inventoryOpen)
 			if !app.inventoryOpen {
 				lastMouseX, lastMouseY = app.window.CursorPos()
@@ -297,8 +256,9 @@ func runGamePhase(app *application) error {
 			app.window.KeyDown(client.KeyD),
 			app.window.KeyDown(client.KeySpace),
 		)
-		if app.inventoryOpen || chatBlockedThisFrame {
-			// 界面打开时持续发送中性输入，避免服务端沿用上一帧移动。
+		if app.inventoryOpen || chatBlockedThisFrame || app.panelVisible() {
+			// 界面打开时持续发送中性输入，避免服务端沿用上一帧移动；
+			// 面板可见时游戏键整体捕获（spec「游戏键 MUST NOT 产生上行」）。
 			movement = client.Movement{}
 		}
 		app.applyInteractiveCursorInput(

@@ -103,11 +103,14 @@ type RenderFrame struct {
 	// 帧字节与本变更之前逐位一致。它与 OverlayStrength 共用同一条全屏三角
 	// 管线,只是 uniform 不同——不新增任何绘制管线。
 	WaterTint [4]float32
-	// NameTagSegment/HUDSegment/DebugSegment 是各文本 pass 的
-	// [uniform][aCount][bCount][a][b] 段字节(EncodeQuadSegment 产物)。
+	// NameTagSegment/HUDSegment 是文本 pass 的 [uniform][aCount][bCount][a][b]
+	// 段字节(EncodeQuadSegment 产物)。
 	NameTagSegment []byte
 	HUDSegment     []byte
-	DebugSegment   []byte
+	// DebugSegment 已废弃：程序化调试面板渲染路径已于 D-03 删除，调试面板改经
+	// UISegment layout v3 呈现，本字段恒为空。为保持既有帧编码路径
+	// （layout v2 判定与 tag 4 TLV）与 ABI 兼容而保留。
+	DebugSegment []byte
 	// UISegment 是 egui 主菜单段(`EncodeUIMenu` 产物),非空时本帧叠加菜单。
 	// 菜单只在 Go 菜单相位产生;为空时本帧不提交任何 UI 工作。
 	UISegment []byte

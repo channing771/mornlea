@@ -48,7 +48,8 @@ type applicationOptions struct {
 	Render config.Render
 	// `AudioVolume` 是本地确认提示音的总音量，只在图形客户端创建播放器时读取。
 	AudioVolume float32
-	// ConfigPath 是设置页与调试面板 F5 的配置保存目标；benchmark/capture 不使用。
+	// ConfigPath 是设置页（D-01）的配置保存目标；调试面板不落盘配置（D-03 移除了
+	// 面板 F5 保存）。benchmark/capture 不使用。
 	ConfigPath string
 	// TexturePackPath 是配置文件中的材质包目录原文，设置页必须无损回显与保存。
 	TexturePackPath string
@@ -114,12 +115,8 @@ type application struct {
 	hotbarRenderer         *hud.HotbarRenderer
 	damageFeedback         damageFeedback
 	damageStrength         float32
-	debugPanelRenderer     *render.DebugPanelRenderer
-	// panel 是调试面板的交互状态；只在 applicationOptions.Dev 为真时创建，
-	// 与 debugPanelRenderer 一同保持 nil/非 nil 同步。
+	// panel 是调试面板的交互状态；只在 applicationOptions.Dev 为真时创建。
 	panel *panelState
-	// configPath 是调试面板 F5 保存时的目标路径，来自 applicationOptions.ConfigPath。
-	configPath string
 	// panelLastFrameAt 是上一帧调试面板读数的采样时刻，用于计算 PanelReadout.FrameMillis。
 	panelLastFrameAt time.Time
 	inventory        client.InventoryMirror

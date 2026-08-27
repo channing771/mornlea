@@ -64,10 +64,28 @@ const (
 	UIEventAction UIEventKind = 1
 	// UIEventSettingsChanged 表示一帧控件变化后的完整设置草稿。
 	UIEventSettingsChanged UIEventKind = 2
+	// UIEventDebugAction 表示一条调试面板动作(kind=3)，与 Rust
+	// `UI_EVENT_KIND_DEBUG_ACTION` 逐字一致。
+	UIEventDebugAction UIEventKind = 3
 )
 
+// 调试面板动作编号，与 Rust `DEBUG_PANEL_ACTION_*` 逐值一致。
+const (
+	DebugPanelActionSelectNext uint32 = 1
+	DebugPanelActionSelectPrev uint32 = 2
+	DebugPanelActionEnterEdit  uint32 = 3
+	DebugPanelActionEditValue  uint32 = 4
+	DebugPanelActionConfirm    uint32 = 5
+	DebugPanelActionCancel     uint32 = 6
+	DebugPanelActionClose      uint32 = 7
+)
+
+// maxDebugPanelEditValueBytes 是调试面板动作携带值文本的字节上界。
+const maxDebugPanelEditValueBytes = 64
+
 // UIEvent 是从 Rust 排空的结构化 UI 事件。`Kind` 为 `UIEventAction` 时只读
-// `ActionID`；为 `UIEventSettingsChanged` 时只读 `Settings`。
+// `ActionID`；为 `UIEventSettingsChanged` 时只读 `Settings`；为
+// `UIEventDebugAction` 时只读 `PanelAction`（与 `PanelValue`）。
 type UIEvent struct {
 	// Kind 决定其余字段的解释方式。
 	Kind UIEventKind
@@ -75,6 +93,12 @@ type UIEvent struct {
 	ActionID uint32
 	// Settings 仅在 `Kind` 为 `UIEventSettingsChanged` 时有效。
 	Settings UISettingsValues
+	// PanelAction 仅在 `Kind` 为 `UIEventDebugAction` 时有效，取
+	// `DebugPanelAction*` 之一。
+	PanelAction uint32
+	// PanelValue 仅在 `Kind` 为 `UIEventDebugAction` 且动作为
+	// `DebugPanelActionEditValue`/`Confirm` 时携带文本。
+	PanelValue string
 }
 
 const (
@@ -184,9 +208,30 @@ func decodeUIEvent(kind UIEventKind, payload []byte) (UIEvent, error) {
 				TexturePackPath: string(pathBytes),
 			},
 		}, nil
+	case UIEventDebugAction:
+		reader := uiBatchReader{bytes: payload}
+		action, ok := reader.u32()
+		if !ok || !validDebugPanelAction(action) {
+			return UIEvent{}, errors.New("client: UI debug action 编号非法")
+		}
+		value, ok := reader.stringBytes(maxDebugPanelEditValueBytes)
+		if !ok || !utf8.Valid(value) || strings.ContainsAny(string(value), "\r\n") {
+			return UIEvent{}, errors.New("client: UI debug action 文本非法")
+		}
+		if !reader.done() {
+			return UIEvent{}, errors.New("client: UI debug action 含尾随字节")
+		}
+		return UIEvent{Kind: kind, PanelAction: action, PanelValue: string(value)}, nil
 	default:
 		return UIEvent{}, errors.New("client: UI 事件 kind 未知")
 	}
+}
+
+// validDebugPanelAction 报告 action 是否落在已定义的调试面板动作区间。
+// 未知动作由解码层拒绝（spec「未知调试动作被拒」），与 Rust
+// valid_output_event 同一判定。
+func validDebugPanelAction(action uint32) bool {
+	return action >= DebugPanelActionSelectNext && action <= DebugPanelActionClose
 }
 
 func validUIAudio(value float32) bool {
