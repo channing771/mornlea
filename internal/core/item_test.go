@@ -26,8 +26,8 @@ func TestCanonicalItemIDsStayStable(t *testing.T) {
 // 「item < ItemIDMax」为穷举界的测试（例如 companion 的 place 注册表覆盖测试），
 // 而不是让穷举测试静默失去对新物品的覆盖。
 func TestItemIDMaxGuardsExhaustiveEnumeration(t *testing.T) {
-	if core.ItemPoisonousPotato != core.ItemIDMax-1 {
-		t.Fatalf("ItemID 枚举末项不再是 ItemPoisonousPotato（ItemIDMax-1 = %d）；"+
+	if core.ItemDoor != core.ItemIDMax-1 {
+		t.Fatalf("ItemID 枚举末项不再是 ItemDoor（ItemIDMax-1 = %d）；"+
 			"新增物品必须同步审视全部以 ItemIDMax 为穷举界的测试", core.ItemIDMax-1)
 	}
 	// 哨兵之外不得再出现已注册物品：若有人把新物品追加在哨兵之后，穷举界会
@@ -40,8 +40,8 @@ func TestItemIDMaxGuardsExhaustiveEnumeration(t *testing.T) {
 }
 
 func TestItemIDsAppendOnly(t *testing.T) {
-	if core.ItemPoisonousPotato != core.ItemIDMax-1 {
-		t.Fatal("Poisonous must be last before Max")
+	if core.ItemDoor != core.ItemIDMax-1 {
+		t.Fatal("Door must be last before Max")
 	}
 	if _, ok := core.ItemStackLimit(core.ItemPotato); !ok {
 		t.Fatal("potato stack missing")
@@ -528,9 +528,13 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 		t.Fatalf("ItemPoisonousPotato = %d，必须紧随 ItemCarrot(%d)",
 			core.ItemPoisonousPotato, core.ItemCarrot)
 	}
-	if core.ItemIDMax != 43 {
-		t.Fatalf("ItemIDMax = %d，必须紧随 ItemPoisonousPotato(%d) 后移到 43",
-			core.ItemIDMax, core.ItemPoisonousPotato)
+	if core.ItemDoor != core.ItemPoisonousPotato+1 {
+		t.Fatalf("ItemDoor = %d，必须紧随 ItemPoisonousPotato(%d)",
+			core.ItemDoor, core.ItemPoisonousPotato)
+	}
+	if core.ItemIDMax != 44 {
+		t.Fatalf("ItemIDMax = %d，必须紧随 ItemDoor(%d) 后移到 44",
+			core.ItemIDMax, core.ItemDoor)
 	}
 	if core.WorkbenchID != 45 {
 		t.Fatalf("WorkbenchID = %d，必须稳定为 45 且紧随 WheatStage7ID(%d)",
@@ -544,9 +548,17 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 		t.Fatalf("CarrotStage0ID = %d，必须紧随 PotatoStage7ID(%d)",
 			core.CarrotStage0ID, core.PotatoStage7ID)
 	}
-	if core.BlockIDMax != 62 {
-		t.Fatalf("BlockIDMax = %d，必须紧随 CarrotStage7ID(%d) 后移到 62",
-			core.BlockIDMax, core.CarrotStage7ID)
+	if core.DoorLowerSouthClosed != core.CarrotStage7ID+1 {
+		t.Fatalf("DoorLowerSouthClosed = %d，必须紧随 CarrotStage7ID(%d)",
+			core.DoorLowerSouthClosed, core.CarrotStage7ID)
+	}
+	if core.DoorUpper != core.DoorLowerEastOpen+1 {
+		t.Fatalf("DoorUpper = %d，必须紧随 DoorLowerEastOpen(%d)",
+			core.DoorUpper, core.DoorLowerEastOpen)
+	}
+	if core.BlockIDMax != 71 {
+		t.Fatalf("BlockIDMax = %d，必须紧随 DoorUpper(%d) 后移到 71",
+			core.BlockIDMax, core.DoorUpper)
 	}
 }
 
@@ -589,6 +601,21 @@ func TestWorkbenchItemPlacesAndDropsBack(t *testing.T) {
 	if !ok || item != core.ItemWorkbench {
 		t.Fatalf("BlockDrop(工作台) = (%d,%v)，想要 (%d,true)",
 			item, ok, core.ItemWorkbench)
+	}
+}
+
+func TestItemDoorPlacementDrop(t *testing.T) {
+	if core.ItemDoor != 43 || core.ItemIDMax != 44 {
+		t.Fatal("ItemDoor IDs")
+	}
+	if got, ok := core.ItemPlacement(core.ItemDoor); !ok || got != core.DoorLowerSouthClosed {
+		t.Fatal("placement")
+	}
+	if got, ok := core.BlockDrop(core.DoorUpper); !ok || got != core.ItemDoor {
+		t.Fatal("drop")
+	}
+	if got, ok := core.BlockDrop(core.DoorLowerSouthClosed); !ok || got != core.ItemDoor {
+		t.Fatal("drop lower")
 	}
 }
 

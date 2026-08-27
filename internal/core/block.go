@@ -108,6 +108,19 @@ const (
 	CarrotStage5ID
 	CarrotStage6ID
 	CarrotStage7ID
+	// DoorLowerSouthClosed..DoorLowerEastOpen 是木门下半的 8 个定向开合态
+	// （4 方向 × 2 开关），DoorUpper 是上半单一编号。
+	// 上半无方向，其朝向由下半决定；9 个编号紧随 CarrotStage7ID 追加，
+	// BlockIDMax 后移至 71，协议稳定且追加在哨兵之前。
+	DoorLowerSouthClosed
+	DoorLowerSouthOpen
+	DoorLowerWestClosed
+	DoorLowerWestOpen
+	DoorLowerNorthClosed
+	DoorLowerNorthOpen
+	DoorLowerEastClosed
+	DoorLowerEastOpen
+	DoorUpper
 	// BlockIDMax 是合法方块编号的独占上界（最后一个合法 BlockID + 1），本身不是
 	// 方块枚举成员，与物品侧的 ItemIDMax 同形。它供哨兵与穷举测试以
 	// 「id < BlockIDMax」表达「全部已注册方块」，替代「某个具体编号恰为枚举末项」
@@ -122,6 +135,32 @@ const (
 // RegisteredBlock 报告 id 是否是已注册的稳定方块编号。
 func RegisteredBlock(id BlockID) bool {
 	return id < BlockIDMax
+}
+
+// IsDoor 报告 id 是否是门方块（下半 62..69 或上半 70）。
+func IsDoor(id BlockID) bool { return id >= DoorLowerSouthClosed && id <= DoorUpper }
+
+// IsDoorLower 报告 id 是否是门下半（62..69）。
+func IsDoorLower(id BlockID) bool { return id >= DoorLowerSouthClosed && id <= DoorLowerEastOpen }
+
+// IsDoorUpper 报告 id 是否是门上半（70）。
+func IsDoorUpper(id BlockID) bool { return id == DoorUpper }
+
+// DoorDir 返回门下半的方向编码：南 0、西 1、北 2、东 3。
+// 非下半门返回 -1。
+func DoorDir(id BlockID) int {
+	switch id {
+	case DoorLowerSouthClosed, DoorLowerSouthOpen:
+		return 0
+	case DoorLowerWestClosed, DoorLowerWestOpen:
+		return 1
+	case DoorLowerNorthClosed, DoorLowerNorthOpen:
+		return 2
+	case DoorLowerEastClosed, DoorLowerEastOpen:
+		return 3
+	default:
+		return -1
+	}
 }
 
 const (

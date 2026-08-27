@@ -41,6 +41,8 @@ const (
 	// 工作台把玩家合成网格的有效尺寸从 2 提到 3，是形状合成的自举配方：
 	// 2×2 网格摆得出的最大形状就是它自己。
 	RecipeWorkbench
+	// RecipeDoor 用两列满的 6 个橡木木板（2×3）合成 3 个木门。
+	RecipeDoor
 )
 
 // Recipe 返回 id 的固定形状配方；未知 ID 返回 false。
@@ -201,6 +203,17 @@ func recipePattern(id RecipeID) (RecipePattern, bool) {
 			},
 			Output: ItemStack{Item: ItemWorkbench, Count: 1},
 		}, true
+	// 木门：2×3 两列满木板合成 3 个木门。
+	case RecipeDoor:
+		return RecipePattern{
+			Width: 2, Height: 3, Mirror: true,
+			Cells: [CraftingGridSlots]ItemID{
+				ItemOakPlanks, ItemOakPlanks, ItemNone,
+				ItemOakPlanks, ItemOakPlanks, ItemNone,
+				ItemOakPlanks, ItemOakPlanks, ItemNone,
+			},
+			Output: ItemStack{Item: ItemDoor, Count: 3},
+		}, true
 	default:
 		return RecipePattern{}, false
 	}
@@ -242,7 +255,7 @@ func MatchCraftingGrid(size uint8, slots [CraftingGridSlots]ItemStack) (RecipeID
 	if !ok {
 		return 0, ItemStack{}, false
 	}
-	for id := RecipeStoneBricks; id <= RecipeWorkbench; id++ {
+	for id := RecipeStoneBricks; id <= RecipeDoor; id++ {
 		pattern, registered := recipePattern(id)
 		if !registered {
 			continue
