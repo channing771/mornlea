@@ -153,3 +153,96 @@ func (inventory Inventory) SetSlot(slot uint8, stack ItemStack) (Inventory, bool
 	next.setSlot(slot, stack)
 	return next, true
 }
+
+// ConsumeRecipe 在合成网格的副本上原子执行一次形状消费：按与
+// `MatchCraftingGrid` 完全相同的归一化与对齐（先正向，形状开 `Mirror` 位时
+// 再按水平镜像重试一次），对被形状覆盖的每个非空格恰减 1，扣到零的格规范化
+// 为空栈。消费成功返回扣减后的网格；任何失败（尺寸非法、有效尺寸之外的格
+// 有残留、包围盒宽高不符、被覆盖格物品不同或数量为零、形状的空格上有残留
+// 栈、被覆盖格是带耐久的物品）返回原网格与 false，绝不留下部分扣减。
+//
+// 注意消费层比匹配层更严：匹配层把数量为零的栈折算为空格（这类残留栈不影
+// 响匹配结果），消费层却连形状空格上的任何残留栈都拒绝——消费是真正动物品
+// 的一步，只允许在逐格规范的网格上执行；因此「匹配成功」不蕴含「消费必然
+// 成功」，调用方必须同时处理两者。
+//
+// 有耐久的物品绝不作为形状材料：匹配层已经因物品编号不符拒绝过它们，这里
+// 再拦一次是防御层——本函数允许调用方直接喂任意 `RecipePattern`，不强制先
+// 走匹配。
+//
+// 产物不进入背包也不写回网格：产物如何入包（容量预演、稳定插入顺序）是
+// sim 的取出路径（见 spec authoritative-crafting「合成原子更新完整物品
+// 状态」），core 只负责网格侧的原子扣减。实现在 `[CraftingGridSlots]`
+// `ItemStack` 数组副本上的固定循环，无分配。
+func ConsumeRecipe(size uint8, slots [CraftingGridSlots]ItemStack, pattern RecipePattern) ([CraftingGridSlots]ItemStack, bool) {
+	if size != 2 && size != 3 {
+		return slots, false
+	}
+	var cells [CraftingGridSlots]ItemID
+	for i := uint8(0); i < CraftingGridSlots; i++ {
+		if slots[i].Count > 0 {
+			cells[i] = slots[i].Item
+		}
+		if i >= size*size && cells[i] != ItemNone {
+			return slots, false
+		}
+	}
+	originX, originY, width, height, ok := trimPattern(size, cells)
+	if !ok || pattern.Width != width || pattern.Height != height {
+		return slots, false
+	}
+	// 镜像重试与匹配层同序：先正向，仅当形状开 Mirror 位才追加镜像尝试
+	//（Mirror=false 时只跑一次正向，不做冗余重跑）。每次尝试都在全新副本上
+	// 预演，中途失配直接丢弃副本，调用方原值不受影响。
+	mirrorAttempts := 1
+	if pattern.Mirror {
+		mirrorAttempts = 2
+	}
+	for index := 0; index < mirrorAttempts; index++ {
+		candidate := slots
+		if consumeAligned(&candidate, size, pattern, originX, originY, index == 1) {
+			return candidate, true
+		}
+	}
+	return slots, false
+}
+
+// consumeAligned 按单一对齐（正向或水平镜像）在网格副本上执行消费；任一格
+// 不满足恰减前提即返回 false 并放弃整次尝试（副本由调用方丢弃）。
+func consumeAligned(next *[CraftingGridSlots]ItemStack, size uint8, pattern RecipePattern, originX, originY uint8, mirror bool) bool {
+	for y := uint8(0); y < pattern.Height; y++ {
+		for x := uint8(0); x < pattern.Width; x++ {
+			patternX := x
+			if mirror {
+				patternX = pattern.Width - 1 - x
+			}
+			material := pattern.Cells[y*3+patternX]
+			index := (originY+y)*size + originX + x
+			stack := next[index]
+			if material == ItemNone {
+				// 形状的空格上必须是真正的零值空栈。这里刻意比匹配层更严：
+				// 匹配层把数量为零的栈折算为空格（残留栈不影响匹配），消费层
+				// 却一律拒绝——真正动物品的一步不允许在任何不规范状态上执行
+				//（详见 `ConsumeRecipe` 的 GoDoc）。
+				if stack.Item != ItemNone || stack.Count != 0 {
+					return false
+				}
+				continue
+			}
+			if stack.Item != material || stack.Count == 0 {
+				return false
+			}
+			// 耐久物品不参与材料：这是独立于物品编号比较的第二道闸，
+			// 防止未来出现「工具编号被写进形状表」这类自毁式配置。
+			if _, durable := ItemMaxDurability(stack.Item); durable {
+				return false
+			}
+			stack.Count--
+			if stack.Count == 0 {
+				stack = ItemStack{}
+			}
+			next[index] = stack
+		}
+	}
+	return true
+}

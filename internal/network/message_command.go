@@ -69,22 +69,6 @@ func (command SelectHotbar) Validate() error {
 	return nil
 }
 
-// CraftRecipe 按稳定配方 ID 请求一次合成；原料与产物完全由服务端决定。
-type CraftRecipe struct {
-	Sequence uint64
-	Recipe   core.RecipeID
-}
-
-func (CraftRecipe) clientMessage() {}
-func (CraftRecipe) clientPacket()  {}
-
-func (command CraftRecipe) Validate() error {
-	if _, ok := core.Recipe(command.Recipe); !ok {
-		return errors.New("network: unknown crafting recipe")
-	}
-	return nil
-}
-
 type RequestChunkResync struct {
 	Sequence     uint64
 	Dimension    core.DimensionID

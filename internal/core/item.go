@@ -56,6 +56,13 @@ const (
 	// 不是任何方块的掉落物。恢复值见 FoodValue。同样只能追加在 ItemIDMax
 	// 哨兵之前。
 	ItemBread
+	// ItemStick 是木棍：镐、锄等工具配方的中间材料，可堆叠 64、不可放置、
+	// 没有耐久（损坏形态只属于工具）。
+	ItemStick
+	// ItemWorkbench 是工作台物品：放置成 WorkbenchID，采掘工作台方块掉回
+	// 恰好 1 个。工作台不是容器——打开只把玩家合成网格的有效尺寸从 2 提到 3，
+	// 不占用任何容器引用或区块槽位。
+	ItemWorkbench
 	// ItemBoneMeal 是骨粉，用于催熟小麦；沿用食物与种子的堆叠与放置语义（不可
 	// 放置，堆叠 64），同样只能追加在 ItemIDMax 哨兵之前。
 	ItemBoneMeal
@@ -227,6 +234,9 @@ func BlockDrop(block BlockID) (ItemID, bool) {
 	// （变更 authoritative-farming 的任务组 5）。不在这里发明新的多产物形状。
 	case WheatStage7ID:
 		return ItemWheat, true
+	// 工作台采掘掉回恰好 1 个工作台物品（数量语义在掉落路径，这里只给物品）。
+	case WorkbenchID:
+		return ItemWorkbench, true
 	default:
 		return ItemNone, false
 	}
@@ -240,7 +250,8 @@ func ItemStackLimit(item ItemID) (uint8, bool) {
 		ItemCobblestone, ItemSmoothStone, ItemSand, ItemGravel, ItemOakLog,
 		ItemOakPlanks, ItemLeaves, ItemGlass, ItemBrick, ItemWhiteWool,
 		ItemRoofTile, ItemClay, ItemSnowBlock, ItemMossyCobblestone,
-		ItemWheatSeeds, ItemWheat, ItemBread, ItemBoneMeal:
+		ItemWheatSeeds, ItemWheat, ItemBread,
+		ItemStick, ItemWorkbench, ItemBoneMeal:
 		return MaxStackCount, true
 	case ItemStonePickaxe, ItemIronPickaxe,
 		ItemBrokenStonePickaxe, ItemBrokenIronPickaxe,
@@ -346,6 +357,9 @@ func ItemPlacement(item ItemID) (BlockID, bool) {
 	// 因此不出现在本表里：耕地只能由锄头翻出，作物只能由种子长成。
 	case ItemWheatSeeds:
 		return WheatStage0ID, true
+	// 工作台放置成普通完整立方体 WorkbenchID；木棍是纯材料，不可放置。
+	case ItemWorkbench:
+		return WorkbenchID, true
 	default:
 		return AirID, false
 	}

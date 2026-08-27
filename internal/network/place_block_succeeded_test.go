@@ -30,6 +30,9 @@ func TestProtocolV26PlaceBlockSucceededWire(t *testing.T) {
 	}
 }
 
+// TestProtocolV26PlaceBlockSucceededRegistryBoundary 钉死 v26 占用的 S→C ID 20
+// 与紧随其后的边界。格子工作台把 21 分配给 `CraftingState`（in-branch 临时
+// 编号，design.md D1），「下一个仍未分配」的上界随之推进到 22。
 func TestProtocolV26PlaceBlockSucceededRegistryBoundary(t *testing.T) {
 	packetID, ok := serverPacketID(StatePlay, PlaceBlockSucceeded{})
 	if !ok || packetID != 20 {
@@ -42,10 +45,10 @@ func TestProtocolV26PlaceBlockSucceededRegistryBoundary(t *testing.T) {
 	if _, ok := registered.(PlaceBlockSucceeded); !ok {
 		t.Fatalf("Play S→C ID 20=%T，想要 PlaceBlockSucceeded", registered)
 	}
-	if _, ok := serverPacketForID(StatePlay, 21); ok {
-		t.Fatal("Play S→C ID 21 必须保持未分配")
+	if _, ok := serverPacketForID(StatePlay, 22); ok {
+		t.Fatal("Play S→C ID 22 必须保持未分配")
 	}
-	if _, err := decodeServerControlPayload(StatePlay, 21, nil); !errors.Is(err, errUnknownPacketID) {
-		t.Fatalf("Play S→C ID 21 解码错误=%v，想要 %v", err, errUnknownPacketID)
+	if _, err := decodeServerControlPayload(StatePlay, 22, nil); !errors.Is(err, errUnknownPacketID) {
+		t.Fatalf("Play S→C ID 22 解码错误=%v，想要 %v", err, errUnknownPacketID)
 	}
 }

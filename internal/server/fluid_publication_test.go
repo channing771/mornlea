@@ -63,6 +63,8 @@ func TestFluidChangesBroadcastOverExistingChunkChannel(t *testing.T) {
 
 	mirror := client.NewMirror()
 	// 本变更之前就存在的服务端消息类型全集。流体不得引入任何新类型（D8）。
+	// `CraftingState` 由格子工作台批次（authoritative-grid-crafting）加入，
+	// 与流体变更无关，登记在此保持该 allowlist 与当前线上类型一致。
 	preexisting := map[string]struct{}{}
 	for _, message := range []network.ServerMessage{
 		network.KeepAlive{}, network.Disconnect{},
@@ -73,7 +75,7 @@ func TestFluidChangesBroadcastOverExistingChunkChannel(t *testing.T) {
 		network.FurnaceState{}, network.ChestState{}, network.ContainerClosed{},
 		network.ItemDropUpserts{}, network.ItemDropRemoves{},
 		network.ChatEvent{}, network.CompanionSpawn{}, network.CompanionStates{},
-		network.CompanionDespawn{},
+		network.CompanionDespawn{}, network.CraftingState{},
 	} {
 		preexisting[fmt.Sprintf("%T", message)] = struct{}{}
 	}

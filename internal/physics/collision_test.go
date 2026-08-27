@@ -276,6 +276,17 @@ func dropOnto(world idSource, centerX float32, tickCount int) physics.State {
 	return state
 }
 
+// TestWorkbenchBlockHasFullCubeCollision 锁定 spec Requirement「工作台方块与
+// 打开生命周期」：工作台是普通完整立方体碰撞（玩家可以站上去），与耕地那类
+// 非满立方体不同——它只是「打开后提升合成网格尺寸」的普通方块，不提供任何
+// 特殊碰撞形状。
+func TestWorkbenchBlockHasFullCubeCollision(t *testing.T) {
+	boxes := physics.BlockCollisionBoxes(core.WorkbenchID, true)
+	if !boxes.Loaded || boxes.Count != 1 || boxes.Boxes[0] != fullCube {
+		t.Fatalf("BlockCollisionBoxes(工作台) = %+v，想要完整方块碰撞", boxes)
+	}
+}
+
 // TestStandingOnFarmlandIsOneSixteenthLowerThanFullBlock 端到端覆盖 spec
 // Scenario「站上耕地低于站上完整方块」：同一高度上并排的耕地与泥土，分别站上去
 // 的立足 Y **恰好**差 1/16。

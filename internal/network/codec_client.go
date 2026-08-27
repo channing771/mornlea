@@ -48,9 +48,6 @@ func encodeClientPacketPayload(state State, packet ClientPacket) (packetID uint3
 			e.u8(message.To)
 		case DropSelectedItem:
 			e.u64(message.Sequence)
-		case CraftRecipe:
-			e.u64(message.Sequence)
-			e.u8(uint8(message.Recipe))
 		case OpenContainer:
 			e.u64(message.Sequence)
 			e.f32(message.Yaw)
@@ -80,6 +77,12 @@ func encodeClientPacketPayload(state State, packet ClientPacket) (packetID uint3
 			e.u64(message.Sequence)
 			e.f32(message.Yaw)
 			e.f32(message.Pitch)
+		case MoveCraftingStack:
+			e.u64(message.Sequence)
+			e.u8(message.From)
+			e.u8(message.To)
+		case TakeCraftingOutput:
+			e.u64(message.Sequence)
 		default:
 			return 0, nil, codecError("encode client", state, packetID, invalidClientPacket(state, packet))
 		}
@@ -208,13 +211,15 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 			}
 			packet = MoveInventoryStack{Sequence: sequence, From: from, To: to}
 		case 7:
-			var sequence uint64
-			var recipe uint8
-			sequence, err = d.u64()
+			var move MoveCraftingStack
+			move.Sequence, err = d.u64()
 			if err == nil {
-				recipe, err = d.u8()
+				move.From, err = d.u8()
 			}
-			packet = CraftRecipe{Sequence: sequence, Recipe: core.RecipeID(recipe)}
+			if err == nil {
+				move.To, err = d.u8()
+			}
+			packet = move
 		case 8:
 			var open OpenContainer
 			open.Sequence, err = d.u64()
@@ -272,6 +277,10 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 				meal.Pitch, err = d.f32()
 			}
 			packet = meal
+		case 15:
+			var take TakeCraftingOutput
+			take.Sequence, err = d.u64()
+			packet = take
 		default:
 			return nil, codecError("decode client", state, packetID, errUnknownPacketID)
 		}

@@ -91,6 +91,9 @@ func (a *application) closeClientSession(cause error) {
 		a.audioFeedback.Reset()
 		a.furnace.Reset()
 		a.chest.Reset()
+		// 合成网格镜像随会话一并清空：断线后不继承任何已确认网格状态
+		//（spec authoritative-grid-crafting「断线清空客户端镜像」）。
+		a.crafting.Reset()
 		a.miningOverlay = hud.MiningOverlay{}
 		// 进食进度是纯呈现预测，随会话一起清零，不得漏进重连后的第一帧。
 		a.eatingTracker.Reset()

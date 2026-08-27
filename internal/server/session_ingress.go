@@ -192,12 +192,22 @@ func translateClientMessage(
 			Sequence: message.Sequence,
 			Kind:     sim.CommandDropSelectedItem,
 		}, true
-	case network.CraftRecipe:
+	case network.MoveCraftingStack:
+		// 网格移动的统一视图格直接搬运（网格 0..8、背包 9..44）；值域已在
+		// 网络层校验，尺寸相关拒绝（个人扩展格）与整堆语义由 sim 权威执行。
 		return sim.Command{
 			Session:  id,
 			Sequence: message.Sequence,
-			Kind:     sim.CommandCraftRecipe,
-			Recipe:   message.Recipe,
+			Kind:     sim.CommandMoveCraftingStack,
+			Slot:     message.From,
+			ToSlot:   message.To,
+		}, true
+	case network.TakeCraftingOutput:
+		// 只搬运序号：产物、扣料与容量全部由 sim 从权威网格派生。
+		return sim.Command{
+			Session:  id,
+			Sequence: message.Sequence,
+			Kind:     sim.CommandTakeCraftingOutput,
 		}, true
 	case network.MoveInventoryStack:
 		return sim.Command{

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"testing"
 
@@ -22,14 +23,17 @@ const (
 	// eatingParitySaturation 是登录时的饱和度（千分位），≤ 12×1000 满足存档
 	// 编码的上界校验。
 	eatingParitySaturation uint16 = 5000
-	// eatingParityWheat 是夹具**直接放进快捷栏**的小麦数，恰好是面包配方的
-	// 用量。这里刻意不走农业闭环（翻地 → 播种 → 等作物成熟 → 收获）：那条
-	// 路径要跨上千个权威 tick，而本脚本要验的是"两种传输下进食结算一致"，
-	// 不是农业本身——农业闭环由 farming_loop_e2e_test.go 覆盖。
+	// eatingParityWheatPerSlot 是夹具**直接放进快捷栏**的小麦数——每格 1 颗、
+	// 共占 0..2 三格。面包配方（横排 3 小麦）要求三颗小麦分别落在三个网格格，
+	// 而整堆移动语义不能拆堆：同一物品的多格形状只能由多个独立栈摆放，
+	// 这正是两次点击整堆语义下玩家的真实操作形态。这里刻意不走农业闭环
+	// （翻地 → 播种 → 等作物成熟 → 收获）：那条路径要跨上千个权威 tick，
+	// 而本脚本要验的是"两种传输下进食结算一致"，不是农业本身——农业闭环由
+	// farming_loop_e2e_test.go 覆盖。
 	//
 	// 也不能指望缺失玩家的一次性材料包：它给的是 core.ItemWheatSeeds
 	// （见 `starterMaterialInventory`），不是小麦，更不是面包。
-	eatingParityWheat uint8 = 3
+	eatingParityWheatPerSlot uint8 = 1
 	// eatingParityEatTicks 是脚本按住进食输入推进的 tick 数，必须等于权威
 	// 默认的 `EatingTicks`。sim 的默认值不导出（archcheck 的禁导出清单），
 	// 这里写字面量并由第 31 tick「饥饿精确不变」+ 第 32 tick「精确 +5」
@@ -76,7 +80,9 @@ func runEatingParityScript(t *testing.T, transport string) eatingParityResult {
 		FormatVersion: 2, Seed: 42, SpawnDimension: core.Overworld,
 	})
 	var inventory core.Inventory
-	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemWheat, Count: eatingParityWheat}
+	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemWheat, Count: eatingParityWheatPerSlot}
+	inventory.Hotbar.Slots[1] = core.ItemStack{Item: core.ItemWheat, Count: eatingParityWheatPerSlot}
+	inventory.Hotbar.Slots[2] = core.ItemStack{Item: core.ItemWheat, Count: eatingParityWheatPerSlot}
 	location := storage.PlayerLocation{Dimension: core.Overworld, Position: [3]float32{0.5, 1.001, 0.5}}
 	if _, err := store.SavePlayer(context.Background(), storage.PlayerSave{
 		PlayerID: identity.PlayerID, Revision: 1, DisplayName: identity.DisplayName,
@@ -147,9 +153,25 @@ func runEatingParityScript(t *testing.T, transport string) eatingParityResult {
 		return state
 	}
 
-	// 第一段：3 小麦经既有合成命令换成 1 个面包。产物落在最低的空快捷栏位
-	// （原料就是从 0 号格扣走的），因此紧接着的选中命令指向 0 号格。
-	state := step(network.CraftRecipe{Sequence: 1, Recipe: core.RecipeBread})
+	// 第一段：3 小麦经网格换成 1 个面包。面包是横排 3 格的形状配方，个人
+	// 2×2 网格摆不下，脚本把出生支撑块换成工作台（夹具只摆地形、不碰背包）
+	// 并向下俯视打开，把网格提到 3×3；三颗小麦分别搬进顶排三格后取出。
+	// 产物经 AddStack 落在搬空后最低的空快捷栏位 0（原料就是从 0..2 格搬走的），
+	// 因此紧接着的选中命令指向 0 号格。
+	host.world.SetBlockForTest(core.BlockPos{}, core.WorkbenchID)
+	state := step(network.OpenContainer{Sequence: 1, Pitch: -float32(math.Pi)/2 + 0.01})
+	if state.Hunger != eatingParityHunger {
+		t.Fatalf("%s 打开工作台后 wire 饥饿值=%d，想要 %d", transport, state.Hunger, eatingParityHunger)
+	}
+	for slot := uint8(0); slot < 3; slot++ {
+		state = step(network.MoveCraftingStack{
+			Sequence: uint64(2 + slot), From: 9 + slot, To: slot,
+		})
+		if state.Hunger != eatingParityHunger {
+			t.Fatalf("%s 摆放小麦后 wire 饥饿值=%d，想要 %d", transport, state.Hunger, eatingParityHunger)
+		}
+	}
+	state = step(network.TakeCraftingOutput{Sequence: 5})
 	want := core.ItemStack{Item: core.ItemBread, Count: 1}
 	if hotbar.Slots[0] != want {
 		t.Fatalf("%s 合成后 0 号格=%+v，想要 %+v", transport, hotbar.Slots[0], want)
@@ -157,7 +179,7 @@ func runEatingParityScript(t *testing.T, transport string) eatingParityResult {
 	if state.Hunger != eatingParityHunger {
 		t.Fatalf("%s 合成后 wire 饥饿值=%d，想要 %d", transport, state.Hunger, eatingParityHunger)
 	}
-	state = step(network.SelectHotbar{Sequence: 2, Slot: 0})
+	state = step(network.SelectHotbar{Sequence: 6, Slot: 0})
 	if state.Hunger != eatingParityHunger {
 		t.Fatalf("%s 选中后 wire 饥饿值=%d，想要 %d", transport, state.Hunger, eatingParityHunger)
 	}
@@ -167,7 +189,7 @@ func runEatingParityScript(t *testing.T, transport string) eatingParityResult {
 	for tick := 1; tick <= eatingParityEatTicks; tick++ {
 		var command network.ClientMessage
 		if tick == 1 {
-			command = network.PlayerInput{Sequence: 3, Eating: true}
+			command = network.PlayerInput{Sequence: 7, Eating: true}
 		}
 		state = step(command)
 		if tick < eatingParityEatTicks {

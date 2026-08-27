@@ -161,6 +161,21 @@ func (server *Server) publishLocalResult(
 			return
 		}
 	}
+	// 完整网格状态同样只发给所属会话（latest-wins、不广播），且与 sim 侧
+	// `publishCraftings` 排在 `publishInventories` 之后的顺序保持一致。
+	for _, update := range result.Craftings {
+		if update.Session != current.id {
+			continue
+		}
+		if !current.enqueue(network.CraftingState{
+			Size:   update.Size,
+			Slots:  update.Slots,
+			Output: update.Output,
+		}) {
+			server.closePublicationSessionLocked(current, errSessionOutboxFull)
+			return
+		}
+	}
 	// 熔炉状态只发给当前查看者；仅订阅区块但未打开界面的玩家不会收到。
 	for _, update := range result.Furnaces {
 		if update.Session != current.id {

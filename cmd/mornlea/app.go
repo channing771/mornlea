@@ -122,8 +122,11 @@ type application struct {
 	inventory        client.InventoryMirror
 	furnace          client.FurnaceMirror
 	chest            client.ChestMirror
-	miningOverlay    hud.MiningOverlay
-	// eatingTracker 是进食进度的客户端预测状态机（B-14）：`renderFrame` 在
+	// crafting 是权威合成网格的 latest-wins 只读镜像：网格内容、产物与有效
+	// 尺寸全部以服务端状态为准，客户端不预测；尺寸 3 表示工作台视图。
+	crafting      client.CraftingMirror
+	miningOverlay hud.MiningOverlay
+	// eatingTracker 是进食进度的客户端预测状态机：`renderFrame` 在
 	// `Prepare` 调用处按帧间时长推进；纯呈现，不进入权威或预测物理状态。
 	eatingTracker     client.EatingProgressTracker
 	itemDrops         *client.ItemDrops

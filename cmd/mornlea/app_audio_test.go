@@ -44,10 +44,17 @@ func TestLocalAudioUIClicksOnlyForEffectiveActions(t *testing.T) {
 	if err := app.inventory.Apply(network.InventoryState{Inventory: inventory}); err != nil {
 		t.Fatal(err)
 	}
-	recipeX, recipeY := recipeButtonCenter(t, core.RecipeStoneBricks, width, height)
-	app.clickInventorySlot(recipeX, recipeY, width, height)
-	if _, ok := receiveInteractiveClientMessage(t, endpoint).(network.CraftRecipe); !ok {
-		t.Fatal("可合成按钮未发送 CraftRecipe")
+	// 产物格取出是合成视图的有效界面动作：确认产物非空时单击即发送取出请求，
+	// 照常播点击 cue（recipe-click 发送路径已随格子工作台删除）。
+	crafting := network.CraftingState{Size: 2}
+	crafting.Output = core.ItemStack{Item: core.ItemStoneBrick, Count: 4}
+	if err := app.crafting.Apply(crafting); err != nil {
+		t.Fatal(err)
+	}
+	outputX, outputY := craftingOutputCenter(t, 2, width, height)
+	app.clickInventorySlot(outputX, outputY, width, height)
+	if _, ok := receiveInteractiveClientMessage(t, endpoint).(network.TakeCraftingOutput); !ok {
+		t.Fatal("产物格点击未发送 TakeCraftingOutput")
 	}
 
 	sourceX, sourceY := inventorySlotCenter(t, 1, width, height)
@@ -62,28 +69,31 @@ func TestLocalAudioUIClicksOnlyForEffectiveActions(t *testing.T) {
 	recorder.want(t, audio.CueUIClick, audio.CueUIClick, audio.CueUIClick, audio.CueUIClick, audio.CueUIClick)
 
 	app.clickInventorySlot(0, 0, width, height)
-	if err := app.inventory.Apply(network.InventoryState{Inventory: core.Inventory{}}); err != nil {
+	// 空产物格：网格不匹配任何配方，点击既不发送也不发声——本地不从「不可
+	// 取出」路径发声的纪律与旧 recipe-click 时代一致，权威拒绝在服务端。
+	if err := app.crafting.Apply(network.CraftingState{Size: 2}); err != nil {
 		t.Fatal(err)
 	}
-	app.clickInventorySlot(recipeX, recipeY, width, height)
+	app.clickInventorySlot(outputX, outputY, width, height)
 	app.inventorySource = core.FurnaceInputSlot
 	if err := app.furnace.Apply(network.FurnaceState{
 		Furnace: core.FurnaceRef{Dimension: core.Overworld, Generation: 1},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	outputX, outputY := furnaceSlotCenter(t, core.FurnaceOutputSlot, width, height)
-	app.clickInventorySlot(outputX, outputY, width, height)
+	outputSlotX, outputSlotY := furnaceSlotCenter(t, core.FurnaceOutputSlot, width, height)
+	app.clickInventorySlot(outputSlotX, outputSlotY, width, height)
 	_ = app.clientEndpoint.Close()
 	app.furnace.Reset()
 	app.inventorySource = 1
 	app.clickInventorySlot(targetX, targetY, width, height)
-	recorder.want(t, audio.CueUIClick, audio.CueUIClick, audio.CueUIClick, audio.CueUIClick, audio.CueUIClick)
+	recorder.want(t, audio.CueUIClick, audio.CueUIClick, audio.CueUIClick,
+		audio.CueUIClick, audio.CueUIClick)
 
 	silentApp, _ := newInteractiveTestApplication(t)
 	var silent audioCueRecorder
 	silentApp.playCue = silent.play
-	silentApp.clickInventorySlot(recipeX, recipeY, width, height)
+	silentApp.clickInventorySlot(outputX, outputY, width, height)
 	silent.want(t)
 }
 

@@ -147,6 +147,12 @@ func (engine *Engine) pickUpDrop(
 		if taken == 0 {
 			continue
 		}
+		// 回收不变量（design.md D4）：拾取不得挤占合成网格回收所需的背包
+		// 预算。预演失败时整堆拒绝——部分拾取也不例外，掉落物原样留在世界、
+		// 权威物品状态不变；下一 tick 若玩家腾出空间仍可正常拾取。
+		if !canRepackCrafting(next, player.crafting) {
+			continue
+		}
 		player.inventory = next
 		player.inventoryDirty = true
 		drop.Stack.Count -= taken

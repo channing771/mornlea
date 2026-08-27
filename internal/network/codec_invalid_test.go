@@ -163,12 +163,12 @@ func TestSmallPacketRejectsMalformedPayloads(t *testing.T) {
 			)
 			return err
 		}},
-		{"unknown craft recipe", func() error {
-			_, err := decodeClientPacketPayload(StatePlay, 7, []byte{0, 0, 0, 0, 0, 0, 0, 0, 200})
+		{"crafting move both ends in inventory", func() error {
+			_, err := decodeClientPacketPayload(StatePlay, 7, []byte{0, 0, 0, 0, 0, 0, 0, 0, 9, 10})
 			return err
 		}},
-		{"craft recipe trailing byte", func() error {
-			_, err := decodeClientPacketPayload(StatePlay, 7, []byte{0, 0, 0, 0, 0, 0, 0, 0, 1, 0})
+		{"crafting move trailing byte", func() error {
+			_, err := decodeClientPacketPayload(StatePlay, 7, []byte{0, 0, 0, 0, 0, 0, 0, 0, 9, 0, 1})
 			return err
 		}},
 		{"inventory move slot out of range", func() error {
@@ -258,8 +258,8 @@ func TestSmallPacketRejectsInvalidSemanticPackets(t *testing.T) {
 	); err == nil {
 		t.Fatal("invalid inventory move encoded")
 	}
-	if _, _, err := encodeClientPacketPayload(StatePlay, CraftRecipe{}); err == nil {
-		t.Fatal("unknown recipe encoded")
+	if _, _, err := encodeClientPacketPayload(StatePlay, MoveCraftingStack{From: 45}); err == nil {
+		t.Fatal("invalid crafting move encoded")
 	}
 	if _, _, err := encodeClientPacketPayload(StatePlay, PlayerInput{Yaw: float32(math.NaN())}); err == nil {
 		t.Fatal("non-finite client float encoded")

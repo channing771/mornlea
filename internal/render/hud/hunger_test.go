@@ -165,7 +165,7 @@ func TestHotbarPrepareDrawsHungerBar(t *testing.T) {
 	countDrumsticks := func(hunger HungerOverlay) (empty, full int) {
 		t.Helper()
 		if err := renderer.Prepare(
-			core.Inventory{}, false, false, -1, nil, nil, MiningOverlay{}, EatingOverlay{},
+			core.Inventory{}, false, false, -1, nil, nil, nil, MiningOverlay{}, EatingOverlay{},
 			HealthOverlay{}, OxygenOverlay{}, hunger, ChatOverlay{}, 1280, 720, budget,
 		); err != nil {
 			t.Fatal(err)

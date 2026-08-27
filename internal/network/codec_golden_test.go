@@ -30,7 +30,7 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		{"keep alive reply", StatePlay, KeepAliveReply{Token: 6}, 4, "0600000000000000"},
 		{"select hotbar", StatePlay, SelectHotbar{Sequence: 9, Slot: 8}, 5, "090000000000000008"},
 		{"move inventory stack", StatePlay, MoveInventoryStack{Sequence: 10, From: 3, To: 35}, 6, "0a00000000000000" + "03" + "23"},
-		{"craft recipe", StatePlay, CraftRecipe{Sequence: 11, Recipe: core.RecipeStoneBricks}, 7, "0b00000000000000" + "01"},
+		{"move crafting stack", StatePlay, MoveCraftingStack{Sequence: 11, From: 9, To: 0}, 7, "0b00000000000000" + "09" + "00"},
 		{"drop selected item", StatePlay, DropSelectedItem{
 			Sequence: 0x1122334455667788,
 		}, 11, "8877665544332211"},

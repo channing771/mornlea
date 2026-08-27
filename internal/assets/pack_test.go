@@ -210,6 +210,7 @@ func TestApplyPack(t *testing.T) {
 			"textures/water.png", "textures/farmland_dry.png", "textures/farmland_wet.png", "textures/wheat_0.png",
 			"textures/wheat_1.png", "textures/wheat_2.png", "textures/wheat_3.png", "textures/wheat_4.png",
 			"textures/wheat_5.png", "textures/wheat_6.png", "textures/wheat_7.png",
+			"textures/workbench_top.png", "textures/workbench_side.png", "textures/workbench_bottom.png",
 		}
 		if !reflect.DeepEqual(root.opened, want) {
 			t.Fatalf("打开顺序 = %v，想要 %v", root.opened, want)

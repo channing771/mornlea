@@ -448,9 +448,10 @@ func drainServerMessages(
 			collect(message)
 		}
 		switch message.(type) {
-		case network.InventoryState, network.ItemDropUpserts, network.ItemDropRemoves,
+		case network.InventoryState, network.CraftingState,
+			network.ItemDropUpserts, network.ItemDropRemoves,
 			network.PlaceBlockSucceeded:
-			// 快捷栏与掉落物由独立的只读镜像消费，不进入世界镜像。
+			// 快捷栏、合成网格与掉落物由独立的只读镜像消费，不进入世界镜像。
 			continue
 		}
 		if state, ok := message.(network.PlayerState); ok {

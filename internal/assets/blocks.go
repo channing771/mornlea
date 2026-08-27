@@ -62,6 +62,14 @@ const (
 	LayerWheat5
 	LayerWheat6
 	LayerWheat7
+	// LayerWorkbenchTop / LayerWorkbenchSide / LayerWorkbenchBottom 是工作台的
+	// 顶/侧/底三个原创程序化木质层（格子工作台批次追加）。工作台是普通不透明
+	// 立方体，三面各占一层、互不复用也不复用橡木木板层；按 LayerWheat0 处注释
+	// 的纪律，新层一律追加在 LayerWheat7 之后（在它之前插入会整体平移植物
+	// 区间，Rust 的 mesher 会把别的方块当成植物）。
+	LayerWorkbenchTop
+	LayerWorkbenchSide
+	LayerWorkbenchBottom
 	layerCount
 )
 
@@ -110,6 +118,9 @@ var textureBindings = [...]textureBinding{
 	{name: "wheat_5", layer: LayerWheat5},
 	{name: "wheat_6", layer: LayerWheat6},
 	{name: "wheat_7", layer: LayerWheat7},
+	{name: "workbench_top", layer: LayerWorkbenchTop},
+	{name: "workbench_side", layer: LayerWorkbenchSide},
+	{name: "workbench_bottom", layer: LayerWorkbenchBottom},
 }
 
 // Registry 是方块属性与材质的注册表。
@@ -155,13 +166,16 @@ func NewRegistry() *Registry {
 	for stage := 0; stage < wheatStageCount; stage++ {
 		r.layers[LayerWheat0+uint16(stage)] = wheatTexture(stage)
 	}
+	r.layers[LayerWorkbenchTop] = workbenchTopTexture()
+	r.layers[LayerWorkbenchSide] = workbenchSideTexture()
+	r.layers[LayerWorkbenchBottom] = workbenchBottomTexture()
 	// ids 覆盖 core 的全部已注册方块编号，上界一律用独占哨兵 core.BlockIDMax
 	// 表达——写死某个具体末位编号（历史上写过 WaterLevel7ID）会在追加新编号时
 	// 静默退化成子集，新方块就永远进不了快照。Rust 侧的
 	// RegistryView::face_visible 只做位图查表、缺条目一律判不可见，漏掉谁就等于
 	// 谁永远不出面（流体当年正是这样差点画不出水）。
 	// 条目数必须不超过 internal/mesh.nativeMaxRegistryEntries 与 Rust 的
-	// MAX_REGISTRY_ENTRIES（今天是 45 <= 48）。
+	// MAX_REGISTRY_ENTRIES（今天是 46 <= 48）。
 	ids := make([]world.BlockID, 0, int(core.BlockIDMax))
 	for id := core.AirID; id < core.BlockIDMax; id++ {
 		ids = append(ids, id)
@@ -288,6 +302,16 @@ func (r *Registry) Material(id world.BlockID, f mesh.Face) uint16 {
 		return LayerSnowSide
 	case core.MossyCobblestoneID:
 		return LayerMossyCobblestone
+	// 工作台：顶面是操作台面、底面是素箱底、四侧共用侧面板——与原木、雪块
+	// 同形的「按轴分层」立方体。
+	case core.WorkbenchID:
+		if f == mesh.FacePosY {
+			return LayerWorkbenchTop
+		}
+		if f == mesh.FaceNegY {
+			return LayerWorkbenchBottom
+		}
+		return LayerWorkbenchSide
 	case core.FarmlandDryID:
 		return LayerFarmlandDry
 	case core.FarmlandWetID:

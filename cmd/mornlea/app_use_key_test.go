@@ -63,12 +63,13 @@ func TestInteractiveDropSendsOnlyWhenReadyAndAllowed(t *testing.T) {
 	}
 }
 
-// TestUseKeySendsTillSoilOnlyForHoeAgainstSoil 覆盖「使用」键的三路分流：手持
-// 锄头对着泥土或草必须发翻地命令；手持可放置方块仍发放置；翻地条件不满足的
-// 锄头、损坏锄头与镐都是不可放置物，一条命令也不发——服务端本来就会拒绝，
-// 客户端不发只是不刷无谓的拒绝（判定与权威侧共用 `core.ItemPlacement`）。
+// TestUseKeySendsTillSoilOnlyForHoeAgainstSoil 覆盖「使用」键的四路分流：手持
+// 锄头对着泥土或草必须发翻地命令；视线命中熔炉、箱子或工作台必须发打开容器
+// 请求而不是放置（工作台与熔炉/箱子共用同一既有判定路径）；手持可放置方块
+// 仍发放置；其余组合一条命令也不发——服务端本来就会拒绝，客户端不发只是
+// 不刷无谓的拒绝（判定与权威侧共用 `core.ItemPlacement`）。
 //
-// 表里三类行都有对照：只测翻地行的话，一个把所有「使用」都改发翻地的实现也会
+// 表里每类行都有对照：只测翻地行的话，一个把所有「使用」都改发翻地的实现也会
 // 全绿；只测「不发」行的话，一个把放置整个删掉的实现也会全绿。
 func TestUseKeySendsTillSoilOnlyForHoeAgainstSoil(t *testing.T) {
 	stoneFull, _ := core.ItemMaxDurability(core.ItemStonePickaxe)
@@ -92,6 +93,12 @@ func TestUseKeySendsTillSoilOnlyForHoeAgainstSoil(t *testing.T) {
 			core.ItemStack{Item: core.ItemBrokenStoneHoe, Count: 1}, nil},
 		{"镐对草不发命令", core.GrassID,
 			core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: stoneFull}, nil},
+		{"手持工作台物品对工作台发打开", core.WorkbenchID,
+			core.ItemStack{Item: core.ItemWorkbench, Count: 3},
+			network.OpenContainer{Sequence: 1}},
+		{"手持普通方块对工作台仍发打开而非放置", core.WorkbenchID,
+			core.ItemStack{Item: core.ItemDirt, Count: 1},
+			network.OpenContainer{Sequence: 1}},
 		{"普通方块对草仍发放置", core.GrassID,
 			core.ItemStack{Item: core.ItemDirt, Count: 1},
 			network.PlaceBlock{Sequence: 1, Slot: 4}},

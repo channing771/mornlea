@@ -92,11 +92,17 @@ func (engine *Engine) openContainer(id SessionID, command Command) (RejectReason
 		return RejectChunkNotReady, true
 	}
 	var kind core.ContainerKind
+	workbench := false
 	switch block {
 	case core.FurnaceID:
 		kind = core.ContainerKindFurnace
 	case core.ChestID:
 		kind = core.ContainerKindChest
+	case core.WorkbenchID:
+		// 工作台走同一份权威射线、触及距离与 loaded chunk 校验，但它是普通
+		// 方块而不是容器（design.md D5）：打开只提升该玩家网格尺寸并记录
+		// 命中位置，不占 `world.ContainerRef`、不占区块槽位、无持久化。
+		workbench = true
 	default:
 		return RejectNoTarget, true
 	}
@@ -108,6 +114,17 @@ func (engine *Engine) openContainer(id SessionID, command Command) (RejectReason
 	index, indexed := world.ChunkBlockIndex(hit.Block)
 	if !indexed {
 		return RejectNoTarget, true
+	}
+	if workbench {
+		player := session.player
+		player.crafting.Size = CraftingGridSizeWorkbench
+		player.workbench = hit.Block
+		player.craftingDirty = true
+		// 打开工作台结束既有容器查看关系：每名玩家同时只操作一个界面，
+		// 与熔炉/箱子互斥的既有语义对齐。
+		session.viewContainer = false
+		session.container = core.ContainerRef{}
+		return 0, false
 	}
 
 	var ref core.ContainerRef
@@ -335,6 +352,13 @@ func (engine *Engine) applyContainerMove(
 		if !ok {
 			return RejectInvalidInput, true
 		}
+		// 回收不变量（design.md D4）：箱子 → 背包的移动是一条真实的背包增量
+		// 入口，同样不得挤占网格回收预算；破坏不变量的移动整体拒绝且
+		// 背包、箱子与网格逐格不变。背包内部移动由 `Inventory.MoveStack`
+		// 的合并/迁移语义保持不变量，这里的预演对它恒过。
+		if !canRepackCrafting(nextInventory, session.player.crafting) {
+			return RejectInvalidInput, true
+		}
 		chunk.SetChest(int(ref.Slot), nextChest)
 		engine.touchChunk(key, pending)
 		session.player.inventory = nextInventory
@@ -349,6 +373,10 @@ func (engine *Engine) applyContainerMove(
 			session.player.inventory, furnace, command.Slot, command.ToSlot,
 		)
 		if !ok {
+			return RejectInvalidInput, true
+		}
+		// 同上：熔炉 → 背包的移动受回收不变量约束。
+		if !canRepackCrafting(nextInventory, session.player.crafting) {
 			return RejectInvalidInput, true
 		}
 		chunk.SetFurnace(int(ref.Slot), nextFurnace)
