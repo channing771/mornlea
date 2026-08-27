@@ -159,7 +159,9 @@ func (m *companionManager) applyDialogueOutcomes() {
 // 或队首已提升）直接丢弃；开始/进展/首次到达节点的任务必须仍在 Running
 // （任务已终态即过时，防止「我出发了」出现在任务结束之后）。终态节点在任务
 // 离开当前槽位时触发，世代一致即同一任务纪元，无需再断言当前槽位状态（清槽
-// 是终态的既有序列）。失败结果只记 debug 级结构化日志并跳过该台词。
+// 是终态的既有序列）。idle 节点执行专用重验：队列完全空、真实同一发令者、
+// 身体激活且受众资格仍成立（见 switch 内 D7 分支）。失败结果只记 debug 级
+// 结构化日志并跳过该台词。
 func (m *companionManager) applyDialogueOutcome(outcome dialogueOutcome) {
 	slot := m.slots[outcome.id]
 	if slot == nil || !slot.dialogueInFlight {
@@ -183,6 +185,24 @@ func (m *companionManager) applyDialogueOutcome(outcome dialogueOutcome) {
 			return
 		}
 	case companion.DialogueNodeTerminal:
+	case companion.DialogueNodeIdle:
+		// idle 结果的专用重验（D7）：请求在途期间世界事实可能已变化，只有
+		// 队列仍完全空、发令者仍是发起请求的同一真实玩家（非恢复合成身份）、
+		// 伙伴仍激活且玩家仍在线并在水平 16 格内时，结果才仍属于发起它的
+		// 语境；任一不符静默丢弃——不广播、不改摘要、不补发。失败结果的
+		// 去向与任务节点一致（switch 之后的 err 分支）。
+		if _, hasCurrent := slot.queue.Current(); hasCurrent || slot.queue.Len() != 0 {
+			return
+		}
+		if slot.currentIssuer.restored ||
+			slot.currentIssuer.playerID != outcome.issuer.playerID ||
+			slot.currentIssuer.name != outcome.issuer.name {
+			return
+		}
+		body, active := m.body(outcome.id)
+		if !active || !m.idleDialogueAudience(slot.currentIssuer, body) {
+			return
+		}
 	default:
 		return
 	}
