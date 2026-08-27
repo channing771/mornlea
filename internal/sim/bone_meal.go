@@ -8,7 +8,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 )
 
-// executeBoneMeal 处理一条骨粉催熟命令：把视线内的未成熟小麦推进一阶段，并从
+// executeBoneMeal 处理一条骨粉催熟命令：把视线内的未成熟作物推进一阶段，并从
 // 权威选中的骨粉扣减恰好一个。
 //
 // 校验顺序与 executeTillSoil 同形，结构上保证拒绝路径零消耗零写入。
@@ -48,7 +48,7 @@ func (engine *Engine) executeBoneMeal(
 		return RejectChunkNotReady, true
 	}
 	// 只有未成熟作物可被催熟；成熟与非作物均拒绝。
-	if !core.IsCrop(block) || block == core.WheatStage7ID {
+	if !core.IsCrop(block) || core.CropStage(block) == 7 {
 		return RejectInvalidBlock, true
 	}
 	// 手持物按权威选中格解析。
@@ -61,7 +61,7 @@ func (engine *Engine) executeBoneMeal(
 	if !ok {
 		return RejectInvalidBlock, true
 	}
-	next := block + 1 // WheatStage0..6 连续递增即下一阶段；Stage7 已在上游拒绝。
+	next := block + 1 // Stage0..6 连续递增即下一阶段；Stage7 已在上游拒绝。
 	_, changed, setErr := dimension.SetBlock(hit.Block, next)
 	if setErr != nil {
 		return mapSetBlockError(setErr), true

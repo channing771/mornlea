@@ -331,6 +331,36 @@ func TestTrampleDualPlayerLandingSameCellIsIdempotent(t *testing.T) {
 	}
 }
 
+// TestTrampleDestroysNewCrops 覆盖 IsCrop 新区间：落在马铃薯/胡萝卜上的踩踏与小麦同形。
+func TestTrampleDestroysNewCrops(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		crop core.BlockID
+		item core.ItemID
+	}{
+		{"PotatoStage3", core.PotatoStage3ID, core.ItemPotato},
+		{"CarrotStage3", core.CarrotStage3ID, core.ItemCarrot},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			engine, session := readyMovementPlayer(t)
+			engine.SetBlockForTest(trampleFoot, core.FarmlandDryID)
+			engine.SetBlockForTest(trampleCrop, tc.crop)
+			result := landPlayerFromAbove(t, engine, session, trampleFoot)
+			if got := tillBlockAt(t, engine, trampleFoot); got != core.DirtID {
+				t.Fatalf("被踩耕地 = %d，想要泥土 %d", got, core.DirtID)
+			}
+			if got := tillBlockAt(t, engine, trampleCrop); got != core.AirID {
+				t.Fatalf("被踩作物 = %d，想要空气", got)
+			}
+			got := miningDropTotals(miningTargetRecord(t, engine, trampleCrop).Chunk)
+			if got[tc.item] != 1 || len(got) != 1 {
+				t.Fatalf("踩踏掉落 = %+v，想要 1 %d", got, tc.item)
+			}
+			assertTrampleBroadcasted(t, result, true)
+		})
+	}
+}
+
 // TestTrampleCrossCellCoverageSettlesAllCoveredFarmland 覆盖 Scenario「跨格站立
 // 踩踏全部覆盖格」：玩家落在四列交界处，碰撞盒（半宽 0.3）水平覆盖 2×2 列，
 // 其中对角两格是耕地，两格 MUST 都被结算为泥土——只判玩家中心柱会漏掉半边。

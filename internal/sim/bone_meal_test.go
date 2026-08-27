@@ -195,3 +195,76 @@ func TestBoneMealConsumesExactlyOneEvenWithMany(t *testing.T) {
 		t.Fatalf("催熟阶段错误: %d", got)
 	}
 }
+
+func TestBoneMealPotatoAdvances(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		before core.BlockID
+		after  core.BlockID
+	}{
+		{"0→1", core.PotatoStage0ID, core.PotatoStage1ID},
+		{"3→4", core.PotatoStage3ID, core.PotatoStage4ID},
+		{"6→7", core.PotatoStage6ID, core.PotatoStage7ID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			held := core.ItemStack{Item: core.ItemBoneMeal, Count: 4}
+			engine, session, yaw, pitch := readyBoneMealPlayer(t, held, tc.before)
+			result := boneMeal(engine, session, yaw, pitch)
+			if len(result.Rejected) != 0 {
+				t.Fatalf("合法马铃薯骨粉被拒绝: %+v", result.Rejected)
+			}
+			if got := tillBlockAt(t, engine, boneMealTarget); got != tc.after {
+				t.Fatalf("马铃薯催熟结果 = %d，想要 %d", got, tc.after)
+			}
+			want := core.ItemStack{Item: core.ItemBoneMeal, Count: 3}
+			if got := engine.sessions[session].player.inventory.Hotbar.Slots[0]; got != want {
+				t.Fatalf("马铃薯催熟后栏位 = %+v，想要 %+v", got, want)
+			}
+		})
+	}
+}
+
+func TestBoneMealCarrotAdvances(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		before core.BlockID
+		after  core.BlockID
+	}{
+		{"0→1", core.CarrotStage0ID, core.CarrotStage1ID},
+		{"3→4", core.CarrotStage3ID, core.CarrotStage4ID},
+		{"6→7", core.CarrotStage6ID, core.CarrotStage7ID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			held := core.ItemStack{Item: core.ItemBoneMeal, Count: 4}
+			engine, session, yaw, pitch := readyBoneMealPlayer(t, held, tc.before)
+			result := boneMeal(engine, session, yaw, pitch)
+			if len(result.Rejected) != 0 {
+				t.Fatalf("合法胡萝卜骨粉被拒绝: %+v", result.Rejected)
+			}
+			if got := tillBlockAt(t, engine, boneMealTarget); got != tc.after {
+				t.Fatalf("胡萝卜催熟结果 = %d，想要 %d", got, tc.after)
+			}
+			want := core.ItemStack{Item: core.ItemBoneMeal, Count: 3}
+			if got := engine.sessions[session].player.inventory.Hotbar.Slots[0]; got != want {
+				t.Fatalf("胡萝卜催熟后栏位 = %+v，想要 %+v", got, want)
+			}
+		})
+	}
+}
+
+func TestBoneMealRejectsMaturePotatoAndCarrot(t *testing.T) {
+	for _, target := range []core.BlockID{core.PotatoStage7ID, core.CarrotStage7ID} {
+		held := core.ItemStack{Item: core.ItemBoneMeal, Count: 2}
+		engine, session, yaw, pitch := readyBoneMealPlayer(t, held, target)
+		result := boneMeal(engine, session, yaw, pitch)
+		if len(result.Rejected) != 1 || result.Rejected[0].Reason != RejectInvalidBlock {
+			t.Fatalf("成熟目标 %d Rejected=%+v，想要 RejectInvalidBlock", target, result.Rejected)
+		}
+		if got := tillBlockAt(t, engine, boneMealTarget); got != target {
+			t.Fatalf("成熟催熟改了方块: %d", got)
+		}
+		if got := engine.sessions[session].player.inventory.Hotbar.Slots[0]; got != held {
+			t.Fatalf("成熟催熟扣了骨粉: %+v", got)
+		}
+	}
+}

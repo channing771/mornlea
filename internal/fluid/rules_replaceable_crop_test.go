@@ -13,7 +13,7 @@ import (
 // 钉住作物放行的完整边界（八个生长阶段 × 最强/最弱两档新等级）以及放行
 // 之后「非作物实心」分支的剩余覆盖面。
 
-// TestReplaceable_CropStages 断言小麦的八个生长阶段对流动水一律可替换。
+// TestReplaceable_CropStages 断言小麦、马铃薯、胡萝卜的全部 24 个生长阶段对流动水一律可替换。
 //
 // 阶段编号逐个显式枚举而不是用 `core.IsCrop` 推导区间端点：测试不得与实现
 // 共用同一段闭区间算式，否则 `core.IsCrop` 的上下界写错时测试会跟着一起错
@@ -21,22 +21,44 @@ import (
 // 极端：newLevel=1 是垂直优先与源的水平传播产出的最强写入，newLevel=7 是
 // 水平递减的下界——两端都放行，中间等级没有独立的代码路径。
 func TestReplaceable_CropStages(t *testing.T) {
-	stages := []core.BlockID{
-		core.WheatStage0ID,
-		core.WheatStage1ID,
-		core.WheatStage2ID,
-		core.WheatStage3ID,
-		core.WheatStage4ID,
-		core.WheatStage5ID,
-		core.WheatStage6ID,
-		core.WheatStage7ID,
+	stages := []struct {
+		name  string
+		id    core.BlockID
+		stage int
+	}{
+		{"WheatStage0", core.WheatStage0ID, 0},
+		{"WheatStage1", core.WheatStage1ID, 1},
+		{"WheatStage2", core.WheatStage2ID, 2},
+		{"WheatStage3", core.WheatStage3ID, 3},
+		{"WheatStage4", core.WheatStage4ID, 4},
+		{"WheatStage5", core.WheatStage5ID, 5},
+		{"WheatStage6", core.WheatStage6ID, 6},
+		{"WheatStage7", core.WheatStage7ID, 7},
+		{"PotatoStage0", core.PotatoStage0ID, 0},
+		{"PotatoStage1", core.PotatoStage1ID, 1},
+		{"PotatoStage2", core.PotatoStage2ID, 2},
+		{"PotatoStage3", core.PotatoStage3ID, 3},
+		{"PotatoStage4", core.PotatoStage4ID, 4},
+		{"PotatoStage5", core.PotatoStage5ID, 5},
+		{"PotatoStage6", core.PotatoStage6ID, 6},
+		{"PotatoStage7", core.PotatoStage7ID, 7},
+		{"CarrotStage0", core.CarrotStage0ID, 0},
+		{"CarrotStage1", core.CarrotStage1ID, 1},
+		{"CarrotStage2", core.CarrotStage2ID, 2},
+		{"CarrotStage3", core.CarrotStage3ID, 3},
+		{"CarrotStage4", core.CarrotStage4ID, 4},
+		{"CarrotStage5", core.CarrotStage5ID, 5},
+		{"CarrotStage6", core.CarrotStage6ID, 6},
+		{"CarrotStage7", core.CarrotStage7ID, 7},
 	}
 	for _, stage := range stages {
 		for _, level := range []uint8{1, 7} {
-			t.Run(fmt.Sprintf("WheatStage%d 对等级%d可替换", stage-core.WheatStage0ID, level), func(t *testing.T) {
-				if got := Replaceable(stage, level); !got {
-					t.Errorf("Replaceable(小麦阶段%d, %d) = false, want true：作物应被流动水冲毁",
-						stage-core.WheatStage0ID, level)
+			s := stage
+			lvl := level
+			t.Run(fmt.Sprintf("%s 对等级%d可替换", s.name, lvl), func(t *testing.T) {
+				if got := Replaceable(s.id, lvl); !got {
+					t.Errorf("Replaceable(%s 阶段%d, %d) = false, want true：作物应被流动水冲毁",
+						s.name, s.stage, lvl)
 				}
 			})
 		}

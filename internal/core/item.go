@@ -234,6 +234,14 @@ func BlockDrop(block BlockID) (ItemID, bool) {
 	// （变更 authoritative-farming 的任务组 5）。不在这里发明新的多产物形状。
 	case WheatStage7ID:
 		return ItemWheat, true
+	// 未成熟马铃薯/胡萝卜各掉 1 自身；成熟各掉 1 自身（多产物 1..4 由收获/踩踏
+	// 分支按确定性哈希补发，保底仍为单产物）。
+	case PotatoStage0ID, PotatoStage1ID, PotatoStage2ID, PotatoStage3ID,
+		PotatoStage4ID, PotatoStage5ID, PotatoStage6ID, PotatoStage7ID:
+		return ItemPotato, true
+	case CarrotStage0ID, CarrotStage1ID, CarrotStage2ID, CarrotStage3ID,
+		CarrotStage4ID, CarrotStage5ID, CarrotStage6ID, CarrotStage7ID:
+		return ItemCarrot, true
 	default:
 		return ItemNone, false
 	}
