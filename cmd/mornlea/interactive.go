@@ -173,8 +173,9 @@ func runGamePhase(app *application) error {
 				// 面板期间的 Esc 由 Rust egui 消费（编辑中取消编辑、非编辑
 				// 态关闭面板），Go 不释放光标；CLOSE 事件回传后由本侧复位。
 			case app.pauseVisible():
-				// 暂停覆盖层占据栈顶时 Esc 即返回游戏；与 Rust 合成的同一
-				// 返回动作共用防重入哨兵，双通路同帧到达只生效一次。
+				// 暂停覆盖层占据栈顶时 Esc 即返回游戏；与「返回游戏」按钮
+				// 动作共用防重入哨兵，双通路同帧到达只生效一次。Esc 关闭
+				// 由本侧键位栈裁决，Rust 不合成 Escape 动作。
 				app.closePauseOverlay()
 				lastMouseX, lastMouseY = app.window.CursorPos()
 				justCaptured = true
@@ -193,9 +194,10 @@ func runGamePhase(app *application) error {
 		}
 		backspaceWasDown = backspaceDown
 
-		// 暂停相位接管整帧 typed UI 事件：「返回游戏」「退回主菜单」按钮与
-		// Rust 合成的 Escape≡back 动作都从这里消费。非暂停相位的 drain 归调试
-		// 面板段独占（语义不变），两个分支因 F3 在暂停期被抑制而互斥。
+		// 暂停相位接管整帧 typed UI 事件：「返回游戏」「退回主菜单」按钮动作
+		// 都从这里消费（Esc 关闭由键位栈直呼，不经该队列）。非暂停相位的
+		// drain 归调试面板段独占（语义不变），两个分支因 F3 在暂停期被抑制
+		// 而互斥。
 		if app.pauseVisible() {
 			for _, event := range app.renderer.DrainUIEvents() {
 				_, disposition := app.handleMenuUIEvent(event)

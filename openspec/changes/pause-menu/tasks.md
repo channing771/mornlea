@@ -10,7 +10,7 @@
 
 ## 2. Rust 暂停页（`mornlea_client`）
 
-- [x] 2.1 先写失败测试：`ui/` 新增暂停页模块的 render 纯函数测试——「返回游戏」「退回主菜单」按钮列可判定；注明行按远程标志两分支呈现；Escape 产生与「返回游戏」相同的 back typed action。
+- [x] 2.1 先写失败测试：`ui/` 新增暂停页模块的 render 纯函数测试——「返回游戏」「退回主菜单」按钮列可判定；注明行按远程标志两分支呈现；Escape 产生与「返回游戏」相同的 back typed action。口径修正（终审修复轮）：该句的 Rust 侧 Escape 合成已被裁定删除——暂停帧对 Escape 键事件免疫（零动作），Esc 关闭由 Go 键位栈裁决，见 ledger 同日「5 终审修复轮 R1」行。
 - [x] 2.2 实现暂停页布局：新增页面级 `UI_PAUSE_LAYOUT_VERSION = 4`（既有 1/2/3 与各自线格式不动，客户端 ABI 保持 v9）。口径修正：控制会话契约补钉裁决把「同一 Task 内改齐两侧」拆分为本任务建 Rust 侧常量并测试钉住、Go 侧同值 `menuAction*` 常量由第 3 组建立消费——见 design.md 关键取舍第 5 条与 2.3 注记。
 - [x] 2.3 验证：Rust 侧 `cargo test -p mornlea_client`；Go 侧涉及文件若为独立包则 `go test ./internal/client -race -count=1`（以实际触碰为准）。本执行：Rust 侧全绿（167 passed / 0 failed，含新增 8 个暂停页测试）；**Go 侧零改动**，Go 侧命令不适用——Go 同值动作常量与编码按 design「关键取舍」第 5 条由接线任务建立后消费。标题「已暂停」断言已随 R2 轮补齐。
 

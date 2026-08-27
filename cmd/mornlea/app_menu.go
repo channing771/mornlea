@@ -36,11 +36,11 @@ const (
 
 // 暂停覆盖层按钮 id 常量：跨语言契约数字与 engine/crates/mornlea_client/src/ui.rs
 // 的 UI_ACTION_PAUSE_BACK / UI_ACTION_PAUSE_QUIT_TO_MENU 同值互钉，延续主菜单
-// 动作表 1..7 之后且互不重叠；Escape 键在暂停相位由 Rust egui 合成为返回动作
-// （沿设置页 Esc≡返回的先例），Go 侧不另设键位编号。两侧任何一方不得单方面
-// 改动数字。
+// 动作表 1..7 之后且互不重叠；动作 8 仅由「返回游戏」按钮产生，Esc 的开合由
+// Go 键位栈暂停档裁决（interactive.go），Rust 侧不合成 Escape 动作——宿主
+// winit 泵同帧回声会把开层立即回声成关层。两侧任何一方不得单方面改动数字。
 const (
-	menuActionPauseBack       uint32 = 8 // 返回游戏或 Escape
+	menuActionPauseBack       uint32 = 8 // 返回游戏
 	menuActionPauseQuitToMenu uint32 = 9 // 退回主菜单
 )
 

@@ -1,4 +1,4 @@
-//! 暂停页无头呈现与交互测试：两按钮、远程注明行两分支与 Escape 同动作。
+//! 暂停页无头呈现与交互测试：两按钮、远程注明行两分支与 Escape 键事件免疫。
 
 use super::test_support::{click_ui, screen_rect, shape_text, take_output_events, test_font};
 use super::*;
@@ -58,10 +58,13 @@ fn pause_remote_flag_presents_note_line() {
 }
 
 #[test]
-fn pause_escape_emits_same_back_action_as_return_button() {
+fn pause_frame_ignores_escape_key_events() {
     let mut state = prepared_state();
     let frame = pause_frame(false);
 
+    // 暂停帧收到 Escape 键事件不得合成任何动作:宿主 winit 泵同一帧既更新
+    // 键位快照又把按键入队为 UI 键事件,Go 侧 Esc 栈据快照边沿裁决开合;
+    // 若 Rust 再合成返回动作,开层当帧的回声会把覆盖层立即关掉(开层即闭)。
     state
         .run_frame(
             raw_input(
@@ -79,12 +82,12 @@ fn pause_escape_emits_same_back_action_as_return_button() {
         )
         .unwrap()
         .unwrap();
-    assert_eq!(
-        take_output_events(&mut state),
-        vec![UiOutputEvent::Action(UI_ACTION_PAUSE_BACK)]
+    assert!(
+        take_output_events(&mut state).is_empty(),
+        "暂停帧不得把 Escape 键事件合成为动作"
     );
 
-    // 首按钮即「返回游戏」,点击产生与 Escape 相同的 typed action。
+    // 「返回游戏」按钮是 back 动作的唯一来源,点击仍产生该 typed action。
     let rects = menu_button_layout(screen_rect(), 2);
     click_ui(&mut state, &frame, screen_rect(), rects[0].center());
     assert_eq!(

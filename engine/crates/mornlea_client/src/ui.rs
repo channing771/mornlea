@@ -1592,9 +1592,9 @@ const PAUSE_REMOTE_NOTE_TEXT: &str = "远程世界不会暂停，服务端仍在
 ///
 /// 半透明遮罩之上复用 [`menu_button_layout`] 居中放置标题与两枚固定按钮,
 /// 布局确定性沿用主菜单口径(不依赖字体度量);注明行只在远程形态呈现,
-/// 锚位沿主菜单错误行的「末按钮下方固定间距」。点击与 Escape 先汇总进
-/// `actions`,由 [`UiState::run_frame`] 统一追加事件;恢复或拆链的裁决权
-/// 在 Go 相位机,本函数只把用户意图翻译成 typed action。
+/// 锚位沿主菜单错误行的「末按钮下方固定间距」。点击先汇总进 `actions`,
+/// 由 [`UiState::run_frame`] 统一追加事件;恢复或拆链的裁决权在 Go 相位机,
+/// 本函数只把按钮点击翻译成 typed action。
 fn draw_pause(ui: &mut egui::Ui, frame: &UiPauseFrame, actions: &mut PauseActions) {
     let screen = ui.max_rect();
     ui.painter()
@@ -1634,9 +1634,10 @@ fn draw_pause(ui: &mut egui::Ui, frame: &UiPauseFrame, actions: &mut PauseAction
         );
     }
 
-    // Escape 与「返回游戏」共用同一个 typed action(设置页 Esc≡back 先例);
-    // 是否允许恢复、光标重新捕获都由 Go 相位机裁决。
-    actions.back |= ui.input(|input| input.key_pressed(Key::Escape));
+    // Esc 关闭由 Go 键位栈在暂停相位裁决,本函数不把 Escape 合成为返回动作:
+    // 宿主 winit 泵同一帧既更新 Go 键位快照、又把按键入队为 UI 键事件,
+    // 这里若再合成会把开层当帧的回声放大成「开层即闭」。设置页的
+    // Esc≡back 合成先例仅适用于菜单相位(Go 在该相位不处理 Esc),不可照搬。
 }
 
 /// 在固定矩形内绘制一枚启用态暂停按钮,返回本帧是否被点击。

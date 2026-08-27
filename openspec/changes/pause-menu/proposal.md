@@ -29,7 +29,7 @@
 
 ## Impact
 
-- **代码**：`internal/server/server.go` 与 `host.go`（暂停门及其经 `Host` 的直通暴露）、`cmd/mornlea/app_menu.go` + `interactive.go` + 新增 `app_pause*.go`（相位机与 Esc 栈）、`engine/crates/mornlea_client/src/ui.rs` 及 `ui/`（暂停页渲染与解码）及各同包测试。
+- **代码**：`internal/server/server.go` 与 `host.go`（暂停门及其经 `Host` 的直通暴露）、`cmd/mornlea/app_menu.go` + `app.go` + `app_lifecycle.go` + `app_startup.go` + `interactive.go` + 新增 `app_pause*.go`（相位机、暂停门捕获与 Esc 栈）、`engine/crates/mornlea_client/src/ui.rs` 及 `ui/`（暂停页渲染与解码）及各同包测试。
 - **兼容性**：无协议、无存档 schema、无 engine/client ABI 升版；唯一结构变化是 UI 下行布局段的内部版本 3→4（沿 D-03 先例，仅仓库自有契约），capture 场景表与视觉 golden 零变化（暂停页不在任何场景中出现）。
 - **性能与并发**：暂停门为一个原子读判断，无新 goroutine、无锁、热路径无新增分配；暂停时长由人工交互决定，期间不产生任何周期性工作。
 

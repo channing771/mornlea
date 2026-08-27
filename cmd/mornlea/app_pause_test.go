@@ -86,6 +86,13 @@ func TestPauseTransitionMatrixEscapeOpensReleasesCursorAndPauses(t *testing.T) {
 	if got := binary.LittleEndian.Uint32(segment[:4]); got != 4 {
 		t.Fatalf("暂停段布局版本 = %d，want 4", got)
 	}
+	// 动作编号钉值断言：跨语言互钉数字 8/9 的 Go 半边显式化（Rust
+	// UI_ACTION_PAUSE_BACK / UI_ACTION_PAUSE_QUIT_TO_MENU 同值，任何一侧
+	// 不得单方面改动）。
+	if menuActionPauseBack != 8 || menuActionPauseQuitToMenu != 9 {
+		t.Fatalf("暂停动作编号 = %d/%d，want 8/9",
+			menuActionPauseBack, menuActionPauseQuitToMenu)
+	}
 }
 
 // TestPauseTransitionMatrixEscOrButtonResumesOnce 锁定关侧防重入：Esc 边沿与
