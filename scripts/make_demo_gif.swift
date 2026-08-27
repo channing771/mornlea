@@ -4,7 +4,11 @@ import UniformTypeIdentifiers
 import CoreGraphics
 
 let dir = "cmd/mornlea/testdata/golden"
-let names = ["terrain-noon", "oak-grove", "block-light-room", "materials-showcase", "avatar-nametag"]
+// 帧序按「世界 → 生存特性 → 界面」讲一遍当前能力：地形、树林、水下、方块光、工作台合成、伙伴。
+let names = [
+    "terrain-noon", "oak-grove", "water-underwater",
+    "block-light-room", "workbench-crafting", "ai-companion",
+]
 let outURL = URL(fileURLWithPath: "docs/demo.gif")
 
 guard let dest = CGImageDestinationCreateWithURL(

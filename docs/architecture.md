@@ -61,3 +61,43 @@ Linux 专服发布单元由 `mornlea-server` 与相邻的 `libmornlea_engine.so`
 当前可观察行为以代码、测试和 [`openspec/specs/`](../openspec/specs/) 为准。正在实施的变更位于 [`openspec/changes/`](../openspec/changes/)，流程见 [`docs/openspec.md`](openspec.md)。
 
 实现编年史见 [`docs/notes/progress.md`](notes/progress.md)。`docs/superpowers/` 与 [`openspec/changes/archive/`](../openspec/changes/archive/) 保存历史设计和 change 证据，不覆盖当前架构与行为主规格。完整入口见 [`docs/README.md`](README.md)。
+
+## 10. 仓库目录导览
+
+```text
+.
+├── cmd/
+│   ├── mornlea/             游戏客户端与内置服务端装配
+│   ├── mornlea-server/      无图形 TCP 专用服务端
+│   ├── mornlea-agent-board/ AI 工作者执行状态 Web 看板
+│   ├── gfxspike/            Rust renderer 地形渲染验证程序
+│   └── perfcheck/           性能报告比较工具
+├── engine/
+│   └── crates/
+│       ├── mornlea_engine/  固定 Rust 1.97.1 cdylib：mesh/light/collision/raycast/physics/worldgen
+│       └── mornlea_client/  Darwin 窗口、事件循环与全部 GPU 渲染（含 egui 菜单/面板页）
+├── internal/                包职责见 §4，依赖白名单以 archcheck 为准
+│   ├── core/                公共领域类型与 native raycast batch 驱动
+│   ├── companion/           独立伙伴身份、静态定义与身体类型
+│   ├── profile/             本机稳定玩家身份与档案
+│   ├── config/              共享 JSON 配置加载与校验
+│   ├── logging/             模块化日志
+│   ├── audio/               Darwin 本地程序化提示音
+│   ├── fluid/               有界权威流体更新队列
+│   ├── lod/                 远环 tile 调度与 CPU 编码
+│   ├── world/               区块和世界数据模型
+│   ├── worldgen/            worldgen seed→perm 播种、Rust 调用与区块回写
+│   ├── physics/             玩家运动与碰撞
+│   ├── sim/                 权威世界模拟
+│   ├── server/              服务端 Host、会话、发布与玩家持久化
+│   ├── network/             二进制协议、登录状态机与 Memory/TCP 传输
+│   ├── storage/             世界、区域文件与玩家状态持久化
+│   ├── client/              输入、相机、预测、窗口/client ABI 与客户端镜像
+│   ├── mesh/                区块网格生产 API（实现位于 Rust cdylib）
+│   ├── nativeabi/           engine C ABI 的唯一 Go bridge
+│   ├── render/              渲染 CPU 半部：布局、编码与上传调度
+│   ├── assets/              方块定义与程序化材质
+│   └── archcheck/           内部包依赖方向门禁测试
+├── scripts/agent-hooks/     Claude Code 与 Codex 共用的自动 Hook 守卫
+└── docs/                    设计、实施计划、性能记录与实现进度
+```

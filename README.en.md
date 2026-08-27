@@ -4,7 +4,7 @@
   <img src="https://img.shields.io/badge/Go-1.26-00ADD8" alt="Go 1.26">
   <img src="https://img.shields.io/badge/Rust-1.97.1-f74c00" alt="Rust 1.97.1">
   <img src="https://img.shields.io/badge/platform-macOS-9cf" alt="macOS">
-  <img src="https://img.shields.io/badge/protocol-v26-blue" alt="protocol v26">
+  <img src="https://img.shields.io/badge/protocol-v29-blue" alt="protocol v29">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
   <img src="https://github.com/channing771/mornlea/actions/workflows/ci.yml/badge.svg" alt="CI">
   <img src="https://img.shields.io/github/v/release/channing771/mornlea" alt="release">
@@ -14,7 +14,7 @@
 
 Mornlea is an original voxel game written from scratch in Go. It ships its own client, an authoritative server, world storage, and a Rust wgpu rendering pipeline. It does **not** aim for compatibility with Minecraft's protocol, saves, or copyrighted assets.
 
-The project is still in early development, but already includes an authoritative server, persistent worlds, direct TCP connections, a headless dedicated server, and LAN sessions for up to eight players. The current baseline uses protocol v26, player schema v7, chunk schema v9, world metadata v2, `companions.ai` schema v4, engine ABI v7, client ABI v9, and benchmark scenario v19. Up to four named, server-authoritative companions can plan and persist queued `go_to`/`follow`/`mine`/`place` tasks and speak through a separate bounded persona/dialogue path; the survival loop includes water, farming, hunger, and local confirmation audio. The ordinary local client starts at an egui main menu with a three-control Settings page. See [实现进度](docs/notes/progress.md) for the full milestone history.
+The current baseline uses protocol v29, player schema v7, chunk schema v9, world metadata v2, `companions.ai` schema v4, engine ABI v7, client ABI v9, and benchmark scenario v19. The survival loop covers water, farming (wheat, potatoes, carrots, bone meal), hunger with saturation and exhaustion, oxygen, tool durability, doors, a workbench with server-authoritative 2×2/3×3 crafting grids, sprinting, and up to four named server-authoritative companions that plan queued `go_to`/`follow`/`mine`/`place` tasks and speak through a bounded persona/dialogue path. The local client starts at an egui main menu with a Settings page and an in-game pause overlay (single-player freezes the authoritative tick; remote sessions keep ticking). See [实现进度](docs/notes/progress.md) for the full milestone history.
 
 ## Screenshots
 
@@ -55,402 +55,70 @@ cd mornlea
 make run
 ```
 
-The first launch generates and loads terrain within the view distance and is noticeably slower than later runs. The default world is stored in `worlds/default`.
-
-Launch with a separate save directory:
-
-```bash
-make run ARGS="--world worlds/demo"
-```
-
-Or build first, then run:
-
-```bash
-make build
-./bin/mornlea --world worlds/default
-```
-
-`make build` builds the complete Rust workspace, produces `bin/mornlea` and `bin/mornlea-server`, and copies `libmornlea_engine.dylib` into `bin/`. The graphical `mornlea` binary depends on the `mornlea_engine` and `mornlea_client` from that same build; `mornlea-server` depends only on the matching `mornlea_engine`. Neither binary may be mixed with dependency libraries from another build.
+The first launch generates and loads terrain within the view distance and is noticeably slower than later runs. The default world is stored in `worlds/default`; pass `make run ARGS="--world worlds/demo"` for a separate save directory. `make build` builds the full Rust workspace and produces `bin/mornlea`, `bin/mornlea-server`, and an adjacent `libmornlea_engine.dylib`; no binary may be mixed with dependency libraries from a different build.
 
 ## Common Commands
 
 | Command | Description |
 | --- | --- |
-| `make help` | Show Makefile help (default target) |
-| `make run` | Run the client; pass extra flags via `ARGS` |
-| `make build` | Build both Go binaries and the complete Rust workspace, then copy `bin/libmornlea_engine.dylib` |
-| `make build-linux-server` | Build the Linux amd64 server and adjacent `bin/libmornlea_engine.so` |
+| `make help` | Show Makefile help (also the default target) |
+| `make run` | Run the client; pass CLI arguments via `ARGS` |
+| `make build` | Build both Go binaries and the full Rust workspace, copying `bin/libmornlea_engine.dylib` |
+| `make build-linux-server` | Build the Linux amd64 `bin/mornlea-server` and an adjacent `bin/libmornlea_engine.so` |
 | `make test` | Run all Go tests |
 | `make test-race` | Run all Go tests with the race detector |
-| `make test-multiplayer` | Run M3C eight-player and v6 report tests |
-| `make bench-multiplayer` | Run three M3C multiplayer micro-benchmarks |
-| `make archcheck` | Verify dependency closure and the headless server boundary |
-| `make rust` | Build both cdylibs in the pinned Rust 1.97.1 workspace (prerequisite of `run`/`build`/`test`) |
-| `make rust-check` | Run Rust fmt, clippy, and workspace unit tests |
-| `make fmt` | Format all Rust and Go sources |
-| `make clean` | Remove `bin/`; world saves are untouched |
+| `make test-multiplayer` | Run the v6 report, interest-observer, and benchmark scheduling test subset |
+| `make bench-multiplayer` | Run the three M3C multiplayer microbenchmarks |
+| `make archcheck` | Verify dependency closures and the headless server boundary |
+| `make visual-check` | Capture frames headlessly and compare against visual goldens (see [视觉验证](docs/notes/visual-verification.md)) |
+| `make dev-check` | gofmt checks and other development gates |
+| `make rust` | Build the two pinned Rust 1.97.1 cdylibs; a prerequisite of `run`/`build`/`test` |
+| `make rust-check` | Run Rust formatting, clippy, and workspace unit tests |
+| `make fmt` | Format the Rust and Go sources in the repository |
+| `make clean` | Delete the `bin` directory; world saves are kept |
 
-## Controls
+## Controls at a Glance
 
 | Input | Action |
 | --- | --- |
-| `W` / `A` / `S` / `D` | Move |
-| Space | Jump |
-| Move mouse | Turn the camera |
-| Hold left mouse | Keep sending the primary action; the server first targets the nearest unobstructed player within three blocks for 2 melee damage (the target has a 10-tick cooldown), and advances mining from the authoritative position, view, and selected tool only when there is no valid player target |
-| Hold right mouse | Use the selected item: open a targeted furnace/chest, till dirt or grass with a hoe, or place seeds/block items; when holding bread below full hunger, keep holding for the default 32 ticks to complete one authoritative eating action |
-| `1` … `9` | Select a hotbar slot; takes effect after server confirmation |
-| `E` | Open/close the inventory, or close an open furnace/chest; the UI releases the mouse and suppresses game input. Each player views at most one container at a time |
-| `Q` | Drop **one** item from the authoritative selected hotbar slot onto the block under your feet; no repeat while held, not sent while a container is open or the mouse is not captured |
-| `Enter` | Open chat when inventory/containers are closed and the debug panel does not consume Enter; submit valid non-empty input when chat is open |
-| `Backspace` | Delete one complete Unicode rune while chat is open |
-| Left click in a container | Two clicks on slots move whole stacks; the furnace uses unified slots `0..38`, the chest `0..62` (`0..35` player items, `36..62` chest's 27 slots); the plain inventory offers ten fixed recipes: stone bricks, furnace, iron block, stone pickaxe, iron pickaxe, chest, oak planks, light block, stone hoe, and iron hoe |
-| `Esc` | Cancel and clear open chat; otherwise close a container and recapture, or release the pointer |
-| Click the window after release | Recapture the mouse pointer |
+| `W` / `A` / `S` / `D` + Space | Move and jump; hold `Left Ctrl` or `Left Shift` while moving forward to sprint |
+| Mouse | Move to look; hold left button to mine/melee, hold right button to use (place, open containers, till, eat, doors, workbench, …) |
+| `1` … `9` | Select a hotbar slot |
+| `E` | Toggle the inventory (with the personal 2×2 crafting grid) or close the current container |
+| `Q` | Drop one item from the selected slot |
+| `Enter` | Open chat (also the entry for companion commands `@伙伴名 指令`) |
+| `Esc` | Close chat/containers/panels, or open the pause overlay |
 
-Closing the game window stops the built-in server and flushes pending world data. Runtime world directories are excluded by `.gitignore`.
+The full key table, crafting recipes, farming, containers, mining, survival numbers, and companion behavior are documented in the [玩家手册 (gameplay manual, in Chinese)](docs/notes/gameplay.md).
 
-When the crosshair hits a displayable registered block within six blocks, a depth-correct outline and the block's Chinese name tag are shown as local, instant feedback; it never participates in authoritative rulings.
+## Documentation
 
-### Resources & Furnaces
+Most project docs are written in Chinese.
 
-In newly generated, never-saved stone, coal ore appears only below `Y < 96` at about `1/2048`, and iron ore only below `Y < 48` at about `1/4096`, with iron taking priority when both would apply. Saved chunks are never batch-rewritten.
+| Topic | Document |
+| --- | --- |
+| Gameplay manual (keys/crafting/farming/survival/companions) | [docs/notes/gameplay.md](docs/notes/gameplay.md) |
+| Configuration file and debug panel | [docs/notes/configuration.md](docs/notes/configuration.md) |
+| LAN dedicated server (`mornlea-server`) | [docs/notes/lan-server.md](docs/notes/lan-server.md) |
+| Texture packs | [docs/texture-packs.md](docs/texture-packs.md) |
+| Current limitations | [docs/notes/limitations.md](docs/notes/limitations.md) |
+| Compatibility and upgrades (protocol/saves/backup) | [docs/notes/compatibility.md](docs/notes/compatibility.md) |
+| Visual verification | [docs/notes/visual-verification.md](docs/notes/visual-verification.md) |
+| Current architecture and repository layout | [docs/architecture.md](docs/architecture.md) |
+| Milestone history | [docs/notes/progress.md](docs/notes/progress.md) |
+| Full documentation map | [docs/README.md](docs/README.md) |
 
-Right-click a placed furnace to open the unified `0..38` slot UI: `0..35` are player items, 36 is the material input, 37 is coal fuel, and 38 is the product output. Smelting has three fixed mappings: raw iron → iron ingot, sand → glass, clay → brick. One product takes 200 active ticks; one coal provides 1600 burn ticks, exactly enough for 8 products; progress and fuel pause together when the input is invalid or the output is full, and switching input kinds resets progress while keeping burn time. Multiple viewers see the same shared world state; the client never predicts items or progress.
-
-### Natural Materials & Oak Trees
-
-Newly generated chunks deterministically produce natural materials from the world seed: sand on low terrain with noise-selected clay and shallow gravel, and snow blocks on high terrain. Oak trees spawn on grass at fixed candidate cells (trunk height 4–6), yielding oak logs and leaves. Saved chunks are never batch-rewritten.
-
-Old worlds can be migrated offline (server stopped) to the same natural-material rules:
-
-```bash
-mornlea-server --world <world-dir> --migrate-materials --backup <backup-dir>
-```
-
-Migration first creates a verifiable full backup, then recomputes only the seven natural values (stone, dirt, grass, sand, gravel, clay, snow); ores, containers, item drops, and all other state are preserved. Interrupted runs resume from recorded progress with the same arguments.
-
-### Water & Farming
-
-`fluidEnabled` defaults to true. Rust worldgen fills sea level and below with water sources, and the server authoritatively advances source water plus seven flowing levels inside the active interest range. Water has no collision box and cannot be placed as an item. Submerged players use water physics, keep rising while jump is held, and cancel the current fall damage when entering water.
-
-Stone and iron hoes till dirt or grass whose space above is air, consuming one durability on success. Wheat seeds placed on farmland create an eight-stage crop. Exposed crops on wet farmland grow under a fixed per-active-section budget; mature wheat drops 1 wheat and 2 seeds, while immature crops drop 1 seed. Seeds, wheat, and bread follow authoritative inventory/drop rules; companions explicitly do not plant or harvest.
-
-### Chests
-
-Chests are chunk-owned fixed-capacity shared storage, crafted by the fixed recipe `8 stone → 1 chest`. They can be placed and mined; mining times match furnaces (bare hands/ordinary items `30` ticks, stone pickaxe `15`, iron pickaxe `8`, and at least a stone pickaxe is required to get the drop). Each chunk holds at most 16 active chests, each with a fixed 27 slots accepting any registered item (including tools with durability); a 17th chest is atomically rejected without consuming items.
-
-Right-click a placed chest to open the unified `0..62` slot UI: `0..35` are player items and `36..62` are the chest's 27 slots, accepting any registered item without the furnace's type restrictions. Each player views at most one container: opening a chest ends an open furnace view and vice versa; several players may view the same chest and see the same final state. Before a chest is destroyed, the server rehearses all non-empty slots (chest body first, then `36..62`) against a copy of the drop slots and only clears the block, deactivates slots, and commits in one step if every stack fits; on insufficient capacity the block, contents, and drops all stay unchanged.
-
-The graphical inventory's fixed crafting panel has ten clickable entries: stone bricks, furnace, iron block, stone pickaxe, iron pickaxe, chest, oak planks, light block, stone hoe, and iron hoe. The stable `RecipeID` table in server-side `internal/core` registers 11 recipes; recipe 11 is `3 wheat → 1 bread` and is not one of the graphical panel's ten rows. Double chests, chest naming, sorting, quick transfer, stack splitting, hoppers, comparators, sneak placement, and automation are not currently supported.
-
-### Authoritative Mining & Tools
-
-While the left button is held, the client sends only continuous primary-action intent. Every 20 Hz tick the server first looks for a valid player melee target within three blocks from the authoritative position and view; only when no player is hit does it advance mining with the selected hotbar slot and a six-block ray. Releasing the key, changing target, block, tool, or distance, opening a container, disconnecting, or resetting clears old mining progress; each player's progress is independent. The HUD shows only server-confirmed mining progress: green means the block will drop when finished, orange means it will break without dropping.
-
-| Block | Bare hands / ordinary item | Stone pickaxe | Iron pickaxe | Drop condition |
-| --- | --- | --- | --- | --- |
-| Dirt, grass block | 5 ticks | 5 ticks | 5 ticks | Drops with anything in hand |
-| Stone | 30 ticks | 15 ticks | 8 ticks | Drops only with bare hands, stone pickaxe, or iron pickaxe; an ordinary item is not bare hands |
-| Stone bricks, furnace, chest, coal ore, iron ore, light block | 30 ticks | 15 ticks | 8 ticks | At least a stone pickaxe to get the block/ore drop; a chest drops atomically with its full contents or is rejected as a whole on insufficient capacity; breaking a furnace with the wrong tool still preserves its contents |
-| Iron block | 40 ticks | 20 ticks | 10 ticks | Iron pickaxe only |
-| Bedrock | no progress | no progress | no progress | Indestructible |
-
-Stone pickaxes/hoes have `131` max durability and iron pickaxes/hoes `250`. The server deducts exactly 1 durability only when a tool completes an effective action: a successful block break or successful till wears the tool, while every rejected action leaves durability unchanged. Harvesting a crop with an intact hoe is the sole exemption and does not wear it. The last durability point still completes the action before the tool becomes its damaged counterpart.
-
-Damaged tools mine like bare hands; they can be kept, moved, or dropped but never crafted, smelted, repaired, or recycled. There is currently no way to restore tool durability. The server's 11 fixed recipes are `4 stone → 4 stone bricks`, `8 stone → 1 furnace`, `9 iron ingots → 1 iron block`, `3 stone → 1 stone pickaxe`, `3 iron ingots → 1 iron pickaxe`, `8 stone → 1 chest`, `1 oak log → 4 oak planks`, `4 glass → 4 light blocks`, `2 stone → 1 stone hoe`, `2 iron ingots → 1 iron hoe`, and `3 wheat → 1 bread`. Newly crafted tools have full durability; usable tools and their damaged counterparts stack to at most 1 per slot, while other current items stack to 64. The hotbar shows a durability bar only for worn but still usable tools.
-
-### Authoritative Survival State & Death
-
-Health and the three-layer hunger state are exclusively server-authoritative and persist in player schema v7; oxygen is an authoritative transient value. The client never predicts these states and displays only confirmed values: hearts sit to the left of the hotbar, drumsticks to the right, and oxygen bubbles appear whenever oxygen is not full.
-
-Fall damage: the safe fall height is 3 blocks. The system tracks the highest point reached after leaving the ground and settles damage once at the "not on ground last tick, on ground this tick" edge with `damage = floor(fall height) − 3`; negative results deal no damage. A 4-block fall deals 1 point and a full-health player dies from a 23-block fall (damage exactly 20); normal jumps and standing still after landing deal nothing; teleports, respawns, and dimension resets reset the peak height to the current height.
-
-Regeneration is hunger-gated. After 100 consecutive ticks without damage, a player whose hunger is at least the default threshold `18` regenerates 1 point every 40 ticks until full. Below the threshold the timer continues but produces no healing; each healed point adds fixed exhaustion, and any damage resets the timer.
-
-While the eyes are submerged, oxygen drains from `300` by 1 each tick. At zero oxygen, drowning deals 1 damage through the shared damage path every `20` ticks by default; leaving the water immediately refills oxygen. Hunger ranges from `0..20`, with saturation and exhaustion advanced as fixed-point integers. Bread is the only current food: using it continuously for the default `32` ticks atomically consumes one, adds 5 hunger clamped to 20, and adds 6000 milli-saturation clamped to the new hunger value × 1000. At zero hunger, starvation deals 1 damage every `80` ticks by default but stops at 1 health and cannot kill.
-
-Player melee/PvP reuses the held-left-button primary action. Among active players in the same dimension, it selects the nearest ray hit within three blocks; solid blocks occlude it, fluids do not, and a hit deals 2 damage while applying a 10-tick cooldown to the target. Same-tick intents are frozen before damage is settled, and Memory/TCP use the same path.
-
-The Darwin graphical client's authoritative confirmation cues cover mining, placement, eating, and damage. Mining triggers after an air delta for the confirmed target is actually applied; eating triggers after both the food decrement and hunger increase are confirmed; damage triggers whenever this player's authoritative health decreases, including confirmed damage caused by another player. A placement cue is triggered only by a fresh v26 `PlaceBlockSucceeded(sequence)` returned to the session that initiated the placement. Duplicate or stale sequences, placement rejection, unrelated state such as block/inventory changes alone, and placement confirmations for other sessions do not trigger the local placement cue.
-
-Effective local UI actions in the inventory or a container play `CueUIClick` immediately, including clicking a craftable recipe, selecting a source slot for the first time, clicking the same slot to cancel, and successfully sending a slot-move request. Blank panel areas, disabled or invalid UI, and send failures remain silent. This local UI cue does not wait for authoritative confirmation, so a later server rejection does not retract a sound already played. If the audio device is unavailable, every cue degrades to silence; capture, benchmark, and the dedicated server never request an audio device.
-
-At zero health, the server resolves death within the same authoritative tick: the 36 inventory slots drop into the world one by one (a slot clears only after the drop is placed — items are never silently destroyed), the player teleports to the spawn anchor, health refills, and velocity zeroes. The pickup delay for death drops defaults to `40` active ticks. Drops spread outward from the death chunk in rings of radius 0, 1, 2…, only writing to loaded, Ready chunks; slots that fit nowhere stay in the inventory through respawn. No intermediate zero-health state is ever observable — the published state is always the post-respawn full-health state.
-
-Monsters and suffocation, lava, or fire damage are not implemented. There are also no beds, custom respawn points, or dedicated death screen. Confirmed health loss produces a brief red edge flash and a local damage cue; death immediately respawns the player at the spawn anchor with full health.
-
-## LAN Multiplayer (M3 completed)
-
-See the [LAN dedicated server guide](docs/notes/lan-server.md) (Chinese) for manual acceptance commands, identity semantics, disconnect/shutdown save behavior, and security boundaries. Minimal setup:
+Minimal LAN session:
 
 ```bash
 go run ./cmd/mornlea-server --listen :25565 --world worlds/lan --seed 42 --max-players 8
 go run ./cmd/mornlea --connect 127.0.0.1:25565 --name PlayerA
 ```
 
-## Config File & Debug Panel
+## Rust / Go Division
 
-`mornlea`/`mornlea-server` read the same JSON config file on startup, defaulting to `os.UserConfigDir()/mornlea/config.json` (next to `profile.json`), overridable with `--config <path>`. If the file is missing, compiled defaults are used and **no file is created**; missing fields take defaults, only numeric tuning fields declared clampable are clamped with an `slog.Warn`, and unknown fields are ignored. JSON syntax errors, an unknown `version`, invalid field types, an unknown `windowSize`, or a `texturePackPath` that is too long or contains CR/LF abort loading. See the [rename migration notes](docs/notes/mornlea-migration.md) (Chinese) for old default-directory migration.
-
-See the [texture-pack guide](docs/texture-packs.md) (Chinese) for local overrides and the v1 directory format.
-
-### Client Settings
-
-The ordinary local client's main-menu Settings page exposes exactly three controls: master audio volume, texture-pack directory, and window size. Window size is limited to the fixed 16:9 presets `640x360`, `960x540`, and `1280x720`; an omitted `windowSize` defaults to `1280x720`. A minimal configuration looks like this:
-
-```json
-{
-  "version": 1,
-  "audioVolume": 0.7,
-  "texturePackPath": "packs/my-pack",
-  "windowSize": "1280x720"
-}
-```
-
-`audioVolume` ranges from `0..1`. The page displays and saves the original `texturePackPath`; it must be a single line of at most 1,024 UTF-8 bytes, and relative paths resolve from the config file's directory. After a successful save, audio volume and window size apply immediately, while a changed non-empty texture-pack candidate is fully validated before writing and takes effect only on the next launch. Failures before the rename commit point preserve the draft, old file, and old runtime. If parent-directory durability synchronization fails after rename, the page reports that the settings were saved with a durability warning and still applies the new audio/window values to match disk.
-
-Beyond the three client settings, the config has four runtime groups, one optional AI group, and top-level `fluidEnabled`:
-
-| Group | Contents |
-| --- | --- |
-| `logging` | Global level `default` plus per-module overrides `modules` (keys are package path suffixes such as `render`, `storage`), levels `debug`/`info`/`warn`/`error` |
-| `physics` | Gravity, walk/jump speeds, acceleration, terminal fall speed, eye height, etc. |
-| `sim` | Interaction distance, drop lifetime & pickup delay, regen interval, spawn radius, furnace smelt/burn ticks, etc. |
-| `render` | `viewDistance` (restart to apply, config file only), `fovDegrees`, `mouseSensitivity` |
-| `ai` | OpenAI-compatible `endpoint`/`model`, API-key environment-variable name `apiKeyEnv`, task timeout, and `0..4` companion definitions with canonical UUIDv4 `id`, unique `name`, and optional `persona`; a missing/empty list disables AI |
-
-`fluidEnabled` defaults to `true` and controls whether newly generated worlds contain water. Benchmark always pins water generation off, while capture pins the compiled default; neither automation path follows local config.
-
-**`mouseSensitivity` is a dimensionless multiplier**, default `1`, range `[0.1, 5]`; the actual radians-per-pixel coefficient is the in-code baseline `baseMouseSensitivity = 0.002` (`cmd/mornlea/main.go`), so runtime sensitivity = baseline × configured multiplier.
-
-`--dev` only toggles the in-game debug panel, **not whether the config file applies**: values tuned in the file apply with or without `--dev`; without `--dev` you just cannot see or edit the panel.
-
-With `--dev`, press `F3` to toggle the panel; it shows group headers (e.g. `── physics ──`) and bare field names (e.g. `gravity`, not `physics.gravity`); arrow keys navigate/step, `Shift` coarse ×10, `Alt` fine ×0.1, `Enter` resets the row, `F5` saves to the config file, `F6` resets everything. When connected (`--connect`), the `physics`/`sim` groups are greyed out as read-only and marked server-controlled, while `render` stays writable; `viewDistance` is always read-only in the panel and changes only via the config file plus a restart.
-
-The built-in server in ordinary local mode and `mornlea-server` both consume `logging`, `physics`, `sim`, `fluidEnabled`, and optional `ai`. The dedicated server does not consume `render`, `audioVolume`, `texturePackPath`, or `windowSize`. A `--connect` client never creates companions from its local `ai` config and only presents companions published by the remote v26 server.
-
-**When connected, your local `physics`/`sim` values must match the server's**, otherwise client prediction diverges from authoritative simulation (position snapping). The panel locks those two groups while connected, but the config file is not bound by that lock — it always applies. On a LAN, pointing `mornlea` and `mornlea-server` at the same config file satisfies this; `mornlea` prints an `slog.Warn` when it detects `--connect` plus non-default values in those two groups.
-
-## Visual Verification
-
-`--capture <dir>` makes `mornlea` run a headless offscreen path over the 19 table-driven scenes in `cmd/mornlea/capture.go`, in this exact order: `terrain-noon`, `hud-hotbar-health`, `hud-survival-feedback`, `avatar-nametag`, `inventory-crafting`, `chest-container`, `furnace-container`, `debug-panel`, `skylight-tunnel`, `block-light-room`, `materials-showcase`, `target-block-feedback`, `oak-grove`, `ai-companion`, `water-surface-slope`, `main-menu`, `settings-menu`, `far-horizon`, `water-underwater`. Each 640×360 PNG is compared against the corresponding baseline in `cmd/mornlea/testdata/golden/`. Comparison uses dual thresholds (max per-pixel channel delta and the ratio of differing pixels, defined in `cmd/mornlea/visual_compare.go`); both must pass. See the [visual verification design doc](docs/superpowers/specs/2026-08-07-visual-verification-design.md) (Chinese) §6 for exact numbers.
-
-```bash
-make visual-check              # capture frames and compare; output defaults to build/visual
-VISUAL_OUT=/tmp/shots make visual-check   # custom output directory
-make visual-update             # regenerate goldens into cmd/mornlea/testdata/golden/
-```
-
-On mismatch, the actual and diff images (differing pixels painted red, the rest dimmed against the baseline) are written to `<scene>-actual.png` and `<scene>-diff.png` for eyeballing.
-
-**When to run `make visual-update`**: only after rendering behavior changed **intentionally** and a human has opened the new PNGs and confirmed they are correct. A wrongly frozen golden poisons every later comparison.
-
-**When not to**: when the comparison is red but you cannot see where or why, or you merely want the gate green. A red light is a signal to investigate, not noise to overwrite — reviews of `internal/render`, the Rust renderer, or shader changes must actually open the diff images. Visual verification is intentionally not part of `go test ./...` or CI (it needs a GPU and lacks shared-runner stability data); it exists as a local make target and a human review step.
-
-## Project Layout
-
-```text
-.
-├── cmd/
-│   ├── mornlea/        game client & built-in server assembly
-│   ├── mornlea-server/ headless TCP dedicated server
-│   ├── gfxspike/       Rust-renderer terrain validation program
-│   └── perfcheck/      performance report comparison tool
-├── engine/
-│   └── crates/
-│       ├── mornlea_engine/ pinned Rust 1.97.1 cdylib: mesh/light/collision/raycast/physics/worldgen
-│       └── mornlea_client/ Darwin window/event loop and all GPU rendering
-├── internal/
-│   ├── core/           shared domain types & native raycast batch driver
-│   ├── companion/      independent companion identity, static definitions & body types
-│   ├── profile/        stable local player identity & profile
-│   ├── config/         shared JSON config loading & validation
-│   ├── logging/        module-scoped logging
-│   ├── audio/          Darwin local procedural cues
-│   ├── fluid/          bounded authoritative fluid-update queue
-│   ├── lod/            far-LOD tile scheduling & CPU encoding
-│   ├── world/          chunk & world data model
-│   ├── worldgen/       seed-to-permutation setup, Rust calls & chunk writeback
-│   ├── physics/        player movement & collision
-│   ├── sim/            authoritative world simulation
-│   ├── server/         host, sessions, publication & player persistence
-│   ├── network/        binary protocol, login state machine, Memory/TCP transports
-│   ├── storage/        world, region files & player state persistence
-│   ├── client/         input, camera, prediction, window/client ABI & client mirror
-│   ├── mesh/           chunk mesh production API (implementation lives in the Rust cdylib)
-│   ├── nativeabi/      engine C ABI's only Go bridge
-│   ├── render/         rendering CPU half: layout, encoding & upload scheduling
-│   ├── assets/         block definitions & procedural materials
-│   └── archcheck/      internal dependency-direction gate tests
-├── scripts/agent-hooks/  shared automatic hooks for Claude Code & Codex
-└── docs/               design, implementation plans, performance records & progress
-```
-
-Architecture & technology choices: [current architecture](docs/architecture.md) (Chinese). See the [documentation map](docs/README.md) for the complete index. The [early project design](docs/superpowers/specs/2026-07-26-minecraft-go-design.md) is historical background only. Other common entries:
-
-- [实现进度 / progress](docs/notes/progress.md): delivered milestones, current baseline, next steps;
-- [LAN dedicated server](docs/notes/lan-server.md): startup, identity, saves, security boundaries;
-- [Rename migration](docs/notes/mornlea-migration.md): M4Q naming & local data migration;
-- [Performance baselines](docs/notes/perf-baseline.md) (M2) and [Apple M5 baseline](docs/notes/perf-baseline-m5.md): evidence chains;
-- [OpenSpec workflow](docs/openspec.md): OpenSpec usage & automatic hook constraints;
-- `docs/superpowers/specs/`, `docs/superpowers/plans/`: historical design background and decision records — not the current implementation.
-
-Most of these are in Chinese.
-
-## Rust & Go Responsibilities
-
-The Rust 1.97.1 workspace contains two `cdylib` crates, `mornlea_engine` and `mornlea_client`, with two independent C ABI and release-unit boundaries: `engine/include/mornlea_engine.h` defines engine ABI v7, while `engine/include/mornlea_client.h` defines client ABI v9. The macOS graphical `mornlea` binary requires matching engine and client libraries from the same build; `mornlea-server` requires only the matching engine library. Neither ABI may be mixed across versions.
-
-| Language / component | Responsibilities |
-| --- | --- |
-| Rust `mornlea_engine` | The **only production implementation** of mesh/light, collision resolution, raycast, physics-tick integration, and world generation (terrain, ores, oaks, sea-level water, and the far-LOD shell). Panics never cross the ABI, and invalid inputs are rejected before results are published. |
-| Rust `mornlea_client` | The **only production implementation** of the Darwin client window, event loop, and all GPU rendering (terrain, sky, clouds, culling, HiZ, entities, text, HUD, and egui; window surfaces and offscreen rendering). |
-| Go | Owns app, world, simulation, networking, storage, and the CPU half of rendering (layout, encoding, and upload scheduling), as well as the client mirror/prediction, assets/configuration, physics state/input/tunable/snapshot encoding, yaw triangles and prism construction, worldgen seed-to-permutation setup, and `world.Chunk` writeback. Go does not touch GPU APIs and has no production fallback. |
-
-Boundary rules:
-
-- `internal/nativeabi` is the engine C ABI's only Go bridge; `internal/mesh`, `internal/physics`, and `internal/core` call it through domain APIs. The client C ABI is touched only by `internal/client`; other Go layers use domain interfaces such as `Window` and `Renderer`;
-- After a call returns, neither language may retain the other's pointers. Legacy Go integration, worldgen, mesh, light, collision, and raycast implementations are test oracles only, not production fallbacks;
-- Mesh and light results never enter the network protocol or saves. Collision is shared by client prediction and authoritative server simulation. The dedicated server therefore uses `mornlea_engine` but does not link `mornlea_client` or the graphics stack.
-
-Build: `make run`/`build`/`test` first build the complete Rust workspace automatically (`rust-toolchain.toml` pins 1.97.1). The macOS graphical client crosses both the engine ABI v7 and client ABI v9 boundaries. `make build` produces both Go binaries, copies `libmornlea_engine.dylib` into `bin/`, links the graphical binary to the workspace-built `mornlea_client`, and links the server binary only to `mornlea_engine`. `make build-linux-server` packages only the Linux amd64 server and adjacent `libmornlea_engine.so`, loaded through `$ORIGIN`. Each ABI is its own release-unit boundary and cannot be mixed across versions. The headless server's dependency closure excludes client/render (verified by `make archcheck`); `make rust-check` runs Rust fmt, clippy, and tests.
-
-## Current Limitations
-
-- The runnable client currently supports macOS only;
-- TCP multiplayer targets trusted LANs only; the protocol has no authentication or encryption and must not be exposed to the public internet;
-- No server discovery, in-game connection menu, or automatic reconnect;
-- The graphical client applies an embedded Pixel Perfection subset over the complete procedural registry and falls back to procedural materials for unmapped layers; the repository contains no official Minecraft art assets;
-- The hotbar is fixed at 9 slots; usable tools and their damaged counterparts stack to at most 1 per slot, other current items to 64; mining still works with a full hotbar, items stay on the ground;
-- Item drops belong to their chunk: at most 32 stacks per chunk; stackable items merge up to 64 at the same position, tools and damaged forms cap at 1 and never merge; when a chunk's drop slots are full, mining of collectible blocks is rejected and the block stays unchanged;
-- The compiled pickup-delay defaults are `10` active ticks for mining and block-break drops and `40` active ticks for actively discarded and death drops; once that source-specific delay ends, players within the default pickup radius of `1.25` blocks can pick them up. The compiled default drop lifetime is `6000` active ticks, and only drops near players (chunk radius 2) advance their lifetime;
-- Pickup fills the hotbar first, then the backpack (partial same-type stacks first, then the lowest empty slot); leftovers stay on the ground when both are full;
-- The inventory UI only moves whole stacks: empty targets receive the whole stack, same items merge to 64 keeping the remainder, different items swap; no stack splitting, dragging, or quick transfer;
-- The server's fixed table has 11 single-input recipes; the graphical inventory shows the first 10, while server recipe 11 is `3 wheat → 1 bread`. There are still no recipes combining several ingredient types, crafting grid, workbench, batch crafting, or queue;
-- Furnaces have three fixed smelting mappings (raw iron → iron ingot, sand → glass, clay → brick), accept only coal as fuel, and cap at 32 per chunk; tools have no repair or damaged-item recycling, mining has no shared multiplayer progress or crack textures, and furnaces have no multi-fuel, experience, automation, or offline catch-up;
-- At most 16 chests per chunk, each fixed at 27 slots accepting any registered item; each player views at most one container, opening a chest ends a furnace view and vice versa; no double chests, naming, sorting, quick transfer, stack splitting, hoppers, comparators, sneak placement, or automation;
-- World time advances authoritatively on the server, with a fixed 24000-tick day/night cycle observed by all clients through the authoritative player state; terrain, remote players, drops, and the sky background follow fixed curves with the time of day, while the HUD and name tags are unaffected by world lighting;
-- Skylight and static block light are both derived client-side from the authoritative block mirror. Direct skylight starts at `15`, loses one extra level per fluid cell, and crosses plants without extra attenuation; block light starts at `15` from light blocks and remains blocked by water or glass. Unknown neighbors block and stay dark. Light blocks can be placed, mined back, and crafted with `4 glass → 4 light blocks`; there are no real torches, colored/dynamic light, dynamic shadows, or weather;
-- Water is generated by default and forms an authoritative loop with source plus seven flowing levels, sloped surfaces, a translucent water pass, submerged physics, oxygen, and drowning. Water is not an item; there are no buckets or player-placed fluids;
-- Farming includes hoe tilling, dry/wet farmland, eight-stage wheat, fixed-budget growth, planting/harvesting, and the server bread recipe. Companions do not plant or harvest, and the graphical inventory does not show recipe 11 for bread;
-- Cobblestone, smooth stone, sand, gravel, oak log, oak planks, leaves, glass, bricks, white wool, red tile, clay, snow block, and mossy cobblestone can all be authoritatively placed, mined, and dropped; sand, gravel, clay, and snow blocks appear naturally in newly generated chunks by seed, and oak trees deterministically yield oak logs and leaves, with offline migration for old worlds via `mornlea-server --migrate-materials --backup`; brand-new players with missing saves receive 64 of each material in the first 14 backpack slots and 64 wheat seeds in slot 15, while existing players are never re-granted. The remaining materials (cobblestone, smooth stone, glass, bricks, wool, red tile, mossy cobblestone, etc.) do not generate naturally; materials have no gravity, decay, or melting behavior;
-- Active dropping supports only single-item in-place transfer: the server validates the player, selected slot, the chunk under their feet, and the 32 drop slots within one authoritative tick, then atomically deducts one item and creates the drop, unpickable for `40` active ticks by default (mining and block-break drops default to `10`). Merging into an existing stack keeps its ID and lifetime timeline, extending only the pickup-block window to the longer source delay. Every registered item can propagate as a drop;
-- No whole-stack dropping, drop-count selection, throw velocity, gravity or horizontal movement, owner-exclusive pickup, or client prediction;
-- Health, oxygen, hunger/saturation/exhaustion, bread eating, hunger-gated regeneration, starvation damage, drowning, falling, and player melee/PvP are all resolved authoritatively. The Darwin client plays authoritative confirmation cues for mining/placement/eating/damage and immediate `CueUIClick` feedback for effective local inventory/container UI actions. Monsters, suffocation/lava/fire damage, beds, custom respawn points, and a dedicated death screen remain absent.
-
-## Compatibility & Upgrades
-
-- The wire protocol is v26; every mismatch is stably rejected before Play with no negotiation or downgrade decoding. The latest v25→v26 migration adds `PlaceBlockSucceeded(sequence)`, sent only to the session that initiated a successful placement;
-- World metadata remains v2 and records absolute world time. Existing v1 worlds open directly at time `0` and are written as v2 on the next normal autosave or shutdown; older programs must reject future metadata without overwriting it;
-- Player saves remain schema v7 and chunk saves schema v9; supported older versions follow the existing migration chains, while future versions must be rejected without overwriting them. Companion state is stored independently in world-root `companions.ai` schema v4, with at most 64 active plus inactive body records; active records may persist the current task, FIFO, and recent dialogue summary, while names and effective personas always come from current configuration;
-- Skylight, static block light, and column-top data remain client-derived from the authoritative block mirror and never enter network or save payloads;
-- **Backup & rollback**: shut down normally, wait for player, companion, and world storage flushes, and back up the whole world directory before starting v26. Rollback requires stopping the server and restoring that complete pre-upgrade backup; downgrading schema v9 chunks, schema v7 player files, `companions.ai` v4, or new items is not promised, and old programs must not reopen an upgraded directory and keep writing. On abnormal exit, player, companion, and chunk files are individually atomic, but there is no cross-file transaction;
-- The producer is benchmark scenario v19 with the fixed seven-player, zero-companion workload; the benchmark world still pins fluid generation off and contains no farming blocks. The version bump records changes to the measured process itself (a new hunger bar that moves the Hotbar HUD fixed upload layout again — quad capacity 247→267, glyph offset 12288→13312, total 45888→46912 bytes — two new programmatic drumstick columns in the HUD atlas, and the three-layer hunger advance in the authoritative tick). The only current explicit migration is `18:19`; historical v6..v18 reports remain same-version readable. M5A v16 Memory/TCP reports are record-only evidence and do not promote the unchanged M2 v15 or M5 v14 baseline JSON. Performance numbers are recorded only; malformed reports, identity mismatch, real overflow, data loss, and I/O errors still fail. Cross-transport comparison is explicit only.
+The pinned Rust 1.97.1 workspace ships two cdylibs: `mornlea_engine` (the sole production implementation of mesh/light, collision, raycast, physics integration, and worldgen; engine ABI v7) and `mornlea_client` (the Darwin window, event loop, all GPU rendering, and egui screens; client ABI v9). Go owns the app, world, sim, network, storage, and the CPU half of rendering; it never touches GPU APIs and has no production fallback. Each ABI is a release-unit boundary that must not be mixed across builds. See [当前架构说明 (architecture, in Chinese)](docs/architecture.md) for component ownership and dependency direction, and [docs/notes/go-rust-division.md](docs/notes/go-rust-division.md) for the new-code placement rules.
 
 ## Developing with OpenSpec
 
-This project uses OpenSpec for complex changes. A change typically contains:
-
-- `proposal.md`: why, scope, and non-goals;
-- `specs/<capability>/spec.md`: observable behavior and acceptance scenarios;
-- `design.md`: technical approach, boundaries, and trade-offs;
-- `tasks.md`: executable, verifiable task list.
-
-New features, cross-package refactors, network protocol or save format changes, and anything touching architecture or performance contracts default to OpenSpec. Low-risk changes like spelling and formatting can be done directly.
-
-### 1. Install
-
-Requires Node.js 20.19 or newer:
-
-```bash
-npm install -g @fission-ai/openspec@1.7.0
-openspec --version
-```
-
-Integration files for Claude Code and Codex are already generated; do not run `openspec init` again.
-
-### 2. Explore & Propose
-
-These commands run inside the AI conversation, not the shell:
-
-```text
-Claude Code: /opsx:explore
-Claude Code: /opsx:propose add-example-feature
-
-Codex:       $openspec-explore
-Codex:       $openspec-propose add-example-feature
-```
-
-Proposals land in `openspec/changes/add-example-feature/`. Humans should review goals, non-goals, Requirements/Scenarios, the technical approach, and the task breakdown before coding; all artifacts are plain Markdown and editable.
-
-### 3. Implement to Spec
-
-```text
-Claude Code: /opsx:apply
-Codex:       $openspec-apply-change
-```
-
-The AI implements and verifies following `tasks.md`. If requirements or design change, update the change artifacts first, keeping the spec consistent with the implementation:
-
-```text
-Claude Code: /opsx:update
-Codex:       $openspec-update-change
-```
-
-### 4. Validate & Archive
-
-After implementation, in the terminal:
-
-```bash
-openspec status --change add-example-feature
-openspec validate --all --strict --no-interactive
-go test ./... -race
-go vet ./...
-```
-
-Once implementation, spec, and task status agree, archive from the AI conversation:
-
-```text
-Claude Code: /opsx:archive
-Codex:       $openspec-archive-change
-```
-
-Archiving merges delta specs into `openspec/specs/` and moves the full change to `openspec/changes/archive/`. These files are committed with the code.
-
-`sync` syncs the main specs early for long-running changes:
-
-```text
-Claude Code: /opsx:sync
-Codex:       $openspec-sync-specs
-```
-
-| Phase | Claude Code | Codex |
-| --- | --- | --- |
-| Explore | `/opsx:explore` | `$openspec-explore` |
-| Propose | `/opsx:propose <change>` | `$openspec-propose <change>` |
-| Implement | `/opsx:apply` | `$openspec-apply-change` |
-| Update artifacts | `/opsx:update` | `$openspec-update-change` |
-| Sync specs early | `/opsx:sync` | `$openspec-sync-specs` |
-| Archive | `/opsx:archive` | `$openspec-archive-change` |
-
-Project context and artifact rules: [`openspec/config.yaml`](openspec/config.yaml); AI project rules: [`AGENTS.md`](AGENTS.md); fuller workflow: [`docs/openspec.md`](docs/openspec.md).
-
-### Automatic Hook Constraints
-
-Claude Code and Codex share [`scripts/agent-hooks/guard.mjs`](scripts/agent-hooks/guard.mjs), loaded from `.claude/settings.json` and `.codex/hooks.json`:
-
-- `PreToolUse`: blocks highly destructive Git commands, force pushes, and wide recursive deletions;
-- `PostToolUse`: checks that Go files in the change are `gofmt`-ed after edits;
-- `Stop`: checks the diff, OpenSpec, architecture dependencies, race tests of affected packages, and `go vet`;
-- Protocol, save, performance baseline, dependency boundary, or cross-component implementation changes may not finish without a complete active OpenSpec change.
-
-After first entering the repo, open `/hooks` in Codex or Claude Code to review the configuration; Codex asks you to review and trust the project hooks, and re-review is required after the hook files change.
-
-Hook policy tests:
-
-```bash
-node --test scripts/agent-hooks/guard.test.mjs
-```
-
-Hooks are mechanical guardrails, not a substitute for CI and human review; detailed triggers and explicit exceptions: [`docs/openspec.md`](docs/openspec.md#自动-hook-约束).
+Complex changes — new features, cross-package refactors, protocol, save, or performance contract changes — default to an OpenSpec change (`proposal.md`, delta specs, `design.md`, `tasks.md`) that is validated and archived alongside the implementation; low-risk small fixes can be made directly. Installation, commands, and the automated hook constraints are documented in [docs/openspec.md](docs/openspec.md); project context lives in [`openspec/config.yaml`](openspec/config.yaml) and the AI collaboration rules in [`AGENTS.md`](AGENTS.md).
