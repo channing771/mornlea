@@ -29,7 +29,7 @@
 
 - 目标文件/包：`internal/assets/blocks.go`、`blocks_test.go`（程序化火把层与 `Model` tag 登记）；`cmd/mornlea/capture.go`、`capture_scene_test.go`、`capture_scene_order_test.go`、`capture_hud_test.go`（场景表插入与断言）；capture golden 目录（仅新增 `torch-night.png`）。
 - 验证命令：`gofmt -w internal/assets cmd/mornlea`；`make rust`；`go test ./internal/assets ./internal/client ./cmd/mornlea -race -count=1`。
-- [ ] RED：火把层非空/alpha 仅 0/255/与既有层逐像素不同/无外部 PNG；`Model` 对五种形态返回冻结 tag（1..5）、其余块保持 0；场景表顺序锁定 `torch-night` 紧随 `block-light-room` 且先于 `materials-showcase`；场景内像素断言（落地 + 至少两种墙面、近亮远暗、透明边缘非实心矩形）。
-- [ ] GREEN：程序化像素（窄木柄 + 暖色火芯）；`torch-night` 场景构造（固定夜晚封闭暗室，不创建前台窗口）。
-- [ ] golden：经显式基线更新写入 `torch-night.png`（19 → 20 张），逐图人工复核；其余 19 张既有 golden 逐字节不变（`workbench-crafting` 缺口保持既有状态，不在本分支补）。提交 `feat: present placeable torches`。
+- [x] RED：火把层非空/alpha 仅 0/255/与既有层逐像素不同/无外部 PNG；`Model` 对五种形态返回冻结 tag（1..5）、其余块保持 0；场景表顺序锁定 `torch-night` 紧随 `block-light-room` 且先于 `materials-showcase`；场景内像素断言（落地 + 至少两种墙面、近亮远暗、透明边缘非实心矩形）。
+- [x] GREEN：程序化像素（窄木柄 + 暖色火芯）；`torch-night` 场景构造（固定夜晚封闭暗室，不创建前台窗口）。
+- [x] golden：经显式基线更新写入 `torch-night.png`（19 → 20 张），逐图人工复核；其余 19 张既有 golden 逐字节不变（`workbench-crafting` 缺口保持既有状态，不在本分支补）。提交 `feat: present placeable torches`。
 - [ ] 整分支终审与门禁：`make rust`；`make rust-check`；`go test ./internal/core ./internal/assets ./internal/mesh ./internal/nativeabi ./internal/sim ./internal/world ./internal/client ./cmd/mornlea -race -count=1`；`go test ./internal/archcheck -count=1`；`go test ./... -race`；`go vet ./...`；`gofmt -l .`；`cmp -s AGENTS.md CLAUDE.md`；`openspec validate --all --strict --no-interactive`；`git diff --check`；`scripts/agents/gates.sh` 全绿。终审要点（支撑原子性、六邻居上限、光属性唯一来源、20-byte/80-entry 双端一致、ABI v8、无新增 pass/资源、原创纹理、golden 20 张口径）与裁决记入 ledger；收尾按仓库惯例推分支开 PR，归档时同步 `docs/notes/progress.md` 与版本矩阵。
