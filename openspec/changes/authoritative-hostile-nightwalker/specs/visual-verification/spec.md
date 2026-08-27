@@ -4,7 +4,7 @@
 
 ### Requirement: 夜行者无窗口场景
 
-无窗口 capture 场景表 SHALL 新增 `hostile-mob` 场景，本变更只约定区间位置约束：位于 `ai-companion` 之后、`water-surface-slope` 之前（分支内为临时顺序，集成后 `sword-combat` 等批次场景插入其间）；`water-underwater` MUST 仍为唯一末场景、`far-horizon` MUST 仍为倒数第二。场景 MUST 装入固定夜间确定性夹具：火把边缘固定位置呈现 8 只夜行者（其中一只处于受击状态、一只处于追逐中），场景 MUST 经与交互客户端相同的完整呈现链路无窗口抓取，MUST NOT 创建或聚焦前台游戏窗口，并 MUST 继续使用既有双阈值比对。批次多分支各自追加场景后，完整清单的精确数量与顺序由批次集成任务（A-07）统一收口并同步主规格。
+无窗口 capture 场景表 SHALL 新增 `hostile-mob` 场景，位于 `ai-companion` 之后、`water-surface-slope` 之前；`water-underwater` MUST 仍为唯一末场景、`far-horizon` MUST 仍为倒数第二。场景 MUST 装入固定夜间确定性夹具：火把边缘固定位置呈现 8 只夜行者（其中一只处于受击状态、一只处于追逐中），场景 MUST 经与交互客户端相同的完整呈现链路无窗口抓取，MUST NOT 创建或聚焦前台游戏窗口，并 MUST 继续使用既有双阈值比对。本变更 SHALL 携带该场景的 golden PNG（torch-night 先例，场景总数 21→22 口径），并在归档时把新增场景同步进主规格。
 
 #### Scenario: 场景表顺序与导出
 

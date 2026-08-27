@@ -11,6 +11,14 @@
 - **Ruling: A-04-q2（2026-08-25T10:52:33Z，answer A）** — 本分支在 `internal/core` 引入 `BlockEmission`/`BlockLightAttenuation` 单一表（按现有 assets/mesh 值迁移，二者改为委托 core；若 A-02 契约先行则消费其表不重复创建） — 为什么：`sim` 只能依赖 `core`/`companion`/`fluid`/`physics`/`world`，暗度判定规则必须落 core；批次设计任务二把 `core.BlockEmission` 单一表归 A-02，故本分支仅在 A-02 未落地时创建并保持值一致。
 - **批准轮 A-04-approval（2026-08-25T10:54:16Z，approve「批准」）** — 按节呈现的设计（§1 范围 / §2 数据所有权 / §3 关键裁决 / §4 固定上限 / §5 验证 / §6 不做）经用户显式批准；结论已誊入本 change 的 proposal/design 与 tasks。
 
+## 重定基线裁决（2026-08-28，控制会话 brainstorming）
+
+- **Ruling: A-04-rebase-1（approve）** — 批次合流模式正式弃用（原 A-06/A-07 集成职责已拆回各功能行并标记取消）：本行改为自包含直接合并，协议 v29→v30、client ABI v9→v10、`hostile_mobs` v1、golden（21→22 张口径）与两份基线文档版本行由本行自带同步；benchmark scenario 不动。为什么：批次模式的「PR 不合并、版本不动、golden 延后」前提随 A-06/A-07 取消失效，现行约定以 A-02（协议 v29 内自带 engine ABI v8、torch-night 场景与 golden）为先例。
+- **Ruling: A-04-rebase-2（approve）** — 消息编号改取 S→C 22/23/24（21 已被 A-01 `CraftingState` 实占；原设计预留 21/22/23 已撞号）；实现期以注册表实占空闲位为准，与并行行撞号由后合并者重订（A-02 撞号重订先例）。
+- **Ruling: A-04-rebase-3（approve）** — `core.BlockEmission`/`core.BlockLightAttenuation` 已由现行 `internal/core/block_properties.go` 提供（A-02 落地）：按原 D2 预设判据走「直接消费、不重复创建」路径，本行只新增 `core.BlockOpaque` 单一表并把 assets/mesh 不透明谓词改为委托。
+- **Ruling: A-04-rebase-4（approve）** — 与并行行 A-05（床与睡眠）解耦互动：睡眠不查询夜行者，跳夜后白昼灼烧规则自然生效；两行唯一共享契约为 `core.DisplayDayPhase(ticks, offset)`（本行交付并消费、offset 恒 0，A-05 后续提供 offset 生产端）。战斗 seam 保留，待 A-03 统一战斗落地后收编删除。
+- **分支操作**：分支 `feat/A-04-hostile-nightwalker` 已 rebase 到 `origin/main`（`fe3890ed`），原两提交（proposal 23df0525 + rulings c96a6851）重放为 69e5c1f0 + 717cd3e7；重定基线文档修订以新提交追加。
+
 ## 变更产物
 
 - [x] `openspec new change authoritative-hostile-nightwalker`；proposal/7 delta specs/design/tasks/ledger 已建。

@@ -28,12 +28,12 @@
 - **WHEN** 客户端渲染一帧
 - **THEN** 夜行者 MUST 以敌怪调色呈现，MUST NOT 出现任何与夜行者相关的名称标签，玩家/伙伴的名标 MUST 不受影响
 
-### Requirement: client ABI 升至 v9 且旧动态库被早期拒绝
+### Requirement: client ABI 升至 v10 且旧动态库被早期拒绝
 
-客户端动态库 ABI SHALL 提升至 v9；低于 v9 版本的动态库在装载或首帧边界 MUST 被稳定拒绝且不产生半启动。容量与 ABI 常量 MUST 不晚于本版本的实现落地。
+客户端动态库 ABI SHALL 提升至 v10；低于 v10 版本的动态库在装载或首帧边界 MUST 被稳定拒绝且不产生半启动。容量与 ABI 常量 MUST 不晚于本版本的实现落地。
 
 #### Scenario: 旧 ABI 动态库被拒绝
 
-- **GIVEN** 装载一个 ABI v8 的 `mornlea_client` 动态库
+- **GIVEN** 装载一个 ABI v9 的 `mornlea_client` 动态库
 - **WHEN** 客户端启动并校验 ABI
 - **THEN** 启动 MUST 被拒绝并报告版本不匹配，MUST NOT 进入渲染循环
