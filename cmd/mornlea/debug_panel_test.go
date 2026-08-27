@@ -822,6 +822,9 @@ func TestPanelF3ToggleFromHiddenCapturesAtFrameLoopLevel(t *testing.T) {
 	if !window.captured {
 		t.Fatal("面板可见期间光标必须保持捕获")
 	}
+	if len(window.captureHistory) != 1 || !window.captureHistory[0] {
+		t.Fatalf("光标捕获历史=%v, want 仅入口捕获一次、绝无打开时释放再重捕获", window.captureHistory)
+	}
 	restored := false
 	for _, input := range drainInputs(drainChatClientMessages(endpoint)) {
 		if input.MoveZ != 0 {

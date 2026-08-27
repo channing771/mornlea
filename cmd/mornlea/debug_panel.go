@@ -70,8 +70,9 @@ func (a *application) applyPanelChange() {
 // 分配一个 20 余行的切片、三处段头字符串拼接与十余次 strconv.FormatFloat，
 // 而 Prepare 的 visible 提前返回拦不住实参求值——把 rows() 写成 Prepare 的
 // 实参，等于在 --dev 开着但面板关着时每帧都往渲染热路径上倒一堆垃圾。
-// 设计 §6.1 要求的是"关闭状态下整个 pass 跳过，不产出任何实例"，输入构造
-// 同样在这条要求之内。
+// spec「无 UI 帧时 egui 零参与」（openspec/specs/egui-tool-ui/spec.md）与
+// design.md 风险项「段仅在面板可见时编码」要求的是关闭状态下整个 pass
+// 跳过、不产出任何实例，输入构造同样在这条要求之内。
 //
 // now 由调用方传入而不是在函数内取，便于测试固定时间基准。
 func (a *application) panelFrameInput(now time.Time) (render.PanelReadout, []render.PanelRow) {
@@ -321,7 +322,10 @@ const (
 	debugPanelEditValueMaxLen = 64
 	debugPanelRowsMax         = 64
 
-	// maxUISegmentBytes 是 UI 段的总长度上界（Rust 侧 MAX_UI_SEGMENT_BYTES）。
+	// maxUISegmentBytes 是 UI 段的总长度上界。权威常量是 Rust
+	// `engine/crates/mornlea_client/src/ui.rs` 的 `MAX_UI_SEGMENT_BYTES`，
+	// 此处是与之逐值一致的跨语言副本（约束性检查 encodeDebugPanelSegment
+	// 里的段长 panic 用），不是运行时对 Rust 的校验。
 	maxUISegmentBytes = 4096
 )
 

@@ -11,7 +11,7 @@
 - 无 wire 变更：面板为客户端内呈现与本地校验，不产生新网络消息；`remote()` 时只读。
 - 不升 client ABI：ln v9 内扩 layout 常量（D-01 先例：v9 上加 settings layout=2）。
 
-非目标：不做调试面板的任意值类型校验逻辑扩展（沿用既有 `config.Fields()` 的只读/编辑分类）、不做面板尺寸/位置拖拽、不做多面板或工具窗体系、不做面板值的远程写回、不改变 F3 之外的任何既有快捷键；不触碰线上 wire、世界/玩家/伙伴存档、engine ABI、benchmark workload 或并行在途 A-01/E-12 的独占文件集。
+非目标：不做调试面板的任意值类型校验逻辑扩展（沿用既有 `config.Fields()` 的只读/编辑分类）、不做面板尺寸/位置拖拽、不做多面板或工具窗体系、不做面板值的远程写回；F3 之外的既有调试面板快捷键以 egui 文本编辑/Enter/Esc 语义取代——F5 保存、F6 重置、←/→ 步进与 Shift/Alt 粗细调移出（设计决策 6，配置保存完全由 D-01 设置页承担）；不触碰线上 wire、世界/玩家/伙伴存档、engine ABI、benchmark workload 或并行在途 A-01/E-12 的独占文件集。
 
 ## Capabilities
 
