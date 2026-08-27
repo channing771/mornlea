@@ -31,3 +31,28 @@
 ## 最终验证输出摘要（收尾补）
 
 - （待整分支终审后补：make rust、focused -race、archcheck、vet、gofmt、openspec strict 的数值摘要；benchmark 数值只记录）
+
+## Task 1 基线验证（2026-08-28）
+
+### 验证命令结果（数值只记录，不改基线）
+
+- `git status --short`：空输出，worktree 干净（位于本 change 的功能分支，未切换 checkout）。
+- `make rust`：通过（exit 0）。`cargo build --locked --release`（rustup 1.97.1）完成于 29.19s，`mornlea_engine` 与 `mornlea_client` 均编译成功。注：命令外壳先输出十余条 `_encode`/`_decode: command not found`，来自用户 zsh profile 初始化，与 make 及 cargo 无关。
+- `go test ./internal/core ./internal/companion ./internal/physics ./internal/sim ./internal/server ./internal/storage ./internal/network ./internal/client ./internal/render ./internal/nativeabi ./cmd/mornlea -race -count=1`：通过（exit 0），11 个包全部 `ok`。各包耗时（`-race`）：core 2.235s、companion 4.585s、physics 2.566s、sim 55.579s、server 254.491s、storage 23.170s、network 7.608s、client 5.649s、render 4.462s、nativeabi 7.870s、cmd/mornlea 373.466s（合计约 741.7s）。
+- `openspec validate --all --strict --no-interactive`：通过（exit 0），72 items passed, 0 failed。
+- `git diff --check`：通过（exit 0，无输出）。
+
+### 事实核对
+
+- a. `internal/network/registry.go`：StatePlay S→C 在 `serverPacketID`/`serverPacketForID` 均实占 0..21，21 为 `CraftingState`；22/23/24 空闲，可承接本 change 的三类敌怪消息。
+- b. `internal/core/block_properties.go` 已有 `BlockEmission`（发光方块 15、五种火把形态 14）与 `BlockLightAttenuation`（八个流体编号 1、其余 0）；`internal/core` 全包无 `BlockOpaque`——符合 design「直接消费两表 + 只新增 `BlockOpaque`」的预设。
+- c. `internal/core`（乃至整个 `internal/`）尚无 `DisplayDayPhase`，待 Task 2.3 新增。
+- d. `internal/core/item.go` 物品枚举末项为 `ItemTorch` = 44（`ItemNone` = iota = 0 起第 45 项，其后是哨兵 `ItemIDMax` = 45）；`internal/core/block.go` 的 `BlockIDMax` = 76（`AirID` = 0 起 iota 第 77 项，独占上界，末个合法方块为 `TorchWallNegZID` = 75）；`internal/core/recipe.go` 配方段末为 `RecipeTorch` = 15（`RecipeStoneBricks` = iota+1 = 1 起第 15 项）。
+- e. `internal/render/avatar.go` 的 `maxAvatars` = 11；Rust 侧 `engine/crates/mornlea_client/src/render/entity.rs` 的 `AVATAR_MAX_INSTANCES: usize = 66`；`engine/include/mornlea_client.h` 的 `MORNLEA_CLIENT_ABI_VERSION 9u`，与 client ABI v9 预期一致。
+- f. `internal/network/packet.go` 的 `ProtocolVersion uint32 = 29`，与「协议 v29→v30 由本行升级」的起点一致。
+
+### 产物一致性核对
+
+- ledger「内容确认记录」与「重定基线裁决」两节已全文誊录既有批准结论（q1/q2、批准轮与 2026-08-28 重定基线各裁决），与 proposal/design/tasks 现文逐项一致：批次合流取消、本行自带协议 v30/client ABI v10/`hostile_mobs` v1/golden 同步、S→C 编号取 22/23/24（实现期以注册表实占空闲位为准）、发光/衰减表走「直接消费 + 只新增 `BlockOpaque`」路径、与并行床行仅共享 `DisplayDayPhase(ticks, offset)`（本行 offset 恒 0）。
+- 上述事实核对 a–f 与 design「Context」记载的基线逐项吻合，未发现偏差。
+- 结论：Task 1 通过，无需修复，可进入 Task 2。

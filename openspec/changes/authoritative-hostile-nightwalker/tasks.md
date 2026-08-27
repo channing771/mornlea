@@ -4,8 +4,8 @@
 
 ## 1. 基线验证与 change 产物核对
 
-- [ ] 1.1 运行 `git status --short`（worktree 干净）并记录 `make rust`、`go test ./internal/core ./internal/companion ./internal/physics ./internal/sim ./internal/server ./internal/storage ./internal/network ./internal/client ./internal/render ./internal/nativeabi ./cmd/mornlea -race -count=1` 输出摘要到 `ledger.md`（数值只记录）
-- [ ] 1.2 检查 `openspec validate --all --strict --no-interactive` 与 `git diff --check` 通过；核对 proposal/specs/design/tasks 与已批准的确认结论一致（原 A-04-q1/q2 裁决与 2026-08-28 重定基线裁决全文誊入 ledger）
+- [x] 1.1 运行 `git status --short`（worktree 干净）并记录 `make rust`、`go test ./internal/core ./internal/companion ./internal/physics ./internal/sim ./internal/server ./internal/storage ./internal/network ./internal/client ./internal/render ./internal/nativeabi ./cmd/mornlea -race -count=1` 输出摘要到 `ledger.md`（数值只记录）
+- [x] 1.2 检查 `openspec validate --all --strict --no-interactive` 与 `git diff --check` 通过；核对 proposal/specs/design/tasks 与已批准的确认结论一致（原 A-04-q1/q2 裁决与 2026-08-28 重定基线裁决全文誊入 ledger）
 
 ## 2. 发光/衰减单一表迁入 core 与 DisplayDayPhase、腐肉食物
 
