@@ -46,7 +46,7 @@
 
 - **Task 1（基线验证）**：完成，提交 `c710d542`。`make rust` 与 9 包 `-race` 全绿；编号核对：床 8 形态取 76..83（`BlockIDMax`→84）、`ItemBed`=45、`RecipeBed`=16、metadata v2、玩家 schema v7（`player_codec.go:13`）、协议 29、`PlayerState`=3。`DisplayDayPhase` 缺位→按并行裁决记入本行自带清单。控制会话抽查通过。
 - **Task 2（床方块/物品/配方/碰撞/纹理/模型）**：实现提交 `f8e4d938`→评审 QUALITY FAIL（床面专属层 60..67 在 mesh 输出不可达：`emit_bed` 全 quad 读 face 0 材质而床面层只挂 FacePosY——生产链缺陷， SPEC PASS）→R1 修复（方案 A：平顶读 face 3、侧板各读自身面、非同质 Rust 夹具、生产链穿透测试 `TestBedSurfaceLayerReachesMesherThroughProductionRegistry` 红→绿、修正 face 序注释、ABI header 注释同步）→amend `dc43e746`→R1 复核 SPEC PASS + QUALITY PASS + 容量专项维持成立（80→96 有原注释/门火把同批先例/两侧同步双守卫/+16 步距四点依据，不属 ABI 版本契约）。修复轮：R1（1 轮，原实现者完成）。
-- **Task 3（放置/采掘/支撑）**：实现提交 `5eb7b581`，待评审。实现者裁决：支撑扫除比照火把先例（门无运行时扫除而 spec 明文要求整床移除掉落）、伙伴采掘床双清分支（避免通用单清残留半床）、右键交互留待 Task 4。
+- **Task 3（放置/采掘/支撑）**：实现提交 `5eb7b581`；评审 SPEC PASS + QUALITY PASS，三项自报裁决经核实全部成立（支撑扫除比照火把系 spec 明文要求且门无先例可抄；伙伴采掘床双清分支防半床残留；现行命令集确无命中床的 use 路径）。非阻塞建议四条留归档期参考（`clearBedPair` 防御纵深不对称、`bedHalfPositions` 第二份坐标拷贝、级联举例、火把触发床失效当 tick 覆盖缺直测）。修复轮：0。实现者裁决：支撑扫除比照火把先例（门无运行时扫除而 spec 明文要求整床移除掉落）、伙伴采掘床双清分支（避免通用单清残留半床）、右键交互留待 Task 4。
 
 ## 最终验证输出摘要（收尾补）
 
