@@ -40,7 +40,7 @@
 
 ### D2：发光/衰减单一表（裁决 A-04-q2 路径 A，重定基线后为「直接消费」路径）
 
-`core.BlockEmission`（发光方块 15、火把 14）与 `core.BlockLightAttenuation`（流体 1、其余 0）已由现行 `internal/core/block_properties.go` 提供，本分支**直接消费、不重复创建**；只新增 `core.BlockOpaque(block core.BlockID) bool`（不透明谓词与既有 `assets.Registry.Opaque` 一致——registered 且非 air/glass/leaves/fluid/作物），`internal/assets` 与 `internal/mesh` 的不透明判定改为委托 core（发光/衰减两表的既有委托关系核对保持即可）。
+`core.BlockEmission`（发光方块 15、火把 14）与 `core.BlockLightAttenuation`（流体 1、其余 0）已由现行 `internal/core/block_properties.go` 提供，本分支**直接消费、不重复创建**；只新增 `core.BlockOpaque(block core.BlockID) bool`（不透明谓词与既有 `assets.Registry.Opaque` 逐值一致——registered 且非 air/glass/leaves/fluid/作物/门/火把），`internal/assets` 与 `internal/mesh` 的不透明判定改为委托 core（发光/衰减两表的既有委托关系核对保持即可）。
 
 **否决**：把表留在 assets/mesh 而 sim 复制同值表（双源漂移）；等待 A-02 阻塞（本分支需独立可验证）；以碰撞盒近似 opacity（glass/leaves 在客户端光传播中透光，碰撞盒近似会造成伺服不一致）。
 
