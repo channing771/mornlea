@@ -11,11 +11,11 @@
 
 ## 2. sim 支撑放置、六邻居失效与掉落
 
-- 目标文件/包：`internal/sim`（`engine_placement.go`、`engine_changes.go`、`block.go`、`engine_step.go`、`drop.go`、`drop_test.go`、`placement_success_test.go`、新建 `torch.go`、`torch_test.go`）；`internal/world/chunk.go`（如需支撑格查询辅助）。
-- 验证命令：`gofmt -w internal/sim internal/world`；`go test ./internal/sim ./internal/world -race -count=1`。
-- [ ] RED：五向放置成功与拒绝路径（底面/无支撑/非实心/流体/未加载/玩家占位）逐条断言拒绝不扣料；成功路径同 tick 原子扣物品并写方块、广播走既有变更路径；采掘/流体替换/作物替换等任何权威变化撤销支撑后，仅移除依赖火把并掉落一个火把、共享 revision/broadcast、非支撑邻居不变；火把经 A-01 网格（2×2 摆放「煤上棍下」）合成一次恰得 4 个火把。
+- 目标文件/包：`internal/sim`（`engine_placement.go`、`engine_changes.go`、`block.go`、`engine_step.go`、`drop.go`、`drop_test.go`、`placement_success_test.go`、新建 `torch.go`、`torch_test.go`）；`internal/world/chunk.go`（如需支撑格查询辅助）；`internal/physics/types.go`（`BlockCollisionBoxes` 五形态火把零碰撞——Task 1 交付的 `core.IsTorch` 谓词在此接线，含对应 physics 定点测试）。
+- 验证命令：`gofmt -w internal/sim internal/world internal/physics`；`go test ./internal/sim ./internal/world ./internal/physics -race -count=1`。
+- [ ] RED：五向放置成功与拒绝路径（底面/无支撑/非实心/流体/未加载/玩家占位）逐条断言拒绝不扣料；成功路径同 tick 原子扣物品并写方块、广播走既有变更路径；采掘/流体替换/作物替换等任何权威变化撤销支撑后，仅移除依赖火把并掉落一个火把、共享 revision/broadcast、非支撑邻居不变；火把经 A-01 网格（2×2 摆放「煤上棍下」）合成一次恰得 4 个火把；五形态火把零碰撞（`BlockCollisionBoxes` 恒空）。
 - [ ] GREEN：`torchSupport` 唯一形态→支撑映射；`executePlacement` 火把分支（世界写入前校验）；`finishChanges` 前对本 tick 已变位置排序去重、精确六邻居复核、`recordChange` 写空气 + 既有掉落 append；火把合成零新分支（由 task 1 的配方经既有匹配/取出路径生效，此处只加验收测试）。
-- [ ] `go test ./internal/sim ./internal/world -race -count=1` 通过后，双评审并提交 `feat: enforce torch support`；结论记入 ledger。
+- [ ] `go test ./internal/sim ./internal/world ./internal/physics -race -count=1` 通过后，双评审并提交 `feat: enforce torch support`；结论记入 ledger。
 
 ## 3. Rust 有限模型与 engine ABI v8
 

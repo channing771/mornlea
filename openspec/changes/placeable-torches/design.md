@@ -15,8 +15,8 @@
 | `BlockFacePosY`（顶面） | standing | 下方一格 |
 | `BlockFaceNegX` | wall −X | `pos + (1,0,0)`（`face.Opposite()`） |
 | `BlockFacePosX` | wall +X | `pos + (-1,0,0)`（`face.Opposite()`） |
-| `BlockFaceNegZ` | wall +Z | `pos + (0,0,+1)`（`face.Opposite()`） |
-| `BlockFacePosZ` | wall −Z | `pos + (0,0,-1)`（`face.Opposite()`） |
+| `BlockFaceNegZ` | wall −Z | `pos + (0,0,+1)`（`face.Opposite()`） |
+| `BlockFacePosZ` | wall +Z | `pos + (0,0,-1)`（`face.Opposite()`） |
 | `BlockFaceNegY`（底面） | 拒绝 | — |
 
 墙面火把的**形态名 = 命中面名**（火把贴在支撑块的哪个侧面），而火把的支撑格位于 `face.Opposite()` 方向（`BlockFace.Opposite()` 已存在于 `internal/core/block.go`）：命中 +X 面 → 火把在支撑块 +X 侧、支撑在火把的 −X 侧。墙外观向远离支撑的方向倾斜（Rust 几何侧），碰撞恒空。
