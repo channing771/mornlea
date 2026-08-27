@@ -525,6 +525,25 @@ func TestRegistryLightDelegatesToCore(t *testing.T) {
 	}
 }
 
+// TestRegistryOpaqueDelegatesToCore 锁定「唯一不透明判定表」：Registry 的
+// Opaque 对全部已注册方块与越界编号都必须与 core.BlockOpaque 逐点恒等——
+// assets 不得保留任何与 core 重复的判定分支，服务端夜行者的局部暗度判定与
+// 客户端注册表都只消费 core 这一张表。
+func TestRegistryOpaqueDelegatesToCore(t *testing.T) {
+	registry := assets.NewRegistry()
+	for id := core.AirID; id < core.BlockIDMax; id++ {
+		if got, want := registry.Opaque(id), core.BlockOpaque(id); got != want {
+			t.Fatalf("Opaque(%d) = %v，与 core.BlockOpaque 的 %v 不一致", id, got, want)
+		}
+	}
+	// 越界编号（哨兵与其后一格、远端编号）同样转调恒等，均为 false。
+	for _, id := range []world.BlockID{core.BlockIDMax, core.BlockIDMax + 1, world.BlockID(65535)} {
+		if got, want := registry.Opaque(id), core.BlockOpaque(id); got != want {
+			t.Fatalf("Opaque(越界 %d) = %v，与 core.BlockOpaque 的 %v 不一致", id, got, want)
+		}
+	}
+}
+
 // TestTorchFormsAreNotOpaque 锁定火把方块的注册表属性：五种形态全部非不透明
 // （与玻璃、树叶、作物同属透明类），否则会遮挡邻面、阻断光照。
 func TestTorchFormsAreNotOpaque(t *testing.T) {

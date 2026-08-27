@@ -66,13 +66,20 @@ func TestBreadIsRegisteredStackableAndNotPlaceable(t *testing.T) {
 	}
 }
 
-// TestFoodValueCoversOnlyBread 是食物表的穷举守护：全部合法物品里只有面包、
-// 马铃薯、胡萝卜、毒土豆四种食物，且各自的恢复值精确等于 Bread(5,6000)、
-// Potato(1,600)、Carrot(3,3600)、PoisonousPotato(2,1200)（千分位）。
+// TestFoodValueCoversExactlyFiveFoods 是食物表的穷举守护：全部合法物品里恰好
+// 只有面包、马铃薯、胡萝卜、毒土豆、腐肉五种食物，且各自的恢复值精确等于
+// Bread(5,6000)、Potato(1,600)、Carrot(3,3600)、PoisonousPotato(2,1200)、
+// RottenFlesh(4,0)（饱和度为千分位）。
+//
+// 这组数值同时就是进食状态机的取值路径：internal/sim 的 advanceEating 以
+// FoodValue 的 (hungerGain, saturationGain, edible) 做唯一准入与结算依据——
+// edible 决定能否开始进食，两个数值决定结算加多少（先加饥饿再钳饱和）。腐肉
+// 的饱和 0 是刻意的：吃完立刻处于零饱和，饥饿条马上开始下降。腐肉没有中毒
+// 效果——有界状态效果系统落地前它就是一块普通食物。
 //
 // 穷举界用 ItemIDMax 独占哨兵而不是「<= 枚举末项」：追加新物品时 core 的枚举
 // 末项守护断言会先变红，迫使开发者回来审视这条穷举是否还表达了预期集合。
-func TestFoodValueCoversOnlyBread(t *testing.T) {
+func TestFoodValueCoversExactlyFiveFoods(t *testing.T) {
 	for item := core.ItemID(0); item < core.ItemIDMax; item++ {
 		hunger, saturation, ok := core.FoodValue(item)
 		switch item {
@@ -92,6 +99,10 @@ func TestFoodValueCoversOnlyBread(t *testing.T) {
 			if !ok || hunger != 2 || saturation != 1200 {
 				t.Fatalf("FoodValue(ItemPoisonousPotato) = (%d,%d,%v)，想要 (2,1200,true)", hunger, saturation, ok)
 			}
+		case core.ItemRottenFlesh:
+			if !ok || hunger != 4 || saturation != 0 {
+				t.Fatalf("FoodValue(ItemRottenFlesh) = (%d,%d,%v)，想要 (4,0,true)", hunger, saturation, ok)
+			}
 		default:
 			if ok || hunger != 0 || saturation != 0 {
 				t.Fatalf("FoodValue(%d) = (%d,%d,%v)，想要 (0,0,false)：非食物", item, hunger, saturation, ok)
@@ -103,6 +114,38 @@ func TestFoodValueCoversOnlyBread(t *testing.T) {
 		if _, _, ok := core.FoodValue(item); ok {
 			t.Fatalf("未注册物品 %d 被登记为食物", item)
 		}
+	}
+}
+
+// TestRottenFleshIsRegisteredStackableAndNotPlaceable 锁定腐肉的物品属性：
+// 已注册（堆叠上限 64、没有耐久）、**不可放置**、食物值恰好 (4,0)。
+//
+// 「不可放置」与面包同一条承重契约：腐肉若意外落进 ItemPlacement，玩家就能把
+// 食物砌成墙。来源上它与面包互补：腐肉不进 BlockDrop 表——世界上没有任何方块
+// 采掘出腐肉，它唯一的来源是夜行者的死亡掉落（由权威模拟在死亡 chunk 放置，
+// 不经任何方块采掘映射）。
+func TestRottenFleshIsRegisteredStackableAndNotPlaceable(t *testing.T) {
+	if !core.RegisteredItem(core.ItemRottenFlesh) {
+		t.Fatal("ItemRottenFlesh 未注册")
+	}
+	if limit, ok := core.ItemStackLimit(core.ItemRottenFlesh); !ok || limit != core.MaxStackCount {
+		t.Fatalf("ItemStackLimit(ItemRottenFlesh) = (%d,%v)，想要 (%d,true)", limit, ok, core.MaxStackCount)
+	}
+	if durability, ok := core.ItemMaxDurability(core.ItemRottenFlesh); ok || durability != 0 {
+		t.Fatalf("ItemMaxDurability(ItemRottenFlesh) = (%d,%v)，想要 (0,false)", durability, ok)
+	}
+	if block, ok := core.ItemPlacement(core.ItemRottenFlesh); ok || block != core.AirID {
+		t.Fatalf("ItemPlacement(ItemRottenFlesh) = (%d,%v)，想要 (AirID,false)：腐肉不可放置", block, ok)
+	}
+	// 腐肉不是任何方块的掉落物：它只能来自夜行者的死亡掉落路径。
+	for block := core.BlockID(0); block < core.BlockIDMax; block++ {
+		if item, ok := core.BlockDrop(block); ok && item == core.ItemRottenFlesh {
+			t.Fatalf("方块 %d 掉落腐肉，腐肉只能由夜行者死亡掉落获得", block)
+		}
+	}
+	// 满堆叠的物品栈必须合法：掉落收集与快捷栏合并都依赖这一判定。
+	if stack := (core.ItemStack{Item: core.ItemRottenFlesh, Count: core.MaxStackCount}); !stack.Valid() {
+		t.Fatal("满堆叠腐肉物品栈必须合法")
 	}
 }
 

@@ -9,10 +9,10 @@
 
 ## 2. 发光/衰减单一表迁入 core 与 DisplayDayPhase、腐肉食物
 
-- [ ] 2.1 核对 `core.BlockEmission`/`core.BlockLightAttenuation`（`internal/core/block_properties.go` 现行表）签名与值并记录消费结论；为 `core.BlockOpaque(block core.BlockID) bool` 写失败测试（不透明谓词与既有 `assets.Registry.Opaque` 逐值一致——registered 且非 air/glass/leaves/fluid/作物）
-- [ ] 2.2 实现 `core.BlockOpaque` 并把 `internal/assets`（`Registry.Opaque`）与 `internal/mesh` 的不透明判定改为委托 core；核对两表既有委托关系不回退；`go test ./internal/core ./internal/assets ./internal/mesh -race -count=1`
-- [ ] 2.3 在 `internal/core` 新增 overflow-safe `DisplayDayPhase(worldTime uint64, offset uint16) uint16`（先 `%24000` 再相加取模）失败测试（边界：MaxUint64、offset 23999）并实现；offset 参数是与 A-05（床与睡眠）的共享契约，本行消费恒 0；`go test ./internal/core -race -count=1`
-- [ ] 2.4 在 `internal/core` 登记 `ItemRottenFlesh`（堆叠 64，编号接 `ItemTorch`=44 之后、哨兵顺延）与食物表条目（饥饿 4、饱和 0 毫秒），把食物表穷举测试更新为精确五种食物（面包 5/6000、马铃薯 1/600、胡萝卜 3/3600、毒土豆 2/1200、腐肉 4/0）并覆盖进食状态机取值；`go test ./internal/core -race -count=1`；本任务组完成后提交 `feat: add core block opacity day phase and rotten flesh`
+- [x] 2.1 核对 `core.BlockEmission`/`core.BlockLightAttenuation`（`internal/core/block_properties.go` 现行表）签名与值并记录消费结论；为 `core.BlockOpaque(block core.BlockID) bool` 写失败测试（不透明谓词与既有 `assets.Registry.Opaque` 逐值一致——registered 且非 air/glass/leaves/fluid/作物）
+- [x] 2.2 实现 `core.BlockOpaque` 并把 `internal/assets`（`Registry.Opaque`）与 `internal/mesh` 的不透明判定改为委托 core；核对两表既有委托关系不回退；`go test ./internal/core ./internal/assets ./internal/mesh -race -count=1`
+- [x] 2.3 在 `internal/core` 新增 overflow-safe `DisplayDayPhase(worldTime uint64, offset uint16) uint16`（先 `%24000` 再相加取模）失败测试（边界：MaxUint64、offset 23999）并实现；offset 参数是与 A-05（床与睡眠）的共享契约，本行消费恒 0；`go test ./internal/core -race -count=1`
+- [x] 2.4 在 `internal/core` 登记 `ItemRottenFlesh`（堆叠 64，编号接 `ItemTorch`=44 之后、哨兵顺延）与食物表条目（饥饿 4、饱和 0 毫秒），把食物表穷举测试更新为精确五种食物（面包 5/6000、马铃薯 1/600、胡萝卜 3/3600、毒土豆 2/1200、腐肉 4/0）并覆盖进食状态机取值；`go test ./internal/core -race -count=1`；本任务组完成后提交 `feat: add core block opacity day phase and rotten flesh`
 
 ## 3. hostile_mobs.bin schema v1 与存储契约
 
