@@ -36,6 +36,8 @@ fn rendered_text(state: &mut UiState, frame: &UiFrame) -> String {
 fn pause_renders_two_buttons_without_remote_note_for_local_world() {
     let mut state = prepared_state();
     let text = rendered_text(&mut state, &pause_frame(false));
+    // 标题为 Rust 固定文案,须与两按钮同帧可判定。
+    assert!(text.contains("已暂停"), "暂停页应绘制标题：{text}");
     // 两个固定按钮各恰好绘制一次;本地单机不呈现注明行。
     assert_eq!(text.matches("返回游戏").count(), 1);
     assert_eq!(text.matches("退回主菜单").count(), 1);
