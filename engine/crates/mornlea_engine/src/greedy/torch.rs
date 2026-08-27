@@ -75,8 +75,8 @@ pub(crate) fn mesh_torches(
                 };
                 let light_above = light.at(x, y + 1, z);
                 count = match tag {
-                    1 => emit_standing(x, y, z, material, light_above, output, count)?,
-                    2..=5 => emit_wall(tag, x, y, z, material, light_above, output, count)?,
+                    1 => emit_standing([x, y, z], material, light_above, output, count)?,
+                    2..=5 => emit_wall(tag, [x, y, z], material, light_above, output, count)?,
                     // validate 已把 > 5（含床 tag 6 与未知值）整体拒绝成
                     // InputError::Registry，这里的 `_` 分支只为穷尽性而存在。
                     _ => unreachable!("model tag 已被 RegistryView::validate 拒绝"),
@@ -89,10 +89,11 @@ pub(crate) fn mesh_torches(
 
 /// emit_standing 发射落地形态：两条交叉斜面 × 正背各一，复用植物的
 /// `PLANT_QUADS` 编组（face 6/7 + 正背位）。
+///
+/// `cell` 是火把格坐标 `[x, y, z]`——与 `compute_ao`/`fluid_corners` 的坐标
+/// 参数式样一致，三个分量合并传递也压住 clippy 的 too_many_arguments 上限。
 fn emit_standing(
-    x: i32,
-    y: i32,
-    z: i32,
+    cell: [i32; 3],
     material: u16,
     light_above: u8,
     output: &mut [u64],
@@ -103,9 +104,9 @@ fn emit_standing(
             return Err(MeshError::OutputOverflow);
         };
         *slot = Quad {
-            x: x as u8,
-            y: y as u8,
-            z: z as u8,
+            x: cell[0] as u8,
+            y: cell[1] as u8,
+            z: cell[2] as u8,
             w: 1,
             h: 1,
             face,
@@ -126,12 +127,11 @@ fn emit_standing(
 ///
 /// 角顺序与 `compute_ao` 一致：局部 (u,v) 的 (0,0)(1,0)(1,1)(0,1)。薄板的
 /// u 轴是倾斜方向（±X 墙 → Z 法线面上 u=x；±Z 墙 → X 法线面上 v=z），顶缘
-/// 两个角分别取 near/far、底缘两角恒 0（贴地）。
+/// 两个角分别取 near/far、底缘两角恒 0（贴地）。`cell` 是火把格坐标
+/// `[x, y, z]`（坐标分量合并传递的式样见 `emit_standing`）。
 fn emit_wall(
     tag: u8,
-    x: i32,
-    y: i32,
-    z: i32,
+    cell: [i32; 3],
     material: u16,
     light_above: u8,
     output: &mut [u64],
@@ -153,9 +153,9 @@ fn emit_wall(
             return Err(MeshError::OutputOverflow);
         };
         *slot = Quad {
-            x: x as u8,
-            y: y as u8,
-            z: z as u8,
+            x: cell[0] as u8,
+            y: cell[1] as u8,
+            z: cell[2] as u8,
             w: 1,
             h: 1,
             face,
@@ -172,9 +172,9 @@ fn emit_wall(
         return Err(MeshError::OutputOverflow);
     };
     *slot = Quad {
-        x: x as u8,
-        y: y as u8,
-        z: z as u8,
+        x: cell[0] as u8,
+        y: cell[1] as u8,
+        z: cell[2] as u8,
         w: 1,
         h: 1,
         face: cap,

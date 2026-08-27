@@ -4,9 +4,9 @@ use crate::quad::{FULL_FLUID_HEIGHT, Face, Quad, plant_material};
 
 mod torch;
 
+use torch::mesh_torches;
 #[cfg(test)]
 pub(crate) use torch::{TORCH_QUADS_PER_STANDING_CELL, TORCH_QUADS_PER_WALL_CELL};
-use torch::mesh_torches;
 
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum MeshError {

@@ -262,7 +262,9 @@ fn adjacent_torches_never_merge() {
     }
     assert_eq!(per_cell.len(), 2, "火把 quad 没有分布在两格上");
     assert!(
-        per_cell.values().all(|&n| n == TORCH_QUADS_PER_STANDING_CELL),
+        per_cell
+            .values()
+            .all(|&n| n == TORCH_QUADS_PER_STANDING_CELL),
         "存在每格面实例数不等于 {TORCH_QUADS_PER_STANDING_CELL} 的格子"
     );
 
