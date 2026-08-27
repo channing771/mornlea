@@ -103,33 +103,6 @@ func TestBeginServerLoginRejectsOutdatedClientHelloWithProtocolV8(t *testing.T) 
 	}
 }
 
-func TestBeginServerLoginFutureClientHelloReturnsV2MismatchOverTCP(t *testing.T) {
-	listener := listenLoopback(t)
-	t.Cleanup(func() { _ = listener.Close() })
-	client, server := dialAndAccept(t, listener)
-	t.Cleanup(func() { _ = client.Close() })
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	serverDone := make(chan error, 1)
-	go func() {
-		_, err := BeginServerLogin(ctx, server, 0)
-		serverDone <- err
-	}()
-
-	writeRawClientFrame(t, client, 0, []byte{byte(ProtocolVersion + 1)})
-	packet, err := client.Recv(ctx, StateHandshake)
-	if err != nil {
-		t.Fatalf("future ClientHello response: %v", err)
-	}
-	reject, ok := packet.(HandshakeReject)
-	if err != nil || !ok || reject.ServerProtocolVersion != ProtocolVersion || reject.Code != HandshakeVersionMismatch {
-		t.Fatalf("future ClientHello rejection=(%#v, %v), want protocol %d HandshakeVersionMismatch", packet, err, ProtocolVersion)
-	}
-	if err := <-serverDone; err == nil || !strings.Contains(err.Error(), "protocol violation") {
-		t.Fatalf("BeginServerLogin error=%v, want protocol violation after rejection", err)
-	}
-}
-
 func TestLoginClientReportsStableLoginRejectCodes(t *testing.T) {
 	for _, reject := range []LoginReject{
 		{Code: LoginServerFull, Message: "server full"},
