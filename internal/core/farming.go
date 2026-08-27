@@ -7,6 +7,7 @@ func IsPotato(id BlockID) bool { return id >= PotatoStage0ID && id <= PotatoStag
 func IsCarrot(id BlockID) bool { return id >= CarrotStage0ID && id <= CarrotStage7ID }
 
 // IsCrop 报告 id 是否是作物方块（小麦、马铃薯、胡萝卜的任一生长阶段）。
+// 门方块由 IsDoor 族判定，不属于作物区间。
 //
 // 与 IsFluid 同形：每种作物各自占一段连续的稳定编号，因此判定是三段闭区间的
 // 并集。其余任何方块（包括耕地与未注册编号）均返回 false——**耕地不是作物**：

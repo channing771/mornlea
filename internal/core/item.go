@@ -73,6 +73,7 @@ const (
 	ItemPotato
 	ItemCarrot
 	ItemPoisonousPotato
+	ItemDoor
 	// ItemIDMax 是合法物品编号的独占上界（最后一个合法 ItemID + 1），本身不是
 	// 物品枚举成员。它供测试以「item < ItemIDMax」穷举全部物品，替代依赖
 	//「某个具体物品恰为枚举末项」的脆弱写法；放在 core 是因为物品注册表归属
@@ -252,6 +253,10 @@ func BlockDrop(block BlockID) (ItemID, bool) {
 	case CarrotStage0ID, CarrotStage1ID, CarrotStage2ID, CarrotStage3ID,
 		CarrotStage4ID, CarrotStage5ID, CarrotStage6ID, CarrotStage7ID:
 		return ItemCarrot, true
+	case DoorLowerSouthClosed, DoorLowerSouthOpen, DoorLowerWestClosed, DoorLowerWestOpen,
+		DoorLowerNorthClosed, DoorLowerNorthOpen, DoorLowerEastClosed, DoorLowerEastOpen,
+		DoorUpper:
+		return ItemDoor, true
 	default:
 		return ItemNone, false
 	}
@@ -267,7 +272,7 @@ func ItemStackLimit(item ItemID) (uint8, bool) {
 		ItemRoofTile, ItemClay, ItemSnowBlock, ItemMossyCobblestone,
 		ItemWheatSeeds, ItemWheat, ItemBread,
 		ItemStick, ItemWorkbench, ItemBoneMeal,
-		ItemPotato, ItemCarrot, ItemPoisonousPotato:
+		ItemPotato, ItemCarrot, ItemPoisonousPotato, ItemDoor:
 		return MaxStackCount, true
 	case ItemStonePickaxe, ItemIronPickaxe,
 		ItemBrokenStonePickaxe, ItemBrokenIronPickaxe,
@@ -380,6 +385,8 @@ func ItemPlacement(item ItemID) (BlockID, bool) {
 		return PotatoStage0ID, true
 	case ItemCarrot:
 		return CarrotStage0ID, true
+	case ItemDoor:
+		return DoorLowerSouthClosed, true
 	default:
 		return AirID, false
 	}

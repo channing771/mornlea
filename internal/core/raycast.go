@@ -202,5 +202,20 @@ func raycastFloorToI32(value float32) int32 {
 // 可采掘、放置的落点是否被占用，仍由各调用点自己的规则判定（例如放置把流体格
 // 视作可覆盖的空位，见 internal/sim 的 executePlacement）。
 func InteractionTarget(id BlockID) bool {
-	return id != AirID && !IsFluid(id)
+	if id == AirID || IsFluid(id) {
+		return false
+	}
+	// 门：关闭实心可命中，开启可穿透（`isDoorSolidForRaycast = !Open`）。
+	// 上半单 ID 无方向，真实固体性由下半 `IsDoorOpen` 决定（见 `sim.blockRaycastSampler` 的 y-1 查询）；
+	// 此处无世界上下文，仅作孤立 ID 的回退：若下半不存在则按关闭处理，保持可命中以便交互映射到下半翻转。
+	if IsDoor(id) {
+		if IsDoorUpper(id) {
+			return true
+		}
+		if IsDoorOpen(id) {
+			return false
+		}
+		return true
+	}
+	return true
 }

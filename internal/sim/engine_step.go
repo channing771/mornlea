@@ -244,6 +244,24 @@ func (engine *Engine) Step() TickResult {
 				continue
 			}
 			interactions = append(interactions, command)
+		case CommandInteractDoor:
+			if session.player == nil || session.player.lifecycle != PlayerActive {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectPlayerNotReady,
+				})
+				continue
+			}
+			if !validPlayerLook(command.Yaw, command.Pitch) {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   RejectInvalidInput,
+				})
+				continue
+			}
+			interactions = append(interactions, command)
 		case CommandOpenFurnace:
 			if reason, rejected := engine.openContainer(command.Session, command); rejected {
 				result.Rejected = append(result.Rejected, Rejection{
@@ -431,6 +449,14 @@ func (engine *Engine) Step() TickResult {
 			}
 		case CommandDropSelectedItem:
 			if reason, rejected := engine.dropSelectedItem(engine.sessions[command.Session], pending); rejected {
+				result.Rejected = append(result.Rejected, Rejection{
+					Session:  command.Session,
+					Sequence: command.Sequence,
+					Reason:   reason,
+				})
+			}
+		case CommandInteractDoor:
+			if reason, rejected := engine.executeInteractDoor(command, pending); rejected {
 				result.Rejected = append(result.Rejected, Rejection{
 					Session:  command.Session,
 					Sequence: command.Sequence,
