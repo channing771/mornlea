@@ -28,6 +28,7 @@ import (
 	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 	"github.com/channing771/mornlea/internal/server"
 	"github.com/channing771/mornlea/internal/storage"
 )
@@ -202,7 +203,7 @@ func TestMornleaServerPersonaFileReachesDialogueRequests(t *testing.T) {
 	// 节奏，与 internal/server 集成测试同款 4096/1h）：默认 512 深度在
 	// 全仓 -race 并行负载下会让测试客户端排水不及、outbox 满而断会话，
 	// 台词广播随之不可达——被测的 persona 链路与这些参数正交。
-	listener, err := network.ListenTCP("127.0.0.1:0")
+	listener, err := networktcp.ListenTCP("127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("ListenTCP: %v", err)
 	}
@@ -228,7 +229,7 @@ func TestMornleaServerPersonaFileReachesDialogueRequests(t *testing.T) {
 
 	// 真实 TCP 登录与指令发送。
 	dialCtx, cancelDial := context.WithTimeout(runCtx, 10*time.Second)
-	clientStream, err := network.DialTCP(dialCtx, listener.Addr())
+	clientStream, err := networktcp.DialTCP(dialCtx, listener.Addr())
 	cancelDial()
 	if err != nil {
 		t.Fatalf("DialTCP: %v", err)

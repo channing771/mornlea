@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/network"
+	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 )
 
 func TestLoginTCPMultiplayer(t *testing.T) {
@@ -14,7 +15,7 @@ func TestLoginTCPMultiplayer(t *testing.T) {
 	config := hostTestConfig()
 	config.MaxPlayers = 8
 	host := mustNewHost(t, config, flatTestGenerator{}, store)
-	listener, err := network.ListenTCP("127.0.0.1:0")
+	listener, err := networktcp.ListenTCP("127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +72,7 @@ func TestLoginTCPMultiplayer(t *testing.T) {
 func dialAndLoginTCP(address string, identity network.Identity) (network.ClientEndpoint, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
 	defer cancel()
-	stream, err := network.DialTCP(ctx, address)
+	stream, err := networktcp.DialTCP(ctx, address)
 	if err != nil {
 		return nil, err
 	}

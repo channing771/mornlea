@@ -13,6 +13,7 @@ import (
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 	"github.com/channing771/mornlea/internal/render"
 )
 
@@ -97,7 +98,7 @@ func celestialTestEndpoints(t *testing.T, transport string) (network.ClientEndpo
 		})
 		return clientEndpoint, serverEndpoint
 	}
-	listener, err := network.ListenTCP("127.0.0.1:0")
+	listener, err := networktcp.ListenTCP("127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +108,7 @@ func celestialTestEndpoints(t *testing.T, transport string) (network.ClientEndpo
 		err    error
 	}, 1)
 	go func() {
-		stream, err := network.DialTCP(context.Background(), listener.Addr())
+		stream, err := networktcp.DialTCP(context.Background(), listener.Addr())
 		dialed <- struct {
 			stream network.ClientPacketStream
 			err    error

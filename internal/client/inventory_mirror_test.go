@@ -9,6 +9,7 @@ import (
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 )
 
 func stockedMirrorInventory() core.Inventory {
@@ -204,7 +205,7 @@ func runGridMirrorScript(t *testing.T, transport string) gridMirrorTransportResu
 	if transport == "memory" {
 		clientStream, serverStream = network.NewMemoryStreamPair(64)
 	} else {
-		listener, err := network.ListenTCP("127.0.0.1:0")
+		listener, err := networktcp.ListenTCP("127.0.0.1:0")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -217,7 +218,7 @@ func runGridMirrorScript(t *testing.T, transport string) gridMirrorTransportResu
 			}
 		}()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		clientStream, err = network.DialTCP(ctx, listener.Addr())
+		clientStream, err = networktcp.DialTCP(ctx, listener.Addr())
 		cancel()
 		if err != nil {
 			_ = listener.Close()

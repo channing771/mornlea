@@ -15,6 +15,7 @@ import (
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
@@ -667,7 +668,7 @@ func openParityTransport(
 	case "memory":
 		clientStream, serverStream = network.NewMemoryStreamPair(256)
 	case "tcp":
-		listener, err := network.ListenTCP("127.0.0.1:0")
+		listener, err := networktcp.ListenTCP("127.0.0.1:0")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -683,7 +684,7 @@ func openParityTransport(
 			}{stream: stream, err: err}
 		}()
 		ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
-		clientStream, err = network.DialTCP(ctx, listener.Addr())
+		clientStream, err = networktcp.DialTCP(ctx, listener.Addr())
 		cancel()
 		if err != nil {
 			_ = listener.Close()

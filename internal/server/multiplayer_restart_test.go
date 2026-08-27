@@ -12,6 +12,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
@@ -273,7 +274,7 @@ func startMultiplayerRestartHost(t *testing.T, root string, seed int64) multipla
 	if err != nil {
 		t.Fatalf("OpenDisk host: %v", err)
 	}
-	listener, err := network.ListenTCP("127.0.0.1:0")
+	listener, err := networktcp.ListenTCP("127.0.0.1:0")
 	if err != nil {
 		_ = store.Close()
 		t.Fatalf("ListenTCP restart: %v", err)

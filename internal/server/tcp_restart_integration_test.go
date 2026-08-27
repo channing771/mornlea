@@ -17,6 +17,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
@@ -635,7 +636,7 @@ func (generator blockedGenerator) GenerateChunk(position core.ChunkPos) *world.C
 
 func startIntegrationHostWithStore(t *testing.T, store storage.WorldStore, generator Generator) integrationHost {
 	t.Helper()
-	listener, err := network.ListenTCP("127.0.0.1:0")
+	listener, err := networktcp.ListenTCP("127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -660,7 +661,7 @@ func startIntegrationHostWithStore(t *testing.T, store storage.WorldStore, gener
 func loginIntegrationClient(address string, identity network.Identity) (network.ClientEndpoint, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
 	defer cancel()
-	stream, err := network.DialTCP(ctx, address)
+	stream, err := networktcp.DialTCP(ctx, address)
 	if err != nil {
 		return nil, err
 	}

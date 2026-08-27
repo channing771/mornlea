@@ -16,6 +16,7 @@ import (
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
@@ -376,7 +377,7 @@ func drainOneTask16(connected *multiplayerTCPClient) (bool, error) {
 
 func startMultiplayerTCPHost(t *testing.T) multiplayerTCPHost {
 	t.Helper()
-	listener, err := network.ListenTCP("127.0.0.1:0")
+	listener, err := networktcp.ListenTCP("127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("ListenTCP loopback: %v", err)
 	}
@@ -405,7 +406,7 @@ func connectMultiplayerTCPClient(
 	address string,
 	identity network.Identity,
 ) (*multiplayerTCPClient, error) {
-	stream, err := network.DialTCP(ctx, address)
+	stream, err := networktcp.DialTCP(ctx, address)
 	if err != nil {
 		return nil, fmt.Errorf("DialTCP %s: %w", identity.DisplayName, err)
 	}

@@ -21,6 +21,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/logging"
 	"github.com/channing771/mornlea/internal/network"
+	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 	"github.com/channing771/mornlea/internal/server"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/worldgen"
@@ -108,7 +109,7 @@ func defaultDependencies() dependencies {
 		openDisk: func(ctx context.Context, world string, options storage.OpenOptions) (storage.WorldStore, error) {
 			return storage.OpenDisk(ctx, world, options)
 		},
-		listenTCP: network.ListenTCP,
+		listenTCP: networktcp.ListenTCP,
 		newHost: func(ctx context.Context, config server.Config, generator server.Generator, store storage.WorldStore) (mornleaServerHost, error) {
 			return server.NewHost(ctx, config, generator, store)
 		},
