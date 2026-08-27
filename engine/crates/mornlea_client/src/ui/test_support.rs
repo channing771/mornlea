@@ -75,7 +75,9 @@ pub(super) fn four_button_frame() -> Vec<u8> {
 pub(super) fn menu_frame(frame: &UiFrame) -> &UiMenuFrame {
     match frame {
         UiFrame::Menu(menu) => menu,
-        UiFrame::Settings(_) | UiFrame::Debug(_) => panic!("测试夹具应为主菜单"),
+        UiFrame::Settings(_) | UiFrame::Debug(_) | UiFrame::Pause(_) => {
+            panic!("测试夹具应为主菜单")
+        }
     }
 }
 

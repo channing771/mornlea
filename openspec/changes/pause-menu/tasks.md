@@ -10,9 +10,9 @@
 
 ## 2. Rust 暂停页（`mornlea_client`）
 
-- [ ] 2.1 先写失败测试：`ui/` 新增暂停页模块的 render 纯函数测试——「返回游戏」「退回主菜单」按钮列可判定；注明行按远程标志两分支呈现；Escape 产生与「返回游戏」相同的 back typed action。
-- [ ] 2.2 实现 UI 下行布局段内部版本 3→4 的暂停页编码侧约定（Go 编码 + Rust 解码），客户端 ABI 保持 v9；未开启暂停时下行走既有布局零成本。沿 D-03 调试面板的 Go/Rust 两侧同步纪律：同一 Task 内改齐两侧版本常量与解码回归测试。
-- [ ] 2.3 验证：Rust 侧 `cargo test -p mornlea_client`；Go 侧涉及文件若为独立包则 `go test ./internal/client -race -count=1`（以实际触碰为准）。
+- [x] 2.1 先写失败测试：`ui/` 新增暂停页模块的 render 纯函数测试——「返回游戏」「退回主菜单」按钮列可判定；注明行按远程标志两分支呈现；Escape 产生与「返回游戏」相同的 back typed action。
+- [x] 2.2 实现 UI 下行布局段内部版本 3→4 的暂停页编码侧约定（Go 编码 + Rust 解码），客户端 ABI 保持 v9；未开启暂停时下行走既有布局零成本。沿 D-03 调试面板的 Go/Rust 两侧同步纪律：同一 Task 内改齐两侧版本常量与解码回归测试。
+- [x] 2.3 验证：Rust 侧 `cargo test -p mornlea_client`；Go 侧涉及文件若为独立包则 `go test ./internal/client -race -count=1`（以实际触碰为准）。本执行：Rust 侧全绿（167 passed / 0 failed，含新增 8 个暂停页测试）；**Go 侧零改动**，Go 侧命令不适用——Go 同值动作常量与编码按 design「关键取舍」第 5 条由接线任务建立后消费。
 
 ## 3. 相位机与接线（`cmd/mornlea`）
 
