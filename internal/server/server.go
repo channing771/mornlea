@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"sync"
@@ -64,6 +65,7 @@ type Server struct {
 	autosaveActive  bool
 	metadataSave    metadataSaveState
 	companions      *companionPersistence
+	hostiles        *hostilePersistence
 	retry           map[storage.RegionKey][]retrySave
 	retryInFlight   map[uint64]retrySave
 	nextRetryID     uint64
@@ -90,7 +92,14 @@ func NewWorld(config Config, generator Generator, store storage.Store) *Server {
 	if len(config.Companions) != 0 {
 		panic("server: NewWorld does not support companions; use NewHost")
 	}
-	return newWorld(config, generator, store, nil)
+	// benchmark 形态不接夜行者持久化（世界随进程生存，无跨重启恢复语义）；
+	// newWorld 的错误只可能来自需要持久化装配的路径，这里不可达，防御口径
+	// 与伙伴 planner 构造的 panic 一致。
+	server, err := newWorld(config, generator, store, nil, nil)
+	if err != nil {
+		panic("server: NewWorld: " + err.Error())
+	}
+	return server
 }
 
 func newWorld(
@@ -98,7 +107,8 @@ func newWorld(
 	generator Generator,
 	store storage.Store,
 	companions *companionPersistence,
-) *Server {
+	hostiles *hostilePersistence,
+) (*Server, error) {
 	config.validate()
 	if generator == nil {
 		panic("server: nil generator")
@@ -194,6 +204,21 @@ func newWorld(
 	// manager 只消费这一权威源。
 	server.hostileManager = newHostileManager(server.engine)
 	server.hostileManager.onlinePlayers = server.onlineHostileTargets
+	// 夜行者恢复接线：启动矩阵已在 NewHost 完成（corrupt/future/read error
+	// 到不了这里），存档记录在首 tick 前整体回到权威侧。存储校验矩阵覆盖
+	// sim 侧全部记录不变量（重复/超限在加载边界已被拒），恢复失败属不可达
+	// 防御路径——绝不允许以「跳过该条」的截断姿态静默继续。
+	if hostiles != nil {
+		hostiles.mu.Lock()
+		hostileRecords := slices.Clone(hostiles.records)
+		hostiles.mu.Unlock()
+		for _, record := range hostileRecords {
+			if err := server.engine.RestoreHostile(hostileRestoreRecord(record)); err != nil {
+				return nil, fmt.Errorf("restore hostile %d: %w", record.ID, err)
+			}
+		}
+		server.hostiles = hostiles
+	}
 
 	server.workers.Add(config.Workers)
 	for range config.Workers {
@@ -211,7 +236,7 @@ func newWorld(
 		server.saveWorkers.Wait()
 		close(server.saveDone)
 	}()
-	return server
+	return server, nil
 }
 
 func (server *Server) AttachSession(spec SessionSpec) (<-chan SessionExit, error) {
@@ -335,6 +360,14 @@ func (server *Server) step(scheduled time.Time) sim.TickResult {
 		)
 		if err := server.companions.Poll(result.Tick); err != nil {
 			slog.Warn("伙伴自动保存失败，保留重试", "error", err)
+		}
+	}
+	// 夜行者持久化与伙伴同一节奏：tick 边界观察权威排序快照并回收保存完成，
+	// autosave 到点才派发；保存异步进行，tick 绝不等待落盘。
+	if server.hostiles != nil {
+		server.hostiles.Observe(server.engine.HostileMobs())
+		if err := server.hostiles.Poll(result.Tick); err != nil {
+			slog.Warn("夜行者自动保存失败，保留重试", "error", err)
 		}
 	}
 	if hasTrustedCenter {

@@ -285,6 +285,32 @@ func TestHostileFallingBelowWorldIsRemoved(t *testing.T) {
 	t.Fatal("坠出世界的夜行者 200 tick 内未被移除")
 }
 
+// 坠落移除阈值与世界下界本体对齐（Y < core.MinY 即移除）：夜行者坠落会滞留
+// 而玩家会重生，世界下界以下的任何位置都无法通过存档记录校验——若允许个体
+// 滞留在 [MinY-16, MinY) 窗口，autosave 会把不可持久化的位置写进存档，重启
+// 恢复因此整体失败。本用例逐 tick 观察：首次越过下界的同一 tick 必须已经
+// 移除，绝不允许再往下多走一格。
+func TestHostileFallingRemovedAtWorldFloorNotBelow(t *testing.T) {
+	engine, _ := readyMovementPlayer(t)
+	engine.SetBlockForTest(core.BlockPos{X: 2, Y: 0, Z: 2}, core.AirID)
+	mob := validTestHostile(32)
+	mob.State.Position = mgl32.Vec3{2.5, 1, 2.5}
+	mob.State.OnGround = true
+	if err := engine.RestoreHostile(mob); err != nil {
+		t.Fatalf("恢复夜行者：%v", err)
+	}
+	for range 400 {
+		engine.advanceHostileMovement()
+		if len(engine.hostiles.entries) == 0 {
+			return
+		}
+		if y := engine.hostiles.entries[0].state.Position.Y(); y < float32(core.MinY) {
+			t.Fatalf("夜行者 Y=%v 已低于世界下界 %d 仍未移除，想要越界即移除", y, core.MinY)
+		}
+	}
+	t.Fatal("坠出世界的夜行者 400 tick 内未被移除")
+}
+
 func TestHostileDistantDespawnUsesActivePlayersOfSameDimension(t *testing.T) {
 	// 累计判据只看 active 玩家的实际位置：玩家在 64 格内清零，玩家离开后
 	// 重新从 0 累计。

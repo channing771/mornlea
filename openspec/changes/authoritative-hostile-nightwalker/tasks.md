@@ -40,10 +40,10 @@
 
 ## 6. 持久化装配、启动恢复与错误路径
 
-- [ ] 6.1 失败测试：启动错误矩阵（missing→空集合；valid→首 tick 前恢复；corrupt/future/read error→Host 构造失败不启动 tick/path worker；重复/超 64 不截断恢复）
-- [ ] 6.2 实现 hostile persistence worker（jobs/completions 容量 1、revision、dirty/inFlight/retry、autosave tick、`Flush`/`Close`；保存输入是 sim 排序值快照；不抽通用 generic）
-- [ ] 6.3 失败测试：非阻塞与故障注入（慢 Save 不持锁不阻 tick；失败按既有 retry；in-flight 时新快照合并 latest；shutdown flush 最新；context cancel/Sync/rename 错误保留旧正式文件并返回错误）
-- [ ] 6.4 Memory/Disk 重启端到端（位置/速度/生命/冷却/目标/DistantTicks 恢复；path 不恢复且首 tick 重算；重启不清怪）；`gofmt -w internal/server`、`go test ./internal/storage ./internal/server -race -count=1`；双评审后提交 `feat: restore hostile nightwalkers`
+- [x] 6.1 失败测试：启动错误矩阵（missing→空集合；valid→首 tick 前恢复；corrupt/future/read error→Host 构造失败不启动 tick/path worker；重复/超 64 不截断恢复）
+- [x] 6.2 实现 hostile persistence worker（jobs/completions 容量 1、revision、dirty/inFlight/retry、autosave tick、`Flush`/`Close`；保存输入是 sim 排序值快照；不抽通用 generic）
+- [x] 6.3 失败测试：非阻塞与故障注入（慢 Save 不持锁不阻 tick；失败按既有 retry；in-flight 时新快照合并 latest；shutdown flush 最新；context cancel/Sync/rename 错误保留旧正式文件并返回错误）
+- [x] 6.4 Memory/Disk 重启端到端（位置/速度/生命/冷却/目标/DistantTicks 恢复；path 不恢复且首 tick 重算；重启不清怪）；`gofmt -w internal/server`、`go test ./internal/storage ./internal/server -race -count=1`；双评审后提交 `feat: restore hostile nightwalkers`
 
 ## 7. 协议、客户端镜像插值、75-body avatar 与 client ABI v10
 

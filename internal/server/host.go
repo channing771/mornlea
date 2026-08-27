@@ -189,11 +189,28 @@ func NewHost(
 		}
 		companions = newCompanionPersistence(store, loaded, config)
 	}
+	// 夜行者聚合存档与伙伴配置解耦，凡世界存储都参与启动矩阵：missing 视同
+	// 空集合；损坏/未来版本/读取失败在此整体拒绝（tick 与路径 worker 都不会
+	// 启动），旧文件由存储层保持原样，重启不可能成为清怪手段。加载后的记录
+	// 由 newWorld 在首 tick 前经 `RestoreHostile` 接线（存储校验矩阵覆盖
+	// sim 侧全部不变量，重复/超限集合在加载边界已被拒绝，恢复失败属不可达
+	// 防御路径）。
+	loadedHostiles, err := store.LoadHostileMobs(ctx)
+	if errors.Is(err, storage.ErrHostileMobsNotFound) {
+		loadedHostiles = storage.StoredHostileMobs{}
+	} else if err != nil {
+		return nil, fmt.Errorf("load hostiles: %w", err)
+	}
+	hostiles := newHostilePersistence(store, loadedHostiles, config)
+	world, err := newWorld(config, generator, store, companions, hostiles)
+	if err != nil {
+		return nil, err
+	}
 	gate := make(chan struct{}, 1)
 	gate <- struct{}{}
 	return &Host{
 		config:          config,
-		world:           newWorld(config, generator, store, companions),
+		world:           world,
 		players:         newPlayerPersistence(store, config),
 		preLogin:        make(chan struct{}, hostPreLoginCapacity),
 		activeByPlayer:  make(map[core.PlayerID]*activeLogin),

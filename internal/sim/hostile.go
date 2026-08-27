@@ -253,7 +253,10 @@ func (engine *Engine) hostileMobAt(index int) HostileMob {
 // 本 tick 刚生成的个体（`fresh`）跳过并清除标记：生成判定发生在 tick 边界、
 // 先于物理，但新生个体的第一次位移从下一 tick 开始。坠出世界或状态失真的
 // 个体没有玩家那样的重生路径，按确定性移除处理（不掉落、不保留半移除状
-// 态），避免留下无法持久化或积分发散的身体。
+// 态），避免留下无法持久化或积分发散的身体。移除阈值取世界下界本体
+// （`Y < core.MinY` 即移除）：坠落个体会滞留，世界下界以下的任何位置都过
+// 不了存档记录校验，容许 `[MinY-16, MinY)` 滞留窗只会把不可持久化的位置
+// 写进存档、令重启恢复整体失败。
 func (engine *Engine) advanceHostileMovement() {
 	for index := 0; index < len(engine.hostiles.entries); {
 		entry := &engine.hostiles.entries[index]
@@ -266,7 +269,7 @@ func (engine *Engine) advanceHostileMovement() {
 		input := entry.input
 		input.BodyInFluid, input.EyeInFluid = physics.SubmersionFlags(entry.state.Position, source)
 		entry.state = physics.Step(entry.state, input, source).State
-		if !physics.ValidState(entry.state) || entry.state.Position.Y() < float32(core.MinY-16) {
+		if !physics.ValidState(entry.state) || entry.state.Position.Y() < float32(core.MinY) {
 			engine.hostiles.removeAt(index)
 			continue
 		}
