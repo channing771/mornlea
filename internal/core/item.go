@@ -38,7 +38,7 @@ const (
 	ItemClay
 	ItemSnowBlock
 	ItemMossyCobblestone
-	// 以下 6 个是农业物品，只能追加在既有序列末尾（ItemIDMax 哨兵之前）：
+	// 以下农业物品只能追加在既有序列末尾（`ItemIDMax` 哨兵之前）：
 	// 插入会平移后续物品 ID，破坏既有存档与线上字节。
 	//
 	// ItemStoneHoe / ItemIronHoe 是翻地工具，沿用镐的耐久与损坏形态模式；
@@ -59,10 +59,10 @@ const (
 	// ItemBoneMeal 是骨粉，用于催熟小麦；沿用食物与种子的堆叠与放置语义（不可
 	// 放置，堆叠 64），同样只能追加在 ItemIDMax 哨兵之前。
 	ItemBoneMeal
-	// ItemPotato / ItemCarrot 是马铃薯与胡萝卜：二者与小麦种子同形，可放置成
-	// 对应的 PotatoStage0ID / CarrotStage0ID，堆叠 64，同样只能追加在
-	// ItemIDMax 哨兵之前。ItemPoisonousPotato 是毒土豆——马铃薯成熟收获时 2%
-	// 概率的额外掉落，本身不可放置，食物值 2/1200（中毒效果延期至 B-25）。
+	// `ItemPotato` / `ItemCarrot` 是马铃薯与胡萝卜：二者与小麦种子同形，可放置成
+	// 对应的 `PotatoStage0ID` / `CarrotStage0ID`，堆叠 64，同样只能追加在
+	// `ItemIDMax` 哨兵之前。`ItemPoisonousPotato` 是毒土豆——马铃薯成熟收获时 2%
+	// 概率的额外掉落，本身不可放置，食物值 2/1200（中毒效果延期至有界状态效果系统）。
 	ItemPotato
 	ItemCarrot
 	ItemPoisonousPotato

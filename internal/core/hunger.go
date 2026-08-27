@@ -38,7 +38,7 @@ func ValidHunger(hunger uint8) bool {
 //
 // 目前有面包、马铃薯、胡萝卜、毒土豆四种食物：面包足以验证三层状态与进食
 // 状态机的全部路径，肉类需要生物、熟食需要熔炉食谱，两者都不在当前范围内；
-// 马铃薯系在 B-01 追加，毒土豆的中毒效果延期至 B-25。新增食物是给本表加一行。
+// 马铃薯系在更多作物中追加，毒土豆的中毒效果延期至有界状态效果系统。新增食物是给本表加一行。
 func FoodValue(item ItemID) (uint8, uint16, bool) {
 	switch item {
 	// 面包 (5, 6.0)：与参考实现同值。饱和度大于饥饿点数是刻意的——刚吃饱的
@@ -51,7 +51,7 @@ func FoodValue(item ItemID) (uint8, uint16, bool) {
 	case ItemCarrot:
 		return 3, 3600, true
 	case ItemPoisonousPotato:
-		return 2, 1200, true // ponytail: poison effect deferred to B-25
+		return 2, 1200, true // ponytail: poison effect deferred — status-effect system 未就位前仅作普通食物
 	default:
 		return 0, 0, false
 	}
