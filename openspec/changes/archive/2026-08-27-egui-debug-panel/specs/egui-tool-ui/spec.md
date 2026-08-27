@@ -31,6 +31,14 @@
 - **THEN** MUST 返回 `CAPACITY`
 - **AND** 调用方缓冲、输出计数与待排空队列 MUST 保持不变
 
+#### Scenario: 字体缺失时 UI 帧被拒绝
+
+- **GIVEN** 渲染器尚未收到菜单字体
+- **WHEN** 渲染携带 UI 段的帧
+- **THEN** UI 帧被拒绝（编程错误路径），非 UI 帧不受影响
+
+## ADDED Requirements
+
 ### Requirement: 调试面板 layout v3 段
 
 UI 下行 SHALL 除 layout v1 主菜单与 v2 设置页外接受 layout v3 调试面板状态段，编码为定宽行记录：段头（layout=3 + 可见 flags + 模式名 + 行计数）后接每行定宽记录（标签 ≤24 字节、值 ≤24 字节、每行 flags 编码只读/选中/可编辑/编辑态）。未知或非法 layout MUST 被拒绝。调试面板行数上限 `64`、读数 `7`、每行标签/值 `24` 的既有约束 MUST 保留；段长度 MUST 受既有 `MAX_UI_SEGMENT_BYTES` 上界约束。
