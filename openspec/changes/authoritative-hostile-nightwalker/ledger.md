@@ -30,6 +30,8 @@
 - **Task 2（core 单一表/显示相位/腐肉）**：实现提交 `74e999b2`；评审 SPEC PASS + QUALITY PASS。`DisplayDayPhase(worldTime uint64, offset uint16) uint16` 签名与「先 `%24000` 再相加取模」语义经独立复算锁定（MaxUint64+23999 分水岭用例）；`BlockOpaque` 与迁移前 `Registry.Opaque` 逐值恒等（判据含门/火把排除，design D2 括注已补齐，提交 `8668a312`）；腐肉=45、食物表精确五食物；assets 转调 core、mesh 经接口天然单一源。非阻塞建议（D2 括注）已落实，其余两条留归档期参考。修复轮：0。
 - **Task 3（hostile_mobs.bin 存储契约）**：实现提交 `ef85bf96`；评审 SPEC PASS + QUALITY PASS。spec 16 类错误矩阵逐例拒绝归因复核为真（`repairHostileCRC` 保证拒绝来自字段校验）；Memory/Disk 同构契约测试、原子写四处故障注入、backup 过滤临时文件；fuzz 10s 97.8 万 execs 0 失败；「起点拒绝且不覆盖旧文件」落在 `DiskStore.LoadHostileMobs`/`SaveHostileMobs`，可被 Task 6 直接复用。加强项（revision=0 拒绝、冷却 ≤20、Distant ≤600、UUIDv4、dimension 白名单）与 spec 相容。非阻塞建议三条留归档期参考（`putF32NoRepair` 文档注释措辞、防御断言标注、目录 fsync 失败语义的 spec 措辞区分）。修复轮：0。
 
+- **Task 4（sim 身体/生成/暗度/生命周期）**：实现提交 `5adfd1df`；评审 SPEC PASS + QUALITY PASS，透明格光差异裁决成立（客户端 air-only 是网格呈现域简化、sim 按 D3 单表语义，公共定义域逐位一致经整窗对照锁定、差异域由专项测试钉死）；despawn 清零半径以 spec >64/≤64 为准（tasks 措辞已同步更正）；`TestHostileSpawnReplayIsDeterministic` 双引擎 240 tick 逐字段全等。修复轮：0。遗留交接：坠落移除阈值 `MinY-16` 沿用玩家先例，但 Y∈[MinY−16, MinY) 的个体位置会被存档校验拒绝——Task 6 接通 autosave 前须收紧为 `Y < core.MinY` 即移除（本 ledger 显式记录，Task 6 验收含此项）；完整 `Step()` 双引擎重放变体并入收尾终审。
+
 ## 最终验证输出摘要（收尾补）
 
 - （待整分支终审后补：make rust、focused -race、archcheck、vet、gofmt、openspec strict 的数值摘要；benchmark 数值只记录）
