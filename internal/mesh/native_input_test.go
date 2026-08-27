@@ -343,7 +343,8 @@ func TestEncodeNativeInputAcceptsRegistryAtCapacity(t *testing.T) {
 		blocks[i].ID = world.BlockID(i)
 	}
 	blocks[nativeMaxRegistryEntries-1].ID = 40000
-	snapshot := RegistrySnapshot{Blocks: blocks, Visibility: make([]uint64, nativeMaxRegistryEntries)}
+	wordsPerRow := (nativeMaxRegistryEntries + 63) / 64
+	snapshot := RegistrySnapshot{Blocks: blocks, Visibility: make([]uint64, nativeMaxRegistryEntries*wordsPerRow)}
 	if _, err := encodeNativeInput(make([]byte, 300000), fullyLoadedAirNeighborhood(), snapshot); err != nil {
 		t.Fatalf("装满 %d 条的 snapshot 被拒绝: %v", nativeMaxRegistryEntries, err)
 	}

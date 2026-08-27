@@ -407,6 +407,31 @@ func workbenchBottomTexture() []byte {
 	return px
 }
 
+// doorTexture 生成木门材质：中褐底色、外框深色包边、中间横向门档与纵向面板线。
+func doorTexture() []byte {
+	px := noisyTexture(rgb{R: 158, G: 112, B: 58}, 8, 0x0D0A)
+	frame := rgb{R: 96, G: 64, B: 36}
+	for i := 0; i < texSize; i++ {
+		paint(px, i, 0, frame)
+		paint(px, i, texSize-1, frame)
+		paint(px, 0, i, frame)
+		paint(px, texSize-1, i, frame)
+	}
+	// 中横档与竖向面板缝
+	bar := rgb{R: 108, G: 72, B: 40}
+	for x := 1; x < texSize-1; x++ {
+		paint(px, x, 7, bar)
+		paint(px, x, 8, bar)
+	}
+	for y := 1; y < texSize-1; y++ {
+		paint(px, 7, y, bar)
+		paint(px, 8, y, bar)
+	}
+	// 门把手点
+	paint(px, 11, 8, rgb{R: 196, G: 168, B: 84})
+	return px
+}
+
 func brickTexture() []byte {
 	px := noisyTexture(rgb{R: 154, G: 74, B: 58}, 8, 0xB21C)
 	paintStaggeredSeams(px, rgb{R: 72, G: 66, B: 64})

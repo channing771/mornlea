@@ -39,7 +39,7 @@ const (
 	// 顺带一提：input.rs 的 BLOCKS_BYTES = 27*4096*2 里也有一个 27，但那
 	// 是 3×3×3 邻域区段数，跟这里的 registry 条目数上限只是数字撞了，两者
 	// 无关，改一个不需要牵动另一个。
-	nativeMaxRegistryEntries = 64
+	nativeMaxRegistryEntries = 71
 	nativeMaxRegistryWords   = (nativeMaxRegistryEntries + 63) / 64
 	nativeLightVolume        = 48 * 48 * 48
 	nativeScratchPadding     = (4 - nativeLightVolume%4) % 4

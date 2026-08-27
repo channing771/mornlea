@@ -51,8 +51,8 @@ func TestFarmingBlockIDsAppendAfterFluids(t *testing.T) {
 // 计数比对抓住；追加但不登记显示名的方块完全惰性、一用就在别处炸开，不值得
 // 为这种自毁式误用另建守卫。
 func TestBlockIDMaxGuardsExhaustiveEnumeration(t *testing.T) {
-	if core.CarrotStage7ID != core.BlockIDMax-1 {
-		t.Fatalf("BlockID 枚举末项不再是 CarrotStage7ID（BlockIDMax-1 = %d）；"+
+	if core.DoorUpper != core.BlockIDMax-1 {
+		t.Fatalf("BlockID 枚举末项不再是 DoorUpper（BlockIDMax-1 = %d）；"+
 			"新增方块必须同步审视全部以 BlockIDMax 为穷举界的测试与哨兵", core.BlockIDMax-1)
 	}
 }
@@ -155,7 +155,16 @@ func TestIsCropCoversPotatoAndCarrot(t *testing.T) {
 }
 
 func TestBlockIDMaxIsSentinel(t *testing.T) {
-	if core.BlockIDMax != core.CarrotStage7ID+1 {
-		t.Fatalf("BlockIDMax must follow CarrotStage7, got %d", core.BlockIDMax)
+	if core.BlockIDMax != core.DoorUpper+1 {
+		t.Fatalf("BlockIDMax must follow DoorUpper, got %d", core.BlockIDMax)
+	}
+}
+
+func TestDoorIntervalOrdered(t *testing.T) {
+	if !(core.DoorLowerSouthClosed == 62 && core.DoorUpper == 70 && core.BlockIDMax == 71) {
+		t.Fatalf("door IDs not 62..70/71")
+	}
+	if !core.IsDoor(core.DoorLowerSouthClosed) || !core.IsDoor(core.DoorUpper) || core.IsDoor(core.BlockIDMax) {
+		t.Fatal("IsDoor interval")
 	}
 }
