@@ -49,3 +49,12 @@
 
 - `workbench-crafting` 场景无 golden PNG：A-01 交付场景构造时把 golden 生成挂给已取消的批次集成任务；场景表 20 项与 golden 19 张的差即此。capture 非更新模式下该场景会因 golden 缺失失败，需对应功能行或独立基线任务补齐。
 - 主规格滞后于代码：`openspec/specs/authoritative-crafting` 仍写 11 条配方与旧聚合语义（代码为 13 条形状配方）、`openspec/specs/visual-verification` 场景清单仍不含 `workbench-crafting`、`openspec/specs/rust-engine-mesh` 仍写「ABI version MUST 保持 1」（代码 v7）——A-01 归档未把这些 MODIFIED 合入主规格；本变更的 delta 按代码事实书写，归档时一并弥合所触及条目。
+
+### Task 1 执行记录
+
+- 实现 commit：`b77b4dde feat: register torch blocks, items and recipe`；评审修复 commit：`cf358dd4 fix: raise mesh registry entry cap to 80`；产物裁决 commit：`26c20c62`（design 方向表 Z 行笔误修正 + Task 2 边界补 physics 零碰撞）。
+- RED：core/assets 双包 build failure（TorchStandingID、PlaceableBlockAtFace、ItemTorch、RecipeTorch 等未定义）。
+- GREEN：core/assets race `ok 4.214s/4.057s`；archcheck `ok 4.335s`；QUALITY repair 后 core/assets/mesh/client 四包 race 全绿、cargo workspace 159+166 通过。
+- 超清单同步（裁决接受）：`farming_test.go`/`block_name_test.go` 为既定枚举守护的最小机械同步；repair 中 `native_input_test.go` 容量夹具按每行 2 字联动。
+- Ruling: registry 条目上限 64→80 提前至 Task 1 收口（QUALITY C1）——保留每提交点套件全绿，19→20 bytes 布局与 ABI v8 仍归 Task 3；Task 1 验证面扩为 core/assets/mesh/client 四包。
+- SPEC 评审：PASS（无 Critical/Important；2 条 Minor 记录）。QUALITY 评审：初审 FAIL（C1 越界回归 + I1/M1/M2/M3），repair round 1 后复审 PASS（含线格式 count 推导逐链核对与跨 FFI 80 条容量钉子）。
