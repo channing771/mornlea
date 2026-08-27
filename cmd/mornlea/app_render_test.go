@@ -369,17 +369,14 @@ func TestRemoteGlyphErrorPropagatesFromFrame(t *testing.T) {
 	}
 }
 
-func TestApplicationConstructionSkipsDebugPanelRendererWhenDevOff(t *testing.T) {
+func TestApplicationConstructionSkipsPanelWhenDevOff(t *testing.T) {
 	app := newRemoteRenderApplication(t, &integrationGlyphSource{})
-	if app.debugPanelRenderer != nil {
-		t.Fatal("Dev 为假时 debugPanelRenderer 必须是 nil")
-	}
 	if app.panel != nil {
 		t.Fatal("Dev 为假时 panel 必须是 nil")
 	}
 }
 
-func TestApplicationConstructionCreatesDebugPanelRendererWhenDevOn(t *testing.T) {
+func TestApplicationConstructionCreatesPanelWhenDevOn(t *testing.T) {
 	rawEndpoint, _ := network.NewMemoryPair(1)
 	endpoint := &connectionTestEndpoint{ClientEndpoint: rawEndpoint}
 	t.Cleanup(func() { _ = rawEndpoint.Close() })
@@ -408,9 +405,6 @@ func TestApplicationConstructionCreatesDebugPanelRendererWhenDevOn(t *testing.T)
 	app, err := newApplicationWithDependencies(options, dependencies)
 	if err != nil {
 		t.Fatalf("newApplication dev=true: %v", err)
-	}
-	if app.debugPanelRenderer == nil {
-		t.Fatal("Dev 为真时 debugPanelRenderer 不能是 nil")
 	}
 	if app.panel == nil {
 		t.Fatal("Dev 为真时 panel 不能是 nil")

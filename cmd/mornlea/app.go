@@ -114,9 +114,7 @@ type application struct {
 	hotbarRenderer         *hud.HotbarRenderer
 	damageFeedback         damageFeedback
 	damageStrength         float32
-	debugPanelRenderer     *render.DebugPanelRenderer
-	// panel 是调试面板的交互状态；只在 applicationOptions.Dev 为真时创建，
-	// 与 debugPanelRenderer 一同保持 nil/非 nil 同步。
+	// panel 是调试面板的交互状态；只在 applicationOptions.Dev 为真时创建。
 	panel *panelState
 	// panelLastFrameAt 是上一帧调试面板读数的采样时刻，用于计算 PanelReadout.FrameMillis。
 	panelLastFrameAt time.Time
