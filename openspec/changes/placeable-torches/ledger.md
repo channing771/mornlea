@@ -58,3 +58,13 @@
 - 超清单同步（裁决接受）：`farming_test.go`/`block_name_test.go` 为既定枚举守护的最小机械同步；repair 中 `native_input_test.go` 容量夹具按每行 2 字联动。
 - Ruling: registry 条目上限 64→80 提前至 Task 1 收口（QUALITY C1）——保留每提交点套件全绿，19→20 bytes 布局与 ABI v8 仍归 Task 3；Task 1 验证面扩为 core/assets/mesh/client 四包。
 - SPEC 评审：PASS（无 Critical/Important；2 条 Minor 记录）。QUALITY 评审：初审 FAIL（C1 越界回归 + I1/M1/M2/M3），repair round 1 后复审 PASS（含线格式 count 推导逐链核对与跨 FFI 80 条容量钉子）。
+
+### Task 2 执行记录
+
+- 实现 commit（amend 终值）：`cebbfc10 feat: enforce torch support`（初版 bc0ae0a9 → 伙伴防御修复 2214f6e6 → 产物一致性修复 cebbfc10）。
+- RED：五向放置被旧 `ItemPlacement` 预检拒绝（reason 4）、支撑移除无法进行（火把放不进世界）、physics 满盒碰撞、companion 防御清单放行火把采掘目标。
+- GREEN：sim/world/physics/companion 四包 race 全绿（sim -race -count=2 复核 94.230s）；archcheck ok；openspec strict 通过。
+- Ruling: Task 2 边界扩为含 `internal/sim/mining.go`、`internal/companion/plan_types.go`——spec「伙伴不获得火把能力」的 mine 半边因 Task 1 `BlockDrop` 登记被通用判据放行，须显式拒绝（计划生成与模拟执行两处防守，与既有农业拒绝同构）。
+- Ruling: 掉落容量不足时整体保留火把（与 `RejectDropCapacity` 同构：静默丢物品是硬失败、悬空火把是可自愈瞬态，下次权威变化重新触发）与邻居区块未加载跳过本轮——两项边界经 repair round 2 写入 spec delta（两个新 Scenario）与 design 取舍记录，并有临界容量钉子测试。
+- SPEC 评审：PASS（无 Critical/Important；Minor：容量保留语义入产物——已在 repair 落实、checkbox 同步、热路径分配记录）。QUALITY 评审：初审 FAIL（I1 注释任务编号、I2 产物不一致），repair round 2 后复审 PASS。
+- 基线债务上报（不属本变更）：`internal/companion/plan_types.go:467` 历史提交含「（A-01）」字样违反编号禁令，建议独立卫生任务清理；`sweepUnsupportedTorches` 与 `finishChanges` 各自枚举 pending 的可选合并优化。
