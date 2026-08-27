@@ -8,7 +8,7 @@
 ## 传输一致性
 
 - Memory 与 TCP 必须受同一 packet/codec 契约约束，并复用登录和上层模拟路径；不得为本地连接建立绕过校验、登录或权威模拟的特权路径。
-- transport 只负责有界传送、关闭和错误归类，不决定业务结果。登录状态转换集中在既有 `Login*` 路径。
+- 根包 `internal/network` 持有 packet、codec、登录状态机、共享 stream 接口和 Memory transport；`internal/network/tcp` 持有 TCP listener、dial、stream 实现，且仍只负责 transport。两者都不决定业务结果，登录状态转换集中在既有 `Login*` 路径。
 - TCP 面向可信局域网，现有协议没有认证或加密。不要把它描述为公网安全，也不要用这一既有边界作为降低输入校验的理由。
 
 ## 协议演进
