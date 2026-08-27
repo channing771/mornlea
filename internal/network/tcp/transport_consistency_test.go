@@ -500,6 +500,11 @@ func newRawMemoryStreamPair() (network.ClientPacketStream, network.ServerPacketS
 
 func (stream *rawMemoryClientStream) Send(ctx context.Context, _ network.State, packet network.ClientPacket) error {
 	select {
+	case <-stream.pair.done:
+		return network.ErrClosed
+	default:
+	}
+	select {
 	case stream.pair.clientToServer <- packet:
 		return nil
 	case <-stream.pair.done:
@@ -526,6 +531,11 @@ func (stream *rawMemoryClientStream) Close() error {
 }
 
 func (stream *rawMemoryServerStream) Send(ctx context.Context, _ network.State, packet network.ServerPacket) error {
+	select {
+	case <-stream.pair.done:
+		return network.ErrClosed
+	default:
+	}
 	select {
 	case stream.pair.serverToClient <- packet:
 		return nil
