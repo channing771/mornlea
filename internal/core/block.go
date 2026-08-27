@@ -65,8 +65,9 @@ const (
 	WaterLevel5ID
 	WaterLevel6ID
 	WaterLevel7ID
-	// 以下 26 个是农业方块编号，只能追加在 WaterLevel7ID 之后：方块 ID 是协议
-	// 稳定值，重排会破坏既有存档与线上字节。
+	// 以下农业方块编号（2 耕地 + 8 小麦 + 8 马铃薯 + 8 胡萝卜）与工作台方块
+	// 只能追加在 WaterLevel7ID 之后：方块 ID 是协议稳定值，重排会破坏既有存档与
+	// 线上字节。农业 26 个 + 工作台 1 个 = 27 个，`BlockIDMax` 恒居末。
 	//
 	// FarmlandDryID / FarmlandWetID 是锄头翻地得到的耕地，只有干湿两态：湿润
 	// 由附近流体决定（见变更 authoritative-farming 的湿润判定），两态共用同一
@@ -86,6 +87,11 @@ const (
 	WheatStage5ID
 	WheatStage6ID
 	WheatStage7ID
+	// WorkbenchID 是工作台方块（格子工作台批次追加，只能追加在 WheatStage7ID
+	// 之后）：普通完整立方体、不透明、不发光，可放置可采掘并掉回 1 个工作台
+	// 物品。打开工作台只把玩家合成网格的有效尺寸从 2 提到 3——它是普通方块
+	// 而不是容器，不占用容器引用或区块槽位，也不持久化任何槽位记录。
+	WorkbenchID
 	PotatoStage0ID
 	PotatoStage1ID
 	PotatoStage2ID

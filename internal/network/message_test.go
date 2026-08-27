@@ -29,7 +29,7 @@ func TestProtocolMessageShapesImplementSealedInterfaces(t *testing.T) {
 		},
 		network.SelectHotbar{Sequence: 9, Slot: 8},
 		network.MoveInventoryStack{Sequence: 10, From: 0, To: 35},
-		network.CraftRecipe{Sequence: 11, Recipe: core.RecipeStoneBricks},
+		network.MoveCraftingStack{Sequence: 11, From: 9, To: 0},
 		network.RequestChunkResync{
 			Sequence:     4,
 			Dimension:    core.Overworld,

@@ -1,6 +1,6 @@
 //! 设置页无头呈现与交互测试：控件、滚动布局、有界输入和事件顺序。
 
-use super::test_support::{click_ui, screen_rect, take_output_events, test_font};
+use super::test_support::{click_ui, screen_rect, shape_text, take_output_events, test_font};
 use super::*;
 
 fn small_screen_rect() -> Rect {
@@ -86,21 +86,6 @@ fn focus_path_at(
         char_index.into()
     );
     id
-}
-
-fn shape_text(shape: &egui::Shape, out: &mut String) {
-    match shape {
-        egui::Shape::Text(text) => {
-            out.push_str(&text.galley.job.text);
-            out.push('\n');
-        }
-        egui::Shape::Vec(shapes) => {
-            for shape in shapes {
-                shape_text(shape, out);
-            }
-        }
-        _ => {}
-    }
 }
 
 #[test]

@@ -136,6 +136,32 @@ func (a *application) drainServerMessages(maxMessages int) {
 			}
 			continue
 		}
+		if state, ok := message.(network.CraftingState); ok {
+			previous, confirmed := a.crafting.State()
+			if err := a.crafting.Apply(state); err != nil {
+				a.closeClientSession(err)
+				return
+			}
+			switch {
+			case state.Size == 3 && (!confirmed || previous.Size != 3):
+				// 尺寸 3 只能来自工作台交互：与熔炉/箱子到达时一致，打开
+				// 界面、释放鼠标并丢弃可能过期的容器镜像；工作台打开也会
+				// 结束既有容器查看关系（sim 侧语义），镜像同步互斥。
+				a.furnace.Reset()
+				a.chest.Reset()
+				a.inventorySource = -1
+				a.inventoryOpen = true
+				if a.window != nil {
+					a.window.SetCursorCaptured(false)
+				}
+			case confirmed && previous.Size == 3 && state.Size != 3 && a.inventoryOpen:
+				// 网格尺寸降级 = 服务端关闭通知（显式关闭后的回收、离开
+				// 距离或工作台被挖）：关闭界面、清除来源并重新捕获鼠标。
+				// 个人网格镜像保留，后续尺寸 2 状态继续 latest-wins。
+				a.clearContainerUI()
+			}
+			continue
+		}
 		if closed, ok := message.(network.ContainerClosed); ok {
 			furnaceCurrent, furnaceOpened := a.furnace.Ref()
 			if err := a.furnace.Close(closed); err != nil {

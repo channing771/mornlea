@@ -126,6 +126,16 @@ func (a *application) renderFrame(workMax int) (bool, error) {
 		return false, fmt.Errorf("准备世界名牌: %w", err)
 	}
 	inventory, inventoryConfirmed := a.inventory.State()
+	// 合成视图只画最后确认的权威网格；未确认时传 nil，HUD 按空的个人 2×2
+	// 呈现——3×3 工作台视图只在收到尺寸 3 的权威状态后出现，绝不预测。
+	var craftingOverlay *hud.CraftingOverlay
+	if crafting, confirmed := a.crafting.State(); confirmed {
+		craftingOverlay = &hud.CraftingOverlay{
+			Size:   crafting.Size,
+			Slots:  crafting.Slots,
+			Output: crafting.Output,
+		}
+	}
 	var overlay *hud.FurnaceOverlay
 	if furnace, opened := a.furnace.State(); opened {
 		overlay = &hud.FurnaceOverlay{
@@ -171,7 +181,7 @@ func (a *application) renderFrame(workMax int) (bool, error) {
 		}
 		eatingActive, eatingProgress := a.eatingTracker.Observe(time.Now(), eatingSample)
 		if err := a.hotbarRenderer.Prepare(
-			inventory, inventoryConfirmed, a.inventoryOpen, a.inventorySource, overlay, chestOverlay,
+			inventory, inventoryConfirmed, a.inventoryOpen, a.inventorySource, craftingOverlay, overlay, chestOverlay,
 			a.miningOverlay,
 			hud.EatingOverlay{Active: eatingActive, Progress: eatingProgress},
 			hud.HealthOverlay{Confirmed: healthReady, Value: health},
@@ -182,14 +192,11 @@ func (a *application) renderFrame(workMax int) (bool, error) {
 			return false, fmt.Errorf("准备快捷栏 HUD: %w", err)
 		}
 	}
-	if a.debugPanelRenderer != nil {
+	var panelUISegment []byte
+	if a.panel != nil {
+		// 面板读数与参数行只构造一次：喂给 layout v3 段（egui 面板）。
 		readout, rows := a.panelFrameInput(time.Now())
-		if err := a.debugPanelRenderer.Prepare(
-			a.panel.visible, readout, rows,
-			uint32(width), uint32(height), a.scheduler.UploadBudget(),
-		); err != nil {
-			return false, fmt.Errorf("准备调试面板: %w", err)
-		}
+		panelUISegment = encodeDebugPanelSegment(a.panel.visible, a.panel.editing, readout, rows)
 	}
 	a.scheduler.DropOutside(a.center, a.render.ViewDistance)
 	// 远环半部:跨 tile 边界增量入队 → BeginFrame → FlushUploads →
@@ -262,12 +269,12 @@ func (a *application) renderFrame(workMax int) (bool, error) {
 		hudViewport, hudQuads, hudGlyphs := a.hotbarRenderer.FrameStreams()
 		hudSegment = client.EncodeQuadSegment(hudViewport, hudQuads, hudGlyphs, 48)
 	}
-	var debugSegment []byte
-	if a.debugPanelRenderer != nil {
-		panelViewport, panelQuads, panelGlyphs := a.debugPanelRenderer.FrameStreams()
-		debugSegment = client.EncodeQuadSegment(panelViewport, panelQuads, panelGlyphs, 48)
+	// UI 段：菜单相位走 layout v1/v2；游戏相位的调试面板走 layout v3，
+	// 两种相位互斥，优先级为菜单段优先。
+	uiSegment := a.uiSegment()
+	if uiSegment == nil {
+		uiSegment = panelUISegment
 	}
-
 	rendered := a.renderer.RenderFrame(client.RenderFrame{
 		ViewProj:         viewProj,
 		ViewProjInv:      viewProjInv,
@@ -286,8 +293,7 @@ func (a *application) renderFrame(workMax int) (bool, error) {
 		WaterTint:        underwater.Tint,
 		NameTagSegment:   nameTagSegment,
 		HUDSegment:       hudSegment,
-		DebugSegment:     debugSegment,
-		UISegment:        a.uiSegment(),
+		UISegment:        uiSegment,
 	})
 	if !rendered {
 		return false, nil

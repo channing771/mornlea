@@ -23,7 +23,7 @@ func clientPacketID(state State, packet ClientPacket) (uint32, bool) {
 			return 5, true
 		case MoveInventoryStack:
 			return 6, true
-		case CraftRecipe:
+		case MoveCraftingStack:
 			return 7, true
 		case OpenContainer:
 			return 8, true
@@ -39,6 +39,8 @@ func clientPacketID(state State, packet ClientPacket) (uint32, bool) {
 			return 13, true
 		case BoneMeal:
 			return 14, true
+		case TakeCraftingOutput:
+			return 15, true
 		}
 	}
 	return 0, false
@@ -70,7 +72,7 @@ func clientPacketForID(state State, id uint32) (ClientPacket, bool) {
 		case 6:
 			return MoveInventoryStack{}, true
 		case 7:
-			return CraftRecipe{}, true
+			return MoveCraftingStack{}, true
 		case 8:
 			return OpenContainer{}, true
 		case 9:
@@ -85,6 +87,8 @@ func clientPacketForID(state State, id uint32) (ClientPacket, bool) {
 			return TillSoil{}, true
 		case 14:
 			return BoneMeal{}, true
+		case 15:
+			return TakeCraftingOutput{}, true
 		}
 	}
 	return nil, false
@@ -151,6 +155,9 @@ func serverPacketID(state State, packet ServerPacket) (uint32, bool) {
 			return 19, true
 		case PlaceBlockSucceeded:
 			return 20, true
+		// 格子工作台的网格状态：始终完整 9 格 + 产物格，只发所属玩家。
+		case CraftingState:
+			return 21, true
 		}
 	}
 	return 0, false
@@ -217,6 +224,8 @@ func serverPacketForID(state State, id uint32) (ServerPacket, bool) {
 			return CompanionDespawn{}, true
 		case 20:
 			return PlaceBlockSucceeded{}, true
+		case 21:
+			return CraftingState{}, true
 		}
 	}
 	return nil, false

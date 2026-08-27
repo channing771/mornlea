@@ -12,7 +12,7 @@
 //! [`UiState::run_frame`] 负责把像素密度写进 viewport。
 
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 use egui::{
@@ -54,6 +54,50 @@ pub const UI_ACTION_SETTINGS_SAVE: u32 = 5;
 pub const UI_ACTION_SETTINGS_CANCEL: u32 = 6;
 /// 设置页「返回」与 Escape 共用的动作编号。
 pub const UI_ACTION_SETTINGS_BACK: u32 = 7;
+
+// ---------------------------------------------------------------------------
+// 调试面板 ABI 布局常量(与 Go layout v3 段编码逐字节对应,小端)。
+// ---------------------------------------------------------------------------
+
+/// 调试面板 UI 段布局版本。
+pub const UI_DEBUG_LAYOUT_VERSION: u32 = 3;
+/// 调试面板行 flags 中「只读」的位(bit0)。
+pub const DEBUG_PANEL_ROW_FLAG_READONLY: u32 = 1;
+/// 调试面板行 flags 中「被选中」的位(bit1)。
+pub const DEBUG_PANEL_ROW_FLAG_SELECTED: u32 = 2;
+/// 调试面板行 flags 中「可编辑」的位(bit2)。
+pub const DEBUG_PANEL_ROW_FLAG_EDITABLE: u32 = 4;
+/// 调试面板行 flags 中「正在编辑」的位(bit3)；置位行必须同时可编辑。
+pub const DEBUG_PANEL_ROW_FLAG_EDITING: u32 = 8;
+/// 调试面板参数行上限(base 的 `maxPanelRows`)。
+pub const MAX_DEBUG_PANEL_ROWS: usize = 64;
+/// 调试面板行标签/值的固定字段宽(字节;Go 按 rune 边界截断后零填充)。
+///
+/// 命名沿用既有 `maxPanelRunesPerSide` 的「行两侧各 24」语义,但线上字段是
+/// 字节定宽——标签/值各容纳 ≤24 **字节**的 UTF-8,不足 24 零填充。
+pub const MAX_DEBUG_PANEL_RUNES_PER_SIDE: usize = 24;
+/// 段头模式名的字节上界。
+pub const MAX_DEBUG_PANEL_MODE_BYTES: usize = 64;
+/// 编辑值原文(上行 EDIT_VALUE/CONFIRM 与下行编辑态字段)的字节上界。
+pub const MAX_DEBUG_PANEL_EDIT_VALUE_BYTES: usize = 64;
+/// 调试面板「选中下行」动作编号。
+pub const DEBUG_PANEL_ACTION_SELECT_NEXT: u32 = 1;
+/// 调试面板「选中上行」动作编号。
+pub const DEBUG_PANEL_ACTION_SELECT_PREV: u32 = 2;
+/// 调试面板「进入编辑」动作编号。
+pub const DEBUG_PANEL_ACTION_ENTER_EDIT: u32 = 3;
+/// 调试面板「编辑值输入」动作编号；事件携带当前编辑原文。
+pub const DEBUG_PANEL_ACTION_EDIT_VALUE: u32 = 4;
+/// 调试面板「确认写回」动作编号；事件携带确认时的新值。
+pub const DEBUG_PANEL_ACTION_CONFIRM: u32 = 5;
+/// 调试面板「取消编辑」动作编号。
+pub const DEBUG_PANEL_ACTION_CANCEL: u32 = 6;
+/// 调试面板「关闭面板」动作编号。
+pub const DEBUG_PANEL_ACTION_CLOSE: u32 = 7;
+/// 调试面板结构化动作事件类型编号。
+pub const UI_EVENT_KIND_DEBUG_ACTION: u32 = 3;
+/// 调试面板单帧最大输出事件数:方向/进入编辑/编辑值/确认/取消/关闭各一。
+const MAX_DEBUG_OUTPUT_EVENTS_PER_FRAME: usize = 8;
 
 // ---------------------------------------------------------------------------
 // 菜单布局常量(全部为逻辑点,绘制函数里确定性计算,不依赖字体度量)。
@@ -226,6 +270,58 @@ pub struct UiSettingsFrame {
     pub error: String,
 }
 
+/// 调试面板中的一行参数(或分组段头行)。
+///
+/// 段头行是 `readonly` 且 `value` 为空的极简特例,导航天然跳过;`selected`
+/// 与 `readonly` 组合、`editing` 而不 `editable` 在解码时必然被拒绝。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UiDebugRow {
+    /// 行标签(≤24 字节)。
+    pub label: String,
+    /// 行当前值(≤24 字节;段头行为空)。
+    pub value: String,
+    /// 是否只读。
+    pub readonly: bool,
+    /// 是否被选中。
+    pub selected: bool,
+    /// 是否可编辑。
+    pub editable: bool,
+    /// 是否处于编辑态;置位时 `edit_value`/`edit_cursor` 有效。
+    pub editing: bool,
+    /// 编辑态下的值编辑原文。
+    pub edit_value: String,
+    /// 编辑态下的光标字节偏移(0..=实际字符串,且落在字符边界)。
+    pub edit_cursor: usize,
+}
+
+/// 一帧完整调试面板的 Rust 表示(layout v3)。
+///
+/// 顶部读数区是结构化段头字段(Rust 侧固定标签呈现),参数行段头行 + 配置
+/// 行都在 `rows` 里。`mode` 是连接模式名(单机/联机/benchmark)。
+#[derive(Debug, Clone, PartialEq)]
+pub struct UiDebugFrame {
+    /// 面板是否可见。
+    pub visible: bool,
+    /// 帧耗时毫秒。
+    pub frame_millis: f64,
+    /// 相机位置。
+    pub position: [f32; 3],
+    /// 水平朝向(度)。
+    pub yaw: f32,
+    /// 俯仰角(度)。
+    pub pitch: f32,
+    /// 权威 tick。
+    pub tick: u64,
+    /// 世界时刻(tick)。
+    pub world_time: u64,
+    /// 已加载区块数。
+    pub loaded_chunks: u32,
+    /// 连接模式名。
+    pub mode: String,
+    /// 参数行列表(含分组段头行)。
+    pub rows: Vec<UiDebugRow>,
+}
+
 /// 一帧 UI 下行快照；client ABI v9 保留主菜单 layout v1 并新增设置页
 /// layout v2。
 #[derive(Debug, Clone, PartialEq)]
@@ -234,6 +330,8 @@ pub enum UiFrame {
     Menu(UiMenuFrame),
     /// 设置页 layout v2。
     Settings(UiSettingsFrame),
+    /// 调试面板 layout v3。
+    Debug(UiDebugFrame),
 }
 
 impl UiFrame {
@@ -242,6 +340,7 @@ impl UiFrame {
         match self {
             Self::Menu(frame) => frame.visible,
             Self::Settings(frame) => frame.visible,
+            Self::Debug(frame) => frame.visible,
         }
     }
 }
@@ -261,6 +360,7 @@ pub fn decode_ui_frame(bytes: &[u8]) -> Result<UiFrame, ()> {
     let frame = match layout {
         UI_LAYOUT_VERSION => UiFrame::Menu(decode_menu_frame(&mut reader)?),
         UI_SETTINGS_LAYOUT_VERSION => UiFrame::Settings(decode_settings_frame(&mut reader)?),
+        UI_DEBUG_LAYOUT_VERSION => UiFrame::Debug(decode_debug_frame(&mut reader)?),
         _ => return Err(()),
     };
     if !reader.done() {
@@ -329,6 +429,123 @@ fn decode_bool(value: u32) -> Result<bool, ()> {
     }
 }
 
+/// 解码 layout v3 调试面板段:段头读数区 + 定宽行记录。
+///
+/// 段头之后至多允许 3 个零字节作为 4 字节对齐填充(design.md「段按 4 字节
+/// 对齐零填充」),超 3 个或含非零字节的尾随一律拒绝——与 v1/v2 的「尾随
+/// 字节拒绝」同一严格度。
+#[allow(clippy::result_unit_err)]
+fn decode_debug_frame(reader: &mut Reader<'_>) -> Result<UiDebugFrame, ()> {
+    let visible = decode_bool(reader.u32()?)?;
+    let frame_millis = reader.f64()?;
+    if !frame_millis.is_finite() || frame_millis < 0.0 {
+        return Err(());
+    }
+    let mut position = [0.0f32; 3];
+    for value in &mut position {
+        *value = reader.f32()?;
+        if !value.is_finite() {
+            return Err(());
+        }
+    }
+    let yaw = reader.f32()?;
+    if !yaw.is_finite() {
+        return Err(());
+    }
+    let pitch = reader.f32()?;
+    if !pitch.is_finite() {
+        return Err(());
+    }
+    let tick = reader.u64()?;
+    let world_time = reader.u64()?;
+    let loaded_chunks = reader.u32()?;
+    let mode = reader.string_field(MAX_DEBUG_PANEL_MODE_BYTES)?;
+    if mode.is_empty() || mode.contains(['\r', '\n']) {
+        return Err(());
+    }
+    let row_count = reader.u32()? as usize;
+    if row_count > MAX_DEBUG_PANEL_ROWS {
+        return Err(());
+    }
+    let mut rows = Vec::with_capacity(row_count);
+    for _ in 0..row_count {
+        rows.push(decode_debug_row(reader)?);
+    }
+    // spec：一次最多一个编辑行（editing 无行级不变量可保证，需整体约束）。
+    if rows.iter().filter(|r| r.editing).count() > 1 {
+        return Err(());
+    }
+    let trailing_len = reader.remaining_bytes().len();
+    if trailing_len > 3 || reader.remaining_bytes().iter().any(|byte| *byte != 0) {
+        return Err(());
+    }
+    // 消费零填充,让外层 `decode_ui_frame` 的 done() 判定为真。
+    reader.bytes_slice(trailing_len)?;
+    Ok(UiDebugFrame {
+        visible,
+        frame_millis,
+        position,
+        yaw,
+        pitch,
+        tick,
+        world_time,
+        loaded_chunks,
+        mode,
+        rows,
+    })
+}
+
+/// 解码一节 layout v3 定宽行记录。
+///
+/// 标签/值各 24 字节零填充(首个 NUL 之后必须全零;整字段必须合法 UTF-8,
+/// 定宽帧结构上无法表达超界字节——超 24 字节的标签由 Go 编码器截断,
+/// 截断到 rune 边界后仍凑不满 24 字节的字段只可能以非法 UTF-8 或非零
+/// 填充出现,此处两种都拒绝)。编辑态字段按「值原文 + 光标字节偏移」排列,
+/// 光标越界或落在多字节字符中间同样拒绝。
+#[allow(clippy::result_unit_err)]
+fn decode_debug_row(reader: &mut Reader<'_>) -> Result<UiDebugRow, ()> {
+    let label = reader.fixed24_string()?;
+    let value = reader.fixed24_string()?;
+    let flags = reader.u32()?;
+    let known = DEBUG_PANEL_ROW_FLAG_READONLY
+        | DEBUG_PANEL_ROW_FLAG_SELECTED
+        | DEBUG_PANEL_ROW_FLAG_EDITABLE
+        | DEBUG_PANEL_ROW_FLAG_EDITING;
+    if flags & !known != 0 {
+        return Err(());
+    }
+    let readonly = flags & DEBUG_PANEL_ROW_FLAG_READONLY != 0;
+    let selected = flags & DEBUG_PANEL_ROW_FLAG_SELECTED != 0;
+    let editable = flags & DEBUG_PANEL_ROW_FLAG_EDITABLE != 0;
+    let editing = flags & DEBUG_PANEL_ROW_FLAG_EDITING != 0;
+    if (selected && readonly) || (editing && !editable) {
+        return Err(());
+    }
+    let (edit_value, edit_cursor) = if editing {
+        let text = reader.string_field(MAX_DEBUG_PANEL_EDIT_VALUE_BYTES)?;
+        if text.contains(['\r', '\n']) {
+            return Err(());
+        }
+        let cursor = reader.u32()? as usize;
+        if cursor > text.len() || !text.is_char_boundary(cursor) {
+            return Err(());
+        }
+        (text, cursor)
+    } else {
+        (String::new(), 0)
+    };
+    Ok(UiDebugRow {
+        label,
+        value,
+        readonly,
+        selected,
+        editable,
+        editing,
+        edit_value,
+        edit_cursor,
+    })
+}
+
 fn valid_audio(value: f32) -> bool {
     value.is_finite() && (0.0..=1.0).contains(&value)
 }
@@ -359,6 +576,42 @@ impl<'a> Reader<'a> {
         Ok(val)
     }
 
+    /// 读一个 u64(小端);越界返回 `Err(())`。
+    #[allow(clippy::result_unit_err)]
+    fn u64(&mut self) -> Result<u64, ()> {
+        let bytes = self.bytes_slice(8)?;
+        Ok(u64::from_le_bytes(bytes.try_into().map_err(|_| ())?))
+    }
+
+    /// 读取 `n` 字节的裸切片引用;越界返回 `Err(())`。
+    #[allow(clippy::result_unit_err)]
+    fn bytes_slice(&mut self, n: usize) -> Result<&'a [u8], ()> {
+        if self.pos + n > self.bytes.len() {
+            return Err(());
+        }
+        let slice = &self.bytes[self.pos..self.pos + n];
+        self.pos += n;
+        Ok(slice)
+    }
+
+    /// 读一个 24 字节定宽零填充字符串字段。
+    ///
+    /// 首个 NUL 之后的字节必须全零(零填充契约),取首个 NUL 前的字节并校验
+    /// UTF-8;无 NUL 时整个 24 字节就是字段内容。
+    #[allow(clippy::result_unit_err)]
+    fn fixed24_string(&mut self) -> Result<String, ()> {
+        let bytes = self.bytes_slice(MAX_DEBUG_PANEL_RUNES_PER_SIDE)?;
+        let end = bytes
+            .iter()
+            .position(|byte| *byte == 0)
+            .unwrap_or(bytes.len());
+        if !bytes[end..].iter().all(|byte| *byte == 0) {
+            return Err(());
+        }
+        let s = std::str::from_utf8(&bytes[..end]).map_err(|_| ())?;
+        Ok(s.to_owned())
+    }
+
     /// 读一个 f32(小端)；数值域由调用方校验。
     #[allow(clippy::result_unit_err)]
     fn f32(&mut self) -> Result<f32, ()> {
@@ -382,6 +635,18 @@ impl<'a> Reader<'a> {
     fn done(&self) -> bool {
         self.pos == self.bytes.len()
     }
+
+    /// 读一个 f64(小端)；数值域由调用方校验。
+    #[allow(clippy::result_unit_err)]
+    fn f64(&mut self) -> Result<f64, ()> {
+        let bytes = self.bytes_slice(8)?;
+        Ok(f64::from_le_bytes(bytes.try_into().map_err(|_| ())?))
+    }
+
+    /// 返回尚未消费的尾部字节(v3 只用来识别 ≤3 字节零填充)。
+    fn remaining_bytes(&self) -> &[u8] {
+        &self.bytes[self.pos..]
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -399,6 +664,15 @@ pub struct UiSettingsValues {
     pub texture_pack_path: String,
 }
 
+/// 调试面板结构化动作,动作号语义经 Go `applyPanelChange` 消费。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UiDebugPanelEvent {
+    /// [`DEBUG_PANEL_ACTION_*`] 之一。
+    pub action: u32,
+    /// 动作携带的值字符串(EDIT_VALUE/CONFIRM 有效,其余为空)。
+    pub value: String,
+}
+
 /// client ABI v9 的结构化 UI 上行事件。
 #[derive(Debug, Clone, PartialEq)]
 pub enum UiOutputEvent {
@@ -406,6 +680,8 @@ pub enum UiOutputEvent {
     Action(u32),
     /// 一帧控件变化后的完整最终草稿。
     SettingsChanged(UiSettingsValues),
+    /// 调试面板动作(选中移动/进入编辑/编辑值/确认/取消/关闭)。
+    DebugPanel(UiDebugPanelEvent),
 }
 
 /// 结构化 UI 输出队列失败原因。
@@ -512,6 +788,15 @@ impl UiOutputQueue {
                     out[cursor..end].copy_from_slice(settings.texture_pack_path.as_bytes());
                     cursor = end;
                 }
+                UiOutputEvent::DebugPanel(panel) => {
+                    write_u32(out, &mut cursor, UI_EVENT_KIND_DEBUG_ACTION);
+                    write_u32(out, &mut cursor, (8 + panel.value.len()) as u32);
+                    write_u32(out, &mut cursor, panel.action);
+                    write_u32(out, &mut cursor, panel.value.len() as u32);
+                    let end = cursor + panel.value.len();
+                    out[cursor..end].copy_from_slice(panel.value.as_bytes());
+                    cursor = end;
+                }
             }
         }
         debug_assert_eq!(cursor, required);
@@ -528,6 +813,7 @@ impl UiOutputQueue {
                 UiOutputEvent::SettingsChanged(settings) => {
                     8 + 12 + settings.texture_pack_path.len()
                 }
+                UiOutputEvent::DebugPanel(panel) => 8 + 8 + panel.value.len(),
             })
             .sum::<usize>()
     }
@@ -545,6 +831,19 @@ fn valid_output_event(event: &UiOutputEvent) -> bool {
             valid_audio(settings.audio_volume)
                 && settings.texture_pack_path.len() <= MAX_UI_SETTINGS_PATH_BYTES
                 && !settings.texture_pack_path.contains(['\r', '\n'])
+        }
+        UiOutputEvent::DebugPanel(panel) => {
+            matches!(
+                panel.action,
+                DEBUG_PANEL_ACTION_SELECT_NEXT
+                    | DEBUG_PANEL_ACTION_SELECT_PREV
+                    | DEBUG_PANEL_ACTION_ENTER_EDIT
+                    | DEBUG_PANEL_ACTION_EDIT_VALUE
+                    | DEBUG_PANEL_ACTION_CONFIRM
+                    | DEBUG_PANEL_ACTION_CANCEL
+                    | DEBUG_PANEL_ACTION_CLOSE
+            ) && panel.value.len() <= MAX_DEBUG_PANEL_EDIT_VALUE_BYTES
+                && !panel.value.contains(['\r', '\n'])
         }
     }
 }
@@ -572,6 +871,12 @@ pub struct UiState {
     /// 下一帧在同一 egui pass 内设置的材质路径字符光标；只供无头测试。
     #[cfg(test)]
     settings_cursor_override: Option<usize>,
+    /// 调试面板逐行编辑草稿:键为行下标,只在该行处于编辑态时存在。
+    ///
+    /// 依 design.md「编辑中的文本留在 Rust 文本框」,会话期文本以本 map 为
+    /// 权威;下行初次携带 `editing` 时用段内 `edit_value` 播种,确认/取消后
+    /// 由 Go 的下一帧翻转 `editing`,本 map 随之清空。
+    debug_edit_buffers: HashMap<usize, String>,
 }
 
 impl Default for UiState {
@@ -591,6 +896,7 @@ impl UiState {
             settings_layout: Vec::new(),
             #[cfg(test)]
             settings_cursor_override: None,
+            debug_edit_buffers: HashMap::new(),
         }
     }
 
@@ -652,6 +958,11 @@ impl UiState {
         pixels_per_point: f32,
     ) -> Result<Option<egui::FullOutput>, UiOutputError> {
         if !self.font_loaded || !frame.visible() {
+            // 面板隐藏即使 Go 未把 editing 翻 0，也视为编辑会话结束：
+            // 清空草稿，避免 reopen 后 `fresh` 播种陈旧会话文本。
+            if matches!(frame, UiFrame::Debug(_)) {
+                self.debug_edit_buffers.clear();
+            }
             return Ok(None);
         }
         let max_frame_events = max_output_events_per_frame(frame);
@@ -661,8 +972,8 @@ impl UiState {
         if let Some(info) = raw.viewports.get_mut(&ViewportId::ROOT) {
             info.native_pixels_per_point = Some(pixels_per_point);
         }
-        if matches!(frame, UiFrame::Settings(_)) {
-            filter_settings_text_events(&mut raw);
+        if matches!(frame, UiFrame::Settings(_) | UiFrame::Debug(_)) {
+            filter_ui_text_events(&mut raw);
         }
         let mut frame_events = Vec::new();
         let output = match frame {
@@ -715,6 +1026,21 @@ impl UiState {
                 actions.append_events(&mut frame_events);
                 output
             }
+            UiFrame::Debug(frame) => {
+                let mut actions = DebugActions::default();
+                let output = self.ctx.run_ui(raw, |ui| {
+                    draw_debug_panel(ui, frame, &mut self.debug_edit_buffers, &mut actions);
+                });
+                // 编辑会话结束(确认/取消/Go 复位)后清空对应草稿。
+                self.debug_edit_buffers.retain(|index, _| {
+                    frame
+                        .rows
+                        .get(*index)
+                        .is_some_and(|row| row.editing && row.editable)
+                });
+                actions.append_events(&mut frame_events);
+                output
+            }
         };
         self.pending_events.enqueue_frame(&frame_events)?;
         Ok(Some(output))
@@ -739,6 +1065,7 @@ fn max_output_events_per_frame(frame: &UiFrame) -> usize {
     match frame {
         UiFrame::Menu(_) => MAX_MENU_OUTPUT_EVENTS_PER_FRAME,
         UiFrame::Settings(_) => MAX_SETTINGS_OUTPUT_EVENTS_PER_FRAME,
+        UiFrame::Debug(_) => MAX_DEBUG_OUTPUT_EVENTS_PER_FRAME,
     }
 }
 
@@ -759,6 +1086,60 @@ impl SettingsActions {
         }
         if self.back {
             pending.push(UiOutputEvent::Action(UI_ACTION_SETTINGS_BACK));
+        }
+    }
+}
+
+/// 一帧调试面板动作汇总;event 生成顺序固定:选中移动、进入编辑、编辑值、
+/// 确认、取消、关闭,与 spec「同帧顺序稳定」一致。
+#[derive(Default)]
+struct DebugActions {
+    select_next: bool,
+    select_prev: bool,
+    enter_edit: bool,
+    edit_value: Option<String>,
+    confirmed: Option<String>,
+    cancelled: bool,
+    close: bool,
+    /// 本帧存在编辑态行:编辑期间不得再产生选中/关闭动作(TextEdit 内部
+    /// 消费方向键,行移位只在其失焦后生效)。
+    editing_active: bool,
+}
+
+impl DebugActions {
+    fn append_events(&self, pending: &mut Vec<UiOutputEvent>) {
+        let bare = |action| {
+            UiOutputEvent::DebugPanel(UiDebugPanelEvent {
+                action,
+                value: String::new(),
+            })
+        };
+        if self.select_next {
+            pending.push(bare(DEBUG_PANEL_ACTION_SELECT_NEXT));
+        }
+        if self.select_prev {
+            pending.push(bare(DEBUG_PANEL_ACTION_SELECT_PREV));
+        }
+        if self.enter_edit {
+            pending.push(bare(DEBUG_PANEL_ACTION_ENTER_EDIT));
+        }
+        if let Some(value) = &self.edit_value {
+            pending.push(UiOutputEvent::DebugPanel(UiDebugPanelEvent {
+                action: DEBUG_PANEL_ACTION_EDIT_VALUE,
+                value: value.clone(),
+            }));
+        }
+        if let Some(value) = &self.confirmed {
+            pending.push(UiOutputEvent::DebugPanel(UiDebugPanelEvent {
+                action: DEBUG_PANEL_ACTION_CONFIRM,
+                value: value.clone(),
+            }));
+        }
+        if self.cancelled {
+            pending.push(bare(DEBUG_PANEL_ACTION_CANCEL));
+        }
+        if self.close {
+            pending.push(bare(DEBUG_PANEL_ACTION_CLOSE));
         }
     }
 }
@@ -884,10 +1265,10 @@ fn sanitize_settings_path(original: &str, path: &mut String) {
 
 /// 在 `TextEdit::singleline` 把换行折叠为空格之前先移除 CR/LF。
 ///
-/// 这条门禁既覆盖手工 RawInput，也覆盖未来可能接入的粘贴事件；随后
-/// [`sanitize_settings_path`] 仍做最终防御，保证任何 egui 行为变化都不会把
-/// 多行或超长字符串送入上行事件。
-fn filter_settings_text_events(raw: &mut RawInput) {
+/// 这条门禁既覆盖手工 RawInput，也覆盖未来可能接入的粘贴事件;设置页与
+/// 调试面板共用的单行编辑都走它,随后各自的最终防御保证任何 egui 行为变化
+/// 都不会把多行字符串送入上行事件。
+fn filter_ui_text_events(raw: &mut RawInput) {
     for event in &mut raw.events {
         match event {
             egui::Event::Text(text) | egui::Event::Paste(text) => {
@@ -1116,6 +1497,229 @@ fn draw_settings(
 
     // Escape 与返回按钮只产生同一个 typed action；是否允许离开由 Go 决定。
     actions.back |= ui.input(|input| input.key_pressed(Key::Escape));
+}
+
+// ---------------------------------------------------------------------------
+// 调试面板绘制(顶部只读读数区 + 参数行列表 + 编辑态 TextEdit)。
+// ---------------------------------------------------------------------------
+
+/// 调试面板宽度(逻辑点,沿用旧程序化面板)。
+const DEBUG_PANEL_WIDTH: f32 = 460.0;
+/// 调试面板左上边距(逻辑点)。
+const DEBUG_PANEL_MARGIN: f32 = 16.0;
+/// 调试面板内边距(逻辑点)。
+const DEBUG_PANEL_PADDING: f32 = 10.0;
+/// 调试面板行高(逻辑点)。
+const DEBUG_PANEL_ROW_HEIGHT: f32 = 26.0;
+/// 读数区与参数行列表之间的间距(逻辑点)。
+const DEBUG_PANEL_READOUT_GAP: f32 = 8.0;
+/// 行文本距行左下角的横向内移(逻辑点)。
+const DEBUG_PANEL_TEXT_PADDING_X: f32 = 2.0;
+/// 行值文本列 x 偏移(逻辑点,旧面板 label 列宽 260)。
+const DEBUG_PANEL_VALUE_X: f32 = 260.0;
+/// 面板文本字号。
+const DEBUG_PANEL_FONT_SIZE: f32 = 14.0;
+/// 半透明深灰面板背景。
+const DEBUG_PANEL_BACKGROUND: Color32 = Color32::from_rgba_unmultiplied_const(10, 10, 13, 209);
+/// 只读行文本颜色。
+const DEBUG_PANEL_READONLY_COLOR: Color32 = Color32::from_rgb(128, 128, 128);
+/// 普通行文本颜色。
+const DEBUG_PANEL_TEXT_COLOR: Color32 = Color32::WHITE;
+/// 选中行背景高亮。
+const DEBUG_PANEL_SELECTED_BACKGROUND: Color32 =
+    Color32::from_rgba_unmultiplied_const(77, 158, 242, 89);
+/// 顶部读数区固定标签;值来自段头结构化字段。
+const DEBUG_PANEL_READOUT_LABELS: [&str; 7] =
+    ["帧时", "坐标", "朝向", "Tick", "时刻", "区块数", "模式"];
+
+/// 绘制一帧调试面板(layout v3 下行 → egui 呈现)。
+///
+/// 面板锚定左上角,宽度固定、高度撑满余量,内容超屏时纵向滚动;读数区是
+/// Rust 侧固定标签 + 段头字段的拼装,参数行按 `rows` 顺序呈现。选中/编辑/
+/// 文本行不自己改变 `UiDebugFrame`——面板语义(选中下标、生效值)全部留在
+/// Go,本函数只产生上行动作事件。
+fn draw_debug_panel(
+    ui: &mut egui::Ui,
+    frame: &UiDebugFrame,
+    edit_buffers: &mut HashMap<usize, String>,
+    actions: &mut DebugActions,
+) {
+    let screen = ui.max_rect();
+    let width = DEBUG_PANEL_WIDTH.min((screen.width() - DEBUG_PANEL_MARGIN * 2.0).max(1.0));
+    let height = (screen.height() - DEBUG_PANEL_MARGIN * 2.0).max(1.0);
+    let panel = Rect::from_min_size(
+        pos2(DEBUG_PANEL_MARGIN, DEBUG_PANEL_MARGIN),
+        vec2(width, height),
+    );
+    ui.painter()
+        .rect_filled(panel, CornerRadius::same(6), DEBUG_PANEL_BACKGROUND);
+    let inner = panel.shrink(DEBUG_PANEL_PADDING);
+    let child = UiBuilder::new()
+        .max_rect(inner)
+        .layout(Layout::top_down(Align::Min));
+    ui.scope_builder(child, |ui| {
+        egui::ScrollArea::vertical()
+            .id_salt("mornlea-debug-panel-scroll")
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                draw_debug_readout(ui, frame);
+                ui.add_space(DEBUG_PANEL_READOUT_GAP);
+                for (index, row) in frame.rows.iter().enumerate() {
+                    draw_debug_row(ui, index, row, edit_buffers, actions);
+                }
+            });
+    });
+    // 键盘语义:编辑态期间方向键/Enter/Esc 由 TextEdit 消费(Enter/Esc 仍产生
+    // 确认/取消),行选中与关闭只在非编辑态下响应。
+    actions.editing_active = frame.rows.iter().any(|row| row.editing);
+    if !actions.editing_active {
+        let keys = ui.input(|input| {
+            (
+                input.key_pressed(Key::ArrowDown),
+                input.key_pressed(Key::ArrowUp),
+                input.key_pressed(Key::Enter),
+                input.key_pressed(Key::Escape),
+            )
+        });
+        if keys.0 {
+            actions.select_next = true;
+        }
+        if keys.1 {
+            actions.select_prev = true;
+        }
+        if keys.2
+            && let Some(_selected) = frame
+                .rows
+                .iter()
+                .position(|row| row.selected && row.editable)
+        {
+            actions.enter_edit = true;
+        }
+        if keys.3 {
+            actions.close = true;
+        }
+    }
+}
+
+/// 绘制顶部只读读数区:固定 7 行标签 + 段头结构化值。
+fn draw_debug_readout(ui: &mut egui::Ui, frame: &UiDebugFrame) {
+    let values = [
+        format!("{:.2} ms", frame.frame_millis),
+        format!(
+            "{:.1}, {:.1}, {:.1}",
+            frame.position[0], frame.position[1], frame.position[2]
+        ),
+        format!("yaw {:.1} pitch {:.1}", frame.yaw, frame.pitch),
+        frame.tick.to_string(),
+        frame.world_time.to_string(),
+        frame.loaded_chunks.to_string(),
+        frame.mode.clone(),
+    ];
+    for (label, value) in DEBUG_PANEL_READOUT_LABELS.iter().zip(values) {
+        debug_row_text_pair(ui, label, &value, DEBUG_PANEL_READONLY_COLOR);
+    }
+}
+
+/// 绘制一行参数(段头行/普通行/编辑态行)。
+fn draw_debug_row(
+    ui: &mut egui::Ui,
+    index: usize,
+    row: &UiDebugRow,
+    edit_buffers: &mut HashMap<usize, String>,
+    actions: &mut DebugActions,
+) {
+    if row.editing {
+        let fresh = !edit_buffers.contains_key(&index);
+        let buffer = edit_buffers
+            .entry(index)
+            .or_insert_with(|| row.edit_value.clone());
+        // 首次进入编辑态时把下行携带的光标写进 TextEdit 状态,并请求键盘
+        // 焦点(进入编辑即开始输入);后续帧焦点/光标由 egui 维护。
+        if fresh {
+            let id = Id::new(("mornlea-debug-edit", index));
+            let mut state = egui::text_edit::TextEditState::default();
+            // `edit_cursor` 是字节偏移且落在字符边界；`CCursor` 以字符索引计，
+            // 必须换算成 `chars().count()`，否则多字节值里光标会被钳到末尾。
+            let char_index = row.edit_value[..row.edit_cursor].chars().count();
+            state
+                .cursor
+                .set_char_range(Some(egui::text::CCursorRange::one(
+                    egui::text::CCursor::new(char_index),
+                )));
+            egui::TextEdit::store_state(ui.ctx(), id, state);
+            ui.ctx().memory_mut(|memory| memory.request_focus(id));
+        }
+        let id = Id::new(("mornlea-debug-edit", index));
+        let response = ui.add_sized(
+            vec2(ui.available_width(), DEBUG_PANEL_ROW_HEIGHT),
+            egui::TextEdit::singleline(buffer).id(id),
+        );
+        if buffer.len() > MAX_DEBUG_PANEL_EDIT_VALUE_BYTES {
+            truncate_edit_value(buffer);
+        }
+        if response.changed() {
+            actions.edit_value = Some(buffer.clone());
+        }
+        if response.lost_focus() {
+            if ui.input(|input| input.key_pressed(Key::Enter)) {
+                actions.confirmed = Some(buffer.clone());
+            } else if ui.input(|input| input.key_pressed(Key::Escape)) {
+                actions.cancelled = true;
+            }
+        }
+        return;
+    }
+    let color = if row.readonly {
+        DEBUG_PANEL_READONLY_COLOR
+    } else {
+        DEBUG_PANEL_TEXT_COLOR
+    };
+    let (rect, _) = ui.allocate_exact_size(
+        vec2(ui.available_width(), DEBUG_PANEL_ROW_HEIGHT),
+        egui::Sense::hover(),
+    );
+    if row.selected {
+        ui.painter()
+            .rect_filled(rect, CornerRadius::same(4), DEBUG_PANEL_SELECTED_BACKGROUND);
+    }
+    debug_row_text_pair_at(ui, rect, &row.label, &row.value, color);
+}
+
+/// 在行矩形内绘制一对标签/值文本；值列偏移见 [`DEBUG_PANEL_VALUE_X`]。
+fn debug_row_text_pair(ui: &mut egui::Ui, label: &str, value: &str, color: Color32) {
+    let (rect, _) = ui.allocate_exact_size(
+        vec2(ui.available_width(), DEBUG_PANEL_ROW_HEIGHT),
+        egui::Sense::hover(),
+    );
+    debug_row_text_pair_at(ui, rect, label, value, color);
+}
+
+fn debug_row_text_pair_at(ui: &mut egui::Ui, rect: Rect, label: &str, value: &str, color: Color32) {
+    debug_row_text_at(ui, rect, label, color, DEBUG_PANEL_TEXT_PADDING_X);
+    debug_row_text_at(ui, rect, value, color, DEBUG_PANEL_VALUE_X);
+}
+
+fn debug_row_text_at(ui: &mut egui::Ui, rect: Rect, text: &str, color: Color32, x_offset: f32) {
+    ui.painter().text(
+        pos2(rect.min.x + x_offset, rect.center().y),
+        Align2::LEFT_CENTER,
+        text,
+        FontId::proportional(DEBUG_PANEL_FONT_SIZE),
+        color,
+    );
+}
+
+/// 把编辑值按字节上界截断到字符边界,保证上行事件里的值不超 ABI 上界。
+///
+/// 单行 TextEdit 在 egui 侧不设字节限额,这里在绘制后统一收口(截短至
+/// [`MAX_DEBUG_PANEL_EDIT_VALUE_BYTES`] 对应的可截断位置)。
+fn truncate_edit_value(text: &mut String) {
+    let mut end = MAX_DEBUG_PANEL_EDIT_VALUE_BYTES;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    text.truncate(end);
 }
 
 // ---------------------------------------------------------------------------
@@ -1451,6 +2055,12 @@ pub fn winit_to_ui_events(
 }
 
 // 测试模块按真实关注点拆分；共享夹具唯一收口在 test_support。
+#[cfg(test)]
+#[path = "ui/debug_abi_tests.rs"]
+mod debug_abi_tests;
+#[cfg(test)]
+#[path = "ui/debug_render_tests.rs"]
+mod debug_render_tests;
 #[cfg(test)]
 #[path = "ui/input_queue_tests.rs"]
 mod input_queue_tests;

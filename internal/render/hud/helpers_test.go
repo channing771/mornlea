@@ -74,14 +74,15 @@ func assertHotbarItemFace(t *testing.T, face hotbarInstance, item core.ItemID) {
 		t.Fatalf("非方块物品 %d face=%+v，想要程序化色块 %v", item, face, render.ItemColor(item))
 	}
 }
-func hotbarRecipeButtonQuads(layout hotbarLayout) []hotbarInstance {
-	buttons := make([]hotbarInstance, 0, 5)
-	for _, quad := range layout.quads {
-		if quad.Width == recipeButtonWidth*layout.scale && quad.Height == hotbarSlotSize*layout.scale {
-			buttons = append(buttons, quad)
-		}
+
+// fullCraftingOverlay 是合成视图的最坏布局：3×3 网格全满且产物格非空。
+func fullCraftingOverlay() *CraftingOverlay {
+	overlay := &CraftingOverlay{Size: 3}
+	for slot := range overlay.Slots {
+		overlay.Slots[slot] = core.ItemStack{Item: core.ItemStone, Count: core.MaxStackCount}
 	}
-	return buttons
+	overlay.Output = core.ItemStack{Item: core.ItemStoneBrick, Count: core.MaxStackCount}
+	return overlay
 }
 
 func fakeNameTagGlyph(advance float32) render.Glyph {

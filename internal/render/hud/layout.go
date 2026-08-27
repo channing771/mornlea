@@ -50,17 +50,17 @@ const (
 	containerHeaderHeight = float32(20)
 
 	hudEdgeMargin = float32(8)
-	// openHUDHeight 是打开背包时从合成面板上沿到 framebuffer 下沿的设计高度，
-	// hudScale 用它把整个界面缩进窗口。自下而上依次是：快捷栏下边距与一格、
-	// 背包三行与行间隔、合成行间隔与最下一条合成行、其余合成行、面板上边距。
+	// openHUDHeight 是打开背包时从最上方容器叠加区上沿到 framebuffer 下沿的设计
+	// 高度，hudScale 用它把整个界面缩进窗口。自下而上依次是：快捷栏下边距与一格、
+	// 背包三行与行间隔、叠加区行间隔与最下一行、其余叠加区行、面板上边距。
+	// 叠加区（合成网格、熔炉、箱子）至多三行：3×3 工作台网格与箱子同为三行，
+	// 个人 2×2 与熔炉只占其一，高度按最坏组合统一收缩。
 	// 底部另永久保留主状态行和向下外扩的氧气行；其中快捷栏既有 24px 下边距
 	// 已容纳主行，额外增加一行只为氧气，满氧隐藏时也不收缩。
-	// 写成随 len(inventoryRecipeIDs) 增长的表达式而不是字面量，否则每追加一条
-	// 配方最上面的行都会被挤出窗口上沿。
-	openHUDHeight = hotbarBottomMargin + hotbarSlotSize +
+	overlayAreaRows = 3
+	openHUDHeight   = hotbarBottomMargin + hotbarSlotSize +
 		inventoryRowGap + 3*hotbarSlotSize + 2*hotbarSlotGap +
-		recipeRowGap + hotbarSlotSize +
-		float32(len(inventoryRecipeIDs)-1)*(hotbarSlotSize+hotbarSlotGap) +
+		recipeRowGap + overlayAreaRows*hotbarSlotSize + (overlayAreaRows-1)*hotbarSlotGap +
 		hotbarPanelPadding + containerHeaderHeight + healthHeartSize + statusBarGap
 	// 关闭态联合高度从 framebuffer 下沿覆盖快捷栏、状态行和最坏采掘轨道；
 	// `hudScale` 用它保证快捷栏、永久两行状态栈和采掘轨道按同一比例缩小。
@@ -98,7 +98,8 @@ type hotbarLayout struct {
 // layoutInventory 只依赖 framebuffer 尺寸、完整物品状态、界面开关与容器叠加值，
 // 产出固定上限的实例；关闭时只有底部 9 格 HUD。overlay 与 chest 至多一个非 nil：
 // overlay 非 nil 时画熔炉三格与两条进度条，chest 非 nil 时画箱子 27 格，
-// 两者都为 nil 时画固定合成行。mining 与 eating 是两条互斥的进度条叠加值
+// 两者都为 nil 时画合成网格与产物格（crafting 为 nil 表示网格镜像尚未确认，
+// 按空的个人 2×2 呈现）。mining 与 eating 是两条互斥的进度条叠加值
 // （采掘激活时进食条让位，见 `appendEatingBar`），只在关闭态出现。
 func layoutInventory(
 	dst *hotbarLayout,
@@ -106,6 +107,7 @@ func layoutInventory(
 	inventory core.Inventory,
 	open bool,
 	source int,
+	crafting *CraftingOverlay,
 	overlay *FurnaceOverlay,
 	chest *ChestOverlay,
 	mining MiningOverlay,
@@ -148,7 +150,7 @@ func layoutInventory(
 		Color:  selectedColor,
 	})
 	if open && source >= 0 {
-		if sourceX, sourceY, ok := containerSourceOrigin(source, overlay, chest, width, height); ok {
+		if sourceX, sourceY, ok := containerSourceOrigin(source, crafting, overlay, chest, width, height); ok {
 			dst.quads = append(dst.quads, hotbarInstance{
 				X:      sourceX - selectBorder,
 				Y:      sourceY - selectBorder,
@@ -202,7 +204,11 @@ func layoutInventory(
 		case overlay != nil:
 			appendFurnaceRow(dst, atlas, *overlay, width, height)
 		default:
-			appendRecipeRows(dst, atlas, inventory, width, height)
+			grid := CraftingOverlay{}
+			if crafting != nil {
+				grid = *crafting
+			}
+			appendCraftingGrid(dst, atlas, grid, width, height)
 		}
 	} else {
 		appendMiningBar(dst, mining, width, height)

@@ -342,6 +342,71 @@ func oakPlanksTexture() []byte {
 	return px
 }
 
+// workbenchTopTexture 是工作台顶面：比素木板略深的木色台面，外框一圈深色
+// 包边，台面中央用十字分割线分成 2×2 工作区——方块的功能是「把 2×2 个人
+// 网格升到 3×3」，顶面像素直接呼应它的自举配方（2×2 木板 → 工作台）。
+func workbenchTopTexture() []byte {
+	px := noisyTexture(rgb{R: 158, G: 108, B: 58}, 8, 0x0A64)
+	frame := rgb{R: 92, G: 58, B: 32}
+	for i := 0; i < texSize; i++ {
+		paint(px, i, 0, frame)
+		paint(px, i, texSize-1, frame)
+		paint(px, 0, i, frame)
+		paint(px, texSize-1, i, frame)
+	}
+	split := rgb{R: 104, G: 66, B: 36}
+	for i := 2; i < texSize-2; i++ {
+		paint(px, i, 7, split)
+		paint(px, i, 8, split)
+		paint(px, 7, i, split)
+		paint(px, 8, i, split)
+	}
+	// 每个工作区中心点一枚浅色划痕，避免大色块在 mip 链里糊成平面。
+	scratch := rgb{R: 188, G: 140, B: 82}
+	for _, point := range [][2]int{{4, 4}, {11, 4}, {4, 11}, {11, 11}} {
+		paint(px, point[0], point[1], scratch)
+	}
+	return px
+}
+
+// workbenchSideTexture 是工作台侧面：上半是台面下的深色横带（带两枚工具挂
+// 节），下半沿用木板竖缝语言但错位半板，与素橡木木板层拉开可辨识的距离。
+func workbenchSideTexture() []byte {
+	px := noisyTexture(rgb{R: 150, G: 102, B: 54}, 8, 0x0A65)
+	seam := rgb{R: 96, G: 60, B: 34}
+	for x := 0; x < texSize; x++ {
+		paint(px, x, 4, seam)
+		paint(px, x, 5, seam)
+	}
+	for y := 6; y < texSize; y++ {
+		paint(px, 3, y, seam)
+		paint(px, 11, y, seam)
+	}
+	pin := rgb{R: 120, G: 84, B: 52}
+	fill(px, 2, 1, 3, 3, pin)
+	fill(px, 12, 1, 13, 3, pin)
+	return px
+}
+
+// workbenchBottomTexture 是工作台底面：纯箱底木板，只有横向双缝与两条半板
+// 竖缝——底面永远朝下，刻意做成三层里最安静的一层。
+func workbenchBottomTexture() []byte {
+	px := noisyTexture(rgb{R: 146, G: 98, B: 52}, 8, 0x0A66)
+	seam := rgb{R: 100, G: 64, B: 36}
+	for x := 0; x < texSize; x++ {
+		paint(px, x, 7, seam)
+		paint(px, x, 8, seam)
+	}
+	for y := 0; y < 7; y++ {
+		paint(px, 7, y, seam)
+	}
+	for y := 9; y < texSize; y++ {
+		paint(px, 5, y, seam)
+		paint(px, 10, y, seam)
+	}
+	return px
+}
+
 func brickTexture() []byte {
 	px := noisyTexture(rgb{R: 154, G: 74, B: 58}, 8, 0xB21C)
 	paintStaggeredSeams(px, rgb{R: 72, G: 66, B: 64})

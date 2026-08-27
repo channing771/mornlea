@@ -136,9 +136,6 @@ func sameClientPacket(got, want ClientPacket) bool {
 	case DropSelectedItem:
 		other, ok := want.(DropSelectedItem)
 		return ok && got == other
-	case CraftRecipe:
-		other, ok := want.(CraftRecipe)
-		return ok && got == other
 	case OpenContainer:
 		other, ok := want.(OpenContainer)
 		return ok && got == other
@@ -153,6 +150,12 @@ func sameClientPacket(got, want ClientPacket) bool {
 		return ok && got == other
 	case TillSoil:
 		other, ok := want.(TillSoil)
+		return ok && got == other
+	case MoveCraftingStack:
+		other, ok := want.(MoveCraftingStack)
+		return ok && got == other
+	case TakeCraftingOutput:
+		other, ok := want.(TakeCraftingOutput)
 		return ok && got == other
 	case BoneMeal:
 		other, ok := want.(BoneMeal)
@@ -206,6 +209,9 @@ func sameServerPacket(got, want ServerPacket) bool {
 		return ok && got == other
 	case PlaceBlockSucceeded:
 		other, ok := want.(PlaceBlockSucceeded)
+		return ok && got == other
+	case CraftingState:
+		other, ok := want.(CraftingState)
 		return ok && got == other
 	case KeepAlive:
 		other, ok := want.(KeepAlive)

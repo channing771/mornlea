@@ -41,9 +41,43 @@ func TestProtocolV1PacketIDsAreFrozen(t *testing.T) {
 	}
 }
 
+// TestGridCraftingPacketIDsAreFrozen 钉死格子工作台三条消息的最终编号：
+// C→S `MoveCraftingStack=7`（复用已删除 recipe-click 消息释放的旧槽位）、
+// `TakeCraftingOutput=15`、S→C `CraftingState=21`。协议版本保持主基线 v27
+// 不变，这些消息类型是既有扩展不升版。
+// 上界断言写成「末项 +1」而不是裸字面量，下次追加 packet 时它会跟着末项走，
+// 不会静默退化成「测一个已合法的 ID」。
+func TestGridCraftingPacketIDsAreFrozen(t *testing.T) {
+	assertClientRegistry(t, []struct {
+		state  State
+		packet ClientPacket
+		id     uint32
+	}{
+		{StatePlay, MoveCraftingStack{}, 7},
+		{StatePlay, TakeCraftingOutput{}, 15},
+	})
+	assertServerRegistry(t, []struct {
+		state  State
+		packet ServerPacket
+		id     uint32
+	}{
+		{StatePlay, CraftingState{}, 21},
+	})
+	if _, ok := clientPacketForID(StatePlay, 15+1); ok {
+		t.Fatal("Play client packet ID 16 必须保持未分配")
+	}
+	if _, ok := serverPacketForID(StatePlay, 21+1); ok {
+		t.Fatal("Play server packet ID 22 必须保持未分配")
+	}
+	if ProtocolVersion != 27 {
+		t.Fatalf("协议版本 = %d，想要 27——基线既有 v27，格子工作台不升版", ProtocolVersion)
+	}
+}
+
 // TestProtocolV22TillSoilPacketIDIsFrozen 钉死 v22 唯一的 wire 变化：翻地命令
-// 占 Play/C→S 的 ID 13，且 14 仍未分配。上界断言写成 13+1 而不是裸字面量，
-// 下次追加客户端 packet 时它会跟着末项走，不会静默退化成「测一个已合法的 ID」。
+// 占 Play/C→S 的 ID 13。上界断言写成「翻地之后的相邻已分配编号」而不是裸
+// 字面量，下次追加客户端 packet 时它会跟着末项走，不会静默退化成「测一个
+// 已合法的 ID」。
 func TestProtocolV22TillSoilPacketIDIsFrozen(t *testing.T) {
 	id, ok := clientPacketID(StatePlay, TillSoil{})
 	if !ok || id != 13 {
@@ -56,8 +90,17 @@ func TestProtocolV22TillSoilPacketIDIsFrozen(t *testing.T) {
 	if _, isTill := packet.(TillSoil); !isTill {
 		t.Fatalf("Play client packet ID 13 = %T，想要 TillSoil", packet)
 	}
-	if _, ok := clientPacketForID(StatePlay, 13+1); !ok {
+	// 14 已由骨粉催熟占用；15 由格子工作台的 `TakeCraftingOutput` 占用，
+	// 保持「相邻编号不被静默占用」的门禁语义。
+	if packet, ok := clientPacketForID(StatePlay, 14); !ok {
 		t.Fatal("Play client packet ID 14 必须已分配给 BoneMeal")
+	} else if _, isMeal := packet.(BoneMeal); !isMeal {
+		t.Fatalf("Play client packet ID 14 = %T，想要 BoneMeal", packet)
+	}
+	if packet, ok := clientPacketForID(StatePlay, 15); !ok {
+		t.Fatal("Play client packet ID 15 必须保持分配给 TakeCraftingOutput")
+	} else if _, isTake := packet.(TakeCraftingOutput); !isTake {
+		t.Fatalf("Play client packet ID 15 = %T，想要 TakeCraftingOutput", packet)
 	}
 	if ProtocolVersion != 27 {
 		t.Fatalf("协议版本 = %d，想要 27——当前版本为 v27", ProtocolVersion)
@@ -76,8 +119,8 @@ func TestProtocolV27BoneMealPacketIDIsFrozen(t *testing.T) {
 	if _, isBone := packet.(BoneMeal); !isBone {
 		t.Fatalf("Play client packet ID 14 = %T，想要 BoneMeal", packet)
 	}
-	if _, ok := clientPacketForID(StatePlay, 14+1); ok {
-		t.Fatal("Play client packet ID 15 必须保持未分配")
+	if _, ok := clientPacketForID(StatePlay, 14+2); ok {
+		t.Fatal("Play client packet ID 16 必须保持未分配")
 	}
 }
 
@@ -121,7 +164,7 @@ func TestProtocolV1RegistryRejectsUnknownIDsAndStates(t *testing.T) {
 	if _, ok := clientPacketForID(StateHandshake, 1); ok {
 		t.Fatal("unknown handshake client packet ID accepted")
 	}
-	if _, ok := serverPacketForID(StatePlay, 21); ok {
+	if _, ok := serverPacketForID(StatePlay, 22); ok {
 		t.Fatal("unknown play server packet ID accepted")
 	}
 	if _, ok := clientPacketID(StateLogin, ClientHello{}); ok {
@@ -226,9 +269,6 @@ func sameClientPacketType(left, right ClientPacket) bool {
 	case MoveInventoryStack:
 		_, ok := right.(MoveInventoryStack)
 		return ok
-	case CraftRecipe:
-		_, ok := right.(CraftRecipe)
-		return ok
 	case OpenContainer:
 		_, ok := right.(OpenContainer)
 		return ok
@@ -243,6 +283,12 @@ func sameClientPacketType(left, right ClientPacket) bool {
 		return ok
 	case ChatCommand:
 		_, ok := right.(ChatCommand)
+		return ok
+	case MoveCraftingStack:
+		_, ok := right.(MoveCraftingStack)
+		return ok
+	case TakeCraftingOutput:
+		_, ok := right.(TakeCraftingOutput)
 		return ok
 	case TillSoil:
 		_, ok := right.(TillSoil)
@@ -330,6 +376,9 @@ func sameServerPacketType(left, right ServerPacket) bool {
 		return ok
 	case CompanionDespawn:
 		_, ok := right.(CompanionDespawn)
+		return ok
+	case CraftingState:
+		_, ok := right.(CraftingState)
 		return ok
 	}
 	return false

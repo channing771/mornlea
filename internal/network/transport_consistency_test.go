@@ -186,6 +186,72 @@ func TestCommonBlockMaterialPlayTranscriptMatchesMemoryAndTCP(t *testing.T) {
 	}
 }
 
+// TestGridCraftingTranscriptMatchesMemoryAndTCP 锁死格子工作台三条 Play 消息
+// 在 Memory 与 TCP 两种传输上的逐字段一致：客户端发出 `MoveCraftingStack` 与
+// `TakeCraftingOutput`，服务端原样收到；服务端发出完整 `CraftingState`，
+// 客户端原样收到。TCP 路径额外覆盖新 packet 的 frame/codec 往返。
+func TestGridCraftingTranscriptMatchesMemoryAndTCP(t *testing.T) {
+	commands := []ClientMessage{
+		MoveCraftingStack{Sequence: 0x0102030405060708, From: 9, To: 0},
+		MoveCraftingStack{Sequence: 2, From: 0, To: 1},
+		TakeCraftingOutput{Sequence: 3},
+	}
+	var grid CraftingState
+	grid.Size = 3
+	grid.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 2}
+	grid.Output = core.ItemStack{Item: core.ItemStoneBrick, Count: 4}
+
+	for _, open := range transportOpeners {
+		t.Run(open.name, func(t *testing.T) {
+			clientStream, serverStream := open.open(t)
+			t.Cleanup(func() { _ = clientStream.Close(); _ = serverStream.Close() })
+			serverDone := make(chan error, 1)
+			go func() {
+				pending, err := BeginServerLogin(context.Background(), serverStream, 0)
+				if err != nil {
+					serverDone <- err
+					return
+				}
+				var endpoint ServerEndpoint
+				err = pending.Accept(context.Background(), func(attached ServerEndpoint) error {
+					endpoint = attached
+					return nil
+				})
+				for _, command := range commands {
+					if err == nil {
+						var got ClientMessage
+						got, err = endpoint.Recv(context.Background())
+						if err == nil && got != command {
+							err = fmt.Errorf("服务端收到 %T=%+v，想要 %+v", got, got, command)
+						}
+					}
+				}
+				if err == nil {
+					err = endpoint.Send(context.Background(), grid)
+				}
+				serverDone <- err
+			}()
+
+			endpoint, err := LoginClient(context.Background(), clientStream, testIdentity(15))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, command := range commands {
+				if err := endpoint.Send(context.Background(), command); err != nil {
+					t.Fatalf("发送 %T: %v", command, err)
+				}
+			}
+			got, err := endpoint.Recv(context.Background())
+			if err != nil || got != (ServerMessage)(grid) {
+				t.Fatalf("网格状态 = (%+v, %v)，想要 %+v", got, err, grid)
+			}
+			if err := <-serverDone; err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
 func TestProtocolOutdatedHandshakeRejectMatchesMemoryAndTCP(t *testing.T) {
 	// v15、v16 与 v17 都是过时版本：Memory 与 TCP 必须产生相同的版本不匹配
 	// 拒绝(变基重编:WorldSeed 段由 v18 重编为 v23,v22 为 authoritative-farming

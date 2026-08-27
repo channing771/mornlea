@@ -95,6 +95,14 @@ func encodeServerControlPayload(state State, packet ServerPacket) (packetID uint
 			e.u8(reason)
 		case PlaceBlockSucceeded:
 			e.u64(message.Sequence)
+		// 格子工作台：u8 尺寸 + 固定 9 格 5 字节栈 + 5 字节产物格（共 51 字节）。
+		// 始终编码全部 9 格（尺寸 2 时格 4..8 恒空），不做变长分支。
+		case CraftingState:
+			e.u8(message.Size)
+			for _, stack := range message.Slots {
+				encodeItemStack(&e, stack)
+			}
+			encodeItemStack(&e, message.Output)
 		case KeepAlive:
 			e.u64(message.Token)
 		case Disconnect:
@@ -446,6 +454,14 @@ func decodeServerControlPayload(state State, packetID uint32, payload []byte) (S
 			var sequence uint64
 			sequence, err = d.u64()
 			packet = PlaceBlockSucceeded{Sequence: sequence}
+		case 21:
+			var state CraftingState
+			state.Size, err = d.u8()
+			for index := range state.Slots {
+				state.Slots[index], err = decodeItemStack(&d, err)
+			}
+			state.Output, err = decodeItemStack(&d, err)
+			packet = state
 		default:
 			return nil, codecError("decode server", state, packetID, errUnknownPacketID)
 		}

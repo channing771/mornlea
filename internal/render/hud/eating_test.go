@@ -114,13 +114,13 @@ func TestHotbarPrepareEatingFrameQuadsNotExceedMiningFrame(t *testing.T) {
 	renderer := newTestHotbarRenderer()
 	budget := render.NewUploadBudget(1024)
 	miningFrame := MiningOverlay{Active: true, ProgressTicks: 6, RequiredTicks: 15}
-	if err := renderer.Prepare(core.Inventory{}, true, false, -1, nil, nil,
+	if err := renderer.Prepare(core.Inventory{}, true, false, -1, nil, nil, nil,
 		miningFrame, EatingOverlay{}, HealthOverlay{}, OxygenOverlay{}, HungerOverlay{},
 		ChatOverlay{}, 1280, 800, budget); err != nil {
 		t.Fatalf("采掘激活帧 Prepare: %v", err)
 	}
 	miningQuads := len(renderer.layout.quads)
-	if err := renderer.Prepare(core.Inventory{}, true, false, -1, nil, nil,
+	if err := renderer.Prepare(core.Inventory{}, true, false, -1, nil, nil, nil,
 		MiningOverlay{}, EatingOverlay{Active: true, Progress: 1},
 		HealthOverlay{}, OxygenOverlay{}, HungerOverlay{},
 		ChatOverlay{}, 1280, 800, budget); err != nil {
@@ -145,7 +145,7 @@ func TestLayoutInventoryDrawsEatingBarOnlyWhenClosed(t *testing.T) {
 	atlas := newFakeNameTagAtlas()
 	eating := EatingOverlay{Active: true, Progress: 0.5}
 	var layout hotbarLayout
-	closed := layoutInventory(&layout, atlas, core.Inventory{}, false, -1, nil, nil,
+	closed := layoutInventory(&layout, atlas, core.Inventory{}, false, -1, nil, nil, nil,
 		MiningOverlay{}, eating, 1280, 800)
 	// 关闭态基线 = 双层面板 + 双层选中框 + 九格（与 `appendEatingBar` 无关的
 	// 既有常量显式列出，裸数字会让后续样式微调时悄悄失真）。
@@ -154,9 +154,9 @@ func TestLayoutInventoryDrawsEatingBarOnlyWhenClosed(t *testing.T) {
 		t.Fatalf("关闭态进食 quads=%d，想要基线 %d + %d", got, closedBase, eatingBarQuads)
 	}
 	var opened hotbarLayout
-	open := layoutInventory(&opened, atlas, core.Inventory{}, true, -1, nil, nil,
+	open := layoutInventory(&opened, atlas, core.Inventory{}, true, -1, nil, nil, nil,
 		MiningOverlay{}, eating, 1280, 800)
-	base := layoutInventory(&opened, atlas, core.Inventory{}, true, -1, nil, nil,
+	base := layoutInventory(&opened, atlas, core.Inventory{}, true, -1, nil, nil, nil,
 		MiningOverlay{}, EatingOverlay{}, 1280, 800)
 	if len(open.quads) != len(base.quads) {
 		t.Fatalf("打开态仍绘制进食条: %d vs 基线 %d", len(open.quads), len(base.quads))

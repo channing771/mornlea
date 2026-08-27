@@ -3,9 +3,9 @@
 package render
 
 // 本文件为 rust-client-render-entities 提供最小导出面:把各 pass 已有的
-// CPU 编码结果(80B avatar 实例、64B 名牌实例、48B 面板实例等)以只读
-// 字节流暴露给平行 Rust 渲染器的帧装配。所有函数只是既有内部逻辑的
-// 复用出口,不改变任何渲染行为。
+// CPU 编码结果(80B avatar 实例、64B 名牌实例等)以只读字节流暴露给
+// 平行 Rust 渲染器的帧装配。所有函数只是既有内部逻辑的复用出口,
+// 不改变任何渲染行为。
 
 // InstanceEncoder 持有实例编码的复用缓冲:热路径(每帧编码)零分配。
 type InstanceEncoder struct {
@@ -61,16 +61,6 @@ func (renderer *NameTagRenderer) FrameStreams() (backgrounds, glyphs []byte) {
 	return backgrounds, glyphs
 }
 
-// FrameStreams 返回 Prepare 之后已编码的面板 viewport/quad/字形字节。
-func (renderer *DebugPanelRenderer) FrameStreams() (viewport, quads, glyphs []byte) {
-	viewport = renderer.upload[panelViewportOffset : panelViewportOffset+panelViewportBytes]
-	quads = renderer.upload[panelQuadOffset : panelQuadOffset+
-		len(renderer.layout.quads)*panelInstanceBytes]
-	glyphs = renderer.upload[panelGlyphOffset : panelGlyphOffset+
-		len(renderer.layout.glyphs)*panelInstanceBytes]
-	return viewport, quads, glyphs
-}
-
 // GlyphAtlasSize 导出字形图集边长,供装配方校验。
 const GlyphAtlasSize = glyphAtlasSize
 
@@ -91,18 +81,6 @@ func NewNameTagLayouter(atlas GlyphSource) *NameTagRenderer {
 		layout: nameTagLayout{
 			glyphs:      make([]nameTagGlyph, 0, maxNameTagGlyphs),
 			backgrounds: make([]nameTagBackground, 0, maxNameTags),
-		},
-	}
-}
-
-// NewDebugPanelLayouter 创建 layout-only 的调试面板 renderer,同上。
-func NewDebugPanelLayouter(atlas GlyphSource) *DebugPanelRenderer {
-	return &DebugPanelRenderer{
-		atlas:  atlas,
-		upload: make([]byte, panelUploadBytes),
-		layout: panelLayout{
-			quads:  make([]panelInstance, 0, maxPanelQuads),
-			glyphs: make([]panelInstance, 0, maxPanelGlyphs),
 		},
 	}
 }

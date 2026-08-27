@@ -485,3 +485,71 @@ func TestCropsUseDedicatedWheatMaterialLayers(t *testing.T) {
 		t.Fatalf("耕地材质层 %d/%d 落进了植物区间", dry, wet)
 	}
 }
+
+// TestWorkbenchUsesDedicatedWoodenLayers 锁定 spec Requirement「工作台方块与
+// 打开生命周期」的呈现契约：顶/侧/底三面各用独立的原创程序化木质层，互不
+// 共用、也不与既有橡木木板层复用；工作台是不发光的普通不透明立方体，朝
+// 空气出面、被不透明邻居遮挡。
+func TestWorkbenchUsesDedicatedWoodenLayers(t *testing.T) {
+	registry := assets.NewRegistry()
+	if got := registry.Material(core.WorkbenchID, mesh.FacePosY); got != assets.LayerWorkbenchTop {
+		t.Fatalf("工作台顶面材质层 = %d，想要 %d", got, assets.LayerWorkbenchTop)
+	}
+	if got := registry.Material(core.WorkbenchID, mesh.FaceNegY); got != assets.LayerWorkbenchBottom {
+		t.Fatalf("工作台底面材质层 = %d，想要 %d", got, assets.LayerWorkbenchBottom)
+	}
+	for _, face := range []mesh.Face{mesh.FaceNegX, mesh.FacePosX, mesh.FaceNegZ, mesh.FacePosZ} {
+		if got := registry.Material(core.WorkbenchID, face); got != assets.LayerWorkbenchSide {
+			t.Fatalf("工作台侧面（face %d）材质层 = %d，想要 %d", face, got, assets.LayerWorkbenchSide)
+		}
+	}
+
+	// 「原创程序化」必须是三个互不相同的新层，不是彼此或橡木木板的别名：
+	// 逐层比对全部字节，任何一层缺失或复用都会在这里变红。
+	top := registry.LayerRGBA(int(assets.LayerWorkbenchTop))
+	side := registry.LayerRGBA(int(assets.LayerWorkbenchSide))
+	bottom := registry.LayerRGBA(int(assets.LayerWorkbenchBottom))
+	planks := registry.LayerRGBA(int(assets.LayerOakPlanks))
+	// 三层都不得落进植物 material 区间：Rust mesher 靠「material 在
+	// [PlantMaterialFirst, PlantMaterialLast] 内」决定出交叉斜面而非轴向面，
+	// 工作台是普通立方体，进区间就会被画成两片麦秆。
+	for _, layer := range []uint16{assets.LayerWorkbenchTop, assets.LayerWorkbenchSide, assets.LayerWorkbenchBottom} {
+		if mesh.PlantMaterial(layer) {
+			t.Fatalf("工作台材质层 %d 落进了植物区间：会被渲染成交叉斜面", layer)
+		}
+	}
+	for _, layer := range []struct {
+		name   string
+		pixels []byte
+	}{
+		{"顶面", top}, {"侧面", side}, {"底面", bottom},
+	} {
+		if len(layer.pixels) != 16*16*4 {
+			t.Fatalf("工作台%s材质长度 = %d，想要 %d", layer.name, len(layer.pixels), 16*16*4)
+		}
+		for i := 3; i < len(layer.pixels); i += 4 {
+			if layer.pixels[i] != 255 {
+				t.Fatalf("工作台%s是不透明方块，像素 alpha 必须全为 255", layer.name)
+			}
+		}
+	}
+	if string(top) == string(side) || string(top) == string(bottom) || string(side) == string(bottom) {
+		t.Fatal("工作台三层材质中存在复用：顶/侧/底必须各自独立")
+	}
+	if string(top) == string(planks) || string(side) == string(planks) || string(bottom) == string(planks) {
+		t.Fatal("工作台材质层复用了橡木木板层")
+	}
+
+	if !registry.Opaque(core.WorkbenchID) {
+		t.Fatal("工作台必须是不透明方块")
+	}
+	if got := registry.Emission(core.WorkbenchID); got != 0 {
+		t.Fatalf("工作台 Emission = %d，想要 0", got)
+	}
+	if !registry.FaceVisible(core.WorkbenchID, core.AirID) {
+		t.Fatal("工作台朝向空气的面消失了")
+	}
+	if registry.FaceVisible(core.WorkbenchID, core.StoneID) {
+		t.Fatal("工作台朝向不透明邻居的面必须被遮挡")
+	}
+}

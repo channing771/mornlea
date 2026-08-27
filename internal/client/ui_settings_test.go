@@ -119,6 +119,57 @@ func TestMaxUIEventBatchBytesFits64MaxSettingsEvents(t *testing.T) {
 	}
 }
 
+func TestDecodeUIEventBatchDebugActionGoldenAndOrder(t *testing.T) {
+	batch := testUIEventBatch(
+		testUIEventRecord(3, testDebugActionPayload(DebugPanelActionSelectNext, "")),
+		testUIEventRecord(3, testDebugActionPayload(DebugPanelActionConfirm, "70.5")),
+	)
+	got, err := DecodeUIEventBatch(batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []UIEvent{
+		{Kind: UIEventDebugAction, PanelAction: DebugPanelActionSelectNext},
+		{Kind: UIEventDebugAction, PanelAction: DebugPanelActionConfirm, PanelValue: "70.5"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("事件数=%d, want %d", len(got), len(want))
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("event[%d]=%+v, want %+v", index, got[index], want[index])
+		}
+	}
+}
+
+func TestDecodeUIEventBatchRejectsInvalidDebugActions(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload []byte
+	}{
+		{name: "unknown action", payload: testDebugActionPayload(DebugPanelActionClose+1, "")},
+		{name: "zero action", payload: testDebugActionPayload(0, "")},
+		{name: "grouped under kind 3", payload: append([]byte{3, 0, 0, 0}, 0)},
+		{name: "value non utf8", payload: testDebugActionPayload(DebugPanelActionConfirm, "\xff")},
+		{name: "value over bound", payload: testDebugActionPayload(DebugPanelActionConfirm, strings.Repeat("a", 65))},
+		{name: "value multiline", payload: testDebugActionPayload(DebugPanelActionConfirm, "a\nb")},
+		{name: "payload tail", payload: append(testDebugActionPayload(DebugPanelActionCancel, ""), 0)},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := DecodeUIEventBatch(testUIEventBatch(testUIEventRecord(3, test.payload))); err == nil {
+				t.Fatal("非法 debug action 未被拒绝")
+			}
+		})
+	}
+}
+
+func testDebugActionPayload(action uint32, value string) []byte {
+	out := binary.LittleEndian.AppendUint32(nil, action)
+	out = binary.LittleEndian.AppendUint32(out, uint32(len(value)))
+	return append(out, value...)
+}
+
 func TestDecodeUIEventBatchRejectsInvalidMatrix(t *testing.T) {
 	validAction := testUIEventBatch(testUIEventRecord(1, binary.LittleEndian.AppendUint32(nil, 9)))
 	validSettings := testUIEventBatch(testUIEventRecord(2, testSettingsChangedPayload(0.5, 3, "pack")))
