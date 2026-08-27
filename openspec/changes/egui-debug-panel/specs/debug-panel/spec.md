@@ -100,13 +100,21 @@
 
 ### Requirement: 联机远端只读
 
-`remote()` 为真的联机客户端 SHALL 只读面板：可以显示读数与参数行，但行选中与值编辑 MUST 被禁止，写回 MUST 不发生。
+`remote()` 为真的联机客户端 SHALL 禁止编辑 physics/sim 两个权威分组：这些行的选中与值编辑 MUST 被禁止，写回 MUST 不发生；render 分组（仅本地呈现）在 `remote()` 下 SHALL 保持可编辑。`field.ReadOnly` 声明的静态只读行在任何模式都不可编辑。
 
-#### Scenario: 联机面板只读
+#### Scenario: 联机远端只读
 
-- **GIVEN** `remote()` 为真且面板可见
-- **WHEN** 用户尝试编辑任意参数行
+- **GIVEN** `remote()` 为真且面板可见，选中 physics.gravity 行
+- **WHEN** 用户尝试进入编辑（Enter）
 - **THEN** 编辑 MUST 不发生，面板显示值 MUST 与原值一致
+- **AND** 该行保持只读态
+
+#### Scenario: 联机呈现组可编辑
+
+- **GIVEN** `remote()` 为真且面板可见，选中 render.fovDegrees 行
+- **WHEN** 用户进入编辑并确认新值
+- **THEN** 该值 SHALL 在当前进程生效（仅本地呈现）
+- **AND** 不产生任何网络上行
 
 ### Requirement: 面板值写回仅本地进程
 
