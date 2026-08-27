@@ -1,4 +1,4 @@
-package network
+package tcp
 
 import (
 	"bytes"
@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/network"
 )
 
 func TestRawTCPLoginSemanticIdentityFailuresReturnStableReject(t *testing.T) {
@@ -32,14 +33,14 @@ func TestRawTCPLoginSemanticIdentityFailuresReturnStableReject(t *testing.T) {
 			writeRawHandshake(t, raw)
 			payload := append([]byte(nil), test.id[:]...)
 			payload = appendRawString(payload, test.nameValue)
-			if err := WriteFrame(raw, 0, payload); err != nil {
+			if err := network.WriteFrame(raw, 0, payload); err != nil {
 				t.Fatalf("write LoginStart: %v", err)
 			}
-			packetID, reject, err := ReadFrame(raw)
+			packetID, reject, err := network.ReadFrame(raw)
 			if err != nil {
 				t.Fatalf("read LoginReject: %v", err)
 			}
-			if packetID != 1 || len(reject) < 2 || LoginRejectCode(reject[0]) != LoginInvalidIdentity {
+			if packetID != 1 || len(reject) < 2 || network.LoginRejectCode(reject[0]) != network.LoginInvalidIdentity {
 				t.Fatalf("LoginReject wire = id %d payload %x, want LoginInvalidIdentity", packetID, reject)
 			}
 			select {
@@ -62,10 +63,10 @@ func TestRawTCPMalformedLoginStringRemainsProtocolError(t *testing.T) {
 	id := core.PlayerID{0, 1, 2, 3, 4, 5, 0x46, 7, 0x88, 9, 10, 11, 12, 13, 14, 15}
 	payload := append([]byte(nil), id[:]...)
 	payload = append(payload, 1, 0xff)
-	if err := WriteFrame(raw, 0, payload); err != nil {
+	if err := network.WriteFrame(raw, 0, payload); err != nil {
 		t.Fatalf("write malformed LoginStart: %v", err)
 	}
-	if _, _, err := ReadFrame(raw); err == nil {
+	if _, _, err := network.ReadFrame(raw); err == nil {
 		t.Fatal("malformed UTF-8 received a LoginReject instead of closing as a protocol error")
 	} else if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatalf("malformed UTF-8 close error = %v", err)
@@ -87,7 +88,7 @@ func openRawTCPLogin(t *testing.T) (streamConn, <-chan error) {
 	raw := client.(*tcpClientStream).stream.conn
 	serverDone := make(chan error, 1)
 	go func() {
-		_, loginErr := BeginServerLogin(context.Background(), server, 0)
+		_, loginErr := network.BeginServerLogin(context.Background(), server, 0)
 		serverDone <- loginErr
 	}()
 	return raw, serverDone
@@ -95,11 +96,11 @@ func openRawTCPLogin(t *testing.T) (streamConn, <-chan error) {
 
 func writeRawHandshake(t *testing.T, raw streamConn) {
 	t.Helper()
-	if err := WriteFrame(raw, 0, []byte{byte(ProtocolVersion)}); err != nil {
+	if err := network.WriteFrame(raw, 0, []byte{byte(network.ProtocolVersion)}); err != nil {
 		t.Fatalf("write ClientHello: %v", err)
 	}
-	packetID, payload, err := ReadFrame(raw)
-	if err != nil || packetID != 0 || !bytes.Equal(payload, []byte{byte(ProtocolVersion)}) {
+	packetID, payload, err := network.ReadFrame(raw)
+	if err != nil || packetID != 0 || !bytes.Equal(payload, []byte{byte(network.ProtocolVersion)}) {
 		t.Fatalf("ServerHello = id %d payload %x err %v", packetID, payload, err)
 	}
 }

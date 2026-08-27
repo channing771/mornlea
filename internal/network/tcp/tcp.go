@@ -1,4 +1,4 @@
-package network
+package tcp
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/channing771/mornlea/internal/network"
 )
 
 const acceptPollInterval = 50 * time.Millisecond
@@ -28,7 +30,7 @@ type tcpListener struct {
 	closeErr  error
 }
 
-func DialTCP(ctx context.Context, address string) (ClientPacketStream, error) {
+func DialTCP(ctx context.Context, address string) (network.ClientPacketStream, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -47,7 +49,7 @@ func DialTCP(ctx context.Context, address string) (ClientPacketStream, error) {
 	if err := configureTCPSocket(tcpConn); err != nil {
 		return nil, fmt.Errorf("network: dial TCP %q: %w", address, err)
 	}
-	codec, err := NewCodec()
+	codec, err := network.NewCodec()
 	if err != nil {
 		_ = tcpConn.Close()
 		return nil, err
@@ -55,7 +57,7 @@ func DialTCP(ctx context.Context, address string) (ClientPacketStream, error) {
 	return &tcpClientStream{stream: &tcpStream{conn: tcpConn, codec: codec}}, nil
 }
 
-func ListenTCP(address string) (Listener, error) {
+func ListenTCP(address string) (network.Listener, error) {
 	tcpAddress, err := net.ResolveTCPAddr("tcp", address)
 	if err != nil {
 		return nil, fmt.Errorf("network: resolve TCP address %q: %w", address, err)
@@ -67,7 +69,7 @@ func ListenTCP(address string) (Listener, error) {
 	return &tcpListener{listener: listener, addr: listener.Addr().String()}, nil
 }
 
-func (listener *tcpListener) Accept(ctx context.Context) (ServerPacketStream, error) {
+func (listener *tcpListener) Accept(ctx context.Context) (network.ServerPacketStream, error) {
 	if err := listener.accept.acquire(ctx); err != nil {
 		return nil, err
 	}
@@ -84,7 +86,7 @@ func (listener *tcpListener) Accept(ctx context.Context) (ServerPacketStream, er
 		}
 		if err := listener.listener.SetDeadline(deadline); err != nil {
 			if isTCPClosedError(err) {
-				return nil, ErrClosed
+				return nil, network.ErrClosed
 			}
 			return nil, fmt.Errorf("network: set TCP accept deadline: %w", err)
 		}
@@ -94,7 +96,7 @@ func (listener *tcpListener) Accept(ctx context.Context) (ServerPacketStream, er
 				return nil, contextErr
 			}
 			if isTCPClosedError(err) {
-				return nil, ErrClosed
+				return nil, network.ErrClosed
 			}
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				continue
@@ -104,7 +106,7 @@ func (listener *tcpListener) Accept(ctx context.Context) (ServerPacketStream, er
 		if err := configureTCPSocket(conn); err != nil {
 			return nil, fmt.Errorf("network: accept TCP: %w", err)
 		}
-		codec, err := NewCodec()
+		codec, err := network.NewCodec()
 		if err != nil {
 			_ = conn.Close()
 			return nil, err
@@ -158,4 +160,4 @@ func isTCPStreamClosedError(err error) bool {
 		errors.Is(err, syscall.ECONNABORTED) || errors.Is(err, syscall.EPIPE)
 }
 
-var _ Listener = (*tcpListener)(nil)
+var _ network.Listener = (*tcpListener)(nil)

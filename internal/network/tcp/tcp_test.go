@@ -1,4 +1,4 @@
-package network
+package tcp
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/network"
 )
 
 func TestTCPStreamRoundTripAndPeer(t *testing.T) {
@@ -20,11 +20,11 @@ func TestTCPStreamRoundTripAndPeer(t *testing.T) {
 	defer client.Close()
 	defer server.Close()
 
-	wantClient := ClientHello{ProtocolVersion: ProtocolVersion}
-	if err := client.Send(context.Background(), StateHandshake, wantClient); err != nil {
+	wantClient := network.ClientHello{ProtocolVersion: network.ProtocolVersion}
+	if err := client.Send(context.Background(), network.StateHandshake, wantClient); err != nil {
 		t.Fatalf("client Send: %v", err)
 	}
-	gotClient, err := server.Recv(context.Background(), StateHandshake)
+	gotClient, err := server.Recv(context.Background(), network.StateHandshake)
 	if err != nil || gotClient != wantClient {
 		t.Fatalf("server Recv = (%+v, %v), want (%+v, nil)", gotClient, err, wantClient)
 	}
@@ -32,13 +32,40 @@ func TestTCPStreamRoundTripAndPeer(t *testing.T) {
 		t.Fatal("Peer returned an empty address")
 	}
 
-	wantServer := ServerHello{ProtocolVersion: ProtocolVersion}
-	if err := server.Send(context.Background(), StateHandshake, wantServer); err != nil {
+	wantServer := network.ServerHello{ProtocolVersion: network.ProtocolVersion}
+	if err := server.Send(context.Background(), network.StateHandshake, wantServer); err != nil {
 		t.Fatalf("server Send: %v", err)
 	}
-	gotServer, err := client.Recv(context.Background(), StateHandshake)
+	gotServer, err := client.Recv(context.Background(), network.StateHandshake)
 	if err != nil || gotServer != wantServer {
 		t.Fatalf("client Recv = (%+v, %v), want (%+v, nil)", gotServer, err, wantServer)
+	}
+}
+
+func TestBeginServerLoginFutureClientHelloReturnsV2MismatchOverTCP(t *testing.T) {
+	listener := listenLoopback(t)
+	t.Cleanup(func() { _ = listener.Close() })
+	client, server := dialAndAccept(t, listener)
+	t.Cleanup(func() { _ = client.Close() })
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	serverDone := make(chan error, 1)
+	go func() {
+		_, err := network.BeginServerLogin(ctx, server, 0)
+		serverDone <- err
+	}()
+
+	writeRawClientFrame(t, client, 0, []byte{byte(network.ProtocolVersion + 1)})
+	packet, err := client.Recv(ctx, network.StateHandshake)
+	if err != nil {
+		t.Fatalf("future ClientHello response: %v", err)
+	}
+	reject, ok := packet.(network.HandshakeReject)
+	if err != nil || !ok || reject.ServerProtocolVersion != network.ProtocolVersion || reject.Code != network.HandshakeVersionMismatch {
+		t.Fatalf("future ClientHello rejection=(%#v, %v), want protocol %d HandshakeVersionMismatch", packet, err, network.ProtocolVersion)
+	}
+	if err := <-serverDone; err == nil || !strings.Contains(err.Error(), "protocol violation") {
+		t.Fatalf("BeginServerLogin error=%v, want protocol violation after rejection", err)
 	}
 }
 
@@ -65,10 +92,10 @@ func TestTCPAcceptCanceledKeepsListenerReusable(t *testing.T) {
 	client, server := dialAndAccept(t, listener)
 	defer client.Close()
 	defer server.Close()
-	if err := client.Send(context.Background(), StateHandshake, ClientHello{ProtocolVersion: ProtocolVersion}); err != nil {
+	if err := client.Send(context.Background(), network.StateHandshake, network.ClientHello{ProtocolVersion: network.ProtocolVersion}); err != nil {
 		t.Fatalf("Send after canceled Accept: %v", err)
 	}
-	if _, err := server.Recv(context.Background(), StateHandshake); err != nil {
+	if _, err := server.Recv(context.Background(), network.StateHandshake); err != nil {
 		t.Fatalf("Recv after canceled Accept: %v", err)
 	}
 }
@@ -82,15 +109,15 @@ func TestTCPRecvDeadlineDoesNotPoisonNextRecv(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	if packet, err := server.Recv(ctx, StateHandshake); packet != nil || !errors.Is(err, context.DeadlineExceeded) {
+	if packet, err := server.Recv(ctx, network.StateHandshake); packet != nil || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("timed Recv = (%v, %v), want (nil, context.DeadlineExceeded)", packet, err)
 	}
 
-	want := ClientHello{ProtocolVersion: ProtocolVersion}
-	if err := client.Send(context.Background(), StateHandshake, want); err != nil {
+	want := network.ClientHello{ProtocolVersion: network.ProtocolVersion}
+	if err := client.Send(context.Background(), network.StateHandshake, want); err != nil {
 		t.Fatalf("Send after Recv deadline: %v", err)
 	}
-	packet, err := server.Recv(context.Background(), StateHandshake)
+	packet, err := server.Recv(context.Background(), network.StateHandshake)
 	if err != nil || packet != want {
 		t.Fatalf("Recv after deadline = (%+v, %v), want (%+v, nil)", packet, err, want)
 	}
@@ -114,14 +141,14 @@ func TestTCPSendDeadlineAndSubsequentSend(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()
-	packet := HandshakeReject{
-		ServerProtocolVersion: ProtocolVersion,
-		Code:                  HandshakeVersionMismatch,
+	packet := network.HandshakeReject{
+		ServerProtocolVersion: network.ProtocolVersion,
+		Code:                  network.HandshakeVersionMismatch,
 		Message:               strings.Repeat("x", 256),
 	}
 	var sendErr error
 	for sendErr == nil {
-		sendErr = server.Send(ctx, StateHandshake, packet)
+		sendErr = server.Send(ctx, network.StateHandshake, packet)
 	}
 	if !errors.Is(sendErr, context.DeadlineExceeded) {
 		t.Fatalf("blocked Send error = %v, want context.DeadlineExceeded", sendErr)
@@ -132,10 +159,10 @@ func TestTCPSendDeadlineAndSubsequentSend(t *testing.T) {
 	}
 	peerCloseCtx, cancelPeerClose := context.WithTimeout(context.Background(), time.Second)
 	defer cancelPeerClose()
-	if packet, err := server.Recv(peerCloseCtx, StateHandshake); packet != nil || !errors.Is(err, ErrClosed) {
+	if packet, err := server.Recv(peerCloseCtx, network.StateHandshake); packet != nil || !errors.Is(err, network.ErrClosed) {
 		t.Fatalf("Recv after peer close = (%v, %v), want (nil, ErrClosed)", packet, err)
 	}
-	if err := server.Send(context.Background(), StateHandshake, ServerHello{ProtocolVersion: ProtocolVersion}); !errors.Is(err, ErrClosed) {
+	if err := server.Send(context.Background(), network.StateHandshake, network.ServerHello{ProtocolVersion: network.ProtocolVersion}); !errors.Is(err, network.ErrClosed) {
 		t.Fatalf("Send after peer close = %v, want ErrClosed", err)
 	}
 }
@@ -148,7 +175,7 @@ func TestTCPPeerCloseWakesBlockedRecv(t *testing.T) {
 
 	result := make(chan error, 1)
 	go func() {
-		_, err := server.Recv(context.Background(), StateHandshake)
+		_, err := server.Recv(context.Background(), network.StateHandshake)
 		result <- err
 	}()
 	time.Sleep(10 * time.Millisecond)
@@ -157,7 +184,7 @@ func TestTCPPeerCloseWakesBlockedRecv(t *testing.T) {
 	}
 	select {
 	case err := <-result:
-		if !errors.Is(err, ErrClosed) {
+		if !errors.Is(err, network.ErrClosed) {
 			t.Fatalf("blocked Recv = %v, want ErrClosed", err)
 		}
 	case <-time.After(time.Second):
@@ -177,7 +204,7 @@ func TestTCPCancelWakesStartedRecvAndDoesNotPoisonNextRecv(t *testing.T) {
 	started := make(chan struct{})
 	go func() {
 		close(started)
-		_, err := server.Recv(ctx, StateHandshake)
+		_, err := server.Recv(ctx, network.StateHandshake)
 		result <- err
 	}()
 	<-started
@@ -192,11 +219,11 @@ func TestTCPCancelWakesStartedRecvAndDoesNotPoisonNextRecv(t *testing.T) {
 		t.Fatal("context cancellation did not wake blocked Recv")
 	}
 
-	want := ClientHello{ProtocolVersion: ProtocolVersion}
-	if err := client.Send(context.Background(), StateHandshake, want); err != nil {
+	want := network.ClientHello{ProtocolVersion: network.ProtocolVersion}
+	if err := client.Send(context.Background(), network.StateHandshake, want); err != nil {
 		t.Fatalf("Send after canceled Recv: %v", err)
 	}
-	got, err := server.Recv(context.Background(), StateHandshake)
+	got, err := server.Recv(context.Background(), network.StateHandshake)
 	if err != nil || got != want {
 		t.Fatalf("Recv after cancellation = (%+v, %v), want (%+v, nil)", got, err, want)
 	}
@@ -221,7 +248,7 @@ func TestTCPListenerCloseWakesAccept(t *testing.T) {
 	}
 	select {
 	case err := <-result:
-		if !errors.Is(err, ErrClosed) {
+		if !errors.Is(err, network.ErrClosed) {
 			t.Fatalf("Accept after listener Close = %v, want ErrClosed", err)
 		}
 	case <-time.After(time.Second):
@@ -238,8 +265,8 @@ func TestTCPClosedStreamReturnsErrClosedBeforeSnapshotCodec(t *testing.T) {
 	if err := server.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	snapshot := fixtureSnapshot(core.ChunkPos{X: 1, Z: 2}, 3)
-	if err := server.Send(context.Background(), StatePlay, snapshot); !errors.Is(err, ErrClosed) {
+	snapshot := network.ChunkSnapshot{}
+	if err := server.Send(context.Background(), network.StatePlay, snapshot); !errors.Is(err, network.ErrClosed) {
 		t.Fatalf("snapshot Send after Close = %v, want ErrClosed", err)
 	}
 }
@@ -253,18 +280,18 @@ func TestTCPPreCanceledOperationsAndDeadlineCleanup(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := client.Send(ctx, StateHandshake, ClientHello{ProtocolVersion: 1}); !errors.Is(err, context.Canceled) {
+	if err := client.Send(ctx, network.StateHandshake, network.ClientHello{ProtocolVersion: 1}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("pre-canceled Send = %v, want context.Canceled", err)
 	}
-	if packet, err := server.Recv(ctx, StateHandshake); packet != nil || !errors.Is(err, context.Canceled) {
+	if packet, err := server.Recv(ctx, network.StateHandshake); packet != nil || !errors.Is(err, context.Canceled) {
 		t.Fatalf("pre-canceled Recv = (%v, %v), want (nil, context.Canceled)", packet, err)
 	}
 
-	want := ClientHello{ProtocolVersion: ProtocolVersion}
-	if err := client.Send(context.Background(), StateHandshake, want); err != nil {
+	want := network.ClientHello{ProtocolVersion: network.ProtocolVersion}
+	if err := client.Send(context.Background(), network.StateHandshake, want); err != nil {
 		t.Fatalf("Send after cancellation: %v", err)
 	}
-	got, err := server.Recv(context.Background(), StateHandshake)
+	got, err := server.Recv(context.Background(), network.StateHandshake)
 	if err != nil || got != want {
 		t.Fatalf("Recv after cancellation = (%+v, %v), want (%+v, nil)", got, err, want)
 	}
@@ -305,7 +332,7 @@ func TestTCPRecvOwnerWaitHonorsContext(t *testing.T) {
 
 			firstResult := make(chan error, 1)
 			go func() {
-				_, err := server.Recv(context.Background(), StateHandshake)
+				_, err := server.Recv(context.Background(), network.StateHandshake)
 				firstResult <- err
 			}()
 			<-enteredRead
@@ -315,7 +342,7 @@ func TestTCPRecvOwnerWaitHonorsContext(t *testing.T) {
 			secondResult := make(chan error, 1)
 			go func() {
 				close(secondStarted)
-				_, err := server.Recv(ctx, StateHandshake)
+				_, err := server.Recv(ctx, network.StateHandshake)
 				secondResult <- err
 			}()
 			<-secondStarted
@@ -340,7 +367,7 @@ func TestTCPRecvOwnerWaitHonorsContext(t *testing.T) {
 			if err := client.Close(); err != nil {
 				t.Fatalf("client Close: %v", err)
 			}
-			if err := <-firstResult; !errors.Is(err, ErrClosed) {
+			if err := <-firstResult; !errors.Is(err, network.ErrClosed) {
 				t.Fatalf("first Recv after peer Close = %v, want ErrClosed", err)
 			}
 			if err := server.Close(); err != nil {
@@ -380,8 +407,8 @@ func TestTCPSendOwnerWaitHonorsContext(t *testing.T) {
 			firstResult := make(chan error, 1)
 			go func() {
 				firstResult <- client.Send(
-					context.Background(), StateHandshake,
-					ClientHello{ProtocolVersion: ProtocolVersion},
+					context.Background(), network.StateHandshake,
+					network.ClientHello{ProtocolVersion: network.ProtocolVersion},
 				)
 			}()
 			<-conn.started
@@ -392,8 +419,8 @@ func TestTCPSendOwnerWaitHonorsContext(t *testing.T) {
 			go func() {
 				close(secondStarted)
 				secondResult <- client.Send(
-					ctx, StateHandshake,
-					ClientHello{ProtocolVersion: ProtocolVersion},
+					ctx, network.StateHandshake,
+					network.ClientHello{ProtocolVersion: network.ProtocolVersion},
 				)
 			}()
 			<-secondStarted
@@ -472,7 +499,7 @@ func TestTCPAcceptOwnerWaitHonorsDeadline(t *testing.T) {
 	if err := listener.Close(); err != nil {
 		t.Fatalf("listener Close: %v", err)
 	}
-	if err := <-firstResult; !errors.Is(err, ErrClosed) {
+	if err := <-firstResult; !errors.Is(err, network.ErrClosed) {
 		t.Fatalf("first Accept after Close = %v, want ErrClosed", err)
 	}
 }
@@ -484,7 +511,7 @@ func TestTCPPreCanceledContextDoesNotEnterAvailableOwner(t *testing.T) {
 	conn := newBlockingWriteConn()
 	codec := mustNewCodec(t)
 	client := &tcpClientStream{stream: &tcpStream{conn: conn, codec: codec}}
-	if err := client.Send(ctx, StateHandshake, ClientHello{ProtocolVersion: ProtocolVersion}); !errors.Is(err, context.Canceled) {
+	if err := client.Send(ctx, network.StateHandshake, network.ClientHello{ProtocolVersion: network.ProtocolVersion}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("pre-canceled Send = %v, want context.Canceled", err)
 	}
 	select {
@@ -492,7 +519,7 @@ func TestTCPPreCanceledContextDoesNotEnterAvailableOwner(t *testing.T) {
 		t.Fatal("pre-canceled Send entered Write")
 	default:
 	}
-	if _, err := client.Recv(ctx, StateHandshake); !errors.Is(err, context.Canceled) {
+	if _, err := client.Recv(ctx, network.StateHandshake); !errors.Is(err, context.Canceled) {
 		t.Fatalf("pre-canceled Recv = %v, want context.Canceled", err)
 	}
 	select {
@@ -512,7 +539,7 @@ func TestConcurrentTCPClose(t *testing.T) {
 		client, server := dialAndAccept(t, listener)
 		blocked := make(chan error, 1)
 		go func() {
-			_, err := server.Recv(context.Background(), StateHandshake)
+			_, err := server.Recv(context.Background(), network.StateHandshake)
 			blocked <- err
 		}()
 
@@ -533,7 +560,7 @@ func TestConcurrentTCPClose(t *testing.T) {
 		closeGroup.Wait()
 		select {
 		case err := <-blocked:
-			if !errors.Is(err, ErrClosed) {
+			if !errors.Is(err, network.ErrClosed) {
 				t.Fatalf("iteration %d: blocked Recv = %v, want ErrClosed", iteration, err)
 			}
 		case <-time.After(time.Second):
@@ -554,21 +581,21 @@ func TestTCPBadFrameClosesOnlyConnection(t *testing.T) {
 	if _, err := clientImpl.stream.conn.Write([]byte{0}); err != nil {
 		t.Fatalf("write malformed frame: %v", err)
 	}
-	if packet, err := server.Recv(context.Background(), StateHandshake); packet != nil || err == nil || errors.Is(err, ErrClosed) {
+	if packet, err := server.Recv(context.Background(), network.StateHandshake); packet != nil || err == nil || errors.Is(err, network.ErrClosed) {
 		t.Fatalf("bad-frame Recv = (%v, %v), want non-closed protocol error", packet, err)
 	}
-	if _, err := client.Recv(context.Background(), StateHandshake); !errors.Is(err, ErrClosed) {
+	if _, err := client.Recv(context.Background(), network.StateHandshake); !errors.Is(err, network.ErrClosed) {
 		t.Fatalf("peer Recv after protocol error = %v, want ErrClosed", err)
 	}
 
 	client2, server2 := dialAndAccept(t, listener)
 	defer client2.Close()
 	defer server2.Close()
-	want := ClientHello{ProtocolVersion: ProtocolVersion}
-	if err := client2.Send(context.Background(), StateHandshake, want); err != nil {
+	want := network.ClientHello{ProtocolVersion: network.ProtocolVersion}
+	if err := client2.Send(context.Background(), network.StateHandshake, want); err != nil {
 		t.Fatalf("second connection Send: %v", err)
 	}
-	got, err := server2.Recv(context.Background(), StateHandshake)
+	got, err := server2.Recv(context.Background(), network.StateHandshake)
 	if err != nil || got != want {
 		t.Fatalf("second connection Recv = (%+v, %v), want (%+v, nil)", got, err, want)
 	}
@@ -683,7 +710,7 @@ func (socket *failingTCPSocket) optionError(option string) error {
 	return nil
 }
 
-func listenLoopback(t *testing.T) Listener {
+func listenLoopback(t *testing.T) network.Listener {
 	t.Helper()
 	listener, err := ListenTCP("127.0.0.1:0")
 	if err != nil {
@@ -695,7 +722,7 @@ func listenLoopback(t *testing.T) Listener {
 	return listener
 }
 
-func dialAndAccept(t *testing.T, listener Listener) (ClientPacketStream, ServerPacketStream) {
+func dialAndAccept(t *testing.T, listener network.Listener) (network.ClientPacketStream, network.ServerPacketStream) {
 	t.Helper()
 	client, err := DialTCP(context.Background(), listener.Addr())
 	if err != nil {
@@ -709,13 +736,22 @@ func dialAndAccept(t *testing.T, listener Listener) (ClientPacketStream, ServerP
 	return client, server
 }
 
-func writeRawClientFrame(t *testing.T, client ClientPacketStream, packetID uint32, payload []byte) {
+func mustNewCodec(t *testing.T) *network.Codec {
+	t.Helper()
+	codec, err := network.NewCodec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return codec
+}
+
+func writeRawClientFrame(t *testing.T, client network.ClientPacketStream, packetID uint32, payload []byte) {
 	t.Helper()
 	stream, ok := client.(*tcpClientStream)
 	if !ok {
 		t.Fatalf("client stream = %T, want *tcpClientStream", client)
 	}
-	if err := WriteFrame(stream.stream.conn, packetID, payload); err != nil {
+	if err := network.WriteFrame(stream.stream.conn, packetID, payload); err != nil {
 		t.Fatalf("write raw client frame: %v", err)
 	}
 }

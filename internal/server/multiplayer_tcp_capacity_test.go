@@ -12,6 +12,7 @@ import (
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 )
 
 func TestEightTCPClientsSoakIsBounded(t *testing.T) {
@@ -162,7 +163,7 @@ func runEightTCPClientsSoakIsBounded(t *testing.T) {
 	t.Helper()
 	baseline := runtime.NumGoroutine()
 	clients := make([]*multiplayerTCPClient, multiplayerClientCount)
-	listener, err := network.ListenTCP("127.0.0.1:0")
+	listener, err := networktcp.ListenTCP("127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("ListenTCP loopback: %v", err)
 	}

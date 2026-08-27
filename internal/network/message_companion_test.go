@@ -1,7 +1,6 @@
 package network
 
 import (
-	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -974,54 +973,6 @@ func TestCompanionDecoderRejectsInvalidIDsEnumsNumbersAndDimensions(t *testing.T
 	}
 	if packet, err := decodeServerControlPayload(StatePlay, 19, make([]byte, 16)); err == nil || packet != nil {
 		t.Fatalf("零 CompanionDespawn ID 解码为 %#v, %v", packet, err)
-	}
-}
-
-func TestCompanionMessagesMatchMemoryAndTCP(t *testing.T) {
-	clientMessage := ChatCommand{Text: "@A x"}
-	serverMessages := []ServerPacket{
-		validAcceptedChatEvent(),
-		CompanionSpawn{ID: testCompanionID(1), Name: "A", Tick: 1, Dimension: core.Overworld},
-		CompanionStates{Tick: 2, States: []CompanionState{{ID: testCompanionID(1), Dimension: core.Overworld}}},
-		CompanionDespawn{ID: testCompanionID(1)},
-	}
-	for _, open := range transportOpeners {
-		t.Run(open.name, func(t *testing.T) {
-			client, server := open.open(t)
-			t.Cleanup(func() { _ = client.Close(); _ = server.Close() })
-			if err := client.Send(context.Background(), StatePlay, clientMessage); err != nil {
-				t.Fatal(err)
-			}
-			gotClient, err := server.Recv(context.Background(), StatePlay)
-			if err != nil || !reflect.DeepEqual(gotClient, clientMessage) {
-				t.Fatalf("client message = (%#v,%v)", gotClient, err)
-			}
-			for _, message := range serverMessages {
-				if err := server.Send(context.Background(), StatePlay, message); err != nil {
-					t.Fatal(err)
-				}
-				got, err := client.Recv(context.Background(), StatePlay)
-				if err != nil || !reflect.DeepEqual(got, message) {
-					t.Fatalf("server message = (%#v,%v), 想要 %#v", got, err, message)
-				}
-			}
-		})
-	}
-}
-
-func TestCompanionStatesFiveRejectedByMemoryAndTCP(t *testing.T) {
-	five := make([]CompanionState, 5)
-	for index := range five {
-		five[index] = CompanionState{ID: testCompanionID(byte(index + 1)), Dimension: core.Overworld}
-	}
-	for _, open := range transportOpeners {
-		t.Run(open.name, func(t *testing.T) {
-			client, server := open.open(t)
-			t.Cleanup(func() { _ = client.Close(); _ = server.Close() })
-			if err := server.Send(context.Background(), StatePlay, CompanionStates{States: five}); err == nil {
-				t.Fatal("五项 CompanionStates 被 transport 接受")
-			}
-		})
 	}
 }
 

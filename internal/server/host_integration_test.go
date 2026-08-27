@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/network"
+	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 )
 
 func TestHostTCPLoginDisconnectAndShutdown(t *testing.T) {
 	store := newHostTestStore()
 	host := newTestHostWithStore(t, store)
-	listener, err := network.ListenTCP("127.0.0.1:0")
+	listener, err := networktcp.ListenTCP("127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,7 +21,7 @@ func TestHostTCPLoginDisconnectAndShutdown(t *testing.T) {
 	go func() { runDone <- host.Run(runCtx, listener) }()
 
 	dialCtx, cancelDial := context.WithTimeout(context.Background(), waitDeadline)
-	stream, err := network.DialTCP(dialCtx, listener.Addr())
+	stream, err := networktcp.DialTCP(dialCtx, listener.Addr())
 	cancelDial()
 	if err != nil {
 		t.Fatal(err)

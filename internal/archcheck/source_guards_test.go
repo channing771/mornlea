@@ -244,7 +244,7 @@ func TestMornleaUsesLoginStreamsInsteadOfAttachedServerEndpoints(t *testing.T) {
 func TestMornleaBenchmarkTCPPathUsesTheSharedLoginStateMachine(t *testing.T) {
 	path := filepath.Join(moduleRoot(t), "cmd", "mornlea")
 	source := productionGoSource(t, path)
-	for _, required := range []string{"network.ListenTCP(", "network.BeginServerLogin(", "network.LoginClient(", "running.AttachTrustedObserver"} {
+	for _, required := range []string{"networktcp.ListenTCP(", "network.BeginServerLogin(", "network.LoginClient(", "running.AttachTrustedObserver"} {
 		if !strings.Contains(source, required) {
 			t.Errorf("%s benchmark TCP path must contain %s", path, required)
 		}

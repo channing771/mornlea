@@ -18,6 +18,7 @@ import (
 	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 	"github.com/channing771/mornlea/internal/render"
 	"github.com/channing771/mornlea/internal/render/hud"
 	"github.com/channing771/mornlea/internal/server"
@@ -172,7 +173,7 @@ func newApplicationWithDependencies(
 		clientEndpoint, err = assembleBenchmarkObserverConnection(
 			ctx, running, options.BenchmarkTransport, uint64(store.Metadata().Seed),
 			func(address string) (network.Listener, error) {
-				return network.ListenTCP(address)
+				return networktcp.ListenTCP(address)
 			},
 			dependencies.dialTCP,
 		)

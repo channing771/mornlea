@@ -1,13 +1,17 @@
-package network
+package network_test
 
 import (
 	"context"
+	"encoding/binary"
 	"strings"
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
 
+	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/network"
+	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 )
 
 var (
@@ -20,33 +24,33 @@ func BenchmarkSmallPacketCodec(b *testing.B) {
 	id := core.PlayerID{0xb3, 0x13, 0x61, 0xa7, 0xc8, 0x62, 0x45, 0x97, 0x92, 0x13, 0xc3, 0xac, 0xd4, 0x68, 0xd1, 0x18}
 	clientPackets := []struct {
 		name  string
-		state State
-		value ClientPacket
+		state network.State
+		value network.ClientPacket
 	}{
-		{"ClientHello", StateHandshake, ClientHello{ProtocolVersion: ProtocolVersion}},
-		{"LoginStart", StateLogin, LoginStart{PlayerID: id, DisplayName: "Benchmark"}},
-		{"PlayerInput", StatePlay, PlayerInput{Sequence: 1, MoveX: 1, MoveZ: -1, Jump: true, Yaw: 0.5, Pitch: -0.25, Mining: true}},
-		{"PlaceBlock", StatePlay, PlaceBlock{Sequence: 3, Yaw: 0.5, Pitch: -0.25, Slot: 2}},
-		{"RequestChunkResync", StatePlay, RequestChunkResync{Sequence: 4, Dimension: core.Overworld, Chunk: core.ChunkPos{X: -2, Z: 3}, HaveRevision: 7}},
-		{"KeepAliveReply", StatePlay, KeepAliveReply{Token: 9}},
-		{"DropSelectedItem", StatePlay, DropSelectedItem{Sequence: 12}},
+		{"ClientHello", network.StateHandshake, network.ClientHello{ProtocolVersion: network.ProtocolVersion}},
+		{"LoginStart", network.StateLogin, network.LoginStart{PlayerID: id, DisplayName: "Benchmark"}},
+		{"PlayerInput", network.StatePlay, network.PlayerInput{Sequence: 1, MoveX: 1, MoveZ: -1, Jump: true, Yaw: 0.5, Pitch: -0.25, Mining: true}},
+		{"PlaceBlock", network.StatePlay, network.PlaceBlock{Sequence: 3, Yaw: 0.5, Pitch: -0.25, Slot: 2}},
+		{"RequestChunkResync", network.StatePlay, network.RequestChunkResync{Sequence: 4, Dimension: core.Overworld, Chunk: core.ChunkPos{X: -2, Z: 3}, HaveRevision: 7}},
+		{"KeepAliveReply", network.StatePlay, network.KeepAliveReply{Token: 9}},
+		{"DropSelectedItem", network.StatePlay, network.DropSelectedItem{Sequence: 12}},
 	}
 	serverPackets := []struct {
 		name  string
-		state State
-		value ServerPacket
+		state network.State
+		value network.ServerPacket
 	}{
-		{"ServerHello", StateHandshake, ServerHello{ProtocolVersion: ProtocolVersion}},
-		{"HandshakeReject", StateHandshake, HandshakeReject{ServerProtocolVersion: ProtocolVersion, Code: HandshakeVersionMismatch, Message: "mismatch"}},
-		{"LoginSuccess", StateLogin, LoginSuccess{PlayerID: id}},
-		{"LoginReject", StateLogin, LoginReject{Code: LoginServerFull, Message: "full"}},
-		{"BlockChanges", StatePlay, BlockChanges{Dimension: core.Overworld, Chunk: core.ChunkPos{}, BaseRevision: 1, NewRevision: 2, Changes: []BlockChange{{Position: core.BlockPos{X: 1, Y: 2, Z: 3}, Block: core.DirtID}}}},
-		{"ForgetChunks", StatePlay, ForgetChunks{Dimension: core.Overworld, Chunks: []core.ChunkPos{{X: -1, Z: 2}}}},
-		{"PlayerState", StatePlay, PlayerState{ServerTick: 5, LastInputSequence: 4, Dimension: core.Overworld, Position: mgl32.Vec3{1, 2, 3}, Velocity: mgl32.Vec3{0.1, 0.2, 0.3}, Ready: true, MiningActive: true, MiningTarget: core.BlockPos{X: 1, Y: 2, Z: 3}, MiningProgressTicks: 6, MiningRequiredTicks: 15, MiningHarvestable: true}},
-		{"CommandRejected", StatePlay, CommandRejected{Sequence: 6, Reason: RejectNoTarget}},
-		{"KeepAlive", StatePlay, KeepAlive{Token: 7}},
-		{"Disconnect", StatePlay, Disconnect{Code: DisconnectServerShutdown, Message: "shutdown"}},
-		{"PlaceBlockSucceeded", StatePlay, PlaceBlockSucceeded{Sequence: 13}},
+		{"ServerHello", network.StateHandshake, network.ServerHello{ProtocolVersion: network.ProtocolVersion}},
+		{"HandshakeReject", network.StateHandshake, network.HandshakeReject{ServerProtocolVersion: network.ProtocolVersion, Code: network.HandshakeVersionMismatch, Message: "mismatch"}},
+		{"LoginSuccess", network.StateLogin, network.LoginSuccess{PlayerID: id}},
+		{"LoginReject", network.StateLogin, network.LoginReject{Code: network.LoginServerFull, Message: "full"}},
+		{"BlockChanges", network.StatePlay, network.BlockChanges{Dimension: core.Overworld, Chunk: core.ChunkPos{}, BaseRevision: 1, NewRevision: 2, Changes: []network.BlockChange{{Position: core.BlockPos{X: 1, Y: 2, Z: 3}, Block: core.DirtID}}}},
+		{"ForgetChunks", network.StatePlay, network.ForgetChunks{Dimension: core.Overworld, Chunks: []core.ChunkPos{{X: -1, Z: 2}}}},
+		{"PlayerState", network.StatePlay, network.PlayerState{ServerTick: 5, LastInputSequence: 4, Dimension: core.Overworld, Position: mgl32.Vec3{1, 2, 3}, Velocity: mgl32.Vec3{0.1, 0.2, 0.3}, Ready: true, MiningActive: true, MiningTarget: core.BlockPos{X: 1, Y: 2, Z: 3}, MiningProgressTicks: 6, MiningRequiredTicks: 15, MiningHarvestable: true}},
+		{"CommandRejected", network.StatePlay, network.CommandRejected{Sequence: 6, Reason: network.RejectNoTarget}},
+		{"KeepAlive", network.StatePlay, network.KeepAlive{Token: 7}},
+		{"Disconnect", network.StatePlay, network.Disconnect{Code: network.DisconnectServerShutdown, Message: "shutdown"}},
+		{"PlaceBlockSucceeded", network.StatePlay, network.PlaceBlockSucceeded{Sequence: 13}},
 	}
 	for _, fixture := range clientPackets {
 		b.Run("EncodeClient/"+fixture.name, func(b *testing.B) {
@@ -115,9 +119,9 @@ func BenchmarkSmallPacketCodec(b *testing.B) {
 }
 
 func BenchmarkRemotePlayerStateCodec(b *testing.B) {
-	players := make([]RemotePlayerState, 7)
+	players := make([]network.RemotePlayerState, 7)
 	for index := range players {
-		players[index] = RemotePlayerState{
+		players[index] = network.RemotePlayerState{
 			PlayerID:  core.PlayerID{0, 0, 0, byte(index + 1), 0, 0, 0x40, byte(index + 1), 0x80, 0, 0, 0, 0, 0, 0, byte(index + 1)},
 			Dimension: core.Overworld,
 			Position:  mgl32.Vec3{float32(index), 80, float32(-index)},
@@ -125,17 +129,17 @@ func BenchmarkRemotePlayerStateCodec(b *testing.B) {
 			Pitch:     float32(index) * -0.01,
 		}
 	}
-	packet := RemotePlayerStates{ServerTick: 42, Players: players}
+	packet := network.RemotePlayerStates{ServerTick: 42, Players: players}
 	codec := benchmarkCodec(b)
 	defer codec.Close()
-	packetID, payload, err := codec.EncodeServer(StatePlay, packet)
+	packetID, payload, err := codec.EncodeServer(network.StatePlay, packet)
 	if err != nil {
 		b.Fatal(err)
 	}
 	b.Run("Encode", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			_, encoded, err := codec.EncodeServer(StatePlay, packet)
+			_, encoded, err := codec.EncodeServer(network.StatePlay, packet)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -145,7 +149,7 @@ func BenchmarkRemotePlayerStateCodec(b *testing.B) {
 	b.Run("Decode", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			decoded, err := codec.DecodeServer(StatePlay, packetID, payload)
+			decoded, err := codec.DecodeServer(network.StatePlay, packetID, payload)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -155,17 +159,17 @@ func BenchmarkRemotePlayerStateCodec(b *testing.B) {
 }
 
 func BenchmarkChatCommandCodec(b *testing.B) {
-	packet := ChatCommand{Text: strings.Repeat("x", 1024)}
+	packet := network.ChatCommand{Text: strings.Repeat("x", 1024)}
 	codec := benchmarkCodec(b)
 	defer codec.Close()
-	packetID, payload, err := codec.EncodeClient(StatePlay, packet)
+	packetID, payload, err := codec.EncodeClient(network.StatePlay, packet)
 	if err != nil {
 		b.Fatal(err)
 	}
 	b.Run("Encode", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			_, encoded, encodeErr := codec.EncodeClient(StatePlay, packet)
+			_, encoded, encodeErr := codec.EncodeClient(network.StatePlay, packet)
 			if encodeErr != nil {
 				b.Fatal(encodeErr)
 			}
@@ -175,7 +179,7 @@ func BenchmarkChatCommandCodec(b *testing.B) {
 	b.Run("Decode", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			decoded, decodeErr := codec.DecodeClient(StatePlay, packetID, payload)
+			decoded, decodeErr := codec.DecodeClient(network.StatePlay, packetID, payload)
 			if decodeErr != nil {
 				b.Fatal(decodeErr)
 			}
@@ -185,31 +189,31 @@ func BenchmarkChatCommandCodec(b *testing.B) {
 }
 
 func BenchmarkCompanionMessageCodec(b *testing.B) {
-	states := make([]CompanionState, 4)
+	states := make([]network.CompanionState, 4)
 	for index := range states {
-		states[index] = CompanionState{ID: testCompanionID(byte(index + 1)), Dimension: core.Overworld}
+		states[index] = network.CompanionState{ID: testCompanionID(byte(index + 1)), Dimension: core.Overworld}
 	}
 	packets := []struct {
 		name   string
-		packet ServerPacket
+		packet network.ServerPacket
 	}{
 		{"ChatEvent", validAcceptedChatEvent()},
-		{"Spawn", CompanionSpawn{ID: testCompanionID(1), Name: "A", Dimension: core.Overworld}},
-		{"States", CompanionStates{States: states}},
-		{"Despawn", CompanionDespawn{ID: testCompanionID(1)}},
+		{"Spawn", network.CompanionSpawn{ID: testCompanionID(1), Name: "A", Dimension: core.Overworld}},
+		{"States", network.CompanionStates{States: states}},
+		{"Despawn", network.CompanionDespawn{ID: testCompanionID(1)}},
 	}
 	for _, test := range packets {
 		b.Run(test.name, func(b *testing.B) {
 			codec := benchmarkCodec(b)
 			defer codec.Close()
-			packetID, payload, err := codec.EncodeServer(StatePlay, test.packet)
+			packetID, payload, err := codec.EncodeServer(network.StatePlay, test.packet)
 			if err != nil {
 				b.Fatal(err)
 			}
 			b.Run("Encode", func(b *testing.B) {
 				b.ReportAllocs()
 				for b.Loop() {
-					_, encoded, encodeErr := codec.EncodeServer(StatePlay, test.packet)
+					_, encoded, encodeErr := codec.EncodeServer(network.StatePlay, test.packet)
 					if encodeErr != nil {
 						b.Fatal(encodeErr)
 					}
@@ -219,7 +223,7 @@ func BenchmarkCompanionMessageCodec(b *testing.B) {
 			b.Run("Decode", func(b *testing.B) {
 				b.ReportAllocs()
 				for b.Loop() {
-					decoded, decodeErr := codec.DecodeServer(StatePlay, packetID, payload)
+					decoded, decodeErr := codec.DecodeServer(network.StatePlay, packetID, payload)
 					if decodeErr != nil {
 						b.Fatal(decodeErr)
 					}
@@ -232,24 +236,21 @@ func BenchmarkCompanionMessageCodec(b *testing.B) {
 
 func BenchmarkWorstLegalChunkSnapshot(b *testing.B) {
 	snapshot := worstLegalBenchmarkSnapshot()
-	logical, err := encodeLogicalSnapshot(snapshot)
-	if err != nil {
-		b.Fatal(err)
-	}
 	codec := benchmarkCodec(b)
 	defer codec.Close()
-	packetID, payload, err := codec.EncodeServer(StatePlay, snapshot)
+	packetID, payload, err := codec.EncodeServer(network.StatePlay, snapshot)
 	if err != nil {
 		b.Fatal(err)
 	}
+	logicalBytes := binary.LittleEndian.Uint32(payload[:4])
 	b.Run("Encode", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		b.ReportMetric(float64(len(logical))/float64(len(payload)), "compression-ratio")
-		b.ReportMetric(float64(len(logical)), "logical-bytes")
+		b.ReportMetric(float64(logicalBytes)/float64(len(payload)), "compression-ratio")
+		b.ReportMetric(float64(logicalBytes), "logical-bytes")
 		b.ReportMetric(float64(len(payload)), "wire-bytes")
 		for range b.N {
-			_, encoded, err := codec.EncodeServer(StatePlay, snapshot)
+			_, encoded, err := codec.EncodeServer(network.StatePlay, snapshot)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -259,11 +260,11 @@ func BenchmarkWorstLegalChunkSnapshot(b *testing.B) {
 	b.Run("Decode", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		b.ReportMetric(float64(len(logical))/float64(len(payload)), "compression-ratio")
-		b.ReportMetric(float64(len(logical)), "logical-bytes")
+		b.ReportMetric(float64(logicalBytes)/float64(len(payload)), "compression-ratio")
+		b.ReportMetric(float64(logicalBytes), "logical-bytes")
 		b.ReportMetric(float64(len(payload)), "wire-bytes")
 		for range b.N {
-			decoded, err := codec.DecodeServer(StatePlay, packetID, payload)
+			decoded, err := codec.DecodeServer(network.StatePlay, packetID, payload)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -276,11 +277,11 @@ func BenchmarkTCPLoopbackPlayerInput(b *testing.B) {
 	client, server, closePair := benchmarkTCPPair(b)
 	defer closePair()
 	ctx := context.Background()
-	packet := PlayerInput{Sequence: 1, MoveX: 1, MoveZ: -1, Yaw: 0.5, Pitch: -0.25, Mining: true}
+	packet := network.PlayerInput{Sequence: 1, MoveX: 1, MoveZ: -1, Yaw: 0.5, Pitch: -0.25, Mining: true}
 	received := make(chan error, 1)
 	go func() {
 		for range b.N {
-			value, err := server.Recv(ctx, StatePlay)
+			value, err := server.Recv(ctx, network.StatePlay)
 			if err != nil {
 				received <- err
 				return
@@ -292,7 +293,7 @@ func BenchmarkTCPLoopbackPlayerInput(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		if err := client.Send(ctx, StatePlay, packet); err != nil {
+		if err := client.Send(ctx, network.StatePlay, packet); err != nil {
 			b.Fatal(err)
 		}
 		packet.Sequence++
@@ -308,7 +309,7 @@ func BenchmarkTCPLoopbackChunkSnapshot(b *testing.B) {
 	ctx := context.Background()
 	snapshot := worstLegalBenchmarkSnapshot()
 	codec := benchmarkCodec(b)
-	_, payload, err := codec.EncodeServer(StatePlay, snapshot)
+	_, payload, err := codec.EncodeServer(network.StatePlay, snapshot)
 	_ = codec.Close()
 	if err != nil {
 		b.Fatal(err)
@@ -317,7 +318,7 @@ func BenchmarkTCPLoopbackChunkSnapshot(b *testing.B) {
 	received := make(chan error, 1)
 	go func() {
 		for range b.N {
-			value, err := client.Recv(ctx, StatePlay)
+			value, err := client.Recv(ctx, network.StatePlay)
 			if err != nil {
 				received <- err
 				return
@@ -329,7 +330,7 @@ func BenchmarkTCPLoopbackChunkSnapshot(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		if err := server.Send(ctx, StatePlay, snapshot); err != nil {
+		if err := server.Send(ctx, network.StatePlay, snapshot); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -338,17 +339,17 @@ func BenchmarkTCPLoopbackChunkSnapshot(b *testing.B) {
 	}
 }
 
-func benchmarkCodec(b *testing.B) *Codec {
+func benchmarkCodec(b *testing.B) *network.Codec {
 	b.Helper()
-	codec, err := NewCodec()
+	codec, err := network.NewCodec()
 	if err != nil {
 		b.Fatal(err)
 	}
 	return codec
 }
 
-func worstLegalBenchmarkSnapshot() ChunkSnapshot {
-	sections := make([]SectionData, core.SectionsPerChunk)
+func worstLegalBenchmarkSnapshot() network.ChunkSnapshot {
+	sections := make([]network.SectionData, core.SectionsPerChunk)
 	valuesPerWord := 64 / 15
 	words := (core.BlocksPerSection + valuesPerWord - 1) / valuesPerWord
 	for section := range sections {
@@ -357,19 +358,19 @@ func worstLegalBenchmarkSnapshot() ChunkSnapshot {
 			value := uint64((section + index) % int(core.MossyCobblestoneID+1))
 			packed[index/valuesPerWord] |= value << uint((index%valuesPerWord)*15)
 		}
-		sections[section] = SectionData{Y: int32(section), Storage: SectionDirect, Bits: 15, Packed: packed}
+		sections[section] = network.SectionData{Y: int32(section), Storage: network.SectionDirect, Bits: 15, Packed: packed}
 	}
-	return ChunkSnapshot{Dimension: core.Overworld, Chunk: core.ChunkPos{X: -3, Z: 7}, Revision: 19, Sections: sections}
+	return network.ChunkSnapshot{Dimension: core.Overworld, Chunk: core.ChunkPos{X: -3, Z: 7}, Revision: 19, Sections: sections}
 }
 
-func benchmarkTCPPair(b *testing.B) (ClientPacketStream, ServerPacketStream, func()) {
+func benchmarkTCPPair(b *testing.B) (network.ClientPacketStream, network.ServerPacketStream, func()) {
 	b.Helper()
-	listener, err := ListenTCP("127.0.0.1:0")
+	listener, err := networktcp.ListenTCP("127.0.0.1:0")
 	if err != nil {
 		b.Fatal(err)
 	}
 	type acceptResult struct {
-		stream ServerPacketStream
+		stream network.ServerPacketStream
 		err    error
 	}
 	accepted := make(chan acceptResult, 1)
@@ -377,7 +378,7 @@ func benchmarkTCPPair(b *testing.B) (ClientPacketStream, ServerPacketStream, fun
 		stream, err := listener.Accept(context.Background())
 		accepted <- acceptResult{stream: stream, err: err}
 	}()
-	client, err := DialTCP(context.Background(), listener.Addr())
+	client, err := networktcp.DialTCP(context.Background(), listener.Addr())
 	if err != nil {
 		_ = listener.Close()
 		b.Fatal(err)
@@ -393,4 +394,16 @@ func benchmarkTCPPair(b *testing.B) (ClientPacketStream, ServerPacketStream, fun
 		_ = server.stream.Close()
 		_ = listener.Close()
 	}
+}
+
+func validAcceptedChatEvent() network.ChatEvent {
+	return network.ChatEvent{
+		EventID: 1, PlayerID: core.PlayerID(testCompanionID(9)), PlayerName: "Chen",
+		CompanionID: testCompanionID(1), CompanionName: "A",
+		Kind: network.ChatEventAccepted, RejectReason: network.ChatRejectNone, Command: "x",
+	}
+}
+
+func testCompanionID(last byte) companion.ID {
+	return companion.ID{0: 0x10, 6: 0x40, 8: 0x80, 15: last}
 }

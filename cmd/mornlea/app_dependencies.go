@@ -12,6 +12,7 @@ import (
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/network"
+	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 	"github.com/channing771/mornlea/internal/render"
 	"github.com/channing771/mornlea/internal/server"
 	"github.com/channing771/mornlea/internal/storage"
@@ -46,7 +47,7 @@ func defaultApplicationDependencies() applicationDependencies {
 			return assets.NewRegistryWithOverride(os.DirFS(path))
 		},
 		openStore:   openApplicationStore,
-		dialTCP:     network.DialTCP,
+		dialTCP:     networktcp.DialTCP,
 		loginClient: network.LoginClientWithSeed,
 		newHost: func(
 			ctx context.Context,

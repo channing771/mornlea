@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/network"
+	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 )
 
 // TestHostLoginSuccessCarriesStoreSeedAcrossTransports 验证 `Host` 在构造
@@ -85,7 +86,7 @@ func loginSeedOverMemory(t *testing.T, host *Host) network.LoginSuccess {
 // loginSeedOverTCP 走专用服务端同款路径：`Host.Run` 的 TCP `acceptLoop`。
 func loginSeedOverTCP(t *testing.T, host *Host) network.LoginSuccess {
 	t.Helper()
-	listener, err := network.ListenTCP("127.0.0.1:0")
+	listener, err := networktcp.ListenTCP("127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +107,7 @@ func loginSeedOverTCP(t *testing.T, host *Host) network.LoginSuccess {
 
 	ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
 	defer cancel()
-	clientStream, err := network.DialTCP(ctx, listener.Addr())
+	clientStream, err := networktcp.DialTCP(ctx, listener.Addr())
 	if err != nil {
 		t.Fatal(err)
 	}

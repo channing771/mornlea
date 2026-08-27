@@ -11,6 +11,7 @@ import (
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
@@ -100,7 +101,7 @@ func startDiskHost(t *testing.T, root, address string, generator Generator) inte
 	if err != nil {
 		t.Fatalf("OpenDisk: %v", err)
 	}
-	listener, err := network.ListenTCP(address)
+	listener, err := networktcp.ListenTCP(address)
 	if err != nil {
 		_ = store.Close()
 		t.Fatalf("ListenTCP: %v", err)
@@ -132,7 +133,7 @@ func dialIntegrationClient(t *testing.T, address string, identity network.Identi
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
 	defer cancel()
-	stream, err := network.DialTCP(ctx, address)
+	stream, err := networktcp.DialTCP(ctx, address)
 	if err != nil {
 		t.Fatalf("DialTCP: %v", err)
 	}
