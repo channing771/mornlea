@@ -52,6 +52,8 @@ id(u16) opaque(u8) emission(u8) material[6](u16) fluidHeight(u8) lightAttenuatio
 
 - standing：竖直居中窄柱（两片双面 quad 或四片薄片，按固定上界）；wall：贴近对应支撑面、向远离支撑方向倾斜的窄柱。坐标全部限制在本格内；双面（正背各一片，惯用 plant 的 face 编组）；alpha cutout 走既有 terrain pass；不参与 greedy merge（与短方块、植物同一豁免路径）。
 - light/AO/材质均来自 registry 与邻域既有规则（无火把专属光照公式）；quad 仍是 8 字节、bit 63 空闲。
+- **交叉斜面编组通用化**：落地火把复用植物的 face 6/7 交叉斜面编组表达竖直窄柱，Go `internal/mesh/quad.go` 的打包断言因此从双向（face 6/7 ⟺ 植物区间 material）放宽为**单向**——植物区间的 material 只允许出现在 face 6/7 上，反方向不设限，与 Rust `quad.rs` 的 pack 断言同口径。被否方案：为火把新开 face 值会耗尽 3 位 face 字段（0..7 仅剩 6/7 可用），新开 bit 则侵犯预留的 bit 63。
+- **客户端解码半边**：火把斜面携带角高度（斜顶边），`mornlea_client` 的 terrain.wgsl 角高度解码门控必须认识火把材质——扩 `torch_material`（==58，即纹理层的火把层号）进门控、`shaders.rs` 增加 `TORCH_MATERIAL` 常量；已知渲染边界：世界坐标锁定 UV 使共用竖直火柄纹理保持竖直，墙面倾斜体现在斜板的斜顶边。贴面帽的法线朝向支撑块，经 cull 背面剔除与支撑块遮挡后实际近乎不可见，墙面火把的正面观感由两片斜板承担；该观感边界交 `torch-night` golden 与逐图人工复核把关。
 
 ## 纹理
 
