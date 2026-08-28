@@ -273,3 +273,16 @@
     访问器已删除）。
   - 依赖方向：main → app 单向；app 不导入 capture/benchmark（源码 import
     经 archcheck dependency 守卫与 `go list` 复核）。
+
+### Task 5.1 + 5.2（依赖方向断言与文档体系）
+
+- 实现 SHA：`bd47913a`（5.1 archcheck 断言）、`fcfb4b3b`（5.2 文档体系）、
+  `c41571c8`（tasks/ledger）；R1 修复 `112b268d`。
+- 双评审裁决：SPEC PASS（30+ 处文档事实抽样全部核实、原 14 条约束零丢失、
+  GOOS 平台稳健性经 `GOOS=linux go list` 实测复核成立）；QUALITY
+  CHANGES_REQUESTED → R1 闭环：SF-1 archcheck 注释 build-tag 机制表述按包
+  区分改准、SF-2 capture 移出 `-short` 包清单（全包无 Short 守卫）、SF-3
+  test-organization 计数 94 → 89、SPEC 措辞「共享常量」→「常量与值类型」
+  并顺带修正 `CaptureWidth/Height` 声明文件标注。
+- 控制会话跟进项：`e621dd74` race-changed 子包 cdylib 消费识别与重型提示
+  （Task 5 发现的 T1 工具缺口）；proposal 引言计数 94 → 89 由控制会话更正。

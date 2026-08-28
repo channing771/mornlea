@@ -2,7 +2,7 @@
 
 ## Why
 
-`cmd/mornlea` 以单一 `package main` 平铺 94 个 Go 文件（约 2.4 万行），
+`cmd/mornlea` 以单一 `package main` 平铺 89 个 Go 文件（约 2.4 万行），
 `application` 装配、输入/UI、capture 视觉 golden 与 benchmark 性能场景混在
 同一包内。后果：
 
