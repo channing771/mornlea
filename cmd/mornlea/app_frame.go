@@ -60,6 +60,9 @@ func (a *application) frame(drainMax, meshWorkMax int, elapsed time.Duration) (b
 	if a.companions != nil {
 		a.companions.Advance(elapsed)
 	}
+	if a.hostiles != nil {
+		a.hostiles.Advance(elapsed)
+	}
 	return a.renderFrame(meshWorkMax)
 }
 
@@ -82,6 +85,13 @@ func (a *application) renderFrame(workMax int) (bool, error) {
 			a.remoteAvatars,
 			a.remoteNameTags,
 			a.companionPresentations,
+		)
+	}
+	if a.hostiles != nil {
+		a.hostilePresentations = a.hostiles.AppendPresentations(a.hostilePresentations[:0])
+		a.remoteAvatars = appendHostileRenderPresentationsInto(
+			a.remoteAvatars,
+			a.hostilePresentations,
 		)
 	}
 	blockOutline := render.BlockOutline{}

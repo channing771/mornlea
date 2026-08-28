@@ -53,6 +53,7 @@ func newRemoteRenderApplication(t *testing.T, glyphs render.GlyphSource) *applic
 		itemDrops:       client.NewItemDrops(),
 		remotePlayers:   client.NewRemotePlayers(),
 		companions:      &client.Companions{},
+		hostiles:        &client.Hostiles{},
 		remoteNameTags:  make([]render.NameTag, 0, maxFrameNameTags),
 		mirror:          client.NewMirror(),
 		predictor:       client.NewPredictor(),
@@ -127,11 +128,80 @@ func TestApplicationRendersSevenPlayersAndFourCompanionsInOneAvatarStream(t *tes
 	if glyphs.flushes != 1 {
 		t.Fatalf("NameTag Prepare/Flush 次数=%d，想要 1", glyphs.flushes)
 	}
-	if err := validateEntityPresentationCounts(make([]render.Avatar, 12), app.remoteNameTags); err == nil {
-		t.Fatal("12 个 Avatar 未被 App 层原子拒绝")
+	if err := validateEntityPresentationCounts(make([]render.Avatar, 76), app.remoteNameTags); err == nil {
+		t.Fatal("76 个 Avatar 未被 App 层原子拒绝")
+	}
+	if err := validateEntityPresentationCounts(make([]render.Avatar, maxFrameAvatars), app.remoteNameTags); err != nil {
+		t.Fatalf("%d 个 Avatar 被误拒: %v", maxFrameAvatars, err)
 	}
 	if err := validateEntityPresentationCounts(app.remoteAvatars, make([]render.NameTag, 13)); err == nil {
 		t.Fatal("13 个 NameTag 未被 App 层原子拒绝")
+	}
+}
+
+// TestApplicationRendersHostilesWithoutNameTags 锁定夜行者的呈现路径：镜像
+// 记录进入 avatar 通道（敌怪身份域键），但绝不产生任何名称标签，玩家/伙伴
+// 的名标不受影响。
+func TestApplicationRendersHostilesWithoutNameTags(t *testing.T) {
+	glyphs := &integrationGlyphSource{}
+	app := newRemoteRenderApplication(t, glyphs)
+	app.companions = &client.Companions{}
+	configureTargetFeedback(t, app)
+	if err := app.remotePlayers.Apply(remoteSpawn(
+		1, "Remote", 1, mgl32.Vec3{0, 2, -4},
+	)); err != nil {
+		t.Fatal(err)
+	}
+	companionID := companion.ID(integrationPlayerID(1))
+	if err := app.companions.ApplySpawn(network.CompanionSpawn{
+		ID: companionID, Name: "阿木", Tick: 1, Dimension: core.Overworld,
+		Position: mgl32.Vec3{1, 2, -8},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.hostiles.ApplySpawn(network.HostileSpawn{ServerTick: 1, Spawns: []network.HostileSpawnRecord{
+		{ID: 7, Dimension: core.Overworld, Position: mgl32.Vec3{-2, 1, -6}, Yaw: 0.25, Health: 13},
+		{ID: 9, Dimension: core.Overworld, Position: mgl32.Vec3{4, 1, -6}, Yaw: -1.5, Health: 20},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if rendered, err := app.renderFrame(1); err != nil || !rendered {
+		t.Fatalf("renderFrame=(%v,%v)", rendered, err)
+	}
+	hostileKeys := map[render.EntityKey]struct{}{
+		render.HostileEntityKey(7): {}, render.HostileEntityKey(9): {},
+	}
+	hostileAvatars := 0
+	for _, avatar := range app.remoteAvatars {
+		if _, hostile := hostileKeys[avatar.Key]; hostile {
+			hostileAvatars++
+		}
+	}
+	if hostileAvatars != 2 {
+		t.Fatalf("avatar 通道中的夜行者=%d，想要 2", hostileAvatars)
+	}
+	for _, tag := range app.remoteNameTags {
+		if _, hostile := hostileKeys[tag.Key]; hostile {
+			t.Fatalf("夜行者 %v 产生了名称标签", tag.Key)
+		}
+	}
+	// 玩家 + 伙伴 + 目标方块的名标数量不受夜行者影响（3 具名标身体 + 1 目标）。
+	if got, want := len(app.remoteNameTags), 3; got != want {
+		t.Fatalf("name tags=%d，想要 %d", got, want)
+	}
+
+	// despawn 后夜行者从 avatar 通道消失，后续帧不再出现。
+	if err := app.hostiles.ApplyDespawn(network.HostileDespawn{ServerTick: 2, IDs: []uint64{7, 9}}); err != nil {
+		t.Fatal(err)
+	}
+	if rendered, err := app.renderFrame(1); err != nil || !rendered {
+		t.Fatalf("despawn 后 renderFrame=(%v,%v)", rendered, err)
+	}
+	for _, avatar := range app.remoteAvatars {
+		if _, hostile := hostileKeys[avatar.Key]; hostile {
+			t.Fatalf("despawn 后夜行者 %v 仍被渲染", avatar.Key)
+		}
 	}
 }
 
@@ -139,9 +209,10 @@ func TestApplicationRejectsActorOverflowBeforeGPUOrAtlasMutation(t *testing.T) {
 	glyphs := &integrationGlyphSource{}
 	app := newRemoteRenderApplication(t, glyphs)
 	configureTargetFeedback(t, app)
-	for index := range 12 {
+	// 76 具身体越界：第 76 具在 App 层被原子拒绝（帧边界稳定报告）。
+	for index := range 76 {
 		if err := app.remotePlayers.Apply(remoteSpawn(
-			byte(index+1), "Remote", 1, mgl32.Vec3{float32(index), 2, -4},
+			byte(index%255+1), "Remote", 1, mgl32.Vec3{float32(index), 2, -4},
 		)); err != nil {
 			t.Fatal(err)
 		}

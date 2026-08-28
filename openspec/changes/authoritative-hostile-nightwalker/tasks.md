@@ -47,12 +47,12 @@
 
 ## 7. 协议、客户端镜像插值、75-body avatar 与 client ABI v10
 
-- [ ] 7.1 失败测试：wire 值域（三类消息各 `<ServerTick u64 + count u8 + ≤64 records>`、ID 严格升序；spawn/state/despawn 字段；拒绝重复/逆序/零 ID、NaN/Inf、非法 health/dimension、count 65、截断/尾随；Memory/TCP round trip + fuzz seed）
-- [ ] 7.2 registry/packet/codec 接线（S→C 22/23/24，实现期以注册表实占空闲位为准；`ProtocolVersion` 29→30；`ValidateServerPacket`、codec_server 分支、`registry_test`）与 per-session publication（只发已订阅 chunk；进入发 spawn、逐 tick state、离开/死亡 despawn；每类每 tick ≤1 包 64 条 ID 升序；Memory/TCP transcript 一致）
-- [ ] 7.3 客户端 latest-wins 镜像（固定 64 records；spawn 建立、state 只接受更新 tick、despawn 删除；未知 state 请求下一 spawn 不隐式造实体；插值复用远端时间边界）与 `presentation_conversion_test`
-- [ ] 7.4 avatar 容量 11→75/66→450（`internal/render/avatar.go`、Go/Rust 上传大小、indirect offset、容量错误；`EntityHostile` kind、16-byte key 写 ID u64、6-cuboid 原创暗青/灰紫调色与不同头身比例；nametag ≤12 且永不加入 hostile）+ Rust `AVATAR_MAX_INSTANCES` 同步
-- [ ] 7.5 client ABI v9→v10（`engine/include/mornlea_client.h`、`mornlea_client` ffi/lib、Go 侧校验；旧 ABI 早期拒绝）与两份基线文档协议 v30、client ABI v10、`hostile_mobs` v1 版本行同步（两份逐字节相同，`cmp -s`）+ `TestBaselineVersionsMatchCode`
-- [ ] 7.6 `gofmt -w internal/network internal/server internal/client internal/render cmd/mornlea`、`make rust`、`go test ./internal/network ./internal/server ./internal/client ./internal/render ./internal/nativeabi ./cmd/mornlea -race -count=1`；双评审后提交 `feat: present hostile nightwalkers`
+- [x] 7.1 失败测试：wire 值域（三类消息各 `<ServerTick u64 + count u8 + ≤64 records>`、ID 严格升序；spawn/state/despawn 字段；拒绝重复/逆序/零 ID、NaN/Inf、非法 health/dimension、count 65、截断/尾随；Memory/TCP round trip + fuzz seed）
+- [x] 7.2 registry/packet/codec 接线（S→C 22/23/24，实现期以注册表实占空闲位为准；`ProtocolVersion` 29→30；`ValidateServerPacket`、codec_server 分支、`registry_test`）与 per-session publication（只发已订阅 chunk；进入发 spawn、逐 tick state、离开/死亡 despawn；每类每 tick ≤1 包 64 条 ID 升序；Memory/TCP transcript 一致）
+- [x] 7.3 客户端 latest-wins 镜像（固定 64 records；spawn 建立、state 只接受更新 tick、despawn 删除；未知 state 请求下一 spawn 不隐式造实体；插值复用远端时间边界）与 `presentation_conversion_test`
+- [x] 7.4 avatar 容量 11→75/66→450（`internal/render/avatar.go`、Go/Rust 上传大小、indirect offset、容量错误；`EntityHostile` kind、16-byte key 写 ID u64、6-cuboid 原创暗青/灰紫调色与不同头身比例；nametag ≤12 且永不加入 hostile）+ Rust `AVATAR_MAX_INSTANCES` 同步
+- [x] 7.5 client ABI v9→v10（`engine/include/mornlea_client.h`、`mornlea_client` ffi/lib、Go 侧校验；旧 ABI 早期拒绝）与两份基线文档协议 v30、client ABI v10、`hostile_mobs` v1 版本行同步（两份逐字节相同，`cmp -s`）+ `TestBaselineVersionsMatchCode`
+- [x] 7.6 `gofmt -w internal/network internal/server internal/client internal/render cmd/mornlea`、`make rust`、`go test ./internal/network ./internal/server ./internal/client ./internal/render ./internal/nativeabi ./cmd/mornlea -race -count=1`；双评审后提交 `feat: present hostile nightwalkers`
 
 ## 8. 视觉场景构造与功能线终审
 

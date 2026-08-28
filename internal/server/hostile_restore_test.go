@@ -12,6 +12,7 @@ import (
 	"hash/crc32"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
@@ -189,6 +190,23 @@ func TestHostileStartupRejectsDuplicateAndOverlimitWithoutTruncation(t *testing.
 			}
 		})
 	}
+}
+
+// 构造失败发生在夜行者持久化 worker 启动之后：恢复阶段拒绝必须在返回错误前
+// 停掉 worker，否则每次启动失败都泄漏一个永不退出的 goroutine。
+func TestNewHostConstructionErrorStopsHostilePersistenceWorker(t *testing.T) {
+	baseline := runtime.NumGoroutine()
+	store := &hostileLoadOverrideStore{hostTestStore: newHostTestStore()}
+	store.loaded = storage.StoredHostileMobs{Revision: 1, Records: []storage.StoredHostileMob{
+		hostileRestoreFixture()[0],
+		// 与首条重复的 ID：加载边界不拦截（注入），恢复阶段整体拒绝，
+		// `newWorld` 以错误返回——这正是 worker 泄漏的错误路径。
+		hostileRestoreFixture()[0],
+	}}
+	if _, err := NewHost(context.Background(), hostTestConfig(), flatTestGenerator{}, store); err == nil {
+		t.Fatal("重复 ID 存档被接受，想要 NewHost 启动失败")
+	}
+	waitForGoroutineCeiling(t, baseline)
 }
 
 // hostileOverlimitFixture 返回 count 条逐字段合法、ID 严格升序的记录。

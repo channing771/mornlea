@@ -216,6 +216,24 @@ func (a *application) drainServerMessages(maxMessages int) {
 				return
 			}
 			continue
+		case network.HostileSpawn:
+			if err := a.hostiles.ApplySpawn(message); err != nil {
+				a.closeClientSession(err)
+				return
+			}
+			continue
+		case network.HostileState:
+			if err := a.hostiles.ApplyStates(message); err != nil {
+				a.closeClientSession(err)
+				return
+			}
+			continue
+		case network.HostileDespawn:
+			if err := a.hostiles.ApplyDespawn(message); err != nil {
+				a.closeClientSession(err)
+				return
+			}
+			continue
 		case network.ChatEvent:
 			if err := a.chatEvents.Apply(message); err != nil {
 				a.closeClientSession(err)

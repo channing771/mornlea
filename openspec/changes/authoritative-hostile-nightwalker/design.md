@@ -72,7 +72,7 @@
 - 消息：S→C 22/23/24（21 已被 `CraftingState` 占用；实现期以注册表实占空闲位为准，与并行行撞号时由后合并者重订）。
 - publication 复用 `queueReadyAndResync` 的订阅判定与 `publishSession` 的每会话路径；新增 hostile 段（spawn/state/despawn 各每 tick 至多一包）。
 - client：`internal/client/hostiles.go` latest-wins 镜像；插值复用远端时间边界；frame 组装在 avatar 段追加夜行者记录。
-- Rust：`AVATAR_MAX_INSTANCES` 66→450、`maxAvatars` 11→75；新增 `EntityHostile`（Go 侧 kind 3）；head/body 比例 6 cuboids 不变；调色暗青/灰紫；nametag 集合不加入 hostile。
+- Rust：`AVATAR_MAX_INSTANCES` 66→450、`maxAvatars` 11→75；新增 `EntityHostile`（Go 侧 kind 4——设计初稿写的 kind 3 已被现行 `EntityTarget` 目标名牌域实占，按「实现期以实占空闲位为准」的同源裁决顺延取下一空闲值，与玩家 1/伙伴 2/名牌 3 的键域两两不相交）；head/body 比例 6 cuboids 不变；调色暗青/灰紫；nametag 集合不加入 hostile。
 - client ABI `MORNLEA_CLIENT_ABI_VERSION 9→10`（`mornlea_client.h` 与 Go 侧校验同步）；两份基线文档同步协议 v30、client ABI v10、`hostile_mobs` v1 三处版本行（A-04-q1 裁决 + 重定基线扩展）。
 
 ### D7：持久化与备份

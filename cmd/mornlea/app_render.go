@@ -84,6 +84,22 @@ func appendCompanionRenderPresentationsInto(
 	return avatars, tags
 }
 
+// appendHostileRenderPresentationsInto 把夜行者镜像转换为 avatar 记录：
+// 夜行者只进入实体通道，绝不进入名称标签集合（名标容量不随敌怪数量变化）。
+func appendHostileRenderPresentationsInto(
+	avatars []render.Avatar,
+	presentations []client.HostilePresentation,
+) []render.Avatar {
+	for _, presentation := range presentations {
+		avatars = append(avatars, render.Avatar{
+			Key:      render.HostileEntityKey(presentation.ID),
+			Position: presentation.Position,
+			Yaw:      presentation.Yaw,
+		})
+	}
+	return avatars
+}
+
 func validateEntityPresentationCounts(avatars []render.Avatar, tags []render.NameTag) error {
 	if len(avatars) > maxFrameAvatars {
 		return fmt.Errorf("avatar count %d exceeds %d", len(avatars), maxFrameAvatars)

@@ -22,7 +22,13 @@ func TestInterestObserverSamplesEachObserverAndNilIsOptional(t *testing.T) {
 		}
 		samples.Add(1)
 	}
-	running := &Server{config: config, sessions: make(map[sim.SessionID]*session)}
+	// 夜行者发布从 tick 末的 Engine 值快照取数：publish 需要 Engine 存在
+	// （与 queueReadyAndResync 的订阅判定同一结构前提）。
+	running := &Server{
+		config:   config,
+		engine:   sim.NewEngine(0, 0, 0),
+		sessions: make(map[sim.SessionID]*session),
+	}
 	for index := 1; index <= 8; index++ {
 		id := sim.SessionID(index)
 		running.sessions[id] = &session{

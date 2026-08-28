@@ -4,13 +4,13 @@
 //! CPU 准备(排序、部件构建、动画相位)留在 Go,80 字节/实例的字节流经
 //! frame v2 pass 段过境;本模块只负责与 Go 相同的 dynamic 缓冲布局
 //! (camera 80B @0、instances @256、indirect 20B 随后)、立方体几何与
-//! indexed indirect 绘制。两个 pass 仅容量不同:avatar 66 实例(11 具身体
-//! × 6 部件),掉落物 800 实例。
+//! indexed indirect 绘制。两个 pass 仅容量不同:avatar 450 实例(75 具身体
+//! × 6 部件,玩家+伙伴+敌怪合计),掉落物 800 实例。
 
 /// 每实例字节数:mat4(64)+ RGBA color(16),与 Go `avatarInstanceBytes` 一致。
 pub const ENTITY_INSTANCE_BYTES: usize = 80;
-/// avatar 实例容量(11 具身体 × 6 部件)。
-pub const AVATAR_MAX_INSTANCES: usize = 66;
+/// avatar 实例容量(75 具身体 × 6 部件),与 Go `render.maxAvatars` 同源。
+pub const AVATAR_MAX_INSTANCES: usize = 450;
 /// 掉落物实例容量(core.MaxSessionDrops)。
 pub const DROP_MAX_INSTANCES: usize = 800;
 /// camera uniform 字节数与 instances 的缓冲偏移(uniform 对齐 256)。

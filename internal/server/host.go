@@ -204,6 +204,9 @@ func NewHost(
 	hostiles := newHostilePersistence(store, loadedHostiles, config)
 	world, err := newWorld(config, generator, store, companions, hostiles)
 	if err != nil {
+		// 持久化 worker 已随构造启动；恢复/装配阶段的任何失败都必须先停掉
+		// worker 再返回，否则每次启动失败都泄漏一个永不退出的 goroutine。
+		hostiles.Close()
 		return nil, err
 	}
 	gate := make(chan struct{}, 1)

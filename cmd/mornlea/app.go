@@ -21,7 +21,9 @@ import (
 )
 
 const (
-	maxFrameAvatars  = 11
+	// maxFrameAvatars 是 App 层每帧身体上限（与 `render.maxAvatars` 的
+	// 75 同步）：第 76 具在帧边界被原子拒绝，不触碰 GPU 上传。
+	maxFrameAvatars  = 75
 	maxFrameNameTags = 12
 )
 
@@ -97,6 +99,7 @@ type application struct {
 	lastFrameStats  render.FrameStats
 	remotePlayers   *client.RemotePlayers
 	companions      *client.Companions
+	hostiles        *client.Hostiles
 	chatEvents      *client.ChatEvents
 	chatInput       chatInput
 	// chatEventBuffer 是 refreshChatLines 的复用缓冲，容量与 client.ChatEventCapacity
@@ -110,6 +113,7 @@ type application struct {
 	remotePresentations    []client.RemotePresentation
 	companionPresentations []client.CompanionPresentation
 	remoteAvatars          []render.Avatar
+	hostilePresentations   []client.HostilePresentation
 	remoteNameTags         []render.NameTag
 	nameTagRenderer        *render.NameTagRenderer
 	hotbarRenderer         *hud.HotbarRenderer
