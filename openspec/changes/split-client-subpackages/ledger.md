@@ -56,6 +56,12 @@
   三条约束下唯一可行解是 capture 新建 `capture_load.go` 承载副本并把
   `captureDrainMax` 改为同值字面量，Task 4 迁移 benchmark 时下沉 app 收敛。
   已同步修订 design Decision 3 与文件簇映射。
+- Ruling: app 包为加载等待函数族参数新增导出接口 `LoadingApplication`（Task 4
+  的函数族下沉组成面）— 函数族下沉后住在 app，capture 的调用点持有
+  `SceneApplication` 接口值，若参数取具体 `*Application` 则 capture 必须类型
+  断言，违反 Decision 2 的消费端接口模式；六方法参数接口使 `SceneApplication`
+  与 benchmark 传入的具体 `*Application` 均隐式满足、直传无需断言。除该接口
+  与函数族五导出、`MessageDrainMax` 常量外，app 本任务零新增导出。
 - Ruling: `ai_model_settings_test.go` 留 main 包（design 初稿举例否决）— 按
   「Test 函数直接调用的生产符号」判定，其两个测试只调用 main 域
   `runWithDependencies`/`runDependencies` 与 app 导出面，grep 核实无任何
@@ -67,6 +73,58 @@
   保持非导出。已同步修订 design Decision 2。
 
 ## Review Log
+
+### Task 4.1（benchmark 包提取与函数族收敛）
+
+- 实现 SHA：`372ef030`（包迁移与接线）、`9bd7e3bf`（函数族下沉 app 收敛 +
+  Makefile）。
+- 验证输出摘要（worktree `refactor/client-subpackages`，基线 `a5776e33`）：
+  - `make rust`：release 增量构建通过；`engine/target/release/` 双 dylib
+    （`libmornlea_engine.dylib`、`libmornlea_client.dylib`）在位。
+  - `go build ./...`：通过；`gofmt -l cmd/mornlea`：无输出；
+    `go vet ./cmd/mornlea/... ./internal/archcheck`：通过。
+  - `-list` 并集比对：`go test ./cmd/mornlea ./cmd/mornlea/app
+    ./cmd/mornlea/capture ./cmd/mornlea/benchmark -list '.*'` 与
+    `baseline-test-list.txt` 过滤后排序 `diff` 零差异（384 Test +
+    1 Benchmark，385 行逐一相同；基线文件尾部混入的一行 `ok` 输出非测试入口）。
+  - `go test ./internal/archcheck -count=1`：通过（约 5s；基线版本守卫的
+    `benchmark.go` 读取路径随迁修正后转绿）。
+  - `go test ./cmd/mornlea/benchmark -race -count=1`：`ok ... 66.1s`。
+  - `go test ./cmd/mornlea/capture -race -count=1`：`ok ... 4.4s`。
+  - `make test-multiplayer`：四包全绿（client/server/benchmark/perfcheck），
+    benchmark 用例经 `./cmd/mornlea/benchmark` 选中。
+  - 补充：`go test ./cmd/mornlea -count=1` 1.0s 通过（main.go/run_test.go
+    接线与迁入的内存上限回归所在包）。
+- 实施裁决（详见 Rulings）：
+  - 加载等待函数族与 drain 常量下沉 app 落点：`app/app_load.go` 导出
+    `WaitUntilLoaded`/`LoadedChunkTarget`/`ApplicationLoadComplete`/
+    `WaitUntilLoadedPair`/`WaitUntilLoadedPairWithStep` 与 `MessageDrainMax`；
+    capture 删除 `capture_load.go` 副本改调 app，benchmark 删除原实现改调 app。
+  - app 为函数族参数新增导出接口 `LoadingApplication`（Frame/Window/
+    LoadedChunks/Mesher/Scheduler/Render 六方法）：capture 的
+    `SceneApplication` 与 benchmark 传入的具体 `*Application` 均隐式满足，
+    接口值直传无需类型断言；除此之外 app 零新增导出（函数族六导出 + 常量
+    即任务许可的「函数族下沉」面）。
+  - benchmark 消费端接口 `BenchmarkApplication` 共 15 方法（Frame、Window、
+    Renderer、Scheduler、NameTagRenderer、Camera、Server、Mirror、
+    RemotePlayers、LastFrameStats、MultiplayerRenderTiming、
+    SetMultiplayerRenderTiming、SetMultiplayerRenderNow、
+    CloseClientSession、ClientCloseErr），经 grep 对照生产代码实际 `app.`
+    引用无未消费方法；RunBenchmark 经具体类型消费其余 11 个访问面。
+  - `TestClientMemoryLimitLeavesHeadroomAboveLiveHeap` 按「Test 函数直接
+    调用的生产符号」留在 main（`clientMemoryLimit` 是 main 域符号），自
+    `cooldown_test.go` 平移至 `run_test.go`，函数体零改动；benchmark 三个
+    冷却测试随包迁移。测试函数名与 `t.Run` 标签逐一不变。
+  - `benchmark_measure.go` 原 194 行注释的陈旧 `application.frame` 表述随
+    函数族上移改为 `Frame` 方法表述（Task 3 评审遗留 note 闭环）。
+  - `internal/archcheck/baseline_test.go` 的 benchmark scenario 守卫读取
+    路径 `cmd/mornlea/benchmark.go` → `cmd/mornlea/benchmark/benchmark.go`。
+  - Makefile `test-multiplayer` 的 `./cmd/mornlea` 改为
+    `./cmd/mornlea/benchmark`（main 包已无匹配该 `-run` 模式的测试；
+    `-run` 模式内容零改动，`ScenarioV6` 备选在基线即为空匹配，维持原样）。
+- 工作区备注：接手时 worktree 已存在同任务的未提交半成品（git mv 暂存、
+  包声明改写、接口与 main 接线初稿），本任务在其基础上续作并复核；
+  半成品中 `cooldown_test.go` 导入分组的 gofmt 违例已修正。
 
 ### Task 3.1 + 3.2（capture 包提取与 golden 路径同步）
 

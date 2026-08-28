@@ -15,7 +15,7 @@
 
 ## 4. benchmark 包提取
 
-- [ ] 4.1 创建 `cmd/mornlea/benchmark`（`package benchmark`），迁入 benchmark 生产文件、对应测试、`benchmark_helpers_test.go` 与 `raceEnabled` 常量对；benchmark 经包内消费端接口访问 app 状态；共享常量下沉 app；更新 `Makefile` `test-multiplayer` 包路径。验证：`go test ./cmd/mornlea/benchmark -race -count=1`；`make test-multiplayer`。
+- [x] 4.1 创建 `cmd/mornlea/benchmark`（`package benchmark`），迁入 benchmark 生产文件、对应测试、`benchmark_helpers_test.go` 与 `raceEnabled` 常量对；benchmark 经包内消费端接口访问 app 状态；共享常量下沉 app；更新 `Makefile` `test-multiplayer` 包路径。验证：`go test ./cmd/mornlea/benchmark -race -count=1`；`make test-multiplayer`。
 
 ## 5. 依赖方向守卫与文档
 
