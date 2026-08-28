@@ -67,7 +67,7 @@ openspec 主规格 `repository-code-organization`。
 ## 传输一致性
 
 - Memory 与 TCP 必须受同一 packet/codec 契约约束，并复用登录和上层模拟路径；不得为本地连接建立绕过校验、登录或权威模拟的特权路径。
-- 根包持有共享 stream 接口、Play endpoint 门面、登录状态机和 Memory transport；协议消息层住 `protocol`、编解码与帧封装住 `codec`、TCP listener/dial/stream 住 `tcp` 且只承担 transport 职责。三者都不决定业务结果，登录状态转换集中在既有 `Login*` 路径。
+- 根包持有共享 stream 接口、Play endpoint 门面、登录状态机和 Memory transport；协议消息层住 `protocol`、编解码与帧封装住 `codec`、TCP listener/dial/stream 住 `tcp` 且只承担 transport 职责。四者都不决定业务结果，登录状态转换集中在既有 `Login*` 路径。
 - TCP 面向可信局域网，现有协议没有认证或加密。不要把它描述为公网安全，也不要用这一既有边界作为降低输入校验的理由。
 
 ## 协议演进
@@ -97,3 +97,5 @@ openspec 主规格 `repository-code-organization`。
 | tcp transport | `go test ./internal/network/tcp -race -count=1` |
 | 全子树（跨域改动） | `go test ./internal/network/... -race -count=1` |
 | 依赖方向 / 文档守卫 | `go test ./internal/archcheck -count=1` |
+
+- 当前文档入口：`docs/notes/lan-server.md`（TCP 可信局域网信任边界与部署约束）。

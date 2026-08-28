@@ -1,3 +1,6 @@
+// Package codec 承载线上编解码层：字节编码原语、双向 packet 编解码分发、
+// `ChunkSnapshot` 压缩专路与帧封装。companion/hostile 的 wire 编解码同属
+// 本包；本包依赖 `protocol` 包的类型与校验（codec → protocol 单向边）。
 package codec
 
 import (

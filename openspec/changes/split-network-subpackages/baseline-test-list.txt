@@ -1,4 +1,4 @@
-# 基线快照：go test ./internal/network/... -list '.*'（基线 6fd03011，2026-08-28，剔除空行与 ok 行，条目按原始输出逐行保留）
+# 基线快照：go test ./internal/network/... -list '.*'（基线 6fd03011，2026-08-28，条目按原始输出逐行保留，比对剥离 # 行与空行后逐名比对）
 # 计数：internal/network 根包 164（Test 151 + Benchmark 7 + Fuzz 6）+ internal/network/tcp 33（Test 33）= 197
 # 计时基线（同基线 SHA 实测，根包 -race -count=1）：2.797s（复跑确认 2.629s），均 ok
 

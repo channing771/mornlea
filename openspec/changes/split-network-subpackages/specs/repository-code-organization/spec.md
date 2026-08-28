@@ -107,7 +107,8 @@ var 函数别名再导出全部迁出符号，既有 `network.X` 引用 MUST 继
 - **GIVEN** 拆分前已持久化 `go test ./internal/network/... -list '.*'`
   全量快照（根包 164 + tcp 33 = 197 项）
 - **WHEN** 拆分完成并对 `./internal/network/...` 各包取 `-list` 并集
-- **THEN** Test、Benchmark、Fuzz 入口集合 MUST 与快照一致
+- **THEN** 剥离快照的 `#` 分节行与空行后，Test、Benchmark、Fuzz 入口集合
+  MUST 与快照逐名一致
 - **AND** 子测试标签 MUST 逐一不变
 
 #### Scenario: 单域迭代不为其他域付费

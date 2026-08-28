@@ -76,9 +76,9 @@ PR #109 拆出且消费根包仅 6 类符号。测试入口 197 项：根包 164
 internal/network/
 ├── types.go                    # package doc + 别名再导出（消费面零改动）
 ├── stream.go / transport.go / memory.go / login.go   # 根包保留会话与传输编排
-├── login_test.go / memory_test.go / seed_test.go / benchmark_test.go / benchmark_helpers_test.go
+├── login_test.go / memory_test.go / seed_test.go / benchmark_test.go
 ├── protocol/   # packet.go, message.go, message_*.go(8), registry.go, snapshot.go + 协议级测试
-├── codec/      # chunk_codec.go, codec.go, codec_client.go, codec_server.go, codec_values.go, codec_primitives.go, frame.go + 编解码测试 + testdata/
+├── codec/      # chunk_codec.go, codec.go, codec_client.go, codec_server.go, codec_values.go, codec_primitives.go, frame.go + 编解码测试（含 benchmark_helpers_test.go）+ testdata/
 └── tcp/        # 完全不动
 ```
 
@@ -163,7 +163,8 @@ Task 2 建 protocol 时，仍留守根包的 codec 文件需要消费迁出符�
 
 - protocol 收：`packet_test.go`、`registry_test.go`、`message_test.go` 及
   message 域中纯 Validate 主体的测试。
-- codec 收：`chunk_codec_test.go`(+fuzz)、`codec_fuzz_test.go`、
+- codec 收：`chunk_codec_test.go`(+fuzz)、`benchmark_helpers_test.go`
+  （chunk codec 域基准夹具）、`codec_fuzz_test.go`、
   `codec_golden_test.go`、`codec_invalid_test.go`、
   `codec_inventory_test.go`、`codec_helpers_test.go`、
   `codec_primitives_test.go`(+fuzz)、`frame_test.go`(+fuzz)、
@@ -174,9 +175,8 @@ Task 2 建 protocol 时，仍留守根包的 codec 文件需要消费迁出符�
   `FuzzPrimitiveDecoder`、`FuzzReadFrame`、`FuzzCompanionMessageCodec`、
   `FuzzHostileMessageCodec`）。
 - 根包留：`login_test.go`、`memory_test.go`、`seed_test.go`（主体为
-  `LoginClientWithSeed` 会话路径）、`benchmark_test.go`、
-  `benchmark_helpers_test.go`（跨域基准留守，CI M3C 步骤与 Makefile
-  `bench-multiplayer` 零改动）。
+  `LoginClientWithSeed` 会话路径）、`benchmark_test.go`（跨域基准留守，CI
+  M3C 步骤与 Makefile `bench-multiplayer` 零改动）。
 - 混合文件按主体拆分：如 `message_hostile_test.go` 同时承载 Validate、
   Codec 往返与 `FuzzHostileMessageCodec`，`message_companion_test.go` 同时
   覆盖 Validate 与 wire 往返——按被测主体拆入 protocol/codec，测试函数名

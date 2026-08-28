@@ -206,9 +206,11 @@
   - companion wire 常量 8 个 + hostile wire 常量 7 个：转正（永久导出），
     消费者 codec 生产（codec_client 预分配拒绝 / codec_server 预分配拒绝 /
     companion_wire / hostile_wire）+ protocol `Validate`。
-  - `ValidBlockID`/`SectionWords`/`ReadSectionPacked`：转正（永久导出），
-    消费者 codec 生产 chunk_codec.go + codec 测试（chunk_codec_test.go/
-    protocol snapshot.go 生产自用）。
+  - `ValidBlockID`/`SectionWords`/`ReadSectionPacked`：转正（永久导出）。
+    消费者：`ValidBlockID`/`SectionWords` 为 codec 生产 chunk_codec.go；
+    `ReadSectionPacked` 的生产消费者是 protocol 包内 snapshot.go，跨包消费
+    仅 codec 测试 chunk_codec_test.go（test-only，与 `GridCraftingViewSlots`
+    同类——导出由测试跨包消费需求正当化）。
   - `InvalidClientPacket`/`InvalidServerPacket`：转正（永久导出），消费者
     codec 生产 codec_client.go/codec_server.go 错误构造。
   - `ChatSpeechTextMaxBytes`：转正（永久导出），消费者 codec 生产

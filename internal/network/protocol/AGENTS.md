@@ -7,7 +7,8 @@
 `internal/companion`（后者服务于常量同源锁定与消息 DTO 的领域类型，见
 下）；依赖方向由
 `internal/archcheck` 的 `TestInternalDependenciesAreOneWay` 强制。行为规格
-见 `openspec/specs/`（协议版本契约承接 `docs/notes/compatibility.md`）；
+见 openspec 主规格 `repository-code-organization`（协议版本契约承接
+`docs/notes/compatibility.md`）；
 全树共享的信任边界与协议演进纪律见上级 `../AGENTS.md`，本文件不重复。
 
 ## 密封接口与版本钉死 (`protocol/packet.go`, `protocol/message.go`)

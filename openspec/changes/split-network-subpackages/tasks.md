@@ -56,15 +56,16 @@
   在 protocol 保持导出；包 ID 访问器与 `ValidateDecodedClientWirePacket`
   保持导出（codec 永久消费）；回收裁决逐项记 ledger。
 - [x] 3.2 测试随迁（跟随被测主体）：codec 收 `chunk_codec_test.go`(+fuzz)、
-  `codec_fuzz_test.go`、`codec_golden_test.go`、`codec_invalid_test.go`、
+  `benchmark_helpers_test.go`、`codec_fuzz_test.go`、
+  `codec_golden_test.go`、`codec_invalid_test.go`、
   `codec_inventory_test.go`、`codec_helpers_test.go`、
   `codec_primitives_test.go`(+fuzz)、`frame_test.go`(+fuzz)、`drop_test.go`
   、`furnace_test.go`、`container_test.go`、`hunger_test.go`、
   `worldtime_test.go`、`place_block_succeeded_test.go`、
   `message_companion_fuzz_test.go` 及全部 6 个 Fuzz；纯 Validate 主体测试
   → protocol；混合文件按主体拆分，测试函数名与 `t.Run` 标签逐名保留；
-  根包留 `login_test.go`/`memory_test.go`/`seed_test.go`/`benchmark_test.go`
-  /`benchmark_helpers_test.go`；`testdata/chunk-snapshot-v1.bin` 迁至
+  根包留 `login_test.go`/`memory_test.go`/`seed_test.go`/
+  `benchmark_test.go`；`testdata/chunk-snapshot-v1.bin` 迁至
   `internal/network/codec/testdata`（`git mv`，逐字节不变）。
 - [x] 3.3 根 `types.go` 增补 codec 侧别名（`Codec`/`NewCodec`/
   `MaxCompressedSnapshot`/`MaxDecodedSnapshot`/`MaxSmallPayload`/

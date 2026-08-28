@@ -46,8 +46,8 @@
     `NewMemoryPair`/`NewMemoryStreamPair`、`ClientEndpoint`/`ServerEndpoint`、
     三个共享 stream 接口、`ErrClosed`），新建 `types.go` 以别名再导出迁出
     符号；测试留 `login_test.go`/`memory_test.go`/`seed_test.go`/
-    `benchmark_test.go`/`benchmark_helpers_test.go`（跨域基准留守，CI M3C
-    步骤与 Makefile `bench-multiplayer` 零改动）；
+    `benchmark_test.go`（跨域基准留守，CI M3C 步骤与 Makefile
+    `bench-multiplayer` 零改动）；
   - `internal/network/protocol`：`packet.go`、`message.go` 与 8 个
     `message_*.go`、`registry.go`、`snapshot.go` 及协议级测试。密封接口
     `ClientPacket`/`ServerPacket` 以 unexported marker 密封且全部 message
@@ -55,9 +55,9 @@
     `CommandRejected.Validate` 双向引用——四者必须同包；
   - `internal/network/codec`：`chunk_codec.go`、`codec.go`、
     `codec_client.go`/`codec_server.go`、`codec_values.go`、
-    `codec_primitives.go`、`frame.go` 及编解码测试与
-    `testdata/chunk-snapshot-v1.bin`。帧封装复用编码原语的 canonical
-    uvarint，随 codec 包且原语保持 unexported。
+    `codec_primitives.go`、`frame.go` 及编解码测试（含基准夹具
+    `benchmark_helpers_test.go`）与 `testdata/chunk-snapshot-v1.bin`。帧封装
+    复用编码原语的 canonical uvarint，随 codec 包且原语保持 unexported。
 - 依赖方向单向并由 `internal/archcheck` 按任务增量登记：network（根）→
   {protocol, codec, internal/core}（`login.go` 的 `NormalizeDisplayName`
   保留既有 core 边）；protocol → {internal/core, internal/companion}（
