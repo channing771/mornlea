@@ -59,6 +59,10 @@
 - QUALITY PASS：完整 diff 只含 Task 2 的 14 个 Go 文件和本 change 的 tasks/ledger；没有 schema、shared fixture、网络、server、render、Rust、长期文档或依赖变化，也没有 registry struct、配置、显示名表、公共 `DamageTool` 或 sword-specific wire 分支。
 - Mutation check：kind 值/合法域、任一 sword ID/limit/durability/broken/damage switch、recipe ID/pattern/material/output/matcher tail、任一 codec 的 item/count/durability round-trip 或 `ItemIDMax` 拒绝、以及 mining sword guard 的删除/错分支均至少会使一条新增测试失败；既有全包测试覆盖 helper 委托后的镐耗损、最后一点损坏、锄头与作物豁免和伙伴路径。
 - Findings：Critical 0、Important 0、Minor 0；无需修复轮次。
+- Task 2 独立评审，SPEC PASS：报告 `.superpowers/sdd/2026-08-28-tiered-swords-unified-combat/task-2-review.md:1-18` 对提交区间 `259b702f..29eb6ee2` 完成核对；combat kind、ItemID/耐久/损坏映射/伤害、recipe 17..19、四条 current-schema round-trip、采掘 durability seam、禁止项与 14 个 Go 文件加 tasks/ledger 的范围均符合 Task 2 brief，没有缺失、额外或误解行为。
+- Task 2 独立评审，Cannot-verify 全部解决：RED/GREEN 时序和 post-commit 命令结果由 `task-2-report.md:38-46,60-69` 的 implementer evidence 解决；player v8、chunk v9、companions v4 的未改数值由无生产 codec/schema/fixture diff、四条 current generic codec 测试与已记录 archcheck/OpenSpec 门禁解决；既有镐、锄、作物×锄头和伙伴行为由完整 `internal/sim` race package 结果及 `task-2-report.md:57,65` 解决；没有剩余无法验证项。
+- Task 2 独立评审，QUALITY PASS：同一报告 `:20-45` 给出 Task quality `Approved`；实现保持 fixed switch、真实 package 行为测试和既有包边界，Critical 0、Important 0、Minor 0，没有 correctness、scope、maintainability、verification、删除或简化 finding。
+- Task 2 完成：`259b702f..29eb6ee2` 已具备 implementer RED/GREEN、focused gates、self-review 与独立 SPEC/QUALITY PASS；`tasks.md` 2.1..2.9 全部完成，后续实现从 Task 3 开始。
 
 ## Validation Evidence
 
