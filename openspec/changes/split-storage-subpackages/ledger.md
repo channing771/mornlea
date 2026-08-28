@@ -542,4 +542,21 @@
     `go vet ./...` + `go test ./... -short` + cargo fmt --check + clippy +
     cargo test --workspace --locked；Rust 步骤实际运行未跳过）。首跑另
     暴露上述 fixture 路径失败与负载 flake 各一，均已处置。
+  - `make test-race`（全仓 race）：首跑仅 `cmd/mornlea/benchmark` 红——9 个
+    GPU 渲染用例报 `client: render create client ABI 版本不匹配`，其余 35 包
+    均绿（含 `internal/server ok ... 251.210s` 与 storage 六包 race 实跑）。
+    定位：共享 `CARGO_TARGET_DIR`（跨 worktree cargo 缓存）持有一份按
+    client ABI v11 源构建的 `libmornlea_client.dylib`（2026-08-28 21:14 由
+    兄弟 worktree `fix-gpu-benchmark-batch` 的进行中改动写入），本分支
+    Go/Rust 两侧常量均为 v10，经 dylib 导出的
+    `mornlea_client_abi_version` 实测返回 11——共享缓存串扰，非本分支
+    缺陷。处置：`touch engine/crates/mornlea_client/src/lib.rs` 后
+    `make rust` 自本分支重建，dylib 实测返回 10；benchmark 包单独复跑
+    `ok ... 71.560s`；
+  - `make test-race` 复跑全绿：36 包 ok、0 FAIL，墙钟 82s（benchmark
+    重建缓存 `ok ... 79.314s`，其余包命中上述本分支 -race 实跑缓存）；
+  - 修复轮 1 minor：`chunk/AGENTS.md` 容器装配不变量补兜底说明——无专属
+    自动化断言，靠 `TestInternalDependenciesAreOneWay` 的方向守卫（chunk
+    生产 import 面实测仅根包）加 openspec 主规格
+    `repository-code-organization` 容器编排条款评审把关。
 - 评审结论：待控制会话规格与质量双评审。
