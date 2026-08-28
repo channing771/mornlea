@@ -45,5 +45,14 @@
 - Deferred minor: the original RED only proved the package was absent and did not independently prove bridge preservation. Existing focused tests and the migration behavior cover the bridge for this structural task; final review must still assess test-entry preservation.
 - Ruling: a 90.59-second `TestDroppedItemSurvivesShutdownAndRestart` Ready timeout was captured before repair, then the exact broad command passed once before and once after repair. No diff evidence ties it to the contract migration, so no speculative fix is made. Cost if wrong: an existing timing-dependent server readiness failure requires an independently reproducible follow-up.
 
+## Task 1.3 Tuning Leaf Package
+
+- Implementer: fresh implementer `ses_fb78164f6ffeMu3XVWyDqLCM9q`.
+- Commits: `07b9a907` and repair `342072d4`.
+- Validation: `go test ./internal/sim/tuning ./internal/config ./cmd/mornlea -race -count=1`, focused root/server/client/app tests, `go test ./internal/archcheck -count=1`, and `git diff --check` passed.
+- Spec review: fresh reviewer `ses_fb75c6937ffewYRHH5fK0TC1xK` found the source guards still targeted the old root path; scoped re-review `ses_fb7470e65ffe1eQfvs0d1awkJJ` approved the shared tuning path coverage.
+- Quality review: fresh reviewer `ses_fb75c6948ffe8cma1D7TuswXp9` found incomplete `DefaultTunables` regression coverage and the same source-guard gap; scoped re-review approved all 20 default field assertions and the guard repair.
+- Deferred minor: package tests do not exercise concurrent readers and writers of the atomic tuning snapshot. Final review must decide whether existing race coverage is sufficient for this refactor.
+
 
 - Pending.
