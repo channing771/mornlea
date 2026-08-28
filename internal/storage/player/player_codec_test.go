@@ -1,4 +1,4 @@
-package storage
+package player
 
 import (
 	"bytes"
@@ -12,8 +12,11 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage/storagedef"
 )
 
+// updateStorageFixtures 与根包及 chunk 包测试共用同一命令行开关名：按域拆分后
+// 各包测试持有同名 flag，重写各自域的 committed fixture。
 var updateStorageFixtures = flag.Bool(
 	"update-storage-fixtures", false, "rewrite committed storage fixtures",
 )
@@ -57,19 +60,19 @@ func fixturePlayerInventory() core.Inventory {
 var respawnFixturePosition = [3]float32{7, 65, -9}
 
 func TestPlayerCodecRoundTrip(t *testing.T) {
-	if currentPlayerSchema != 8 {
-		t.Fatalf("玩家 schema=%d，想要 8", currentPlayerSchema)
+	if CurrentSchema != 8 {
+		t.Fatalf("玩家 schema=%d，想要 8", CurrentSchema)
 	}
 	id := fixturePlayerID()
 	want := fixturePlayerSave(id, 7)
 	want.RespawnPresent = true
 	want.RespawnPosition = respawnFixturePosition
 	want.RespawnDimension = core.Overworld
-	encoded, err := encodePlayer(want)
+	encoded, err := Encode(want)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := decodePlayer(id, encoded)
+	got, err := Decode(id, encoded)
 	if err != nil || got.PlayerID != want.PlayerID || got.Revision != want.Revision ||
 		got.DisplayName != want.DisplayName || got.Current != want.Current ||
 		got.Yaw != want.Yaw || got.Pitch != want.Pitch || got.Safe == nil || *got.Safe != *want.Safe ||
@@ -101,11 +104,11 @@ func TestPlayerCodecRoundTrip(t *testing.T) {
 func TestPlayerCodecRoundTripWithoutRespawn(t *testing.T) {
 	id := fixturePlayerID()
 	want := fixturePlayerSave(id, 7)
-	encoded, err := encodePlayer(want)
+	encoded, err := Encode(want)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := decodePlayer(id, encoded)
+	got, err := Decode(id, encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +120,7 @@ func TestPlayerCodecRoundTripWithoutRespawn(t *testing.T) {
 	residue := want
 	residue.RespawnPosition = [3]float32{1, 2, 3}
 	residue.RespawnDimension = core.Overworld
-	residueEncoded, err := encodePlayer(residue)
+	residueEncoded, err := Encode(residue)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,11 +136,11 @@ func TestPlayerSchemaV6RoundTripsNewBlockItems(t *testing.T) {
 	want.Inventory.Backpack[3] = core.ItemStack{
 		Item: core.ItemMossyCobblestone, Count: core.MaxStackCount,
 	}
-	encoded, err := encodePlayer(want)
+	encoded, err := Encode(want)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := decodePlayer(id, encoded)
+	got, err := Decode(id, encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,11 +154,11 @@ func TestPlayerSchemaV4DecodeKeepsWornDurability(t *testing.T) {
 	save.Inventory.Hotbar.Slots[4].Durability = 73
 	save.Inventory.Backpack[7].Durability = 149
 
-	encoded, err := encodePlayer(save)
+	encoded, err := Encode(save)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := decodePlayer(save.PlayerID, encoded)
+	got, err := Decode(save.PlayerID, encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +174,7 @@ func TestPlayerV4FixtureMigratesToFullHealth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := decodePlayer(fixturePlayerID(), encoded)
+	got, err := Decode(fixturePlayerID(), encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +197,7 @@ func TestPlayerV5FixtureMigratesLosslessly(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := fixturePlayerSave(fixturePlayerID(), 19)
-	got, err := decodePlayer(want.PlayerID, encoded)
+	got, err := Decode(want.PlayerID, encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +237,7 @@ func TestPlayerV6FixtureMigratesToInitialHunger(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := fixturePlayerSave(fixturePlayerID(), 19)
-	got, err := decodePlayer(want.PlayerID, encoded)
+	got, err := Decode(want.PlayerID, encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +281,7 @@ func TestPlayerV8Fixture(t *testing.T) {
 	want1.RespawnPresent = true
 	want1.RespawnPosition = respawnFixturePosition
 	want1.RespawnDimension = core.Overworld
-	encoded, err := encodePlayer(want1)
+	encoded, err := Encode(want1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,7 +313,7 @@ func TestPlayerV7FixtureMigratesToNoRespawn(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := fixturePlayerSave(fixturePlayerID(), 19)
-	got, err := decodePlayer(want.PlayerID, encoded)
+	got, err := Decode(want.PlayerID, encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -360,7 +363,7 @@ func TestPlayerV3FixtureMigratesLosslessly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := decodePlayer(fixturePlayerID(), encoded)
+	got, err := Decode(fixturePlayerID(), encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -380,7 +383,7 @@ func TestPlayerV1FixtureMigratesToEmptyHotbar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := decodePlayer(fixturePlayerID(), encoded)
+	got, err := Decode(fixturePlayerID(), encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -427,12 +430,12 @@ func TestPlayerCodecRejectsInvalidHotbarPayload(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			save := fixturePlayerSave(id, 3)
 			tc.mutate(&save.Inventory.Hotbar)
-			if _, err := encodePlayer(save); !errors.Is(err, ErrCorrupt) {
-				t.Fatalf("encode error = %v，想要 ErrCorrupt", err)
+			if _, err := Encode(save); !errors.Is(err, storagedef.ErrCorrupt) {
+				t.Fatalf("encode error = %v，想要 storagedef.ErrCorrupt", err)
 			}
 			encoded := playerWireWithHotbar(t, id, save.Inventory.Hotbar)
-			if _, err := decodePlayer(id, encoded); !errors.Is(err, ErrCorrupt) {
-				t.Fatalf("decode error = %v，想要 ErrCorrupt", err)
+			if _, err := Decode(id, encoded); !errors.Is(err, storagedef.ErrCorrupt) {
+				t.Fatalf("decode error = %v，想要 storagedef.ErrCorrupt", err)
 			}
 		})
 	}
@@ -441,7 +444,7 @@ func TestPlayerCodecRejectsInvalidHotbarPayload(t *testing.T) {
 // playerWireWithHotbar 用合法存档换掉快捷栏负载并修正 CRC，绕过编码器校验。
 func playerWireWithHotbar(t *testing.T, id core.PlayerID, hotbar core.Hotbar) []byte {
 	t.Helper()
-	encoded, err := encodePlayer(fixturePlayerSave(id, 3))
+	encoded, err := Encode(fixturePlayerSave(id, 3))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -462,7 +465,7 @@ func playerWireWithHotbar(t *testing.T, id core.PlayerID, hotbar core.Hotbar) []
 	}
 	hasher := crc32.New(playerCRCTable)
 	_, _ = hasher.Write(wire[8:40])
-	_, _ = hasher.Write(wire[playerEnvelopeLength:])
+	_, _ = hasher.Write(wire[EnvelopeLength:])
 	binary.LittleEndian.PutUint32(wire[40:], hasher.Sum32())
 	return wire
 }
@@ -506,8 +509,8 @@ func TestPlayerCodecRejectsInvalidSave(t *testing.T) {
 				save.Safe = &safe
 			}
 			tc.mutate(&save)
-			if _, err := encodePlayer(save); !errors.Is(err, ErrCorrupt) {
-				t.Fatalf("encode error = %v, want ErrCorrupt", err)
+			if _, err := Encode(save); !errors.Is(err, storagedef.ErrCorrupt) {
+				t.Fatalf("encode error = %v, want storagedef.ErrCorrupt", err)
 			}
 		})
 	}
@@ -515,7 +518,7 @@ func TestPlayerCodecRejectsInvalidSave(t *testing.T) {
 
 func TestPlayerCodecRejectsCorruptEnvelope(t *testing.T) {
 	id := fixturePlayerID()
-	encoded, err := encodePlayer(fixturePlayerSave(id, 19))
+	encoded, err := Encode(fixturePlayerSave(id, 19))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -527,52 +530,52 @@ func TestPlayerCodecRejectsCorruptEnvelope(t *testing.T) {
 		payload func() []byte
 		want    error
 	}{
-		{"magic", func() []byte { p := bytes.Clone(encoded); p[0] ^= 1; return p }, ErrCorrupt},
-		{"old envelope", func() []byte { p := bytes.Clone(encoded); binary.LittleEndian.PutUint32(p[4:], 0); return p }, ErrCorrupt},
-		{"future envelope", func() []byte { p := bytes.Clone(encoded); binary.LittleEndian.PutUint32(p[4:], 2); return p }, ErrFutureVersion},
-		{"invalid schema", func() []byte { p := bytes.Clone(encoded); binary.LittleEndian.PutUint32(p[8:], 0); return p }, ErrCorrupt},
+		{"magic", func() []byte { p := bytes.Clone(encoded); p[0] ^= 1; return p }, storagedef.ErrCorrupt},
+		{"old envelope", func() []byte { p := bytes.Clone(encoded); binary.LittleEndian.PutUint32(p[4:], 0); return p }, storagedef.ErrCorrupt},
+		{"future envelope", func() []byte { p := bytes.Clone(encoded); binary.LittleEndian.PutUint32(p[4:], 2); return p }, storagedef.ErrFutureVersion},
+		{"invalid schema", func() []byte { p := bytes.Clone(encoded); binary.LittleEndian.PutUint32(p[8:], 0); return p }, storagedef.ErrCorrupt},
 		{"future schema", func() []byte {
 			p := bytes.Clone(encoded)
-			binary.LittleEndian.PutUint32(p[8:], currentPlayerSchema+1)
+			binary.LittleEndian.PutUint32(p[8:], CurrentSchema+1)
 			return p
-		}, ErrFutureVersion},
-		{"invalid player ID", func() []byte { p := bytes.Clone(encoded); clear(p[12:28]); repairPlayerCRC(p); return p }, ErrCorrupt},
-		{"mismatched player ID", func() []byte { p := bytes.Clone(encoded); p[27] ^= 1; repairPlayerCRC(p); return p }, ErrCorrupt},
-		{"zero revision", func() []byte { p := bytes.Clone(encoded); clear(p[28:36]); repairPlayerCRC(p); return p }, ErrCorrupt},
+		}, storagedef.ErrFutureVersion},
+		{"invalid player ID", func() []byte { p := bytes.Clone(encoded); clear(p[12:28]); repairPlayerCRC(p); return p }, storagedef.ErrCorrupt},
+		{"mismatched player ID", func() []byte { p := bytes.Clone(encoded); p[27] ^= 1; repairPlayerCRC(p); return p }, storagedef.ErrCorrupt},
+		{"zero revision", func() []byte { p := bytes.Clone(encoded); clear(p[28:36]); repairPlayerCRC(p); return p }, storagedef.ErrCorrupt},
 		{"payload length mismatch", func() []byte {
 			p := bytes.Clone(encoded)
 			binary.LittleEndian.PutUint32(p[36:], uint32(len(p)))
 			return p
-		}, ErrCorrupt},
-		{"CRC", func() []byte { p := bytes.Clone(encoded); p[40] ^= 1; return p }, ErrCorrupt},
-		{"invalid nickname", func() []byte { p := bytes.Clone(encoded); p[48] = '\n'; repairPlayerCRC(p); return p }, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
+		{"CRC", func() []byte { p := bytes.Clone(encoded); p[40] ^= 1; return p }, storagedef.ErrCorrupt},
+		{"invalid nickname", func() []byte { p := bytes.Clone(encoded); p[48] = '\n'; repairPlayerCRC(p); return p }, storagedef.ErrCorrupt},
 		{"current dimension", func() []byte {
 			p := bytes.Clone(encoded)
 			binary.LittleEndian.PutUint32(p[52:], 1)
 			repairPlayerCRC(p)
 			return p
-		}, ErrCorrupt},
-		{"current x", func() []byte { return badFloat(56) }, ErrCorrupt},
-		{"current y", func() []byte { return badFloat(60) }, ErrCorrupt},
-		{"current z", func() []byte { return badFloat(64) }, ErrCorrupt},
-		{"yaw", func() []byte { return badFloat(68) }, ErrCorrupt},
-		{"pitch", func() []byte { return badFloat(72) }, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
+		{"current x", func() []byte { return badFloat(56) }, storagedef.ErrCorrupt},
+		{"current y", func() []byte { return badFloat(60) }, storagedef.ErrCorrupt},
+		{"current z", func() []byte { return badFloat(64) }, storagedef.ErrCorrupt},
+		{"yaw", func() []byte { return badFloat(68) }, storagedef.ErrCorrupt},
+		{"pitch", func() []byte { return badFloat(72) }, storagedef.ErrCorrupt},
 		{"pitch outside range", func() []byte {
 			p := bytes.Clone(encoded)
 			binary.LittleEndian.PutUint32(p[72:], math.Float32bits(2))
 			repairPlayerCRC(p)
 			return p
-		}, ErrCorrupt},
-		{"safe flag", func() []byte { p := bytes.Clone(encoded); p[76] = 2; repairPlayerCRC(p); return p }, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
+		{"safe flag", func() []byte { p := bytes.Clone(encoded); p[76] = 2; repairPlayerCRC(p); return p }, storagedef.ErrCorrupt},
 		{"safe dimension", func() []byte {
 			p := bytes.Clone(encoded)
 			binary.LittleEndian.PutUint32(p[77:], 1)
 			repairPlayerCRC(p)
 			return p
-		}, ErrCorrupt},
-		{"safe x", func() []byte { return badFloat(81) }, ErrCorrupt},
-		{"safe y", func() []byte { return badFloat(85) }, ErrCorrupt},
-		{"safe z", func() []byte { return badFloat(89) }, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
+		{"safe x", func() []byte { return badFloat(81) }, storagedef.ErrCorrupt},
+		{"safe y", func() []byte { return badFloat(85) }, storagedef.ErrCorrupt},
+		{"safe z", func() []byte { return badFloat(89) }, storagedef.ErrCorrupt},
 		{"invalid health", func() []byte {
 			p := bytes.Clone(encoded)
 			// 生命值不再是末字节：v7 在它之后追加了三层饥饿状态，v8 再追加重生点。
@@ -582,13 +585,13 @@ func TestPlayerCodecRejectsCorruptEnvelope(t *testing.T) {
 			p[len(p)-playerRespawnBytes-playerHungerBytes-playerHealthBytes] = core.MaxHealth + 1
 			repairPlayerCRC(p)
 			return p
-		}, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
 		{"invalid hunger", func() []byte {
 			p := bytes.Clone(encoded)
 			p[len(p)-playerRespawnBytes-playerHungerBytes] = core.MaxHunger + 1
 			repairPlayerCRC(p)
 			return p
-		}, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
 		{"saturation above hunger", func() []byte {
 			p := bytes.Clone(encoded)
 			// 饱和度紧随饥饿值，取 hunger×1000 + 1 恰好越过上界一个千分位。
@@ -599,42 +602,42 @@ func TestPlayerCodecRejectsCorruptEnvelope(t *testing.T) {
 			)
 			repairPlayerCRC(p)
 			return p
-		}, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
 		{"respawn flag", func() []byte {
 			p := bytes.Clone(encoded)
 			p[len(p)-playerRespawnBytes] = 2
 			repairPlayerCRC(p)
 			return p
-		}, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
 		// 位置与维度字节只在 present=1 时携带语义（present=0 时规范为零），
 		// 因此这几条先置位 flag 再投毒，保证变异真正抵达校验层。
 		{"respawn x", func() []byte {
 			p := bytes.Clone(encoded)
 			p[len(p)-playerRespawnBytes] = 1
 			return badFloatAt(p, len(p)-playerRespawnBytes+1)
-		}, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
 		{"respawn y", func() []byte {
 			p := bytes.Clone(encoded)
 			p[len(p)-playerRespawnBytes] = 1
 			return badFloatAt(p, len(p)-playerRespawnBytes+5)
-		}, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
 		{"respawn z", func() []byte {
 			p := bytes.Clone(encoded)
 			p[len(p)-playerRespawnBytes] = 1
 			return badFloatAt(p, len(p)-playerRespawnBytes+9)
-		}, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
 		{"respawn dimension", func() []byte {
 			p := bytes.Clone(encoded)
 			p[len(p)-playerRespawnBytes] = 1
 			binary.LittleEndian.PutUint32(p[len(p)-playerRespawnBytes+13:], 1)
 			repairPlayerCRC(p)
 			return p
-		}, ErrCorrupt},
-		{"trailing byte", func() []byte { return append(bytes.Clone(encoded), 0) }, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
+		{"trailing byte", func() []byte { return append(bytes.Clone(encoded), 0) }, storagedef.ErrCorrupt},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := decodePlayer(id, tc.payload())
+			_, err := Decode(id, tc.payload())
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("decode error = %v, want %v", err, tc.want)
 			}
@@ -644,22 +647,22 @@ func TestPlayerCodecRejectsCorruptEnvelope(t *testing.T) {
 
 func TestPlayerCodecRejectsPayloadOverLimitBeforeAllocation(t *testing.T) {
 	id := fixturePlayerID()
-	payload := make([]byte, playerEnvelopeLength)
+	payload := make([]byte, EnvelopeLength)
 	copy(payload, "MCPL")
 	binary.LittleEndian.PutUint32(payload[4:], playerEnvelopeVersion)
-	binary.LittleEndian.PutUint32(payload[8:], currentPlayerSchema)
+	binary.LittleEndian.PutUint32(payload[8:], CurrentSchema)
 	copy(payload[12:28], id[:])
 	binary.LittleEndian.PutUint64(payload[28:], 1)
-	binary.LittleEndian.PutUint32(payload[36:], maxPlayerPayload+1)
-	if _, err := decodePlayer(id, payload); !errors.Is(err, ErrCorrupt) {
-		t.Fatalf("decode error = %v, want ErrCorrupt", err)
+	binary.LittleEndian.PutUint32(payload[36:], MaxPayload+1)
+	if _, err := Decode(id, payload); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("decode error = %v, want storagedef.ErrCorrupt", err)
 	}
 }
 
 func repairPlayerCRC(payload []byte) {
 	hasher := crc32.New(crc32.MakeTable(crc32.Castagnoli))
 	_, _ = hasher.Write(payload[8:40])
-	_, _ = hasher.Write(payload[playerEnvelopeLength:])
+	_, _ = hasher.Write(payload[EnvelopeLength:])
 	binary.LittleEndian.PutUint32(payload[40:], hasher.Sum32())
 }
 
@@ -672,10 +675,10 @@ func badFloatAt(payload []byte, offset int) []byte {
 }
 
 // TestPlayerSchemaV8KeepsM4EItems 原先位于 chunk 域的 chunk_furnace_test.go：
-// 拆分按「跟随被测主体」落位，其被测主体是 player codec，随 player 域留根。
+// 拆分按「跟随被测主体」落位，其被测主体是 player codec，随 player 域入包。
 func TestPlayerSchemaV8KeepsM4EItems(t *testing.T) {
-	if currentPlayerSchema != 8 {
-		t.Fatalf("玩家 schema = %d，想要 8", currentPlayerSchema)
+	if CurrentSchema != 8 {
+		t.Fatalf("玩家 schema = %d，想要 8", CurrentSchema)
 	}
 	var inventory core.Inventory
 	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemCoal, Count: 12}
@@ -686,11 +689,11 @@ func TestPlayerSchemaV8KeepsM4EItems(t *testing.T) {
 
 	save := fixturePlayerSave(fixturePlayerID(), 7)
 	save.Inventory = inventory
-	encoded, err := encodePlayer(save)
+	encoded, err := Encode(save)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := decodePlayer(save.PlayerID, encoded)
+	got, err := Decode(save.PlayerID, encoded)
 	if err != nil {
 		t.Fatal(err)
 	}

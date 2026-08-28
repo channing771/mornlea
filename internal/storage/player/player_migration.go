@@ -1,9 +1,10 @@
-package storage
+package player
 
 import (
 	"fmt"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage/storagedef"
 )
 
 const oldestPlayerSchema uint32 = 1
@@ -82,11 +83,11 @@ var playerMigrations = map[uint32]playerMigration{
 }
 
 func migratePlayer(from uint32, dto playerDTO) (playerDTO, bool, error) {
-	if from > currentPlayerSchema {
-		return playerDTO{}, false, fmt.Errorf("%w: player schema %d", ErrFutureVersion, from)
+	if from > CurrentSchema {
+		return playerDTO{}, false, fmt.Errorf("%w: player schema %d", storagedef.ErrFutureVersion, from)
 	}
 	migrated := false
-	for version := from; version < currentPlayerSchema; version++ {
+	for version := from; version < CurrentSchema; version++ {
 		migration, ok := playerMigrations[version]
 		if !ok {
 			return playerDTO{}, false, fmt.Errorf("storage: missing player migration %d", version)
@@ -111,8 +112,8 @@ func clonePlayerDTO(dto playerDTO) playerDTO {
 }
 
 // fillFullDurability 把没有耐久的旧工具补为满耐久，非工具保持零值。
-// 与 chunk 包 migration.go 的同名迁移助手同源：按域拆分后各域持有自己的
-// 副本，后续 player 域随包迁走时一并带走。
+// 与 chunk 包 migration.go 的同名迁移助手同源：按域拆分后各域持有自己的副本，
+// 域内迁移表是这些副本的唯一消费方。
 func fillFullDurability(stack core.ItemStack) core.ItemStack {
 	full, ok := core.ItemMaxDurability(stack.Item)
 	if !ok || stack.Durability != 0 {

@@ -51,9 +51,9 @@ var baselineVersionMappings = []baselineVersionMapping{
 	{
 		name:        "玩家 schema",
 		docPattern:  `玩家 schema v(\d+)`,
-		sourcePath:  filepath.Join("internal", "storage", "player_codec.go"),
-		codePattern: `currentPlayerSchema\s+uint32\s*=\s*(\w+)`,
-		why:         "currentPlayerSchema 是玩家记录写出时落盘的 schema 号。",
+		sourcePath:  filepath.Join("internal", "storage", "player", "player_codec.go"),
+		codePattern: `CurrentSchema\s+uint32\s*=\s*(\w+)`,
+		why:         "CurrentSchema 是玩家记录写出时落盘的 schema 号（player 包导出的权威常量）。",
 	},
 	{
 		name:        "companions.ai schema",

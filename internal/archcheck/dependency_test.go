@@ -45,16 +45,22 @@ var allowed = map[string][]string{
 	"internal/sim":         {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/world"},
 	"internal/storage": {
 		"internal/companion", "internal/core",
-		"internal/storage/chunk", "internal/storage/region",
+		"internal/storage/chunk", "internal/storage/player", "internal/storage/region",
 		"internal/storage/storagedef", "internal/world",
 	},
 	// internal/storage/chunk 是 chunk 记录层容器与信封编解码域：region 格式
 	// 原语与哨兵经 storagedef/region 取，值类型直接依赖 world，不得反向依赖
 	// 根包或其他实体域子包。
 	"internal/storage/chunk": {"internal/core", "internal/storage/region", "internal/storage/storagedef", "internal/world"},
+	// internal/storage/player 是 player 存档域的纯 codec 包（MCPL 信封编解码
+	// 与 schema 迁移链）：只依赖 core 值类型与 storagedef 哨兵，不感知 chunk/
+	// region 记录层与根包编排（player 文件的原子替换与路径编排在根包），依赖
+	// 更宽即意味着 codec 越界感知存储布局。
+	"internal/storage/player": {"internal/core", "internal/storage/storagedef"},
 	// internal/storage/region 是 region 格式原语叶子（superblock/bank 编解码、
 	// 扇区空间分配、RegionKey/RegionFor）：只允许 core 与 storagedef，
-	// 不得感知 chunk 记录层容器，否则 region.go 随 chunk 的裁决（T1-1）失守。
+	// 不得感知 chunk 记录层容器，否则记录层容器随 chunk 域落位、region 只收
+	// 格式原语的拆分前提失守。
 	"internal/storage/region": {"internal/core", "internal/storage/storagedef"},
 	// internal/storage/storagedef 是世界存储的哨兵错误叶子（ErrCorrupt/
 	// ErrFutureVersion 的公共下沉）：region 与四个实体域子包都经它取哨兵，

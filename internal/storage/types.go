@@ -1,8 +1,8 @@
 // Package storage 定义世界存储的稳定值与接口。
 //
 // 根包保留编排与门面：disk/memory 编排、world_files/backup/metadata 与
-// chunk_keys，外加对拆分出的域子包（storagedef/region/chunk 与后续
-// player/companion/hostile）的别名再导出，保证既有 `storage.X` 消费方
+// chunk_keys，外加对拆分出的域子包（storagedef/region/chunk/player 与后续
+// companion/hostile）的别名再导出，保证既有 `storage.X` 消费方
 // 源码零改动。
 package storage
 
@@ -12,6 +12,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/chunk"
+	"github.com/channing771/mornlea/internal/storage/player"
 	"github.com/channing771/mornlea/internal/storage/region"
 	"github.com/channing771/mornlea/internal/storage/storagedef"
 )
@@ -22,8 +23,9 @@ var (
 	// 保持既有 `storage.X` 引用与 errors.Is 身份不变。
 	ErrChunkNotFound    = chunk.ErrChunkNotFound
 	ErrRevisionConflict = chunk.ErrRevisionConflict
-	// ErrPlayerNotFound/ErrWorldLocked 仍属根包：player 域与世界锁编排尚未
-	// 拆出（后续任务随域迁移）。
+	// ErrPlayerNotFound/ErrWorldLocked 定义在根包：二者的产生方是根包编排
+	// （DiskStore/MemoryStore 的 LoadPlayer 路径与世界文件锁），player codec
+	// 只产生 storagedef 哨兵，故不随 player 域迁出。
 	ErrPlayerNotFound = errors.New("storage: player not found")
 	ErrWorldLocked    = errors.New("storage: world locked")
 	// ErrCorrupt/ErrFutureVersion 定义在 `storagedef` 叶子包（跨域哨兵的公共
@@ -60,8 +62,23 @@ type (
 	ChunkSave   = chunk.ChunkSave
 )
 
+// StoredPlayer/PlayerSave/PlayerLocation 是 player 存档域的值类型，别名再导出
+// 保持类型身份。
+type (
+	StoredPlayer   = player.StoredPlayer
+	PlayerSave     = player.PlayerSave
+	PlayerLocation = player.PlayerLocation
+)
+
 type SaveResult struct {
 	Committed map[core.ChunkKey]uint64
+}
+
+// PlayerStore 是 player 存档的根包编排契约：DiskStore/MemoryStore 各自实现，
+// player 子包只提供编解码，不感知存储实现。
+type PlayerStore interface {
+	LoadPlayer(context.Context, core.PlayerID) (StoredPlayer, error)
+	SavePlayer(context.Context, PlayerSave) (uint64, error)
 }
 
 type Store interface {

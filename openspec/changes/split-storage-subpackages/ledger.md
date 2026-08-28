@@ -137,6 +137,54 @@
   之所以用 AST 源码解析是因 cmd/mornlea 带 GOOS 构建约束会导致 `go list`
   导入边随平台翻转，internal/storage 各包无构建约束，go-list 检查平台无关，
   按既有检查器复用即可。
+- Ruling T4-1: `player_bench_test.go` 按「跟随被测主体」拆分落位 —
+  `BenchmarkPlayerCodec`（直接调用 player codec 入口）随 player 包；
+  `BenchmarkMemoryPlayerStore`/`BenchmarkDiskPlayerStore`/`benchmarkPlayerStore`
+  （直接调用 `NewMemory`/`OpenDisk`/`PlayerStore`）的被测主体是根包编排，且
+  player 域没有 chunk 那样可域内装配的记录层（根包 player 存取没有
+  CreateRegion/OpenRegion 对应物），域内重装配只会在不存在的装配点上改变
+  被测主体、违反「只动装配不动断言」，故并入留根的
+  `player_store_test.go`；`benchmarkPlayerSave` 与
+  `benchmarkStoredPlayer` 由两侧各持同构副本。Benchmark 函数名与
+  `-list` 并集逐名不变。
+- Ruling T4-2: `PlayerStore` 接口定义留根 — design 导出面清单把
+  `PlayerStore` 列为「留根不动」，文件簇映射却把 `player_types.go` 整文件
+  迁 player 包，接口定义随文件走会自相矛盾。按接口家族归属裁决：
+  `PlayerStore` 与 `Store`/`WorldStore`/`CompanionStore`/`HostileMobStore`
+  同属根包存储编排契约，且 player 包定位为纯 codec 域（不感知存储实现），
+  接口落根包 `types.go`（定义逐字不变），`player_types.go` 迁移时剥离；
+  delta spec「根包 MUST 保留 Store/WorldStore 等接口」同向印证。
+- Ruling T4-3: `ErrPlayerNotFound` 核实后留根不随迁 — 逐处核实产生方：
+  仅根包 `disk.go`/`memory.go` 的 `LoadPlayer` 缺失路径产生它，player codec
+  自身只产生 storagedef 哨兵；T3-2「哨兵随产生方迁移」的触发条件不成立，
+  定义留根（`types.go` 注释同步改写为按产生方表述），无需别名。
+- Ruling T4-4: player 包新增导出 `CurrentSchema`/`EnvelopeLength`/
+  `MaxPayload` — design 只点名「信封长度常量按需导出」；实测根包
+  `disk.go` 的 `maxPlayerFileLength` 需要 `EnvelopeLength`+`MaxPayload`，
+  留根的 `player_store_test.go` future-schema 故障注入需要 `CurrentSchema`
+  （该测试注释明确要求跟随权威常量而非字面量）。三者均由既有根包调用方
+  改为 `player.` 限定名消费，`world_files.go` 实测零 player 常量引用、
+  无需导出；其余域内常量与 `playerDTO`/迁移表保持非导出。
+- Ruling T4-5: player 域依赖实测登记为 {core, storagedef}，不登记 world —
+  design Decision 6 的 player → {storagedef, core, world} 是方向上限；
+  `go list` 实测 player 包仅导入 core 与 storagedef，按「不预先登记未使用
+  的边」惯例只登记实测边（与 chunk 登记四边、region 登记两边同口径）。
+- Ruling T4-6: 冻结 fixture 单一来源在 player 包 — `player-v1..v8.bin`
+  以 `git mv` 随域落 `player/testdata`（字节逐字节不变）；根包
+  `TestDiskStoreV4PlayerFileMigratesToFullHealth` 以只读相对路径
+  `player/testdata/player-v4.bin` 取用，不在根 testdata 复制第二份
+  golden。`updateStorageFixtures` flag 定义由根包（原
+  `player_codec_test.go`）与 player 包各持同名副本，根包消费方
+  `companion_summary_test.go` 的定义落回该文件。
+- Ruling T4-7: 根包同构副本清账（承接 T3-4 的 T4 义务）—
+  `byte_codec.go` 的字节原语（appendU32/appendU64/byteDecoder/corrupt）仍被
+  留根的 companion codec（72 处）与 hostile codec（38 处）消费，留根待
+  T5 随域迁走时清理；companion/hostile 仍消费的 float/itemstack 原语
+  （appendF32/decodeF32/appendPlayerStack/decodePlayerStack/
+  finitePlayerFloat）原随 `player_codec.go` 定义，迁出后在根包
+  `byte_codec.go` 持同构副本并注明去向；`fillFullDurability` 根包零引用，
+  随 `player_migration.go` 迁走（chunk 包副本不受影响）；`syncDirectory`
+  仍被 `backup.go` 消费，留根。
 
 ## Review Log
 
@@ -270,3 +318,56 @@
     `go vet ./internal/storage/... ./internal/archcheck` 通过。
 - 评审结论：待控制会话规格与质量双评审；tasks.md 3.1/3.2/3.3 勾选待评审
   通过后执行。
+
+### Task 4（player 域抽取）
+
+- 实现：新建 `internal/storage/player`（package doc 中文，纯 codec 域，实测
+  依赖 core+storagedef）：`player_codec.go`（`Encode`/`Decode` 入口，原
+  encodePlayer/decodePlayer；`CurrentSchema`/`EnvelopeLength`/`MaxPayload`
+  导出，其余常量与 `playerDTO`/`playerMigrations` 保持非导出）、
+  `player_migration.go`（迁移表私有）、`player_types.go`（`PlayerSave`/
+  `StoredPlayer`/`PlayerLocation`；`PlayerStore` 接口剥离留根，见
+  Ruling T4-2）、`codec_primitives.go`（byte 原语同构副本，沿
+  chunk_codec_primitives.go 范式）。哨兵改经 `storagedef.` 限定名，
+  错误消息逐字节不变。
+- 测试迁移：`player_codec_test.go`（含 T3-6 改判的
+  `TestPlayerSchemaV8KeepsM4EItems`，函数名与断言逐字保留，仅落位注释
+  更新为入包）、`player_codec_fuzz_test.go`（`FuzzDecodePlayer`）、
+  `player_migration_test.go`、`player_bench_test.go`（按 Ruling T4-1 拆分，
+  codec 基准入包）；`player_store_test.go` 留根，新增 fixturePlayerID/
+  fixturePlayerSave/fixturePlayerInventory 同构副本与迁入的
+  BenchmarkMemoryPlayerStore/BenchmarkDiskPlayerStore。
+- fixture：`player-v1..v8.bin` 以 `git mv` 随域落 `player/testdata`，字节
+  逐字节不变（Ruling T4-6）。
+- 根包适配：`types.go` 别名再导出 `StoredPlayer`/`PlayerSave`/
+  `PlayerLocation`（type 别名）并落 `PlayerStore` 接口定义，哨兵注释改按
+  产生方表述（Ruling T4-3）；`disk.go`/`memory.go` 编排改经 `player.`
+  限定名消费，`maxPlayerFileLength` 改由 `player.EnvelopeLength`+
+  `player.MaxPayload` 推导；`byte_codec.go` 按 Ruling T4-7 清账；
+  `companion_summary_test.go` 落 `updateStorageFixtures` flag 定义
+  （Ruling T4-6）。
+- archcheck：登记 `internal/storage/player`（core+storagedef，Ruling
+  T4-5）并加入根包允许集；`baseline_test.go` 玩家 schema 权威来源路径同步
+  为 `internal/storage/player/player_codec.go`、codePattern 跟随导出名
+  `CurrentSchema`；顺带清 T3 deferred minor——
+  `dependency_test.go` region 条目注释中「裁决（T1-1）」编号引用改写为
+  描述契约本身（记录层容器随 chunk 落位、region 只收格式原语的拆分前提）。
+- 验证（本 worktree 实测，2026-08-28）：
+  - `go test ./internal/storage/... -race -count=1` → 根
+    `ok ... 17.448s`、chunk `ok ... 8.706s`、player `ok ... 2.663s`、
+    region `ok ... 3.079s`（对照 Baseline 单包 race 24.194s 与 T3 后根包
+    23.920s，只记录不设门槛）；
+  - 非 race：根 `ok ... 4.951s`、chunk `ok ... 2.286s`、player
+    `ok ... 1.466s`、region `ok ... 0.655s`；
+  - `go test ./internal/archcheck -count=1` → `ok ... 6.367s`；
+  - `go build ./internal/server ./internal/sim ./cmd/...` → 通过；`git status`
+    无 `internal/server`/`cmd/` 文件（消费方源码零改动）；
+  - `go test ./internal/storage/... -list '.*'` 并集与
+    `baseline-test-list.txt` 逐名 diff 为空（234 = 223 Test + 7 Benchmark +
+    4 Fuzz；分包计数根 118 / player 25 / chunk 79 / region 12）；
+  - `gofmt -l internal/storage internal/archcheck` 无输出；
+    `go vet ./internal/storage/... ./internal/archcheck` 通过；
+  - `openspec validate --all --strict --no-interactive` →
+    `Totals: 77 passed, 0 failed (77 items)`。
+- 评审结论：待控制会话规格与质量双评审；tasks.md 4.1 勾选待评审通过后
+  执行。

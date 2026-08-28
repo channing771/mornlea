@@ -1,8 +1,12 @@
-package storage
+// Package player 承载 player 存档域：MCPL 信封编解码、schema v1..v8 迁移链
+// 与玩家存档值类型。
+//
+// 本包是纯 codec 域：只依赖 core 值类型与 storagedef 哨兵，不感知根包编排
+// （DiskStore/MemoryStore 的 player 文件读写）或其他域子包；`PlayerStore`
+// 接口属根包存储契约家族，定义留在根包 types.go。
+package player
 
 import (
-	"context"
-
 	"github.com/channing771/mornlea/internal/core"
 )
 
@@ -57,9 +61,4 @@ type PlayerSave struct {
 	RespawnPresent   bool
 	RespawnPosition  [3]float32
 	RespawnDimension core.DimensionID
-}
-
-type PlayerStore interface {
-	LoadPlayer(context.Context, core.PlayerID) (StoredPlayer, error)
-	SavePlayer(context.Context, PlayerSave) (uint64, error)
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/chunk"
+	"github.com/channing771/mornlea/internal/storage/player"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -212,7 +213,7 @@ func (store *MemoryStore) LoadPlayer(
 	if !ok {
 		return StoredPlayer{}, fmt.Errorf("%w: %s", ErrPlayerNotFound, id)
 	}
-	return decodePlayer(id, bytes.Clone(stored.encoded))
+	return player.Decode(id, bytes.Clone(stored.encoded))
 }
 
 func (store *MemoryStore) SavePlayer(
@@ -222,7 +223,7 @@ func (store *MemoryStore) SavePlayer(
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	encoded, err := encodePlayer(save)
+	encoded, err := player.Encode(save)
 	if err != nil {
 		return 0, err
 	}

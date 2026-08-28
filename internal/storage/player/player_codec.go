@@ -1,4 +1,4 @@
-package storage
+package player
 
 import (
 	"encoding/binary"
@@ -7,13 +7,21 @@ import (
 	"math"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage/storagedef"
 )
 
 const (
-	currentPlayerSchema   uint32 = 8
+	// CurrentSchema 为 v8：追加定长重生点三字段。它同时是根包读取 player
+	// 文件时构造「未来 schema」故障注入的基准，故导出。
+	CurrentSchema uint32 = 8
+	// EnvelopeLength 是 MCPL 信封的固定头部长度；根包用它推出 player 文件的
+	// 物理字节上界，故导出。
+	EnvelopeLength = 44
+	// MaxPayload 是单条 player 负载的解码分配上界；根包的文件读取上界由
+	// EnvelopeLength + MaxPayload 组成。
+	MaxPayload uint32 = 1 << 20
+
 	playerEnvelopeVersion uint32 = 1
-	playerEnvelopeLength         = 44
-	maxPlayerPayload      uint32 = 1 << 20
 	// legacyPlayerHotbarBytes 是 schema v2/v3 的固定快捷栏负载长度。
 	legacyPlayerHotbarBytes = 1 + core.HotbarSlots*3
 	// legacyPlayerBackpackBytes 是 schema v3 的固定背包负载长度。
@@ -43,8 +51,8 @@ var (
 	playerCRCTable      = crc32.MakeTable(crc32.Castagnoli)
 )
 
-// encodePlayer serializes one player as the stable MCPL v1 envelope.
-func encodePlayer(save PlayerSave) ([]byte, error) {
+// Encode serializes one player as the stable MCPL v1 envelope.
+func Encode(save PlayerSave) ([]byte, error) {
 	if err := validatePlayerSave(save); err != nil {
 		return nil, err
 	}
@@ -52,13 +60,13 @@ func encodePlayer(save PlayerSave) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if uint64(len(payload)) > uint64(maxPlayerPayload) {
-		return nil, fmt.Errorf("%w: player payload exceeds %d bytes", ErrCorrupt, maxPlayerPayload)
+	if uint64(len(payload)) > uint64(MaxPayload) {
+		return nil, fmt.Errorf("%w: player payload exceeds %d bytes", storagedef.ErrCorrupt, MaxPayload)
 	}
-	encoded := make([]byte, 0, playerEnvelopeLength+len(payload))
+	encoded := make([]byte, 0, EnvelopeLength+len(payload))
 	encoded = append(encoded, playerEnvelopeMagic[:]...)
 	encoded = appendU32(encoded, playerEnvelopeVersion)
-	encoded = appendU32(encoded, currentPlayerSchema)
+	encoded = appendU32(encoded, CurrentSchema)
 	encoded = append(encoded, save.PlayerID[:]...)
 	encoded = appendU64(encoded, save.Revision)
 	encoded = appendU32(encoded, uint32(len(payload)))
@@ -72,9 +80,11 @@ func encodePlayer(save PlayerSave) ([]byte, error) {
 	return encoded, nil
 }
 
-func decodePlayer(wantID core.PlayerID, data []byte) (StoredPlayer, error) {
+// Decode verifies the envelope and reconstructs an independent player,
+// migrating older schemas up to the current one.
+func Decode(wantID core.PlayerID, data []byte) (StoredPlayer, error) {
 	if !wantID.Valid() {
-		return StoredPlayer{}, fmt.Errorf("%w: invalid requested player ID", ErrCorrupt)
+		return StoredPlayer{}, fmt.Errorf("%w: invalid requested player ID", storagedef.ErrCorrupt)
 	}
 	envelope := byteDecoder{data: data}
 	if err := envelope.magic(playerEnvelopeMagic); err != nil {
@@ -86,19 +96,19 @@ func decodePlayer(wantID core.PlayerID, data []byte) (StoredPlayer, error) {
 	}
 	if version != playerEnvelopeVersion {
 		if version > playerEnvelopeVersion {
-			return StoredPlayer{}, fmt.Errorf("%w: player envelope version %d", ErrFutureVersion, version)
+			return StoredPlayer{}, fmt.Errorf("%w: player envelope version %d", storagedef.ErrFutureVersion, version)
 		}
-		return StoredPlayer{}, fmt.Errorf("%w: unsupported player envelope version %d", ErrCorrupt, version)
+		return StoredPlayer{}, fmt.Errorf("%w: unsupported player envelope version %d", storagedef.ErrCorrupt, version)
 	}
 	schema, err := envelope.u32()
 	if err != nil {
 		return StoredPlayer{}, corrupt("player schema", err)
 	}
-	if schema > currentPlayerSchema {
-		return StoredPlayer{}, fmt.Errorf("%w: player schema %d", ErrFutureVersion, schema)
+	if schema > CurrentSchema {
+		return StoredPlayer{}, fmt.Errorf("%w: player schema %d", storagedef.ErrFutureVersion, schema)
 	}
 	if schema < oldestPlayerSchema {
-		return StoredPlayer{}, fmt.Errorf("%w: unsupported player schema %d", ErrCorrupt, schema)
+		return StoredPlayer{}, fmt.Errorf("%w: unsupported player schema %d", storagedef.ErrCorrupt, schema)
 	}
 	encodedID, err := envelope.take(len(wantID))
 	if err != nil {
@@ -107,28 +117,28 @@ func decodePlayer(wantID core.PlayerID, data []byte) (StoredPlayer, error) {
 	var playerID core.PlayerID
 	copy(playerID[:], encodedID)
 	if !playerID.Valid() || playerID != wantID {
-		return StoredPlayer{}, fmt.Errorf("%w: player ID does not match request", ErrCorrupt)
+		return StoredPlayer{}, fmt.Errorf("%w: player ID does not match request", storagedef.ErrCorrupt)
 	}
 	revision, err := envelope.u64()
 	if err != nil {
 		return StoredPlayer{}, corrupt("player revision", err)
 	}
 	if revision == 0 {
-		return StoredPlayer{}, fmt.Errorf("%w: zero player revision", ErrCorrupt)
+		return StoredPlayer{}, fmt.Errorf("%w: zero player revision", storagedef.ErrCorrupt)
 	}
 	payloadLength, err := envelope.u32()
 	if err != nil {
 		return StoredPlayer{}, corrupt("player payload length", err)
 	}
-	if payloadLength > maxPlayerPayload {
-		return StoredPlayer{}, fmt.Errorf("%w: player payload length %d exceeds limit", ErrCorrupt, payloadLength)
+	if payloadLength > MaxPayload {
+		return StoredPlayer{}, fmt.Errorf("%w: player payload length %d exceeds limit", storagedef.ErrCorrupt, payloadLength)
 	}
 	wantCRC, err := envelope.u32()
 	if err != nil {
 		return StoredPlayer{}, corrupt("player CRC32C", err)
 	}
 	if uint64(envelope.remaining()) != uint64(payloadLength) {
-		return StoredPlayer{}, fmt.Errorf("%w: player payload length does not match envelope", ErrCorrupt)
+		return StoredPlayer{}, fmt.Errorf("%w: player payload length does not match envelope", storagedef.ErrCorrupt)
 	}
 	payload, err := envelope.take(int(payloadLength))
 	if err != nil {
@@ -138,7 +148,7 @@ func decodePlayer(wantID core.PlayerID, data []byte) (StoredPlayer, error) {
 	_, _ = hasher.Write(data[8:40])
 	_, _ = hasher.Write(payload)
 	if hasher.Sum32() != wantCRC {
-		return StoredPlayer{}, fmt.Errorf("%w: player CRC32C", ErrCorrupt)
+		return StoredPlayer{}, fmt.Errorf("%w: player CRC32C", storagedef.ErrCorrupt)
 	}
 	dto, err := decodePlayerPayload(schema, playerID, revision, payload)
 	if err != nil {
@@ -302,7 +312,7 @@ func decodePlayerPayload(
 	case 8:
 		return decodePlayerV8(playerID, revision, data)
 	default:
-		return playerDTO{}, fmt.Errorf("%w: unsupported player schema %d", ErrCorrupt, schema)
+		return playerDTO{}, fmt.Errorf("%w: unsupported player schema %d", storagedef.ErrCorrupt, schema)
 	}
 }
 
@@ -312,7 +322,7 @@ func decodePlayerPayload(
 // 校验维度与坐标的合法性——越界值由 validatePlayerDTO 统一拒绝。
 func decodePlayerV8(playerID core.PlayerID, revision uint64, data []byte) (playerDTO, error) {
 	if len(data) < playerRespawnBytes {
-		return playerDTO{}, fmt.Errorf("%w: player payload is shorter than the respawn point", ErrCorrupt)
+		return playerDTO{}, fmt.Errorf("%w: player payload is shorter than the respawn point", storagedef.ErrCorrupt)
 	}
 	split := len(data) - playerRespawnBytes
 	dto, err := decodePlayerV7(playerID, revision, data[:split])
@@ -332,7 +342,7 @@ func decodePlayerV8(playerID core.PlayerID, revision uint64, data []byte) (playe
 		}
 		dto.RespawnDimension = core.DimensionID(int32(binary.LittleEndian.Uint32(tail[13:])))
 	default:
-		return playerDTO{}, fmt.Errorf("%w: invalid player respawn flag %d", ErrCorrupt, tail[0])
+		return playerDTO{}, fmt.Errorf("%w: invalid player respawn flag %d", storagedef.ErrCorrupt, tail[0])
 	}
 	return dto, nil
 }
@@ -340,7 +350,7 @@ func decodePlayerV8(playerID core.PlayerID, revision uint64, data []byte) (playe
 // decodePlayerV7 在 v5 解析结果之上追加三层饥饿状态。
 func decodePlayerV7(playerID core.PlayerID, revision uint64, data []byte) (playerDTO, error) {
 	if len(data) < playerHungerBytes {
-		return playerDTO{}, fmt.Errorf("%w: player payload is shorter than the hunger state", ErrCorrupt)
+		return playerDTO{}, fmt.Errorf("%w: player payload is shorter than the hunger state", storagedef.ErrCorrupt)
 	}
 	split := len(data) - playerHungerBytes
 	dto, err := decodePlayerV5(playerID, revision, data[:split])
@@ -358,7 +368,7 @@ func decodePlayerV7(playerID core.PlayerID, revision uint64, data []byte) (playe
 // decodePlayerV5 在 v4 解析结果之上追加 1 字节生命值。
 func decodePlayerV5(playerID core.PlayerID, revision uint64, data []byte) (playerDTO, error) {
 	if len(data) < playerHealthBytes {
-		return playerDTO{}, fmt.Errorf("%w: player payload is shorter than health", ErrCorrupt)
+		return playerDTO{}, fmt.Errorf("%w: player payload is shorter than health", storagedef.ErrCorrupt)
 	}
 	split := len(data) - playerHealthBytes
 	dto, err := decodePlayerV4(playerID, revision, data[:split])
@@ -372,7 +382,7 @@ func decodePlayerV5(playerID core.PlayerID, revision uint64, data []byte) (playe
 func decodePlayerV4(playerID core.PlayerID, revision uint64, data []byte) (playerDTO, error) {
 	inventoryBytes := playerHotbarBytes + playerBackpackBytes
 	if len(data) < inventoryBytes {
-		return playerDTO{}, fmt.Errorf("%w: player payload is shorter than the inventory", ErrCorrupt)
+		return playerDTO{}, fmt.Errorf("%w: player payload is shorter than the inventory", storagedef.ErrCorrupt)
 	}
 	split := len(data) - inventoryBytes
 	dto, err := decodePlayerV1(playerID, revision, data[:split])
@@ -404,7 +414,7 @@ func decodePlayerV4(playerID core.PlayerID, revision uint64, data []byte) (playe
 
 func decodePlayerV3(playerID core.PlayerID, revision uint64, data []byte) (playerDTO, error) {
 	if len(data) < legacyPlayerBackpackBytes {
-		return playerDTO{}, fmt.Errorf("%w: player payload is shorter than the backpack", ErrCorrupt)
+		return playerDTO{}, fmt.Errorf("%w: player payload is shorter than the backpack", storagedef.ErrCorrupt)
 	}
 	split := len(data) - legacyPlayerBackpackBytes
 	dto, err := decodePlayerV2(playerID, revision, data[:split])
@@ -424,7 +434,7 @@ func decodePlayerV3(playerID core.PlayerID, revision uint64, data []byte) (playe
 
 func decodePlayerV2(playerID core.PlayerID, revision uint64, data []byte) (playerDTO, error) {
 	if len(data) < legacyPlayerHotbarBytes {
-		return playerDTO{}, fmt.Errorf("%w: player payload is shorter than the hotbar", ErrCorrupt)
+		return playerDTO{}, fmt.Errorf("%w: player payload is shorter than the hotbar", storagedef.ErrCorrupt)
 	}
 	split := len(data) - legacyPlayerHotbarBytes
 	dto, err := decodePlayerV1(playerID, revision, data[:split])
@@ -454,7 +464,7 @@ func decodePlayerV1(playerID core.PlayerID, revision uint64, data []byte) (playe
 		return playerDTO{}, corrupt("player name length", err)
 	}
 	if uint64(nameLength) > uint64(decoder.remaining()) {
-		return playerDTO{}, fmt.Errorf("%w: player name length does not match payload", ErrCorrupt)
+		return playerDTO{}, fmt.Errorf("%w: player name length does not match payload", storagedef.ErrCorrupt)
 	}
 	name, err := decoder.take(int(nameLength))
 	if err != nil {
@@ -486,10 +496,10 @@ func decodePlayerV1(playerID core.PlayerID, revision uint64, data []byte) (playe
 		}
 		dto.Safe = &safe
 	default:
-		return playerDTO{}, fmt.Errorf("%w: invalid player safe flag %d", ErrCorrupt, hasSafe)
+		return playerDTO{}, fmt.Errorf("%w: invalid player safe flag %d", storagedef.ErrCorrupt, hasSafe)
 	}
 	if decoder.remaining() != 0 {
-		return playerDTO{}, fmt.Errorf("%w: trailing player payload bytes", ErrCorrupt)
+		return playerDTO{}, fmt.Errorf("%w: trailing player payload bytes", storagedef.ErrCorrupt)
 	}
 	return dto, nil
 }
@@ -545,23 +555,23 @@ func validatePlayerSave(save PlayerSave) error {
 
 func validatePlayerDTO(dto playerDTO) error {
 	if !dto.PlayerID.Valid() {
-		return fmt.Errorf("%w: invalid player ID", ErrCorrupt)
+		return fmt.Errorf("%w: invalid player ID", storagedef.ErrCorrupt)
 	}
 	if dto.Revision == 0 {
-		return fmt.Errorf("%w: zero player revision", ErrCorrupt)
+		return fmt.Errorf("%w: zero player revision", storagedef.ErrCorrupt)
 	}
 	name, err := core.NormalizeDisplayName(dto.DisplayName)
 	if err != nil || name != dto.DisplayName {
-		return fmt.Errorf("%w: invalid player display name", ErrCorrupt)
+		return fmt.Errorf("%w: invalid player display name", storagedef.ErrCorrupt)
 	}
 	if err := validatePlayerLocation(dto.Current); err != nil {
 		return err
 	}
 	if !finitePlayerFloat(dto.Yaw) {
-		return fmt.Errorf("%w: non-finite player yaw", ErrCorrupt)
+		return fmt.Errorf("%w: non-finite player yaw", storagedef.ErrCorrupt)
 	}
 	if !finitePlayerFloat(dto.Pitch) || dto.Pitch < -math.Pi/2 || dto.Pitch > math.Pi/2 {
-		return fmt.Errorf("%w: invalid player pitch", ErrCorrupt)
+		return fmt.Errorf("%w: invalid player pitch", storagedef.ErrCorrupt)
 	}
 	if dto.Safe != nil {
 		if err := validatePlayerLocation(*dto.Safe); err != nil {
@@ -569,19 +579,19 @@ func validatePlayerDTO(dto playerDTO) error {
 		}
 	}
 	if !dto.Inventory.Valid() {
-		return fmt.Errorf("%w: invalid player inventory", ErrCorrupt)
+		return fmt.Errorf("%w: invalid player inventory", storagedef.ErrCorrupt)
 	}
 	if !core.ValidHealth(dto.Health) {
-		return fmt.Errorf("%w: invalid player health", ErrCorrupt)
+		return fmt.Errorf("%w: invalid player health", storagedef.ErrCorrupt)
 	}
 	if !core.ValidHunger(dto.Hunger) {
-		return fmt.Errorf("%w: invalid player hunger", ErrCorrupt)
+		return fmt.Errorf("%w: invalid player hunger", storagedef.ErrCorrupt)
 	}
 	// 饱和度是饥饿值之上的缓冲，上界就是饥饿值本身（千分位）。乘积至多
 	// 20×1000，远在 uint16 之内，不会溢出。疲劳值没有静态上界：阈值是 tunable，
 	// uint16 的全域都是合法取值。
 	if dto.SaturationMilli > uint16(dto.Hunger)*core.SaturationMilliPerPoint {
-		return fmt.Errorf("%w: player saturation exceeds hunger", ErrCorrupt)
+		return fmt.Errorf("%w: player saturation exceeds hunger", storagedef.ErrCorrupt)
 	}
 	// 重生点只在 present=1 时校验：位置与维度复用 PlayerLocation 的同一条
 	// 规则（维度受支持、坐标有限），present=0 时三个字段都不携带语义。
@@ -598,11 +608,11 @@ func validatePlayerDTO(dto playerDTO) error {
 
 func validatePlayerLocation(location PlayerLocation) error {
 	if location.Dimension != core.Overworld {
-		return fmt.Errorf("%w: unsupported player dimension %d", ErrCorrupt, location.Dimension)
+		return fmt.Errorf("%w: unsupported player dimension %d", storagedef.ErrCorrupt, location.Dimension)
 	}
 	for _, position := range location.Position {
 		if !finitePlayerFloat(position) {
-			return fmt.Errorf("%w: non-finite player position", ErrCorrupt)
+			return fmt.Errorf("%w: non-finite player position", storagedef.ErrCorrupt)
 		}
 	}
 	return nil

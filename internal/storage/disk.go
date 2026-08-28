@@ -15,10 +15,11 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/chunk"
+	"github.com/channing771/mornlea/internal/storage/player"
 	"github.com/channing771/mornlea/internal/storage/region"
 )
 
-const maxPlayerFileLength = int64(playerEnvelopeLength) + int64(maxPlayerPayload)
+const maxPlayerFileLength = int64(player.EnvelopeLength) + int64(player.MaxPayload)
 
 // DiskStore persists chunks in lazily opened region files under one locked world.
 type DiskStore struct {
@@ -212,7 +213,7 @@ func (store *DiskStore) LoadPlayer(
 	if err != nil {
 		return StoredPlayer{}, fmt.Errorf("read player %s: %w", id, err)
 	}
-	return decodePlayer(id, encoded)
+	return player.Decode(id, encoded)
 }
 
 func (store *DiskStore) SavePlayer(
@@ -225,7 +226,7 @@ func (store *DiskStore) SavePlayer(
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	encoded, err := encodePlayer(save)
+	encoded, err := player.Encode(save)
 	if err != nil {
 		return 0, err
 	}
@@ -243,7 +244,7 @@ func (store *DiskStore) SavePlayer(
 	previous, err := readPlayerFile(path)
 	switch {
 	case err == nil:
-		stored, decodeErr := decodePlayer(save.PlayerID, previous)
+		stored, decodeErr := player.Decode(save.PlayerID, previous)
 		if decodeErr != nil {
 			return 0, fmt.Errorf("read existing player %s: %w", save.PlayerID, decodeErr)
 		}

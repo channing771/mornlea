@@ -1,4 +1,4 @@
-package storage
+package player
 
 import (
 	"bytes"
@@ -21,11 +21,11 @@ func FuzzDecodePlayer(f *testing.F) {
 			f.Add(bytes.Clone(fixture[:length]))
 		}
 	}
-	for _, length := range []uint32{maxPlayerPayload - 1, maxPlayerPayload, maxPlayerPayload + 1} {
-		payload := make([]byte, playerEnvelopeLength)
+	for _, length := range []uint32{MaxPayload - 1, MaxPayload, MaxPayload + 1} {
+		payload := make([]byte, EnvelopeLength)
 		copy(payload, "MCPL")
 		binary.LittleEndian.PutUint32(payload[4:], playerEnvelopeVersion)
-		binary.LittleEndian.PutUint32(payload[8:], currentPlayerSchema)
+		binary.LittleEndian.PutUint32(payload[8:], CurrentSchema)
 		id := fixturePlayerID()
 		copy(payload[12:28], id[:])
 		binary.LittleEndian.PutUint64(payload[28:], 1)
@@ -34,7 +34,7 @@ func FuzzDecodePlayer(f *testing.F) {
 	}
 	id := fixturePlayerID()
 	f.Fuzz(func(t *testing.T, payload []byte) {
-		got, err := decodePlayer(id, payload)
+		got, err := Decode(id, payload)
 		if err == nil && (got.PlayerID != id || got.Revision == 0) {
 			t.Fatalf("successful decode changed identity: %+v", got)
 		}

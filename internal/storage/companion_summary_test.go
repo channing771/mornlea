@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"flag"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -20,6 +21,12 @@ import (
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
+)
+
+// updateStorageFixtures 与 player/chunk 域测试共用同一命令行开关名：按域拆分后
+// 各包测试持有同名 flag，重写各自域的 committed fixture。
+var updateStorageFixtures = flag.Bool(
+	"update-storage-fixtures", false, "rewrite committed storage fixtures",
 )
 
 // fixtureCompanionSummary 是 v4 golden 中 active 记录携带的最近对话摘要文本：

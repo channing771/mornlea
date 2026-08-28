@@ -1,4 +1,4 @@
-package storage
+package player
 
 import (
 	"errors"
@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage/storagedef"
 )
 
 func TestPlayerV5MigrationPreservesState(t *testing.T) {
@@ -29,21 +30,21 @@ func TestPlayerV5MigrationPreservesState(t *testing.T) {
 }
 
 func TestPlayerFutureSchemaIsRejected(t *testing.T) {
-	// 用 currentPlayerSchema+1 而不是字面量：升 schema 时这条断言必须自动跟随，
+	// 用 CurrentSchema+1 而不是字面量：升 schema 时这条断言必须自动跟随，
 	// 否则它会退化成"迁移一个已经支持的版本"，永远绿。
-	if _, migrated, err := migratePlayer(currentPlayerSchema+1, playerDTO{}); !errors.Is(err, ErrFutureVersion) || migrated {
+	if _, migrated, err := migratePlayer(CurrentSchema+1, playerDTO{}); !errors.Is(err, storagedef.ErrFutureVersion) || migrated {
 		t.Fatalf("未来玩家 schema migrated=%v err=%v，想要 ErrFutureVersion", migrated, err)
 	}
 }
 
 func TestPlayerMigrationRegistryIsContinuous(t *testing.T) {
-	for schema := oldestPlayerSchema; schema < currentPlayerSchema; schema++ {
+	for schema := oldestPlayerSchema; schema < CurrentSchema; schema++ {
 		if _, ok := playerMigrations[schema]; !ok {
 			t.Fatalf("missing migration from schema %d", schema)
 		}
 	}
 	for schema := range playerMigrations {
-		if schema < oldestPlayerSchema || schema >= currentPlayerSchema {
+		if schema < oldestPlayerSchema || schema >= CurrentSchema {
 			t.Fatalf("unexpected migration from schema %d", schema)
 		}
 	}
