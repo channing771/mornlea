@@ -86,7 +86,7 @@ var baselineVersionMappings = []baselineVersionMapping{
 	{
 		name:        "benchmark scenario",
 		docPattern:  `benchmark scenario 为 v(\d+)`,
-		sourcePath:  filepath.Join("cmd", "mornlea", "benchmark.go"),
+		sourcePath:  filepath.Join("cmd", "mornlea", "benchmark", "benchmark.go"),
 		codePattern: `scenarioVersion\s*=\s*(\w+)`,
 		why:         "scenarioVersion 是 benchmark 报告写出的场景版本，场景迁移链以它为终点。",
 	},

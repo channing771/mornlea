@@ -1,6 +1,6 @@
 //go:build darwin
 
-package main
+package benchmark
 
 import (
 	"context"
@@ -22,7 +22,7 @@ import (
 )
 
 func (probe *multiplayerClientProbe) measureGPUCompletionAfterTransportClose(
-	app *application.Application,
+	app BenchmarkApplication,
 ) error {
 	serverCloseErr := app.Server().CloseTrustedObserver()
 	app.CloseClientSession(nil)
@@ -192,7 +192,7 @@ func waitUntilLoadedPair(lodOn, lodOff *application.Application, timeout time.Du
 
 // waitUntilLoadedPairWithStep 是 paired control 的最小调度内核。`step` 保留
 // 仅用于无 GPU 单元测试的 seam；生产路径始终由 `waitUntilLoadedPair` 注入
-// 真实 `application.frame`，从而完整应用服务端消息和网格上传。
+// 真实 `Frame` 方法，从而完整应用服务端消息和网格上传。
 func waitUntilLoadedPairWithStep(
 	lodOn, lodOff *application.Application,
 	timeout time.Duration,
@@ -218,7 +218,7 @@ func waitUntilLoadedPairWithStep(
 }
 
 func waitForBenchmarkCenterConsistency(
-	app *application.Application,
+	app BenchmarkApplication,
 	center core.ChunkPos,
 	afterSequence uint64,
 	timeout time.Duration,
@@ -257,7 +257,7 @@ func waitForBenchmarkCenterConsistency(
 	)
 }
 
-func runWarmup(app *application.Application, duration time.Duration) error {
+func runWarmup(app BenchmarkApplication, duration time.Duration) error {
 	deadline := time.Now().Add(duration)
 	for time.Now().Before(deadline) {
 		if app.Window() != nil {
@@ -278,7 +278,7 @@ func runWarmup(app *application.Application, duration time.Duration) error {
 }
 
 func measurePhase(
-	app *application.Application,
+	app BenchmarkApplication,
 	multiplayer *multiplayerClientProbe,
 	name string,
 	duration time.Duration,

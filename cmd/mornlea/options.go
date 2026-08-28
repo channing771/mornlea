@@ -84,7 +84,7 @@ func parseMainOptions(args []string) (mainOptions, error) {
 	}
 	seed := int64(42)
 	if *benchmark {
-		seed = benchmarkSeed
+		seed = application.BenchmarkSeed
 	}
 	return mainOptions{
 		Application: application.Options{

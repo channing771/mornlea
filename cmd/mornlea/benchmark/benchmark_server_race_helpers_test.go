@@ -1,6 +1,6 @@
 //go:build darwin && race
 
-package main
+package benchmark
 
 // raceEnabled 在 -race 构建下为 true，与 benchmark_server_norace_helpers_test.go 中
 // 的 false 常量配对。服务端 benchmark 的 darwin-only 测试用它区分构建形态：

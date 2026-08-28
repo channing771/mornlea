@@ -1,6 +1,6 @@
 //go:build darwin
 
-package main
+package benchmark
 
 import (
 	"fmt"
@@ -44,7 +44,7 @@ var (
 
 // runBenchmarkCooldown 在阶段之间等待固定时长，期间只泵送窗口事件，
 // 不提交任何渲染工作，也不推进相机脚本。
-func runBenchmarkCooldown(app *application.Application, duration time.Duration) {
+func runBenchmarkCooldown(app BenchmarkApplication, duration time.Duration) {
 	// 冷却是让系统回落的窗口：顺带回收上一阶段产生的对象，
 	// 避免它们把后续阶段的 RSS 峰值推高。
 	runtime.GC()
@@ -104,7 +104,11 @@ func gpuCompletionMinSamples(scenario int) int {
 	}
 }
 
-func runBenchmark(app *application.Application, outputPath string) error {
+// RunBenchmark 是 benchmark 性能测量的导出入口：加载固定场景后依次执行
+// 预热、still/flying 两个测量阶段、GPU 完成时间采样与八会话服务端探针，
+// 并把完整 `client.PerfReport` 写入 outputPath。app 由 main 装配后传入；
+// 内部的帧循环与探针只依赖包内消费端接口 `BenchmarkApplication`。
+func RunBenchmark(app *application.Application, outputPath string) error {
 	width, height := app.FramebufferSize()
 	if width != 2560 || height != 1440 {
 		return fmt.Errorf("benchmark framebuffer=%dx%d，要求精确 2560x1440", width, height)

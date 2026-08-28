@@ -1,6 +1,6 @@
 //go:build darwin
 
-package main
+package benchmark
 
 import (
 	"fmt"
@@ -23,7 +23,7 @@ const (
 )
 
 type multiplayerClientProbe struct {
-	app      *application.Application
+	app      BenchmarkApplication
 	scenario application.MultiplayerBenchmarkScenario
 	codec    *network.Codec
 	roster   *client.RemotePlayers
@@ -38,7 +38,7 @@ type multiplayerClientProbe struct {
 	tick         uint64
 }
 
-func newMultiplayerClientProbe(app *application.Application) (*multiplayerClientProbe, error) {
+func newMultiplayerClientProbe(app BenchmarkApplication) (*multiplayerClientProbe, error) {
 	codec, err := network.NewCodec()
 	if err != nil {
 		return nil, err
@@ -84,7 +84,7 @@ func (probe *multiplayerClientProbe) Close() {
 	}
 }
 
-func (probe *multiplayerClientProbe) sampleFrame(app *application.Application, tick uint64) error {
+func (probe *multiplayerClientProbe) sampleFrame(app BenchmarkApplication, tick uint64) error {
 	batch := probe.statesNearCamera(tick, app.Camera().Pos)
 	started := time.Now()
 	packetID, payload, err := probe.codec.EncodeServer(network.StatePlay, batch)
@@ -127,7 +127,7 @@ func (probe *multiplayerClientProbe) statesNearCamera(tick uint64, camera mgl32.
 	return batch
 }
 
-func benchmarkBillboardCamera(app *application.Application) render.BillboardCamera {
+func benchmarkBillboardCamera(app BenchmarkApplication) render.BillboardCamera {
 	right := mgl32.Vec3{
 		float32(math.Cos(float64(app.Camera().Yaw))), 0,
 		-float32(math.Sin(float64(app.Camera().Yaw))),
@@ -142,7 +142,7 @@ func benchmarkBillboardCamera(app *application.Application) render.BillboardCame
 const gpuCompletionChunks = client.ScenarioV12GPUCompletionBatch /
 	client.ScenarioV12GPUCompletionChunk
 
-func (probe *multiplayerClientProbe) measureGPUCompletion(app *application.Application) error {
+func (probe *multiplayerClientProbe) measureGPUCompletion(app BenchmarkApplication) error {
 	avatars, tags := application.RemoteRenderPresentations(probe.roster.Presentations())
 	// 切换到 Rust 渲染器后,一个样本是一批完整 RenderFrame(含提交与完成)
 	// 的总耗时摊到批次数;Poll 的固定节拍在样本内只出现一次,被摊薄到可忽略。
