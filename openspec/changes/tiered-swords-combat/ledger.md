@@ -32,7 +32,9 @@
 - Task 1 implementer self-review round 1，QUALITY PASS：artifact 依赖按 `openspec status --json` 与 `openspec instructions ... --json` 的顺序创建；modified requirement 使用现有 requirement 精确标题；tasks 只有计划 Tasks 2–5，未包含 admission、sync/archive、PR、CI 或 cleanup；没有生产/测试代码或长期配置改动。
 - Task 1 implementer self-review round 2，SPEC PASS：逐文件复核完整 16-file active change diff，并与 task brief、批准设计和实施计划 Tasks 2–5 对照；11 个 capability、固定值、failure/capacity boundary、兼容矩阵与 publication/client/capture 边界均完整，无遗漏、冲突或待定值。
 - Task 1 implementer self-review round 2，QUALITY PASS：13 个 `MODIFIED` requirement 标题均与当前主规格精确匹配；所有 requirement 都有可判定 scenario；tasks 保持 2.1..2.9、3.1..3.11、4.1..4.8、5.1..5.13 且不包含 Task 1/6；全文未发现需要修复的 finding。
-- 独立 SPEC/QUALITY 评审未在本 implementer task 内执行，原因见上方 no-reviewer ruling；本 ledger 不冒充独立 verdict。
+- Task 1 独立评审，SPEC PASS：评审报告 `.superpowers/sdd/2026-08-28-tiered-swords-unified-combat/task-1-review.md:1-11` 对提交区间 `6a992a5c..80c4affa` 的 16-file active change 完成核对；11 个 capability、冻结增量/不变矩阵、玩法数值、72/72 fail-closed、hostile-first、私有 `CombatHit`、HUD/capture 边界与 Tasks 2–5 镜像均符合批准设计，无法从 diff 验证的项目为 0。
+- Task 1 独立评审，QUALITY PASS：同一报告 `:13-42` 给出 Task quality `Approved`，Critical 0、Important 0、Minor 0；没有 correctness、scope、maintainability 或 verification finding。
+- Task 1 完成：起始提交 `6a992a5c` 到 proposal 提交 `80c4affa` 的 docs-only 区间已完成 implementer self-review、独立 SPEC/QUALITY 评审和既有 validation evidence，后续工作从 `tasks.md` 的 Task 2 开始。
 
 ## Validation Evidence
 
