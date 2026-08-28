@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage/storagedef"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -25,11 +26,14 @@ type regionFileHooks struct {
 }
 
 var (
-	ErrChunkNotFound    = errors.New("storage: chunk not found")
-	ErrPlayerNotFound   = errors.New("storage: player not found")
-	ErrWorldLocked      = errors.New("storage: world locked")
-	ErrCorrupt          = errors.New("storage: corrupt data")
-	ErrFutureVersion    = errors.New("storage: future version")
+	ErrChunkNotFound  = errors.New("storage: chunk not found")
+	ErrPlayerNotFound = errors.New("storage: player not found")
+	ErrWorldLocked    = errors.New("storage: world locked")
+	// ErrCorrupt/ErrFutureVersion 定义在 `storagedef` 叶子包（跨域哨兵的公共
+	// 下沉），此处绑定同一错误值再导出，保持既有 `storage.X` 引用与
+	// errors.Is 身份不变。
+	ErrCorrupt          = storagedef.ErrCorrupt
+	ErrFutureVersion    = storagedef.ErrFutureVersion
 	ErrRevisionConflict = errors.New("storage: revision conflict")
 )
 
