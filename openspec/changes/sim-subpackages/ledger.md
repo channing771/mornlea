@@ -54,5 +54,14 @@
 - Quality review: fresh reviewer `ses_fb75c6948ffe8cma1D7TuswXp9` found incomplete `DefaultTunables` regression coverage and the same source-guard gap; scoped re-review approved all 20 default field assertions and the guard repair.
 - Deferred minor: package tests do not exercise concurrent readers and writers of the atomic tuning snapshot. Final review must decide whether existing race coverage is sufficient for this refactor.
 
+## Task 2.1 Realm State And Transaction
+
+- Implementer: fresh implementer `ses_fb73bcff7ffegXa2ivN06Io3ra`.
+- Commits: `34adc1cf` and repair `0e0d11a0`.
+- Validation: `go test ./internal/sim/realm -race -count=1`, `go test ./internal/world ./internal/storage -race -count=1`, `go test ./internal/sim -race -count=1`, `go test ./internal/archcheck -count=1`, focused server/client/app tests, `go vet ./...`, scoped `gofmt -l`, and `git diff --check` passed.
+- Spec review: fresh reviewer `ses_fb70f9426ffe9TOn8hEl82r7jU` rejected the first implementation because realm imported contract, exposed writable state, and allowed repeated commits. Scoped re-review `ses_fb6b8ad6bffehDhxxqxA6EfS3i` approved the localized DTO boundary, private maps, and single-commit guard.
+- Quality review: fresh reviewer `ses_fb70f9475ffejjwAvPdOs9rWT5` found no issue in the initial diff; the stricter specification findings governed the repair.
+- Ruling: a full race run after the repair failed only in two server timing tests that each passed in isolated reruns. No causal code path was established and task-specific gates passed, so no speculative retry or timeout change is made. Cost if wrong: the existing timing-dependent server tests require a reproducible, separately scoped fix.
+
 
 - Pending.

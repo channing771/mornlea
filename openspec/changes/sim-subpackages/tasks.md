@@ -10,7 +10,7 @@
 
 ## 2. Realm State And Transaction
 
-- [ ] 2.1 新建 `internal/sim/realm`，将 `Dimension`、区块生命周期、持久化 revision、`pendingChunkChanges` 与 `recordChange`/`finishChanges` 收敛为 `realm.State` 和单 tick `realm.Mutation`；保持变更按区块与索引的既有确定性排序。目标包：`internal/sim/world.go`、`engine_changes.go`、持久化与区块生命周期代码及相应白盒测试。验证：`go test ./internal/sim/realm -race -count=1` 与 `go test ./internal/world ./internal/storage -race -count=1`。
+- [x] 2.1 新建 `internal/sim/realm`，将 `Dimension`、区块生命周期、持久化 revision、`pendingChunkChanges` 与 `recordChange`/`finishChanges` 收敛为 `realm.State` 和单 tick `realm.Mutation`；保持变更按区块与索引的既有确定性排序。目标包：`internal/sim/world.go`、`engine_changes.go`、持久化与区块生命周期代码及相应白盒测试。验证：`go test ./internal/sim/realm -race -count=1` 与 `go test ./internal/world ./internal/storage -race -count=1`。
 - [ ] 2.2 将 fluid、耕地湿度、作物、干耕地退化、火把/床支撑复核及其有界 scratch/队列迁入 `realm`，所有环境写入只通过同一 `realm.Mutation`；保留既有预算、重扫、随机抽样和区块写入顺序。目标包：`internal/sim/fluid*.go`、`crop*.go`、`farmland_*.go`、`torch.go`、`bed.go` 的支持复核声明及关联测试。验证：`go test ./internal/sim/realm ./internal/fluid -race -count=1`，以及现有流体/作物 benchmark 的 record-only 运行。
 
 ## 3. Entity State And Gameplay Settlement
