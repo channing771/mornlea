@@ -70,9 +70,8 @@
 
 ### Task 3.1 + 3.2（capture 包提取与 golden 路径同步）
 
-- 实现 SHA：`47723a20`（Task 3.1 包迁移）；Task 3.2 为 golden 引用同步与
-  tasks/ledger 勾选，与本文更新同批提交（该提交自身 SHA 无法写入自身，
-  由控制会话复核时补记）。
+- 实现 SHA：`47723a20`（Task 3.1 包迁移）；`1ef094b4`（Task 3.2 golden 路径
+  与引用同步）。
 - 验证输出摘要（worktree `refactor/client-subpackages`，基线 `73748fee`）：
   - `make rust`：release 增量构建通过；`engine/target/release/` 同时有
     `libmornlea_engine.dylib` 与 `libmornlea_client.dylib`。
@@ -102,6 +101,13 @@
     `Makefile` 无 golden 路径引用，核对后零改动；`docs/superpowers/`、
     `openspec/changes/archive/`、`docs/notes/fix-grass-block-texture/`、
     `docs/feature-backlog.md` 为历史记录，语义指当时事实，不改写。
+- 双评审裁决（控制会话复核）：SPEC PASS（逐条复核 `-list` 并集零差异、
+  golden 21 张 R100、依赖方向 capture→app 单向、接口 54/54 方法真实消费、
+  `capture_load.go` 副本逐字节归一 diff 等价、app 侧仅 +2 别名行）；QUALITY
+  APPROVED（无 should-fix）。评审遗留 note：`SceneApplication` 实为 54 方法；
+  `benchmark_measure.go:194` 注释 `application.frame` 陈旧表述随 Task 4 收敛
+  顺带核对；app 侧 `Panel()`/`ChatInput()` 签名可改用别名拼写（可选，
+  零行为差异）。
 
 ### Task 2.1 + 2.2（app 包提取与 archcheck 子树守卫适配）
 
