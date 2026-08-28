@@ -21,14 +21,14 @@ func TestCanonicalItemIDsStayStable(t *testing.T) {
 }
 
 // TestItemIDMaxGuardsExhaustiveEnumeration 锁定 ItemIDMax 独占哨兵与枚举末项的
-// 关系：当前最后一个合法物品必须是 ItemRottenFlesh（紧随 ItemTorch 追加，是
-// 夜行者死亡掉落的可食用战利品）。物品演进纪律是只能在哨兵之前追加；将来追加
-// 新物品时第一个断言变红，迫使开发者同步审视全部以「item < ItemIDMax」为穷举界
-// 的测试（例如 companion 的 place 注册表覆盖测试），而不是让穷举测试静默失去
-// 对新物品的覆盖。
+// 关系：当前最后一个合法物品必须是 ItemBed（紧随 ItemRottenFlesh 追加；腐肉是
+// 夜行者死亡掉落的可食用战利品，床是床与睡眠行的合成与放置物品）。物品演进
+// 纪律是只能在哨兵之前追加；将来追加新物品时第一个断言变红，迫使开发者同步
+// 审视全部以「item < ItemIDMax」为穷举界的测试（例如 companion 的 place 注册表
+// 覆盖测试），而不是让穷举测试静默失去对新物品的覆盖。
 func TestItemIDMaxGuardsExhaustiveEnumeration(t *testing.T) {
-	if core.ItemRottenFlesh != core.ItemIDMax-1 {
-		t.Fatalf("ItemID 枚举末项不再是 ItemRottenFlesh（ItemIDMax-1 = %d）；"+
+	if core.ItemBed != core.ItemIDMax-1 {
+		t.Fatalf("ItemID 枚举末项不再是 ItemBed（ItemIDMax-1 = %d）；"+
 			"新增物品必须同步审视全部以 ItemIDMax 为穷举界的测试", core.ItemIDMax-1)
 	}
 	// 哨兵之外不得再出现已注册物品：若有人把新物品追加在哨兵之后，穷举界会
@@ -41,14 +41,14 @@ func TestItemIDMaxGuardsExhaustiveEnumeration(t *testing.T) {
 }
 
 func TestItemIDsAppendOnly(t *testing.T) {
-	if core.ItemRottenFlesh != core.ItemIDMax-1 {
-		t.Fatal("Rotten flesh must be last before Max")
+	if core.ItemBed != core.ItemIDMax-1 {
+		t.Fatal("Bed must be last before Max")
+	}
+	if core.ItemRottenFlesh != core.ItemBed-1 {
+		t.Fatal("Rotten flesh must sit right before Bed")
 	}
 	if core.ItemTorch != core.ItemRottenFlesh-1 {
 		t.Fatal("Torch must sit right before rotten flesh")
-	}
-	if core.ItemDoor != core.ItemTorch-1 {
-		t.Fatal("Door must sit right before Torch")
 	}
 	if _, ok := core.ItemStackLimit(core.ItemPotato); !ok {
 		t.Fatal("potato stack missing")
@@ -544,7 +544,7 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 	}
 	// 火把物品紧随门物品追加（面向相关的可放置物品，放置映射走
 	// PlaceableBlockAtFace）；夜行者死亡掉落的腐肉物品紧随火把追加，
-	// 哨兵随之后移到 46。
+	// 床物品紧随腐肉追加（可合成的双格放置物品），哨兵随之后移到 47。
 	if core.ItemTorch != core.ItemDoor+1 {
 		t.Fatalf("ItemTorch = %d，必须紧随 ItemDoor(%d)",
 			core.ItemTorch, core.ItemDoor)
@@ -553,9 +553,13 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 		t.Fatalf("ItemRottenFlesh = %d，必须紧随 ItemTorch(%d)",
 			core.ItemRottenFlesh, core.ItemTorch)
 	}
-	if core.ItemIDMax != 46 {
-		t.Fatalf("ItemIDMax = %d，必须紧随 ItemRottenFlesh(%d) 后移到 46",
-			core.ItemIDMax, core.ItemRottenFlesh)
+	if core.ItemBed != core.ItemRottenFlesh+1 {
+		t.Fatalf("ItemBed = %d，必须紧随 ItemRottenFlesh(%d)",
+			core.ItemBed, core.ItemRottenFlesh)
+	}
+	if core.ItemIDMax != 47 {
+		t.Fatalf("ItemIDMax = %d，必须紧随 ItemBed(%d) 后移到 47",
+			core.ItemIDMax, core.ItemBed)
 	}
 	if core.WorkbenchID != 45 {
 		t.Fatalf("WorkbenchID = %d，必须稳定为 45 且紧随 WheatStage7ID(%d)",
@@ -577,14 +581,18 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 		t.Fatalf("DoorUpper = %d，必须紧随 DoorLowerEastOpen(%d)",
 			core.DoorUpper, core.DoorLowerEastOpen)
 	}
-	// 火把五形态紧随门方块追加，方块侧哨兵随之后移到 76。
+	// 火把五形态紧随门方块追加，床八形态紧随火把追加，方块侧哨兵随之后移到 84。
 	if core.TorchStandingID != core.DoorUpper+1 {
 		t.Fatalf("TorchStandingID = %d，必须紧随 DoorUpper(%d)",
 			core.TorchStandingID, core.DoorUpper)
 	}
-	if core.BlockIDMax != 76 {
-		t.Fatalf("BlockIDMax = %d，必须紧随 TorchWallNegZID(%d) 后移到 76",
-			core.BlockIDMax, core.TorchWallNegZID)
+	if core.BedFootSouthID != core.TorchWallNegZID+1 {
+		t.Fatalf("BedFootSouthID = %d，必须紧随 TorchWallNegZID(%d)",
+			core.BedFootSouthID, core.TorchWallNegZID)
+	}
+	if core.BlockIDMax != 84 {
+		t.Fatalf("BlockIDMax = %d，必须紧随 BedHeadEastID(%d) 后移到 84",
+			core.BlockIDMax, core.BedHeadEastID)
 	}
 }
 
@@ -631,8 +639,8 @@ func TestWorkbenchItemPlacesAndDropsBack(t *testing.T) {
 }
 
 // TestTorchItemIsRegisteredStackableMaterial 锁定火把物品语义：编号 44（紧随
-// 门物品；其后是夜行者死亡掉落的腐肉物品，ItemIDMax 后移到 46）、堆叠 64、
-// 没有耐久、不是工具、不是食物。
+// 门物品；其后是夜行者死亡掉落的腐肉物品与床物品，ItemIDMax 后移到 47）、
+// 堆叠 64、没有耐久、不是工具、不是食物。
 // 放置不经 ItemPlacement（面向无关的旧窗口），只经 PlaceableBlockAtFace 的
 // 面 → 形态映射——因此火把对 ItemPlacement 必须保持不可放置，防止任何调用方
 // 绕开面映射直接写出「默认形态」。
@@ -649,8 +657,12 @@ func TestTorchItemIsRegisteredStackableMaterial(t *testing.T) {
 		t.Fatalf("ItemRottenFlesh = %d，必须紧随 ItemTorch(%d)",
 			core.ItemRottenFlesh, core.ItemTorch)
 	}
-	if core.ItemIDMax != 46 {
-		t.Fatalf("ItemIDMax = %d，必须后移到 46", core.ItemIDMax)
+	if core.ItemBed != core.ItemRottenFlesh+1 {
+		t.Fatalf("ItemBed = %d，必须紧随 ItemRottenFlesh(%d)",
+			core.ItemBed, core.ItemRottenFlesh)
+	}
+	if core.ItemIDMax != 47 {
+		t.Fatalf("ItemIDMax = %d，必须后移到 47", core.ItemIDMax)
 	}
 	if !core.RegisteredItem(core.ItemTorch) {
 		t.Fatal("ItemTorch 未注册")
@@ -696,7 +708,7 @@ func TestTorchFormsDropBackOneTorch(t *testing.T) {
 }
 
 func TestItemDoorPlacementDrop(t *testing.T) {
-	if core.ItemDoor != 43 || core.ItemIDMax != 46 {
+	if core.ItemDoor != 43 || core.ItemIDMax != 47 {
 		t.Fatal("ItemDoor IDs")
 	}
 	if got, ok := core.ItemPlacement(core.ItemDoor); !ok || got != core.DoorLowerSouthClosed {

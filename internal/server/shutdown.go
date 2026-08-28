@@ -257,6 +257,7 @@ func (server *Server) flushFrozen(ctx context.Context) error {
 func (server *Server) flushMetadata(ctx context.Context) error {
 	server.stepMu.Lock()
 	target := server.engine.WorldTime()
+	offset := server.engine.DayPhaseOffset()
 	server.metadataSave.latest = target
 	server.stepMu.Unlock()
 
@@ -270,6 +271,7 @@ func (server *Server) flushMetadata(ctx context.Context) error {
 		done := !inFlight && server.metadataSave.committed >= target
 		metadata := server.store.Metadata()
 		metadata.WorldTimeTicks = target
+		metadata.DayPhaseOffset = uint64(offset)
 		server.stepMu.Unlock()
 		if done {
 			return nil

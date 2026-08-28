@@ -96,7 +96,7 @@ func integrationPlayerID() core.PlayerID {
 func startDiskHost(t *testing.T, root, address string, generator Generator) integrationHost {
 	t.Helper()
 	store, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 2, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld,
 	}})
 	if err != nil {
 		t.Fatalf("OpenDisk: %v", err)
@@ -413,7 +413,7 @@ func seedIntegrationPlayer(
 ) {
 	t.Helper()
 	store, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 2, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld,
 	}})
 	if err != nil {
 		t.Fatal(err)

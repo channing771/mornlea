@@ -41,6 +41,10 @@ type PlayerUpdate struct {
 	// SaturationZero 是 `saturationMilli==0` 的瞬态提示位，随 `Hunger` 同频下发
 	// （`ProtocolVersion 29` 尾部 1 bool），仅驱动 HUD 抖动呈现。
 	SaturationZero bool
+	// DayPhaseOffset 是本 tick 生效的显示相位偏移（引擎单值，0..23999），与
+	// `WorldTimeTicks` 同频下发。它只进入显示相位
+	// `(WorldTimeTicks + DayPhaseOffset) % 24000`，绝不回写绝对时间。
+	DayPhaseOffset uint16
 	// WorldTimeTicks 是本 tick 结束时的权威绝对世界时间。
 	WorldTimeTicks uint64
 }
@@ -71,6 +75,11 @@ type PlayerRestore struct {
 	// 重登就回到 20/5000/0——重登因此成为免费进食途径，与 design.md D4
 	// "beginReset 不回满"要挡的正是同一个漏洞。
 	HasHunger bool
+	// RespawnPresent 报告存档是否携带个人重生点（床尾格）。为假时注册后的
+	// 玩家没有重生点，死亡回落世界出生锚点；为真时死亡经延迟校验回床尾格。
+	RespawnPresent   bool
+	RespawnPosition  [3]float32
+	RespawnDimension core.DimensionID
 }
 
 type PlayerSnapshot struct {
@@ -85,6 +94,13 @@ type PlayerSnapshot struct {
 	Hunger          uint8
 	SaturationMilli uint16
 	ExhaustionMilli uint16
+	// RespawnPresent 为真时 RespawnPosition（床尾格）/RespawnDimension 携带
+	// 个人重生点，由持久化路径原样落盘（玩家 schema v8）；为假时后两者为零。
+	// 快照是重生点跨重启保留的唯一通道，漏进快照的漏写都会让「睡一觉设置的
+	// 重生点」在重登后静默丢失。
+	RespawnPresent   bool
+	RespawnPosition  [3]float32
+	RespawnDimension core.DimensionID
 }
 
 // InventoryUpdate 是一名玩家在本 tick 的最终权威物品状态，只发送给所属会话。
@@ -168,6 +184,18 @@ type playerState struct {
 	// 它同样留在 playerState 而不是上移 actorState：伙伴不进食。
 	eating eatingState
 
+	// sleeping 是该玩家的入睡位（每玩家一个布尔位，跳夜结算与取消路径的唯一
+	// 权威状态）。置位只发生在夜间对床右键的命令路径；移动输入、受击与跳夜
+	// 完成都会清零。它不持久化：重连即清醒，且跳夜只看当期活跃玩家。
+	sleeping bool
+	// 以下三个字段是该玩家的个人重生点（内存态，持久化由存档批次承接）：
+	// `respawnPresent` 为真时表示 `respawnPos`/`respawnDim` 有效，死亡重生时
+	// 延迟校验「两格仍为同属一床」后回到床尾格，失效则回落世界出生锚点并清
+	// present 位。`respawnPos` 恒为床尾格（入睡判定的记录基准）。
+	respawnPresent bool
+	respawnPos     core.BlockPos
+	respawnDim     core.DimensionID
+
 	// crafting 是本玩家的瞬态权威合成网格（见 crafting.go）：个人 2×2、对
 	// 工作台完成权威射线交互后 3×3。它 MUST NOT 进入快照/哈希/存档——断线
 	// 持久化前与死亡清空前由生命周期路径先无损回收进背包。伙伴没有网格，
@@ -246,6 +274,13 @@ func (engine *Engine) RegisterPlayer(id SessionID, restore PlayerRestore) {
 		player.saturationMilli = restore.SaturationMilli
 		player.exhaustionMilli = restore.ExhaustionMilli
 	}
+	// 个人重生点只来自真实存档：与三层饥饿同理，缺失路径（新玩家、只给锚点
+	// 的 RegisterSession）注册后没有重生点，死亡回落世界出生锚点。
+	if restore.RespawnPresent {
+		player.respawnPresent = true
+		player.respawnPos = respawnBlockFromPosition(restore.RespawnPosition)
+		player.respawnDim = restore.RespawnDimension
+	}
 	if restore.Current != nil {
 		player.restoreCandidates = append(player.restoreCandidates, restoreCandidate{
 			location: *restore.Current,
@@ -286,7 +321,7 @@ func (engine *Engine) Player(id SessionID) (PlayerUpdate, bool) {
 	if session == nil || session.player == nil {
 		return PlayerUpdate{}, false
 	}
-	return session.player.update(id, session, engine.WorldTime()), true
+	return session.player.update(id, session, engine.WorldTime(), engine.DayPhaseOffset()), true
 }
 
 func (engine *Engine) PlayerSnapshot(id SessionID) (PlayerSnapshot, bool) {
@@ -363,6 +398,11 @@ func (player *playerState) snapshot(
 		safe := *player.safe
 		snapshot.Safe = &safe
 	}
+	if player.respawnPresent {
+		snapshot.RespawnPresent = true
+		snapshot.RespawnPosition = respawnPositionFromBlock(player.respawnPos)
+		snapshot.RespawnDimension = player.respawnDim
+	}
 	return snapshot
 }
 
@@ -432,12 +472,14 @@ func (player *playerState) update(
 	id SessionID,
 	session *sessionState,
 	worldTime uint64,
+	dayPhaseOffset uint16,
 ) PlayerUpdate {
 	// 每 tick 定格饱和度归零提示位：`applyExhaustion`/`eating`/`resetHunger`
 	// 均已在权威阶段内完成写入，此处统一收敛，不在各写者处分散同步。
 	player.saturationZero = player.saturationMilli == 0
 	return PlayerUpdate{
 		WorldTimeTicks:    worldTime,
+		DayPhaseOffset:    dayPhaseOffset,
 		Session:           id,
 		Dimension:         session.dimension,
 		ViewCenter:        session.center,
@@ -465,8 +507,12 @@ func (engine *Engine) publishPlayers(result *TickResult) {
 	sort.Slice(sessions, func(i, j int) bool { return sessions[i] < sessions[j] })
 	for _, id := range sessions {
 		session := engine.sessions[id]
+		// 偏移在本 tick 已由跳夜结算（先于玩家发布执行）写入，读到的就是随本
+		// 份权威状态下发的值；跳夜 tick 的客户端即刻看到白昼相位。
 		result.Players = append(
-			result.Players, session.player.update(id, session, result.WorldTimeTicks),
+			result.Players, session.player.update(
+				id, session, result.WorldTimeTicks, engine.DayPhaseOffset(),
+			),
 		)
 		session.player.reset = false
 	}
@@ -640,6 +686,9 @@ func (player *playerState) applyDamage(damage int32) {
 	// 因此都必须排在非正伤害的短路**之后**——摔落曲线在安全高度每次落地都会
 	// 算出负值，写在函数第一行会让"跳一下"打断进食。清空只丢进度，不碰背包。
 	player.eating = eatingState{}
+	// 真正挨一下会惊醒入睡的玩家（spec「受到伤害 SHALL 取消其入睡状态」）；
+	// 同样排在非正伤害短路之后。重生点刻意保留：受击只打断睡觉，不否定床。
+	player.sleeping = false
 	if damage >= int32(player.health) {
 		player.health = 0
 		return
@@ -760,6 +809,9 @@ func (player *playerState) beginReset() {
 	// 死亡与位置跳变都经这里，进食进度随之作废：重生后站在出生点继续吃完
 	// 死前那半块面包没有任何语义，与 `mining` 上一行同理。
 	player.eating = eatingState{}
+	// 重生一律清醒：入睡位不跨「待重生」窗口保留，否则重生即睡会让下一次
+	// 全员跳夜判定混入一个不在世界里的玩家。
+	player.sleeping = false
 	player.reset = false
 	player.inventoryDirty = true
 	player.nextCandidate = 0

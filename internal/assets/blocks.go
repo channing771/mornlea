@@ -94,6 +94,20 @@ const (
 	// 该值，三处没有共享定义也没有生成步骤，改层号必须同批同步。仍按
 	// LayerWheat0 处注释的纪律追加在枚举末位，不扰动植物区间。
 	LayerTorch
+	// LayerBedFootSouth..LayerBedHeadEast 是床八形态各占一张的原创程序化床面
+	// 层（床尾/床头 × 南西北东）。层号仍按 LayerWheat0 处纪律追加在枚举末位；
+	// 床头段与床尾段同序平移 4（床头层 = 床尾层 + 4），与床方块编号的排布
+	// 同形。八层只在床方块的顶面使用（四个侧面与底面复用橡木木板层表达床架），
+	// 且都是完全不透明的普通固体层（不进 cutout 集合）。朝向差异由逐形态层
+	// 表达：每张床面层把亮色带（床头的枕头、床尾的毯沿）画在朝向对应的边上。
+	LayerBedFootSouth
+	LayerBedFootWest
+	LayerBedFootNorth
+	LayerBedFootEast
+	LayerBedHeadSouth
+	LayerBedHeadWest
+	LayerBedHeadNorth
+	LayerBedHeadEast
 	layerCount
 )
 
@@ -165,6 +179,16 @@ var textureBindings = [...]textureBinding{
 	// 火把层的绑定只是材质包覆盖的命名槽位：仓库自身不携带任何 torch.png，
 	// 内嵌默认包与用户包未提供该文件时程序化像素原样生效。
 	{name: "torch", layer: LayerTorch},
+	// 床八面的绑定同样是覆盖槽位：床面为原创程序化像素，内嵌默认包不含
+	// bed_*.png，用户包提供同名文件时按槽位覆盖。
+	{name: "bed_foot_south", layer: LayerBedFootSouth},
+	{name: "bed_foot_west", layer: LayerBedFootWest},
+	{name: "bed_foot_north", layer: LayerBedFootNorth},
+	{name: "bed_foot_east", layer: LayerBedFootEast},
+	{name: "bed_head_south", layer: LayerBedHeadSouth},
+	{name: "bed_head_west", layer: LayerBedHeadWest},
+	{name: "bed_head_north", layer: LayerBedHeadNorth},
+	{name: "bed_head_east", layer: LayerBedHeadEast},
 }
 
 // Registry 是方块属性与材质的注册表。
@@ -221,13 +245,17 @@ func NewRegistry() *Registry {
 	r.layers[LayerWorkbenchSide] = workbenchSideTexture()
 	r.layers[LayerWorkbenchBottom] = workbenchBottomTexture()
 	r.layers[LayerTorch] = torchTexture()
+	for dir := 0; dir < 4; dir++ {
+		r.layers[LayerBedFootSouth+uint16(dir)] = bedTopTexture(false, dir)
+		r.layers[LayerBedHeadSouth+uint16(dir)] = bedTopTexture(true, dir)
+	}
 	// ids 覆盖 core 的全部已注册方块编号，上界一律用独占哨兵 core.BlockIDMax
 	// 表达——写死某个具体末位编号（历史上写过 WaterLevel7ID）会在追加新编号时
 	// 静默退化成子集，新方块就永远进不了快照。Rust 侧的
 	// RegistryView::face_visible 只做位图查表、缺条目一律判不可见，漏掉谁就等于
 	// 谁永远不出面（流体当年正是这样差点画不出水）。
 	// 条目数必须不超过 internal/mesh.nativeMaxRegistryEntries 与 Rust 的
-	// MAX_REGISTRY_ENTRIES（当前已注册 76 个方块，上限 80；上限扩容必须
+	// MAX_REGISTRY_ENTRIES（当前已注册 84 个方块，上限 96；上限扩容必须
 	// Go/Rust 两侧同批同步）。
 	ids := make([]world.BlockID, 0, int(core.BlockIDMax))
 	for id := core.AirID; id < core.BlockIDMax; id++ {
@@ -258,7 +286,9 @@ func NewRegistry() *Registry {
 // 仍被照亮」——Rust 天空光 BFS 的阻断判据就是本函数（light.rs 的 build_sky
 // 只看 opaque），作物一旦不透明，它下方那格的派生天空光会归零、耕地顶面变全黑。
 // 火把与作物同类判 false：零碰撞的窄柱/贴墙形态既不填满格子也不遮挡邻面，且
-// 自身是发光体，被判成不透明会同时挡死邻域光照与出面。
+// 自身是发光体，被判成不透明会同时挡死邻域光照与出面。床同样判 false：9/16
+// 半高方块只占格子的下半，与门同属「不满格即不遮光」的透明分类——判成不透明
+// 会让床上方格的派生天空光归零、床面在夜间反而被错误压暗。
 func (r *Registry) Opaque(id world.BlockID) bool {
 	return core.BlockOpaque(id)
 }
@@ -308,6 +338,13 @@ func (r *Registry) FaceVisible(id, adjacent world.BlockID) bool {
 		}
 		// 门对非不透明方块（水、玻璃、树叶、另一扇门等）仍需出面，否则门面会在
 		// 这些方块旁消失；门对门的内部面由两侧几何各自决定，此处不过滤。
+		return true
+	}
+	// 床是 9/16 半高方块，与门同属「本身非不透明、不满格」的薄几何：朝空气
+	// 与一切非不透明邻居都需出面（否则床贴着玻璃/另一张床时侧面被错误剔除）；
+	// 朝不透明邻居的面已被上方 Opaque(adjacent) 拦下。半高贴边细节由模型
+	// 几何阶段承载，可见性位图只保留薄几何的基准可见性。
+	if core.IsBed(id) {
 		return true
 	}
 	if adjacent == core.AirID {
@@ -422,8 +459,27 @@ func (r *Registry) Material(id world.BlockID, f mesh.Face) uint16 {
 		if core.IsTorch(id) {
 			return LayerTorch
 		}
+		// 床的八个形态按「顶面床面层 + 其余面床架层」分层（与原木、雪块、
+		// 工作台同形的按面分层）：顶面各用与朝向冻结同序的专属床面层，四个
+		// 侧面与底面复用橡木木板层表达橡木床架。Rust 的 model dispatcher 按
+		// face 枚举序（0..5 = −X/+X/−Y/+Y/−Z/+Z）取材质：平顶 quad 读
+		// face 3（PosY）取床面层、四片侧板各读自身面材质落在橡木板层——
+		// 本分支的按面取值与 emit_bed 的按面读取必须逐面同序，错位即材质缝。
+		if core.IsBed(id) {
+			if f == mesh.FacePosY {
+				return bedTopLayer(id)
+			}
+			return LayerOakPlanks
+		}
 		return LayerStone
 	}
+}
+
+// bedTopLayer 返回床形态对应的床面层号：床尾四向 LayerBedFootSouth..East、
+// 床头四向同序平移 4。调用方保证 id 是床方块；层排布与方块编号冻结顺序
+// 严格同形（床头 = 床尾 + 4），这是「朝向 ↔ 层」的唯一映射。
+func bedTopLayer(id core.BlockID) uint16 {
+	return LayerBedFootSouth + uint16(id-core.BedFootSouthID)
 }
 
 // Emission 返回方块固定发出的方块光等级。实现 mesh.Registry。
@@ -494,10 +550,15 @@ func (r *Registry) MeshSnapshot() mesh.RegistrySnapshot { return r.meshSnapshot 
 //
 // 封闭集合：0=默认（无模型覆写，满格/短方块/流体/植物继续走既有判定）、
 // 1=火把落地、2..5=火把墙面 +X/−X/+Z/−Z——与火把方块编号 71..75 严格同序，
-// 因此映射就是「编号相对首形态的偏移 +1」。其余全部方块（含未注册与越界
-// 编号）恒 0；tag 经 BuildRegistrySnapshot 冻结进快照，由 Rust greedy 的
-// model dispatcher 消费（6=床与未知值在快照与 Rust 两侧都被拒绝）。
+// 因此映射就是「编号相对首形态的偏移 +1」；6=床，床尾/床头 × 四向八形态
+// 共用同一床几何（9/16 半高板），朝向差异由逐形态床面材质层表达而非几何。
+// 其余全部方块（含未注册与越界编号）恒 0；tag 经 BuildRegistrySnapshot 冻结
+// 进快照，由 Rust greedy 的 model dispatcher 消费（7 起的未知值在快照与
+// Rust 两侧都被拒绝）。
 func (r *Registry) Model(id world.BlockID) uint8 {
+	if core.IsBed(id) {
+		return 6
+	}
 	if !core.IsTorch(id) {
 		return 0
 	}

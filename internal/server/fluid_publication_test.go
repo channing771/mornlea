@@ -44,7 +44,7 @@ func (fluidGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
 //   - 整个过程中出现的服务端消息类型必须全部落在本变更之前就存在的集合里。
 func TestFluidChangesBroadcastOverExistingChunkChannel(t *testing.T) {
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 2, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld,
 	})
 	config := hostTestConfig()
 	config.ViewRadius = 1

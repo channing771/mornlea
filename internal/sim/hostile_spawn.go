@@ -61,7 +61,7 @@ func hostileCandidateHash(seed int64, tick uint64, x, y, z int32) uint64 {
 // 为生成触发同步加载。
 func (engine *Engine) advanceHostileSpawn() {
 	now := engine.worldTime.Load()
-	phase := core.DisplayDayPhase(now, engine.dayPhaseOffset)
+	phase := core.DisplayDayPhase(now, engine.DayPhaseOffset())
 	if phase < hostileSpawnPhaseStart || phase > hostileSpawnPhaseEnd {
 		return
 	}

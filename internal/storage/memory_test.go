@@ -12,7 +12,7 @@ import (
 )
 
 func TestMemoryStoreOwnsSavedAndLoadedChunks(t *testing.T) {
-	store := storage.NewMemory(storage.Metadata{FormatVersion: 2, Seed: 42})
+	store := storage.NewMemory(storage.Metadata{FormatVersion: 3, Seed: 42})
 	key := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: -1, Z: 32}}
 	chunk := world.NewChunk(key.Pos)
 	chunk.SetBlock(1, 0, 2, core.StoneID)

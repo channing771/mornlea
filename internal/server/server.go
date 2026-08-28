@@ -161,6 +161,16 @@ func newWorld(
 	if config.TrustedObserver {
 		server.trustedObserverCenters = make(chan trustedObserverCenter, 1)
 	}
+	// 显示相位偏移与绝对世界时间同源于世界 metadata：装配阶段在首个 tick 之前
+	// 恢复，其后的唯一写者是 sim 的跳夜结算。偏移只进入
+	// `(WorldTimeTicks + DayPhaseOffset) % 24000`，对 u64 存储值按周期长度取模
+	// 再收窄，正常存档（0..23999）逐值不变，异常旧值也保持显示相位等价。
+	//
+	// 与 wire 侧的语义分界：这里（存储装配侧）对越界旧值**宽容归一**——存档
+	// 是历史载体，折回周期内即可延续既有显示相位；而协议 `PlayerState` 的
+	// `DayPhaseOffset` **严格拒绝** >23999——wire 只传播权威单值，没有历史
+	// 包袱。两侧策略不同是刻意的，装配归一后的值随后经 wire 下发时必然合法。
+	server.engine.RestoreDayPhaseOffset(uint16(metadata.DayPhaseOffset % core.DayLengthTicks))
 	if companions != nil {
 		companions.mu.Lock()
 		records := slices.Clone(companions.records)

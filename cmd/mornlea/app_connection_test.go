@@ -505,7 +505,7 @@ type connectionTestStore struct {
 
 func newConnectionTestStore(seed int64) *connectionTestStore {
 	return &connectionTestStore{MemoryStore: storage.NewMemory(storage.Metadata{
-		FormatVersion: 2,
+		FormatVersion: 3,
 		Seed:          seed,
 	})}
 }

@@ -228,7 +228,7 @@ func hostileOverlimitFixture(count int) []storage.StoredHostileMob {
 func seedHostileDiskWorld(t *testing.T, root string) []byte {
 	t.Helper()
 	store, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{
-		Create: storage.Metadata{FormatVersion: 2, Seed: 42, SpawnDimension: core.Overworld},
+		Create: storage.Metadata{FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld},
 	})
 	if err != nil {
 		t.Fatalf("OpenDisk 种子存档: %v", err)

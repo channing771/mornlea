@@ -18,7 +18,7 @@ import (
 func TestDiskStorePersistsNegativeAndMultipleRegions(t *testing.T) {
 	root := t.TempDir()
 	store, err := OpenDisk(context.Background(), root, OpenOptions{
-		Create: Metadata{FormatVersion: 2, Seed: 42, SpawnDimension: core.Overworld},
+		Create: Metadata{FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +43,7 @@ func TestDiskStorePersistsNegativeAndMultipleRegions(t *testing.T) {
 	}
 
 	reopened, err := OpenDisk(context.Background(), root, OpenOptions{
-		Create: Metadata{FormatVersion: 2, Seed: 999},
+		Create: Metadata{FormatVersion: 3, Seed: 999},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +66,7 @@ func TestDiskStorePersistsNegativeAndMultipleRegions(t *testing.T) {
 func TestDiskStoreLoadMissDoesNotCreateRegion(t *testing.T) {
 	root := t.TempDir()
 	store, err := OpenDisk(context.Background(), root, OpenOptions{
-		Create: Metadata{FormatVersion: 2},
+		Create: Metadata{FormatVersion: 3},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -89,7 +89,7 @@ func TestDiskStoreLoadMissDoesNotCreateRegion(t *testing.T) {
 func TestDiskStoreSaveBatchValidatesAllChunksBeforeCreatingRegions(t *testing.T) {
 	root := t.TempDir()
 	store, err := OpenDisk(context.Background(), root, OpenOptions{
-		Create: Metadata{FormatVersion: 2},
+		Create: Metadata{FormatVersion: 3},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -230,7 +230,7 @@ func TestDiskStoreSaveBatchRejectsMaxRevisionConflictBeforeFilesystemEffects(t *
 		t.Run(strconv.Itoa(index), func(t *testing.T) {
 			root := t.TempDir()
 			store, err := OpenDisk(context.Background(), root, OpenOptions{
-				Create: Metadata{FormatVersion: 2},
+				Create: Metadata{FormatVersion: 3},
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -448,7 +448,7 @@ func TestDiskStoreSyncVisitsAllRegionsInOrderAndJoinsErrors(t *testing.T) {
 func TestDiskStoreCloseRetriesOnlyFailuresAndRetainsLock(t *testing.T) {
 	root := t.TempDir()
 	store, err := OpenDisk(context.Background(), root, OpenOptions{
-		Create: Metadata{FormatVersion: 2},
+		Create: Metadata{FormatVersion: 3},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -663,7 +663,7 @@ func (file *observedRegionFile) Close() error {
 func openTestDiskStore(t *testing.T) *DiskStore {
 	t.Helper()
 	store, err := OpenDisk(context.Background(), t.TempDir(), OpenOptions{
-		Create: Metadata{FormatVersion: 2, Seed: 42},
+		Create: Metadata{FormatVersion: 3, Seed: 42},
 	})
 	if err != nil {
 		t.Fatal(err)

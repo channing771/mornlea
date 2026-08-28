@@ -445,12 +445,12 @@ func TestRecipeShapeTableOneToThirteenIsFrozen(t *testing.T) {
 }
 
 // TestRecipeRejectsUnknownIDs 覆盖 spec Scenario「未登记配方被拒绝」：
-// recipe 0、批次其余功能线尚未合流的编号段（三把剑与白床）以及任意更大
-// 编号都必须稳定拒绝且不产生产物。写成 `RecipeTorch+1` 起步而不是裸字面量，
+// recipe 0、批次其余功能线尚未合流的编号段（两把剑）以及任意更大
+// 编号都必须稳定拒绝且不产生产物。写成 `RecipeBed+1` 起步而不是裸字面量，
 // 下次追加配方时这段循环自动跟着末项走。
 func TestRecipeRejectsUnknownIDs(t *testing.T) {
 	unknown := []core.RecipeID{0}
-	for id := core.RecipeTorch + 1; id <= core.RecipeTorch+5; id++ {
+	for id := core.RecipeBed + 1; id <= core.RecipeBed+5; id++ {
 		unknown = append(unknown, id)
 	}
 	unknown = append(unknown, 200, 255)
@@ -459,16 +459,20 @@ func TestRecipeRejectsUnknownIDs(t *testing.T) {
 			t.Fatalf("recipe %d 被接受为 %+v：表末之后的编号必须稳定拒绝", id, pattern)
 		}
 	}
-	// 16..18 是批次计划里的既定编号段（三把剑、白床，归各自功能行）：
-	// 在它们合流之前逐个点名拒绝，比「表末 +1」更能钉住「暂缺但已规划」。
-	for id := core.RecipeID(16); id <= 18; id++ {
+	// 17..18 是批次计划里的既定编号段（两把剑，归各自功能行；白床已由
+	// 床与睡眠功能行以 RecipeBed=16 落地）：在它们合流之前逐个点名拒绝，
+	// 比「表末 +1」更能钉住「暂缺但已规划」。
+	for id := core.RecipeID(17); id <= 18; id++ {
 		if _, ok := core.Recipe(id); ok {
 			t.Fatalf("规划中的 recipe %d 在合流前被注册", id)
 		}
 	}
-	// 对照组：火把配方是当前表末，必须可查询。
+	// 对照组：火把与床配方都在表内，必须可查询。
 	if _, ok := core.Recipe(core.RecipeTorch); !ok {
 		t.Fatal("火把配方未注册")
+	}
+	if _, ok := core.Recipe(core.RecipeBed); !ok {
+		t.Fatal("床配方未注册")
 	}
 }
 
@@ -511,9 +515,9 @@ func TestRegisteredRecipeCellsStayInsideShapeBounds(t *testing.T) {
 	}
 	// 注册表从 1 起无空洞连续注册到末项常量：循环按「首个未注册即停」推进，
 	// 中间留洞会让后面的配方全部漏检，这里用计数把洞钉出来。
-	if checked != int(core.RecipeTorch) {
+	if checked != int(core.RecipeBed) {
 		t.Fatalf("注册表枚举到 %d 条，想要与末项常量一致的 %d 条（注册表出现空洞？）",
-			checked, core.RecipeTorch)
+			checked, core.RecipeBed)
 	}
 }
 

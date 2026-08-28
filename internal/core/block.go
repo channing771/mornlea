@@ -134,6 +134,22 @@ const (
 	TorchWallNegXID
 	TorchWallPosZID
 	TorchWallNegZID
+	// BedFootSouthID..BedHeadEastID 是床的 8 个定向形态（床尾/床头 × 4 水平
+	// 朝向），只能追加在 TorchWallNegZID 之后：方块 ID 是协议稳定值，重排会
+	// 破坏既有存档与线上字节。床尾/床头各 4 个编号按门先例的南/西/北/东顺序
+	// 冻结，床头段与床尾段同序平移 4（同方向床头 = 床尾 + 4）。形态名中的
+	// 方向表示床头相对床尾所指的方向（床尾在南、床头在其 +Z 邻格即南向床）；
+	// 朝向 ↔ 编号的唯一映射窗口是 bed.go 的 BedFootID/BedHeadID/BedDir，
+	// 双格的展开与配对由放置执行方消费。床是半高（9/16）非不透明方块，碰撞、
+	// 光照与呈现属性分别见 physics.BlockCollisionBoxes 与 assets/mesh 的注册。
+	BedFootSouthID
+	BedFootWestID
+	BedFootNorthID
+	BedFootEastID
+	BedHeadSouthID
+	BedHeadWestID
+	BedHeadNorthID
+	BedHeadEastID
 	// BlockIDMax 是合法方块编号的独占上界（最后一个合法 BlockID + 1），本身不是
 	// 方块枚举成员，与物品侧的 ItemIDMax 同形。它供哨兵与穷举测试以
 	// 「id < BlockIDMax」表达「全部已注册方块」，替代「某个具体编号恰为枚举末项」

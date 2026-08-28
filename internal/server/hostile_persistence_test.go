@@ -303,7 +303,7 @@ func TestHostilePersistenceFlushCancellationKeepsWorkerAndRetry(t *testing.T) {
 func TestHostilePersistenceSurvivesRealStoreRoundTrip(t *testing.T) {
 	// 走真实 MemoryStore 的完整编码路径：观察 → Flush → 重新加载必须逐字段
 	// 一致，不经任何假存档。
-	store := storage.NewMemory(storage.Metadata{FormatVersion: 2, Seed: 42})
+	store := storage.NewMemory(storage.Metadata{FormatVersion: 3, Seed: 42})
 	p := newHostilePersistence(store, storage.StoredHostileMobs{}, hostilePersistenceTestConfig())
 	t.Cleanup(p.Close)
 	p.Observe([]sim.HostileMob{
@@ -333,7 +333,7 @@ func TestHostilePersistenceSaveFailurePreservesArchiveFile(t *testing.T) {
 	// worker 层的「失败即报错、旧文件不动」闭环）。
 	root := t.TempDir()
 	store, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{
-		Create: storage.Metadata{FormatVersion: 2, Seed: 42, SpawnDimension: core.Overworld},
+		Create: storage.Metadata{FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld},
 	})
 	if err != nil {
 		t.Fatalf("OpenDisk: %v", err)

@@ -56,7 +56,7 @@ func runTillSoilParityScript(t *testing.T, transport string) tillSoilParityResul
 	t.Helper()
 	identity := integrationIdentity(0x9c, "Tiller")
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 2, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld,
 	})
 	full, _ := core.ItemMaxDurability(core.ItemStoneHoe)
 	var initial core.Inventory

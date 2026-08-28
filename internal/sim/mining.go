@@ -49,6 +49,10 @@ func miningRule(block core.BlockID, held core.ItemID) (uint16, bool) {
 	if core.IsDoor(block) {
 		return 15, true
 	}
+	// 床是木质家具，与木板同价 15 tick，任意手持（含徒手）可采掘，与工具无关。
+	if core.IsBed(block) {
+		return 15, true
+	}
 	// 农业方块与手持无关（锄头不是采掘工具，作物与耕地徒手即可收）：作物 1
 	// tick、耕地 5 tick（与泥土同价，翻地这一步撤销得和挖泥土一样费力）。
 	//
@@ -420,6 +424,38 @@ func (engine *Engine) completeCompanionMining(
 		engine.completeCompanionContainerMining(entry, pending)
 		return
 	}
+	// 床双格语义与玩家采掘同构：任一半完成即双清两格，世界中不得残留半床。
+	// 与玩家的差别只在产物去向——1 个床物品直入伙伴背包；背包副本预演不过
+	// （容量不足）时整体不结算，进度保持满格的「就绪但无容量」状态。
+	if core.IsBed(entry.mining.block) {
+		footPos, headPos, ok := bedHalfPositions(entry.mining.target, entry.mining.block)
+		if !ok {
+			entry.mining = miningState{}
+			return
+		}
+		var staged core.Inventory
+		if entry.mining.harvestable {
+			var leftover core.ItemStack
+			staged, leftover = entry.inventory.AddStack(core.ItemStack{Item: core.ItemBed, Count: 1})
+			if leftover.Count != 0 {
+				return
+			}
+		}
+		if _, rejected := engine.clearBedPair(entry.dimension, footPos, headPos, pending); rejected {
+			// 区块失效或写入失败：清零进度且不结算，背包副本丢弃。
+			entry.mining = miningState{}
+			return
+		}
+		if entry.mining.harvestable {
+			entry.inventory = staged
+			entry.inventoryDirty = true
+		}
+		if consumeToolDurability(&entry.actorState) {
+			entry.inventoryDirty = true
+		}
+		entry.mining = miningState{}
+		return
+	}
 	item, _ := core.BlockDrop(entry.mining.block)
 	var staged core.Inventory
 	if entry.mining.harvestable {
@@ -630,6 +666,25 @@ func (engine *Engine) completeMining(
 			lowerRecord.Chunk.CommitDropBatch(nextDrops)
 		}
 		return 0, false
+	}
+
+	// 床双格原子破坏：命中任一半均双清，掉落 1 床（DoDrop 为假时仍双清零
+	// 掉落）。两半水平相邻，掉落锚在被采掘的半格；另一半所在区块未就绪时
+	// 整单拒绝（门跨区块先例）。
+	if core.IsBed(block) {
+		footPos, headPos, ok := bedHalfPositions(target, block)
+		if !ok {
+			return RejectProtectedBlock, true
+		}
+		otherPos := headPos
+		if otherPos == target {
+			otherPos = footPos
+		}
+		if otherRecord, otherOK := dimension.records[otherPos.Chunk()]; !otherOK ||
+			otherRecord.State != ChunkReady || otherRecord.Chunk == nil {
+			return RejectChunkNotReady, true
+		}
+		return engine.removeBedWithDrop(dimensionID, target, footPos, headPos, harvestable, pending)
 	}
 
 	if block == core.FurnaceID {

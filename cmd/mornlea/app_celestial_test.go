@@ -25,8 +25,8 @@ func TestApplicationCelestialParametersKeepLastAcceptedWorldTime(t *testing.T) {
 	}
 	sendInteractiveServerMessage(t, serverEndpoint, newest)
 	app.drainServerMessages(1)
-	want := render.DayNightAt(newest.WorldTimeTicks)
-	if got := render.DayNightAt(app.worldTimeTicks); got != want {
+	want := render.DayNightAt(newest.WorldTimeTicks, 0)
+	if got := render.DayNightAt(app.worldTimeTicks, app.dayPhaseOffset); got != want {
 		t.Fatalf("接受新状态后的天体参数 = %+v，想要 %+v", got, want)
 	}
 	if got := want.SunDirection; math.Abs(float64(got[1]-1)) > 1e-5 || math.Abs(float64(got[0])) > 1e-5 || math.Abs(float64(got[2])) > 1e-5 {
@@ -42,9 +42,65 @@ func TestApplicationCelestialParametersKeepLastAcceptedWorldTime(t *testing.T) {
 		if app.worldTimeTicks != newest.WorldTimeTicks {
 			t.Fatalf("旧或重复状态将世界时间改为 %d，想要 %d", app.worldTimeTicks, newest.WorldTimeTicks)
 		}
-		if got := render.DayNightAt(app.worldTimeTicks); got != want {
+		if got := render.DayNightAt(app.worldTimeTicks, app.dayPhaseOffset); got != want {
 			t.Fatalf("旧或重复状态改变天体参数 = %+v，想要 %+v", got, want)
 		}
+	}
+}
+
+// TestApplicationCelestialParametersFollowDayPhaseOffset 锁定显示相位偏移的
+// 客户端消费链：偏移随权威 `PlayerState` 一起被接受（同样的「只认更新 tick」
+// 纪律），昼夜呈现由 `(WorldTimeTicks + DayPhaseOffset)` 决定——offset 变更随
+// 下一份权威状态立即切换，旧或重复状态既不回退世界时间也不回退偏移。
+func TestApplicationCelestialParametersFollowDayPhaseOffset(t *testing.T) {
+	app, serverEndpoint := newInteractiveTestApplication(t)
+	newest := network.PlayerState{
+		ServerTick: 2, WorldTimeTicks: 18000, DayPhaseOffset: 6000, Dimension: core.Overworld,
+		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true, Ready: true,
+	}
+	sendInteractiveServerMessage(t, serverEndpoint, newest)
+	app.drainServerMessages(1)
+	// 18000 的实际相位加偏移 6000 回绕到周期起点（白昼），而同一绝对时间在
+	// 零偏移下是午夜：天空与光照随下一份权威状态切换生效。
+	want := render.DayNightAt(newest.WorldTimeTicks, newest.DayPhaseOffset)
+	if got := render.DayNightAt(app.worldTimeTicks, app.dayPhaseOffset); got != want {
+		t.Fatalf("接受偏移状态后的天体参数 = %+v，想要 %+v", got, want)
+	}
+	if want != render.DayNightAt(0, 0) {
+		t.Fatalf("夹具无效：18000+6000 应呈现周期起点，得到 %+v", want)
+	}
+	if app.dayPhaseOffset != newest.DayPhaseOffset {
+		t.Fatalf("接受的偏移 = %d，想要 %d", app.dayPhaseOffset, newest.DayPhaseOffset)
+	}
+
+	for _, stale := range []network.PlayerState{
+		{ServerTick: 1, WorldTimeTicks: 18000, DayPhaseOffset: 0, Dimension: core.Overworld, Position: newest.Position, OnGround: true, Ready: true},
+		{ServerTick: 2, WorldTimeTicks: 18000, DayPhaseOffset: 23999, Dimension: core.Overworld, Position: newest.Position, OnGround: true, Ready: true},
+	} {
+		sendInteractiveServerMessage(t, serverEndpoint, stale)
+		app.drainServerMessages(1)
+		if app.dayPhaseOffset != newest.DayPhaseOffset || app.worldTimeTicks != newest.WorldTimeTicks {
+			t.Fatalf("旧或重复状态将偏移/时间改为 (%d,%d)，想要 (%d,%d)",
+				app.dayPhaseOffset, app.worldTimeTicks, newest.DayPhaseOffset, newest.WorldTimeTicks)
+		}
+		if got := render.DayNightAt(app.worldTimeTicks, app.dayPhaseOffset); got != want {
+			t.Fatalf("旧或重复状态改变天体参数 = %+v，想要 %+v", got, want)
+		}
+	}
+
+	// 更新的权威状态携带新偏移：呈现立即切换到新偏移下的相位。
+	newer := network.PlayerState{
+		ServerTick: 3, WorldTimeTicks: 18001, DayPhaseOffset: 0, Dimension: core.Overworld,
+		Position: newest.Position, OnGround: true, Ready: true,
+	}
+	sendInteractiveServerMessage(t, serverEndpoint, newer)
+	app.drainServerMessages(1)
+	want = render.DayNightAt(newer.WorldTimeTicks, newer.DayPhaseOffset)
+	if got := render.DayNightAt(app.worldTimeTicks, app.dayPhaseOffset); got != want {
+		t.Fatalf("切换后的天体参数 = %+v，想要 %+v", got, want)
+	}
+	if app.dayPhaseOffset != 0 || app.worldTimeTicks != 18001 {
+		t.Fatalf("新状态未生效: offset=%d ticks=%d", app.dayPhaseOffset, app.worldTimeTicks)
 	}
 }
 
@@ -73,7 +129,7 @@ func TestApplicationCelestialParametersMatchMemoryAndTCP(t *testing.T) {
 			if app.serverTick != state.ServerTick {
 				t.Fatalf("等待权威世界时间超时: receiver error=%v", app.receiver.Err())
 			}
-			got := render.DayNightAt(app.worldTimeTicks)
+			got := render.DayNightAt(app.worldTimeTicks, app.dayPhaseOffset)
 			if math.Abs(float64(got.SunDirection[1]+1)) > 1e-5 || math.Abs(float64(got.SunDirection[0])) > 1e-5 || math.Abs(float64(got.SunDirection[2])) > 1e-5 {
 				t.Fatalf("午夜太阳方向 = %v，想要地平线下方", got.SunDirection)
 			}

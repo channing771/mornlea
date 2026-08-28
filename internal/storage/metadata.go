@@ -14,13 +14,16 @@ import (
 )
 
 const (
-	currentMetadataVersion uint32 = 2
-	metadataPayloadLength  uint32 = 28
+	currentMetadataVersion uint32 = 3
+	metadataPayloadLength  uint32 = 36
 	// legacyMetadataVersion 是仍可读取的 v1；v1 只被读取和迁移，不再写出。
 	legacyMetadataVersion       uint32 = 1
 	legacyMetadataPayloadLength uint32 = 20
-	metadataHeaderLength               = 12
-	metadataChecksumLength             = 4
+	// legacyMetadataV2Version 是仍可读取的 v2；v2 只被读取和迁移，不再写出。
+	legacyMetadataV2Version       uint32 = 2
+	legacyMetadataV2PayloadLength uint32 = 28
+	metadataHeaderLength                 = 12
+	metadataChecksumLength               = 4
 )
 
 var (
@@ -65,6 +68,8 @@ func encodeMetadata(metadata Metadata) ([]byte, error) {
 	encoded = binary.LittleEndian.AppendUint32(encoded, uint32(metadata.SpawnAnchor.X))
 	encoded = binary.LittleEndian.AppendUint32(encoded, uint32(metadata.SpawnAnchor.Z))
 	encoded = binary.LittleEndian.AppendUint64(encoded, metadata.WorldTimeTicks)
+	// 偏移是 v3 相对 v2 的纯尾部追加：v2 载荷的既有段布局一字不动。
+	encoded = binary.LittleEndian.AppendUint64(encoded, metadata.DayPhaseOffset)
 	encoded = binary.LittleEndian.AppendUint32(
 		encoded, crc32.Checksum(encoded, metadataCRCTable),
 	)
@@ -83,11 +88,14 @@ func decodeMetadata(encoded []byte) (Metadata, error) {
 	if version > currentMetadataVersion {
 		return Metadata{}, fmt.Errorf("%w: metadata version %d", ErrFutureVersion, version)
 	}
-	// v1 与 v2 各自有固定 payload 长度；v1 读取后在内存中规范为 v2、世界时间为零。
+	// v1、v2 与 v3 各自有固定 payload 长度；旧版本读取后在内存中规范为当前
+	// 版本：v1 世界时间与偏移均为零，v2 偏移为零。
 	var wantPayloadLength uint32
 	switch version {
 	case currentMetadataVersion:
 		wantPayloadLength = metadataPayloadLength
+	case legacyMetadataV2Version:
+		wantPayloadLength = legacyMetadataV2PayloadLength
 	case legacyMetadataVersion:
 		wantPayloadLength = legacyMetadataPayloadLength
 	default:
@@ -122,8 +130,13 @@ func decodeMetadata(encoded []byte) (Metadata, error) {
 			Z: int32(binary.LittleEndian.Uint32(payload[16:20])),
 		},
 	}
-	if version == currentMetadataVersion {
+	// 世界时间自 v2 起持久化，偏移自 v3 起持久化：旧版本读入即升级，
+	// 缺失的尾部字段按零值迁移，行为与升级前完全一致。
+	if version >= legacyMetadataV2Version {
 		metadata.WorldTimeTicks = binary.LittleEndian.Uint64(payload[20:28])
+	}
+	if version == currentMetadataVersion {
+		metadata.DayPhaseOffset = binary.LittleEndian.Uint64(payload[28:36])
 	}
 	return metadata, nil
 }

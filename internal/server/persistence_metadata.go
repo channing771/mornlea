@@ -56,6 +56,9 @@ func (server *Server) scheduleMetadataSave(tick, worldTime uint64) {
 	}
 	metadata := server.store.Metadata()
 	metadata.WorldTimeTicks = server.metadataSave.latest
+	// 偏移在派发时刻现取：待保存批次合并到的总是最新权威值（自动保存语义
+	// 与世界时间一致），不阻塞 tick 也不形成无界队列。
+	metadata.DayPhaseOffset = uint64(server.engine.DayPhaseOffset())
 	select {
 	case server.saveJobs <- saveJob{
 		Kind:     saveKindMetadata,

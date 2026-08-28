@@ -124,7 +124,7 @@ func fixedFrame(aspect float32) client.RenderFrame {
 	view := mgl32.LookAtV(pos, target, mgl32.Vec3{0, 1, 0})
 	proj := core.Perspective(mgl32.DegToRad(55), aspect, 0.1, 1000)
 	viewProj := proj.Mul4(view)
-	noon := render.DayNightAt(6000)
+	noon := render.DayNightAt(6000, 0)
 	return client.RenderFrame{
 		ViewProj:       viewProj,
 		ViewProjInv:    viewProj.Inv(),
