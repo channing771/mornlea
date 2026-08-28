@@ -24,5 +24,5 @@
 
 ## 6. 收尾验证
 
-- [ ] 6.1 对比迁移前后 `./cmd/mornlea/...` 全部包的测试入口并集与基线快照（Test/Benchmark/Fuzz 名称及 `t.Run` 标签逐一不变）；确认与 change 无关的工作区改动未进入 diff。
-- [ ] 6.2 执行收尾门禁：`gofmt -l .`、`go vet ./...`、`make dev-check`、`go test ./... -race`、`make rust-check`、`openspec validate --all --strict --no-interactive`；将命令结果、评审结论与 Ruling 写入 `ledger.md`，全部通过后再勾选任务。
+- [x] 6.1 对比迁移前后 `./cmd/mornlea/...` 全部包的测试入口并集与基线快照（Test/Benchmark/Fuzz 名称及 `t.Run` 标签逐一不变）；确认与 change 无关的工作区改动未进入 diff。
+- [x] 6.2 执行收尾门禁：`gofmt -l .`、`go vet ./...`、`make dev-check`、`go test ./... -race`、`make rust-check`、`openspec validate --all --strict --no-interactive`；将命令结果、评审结论与 Ruling 写入 `ledger.md`，全部通过后再勾选任务。

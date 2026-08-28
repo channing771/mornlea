@@ -286,3 +286,20 @@
   并顺带修正 `CaptureWidth/Height` 声明文件标注。
 - 控制会话跟进项：`e621dd74` race-changed 子包 cdylib 消费识别与重型提示
   （Task 5 发现的 T1 工具缺口）；proposal 引言计数 94 → 89 由控制会话更正。
+
+### Task 6.1 + 6.2（整体验收与收尾门禁，控制会话执行）
+
+- 验收 HEAD：`fd21645a`（此后无代码改动；本节记录与提交同批）。
+- 6.1 测试入口终对照：`go test ./cmd/mornlea ./cmd/mornlea/app
+  ./cmd/mornlea/capture ./cmd/mornlea/benchmark -list '.*'` 过滤排序后与
+  `baseline-test-list.txt` 逐名 `diff` **零差异（384 Test + 1 Benchmark，
+  385 项）**；`git status` 干净，无与本 change 无关的工作区改动进入分支。
+- 6.2 收尾门禁（全部退出码 0）：
+  - `make dev-check`：gofmt 无输出、go vet 干净、全仓 `-short` 测试全绿、
+    Rust fmt/clippy/单测全绿；
+  - `go test ./... -race`：31 个包全部 `ok`；
+  - `make rust-check`：cargo fmt/clippy/workspace 单测全绿；
+  - `openspec validate --all --strict --no-interactive`：73 passed,
+    0 failed（含本 change 与全部主规格）。
+- 结论：split-client-subpackages 六个任务全部完成，实现与 delta specs 一致，
+  行为契约（测试入口集合、golden 逐字节、依赖方向、架构守卫）全部满足。
