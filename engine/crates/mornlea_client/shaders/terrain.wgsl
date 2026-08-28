@@ -53,8 +53,10 @@ fn face_shade(face: u32) -> f32 {
 //
 // 判别为什么走 material 区间：quad 布局只剩 bit 63 一个空闲位且必须留空，
 // 「是不是短方块」占不到任何位；植物又把 face 6/7 占为交叉斜面判别。耕地是
-// 轴向面（face 0..5），与植物按 face 天然互斥，material 区间是唯一不冲突的
-// 判别通道。数值真值源是 Go internal/assets 的 `LayerFarmlandDry`/`LayerFarmlandWet`
+// 轴向面（face 0..5），与植物按 face 天然互斥，material 区间是 D2a 选定的
+// 判别通道（床的侧板共享橡木板层后该通道对其失效，分流门已加角 2 结构判别
+// 兜底，见下方 vs_main 注释）。数值真值源是 Go internal/assets 的
+// `LayerFarmlandDry`/`LayerFarmlandWet`
 // （29/30），Rust 侧复述见 src/render/shaders.rs 的
 // `FARMLAND_MATERIAL_FIRST`/`FARMLAND_MATERIAL_LAST`，三方由 render/farmland_tests.rs
 // 钉在一起——在这里改数字必须同步另外两处。
@@ -65,13 +67,27 @@ fn farmland_material(mat: u32) -> bool {
 // 火把材质层（五种形态共用一张竖直火柄纹理）。墙面火把的倾斜薄板携带角高度
 // （支撑侧 9/16、远离侧 14/16，贴面帽四角全 0），与耕地共用同一条角高度解码
 // 路径——判别同样走 material：火把薄板是轴向面（face 0..5），与植物（face 6/7）
-// 按 face 天然互斥，material 是唯一不冲突的判别通道。数值真值源是 Go
+// 按 face 天然互斥（分流门另有角 2 结构判别兜底，见下方 vs_main 注释）。数值
+// 真值源是 Go
 // internal/assets 的 `LayerTorch`（层枚举末位追加，iota 当前 59，门层 55 与
 // 工作台三层 56..58 之后），Rust 侧复述
 // 见 src/render/shaders.rs 的 `TORCH_MATERIAL`，由 render/farmland_tests.rs 的
 // 源码扫描钉在一起——在这里改数字必须同步另外两处。
 fn torch_material(mat: u32) -> bool {
     return mat == 59u;
+}
+
+// 床材质层闭区间（床尾/床头 × 南西北东八层）。床是 registry block_top_raw=8
+// 的短方块（9/16 半高板）：五条 quad 全部携带角高度原值（侧板顶缘与平顶为
+// 8、底缘为 0），bit 12..19/55..62 是角高度而不是 w/h 尺寸，与耕地/火把共用
+// 同一条角高度解码路径——判别同样走 material：床是轴向面（face 0..5），与
+// 植物（face 6/7）按 face 天然互斥。数值真值源是 Go internal/assets 的
+// `LayerBedFootSouth`..`LayerBedHeadEast`（60..67，层枚举末位追加），Rust 侧
+// 复述见 src/render/shaders.rs 的 `BED_MATERIAL_FIRST`/`BED_MATERIAL_LAST`，
+// 三方由 render/farmland_tests.rs 的源码扫描与床渲染回归钉在一起——在这里
+// 改数字必须同步另外两处。
+fn bed_material(mat: u32) -> bool {
+    return mat >= 60u && mat <= 67u;
 }
 
 // corner_height 取出第 vi 个顶点的 4-bit 角高度原值，与 water.wgsl 逐字同源
@@ -136,12 +152,22 @@ fn vs_main(
     // `w`/`h` 因此只在普通轴向面的分支里解码：三条路径互斥，由 face ∈ {6,7} 与
     // 耕地/火把 material 集合保证。两条保证的强度不同，如实记录：植物 material 只
     // 出现在 face 6/7 上是 mesher 打包期显式断言（两侧同口径当场拒绝）；而
-    // 「短方块的 material 都落在耕地区间内」不是打包期查得出来的——它是 Go
-    // registry 数据的传递性事实（当前只有耕地条目 block_top_raw 非零），区间外
-    // 的未来短方块会**静默**走 w/h 路径、顶面不下沉。这是 D2a 选定 material
-    // 判别时已接受的边界：新增短方块必须同步扩宽本区间并更新三处钉子。火把
-    // 倾斜薄板（角高度承载「向远离支撑方向倾斜」）是同一判别通道的第二个
-    // 消费者，走 `torch_material` 同一条角高度路径。
+    // 「短方块的 material 都落在角高度判别集合内」不是打包期查得出来的——它
+    // 是 Go registry 数据的传递性事实，集合外的未来短方块会**静默**走 w/h
+    // 路径、摊成巨型石板。这是 D2a 选定 material 判别时已接受的边界：新增短
+    // 方块必须同步扩宽判别集合并更新各方钉子。火把倾斜薄板（角高度承载「向
+    // 远离支撑方向倾斜」）是第二个消费者，床的 9/16 半高板（五条 quad 全带
+    // 角高度原值 8）是第三个，分别走 `torch_material` 与 `bed_material` 进入
+    // 同一条角高度路径。
+    //
+    // 分流门的最后一个析取是**结构判别**（与 Go 侧 quad.UnpackQuad 的边界契约
+    // 同一语义：角 2 在任何面朝向下都是顶面顶点，角高度 quad 的该原值恒非零，
+    // 普通 quad 的 bit 55..58 恒为 0——两侧 pack 的默认分支都只会往这里写
+    // 0）：它兜住「material 不在任何短方块集合里、却携带角高度」的 quad。床
+    // 首先撞上这一形态：五条 quad 里只有平顶挂床面层，四片侧板读各自面的
+    // 材质、生产注册表给的是与满格方块共享的橡木木板层，material 判别对它们
+    // 原理性失效（侧板曾被摊成 1×9 长板）。material 集合因此只承担「短方块
+    // 清单 + 跨语言层漂移报警」的角色，路由正确性由角 2 判别兜底。
     //
     // 两条对角线（`cu[vi]` 是水平参数 s，`cv[vi]` 是竖直参数 t）：
     //
@@ -158,7 +184,8 @@ fn vs_main(
             px = x + 1.0 - s;
         }
         local = vec3f(px, y + cv[vi], z + s);
-    } else if (farmland_material(mat) || torch_material(mat)) {
+    } else if (farmland_material(mat) || torch_material(mat) || bed_material(mat)
+        || corner_height(lo, hi, 2u) != 0u) {
         local = vec3f(x, y, z)
             + axis_vec(axis) * positive
             + axis_vec(ua) * cu[vi]

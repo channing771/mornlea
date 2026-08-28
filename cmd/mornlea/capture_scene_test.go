@@ -971,12 +971,12 @@ func TestTorchNightApplyResetsSharedPresentationState(t *testing.T) {
 	}
 }
 
-// newTorchNightRenderApplication 构造与正式 capture 同尺寸（640×360）的最小
-// 离屏渲染 application：torch-night 的像素断言经它复用 captureSceneImage 的
-// 完整链路（预热、装夹具、收敛、回读）。渲染器是离屏设备，不创建也不聚焦
-// 任何前台窗口；无 GPU 适配器时跳过（与既有渲染测试同口径）。材质用内嵌
-// 默认材质包，与 golden 抓帧路径看到的是同一份像素。
-func newTorchNightRenderApplication(t *testing.T) *application {
+// newCaptureSceneRenderApplication 构造与正式 capture 同尺寸（640×360）的最小
+// 离屏渲染 application：世界夜景场景（torch-night、bed-night 等）的像素断言经
+// 它复用 captureSceneImage 的完整链路（预热、装夹具、收敛、回读）。渲染器是
+// 离屏设备，不创建也不聚焦任何前台窗口；无 GPU 适配器时跳过（与既有渲染测试
+// 同口径）。材质用内嵌默认材质包，与 golden 抓帧路径看到的是同一份像素。
+func newCaptureSceneRenderApplication(t *testing.T) *application {
 	t.Helper()
 	renderer, err := client.NewRenderer(captureWidth, captureHeight)
 	if errors.Is(err, client.ErrNoGPUAdapter) {
@@ -1018,10 +1018,10 @@ func newTorchNightRenderApplication(t *testing.T) *application {
 	return app
 }
 
-// torchNightProject 把世界坐标投影到 capture 屏幕像素（y 轴向下）。相机取
+// captureSceneProject 把世界坐标投影到 capture 屏幕像素（y 轴向下）。相机取
 // Apply 之后的实例，投影矩阵与渲染用的 `Camera.ViewProj` 同一实现，不另写
 // 一套。
-func torchNightProject(t *testing.T, camera client.Camera, p mgl32.Vec3) image.Point {
+func captureSceneProject(t *testing.T, camera client.Camera, p mgl32.Vec3) image.Point {
 	t.Helper()
 	clip := camera.ViewProj().Mul4x1(mgl32.Vec4{p.X(), p.Y(), p.Z(), 1})
 	if clip.W() <= 0 {
@@ -1032,15 +1032,15 @@ func torchNightProject(t *testing.T, camera client.Camera, p mgl32.Vec3) image.P
 	return image.Pt(x, y)
 }
 
-// torchNightCellRect 返回一个方块格八 corner 投影后的屏幕外接矩形。
-func torchNightCellRect(t *testing.T, camera client.Camera, cell core.BlockPos) image.Rectangle {
+// captureSceneCellRect 返回一个方块格八 corner 投影后的屏幕外接矩形。
+func captureSceneCellRect(t *testing.T, camera client.Camera, cell core.BlockPos) image.Rectangle {
 	t.Helper()
 	minX, minY, maxX, maxY := 0, 0, 0, 0
 	for index, corner := range [8]mgl32.Vec3{
 		{0, 0, 0}, {1, 0, 0}, {0, 1, 0}, {1, 1, 0},
 		{0, 0, 1}, {1, 0, 1}, {0, 1, 1}, {1, 1, 1},
 	} {
-		point := torchNightProject(t, camera, mgl32.Vec3{
+		point := captureSceneProject(t, camera, mgl32.Vec3{
 			float32(cell.X) + corner.X(),
 			float32(cell.Y) + corner.Y(),
 			float32(cell.Z) + corner.Z(),
@@ -1106,7 +1106,7 @@ func torchNightFlamePixels(img *image.NRGBA, rect image.Rectangle) []image.Point
 // 同时核对落地与左右两墙火把的火芯都真实出现在各自的屏幕格内（墙面形态经
 // model tag 2..3 的贴面斜板几何渲染，而不是只有落地形态在画）。
 func TestTorchNightScenePixelsShowLightFalloffAndCutout(t *testing.T) {
-	app := newTorchNightRenderApplication(t)
+	app := newCaptureSceneRenderApplication(t)
 	scene := captureSceneByName(t, "torch-night")
 	img, err := captureSceneImage(app, scene)
 	if err != nil {
@@ -1118,8 +1118,8 @@ func TestTorchNightScenePixelsShowLightFalloffAndCutout(t *testing.T) {
 	camera := app.camera
 
 	t.Run("近亮远暗", func(t *testing.T) {
-		near := torchNightPatchLuma(t, img, torchNightProject(t, camera, mgl32.Vec3{1.0, 1.0, -3.0}))
-		far := torchNightPatchLuma(t, img, torchNightProject(t, camera, mgl32.Vec3{5.0, 1.0, -15.0}))
+		near := torchNightPatchLuma(t, img, captureSceneProject(t, camera, mgl32.Vec3{1.0, 1.0, -3.0}))
+		far := torchNightPatchLuma(t, img, captureSceneProject(t, camera, mgl32.Vec3{5.0, 1.0, -15.0}))
 		if near < 70 {
 			t.Fatalf("火把旁地板亮度=%d，想要至少 70：火把没有点亮近处", near)
 		}
@@ -1131,13 +1131,13 @@ func TestTorchNightScenePixelsShowLightFalloffAndCutout(t *testing.T) {
 		}
 	})
 	t.Run("封墙暗室无漏光", func(t *testing.T) {
-		ceiling := torchNightPatchLuma(t, img, torchNightProject(t, camera, mgl32.Vec3{4.0, 6.0, -12.0}))
+		ceiling := torchNightPatchLuma(t, img, captureSceneProject(t, camera, mgl32.Vec3{4.0, 6.0, -12.0}))
 		if ceiling >= 70 {
 			t.Fatalf("远端天花板亮度=%d，封闭暗室的未照到面应当保持暗色", ceiling)
 		}
 	})
 	t.Run("透明边缘非实心矩形", func(t *testing.T) {
-		rect := torchNightCellRect(t, camera, core.BlockPos{X: 2, Y: 1, Z: -3})
+		rect := captureSceneCellRect(t, camera, core.BlockPos{X: 2, Y: 1, Z: -3})
 		flames := torchNightFlamePixels(img, rect)
 		if len(flames) < 8 {
 			t.Fatalf("落地火把格内火芯像素=%d，想要至少 8（矩形=%v）", len(flames), rect)
@@ -1166,11 +1166,345 @@ func TestTorchNightScenePixelsShowLightFalloffAndCutout(t *testing.T) {
 			{"右墙 −X 形态", core.BlockPos{X: 5, Y: 2, Z: -6}},
 		} {
 			t.Run(wall.name, func(t *testing.T) {
-				flames := torchNightFlamePixels(img, torchNightCellRect(t, camera, wall.cell))
+				flames := torchNightFlamePixels(img, captureSceneCellRect(t, camera, wall.cell))
 				if len(flames) < 4 {
 					t.Fatalf("墙面火把格内火芯像素=%d，想要至少 4：贴面斜板几何没有渲染", len(flames))
 				}
 			})
+		}
+	})
+}
+
+// TestBedNightCaptureSceneIsRegistered 锁住 bed-night 场景条目的完整性：
+// 与其余世界场景一样走「Prepare 装夹具 + Apply 定状态 + 8 帧预热」的完整链路。
+func TestBedNightCaptureSceneIsRegistered(t *testing.T) {
+	scene := captureSceneByName(t, "bed-night")
+	if scene.Prepare == nil || scene.Apply == nil {
+		t.Fatalf("场景=%+v，想要完整 bed-night", scene)
+	}
+	if scene.WarmupFrames != 8 {
+		t.Fatalf("bed-night WarmupFrames=%d，想要 8", scene.WarmupFrames)
+	}
+	if scene.HUD != nil || scene.Menu != nil || scene.Settings != nil || scene.PinVolatile != nil {
+		t.Fatalf("bed-night 不应携带 HUD/菜单/设置/易变钉住夹具: %+v", scene)
+	}
+}
+
+// bedNightBeds 是床夜景夹具的四张床（格 → 形态编号）：四个水平朝向各一张
+// 完整床（床头与床尾成对、同框），坐标与 `applyCaptureBedNightChanges` 里的
+// 夹具逐一对应——生产表与测试锁各声明一份，任何一侧单独漂移都会红。
+var bedNightBeds = map[core.BlockPos]core.BlockID{
+	{X: -3, Y: 1, Z: -4}: core.BedFootEastID,
+	{X: -2, Y: 1, Z: -4}: core.BedHeadEastID,
+	{X: 2, Y: 1, Z: -4}:  core.BedFootWestID,
+	{X: 1, Y: 1, Z: -4}:  core.BedHeadWestID,
+	{X: 4, Y: 1, Z: -6}:  core.BedFootSouthID,
+	{X: 4, Y: 1, Z: -5}:  core.BedHeadSouthID,
+	{X: -5, Y: 1, Z: -5}: core.BedFootNorthID,
+	{X: -5, Y: 1, Z: -6}: core.BedHeadNorthID,
+}
+
+// bedNightTorches 是床夜景夹具的三朵火把：落地一朵居中，左右墙各一朵墙面
+// 形态，与火把夜景同一支撑契约。
+var bedNightTorches = map[core.BlockPos]core.BlockID{
+	{X: 0, Y: 1, Z: -7}:  core.TorchStandingID,
+	{X: -5, Y: 2, Z: -3}: core.TorchWallPosXID,
+	{X: 5, Y: 2, Z: -5}:  core.TorchWallNegXID,
+}
+
+// TestPrepareBedNightRoomUsesMirrorAndMesher 穷举核对床夜景夹具的全封闭石室、
+// 四朝向床与三朵火把的位置、形态与支撑：床的 8 个格与火把 3 个格之外，室内
+// 必须全是空气，外壳全是石块；床双格按 `core` 的朝向映射成对出现且床尾格的
+// 正下方是实心石地板——夹具因此与放置规则的支撑契约一致，不是悬空摆拍。
+// 最后经下一场景（materials-showcase）的 Prepare 重装空气基线，验证床与火把
+// 夹具不泄入后续场景（spec delta「不污染后续场景」的 Scenario）。
+func TestPrepareBedNightRoomUsesMirrorAndMesher(t *testing.T) {
+	airMesher := client.NewMesher(assets.NewRegistry(), 1)
+	t.Cleanup(airMesher.Close)
+	app := &application{mirror: client.NewMirror(), mesher: airMesher}
+
+	if err := prepareCaptureAirNeighborhood(app); err != nil {
+		t.Fatal(err)
+	}
+	roomMesher := client.NewMesher(assets.NewRegistry(), 1)
+	t.Cleanup(roomMesher.Close)
+	app.mesher = roomMesher
+	if got := roomMesher.Stats().DirtySections; got != 0 {
+		t.Fatalf("施加房间变化前 dirty sections = %d，想要 0", got)
+	}
+	if err := applyCaptureBedNightChanges(app); err != nil {
+		t.Fatal(err)
+	}
+	for z := int32(-1); z <= 1; z++ {
+		for x := int32(-1); x <= 1; x++ {
+			chunk, ok := app.mirror.Chunk(core.Overworld, core.ChunkPos{X: x, Z: z})
+			if !ok || chunk.Revision != 2 {
+				t.Fatalf("chunk (%d,%d) = (%v,%v)，想要 revision 2", x, z, chunk, ok)
+			}
+		}
+	}
+	for y := int32(0); y <= 6; y++ {
+		for z := int32(-16); z <= 2; z++ {
+			for x := int32(-6); x <= 6; x++ {
+				position := core.BlockPos{X: x, Y: y, Z: z}
+				want := core.AirID
+				if y == 0 || y == 6 || x == -6 || x == 6 || z == -16 || z == 2 {
+					want = core.StoneID
+				}
+				if bed, ok := bedNightBeds[position]; ok {
+					want = bed
+				}
+				if torch, ok := bedNightTorches[position]; ok {
+					want = torch
+				}
+				got, loaded := app.mirror.BlockAt(core.Overworld, position)
+				if !loaded || got != want {
+					t.Fatalf("BlockAt(%+v) = (%d,%v)，想要 (%d,true)", position, got, loaded, want)
+				}
+			}
+		}
+	}
+	// 床双格按 core 的「朝向 ↔ 编号」唯一窗口成对出现：床头格恰为床尾格按
+	// 朝向的邻格、编号与 `core.BedHeadID` 一致，且两格正下方都有实心支撑。
+	for position, id := range bedNightBeds {
+		if !core.IsBedFoot(id) {
+			continue
+		}
+		dir := core.BedDir(id)
+		head := core.BedHeadNeighbor(position, dir)
+		got, loaded := app.mirror.BlockAt(core.Overworld, head)
+		if !loaded || got != core.BedHeadID(dir) {
+			t.Fatalf("床头 BlockAt(%+v) = (%d,%v)，想要 (%d,true)", head, got, loaded, core.BedHeadID(dir))
+		}
+	}
+	// 床与火把的正下方（墙面形态的支撑在墙内同一高度）逐一核对支撑格。
+	// 落地火把与 8 个床格的支撑是正下方地板；墙面火把的支撑按形态反方向
+	// 在同一高度。
+	for _, position := range []core.BlockPos{
+		{X: -3, Y: 1, Z: -4}, {X: -2, Y: 1, Z: -4},
+		{X: 2, Y: 1, Z: -4}, {X: 1, Y: 1, Z: -4},
+		{X: 4, Y: 1, Z: -6}, {X: 4, Y: 1, Z: -5},
+		{X: -5, Y: 1, Z: -5}, {X: -5, Y: 1, Z: -6},
+		{X: 0, Y: 1, Z: -7},
+	} {
+		support := core.BlockPos{X: position.X, Y: position.Y - 1, Z: position.Z}
+		if got, loaded := app.mirror.BlockAt(core.Overworld, support); !loaded || got != core.StoneID {
+			t.Fatalf("支撑 BlockAt(%+v) = (%d,%v)，想要 (StoneID,true)", support, got, loaded)
+		}
+	}
+	for _, support := range []core.BlockPos{
+		{X: -6, Y: 2, Z: -3},
+		{X: 6, Y: 2, Z: -5},
+	} {
+		if got, loaded := app.mirror.BlockAt(core.Overworld, support); !loaded || got != core.StoneID {
+			t.Fatalf("墙面火把支撑 BlockAt(%+v) = (%d,%v)，想要 (StoneID,true)", support, got, loaded)
+		}
+	}
+	// 房外一格必须仍是空气：夹具的可见变化不越出外壳。
+	for _, position := range []core.BlockPos{
+		{X: -7, Y: 3, Z: -8},
+		{X: 0, Y: 3, Z: 3},
+		{X: 0, Y: 7, Z: -8},
+	} {
+		if got, loaded := app.mirror.BlockAt(core.Overworld, position); !loaded || got != core.AirID {
+			t.Fatalf("房外 BlockAt(%+v) = (%d,%v)，想要 (AirID,true)", position, got, loaded)
+		}
+	}
+	if got := roomMesher.Stats().DirtySections; got == 0 {
+		t.Fatal("床夜景装入后 mesher 没有 dirty section")
+	}
+
+	// 下一场景从空气基线重装后，床与火把格必须全部消失：夹具值不得泄入
+	// 后续场景。
+	if err := prepareMaterialsShowcase(app); err != nil {
+		t.Fatal(err)
+	}
+	for position := range bedNightBeds {
+		if got, loaded := app.mirror.BlockAt(core.Overworld, position); !loaded || got != core.AirID {
+			t.Fatalf("后续场景床格 BlockAt(%+v) = (%d,%v)，想要 (AirID,true)", position, got, loaded)
+		}
+	}
+	for position := range bedNightTorches {
+		if got, loaded := app.mirror.BlockAt(core.Overworld, position); !loaded || got != core.AirID {
+			t.Fatalf("后续场景火把格 BlockAt(%+v) = (%d,%v)，想要 (AirID,true)", position, got, loaded)
+		}
+	}
+}
+
+// TestBedNightApplyResetsSharedPresentationState 与 torch-night 的同名断言
+// 同构：前序场景留下的全部共享呈现状态都必须被 Apply 显式清空，夜晚时间
+// 与相机姿态固定。
+func TestBedNightApplyResetsSharedPresentationState(t *testing.T) {
+	scene := captureSceneByName(t, "bed-night")
+	if scene.Apply == nil {
+		t.Fatal("缺少 bed-night")
+	}
+	remotePlayers := client.NewRemotePlayers()
+	if err := remotePlayers.Apply(network.RemotePlayerSpawn{
+		PlayerID: core.PlayerID{6: 0x40, 8: 0x80, 15: 1}, DisplayName: "测试Player",
+		ServerTick: 1, Position: mgl32.Vec3{0.5, 2, 0.5},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	app := &application{
+		remotePlayers: remotePlayers,
+		panel:         &panelState{visible: true},
+		inventoryOpen: true,
+	}
+	inventory := core.Inventory{}
+	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 1}
+	if err := app.inventory.Apply(network.InventoryState{Inventory: inventory}); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.furnace.Apply(network.FurnaceState{Furnace: core.FurnaceRef{
+		Dimension: core.Overworld, Generation: 1,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.chest.Apply(network.ChestState{Chest: core.ContainerRef{
+		Dimension: core.Overworld, Kind: core.ContainerKindChest, Generation: 1,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := scene.Apply(app); err != nil {
+		t.Fatal(err)
+	}
+	if app.worldTimeTicks != 18000 {
+		t.Fatalf("world time = %d，想要 18000（夜晚：室内亮度只由方块光决定）", app.worldTimeTicks)
+	}
+	if app.camera.Pos != (mgl32.Vec3{0.5, 3.4, 0.5}) || app.camera.Yaw != 0 || app.camera.Pitch != -0.3 {
+		t.Fatalf("camera = %+v yaw=%v pitch=%v", app.camera.Pos, app.camera.Yaw, app.camera.Pitch)
+	}
+	if got, confirmed := app.inventory.State(); !confirmed || got != (core.Inventory{}) {
+		t.Fatalf("inventory = %+v confirmed=%v，想要已确认空物品栏", got, confirmed)
+	}
+	if got := app.remotePlayers.Presentations(); len(got) != 0 {
+		t.Fatalf("远端玩家未清空: %+v", got)
+	}
+	if _, opened := app.furnace.State(); opened {
+		t.Fatal("熔炉镜像未清空")
+	}
+	if _, opened := app.chest.State(); opened {
+		t.Fatal("箱子镜像未清空")
+	}
+	if app.inventoryOpen || app.panel.visible {
+		t.Fatalf("共享界面状态未清空: inventoryOpen=%v panelVisible=%v",
+			app.inventoryOpen, app.panel.visible)
+	}
+}
+
+// bedNightPatchRGB 返回以 center 为中心的 3×3 像素平均 RGB。床面亮带在
+// 640×360 的画面里只有几个像素厚，3×3 已覆盖采样点邻域而不至于混入相邻
+// 材质之外的大片背景。
+func bedNightPatchRGB(t *testing.T, img *image.NRGBA, center image.Point) (int, int, int) {
+	t.Helper()
+	const radius = 1
+	sum := [3]int{}
+	count := 0
+	for dy := -radius; dy <= radius; dy++ {
+		for dx := -radius; dx <= radius; dx++ {
+			x, y := center.X+dx, center.Y+dy
+			if x < 0 || y < 0 || x >= img.Bounds().Dx() || y >= img.Bounds().Dy() {
+				t.Fatalf("采样块 (%d,%d) 越出图像边界", x, y)
+			}
+			i := img.PixOffset(x, y)
+			sum[0] += int(img.Pix[i])
+			sum[1] += int(img.Pix[i+1])
+			sum[2] += int(img.Pix[i+2])
+			count++
+		}
+	}
+	return sum[0] / count, sum[1] / count, sum[2] / count
+}
+
+// TestBedNightScenePixelsShowMultiOrientationBedsAtNight 是 bed-night 的场景内
+// 像素断言（spec delta visual-verification「夜间配色可辨认」的 Scenario）：
+//
+//   - 多朝向床头可辨：四张床的枕头带（床头亮带）采样块都比同床毯沿带更亮、
+//     更接近中性（R−G 更小）——床头方向因此逐床可读，四个朝向同框互证；
+//   - 床面配色可辨：床垫暖色与**同照度**石面的暖度差显著为正——火把照明
+//     本身给石面染色，差值扣掉照明色温后剩下的才是床的材质本色；
+//   - 半高轮廓：床侧板是暖色木板，其正上方透视到的背景是暗色石墙——
+//     床只占半格高，上半透出背景，轮廓因此可辨。
+//
+// 采样点钉在床面层 UV 的带位上（带沿床头朝向边内侧 3px：南/北带沿 z、
+// 东/西带沿 x），与 `assets.bedBand` 的画带约定一致。经完整呈现链路抓帧，
+// 渲染器是离屏设备，不创建也不聚焦任何前台窗口；无 GPU 适配器时跳过。
+func TestBedNightScenePixelsShowMultiOrientationBedsAtNight(t *testing.T) {
+	app := newCaptureSceneRenderApplication(t)
+	scene := captureSceneByName(t, "bed-night")
+	img, err := captureSceneImage(app, scene)
+	if err != nil {
+		t.Fatalf("抓取 bed-night: %v", err)
+	}
+	camera := app.camera
+
+	// 床顶平面高度：床是 9/16 半高板（块原点 y=1，顶面在 1+9/16）。
+	const bedTopY = float32(1) + 9.0/16.0
+	samples := []struct {
+		name     string
+		pillow   mgl32.Vec3
+		blanket  mgl32.Vec3
+		mattress mgl32.Vec3
+	}{
+		{"东向床", mgl32.Vec3{-1.22, bedTopY, -3.5}, mgl32.Vec3{-2.22, bedTopY, -3.5}, mgl32.Vec3{-1.75, bedTopY, -3.5}},
+		{"西向床", mgl32.Vec3{1.22, bedTopY, -3.5}, mgl32.Vec3{2.22, bedTopY, -3.5}, mgl32.Vec3{1.75, bedTopY, -3.5}},
+		{"南向床", mgl32.Vec3{4.5, bedTopY, -4.22}, mgl32.Vec3{4.5, bedTopY, -5.22}, mgl32.Vec3{4.5, bedTopY, -5.75}},
+		{"北向床", mgl32.Vec3{-4.5, bedTopY, -5.78}, mgl32.Vec3{-4.5, bedTopY, -4.78}, mgl32.Vec3{-4.5, bedTopY, -5.25}},
+	}
+
+	t.Run("床头床尾同框且完整在画面内", func(t *testing.T) {
+		for position := range bedNightBeds {
+			rect := captureSceneCellRect(t, camera, position)
+			if !rect.In(image.Rect(0, 0, captureWidth, captureHeight)) {
+				t.Fatalf("床格 %v 屏幕外接矩形 %v 越出画面", position, rect)
+			}
+		}
+	})
+
+	// 石面对照样点：东向床与西向床之间的地板，与床面同受居中火把照明、
+	// 光照等级与床面相近——床垫暖度减去它，就是「材质本色」而非照明色温。
+	const stoneX, stoneY, stoneZ = float32(-0.5), float32(1.0), float32(-3.5)
+
+	t.Run("多朝向床头亮带可辨", func(t *testing.T) {
+		sr, sg, _ := bedNightPatchRGB(t, img, captureSceneProject(t, camera, mgl32.Vec3{stoneX, stoneY, stoneZ}))
+		for _, sample := range samples {
+			t.Run(sample.name, func(t *testing.T) {
+				pr, pg, pb := bedNightPatchRGB(t, img, captureSceneProject(t, camera, sample.pillow))
+				br, bg, bb := bedNightPatchRGB(t, img, captureSceneProject(t, camera, sample.blanket))
+				mr, mg, _ := bedNightPatchRGB(t, img, captureSceneProject(t, camera, sample.mattress))
+				pillowLuma, blanketLuma := (pr+pg+pb)/3, (br+bg+bb)/3
+				t.Logf("%s: 枕头 rgb=(%d,%d,%d) 毯沿 rgb=(%d,%d,%d) 床垫 r=%d g=%d 石面 r=%d g=%d",
+					sample.name, pr, pg, pb, br, bg, bb, mr, mg, sr, sg)
+				if pillowLuma-blanketLuma < 15 {
+					t.Fatalf("枕头亮度=%d 毯沿亮度=%d：床头亮带不可辨", pillowLuma, blanketLuma)
+				}
+				if (br-bg)-(pr-pg) < 15 {
+					t.Fatalf("毯沿暖度(r-g)=%d 枕头暖度(r-g)=%d：毯沿暖带不可辨", br-bg, pr-pg)
+				}
+				if pillowLuma < 90 {
+					t.Fatalf("枕头亮度=%d：夜间光照下床头不可辨", pillowLuma)
+				}
+				if (mr-mg)-(sr-sg) < 10 {
+					t.Fatalf("床垫暖度(r-g)=%d 同照度石面暖度(r-g)=%d：床面配色与石面不可分", mr-mg, sr-sg)
+				}
+			})
+		}
+	})
+
+	t.Run("半高轮廓可辨", func(t *testing.T) {
+		// 南向床的 −X 侧板：板面是橡木木板层（暖色），板顶（9/16）以上同一
+		// 屏幕列透视到的是远处暗色石墙——床只占下半格，上半透出背景。
+		boardR, boardG, _ := bedNightPatchRGB(t, img, captureSceneProject(t, camera, mgl32.Vec3{4.0, 1.28, -5.5}))
+		aboveR, aboveG, _ := bedNightPatchRGB(t, img, captureSceneProject(t, camera, mgl32.Vec3{4.0, 2.35, -5.5}))
+		t.Logf("侧板 r=%d g=%d，板上背景 r=%d g=%d", boardR, boardG, aboveR, aboveG)
+		if boardR-boardG < 10 {
+			t.Fatalf("床侧板暖度(r-g)=%d：床体木色不可辨", boardR-boardG)
+		}
+		if (boardR-boardG)-(aboveR-aboveG) < 8 {
+			t.Fatalf("侧板暖度=%d 板上背景暖度=%d：半高轮廓不可辨",
+				boardR-boardG, aboveR-aboveG)
 		}
 	})
 }

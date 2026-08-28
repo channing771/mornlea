@@ -520,8 +520,8 @@ var captureScenes = []captureScene{
 		// 各一朵 ±X 形态）；近处地板被照亮、远角沿距离衰减变暗，火把本体
 		// 是窄柄加暖色火芯的 cutout 精灵（边缘透明，透过可见背景）。
 		//
-		// 排序约束：紧随 block-light-room、先于 materials-showcase（spec
-		// visual-verification「完整场景顺序固定为 21 项」），由
+		// 排序约束：紧随 block-light-room、先于 bed-night（bed-night 按
+		// spec delta visual-verification 插入其后），由
 		// TestTorchNightCaptureScenePosition 兜底。
 		Name:         "torch-night",
 		WarmupFrames: 8,
@@ -531,6 +531,46 @@ var captureScenes = []captureScene{
 			app.camera.Pos = mgl32.Vec3{0.5, 2.8, 0.5}
 			app.camera.Yaw = 0
 			app.camera.Pitch = 0
+			app.inventoryOpen = false
+			if app.panel != nil {
+				app.panel.visible = false
+			}
+			if err := app.inventory.Apply(network.InventoryState{Inventory: core.Inventory{}}); err != nil {
+				return fmt.Errorf("重置物品栏: %w", err)
+			}
+			app.remotePlayers.Reset()
+			app.furnace.Reset()
+			app.chest.Reset()
+			app.crafting.Reset()
+			return nil
+		},
+	},
+	{
+		// bed-night 是床的无窗口夜景 capture 场景：固定夜晚（18000 tick）
+		// 的全封闭石室内，四个水平朝向各一张完整床（床头与床尾成对、同框），
+		// 室内亮度只来自三朵火把的方块光。床面层的枕头/毯沿亮带随朝向旋转、
+		// 床体是 9/16 半高板——原创配色与半高轮廓在夜间光照下的可辨性由
+		// golden 双阈值与场景内像素断言共同兜底。四张床刻意聚在相机近处的
+		// 两排：床头亮带只有 3px 宽，离相机太远会在画面里薄于一个像素，
+		// 多朝向可辨的像素证据随之消失。
+		//
+		// 排序约束：紧随 torch-night、先于 ai-companion（spec delta
+		// visual-verification「bed-night 无窗口夜景场景」），由
+		// TestBedNightCaptureScenePosition 兜底。床与火把夹具经 Prepare 装
+		// 进客户端镜像，下一场景 materials-showcase 的 Prepare 从空气基线
+		// 重装，夹具值不会泄入后续场景。
+		Name:         "bed-night",
+		WarmupFrames: 8,
+		Prepare:      prepareBedNightRoom,
+		Apply: func(app *application) error {
+			app.worldTimeTicks = 18000
+			// 相机抬高并下俯：床面层（枕头/毯沿亮带所在的面）是水平顶面，
+			// 平视只能看到一条窄边，下俯才能把四个朝向的床面同时铺进画面；
+			// 姿态是常量，与登录 ResetView 的出生朝向无关。
+			app.camera.Pos = mgl32.Vec3{0.5, 3.4, 0.5}
+			app.camera.Yaw = 0
+			app.camera.Pitch = -0.3
+			app.center = cameraChunk(app.camera.Pos)
 			app.inventoryOpen = false
 			if app.panel != nil {
 				app.panel.visible = false

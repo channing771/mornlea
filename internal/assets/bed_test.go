@@ -250,3 +250,39 @@ func TestBedSurfaceLayerReachesMesherThroughProductionRegistry(t *testing.T) {
 		})
 	}
 }
+
+// TestBedLayerNumbersMatchClientShaderContract 是床 material 区间在 Go 侧的
+// 机械守卫：八张床面层的层号被 Rust 客户端的 BED_MATERIAL_FIRST/LAST 常量与
+// terrain.wgsl 的 bed_material 字面量各硬编码一份（三方没有共享定义，只能
+// 人手同步）。床是角高度短方块（9/16 半高板），客户端按 material 区间把床
+// quad 分流到角高度解码路径；在层枚举的床**之前**插层会整体平移区间，床
+// quad 会脱门走 w/h 尺寸解码、摊成盖住邻格的巨型石板——本条与 Rust 侧
+// farmland_tests.rs 的 bed_range_constants_match_go_layer_enum 及其床渲染
+// 回归是仅有的报警点。反引号纪律与 TestFarmlandLayerNumbersMatchClientShaderContract
+// 同款：wgsl 函数与 Rust 测试名不是 Go 声明，一律纯文本提及。
+func TestBedLayerNumbersMatchClientShaderContract(t *testing.T) {
+	// 字面量与 Rust 客户端 shaders.rs 的两个常量逐一对应，改任何一侧必须同步。
+	if want := uint16(60); assets.LayerBedFootSouth != want {
+		t.Fatalf("客户端床区间下界应为 %d（Rust 客户端 BED_MATERIAL_FIRST），实测 LayerBedFootSouth=%d", want, assets.LayerBedFootSouth)
+	}
+	if want := uint16(67); assets.LayerBedHeadEast != want {
+		t.Fatalf("客户端床区间上界应为 %d（Rust 客户端 BED_MATERIAL_LAST），实测 LayerBedHeadEast=%d", want, assets.LayerBedHeadEast)
+	}
+	// 区间与两侧邻居紧贴：火把层在前、枚举末位在后，插层必然撞上断言。
+	if assets.LayerTorch != assets.LayerBedFootSouth-1 {
+		t.Fatalf("LayerTorch=%d 不紧贴床区间下界，插层检测失效", assets.LayerTorch)
+	}
+	registry := assets.NewRegistry()
+	if got := int(assets.LayerBedHeadEast) + 1; registry.LayerCount() != got {
+		t.Fatalf("LayerCount=%d 不紧贴床区间上界，插层检测失效", registry.LayerCount())
+	}
+
+	// 游戏编号 → 材质层的映射是客户端判别的实际输入：八个床形态的顶面
+	// material 都必须落在本区间内，否则 shader 不走角高度路径。
+	for _, id := range allBedForms() {
+		mat := registry.Material(id, mesh.FacePosY)
+		if mat < assets.LayerBedFootSouth || mat > assets.LayerBedHeadEast {
+			t.Fatalf("床形态 %d 的顶面 material=%d 落在客户端床区间 [60,67] 之外", id, mat)
+		}
+	}
+}

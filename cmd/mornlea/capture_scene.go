@@ -248,6 +248,72 @@ func applyCaptureTorchNightChanges(app *application) error {
 	return applyCaptureBlocks(app, blocks, captureWaterBasinChunkRadius, "火把夜景")
 }
 
+// prepareBedNightRoom 装入床夜景夹具：一间与火把夜景同壳的全封闭石室
+// （地板 y=0、天花板 y=6、四壁合围，纵深 z=-16..2），室内按四个水平朝向
+// 各摆一张完整床（床头与床尾成对、同框），光照只来自三朵火把的方块光。
+// 封闭沿用火把夜景的同一理由：场景在夜晚（18000 tick）抓帧，室内亮度必须
+// 只由固定光源解释，墙体留洞会让室外夜空混进画面、床面的明暗梯度就不再
+// 只由火把解释。夹具经客户端只读镜像装入，不依赖任何服务端模拟推进；
+// 床的双格都落在整片石地板上，与放置规则的支撑契约一致，不是悬空摆拍。
+func prepareBedNightRoom(app *application) error {
+	if err := prepareCaptureAirNeighborhood(app); err != nil {
+		return err
+	}
+	return applyCaptureBedNightChanges(app)
+}
+
+// applyCaptureBedNightChanges 写入石室外壳、四张床与三朵火把。四张床覆盖
+// 全部四个水平朝向（南/北/东/西各一）：床面层的枕头/毯沿亮带随朝向旋转，
+// 四个朝向同框即可互证「多朝向可辨」，超过 spec 要求的两种朝向以锁死
+// 逐朝向的床面层差异。落地火把居中照亮四张床，左右墙各一朵补足边缘照度
+// （床的床面材质取床顶上方格的光照，三朵把四张床上方的光照都抬到 10 级
+// 上下），支撑格全部是实心石块。坐标由 capture_scene_test.go 的夹具测试
+// 穷举锁定。
+func applyCaptureBedNightChanges(app *application) error {
+	blocks := make(map[core.ChunkPos]map[core.BlockPos]core.BlockID)
+	setBlock := func(position core.BlockPos, block core.BlockID) {
+		chunk := position.Chunk()
+		if blocks[chunk] == nil {
+			blocks[chunk] = make(map[core.BlockPos]core.BlockID)
+		}
+		blocks[chunk][position] = block
+	}
+	for z := int32(-16); z <= 2; z++ {
+		for x := int32(-6); x <= 6; x++ {
+			setBlock(core.BlockPos{X: x, Y: 0, Z: z}, core.StoneID)
+			setBlock(core.BlockPos{X: x, Y: 6, Z: z}, core.StoneID)
+		}
+		for y := int32(1); y <= 5; y++ {
+			setBlock(core.BlockPos{X: -6, Y: y, Z: z}, core.StoneID)
+			setBlock(core.BlockPos{X: 6, Y: y, Z: z}, core.StoneID)
+		}
+	}
+	for y := int32(1); y <= 5; y++ {
+		for x := int32(-6); x <= 6; x++ {
+			setBlock(core.BlockPos{X: x, Y: y, Z: -16}, core.StoneID)
+			setBlock(core.BlockPos{X: x, Y: y, Z: 2}, core.StoneID)
+		}
+	}
+	// 四张床：南向（床头 +Z）、北向（床头 −Z）、东向（床头 +X）、西向
+	// （床头 −X），床尾格在前、床头格按 `core.BedHeadNeighbor` 成对。布局
+	// 刻意聚在相机近处（z=-4 一排东西向、x=±5/4 两侧各一张南北向）：床面
+	// 亮带在画面里只有几个像素厚，摆远了像素证据随之消失（详见场景注释）。
+	setBlock(core.BlockPos{X: -3, Y: 1, Z: -4}, core.BedFootEastID)
+	setBlock(core.BlockPos{X: -2, Y: 1, Z: -4}, core.BedHeadEastID)
+	setBlock(core.BlockPos{X: 2, Y: 1, Z: -4}, core.BedFootWestID)
+	setBlock(core.BlockPos{X: 1, Y: 1, Z: -4}, core.BedHeadWestID)
+	setBlock(core.BlockPos{X: 4, Y: 1, Z: -6}, core.BedFootSouthID)
+	setBlock(core.BlockPos{X: 4, Y: 1, Z: -5}, core.BedHeadSouthID)
+	setBlock(core.BlockPos{X: -5, Y: 1, Z: -5}, core.BedFootNorthID)
+	setBlock(core.BlockPos{X: -5, Y: 1, Z: -6}, core.BedHeadNorthID)
+	// 三朵火把：落地一朵居中（支撑是正下方地板），左右墙各一朵墙面形态
+	// （支撑在命中面反方向的墙内），把四张床上方的光照都抬到 10 级上下。
+	setBlock(core.BlockPos{X: 0, Y: 1, Z: -7}, core.TorchStandingID)
+	setBlock(core.BlockPos{X: -5, Y: 2, Z: -3}, core.TorchWallPosXID)
+	setBlock(core.BlockPos{X: 5, Y: 2, Z: -5}, core.TorchWallNegXID)
+	return applyCaptureBlocks(app, blocks, captureWaterBasinChunkRadius, "床夜景")
+}
+
 func applyCaptureBlockLightRoomChanges(app *application) error {
 	blocks := make(map[core.ChunkPos]map[core.BlockPos]core.BlockID)
 	setBlock := func(position core.BlockPos, block core.BlockID) {
