@@ -1,4 +1,4 @@
-package storage
+package companion
 
 import (
 	"bytes"
@@ -59,13 +59,13 @@ func FuzzDecodeCompanions(f *testing.F) {
 	for index := range records {
 		records[index].ID = fixtureCompanionID(byte(index))
 	}
-	maximum, err := encodeCompanions(CompanionSave{Revision: 1, Records: records})
+	maximum, err := Encode(CompanionSave{Revision: 1, Records: records})
 	if err != nil {
 		f.Fatal(err)
 	}
 	f.Add(maximum)
 	// 单记录 Running 任务 + 两条 FIFO：驱动任务区/FIFO 解码路径。
-	taskBearing, err := encodeCompanions(CompanionSave{
+	taskBearing, err := Encode(CompanionSave{
 		Revision: 5,
 		Records:  fixtureCompanionBodies()[:1],
 		Queues: []StoredCompanionQueue{{
@@ -87,7 +87,7 @@ func FuzzDecodeCompanions(f *testing.F) {
 	f.Add(taskBearing)
 	// FIFO-only 形态（无当前任务、仅排队指令）：flags 仅 bit1，驱动
 	// 「HasCurrent 为假时 Current 零值」的编码/解码对称路径。
-	fifoOnly, err := encodeCompanions(CompanionSave{
+	fifoOnly, err := Encode(CompanionSave{
 		Revision: 6,
 		Records:  fixtureCompanionBodies()[:1],
 		Queues: []StoredCompanionQueue{{
@@ -115,7 +115,7 @@ func FuzzDecodeCompanions(f *testing.F) {
 	// v3 变长种子：四 kind 全覆盖的 Running 任务驱动变长解码路径；非法
 	// kind 步长错位、follow 目标非法与 follow 携带 deadline 三个补丁种子
 	// 深入步骤级校验。
-	v3TaskBearing, err := encodeCompanions(CompanionSave{
+	v3TaskBearing, err := Encode(CompanionSave{
 		Revision: 7,
 		Records:  fixtureCompanionBodies()[:1],
 		Queues: []StoredCompanionQueue{{
@@ -157,7 +157,7 @@ func FuzzDecodeCompanions(f *testing.F) {
 	// 五个补丁种子深入摘要级校验。缩小错位种子把长度减去整整一个 rune
 	//（3 bytes），剩余文本仍合法——必须由「payload 读空」门禁拒绝残留
 	// 字节，而不是静默接受非规范文件。
-	summaryOnly, err := encodeCompanions(CompanionSave{
+	summaryOnly, err := Encode(CompanionSave{
 		Revision: 8,
 		Records:  fixtureCompanionBodies()[:1],
 		Queues: []StoredCompanionQueue{{
@@ -199,7 +199,7 @@ func FuzzDecodeCompanions(f *testing.F) {
 	binary.LittleEndian.PutUint32(oversized[24:], (companion.MaxStored+1)*221)
 	f.Add(oversized)
 	f.Fuzz(func(t *testing.T, payload []byte) {
-		got, err := decodeCompanions(payload)
+		got, err := Decode(payload)
 		if err != nil {
 			return
 		}
@@ -223,10 +223,10 @@ func FuzzDecodeCompanions(f *testing.F) {
 		}
 		// v1/v2/v3 是只读迁移 schema：解码成功即可；规范重编码只写 v4，
 		// 字节不可比对。
-		if schema := binary.LittleEndian.Uint32(payload[8:12]); schema != currentCompanionSchema {
+		if schema := binary.LittleEndian.Uint32(payload[8:12]); schema != CurrentSchema {
 			return
 		}
-		encoded, err := encodeCompanions(CompanionSave{
+		encoded, err := Encode(CompanionSave{
 			Revision: got.Revision,
 			Records:  got.Records,
 			Queues:   got.Queues,

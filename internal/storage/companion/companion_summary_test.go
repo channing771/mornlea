@@ -5,7 +5,7 @@
 // 4×2,050 摘要区推导）、v3/v2/v1 只读迁移摘要为空与首存 v4、inactive 去激活
 // 丢弃摘要。全部用例不触盘（除显式 DiskStore 用例），失败注入均为字节级或
 // 载荷级构造。
-package storage
+package companion
 
 import (
 	"bytes"
@@ -21,6 +21,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage/storagedef"
 )
 
 // updateStorageFixtures 与 player/chunk 域测试共用同一命令行开关名：按域拆分后
@@ -52,17 +53,17 @@ func fixtureCompanionV4Queues() []StoredCompanionQueue {
 // 文件上界常量、带摘要/无摘要 active 记录混排的 round-trip、golden 字节稳定
 // （-update-storage-fixtures 重生成）与解码结果对输入字节的独立性。
 func TestCompanionCodecV4RoundTripAndGolden(t *testing.T) {
-	if currentCompanionSchema != 4 {
-		t.Fatalf("current companion schema=%d，想要 4", currentCompanionSchema)
+	if CurrentSchema != 4 {
+		t.Fatalf("current companion schema=%d，想要 4", CurrentSchema)
 	}
-	if maxCompanionFileLength != 438280 {
-		t.Fatalf("max companion file length=%d，想要 438280", maxCompanionFileLength)
+	if MaxFileLength != 438280 {
+		t.Fatalf("max companion file length=%d，想要 438280", MaxFileLength)
 	}
 	input := fixtureCompanionBodies()
 	queues := fixtureCompanionV4Queues()
 	bodiesSnapshot := append([]companion.Body(nil), input...)
 	queuesSnapshot := cloneStoredQueuesForTest(queues)
-	encoded, err := encodeCompanions(CompanionSave{Revision: 47, Records: input, Queues: queues})
+	encoded, err := Encode(CompanionSave{Revision: 47, Records: input, Queues: queues})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +90,7 @@ func TestCompanionCodecV4RoundTripAndGolden(t *testing.T) {
 		t.Fatalf("v4 文件长度=%d，想要 %d", len(encoded), wantLength)
 	}
 
-	got, err := decodeCompanions(encoded)
+	got, err := Decode(encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +137,7 @@ func TestCompanionCodecV4SummaryBoundariesAndEmptySemantics(t *testing.T) {
 		t.Fatalf("构造的边界摘要长度=%d，想要 %d", len(maxSummary), MaxCompanionSummaryBytes)
 	}
 	queue := StoredCompanionQueue{ID: fixtureCompanionID(2), Pending: []string{"排队"}, Summary: maxSummary}
-	encoded, err := encodeCompanions(CompanionSave{
+	encoded, err := Encode(CompanionSave{
 		Revision: 11,
 		Records:  fixtureCompanionBodies()[:1],
 		Queues:   []StoredCompanionQueue{queue},
@@ -144,7 +145,7 @@ func TestCompanionCodecV4SummaryBoundariesAndEmptySemantics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("2,048-byte 摘要 encode error=%v，想要成功", err)
 	}
-	got, err := decodeCompanions(encoded)
+	got, err := Decode(encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,19 +155,19 @@ func TestCompanionCodecV4SummaryBoundariesAndEmptySemantics(t *testing.T) {
 
 	over := queue
 	over.Summary = maxSummary + "c"
-	if _, err := encodeCompanions(CompanionSave{
+	if _, err := Encode(CompanionSave{
 		Revision: 12,
 		Records:  fixtureCompanionBodies()[:1],
 		Queues:   []StoredCompanionQueue{over},
-	}); !errors.Is(err, ErrCorrupt) {
-		t.Fatalf("2,049-byte 摘要 encode error=%v，想要 ErrCorrupt", err)
+	}); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("2,049-byte 摘要 encode error=%v，想要 storagedef.ErrCorrupt", err)
 	}
 
 	// 空摘要语义：空串等价于「无摘要」，不写摘要区——文件长度与 v3 位形
 	// 一致（仅 flags 后跟 FIFO 区）。
 	empty := queue
 	empty.Summary = ""
-	encodedEmpty, err := encodeCompanions(CompanionSave{
+	encodedEmpty, err := Encode(CompanionSave{
 		Revision: 13,
 		Records:  fixtureCompanionBodies()[:1],
 		Queues:   []StoredCompanionQueue{empty},
@@ -177,7 +178,7 @@ func TestCompanionCodecV4SummaryBoundariesAndEmptySemantics(t *testing.T) {
 	if want := 32 + companionRecordLength + 1 + (2 + 2 + len("排队")); len(encodedEmpty) != want {
 		t.Fatalf("空摘要文件长度=%d，想要 %d（无摘要区）", len(encodedEmpty), want)
 	}
-	decodedEmpty, err := decodeCompanions(encodedEmpty)
+	decodedEmpty, err := Decode(encodedEmpty)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,32 +187,32 @@ func TestCompanionCodecV4SummaryBoundariesAndEmptySemantics(t *testing.T) {
 	}
 
 	// 只有空摘要的队列即空队列：空串不构成载荷，按既有空队列规则拒绝。
-	if _, err := encodeCompanions(CompanionSave{
+	if _, err := Encode(CompanionSave{
 		Revision: 14,
 		Records:  fixtureCompanionBodies()[:1],
 		Queues:   []StoredCompanionQueue{{ID: queue.ID, Summary: ""}},
-	}); !errors.Is(err, ErrCorrupt) {
-		t.Fatalf("纯空摘要队列 encode error=%v，想要 ErrCorrupt（空队列）", err)
+	}); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("纯空摘要队列 encode error=%v，想要 storagedef.ErrCorrupt（空队列）", err)
 	}
 
 	withNUL := queue
 	withNUL.Summary = "记忆\x00注入"
-	if _, err := encodeCompanions(CompanionSave{
+	if _, err := Encode(CompanionSave{
 		Revision: 15,
 		Records:  fixtureCompanionBodies()[:1],
 		Queues:   []StoredCompanionQueue{withNUL},
-	}); !errors.Is(err, ErrCorrupt) {
-		t.Fatalf("含 NUL 摘要 encode error=%v，想要 ErrCorrupt", err)
+	}); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("含 NUL 摘要 encode error=%v，想要 storagedef.ErrCorrupt", err)
 	}
 
 	invalidUTF8 := queue
 	invalidUTF8.Summary = "记忆\xff碎片"
-	if _, err := encodeCompanions(CompanionSave{
+	if _, err := Encode(CompanionSave{
 		Revision: 16,
 		Records:  fixtureCompanionBodies()[:1],
 		Queues:   []StoredCompanionQueue{invalidUTF8},
-	}); !errors.Is(err, ErrCorrupt) {
-		t.Fatalf("非法 UTF-8 摘要 encode error=%v，想要 ErrCorrupt", err)
+	}); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("非法 UTF-8 摘要 encode error=%v，想要 storagedef.ErrCorrupt", err)
 	}
 }
 
@@ -223,7 +224,7 @@ func TestCompanionCodecV4RejectsCorruptSummaryBytes(t *testing.T) {
 	// 单记录 summary-only 载荷：flags 仅摘要位，摘要区紧随 flags 之后，
 	// 偏移可按第一性原理稳定推导（32 envelope + 221 身体 + 1 flags）。
 	queue := StoredCompanionQueue{ID: fixtureCompanionID(2), Summary: "summarytext"}
-	valid, err := encodeCompanions(CompanionSave{
+	valid, err := Encode(CompanionSave{
 		Revision: 21,
 		Records:  fixtureCompanionBodies()[:1],
 		Queues:   []StoredCompanionQueue{queue},
@@ -239,28 +240,28 @@ func TestCompanionCodecV4RejectsCorruptSummaryBytes(t *testing.T) {
 	}{
 		{"summary length exceeds limit", func(payload []byte) {
 			binary.LittleEndian.PutUint16(payload[summaryPrefixOffset:], MaxCompanionSummaryBytes+1)
-		}, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
 		{"summary length zero", func(payload []byte) {
 			binary.LittleEndian.PutUint16(payload[summaryPrefixOffset:], 0)
-		}, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
 		// 缩小摘要长度：文本仍合法，但 payload 内残留 1 byte 未消费——
 		// 变长错位必须被拒绝，不得静默接受非规范字节。
 		{"summary length shrunk misaligns", func(payload []byte) {
 			binary.LittleEndian.PutUint16(payload[summaryPrefixOffset:], uint16(len(queue.Summary)-1))
-		}, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
 		// 放大摘要长度（仍在 2,048 内）：take 越过文件末尾，按截断拒绝。
 		{"summary length grown truncates", func(payload []byte) {
 			binary.LittleEndian.PutUint16(payload[summaryPrefixOffset:], uint16(len(queue.Summary)+1))
-		}, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
 		{"summary contains NUL", func(payload []byte) {
 			payload[summaryPrefixOffset+2] = 0
-		}, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
 		{"summary invalid UTF-8", func(payload []byte) {
 			payload[summaryPrefixOffset+2] = 0xff
-		}, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
 		{"future schema v5", func(payload []byte) {
-			binary.LittleEndian.PutUint32(payload[8:], currentCompanionSchema+1)
-		}, ErrFutureVersion},
+			binary.LittleEndian.PutUint32(payload[8:], CurrentSchema+1)
+		}, storagedef.ErrFutureVersion},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -269,7 +270,7 @@ func TestCompanionCodecV4RejectsCorruptSummaryBytes(t *testing.T) {
 			if tc.name != "future schema v5" {
 				repairCompanionCRC(payload)
 			}
-			if _, err := decodeCompanions(payload); !errors.Is(err, tc.want) {
+			if _, err := Decode(payload); !errors.Is(err, tc.want) {
 				t.Fatalf("decode error=%v，想要 %v", err, tc.want)
 			}
 		})
@@ -283,13 +284,13 @@ func TestCompanionCodecV4RejectsCorruptSummaryBytes(t *testing.T) {
 	reserved := bytes.Clone(v3Golden)
 	reserved[companionHeaderLength+companionRecordLength] |= companionFlagHasSummary
 	repairCompanionCRC(reserved)
-	if _, err := decodeCompanions(reserved); !errors.Is(err, ErrCorrupt) {
-		t.Fatalf("v3 摘要保留位 decode error=%v，想要 ErrCorrupt", err)
+	if _, err := Decode(reserved); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("v3 摘要保留位 decode error=%v，想要 storagedef.ErrCorrupt", err)
 	}
 
 	// 超过 438,280 bytes 的文件必须在任何解析与分配之前被拒绝。
-	oversized := bytes.Repeat([]byte{0x5a}, maxCompanionFileLength+1)
-	if _, err := decodeCompanions(oversized); !errors.Is(err, ErrCorrupt) ||
+	oversized := bytes.Repeat([]byte{0x5a}, MaxFileLength+1)
+	if _, err := Decode(oversized); !errors.Is(err, storagedef.ErrCorrupt) ||
 		!strings.Contains(err.Error(), "exceeds limit") {
 		t.Fatalf("oversized error=%v，想要分配前长度门禁", err)
 	}
@@ -337,20 +338,20 @@ func TestCompanionCodecV4FileBoundIncludesSummary(t *testing.T) {
 		records[index].ID = fixtureCompanionID(byte(index + 1))
 	}
 
-	withoutSummary, err := encodeCompanions(CompanionSave{
+	withoutSummary, err := Encode(CompanionSave{
 		Revision: 31, Records: records, Queues: buildQueues(""),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(withoutSummary) <= 430080 || len(withoutSummary) > maxCompanionFileLength {
-		t.Fatalf("无摘要前缀长度=%d，想要落在 (430080, %d]", len(withoutSummary), maxCompanionFileLength)
+	if len(withoutSummary) <= 430080 || len(withoutSummary) > MaxFileLength {
+		t.Fatalf("无摘要前缀长度=%d，想要落在 (430080, %d]", len(withoutSummary), MaxFileLength)
 	}
 	withSummary := buildQueues(strings.Repeat("s", MaxCompanionSummaryBytes))
-	if _, err := encodeCompanions(CompanionSave{
+	if _, err := Encode(CompanionSave{
 		Revision: 32, Records: records, Queues: withSummary,
-	}); !errors.Is(err, ErrCorrupt) || !strings.Contains(err.Error(), "exceeds limit") {
-		t.Fatalf("含摘要超界 encode error=%v，想要 ErrCorrupt 长度门禁", err)
+	}); !errors.Is(err, storagedef.ErrCorrupt) || !strings.Contains(err.Error(), "exceeds limit") {
+		t.Fatalf("含摘要超界 encode error=%v，想要 storagedef.ErrCorrupt 长度门禁", err)
 	}
 }
 
@@ -375,7 +376,7 @@ func TestCompanionRestoreV4MigrationSummariesEmptyAndFirstSaveV4(t *testing.T) {
 			if got := binary.LittleEndian.Uint32(golden[8:12]); got != schema.value {
 				t.Fatalf("%s golden schema=%d，想要 %d（字节冻结零改动）", schema.name, got, schema.value)
 			}
-			decoded, err := decodeCompanions(golden)
+			decoded, err := Decode(golden)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -384,7 +385,7 @@ func TestCompanionRestoreV4MigrationSummariesEmptyAndFirstSaveV4(t *testing.T) {
 					t.Fatalf("%s 迁移后摘要=%q，想要空", schema.name, queue.Summary)
 				}
 			}
-			encoded, err := encodeCompanions(CompanionSave{
+			encoded, err := Encode(CompanionSave{
 				Revision: decoded.Revision,
 				Records:  decoded.Records,
 				Queues:   decoded.Queues,
@@ -392,10 +393,10 @@ func TestCompanionRestoreV4MigrationSummariesEmptyAndFirstSaveV4(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := binary.LittleEndian.Uint32(encoded[8:12]); got != currentCompanionSchema {
-				t.Fatalf("%s 首次保存 schema=%d，想要 %d", schema.name, got, currentCompanionSchema)
+			if got := binary.LittleEndian.Uint32(encoded[8:12]); got != CurrentSchema {
+				t.Fatalf("%s 首次保存 schema=%d，想要 %d", schema.name, got, CurrentSchema)
 			}
-			reloaded, err := decodeCompanions(encoded)
+			reloaded, err := Decode(encoded)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -408,7 +409,7 @@ func TestCompanionRestoreV4MigrationSummariesEmptyAndFirstSaveV4(t *testing.T) {
 
 	// v3 golden 的磁盘路径：加载（摘要为空）→ 首存 v4 → 再加载。
 	root := t.TempDir()
-	store := openCompanionDisk(t, root)
+	store := newCompanionFileFixture(root)
 	path := filepath.Join(root, "companions.ai")
 	v3Golden, err := os.ReadFile(filepath.Join("testdata", "companions-v3.bin"))
 	if err != nil {
@@ -437,8 +438,8 @@ func TestCompanionRestoreV4MigrationSummariesEmptyAndFirstSaveV4(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := binary.LittleEndian.Uint32(after[8:12]); got != currentCompanionSchema {
-		t.Fatalf("首次保存 schema=%d，想要 %d", got, currentCompanionSchema)
+	if got := binary.LittleEndian.Uint32(after[8:12]); got != CurrentSchema {
+		t.Fatalf("首次保存 schema=%d，想要 %d", got, CurrentSchema)
 	}
 	reloaded, err := store.LoadCompanions(context.Background())
 	if err != nil {
@@ -455,7 +456,7 @@ func TestCompanionRestoreV4MigrationSummariesEmptyAndFirstSaveV4(t *testing.T) {
 // inactive 保留身体字段且不带摘要区，其余 active 记录的摘要不受影响。
 func TestCompanionRestoreV4DeactivationDropsSummary(t *testing.T) {
 	root := t.TempDir()
-	store := openCompanionDisk(t, root)
+	store := newCompanionFileFixture(root)
 	inactive := fixtureCompanionBodies()[1]
 	inactive.ID = fixtureCompanionID(3)
 	// 按 ID 升序构造（..01 active 带摘要、..02 active 带摘要、..03 inactive），

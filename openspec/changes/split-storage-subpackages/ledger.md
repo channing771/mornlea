@@ -185,6 +185,54 @@
   `byte_codec.go` 持同构副本并注明去向；`fillFullDurability` 根包零引用，
   随 `player_migration.go` 迁走（chunk 包副本不受影响）；`syncDirectory`
   仍被 `backup.go` 消费，留根。
+- Ruling T5-1: companion 与 hostile 两域同任务单提交原子迁移 — 5.1/5.2 虽是
+  两个勾选项，但两域共享同一批根包收口点（`types.go` 别名与接口剥离、
+  `disk.go`/`memory.go` 编排改写、`byte_codec.go` 删除、archcheck 登记），
+  拆成两个提交会制造「根包生产代码零消费 byte 原语但文件仍在」的中间态；
+  沿 T3 原子迁移先例一次提交，任一域独立回退由 `git revert` 单提交保证。
+- Ruling T5-2: ErrCompanionsNotFound/ErrHostileMobsNotFound 按设计导出面
+  清单随域迁出 + 根包 var 再导出 — 逐处核实产生方均为根包编排
+  （DiskStore/MemoryStore 的 Load 缺失路径），codec 自身只产生 storagedef
+  哨兵，T3-2「哨兵随产生方迁移」的触发条件不成立；与 T4-3 ErrPlayerNotFound
+  留根不同之处在于：design 导出面清单把这两个哨兵显式列为「迁出 + 别名
+  再导出」（「聚合存档缺失」的语义在域内与 DTO 同文件承载、属域存档契约
+  一部分），design/tasks 对本任务的归属指示优先于产生方规则。同一错误值
+  var 再导出保持 errors.Is 身份、消息逐字节不变，消费面零改动；
+  MaxHostileMobs 同批随 hostile 迁出并以常量再导出。
+- Ruling T5-3: CompanionStore/HostileMobStore 接口定义留根 — T4-2 先例
+  直接适用：接口与 Store/WorldStore/PlayerStore 同属根包存储编排契约家族
+  （design 清单「留根不动」），随 `companion_types.go`/`hostile_types.go`
+  整文件迁移前剥离，定义逐字落入根包 `types.go`，两域子包不感知存储实现。
+- Ruling T5-4: 域包新增导出 CurrentSchema/MaxFileLength（companion 与
+  hostile 各一对）— T4-4 先例同构：根包 `disk.go` 的 readCompanionFile/
+  readHostileFile 按物理字节上界截断读取，需要 MaxFileLength；留根的
+  companion/hostile store 测试 future-schema 故障注入需要 CurrentSchema
+  （跟随权威常量而非字面量）。MaxCompanionTaskCommandBytes/PlanSteps/
+  FIFOEntries/SummaryBytes 与 hostile 域内其余常量不加根别名（design：
+  未列入别名清单的域内导出不加别名），根包以限定名消费。
+- Ruling T5-5: companion_restore_test/companion_summary_test 的 DiskStore
+  夹具改造为域内最小装配 companionFileFixture — 按 T3-9 先例；companion 域
+  没有 region 记录层对应物，最小装配 = 本包 Encode/Decode + companions.ai
+  直读直写（restore/summary 测的是 codec 迁移与摘要语义而非 store 编排，
+  design 测试速查明确判入 companion 域，T4-1「无装配点留根」裁决不适用）。
+  装配类型提供与 CompanionStore 同形的方法集，测试体逐字不变、仅构造行与
+  落位注释改动；原子替换、revision 冲突与关闭语义仍由留根的
+  companion_store_test.go 以 DiskStore 覆盖。
+- Ruling T5-6: 根包同构副本清账（承接 T4-7 的 T5 义务）— companion/hostile
+  迁走后逐原语核实 `byte_codec.go` 根包零消费方（metadata/backup/
+  world_files/chunk_keys 编排各用本地原语或直接 binary.LittleEndian），
+  全文件删除；byte 原语与 f32 原语随 hostile 包 codec_primitives.go，
+  byte+f32+itemstack+finitePlayerFloat 全集随 companion 包
+  codec_primitives.go（沿 player 包同名文件范式）；`syncDirectory` 在
+  backup.go 内定义、不受影响。
+- Ruling T5-7: 两域依赖按 go list 实测登记 — companion 登记为
+  {internal/companion, core, storagedef}（既有 internal/companion 边随迁），
+  hostile 登记为 {core, storagedef}，不登记 world（T4-5 同口径：design
+  Decision 6 的 {storagedef, core, world} 是方向上限）；根包允许集移除
+  internal/companion（生产代码消费边随域迁走，仅测试夹具副本仍引用、
+  go list 的 .Imports 不含测试导入）。baseline_test.go 的 companions.ai/
+  hostile_mobs schema 权威来源路径随迁改为域包路径，codePattern 跟随导出
+  名 CurrentSchema（player 条目同款）。
 
 ## Review Log
 
@@ -370,4 +418,64 @@
   - `openspec validate --all --strict --no-interactive` →
     `Totals: 77 passed, 0 failed (77 items)`。
 - 评审结论：待控制会话规格与质量双评审；tasks.md 4.1 勾选待评审通过后
+  执行。
+
+### Task 5（companion + hostile 域抽取，5.1/5.2 单提交原子迁移）
+
+- 实现：新建 `internal/storage/companion`（package doc 中文，实测依赖
+  internal/companion+core+storagedef）与 `internal/storage/hostile`（实测依赖
+  core+storagedef）。companion 迁入 `companion_codec.go`（`Encode`/`Decode`
+  入口，原 encodeCompanions/decodeCompanions；`CurrentSchema`/`MaxFileLength`
+  导出）与 `companion_types.go`（`ErrCompanionsNotFound`、Max 系常量、
+  `StoredCompanions`/`CompanionSave`/`StoredCompanionTask`/
+  `StoredCompanionQueue`；`CompanionStore` 接口剥离留根）；hostile 迁入
+  `hostile_codec.go`（`Encode`/`Decode`；`CurrentSchema`/`MaxFileLength`
+  导出）与 `hostile_types.go`（`ErrHostileMobsNotFound`/`MaxHostileMobs` 与
+  三个值类型；`HostileMobStore` 接口剥离留根）。两域各新建
+  `codec_primitives.go` 字节原语同构副本（companion 全集含
+  float/itemstack/finitePlayerFloat，hostile 只持 byte+f32 子集），哨兵改经
+  storagedef 限定名，错误消息逐字节不变。
+- 测试迁移：companion 四件（`companion_codec_test.go`、
+  `companion_codec_fuzz_test.go`、`companion_restore_test.go`、
+  `companion_summary_test.go`）随包；restore/summary 的 DiskStore 夹具按
+  Ruling T5-5 改造为 `companionFileFixture` 域内最小装配，测试函数名与
+  断言逐字保持。hostile 两件（`hostile_codec_test.go`、
+  `hostile_codec_fuzz_test.go`）随包。`companion_store_test.go`/
+  `hostile_store_test.go` 留根，各新增同名夹具同构副本（companion：
+  fixtureCompanionID/Bodies/Queues；hostile：
+  fixtureHostileTargetPlayerID/Records/RecordsSorted；companion 域包与
+  internal/companion 裸名冲突，测试文件内以 companioncodec 别名指代存储域
+  包）；`backup_test.go` 的伙伴夹具引用改由留根副本承接。
+- fixture：companions-v1..v4.bin 与 hostile-mobs-v1.bin 以 `git mv` 随域落
+  各自 testdata，字节逐字节不变；根 testdata 清空（chunk/player 已先期
+  迁出），fixture 单一来源在各域包（T4-6 同口径）。
+- 根包适配：`types.go` 别名再导出七类值类型、两哨兵 var 与 MaxHostileMobs
+  常量、CompanionStore/HostileMobStore 接口定义落根；`disk.go`/`memory.go`
+  编排改经 `companion.`/`hostile.` 限定名消费，文件读取上界改用
+  `MaxFileLength`；`byte_codec.go` 按 Ruling T5-6 全文件删除。
+- archcheck：登记 `internal/storage/companion`（internal/companion+core+
+  storagedef）、`internal/storage/hostile`（core+storagedef）并加入根包
+  允许集；根包允许集移除 internal/companion（Ruling T5-7）；
+  `baseline_test.go` 两 schema 权威来源路径同步为域包路径。
+- 验证（本 worktree 实测，2026-08-28）：
+  - `go test ./internal/storage/... -race -count=1` → 根 `ok ... 22.037s`、
+    chunk `ok ... 13.501s`、companion `ok ... 6.211s`、hostile
+    `ok ... 4.353s`、player `ok ... 6.499s`、region `ok ... 6.929s`
+    （对照 Baseline 单包 race 24.194s 与 T4 后根包 17.448s，只记录不设
+    门槛）；
+  - 非 race：根 `ok ... 4.287s`、chunk `ok ... 1.826s`、companion
+    `ok ... 2.916s`、hostile `ok ... 1.931s`、player `ok ... 1.098s`、
+    region `ok ... 2.378s`（对照 4.433s）；
+  - `go test ./internal/archcheck -count=1` → `ok ... 11.189s`；
+  - `go build ./internal/server ./internal/sim ./cmd/...` → 通过；`git status`
+    无 `internal/server`/`cmd/` 文件（消费方源码零改动）；
+  - `go test ./internal/storage/... -list '.*'` 并集与
+    `baseline-test-list.txt` 逐名 diff 为空（234 = 223 Test + 7 Benchmark +
+    4 Fuzz；分包计数根 86 / companion 23 / hostile 9 / player 25 / chunk 79 /
+    region 12）；
+  - `gofmt -l internal/storage internal/archcheck` 无输出；
+    `go vet ./internal/storage/... ./internal/archcheck` 通过；
+  - `openspec validate --all --strict --no-interactive` →
+    `Totals: 77 passed, 0 failed (77 items)`。
+- 评审结论：待控制会话规格与质量双评审；tasks.md 5.1/5.2 勾选待评审通过后
   执行。

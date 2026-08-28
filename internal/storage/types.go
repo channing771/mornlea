@@ -1,7 +1,7 @@
 // Package storage 定义世界存储的稳定值与接口。
 //
 // 根包保留编排与门面：disk/memory 编排、world_files/backup/metadata 与
-// chunk_keys，外加对拆分出的域子包（storagedef/region/chunk/player 与后续
+// chunk_keys，外加对拆分出的域子包（storagedef/region/chunk/player/
 // companion/hostile）的别名再导出，保证既有 `storage.X` 消费方
 // 源码零改动。
 package storage
@@ -12,6 +12,8 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/chunk"
+	"github.com/channing771/mornlea/internal/storage/companion"
+	"github.com/channing771/mornlea/internal/storage/hostile"
 	"github.com/channing771/mornlea/internal/storage/player"
 	"github.com/channing771/mornlea/internal/storage/region"
 	"github.com/channing771/mornlea/internal/storage/storagedef"
@@ -23,6 +25,11 @@ var (
 	// 保持既有 `storage.X` 引用与 errors.Is 身份不变。
 	ErrChunkNotFound    = chunk.ErrChunkNotFound
 	ErrRevisionConflict = chunk.ErrRevisionConflict
+	// ErrCompanionsNotFound/ErrHostileMobsNotFound 随实体域分别定义在
+	// companion/hostile 包（「聚合存档缺失」是该域存档契约的一部分），此处
+	// 绑定同一错误值再导出，保持既有引用与 errors.Is 身份不变。
+	ErrCompanionsNotFound  = companion.ErrCompanionsNotFound
+	ErrHostileMobsNotFound = hostile.ErrHostileMobsNotFound
 	// ErrPlayerNotFound/ErrWorldLocked 定义在根包：二者的产生方是根包编排
 	// （DiskStore/MemoryStore 的 LoadPlayer 路径与世界文件锁），player codec
 	// 只产生 storagedef 哨兵，故不随 player 域迁出。
@@ -33,6 +40,10 @@ var (
 	ErrCorrupt       = storagedef.ErrCorrupt
 	ErrFutureVersion = storagedef.ErrFutureVersion
 )
+
+// MaxHostileMobs 是 hostile 存档域的记录数上限，随 hostile 包定义，此处常量
+// 再导出保持既有 storage.MaxHostileMobs 引用不变。
+const MaxHostileMobs = hostile.MaxHostileMobs
 
 type Metadata struct {
 	FormatVersion  uint32
@@ -70,6 +81,23 @@ type (
 	PlayerLocation = player.PlayerLocation
 )
 
+// StoredCompanions/CompanionSave/StoredCompanionTask/StoredCompanionQueue 是
+// companion 存档域的值类型，别名再导出保持类型身份。
+type (
+	StoredCompanions     = companion.StoredCompanions
+	CompanionSave        = companion.CompanionSave
+	StoredCompanionTask  = companion.StoredCompanionTask
+	StoredCompanionQueue = companion.StoredCompanionQueue
+)
+
+// StoredHostileMob/StoredHostileMobs/HostileMobsSave 是 hostile 存档域的值
+// 类型，别名再导出保持类型身份。
+type (
+	StoredHostileMob  = hostile.StoredHostileMob
+	StoredHostileMobs = hostile.StoredHostileMobs
+	HostileMobsSave   = hostile.HostileMobsSave
+)
+
 type SaveResult struct {
 	Committed map[core.ChunkKey]uint64
 }
@@ -79,6 +107,21 @@ type SaveResult struct {
 type PlayerStore interface {
 	LoadPlayer(context.Context, core.PlayerID) (StoredPlayer, error)
 	SavePlayer(context.Context, PlayerSave) (uint64, error)
+}
+
+// CompanionStore 是伙伴聚合存档的根包编排契约：DiskStore/MemoryStore 各自
+// 实现，companion 子包只提供编解码，不感知存储实现。
+type CompanionStore interface {
+	LoadCompanions(context.Context) (StoredCompanions, error)
+	SaveCompanions(context.Context, CompanionSave) error
+}
+
+// HostileMobStore 是夜行者聚合存档的根包编排契约：DiskStore/MemoryStore 各自
+// 实现，hostile 子包只提供编解码，不感知存储实现。文件缺失以独立的
+// ErrHostileMobsNotFound 表达，调用方视同空集合。
+type HostileMobStore interface {
+	LoadHostileMobs(context.Context) (StoredHostileMobs, error)
+	SaveHostileMobs(context.Context, HostileMobsSave) error
 }
 
 type Store interface {

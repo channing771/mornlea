@@ -44,8 +44,9 @@ var allowed = map[string][]string{
 	"internal/profile":     {"internal/core"},
 	"internal/sim":         {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/world"},
 	"internal/storage": {
-		"internal/companion", "internal/core",
-		"internal/storage/chunk", "internal/storage/player", "internal/storage/region",
+		"internal/core",
+		"internal/storage/chunk", "internal/storage/companion", "internal/storage/hostile",
+		"internal/storage/player", "internal/storage/region",
 		"internal/storage/storagedef", "internal/world",
 	},
 	// internal/storage/chunk 是 chunk 记录层容器与信封编解码域：region 格式
@@ -57,6 +58,16 @@ var allowed = map[string][]string{
 	// region 记录层与根包编排（player 文件的原子替换与路径编排在根包），依赖
 	// 更宽即意味着 codec 越界感知存储布局。
 	"internal/storage/player": {"internal/core", "internal/storage/storagedef"},
+	// internal/storage/companion 是 companion 存档域的纯 codec 包（companions.ai
+	// 信封编解码、任务区/FIFO/摘要载荷校验）：依赖 internal/companion 领域模型
+	// 与 core 值类型并经 storagedef 取哨兵；不感知根包编排（companions.ai 文件
+	// 的原子替换与路径编排在根包），依赖更宽即意味着 codec 越界感知存储布局。
+	"internal/storage/companion": {"internal/companion", "internal/core", "internal/storage/storagedef"},
+	// internal/storage/hostile 是 hostile（夜行者）存档域的纯 codec 包
+	// （hostile_mobs.bin 信封编解码与记录字段校验）：夜行者身体类型自包含
+	// 定义（权威侧身体类型属于 internal/sim，存储不得依赖 sim），只依赖 core
+	// 值类型并经 storagedef 取哨兵，不感知根包编排。
+	"internal/storage/hostile": {"internal/core", "internal/storage/storagedef"},
 	// internal/storage/region 是 region 格式原语叶子（superblock/bank 编解码、
 	// 扇区空间分配、RegionKey/RegionFor）：只允许 core 与 storagedef，
 	// 不得感知 chunk 记录层容器，否则记录层容器随 chunk 域落位、region 只收

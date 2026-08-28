@@ -1,4 +1,4 @@
-package storage
+package companion
 
 import (
 	"bytes"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage/storagedef"
 )
 
 const (
@@ -27,25 +28,27 @@ const (
 	// 写（摘要为空）；v3 字节永不再生。
 	companionSchemaV3 uint32 = 3
 	// companionSchemaV4 是 M5D 引入摘要区的最低 schema：v4 及以上版本的
-	// 记录 flags 才允许 summary 位。独立于 currentCompanionSchema 存在，
+	// 记录 flags 才允许 summary 位。独立于 CurrentSchema 存在，
 	// 未来 v5 成为 current 时 v4 迁移文件的摘要位仍按合法解析，而不是被
 	// 误判为保留位损坏。
 	companionSchemaV4 uint32 = 4
-	// currentCompanionSchema 是当前写出的 schema：记录 = 身体 + 可选任务
+	// CurrentSchema 是当前写出的 schema：记录 = 身体 + 可选任务
 	// 区与 FIFO 区（仅 active 记录携带）+ 可选摘要区（仅 active 且有摘要
 	// 时写入），任务区步骤按 kind 变长（见 companionPlanStepWireLength）。
-	// 编码端只写当前版本。
-	currentCompanionSchema uint32 = companionSchemaV4
-	companionHeaderLength         = 32
-	companionRecordLength         = 221
-	// maxCompanionFileLength 是物理文件字节上界（spec：438,280）。推导：
+	// 编码端只写当前版本。留根的根包 store 测试以它构造未来 schema 故障
+	// 注入（跟随权威常量而非字面量），故导出。
+	CurrentSchema         uint32 = companionSchemaV4
+	companionHeaderLength        = 32
+	companionRecordLength        = 221
+	// MaxFileLength 是物理文件字节上界（spec：438,280）。根包编排读取
+	// companions.ai 时按同一上界截断读取，故导出。推导：
 	// v3 上界 430,080（单条 active 记录 ≤ 221 身体 + 1 flags + 任务区
 	// 86,050 + FIFO 区 16,418 共 102,690；4 条 active ≈ 410,760；60 条
 	// inactive 记录各 222 共 13,320；+ envelope 32 ≈ 424,112，取整上界
 	// 430,080）之上，v4 为 4 条 active 记录各追加一个摘要区（u16 前缀
 	// 2 + 2,048 摘要文本 = 2,050）：430,080 + 4×2,050 = 438,280。解码在
 	// 任何解析与分配之前按本常量拒绝超长。
-	maxCompanionFileLength = 438280
+	MaxFileLength = 438280
 	// companionTaskCommandPrefixLength 是任务区指令的 u16 长度前缀。
 	companionTaskCommandPrefixLength = 2
 	// companionSummaryPrefixLength 是摘要区的 u16 长度前缀：摘要区只在
@@ -73,12 +76,15 @@ var (
 	companionCRCTable      = crc32.MakeTable(crc32.Castagnoli)
 )
 
-func encodeCompanions(save CompanionSave) ([]byte, error) {
+// Encode 把一份伙伴聚合保存请求编码为规范磁盘形态：记录按 ID 升序写出，
+// 任务载荷只读不改。零 revision、记录或载荷越界都拒绝编码——编码端产出的
+// 字节必须能被 Decode 原样接受，绝不写出不可读文件。
+func Encode(save CompanionSave) ([]byte, error) {
 	if save.Revision == 0 {
-		return nil, fmt.Errorf("%w: zero companion revision", ErrCorrupt)
+		return nil, fmt.Errorf("%w: zero companion revision", storagedef.ErrCorrupt)
 	}
 	if len(save.Records) > companion.MaxStored {
-		return nil, fmt.Errorf("%w: companion count %d exceeds limit", ErrCorrupt, len(save.Records))
+		return nil, fmt.Errorf("%w: companion count %d exceeds limit", storagedef.ErrCorrupt, len(save.Records))
 	}
 	records := slices.Clone(save.Records)
 	slices.SortFunc(records, func(a, b companion.Body) int {
@@ -89,10 +95,10 @@ func encodeCompanions(save CompanionSave) ([]byte, error) {
 			return nil, fmt.Errorf("companion record %d: %w", index, err)
 		}
 		if index > 0 && records[index-1].ID == body.ID {
-			return nil, fmt.Errorf("%w: duplicate companion ID", ErrCorrupt)
+			return nil, fmt.Errorf("%w: duplicate companion ID", storagedef.ErrCorrupt)
 		}
 	}
-	if err := validateStoredCompanionQueues(save.Queues, records, currentCompanionSchema); err != nil {
+	if err := validateStoredCompanionQueues(save.Queues, records, CurrentSchema); err != nil {
 		return nil, err
 	}
 	queuesByID := make(map[companion.ID]StoredCompanionQueue, len(save.Queues))
@@ -118,7 +124,7 @@ func encodeCompanions(save CompanionSave) ([]byte, error) {
 	encoded := make([]byte, 0, companionHeaderLength+payloadLength)
 	encoded = append(encoded, companionEnvelopeMagic[:]...)
 	encoded = appendU32(encoded, companionEnvelopeVersion)
-	encoded = appendU32(encoded, currentCompanionSchema)
+	encoded = appendU32(encoded, CurrentSchema)
 	encoded = appendU64(encoded, save.Revision)
 	encoded = appendU32(encoded, uint32(len(records)))
 	encoded = appendU32(encoded, uint32(payloadLength))
@@ -152,9 +158,9 @@ func encodeCompanions(save CompanionSave) ([]byte, error) {
 	}
 	// 长度门禁的编码侧镜像：产出必须能被解码端接受，超上界（输入违反
 	// active 记录假设时的防御路径）立即拒绝而不是写出不可读文件。
-	if len(encoded) > companionHeaderLength+payloadLength || len(encoded) > maxCompanionFileLength {
+	if len(encoded) > companionHeaderLength+payloadLength || len(encoded) > MaxFileLength {
 		return nil, fmt.Errorf(
-			"%w: companion file length %d exceeds limit", ErrCorrupt, len(encoded),
+			"%w: companion file length %d exceeds limit", storagedef.ErrCorrupt, len(encoded),
 		)
 	}
 	binary.LittleEndian.PutUint32(encoded[28:], companionChecksum(encoded))
@@ -198,11 +204,11 @@ func companionFIFOEncodedLength(pending []string) int {
 }
 
 // companionSchemaReadable 判断存档 schema 是否在解码入口白名单内。成员
-// 显式列出 v1/v2/v3/v4 的字面常量，绝不退化成 currentCompanionSchema
+// 显式列出 v1/v2/v3/v4 的字面常量，绝不退化成 CurrentSchema
 // 引用：未来 v5 成为 current 时，schema=4 的合法迁移文件仍必须在入口被
 // 放行，才能到达 decodeCompanionQueueSections 的 `schema >=
 // companionSchemaV4` 摘要位前瞻检查——若用 current 引用，v4 文件会在入口
-// 被误判 ErrCorrupt，永远到不了前瞻检查，companionSchemaV4 独立常量的
+// 被误判 storagedef.ErrCorrupt，永远到不了前瞻检查，companionSchemaV4 独立常量的
 // 设计意图随之落空。新增 schema 版本时在此显式追加成员，并同步白名单
 // 锁测试（TestCompanionDecodeSchemaWhitelistListsLiteralV4）。
 func companionSchemaReadable(schema uint32) bool {
@@ -210,10 +216,12 @@ func companionSchemaReadable(schema uint32) bool {
 		schema == companionSchemaV3 || schema == companionSchemaV4
 }
 
-func decodeCompanions(data []byte) (StoredCompanions, error) {
+// Decode 校验 MCAI 信封并重建伙伴聚合快照，v1..v3 历史文件只读迁移、
+// 摘要语义按 schema 前瞻解析；超长输入在任何解析与分配之前拒绝。
+func Decode(data []byte) (StoredCompanions, error) {
 	// 分配前门禁：任何超过物理上界的输入在解析前拒绝。
-	if len(data) > maxCompanionFileLength {
-		return StoredCompanions{}, fmt.Errorf("%w: companion file length %d exceeds limit", ErrCorrupt, len(data))
+	if len(data) > MaxFileLength {
+		return StoredCompanions{}, fmt.Errorf("%w: companion file length %d exceeds limit", storagedef.ErrCorrupt, len(data))
 	}
 	header := byteDecoder{data: data}
 	if err := header.magic(companionEnvelopeMagic); err != nil {
@@ -225,9 +233,9 @@ func decodeCompanions(data []byte) (StoredCompanions, error) {
 	}
 	if version != companionEnvelopeVersion {
 		if version > companionEnvelopeVersion {
-			return StoredCompanions{}, fmt.Errorf("%w: companion envelope version %d", ErrFutureVersion, version)
+			return StoredCompanions{}, fmt.Errorf("%w: companion envelope version %d", storagedef.ErrFutureVersion, version)
 		}
-		return StoredCompanions{}, fmt.Errorf("%w: unsupported companion envelope version %d", ErrCorrupt, version)
+		return StoredCompanions{}, fmt.Errorf("%w: unsupported companion envelope version %d", storagedef.ErrCorrupt, version)
 	}
 	schema, err := header.u32()
 	if err != nil {
@@ -235,26 +243,26 @@ func decodeCompanions(data []byte) (StoredCompanions, error) {
 	}
 	if !companionSchemaReadable(schema) {
 		// 拒绝路径的错误分类仍以 current 为界：比当前更新的版本是明确的
-		// 前瞻信号（ErrFutureVersion）；白名单成员资格本身只看字面版本
+		// 前瞻信号（storagedef.ErrFutureVersion）；白名单成员资格本身只看字面版本
 		// （companionSchemaReadable），与 current 的取值解耦。
-		if schema > currentCompanionSchema {
-			return StoredCompanions{}, fmt.Errorf("%w: companion schema %d", ErrFutureVersion, schema)
+		if schema > CurrentSchema {
+			return StoredCompanions{}, fmt.Errorf("%w: companion schema %d", storagedef.ErrFutureVersion, schema)
 		}
-		return StoredCompanions{}, fmt.Errorf("%w: unsupported companion schema %d", ErrCorrupt, schema)
+		return StoredCompanions{}, fmt.Errorf("%w: unsupported companion schema %d", storagedef.ErrCorrupt, schema)
 	}
 	revision, err := header.u64()
 	if err != nil {
 		return StoredCompanions{}, corrupt("companion revision", err)
 	}
 	if revision == 0 {
-		return StoredCompanions{}, fmt.Errorf("%w: zero companion revision", ErrCorrupt)
+		return StoredCompanions{}, fmt.Errorf("%w: zero companion revision", storagedef.ErrCorrupt)
 	}
 	count, err := header.u32()
 	if err != nil {
 		return StoredCompanions{}, corrupt("companion count", err)
 	}
 	if count > companion.MaxStored {
-		return StoredCompanions{}, fmt.Errorf("%w: companion count %d exceeds limit", ErrCorrupt, count)
+		return StoredCompanions{}, fmt.Errorf("%w: companion count %d exceeds limit", storagedef.ErrCorrupt, count)
 	}
 	payloadLength, err := header.u32()
 	if err != nil {
@@ -262,17 +270,17 @@ func decodeCompanions(data []byte) (StoredCompanions, error) {
 	}
 	// v1 是固定步长布局；v2 的记录长度随任务区/FIFO 变化，只约束总量。
 	if schema == companionSchemaV1 && payloadLength != count*companionRecordLength {
-		return StoredCompanions{}, fmt.Errorf("%w: companion payload length does not match count", ErrCorrupt)
+		return StoredCompanions{}, fmt.Errorf("%w: companion payload length does not match count", storagedef.ErrCorrupt)
 	}
 	wantCRC, err := header.u32()
 	if err != nil {
 		return StoredCompanions{}, corrupt("companion CRC32C", err)
 	}
 	if uint64(header.remaining()) != uint64(payloadLength) {
-		return StoredCompanions{}, fmt.Errorf("%w: companion payload length does not match file", ErrCorrupt)
+		return StoredCompanions{}, fmt.Errorf("%w: companion payload length does not match file", storagedef.ErrCorrupt)
 	}
 	if companionChecksum(data) != wantCRC {
-		return StoredCompanions{}, fmt.Errorf("%w: companion CRC32C", ErrCorrupt)
+		return StoredCompanions{}, fmt.Errorf("%w: companion CRC32C", storagedef.ErrCorrupt)
 	}
 
 	records := make([]companion.Body, int(count))
@@ -283,7 +291,7 @@ func decodeCompanions(data []byte) (StoredCompanions, error) {
 			return StoredCompanions{}, fmt.Errorf("companion record %d: %w", index, err)
 		}
 		if index > 0 && bytes.Compare(records[index-1].ID[:], body.ID[:]) >= 0 {
-			return StoredCompanions{}, fmt.Errorf("%w: companion IDs are not strictly sorted", ErrCorrupt)
+			return StoredCompanions{}, fmt.Errorf("%w: companion IDs are not strictly sorted", storagedef.ErrCorrupt)
 		}
 		records[index] = body
 		if schema == companionSchemaV1 {
@@ -304,7 +312,7 @@ func decodeCompanions(data []byte) (StoredCompanions, error) {
 	// 未消费字节，静默接受它们等于接受非规范文件（重编码字节必然不同）。
 	if header.remaining() != 0 {
 		return StoredCompanions{}, fmt.Errorf(
-			"%w: companion payload has %d trailing bytes", ErrCorrupt, header.remaining(),
+			"%w: companion payload has %d trailing bytes", storagedef.ErrCorrupt, header.remaining(),
 		)
 	}
 	return StoredCompanions{Revision: revision, Records: records, Queues: queues}, nil
@@ -324,7 +332,7 @@ func decodeCompanionQueueSections(decoder *byteDecoder, schema uint32) (StoredCo
 		allowed |= companionFlagHasSummary
 	}
 	if flags&^allowed != 0 {
-		return StoredCompanionQueue{}, fmt.Errorf("%w: companion record flags %#x reserved", ErrCorrupt, flags)
+		return StoredCompanionQueue{}, fmt.Errorf("%w: companion record flags %#x reserved", storagedef.ErrCorrupt, flags)
 	}
 	var queue StoredCompanionQueue
 	if flags&companionFlagHasTask != 0 {
@@ -369,21 +377,21 @@ func decodeCompanionSummary(decoder *byteDecoder) (string, error) {
 	}
 	if length > MaxCompanionSummaryBytes {
 		return "", fmt.Errorf(
-			"%w: companion summary length %d exceeds limit", ErrCorrupt, length,
+			"%w: companion summary length %d exceeds limit", storagedef.ErrCorrupt, length,
 		)
 	}
 	if length == 0 {
-		return "", fmt.Errorf("%w: companion summary section without text", ErrCorrupt)
+		return "", fmt.Errorf("%w: companion summary section without text", storagedef.ErrCorrupt)
 	}
 	text, err := decoder.take(int(length))
 	if err != nil {
 		return "", corrupt("companion summary", err)
 	}
 	if !utf8.Valid(text) {
-		return "", fmt.Errorf("%w: companion summary is not valid UTF-8", ErrCorrupt)
+		return "", fmt.Errorf("%w: companion summary is not valid UTF-8", storagedef.ErrCorrupt)
 	}
 	if bytes.IndexByte(text, 0) >= 0 {
-		return "", fmt.Errorf("%w: companion summary contains NUL", ErrCorrupt)
+		return "", fmt.Errorf("%w: companion summary contains NUL", storagedef.ErrCorrupt)
 	}
 	return string(text), nil
 }
@@ -443,7 +451,7 @@ func decodeCompanionTask(decoder *byteDecoder, schema uint32) (StoredCompanionTa
 	}
 	if stepCount > MaxCompanionPlanSteps {
 		return StoredCompanionTask{}, fmt.Errorf(
-			"%w: companion task plan steps %d exceeds limit", ErrCorrupt, stepCount,
+			"%w: companion task plan steps %d exceeds limit", storagedef.ErrCorrupt, stepCount,
 		)
 	}
 	if stepCount != 0 {
@@ -552,7 +560,7 @@ func decodeCompanionPlanStepV3(decoder *byteDecoder) (companion.PlanStep, error)
 		copy(step.PlayerID[:], playerID)
 	default:
 		return companion.PlanStep{}, fmt.Errorf(
-			"%w: companion plan step kind %d is not delivered", ErrCorrupt, kind,
+			"%w: companion plan step kind %d is not delivered", storagedef.ErrCorrupt, kind,
 		)
 	}
 	return step, nil
@@ -583,10 +591,10 @@ func decodeCompanionFIFO(decoder *byteDecoder) ([]string, error) {
 		return nil, corrupt("companion FIFO count", err)
 	}
 	if count > MaxCompanionFIFOEntries {
-		return nil, fmt.Errorf("%w: companion FIFO depth %d exceeds limit", ErrCorrupt, count)
+		return nil, fmt.Errorf("%w: companion FIFO depth %d exceeds limit", storagedef.ErrCorrupt, count)
 	}
 	if count == 0 {
-		return nil, fmt.Errorf("%w: companion FIFO section without entries", ErrCorrupt)
+		return nil, fmt.Errorf("%w: companion FIFO section without entries", storagedef.ErrCorrupt)
 	}
 	pending := make([]string, int(count))
 	for index := range pending {
@@ -600,7 +608,7 @@ func decodeCompanionFIFO(decoder *byteDecoder) ([]string, error) {
 		}
 		pending[index] = string(entry)
 		if err := companion.TaskCommand(pending[index]).Validate(); err != nil {
-			return nil, fmt.Errorf("companion FIFO entry %d: %w: %v", index, ErrCorrupt, err)
+			return nil, fmt.Errorf("companion FIFO entry %d: %w: %v", index, storagedef.ErrCorrupt, err)
 		}
 	}
 	return pending, nil
@@ -671,24 +679,24 @@ func decodeCompanionBody(decoder *byteDecoder) (companion.Body, error) {
 
 func validateCompanionBody(body companion.Body) error {
 	if !body.ID.Valid() {
-		return fmt.Errorf("%w: invalid companion ID", ErrCorrupt)
+		return fmt.Errorf("%w: invalid companion ID", storagedef.ErrCorrupt)
 	}
 	if body.Dimension != core.Overworld {
-		return fmt.Errorf("%w: unsupported companion dimension %d", ErrCorrupt, body.Dimension)
+		return fmt.Errorf("%w: unsupported companion dimension %d", storagedef.ErrCorrupt, body.Dimension)
 	}
 	for _, value := range body.Position {
 		if !finitePlayerFloat(value) {
-			return fmt.Errorf("%w: non-finite companion position", ErrCorrupt)
+			return fmt.Errorf("%w: non-finite companion position", storagedef.ErrCorrupt)
 		}
 	}
 	if !finitePlayerFloat(body.Yaw) {
-		return fmt.Errorf("%w: non-finite companion yaw", ErrCorrupt)
+		return fmt.Errorf("%w: non-finite companion yaw", storagedef.ErrCorrupt)
 	}
 	if !finitePlayerFloat(body.Pitch) || body.Pitch < -math.Pi/2 || body.Pitch > math.Pi/2 {
-		return fmt.Errorf("%w: invalid companion pitch", ErrCorrupt)
+		return fmt.Errorf("%w: invalid companion pitch", storagedef.ErrCorrupt)
 	}
 	if !body.Inventory.Valid() {
-		return fmt.Errorf("%w: invalid companion inventory", ErrCorrupt)
+		return fmt.Errorf("%w: invalid companion inventory", storagedef.ErrCorrupt)
 	}
 	return nil
 }

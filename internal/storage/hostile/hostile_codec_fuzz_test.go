@@ -1,4 +1,4 @@
-package storage
+package hostile
 
 import (
 	"bytes"
@@ -24,13 +24,13 @@ func FuzzDecodeHostileMobs(f *testing.F) {
 	for index := range records {
 		records[index] = StoredHostileMob{ID: uint64(index) + 1, Dimension: core.Overworld, Health: 1}
 	}
-	maximum, err := encodeHostileMobs(HostileMobsSave{Revision: 1, Records: records})
+	maximum, err := Encode(HostileMobsSave{Revision: 1, Records: records})
 	if err != nil {
 		f.Fatal(err)
 	}
 	f.Add(maximum)
 	// 单条满字段记录：驱动目标/冷却/distant 字段的深路径。
-	full, err := encodeHostileMobs(HostileMobsSave{
+	full, err := Encode(HostileMobsSave{
 		Revision: 5, Records: fixtureHostileRecords()[:1],
 	})
 	if err != nil {
@@ -63,7 +63,7 @@ func FuzzDecodeHostileMobs(f *testing.F) {
 	binary.LittleEndian.PutUint32(oversizedCount[24:], (MaxHostileMobs+1)*hostileRecordLength)
 	f.Add(oversizedCount)
 	f.Fuzz(func(t *testing.T, payload []byte) {
-		got, err := decodeHostileMobs(payload)
+		got, err := Decode(payload)
 		if err != nil {
 			return
 		}
@@ -80,7 +80,7 @@ func FuzzDecodeHostileMobs(f *testing.F) {
 		}
 		// v1 是唯一 schema 且编码无任何自由度（固定布局 + 升序）：解码成功
 		// 的输入必须是规范字节形态。
-		encoded, err := encodeHostileMobs(HostileMobsSave{
+		encoded, err := Encode(HostileMobsSave{
 			Revision: got.Revision, Records: got.Records,
 		})
 		if err != nil || !bytes.Equal(encoded, payload) {
@@ -101,10 +101,10 @@ func TestHostileCodecGoldenRoundTrip(t *testing.T) {
 	if string(golden[0:4]) != "MHST" {
 		t.Fatalf("golden magic=%q，想要 MHST", golden[0:4])
 	}
-	if schema := binary.LittleEndian.Uint32(golden[8:12]); schema != currentHostileSchema {
-		t.Fatalf("golden schema=%d，想要 %d", schema, currentHostileSchema)
+	if schema := binary.LittleEndian.Uint32(golden[8:12]); schema != CurrentSchema {
+		t.Fatalf("golden schema=%d，想要 %d", schema, CurrentSchema)
 	}
-	decoded, err := decodeHostileMobs(golden)
+	decoded, err := Decode(golden)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestHostileCodecGoldenRoundTrip(t *testing.T) {
 		t.Fatalf("golden decode=%+v，想要 %+v", decoded, want)
 	}
 	// 同一载荷重编码必须逐字节还原 golden：磁盘形态无任何自由度。
-	encoded, err := encodeHostileMobs(HostileMobsSave{
+	encoded, err := Encode(HostileMobsSave{
 		Revision: decoded.Revision, Records: decoded.Records,
 	})
 	if err != nil {

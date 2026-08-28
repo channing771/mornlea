@@ -1,17 +1,27 @@
-package storage
+// Package hostile 承载 hostile（夜行者）存档域：hostile_mobs.bin 聚合文件
+// （MHST 信封、schema v1）的编解码、记录字段校验与夜行者存档值类型。
+//
+// 本包是纯 codec 域：夜行者身体类型在本包自包含定义（权威侧身体类型属于
+// internal/sim，存储不得依赖 sim），只依赖 core 值类型并经 storagedef 取
+// 哨兵；不感知根包编排（DiskStore/MemoryStore 的 hostile_mobs.bin 原子替换
+// 与路径编排），HostileMobStore 接口属根包存储契约家族，定义留在根包
+// types.go。
+package hostile
 
 import (
-	"context"
 	"errors"
 
 	"github.com/channing771/mornlea/internal/core"
 )
 
 // ErrHostileMobsNotFound 表示世界尚无夜行者聚合存档；调用方视同空集合。
+// 根包以 var 绑定同一错误值再导出，保持既有 storage.ErrHostileMobsNotFound
+// 引用与 errors.Is 身份不变。
 var ErrHostileMobsNotFound = errors.New("storage: hostile mobs not found")
 
 // MaxHostileMobs 是一份夜行者存档可包含的记录数上限，与权威侧的全服
-// 夜行者上限同源（64）。编码与解码两侧都在解析前按本值拒绝越界。
+// 夜行者上限同源（64）。编码与解码两侧都在解析前按本值拒绝越界。根包以
+// 常量再导出保持既有 storage.MaxHostileMobs 引用不变。
 const MaxHostileMobs = 64
 
 // StoredHostileMob 是一只夜行者在存档中的持久化记录。夜行者的身体事实
@@ -68,11 +78,4 @@ type StoredHostileMobs struct {
 type HostileMobsSave struct {
 	Revision uint64
 	Records  []StoredHostileMob
-}
-
-// HostileMobStore 定义夜行者聚合存档的加载与保存边界。文件缺失以独立的
-// ErrHostileMobsNotFound 表达，调用方视同空集合。
-type HostileMobStore interface {
-	LoadHostileMobs(context.Context) (StoredHostileMobs, error)
-	SaveHostileMobs(context.Context, HostileMobsSave) error
 }

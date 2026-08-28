@@ -15,6 +15,8 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/chunk"
+	"github.com/channing771/mornlea/internal/storage/companion"
+	"github.com/channing771/mornlea/internal/storage/hostile"
 	"github.com/channing771/mornlea/internal/storage/player"
 	"github.com/channing771/mornlea/internal/storage/region"
 )
@@ -303,7 +305,7 @@ func (store *DiskStore) LoadCompanions(ctx context.Context) (StoredCompanions, e
 	if err != nil {
 		return StoredCompanions{}, fmt.Errorf("read companions: %w", err)
 	}
-	stored, err := decodeCompanions(encoded)
+	stored, err := companion.Decode(encoded)
 	if err != nil {
 		return StoredCompanions{}, fmt.Errorf("decode companions: %w", err)
 	}
@@ -317,7 +319,7 @@ func (store *DiskStore) SaveCompanions(ctx context.Context, save CompanionSave) 
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	encoded, err := encodeCompanions(save)
+	encoded, err := companion.Encode(save)
 	if err != nil {
 		return err
 	}
@@ -334,7 +336,7 @@ func (store *DiskStore) SaveCompanions(ctx context.Context, save CompanionSave) 
 	previous, err := readCompanionFile(path)
 	switch {
 	case err == nil:
-		stored, decodeErr := decodeCompanions(previous)
+		stored, decodeErr := companion.Decode(previous)
 		if decodeErr != nil {
 			return fmt.Errorf("read existing companions: %w", decodeErr)
 		}
@@ -389,7 +391,7 @@ func (store *DiskStore) LoadHostileMobs(ctx context.Context) (StoredHostileMobs,
 	if err != nil {
 		return StoredHostileMobs{}, fmt.Errorf("read hostile mobs: %w", err)
 	}
-	stored, err := decodeHostileMobs(encoded)
+	stored, err := hostile.Decode(encoded)
 	if err != nil {
 		return StoredHostileMobs{}, fmt.Errorf("decode hostile mobs: %w", err)
 	}
@@ -403,7 +405,7 @@ func (store *DiskStore) SaveHostileMobs(ctx context.Context, save HostileMobsSav
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	encoded, err := encodeHostileMobs(save)
+	encoded, err := hostile.Encode(save)
 	if err != nil {
 		return err
 	}
@@ -420,7 +422,7 @@ func (store *DiskStore) SaveHostileMobs(ctx context.Context, save HostileMobsSav
 	previous, err := readHostileFile(path)
 	switch {
 	case err == nil:
-		stored, decodeErr := decodeHostileMobs(previous)
+		stored, decodeErr := hostile.Decode(previous)
 		if decodeErr != nil {
 			// 正式文件损坏或为未来版本时拒绝保存并保留原文件：覆盖等于把
 			// 「读不回的数据」洗成合法存档，重启会静默清怪。
@@ -595,13 +597,13 @@ func readCompanionFile(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	encoded, readErr := io.ReadAll(io.LimitReader(file, int64(maxCompanionFileLength)+1))
+	encoded, readErr := io.ReadAll(io.LimitReader(file, int64(companion.MaxFileLength)+1))
 	if err := errors.Join(readErr, file.Close()); err != nil {
 		return nil, err
 	}
-	if len(encoded) > maxCompanionFileLength {
+	if len(encoded) > companion.MaxFileLength {
 		return nil, fmt.Errorf(
-			"%w: companion file exceeds %d bytes", ErrCorrupt, maxCompanionFileLength,
+			"%w: companion file exceeds %d bytes", ErrCorrupt, companion.MaxFileLength,
 		)
 	}
 	return encoded, nil
@@ -614,13 +616,13 @@ func readHostileFile(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	encoded, readErr := io.ReadAll(io.LimitReader(file, int64(maxHostileFileLength)+1))
+	encoded, readErr := io.ReadAll(io.LimitReader(file, int64(hostile.MaxFileLength)+1))
 	if err := errors.Join(readErr, file.Close()); err != nil {
 		return nil, err
 	}
-	if len(encoded) > maxHostileFileLength {
+	if len(encoded) > hostile.MaxFileLength {
 		return nil, fmt.Errorf(
-			"%w: hostile file exceeds %d bytes", ErrCorrupt, maxHostileFileLength,
+			"%w: hostile file exceeds %d bytes", ErrCorrupt, hostile.MaxFileLength,
 		)
 	}
 	return encoded, nil

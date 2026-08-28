@@ -1,4 +1,4 @@
-package storage
+package companion
 
 import (
 	"bytes"
@@ -14,6 +14,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage/storagedef"
 )
 
 func fixtureCompanionID(last byte) companion.ID {
@@ -57,7 +58,7 @@ func TestCompanionCodecV1RoundTripAndGolden(t *testing.T) {
 	if schema := binary.LittleEndian.Uint32(golden[8:12]); schema != 1 {
 		t.Fatalf("v1 golden schema=%d，想要 1", schema)
 	}
-	got, err := decodeCompanions(golden)
+	got, err := Decode(golden)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +73,7 @@ func TestCompanionCodecV1RoundTripAndGolden(t *testing.T) {
 	// 同一载荷的首次保存必须写出当前 schema（v4）：记录 = v1 身体 + flags 字节。
 	input := fixtureCompanionBodies()
 	before := append([]companion.Body(nil), input...)
-	encoded, err := encodeCompanions(CompanionSave{Revision: 19, Records: input})
+	encoded, err := Encode(CompanionSave{Revision: 19, Records: input})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,10 +83,10 @@ func TestCompanionCodecV1RoundTripAndGolden(t *testing.T) {
 	if !reflect.DeepEqual(input, before) {
 		t.Fatalf("编码修改调用者 records：got=%+v want=%+v", input, before)
 	}
-	if schema := binary.LittleEndian.Uint32(encoded[8:12]); schema != currentCompanionSchema {
-		t.Fatalf("首次保存 schema=%d，想要 %d", schema, currentCompanionSchema)
+	if schema := binary.LittleEndian.Uint32(encoded[8:12]); schema != CurrentSchema {
+		t.Fatalf("首次保存 schema=%d，想要 %d", schema, CurrentSchema)
 	}
-	migrated, err := decodeCompanions(encoded)
+	migrated, err := Decode(encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +101,7 @@ func TestCompanionCodecAcceptsMaximumStoredRecords(t *testing.T) {
 	for index := range records {
 		records[index].ID = fixtureCompanionID(byte(index))
 	}
-	encoded, err := encodeCompanions(CompanionSave{Revision: 23, Records: records})
+	encoded, err := Encode(CompanionSave{Revision: 23, Records: records})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,20 +111,20 @@ func TestCompanionCodecAcceptsMaximumStoredRecords(t *testing.T) {
 			len(encoded), 32+companion.MaxStored*(companionRecordLength+1),
 		)
 	}
-	got, err := decodeCompanions(encoded)
+	got, err := Decode(encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Revision != 23 || len(got.Records) != 64 || !reflect.DeepEqual(got.Records, records) {
 		t.Fatalf("64 条记录 decode=%+v", got)
 	}
-	if _, err := decodeCompanions(append(encoded, 0)); !errors.Is(err, ErrCorrupt) {
-		t.Fatalf("trailing byte decode error=%v，想要 ErrCorrupt", err)
+	if _, err := Decode(append(encoded, 0)); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("trailing byte decode error=%v，想要 storagedef.ErrCorrupt", err)
 	}
 }
 
 func TestCompanionCodecRejectsCRCTruncationFutureVersionAndOversizedRecords(t *testing.T) {
-	valid, err := encodeCompanions(CompanionSave{Revision: 7, Records: fixtureCompanionBodies()})
+	valid, err := Encode(CompanionSave{Revision: 7, Records: fixtureCompanionBodies()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,48 +139,48 @@ func TestCompanionCodecRejectsCRCTruncationFutureVersionAndOversizedRecords(t *t
 		payload func() []byte
 		want    error
 	}{
-		{"magic", func() []byte { p := bytes.Clone(valid); p[0] ^= 1; return p }, ErrCorrupt},
-		{"old envelope", func() []byte { p := bytes.Clone(valid); binary.LittleEndian.PutUint32(p[4:], 0); return p }, ErrCorrupt},
-		{"future envelope", func() []byte { p := bytes.Clone(valid); binary.LittleEndian.PutUint32(p[4:], 2); return p }, ErrFutureVersion},
-		{"old schema", func() []byte { p := bytes.Clone(valid); binary.LittleEndian.PutUint32(p[8:], 0); return p }, ErrCorrupt},
+		{"magic", func() []byte { p := bytes.Clone(valid); p[0] ^= 1; return p }, storagedef.ErrCorrupt},
+		{"old envelope", func() []byte { p := bytes.Clone(valid); binary.LittleEndian.PutUint32(p[4:], 0); return p }, storagedef.ErrCorrupt},
+		{"future envelope", func() []byte { p := bytes.Clone(valid); binary.LittleEndian.PutUint32(p[4:], 2); return p }, storagedef.ErrFutureVersion},
+		{"old schema", func() []byte { p := bytes.Clone(valid); binary.LittleEndian.PutUint32(p[8:], 0); return p }, storagedef.ErrCorrupt},
 		{"future schema", func() []byte {
 			p := bytes.Clone(valid)
-			binary.LittleEndian.PutUint32(p[8:], currentCompanionSchema+1)
+			binary.LittleEndian.PutUint32(p[8:], CurrentSchema+1)
 			return p
-		}, ErrFutureVersion},
-		{"zero revision", func() []byte { p := bytes.Clone(valid); clear(p[12:20]); repairCompanionCRC(p); return p }, ErrCorrupt},
-		{"payload length", func() []byte { p := bytes.Clone(valid); binary.LittleEndian.PutUint32(p[24:], 1); return p }, ErrCorrupt},
-		{"CRC", func() []byte { p := bytes.Clone(valid); p[28] ^= 1; return p }, ErrCorrupt},
-		{"truncation", func() []byte { return bytes.Clone(valid[:len(valid)-1]) }, ErrCorrupt},
-		{"trailing byte", func() []byte { return append(bytes.Clone(valid), 0) }, ErrCorrupt},
-		{"invalid ID", func() []byte { p := bytes.Clone(valid); clear(p[32:48]); repairCompanionCRC(p); return p }, ErrCorrupt},
+		}, storagedef.ErrFutureVersion},
+		{"zero revision", func() []byte { p := bytes.Clone(valid); clear(p[12:20]); repairCompanionCRC(p); return p }, storagedef.ErrCorrupt},
+		{"payload length", func() []byte { p := bytes.Clone(valid); binary.LittleEndian.PutUint32(p[24:], 1); return p }, storagedef.ErrCorrupt},
+		{"CRC", func() []byte { p := bytes.Clone(valid); p[28] ^= 1; return p }, storagedef.ErrCorrupt},
+		{"truncation", func() []byte { return bytes.Clone(valid[:len(valid)-1]) }, storagedef.ErrCorrupt},
+		{"trailing byte", func() []byte { return append(bytes.Clone(valid), 0) }, storagedef.ErrCorrupt},
+		{"invalid ID", func() []byte { p := bytes.Clone(valid); clear(p[32:48]); repairCompanionCRC(p); return p }, storagedef.ErrCorrupt},
 		{"invalid dimension", func() []byte {
 			p := bytes.Clone(valid)
 			binary.LittleEndian.PutUint32(p[48:], 1)
 			repairCompanionCRC(p)
 			return p
-		}, ErrCorrupt},
-		{"position", func() []byte { return badFloat(52) }, ErrCorrupt},
-		{"yaw", func() []byte { return badFloat(64) }, ErrCorrupt},
-		{"pitch", func() []byte { return badFloat(68) }, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
+		{"position", func() []byte { return badFloat(52) }, storagedef.ErrCorrupt},
+		{"yaw", func() []byte { return badFloat(64) }, storagedef.ErrCorrupt},
+		{"pitch", func() []byte { return badFloat(68) }, storagedef.ErrCorrupt},
 		{"pitch outside range", func() []byte {
 			p := bytes.Clone(valid)
 			binary.LittleEndian.PutUint32(p[68:], math.Float32bits(2))
 			repairCompanionCRC(p)
 			return p
-		}, ErrCorrupt},
-		{"selected slot", func() []byte { p := bytes.Clone(valid); p[72] = core.HotbarSlots; repairCompanionCRC(p); return p }, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
+		{"selected slot", func() []byte { p := bytes.Clone(valid); p[72] = core.HotbarSlots; repairCompanionCRC(p); return p }, storagedef.ErrCorrupt},
 		{"invalid inventory", func() []byte {
 			p := bytes.Clone(valid)
 			binary.LittleEndian.PutUint16(p[73:], 4242)
 			p[75] = 1
 			repairCompanionCRC(p)
 			return p
-		}, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := decodeCompanions(tc.payload())
+			_, err := Decode(tc.payload())
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("decode error=%v，想要 %v", err, tc.want)
 			}
@@ -193,8 +194,8 @@ func TestCompanionCodecRejectsCRCTruncationFutureVersionAndOversizedRecords(t *t
 	binary.LittleEndian.PutUint64(oversized[12:], 1)
 	binary.LittleEndian.PutUint32(oversized[20:], companion.MaxStored+1)
 	binary.LittleEndian.PutUint32(oversized[24:], (companion.MaxStored+1)*221)
-	_, err = decodeCompanions(oversized)
-	if !errors.Is(err, ErrCorrupt) || !strings.Contains(err.Error(), "count") {
+	_, err = Decode(oversized)
+	if !errors.Is(err, storagedef.ErrCorrupt) || !strings.Contains(err.Error(), "count") {
 		t.Fatalf("oversized count error=%v，想要分配前 count 门禁", err)
 	}
 
@@ -202,21 +203,21 @@ func TestCompanionCodecRejectsCRCTruncationFutureVersionAndOversizedRecords(t *t
 	for i := range tooMany {
 		tooMany[i] = fixtureCompanionBodies()[0]
 	}
-	if _, err := encodeCompanions(CompanionSave{Revision: 1, Records: tooMany}); !errors.Is(err, ErrCorrupt) {
-		t.Fatalf("encode 65 records error=%v，想要 ErrCorrupt", err)
+	if _, err := Encode(CompanionSave{Revision: 1, Records: tooMany}); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("encode 65 records error=%v，想要 storagedef.ErrCorrupt", err)
 	}
-	if _, err := encodeCompanions(CompanionSave{Records: fixtureCompanionBodies()[:1]}); !errors.Is(err, ErrCorrupt) {
-		t.Fatalf("encode zero revision error=%v，想要 ErrCorrupt", err)
+	if _, err := Encode(CompanionSave{Records: fixtureCompanionBodies()[:1]}); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("encode zero revision error=%v，想要 storagedef.ErrCorrupt", err)
 	}
 	invalidBody := fixtureCompanionBodies()[0]
 	invalidBody.Position[0] = float32(math.Inf(1))
-	if _, err := encodeCompanions(CompanionSave{Revision: 1, Records: []companion.Body{invalidBody}}); !errors.Is(err, ErrCorrupt) {
-		t.Fatalf("encode invalid body error=%v，想要 ErrCorrupt", err)
+	if _, err := Encode(CompanionSave{Revision: 1, Records: []companion.Body{invalidBody}}); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("encode invalid body error=%v，想要 storagedef.ErrCorrupt", err)
 	}
 }
 
 func TestCompanionCodecRejectsDuplicateOrUnsortedIDs(t *testing.T) {
-	valid, err := encodeCompanions(CompanionSave{Revision: 3, Records: fixtureCompanionBodies()})
+	valid, err := Encode(CompanionSave{Revision: 3, Records: fixtureCompanionBodies()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,21 +231,21 @@ func TestCompanionCodecRejectsDuplicateOrUnsortedIDs(t *testing.T) {
 	repairCompanionCRC(unsorted)
 	for name, payload := range map[string][]byte{"duplicate": duplicate, "unsorted": unsorted} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := decodeCompanions(payload); !errors.Is(err, ErrCorrupt) {
-				t.Fatalf("decode error=%v，想要 ErrCorrupt", err)
+			if _, err := Decode(payload); !errors.Is(err, storagedef.ErrCorrupt) {
+				t.Fatalf("decode error=%v，想要 storagedef.ErrCorrupt", err)
 			}
 		})
 	}
 
 	input := fixtureCompanionBodies()
 	input[1].ID = input[0].ID
-	if _, err := encodeCompanions(CompanionSave{Revision: 1, Records: input}); !errors.Is(err, ErrCorrupt) {
-		t.Fatalf("encode duplicate error=%v，想要 ErrCorrupt", err)
+	if _, err := Encode(CompanionSave{Revision: 1, Records: input}); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("encode duplicate error=%v，想要 storagedef.ErrCorrupt", err)
 	}
 }
 
 func TestCompanionCodecDoesNotPersistNameTaskOrPersona(t *testing.T) {
-	encoded, err := encodeCompanions(CompanionSave{Revision: 5, Records: fixtureCompanionBodies()[:1]})
+	encoded, err := Encode(CompanionSave{Revision: 5, Records: fixtureCompanionBodies()[:1]})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,11 +263,11 @@ func TestCompanionCodecV1PreservesWornToolDurability(t *testing.T) {
 	body := fixtureCompanionBodies()[0]
 	body.Inventory.Hotbar.Slots[4].Durability = 73
 	body.Inventory.Backpack[3] = core.ItemStack{Item: core.ItemIronPickaxe, Count: 1, Durability: 149}
-	encoded, err := encodeCompanions(CompanionSave{Revision: 9, Records: []companion.Body{body}})
+	encoded, err := Encode(CompanionSave{Revision: 9, Records: []companion.Body{body}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := decodeCompanions(encoded)
+	got, err := Decode(encoded)
 	if err != nil {
 		t.Fatal(err)
 	}

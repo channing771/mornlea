@@ -1,4 +1,4 @@
-package storage
+package hostile
 
 import (
 	"cmp"
@@ -9,20 +9,24 @@ import (
 	"slices"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage/storagedef"
 )
 
 // 夜行者存档的 schema 演进常量。当前只写 v1；未来版本在解码入口按
-// ErrFutureVersion 拒绝，绝不猜测布局。
+// storagedef.ErrFutureVersion 拒绝，绝不猜测布局。
 const (
 	hostileEnvelopeVersion uint32 = 1
 	hostileSchemaV1        uint32 = 1
-	// currentHostileSchema 是当前写出的 schema；编码端只写当前版本。
-	currentHostileSchema uint32 = hostileSchemaV1
-	hostileHeaderLength         = 32
-	hostileRecordLength         = 72
-	// maxHostileFileLength 是物理文件字节上界（spec：4640）= 32-byte 头 +
-	// 64 条 72-byte 记录。解码在任何解析与分配之前按本值拒绝超长。
-	maxHostileFileLength = hostileHeaderLength + MaxHostileMobs*hostileRecordLength
+	// CurrentSchema 是当前写出的 schema；编码端只写当前版本。留根的根包
+	// store 测试以它构造未来 schema 故障注入（跟随权威常量而非字面量），
+	// 故导出。
+	CurrentSchema       uint32 = hostileSchemaV1
+	hostileHeaderLength        = 32
+	hostileRecordLength        = 72
+	// MaxFileLength 是物理文件字节上界（spec：4640）= 32-byte 头 +
+	// 64 条 72-byte 记录。解码在任何解析与分配之前按本值拒绝超长；根包
+	// 编排读取 hostile_mobs.bin 时按同一上界截断读取，故导出。
+	MaxFileLength = hostileHeaderLength + MaxHostileMobs*hostileRecordLength
 )
 
 // hostileCooldownPeriodTicks 是三个冷却计时器（攻击/受击/灼烧）的共享
@@ -41,16 +45,15 @@ var (
 	hostileCRCTable      = crc32.MakeTable(crc32.Castagnoli)
 )
 
-// encodeHostileMobs 把一份夜行者集合快照编码为规范磁盘形态：记录按 ID
-// 升序写出，输入顺序与字段值不得被修改。revision 为零或任何记录越界都
-// 拒绝编码——编码端产出的字节必须能被解码端原样接受，绝不写出不可读
-// 文件。
-func encodeHostileMobs(save HostileMobsSave) ([]byte, error) {
+// Encode 把一份夜行者集合快照编码为规范磁盘形态：记录按 ID 升序写出，
+// 输入顺序与字段值不得被修改。revision 为零或任何记录越界都拒绝编码——
+// 编码端产出的字节必须能被 Decode 原样接受，绝不写出不可读文件。
+func Encode(save HostileMobsSave) ([]byte, error) {
 	if save.Revision == 0 {
-		return nil, fmt.Errorf("%w: zero hostile revision", ErrCorrupt)
+		return nil, fmt.Errorf("%w: zero hostile revision", storagedef.ErrCorrupt)
 	}
 	if len(save.Records) > MaxHostileMobs {
-		return nil, fmt.Errorf("%w: hostile count %d exceeds limit", ErrCorrupt, len(save.Records))
+		return nil, fmt.Errorf("%w: hostile count %d exceeds limit", storagedef.ErrCorrupt, len(save.Records))
 	}
 	records := slices.Clone(save.Records)
 	slices.SortFunc(records, func(a, b StoredHostileMob) int {
@@ -61,7 +64,7 @@ func encodeHostileMobs(save HostileMobsSave) ([]byte, error) {
 			return nil, fmt.Errorf("hostile record %d: %w", index, err)
 		}
 		if index > 0 && records[index-1].ID == record.ID {
-			return nil, fmt.Errorf("%w: duplicate hostile ID", ErrCorrupt)
+			return nil, fmt.Errorf("%w: duplicate hostile ID", storagedef.ErrCorrupt)
 		}
 	}
 
@@ -69,7 +72,7 @@ func encodeHostileMobs(save HostileMobsSave) ([]byte, error) {
 	encoded := make([]byte, 0, hostileHeaderLength+payloadLength)
 	encoded = append(encoded, hostileEnvelopeMagic[:]...)
 	encoded = appendU32(encoded, hostileEnvelopeVersion)
-	encoded = appendU32(encoded, currentHostileSchema)
+	encoded = appendU32(encoded, CurrentSchema)
 	encoded = appendU64(encoded, save.Revision)
 	encoded = appendU32(encoded, uint32(len(records)))
 	encoded = appendU32(encoded, uint32(payloadLength))
@@ -79,24 +82,24 @@ func encodeHostileMobs(save HostileMobsSave) ([]byte, error) {
 	}
 	// 长度门禁的编码侧镜像：count 上界已使本分支不可达，保留它与 companion
 	// codec 同构，作为「产出必须可被解码端接受」的防御断言。
-	if len(encoded) > maxHostileFileLength {
+	if len(encoded) > MaxFileLength {
 		return nil, fmt.Errorf(
-			"%w: hostile file length %d exceeds limit", ErrCorrupt, len(encoded),
+			"%w: hostile file length %d exceeds limit", storagedef.ErrCorrupt, len(encoded),
 		)
 	}
 	binary.LittleEndian.PutUint32(encoded[28:], hostileChecksum(encoded))
 	return encoded, nil
 }
 
-// decodeHostileMobs 解码一份夜行者存档。入口先守住文件与 count 上界再做
-// 任何解析与分配；未来 envelope/schema 版本以 ErrFutureVersion 与损坏区分，
+// Decode 解码一份夜行者存档。入口先守住文件与 count 上界再做
+// 任何解析与分配；未来 envelope/schema 版本以 storagedef.ErrFutureVersion 与损坏区分，
 // 记录字段校验与编码端共用同一函数保证双向边界一致。payload 必须被恰好
 // 读空：固定步长布局下任何长度错位都是损坏，静默接受等于接受非规范文件。
-func decodeHostileMobs(data []byte) (StoredHostileMobs, error) {
+func Decode(data []byte) (StoredHostileMobs, error) {
 	// 分配前门禁：任何超过物理上界的输入在解析前拒绝。
-	if len(data) > maxHostileFileLength {
+	if len(data) > MaxFileLength {
 		return StoredHostileMobs{}, fmt.Errorf(
-			"%w: hostile file length %d exceeds limit", ErrCorrupt, len(data),
+			"%w: hostile file length %d exceeds limit", storagedef.ErrCorrupt, len(data),
 		)
 	}
 	header := byteDecoder{data: data}
@@ -109,9 +112,9 @@ func decodeHostileMobs(data []byte) (StoredHostileMobs, error) {
 	}
 	if version != hostileEnvelopeVersion {
 		if version > hostileEnvelopeVersion {
-			return StoredHostileMobs{}, fmt.Errorf("%w: hostile envelope version %d", ErrFutureVersion, version)
+			return StoredHostileMobs{}, fmt.Errorf("%w: hostile envelope version %d", storagedef.ErrFutureVersion, version)
 		}
-		return StoredHostileMobs{}, fmt.Errorf("%w: unsupported hostile envelope version %d", ErrCorrupt, version)
+		return StoredHostileMobs{}, fmt.Errorf("%w: unsupported hostile envelope version %d", storagedef.ErrCorrupt, version)
 	}
 	schema, err := header.u32()
 	if err != nil {
@@ -121,24 +124,24 @@ func decodeHostileMobs(data []byte) (StoredHostileMobs, error) {
 		// 白名单只有一个成员，仍显式列出字面常量而不是 current 引用：未来
 		// v2 成为 current 时，v1 文件必须仍被本入口放行（companion 同款
 		// 白名单纪律）。
-		if schema > currentHostileSchema {
-			return StoredHostileMobs{}, fmt.Errorf("%w: hostile schema %d", ErrFutureVersion, schema)
+		if schema > CurrentSchema {
+			return StoredHostileMobs{}, fmt.Errorf("%w: hostile schema %d", storagedef.ErrFutureVersion, schema)
 		}
-		return StoredHostileMobs{}, fmt.Errorf("%w: unsupported hostile schema %d", ErrCorrupt, schema)
+		return StoredHostileMobs{}, fmt.Errorf("%w: unsupported hostile schema %d", storagedef.ErrCorrupt, schema)
 	}
 	revision, err := header.u64()
 	if err != nil {
 		return StoredHostileMobs{}, corrupt("hostile revision", err)
 	}
 	if revision == 0 {
-		return StoredHostileMobs{}, fmt.Errorf("%w: zero hostile revision", ErrCorrupt)
+		return StoredHostileMobs{}, fmt.Errorf("%w: zero hostile revision", storagedef.ErrCorrupt)
 	}
 	count, err := header.u32()
 	if err != nil {
 		return StoredHostileMobs{}, corrupt("hostile count", err)
 	}
 	if count > MaxHostileMobs {
-		return StoredHostileMobs{}, fmt.Errorf("%w: hostile count %d exceeds limit", ErrCorrupt, count)
+		return StoredHostileMobs{}, fmt.Errorf("%w: hostile count %d exceeds limit", storagedef.ErrCorrupt, count)
 	}
 	payloadLength, err := header.u32()
 	if err != nil {
@@ -147,17 +150,17 @@ func decodeHostileMobs(data []byte) (StoredHostileMobs, error) {
 	// v1 是固定步长布局：payload 长度必须恰好等于 count 条记录，任何偏差
 	// 都意味着头与数据错位，继续解析没有意义。
 	if payloadLength != count*hostileRecordLength {
-		return StoredHostileMobs{}, fmt.Errorf("%w: hostile payload length does not match count", ErrCorrupt)
+		return StoredHostileMobs{}, fmt.Errorf("%w: hostile payload length does not match count", storagedef.ErrCorrupt)
 	}
 	wantCRC, err := header.u32()
 	if err != nil {
 		return StoredHostileMobs{}, corrupt("hostile CRC32C", err)
 	}
 	if uint64(header.remaining()) != uint64(payloadLength) {
-		return StoredHostileMobs{}, fmt.Errorf("%w: hostile payload length does not match file", ErrCorrupt)
+		return StoredHostileMobs{}, fmt.Errorf("%w: hostile payload length does not match file", storagedef.ErrCorrupt)
 	}
 	if hostileChecksum(data) != wantCRC {
-		return StoredHostileMobs{}, fmt.Errorf("%w: hostile CRC32C", ErrCorrupt)
+		return StoredHostileMobs{}, fmt.Errorf("%w: hostile CRC32C", storagedef.ErrCorrupt)
 	}
 
 	records := make([]StoredHostileMob, int(count))
@@ -167,13 +170,13 @@ func decodeHostileMobs(data []byte) (StoredHostileMobs, error) {
 			return StoredHostileMobs{}, fmt.Errorf("hostile record %d: %w", index, err)
 		}
 		if index > 0 && records[index-1].ID >= record.ID {
-			return StoredHostileMobs{}, fmt.Errorf("%w: hostile IDs are not strictly sorted", ErrCorrupt)
+			return StoredHostileMobs{}, fmt.Errorf("%w: hostile IDs are not strictly sorted", storagedef.ErrCorrupt)
 		}
 		records[index] = record
 	}
 	if header.remaining() != 0 {
 		return StoredHostileMobs{}, fmt.Errorf(
-			"%w: hostile payload has %d trailing bytes", ErrCorrupt, header.remaining(),
+			"%w: hostile payload has %d trailing bytes", storagedef.ErrCorrupt, header.remaining(),
 		)
 	}
 	return StoredHostileMobs{Revision: revision, Records: records}, nil
@@ -185,52 +188,52 @@ func decodeHostileMobs(data []byte) (StoredHostileMobs, error) {
 // 与解码共用本函数，保证双向边界一致。
 func validateHostileRecord(record StoredHostileMob) error {
 	if record.ID == 0 {
-		return fmt.Errorf("%w: zero hostile ID", ErrCorrupt)
+		return fmt.Errorf("%w: zero hostile ID", storagedef.ErrCorrupt)
 	}
 	if record.Dimension != core.Overworld {
-		return fmt.Errorf("%w: unsupported hostile dimension %d", ErrCorrupt, record.Dimension)
+		return fmt.Errorf("%w: unsupported hostile dimension %d", storagedef.ErrCorrupt, record.Dimension)
 	}
 	for _, value := range record.Position {
 		if !finiteHostileFloat(value) {
-			return fmt.Errorf("%w: non-finite hostile position", ErrCorrupt)
+			return fmt.Errorf("%w: non-finite hostile position", storagedef.ErrCorrupt)
 		}
 	}
 	if record.Position[1] < float32(core.MinY) || record.Position[1] >= float32(core.MaxY) {
-		return fmt.Errorf("%w: hostile position Y %v outside world", ErrCorrupt, record.Position[1])
+		return fmt.Errorf("%w: hostile position Y %v outside world", storagedef.ErrCorrupt, record.Position[1])
 	}
 	for _, value := range record.Velocity {
 		if !finiteHostileFloat(value) {
-			return fmt.Errorf("%w: non-finite hostile velocity", ErrCorrupt)
+			return fmt.Errorf("%w: non-finite hostile velocity", storagedef.ErrCorrupt)
 		}
 	}
 	if !finiteHostileFloat(record.Yaw) {
-		return fmt.Errorf("%w: non-finite hostile yaw", ErrCorrupt)
+		return fmt.Errorf("%w: non-finite hostile yaw", storagedef.ErrCorrupt)
 	}
 	if record.Health == 0 || record.Health > core.MaxHealth {
-		return fmt.Errorf("%w: hostile health %d outside 1..%d", ErrCorrupt, record.Health, core.MaxHealth)
+		return fmt.Errorf("%w: hostile health %d outside 1..%d", storagedef.ErrCorrupt, record.Health, core.MaxHealth)
 	}
 	for _, cooldown := range [3]uint8{record.AttackCooldown, record.HurtCooldown, record.BurnCooldown} {
 		if cooldown > hostileCooldownPeriodTicks {
 			return fmt.Errorf(
 				"%w: hostile cooldown %d exceeds period %d",
-				ErrCorrupt, cooldown, hostileCooldownPeriodTicks,
+				storagedef.ErrCorrupt, cooldown, hostileCooldownPeriodTicks,
 			)
 		}
 	}
 	if record.DistantTicks > maxHostileDistantTicks {
 		return fmt.Errorf(
 			"%w: hostile distant ticks %d exceeds limit %d",
-			ErrCorrupt, record.DistantTicks, maxHostileDistantTicks,
+			storagedef.ErrCorrupt, record.DistantTicks, maxHostileDistantTicks,
 		)
 	}
 	if !record.HasTarget {
 		if record.PlayerID != (core.PlayerID{}) {
-			return fmt.Errorf("%w: hostile without target keeps player ID", ErrCorrupt)
+			return fmt.Errorf("%w: hostile without target keeps player ID", storagedef.ErrCorrupt)
 		}
 		return nil
 	}
 	if !record.PlayerID.Valid() {
-		return fmt.Errorf("%w: hostile target is not a valid UUIDv4", ErrCorrupt)
+		return fmt.Errorf("%w: hostile target is not a valid UUIDv4", storagedef.ErrCorrupt)
 	}
 	return nil
 }
@@ -297,7 +300,7 @@ func decodeHostileMob(decoder *byteDecoder) (StoredHostileMob, error) {
 		return StoredHostileMob{}, corrupt("hostile onGround", err)
 	}
 	if onGround > 1 {
-		return StoredHostileMob{}, fmt.Errorf("%w: hostile onGround %d is not a bool", ErrCorrupt, onGround)
+		return StoredHostileMob{}, fmt.Errorf("%w: hostile onGround %d is not a bool", storagedef.ErrCorrupt, onGround)
 	}
 	record.OnGround = onGround == 1
 	if record.Yaw, err = decodeF32(decoder); err != nil {
@@ -320,7 +323,7 @@ func decodeHostileMob(decoder *byteDecoder) (StoredHostileMob, error) {
 		return StoredHostileMob{}, corrupt("hostile hasTarget", err)
 	}
 	if hasTarget > 1 {
-		return StoredHostileMob{}, fmt.Errorf("%w: hostile hasTarget %d is not a bool", ErrCorrupt, hasTarget)
+		return StoredHostileMob{}, fmt.Errorf("%w: hostile hasTarget %d is not a bool", storagedef.ErrCorrupt, hasTarget)
 	}
 	record.HasTarget = hasTarget == 1
 	playerID, err := decoder.take(len(core.PlayerID{}))

@@ -1,4 +1,4 @@
-package storage
+package hostile
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage/storagedef"
 )
 
 // hostileWireOffsets 是单条 72-byte 记录内各字段的字节偏移，与
@@ -111,7 +112,7 @@ func putF32(offset int, value float32) func([]byte) {
 
 func TestHostileCodecHeaderAndRecordLayout(t *testing.T) {
 	record := fixtureHostileRecords()[0]
-	encoded, err := encodeHostileMobs(HostileMobsSave{
+	encoded, err := Encode(HostileMobsSave{
 		Revision: 7, Records: []StoredHostileMob{record},
 	})
 	if err != nil {
@@ -199,14 +200,14 @@ func TestHostileCodecHeaderAndRecordLayout(t *testing.T) {
 func TestHostileCodecRoundTripIsExactAndSorted(t *testing.T) {
 	input := fixtureHostileRecords()
 	before := slices.Clone(input)
-	encoded, err := encodeHostileMobs(HostileMobsSave{Revision: 9, Records: input})
+	encoded, err := Encode(HostileMobsSave{Revision: 9, Records: input})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(input, before) {
 		t.Fatalf("编码修改了调用方 records：got=%+v want=%+v", input, before)
 	}
-	decoded, err := decodeHostileMobs(encoded)
+	decoded, err := Decode(encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +222,7 @@ func TestHostileCodecAcceptsMaximumRecordsAndEnforcesFileLimit(t *testing.T) {
 	for index := range records {
 		records[index] = StoredHostileMob{ID: uint64(index) + 1, Dimension: core.Overworld, Health: 1}
 	}
-	encoded, err := encodeHostileMobs(HostileMobsSave{Revision: 23, Records: records})
+	encoded, err := Encode(HostileMobsSave{Revision: 23, Records: records})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +232,7 @@ func TestHostileCodecAcceptsMaximumRecordsAndEnforcesFileLimit(t *testing.T) {
 			len(encoded), hostileHeaderLength+MaxHostileMobs*hostileRecordLength,
 		)
 	}
-	decoded, err := decodeHostileMobs(encoded)
+	decoded, err := Decode(encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,34 +240,34 @@ func TestHostileCodecAcceptsMaximumRecordsAndEnforcesFileLimit(t *testing.T) {
 		!reflect.DeepEqual(decoded.Records, records) {
 		t.Fatalf("64 条记录 decode=%+v", decoded)
 	}
-	if _, err := decodeHostileMobs(append(encoded, 0)); !errors.Is(err, ErrCorrupt) {
-		t.Fatalf("尾随字节 decode error=%v，想要 ErrCorrupt", err)
+	if _, err := Decode(append(encoded, 0)); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("尾随字节 decode error=%v，想要 storagedef.ErrCorrupt", err)
 	}
 
 	tooMany := make([]StoredHostileMob, MaxHostileMobs+1)
 	for index := range tooMany {
 		tooMany[index] = StoredHostileMob{ID: uint64(index) + 1, Dimension: core.Overworld, Health: 1}
 	}
-	if _, err := encodeHostileMobs(HostileMobsSave{Revision: 1, Records: tooMany}); !errors.Is(err, ErrCorrupt) {
-		t.Fatalf("encode 65 条 error=%v，想要 ErrCorrupt", err)
+	if _, err := Encode(HostileMobsSave{Revision: 1, Records: tooMany}); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("encode 65 条 error=%v，想要 storagedef.ErrCorrupt", err)
 	}
 
-	oversized := bytes.Repeat([]byte{0x5a}, maxHostileFileLength+1)
-	_, err = decodeHostileMobs(oversized)
-	if !errors.Is(err, ErrCorrupt) || !strings.Contains(err.Error(), "length") {
+	oversized := bytes.Repeat([]byte{0x5a}, MaxFileLength+1)
+	_, err = Decode(oversized)
+	if !errors.Is(err, storagedef.ErrCorrupt) || !strings.Contains(err.Error(), "length") {
 		t.Fatalf("超长输入 error=%v，想要分配前长度门禁", err)
 	}
 }
 
 func TestHostileCodecEmptyCollectionRoundTrip(t *testing.T) {
-	encoded, err := encodeHostileMobs(HostileMobsSave{Revision: 4})
+	encoded, err := Encode(HostileMobsSave{Revision: 4})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(encoded) != hostileHeaderLength {
 		t.Fatalf("空集合文件长度=%d，想要 %d", len(encoded), hostileHeaderLength)
 	}
-	decoded, err := decodeHostileMobs(encoded)
+	decoded, err := Decode(encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -325,25 +326,25 @@ func TestHostileCodecRejectsInvalidSaves(t *testing.T) {
 				Health: 20, HasTarget: true, PlayerID: validTarget,
 			}
 			tc.mutate(&record)
-			_, err := encodeHostileMobs(HostileMobsSave{Revision: 1, Records: []StoredHostileMob{record}})
-			if !errors.Is(err, ErrCorrupt) {
-				t.Fatalf("encode error=%v，想要 ErrCorrupt", err)
+			_, err := Encode(HostileMobsSave{Revision: 1, Records: []StoredHostileMob{record}})
+			if !errors.Is(err, storagedef.ErrCorrupt) {
+				t.Fatalf("encode error=%v，想要 storagedef.ErrCorrupt", err)
 			}
 		})
 	}
 
-	if _, err := encodeHostileMobs(HostileMobsSave{Records: fixtureHostileRecords()}); !errors.Is(err, ErrCorrupt) {
-		t.Fatalf("encode 零 revision error=%v，想要 ErrCorrupt", err)
+	if _, err := Encode(HostileMobsSave{Records: fixtureHostileRecords()}); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("encode 零 revision error=%v，想要 storagedef.ErrCorrupt", err)
 	}
 	duplicate := fixtureHostileRecordsSorted()
 	duplicate[1].ID = duplicate[0].ID
-	if _, err := encodeHostileMobs(HostileMobsSave{Revision: 1, Records: duplicate}); !errors.Is(err, ErrCorrupt) {
-		t.Fatalf("encode 重复 ID error=%v，想要 ErrCorrupt", err)
+	if _, err := Encode(HostileMobsSave{Revision: 1, Records: duplicate}); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("encode 重复 ID error=%v，想要 storagedef.ErrCorrupt", err)
 	}
 }
 
 func TestHostileCodecRejectsCorruptFiles(t *testing.T) {
-	encoded, err := encodeHostileMobs(HostileMobsSave{Revision: 9, Records: fixtureHostileRecords()})
+	encoded, err := Encode(HostileMobsSave{Revision: 9, Records: fixtureHostileRecords()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -360,107 +361,107 @@ func TestHostileCodecRejectsCorruptFiles(t *testing.T) {
 		want   error
 		mutate func([]byte)
 	}{
-		{"magic", ErrCorrupt, func(payload []byte) { payload[0] ^= 0x01 }},
-		{"old envelope", ErrCorrupt, func(payload []byte) {
+		{"magic", storagedef.ErrCorrupt, func(payload []byte) { payload[0] ^= 0x01 }},
+		{"old envelope", storagedef.ErrCorrupt, func(payload []byte) {
 			binary.LittleEndian.PutUint32(payload[4:], 0)
 		}},
-		{"future envelope", ErrFutureVersion, func(payload []byte) {
+		{"future envelope", storagedef.ErrFutureVersion, func(payload []byte) {
 			binary.LittleEndian.PutUint32(payload[4:], 2)
 		}},
-		{"old schema", ErrCorrupt, func(payload []byte) {
+		{"old schema", storagedef.ErrCorrupt, func(payload []byte) {
 			binary.LittleEndian.PutUint32(payload[8:], 0)
 		}},
-		{"future schema", ErrFutureVersion, func(payload []byte) {
-			binary.LittleEndian.PutUint32(payload[8:], currentHostileSchema+1)
+		{"future schema", storagedef.ErrFutureVersion, func(payload []byte) {
+			binary.LittleEndian.PutUint32(payload[8:], CurrentSchema+1)
 		}},
-		{"zero revision", ErrCorrupt, func(payload []byte) {
+		{"zero revision", storagedef.ErrCorrupt, func(payload []byte) {
 			binary.LittleEndian.PutUint64(payload[12:], 0)
 		}},
-		{"payload length mismatch", ErrCorrupt, func(payload []byte) {
+		{"payload length mismatch", storagedef.ErrCorrupt, func(payload []byte) {
 			binary.LittleEndian.PutUint32(payload[24:], 1)
 		}},
-		{"count beyond payload", ErrCorrupt, func(payload []byte) {
+		{"count beyond payload", storagedef.ErrCorrupt, func(payload []byte) {
 			binary.LittleEndian.PutUint32(payload[20:], 4)
 		}},
-		{"CRC", ErrCorrupt, func(payload []byte) { payload[28] ^= 0x01 }},
-		{"duplicate ID", ErrCorrupt, func(payload []byte) {
+		{"CRC", storagedef.ErrCorrupt, func(payload []byte) { payload[28] ^= 0x01 }},
+		{"duplicate ID", storagedef.ErrCorrupt, func(payload []byte) {
 			copy(payload[base1+hostileWireID:], payload[base0+hostileWireID:base0+hostileWireID+8])
 			repairHostileCRC(payload)
 		}},
-		{"descending IDs", ErrCorrupt, func(payload []byte) {
+		{"descending IDs", storagedef.ErrCorrupt, func(payload []byte) {
 			first := bytes.Clone(payload[base0+hostileWireID : base0+hostileWireID+8])
 			copy(payload[base0+hostileWireID:], payload[base1+hostileWireID:base1+hostileWireID+8])
 			copy(payload[base1+hostileWireID:], first)
 			repairHostileCRC(payload)
 		}},
-		{"zero ID", ErrCorrupt, func(payload []byte) {
+		{"zero ID", storagedef.ErrCorrupt, func(payload []byte) {
 			clear(payload[base0+hostileWireID : base0+hostileWireID+8])
 			repairHostileCRC(payload)
 		}},
-		{"unknown dimension", ErrCorrupt, patchAndRepairU32(base1+hostileWireDimension, 7)},
-		{"NaN position", ErrCorrupt, func(payload []byte) {
+		{"unknown dimension", storagedef.ErrCorrupt, patchAndRepairU32(base1+hostileWireDimension, 7)},
+		{"NaN position", storagedef.ErrCorrupt, func(payload []byte) {
 			putF32(base0+hostileWirePosition+4, float32(math.NaN()))(payload)
 			repairHostileCRC(payload)
 		}},
-		{"Inf velocity", ErrCorrupt, func(payload []byte) {
+		{"Inf velocity", storagedef.ErrCorrupt, func(payload []byte) {
 			putF32(base2+hostileWireVelocity+8, float32(math.Inf(1)))(payload)
 			repairHostileCRC(payload)
 		}},
-		{"NaN yaw", ErrCorrupt, func(payload []byte) {
+		{"NaN yaw", storagedef.ErrCorrupt, func(payload []byte) {
 			putF32(base1+hostileWireYaw, float32(math.NaN()))(payload)
 			repairHostileCRC(payload)
 		}},
-		{"health zero", ErrCorrupt, func(payload []byte) {
+		{"health zero", storagedef.ErrCorrupt, func(payload []byte) {
 			payload[base0+hostileWireHealth] = 0
 			repairHostileCRC(payload)
 		}},
-		{"health above max", ErrCorrupt, func(payload []byte) {
+		{"health above max", storagedef.ErrCorrupt, func(payload []byte) {
 			payload[base0+hostileWireHealth] = core.MaxHealth + 1
 			repairHostileCRC(payload)
 		}},
-		{"attack cooldown above period", ErrCorrupt, func(payload []byte) {
+		{"attack cooldown above period", storagedef.ErrCorrupt, func(payload []byte) {
 			payload[base0+hostileWireAttack] = 21
 			repairHostileCRC(payload)
 		}},
-		{"hurt cooldown above period", ErrCorrupt, func(payload []byte) {
+		{"hurt cooldown above period", storagedef.ErrCorrupt, func(payload []byte) {
 			payload[base0+hostileWireHurt] = 21
 			repairHostileCRC(payload)
 		}},
-		{"burn cooldown above period", ErrCorrupt, func(payload []byte) {
+		{"burn cooldown above period", storagedef.ErrCorrupt, func(payload []byte) {
 			payload[base2+hostileWireBurn] = 21
 			repairHostileCRC(payload)
 		}},
-		{"distant above threshold", ErrCorrupt, func(payload []byte) {
+		{"distant above threshold", storagedef.ErrCorrupt, func(payload []byte) {
 			binary.LittleEndian.PutUint16(payload[base2+hostileWireDistant:], maxHostileDistantTicks+1)
 			repairHostileCRC(payload)
 		}},
-		{"position below world", ErrCorrupt, func(payload []byte) {
+		{"position below world", storagedef.ErrCorrupt, func(payload []byte) {
 			putF32(base0+hostileWirePosition+4, -64.5)(payload)
 			repairHostileCRC(payload)
 		}},
-		{"position at world top", ErrCorrupt, func(payload []byte) {
+		{"position at world top", storagedef.ErrCorrupt, func(payload []byte) {
 			putF32(base0+hostileWirePosition+4, float32(core.MaxY))(payload)
 			repairHostileCRC(payload)
 		}},
-		{"invalid bool", ErrCorrupt, func(payload []byte) {
+		{"invalid bool", storagedef.ErrCorrupt, func(payload []byte) {
 			payload[base0+hostileWireHasTarget] = 2
 			repairHostileCRC(payload)
 		}},
-		{"no target keeps player ID", ErrCorrupt, func(payload []byte) {
+		{"no target keeps player ID", storagedef.ErrCorrupt, func(payload []byte) {
 			// base2 是携带目标的 tracking 记录：只清 hasTarget、保留其合法
 			// PlayerID，恰好构成「无目标却携带 PlayerID」的位形。
 			payload[base2+hostileWireHasTarget] = 0
 			repairHostileCRC(payload)
 		}},
-		{"target with zero player ID", ErrCorrupt, func(payload []byte) {
+		{"target with zero player ID", storagedef.ErrCorrupt, func(payload []byte) {
 			clear(payload[base2+hostileWirePlayerID : base2+hostileWirePlayerID+16])
 			repairHostileCRC(payload)
 		}},
-		{"target with non-v4 player ID", ErrCorrupt, func(payload []byte) {
+		{"target with non-v4 player ID", storagedef.ErrCorrupt, func(payload []byte) {
 			payload[base2+hostileWirePlayerID+6] = 0x36
 			repairHostileCRC(payload)
 		}},
-		{"target with non-variant player ID", ErrCorrupt, func(payload []byte) {
+		{"target with non-variant player ID", storagedef.ErrCorrupt, func(payload []byte) {
 			payload[base2+hostileWirePlayerID+8] = 0x1f
 			repairHostileCRC(payload)
 		}},
@@ -469,7 +470,7 @@ func TestHostileCodecRejectsCorruptFiles(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			payload := bytes.Clone(valid)
 			tc.mutate(payload)
-			if _, err := decodeHostileMobs(payload); !errors.Is(err, tc.want) {
+			if _, err := Decode(payload); !errors.Is(err, tc.want) {
 				t.Fatalf("decode error=%v，想要 %v", err, tc.want)
 			}
 		})
@@ -483,8 +484,8 @@ func TestHostileCodecRejectsCorruptFiles(t *testing.T) {
 		"trailing byte": append(bytes.Clone(valid), 0),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := decodeHostileMobs(payload); !errors.Is(err, ErrCorrupt) {
-				t.Fatalf("decode error=%v，想要 ErrCorrupt", err)
+			if _, err := Decode(payload); !errors.Is(err, storagedef.ErrCorrupt) {
+				t.Fatalf("decode error=%v，想要 storagedef.ErrCorrupt", err)
 			}
 		})
 	}
@@ -498,8 +499,8 @@ func TestHostileCodecRejectsCorruptFiles(t *testing.T) {
 	binary.LittleEndian.PutUint64(oversizedCount[12:], 1)
 	binary.LittleEndian.PutUint32(oversizedCount[20:], MaxHostileMobs+1)
 	binary.LittleEndian.PutUint32(oversizedCount[24:], (MaxHostileMobs+1)*hostileRecordLength)
-	_, err = decodeHostileMobs(oversizedCount)
-	if !errors.Is(err, ErrCorrupt) || !strings.Contains(err.Error(), "count") {
+	_, err = Decode(oversizedCount)
+	if !errors.Is(err, storagedef.ErrCorrupt) || !strings.Contains(err.Error(), "count") {
 		t.Fatalf("count 超限 error=%v，想要分配前 count 门禁", err)
 	}
 
@@ -508,11 +509,11 @@ func TestHostileCodecRejectsCorruptFiles(t *testing.T) {
 	for _, y := range []float32{float32(core.MinY), 319.5} {
 		record := StoredHostileMob{ID: 8, Dimension: core.Overworld, Health: 20}
 		record.Position[1] = y
-		bounded, err := encodeHostileMobs(HostileMobsSave{Revision: 2, Records: []StoredHostileMob{record}})
+		bounded, err := Encode(HostileMobsSave{Revision: 2, Records: []StoredHostileMob{record}})
 		if err != nil {
 			t.Fatalf("Y=%v 应当合法：encode error=%v", y, err)
 		}
-		decoded, err := decodeHostileMobs(bounded)
+		decoded, err := Decode(bounded)
 		if err != nil {
 			t.Fatalf("Y=%v 应当合法：decode error=%v", y, err)
 		}
@@ -523,13 +524,13 @@ func TestHostileCodecRejectsCorruptFiles(t *testing.T) {
 }
 
 func TestHostileCodecCanonicalFormIndependentOfInputOrder(t *testing.T) {
-	sorted, err := encodeHostileMobs(HostileMobsSave{
+	sorted, err := Encode(HostileMobsSave{
 		Revision: 3, Records: fixtureHostileRecordsSorted(),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	shuffled, err := encodeHostileMobs(HostileMobsSave{
+	shuffled, err := Encode(HostileMobsSave{
 		Revision: 3, Records: fixtureHostileRecords(),
 	})
 	if err != nil {
@@ -538,7 +539,7 @@ func TestHostileCodecCanonicalFormIndependentOfInputOrder(t *testing.T) {
 	if !bytes.Equal(sorted, shuffled) {
 		t.Fatal("升序与乱序输入的编码不一致：磁盘形态必须唯一")
 	}
-	decoded, err := decodeHostileMobs(sorted)
+	decoded, err := Decode(sorted)
 	if err != nil {
 		t.Fatal(err)
 	}

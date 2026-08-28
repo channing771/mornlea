@@ -8,6 +8,8 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/chunk"
+	"github.com/channing771/mornlea/internal/storage/companion"
+	"github.com/channing771/mornlea/internal/storage/hostile"
 	"github.com/channing771/mornlea/internal/storage/player"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -269,14 +271,14 @@ func (store *MemoryStore) LoadCompanions(ctx context.Context) (StoredCompanions,
 	if len(store.companions.encoded) == 0 {
 		return StoredCompanions{}, ErrCompanionsNotFound
 	}
-	return decodeCompanions(bytes.Clone(store.companions.encoded))
+	return companion.Decode(bytes.Clone(store.companions.encoded))
 }
 
 func (store *MemoryStore) SaveCompanions(ctx context.Context, save CompanionSave) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	encoded, err := encodeCompanions(save)
+	encoded, err := companion.Encode(save)
 	if err != nil {
 		return err
 	}
@@ -315,14 +317,14 @@ func (store *MemoryStore) LoadHostileMobs(ctx context.Context) (StoredHostileMob
 	if len(store.hostiles.encoded) == 0 {
 		return StoredHostileMobs{}, ErrHostileMobsNotFound
 	}
-	return decodeHostileMobs(bytes.Clone(store.hostiles.encoded))
+	return hostile.Decode(bytes.Clone(store.hostiles.encoded))
 }
 
 func (store *MemoryStore) SaveHostileMobs(ctx context.Context, save HostileMobsSave) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	encoded, err := encodeHostileMobs(save)
+	encoded, err := hostile.Encode(save)
 	if err != nil {
 		return err
 	}

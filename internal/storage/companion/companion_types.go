@@ -1,7 +1,13 @@
-package storage
+// Package companion 承载 companion 存档域：companions.ai 聚合文件（MCAI
+// 信封、schema v1..v4）的编解码、任务区/FIFO/摘要载荷校验与伙伴存档值类型。
+//
+// 本包是纯 codec 域：依赖 internal/companion 领域模型与 core 值类型，哨兵经
+// storagedef 取用；不感知根包编排（DiskStore/MemoryStore 的 companions.ai
+// 文件原子替换与路径编排），CompanionStore 接口属根包存储契约家族，定义
+// 留在根包 types.go。
+package companion
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,9 +15,11 @@ import (
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage/storagedef"
 )
 
-// ErrCompanionsNotFound 表示世界尚无伙伴聚合存档。
+// ErrCompanionsNotFound 表示世界尚无伙伴聚合存档。根包以 var 绑定同一错误值
+// 再导出，保持既有 storage.ErrCompanionsNotFound 引用与 errors.Is 身份不变。
 var ErrCompanionsNotFound = errors.New("storage: companions not found")
 
 // 任务区与 FIFO 的持久化上界。全部在编码/解码边界强制：磁盘文件与内存
@@ -95,12 +103,6 @@ type StoredCompanionQueue struct {
 	Summary string
 }
 
-// CompanionStore 定义伙伴聚合存档的加载与保存边界。
-type CompanionStore interface {
-	LoadCompanions(context.Context) (StoredCompanions, error)
-	SaveCompanions(context.Context, CompanionSave) error
-}
-
 // validateStoredCompanionTask 校验单条任务载荷的全部不变量：状态与失败
 // 原因的枚举与配对、指令文本边界、计划步骤按 schema 的结构合法性，以及
 // "计划只在 Running 落盘"的字段耦合（非 Running 必须无步骤、无进度、
@@ -108,18 +110,18 @@ type CompanionStore interface {
 // 集合（v2 只认 go_to、v3 认交付全集四 kind），其余不变量跨 schema 相同。
 func validateStoredCompanionTask(task StoredCompanionTask, schema uint32) error {
 	if task.State < companion.TaskQueued || task.State > companion.TaskStopped {
-		return fmt.Errorf("%w: companion task state %d outside enum", ErrCorrupt, task.State)
+		return fmt.Errorf("%w: companion task state %d outside enum", storagedef.ErrCorrupt, task.State)
 	}
 	if task.State == companion.TaskFailed {
 		if task.FailReason <= companion.TaskFailNone ||
 			task.FailReason > companion.TaskFailInventoryFull {
-			return fmt.Errorf("%w: companion task fail reason %d invalid", ErrCorrupt, task.FailReason)
+			return fmt.Errorf("%w: companion task fail reason %d invalid", storagedef.ErrCorrupt, task.FailReason)
 		}
 	} else if task.FailReason != companion.TaskFailNone {
-		return fmt.Errorf("%w: companion task fail reason %d without failed state", ErrCorrupt, task.FailReason)
+		return fmt.Errorf("%w: companion task fail reason %d without failed state", storagedef.ErrCorrupt, task.FailReason)
 	}
 	if err := companion.TaskCommand(task.Command).Validate(); err != nil {
-		return fmt.Errorf("%w: companion task command: %v", ErrCorrupt, err)
+		return fmt.Errorf("%w: companion task command: %v", storagedef.ErrCorrupt, err)
 	}
 	if task.State == companion.TaskRunning {
 		// 步骤约束与 companion 侧 validPlanSteps 的结构校验保持一致
@@ -127,22 +129,22 @@ func validateStoredCompanionTask(task StoredCompanionTask, schema uint32) error 
 		// 值域校验依赖 companion 的私有注册表，由恢复路径 RestoreCurrent
 		// → validPlanSteps 兜底，存档边界把 Block 当作有界不透明载荷）。
 		if len(task.PlanSteps) == 0 {
-			return fmt.Errorf("%w: running companion task has no plan steps", ErrCorrupt)
+			return fmt.Errorf("%w: running companion task has no plan steps", storagedef.ErrCorrupt)
 		}
 		if task.StepIndex < 0 || task.StepIndex >= len(task.PlanSteps) {
 			return fmt.Errorf(
-				"%w: companion task step index %d outside plan", ErrCorrupt, task.StepIndex,
+				"%w: companion task step index %d outside plan", storagedef.ErrCorrupt, task.StepIndex,
 			)
 		}
 	} else if len(task.PlanSteps) != 0 || task.StepIndex != 0 ||
 		task.StartTick != 0 || task.DeadlineTicks != 0 {
 		return fmt.Errorf(
-			"%w: companion task keeps plan progress outside running state", ErrCorrupt,
+			"%w: companion task keeps plan progress outside running state", storagedef.ErrCorrupt,
 		)
 	}
 	if len(task.PlanSteps) > MaxCompanionPlanSteps {
 		return fmt.Errorf(
-			"%w: companion task plan steps %d exceeds limit", ErrCorrupt, len(task.PlanSteps),
+			"%w: companion task plan steps %d exceeds limit", storagedef.ErrCorrupt, len(task.PlanSteps),
 		)
 	}
 	hasFollow := false
@@ -160,7 +162,7 @@ func validateStoredCompanionTask(task StoredCompanionTask, schema uint32) error 
 	// 迁移；编码与解码共用同一道门。
 	if hasFollow && task.DeadlineTicks != 0 {
 		return fmt.Errorf(
-			"%w: companion follow task keeps deadline %d", ErrCorrupt, task.DeadlineTicks,
+			"%w: companion follow task keeps deadline %d", storagedef.ErrCorrupt, task.DeadlineTicks,
 		)
 	}
 	return nil
@@ -178,12 +180,12 @@ func validateStoredPlanStep(step companion.PlanStep, index, total int, schema ui
 	if schema == companionSchemaV2 {
 		if step.Kind != companion.PlanStepGoTo {
 			return fmt.Errorf(
-				"%w: companion task plan step %d kind %d is not go_to", ErrCorrupt, index, step.Kind,
+				"%w: companion task plan step %d kind %d is not go_to", storagedef.ErrCorrupt, index, step.Kind,
 			)
 		}
 		if step.Y < core.MinY || step.Y >= core.MaxY {
 			return fmt.Errorf(
-				"%w: companion task plan step %d Y=%d outside world", ErrCorrupt, index, step.Y,
+				"%w: companion task plan step %d Y=%d outside world", storagedef.ErrCorrupt, index, step.Y,
 			)
 		}
 		return nil
@@ -192,39 +194,39 @@ func validateStoredPlanStep(step companion.PlanStep, index, total int, schema ui
 	case companion.PlanStepGoTo, companion.PlanStepMine:
 		if step.Block != 0 || step.PlayerID != (core.PlayerID{}) {
 			return fmt.Errorf(
-				"%w: companion task plan step %d keeps unused payload", ErrCorrupt, index,
+				"%w: companion task plan step %d keeps unused payload", storagedef.ErrCorrupt, index,
 			)
 		}
 	case companion.PlanStepPlace:
 		if step.PlayerID != (core.PlayerID{}) {
 			return fmt.Errorf(
-				"%w: companion task plan step %d keeps unused player payload", ErrCorrupt, index,
+				"%w: companion task plan step %d keeps unused player payload", storagedef.ErrCorrupt, index,
 			)
 		}
 	case companion.PlanStepFollow:
 		if step.X != 0 || step.Y != 0 || step.Z != 0 || step.Block != 0 {
 			return fmt.Errorf(
-				"%w: companion task plan step %d keeps unused coordinate payload", ErrCorrupt, index,
+				"%w: companion task plan step %d keeps unused coordinate payload", storagedef.ErrCorrupt, index,
 			)
 		}
 		if !step.PlayerID.Valid() {
 			return fmt.Errorf(
-				"%w: companion task plan step %d follow target invalid", ErrCorrupt, index,
+				"%w: companion task plan step %d follow target invalid", storagedef.ErrCorrupt, index,
 			)
 		}
 		if index != total-1 {
 			return fmt.Errorf(
-				"%w: companion task plan step %d follow is not last", ErrCorrupt, index,
+				"%w: companion task plan step %d follow is not last", storagedef.ErrCorrupt, index,
 			)
 		}
 	default:
 		return fmt.Errorf(
-			"%w: companion task plan step %d kind %d is not delivered", ErrCorrupt, index, step.Kind,
+			"%w: companion task plan step %d kind %d is not delivered", storagedef.ErrCorrupt, index, step.Kind,
 		)
 	}
 	if step.Kind != companion.PlanStepFollow && (step.Y < core.MinY || step.Y >= core.MaxY) {
 		return fmt.Errorf(
-			"%w: companion task plan step %d Y=%d outside world", ErrCorrupt, index, step.Y,
+			"%w: companion task plan step %d Y=%d outside world", storagedef.ErrCorrupt, index, step.Y,
 		)
 	}
 	return nil
@@ -249,10 +251,10 @@ func validateStoredCompanionQueues(
 			return fmt.Errorf("companion queue %d: %w", index, err)
 		}
 		if _, duplicate := seen[queue.ID]; duplicate {
-			return fmt.Errorf("%w: duplicate companion queue ID", ErrCorrupt)
+			return fmt.Errorf("%w: duplicate companion queue ID", storagedef.ErrCorrupt)
 		}
 		if _, exists := known[queue.ID]; !exists {
-			return fmt.Errorf("%w: companion queue without body record", ErrCorrupt)
+			return fmt.Errorf("%w: companion queue without body record", storagedef.ErrCorrupt)
 		}
 		seen[queue.ID] = struct{}{}
 	}
@@ -266,26 +268,26 @@ func validateStoredCompanionQueues(
 // v4 语义校验（v3/v2/v1 迁移读入的载荷摘要恒为空，天然通过）。
 func validateStoredCompanionQueue(queue StoredCompanionQueue, schema uint32) error {
 	if !queue.HasCurrent && len(queue.Pending) == 0 && queue.Summary == "" {
-		return fmt.Errorf("%w: empty companion queue", ErrCorrupt)
+		return fmt.Errorf("%w: empty companion queue", storagedef.ErrCorrupt)
 	}
 	if !queue.ID.Valid() {
-		return fmt.Errorf("%w: invalid companion queue ID", ErrCorrupt)
+		return fmt.Errorf("%w: invalid companion queue ID", storagedef.ErrCorrupt)
 	}
 	if queue.HasCurrent {
 		if err := validateStoredCompanionTask(queue.Current, schema); err != nil {
 			return err
 		}
 	} else if !storedCompanionTaskIsZero(queue.Current) {
-		return fmt.Errorf("%w: companion queue keeps current task without HasCurrent", ErrCorrupt)
+		return fmt.Errorf("%w: companion queue keeps current task without HasCurrent", storagedef.ErrCorrupt)
 	}
 	if len(queue.Pending) > MaxCompanionFIFOEntries {
 		return fmt.Errorf(
-			"%w: companion FIFO depth %d exceeds limit", ErrCorrupt, len(queue.Pending),
+			"%w: companion FIFO depth %d exceeds limit", storagedef.ErrCorrupt, len(queue.Pending),
 		)
 	}
 	for index, command := range queue.Pending {
 		if err := companion.TaskCommand(command).Validate(); err != nil {
-			return fmt.Errorf("companion FIFO entry %d: %w: %v", index, ErrCorrupt, err)
+			return fmt.Errorf("companion FIFO entry %d: %w: %v", index, storagedef.ErrCorrupt, err)
 		}
 	}
 	if err := validateStoredCompanionSummary(queue.Summary); err != nil {
@@ -302,14 +304,14 @@ func validateStoredCompanionQueue(queue StoredCompanionQueue, schema uint32) err
 func validateStoredCompanionSummary(summary string) error {
 	if len(summary) > MaxCompanionSummaryBytes {
 		return fmt.Errorf(
-			"%w: companion summary %d bytes exceeds limit", ErrCorrupt, len(summary),
+			"%w: companion summary %d bytes exceeds limit", storagedef.ErrCorrupt, len(summary),
 		)
 	}
 	if !utf8.ValidString(summary) {
-		return fmt.Errorf("%w: companion summary is not valid UTF-8", ErrCorrupt)
+		return fmt.Errorf("%w: companion summary is not valid UTF-8", storagedef.ErrCorrupt)
 	}
 	if strings.ContainsRune(summary, 0) {
-		return fmt.Errorf("%w: companion summary contains NUL", ErrCorrupt)
+		return fmt.Errorf("%w: companion summary contains NUL", storagedef.ErrCorrupt)
 	}
 	return nil
 }
