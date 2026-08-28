@@ -93,6 +93,40 @@ func TestPlayerV6MigrationFillsInitialHunger(t *testing.T) {
 	}
 }
 
+// TestPlayerV7MigrationClearsRespawn 覆盖 v7→v8 的确定性迁移：v7 没有重生点
+// 字段，迁移必须是「无重生点」——present 清零，任何坐标/维度残值不得存活，
+// 其余字段原样通过。行为上等价于升级前的世界锚点重生语义。
+func TestPlayerV7MigrationClearsRespawn(t *testing.T) {
+	safe := PlayerLocation{Dimension: core.Overworld, Position: [3]float32{4, 5, 6}}
+	dto := playerDTO{
+		PlayerID: fixturePlayerID(), Revision: 9, DisplayName: "Chen",
+		Current: PlayerLocation{Dimension: core.Overworld, Position: [3]float32{1, 2, 3}},
+		Yaw:     1, Pitch: -0.5, Safe: &safe, Health: 13,
+		Hunger: 12, SaturationMilli: 2500, ExhaustionMilli: 1750,
+		// 残值哨兵：迁移不得「顺手保留」任何重生点痕迹。
+		RespawnPresent:   true,
+		RespawnPosition:  [3]float32{7, 8, 9},
+		RespawnDimension: core.Overworld,
+	}
+	migrated, changed, err := migratePlayer(7, dto)
+	if err != nil || !changed {
+		t.Fatalf("migratePlayer(7) changed=%v err=%v", changed, err)
+	}
+	if migrated.RespawnPresent || migrated.RespawnPosition != ([3]float32{}) ||
+		migrated.RespawnDimension != 0 {
+		t.Fatalf("v7 迁移重生点 = (present %v, %+v, %d)，想要全零",
+			migrated.RespawnPresent, migrated.RespawnPosition, migrated.RespawnDimension)
+	}
+	// 其余字段逐字节不变：迁移只补缺失的语义，不改既有状态。
+	want := dto
+	want.RespawnPresent = false
+	want.RespawnPosition = [3]float32{}
+	want.RespawnDimension = 0
+	if !reflect.DeepEqual(migrated, want) {
+		t.Fatalf("v7 迁移改动了既有状态\n got=%+v\nwant=%+v", migrated, want)
+	}
+}
+
 func TestPlayerV4MigrationFillsFullHealth(t *testing.T) {
 	dto := playerDTO{Health: 0}
 	migrated, changed, err := migratePlayer(4, dto)

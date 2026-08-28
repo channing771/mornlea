@@ -638,7 +638,7 @@ type shutdownTestStore struct {
 func newShutdownTestStore() *shutdownTestStore {
 	return &shutdownTestStore{
 		metadata: storage.Metadata{
-			FormatVersion:  2,
+			FormatVersion:  3,
 			Seed:           42,
 			SpawnDimension: core.Overworld,
 		},

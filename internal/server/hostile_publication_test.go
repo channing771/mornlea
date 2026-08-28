@@ -257,7 +257,7 @@ func TestMemoryTCPHostilePublicationTranscriptParity(t *testing.T) {
 func recordHostileTranscript(t *testing.T, transport string) hostileTranscriptRecord {
 	t.Helper()
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 2, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld,
 	})
 	config := hostTestConfig()
 	config.ViewRadius = 1

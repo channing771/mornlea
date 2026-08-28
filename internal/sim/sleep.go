@@ -2,6 +2,7 @@ package sim
 
 import (
 	"errors"
+	"math"
 
 	"github.com/go-gl/mathgl/mgl32"
 
@@ -103,6 +104,24 @@ func (engine *Engine) settleSleepThroughNight() {
 		if session.player != nil {
 			session.player.sleeping = false
 		}
+	}
+}
+
+// respawnPositionFromBlock 把床尾格坐标展开为存档用的 float 三元组。三个分量
+// 都是整数且在 float32 逐位精确的整数范围内，与 Current/Safe 位置的既有精度
+// 约定一致。
+func respawnPositionFromBlock(pos core.BlockPos) [3]float32 {
+	return [3]float32{float32(pos.X), float32(pos.Y), float32(pos.Z)}
+}
+
+// respawnBlockFromPosition 把存档恢复的 float 三元组收拢回床尾格。写入侧保证
+// 分量恒为整数；四舍五入（而不是向零截断）使任何尾数误差都回到原格而不是
+// 相邻格，与 respawnPositionFromBlock 构成逐格可逆的一对转换。
+func respawnBlockFromPosition(position [3]float32) core.BlockPos {
+	return core.BlockPos{
+		X: int32(math.Round(float64(position[0]))),
+		Y: int32(math.Round(float64(position[1]))),
+		Z: int32(math.Round(float64(position[2]))),
 	}
 }
 

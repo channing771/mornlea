@@ -26,7 +26,14 @@ type StoredPlayer struct {
 	Hunger          uint8
 	SaturationMilli uint16
 	ExhaustionMilli uint16
-	NeedsRewrite    bool
+	// RespawnPresent 报告存档是否携带个人重生点（床尾格），schema v8 起落盘；
+	// 更旧的存档读入时迁移为「无重生点」，死亡重生沿用世界出生锚点。
+	RespawnPresent bool
+	// RespawnPosition 是重生点床尾格的方块坐标（X/Y/Z 逐分量 float32）。
+	RespawnPosition [3]float32
+	// RespawnDimension 是重生点所在的维度。
+	RespawnDimension core.DimensionID
+	NeedsRewrite     bool
 }
 
 type PlayerSave struct {
@@ -45,6 +52,11 @@ type PlayerSave struct {
 	Hunger          uint8
 	SaturationMilli uint16
 	ExhaustionMilli uint16
+	// RespawnPresent 为真时 RespawnPosition/RespawnDimension 携带个人重生点
+	// （床尾格），schema v8 起落盘；为假时位置与维度不携带语义，编码规范为零。
+	RespawnPresent   bool
+	RespawnPosition  [3]float32
+	RespawnDimension core.DimensionID
 }
 
 type PlayerStore interface {

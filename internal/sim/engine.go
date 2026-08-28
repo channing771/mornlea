@@ -174,6 +174,14 @@ func (engine *Engine) WorldTime() uint64 { return engine.worldTime.Load() }
 // DayPhaseOffset 返回当前显示相位偏移（0..23999）。跳夜结算之外恒为构造初值 0。
 func (engine *Engine) DayPhaseOffset() uint16 { return uint16(engine.dayPhaseOffset.Load()) }
 
+// RestoreDayPhaseOffset 写入从世界 metadata 恢复的显示相位偏移。它只允许宿主
+// 装配阶段在首个权威 tick 之前调用一次：`dayPhaseOffset` 的常规写者是跳夜结算
+// （`settleSleepThroughNight`），恢复先于一切命令与 tick，因此不构成第二个
+// 并发写者。
+func (engine *Engine) RestoreDayPhaseOffset(offset uint16) {
+	engine.dayPhaseOffset.Store(uint64(offset))
+}
+
 // displayDayPhase 返回当前权威视角下的显示相位：绝对时间与偏移都只经
 // `core.DisplayDayPhase` 组合，判夜读取点不得自建算式。
 func (engine *Engine) displayDayPhase() uint16 {
@@ -184,6 +192,13 @@ func (engine *Engine) displayDayPhase() uint16 {
 // （例如夜间的入睡判定与跳夜结算）。生产路径的时间只能经 `advanceWorldTime`
 // 每 tick 恰好 +1，不得有任何旁路写者。
 func (engine *Engine) SetWorldTimeForTest(ticks uint64) { engine.worldTime.Store(ticks) }
+
+// SetDayPhaseOffsetForTest 直接写入显示相位偏移，仅供上层包的测试构造「跳夜
+// 已结算」的偏移状态来验证持久化接线。生产路径的偏移只能经宿主装配的
+// `RestoreDayPhaseOffset`（恢复 metadata）或跳夜结算写入。
+func (engine *Engine) SetDayPhaseOffsetForTest(offset uint16) {
+	engine.dayPhaseOffset.Store(uint64(offset))
+}
 
 // advanceWorldTime 把绝对世界时间推进恰好一个 tick 并返回新值。
 func (engine *Engine) advanceWorldTime() uint64 { return engine.worldTime.Add(1) }

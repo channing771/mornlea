@@ -29,9 +29,9 @@
 
 ## 5. 持久化：玩家 schema v8 与 metadata v3
 
-- [ ] 5.1 失败测试：玩家 record v8 追加 `respawnPresent/respawnPosition/respawnDimension` 尾部布局、v7 旧档迁移 present=0、round trip、fuzz 不 panic；`go test ./internal/storage -race -count=1` 后实现
-- [ ] 5.2 失败测试：metadata v3 追加 `DayPhaseOffset` u64、v2/v1 迁移 offset=0、重启恢复 offset、CRC 与损坏拒绝矩阵（沿用既有错误矩阵先例）；`go test ./internal/storage -race -count=1` 后实现
-- [ ] 5.3 `gofmt -w internal/storage`、`go test ./internal/storage ./internal/sim -race -count=1`；SPEC+QUALITY 双评审后提交 `feat: persist respawn point and day offset`
+- [x] 5.1 失败测试：玩家 record v8 追加 `respawnPresent/respawnPosition/respawnDimension` 尾部布局、v7 旧档迁移 present=0、round trip、fuzz 不 panic；`go test ./internal/storage -race -count=1` 后实现
+- [x] 5.2 失败测试：metadata v3 追加 `DayPhaseOffset` u64、v2/v1 迁移 offset=0、重启恢复 offset、CRC 与损坏拒绝矩阵（沿用既有错误矩阵先例）；`go test ./internal/storage -race -count=1` 后实现
+- [x] 5.3 `gofmt -w internal/storage`、`go test ./internal/storage ./internal/sim -race -count=1`；SPEC+QUALITY 双评审后提交 `feat: persist respawn point and day offset`
 
 ## 6. 协议、客户端显示相位与版本基线
 

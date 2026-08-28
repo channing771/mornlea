@@ -58,7 +58,7 @@ func openHungerDiskStore(t *testing.T, root string, create bool) *storage.DiskSt
 	options := storage.OpenOptions{}
 	if create {
 		options.Create = storage.Metadata{
-			FormatVersion: 2, Seed: 42, SpawnDimension: core.Overworld,
+			FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld,
 		}
 	}
 	store, err := storage.OpenDisk(context.Background(), root, options)

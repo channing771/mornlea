@@ -71,6 +71,11 @@ type PlayerRestore struct {
 	// 重登就回到 20/5000/0——重登因此成为免费进食途径，与 design.md D4
 	// "beginReset 不回满"要挡的正是同一个漏洞。
 	HasHunger bool
+	// RespawnPresent 报告存档是否携带个人重生点（床尾格）。为假时注册后的
+	// 玩家没有重生点，死亡回落世界出生锚点；为真时死亡经延迟校验回床尾格。
+	RespawnPresent   bool
+	RespawnPosition  [3]float32
+	RespawnDimension core.DimensionID
 }
 
 type PlayerSnapshot struct {
@@ -85,6 +90,13 @@ type PlayerSnapshot struct {
 	Hunger          uint8
 	SaturationMilli uint16
 	ExhaustionMilli uint16
+	// RespawnPresent 为真时 RespawnPosition（床尾格）/RespawnDimension 携带
+	// 个人重生点，由持久化路径原样落盘（玩家 schema v8）；为假时后两者为零。
+	// 快照是重生点跨重启保留的唯一通道，漏进快照的漏写都会让「睡一觉设置的
+	// 重生点」在重登后静默丢失。
+	RespawnPresent   bool
+	RespawnPosition  [3]float32
+	RespawnDimension core.DimensionID
 }
 
 // InventoryUpdate 是一名玩家在本 tick 的最终权威物品状态，只发送给所属会话。
@@ -258,6 +270,13 @@ func (engine *Engine) RegisterPlayer(id SessionID, restore PlayerRestore) {
 		player.saturationMilli = restore.SaturationMilli
 		player.exhaustionMilli = restore.ExhaustionMilli
 	}
+	// 个人重生点只来自真实存档：与三层饥饿同理，缺失路径（新玩家、只给锚点
+	// 的 RegisterSession）注册后没有重生点，死亡回落世界出生锚点。
+	if restore.RespawnPresent {
+		player.respawnPresent = true
+		player.respawnPos = respawnBlockFromPosition(restore.RespawnPosition)
+		player.respawnDim = restore.RespawnDimension
+	}
 	if restore.Current != nil {
 		player.restoreCandidates = append(player.restoreCandidates, restoreCandidate{
 			location: *restore.Current,
@@ -374,6 +393,11 @@ func (player *playerState) snapshot(
 	if player.safe != nil {
 		safe := *player.safe
 		snapshot.Safe = &safe
+	}
+	if player.respawnPresent {
+		snapshot.RespawnPresent = true
+		snapshot.RespawnPosition = respawnPositionFromBlock(player.respawnPos)
+		snapshot.RespawnDimension = player.respawnDim
 	}
 	return snapshot
 }

@@ -37,7 +37,7 @@ func TestPlayerMeleeMemoryTCPWireParity(t *testing.T) {
 func TestEightPlayersSameTickPrimaryInputKeepsSessionOrder(t *testing.T) {
 	const seed int64 = 160017
 	key := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{}}
-	memory := storage.NewMemory(storage.Metadata{FormatVersion: 2, Seed: seed, SpawnDimension: core.Overworld})
+	memory := storage.NewMemory(storage.Metadata{FormatVersion: 3, Seed: seed, SpawnDimension: core.Overworld})
 	if _, err := memory.SaveBatch(context.Background(), []storage.ChunkSave{{
 		Key: key, Revision: 1, Chunk: multiplayerManualGenerator{}.GenerateChunk(key.Pos),
 	}}); err != nil {
@@ -170,7 +170,7 @@ func runPlayerMeleeWireScript(t *testing.T, transport string) meleeWireTranscrip
 	t.Helper()
 	attacker := integrationIdentity(0x91, "MeleeAttacker")
 	target := integrationIdentity(0x92, "MeleeTarget")
-	store := storage.NewMemory(storage.Metadata{FormatVersion: 2, Seed: 42, SpawnDimension: core.Overworld})
+	store := storage.NewMemory(storage.Metadata{FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld})
 	seedMeleePlayer := func(identity network.Identity, position mgl32.Vec3) {
 		location := storage.PlayerLocation{Dimension: core.Overworld, Position: [3]float32(position)}
 		if _, err := store.SavePlayer(context.Background(), wellFedPlayerSave(storage.PlayerSave{

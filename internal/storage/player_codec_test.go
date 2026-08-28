@@ -51,12 +51,20 @@ func fixturePlayerInventory() core.Inventory {
 	return inventory
 }
 
+// respawnFixturePosition 是重生点往返用例的床尾格坐标：三个分量全部非零且
+// Y 分量落在世界高度区间内。任何一个字段在编码或恢复路径上被漏写，读回来
+// 都会落在零值/缺失上，与这里的取值不同，往返用例因此承重。
+var respawnFixturePosition = [3]float32{7, 65, -9}
+
 func TestPlayerCodecRoundTrip(t *testing.T) {
-	if currentPlayerSchema != 7 {
-		t.Fatalf("玩家 schema=%d，想要 7", currentPlayerSchema)
+	if currentPlayerSchema != 8 {
+		t.Fatalf("玩家 schema=%d，想要 8", currentPlayerSchema)
 	}
 	id := fixturePlayerID()
 	want := fixturePlayerSave(id, 7)
+	want.RespawnPresent = true
+	want.RespawnPosition = respawnFixturePosition
+	want.RespawnDimension = core.Overworld
 	encoded, err := encodePlayer(want)
 	if err != nil {
 		t.Fatal(err)
@@ -70,12 +78,51 @@ func TestPlayerCodecRoundTrip(t *testing.T) {
 		got.ExhaustionMilli != want.ExhaustionMilli {
 		t.Fatalf("got=%+v err=%v", got, err)
 	}
+	if !got.RespawnPresent {
+		t.Fatal("带重生点的存档往返后 RespawnPresent = false")
+	}
+	if got.RespawnPosition != want.RespawnPosition || got.RespawnDimension != want.RespawnDimension {
+		t.Fatalf("重生点往返 = (%+v, %d)，想要 (%+v, %d)",
+			got.RespawnPosition, got.RespawnDimension, want.RespawnPosition, want.RespawnDimension)
+	}
 	if got.NeedsRewrite {
-		t.Fatal("v7 玩家意外需要重写")
+		t.Fatal("当前 schema 玩家意外需要重写")
 	}
 	got.Safe.Position[0] = 99
 	if want.Safe.Position[0] == 99 {
 		t.Fatal("decoded safe location aliases save")
+	}
+}
+
+// TestPlayerCodecRoundTripWithoutRespawn 覆盖重生点缺失的一半：present=0 是
+// 「无重生点」的规范形态，往返后必须保持缺失，且编码对调用方留在
+// RespawnPosition 里的残值不敏感——present=0 时位置字节不携带语义，同一份
+// 逻辑状态无论残值是什么都必须得到逐字节相同的编码。
+func TestPlayerCodecRoundTripWithoutRespawn(t *testing.T) {
+	id := fixturePlayerID()
+	want := fixturePlayerSave(id, 7)
+	encoded, err := encodePlayer(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := decodePlayer(id, encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RespawnPresent || got.RespawnPosition != ([3]float32{}) || got.RespawnDimension != 0 {
+		t.Fatalf("无重生点存档往返 = (present %v, %+v, %d)，想要全零",
+			got.RespawnPresent, got.RespawnPosition, got.RespawnDimension)
+	}
+
+	residue := want
+	residue.RespawnPosition = [3]float32{1, 2, 3}
+	residue.RespawnDimension = core.Overworld
+	residueEncoded, err := encodePlayer(residue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(encoded, residueEncoded) {
+		t.Fatal("present=0 的编码依赖了 RespawnPosition 残值，不再是确定性的")
 	}
 }
 
@@ -222,27 +269,89 @@ func TestPlayerV6FixtureMigratesToInitialHunger(t *testing.T) {
 	}
 }
 
-// TestPlayerV7Fixture 冻结当前 schema 的编码结果，防止字节布局无声漂移。
+// TestPlayerV8Fixture 冻结当前 schema 的编码结果，防止字节布局无声漂移。
 //
-// 冻结的 v6 golden（testdata/player-v6.bin）刻意保留在原处不再生成：它是
-// "旧存档仍然可读"的唯一真实证据，见 TestPlayerV6FixtureMigratesToInitialHunger。
-func TestPlayerV7Fixture(t *testing.T) {
-	encoded, err := encodePlayer(fixturePlayerSave(fixturePlayerID(), 19))
+// 冻结的 v7 golden（testdata/player-v7.bin）刻意保留在原处不再生成：它是
+// "旧存档仍然可读"的唯一真实证据，见 TestPlayerV7FixtureMigratesToNoRespawn。
+func TestPlayerV8Fixture(t *testing.T) {
+	want1 := fixturePlayerSave(fixturePlayerID(), 19)
+	want1.RespawnPresent = true
+	want1.RespawnPosition = respawnFixturePosition
+	want1.RespawnDimension = core.Overworld
+	encoded, err := encodePlayer(want1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join("testdata", "player-v7.bin")
+	path := filepath.Join("testdata", "player-v8.bin")
 	if *updateStorageFixtures {
 		if err := os.WriteFile(path, encoded, 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	want, err := os.ReadFile(path)
+	stored, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(want, encoded) {
-		t.Fatal("v7 fixture drift; change schema version")
+	if !bytes.Equal(stored, encoded) {
+		t.Fatal("v8 fixture drift; change schema version")
+	}
+}
+
+// TestPlayerV7FixtureMigratesToNoRespawn 覆盖 Scenario「v7 玩家档迁移后行为
+// 不变」：输入是**冻结的 v7 字节**（testdata/player-v7.bin，本变更一字不改），
+// 不是当前编码器现场生成的负载——当前编码器已经写 v8，用它"生成 v7"只会得到
+// 一份带重生点字段的 v8 记录，迁移分支根本不会被执行，用例会全绿而什么都没测。
+//
+// 迁移语义是「无重生点」：present 必须为假（死亡回到世界锚点，与升级前的
+// 行为一致），其余字段逐字段不变，且必须标记为需要重写（下次保存写为 v8）。
+func TestPlayerV7FixtureMigratesToNoRespawn(t *testing.T) {
+	encoded, err := os.ReadFile(filepath.Join("testdata", "player-v7.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := fixturePlayerSave(fixturePlayerID(), 19)
+	got, err := decodePlayer(want.PlayerID, encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RespawnPresent {
+		t.Fatal("v7 迁移后不应携带重生点")
+	}
+	if got.PlayerID != want.PlayerID {
+		t.Fatalf("v7 迁移后身份 = %v，想要 %v", got.PlayerID, want.PlayerID)
+	}
+	if got.Revision != want.Revision {
+		t.Fatalf("v7 迁移后修订号 = %d，想要 %d", got.Revision, want.Revision)
+	}
+	if got.DisplayName != want.DisplayName {
+		t.Fatalf("v7 迁移后昵称 = %q，想要 %q", got.DisplayName, want.DisplayName)
+	}
+	if got.Current != want.Current {
+		t.Fatalf("v7 迁移后位置 = %+v，想要 %+v", got.Current, want.Current)
+	}
+	if got.Yaw != want.Yaw || got.Pitch != want.Pitch {
+		t.Fatalf("v7 迁移后朝向 = (%v, %v)，想要 (%v, %v)",
+			got.Yaw, got.Pitch, want.Yaw, want.Pitch)
+	}
+	if got.Safe == nil || *got.Safe != *want.Safe {
+		t.Fatalf("v7 迁移后安全点 = %+v，想要 %+v", got.Safe, want.Safe)
+	}
+	if got.Inventory != want.Inventory {
+		t.Fatalf("v7 迁移后物品状态 = %+v，想要 %+v", got.Inventory, want.Inventory)
+	}
+	if got.Health != want.Health {
+		t.Fatalf("v7 迁移后生命值 = %d，想要 %d", got.Health, want.Health)
+	}
+	// v7 自带三层饥饿字段（夹具取的是非初值 12/2500/1750），迁移必须原样保留
+	// 而不是重置：与 v6 那条「补初值」迁移不同，v7 缺的只有重生点。
+	if got.Hunger != want.Hunger || got.SaturationMilli != want.SaturationMilli ||
+		got.ExhaustionMilli != want.ExhaustionMilli {
+		t.Fatalf("v7 迁移三层饥饿状态 = (%d, %d, %d)，想要原值 (%d, %d, %d)",
+			got.Hunger, got.SaturationMilli, got.ExhaustionMilli,
+			want.Hunger, want.SaturationMilli, want.ExhaustionMilli)
+	}
+	if !got.NeedsRewrite {
+		t.Fatal("v7 玩家必须标记为需要重写")
 	}
 }
 
@@ -338,9 +447,10 @@ func playerWireWithHotbar(t *testing.T, id core.PlayerID, hotbar core.Hotbar) []
 	}
 	wire := bytes.Clone(encoded)
 	// v5 起负载在快捷栏/背包之后追加了 1 字节生命值，v7 起再追加三层饥饿状态，
-	// 从末尾定位快捷栏的偏移量必须跳过这两段尾巴。这里写成具名常量而不是字面
-	// 数字：F2 追加 Health 时就有一条 len(payload)-1 的断言静默改指了新字段。
-	offset := len(wire) - playerHungerBytes - playerHealthBytes -
+	// v8 起再追加重生点三字段，从末尾定位快捷栏的偏移量必须按倒序跳过这三段
+	// 尾巴。这里写成具名常量而不是字面数字：往尾部追加字段时就有一条断言静默
+	// 改指了新字段，而不是悄悄破坏快捷栏。
+	offset := len(wire) - playerRespawnBytes - playerHungerBytes - playerHealthBytes -
 		playerBackpackBytes - playerHotbarBytes
 	wire[offset] = hotbar.Selected
 	offset++
@@ -377,6 +487,16 @@ func TestPlayerCodecRejectsInvalidSave(t *testing.T) {
 		{"saturation above hunger", func(save *PlayerSave) {
 			save.SaturationMilli = uint16(save.Hunger)*core.SaturationMilliPerPoint + 1
 		}},
+		{"invalid respawn dimension", func(save *PlayerSave) {
+			save.RespawnPresent = true
+			save.RespawnPosition = respawnFixturePosition
+			save.RespawnDimension = 1
+		}},
+		{"nonfinite respawn position", func(save *PlayerSave) {
+			save.RespawnPresent = true
+			save.RespawnDimension = core.Overworld
+			save.RespawnPosition = [3]float32{1, float32(math.NaN()), 3}
+		}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -400,10 +520,7 @@ func TestPlayerCodecRejectsCorruptEnvelope(t *testing.T) {
 		t.Fatal(err)
 	}
 	badFloat := func(offset int) []byte {
-		payload := bytes.Clone(encoded)
-		binary.LittleEndian.PutUint32(payload[offset:], math.Float32bits(float32(math.NaN())))
-		repairPlayerCRC(payload)
-		return payload
+		return badFloatAt(bytes.Clone(encoded), offset)
 	}
 	tests := []struct {
 		name    string
@@ -458,26 +575,58 @@ func TestPlayerCodecRejectsCorruptEnvelope(t *testing.T) {
 		{"safe z", func() []byte { return badFloat(89) }, ErrCorrupt},
 		{"invalid health", func() []byte {
 			p := bytes.Clone(encoded)
-			// 生命值不再是末字节：v7 在它之后追加了三层饥饿状态。写成
-			// len(p)-playerHungerBytes-playerHealthBytes 而不是 len(p)-1，否则
-			// 这条断言会静默改指疲劳值高字节，"生命值越界被拒"就不再被任何用例覆盖。
-			p[len(p)-playerHungerBytes-playerHealthBytes] = core.MaxHealth + 1
+			// 生命值不再是末字节：v7 在它之后追加了三层饥饿状态，v8 再追加重生点。
+			// 写成 len(p)-playerRespawnBytes-playerHungerBytes-playerHealthBytes 而
+			// 不是 len(p)-1，否则这条断言会静默改指重生点字段，"生命值越界被拒"
+			// 就不再被任何用例覆盖。
+			p[len(p)-playerRespawnBytes-playerHungerBytes-playerHealthBytes] = core.MaxHealth + 1
 			repairPlayerCRC(p)
 			return p
 		}, ErrCorrupt},
 		{"invalid hunger", func() []byte {
 			p := bytes.Clone(encoded)
-			p[len(p)-playerHungerBytes] = core.MaxHunger + 1
+			p[len(p)-playerRespawnBytes-playerHungerBytes] = core.MaxHunger + 1
 			repairPlayerCRC(p)
 			return p
 		}, ErrCorrupt},
 		{"saturation above hunger", func() []byte {
 			p := bytes.Clone(encoded)
 			// 饱和度紧随饥饿值，取 hunger×1000 + 1 恰好越过上界一个千分位。
+			hungerOffset := len(p) - playerRespawnBytes - playerHungerBytes
 			binary.LittleEndian.PutUint16(
-				p[len(p)-playerHungerBytes+1:],
-				uint16(p[len(p)-playerHungerBytes])*core.SaturationMilliPerPoint+1,
+				p[hungerOffset+1:],
+				uint16(p[hungerOffset])*core.SaturationMilliPerPoint+1,
 			)
+			repairPlayerCRC(p)
+			return p
+		}, ErrCorrupt},
+		{"respawn flag", func() []byte {
+			p := bytes.Clone(encoded)
+			p[len(p)-playerRespawnBytes] = 2
+			repairPlayerCRC(p)
+			return p
+		}, ErrCorrupt},
+		// 位置与维度字节只在 present=1 时携带语义（present=0 时规范为零），
+		// 因此这几条先置位 flag 再投毒，保证变异真正抵达校验层。
+		{"respawn x", func() []byte {
+			p := bytes.Clone(encoded)
+			p[len(p)-playerRespawnBytes] = 1
+			return badFloatAt(p, len(p)-playerRespawnBytes+1)
+		}, ErrCorrupt},
+		{"respawn y", func() []byte {
+			p := bytes.Clone(encoded)
+			p[len(p)-playerRespawnBytes] = 1
+			return badFloatAt(p, len(p)-playerRespawnBytes+5)
+		}, ErrCorrupt},
+		{"respawn z", func() []byte {
+			p := bytes.Clone(encoded)
+			p[len(p)-playerRespawnBytes] = 1
+			return badFloatAt(p, len(p)-playerRespawnBytes+9)
+		}, ErrCorrupt},
+		{"respawn dimension", func() []byte {
+			p := bytes.Clone(encoded)
+			p[len(p)-playerRespawnBytes] = 1
+			binary.LittleEndian.PutUint32(p[len(p)-playerRespawnBytes+13:], 1)
 			repairPlayerCRC(p)
 			return p
 		}, ErrCorrupt},
@@ -512,4 +661,12 @@ func repairPlayerCRC(payload []byte) {
 	_, _ = hasher.Write(payload[8:40])
 	_, _ = hasher.Write(payload[playerEnvelopeLength:])
 	binary.LittleEndian.PutUint32(payload[40:], hasher.Sum32())
+}
+
+// badFloatAt 把 payload 指定偏移处的 float32 改成 NaN 并修正 CRC，返回同一缓冲。
+// 调用方传入的 payload 必须已经携带其他想叠加的变异。
+func badFloatAt(payload []byte, offset int) []byte {
+	binary.LittleEndian.PutUint32(payload[offset:], math.Float32bits(float32(math.NaN())))
+	repairPlayerCRC(payload)
+	return payload
 }

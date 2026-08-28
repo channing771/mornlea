@@ -168,7 +168,7 @@ func playerID(value byte) core.PlayerID {
 
 func testMetadata() storage.Metadata {
 	return storage.Metadata{
-		FormatVersion:  2,
+		FormatVersion:  3,
 		Seed:           42,
 		SpawnDimension: core.Overworld,
 		SpawnAnchor:    core.ChunkPos{X: 2, Z: -3},

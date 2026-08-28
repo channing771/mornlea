@@ -40,6 +40,10 @@ type Metadata struct {
 	SpawnAnchor    core.ChunkPos
 	// WorldTimeTicks 是权威绝对世界时间，metadata v2 起持久化；v1 世界迁移后为零。
 	WorldTimeTicks uint64
+	// DayPhaseOffset 是显示相位偏移，metadata v3 起持久化；v1/v2 世界迁移后为零。
+	// 它只进入显示相位计算 `(WorldTimeTicks + DayPhaseOffset) % 24000`，
+	// 不影响绝对时间的推进或任何以绝对时间驱动的模拟。
+	DayPhaseOffset uint64
 }
 
 type StoredChunk struct {

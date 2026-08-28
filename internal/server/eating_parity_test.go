@@ -77,7 +77,7 @@ func runEatingParityScript(t *testing.T, transport string) eatingParityResult {
 	t.Helper()
 	identity := integrationIdentity(0x74, "EatingParity")
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 2, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld,
 	})
 	var inventory core.Inventory
 	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemWheat, Count: eatingParityWheatPerSlot}

@@ -24,6 +24,11 @@ type playerDTO struct {
 	SaturationMilli uint16
 	// ExhaustionMilli 是权威疲劳值（千分位）。
 	ExhaustionMilli uint16
+	// RespawnPresent 为真时 RespawnPosition/RespawnDimension 携带个人重生点；
+	// 只有 schema v8 起的负载才会解码出真值，更旧的 schema 由迁移链清零。
+	RespawnPresent   bool
+	RespawnPosition  [3]float32
+	RespawnDimension core.DimensionID
 }
 
 type playerMigration func(playerDTO) (playerDTO, error)
@@ -63,6 +68,15 @@ var playerMigrations = map[uint32]playerMigration{
 		dto.Hunger = core.MaxHunger
 		dto.SaturationMilli = core.InitialSaturationMilli
 		dto.ExhaustionMilli = 0
+		return dto, nil
+	},
+	// v7 没有个人重生点字段，历史存档一律迁移为「无重生点」：死亡重生沿用
+	// 世界出生锚点，与升级前的行为完全一致。坐标/维度零值只是规范形态，
+	// present 位为假时它们不参与任何行为。
+	7: func(dto playerDTO) (playerDTO, error) {
+		dto.RespawnPresent = false
+		dto.RespawnPosition = [3]float32{}
+		dto.RespawnDimension = 0
 		return dto, nil
 	},
 }

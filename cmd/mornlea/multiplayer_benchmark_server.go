@@ -208,7 +208,7 @@ func measureMultiplayerServerProbe(duration time.Duration) (
 	config.ScheduledTickObserver = epoch.observeScheduledTick
 	config.InterestObserver = epoch.observeInterest
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 2, Seed: benchmarkSeed,
+		FormatVersion: 3, Seed: benchmarkSeed,
 		SpawnDimension: core.Overworld, SpawnAnchor: core.ChunkPos{},
 	})
 	runCtx, cancelRun := context.WithTimeout(
