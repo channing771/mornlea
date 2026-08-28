@@ -346,3 +346,12 @@
   后同一测试 3.4s 通过。
 - 集成验证：build/vet/archcheck 全绿；基线 385 入口零丢失；visual-check
   23 场景全零差异；test-multiplayer 全绿；客户端四包 `-race` 全绿。
+
+## 集成期记录（CI 修复）
+
+- Linux CI `TestNoPackageImportsWebGPU` 失败：拆包后 `cmd/mornlea/app` 全部
+  文件挂 darwin tag，Linux 上该包「build constraints exclude all Go files」
+  使 `go list ./...` 非零退出（拆包前平铺包内有 21 个无 tag capture 文件
+  兜底）。守卫改用 `go list -e`：被排除包以加载错误列出、可加载包的
+  Imports 检查语义不变；darwin 专属包由 macOS CI 原生覆盖（与拆包前实际
+  覆盖面一致）。本地 `GOOS=linux` 模拟：修复前 exit 1、修复后 exit 0。

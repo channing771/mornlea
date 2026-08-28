@@ -101,7 +101,11 @@ func goFiles(t *testing.T, root string) []string {
 }
 
 func TestNoPackageImportsWebGPU(t *testing.T) {
-	cmd := exec.Command("go", "list", "-f", "{{.ImportPath}}|{{join .Imports \" \"}}", "./...")
+	// `-e` 让构建约束排除的包（客户端 app/capture/benchmark 的 darwin 专属
+	// 文件在 Linux 上全被排除）以加载错误形式列出而不是让 go list 非零退出；
+	// 可加载包的 Imports 检查语义不变，darwin 专属包由 macOS CI 的同测试
+	// 原生覆盖。
+	cmd := exec.Command("go", "list", "-e", "-f", "{{.ImportPath}}|{{join .Imports \" \"}}", "./...")
 	cmd.Dir = moduleRoot(t)
 	out, err := cmd.Output()
 	if err != nil {
