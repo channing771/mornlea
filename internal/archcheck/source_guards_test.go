@@ -13,28 +13,41 @@ import (
 	"testing"
 )
 
-// TestTunableConstantsAreNotExported 守住"可调参数只能经快照读取"这条不变量。
-//
-// 若某个可调参数同时以导出常量存在，任何一处漏改都会让编译期值与快照值并存：
-// 例如相机读到编译期 EyeHeight、服务端射线读到快照值，玩家瞄准的方块与服务端
-// 判定的方块就不是同一个，而且不会有任何报错。
-func TestTunableConstantsAreNotExported(t *testing.T) {
-	forbidden := map[string][]string{
+func TestTunableSourceGuardsCoverTuningPackage(t *testing.T) {
+	packageDirectory := filepath.Join("internal", "sim", "tuning")
+	if _, ok := tunableSourceGuardPackages()[packageDirectory]; !ok {
+		t.Fatalf("可调参数源码守卫遗漏 %s", packageDirectory)
+	}
+}
+
+func tunableSourceGuardPackages() map[string][]string {
+	simTunables := []string{
+		"RegenDelayTicks", "RegenIntervalTicks", "DropPickupDelayTicks",
+		"PlayerDropPickupDelayTicks", "DropLifetimeTicks",
+		"InteractionReach", "DropPickupRange", "SpawnRadius",
+		"RandomTicksPerSection", "CropGrowthChancePercent",
+		"StarvationDamageIntervalTicks", "ExhaustionThresholdMilli",
+		"RegenHungerThreshold", "EatingTicks",
+	}
+	return map[string][]string{
 		filepath.Join("internal", "physics"): {
 			"EyeHeight", "StepHeight", "WalkSpeed", "GroundAcceleration",
 			"GroundDeceleration", "AirAcceleration", "JumpSpeed", "Gravity",
 			"TerminalFallSpeed", "FluidGravity", "FluidSinkSpeed",
 			"FluidAscendSpeed", "FluidHorizontalDrag",
 		},
-		filepath.Join("internal", "sim"): {
-			"RegenDelayTicks", "RegenIntervalTicks", "DropPickupDelayTicks",
-			"PlayerDropPickupDelayTicks", "DropLifetimeTicks",
-			"InteractionReach", "DropPickupRange", "SpawnRadius",
-			"RandomTicksPerSection", "CropGrowthChancePercent",
-			"StarvationDamageIntervalTicks", "ExhaustionThresholdMilli",
-			"RegenHungerThreshold", "EatingTicks",
-		},
+		filepath.Join("internal", "sim"):           simTunables,
+		filepath.Join("internal", "sim", "tuning"): simTunables,
 	}
+}
+
+// TestTunableConstantsAreNotExported 守住"可调参数只能经快照读取"这条不变量。
+//
+// 若某个可调参数同时以导出常量存在，任何一处漏改都会让编译期值与快照值并存：
+// 例如相机读到编译期 EyeHeight、服务端射线读到快照值，玩家瞄准的方块与服务端
+// 判定的方块就不是同一个，而且不会有任何报错。
+func TestTunableConstantsAreNotExported(t *testing.T) {
+	forbidden := tunableSourceGuardPackages()
 	root := moduleRoot(t)
 	for packageDirectory, names := range forbidden {
 		files, err := filepath.Glob(filepath.Join(root, packageDirectory, "*.go"))
@@ -93,10 +106,7 @@ func TestTunableConstantsAreNotExported(t *testing.T) {
 // 那里组装默认快照），任何非测试文件都不得再出现 defaultXxx 标识符。
 func TestTunableDefaultsAreOnlyReadInTunablesFile(t *testing.T) {
 	root := moduleRoot(t)
-	for _, packageDirectory := range []string{
-		filepath.Join("internal", "physics"),
-		filepath.Join("internal", "sim"),
-	} {
+	for packageDirectory := range tunableSourceGuardPackages() {
 		files, err := filepath.Glob(filepath.Join(root, packageDirectory, "*.go"))
 		if err != nil {
 			t.Fatalf("枚举 %s: %v", packageDirectory, err)

@@ -15,6 +15,7 @@ func TestDefaultTunablesMatchLegacyConstants(t *testing.T) {
 		{"InteractionReach", float64(tunables.InteractionReach), 6},
 		{"RegenDelayTicks", float64(tunables.RegenDelayTicks), 100},
 		{"RegenIntervalTicks", float64(tunables.RegenIntervalTicks), 40},
+		{"DrownDamageIntervalTicks", float64(tunables.DrownDamageIntervalTicks), 20},
 		{"DropPickupDelayTicks", float64(tunables.DropPickupDelayTicks), 10},
 		{"PlayerDropPickupDelayTicks", float64(tunables.PlayerDropPickupDelayTicks), 40},
 		{"DropLifetimeTicks", float64(tunables.DropLifetimeTicks), 6000},
@@ -24,6 +25,13 @@ func TestDefaultTunablesMatchLegacyConstants(t *testing.T) {
 		{"FurnaceBurnTicks", float64(tunables.FurnaceBurnTicks), float64(core.FurnaceBurnTicks)},
 		{"FluidFlowDelayTicks", float64(tunables.FluidFlowDelayTicks), 5},
 		{"FluidUpdatesPerTick", float64(tunables.FluidUpdatesPerTick), 512},
+		{"FluidRescanCellsPerTick", float64(tunables.FluidRescanCellsPerTick), 65536},
+		{"RandomTicksPerSection", float64(tunables.RandomTicksPerSection), 3},
+		{"CropGrowthChancePercent", float64(tunables.CropGrowthChancePercent), 50},
+		{"StarvationDamageIntervalTicks", float64(tunables.StarvationDamageIntervalTicks), 80},
+		{"ExhaustionThresholdMilli", float64(tunables.ExhaustionThresholdMilli), 4000},
+		{"RegenHungerThreshold", float64(tunables.RegenHungerThreshold), 18},
+		{"EatingTicks", float64(tunables.EatingTicks), 32},
 	} {
 		if check.got != check.want {
 			t.Errorf("%s = %v，want %v", check.name, check.got, check.want)
