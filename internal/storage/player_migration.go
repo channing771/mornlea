@@ -109,3 +109,15 @@ func clonePlayerDTO(dto playerDTO) playerDTO {
 	}
 	return clone
 }
+
+// fillFullDurability 把没有耐久的旧工具补为满耐久，非工具保持零值。
+// 与 chunk 包 migration.go 的同名迁移助手同源：按域拆分后各域持有自己的
+// 副本，后续 player 域随包迁走时一并带走。
+func fillFullDurability(stack core.ItemStack) core.ItemStack {
+	full, ok := core.ItemMaxDurability(stack.Item)
+	if !ok || stack.Durability != 0 {
+		return stack
+	}
+	stack.Durability = full
+	return stack
+}

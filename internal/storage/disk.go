@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage/chunk"
+	"github.com/channing771/mornlea/internal/storage/region"
 )
 
 const maxPlayerFileLength = int64(playerEnvelopeLength) + int64(maxPlayerPayload)
@@ -22,7 +24,7 @@ const maxPlayerFileLength = int64(playerEnvelopeLength) + int64(maxPlayerPayload
 type DiskStore struct {
 	mu      sync.Mutex
 	files   *worldFiles
-	regions map[RegionKey]*region
+	regions map[RegionKey]*chunk.Region
 	closing atomic.Bool
 	closed  bool
 
@@ -39,7 +41,7 @@ func OpenDisk(ctx context.Context, root string, options OpenOptions) (*DiskStore
 	}
 	return &DiskStore{
 		files:   files,
-		regions: make(map[RegionKey]*region),
+		regions: make(map[RegionKey]*chunk.Region),
 	}, nil
 }
 
@@ -106,7 +108,7 @@ func (store *DiskStore) LoadChunk(
 	opened, ok := store.regions[regionKey]
 	if !ok {
 		var err error
-		opened, err = openRegion(ctx, store.regionPath(regionKey), regionKey)
+		opened, err = chunk.OpenRegion(ctx, store.regionPath(regionKey), regionKey)
 		if errors.Is(err, os.ErrNotExist) {
 			return StoredChunk{}, fmt.Errorf("%w: %v", ErrChunkNotFound, key)
 		}
@@ -115,7 +117,7 @@ func (store *DiskStore) LoadChunk(
 		}
 		store.regions[regionKey] = opened
 	}
-	return opened.load(ctx, key)
+	return opened.Load(ctx, key)
 }
 
 func (store *DiskStore) SaveBatch(
@@ -165,15 +167,15 @@ func (store *DiskStore) SaveBatch(
 		if err != nil {
 			return result, err
 		}
-		regionResult, err := opened.save(ctx, grouped[key])
+		regionResult, err := opened.Save(ctx, grouped[key])
 		for chunkKey, revision := range regionResult.Committed {
 			result.Committed[chunkKey] = revision
 		}
 		if err != nil {
 			return result, fmt.Errorf("save region %+v: %w", key, err)
 		}
-		if opened.shouldCompact(productionRegionSpacePolicy) {
-			if err := opened.compact(ctx); err != nil {
+		if opened.ShouldCompact(region.ProductionSpacePolicy) {
+			if err := opened.Compact(ctx); err != nil {
 				return result, fmt.Errorf("compact region %+v: %w", key, err)
 			}
 		}
@@ -455,7 +457,7 @@ func (store *DiskStore) SaveHostileMobs(ctx context.Context, save HostileMobsSav
 func validateAndNormalizeSaves(saves []ChunkSave) ([]ChunkSave, error) {
 	maxRevisions := make(map[core.ChunkKey]uint64, len(saves))
 	for _, save := range saves {
-		if err := validateChunkSave(save); err != nil {
+		if err := chunk.ValidateChunkSave(save); err != nil {
 			return nil, err
 		}
 		if save.Revision > maxRevisions[save.Key] {
@@ -516,7 +518,7 @@ func (store *DiskStore) Sync(ctx context.Context) error {
 	keys := store.regionKeys()
 	errs := make([]error, 0, len(keys))
 	for _, key := range keys {
-		if err := store.regions[key].sync(ctx); err != nil {
+		if err := store.regions[key].Sync(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("sync region %+v: %w", key, err))
 		}
 	}
@@ -535,7 +537,7 @@ func (store *DiskStore) Close() error {
 	keys := store.regionKeys()
 	errs := make([]error, 0, len(keys))
 	for _, key := range keys {
-		if err := store.regions[key].close(); err != nil {
+		if err := store.regions[key].Close(); err != nil {
 			errs = append(errs, fmt.Errorf("close region %+v: %w", key, err))
 			continue
 		}
@@ -623,7 +625,7 @@ func readHostileFile(path string) ([]byte, error) {
 	return encoded, nil
 }
 
-func (store *DiskStore) regionForSave(ctx context.Context, key RegionKey) (*region, error) {
+func (store *DiskStore) regionForSave(ctx context.Context, key RegionKey) (*chunk.Region, error) {
 	if opened, ok := store.regions[key]; ok {
 		return opened, nil
 	}
@@ -631,9 +633,9 @@ func (store *DiskStore) regionForSave(ctx context.Context, key RegionKey) (*regi
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, fmt.Errorf("create region directory %q: %w", filepath.Dir(path), err)
 	}
-	opened, err := openRegion(ctx, path, key)
+	opened, err := chunk.OpenRegion(ctx, path, key)
 	if errors.Is(err, os.ErrNotExist) {
-		opened, err = createRegion(ctx, path, key)
+		opened, err = chunk.CreateRegion(ctx, path, key)
 	}
 	if err != nil {
 		return nil, err

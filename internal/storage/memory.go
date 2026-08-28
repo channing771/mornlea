@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage/chunk"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -96,7 +97,7 @@ func (store *MemoryStore) LoadChunk(
 	if !ok {
 		return StoredChunk{}, fmt.Errorf("%w: %v", ErrChunkNotFound, key)
 	}
-	decoded, err := decodeChunkPayload(key, stored.revision, stored.encoded)
+	decoded, err := chunk.Decode(key, stored.revision, stored.encoded)
 	if err != nil {
 		return StoredChunk{}, fmt.Errorf("decode memory chunk %v: %w", key, err)
 	}
@@ -125,7 +126,7 @@ func (store *MemoryStore) SaveBatch(
 	committed := make(map[core.ChunkKey]uint64, len(saves))
 	pending := make(map[core.ChunkKey]pendingChunk, len(saves))
 	for _, save := range saves {
-		if err := validateChunkSave(save); err != nil {
+		if err := chunk.ValidateChunkSave(save); err != nil {
 			return SaveResult{}, err
 		}
 
@@ -169,7 +170,7 @@ func (store *MemoryStore) SaveBatch(
 		if err := ctx.Err(); err != nil {
 			return SaveResult{}, err
 		}
-		payload, err := encodeChunkPayload(ChunkSave{
+		payload, err := chunk.Encode(ChunkSave{
 			Key: key, Revision: candidate.revision, Chunk: candidate.chunk,
 		})
 		if err != nil {
@@ -352,19 +353,6 @@ func (store *MemoryStore) Sync(ctx context.Context) error {
 }
 
 func (store *MemoryStore) Close() error {
-	return nil
-}
-
-func validateChunkSave(save ChunkSave) error {
-	if save.Chunk == nil {
-		return fmt.Errorf("storage: chunk save for %v has nil chunk", save.Key)
-	}
-	if save.Chunk.Pos != save.Key.Pos {
-		return fmt.Errorf("storage: chunk save key %v does not match chunk position %v", save.Key, save.Chunk.Pos)
-	}
-	if save.Revision == 0 {
-		return fmt.Errorf("storage: chunk save for %v has zero revision", save.Key)
-	}
 	return nil
 }
 

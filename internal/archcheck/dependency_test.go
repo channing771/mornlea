@@ -43,7 +43,19 @@ var allowed = map[string][]string{
 	"internal/network/tcp": {"internal/network"},
 	"internal/profile":     {"internal/core"},
 	"internal/sim":         {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/world"},
-	"internal/storage":     {"internal/companion", "internal/core", "internal/storage/storagedef", "internal/world"},
+	"internal/storage": {
+		"internal/companion", "internal/core",
+		"internal/storage/chunk", "internal/storage/region",
+		"internal/storage/storagedef", "internal/world",
+	},
+	// internal/storage/chunk 是 chunk 记录层容器与信封编解码域：region 格式
+	// 原语与哨兵经 storagedef/region 取，值类型直接依赖 world，不得反向依赖
+	// 根包或其他实体域子包。
+	"internal/storage/chunk": {"internal/core", "internal/storage/region", "internal/storage/storagedef", "internal/world"},
+	// internal/storage/region 是 region 格式原语叶子（superblock/bank 编解码、
+	// 扇区空间分配、RegionKey/RegionFor）：只允许 core 与 storagedef，
+	// 不得感知 chunk 记录层容器，否则 region.go 随 chunk 的裁决（T1-1）失守。
+	"internal/storage/region": {"internal/core", "internal/storage/storagedef"},
 	// internal/storage/storagedef 是世界存储的哨兵错误叶子（ErrCorrupt/
 	// ErrFutureVersion 的公共下沉）：region 与四个实体域子包都经它取哨兵，
 	// 自身不得依赖任何 internal 包，否则叶子就失去了斩断 root↔子包循环的作用。

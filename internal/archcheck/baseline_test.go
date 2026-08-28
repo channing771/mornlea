@@ -44,7 +44,7 @@ var baselineVersionMappings = []baselineVersionMapping{
 	{
 		name:        "区块 schema",
 		docPattern:  `区块 schema v(\d+)`,
-		sourcePath:  filepath.Join("internal", "storage", "chunk_codec.go"),
+		sourcePath:  filepath.Join("internal", "storage", "chunk", "chunk_codec.go"),
 		codePattern: `currentChunkSchema\s+uint32\s*=\s*(\w+)`,
 		why:         "currentChunkSchema 是区块记录写出时落盘的 schema 号，也是拒绝更高版本的上界。",
 	},

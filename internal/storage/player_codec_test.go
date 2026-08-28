@@ -670,3 +670,31 @@ func badFloatAt(payload []byte, offset int) []byte {
 	repairPlayerCRC(payload)
 	return payload
 }
+
+// TestPlayerSchemaV8KeepsM4EItems 原先位于 chunk 域的 chunk_furnace_test.go：
+// 拆分按「跟随被测主体」落位，其被测主体是 player codec，随 player 域留根。
+func TestPlayerSchemaV8KeepsM4EItems(t *testing.T) {
+	if currentPlayerSchema != 8 {
+		t.Fatalf("玩家 schema = %d，想要 8", currentPlayerSchema)
+	}
+	var inventory core.Inventory
+	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemCoal, Count: 12}
+	inventory.Hotbar.Slots[1] = core.ItemStack{Item: core.ItemRawIron, Count: 5}
+	inventory.Backpack[0] = core.ItemStack{Item: core.ItemIronIngot, Count: 64}
+	inventory.Backpack[1] = core.ItemStack{Item: core.ItemFurnace, Count: 1}
+	inventory.Backpack[2] = core.ItemStack{Item: core.ItemIronBlock, Count: 3}
+
+	save := fixturePlayerSave(fixturePlayerID(), 7)
+	save.Inventory = inventory
+	encoded, err := encodePlayer(save)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := decodePlayer(save.PlayerID, encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Inventory != inventory {
+		t.Fatalf("M4E 物品未往返: %+v", got.Inventory)
+	}
+}
