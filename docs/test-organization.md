@@ -104,7 +104,7 @@ helper 落位规则与验收清单都在这里。条文是原则，本文件是�
 | `queue_bounded_test.go` 顶部跨文件 helper | `sortItems`/`queuedDueTick` 入 `helpers_test.go`；`boundedPos` 单文件私有，留原处 |
 
 客户端命令分包（2026-08，openspec change `split-client-subpackages`）：
-`cmd/mornlea` 单包（94 个 Go 文件）按功能域 git mv 迁移为薄 main 加 `app/`、
+`cmd/mornlea` 单包（89 个 Go 文件）按功能域 git mv 迁移为薄 main 加 `app/`、
 `capture/`、`benchmark/` 三个子包；全程测试函数名与 `t.Run` 标签逐一不变，
 三个子包 `go test -list` 入口并集与迁移前单包集合一致；helper 中心按「每包
 一个」落位（见上文 helper 中心规则），跨包白盒装配收敛为

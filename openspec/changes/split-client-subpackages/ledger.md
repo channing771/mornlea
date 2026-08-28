@@ -96,10 +96,12 @@
     `docs/notes/test-quickstart.md` 中零残留。
 - 实施裁决（详见下方 Rulings）：
   - 依赖边以源码级 parser 逐文件解析（`parser.ImportsOnly`，跳过 `_test.go`）
-    而非 `go list` 枚举——四个包全部挂 `//go:build darwin`，`GOOS=linux` 下
-    `go list` 的 `.Imports` 被清空（实测），而 Linux CI 的「Linux 专服架构与
-    ELF 门禁」同样运行 archcheck；源码级解析让同一断言在两个平台看到同一份
-    边集，且与既有 source guards 风格一致。
+    而非 `go list` 枚举——`go list` 的导入边随 GOOS 与构建约束变化：实测
+    `GOOS=linux` 下带 `//go:build darwin` 的 main/app/benchmark 加载失败
+    （报 build constraints exclude all Go files，`.Imports` 为空），不带 tag 的
+    capture（7 个生产文件均无 darwin tag）反而照常报出完整导入边；而 Linux
+    CI 的「Linux 专服架构与 ELF 门禁」同样运行 archcheck。源码级解析让同一
+    断言在两个平台看到同一份边集，且与既有 source guards 风格一致。
   - 检查器抽为纯函数 `clientCommandDependencyViolations`，合成边负断言覆盖
     五类漂移（app→capture、app→benchmark、capture↔benchmark 两个方向、
     必需装配边缺失、未登记新包），钉住检查器本身——真实树处于契约内时负向
@@ -117,6 +119,25 @@
   「集合含重型包」提示仍只识别 `cmd/mornlea`（分包后为薄 main，秒级）与
   `internal/server`，对 capture/benchmark 子包不提示；`test-quickstart.md`
   T1 边界条目已按现状如实描述，脚本识别列表的更新留独立跟进。
+  （后续已由控制会话 `e621dd74` 闭环：cdylib 消费识别延伸到三个子包，重型
+  提示改为 app/benchmark 与 internal/server。）
+- R1 修复（双评审：SPEC PASS；QUALITY CHANGES_REQUESTED，3 处事实性
+  should-fix + SPEC 1 处措辞）：
+  - SF-1 依赖断言注释与上文的机制表述失实（原文称「四个包全部挂 darwin
+    tag、Linux 下 Imports 被清空」）——实测 capture 的 7 个生产文件均无
+    darwin tag、其 Imports 在 `GOOS=linux` 下不被清空，被清空/加载失败的是
+    带 tag 的 main/app/benchmark；两处改为按包区分的准确表述。
+  - SF-2 `test-quickstart.md` T1/T2 的 `-short` 包清单移出 capture——全包
+    0 个 `testing.Short()`（app 3、benchmark 3、server 10 个测试文件含守卫，
+    grep 核实），`-short` 对 capture 是空操作，重型 golden 抓帧走
+    `make visual-check` 独立门禁。
+  - SF-3 `test-organization.md` 分包先例的单包 .go 计数 94 → 89（
+    `git ls-tree b6d3a90d` 基线实测；94 为 proposal 引言的失实数字，未在本
+    次一并改写，留 change 产物维护方处理）。
+  - SPEC should-fix `app/AGENTS.md` 导出面纪律把 `MultiplayerRenderTiming`/
+    `MultiplayerBenchmarkScenario` 从「共享常量」改述为「值类型与构造器」
+    （二者是导出 struct，后者配 `NewMultiplayerBenchmarkScenario`），常量
+    清单注明各自的声明文件。
 
 ### Task 4.1（benchmark 包提取与函数族收敛）
 

@@ -45,10 +45,14 @@ cmd/mornlea/app/
 - `PanelState`/`ChatInput` 是仅有的两个类型别名导出：`Panel()`/`ChatInput()`
   的返回类型不导出则 `*Application` 无法隐式实现 capture 的 `SceneApplication`
   （接口声明必须能命名返回类型）；别名不改变方法集与行为。
-- 跨域共享常量住本包（`app.go` 等）：`CaptureWidth`/`CaptureHeight`、
-  `MessageDrainMax`、`BenchmarkSeed`、`SteadyFrameMeshWorkMax`、
-  `MaxFrameNameTags`、`MultiplayerRenderTiming`、`MultiplayerBenchmarkScenario`。
-  main/capture/benchmark 多方消费它们；任何一侧本地复制都会让固定场景互不可比。
+- 跨域共享的常量与值类型住本包。常量：`BenchmarkSeed`、`MaxFrameNameTags`
+  （`app.go`）、`CaptureWidth`/`CaptureHeight`（`app_startup.go`）、
+  `MessageDrainMax`（`app_load.go`）、`SteadyFrameMeshWorkMax`
+  （`interactive.go`）；值类型与构造器：`MultiplayerRenderTiming`
+  （`multiplayer_render_timing.go`）、`MultiplayerBenchmarkScenario`
+  （`multiplayer_benchmark_scenario.go`，配
+  `NewMultiplayerBenchmarkScenario`）。main/capture/benchmark 多方消费它们；
+  任何一侧本地复制都会让固定场景互不可比。
 
 ## 帧驱动与加载判据 (`app/app_frame.go`, `app/app_load.go`)
 

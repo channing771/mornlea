@@ -176,10 +176,13 @@ func clientCommandDependencyViolations(edges map[string][]string) []string {
 // `clientCommandDependencyViolations`，钉住客户端命令的依赖方向契约。
 //
 // 边的来源是逐文件解析生产 .go（parser.ImportsOnly 模式，跳过 `_test.go`），
-// 而不是 `go list`：四个包全部挂 `//go:build darwin`，Linux CI 上 `go list` 的
-// `.Imports` 会被 build constraints 清空，同一份断言会随运行平台翻转；源码级
-// 解析在两个平台上看到同一份边集。测试文件不计入——子包测试经 app 包导出的
-// 测试装配入口（`testkit.go`）复用是合法的，不应污染生产依赖方向。
+// 而不是 `go list`：`go list` 的导入边随 GOOS 与构建约束变化——带
+// `//go:build darwin` 的包（main/app/benchmark）在 Linux 下整个加载失败
+// （报 build constraints exclude all Go files，`.Imports` 为空），不带 tag 的
+// capture 反而照常报出完整导入边；建立在 `go list` 上的断言因此随运行平台
+// 翻转。源码级 AST 解析与平台无关，两个 CI 平台看到同一份边集。测试文件不
+// 计入——子包测试经 app 包导出的测试装配入口（`testkit.go`）复用是合法的，
+// 不应污染生产依赖方向。
 func TestClientCommandSubpackageDependencyDirections(t *testing.T) {
 	edges := clientCommandImportEdges(t)
 	if violations := clientCommandDependencyViolations(edges); len(violations) > 0 {
