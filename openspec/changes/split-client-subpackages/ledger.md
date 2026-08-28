@@ -126,7 +126,22 @@
     `-run` 模式内容零改动，`ScenarioV6` 备选在基线即为空匹配，维持原样）。
 - 工作区备注：接手时 worktree 已存在同任务的未提交半成品（git mv 暂存、
   包声明改写、接口与 main 接线初稿），本任务在其基础上续作并复核；
-  半成品中 `cooldown_test.go` 导入分组的 gofmt 违例已修正。
+  半成品中 `cooldown_test.go` 导入分组的 gofmt 违例已修正。该半成品来自
+  首次派发遭基础设施 500 中断的同一 brief 执行，续作按「保护已有改动」
+  处理并在评审中重点核对接缝。
+- 双评审裁决（控制会话复核）：SPEC PASS（逐条复核 `-list` 四包并集零差异、
+  函数族三方归一 diff 语义等价、`BenchmarkApplication` 15/15 方法真实消费、
+  archcheck baseline 守卫仅 1 行路径且断言零变化、Makefile 单行替换且两个
+  「无匹配/空匹配」声明经基线快照核实、半成品续作无游离提交）；QUALITY
+  CHANGES_REQUESTED → R1 修复 `a538efbf` 后闭环：
+  - blocker：`.github/workflows/ci.yml` 两处 benchmark 测试入口未随包迁移
+    （「50ms 服务端探针门禁」step 空跑致该实时门禁在 CI 无执行点；「M3C v6」
+    step 的 `./cmd/mornlea` 元素不再匹配三个已迁测试）——已改指
+    `./cmd/mornlea/benchmark`，`-run` 模式与超时/断言语义零变化，并经
+    `-list` 验证新指向的包确实含全部 13 个目标入口。change Impact 清单
+    漏列 ci.yml 的教训：后续涉及测试搬迁的 change 须同步盘点 CI 工作流。
+  - should-fix：`app_load.go` GoDoc「超集」表述与事实不符，已改为准确表述
+    （仅 `SceneApplication` 为超集可直传；benchmark 经具体类型隐式满足）。
 
 ### Task 3.1 + 3.2（capture 包提取与 golden 路径同步）
 
