@@ -62,8 +62,9 @@ cmd/mornlea/
 
 - 修改任一子包的行为、导出面或测试入口，必须同步该子包的 `AGENTS.md`；根
   文档只维护目录地图、依赖方向与模式差异，不复制子包细节。
-- 各目录 `CLAUDE.md` 是 `AGENTS.md` 的薄导入，内容逐字节固定；改动直接落在
-  `AGENTS.md`，不要把内容写进 `CLAUDE.md`。
+- 子树根的 `CLAUDE.md` 是 `AGENTS.md` 的薄导入，内容逐字节固定；改动直接
+  落在 `AGENTS.md`，不要把内容写进 `CLAUDE.md`。子包目录不放 `CLAUDE.md`，
+  代理沿目录祖先链读到本总纲与子包指南。
 - 行为规格的权威在 `openspec/specs/`：视觉验证 `visual-verification`、
   benchmark 工作负载 `bounded-benchmark-workload`。长期基线只陈述当前事实，
   不复制 change 叙事。
