@@ -44,7 +44,7 @@ const (
 	menuActionPauseQuitToMenu uint32 = 9 // 退回主菜单
 )
 
-// menuState 是主菜单的语义状态。Go 侧（cmd/mornlea，package main）拥有全部菜单
+// menuState 是主菜单的语义状态。Go 侧（cmd/mornlea/app，package app）拥有全部菜单
 // 语义：相位、按钮表、标题、版本行、装配错误行；Rust mornlea_client 只负责呈现
 // 与回传被点击按钮的 id，不产生任何游戏/菜单语义。
 type menuState struct {

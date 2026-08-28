@@ -121,31 +121,31 @@ func configWindowFromUI(window client.UISettingsWindow) (config.WindowSize, bool
 // Committed 与所有运行时资源均保持原状；rename 后父目录同步失败只降低掉电
 // 持久性置信度，新字节已经可见，故仍提交内存和运行时并显示有界警告。
 func (a *Application) saveSettings() error {
-	Draft := a.settings.Draft
-	if err := Draft.validate(); err != nil {
+	draft := a.settings.Draft
+	if err := draft.validate(); err != nil {
 		return fmt.Errorf("校验设置: %w", err)
 	}
 
-	textureChanged := Draft.TexturePackPath != a.settings.Committed.TexturePackPath
-	if textureChanged && Draft.TexturePackPath != "" {
-		candidatePath, err := resolveSettingsTexturePackPath(a.startupOptions.ConfigPath, Draft.TexturePackPath)
+	textureChanged := draft.TexturePackPath != a.settings.Committed.TexturePackPath
+	if textureChanged && draft.TexturePackPath != "" {
+		candidatePath, err := resolveSettingsTexturePackPath(a.startupOptions.ConfigPath, draft.TexturePackPath)
 		if err != nil {
-			return fmt.Errorf("解析材质包候选 %q: %w", Draft.TexturePackPath, err)
+			return fmt.Errorf("解析材质包候选 %q: %w", draft.TexturePackPath, err)
 		}
 		if a.startupDeps.NewRegistry == nil {
 			return errors.New("校验材质包候选: registry 工厂不可用")
 		}
 		if _, err := a.startupDeps.NewRegistry(candidatePath); err != nil {
-			return fmt.Errorf("校验材质包候选 %q: %w", Draft.TexturePackPath, err)
+			return fmt.Errorf("校验材质包候选 %q: %w", draft.TexturePackPath, err)
 		}
 	}
 
-	PatchSettings := a.startupDeps.PatchSettings
-	if PatchSettings == nil {
-		PatchSettings = config.PatchSettings
+	patchSettings := a.startupDeps.PatchSettings
+	if patchSettings == nil {
+		patchSettings = config.PatchSettings
 	}
-	result, persistenceErr := PatchSettings(a.startupOptions.ConfigPath, config.SettingsPatch{
-		AudioVolume: Draft.AudioVolume, TexturePackPath: Draft.TexturePackPath, WindowSize: Draft.WindowSize,
+	result, persistenceErr := patchSettings(a.startupOptions.ConfigPath, config.SettingsPatch{
+		AudioVolume: draft.AudioVolume, TexturePackPath: draft.TexturePackPath, WindowSize: draft.WindowSize,
 	})
 	if persistenceErr != nil && !result.Committed {
 		return fmt.Errorf("原子保存配置: %w", persistenceErr)
@@ -161,20 +161,20 @@ func (a *Application) saveSettings() error {
 	}
 
 	previous := a.settings.Committed
-	a.settings.Committed = Draft
+	a.settings.Committed = draft
 	a.settings.error = ""
 	a.settings.status = boundedSettingsMessage("设置已保存")
 	if persistenceErr != nil {
 		a.settings.status = boundedSettingsMessage("设置已保存但持久性同步异常")
 	}
-	a.startupOptions.AudioVolume = Draft.AudioVolume
-	a.startupOptions.TexturePackPath = Draft.TexturePackPath
-	a.startupOptions.WindowSize = Draft.WindowSize
-	if previous.AudioVolume != Draft.AudioVolume {
-		a.replaceAudioPlayer(Draft.AudioVolume)
+	a.startupOptions.AudioVolume = draft.AudioVolume
+	a.startupOptions.TexturePackPath = draft.TexturePackPath
+	a.startupOptions.WindowSize = draft.WindowSize
+	if previous.AudioVolume != draft.AudioVolume {
+		a.replaceAudioPlayer(draft.AudioVolume)
 	}
-	if previous.WindowSize != Draft.WindowSize {
-		a.applyWindowSize(Draft.WindowSize)
+	if previous.WindowSize != draft.WindowSize {
+		a.applyWindowSize(draft.WindowSize)
 	}
 	if textureChanged {
 		status := "设置已保存；材质包将在下次启动时生效"

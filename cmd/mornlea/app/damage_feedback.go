@@ -13,9 +13,9 @@ type DamageFeedback struct {
 	Remaining time.Duration
 }
 
-// Update 接收本帧确认生命值并返回 0..1 的遮罩强度。
-func (feedback *DamageFeedback) Update(
-	Health uint8,
+// update 接收本帧确认生命值并返回 0..1 的遮罩强度。
+func (feedback *DamageFeedback) update(
+	health uint8,
 	ready bool,
 	elapsed time.Duration,
 ) float32 {
@@ -25,11 +25,11 @@ func (feedback *DamageFeedback) Update(
 	}
 	if !feedback.HasHealth {
 		feedback.HasHealth = true
-		feedback.Health = Health
+		feedback.Health = health
 		return 0
 	}
-	damaged := Health < feedback.Health
-	feedback.Health = Health
+	damaged := health < feedback.Health
+	feedback.Health = health
 	if damaged {
 		feedback.Remaining = damageFeedbackDuration
 		return 1

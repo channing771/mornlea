@@ -90,7 +90,7 @@ capture、benchmark 在各自包内定义所需能力的接口（Go 消费端接
 
 ### 5. darwin 构建纪律随文件保持
 
-66 个 `//go:build darwin` 文件迁移时逐字保留 build tag；capture 包内既有
+68 个 `//go:build darwin` 文件迁移时逐字保留 build tag；capture 包内既有
 无 tag 文件（依赖 darwin-only 类型）保持现状；新包不引入新的平台矩阵。
 archcheck/identity 的 darwin full-root 判定若按路径前缀匹配则自动覆盖子包，
 否则在守卫任务中登记。

@@ -52,8 +52,8 @@ func (a *Application) Frame(drainMax, meshWorkMax int, elapsed time.Duration) (b
 			return false, err
 		}
 	}
-	Health, ready := a.predictor.Health()
-	a.damageStrength = a.damageFeedback.Update(Health, ready, elapsed)
+	health, ready := a.predictor.Health()
+	a.damageStrength = a.damageFeedback.update(health, ready, elapsed)
 	if a.remotePlayers != nil {
 		a.remotePlayers.Advance(elapsed)
 	}
@@ -151,16 +151,16 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		chestOverlay = &hud.ChestOverlay{Items: chest.Items}
 	}
 	// 生命值、氧气、饥饿值和聊天都独立于背包确认状态；未确认时 renderer 只跳过物品布局。
-	Health, healthReady := a.predictor.Health()
+	health, healthReady := a.predictor.Health()
 	oxygen, oxygenReady := a.predictor.Oxygen()
 	// 饥饿值同生命值与氧气：只取权威确认镜像，客户端不推算也不预测。
 	hunger, hungerReady := a.predictor.Hunger()
 	saturationZero, _ := a.predictor.SaturationZero()
-	ChatOverlay := a.ChatOverlay()
+	chatOverlay := a.ChatOverlay()
 	hudVisible := inventoryConfirmed || (healthReady && !a.clientSessionClosed) ||
-		ChatOverlay.Open || len(ChatOverlay.Lines) != 0
+		chatOverlay.Open || len(chatOverlay.Lines) != 0
 	if hudVisible {
-		// B-14 进食进度条：纯客户端预测。输入位在 `RenderFrame` 作用域没有现成的
+		// 进食进度条：纯客户端预测。输入位在 `RenderFrame` 作用域没有现成的
 		// 当帧 `Control.Eating`，故按 `interactive.go` 置位的同源状态派生（光标
 		// 捕获 + 次键按住 + 已确认手持食物 + 权威确认饥饿未满）：开箱/菜单/聊天
 		// 都会释放光标，天然归零；唯一偏差是刚刚重新捕获的那一帧会超前一个帧
@@ -185,9 +185,9 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 			inventory, inventoryConfirmed, a.inventoryOpen, a.inventorySource, craftingOverlay, overlay, chestOverlay,
 			a.miningOverlay,
 			hud.EatingOverlay{Active: eatingActive, Progress: eatingProgress},
-			hud.HealthOverlay{Confirmed: healthReady, Value: Health},
+			hud.HealthOverlay{Confirmed: healthReady, Value: health},
 			hud.OxygenOverlay{Confirmed: oxygenReady, Value: oxygen},
-			hud.HungerOverlay{Confirmed: hungerReady, Value: hunger, SaturationZero: saturationZero}, ChatOverlay,
+			hud.HungerOverlay{Confirmed: hungerReady, Value: hunger, SaturationZero: saturationZero}, chatOverlay,
 			uint32(width), uint32(height), a.scheduler.UploadBudget(),
 		); err != nil {
 			return false, fmt.Errorf("准备快捷栏 HUD: %w", err)
