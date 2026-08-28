@@ -45,8 +45,150 @@
 - Ruling：基线文件计数以实测 53（23 生产 + 30 测试）为准，执行计划
   「51 文件」系笔误——计划自身的 23+30 分解与行数实测一致；按「不强迫
   数字吻合、记录实测」纪律处理，proposal 采用实测值。
-- 本 change 尚无实现期裁决；Task 2–4 的实施裁决、临时导出清单与回收记录
-  随各任务评审追加于本节之后。
+
+## Task 3 实现记录（codec 子包）
+
+- 实现 SHA：`bc95ac24`（`refactor(network): extract codec subpackage with
+  alias re-exports`，9 个生产文件 + `testdata/chunk-snapshot-v1.bin` 与 22 个
+  测试文件经 `git mv` 迁移；6 个 protocol 侧拆分文件与
+  archcheck/types.go 修改见下）。
+- 实现期裁决（记入本节，均依 design.md「测试归属跟随被测主体」规则裁定）：
+  1. **protocol 域纯主体测试随 Task 3 迁入 protocol/**：`packet_test.go`、
+    `registry_test.go`（转 `package protocol`，限定名就地还原 unqualified）、
+    `message_test.go`、`snapshot_test.go`（转 `package protocol_test`，外部
+    测试形态保持，`network.` → `protocol.`）。Task 2 preflight-1 允许的
+    「就地限定」过渡态就此收敛为 design 既定终态；根包测试仅留
+    login/memory/seed/benchmark 四文件。
+  2. **`benchmark_helpers_test.go` 随簇迁入 codec/**：brief 的根包留守清单
+    列有此文件，但其内容（`worstLegalBenchmarkSnapshot` 夹具与
+    `benchmarkPayload`）只被 chunk codec 域测试（`chunk_codec_test.go`）消费，
+    且 `benchmark_test.go`（package network_test）自带同名副本；按被测主体
+    随 `chunk_codec_test.go` 迁入 codec，CI M3C 步骤与 Makefile
+    `bench-multiplayer` 指向的基准主体（benchmark_test.go）仍在根包，零影响。
+    避免了「根包留死代码 + codec 侧再复制一份」的双份浪费。
+  3. **`message_companion_limit_lock_test.go` 归 codec**（brief 混合文件清单
+    未列）：两个锁定函数各自在单一函数体内混合 Validate 与 wire 往返，按函数
+    拆分必须改名（违反逐名保留硬约束）；其 wire 侧（encode/decode 直呼）为
+    定位性主体，归 codec 后可直接使用测试 helper（`taskChatEvent`/
+    `companionSpeechEvent`，由 codec 侧 `message_companion_test.go` 提供），
+    零 helper 复制。其 `internal/companion` import 仅为测试夹具取值
+    （`testCompanionID` 同源），archcheck 只扫非测试文件，codec 生产边保持
+    `{internal/core, internal/network/protocol}`（`go list` 实证）。
+  4. **混合文件按「函数直接调用的生产符号所在域」逐函数拆分**（brief 允许，
+    design 规则口径）：
+    - `message_companion_test.go` → protocol 收
+      `TestCompanionMessageIDsAreAppendOnly`、
+      `TestChatEventTaskEnumsAreFrozen`（纯 registry/枚举，零 helper 复制）；
+      其余 14 函数与全部 helper 归 codec（Validate + wire 往返混在单函数体内，
+      protocol 无法触达 codec unexported 编码器，结构性只能归 codec）。
+    - `message_hostile_test.go` → protocol 收
+      `TestHostileMessageIDsAreFrozen`、
+      `TestHostileMessagesValidateRejectsInvalidRecords`（纯 Validate 矩阵，
+      按生产符号域归 protocol）；5 个冻结 DTO 夹具
+      （`hostileSpawnFixture`/`hostileStateFixture`/`hostileSpawnMessage`/
+      `hostileStateMessage`/`hostileDespawnMessage`，约 30 行）在两侧各持一份
+      同值副本——按生产符号域判定归属的机械结果，取值被两侧测试自身钉死；
+      整文件归 codec 的替代方案需复制 `assertServerRegistry`+
+      `sameServerPacketType`（约 90 行），劣于本方案。其余 5 函数（含
+      `FuzzHostileMessageCodec`）归 codec。
+    - `drop_test.go` → protocol 收 `TestProtocolV4DropPacketIDsAreFrozen`、
+      `TestItemDropMessagesValidateBoundedBatches`（+ `dropTestID`/
+      `dropTestUpsert` 同值副本）；codec 收其余 5 函数；
+      `TestProtocolV11CarriesWornToolDropOnCodecAndMemory` 单函数同时驱动
+      codec wire 往返与 Memory transport（`NewMemoryStreamPair`），design 禁止
+      子包测试导入根包，protocol/codec 均无法承载完整函数体 → 留守根包并入
+      `memory_test.go`（`package network_test`）：wire 半经根包 `NewCodec`
+      别名门面（`EncodeServer`/`DecodeServer` 对 StatePlay 非 snapshot packet
+      与包内直呼路径逐分支一致），DropID 夹具就地内联（原 `dropTestID` 为
+      codec 域 helper，不跨包复制）。
+    - `furnace_test.go` → protocol 收 `TestProtocolV7FurnacePacketIDsAreFrozen`
+      （零 helper 复制）；其余归 codec。
+    - `container_test.go` → protocol 收
+      `TestProtocolV12ChestStatePacketIDIsFrozen`、
+      `TestMoveContainerStackChestUnifiedSlotRange`、
+      `TestContainerNeutralMessagesRejectUnknownKind`（+ `testChestRef` 同值
+      副本）；其余归 codec。
+    - `worldtime_test.go` → protocol 收 `TestProtocolVersionPinned`（新建
+      protocol/worldtime_test.go 单函数文件，保持「版本无关命名」约定所在
+      文件语境）；根包收 `TestProtocolV26RejectsPriorVersionsBeforePlay`、
+      `TestHandshakeAcceptsCurrentVersion`（主体为 `BeginServerLogin` 握手/
+      会话路径，且依赖根包测试 helper `staticClientHelloStream`，并入
+      `login_test.go`，函数体零改动）；其余 9 函数与 playerState 偏移 helper
+      归 codec。`TestProtocolV10DropSelectedItemRegistryIsFrozen` 因含
+      `encodeClientPacketPayload` 非法状态拒绝断言（codec unexported）归
+      codec，registry 断言经 protocol 导出访问器照常生效。
+  5. **seed_test.go 留守根包的两个 wire 前缀测试**（
+    `TestProtocolV23LoginSuccessCarriesWorldSeed`、
+    `TestProtocolV23LoginSuccessWorldSeedAcceptsFullRange`）改经根包
+    `NewCodec` 别名门面驱动（brief 钉死 seed_test.go 留守根包，而
+    `encodeServerControlPayload`/`decodeServerControlPayload` 迁入 codec 后
+    不可再被根包直呼；EncodeServer/DecodeServer 对 StateLogin 分支与直呼
+    逐分支一致），并以 `mustSeedPlayerID`/`mustSeedCodec` 本地 helper 替代
+    迁走的 `mustCodecPlayerID`。
+- 导出表面（Task 2 临时导出回收表逐项终态）：
+  - 包 ID 访问器 6 个（`ClientPacketID`/`ClientPacketForID`/
+    `ServerPacketID`/`ServerPacketForID`/`CommandRejectReasonID`/
+    `CommandRejectReasonForID`）：转正（永久导出），消费者 codec 生产
+    （codec_client/codec_server 分发）+ codec/protocol 域测试。
+  - `ValidateDecodedClientWirePacket`：转正（永久导出），消费者根包
+    memory.go + codec decodeClientPacketPayload 尾部校验。
+  - companion wire 常量 8 个 + hostile wire 常量 7 个：转正（永久导出），
+    消费者 codec 生产（codec_client 预分配拒绝 / codec_server 预分配拒绝 /
+    companion_wire / hostile_wire）+ protocol `Validate`。
+  - `ValidBlockID`/`SectionWords`/`ReadSectionPacked`：转正（永久导出），
+    消费者 codec 生产 chunk_codec.go + codec 测试（chunk_codec_test.go/
+    protocol snapshot.go 生产自用）。
+  - `InvalidClientPacket`/`InvalidServerPacket`：转正（永久导出），消费者
+    codec 生产 codec_client.go/codec_server.go 错误构造。
+  - `ChatSpeechTextMaxBytes`：转正（永久导出），消费者 codec 生产
+    companion_wire.go。
+  - `MaxChunkBlockIndex`（drop_test.go 消费，随迁 codec）、
+    `GridCraftingViewSlots`（codec_inventory_test.go 消费）：**保持导出**，
+    终态理由「codec 域测试跨包消费 protocol 冻结值域上界」——两常量由
+    protocol `Validate` 生产自用，撤销导出会使 codec 测试退回裸字面量，违背
+    同源锁定意图；无生产消费者以外的导出面扩张。
+  - wire encode/decode 函数 12+1 个：按 Task 2 裁决 `git mv`
+    `companion_wire.go`/`hostile_wire.go` 进 codec，包内直呼，保持
+    unexported，回收完成（无导出面）。
+- 根包 `types.go` 增补 codec 侧别名（逐别名带中文注释）：`type Codec =
+  codec.Codec`、`var NewCodec = codec.NewCodec`、常量
+  `MaxCompressedSnapshot`/`MaxDecodedSnapshot`/`MaxSmallPayload`/
+  `MaxFrameBytes`、`var WriteFrame = codec.WriteFrame`/`ReadFrame =
+  codec.ReadFrame`；package doc 同步为 network → {protocol, codec} 双子包
+  再导出保证。
+- archcheck：根包边 `{"internal/core", "internal/network/codec",
+  "internal/network/protocol"}`、新增 `"internal/network/codec":
+  {"internal/core", "internal/network/protocol"}`；`go list` 实测 codec 生产
+  import 无 internal/companion（其测试文件的 companion import 不入边）。
+  `internal/archcheck/baseline_test.go` 无需改动（Task 2 已把 ProtocolVersion
+  权威来源路径指向 `internal/network/protocol/packet.go`，本次无路径漂移）。
+- 测试入口分布（`-list` 并集 197 逐名与基线一致，diff 为空）：根包 43
+  （Test 36 + Benchmark 7）、protocol 29（Test 29）、codec 92（Test 86 +
+  Fuzz 6）、tcp 33（Test 33）；Test 184 + Benchmark 7 + Fuzz 6 与基线三类
+  计数逐项一致。全部 6 个 Fuzz 落位 codec；基准（含 `BenchmarkTCPLoopback*`）
+  留守根包，CI M3C 与 Makefile `bench-multiplayer` 零改动。
+- 验证（同实现工作区实测，2026-08-28，darwin/arm64，go1.26.0）：
+  - `go test ./internal/network/... -race -count=1` → 根包 ok 1.668s、
+    codec ok 2.147s、protocol ok 2.271s、tcp ok 2.456s，全部 PASS。
+  - `go test ./internal/archcheck -count=1` → ok 5.826s。
+  - `go build ./...` → 通过；`go vet ./internal/network/...` → 清洁。
+  - `-list` 并集 197 项与 `baseline-test-list.txt`（剥离 `#` 行）排序 diff
+    为空；每包分布 43/29/92/33。
+  - `go test ./internal/network/... -bench . -benchtime 1x`（盲区预演，数值
+    只记录不设门槛）：全部基准可运行（含根包 `BenchmarkTCPLoopback*`），
+    代表值——`BenchmarkSmallPacketCodec` 子项 0.5–7.2 µs/op、
+    `BenchmarkRemotePlayerStateCodec` Encode 14.7 µs / Decode 13.0 µs、
+    `BenchmarkChatCommandCodec` Encode 12.8 µs / Decode 11.6 µs、
+    `BenchmarkCompanionMessageCodec` 8.5–12.7 µs、
+    `BenchmarkWorstLegalChunkSnapshot` Encode 366 µs / Decode 509 µs
+    （compression-ratio 426.8、logical 196749 B、wire 461 B）、
+    `BenchmarkTCPLoopbackPlayerInput` 3.75 ms、
+    `BenchmarkTCPLoopbackChunkSnapshot` 0.98 ms（0.47 MB/s）。
+  - `gofmt -l` 于 internal/network 与 internal/archcheck 无输出；消费方
+    （internal/server、internal/client、internal/sim、cmd/）与 tcp 生产源码
+    零改动（git status 实证，仅 internal/network/**、internal/archcheck/
+    dependency_test.go 与本 change 产物变更）。
+
 
 ## Task 2 实现记录（protocol 子包）
 
