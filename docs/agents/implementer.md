@@ -54,7 +54,7 @@
 严格按 `docs/development-process.md` 阶段 2–4（前置的「阶段 1 内容确认门禁」已通过）：
 
 1. 建 OpenSpec change（复杂功能必建；F 组小型修复走直接修改豁免）。
-2. 每个 Task 派发**全新** implementer 子代理；brief 必须自包含：当前 Task、基线 SHA、change 产物路径、全局约束（对应作用域 `AGENTS.md` 的关键条款）、精确验证命令；禁止子代理自我派生。
+2. 每个 Task 派发**全新** implementer 子代理；brief 必须自包含：当前 Task、基线 SHA、change 产物路径、全局约束（对应作用域 `AGENTS.md` 的关键条款）、精确验证命令、既有 ledger 验证证据（同一 SHA 直接引用，不重跑）；禁止子代理自我派生。
 3. TDD；每 Task 后独立 SPEC + QUALITY 双评审；修复 ≤5 轮（R≤3 原实现者，R≥4 换新）；所有结论与 Ruling 写 `ledger.md`。
 4. 全部 Task 完成后整分支终审；`scripts/agents/gates.sh` 当前执行 gofmt、vet、archcheck、OpenSpec、`make rust` 和未跳过时的 full race，完整提交前另跑 `make rust-check`。改动域涉及渲染/tick/存储/协议时补 benchmark（数值只记录）、fuzz/golden 或 `perfcheck`；预期视觉不变时运行 `make visual-check`，预期视觉变化时先逐图确认，再运行 `make visual-update`，随后重新运行 `make visual-check`。
 

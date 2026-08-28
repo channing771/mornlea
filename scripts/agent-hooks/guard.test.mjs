@@ -87,11 +87,25 @@ test("runs Rust validation before Go checks for Rust-required changes", () => {
         "./cmd/mornlea",
         "./cmd/mornlea-server",
         "-race",
-        "-count=1",
       ],
     ],
   ]);
   assert.equal(calls.some(([command]) => command === "cargo"), false);
+});
+
+test("stop-gate test runs stay cache-friendly with generous timeouts", () => {
+  const calls = [];
+  const run = (command, argumentsList, timeout) => {
+    calls.push({ command, argumentsList, timeout });
+    return { status: 0, stdout: "" };
+  };
+
+  assert.deepEqual(stopFailures(["internal/server/host.go"], run, {}), []);
+  const affected = calls.find(({ argumentsList }) =>
+    argumentsList.includes("./internal/server"),
+  );
+  assert.deepEqual(affected.argumentsList, ["test", "-race", "./internal/server"]);
+  assert.equal(affected.timeout, 600_000);
 });
 
 test("runs the fixed native downstream union for Rust-only bridge changes", () => {
@@ -118,7 +132,6 @@ test("runs the fixed native downstream union for Rust-only bridge changes", () =
         "./cmd/mornlea",
         "./cmd/mornlea-server",
         "-race",
-        "-count=1",
       ],
     ],
   );
@@ -151,7 +164,6 @@ test("unions the fixed native downstream packages with mixed bridge Go changes",
         "./cmd/mornlea",
         "./cmd/mornlea-server",
         "-race",
-        "-count=1",
       ],
     ],
   );
@@ -289,7 +301,7 @@ test("builds Rust before existing Go gates without unrelated cargo checks", () =
     ["gofmt", ["-l", "internal/server/session_ingress.go"]],
     ["make", ["rust"]],
     ["go", ["test", "./internal/archcheck", "-count=1"]],
-    ["go", ["test", "-race", "-count=1", "./internal/server"]],
+    ["go", ["test", "-race", "./internal/server"]],
   ]);
   assert.equal(calls.some(([command]) => command === "cargo"), false);
 });

@@ -2,6 +2,11 @@
 
 GO := go
 CARGO ?= rustup run 1.97.1 cargo
+# 共享 Cargo 目标目录:worktree 隔离开发下每个分支不再各自冷编译 wgpu 全家桶,
+# 新 worktree 的 `make rust`/`rust-check` 直接吃既有增量产物。并行构建会在 cargo
+# 的文件锁上串行等待,与「重型验证管线不并发」的纪律一致。变量已导出给全部
+# recipe;绕过 make 直接调用 cargo 时需自行 export 同名变量才能复用产物。
+export CARGO_TARGET_DIR ?= $(HOME)/.cache/mornlea-cargo-target
 RUST_DIR := engine
 RUST_DYLIB := $(RUST_DIR)/target/release/libmornlea_engine.dylib
 RUST_SO := $(RUST_DIR)/target/release/libmornlea_engine.so
@@ -90,7 +95,8 @@ test-race-short:
 # test-race-changed:测试分层纪律的 T1 层——只对「改动包及其反向依赖」跑
 # race(集合由 scripts/agents/race-changed.sh 从 git diff 求,恒含 archcheck),
 # 绝大多数改动秒级到分钟级;全量 `test-race` 留给 T3 与 CI。RACE_BASE 覆盖基线。
-test-race-changed: rust
+# Rust 构建不在此处前置:脚本检测到闭包含 cdylib 消费包时才按需 `make rust`。
+test-race-changed:
 	scripts/agents/race-changed.sh $(if $(RACE_BASE),--base $(RACE_BASE),)
 
 test-multiplayer:

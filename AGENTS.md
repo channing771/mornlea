@@ -54,7 +54,7 @@ Mornlea 是使用 Go 1.26 编写的独立体素游戏，Go module 为 `github.co
 
 ## 验证
 
-按风险递增选择入口，定点命令与测试分层见 `docs/notes/test-quickstart.md`：
+按风险递增选择入口：编辑循环与任务闭环默认停在最低相称层级（T0/T1），`dev-check`、`test-race-short`（T2）与全量门禁（T3）只在阶段边界（推送前、提交前或复现 CI 失败）运行；同一基线 SHA 下已记入 change ledger 的验证输出可直接引用，不重跑。定点命令与测试分层见 `docs/notes/test-quickstart.md`：
 
 ```bash
 make rust
