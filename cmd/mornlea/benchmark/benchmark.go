@@ -15,8 +15,10 @@ import (
 )
 
 const (
-	benchmarkSeed            = application.BenchmarkSeed
-	benchmarkMessageDrainMax = 4096
+	benchmarkSeed = application.BenchmarkSeed
+	// benchmarkMessageDrainMax 是每帧服务端消息 drain 预算，单一取值住在
+	// app 包（`MessageDrainMax`），与 capture 共用同一无头帧节奏契约。
+	benchmarkMessageDrainMax = application.MessageDrainMax
 	// scenarioVersion 是 benchmark producer 的场景身份。v18 → v19 的判定与
 	// v17 → v18、v15 → v16 同源：benchmark 的固定输入（七名远端玩家、零伙伴、
 	// 不注入聊天）与被测世界（不注水、同一 seed、不含农业方块）一格未动，但
@@ -115,7 +117,7 @@ func RunBenchmark(app *application.Application, outputPath string) error {
 	}
 
 	loadStarted := time.Now()
-	snapshotDuration, err := waitUntilLoaded(app, 5*time.Minute)
+	snapshotDuration, err := application.WaitUntilLoaded(app, 5*time.Minute)
 	if err != nil {
 		return err
 	}

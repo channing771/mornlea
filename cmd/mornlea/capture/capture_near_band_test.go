@@ -42,8 +42,8 @@ func goldenControlTestApplication() *application.Application {
 func TestWaitUntilLoadedPairContinuesDrainingControlThatFinishedFirst(t *testing.T) {
 	first, second := &application.Application{}, &application.Application{}
 	firstCalls, secondCalls := 0, 0
-	err := waitUntilLoadedPairWithStep(first, second, time.Second,
-		func(app SceneApplication) (bool, error) {
+	err := application.WaitUntilLoadedPairWithStep(first, second, time.Second,
+		func(app application.LoadingApplication) (bool, error) {
 			switch app {
 			case first:
 				firstCalls++
@@ -58,7 +58,7 @@ func TestWaitUntilLoadedPairContinuesDrainingControlThatFinishedFirst(t *testing
 		},
 	)
 	if err != nil {
-		t.Fatalf("waitUntilLoadedPairWithStep: %v", err)
+		t.Fatalf("WaitUntilLoadedPairWithStep: %v", err)
 	}
 	if firstCalls != 3 || secondCalls != 3 {
 		t.Fatalf("control 推进次数 = (%d,%d)，want (3,3)", firstCalls, secondCalls)

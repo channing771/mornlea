@@ -27,10 +27,9 @@ const (
 	captureHeight = application.CaptureHeight
 )
 
-// captureDrainMax 是抓帧期间每帧处理的服务端消息上限，取值与 benchmark 域的
-// `benchmarkMessageDrainMax` 一致；两个域各自持有同值字面量，benchmark 迁入
-// 独立包时随加载等待函数族一并下沉 app 收敛为单一常量。
-const captureDrainMax = 4096
+// captureDrainMax 是抓帧期间每帧处理的服务端消息上限，取值是 app 包的
+// 单一常量（`MessageDrainMax`），与 benchmark 共用同一无头帧节奏契约。
+const captureDrainMax = application.MessageDrainMax
 
 // captureGlyphSettleFrames 是 Apply 之后、真正回读之前额外渲染的帧数，
 // 用来让字形图集的异步光栅化收敛。GlyphAtlas.Request 只把符文入队，
@@ -53,12 +52,12 @@ type captureHUDFixture struct {
 }
 
 // captureScene 是一个视觉场景。三要素缺一不可：确定性的世界状态由固定种子、
-// waitUntilLoaded 与可选 Prepare 保证，固定的相机位姿与其余呈现状态由 Apply
+// `WaitUntilLoaded` 与可选 Prepare 保证，固定的相机位姿与其余呈现状态由 Apply
 // 设置，抓帧时机由 WarmupFrames 和收敛判据固定。任何一项随环境变化，产出的图
 // 就不可比对。
 //
 // 潜在陷阱：app.go 把 a.serverTick 传给 itemDropRenderer.Render 作掉落物动画相位，
-// 而 a.serverTick 的取值依赖 waitUntilLoaded 花了多少个权威 tick 才收敛，
+// 而 a.serverTick 的取值依赖 `WaitUntilLoaded` 花了多少个权威 tick 才收敛，
 // 这本身取决于机器速度——不是本文件描述的三个常量之一。当前所有场景都不含
 // 掉落物，因此无害；但第一个引入掉落物的场景会让基线的动画相位依赖机器速度，
 // 到时需要额外想办法钉死或忽略这一相位。
@@ -761,9 +760,10 @@ func prepareCaptureApplication(app SceneApplication) error {
 	if err := validateCaptureApplication(app); err != nil {
 		return err
 	}
-	// 加载等待与 benchmark 域共用同一套判据（本包 capture_load.go 副本）：同样的视距、同样的收敛判据。
-	// 抓帧不另设视距，否则图里所见与真实客户端所见就会分歧，golden 随之失去意义。
-	if _, err := waitUntilLoaded(app, 5*time.Minute); err != nil {
+	// 加载等待与 benchmark 域共用 app 包的同一套判据（`WaitUntilLoaded` 函数族）：
+	// 同样的视距、同样的收敛判据。抓帧不另设视距，否则图里所见与真实客户端
+	// 所见就会分歧，golden 随之失去意义。
+	if _, err := application.WaitUntilLoaded(app, 5*time.Minute); err != nil {
 		return fmt.Errorf("固定场景加载: %w", err)
 	}
 	return nil
@@ -798,7 +798,7 @@ func prepareGoldenUpdateControls(lodOn, lodOff SceneApplication) error {
 			return fmt.Errorf("%s control: %w", control.name, err)
 		}
 	}
-	if err := waitUntilLoadedPair(lodOn, lodOff, 5*time.Minute); err != nil {
+	if err := application.WaitUntilLoadedPair(lodOn, lodOff, 5*time.Minute); err != nil {
 		return fmt.Errorf("固定场景加载: %w", err)
 	}
 	return nil
