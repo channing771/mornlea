@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	currentPlayerSchema   uint32 = 7
+	currentPlayerSchema   uint32 = 8
 	playerEnvelopeVersion uint32 = 1
 	playerEnvelopeLength         = 44
 	maxPlayerPayload      uint32 = 1 << 20
@@ -28,9 +28,14 @@ const (
 	// 饥饿值 1 字节 + 饱和度 2 字节 + 疲劳值 2 字节（后两者小端 uint16）。
 	//
 	// 三字段追加在 Health **之后**而不是插进负载中段，是既有的追加纪律：解码按
-	// "从末尾切走固定长度"逐层剥离（decodePlayerV7 → V5 → V4 → V1），只有末尾
-	// 追加才能让 v5/v6 那几层的切分点保持不变，冻结的旧 fixture 因此仍可解码。
+	// "从末尾切走固定长度"逐层剥离（decodePlayerV8 → V7 → V5 → V4 → V1），只有
+	// 末尾追加才能让旧层的切分点保持不变，冻结的旧 fixture 因此仍可解码。
 	playerHungerBytes = 1 + 2 + 2
+	// playerRespawnBytes 是 schema v8 起追加在饥饿状态之后的重生点长度：
+	// present 1 字节 + 床尾格坐标 3×4 字节 + 维度 u32 4 字节，定长 17 字节。
+	// 与 Safe 的「标志位 + 可选负载」变长编码不同：重生点恒占满 17 字节，
+	// present=0 时位置与维度字节规范为零，解码无需二次定位。
+	playerRespawnBytes = 1 + 12 + 4
 )
 
 var (
@@ -43,7 +48,7 @@ func encodePlayer(save PlayerSave) ([]byte, error) {
 	if err := validatePlayerSave(save); err != nil {
 		return nil, err
 	}
-	payload, err := encodePlayerV7(save)
+	payload, err := encodePlayerV8(save)
 	if err != nil {
 		return nil, err
 	}
@@ -149,17 +154,39 @@ func decodePlayer(wantID core.PlayerID, data []byte) (StoredPlayer, error) {
 	stored := StoredPlayer{
 		PlayerID: dto.PlayerID, Revision: dto.Revision, DisplayName: dto.DisplayName,
 		Current: dto.Current, Yaw: dto.Yaw, Pitch: dto.Pitch, Inventory: dto.Inventory,
-		Health:          dto.Health,
-		Hunger:          dto.Hunger,
-		SaturationMilli: dto.SaturationMilli,
-		ExhaustionMilli: dto.ExhaustionMilli,
-		NeedsRewrite:    migrated,
+		Health:           dto.Health,
+		Hunger:           dto.Hunger,
+		SaturationMilli:  dto.SaturationMilli,
+		ExhaustionMilli:  dto.ExhaustionMilli,
+		RespawnPresent:   dto.RespawnPresent,
+		RespawnPosition:  dto.RespawnPosition,
+		RespawnDimension: dto.RespawnDimension,
+		NeedsRewrite:     migrated,
 	}
 	if dto.Safe != nil {
 		safe := *dto.Safe
 		stored.Safe = &safe
 	}
 	return stored, nil
+}
+
+// encodePlayerV8 在 v7 负载末尾追加定长的重生点三字段（present + 床尾格 + 维度）。
+//
+// present=0 时位置与维度字节一律写零：它们不携带语义，规范为零让同一份逻辑
+// 状态无论调用方留下什么残值都得到逐字节相同的编码，golden fixture 因此稳定。
+func encodePlayerV8(save PlayerSave) ([]byte, error) {
+	payload, err := encodePlayerV7(save)
+	if err != nil {
+		return nil, err
+	}
+	if !save.RespawnPresent {
+		return append(payload, make([]byte, playerRespawnBytes)...), nil
+	}
+	payload = append(payload, 1)
+	for _, position := range save.RespawnPosition {
+		payload = appendF32(payload, position)
+	}
+	return binary.LittleEndian.AppendUint32(payload, uint32(save.RespawnDimension)), nil
 }
 
 // encodePlayerV7 在 v5 负载末尾追加三层饥饿状态（饥饿值、饱和度、疲劳值）。
@@ -272,9 +299,42 @@ func decodePlayerPayload(
 		return decodePlayerV5(playerID, revision, data)
 	case 7:
 		return decodePlayerV7(playerID, revision, data)
+	case 8:
+		return decodePlayerV8(playerID, revision, data)
 	default:
 		return playerDTO{}, fmt.Errorf("%w: unsupported player schema %d", ErrCorrupt, schema)
 	}
+}
+
+// decodePlayerV8 在 v7 解析结果之上剥离定长的重生点尾巴（present + 床尾格 + 维度）。
+//
+// present=0 时位置与维度字节不携带语义，读入即规范为零；只有 present=1 才
+// 校验维度与坐标的合法性——越界值由 validatePlayerDTO 统一拒绝。
+func decodePlayerV8(playerID core.PlayerID, revision uint64, data []byte) (playerDTO, error) {
+	if len(data) < playerRespawnBytes {
+		return playerDTO{}, fmt.Errorf("%w: player payload is shorter than the respawn point", ErrCorrupt)
+	}
+	split := len(data) - playerRespawnBytes
+	dto, err := decodePlayerV7(playerID, revision, data[:split])
+	if err != nil {
+		return playerDTO{}, err
+	}
+	// 长度已在上面校验，这里直接按固定偏移读；越界不可能发生。
+	tail := data[split:]
+	switch tail[0] {
+	case 0:
+	case 1:
+		dto.RespawnPresent = true
+		for index := range dto.RespawnPosition {
+			dto.RespawnPosition[index] = math.Float32frombits(
+				binary.LittleEndian.Uint32(tail[1+4*index:]),
+			)
+		}
+		dto.RespawnDimension = core.DimensionID(int32(binary.LittleEndian.Uint32(tail[13:])))
+	default:
+		return playerDTO{}, fmt.Errorf("%w: invalid player respawn flag %d", ErrCorrupt, tail[0])
+	}
+	return dto, nil
 }
 
 // decodePlayerV7 在 v5 解析结果之上追加三层饥饿状态。
@@ -476,7 +536,10 @@ func validatePlayerSave(save PlayerSave) error {
 		Current: save.Current, Yaw: save.Yaw, Pitch: save.Pitch, Safe: save.Safe,
 		Inventory: save.Inventory, Health: save.Health,
 		Hunger: save.Hunger, SaturationMilli: save.SaturationMilli,
-		ExhaustionMilli: save.ExhaustionMilli,
+		ExhaustionMilli:  save.ExhaustionMilli,
+		RespawnPresent:   save.RespawnPresent,
+		RespawnPosition:  save.RespawnPosition,
+		RespawnDimension: save.RespawnDimension,
 	})
 }
 
@@ -519,6 +582,16 @@ func validatePlayerDTO(dto playerDTO) error {
 	// uint16 的全域都是合法取值。
 	if dto.SaturationMilli > uint16(dto.Hunger)*core.SaturationMilliPerPoint {
 		return fmt.Errorf("%w: player saturation exceeds hunger", ErrCorrupt)
+	}
+	// 重生点只在 present=1 时校验：位置与维度复用 PlayerLocation 的同一条
+	// 规则（维度受支持、坐标有限），present=0 时三个字段都不携带语义。
+	if dto.RespawnPresent {
+		if err := validatePlayerLocation(PlayerLocation{
+			Dimension: dto.RespawnDimension,
+			Position:  dto.RespawnPosition,
+		}); err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -215,8 +215,9 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	// pumpLodFrame 只做一次 nil 检查即返回。
 	a.pumpLodFrame()
 
-	// 每帧只从最后确认的权威世界时间计算一次昼夜;ViewProj 及其逆矩阵同样只计算一次。
-	dayNight := render.DayNightAt(a.worldTimeTicks)
+	// 每帧只从最后确认的权威世界时间与显示相位偏移计算一次昼夜（云层漂移仍
+	// 由绝对时间驱动）;ViewProj 及其逆矩阵同样只计算一次。
+	dayNight := render.DayNightAt(a.worldTimeTicks, a.dayPhaseOffset)
 	cloud := render.CloudOffsetAt(a.worldTimeTicks)
 	viewProj := a.camera.ViewProj()
 	viewProjInv := viewProj.Inv()

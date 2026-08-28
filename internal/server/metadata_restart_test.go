@@ -20,7 +20,7 @@ import (
 func openRestartWorld(t *testing.T, root string, seed int64) (*Server, *storage.DiskStore) {
 	t.Helper()
 	store, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 2, Seed: seed, SpawnDimension: core.Overworld,
+		FormatVersion: 3, Seed: seed, SpawnDimension: core.Overworld,
 	}})
 	if err != nil {
 		t.Fatalf("OpenDisk: %v", err)
@@ -74,7 +74,7 @@ func TestDiskLegacyMetadataStartsAtZeroAndUpgradesOnShutdown(t *testing.T) {
 
 	// 先用当前程序建立世界，再把 world.meta 换成等价的 v1 字节。
 	seedStore, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 2, Seed: seed, SpawnDimension: core.Overworld,
+		FormatVersion: 3, Seed: seed, SpawnDimension: core.Overworld,
 	}})
 	if err != nil {
 		t.Fatalf("OpenDisk seed: %v", err)
@@ -117,8 +117,8 @@ func TestDiskLegacyMetadataStartsAtZeroAndUpgradesOnShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version := binary.LittleEndian.Uint32(onDisk[4:8]); version != 2 {
-		t.Fatalf("关服后磁盘 metadata 版本 = %d，想要 2", version)
+	if version := binary.LittleEndian.Uint32(onDisk[4:8]); version != 3 {
+		t.Fatalf("关服后磁盘 metadata 版本 = %d，想要 3", version)
 	}
 
 	reopened, reopenedStore := openRestartWorld(t, root, seed)
@@ -135,7 +135,7 @@ func TestDiskLegacyMetadataStartsAtZeroAndUpgradesOnShutdown(t *testing.T) {
 }
 
 // legacyMetadataBytesForTest 构造一份 CRC 有效的 metadata v1 文件字节。
-// 生产代码只写 v2，v1 样本必须由测试自己保留。
+// 生产代码只写当前版本，v1 样本必须由测试自己保留。
 func legacyMetadataBytesForTest(seed int64) []byte {
 	encoded := make([]byte, 0, 36)
 	encoded = append(encoded, 'M', 'C', 'G', 'M')
@@ -150,12 +150,12 @@ func legacyMetadataBytesForTest(seed int64) []byte {
 	)
 }
 
-func TestDiskAutosaveMigratesLegacyMetadataToV2(t *testing.T) {
+func TestDiskAutosaveMigratesLegacyMetadata(t *testing.T) {
 	root := t.TempDir()
 	const seed int64 = 77
 
 	seedStore, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 2, Seed: seed, SpawnDimension: core.Overworld,
+		FormatVersion: 3, Seed: seed, SpawnDimension: core.Overworld,
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -178,7 +178,7 @@ func TestDiskAutosaveMigratesLegacyMetadataToV2(t *testing.T) {
 	})
 	running.config.AutosaveTicks = 4
 
-	// 不经关服，仅靠自动保存边界就必须把 v1 升级为 v2。
+	// 不经关服，仅靠自动保存边界就必须把 v1 升级为当前版本。
 	deadline := time.Now().Add(waitDeadline)
 	for {
 		running.StepForTest()
@@ -186,7 +186,7 @@ func TestDiskAutosaveMigratesLegacyMetadataToV2(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if binary.LittleEndian.Uint32(onDisk[4:8]) == 2 {
+		if binary.LittleEndian.Uint32(onDisk[4:8]) == 3 {
 			decoded := store.Metadata()
 			if decoded.Seed != seed {
 				t.Fatalf("迁移后种子 = %d，想要 %d", decoded.Seed, seed)
@@ -197,7 +197,7 @@ func TestDiskAutosaveMigratesLegacyMetadataToV2(t *testing.T) {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("自动保存没有把 metadata 升级为 v2")
+			t.Fatal("自动保存没有把 metadata 升级为当前版本")
 		}
 	}
 }
@@ -207,7 +207,7 @@ func TestDiskMetadataSaveFailureKeepsOldFileAndFailsShutdown(t *testing.T) {
 	const seed int64 = 1234
 
 	store, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 2, Seed: seed, SpawnDimension: core.Overworld,
+		FormatVersion: 3, Seed: seed, SpawnDimension: core.Overworld,
 	}})
 	if err != nil {
 		t.Fatal(err)

@@ -35,7 +35,7 @@ func runMaterialProcessingScript(t *testing.T, transport string) materialProcess
 	t.Helper()
 	identity := integrationIdentity(0x94, "MaterialProcessor")
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 2, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld,
 	})
 	var initial core.Inventory
 	initial.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemOakLog, Count: 1}

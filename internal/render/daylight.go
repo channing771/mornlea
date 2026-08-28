@@ -1,6 +1,10 @@
 package render
 
-import "math"
+import (
+	"math"
+
+	"github.com/channing771/mornlea/internal/core"
+)
 
 // DayLengthTicks 是一个完整昼夜的权威 tick 数。
 const DayLengthTicks = 24000
@@ -35,7 +39,8 @@ var (
 )
 
 // DayNight 是某个显示相位下与世界空间明暗有关的全部固定值。
-// 它完全由绝对世界时间决定，不含任何可变状态。
+// 它完全由绝对世界时间与显示相位偏移决定（偏移只平移显示相位，不回写绝对
+// 时间），不含任何可变状态。
 type DayNight struct {
 	Sun            float32
 	Daylight       float32
@@ -45,13 +50,17 @@ type DayNight struct {
 	StarVisibility float32
 }
 
-// DayNightAt 按固定曲线计算给定绝对世界时间的昼夜状态：
+// DayNightAt 按固定曲线计算给定绝对世界时间与显示相位偏移下的昼夜状态：
 //
-//	p        = worldTime mod 24000
-//	sun      = max(0, sin(2πp/24000))
+//	phase    = (worldTime mod 24000 + offset) mod 24000（经 `core.DisplayDayPhase`）
+//	sun      = max(0, sin(2π·phase/24000))
 //	daylight = 0.15 + 0.85*sun
-func DayNightAt(worldTime uint64) DayNight {
-	phase := float64(worldTime%DayLengthTicks) / DayLengthTicks
+//
+// 偏移是服务端随权威玩家状态下发、客户端只读的显示相位单值（跳夜交付）：
+// 全仓相位算式收敛在 `core.DisplayDayPhase`，客户端不得自建。云层漂移等绝对
+// 时间驱动的呈现仍直接消费 worldTime（见 `CloudOffsetAt`），不受偏移影响。
+func DayNightAt(worldTime uint64, dayPhaseOffset uint16) DayNight {
+	phase := float64(core.DisplayDayPhase(worldTime, dayPhaseOffset)) / DayLengthTicks
 	theta := 2 * math.Pi * phase
 	sun := math.Sin(theta)
 	if sun < 0 {

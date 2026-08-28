@@ -757,7 +757,7 @@ func seedV2CraftingChunk(t *testing.T, root string, key core.ChunkKey) {
 		})
 	}
 	store, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
-		FormatVersion: 2, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld,
 	}})
 	if err != nil {
 		t.Fatal(err)

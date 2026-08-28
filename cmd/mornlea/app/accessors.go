@@ -307,6 +307,11 @@ func (a *Application) SetLODTileCenter(center lod.TilePos) { a.lodTileCenter = c
 // LoadedChunks 读取已加载区块表（benchmark 测量路径按帧清点/复用）。
 func (a *Application) LoadedChunks() map[core.ChunkPos]struct{} { return a.loadedChunks }
 
+// SetPanel 整体替换调试面板状态，仅限测试装配路径使用。
+func (a *Application) SetPanel(panel *panelState) {
+	a.panel = panel
+}
+
 // SetPanelLastFrameAt 复位调试面板读数的采样时刻（capture 场景钉住 PanelReadout）。
 func (a *Application) SetPanelLastFrameAt(at time.Time) { a.panelLastFrameAt = at }
 

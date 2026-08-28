@@ -742,3 +742,87 @@ func carrotTexture(stage int) []byte {
 	}
 	return px
 }
+
+// 床面的原创配色（床与睡眠功能行）：全部取自橡木/织物色域的原创像素，不
+// 复用也绝不引入任何外部美术资源。struct 无法声明为 Go 常量，这里用包级
+// var 表达「颜色表只在此一处」的同一意图。
+var (
+	// bedFrameColor 是床架包边：深橡木，与门框/工作台包边同一色域。
+	bedFrameColor = rgb{R: 92, G: 62, B: 36}
+	// bedMattressColor 是床垫基色：暖橡木织物的中调。
+	bedMattressColor = rgb{R: 186, G: 144, B: 92}
+	// bedSeamColor 是绗缝线：比床垫深一档的橡木褐。
+	bedSeamColor = rgb{R: 152, G: 110, B: 62}
+	// bedPillowColor 是床头层的枕头带：全层最亮的奶白，是「这头是床头」的
+	// 主视觉锚点。
+	bedPillowColor = rgb{R: 236, G: 228, B: 206}
+	// bedBlanketColor 是床尾层的毯沿带：比床垫深而饱和，读作折过来的毯子。
+	bedBlanketColor = rgb{R: 158, G: 112, B: 60}
+	// bedBlanketEdgeColor 是毯沿外侧一线的折边高光。
+	bedBlanketEdgeColor = rgb{R: 206, G: 166, B: 112}
+)
+
+// bedBand 沿床头朝向边、距床架包边内侧 offset 像素处刷一条 width 像素宽的
+// 通带。
+//
+// 带的位置锁死在朝向上：顶面 UV 约定与 terrain.wgsl 的 face_uv 一致
+// （列 = world.z、行 = world.x），因此南带在末列侧、北带在首列侧、东带在
+// 末行侧、西带在首行侧——四个朝向的床面层因此逐两可辨。带只画包边内侧的
+// 2..13 开区间，不覆盖床架包边。
+func bedBand(px []byte, dir, offset, width int, color rgb) {
+	for i := 2; i < texSize-2; i++ {
+		for w := offset; w < offset+width; w++ {
+			switch dir {
+			case 0: // 南：床头在 +Z → 末列侧
+				paint(px, texSize-3-w, i, color)
+			case 1: // 西：床头在 −X → 首行侧
+				paint(px, i, 2+w, color)
+			case 2: // 北：床头在 −Z → 首列侧
+				paint(px, 2+w, i, color)
+			case 3: // 东：床头在 +X → 末行侧
+				paint(px, i, texSize-3-w, color)
+			}
+		}
+	}
+}
+
+// bedTopTexture 生成床第 head（false=床尾、true=床头）× dir（南 0/西 1/北 2/
+// 东 3）形态的原创床面层。
+//
+// 结构自外向内：2px 深橡木床架包边；带噪声的暖橡木床垫；两道垂直于床头方向
+// 的绗缝线；床头朝向边内侧 3px 亮带——床头层是枕头（奶白），床尾层是折过来的
+// 毯沿（深橡木褐 + 内侧一线折边高光）。八个（head × dir）组合各用独立噪声盐，
+// 加上带位置随朝向旋转，保证八张层互不相同。全部像素不透明（床面层是普通
+// 固体层，不进 cutout 集合）。
+func bedTopTexture(head bool, dir int) []byte {
+	salt := 0x3E10 + uint32(dir)
+	if head {
+		salt += 0x20
+	}
+	px := noisyTexture(bedMattressColor, 8, salt)
+	// 床架包边：外圈 2px。
+	for i := 0; i < texSize; i++ {
+		for _, b := range [...]int{0, 1, texSize - 2, texSize - 1} {
+			paint(px, i, b, bedFrameColor)
+			paint(px, b, i, bedFrameColor)
+		}
+	}
+	// 绗缝线：垂直于床头方向的两道（床头在 z 轴向时缝线沿列，x 轴向时沿行）。
+	for _, seam := range [...]int{6, 9} {
+		for i := 2; i < texSize-2; i++ {
+			if dir == 0 || dir == 2 {
+				paint(px, seam, i, bedSeamColor)
+			} else {
+				paint(px, i, seam, bedSeamColor)
+			}
+		}
+	}
+	if head {
+		bedBand(px, dir, 0, 3, bedPillowColor)
+		return px
+	}
+	bedBand(px, dir, 0, 3, bedBlanketColor)
+	// 毯沿内侧一线折边高光，让「毯子折过来」可读。
+	bedBand(px, dir, 3, 1, bedBlanketEdgeColor)
+	return px
+}

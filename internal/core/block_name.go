@@ -26,6 +26,11 @@ var blockDisplayNames = [...]string{
 	// RegisteredBlock 扩容后 BlockDisplayName 会索引越界 panic。
 	// 贴墙形态名与放置命中面同向（火把贴在支撑块的哪个侧面）。
 	"落地火把", "墙挂火把+X", "墙挂火把-X", "墙挂火把+Z", "墙挂火把-Z",
+	// 床八形态紧随火把追加，显示名同步补齐，否则
+	// RegisteredBlock 扩容后 BlockDisplayName 会索引越界 panic。
+	// 形态名中的方向表示床头相对床尾所指的方向（与方块编号注释同口径）。
+	"床尾_南", "床尾_西", "床尾_北", "床尾_东",
+	"床头_南", "床头_西", "床头_北", "床头_东",
 }
 
 // BlockDisplayName 返回已注册方块的中文显示名。

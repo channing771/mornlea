@@ -31,6 +31,18 @@ const (
 	// 与客户端预测两侧因此逐位一致。
 	farmlandCollisionHeight = float32(0.9375)
 
+	// bedCollisionHeight 是床碰撞体的高度 9/16 = 0.5625（床尾与床头两格同高，
+	// 水平占满整格）。
+	//
+	// 为什么是 9/16：spec Requirement「床有半高碰撞体且可被选取」写死的半高
+	// 契约——床必须能被玩家站上（站上高度 1+9/16 与满方块可区分），又必须
+	// 挡住穿越（零碰撞会让床变成可穿行的装饰）。取 9/16 而不是任意的「半格」
+	// 与耕地同理由：9/16 = 0.5625 在 f32 里精确（2^-1 + 2^-4），1+9/16 = 1.5625
+	// 同样精确，落地钳位不引入任何舍入，权威与客户端预测两侧逐位一致；同一
+	// 数值由呈现侧的床模型顶面角高度（(8+1)/16 = 9/16）复用，可见几何与碰撞
+	// 边界同线。
+	bedCollisionHeight = float32(0.5625)
+
 	// 以下是可调参数的编译期默认值。唯一读取入口是 Tunables 快照，
 	// 不得再以导出常量暴露——见 internal/archcheck 的 TestTunableConstantsAreNotExported。
 	defaultEyeHeight          = float32(1.62)
@@ -138,11 +150,16 @@ func PlayerBounds(position mgl32.Vec3) core.AABB {
 // 提供碰撞体，Requirement「作物不提供碰撞体，耕地略低于满方块」对作物提出同一
 // 要求，可放置火把的需求同样写死五形态零碰撞，实体必须能自由穿行。零碰撞不
 // 豁免瞄准：火把仍是交互射线的合法命中目标，那由射线的目标谓词决定，与碰撞表
-// 无关。耕地（core.IsFarmland）是全仓唯一的非满立方体碰撞：单盒，顶面压到
+// 无关。耕地（core.IsFarmland）是首个非满立方体碰撞：单盒，顶面压到
 // farmlandCollisionHeight。
 //
 // 门是第二类非满碰撞：关闭时厚 3/16 贴方向边，开启时旋转 90° 薄边；上半无方向，
 // 按空气处理（下半已阻挡时上半无需再阻挡，也避免双格厚度叠加）。
+//
+// 床是第三类非满碰撞：床尾与床头两格同为单盒半高（bedCollisionHeight = 9/16），
+// 水平占满整格——实体 MUST NOT 穿越已放置的床，站上床顶面时脚底恰在
+// 1+9/16。八个朝向形态共用同一碰撞形状：朝向只影响呈现与双格配对，不影响
+// 阻挡。
 //
 // 各分支的形状差异全部由 prism 的逐格 AABB 数组承载（每格 box count + 每 box
 // 24 字节），Rust 侧按 count 循环读任意包围盒，因此新增非满方块形状不触及 FFI
@@ -153,6 +170,13 @@ func BlockCollisionBoxes(id core.BlockID, loaded bool) CollisionBoxSet {
 	}
 	if id == core.AirID || core.IsFluid(id) || core.IsCrop(id) || core.IsTorch(id) {
 		return CollisionBoxSet{Loaded: true}
+	}
+	// 床碰撞：床尾/床头同形，单盒半高、水平占满。
+	if core.IsBed(id) {
+		return CollisionBoxSet{Loaded: true, Count: 1, Boxes: [8]core.AABB{{
+			Min: mgl32.Vec3{},
+			Max: mgl32.Vec3{1, bedCollisionHeight, 1},
+		}}}
 	}
 	// 门碰撞：关闭贴边、开启旋转 90°，厚度 3/16
 	if core.IsDoor(id) {

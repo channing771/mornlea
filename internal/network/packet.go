@@ -7,19 +7,22 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 )
 
-// ProtocolVersion 是当前唯一支持的协议版本；v30 新增 Play S→C ID 22/23/24
+// ProtocolVersion 是当前唯一支持的协议版本；v31 在 `PlayerState` 尾部追加
+// `DayPhaseOffset` 显示相位偏移（u16，0..23999，紧跟 `SaturationZero` 之后、
+// `WorldTimeTicks` 之前，越界拒绝）；v30 新增 Play S→C ID 22/23/24
 // 三类夜行者消息 `HostileSpawn`/`HostileState`/`HostileDespawn`（每类
 // `ServerTick` u64 + count u8 + ≤64 条按 ID 严格升序的 record；spawn 携带
 // ID/dimension/position/yaw/health，state 携带 ID/position/velocity/yaw/health，
 // despawn 只携带 ID），并维护旧客户端握手拒绝语义；v29 在 `PlayerState` 尾部追加
 // `SaturationZero` 饱和度归零提示位（紧跟 `Hunger` 之后、`WorldTimeTicks` 之前）；v28 在 `PlayerInput` 尾部追加 `Sprinting` 疾跑位（紧跟 `Eating` 之后）；v27 新增 Play C→S ID 14 `BoneMeal`，v26 新增 Play S→C ID 20 `PlaceBlockSucceeded`，v25 只扩展既有 `Mining` 位语义不新增字段，v24 上线权威饥饿 Eating/Hunger 并拒绝 v23 及更早登录。
 //
-// v30 是纯追加：不新增 C→S 消息、不改动既有 packet 的 wire 形状与全部长度
-// 上限、不新增 `RejectReason`。v29/v28/v24 同为既有 packet 尾部追加：
+// v31 是纯追加：不新增 C→S 消息、不改动既有 packet 的 wire 形状与全部长度
+// 上限、不新增 `RejectReason`。v30 新增三类 S→C 消息；v29/v28/v24 同为既有
+// packet 尾部追加：
 //
 //   - `PlayerInput`（Play/C→S ID 0）末尾追加 1 字节 `Sprinting`，紧跟 `Eating` 之后。
 //     三者同形：客户端只声明按键意图，权威结算全在服务端。
-//   - `PlayerState`（Play/S→C ID 3）在 v24 已追加 1 字节 `Hunger`，在 v29 再追加 1 字节 `SaturationZero`，落在 `Hunger` 之后、`WorldTimeTicks` 之前。三层饥饿状态里只有饥饿值与零提示位上线，饱和度与疲劳值是纯服务端量、不占 wire 字段（design.md D6，B-12 仅追加 1 位抖动提示）。
+//   - `PlayerState`（Play/S→C ID 3）在 v24 已追加 1 字节 `Hunger`，在 v29 再追加 1 字节 `SaturationZero`，在 v31 再追加 2 字节 `DayPhaseOffset`（u16，值域 0..23999，越界拒绝），均落在 `WorldTimeTicks` 之前。三层饥饿状态里只有饥饿值与零提示位上线，饱和度与疲劳值是纯服务端量、不占 wire 字段（design.md D6）；相位偏移只平移显示相位，绝对世界时间的推进语义不变。
 //
 // 历史：v23 在 `LoginSuccess` 追加 `WorldSeed`（u64，wire 上紧跟 `PlayerID` 之后），
 // 供客户端确定性生成远环壳——该段在旧基线上原编号 v18，main 合并 fluid 系列
@@ -29,7 +32,7 @@ import (
 // v21 在 `PlayerState` 末尾追加 2 字节权威氧气（只发给玩家本人的权威
 // 值）；v20 追加 8 个流体方块编号（只扩方块 ID 集合，wire 形状不变），流体
 // 变更走既有区块变更通道（design.md D8）。
-const ProtocolVersion uint32 = 30
+const ProtocolVersion uint32 = 31
 
 // State 标识连接当前允许交换的 packet 集合。
 type State uint8

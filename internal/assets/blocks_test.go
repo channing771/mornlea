@@ -697,21 +697,25 @@ func TestTorchTextureIsNarrowHandleWithWarmFlame(t *testing.T) {
 	}
 }
 
-// TestTorchFormsModelTags 锁定有限模型 tag 的生产登记：五种火把形态按方块
-// 编号顺序 71..75 → tag 1..5（1=落地、2..5=墙面 +X/−X/+Z/−Z），其余全部
-// 已注册方块与越界编号保持默认 0；tag 随 registry 快照冻结送过 ABI 边界。
-func TestTorchFormsModelTags(t *testing.T) {
+// TestFiniteModelTagsCoverTorchAndBed 锁定有限模型 tag 的生产登记：五种火把
+// 形态按方块编号顺序 71..75 → tag 1..5（1=落地、2..5=墙面 +X/−X/+Z/−Z），
+// 床八形态（76..83）共用保留的 tag 6，其余全部已注册方块与越界编号保持默认
+// 0；tag 随 registry 快照冻结送过 ABI 边界。
+func TestFiniteModelTagsCoverTorchAndBed(t *testing.T) {
 	registry := assets.NewRegistry()
 	// Registry 必须实现可选的 mesh.ModelReader：BuildRegistrySnapshot 靠类型
-	// 断言接入，未实现则所有方块静默回落 tag 0，火把永远不出模型几何。
+	// 断言接入，未实现则所有方块静默回落 tag 0，火把与床永远不出模型几何。
 	var reader mesh.RegistryReader = registry
 	if _, ok := reader.(mesh.ModelReader); !ok {
-		t.Fatal("assets.Registry 未实现 mesh.ModelReader：火把模型 tag 无法进入快照")
+		t.Fatal("assets.Registry 未实现 mesh.ModelReader：模型 tag 无法进入快照")
 	}
 	for id := core.AirID; id < core.BlockIDMax; id++ {
 		want := uint8(0)
-		if core.IsTorch(id) {
+		switch {
+		case core.IsTorch(id):
 			want = uint8(id - core.TorchStandingID + 1)
+		case core.IsBed(id):
+			want = 6
 		}
 		if got := registry.Model(id); got != want {
 			t.Fatalf("Model(%d)=%d，想要 %d", id, got, want)
@@ -725,8 +729,11 @@ func TestTorchFormsModelTags(t *testing.T) {
 	snapshot := registry.MeshSnapshot()
 	for id := core.AirID; id < core.BlockIDMax; id++ {
 		want := uint8(0)
-		if core.IsTorch(id) {
+		switch {
+		case core.IsTorch(id):
 			want = uint8(id - core.TorchStandingID + 1)
+		case core.IsBed(id):
+			want = 6
 		}
 		if got := snapshot.Blocks[int(id)].Model; got != want {
 			t.Fatalf("快照中方块 %d 的 Model=%d，想要 %d", id, got, want)

@@ -1,6 +1,8 @@
-//! 火把有限模型（placeable-torches）的几何发射。
+//! 有限模型几何发射（model dispatcher 的发射半边）：本文件承载 `mesh_models`
+//! 调度器与火把（placeable-torches）两种形态的几何；床的半高板几何见
+//! `super::bed`。
 //!
-//! 五种形态共用一张竖直火柄纹理（材质 alpha 收窄视觉），mesher 只负责发射
+//! 五种火把形态共用一张竖直火柄纹理（材质 alpha 收窄视觉），mesher 只负责发射
 //! 「形态几何」：
 //!
 //! - **落地（model 1）**：与植物完全同构的两条交叉斜面（face 6/7 × 正背各
@@ -21,6 +23,7 @@ use crate::input::MeshInput;
 use crate::light::LightScratch;
 use crate::quad::{Face, Quad};
 
+use super::bed::emit_bed;
 use super::{MeshError, PLANT_QUADS};
 
 /// 落地火把每格面实例数的**固定上界**：两条交叉斜面 × 正背各一。
@@ -46,13 +49,13 @@ pub(crate) const TORCH_WALL_TOP_NEAR_RAW: u8 = 8;
 /// 间误传；也留出与满格 15（流体水柱内部专用）的余量。
 pub(crate) const TORCH_WALL_TOP_FAR_RAW: u8 = 13;
 
-/// mesh_torches 为区段里每个火把格发射有限模型几何，返回新的 quad 总数。
-///
-/// 这是 model dispatcher 的发射半边：tag 0（默认）不进本函数、继续走既有
-/// 几何；tag 6（床，保留）与未知值在 `RegistryView::validate` 的 parse 期就
-/// 被拒绝，走不到这里——闭区间 `match` 保持穷尽，未来新增 tag 会在编译期
-/// 强制显式处理而不是静默回退。
-pub(crate) fn mesh_torches(
+/// mesh_models 为区段里每个带有限模型 tag 的格子发射模型几何，返回新的
+/// quad 总数。这是 model dispatcher 的发射半边：tag 0（默认）不进本函数、
+/// 继续走既有几何；tag 1..=5 走火把、tag 6 走床（见 `super::bed`）；
+/// 7 起的未知值在 `RegistryView::validate` 的 parse 期就被拒绝，走不到
+/// 这里——闭区间 `match` 保持穷尽，未来新增 tag 会在编译期强制显式处理
+/// 而不是静默回退。
+pub(crate) fn mesh_models(
     input: &MeshInput<'_>,
     light: &LightScratch<'_>,
     output: &mut [u64],
@@ -77,8 +80,9 @@ pub(crate) fn mesh_torches(
                 count = match tag {
                     1 => emit_standing([x, y, z], material, light_above, output, count)?,
                     2..=5 => emit_wall(tag, [x, y, z], material, light_above, output, count)?,
-                    // validate 已把 > 5（含床 tag 6 与未知值）整体拒绝成
-                    // InputError::Registry，这里的 `_` 分支只为穷尽性而存在。
+                    6 => emit_bed(input, light, [x, y, z], output, count)?,
+                    // validate 已把 7 起的未知值整体拒绝成 InputError::Registry，
+                    // 这里的 `_` 分支只为穷尽性而存在。
                     _ => unreachable!("model tag 已被 RegistryView::validate 拒绝"),
                 };
             }

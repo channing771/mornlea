@@ -40,6 +40,13 @@ type PlayerState struct {
 	// `Hunger` 之后、`WorldTimeTicks` 之前）；为真时表示 `saturationMilli==0`。
 	// 它只驱动 HUD 抖动提示，不持久化、不进存档。
 	SaturationZero bool
+	// DayPhaseOffset 是显示相位偏移，协议 v31 起随玩家状态同步（wire 上紧跟
+	// `SaturationZero` 之后、`WorldTimeTicks` 之前）；合法区间是 0..23999，越界值
+	// 在 Validate、编码与解码三处都被拒绝。显示相位由
+	// `(WorldTimeTicks + DayPhaseOffset) % 24000` 决定：偏移只平移呈现相位，绝不
+	// 回写绝对时间。与存储侧（世界 metadata 装配）对历史存档越界旧值的宽容归一
+	// 不同，wire 侧只传播权威单值、没有兼容包袱，故从严拒绝。
+	DayPhaseOffset uint16
 	// WorldTimeTicks 是本 tick 结束时的权威绝对世界时间，协议 v9 起随玩家状态同步。
 	WorldTimeTicks uint64
 }
@@ -142,6 +149,9 @@ func (state PlayerState) Validate() error {
 	}
 	if !core.ValidHunger(state.Hunger) {
 		return errors.New("network: player state has out-of-range hunger")
+	}
+	if state.DayPhaseOffset >= core.DayLengthTicks {
+		return errors.New("network: player state has out-of-range day phase offset")
 	}
 	if !state.MiningActive {
 		if state.MiningTarget != (core.BlockPos{}) || state.MiningProgressTicks != 0 ||

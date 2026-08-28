@@ -30,148 +30,11 @@ func encodeLegacyMetadataV1(metadata Metadata) []byte {
 	)
 }
 
-func TestMetadataV2GoldenBytes(t *testing.T) {
-	metadata := Metadata{
-		FormatVersion:  currentMetadataVersion,
-		Seed:           -42,
-		SpawnDimension: core.DimensionID(-3),
-		SpawnAnchor:    core.ChunkPos{X: 7, Z: -11},
-		WorldTimeTicks: 0x0102030405060708,
-	}
-	encoded, err := encodeMetadata(metadata)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	wantPrefix := []byte{
-		'M', 'C', 'G', 'M',
-		2, 0, 0, 0,
-		28, 0, 0, 0,
-		0xd6, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-		0xfd, 0xff, 0xff, 0xff,
-		7, 0, 0, 0,
-		0xf5, 0xff, 0xff, 0xff,
-		8, 7, 6, 5, 4, 3, 2, 1,
-	}
-	if len(encoded) != len(wantPrefix)+4 || !bytes.Equal(encoded[:len(wantPrefix)], wantPrefix) {
-		t.Fatalf("metadata v2 字节 = %x，想要前缀 %x 加 CRC32C", encoded, wantPrefix)
-	}
-	wantCRC := crc32.Checksum(wantPrefix, metadataCRCTable)
-	if got := binary.LittleEndian.Uint32(encoded[len(wantPrefix):]); got != wantCRC {
-		t.Fatalf("metadata CRC32C = %#x，想要 %#x", got, wantCRC)
-	}
-
-	decoded, err := decodeMetadata(encoded)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if decoded != metadata {
-		t.Fatalf("往返 = %+v，想要 %+v", decoded, metadata)
-	}
-}
-
-func TestMetadataV1MigratesToV2WithZeroTime(t *testing.T) {
-	legacy := Metadata{
-		FormatVersion:  legacyMetadataVersion,
-		Seed:           -42,
-		SpawnDimension: core.DimensionID(-3),
-		SpawnAnchor:    core.ChunkPos{X: 7, Z: -11},
-	}
-	decoded, err := decodeMetadata(encodeLegacyMetadataV1(legacy))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	want := legacy
-	want.FormatVersion = currentMetadataVersion
-	want.WorldTimeTicks = 0
-	if decoded != want {
-		t.Fatalf("v1 迁移结果 = %+v，想要 %+v", decoded, want)
-	}
-}
-
-func TestMetadataRejectsFutureAndMalformedV2(t *testing.T) {
-	valid, err := encodeMetadata(Metadata{
-		FormatVersion:  currentMetadataVersion,
-		Seed:           42,
-		SpawnDimension: core.Overworld,
-		SpawnAnchor:    core.ChunkPos{X: 3, Z: -2},
-		WorldTimeTicks: 12345,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	legacy := encodeLegacyMetadataV1(Metadata{FormatVersion: legacyMetadataVersion, Seed: 42})
-
-	tests := []struct {
-		name    string
-		bytes   func() []byte
-		wantErr error
-	}{
-		{
-			name: "未来版本",
-			bytes: func() []byte {
-				future := bytes.Clone(valid)
-				binary.LittleEndian.PutUint32(future[4:8], currentMetadataVersion+1)
-				return future
-			},
-			wantErr: ErrFutureVersion,
-		},
-		{
-			name: "零版本",
-			bytes: func() []byte {
-				past := bytes.Clone(valid)
-				binary.LittleEndian.PutUint32(past[4:8], 0)
-				return past
-			},
-			wantErr: ErrCorrupt,
-		},
-		{
-			name:    "v2 截断",
-			bytes:   func() []byte { return bytes.Clone(valid[:len(valid)-1]) },
-			wantErr: ErrCorrupt,
-		},
-		{
-			name:    "v1 截断",
-			bytes:   func() []byte { return bytes.Clone(legacy[:len(legacy)-1]) },
-			wantErr: ErrCorrupt,
-		},
-		{
-			name: "v2 声明 v1 长度",
-			bytes: func() []byte {
-				wrong := bytes.Clone(valid)
-				binary.LittleEndian.PutUint32(wrong[8:12], legacyMetadataPayloadLength)
-				return wrong
-			},
-			wantErr: ErrCorrupt,
-		},
-		{
-			name: "v1 声明 v2 长度",
-			bytes: func() []byte {
-				wrong := bytes.Clone(legacy)
-				binary.LittleEndian.PutUint32(wrong[8:12], metadataPayloadLength)
-				return wrong
-			},
-			wantErr: ErrCorrupt,
-		},
-		{
-			name: "v2 CRC 损坏",
-			bytes: func() []byte {
-				corrupt := bytes.Clone(valid)
-				corrupt[len(corrupt)-5] ^= 0xff
-				return corrupt
-			},
-			wantErr: ErrCorrupt,
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if _, err := decodeMetadata(tc.bytes()); !errors.Is(err, tc.wantErr) {
-				t.Fatalf("decodeMetadata 错误 = %v，想要 %v", err, tc.wantErr)
-			}
-		})
-	}
-}
+// 本文件原有的 v2 golden、v1→v2 迁移与 v2 时代损坏矩阵已随版本升级由
+// metadata_dayphase_test.go 的 TestMetadataV3GoldenBytes（当前布局）、
+// TestMetadataV2LegacyGoldenBytes（冻结的 v2 旧档字节）、
+// TestMetadataV1MigratesToV3WithZeroTimeAndOffset 与
+// TestMetadataVersionsRejectMalformedBytes（覆盖三个版本的两两长度混淆）承接。
 
 // failingReplaceFile 在指定阶段注入失败的临时文件。
 type failingReplaceFile struct {
@@ -333,6 +196,9 @@ func TestStoreSaveMetadataSharesValueSemantics(t *testing.T) {
 		Seed:           99,
 		SpawnDimension: core.Overworld,
 		SpawnAnchor:    core.ChunkPos{X: 1, Z: 2},
+		// 偏移取非零值：保存路径漏写偏移会在读数上暴露，零值夹具下
+		// 「写了 0」与「没写」无法区分。
+		DayPhaseOffset: 23999,
 	}
 	ctx := context.Background()
 
@@ -350,6 +216,8 @@ func TestStoreSaveMetadataSharesValueSemantics(t *testing.T) {
 		}
 		updated := base
 		updated.WorldTimeTicks = 4242
+		// 偏移归零的保存：读回应是「时间前进、偏移归零」的完整值语义。
+		updated.DayPhaseOffset = 0
 		if err := store.SaveMetadata(ctx, updated); err != nil {
 			t.Fatalf("%s: SaveMetadata: %v", name, err)
 		}
@@ -372,6 +240,9 @@ func TestStoreSaveMetadataSharesValueSemantics(t *testing.T) {
 	t.Cleanup(func() { _ = reopened.Close() })
 	if got := reopened.Metadata().WorldTimeTicks; got != 4242 {
 		t.Fatalf("重开后世界时间 = %d，想要 4242", got)
+	}
+	if got := reopened.Metadata().DayPhaseOffset; got != 0 {
+		t.Fatalf("重开后偏移 = %d，想要 0", got)
 	}
 }
 

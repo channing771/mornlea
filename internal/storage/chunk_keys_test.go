@@ -14,7 +14,7 @@ import (
 func TestChunkKeysEnumeratesPersistedChunksInOrder(t *testing.T) {
 	root := t.TempDir()
 	store, err := OpenDisk(context.Background(), root, OpenOptions{
-		Create: Metadata{FormatVersion: 2, Seed: 42},
+		Create: Metadata{FormatVersion: 3, Seed: 42},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -69,7 +69,7 @@ func TestChunkKeysEnumeratesPersistedChunksInOrder(t *testing.T) {
 func TestChunkKeysEmptyWorldDoesNotCreateDimensions(t *testing.T) {
 	root := t.TempDir()
 	store, err := OpenDisk(context.Background(), root, OpenOptions{
-		Create: Metadata{FormatVersion: 2},
+		Create: Metadata{FormatVersion: 3},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -91,7 +91,7 @@ func TestChunkKeysEmptyWorldDoesNotCreateDimensions(t *testing.T) {
 func TestChunkKeysIgnoresNonCanonicalAliasesAndUnrelatedFiles(t *testing.T) {
 	root := t.TempDir()
 	store, err := OpenDisk(context.Background(), root, OpenOptions{
-		Create: Metadata{FormatVersion: 2},
+		Create: Metadata{FormatVersion: 3},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -150,7 +150,7 @@ func TestChunkKeysIgnoresNonCanonicalAliasesAndUnrelatedFiles(t *testing.T) {
 func TestChunkKeysRejectsCorruptRegion(t *testing.T) {
 	root := t.TempDir()
 	store, err := OpenDisk(context.Background(), root, OpenOptions{
-		Create: Metadata{FormatVersion: 2},
+		Create: Metadata{FormatVersion: 3},
 	})
 	if err != nil {
 		t.Fatal(err)

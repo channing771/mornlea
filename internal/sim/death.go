@@ -49,9 +49,21 @@ func (engine *Engine) settleDeath(
 	// 它刻意放在这里而不是 beginReset：beginReset 同时服务「掉出世界」等纯位置
 	// 跳变，在那里回满饥饿等于给玩家一条免费的进食途径。
 	player.resetHunger()
+	// 个人重生点延迟校验先于 beginReset：床完好时把「床尾格站立候选」挂进
+	// restoreCandidates，让待重生扫描优先复用既有恢复路径回到床尾；失效或无
+	// 法验证时保持候选为空，beginReset 的锚点语义原样生效（含 present 位清除，
+	// 见 bedRespawnCandidate）。
+	respawn := engine.bedRespawnCandidate(player)
 	// beginReset 是既有的重生/传送路径：它把玩家置为待重生、位置移回出生锚点所在列、
 	// 速度与输入归零，并把摔落峰值重置到新高度，因此死亡不需要另写一套位置赋值。
 	player.beginReset()
+	if respawn != nil {
+		player.restoreCandidates = append(player.restoreCandidates, *respawn)
+		player.nextRestore = 0
+		// `activate` 会把 restoreWanted 置 nil（登录恢复一次性使用）；死亡重生
+		// 复用该路径时必须重新建图，retainRestoreChunks 才有可写的保留集合。
+		player.restoreWanted = make(map[core.ChunkKey]struct{})
+	}
 	engine.subscriptionsDirty = true
 }
 

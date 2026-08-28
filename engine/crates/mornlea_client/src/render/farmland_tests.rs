@@ -10,10 +10,13 @@
 //! 2/3、恒 1×1 不贪心合并。客户端若沿用 `w/h` 尺寸解码，耕地的角高度原值
 //! 14 会被读成 15×15 的巨型石板盖住邻格；本文件钉住 terrain.wgsl 按
 //! **material 区间**分流到与 water.wgsl 同源的角高度路径，并把区间常量、
-//! Go 层枚举与 shader 字面量三方钉在一起。
+//! Go 层枚举与 shader 字面量三方钉在一起。同一判别路径此后接入了两批新短
+//! 方块：墙面火把的倾斜薄板（`TORCH_MATERIAL`，单层）与床的 9/16 半高板
+//! （`BED_MATERIAL_FIRST/LAST`，八层），三者的守卫与扫描都在本文件。
 
 use super::shaders::{
-    CULL, FARMLAND_MATERIAL_FIRST, FARMLAND_MATERIAL_LAST, TERRAIN, TORCH_MATERIAL,
+    BED_MATERIAL_FIRST, BED_MATERIAL_LAST, CULL, FARMLAND_MATERIAL_FIRST, FARMLAND_MATERIAL_LAST,
+    TERRAIN, TORCH_MATERIAL,
 };
 use super::*;
 
@@ -27,6 +30,9 @@ const MAT_FARMLAND_WET: u16 = FARMLAND_MATERIAL_LAST;
 /// 生产夹具值：耕地顶面高度原值 14，呈现高度 (14+1)/16 = 15/16，
 /// 恰等于物理碰撞体高度（internal/physics 的 farmlandCollisionHeight）。
 const FARMLAND_TOP_RAW: u8 = 14;
+/// 生产夹具值：床面高度原值 8，呈现高度 (8+1)/16 = 9/16，与 engine
+/// `greedy/bed.rs` 的 `BED_TOP_RAW` 及物理床碰撞体同线。
+const BED_TOP_RAW: u8 = 8;
 /// 满格对照的高度原值：(15+1)/16 = 1，即未下沉的整格顶面。
 const FULL_TOP_RAW: u8 = 15;
 /// 一个 atlas 层（含全部 mip）的字节数：16²+8²+4²+2²+1² 个 RGBA 像素。
@@ -131,16 +137,18 @@ fn atlas_bytes(colors: &[[u8; 4]]) -> Vec<u8> {
     out
 }
 
-/// 测试用的纯色表：层数必须大于 [`FARMLAND_MATERIAL_LAST`]，否则耕地采样层
+/// 测试用的纯色表：层数必须大于 [`BED_MATERIAL_LAST`]，否则床采样层
 /// 越界（WGSL 对越界层号的行光是未定义行为，绝不能让断言建立在它上面）。
 ///
 /// 层 0 不透明红（裸地面）、层 29（干耕地）不透明绿、层 30（湿耕地）不透明蓝，
-/// 其余层填不透明灰占位。三色两两可按主导通道区分，断言不需要逐字节相等。
+/// 层 60（床尾南向）不透明琥珀，其余层填不透明灰占位。各色两两可按主导通道
+/// 区分，断言不需要逐字节相等。
 fn test_colors() -> Vec<[u8; 4]> {
-    let mut colors = vec![[90u8, 90, 90, 255]; 32];
+    let mut colors = vec![[90u8, 90, 90, 255]; 68];
     colors[MAT_RED as usize] = [200, 60, 60, 255];
     colors[MAT_FARMLAND_DRY as usize] = [60, 200, 60, 255];
     colors[MAT_FARMLAND_WET as usize] = [60, 90, 220, 255];
+    colors[BED_MATERIAL_FIRST as usize] = [220, 170, 60, 255];
     colors
 }
 
@@ -290,6 +298,23 @@ fn shader_sources_stay_pinned_to_the_range_constants() {
         "terrain.wgsl 的火把层号与本 crate 常量不一致：\n{torch_seg}"
     );
 
+    // 床层区间是角高度路径的第三个消费者(9/16 半高板,五条 quad 全带角高度),
+    // 同一套三方手工同步,同一处扫描一并钉住;判别函数必须真实接入角高度路径
+    // 的分流门,只定义不接入时床 quad 仍会走 w/h 解码摊成巨型石板。
+    let bed_seg = segment_after(TERRAIN, "fn bed_material");
+    assert!(
+        bed_seg.contains(&format!(">= {BED_MATERIAL_FIRST}u")),
+        "terrain.wgsl 的床区间下界与本 crate 常量不一致：\n{bed_seg}"
+    );
+    assert!(
+        bed_seg.contains(&format!("<= {BED_MATERIAL_LAST}u")),
+        "terrain.wgsl 的床区间上界与本 crate 常量不一致：\n{bed_seg}"
+    );
+    assert!(
+        TERRAIN.contains("torch_material(mat) || bed_material(mat)"),
+        "terrain.wgsl 的角高度分流门必须包含床判别：床 quad 脱门即巨型石板回归"
+    );
+
     // cull.wgsl 对耕地 quad 按**满格**做背面剔除（误差有界、只可能漏画，
     // 论证见 shader 内注释）：bit 16..19 在耕地 quad 上是角高度、在普通
     // quad 上是 h 尺寸，两种语义都不该被剔除路径读到。若有人给 cull 补上
@@ -421,5 +446,184 @@ fn dry_and_wet_farmland_render_distinguishably() {
     assert!(
         image_diff(&dry, &wet).is_some(),
         "干湿两态画面逐像素相同：材质层没有进入渲染路径"
+    );
+}
+
+/// 床区间常量必须等于 Go `assets.LayerBedFootSouth`..`LayerBedHeadEast` 的
+/// 当前枚举值（60..67，火把层 59 之后末位追加）。
+///
+/// 三处手工同步、无共享定义：Go 层枚举（真值源）、本 crate 常量、
+/// terrain.wgsl 的 `bed_material` 字面量。Go 侧钉子是 internal/assets 的
+/// `TestBedLayerNumbersMatchClientShaderContract`，shader 一侧由
+/// `shader_sources_stay_pinned_to_the_range_constants` 扫源码钉住。在 Go 枚举
+/// 床之前插层会整体平移区间——床 quad 会脱门走 `w/h` 解码摊成巨型石板，
+/// 那两处守卫与下面的渲染回归是报警点。
+#[test]
+fn bed_range_constants_match_go_layer_enum() {
+    assert_eq!(BED_MATERIAL_FIRST, 60, "Go `LayerBedFootSouth`=60");
+    assert_eq!(BED_MATERIAL_LAST, 67, "Go `LayerBedHeadEast`=67");
+    // 区间必须恰好覆盖床尾/床头 × 南西北东八层：放宽会把火把层(59)卷进
+    // 区间，收紧会让床的一部分形态脱门走 w/h 解码。
+    assert_eq!(
+        BED_MATERIAL_LAST - BED_MATERIAL_FIRST,
+        7,
+        "床区间恰好覆盖八张床面层"
+    );
+}
+
+/// 床顶面只覆盖自己那一格——巨型石板回归的直接锁。
+///
+/// 床是 9/16 短方块：顶面 quad 四角带高度原值 8；terrain.wgsl 若沿用 `w/h`
+/// 解码，角 0/角 1 的 8 会被读成 9×9 巨型石板、贴在整格顶面平面上盖住右下
+/// 邻格。对照法与耕地用例同款：对同一场景做「有/无床」两帧渲染，断言石板
+/// 覆盖范围内的空格子逐像素不变、床格自身有变化。床面层取区间下界即可——
+/// 判别按 material 区间分流，八层的解码路径同门。
+#[test]
+fn bed_top_face_covers_only_its_own_cell() {
+    let scene = |with_bed: bool| {
+        // 地板只摆在石板范围之外（x<8），证明地面渲染本身不受影响。
+        let mut opaque = vec![floor_cell(6, 6), floor_cell(6, 9)];
+        if with_bed {
+            opaque.push(pack_quad(
+                8,
+                0,
+                8,
+                FACE_POS_Y,
+                BED_MATERIAL_FIRST,
+                0xFF,
+                0xFF,
+                [BED_TOP_RAW; 4],
+            ));
+        }
+        SectionData {
+            pos: (0, 4, 0),
+            opaque,
+            water: vec![],
+        }
+    };
+    let Some(without) = render_once(top_down_view_proj(), &[scene(false)]) else {
+        return;
+    };
+    let with = render_once(top_down_view_proj(), &[scene(true)]).expect("首个场景已成功建过渲染器");
+    // (9,8)/(8,9)/(9,9) 摆在 9×9 石板的必经之路上且没有别的几何：石板一旦
+    // 出现，这些格子相对无床帧必然变色。
+    for (bx, bz) in [(9u32, 8u32), (8, 9), (9, 9)] {
+        assert_eq!(
+            cell_pixel(&without, bx, bz),
+            cell_pixel(&with, bx, bz),
+            "床不得越出自身一格：({bx},{bz}) 被石板化床顶覆盖"
+        );
+    }
+    assert_ne!(
+        cell_pixel(&without, 8, 8),
+        cell_pixel(&with, 8, 8),
+        "床格自身毫无变化：夹具空转，上面的邻格断言不承重"
+    );
+}
+
+/// 床顶面必须真的下沉到 9/16，且幅度对得上位布局：与满格对照差 7/16 世界
+/// 高度（角高度 8 → (8+1)/16，满格 15 → 1）。
+///
+/// 沿用耕地斜视投影的同一手法：高度差 Δy 对应屏幕 64Δy 行，7/16 即 28 行，
+/// 带宽取 26..=30。断言顶面**出现了**且比满格对照更靠下——完全不解码角
+/// 高度（顶点恒在 y+1）或沿用 w/h 解码（巨型石板首行远移或出屏）都会红。
+#[test]
+fn bed_top_edge_sinks_below_a_full_height_control() {
+    let empty = SectionData {
+        pos: (0, 4, 0),
+        opaque: vec![],
+        water: vec![],
+    };
+    let Some(empty_image) = render_once(oblique_view_proj(), std::slice::from_ref(&empty)) else {
+        return;
+    };
+    let top_row = |raw: u8| {
+        let image = render_once(
+            oblique_view_proj(),
+            &[SectionData {
+                pos: (0, 4, 0),
+                opaque: vec![pack_quad(
+                    8,
+                    0,
+                    8,
+                    FACE_POS_Y,
+                    BED_MATERIAL_FIRST,
+                    0xFF,
+                    0xFF,
+                    [raw; 4],
+                )],
+                water: vec![],
+            }],
+        )
+        .expect("首个场景已成功建过渲染器");
+        (0..VIEW)
+            .find(|&row| {
+                (0..VIEW).any(|x| {
+                    let (a, b) = (pixel(&image, x, row), pixel(&empty_image, x, row));
+                    (0..3).any(|c| a[c].abs_diff(b[c]) >= 8)
+                })
+            })
+            .unwrap_or_else(|| panic!("高度 {raw} 的床顶面完全没有出现在画面上"))
+    };
+    let sunk = top_row(BED_TOP_RAW);
+    let full = top_row(FULL_TOP_RAW);
+    assert!(
+        sunk > full,
+        "下沉的床顶面必须比满格对照更靠下（行号更大）：sunk={sunk} full={full}"
+    );
+    let shift = sunk - full;
+    assert!(
+        (26..=30).contains(&shift),
+        "高度 15 → 8 的位移应约 28 行，实测 {shift} 行（sunk={sunk} full={full}）"
+    );
+}
+
+/// 角高度 quad 不论 material 落在哪个短方块集合，都必须走角高度解码。
+///
+/// 床的四片侧板读各自面的材质、生产注册表给的是与满格方块共享的橡木木板
+/// 层——material 判别对它们原理性失效，侧板曾被摊成 1×9 长板。分流门为此
+/// 保留了与 Go 侧 `UnpackQuad` 同语义的结构判别（角 2 非 0 ⟺ 角高度 quad）。
+/// 本用例用一条「橡木木板 material + 四角高度 8」的 PosY quad 钉住该路由：
+/// material 不在任何短方块集合里，几何上与床平顶同形——若门退回纯 material
+/// 判别，它会摊成 9×9 石板盖住邻格，断言当场红。
+#[test]
+fn corner_height_quads_route_regardless_of_material() {
+    let scene = |with_short_quad: bool| {
+        let mut opaque = vec![floor_cell(6, 6), floor_cell(6, 9)];
+        if with_short_quad {
+            // 层 20 在生产 atlas 里是橡木木板层：刻意选一个不在任何短方块
+            // material 集合里的层号，复现侧板的判别处境。
+            opaque.push(pack_quad(
+                8,
+                0,
+                8,
+                FACE_POS_Y,
+                20,
+                0xFF,
+                0xFF,
+                [BED_TOP_RAW; 4],
+            ));
+        }
+        SectionData {
+            pos: (0, 4, 0),
+            opaque,
+            water: vec![],
+        }
+    };
+    let Some(without) = render_once(top_down_view_proj(), &[scene(false)]) else {
+        return;
+    };
+    let with = render_once(top_down_view_proj(), &[scene(true)]).expect("首个场景已成功建过渲染器");
+    for (bx, bz) in [(9u32, 8u32), (8, 9), (9, 9)] {
+        assert_eq!(
+            cell_pixel(&without, bx, bz),
+            cell_pixel(&with, bx, bz),
+            "角高度 quad 不得因 material 在短方块集合之外而被摊成巨型石板：({bx},{bz}) 被覆盖"
+        );
+    }
+    assert_ne!(
+        cell_pixel(&without, 8, 8),
+        cell_pixel(&with, 8, 8),
+        "角高度 quad 自身毫无变化：夹具空转，上面的邻格断言不承重"
     );
 }

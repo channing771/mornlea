@@ -30,16 +30,17 @@ const HEIGHTS_BYTES: usize = 9 * 256 * 2;
 ///   方块、流体与植物继续走既有判定（植物仍按 material 区间识别），火把是
 ///   model tag 的第一个消费者，故 0 取「默认」而非「cube」，避免为既有四条
 ///   几何路径重复造 tag；`1..=5` 是火把五种形态（1=落地、2..=5=墙面
-///   +X/−X/+Z/−Z，与火把方块编号 72..75 同序）；`6` 保留给床功能行，**出现
-///   即拒绝**；其余值未知拒绝。这是固定 tag 而不是数据驱动格式——见
-///   `RegistryView::validate` 与 greedy 的 model dispatcher。
+///   +X/−X/+Z/−Z，与火把方块编号 72..75 同序）；`6` 是床（床尾/床头 × 4 朝向
+///   八形态共用的半高板几何，朝向差异由逐形态材质层表达）；其余值未知拒绝。
+///   这是固定 tag 而不是数据驱动格式——见 `RegistryView::validate` 与 greedy
+///   的 model dispatcher。
 const REGISTRY_ENTRY_BYTES: usize = 20;
 /// registry 条目表的容量上限。
 ///
-/// 80 是**上限**而不是当前条目数：Go 侧 `internal/assets.NewRegistry()` 把
-/// `core.AirID..core.BlockIDMax-1` 的全部已注册方块烘焙进 mesh snapshot，今天
-/// 是 76 条（27 个 M4 材料 + 8 个流体 + 27 个农业编号含工作台 + 9 个门编号 +
-/// 5 个火把形态）。
+/// 96 是**上限**而不是当前条目数：Go 侧 `internal/assets.NewRegistry()` 把
+/// `core.AirID..core.BlockIDMax-1` 的全部已注册方块烘焙进 mesh registry snapshot，今天
+/// 是 84 条（27 个 M4 材料 + 8 个流体 + 27 个农业编号含工作台 + 9 个门编号 +
+/// 5 个火把形态 + 8 个床形态）。
 /// 留出余量是为了避免每次追加方块编号都要做一次跨语言的常量同步。
 ///
 /// 本常量此前是 35，即"恰好等于当时的条目数"；那种写法会在 Go 侧追加编号时
@@ -51,7 +52,7 @@ const REGISTRY_ENTRY_BYTES: usize = 20;
 ///
 /// **注意**：本文件开头 `BLOCKS_BYTES = 27 * 4096 * 2` 里的 27 是 3×3×3 邻域的
 /// 区段数，与本常量只是数字撞了，两者语义无关，改一个绝不能牵动另一个。
-const MAX_REGISTRY_ENTRIES: usize = 80;
+const MAX_REGISTRY_ENTRIES: usize = 96;
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum InputError {
@@ -247,11 +248,11 @@ impl RegistryView<'_> {
             if self.entries[offset + 16] != 0 && self.entries[offset + 18] != 0 {
                 return Err(InputError::Registry);
             }
-            // model tag 的封闭集合：0=默认、1..=5=火把五形态。6 保留给床功能
-            // 行，**出现即拒绝**；其余值未知拒绝——两者返回相同的 Registry 拒
-            // 绝，放行任何一个都会让 mesher 静默回退到默认几何。拒绝发生在
-            // parse 期、任何几何产出之前，Go 侧编码器同口径。
-            if self.entries[offset + 19] > 5 {
+            // model tag 的封闭集合：0=默认、1..=5=火把五形态、6=床（八形态
+            // 共用单值床几何）。7 起的未知值拒绝——放行会让 mesher 静默回退
+            // 到默认几何。拒绝发生在 parse 期、任何几何产出之前，Go 侧编码
+            // 器同口径。
+            if self.entries[offset + 19] > 6 {
                 return Err(InputError::Registry);
             }
             has_air |= id == air_id;
@@ -326,8 +327,9 @@ impl RegistryView<'_> {
     /// model 返回该方块的有限模型 tag。
     ///
     /// 封闭集合见 `REGISTRY_ENTRY_BYTES` 的布局说明：`0` 是默认（无模型覆写），
-    /// `1..=5` 是火把五形态；`6` 与未知值在 `validate` 就被拒绝，走不到这里。
-    /// 未登记的方块编号返回默认 0（与 `opaque`/`emission` 的缺省口径一致）。
+    /// `1..=5` 是火把五形态、`6` 是床；7 起的未知值在 `validate` 就被拒绝，
+    /// 走不到这里。未登记的方块编号返回默认 0（与 `opaque`/`emission` 的缺省
+    /// 口径一致）。
     pub(crate) fn model(&self, id: u16) -> u8 {
         self.index(id)
             .map_or(0, |index| self.entries[index * REGISTRY_ENTRY_BYTES + 19])
@@ -521,23 +523,25 @@ pub(crate) mod tests {
         assert_eq!(parsed.registry.model(0), 0, "空气条目保持默认 model 0");
         assert_eq!(parsed.registry.model(30000), 0, "未登记编号缺省为默认 0");
 
-        // 边界对照：五个火把 tag（1..=5）全部合法，逐个改写都要放行。
-        for tag in 1_u8..=5 {
+        // 边界对照：六个 tag（1..=5 火把五形态与 6=床）全部合法，逐个改写
+        // 都要放行。
+        for tag in 1_u8..=6 {
             let mut bytes = valid_input();
             bytes[REGISTRY_OFFSET + ENTRY_BYTES + 19] = tag;
             assert!(
                 MeshInput::parse(&bytes).is_ok(),
-                "火把 model tag={tag} 必须合法"
+                "火把/床 model tag={tag} 必须合法"
             );
         }
     }
 
-    /// model tag 的封闭集合：床（6，保留给床功能行）与任何未知值（>= 7）都
-    /// 必须在条目校验就被拒绝，且两者返回**相同**的拒绝——放行会留下静默
-    /// 回退到默认几何的隐患。拒绝发生在 parse 期、任何几何产出之前。
+    /// model tag 的封闭集合：7 起的未知值必须在条目校验就被拒绝（返回
+    /// Registry 拒绝）——放行会让 mesher 静默回退到默认几何。拒绝发生在
+    /// parse 期、任何几何产出之前。床 tag 6 已由床功能行消费（见上一条
+    /// 边界对照），不再属于拒绝集合。
     #[test]
-    fn unknown_and_bed_model_tags_are_rejected() {
-        for tag in [6_u8, 7, 8, 255] {
+    fn unknown_model_tags_are_rejected() {
+        for tag in [7_u8, 8, 255] {
             let mut bytes = valid_input();
             bytes[REGISTRY_OFFSET + ENTRY_BYTES + 19] = tag;
             assert_eq!(

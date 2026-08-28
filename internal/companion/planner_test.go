@@ -1003,6 +1003,7 @@ func TestPlanDecodePlaceRegistryLock(t *testing.T) {
 		core.ItemPotato: "伙伴种地属 M5 系列范围；新增马铃薯种植同样不交付",
 		core.ItemCarrot: "伙伴种地属 M5 系列范围；新增胡萝卜种植同样不交付",
 		core.ItemDoor:   "门为双格原子放置（lower+upper），伙伴 place 单格语义不覆盖；首版不交付伙伴放门",
+		core.ItemBed:    "床为双格原子放置（床尾+床头），伙伴 place 单格语义不覆盖；首版不交付伙伴放床（与门同口径）",
 	}
 	for item, why := range planPlaceExempt {
 		// 守卫一（防豁免空转）：被豁免的物品必须**真的**是玩家可放置物品。

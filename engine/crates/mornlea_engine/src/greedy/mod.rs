@@ -2,9 +2,10 @@ use crate::input::MeshInput;
 use crate::light::LightScratch;
 use crate::quad::{FULL_FLUID_HEIGHT, Face, Quad, plant_material};
 
+mod bed;
 mod torch;
 
-use torch::mesh_torches;
+use torch::mesh_models;
 #[cfg(test)]
 pub(crate) use torch::{TORCH_QUADS_PER_STANDING_CELL, TORCH_QUADS_PER_WALL_CELL};
 
@@ -96,10 +97,10 @@ pub(crate) fn mesh_section(
                         continue;
                     };
                     // model dispatcher 的豁免半边：带有限模型 tag 的方块（当前
-                    // 即火把 1..=5）不出轴向面——几何由 `mesh_torches` 全权
-                    // 发射。植物靠 visibility 位图的整行全零达成同一豁免；火把
-                    // 的位图可能非零（Go 侧 FaceVisible 对非不透明邻居返回
-                    // true），必须在这里显式跳过。tag 6 与未知值已被
+                    // 即火把 1..=5 与床 6）不出轴向面——几何由 `mesh_models`
+                    // 全权发射。植物靠 visibility 位图的整行全零达成同一豁免；
+                    // 火把/床的位图可能非零（Go 侧 FaceVisible 对非不透明邻居
+                    // 返回 true），必须在这里显式跳过。7 起的未知值已被
                     // `RegistryView::validate` 在 parse 期拒绝，进不到这里。
                     if input.registry.model(id) != 0 {
                         continue;
@@ -191,7 +192,7 @@ pub(crate) fn mesh_section(
     }
 
     count = mesh_plants(input, light, output, count)?;
-    count = mesh_torches(input, light, output, count)?;
+    count = mesh_models(input, light, output, count)?;
     Ok(count)
 }
 

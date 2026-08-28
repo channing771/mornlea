@@ -135,7 +135,7 @@ func TestHungerLoopEndToEndMemory(t *testing.T) {
 	// 刻意**不**预存玩家：只有 LoadPlayer 返回 ErrPlayerNotFound 的路径才会
 	// 构造一次性材料包与三层饥饿初值，而这两者正是整条脚本的起点。
 	store := storage.NewMemory(storage.Metadata{
-		FormatVersion: 2, Seed: 42, SpawnDimension: core.Overworld,
+		FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld,
 	})
 
 	config := hostTestConfig()

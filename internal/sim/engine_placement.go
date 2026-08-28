@@ -127,6 +127,19 @@ func (engine *Engine) executePlacement(
 		player.inventoryDirty = true
 		return 0, false
 	}
+	if core.IsBed(placement) {
+		// 床与门共用同一套 yaw → 水平方向派生（`core/bed.go` 把床的方向编码
+		// 冻结为门先例同序），床头落在床尾的朝向侧邻格，由 `tryPlaceBed`
+		// 原子完成；单值放置映射给出的默认形态（南向床尾）在这里被朝向展开。
+		dir := yawToDoorDir(command.Yaw)
+		reason, rejected := engine.tryPlaceBed(dimensionID, target, dir, pending)
+		if rejected {
+			return reason, true
+		}
+		player.inventory.Hotbar = consumed
+		player.inventoryDirty = true
+		return 0, false
+	}
 	if core.IsCrop(placement) {
 		// 种子不复用上面「流体可覆盖」的通用放置语义：规格字面写死种子 MUST
 		// NOT 被放置在非空气格，流体也不例外——往水里种麦子没有玩法意义，

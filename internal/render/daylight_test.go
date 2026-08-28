@@ -72,7 +72,7 @@ func TestDayNightPhaseFormula(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := DayNightAt(tc.worldTime)
+			got := DayNightAt(tc.worldTime, 0)
 			if !closeEnough(got.Sun, tc.wantSun) {
 				t.Fatalf("sun = %v，想要 %v", got.Sun, tc.wantSun)
 			}
@@ -86,7 +86,7 @@ func TestDayNightPhaseFormula(t *testing.T) {
 func TestDayNightSunIsClampedAtNight(t *testing.T) {
 	// 相位 12000..24000 太阳位于地平线以下，sun 必须被夹到 0。
 	for phase := uint64(12001); phase < DayLengthTicks; phase += 137 {
-		got := DayNightAt(phase)
+		got := DayNightAt(phase, 0)
 		if got.Sun != 0 {
 			t.Fatalf("相位 %d 的 sun = %v，想要 0", phase, got.Sun)
 		}
@@ -98,9 +98,9 @@ func TestDayNightSunIsClampedAtNight(t *testing.T) {
 
 func TestDayNightIsPeriodicAndFinite(t *testing.T) {
 	for phase := uint64(0); phase < DayLengthTicks; phase += 251 {
-		base := DayNightAt(phase)
-		next := DayNightAt(phase + DayLengthTicks)
-		far := DayNightAt(phase + 1000*DayLengthTicks)
+		base := DayNightAt(phase, 0)
+		next := DayNightAt(phase+DayLengthTicks, 0)
+		far := DayNightAt(phase+1000*DayLengthTicks, 0)
 		if base != next || base != far {
 			t.Fatalf("相位 %d 不是周期性的：%+v / %+v / %+v", phase, base, next, far)
 		}
@@ -118,14 +118,14 @@ func TestDayNightIsPeriodicAndFinite(t *testing.T) {
 }
 
 func TestDayNightClearColorInterpolatesBetweenNightAndDay(t *testing.T) {
-	noon := DayNightAt(6000).ClearColor
+	noon := DayNightAt(6000, 0).ClearColor
 	wantDay := [4]float32{0.42, 0.68, 0.92, 1}
 	for index := range noon {
 		if !closeEnough(noon[index], wantDay[index]) {
 			t.Fatalf("正午 clear color = %v，想要 %v", noon, wantDay)
 		}
 	}
-	midnight := DayNightAt(18000).ClearColor
+	midnight := DayNightAt(18000, 0).ClearColor
 	wantNight := [4]float32{0.02, 0.03, 0.08, 1}
 	for index := range midnight {
 		if !closeEnough(midnight[index], wantNight[index]) {
@@ -151,7 +151,7 @@ func TestCelestialDirectionsFollowAuthoritativePhase(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := DayNightAt(tc.worldTime)
+			got := DayNightAt(tc.worldTime, 0)
 			if !closeDirection(got.SunDirection, tc.wantSun) || !closeDirection(got.MoonDirection, tc.wantMoon) {
 				t.Fatalf("天体方向 = sun %v moon %v，想要 sun %v moon %v", got.SunDirection, got.MoonDirection, tc.wantSun, tc.wantMoon)
 			}
@@ -163,10 +163,10 @@ func TestCelestialDirectionsFollowAuthoritativePhase(t *testing.T) {
 }
 
 func TestCelestialStarVisibilitySmoothlyAppearsNearHorizonAndAtNight(t *testing.T) {
-	midnight := DayNightAt(18000).StarVisibility
-	nearSunrise := DayNightAt(500).StarVisibility
-	nearSunset := DayNightAt(11500).StarVisibility
-	day := DayNightAt(1000).StarVisibility
+	midnight := DayNightAt(18000, 0).StarVisibility
+	nearSunrise := DayNightAt(500, 0).StarVisibility
+	nearSunset := DayNightAt(11500, 0).StarVisibility
+	day := DayNightAt(1000, 0).StarVisibility
 	if midnight != 1 {
 		t.Fatalf("午夜星空可见度 = %v，想要 1", midnight)
 	}
@@ -192,7 +192,7 @@ func TestTerrainBrightnessMatchesSpecification(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			daylight := DayNightAt(tc.phase).Daylight
+			daylight := DayNightAt(tc.phase, 0).Daylight
 			if got := TerrainBrightness(daylight, tc.sky); !closeEnough(got, tc.wantBase) {
 				t.Fatalf("地形基础亮度 = %v，想要 %v", got, tc.wantBase)
 			}
@@ -200,9 +200,44 @@ func TestTerrainBrightnessMatchesSpecification(t *testing.T) {
 	}
 
 	// 中间天空光按线性插值落在室内与露天之间。
-	daylight := DayNightAt(6000).Daylight
+	daylight := DayNightAt(6000, 0).Daylight
 	mid := TerrainBrightness(daylight, 8)
 	if mid <= TerrainBrightness(daylight, 0) || mid >= TerrainBrightness(daylight, 15) {
 		t.Fatalf("中间天空光亮度 = %v，想要严格落在 0.08 与 1 之间", mid)
+	}
+}
+
+// TestDayNightAtShiftsPhaseByOffset 锁定显示相位偏移的呈现语义：偏移只平移
+// 显示相位——`(worldTime, offset)` 的昼夜状态与「绝对时间前进 offset」的呈现
+// 完全一致，回绕落在周期起点（白昼），且偏移按周期平移后周期性保持。
+func TestDayNightAtShiftsPhaseByOffset(t *testing.T) {
+	midnight := DayNightAt(0, 0)
+	noon := DayNightAt(6000, 0)
+	if midnight == noon {
+		t.Fatal("夹具无效：午夜与正午的昼夜状态相同，无法分辨偏移是否生效")
+	}
+
+	// 偏移把绝对相位 0 平移到显示相位 6000（正午）：天空、太阳与亮度全部跟随。
+	if got := DayNightAt(0, 6000); got != noon {
+		t.Fatalf("偏移 6000 的午夜呈现 = %+v，想要与绝对正午一致的 %+v", got, noon)
+	}
+
+	// 回绕落在周期起点：(23000, 1000) 等价于 (0, 0)。
+	if got := DayNightAt(23000, 1000); got != midnight {
+		t.Fatalf("(23000, 1000) = %+v，想要与 (0, 0) 一致的 %+v", got, midnight)
+	}
+
+	// 大绝对时间先取模再相加（`core.DisplayDayPhase` 语义）：uint64 上界不溢出。
+	if got, want := DayNightAt(math.MaxUint64, 23999), DayNightAt(math.MaxUint64%DayLengthTicks, 23999); got != want {
+		t.Fatalf("最大绝对时间的偏移呈现 = %+v，想要 %+v", got, want)
+	}
+
+	// 同一偏移下周期性保持：偏移是相位的平移量，不破坏 24000 tick 周期。
+	for _, offset := range []uint16{1, 13000, 23999} {
+		base := DayNightAt(12345, offset)
+		if base != DayNightAt(12345+DayLengthTicks, offset) ||
+			base != DayNightAt(12345+1000*DayLengthTicks, offset) {
+			t.Fatalf("偏移 %d 下昼夜状态不是周期性的", offset)
+		}
 	}
 }

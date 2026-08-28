@@ -89,6 +89,9 @@ func encodeServerControlPayload(state State, packet ServerPacket) (packetID uint
 			e.u16(message.Oxygen)
 			e.u8(message.Hunger)
 			e.bool(message.SaturationZero)
+			// v31：显示相位偏移追加在 `SaturationZero` 之后、绝对世界时间之前，
+			// 既有字段的位置与字节序保持不变。
+			e.u16(message.DayPhaseOffset)
 			e.u64(message.WorldTimeTicks)
 		case CommandRejected:
 			reason, _ := commandRejectReasonID(message.Reason)
@@ -351,6 +354,9 @@ func decodeServerControlPayload(state State, packetID uint32, payload []byte) (S
 			}
 			if err == nil {
 				statePacket.SaturationZero, err = d.bool()
+			}
+			if err == nil {
+				statePacket.DayPhaseOffset, err = d.u16()
 			}
 			if err == nil {
 				statePacket.WorldTimeTicks, err = d.u64()

@@ -327,3 +327,22 @@
   `make visual-check` 22 场景全零差异（含 hostile-mob）；`make
   test-multiplayer` 全绿；客户端四包 `-race` 全绿。`client ABI 不匹配` 失败
   系共享目标目录内 dylib 早于合并后 Rust 源码，`make rust` 重建后消除。
+
+## 集成期记录（第二轮：A-05 bed sleep）
+
+- 集成 origin/main（A-05 authoritative bed sleep、backlog 标记）二轮冲突七
+  文件：`race-changed.sh`/`test-quickstart.md` 保留分支精修版（origin/main
+  侧为本 change 此前提交的旧版）；`app_startup_test`/`testkit` 的
+  `FormatVersion` 2→3、`app_celestial_test` 采纳 `DayNightAt` 双参与
+  `dayPhaseOffset`（白盒字段沿用）、connection store 类型维持 testkit 版；
+  capture 新增 `prepareBedNightRoom`/`applyCaptureBedNightChanges` 与
+  `bed-night` 场景表项转 `SceneApplication` 形态（`app.Panel()` 非空守卫、
+  `Camera()` 可变指针、`application.CameraChunk`）；`bed-night.png` 随迁
+  capture golden（23 张）；泛化测试 helper 更名
+  `newCaptureSceneRenderApplication`；app 新增 `SetPanel`/`SetHostiles`
+  访问器供测试装配。
+- 教训：**合并带 Rust 侧改动的分支后必须重跑 `make rust`**——engine dylib
+  陈旧（旧 ABI）不报版本错而表现为 mesher 收敛等待挂满 5 分钟超时；重建
+  后同一测试 3.4s 通过。
+- 集成验证：build/vet/archcheck 全绿；基线 385 入口零丢失；visual-check
+  23 场景全零差异；test-multiplayer 全绿；客户端四包 `-race` 全绿。

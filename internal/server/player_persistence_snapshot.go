@@ -34,6 +34,11 @@ func (player *cachedPlayer) restore(metadata storage.Metadata) sim.PlayerRestore
 	restore.SaturationMilli = player.snapshot.SaturationMilli
 	restore.ExhaustionMilli = player.snapshot.ExhaustionMilli
 	restore.HasHunger = true
+	// 个人重生点与饥饿同理只来自真实存档：缺失路径的提前返回没有重生点，
+	// sim 的 RegisterPlayer 会把死亡重生落回世界出生锚点。
+	restore.RespawnPresent = player.snapshot.RespawnPresent
+	restore.RespawnPosition = player.snapshot.RespawnPosition
+	restore.RespawnDimension = player.snapshot.RespawnDimension
 	return restore
 }
 
@@ -52,6 +57,11 @@ func cachedPlayerFromStored(stored storage.StoredPlayer, pendingName string) *ca
 		Hunger:          stored.Hunger,
 		SaturationMilli: stored.SaturationMilli,
 		ExhaustionMilli: stored.ExhaustionMilli,
+		// 重生点同理：v7 及更旧的存档经迁移链规范为「无重生点」，present 为假，
+		// 后两个字段的零值不携带语义。
+		RespawnPresent:   stored.RespawnPresent,
+		RespawnPosition:  stored.RespawnPosition,
+		RespawnDimension: stored.RespawnDimension,
 	}
 	if stored.Safe != nil {
 		snapshot.Safe = &sim.PlayerLocation{
@@ -147,6 +157,11 @@ func (player *cachedPlayer) save(revision uint64) storage.PlayerSave {
 		Hunger:          player.snapshot.Hunger,
 		SaturationMilli: player.snapshot.SaturationMilli,
 		ExhaustionMilli: player.snapshot.ExhaustionMilli,
+		// 重生点三字段全部落盘：漏写任何一个都会让入睡设置的重生点在重登后
+		// 静默丢失，回落世界出生锚点。
+		RespawnPresent:   player.snapshot.RespawnPresent,
+		RespawnPosition:  player.snapshot.RespawnPosition,
+		RespawnDimension: player.snapshot.RespawnDimension,
 	}
 	if player.snapshot.Safe != nil {
 		save.Safe = &storage.PlayerLocation{
@@ -166,7 +181,10 @@ func (player *cachedPlayer) matchesSave(save storage.PlayerSave) bool {
 		player.snapshot.Health != save.Health ||
 		player.snapshot.Hunger != save.Hunger ||
 		player.snapshot.SaturationMilli != save.SaturationMilli ||
-		player.snapshot.ExhaustionMilli != save.ExhaustionMilli {
+		player.snapshot.ExhaustionMilli != save.ExhaustionMilli ||
+		player.snapshot.RespawnPresent != save.RespawnPresent ||
+		player.snapshot.RespawnPosition != save.RespawnPosition ||
+		player.snapshot.RespawnDimension != save.RespawnDimension {
 		return false
 	}
 	if player.snapshot.Safe == nil || save.Safe == nil {
@@ -197,11 +215,15 @@ func clonePlayerSnapshot(snapshot sim.PlayerSnapshot) sim.PlayerSnapshot {
 func playerSnapshotsEqual(left, right sim.PlayerSnapshot) bool {
 	// 三层饥饿状态参与变更检测：饥饿是唯一会在玩家原地不动时独自变化的状态，
 	// 漏掉任何一个字段都会让"只有饥饿变了"的 tick 被判为无变化而永不落盘。
+	// 重生点同理：入睡只改重生点、不动位置，漏掉它会让"睡一觉"永不落盘。
 	if left.Current != right.Current || left.Yaw != right.Yaw ||
 		left.Pitch != right.Pitch || left.Inventory != right.Inventory ||
 		left.Health != right.Health || left.Hunger != right.Hunger ||
 		left.SaturationMilli != right.SaturationMilli ||
-		left.ExhaustionMilli != right.ExhaustionMilli {
+		left.ExhaustionMilli != right.ExhaustionMilli ||
+		left.RespawnPresent != right.RespawnPresent ||
+		left.RespawnPosition != right.RespawnPosition ||
+		left.RespawnDimension != right.RespawnDimension {
 		return false
 	}
 	if left.Safe == nil || right.Safe == nil {
