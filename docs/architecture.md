@@ -24,6 +24,7 @@ Mornlea 由 Go 应用与两个 Rust `cdylib` 组成。Go 持有应用装配、�
 - `internal/network` 持有 packet、codec、登录状态机、共享 stream 接口与 Memory transport；`internal/network/tcp` 持有 TCP listener、dial、stream 实现，只依赖 `internal/network` 且保持 transport-only。
 - `internal/storage` 持有世界、玩家和伙伴数据的编码、迁移、恢复与磁盘生命周期。
 - `internal/server` 装配 Host、会话、权威模拟与持久化 worker。
+- `internal/pathfind` 持有不可变快照上的有界寻路且只依赖 `internal/core`；`internal/companion` 与 `internal/server` 消费它，但寻路不拥有玩法或世界访问。
 - `internal/client` 持有客户端镜像、输入预测、消息接收、client ABI bridge 和渲染侧 CPU 编排。
 - `internal/render`、`internal/mesh`、`internal/assets`、`internal/lod` 与 `internal/worldgen` 持有领域数据描述、CPU 编码和 Rust 调用编排，不拥有 GPU 后端或第二套数值生产实现。
 - `internal/nativeabi` 是 engine ABI 的唯一 Go bridge。

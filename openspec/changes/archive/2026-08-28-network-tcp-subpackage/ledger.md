@@ -45,3 +45,8 @@
 - 最终复审未重跑耗时的全仓门禁，既有 gate 证据与 accepted race ruling 保持不变。
 - 最终树补充门禁：review fix round 后 controller 重新运行 accepted serialized full race gate `go test ./... -race -p=1 -count=1`，退出 0 且全部包通过；关键耗时为 `cmd/mornlea` 312.091s、`internal/archcheck` 40.337s、`internal/network` 2.269s、`internal/network/tcp` 2.024s、`internal/server` 212.077s、`internal/sim` 46.809s、`internal/storage` 23.453s。
 - 当前状态：handoff 已完成，OpenSpec tasks 5.1/5.2 保持完成；HEAD 仍为 `6bd33df52b2adec984805427f18fb650961d1681`，final artifacts 与 fix-round changes 均未 stage、未 commit。
+
+## Archive Evidence
+
+- 2026-08-28 执行 `openspec archive network-tcp-subpackage --yes`，归档此 change，并将恰好两条 TCP 包边界 requirement 同步至 `openspec/specs/repository-code-organization/spec.md`：`TCP transport 具有单向包边界` 与 `Transport 包整理保持传输行为`；随后移除 CLI 添加的重复英文 requirement，保留等价中文 requirement。
+- `openspec validate --all --strict --no-interactive` 成功（71 passed、0 failed）；`git diff --check` 成功（退出 0、无输出）。

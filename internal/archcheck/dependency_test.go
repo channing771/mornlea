@@ -23,12 +23,13 @@ import (
 var allowed = map[string][]string{
 	"internal/archcheck":   {},
 	"internal/audio":       {},
-	"internal/companion":   {"internal/core"},
+	"internal/companion":   {"internal/core", "internal/pathfind"},
 	"internal/core":        {"internal/nativeabi"},
 	"internal/nativeabi":   {},
 	"internal/config":      {"internal/companion", "internal/core", "internal/physics", "internal/sim", "internal/logging"},
 	"internal/fluid":       {"internal/core"},
 	"internal/physics":     {"internal/core", "internal/nativeabi"},
+	"internal/pathfind":    {"internal/core"},
 	"internal/logging":     {},
 	"internal/network":     {"internal/companion", "internal/core"},
 	"internal/network/tcp": {"internal/network"},
@@ -45,7 +46,7 @@ var allowed = map[string][]string{
 	"internal/assets":     {"internal/core", "internal/world", "internal/mesh", "internal/worldgen"},
 	"internal/render":     {"internal/core", "internal/world", "internal/mesh", "internal/assets"},
 	"internal/render/hud": {"internal/core", "internal/mesh", "internal/assets", "internal/render"},
-	"internal/server":     {"internal/companion", "internal/core", "internal/network", "internal/physics", "internal/world", "internal/worldgen", "internal/sim", "internal/storage"},
+	"internal/server":     {"internal/companion", "internal/core", "internal/network", "internal/pathfind", "internal/physics", "internal/world", "internal/worldgen", "internal/sim", "internal/storage"},
 	"internal/client":     {"internal/companion", "internal/core", "internal/physics", "internal/network", "internal/world", "internal/mesh", "internal/assets", "internal/render"},
 }
 

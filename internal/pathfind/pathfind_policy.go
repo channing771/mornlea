@@ -2,7 +2,7 @@
 // 在提交每个路径点前重验；失效按固定冷却重算，同一任务连续三次失败终止。
 // 策略是纯值逻辑（无锁、无 goroutine），由 Task 6 的 tick 边界编排调用——
 // 权威 tick 是唯一写者，策略本身不需要并发防护。
-package companion
+package pathfind
 
 // PathReplanCooldownTicks 是路径失效后的固定重算冷却（tick）。冷却存在的
 // 理由：世界在快速变化（玩家正在挖/放）时立即重算大概率再次失败，固定冷却

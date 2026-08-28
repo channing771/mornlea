@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/pathfind"
 )
 
 // 规划输入与计划输出的有界常量。全部上限都在构造/解码边界一次性强制，保证
@@ -30,10 +31,10 @@ const (
 	// 256 个按坐标排序的方块条目）。
 	MaxPlanExposedBlocks = 256
 	// planEnvRadiusBlocks 是环境摘要的水平半径（spec：伙伴周围水平 16 格）。
-	// 它不是独立数字，而是直接引用 PathWindowHorizontalRadius：寻路窗口与
+	// 它不是独立数字，而是直接引用 `pathfind.PathWindowHorizontalRadius`：寻路窗口与
 	// Planner 观察快照是同级范围，两处半径必须一起变化，由单一常量定义保证
 	// 不漂移（耦合语义见 pathfind.go 的常量注释）。
-	planEnvRadiusBlocks = PathWindowHorizontalRadius
+	planEnvRadiusBlocks = pathfind.PathWindowHorizontalRadius
 	// planEnvVerticalBlocks 是环境摘要的垂直半径（spec：伙伴周围垂直 8 格）。
 	// 它同时是 mine 步骤观察窗口判定的垂直 ±8 数值界（见
 	// planInObservationWindow）。
@@ -44,9 +45,6 @@ const (
 	// MaxPlanHeightSamples 是高度样本条数上限：水平半径 16 格覆盖
 	// (2*16+1)^2 = 1089 列。垂直 8 格范围由方块 Y 坐标自身表达，不设独立字段。
 	MaxPlanHeightSamples = (2*planEnvRadiusBlocks + 1) * (2*planEnvRadiusBlocks + 1)
-	// MaxPlanChunkRevisions 是快照可携带的区块 revision 上限，对应伙伴 3×3
-	// 区块兴趣范围（水平 16 格半径最多横跨 3×3 区块）。
-	MaxPlanChunkRevisions = 9
 )
 
 // PlanBlock 是环境摘要中的一个暴露或特殊方块条目。
@@ -62,12 +60,6 @@ type PlanHeight struct {
 	X      int32 `json:"x"`
 	Z      int32 `json:"z"`
 	Height int32 `json:"height"`
-}
-
-// ChunkRevision 记录快照引用的一个区块的内容 revision，供寻路结果失效判定。
-type ChunkRevision struct {
-	Chunk    core.ChunkPos `json:"chunk"`
-	Revision uint64        `json:"revision"`
 }
 
 // PlanPlayer 是发令玩家在快照时刻的稳定事实。
@@ -114,8 +106,8 @@ type PlanSnapshot struct {
 	// Heights 是按 (X,Z) 严格升序的地表高度样本，至多 MaxPlanHeightSamples 条。
 	Heights []PlanHeight `json:"heights"`
 	// ChunkRevisions 是按 (X,Z) 严格升序的相关区块 revision，至多
-	// MaxPlanChunkRevisions 条。
-	ChunkRevisions []ChunkRevision `json:"chunkRevisions"`
+	// pathfind.MaxPlanChunkRevisions 条。
+	ChunkRevisions []pathfind.ChunkRevision `json:"chunkRevisions"`
 	// OnlinePlayers 是快照时刻全部在线玩家的稳定事实，按 ID 严格升序且至多
 	// MaxPlanOnlinePlayers 名（M5C），供 follow 步骤的目标校验。集合在构造时
 	// 一次性拷贝，worker 读取期间不随会话变化。
@@ -188,9 +180,9 @@ func (s PlanSnapshot) Validate() error {
 			}
 		}
 	}
-	if len(s.ChunkRevisions) > MaxPlanChunkRevisions {
+	if len(s.ChunkRevisions) > pathfind.MaxPlanChunkRevisions {
 		return fmt.Errorf("companion: 快照区块 revision 数 %d 超过上限 %d",
-			len(s.ChunkRevisions), MaxPlanChunkRevisions)
+			len(s.ChunkRevisions), pathfind.MaxPlanChunkRevisions)
 	}
 	for index, revision := range s.ChunkRevisions {
 		if index > 0 {
