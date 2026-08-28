@@ -58,6 +58,9 @@ run:
 
 rust:
 	cd $(RUST_DIR) && $(CARGO) build --locked --release
+	@mkdir -p $(RUST_DIR)/target/release
+	@test -f $(CARGO_TARGET_DIR)/release/libmornlea_engine.dylib && cp -f $(CARGO_TARGET_DIR)/release/libmornlea_engine.dylib $(RUST_DYLIB) || true
+	@test -f $(CARGO_TARGET_DIR)/release/libmornlea_engine.so && cp -f $(CARGO_TARGET_DIR)/release/libmornlea_engine.so $(RUST_SO) || true
 
 rust-check:
 	cd $(RUST_DIR) && $(CARGO) fmt --check
