@@ -180,6 +180,12 @@ func encodeServerControlPayload(state State, packet ServerPacket) (packetID uint
 			encodeCompanionStates(&e, message)
 		case CompanionDespawn:
 			e.data = append(e.data, message.ID[:]...)
+		case HostileSpawn:
+			encodeHostileSpawn(&e, message)
+		case HostileState:
+			encodeHostileState(&e, message)
+		case HostileDespawn:
+			encodeHostileDespawn(&e, message)
 		default:
 			return 0, nil, codecError("encode server", state, packetID, invalidServerPacket(state, packet))
 		}
@@ -204,9 +210,15 @@ func decodeServerControlPayload(state State, packetID uint32, payload []byte) (S
 			max = companionStatesMaxWireBytes
 		case 19:
 			max = len(CompanionDespawn{}.ID)
+		case 22:
+			max = hostileSpawnMaxWireBytes
+		case 23:
+			max = hostileStateMaxWireBytes
+		case 24:
+			max = hostileDespawnMaxWireBytes
 		}
 		if max > 0 && len(payload) > max {
-			return nil, codecError("decode server", state, packetID, errors.New("network: companion payload exceeds fixed maximum"))
+			return nil, codecError("decode server", state, packetID, errors.New("network: payload exceeds fixed maximum"))
 		}
 	}
 	if state == StatePlay && packetID == 9 && len(payload) > remotePlayerStatesMaxPayload {
@@ -466,6 +478,12 @@ func decodeServerControlPayload(state State, packetID uint32, payload []byte) (S
 			}
 			state.Output, err = decodeItemStack(&d, err)
 			packet = state
+		case 22:
+			packet, err = decodeHostileSpawn(&d)
+		case 23:
+			packet, err = decodeHostileState(&d)
+		case 24:
+			packet, err = decodeHostileDespawn(&d)
 		default:
 			return nil, codecError("decode server", state, packetID, errUnknownPacketID)
 		}

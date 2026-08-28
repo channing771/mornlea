@@ -26,7 +26,7 @@ func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 		"workbench-crafting", "chest-container", "furnace-container",
 		"debug-panel", "skylight-tunnel", "block-light-room", "torch-night", "materials-showcase",
 		"target-block-feedback", "oak-grove", "ai-companion",
-		"water-surface-slope", "main-menu", "settings-menu", "far-horizon", "water-underwater",
+		"hostile-mob", "water-surface-slope", "main-menu", "settings-menu", "far-horizon", "water-underwater",
 	}
 	gotNames := make([]string, len(captureScenes))
 	for index, scene := range captureScenes {

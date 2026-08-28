@@ -30,7 +30,8 @@ use crate::window::ClientWindow;
 /// 分成不透明与水面两条流,新增半透明 water pass)占用,故整体顺延一格。
 /// 必须与 `engine/include/mornlea_client.h` 的 `MORNLEA_CLIENT_ABI_VERSION`
 /// 逐版本一致。
-pub const CLIENT_ABI_VERSION: u32 = 9;
+/// v10:avatar 通道容量扩至 75 具身体(450 实例)并新增敌怪身份域。
+pub const CLIENT_ABI_VERSION: u32 = 10;
 
 /// 调用成功。
 pub const MORNLEA_CLIENT_STATUS_OK: u32 = 0;
@@ -280,9 +281,10 @@ mod tests {
     // 校验拒绝路径:ABI 版本、参数校验与无效句柄。
 
     #[test]
-    fn abi_version_is_nine() {
-        // v9 增加设置 layout v2 与结构化事件 batch；v8 菜单出口保持。
-        assert_eq!(mornlea_client_abi_version(), 9);
+    fn abi_version_is_ten() {
+        // v10 扩大 avatar 通道容量（75 具身体 / 450 实例）并新增敌怪
+        // EntityHostile 身份域；v9 的设置 layout v2 与结构化事件 batch 保持。
+        assert_eq!(mornlea_client_abi_version(), 10);
     }
 
     #[test]

@@ -303,3 +303,27 @@
     0 failed（含本 change 与全部主规格）。
 - 结论：split-client-subpackages 六个任务全部完成，实现与 delta specs 一致，
   行为契约（测试入口集合、golden 逐字节、依赖方向、架构守卫）全部满足。
+
+## 集成期记录（归档后 main 合入）
+
+- 集成 origin/main `bb399fa6`（A-04 hostile nightwalker、B-28 lava docs）进入
+  分包布局，冲突四文件按「保留访问器形态 + 移植 nightwalker 逻辑」解决：
+  - `app.go`：`maxFrameAvatars` 11→75（夜行者上限语义 + 注释），保留
+    `MaxFrameNameTags` 导出；
+  - `app_frame.go`：`hostiles.Advance` 块 + `RenderFrame` 新名；
+  - `app_render_test.go`：helper 以 testkit 版本为准（nightwalker 仅加
+    `hostiles` 装配一行，已移入 `newRemoteRenderApplication` 包装），76 具
+    越界循环采纳；
+  - `capture/capture_scene.go`：`resetCapturePresentation` 增加夜行者镜像与
+    呈现缓存清理（经新增 `Hostiles`/`HostilePresentations`/
+    `SetHostilePresentations` 访问器；首插误落 `applyAICompanionCaptureState`
+    已改正——9=1 预置+8 夹具的失败即为该错位的信号）。
+- main 侧平铺新增的 `capture_hostile_mob*.go` 迁入 `capture/` 子包并转访问器
+  形态；`hostile-mob.png` 随迁 `capture/testdata/golden/`；app 侧三个呈现
+  管线 helper 导出（`CameraChunk`、`RemoteRenderPresentationsSortedInto`、
+  `Append*RenderPresentationsInto`）供 capture 测试复用同一管线。
+- 集成验证：`go build`、`go vet ./cmd/mornlea/... ./internal/...`、archcheck
+  全绿；基线 385 个测试入口零丢失（并集 388，nightwalker 新增 3）；
+  `make visual-check` 22 场景全零差异（含 hostile-mob）；`make
+  test-multiplayer` 全绿；客户端四包 `-race` 全绿。`client ABI 不匹配` 失败
+  系共享目标目录内 dylib 早于合并后 Rust 源码，`make rust` 重建后消除。

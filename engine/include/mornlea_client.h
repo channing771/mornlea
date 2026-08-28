@@ -4,7 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* v9:新增设置页 layout v2，并把 render_drain_ui_events 升级为结构化事件
+/* v10:avatar 通道容量扩至 75 具身体(450 个 80-byte instance)并新增敌怪
+ * EntityHostile 身份域;v9:新增设置页 layout v2，并把 render_drain_ui_events 升级为结构化事件
  * batch 与整批容量门禁；v8:新增 egui 主菜单两出口
  * render_upload_ui_font / render_drain_ui_events
  * 与帧 TLV tag 9(egui 菜单段);v7:终审修复波新增雾参数化
@@ -12,7 +13,7 @@
  * 契约);v6:新增远环 LOD tile 出口(render_upload_lod_tile/drop_lod_tile)。
  * 变基重编:远环两项出口在旧基线上原编号 v5/v6,main 的 water pass
  * (按 material 分流 + 半透明 water pass)占用 v5 后整体顺延一格。 */
-#define MORNLEA_CLIENT_ABI_VERSION 9u
+#define MORNLEA_CLIENT_ABI_VERSION 10u
 
 #define MORNLEA_CLIENT_STATUS_OK 0u
 #define MORNLEA_CLIENT_STATUS_ABI_VERSION 1u

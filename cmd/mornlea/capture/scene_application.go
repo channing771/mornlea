@@ -67,6 +67,9 @@ type SceneApplication interface {
 	SetRemoteAvatars(avatars []render.Avatar)
 	RemoteNameTags() []render.NameTag
 	SetRemoteNameTags(tags []render.NameTag)
+	Hostiles() *client.Hostiles
+	HostilePresentations() []client.HostilePresentation
+	SetHostilePresentations(presentations []client.HostilePresentation)
 	ItemDropInstances() []render.ItemDrop
 	SetItemDropInstances(instances []render.ItemDrop)
 	SetChatEventBuffer(buffer [client.ChatEventCapacity]network.ChatEvent)

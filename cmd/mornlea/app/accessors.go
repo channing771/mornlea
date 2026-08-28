@@ -115,6 +115,29 @@ func (a *Application) SetRemoteAvatars(avatars []render.Avatar) { a.remoteAvatar
 // RemoteNameTags 返回名牌批次缓冲。
 func (a *Application) RemoteNameTags() []render.NameTag { return a.remoteNameTags }
 
+// Hostiles 返回夜行者镜像的可变指针，供 capture 场景注入与恢复夹具个体；
+// 未装配夜行者镜像时为 nil，调用方需先判空。
+func (a *Application) Hostiles() *client.Hostiles {
+	return a.hostiles
+}
+
+// SetHostiles 整体替换夜行者镜像，仅限测试装配路径使用。
+func (a *Application) SetHostiles(hostiles *client.Hostiles) {
+	a.hostiles = hostiles
+}
+
+// HostilePresentations 返回夜行者派生呈现缓存切片。与其余呈现缓存一致：
+// 同帧内复用同一底层数组，消费方只应截断复用，不得持有跨帧引用。
+func (a *Application) HostilePresentations() []client.HostilePresentation {
+	return a.hostilePresentations
+}
+
+// SetHostilePresentations 整体替换夜行者派生呈现缓存，写入方须传入
+// 截断复用后的切片。
+func (a *Application) SetHostilePresentations(v []client.HostilePresentation) {
+	a.hostilePresentations = v
+}
+
 // SetRemoteNameTags 写入名牌批次缓冲。
 func (a *Application) SetRemoteNameTags(tags []render.NameTag) { a.remoteNameTags = tags }
 

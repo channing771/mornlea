@@ -51,7 +51,9 @@ func (*fakeInteractiveWindow) Close()                      {}
 // 可参数化装配入口。
 func newRemoteRenderApplication(t *testing.T, glyphs render.GlyphSource) *Application {
 	t.Helper()
-	return NewOffscreenRenderApplicationForTest(t, glyphs, 64, 64, config.Render{})
+	application := NewOffscreenRenderApplicationForTest(t, glyphs, 64, 64, config.Render{})
+	application.SetHostiles(&client.Hostiles{})
+	return application
 }
 
 func newInteractiveTestApplication(

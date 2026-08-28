@@ -60,6 +60,9 @@ func (a *Application) Frame(drainMax, meshWorkMax int, elapsed time.Duration) (b
 	if a.companions != nil {
 		a.companions.Advance(elapsed)
 	}
+	if a.hostiles != nil {
+		a.hostiles.Advance(elapsed)
+	}
 	return a.RenderFrame(meshWorkMax)
 }
 
@@ -71,17 +74,24 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		return false, nil
 	}
 	a.remotePresentations = a.remotePlayers.AppendPresentations(a.remotePresentations[:0])
-	a.remoteAvatars, a.remoteNameTags = remoteRenderPresentationsSortedInto(
+	a.remoteAvatars, a.remoteNameTags = RemoteRenderPresentationsSortedInto(
 		a.remoteAvatars[:0],
 		a.remoteNameTags[:0],
 		a.remotePresentations,
 	)
 	if a.companions != nil {
 		a.companionPresentations = a.companions.AppendPresentations(a.companionPresentations[:0])
-		a.remoteAvatars, a.remoteNameTags = appendCompanionRenderPresentationsInto(
+		a.remoteAvatars, a.remoteNameTags = AppendCompanionRenderPresentationsInto(
 			a.remoteAvatars,
 			a.remoteNameTags,
 			a.companionPresentations,
+		)
+	}
+	if a.hostiles != nil {
+		a.hostilePresentations = a.hostiles.AppendPresentations(a.hostilePresentations[:0])
+		a.remoteAvatars = AppendHostileRenderPresentationsInto(
+			a.remoteAvatars,
+			a.hostilePresentations,
 		)
 	}
 	blockOutline := render.BlockOutline{}

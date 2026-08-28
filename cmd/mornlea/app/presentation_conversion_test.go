@@ -34,9 +34,9 @@ func TestRemoteRenderPresentationsSortedIntoReusesEquivalentStorage(t *testing.T
 
 	avatars := make([]render.Avatar, 0, len(sorted))
 	tags := make([]render.NameTag, 0, len(sorted))
-	avatars, tags = remoteRenderPresentationsSortedInto(avatars, tags, sorted)
+	avatars, tags = RemoteRenderPresentationsSortedInto(avatars, tags, sorted)
 	allocations := testing.AllocsPerRun(1000, func() {
-		avatars, tags = remoteRenderPresentationsSortedInto(avatars[:0], tags[:0], sorted)
+		avatars, tags = RemoteRenderPresentationsSortedInto(avatars[:0], tags[:0], sorted)
 	})
 	if allocations != 0 {
 		t.Fatalf("warmed sorted conversion allocations=%v want=0", allocations)
@@ -61,11 +61,11 @@ func TestRemoteRenderPresentationsSortedIntoReusesEquivalentStorage(t *testing.T
 		}
 	}
 
-	avatars, tags = remoteRenderPresentationsSortedInto(avatars[:0], tags[:0], nil)
+	avatars, tags = RemoteRenderPresentationsSortedInto(avatars[:0], tags[:0], nil)
 	if len(avatars) != 0 || len(tags) != 0 {
 		t.Fatalf("empty conversion lengths=%d/%d want=0/0", len(avatars), len(tags))
 	}
-	avatars, tags = remoteRenderPresentationsSortedInto(avatars[:0], tags[:0], sorted)
+	avatars, tags = RemoteRenderPresentationsSortedInto(avatars[:0], tags[:0], sorted)
 	if !reflect.DeepEqual(avatars, wantAvatars) || !reflect.DeepEqual(tags, wantTags) {
 		t.Fatalf("refill after empty retained stale data: %+v/%+v", avatars, tags)
 	}
@@ -97,8 +97,8 @@ func TestMixedActorPresentationConversionReusesBackingSlices(t *testing.T) {
 	run := func() {
 		remotePresentations = players.AppendPresentations(remotePresentations[:0])
 		companionPresentations = companions.AppendPresentations(companionPresentations[:0])
-		avatars, tags = remoteRenderPresentationsSortedInto(avatars[:0], tags[:0], remotePresentations)
-		avatars, tags = appendCompanionRenderPresentationsInto(avatars, tags, companionPresentations)
+		avatars, tags = RemoteRenderPresentationsSortedInto(avatars[:0], tags[:0], remotePresentations)
+		avatars, tags = AppendCompanionRenderPresentationsInto(avatars, tags, companionPresentations)
 	}
 	run()
 	if allocations := testing.AllocsPerRun(1000, run); allocations != 0 {
@@ -145,13 +145,13 @@ func BenchmarkRemotePresentationConversion(b *testing.B) {
 	avatars := make([]render.Avatar, 0, len(scenario.Spawns))
 	tags := make([]render.NameTag, 0, len(scenario.Spawns))
 	presentations = players.AppendPresentations(presentations)
-	avatars, tags = remoteRenderPresentationsSortedInto(avatars, tags, presentations)
+	avatars, tags = RemoteRenderPresentationsSortedInto(avatars, tags, presentations)
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
 		presentations = players.AppendPresentations(presentations[:0])
-		avatars, tags = remoteRenderPresentationsSortedInto(avatars[:0], tags[:0], presentations)
+		avatars, tags = RemoteRenderPresentationsSortedInto(avatars[:0], tags[:0], presentations)
 	}
 	b.StopTimer()
 	presentationBenchmarkPresentations = presentations

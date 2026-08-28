@@ -29,6 +29,7 @@ type DiskStore struct {
 	playerReplaceHooks    atomicReplaceHooks
 	companionReplaceHooks atomicReplaceHooks
 	metadataReplaceHooks  atomicReplaceHooks
+	hostileReplaceHooks   atomicReplaceHooks
 }
 
 func OpenDisk(ctx context.Context, root string, options OpenOptions) (*DiskStore, error) {
@@ -363,6 +364,94 @@ func (store *DiskStore) SaveCompanions(ctx context.Context, save CompanionSave) 
 	return nil
 }
 
+func (store *DiskStore) LoadHostileMobs(ctx context.Context) (StoredHostileMobs, error) {
+	if store.closing.Load() {
+		return StoredHostileMobs{}, os.ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return StoredHostileMobs{}, err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.closing.Load() || store.closed {
+		return StoredHostileMobs{}, os.ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return StoredHostileMobs{}, err
+	}
+	encoded, err := readHostileFile(store.hostilePath())
+	if errors.Is(err, os.ErrNotExist) {
+		return StoredHostileMobs{}, ErrHostileMobsNotFound
+	}
+	if err != nil {
+		return StoredHostileMobs{}, fmt.Errorf("read hostile mobs: %w", err)
+	}
+	stored, err := decodeHostileMobs(encoded)
+	if err != nil {
+		return StoredHostileMobs{}, fmt.Errorf("decode hostile mobs: %w", err)
+	}
+	return stored, nil
+}
+
+func (store *DiskStore) SaveHostileMobs(ctx context.Context, save HostileMobsSave) error {
+	if store.closing.Load() {
+		return os.ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	encoded, err := encodeHostileMobs(save)
+	if err != nil {
+		return err
+	}
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.closing.Load() || store.closed {
+		return os.ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	path := store.hostilePath()
+	previous, err := readHostileFile(path)
+	switch {
+	case err == nil:
+		stored, decodeErr := decodeHostileMobs(previous)
+		if decodeErr != nil {
+			// 正式文件损坏或为未来版本时拒绝保存并保留原文件：覆盖等于把
+			// 「读不回的数据」洗成合法存档，重启会静默清怪。
+			return fmt.Errorf("read existing hostile mobs: %w", decodeErr)
+		}
+		switch {
+		case save.Revision < stored.Revision:
+			return fmt.Errorf(
+				"%w: hostile revision %d is below %d",
+				ErrRevisionConflict, save.Revision, stored.Revision,
+			)
+		case save.Revision == stored.Revision:
+			if !bytes.Equal(encoded, previous) {
+				return fmt.Errorf("%w: hostile revision %d", ErrRevisionConflict, save.Revision)
+			}
+			return nil
+		}
+	case errors.Is(err, os.ErrNotExist):
+	default:
+		return fmt.Errorf("read existing hostile mobs: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	hooks := store.hostileReplaceHooks
+	hooks.beforeRename = ctx.Err
+	if err := replaceFileAtomicallyWithPatternAndHooks(
+		path, ".hostile_mobs.bin.tmp-*", encoded, 0o600, hooks,
+	); err != nil {
+		return fmt.Errorf("save hostile mobs: %w", err)
+	}
+	return nil
+}
+
 func validateAndNormalizeSaves(saves []ChunkSave) ([]ChunkSave, error) {
 	maxRevisions := make(map[core.ChunkKey]uint64, len(saves))
 	for _, save := range saves {
@@ -474,6 +563,12 @@ func (store *DiskStore) companionPath() string {
 	return filepath.Join(store.files.root, "companions.ai")
 }
 
+// hostilePath 是夜行者聚合存档的固定路径，与世界根目录平级（与
+// companions.ai 同一布局约定）。
+func (store *DiskStore) hostilePath() string {
+	return filepath.Join(store.files.root, "hostile_mobs.bin")
+}
+
 func readPlayerFile(path string) ([]byte, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -504,6 +599,25 @@ func readCompanionFile(path string) ([]byte, error) {
 	if len(encoded) > maxCompanionFileLength {
 		return nil, fmt.Errorf(
 			"%w: companion file exceeds %d bytes", ErrCorrupt, maxCompanionFileLength,
+		)
+	}
+	return encoded, nil
+}
+
+// readHostileFile 读取夜行者存档并守住物理字节上界：先按上界截断读取再
+// 拒绝超限输入，保证超大文件不会在解码前进入内存。
+func readHostileFile(path string) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	encoded, readErr := io.ReadAll(io.LimitReader(file, int64(maxHostileFileLength)+1))
+	if err := errors.Join(readErr, file.Close()); err != nil {
+		return nil, err
+	}
+	if len(encoded) > maxHostileFileLength {
+		return nil, fmt.Errorf(
+			"%w: hostile file exceeds %d bytes", ErrCorrupt, maxHostileFileLength,
 		)
 	}
 	return encoded, nil

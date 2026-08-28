@@ -71,11 +71,12 @@ type Store interface {
 	Close() error
 }
 
-// WorldStore 组合世界区块、玩家与伙伴聚合存档。
+// WorldStore 组合世界区块、玩家、伙伴与夜行者聚合存档。
 type WorldStore interface {
 	Store
 	PlayerStore
 	CompanionStore
+	HostileMobStore
 }
 
 type RegionKey struct {

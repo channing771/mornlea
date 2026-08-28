@@ -19,7 +19,7 @@ func RemoteRenderPresentations(presentations []client.RemotePresentation) ([]ren
 	slices.SortFunc(ordered, func(left, right client.RemotePresentation) int {
 		return slices.Compare(left.PlayerID[:], right.PlayerID[:])
 	})
-	return remoteRenderPresentationsSortedInto(
+	return RemoteRenderPresentationsSortedInto(
 		make([]render.Avatar, 0, len(ordered)),
 		make([]render.NameTag, 0, MaxFrameNameTags),
 		ordered,
@@ -45,7 +45,7 @@ func (a *Application) appendCurrentBlockTarget(
 	return tags, render.BlockOutline{Visible: true, Position: target.Position}
 }
 
-func remoteRenderPresentationsSortedInto(
+func RemoteRenderPresentationsSortedInto(
 	avatars []render.Avatar,
 	tags []render.NameTag,
 	ordered []client.RemotePresentation,
@@ -65,7 +65,7 @@ func remoteRenderPresentationsSortedInto(
 	return avatars, tags
 }
 
-func appendCompanionRenderPresentationsInto(
+func AppendCompanionRenderPresentationsInto(
 	avatars []render.Avatar,
 	tags []render.NameTag,
 	presentations []client.CompanionPresentation,
@@ -82,6 +82,22 @@ func appendCompanionRenderPresentationsInto(
 		})
 	}
 	return avatars, tags
+}
+
+// AppendHostileRenderPresentationsInto 把夜行者镜像转换为 avatar 记录：
+// 夜行者只进入实体通道，绝不进入名称标签集合（名标容量不随敌怪数量变化）。
+func AppendHostileRenderPresentationsInto(
+	avatars []render.Avatar,
+	presentations []client.HostilePresentation,
+) []render.Avatar {
+	for _, presentation := range presentations {
+		avatars = append(avatars, render.Avatar{
+			Key:      render.HostileEntityKey(presentation.ID),
+			Position: presentation.Position,
+			Yaw:      presentation.Yaw,
+		})
+	}
+	return avatars
 }
 
 func validateEntityPresentationCounts(avatars []render.Avatar, tags []render.NameTag) error {

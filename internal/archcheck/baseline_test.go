@@ -84,6 +84,13 @@ var baselineVersionMappings = []baselineVersionMapping{
 		why:         "头文件宏是 mornlea_client cdylib 的 C ABI 版本，混装检测以它为准。",
 	},
 	{
+		name:        "hostile_mobs schema",
+		docPattern:  "独立 `hostile_mobs` schema v(\\d+)",
+		sourcePath:  filepath.Join("internal", "storage", "hostile_codec.go"),
+		codePattern: `currentHostileSchema\s+uint32\s*=\s*(\w+)`,
+		why:         "currentHostileSchema 是 hostile_mobs.bin 写出时落盘的 schema 号；它以 hostileSchemaV1 间接定义，需解析到最终数值。",
+	},
+	{
 		name:        "benchmark scenario",
 		docPattern:  `benchmark scenario 为 v(\d+)`,
 		sourcePath:  filepath.Join("cmd", "mornlea", "benchmark", "benchmark.go"),
@@ -97,7 +104,7 @@ var baselineVersionMappings = []baselineVersionMapping{
 //
 // 两条实现约束：
 //   - 期望值一律从文件读取，测试内不出现任何具体版本号；
-//   - "八条断言是否都被找到"这个防空转守卫必须排在逐条比对之后。否则一次真实的
+//   - "九条断言是否都被找到"这个防空转守卫必须排在逐条比对之后。否则一次真实的
 //     版本不匹配若同时让某条正则失配，守卫会先报出"断言未找到"这个误导性诊断，
 //     把下一个人引向错误方向。
 func TestBaselineVersionsMatchCode(t *testing.T) {
@@ -157,7 +164,7 @@ func assertBaselineVersions(t *testing.T, root, name string) {
 	guidePath := filepath.Join(root, name)
 	guide := readBaselineDoc(t, root, name)
 	// 映射表本身也是承重件：删掉一行同样能让门禁静默变松，因此固定条数。
-	const expectedMappingCount = 8
+	const expectedMappingCount = 9
 	if len(baselineVersionMappings) != expectedMappingCount {
 		t.Fatalf("基线映射表有 %d 条，期望 %d 条：新增或删除契约版本号时必须同步本表",
 			len(baselineVersionMappings), expectedMappingCount)

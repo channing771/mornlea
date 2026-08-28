@@ -569,6 +569,13 @@ func resetCapturePresentation(app SceneApplication) error {
 	app.SetRemoteAvatars(app.RemoteAvatars()[:0])
 	app.SetRemoteNameTags(app.RemoteNameTags()[:0])
 	app.SetItemDropInstances(app.ItemDropInstances()[:0])
+	// 夜行者镜像是场景夹具的一部分：hostile-mob 注入的 8 只个体（含受击与
+	// 追逐状态）必须在这里一并恢复，否则水景会带着夜景敌怪出图。镜像可能
+	// 为 nil（最小测试装配），nil 时无从谈起夹具残留，跳过即可。
+	if app.Hostiles() != nil {
+		app.Hostiles().Reset()
+	}
+	app.SetHostilePresentations(app.HostilePresentations()[:0])
 	app.SetMiningOverlay(hud.MiningOverlay{})
 	app.SetDamageFeedback(application.DamageFeedback{})
 	app.SetDamageStrength(0)

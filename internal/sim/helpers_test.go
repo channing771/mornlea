@@ -6,6 +6,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/world"
 )
 
 // 本文件是 internal/sim 的共享测试 helper 中心（见 AGENTS.md「测试文件编排」）：
@@ -34,6 +35,27 @@ func setMeleePlayer(engine *Engine, id SessionID, position mgl32.Vec3, yaw float
 	player.pitch = 0
 	player.health = core.MaxHealth
 	player.reset = false
+}
+
+// loadFlatChunks 在维度里装载 [minX,maxX]×[minZ,maxZ] 范围的 flat 区块
+// （y=0 一层草地，上方全空气）。已就绪的区块按既有内容跳过（flat 世界的
+// 原点区块在引擎夹具里已就绪且形状一致）。
+func loadFlatChunks(t *testing.T, dimension *Dimension, minX, maxX, minZ, maxZ int32) {
+	t.Helper()
+	for x := minX; x <= maxX; x++ {
+		for z := minZ; z <= maxZ; z++ {
+			if info, ok := dimension.Info(core.ChunkPos{X: x, Z: z}); ok && info.State == ChunkReady {
+				continue
+			}
+			chunk := world.NewChunk(core.ChunkPos{X: x, Z: z})
+			for lx := 0; lx < core.SectionSize; lx++ {
+				for lz := 0; lz < core.SectionSize; lz++ {
+					chunk.SetBlock(lx, 0, lz, core.GrassID)
+				}
+			}
+			loadMovementChunk(t, dimension, chunk)
+		}
+	}
 }
 
 // farmlandMoistureCandidateWatch 记录湿度阶段开始前是否观察到指定候选。
