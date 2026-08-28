@@ -7,6 +7,10 @@ import (
 	"sync"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage/chunk"
+	"github.com/channing771/mornlea/internal/storage/companion"
+	"github.com/channing771/mornlea/internal/storage/hostile"
+	"github.com/channing771/mornlea/internal/storage/player"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -96,7 +100,7 @@ func (store *MemoryStore) LoadChunk(
 	if !ok {
 		return StoredChunk{}, fmt.Errorf("%w: %v", ErrChunkNotFound, key)
 	}
-	decoded, err := decodeChunkPayload(key, stored.revision, stored.encoded)
+	decoded, err := chunk.Decode(key, stored.revision, stored.encoded)
 	if err != nil {
 		return StoredChunk{}, fmt.Errorf("decode memory chunk %v: %w", key, err)
 	}
@@ -125,7 +129,7 @@ func (store *MemoryStore) SaveBatch(
 	committed := make(map[core.ChunkKey]uint64, len(saves))
 	pending := make(map[core.ChunkKey]pendingChunk, len(saves))
 	for _, save := range saves {
-		if err := validateChunkSave(save); err != nil {
+		if err := chunk.ValidateChunkSave(save); err != nil {
 			return SaveResult{}, err
 		}
 
@@ -169,7 +173,7 @@ func (store *MemoryStore) SaveBatch(
 		if err := ctx.Err(); err != nil {
 			return SaveResult{}, err
 		}
-		payload, err := encodeChunkPayload(ChunkSave{
+		payload, err := chunk.Encode(ChunkSave{
 			Key: key, Revision: candidate.revision, Chunk: candidate.chunk,
 		})
 		if err != nil {
@@ -211,7 +215,7 @@ func (store *MemoryStore) LoadPlayer(
 	if !ok {
 		return StoredPlayer{}, fmt.Errorf("%w: %s", ErrPlayerNotFound, id)
 	}
-	return decodePlayer(id, bytes.Clone(stored.encoded))
+	return player.Decode(id, bytes.Clone(stored.encoded))
 }
 
 func (store *MemoryStore) SavePlayer(
@@ -221,7 +225,7 @@ func (store *MemoryStore) SavePlayer(
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	encoded, err := encodePlayer(save)
+	encoded, err := player.Encode(save)
 	if err != nil {
 		return 0, err
 	}
@@ -267,14 +271,14 @@ func (store *MemoryStore) LoadCompanions(ctx context.Context) (StoredCompanions,
 	if len(store.companions.encoded) == 0 {
 		return StoredCompanions{}, ErrCompanionsNotFound
 	}
-	return decodeCompanions(bytes.Clone(store.companions.encoded))
+	return companion.Decode(bytes.Clone(store.companions.encoded))
 }
 
 func (store *MemoryStore) SaveCompanions(ctx context.Context, save CompanionSave) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	encoded, err := encodeCompanions(save)
+	encoded, err := companion.Encode(save)
 	if err != nil {
 		return err
 	}
@@ -313,14 +317,14 @@ func (store *MemoryStore) LoadHostileMobs(ctx context.Context) (StoredHostileMob
 	if len(store.hostiles.encoded) == 0 {
 		return StoredHostileMobs{}, ErrHostileMobsNotFound
 	}
-	return decodeHostileMobs(bytes.Clone(store.hostiles.encoded))
+	return hostile.Decode(bytes.Clone(store.hostiles.encoded))
 }
 
 func (store *MemoryStore) SaveHostileMobs(ctx context.Context, save HostileMobsSave) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	encoded, err := encodeHostileMobs(save)
+	encoded, err := hostile.Encode(save)
 	if err != nil {
 		return err
 	}
@@ -352,19 +356,6 @@ func (store *MemoryStore) Sync(ctx context.Context) error {
 }
 
 func (store *MemoryStore) Close() error {
-	return nil
-}
-
-func validateChunkSave(save ChunkSave) error {
-	if save.Chunk == nil {
-		return fmt.Errorf("storage: chunk save for %v has nil chunk", save.Key)
-	}
-	if save.Chunk.Pos != save.Key.Pos {
-		return fmt.Errorf("storage: chunk save key %v does not match chunk position %v", save.Key, save.Chunk.Pos)
-	}
-	if save.Revision == 0 {
-		return fmt.Errorf("storage: chunk save for %v has zero revision", save.Key)
-	}
 	return nil
 }
 

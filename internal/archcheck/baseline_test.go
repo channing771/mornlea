@@ -44,23 +44,23 @@ var baselineVersionMappings = []baselineVersionMapping{
 	{
 		name:        "区块 schema",
 		docPattern:  `区块 schema v(\d+)`,
-		sourcePath:  filepath.Join("internal", "storage", "chunk_codec.go"),
+		sourcePath:  filepath.Join("internal", "storage", "chunk", "chunk_codec.go"),
 		codePattern: `currentChunkSchema\s+uint32\s*=\s*(\w+)`,
 		why:         "currentChunkSchema 是区块记录写出时落盘的 schema 号，也是拒绝更高版本的上界。",
 	},
 	{
 		name:        "玩家 schema",
 		docPattern:  `玩家 schema v(\d+)`,
-		sourcePath:  filepath.Join("internal", "storage", "player_codec.go"),
-		codePattern: `currentPlayerSchema\s+uint32\s*=\s*(\w+)`,
-		why:         "currentPlayerSchema 是玩家记录写出时落盘的 schema 号。",
+		sourcePath:  filepath.Join("internal", "storage", "player", "player_codec.go"),
+		codePattern: `CurrentSchema\s+uint32\s*=\s*(\w+)`,
+		why:         "CurrentSchema 是玩家记录写出时落盘的 schema 号（player 包导出的权威常量）。",
 	},
 	{
 		name:        "companions.ai schema",
 		docPattern:  "独立 `companions\\.ai` schema v(\\d+)",
-		sourcePath:  filepath.Join("internal", "storage", "companion_codec.go"),
-		codePattern: `currentCompanionSchema\s+uint32\s*=\s*(\w+)`,
-		why:         "currentCompanionSchema 是 companions.ai 写出时落盘的 schema 号；它以 companionSchemaVN 间接定义，需解析到最终数值。",
+		sourcePath:  filepath.Join("internal", "storage", "companion", "companion_codec.go"),
+		codePattern: `CurrentSchema\s+uint32\s*=\s*(\w+)`,
+		why:         "CurrentSchema 是 companions.ai 写出时落盘的 schema 号（companion 包导出的权威常量）；它以 companionSchemaVN 间接定义，需解析到最终数值。",
 	},
 	{
 		name:        "世界 metadata 版本",
@@ -86,9 +86,9 @@ var baselineVersionMappings = []baselineVersionMapping{
 	{
 		name:        "hostile_mobs schema",
 		docPattern:  "独立 `hostile_mobs` schema v(\\d+)",
-		sourcePath:  filepath.Join("internal", "storage", "hostile_codec.go"),
-		codePattern: `currentHostileSchema\s+uint32\s*=\s*(\w+)`,
-		why:         "currentHostileSchema 是 hostile_mobs.bin 写出时落盘的 schema 号；它以 hostileSchemaV1 间接定义，需解析到最终数值。",
+		sourcePath:  filepath.Join("internal", "storage", "hostile", "hostile_codec.go"),
+		codePattern: `CurrentSchema\s+uint32\s*=\s*(\w+)`,
+		why:         "CurrentSchema 是 hostile_mobs.bin 写出时落盘的 schema 号（hostile 包导出的权威常量）；它以 hostileSchemaV1 间接定义，需解析到最终数值。",
 	},
 	{
 		name:        "benchmark scenario",
@@ -203,7 +203,7 @@ func assertBaselineVersions(t *testing.T, root, name string) {
 
 // resolveBaselineConstant 从源码文本中取出常量值，并顺着间接定义解析到最终数值。
 //
-// `currentCompanionSchema uint32 = companionSchemaV4` 这类写法若只取字面捕获，
+// `CurrentSchema uint32 = companionSchemaV4` 这类写法若只取字面捕获，
 // 门禁会拿标识符去和版本号比较、或者更糟地"读到标识符就放行"，因此必须继续解析。
 // 跳数设上界以防常量互相引用形成死循环。
 func resolveBaselineConstant(sourceText, codePattern string) (string, error) {
