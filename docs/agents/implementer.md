@@ -73,7 +73,7 @@
    gh api graphql --input <(jq -n --rawfile b /tmp/disc-note.md --arg q 'mutation($b:String!){ addDiscussionComment(input:{discussionId:"D_kwDOToJS8M4Aou6G", body:$b}){ comment { id } } }' '{query:$q, variables:{b:$b}}')
 □ 门禁证据归档：ledger 补最终验证输出摘要（数值记录，不改基线）
 □ 推送分支：git push -u origin <branch>
-□ 创建 PR：gh pr create --title "feat: <行 ID> <功能名>" --body "<OpenSpec change 链接 + 规划行 + 验证摘要>"
+□ 创建 PR：gh pr create --title "<type>(<scope>): <英文单行主题，沿用提交信息格式>" --body 直接采用 `.github/PULL_REQUEST_TEMPLATE.md`（## Summary 要点 + ## Validation 验证命令），附 OpenSpec change 链接
 □ 启动 PR 收尾守护（detached，会话退出也不丢）：nohup scripts/agents/pr-finalize.sh <PR号> >> ~/Library/Logs/mornlea-pr-finalize.log 2>&1 &
    守护职责：监听 CI 至完成 → 失败自动 failed-only 重跑（最多 3 轮，flaky 免疫）→ 仍失败保持 OPEN 并在日志登记
    → 全绿后 gh pr merge --merge；实现者随后只需确认合并结果（gh pr view <PR> --json state）
