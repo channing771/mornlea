@@ -30,8 +30,8 @@ const MaxHostileMobs = 64
 // active tick（达到 despawn 阈值后归零移除）。路径与规划世代是运行时
 // 派生物，刻意不落盘：恢复后路径为空，首 tick 重新规划。
 //
-// 类型在 storage 包内自包含定义：权威侧的夜行者身体类型属于 `internal/sim`
-// 而 storage 不得依赖 sim（archcheck 依赖矩阵），server 装配层负责在两者
+// 类型在本包内自包含定义：权威侧的夜行者身体类型属于 `internal/sim`
+// 而存储子树不得依赖 sim（archcheck 依赖矩阵），server 装配层负责在两者
 // 之间转换。
 type StoredHostileMob struct {
 	// ID 是稳定非零的夜行者标识；存档内按本值严格升序排列。

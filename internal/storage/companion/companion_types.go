@@ -23,7 +23,8 @@ import (
 var ErrCompanionsNotFound = errors.New("storage: companions not found")
 
 // 任务区与 FIFO 的持久化上界。全部在编码/解码边界强制：磁盘文件与内存
-// 占用都不随世界规模无界增长（推导见 codec 的 maxCompanionFileLength）。
+// 占用都不随世界规模无界增长（推导见 `companion_codec.go` 的
+// `MaxFileLength`）。
 const (
 	// MaxCompanionTaskCommandBytes 是任务区与 FIFO 每条指令的持久化字节
 	// 上界，与网络聊天指令及 TaskCommand 的上界一致。

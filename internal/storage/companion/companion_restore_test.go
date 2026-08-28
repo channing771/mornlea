@@ -3,8 +3,9 @@
 // 写 v4、入口 schema 白名单前瞻锁（字面 v1..v4 成员、v5 假想文件拒绝）、
 // 任务与 FIFO 跨重启精确恢复、损坏矩阵（CRC/future/截断/超
 // 438,280 bytes/非法任务状态/变长步长错位/follow 携带 deadline）与
-// 5,000 步骤、16 条 FIFO 边界。全部用例不触盘（除显式 DiskStore 用例），
-// 失败注入均为字节级或载荷级构造。
+// 5,000 步骤、16 条 FIFO 边界。全部用例经 companionFileFixture 在临时
+// 目录内读写（域包测试不回接根包 DiskStore 编排），失败注入均为字节级
+// 或载荷级构造。
 package companion
 
 import (

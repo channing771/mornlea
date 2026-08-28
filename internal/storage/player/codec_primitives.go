@@ -8,8 +8,8 @@ import (
 	"github.com/channing771/mornlea/internal/storage/storagedef"
 )
 
-// 本文件是 player 域 codec 的字节原语：与根包 byte_codec.go、chunk 包
-// chunk_codec_primitives.go 同源。按域拆分后各域持有自己的同构副本，
+// 本文件是 player 域 codec 的字节原语：与 chunk、companion、hostile 包的
+// 同名字节原语同源。按域拆分后各域持有自己的同构副本，
 // 域内 codec 是副本的唯一消费方，域间不共享原语包。
 
 func appendU32(dst []byte, value uint32) []byte {
