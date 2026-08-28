@@ -24,24 +24,35 @@
 - [ ] 2.1 新建 `internal/storage/storagedef`，迁入 `ErrCorrupt`/
   `ErrFutureVersion`（消息逐字节不变）；根包以 `var` 别名再导出（同一错误值，
   `errors.Is` 身份不变）。验证：`go build ./...`；`go test ./internal/storage -list '.*'` 与基线一致。
-- [ ] 2.2 新建 `internal/storage/region`，迁入 `region.go`、`region_format.go`、
-  `region_space.go`、`coords.go` 及 region 域测试；导出最小门面：`Region`
-  （现 `*region`）、open/save/load/compact 入口与 `RegionFileHooks`，门面签名
-  不引入 chunk 包类型（见 design Decision 4，接缝裁决记 ledger）；根包别名
-  再导出 `RegionKey`/`RegionFor`；`chunk_keys_test.go` 留根；archcheck 登记
-  新包与实际消费边。验证：`go test ./internal/storage/... -race -count=1`；
+- [ ] 2.2 新建 `internal/storage/region`（格式原语包），迁入
+  `region_format.go`、`region_space.go` 的纯原语部分（`sectorExtent`、
+  `regionSpacePolicy`、`regionCompactionHooks`、`freeSectorExtents`、
+  `allocateExtent`、`productionRegionSpacePolicy`）、`coords.go`，及
+  `region_format_test.go`、`region_space_test.go` 的两个 allocator 测试、
+  `coords_test.go`；`region_space.go` 内四个 `*region` 方法与 `*region` 类型
+  同包约束，暂留根随容器 T3 落 chunk（拆分落位记 ledger）；根包以 import
+  别名引用 region 包（根包仍有局部 `region` 结构体类型同名冲突，T3 迁走后
+  别名消除）；根包别名再导出 `RegionKey`/`RegionFor`；archcheck 登记新包与
+  实际消费边。验证：`go test ./internal/storage/... -race -count=1`；
   `go test ./internal/archcheck -count=1`；`-list` 并集对照。
 
 ## 3. chunk 包
 
-- [ ] 3.1 新建 `internal/storage/chunk`，迁入 `chunk_codec*.go`、`migration.go`
-  及 chunk 域测试与 `chunk-v1..v9.bin`（git mv）；导出 `chunk.Encode`/
-  `chunk.Decode`（现 `encodeChunkPayload`/`decodeChunkPayload` 入口）与
-  `ChunkSave`/`StoredChunk` 值类型；`chunkDTO` 保持非导出；根包别名再导出
-  `ChunkSave`/`StoredChunk`；`chunk_keys.go` 留根；archcheck 登记 chunk
-  消费边。验证：`go test ./internal/storage/... -race -count=1`（Fuzz 入口在
-  `-list` 并集中逐名保持）；`go test ./internal/archcheck -count=1`；
-  `-list` 并集对照。
+- [ ] 3.1 新建 `internal/storage/chunk`（codec + 记录层容器），迁入
+  `chunk_codec*.go`、`migration.go`、`region.go`（`errRegionPayloadInvalid`、
+  `*region` 及 open/load/save/sync/close/compact 入口）、`region_space.go` 的
+  `*region` 方法、`types.go` 的 `regionFile`/`regionFileHooks`，及 chunk 域
+  测试（含 `migration_test.go`、`region_test.go`、`region_recovery_test.go`、
+  `region_compact_test.go`、`region_crash_test.go`、
+  `region_space_test.go` 的 `TestRegionSaveReusesInactiveOnlyExtentWithoutGrowing`）
+  与 `chunk-v1..v9.bin`（git mv）；导出 `chunk.Encode`/`chunk.Decode`（现
+  `encodeChunkPayload`/`decodeChunkPayload` 入口）、`ChunkSave`/`StoredChunk`
+  值类型与记录层容器类型（现 `*region`，供根包
+  `map[RegionKey]*chunk.<容器>` 缓存编排，导出名实施裁决）；`chunkDTO` 保持
+  非导出；根包别名再导出 `ChunkSave`/`StoredChunk`；消除 Task 2 的过渡
+  import 别名；`chunk_keys.go` 留根；archcheck 登记 chunk 消费边。验证：
+  `go test ./internal/storage/... -race -count=1`（Fuzz 入口在 `-list` 并集中
+  逐名保持）；`go test ./internal/archcheck -count=1`；`-list` 并集对照。
 
 ## 4. player 包
 

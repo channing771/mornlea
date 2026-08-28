@@ -8,7 +8,9 @@
 `internal/storage/companion`、`internal/storage/hostile` 六个子包。根包 MUST
 保留 `Store`/`WorldStore` 等接口与 disk/memory/world_files/backup/metadata/
 chunk_keys 编排；`storagedef` MUST 只承载 `ErrCorrupt`/`ErrFutureVersion` 跨域
-哨兵；`region` MUST 承载 region 容器与 `RegionKey`/`RegionFor`；`chunk`/
+哨兵；`region` MUST 承载 region 格式原语（superblock/bank 编解码、扇区空间
+分配）与 `RegionKey`/`RegionFor`；`chunk` MUST 承载 chunk 信封编解码、迁移、
+chunk 值类型与 region 记录层容器（现 `*region` 及其读写、压缩、崩溃恢复）；
 `player`/`companion`/`hostile` MUST 各自承载对应实体的 codec、迁移、类型、域
 测试与版本化 bin fixture。
 
@@ -16,25 +18,29 @@ chunk_keys 编排；`storagedef` MUST 只承载 `ErrCorrupt`/`ErrFutureVersion` 
 
 - **GIVEN** 仓库包含 `internal/storage` 的全部六个子包
 - **WHEN** 架构依赖检查枚举全部内部包
-- **THEN** MUST 接受根包到六个子包的依赖边
+- **THEN** MUST 接受根包到 storagedef 叶子与五个域子包的依赖边
 - **AND** MUST 接受 chunk → region、实体域 → storagedef、region → storagedef
   等已登记的消费边
 - **AND** MUST 拒绝任何子包指向根包的反向依赖与子包之间未登记的相互依赖
   （chunk → region 除外）
 
-#### Scenario: region 容器经最小门面暴露
+#### Scenario: region 记录层随 chunk 包且 region 包只收格式原语
 
-- **GIVEN** 根包 disk 编排需要打开、读写、压缩 region 容器并注入测试文件钩子
+- **GIVEN** `region.go` 的读写路径直接调用 chunk 信封编解码并经手 chunk 值
+  类型，属于 chunk 的记录层容器
 - **WHEN** 针对拆分后的仓库编译
-- **THEN** `region` 包 MUST 经 `Region` 门面类型与 open/save/load/compact 入口
-  及文件钩子类型暴露容器能力
-- **AND** `region` 包导出面 MUST NOT 引用 chunk 包类型
-- **AND** 根包 MUST 继续持有 region 缓存与 `ChunkKeys` 编排
+- **THEN** 记录层容器（现 `*region` 及其 open/load/save/sync/close/compact
+  入口与文件注入钩子）MUST 位于 `chunk` 包，并由 chunk 包导出容器类型供根包
+  缓存编排
+- **AND** `region` 包 MUST 只承载格式原语与 `RegionKey`/`RegionFor`，MUST NOT
+  承载 chunk 信封编解码或容器文件编排
+- **AND** 根包 MUST 继续持有容器缓存与 `ChunkKeys` 编排
 
 ### Requirement: 存储子包依赖方向单向
 
-存储子包的依赖方向 MUST 单向且由架构依赖检查登记：根包 → 六个子包；
-chunk → {region, storagedef, core, world}；
+存储子包的依赖方向 MUST 单向且由架构依赖检查登记：根包 →
+region/chunk/player/companion/hostile 五个域子包与 storagedef 叶子（经错误
+别名消费哨兵）；chunk → {region, storagedef, core, world}；
 player/companion/hostile → {storagedef, core, world}；region → {storagedef,
 core}。companion 存储域 MUST 经既有 `internal/companion` 边访问伙伴领域类型，
 不得新增其他子包间依赖。

@@ -22,11 +22,15 @@
   - 根包保留 `Store`/`WorldStore` 等接口、`disk`/`memory`/`world_files`/
     `backup`/`metadata`/`chunk_keys` 编排，并以别名再导出迁出符号；
   - `internal/storage/storagedef`：`ErrCorrupt`/`ErrFutureVersion` 跨域哨兵叶子；
-  - `internal/storage/region`：region 容器与 `RegionKey`/`RegionFor`；
-  - `internal/storage/chunk`、`internal/storage/player`、
-    `internal/storage/companion`、`internal/storage/hostile`：各实体 codec、
-    迁移、类型、域测试与版本化 bin fixture。
-- 依赖方向单向并由 `internal/archcheck` 登记：root → 六个子包；
+  - `internal/storage/region`：region 格式原语（superblock/bank 编解码、扇区
+    空间分配）与 `RegionKey`/`RegionFor`；
+  - `internal/storage/chunk`：chunk 信封编解码、迁移、chunk 值类型与 region
+    记录层容器（现 `*region` 及其读写、压缩、崩溃恢复）；
+  - `internal/storage/player`、`internal/storage/companion`、
+    `internal/storage/hostile`：各实体 codec、迁移、类型、域测试与版本化
+    bin fixture。
+- 依赖方向单向并由 `internal/archcheck` 登记：根包 → region/chunk/player/
+  companion/hostile 五个域子包与 storagedef 叶子（经错误别名消费哨兵）；
   chunk → region；实体域 → storagedef；region → storagedef；子包之间不得互相
   导入（chunk → region 除外）；companion 域保留既有 `internal/companion` 边。
 - 消费面零改动：`internal/server`、`cmd/mornlea/app`、`cmd/mornlea/benchmark`、
@@ -51,8 +55,9 @@
 
 ### Modified Capabilities
 
-- `repository-code-organization`：为世界存储建立根包 + 六子包布局，要求依赖
-  方向单向、别名再导出保持消费面、测试入口集合保持不变、region 门面最小导出。
+- `repository-code-organization`：为世界存储建立根包 + 六子包布局（region 只收
+  格式原语，chunk 承载记录层容器），要求依赖方向单向、别名再导出保持消费面、
+  测试入口集合保持不变。
 
 ## Impact
 
