@@ -3,7 +3,7 @@
 // 四种整数移动（平移/跳上一格/下落一格/跨一格间隙）、不修改任何方块、区块
 // revision 透传、失效冷却重算与三连失败终止。全部为纯 CPU 测试，不启动窗口、
 // 不做任何 I/O。
-package companion
+package pathfind
 
 import (
 	"errors"
@@ -29,8 +29,19 @@ func mustPathGrid(t *testing.T, build func() (PathGrid, error)) PathGrid {
 	return grid
 }
 
-// 哨兵错误断言 helper wantErrorIs 的定义位于 planner_test.go：本文件原本与
-// planner 测试各持一份逐字相同的副本，按并集语义合并后由两个文件共用。
+// wantErrorIs 断言错误属于期望的哨兵类别且不同时命中另一类别。
+func wantErrorIs(t *testing.T, err error, want, other error) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("期望错误 %v，got nil", want)
+	}
+	if !errors.Is(err, want) {
+		t.Fatalf("错误类别错误: %v，want %v", err, want)
+	}
+	if errors.Is(err, other) {
+		t.Fatalf("错误同时命中另一类别: %v", err)
+	}
+}
 
 // assertPathCells 断言坐标序列逐点相等。
 func assertPathCells(t *testing.T, got, want []PathCell) {

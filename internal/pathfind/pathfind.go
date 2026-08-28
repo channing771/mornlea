@@ -3,7 +3,7 @@
 // 迁 Rust 反而制造 FFI 数据往返）。全部函数为纯计算：输入是不可变网格快照，
 // 输出是值，没有共享状态、goroutine 或 I/O——"只在 worker goroutine 执行"
 // 由纯函数性质保证，由 Task 6 的编排接线。
-package companion
+package pathfind
 
 import (
 	"errors"
@@ -33,6 +33,10 @@ const (
 // 直走廊锁定精确边界——目标恰是第 4097 个被考察节点，本上限必须在考察它
 // 之前终止。
 const MaxPathNodes = 4096
+
+// MaxPlanChunkRevisions 是快照可携带的区块 revision 上限，对应伙伴 3×3
+// 区块兴趣范围（水平 16 格半径最多横跨 3×3 区块）。
+const MaxPlanChunkRevisions = 9
 
 // maxPathGridCells 是网格快照的总量上限。生产窗口（33×9×33）只占用 9801 格；
 // 上限取 2^17 是为了容纳预算边界测试使用的 4097 长走廊（36,873 格），同时
@@ -65,6 +69,12 @@ type PathCell struct {
 	X int32
 	Y int32
 	Z int32
+}
+
+// ChunkRevision 记录快照引用的一个区块的内容 revision，供寻路结果失效判定。
+type ChunkRevision struct {
+	Chunk    core.ChunkPos `json:"chunk"`
+	Revision uint64        `json:"revision"`
 }
 
 // PathWindow 描述以 Center 为中心的寻路窗口：水平 ±PathWindowHorizontalRadius、

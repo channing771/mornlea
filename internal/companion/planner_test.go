@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/pathfind"
 )
 
 // testPlayerUUID 与 testCompanionUUID 是合法 UUIDv4 文本，仅测试使用。
@@ -80,7 +81,7 @@ func testSnapshot() PlanSnapshot {
 			{Pos: core.BlockPos{X: 9, Y: 64, Z: -1}, Block: core.OakLogID},
 		},
 		Heights:        []PlanHeight{{X: 8, Z: -2, Height: 63}, {X: 9, Z: -1, Height: 64}},
-		ChunkRevisions: []ChunkRevision{{Chunk: core.ChunkPos{X: 0, Z: -1}, Revision: 7}},
+		ChunkRevisions: []pathfind.ChunkRevision{{Chunk: core.ChunkPos{X: 0, Z: -1}, Revision: 7}},
 		WorldTimeTicks: 6000,
 	}
 }
@@ -171,9 +172,9 @@ func TestPlanSnapshotValidateBounds(t *testing.T) {
 	for index := range heightsOver {
 		heightsOver[index] = PlanHeight{X: int32(index % 33), Z: int32(index / 33), Height: 63}
 	}
-	revisionsOver := make([]ChunkRevision, MaxPlanChunkRevisions+1)
+	revisionsOver := make([]pathfind.ChunkRevision, pathfind.MaxPlanChunkRevisions+1)
 	for index := range revisionsOver {
-		revisionsOver[index] = ChunkRevision{Chunk: core.ChunkPos{X: int32(index - 5), Z: 0}, Revision: 1}
+		revisionsOver[index] = pathfind.ChunkRevision{Chunk: core.ChunkPos{X: int32(index - 5), Z: 0}, Revision: 1}
 	}
 	statusOver := strings.Repeat("忙", MaxPlanTaskStatusBytes/3+1)
 
@@ -201,10 +202,10 @@ func TestPlanSnapshotValidateBounds(t *testing.T) {
 		"高度样本空列越界":     func(s *PlanSnapshot) { s.Heights[0].Height = core.MinY - 2 },
 		"revision 超上界": func(s *PlanSnapshot) { s.ChunkRevisions = revisionsOver },
 		"revision 乱序": func(s *PlanSnapshot) {
-			s.ChunkRevisions = []ChunkRevision{{Chunk: core.ChunkPos{X: 1, Z: 0}, Revision: 2}, {Chunk: core.ChunkPos{X: 0, Z: 0}, Revision: 1}}
+			s.ChunkRevisions = []pathfind.ChunkRevision{{Chunk: core.ChunkPos{X: 1, Z: 0}, Revision: 2}, {Chunk: core.ChunkPos{X: 0, Z: 0}, Revision: 1}}
 		},
 		"revision 坐标重复": func(s *PlanSnapshot) {
-			s.ChunkRevisions = append(s.ChunkRevisions, ChunkRevision{Chunk: core.ChunkPos{X: 0, Z: -1}, Revision: 9})
+			s.ChunkRevisions = append(s.ChunkRevisions, pathfind.ChunkRevision{Chunk: core.ChunkPos{X: 0, Z: -1}, Revision: 9})
 		},
 		"任务状态摘要超长":      func(s *PlanSnapshot) { s.Companion.TaskStatus = statusOver },
 		"任务状态摘要非 UTF-8": func(s *PlanSnapshot) { s.Companion.TaskStatus = "\xff" },
@@ -215,7 +216,7 @@ func TestPlanSnapshotValidateBounds(t *testing.T) {
 		snapshot := testSnapshot()
 		snapshot.ExposedBlocks = append([]PlanBlock(nil), snapshot.ExposedBlocks...)
 		snapshot.Heights = append([]PlanHeight(nil), snapshot.Heights...)
-		snapshot.ChunkRevisions = append([]ChunkRevision(nil), snapshot.ChunkRevisions...)
+		snapshot.ChunkRevisions = append([]pathfind.ChunkRevision(nil), snapshot.ChunkRevisions...)
 		mutate(&snapshot)
 		if err := snapshot.Validate(); err == nil {
 			t.Errorf("%s 被接受", name)
