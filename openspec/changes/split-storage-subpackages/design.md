@@ -48,9 +48,9 @@ companions v1–v4、hostile-mobs v1）集中在 `internal/storage/testdata`。
 
 | 目标包 | 生产文件 | 版本化 fixture |
 |---|---|---|
-| 根包（保留） | `types.go`（`regionFile`/`regionFileHooks` 除外，二者随容器 T3 落 chunk）、`disk.go`、`memory.go`、`world_files.go`、`backup.go`、`metadata.go`、`chunk_keys.go` | 无 |
+| 根包（保留） | `types.go`（`regionFile`/`regionFileHooks` 与 `RegionKey` 除外，随容器 T3 分别落 chunk 与 region）、`disk.go`、`memory.go`、`world_files.go`、`backup.go`、`metadata.go`、`chunk_keys.go` | 无 |
 | storagedef | 新文件承载 `ErrCorrupt`/`ErrFutureVersion`（自 `types.go` 迁出，消息逐字节不变） | 无 |
-| region（格式原语） | `region_format.go`、`region_space.go` 的纯原语部分（`sectorExtent`、`regionSpacePolicy`、`regionCompactionHooks`、`freeSectorExtents`、`allocateExtent`、`productionRegionSpacePolicy`）、`coords.go` | 无 |
+| region（格式原语） | `region_format.go`、`region_space.go` 的纯原语部分（`sectorExtent`、`regionSpacePolicy`、`regionCompactionHooks`、`freeSectorExtents`、`allocateExtent`、`productionRegionSpacePolicy`）、`coords.go`（仅 `RegionFor`/`floorDiv32`）、`types.go` 的 `RegionKey`（定义在根包 `types.go`，非 `coords.go`） | 无 |
 | chunk（含记录层容器） | `chunk_codec.go`、`chunk_codec_container.go`、`chunk_codec_logical.go`、`chunk_codec_primitives.go`、`migration.go`、`region.go`（`errRegionPayloadInvalid`、`*region`、`openRegion*`、load/save/sync/close）、`region_space.go` 的 `*region` 方法（`shouldCompact`、`writeCompactedFile`、`reopenCanonical`、`compact`）、`types.go` 的 `regionFile`/`regionFileHooks` | `chunk-v1..v9.bin` |
 | player | `player_codec.go`、`player_migration.go`、`player_types.go` | `player-v1..v8.bin` |
 | companion | `companion_codec.go`、`companion_types.go` | `companions-v1..v4.bin` |
@@ -58,7 +58,8 @@ companions v1–v4、hostile-mobs v1）集中在 `internal/storage/testdata`。
 
 说明：`region_space.go` 内的四个 `*region` 方法与 `*region` 类型必须同包
 （Go 方法不能跨包定义），故该文件按「原语 / 容器方法」拆分落位——原语入
-region 包（T2），方法随容器落 chunk 包（T3）；拆分细节由 Task 2 实施裁决并记
+region 包、方法随容器落 chunk 包，二者同在 T3 随容器原子迁移（Ruling
+T1-3）；拆分细节由 Task 3 实施裁决并记
 ledger。`region.go` 属 chunk 记录层（其 `save`/`load` 直接调用 chunk 信封编解码
 并经手 `ChunkSave`/`StoredChunk`），随 chunk 包迁移，零门面重设计。
 
@@ -70,7 +71,7 @@ ledger。`region.go` 属 chunk 记录层（其 `save`/`load` 直接调用 chunk 
   `metadata_worldtime_test.go`、`chunk_keys_test.go`（测 `DiskStore.ChunkKeys`
   编排）、`player_store_test.go`、`companion_store_test.go`、
   `hostile_store_test.go`。
-- region 域（格式原语，T2）：`region_format_test.go`（零容器引用，实测）、
+- region 域（格式原语，T3）：`region_format_test.go`（零容器引用，实测）、
   `region_space_test.go` 的两个 allocator 测试（
   `TestAllocatorNeverUsesActiveExtentsAndUsesFirstFit`、
   `TestAllocatorAppendsOnlyWhenNoFreeExtentFits`）、`coords_test.go`
@@ -121,8 +122,8 @@ ledger。`region.go` 属 chunk 记录层（其 `save`/`load` 直接调用 chunk 
   `StoredCompanionQueue`、`ErrCompanionsNotFound`（companion）；
   `StoredHostileMob`、`StoredHostileMobs`、`HostileMobsSave`、
   `ErrHostileMobsNotFound`、`MaxHostileMobs`（hostile）。
-- 域包新增导出（仅承接既有调用方，不为对称性加导出）：region 包导出 T2
-  过渡期根包与 T3 起 chunk 包实际调用的格式原语符号（superblock/bank 编解码、
+- 域包新增导出（仅承接既有调用方，不为对称性加导出）：region 包导出
+  chunk 包实际调用的格式原语符号（superblock/bank 编解码、
   扇区分配原语）；chunk 包导出记录层容器类型（现 `*region`，供根包
   `map[RegionKey]*chunk.<容器>` 缓存编排，导出名由 Task 3 裁决）与
   `chunk.Encode`/`chunk.Decode`（现 `encodeChunkPayload`/`decodeChunkPayload`
@@ -172,17 +173,19 @@ storagedef/region/chunk/player/companion/hostile 六个文件簇边界清晰、�
 `encodeChunkPayload`/`decodeChunkPayload` 并经手 `ChunkSave`/`StoredChunk`，
 不是可独立复用的通用容器。据此（评审裁决 T1-1）：region 包只收
 `region_format.go`、`region_space.go` 的纯原语部分、`coords.go`
-（`RegionKey`/`RegionFor`）及对应格式原语测试；`region.go`（含
+（仅 `RegionFor`/`floorDiv32`；`RegionKey` 定义在根包 `types.go`，随迁
+region 包）及对应格式原语测试；`region.go`（含
 `errRegionPayloadInvalid`、`*region` 类型与 open/load/save/sync/close/compact
 入口）连同 `regionFile`/`regionFileHooks` 与容器级测试随 chunk 包（T3）。
 不存在也不需要新的 region 门面 API——T3 后容器类型由 chunk 包导出供根包
 `map[RegionKey]*chunk.<容器>` 缓存编排（导出名 Task 3 裁决），方法集与行为
 零变化。
 
-过渡约束：T2 迁出格式原语时，`region.go` 仍在根包且根包仍有局部 `region`
-结构体类型，根包 MUST 以 import 别名（如 `regfmt "…/internal/storage/region"`）
-引用 region 包符号，规避同名冲突；T3 迁走 `region.go` 后该别名消除。T2 同步
-落根包别名再导出 `RegionKey`/`RegionFor`（根包内代码改经别名消费）。
+任务边界（Ruling T1-3）：region 包与 `region.go`/chunk 域在 Task 3 同任务
+原子迁移——根包局部 `region` 结构体类型随容器同批迁走，不存在根包过渡期
+import 别名引用 region 包的中间态（原「T2 迁出格式原语 + 过渡期 import
+别名」约束随任务边界重划作废删除）。T3 落根包别名再导出
+`RegionKey`/`RegionFor`（根包内代码改经 `region.`/`chunk.` 限定名消费）。
 
 被否决的替代方案：「region 独立成完整容器包、以载荷字节门面与 chunk 解耦」
 （本 design 初稿 Decision 4，已作废）——`region.go` 深度耦合 chunk 信封与
@@ -210,8 +213,8 @@ player/companion/hostile → {storagedef, core, world}；region →
 
 ### 7. 分任务可独立回退
 
-Task 2（storagedef + region 格式原语）→ 3（chunk 含记录层容器）→
-4（player）→ 5（companion+hostile）为独立提交序列，每步结束仓库可编译、
+Task 2（storagedef 叶子）→ 3（region 格式原语与 chunk 含记录层容器，同任务
+原子迁移）→ 4（player）→ 5（companion+hostile）为独立提交序列，每步结束仓库可编译、
 `-list` 并集与基线一致、消费面零改动；任一步失败可单独回退而不拖垮整体。
 
 ## 风险
@@ -219,7 +222,7 @@ Task 2（storagedef + region 格式原语）→ 3（chunk 含记录层容器）�
 - 别名遗漏：编译期即失败（消费方引用无法解析），风险低、无需运行时守卫。
 - 随域测试夹具改造引入行为差异：以 `-list` 并集对照 + 逐域 `-race` +
   fixture 逐字节不变兜底；断言逻辑零改动是评审硬检查项。
-- `region_space.go` 原语/方法拆分与 T2 过渡期 import 别名是机械但易错的
-  改动：以「方法随 `*region` 同包」为硬约束，拆分落位与别名消除分别在
-  Task 2/3 的 ledger 裁决中核对。
+- `region_space.go` 原语/方法拆分是机械但易错的改动：以「方法随 `*region`
+  同包」为硬约束，region 包与 chunk 包同任务原子迁移（Ruling T1-3），
+  拆分落位在 Task 3 的 ledger 裁决中核对。
 - 计时基线漂移：race/非 race 计时只记录对照，不设门槛（见 ledger Baseline）。

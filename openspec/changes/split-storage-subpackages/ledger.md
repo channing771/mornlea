@@ -67,6 +67,19 @@
 - Ruling: `region_crash_test.go` 暂判 chunk 域 — 其被测主体未逐行核实，按
   「跟随被测主体」规则随记录层容器判 chunk；实施时若核实其纯测格式原语，
   以规则改判 region 包并记 ledger。
+- Ruling T1-3: 任务边界重划 — `region.go` 与容器紧耦合（直接持有
+  `regionFile`/`regionBank` 等容器内部类型），若格式原语在 T2 先行迁出，
+  根包过渡期被迫临时导出容器内部类型或以 import 别名引用 region 包，正是
+  T1-1 要避免的 churn。裁决：Task 2 缩为仅 `storagedef` 叶子；region 包
+  （`region_format.go`、`region_space.go` 纯原语部分、`coords.go` 的
+  `RegionFor`/`floorDiv32`、`types.go` 的 `RegionKey` +
+  `region_format_test.go`、`region_space_test.go` 两个 allocator 测试、
+  `coords_test.go`）并入 Task 3，与 `region.go`（chunk 记录层）和 chunk 域
+  同任务原子迁移，零临时门面；原 Task 2 的「根包过渡期 import 别名引用
+  region 包」约束随之作废删除。tasks.md、design.md（T2 过渡别名约束、
+  拆分说明、风险节）与执行计划文档的 Task 2/3 边界随 Task 2 前置文档修订
+  落地。代价：若错，Task 3 单任务偏大（约 6.5k 行机械迁移），由 `-list`
+  并集对照 + 逐域定点 race 兜底。
 
 ## Review Log
 
@@ -108,3 +121,21 @@
   `Totals: 77 passed, 0 failed (77 items)`，其中
   `✓ change/split-storage-subpackages`。
 - 本任务为规划层产物与只读基线快照，未改任何 Go 代码。
+
+### Task 2 前置文档修订（Ruling T1-3 + Task 1 两个 deferred minor 落地）
+
+- Ruling T1-3 落地：tasks.md Task 2/3 边界重划（Task 2 = 仅 storagedef 叶子；
+  region 包并入 Task 3 与 chunk 域原子迁移，新增 3.3 原子性条款）；design.md
+  的 Decision 4 过渡约束段改写为「同任务原子迁移、零临时门面」，Decision 7
+  任务序列、文件簇映射说明与风险节同步更新；执行计划文档 Task 2/3 节按新
+  边界重写。
+- Minor ①（Task 1 复审 deferred）：文件簇归属表 `RegionKey` 归属更正 —
+  实际定义在根包 `types.go:86`，并非 `coords.go`；`coords.go` 仅含
+  `RegionFor`/`floorDiv32`。design 文件簇映射表 region 行、Decision 4 与
+  根包保留行的 types.go 除外清单（补 `RegionKey`）已同步更正。
+- Minor ②（Task 1 复审 deferred）：执行计划文档
+  `docs/superpowers/plans/2026-08-28-split-storage-subpackages.md` Task 2/3
+  节仍为 T1-1 重映射前旧文 — 已按新 tasks.md 边界同步重写（含清除已作废的
+  「region 最小门面」表述），不再需要登记取代说明。
+- 验证：`openspec validate --all --strict --no-interactive`（结果见
+  task-2-report 与本 ledger 后续记录）。
