@@ -18,7 +18,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/server"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -231,7 +231,7 @@ func TestCorruptStoredChunkBothCopiesFailWithoutGeneration(t *testing.T) {
 	harness.setTrustedCenter(core.ChunkPos{})
 	harness.stepUntil(func() bool {
 		info, ok := harness.running.ChunkInfo(core.Overworld, core.ChunkPos{})
-		return ok && info.State == sim.ChunkFailed
+		return ok && info.State == contract.ChunkFailed
 	})
 	info, _ := harness.running.ChunkInfo(core.Overworld, core.ChunkPos{})
 	if !errors.Is(info.Err, storage.ErrCorrupt) {
@@ -530,7 +530,7 @@ func (h *persistentHarness) waitTrustedReady(position core.ChunkPos) {
 	h.stepUntil(func() bool {
 		info, ok := h.running.ChunkInfo(core.Overworld, position)
 		_, mirrored := h.mirror.Chunk(core.Overworld, position)
-		return ok && info.State == sim.ChunkReady && mirrored
+		return ok && info.State == contract.ChunkReady && mirrored
 	})
 	h.assertMirrorMatches(position)
 }

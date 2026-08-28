@@ -4,7 +4,7 @@ package server
 
 import (
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/worldgen"
 )
@@ -18,7 +18,7 @@ func newAttachedWorldForTest(config Config, endpoint network.ServerEndpoint, gen
 		return running
 	}
 	spec := registrySessionSpec(testSessionID, 1, endpoint)
-	spec.Restore = sim.PlayerRestore{
+	spec.Restore = contract.PlayerRestore{
 		SpawnDimension: config.SpawnDimension,
 		SpawnAnchor:    config.SpawnAnchor,
 	}

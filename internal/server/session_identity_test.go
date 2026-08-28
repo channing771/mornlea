@@ -8,7 +8,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 func TestSessionIdentityMetadataIsValidatedBeforeRegister(t *testing.T) {
@@ -118,19 +118,19 @@ func TestSessionIdentityTrustedObserverHasNoStableIdentity(t *testing.T) {
 	}
 }
 
-func TestSessionIdentityDoesNotLeakIntoSimPublicValues(t *testing.T) {
-	for _, value := range []any{sim.PlayerUpdate{}, sim.PlayerSnapshot{}} {
+func TestSessionIdentityDoesNotLeakIntoContractPublicValues(t *testing.T) {
+	for _, value := range []any{contract.PlayerUpdate{}, contract.PlayerSnapshot{}} {
 		typeOf := reflect.TypeOf(value)
 		for _, forbidden := range []string{"PlayerID", "DisplayName"} {
 			if _, ok := typeOf.FieldByName(forbidden); ok {
-				t.Fatalf("sim.%s unexpectedly exposes %s", typeOf.Name(), forbidden)
+			t.Fatalf("contract.%s unexpectedly exposes %s", typeOf.Name(), forbidden)
 			}
 		}
 	}
 }
 
 func registrySessionSpec(
-	id sim.SessionID,
+	id contract.SessionID,
 	generation uint64,
 	endpoint network.ServerEndpoint,
 ) SessionSpec {
@@ -138,10 +138,10 @@ func registrySessionSpec(
 }
 
 func registrySessionSpecWithRestore(
-	id sim.SessionID,
+	id contract.SessionID,
 	generation uint64,
 	endpoint network.ServerEndpoint,
-	restore sim.PlayerRestore,
+	restore contract.PlayerRestore,
 ) SessionSpec {
 	return SessionSpec{
 		ID:          id,

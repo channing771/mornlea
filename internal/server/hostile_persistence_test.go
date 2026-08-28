@@ -19,7 +19,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -30,7 +30,7 @@ func TestHostilePersistenceCoalescesToOneInflightSave(t *testing.T) {
 
 	// 首次保存派发后 store 挂起不返回：Poll 立即返回（tick 不等落盘），
 	// 期间不会并发第二份保存。
-	p.Observe([]sim.HostileMob{hostileObserveFixture(5, 10)})
+	p.Observe([]contract.HostileMob{hostileObserveFixture(5, 10)})
 	if err := p.Poll(10); err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestHostilePersistenceCoalescesToOneInflightSave(t *testing.T) {
 	if first.Revision != 1 || first.Records[0].Position[0] != 10 {
 		t.Fatalf("first save=%+v", first)
 	}
-	p.Observe([]sim.HostileMob{hostileObserveFixture(5, 20)})
+	p.Observe([]contract.HostileMob{hostileObserveFixture(5, 20)})
 	if err := p.Poll(20); err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestHostilePersistenceDoesNotHoldMutexDuringStoreSave(t *testing.T) {
 		}
 		mutexFree <- free
 	})
-	p.Observe([]sim.HostileMob{hostileObserveFixture(5, 10)})
+	p.Observe([]contract.HostileMob{hostileObserveFixture(5, 10)})
 	if err := p.Poll(10); err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestHostilePersistenceSaveFailureRetainsDirtyAndRetriesAtTick(t *testing.T)
 	store := newControllableHostileStore()
 	p := newHostilePersistence(store, storage.StoredHostileMobs{}, hostilePersistenceTestConfig())
 	t.Cleanup(p.Close)
-	p.Observe([]sim.HostileMob{hostileObserveFixture(5, 10)})
+	p.Observe([]contract.HostileMob{hostileObserveFixture(5, 10)})
 	_ = p.Poll(10)
 	first := receiveHostileSave(t, store)
 	store.complete(errors.New("disk full"))
@@ -109,7 +109,7 @@ func TestHostilePersistenceRetryDoesNotAliasStoreSaveInput(t *testing.T) {
 	store.mutateNextSave()
 	p := newHostilePersistence(store, storage.StoredHostileMobs{}, hostilePersistenceTestConfig())
 	t.Cleanup(p.Close)
-	p.Observe([]sim.HostileMob{hostileObserveFixture(5, 10)})
+	p.Observe([]contract.HostileMob{hostileObserveFixture(5, 10)})
 	_ = p.Poll(10)
 	mutated := receiveHostileSave(t, store)
 	if mutated.Records[0].Position[0] != 999 {
@@ -129,10 +129,10 @@ func TestHostilePersistenceChangeDuringInflightRemainsDirty(t *testing.T) {
 	store := newControllableHostileStore()
 	p := newHostilePersistence(store, storage.StoredHostileMobs{}, hostilePersistenceTestConfig())
 	t.Cleanup(p.Close)
-	p.Observe([]sim.HostileMob{hostileObserveFixture(5, 10)})
+	p.Observe([]contract.HostileMob{hostileObserveFixture(5, 10)})
 	_ = p.Poll(10)
 	_ = receiveHostileSave(t, store)
-	p.Observe([]sim.HostileMob{hostileObserveFixture(5, 20)})
+	p.Observe([]contract.HostileMob{hostileObserveFixture(5, 20)})
 	store.complete(nil)
 	pollHostilePersistenceUntil(t, p, 11, func() bool {
 		p.mu.Lock()
@@ -153,7 +153,7 @@ func TestHostilePersistenceFlushWaitsForInflightAndWritesLatestOnce(t *testing.T
 			store := newControllableHostileStore()
 			p := newHostilePersistence(store, storage.StoredHostileMobs{}, hostilePersistenceTestConfig())
 			t.Cleanup(p.Close)
-			p.Observe([]sim.HostileMob{hostileObserveFixture(5, 10)})
+			p.Observe([]contract.HostileMob{hostileObserveFixture(5, 10)})
 			flushed := make(chan error, 1)
 			if test.inherited {
 				if err := p.Poll(10); err != nil {
@@ -171,7 +171,7 @@ func TestHostilePersistenceFlushWaitsForInflightAndWritesLatestOnce(t *testing.T
 
 			// 关服屏障写的是最新权威快照：继承或自派的首次保存之后发生的
 			// 观察变化，由同一屏障的收尾保存补齐。
-			p.Observe([]sim.HostileMob{hostileObserveFixture(5, 20)})
+			p.Observe([]contract.HostileMob{hostileObserveFixture(5, 20)})
 			store.complete(nil)
 			followup := receiveHostileSaveBeforeFlushReturns(t, store, flushed)
 			if followup.Revision != 2 || followup.Records[0].Position[0] != 20 {
@@ -179,7 +179,7 @@ func TestHostilePersistenceFlushWaitsForInflightAndWritesLatestOnce(t *testing.T
 			}
 			// 收尾保存等待期间的新观察不被同一屏障吞掉：单次 Flush 至多补
 			// 一份 follow-up，随后返回（第三次变化留给下一次 Flush）。
-			p.Observe([]sim.HostileMob{hostileObserveFixture(5, 30)})
+			p.Observe([]contract.HostileMob{hostileObserveFixture(5, 30)})
 			store.complete(nil)
 			select {
 			case save := <-store.started:
@@ -217,7 +217,7 @@ func TestHostilePersistenceFlushFailureCanBeRetried(t *testing.T) {
 	store := newControllableHostileStore()
 	p := newHostilePersistence(store, storage.StoredHostileMobs{}, hostilePersistenceTestConfig())
 	t.Cleanup(p.Close)
-	p.Observe([]sim.HostileMob{hostileObserveFixture(5, 10)})
+	p.Observe([]contract.HostileMob{hostileObserveFixture(5, 10)})
 	firstDone := make(chan error, 1)
 	go func() { firstDone <- p.Flush(context.Background()) }()
 	first := receiveHostileSave(t, store)
@@ -243,7 +243,7 @@ func TestHostilePersistenceFlushCancellationKeepsWorkerAndRetry(t *testing.T) {
 	store := newControllableHostileStore()
 	p := newHostilePersistence(store, storage.StoredHostileMobs{}, hostilePersistenceTestConfig())
 	t.Cleanup(p.Close)
-	p.Observe([]sim.HostileMob{hostileObserveFixture(5, 10)})
+	p.Observe([]contract.HostileMob{hostileObserveFixture(5, 10)})
 	if err := p.Poll(10); err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +306,7 @@ func TestHostilePersistenceSurvivesRealStoreRoundTrip(t *testing.T) {
 	store := storage.NewMemory(storage.Metadata{FormatVersion: 3, Seed: 42})
 	p := newHostilePersistence(store, storage.StoredHostileMobs{}, hostilePersistenceTestConfig())
 	t.Cleanup(p.Close)
-	p.Observe([]sim.HostileMob{
+	p.Observe([]contract.HostileMob{
 		hostileObserveFixture(5, 10),
 		hostileObserveFixture(6, 20),
 	})
@@ -350,7 +350,7 @@ func TestHostilePersistenceSaveFailurePreservesArchiveFile(t *testing.T) {
 			t.Errorf("store Close: %v", err)
 		}
 	})
-	p.Observe([]sim.HostileMob{hostileObserveFixture(5, 10)})
+	p.Observe([]contract.HostileMob{hostileObserveFixture(5, 10)})
 	if err := p.Flush(context.Background()); err != nil {
 		t.Fatalf("first Flush: %v", err)
 	}
@@ -360,7 +360,7 @@ func TestHostilePersistenceSaveFailurePreservesArchiveFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p.Observe([]sim.HostileMob{hostileObserveFixture(5, 20)})
+	p.Observe([]contract.HostileMob{hostileObserveFixture(5, 20)})
 	if err := os.Chmod(root, 0o555); err != nil {
 		t.Fatal(err)
 	}
@@ -393,8 +393,8 @@ func TestHostilePersistenceSaveFailurePreservesArchiveFile(t *testing.T) {
 
 // hostileObserveFixture 返回一条位置可变的合法权威夜行者快照（含目标、
 // 冷却与远离累计，供脏判定与逐字段比对使用）。
-func hostileObserveFixture(id uint64, x float32) sim.HostileMob {
-	return sim.HostileMob{
+func hostileObserveFixture(id uint64, x float32) contract.HostileMob {
+	return contract.HostileMob{
 		ID:        id,
 		Dimension: core.Overworld,
 		State: physics.State{

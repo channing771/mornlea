@@ -12,7 +12,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	networktcp "github.com/channing771/mornlea/internal/network/tcp"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -148,7 +148,7 @@ func (c integrationClient) Close() error {
 	return c.Endpoint.Close()
 }
 
-func (h integrationHost) PlayerSnapshot(t *testing.T, id core.PlayerID) sim.PlayerSnapshot {
+func (h integrationHost) PlayerSnapshot(t *testing.T, id core.PlayerID) contract.PlayerSnapshot {
 	t.Helper()
 	snapshot, ok := h.PlayerSnapshotFor(t, id)
 	if !ok {
@@ -157,13 +157,13 @@ func (h integrationHost) PlayerSnapshot(t *testing.T, id core.PlayerID) sim.Play
 	return snapshot
 }
 
-func (h integrationHost) PlayerSnapshotFor(t *testing.T, id core.PlayerID) (sim.PlayerSnapshot, bool) {
+func (h integrationHost) PlayerSnapshotFor(t *testing.T, id core.PlayerID) (contract.PlayerSnapshot, bool) {
 	t.Helper()
 	h.Host.mu.Lock()
 	active := h.Host.activeByPlayer[id]
 	if active == nil || active.Session == 0 {
 		h.Host.mu.Unlock()
-		return sim.PlayerSnapshot{}, false
+		return contract.PlayerSnapshot{}, false
 	}
 	session := active.Session
 	h.Host.mu.Unlock()
@@ -171,7 +171,7 @@ func (h integrationHost) PlayerSnapshotFor(t *testing.T, id core.PlayerID) (sim.
 }
 
 // SessionFor 返回某个身份当前占用的权威会话 ID，供纵向脚本直接构造权威场景。
-func (h integrationHost) SessionFor(t *testing.T, id core.PlayerID) sim.SessionID {
+func (h integrationHost) SessionFor(t *testing.T, id core.PlayerID) contract.SessionID {
 	t.Helper()
 	h.Host.mu.Lock()
 	defer h.Host.mu.Unlock()
@@ -328,11 +328,11 @@ func manualMultiplayerStable(running *Server, store *trackedMemoryStore, clients
 		len(running.generated) == 0 && len(running.incoming) == 0 && len(running.queued) == 0
 	allPlayersReady := true
 	for index := range clients {
-		update, ok := running.engine.Player(sim.SessionID(index + 1))
+		update, ok := running.engine.Player(contract.SessionID(index + 1))
 		allPlayersReady = allPlayersReady && ok && update.Ready
 	}
 	running.stepMu.Unlock()
-	if !ready || info.State != sim.ChunkReady || !queuesEmpty || !allPlayersReady || store.inFlight.Load() != 0 {
+	if !ready || info.State != contract.ChunkReady || !queuesEmpty || !allPlayersReady || store.inFlight.Load() != 0 {
 		return false
 	}
 	for _, connected := range clients {
@@ -409,7 +409,7 @@ func seedIntegrationPlayer(
 	t *testing.T,
 	root string,
 	identity network.Identity,
-	snapshot sim.PlayerSnapshot,
+	snapshot contract.PlayerSnapshot,
 ) {
 	t.Helper()
 	store, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{Create: storage.Metadata{
@@ -454,9 +454,9 @@ func wellFedPlayerSave(save storage.PlayerSave) storage.PlayerSave {
 	return save
 }
 
-func integrationPlayerSnapshotAt(x, y, z float32, safe *sim.PlayerLocation) sim.PlayerSnapshot {
-	return sim.PlayerSnapshot{
-		Current: sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{x, y, z}},
+func integrationPlayerSnapshotAt(x, y, z float32, safe *contract.PlayerLocation) contract.PlayerSnapshot {
+	return contract.PlayerSnapshot{
+		Current: contract.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{x, y, z}},
 		Safe:    safe,
 	}
 }

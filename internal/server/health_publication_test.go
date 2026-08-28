@@ -7,7 +7,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 // TestPlayerHealthPublishesOnlyToOwner 覆盖"生命值只随本人的权威玩家状态下发"：
@@ -22,7 +22,7 @@ func TestPlayerHealthPublishesOnlyToOwner(t *testing.T) {
 	second := h.playerUpdate(2, true, core.Overworld, mgl32.Vec3{0.5, 2, 0.5})
 	second.Health = 11
 
-	h.publish(sim.TickResult{Tick: 5, Players: []sim.PlayerUpdate{first, second}})
+	h.publish(contract.TickResult{Tick: 5, Players: []contract.PlayerUpdate{first, second}})
 
 	assertOwnHealthOnly(t, h.drain(1), 7, 11)
 	assertOwnHealthOnly(t, h.drain(2), 11, 7)
@@ -31,7 +31,7 @@ func TestPlayerHealthPublishesOnlyToOwner(t *testing.T) {
 // TestPlayerHealthSlowSessionKeepsBoundedOutboxPolicy 覆盖"慢会话仍走既有有界
 // outbox 与断开策略"：outbox 塞满的会话被断开，其余会话照常收到各自的生命值。
 func TestPlayerHealthSlowSessionKeepsBoundedOutboxPolicy(t *testing.T) {
-	ids := []sim.SessionID{1, 2, 3}
+	ids := []contract.SessionID{1, 2, 3}
 	h := newRemotePublicationHarness(t, ids...)
 	for _, id := range ids {
 		h.markSnapshotSent(id, core.ChunkPos{})
@@ -42,7 +42,7 @@ func TestPlayerHealthSlowSessionKeepsBoundedOutboxPolicy(t *testing.T) {
 		players[index].Health = uint8(index) + 3
 	}
 
-	h.publish(sim.TickResult{Tick: 6, Players: players})
+	h.publish(contract.TickResult{Tick: 6, Players: players})
 
 	if h.running.sessions[1] != nil {
 		t.Fatal("满 outbox 的慢会话未被断开")
@@ -87,7 +87,7 @@ func assertOwnHealthOnly(
 // 持久化"：玩家原地站着回血时位置与物品都不变，快照比较与存档比较都必须把生命值
 // 算进去，否则这次变化会被当成无变化而丢失。
 func TestPlayerPersistenceDirtyDetectionIncludesHealth(t *testing.T) {
-	full := sim.PlayerSnapshot{Health: core.MaxHealth}
+	full := contract.PlayerSnapshot{Health: core.MaxHealth}
 	hurt := full
 	hurt.Health = 7
 	if playerSnapshotsEqual(full, hurt) {

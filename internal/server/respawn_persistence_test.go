@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -18,7 +18,7 @@ import (
 var respawnTestPosition = [3]float32{7, 1, 5}
 
 // respawnTestSnapshot 在既有快照夹具之上带上一个非零重生点。
-func respawnTestSnapshot() sim.PlayerSnapshot {
+func respawnTestSnapshot() contract.PlayerSnapshot {
 	snapshot := testPlayerSnapshot(10)
 	snapshot.RespawnPresent = true
 	snapshot.RespawnPosition = respawnTestPosition
@@ -100,15 +100,15 @@ func TestPlayerPersistenceDirtyDetectionIncludesRespawn(t *testing.T) {
 	base := respawnTestSnapshot()
 	cases := []struct {
 		name  string
-		apply func(*sim.PlayerSnapshot)
+		apply func(*contract.PlayerSnapshot)
 	}{
-		{"重生点出现", func(s *sim.PlayerSnapshot) {
+		{"重生点出现", func(s *contract.PlayerSnapshot) {
 			s.RespawnPresent = false
 		}},
-		{"重生点坐标", func(s *sim.PlayerSnapshot) {
+		{"重生点坐标", func(s *contract.PlayerSnapshot) {
 			s.RespawnPosition = [3]float32{8, 1, 6}
 		}},
-		{"重生点维度", func(s *sim.PlayerSnapshot) {
+		{"重生点维度", func(s *contract.PlayerSnapshot) {
 			s.RespawnDimension = 1
 		}},
 	}

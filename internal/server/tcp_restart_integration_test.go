@@ -18,7 +18,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	networktcp "github.com/channing771/mornlea/internal/network/tcp"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -115,7 +115,7 @@ func integrationChangeSeen(
 	return false
 }
 
-func assertPlayerRestored(t *testing.T, host integrationHost, id core.PlayerID, want sim.PlayerSnapshot) {
+func assertPlayerRestored(t *testing.T, host integrationHost, id core.PlayerID, want contract.PlayerSnapshot) {
 	t.Helper()
 	got := host.PlayerSnapshot(t, id)
 	if got.Current != want.Current || got.Yaw != want.Yaw || got.Pitch != want.Pitch ||
@@ -172,7 +172,7 @@ func waitIntegrationState(
 	}
 }
 
-func equalIntegrationSafe(left, right *sim.PlayerLocation) bool {
+func equalIntegrationSafe(left, right *contract.PlayerLocation) bool {
 	if left == nil || right == nil {
 		return left == nil && right == nil
 	}
@@ -517,13 +517,13 @@ func TestTCPPlayerAndWorldFailureMatrixProtocolVersionAndUnknownPacket(t *testin
 }
 
 func TestTCPPlayerAndWorldRestoreFallbackMatrix(t *testing.T) {
-	current := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1, 0.5}}
-	safe := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{2.5, 1, 0.5}}
+	current := contract.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1, 0.5}}
+	safe := contract.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{2.5, 1, 0.5}}
 
 	t.Run("blocked current falls back to safe", func(t *testing.T) {
 		root := t.TempDir()
 		identity := integrationIdentity(0x41, "FallbackSafe")
-		seedIntegrationPlayer(t, root, identity, sim.PlayerSnapshot{Current: current, Safe: &safe})
+		seedIntegrationPlayer(t, root, identity, contract.PlayerSnapshot{Current: current, Safe: &safe})
 		host := startDiskHost(t, root, "127.0.0.1:0", blockedGenerator{
 			core.BlockPos{X: 0, Y: 1, Z: 0}: core.StoneID,
 		})
@@ -538,11 +538,11 @@ func TestTCPPlayerAndWorldRestoreFallbackMatrix(t *testing.T) {
 	})
 
 	t.Run("blocked safe falls back to deterministic spawn", func(t *testing.T) {
-		var restored [2]sim.PlayerLocation
+		var restored [2]contract.PlayerLocation
 		for run := range 2 {
 			root := t.TempDir()
 			identity := integrationIdentity(byte(0x51+run), fmt.Sprintf("Spawn%d", run))
-			seedIntegrationPlayer(t, root, identity, sim.PlayerSnapshot{Current: current, Safe: &safe})
+			seedIntegrationPlayer(t, root, identity, contract.PlayerSnapshot{Current: current, Safe: &safe})
 			host := startDiskHost(t, root, "127.0.0.1:0", blockedGenerator{
 				core.BlockPos{X: 0, Y: 1, Z: 0}: core.StoneID,
 				core.BlockPos{X: 2, Y: 1, Z: 0}: core.StoneID,

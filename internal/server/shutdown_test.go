@@ -12,7 +12,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -32,7 +32,7 @@ func TestShutdownFailureFreezesAndCanRetry(t *testing.T) {
 	if got := running.engine.TickCount(); got != tickBefore+1 {
 		t.Fatalf("freeze ticks=%d, want exactly one final tick after %d", got, tickBefore)
 	}
-	if result := running.StepForTest(); !reflect.DeepEqual(result, sim.TickResult{}) {
+	if result := running.StepForTest(); !reflect.DeepEqual(result, contract.TickResult{}) {
 		t.Fatalf("frozen StepForTest=%+v, want zero TickResult", result)
 	}
 	status := running.PersistenceStatus()
@@ -69,8 +69,8 @@ func TestShutdownAppliesFinalBufferedCommandExactlyOnceWithoutPublishing(t *test
 	running, client := newShutdownTestServer(t, store)
 	key := chunkKey(0, 0)
 	running.engine = dirtyPlayerEngine(t, key)
-	running.engine.Enqueue(sim.Command{
-		Session: testSessionID, Sequence: 1, Kind: sim.CommandPlayerInput,
+	running.engine.Enqueue(contract.Command{
+		Session: testSessionID, Sequence: 1, Kind: contract.CommandPlayerInput,
 		Pitch: -1.5, Mining: true,
 	})
 	for range 4 {
@@ -81,9 +81,9 @@ func TestShutdownAppliesFinalBufferedCommandExactlyOnceWithoutPublishing(t *test
 	tickBefore := running.engine.TickCount()
 	running.incoming <- incomingCommand{
 		Session: testSessionID, Generation: 1,
-		Command: sim.Command{
+		Command: contract.Command{
 			Session: testSessionID, Sequence: 2,
-			Kind: sim.CommandPlayerInput, Pitch: -1.5, Mining: true,
+			Kind: contract.CommandPlayerInput, Pitch: -1.5, Mining: true,
 		},
 	}
 
@@ -104,7 +104,7 @@ func TestShutdownAppliesFinalBufferedCommandExactlyOnceWithoutPublishing(t *test
 	if message, err := client.Recv(ctx); err == nil {
 		t.Fatalf("final tick published %#v", message)
 	}
-	if result := running.StepForTest(); !reflect.DeepEqual(result, sim.TickResult{}) {
+	if result := running.StepForTest(); !reflect.DeepEqual(result, contract.TickResult{}) {
 		t.Fatalf("post-close StepForTest=%+v, want zero TickResult", result)
 	}
 }
@@ -122,7 +122,7 @@ func TestShutdownCallerTimeoutPreservesFrozenAuthorityForRetry(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Shutdown error=%v, want deadline exceeded", err)
 	}
-	if result := running.StepForTest(); !reflect.DeepEqual(result, sim.TickResult{}) {
+	if result := running.StepForTest(); !reflect.DeepEqual(result, contract.TickResult{}) {
 		t.Fatalf("timed-out shutdown did not freeze Step: %+v", result)
 	}
 	if status := running.PersistenceStatus(); status.DirtyChunks != 1 ||
@@ -248,7 +248,7 @@ func TestShutdownJoinsBufferedPersistenceFailureWithCanceledCaller(t *testing.T)
 	store := newShutdownTestStore()
 	running, _ := newShutdownTestServer(t, store)
 	running.engine = dirtyReadyEngine(t, []core.ChunkKey{chunkKey(0, 0)})
-	snapshots := running.engine.PersistenceSnapshots(1, 1<<20, sim.SaveAll)
+	snapshots := running.engine.PersistenceSnapshots(1, 1<<20, contract.SaveAll)
 	jobs := groupSaveJobs(snapshots)
 	jobs[0].Attempt = 1
 	running.saveCompletions <- saveCompletion{Job: jobs[0], Err: wantErr}

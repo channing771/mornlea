@@ -12,7 +12,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -264,7 +264,7 @@ func runContainerMineParity(t *testing.T, transport string) containerMineParityR
 	var transcript []network.ChatEvent
 	// stepParityTick 推进一个权威 tick 并排空本 tick 的全部客户端消息（保持
 	// 流同步），把 ChatEvent 追加进 transcript。
-	stepParityTick := func() sim.TickResult {
+	stepParityTick := func() contract.TickResult {
 		tickResult := host.world.StepForTest()
 		transcript = append(transcript,
 			companionChatEvents(receiveCompanionChatTick(t, client, tickResult.Tick))...)

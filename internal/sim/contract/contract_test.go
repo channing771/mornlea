@@ -4,8 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/go-gl/mathgl/mgl32"
-
 	"github.com/channing771/mornlea/internal/core"
 )
 
@@ -50,7 +48,7 @@ func TestBoundaryValuesPreserveCommandAndTickOutput(t *testing.T) {
 	}
 }
 
-func TestChunkIngressAndLookDirectionPreserveValues(t *testing.T) {
+func TestChunkIngressPreservesValues(t *testing.T) {
 	inputErr := errors.New("load failed")
 	acquired := AcquiredChunk{
 		Key:     core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: 3, Z: 4}},
@@ -65,8 +63,5 @@ func TestChunkIngressAndLookDirectionPreserveValues(t *testing.T) {
 	if !acquired.Missing || !errors.Is(acquired.Err, inputErr) ||
 		generated.Pos != (core.ChunkPos{X: -2, Z: 8}) || !errors.Is(generated.Err, inputErr) {
 		t.Fatalf("chunk ingress changed while crossing the boundary: acquired=%+v generated=%+v", acquired, generated)
-	}
-	if got, want := LookDirection(0, 0), (mgl32.Vec3{0, 0, -1}); got != want {
-		t.Fatalf("look direction = %v, want %v", got, want)
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/channing771/mornlea/internal/network"
 	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -718,7 +719,7 @@ func parityStep(
 	host *Host,
 	endpoint network.ClientEndpoint,
 	mirror *client.Mirror,
-) (sim.TickResult, []network.ServerMessage) {
+) (contract.TickResult, []network.ServerMessage) {
 	t.Helper()
 	result := host.world.StepForTest()
 	ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)

@@ -10,6 +10,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -51,7 +52,7 @@ func TestInitialSnapshotCapturesSameTickChangesBeforeDelta(t *testing.T) {
 	if len(generated.Generate) != 1 {
 		t.Fatalf("Generate = %+v", generated.Generate)
 	}
-	running.engine.SubmitGenerated(sim.GeneratedChunk{
+	running.engine.SubmitGenerated(contract.GeneratedChunk{
 		Dimension: core.Overworld,
 		Pos:       core.ChunkPos{},
 		Chunk:     generator.chunk(core.ChunkPos{}),
@@ -60,8 +61,8 @@ func TestInitialSnapshotCapturesSameTickChangesBeforeDelta(t *testing.T) {
 	if len(ready.Ready) != 1 || !ready.Players[0].Ready {
 		t.Fatalf("spawn ready = %+v", ready)
 	}
-	running.engine.Enqueue(sim.Command{
-		Session: testSessionID, Sequence: 2, Kind: sim.CommandPlayerInput,
+	running.engine.Enqueue(contract.Command{
+		Session: testSessionID, Sequence: 2, Kind: contract.CommandPlayerInput,
 		Yaw: 0, Pitch: -1.5, Mining: true,
 	})
 	for range 4 {
@@ -93,8 +94,8 @@ func TestPublishedDeltaIsContiguousAfterSnapshot(t *testing.T) {
 		t.Fatalf("初始 revision = %d", snapshot.Revision)
 	}
 
-	running.engine.Enqueue(sim.Command{
-		Session: testSessionID, Sequence: 2, Kind: sim.CommandPlayerInput,
+	running.engine.Enqueue(contract.Command{
+		Session: testSessionID, Sequence: 2, Kind: contract.CommandPlayerInput,
 		Pitch: -1.5, Mining: true,
 	})
 	for range 4 {
@@ -122,10 +123,10 @@ func TestResyncSnapshotPrecedesOrdinaryPendingSnapshots(t *testing.T) {
 
 	running.incoming <- incomingCommand{
 		Session: testSessionID, Generation: 1,
-		Command: sim.Command{
+		Command: contract.Command{
 			Session:      testSessionID,
 			Sequence:     2,
-			Kind:         sim.CommandResync,
+			Kind:         contract.CommandResync,
 			Dimension:    core.Overworld,
 			Chunk:        core.ChunkPos{},
 			HaveRevision: 0,
@@ -152,10 +153,10 @@ func TestForgetRemovesPendingSnapshotsAndSortsChunks(t *testing.T) {
 		running.sessions[testSessionID].pendingSnapshots[key] = snapshotRequest{}
 		running.sessions[testSessionID].publications[key] = &publication{}
 	}
-	running.publish(sim.TickResult{
+	running.publish(contract.TickResult{
 		Tick:   1,
-		Forget: map[sim.SessionID][]core.ChunkKey{testSessionID: keys},
-		Players: []sim.PlayerUpdate{{
+		Forget: map[contract.SessionID][]core.ChunkKey{testSessionID: keys},
+		Players: []contract.PlayerUpdate{{
 			Session:    testSessionID,
 			Dimension:  core.Overworld,
 			ViewCenter: core.ChunkPos{},
@@ -178,9 +179,9 @@ func TestForgetRemovesPendingSnapshotsAndSortsChunks(t *testing.T) {
 
 func TestPublishLocalResultMapsCanonicalMiningStateIntoSinglePlayerState(t *testing.T) {
 	current := &session{id: testSessionID, outbox: make(chan network.ServerMessage, 2)}
-	player := sim.PlayerUpdate{
+	player := contract.PlayerUpdate{
 		Session: testSessionID,
-		Mining: sim.MiningUpdate{
+		Mining: contract.MiningUpdate{
 			Active:        true,
 			Target:        core.BlockPos{X: 1, Y: 2, Z: 3},
 			ProgressTicks: 6,
@@ -188,7 +189,7 @@ func TestPublishLocalResultMapsCanonicalMiningStateIntoSinglePlayerState(t *test
 			Harvestable:   true,
 		},
 	}
-	(&Server{}).publishLocalResult(current, sim.TickResult{Tick: 9}, player)
+	(&Server{}).publishLocalResult(current, contract.TickResult{Tick: 9}, player)
 
 	if len(current.outbox) != 1 {
 		t.Fatalf("本地发布消息数 = %d，想要唯一 PlayerState", len(current.outbox))
@@ -213,16 +214,16 @@ func TestRemotePlayerStatesDoNotPublishMiningState(t *testing.T) {
 	h.markSnapshotSent(1, core.ChunkPos{})
 	observer := h.playerUpdate(1, true, core.Overworld, [3]float32{0.5, 2, 0.5})
 	target := h.playerUpdate(2, true, core.Overworld, [3]float32{0.5, 2, 0.5})
-	target.Mining = sim.MiningUpdate{
+	target.Mining = contract.MiningUpdate{
 		Active: true, Target: core.BlockPos{X: 1, Y: 2, Z: 3},
 		ProgressTicks: 6, RequiredTicks: 15, Harvestable: true,
 	}
-	h.publish(sim.TickResult{Tick: 1, Players: []sim.PlayerUpdate{observer, target}})
+	h.publish(contract.TickResult{Tick: 1, Players: []contract.PlayerUpdate{observer, target}})
 	h.drain(1)
-	h.publish(sim.TickResult{Tick: 2, Players: []sim.PlayerUpdate{observer, target}})
+	h.publish(contract.TickResult{Tick: 2, Players: []contract.PlayerUpdate{observer, target}})
 	active := onlyRemotePlayerMessages(h.drain(1))
-	target.Mining = sim.MiningUpdate{}
-	h.publish(sim.TickResult{Tick: 3, Players: []sim.PlayerUpdate{observer, target}})
+	target.Mining = contract.MiningUpdate{}
+	h.publish(contract.TickResult{Tick: 3, Players: []contract.PlayerUpdate{observer, target}})
 	inactive := onlyRemotePlayerMessages(h.drain(1))
 
 	if len(active) != 1 || len(inactive) != 1 {
@@ -273,15 +274,15 @@ func TestForgetSplits4097ChunksIntoValidDeterministicPackets(t *testing.T) {
 func TestDefaultRadiusLargeCenterMovePublishesBoundedForgetPackets(t *testing.T) {
 	config := DefaultConfig(1)
 	engine := sim.NewEngine(config.ViewRadius, 0, 0)
-	const observer = sim.SessionID(77)
+	const observer = contract.SessionID(77)
 	engine.RegisterObserverSession(observer)
-	engine.Enqueue(sim.Command{
-		Session: observer, Sequence: 1, Kind: sim.CommandTrustedObserverCenter,
+	engine.Enqueue(contract.Command{
+		Session: observer, Sequence: 1, Kind: contract.CommandTrustedObserverCenter,
 		Dimension: core.Overworld, Center: core.ChunkPos{},
 	})
 	engine.Step()
-	engine.Enqueue(sim.Command{
-		Session: observer, Sequence: 2, Kind: sim.CommandTrustedObserverCenter,
+	engine.Enqueue(contract.Command{
+		Session: observer, Sequence: 2, Kind: contract.CommandTrustedObserverCenter,
 		Dimension: core.Overworld, Center: core.ChunkPos{X: 1000},
 	})
 	moved := engine.Step()
@@ -352,7 +353,7 @@ func prepareReadySquare(
 		t.Fatalf("Generate = %d，想要 %d", len(generated.Generate), len(requested.Acquire))
 	}
 	for _, key := range generated.Generate {
-		running.engine.SubmitGenerated(sim.GeneratedChunk{
+		running.engine.SubmitGenerated(contract.GeneratedChunk{
 			Dimension: key.Dimension,
 			Pos:       key.Pos,
 			Chunk:     generator.chunk(key.Pos),
@@ -366,7 +367,7 @@ func prepareReadySquare(
 
 func submitServerAcquiredMisses(running *Server, keys []core.ChunkKey) {
 	for _, key := range keys {
-		running.engine.SubmitAcquired(sim.AcquiredChunk{Key: key, Missing: true})
+		running.engine.SubmitAcquired(contract.AcquiredChunk{Key: key, Missing: true})
 	}
 }
 

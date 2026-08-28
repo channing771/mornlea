@@ -10,10 +10,10 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
-const testSessionID sim.SessionID = 1
+const testSessionID contract.SessionID = 1
 
 func TestNewWorldStartsWithoutAttachedPlayer(t *testing.T) {
 	running := NewWorld(registryTestConfig(), playerTestGenerator{}, testStore())
@@ -272,10 +272,10 @@ func TestTrustedObserverFullOutboxDetachesAndAllowsReattach(t *testing.T) {
 	}
 
 	running.stepMu.Lock()
-	running.publish(sim.TickResult{Rejected: []sim.Rejection{{
+	running.publish(contract.TickResult{Rejected: []contract.Rejection{{
 		Session: trustedObserverSessionID, Sequence: 2,
 	}}})
-	running.publish(sim.TickResult{Rejected: []sim.Rejection{{
+	running.publish(contract.TickResult{Rejected: []contract.Rejection{{
 		Session: trustedObserverSessionID, Sequence: 3,
 	}}})
 	detached := running.trustedObserver == nil

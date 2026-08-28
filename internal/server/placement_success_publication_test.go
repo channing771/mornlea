@@ -4,17 +4,17 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 func TestPublishLocalResultRoutesPlacementSuccessOnlyToInitiatingSession(t *testing.T) {
 	current := &session{id: 1, outbox: make(chan network.ServerMessage, 2)}
-	(&Server{}).publishLocalResult(current, sim.TickResult{
-		PlacementSuccesses: []sim.PlacementSuccess{
+	(&Server{}).publishLocalResult(current, contract.TickResult{
+		PlacementSuccesses: []contract.PlacementSuccess{
 			{Session: 2, Sequence: 20},
 			{Session: 1, Sequence: 10},
 		},
-	}, sim.PlayerUpdate{})
+	}, contract.PlayerUpdate{})
 
 	if len(current.outbox) != 1 {
 		t.Fatalf("本会话放置成功消息数=%d，想要 1", len(current.outbox))
@@ -27,11 +27,11 @@ func TestPublishLocalResultRoutesPlacementSuccessOnlyToInitiatingSession(t *test
 
 func TestPublishLocalResultRejectedPlacementHasNoSuccess(t *testing.T) {
 	current := &session{id: 1, outbox: make(chan network.ServerMessage, 2)}
-	(&Server{}).publishLocalResult(current, sim.TickResult{
-		Rejected: []sim.Rejection{{
-			Session: 1, Sequence: 10, Reason: sim.RejectOccupied,
+	(&Server{}).publishLocalResult(current, contract.TickResult{
+		Rejected: []contract.Rejection{{
+			Session: 1, Sequence: 10, Reason: contract.RejectOccupied,
 		}},
-	}, sim.PlayerUpdate{})
+	}, contract.PlayerUpdate{})
 
 	if len(current.outbox) != 1 {
 		t.Fatalf("拒绝放置消息数=%d，想要 1", len(current.outbox))

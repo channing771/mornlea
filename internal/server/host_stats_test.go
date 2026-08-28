@@ -11,6 +11,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 func TestInterestObserverSamplesEachObserverAndNilIsOptional(t *testing.T) {
@@ -27,10 +28,10 @@ func TestInterestObserverSamplesEachObserverAndNilIsOptional(t *testing.T) {
 	running := &Server{
 		config:   config,
 		engine:   sim.NewEngine(0, 0, 0),
-		sessions: make(map[sim.SessionID]*session),
+		sessions: make(map[contract.SessionID]*session),
 	}
 	for index := 1; index <= 8; index++ {
-		id := sim.SessionID(index)
+		id := contract.SessionID(index)
 		running.sessions[id] = &session{
 			id: id, playerID: playerID(byte(index)),
 			outbox:           make(chan network.ServerMessage, config.OutboxCapacity),
@@ -39,7 +40,7 @@ func TestInterestObserverSamplesEachObserverAndNilIsOptional(t *testing.T) {
 			visiblePlayers:   make(map[core.PlayerID]visiblePlayer),
 		}
 	}
-	running.publish(sim.TickResult{Forget: make(map[sim.SessionID][]core.ChunkKey)})
+	running.publish(contract.TickResult{Forget: make(map[contract.SessionID][]core.ChunkKey)})
 	if got := samples.Load(); got != 8 {
 		t.Fatalf("interest samples=%d, want one per observer (8)", got)
 	}
@@ -61,7 +62,7 @@ func TestHostStatsAreScalarBoundedSnapshotsWithNoNestedLocking(t *testing.T) {
 	})
 	host.mu.Lock()
 	for index := 1; index <= 8; index++ {
-		host.activeBySession[sim.SessionID(index)] = &activeLogin{Session: sim.SessionID(index)}
+		host.activeBySession[contract.SessionID(index)] = &activeLogin{Session: contract.SessionID(index)}
 	}
 	host.mu.Unlock()
 	host.world.stepMu.Lock()
@@ -144,7 +145,7 @@ func TestHostRunAtInputBoundaryWaitsForDistinctIngressAndExcludesWorldStep(t *te
 	for range 2 {
 		host.world.enqueueIncoming(context.Background(), incomingCommand{
 			Session: 1,
-			Command: sim.Command{Session: 1, Sequence: 9, Kind: sim.CommandPlayerInput},
+			Command: contract.Command{Session: 1, Sequence: 9, Kind: contract.CommandPlayerInput},
 		})
 	}
 	select {
@@ -154,7 +155,7 @@ func TestHostRunAtInputBoundaryWaitsForDistinctIngressAndExcludesWorldStep(t *te
 	}
 	host.world.enqueueIncoming(context.Background(), incomingCommand{
 		Session: 2,
-		Command: sim.Command{Session: 2, Sequence: 9, Kind: sim.CommandPlayerInput},
+		Command: contract.Command{Session: 2, Sequence: 9, Kind: contract.CommandPlayerInput},
 	})
 	if err := <-boundaryDone; err != nil {
 		t.Fatal(err)

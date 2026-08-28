@@ -1,6 +1,8 @@
 package sim
 
 import (
+	"math"
+
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/sim/contract"
@@ -91,5 +93,10 @@ const (
 )
 
 func LookDirection(yaw, pitch float32) mgl32.Vec3 {
-	return contract.LookDirection(yaw, pitch)
+	cosPitch := float32(math.Cos(float64(pitch)))
+	return mgl32.Vec3{
+		-float32(math.Sin(float64(yaw))) * cosPitch,
+		float32(math.Sin(float64(pitch))),
+		-float32(math.Cos(float64(yaw))) * cosPitch,
+	}
 }

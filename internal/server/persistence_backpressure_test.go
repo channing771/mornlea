@@ -7,7 +7,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -68,9 +68,9 @@ func TestPersistenceBackpressureQueuesAcquireUntilMemoryRecovers(t *testing.T) {
 	heldKey := chunkKey(0, 0)
 	running.engine = dirtyReadyEngine(t, []core.ChunkKey{heldKey})
 	running.engine.RegisterObserverSession(trustedObserverSessionID)
-	running.engine.Enqueue(sim.Command{
+	running.engine.Enqueue(contract.Command{
 		Session: trustedObserverSessionID, Sequence: 1,
-		Kind:      sim.CommandTrustedObserverCenter,
+		Kind:      contract.CommandTrustedObserverCenter,
 		Dimension: heldKey.Dimension, Center: heldKey.Pos,
 	})
 	running.engine.Step()
@@ -92,7 +92,7 @@ func TestPersistenceBackpressureQueuesAcquireUntilMemoryRecovers(t *testing.T) {
 	default:
 	}
 	info, exists := running.engine.ChunkInfo(wantAcquire)
-	if !exists || info.State != sim.ChunkLoading || len(running.pending) != 1 {
+	if !exists || info.State != contract.ChunkLoading || len(running.pending) != 1 {
 		t.Fatalf("queued unknown chunk state=%+v exists=%v pending=%+v", info, exists, running.pending)
 	}
 	status := running.PersistenceStatus()
@@ -101,11 +101,11 @@ func TestPersistenceBackpressureQueuesAcquireUntilMemoryRecovers(t *testing.T) {
 		t.Fatalf("backpressure status=%+v", status)
 	}
 
-	selected := running.engine.PersistenceSnapshots(1, 1<<20, sim.SaveAll)
+	selected := running.engine.PersistenceSnapshots(1, 1<<20, contract.SaveAll)
 	if len(selected) != 1 || selected[0].Key != heldKey {
 		t.Fatalf("cleanup snapshot=%+v, want held key", selected)
 	}
-	running.engine.ApplyPersisted([]sim.PersistedChunk{{Key: heldKey, Revision: selected[0].Revision}})
+	running.engine.ApplyPersisted([]contract.PersistedChunk{{Key: heldKey, Revision: selected[0].Revision}})
 	running.StepForTest()
 	select {
 	case started := <-store.started:

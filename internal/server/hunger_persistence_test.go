@@ -11,7 +11,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -43,7 +43,7 @@ func flushHungerPersistence(t *testing.T, persistence *playerPersistence) {
 
 // hungerTestSnapshot 在 testPlayerSnapshot 之上带上三层饥饿状态与一个非零生命值。
 // 位置、朝向、安全点沿用既有夹具，"其余字段不变"因此有具体内容可比。
-func hungerTestSnapshot(hunger uint8, saturation, exhaustion uint16) sim.PlayerSnapshot {
+func hungerTestSnapshot(hunger uint8, saturation, exhaustion uint16) contract.PlayerSnapshot {
 	snapshot := testPlayerSnapshot(10)
 	snapshot.Health = 13
 	snapshot.Hunger = hunger
@@ -76,7 +76,7 @@ func seedHungerPlayer(
 	root string,
 	id core.PlayerID,
 	name string,
-	snapshot sim.PlayerSnapshot,
+	snapshot contract.PlayerSnapshot,
 ) {
 	t.Helper()
 	store := openHungerDiskStore(t, root, true)
@@ -90,12 +90,12 @@ func seedHungerPlayer(
 	}
 }
 
-// assertRestoreHunger 断言一份 sim.PlayerRestore 的三层饥饿状态，并要求它确实
+// assertRestoreHunger 断言一份 contract.PlayerRestore 的三层饥饿状态，并要求它确实
 // 来自存档（HasHunger 为真）——否则 sim 会忽略这三个字段改用初值。
 func assertRestoreHunger(
 	t *testing.T,
 	what string,
-	restore sim.PlayerRestore,
+	restore contract.PlayerRestore,
 	hunger uint8,
 	saturation, exhaustion uint16,
 ) {
@@ -183,8 +183,8 @@ func TestHungerSurvivesDiskRestart(t *testing.T) {
 func assertRestoreMatchesSnapshot(
 	t *testing.T,
 	what string,
-	restore sim.PlayerRestore,
-	want sim.PlayerSnapshot,
+	restore contract.PlayerRestore,
+	want contract.PlayerSnapshot,
 ) {
 	t.Helper()
 	if restore.Current == nil || *restore.Current != want.Current {
@@ -207,7 +207,7 @@ func assertRestoreMatchesSnapshot(
 
 // TestLegacyPlayerFileMigratesToInitialHunger 覆盖 Scenario「旧存档按初值迁移」的
 // 服务端一半：一份**冻结的 v6 玩家存档文件**放进磁盘世界，登录拿到的
-// sim.PlayerRestore 必须带上固定初值，其余字段一个不变。
+// contract.PlayerRestore 必须带上固定初值，其余字段一个不变。
 //
 // 输入是 internal/storage/testdata/player-v6.bin 的原始字节，不是当前编码器
 // 现场生成的存档：当前编码器已经写 v7，用它"生成 v6"只会得到一份带饥饿字段的
@@ -261,12 +261,12 @@ func TestLegacyPlayerFileMigratesToInitialHunger(t *testing.T) {
 	}
 	assertRestoreHunger(t, "v6 存档", restore, core.MaxHunger, core.InitialSaturationMilli, 0)
 	// 其余字段逐字段不变：迁移与接线都不得顺手改动既有状态。
-	assertRestoreMatchesSnapshot(t, "v6 存档", restore, sim.PlayerSnapshot{
-		Current: sim.PlayerLocation{
+	assertRestoreMatchesSnapshot(t, "v6 存档", restore, contract.PlayerSnapshot{
+		Current: contract.PlayerLocation{
 			Dimension: stored.Current.Dimension,
 			Position:  mgl32.Vec3(stored.Current.Position),
 		},
-		Safe: &sim.PlayerLocation{
+		Safe: &contract.PlayerLocation{
 			Dimension: stored.Safe.Dimension,
 			Position:  mgl32.Vec3(stored.Safe.Position),
 		},
@@ -330,11 +330,11 @@ func TestPlayerPersistenceDirtyDetectionIncludesHunger(t *testing.T) {
 	full := hungerTestSnapshot(core.MaxHunger, core.InitialSaturationMilli, 0)
 	cases := []struct {
 		name  string
-		apply func(*sim.PlayerSnapshot)
+		apply func(*contract.PlayerSnapshot)
 	}{
-		{"饥饿", func(s *sim.PlayerSnapshot) { s.Hunger = savedHunger }},
-		{"饱和", func(s *sim.PlayerSnapshot) { s.SaturationMilli = savedSaturationMilli }},
-		{"疲劳", func(s *sim.PlayerSnapshot) { s.ExhaustionMilli = savedExhaustionMilli }},
+		{"饥饿", func(s *contract.PlayerSnapshot) { s.Hunger = savedHunger }},
+		{"饱和", func(s *contract.PlayerSnapshot) { s.SaturationMilli = savedSaturationMilli }},
+		{"疲劳", func(s *contract.PlayerSnapshot) { s.ExhaustionMilli = savedExhaustionMilli }},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -370,8 +370,8 @@ func TestHungerPublishedOverWireOnLogin(t *testing.T) {
 	root := t.TempDir()
 	id := playerID(0x73)
 	const name = "Wired"
-	loc := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
-	seedHungerPlayer(t, root, id, name, sim.PlayerSnapshot{
+	loc := contract.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
+	seedHungerPlayer(t, root, id, name, contract.PlayerSnapshot{
 		Current: loc, Health: core.MaxHealth,
 		Hunger: savedHunger, SaturationMilli: savedSaturationMilli, ExhaustionMilli: savedExhaustionMilli,
 	})
