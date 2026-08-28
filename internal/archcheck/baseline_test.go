@@ -118,6 +118,11 @@ var claudeImportDocs = []string{
 	filepath.Join("internal", "CLAUDE.md"),
 	filepath.Join("engine", "CLAUDE.md"),
 	filepath.Join("cmd", "mornlea", "CLAUDE.md"),
+	// 客户端命令的三个功能域子包各有自己的 AGENTS.md，薄导入必须逐字节
+	// 规范；子包文档拆出后漏登记会让新 CLAUDE.md 静默脱离本门禁。
+	filepath.Join("cmd", "mornlea", "app", "CLAUDE.md"),
+	filepath.Join("cmd", "mornlea", "capture", "CLAUDE.md"),
+	filepath.Join("cmd", "mornlea", "benchmark", "CLAUDE.md"),
 }
 
 func TestClaudeImportsAgentGuidance(t *testing.T) {
