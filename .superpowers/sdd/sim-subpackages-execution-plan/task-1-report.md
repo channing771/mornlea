@@ -64,3 +64,21 @@ The command inventory contains the complete raw `go test ./internal/sim -list '.
 ## Review Handoff
 
 The OpenSpec task checkbox remains unchecked. `tasks.md` requires independent specification and quality reviews before it can be marked complete; those reviews are intentionally left to the coordinator.
+
+## Review Fix Round 1
+
+Corrected the ledger command at `openspec/changes/sim-subpackages/ledger.md:25` to the single-backslash regex that generated the committed call-site artifact.
+
+```text
+rg -n '\bt\.Run\s*\(' internal/sim --glob '*_test.go' | cmp -s - openspec/changes/sim-subpackages/baseline/task-1-t-run-call-sites.txt
+```
+
+Passed with no output. The corrected command reproduces the call-site artifact byte-for-byte.
+
+```text
+git diff --check
+```
+
+Passed with no output.
+
+The long race baseline was not repeated.
