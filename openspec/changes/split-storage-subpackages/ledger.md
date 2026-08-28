@@ -137,5 +137,40 @@
   `docs/superpowers/plans/2026-08-28-split-storage-subpackages.md` Task 2/3
   节仍为 T1-1 重映射前旧文 — 已按新 tasks.md 边界同步重写（含清除已作废的
   「region 最小门面」表述），不再需要登记取代说明。
-- 验证：`openspec validate --all --strict --no-interactive`（结果见
-  task-2-report 与本 ledger 后续记录）。
+- 验证：`openspec validate --all --strict --no-interactive` →
+  `Totals: 77 passed, 0 failed (77 items)`（commit `6ddc4479` 时点实测）。
+
+### Task 2（storagedef 叶子）
+
+- 文档前置：Ruling T1-3 与 Task 1 两个 deferred minor 随 commit `6ddc4479`
+  落地（tasks.md、design.md、执行计划文档、本 ledger）。
+- 实现：commit `974463c8` — 新建 `internal/storage/storagedef`（包注释中文，
+  说明哨兵叶子防 root↔子包循环的取舍；自身零 internal 依赖）；
+  `ErrCorrupt`/`ErrFutureVersion` 消息逐字节不变（"storage: corrupt data" /
+  "storage: future version"）；根包 `types.go` 以
+  `var ErrCorrupt = storagedef.ErrCorrupt`、
+  `var ErrFutureVersion = storagedef.ErrFutureVersion` 绑定同一错误值再导出，
+  `errors.Is` 身份不变；`ErrChunkNotFound`/`ErrPlayerNotFound`/
+  `ErrWorldLocked`/`ErrRevisionConflict` 留根未动；archcheck `allowed` 表
+  新增 `internal/storage/storagedef`（允许集为空集）并把它加入
+  `internal/storage` 允许集。
+- 实施适配：`internal/archcheck` 的反引号标识符门禁
+  （`comment_identifier_test.go`）拒绝注释中出现非本仓声明的反引号名字，
+  `errors.Is` 与 `var` 改按既有先例（`internal/companion`）以裸词书写；
+  除措辞外无其他门禁登记需求。
+- 验证（commit `974463c8` 实测，2026-08-28）：
+  - `go test ./internal/storage -race -count=1` → `ok ... 26.438s`（对照
+    Baseline 24.194s，只记录不设门槛）；
+  - `go test ./internal/storage -count=1` → `ok ... 7.696s`（对照 4.433s，
+    只记录不设门槛）；
+  - `go test ./internal/archcheck -count=1` → `ok ... 8.786s`；
+  - `go build ./internal/server ./internal/sim ./cmd/...` → 通过（消费方
+    源码零改动，`git status` 无 `internal/server`/`cmd/` 文件）；
+  - `go test ./internal/storage -list '.*'` 与
+    `go test ./internal/storage/... -list '.*'` 并集均与
+    `baseline-test-list.txt` 逐名一致（234 项 = 223 Test + 7 Benchmark +
+    4 Fuzz，diff 为空）；
+  - `gofmt -l internal/storage internal/archcheck` 无输出；
+    `go vet ./internal/storage/... ./internal/archcheck` 通过。
+- 评审结论：待控制会话规格与质量双评审；tasks.md 2.1 勾选待评审通过后
+  执行。
