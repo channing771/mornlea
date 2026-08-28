@@ -145,7 +145,7 @@ func fluidPerfAdapter(engine *Engine) *fluidWorld {
 		id:        core.Overworld,
 		dimension: engine.dimensions[core.Overworld],
 		scope:     engine.fluidScope,
-		pending:   make(map[core.ChunkKey]*pendingChunkChanges),
+		pending:   engine.newMutation(),
 	}
 }
 

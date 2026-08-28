@@ -299,7 +299,7 @@ func (engine *Engine) PlanHostileChase(
 // 「被打死」走完全相同的移除与掉落路径。夜行者近战结算先于玩家近战执行，同
 // tick 两类近战共享同一份受击保护计时。所有子步骤的成本都有固定上界（候选
 // ≤1、个体 ≤64、意图 ≤64、掉落尝试以已加载区块封顶），不随世界规模放大。
-func (engine *Engine) advanceHostiles(pending map[core.ChunkKey]*pendingChunkChanges) {
+func (engine *Engine) advanceHostiles(pending *pendingChunkChanges) {
 	engine.advanceHostileSpawn()
 	engine.applyHostileActions(engine.takeHostileActions())
 	engine.advanceHostileMovement()
@@ -414,7 +414,7 @@ const hostileDistantRadius = 64
 // settleHostileDeaths 结算本 tick 生命归零的夜行者：经既有掉落契约在死亡
 // chunk 环形尝试放置 1 个腐肉后同 tick 移除，绝不留下半移除状态。处理顺序
 // 即切片顺序（ID 升序），掉落放置顺序因此可复现。
-func (engine *Engine) settleHostileDeaths(pending map[core.ChunkKey]*pendingChunkChanges) {
+func (engine *Engine) settleHostileDeaths(pending *pendingChunkChanges) {
 	for index := 0; index < len(engine.hostiles.entries); {
 		entry := &engine.hostiles.entries[index]
 		if entry.health != 0 {
@@ -432,7 +432,7 @@ func (engine *Engine) settleHostileDeaths(pending map[core.ChunkKey]*pendingChun
 // 死亡仍由调用方完成。
 func (engine *Engine) dropHostileLoot(
 	entry *hostileState,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) {
 	dimension := engine.dimensions[entry.dimension]
 	if dimension == nil {
@@ -441,7 +441,7 @@ func (engine *Engine) dropHostileLoot(
 	death := blockPosOf(entry.state.Position)
 	batch := [1]core.ItemStack{{Item: core.ItemRottenFlesh, Count: 1}}
 	for _, key := range engine.deathDropChunks(entry.dimension, death.Chunk()) {
-		record := dimension.records[key.Pos]
+		record := dimension.Records[key.Pos]
 		if record == nil || record.State != ChunkReady || record.Chunk == nil {
 			continue
 		}

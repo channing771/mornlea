@@ -1,8 +1,6 @@
 package sim
 
 import (
-	"slices"
-
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -17,7 +15,7 @@ import (
 // 放置床头。校验两格可替换（严格要求空气，流体视为占据）、各自下方满足
 // `isSolidSupport`，床头格所在区块未就绪（含跨区块）时整单拒绝；通过后原子
 // 双格写入，床头写入失败回滚床尾（门先例）。
-func (engine *Engine) tryPlaceBed(dimensionID core.DimensionID, foot core.BlockPos, dir int, pending map[core.ChunkKey]*pendingChunkChanges) (RejectReason, bool) {
+func (engine *Engine) tryPlaceBed(dimensionID core.DimensionID, foot core.BlockPos, dir int, pending *pendingChunkChanges) (RejectReason, bool) {
 	if dir < 0 || dir > 3 {
 		return RejectInvalidBlock, true
 	}
@@ -105,7 +103,7 @@ func bedHalfPositions(target core.BlockPos, block core.BlockID) (core.BlockPos, 
 func (engine *Engine) clearBedPair(
 	dimensionID core.DimensionID,
 	footPos, headPos core.BlockPos,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) (RejectReason, bool) {
 	dimension := engine.dimensions[dimensionID]
 	oldFoot, _ := dimension.BlockAt(footPos)
@@ -133,10 +131,10 @@ func (engine *Engine) removeBedWithDrop(
 	dimensionID core.DimensionID,
 	dropPos, footPos, headPos core.BlockPos,
 	drop bool,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) (RejectReason, bool) {
 	dimension := engine.dimensions[dimensionID]
-	record, recordOK := dimension.records[dropPos.Chunk()]
+	record, recordOK := dimension.Records[dropPos.Chunk()]
 	index, indexOK := world.ChunkBlockIndex(dropPos)
 	if !recordOK || record.State != ChunkReady || record.Chunk == nil || !indexOK {
 		return RejectChunkNotReady, true
@@ -187,34 +185,15 @@ type bedSweepCell struct {
 // 在床被采掘时已由更早的写入覆盖，仅「床被本复核移除」这一三阶路径顺延到
 // 该格下一次权威变化，与火把复核的单级取舍一致。
 func (engine *Engine) sweepUnsupportedBeds(
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) {
-	if len(pending) == 0 {
+	changes := pending.ChangedBlocks()
+	if len(changes) == 0 {
 		return
 	}
-	keys := make([]core.ChunkKey, 0, len(pending))
-	for key := range pending {
-		keys = append(keys, key)
-	}
-	sortChunkKeys(keys)
-	cells := make([]bedSweepCell, 0)
-	for _, key := range keys {
-		changeSet := pending[key]
-		// 掉落物等非方块变化经 touchChunk 登记零方块 barrier，没有格子可复核。
-		if len(changeSet.changes) == 0 {
-			continue
-		}
-		indices := make([]uint32, 0, len(changeSet.changes))
-		for index := range changeSet.changes {
-			indices = append(indices, index)
-		}
-		slices.Sort(indices)
-		for _, index := range indices {
-			cells = append(cells, bedSweepCell{
-				dimension: key.Dimension,
-				position:  changeSet.changes[index].Position,
-			})
-		}
+	cells := make([]bedSweepCell, len(changes))
+	for index, change := range changes {
+		cells[index] = bedSweepCell{dimension: change.Dimension, position: change.Position}
 	}
 	for _, cell := range cells {
 		engine.invalidateBedSupportedBy(cell.dimension, cell.position, pending)
@@ -228,7 +207,7 @@ func (engine *Engine) sweepUnsupportedBeds(
 func (engine *Engine) invalidateBedSupportedBy(
 	dimensionID core.DimensionID,
 	position core.BlockPos,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) {
 	dimension := engine.dimensions[dimensionID]
 	if dimension == nil {

@@ -225,7 +225,7 @@ func TestMiningInvalidTargetsClearWithoutRejection(t *testing.T) {
 				engine.SetBlockForTest(target, core.AirID)
 				session.player.state.Position = mgl32.Vec3{8.5, 1, 1.5}
 				session.player.pitch = 0
-				delete(engine.dimensions[core.Overworld].records, core.ChunkPos{Z: -1})
+				delete(engine.dimensions[core.Overworld].Records, core.ChunkPos{Z: -1})
 			},
 		},
 		{
@@ -663,7 +663,7 @@ func TestMiningProtectedAndUnreadyRejectionsPreserveDurability(t *testing.T) {
 		{
 			name: "区块未就绪", block: core.StoneID, want: RejectChunkNotReady,
 			mutate: func(engine *Engine, target core.BlockPos) {
-				delete(engine.dimensions[core.Overworld].records, target.Chunk())
+				delete(engine.dimensions[core.Overworld].Records, target.Chunk())
 			},
 		},
 	}
@@ -681,7 +681,7 @@ func TestMiningProtectedAndUnreadyRejectionsPreserveDurability(t *testing.T) {
 				target,
 				test.block,
 				true,
-				make(map[core.ChunkKey]*pendingChunkChanges),
+				engine.newMutation(),
 			)
 			if !rejected || reason != test.want {
 				t.Fatalf("拒绝 = (%d, %v)，想要 (%d, true)", reason, rejected, test.want)
@@ -728,7 +728,7 @@ func TestCompleteMiningRejectsNoOp(t *testing.T) {
 			beforeDropsHash := record.Chunk.DropsHash()
 			beforeFurnace := record.Chunk.Furnace(0)
 			beforeRevision := record.Revision
-			pending := make(map[core.ChunkKey]*pendingChunkChanges)
+			pending := engine.newMutation()
 
 			reason, rejected := engine.completeMining(
 				core.Overworld, target, test.block, true, pending,
@@ -747,7 +747,7 @@ func TestCompleteMiningRejectsNoOp(t *testing.T) {
 			if got := record.Chunk.Furnace(0); got != beforeFurnace {
 				t.Fatalf("no-op 完成修改了熔炉：got=%+v want=%+v", got, beforeFurnace)
 			}
-			if record.Revision != beforeRevision || len(pending) != 0 {
+			if record.Revision != beforeRevision || pending.Len() != 0 {
 				t.Fatalf("no-op 完成修改了 revision 或 pending：revision=%d/%d pending=%+v",
 					record.Revision, beforeRevision, pending)
 			}
@@ -1059,7 +1059,7 @@ func TestMiningTwoSessionsCompleteOneTargetOnce(t *testing.T) {
 
 func TestAuthoritativeMiningEightPlayersDoesNotAllocate(t *testing.T) {
 	engine, sessions, _ := readyMiningPlayers(t, 8)
-	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	pending := engine.newMutation()
 	result := TickResult{}
 	engine.advanceMining(pending, &result)
 	for _, session := range engine.sessions {
@@ -1087,7 +1087,7 @@ func TestAuthoritativeMiningEightPlayersDoesNotAllocate(t *testing.T) {
 
 func BenchmarkAuthoritativeMiningEightPlayers(b *testing.B) {
 	engine := readyMiningBenchmarkPlayers(b)
-	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	pending := engine.newMutation()
 	result := TickResult{}
 	engine.advanceMining(pending, &result)
 	for _, session := range engine.sessions {
@@ -1107,7 +1107,7 @@ func BenchmarkAuthoritativeMiningEightPlayers(b *testing.B) {
 
 func advanceMiningOnce(engine *Engine) TickResult {
 	result := TickResult{}
-	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	pending := engine.newMutation()
 	engine.advanceMining(pending, &result)
 	engine.finishChanges(pending, &result)
 	return result
@@ -1124,7 +1124,7 @@ func setMiningHeldItem(player *playerState, item core.ItemID) {
 
 func miningTargetRecord(t *testing.T, engine *Engine, target core.BlockPos) *ChunkRecord {
 	t.Helper()
-	record := engine.dimensions[core.Overworld].records[target.Chunk()]
+	record := engine.dimensions[core.Overworld].Records[target.Chunk()]
 	if record == nil || record.Chunk == nil {
 		t.Fatalf("目标区块 %+v 未就绪", target.Chunk())
 	}

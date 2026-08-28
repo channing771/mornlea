@@ -43,7 +43,7 @@ func TestTryPlaceBedWritesBothHalvesPerDirection(t *testing.T) {
 		engine, _, _ := doorTestReadyEngine(t, hotbarWithBed(1))
 		foot := core.BlockPos{X: 3, Y: 1, Z: 4}
 		head := bedPlaceScenario(t, engine, foot, dir)
-		pending := make(map[core.ChunkKey]*pendingChunkChanges)
+		pending := engine.newMutation()
 		reason, rejected := engine.tryPlaceBed(core.Overworld, foot, dir, pending)
 		if rejected {
 			t.Fatalf("dir %d 放置被拒绝 reason %d", dir, reason)
@@ -116,7 +116,7 @@ func TestTryPlaceBedRejectionsWithoutWrites(t *testing.T) {
 			foot := core.BlockPos{X: 3, Y: 1, Z: 4}
 			head := bedPlaceScenario(t, engine, foot, tc.dir)
 			tc.mutdb(t, engine, foot, head)
-			pending := make(map[core.ChunkKey]*pendingChunkChanges)
+			pending := engine.newMutation()
 			_, rejected := engine.tryPlaceBed(core.Overworld, foot, tc.dir, pending)
 			if !rejected {
 				t.Fatalf("%s 应整单拒绝", tc.name)
@@ -127,18 +127,18 @@ func TestTryPlaceBedRejectionsWithoutWrites(t *testing.T) {
 			if got, _ := engine.dimensions[core.Overworld].BlockAt(head); got == core.BedHeadID(tc.dir) {
 				t.Fatalf("%s 床头被写入 %d", tc.name, got)
 			}
-			if len(pending) != 0 {
+			if pending.Len() != 0 {
 				t.Fatalf("%s 拒绝产生了待发布变更 %+v", tc.name, pending)
 			}
 		})
 	}
 	for _, dir := range []int{-1, 4} {
 		engine, _, _ := doorTestReadyEngine(t, hotbarWithBed(1))
-		pending := make(map[core.ChunkKey]*pendingChunkChanges)
+		pending := engine.newMutation()
 		if _, rejected := engine.tryPlaceBed(core.Overworld, core.BlockPos{X: 3, Y: 1, Z: 4}, dir, pending); !rejected {
 			t.Fatalf("dir %d 应拒绝", dir)
 		}
-		if len(pending) != 0 {
+		if pending.Len() != 0 {
 			t.Fatalf("dir %d 拒绝产生了待发布变更", dir)
 		}
 	}
@@ -153,7 +153,7 @@ func TestTryPlaceBedCrossChunkRejected(t *testing.T) {
 	foot := core.BlockPos{X: 15, Y: 1, Z: 4}
 	engine.SetBlockForTest(foot, core.AirID)
 	engine.SetBlockForTest(core.BlockPos{X: 15, Y: 0, Z: 4}, core.StoneID)
-	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	pending := engine.newMutation()
 	_, rejected := engine.tryPlaceBed(core.Overworld, foot, 3, pending)
 	if !rejected {
 		t.Fatal("床头格跨区块未就绪应整单拒绝")
@@ -161,7 +161,7 @@ func TestTryPlaceBedCrossChunkRejected(t *testing.T) {
 	if got, _ := engine.dimensions[core.Overworld].BlockAt(foot); got != core.AirID {
 		t.Fatalf("床尾格被写入 %d", got)
 	}
-	if len(pending) != 0 {
+	if pending.Len() != 0 {
 		t.Fatalf("拒绝产生了待发布变更 %+v", pending)
 	}
 }
@@ -258,7 +258,7 @@ func TestCompleteMiningBedClearsBothHalvesAndDropsOne(t *testing.T) {
 			if hitHead {
 				target = head
 			}
-			pending := make(map[core.ChunkKey]*pendingChunkChanges)
+			pending := engine.newMutation()
 			block, _ := engine.dimensions[core.Overworld].BlockAt(target)
 			reason, rejected := engine.completeMining(core.Overworld, target, block, harvestable, pending)
 			if rejected {
@@ -270,7 +270,7 @@ func TestCompleteMiningBedClearsBothHalvesAndDropsOne(t *testing.T) {
 					t.Fatalf("hitHead %v harvestable %v: %+v 未清空 = %d", hitHead, harvestable, pos, got)
 				}
 			}
-			rec := engine.dimensions[core.Overworld].records[foot.Chunk()]
+			rec := engine.dimensions[core.Overworld].Records[foot.Chunk()]
 			wantCount := uint8(0)
 			if harvestable {
 				wantCount = 1
@@ -294,7 +294,7 @@ func TestCompleteMiningBedDropCapacityAtomic(t *testing.T) {
 	record := miningTargetRecord(t, engine, foot)
 	beforeHash := record.Chunk.Hash()
 	beforeRevision := record.Revision
-	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	pending := engine.newMutation()
 	block, _ := engine.dimensions[core.Overworld].BlockAt(foot)
 	reason, rejected := engine.completeMining(core.Overworld, foot, block, true, pending)
 	if !rejected || reason != RejectDropCapacity {
@@ -306,7 +306,7 @@ func TestCompleteMiningBedDropCapacityAtomic(t *testing.T) {
 	if record.Revision != beforeRevision {
 		t.Fatal("容量失败不应推进 revision")
 	}
-	if len(pending) != 0 {
+	if pending.Len() != 0 {
 		t.Fatalf("容量失败不应产生待发布变更 %+v", pending)
 	}
 	if got, _ := engine.dimensions[core.Overworld].BlockAt(foot); got != core.BedFootSouthID {

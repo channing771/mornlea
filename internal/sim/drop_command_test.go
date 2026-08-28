@@ -22,7 +22,7 @@ func TestDropSelectedItemRejectsUnavailableFootChunkAtomically(t *testing.T) {
 	state.player.state.Position = mgl32.Vec3{16.5, 1, 0.5}
 	before := state.player.inventory
 	dirtyBefore := state.player.inventoryDirty
-	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	pending := engine.newMutation()
 
 	reason, rejected := engine.dropSelectedItem(state, pending)
 
@@ -35,7 +35,7 @@ func TestDropSelectedItemRejectsUnavailableFootChunkAtomically(t *testing.T) {
 	if state.player.inventoryDirty != dirtyBefore {
 		t.Fatal("拒绝路径改变了 inventoryDirty")
 	}
-	if len(pending) != 0 {
+	if pending.Len() != 0 {
 		t.Fatalf("拒绝后产生了待提交区块变更：%+v", pending)
 	}
 }
@@ -46,7 +46,7 @@ func TestDropSelectedItemRejectsInactivePlayer(t *testing.T) {
 	state.player.inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 1}
 	state.player.lifecycle = PlayerPendingSpawn
 	before := state.player.inventory
-	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	pending := engine.newMutation()
 
 	reason, rejected := engine.dropSelectedItem(state, pending)
 
@@ -56,7 +56,7 @@ func TestDropSelectedItemRejectsInactivePlayer(t *testing.T) {
 	if state.player.inventory != before {
 		t.Fatalf("拒绝后背包被修改：%+v", state.player.inventory)
 	}
-	if len(pending) != 0 {
+	if pending.Len() != 0 {
 		t.Fatalf("拒绝后产生了待提交区块变更：%+v", pending)
 	}
 }
@@ -66,7 +66,7 @@ func TestDropSelectedItemRejectsFullDropCapacityAtomically(t *testing.T) {
 	state := engine.sessions[session]
 	state.player.inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 2}
 	state.player.inventory.Hotbar.Selected = 0
-	chunk := engine.dimensions[state.dimension].records[core.ChunkPos{}].Chunk
+	chunk := engine.dimensions[state.dimension].Records[core.ChunkPos{}].Chunk
 	// 用满堆且物品不匹配的槽占满 32 个容量：既不能合并也不能新建。
 	for slot := range core.DropsPerChunk {
 		chunk.SetDrop(slot, world.DropSlot{
@@ -76,7 +76,7 @@ func TestDropSelectedItemRejectsFullDropCapacityAtomically(t *testing.T) {
 		})
 	}
 	before := state.player.inventory
-	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	pending := engine.newMutation()
 
 	reason, rejected := engine.dropSelectedItem(state, pending)
 
@@ -86,7 +86,7 @@ func TestDropSelectedItemRejectsFullDropCapacityAtomically(t *testing.T) {
 	if state.player.inventory != before {
 		t.Fatalf("容量不足时背包被修改：%+v", state.player.inventory)
 	}
-	if len(pending) != 0 {
+	if pending.Len() != 0 {
 		t.Fatalf("容量不足时产生了待提交区块变更：%+v", pending)
 	}
 }
@@ -108,13 +108,13 @@ func BenchmarkDropSelectedItem(b *testing.B) {
 		engine, session := readyMovementPlayerForBench(b)
 		state := engine.sessions[session]
 		state.player.inventory.Hotbar.Selected = 0
-		record := engine.dimensions[state.dimension].records[core.ChunkPos{}]
+		record := engine.dimensions[state.dimension].Records[core.ChunkPos{}]
 		return engine, state, record.Chunk
 	}
 
 	b.Run("create", func(b *testing.B) {
 		engine, state, chunk := newBenchEngine()
-		pending := make(map[core.ChunkKey]*pendingChunkChanges)
+		pending := engine.newMutation()
 		b.ReportAllocs()
 		b.ResetTimer()
 		for b.Loop() {
@@ -124,7 +124,7 @@ func BenchmarkDropSelectedItem(b *testing.B) {
 			for slot := range core.DropsPerChunk {
 				chunk.SetDrop(slot, world.DropSlot{})
 			}
-			clear(pending)
+			pending = engine.newMutation()
 			b.StartTimer()
 			engine.dropSelectedItem(state, pending)
 		}
@@ -132,7 +132,7 @@ func BenchmarkDropSelectedItem(b *testing.B) {
 
 	b.Run("merge", func(b *testing.B) {
 		engine, state, chunk := newBenchEngine()
-		pending := make(map[core.ChunkKey]*pendingChunkChanges)
+		pending := engine.newMutation()
 		b.ReportAllocs()
 		b.ResetTimer()
 		for b.Loop() {
@@ -147,7 +147,7 @@ func BenchmarkDropSelectedItem(b *testing.B) {
 				Stack:      core.ItemStack{Item: core.ItemStone, Count: 1},
 				BlockIndex: benchFootBlockIndex(state),
 			})
-			clear(pending)
+			pending = engine.newMutation()
 			b.StartTimer()
 			engine.dropSelectedItem(state, pending)
 		}
@@ -163,7 +163,7 @@ func BenchmarkDropSelectedItem(b *testing.B) {
 				BlockIndex: uint32(slot),
 			})
 		}
-		pending := make(map[core.ChunkKey]*pendingChunkChanges)
+		pending := engine.newMutation()
 		b.ReportAllocs()
 		b.ResetTimer()
 		for b.Loop() {

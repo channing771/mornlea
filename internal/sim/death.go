@@ -12,7 +12,7 @@ import (
 // settleDeaths 结算本 tick 生命值归零的玩家。它必须在本 tick 发布权威状态之前运行，
 // 外部才观察不到生命值为 0 的中间状态。死亡是罕见事件，不受每 tick 固定工作量契约约束；
 // 没有玩家死亡时这里既不排序也不分配。
-func (engine *Engine) settleDeaths(pending map[core.ChunkKey]*pendingChunkChanges) {
+func (engine *Engine) settleDeaths(pending *pendingChunkChanges) {
 	var dying []SessionID
 	for id, session := range engine.sessions {
 		if session.player != nil && session.player.lifecycle == PlayerActive &&
@@ -33,7 +33,7 @@ func (engine *Engine) settleDeaths(pending map[core.ChunkKey]*pendingChunkChange
 // 再回满生命值、清受伤计时，最后复用既有的位置跳变入口把玩家送回出生锚点。
 func (engine *Engine) settleDeath(
 	session *sessionState,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) {
 	player := session.player
 	// 死亡回收先于清空（spec「死亡回收先于清空」）：先把全部 9 格无损装回
@@ -73,7 +73,7 @@ func (engine *Engine) settleDeath(
 // 死亡不被阻止，物品也不被销毁。
 func (engine *Engine) dropInventoryOnDeath(
 	session *sessionState,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) {
 	player := session.player
 	dimension := engine.dimensions[session.dimension]
@@ -86,7 +86,7 @@ func (engine *Engine) dropInventoryOnDeath(
 		Z: int32(math.Floor(float64(player.state.Position.Z()))),
 	}
 	for _, key := range engine.deathDropChunks(session.dimension, death.Chunk()) {
-		record := dimension.records[key.Pos]
+		record := dimension.Records[key.Pos]
 		if record == nil || record.State != ChunkReady || record.Chunk == nil {
 			continue
 		}
@@ -115,8 +115,8 @@ func (engine *Engine) deathDropChunks(
 	death core.ChunkPos,
 ) []core.ChunkKey {
 	dimension := engine.dimensions[dimensionID]
-	keys := make([]core.ChunkKey, 0, len(dimension.records))
-	for pos, record := range dimension.records {
+	keys := make([]core.ChunkKey, 0, len(dimension.Records))
+	for pos, record := range dimension.Records {
 		if record.State != ChunkReady || record.Chunk == nil {
 			continue
 		}

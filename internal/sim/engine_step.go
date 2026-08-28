@@ -78,7 +78,7 @@ func (engine *Engine) Step() TickResult {
 	interactions := make([]Command, 0, len(commands))
 	containerMoves := make([]Command, 0, len(commands))
 	// 命令阶段与后续掉落物/熔炉推进共用同一份待提交区块变更。
-	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	pending := engine.newMutation()
 	viewChanged := false
 	for _, command := range commands {
 		session := engine.sessions[command.Session]

@@ -66,7 +66,7 @@ func isSolidSupport(id core.BlockID) bool {
 
 // tryPlaceDoor 尝试在 lower 放置下半门并在 upper 放置上半。
 // 校验 lower/upper 可替换（空气）且下方实心，跨区块未就绪拒绝，原子双格写入。
-func (engine *Engine) tryPlaceDoor(dimensionID core.DimensionID, lower core.BlockPos, dir int, pending map[core.ChunkKey]*pendingChunkChanges) (RejectReason, bool) {
+func (engine *Engine) tryPlaceDoor(dimensionID core.DimensionID, lower core.BlockPos, dir int, pending *pendingChunkChanges) (RejectReason, bool) {
 	if dir < 0 || dir > 3 {
 		return RejectInvalidBlock, true
 	}
@@ -120,7 +120,7 @@ func (engine *Engine) tryPlaceDoor(dimensionID core.DimensionID, lower core.Bloc
 }
 
 // handleInteractDoor 处理对门方块的右键交互，上下联动切换 Closed<->Open。
-func handleInteractDoor(engine *Engine, dimensionID core.DimensionID, pos core.BlockPos, pending map[core.ChunkKey]*pendingChunkChanges) bool {
+func handleInteractDoor(engine *Engine, dimensionID core.DimensionID, pos core.BlockPos, pending *pendingChunkChanges) bool {
 	dimension := engine.dimensions[dimensionID]
 	if dimension == nil {
 		return false
@@ -163,7 +163,7 @@ func handleInteractDoor(engine *Engine, dimensionID core.DimensionID, pos core.B
 }
 
 // executeInteractDoor 通过权威射线定位目标并分发到 handleInteractDoor。
-func (engine *Engine) executeInteractDoor(command Command, pending map[core.ChunkKey]*pendingChunkChanges) (RejectReason, bool) {
+func (engine *Engine) executeInteractDoor(command Command, pending *pendingChunkChanges) (RejectReason, bool) {
 	session := engine.sessions[command.Session]
 	if session == nil || session.player == nil || session.player.lifecycle != PlayerActive {
 		return RejectPlayerNotReady, true

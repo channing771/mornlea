@@ -43,7 +43,7 @@ func setColumn(t *testing.T, engine *Engine, position mgl32.Vec3, block core.Blo
 		Y: 1,
 		Z: int32(math.Floor(float64(position.Z()))),
 	}
-	record := engine.dimensions[core.Overworld].records[base.Chunk()]
+	record := engine.dimensions[core.Overworld].Records[base.Chunk()]
 	if record == nil || record.Chunk == nil {
 		t.Fatalf("列 %+v 所在区块未就绪", base)
 	}
@@ -304,7 +304,7 @@ func waistDeepPlayerColumn(t *testing.T, engine *Engine, position mgl32.Vec3) {
 		Y: 1,
 		Z: int32(math.Floor(float64(position.Z()))),
 	}
-	record := engine.dimensions[core.Overworld].records[base.Chunk()]
+	record := engine.dimensions[core.Overworld].Records[base.Chunk()]
 	if record == nil || record.Chunk == nil {
 		t.Fatalf("列 %+v 所在区块未就绪", base)
 	}

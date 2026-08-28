@@ -17,7 +17,7 @@ func (engine *Engine) containerChunk(ref core.ContainerRef) (*world.Chunk, bool)
 	if dimension == nil {
 		return nil, false
 	}
-	record, ok := dimension.records[ref.Chunk]
+	record, ok := dimension.Records[ref.Chunk]
 	if !ok || record.State != ChunkReady || record.Chunk == nil {
 		return nil, false
 	}
@@ -107,7 +107,7 @@ func (engine *Engine) openContainer(id SessionID, command Command) (RejectReason
 		return RejectNoTarget, true
 	}
 	key := core.ChunkKey{Dimension: session.dimension, Pos: hit.Block.Chunk()}
-	record, exists := dimension.records[key.Pos]
+	record, exists := dimension.Records[key.Pos]
 	if !exists || record.State != ChunkReady || record.Chunk == nil {
 		return RejectChunkNotReady, true
 	}
@@ -328,7 +328,7 @@ func setChestViewSlot(
 func (engine *Engine) applyContainerMove(
 	id SessionID,
 	command Command,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) (RejectReason, bool) {
 	session := engine.sessions[id]
 	if session == nil || session.player == nil || session.player.lifecycle != PlayerActive {
@@ -399,7 +399,7 @@ func (engine *Engine) SetChunkChestForTest(
 	if dimension == nil {
 		return
 	}
-	if record, ok := dimension.records[key.Pos]; ok && record.Chunk != nil {
+	if record, ok := dimension.Records[key.Pos]; ok && record.Chunk != nil {
 		record.Chunk.SetChest(slot, value)
 	}
 }

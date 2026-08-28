@@ -42,7 +42,7 @@ func TestFarmlandMoistureRescanSpreadsAcrossFourTicks(t *testing.T) {
 	engine.farmlandMoisture.rescans.enqueueChunk(key)
 
 	for tick, wantCursor := range []int{65_536, 131_072, 196_608} {
-		engine.advanceFarmlandMoisture(make(map[core.ChunkKey]*pendingChunkChanges))
+		engine.advanceFarmlandMoisture(engine.newMutation())
 		if got := engine.farmlandMoisture.blockReads; got != farmlandMoistureReadsPerTick {
 			t.Fatalf("第 %d tick 读取=%d，想要 %d", tick+1, got, farmlandMoistureReadsPerTick)
 		}
@@ -50,7 +50,7 @@ func TestFarmlandMoistureRescanSpreadsAcrossFourTicks(t *testing.T) {
 			t.Fatalf("第 %d tick 游标=%d，想要 %d", tick+1, got, wantCursor)
 		}
 	}
-	engine.advanceFarmlandMoisture(make(map[core.ChunkKey]*pendingChunkChanges))
+	engine.advanceFarmlandMoisture(engine.newMutation())
 	if got := engine.farmlandMoisture.blockReads; got != 24_576 {
 		t.Fatalf("第 4 tick 读取=%d，想要 24576", got)
 	}
@@ -71,7 +71,7 @@ func TestFarmlandMoistureRescanEventsConsumeBudgetFirst(t *testing.T) {
 		engine.enqueueFarmlandMoisture(core.Overworld, core.BlockPos{X: x, Y: core.MinY})
 	}
 
-	engine.advanceFarmlandMoisture(make(map[core.ChunkKey]*pendingChunkChanges))
+	engine.advanceFarmlandMoisture(engine.newMutation())
 	if got := engine.farmlandMoisture.blockReads; got != farmlandMoistureReadsPerTick {
 		t.Fatalf("事件加重扫读取=%d，想要 %d", got, farmlandMoistureReadsPerTick)
 	}
@@ -92,7 +92,7 @@ func TestFarmlandMoistureRescanDropsOutOfScopeAndRestarts(t *testing.T) {
 	}
 
 	delete(engine.fluidScope, key)
-	engine.advanceFarmlandMoisture(make(map[core.ChunkKey]*pendingChunkChanges))
+	engine.advanceFarmlandMoisture(engine.newMutation())
 	if len(engine.farmlandMoisture.rescans.pending) != 0 || engine.farmlandMoisture.rescans.cursor != 0 {
 		t.Fatalf("离开 scope 后重扫未清空：pending=%d cursor=%d",
 			len(engine.farmlandMoisture.rescans.pending), engine.farmlandMoisture.rescans.cursor)

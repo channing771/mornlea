@@ -80,7 +80,7 @@ func (engine *Engine) noteTrampleLanding(session *sessionState, player *playerSt
 // settleTramples 结算本 tick 收集到的全部踩踏候选格，结算后清空暂存（每 tick
 // 调用一次，暂存绝无跨 tick 残留）。由 `advanceCrops` 首部调用，位于
 // `reconcileSubscriptions` 之后的区块写入区，满足阶段顺序契约。
-func (engine *Engine) settleTramples(pending map[core.ChunkKey]*pendingChunkChanges) {
+func (engine *Engine) settleTramples(pending *pendingChunkChanges) {
 	cells := engine.tramplePending
 	for index := range cells {
 		engine.settleTrampleCell(cells[index], pending)
@@ -100,7 +100,7 @@ func (engine *Engine) settleTramples(pending map[core.ChunkKey]*pendingChunkChan
 // 重试机会是玩家的下一次落地边沿（跳一下），这是「落地冲击」语义的自然读法。
 func (engine *Engine) settleTrampleCell(
 	cell tramplePendingCell,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) {
 	dimension := engine.dimensions[cell.dimension]
 	if dimension == nil {
@@ -128,7 +128,7 @@ func (engine *Engine) settleTrampleCell(
 	// 上方有作物：按采掘同形规则准备掉落——成熟小麦走 `cropYieldRolls` 确定性
 	// 双产物，未成熟作物走 `core.BlockDrop` 的单产物（1 颗种子）。掉落预演
 	// （容量前验）必须先于任何方块写入，整格原子性由它保证。
-	record, recordOK := dimension.records[crop.Chunk()]
+	record, recordOK := dimension.Records[crop.Chunk()]
 	blockIndex, indexOK := world.ChunkBlockIndex(crop)
 	if !recordOK || record.State != ChunkReady || record.Chunk == nil || !indexOK {
 		return
@@ -185,7 +185,7 @@ func (engine *Engine) commitTrample(
 	dimension *Dimension,
 	cell tramplePendingCell,
 	crop core.BlockPos,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) bool {
 	if _, changed, err := dimension.SetBlock(cell.position, core.DirtID); err != nil || !changed {
 		return false

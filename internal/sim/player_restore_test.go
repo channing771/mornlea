@@ -460,7 +460,7 @@ func setRestoreBlock(
 	block core.BlockID,
 ) {
 	t.Helper()
-	record := engine.dimensions[core.Overworld].records[position.Chunk()]
+	record := engine.dimensions[core.Overworld].Records[position.Chunk()]
 	if record == nil || record.State != ChunkReady {
 		t.Fatalf("chunk %+v is not Ready", position.Chunk())
 	}

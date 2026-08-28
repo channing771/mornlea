@@ -129,7 +129,7 @@ func TestFarmlandMoistureQueueDropsOutOfScopeCandidate(t *testing.T) {
 	engine := NewEngine(0, 0, 0)
 	engine.fluidScope = make(map[core.ChunkKey]struct{})
 	engine.enqueueFarmlandMoisture(core.Overworld, core.BlockPos{})
-	engine.advanceFarmlandMoisture(make(map[core.ChunkKey]*pendingChunkChanges))
+	engine.advanceFarmlandMoisture(engine.newMutation())
 	if got := len(engine.farmlandMoisture.pending); got != 0 {
 		t.Fatalf("范围外候选处理后仍剩 %d 项，想要 0", got)
 	}

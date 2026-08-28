@@ -40,7 +40,7 @@ func TestSubmersionFlagsParityAuthorityVersusMirror(t *testing.T) {
 	chunk.Compact()
 
 	dimension := NewDimension(core.Overworld)
-	dimension.records[core.ChunkPos{}] = &ChunkRecord{State: ChunkReady, Chunk: chunk}
+	dimension.Records[core.ChunkPos{}] = &ChunkRecord{State: ChunkReady, Chunk: chunk}
 	authority := dimensionCollisionSource{dimension: dimension}
 
 	mirror := client.NewMirror()

@@ -19,7 +19,7 @@ func TestGeneratedChunkIsDirtyUntilPersisted(t *testing.T) {
 	if err := dimension.ApplyGenerated(pos, world.NewChunk(pos)); err != nil {
 		t.Fatal(err)
 	}
-	record := dimension.records[pos]
+	record := dimension.Records[pos]
 	if record.Revision != 1 || record.PersistedRevision != 0 || !record.Dirty() {
 		t.Fatalf("generated record=%+v", record)
 	}
@@ -41,7 +41,7 @@ func TestLoadedChunkKeepsPersistedRevisionAndCancelsUnload(t *testing.T) {
 	if !clean.RequestUnload(pos) {
 		t.Fatal("clean loaded chunk should unload immediately")
 	}
-	if _, exists := clean.records[pos]; exists {
+	if _, exists := clean.Records[pos]; exists {
 		t.Fatal("clean loaded chunk was retained")
 	}
 
@@ -55,14 +55,14 @@ func TestLoadedChunkKeepsPersistedRevisionAndCancelsUnload(t *testing.T) {
 	if unloaded := dirty.RequestUnload(pos); unloaded {
 		t.Fatal("dirty loaded chunk was discarded")
 	}
-	record := dirty.records[pos]
+	record := dirty.Records[pos]
 	chunk := record.Chunk
 	if record.State != ChunkUnloading || chunk == nil || !record.UnloadRequested {
 		t.Fatalf("dirty unload=%+v", record)
 	}
-	if !dirty.CancelUnload(pos) || dirty.records[pos].State != ChunkReady ||
-		dirty.records[pos].Chunk != chunk || dirty.records[pos].UnloadRequested {
-		t.Fatalf("cancel unload=%+v", dirty.records[pos])
+	if !dirty.CancelUnload(pos) || dirty.Records[pos].State != ChunkReady ||
+		dirty.Records[pos].Chunk != chunk || dirty.Records[pos].UnloadRequested {
+		t.Fatalf("cancel unload=%+v", dirty.Records[pos])
 	}
 }
 
@@ -105,7 +105,7 @@ func TestPersistenceLifecyclePreservesRecoveryAndRewriteMetadata(t *testing.T) {
 			); err != nil {
 				t.Fatal(err)
 			}
-			record := dimension.records[pos]
+			record := dimension.Records[pos]
 			if record.Revision != test.revision ||
 				record.PersistedRevision != test.persistedRevision ||
 				record.NeedsRewrite != test.needsRewrite ||
@@ -125,7 +125,7 @@ func TestRecoveredOnlyLoadedChunkRequiresRewriteOnUnload(t *testing.T) {
 	if err := dimension.ApplyLoaded(pos, world.NewChunk(pos), 6, 6, false, true); err != nil {
 		t.Fatal(err)
 	}
-	record := dimension.records[pos]
+	record := dimension.Records[pos]
 	if !record.Recovered || !record.NeedsRewrite || !record.Dirty() {
 		t.Fatalf("recovered-only record=%+v", record)
 	}
@@ -158,7 +158,7 @@ func TestEngineAcquiredHitPropagatesExactPersistenceState(t *testing.T) {
 	})
 
 	loaded := engine.Step()
-	record := engine.dimensions[key.Dimension].records[key.Pos]
+	record := engine.dimensions[key.Dimension].Records[key.Pos]
 	if !reflect.DeepEqual(loaded.Ready, []core.ChunkKey{key}) || record == nil ||
 		record.State != ChunkReady || record.Chunk != chunk ||
 		record.Revision != 12 || record.PersistedRevision != 9 ||
@@ -191,7 +191,7 @@ func TestEngineForgottenCleanAcquiredHitIsDeleted(t *testing.T) {
 	if len(loaded.Ready) != 0 {
 		t.Fatalf("forgotten clean hit published Ready=%+v", loaded.Ready)
 	}
-	if _, exists := engine.dimensions[oldKey.Dimension].records[oldKey.Pos]; exists {
+	if _, exists := engine.dimensions[oldKey.Dimension].Records[oldKey.Pos]; exists {
 		t.Fatal("forgotten clean hit retained authority")
 	}
 }
@@ -205,7 +205,7 @@ func TestPersistenceLifecycleRejectsPersistedRevisionAboveCurrent(t *testing.T) 
 	if err := dimension.ApplyLoaded(pos, world.NewChunk(pos), 4, 5, false, false); err == nil {
 		t.Fatal("persisted revision above current was accepted")
 	}
-	if record := dimension.records[pos]; record.State != ChunkLoading || record.Chunk != nil {
+	if record := dimension.Records[pos]; record.State != ChunkLoading || record.Chunk != nil {
 		t.Fatalf("invalid load changed authority: %+v", record)
 	}
 }
@@ -225,7 +225,7 @@ func TestPersistenceLifecycleLoadTransitionsSupportMissDropAndRetry(t *testing.T
 		t.Fatal("drop load not started")
 	}
 	dimension.DropLoading(droppedPos)
-	if _, exists := dimension.records[droppedPos]; exists {
+	if _, exists := dimension.Records[droppedPos]; exists {
 		t.Fatal("dropped loading record was retained")
 	}
 
@@ -235,12 +235,12 @@ func TestPersistenceLifecycleLoadTransitionsSupportMissDropAndRetry(t *testing.T
 		t.Fatal("failed load not started")
 	}
 	dimension.MarkLoadFailed(failedPos, wantErr)
-	record := dimension.records[failedPos]
+	record := dimension.Records[failedPos]
 	if record.State != ChunkFailed || !errors.Is(record.Err, wantErr) {
 		t.Fatalf("failed load record=%+v", record)
 	}
-	if !dimension.BeginLoading(failedPos) || dimension.records[failedPos].Err != nil {
-		t.Fatalf("failed load did not retry cleanly: %+v", dimension.records[failedPos])
+	if !dimension.BeginLoading(failedPos) || dimension.Records[failedPos].Err != nil {
+		t.Fatalf("failed load did not retry cleanly: %+v", dimension.Records[failedPos])
 	}
 }
 
@@ -254,7 +254,7 @@ func TestPersistenceLifecycleInFlightCleanChunkIsRetainedOnUnload(t *testing.T) 
 	if err := dimension.ApplyLoaded(pos, chunk, 7, 7, false, false); err != nil {
 		t.Fatal(err)
 	}
-	record := dimension.records[pos]
+	record := dimension.Records[pos]
 	record.SaveInFlightRevision = 7
 	if dimension.RequestUnload(pos) || record.State != ChunkUnloading ||
 		record.Chunk != chunk || !record.UnloadRequested {
@@ -278,7 +278,7 @@ func TestPersistenceLifecycleBlockChangeAdvancesDirtyRevision(t *testing.T) {
 	if len(result.Changes) != 1 {
 		t.Fatalf("block change batches=%+v", result.Changes)
 	}
-	record := engine.dimensions[core.Overworld].records[core.ChunkPos{}]
+	record := engine.dimensions[core.Overworld].Records[core.ChunkPos{}]
 	if record.Revision != 2 || record.PersistedRevision != 0 || !record.Dirty() {
 		t.Fatalf("changed record=%+v", record)
 	}
@@ -320,7 +320,7 @@ func TestPersistenceLifecycleRetainsLateGeneratedChunkForSaving(t *testing.T) {
 			t.Fatalf("forgotten chunk published ready: %+v", result.Ready)
 		}
 	}
-	record := engine.dimensions[core.Overworld].records[first]
+	record := engine.dimensions[core.Overworld].Records[first]
 	if record == nil || record.State != ChunkUnloading || record.Chunk == nil ||
 		record.Revision != 1 || record.PersistedRevision != 0 || !record.Dirty() {
 		t.Fatalf("late generated chunk was not retained: %+v", record)
@@ -331,7 +331,7 @@ func TestPersistenceLifecycleRetainsLateGeneratedChunkForSaving(t *testing.T) {
 		Dimension: core.Overworld, Center: first,
 	})
 	resubscribed := engine.Step()
-	record = engine.dimensions[core.Overworld].records[first]
+	record = engine.dimensions[core.Overworld].Records[first]
 	if record.State != ChunkReady || record.UnloadRequested ||
 		!reflect.DeepEqual(resubscribed.Ready, []core.ChunkKey{key}) {
 		t.Fatalf("retained chunk was not reused: record=%+v ready=%+v", record, resubscribed.Ready)

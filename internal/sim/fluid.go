@@ -97,7 +97,7 @@ type fluidWorld struct {
 	dimension *Dimension
 	// scope 是本 tick 允许读写的区块集合（活动兴趣区块 ∩ ChunkReady）。
 	scope   map[core.ChunkKey]struct{}
-	pending map[core.ChunkKey]*pendingChunkChanges
+	pending *pendingChunkChanges
 }
 
 // record 定位 position 所属的可读写区块记录；越界、超出推进范围或区块未就绪
@@ -113,7 +113,7 @@ func (w *fluidWorld) record(position core.BlockPos) *ChunkRecord {
 	if _, inScope := w.scope[key]; !inScope {
 		return nil
 	}
-	record := w.dimension.records[key.Pos]
+	record := w.dimension.Records[key.Pos]
 	if record == nil || record.State != ChunkReady || record.Chunk == nil {
 		return nil
 	}
@@ -206,7 +206,7 @@ func (engine *Engine) rescanChunkFluids(
 	now, delay uint64,
 	budget int,
 ) (spent int, done bool) {
-	record := dimension.records[pos]
+	record := dimension.Records[pos]
 	if record == nil || record.Chunk == nil {
 		engine.fluidRescan.resetCursor()
 		return 0, true
@@ -219,7 +219,7 @@ func (engine *Engine) rescanChunkFluids(
 		if state.plane > 0 {
 			plane := fluidBoundaryPlanes[state.plane-1]
 			chunkPos = core.ChunkPos{X: pos.X + plane.dx, Z: pos.Z + plane.dz}
-			neighbor := dimension.records[chunkPos]
+			neighbor := dimension.Records[chunkPos]
 			if neighbor == nil || neighbor.State != ChunkReady || neighbor.Chunk == nil {
 				state.plane++
 				state.section = 0
@@ -256,7 +256,7 @@ func fluidRescanBlockAt(dimension *Dimension, position core.BlockPos) core.Block
 	if position.Y < core.MinY || position.Y >= core.MaxY {
 		return core.BarrierID
 	}
-	record := dimension.records[position.Chunk()]
+	record := dimension.Records[position.Chunk()]
 	if record == nil || record.State != ChunkReady || record.Chunk == nil {
 		return core.BarrierID
 	}
@@ -312,7 +312,7 @@ var fluidSealedSourceOffsets = [5][3]int32{
 // 就是 O(表面)，不值得为它把论证复杂化。
 //
 // section 与 localX/localY/localZ 是 position 所在区段及其区段内局部坐标：邻格
-// 仍落在同一区段内时直接读区段（这是绝大多数情况），避开 dimension.records 的
+// 仍落在同一区段内时直接读区段（这是绝大多数情况），避开 dimension.Records 的
 // map 查找；只有跨区段/跨区块的邻格才走 fluidRescanBlockAt。两条路径读的是同一
 // 份数据，只是快慢不同。
 func fluidSourceIsFixedPoint(
@@ -350,7 +350,7 @@ func fluidSectionUnreplaceable(dimension *Dimension, pos core.ChunkPos, sectionI
 	if sectionIndex < 0 || sectionIndex >= core.SectionsPerChunk {
 		return true
 	}
-	record := dimension.records[pos]
+	record := dimension.Records[pos]
 	if record == nil || record.State != ChunkReady || record.Chunk == nil {
 		return true
 	}
@@ -577,7 +577,7 @@ func (engine *Engine) runFluidRescans(now, delay uint64) {
 // 重扫本身有独立预算并跨 tick 分摊（fluidRescanState / FluidRescanCellsPerTick）：
 // 它的工作量正比于新进入范围的方块数，与 FluidUpdatesPerTick 无关，不分摊会在
 // 大批区块同时进入范围时直接击穿 tick 预算。
-func (engine *Engine) advanceFluids(pending map[core.ChunkKey]*pendingChunkChanges) {
+func (engine *Engine) advanceFluids(pending *pendingChunkChanges) {
 	now, delay := engine.fluidClock()
 	budget := int(engine.tunables.FluidUpdatesPerTick)
 
@@ -592,7 +592,7 @@ func (engine *Engine) advanceFluids(pending map[core.ChunkKey]*pendingChunkChang
 		if dimension == nil {
 			continue
 		}
-		record, ok := dimension.records[key.Pos]
+		record, ok := dimension.Records[key.Pos]
 		if !ok || record.State != ChunkReady || record.Chunk == nil {
 			continue
 		}

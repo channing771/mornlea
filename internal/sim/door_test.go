@@ -93,7 +93,7 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 		engine.SetBlockForTest(target, core.AirID)
 		engine.SetBlockForTest(core.BlockPos{X: 0, Y: 3, Z: 4}, core.AirID)
 		engine.SetBlockForTest(below, core.StoneID)
-		pending := make(map[core.ChunkKey]*pendingChunkChanges)
+		pending := engine.newMutation()
 		reason, rejected := engine.tryPlaceDoor(core.Overworld, target, dir, pending)
 		if rejected {
 			t.Fatalf("dir %d 放置被拒绝 reason %d want %d", dir, reason, wantLower)
@@ -109,7 +109,7 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 	{
 		engine, _, _ := doorTestReadyEngine(t, hotbarWithDoor(1))
 		engine.SetBlockForTest(core.BlockPos{X: 0, Y: 3, Z: 4}, core.StoneID)
-		pending := make(map[core.ChunkKey]*pendingChunkChanges)
+		pending := engine.newMutation()
 		_, rejected := engine.tryPlaceDoor(core.Overworld, core.BlockPos{X: 0, Y: 2, Z: 4}, 0, pending)
 		if !rejected {
 			t.Fatal("上方占用应拒绝")
@@ -121,7 +121,7 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 		engine.SetBlockForTest(below, core.AirID)
 		engine.SetBlockForTest(core.BlockPos{X: 0, Y: 2, Z: 4}, core.AirID)
 		engine.SetBlockForTest(core.BlockPos{X: 0, Y: 3, Z: 4}, core.AirID)
-		pending := make(map[core.ChunkKey]*pendingChunkChanges)
+		pending := engine.newMutation()
 		_, rejected := engine.tryPlaceDoor(core.Overworld, core.BlockPos{X: 0, Y: 2, Z: 4}, 0, pending)
 		if !rejected {
 			t.Fatal("下方非实心应拒绝")
@@ -134,13 +134,13 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 		engine.SetBlockForTest(core.BlockPos{X: 1, Y: 1, Z: 4}, core.StoneID)
 		engine.SetBlockForTest(lower, core.DoorLowerSouthClosed)
 		engine.SetBlockForTest(upper, core.DoorUpper)
-		if !handleInteractDoor(engine, core.Overworld, lower, make(map[core.ChunkKey]*pendingChunkChanges)) {
+		if !handleInteractDoor(engine, core.Overworld, lower, engine.newMutation()) {
 			t.Fatal("interact lower should succeed")
 		}
 		if got, _ := engine.dimensions[core.Overworld].BlockAt(lower); got != core.DoorLowerSouthOpen {
 			t.Fatalf("toggle to open got %d want open", got)
 		}
-		if !handleInteractDoor(engine, core.Overworld, upper, make(map[core.ChunkKey]*pendingChunkChanges)) {
+		if !handleInteractDoor(engine, core.Overworld, upper, engine.newMutation()) {
 			t.Fatal("interact upper should succeed")
 		}
 		if got, _ := engine.dimensions[core.Overworld].BlockAt(lower); got != core.DoorLowerSouthClosed {
@@ -159,7 +159,7 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 			engine.SetBlockForTest(target, core.DoorLowerSouthClosed)
 			engine.SetBlockForTest(core.BlockPos{X: 0, Y: 3, Z: 5}, core.DoorUpper)
 		}
-		pending := make(map[core.ChunkKey]*pendingChunkChanges)
+		pending := engine.newMutation()
 		block, _ := engine.dimensions[core.Overworld].BlockAt(target)
 		reason, rejected := engine.completeMining(core.Overworld, target, block, true, pending)
 		if rejected {
@@ -174,7 +174,7 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 		if got, _ := engine.dimensions[core.Overworld].BlockAt(upperPos); got != core.AirID {
 			t.Fatalf("hitUpper %v upper not air %d", hitUpper, got)
 		}
-		rec := engine.dimensions[core.Overworld].records[lowerPos.Chunk()]
+		rec := engine.dimensions[core.Overworld].Records[lowerPos.Chunk()]
 		found := miningDropTotals(rec.Chunk)[core.ItemDoor]
 		if found != 1 {
 			t.Fatalf("hitUpper %v drop ItemDoor=%d want 1", hitUpper, found)
@@ -210,7 +210,7 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 		upperPos := core.BlockPos{X: 0, Y: 3, Z: 5}
 		engine.SetBlockForTest(lowerPos, core.DoorLowerSouthClosed)
 		engine.SetBlockForTest(upperPos, core.DoorUpper)
-		pending := make(map[core.ChunkKey]*pendingChunkChanges)
+		pending := engine.newMutation()
 		block, _ := engine.dimensions[core.Overworld].BlockAt(lowerPos)
 		reason, rejected := engine.completeMining(core.Overworld, lowerPos, block, false, pending)
 		if rejected {
@@ -223,7 +223,7 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 		if got, _ := engine.dimensions[core.Overworld].BlockAt(upperPos); got != core.AirID {
 			t.Fatalf("DoDrop false upper not air %d", got)
 		}
-		rec := engine.dimensions[core.Overworld].records[lowerPos.Chunk()]
+		rec := engine.dimensions[core.Overworld].Records[lowerPos.Chunk()]
 		if got := miningDropTotals(rec.Chunk)[core.ItemDoor]; got != 0 {
 			t.Fatalf("DoDrop false drop %d want 0", got)
 		}
@@ -278,7 +278,7 @@ func TestDoorPlaceSupportEnumerations(t *testing.T) {
 		engine.SetBlockForTest(below, belowID)
 		engine.SetBlockForTest(core.BlockPos{X: 2, Y: 2, Z: 4}, core.AirID)
 		engine.SetBlockForTest(core.BlockPos{X: 2, Y: 3, Z: 4}, core.AirID)
-		pending := make(map[core.ChunkKey]*pendingChunkChanges)
+		pending := engine.newMutation()
 		_, rejected := engine.tryPlaceDoor(core.Overworld, core.BlockPos{X: 2, Y: 2, Z: 4}, 0, pending)
 		if !rejected {
 			t.Fatalf("below %d should be rejected as non-solid support", belowID)
@@ -294,7 +294,7 @@ func TestDoorPlaceSupportEnumerations(t *testing.T) {
 		engine.SetBlockForTest(below, belowID)
 		engine.SetBlockForTest(core.BlockPos{X: 2, Y: 2, Z: 4}, core.AirID)
 		engine.SetBlockForTest(core.BlockPos{X: 2, Y: 3, Z: 4}, core.AirID)
-		pending := make(map[core.ChunkKey]*pendingChunkChanges)
+		pending := engine.newMutation()
 		_, rejected := engine.tryPlaceDoor(core.Overworld, core.BlockPos{X: 2, Y: 2, Z: 4}, 0, pending)
 		if rejected {
 			t.Fatalf("below Farmland %d should be accepted as solid support", belowID)
@@ -326,7 +326,7 @@ func TestDoorInteractViaRaycast(t *testing.T) {
 	if got, _ := engine.dimensions[core.Overworld].BlockAt(lower); got != core.DoorLowerSouthOpen {
 		t.Fatalf("ray interact lower: got %d want open", got)
 	}
-	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	pending := engine.newMutation()
 	if !handleInteractDoor(engine, core.Overworld, upper, pending) {
 		t.Fatal("interact upper should succeed to toggle back")
 	}
@@ -352,7 +352,7 @@ func TestDoorUpperInteractDirPreserved(t *testing.T) {
 		engine.SetBlockForTest(core.BlockPos{X: 5, Y: 1, Z: 5}, core.StoneID)
 		engine.SetBlockForTest(lower, closed)
 		engine.SetBlockForTest(upper, core.DoorUpper)
-		pending := make(map[core.ChunkKey]*pendingChunkChanges)
+		pending := engine.newMutation()
 		if !handleInteractDoor(engine, core.Overworld, upper, pending) {
 			t.Fatalf("dir %d upper interact should succeed", dir)
 		}
@@ -477,7 +477,7 @@ func TestDoorPhysicsFluidDivergence(t *testing.T) {
 	if solid, _ := sampler(upper); !solid {
 		t.Fatal("closed upper via lower sampler should be solid")
 	}
-	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	pending := engine.newMutation()
 	handleInteractDoor(engine, core.Overworld, lower, pending)
 	engine.finishChanges(pending, &TickResult{})
 	if solid, _ := sampler(lower); solid {
@@ -498,7 +498,7 @@ func TestDoorMiningDropCapacity(t *testing.T) {
 	record := miningTargetRecord(t, engine, lowerPos)
 	beforeHash := record.Chunk.Hash()
 	beforeRevision := record.Revision
-	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	pending := engine.newMutation()
 	block, _ := engine.dimensions[core.Overworld].BlockAt(lowerPos)
 	reason, rejected := engine.completeMining(core.Overworld, lowerPos, block, true, pending)
 	if !rejected || reason != RejectDropCapacity {
@@ -510,10 +510,10 @@ func TestDoorMiningDropCapacity(t *testing.T) {
 	if record.Revision != beforeRevision {
 		t.Fatal("capacity failure should not bump revision")
 	}
-	if len(pending) != 0 {
+	if pending.Len() != 0 {
 		t.Fatal("capacity failure should not produce pending")
 	}
-	pending2 := make(map[core.ChunkKey]*pendingChunkChanges)
+	pending2 := engine.newMutation()
 	block2, _ := engine.dimensions[core.Overworld].BlockAt(upperPos)
 	reason2, rejected2 := engine.completeMining(core.Overworld, upperPos, block2, true, pending2)
 	if !rejected2 || reason2 != RejectDropCapacity {
@@ -528,7 +528,7 @@ func TestDoorPlaceUpperRollback(t *testing.T) {
 	engine.SetBlockForTest(upper, core.StoneID)
 	engine.SetBlockForTest(lower, core.AirID)
 	engine.SetBlockForTest(core.BlockPos{X: 3, Y: 1, Z: 4}, core.StoneID)
-	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	pending := engine.newMutation()
 	_, rejected := engine.tryPlaceDoor(core.Overworld, lower, 0, pending)
 	if !rejected {
 		t.Fatal("upper occupied should be rejected")
@@ -539,7 +539,7 @@ func TestDoorPlaceUpperRollback(t *testing.T) {
 	if got, _ := engine.dimensions[core.Overworld].BlockAt(upper); got != core.StoneID {
 		t.Fatalf("upper should stay Stone got %d", got)
 	}
-	if len(pending) != 0 {
+	if pending.Len() != 0 {
 		t.Fatalf("rejected place should not produce pending %+v", pending)
 	}
 }

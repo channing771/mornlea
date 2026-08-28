@@ -25,7 +25,7 @@ func countLoadedDrops(t *testing.T, engine *Engine, item core.ItemID) int {
 	t.Helper()
 	count := 0
 	dimension := engine.dimensions[core.Overworld]
-	for _, record := range dimension.records {
+	for _, record := range dimension.Records {
 		if record.State != ChunkReady || record.Chunk == nil {
 			continue
 		}
@@ -179,13 +179,13 @@ func TestHostileBurnDeathDropsSingleRottenFlesh(t *testing.T) {
 	}
 	// 生命 1、灼烧计时到期：同一 tick 内灼烧致死 + 移除 + 掉落。
 	engine.advanceHostileBurn(testDayTick)
-	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	pending := engine.newMutation()
 	engine.settleHostileDeaths(pending)
 	if len(engine.hostiles.entries) != 0 {
 		t.Fatal("死亡后夜行者仍留在集合中，想要同 tick 移除")
 	}
 	key := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: 0, Z: 0}}
-	if _, touched := pending[key]; !touched {
+	if !pending.Has(key) {
 		t.Fatal("死亡掉落未登记区块变更 barrier")
 	}
 	if got := countLoadedDrops(t, engine, core.ItemRottenFlesh); got != 1 {
@@ -198,7 +198,7 @@ func TestHostileDeathDropRingsToNeighborChunkWhenDeathChunkFull(t *testing.T) {
 	// 装载 3×3 邻域并填满死亡区块（原点）的全部掉落槽。
 	loadFlatChunks(t, engine.dimensions[core.Overworld], -1, 1, -1, 1)
 	dimension := engine.dimensions[core.Overworld]
-	originRecord := dimension.records[core.ChunkPos{}]
+	originRecord := dimension.Records[core.ChunkPos{}]
 	for slot := range core.DropsPerChunk {
 		originRecord.Chunk.SetDrop(slot, world.DropSlot{
 			Generation: 1,
@@ -215,7 +215,7 @@ func TestHostileDeathDropRingsToNeighborChunkWhenDeathChunkFull(t *testing.T) {
 	// 死亡结算的入口条件是生命归零；恢复校验只收健康个体，这里直接置零
 	// 等价于灼烧/攻击刚好扣完的瞬间。
 	engine.hostiles.entries[0].health = 0
-	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	pending := engine.newMutation()
 	engine.settleHostileDeaths(pending)
 	if len(engine.hostiles.entries) != 0 {
 		t.Fatal("掉落槽全满时死亡未完成，想要仍移除")
@@ -224,7 +224,7 @@ func TestHostileDeathDropRingsToNeighborChunkWhenDeathChunkFull(t *testing.T) {
 		t.Fatalf("环形尝试后腐肉=%d，想要恰好 1", got)
 	}
 	neighbor := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: -1, Z: -1}}
-	if _, touched := pending[neighbor]; !touched {
+	if !pending.Has(neighbor) {
 		t.Fatal("环形掉落未在邻接区块登记变更 barrier")
 	}
 }
@@ -234,7 +234,7 @@ func TestHostileDeathWithAllSlotsFullOmitsDropDeterministically(t *testing.T) {
 	// 3×3 邻域全部填满：死亡完成但确定性省略掉落，且不动任何已有物品。
 	loadFlatChunks(t, engine.dimensions[core.Overworld], -1, 1, -1, 1)
 	dimension := engine.dimensions[core.Overworld]
-	for _, record := range dimension.records {
+	for _, record := range dimension.Records {
 		if record.State != ChunkReady || record.Chunk == nil {
 			continue
 		}
@@ -253,7 +253,7 @@ func TestHostileDeathWithAllSlotsFullOmitsDropDeterministically(t *testing.T) {
 		t.Fatalf("恢复夜行者：%v", err)
 	}
 	engine.hostiles.entries[0].health = 0
-	engine.settleHostileDeaths(make(map[core.ChunkKey]*pendingChunkChanges))
+	engine.settleHostileDeaths(engine.newMutation())
 	if len(engine.hostiles.entries) != 0 {
 		t.Fatal("全满时死亡未完成，想要仍移除")
 	}

@@ -146,7 +146,7 @@ func TestPendingSpawnGenerateRetainActivateAndForget(t *testing.T) {
 	if !reflect.DeepEqual(engine.wanted, map[core.ChunkKey]struct{}{target: {}}) {
 		t.Fatalf("Active union wanted=%+v，想要仅 target", engine.wanted)
 	}
-	record := engine.dimensions[core.Overworld].records[anchor.Pos]
+	record := engine.dimensions[core.Overworld].Records[anchor.Pos]
 	if record == nil || record.State != ChunkUnloading || record.Chunk == nil ||
 		!record.UnloadRequested || !record.Dirty() {
 		t.Fatalf("activate forget 后未保留待持久 anchor: %+v", record)
@@ -166,7 +166,7 @@ func TestExhaustedSpawnRetriesOnlyAfterRevisionChange(t *testing.T) {
 	if player := onlyInternalPlayer(t, engine.Step()); player.Ready {
 		t.Fatalf("全空气候选不应 Ready: %+v", player)
 	}
-	record := dimension.records[core.ChunkPos{}]
+	record := dimension.Records[core.ChunkPos{}]
 	record.Chunk.SetBlock(0, 0, 0, core.GrassID)
 	if player := onlyInternalPlayer(t, engine.Step()); player.Ready {
 		t.Fatalf("revision 未变却重新扫描: %+v", player)

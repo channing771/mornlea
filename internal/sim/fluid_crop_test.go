@@ -273,7 +273,7 @@ type fluidCropSlotView struct {
 
 // fluidCropChunkSlots 读取区块 (0,0) 全部掉落槽的语义投影。
 func fluidCropChunkSlots(engine *Engine) [core.DropsPerChunk]fluidCropSlotView {
-	chunk := engine.dimensions[core.Overworld].records[core.ChunkPos{}].Chunk
+	chunk := engine.dimensions[core.Overworld].Records[core.ChunkPos{}].Chunk
 	var views [core.DropsPerChunk]fluidCropSlotView
 	for slot := range core.DropsPerChunk {
 		drop := chunk.Drop(slot)
@@ -361,7 +361,7 @@ func TestFluidCropCapacityFullRejectsAndRetriesUntilSlotFreed(t *testing.T) {
 	}
 
 	// 释放一个槽位：重试到期后冲毁应当完成，种子占据腾出的槽位。
-	engine.dimensions[core.Overworld].records[core.ChunkPos{}].Chunk.ClearDrop(
+	engine.dimensions[core.Overworld].Records[core.ChunkPos{}].Chunk.ClearDrop(
 		core.DropsPerChunk - 1,
 	)
 	stepUntilFluidCropFlooded(t, engine, fluidCropCell, core.WaterLevel1ID)

@@ -290,7 +290,7 @@ func cropSkyExposed(chunk *world.Chunk, position core.BlockPos) bool {
 //
 // **枚举顺序全序、绝不遍历 map**：区块来自 activeInterestKeys()（已按
 // chunkKeyLess 排好），区段按索引升序，区段内的 n 条抽样按 i 升序。
-// dimension.records[...] 是 map **查找**不是 map 遍历，不引入顺序不确定性。
+// dimension.Records[...] 是 map **查找**不是 map 遍历，不引入顺序不确定性。
 //
 // 成本契约：本 tick 触及的格数恒等于「已就绪的活动区块数 × 24 个区段 ×
 // RandomTicksPerSection」，与世界里有多少株作物无关。这里刻意**不**跳过均匀
@@ -300,7 +300,7 @@ func cropSkyExposed(chunk *world.Chunk, position core.BlockPos) bool {
 // `cropCellsExamined` 计量被抽中的格数，`cropBlockReads` 计量规则读取的方块编号。
 // 每条样本读取自身一次；只有作物再读取正下方持久化的干/湿耕地编号一次，因此
 // 单阶段方块读取不会超过考察格数的两倍。
-func (engine *Engine) advanceCrops(pending map[core.ChunkKey]*pendingChunkChanges) {
+func (engine *Engine) advanceCrops(pending *pendingChunkChanges) {
 	engine.cropCellsExamined = 0
 	engine.cropBlockReads = 0
 	// 踩踏结算（trample.go）：落地边沿在物理阶段收集（reconcileSubscriptions
@@ -318,7 +318,7 @@ func (engine *Engine) advanceCrops(pending map[core.ChunkKey]*pendingChunkChange
 		if dimension == nil {
 			continue
 		}
-		record := dimension.records[key.Pos]
+		record := dimension.Records[key.Pos]
 		if record == nil || record.State != ChunkReady || record.Chunk == nil {
 			continue
 		}
@@ -357,7 +357,7 @@ func (engine *Engine) advanceCropCell(
 	chunk *world.Chunk,
 	position core.BlockPos,
 	tick uint64,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) {
 	localX, _, localZ := position.Local()
 	block := chunk.BlockAt(localX, position.Y, localZ)

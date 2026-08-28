@@ -9,6 +9,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/fluid"
 	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -37,12 +38,6 @@ type sessionState struct {
 	viewContainer bool
 }
 
-type pendingChunkChanges struct {
-	baseRevision uint64
-	changes      map[uint32]BlockChange
-	dirty        map[int]struct{}
-}
-
 type Engine struct {
 	viewRadius int
 	// seed 是世界种子，构造后只读。它由 host 从 storage.Metadata.Seed 传入，
@@ -62,7 +57,7 @@ type Engine struct {
 	// 每次判定原地重建、重复调用零分配。
 	hostileLight       *blockLightScratch
 	wanted             map[core.ChunkKey]struct{}
-	inFlightSaves      map[core.ChunkKey]persistenceInFlight
+	realm              *realm.State
 	subscriptionsDirty bool
 
 	// fluidQueues 是流体待更新队列，**按维度各持一个实例**（原因见
@@ -137,18 +132,17 @@ func NewEngine(viewRadius int, worldTime uint64, seed int64) *Engine {
 	if viewRadius < 0 {
 		panic("sim: negative view radius")
 	}
+	realmState := realm.NewState(core.Overworld)
 	engine := &Engine{
-		viewRadius: viewRadius,
-		seed:       seed,
-		dimensions: map[core.DimensionID]*Dimension{
-			core.Overworld: NewDimension(core.Overworld),
-		},
-		sessions:      make(map[SessionID]*sessionState),
-		companions:    make(map[companion.ID]*companionState),
-		hostiles:      newHostileSet(),
-		hostileLight:  newBlockLightScratch(),
-		wanted:        make(map[core.ChunkKey]struct{}),
-		inFlightSaves: make(map[core.ChunkKey]persistenceInFlight),
+		viewRadius:   viewRadius,
+		seed:         seed,
+		dimensions:   realmState.Dimensions(),
+		realm:        realmState,
+		sessions:     make(map[SessionID]*sessionState),
+		companions:   make(map[companion.ID]*companionState),
+		hostiles:     newHostileSet(),
+		hostileLight: newBlockLightScratch(),
+		wanted:       make(map[core.ChunkKey]struct{}),
 	}
 	engine.worldTime.Store(worldTime)
 	// 初始化快照，使未经 Step 就被调用的方法（例如 RegisterPlayer 的出生扫描）

@@ -2,85 +2,30 @@ package sim
 
 import (
 	"slices"
-	"sort"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/internal/sim/realm"
 )
+
+type pendingChunkChanges = realm.Mutation
+
+func (engine *Engine) newMutation() *pendingChunkChanges {
+	return engine.realm.NewMutation()
+}
 
 func (engine *Engine) recordChange(
 	dimensionID core.DimensionID,
 	position core.BlockPos,
 	block core.BlockID,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) {
-	key := core.ChunkKey{
-		Dimension: dimensionID,
-		Pos:       position.Chunk(),
-	}
-	changeSet := pending[key]
-	if changeSet == nil {
-		record := engine.dimensions[dimensionID].records[key.Pos]
-		changeSet = &pendingChunkChanges{
-			baseRevision: record.Revision,
-			changes:      make(map[uint32]BlockChange),
-			dirty:        make(map[int]struct{}),
-		}
-		pending[key] = changeSet
-	}
-	index, ok := world.ChunkBlockIndex(position)
-	if !ok {
-		panic("sim: changed block has no chunk index")
-	}
-	changeSet.changes[index] = BlockChange{
-		Position: position,
-		Block:    block,
-	}
-	changeSet.dirty[position.SectionIndex()] = struct{}{}
-	// 权威 tick 内「方块真的变了」的唯一汇聚点，因此也是流体入队的唯一挂点：
-	// 放置、采掘、伙伴放置、伙伴采掘乃至流体自身的写入全部经由这里，挂一次
-	// 就没有写者会漏掉入队（详见 enqueueFluidUpdate 的注释）。
+	pending.Record(dimensionID, position, block)
+	// 环境写者尚未迁移前，保持原有入队时点，避免流体同 tick 观察到不同世界状态。
 	engine.enqueueFluidUpdate(dimensionID, position)
 }
 
-func (engine *Engine) finishChanges(
-	pending map[core.ChunkKey]*pendingChunkChanges,
-	result *TickResult,
-) {
-	keys := make([]core.ChunkKey, 0, len(pending))
-	for key := range pending {
-		keys = append(keys, key)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		return chunkKeyLess(keys[i], keys[j])
-	})
-	for _, key := range keys {
-		changeSet := pending[key]
-		record := engine.dimensions[key.Dimension].records[key.Pos]
-		for sectionIndex := range changeSet.dirty {
-			record.Chunk.Section(sectionIndex).Blocks.Compact()
-		}
-		record.Revision++
-
-		indices := make([]uint32, 0, len(changeSet.changes))
-		for index := range changeSet.changes {
-			indices = append(indices, index)
-		}
-		sort.Slice(indices, func(i, j int) bool {
-			return indices[i] < indices[j]
-		})
-		changes := make([]BlockChange, 0, len(indices))
-		for _, index := range indices {
-			changes = append(changes, changeSet.changes[index])
-		}
-		result.Changes = append(result.Changes, ChunkChangeBatch{
-			Dimension:    key.Dimension,
-			Chunk:        key.Pos,
-			BaseRevision: changeSet.baseRevision,
-			NewRevision:  record.Revision,
-			Changes:      changes,
-		})
-	}
+func (engine *Engine) finishChanges(pending *pendingChunkChanges, result *TickResult) {
+	result.Changes = append(result.Changes, pending.Commit()...)
 }
 
 // sortChunkKeys 用泛型排序避免 sort.Slice 的反射 swapper 分配，

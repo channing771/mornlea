@@ -197,7 +197,7 @@ func blockCenterVec3(target core.BlockPos) mgl32.Vec3 {
 // 累积语义与完成判定，玩家与伙伴的差别只在完成 tick 的产物去向（玩家掉落物、
 // 伙伴直入背包）与进度发布载体（MiningUpdate/CompanionUpdate.Mining）。
 func (engine *Engine) advanceMining(
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 	result *TickResult,
 ) {
 	var sessions [8]SessionID
@@ -302,7 +302,7 @@ func (engine *Engine) advanceMining(
 // `completeCompanionMining` 的容器分叉批量结算。
 func (engine *Engine) advanceCompanionMining(
 	entry *companionState,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) {
 	if !entry.miningHeld {
 		entry.mining = miningState{}
@@ -403,7 +403,7 @@ func CompanionMineContainerStaging(
 // 在单写者 tick 内不再有失败路径，三方在同一 tick 内同时成立。
 func (engine *Engine) completeCompanionMining(
 	entry *companionState,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) {
 	if !companionMineableBlock(entry.mining.block) {
 		entry.mining = miningState{}
@@ -488,10 +488,10 @@ func (engine *Engine) completeCompanionMining(
 // 的「延期与放弃」）。
 func (engine *Engine) completeCompanionContainerMining(
 	entry *companionState,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) {
 	dimension := engine.dimensions[entry.dimension]
-	record, recordOK := dimension.records[entry.mining.target.Chunk()]
+	record, recordOK := dimension.Records[entry.mining.target.Chunk()]
 	blockIndex, indexOK := world.ChunkBlockIndex(entry.mining.target)
 	if !recordOK || record.State != ChunkReady || record.Chunk == nil || !indexOK {
 		entry.mining = miningState{}
@@ -588,13 +588,13 @@ func (engine *Engine) completeMining(
 	target core.BlockPos,
 	block core.BlockID,
 	harvestable bool,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) (RejectReason, bool) {
 	dimension := engine.dimensions[dimensionID]
 	if dimension == nil {
 		return RejectChunkNotReady, true
 	}
-	record, recordOK := dimension.records[target.Chunk()]
+	record, recordOK := dimension.Records[target.Chunk()]
 	blockIndex, indexOK := world.ChunkBlockIndex(target)
 	if !recordOK || record.State != ChunkReady || record.Chunk == nil || !indexOK {
 		return RejectChunkNotReady, true
@@ -610,8 +610,8 @@ func (engine *Engine) completeMining(
 			lowerPos = target
 			upperPos = core.BlockPos{X: target.X, Y: target.Y + 1, Z: target.Z}
 		}
-		lowerRecord, lowerOK := dimension.records[lowerPos.Chunk()]
-		upperRecord, upperOK := dimension.records[upperPos.Chunk()]
+		lowerRecord, lowerOK := dimension.Records[lowerPos.Chunk()]
+		upperRecord, upperOK := dimension.Records[upperPos.Chunk()]
 		if !lowerOK || lowerRecord.State != ChunkReady || lowerRecord.Chunk == nil ||
 			!upperOK || upperRecord.State != ChunkReady || upperRecord.Chunk == nil {
 			return RejectChunkNotReady, true
@@ -669,7 +669,7 @@ func (engine *Engine) completeMining(
 		if otherPos == target {
 			otherPos = footPos
 		}
-		if otherRecord, otherOK := dimension.records[otherPos.Chunk()]; !otherOK ||
+		if otherRecord, otherOK := dimension.Records[otherPos.Chunk()]; !otherOK ||
 			otherRecord.State != ChunkReady || otherRecord.Chunk == nil {
 			return RejectChunkNotReady, true
 		}

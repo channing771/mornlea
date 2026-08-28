@@ -117,7 +117,7 @@ func cropPerfPlant(engine *Engine, chunks int) int {
 // tick 每轮 +1 是必要的：抽样是 (seed, tick, 位置) 的纯函数，tick 不动的话
 // 每一轮抽到的是同一批格，测出来的是被 CPU 缓存彻底喂熟的最好情况。
 func runCropPerf(b *testing.B, engine *Engine, crops int) {
-	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	pending := engine.newMutation()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
@@ -125,8 +125,8 @@ func runCropPerf(b *testing.B, engine *Engine, crops int) {
 		engine.advanceCrops(pending)
 	}
 	b.StopTimer()
-	if len(pending) != 0 {
-		b.Fatalf("夹具产生了 %d 个区块的方块变更，两次测量不再只差「有没有作物」", len(pending))
+	if pending.Len() != 0 {
+		b.Fatalf("夹具产生了 %d 个区块的方块变更，两次测量不再只差「有没有作物」", pending.Len())
 	}
 	want := cropPerfChunks * core.SectionsPerChunk * int(tuning.DefaultTunables().RandomTicksPerSection)
 	if engine.cropCellsExamined != want {
@@ -213,7 +213,7 @@ func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 		if dimension == nil {
 			continue
 		}
-		record := dimension.records[key.Pos]
+		record := dimension.Records[key.Pos]
 		if record != nil && record.State == ChunkReady && record.Chunk != nil {
 			readyChunks++
 		}
@@ -221,7 +221,7 @@ func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 	if readyChunks != 1 {
 		b.Fatalf("Ready 区块数=%d，想要 1", readyChunks)
 	}
-	record := engine.dimensions[core.Overworld].records[core.ChunkPos{}]
+	record := engine.dimensions[core.Overworld].Records[core.ChunkPos{}]
 	if record == nil || record.State != ChunkReady || record.Chunk == nil {
 		b.Fatal("原点区块未 Ready")
 	}
@@ -243,7 +243,7 @@ func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 		b.Fatalf("工作负载耕地/作物=%d/%d，想要 %d/0", farmland, crops, wantFarmland)
 	}
 
-	pending := make(map[core.ChunkKey]*pendingChunkChanges)
+	pending := engine.newMutation()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
@@ -256,16 +256,13 @@ func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 	b.ReportMetric(float64(crops), "crops")
 	// 全耕地世界顶层（y=MaxY-1）上方为世界外空气，满足 B-06“干+无作物才退”，会产生
 	// 少量 Dirt 写入；pending 非空不再视为失败，只要变更仅为 FarmlandDry→Dirt。
-	if len(pending) != 0 {
-		for _, pc := range pending {
-			for _, change := range pc.changes {
-				if change.Block != core.DirtID {
-					b.Fatalf("全耕地世界 unexpected 变更 %d（仅允许 FarmlandDry→Dirt）", change.Block)
-				}
+	if pending.Len() != 0 {
+		for _, change := range pending.ChangedBlocks() {
+			block, ready := engine.dimensions[change.Dimension].BlockAt(change.Position)
+			if !ready || block != core.DirtID {
+				b.Fatalf("全耕地世界 unexpected 变更 %d（仅允许 FarmlandDry→Dirt）", block)
 			}
 		}
-		// 已验证仅为退化写入，清盘以免影响后续迭代的 reads 断言。
-		clear(pending)
 	}
 	want := core.SectionsPerChunk * int(tuning.DefaultTunables().RandomTicksPerSection)
 	if engine.cropCellsExamined != want {

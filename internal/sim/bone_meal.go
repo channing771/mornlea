@@ -14,7 +14,7 @@ import (
 // 校验顺序与 executeTillSoil 同形，结构上保证拒绝路径零消耗零写入。
 func (engine *Engine) executeBoneMeal(
 	command Command,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) (RejectReason, bool) {
 	session := engine.sessions[command.Session]
 	if session == nil || session.player == nil ||

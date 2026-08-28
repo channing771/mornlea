@@ -37,7 +37,7 @@ import (
 // tick 的既有语义逐字一致，两者共用 consumeToolDurability 这一个实现。
 func (engine *Engine) executeTillSoil(
 	command Command,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) (RejectReason, bool) {
 	session := engine.sessions[command.Session]
 	if session == nil || session.player == nil ||

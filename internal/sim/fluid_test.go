@@ -153,7 +153,7 @@ func TestFluidWorldTreatsOutOfScopeAsUnreplaceable(t *testing.T) {
 		id:        core.Overworld,
 		dimension: dimension,
 		scope:     engine.fluidScope,
-		pending:   make(map[core.ChunkKey]*pendingChunkChanges),
+		pending:   engine.newMutation(),
 	}
 
 	// 正向对照：范围内的空气必须读作空气且可替换，证明适配器不是对一切位置
@@ -193,7 +193,7 @@ func TestFluidWorldTreatsOutOfScopeAsUnreplaceable(t *testing.T) {
 	if got := fluidBlockAt(t, engine, outsideWater); got != core.WaterSourceID {
 		t.Fatalf("范围外的格被改写成 %d", got)
 	}
-	if len(adapter.pending) != 0 {
+	if adapter.pending.Len() != 0 {
 		t.Fatalf("范围外的写入登记了区块变更: %+v", adapter.pending)
 	}
 }
@@ -470,7 +470,7 @@ func fluidBasinDimension() (*Dimension, []core.ChunkPos) {
 				}
 			}
 			chunk.Compact()
-			dimension.records[pos] = &ChunkRecord{State: ChunkReady, Chunk: chunk}
+			dimension.Records[pos] = &ChunkRecord{State: ChunkReady, Chunk: chunk}
 			positions = append(positions, pos)
 		}
 	}
@@ -532,7 +532,7 @@ func assertFluidBasinPremises(t *testing.T, dimension *Dimension, positions []co
 
 	uniformSkipped, uniformDeclined := 0, 0
 	for _, pos := range positions {
-		chunk := dimension.records[pos].Chunk
+		chunk := dimension.Records[pos].Chunk
 		for sectionIndex := range core.SectionsPerChunk {
 			section := chunk.Section(sectionIndex)
 			id, uniform := section.Blocks.IsUniform()
@@ -562,7 +562,7 @@ func assertFluidBasinPremises(t *testing.T, dimension *Dimension, positions []co
 
 	var singleOpening [len(fluidSealedSourceOffsets)]int
 	for _, pos := range positions {
-		chunk := dimension.records[pos].Chunk
+		chunk := dimension.Records[pos].Chunk
 		baseX := pos.X << core.SectionShift
 		baseZ := pos.Z << core.SectionShift
 		for y := int32(core.MinY); y < core.MaxY; y++ {
@@ -609,7 +609,7 @@ func assertFluidBasinPremises(t *testing.T, dimension *Dimension, positions []co
 // enqueueEveryFluidCell 是重扫的朴素参照实现：不做任何不动点判断，把维度内全部
 // 流体格原样入队。它是 fluidSourceIsFixedPoint 捷径的对照组。
 func enqueueEveryFluidCell(queue *fluid.Queue, dimension *Dimension, now, delay uint64) {
-	for pos, record := range dimension.records {
+	for pos, record := range dimension.Records {
 		for y := int32(core.MinY); y < core.MaxY; y++ {
 			for lx := range core.SectionSize {
 				for lz := range core.SectionSize {
@@ -647,7 +647,7 @@ func settleFluids(t *testing.T, queue *fluid.Queue, dimension *Dimension, positi
 			id:        core.Overworld,
 			dimension: dimension,
 			scope:     scope,
-			pending:   map[core.ChunkKey]*pendingChunkChanges{},
+			pending:   engine.newMutation(),
 		}, 1<<20, 1)
 	}
 	t.Fatalf("流体在 2000 tick 内没有排空，剩余 %d 项", queue.Len())
@@ -657,7 +657,7 @@ func settleFluids(t *testing.T, queue *fluid.Queue, dimension *Dimension, positi
 func dimensionHashes(dimension *Dimension, positions []core.ChunkPos) map[core.ChunkPos][32]byte {
 	hashes := make(map[core.ChunkPos][32]byte, len(positions))
 	for _, pos := range positions {
-		hashes[pos] = dimension.records[pos].Chunk.Hash()
+		hashes[pos] = dimension.Records[pos].Chunk.Hash()
 	}
 	return hashes
 }
@@ -837,7 +837,6 @@ func TestFluidRescanDropsChunkThatLeavesScope(t *testing.T) {
 func TestFluidRescanUsesQueueOfItsOwnDimension(t *testing.T) {
 	const other = core.Overworld + 1
 	dimension, positions := fluidBasinDimension()
-	dimension.id = other
 	engine := NewEngine(0, 0, 0)
 	engine.tunables = tuning.DefaultTunables()
 	engine.tunables.FluidRescanCellsPerTick = 1 << 20

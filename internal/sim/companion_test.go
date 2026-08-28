@@ -222,7 +222,7 @@ func TestCompanionSpawnRetriesAfterFailedChunkRevisionChanges(t *testing.T) {
 	if updates := engine.Step().Companions; len(updates) != 0 || !engine.companions[id].exhausted {
 		t.Fatalf("全空气出生扫描=%+v exhausted=%v", updates, engine.companions[id].exhausted)
 	}
-	record := engine.dimensions[core.Overworld].records[core.ChunkPos{}]
+	record := engine.dimensions[core.Overworld].Records[core.ChunkPos{}]
 	record.Chunk.SetBlock(0, 0, 0, core.GrassID)
 	if updates := engine.Step().Companions; len(updates) != 0 {
 		t.Fatalf("revision 未变却重试出生: %+v", updates)

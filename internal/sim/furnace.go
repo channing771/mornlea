@@ -8,7 +8,7 @@ import (
 // advanceFurnaces 在单写者 tick 中推进活动范围内的熔炉。
 // 它复用与掉落物相同的区块兴趣集合，按稳定的区块与槽位顺序处理，
 // 因此多名玩家的重叠观察在同一 tick 内只推进一次。
-func (engine *Engine) advanceFurnaces(pending map[core.ChunkKey]*pendingChunkChanges) {
+func (engine *Engine) advanceFurnaces(pending *pendingChunkChanges) {
 	keys := engine.activeInterestKeys()
 	burnTicks := engine.tunables.FurnaceBurnTicks
 	smeltTicks := engine.tunables.FurnaceSmeltTicks
@@ -17,7 +17,7 @@ func (engine *Engine) advanceFurnaces(pending map[core.ChunkKey]*pendingChunkCha
 		if dimension == nil {
 			continue
 		}
-		record, ok := dimension.records[key.Pos]
+		record, ok := dimension.Records[key.Pos]
 		if !ok || record.State != ChunkReady || record.Chunk == nil {
 			continue
 		}
@@ -104,7 +104,7 @@ func (engine *Engine) SetChunkFurnaceForTest(
 	if dimension == nil {
 		return
 	}
-	if record, ok := dimension.records[key.Pos]; ok && record.Chunk != nil {
+	if record, ok := dimension.Records[key.Pos]; ok && record.Chunk != nil {
 		record.Chunk.SetFurnace(slot, value)
 	}
 }
@@ -119,7 +119,7 @@ func (engine *Engine) AdvanceFurnacesForBenchmark() {
 		if dimension == nil {
 			continue
 		}
-		record, ok := dimension.records[key.Pos]
+		record, ok := dimension.Records[key.Pos]
 		if !ok || record.State != ChunkReady || record.Chunk == nil {
 			continue
 		}

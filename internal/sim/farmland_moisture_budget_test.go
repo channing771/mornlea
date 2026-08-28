@@ -31,7 +31,7 @@ func TestFarmlandMoistureDryCandidateUsesWorstCaseReads(t *testing.T) {
 	engine, _ := readyCropWorld(t)
 	engine.SetBlockForTest(cropFixtureFarmland, core.FarmlandDryID)
 	engine.enqueueFarmlandMoisture(core.Overworld, cropFixtureFarmland)
-	engine.advanceFarmlandMoisture(make(map[core.ChunkKey]*pendingChunkChanges))
+	engine.advanceFarmlandMoisture(engine.newMutation())
 	if got := engine.farmlandMoisture.blockReads; got != 163 {
 		t.Fatalf("无水耕地读取=%d，想要目标 1 + 邻域 162", got)
 	}
@@ -42,7 +42,7 @@ func TestFarmlandMoistureBudgetCapsReadsAndEventuallyDrains(t *testing.T) {
 	engine, _ := readyCropWorld(t)
 	enqueueNonFarmlandCandidates(engine, farmlandMoistureReadsPerTick+1, nil)
 
-	engine.advanceFarmlandMoisture(make(map[core.ChunkKey]*pendingChunkChanges))
+	engine.advanceFarmlandMoisture(engine.newMutation())
 	if got := engine.farmlandMoisture.blockReads; got != farmlandMoistureReadsPerTick {
 		t.Fatalf("首 tick 读取=%d，想要 %d", got, farmlandMoistureReadsPerTick)
 	}
@@ -50,7 +50,7 @@ func TestFarmlandMoistureBudgetCapsReadsAndEventuallyDrains(t *testing.T) {
 		t.Fatalf("首 tick 后待办=%d，想要 1", got)
 	}
 
-	engine.advanceFarmlandMoisture(make(map[core.ChunkKey]*pendingChunkChanges))
+	engine.advanceFarmlandMoisture(engine.newMutation())
 	if got := engine.farmlandMoisture.blockReads; got != 1 {
 		t.Fatalf("第二 tick 读取=%d，想要 1", got)
 	}
@@ -70,7 +70,7 @@ func TestFarmlandMoistureInspectionBudgetDefersOutOfScopeBacklog(t *testing.T) {
 		})
 	}
 
-	engine.advanceFarmlandMoisture(make(map[core.ChunkKey]*pendingChunkChanges))
+	engine.advanceFarmlandMoisture(engine.newMutation())
 	if got := engine.farmlandMoisture.candidateInspections; got != 65_536 {
 		t.Fatalf("首 tick 候选检查=%d，想要 65536", got)
 	}
@@ -81,7 +81,7 @@ func TestFarmlandMoistureInspectionBudgetDefersOutOfScopeBacklog(t *testing.T) {
 		t.Fatalf("首 tick 剩余候选=%d，想要 1", got)
 	}
 
-	engine.advanceFarmlandMoisture(make(map[core.ChunkKey]*pendingChunkChanges))
+	engine.advanceFarmlandMoisture(engine.newMutation())
 	if got := engine.farmlandMoisture.candidateInspections; got != 1 {
 		t.Fatalf("次 tick 候选检查=%d，想要 1", got)
 	}
@@ -102,7 +102,7 @@ func TestFarmlandMoistureBudgetDoesNotStorePartialNeighborhood(t *testing.T) {
 	})
 	engine.enqueueFarmlandMoisture(core.Overworld, cropFixtureFarmland)
 
-	engine.advanceFarmlandMoisture(make(map[core.ChunkKey]*pendingChunkChanges))
+	engine.advanceFarmlandMoisture(engine.newMutation())
 	if got := engine.farmlandMoisture.blockReads; got != 65_375 {
 		t.Fatalf("余额不足 tick 的读取=%d，想要 65374 + 目标 1", got)
 	}
@@ -116,7 +116,7 @@ func TestFarmlandMoistureBudgetDoesNotStorePartialNeighborhood(t *testing.T) {
 		t.Fatalf("余额不足时耕地变成 %s，邻域判断不应保存部分结果", blockLabel(got))
 	}
 
-	engine.advanceFarmlandMoisture(make(map[core.ChunkKey]*pendingChunkChanges))
+	engine.advanceFarmlandMoisture(engine.newMutation())
 	if got := engine.farmlandMoisture.blockReads; got != 163 {
 		t.Fatalf("重试完整判断的读取=%d，想要 163", got)
 	}
@@ -146,7 +146,7 @@ func runFarmlandMoistureBudgetReplay(t *testing.T) [][]core.BlockPos {
 			t.Fatalf("过预算待办在 10 tick 内没有排空，仍有 %d 项",
 				farmlandMoisturePendingLen(&engine.farmlandMoisture))
 		}
-		pending := make(map[core.ChunkKey]*pendingChunkChanges)
+		pending := engine.newMutation()
 		engine.advanceFarmlandMoisture(pending)
 		var result TickResult
 		engine.finishChanges(pending, &result)

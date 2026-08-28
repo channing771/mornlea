@@ -27,7 +27,7 @@ func farmlandMoistureFluidAdapter(
 		id:        core.Overworld,
 		dimension: engine.dimensions[core.Overworld],
 		scope:     engine.fluidScope,
-		pending:   make(map[core.ChunkKey]*pendingChunkChanges),
+		pending:   engine.newMutation(),
 	}
 }
 
@@ -388,7 +388,7 @@ func TestFarmlandMoistureReentryRecoversStaleWetFarmland(t *testing.T) {
 	}
 	// 邻块不在 Ready scope 时直接改测试夹具，模拟存档侧失水；这条写入刻意不经过
 	// `fluidWorld.SetBlock`，因此不会生产事件，恢复只能来自后续重扫。
-	rightRecord := engine.dimensions[core.Overworld].records[right]
+	rightRecord := engine.dimensions[core.Overworld].Records[right]
 	if rightRecord == nil || rightRecord.State == ChunkReady || rightRecord.Chunk == nil {
 		t.Fatalf("邻块离开后记录不适合模拟失水：%+v", rightRecord)
 	}

@@ -79,7 +79,7 @@ func companionPlaceableBlock(blockID core.BlockID) (core.ItemID, bool) {
 // action 的拒绝不进入 result.Rejected，"任务失败"判定属于 Manager（Task 7）。
 func (engine *Engine) settleCompanionPlacements(
 	intents []companionPlaceIntent,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) {
 	for index := range intents {
 		intent := intents[index]
@@ -104,7 +104,7 @@ func (engine *Engine) completeCompanionPlacement(
 	entry *companionState,
 	target core.BlockPos,
 	blockID core.BlockID,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) bool {
 	item, ok := companionPlaceableBlock(blockID)
 	if !ok {
@@ -131,7 +131,7 @@ func (engine *Engine) completeCompanionPlacement(
 	}
 	// 放置熔炉或箱子必须先预留槽位；Prepare* 是纯预检不改区块，失败路径零副作用。
 	// 槽位耗尽与玩家路径同样整体拒绝，不改方块也不扣物品。
-	targetRecord, targetOK := dimension.records[target.Chunk()]
+	targetRecord, targetOK := dimension.Records[target.Chunk()]
 	targetIndex, targetIndexed := world.ChunkBlockIndex(target)
 	furnaceSlot, reserveFurnace := -1, false
 	chestSlot, reserveChest := -1, false

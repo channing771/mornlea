@@ -14,7 +14,7 @@ import (
 
 func (engine *Engine) executePlacement(
 	command Command,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) (RejectReason, bool) {
 	session := engine.sessions[command.Session]
 	if command.Kind != CommandPlaceBlock {
@@ -188,7 +188,7 @@ func (engine *Engine) executePlacement(
 		}
 	}
 	// 放置熔炉或箱子必须先预留槽位；槽位耗尽时不改方块也不扣物品。
-	targetRecord, targetOK := dimension.records[target.Chunk()]
+	targetRecord, targetOK := dimension.Records[target.Chunk()]
 	targetIndex, targetIndexed := world.ChunkBlockIndex(target)
 	furnaceSlot, reserveFurnace := -1, false
 	chestSlot, reserveChest := -1, false

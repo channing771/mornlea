@@ -195,7 +195,7 @@ func (engine *Engine) runFarmlandMoistureRescans(budget int) {
 
 // advanceFarmlandMoisture 在独立的候选检查与读取预算内按 FIFO 处理湿度候选。
 func (engine *Engine) advanceFarmlandMoisture(
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) {
 	state := &engine.farmlandMoisture
 	state.candidateInspections = 0

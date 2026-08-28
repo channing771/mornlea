@@ -41,7 +41,7 @@ func (engine *Engine) sessionDropWantedSnapshot(
 
 // advanceDrops 在单写者 tick 中推进兴趣范围内的掉落物寿命并处理拾取。
 // 它按 ChunkKey、SessionID、槽位稳定扫描，最坏为玩家数 × 25 区块 × 32 槽。
-func (engine *Engine) advanceDrops(pending map[core.ChunkKey]*pendingChunkChanges) {
+func (engine *Engine) advanceDrops(pending *pendingChunkChanges) {
 	keys := engine.activeInterestKeys()
 	if len(keys) == 0 {
 		return
@@ -54,7 +54,7 @@ func (engine *Engine) advanceDrops(pending map[core.ChunkKey]*pendingChunkChange
 		if dimension == nil {
 			continue
 		}
-		record, ok := dimension.records[key.Pos]
+		record, ok := dimension.Records[key.Pos]
 		if !ok || record.State != ChunkReady || record.Chunk == nil {
 			continue
 		}
@@ -222,17 +222,9 @@ func (engine *Engine) sortedActiveSessions() []SessionID {
 // touchChunk 为只有掉落物变化的区块登记一个零方块 revision barrier。
 func (engine *Engine) touchChunk(
 	key core.ChunkKey,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) {
-	if pending[key] != nil {
-		return
-	}
-	record := engine.dimensions[key.Dimension].records[key.Pos]
-	pending[key] = &pendingChunkChanges{
-		baseRevision: record.Revision,
-		changes:      make(map[uint32]BlockChange),
-		dirty:        make(map[int]struct{}),
-	}
+	pending.Touch(key)
 }
 
 // SetChunkDropForTest 直接写入一个已 Ready 区块的掉落物槽，仅供测试构造固定场景。
@@ -245,7 +237,7 @@ func (engine *Engine) SetChunkDropForTest(
 	if dimension == nil {
 		return
 	}
-	if record, ok := dimension.records[key.Pos]; ok && record.Chunk != nil {
+	if record, ok := dimension.Records[key.Pos]; ok && record.Chunk != nil {
 		record.Chunk.SetDrop(slot, value)
 	}
 }
@@ -281,7 +273,7 @@ func (engine *Engine) AppendSessionDrops(id SessionID, dst []DropSnapshot) []Dro
 					Z: session.center.Z + int32(dz),
 				},
 			}
-			record, ok := dimension.records[key.Pos]
+			record, ok := dimension.Records[key.Pos]
 			if !ok || record.State != ChunkReady || record.Chunk == nil {
 				continue
 			}
@@ -323,7 +315,7 @@ func appendChunkDrops(
 // 或 persistence 状态。位置取玩家脚底方块，栏位取权威选中格，两者都不由客户端提供。
 func (engine *Engine) dropSelectedItem(
 	session *sessionState,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) (RejectReason, bool) {
 	if session.player == nil || session.player.lifecycle != PlayerActive {
 		return RejectPlayerNotReady, true
@@ -345,7 +337,7 @@ func (engine *Engine) dropSelectedItem(
 	if dimension == nil {
 		return RejectChunkNotReady, true
 	}
-	record := dimension.records[key.Pos]
+	record := dimension.Records[key.Pos]
 	if record == nil || record.State != ChunkReady || record.Chunk == nil {
 		return RejectChunkNotReady, true
 	}

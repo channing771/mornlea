@@ -32,7 +32,7 @@ func TestPersistenceSnapshotBudgetAndStaleAck(t *testing.T) {
 			snapshots[0].EstimatedBytes, emptyChunkEstimateBytes)
 	}
 	snapshots[0].Chunk.SetBlock(0, 0, 0, core.DirtID)
-	record := dimension.records[snapshots[0].Key.Pos]
+	record := dimension.Records[snapshots[0].Key.Pos]
 	if got := record.Chunk.BlockAt(0, 0, 0); got == core.DirtID {
 		t.Fatal("save snapshot aliases authority")
 	}
@@ -90,7 +90,7 @@ func TestPersistenceSnapshotsRespectModeOrderAndBudgets(t *testing.T) {
 func TestPersistenceKeepsOneSnapshotPerKeyAndFailureMustMatch(t *testing.T) {
 	key := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: 4}}
 	engine := dirtyPersistenceEngine(t, []core.ChunkKey{key})
-	record := engine.dimensions[key.Dimension].records[key.Pos]
+	record := engine.dimensions[key.Dimension].Records[key.Pos]
 
 	selected := engine.PersistenceSnapshots(10, 1<<20, SaveAll)
 	if len(selected) != 1 || len(engine.PersistenceSnapshots(10, 1<<20, SaveAll)) != 0 {
@@ -120,7 +120,7 @@ func TestPersistenceKeepsOneSnapshotPerKeyAndFailureMustMatch(t *testing.T) {
 func TestPersistenceStaleAckCannotClearNewerInFlightSnapshot(t *testing.T) {
 	key := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{Z: 6}}
 	engine := dirtyPersistenceEngine(t, []core.ChunkKey{key})
-	record := engine.dimensions[key.Dimension].records[key.Pos]
+	record := engine.dimensions[key.Dimension].Records[key.Pos]
 
 	old := engine.PersistenceSnapshots(1, 1<<20, SaveAll)[0]
 	engine.FailPersistence([]ChunkSaveSnapshot{old})
@@ -154,7 +154,7 @@ func TestPersistenceSuccessClearsRewriteAndRejectsFutureRevision(t *testing.T) {
 	if err := dimension.ApplyLoaded(key.Pos, world.NewChunk(key.Pos), 7, 7, true, false); err != nil {
 		t.Fatal(err)
 	}
-	record := dimension.records[key.Pos]
+	record := dimension.Records[key.Pos]
 	snapshot := engine.PersistenceSnapshots(1, 1<<20, SaveAll)
 	if len(snapshot) != 1 || snapshot[0].Revision != 7 {
 		t.Fatalf("rewrite snapshots=%+v", snapshot)
@@ -183,7 +183,7 @@ func TestPersistenceAckDeletesOnlyStillUnloadingChunk(t *testing.T) {
 		}
 		snapshot := engine.PersistenceSnapshots(1, 1<<20, SaveUrgent)
 		engine.ApplyPersisted([]PersistedChunk{{Key: key, Revision: snapshot[0].Revision}})
-		if _, exists := dimension.records[key.Pos]; exists {
+		if _, exists := dimension.Records[key.Pos]; exists {
 			t.Fatal("clean unloading chunk retained after ack")
 		}
 	})
@@ -192,7 +192,7 @@ func TestPersistenceAckDeletesOnlyStillUnloadingChunk(t *testing.T) {
 		key := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: 9}}
 		engine := dirtyPersistenceEngine(t, []core.ChunkKey{key})
 		dimension := engine.dimensions[key.Dimension]
-		record := dimension.records[key.Pos]
+		record := dimension.Records[key.Pos]
 		authority := record.Chunk
 		if dimension.RequestUnload(key.Pos) {
 			t.Fatal("dirty chunk unloaded before persistence")
@@ -202,7 +202,7 @@ func TestPersistenceAckDeletesOnlyStillUnloadingChunk(t *testing.T) {
 			t.Fatal("unload cancellation failed")
 		}
 		engine.ApplyPersisted([]PersistedChunk{{Key: key, Revision: snapshot[0].Revision}})
-		got := dimension.records[key.Pos]
+		got := dimension.Records[key.Pos]
 		if got == nil || got.State != ChunkReady || got.UnloadRequested ||
 			got.Chunk != authority || got.Dirty() || got.SaveInFlightRevision != 0 {
 			t.Fatalf("resubscribed chunk was not retained cleanly: %+v", got)
@@ -235,7 +235,7 @@ func TestPersistenceStatsKeepSelectionTimeInFlightBytesStable(t *testing.T) {
 	if got := engine.PersistenceStats(); got != selectedStats {
 		t.Fatalf("consumer mutation changed sim accounting: got %+v, want %+v", got, selectedStats)
 	}
-	if got := dimension.records[key.Pos].Chunk.BlockAt(0, 0, 0); got != core.AirID {
+	if got := dimension.Records[key.Pos].Chunk.BlockAt(0, 0, 0); got != core.AirID {
 		t.Fatalf("consumer mutation changed authority block to %d", got)
 	}
 	engine.FailPersistence(snapshot)

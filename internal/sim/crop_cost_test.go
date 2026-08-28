@@ -118,7 +118,7 @@ func TestCropAllFarmlandReadsEachSampleOnce(t *testing.T) {
 		}
 	}
 
-	engine.advanceCrops(make(map[core.ChunkKey]*pendingChunkChanges))
+	engine.advanceCrops(engine.newMutation())
 
 	if engine.cropCellsExamined == 0 {
 		t.Fatal("全耕地世界一格都没考察，读取等式无法证明成本")

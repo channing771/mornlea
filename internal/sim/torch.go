@@ -1,8 +1,6 @@
 package sim
 
 import (
-	"slices"
-
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
@@ -99,34 +97,15 @@ type torchSweepCell struct {
 // 收集成快照再处理，处理期间的移除写入不会反馈进本轮复核（火把零碰撞、
 // 不可能支撑任何火把，单级就是闭包）。
 func (engine *Engine) sweepUnsupportedTorches(
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) {
-	if len(pending) == 0 {
+	changes := pending.ChangedBlocks()
+	if len(changes) == 0 {
 		return
 	}
-	keys := make([]core.ChunkKey, 0, len(pending))
-	for key := range pending {
-		keys = append(keys, key)
-	}
-	sortChunkKeys(keys)
-	cells := make([]torchSweepCell, 0)
-	for _, key := range keys {
-		changeSet := pending[key]
-		// 掉落物等非方块变化经 touchChunk 登记零方块 barrier，没有格子可复核。
-		if len(changeSet.changes) == 0 {
-			continue
-		}
-		indices := make([]uint32, 0, len(changeSet.changes))
-		for index := range changeSet.changes {
-			indices = append(indices, index)
-		}
-		slices.Sort(indices)
-		for _, index := range indices {
-			cells = append(cells, torchSweepCell{
-				dimension: key.Dimension,
-				position:  changeSet.changes[index].Position,
-			})
-		}
+	cells := make([]torchSweepCell, len(changes))
+	for index, change := range changes {
+		cells[index] = torchSweepCell{dimension: change.Dimension, position: change.Position}
 	}
 	for _, cell := range cells {
 		engine.invalidateTorchesSupportedBy(cell.dimension, cell.position, pending)
@@ -140,7 +119,7 @@ func (engine *Engine) sweepUnsupportedTorches(
 func (engine *Engine) invalidateTorchesSupportedBy(
 	dimensionID core.DimensionID,
 	position core.BlockPos,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) {
 	dimension := engine.dimensions[dimensionID]
 	if dimension == nil {
@@ -178,10 +157,10 @@ func (engine *Engine) invalidateTorchesSupportedBy(
 func (engine *Engine) removeUnsupportedTorch(
 	dimensionID core.DimensionID,
 	position core.BlockPos,
-	pending map[core.ChunkKey]*pendingChunkChanges,
+	pending *pendingChunkChanges,
 ) {
 	dimension := engine.dimensions[dimensionID]
-	record, recordOK := dimension.records[position.Chunk()]
+	record, recordOK := dimension.Records[position.Chunk()]
 	index, indexOK := world.ChunkBlockIndex(position)
 	if !recordOK || record.State != ChunkReady || record.Chunk == nil || !indexOK {
 		return
