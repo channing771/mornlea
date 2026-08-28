@@ -11,7 +11,7 @@ import (
 	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
 type mainOptions struct {
@@ -147,5 +147,5 @@ func remoteTuningDiverges(options mainOptions, effective config.Config) bool {
 		return false
 	}
 	return effective.Physics != physics.DefaultTunables() ||
-		effective.Sim != sim.DefaultTunables()
+		effective.Sim != tuning.DefaultTunables()
 }

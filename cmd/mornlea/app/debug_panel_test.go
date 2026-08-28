@@ -21,7 +21,7 @@ import (
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/render"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
 // selectFieldForTest 按 Group+"."+Name 定位字段并设置 selected，找不到时 Fatal。
@@ -220,10 +220,10 @@ func TestPanelToggleClearsEditing(t *testing.T) {
 // 遗漏，必须有测试锁住。
 func TestApplyPanelChangeWritesCameraFovY(t *testing.T) {
 	originalPhysics := physics.ActiveTunables()
-	originalSim := sim.ActiveTunables()
+	originalSim := tuning.ActiveTunables()
 	t.Cleanup(func() {
 		physics.SetTunables(originalPhysics)
-		sim.SetTunables(originalSim)
+		tuning.SetTunables(originalSim)
 	})
 
 	app := &Application{panel: newPanelState(config.Defaults())}

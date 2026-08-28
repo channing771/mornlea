@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -101,11 +102,11 @@ func readyCropWorld(t *testing.T) (*Engine, SessionID) {
 // UnregisterSession 让其中一个离开。
 func readyCropWorldAt(t *testing.T, anchors ...core.ChunkPos) (*Engine, []SessionID) {
 	t.Helper()
-	t.Cleanup(func() { SetTunables(DefaultTunables()) })
-	tunables := DefaultTunables()
+	t.Cleanup(func() { tuning.SetTunables(tuning.DefaultTunables()) })
+	tunables := tuning.DefaultTunables()
 	tunables.RandomTicksPerSection = 64
 	tunables.CropGrowthChancePercent = 100
-	SetTunables(tunables)
+	tuning.SetTunables(tunables)
 
 	engine := NewEngine(0, 0, 0)
 	sessions := make([]SessionID, 0, len(anchors))

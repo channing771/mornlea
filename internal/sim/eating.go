@@ -2,15 +2,6 @@ package sim
 
 import "github.com/channing771/mornlea/internal/core"
 
-// defaultEatingTicks 是吃完一件食物需要连续保持进食输入的 tick 数。
-// 唯一读取入口是 `Tunables` 快照，不得再以导出常量暴露——见 internal/archcheck
-// 的 `TestTunableConstantsAreNotExported`。
-//
-// 取 32 与参考实现同值：权威 tick 是 20 TPS，32 tick 是 1.6 秒。它必须足够长，
-// 让"受伤打断进食"成为一件真会发生的事（否则中断规则形同虚设），又必须短到
-// 玩家愿意在战斗间隙吃一口。
-const defaultEatingTicks uint16 = 32
-
 // eatingState 是玩家进食的权威进度状态机，形状与 `miningState` 同构：记录
 // 开始进食时的快捷栏位、那一格里的物品与已连续推进的 tick 数。
 //

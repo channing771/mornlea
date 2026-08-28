@@ -6,6 +6,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
 // boneMealTarget 与翻地共用同一目标格，保持与 tillTarget 一致的瞄准可达性。
@@ -129,12 +130,12 @@ func TestBoneMealRejectsWhenNotHoldingBoneMeal(t *testing.T) {
 }
 
 func TestBoneMealRespectsInteractionReach(t *testing.T) {
-	t.Cleanup(func() { SetTunables(DefaultTunables()) })
+	t.Cleanup(func() { tuning.SetTunables(tuning.DefaultTunables()) })
 	run := func(t *testing.T, reach float32) (TickResult, core.ItemStack, core.BlockID) {
 		t.Helper()
-		tunables := DefaultTunables()
+		tunables := tuning.DefaultTunables()
 		tunables.InteractionReach = reach
-		SetTunables(tunables)
+		tuning.SetTunables(tunables)
 		held := core.ItemStack{Item: core.ItemBoneMeal, Count: 2}
 		engine, session, yaw, pitch := readyBoneMealPlayer(t, held, core.WheatStage2ID)
 		result := boneMeal(engine, session, yaw, pitch)
@@ -143,7 +144,7 @@ func TestBoneMealRespectsInteractionReach(t *testing.T) {
 			tillBlockAt(t, engine, boneMealTarget)
 	}
 	held := core.ItemStack{Item: core.ItemBoneMeal, Count: 2}
-	result, afterHeld, block := run(t, DefaultTunables().InteractionReach)
+	result, afterHeld, block := run(t, tuning.DefaultTunables().InteractionReach)
 	if len(result.Rejected) != 0 || block != core.WheatStage3ID || afterHeld.Count != held.Count-1 {
 		t.Fatalf("默认距离骨粉失败: %+v / %+v / %d", result.Rejected, afterHeld, block)
 	}

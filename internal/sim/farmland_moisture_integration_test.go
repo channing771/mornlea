@@ -6,6 +6,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
 // farmlandMoistureFluidAdapter 构造真实的流体写入适配器，并把目标格六邻中的空气
@@ -55,10 +56,10 @@ func TestFarmlandMoistureFluidMembershipChanges(t *testing.T) {
 // TestPlayerPlacementRemovingLastIrrigationDriesFarmlandSameTick 锁定普通玩家放置
 // 覆盖最后一格灌溉水时，经真实命令路径在同一权威 tick 重判附近耕地。
 func TestPlayerPlacementRemovingLastIrrigationDriesFarmlandSameTick(t *testing.T) {
-	t.Cleanup(func() { SetTunables(DefaultTunables()) })
-	tunables := DefaultTunables()
+	t.Cleanup(func() { tuning.SetTunables(tuning.DefaultTunables()) })
+	tunables := tuning.DefaultTunables()
 	tunables.RandomTicksPerSection = 0
-	SetTunables(tunables)
+	tuning.SetTunables(tunables)
 	engine, session := readyMovementPlayer(t)
 	for tick := 0; len(engine.farmlandMoisture.rescans.pending) > 0; tick++ {
 		if tick == 8 {

@@ -7,6 +7,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -144,10 +145,10 @@ func TestTillTurnsGrassIntoFarmlandAndSpendsOneDurability(t *testing.T) {
 // TestTillInWaterRangePublishesWetFarmland 覆盖范围内已有水时，成功翻地在同一
 // tick 只发布合并后的湿耕地状态。
 func TestTillInWaterRangePublishesWetFarmland(t *testing.T) {
-	t.Cleanup(func() { SetTunables(DefaultTunables()) })
-	tunables := DefaultTunables()
+	t.Cleanup(func() { tuning.SetTunables(tuning.DefaultTunables()) })
+	tunables := tuning.DefaultTunables()
 	tunables.RandomTicksPerSection = 0
-	SetTunables(tunables)
+	tuning.SetTunables(tunables)
 	full, _ := core.ItemMaxDurability(core.ItemStoneHoe)
 	held := core.ItemStack{Item: core.ItemStoneHoe, Count: 1, Durability: full}
 	engine, session, yaw, pitch := readyTillPlayer(t, held, core.DirtID, core.AirID)
@@ -336,13 +337,13 @@ func TestTillRejectsTargetsThatAreNotDirtOrGrass(t *testing.T) {
 // 必须被拒且耐久一点不掉。两遍对照才让这条断言是**位置性**的——只跑"被拒"
 // 那一遍的话，一个永远拒绝翻地的实现也会全绿。
 func TestTillRespectsInteractionReach(t *testing.T) {
-	t.Cleanup(func() { SetTunables(DefaultTunables()) })
+	t.Cleanup(func() { tuning.SetTunables(tuning.DefaultTunables()) })
 
 	run := func(t *testing.T, reach float32) (TickResult, core.ItemStack, core.BlockID) {
 		t.Helper()
-		tunables := DefaultTunables()
+		tunables := tuning.DefaultTunables()
 		tunables.InteractionReach = reach
-		SetTunables(tunables)
+		tuning.SetTunables(tunables)
 		full, _ := core.ItemMaxDurability(core.ItemStoneHoe)
 		held := core.ItemStack{Item: core.ItemStoneHoe, Count: 1, Durability: full}
 		engine, session, yaw, pitch := readyTillPlayer(t, held, core.DirtID, core.AirID)
@@ -353,7 +354,7 @@ func TestTillRespectsInteractionReach(t *testing.T) {
 	}
 
 	full, _ := core.ItemMaxDurability(core.ItemStoneHoe)
-	result, hoe, block := run(t, DefaultTunables().InteractionReach)
+	result, hoe, block := run(t, tuning.DefaultTunables().InteractionReach)
 	if len(result.Rejected) != 0 || block != core.FarmlandDryID ||
 		hoe.Durability != full-1 {
 		t.Fatalf("默认交互距离下的翻地 = %+v / 方块 %d / 锄头 %+v，想要成功",

@@ -34,7 +34,7 @@ var allowed = map[string][]string{
 	"internal/companion":    {"internal/core", "internal/pathfind"},
 	"internal/core":         {"internal/nativeabi"},
 	"internal/nativeabi":    {},
-	"internal/config":       {"internal/companion", "internal/core", "internal/physics", "internal/sim", "internal/logging"},
+	"internal/config":       {"internal/companion", "internal/core", "internal/physics", "internal/sim/tuning", "internal/logging"},
 	"internal/fluid":        {"internal/core"},
 	"internal/physics":      {"internal/core", "internal/nativeabi"},
 	"internal/pathfind":     {"internal/core"},
@@ -42,8 +42,9 @@ var allowed = map[string][]string{
 	"internal/network":      {"internal/companion", "internal/core"},
 	"internal/network/tcp":  {"internal/network"},
 	"internal/profile":      {"internal/core"},
-	"internal/sim":          {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/sim/contract", "internal/world"},
+	"internal/sim":          {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/sim/contract", "internal/sim/tuning", "internal/world"},
 	"internal/sim/contract": {"internal/companion", "internal/core", "internal/physics", "internal/world"},
+	"internal/sim/tuning":   {"internal/core"},
 	"internal/storage":      {"internal/companion", "internal/core", "internal/world"},
 	"internal/world":        {"internal/core"},
 	"internal/worldgen":     {"internal/core", "internal/world", "internal/nativeabi"},
@@ -55,7 +56,7 @@ var allowed = map[string][]string{
 	"internal/assets":     {"internal/core", "internal/world", "internal/mesh", "internal/worldgen"},
 	"internal/render":     {"internal/core", "internal/world", "internal/mesh", "internal/assets"},
 	"internal/render/hud": {"internal/core", "internal/mesh", "internal/assets", "internal/render"},
-	"internal/server":     {"internal/companion", "internal/core", "internal/network", "internal/pathfind", "internal/physics", "internal/world", "internal/worldgen", "internal/sim", "internal/sim/contract", "internal/storage"},
+	"internal/server":     {"internal/companion", "internal/core", "internal/network", "internal/pathfind", "internal/physics", "internal/world", "internal/worldgen", "internal/sim", "internal/sim/contract", "internal/sim/tuning", "internal/storage"},
 	"internal/client":     {"internal/companion", "internal/core", "internal/physics", "internal/network", "internal/world", "internal/mesh", "internal/assets", "internal/render"},
 }
 

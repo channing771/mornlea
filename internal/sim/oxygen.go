@@ -2,16 +2,6 @@ package sim
 
 import "github.com/channing771/mornlea/internal/core"
 
-// defaultDrownDamageIntervalTicks 是氧气归零后两次溺水伤害之间的 tick 数。
-// 唯一读取入口是 Tunables 快照，不得再以导出常量暴露——见 internal/archcheck
-// 的 TestTunableConstantsAreNotExported。
-//
-// 取 20 的理由：权威 tick 是 20 TPS，20 tick 恰好一秒，也就是「氧气见底后每秒
-// 掉一点血」。满血 core.MaxHealth（20）因此还有 20 秒可以自救，比
-// core.MaxOxygenTicks 本身的 15 秒更长——憋气见底不等于必死，玩家仍有充裕时间
-// 浮出水面，与摔落伤害那种一次结清的曲线刻意不同。
-const defaultDrownDamageIntervalTicks = 20
-
 // advanceOxygen 推进一名玩家一个 tick 的氧气与溺水结算，与 advanceHealthRegen
 // 同形：固定整数运算、不分配、由调用方传入本 tick 的 tunable 快照值。
 //

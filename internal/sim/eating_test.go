@@ -7,6 +7,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
 // eatingTestSession 是本文件全部夹具共用的会话号。每条用例各建一个引擎，
@@ -71,25 +72,25 @@ func TestEatingSettlesExactlyAtEatingTicksWithFixedValues(t *testing.T) {
 			setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
 			player.eatingHeld = true
 
-			for range defaultEatingTicks - 1 {
+			for range tuning.DefaultTunables().EatingTicks - 1 {
 				engine.Step()
 			}
 			if got := hotbarCount(player, 0); got != 2 {
-				t.Fatalf("第 %d tick 面包数=%d，想要精确保持 2", defaultEatingTicks-1, got)
+				t.Fatalf("第 %d tick 面包数=%d，想要精确保持 2", tuning.DefaultTunables().EatingTicks-1, got)
 			}
 			if player.hunger != testCase.hunger || player.saturationMilli != testCase.saturation {
 				t.Fatalf("第 %d tick (饥饿,饱和)=(%d,%d)，想要精确保持 (%d,%d)",
-					defaultEatingTicks-1, player.hunger, player.saturationMilli,
+					tuning.DefaultTunables().EatingTicks-1, player.hunger, player.saturationMilli,
 					testCase.hunger, testCase.saturation)
 			}
-			if player.eating.progressTicks != defaultEatingTicks-1 {
+			if player.eating.progressTicks != tuning.DefaultTunables().EatingTicks-1 {
 				t.Fatalf("第 %d tick 进度=%d，想要 %d（夹具没有连续推进就测不到结算 tick）",
-					defaultEatingTicks-1, player.eating.progressTicks, defaultEatingTicks-1)
+					tuning.DefaultTunables().EatingTicks-1, player.eating.progressTicks, tuning.DefaultTunables().EatingTicks-1)
 			}
 
 			engine.Step()
 			if got := hotbarCount(player, 0); got != 1 {
-				t.Fatalf("第 %d tick 面包数=%d，想要 1", defaultEatingTicks, got)
+				t.Fatalf("第 %d tick 面包数=%d，想要 1", tuning.DefaultTunables().EatingTicks, got)
 			}
 			if player.hunger != testCase.wantHunger ||
 				player.saturationMilli != testCase.wantSaturation {
@@ -138,16 +139,16 @@ func TestEatingReleaseKeepsFoodAndRestartsFromZero(t *testing.T) {
 	}
 
 	player.eatingHeld = true
-	for range defaultEatingTicks - 1 {
+	for range tuning.DefaultTunables().EatingTicks - 1 {
 		engine.Step()
 	}
 	if got := hotbarCount(player, 0); got != 2 {
 		t.Fatalf("重按第 %d tick 面包数=%d，想要精确保持 2（重按必须从 0 重新计时）",
-			defaultEatingTicks-1, got)
+			tuning.DefaultTunables().EatingTicks-1, got)
 	}
 	engine.Step()
 	if got := hotbarCount(player, 0); got != 1 {
-		t.Fatalf("重按第 %d tick 面包数=%d，想要 1", defaultEatingTicks, got)
+		t.Fatalf("重按第 %d tick 面包数=%d，想要 1", tuning.DefaultTunables().EatingTicks, got)
 	}
 	if player.hunger != 17 {
 		t.Fatalf("重按结算后饥饿=%d，想要 17", player.hunger)
@@ -180,7 +181,7 @@ func TestEatingSlotSwitchRestartsAndConsumesNeitherSlot(t *testing.T) {
 	}
 
 	player.inventory.Hotbar.Selected = 1
-	for range defaultEatingTicks - switchedAt {
+	for range tuning.DefaultTunables().EatingTicks - switchedAt {
 		engine.Step()
 	}
 	if got := hotbarCount(player, 0); got != 2 {
@@ -195,7 +196,7 @@ func TestEatingSlotSwitchRestartsAndConsumesNeitherSlot(t *testing.T) {
 	}
 	want := eatingState{
 		slot: 1, item: core.ItemBread,
-		progressTicks: defaultEatingTicks - switchedAt,
+		progressTicks: tuning.DefaultTunables().EatingTicks - switchedAt,
 	}
 	if player.eating != want {
 		t.Fatalf("切格后进食状态=%+v，想要 %+v（新栏位必须从 0 重新计时）",
@@ -233,7 +234,7 @@ func TestEatingSameSlotItemSwapRestartsAndConsumesNeither(t *testing.T) {
 		// 只换内容，不动 `Selected`：面包整摞离开这一格，换成 3 小麦。
 		wheat := core.ItemStack{Item: core.ItemWheat, Count: 3}
 		player.inventory.Hotbar.Slots[0] = wheat
-		for range defaultEatingTicks - swappedAt {
+		for range tuning.DefaultTunables().EatingTicks - swappedAt {
 			engine.Step()
 		}
 		if got := player.inventory.Hotbar.Slots[0]; got != wheat {
@@ -251,16 +252,16 @@ func TestEatingSameSlotItemSwapRestartsAndConsumesNeither(t *testing.T) {
 		// 离开过这一格，只能这样断言。重新计时必须从 0 起，因此第
 		// `EatingTicks - 1` tick 仍不许结算。
 		player.inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemBread, Count: 2}
-		for range defaultEatingTicks - 1 {
+		for range tuning.DefaultTunables().EatingTicks - 1 {
 			engine.Step()
 		}
 		if got := hotbarCount(player, 0); got != 2 {
 			t.Fatalf("换回面包第 %d tick 面包数=%d，想要精确保持 2（换物品必须从 0 重新计时）",
-				defaultEatingTicks-1, got)
+				tuning.DefaultTunables().EatingTicks-1, got)
 		}
 		if player.hunger != 12 || player.saturationMilli != 0 {
 			t.Fatalf("换回面包第 %d tick (饥饿,饱和)=(%d,%d)，想要精确保持 (12,0)",
-				defaultEatingTicks-1, player.hunger, player.saturationMilli)
+				tuning.DefaultTunables().EatingTicks-1, player.hunger, player.saturationMilli)
 		}
 	})
 
@@ -270,12 +271,12 @@ func TestEatingSameSlotItemSwapRestartsAndConsumesNeither(t *testing.T) {
 		// 记录的是另一物品、进度差一 tick 就结算：核对 `item` 的实现从 1 重数，
 		// 只核对 `slot` 的实现会在这一 tick 直接吃掉面包。
 		player.eating = eatingState{
-			slot: 0, item: core.ItemWheat, progressTicks: defaultEatingTicks - 1,
+			slot: 0, item: core.ItemWheat, progressTicks: tuning.DefaultTunables().EatingTicks - 1,
 		}
 
 		// 挂起传 false：这条子用例不经引擎、也就没有会话可挂起，容器/视野
 		// 中断由本文件专属用例覆盖。
-		player.advanceEating(defaultEatingTicks, false)
+		player.advanceEating(tuning.DefaultTunables().EatingTicks, false)
 		want := eatingState{slot: 0, item: core.ItemBread, progressTicks: 1}
 		if player.eating != want {
 			t.Fatalf("进食状态=%+v，想要 %+v", player.eating, want)
@@ -445,16 +446,16 @@ func TestEatingContainerOpenInterruptsAndRestartsAfterClose(t *testing.T) {
 	// 清掉，这里的显式置回 false 表达"玩家主动关箱"的观察，使重启语义不依赖
 	// 标志因何变 false。进食输入始终没松。
 	engine.sessions[eatingTestSession].viewContainer = false
-	for range defaultEatingTicks - 1 {
+	for range tuning.DefaultTunables().EatingTicks - 1 {
 		engine.Step()
 	}
 	if got := hotbarCount(player, 0); got != 2 {
 		t.Fatalf("关箱重按第 %d tick 面包数=%d，想要精确保持 2（关箱必须从 0 重新计时）",
-			defaultEatingTicks-1, got)
+			tuning.DefaultTunables().EatingTicks-1, got)
 	}
 	engine.Step()
 	if got := hotbarCount(player, 0); got != 1 {
-		t.Fatalf("关箱重按第 %d tick 面包数=%d，想要 1", defaultEatingTicks, got)
+		t.Fatalf("关箱重按第 %d tick 面包数=%d，想要 1", tuning.DefaultTunables().EatingTicks, got)
 	}
 	if player.hunger != 17 || player.saturationMilli != 6000 {
 		t.Fatalf("关箱重按结算后 (饥饿,饱和)=(%d,%d)，想要 (17,6000)",
@@ -476,12 +477,12 @@ func TestEatingContainerOpenOnSettlementTickDoesNotSettle(t *testing.T) {
 	setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
 	player.eatingHeld = true
 
-	for range defaultEatingTicks - 1 {
+	for range tuning.DefaultTunables().EatingTicks - 1 {
 		engine.Step()
 	}
 	// 夹具自证：下一 tick 就是结算 tick，本用例测的正是这一 tick 的优先序。
-	if player.eating.progressTicks != defaultEatingTicks-1 {
-		t.Fatalf("开箱前进度=%d，想要 %d", player.eating.progressTicks, defaultEatingTicks-1)
+	if player.eating.progressTicks != tuning.DefaultTunables().EatingTicks-1 {
+		t.Fatalf("开箱前进度=%d，想要 %d", player.eating.progressTicks, tuning.DefaultTunables().EatingTicks-1)
 	}
 	if got := hotbarCount(player, 0); got != 2 {
 		t.Fatalf("开箱前面包数=%d，想要精确保持 2", got)
@@ -596,7 +597,7 @@ func TestDeathClearsEatingProgressAndResetsHunger(t *testing.T) {
 // 把 32 写死的实现在那里全绿。形状照 `TestApplyExhaustionReadsThresholdFromParameter`。
 // 挂起传 false：本用例只钉 tick 数来源，容器/视野挂起不经会话、无从谈起。
 func TestEatingTicksComesFromTunableSnapshot(t *testing.T) {
-	for _, ticks := range []uint16{8, defaultEatingTicks} {
+	for _, ticks := range []uint16{8, tuning.DefaultTunables().EatingTicks} {
 		player := &playerState{hunger: 12, eatingHeld: true}
 		player.inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemBread, Count: 2}
 		for tick := uint16(1); tick < ticks; tick++ {

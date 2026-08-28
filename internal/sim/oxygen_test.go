@@ -8,6 +8,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
 // drownColumn 是溺水用例统一使用的玩家所在列（readyRegenPlayer 把玩家放在
@@ -97,7 +98,7 @@ func TestDrowningDamagesEveryIntervalAndResetsRegenTimer(t *testing.T) {
 	engine := readyRegenPlayer(t, id, 10)
 	submergePlayerColumn(t, engine, drownColumn)
 	player := engine.sessions[id].player
-	interval := int(DefaultTunables().DrownDamageIntervalTicks)
+	interval := int(tuning.DefaultTunables().DrownDamageIntervalTicks)
 
 	stepRegen(t, engine, id, int(core.MaxOxygenTicks))
 	if player.oxygen != 0 {
@@ -146,7 +147,7 @@ func TestDrowningKillsAndRunsExistingDeathSettlement(t *testing.T) {
 	engine := readyRegenPlayer(t, id, 2)
 	submergePlayerColumn(t, engine, drownColumn)
 	player := engine.sessions[id].player
-	interval := int(DefaultTunables().DrownDamageIntervalTicks)
+	interval := int(tuning.DefaultTunables().DrownDamageIntervalTicks)
 
 	// 预算按最坏情况给足：氧气耗尽要 MaxOxygenTicks 个 tick，其后每 interval 个
 	// tick 扣 1 点血，而自动回复在此期间永远追不上（间隔 20 远小于回复延迟 100），

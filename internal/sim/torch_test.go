@@ -8,6 +8,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -337,7 +338,7 @@ func TestMiningSupportRemovesStandingTorchAndDropsSameTick(t *testing.T) {
 		if !ok || position != torchPos {
 			t.Fatalf("火把掉落位置 = %+v，想要火把原格", position)
 		}
-		if drop.PickupDelayTicks != DefaultTunables().DropPickupDelayTicks {
+		if drop.PickupDelayTicks != tuning.DefaultTunables().DropPickupDelayTicks {
 			t.Fatalf("火把掉落拾取延迟 = %d", drop.PickupDelayTicks)
 		}
 	}
@@ -472,7 +473,7 @@ func TestSupportRemovalKeepsTorchWhenDropCapacityFull(t *testing.T) {
 			Active:           true,
 			Stack:            core.ItemStack{Item: core.ItemStone, Count: core.MaxStackCount},
 			BlockIndex:       elsewhere,
-			PickupDelayTicks: DefaultTunables().DropPickupDelayTicks,
+			PickupDelayTicks: tuning.DefaultTunables().DropPickupDelayTicks,
 		})
 	}
 	eye := torchEye(engine, session)

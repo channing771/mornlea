@@ -8,29 +8,6 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 )
 
-// defaultStarvationDamageIntervalTicks 是饥饿值归零后两次饥饿伤害之间的 tick 数。
-// 唯一读取入口是 Tunables 快照，不得再以导出常量暴露——见 internal/archcheck
-// 的 TestTunableConstantsAreNotExported。
-//
-// 取 80 的理由：权威 tick 是 20 TPS，80 tick 是 4 秒。饥饿伤害止于 1 点生命，
-// 所以它不是死亡倒计时而是「一直饿着就别想打架」的压力源；比溺水（每秒 1 点）
-// 慢四倍，因为断粮是可以边走边解决的问题，溺水不是。
-const defaultStarvationDamageIntervalTicks = 80
-
-// defaultExhaustionThresholdMilli 是疲劳值累积到多少（千分位）就结算一次消耗。
-// 唯一读取入口同上。
-//
-// 取 4000（即 4.0）与参考实现同值：它决定了「跳 80 次」或「挖 800 个方块」
-// 换掉一点饱和度，是整条饥饿曲线的时间刻度。
-const defaultExhaustionThresholdMilli = 4000
-
-// defaultRegenHungerThreshold 是允许自然回血的最低饥饿值。唯一读取入口同上。
-//
-// 取 18 与参考实现同值：它把「回满 20 点血」的代价定成 20×6000 = 120000 千分位
-// 疲劳，也就是 30 次阈值结算——玩家必须至少吃回 18 才可能回血，而回血本身又会
-// 把饥饿值推回 18 以下。这个反馈环就是本变更要交付的「回血有代价」。
-const defaultRegenHungerThreshold = 18
-
 // 疲劳来源固定表（单位：千分位）。
 //
 // 这些数值**刻意不做 tunable**：它们之间的比例关系就是玩法本身（跳一次抵

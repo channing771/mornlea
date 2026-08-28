@@ -5,6 +5,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
 // stepPhase 标识 `Step` 内部的固定处理阶段。权威 tick 的阶段顺序是规格契约：
@@ -61,7 +62,7 @@ func (engine *Engine) notifyStepPhase(phase stepPhase) {
 
 // Step 严格串行执行一个权威 tick。
 func (engine *Engine) Step() TickResult {
-	engine.tunables = ActiveTunables()
+	engine.tunables = tuning.ActiveTunables()
 	engine.physicsTunables = physics.ActiveTunables()
 	commands, acquired, generated := engine.takeInbox()
 	companionActions := engine.takeCompanionActions()

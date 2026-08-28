@@ -1,9 +1,27 @@
-package sim
+package tuning
 
 import (
 	"sync/atomic"
 
 	"github.com/channing771/mornlea/internal/core"
+)
+
+const (
+	defaultInteractionReach              = 6
+	defaultRegenDelayTicks               = 100
+	defaultRegenIntervalTicks            = 40
+	defaultDrownDamageIntervalTicks      = 20
+	defaultDropPickupDelayTicks          = 10
+	defaultPlayerDropPickupDelayTicks    = 40
+	defaultDropLifetimeTicks             = 6000
+	defaultDropPickupRange               = 1.25
+	defaultSpawnRadius                   = int32(16)
+	minSpawnRadius                       = int32(1)
+	maxSpawnRadius                       = int32(64)
+	defaultStarvationDamageIntervalTicks = 80
+	defaultExhaustionThresholdMilli      = 4000
+	defaultRegenHungerThreshold          = 18
+	defaultEatingTicks                   = uint16(32)
 )
 
 // Tunables 是可在运行时调整的权威模拟参数。

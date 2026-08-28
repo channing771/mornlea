@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
 // TestGrowCropIsExhaustivelySpecified 穷举 8 个小麦阶段 × {湿, 干} ×
@@ -59,9 +60,9 @@ func TestGrowCropLeavesNonCropsAlone(t *testing.T) {
 // setCropGrowthChance 改写生效中的生长概率。readyCropWorldAt 已经登记了恢复
 // 默认值的 Cleanup，因此这里不必再登记一次。
 func setCropGrowthChance(percent uint8) {
-	tunables := ActiveTunables()
+	tunables := tuning.ActiveTunables()
 	tunables.CropGrowthChancePercent = percent
-	SetTunables(tunables)
+	tuning.SetTunables(tunables)
 }
 
 // —— Scenario：作物按时间推进阶段，且只在露天与湿润时生长 ——

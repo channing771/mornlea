@@ -36,6 +36,7 @@ import (
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -349,7 +350,7 @@ func (m *companionManager) issuerLookHit(player contract.PlayerUpdate) (core.Blo
 	hit, ok, err := core.RaycastBlocks(
 		origin,
 		direction,
-		sim.ActiveTunables().InteractionReach,
+		tuning.ActiveTunables().InteractionReach,
 		func(position core.BlockPos) (bool, error) {
 			block, ready := view.blockAt(position.X, position.Y, position.Z)
 			if !ready {

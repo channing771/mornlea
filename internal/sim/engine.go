@@ -9,17 +9,13 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/fluid"
 	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/world"
 )
 
 const (
 	productionTickInterval = 50 * time.Millisecond
 	maxCatchUpSteps        = 5
-
-	// defaultInteractionReach 是放置、挖掘与开启容器共用的最大交互距离的编译期默认值。
-	// 唯一读取入口是 Tunables 快照，不得再以导出常量暴露——见 internal/archcheck
-	// 的 TestTunableConstantsAreNotExported。
-	defaultInteractionReach = 6
 )
 
 type Clock interface {
@@ -131,7 +127,7 @@ type Engine struct {
 
 	// tunables 与 physicsTunables 在每次 Step 入口刷新一次，同一 tick 内全程使用，
 	// 保证单个 tick 的所有判定基于同一份参数。
-	tunables        Tunables
+	tunables        tuning.Tunables
 	physicsTunables physics.Tunables
 }
 
@@ -157,7 +153,7 @@ func NewEngine(viewRadius int, worldTime uint64, seed int64) *Engine {
 	engine.worldTime.Store(worldTime)
 	// 初始化快照，使未经 Step 就被调用的方法（例如 RegisterPlayer 的出生扫描）
 	// 也有可用的参数快照。
-	engine.tunables = ActiveTunables()
+	engine.tunables = tuning.ActiveTunables()
 	engine.physicsTunables = physics.ActiveTunables()
 	return engine
 }

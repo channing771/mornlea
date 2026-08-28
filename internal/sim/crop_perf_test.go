@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
 // 本文件是变更 authoritative-farming 任务 8.7 的测量夹具，回答一个问题：
@@ -44,8 +45,8 @@ const (
 // 跑到的数字。
 func cropPerfEngine(b *testing.B) *Engine {
 	b.Helper()
-	b.Cleanup(func() { SetTunables(DefaultTunables()) })
-	SetTunables(DefaultTunables())
+	b.Cleanup(func() { tuning.SetTunables(tuning.DefaultTunables()) })
+	tuning.SetTunables(tuning.DefaultTunables())
 
 	engine := NewEngine(DropInterestRadius, 0, 0)
 	for index := range cropPerfSessions {
@@ -127,11 +128,11 @@ func runCropPerf(b *testing.B, engine *Engine, crops int) {
 	if len(pending) != 0 {
 		b.Fatalf("夹具产生了 %d 个区块的方块变更，两次测量不再只差「有没有作物」", len(pending))
 	}
-	want := cropPerfChunks * core.SectionsPerChunk * int(DefaultTunables().RandomTicksPerSection)
+	want := cropPerfChunks * core.SectionsPerChunk * int(tuning.DefaultTunables().RandomTicksPerSection)
 	if engine.cropCellsExamined != want {
 		b.Fatalf("单 tick 触及 %d 格，想要 %d（%d 区块 × %d 区段 × %d 抽样）",
 			engine.cropCellsExamined, want, cropPerfChunks, core.SectionsPerChunk,
-			DefaultTunables().RandomTicksPerSection)
+			tuning.DefaultTunables().RandomTicksPerSection)
 	}
 	if engine.cropBlockReads > 2*engine.cropCellsExamined {
 		b.Fatalf("单 tick 方块读取 %d，超过考察格数 %d 的两倍",
@@ -180,8 +181,8 @@ func BenchmarkCropAdvanceFullInterestDense(b *testing.B) {
 // 耕地与作物数，以解析式读取等式作为正确性门禁。
 func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 	const wantFarmland = core.SectionsPerChunk * core.BlocksPerSection
-	b.Cleanup(func() { SetTunables(DefaultTunables()) })
-	SetTunables(DefaultTunables())
+	b.Cleanup(func() { tuning.SetTunables(tuning.DefaultTunables()) })
+	tuning.SetTunables(tuning.DefaultTunables())
 
 	engine := NewEngine(0, 0, 0)
 	engine.RegisterSession(1, core.Overworld, core.ChunkPos{})
@@ -266,7 +267,7 @@ func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 		// 已验证仅为退化写入，清盘以免影响后续迭代的 reads 断言。
 		clear(pending)
 	}
-	want := core.SectionsPerChunk * int(DefaultTunables().RandomTicksPerSection)
+	want := core.SectionsPerChunk * int(tuning.DefaultTunables().RandomTicksPerSection)
 	if engine.cropCellsExamined != want {
 		b.Fatalf("单 tick 触及 %d 格，想要 %d", engine.cropCellsExamined, want)
 	}

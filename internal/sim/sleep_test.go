@@ -6,6 +6,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
 // sleep_test.go：入睡、跳夜与个人重生点在权威 sim 层的行为。夜间窗 13000..23000
@@ -389,7 +390,7 @@ func TestSleepThroughNightKeepsCropPaceIdentical(t *testing.T) {
 		engine.Step()
 		return engine
 	}
-	t.Cleanup(func() { SetTunables(DefaultTunables()) })
+	t.Cleanup(func() { tuning.SetTunables(tuning.DefaultTunables()) })
 
 	withJump := build(t, true)
 	withoutJump := build(t, false)

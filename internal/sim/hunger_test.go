@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
 // TestApplyExhaustionExhaustive 是疲劳结算的穷举表：三层状态的每种起始组合
@@ -21,7 +22,7 @@ import (
 // 不变量，放进表里是为了钉住 applyExhaustion 的分支次序——先看饱和度、饱和度
 // 归零后才动饥饿值——与饥饿值当前取值无关。
 func TestApplyExhaustionExhaustive(t *testing.T) {
-	const threshold = defaultExhaustionThresholdMilli
+	threshold := tuning.DefaultTunables().ExhaustionThresholdMilli
 	for _, tc := range []struct {
 		name                           string
 		hunger                         uint8

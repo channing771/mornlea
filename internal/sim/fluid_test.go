@@ -7,6 +7,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/fluid"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -717,7 +718,7 @@ func TestFluidRescanFixedPointSkipMatchesFullRescan(t *testing.T) {
 // 区块放进推进范围，并把重扫预算设成 budget。
 func fluidRescanEngine(dimension *Dimension, positions []core.ChunkPos, budget uint32) *Engine {
 	engine := NewEngine(0, 0, 0)
-	engine.tunables = DefaultTunables()
+	engine.tunables = tuning.DefaultTunables()
 	engine.tunables.FluidRescanCellsPerTick = budget
 	engine.dimensions[core.Overworld] = dimension
 	engine.fluidScope = make(map[core.ChunkKey]struct{}, len(positions))
@@ -838,7 +839,7 @@ func TestFluidRescanUsesQueueOfItsOwnDimension(t *testing.T) {
 	dimension, positions := fluidBasinDimension()
 	dimension.id = other
 	engine := NewEngine(0, 0, 0)
-	engine.tunables = DefaultTunables()
+	engine.tunables = tuning.DefaultTunables()
 	engine.tunables.FluidRescanCellsPerTick = 1 << 20
 	engine.dimensions[other] = dimension
 	engine.fluidScope = make(map[core.ChunkKey]struct{}, len(positions))

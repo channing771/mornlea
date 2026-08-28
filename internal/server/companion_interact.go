@@ -14,6 +14,7 @@ import (
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -418,7 +419,7 @@ func withinInteractionReach(body companion.Body, target core.BlockPos) bool {
 	dx := body.Position[0] - (float32(target.X) + 0.5)
 	dy := eyeY - (float32(target.Y) + 0.5)
 	dz := body.Position[2] - (float32(target.Z) + 0.5)
-	reach := sim.ActiveTunables().InteractionReach
+	reach := tuning.ActiveTunables().InteractionReach
 	return dx*dx+dy*dy+dz*dz <= reach*reach
 }
 
