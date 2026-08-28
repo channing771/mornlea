@@ -217,6 +217,14 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	crosshair := hud.CrosshairOverlay{
 		Visible: a.menu.phase == MenuPhaseGame && a.menuOverride == nil,
 	}
+	// 容器悬停 tooltip：界面打开时把本帧指针坐标传入渲染层，与点击命中同一
+	// 坐标源（`window.CursorPos`）；无头路径 window 为 nil，恒为无效输入，
+	// 零实例。
+	tooltip := hud.TooltipOverlay{}
+	if a.inventoryOpen && a.window != nil {
+		cursorX, cursorY := a.window.CursorPos()
+		tooltip = hud.TooltipOverlay{Valid: true, CursorX: cursorX, CursorY: cursorY}
+	}
 	hudVisible := inventoryConfirmed || (healthReady && !a.clientSessionClosed) ||
 		chatOverlay.Open || len(chatOverlay.Lines) != 0
 	if hudVisible {
@@ -248,7 +256,7 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 			hud.HealthOverlay{Confirmed: healthReady, Value: health},
 			hud.OxygenOverlay{Confirmed: oxygenReady, Value: oxygen},
 			hud.HungerOverlay{Confirmed: hungerReady, Value: hunger, SaturationZero: saturationZero}, chatOverlay,
-			popup, crosshair,
+			popup, crosshair, tooltip,
 			uint32(width), uint32(height), a.scheduler.UploadBudget(),
 		); err != nil {
 			return false, fmt.Errorf("准备快捷栏 HUD: %w", err)

@@ -23,3 +23,11 @@
 - QUALITY PASS：mask 几何逐项核验（对称/连通/1px 轮廓）；扫描 tripwire 定位恰当（误报响亮、漏报需刻意规避、其上有钉值+行为断言纵深）；热路径零变化（atlas 仅启动期构建）；`-count=2` 复跑无 flake。
 - 控制会话裁决：`containerSourceHighlightColor` 青蓝列入 design D1 语义色保留表（「待移动来源」状态色，几何区分外扩描边）。
 - 移交 T3 顺手项：style.go:20 亮边适用面注释措辞、health.go:139「上下对称」措辞、`atlas_mask_test.go:195`/`style_test.go:101` 空赋值笨拙、layout.go:257 分隔线几何注释（2 design px 非 1px）。
+
+### T3 容器原版式浮动面板 + tooltip — PASS（R1 一轮修复）
+
+- Implementer 报告：`panel.go` 面板几何单源（`panelOrigin` + `containerPanelFrame`，5 类命中函数同源推导）；四类面板（个人 2×2 左上+右栏十条配方 / 工作台 3×3 / 熔炉原版图式 36/37/38 / 箱子 27 格）7-quad 面板族（投影+表面+四边亮边+标题）；`tooltip.go` 悬停中文名（右下优先/翻转/夹回、与弹条同源）；打开最坏实算 **264**（`openWorstQuads` 命名常量分解）、glyph 最坏 710≤768；saturation-jitter 直达测试补齐。
+- 控制会话随裁决定稿：打开最坏 274→264（design D3、survival delta、container delta、tasks 3.4 四处同步）；D1 强调色语义收敛为「选中、进度、产物」三类（tooltip 不消费琥珀）；核实 `RecipeButtonAt` 在 main（94405319）已无生产消费方——配方入口为「呈现+可命中、无点击行为」的既有状态，T6 文档照实记录。
+- SPEC R0 FAIL（1 项）→ R1 修复：响应式扫描打开分支补有效悬停 tooltip 夹具（箱 0 号格中心，任意缩放落格内），变异验证（基线 +500 → glyph 216 越界）证明断言有牙；SPEC(RE) PASS。
+- QUALITY R0 FAIL（1 项）→ R1 修复：`appendCountAtSize` 前景笔重置 `hotbarSlotSize`→`size`（配方栏数字双层 24px 分离），新增 `TestAppendCountAtSizeKeepsLayeredPenAlignment`（shadow==fg+(1,1) 逐字断言，变异复现 110/133 分叉）；另恢复火焰 V1 端点断言、tooltip 坐标源注释措辞；QUALITY(RE) PASS。
+- 移交项：`Prepare` 已 19 参——**下一次任何 overlay 追加前必须先做 overlay 输入 struct 收敛**；打开态聊天栈与面板层叠重叠为既有行为未处理。

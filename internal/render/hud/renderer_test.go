@@ -39,12 +39,12 @@ func TestHotbarPrepareReusesLayoutAndUploadStorage(t *testing.T) {
 	// 饥饿取奇数值：预热路径必须走到半格分支，否则「零每帧分配」对它只是空转。
 	hunger := HungerOverlay{Confirmed: true, Value: 13}
 	budget := render.NewUploadBudget(1024)
-	if err := renderer.Prepare(inventory, true, true, 3, nil, nil, nil, MiningOverlay{}, EatingOverlay{}, health, oxygen, hunger, ChatOverlay{}, PopupOverlay{}, CrosshairOverlay{Visible: true}, 1280, 720, budget); err != nil {
+	if err := renderer.Prepare(inventory, true, true, 3, nil, nil, nil, MiningOverlay{}, EatingOverlay{}, health, oxygen, hunger, ChatOverlay{}, PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 720, budget); err != nil {
 		t.Fatalf("warm Prepare: %v", err)
 	}
 	allocations := testing.AllocsPerRun(1000, func() {
 		source.requestCount = 0
-		if err := renderer.Prepare(inventory, true, true, 3, nil, nil, nil, MiningOverlay{}, EatingOverlay{}, health, oxygen, hunger, ChatOverlay{}, PopupOverlay{}, CrosshairOverlay{Visible: true}, 1280, 720, budget); err != nil {
+		if err := renderer.Prepare(inventory, true, true, 3, nil, nil, nil, MiningOverlay{}, EatingOverlay{}, health, oxygen, hunger, ChatOverlay{}, PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 720, budget); err != nil {
 			panic(err)
 		}
 	})
@@ -68,7 +68,7 @@ func TestHotbarPrepareClosedMiningEncodesLayeredFeedback(t *testing.T) {
 		core.Inventory{}, true, false, -1, nil, nil, nil,
 		MiningOverlay{Active: true, ProgressTicks: 6, RequiredTicks: 15}, EatingOverlay{},
 		HealthOverlay{}, OxygenOverlay{}, HungerOverlay{}, ChatOverlay{},
-		PopupOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800, render.NewUploadBudget(1024),
+		PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 800, render.NewUploadBudget(1024),
 	); err != nil {
 		t.Fatalf("关闭态 Prepare: %v", err)
 	}
@@ -134,14 +134,27 @@ func TestResponsiveHotbarPrepareKeepsEveryInstanceInFramebuffer(t *testing.T) {
 			renderer := newTestHotbarRenderer()
 			var chest *ChestOverlay
 			mining := MiningOverlay{Active: true, ProgressTicks: 6, RequiredTicks: 15}
+			tooltip := TooltipOverlay{}
 			if open {
 				chest = fullChestOverlay()
+				// 打开帧携带有效悬停：指针落在箱子 0 号格（满箱非空）中心，tooltip
+				// 的背景 quad 与双层字形随其余 HUD 矩形一起进入逐实例界内断言
+				// （窄窗口场景明文含 tooltip）。格中心在任意缩放下都落在格内；
+				// scale 为 0 的极小窗口没有任何可命中格，tooltip 与其余实例同为
+				// 零尺寸退化。关闭帧由 Prepare 的打开态门控保持 tooltip 零实例。
+				scale := hudScale(true, float32(size[0]), float32(size[1]))
+				hoverX, hoverY := chestSlotOrigin(0, float32(size[0]), float32(size[1]))
+				tooltip = TooltipOverlay{
+					Valid:   true,
+					CursorX: float64(hoverX + hotbarSlotSize*scale*0.5),
+					CursorY: float64(hoverY + hotbarSlotSize*scale*0.5),
+				}
 			}
 			if err := renderer.Prepare(maxQuadTestInventory(), true, open, 5, nil, nil, chest, mining, EatingOverlay{},
 				HealthOverlay{Confirmed: true, Value: 7},
 				OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1},
 				HungerOverlay{Confirmed: true, Value: core.MaxHunger},
-				ChatOverlay{}, popup, CrosshairOverlay{Visible: true}, size[0], size[1], render.NewUploadBudget(1024)); err != nil {
+				ChatOverlay{}, popup, CrosshairOverlay{Visible: true}, tooltip, size[0], size[1], render.NewUploadBudget(1024)); err != nil {
 				t.Fatalf("framebuffer %v open=%v Prepare: %v", size, open, err)
 			}
 			for index, quad := range renderer.layout.quads {
@@ -161,7 +174,7 @@ func TestResponsiveHotbarPrepareKeepsEveryInstanceInFramebuffer(t *testing.T) {
 		renderer := newTestHotbarRenderer()
 		if err := renderer.Prepare(maxQuadTestInventory(), true, true, 5, nil, nil, fullChestOverlay(), MiningOverlay{}, EatingOverlay{},
 			HealthOverlay{Confirmed: true, Value: 7}, OxygenOverlay{Confirmed: true, Value: 1},
-			HungerOverlay{}, ChatOverlay{}, PopupOverlay{}, CrosshairOverlay{Visible: true}, size[0], size[1], render.NewUploadBudget(1024)); err != nil {
+			HungerOverlay{}, ChatOverlay{}, PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, size[0], size[1], render.NewUploadBudget(1024)); err != nil {
 			t.Fatalf("framebuffer %v Prepare: %v", size, err)
 		}
 		if len(renderer.layout.quads) != 0 || len(renderer.layout.glyphs) != 0 {
@@ -196,7 +209,7 @@ func TestHotbarMaximumBranchesAndEncodingContract(t *testing.T) {
 		HealthOverlay{Confirmed: true, Value: core.MaxHealth},
 		OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1},
 		HungerOverlay{Confirmed: true, Value: core.MaxHunger}, chat,
-		PopupOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800, render.NewUploadBudget(1024)); err != nil {
+		PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 800, render.NewUploadBudget(1024)); err != nil {
 		t.Fatalf("关闭最大分支 Prepare: %v", err)
 	}
 	closedWant := closedHotbarQuads + healthQuads + oxygenQuads + hungerQuads + maxChatQuads
@@ -204,36 +217,45 @@ func TestHotbarMaximumBranchesAndEncodingContract(t *testing.T) {
 		t.Fatalf("关闭分支 quads=%d，想要含准星的合法最坏 100 且不超过 %d", len(renderer.layout.quads), maxHotbarQuads)
 	}
 
-	// 打开最大分支改由箱子见证（十条配方行删除后箱子 83 是最大 overlay）；
-	// 合成视图的最坏组合（满 3×3 + 产物 + 来源高亮 + 满背包磨损）另起一段锁定。
+	// 打开最大分支改由箱子见证（面板族与箱子 81 内容 quad 是最大 overlay）；
+	// 悬停 tooltip 背景计入合法最坏；合成视图的最坏组合另起一段锁定。
+	hoverX, hoverY := chestSlotOrigin(0, 1280, 800)
 	if err := renderer.Prepare(maxQuadTestInventory(), true, true, 5, nil, nil, fullChestOverlay(), MiningOverlay{}, EatingOverlay{},
 		HealthOverlay{Confirmed: true, Value: core.MaxHealth},
 		OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1},
 		HungerOverlay{Confirmed: true, Value: core.MaxHunger}, chat,
-		PopupOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800, render.NewUploadBudget(1024)); err != nil {
+		PopupOverlay{}, CrosshairOverlay{Visible: true},
+		TooltipOverlay{Valid: true, CursorX: float64(hoverX) + 1, CursorY: float64(hoverY) + 1},
+		1280, 800, render.NewUploadBudget(1024)); err != nil {
 		t.Fatalf("打开最大分支 Prepare: %v", err)
 	}
 	openWant := openInventoryQuads + healthQuads + oxygenQuads + hungerQuads + maxChatQuads
-	if len(renderer.layout.quads) != openWant || len(renderer.layout.quads) != 261 || len(renderer.layout.quads) > maxHotbarQuads {
-		t.Fatalf("较大打开分支 quads=%d，想要含准星的 261 且不超过固定上限 %d", len(renderer.layout.quads), maxHotbarQuads)
+	if len(renderer.layout.quads) != openWant || len(renderer.layout.quads) != 264 || len(renderer.layout.quads) > maxHotbarQuads {
+		t.Fatalf("较大打开分支 quads=%d，想要含准星与 tooltip 的 264 且不超过固定上限 %d", len(renderer.layout.quads), maxHotbarQuads)
 	}
 	if err := renderer.Prepare(maxQuadTestInventory(), true, true, 5, fullCraftingOverlay(), nil, nil, MiningOverlay{}, EatingOverlay{},
 		HealthOverlay{Confirmed: true, Value: core.MaxHealth},
 		OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1},
 		HungerOverlay{Confirmed: true, Value: core.MaxHunger}, chat,
-		PopupOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800, render.NewUploadBudget(1024)); err != nil {
+		PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 800, render.NewUploadBudget(1024)); err != nil {
 		t.Fatalf("打开合成最大分支 Prepare: %v", err)
 	}
-	craftingWant := crosshairQuads + openInventoryPanelQuads + 2 + core.InventorySlots + core.InventorySlots*2 +
-		core.HotbarSlots*2 + craftingQuads + healthQuads + oxygenQuads + hungerQuads + maxChatQuads
-	if len(renderer.layout.quads) != craftingWant || craftingWant != 210 || len(renderer.layout.quads) > maxHotbarQuads {
-		t.Fatalf("打开合成分支 quads=%d，想要含准星的 210 且不超过固定上限 %d", len(renderer.layout.quads), maxHotbarQuads)
+	craftingWant := crosshairQuads + containerPanelQuads + 2 + core.InventorySlots + core.InventorySlots*2 +
+		core.HotbarSlots*2 + craftingContentQuads + recipeColumnQuads + healthQuads + oxygenQuads + hungerQuads + maxChatQuads
+	if len(renderer.layout.quads) != craftingWant || craftingWant != 243 || len(renderer.layout.quads) > maxHotbarQuads {
+		t.Fatalf("打开合成分支 quads=%d，想要含准星的 243 且不超过固定上限 %d", len(renderer.layout.quads), maxHotbarQuads)
 	}
 	// maxQuadTestInventory 的九格工具数量为 1 不出数字，只有 27 个背包格贡献
-	// 两位数量（各 4 实例）。
-	if len(renderer.layout.glyphs) != (core.InventorySlots-core.HotbarSlots)*4+craftingGlyphs+maxChatGlyphs {
+	// 两位数量（各 4 实例）；配方栏十条入口中三条产物数量为 4（各 1 位双层）。
+	recipeDigitGlyphs := 0
+	for _, recipeID := range inventoryRecipeIDs {
+		if recipe, ok := core.Recipe(recipeID); ok && recipe.Output.Count > 1 {
+			recipeDigitGlyphs += 2
+		}
+	}
+	if len(renderer.layout.glyphs) != (core.InventorySlots-core.HotbarSlots)*4+craftingGlyphs+recipeDigitGlyphs+maxChatGlyphs {
 		t.Fatalf("打开合成分支 glyphs=%d，想要 %d", len(renderer.layout.glyphs),
-			(core.InventorySlots-core.HotbarSlots)*4+craftingGlyphs+maxChatGlyphs)
+			(core.InventorySlots-core.HotbarSlots)*4+craftingGlyphs+recipeDigitGlyphs+maxChatGlyphs)
 	}
 	viewport, quads, glyphs := renderer.FrameStreams()
 	if len(viewport) != hotbarViewportBytes || len(quads) != len(renderer.layout.quads)*hotbarInstanceBytes ||
@@ -245,7 +267,7 @@ func TestHotbarMaximumBranchesAndEncodingContract(t *testing.T) {
 	if err := renderer.Prepare(fullTestInventory(), true, true, 5, nil, nil, fullChestOverlay(), MiningOverlay{}, EatingOverlay{},
 		HealthOverlay{Confirmed: true, Value: core.MaxHealth}, OxygenOverlay{Confirmed: true, Value: 0},
 		HungerOverlay{Confirmed: true, Value: core.MaxHunger}, chat,
-		PopupOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800, render.NewUploadBudget(1024)); err != nil {
+		PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 800, render.NewUploadBudget(1024)); err != nil {
 		t.Fatalf("glyph 最大分支 Prepare: %v", err)
 	}
 	openGlyphWant := core.InventorySlots*4 + maxOverlayGlyphs + maxChatGlyphs
@@ -257,7 +279,7 @@ func TestHotbarMaximumBranchesAndEncodingContract(t *testing.T) {
 
 	if err := renderer.Prepare(core.Inventory{}, true, false, -1, nil, nil, nil, MiningOverlay{}, EatingOverlay{},
 		HealthOverlay{}, OxygenOverlay{}, HungerOverlay{}, ChatOverlay{},
-		PopupOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800, render.NewUploadBudget(1024)); err != nil {
+		PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 800, render.NewUploadBudget(1024)); err != nil {
 		t.Fatalf("最小前缀 Prepare: %v", err)
 	}
 	_, quads, glyphs = renderer.FrameStreams()

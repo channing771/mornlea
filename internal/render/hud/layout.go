@@ -9,8 +9,11 @@ const (
 	// 打开态与关闭态互斥；分别列出合法上限，防止后续样式变化悄悄突破 benchmark
 	// scenario v20 口径重钉后的固定上传容量（scenario 常量与文档的同步由
 	// capture/benchmark 任务组落地）。准星在两种状态下都最先绘制，计入两个分支。
-	openInventoryQuads = crosshairQuads + openInventoryPanelQuads + 2 + core.InventorySlots + core.InventorySlots*2 +
-		core.HotbarSlots*2 + maxOverlayQuads
+	// 打开态最坏由箱子视图见证：面板族 + 选中/来源 + 36 格双层物品 + 九条耐久
+	// + 箱子 81 内容 quad + 悬停 tooltip 背景，实算分解见 panel_test.go 的
+	// 固定预算测试。
+	openInventoryQuads = crosshairQuads + containerPanelQuads + 2 + core.InventorySlots + core.InventorySlots*2 +
+		core.HotbarSlots*2 + maxOverlayQuads + tooltipQuads
 	closedHotbarQuads = crosshairQuads + closedHotbarPanelQuads + closedHotbarSelectionQuads + core.HotbarSlots +
 		core.HotbarSlots*2 + core.HotbarSlots*2 + miningBarQuads + miningWarningNotches
 	maxHotbarQuads = 320
@@ -28,8 +31,6 @@ const (
 	// 余量同源（弹条/准星落地后仍保留可观裕度）。
 	glyphGrowthMargin = 52
 
-	// 打开背包时依次绘制外框、背包区、快捷栏区和分隔线。
-	openInventoryPanelQuads = 4
 	// 关闭态快捷栏以外阴影和内表面形成独立面板，选中格再用双层轮廓强调。
 	closedHotbarPanelQuads     = 2
 	closedHotbarSelectionQuads = 2
@@ -54,26 +55,10 @@ const (
 	miningBarGap        = float32(16)
 	miningBarCapWidth   = float32(8)
 	miningNotchWidth    = float32(6)
-	// 背包界面在快捷栏之上再放 3 行，并与快捷栏留出一段间隔。
+	// 面板下段快捷栏行与背包三行之间的行距。
 	inventoryRowGap = float32(12)
-	// 三类容器共享的标题 header 只扩展 overlay 面板，不改变任何栏位原点或命中区域。
-	containerTitleSize    = float32(16)
-	containerTitleGap     = float32(4)
-	containerHeaderHeight = float32(20)
 
 	hudEdgeMargin = float32(8)
-	// openHUDHeight 是打开背包时从最上方容器叠加区上沿到 framebuffer 下沿的设计
-	// 高度，hudScale 用它把整个界面缩进窗口。自下而上依次是：快捷栏下边距与一格、
-	// 背包三行与行间隔、叠加区行间隔与最下一行、其余叠加区行、面板上边距，
-	// 以及移到快捷栏下方的主状态行与向下外扩的氧气行（两行各占
-	// `healthHeartSize + statusBarGap`，底部仍由 6px 下边距收口）。
-	// 叠加区（合成网格、熔炉、箱子）至多三行：3×3 工作台网格与箱子同为三行，
-	// 个人 2×2 与熔炉只占其一，高度按最坏组合统一收缩。
-	overlayAreaRows = 3
-	openHUDHeight   = hotbarBottomMargin + hotbarSlotSize +
-		inventoryRowGap + 3*hotbarSlotSize + 2*hotbarSlotGap +
-		recipeRowGap + overlayAreaRows*hotbarSlotSize + (overlayAreaRows-1)*hotbarSlotGap +
-		hotbarPanelPadding + containerHeaderHeight + 2*(healthHeartSize+statusBarGap)
 	// 关闭态联合高度从 framebuffer 下沿覆盖快捷栏、状态行和最坏采掘轨道；
 	// `hudScale` 用它保证快捷栏、永久两行状态栈和采掘轨道按同一比例缩小。
 	// 末尾的 `popupTrackGap + popupRowHeight` 是物品名弹条行：轨道上沿之上
@@ -142,7 +127,20 @@ func layoutInventory(
 	if open {
 		slots = core.InventorySlots
 	}
-	appendInventoryPanel(dst, open, width, height, scale)
+	// 面板族在准星之后、一切栏位之前追加；视图决定面板宽度（个人合成面板加
+	// 右侧配方栏）与标题 cell，原点与各行锚点对四类视图一致。
+	view := containerViewCrafting
+	switch {
+	case chest != nil:
+		view = containerViewChest
+	case overlay != nil:
+		view = containerViewFurnace
+	}
+	if open {
+		appendContainerPanel(dst, view, width, height)
+	} else {
+		appendClosedHotbarStrip(dst, width, height, scale)
+	}
 	// 高亮先于栏位表面绘制，栏位只覆盖内部并留下像素边框。
 	selectedX, selectedY := inventorySlotOrigin(int(inventory.Hotbar.Selected), open, width, height)
 	selectedColor := hotbarSelectedOuterColor
@@ -207,15 +205,15 @@ func layoutInventory(
 	if open {
 		switch {
 		case chest != nil:
-			appendChestGrid(dst, atlas, *chest, width, height)
+			appendChestContent(dst, atlas, *chest, width, height)
 		case overlay != nil:
-			appendFurnaceRow(dst, atlas, *overlay, width, height)
+			appendFurnaceContent(dst, atlas, *overlay, width, height)
 		default:
 			grid := CraftingOverlay{}
 			if crafting != nil {
 				grid = *crafting
 			}
-			appendCraftingGrid(dst, atlas, grid, width, height)
+			appendCraftingContent(dst, atlas, grid, width, height)
 		}
 	} else {
 		appendMiningBar(dst, mining, width, height)
@@ -223,56 +221,25 @@ func layoutInventory(
 	}
 	return *dst
 }
-func appendInventoryPanel(dst *hotbarLayout, open bool, width, height, scale float32) {
-	left, hotbarY := inventorySlotOrigin(0, open, width, height)
-	top := hotbarY
-	if open {
-		_, top = inventorySlotOrigin(core.HotbarSlots, true, width, height)
-	}
+
+// appendClosedHotbarStrip 绘制关闭态快捷栏贴条：外阴影加内表面双层、无边，
+// 与浮动面板语言刻意区分（任何描边都会突破关闭态最坏恰 100 的固定预算）。
+func appendClosedHotbarStrip(dst *hotbarLayout, width, height, scale float32) {
+	left, top := inventorySlotOrigin(0, false, width, height)
 	padding := hotbarPanelPadding * scale
-	totalWidth := (core.HotbarSlots*hotbarSlotSize + (core.HotbarSlots-1)*hotbarSlotGap) * scale
-	if !open {
-		panelHeight := hotbarSlotSize*scale + 2*padding
-		dst.quads = append(dst.quads, hotbarInstance{
-			X: left - padding, Y: top - padding,
-			Width: totalWidth + 2*padding, Height: panelHeight,
-			Color: hotbarPanelShadowColor,
-		})
-		inset := hotbarPanelInset * scale
-		dst.quads = append(dst.quads, hotbarInstance{
-			X: left - padding + inset, Y: top - padding + inset,
-			Width: totalWidth + 2*padding - 2*inset, Height: panelHeight - 2*inset,
-			Color: hotbarPanelSurfaceColor,
-		})
-		return
-	}
+	totalWidth := hotbarRowWidth * scale
+	panelHeight := hotbarSlotSize*scale + 2*padding
 	dst.quads = append(dst.quads, hotbarInstance{
 		X: left - padding, Y: top - padding,
-		Width: totalWidth + 2*padding, Height: hotbarY + hotbarSlotSize*scale - top + 2*padding,
-		Color: panelShadow,
+		Width: totalWidth + 2*padding, Height: panelHeight,
+		Color: hotbarPanelShadowColor,
 	})
-	_, backpackBottomY := inventorySlotOrigin(core.InventorySlots-1, true, width, height)
-	innerPadding := padding * 0.5
-	// 打开态面板族：外层背衬与快捷栏行取投影色形成凹陷分组，背包表面取表面
-	// 色，分组分隔线取 1px 亮边令牌。仍然只有四层 quad，无描边实例。
-	dst.quads = append(dst.quads,
-		hotbarInstance{
-			X: left - innerPadding, Y: top - innerPadding,
-			Width:  totalWidth + 2*innerPadding,
-			Height: backpackBottomY + hotbarSlotSize*scale - top + 2*innerPadding,
-			Color:  panelSurface,
-		},
-		hotbarInstance{
-			X: left - innerPadding, Y: hotbarY - innerPadding,
-			Width: totalWidth + 2*innerPadding, Height: hotbarSlotSize*scale + 2*innerPadding,
-			Color: panelShadow,
-		},
-		hotbarInstance{
-			X: left, Y: (backpackBottomY + hotbarSlotSize*scale + hotbarY) * 0.5,
-			Width: totalWidth, Height: scale * 2,
-			Color: panelBorderLight,
-		},
-	)
+	inset := hotbarPanelInset * scale
+	dst.quads = append(dst.quads, hotbarInstance{
+		X: left - padding + inset, Y: top - padding + inset,
+		Width: totalWidth + 2*padding - 2*inset, Height: panelHeight - 2*inset,
+		Color: hotbarPanelSurfaceColor,
+	})
 }
 
 // appendItemTile 用已有矩形画出带暗边的物品；可放置方块采样真实注册表材质，
@@ -392,26 +359,32 @@ func appendMiningBar(dst *hotbarLayout, overlay MiningOverlay, width, height flo
 }
 
 // inventorySlotOrigin 返回统一索引对应格子的左上角像素坐标。
-// 索引 0..8 是底部快捷栏行，9..35 是其上方自上而下的三行背包。
+// 索引 0..8 是面板下段的快捷栏行，9..35 是其上方自上而下的三行背包。
+// 关闭态没有面板：快捷栏行继续锚在 `hotbarRowBounds` 的既有位置。打开态的
+// 全部行都从面板几何（`openPanelAnchor`）推导，与命中测试共用同一原点。
 func inventorySlotOrigin(slot int, open bool, width, height float32) (float32, float32) {
 	column := slot % core.HotbarSlots
-	left, hotbarY, _, scale := hotbarRowBounds(open, width, height)
-	x := left + float32(column)*(hotbarSlotSize+hotbarSlotGap)*scale
+	pitch := (hotbarSlotSize + hotbarSlotGap)
 	if !open {
-		return x, hotbarY
+		left, hotbarY, _, scale := hotbarRowBounds(false, width, height)
+		return left + float32(column)*pitch*scale, hotbarY
 	}
+	frame := openPanelAnchor(width, height)
+	x := frame.contentLeft + float32(column)*pitch*frame.scale
 	if slot < core.HotbarSlots {
-		return x, hotbarY
+		return x, frame.hotbarY
 	}
 	// 背包第 0 行在最上方，第 2 行紧邻快捷栏。
 	row := (slot - core.HotbarSlots) / core.HotbarSlots
 	rowsAbove := float32(2 - row)
-	y := hotbarY - (inventoryRowGap+(rowsAbove+1)*hotbarSlotSize+rowsAbove*hotbarSlotGap)*scale
+	y := frame.hotbarY - (inventoryRowGap+(rowsAbove+1)*hotbarSlotSize+rowsAbove*hotbarSlotGap)*frame.scale
 	return x, y
 }
 
-// hotbarRowBounds 返回对应容器状态下快捷栏的共享中心边界，供快捷栏、状态行与
-// 采掘反馈复用，避免打开态命中缩放和非交互状态行各算一套几何。
+// hotbarRowBounds 返回对应容器状态下底部状态栈的共享中心边界：关闭态它就是
+// 快捷栏行本身；打开态快捷栏行收进浮动面板，这里保留的是状态行锚点所依赖的
+// 底部预留区（快捷栏原位 + 下方两行状态栈）。状态行、采掘反馈与弹条复用本
+// 函数，避免打开态缩放和非交互状态行各算一套几何。
 func hotbarRowBounds(open bool, width, height float32) (left, top, totalWidth, scale float32) {
 	scale = hudScale(open, width, height)
 	totalWidth = (core.HotbarSlots*hotbarSlotSize + (core.HotbarSlots-1)*hotbarSlotGap) * scale
@@ -454,6 +427,11 @@ func hudScale(open bool, width, height float32) float32 {
 		scale = max(available/hotbarContentWidth, 0)
 	}
 	if open {
+		// 打开态宽度约束取最宽视图：个人面板的右侧配方栏向右伸出共享内容列，
+		// 对称等效宽度见 `openHUDWidth`；高度约束含统一面板高度。
+		if available := width - 2*hudEdgeMargin; available < openHUDWidth {
+			scale = min(scale, max(available/openHUDWidth, 0))
+		}
 		if available := height - 2*hudEdgeMargin; available < openHUDHeight {
 			scale = min(scale, max(available/openHUDHeight, 0))
 		}
@@ -495,6 +473,17 @@ func appendHotbarCountScaled(
 	count uint8,
 	slotX, slotY, scale float32,
 ) {
+	appendCountAtSize(dst, atlas, count, slotX, slotY, hotbarSlotSize, scale)
+}
+
+// appendCountAtSize 在给定尺寸的格内右下角排布最多两位数量数字：快捷栏 48 格
+// 与配方栏 24 紧凑行共用同一套双层规范与右下对齐公式，只有锚定尺寸不同。
+func appendCountAtSize(
+	dst *hotbarLayout,
+	atlas render.GlyphSource,
+	count uint8,
+	slotX, slotY, size, scale float32,
+) {
 	if count <= 1 {
 		return
 	}
@@ -516,8 +505,8 @@ func appendHotbarCountScaled(
 		tracking = hotbarDigitTracking * scale
 		advance += tracking
 	}
-	penX := slotX + (hotbarSlotSize-hotbarDigitMargin)*scale - advance
-	baseline := slotY + (hotbarSlotSize-hotbarDigitMargin)*scale
+	penX := slotX + (size-hotbarDigitMargin)*scale - advance
+	baseline := slotY + (size-hotbarDigitMargin)*scale
 	for index := range length {
 		glyph := atlas.Glyph(digits[index])
 		dst.glyphs = append(dst.glyphs, hotbarInstance{
@@ -533,7 +522,7 @@ func appendHotbarCountScaled(
 			penX += tracking
 		}
 	}
-	penX = slotX + (hotbarSlotSize-hotbarDigitMargin)*scale - advance
+	penX = slotX + (size-hotbarDigitMargin)*scale - advance
 	for index := range length {
 		glyph := atlas.Glyph(digits[index])
 		dst.glyphs = append(dst.glyphs, hotbarInstance{

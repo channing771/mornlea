@@ -142,7 +142,7 @@ func TestCrosshairDrawnWithoutConfirmedInventory(t *testing.T) {
 	if err := renderer.Prepare(
 		core.Inventory{}, false, false, -1, nil, nil, nil, MiningOverlay{}, EatingOverlay{},
 		HealthOverlay{}, OxygenOverlay{}, HungerOverlay{}, ChatOverlay{},
-		PopupOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800, render.NewUploadBudget(1024),
+		PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 800, render.NewUploadBudget(1024),
 	); err != nil {
 		t.Fatalf("未确认物品 Prepare: %v", err)
 	}

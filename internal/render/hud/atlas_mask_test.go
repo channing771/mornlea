@@ -183,7 +183,8 @@ func TestHotbarIconSilhouettesStaySameFamily(t *testing.T) {
 	pixels := buildHotbarTextureAtlas(assets.NewRegistry())
 	for column, legacy := range legacyIconOpaqueCounts {
 		cell := hotbarTextureCell(pixels, column)
-		opaque, components, smallest := iconCellStats(cell)
+		// 剪影族约束只关心覆盖规模与连通性；smallest 在下方标题分支单独断言。
+		opaque, components, _ := iconCellStats(cell)
 		if components != 1 {
 			t.Fatalf("列 %d 剪影有 %d 个连通组件，想要单一剪影", column, components)
 		}
@@ -192,7 +193,6 @@ func TestHotbarIconSilhouettesStaySameFamily(t *testing.T) {
 			t.Fatalf("列 %d 不透明像素=%d，相对旧剪影 %d 的倍率 %.2f 越出 [0.6,1.6]",
 				column, opaque, legacy, ratio)
 		}
-		_ = smallest
 	}
 	// 凹槽是所有栏位共用的满幅底：必须铺满整个 16×16 cell。
 	if opaque, _, _ := iconCellStats(hotbarTextureCell(pixels, hotbarContainerSlotColumn)); opaque != 256 {

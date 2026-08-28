@@ -58,7 +58,7 @@ func TestContainerPixelCellsUseSharedSlotUV(t *testing.T) {
 				}
 			case view.overlay != nil:
 				for slot := range 3 {
-					x, y := recipeSlotOrigin(slot, width, height)
+					x, y := furnaceSlotOrigin(slot, width, height)
 					assertSlot(t, got, x, y)
 				}
 			default:
@@ -74,7 +74,7 @@ func TestContainerPixelCellsUseSharedSlotUV(t *testing.T) {
 }
 
 // TestContainerTitlesUseAtlasCells 锁定每个互斥 overlay 只追加一个 atlas 标题，
-// 并且标题不借用动态 glyph 流。
+// 标题位于面板顶部共享内容列左沿，并且标题不借用动态 glyph 流。
 func TestContainerTitlesUseAtlasCells(t *testing.T) {
 	atlas := newFakeNameTagAtlas()
 	const width, height = float32(1280), float32(800)
@@ -84,31 +84,28 @@ func TestContainerTitlesUseAtlasCells(t *testing.T) {
 		overlay  *FurnaceOverlay
 		chest    *ChestOverlay
 		column   int
-		top      func() float32
 		glyphs   int
 	}{
-		{"合成", &CraftingOverlay{Size: 3}, nil, nil, hotbarCraftingTitleColumn, func() float32 {
-			_, y := craftingGridSlotOrigin(0, 3, width, height)
-			return y
-		}, 0},
-		{"熔炉", nil, &FurnaceOverlay{}, nil, hotbarFurnaceTitleColumn, func() float32 { _, y := furnaceBarOrigin(width, height); return y }, 0},
-		{"箱子", nil, nil, &ChestOverlay{}, hotbarChestTitleColumn, func() float32 { _, y := chestSlotOrigin(core.ChestSlots-core.HotbarSlots, width, height); return y }, 0},
+		// 合成视图的 glyph 来自右侧配方栏三条数量为 4 的产物（双层）。
+		{"合成", &CraftingOverlay{Size: 3}, nil, nil, hotbarCraftingTitleColumn, 6},
+		{"熔炉", nil, &FurnaceOverlay{}, nil, hotbarFurnaceTitleColumn, 0},
+		{"箱子", nil, nil, &ChestOverlay{}, hotbarChestTitleColumn, 0},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var layout hotbarLayout
 			got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, test.crafting, test.overlay, test.chest, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, width, height)
 			wantUV := hotbarTextureUV(test.column)
-			left, _ := inventorySlotOrigin(0, true, width, height)
+			frame := openPanelAnchor(width, height)
 			count := 0
 			for _, quad := range got.quads {
 				if [4]float32{quad.U0, quad.V0, quad.U1, quad.V1} != wantUV {
 					continue
 				}
 				count++
-				if quad.X != left ||
-					quad.Y != test.top()-hotbarPanelPadding*got.scale-containerHeaderHeight*got.scale+containerTitleGap*got.scale ||
-					quad.Width != containerTitleSize*got.scale || quad.Height != containerTitleSize*got.scale {
-					t.Fatalf("标题=%+v，未放在 panel 左上 header", quad)
+				if quad.X != frame.contentLeft ||
+					quad.Y != frame.y+containerTitleGap*frame.scale ||
+					quad.Width != containerTitleSize*frame.scale || quad.Height != containerTitleSize*frame.scale {
+					t.Fatalf("标题=%+v，未放在面板顶部内容列左沿", quad)
 				}
 			}
 			if count != 1 {
@@ -122,8 +119,8 @@ func TestContainerTitlesUseAtlasCells(t *testing.T) {
 }
 
 // TestCraftingOverlayDrawsPersonalAndWorkbenchGrids 锁定合成区的组成：个人面板
-// 恰好 2×2、工作台恰好 3×3，产物格独立绘制，个人扩展格 4..8 不画，全部网格格与
-// 产物格画物品双层色块与数量。
+// 恰好 2×2、工作台恰好 3×3，产物格带琥珀轮廓底衬与静态箭头，右侧配方栏恒为
+// 十条入口；个人扩展格 4..8 不画，全部网格格与产物格画物品双层色块与数量。
 func TestCraftingOverlayDrawsPersonalAndWorkbenchGrids(t *testing.T) {
 	atlas := newFakeNameTagAtlas()
 	for _, char := range hotbarDigits {
@@ -136,10 +133,11 @@ func TestCraftingOverlayDrawsPersonalAndWorkbenchGrids(t *testing.T) {
 	personal.Slots[3] = core.ItemStack{Item: core.ItemOakLog, Count: 1}
 	var layout hotbarLayout
 	got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, personal, nil, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, width, height)
-	// 准星、分组面板、选中框、36 格，加合成区的面板、5 个凹槽、2 个双层色块
-	// 与标题。
-	if len(got.quads) != crosshairQuads+openInventoryPanelQuads+1+core.InventorySlots+1+5+2*2+1 {
-		t.Fatalf("个人网格 quads=%d，想要基础 45 加合成区 11", len(got.quads))
+	// 准星、面板族、选中框、36 格，加合成区内容（轮廓、5 个凹槽、2 个双层色块、
+	// 箭头）与十条配方入口。
+	if len(got.quads) != crosshairQuads+containerPanelQuads+1+core.InventorySlots+11+recipeColumnQuads {
+		t.Fatalf("个人网格 quads=%d，想要基础 %d 加合成内容 11 与配方栏 %d",
+			len(got.quads), crosshairQuads+containerPanelQuads+1+core.InventorySlots, recipeColumnQuads)
 	}
 	for slot := range 4 {
 		x, y := craftingGridSlotOrigin(slot, 2, width, height)
@@ -147,17 +145,17 @@ func TestCraftingOverlayDrawsPersonalAndWorkbenchGrids(t *testing.T) {
 			t.Fatalf("个人网格格 %d 未绘制在 (%f,%f)", slot, x, y)
 		}
 	}
-	// 个人视图只覆盖左下 2×2 区域（row 0 在上、最下一行锚在容器行）：3×3 坐标
-	// 里的顶行与右列（格 0、1、2、5、8）一律不画；个人格 0..3 与 3×3 格 3、4、
-	// 6、7 同位，属于 2×2 自身。
-	for _, slot := range []int{0, 1, 2, 5, 8} {
+	// 个人视图只覆盖左上 2×2 区域（row 0 在上）：3×3 坐标里的右列与底行
+	//（格 2、5、6、7、8）一律不画；个人格 0..3 与 3×3 格 0、1、3、4 同位。
+	for _, slot := range []int{2, 5, 6, 7, 8} {
 		x, y := craftingGridSlotOrigin(slot, 3, width, height)
 		if hasQuadAt(got.quads, x, y) {
 			t.Fatalf("个人视图画出了 3×3 专属格 %d", slot)
 		}
 	}
-	if len(got.glyphs) != 4 {
-		t.Fatalf("个人网格数字=%d，想要数量 12 两位数字的阴影与前景共 4", len(got.glyphs))
+	// 个人网格的数量 12 出 4 个字形；配方栏三条数量为 4 的产物各出 2 个，共 10。
+	if len(got.glyphs) != 10 {
+		t.Fatalf("个人网格数字=%d，想要网格 4 加配方栏 6 共 10", len(got.glyphs))
 	}
 
 	workbench := &CraftingOverlay{Size: 3}
@@ -167,14 +165,14 @@ func TestCraftingOverlayDrawsPersonalAndWorkbenchGrids(t *testing.T) {
 	// 产物取两位数量：glyph 容量按 10 个格全部两位数字锁定（craftingGlyphs）。
 	workbench.Output = core.ItemStack{Item: core.ItemStoneBrick, Count: 12}
 	got = layoutInventory(&layout, atlas, core.Inventory{}, true, -1, workbench, nil, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, width, height)
-	// 准星 + 基础（分组面板、选中框、36 格）加合成区（面板 + 9 网格格 + 产物格 +
-	// 10 个双层色块 + 标题）= craftingQuads。
-	if len(got.quads) != crosshairQuads+openInventoryPanelQuads+1+core.InventorySlots+craftingQuads {
-		t.Fatalf("满工作台 quads=%d，想要基础 %d 加合成区 %d",
-			len(got.quads), crosshairQuads+openInventoryPanelQuads+1+core.InventorySlots, craftingQuads)
+	// 准星 + 面板族 + 选中框 + 36 格，加合成内容 32（轮廓 + 10 凹槽 + 20 色块 +
+	// 箭头）与配方栏 30。
+	if len(got.quads) != crosshairQuads+containerPanelQuads+1+core.InventorySlots+craftingContentQuads+recipeColumnQuads {
+		t.Fatalf("满工作台 quads=%d，想要基础 %d 加合成内容 %d 与配方栏 %d", len(got.quads),
+			crosshairQuads+containerPanelQuads+1+core.InventorySlots, craftingContentQuads, recipeColumnQuads)
 	}
-	if craftingQuads != 32 || craftingGlyphs != 40 {
-		t.Fatalf("合成区容量 quads/glyphs=%d/%d，想要 32/40", craftingQuads, craftingGlyphs)
+	if craftingContentQuads != 32 || craftingGlyphs != 40 {
+		t.Fatalf("合成内容容量 quads/glyphs=%d/%d，想要 32/40", craftingContentQuads, craftingGlyphs)
 	}
 	for slot := range core.CraftingGridSlots {
 		x, y := craftingGridSlotOrigin(slot, 3, width, height)
@@ -186,8 +184,8 @@ func TestCraftingOverlayDrawsPersonalAndWorkbenchGrids(t *testing.T) {
 	if !hasQuadAt(got.quads, outputX, outputY) {
 		t.Fatalf("产物格未绘制在 (%f,%f)", outputX, outputY)
 	}
-	if len(got.glyphs) != craftingGlyphs {
-		t.Fatalf("满工作台数字=%d，想要 %d", len(got.glyphs), craftingGlyphs)
+	if len(got.glyphs) != craftingGlyphs+6 {
+		t.Fatalf("满工作台数字=%d，想要网格 %d 加配方栏 6", len(got.glyphs), craftingGlyphs)
 	}
 
 	// 空产物格只画凹槽不画色块：产物格内容由权威镜像决定，客户端不预测。
@@ -199,6 +197,18 @@ func TestCraftingOverlayDrawsPersonalAndWorkbenchGrids(t *testing.T) {
 		if quad.X == outputX && quad.Y == outputY && quad.Color != ([4]float32{1, 1, 1, 1}) {
 			t.Fatalf("空产物格画出了非凹槽内容: %+v", quad)
 		}
+	}
+	// 产物格轮廓底衬取强调色：产物是强调色四类语义之一。
+	expand := craftingOutputOutlineExpand * got.scale
+	foundOutline := false
+	for _, quad := range got.quads {
+		if quad.X == outputX-expand && quad.Y == outputY-expand && quad.Color == accentAmber {
+			foundOutline = true
+			break
+		}
+	}
+	if !foundOutline {
+		t.Fatal("产物格缺少琥珀轮廓底衬")
 	}
 }
 
@@ -233,10 +243,10 @@ func TestCraftingSlotAtCoversUnifiedIndices(t *testing.T) {
 				t.Fatalf("尺寸 %d 网格格 %d 右边界外仍被命中", test.size, slot)
 			}
 		}
-		// 个人视图只覆盖左下 2×2（row 0 在上）：3×3 坐标里的顶行与右列
-		//（格 0、1、2、5、8）既不画也不命中。
+		// 个人视图只覆盖左上 2×2（row 0 在上）：3×3 坐标里的右列与底行
+		//（格 2、5、6、7、8）既不画也不命中。
 		if test.size == 2 {
-			for _, slot := range []int{0, 1, 2, 5, 8} {
+			for _, slot := range []int{2, 5, 6, 7, 8} {
 				x, y := craftingGridSlotOrigin(slot, 3, float32(width), float32(height))
 				if _, ok := CraftingSlotAt(float64(x)+1, float64(y)+1, width, height, 2); ok {
 					t.Fatalf("个人专属扩展位置 %d 被命中", slot)
@@ -278,7 +288,7 @@ func TestCraftingOutputAtMatchesDrawnGeometry(t *testing.T) {
 		if _, ok := CraftingSlotAt(float64(left)+1, float64(top)+1, width, height, size); ok {
 			t.Fatalf("尺寸 %d 产物格被当成普通移动目标命中", size)
 		}
-		// 产物格与全部网格格、背包格互不相交。
+		// 产物格与全部网格格、配方栏入口互不相交。
 		for slot := range size * size {
 			gridX, gridY := craftingGridSlotOrigin(slot, size, float32(width), float32(height))
 			if rectanglesIntersect(
@@ -286,6 +296,15 @@ func TestCraftingOutputAtMatchesDrawnGeometry(t *testing.T) {
 				hotbarInstance{X: gridX, Y: gridY, Width: hotbarSlotSize, Height: hotbarSlotSize},
 			) {
 				t.Fatalf("尺寸 %d 产物格与网格格 %d 相交", size, slot)
+			}
+		}
+		for row := range recipeEntryCount {
+			buttonX, buttonY := recipeButtonOrigin(row, float32(width), float32(height))
+			if rectanglesIntersect(
+				hotbarInstance{X: left, Y: top, Width: hotbarSlotSize, Height: hotbarSlotSize},
+				hotbarInstance{X: buttonX, Y: buttonY, Width: recipeColumnWidth, Height: recipeEntryHeight},
+			) {
+				t.Fatalf("尺寸 %d 产物格与配方入口 %d 相交", size, row)
 			}
 		}
 	}
@@ -304,7 +323,7 @@ func TestCraftingSourceHighlightCoversUnifiedView(t *testing.T) {
 			&layout, atlas, core.Inventory{}, true, source,
 			&CraftingOverlay{Size: 3}, nil, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800,
 		)
-		highlight := got.quads[crosshairQuads+openInventoryPanelQuads+1]
+		highlight := got.quads[crosshairQuads+containerPanelQuads+1]
 		wantX, wantY := inventorySlotOrigin(source-core.CraftingGridSlots, true, 1280, 800)
 		if source < core.CraftingGridSlots {
 			wantX, wantY = craftingGridSlotOrigin(source, 3, 1280, 800)
@@ -316,8 +335,8 @@ func TestCraftingSourceHighlightCoversUnifiedView(t *testing.T) {
 	}
 	// 越界来源（超出统一视图 0..44）不画高亮；maxQuadTestInventory 的全部物品
 	// 色块与九条耐久条都计入基础计数。
-	baseQuads := crosshairQuads + openInventoryPanelQuads + 1 + core.InventorySlots + core.InventorySlots*2 +
-		core.HotbarSlots*2 + craftingQuads
+	baseQuads := crosshairQuads + containerPanelQuads + 1 + core.InventorySlots + core.InventorySlots*2 +
+		core.HotbarSlots*2 + craftingContentQuads + recipeColumnQuads
 	got := layoutInventory(
 		&layout, atlas, maxQuadTestInventory(), true, 45,
 		fullCraftingOverlay(), nil, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800,
@@ -334,17 +353,19 @@ func TestInventoryLayoutDrawsCraftingArea(t *testing.T) {
 		atlas.glyphs[char] = fakeNameTagGlyph(7)
 	}
 	var layout hotbarLayout
-	if craftingQuads != 32 || craftingGlyphs != 40 {
-		t.Fatalf("合成区容量 quads/glyphs=%d/%d，想要 32/40", craftingQuads, craftingGlyphs)
+	if craftingContentQuads != 32 || craftingGlyphs != 40 {
+		t.Fatalf("合成内容容量 quads/glyphs=%d/%d，想要 32/40", craftingContentQuads, craftingGlyphs)
 	}
-	// 空个人网格：分组面板、选中框、36 格与「面板+5 凹槽+标题」的合成区。
+	// 空个人网格：面板族、选中框、36 格，与「轮廓 + 5 凹槽 + 箭头」的合成内容
+	// 和十条配方入口。
 	open := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, nil, nil, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
-	if len(open.quads) != crosshairQuads+openInventoryPanelQuads+1+core.InventorySlots+7 {
-		t.Fatalf("空个人网格 quads=%d，想要准星、分组面板、选中框、36 格与 7 个合成区实例",
+	if len(open.quads) != crosshairQuads+containerPanelQuads+1+core.InventorySlots+7+recipeColumnQuads {
+		t.Fatalf("空个人网格 quads=%d，想要准星、面板族、选中框、36 格、7 个合成内容与配方栏",
 			len(open.quads))
 	}
-	if len(open.glyphs) != 0 {
-		t.Fatalf("空个人网格数字=%d，想要 0", len(open.glyphs))
+	// 空个人网格没有物品数量；glyph 全部来自配方栏三条数量为 4 的产物。
+	if len(open.glyphs) != 6 {
+		t.Fatalf("空个人网格数字=%d，想要配方栏 6", len(open.glyphs))
 	}
 
 	// 满工作台加来源高亮与全部背包物品是合成视图的合法最坏组合。
@@ -355,8 +376,8 @@ func TestInventoryLayoutDrawsCraftingArea(t *testing.T) {
 	}
 	workbench.Output = core.ItemStack{Item: core.ItemStoneBrick, Count: 4}
 	got := layoutInventory(&layout, atlas, full, true, 5, workbench, nil, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
-	want := crosshairQuads + openInventoryPanelQuads + 2 + core.InventorySlots + core.InventorySlots*2 +
-		core.HotbarSlots*2 + craftingQuads
+	want := crosshairQuads + containerPanelQuads + 2 + core.InventorySlots + core.InventorySlots*2 +
+		core.HotbarSlots*2 + craftingContentQuads + recipeColumnQuads
 	if len(got.quads) != want {
 		t.Fatalf("满工作台 quads=%d，想要 %d", len(got.quads), want)
 	}
@@ -365,19 +386,19 @@ func TestInventoryLayoutDrawsCraftingArea(t *testing.T) {
 	}
 }
 
-// 杀死变异：熔炉/箱子打开时合成区必须被互斥替换，反之亦然。三套叠加区共用
-// 同一行锚点与凹槽矩形（位置无法区分），因此用精确实例计数区分组成。
-func TestContainerOverlaysReplaceCraftingGrid(t *testing.T) {
+// 杀死变异：熔炉/箱子打开时合成区必须被互斥替换，反之亦然。四类视图共用同一
+// 面板族（位置无法区分），因此用精确实例计数区分内容组成。
+func TestContainerOverlaysReplaceCraftingContent(t *testing.T) {
 	atlas := newFakeNameTagAtlas()
 	var layout hotbarLayout
-	// 空背包 + 空叠加视图的基础：分组面板、选中框与 36 格。
-	const baseQuads = crosshairQuads + openInventoryPanelQuads + 1 + core.InventorySlots
+	// 空背包 + 空叠加视图的基础：面板族、选中框与 36 格。
+	const baseQuads = crosshairQuads + containerPanelQuads + 1 + core.InventorySlots
 
 	workbench := &CraftingOverlay{Size: 3}
 	crafting := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, workbench, nil, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
-	// 空 3×3：面板、10 个凹槽与标题。
-	if len(crafting.quads) != baseQuads+12 {
-		t.Fatalf("空工作台视图 quads=%d，想要 %d+12", len(crafting.quads), baseQuads)
+	// 空 3×3：轮廓、10 个凹槽、箭头与配方栏。
+	if len(crafting.quads) != baseQuads+12+recipeColumnQuads {
+		t.Fatalf("空工作台视图 quads=%d，想要 %d+12+%d", len(crafting.quads), baseQuads, recipeColumnQuads)
 	}
 
 	for _, view := range []struct {
@@ -386,10 +407,10 @@ func TestContainerOverlaysReplaceCraftingGrid(t *testing.T) {
 		chest   *ChestOverlay
 		want    int
 	}{
-		// 空熔炉：面板、3 个凹槽、2 条进度条底与标题。
-		{"熔炉", &FurnaceOverlay{}, nil, baseQuads + 7},
-		// 空箱子：面板、27 个凹槽与标题。
-		{"箱子", nil, &ChestOverlay{}, baseQuads + 29},
+		// 空熔炉：3 个凹槽与 2 条进度底衬。
+		{"熔炉", &FurnaceOverlay{}, nil, baseQuads + 5},
+		// 空箱子：27 个凹槽。
+		{"箱子", nil, &ChestOverlay{}, baseQuads + core.ChestSlots},
 	} {
 		got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, workbench, view.overlay, view.chest, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
 		if len(got.quads) != view.want {
@@ -403,18 +424,18 @@ func TestContainerOverlaysReplaceCraftingGrid(t *testing.T) {
 		}
 	}
 	// crafting 与熔炉叠加值同时非 nil 时必须呈现熔炉（互斥优先级确定）：
-	// 实例数是熔炉组成（含 2 条非零进度填充），而不是合成区的 12 个。
+	// 实例数是熔炉组成（含 2 条非零进度填充），而不是合成内容的 12+配方栏。
 	withProgress := layoutInventory(
 		&layout, atlas, core.Inventory{}, true, -1,
 		&CraftingOverlay{Size: 3}, &FurnaceOverlay{ProgressTicks: 7, BurnTicks: 300}, nil,
 		MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800,
 	)
-	if len(withProgress.quads) != baseQuads+7+2 {
-		t.Fatalf("熔炉优先视图 quads=%d，想要 %d+7+2", len(withProgress.quads), baseQuads)
+	if len(withProgress.quads) != baseQuads+5+2 {
+		t.Fatalf("熔炉优先视图 quads=%d，想要 %d+5+2", len(withProgress.quads), baseQuads)
 	}
 }
 
-// 杀死变异：遗漏任一熔炉格、放错进度条或忽略权威计时都会改变实例布局。
+// 杀死变异：遗漏任一熔炉格、放错进度图示或忽略权威计时都会改变实例布局。
 func TestFurnaceOverlayDrawsThreeSlotsAndTwoBars(t *testing.T) {
 	atlas := newFakeNameTagAtlas()
 	for _, char := range hotbarDigits {
@@ -423,7 +444,7 @@ func TestFurnaceOverlayDrawsThreeSlotsAndTwoBars(t *testing.T) {
 	var layout hotbarLayout
 
 	empty := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, nil, &FurnaceOverlay{}, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
-	// 空熔炉：面板、3 个栏位背景与 2 条进度条底，没有物品色块或填充。
+	// 空熔炉：3 个栏位背景与 2 条进度底衬，没有物品色块或填充。
 	emptyQuads := len(empty.quads)
 	if len(empty.glyphs) != 0 {
 		t.Fatalf("空熔炉数字 = %d，想要 0", len(empty.glyphs))
@@ -438,11 +459,11 @@ func TestFurnaceOverlayDrawsThreeSlotsAndTwoBars(t *testing.T) {
 	if len(full.glyphs) != 12 {
 		t.Fatalf("满熔炉数字 = %d，想要三组两位数含阴影共 12", len(full.glyphs))
 	}
-
 }
 
-// TestFurnaceBarCompositionCropsAtlasIcons 验证两个填充复用原有 bar quad，
-// 但同时裁剪实例与 UV，而不是缩放完整图标。
+// TestFurnaceBarCompositionCropsAtlasIcons 验证两条进度的填充复用底衬 quad，
+// 同时裁剪实例与 UV，而不是缩放完整图标；火焰居中于输入/燃料之间，箭头横置
+// 指向输出栏。
 func TestFurnaceBarCompositionCropsAtlasIcons(t *testing.T) {
 	atlas := newFakeNameTagAtlas()
 	var layout hotbarLayout
@@ -451,9 +472,11 @@ func TestFurnaceBarCompositionCropsAtlasIcons(t *testing.T) {
 		BurnTicks:     core.FurnaceBurnTicks / 2,
 		ProgressTicks: core.FurnaceSmeltTicks / 2,
 	}, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, width, height)
-	barX, barTop := furnaceBarOrigin(width, height)
-	barWidth := (3*hotbarSlotSize + 2*hotbarSlotGap) * got.scale
-	barHeight := furnaceBarHeight * got.scale
+	flameX, flameY := furnaceFlameOrigin(width, height)
+	arrowX, arrowY := furnaceArrowOrigin(width, height)
+	flameSize := furnaceFlameSize * got.scale
+	arrowWidth := furnaceArrowWidth * got.scale
+	arrowHeight := furnaceArrowHeight * got.scale
 	fraction := float32(0.5)
 	for _, test := range []struct {
 		name string
@@ -462,12 +485,12 @@ func TestFurnaceBarCompositionCropsAtlasIcons(t *testing.T) {
 	}{
 		{
 			"火焰自下向上", hotbarTextureUV(hotbarFurnaceFlameColumn), hotbarInstance{
-				X: barX, Y: barTop + barHeight*(1-fraction), Width: barWidth, Height: barHeight * fraction,
+				X: flameX, Y: flameY + flameSize*(1-fraction), Width: flameSize, Height: flameSize * fraction,
 			},
 		},
 		{
 			"箭头自左向右", hotbarTextureUV(hotbarFurnaceArrowColumn), hotbarInstance{
-				X: barX, Y: barTop + (furnaceBarHeight+furnaceBarGap)*got.scale, Width: barWidth * fraction, Height: barHeight,
+				X: arrowX, Y: arrowY, Width: arrowWidth * fraction, Height: arrowHeight,
 			},
 		},
 	} {
@@ -483,11 +506,13 @@ func TestFurnaceBarCompositionCropsAtlasIcons(t *testing.T) {
 				if quad.X != test.want.X || quad.Y != test.want.Y || quad.Width != test.want.Width || quad.Height != test.want.Height {
 					t.Fatalf("填充=%+v，想要实例=%+v", quad, test.want)
 				}
-				if test.name == "火焰自下向上" && quad.V1 != test.uv[3] {
-					t.Fatalf("火焰 V1=%v，想要保留底边 %v", quad.V1, test.uv[3])
-				}
-				if test.name == "火焰自下向上" && quad.V0 != test.uv[1]+(test.uv[3]-test.uv[1])*(1-fraction) {
-					t.Fatalf("火焰 V0=%v，想要比例端点", quad.V0)
+				if test.name == "火焰自下向上" {
+					if quad.V1 != test.uv[3] {
+						t.Fatalf("火焰 V1=%v，想要保留完整 cell 底沿 %v（裁剪只动 V0/Y）", quad.V1, test.uv[3])
+					}
+					if quad.V0 != test.uv[1]+(test.uv[3]-test.uv[1])*(1-fraction) {
+						t.Fatalf("火焰 V0=%v，想要比例端点", quad.V0)
+					}
 				}
 				if test.name == "箭头自左向右" && quad.U1 != test.uv[0]+(test.uv[2]-test.uv[0])*fraction {
 					t.Fatalf("箭头 U1=%v，想要比例端点", quad.U1)
@@ -498,7 +523,26 @@ func TestFurnaceBarCompositionCropsAtlasIcons(t *testing.T) {
 			}
 		})
 	}
+	// 火焰区域必须落在输入栏底沿与燃料栏顶沿之间，箭头区域不得与三格相交。
+	inputX, inputY := furnaceSlotOrigin(0, width, height)
+	fuelX, fuelY := furnaceSlotOrigin(1, width, height)
+	outputX, outputY := furnaceSlotOrigin(2, width, height)
+	flame := hotbarInstance{X: flameX, Y: flameY, Width: flameSize, Height: flameSize}
+	input := hotbarInstance{X: inputX, Y: inputY, Width: hotbarSlotSize * got.scale, Height: hotbarSlotSize * got.scale}
+	fuel := hotbarInstance{X: fuelX, Y: fuelY, Width: input.Width, Height: input.Height}
+	output := hotbarInstance{X: outputX, Y: outputY, Width: input.Width, Height: input.Height}
+	arrow := hotbarInstance{X: arrowX, Y: arrowY, Width: arrowWidth, Height: arrowHeight}
+	for _, test := range []struct {
+		name string
+		a, b hotbarInstance
+	}{{"火焰-输入", flame, input}, {"火焰-燃料", flame, fuel}, {"火焰-输出", flame, output},
+		{"箭头-输入", arrow, input}, {"箭头-燃料", arrow, fuel}, {"箭头-输出", arrow, output}} {
+		if rectanglesIntersect(test.a, test.b) {
+			t.Fatalf("%s 图示与栏位相交: %+v / %+v", test.name, test.a, test.b)
+		}
+	}
 }
+
 func TestFurnaceSlotAtCoversUnifiedIndices(t *testing.T) {
 	width, height := uint32(1280), uint32(800)
 	// 0..35 与背包命中一致。
@@ -511,7 +555,7 @@ func TestFurnaceSlotAtCoversUnifiedIndices(t *testing.T) {
 	}
 	// 36、37、38 落在熔炉三格上。
 	for index := range 3 {
-		x, y := recipeSlotOrigin(index, float32(width), float32(height))
+		x, y := furnaceSlotOrigin(index, float32(width), float32(height))
 		got, ok := FurnaceSlotAt(float64(x), float64(y), width, height)
 		if !ok || got != core.InventorySlots+uint8(index) {
 			t.Fatalf("熔炉格 %d 命中 = %d, %v", index, got, ok)
@@ -529,6 +573,7 @@ func TestFurnaceSlotAtCoversUnifiedIndices(t *testing.T) {
 		t.Fatal("零尺寸 framebuffer 被判为命中")
 	}
 }
+
 func TestFurnaceSourceHighlightCoversFurnaceSlots(t *testing.T) {
 	atlas := newFakeNameTagAtlas()
 	var layout hotbarLayout
@@ -537,11 +582,11 @@ func TestFurnaceSourceHighlightCoversFurnaceSlots(t *testing.T) {
 			&layout, atlas, core.Inventory{}, true, source,
 			nil, &FurnaceOverlay{}, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800,
 		)
-		// 面板和当前选中框之后是来源高亮。
-		highlight := got.quads[crosshairQuads+openInventoryPanelQuads+1]
+		// 面板族和当前选中框之后是来源高亮。
+		highlight := got.quads[crosshairQuads+containerPanelQuads+1]
 		wantX, wantY := inventorySlotOrigin(source, true, 1280, 800)
 		if source >= core.InventorySlots {
-			wantX, wantY = recipeSlotOrigin(source-core.InventorySlots, 1280, 800)
+			wantX, wantY = furnaceSlotOrigin(source-core.InventorySlots, 1280, 800)
 		}
 		border := hotbarSelectBorder * hudScale(true, 1280, 800)
 		if highlight.X != wantX-border || highlight.Y != wantY-border {
@@ -577,8 +622,8 @@ func TestChestOverlayDraws27SlotsWithItemsAndCounts(t *testing.T) {
 	if len(got.glyphs) != 6 {
 		t.Fatalf("数字数量 = %d，想要 64/5 含阴影且隐藏 1，共 6 个实例", len(got.glyphs))
 	}
-	// 标题固定追加在 overlay 尾部，不属于物品色块序列。
-	tiles := got.quads[emptyQuads-1 : len(got.quads)-1]
+	// 物品色块固定追加在箱子凹槽序列之后。
+	tiles := got.quads[emptyQuads:len(got.quads)]
 	wantItems := []core.ItemID{core.ItemStone, core.ItemCoal, core.ItemIronIngot}
 	for index, item := range wantItems {
 		face := tiles[index*2+1]
@@ -646,8 +691,8 @@ func TestChestSourceHighlightCoversChestSlots(t *testing.T) {
 			&layout, atlas, core.Inventory{}, true, source,
 			nil, nil, &ChestOverlay{}, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800,
 		)
-		// 面板和当前选中框之后是来源高亮。
-		highlight := got.quads[crosshairQuads+openInventoryPanelQuads+1]
+		// 面板族和当前选中框之后是来源高亮。
+		highlight := got.quads[crosshairQuads+containerPanelQuads+1]
 		wantX, wantY := inventorySlotOrigin(source, true, 1280, 800)
 		if source >= core.InventorySlots {
 			wantX, wantY = chestSlotOrigin(source-core.InventorySlots, 1280, 800)

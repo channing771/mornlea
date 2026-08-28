@@ -32,6 +32,7 @@ func (renderer *HotbarRenderer) Prepare(
 	chat ChatOverlay,
 	popup PopupOverlay,
 	crosshair CrosshairOverlay,
+	tooltip TooltipOverlay,
 	width, height uint32,
 	budget *render.UploadBudget,
 ) error {
@@ -42,6 +43,8 @@ func (renderer *HotbarRenderer) Prepare(
 	}
 	textRequested = requestChatText(renderer.atlas, chat) || textRequested
 	textRequested = requestPopupText(renderer.atlas, popup, open) || textRequested
+	textRequested = requestTooltipText(renderer.atlas, tooltip, inventory, crafting, overlay, chest,
+		open, float32(width), float32(height)) || textRequested
 	if textRequested {
 		if err := renderer.atlas.FlushUploads(budget); err != nil {
 			return err
@@ -67,6 +70,12 @@ func (renderer *HotbarRenderer) Prepare(
 	appendChatOverlay(&renderer.layout, renderer.atlas, chat, float32(width), float32(height))
 	// 弹条最后布局：它只追加 glyph、锚在关闭态几何上，与物品镜像确认状态无关。
 	appendPopupOverlay(&renderer.layout, renderer.atlas, popup, open, float32(width), float32(height))
+	// tooltip 只在打开态布局：悬停解析与命中测试共用同一几何，实例追加在
+	// 一切 HUD 内容之后，保证浮在最上层。
+	if open && inventoryConfirmed {
+		appendTooltipOverlay(&renderer.layout, renderer.atlas, tooltip, inventory, crafting, overlay, chest,
+			float32(width), float32(height))
+	}
 	encodeHotbarViewport(
 		renderer.upload[hotbarViewportOffset:hotbarViewportOffset+hotbarViewportBytes],
 		float32(width), float32(height),

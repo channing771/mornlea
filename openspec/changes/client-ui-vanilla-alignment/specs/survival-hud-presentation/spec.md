@@ -27,7 +27,7 @@
 
 - **GIVEN** 分别构造关闭界面的最坏快捷栏、状态、准星与采掘组合，以及打开界面的最大浮动面板、背包、容器、状态、聊天与悬停 tooltip 组合
 - **WHEN** 系统准备两种 HUD
-- **THEN** 加入最多 20 个饥饿 quad 后，关闭合法最坏组合的 quad 数量 MUST 恰好为 100，打开合法最坏组合 MUST 恰好为 274，且都 MUST 不超过固定上限 320
+- **THEN** 加入最多 20 个饥饿 quad 后，关闭合法最坏组合的 quad 数量 MUST 恰好为 100，打开合法最坏组合 MUST 恰好为 264，且都 MUST 不超过固定上限 320
 - **AND** 合法最大 glyph 组合（含 tooltip 与物品名弹条）MUST 不超过固定上限 768
 - **AND** 两种组合 MUST 继续通过同一 HUD pass 以相同 48-byte instance 编码输出
 - **AND** glyph offset 与固定上传总容量 MUST 分别保持 15616 与 52480 bytes，固定区间 MUST 保持 256-byte 对齐

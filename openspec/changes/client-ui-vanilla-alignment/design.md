@@ -21,12 +21,12 @@ HUD 布局逻辑全部在 Go 侧 `internal/render/hud/`（固定容量 quad/glyp
 | `panelBorderLight` | (0.92, 0.93, 0.95, 0.16) | 1 design px 亮边 |
 | `slotWell` | (0.020, 0.024, 0.030, 0.92) | 槽位凹槽 |
 | `slotWellEdge` | (1, 1, 1, 0.07) | 凹槽上沿内高光 1 design px |
-| `accentAmber` | (1, 0.72, 0.24, 0.98) | 唯一强调色：选中格内衬、进度填充、tooltip 标记、产物格轮廓 |
+| `accentAmber` | (1, 0.72, 0.24, 0.98) | 唯一强调色：选中格内衬、进度填充、产物格轮廓 |
 | `textPrimaryFg` | (0.96, 0.96, 0.97, 1) / 阴影 (0, 0, 0, 0.85) | 全部 HUD 文字双层 |
 | `crosshairShadow` / `crosshairFg` | (0, 0, 0, 0.55) / (0.96, 0.96, 0.96, 0.92) | 准星双层 |
 | 语义色保留 | 生命红系、饥饿棕系、氧气青白系、耐久绿→红、采掘可采绿/不可采琥珀橙、来源高亮青（「待移动来源」状态色，几何区分：外扩整格描边） | 图标与状态语义色不变相 |
 
-规则：强调色只允许出现在「选中、进度、产物、tooltip 标记」四类语义；警告与错误沿用既有红/橙语义色；禁止新增第二种强调色相。`panelBorderLight` 亮边只适用于容器浮动面板与 egui 面板；底部快捷栏贴条保持「投影+表面」双层结构（无边），与原版热栏的贴条形态一致——这也保住关闭态最坏恰 100 的预算钉。Rust 侧对应新增 `engine/crates/mornlea_client/src/ui/style.rs`（egui 令牌，见 D5），两侧令牌表并排写进本文件，互不引用（无 ABI 通道）。
+规则：强调色只允许出现在「选中、进度、产物」三类语义；警告与错误沿用既有红/橙语义色；禁止新增第二种强调色相。`panelBorderLight` 亮边只适用于容器浮动面板与 egui 面板；底部快捷栏贴条保持「投影+表面」双层结构（无边），与原版热栏的贴条形态一致——这也保住关闭态最坏恰 100 的预算钉。Rust 侧对应新增 `engine/crates/mornlea_client/src/ui/style.rs`（egui 令牌，见 D5），两侧令牌表并排写进本文件，互不引用（无 ABI 通道）。
 
 ## D2 生存 HUD 布局对齐 + 准星 + 物品名弹条
 
@@ -40,7 +40,7 @@ HUD 布局逻辑全部在 Go 侧 `internal/render/hud/`（固定容量 quad/glyp
 新增 quad 来源：准星 4（关闭+打开）、浮动面板描边 4（打开）、tooltip 背景 2（打开）。最坏组合重算并以固定预算测试钉住：
 
 - 关闭最坏：96 + 4 = **100**
-- 打开最坏：实算基线 257（旧 spec 的 266 为历史口径）+ 4（准星）= 261，T3 落地面板净增（描边等）与 tooltip 背景（+2）后**由 T3 固定预算测试实算**，届时同步修正本行与 delta 钉值（先例：glyph 预算 548 实测修正）
+- 打开最坏（T3 实算钉值）：**264** = 准星 4 + 面板族 7 + 选中 1 + 来源高亮 1 + 36 格 + 72 色块 + 18 耐久 + 箱子内容 81 + 状态栈 40 + 聊天 2 + tooltip 背景 2（基线 257 + 面板族净增 3 + tooltip 2；以 `openWorstQuads` 命名常量固定预算测试钉住）
 - 容量：`maxHotbarQuads` 267→**320**；quad 区 256 + 320×48 = 15616 = glyph offset（256 对齐保持）
 - glyph：`maxHotbarGlyphs` 700→**768**（现有最坏 + 弹条 ≤64（32 rune × 阴影/前景双层）+ tooltip ≤16 后留余量；关闭态实测最坏 548；实现须以测试断言实测最坏并记录）；总容量 15616 + 768×48 = **52480**
 - benchmark scenario v19→v20：scenario 常量、测试断言、README 双语版本矩阵、`docs/notes/compatibility.md`、`docs/architecture.md`（如有提及）、`internal/render/hud/layout.go` 注释同步。协议/schema/ABI/配置版本全部不动。

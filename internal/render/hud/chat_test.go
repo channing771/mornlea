@@ -26,7 +26,7 @@ func TestChatOverlayShowsSixEventsAndInputWithinFixedCapacity(t *testing.T) {
 	if err := renderer.Prepare(
 		core.Inventory{}, false, false, -1, nil, nil, nil, MiningOverlay{}, EatingOverlay{}, HealthOverlay{}, OxygenOverlay{}, HungerOverlay{},
 		ChatOverlay{Open: true, Input: line, Lines: lines},
-		PopupOverlay{}, CrosshairOverlay{}, 1280, 720, render.NewUploadBudget(1<<20),
+		PopupOverlay{}, CrosshairOverlay{}, TooltipOverlay{}, 1280, 720, render.NewUploadBudget(1<<20),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestChatOverlayHotPathAllocations(t *testing.T) {
 	prepare := func() {
 		if err := renderer.Prepare(
 			core.Inventory{}, false, false, -1, nil, nil, nil, MiningOverlay{}, EatingOverlay{}, HealthOverlay{}, OxygenOverlay{}, HungerOverlay{},
-			overlay, PopupOverlay{}, CrosshairOverlay{}, 1280, 720, budget,
+			overlay, PopupOverlay{}, CrosshairOverlay{}, TooltipOverlay{}, 1280, 720, budget,
 		); err != nil {
 			panic(err)
 		}

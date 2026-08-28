@@ -25,7 +25,7 @@
 - [ ] 3.1 `panelGeometry` 单源推导：四类面板绘制与全部命中测试（36/39/63 格、产物格、十条配方）共用面板矩形；穷举几何测试（面板与状态栈/快捷栏/进度条互不相交、全部界内）。
 - [ ] 3.2 四类面板布局：个人背包（2×2+箭头+产物 + 右侧十条配方栏 + 3×9 + 快捷栏行）、工作台（3×3 图式）、熔炉（输入上/火焰中/燃料下 → 箭头 → 输出）、箱子（27 格）；标题 quad 各一。
 - [ ] 3.3 tooltip：悬停非空栏位（含产物格）显示中文名（与弹条同源），指针右下优先、越界翻转、空格/面板外零实例；TDD。
-- [ ] 3.4 打开最坏恰 274 预算测试；`openHUDHeight` 语义更新为含面板高度的缩放约束；delta：`container-ui-presentation` MODIFIED×3 + ADDED×1 与实现一致。
+- [ ] 3.4 打开最坏恰 264 预算测试；`openHUDHeight` 语义更新为含面板高度的缩放约束；delta：`container-ui-presentation` MODIFIED×3 + ADDED×1 与实现一致。
 - 验证：`go test ./internal/render/... ./cmd/mornlea -race -count=1`（capture 包编译级）。
 
 ## 4. egui 菜单换肤

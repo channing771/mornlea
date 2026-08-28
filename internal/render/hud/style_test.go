@@ -98,7 +98,9 @@ func TestStyleTokensAreTheOnlyFloatColorSource(t *testing.T) {
 				continue
 			}
 			if reason, ok := allowedOutsideStyleFile[value]; ok {
-				_ = reason
+				if reason == "" {
+					t.Errorf("%s 的白名单理由为空", name)
+				}
 				continue
 			}
 			t.Errorf("%s 出现令牌表之外的颜色字面量 %v：呈现色必须迁入 style.go", name, value)
@@ -159,40 +161,64 @@ func TestHotbarDigitsUseTextPrimaryTokens(t *testing.T) {
 	}
 }
 
-// TestOpenPanelsConsumePanelTokens 钉住打开态面板族全部取自面板令牌：外层
-// 背衬与快捷栏行取 `panelShadow`（贴条行的凹陷分组），背包表面取
-// `panelSurface`，分组分隔线取 `panelBorderLight`；三类容器视图的面板同源。
-// 面板仍保持双层（投影+表面）结构，本测试不引入也不允许任何描边 quad。
+// TestOpenPanelsConsumePanelTokens 钉住打开态面板族全部取自面板令牌：外扩
+// 投影取 `panelShadow`，表面取 `panelSurface`，四边亮边取 `panelBorderLight`；
+// 右侧配方栏入口取槽位令牌 `slotWell`/`slotWellEdge`，产物格轮廓取强调色。
+// 三类容器视图的面板同源；聊天栈背衬同语言。
 func TestOpenPanelsConsumePanelTokens(t *testing.T) {
 	atlas := newFakeNameTagAtlas()
 	var layout hotbarLayout
 	got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, nil, nil, nil,
 		MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
-	// 准星先追加，其后的 `openInventoryPanelQuads` 个实例才是面板层。
-	panels := got.quads[crosshairQuads:][:openInventoryPanelQuads]
-	wantColors := [openInventoryPanelQuads][4]float32{
-		panelShadow, panelSurface, panelShadow, panelBorderLight,
+	// 准星先追加，其后的面板族是投影、表面与四边亮边（标题为纹理 cell 不在此列）。
+	family := got.quads[crosshairQuads:][:containerPanelQuads-1]
+	wantColors := [containerPanelQuads - 1][4]float32{
+		panelShadow, panelSurface,
+		panelBorderLight, panelBorderLight, panelBorderLight, panelBorderLight,
 	}
 	for index, want := range wantColors {
-		if panels[index].Color != want {
-			t.Fatalf("打开态面板层 %d 颜色=%v，想要令牌 %v", index, panels[index].Color, want)
+		if family[index].Color != want {
+			t.Fatalf("打开态面板层 %d 颜色=%v，想要令牌 %v", index, family[index].Color, want)
 		}
 	}
 
 	var chest hotbarLayout
-	appendChestGrid(&chest, atlas, ChestOverlay{}, 1280, 800)
-	if chest.quads[0].Color != panelSurface {
-		t.Fatalf("箱子面板颜色=%v，想要令牌 panelSurface", chest.quads[0].Color)
+	chestGot := layoutInventory(&chest, atlas, core.Inventory{}, true, -1, nil, nil, &ChestOverlay{},
+		MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
+	chestFamily := chestGot.quads[crosshairQuads:][:containerPanelQuads-1]
+	for index, want := range wantColors {
+		if chestFamily[index].Color != want {
+			t.Fatalf("箱子面板层 %d 颜色=%v，想要令牌 %v", index, chestFamily[index].Color, want)
+		}
 	}
-	var furnace hotbarLayout
-	appendFurnaceRow(&furnace, atlas, FurnaceOverlay{}, 1280, 800)
-	if furnace.quads[0].Color != panelSurface {
-		t.Fatalf("熔炉面板颜色=%v，想要令牌 panelSurface", furnace.quads[0].Color)
-	}
+
+	// 配方栏十条入口：井取 `slotWell`、上沿内高光取 `slotWellEdge`。
 	var crafting hotbarLayout
-	appendCraftingGrid(&crafting, atlas, CraftingOverlay{}, 1280, 800)
-	if crafting.quads[0].Color != panelSurface {
-		t.Fatalf("合成面板颜色=%v，想要令牌 panelSurface", crafting.quads[0].Color)
+	craftingGot := layoutInventory(&crafting, atlas, core.Inventory{}, true, -1, &CraftingOverlay{Size: 2}, nil, nil,
+		MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
+	wells, edges := 0, 0
+	for _, quad := range craftingGot.quads {
+		switch quad.Color {
+		case slotWell:
+			wells++
+		case slotWellEdge:
+			edges++
+		case accentAmber:
+			// 产物格轮廓底衬是唯一强调色 quad。
+		}
+	}
+	if wells != recipeEntryCount || edges != recipeEntryCount {
+		t.Fatalf("配方栏井/高光=%d/%d，想要各 %d", wells, edges, recipeEntryCount)
+	}
+	// 强调色 quad = 产物格轮廓底衬 + 打开态选中格内衬（`accentAmber` 别名）。
+	amberCount := 0
+	for _, quad := range craftingGot.quads {
+		if quad.Color == accentAmber {
+			amberCount++
+		}
+	}
+	if amberCount != craftingOutputOutlineQuads+1 {
+		t.Fatalf("强调色 quad=%d，想要产物格轮廓 %d 加选中内衬 1", amberCount, craftingOutputOutlineQuads)
 	}
 
 	// 聊天栈同属浮动面板语言：输入行取更深的投影色作背衬，历史行取表面色。

@@ -133,8 +133,9 @@ func TestCraftingPersonalExtendedSlotsNotSelectable(t *testing.T) {
 	app.setInventoryOpen(true)
 
 	width, height := uint32(1280), uint32(720)
-	// 3×3 坐标里的顶行与右列位置在个人视图下是空的叠加区：点击不得记录来源。
-	for _, slot := range []int{0, 1, 2, 5, 8} {
+	// 3×3 坐标里的右列与底行位置在个人视图下是空的叠加区：点击不得记录来源。
+	// 个人 2×2 锚在图示区左上（row 0 在上），覆盖 3×3 的格 0、1、3、4。
+	for _, slot := range []int{2, 5, 6, 7, 8} {
 		x, y := craftingGridSlotCenter(t, slot, 3, width, height)
 		app.clickInventorySlot(x, y, width, height)
 		if app.inventorySource != -1 {

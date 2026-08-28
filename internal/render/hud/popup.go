@@ -52,13 +52,19 @@ func (overlay PopupOverlay) visible() bool {
 // popupVisibleText 把弹条文本截断到 `maxPopupRunes` 个 rune：超长时保留前
 // 31 rune 并以省略号收尾，与聊天行的可见 rune 预算同构。
 func popupVisibleText(text string) string {
-	if utf8.RuneCountInString(text) <= maxPopupRunes {
+	return truncateVisibleRunes(text, maxPopupRunes)
+}
+
+// truncateVisibleRunes 把文本截断到 limit 个可见 rune：超长时保留前 limit-1
+// rune 并以省略号收尾，是聊天行/弹条/tooltip 共用的截断约定。
+func truncateVisibleRunes(text string, limit int) string {
+	if utf8.RuneCountInString(text) <= limit {
 		return text
 	}
 	visibleEnd := 0
 	runes := 0
 	for index := range text {
-		if runes == maxPopupRunes-1 {
+		if runes == limit-1 {
 			visibleEnd = index
 			break
 		}
@@ -115,8 +121,19 @@ func appendPopupText(
 	centerX, baseline, scale float32,
 ) {
 	width := popupTextWidth(atlas, text, scale)
+	appendAlignedText(dst, atlas, text, centerX-width*0.5, baseline, scale)
+}
+
+// appendAlignedText 以基线锚定、左对齐绘制双层文字：tooltip 悬停名与弹条共用
+// 同一套 pen 推进、kerning 与阴影偏移，避免两份字形循环各自漂移。
+func appendAlignedText(
+	dst *hotbarLayout,
+	atlas render.GlyphSource,
+	text string,
+	penOriginX, baseline, scale float32,
+) {
 	for pass := range 2 {
-		penX := centerX - width*0.5
+		penX := penOriginX
 		previous := rune(0)
 		index := 0
 		for _, char := range text {

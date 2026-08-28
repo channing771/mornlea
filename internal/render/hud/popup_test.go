@@ -203,7 +203,7 @@ func TestPrepareLayoutsPopupGlyphs(t *testing.T) {
 		core.Inventory{}, true, false, -1, nil, nil, nil, MiningOverlay{}, EatingOverlay{},
 		HealthOverlay{}, OxygenOverlay{}, HungerOverlay{}, ChatOverlay{},
 		PopupOverlay{Text: "石头", ShownAtTick: 1, WorldTick: 1, Valid: true},
-		CrosshairOverlay{Visible: true}, 1280, 800, render.NewUploadBudget(1024),
+		CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 800, render.NewUploadBudget(1024),
 	); err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
