@@ -56,6 +56,6 @@
 
 ## 8. 视觉场景构造与功能线终审
 
-- [ ] 8.1 `hostile-mob` 场景构造（夜间火把边缘 8 只夜行者、1 只受击 1 只追逐；无 nametag 断言；插入 `ai-companion` 与 `water-surface-slope` 之间）并生成本场景 golden PNG（torch-night 先例；场景总数 21→22 口径），`visual-check` 对全表比对全绿
-- [ ] 8.2 功能线验证：`make rust`、`go test ./internal/core ./internal/companion ./internal/network ./internal/storage ./internal/sim ./internal/server ./internal/client ./internal/render ./internal/nativeabi ./cmd/mornlea -race -count=1`、`go test ./... -race`（合并前全量）、`go test ./internal/archcheck -count=1`、`go vet ./...`、`gofmt -l .` 无输出、`openspec validate --all --strict --no-interactive`、`git diff --check`；另记录 benchmark scenario v19 或 `cmd/perfcheck` 输出摘要（tick 热路径变更，数值只记录、不改基线）
+- [x] 8.1 `hostile-mob` 场景构造（夜间火把边缘 8 只夜行者、1 只受击 1 只追逐；无 nametag 断言；插入 `ai-companion` 与 `water-surface-slope` 之间）并生成本场景 golden PNG（torch-night 先例；场景总数 21→22 口径），`visual-check` 对全表比对全绿
+- [x] 8.2 功能线验证：`make rust`、`go test ./internal/core ./internal/companion ./internal/network ./internal/storage ./internal/sim ./internal/server ./internal/client ./internal/render ./internal/nativeabi ./cmd/mornlea -race -count=1`、`go test ./... -race`（合并前全量）、`go test ./internal/archcheck -count=1`、`go vet ./...`、`gofmt -l .` 无输出、`openspec validate --all --strict --no-interactive`、`git diff --check`；另记录 benchmark scenario v19 或 `cmd/perfcheck` 输出摘要（tick 热路径变更，数值只记录、不改基线）
 - [ ] 8.3 独立整分支终审（规格合规 + 上限 + worker 不阻 tick + spawn 重放 + 暗度 oracle + schema 错误矩阵 + 重启 + wire 订阅 + 75-body ABI + 无 nametag + 无版权资源）；终审结论与验证输出摘要写入 `ledger.md`；推送分支开 PR，评审通过后合并 main（含 golden 与基线文档版本行）

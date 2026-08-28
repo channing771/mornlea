@@ -549,6 +549,9 @@ func applyCaptureBlocks(
 // 聊天输入与格式化缓存——不显式清掉就会静默出现在水面上。清理项与
 // applyAICompanionCaptureState 自己开头的那段一一对应：谁留下的谁负责被清掉，
 // 但清理的落点必须在**后一个**场景，因为场景表没有 teardown 钩子。
+// hostile-mob 场景排在 ai-companion 与水景之间，其临时夜行者（含受击与追逐
+// 状态）由本函数一并恢复：镜像清空 + 派生呈现缓存归零，后续场景不继承任何
+// 夹具值。
 func resetCapturePresentation(app *application) error {
 	if app.remotePlayers == nil || app.companions == nil ||
 		app.chatEvents == nil || app.itemDrops == nil {
@@ -568,6 +571,13 @@ func resetCapturePresentation(app *application) error {
 	app.remoteAvatars = app.remoteAvatars[:0]
 	app.remoteNameTags = app.remoteNameTags[:0]
 	app.itemDropInstances = app.itemDropInstances[:0]
+	// 夜行者镜像是场景夹具的一部分：hostile-mob 注入的 8 只个体（含受击与
+	// 追逐状态）必须在这里一并恢复，否则水景会带着夜景敌怪出图。镜像可能
+	// 为 nil（最小测试装配），nil 时无从谈起夹具残留，跳过即可。
+	if app.hostiles != nil {
+		app.hostiles.Reset()
+	}
+	app.hostilePresentations = app.hostilePresentations[:0]
 	app.miningOverlay = hud.MiningOverlay{}
 	app.damageFeedback.Reset()
 	app.damageStrength = 0

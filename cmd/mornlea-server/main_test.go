@@ -101,8 +101,10 @@ func TestDefaultOptions(t *testing.T) {
 }
 
 func TestServerProtocolV26IsCurrent(t *testing.T) {
-	if network.ProtocolVersion != 29 {
-		t.Fatalf("专用服务端协议版本 = %d，想要 29", network.ProtocolVersion)
+	// 字面量随 `network.ProtocolVersion` 的现行契约同步（v30 新增三类夜行者
+	// S→C 消息）；函数名保留历史编号先例，仅钉住「专用服务端跟随当前协议」。
+	if network.ProtocolVersion != 30 {
+		t.Fatalf("专用服务端协议版本 = %d，想要 30", network.ProtocolVersion)
 	}
 }
 
@@ -331,7 +333,8 @@ func TestRunMigrateMaterialsCompletesAndRerunsWithSameArguments(t *testing.T) {
 	if got := reopened.Metadata().FormatVersion; got != 2 {
 		t.Fatalf("迁移后 metadata 版本 = %d，期望 2", got)
 	}
-	if network.ProtocolVersion != 29 {
+	// 迁移只动世界 metadata，协议契约必须保持现行值（v30）不变。
+	if network.ProtocolVersion != 30 {
 		t.Fatalf("迁移命令改变了协议版本: %d", network.ProtocolVersion)
 	}
 }
