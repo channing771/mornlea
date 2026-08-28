@@ -57,6 +57,12 @@ const (
 	// 「形状自身水平镜像等价」声明（与 RecipeTorch 的声明方式同形），与门
 	// 2×3 两列木板形状互不误配。
 	RecipeBed
+	// RecipeWoodenSword 用两块橡木木板纵列加一根木棍合成满耐久木剑。
+	RecipeWoodenSword
+	// RecipeStoneSword 用两块圆石纵列加一根木棍合成满耐久石剑。
+	RecipeStoneSword
+	// RecipeIronSword 用两块铁锭纵列加一根木棍合成满耐久铁剑。
+	RecipeIronSword
 )
 
 // Recipe 返回 id 的固定形状配方；未知 ID 返回 false。
@@ -251,6 +257,36 @@ func recipePattern(id RecipeID) (RecipePattern, bool) {
 			},
 			Output: ItemStack{Item: ItemBed, Count: 1},
 		}, true
+	case RecipeWoodenSword:
+		return RecipePattern{
+			Width: 1, Height: 3, Mirror: true,
+			Cells: [CraftingGridSlots]ItemID{
+				ItemOakPlanks, ItemNone, ItemNone,
+				ItemOakPlanks, ItemNone, ItemNone,
+				ItemStick, ItemNone, ItemNone,
+			},
+			Output: ItemStack{Item: ItemWoodenSword, Count: 1, Durability: 59},
+		}, true
+	case RecipeStoneSword:
+		return RecipePattern{
+			Width: 1, Height: 3, Mirror: true,
+			Cells: [CraftingGridSlots]ItemID{
+				ItemCobblestone, ItemNone, ItemNone,
+				ItemCobblestone, ItemNone, ItemNone,
+				ItemStick, ItemNone, ItemNone,
+			},
+			Output: ItemStack{Item: ItemStoneSword, Count: 1, Durability: 131},
+		}, true
+	case RecipeIronSword:
+		return RecipePattern{
+			Width: 1, Height: 3, Mirror: true,
+			Cells: [CraftingGridSlots]ItemID{
+				ItemIronIngot, ItemNone, ItemNone,
+				ItemIronIngot, ItemNone, ItemNone,
+				ItemStick, ItemNone, ItemNone,
+			},
+			Output: ItemStack{Item: ItemIronSword, Count: 1, Durability: 250},
+		}, true
 	default:
 		return RecipePattern{}, false
 	}
@@ -269,8 +305,8 @@ func recipePattern(id RecipeID) (RecipePattern, bool) {
 // 或有效尺寸之外的格（个人网格的格 4..8）残留物品时，一律判定无匹配——
 // 正常权威路径不会构造出这两种输入，这里是防御层。
 //
-// 实现是固定 16 条 × 至多 9 格的纯值循环，无 map/slice 分配，不建通用矩阵包
-// （design.md D3）。循环上界用命名常量 RecipeBed 而非字面量：追加新配方时
+// 实现是固定 19 条 × 至多 9 格的纯值循环，无 map/slice 分配，不建通用矩阵包
+// （design.md D3）。循环上界用命名常量 RecipeIronSword 而非字面量：追加新配方时
 // 它随注册表自然延伸（与 BlockIDMax 同形的哨兵纪律）。
 func MatchCraftingGrid(size uint8, slots [CraftingGridSlots]ItemStack) (RecipeID, ItemStack, bool) {
 	if size != 2 && size != 3 {
@@ -293,7 +329,7 @@ func MatchCraftingGrid(size uint8, slots [CraftingGridSlots]ItemStack) (RecipeID
 	if !ok {
 		return 0, ItemStack{}, false
 	}
-	for id := RecipeStoneBricks; id <= RecipeBed; id++ {
+	for id := RecipeStoneBricks; id <= RecipeIronSword; id++ {
 		pattern, registered := recipePattern(id)
 		if !registered {
 			continue

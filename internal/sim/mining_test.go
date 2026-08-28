@@ -431,6 +431,46 @@ func TestMiningConsumesOneDurabilityPerBrokenBlock(t *testing.T) {
 	}
 }
 
+func TestMiningIntactSwordsDoNotConsumeDurability(t *testing.T) {
+	tests := []struct {
+		name  string
+		stack core.ItemStack
+	}{
+		{"木剑", core.ItemStack{Item: core.ItemWoodenSword, Count: 1, Durability: 29}},
+		{"石剑", core.ItemStack{Item: core.ItemStoneSword, Count: 1, Durability: 65}},
+		{"铁剑", core.ItemStack{Item: core.ItemIronSword, Count: 1, Durability: 125}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			engine, sessions, targets := readyMiningPlayers(t, 1)
+			player := engine.sessions[sessions[0]].player
+			target := targets[0]
+			engine.SetBlockForTest(target, core.DirtID)
+			player.inventory.Hotbar.Slots[0] = test.stack
+
+			var result TickResult
+			for range 5 {
+				result = advanceMiningOnce(engine)
+			}
+
+			if len(result.Rejected) != 0 {
+				t.Fatalf("剑采掘泥土被拒绝 = %+v", result.Rejected)
+			}
+			record := miningTargetRecord(t, engine, target)
+			x, _, z := target.Local()
+			if got := record.Chunk.BlockAt(x, target.Y, z); got != core.AirID {
+				t.Fatalf("剑采掘完成后方块 = %d，想要空气", got)
+			}
+			if got := player.inventory.Hotbar.Slots[0]; got != test.stack {
+				t.Fatalf("剑采掘后栏位 = %+v，想要保持 %+v", got, test.stack)
+			}
+			if player.inventoryDirty {
+				t.Fatal("剑采掘不改背包，inventoryDirty 应保持 false")
+			}
+		})
+	}
+}
+
 func TestMiningWrongToolStillConsumesDurability(t *testing.T) {
 	engine, sessions, targets := readyMiningPlayers(t, 1)
 	player := engine.sessions[sessions[0]].player

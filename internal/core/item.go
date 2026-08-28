@@ -90,6 +90,12 @@ const (
 	// 默认形态（南向床尾），床头格的展开、朝向选择与双格原子写入由放置执行方
 	// 消费；八个床形态采掘都掉回恰好 1 个本物品（见 BlockDrop）。
 	ItemBed
+	ItemWoodenSword
+	ItemStoneSword
+	ItemIronSword
+	ItemBrokenWoodenSword
+	ItemBrokenStoneSword
+	ItemBrokenIronSword
 	// ItemIDMax 是合法物品编号的独占上界（最后一个合法 ItemID + 1），本身不是
 	// 物品枚举成员。它供测试以「item < ItemIDMax」穷举全部物品，替代依赖
 	//「某个具体物品恰为枚举末项」的脆弱写法；放在 core 是因为物品注册表归属
@@ -304,7 +310,9 @@ func ItemStackLimit(item ItemID) (uint8, bool) {
 	case ItemStonePickaxe, ItemIronPickaxe,
 		ItemBrokenStonePickaxe, ItemBrokenIronPickaxe,
 		ItemStoneHoe, ItemIronHoe,
-		ItemBrokenStoneHoe, ItemBrokenIronHoe:
+		ItemBrokenStoneHoe, ItemBrokenIronHoe,
+		ItemWoodenSword, ItemStoneSword, ItemIronSword,
+		ItemBrokenWoodenSword, ItemBrokenStoneSword, ItemBrokenIronSword:
 		return 1, true
 	default:
 		return 0, false
@@ -317,6 +325,12 @@ func ItemMaxDurability(item ItemID) (uint16, bool) {
 	case ItemStonePickaxe:
 		return 131, true
 	case ItemIronPickaxe:
+		return 250, true
+	case ItemWoodenSword:
+		return 59, true
+	case ItemStoneSword:
+		return 131, true
+	case ItemIronSword:
 		return 250, true
 	// 锄头取与同材质镐相同的耐久：两者都是「每次成功动作恰好扣 1 点」的工具
 	// （采掘破坏方块扣 1、翻地成功扣 1），同一材质给两种工具不同数值只会制造
@@ -342,8 +356,38 @@ func ItemBrokenForm(item ItemID) (ItemID, bool) {
 		return ItemBrokenStoneHoe, true
 	case ItemIronHoe:
 		return ItemBrokenIronHoe, true
+	case ItemWoodenSword:
+		return ItemBrokenWoodenSword, true
+	case ItemStoneSword:
+		return ItemBrokenStoneSword, true
+	case ItemIronSword:
+		return ItemBrokenIronSword, true
 	default:
 		return ItemNone, false
+	}
+}
+
+// IsIntactSword 报告物品是否是可按分级伤害结算的完好剑。
+func IsIntactSword(item ItemID) bool {
+	switch item {
+	case ItemWoodenSword, ItemStoneSword, ItemIronSword:
+		return true
+	default:
+		return false
+	}
+}
+
+// WeaponDamage 返回物品用于权威实体命中的固定伤害。
+func WeaponDamage(item ItemID) int32 {
+	switch item {
+	case ItemWoodenSword:
+		return 4
+	case ItemStoneSword:
+		return 5
+	case ItemIronSword:
+		return 6
+	default:
+		return 2
 	}
 }
 

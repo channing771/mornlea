@@ -65,6 +65,47 @@ func TestChunkCodecRoundTripsDrops(t *testing.T) {
 	}
 }
 
+func TestChunkCodecRoundTripsSwordItemDrops(t *testing.T) {
+	key := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: -3, Z: 7}}
+	want := codecFixtureChunk(key.Pos)
+	index, ok := world.ChunkBlockIndex(core.BlockPos{
+		X: key.Pos.X << core.SectionShift, Y: 5, Z: key.Pos.Z << core.SectionShift,
+	})
+	if !ok {
+		t.Fatal("固定测试方块没有区块索引")
+	}
+	stacks := [...]core.ItemStack{
+		{Item: core.ItemWoodenSword, Count: 1, Durability: 58},
+		{Item: core.ItemStoneSword, Count: 1, Durability: 130},
+		{Item: core.ItemIronSword, Count: 1, Durability: 249},
+		{Item: core.ItemBrokenWoodenSword, Count: 1},
+		{Item: core.ItemBrokenStoneSword, Count: 1},
+		{Item: core.ItemBrokenIronSword, Count: 1},
+	}
+	for slot, stack := range stacks {
+		want.SetDrop(slot, world.DropSlot{
+			Generation: uint32(slot + 1), Active: true, Stack: stack, BlockIndex: index,
+		})
+	}
+
+	encoded, err := encodeChunkPayload(ChunkSave{Key: key, Revision: 31, Chunk: want})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := decodeChunkPayload(key, 31, encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for slot, stack := range stacks {
+		if got.Chunk.Drop(slot).Stack != stack {
+			t.Fatalf("掉落槽 %d 剑物品 = %+v，想要 %+v", slot, got.Chunk.Drop(slot).Stack, stack)
+		}
+	}
+	if got.Migrated {
+		t.Fatal("当前 schema 剑掉落物不应标记为已迁移")
+	}
+}
+
 func TestChunkV1FixtureMigratesToEmptyDrops(t *testing.T) {
 	key := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: -3, Z: 7}}
 	encoded, err := os.ReadFile(filepath.Join("testdata", "chunk-v1.bin"))
@@ -106,6 +147,10 @@ func TestChunkCodecRejectsInvalidDropSlots(t *testing.T) {
 		{"未知物品", world.DropSlot{
 			Generation: 1, Active: true,
 			Stack: core.ItemStack{Item: core.ItemID(4242), Count: 1}, BlockIndex: index,
+		}},
+		{"物品哨兵", world.DropSlot{
+			Generation: 1, Active: true,
+			Stack: core.ItemStack{Item: core.ItemIDMax, Count: 1}, BlockIndex: index,
 		}},
 		{"零数量", world.DropSlot{
 			Generation: 1, Active: true,

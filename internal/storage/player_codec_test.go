@@ -94,6 +94,32 @@ func TestPlayerCodecRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPlayerCodecCurrentSchemaRoundTripsSwordItems(t *testing.T) {
+	want := fixturePlayerSave(fixturePlayerID(), 27)
+	stacks := [...]core.ItemStack{
+		{Item: core.ItemWoodenSword, Count: 1, Durability: 58},
+		{Item: core.ItemStoneSword, Count: 1, Durability: 130},
+		{Item: core.ItemIronSword, Count: 1, Durability: 249},
+		{Item: core.ItemBrokenWoodenSword, Count: 1},
+		{Item: core.ItemBrokenStoneSword, Count: 1},
+		{Item: core.ItemBrokenIronSword, Count: 1},
+	}
+	copy(want.Inventory.Hotbar.Slots[:], stacks[:])
+
+	encoded, err := encodePlayer(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := decodePlayer(want.PlayerID, encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Inventory != want.Inventory || got.NeedsRewrite {
+		t.Fatalf("剑物品往返 inventory=%+v needsRewrite=%v，想要 %+v / false",
+			got.Inventory, got.NeedsRewrite, want.Inventory)
+	}
+}
+
 // TestPlayerCodecRoundTripWithoutRespawn 覆盖重生点缺失的一半：present=0 是
 // 「无重生点」的规范形态，往返后必须保持缺失，且编码对调用方留在
 // RespawnPosition 里的残值不敏感——present=0 时位置字节不携带语义，同一份
@@ -415,6 +441,9 @@ func TestPlayerCodecRejectsInvalidHotbarPayload(t *testing.T) {
 		// 这里保留真正未知的 4242，不能复制一份冻结的旧 decoder。
 		{"未知物品", func(h *core.Hotbar) {
 			h.Slots[2] = core.ItemStack{Item: core.ItemID(4242), Count: 1}
+		}},
+		{"物品哨兵", func(h *core.Hotbar) {
+			h.Slots[2] = core.ItemStack{Item: core.ItemIDMax, Count: 1}
 		}},
 		{"空物品非零数量", func(h *core.Hotbar) {
 			h.Slots[3] = core.ItemStack{Item: core.ItemNone, Count: 5}

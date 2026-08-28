@@ -36,6 +36,30 @@
 - Task 1 独立评审，QUALITY PASS：同一报告 `:13-42` 给出 Task quality `Approved`，Critical 0、Important 0、Minor 0；没有 correctness、scope、maintainability 或 verification finding。
 - Task 1 完成：起始提交 `6a992a5c` 到 proposal 提交 `80c4affa` 的 docs-only 区间已完成 implementer self-review、独立 SPEC/QUALITY 评审和既有 validation evidence，后续工作从 `tasks.md` 的 Task 2 开始。
 
+## Task 2 Implementation
+
+- 起始 HEAD：`259b702ff818f57b514c48cda935da27580569b5`；起始 `git status --short --branch` 退出 0，仅输出分支名，无 tracked/untracked 改动。
+- RED（combat kind 与 item registry）：`go test ./internal/core -run 'Test(CombatTargetKind|Sword|ItemID)' -count=1`，exit 1；按预期因 `CombatTargetKind`、两个 kind、六个 sword ItemID 与 sword helpers 尚未定义而编译失败，证明新增测试能捕获缺失登记。
+- GREEN（combat kind 与 item registry）：`gofmt -w internal/core/combat.go internal/core/combat_test.go internal/core/item.go internal/core/item_test.go`，exit 0；`go test ./internal/core -run 'Test(CombatTargetKind|Sword|ItemID|Durability|Broken)' -count=1`，exit 0，append-only kind/item、stack limit、耐久、损坏映射与伤害通过。
+- RED（sword recipes）：`go test ./internal/core -run 'Test.*SwordRecipe' -count=1`，exit 1；按预期因 `RecipeWoodenSword`、`RecipeStoneSword`、`RecipeIronSword` 尚未定义而编译失败，证明三档固定 pattern 与 matcher 行为测试能捕获缺失登记。
+- GREEN（sword recipes）：`gofmt -w internal/core/recipe.go internal/core/recipe_test.go internal/core/recipe_shape_internal_test.go`，exit 0；`go test ./internal/core -run 'Test.*SwordRecipe' -count=1`，exit 0，recipe 17..19、三列平移、满耐久产物与拒绝边界通过。
+- 当前 schema 兼容特征测试：`go test ./internal/storage -run 'Test.*SwordItems' -count=1`，exit 0；按 brief 预期在 core 登记后直接通过，现有通用 player/chest/companion codec 无需生产改动。`TestChunkCodecRoundTripsSwordItemDrops` 的精确名称不落入 brief 给定的复数过滤器，将由最终完整 storage package gate 覆盖；四条测试都同时加入 `core.ItemIDMax` 对应 invalid case，未修改 schema 或 shared fixture。
+- RED（intact sword mining durability）：`go test ./internal/sim -run 'TestMiningIntactSwordsDoNotConsumeDurability' -count=1`，exit 1；三档部分磨损剑均在成功移除泥土后错误减少 1 点耐久（29→28、65→64、125→124），与预期根因“通用 durability wrapper 磨损全部有耐久物品”一致。
+- GREEN（durability seam）：`gofmt -w internal/sim/mining.go internal/sim/mining_test.go`，exit 0；`go test ./internal/sim -run 'TestMiningIntactSwordsDoNotConsumeDurability' -count=1`，exit 0；采掘 wrapper 排除完好剑，既有路径复用按 slot/item/count 重验的 `consumeToolDurabilityAt`。
+- Focused gofmt：`gofmt -w internal/core/combat.go internal/core/combat_test.go internal/core/item.go internal/core/item_test.go internal/core/bed_test.go internal/core/recipe.go internal/core/recipe_test.go internal/core/recipe_shape_internal_test.go internal/storage/player_codec_test.go internal/storage/chunk_chest_test.go internal/storage/chunk_drop_test.go internal/storage/companion_codec_test.go internal/sim/mining.go internal/sim/mining_test.go`，exit 0，无输出。
+- Focused race：`go test ./internal/core ./internal/storage ./internal/sim -race -count=1`，exit 0；core、storage、sim 分别通过（2.649s、22.544s、53.647s），包含精确名称未落入早期 storage 过滤器的 sword drop round-trip，并保持既有镐、锄、作物×锄头和伙伴采掘测试全绿。
+- 架构门禁：`go test ./internal/archcheck -count=1`，exit 0（9.660s）。
+- OpenSpec 门禁：`openspec validate --all --strict --no-interactive`，exit 0，77 passed、0 failed。
+- Diff 门禁：`git diff --check`，exit 0，无输出。
+- Checklist：2.1..2.8 已有实际 RED/GREEN 或 brief 指定的直接兼容通过证据；2.9 按控制器指令保持未勾选，等待 implementer 外部的独立 SPEC/QUALITY review。
+
+## Task 2 Self-Review
+
+- SPEC PASS：逐项核对 ItemID 47..52、`ItemIDMax=53`、`ItemBed=46`、combat kind 1/2、damage 2/4/5/6、durability 59/131/250、broken mapping、recipe 17..19、三列平移/拒绝边界、四条 current-schema round-trip 与 sword mining exemption；没有遗漏或额外行为。
+- QUALITY PASS：完整 diff 只含 Task 2 的 14 个 Go 文件和本 change 的 tasks/ledger；没有 schema、shared fixture、网络、server、render、Rust、长期文档或依赖变化，也没有 registry struct、配置、显示名表、公共 `DamageTool` 或 sword-specific wire 分支。
+- Mutation check：kind 值/合法域、任一 sword ID/limit/durability/broken/damage switch、recipe ID/pattern/material/output/matcher tail、任一 codec 的 item/count/durability round-trip 或 `ItemIDMax` 拒绝、以及 mining sword guard 的删除/错分支均至少会使一条新增测试失败；既有全包测试覆盖 helper 委托后的镐耗损、最后一点损坏、锄头与作物豁免和伙伴路径。
+- Findings：Critical 0、Important 0、Minor 0；无需修复轮次。
+
 ## Validation Evidence
 
 - 基线验证证据见 `Baseline`，均对应 frozen code SHA `67fcc604bd3f3b5ce9326b5cd7498381163296d6`，本 Task 未重复运行。
