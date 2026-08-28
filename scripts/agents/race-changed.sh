@@ -14,6 +14,9 @@
 #      internal/core 这类底座包时闭包近似全仓，工具就失去意义；残余风险由
 #      T3 全量门禁与 CI 兜底。
 #   4. 恒含 internal/archcheck（依赖边界/基线版本/文档一致守卫，秒级）。
+#   5. 闭包触及 cdylib 消费包（nativeabi/core/physics/mesh/client/sim/server/
+#      cmd/mornlea 与 cmd/mornlea-server）时先 `make rust`；纯 Go 叶子改动
+#      跳过 Rust 构建，不为无关改动支付构建成本。
 #
 # 用法:
 #   scripts/agents/race-changed.sh            # 计算并运行 go test <集合> -race -count=1
@@ -113,6 +116,13 @@ fi
 heavy="$(printf '%s\n' "$closure" | grep -E '/(cmd/mornlea|internal/server)$' || true)"
 if [ -n "$heavy" ]; then
   echo "提示：集合含重型包（${heavy}），预计分钟级；仅迭代验证可改用 --diff 后手动加 -short" >&2
+fi
+
+# 运行期消费 cdylib 的包集合与 scripts/agent-hooks/guard.mjs 的 native 下游清单
+# 保持一致；触及才前置 `make rust`，其余改动直接进 Go race 测试。
+if printf '%s\n' "$closure" | grep -qE '/(internal/nativeabi|internal/core|internal/physics|internal/mesh|internal/client|internal/sim|internal/server|cmd/mornlea|cmd/mornlea-server)$'; then
+  echo "闭包含 cdylib 消费包，先构建 Rust 动态库（make rust）" >&2
+  make rust
 fi
 
 # shellcheck disable=SC2086 —— 包列表需要按空白展开为多个参数（不可加引号：

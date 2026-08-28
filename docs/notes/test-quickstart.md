@@ -18,6 +18,7 @@
 - **禁止把 `go test ./... -race -count=1` 当快检**：`-race -count=1` 强制全量失效缓存，每次都是完整 4.5 分钟起步。`-race -count=1` 是 T1/T2/T3 的专属旗标；T0 恰恰靠省略它们吃测试缓存。
 - **本地与 CI 不双跑全量 race**：CI 的 `go-race` 已按 cmd / internal-server / internal-rest 三分片并行执行全量。默认路径是 T2 绿 → 推送 → 信任 CI；本地 T3 只在 (a) 改动涉及 `internal/sim`/`internal/server`/`internal/network`/`internal/storage`/`internal/physics` 的并发或时序语义，或 (b) CI 红了需要本地复现时执行。`AGENT_MODE=merge`（不经 PR 直推）时 T3 本地必跑。
 - **flake 分诊协议**：高负载下出现「等待预算/超时」类失败时，先对**失败包单独重跑**（`go test ./该包 -race -count=1`）；单独通过即记录为负载 flake（写进 ledger 或 PR 备注），不进修复循环、不为此改生产代码。同一 flake 一天内重现 ≥2 次才立待修任务（参照 E-11 模式）。
+- **验证证据可继承**：同一基线 SHA 下已记入 change `ledger.md` 的验证输出直接引用，不重跑同等命令；评审复核用 focused 测试抽查（见 `docs/development-process.md` 阶段 3）。
 - **T1 闭包的边界**：`race-changed.sh` 的反向依赖沿生产 import 边传递，测试 import 只算一层直接依赖（否则触碰 `internal/core` 这类底座包时闭包近似全仓）；残余盲区由 T3 与 CI 兜底。集合含 `cmd/mornlea`/`internal/server` 时脚本会提示分钟级耗时，迭代验证可对这两个包追加 `-short`。
 
 ## T0：定点测试
@@ -34,7 +35,7 @@
 要点：
 
 - `go test ./pkg` 不带 `-count=1` 时未改动包命中缓存秒回；`-race` 与 `-count=1` 会强制失效缓存，只留给 T1 及以上。
-- Rust 增量构建从不清 `target/`；日常用 `cargo test -p <crate> --locked`，`make rust-check` 留到提交前。
+- Rust 增量构建从不清 `target/`；`CARGO_TARGET_DIR` 默认指向 `~/.cache/mornlea-cargo-target`（Makefile 已导出），worktree 之间共享编译产物，新分支不再冷编译 wgpu 全家桶。日常用 `cargo test -p <crate> --locked`，`make rust-check` 留到提交前。
 
 ## T1：race-changed
 
@@ -44,7 +45,7 @@ make test-race-changed RACE_BASE=<ref>   # 换比较基线（如批次共享 SHA
 scripts/agents/race-changed.sh --diff    # 只打印包集合不运行（核对闭包用）
 ```
 
-集合 = 改动包（已提交 diff ∪ 暂存 ∪ 未暂存 ∪ 未跟踪的 .go）∪ 生产 import 反向依赖（传递）∪ 测试 import 直接依赖 ∪ `internal/archcheck`。
+集合 = 改动包（已提交 diff ∪ 暂存 ∪ 未暂存 ∪ 未跟踪的 .go）∪ 生产 import 反向依赖（传递）∪ 测试 import 直接依赖 ∪ `internal/archcheck`。闭包含 cdylib 消费包（nativeabi/core/physics/mesh/client/sim/server/cmd/mornlea[-server]）时脚本先按需 `make rust`；纯 Go 叶子改动不构建 Rust。
 
 ## T2：短模式与一键快检
 

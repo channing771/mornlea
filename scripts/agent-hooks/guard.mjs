@@ -381,15 +381,14 @@ export function stopFailures(paths, execute = run, environment = process.env) {
       ),
     ].sort();
     if (!needsRustValidation && packageArguments.length > 0) {
-      const tests = execute(
-        "go",
-        ["test", "-race", "-count=1", ...packageArguments],
-        180_000,
-      );
-      const testFailure = commandFailure("受影响包测试", tests);
-      if (testFailure) {
-        failures.push(testFailure);
-      }
+    // 复检常在无新改动时再次触发；省略 `-count=1` 让未变包命中测试缓存，变更包
+    // 仍真实重跑。超时给足 `cmd/mornlea` 与 `internal/server` 两个分钟级重型包的
+    // 冷跑空间，避免门禁被自身超时打断而进入修复循环。
+    const tests = execute("go", ["test", "-race", ...packageArguments], 600_000);
+    const testFailure = commandFailure("受影响包测试", tests);
+    if (testFailure) {
+      failures.push(testFailure);
+    }
     }
 
     const vet = execute("go", ["vet", "./..."], 180_000);
@@ -417,10 +416,12 @@ export function stopFailures(paths, execute = run, environment = process.env) {
           .map((directory) => `./${directory}`),
       ),
     ];
+    // 固定的 cdylib 下游清单体量大（含两个分钟级重型包）；同样省略 `-count=1`
+    // 以复用测试缓存，并给足冷跑超时。
     const tests = execute(
       "go",
-      ["test", ...new Set(packageArguments), "-race", "-count=1"],
-      180_000,
+      ["test", ...new Set(packageArguments), "-race"],
+      600_000,
     );
     const testFailure = commandFailure("native 下游测试", tests);
     if (testFailure) {

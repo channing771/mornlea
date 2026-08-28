@@ -33,7 +33,7 @@
           {
             "type": "command",
             "command": "node \"$(git rev-parse --show-toplevel)/scripts/agent-hooks/guard.mjs\"",
-            "timeout": 600,
+            "timeout": 1200,
             "statusMessage": "运行仓库停止前门禁"
           }
         ]
