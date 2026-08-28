@@ -63,6 +63,18 @@ rust:
 	@test -f $(CARGO_TARGET_DIR)/release/libmornlea_engine.so && cp -f $(CARGO_TARGET_DIR)/release/libmornlea_engine.so $(RUST_SO) || true
 	@test -f $(CARGO_TARGET_DIR)/release/libmornlea_client.dylib && cp -f $(CARGO_TARGET_DIR)/release/libmornlea_client.dylib $(RUST_DIR)/target/release/libmornlea_client.dylib || true
 	@test -f $(CARGO_TARGET_DIR)/release/libmornlea_client.so && cp -f $(CARGO_TARGET_DIR)/release/libmornlea_client.so $(RUST_DIR)/target/release/libmornlea_client.so || true
+	@# 把 install name 改写为 @rpath：cargo 默认嵌入共享目标目录的绝对路径，
+	@# CI 的 race/integration job 是下载 artifact 到 engine/target/release 后
+	@# 运行，绝对路径对不上会让 dyld 直接拒载（表现为测试包秒挂）。@rpath 由
+	@# cgo 的 -Wl,-rpath 解析到规范路径，dylib 因此与构建位置无关。
+	@if [ "$$(uname)" = "Darwin" ]; then \
+	  for f in libmornlea_engine.dylib libmornlea_client.dylib; do \
+	    if [ -f "$(RUST_DIR)/target/release/$$f" ]; then \
+	      install_name_tool -id @rpath/$$f "$(RUST_DIR)/target/release/$$f"; \
+	      codesign --force --sign - "$(RUST_DIR)/target/release/$$f"; \
+	    fi; \
+	  done; \
+	fi
 
 rust-check:
 	cd $(RUST_DIR) && $(CARGO) fmt --check
