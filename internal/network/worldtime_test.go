@@ -3,6 +3,7 @@ package network
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/channing771/mornlea/internal/network/protocol"
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
@@ -310,17 +311,17 @@ func TestProtocolV31PlayerStateRejectsOutOfRangeDayPhaseOffset(t *testing.T) {
 
 func TestProtocolV10DropSelectedItemRegistryIsFrozen(t *testing.T) {
 	// 新 packet 只占用此前未分配的 ID 11；ID 1 继续保持未分配且不复用。
-	if id, ok := clientPacketID(StatePlay, DropSelectedItem{}); !ok || id != 11 {
+	if id, ok := protocol.ClientPacketID(StatePlay, DropSelectedItem{}); !ok || id != 11 {
 		t.Fatalf("DropSelectedItem packet ID = (%d,%v)，想要 (11,true)", id, ok)
 	}
-	packet, ok := clientPacketForID(StatePlay, 11)
+	packet, ok := protocol.ClientPacketForID(StatePlay, 11)
 	if !ok {
 		t.Fatal("Play client packet ID 11 未注册")
 	}
 	if _, isDrop := packet.(DropSelectedItem); !isDrop {
 		t.Fatalf("ID 11 解析为 %T，想要 DropSelectedItem", packet)
 	}
-	if _, ok := clientPacketForID(StatePlay, 1); ok {
+	if _, ok := protocol.ClientPacketForID(StatePlay, 1); ok {
 		t.Fatal("Play client packet ID 1 必须保持未分配")
 	}
 

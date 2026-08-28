@@ -1,4 +1,4 @@
-package network
+package protocol
 
 import (
 	"errors"
@@ -28,5 +28,6 @@ func (forget ForgetChunks) Validate() error {
 	return nil
 }
 
-// maxChunkBlockIndex 是区块内方块索引的排他上限。
-const maxChunkBlockIndex = core.SectionsPerChunk * core.BlocksPerSection
+// MaxChunkBlockIndex 是区块内方块索引的排他上限；`ItemDrop.validate` 的
+// BlockIndex 值域检查与掉落物编解码测试共用。
+const MaxChunkBlockIndex = core.SectionsPerChunk * core.BlocksPerSection

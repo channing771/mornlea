@@ -3,6 +3,8 @@ package network
 import (
 	"errors"
 	"fmt"
+
+	"github.com/channing771/mornlea/internal/network/protocol"
 )
 
 const MaxSmallPayload = 64 << 10
@@ -13,7 +15,7 @@ var (
 	errCountShortInput  = errors.New("network: packet count exceeds remaining payload")
 )
 
-func finishEncode(direction string, state State, packetID uint32, e byteEncoder) (uint32, []byte, error) {
+func finishEncode(direction string, state protocol.State, packetID uint32, e byteEncoder) (uint32, []byte, error) {
 	if e.err != nil {
 		return 0, nil, codecError(direction, state, packetID, e.err)
 	}
@@ -35,6 +37,6 @@ var (
 	errSnapshotDelegated = errors.New("network: Play/S→C/ID 0 ChunkSnapshot is handled by Task 5")
 )
 
-func codecError(direction string, state State, packetID uint32, err error) error {
+func codecError(direction string, state protocol.State, packetID uint32, err error) error {
 	return fmt.Errorf("network: %s state=%d packetID=%d: %w", direction, state, packetID, err)
 }

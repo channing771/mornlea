@@ -1,4 +1,4 @@
-package network
+package protocol
 
 import (
 	"errors"
@@ -40,10 +40,11 @@ func (command MoveInventoryStack) Validate() error {
 	return nil
 }
 
-// gridCraftingViewSlots 是合成统一视图格的独占上界：网格 0..8、背包 9..44
+// GridCraftingViewSlots 是合成统一视图格的独占上界：网格 0..8、背包 9..44
 // （背包统一格 = 物品栏索引 + `core.CraftingGridSlots`）。与 sim 侧
-// `craftingViewSlots` 同一布局，两侧各自硬编码、由值域测试共同锁定。
-const gridCraftingViewSlots = core.CraftingGridSlots + core.InventorySlots
+// `craftingViewSlots` 同一布局，两侧各自硬编码、由值域测试共同锁定；导出
+// 供编解码层的合成命令值域测试引用同一上界。
+const GridCraftingViewSlots = core.CraftingGridSlots + core.InventorySlots
 
 // 网格有效尺寸的固定取值，与 sim 侧 `CraftingGridSizePersonal`/
 // `CraftingGridSizeWorkbench` 语义相同。network 不依赖 sim（archcheck 依赖
@@ -70,7 +71,7 @@ func (MoveCraftingStack) clientMessage() {}
 func (MoveCraftingStack) clientPacket()  {}
 
 func (command MoveCraftingStack) Validate() error {
-	if command.From >= gridCraftingViewSlots || command.To >= gridCraftingViewSlots {
+	if command.From >= GridCraftingViewSlots || command.To >= GridCraftingViewSlots {
 		return errors.New("network: crafting move slot is outside 0..44")
 	}
 	if command.From == command.To {

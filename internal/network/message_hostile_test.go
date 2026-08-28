@@ -3,6 +3,7 @@ package network
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"github.com/channing771/mornlea/internal/network/protocol"
 	"math"
 	"reflect"
 	"testing"
@@ -87,7 +88,7 @@ func TestHostileMessagesWireLayoutIsFrozen(t *testing.T) {
 }
 
 // TestHostileMessageIDsAreFrozen 钉死夜行者三类消息的最终编号：S→C 22/23/24
-// （21 已被 `CraftingState` 实占；`serverPacketID` 与 `serverPacketForID` 两处
+// （21 已被 `CraftingState` 实占；`protocol.ServerPacketID` 与 `protocol.ServerPacketForID` 两处
 // 对称）。上界断言写成「末项 +1」，下次追加 packet 时它跟着末项走。
 func TestHostileMessageIDsAreFrozen(t *testing.T) {
 	assertServerRegistry(t, []struct {
@@ -100,11 +101,11 @@ func TestHostileMessageIDsAreFrozen(t *testing.T) {
 		{StatePlay, HostileDespawn{}, 24},
 	})
 	for _, id := range []uint32{22, 23, 24} {
-		if _, ok := serverPacketForID(StatePlay, id); !ok {
+		if _, ok := protocol.ServerPacketForID(StatePlay, id); !ok {
 			t.Fatalf("Play server packet ID %d 未注册", id)
 		}
 	}
-	if _, ok := serverPacketForID(StatePlay, 24+1); ok {
+	if _, ok := protocol.ServerPacketForID(StatePlay, 24+1); ok {
 		t.Fatal("Play server packet ID 25 必须保持未分配")
 	}
 }
@@ -179,7 +180,7 @@ func TestHostileMessagesValidateRejectsInvalidRecords(t *testing.T) {
 	}
 
 	// 边界内的合法形态必须继续通过：count 恰好 1 与上限、生命 1 与 20。
-	validSpawns := make([]HostileSpawnRecord, maxHostileRecords)
+	validSpawns := make([]HostileSpawnRecord, protocol.MaxHostileRecords)
 	for index := range validSpawns {
 		validSpawns[index] = HostileSpawnRecord{
 			ID: uint64(index + 1), Dimension: core.Overworld,
@@ -190,7 +191,7 @@ func TestHostileMessagesValidateRejectsInvalidRecords(t *testing.T) {
 		t.Fatalf("合法 spawn 被拒绝: %v", err)
 	}
 	if err := (HostileSpawn{ServerTick: 1, Spawns: validSpawns}).Validate(); err != nil {
-		t.Fatalf("count=%d 的合法 spawn 被拒绝: %v", maxHostileRecords, err)
+		t.Fatalf("count=%d 的合法 spawn 被拒绝: %v", protocol.MaxHostileRecords, err)
 	}
 	if err := validState.Validate(); err != nil {
 		t.Fatalf("合法 state 被拒绝: %v", err)
@@ -295,8 +296,8 @@ func TestHostileMessagesDecodeRejectsInvalidWire(t *testing.T) {
 // TestHostileMessagesWireLimitsAreFrozen 钉死三类消息的固定 wire 上限与
 // record 步长推导：字段宽度一变这里先红，防止上限与布局静默漂移。
 func TestHostileMessagesWireLimitsAreFrozen(t *testing.T) {
-	if maxHostileRecords != 64 {
-		t.Fatalf("maxHostileRecords=%d，想要 64", maxHostileRecords)
+	if protocol.MaxHostileRecords != 64 {
+		t.Fatalf("protocol.MaxHostileRecords=%d，想要 64", protocol.MaxHostileRecords)
 	}
 	tests := []struct {
 		name        string
@@ -312,7 +313,7 @@ func TestHostileMessagesWireLimitsAreFrozen(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := 9 + maxHostileRecords*test.recordBytes; got != test.wantMax {
+			if got := 9 + protocol.MaxHostileRecords*test.recordBytes; got != test.wantMax {
 				t.Fatalf("%s 载荷上限=%d，想要 %d", test.name, got, test.wantMax)
 			}
 		})
@@ -360,7 +361,7 @@ func FuzzHostileMessageCodec(f *testing.F) {
 	// 边界种子：count 64 的满载 spawn；再补两个已知非法形态（count 0、
 	// count 65 的最小 despawn 载荷），帮助 fuzzer 直接落到拒绝路径。
 	full := hostileSpawnMessage()
-	full.Spawns = make([]HostileSpawnRecord, maxHostileRecords)
+	full.Spawns = make([]HostileSpawnRecord, protocol.MaxHostileRecords)
 	for index := range full.Spawns {
 		full.Spawns[index] = HostileSpawnRecord{
 			ID: uint64(index + 1), Dimension: core.Overworld,

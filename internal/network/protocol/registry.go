@@ -1,7 +1,9 @@
-package network
+package protocol
 
-// clientPacketID returns the frozen V1 ID for packet in state.
-func clientPacketID(state State, packet ClientPacket) (uint32, bool) {
+// ClientPacketID 返回 packet 在 state 下的冻结 V1 包 ID；该 state 未注册
+// 此 packet 类型时第二返回值为 false。导出供编解码层在编码与按 ID 解码时
+// 查表，是协议冻结契约面的一部分。
+func ClientPacketID(state State, packet ClientPacket) (uint32, bool) {
 	switch state {
 	case StateHandshake:
 		_, ok := packet.(ClientHello)
@@ -46,8 +48,9 @@ func clientPacketID(state State, packet ClientPacket) (uint32, bool) {
 	return 0, false
 }
 
-// clientPacketForID returns an empty packet of the frozen V1 type.
-func clientPacketForID(state State, id uint32) (ClientPacket, bool) {
+// ClientPacketForID 返回 state 下冻结 V1 包 ID 对应的空 packet 值；
+// ID 未注册时第二返回值为 false。与 `ClientPacketID` 构成双向查表。
+func ClientPacketForID(state State, id uint32) (ClientPacket, bool) {
 	switch state {
 	case StateHandshake:
 		if id == 0 {
@@ -94,8 +97,10 @@ func clientPacketForID(state State, id uint32) (ClientPacket, bool) {
 	return nil, false
 }
 
-// serverPacketID returns the frozen V1 ID for packet in state.
-func serverPacketID(state State, packet ServerPacket) (uint32, bool) {
+// ServerPacketID 返回 packet 在 state 下的冻结 V1 包 ID；该 state 未注册
+// 此 packet 类型时第二返回值为 false。导出供编解码层在编码与按 ID 解码时
+// 查表，是协议冻结契约面的一部分。
+func ServerPacketID(state State, packet ServerPacket) (uint32, bool) {
 	switch state {
 	case StateHandshake:
 		switch packet.(type) {
@@ -170,8 +175,9 @@ func serverPacketID(state State, packet ServerPacket) (uint32, bool) {
 	return 0, false
 }
 
-// serverPacketForID returns an empty packet of the frozen V1 type.
-func serverPacketForID(state State, id uint32) (ServerPacket, bool) {
+// ServerPacketForID 返回 state 下冻结 V1 包 ID 对应的空 packet 值；
+// ID 未注册时第二返回值为 false。与 `ServerPacketID` 构成双向查表。
+func ServerPacketForID(state State, id uint32) (ServerPacket, bool) {
 	switch state {
 	case StateHandshake:
 		switch id {
@@ -233,7 +239,7 @@ func serverPacketForID(state State, id uint32) (ServerPacket, bool) {
 			return PlaceBlockSucceeded{}, true
 		case 21:
 			return CraftingState{}, true
-		// 夜行者三类 S→C 消息：与 `serverPacketID` 的 22/23/24 对称。
+		// 夜行者三类 S→C 消息：与 `ServerPacketID` 的 22/23/24 对称。
 		case 22:
 			return HostileSpawn{}, true
 		case 23:
@@ -245,7 +251,9 @@ func serverPacketForID(state State, id uint32) (ServerPacket, bool) {
 	return nil, false
 }
 
-func commandRejectReasonID(reason RejectReason) (uint8, bool) {
+// CommandRejectReasonID 返回 `RejectReason` 在 `CommandRejected` wire
+// 槽位上的冻结编号；未注册原因第二返回值为 false。
+func CommandRejectReasonID(reason RejectReason) (uint8, bool) {
 	switch reason {
 	case RejectInvalidRay:
 		return 1, true
@@ -276,7 +284,9 @@ func commandRejectReasonID(reason RejectReason) (uint8, bool) {
 	}
 }
 
-func commandRejectReasonForID(id uint8) (RejectReason, bool) {
+// CommandRejectReasonForID 是 `CommandRejectReasonID` 的逆查表；未注册
+// 编号第二返回值为 false。
+func CommandRejectReasonForID(id uint8) (RejectReason, bool) {
 	switch id {
 	case 1:
 		return RejectInvalidRay, true

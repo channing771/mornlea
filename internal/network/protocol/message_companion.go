@@ -1,4 +1,4 @@
-package network
+package protocol
 
 import (
 	"bytes"
@@ -16,40 +16,48 @@ import (
 )
 
 const (
-	// chatCommandMaxWireBytes 是 ChatCommand 载荷的固定 wire 上限。推导：
+	// ChatCommandMaxWireBytes 是 ChatCommand 载荷的固定 wire 上限。推导：
 	// uvarint 长度前缀 2 bytes（文本长度 128..16383 时 uvarint 占 2 bytes）+
 	// 文本 ≤ companion.MaxPlanCommandBytes（1024）= 1026。文本上限与 companion
 	// 常量同源（E7）：Planner 指令上限变化时本 wire 上限自动随动，不再依赖
-	// 裸字面量与注释约定。数值当前冻结为 1026。
-	chatCommandMaxWireBytes = companion.MaxPlanCommandBytes + 2
-	// chatCommandTextMaxBytes 是 ChatCommand 文本槽位的编码/解码字节上限，与校验端
-	// `validateCommandText` 及 wire 上限推导 `chatCommandMaxWireBytes` 同源于
+	// 裸字面量与注释约定。数值当前冻结为 1026。导出供编解码层做载荷预截断。
+	ChatCommandMaxWireBytes = companion.MaxPlanCommandBytes + 2
+	// ChatCommandTextMaxBytes 是 ChatCommand 文本槽位的编码/解码字节上限，与校验端
+	// `validateCommandText` 及 wire 上限推导 `ChatCommandMaxWireBytes` 同源于
 	// `companion.MaxPlanCommandBytes`，三处不可能漂移。
-	chatCommandTextMaxBytes = companion.MaxPlanCommandBytes
-	// chatEventMaxWireBytes 是 ChatEvent 载荷的固定 wire 上限。推导：8 event
+	ChatCommandTextMaxBytes = companion.MaxPlanCommandBytes
+	// ChatSpeechTextMaxBytes 是 ChatEvent 台词槽位的编码/解码字节上限，与校验端
+	// `validateSpeechText` 同源于 `companion.MaxDialogueLineBytes`（v19 追加的
+	// CompanionSpeech kind 专用文本槽位）。导出供编解码侧 wire 编解码共用，
+	// 编解码簇不得直接依赖 internal/companion。
+	ChatSpeechTextMaxBytes = companion.MaxDialogueLineBytes
+	// ChatEventMaxWireBytes 是 ChatEvent 载荷的固定 wire 上限。推导：8 event
 	// ID（u64）+ 16 玩家 ID + 130 玩家名（128-byte 名称上限 + 2-byte uvarint
 	// 前缀）+ 16 伙伴 ID + 130 伙伴名 + 1 kind + 1 reason + 文本槽位
-	// （= chatCommandMaxWireBytes）= 1328。文本槽位按 kind 复用：指令槽位
+	// （= ChatCommandMaxWireBytes）= 1328。文本槽位按 kind 复用：指令槽位
 	// ≤ 1024+2 决定上界，台词槽位 ≤ 256+2=258 更小。指令槽位与 companion
 	// 常量同源（E7），名称上限当前冻结为 128 bytes。数值当前冻结为 1328。
-	chatEventMaxWireBytes = 8 + 16 + 130 + 16 + 130 + 1 + 1 + chatCommandMaxWireBytes
-	// companionSpawnMaxWireBytes 是 CompanionSpawn 载荷的固定 wire 上限。
+	// 导出供编解码层做载荷预截断。
+	ChatEventMaxWireBytes = 8 + 16 + 130 + 16 + 130 + 1 + 1 + ChatCommandMaxWireBytes
+	// CompanionSpawnMaxWireBytes 是 CompanionSpawn 载荷的固定 wire 上限。
 	// 推导：16 伙伴 ID + 130 伙伴名（128-byte 名称上限 + 2-byte uvarint 前缀）
 	// + 8 tick（u64）+ 4 维度（i32）+ 12 位置（3×f32）+ 4 yaw（f32）+
-	// 4 pitch（f32）= 178。数值当前冻结为 178。
-	companionSpawnMaxWireBytes = 178
-	// companionStateWireBytes 是 CompanionStates 批次内单个伙伴状态的固定编码
+	// 4 pitch（f32）= 178。数值当前冻结为 178。导出供编解码层做载荷预截断。
+	CompanionSpawnMaxWireBytes = 178
+	// CompanionStateWireBytes 是 CompanionStates 批次内单个伙伴状态的固定编码
 	// 长度。推导：16 伙伴 ID + 4 维度（i32）+ 12 位置（3×f32）+ 4 yaw（f32）
 	// + 4 pitch（f32）+ 1 reset bool = 41。解码端按「剩余字节数 == count×41」
-	// 整批校验（见 decodeCompanionStates），任何字段变宽都会在这里先失配。
-	// 数值当前冻结为 41。
-	companionStateWireBytes = 41
-	maxCompanionStates      = companion.MaxActive
-	// companionStatesMaxWireBytes 是 CompanionStates 载荷的固定 wire 上限。
+	// 整批校验（见编解码侧 `decodeCompanionStates`），任何字段变宽都会在这里
+	// 先失配。数值当前冻结为 41。
+	CompanionStateWireBytes = 41
+	// MaxCompanionStates 是单批伙伴状态数量的固定上限，与 companion.MaxActive
+	// 同源；`CompanionStates.Validate` 与编解码侧解码共用。
+	MaxCompanionStates = companion.MaxActive
+	// CompanionStatesMaxWireBytes 是 CompanionStates 载荷的固定 wire 上限。
 	// 推导：8 tick（u64）+ 1 count uvarint（状态数 ≤ companion.MaxActive=4，
-	// 单字节）+ 每状态 companionStateWireBytes（41）bytes = 173。数值当前
-	// 冻结为 173。
-	companionStatesMaxWireBytes = 8 + 1 + maxCompanionStates*companionStateWireBytes
+	// 单字节）+ 每状态 CompanionStateWireBytes（41）bytes = 173。数值当前
+	// 冻结为 173。导出供编解码层做载荷预截断。
+	CompanionStatesMaxWireBytes = 8 + 1 + MaxCompanionStates*CompanionStateWireBytes
 )
 
 // ChatCommand 是客户端发送的有界聊天文本。
@@ -275,8 +283,8 @@ func (CompanionStates) serverPacket()  {}
 
 // Validate 验证批次数量、每项状态和 ID 严格顺序。
 func (states CompanionStates) Validate() error {
-	if len(states.States) < 1 || len(states.States) > maxCompanionStates {
-		return fmt.Errorf("network: companion state count is outside 1..%d", maxCompanionStates)
+	if len(states.States) < 1 || len(states.States) > MaxCompanionStates {
+		return fmt.Errorf("network: companion state count is outside 1..%d", MaxCompanionStates)
 	}
 	for index, state := range states.States {
 		if err := state.validate(); err != nil {
@@ -346,179 +354,4 @@ func validPlayerName(name string) bool {
 
 func validCompanionPose(position mgl32.Vec3, yaw, pitch float32) bool {
 	return finiteVec3(position) && finite32(yaw) && finite32(pitch) && pitch >= -math.Pi/2 && pitch <= math.Pi/2
-}
-
-func encodeChatEvent(e *byteEncoder, event ChatEvent) {
-	e.u64(event.EventID)
-	e.data = append(e.data, event.PlayerID[:]...)
-	e.string(event.PlayerName, 128)
-	e.data = append(e.data, event.CompanionID[:]...)
-	e.string(event.CompanionName, 128)
-	e.u8(uint8(event.Kind))
-	e.u8(uint8(event.RejectReason))
-	// 文本槽位按 kind 复用：CompanionSpeech 写入台词（编码层即收紧为
-	// companion.MaxDialogueLineBytes 上界），其余 kind 保持
-	// companion.MaxPlanCommandBytes 指令编码，既有 kind 的 wire 字节不受影响。
-	if event.Kind == ChatEventCompanionSpeech {
-		e.string(event.Speech, companion.MaxDialogueLineBytes)
-	} else {
-		e.string(event.Command, companion.MaxPlanCommandBytes)
-	}
-}
-
-func encodeCompanionSpawn(e *byteEncoder, spawn CompanionSpawn) {
-	e.data = append(e.data, spawn.ID[:]...)
-	e.string(spawn.Name, 128)
-	e.u64(spawn.Tick)
-	e.i32(int32(spawn.Dimension))
-	for _, value := range spawn.Position {
-		e.f32(value)
-	}
-	e.f32(spawn.Yaw)
-	e.f32(spawn.Pitch)
-}
-
-func encodeCompanionStates(e *byteEncoder, states CompanionStates) {
-	e.u64(states.Tick)
-	e.uvarint(uint32(len(states.States)))
-	for _, state := range states.States {
-		e.data = append(e.data, state.ID[:]...)
-		e.i32(int32(state.Dimension))
-		for _, value := range state.Position {
-			e.f32(value)
-		}
-		e.f32(state.Yaw)
-		e.f32(state.Pitch)
-		e.bool(state.Reset)
-	}
-}
-
-func decodeChatEvent(d *byteDecoder) (ServerPacket, error) {
-	var event ChatEvent
-	var err error
-	event.EventID, err = d.u64()
-	if err == nil {
-		err = decodeFixedID(d, event.PlayerID[:])
-	}
-	if err == nil {
-		event.PlayerName, err = d.string(128, 32)
-	}
-	if err == nil {
-		err = decodeFixedID(d, event.CompanionID[:])
-	}
-	if err == nil {
-		event.CompanionName, err = d.string(128, 32)
-	}
-	if err == nil {
-		var kind uint8
-		kind, err = d.u8()
-		event.Kind = ChatEventKind(kind)
-	}
-	if err == nil {
-		var reason uint8
-		reason, err = d.u8()
-		event.RejectReason = ChatRejectReason(reason)
-	}
-	if err == nil {
-		// 文本槽位按 kind 复用：解码时先读出 kind，再把槽位读入台词（超过
-		// companion.MaxDialogueLineBytes 直接拒绝）或玩家指令，随后 Validate
-		// 按 kind 施加完整文本纪律。
-		if event.Kind == ChatEventCompanionSpeech {
-			event.Speech, err = d.string(companion.MaxDialogueLineBytes, companion.MaxDialogueLineBytes)
-		} else {
-			event.Command, err = d.string(companion.MaxPlanCommandBytes, companion.MaxPlanCommandBytes)
-		}
-	}
-	if err != nil {
-		return nil, err
-	}
-	return event, nil
-}
-
-func decodeCompanionSpawn(d *byteDecoder) (ServerPacket, error) {
-	var spawn CompanionSpawn
-	var err error
-	err = decodeFixedID(d, spawn.ID[:])
-	if err == nil {
-		spawn.Name, err = d.string(128, 32)
-	}
-	if err == nil {
-		spawn.Tick, err = d.u64()
-	}
-	if err == nil {
-		var dimension int32
-		dimension, err = d.i32()
-		spawn.Dimension = core.DimensionID(dimension)
-	}
-	for index := range spawn.Position {
-		if err == nil {
-			spawn.Position[index], err = d.f32()
-		}
-	}
-	if err == nil {
-		spawn.Yaw, err = d.f32()
-	}
-	if err == nil {
-		spawn.Pitch, err = d.f32()
-	}
-	if err != nil {
-		return nil, err
-	}
-	return spawn, nil
-}
-
-func decodeCompanionStates(d *byteDecoder) (ServerPacket, error) {
-	var states CompanionStates
-	var err error
-	states.Tick, err = d.u64()
-	var count uint32
-	if err == nil {
-		count, err = d.uvarint()
-	}
-	if err == nil && (count < 1 || count > maxCompanionStates) {
-		err = fmt.Errorf("network: companion state count is outside 1..%d", maxCompanionStates)
-	}
-	if err == nil && len(d.data)-d.offset != int(count)*companionStateWireBytes {
-		err = errors.New("network: companion states length does not match count")
-	}
-	if err != nil {
-		return nil, err
-	}
-	states.States = make([]CompanionState, int(count))
-	for index := range states.States {
-		state := &states.States[index]
-		if err = decodeFixedID(d, state.ID[:]); err != nil {
-			return nil, err
-		}
-		dimension, readErr := d.i32()
-		if readErr != nil {
-			return nil, readErr
-		}
-		state.Dimension = core.DimensionID(dimension)
-		for component := range state.Position {
-			state.Position[component], err = d.f32()
-			if err != nil {
-				return nil, err
-			}
-		}
-		if state.Yaw, err = d.f32(); err != nil {
-			return nil, err
-		}
-		if state.Pitch, err = d.f32(); err != nil {
-			return nil, err
-		}
-		if state.Reset, err = d.bool(); err != nil {
-			return nil, err
-		}
-	}
-	return states, nil
-}
-
-func decodeFixedID(d *byteDecoder, destination []byte) error {
-	data, err := d.take(len(destination))
-	if err != nil {
-		return err
-	}
-	copy(destination, data)
-	return nil
 }

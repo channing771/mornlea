@@ -1,4 +1,4 @@
-package network
+package protocol
 
 import (
 	"errors"
@@ -154,7 +154,7 @@ func ValidateClientPacket(state State, packet ClientPacket) error {
 	case StateHandshake:
 		clientHello, ok := packet.(ClientHello)
 		if !ok {
-			return invalidClientPacket(state, packet)
+			return InvalidClientPacket(state, packet)
 		}
 		if clientHello.ProtocolVersion != ProtocolVersion {
 			return fmt.Errorf("network: unsupported client protocol version %d", clientHello.ProtocolVersion)
@@ -163,7 +163,7 @@ func ValidateClientPacket(state State, packet ClientPacket) error {
 	case StateLogin:
 		loginStart, ok := packet.(LoginStart)
 		if !ok {
-			return invalidClientPacket(state, packet)
+			return InvalidClientPacket(state, packet)
 		}
 		if !loginStart.PlayerID.Valid() {
 			return errors.New("network: login player ID is not UUIDv4")
@@ -208,10 +208,10 @@ func ValidateClientPacket(state State, packet ClientPacket) error {
 			}
 			return nil
 		default:
-			return invalidClientPacket(state, packet)
+			return InvalidClientPacket(state, packet)
 		}
 	default:
-		return invalidClientPacket(state, packet)
+		return InvalidClientPacket(state, packet)
 	}
 }
 
@@ -231,7 +231,7 @@ func ValidateServerPacket(state State, packet ServerPacket) error {
 			}
 			return nil
 		default:
-			return invalidServerPacket(state, packet)
+			return InvalidServerPacket(state, packet)
 		}
 	case StateLogin:
 		switch serverPacket := packet.(type) {
@@ -246,7 +246,7 @@ func ValidateServerPacket(state State, packet ServerPacket) error {
 			}
 			return nil
 		default:
-			return invalidServerPacket(state, packet)
+			return InvalidServerPacket(state, packet)
 		}
 	case StatePlay:
 		switch serverPacket := packet.(type) {
@@ -307,10 +307,10 @@ func ValidateServerPacket(state State, packet ServerPacket) error {
 		case HostileDespawn:
 			return serverPacket.Validate()
 		default:
-			return invalidServerPacket(state, packet)
+			return InvalidServerPacket(state, packet)
 		}
 	default:
-		return invalidServerPacket(state, packet)
+		return InvalidServerPacket(state, packet)
 	}
 }
 
@@ -338,10 +338,40 @@ func validDisconnectCode(code DisconnectCode) bool {
 	}
 }
 
-func invalidClientPacket(state State, packet ClientPacket) error {
+// InvalidClientPacket 构造 client packet 在给定 state 下类型非法的固定
+// 错误。导出供编解码层在包 ID 查表失败等分发点复用同一错误文本，避免
+// 两侧各自维护格式串造成语义漂移。
+func InvalidClientPacket(state State, packet ClientPacket) error {
 	return fmt.Errorf("network: client packet %T is not valid in state %d", packet, state)
 }
 
-func invalidServerPacket(state State, packet ServerPacket) error {
+// InvalidServerPacket 构造 server packet 在给定 state 下类型非法的固定
+// 错误，与 `InvalidClientPacket` 对称。
+func InvalidServerPacket(state State, packet ServerPacket) error {
 	return fmt.Errorf("network: server packet %T is not valid in state %d", packet, state)
+}
+
+// ValidateDecodedClientWirePacket 是解码侧的协议级校验入口：在主校验
+// `ValidateClientPacket` 之前放行 Handshake 的 `ClientHello` 与 Login 的
+// `LoginStart`，让登录状态机能对结构完整的握手/登录消息返回冻结的
+// `HandshakeVersionMismatch`/`LoginInvalidIdentity` 拒绝路径；其余 packet
+// 原样转发主校验，不接触任何字节层细节。导出供根包 Memory transport 与
+// 编解码层解码路径共用。
+func ValidateDecodedClientWirePacket(state State, packet ClientPacket) error {
+	// The login state machine must observe every structurally valid hello in
+	// order to return the frozen HandshakeVersionMismatch response. Outbound
+	// callers remain unable to encode unsupported versions.
+	if state == StateHandshake {
+		if _, ok := packet.(ClientHello); ok {
+			return nil
+		}
+	}
+	// A structurally complete LoginStart must reach the login driver so it can
+	// return the frozen LoginInvalidIdentity code for semantic identity errors.
+	if state == StateLogin {
+		if _, ok := packet.(LoginStart); ok {
+			return nil
+		}
+	}
+	return ValidateClientPacket(state, packet)
 }

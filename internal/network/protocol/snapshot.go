@@ -1,4 +1,4 @@
-package network
+package protocol
 
 import (
 	"errors"
@@ -35,7 +35,7 @@ func (section SectionData) Validate() error {
 		if section.Bits != 0 || len(section.Palette) != 0 || len(section.Packed) != 0 {
 			return errors.New("network: single section has compressed payload")
 		}
-		if !validBlockID(section.Single) {
+		if !ValidBlockID(section.Single) {
 			return fmt.Errorf("network: single block ID %d is unregistered", section.Single)
 		}
 		return nil
@@ -54,16 +54,16 @@ func (section SectionData) Validate() error {
 				section.Bits,
 			)
 		}
-		if len(section.Packed) != sectionWords(section.Bits) {
+		if len(section.Packed) != SectionWords(section.Bits) {
 			return fmt.Errorf(
 				"network: indexed packed length %d, want %d",
 				len(section.Packed),
-				sectionWords(section.Bits),
+				SectionWords(section.Bits),
 			)
 		}
 		seen := make(map[core.BlockID]struct{}, len(section.Palette))
 		for _, id := range section.Palette {
-			if !validBlockID(id) {
+			if !ValidBlockID(id) {
 				return fmt.Errorf("network: palette block ID %d is unregistered", id)
 			}
 			if _, duplicate := seen[id]; duplicate {
@@ -72,7 +72,7 @@ func (section SectionData) Validate() error {
 			seen[id] = struct{}{}
 		}
 		for index := 0; index < core.BlocksPerSection; index++ {
-			slot := readSectionPacked(section.Packed, section.Bits, index)
+			slot := ReadSectionPacked(section.Packed, section.Bits, index)
 			if slot >= uint32(len(section.Palette)) {
 				return fmt.Errorf(
 					"network: palette slot %d at block %d exceeds palette length %d",
@@ -91,11 +91,11 @@ func (section SectionData) Validate() error {
 		if section.Single != 0 || len(section.Palette) != 0 {
 			return errors.New("network: direct section has palette or single value")
 		}
-		if len(section.Packed) != sectionWords(15) {
+		if len(section.Packed) != SectionWords(15) {
 			return fmt.Errorf(
 				"network: direct packed length %d, want %d",
 				len(section.Packed),
-				sectionWords(15),
+				SectionWords(15),
 			)
 		}
 		for index, word := range section.Packed {
@@ -104,7 +104,7 @@ func (section SectionData) Validate() error {
 			}
 		}
 		for index := 0; index < core.BlocksPerSection; index++ {
-			id := core.BlockID(readSectionPacked(section.Packed, section.Bits, index))
+			id := core.BlockID(ReadSectionPacked(section.Packed, section.Bits, index))
 			if !core.RegisteredBlock(id) {
 				return fmt.Errorf("network: direct block ID %d at block %d is unregistered", id, index)
 			}
@@ -201,7 +201,7 @@ func (changes BlockChanges) Validate() error {
 	}
 	var previous uint32
 	for index, change := range changes.Changes {
-		if !validBlockID(change.Block) {
+		if !ValidBlockID(change.Block) {
 			return fmt.Errorf("network: block ID %d is unregistered", change.Block)
 		}
 		if change.Position.Y < core.MinY || change.Position.Y >= core.MaxY {
@@ -223,16 +223,22 @@ func (changes BlockChanges) Validate() error {
 	return nil
 }
 
-func validBlockID(id core.BlockID) bool {
+// ValidBlockID 报告方块 ID 是否已注册；区段与方块变更的校验共用，
+// 编解码层解码调色板时也按同一谓词拒绝未注册 ID。
+func ValidBlockID(id core.BlockID) bool {
 	return core.RegisteredBlock(id)
 }
 
-func sectionWords(bits uint8) int {
+// SectionWords 返回给定位宽下编码整段方块所需的 uint64 字数；区段校验与
+// 编解码层的逻辑快照编解码共用同一推导。
+func SectionWords(bits uint8) int {
 	perWord := 64 / int(bits)
 	return (core.BlocksPerSection + perWord - 1) / perWord
 }
 
-func readSectionPacked(data []uint64, bits uint8, index int) uint32 {
+// ReadSectionPacked 从 packed words 中取出第 index 个方块槽位；区段校验与
+// 编解码层的 fixture 检视共用同一解包实现，避免位布局二次实现漂移。
+func ReadSectionPacked(data []uint64, bits uint8, index int) uint32 {
 	perWord := 64 / int(bits)
 	shift := uint((index % perWord) * int(bits))
 	mask := uint64(1)<<bits - 1

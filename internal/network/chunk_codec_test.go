@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"flag"
+	"github.com/channing771/mornlea/internal/network/protocol"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -64,14 +65,14 @@ func missingFluidIDs(snapshot ChunkSnapshot) []core.BlockID {
 			seen[section.Single] = true
 		case SectionIndexed:
 			for index := 0; index < core.BlocksPerSection; index++ {
-				palette := readSectionPacked(section.Packed, section.Bits, index)
+				palette := protocol.ReadSectionPacked(section.Packed, section.Bits, index)
 				if int(palette) < len(section.Palette) {
 					seen[section.Palette[palette]] = true
 				}
 			}
 		case SectionDirect:
 			for index := 0; index < core.BlocksPerSection; index++ {
-				seen[core.BlockID(readSectionPacked(section.Packed, section.Bits, index))] = true
+				seen[core.BlockID(protocol.ReadSectionPacked(section.Packed, section.Bits, index))] = true
 			}
 		}
 	}

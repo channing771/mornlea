@@ -2,6 +2,7 @@ package network
 
 import (
 	"encoding/hex"
+	"github.com/channing771/mornlea/internal/network/protocol"
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
@@ -86,8 +87,8 @@ func TestGridCraftingMoveValueDomain(t *testing.T) {
 		}
 	}
 	invalid := []MoveCraftingStack{
-		{Sequence: 1, From: gridCraftingViewSlots, To: 0},
-		{Sequence: 1, From: 0, To: gridCraftingViewSlots},
+		{Sequence: 1, From: protocol.GridCraftingViewSlots, To: 0},
+		{Sequence: 1, From: 0, To: protocol.GridCraftingViewSlots},
 		{Sequence: 1, From: 9, To: 9},
 		{Sequence: 1, From: 0, To: 0},
 		// 两端都在背包区 9..44：必须走既有背包移动命令。
@@ -104,7 +105,7 @@ func TestGridCraftingMoveValueDomain(t *testing.T) {
 	}
 	// wire 侧同判：手工构造 45 越界与双背包端载荷，解码必须拒绝。
 	for _, wire := range [][]byte{
-		{1, 0, 0, 0, 0, 0, 0, 0, gridCraftingViewSlots, 0},
+		{1, 0, 0, 0, 0, 0, 0, 0, protocol.GridCraftingViewSlots, 0},
 		{1, 0, 0, 0, 0, 0, 0, 0, 9, 10},
 	} {
 		if packet, err := decodeClientPacketPayload(StatePlay, 7, wire); err == nil {

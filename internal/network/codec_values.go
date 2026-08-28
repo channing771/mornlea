@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/network/protocol"
 )
 
 const (
@@ -124,7 +125,7 @@ func decodeItemDropBatchCount(d *byteDecoder, itemBytes int) (uint32, error) {
 	if err != nil {
 		return 0, err
 	}
-	if count < 1 || count > MaxItemDropBatch {
+	if count < 1 || count > protocol.MaxItemDropBatch {
 		return 0, errors.New("network: item drop batch count is outside 1..32")
 	}
 	if len(d.data)-d.offset < int(count)*itemBytes {
@@ -133,8 +134,8 @@ func decodeItemDropBatchCount(d *byteDecoder, itemBytes int) (uint32, error) {
 	return count, nil
 }
 
-func decodeItemDropUpserts(d *byteDecoder) (ServerPacket, error) {
-	var result ItemDropUpserts
+func decodeItemDropUpserts(d *byteDecoder) (protocol.ServerPacket, error) {
+	var result protocol.ItemDropUpserts
 	serverTick, err := d.u64()
 	if err != nil {
 		return nil, err
@@ -144,7 +145,7 @@ func decodeItemDropUpserts(d *byteDecoder) (ServerPacket, error) {
 	if err != nil {
 		return nil, err
 	}
-	result.Drops = make([]ItemDrop, count)
+	result.Drops = make([]protocol.ItemDrop, count)
 	for index := range result.Drops {
 		drop := &result.Drops[index]
 		if drop.ID, err = decodeDropID(d); err != nil {
@@ -164,8 +165,8 @@ func decodeItemDropUpserts(d *byteDecoder) (ServerPacket, error) {
 	return result, nil
 }
 
-func decodeItemDropRemoves(d *byteDecoder) (ServerPacket, error) {
-	var result ItemDropRemoves
+func decodeItemDropRemoves(d *byteDecoder) (protocol.ServerPacket, error) {
+	var result protocol.ItemDropRemoves
 	serverTick, err := d.u64()
 	if err != nil {
 		return nil, err
@@ -184,8 +185,8 @@ func decodeItemDropRemoves(d *byteDecoder) (ServerPacket, error) {
 	return result, nil
 }
 
-func decodeRemotePlayerStates(d *byteDecoder) (ServerPacket, error) {
-	var result RemotePlayerStates
+func decodeRemotePlayerStates(d *byteDecoder) (protocol.ServerPacket, error) {
+	var result protocol.RemotePlayerStates
 	serverTick, err := d.u64()
 	result.ServerTick = serverTick
 	var count uint32
@@ -199,7 +200,7 @@ func decodeRemotePlayerStates(d *byteDecoder) (ServerPacket, error) {
 		err = errors.New("network: remote player states exceed remaining payload")
 	}
 	if err == nil {
-		result.Players = make([]RemotePlayerState, int(count))
+		result.Players = make([]protocol.RemotePlayerState, int(count))
 		for index := range result.Players {
 			player := &result.Players[index]
 			var id []byte
@@ -234,8 +235,8 @@ func decodeRemotePlayerStates(d *byteDecoder) (ServerPacket, error) {
 	return result, err
 }
 
-func decodeBlockChanges(d *byteDecoder) (ServerPacket, error) {
-	var result BlockChanges
+func decodeBlockChanges(d *byteDecoder) (protocol.ServerPacket, error) {
+	var result protocol.BlockChanges
 	var dimension int32
 	var err error
 	dimension, err = d.i32()
@@ -264,7 +265,7 @@ func decodeBlockChanges(d *byteDecoder) (ServerPacket, error) {
 		err = errCountShortInput
 	}
 	if err == nil {
-		result.Changes = make([]BlockChange, int(count))
+		result.Changes = make([]protocol.BlockChange, int(count))
 		for index := range result.Changes {
 			if result.Changes[index].Position.X, err = d.i32(); err != nil {
 				break
@@ -285,8 +286,8 @@ func decodeBlockChanges(d *byteDecoder) (ServerPacket, error) {
 	return result, err
 }
 
-func decodeForgetChunks(d *byteDecoder) (ServerPacket, error) {
-	var result ForgetChunks
+func decodeForgetChunks(d *byteDecoder) (protocol.ServerPacket, error) {
+	var result protocol.ForgetChunks
 	dimension, err := d.i32()
 	result.Dimension = core.DimensionID(dimension)
 	var count uint32

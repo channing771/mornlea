@@ -1,4 +1,4 @@
-package network
+package protocol
 
 import (
 	"bytes"
@@ -192,7 +192,7 @@ func (CommandRejected) serverMessage() {}
 func (CommandRejected) serverPacket()  {}
 
 func (rejection CommandRejected) Validate() error {
-	if _, ok := commandRejectReasonID(rejection.Reason); !ok {
+	if _, ok := CommandRejectReasonID(rejection.Reason); !ok {
 		return errors.New("network: unknown command rejection reason")
 	}
 	return nil

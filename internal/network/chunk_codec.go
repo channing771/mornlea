@@ -8,6 +8,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/network/protocol"
 )
 
 const (
@@ -65,19 +66,19 @@ func (c *Codec) Close() error {
 	return c.closeErr
 }
 
-func (c *Codec) EncodeClient(state State, packet ClientPacket) (uint32, []byte, error) {
+func (c *Codec) EncodeClient(state protocol.State, packet protocol.ClientPacket) (uint32, []byte, error) {
 	return encodeClientPacketPayload(state, packet)
 }
 
-func (c *Codec) DecodeClient(state State, packetID uint32, payload []byte) (ClientPacket, error) {
+func (c *Codec) DecodeClient(state protocol.State, packetID uint32, payload []byte) (protocol.ClientPacket, error) {
 	return decodeClientPacketPayload(state, packetID, payload)
 }
 
-func (c *Codec) EncodeServer(state State, packet ServerPacket) (uint32, []byte, error) {
+func (c *Codec) EncodeServer(state protocol.State, packet protocol.ServerPacket) (uint32, []byte, error) {
 	if state != StatePlay {
 		return encodeServerControlPayload(state, packet)
 	}
-	snapshot, ok := packet.(ChunkSnapshot)
+	snapshot, ok := packet.(protocol.ChunkSnapshot)
 	if !ok {
 		return encodeServerControlPayload(state, packet)
 	}
@@ -100,7 +101,7 @@ func (c *Codec) EncodeServer(state State, packet ServerPacket) (uint32, []byte, 
 	return 0, envelope.data, nil
 }
 
-func (c *Codec) DecodeServer(state State, packetID uint32, payload []byte) (ServerPacket, error) {
+func (c *Codec) DecodeServer(state protocol.State, packetID uint32, payload []byte) (protocol.ServerPacket, error) {
 	if state != StatePlay || packetID != 0 {
 		return decodeServerControlPayload(state, packetID, payload)
 	}
@@ -139,54 +140,54 @@ func (c *Codec) decompress(compressed []byte, decodedLength uint32) ([]byte, err
 	return decoded, nil
 }
 
-func (c *Codec) decodeSnapshotEnvelope(payload []byte) (ChunkSnapshot, error) {
+func (c *Codec) decodeSnapshotEnvelope(payload []byte) (protocol.ChunkSnapshot, error) {
 	if len(payload) < 8 {
-		return ChunkSnapshot{}, errors.New("snapshot envelope is shorter than 8 bytes")
+		return protocol.ChunkSnapshot{}, errors.New("snapshot envelope is shorter than 8 bytes")
 	}
 	d := byteDecoder{data: payload}
 	decodedLength, err := d.u32()
 	if err != nil {
-		return ChunkSnapshot{}, fmt.Errorf("decoded length: %w", err)
+		return protocol.ChunkSnapshot{}, fmt.Errorf("decoded length: %w", err)
 	}
 	if decodedLength > MaxDecodedSnapshot {
-		return ChunkSnapshot{}, fmt.Errorf(
+		return protocol.ChunkSnapshot{}, fmt.Errorf(
 			"decoded length %d exceeds limit %d", decodedLength, MaxDecodedSnapshot,
 		)
 	}
 	compressedLength, err := d.u32()
 	if err != nil {
-		return ChunkSnapshot{}, fmt.Errorf("compressed length: %w", err)
+		return protocol.ChunkSnapshot{}, fmt.Errorf("compressed length: %w", err)
 	}
 	if compressedLength > MaxCompressedSnapshot {
-		return ChunkSnapshot{}, fmt.Errorf(
+		return protocol.ChunkSnapshot{}, fmt.Errorf(
 			"compressed length %d exceeds limit %d", compressedLength, MaxCompressedSnapshot,
 		)
 	}
 	if d.offset > len(payload) || len(payload)-d.offset != int(compressedLength) {
-		return ChunkSnapshot{}, errors.New("compressed length does not match snapshot envelope")
+		return protocol.ChunkSnapshot{}, errors.New("compressed length does not match snapshot envelope")
 	}
 	compressed, err := d.take(int(compressedLength))
 	if err != nil {
-		return ChunkSnapshot{}, fmt.Errorf("compressed bytes: %w", err)
+		return protocol.ChunkSnapshot{}, fmt.Errorf("compressed bytes: %w", err)
 	}
 	decoded, err := c.decompress(compressed, decodedLength)
 	if err != nil {
-		return ChunkSnapshot{}, err
+		return protocol.ChunkSnapshot{}, err
 	}
 	if len(decoded) != int(decodedLength) {
-		return ChunkSnapshot{}, fmt.Errorf(
+		return protocol.ChunkSnapshot{}, fmt.Errorf(
 			"decoded length does not match snapshot envelope: got %d, want %d",
 			len(decoded), decodedLength,
 		)
 	}
 	snapshot, err := decodeLogicalSnapshot(decoded)
 	if err != nil {
-		return ChunkSnapshot{}, fmt.Errorf("logical snapshot: %w", err)
+		return protocol.ChunkSnapshot{}, fmt.Errorf("logical snapshot: %w", err)
 	}
 	return snapshot, nil
 }
 
-func encodeLogicalSnapshot(snapshot ChunkSnapshot) ([]byte, error) {
+func encodeLogicalSnapshot(snapshot protocol.ChunkSnapshot) ([]byte, error) {
 	if err := validateSnapshotDimension(snapshot.Dimension); err != nil {
 		return nil, err
 	}
@@ -207,9 +208,9 @@ func encodeLogicalSnapshot(snapshot ChunkSnapshot) ([]byte, error) {
 		e.u8(uint8(section.Y))
 		e.u8(uint8(section.Storage))
 		switch section.Storage {
-		case SectionSingle:
+		case protocol.SectionSingle:
 			e.u16(uint16(section.Single))
-		case SectionIndexed:
+		case protocol.SectionIndexed:
 			e.u8(section.Bits)
 			e.uvarint(uint32(len(section.Palette)))
 			for _, id := range section.Palette {
@@ -219,7 +220,7 @@ func encodeLogicalSnapshot(snapshot ChunkSnapshot) ([]byte, error) {
 			for _, word := range section.Packed {
 				e.u64(word)
 			}
-		case SectionDirect:
+		case protocol.SectionDirect:
 			e.u8(section.Bits)
 			e.uvarint(uint32(len(section.Packed)))
 			for _, word := range section.Packed {
@@ -233,61 +234,61 @@ func encodeLogicalSnapshot(snapshot ChunkSnapshot) ([]byte, error) {
 	return e.data, nil
 }
 
-func logicalSnapshotSize(snapshot ChunkSnapshot) int {
+func logicalSnapshotSize(snapshot protocol.ChunkSnapshot) int {
 	size := 20 + canonicalUvarintLength(uint32(len(snapshot.Sections)))
 	for _, section := range snapshot.Sections {
 		size += 2 + section.PayloadBytes()
 		switch section.Storage {
-		case SectionIndexed:
+		case protocol.SectionIndexed:
 			size += 1 + canonicalUvarintLength(uint32(len(section.Palette))) +
 				canonicalUvarintLength(uint32(len(section.Packed)))
-		case SectionDirect:
+		case protocol.SectionDirect:
 			size += 1 + canonicalUvarintLength(uint32(len(section.Packed)))
 		}
 	}
 	return size
 }
 
-func decodeLogicalSnapshot(data []byte) (ChunkSnapshot, error) {
+func decodeLogicalSnapshot(data []byte) (protocol.ChunkSnapshot, error) {
 	d := byteDecoder{data: data}
-	var snapshot ChunkSnapshot
+	var snapshot protocol.ChunkSnapshot
 	dimension, err := d.i32()
 	if err != nil {
-		return ChunkSnapshot{}, fmt.Errorf("dimension: %w", err)
+		return protocol.ChunkSnapshot{}, fmt.Errorf("dimension: %w", err)
 	}
 	snapshot.Dimension = core.DimensionID(dimension)
 	if err := validateSnapshotDimension(snapshot.Dimension); err != nil {
-		return ChunkSnapshot{}, err
+		return protocol.ChunkSnapshot{}, err
 	}
 	if snapshot.Chunk.X, err = d.i32(); err != nil {
-		return ChunkSnapshot{}, fmt.Errorf("chunk X: %w", err)
+		return protocol.ChunkSnapshot{}, fmt.Errorf("chunk X: %w", err)
 	}
 	if snapshot.Chunk.Z, err = d.i32(); err != nil {
-		return ChunkSnapshot{}, fmt.Errorf("chunk Z: %w", err)
+		return protocol.ChunkSnapshot{}, fmt.Errorf("chunk Z: %w", err)
 	}
 	if snapshot.Revision, err = d.u64(); err != nil {
-		return ChunkSnapshot{}, fmt.Errorf("revision: %w", err)
+		return protocol.ChunkSnapshot{}, fmt.Errorf("revision: %w", err)
 	}
 	sectionCount, err := d.uvarint()
 	if err != nil {
-		return ChunkSnapshot{}, fmt.Errorf("section count: %w", err)
+		return protocol.ChunkSnapshot{}, fmt.Errorf("section count: %w", err)
 	}
 	if sectionCount != core.SectionsPerChunk {
-		return ChunkSnapshot{}, fmt.Errorf("section count %d, want %d", sectionCount, core.SectionsPerChunk)
+		return protocol.ChunkSnapshot{}, fmt.Errorf("section count %d, want %d", sectionCount, core.SectionsPerChunk)
 	}
-	snapshot.Sections = make([]SectionData, core.SectionsPerChunk)
+	snapshot.Sections = make([]protocol.SectionData, core.SectionsPerChunk)
 	for index := range snapshot.Sections {
 		section, err := decodeLogicalSection(&d, index)
 		if err != nil {
-			return ChunkSnapshot{}, fmt.Errorf("section %d: %w", index, err)
+			return protocol.ChunkSnapshot{}, fmt.Errorf("section %d: %w", index, err)
 		}
 		snapshot.Sections[index] = section
 	}
 	if err := d.done(); err != nil {
-		return ChunkSnapshot{}, err
+		return protocol.ChunkSnapshot{}, err
 	}
 	if err := snapshot.Validate(); err != nil {
-		return ChunkSnapshot{}, err
+		return protocol.ChunkSnapshot{}, err
 	}
 	return snapshot, nil
 }
@@ -299,70 +300,70 @@ func validateSnapshotDimension(dimension core.DimensionID) error {
 	return nil
 }
 
-func decodeLogicalSection(d *byteDecoder, index int) (SectionData, error) {
+func decodeLogicalSection(d *byteDecoder, index int) (protocol.SectionData, error) {
 	sectionY, err := d.u8()
 	if err != nil {
-		return SectionData{}, fmt.Errorf("Y: %w", err)
+		return protocol.SectionData{}, fmt.Errorf("Y: %w", err)
 	}
 	if int(sectionY) != index {
-		return SectionData{}, fmt.Errorf("Y %d at position %d", sectionY, index)
+		return protocol.SectionData{}, fmt.Errorf("Y %d at position %d", sectionY, index)
 	}
 	storage, err := d.u8()
 	if err != nil {
-		return SectionData{}, fmt.Errorf("storage: %w", err)
+		return protocol.SectionData{}, fmt.Errorf("storage: %w", err)
 	}
-	section := SectionData{Y: int32(sectionY), Storage: SectionStorage(storage)}
+	section := protocol.SectionData{Y: int32(sectionY), Storage: protocol.SectionStorage(storage)}
 	switch section.Storage {
-	case SectionSingle:
+	case protocol.SectionSingle:
 		block, err := d.u16()
 		if err != nil {
-			return SectionData{}, fmt.Errorf("single block ID: %w", err)
+			return protocol.SectionData{}, fmt.Errorf("single block ID: %w", err)
 		}
 		section.Single = core.BlockID(block)
 
-	case SectionIndexed:
+	case protocol.SectionIndexed:
 		if err := decodeIndexedSection(d, &section); err != nil {
-			return SectionData{}, err
+			return protocol.SectionData{}, err
 		}
 
-	case SectionDirect:
+	case protocol.SectionDirect:
 		bits, err := d.u8()
 		if err != nil {
-			return SectionData{}, fmt.Errorf("direct bits: %w", err)
+			return protocol.SectionData{}, fmt.Errorf("direct bits: %w", err)
 		}
 		if bits != 15 {
-			return SectionData{}, fmt.Errorf("direct bits %d, want 15", bits)
+			return protocol.SectionData{}, fmt.Errorf("direct bits %d, want 15", bits)
 		}
 		section.Bits = bits
 		wordCount, err := d.uvarint()
 		if err != nil {
-			return SectionData{}, fmt.Errorf("direct word count: %w", err)
+			return protocol.SectionData{}, fmt.Errorf("direct word count: %w", err)
 		}
-		wantWords := sectionWords(bits)
+		wantWords := protocol.SectionWords(bits)
 		if wordCount != uint32(wantWords) {
-			return SectionData{}, fmt.Errorf("direct word count %d, want %d", wordCount, wantWords)
+			return protocol.SectionData{}, fmt.Errorf("direct word count %d, want %d", wordCount, wantWords)
 		}
 		if err := requireRemaining(d, uint64(wordCount)*8, "direct words"); err != nil {
-			return SectionData{}, err
+			return protocol.SectionData{}, err
 		}
 		section.Packed = make([]uint64, int(wordCount))
 		for wordIndex := range section.Packed {
 			section.Packed[wordIndex], err = d.u64()
 			if err != nil {
-				return SectionData{}, fmt.Errorf("direct word %d: %w", wordIndex, err)
+				return protocol.SectionData{}, fmt.Errorf("direct word %d: %w", wordIndex, err)
 			}
 		}
 
 	default:
-		return SectionData{}, fmt.Errorf("unknown storage %d", storage)
+		return protocol.SectionData{}, fmt.Errorf("unknown storage %d", storage)
 	}
 	if err := section.Validate(); err != nil {
-		return SectionData{}, err
+		return protocol.SectionData{}, err
 	}
 	return section, nil
 }
 
-func decodeIndexedSection(d *byteDecoder, section *SectionData) error {
+func decodeIndexedSection(d *byteDecoder, section *protocol.SectionData) error {
 	bits, err := d.u8()
 	if err != nil {
 		return fmt.Errorf("indexed bits: %w", err)
@@ -390,7 +391,7 @@ func decodeIndexedSection(d *byteDecoder, section *SectionData) error {
 			return fmt.Errorf("palette block %d: %w", paletteIndex, err)
 		}
 		id := core.BlockID(block)
-		if !validBlockID(id) {
+		if !protocol.ValidBlockID(id) {
 			return fmt.Errorf("palette block ID %d is unregistered", id)
 		}
 		if _, duplicate := seen[id]; duplicate {
@@ -403,7 +404,7 @@ func decodeIndexedSection(d *byteDecoder, section *SectionData) error {
 	if err != nil {
 		return fmt.Errorf("indexed word count: %w", err)
 	}
-	wantWords := sectionWords(bits)
+	wantWords := protocol.SectionWords(bits)
 	if wordCount != uint32(wantWords) {
 		return fmt.Errorf("indexed word count %d, want %d", wordCount, wantWords)
 	}

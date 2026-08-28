@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"github.com/channing771/mornlea/internal/network/protocol"
 	"math"
 	"reflect"
 	"strings"
@@ -62,19 +63,19 @@ func TestCompanionMessageIDsAreAppendOnly(t *testing.T) {
 		{StatePlay, CompanionDespawn{}, 19},
 		{StatePlay, PlaceBlockSucceeded{}, 20},
 	})
-	if _, ok := clientPacketForID(StatePlay, 1); ok {
+	if _, ok := protocol.ClientPacketForID(StatePlay, 1); ok {
 		t.Fatal("Play client packet ID 1 必须保持未分配")
 	}
 	// v22 把 13 分配给了 TillSoil，v27 把 14 分配给了 BoneMeal，格子工作台把
 	// 15 分配给 `TakeCraftingOutput`（`MoveCraftingStack` 复用 7）；本表的
 	// 「下一个仍未分配」上界随之推进到 16。
-	if _, ok := clientPacketForID(StatePlay, 16); ok {
+	if _, ok := protocol.ClientPacketForID(StatePlay, 16); ok {
 		t.Fatal("未知 client packet ID 16 被接受")
 	}
 	// 格子工作台把 21 分配给了 `CraftingState`，夜行者把 22/23/24 分配给
 	// `HostileSpawn`/`HostileState`/`HostileDespawn`；下一个仍未分配的上界
 	// 推进到 25。
-	if _, ok := serverPacketForID(StatePlay, 25); ok {
+	if _, ok := protocol.ServerPacketForID(StatePlay, 25); ok {
 		t.Fatal("未知 server packet ID 25 被接受")
 	}
 }

@@ -4,28 +4,29 @@ import (
 	"fmt"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/network/protocol"
 )
 
-func encodeClientPacketPayload(state State, packet ClientPacket) (packetID uint32, payload []byte, err error) {
+func encodeClientPacketPayload(state protocol.State, packet protocol.ClientPacket) (packetID uint32, payload []byte, err error) {
 	if err := validateClientWirePacket(state, packet); err != nil {
 		return 0, nil, codecError("encode client", state, 0, err)
 	}
-	packetID, ok := clientPacketID(state, packet)
+	packetID, ok := protocol.ClientPacketID(state, packet)
 	if !ok {
-		return 0, nil, codecError("encode client", state, 0, invalidClientPacket(state, packet))
+		return 0, nil, codecError("encode client", state, 0, protocol.InvalidClientPacket(state, packet))
 	}
 	var e byteEncoder
 	switch state {
-	case StateHandshake:
-		message := packet.(ClientHello)
+	case protocol.StateHandshake:
+		message := packet.(protocol.ClientHello)
 		e.uvarint(message.ProtocolVersion)
-	case StateLogin:
-		message := packet.(LoginStart)
+	case protocol.StateLogin:
+		message := packet.(protocol.LoginStart)
 		e.data = append(e.data, message.PlayerID[:]...)
 		e.string(message.DisplayName, 128)
-	case StatePlay:
+	case protocol.StatePlay:
 		switch message := packet.(type) {
-		case PlayerInput:
+		case protocol.PlayerInput:
 			e.u64(message.Sequence)
 			e.i8(message.MoveX)
 			e.i8(message.MoveZ)
@@ -35,84 +36,84 @@ func encodeClientPacketPayload(state State, packet ClientPacket) (packetID uint3
 			e.bool(message.Mining)
 			e.bool(message.Eating)
 			e.bool(message.Sprinting)
-		case PlaceBlock:
+		case protocol.PlaceBlock:
 			e.u64(message.Sequence)
 			e.f32(message.Yaw)
 			e.f32(message.Pitch)
 			e.u8(message.Slot)
-		case SelectHotbar:
+		case protocol.SelectHotbar:
 			e.u64(message.Sequence)
 			e.u8(message.Slot)
-		case MoveInventoryStack:
+		case protocol.MoveInventoryStack:
 			e.u64(message.Sequence)
 			e.u8(message.From)
 			e.u8(message.To)
-		case DropSelectedItem:
+		case protocol.DropSelectedItem:
 			e.u64(message.Sequence)
-		case OpenContainer:
+		case protocol.OpenContainer:
 			e.u64(message.Sequence)
 			e.f32(message.Yaw)
 			e.f32(message.Pitch)
-		case MoveContainerStack:
+		case protocol.MoveContainerStack:
 			e.u64(message.Sequence)
 			encodeContainerRef(&e, message.Container)
 			e.u8(message.From)
 			e.u8(message.To)
-		case CloseContainer:
+		case protocol.CloseContainer:
 			e.u64(message.Sequence)
-		case RequestChunkResync:
+		case protocol.RequestChunkResync:
 			e.u64(message.Sequence)
 			e.i32(int32(message.Dimension))
 			e.i32(message.Chunk.X)
 			e.i32(message.Chunk.Z)
 			e.u64(message.HaveRevision)
-		case KeepAliveReply:
+		case protocol.KeepAliveReply:
 			e.u64(message.Token)
-		case ChatCommand:
-			e.string(message.Text, chatCommandTextMaxBytes)
-		case TillSoil:
+		case protocol.ChatCommand:
+			e.string(message.Text, protocol.ChatCommandTextMaxBytes)
+		case protocol.TillSoil:
 			e.u64(message.Sequence)
 			e.f32(message.Yaw)
 			e.f32(message.Pitch)
-		case BoneMeal:
+		case protocol.BoneMeal:
 			e.u64(message.Sequence)
 			e.f32(message.Yaw)
 			e.f32(message.Pitch)
-		case MoveCraftingStack:
+		case protocol.MoveCraftingStack:
 			e.u64(message.Sequence)
 			e.u8(message.From)
 			e.u8(message.To)
-		case TakeCraftingOutput:
+		case protocol.TakeCraftingOutput:
 			e.u64(message.Sequence)
 		default:
-			return 0, nil, codecError("encode client", state, packetID, invalidClientPacket(state, packet))
+			return 0, nil, codecError("encode client", state, packetID, protocol.InvalidClientPacket(state, packet))
 		}
 	default:
-		return 0, nil, codecError("encode client", state, packetID, invalidClientPacket(state, packet))
+		return 0, nil, codecError("encode client", state, packetID, protocol.InvalidClientPacket(state, packet))
 	}
 	return finishEncode("encode client", state, packetID, e)
 }
 
-func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (ClientPacket, error) {
+func decodeClientPacketPayload(state protocol.State, packetID uint32, payload []byte) (protocol.ClientPacket, error) {
 	if err := checkSmallPayload(payload); err != nil {
 		return nil, codecError("decode client", state, packetID, err)
 	}
-	if state == StatePlay && packetID == 12 && len(payload) > chatCommandMaxWireBytes {
+	if state == protocol.StatePlay && packetID == 12 && len(payload) > protocol.ChatCommandMaxWireBytes {
 		return nil, codecError("decode client", state, packetID,
-			fmt.Errorf("network: chat command payload exceeds %d bytes", chatCommandMaxWireBytes))
+			fmt.Errorf("network: chat command payload exceeds %d bytes", protocol.ChatCommandMaxWireBytes))
 	}
 	d := byteDecoder{data: payload}
-	var packet ClientPacket
+	var packet protocol.ClientPacket
 	var err error
 	switch state {
-	case StateHandshake:
+	case protocol.StateHandshake:
 		if packetID != 0 {
 			return nil, codecError("decode client", state, packetID, errUnknownPacketID)
 		}
 		var version uint32
 		version, err = d.uvarint()
-		packet = ClientHello{ProtocolVersion: version}
-	case StateLogin:
+		packet = protocol.ClientHello{ProtocolVersion: version}
+	case protocol.StateLogin:
 		if packetID != 0 {
 			return nil, codecError("decode client", state, packetID, errUnknownPacketID)
 		}
@@ -124,8 +125,8 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 			copy(id[:], data)
 			name, err = d.string(MaxSmallPayload, MaxSmallPayload)
 		}
-		packet = LoginStart{PlayerID: id, DisplayName: name}
-	case StatePlay:
+		packet = protocol.LoginStart{PlayerID: id, DisplayName: name}
+	case protocol.StatePlay:
 		switch packetID {
 		case 0:
 			var sequence uint64
@@ -158,7 +159,7 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 			if err == nil {
 				sprinting, err = d.bool()
 			}
-			packet = PlayerInput{Sequence: sequence, MoveX: moveX, MoveZ: moveZ, Jump: jump, Yaw: yaw, Pitch: pitch, Mining: mining, Eating: eating, Sprinting: sprinting}
+			packet = protocol.PlayerInput{Sequence: sequence, MoveX: moveX, MoveZ: moveZ, Jump: jump, Yaw: yaw, Pitch: pitch, Mining: mining, Eating: eating, Sprinting: sprinting}
 		case 2:
 			var sequence uint64
 			var yaw, pitch float32
@@ -173,7 +174,7 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 			if err == nil {
 				slot, err = d.u8()
 			}
-			packet = PlaceBlock{Sequence: sequence, Yaw: yaw, Pitch: pitch, Slot: slot}
+			packet = protocol.PlaceBlock{Sequence: sequence, Yaw: yaw, Pitch: pitch, Slot: slot}
 		case 3:
 			var sequence, revision uint64
 			var dimension, chunkX, chunkZ int32
@@ -190,11 +191,11 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 			if err == nil {
 				revision, err = d.u64()
 			}
-			packet = RequestChunkResync{Sequence: sequence, Dimension: core.DimensionID(dimension), Chunk: core.ChunkPos{X: chunkX, Z: chunkZ}, HaveRevision: revision}
+			packet = protocol.RequestChunkResync{Sequence: sequence, Dimension: core.DimensionID(dimension), Chunk: core.ChunkPos{X: chunkX, Z: chunkZ}, HaveRevision: revision}
 		case 4:
 			var token uint64
 			token, err = d.u64()
-			packet = KeepAliveReply{Token: token}
+			packet = protocol.KeepAliveReply{Token: token}
 		case 5:
 			var sequence uint64
 			var slot uint8
@@ -202,7 +203,7 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 			if err == nil {
 				slot, err = d.u8()
 			}
-			packet = SelectHotbar{Sequence: sequence, Slot: slot}
+			packet = protocol.SelectHotbar{Sequence: sequence, Slot: slot}
 		case 6:
 			var sequence uint64
 			var from, to uint8
@@ -213,9 +214,9 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 			if err == nil {
 				to, err = d.u8()
 			}
-			packet = MoveInventoryStack{Sequence: sequence, From: from, To: to}
+			packet = protocol.MoveInventoryStack{Sequence: sequence, From: from, To: to}
 		case 7:
-			var move MoveCraftingStack
+			var move protocol.MoveCraftingStack
 			move.Sequence, err = d.u64()
 			if err == nil {
 				move.From, err = d.u8()
@@ -225,7 +226,7 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 			}
 			packet = move
 		case 8:
-			var open OpenContainer
+			var open protocol.OpenContainer
 			open.Sequence, err = d.u64()
 			if err == nil {
 				open.Yaw, err = d.f32()
@@ -235,7 +236,7 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 			}
 			packet = open
 		case 9:
-			var move MoveContainerStack
+			var move protocol.MoveContainerStack
 			move.Sequence, err = d.u64()
 			if err == nil {
 				move.Container, err = decodeContainerRef(&d)
@@ -248,21 +249,21 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 			}
 			packet = move
 		case 10:
-			var closeContainer CloseContainer
+			var closeContainer protocol.CloseContainer
 			closeContainer.Sequence, err = d.u64()
 			packet = closeContainer
 		case 11:
-			var drop DropSelectedItem
+			var drop protocol.DropSelectedItem
 			drop.Sequence, err = d.u64()
 			packet = drop
 		case 12:
-			var command ChatCommand
+			var command protocol.ChatCommand
 			// `d.string` 的两参分别是字节上限与 rune 上限；此处同值系现状保持，
 			// 并非两个独立上限恰好相等的巧合约束。
-			command.Text, err = d.string(chatCommandTextMaxBytes, chatCommandTextMaxBytes)
+			command.Text, err = d.string(protocol.ChatCommandTextMaxBytes, protocol.ChatCommandTextMaxBytes)
 			packet = command
 		case 13:
-			var till TillSoil
+			var till protocol.TillSoil
 			till.Sequence, err = d.u64()
 			if err == nil {
 				till.Yaw, err = d.f32()
@@ -272,7 +273,7 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 			}
 			packet = till
 		case 14:
-			var meal BoneMeal
+			var meal protocol.BoneMeal
 			meal.Sequence, err = d.u64()
 			if err == nil {
 				meal.Yaw, err = d.f32()
@@ -282,7 +283,7 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 			}
 			packet = meal
 		case 15:
-			var take TakeCraftingOutput
+			var take protocol.TakeCraftingOutput
 			take.Sequence, err = d.u64()
 			packet = take
 		default:
@@ -295,7 +296,7 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 		err = d.done()
 	}
 	if err == nil {
-		err = validateDecodedClientWirePacket(state, packet)
+		err = protocol.ValidateDecodedClientWirePacket(state, packet)
 	}
 	if err != nil {
 		return nil, codecError("decode client", state, packetID, err)
@@ -303,25 +304,6 @@ func decodeClientPacketPayload(state State, packetID uint32, payload []byte) (Cl
 	return packet, nil
 }
 
-func validateDecodedClientWirePacket(state State, packet ClientPacket) error {
-	// The login state machine must observe every structurally valid hello in
-	// order to return the frozen HandshakeVersionMismatch response. Outbound
-	// callers remain unable to encode unsupported versions.
-	if state == StateHandshake {
-		if _, ok := packet.(ClientHello); ok {
-			return nil
-		}
-	}
-	// A structurally complete LoginStart must reach the login driver so it can
-	// return the frozen LoginInvalidIdentity code for semantic identity errors.
-	if state == StateLogin {
-		if _, ok := packet.(LoginStart); ok {
-			return nil
-		}
-	}
-	return validateClientWirePacket(state, packet)
-}
-
-func validateClientWirePacket(state State, packet ClientPacket) error {
-	return ValidateClientPacket(state, packet)
+func validateClientWirePacket(state protocol.State, packet protocol.ClientPacket) error {
+	return protocol.ValidateClientPacket(state, packet)
 }

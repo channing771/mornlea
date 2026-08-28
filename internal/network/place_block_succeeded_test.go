@@ -3,6 +3,7 @@ package network
 import (
 	"encoding/hex"
 	"errors"
+	"github.com/channing771/mornlea/internal/network/protocol"
 	"reflect"
 	"testing"
 )
@@ -34,18 +35,18 @@ func TestProtocolV26PlaceBlockSucceededWire(t *testing.T) {
 // 与紧随其后的边界。格子工作台把 21 分配给 `CraftingState`（in-branch 临时
 // 编号，design.md D1），「下一个仍未分配」的上界随之推进到 22。
 func TestProtocolV26PlaceBlockSucceededRegistryBoundary(t *testing.T) {
-	packetID, ok := serverPacketID(StatePlay, PlaceBlockSucceeded{})
+	packetID, ok := protocol.ServerPacketID(StatePlay, PlaceBlockSucceeded{})
 	if !ok || packetID != 20 {
 		t.Fatalf("PlaceBlockSucceeded ID=(%d,%v)，想要 (20,true)", packetID, ok)
 	}
-	registered, ok := serverPacketForID(StatePlay, 20)
+	registered, ok := protocol.ServerPacketForID(StatePlay, 20)
 	if !ok {
 		t.Fatal("Play S→C ID 20 未注册")
 	}
 	if _, ok := registered.(PlaceBlockSucceeded); !ok {
 		t.Fatalf("Play S→C ID 20=%T，想要 PlaceBlockSucceeded", registered)
 	}
-	if _, ok := serverPacketForID(StatePlay, 25); ok {
+	if _, ok := protocol.ServerPacketForID(StatePlay, 25); ok {
 		t.Fatal("Play S→C ID 25 必须保持未分配")
 	}
 	if _, err := decodeServerControlPayload(StatePlay, 25, nil); !errors.Is(err, errUnknownPacketID) {

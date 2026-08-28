@@ -1,5 +1,8 @@
-// Package network 定义端无关消息协议与传输接口。
-package network
+// Package protocol 定义端无关的消息协议层：封闭的 `ClientPacket`/
+// `ServerPacket` packet 集合、冻结的包 ID 注册表与逐字段 Validate 规则。
+// 编解码（wire 字节层）与会话编排分属 `internal/network` 的 codec 簇与
+// 根包，本包不依赖二者。
+package protocol
 
 import (
 	"math"

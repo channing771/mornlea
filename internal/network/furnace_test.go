@@ -1,6 +1,7 @@
 package network
 
 import (
+	"github.com/channing771/mornlea/internal/network/protocol"
 	"math"
 	"testing"
 
@@ -34,7 +35,7 @@ func TestProtocolV7FurnacePacketIDsAreFrozen(t *testing.T) {
 		{StatePlay, FurnaceState{}, 13},
 		{StatePlay, ContainerClosed{}, 14},
 	})
-	if _, ok := clientPacketForID(StatePlay, 1); ok {
+	if _, ok := protocol.ClientPacketForID(StatePlay, 1); ok {
 		t.Fatal("Play client packet ID 1 必须保持未分配")
 	}
 }
@@ -59,12 +60,12 @@ func TestProtocolV12ContainerPayloadsAreFixedLength(t *testing.T) {
 				t.Fatalf("%T payload=%d err=%v，想要 %d 字节", tc.packet, len(payload), err, tc.bytes)
 			}
 			for length := range len(payload) {
-				id, _ := clientPacketID(StatePlay, tc.packet)
+				id, _ := protocol.ClientPacketID(StatePlay, tc.packet)
 				if _, err := decodeClientPacketPayload(StatePlay, id, payload[:length]); err == nil {
 					t.Fatalf("截断到 %d 字节仍被接受", length)
 				}
 			}
-			id, _ := clientPacketID(StatePlay, tc.packet)
+			id, _ := protocol.ClientPacketID(StatePlay, tc.packet)
 			trailing := append(append([]byte(nil), payload...), 0)
 			if _, err := decodeClientPacketPayload(StatePlay, id, trailing); err == nil {
 				t.Fatal("尾随字节被接受")
@@ -199,7 +200,7 @@ func TestFurnaceMessagesRejectInvalidValues(t *testing.T) {
 
 func TestFurnaceDecodeRejectsUnknownWireValues(t *testing.T) {
 	ref := testFurnaceRef()
-	moveID, _ := clientPacketID(StatePlay, MoveContainerStack{})
+	moveID, _ := protocol.ClientPacketID(StatePlay, MoveContainerStack{})
 	_, payload, err := encodeClientPacketPayload(StatePlay, MoveContainerStack{
 		Sequence: 1, Container: ref, From: 0, To: core.FurnaceInputSlot,
 	})
@@ -213,7 +214,7 @@ func TestFurnaceDecodeRejectsUnknownWireValues(t *testing.T) {
 		t.Fatal("越界目标索引被接受")
 	}
 
-	stateID, _ := serverPacketID(StatePlay, FurnaceState{})
+	stateID, _ := protocol.ServerPacketID(StatePlay, FurnaceState{})
 	_, statePayload, err := encodeServerControlPayload(StatePlay, FurnaceState{
 		Furnace: ref, ProgressTicks: 10, BurnTicks: 20,
 	})

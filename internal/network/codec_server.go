@@ -4,46 +4,47 @@ import (
 	"errors"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/network/protocol"
 )
 
-func encodeServerControlPayload(state State, packet ServerPacket) (packetID uint32, payload []byte, err error) {
-	if state == StatePlay {
-		if _, ok := packet.(ChunkSnapshot); ok {
+func encodeServerControlPayload(state protocol.State, packet protocol.ServerPacket) (packetID uint32, payload []byte, err error) {
+	if state == protocol.StatePlay {
+		if _, ok := packet.(protocol.ChunkSnapshot); ok {
 			return 0, nil, codecError("encode server", state, 0, errSnapshotDelegated)
 		}
 	}
 	if err := validateServerWirePacket(state, packet); err != nil {
 		return 0, nil, codecError("encode server", state, 0, err)
 	}
-	packetID, ok := serverPacketID(state, packet)
+	packetID, ok := protocol.ServerPacketID(state, packet)
 	if !ok {
-		return 0, nil, codecError("encode server", state, 0, invalidServerPacket(state, packet))
+		return 0, nil, codecError("encode server", state, 0, protocol.InvalidServerPacket(state, packet))
 	}
 	var e byteEncoder
 	switch state {
-	case StateHandshake:
+	case protocol.StateHandshake:
 		switch message := packet.(type) {
-		case ServerHello:
+		case protocol.ServerHello:
 			e.uvarint(message.ProtocolVersion)
-		case HandshakeReject:
+		case protocol.HandshakeReject:
 			e.uvarint(message.ServerProtocolVersion)
 			e.u8(uint8(message.Code))
 			e.string(message.Message, 256)
 		}
-	case StateLogin:
+	case protocol.StateLogin:
 		switch message := packet.(type) {
-		case LoginSuccess:
+		case protocol.LoginSuccess:
 			e.data = append(e.data, message.PlayerID[:]...)
 			// v23：种子恰好追加在 PlayerID 之后（little-endian uint64），
 			// 既有 M5B 及更早字段的位置与字节序保持不变。
 			e.u64(message.WorldSeed)
-		case LoginReject:
+		case protocol.LoginReject:
 			e.u8(uint8(message.Code))
 			e.string(message.Message, 256)
 		}
-	case StatePlay:
+	case protocol.StatePlay:
 		switch message := packet.(type) {
-		case BlockChanges:
+		case protocol.BlockChanges:
 			e.i32(int32(message.Dimension))
 			e.i32(message.Chunk.X)
 			e.i32(message.Chunk.Z)
@@ -56,14 +57,14 @@ func encodeServerControlPayload(state State, packet ServerPacket) (packetID uint
 				e.i32(change.Position.Z)
 				e.u16(uint16(change.Block))
 			}
-		case ForgetChunks:
+		case protocol.ForgetChunks:
 			e.i32(int32(message.Dimension))
 			e.uvarint(uint32(len(message.Chunks)))
 			for _, chunk := range message.Chunks {
 				e.i32(chunk.X)
 				e.i32(chunk.Z)
 			}
-		case PlayerState:
+		case protocol.PlayerState:
 			e.u64(message.ServerTick)
 			e.u64(message.LastInputSequence)
 			e.i32(int32(message.Dimension))
@@ -93,26 +94,26 @@ func encodeServerControlPayload(state State, packet ServerPacket) (packetID uint
 			// 既有字段的位置与字节序保持不变。
 			e.u16(message.DayPhaseOffset)
 			e.u64(message.WorldTimeTicks)
-		case CommandRejected:
-			reason, _ := commandRejectReasonID(message.Reason)
+		case protocol.CommandRejected:
+			reason, _ := protocol.CommandRejectReasonID(message.Reason)
 			e.u64(message.Sequence)
 			e.u8(reason)
-		case PlaceBlockSucceeded:
+		case protocol.PlaceBlockSucceeded:
 			e.u64(message.Sequence)
 		// 格子工作台：u8 尺寸 + 固定 9 格 5 字节栈 + 5 字节产物格（共 51 字节）。
 		// 始终编码全部 9 格（尺寸 2 时格 4..8 恒空），不做变长分支。
-		case CraftingState:
+		case protocol.CraftingState:
 			e.u8(message.Size)
 			for _, stack := range message.Slots {
 				encodeItemStack(&e, stack)
 			}
 			encodeItemStack(&e, message.Output)
-		case KeepAlive:
+		case protocol.KeepAlive:
 			e.u64(message.Token)
-		case Disconnect:
+		case protocol.Disconnect:
 			e.u8(uint8(message.Code))
 			e.string(message.Message, 256)
-		case RemotePlayerSpawn:
+		case protocol.RemotePlayerSpawn:
 			e.data = append(e.data, message.PlayerID[:]...)
 			e.string(message.DisplayName, 128)
 			e.u64(message.ServerTick)
@@ -122,9 +123,9 @@ func encodeServerControlPayload(state State, packet ServerPacket) (packetID uint
 			}
 			e.f32(message.Yaw)
 			e.f32(message.Pitch)
-		case RemotePlayerDespawn:
+		case protocol.RemotePlayerDespawn:
 			e.data = append(e.data, message.PlayerID[:]...)
-		case RemotePlayerStates:
+		case protocol.RemotePlayerStates:
 			e.u64(message.ServerTick)
 			e.uvarint(uint32(len(message.Players)))
 			for _, player := range message.Players {
@@ -137,7 +138,7 @@ func encodeServerControlPayload(state State, packet ServerPacket) (packetID uint
 				e.f32(player.Pitch)
 				e.bool(player.Reset)
 			}
-		case InventoryState:
+		case protocol.InventoryState:
 			e.u8(message.Inventory.Hotbar.Selected)
 			for _, stack := range message.Inventory.Hotbar.Slots {
 				encodeItemStack(&e, stack)
@@ -145,21 +146,21 @@ func encodeServerControlPayload(state State, packet ServerPacket) (packetID uint
 			for _, stack := range message.Inventory.Backpack {
 				encodeItemStack(&e, stack)
 			}
-		case FurnaceState:
+		case protocol.FurnaceState:
 			encodeContainerRef(&e, message.Furnace)
 			for _, stack := range [3]core.ItemStack{message.Input, message.Fuel, message.Output} {
 				encodeItemStack(&e, stack)
 			}
 			e.u8(message.ProgressTicks)
 			e.u16(message.BurnTicks)
-		case ChestState:
+		case protocol.ChestState:
 			encodeContainerRef(&e, message.Chest)
 			for _, stack := range message.Items {
 				encodeItemStack(&e, stack)
 			}
-		case ContainerClosed:
+		case protocol.ContainerClosed:
 			encodeContainerRef(&e, message.Container)
-		case ItemDropUpserts:
+		case protocol.ItemDropUpserts:
 			e.u64(message.ServerTick)
 			e.uvarint(uint32(len(message.Drops)))
 			for _, drop := range message.Drops {
@@ -169,77 +170,77 @@ func encodeServerControlPayload(state State, packet ServerPacket) (packetID uint
 					Item: drop.Item, Count: drop.Count, Durability: drop.Durability,
 				})
 			}
-		case ItemDropRemoves:
+		case protocol.ItemDropRemoves:
 			e.u64(message.ServerTick)
 			e.uvarint(uint32(len(message.IDs)))
 			for _, id := range message.IDs {
 				encodeDropID(&e, id)
 			}
-		case ChatEvent:
+		case protocol.ChatEvent:
 			encodeChatEvent(&e, message)
-		case CompanionSpawn:
+		case protocol.CompanionSpawn:
 			encodeCompanionSpawn(&e, message)
-		case CompanionStates:
+		case protocol.CompanionStates:
 			encodeCompanionStates(&e, message)
-		case CompanionDespawn:
+		case protocol.CompanionDespawn:
 			e.data = append(e.data, message.ID[:]...)
-		case HostileSpawn:
+		case protocol.HostileSpawn:
 			encodeHostileSpawn(&e, message)
-		case HostileState:
+		case protocol.HostileState:
 			encodeHostileState(&e, message)
-		case HostileDespawn:
+		case protocol.HostileDespawn:
 			encodeHostileDespawn(&e, message)
 		default:
-			return 0, nil, codecError("encode server", state, packetID, invalidServerPacket(state, packet))
+			return 0, nil, codecError("encode server", state, packetID, protocol.InvalidServerPacket(state, packet))
 		}
 	default:
-		return 0, nil, codecError("encode server", state, packetID, invalidServerPacket(state, packet))
+		return 0, nil, codecError("encode server", state, packetID, protocol.InvalidServerPacket(state, packet))
 	}
 	return finishEncode("encode server", state, packetID, e)
 }
 
-func decodeServerControlPayload(state State, packetID uint32, payload []byte) (ServerPacket, error) {
+func decodeServerControlPayload(state protocol.State, packetID uint32, payload []byte) (protocol.ServerPacket, error) {
 	if err := checkSmallPayload(payload); err != nil {
 		return nil, codecError("decode server", state, packetID, err)
 	}
-	if state == StatePlay {
+	if state == protocol.StatePlay {
 		var max int
 		switch packetID {
 		case 16:
-			max = chatEventMaxWireBytes
+			max = protocol.ChatEventMaxWireBytes
 		case 17:
-			max = companionSpawnMaxWireBytes
+			max = protocol.CompanionSpawnMaxWireBytes
 		case 18:
-			max = companionStatesMaxWireBytes
+			max = protocol.CompanionStatesMaxWireBytes
 		case 19:
-			max = len(CompanionDespawn{}.ID)
+			max = len(protocol.CompanionDespawn{}.ID)
 		case 22:
-			max = hostileSpawnMaxWireBytes
+			max = protocol.HostileSpawnMaxWireBytes
 		case 23:
-			max = hostileStateMaxWireBytes
+			max = protocol.HostileStateMaxWireBytes
 		case 24:
-			max = hostileDespawnMaxWireBytes
+			max = protocol.HostileDespawnMaxWireBytes
 		}
 		if max > 0 && len(payload) > max {
 			return nil, codecError("decode server", state, packetID, errors.New("network: payload exceeds fixed maximum"))
 		}
 	}
-	if state == StatePlay && packetID == 9 && len(payload) > remotePlayerStatesMaxPayload {
+	if state == protocol.StatePlay && packetID == 9 && len(payload) > remotePlayerStatesMaxPayload {
 		return nil, codecError("decode server", state, packetID, errors.New("network: remote player states payload exceeds 296 bytes"))
 	}
-	if state == StatePlay && packetID == 0 {
+	if state == protocol.StatePlay && packetID == 0 {
 		return nil, codecError("decode server", state, packetID, errSnapshotDelegated)
 	}
 	d := byteDecoder{data: payload}
-	var packet ServerPacket
+	var packet protocol.ServerPacket
 	var err error
 	switch state {
-	case StateHandshake:
+	case protocol.StateHandshake:
 		switch packetID {
 		case 0:
 			var version uint32
 			version, err = d.uvarint()
-			packet = ServerHello{ProtocolVersion: version}
+			packet = protocol.ServerHello{ProtocolVersion: version}
 		case 1:
 			var version uint32
 			var code uint8
@@ -251,11 +252,11 @@ func decodeServerControlPayload(state State, packetID uint32, payload []byte) (S
 			if err == nil {
 				message, err = d.string(256, 256)
 			}
-			packet = HandshakeReject{ServerProtocolVersion: version, Code: HandshakeRejectCode(code), Message: message}
+			packet = protocol.HandshakeReject{ServerProtocolVersion: version, Code: protocol.HandshakeRejectCode(code), Message: message}
 		default:
 			return nil, codecError("decode server", state, packetID, errUnknownPacketID)
 		}
-	case StateLogin:
+	case protocol.StateLogin:
 		switch packetID {
 		case 0:
 			var id core.PlayerID
@@ -268,7 +269,7 @@ func decodeServerControlPayload(state State, packetID uint32, payload []byte) (S
 			if err == nil {
 				worldSeed, err = d.u64()
 			}
-			packet = LoginSuccess{PlayerID: id, WorldSeed: worldSeed}
+			packet = protocol.LoginSuccess{PlayerID: id, WorldSeed: worldSeed}
 		case 1:
 			var code uint8
 			var message string
@@ -276,18 +277,18 @@ func decodeServerControlPayload(state State, packetID uint32, payload []byte) (S
 			if err == nil {
 				message, err = d.string(256, 256)
 			}
-			packet = LoginReject{Code: LoginRejectCode(code), Message: message}
+			packet = protocol.LoginReject{Code: protocol.LoginRejectCode(code), Message: message}
 		default:
 			return nil, codecError("decode server", state, packetID, errUnknownPacketID)
 		}
-	case StatePlay:
+	case protocol.StatePlay:
 		switch packetID {
 		case 1:
 			packet, err = decodeBlockChanges(&d)
 		case 2:
 			packet, err = decodeForgetChunks(&d)
 		case 3:
-			var statePacket PlayerState
+			var statePacket protocol.PlayerState
 			statePacket.ServerTick, err = d.u64()
 			if err == nil {
 				statePacket.LastInputSequence, err = d.u64()
@@ -369,15 +370,15 @@ func decodeServerControlPayload(state State, packetID uint32, payload []byte) (S
 			if err == nil {
 				reasonID, err = d.u8()
 			}
-			reason, ok := commandRejectReasonForID(reasonID)
+			reason, ok := protocol.CommandRejectReasonForID(reasonID)
 			if err == nil && !ok {
 				err = errors.New("network: unknown command rejection reason ID")
 			}
-			packet = CommandRejected{Sequence: sequence, Reason: reason}
+			packet = protocol.CommandRejected{Sequence: sequence, Reason: reason}
 		case 5:
 			var token uint64
 			token, err = d.u64()
-			packet = KeepAlive{Token: token}
+			packet = protocol.KeepAlive{Token: token}
 		case 6:
 			var code uint8
 			var message string
@@ -385,9 +386,9 @@ func decodeServerControlPayload(state State, packetID uint32, payload []byte) (S
 			if err == nil {
 				message, err = d.string(256, 256)
 			}
-			packet = Disconnect{Code: DisconnectCode(code), Message: message}
+			packet = protocol.Disconnect{Code: protocol.DisconnectCode(code), Message: message}
 		case 7:
-			var spawn RemotePlayerSpawn
+			var spawn protocol.RemotePlayerSpawn
 			if data, readErr := d.take(len(spawn.PlayerID)); readErr != nil {
 				err = readErr
 			} else {
@@ -415,7 +416,7 @@ func decodeServerControlPayload(state State, packetID uint32, payload []byte) (S
 			}
 			packet = spawn
 		case 8:
-			var despawn RemotePlayerDespawn
+			var despawn protocol.RemotePlayerDespawn
 			if data, readErr := d.take(len(despawn.PlayerID)); readErr != nil {
 				err = readErr
 			} else {
@@ -437,9 +438,9 @@ func decodeServerControlPayload(state State, packetID uint32, payload []byte) (S
 			for index := range inventory.Backpack {
 				inventory.Backpack[index], err = decodeItemStack(&d, err)
 			}
-			packet = InventoryState{Inventory: inventory}
+			packet = protocol.InventoryState{Inventory: inventory}
 		case 13:
-			var state FurnaceState
+			var state protocol.FurnaceState
 			state.Furnace, err = decodeContainerRef(&d)
 			state.Input, err = decodeItemStack(&d, err)
 			state.Fuel, err = decodeItemStack(&d, err)
@@ -452,11 +453,11 @@ func decodeServerControlPayload(state State, packetID uint32, payload []byte) (S
 			}
 			packet = state
 		case 14:
-			var closed ContainerClosed
+			var closed protocol.ContainerClosed
 			closed.Container, err = decodeContainerRef(&d)
 			packet = closed
 		case 15:
-			var chest ChestState
+			var chest protocol.ChestState
 			chest.Chest, err = decodeContainerRef(&d)
 			for index := range chest.Items {
 				chest.Items[index], err = decodeItemStack(&d, err)
@@ -469,15 +470,15 @@ func decodeServerControlPayload(state State, packetID uint32, payload []byte) (S
 		case 18:
 			packet, err = decodeCompanionStates(&d)
 		case 19:
-			var despawn CompanionDespawn
+			var despawn protocol.CompanionDespawn
 			err = decodeFixedID(&d, despawn.ID[:])
 			packet = despawn
 		case 20:
 			var sequence uint64
 			sequence, err = d.u64()
-			packet = PlaceBlockSucceeded{Sequence: sequence}
+			packet = protocol.PlaceBlockSucceeded{Sequence: sequence}
 		case 21:
-			var state CraftingState
+			var state protocol.CraftingState
 			state.Size, err = d.u8()
 			for index := range state.Slots {
 				state.Slots[index], err = decodeItemStack(&d, err)
@@ -508,20 +509,20 @@ func decodeServerControlPayload(state State, packetID uint32, payload []byte) (S
 	return packet, nil
 }
 
-func validateServerWirePacket(state State, packet ServerPacket) error {
-	if err := ValidateServerPacket(state, packet); err != nil {
+func validateServerWirePacket(state protocol.State, packet protocol.ServerPacket) error {
+	if err := protocol.ValidateServerPacket(state, packet); err != nil {
 		return err
 	}
 	switch message := packet.(type) {
-	case BlockChanges:
+	case protocol.BlockChanges:
 		if message.Dimension != core.Overworld {
 			return errInvalidDimension
 		}
-	case ForgetChunks:
+	case protocol.ForgetChunks:
 		if message.Dimension != core.Overworld {
 			return errInvalidDimension
 		}
-	case PlayerState:
+	case protocol.PlayerState:
 		if message.Dimension != core.Overworld {
 			return errInvalidDimension
 		}
