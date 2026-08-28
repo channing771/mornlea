@@ -57,7 +57,7 @@ HUD 布局逻辑全部在 Go 侧 `internal/render/hud/`（固定容量 quad/glyp
 
 ## D5 egui 菜单换肤
 
-新增 `engine/crates/mornlea_client/src/ui/style.rs`：`PANEL_FILL rgba(0.045,0.052,0.062,0.92)`、`PANEL_STROKE rgba(1,1,1,0.12)`、`TEXT_PRIMARY (0.94,0.95,0.96)`、`TEXT_SECONDARY (0.62,0.65,0.70)`、`ACCENT_AMBER (1,0.72,0.24)`、`DANGER (0.94,0.35,0.35)`、按钮圆角 2、无阴影。应用面：
+新增 `engine/crates/mornlea_client/src/ui/style.rs`：`PANEL_FILL rgba(0.045,0.052,0.062,0.92)`、`PANEL_STROKE rgba(1,1,1,0.12)`、`TEXT_PRIMARY (0.94,0.95,0.96)`、`TEXT_SECONDARY (0.62,0.65,0.70)`、`ACCENT_AMBER (1,0.72,0.24)`、`DANGER (0.94,0.35,0.35)`、`MENU_BACKGROUND (0.055,0.062,0.075)`、按钮圆角 2、无阴影；派生令牌 `ACCENT_WASH`（25% 琥珀，文本选区/滑杆进度）与 `CONTROL_WELL`（输入凹槽，对应 Go 侧 `slotWell`）经评审裁决纳入正式令牌表。应用面：
 
 - 主菜单：底色加深为 (0.055,0.062,0.075)；按钮 = 半透明面板 + 1px 亮边 + 悬停/焦点琥珀描边；标题加大字重（尺寸可调，布局关系不变）；版本行用 `TEXT_SECONDARY`。
 - 暂停/设置：遮罩保留，面板与控件套用令牌；错误行沿用 `DANGER`。

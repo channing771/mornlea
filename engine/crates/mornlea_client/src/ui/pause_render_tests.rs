@@ -1,6 +1,9 @@
 //! 暂停页无头呈现与交互测试：两按钮、远程注明行两分支与 Escape 键事件免疫。
 
-use super::test_support::{click_ui, screen_rect, shape_text, take_output_events, test_font};
+use super::test_support::{
+    click_ui, collect_rects_and_texts, screen_rect, shape_text, take_output_events, test_font,
+    text_color,
+};
 use super::*;
 
 /// 远程注明行的可断言核心文案(整行文案以它开头,供两分支断言复用)。
@@ -105,6 +108,47 @@ fn pause_quit_to_menu_button_emits_quit_action() {
     assert_eq!(
         take_output_events(&mut state),
         vec![UiOutputEvent::Action(UI_ACTION_PAUSE_QUIT_TO_MENU)]
+    );
+}
+
+#[test]
+fn pause_visuals_use_panel_tokens() {
+    let mut state = prepared_state();
+    let text = rendered_text(&mut state, &pause_frame(true));
+    assert!(text.contains(REMOTE_NOTE_SNIPPET), "注明行应绘制：{text}");
+
+    // 重新取一帧做形状级断言:遮罩、标题与注明行都落在令牌上。
+    let frame = pause_frame(true);
+    let full = state
+        .run_frame(raw_input(&[], screen_rect(), 1.0, None), &frame, 1.0)
+        .expect("事件队列应有容量")
+        .expect("可见暂停页应产出布局");
+    let (rects, texts) = collect_rects_and_texts(&full);
+
+    // 遮罩 = 面板族同色的 0.82 透明变体。
+    assert!(
+        rects
+            .iter()
+            .any(|rect| rect.rect == screen_rect() && rect.fill == style::PAUSE_OVERLAY),
+        "暂停遮罩应为令牌 PAUSE_OVERLAY"
+    );
+
+    // 标题 = 主文字;远程注明行 = 次级文字(不再是琥珀提示色)。
+    let title = texts
+        .iter()
+        .find(|text| text.galley.job.text.contains("已暂停"))
+        .expect("暂停标题应绘制");
+    assert_eq!(text_color(title), style::TEXT_PRIMARY);
+    let note = texts
+        .iter()
+        .find(|text| text.galley.job.text.contains(REMOTE_NOTE_SNIPPET))
+        .expect("远程注明行应绘制");
+    assert_eq!(text_color(note), style::TEXT_SECONDARY);
+
+    // 按钮与主菜单同令牌:半透明面板填充。
+    assert!(
+        rects.iter().any(|rect| rect.fill == style::PANEL_FILL),
+        "暂停按钮应为半透明面板填充"
     );
 }
 

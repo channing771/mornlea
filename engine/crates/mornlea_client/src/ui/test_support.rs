@@ -132,3 +132,53 @@ pub(super) fn shape_text(shape: &egui::Shape, out: &mut String) {
         _ => {}
     }
 }
+
+/// 一帧输出中的矩形与文本形状(递归下钻 `Shape::Vec` 嵌套),供令牌视觉
+/// 断言消费;只收集形状,不解释语义。
+pub(super) fn collect_rects_and_texts(
+    output: &egui::FullOutput,
+) -> (Vec<&egui::epaint::RectShape>, Vec<&egui::epaint::TextShape>) {
+    fn walk<'a>(
+        shape: &'a egui::Shape,
+        rects: &mut Vec<&'a egui::epaint::RectShape>,
+        texts: &mut Vec<&'a egui::epaint::TextShape>,
+    ) {
+        match shape {
+            egui::Shape::Rect(rect) => rects.push(rect),
+            egui::Shape::Text(text) => texts.push(text),
+            egui::Shape::Vec(nested) => {
+                for shape in nested {
+                    walk(shape, rects, texts);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut rects = Vec::new();
+    let mut texts = Vec::new();
+    for clipped in &output.shapes {
+        walk(&clipped.shape, &mut rects, &mut texts);
+    }
+    (rects, texts)
+}
+
+/// 文本段的有效前景色。
+///
+/// egui 控件文本把解析后的颜色落在 [`egui::epaint::TextShape::fallback_color`],
+/// 显式 `Painter::text` 则直接把颜色写进 job section;首个非占位 section
+/// 色优先,两者都覆盖后才回落。
+pub(super) fn text_color(shape: &egui::epaint::TextShape) -> egui::Color32 {
+    shape
+        .galley
+        .job
+        .sections
+        .iter()
+        .map(|section| section.format.color)
+        .find(|color| *color != egui::Color32::PLACEHOLDER)
+        .unwrap_or(shape.fallback_color)
+}
+
+/// 文本段的字号(首个 section 的字体;单段文本即绘制字号)。
+pub(super) fn text_font_size(shape: &egui::epaint::TextShape) -> f32 {
+    shape.galley.job.sections[0].format.font_id.size
+}

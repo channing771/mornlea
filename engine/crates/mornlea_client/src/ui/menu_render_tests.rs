@@ -1,8 +1,8 @@
 //! 主菜单无头呈现与交互测试：命中、禁用态、布局、字体和确定性输出。
 
 use super::test_support::{
-    click_ui, encode_frame, four_button_frame, menu_frame, screen_rect, take_output_events,
-    test_font,
+    click_ui, collect_rects_and_texts, encode_frame, four_button_frame, menu_frame, screen_rect,
+    take_output_events, test_font, text_color, text_font_size,
 };
 use super::*;
 
@@ -176,6 +176,96 @@ fn menu_run_frame_is_deterministic_and_no_texture_churn() {
         "第二次同输入不应再上传纹理"
     );
     assert!(!first.shapes.is_empty());
+}
+
+#[test]
+fn menu_visuals_use_panel_tokens() {
+    let mut state = UiState::new();
+    state.install_font(test_font());
+    // 单按钮 + 错误行夹具:一帧同时覆盖背景、标题、按钮、版本与错误行。
+    let frame = decode_ui_frame(&encode_frame(
+        UI_LAYOUT_VERSION,
+        UI_FLAG_VISIBLE,
+        &[(1, "进入游戏", true)],
+        "Mornlea",
+        "dev",
+        "连接失败",
+    ))
+    .unwrap();
+    let full = state
+        .run_frame(raw_input(&[], screen_rect(), 1.0, None), &frame, 1.0)
+        .expect("事件队列应有容量")
+        .expect("应产出布局");
+    let (rects, texts) = collect_rects_and_texts(&full);
+
+    // 整屏底色 = 令牌深底。
+    assert!(
+        rects
+            .iter()
+            .any(|rect| rect.rect == screen_rect() && rect.fill == style::MENU_BACKGROUND),
+        "主菜单整屏底色应为令牌 MENU_BACKGROUND"
+    );
+
+    // 标题 = 主文字 + 加大字号;版本行 = 次级文字;错误行 = 告警红。
+    let title = texts
+        .iter()
+        .find(|text| text.galley.job.text.contains("Mornlea"))
+        .expect("标题应绘制");
+    assert_eq!(text_color(title), style::TEXT_PRIMARY);
+    assert_eq!(text_font_size(title), MENU_TITLE_FONT_SIZE);
+    let version = texts
+        .iter()
+        .find(|text| text.galley.job.text.contains("dev"))
+        .expect("版本行应绘制");
+    assert_eq!(text_color(version), style::TEXT_SECONDARY);
+    let error = texts
+        .iter()
+        .find(|text| text.galley.job.text.contains("连接失败"))
+        .expect("错误行应绘制");
+    assert_eq!(text_color(error), style::DANGER);
+
+    // 静默态按钮 = 半透明面板表面 + 1 逻辑点亮边。
+    assert!(
+        rects.iter().any(|rect| rect.fill == style::PANEL_FILL
+            && rect.corner_radius == style::BUTTON_CORNER_RADIUS),
+        "菜单按钮应为半透明面板填充 + 2 逻辑点圆角"
+    );
+    assert!(
+        rects
+            .iter()
+            .any(|rect| rect.stroke.color == style::PANEL_STROKE.color),
+        "菜单按钮应带 1 逻辑点亮边描边"
+    );
+}
+
+#[test]
+fn menu_button_hover_switches_to_amber_stroke() {
+    let mut state = UiState::new();
+    state.install_font(test_font());
+    let frame = decode_ui_frame(&four_button_frame()).unwrap();
+    let rects = menu_button_layout(screen_rect(), 4);
+    // 悬停帧的控件样式取自上一帧的 widget state,故先移动建立悬浮再跑一帧。
+    let hover = raw_input(
+        &[UiEvent::CursorMoved(
+            rects[0].center().x as f64,
+            rects[0].center().y as f64,
+        )],
+        screen_rect(),
+        1.0,
+        None,
+    );
+    state
+        .run_frame(hover.clone(), &frame, 1.0)
+        .unwrap()
+        .unwrap();
+    let full = state.run_frame(hover, &frame, 1.0).unwrap().unwrap();
+    let (painted, _) = collect_rects_and_texts(&full);
+    assert!(
+        painted
+            .iter()
+            .any(|rect| rect.stroke.color == style::ACCENT_AMBER),
+        "悬停按钮应为琥珀描边"
+    );
 }
 
 #[test]

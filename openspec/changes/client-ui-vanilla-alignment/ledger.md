@@ -31,3 +31,12 @@
 - SPEC R0 FAIL（1 项）→ R1 修复：响应式扫描打开分支补有效悬停 tooltip 夹具（箱 0 号格中心，任意缩放落格内），变异验证（基线 +500 → glyph 216 越界）证明断言有牙；SPEC(RE) PASS。
 - QUALITY R0 FAIL（1 项）→ R1 修复：`appendCountAtSize` 前景笔重置 `hotbarSlotSize`→`size`（配方栏数字双层 24px 分离），新增 `TestAppendCountAtSizeKeepsLayeredPenAlignment`（shadow==fg+(1,1) 逐字断言，变异复现 110/133 分叉）；另恢复火焰 V1 端点断言、tooltip 坐标源注释措辞；QUALITY(RE) PASS。
 - 移交项：`Prepare` 已 19 参——**下一次任何 overlay 追加前必须先做 overlay 输入 struct 收敛**；打开态聊天栈与面板层叠重叠为既有行为未处理。
+
+### T4 egui 菜单换肤 — PASS（零修复轮）
+
+- Implementer 报告：`ui/style.rs` 令牌表 + `ui_style()` 全局 Style 批量接线；删 13 个散落色常量；主菜单底色加深/按钮半透明面板+琥珀悬停描边/标题 32→40px（单一字重字体以字号承担权重，布局关系不变）；暂停遮罩对齐面板族；设置面板内侧亮边+输入焦点琥珀+错误 DANGER；F3 面板令牌+选中行琥珀左缘 3pt 窄条替代蓝色整行高亮；wire layout v1–v4、动作常量、事件批、pass 顺序、dithering 关闭零改动。
+- 验证：`cargo test -p mornlea_client` 181 passed/0 failed（debug+release）、clippy 0 warning、fmt 干净、`make rust` 回拷成功、`go test ./internal/client` nativeabi 绿。
+- SPEC PASS：wire/行为零改动经 diff 与测试双证；新增 10 个视觉断言全部引用令牌常量、带负向断言（聚焦前无琥珀）非恒真；golden 确定性护栏（无动画/时钟/随机符号）。
+- QUALITY PASS：egui 0.35 API 逐项对照本机源码核实；单 Context 单接线路径；跨侧令牌同族性逐令牌核对（×255 口径 RGB 逐字节一致，刻意分歧均有注释）。
+- 控制会话裁决：派生令牌 `ACCENT_WASH`/`CONTROL_WELL` 纳入 design D5 正式令牌表。
+- 观察记录（非本 change 缺陷）：Go HUD 令牌自述 linear 但实际经 sRGB 管线原样透传，与 egui 侧严格 gamma 口径存在既有分岔——未来跨侧视觉 parity 时单独裁决。
