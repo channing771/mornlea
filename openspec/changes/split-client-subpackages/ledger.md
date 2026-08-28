@@ -110,7 +110,9 @@
     RemotePlayers、LastFrameStats、MultiplayerRenderTiming、
     SetMultiplayerRenderTiming、SetMultiplayerRenderNow、
     CloseClientSession、ClientCloseErr），经 grep 对照生产代码实际 `app.`
-    引用无未消费方法；RunBenchmark 经具体类型消费其余 11 个访问面。
+    引用无未消费方法；RunBenchmark 经具体类型消费其余 8 个访问面
+    （FramebufferSize/FramebufferLabel/BenchmarkTransport/Ticks/Saves/
+    UpdateCenter/Center/ObserverFloor）。
   - `TestClientMemoryLimitLeavesHeadroomAboveLiveHeap` 按「Test 函数直接
     调用的生产符号」留在 main（`clientMemoryLimit` 是 main 域符号），自
     `cooldown_test.go` 平移至 `run_test.go`，函数体零改动；benchmark 三个

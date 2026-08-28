@@ -20,8 +20,9 @@ const MessageDrainMax = 4096
 
 // LoadingApplication 是加载等待函数族的参数面：声明「加载完成判据」所需的
 // 最小帧驱动与状态读取能力。`*Application` 隐式实现本接口；capture 的
-// `SceneApplication` 与 benchmark 的 `BenchmarkApplication` 方法集都是本接口
-// 的超集，接口值可直接传入而无需类型断言，两个消费域因此不感知具体类型。
+// `SceneApplication` 方法集是本接口的超集，接口值可直接传入而无需类型断言；
+// benchmark 则以具体 `*application.Application` 调用，两个消费域因此都不
+// 感知超出本接口的加载判据面。
 type LoadingApplication interface {
 	// Frame 应用服务端消息并绘制一帧，是无头路径推进加载的唯一入口。
 	Frame(drainMax, meshWorkMax int, elapsed time.Duration) (bool, error)
