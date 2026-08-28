@@ -74,6 +74,50 @@
 
 ## Review Log
 
+### Task 5.1 + 5.2（依赖方向守卫与文档体系）
+
+- 实现 SHA：`bd47913a`（archcheck 依赖方向断言）、`fcfb4b3b`（文档体系重组）。
+- 验证输出摘要（worktree `refactor/client-subpackages`，基线 `c542a0ea`）：
+  - 红绿过程（5.1）：先写测试并将检查器置桩（恒返回空），真实树正断言
+    `TestClientCommandSubpackageDependencyDirections` 绿、合成边负断言
+    `TestClientCommandDependencyViolationsDetectDrift` 六个子用例全红（「注入
+    禁止边 … 未被拒绝: []」）；实现检查器后全绿。真实树失败路径核对：向
+    `cmd/mornlea/app/app.go` 临时注入 `_ "cmd/mornlea/capture"` 导入，正断言
+    转红并报「客户端命令包 cmd/mornlea/app 不允许依赖 cmd/mornlea/capture」，
+    回滚后恢复绿（最终 diff 不含 app.go）。
+  - `go build ./...`：通过；`gofmt -l internal/archcheck cmd/mornlea`：无输出；
+    `go vet ./internal/archcheck ./cmd/mornlea/...`：通过。
+  - `go test ./internal/archcheck -count=1`：全绿（约 4.2s，含新增两测试、
+    `TestClaudeImportsAgentGuidance` 三个新登记路径、注释标识符守卫）。
+  - `go test ./cmd/mornlea -count=1`：1.0s 通过（核对文档命令表所列命令真实
+    可用）。
+  - `openspec validate --all --strict --no-interactive`：73 passed, 0 failed。
+  - 过时命令 grep：`go test ./cmd/mornlea -race` 在四份客户端 AGENTS.md 与
+    `docs/notes/test-quickstart.md` 中零残留。
+- 实施裁决（详见下方 Rulings）：
+  - 依赖边以源码级 parser 逐文件解析（`parser.ImportsOnly`，跳过 `_test.go`）
+    而非 `go list` 枚举——四个包全部挂 `//go:build darwin`，`GOOS=linux` 下
+    `go list` 的 `.Imports` 被清空（实测），而 Linux CI 的「Linux 专服架构与
+    ELF 门禁」同样运行 archcheck；源码级解析让同一断言在两个平台看到同一份
+    边集，且与既有 source guards 风格一致。
+  - 检查器抽为纯函数 `clientCommandDependencyViolations`，合成边负断言覆盖
+    五类漂移（app→capture、app→benchmark、capture↔benchmark 两个方向、
+    必需装配边缺失、未登记新包），钉住检查器本身——真实树处于契约内时负向
+    路径没有天然失败信号，检查逻辑被改坏必须转红。
+  - `TestClaudeImportsAgentGuidance` 的 `claudeImportDocs` 登记三个子包
+    CLAUDE.md（+3 行路径 +2 行注释），随文档同一 commit 落地以保持每步全绿；
+    漏登记会让新薄导入静默脱离门禁。
+  - `docs/notes/test-quickstart.md` 引言的规模数字（433 文件/27 包）更新为
+    当日实测（495 文件/33 包）；「82% 集中在两个包/约 4 分钟」的旧归属改写
+    为按子包归因并注明 4 分钟为分包前单包实测（分包后 benchmark 66s 级、
+    capture 秒级，原数字已不可整包归属）。
+  - `docs/test-organization.md` 范例节补客户端分包先例（引用 change 名属
+    规划层溯源，符合 docs/AGENTS.md 规则）；helper 中心示例改为三子包各一。
+- 跟进项（超出本任务文件清单，未改）：`scripts/agents/race-changed.sh` 的
+  「集合含重型包」提示仍只识别 `cmd/mornlea`（分包后为薄 main，秒级）与
+  `internal/server`，对 capture/benchmark 子包不提示；`test-quickstart.md`
+  T1 边界条目已按现状如实描述，脚本识别列表的更新留独立跟进。
+
 ### Task 4.1（benchmark 包提取与函数族收敛）
 
 - 实现 SHA：`372ef030`（包迁移与接线）、`9bd7e3bf`（函数族下沉 app 收敛 +

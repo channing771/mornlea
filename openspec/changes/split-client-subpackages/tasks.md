@@ -19,8 +19,8 @@
 
 ## 5. 依赖方向守卫与文档
 
-- [ ] 5.1 在 `internal/archcheck` 新增断言：接受 main → app/capture/benchmark、capture → app、benchmark → app；拒绝 app → capture、app → benchmark、capture ↔ benchmark。验证：`go test ./internal/archcheck -count=1`（含正向与故意注入反向边的失败路径核对）。
-- [ ] 5.2 重写 `cmd/mornlea/AGENTS.md`（子包注释树、依赖方向、入口模式差异、文档同步政策、定点验证命令），新增 `app/`、`capture/`、`benchmark/` 三份 AGENTS.md 与三份薄 CLAUDE.md；更新根 `AGENTS.md` 局部指南清单与 `docs/notes/test-quickstart.md` 定点命令表、`docs/test-organization.md` 范例。验证：`go test ./internal/archcheck -count=1`（`TestClaudeImportsAgentGuidance` 等）。
+- [x] 5.1 在 `internal/archcheck` 新增断言：接受 main → app/capture/benchmark、capture → app、benchmark → app；拒绝 app → capture、app → benchmark、capture ↔ benchmark。验证：`go test ./internal/archcheck -count=1`（含正向与故意注入反向边的失败路径核对）。
+- [x] 5.2 重写 `cmd/mornlea/AGENTS.md`（子包注释树、依赖方向、入口模式差异、文档同步政策、定点验证命令），新增 `app/`、`capture/`、`benchmark/` 三份 AGENTS.md 与三份薄 CLAUDE.md；更新根 `AGENTS.md` 局部指南清单与 `docs/notes/test-quickstart.md` 定点命令表、`docs/test-organization.md` 范例。验证：`go test ./internal/archcheck -count=1`（`TestClaudeImportsAgentGuidance` 等）。
 
 ## 6. 收尾验证
 
