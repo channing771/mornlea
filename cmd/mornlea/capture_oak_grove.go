@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
@@ -15,7 +16,7 @@ import (
 const captureOakGroveSeed int64 = 42
 
 // prepareOakGrove 把固定 3×3 生成区块经既有网络快照和 mirror 路径装入。
-func prepareOakGrove(app *application) error {
+func prepareOakGrove(app *application.Application) error {
 	// 注水必须与抓帧进程自己的世界一致：抓帧路径把 FluidEnabled 钉成编译期
 	// 默认值（见 main.go 的 resolveConfig 与 options.Application.FluidEnabled），
 	// 而本夹具的种子与抓帧世界的默认种子同为 42，覆盖的又只是区块 (-1..1)。
@@ -60,21 +61,21 @@ func captureOakGroveSnapshot(chunk *world.Chunk) network.ChunkSnapshot {
 	}
 }
 
-func applyOakGroveCaptureState(app *application) error {
-	app.worldTimeTicks = 6000
-	app.camera.Pos = mgl32.Vec3{-3.5, 75.5, 12.5}
-	app.camera.Yaw = 0
-	app.camera.Pitch = -0.38
-	app.inventoryOpen = false
-	app.inventorySource = -1
-	if app.remotePlayers == nil {
+func applyOakGroveCaptureState(app *application.Application) error {
+	app.SetWorldTimeTicks(6000)
+	app.Camera().Pos = mgl32.Vec3{-3.5, 75.5, 12.5}
+	app.Camera().Yaw = 0
+	app.Camera().Pitch = -0.38
+	app.SetInventoryOpen(false)
+	app.SetInventorySource(-1)
+	if app.RemotePlayers() == nil {
 		return fmt.Errorf("oak-grove 需要远端玩家追踪器，当前为 nil")
 	}
-	app.remotePlayers.Reset()
-	app.furnace.Reset()
-	app.chest.Reset()
-	if app.panel != nil {
-		app.panel.visible = false
+	app.RemotePlayers().Reset()
+	app.Furnace().Reset()
+	app.Chest().Reset()
+	if app.Panel() != nil {
+		app.Panel().SetVisible(false)
 	}
-	return app.inventory.Apply(network.InventoryState{Inventory: core.Inventory{}})
+	return app.Inventory().Apply(network.InventoryState{Inventory: core.Inventory{}})
 }

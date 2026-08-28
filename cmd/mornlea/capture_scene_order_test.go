@@ -43,13 +43,14 @@ func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 	mesher := client.NewMesher(assets.NewRegistry(), 1)
 	t.Cleanup(mesher.Close)
 	app := newCaptureAICompanionState()
-	app.mirror, app.mesher = client.NewMirror(), mesher
+	app.SetMirror(client.NewMirror())
+	app.SetMesher(mesher)
 	if err := scene.Prepare(app); err != nil {
 		t.Fatalf("准备 ai-companion: %v", err)
 	}
 	for z := int32(-1); z <= 1; z++ {
 		for x := int32(-1); x <= 1; x++ {
-			chunk, ok := app.mirror.Chunk(core.Overworld, core.ChunkPos{X: x, Z: z})
+			chunk, ok := app.Mirror().Chunk(core.Overworld, core.ChunkPos{X: x, Z: z})
 			wantRevision := uint64(1)
 			if x == 0 && z == 0 {
 				wantRevision = 2
@@ -68,7 +69,7 @@ func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 		{position: core.BlockPos{X: 5, Y: 0, Z: 4}, want: core.GrassID},
 		{position: core.BlockPos{X: -1, Y: 0, Z: 4}, want: core.AirID},
 	} {
-		got, loaded := app.mirror.BlockAt(core.Overworld, test.position)
+		got, loaded := app.Mirror().BlockAt(core.Overworld, test.position)
 		if !loaded || got != test.want {
 			t.Fatalf("BlockAt(%+v)=%d/%v，想要 %d/true", test.position, got, loaded, test.want)
 		}
@@ -81,7 +82,7 @@ func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 		t.Fatalf("应用 ai-companion: %v", err)
 	}
 	assertCaptureAICompanionState(t, app)
-	overlay := app.chatOverlay()
+	overlay := app.ChatOverlay()
 	if !overlay.Open || overlay.Input != "@阿木 挖石头" ||
 		!slices.Equal(overlay.Lines, []string{"旅人 → 阿木：挖石头"}) {
 		t.Fatalf("chat overlay=%+v", overlay)

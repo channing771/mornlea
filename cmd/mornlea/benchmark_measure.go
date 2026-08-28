@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
@@ -21,11 +22,11 @@ import (
 )
 
 func (probe *multiplayerClientProbe) measureGPUCompletionAfterTransportClose(
-	app *application,
+	app *application.Application,
 ) error {
-	serverCloseErr := app.server.CloseTrustedObserver()
-	app.closeClientSession(nil)
-	if err := errors.Join(serverCloseErr, app.clientCloseErr); err != nil {
+	serverCloseErr := app.Server().CloseTrustedObserver()
+	app.CloseClientSession(nil)
+	if err := errors.Join(serverCloseErr, app.ClientCloseErr()); err != nil {
 		return fmt.Errorf("关闭 GPU 探针传输: %w", err)
 	}
 	return probe.measureGPUCompletion(app)
@@ -70,12 +71,16 @@ func fixedBenchmarkPlayerInput() network.PlayerInput {
 	return network.PlayerInput{Sequence: 1, MoveX: 1, MoveZ: -1, Jump: true, Yaw: 0.5, Pitch: -0.25}
 }
 
+// steadyFrameMeshWorkMax 与交互循环共用同一每帧 mesh 上传预算，取值下沉在
+// app 包；这里保留本包内的原名别名，避免逐处改写既有调用点。
+const steadyFrameMeshWorkMax = application.SteadyFrameMeshWorkMax
+
 func measurePlayerPersistenceSummary() (client.PersistenceSummary, error) {
 	store := storage.NewMemory(storage.Metadata{
 		FormatVersion: 2, Seed: benchmarkSeed, SpawnDimension: core.Overworld,
 	})
 	id := core.PlayerID{0xa1, 0x63, 0xd4, 0x99, 0x36, 0x55, 0x43, 0xd5, 0x87, 0x30, 0xe5, 0x9d, 0x11, 0x0c, 0x21, 0x76}
-	recorder := newSaveRecorder(256)
+	recorder := application.NewSaveRecorder(256)
 	ctx := context.Background()
 	for revision := uint64(1); revision <= 256; revision++ {
 		started := time.Now()
@@ -91,9 +96,9 @@ func measurePlayerPersistenceSummary() (client.PersistenceSummary, error) {
 		if _, err := store.LoadPlayer(ctx, id); err != nil {
 			return client.PersistenceSummary{}, err
 		}
-		recorder.add(time.Since(started))
+		recorder.Add(time.Since(started))
 	}
-	return recorder.summary(), nil
+	return recorder.Summary(), nil
 }
 
 func durationP99(sorted []float64) float64 {
@@ -104,7 +109,7 @@ func durationP99(sorted []float64) float64 {
 	return sorted[max(0, min(index, len(sorted)-1))]
 }
 
-func waitUntilLoaded(app *application, timeout time.Duration) (time.Duration, error) {
+func waitUntilLoaded(app *application.Application, timeout time.Duration) (time.Duration, error) {
 	deadline := time.Now().Add(timeout)
 	started := time.Now()
 	var snapshotDuration time.Duration
@@ -113,33 +118,33 @@ func waitUntilLoaded(app *application, timeout time.Duration) (time.Duration, er
 	for {
 		if time.Now().After(deadline) {
 			return 0, fmt.Errorf("固定场景在 %s 内未完成加载：chunks=%d/%d mesher=%+v pending=%d",
-				timeout, len(app.loadedChunks), wantedChunks, app.mesher.Stats(),
-				app.scheduler.PendingUploads())
+				timeout, len(app.LoadedChunks()), wantedChunks, app.Mesher().Stats(),
+				app.Scheduler().PendingUploads())
 		}
-		if app.window != nil {
-			app.window.Poll()
-			if app.window.ShouldClose() {
-				app.window.CancelClose()
+		if app.Window() != nil {
+			app.Window().Poll()
+			if app.Window().ShouldClose() {
+				app.Window().CancelClose()
 			}
 		}
-		rendered, err := app.frame(benchmarkMessageDrainMax, benchmarkMessageDrainMax, physics.FixedDelta)
+		rendered, err := app.Frame(benchmarkMessageDrainMax, benchmarkMessageDrainMax, physics.FixedDelta)
 		if err != nil {
 			return 0, err
 		}
 		if !rendered {
 			continue
 		}
-		if snapshotDuration == 0 && len(app.loadedChunks) == wantedChunks {
+		if snapshotDuration == 0 && len(app.LoadedChunks()) == wantedChunks {
 			snapshotDuration = time.Since(started)
 		}
 		if applicationLoadComplete(app, wantedChunks) {
 			return snapshotDuration, nil
 		}
 		if time.Since(lastLog) >= 5*time.Second {
-			stats := app.mesher.Stats()
+			stats := app.Mesher().Stats()
 			fmt.Printf("加载中：chunks=%d/%d queued=%d active=%d ready=%d pending=%d\n",
-				len(app.loadedChunks), wantedChunks, stats.QueuedJobs, stats.InFlightJobs,
-				stats.ReadyResults, app.scheduler.PendingUploads())
+				len(app.LoadedChunks()), wantedChunks, stats.QueuedJobs, stats.InFlightJobs,
+				stats.ReadyResults, app.Scheduler().PendingUploads())
 			lastLog = time.Now()
 		}
 	}
@@ -148,33 +153,33 @@ func waitUntilLoaded(app *application, timeout time.Duration) (time.Duration, er
 // loadedChunkTarget 返回当前视距完整初始快照应包含的列数。服务端额外发送
 // 一圈边界列，故半径是 `ViewDistance + 1`，这个定义与 `waitUntilLoaded`
 // 的历史收敛判据保持完全一致。
-func loadedChunkTarget(app *application) int {
-	viewDistance := app.render.ViewDistance
+func loadedChunkTarget(app *application.Application) int {
+	viewDistance := app.Render().ViewDistance
 	return (2*(viewDistance+1) + 1) * (2*(viewDistance+1) + 1)
 }
 
 // applicationLoadComplete 判断初始快照与近环网格上传是否全部收敛。远环
 // LOD 的单独收敛仍由 `captureSceneImage` 负责；这里刻意保持 benchmark 的
 // 原判据，避免 control 的预加载与正式抓帧有不同的近环就绪定义。
-func applicationLoadComplete(app *application, wantedChunks int) bool {
-	stats := app.mesher.Stats()
-	return len(app.loadedChunks) == wantedChunks &&
+func applicationLoadComplete(app *application.Application, wantedChunks int) bool {
+	stats := app.Mesher().Stats()
+	return len(app.LoadedChunks()) == wantedChunks &&
 		stats.QueuedJobs == 0 &&
 		stats.InFlightJobs == 0 &&
 		stats.ReadyResults == 0 &&
 		stats.DirtySections == 0 &&
-		app.scheduler.PendingUploads() == 0
+		app.Scheduler().PendingUploads() == 0
 }
 
 // waitUntilLoadedPair 在同一 goroutine 交错推进 LOD on/off control，直到
 // 两者的既有加载判据都成立。即便一侧先完成，也继续推进它直到另一侧完成，
 // 因为其内嵌 Host 仍会持续发送消息，停止 drain 会让 `client.Receiver`
 // 的有界 inbox 溢出。这里不并发调用 renderer，控制次序固定为 on 后 off。
-func waitUntilLoadedPair(lodOn, lodOff *application, timeout time.Duration) error {
+func waitUntilLoadedPair(lodOn, lodOff *application.Application, timeout time.Duration) error {
 	return waitUntilLoadedPairWithStep(
 		lodOn, lodOff, timeout,
-		func(app *application) (bool, error) {
-			rendered, err := app.frame(
+		func(app *application.Application) (bool, error) {
+			rendered, err := app.Frame(
 				benchmarkMessageDrainMax, benchmarkMessageDrainMax, physics.FixedDelta,
 			)
 			if err != nil || !rendered {
@@ -189,9 +194,9 @@ func waitUntilLoadedPair(lodOn, lodOff *application, timeout time.Duration) erro
 // 仅用于无 GPU 单元测试的 seam；生产路径始终由 `waitUntilLoadedPair` 注入
 // 真实 `application.frame`，从而完整应用服务端消息和网格上传。
 func waitUntilLoadedPairWithStep(
-	lodOn, lodOff *application,
+	lodOn, lodOff *application.Application,
 	timeout time.Duration,
-	step func(*application) (bool, error),
+	step func(*application.Application) (bool, error),
 ) error {
 	deadline := time.Now().Add(timeout)
 	for {
@@ -213,33 +218,33 @@ func waitUntilLoadedPairWithStep(
 }
 
 func waitForBenchmarkCenterConsistency(
-	app *application,
+	app *application.Application,
 	center core.ChunkPos,
 	afterSequence uint64,
 	timeout time.Duration,
 ) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if _, err := app.frame(benchmarkMessageDrainMax, benchmarkMessageDrainMax, physics.FixedDelta); err != nil {
+		if _, err := app.Frame(benchmarkMessageDrainMax, benchmarkMessageDrainMax, physics.FixedDelta); err != nil {
 			return err
 		}
 		appliedDimension, appliedCenter, appliedSequence, appliedOK :=
-			app.server.AppliedTrustedObserverCenter()
+			app.Server().AppliedTrustedObserverCenter()
 		if !appliedOK || appliedDimension != core.Overworld ||
 			appliedCenter != center || appliedSequence <= afterSequence {
 			continue
 		}
-		authoritativeHash, authoritativeRevision, authoritativeOK := app.server.ChunkHash(
+		authoritativeHash, authoritativeRevision, authoritativeOK := app.Server().ChunkHash(
 			core.Overworld, center,
 		)
-		mirrorHash, mirrorRevision, mirrorOK := app.mirror.Hash(core.Overworld, center)
+		mirrorHash, mirrorRevision, mirrorOK := app.Mirror().Hash(core.Overworld, center)
 		if authoritativeOK && mirrorOK && authoritativeRevision == mirrorRevision &&
 			authoritativeHash == mirrorHash {
 			return nil
 		}
 	}
 	appliedDimension, appliedCenter, appliedSequence, appliedOK :=
-		app.server.AppliedTrustedObserverCenter()
+		app.Server().AppliedTrustedObserverCenter()
 	return fmt.Errorf(
 		"最终 trusted observer 中心在 %s 内未收敛: center=%+v afterSequence=%d applied=(%d,%+v,%d,%v)",
 		timeout,
@@ -252,16 +257,16 @@ func waitForBenchmarkCenterConsistency(
 	)
 }
 
-func runWarmup(app *application, duration time.Duration) error {
+func runWarmup(app *application.Application, duration time.Duration) error {
 	deadline := time.Now().Add(duration)
 	for time.Now().Before(deadline) {
-		if app.window != nil {
-			app.window.Poll()
-			if app.window.ShouldClose() {
-				app.window.CancelClose()
+		if app.Window() != nil {
+			app.Window().Poll()
+			if app.Window().ShouldClose() {
+				app.Window().CancelClose()
 			}
 		}
-		rendered, err := app.frame(benchmarkMessageDrainMax, steadyFrameMeshWorkMax, physics.FixedDelta)
+		rendered, err := app.Frame(benchmarkMessageDrainMax, steadyFrameMeshWorkMax, physics.FixedDelta)
 		if err != nil {
 			return err
 		}
@@ -273,7 +278,7 @@ func runWarmup(app *application, duration time.Duration) error {
 }
 
 func measurePhase(
-	app *application,
+	app *application.Application,
 	multiplayer *multiplayerClientProbe,
 	name string,
 	duration time.Duration,
@@ -287,10 +292,10 @@ func measurePhase(
 	var peakRSS uint64
 	for time.Now().Before(deadline) {
 		frameStarted := time.Now()
-		if app.window != nil {
-			app.window.Poll()
-			if app.window.ShouldClose() {
-				app.window.CancelClose()
+		if app.Window() != nil {
+			app.Window().Poll()
+			if app.Window().ShouldClose() {
+				app.Window().CancelClose()
 			}
 		}
 		if update != nil {
@@ -300,7 +305,7 @@ func measurePhase(
 		if err := multiplayer.sampleFrame(app, multiplayer.tick); err != nil {
 			return client.PhaseSummary{}, fmt.Errorf("%s 多人 probe tick %d: %w", name, multiplayer.tick, err)
 		}
-		rendered, err := app.frame(benchmarkMessageDrainMax, steadyFrameMeshWorkMax, fixedBenchmarkFrameDuration)
+		rendered, err := app.Frame(benchmarkMessageDrainMax, steadyFrameMeshWorkMax, fixedBenchmarkFrameDuration)
 		if err != nil {
 			return client.PhaseSummary{}, err
 		}
@@ -312,13 +317,13 @@ func measurePhase(
 		}
 		lastRendered = time.Now()
 		frameMS := float64(time.Since(frameStarted).Microseconds()) / 1000
-		stats := app.lastFrameStats
+		stats := app.LastFrameStats()
 		sampler.Add(client.FrameSample{
 			FrameMS:           frameMS,
 			CandidateSections: stats.CandidateSections,
 			CandidateBytes:    stats.CandidateBytes,
 			CandidateFaces:    stats.CandidateFaces,
-			PendingUploads:    app.scheduler.PendingUploads(),
+			PendingUploads:    app.Scheduler().PendingUploads(),
 		})
 		if time.Now().After(nextRSS) {
 			rss, err := client.ProcessRSSBytes()

@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/lod"
@@ -62,34 +63,31 @@ func TestFarHorizonApplyPinsCameraAndResetsSharedState(t *testing.T) {
 		t.Fatal("缺少 far-horizon Apply")
 	}
 
-	remotePlayers := client.NewRemotePlayers()
-	if err := remotePlayers.Apply(network.RemotePlayerSpawn{
+	// 呈现状态替身经 app 导出测试装配入口构造，再把本测试预置的 roster 与
+	// 界面状态逐一注入，等价于旧的白盒字面量初始条件。
+	app := application.NewPresentationApplicationForTest()
+	if err := app.RemotePlayers().Apply(network.RemotePlayerSpawn{
 		PlayerID:    core.PlayerID{6: 0x40, 8: 0x80, 15: 1},
 		DisplayName: "测试Player",
 		ServerTick:  1, Position: mgl32.Vec3{0, 2, 0},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	app := &application{
-		remotePlayers:   remotePlayers,
-		companions:      &client.Companions{},
-		chatEvents:      &client.ChatEvents{},
-		itemDrops:       client.NewItemDrops(),
-		panel:           &panelState{visible: true},
-		inventoryOpen:   true,
-		inventorySource: 12,
-		center:          core.ChunkPos{X: 0, Z: 0},
-		lodTileCenter:   lod.TilePos{X: 0, Z: 0},
-		camera: client.Camera{
-			Pos: mgl32.Vec3{99, 99, 99}, Yaw: 2, Pitch: 1,
-		},
+	if app.Panel() == nil {
+		t.Fatal("呈现替身必须携带调试面板")
 	}
-	if err := app.furnace.Apply(network.FurnaceState{
+	app.Panel().SetVisible(true)
+	app.SetInventoryOpen(true)
+	app.SetInventorySource(12)
+	app.SetCenter(core.ChunkPos{X: 0, Z: 0})
+	app.SetLODTileCenter(lod.TilePos{X: 0, Z: 0})
+	*app.Camera() = client.Camera{Pos: mgl32.Vec3{99, 99, 99}, Yaw: 2, Pitch: 1}
+	if err := app.Furnace().Apply(network.FurnaceState{
 		Furnace: core.FurnaceRef{Dimension: core.Overworld, Generation: 1},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := app.chest.Apply(network.ChestState{
+	if err := app.Chest().Apply(network.ChestState{
 		Chest: core.ContainerRef{
 			Dimension: core.Overworld, Kind: core.ContainerKindChest, Generation: 1,
 		},
@@ -99,33 +97,33 @@ func TestFarHorizonApplyPinsCameraAndResetsSharedState(t *testing.T) {
 	if err := scene.Apply(app); err != nil {
 		t.Fatalf("应用场景: %v", err)
 	}
-	if app.worldTimeTicks != 6000 {
-		t.Fatalf("world time = %d, want 6000", app.worldTimeTicks)
+	if app.WorldTimeTicks() != 6000 {
+		t.Fatalf("world time = %d, want 6000", app.WorldTimeTicks())
 	}
-	if got := app.camera.Pos; got != (mgl32.Vec3{8, 110, -352}) {
+	if got := app.Camera().Pos; got != (mgl32.Vec3{8, 110, -352}) {
 		t.Fatalf("camera.Pos = %v, want (8,110,-352)(近环边缘 -z 内侧高空)", got)
 	}
-	if app.camera.Yaw != 0 || app.camera.Pitch != -0.25 {
-		t.Fatalf("yaw/pitch = %v/%v, want 0/-0.25(朝 -z 地平线)", app.camera.Yaw, app.camera.Pitch)
+	if app.Camera().Yaw != 0 || app.Camera().Pitch != -0.25 {
+		t.Fatalf("yaw/pitch = %v/%v, want 0/-0.25(朝 -z 地平线)", app.Camera().Yaw, app.Camera().Pitch)
 	}
 	// 远环与近环的装配事实必须原样保留:场景不得移动视距中心,否则
 	// 触发近环 `DropOutside` 与远环增量入队,收敛域随场景执行漂移。
-	if app.center != (core.ChunkPos{X: 0, Z: 0}) {
-		t.Fatalf("center = %v, want (0,0)(场景不得移动视距中心)", app.center)
+	if app.Center() != (core.ChunkPos{X: 0, Z: 0}) {
+		t.Fatalf("center = %v, want (0,0)(场景不得移动视距中心)", app.Center())
 	}
-	if app.lodTileCenter != (lod.TilePos{X: 0, Z: 0}) {
-		t.Fatalf("lodTileCenter = %v, want (0,0)", app.lodTileCenter)
+	if app.LODTileCenter() != (lod.TilePos{X: 0, Z: 0}) {
+		t.Fatalf("lodTileCenter = %v, want (0,0)", app.LODTileCenter())
 	}
-	if app.inventoryOpen || app.inventorySource != -1 || app.panel.visible ||
-		len(app.remotePlayers.Presentations()) != 0 {
+	if app.InventoryOpen() || app.InventorySource() != -1 || app.Panel().Visible() ||
+		len(app.RemotePlayers().Presentations()) != 0 {
 		t.Fatalf("共享状态未清空: inventory=%v/%d panel=%v remotes=%d",
-			app.inventoryOpen, app.inventorySource, app.panel.visible,
-			len(app.remotePlayers.Presentations()))
+			app.InventoryOpen(), app.InventorySource(), app.Panel().Visible(),
+			len(app.RemotePlayers().Presentations()))
 	}
-	if _, opened := app.furnace.State(); opened {
+	if _, opened := app.Furnace().State(); opened {
 		t.Fatal("熔炉状态未清空")
 	}
-	if _, opened := app.chest.State(); opened {
+	if _, opened := app.Chest().State(); opened {
 		t.Fatal("箱子状态未清空")
 	}
 }

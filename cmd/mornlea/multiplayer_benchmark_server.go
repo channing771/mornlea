@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
@@ -268,7 +269,7 @@ func measureMultiplayerServerProbe(duration time.Duration) (
 		}
 	}()
 
-	scenario := newMultiplayerBenchmarkScenario()
+	scenario := application.NewMultiplayerBenchmarkScenario()
 	identities := make([]network.Identity, 0, 8)
 	identities = append(identities, network.Identity{PlayerID: scenario.LocalPlayerID, DisplayName: "本地玩家"})
 	for _, spawn := range scenario.Spawns {

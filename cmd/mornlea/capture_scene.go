@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
@@ -17,7 +18,7 @@ import (
 
 var captureAICompanionID = companion.ID{0: 0x42, 6: 0x40, 8: 0x80, 15: 0x14}
 
-func prepareAICompanion(app *application) error {
+func prepareAICompanion(app *application.Application) error {
 	if err := prepareCaptureAirNeighborhood(app); err != nil {
 		return err
 	}
@@ -41,70 +42,70 @@ func prepareAICompanion(app *application) error {
 	})
 }
 
-func applyAICompanionCaptureState(app *application) error {
-	if app.remotePlayers == nil || app.companions == nil || app.chatEvents == nil || app.itemDrops == nil {
+func applyAICompanionCaptureState(app *application.Application) error {
+	if app.RemotePlayers() == nil || app.Companions() == nil || app.ChatEvents() == nil || app.ItemDrops() == nil {
 		return fmt.Errorf("ai-companion 需要完整客户端呈现镜像")
 	}
 
-	app.remotePlayers.Reset()
-	app.companions.Reset()
-	app.chatEvents.Reset()
-	app.chatInput.Cancel()
-	app.chatEventBuffer = [client.ChatEventCapacity]network.ChatEvent{}
-	app.chatLines = [6]string{}
-	app.chatLineCount = 0
-	app.formattedChatEventID = 0
-	app.inventory.Reset()
-	app.inventoryOpen = false
-	app.inventorySource = -1
-	app.furnace.Reset()
-	app.chest.Reset()
+	app.RemotePlayers().Reset()
+	app.Companions().Reset()
+	app.ChatEvents().Reset()
+	app.ChatInput().Cancel()
+	app.SetChatEventBuffer([client.ChatEventCapacity]network.ChatEvent{})
+	app.SetChatLines([6]string{})
+	app.SetChatLineCount(0)
+	app.SetFormattedChatEventID(0)
+	app.Inventory().Reset()
+	app.SetInventoryOpen(false)
+	app.SetInventorySource(-1)
+	app.Furnace().Reset()
+	app.Chest().Reset()
 	// 合成网格镜像一并清空：ai-companion 场景不呈现容器与网格，前序容器
 	// 场景（含 workbench-crafting 的尺寸 3 状态）不得静默渗入。
-	app.crafting.Reset()
-	app.miningOverlay = hud.MiningOverlay{}
-	app.damageFeedback.Reset()
-	app.damageStrength = 0
-	app.itemDrops.Reset()
-	app.remotePresentations = app.remotePresentations[:0]
-	app.companionPresentations = app.companionPresentations[:0]
-	app.remoteAvatars = app.remoteAvatars[:0]
-	app.remoteNameTags = app.remoteNameTags[:0]
-	app.itemDropInstances = app.itemDropInstances[:0]
-	if app.panel != nil {
-		app.panel.visible = false
+	app.Crafting().Reset()
+	app.SetMiningOverlay(hud.MiningOverlay{})
+	app.SetDamageFeedback(application.DamageFeedback{})
+	app.SetDamageStrength(0)
+	app.ItemDrops().Reset()
+	app.SetRemotePresentations(app.RemotePresentations()[:0])
+	app.SetCompanionPresentations(app.CompanionPresentations()[:0])
+	app.SetRemoteAvatars(app.RemoteAvatars()[:0])
+	app.SetRemoteNameTags(app.RemoteNameTags()[:0])
+	app.SetItemDropInstances(app.ItemDropInstances()[:0])
+	if app.Panel() != nil {
+		app.Panel().SetVisible(false)
 	}
 
-	app.worldTimeTicks = 6000
-	app.camera = client.Camera{
+	app.SetWorldTimeTicks(6000)
+	*app.Camera() = client.Camera{
 		Pos: mgl32.Vec3{5.5, 3.2, 9.5}, Yaw: 0, Pitch: -0.05,
 		FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
 		Near: 0.1, Far: 2000,
 	}
-	app.center = cameraChunk(app.camera.Pos)
-	app.blockTargetReset = false
+	app.SetCenter(application.CameraChunk(app.Camera().Pos))
+	app.SetBlockTargetReset(false)
 
-	if err := app.companions.ApplySpawn(network.CompanionSpawn{
+	if err := app.Companions().ApplySpawn(network.CompanionSpawn{
 		ID: captureAICompanionID, Name: "阿木", Tick: 1, Dimension: core.Overworld,
 		Position: mgl32.Vec3{5.5, 1, 4}, Yaw: 3.1415927,
 	}); err != nil {
 		return fmt.Errorf("装入固定伙伴: %w", err)
 	}
-	if err := app.chatEvents.Apply(network.ChatEvent{
+	if err := app.ChatEvents().Apply(network.ChatEvent{
 		EventID: 1, PlayerID: core.PlayerID{0: 0x23, 6: 0x40, 8: 0x80, 15: 0x11},
 		PlayerName: "旅人", CompanionID: captureAICompanionID, CompanionName: "阿木",
 		Kind: network.ChatEventAccepted, Command: "挖石头",
 	}); err != nil {
 		return fmt.Errorf("装入固定聊天事件: %w", err)
 	}
-	app.chatInput.Open()
+	app.ChatInput().Open()
 	for _, value := range "@阿木 挖石头" {
-		app.chatInput.Append(value)
+		app.ChatInput().Append(value)
 	}
 	return nil
 }
 
-func prepareSkylightTunnel(app *application) error {
+func prepareSkylightTunnel(app *application.Application) error {
 	if err := prepareCaptureAirNeighborhood(app); err != nil {
 		return err
 	}
@@ -164,7 +165,7 @@ func prepareSkylightTunnel(app *application) error {
 	return nil
 }
 
-func prepareCaptureAirNeighborhood(app *application) error {
+func prepareCaptureAirNeighborhood(app *application.Application) error {
 	for z := int32(-1); z <= 1; z++ {
 		for x := int32(-1); x <= 1; x++ {
 			sections := make([]network.SectionData, core.SectionsPerChunk)
@@ -186,7 +187,7 @@ func prepareCaptureAirNeighborhood(app *application) error {
 	return nil
 }
 
-func prepareBlockLightRoom(app *application) error {
+func prepareBlockLightRoom(app *application.Application) error {
 	if err := prepareCaptureAirNeighborhood(app); err != nil {
 		return err
 	}
@@ -201,7 +202,7 @@ func prepareBlockLightRoom(app *application) error {
 // 另一端，远角与近处火把的距离差足够大，近亮远暗在画面里是一段可测的
 // 梯度而不是两个相邻色块。夹具经客户端只读镜像装入，不依赖任何服务端
 // 模拟推进。
-func prepareTorchNightRoom(app *application) error {
+func prepareTorchNightRoom(app *application.Application) error {
 	if err := prepareCaptureAirNeighborhood(app); err != nil {
 		return err
 	}
@@ -214,7 +215,7 @@ func prepareTorchNightRoom(app *application) error {
 // 石块，夹具因此与真实放置结果一致、不是悬空摆拍。墙面形态选 ±X 两种：
 // 这两种形态的可见斜板朝 ±Z，正对纵深方向平视的相机恰好各看到一片完整
 // 的火柄斜影。
-func applyCaptureTorchNightChanges(app *application) error {
+func applyCaptureTorchNightChanges(app *application.Application) error {
 	blocks := make(map[core.ChunkPos]map[core.BlockPos]core.BlockID)
 	setBlock := func(position core.BlockPos, block core.BlockID) {
 		chunk := position.Chunk()
@@ -248,7 +249,7 @@ func applyCaptureTorchNightChanges(app *application) error {
 	return applyCaptureBlocks(app, blocks, captureWaterBasinChunkRadius, "火把夜景")
 }
 
-func applyCaptureBlockLightRoomChanges(app *application) error {
+func applyCaptureBlockLightRoomChanges(app *application.Application) error {
 	blocks := make(map[core.ChunkPos]map[core.BlockPos]core.BlockID)
 	setBlock := func(position core.BlockPos, block core.BlockID) {
 		chunk := position.Chunk()
@@ -304,7 +305,7 @@ func applyCaptureBlockLightRoomChanges(app *application) error {
 	return nil
 }
 
-func prepareMaterialsShowcase(app *application) error {
+func prepareMaterialsShowcase(app *application.Application) error {
 	if err := prepareCaptureAirNeighborhood(app); err != nil {
 		return err
 	}
@@ -388,7 +389,7 @@ func prepareMaterialsShowcase(app *application) error {
 	return nil
 }
 
-func prepareTargetBlockFeedback(app *application) error {
+func prepareTargetBlockFeedback(app *application.Application) error {
 	if err := prepareCaptureAirNeighborhood(app); err != nil {
 		return err
 	}
@@ -404,12 +405,12 @@ func prepareTargetBlockFeedback(app *application) error {
 	})
 }
 
-func applyCaptureMirror(app *application, message network.ServerMessage) error {
-	update, err := app.mirror.Apply(message)
+func applyCaptureMirror(app *application.Application, message network.ServerMessage) error {
+	update, err := app.Mirror().Apply(message)
 	if err != nil {
 		return err
 	}
-	app.mesher.MarkDirty(update.Dirty...)
+	app.Mesher().MarkDirty(update.Dirty...)
 	return nil
 }
 
@@ -431,7 +432,7 @@ const captureWaterBasinChunkRadius = 1
 //     三种材质在水下的可辨识度是「水下变暗但不立刻归零」的直接证据。
 //
 // 夹具全部走客户端只读镜像装入，不依赖任何流体模拟推进，因此与机器速度无关。
-func prepareWaterBasin(app *application) error {
+func prepareWaterBasin(app *application.Application) error {
 	if err := prepareCaptureAirNeighborhood(app); err != nil {
 		return err
 	}
@@ -512,7 +513,7 @@ func prepareWaterBasin(app *application) error {
 // 每个区块内按 world.ChunkBlockIndex 排序后再发，保证同一份夹具在任何机器上
 // 都产生逐字节相同的 BlockChanges——map 的遍历序不能进线上字节。
 func applyCaptureBlocks(
-	app *application,
+	app *application.Application,
 	blocks map[core.ChunkPos]map[core.BlockPos]core.BlockID,
 	chunkRadius int32,
 	label string,
@@ -549,38 +550,38 @@ func applyCaptureBlocks(
 // 聊天输入与格式化缓存——不显式清掉就会静默出现在水面上。清理项与
 // applyAICompanionCaptureState 自己开头的那段一一对应：谁留下的谁负责被清掉，
 // 但清理的落点必须在**后一个**场景，因为场景表没有 teardown 钩子。
-func resetCapturePresentation(app *application) error {
-	if app.remotePlayers == nil || app.companions == nil ||
-		app.chatEvents == nil || app.itemDrops == nil {
+func resetCapturePresentation(app *application.Application) error {
+	if app.RemotePlayers() == nil || app.Companions() == nil ||
+		app.ChatEvents() == nil || app.ItemDrops() == nil {
 		return fmt.Errorf("水景场景需要完整客户端呈现镜像")
 	}
-	app.remotePlayers.Reset()
-	app.companions.Reset()
-	app.chatEvents.Reset()
-	app.chatInput.Cancel()
-	app.chatEventBuffer = [client.ChatEventCapacity]network.ChatEvent{}
-	app.chatLines = [6]string{}
-	app.chatLineCount = 0
-	app.formattedChatEventID = 0
-	app.itemDrops.Reset()
-	app.remotePresentations = app.remotePresentations[:0]
-	app.companionPresentations = app.companionPresentations[:0]
-	app.remoteAvatars = app.remoteAvatars[:0]
-	app.remoteNameTags = app.remoteNameTags[:0]
-	app.itemDropInstances = app.itemDropInstances[:0]
-	app.miningOverlay = hud.MiningOverlay{}
-	app.damageFeedback.Reset()
-	app.damageStrength = 0
-	app.furnace.Reset()
-	app.chest.Reset()
-	app.crafting.Reset()
-	app.inventoryOpen = false
-	app.inventorySource = -1
-	app.blockTargetReset = false
-	if app.panel != nil {
-		app.panel.visible = false
+	app.RemotePlayers().Reset()
+	app.Companions().Reset()
+	app.ChatEvents().Reset()
+	app.ChatInput().Cancel()
+	app.SetChatEventBuffer([client.ChatEventCapacity]network.ChatEvent{})
+	app.SetChatLines([6]string{})
+	app.SetChatLineCount(0)
+	app.SetFormattedChatEventID(0)
+	app.ItemDrops().Reset()
+	app.SetRemotePresentations(app.RemotePresentations()[:0])
+	app.SetCompanionPresentations(app.CompanionPresentations()[:0])
+	app.SetRemoteAvatars(app.RemoteAvatars()[:0])
+	app.SetRemoteNameTags(app.RemoteNameTags()[:0])
+	app.SetItemDropInstances(app.ItemDropInstances()[:0])
+	app.SetMiningOverlay(hud.MiningOverlay{})
+	app.SetDamageFeedback(application.DamageFeedback{})
+	app.SetDamageStrength(0)
+	app.Furnace().Reset()
+	app.Chest().Reset()
+	app.Crafting().Reset()
+	app.SetInventoryOpen(false)
+	app.SetInventorySource(-1)
+	app.SetBlockTargetReset(false)
+	if app.Panel() != nil {
+		app.Panel().SetVisible(false)
 	}
-	return app.inventory.Apply(network.InventoryState{Inventory: core.Inventory{}})
+	return app.Inventory().Apply(network.InventoryState{Inventory: core.Inventory{}})
 }
 
 // captureUnderwaterEyePosition 是 water-underwater 场景注入的权威玩家位置
@@ -604,15 +605,15 @@ const captureUnderwaterOxygen = 160
 //
 // 注入走非 Reset 分支：Reset 会命中 Predictor.Begin，而 Begin 手上没有方块视图，
 // 按其文档把标志置为 false，画面就会变成"人在水里但视觉没入水"。
-func applyWaterUnderwaterCaptureState(app *application) error {
+func applyWaterUnderwaterCaptureState(app *application.Application) error {
 	if err := resetCapturePresentation(app); err != nil {
 		return err
 	}
-	app.worldTimeTicks = 6000
+	app.SetWorldTimeTicks(6000)
 	// ServerTick 取一个远大于抓帧期间真实 tick 的常量：ApplyPlayerState 有
 	// 单调校验，小于等于已收到的 tick 会被静默忽略，而真实 tick 取决于加载
 	// 花了多久，不能拿来做常量。
-	if _, err := app.predictor.ApplyPlayerState(network.PlayerState{
+	if _, err := app.Predictor().ApplyPlayerState(network.PlayerState{
 		ServerTick:     1 << 20,
 		Dimension:      core.Overworld,
 		Position:       captureUnderwaterEyePosition,
@@ -623,21 +624,21 @@ func applyWaterUnderwaterCaptureState(app *application) error {
 		Oxygen:         captureUnderwaterOxygen,
 		WorldTimeTicks: 6000,
 	}, client.MirrorCollisionSource{
-		Mirror:    app.mirror,
+		Mirror:    app.Mirror(),
 		Dimension: core.Overworld,
 	}); err != nil {
 		return fmt.Errorf("注入水下权威玩家状态: %w", err)
 	}
-	if !app.predictor.EyeInFluid() {
+	if !app.Predictor().EyeInFluid() {
 		return fmt.Errorf(
 			"water-underwater 的相机没有落在水里：位置 %v 处 EyeInFluid=false",
 			captureUnderwaterEyePosition)
 	}
-	app.camera.Pos = captureUnderwaterEyePosition.Add(
+	app.Camera().Pos = captureUnderwaterEyePosition.Add(
 		mgl32.Vec3{0, physics.ActiveTunables().EyeHeight, 0})
-	app.camera.Yaw = 0
-	app.camera.Pitch = -0.05
-	app.center = cameraChunk(app.camera.Pos)
+	app.Camera().Yaw = 0
+	app.Camera().Pitch = -0.05
+	app.SetCenter(application.CameraChunk(app.Camera().Pos))
 	return nil
 }
 
@@ -652,16 +653,16 @@ func applyWaterUnderwaterCaptureState(app *application) error {
 // 天空、雾过渡带、壳带、近景四段齐备。相机 y=110 保持在壳上界(112)之下,
 // 与近处不变断言的截止推导自洽。a.center 与 lodTileCenter 刻意不动:场景
 // 不得触发近环 DropOutside 或远环增量入队,收敛域与 terrain-noon 同源。
-func applyFarHorizonCaptureState(app *application) error {
+func applyFarHorizonCaptureState(app *application.Application) error {
 	if err := resetCapturePresentation(app); err != nil {
 		return err
 	}
-	app.worldTimeTicks = 6000
-	app.camera = client.Camera{
+	app.SetWorldTimeTicks(6000)
+	*app.Camera() = client.Camera{
 		Pos: mgl32.Vec3{8, 110, -352}, Yaw: 0, Pitch: -0.25,
 		FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
 		Near: 0.1, Far: 2000,
 	}
-	app.blockTargetReset = false
+	app.SetBlockTargetReset(false)
 	return nil
 }

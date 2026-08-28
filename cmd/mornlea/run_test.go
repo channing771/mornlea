@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/client"
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/core"
@@ -20,22 +20,19 @@ import (
 	"github.com/channing771/mornlea/internal/storage"
 )
 
-func newRunTestApplication(events *[]string, name string) *application {
-	return &application{
-		itemDrops: client.NewItemDrops(),
-		releaseResources: func() {
-			*events = append(*events, "close "+name)
-		},
-	}
+func newRunTestApplication(events *[]string, name string) *application.Application {
+	return application.NewCloseTrackedApplicationForTest(func() {
+		*events = append(*events, "close "+name)
+	})
 }
 
 func TestTextureGoldenUpdateUsesDisposableControlsBeforeFreshCapture(t *testing.T) {
 	var events []string
-	var applications []*application
-	var gotOptions []applicationOptions
+	var applications []*application.Application
+	var gotOptions []application.Options
 	dependencies := runDependencies{
 		loadIdentity: func(*string) (network.Identity, error) { return network.Identity{}, nil },
-		newApplication: func(options applicationOptions) (*application, error) {
+		newApplication: func(options application.Options) (*application.Application, error) {
 			name := string(rune('0' + len(applications)))
 			events = append(events, "new "+name)
 			app := newRunTestApplication(&events, name)
@@ -43,14 +40,14 @@ func TestTextureGoldenUpdateUsesDisposableControlsBeforeFreshCapture(t *testing.
 			gotOptions = append(gotOptions, options)
 			return app, nil
 		},
-		runGoldenUpdateControl: func(lodOn, lodOff *application, _ string) error {
+		runGoldenUpdateControl: func(lodOn, lodOff *application.Application, _ string) error {
 			events = append(events, "control")
 			if len(applications) != 2 || lodOn != applications[0] || lodOff != applications[1] {
 				t.Fatalf("control applications = (%p, %p)，want 前两次构造结果", lodOn, lodOff)
 			}
 			return nil
 		},
-		runCapture: func(app *application, _ string, update bool) error {
+		runCapture: func(app *application.Application, _ string, update bool) error {
 			events = append(events, "formal")
 			if !update || len(applications) != 3 || app != applications[2] {
 				t.Fatalf("formal capture app=%p update=%v，want fresh 第三次构造结果", app, update)
@@ -116,20 +113,17 @@ func TestTextureGoldenUpdateClosesConstructedApplicationsOnEveryFailure(t *testi
 				append([]string{"--capture", t.TempDir(), "--update-golden"}, absentConfigArgs(t)...),
 				runDependencies{
 					loadIdentity: func(*string) (network.Identity, error) { return network.Identity{}, nil },
-					newApplication: func(applicationOptions) (*application, error) {
+					newApplication: func(application.Options) (*application.Application, error) {
 						if constructed+1 == test.failConstruction {
 							return nil, constructionErr
 						}
 						constructed++
-						return &application{
-							itemDrops:        client.NewItemDrops(),
-							releaseResources: func() { closed++ },
-						}, nil
+						return application.NewCloseTrackedApplicationForTest(func() { closed++ }), nil
 					},
-					runGoldenUpdateControl: func(*application, *application, string) error {
+					runGoldenUpdateControl: func(*application.Application, *application.Application, string) error {
 						return test.controlErr
 					},
-					runCapture: func(*application, string, bool) error {
+					runCapture: func(*application.Application, string, bool) error {
 						formalCapture = true
 						return test.captureErr
 					},
@@ -155,18 +149,15 @@ func TestRunOrdinaryCaptureUsesOneApplicationWithoutGoldenControl(t *testing.T) 
 		append([]string{"--capture", t.TempDir()}, absentConfigArgs(t)...),
 		runDependencies{
 			loadIdentity: func(*string) (network.Identity, error) { return network.Identity{}, nil },
-			newApplication: func(applicationOptions) (*application, error) {
+			newApplication: func(application.Options) (*application.Application, error) {
 				constructed++
-				return &application{
-					itemDrops:        client.NewItemDrops(),
-					releaseResources: func() { closed++ },
-				}, nil
+				return application.NewCloseTrackedApplicationForTest(func() { closed++ }), nil
 			},
-			runGoldenUpdateControl: func(*application, *application, string) error {
+			runGoldenUpdateControl: func(*application.Application, *application.Application, string) error {
 				t.Fatal("ordinary capture 不得运行 golden update control")
 				return nil
 			},
-			runCapture: func(*application, string, bool) error {
+			runCapture: func(*application.Application, string, bool) error {
 				captured++
 				return nil
 			},
@@ -197,7 +188,7 @@ func TestRunWithDependenciesLoadsProfileOnceForLocalAndRemote(t *testing.T) {
 					loads++
 					return identity, nil
 				},
-				newApplication: func(options applicationOptions) (*application, error) {
+				newApplication: func(options application.Options) (*application.Application, error) {
 					if options.Identity == nil || *options.Identity != identity {
 						t.Fatalf("application identity=%+v", options.Identity)
 					}
@@ -218,7 +209,7 @@ func TestRunWithDependenciesBypassesProfileForBenchmark(t *testing.T) {
 			loads++
 			return network.Identity{}, nil
 		},
-		newApplication: func(options applicationOptions) (*application, error) {
+		newApplication: func(options application.Options) (*application.Application, error) {
 			if options.Identity != nil {
 				t.Fatalf("benchmark identity=%+v, want nil", options.Identity)
 			}
@@ -243,7 +234,7 @@ func TestRunWithDependenciesPassesConfiguredAudioVolume(t *testing.T) {
 	var got float32
 	err := runWithDependencies([]string{"--config", configPath}, runDependencies{
 		loadIdentity: func(*string) (network.Identity, error) { return network.Identity{}, nil },
-		newApplication: func(options applicationOptions) (*application, error) {
+		newApplication: func(options application.Options) (*application.Application, error) {
 			got = options.AudioVolume
 			return nil, errors.New("stop before window")
 		},
@@ -265,7 +256,7 @@ func TestRunWithDependenciesDisablesDevForBenchmark(t *testing.T) {
 	var gotDev bool
 	err := runWithDependencies([]string{"--benchmark", "--perf-output", "x.json", "--dev"}, runDependencies{
 		loadIdentity: func(*string) (network.Identity, error) { return network.Identity{}, nil },
-		newApplication: func(options applicationOptions) (*application, error) {
+		newApplication: func(options application.Options) (*application.Application, error) {
 			sawCall = true
 			gotDev = options.Dev
 			return nil, errors.New("stop before window")
@@ -307,7 +298,7 @@ func TestRunWithDependenciesAlwaysEnablesDevForCapture(t *testing.T) {
 			args = append(args, absentConfigArgs(t)...)
 			err := runWithDependencies(args, runDependencies{
 				loadIdentity: func(*string) (network.Identity, error) { return network.Identity{}, nil },
-				newApplication: func(options applicationOptions) (*application, error) {
+				newApplication: func(options application.Options) (*application.Application, error) {
 					sawCall = true
 					gotDev = options.Dev
 					return nil, errors.New("stop before window")
@@ -344,7 +335,7 @@ func TestRunPassesRawAndResolvedTexturePackPathToLocalAndRemoteClients(t *testin
 			var gotRaw, gotResolved string
 			err := runWithDependencies(test.args, runDependencies{
 				loadIdentity: func(*string) (network.Identity, error) { return network.Identity{}, nil },
-				newApplication: func(options applicationOptions) (*application, error) {
+				newApplication: func(options application.Options) (*application.Application, error) {
 					gotRaw = options.TexturePackPath
 					gotResolved = options.ResolvedTexturePackPath
 					return nil, errors.New("stop before window")
@@ -383,7 +374,7 @@ func TestRunAutomationTexturePackIsolation(t *testing.T) {
 			var gotRaw, gotResolved string
 			err := runWithDependencies(test.args, runDependencies{
 				loadIdentity: func(*string) (network.Identity, error) { return network.Identity{}, nil },
-				newApplication: func(options applicationOptions) (*application, error) {
+				newApplication: func(options application.Options) (*application.Application, error) {
 					gotRaw = options.TexturePackPath
 					gotResolved = options.ResolvedTexturePackPath
 					return nil, errors.New("stop before window")
@@ -472,7 +463,7 @@ func TestFluidGatePerRunPath(t *testing.T) {
 			var gotFluid bool
 			err := runWithDependencies(args, runDependencies{
 				loadIdentity: func(*string) (network.Identity, error) { return network.Identity{}, nil },
-				newApplication: func(options applicationOptions) (*application, error) {
+				newApplication: func(options application.Options) (*application.Application, error) {
 					sawCall = true
 					gotFluid = options.FluidEnabled
 					return nil, errors.New("stop before window")
@@ -496,7 +487,7 @@ func TestRunWithDependenciesPassesExplicitNameToProfile(t *testing.T) {
 			got = requested
 			return network.Identity{}, nil
 		},
-		newApplication: func(applicationOptions) (*application, error) {
+		newApplication: func(application.Options) (*application.Application, error) {
 			return nil, errors.New("stop before window")
 		},
 	})
@@ -618,7 +609,7 @@ func TestBenchmarkIgnoresUserConfig(t *testing.T) {
 
 	effective, err := resolveConfig(mainOptions{
 		ConfigPath:  path,
-		Application: applicationOptions{Benchmark: true},
+		Application: application.Options{Benchmark: true},
 	})
 	if err != nil {
 		t.Fatalf("resolveConfig: %v", err)
@@ -655,7 +646,7 @@ func TestRemoteTuningDivergenceWarnCondition(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			options := mainOptions{Application: applicationOptions{Connect: testCase.connect}}
+			options := mainOptions{Application: application.Options{Connect: testCase.connect}}
 			if got := remoteTuningDiverges(options, testCase.effective); got != testCase.want {
 				t.Fatalf("remoteTuningDiverges = %v，want %v", got, testCase.want)
 			}
@@ -715,7 +706,7 @@ func TestRunInjectsAIOnlyIntoOrdinaryLocalGame(t *testing.T) {
 			var got []companion.Definition
 			err := runWithDependencies(test.args, runDependencies{
 				loadIdentity: func(*string) (network.Identity, error) { return network.Identity{}, nil },
-				newApplication: func(options applicationOptions) (*application, error) {
+				newApplication: func(options application.Options) (*application.Application, error) {
 					got = options.Companions
 					return nil, errors.New("stop before window")
 				},
@@ -733,25 +724,67 @@ func TestRunLocalAIReachesServerConfigWithoutAliasingOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	definitions := []companion.Definition{{ID: id, Name: "阿木"}}
-	options := localConnectionOptions()
+	options := application.LocalConnectionTestOptions()
 	options.Companions = definitions
 	want := errors.New("stop after server config")
-	dependencies := connectionTestDependencies(t)
-	dependencies.openStore = func(context.Context, applicationOptions) (storage.WorldStore, error) {
-		return newConnectionTestStore(42), nil
+	dependencies := application.NewConnectionTestDependencies(t)
+	dependencies.OpenStore = func(context.Context, application.Options) (storage.WorldStore, error) {
+		return application.NewConnectionTestStore(42), nil
 	}
-	dependencies.newHost = func(_ context.Context, config server.Config, _ server.Generator, _ storage.WorldStore) (applicationHost, error) {
+	dependencies.NewHost = func(_ context.Context, config server.Config, _ server.Generator, _ storage.WorldStore) (application.Host, error) {
 		if len(config.Companions) != 1 || config.Companions[0] != definitions[0] {
 			t.Fatalf("server companions = %+v", config.Companions)
 		}
 		config.Companions[0].Name = "已改"
 		return nil, want
 	}
-	_, gotErr := newApplicationWithDependencies(options, dependencies)
+	_, gotErr := application.NewWithDependencies(options, dependencies)
 	if !errors.Is(gotErr, want) {
 		t.Fatalf("newApplication error = %v，want %v", gotErr, want)
 	}
 	if definitions[0].Name != "阿木" {
-		t.Fatalf("server.Config 与 applicationOptions 共用 backing array：%+v", definitions)
+		t.Fatalf("server.Config 与 application.Options 共用 backing array：%+v", definitions)
+	}
+}
+
+func TestRunPassesRawResolvedAndWindowSettingsWithAutomationIsolation(t *testing.T) {
+	configDir := t.TempDir()
+	configPath := filepath.Join(configDir, "config.json")
+	cfg := config.Defaults()
+	cfg.TexturePackPath = "packs/local"
+	cfg.WindowSize = config.WindowSize960x540
+	cfg.AudioVolume = 0.25
+	if err := cfg.Save(configPath); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name            string
+		args            []string
+		wantRaw         string
+		wantResolved    string
+		wantWindow      config.WindowSize
+		wantStartAtMenu bool
+	}{
+		{name: "local", args: []string{"--config", configPath}, wantRaw: "packs/local", wantResolved: filepath.Join(configDir, "packs/local"), wantWindow: config.WindowSize960x540, wantStartAtMenu: true},
+		{name: "connect", args: []string{"--config", configPath, "--connect", "127.0.0.1:25565"}, wantRaw: "packs/local", wantResolved: filepath.Join(configDir, "packs/local"), wantWindow: config.WindowSize960x540},
+		{name: "benchmark", args: []string{"--config", configPath, "--benchmark", "--perf-output", filepath.Join(t.TempDir(), "perf.json")}, wantWindow: config.WindowSize1280x720},
+		{name: "capture", args: []string{"--config", configPath, "--capture", t.TempDir()}, wantWindow: config.WindowSize1280x720},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var got application.Options
+			err := runWithDependencies(test.args, runDependencies{
+				loadIdentity: func(*string) (network.Identity, error) { return network.Identity{}, nil },
+				newApplication: func(options application.Options) (*application.Application, error) {
+					got = options
+					return nil, errors.New("stop before window")
+				},
+			})
+			if err == nil {
+				t.Fatal("want injected construction error")
+			}
+			if got.TexturePackPath != test.wantRaw || got.ResolvedTexturePackPath != test.wantResolved || got.WindowSize != test.wantWindow || got.StartAtMenu != test.wantStartAtMenu {
+				t.Fatalf("settings options=%+v", got)
+			}
+		})
 	}
 }

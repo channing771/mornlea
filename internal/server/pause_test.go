@@ -299,7 +299,7 @@ func readySpawnChunkForDeterministicReplay(t *testing.T, running *Server) {
 }
 
 // ---------------------------------------------------------------------------
-// Host 暂停门直通测试。单机交互客户端经 `applicationHost` 只持有 `*Host`，
+// Host 暂停门直通测试。单机交互客户端经 `app.Host` 只持有 `*Host`，
 // 因此宿主必须把暂停门转发到内持 `*Server` 的同一原子位；这里用行为断言
 // 钉住转发落点与幂等性（冻结语义本身以 Server 侧 pause 测试为准，不重复
 // 孪生世界对照）。

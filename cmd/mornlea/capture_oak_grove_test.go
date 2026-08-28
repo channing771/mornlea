@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/assets"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
@@ -25,7 +26,9 @@ func TestCaptureOakGroveFindsSceneByName(t *testing.T) {
 
 	mesher := client.NewMesher(assets.NewRegistry(), 1)
 	t.Cleanup(mesher.Close)
-	app := &application{mirror: client.NewMirror(), mesher: mesher}
+	app := &application.Application{}
+	app.SetMirror(client.NewMirror())
+	app.SetMesher(mesher)
 	if err := scene.Prepare(app); err != nil {
 		t.Fatalf("准备 oak-grove: %v", err)
 	}
@@ -39,7 +42,7 @@ func TestCaptureOakGroveFindsSceneByName(t *testing.T) {
 		for x := int32(-1); x <= 1; x++ {
 			position := core.ChunkPos{X: x, Z: z}
 			want := generator.GenerateChunk(position)
-			gotHash, gotRevision, loaded := app.mirror.Hash(core.Overworld, position)
+			gotHash, gotRevision, loaded := app.Mirror().Hash(core.Overworld, position)
 			if !loaded || gotRevision != 1 || gotHash != want.Hash() {
 				t.Fatalf("chunk (%d,%d) hash/revision/loaded=(%x,%d,%v)，想要 (%x,1,true)",
 					x, z, gotHash, gotRevision, loaded, want.Hash())
@@ -47,7 +50,7 @@ func TestCaptureOakGroveFindsSceneByName(t *testing.T) {
 			for y := int32(core.MinY); y < core.MaxY; y++ {
 				for localZ := int32(0); localZ < core.SectionSize; localZ++ {
 					for localX := int32(0); localX < core.SectionSize; localX++ {
-						block, blockLoaded := app.mirror.BlockAt(core.Overworld, core.BlockPos{
+						block, blockLoaded := app.Mirror().BlockAt(core.Overworld, core.BlockPos{
 							X: x*core.SectionSize + localX, Y: y, Z: z*core.SectionSize + localZ,
 						})
 						if !blockLoaded {
@@ -70,26 +73,27 @@ func TestCaptureOakGroveFindsSceneByName(t *testing.T) {
 		t.Fatal("oak-grove 通过 mirror 装入后 mesher 没有 dirty section")
 	}
 
-	stateApp := &application{remotePlayers: client.NewRemotePlayers(), panel: &panelState{visible: true}}
+	stateApp := application.NewPresentationApplicationForTest()
+	stateApp.Panel().SetVisible(true)
 	if err := scene.Apply(stateApp); err != nil {
 		t.Fatalf("应用 oak-grove: %v", err)
 	}
 	cameraCell := core.BlockPos{
-		X: int32(math.Floor(float64(stateApp.camera.Pos[0]))),
-		Y: int32(math.Floor(float64(stateApp.camera.Pos[1]))),
-		Z: int32(math.Floor(float64(stateApp.camera.Pos[2]))),
+		X: int32(math.Floor(float64(stateApp.Camera().Pos[0]))),
+		Y: int32(math.Floor(float64(stateApp.Camera().Pos[1]))),
+		Z: int32(math.Floor(float64(stateApp.Camera().Pos[2]))),
 	}
-	block, loaded := app.mirror.BlockAt(core.Overworld, cameraCell)
+	block, loaded := app.Mirror().BlockAt(core.Overworld, cameraCell)
 	if !loaded || block != core.AirID {
 		t.Fatalf("oak-grove 相机格 %+v loaded/block=%v/%d，想要 true/%d",
 			cameraCell, loaded, block, core.AirID)
 	}
 	hit, found, err := core.RaycastBlocks(
-		stateApp.camera.Pos,
-		stateApp.camera.Forward(),
+		stateApp.Camera().Pos,
+		stateApp.Camera().Forward(),
 		6,
 		func(position core.BlockPos) (bool, error) {
-			block, loaded := app.mirror.BlockAt(core.Overworld, position)
+			block, loaded := app.Mirror().BlockAt(core.Overworld, position)
 			if !loaded {
 				t.Fatalf("oak-grove 射线命中未加载方块 %+v", position)
 			}
@@ -100,10 +104,10 @@ func TestCaptureOakGroveFindsSceneByName(t *testing.T) {
 		t.Fatalf("oak-grove 6 格目标射线 hit/found/err=%+v/%v/%v，想要零值/false/nil",
 			hit, found, err)
 	}
-	if stateApp.worldTimeTicks != 6000 ||
-		stateApp.camera.Pos != (mgl32.Vec3{-3.5, 75.5, 12.5}) ||
-		stateApp.camera.Yaw != 0 || stateApp.camera.Pitch != -0.38 {
+	if stateApp.WorldTimeTicks() != 6000 ||
+		stateApp.Camera().Pos != (mgl32.Vec3{-3.5, 75.5, 12.5}) ||
+		stateApp.Camera().Yaw != 0 || stateApp.Camera().Pitch != -0.38 {
 		t.Fatalf("oak-grove 状态 time=%d camera=%+v yaw=%v pitch=%v",
-			stateApp.worldTimeTicks, stateApp.camera.Pos, stateApp.camera.Yaw, stateApp.camera.Pitch)
+			stateApp.WorldTimeTicks(), stateApp.Camera().Pos, stateApp.Camera().Yaw, stateApp.Camera().Pitch)
 	}
 }

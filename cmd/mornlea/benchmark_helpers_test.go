@@ -4,18 +4,12 @@ package main
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
-	"math"
 	"sync/atomic"
 
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/network"
 )
-
-func readFloat32(data []byte, offset int) float32 {
-	return math.Float32frombits(binary.LittleEndian.Uint32(data[offset:]))
-}
 
 type benchmarkBlockingServerStream struct {
 	entered chan struct{}

@@ -10,8 +10,8 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/render"
 )
@@ -22,85 +22,9 @@ const (
 	benchmarkLatencyCapacity    = 131_072
 )
 
-type multiplayerRenderTiming struct {
-	avatarSubmit  *client.LatencyRecorder
-	nameTagSubmit *client.LatencyRecorder
-}
-
-func newMultiplayerRenderTiming() *multiplayerRenderTiming {
-	return &multiplayerRenderTiming{
-		avatarSubmit:  client.NewLatencyRecorder(benchmarkLatencyCapacity),
-		nameTagSubmit: client.NewLatencyRecorder(benchmarkLatencyCapacity),
-	}
-}
-
-func (timing *multiplayerRenderTiming) recordAvatar(duration time.Duration) {
-	timing.avatarSubmit.Add(duration)
-}
-
-func (timing *multiplayerRenderTiming) recordNameTag(duration time.Duration) {
-	timing.nameTagSubmit.Add(duration)
-}
-
-func (timing *multiplayerRenderTiming) Summaries() (client.LatencySummary, client.LatencySummary) {
-	return timing.avatarSubmit.Summary(), timing.nameTagSubmit.Summary()
-}
-
-type multiplayerBenchmarkScenario struct {
-	LocalPlayerID core.PlayerID
-	Spawns        []network.RemotePlayerSpawn
-	Tags          []render.NameTag
-}
-
-func newMultiplayerBenchmarkScenario() multiplayerBenchmarkScenario {
-	local := benchmarkPlayerID(0)
-	names := [...]string{"星野", "月河", "云山", "海界", "星河", "月海", "云野"}
-	spawns := make([]network.RemotePlayerSpawn, len(names))
-	tags := make([]render.NameTag, len(names), maxFrameNameTags)
-	for index, name := range names {
-		angle := float64(index) * 2 * math.Pi / float64(len(names))
-		position := mgl32.Vec3{float32(math.Cos(angle)) * 4, 80, float32(math.Sin(angle))*4 - 8}
-		playerID := benchmarkPlayerID(index + 1)
-		spawns[index] = network.RemotePlayerSpawn{
-			PlayerID: playerID, DisplayName: name, ServerTick: 1,
-			Dimension: core.Overworld, Position: position,
-		}
-		tags[index] = render.NameTag{
-			Key:  render.EntityKey{Kind: render.EntityPlayer, ID: [16]byte(playerID)},
-			Text: name, Anchor: position.Add(mgl32.Vec3{0, 2.05, 0}),
-		}
-	}
-	return multiplayerBenchmarkScenario{LocalPlayerID: local, Spawns: spawns, Tags: tags}
-}
-
-func (scenario multiplayerBenchmarkScenario) States(tick uint64) network.RemotePlayerStates {
-	states := make([]network.RemotePlayerState, len(scenario.Spawns))
-	for index, spawn := range scenario.Spawns {
-		phase := float64(tick)*0.035 + float64(index)*2*math.Pi/float64(len(scenario.Spawns))
-		position := spawn.Position.Add(mgl32.Vec3{
-			float32(math.Sin(phase)) * 1.5,
-			0,
-			float32(math.Cos(phase)) * 1.5,
-		})
-		states[index] = network.RemotePlayerState{
-			PlayerID: spawn.PlayerID, Dimension: core.Overworld, Position: position,
-			Yaw:   float32(math.Atan2(math.Sin(phase), math.Cos(phase))),
-			Pitch: float32(math.Sin(phase*0.5)) * 0.15,
-		}
-	}
-	return network.RemotePlayerStates{ServerTick: tick, Players: states}
-}
-
-func benchmarkPlayerID(index int) core.PlayerID {
-	return core.PlayerID{
-		0x10, 0, 0, byte(index + 1), 0x20, 0x30, 0x40, byte(index + 1),
-		0x80, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, byte(index + 1),
-	}
-}
-
 type multiplayerClientProbe struct {
-	app      *application
-	scenario multiplayerBenchmarkScenario
+	app      *application.Application
+	scenario application.MultiplayerBenchmarkScenario
 	codec    *network.Codec
 	roster   *client.RemotePlayers
 
@@ -108,27 +32,27 @@ type multiplayerClientProbe struct {
 	decode       *client.LatencyRecorder
 	rosterApply  *client.LatencyRecorder
 	interpolate  *client.LatencyRecorder
-	renderTiming *multiplayerRenderTiming
+	renderTiming *application.MultiplayerRenderTiming
 	gpuComplete  *client.LatencyRecorder
 	now          func() time.Time
 	tick         uint64
 }
 
-func newMultiplayerClientProbe(app *application) (*multiplayerClientProbe, error) {
+func newMultiplayerClientProbe(app *application.Application) (*multiplayerClientProbe, error) {
 	codec, err := network.NewCodec()
 	if err != nil {
 		return nil, err
 	}
 	probe := &multiplayerClientProbe{
 		app:          app,
-		scenario:     newMultiplayerBenchmarkScenario(),
+		scenario:     application.NewMultiplayerBenchmarkScenario(),
 		codec:        codec,
 		roster:       client.NewRemotePlayers(),
 		encode:       client.NewLatencyRecorder(benchmarkLatencyCapacity),
 		decode:       client.NewLatencyRecorder(benchmarkLatencyCapacity),
 		rosterApply:  client.NewLatencyRecorder(benchmarkLatencyCapacity),
 		interpolate:  client.NewLatencyRecorder(benchmarkLatencyCapacity),
-		renderTiming: newMultiplayerRenderTiming(),
+		renderTiming: application.NewMultiplayerRenderTiming(benchmarkLatencyCapacity),
 		gpuComplete:  client.NewLatencyRecorder(client.ScenarioV12GPUCompletionSamples),
 		now:          time.Now,
 		tick:         1,
@@ -138,20 +62,20 @@ func newMultiplayerClientProbe(app *application) (*multiplayerClientProbe, error
 			probe.Close()
 			return nil, err
 		}
-		if err := app.remotePlayers.Apply(spawn); err != nil {
+		if err := app.RemotePlayers().Apply(spawn); err != nil {
 			probe.Close()
 			return nil, err
 		}
 	}
-	app.multiplayerRenderTiming = probe.renderTiming
-	app.multiplayerRenderNow = time.Now
+	app.SetMultiplayerRenderTiming(probe.renderTiming)
+	app.SetMultiplayerRenderNow(time.Now)
 	return probe, nil
 }
 
 func (probe *multiplayerClientProbe) Close() {
-	if probe != nil && probe.app != nil && probe.app.multiplayerRenderTiming == probe.renderTiming {
-		probe.app.multiplayerRenderTiming = nil
-		probe.app.multiplayerRenderNow = nil
+	if probe != nil && probe.app != nil && probe.app.MultiplayerRenderTiming() == probe.renderTiming {
+		probe.app.SetMultiplayerRenderTiming(nil)
+		probe.app.SetMultiplayerRenderNow(nil)
 		probe.app = nil
 	}
 	if probe != nil && probe.codec != nil {
@@ -160,8 +84,8 @@ func (probe *multiplayerClientProbe) Close() {
 	}
 }
 
-func (probe *multiplayerClientProbe) sampleFrame(app *application, tick uint64) error {
-	batch := probe.statesNearCamera(tick, app.camera.Pos)
+func (probe *multiplayerClientProbe) sampleFrame(app *application.Application, tick uint64) error {
+	batch := probe.statesNearCamera(tick, app.Camera().Pos)
 	started := time.Now()
 	packetID, payload, err := probe.codec.EncodeServer(network.StatePlay, batch)
 	probe.encode.Add(time.Since(started))
@@ -179,7 +103,7 @@ func (probe *multiplayerClientProbe) sampleFrame(app *application, tick uint64) 
 		return fmt.Errorf("解码远端状态得到非 ServerMessage: %T", decoded)
 	}
 	started = time.Now()
-	if err := app.remotePlayers.Apply(message); err != nil {
+	if err := app.RemotePlayers().Apply(message); err != nil {
 		return fmt.Errorf("应用远端 roster: %w", err)
 	}
 	probe.rosterApply.Add(time.Since(started))
@@ -203,14 +127,14 @@ func (probe *multiplayerClientProbe) statesNearCamera(tick uint64, camera mgl32.
 	return batch
 }
 
-func benchmarkBillboardCamera(app *application) render.BillboardCamera {
+func benchmarkBillboardCamera(app *application.Application) render.BillboardCamera {
 	right := mgl32.Vec3{
-		float32(math.Cos(float64(app.camera.Yaw))), 0,
-		-float32(math.Sin(float64(app.camera.Yaw))),
+		float32(math.Cos(float64(app.Camera().Yaw))), 0,
+		-float32(math.Sin(float64(app.Camera().Yaw))),
 	}
 	return render.BillboardCamera{
-		ViewProj: app.camera.ViewProj(), Right: right,
-		Up: right.Cross(app.camera.Forward()).Normalize(),
+		ViewProj: app.Camera().ViewProj(), Right: right,
+		Up: right.Cross(app.Camera().Forward()).Normalize(),
 	}
 }
 
@@ -218,22 +142,22 @@ func benchmarkBillboardCamera(app *application) render.BillboardCamera {
 const gpuCompletionChunks = client.ScenarioV12GPUCompletionBatch /
 	client.ScenarioV12GPUCompletionChunk
 
-func (probe *multiplayerClientProbe) measureGPUCompletion(app *application) error {
-	avatars, tags := remoteRenderPresentations(probe.roster.Presentations())
+func (probe *multiplayerClientProbe) measureGPUCompletion(app *application.Application) error {
+	avatars, tags := application.RemoteRenderPresentations(probe.roster.Presentations())
 	// 切换到 Rust 渲染器后,一个样本是一批完整 RenderFrame(含提交与完成)
 	// 的总耗时摊到批次数;Poll 的固定节拍在样本内只出现一次,被摊薄到可忽略。
 	for range client.ScenarioV12GPUCompletionSamples {
-		if err := app.nameTagRenderer.Prepare(tags, app.scheduler.UploadBudget()); err != nil {
+		if err := app.NameTagRenderer().Prepare(tags, app.Scheduler().UploadBudget()); err != nil {
 			return err
 		}
-		viewProj := app.camera.ViewProj()
+		viewProj := app.Camera().ViewProj()
 		avatarStream := (&render.InstanceEncoder{}).EncodeAvatarInstances(nil, avatars)
 		billboard := benchmarkBillboardCamera(app)
-		backgrounds, glyphs := app.nameTagRenderer.FrameStreams()
+		backgrounds, glyphs := app.NameTagRenderer().FrameStreams()
 		frame := client.RenderFrame{
 			ViewProj:        viewProj,
 			ViewProjInv:     viewProj.Inv(),
-			Pos:             app.camera.Pos,
+			Pos:             app.Camera().Pos,
 			Daylight:        1,
 			SkyColor:        [4]float32{0, 0, 0, 1},
 			AvatarInstances: avatarStream,
@@ -243,7 +167,7 @@ func (probe *multiplayerClientProbe) measureGPUCompletion(app *application) erro
 		}
 		started := probe.now()
 		for range client.ScenarioV12GPUCompletionBatch {
-			app.renderer.RenderFrame(frame)
+			app.Renderer().RenderFrame(frame)
 		}
 		probe.gpuComplete.Add(probe.now().Sub(started) / client.ScenarioV12GPUCompletionBatch)
 		// 每个样本都回收:ru_maxrss 是进程生命周期的历史峰值,必须阻止

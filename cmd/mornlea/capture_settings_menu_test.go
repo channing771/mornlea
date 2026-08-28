@@ -24,13 +24,13 @@ func TestSettingsMenuCaptureSceneUsesLayoutV2Fixture(t *testing.T) {
 		TexturePackPath: "packs/local",
 		Dirty:           false,
 	}
-	if got := scene.Settings.uiSettings(); got != want {
+	if got := scene.Settings.UISettings(); got != want {
 		t.Fatalf("settings-menu Settings=%+v，想要 %+v", got, want)
 	}
 	if scene.Menu != nil || scene.WarmupFrames != 8 || scene.Apply == nil {
 		t.Fatalf("settings-menu 场景不完整或混入主菜单快照: %+v", scene)
 	}
-	encoded := client.EncodeUISettings(scene.Settings.uiSettings())
+	encoded := client.EncodeUISettings(scene.Settings.UISettings())
 	if len(encoded) < 4 || binary.LittleEndian.Uint32(encoded[:4]) != 2 {
 		t.Fatalf("settings-menu 未编码为 layout v2: %v", encoded)
 	}

@@ -6,14 +6,16 @@ import (
 	"testing"
 	"time"
 
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/client"
+	"github.com/channing771/mornlea/internal/config"
 )
 
 func TestScenarioV12GPUCompletionAmortizesOverFixedBatch(t *testing.T) {
 	if testing.Short() {
 		t.Skip("短模式:重型测试由 CI 全量门禁运行")
 	}
-	app := newRemoteRenderApplication(t, &integrationGlyphSource{})
+	app := application.NewOffscreenRenderApplicationForTest(t, &application.IntegrationGlyphSource{}, 64, 64, config.Render{})
 	probe, err := newMultiplayerClientProbe(app)
 	if err != nil {
 		t.Fatal(err)
@@ -26,7 +28,7 @@ func TestScenarioV12GPUCompletionAmortizesOverFixedBatch(t *testing.T) {
 		clockReads++
 		return time.Unix(0, int64(clockReads)*int64(time.Millisecond))
 	}
-	framesBefore := app.renderer.FrameCalls()
+	framesBefore := app.Renderer().FrameCalls()
 	if err := probe.measureGPUCompletion(app); err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +45,7 @@ func TestScenarioV12GPUCompletionAmortizesOverFixedBatch(t *testing.T) {
 
 	// 每个样本恰好一批 RenderFrame 与一对读钟;准备与编码都在计时区间外。
 	wantFrames := client.ScenarioV12GPUCompletionSamples * client.ScenarioV12GPUCompletionBatch
-	if got := app.renderer.FrameCalls() - framesBefore; got != wantFrames {
+	if got := app.Renderer().FrameCalls() - framesBefore; got != wantFrames {
 		t.Fatalf("GPU completion render FFI=%d,想要 %d", got, wantFrames)
 	}
 	if clockReads != client.ScenarioV12GPUCompletionSamples*2 {
@@ -86,7 +88,7 @@ func TestScenarioV12GPUCompletionBatchIsRecordedInReport(t *testing.T) {
 	if testing.Short() {
 		t.Skip("短模式:重型测试由 CI 全量门禁运行")
 	}
-	app := newRemoteRenderApplication(t, &integrationGlyphSource{})
+	app := application.NewOffscreenRenderApplicationForTest(t, &application.IntegrationGlyphSource{}, 64, 64, config.Render{})
 	probe, err := newMultiplayerClientProbe(app)
 	if err != nil {
 		t.Fatal(err)

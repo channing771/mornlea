@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/core"
@@ -22,8 +23,8 @@ import (
 // 刻意远小于 benchmark 的 2560×1440：golden 图要长期入库并反复更新，
 // 全尺寸会让仓库历史迅速膨胀，而 360p 足以暴露本设施要抓的问题类别。
 const (
-	captureWidth  = 640
-	captureHeight = 360
+	captureWidth  = application.CaptureWidth
+	captureHeight = application.CaptureHeight
 )
 
 // captureDrainMax 是抓帧期间每帧处理的服务端消息上限，取值与 benchmark 一致。
@@ -64,10 +65,10 @@ type captureScene struct {
 	// WarmupFrames 是 Apply 之前空跑的帧数，用来让上传预算与网格化收敛。
 	WarmupFrames int
 	// Prepare 在权威消息完成最后一次 drain 后装入固定镜像夹具。
-	Prepare func(*application) error
+	Prepare func(*application.Application) error
 	// Apply 在最后一帧渲染前执行，是场景对呈现状态的全部干预。
 	// 它跑在 drainServerMessages 之后，因此设置的值不会被当帧的服务端消息覆盖。
-	Apply func(*application) error
+	Apply func(*application.Application) error
 	// HUD 是仅在 capture 收敛与最终帧期间生效的临时生存状态。
 	HUD *captureHUDFixture
 	// Menu 可选，非 nil 时本场景以该快照渲染一帧 egui 主菜单（capture 专用）。
@@ -79,14 +80,14 @@ type captureScene struct {
 	// Settings 可选，非 nil 时本场景通过正常的设置相位与 `uiSegment` 路径编码
 	// layout v2。它与 Menu 互斥；每个场景都会显式重置菜单相位，避免设置页污染
 	// 后续共用同一 application 的场景。
-	Settings *settingsState
+	Settings *application.SettingsState
 	// PinVolatile 可选，在字形收敛帧之后、最后一帧渲染之前执行，用来钉住那些
 	// 随机器速度变化、因而不属于场景三要素的量。
 	//
 	// 存在的理由：Apply 跑在收敛帧之前，而收敛帧会推进帧间隔与权威 tick，
 	// 在 Apply 里设的值到最后一帧已经被覆盖。目前只有调试面板需要它——它的
 	// 读数区直接显示帧时与 tick，这两者在同一台机器上重复抓帧也会变。
-	PinVolatile func(*application) error
+	PinVolatile func(*application.Application) error
 }
 
 // captureContainerInventory 返回箱子和熔炉场景共用的 36 格已确认背包，刻意在
@@ -131,27 +132,27 @@ var captureScenes = []captureScene{
 	{
 		Name:         "terrain-noon",
 		WarmupFrames: 8,
-		Apply: func(app *application) error {
+		Apply: func(app *application.Application) error {
 			// 6000 tick 是正午，日光与太阳高度都取到最大值，
 			// 是昼夜管线上最容易看出偏差的相位。
-			app.worldTimeTicks = 6000
+			app.SetWorldTimeTicks(6000)
 			// 登录首条权威 PlayerState 必然触发 ResetView，把 Yaw/Pitch 覆盖成
 			// 服务端下发的出生朝向——那不是本场景声明的常量。这里显式钉死，
 			// 避免相机姿态随出生朝向漂移；Pitch 取小幅度下俯以避免画面被天空占满。
-			app.camera.Yaw = 0
-			app.camera.Pitch = -0.25
+			app.Camera().Yaw = 0
+			app.Camera().Pitch = -0.25
 			return nil
 		},
 	},
 	{
 		Name:         "hud-hotbar-health",
 		WarmupFrames: 8,
-		Apply: func(app *application) error {
-			app.worldTimeTicks = 6000
+		Apply: func(app *application.Application) error {
+			app.SetWorldTimeTicks(6000)
 			// 与 terrain-noon 一样显式钉死相机姿态：登录首条权威 PlayerState 的
 			// ResetView 会把 Yaw/Pitch 覆盖成出生朝向，不显式设置就不是常量。
-			app.camera.Yaw = 0
-			app.camera.Pitch = -0.25
+			app.Camera().Yaw = 0
+			app.Camera().Pitch = -0.25
 			// 走 InventoryMirror.Apply 而不是直接改内部字段：它会执行
 			// Inventory.Valid() 校验，因此这份构造数据同时也是一条格式自检。
 			inventory := core.Inventory{}
@@ -167,7 +168,7 @@ var captureScenes = []captureScene{
 				Item: core.ItemIronPickaxe, Count: 1, Durability: 250,
 			}
 			inventory.Backpack[0] = core.ItemStack{Item: core.ItemCoal, Count: 12}
-			return app.inventory.Apply(network.InventoryState{Inventory: inventory})
+			return app.Inventory().Apply(network.InventoryState{Inventory: inventory})
 		},
 		HUD: &captureHUDFixture{
 			Health: core.MaxHealth,
@@ -178,10 +179,10 @@ var captureScenes = []captureScene{
 	{
 		Name:         "hud-survival-feedback",
 		WarmupFrames: 8,
-		Apply: func(app *application) error {
-			app.worldTimeTicks = 6000
-			app.camera.Yaw = 0
-			app.camera.Pitch = -0.25
+		Apply: func(app *application.Application) error {
+			app.SetWorldTimeTicks(6000)
+			app.Camera().Yaw = 0
+			app.Camera().Pitch = -0.25
 			inventory := core.Inventory{}
 			inventory.Hotbar.Selected = 2
 			inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 64}
@@ -193,7 +194,7 @@ var captureScenes = []captureScene{
 				Item: core.ItemIronPickaxe, Count: 1, Durability: 250,
 			}
 			inventory.Backpack[0] = core.ItemStack{Item: core.ItemCoal, Count: 12}
-			return app.inventory.Apply(network.InventoryState{Inventory: inventory})
+			return app.Inventory().Apply(network.InventoryState{Inventory: inventory})
 		},
 		HUD: &captureHUDFixture{
 			Health: 5,
@@ -207,18 +208,18 @@ var captureScenes = []captureScene{
 	{
 		Name:         "avatar-nametag",
 		WarmupFrames: 8,
-		Apply: func(app *application) error {
-			app.worldTimeTicks = 6000
-			app.camera.Yaw = 0
-			app.camera.Pitch = -0.25
+		Apply: func(app *application.Application) error {
+			app.SetWorldTimeTicks(6000)
+			app.Camera().Yaw = 0
+			app.Camera().Pitch = -0.25
 			// 本场景不关心物品栏，但前一个场景（hud-hotbar-health）会把石镐、
-			// 铁镐等物品状态留在 app.inventory 里——这些场景共用同一个
+			// 铁镐等物品状态留在 app.Inventory() 里——这些场景共用同一个
 			// application，不显式清空就会被悄悄继承。这里显式设成空物品栏，
 			// 让本场景的画面只由自己的 Apply 决定，不依赖场景表的执行顺序。
-			if err := app.inventory.Apply(network.InventoryState{Inventory: core.Inventory{}}); err != nil {
+			if err := app.Inventory().Apply(network.InventoryState{Inventory: core.Inventory{}}); err != nil {
 				return fmt.Errorf("重置物品栏: %w", err)
 			}
-			if app.remotePlayers == nil {
+			if app.RemotePlayers() == nil {
 				return fmt.Errorf("avatar-nametag 需要远端玩家追踪器，当前为 nil")
 			}
 			// 昵称刻意混用 ASCII 与非 ASCII：字形 atlas 的分支在这两类上不同，
@@ -230,25 +231,25 @@ var captureScenes = []captureScene{
 				PlayerID:    core.PlayerID{6: 0x40, 8: 0x80, 15: 1},
 				DisplayName: "测试Player",
 				ServerTick:  1,
-				Position:    app.camera.Pos.Add(mgl32.Vec3{0, 0, -6}),
+				Position:    app.Camera().Pos.Add(mgl32.Vec3{0, 0, -6}),
 			}
-			return app.remotePlayers.Apply(spawn)
+			return app.RemotePlayers().Apply(spawn)
 		},
 	},
 	{
 		Name:         "inventory-crafting",
 		WarmupFrames: 8,
-		Apply: func(app *application) error {
-			app.worldTimeTicks = 6000
-			app.camera.Yaw = 0
-			app.camera.Pitch = -0.25
-			app.remotePlayers.Reset()
-			app.furnace.Reset()
-			app.chest.Reset()
-			app.inventoryOpen = true
+		Apply: func(app *application.Application) error {
+			app.SetWorldTimeTicks(6000)
+			app.Camera().Yaw = 0
+			app.Camera().Pitch = -0.25
+			app.RemotePlayers().Reset()
+			app.Furnace().Reset()
+			app.Chest().Reset()
+			app.SetInventoryOpen(true)
 			// 已选来源格取统一视图格 12（背包格 3）：来源轮廓落在背包区，
 			// 与下一场景落在网格区的轮廓互为对照。
-			app.inventorySource = 12
+			app.SetInventorySource(12)
 
 			inventory := core.Inventory{}
 			inventory.Hotbar.Selected = 1
@@ -265,7 +266,7 @@ var captureScenes = []captureScene{
 			inventory.Backpack[5] = core.ItemStack{Item: core.ItemOakLog, Count: 1}
 			inventory.Backpack[6] = core.ItemStack{Item: core.ItemGlass, Count: 4}
 			inventory.Backpack[9] = core.ItemStack{Item: core.ItemIronBlock, Count: 1}
-			if err := app.inventory.Apply(network.InventoryState{Inventory: inventory}); err != nil {
+			if err := app.Inventory().Apply(network.InventoryState{Inventory: inventory}); err != nil {
 				return err
 			}
 			// 个人 2×2 网格装入已匹配的真实原料形状（石砖 2×2）与非空产物格：
@@ -278,7 +279,7 @@ var captureScenes = []captureScene{
 			for slot := range 4 {
 				personal.Slots[slot] = core.ItemStack{Item: core.ItemStone, Count: 1}
 			}
-			return app.crafting.Apply(personal)
+			return app.Crafting().Apply(personal)
 		},
 		HUD: &captureHUDFixture{
 			Health: 5,
@@ -296,17 +297,17 @@ var captureScenes = []captureScene{
 		// scenario 迁移时统一生成。
 		Name:         "workbench-crafting",
 		WarmupFrames: 8,
-		Apply: func(app *application) error {
-			app.worldTimeTicks = 6000
-			app.camera.Yaw = 0
-			app.camera.Pitch = -0.25
-			app.remotePlayers.Reset()
-			app.furnace.Reset()
-			app.chest.Reset()
-			app.inventoryOpen = true
+		Apply: func(app *application.Application) error {
+			app.SetWorldTimeTicks(6000)
+			app.Camera().Yaw = 0
+			app.Camera().Pitch = -0.25
+			app.RemotePlayers().Reset()
+			app.Furnace().Reset()
+			app.Chest().Reset()
+			app.SetInventoryOpen(true)
 			// 已选来源格取统一视图格 1（网格格 1，石锄木棍列顶格）：来源轮廓
 			// 落在网格区，与前一场景落在背包区的轮廓互为对照。
-			app.inventorySource = 1
+			app.SetInventorySource(1)
 
 			inventory := core.Inventory{}
 			inventory.Hotbar.Selected = 1
@@ -320,7 +321,7 @@ var captureScenes = []captureScene{
 			inventory.Backpack[3] = core.ItemStack{Item: core.ItemRawIron, Count: 8}
 			inventory.Backpack[4] = core.ItemStack{Item: core.ItemIronIngot, Count: 9}
 			inventory.Backpack[6] = core.ItemStack{Item: core.ItemGlass, Count: 4}
-			if err := app.inventory.Apply(network.InventoryState{Inventory: inventory}); err != nil {
+			if err := app.Inventory().Apply(network.InventoryState{Inventory: inventory}); err != nil {
 				return err
 			}
 			// 3×3 石锄摆放：左列石头（格 0、3）旁接右列木棍（格 1、4），占据
@@ -337,7 +338,7 @@ var captureScenes = []captureScene{
 			for _, slot := range []int{1, 4} {
 				workbench.Slots[slot] = core.ItemStack{Item: core.ItemStick, Count: 1}
 			}
-			return app.crafting.Apply(workbench)
+			return app.Crafting().Apply(workbench)
 		},
 		HUD: &captureHUDFixture{
 			Health: 5,
@@ -348,20 +349,20 @@ var captureScenes = []captureScene{
 	{
 		Name:         "chest-container",
 		WarmupFrames: 8,
-		Apply: func(app *application) error {
+		Apply: func(app *application.Application) error {
 			if err := resetCapturePresentation(app); err != nil {
 				return err
 			}
-			app.worldTimeTicks = 6000
-			app.camera = client.Camera{
+			app.SetWorldTimeTicks(6000)
+			*app.Camera() = client.Camera{
 				Pos: mgl32.Vec3{0, 110, 0}, Pitch: -0.25,
 				FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
 				Near: 0.1, Far: 2000,
 			}
-			app.center = cameraChunk(app.camera.Pos)
-			app.inventoryOpen = true
-			app.inventorySource = core.ChestFirstSlot
-			if err := app.inventory.Apply(network.InventoryState{Inventory: captureContainerInventory()}); err != nil {
+			app.SetCenter(application.CameraChunk(app.Camera().Pos))
+			app.SetInventoryOpen(true)
+			app.SetInventorySource(core.ChestFirstSlot)
+			if err := app.Inventory().Apply(network.InventoryState{Inventory: captureContainerInventory()}); err != nil {
 				return fmt.Errorf("装入箱子场景背包: %w", err)
 			}
 			state := network.ChestState{Chest: core.ContainerRef{
@@ -371,7 +372,7 @@ var captureScenes = []captureScene{
 			state.Items[8] = core.ItemStack{Item: core.ItemCoal, Count: 17}
 			state.Items[17] = core.ItemStack{Item: core.ItemRawIron, Count: 1}
 			state.Items[26] = core.ItemStack{Item: core.ItemIronIngot, Count: 64}
-			if err := app.chest.Apply(state); err != nil {
+			if err := app.Chest().Apply(state); err != nil {
 				return fmt.Errorf("装入箱子场景镜像: %w", err)
 			}
 			return nil
@@ -385,23 +386,23 @@ var captureScenes = []captureScene{
 	{
 		Name:         "furnace-container",
 		WarmupFrames: 8,
-		Apply: func(app *application) error {
+		Apply: func(app *application.Application) error {
 			if err := resetCapturePresentation(app); err != nil {
 				return err
 			}
-			app.worldTimeTicks = 6000
-			app.camera = client.Camera{
+			app.SetWorldTimeTicks(6000)
+			*app.Camera() = client.Camera{
 				Pos: mgl32.Vec3{0, 110, 0}, Pitch: -0.25,
 				FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
 				Near: 0.1, Far: 2000,
 			}
-			app.center = cameraChunk(app.camera.Pos)
-			app.inventoryOpen = true
-			app.inventorySource = core.FurnaceFuelSlot
-			if err := app.inventory.Apply(network.InventoryState{Inventory: captureContainerInventory()}); err != nil {
+			app.SetCenter(application.CameraChunk(app.Camera().Pos))
+			app.SetInventoryOpen(true)
+			app.SetInventorySource(core.FurnaceFuelSlot)
+			if err := app.Inventory().Apply(network.InventoryState{Inventory: captureContainerInventory()}); err != nil {
 				return fmt.Errorf("装入熔炉场景背包: %w", err)
 			}
-			if err := app.furnace.Apply(network.FurnaceState{
+			if err := app.Furnace().Apply(network.FurnaceState{
 				Furnace:       core.FurnaceRef{Dimension: core.Overworld, Slot: 3, Generation: 4},
 				Input:         core.ItemStack{Item: core.ItemRawIron, Count: 8},
 				Fuel:          core.ItemStack{Item: core.ItemCoal, Count: 12},
@@ -425,38 +426,38 @@ var captureScenes = []captureScene{
 		// 全项目唯一大量绘制拉丁文本的界面，窄字符丢失在它身上最明显。
 		Name:         "debug-panel",
 		WarmupFrames: 8,
-		Apply: func(app *application) error {
-			app.worldTimeTicks = 6000
-			app.camera.Yaw = 0
-			app.camera.Pitch = -0.25
+		Apply: func(app *application.Application) error {
+			app.SetWorldTimeTicks(6000)
+			app.Camera().Yaw = 0
+			app.Camera().Pitch = -0.25
 			// 与其余场景一样显式清空上一个场景留下的呈现状态：本列表共用同一个
 			// application，不显式设置就会静默继承容器与网格场景（inventory/
 			// workbench-crafting）的背包、容器或网格状态。
-			app.remotePlayers.Reset()
-			app.furnace.Reset()
-			app.chest.Reset()
-			app.crafting.Reset()
-			app.inventoryOpen = false
-			if err := app.inventory.Apply(
+			app.RemotePlayers().Reset()
+			app.Furnace().Reset()
+			app.Chest().Reset()
+			app.Crafting().Reset()
+			app.SetInventoryOpen(false)
+			if err := app.Inventory().Apply(
 				network.InventoryState{Inventory: core.Inventory{}},
 			); err != nil {
 				return fmt.Errorf("重置物品栏: %w", err)
 			}
-			if app.panel == nil {
+			if app.Panel() == nil {
 				return fmt.Errorf("debug-panel 需要面板状态，当前为 nil")
 			}
-			app.panel.visible = true
+			app.Panel().SetVisible(true)
 			return nil
 		},
-		PinVolatile: func(app *application) error {
+		PinVolatile: func(app *application.Application) error {
 			// 面板读数区直接显示帧时与权威 tick，两者都随机器速度变化：
 			// 同机重复抓帧实测 tick 在 412..416 之间、帧时在 3.3..4.3ms 之间，
 			// 足以让基线比对超出阈值。
 			//
 			// panelLastFrameAt 清零后，下一帧的帧时按 panelFrameInput 的定义
 			// 保持 0，显示为固定的 "0.00 ms"；serverTick 钉成常量。
-			app.panelLastFrameAt = time.Time{}
-			app.serverTick = capturePinnedServerTick
+			app.SetPanelLastFrameAt(time.Time{})
+			app.SetServerTick(capturePinnedServerTick)
 			return nil
 		},
 	},
@@ -464,24 +465,24 @@ var captureScenes = []captureScene{
 		Name:         "skylight-tunnel",
 		WarmupFrames: 8,
 		Prepare:      prepareSkylightTunnel,
-		Apply: func(app *application) error {
-			app.worldTimeTicks = 6000
-			app.camera.Pos = mgl32.Vec3{0.5, 2.8, 8.5}
-			app.camera.Yaw = 0
-			app.camera.Pitch = -0.04
-			app.inventoryOpen = false
-			if app.panel != nil {
-				app.panel.visible = false
+		Apply: func(app *application.Application) error {
+			app.SetWorldTimeTicks(6000)
+			app.Camera().Pos = mgl32.Vec3{0.5, 2.8, 8.5}
+			app.Camera().Yaw = 0
+			app.Camera().Pitch = -0.04
+			app.SetInventoryOpen(false)
+			if app.Panel() != nil {
+				app.Panel().SetVisible(false)
 			}
-			if err := app.inventory.Apply(network.InventoryState{Inventory: core.Inventory{}}); err != nil {
+			if err := app.Inventory().Apply(network.InventoryState{Inventory: core.Inventory{}}); err != nil {
 				return fmt.Errorf("重置物品栏: %w", err)
 			}
-			if app.remotePlayers == nil {
+			if app.RemotePlayers() == nil {
 				return fmt.Errorf("skylight-tunnel 需要远端玩家追踪器，当前为 nil")
 			}
 			// 用快照逐一走合法 despawn，空列表自然成功，也不会遗漏其他玩家。
-			for _, player := range app.remotePlayers.Presentations() {
-				if err := app.remotePlayers.Apply(network.RemotePlayerDespawn{
+			for _, player := range app.RemotePlayers().Presentations() {
+				if err := app.RemotePlayers().Apply(network.RemotePlayerDespawn{
 					PlayerID: player.PlayerID,
 				}); err != nil {
 					return fmt.Errorf("清除远端玩家 %s: %w", player.PlayerID, err)
@@ -494,22 +495,22 @@ var captureScenes = []captureScene{
 		Name:         "block-light-room",
 		WarmupFrames: 8,
 		Prepare:      prepareBlockLightRoom,
-		Apply: func(app *application) error {
-			app.worldTimeTicks = 18000
-			app.camera.Pos = mgl32.Vec3{0.5, 2.8, 0.5}
-			app.camera.Yaw = 0
-			app.camera.Pitch = 0
-			app.inventoryOpen = false
-			if app.panel != nil {
-				app.panel.visible = false
+		Apply: func(app *application.Application) error {
+			app.SetWorldTimeTicks(18000)
+			app.Camera().Pos = mgl32.Vec3{0.5, 2.8, 0.5}
+			app.Camera().Yaw = 0
+			app.Camera().Pitch = 0
+			app.SetInventoryOpen(false)
+			if app.Panel() != nil {
+				app.Panel().SetVisible(false)
 			}
-			if err := app.inventory.Apply(network.InventoryState{Inventory: core.Inventory{}}); err != nil {
+			if err := app.Inventory().Apply(network.InventoryState{Inventory: core.Inventory{}}); err != nil {
 				return fmt.Errorf("重置物品栏: %w", err)
 			}
-			app.remotePlayers.Reset()
-			app.furnace.Reset()
-			app.chest.Reset()
-			app.crafting.Reset()
+			app.RemotePlayers().Reset()
+			app.Furnace().Reset()
+			app.Chest().Reset()
+			app.Crafting().Reset()
 			return nil
 		},
 	},
@@ -526,22 +527,22 @@ var captureScenes = []captureScene{
 		Name:         "torch-night",
 		WarmupFrames: 8,
 		Prepare:      prepareTorchNightRoom,
-		Apply: func(app *application) error {
-			app.worldTimeTicks = 18000
-			app.camera.Pos = mgl32.Vec3{0.5, 2.8, 0.5}
-			app.camera.Yaw = 0
-			app.camera.Pitch = 0
-			app.inventoryOpen = false
-			if app.panel != nil {
-				app.panel.visible = false
+		Apply: func(app *application.Application) error {
+			app.SetWorldTimeTicks(18000)
+			app.Camera().Pos = mgl32.Vec3{0.5, 2.8, 0.5}
+			app.Camera().Yaw = 0
+			app.Camera().Pitch = 0
+			app.SetInventoryOpen(false)
+			if app.Panel() != nil {
+				app.Panel().SetVisible(false)
 			}
-			if err := app.inventory.Apply(network.InventoryState{Inventory: core.Inventory{}}); err != nil {
+			if err := app.Inventory().Apply(network.InventoryState{Inventory: core.Inventory{}}); err != nil {
 				return fmt.Errorf("重置物品栏: %w", err)
 			}
-			app.remotePlayers.Reset()
-			app.furnace.Reset()
-			app.chest.Reset()
-			app.crafting.Reset()
+			app.RemotePlayers().Reset()
+			app.Furnace().Reset()
+			app.Chest().Reset()
+			app.Crafting().Reset()
 			return nil
 		},
 	},
@@ -549,40 +550,40 @@ var captureScenes = []captureScene{
 		Name:         "materials-showcase",
 		WarmupFrames: 8,
 		Prepare:      prepareMaterialsShowcase,
-		Apply: func(app *application) error {
-			app.worldTimeTicks = 6000
-			app.camera.Pos = mgl32.Vec3{0.5, 5.8, 13.5}
-			app.camera.Yaw = 0
-			app.camera.Pitch = -0.12
-			app.inventoryOpen = false
-			app.remotePlayers.Reset()
-			app.furnace.Reset()
-			app.chest.Reset()
-			app.crafting.Reset()
-			if app.panel != nil {
-				app.panel.visible = false
+		Apply: func(app *application.Application) error {
+			app.SetWorldTimeTicks(6000)
+			app.Camera().Pos = mgl32.Vec3{0.5, 5.8, 13.5}
+			app.Camera().Yaw = 0
+			app.Camera().Pitch = -0.12
+			app.SetInventoryOpen(false)
+			app.RemotePlayers().Reset()
+			app.Furnace().Reset()
+			app.Chest().Reset()
+			app.Crafting().Reset()
+			if app.Panel() != nil {
+				app.Panel().SetVisible(false)
 			}
-			return app.inventory.Apply(network.InventoryState{Inventory: core.Inventory{}})
+			return app.Inventory().Apply(network.InventoryState{Inventory: core.Inventory{}})
 		},
 	},
 	{
 		Name:         "target-block-feedback",
 		WarmupFrames: 8,
 		Prepare:      prepareTargetBlockFeedback,
-		Apply: func(app *application) error {
-			app.worldTimeTicks = 6000
-			app.camera.Pos = mgl32.Vec3{0.5, 3.5, 2.5}
-			app.camera.Yaw, app.camera.Pitch = 0, 0
-			app.inventoryOpen = false
-			app.inventorySource = -1
-			app.remotePlayers.Reset()
-			app.furnace.Reset()
-			app.chest.Reset()
-			app.crafting.Reset()
-			if app.panel != nil {
-				app.panel.visible = false
+		Apply: func(app *application.Application) error {
+			app.SetWorldTimeTicks(6000)
+			app.Camera().Pos = mgl32.Vec3{0.5, 3.5, 2.5}
+			app.Camera().Yaw, app.Camera().Pitch = 0, 0
+			app.SetInventoryOpen(false)
+			app.SetInventorySource(-1)
+			app.RemotePlayers().Reset()
+			app.Furnace().Reset()
+			app.Chest().Reset()
+			app.Crafting().Reset()
+			if app.Panel() != nil {
+				app.Panel().SetVisible(false)
 			}
-			return app.inventory.Apply(network.InventoryState{Inventory: core.Inventory{}})
+			return app.Inventory().Apply(network.InventoryState{Inventory: core.Inventory{}})
 		},
 	},
 	{
@@ -604,17 +605,17 @@ var captureScenes = []captureScene{
 		Name:         "water-surface-slope",
 		WarmupFrames: 8,
 		Prepare:      prepareWaterBasin,
-		Apply: func(app *application) error {
+		Apply: func(app *application.Application) error {
 			if err := resetCapturePresentation(app); err != nil {
 				return err
 			}
-			app.worldTimeTicks = 6000
+			app.SetWorldTimeTicks(6000)
 			// 3/4 角俯视：斜水面的梯度沿 z 轴，从侧后方看过去，水面高度差
 			// 在画面里是一条明显倾斜的水线，正视（yaw=0）反而只能看到它退远。
-			app.camera.Pos = mgl32.Vec3{7.5, 6.4, 4.5}
-			app.camera.Yaw = 0.6
-			app.camera.Pitch = -0.3
-			app.center = cameraChunk(app.camera.Pos)
+			app.Camera().Pos = mgl32.Vec3{7.5, 6.4, 4.5}
+			app.Camera().Yaw = 0.6
+			app.Camera().Pitch = -0.3
+			app.SetCenter(application.CameraChunk(app.Camera().Pos))
 			return nil
 		},
 	},
@@ -644,21 +645,21 @@ var captureScenes = []captureScene{
 			// 见上：真实错误行 + 非 4 对齐 UI 段（Ruling 8）。
 			Error: "存档无法打开",
 			// 复用交互主菜单的按钮表（四个按钮、进入/设置/退出可用、多人禁用）。
-			Buttons: menuButtons(),
+			Buttons: application.MenuButtons(),
 		},
-		Apply: func(app *application) error {
+		Apply: func(app *application.Application) error {
 			if err := resetCapturePresentation(app); err != nil {
 				return err
 			}
-			app.worldTimeTicks = 6000
+			app.SetWorldTimeTicks(6000)
 			// 相机钉在出生点上空（出生锚点为原点区块，y=110 高位）；菜单面板不透明
 			// 覆盖全屏，世界内容不可见，此处只是确定性的占位姿态。
-			app.camera = client.Camera{
+			*app.Camera() = client.Camera{
 				Pos: mgl32.Vec3{0, 110, 0}, Yaw: 0, Pitch: -0.25,
 				FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
 				Near: 0.1, Far: 2000,
 			}
-			app.center = cameraChunk(app.camera.Pos)
+			app.SetCenter(application.CameraChunk(app.Camera().Pos))
 			return nil
 		},
 	},
@@ -668,29 +669,29 @@ var captureScenes = []captureScene{
 		// 同时保持 clean/空状态，让 640×360 首屏能完整显示三枚动作按钮。
 		Name:         "settings-menu",
 		WarmupFrames: 8,
-		Settings: &settingsState{
-			committed: settingsValues{
-				audioVolume:     0.25,
-				texturePackPath: "packs/local",
-				windowSize:      config.WindowSize960x540,
+		Settings: &application.SettingsState{
+			Committed: application.SettingsValues{
+				AudioVolume:     0.25,
+				TexturePackPath: "packs/local",
+				WindowSize:      config.WindowSize960x540,
 			},
-			draft: settingsValues{
-				audioVolume:     0.25,
-				texturePackPath: "packs/local",
-				windowSize:      config.WindowSize960x540,
+			Draft: application.SettingsValues{
+				AudioVolume:     0.25,
+				TexturePackPath: "packs/local",
+				WindowSize:      config.WindowSize960x540,
 			},
 		},
-		Apply: func(app *application) error {
+		Apply: func(app *application.Application) error {
 			if err := resetCapturePresentation(app); err != nil {
 				return err
 			}
-			app.worldTimeTicks = 6000
-			app.camera = client.Camera{
+			app.SetWorldTimeTicks(6000)
+			*app.Camera() = client.Camera{
 				Pos: mgl32.Vec3{0, 110, 0}, Yaw: 0, Pitch: -0.25,
 				FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
 				Near: 0.1, Far: 2000,
 			}
-			app.center = cameraChunk(app.camera.Pos)
+			app.SetCenter(application.CameraChunk(app.Camera().Pos))
 			return nil
 		},
 	},
@@ -735,7 +736,7 @@ const capturePinnedServerTick = 400
 
 // runCapture 依次跑完全部视觉场景。updateGolden 为真时把抓到的图写进 golden 基线；
 // 为假时与已有基线比对，超阈值的场景把实拍图与差异图写进 dir 并返回错误。
-func runCapture(app *application, dir string, updateGolden bool) error {
+func runCapture(app *application.Application, dir string, updateGolden bool) error {
 	if err := prepareCaptureApplication(app); err != nil {
 		return err
 	}
@@ -754,7 +755,7 @@ func runCapture(app *application, dir string, updateGolden bool) error {
 	return errors.Join(errs...)
 }
 
-func prepareCaptureApplication(app *application) error {
+func prepareCaptureApplication(app *application.Application) error {
 	if err := validateCaptureApplication(app); err != nil {
 		return err
 	}
@@ -768,12 +769,12 @@ func prepareCaptureApplication(app *application) error {
 
 // validateCaptureApplication 检查无头 capture 的固定 framebuffer 契约。单
 // application 与 LOD on/off control 都必须在开始消费服务端快照前通过它。
-func validateCaptureApplication(app *application) error {
-	if width, height := app.framebufferSize(); width != captureWidth || height != captureHeight {
+func validateCaptureApplication(app *application.Application) error {
+	if width, height := app.FramebufferSize(); width != captureWidth || height != captureHeight {
 		return fmt.Errorf("capture framebuffer=%dx%d，要求精确 %dx%d",
 			width, height, captureWidth, captureHeight)
 	}
-	if app.window != nil {
+	if app.Window() != nil {
 		return fmt.Errorf("capture 需要无头 offscreen 渲染器,当前为窗口模式")
 	}
 	return nil
@@ -783,10 +784,10 @@ func validateCaptureApplication(app *application) error {
 // 初始加载。二者在构造后 Host 已开始发送完整快照，故不能先完整加载其中
 // 一个；否则另一侧的 bounded receiver 会在闲置时溢出。交错仅调用现有帧
 // 路径，不并发使用任何 renderer。
-func prepareGoldenUpdateControls(lodOn, lodOff *application) error {
+func prepareGoldenUpdateControls(lodOn, lodOff *application.Application) error {
 	for _, control := range []struct {
 		name string
-		app  *application
+		app  *application.Application
 	}{
 		{name: "LOD-on", app: lodOn},
 		{name: "LOD-off", app: lodOff},
@@ -801,7 +802,7 @@ func prepareGoldenUpdateControls(lodOn, lodOff *application) error {
 	return nil
 }
 
-func captureOne(app *application, dir string, scene captureScene, updateGolden bool) error {
+func captureOne(app *application.Application, dir string, scene captureScene, updateGolden bool) error {
 	img, err := captureSceneImage(app, scene)
 	if err != nil {
 		return err
@@ -830,15 +831,15 @@ func captureOne(app *application, dir string, scene captureScene, updateGolden b
 
 // `captureSceneImage` 只完成既有场景的预热、状态装入、收敛和回读，不写文件。
 // update control 与正式 `captureOne` 共用它，保证两条路径没有第二套场景渲染逻辑。
-func captureSceneImage(app *application, scene captureScene) (*image.NRGBA, error) {
+func captureSceneImage(app *application.Application, scene captureScene) (*image.NRGBA, error) {
 	for i := 0; i < scene.WarmupFrames; i++ {
-		if _, err := app.frame(captureDrainMax, captureDrainMax, physics.FixedDelta); err != nil {
+		if _, err := app.Frame(captureDrainMax, captureDrainMax, physics.FixedDelta); err != nil {
 			return nil, fmt.Errorf("预热第 %d 帧: %w", i, err)
 		}
 	}
 	// 最后一帧手工拆开 frame()：先收消息，再装入夹具并覆盖呈现状态，最后渲染。
 	// 顺序不能变；从 Prepare 开始不再 drain，固定夹具不会被权威消息覆盖。
-	app.drainServerMessages(captureDrainMax)
+	app.DrainServerMessages(captureDrainMax)
 	if scene.Prepare != nil {
 		if err := scene.Prepare(app); err != nil {
 			return nil, fmt.Errorf("准备场景夹具: %w", err)
@@ -854,12 +855,12 @@ func captureSceneImage(app *application, scene captureScene) (*image.NRGBA, erro
 	if scene.Menu != nil && scene.Settings != nil {
 		return nil, fmt.Errorf("场景 %s 同时设置 Menu 与 Settings", scene.Name)
 	}
-	app.menuOverride = scene.Menu
+	app.SetMenuOverride(scene.Menu)
 	if scene.Settings != nil {
-		app.menu.phase = menuPhaseSettings
-		app.settings = *scene.Settings
+		app.SetMenuPhase(application.MenuPhaseSettings)
+		app.SetSettings(*scene.Settings)
 	} else {
-		app.menu.phase = menuPhaseGame
+		app.SetMenuPhase(application.MenuPhaseGame)
 	}
 	if scene.HUD != nil {
 		restore, err := applyCaptureHUDFixture(app, scene.HUD)
@@ -870,15 +871,15 @@ func captureSceneImage(app *application, scene captureScene) (*image.NRGBA, erro
 	}
 	settleDeadline := time.Now().Add(captureSettleTimeout)
 	for i := 0; ; i++ {
-		if _, err := app.renderFrame(captureDrainMax); err != nil {
+		if _, err := app.RenderFrame(captureDrainMax); err != nil {
 			return nil, fmt.Errorf("场景收敛第 %d 帧: %w", i, err)
 		}
-		stats, pending := app.mesher.Stats(), app.scheduler.PendingUploads()
+		stats, pending := app.Mesher().Stats(), app.Scheduler().PendingUploads()
 		// 远环收敛判据与近环同源：pending==0 且 worker 空闲（Busy 归零）。
 		// 禁用路径 lodScheduler 为 nil，传 0 即与旧语义一致。
 		lodBusy := 0
-		if app.lodScheduler != nil {
-			lodBusy = app.lodScheduler.Busy()
+		if app.LODScheduler() != nil {
+			lodBusy = app.LODScheduler().Busy()
 		}
 		if i+1 >= captureGlyphSettleFrames && captureSettled(stats, pending, lodBusy) {
 			break
@@ -895,18 +896,18 @@ func captureSceneImage(app *application, scene captureScene) (*image.NRGBA, erro
 			return nil, fmt.Errorf("钉住易变读数: %w", err)
 		}
 	}
-	if _, err := app.renderFrame(captureDrainMax); err != nil {
+	if _, err := app.RenderFrame(captureDrainMax); err != nil {
 		return nil, fmt.Errorf("渲染抓帧: %w", err)
 	}
-	pixels := app.renderer.Readback()
+	pixels := app.Renderer().Readback()
 	return bgraToNRGBA(pixels, captureWidth, captureHeight), nil
 }
 
 func applyCaptureHUDFixture(
-	app *application,
+	app *application.Application,
 	fixture *captureHUDFixture,
 ) (func(), error) {
-	originalPredictor, originalMining := app.predictor, app.miningOverlay
+	originalPredictor, originalMining := app.Predictor(), app.MiningOverlay()
 	state, ready := originalPredictor.State()
 	if !ready {
 		return nil, errors.New("capture HUD 夹具需要已就绪 predictor")
@@ -917,8 +918,8 @@ func applyCaptureHUDFixture(
 		Position:  state.Position,
 		Velocity:  state.Velocity,
 		OnGround:  state.OnGround,
-		Yaw:       app.camera.Yaw,
-		Pitch:     app.camera.Pitch,
+		Yaw:       app.Camera().Yaw,
+		Pitch:     app.Camera().Pitch,
 		Ready:     true,
 		Health:    fixture.Health,
 		Oxygen:    fixture.Oxygen,
@@ -926,26 +927,28 @@ func applyCaptureHUDFixture(
 	}); err != nil {
 		return nil, fmt.Errorf("构造 capture HUD predictor: %w", err)
 	}
-	app.predictor, app.miningOverlay = predictor, fixture.Mining
+	app.SetPredictor(predictor)
+	app.SetMiningOverlay(fixture.Mining)
 	restored := false
 	return func() {
 		if restored {
 			return
 		}
 		restored = true
-		app.predictor, app.miningOverlay = originalPredictor, originalMining
+		app.SetPredictor(originalPredictor)
+		app.SetMiningOverlay(originalMining)
 	}, nil
 }
 
 // `runGoldenUpdateControl` 在两个 disposable application 上只抓取 far-horizon，
 // 并在调用方可能写入任一 golden 前完成当前 LOD on/off 帧的近环比较。
-func runGoldenUpdateControl(lodOn, lodOff *application, dir string) error {
+func runGoldenUpdateControl(lodOn, lodOff *application.Application, dir string) error {
 	if err := prepareGoldenUpdateControls(lodOn, lodOff); err != nil {
 		return err
 	}
 	return runGoldenUpdateControlWithCapture(
 		lodOn, lodOff, dir,
-		func(app *application, scene captureScene) (*image.NRGBA, error) {
+		func(app *application.Application, scene captureScene) (*image.NRGBA, error) {
 			return captureSceneImage(app, scene)
 		},
 	)
@@ -954,9 +957,9 @@ func runGoldenUpdateControl(lodOn, lodOff *application, dir string) error {
 // `runGoldenUpdateControlWithCapture` 保留最小的抓帧 seam，让测试用合成当前帧
 // 覆盖 fail-closed guard；生产调用仍由 `runGoldenUpdateControl` 走真实完整链路。
 func runGoldenUpdateControlWithCapture(
-	lodOn, lodOff *application,
+	lodOn, lodOff *application.Application,
 	dir string,
-	capture func(*application, captureScene) (*image.NRGBA, error),
+	capture func(*application.Application, captureScene) (*image.NRGBA, error),
 ) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("创建抓帧输出目录 %s: %w", dir, err)
@@ -986,10 +989,10 @@ func runGoldenUpdateControlWithCapture(
 		return fmt.Errorf("写出 LOD-off control: %w", err)
 	}
 	guard := newNearBandGuard(
-		lodOn.camera, lodOn.lodTileCenter,
-		lodNearTileRadius(lodOn.render.ViewDistance),
-		lodFarTileRadius(lodOn.render.ViewDistance, lodOn.render.LodFarMultiplier),
-		lodOn.lodScheduler != nil,
+		*lodOn.Camera(), lodOn.LODTileCenter(),
+		application.LodNearTileRadius(lodOn.Render().ViewDistance),
+		application.LodFarTileRadius(lodOn.Render().ViewDistance, lodOn.Render().LodFarMultiplier),
+		lodOn.LODScheduler() != nil,
 	)
 	if err := guard.assertUnchanged(farHorizon.Name, lodOffFrame, lodOnFrame); err != nil {
 		return err

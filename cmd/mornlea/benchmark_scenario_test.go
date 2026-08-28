@@ -12,7 +12,9 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/client"
+	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/render"
@@ -28,7 +30,7 @@ func TestScenarioV19ContainsSevenSortedUnicodeRemotePlayers(t *testing.T) {
 	if input := fixedBenchmarkPlayerInput(); input.Mining {
 		t.Fatalf("固定 benchmark PlayerInput.Mining=%t，想要 false", input.Mining)
 	}
-	scenario := newMultiplayerBenchmarkScenario()
+	scenario := application.NewMultiplayerBenchmarkScenario()
 	if !scenario.LocalPlayerID.Valid() {
 		t.Fatalf("local PlayerID invalid: %x", scenario.LocalPlayerID)
 	}
@@ -68,7 +70,7 @@ func TestBenchmarkScenarioV19AccountsForCompanionRendererUploadLayout(t *testing
 	if scenarioVersion != 19 {
 		t.Fatalf("scenarioVersion=%d，想要 19", scenarioVersion)
 	}
-	scenario := newMultiplayerBenchmarkScenario()
+	scenario := application.NewMultiplayerBenchmarkScenario()
 	if len(scenario.Spawns) != 7 || len(scenario.Tags) != 7 {
 		t.Fatalf("固定 benchmark 玩家/名牌=%d/%d，想要 7/7", len(scenario.Spawns), len(scenario.Tags))
 	}
@@ -77,8 +79,8 @@ func TestBenchmarkScenarioV19AccountsForCompanionRendererUploadLayout(t *testing
 			t.Fatalf("benchmark tag[%d] key=%v，未保持玩家域", index, tag.Key)
 		}
 	}
-	app := newRemoteRenderApplication(t, &integrationGlyphSource{})
-	if got := len(app.companions.AppendPresentations(nil)); got != 0 {
+	app := application.NewOffscreenRenderApplicationForTest(t, &application.IntegrationGlyphSource{}, 64, 64, config.Render{})
+	if got := len(app.Companions().AppendPresentations(nil)); got != 0 {
 		t.Fatalf("固定 benchmark 注入了 %d 个伙伴，想要 0", got)
 	}
 }
@@ -99,7 +101,7 @@ func TestScenarioV8GPUCompletionStopsWhenTransportCloseFails(t *testing.T) {
 		{name: "客户端", clientErr: clientCloseErr, want: clientCloseErr},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			app := newRemoteRenderApplication(t, &integrationGlyphSource{})
+			app := application.NewOffscreenRenderApplicationForTest(t, &application.IntegrationGlyphSource{}, 64, 64, config.Render{})
 			config := server.DefaultConfig(benchmarkSeed)
 			config.TrustedObserver = true
 			running := server.NewWorld(
@@ -121,8 +123,8 @@ func TestScenarioV8GPUCompletionStopsWhenTransportCloseFails(t *testing.T) {
 			if err := running.AttachTrustedObserver(serverEndpoint); err != nil {
 				t.Fatal(err)
 			}
-			app.server = running
-			app.clientEndpoint = clientEndpoint
+			app.SetServer(running)
+			app.SetClientEndpoint(clientEndpoint)
 
 			probe, err := newMultiplayerClientProbe(app)
 			if err != nil {
@@ -156,7 +158,7 @@ func TestScenarioV8GPUCompletionStartsAfterTransportTeardown(t *testing.T) {
 	if testing.Short() {
 		t.Skip("短模式:重型测试由 CI 全量门禁运行")
 	}
-	app := newRemoteRenderApplication(t, &integrationGlyphSource{})
+	app := application.NewOffscreenRenderApplicationForTest(t, &application.IntegrationGlyphSource{}, 64, 64, config.Render{})
 	config := server.DefaultConfig(benchmarkSeed)
 	config.TrustedObserver = true
 	config.ViewRadius = 0
@@ -179,12 +181,12 @@ func TestScenarioV8GPUCompletionStartsAfterTransportTeardown(t *testing.T) {
 		}
 	})
 	rawClient, serverEndpoint := network.NewMemoryPair(8)
-	clientEndpoint := &connectionTestEndpoint{ClientEndpoint: rawClient}
+	clientEndpoint := &application.ConnectionTestEndpoint{ClientEndpoint: rawClient}
 	if err := running.AttachTrustedObserver(serverEndpoint); err != nil {
 		t.Fatal(err)
 	}
-	app.server = running
-	app.clientEndpoint = clientEndpoint
+	app.SetServer(running)
+	app.SetClientEndpoint(clientEndpoint)
 
 	probe, err := newMultiplayerClientProbe(app)
 	if err != nil {
@@ -197,7 +199,7 @@ func TestScenarioV8GPUCompletionStartsAfterTransportTeardown(t *testing.T) {
 			if err := running.SetTrustedObserverCenter(core.Overworld, core.ChunkPos{}); !errors.Is(err, server.ErrTrustedObserverDisabled) {
 				t.Fatalf("首个 GPU 时钟读取时 trusted observer 仍挂载: %v", err)
 			}
-			if got := clientEndpoint.closeCalls.Load(); got != 1 {
+			if got := clientEndpoint.CloseCalls(); got != 1 {
 				t.Fatalf("首个 GPU 时钟读取时客户端 Close 调用=%d，想要 1", got)
 			}
 		}
@@ -214,9 +216,9 @@ func TestScenarioV8GPUCompletionStartsAfterTransportTeardown(t *testing.T) {
 }
 
 func TestMultiplayerBenchmarkReservesTargetNameTagSlotWithoutAddingTarget(t *testing.T) {
-	scenario := newMultiplayerBenchmarkScenario()
-	if len(scenario.Tags) != 7 || cap(scenario.Tags) != maxFrameNameTags {
-		t.Fatalf("benchmark tags len/cap=%d/%d，想要 7/%d", len(scenario.Tags), cap(scenario.Tags), maxFrameNameTags)
+	scenario := application.NewMultiplayerBenchmarkScenario()
+	if len(scenario.Tags) != 7 || cap(scenario.Tags) != application.MaxFrameNameTags {
+		t.Fatalf("benchmark tags len/cap=%d/%d，想要 7/%d", len(scenario.Tags), cap(scenario.Tags), application.MaxFrameNameTags)
 	}
 	for index, tag := range scenario.Tags {
 		if tag.Key.Kind != render.EntityPlayer || tag.Key.ID == ([16]byte{}) || tag.Text == "" {
@@ -226,18 +228,18 @@ func TestMultiplayerBenchmarkReservesTargetNameTagSlotWithoutAddingTarget(t *tes
 }
 
 func TestScenarioV7RenderFrameSamplesExistingRemotePassesExactlyOnce(t *testing.T) {
-	app := newRemoteRenderApplication(t, &integrationGlyphSource{})
-	if err := app.remotePlayers.Apply(remoteSpawn(1, "星河", 1, mgl32.Vec3{0, 0, -4})); err != nil {
+	app := application.NewOffscreenRenderApplicationForTest(t, &application.IntegrationGlyphSource{}, 64, 64, config.Render{})
+	if err := app.RemotePlayers().Apply(application.RemoteSpawn(1, "星河", 1, mgl32.Vec3{0, 0, -4})); err != nil {
 		t.Fatal(err)
 	}
-	timing := newMultiplayerRenderTiming()
-	app.multiplayerRenderTiming = timing
+	timing := application.NewMultiplayerRenderTiming(benchmarkLatencyCapacity)
+	app.SetMultiplayerRenderTiming(timing)
 	var nowCalls int
-	app.multiplayerRenderNow = func() time.Time {
+	app.SetMultiplayerRenderNow(func() time.Time {
 		nowCalls++
 		return time.Unix(0, int64(nowCalls)*int64(time.Millisecond))
-	}
-	rendered, err := app.renderFrame(1)
+	})
+	rendered, err := app.RenderFrame(1)
 	if err != nil || !rendered {
 		t.Fatalf("renderFrame=(%v,%v)", rendered, err)
 	}
@@ -254,30 +256,30 @@ func TestScenarioV7RenderFrameSamplesExistingRemotePassesExactlyOnce(t *testing.
 }
 
 func TestScenarioV7NilRenderTimingNeverReadsBenchmarkClock(t *testing.T) {
-	app := newRemoteRenderApplication(t, &integrationGlyphSource{})
-	if err := app.remotePlayers.Apply(remoteSpawn(1, "月海", 1, mgl32.Vec3{0, 0, -4})); err != nil {
+	app := application.NewOffscreenRenderApplicationForTest(t, &application.IntegrationGlyphSource{}, 64, 64, config.Render{})
+	if err := app.RemotePlayers().Apply(application.RemoteSpawn(1, "月海", 1, mgl32.Vec3{0, 0, -4})); err != nil {
 		t.Fatal(err)
 	}
-	app.multiplayerRenderTiming = nil
-	app.multiplayerRenderNow = func() time.Time {
+	app.SetMultiplayerRenderTiming(nil)
+	app.SetMultiplayerRenderNow(func() time.Time {
 		panic("nil benchmark timing read wall clock")
-	}
-	if rendered, err := app.renderFrame(1); err != nil || !rendered {
+	})
+	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("nil timing renderFrame=(%v,%v)", rendered, err)
 	}
 }
 
 func TestScenarioV7NameTagFailurePublishesNoRenderTimingSample(t *testing.T) {
 	wantErr := errors.New("injected glyph flush failure")
-	app := newRemoteRenderApplication(t, &integrationGlyphSource{flushErr: wantErr})
-	framesBefore := app.renderer.FrameCalls()
-	if err := app.remotePlayers.Apply(remoteSpawn(1, "云野", 1, mgl32.Vec3{0, 0, -4})); err != nil {
+	app := application.NewOffscreenRenderApplicationForTest(t, &application.IntegrationGlyphSource{FlushErr: wantErr}, 64, 64, config.Render{})
+	framesBefore := app.Renderer().FrameCalls()
+	if err := app.RemotePlayers().Apply(application.RemoteSpawn(1, "云野", 1, mgl32.Vec3{0, 0, -4})); err != nil {
 		t.Fatal(err)
 	}
-	timing := newMultiplayerRenderTiming()
-	app.multiplayerRenderTiming = timing
-	app.multiplayerRenderNow = time.Now
-	rendered, err := app.renderFrame(1)
+	timing := application.NewMultiplayerRenderTiming(benchmarkLatencyCapacity)
+	app.SetMultiplayerRenderTiming(timing)
+	app.SetMultiplayerRenderNow(time.Now)
+	rendered, err := app.RenderFrame(1)
 	if rendered || !errors.Is(err, wantErr) {
 		t.Fatalf("renderFrame=(%v,%v), want wrapped glyph error", rendered, err)
 	}
@@ -285,7 +287,7 @@ func TestScenarioV7NameTagFailurePublishesNoRenderTimingSample(t *testing.T) {
 	if avatar.Samples != 0 || nameTag.Samples != 0 {
 		t.Fatalf("failed frame published successful timing: avatar=%+v nameTag=%+v", avatar, nameTag)
 	}
-	if got := app.renderer.FrameCalls(); got != framesBefore {
+	if got := app.Renderer().FrameCalls(); got != framesBefore {
 		t.Fatalf("glyph failure 后 render FFI=%d,想要保持 %d", got, framesBefore)
 	}
 }
@@ -304,7 +306,7 @@ func TestScenarioV13StillFlyingFrameIncludesCelestialSkyDraw(t *testing.T) {
 		{name: "flying", flying: true},
 	} {
 		t.Run(phase.name, func(t *testing.T) {
-			app := newRemoteRenderApplication(t, &integrationGlyphSource{})
+			app := application.NewOffscreenRenderApplicationForTest(t, &application.IntegrationGlyphSource{}, 64, 64, config.Render{})
 			probe, err := newMultiplayerClientProbe(app)
 			if err != nil {
 				t.Fatal(err)
@@ -329,7 +331,7 @@ func TestScenarioV13StillFlyingFrameIncludesCelestialSkyDraw(t *testing.T) {
 
 			// sky 绘制顺序与 daylight uniform 已内化于 Rust 渲染器
 			// (golden capture 守护);此处只断言阶段确实执行了真实帧。
-			if app.renderer.FrameCalls() == 0 {
+			if app.Renderer().FrameCalls() == 0 {
 				t.Fatal("阶段未触发真实 render FFI")
 			}
 		})

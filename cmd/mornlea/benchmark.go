@@ -8,13 +8,14 @@ import (
 	"runtime"
 	"time"
 
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/server"
 )
 
 const (
-	benchmarkSeed            = 20260726
+	benchmarkSeed            = application.BenchmarkSeed
 	benchmarkMessageDrainMax = 4096
 	// scenarioVersion 是 benchmark producer 的场景身份。v18 → v19 的判定与
 	// v17 → v18、v15 → v16 同源：benchmark 的固定输入（七名远端玩家、零伙伴、
@@ -43,16 +44,16 @@ var (
 
 // runBenchmarkCooldown 在阶段之间等待固定时长，期间只泵送窗口事件，
 // 不提交任何渲染工作，也不推进相机脚本。
-func runBenchmarkCooldown(app *application, duration time.Duration) {
+func runBenchmarkCooldown(app *application.Application, duration time.Duration) {
 	// 冷却是让系统回落的窗口：顺带回收上一阶段产生的对象，
 	// 避免它们把后续阶段的 RSS 峰值推高。
 	runtime.GC()
 	deadline := time.Now().Add(duration)
 	for time.Now().Before(deadline) {
-		if app.window != nil {
-			app.window.Poll()
-			if app.window.ShouldClose() {
-				app.window.CancelClose()
+		if app.Window() != nil {
+			app.Window().Poll()
+			if app.Window().ShouldClose() {
+				app.Window().CancelClose()
 			}
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -103,8 +104,8 @@ func gpuCompletionMinSamples(scenario int) int {
 	}
 }
 
-func runBenchmark(app *application, outputPath string) error {
-	width, height := app.framebufferSize()
+func runBenchmark(app *application.Application, outputPath string) error {
+	width, height := app.FramebufferSize()
 	if width != 2560 || height != 1440 {
 		return fmt.Errorf("benchmark framebuffer=%dx%d，要求精确 2560x1440", width, height)
 	}
@@ -126,43 +127,43 @@ func runBenchmark(app *application, outputPath string) error {
 		return fmt.Errorf("创建多人客户端性能探针: %w", err)
 	}
 	defer multiplayerProbe.Close()
-	app.ticks.reset()
-	app.saves.reset()
+	app.Ticks().Reset()
+	app.Saves().Reset()
 	still, err := measurePhase(app, multiplayerProbe, "still", stillDuration, nil)
 	if err != nil {
 		return err
 	}
 	printMemoryBreakdown("still 后")
 	runBenchmarkCooldown(app, benchmarkCooldown)
-	flyingStart := app.camera.Pos
+	flyingStart := app.Camera().Pos
 	probe := server.NewTerrainProbe(benchmarkSeed)
 	flying, err := measurePhase(app, multiplayerProbe, "flying", flyDuration, func(elapsed time.Duration) {
 		seconds := float32(elapsed.Seconds())
-		app.camera.Pos[0] = flyingStart[0] + seconds*48
-		app.camera.Pos[2] = flyingStart[2] + float32(math.Sin(float64(seconds)*0.1))*96
-		x := int32(math.Floor(float64(app.camera.Pos[0])))
-		z := int32(math.Floor(float64(app.camera.Pos[2])))
-		app.camera.Pos[1] = float32(probe.HeightAt(x, z)) + 3.5
-		app.camera.Pitch = -float32(math.Pi)/2 + 0.02
-		app.updateCenter()
+		app.Camera().Pos[0] = flyingStart[0] + seconds*48
+		app.Camera().Pos[2] = flyingStart[2] + float32(math.Sin(float64(seconds)*0.1))*96
+		x := int32(math.Floor(float64(app.Camera().Pos[0])))
+		z := int32(math.Floor(float64(app.Camera().Pos[2])))
+		app.Camera().Pos[1] = float32(probe.HeightAt(x, z)) + 3.5
+		app.Camera().Pitch = -float32(math.Pi)/2 + 0.02
+		app.UpdateCenter()
 	})
 	if err != nil {
 		return err
 	}
 	printMemoryBreakdown("flying 后")
-	finalCenter := app.center
+	finalCenter := app.Center()
 	if err := waitForBenchmarkCenterConsistency(
 		app,
 		finalCenter,
-		app.observerFloor,
+		app.ObserverFloor(),
 		10*time.Second,
 	); err != nil {
 		return err
 	}
-	authoritativeHash, authoritativeRevision, authoritativeOK := app.server.ChunkHash(
+	authoritativeHash, authoritativeRevision, authoritativeOK := app.Server().ChunkHash(
 		core.Overworld, finalCenter,
 	)
-	mirrorHash, mirrorRevision, mirrorOK := app.mirror.Hash(
+	mirrorHash, mirrorRevision, mirrorOK := app.Mirror().Hash(
 		core.Overworld, finalCenter,
 	)
 	if !authoritativeOK || !mirrorOK || authoritativeRevision != mirrorRevision ||
@@ -191,7 +192,7 @@ func runBenchmark(app *application, outputPath string) error {
 	multiplayer.PlayerJobsHighWater = serverMultiplayer.PlayerJobsHighWater
 	multiplayer.PlayerDoneHighWater = serverMultiplayer.PlayerDoneHighWater
 	multiplayer.PeakRSSBytes = serverMultiplayer.PeakRSSBytes
-	persistence := app.saves.summary()
+	persistence := app.Saves().Summary()
 	protocol, err := measureProtocolSummary()
 	if err != nil {
 		return err
@@ -203,12 +204,12 @@ func runBenchmark(app *application, outputPath string) error {
 
 	report := client.PerfReport{
 		ScenarioVersion: scenarioVersion,
-		Transport:       app.benchmarkTransport,
+		Transport:       app.BenchmarkTransport(),
 		Hardware:        hardwareID(),
 		OS:              osID(),
 		GoVersion:       runtime.Version() + " " + runtime.GOOS + "/" + runtime.GOARCH,
 		GitCommit:       commandOutput("git", "rev-parse", "HEAD"),
-		Framebuffer:     app.framebufferLabel(),
+		Framebuffer:     app.FramebufferLabel(),
 		LoadSeconds:     loadSeconds,
 		CooldownSeconds: benchmarkCooldown.Seconds(),
 		SnapshotSeconds: snapshotDuration.Seconds(),

@@ -1,0 +1,250 @@
+//go:build darwin
+
+package app
+
+import (
+	"testing"
+
+	"github.com/go-gl/mathgl/mgl32"
+
+	"github.com/channing771/mornlea/internal/client"
+	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/internal/world"
+)
+
+func TestCurrentBlockTargetHitsRegisteredBlockWithinSixBlocks(t *testing.T) {
+	app := newTargetBlockApplication(t, true, core.ChunkPos{}, core.ChunkPos{Z: -1})
+	position := core.BlockPos{X: 0, Y: 3, Z: -3}
+	setTargetMirrorBlock(t, app.mirror, position, core.BrickID)
+
+	got, ok := app.CurrentBlockTarget()
+	want := BlockTarget{Position: position, Name: "砖块"}
+	if !ok || got != want {
+		t.Fatalf("CurrentBlockTarget() = %+v, %v，想要 %+v, true", got, ok, want)
+	}
+}
+
+func TestCurrentBlockTargetLooksThroughFluid(t *testing.T) {
+	app := newTargetBlockApplication(t, true, core.ChunkPos{}, core.ChunkPos{Z: -1})
+	position := core.BlockPos{X: 0, Y: 3, Z: -3}
+	setTargetMirrorBlock(t, app.mirror, position, core.BrickID)
+	// 相机在 (0.5,3.5,2.5) 沿 -Z 看，水必须落在它与砖块之间的射线路径上，
+	// 否则「命中砖块」在没有水的世界里同样成立、断言恒绿。
+	fluid := core.BlockPos{X: 0, Y: 3, Z: 0}
+	setTargetMirrorBlock(t, app.mirror, fluid, core.WaterSourceID)
+
+	got, ok := app.CurrentBlockTarget()
+	want := BlockTarget{Position: position, Name: "砖块"}
+	if !ok || got != want {
+		t.Fatalf("穿水瞄准 CurrentBlockTarget() = %+v, %v，想要 %+v, true", got, ok, want)
+	}
+
+	// 夹具承重守卫排在真实断言之后。守卫必须证明水**挡在相机与砖块之间**，
+	// 而不只是"世界里某处有水"：后者在把水随手挪出射线路径后依然成立，改坏
+	// 实现也照样全绿。用修复前的旧谓词（流体也算实心）重打同一条射线，命中
+	// 必须恰好是那格水。
+	hit, found, err := core.RaycastBlocks(
+		app.camera.Pos,
+		app.camera.Forward(),
+		6,
+		func(position core.BlockPos) (bool, error) {
+			id, loaded := app.mirror.BlockAt(core.Overworld, position)
+			return loaded && id != core.AirID, nil
+		},
+	)
+	if err != nil || !found || hit.Block != fluid {
+		t.Fatalf("夹具失效：水 %+v 不挡在相机与砖块之间（旧谓词命中 %+v found=%v err=%v）",
+			fluid, hit.Block, found, err)
+	}
+	if id, loaded := app.mirror.BlockAt(core.Overworld, fluid); !loaded || !core.IsFluid(id) {
+		t.Fatalf("夹具失效：%+v=%d loaded=%v，不是流体", fluid, id, loaded)
+	}
+}
+
+func TestCurrentBlockTargetRejectsDesyncedStaleBlock(t *testing.T) {
+	app := newTargetBlockApplication(t, true, core.ChunkPos{})
+	position := core.BlockPos{X: 0, Y: 3, Z: -3}
+	chunk := world.NewChunk(position.Chunk())
+	x, _, z := position.Local()
+	chunk.SetBlock(x, position.Y, z, core.BrickID)
+	applyTargetMirrorChunk(t, app.mirror, chunk)
+	if got, ok := app.CurrentBlockTarget(); !ok || got.Position != position {
+		t.Fatalf("revision gap 前 CurrentBlockTarget() = %+v, %v，想要命中 %+v", got, ok, position)
+	}
+
+	update, err := app.mirror.Apply(network.BlockChanges{
+		Dimension:    core.Overworld,
+		Chunk:        position.Chunk(),
+		BaseRevision: 2,
+		NewRevision:  3,
+		Changes: []network.BlockChange{{
+			Position: position,
+			Block:    core.AirID,
+		}},
+	})
+	if err != nil || update.Resync == nil {
+		t.Fatalf("revision gap update = %+v, %v，想要 resync", update, err)
+	}
+	if got, ok := app.CurrentBlockTarget(); ok || got != (BlockTarget{}) {
+		t.Fatalf("desynced CurrentBlockTarget() = %+v, %v，想要零值, false", got, ok)
+	}
+}
+
+func TestCurrentBlockTargetRejectsInvalidTargetsAndUI(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(*testing.T) *Application
+	}{
+		{
+			name: "超过六格",
+			setup: func(t *testing.T) *Application {
+				app := newTargetBlockApplication(t, true, core.ChunkPos{}, core.ChunkPos{Z: -1})
+				setTargetMirrorBlock(t, app.mirror, core.BlockPos{X: 0, Y: 3, Z: -5}, core.BrickID)
+				return app
+			},
+		},
+		{
+			name: "路径中缺失区块",
+			setup: func(t *testing.T) *Application {
+				app := newTargetBlockApplication(t, true, core.ChunkPos{Z: -1})
+				app.camera.Pos = mgl32.Vec3{0.5, 3.5, 0.5}
+				setTargetMirrorBlock(t, app.mirror, core.BlockPos{X: 0, Y: 3, Z: -1}, core.BrickID)
+				return app
+			},
+		},
+		{
+			name: "未知方块阻断路径",
+			setup: func(t *testing.T) *Application {
+				app := newTargetBlockApplication(t, true, core.ChunkPos{}, core.ChunkPos{Z: -1})
+				// 未注册编号一律用独占哨兵 core.BlockIDMax 表达：写死具体编号
+				// （历史上写过 MossyCobblestoneID+1、WaterLevel7ID+1）会在追加
+				// 新方块时静默变成已注册，本用例就不再覆盖"未知方块阻断路径"。
+				setTargetMirrorBlock(t, app.mirror, core.BlockPos{X: 0, Y: 3, Z: 0}, core.BlockIDMax)
+				setTargetMirrorBlock(t, app.mirror, core.BlockPos{X: 0, Y: 3, Z: -1}, core.BrickID)
+				return app
+			},
+		},
+		{
+			name: "全空气",
+			setup: func(t *testing.T) *Application {
+				return newTargetBlockApplication(t, true, core.ChunkPos{}, core.ChunkPos{Z: -1})
+			},
+		},
+		{
+			name: "Predictor 未就绪",
+			setup: func(t *testing.T) *Application {
+				app := newTargetBlockApplication(t, false, core.ChunkPos{}, core.ChunkPos{Z: -1})
+				setTargetMirrorBlock(t, app.mirror, core.BlockPos{X: 0, Y: 3, Z: -3}, core.BrickID)
+				return app
+			},
+		},
+		{
+			name: "背包打开",
+			setup: func(t *testing.T) *Application {
+				app := targetBlockHitApplication(t)
+				app.inventoryOpen = true
+				return app
+			},
+		},
+		{
+			name: "熔炉打开",
+			setup: func(t *testing.T) *Application {
+				app := targetBlockHitApplication(t)
+				if err := app.furnace.Apply(network.FurnaceState{Furnace: core.FurnaceRef{Generation: 1}}); err != nil {
+					t.Fatal(err)
+				}
+				return app
+			},
+		},
+		{
+			name: "箱子打开",
+			setup: func(t *testing.T) *Application {
+				app := targetBlockHitApplication(t)
+				if err := app.chest.Apply(network.ChestState{Chest: core.ContainerRef{Kind: core.ContainerKindChest, Generation: 1}}); err != nil {
+					t.Fatal(err)
+				}
+				return app
+			},
+		},
+		{
+			name: "调试面板可见",
+			setup: func(t *testing.T) *Application {
+				app := targetBlockHitApplication(t)
+				app.panel = &panelState{visible: true}
+				return app
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got, ok := test.setup(t).CurrentBlockTarget(); ok || got != (BlockTarget{}) {
+				t.Fatalf("CurrentBlockTarget() = %+v, %v，想要零值, false", got, ok)
+			}
+		})
+	}
+}
+
+func targetBlockHitApplication(t *testing.T) *Application {
+	t.Helper()
+	app := newTargetBlockApplication(t, true, core.ChunkPos{}, core.ChunkPos{Z: -1})
+	setTargetMirrorBlock(t, app.mirror, core.BlockPos{X: 0, Y: 3, Z: -3}, core.BrickID)
+	return app
+}
+
+func newTargetBlockApplication(t *testing.T, ready bool, chunks ...core.ChunkPos) *Application {
+	t.Helper()
+	app := &Application{
+		mirror:    client.NewMirror(),
+		predictor: client.NewPredictor(),
+		camera:    client.Camera{Pos: mgl32.Vec3{0.5, 3.5, 2.5}},
+	}
+	for _, position := range chunks {
+		applyTargetMirrorChunk(t, app.mirror, world.NewChunk(position))
+	}
+	if ready {
+		if err := app.predictor.Begin(network.PlayerState{
+			ServerTick: 1,
+			Dimension:  core.Overworld,
+			Ready:      true,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return app
+}
+
+func applyTargetMirrorChunk(t *testing.T, mirror *client.Mirror, chunk *world.Chunk) {
+	t.Helper()
+	sections := make([]network.SectionData, core.SectionsPerChunk)
+	for index := range sections {
+		snapshot := chunk.Section(index).Blocks.Snapshot()
+		sections[index] = network.SectionData{
+			Y:       int32(index),
+			Storage: network.SectionStorage(snapshot.Kind),
+			Single:  snapshot.Single,
+			Bits:    snapshot.Bits,
+			Palette: append([]core.BlockID(nil), snapshot.Palette...),
+			Packed:  append([]uint64(nil), snapshot.Packed...),
+		}
+	}
+	if _, err := mirror.Apply(network.ChunkSnapshot{
+		Dimension: core.Overworld,
+		Chunk:     chunk.Pos,
+		Revision:  1,
+		Sections:  sections,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func setTargetMirrorBlock(t *testing.T, mirror *client.Mirror, position core.BlockPos, id core.BlockID) {
+	t.Helper()
+	chunk, ok := mirror.Chunk(core.Overworld, position.Chunk())
+	if !ok {
+		t.Fatalf("测试区块 %+v 未加载", position.Chunk())
+	}
+	x, _, z := position.Local()
+	chunk.Chunk.SetBlock(x, position.Y, z, id)
+}

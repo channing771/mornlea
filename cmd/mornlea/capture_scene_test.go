@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"image"
 	"os"
 	"path/filepath"
@@ -10,27 +9,28 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/assets"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/render"
-	"github.com/channing771/mornlea/internal/render/hud"
 	"github.com/channing771/mornlea/internal/world"
 )
 
 func TestCaptureSkylightTunnelFixtureUsesMirrorAndMesher(t *testing.T) {
 	mesher := client.NewMesher(assets.NewRegistry(), 1)
 	t.Cleanup(mesher.Close)
-	app := &application{mirror: client.NewMirror(), mesher: mesher}
+	app := &application.Application{}
+	app.SetMirror(client.NewMirror())
+	app.SetMesher(mesher)
 
 	if err := prepareSkylightTunnel(app); err != nil {
 		t.Fatal(err)
 	}
 	for z := int32(-1); z <= 1; z++ {
 		for x := int32(-1); x <= 1; x++ {
-			chunk, ok := app.mirror.Chunk(core.Overworld, core.ChunkPos{X: x, Z: z})
+			chunk, ok := app.Mirror().Chunk(core.Overworld, core.ChunkPos{X: x, Z: z})
 			if !ok || chunk.Revision != 2 {
 				t.Fatalf("chunk (%d,%d) = (%v,%v)，想要 revision 2", x, z, chunk, ok)
 			}
@@ -49,13 +49,13 @@ func TestCaptureSkylightTunnelFixtureUsesMirrorAndMesher(t *testing.T) {
 		{name: "通道后墙", position: core.BlockPos{X: 0, Y: 2, Z: -16}, want: core.StoneID},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, loaded := app.mirror.BlockAt(core.Overworld, tc.position)
+			got, loaded := app.Mirror().BlockAt(core.Overworld, tc.position)
 			if !loaded || got != tc.want {
 				t.Fatalf("BlockAt(%+v) = (%d,%v)，想要 (%d,true)", tc.position, got, loaded, tc.want)
 			}
 		})
 	}
-	if got := app.mesher.Stats().DirtySections; got != 9*core.SectionsPerChunk {
+	if got := app.Mesher().Stats().DirtySections; got != 9*core.SectionsPerChunk {
 		t.Fatalf("dirty sections = %d，想要 %d", got, 9*core.SectionsPerChunk)
 	}
 }
@@ -99,28 +99,28 @@ func TestContainerCaptureFixturesUseIndependentConfirmedMirrors(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		source int
-		assert func(*testing.T, *application)
+		assert func(*testing.T, *application.Application)
 	}{
 		{
 			name: "chest-container", source: 36,
-			assert: func(t *testing.T, app *application) {
+			assert: func(t *testing.T, app *application.Application) {
 				t.Helper()
-				if got, opened := app.chest.State(); !opened || got != wantChest {
+				if got, opened := app.Chest().State(); !opened || got != wantChest {
 					t.Fatalf("chest=%+v opened=%v，想要 %+v/true", got, opened, wantChest)
 				}
-				if _, opened := app.furnace.State(); opened {
+				if _, opened := app.Furnace().State(); opened {
 					t.Fatal("箱子场景没有显式清空熔炉镜像")
 				}
 			},
 		},
 		{
 			name: "furnace-container", source: 37,
-			assert: func(t *testing.T, app *application) {
+			assert: func(t *testing.T, app *application.Application) {
 				t.Helper()
-				if got, opened := app.furnace.State(); !opened || got != wantFurnace {
+				if got, opened := app.Furnace().State(); !opened || got != wantFurnace {
 					t.Fatalf("furnace=%+v opened=%v，想要 %+v/true", got, opened, wantFurnace)
 				}
-				if _, opened := app.chest.State(); opened {
+				if _, opened := app.Chest().State(); opened {
 					t.Fatal("熔炉场景没有显式清空箱子镜像")
 				}
 			},
@@ -132,21 +132,23 @@ func TestContainerCaptureFixturesUseIndependentConfirmedMirrors(t *testing.T) {
 				t.Fatalf("场景=%+v，想要完整 8 帧夹具", scene)
 			}
 			app := newCaptureAICompanionState()
-			if err := app.remotePlayers.Apply(network.RemotePlayerSpawn{
+			if err := app.RemotePlayers().Apply(network.RemotePlayerSpawn{
 				PlayerID: core.PlayerID{6: 0x40, 8: 0x80, 15: 1}, DisplayName: "旧玩家",
 				ServerTick: 1, Position: mgl32.Vec3{1, 2, 3},
 			}); err != nil {
 				t.Fatal(err)
 			}
-			app.panel.visible = true
-			app.camera = client.Camera{Pos: mgl32.Vec3{99, 99, 99}, Yaw: 1, Pitch: 1}
-			app.worldTimeTicks = 18000
-			if err := app.furnace.Apply(network.FurnaceState{
+			if app.Panel() != nil {
+				app.Panel().SetVisible(true)
+			}
+			*app.Camera() = client.Camera{Pos: mgl32.Vec3{99, 99, 99}, Yaw: 1, Pitch: 1}
+			app.SetWorldTimeTicks(18000)
+			if err := app.Furnace().Apply(network.FurnaceState{
 				Furnace: core.FurnaceRef{Dimension: core.Overworld, Generation: 1},
 			}); err != nil {
 				t.Fatal(err)
 			}
-			if err := app.chest.Apply(network.ChestState{Chest: core.ContainerRef{
+			if err := app.Chest().Apply(network.ChestState{Chest: core.ContainerRef{
 				Dimension: core.Overworld, Kind: core.ContainerKindChest, Generation: 1,
 			}}); err != nil {
 				t.Fatal(err)
@@ -155,16 +157,16 @@ func TestContainerCaptureFixturesUseIndependentConfirmedMirrors(t *testing.T) {
 			if err := scene.Apply(app); err != nil {
 				t.Fatal(err)
 			}
-			if got, confirmed := app.inventory.State(); !confirmed || got != wantInventory {
+			if got, confirmed := app.Inventory().State(); !confirmed || got != wantInventory {
 				t.Fatalf("inventory=%+v confirmed=%v，想要 %+v/true", got, confirmed, wantInventory)
 			}
-			if !app.inventoryOpen || app.inventorySource != test.source {
-				t.Fatalf("open/source=%v/%d，想要 true/%d", app.inventoryOpen, app.inventorySource, test.source)
+			if !app.InventoryOpen() || app.InventorySource() != test.source {
+				t.Fatalf("open/source=%v/%d，想要 true/%d", app.InventoryOpen(), app.InventorySource(), test.source)
 			}
-			if app.panel.visible || len(app.remotePlayers.Presentations()) != 0 ||
-				app.worldTimeTicks != 6000 || app.camera != wantCamera {
+			if app.Panel().Visible() || len(app.RemotePlayers().Presentations()) != 0 ||
+				app.WorldTimeTicks() != 6000 || *app.Camera() != wantCamera {
 				t.Fatalf("reset 后 panel=%v remotes=%d time=%d camera=%+v",
-					app.panel.visible, len(app.remotePlayers.Presentations()), app.worldTimeTicks, app.camera)
+					app.Panel().Visible(), len(app.RemotePlayers().Presentations()), app.WorldTimeTicks(), app.Camera())
 			}
 			test.assert(t, app)
 		})
@@ -185,13 +187,15 @@ func TestCaptureMaterialsShowcaseFixtureUsesMirrorAndMesher(t *testing.T) {
 
 	mesher := client.NewMesher(assets.NewRegistry(), 1)
 	t.Cleanup(mesher.Close)
-	app := &application{mirror: client.NewMirror(), mesher: mesher}
+	app := &application.Application{}
+	app.SetMirror(client.NewMirror())
+	app.SetMesher(mesher)
 	if err := scene.Prepare(app); err != nil {
 		t.Fatal(err)
 	}
 	for z := int32(-1); z <= 1; z++ {
 		for x := int32(-1); x <= 1; x++ {
-			chunk, ok := app.mirror.Chunk(core.Overworld, core.ChunkPos{X: x, Z: z})
+			chunk, ok := app.Mirror().Chunk(core.Overworld, core.ChunkPos{X: x, Z: z})
 			if !ok || chunk.Revision != 2 {
 				t.Fatalf("chunk (%d,%d) = (%v,%v)，想要 revision 2", x, z, chunk, ok)
 			}
@@ -200,7 +204,7 @@ func TestCaptureMaterialsShowcaseFixtureUsesMirrorAndMesher(t *testing.T) {
 
 	assertBlock := func(position core.BlockPos, want core.BlockID) {
 		t.Helper()
-		got, loaded := app.mirror.BlockAt(core.Overworld, position)
+		got, loaded := app.Mirror().BlockAt(core.Overworld, position)
 		if !loaded || got != want {
 			t.Fatalf("BlockAt(%+v) = (%d,%v)，想要 (%d,true)", position, got, loaded, want)
 		}
@@ -249,7 +253,7 @@ func TestCaptureMaterialsShowcaseFixtureUsesMirrorAndMesher(t *testing.T) {
 	assertBlock(core.BlockPos{X: -7, Y: 0, Z: -1}, core.FarmlandWetID)
 	// 列外一格必须仍是空气：耕地不得越出声明的 2×2 格范围。
 	assertBlock(core.BlockPos{X: -9, Y: 0, Z: -1}, core.AirID)
-	if got := app.mesher.Stats().DirtySections; got == 0 {
+	if got := app.Mesher().Stats().DirtySections; got == 0 {
 		t.Fatal("材料展示装入后 mesher 没有 dirty section")
 	}
 
@@ -260,17 +264,16 @@ func TestCaptureMaterialsShowcaseFixtureUsesMirrorAndMesher(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	stateApp := &application{
-		remotePlayers: remotePlayers,
-		panel:         &panelState{visible: true},
-		inventoryOpen: true,
-	}
-	if err := stateApp.furnace.Apply(network.FurnaceState{
+	stateApp := application.NewPresentationApplicationForTest()
+	stateApp.SetRemotePlayers(remotePlayers)
+	stateApp.Panel().SetVisible(true)
+	stateApp.SetInventoryOpen(true)
+	if err := stateApp.Furnace().Apply(network.FurnaceState{
 		Furnace: core.FurnaceRef{Dimension: core.Overworld, Generation: 1},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := stateApp.chest.Apply(network.ChestState{
+	if err := stateApp.Chest().Apply(network.ChestState{
 		Chest: core.ContainerRef{
 			Dimension: core.Overworld, Kind: core.ContainerKindChest, Generation: 1,
 		},
@@ -279,32 +282,32 @@ func TestCaptureMaterialsShowcaseFixtureUsesMirrorAndMesher(t *testing.T) {
 	}
 	inventory := core.Inventory{}
 	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 1}
-	if err := stateApp.inventory.Apply(network.InventoryState{Inventory: inventory}); err != nil {
+	if err := stateApp.Inventory().Apply(network.InventoryState{Inventory: inventory}); err != nil {
 		t.Fatal(err)
 	}
 	if err := scene.Apply(stateApp); err != nil {
 		t.Fatal(err)
 	}
-	if stateApp.worldTimeTicks != 6000 ||
-		stateApp.camera.Pos != (mgl32.Vec3{0.5, 5.8, 13.5}) ||
-		stateApp.camera.Yaw != 0 || stateApp.camera.Pitch != -0.12 {
+	if stateApp.WorldTimeTicks() != 6000 ||
+		stateApp.Camera().Pos != (mgl32.Vec3{0.5, 5.8, 13.5}) ||
+		stateApp.Camera().Yaw != 0 || stateApp.Camera().Pitch != -0.12 {
 		t.Fatalf("场景状态错误: time=%d camera=%+v yaw=%v pitch=%v",
-			stateApp.worldTimeTicks, stateApp.camera.Pos, stateApp.camera.Yaw, stateApp.camera.Pitch)
+			stateApp.WorldTimeTicks(), stateApp.Camera().Pos, stateApp.Camera().Yaw, stateApp.Camera().Pitch)
 	}
-	if stateApp.inventoryOpen || stateApp.panel.visible {
+	if stateApp.InventoryOpen() || stateApp.Panel().Visible() {
 		t.Fatalf("界面状态未重置: inventoryOpen=%v panelVisible=%v",
-			stateApp.inventoryOpen, stateApp.panel.visible)
+			stateApp.InventoryOpen(), stateApp.Panel().Visible())
 	}
 	if len(remotePlayers.Presentations()) != 0 {
 		t.Fatal("远端玩家未重置")
 	}
-	if _, ok := stateApp.furnace.State(); ok {
+	if _, ok := stateApp.Furnace().State(); ok {
 		t.Fatal("熔炉镜像未重置")
 	}
-	if _, ok := stateApp.chest.State(); ok {
+	if _, ok := stateApp.Chest().State(); ok {
 		t.Fatal("箱子镜像未重置")
 	}
-	if got, confirmed := stateApp.inventory.State(); !confirmed || got != (core.Inventory{}) {
+	if got, confirmed := stateApp.Inventory().State(); !confirmed || got != (core.Inventory{}) {
 		t.Fatalf("inventory = %+v confirmed=%v，想要已确认空物品栏", got, confirmed)
 	}
 }
@@ -401,43 +404,43 @@ func TestCraftingCaptureScenesCoverGridsAndLegalOutputs(t *testing.T) {
 			}
 			app := newCaptureAICompanionState()
 			// 预置前一个场景可能留下的全部共享状态：Apply 必须全部覆盖。
-			if err := app.crafting.Apply(network.CraftingState{
+			if err := app.Crafting().Apply(network.CraftingState{
 				Size:  2,
 				Slots: [9]core.ItemStack{0: {Item: core.ItemDirt, Count: 9}},
 			}); err != nil {
 				t.Fatal(err)
 			}
-			if err := app.furnace.Apply(network.FurnaceState{
+			if err := app.Furnace().Apply(network.FurnaceState{
 				Furnace: core.FurnaceRef{Dimension: core.Overworld, Generation: 1},
 			}); err != nil {
 				t.Fatal(err)
 			}
-			if err := app.chest.Apply(network.ChestState{Chest: core.ContainerRef{
+			if err := app.Chest().Apply(network.ChestState{Chest: core.ContainerRef{
 				Dimension: core.Overworld, Kind: core.ContainerKindChest, Generation: 1,
 			}}); err != nil {
 				t.Fatal(err)
 			}
-			app.inventoryOpen = false
-			app.inventorySource = 44
+			app.SetInventoryOpen(false)
+			app.SetInventorySource(44)
 
 			if err := scene.Apply(app); err != nil {
 				t.Fatalf("应用场景: %v", err)
 			}
-			got, confirmed := app.crafting.State()
+			got, confirmed := app.Crafting().State()
 			if !confirmed || got != test.wantGrid {
 				t.Fatalf("网格=%+v confirmed=%v，想要 %+v/true", got, confirmed, test.wantGrid)
 			}
-			if !app.inventoryOpen || app.inventorySource != test.wantIndex {
+			if !app.InventoryOpen() || app.InventorySource() != test.wantIndex {
 				t.Fatalf("open/source=%v/%d，想要 true/%d",
-					app.inventoryOpen, app.inventorySource, test.wantIndex)
+					app.InventoryOpen(), app.InventorySource(), test.wantIndex)
 			}
-			if _, opened := app.furnace.State(); opened {
+			if _, opened := app.Furnace().State(); opened {
 				t.Fatal("合成场景没有显式清空熔炉镜像")
 			}
-			if _, opened := app.chest.State(); opened {
+			if _, opened := app.Chest().State(); opened {
 				t.Fatal("合成场景没有显式清空箱子镜像")
 			}
-			inventory, confirmed := app.inventory.State()
+			inventory, confirmed := app.Inventory().State()
 			if !confirmed || inventory.Hotbar.Slots[0].Item != core.ItemStone {
 				t.Fatalf("背包=%+v confirmed=%v，想要含石头的固定背包", inventory, confirmed)
 			}
@@ -463,33 +466,32 @@ func TestCaptureTargetBlockFeedbackFindsSceneByName(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	app := &application{
-		mirror:          client.NewMirror(),
-		mesher:          mesher,
-		predictor:       client.NewPredictor(),
-		remotePlayers:   remotePlayers,
-		panel:           &panelState{visible: true},
-		inventoryOpen:   true,
-		inventorySource: 12,
-	}
-	if err := app.predictor.Begin(network.PlayerState{
+	app := application.NewPresentationApplicationForTest()
+	app.SetMirror(client.NewMirror())
+	app.SetMesher(mesher)
+	app.SetPredictor(client.NewPredictor())
+	app.SetRemotePlayers(remotePlayers)
+	app.Panel().SetVisible(true)
+	app.SetInventoryOpen(true)
+	app.SetInventorySource(12)
+	if err := app.Predictor().Begin(network.PlayerState{
 		ServerTick: 1, Dimension: core.Overworld, Ready: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := app.furnace.Apply(network.FurnaceState{
+	if err := app.Furnace().Apply(network.FurnaceState{
 		Furnace: core.FurnaceRef{Dimension: core.Overworld, Generation: 1},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := app.chest.Apply(network.ChestState{Chest: core.ContainerRef{
+	if err := app.Chest().Apply(network.ChestState{Chest: core.ContainerRef{
 		Dimension: core.Overworld, Kind: core.ContainerKindChest, Generation: 1,
 	}}); err != nil {
 		t.Fatal(err)
 	}
 	inventory := core.Inventory{}
 	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 1}
-	if err := app.inventory.Apply(network.InventoryState{Inventory: inventory}); err != nil {
+	if err := app.Inventory().Apply(network.InventoryState{Inventory: inventory}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -507,46 +509,46 @@ func TestCaptureTargetBlockFeedbackFindsSceneByName(t *testing.T) {
 				want.SetBlock(x, targetPosition.Y, z, core.BrickID)
 				wantRevision = 2
 			}
-			gotHash, gotRevision, loaded := app.mirror.Hash(core.Overworld, position)
+			gotHash, gotRevision, loaded := app.Mirror().Hash(core.Overworld, position)
 			if !loaded || gotRevision != wantRevision || gotHash != want.Hash() {
 				t.Fatalf("chunk %+v hash/revision/loaded=(%x,%d,%v)，想要 (%x,%d,true)",
 					position, gotHash, gotRevision, loaded, want.Hash(), wantRevision)
 			}
 		}
 	}
-	if got := app.mesher.Stats().DirtySections; got == 0 {
+	if got := app.Mesher().Stats().DirtySections; got == 0 {
 		t.Fatal("目标夹具装入后 mesher 没有 dirty section")
 	}
 
 	if err := scene.Apply(app); err != nil {
 		t.Fatal(err)
 	}
-	if app.worldTimeTicks != 6000 || app.camera.Pos != (mgl32.Vec3{0.5, 3.5, 2.5}) ||
-		app.camera.Yaw != 0 || app.camera.Pitch != 0 {
+	if app.WorldTimeTicks() != 6000 || app.Camera().Pos != (mgl32.Vec3{0.5, 3.5, 2.5}) ||
+		app.Camera().Yaw != 0 || app.Camera().Pitch != 0 {
 		t.Fatalf("场景状态错误: time=%d camera=%+v yaw=%v pitch=%v",
-			app.worldTimeTicks, app.camera.Pos, app.camera.Yaw, app.camera.Pitch)
+			app.WorldTimeTicks(), app.Camera().Pos, app.Camera().Yaw, app.Camera().Pitch)
 	}
-	if app.inventoryOpen || app.inventorySource != -1 || app.panel.visible ||
-		len(app.remotePlayers.Presentations()) != 0 {
+	if app.InventoryOpen() || app.InventorySource() != -1 || app.Panel().Visible() ||
+		len(app.RemotePlayers().Presentations()) != 0 {
 		t.Fatalf("共享状态未清空: inventory=%v/%d panel=%v remotes=%d",
-			app.inventoryOpen, app.inventorySource, app.panel.visible,
-			len(app.remotePlayers.Presentations()))
+			app.InventoryOpen(), app.InventorySource(), app.Panel().Visible(),
+			len(app.RemotePlayers().Presentations()))
 	}
-	if _, opened := app.furnace.State(); opened {
+	if _, opened := app.Furnace().State(); opened {
 		t.Fatal("熔炉状态未清空")
 	}
-	if _, opened := app.chest.State(); opened {
+	if _, opened := app.Chest().State(); opened {
 		t.Fatal("箱子状态未清空")
 	}
-	if got, confirmed := app.inventory.State(); !confirmed || got != (core.Inventory{}) {
+	if got, confirmed := app.Inventory().State(); !confirmed || got != (core.Inventory{}) {
 		t.Fatalf("inventory=%+v confirmed=%v，想要已确认空物品栏", got, confirmed)
 	}
-	if got, ok := app.currentBlockTarget(); !ok || got != (blockTarget{
+	if got, ok := app.CurrentBlockTarget(); !ok || got != (application.BlockTarget{
 		Position: targetPosition,
 		Name:     "砖块",
 	}) {
 		t.Fatalf("currentBlockTarget()=%+v, %v，想要 %+v, true",
-			got, ok, blockTarget{Position: targetPosition, Name: "砖块"})
+			got, ok, application.BlockTarget{Position: targetPosition, Name: "砖块"})
 	}
 }
 
@@ -590,7 +592,8 @@ func TestCaptureSkylightTunnelSceneFixesPresentationState(t *testing.T) {
 		t.Fatal("capture 场景缺少完整 skylight-tunnel")
 	}
 	t.Run("空远端玩家列表", func(t *testing.T) {
-		app := &application{remotePlayers: client.NewRemotePlayers()}
+		app := application.NewPresentationApplicationForTest()
+		app.SetRemotePlayers(client.NewRemotePlayers())
 		if err := scene.Apply(app); err != nil {
 			t.Fatalf("空列表应用场景: %v", err)
 		}
@@ -608,35 +611,34 @@ func TestCaptureSkylightTunnelSceneFixesPresentationState(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	app := &application{
-		remotePlayers: remotePlayers,
-		panel:         &panelState{visible: true},
-		inventoryOpen: true,
-	}
+	app := application.NewPresentationApplicationForTest()
+	app.SetRemotePlayers(remotePlayers)
+	app.Panel().SetVisible(true)
+	app.SetInventoryOpen(true)
 	inventory := core.Inventory{}
 	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 1}
-	if err := app.inventory.Apply(network.InventoryState{Inventory: inventory}); err != nil {
+	if err := app.Inventory().Apply(network.InventoryState{Inventory: inventory}); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := scene.Apply(app); err != nil {
 		t.Fatal(err)
 	}
-	if app.worldTimeTicks != 6000 {
-		t.Fatalf("world time = %d，想要 6000", app.worldTimeTicks)
+	if app.WorldTimeTicks() != 6000 {
+		t.Fatalf("world time = %d，想要 6000", app.WorldTimeTicks())
 	}
-	if app.camera.Pos != (mgl32.Vec3{0.5, 2.8, 8.5}) || app.camera.Yaw != 0 || app.camera.Pitch != -0.04 {
-		t.Fatalf("camera = %+v yaw=%v pitch=%v", app.camera.Pos, app.camera.Yaw, app.camera.Pitch)
+	if app.Camera().Pos != (mgl32.Vec3{0.5, 2.8, 8.5}) || app.Camera().Yaw != 0 || app.Camera().Pitch != -0.04 {
+		t.Fatalf("camera = %+v yaw=%v pitch=%v", app.Camera().Pos, app.Camera().Yaw, app.Camera().Pitch)
 	}
-	if got, confirmed := app.inventory.State(); !confirmed || got != (core.Inventory{}) {
+	if got, confirmed := app.Inventory().State(); !confirmed || got != (core.Inventory{}) {
 		t.Fatalf("inventory = %+v confirmed=%v，想要已确认空物品栏", got, confirmed)
 	}
 	if got := remotePlayers.Presentations(); len(got) != 0 {
 		t.Fatalf("远端玩家未清空: %+v", got)
 	}
-	if app.inventoryOpen || app.panel.visible {
+	if app.InventoryOpen() || app.Panel().Visible() {
 		t.Fatalf("上个场景的界面状态未清空: inventoryOpen=%v panelVisible=%v",
-			app.inventoryOpen, app.panel.visible)
+			app.InventoryOpen(), app.Panel().Visible())
 	}
 }
 
@@ -655,14 +657,16 @@ func TestBlockLightRoomCaptureSceneIsRegistered(t *testing.T) {
 func TestPrepareBlockLightRoomUsesMirrorAndMesher(t *testing.T) {
 	airMesher := client.NewMesher(assets.NewRegistry(), 1)
 	t.Cleanup(airMesher.Close)
-	app := &application{mirror: client.NewMirror(), mesher: airMesher}
+	app := &application.Application{}
+	app.SetMirror(client.NewMirror())
+	app.SetMesher(airMesher)
 
 	if err := prepareCaptureAirNeighborhood(app); err != nil {
 		t.Fatal(err)
 	}
 	roomMesher := client.NewMesher(assets.NewRegistry(), 1)
 	t.Cleanup(roomMesher.Close)
-	app.mesher = roomMesher
+	app.SetMesher(roomMesher)
 	if got := roomMesher.Stats().DirtySections; got != 0 {
 		t.Fatalf("施加房间变化前 dirty sections = %d，想要 0", got)
 	}
@@ -671,7 +675,7 @@ func TestPrepareBlockLightRoomUsesMirrorAndMesher(t *testing.T) {
 	}
 	for z := int32(-1); z <= 1; z++ {
 		for x := int32(-1); x <= 1; x++ {
-			chunk, ok := app.mirror.Chunk(core.Overworld, core.ChunkPos{X: x, Z: z})
+			chunk, ok := app.Mirror().Chunk(core.Overworld, core.ChunkPos{X: x, Z: z})
 			if !ok || chunk.Revision != 2 {
 				t.Fatalf("chunk (%d,%d) = (%v,%v)，想要 revision 2", x, z, chunk, ok)
 			}
@@ -688,7 +692,7 @@ func TestPrepareBlockLightRoomUsesMirrorAndMesher(t *testing.T) {
 				if position == (core.BlockPos{X: 0, Y: 3, Z: -4}) {
 					want = core.LightBlockID
 				}
-				got, loaded := app.mirror.BlockAt(core.Overworld, position)
+				got, loaded := app.Mirror().BlockAt(core.Overworld, position)
 				if !loaded || got != want {
 					t.Fatalf("BlockAt(%+v) = (%d,%v)，想要 (%d,true)", position, got, loaded, want)
 				}
@@ -701,7 +705,7 @@ func TestPrepareBlockLightRoomUsesMirrorAndMesher(t *testing.T) {
 		{X: 0, Y: 3, Z: -11},
 		{X: 0, Y: 3, Z: 3},
 	} {
-		if got, loaded := app.mirror.BlockAt(core.Overworld, position); !loaded || got != core.AirID {
+		if got, loaded := app.Mirror().BlockAt(core.Overworld, position); !loaded || got != core.AirID {
 			t.Fatalf("房外 BlockAt(%+v) = (%d,%v)，想要 (AirID,true)", position, got, loaded)
 		}
 	}
@@ -731,22 +735,21 @@ func TestBlockLightRoomApplyResetsSharedPresentationState(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	app := &application{
-		remotePlayers: remotePlayers,
-		panel:         &panelState{visible: true},
-		inventoryOpen: true,
-	}
+	app := application.NewPresentationApplicationForTest()
+	app.SetRemotePlayers(remotePlayers)
+	app.Panel().SetVisible(true)
+	app.SetInventoryOpen(true)
 	inventory := core.Inventory{}
 	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 1}
-	if err := app.inventory.Apply(network.InventoryState{Inventory: inventory}); err != nil {
+	if err := app.Inventory().Apply(network.InventoryState{Inventory: inventory}); err != nil {
 		t.Fatal(err)
 	}
-	if err := app.furnace.Apply(network.FurnaceState{Furnace: core.FurnaceRef{
+	if err := app.Furnace().Apply(network.FurnaceState{Furnace: core.FurnaceRef{
 		Dimension: core.Overworld, Generation: 1,
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := app.chest.Apply(network.ChestState{Chest: core.ContainerRef{
+	if err := app.Chest().Apply(network.ChestState{Chest: core.ContainerRef{
 		Dimension: core.Overworld, Kind: core.ContainerKindChest, Generation: 1,
 	}}); err != nil {
 		t.Fatal(err)
@@ -755,32 +758,32 @@ func TestBlockLightRoomApplyResetsSharedPresentationState(t *testing.T) {
 	if err := scene.Apply(app); err != nil {
 		t.Fatal(err)
 	}
-	if app.worldTimeTicks != 18000 {
-		t.Fatalf("world time = %d，想要 18000", app.worldTimeTicks)
+	if app.WorldTimeTicks() != 18000 {
+		t.Fatalf("world time = %d，想要 18000", app.WorldTimeTicks())
 	}
-	if app.camera.Pos != (mgl32.Vec3{0.5, 2.8, 0.5}) || app.camera.Yaw != 0 || app.camera.Pitch != 0 {
-		t.Fatalf("camera = %+v yaw=%v pitch=%v", app.camera.Pos, app.camera.Yaw, app.camera.Pitch)
+	if app.Camera().Pos != (mgl32.Vec3{0.5, 2.8, 0.5}) || app.Camera().Yaw != 0 || app.Camera().Pitch != 0 {
+		t.Fatalf("camera = %+v yaw=%v pitch=%v", app.Camera().Pos, app.Camera().Yaw, app.Camera().Pitch)
 	}
-	if got, confirmed := app.inventory.State(); !confirmed || got != (core.Inventory{}) {
+	if got, confirmed := app.Inventory().State(); !confirmed || got != (core.Inventory{}) {
 		t.Fatalf("inventory = %+v confirmed=%v，想要已确认空物品栏", got, confirmed)
 	}
-	if got := app.remotePlayers.Presentations(); len(got) != 0 {
+	if got := app.RemotePlayers().Presentations(); len(got) != 0 {
 		t.Fatalf("远端玩家未清空: %+v", got)
 	}
-	if _, opened := app.furnace.State(); opened {
+	if _, opened := app.Furnace().State(); opened {
 		t.Fatal("熔炉状态未清空")
 	}
-	if _, opened := app.chest.State(); opened {
+	if _, opened := app.Chest().State(); opened {
 		t.Fatal("箱子状态未清空")
 	}
-	if app.inventoryOpen || app.panel.visible {
+	if app.InventoryOpen() || app.Panel().Visible() {
 		t.Fatalf("共享界面状态未清空: inventoryOpen=%v panelVisible=%v",
-			app.inventoryOpen, app.panel.visible)
+			app.InventoryOpen(), app.Panel().Visible())
 	}
 }
 
 func TestCaptureSkylightTunnelUnsettledErrorNamesScene(t *testing.T) {
-	app := newRemoteRenderApplication(t, &integrationGlyphSource{})
+	app := application.NewOffscreenRenderApplicationForTest(t, &application.IntegrationGlyphSource{}, 64, 64, config.Render{})
 	sections := make([]network.SectionData, core.SectionsPerChunk)
 	for y := range sections {
 		sections[y] = network.SectionData{
@@ -792,19 +795,19 @@ func TestCaptureSkylightTunnelUnsettledErrorNamesScene(t *testing.T) {
 	t.Cleanup(func() { captureSettleTimeout = oldTimeout })
 	scene := captureScene{
 		Name: "skylight-tunnel",
-		Prepare: func(app *application) error {
-			update, err := app.mirror.Apply(network.ChunkSnapshot{
+		Prepare: func(app *application.Application) error {
+			update, err := app.Mirror().Apply(network.ChunkSnapshot{
 				Dimension: core.Overworld, Revision: 1, Sections: sections,
 			})
 			if err != nil {
 				return err
 			}
-			release := app.mesher.BlockForTest(update.Dirty[0])
+			release := app.Mesher().BlockForTest(update.Dirty[0])
 			t.Cleanup(release)
-			app.mesher.MarkDirty(update.Dirty...)
+			app.Mesher().MarkDirty(update.Dirty...)
 			return nil
 		},
-		Apply: func(*application) error { return nil },
+		Apply: func(*application.Application) error { return nil },
 	}
 	dir := t.TempDir()
 	err := captureOne(app, dir, scene, false)
@@ -837,14 +840,16 @@ func TestTorchNightCaptureSceneIsRegistered(t *testing.T) {
 func TestPrepareTorchNightUsesMirrorAndMesher(t *testing.T) {
 	airMesher := client.NewMesher(assets.NewRegistry(), 1)
 	t.Cleanup(airMesher.Close)
-	app := &application{mirror: client.NewMirror(), mesher: airMesher}
+	app := &application.Application{}
+	app.SetMirror(client.NewMirror())
+	app.SetMesher(airMesher)
 
 	if err := prepareCaptureAirNeighborhood(app); err != nil {
 		t.Fatal(err)
 	}
 	roomMesher := client.NewMesher(assets.NewRegistry(), 1)
 	t.Cleanup(roomMesher.Close)
-	app.mesher = roomMesher
+	app.SetMesher(roomMesher)
 	if got := roomMesher.Stats().DirtySections; got != 0 {
 		t.Fatalf("施加房间变化前 dirty sections = %d，想要 0", got)
 	}
@@ -853,7 +858,7 @@ func TestPrepareTorchNightUsesMirrorAndMesher(t *testing.T) {
 	}
 	for z := int32(-1); z <= 1; z++ {
 		for x := int32(-1); x <= 1; x++ {
-			chunk, ok := app.mirror.Chunk(core.Overworld, core.ChunkPos{X: x, Z: z})
+			chunk, ok := app.Mirror().Chunk(core.Overworld, core.ChunkPos{X: x, Z: z})
 			if !ok || chunk.Revision != 2 {
 				t.Fatalf("chunk (%d,%d) = (%v,%v)，想要 revision 2", x, z, chunk, ok)
 			}
@@ -875,7 +880,7 @@ func TestPrepareTorchNightUsesMirrorAndMesher(t *testing.T) {
 				if torch, ok := torches[position]; ok {
 					want = torch
 				}
-				got, loaded := app.mirror.BlockAt(core.Overworld, position)
+				got, loaded := app.Mirror().BlockAt(core.Overworld, position)
 				if !loaded || got != want {
 					t.Fatalf("BlockAt(%+v) = (%d,%v)，想要 (%d,true)", position, got, loaded, want)
 				}
@@ -888,7 +893,7 @@ func TestPrepareTorchNightUsesMirrorAndMesher(t *testing.T) {
 		{X: 0, Y: 3, Z: 3},
 		{X: 0, Y: 7, Z: -6},
 	} {
-		if got, loaded := app.mirror.BlockAt(core.Overworld, position); !loaded || got != core.AirID {
+		if got, loaded := app.Mirror().BlockAt(core.Overworld, position); !loaded || got != core.AirID {
 			t.Fatalf("房外 BlockAt(%+v) = (%d,%v)，想要 (AirID,true)", position, got, loaded)
 		}
 	}
@@ -899,7 +904,7 @@ func TestPrepareTorchNightUsesMirrorAndMesher(t *testing.T) {
 		{X: -6, Y: 2, Z: -5},
 		{X: 6, Y: 2, Z: -6},
 	} {
-		if got, loaded := app.mirror.BlockAt(core.Overworld, support); !loaded || got != core.StoneID {
+		if got, loaded := app.Mirror().BlockAt(core.Overworld, support); !loaded || got != core.StoneID {
 			t.Fatalf("火把支撑 BlockAt(%+v) = (%d,%v)，想要 (StoneID,true)", support, got, loaded)
 		}
 	}
@@ -923,22 +928,21 @@ func TestTorchNightApplyResetsSharedPresentationState(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	app := &application{
-		remotePlayers: remotePlayers,
-		panel:         &panelState{visible: true},
-		inventoryOpen: true,
-	}
+	app := application.NewPresentationApplicationForTest()
+	app.SetRemotePlayers(remotePlayers)
+	app.Panel().SetVisible(true)
+	app.SetInventoryOpen(true)
 	inventory := core.Inventory{}
 	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 1}
-	if err := app.inventory.Apply(network.InventoryState{Inventory: inventory}); err != nil {
+	if err := app.Inventory().Apply(network.InventoryState{Inventory: inventory}); err != nil {
 		t.Fatal(err)
 	}
-	if err := app.furnace.Apply(network.FurnaceState{Furnace: core.FurnaceRef{
+	if err := app.Furnace().Apply(network.FurnaceState{Furnace: core.FurnaceRef{
 		Dimension: core.Overworld, Generation: 1,
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := app.chest.Apply(network.ChestState{Chest: core.ContainerRef{
+	if err := app.Chest().Apply(network.ChestState{Chest: core.ContainerRef{
 		Dimension: core.Overworld, Kind: core.ContainerKindChest, Generation: 1,
 	}}); err != nil {
 		t.Fatal(err)
@@ -947,27 +951,27 @@ func TestTorchNightApplyResetsSharedPresentationState(t *testing.T) {
 	if err := scene.Apply(app); err != nil {
 		t.Fatal(err)
 	}
-	if app.worldTimeTicks != 18000 {
-		t.Fatalf("world time = %d，想要 18000（夜晚：室内亮度只由方块光决定）", app.worldTimeTicks)
+	if app.WorldTimeTicks() != 18000 {
+		t.Fatalf("world time = %d，想要 18000（夜晚：室内亮度只由方块光决定）", app.WorldTimeTicks())
 	}
-	if app.camera.Pos != (mgl32.Vec3{0.5, 2.8, 0.5}) || app.camera.Yaw != 0 || app.camera.Pitch != 0 {
-		t.Fatalf("camera = %+v yaw=%v pitch=%v", app.camera.Pos, app.camera.Yaw, app.camera.Pitch)
+	if app.Camera().Pos != (mgl32.Vec3{0.5, 2.8, 0.5}) || app.Camera().Yaw != 0 || app.Camera().Pitch != 0 {
+		t.Fatalf("camera = %+v yaw=%v pitch=%v", app.Camera().Pos, app.Camera().Yaw, app.Camera().Pitch)
 	}
-	if got, confirmed := app.inventory.State(); !confirmed || got != (core.Inventory{}) {
+	if got, confirmed := app.Inventory().State(); !confirmed || got != (core.Inventory{}) {
 		t.Fatalf("inventory = %+v confirmed=%v，想要已确认空物品栏", got, confirmed)
 	}
-	if got := app.remotePlayers.Presentations(); len(got) != 0 {
+	if got := app.RemotePlayers().Presentations(); len(got) != 0 {
 		t.Fatalf("远端玩家未清空: %+v", got)
 	}
-	if _, opened := app.furnace.State(); opened {
+	if _, opened := app.Furnace().State(); opened {
 		t.Fatal("熔炉镜像未清空")
 	}
-	if _, opened := app.chest.State(); opened {
+	if _, opened := app.Chest().State(); opened {
 		t.Fatal("箱子镜像未清空")
 	}
-	if app.inventoryOpen || app.panel.visible {
+	if app.InventoryOpen() || app.Panel().Visible() {
 		t.Fatalf("共享界面状态未清空: inventoryOpen=%v panelVisible=%v",
-			app.inventoryOpen, app.panel.visible)
+			app.InventoryOpen(), app.Panel().Visible())
 	}
 }
 
@@ -975,46 +979,18 @@ func TestTorchNightApplyResetsSharedPresentationState(t *testing.T) {
 // 离屏渲染 application：torch-night 的像素断言经它复用 captureSceneImage 的
 // 完整链路（预热、装夹具、收敛、回读）。渲染器是离屏设备，不创建也不聚焦
 // 任何前台窗口；无 GPU 适配器时跳过（与既有渲染测试同口径）。材质用内嵌
-// 默认材质包，与 golden 抓帧路径看到的是同一份像素。
-func newTorchNightRenderApplication(t *testing.T) *application {
+// 默认材质包，与 golden 抓帧路径看到的同一份像素；相机沿用电离屏替身基线、
+// 只把远平面放宽到正式 capture 的 2000。
+func newTorchNightRenderApplication(t *testing.T) *application.Application {
 	t.Helper()
-	renderer, err := client.NewRenderer(captureWidth, captureHeight)
-	if errors.Is(err, client.ErrNoGPUAdapter) {
-		t.Skip("无 GPU 适配器")
+	app := application.NewOffscreenRenderApplicationForTest(
+		t, &application.IntegrationGlyphSource{}, captureWidth, captureHeight,
+		config.Defaults().Render,
+	)
+	*app.Camera() = client.Camera{
+		FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
+		Near: 0.1, Far: 2000,
 	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	registry := assets.NewDefaultRegistry()
-	layers, pixels := registry.AtlasPixels()
-	renderer.UploadAtlas(layers, pixels)
-	renderer.UploadUIFont(render.EmbeddedCJKFont())
-	glyphs := &integrationGlyphSource{}
-	app := &application{
-		renderer:        renderer,
-		scheduler:       render.NewSectionScheduler(renderer, applicationUploadPerFrame),
-		frameWidth:      captureWidth,
-		frameHeight:     captureHeight,
-		nameTagRenderer: render.NewNameTagLayouter(glyphs),
-		hotbarRenderer:  hud.NewHotbarLayout(glyphs, registry),
-		itemDrops:       client.NewItemDrops(),
-		remotePlayers:   client.NewRemotePlayers(),
-		companions:      &client.Companions{},
-		remoteNameTags:  make([]render.NameTag, 0, maxFrameNameTags),
-		mirror:          client.NewMirror(),
-		predictor:       client.NewPredictor(),
-		mesher:          client.NewMesher(registry, 1),
-		camera: client.Camera{
-			FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
-			Near: 0.1, Far: 2000,
-		},
-		loadedChunks: make(map[core.ChunkPos]struct{}),
-		// 渲染配置取默认值（视距 32）：零值会让 scheduler.DropOutside 在每帧
-		// 把相机区块之外的区段全部丢弃，场景只剩出生区块的一角。
-		render: config.Defaults().Render,
-	}
-	app.releaseResources = app.releaseOwnedResources
-	t.Cleanup(func() { _ = app.Close() })
 	return app
 }
 
@@ -1115,7 +1091,7 @@ func TestTorchNightScenePixelsShowLightFalloffAndCutout(t *testing.T) {
 	if got := img.Bounds(); got != image.Rect(0, 0, captureWidth, captureHeight) {
 		t.Fatalf("抓帧尺寸=%v，想要 %dx%d", got, captureWidth, captureHeight)
 	}
-	camera := app.camera
+	camera := *app.Camera()
 
 	t.Run("近亮远暗", func(t *testing.T) {
 		near := torchNightPatchLuma(t, img, torchNightProject(t, camera, mgl32.Vec3{1.0, 1.0, -3.0}))

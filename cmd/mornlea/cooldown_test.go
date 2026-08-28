@@ -1,7 +1,10 @@
 package main
 
 import (
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"testing"
+
+	"github.com/channing771/mornlea/internal/config"
 	"time"
 )
 
@@ -16,13 +19,13 @@ func TestBenchmarkCooldownIsFixedAndNonZero(t *testing.T) {
 }
 
 func TestBenchmarkCooldownDoesNotSubmitRenderWork(t *testing.T) {
-	app := newRemoteRenderApplication(t, &integrationGlyphSource{})
-	framesBefore := app.renderer.FrameCalls()
+	app := application.NewOffscreenRenderApplicationForTest(t, &application.IntegrationGlyphSource{}, 64, 64, config.Render{})
+	framesBefore := app.Renderer().FrameCalls()
 
 	// 冷却期间只允许窗口事件泵，不得提交任何渲染工作。
 	runBenchmarkCooldown(app, 10*time.Millisecond)
 
-	if got := app.renderer.FrameCalls(); got != framesBefore {
+	if got := app.Renderer().FrameCalls(); got != framesBefore {
 		t.Fatalf("冷却期间触发 %d 次 render FFI,想要 %d", got, framesBefore)
 	}
 }

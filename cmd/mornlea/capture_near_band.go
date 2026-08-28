@@ -105,8 +105,8 @@ type nearBandGuard struct {
 }
 
 // newNearBandGuard 按抓帧时的相机位姿与远环装配事实构造断言。center
-// 是远环带中心 tile(字段 `lodTileCenter`),inner 是 `lodNearTileRadius` 推导的
-// 内半径,outer 是 `lodFarTileRadius` 推导的远环外半径;`shellWired` 为假
+// 是远环带中心 tile(字段 `lodTileCenter`),inner 是 `LodNearTileRadius` 推导的
+// 内半径,outer 是 `LodFarTileRadius` 推导的远环外半径;`shellWired` 为假
 // (禁用/benchmark 路径)时其余参数不参与。
 func newNearBandGuard(
 	camera client.Camera, center lod.TilePos, inner, outer int, shellWired bool,

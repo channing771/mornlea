@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
@@ -67,46 +68,45 @@ func TestHUDCaptureSurvivalFeedbackFixtureRestoresState(t *testing.T) {
 	originalMining := hud.MiningOverlay{
 		Active: true, ProgressTicks: 1, RequiredTicks: 2, Harvestable: true,
 	}
-	app := &application{
-		predictor:     originalPredictor,
-		camera:        client.Camera{Yaw: 0, Pitch: -0.25},
-		miningOverlay: originalMining,
-	}
+	app := &application.Application{}
+	app.SetPredictor(originalPredictor)
+	*app.Camera() = client.Camera{Yaw: 0, Pitch: -0.25}
+	app.SetMiningOverlay(originalMining)
 
 	restore, err := applyCaptureHUDFixture(app, scene.HUD)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if app.predictor == originalPredictor {
+	if app.Predictor() == originalPredictor {
 		t.Fatal("HUD fixture 没有使用独立 predictor")
 	}
-	if got, ready := app.predictor.State(); !ready || got != wantState {
+	if got, ready := app.Predictor().State(); !ready || got != wantState {
 		t.Fatalf("fixture physics=%+v/%v，想要 %+v/true", got, ready, wantState)
 	}
-	if got, ready := app.predictor.Health(); !ready || got != wantFixture.Health {
+	if got, ready := app.Predictor().Health(); !ready || got != wantFixture.Health {
 		t.Fatalf("fixture health=%d/%v，想要 %d/true", got, ready, wantFixture.Health)
 	}
-	if got, ready := app.predictor.Oxygen(); !ready || got != wantFixture.Oxygen {
+	if got, ready := app.Predictor().Oxygen(); !ready || got != wantFixture.Oxygen {
 		t.Fatalf("fixture oxygen=%d/%v，想要 %d/true", got, ready, wantFixture.Oxygen)
 	}
-	if got, ready := app.predictor.Hunger(); !ready || got != wantFixture.Hunger {
+	if got, ready := app.Predictor().Hunger(); !ready || got != wantFixture.Hunger {
 		t.Fatalf("fixture hunger=%d/%v，想要 %d/true", got, ready, wantFixture.Hunger)
 	}
-	if app.miningOverlay != wantFixture.Mining {
-		t.Fatalf("fixture mining=%+v，想要 %+v", app.miningOverlay, wantFixture.Mining)
+	if app.MiningOverlay() != wantFixture.Mining {
+		t.Fatalf("fixture mining=%+v，想要 %+v", app.MiningOverlay(), wantFixture.Mining)
 	}
 
 	restore()
-	if app.predictor != originalPredictor || app.miningOverlay != originalMining {
+	if app.Predictor() != originalPredictor || app.MiningOverlay() != originalMining {
 		t.Fatalf("首次 restore 后 predictor/mining=%p/%+v，想要 %p/%+v",
-			app.predictor, app.miningOverlay, originalPredictor, originalMining)
+			app.Predictor(), app.MiningOverlay(), originalPredictor, originalMining)
 	}
 	restore()
-	if app.predictor != originalPredictor || app.miningOverlay != originalMining {
+	if app.Predictor() != originalPredictor || app.MiningOverlay() != originalMining {
 		t.Fatalf("重复 restore 后 predictor/mining=%p/%+v，想要 %p/%+v",
-			app.predictor, app.miningOverlay, originalPredictor, originalMining)
+			app.Predictor(), app.MiningOverlay(), originalPredictor, originalMining)
 	}
-	if got, ready := app.predictor.Hunger(); !ready || got != 17 {
+	if got, ready := app.Predictor().Hunger(); !ready || got != 17 {
 		t.Fatalf("重复 restore 后 hunger=%d/%v，想要 17/true", got, ready)
 	}
 
@@ -116,11 +116,11 @@ func TestHUDCaptureSurvivalFeedbackFixtureRestoresState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("对同一 app 第二次 apply: %v", err)
 	}
-	if got, ready := app.predictor.Hunger(); !ready || got != core.MaxHunger {
+	if got, ready := app.Predictor().Hunger(); !ready || got != core.MaxHunger {
 		t.Fatalf("第二次 apply hunger=%d/%v，想要 %d/true", got, ready, core.MaxHunger)
 	}
 	secondRestore()
-	if app.predictor != originalPredictor || app.miningOverlay != originalMining {
+	if app.Predictor() != originalPredictor || app.MiningOverlay() != originalMining {
 		t.Fatal("第二次 apply/restore 没有恢复完整 predictor 与 mining")
 	}
 }
@@ -138,7 +138,9 @@ func TestHUDCaptureFixtureSuccessDeferAndErrorPreserveState(t *testing.T) {
 		t.Fatal(err)
 	}
 	originalMining := hud.MiningOverlay{Active: true, ProgressTicks: 2, RequiredTicks: 5}
-	app := &application{predictor: originalPredictor, miningOverlay: originalMining}
+	app := &application.Application{}
+	app.SetPredictor(originalPredictor)
+	app.SetMiningOverlay(originalMining)
 
 	func() {
 		restore, err := applyCaptureHUDFixture(app, &captureHUDFixture{
@@ -148,11 +150,11 @@ func TestHUDCaptureFixtureSuccessDeferAndErrorPreserveState(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer restore()
-		if app.predictor == originalPredictor {
+		if app.Predictor() == originalPredictor {
 			t.Fatal("成功 apply 没有安装临时 predictor")
 		}
 	}()
-	if app.predictor != originalPredictor || app.miningOverlay != originalMining {
+	if app.Predictor() != originalPredictor || app.MiningOverlay() != originalMining {
 		t.Fatal("defer restore 没有恢复完整 predictor 与 mining")
 	}
 
@@ -162,10 +164,10 @@ func TestHUDCaptureFixtureSuccessDeferAndErrorPreserveState(t *testing.T) {
 	if err == nil || restore != nil {
 		t.Fatalf("非法 hunger apply 的 error/restore nil=%v/%v，想要 true/true", err != nil, restore == nil)
 	}
-	if app.predictor != originalPredictor || app.miningOverlay != originalMining {
+	if app.Predictor() != originalPredictor || app.MiningOverlay() != originalMining {
 		t.Fatal("错误返回改变了 predictor 或 mining")
 	}
-	if got, ready := app.predictor.Hunger(); !ready || got != 13 {
+	if got, ready := app.Predictor().Hunger(); !ready || got != 13 {
 		t.Fatalf("错误返回后 hunger=%d/%v，想要 13/true", got, ready)
 	}
 }

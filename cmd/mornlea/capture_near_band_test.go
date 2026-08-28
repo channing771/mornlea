@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/lod"
@@ -26,12 +27,12 @@ func repaintRow(img *image.NRGBA, y int, value uint8) {
 	}
 }
 
-func goldenControlTestApplication() *application {
-	return &application{
-		camera:       nearBandTestCamera(60),
-		lodScheduler: &lod.Scheduler{},
-		render:       config.Defaults().Render,
-	}
+func goldenControlTestApplication() *application.Application {
+	app := &application.Application{}
+	*app.Camera() = nearBandTestCamera(60)
+	app.SetLODScheduler(&lod.Scheduler{})
+	app.SetRender(config.Defaults().Render)
+	return app
 }
 
 // TestWaitUntilLoadedPairContinuesDrainingControlThatFinishedFirst 锁住两个
@@ -39,10 +40,10 @@ func goldenControlTestApplication() *application {
 // 前者仍必须继续推进并 drain receiver。若退回为先完整加载一个再加载另一个，
 // firstCalls 会停在 1，闲置一侧的有界 inbox 会在真实 4,489 个快照期间溢出。
 func TestWaitUntilLoadedPairContinuesDrainingControlThatFinishedFirst(t *testing.T) {
-	first, second := &application{}, &application{}
+	first, second := &application.Application{}, &application.Application{}
 	firstCalls, secondCalls := 0, 0
 	err := waitUntilLoadedPairWithStep(first, second, time.Second,
-		func(app *application) (bool, error) {
+		func(app *application.Application) (bool, error) {
 			switch app {
 			case first:
 				firstCalls++
@@ -83,7 +84,7 @@ func TestTextureGoldenUpdateControlRejectsProtectedRowsBeforeGoldenWrite(t *test
 	outDir := filepath.Join(root, "out")
 	err := runGoldenUpdateControlWithCapture(
 		lodOn, lodOff, outDir,
-		func(app *application, scene captureScene) (*image.NRGBA, error) {
+		func(app *application.Application, scene captureScene) (*image.NRGBA, error) {
 			if scene.Name != "far-horizon" {
 				t.Fatalf("control scene = %q，want far-horizon", scene.Name)
 			}
@@ -117,7 +118,7 @@ func TestTextureGoldenUpdateControlAllowsOnlyFarBandDifference(t *testing.T) {
 	var captured []string
 	err := runGoldenUpdateControlWithCapture(
 		lodOn, lodOff, t.TempDir(),
-		func(app *application, scene captureScene) (*image.NRGBA, error) {
+		func(app *application.Application, scene captureScene) (*image.NRGBA, error) {
 			captured = append(captured, scene.Name)
 			if app == lodOn {
 				return onFrame, nil

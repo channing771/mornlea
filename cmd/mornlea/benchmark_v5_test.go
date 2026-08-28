@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/client"
 )
 
@@ -257,18 +258,18 @@ func validBenchmarkReport() client.PerfReport {
 }
 
 func TestSaveRecorderPercentilesAndReset(t *testing.T) {
-	recorder := newSaveRecorder(100)
+	recorder := application.NewSaveRecorder(100)
 	for millisecond := 1; millisecond <= 100; millisecond++ {
-		recorder.add(time.Duration(millisecond) * time.Millisecond)
+		recorder.Add(time.Duration(millisecond) * time.Millisecond)
 	}
-	got := recorder.summary()
+	got := recorder.Summary()
 	if got.Snapshots != 100 || got.P50MS != 50 || got.P95MS != 95 ||
 		got.P99MS != 99 || got.MaxMS != 100 {
 		t.Fatalf("save summary=%+v，想要 100 samples 与 50/95/99/100ms", got)
 	}
 
-	recorder.reset()
-	if got := recorder.summary(); got.Snapshots != 0 || got.P50MS != 0 ||
+	recorder.Reset()
+	if got := recorder.Summary(); got.Snapshots != 0 || got.P50MS != 0 ||
 		got.P95MS != 0 || got.P99MS != 0 || got.MaxMS != 0 {
 		t.Fatalf("reset 后 save summary=%+v，想要全零", got)
 	}
@@ -277,19 +278,19 @@ func TestSaveRecorderPercentilesAndReset(t *testing.T) {
 func TestSaveRecorderIsConcurrencySafeAndBounded(t *testing.T) {
 	const workers = 8
 	const samplesPerWorker = 1000
-	recorder := newSaveRecorder(workers * samplesPerWorker)
+	recorder := application.NewSaveRecorder(workers * samplesPerWorker)
 	var group sync.WaitGroup
 	for worker := range workers {
 		group.Add(1)
 		go func() {
 			defer group.Done()
 			for sample := range samplesPerWorker {
-				recorder.add(time.Duration(worker+sample+1) * time.Microsecond)
+				recorder.Add(time.Duration(worker+sample+1) * time.Microsecond)
 			}
 		}()
 	}
 	group.Wait()
-	got := recorder.summary()
+	got := recorder.Summary()
 	if got.Snapshots != workers*samplesPerWorker {
 		t.Fatalf("concurrent snapshots=%d，想要 %d", got.Snapshots, workers*samplesPerWorker)
 	}
@@ -298,11 +299,11 @@ func TestSaveRecorderIsConcurrencySafeAndBounded(t *testing.T) {
 		t.Fatalf("concurrent percentiles 非单调: %+v", got)
 	}
 
-	bounded := newSaveRecorder(2)
-	bounded.add(time.Millisecond)
-	bounded.add(2 * time.Millisecond)
-	bounded.add(3 * time.Millisecond)
-	if got := bounded.summary(); got.Snapshots != 2 || got.P50MS != 2 || got.MaxMS != 3 {
+	bounded := application.NewSaveRecorder(2)
+	bounded.Add(time.Millisecond)
+	bounded.Add(2 * time.Millisecond)
+	bounded.Add(3 * time.Millisecond)
+	if got := bounded.Summary(); got.Snapshots != 2 || got.P50MS != 2 || got.MaxMS != 3 {
 		t.Fatalf("bounded recorder=%+v，想要仅保留最新 2 个样本", got)
 	}
 }

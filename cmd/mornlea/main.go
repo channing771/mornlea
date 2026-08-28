@@ -12,33 +12,32 @@ import (
 	"runtime/debug"
 	"slices"
 
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/logging"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/profile"
 )
 
-const steadyFrameMeshWorkMax = 64
-
 func init() {
 	runtime.LockOSThread()
 }
 
 type runDependencies struct {
-	newApplication func(applicationOptions) (*application, error)
+	newApplication func(application.Options) (*application.Application, error)
 	loadIdentity   func(*string) (network.Identity, error)
-	runInteractive func(*application) error
-	runBenchmark   func(*application, string) error
-	runCapture     func(*application, string, bool) error
+	runInteractive func(*application.Application) error
+	runBenchmark   func(*application.Application, string) error
+	runCapture     func(*application.Application, string, bool) error
 	// `runGoldenUpdateControl` 只服务显式 baseline update；普通 capture 与游戏不调用。
-	runGoldenUpdateControl func(*application, *application, string) error
+	runGoldenUpdateControl func(*application.Application, *application.Application, string) error
 }
 
 func run(args []string) error {
 	return runWithDependencies(args, runDependencies{
-		newApplication:         newApplication,
+		newApplication:         application.New,
 		loadIdentity:           loadApplicationIdentity,
-		runInteractive:         runInteractive,
+		runInteractive:         application.RunInteractive,
 		runBenchmark:           runBenchmark,
 		runCapture:             runCapture,
 		runGoldenUpdateControl: runGoldenUpdateControl,
@@ -192,7 +191,7 @@ func loadApplicationIdentity(requestedName *string) (network.Identity, error) {
 //
 // 环境变量名为空（loopback http 免密钥的本地联调形态）返回空串；变量未设置
 // 或值为空同样返回空串——是否构成启动错误由 server.NewHost 的密钥边界统一
-// 裁决，这里不做二次判断。密钥值只流入内存中的 applicationOptions，绝不写
+// 裁决，这里不做二次判断。密钥值只流入内存中的 application.Options，绝不写
 // 日志或配置文件。
 func resolveAIAPIKey(settings companion.ModelSettings) string {
 	if settings.APIKeyEnv == "" {
