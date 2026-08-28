@@ -138,8 +138,18 @@ func (a *Application) NameTagRenderer() *render.NameTagRenderer { return a.nameT
 // LODScheduler 返回远环 LOD 调度器；禁用与 benchmark 观察者路径为 nil。
 func (a *Application) LODScheduler() *lod.Scheduler { return a.lodScheduler }
 
+// PanelState 是 `panelState` 的导出别名：`Panel()` 的返回类型需要能被
+// capture 子包的消费端接口签名命名，而具体结构体保持非导出。别名与方法集
+// 零变化，不得当作扩大面板内部访问面的依据。
+type PanelState = panelState
+
 // Panel 返回调试面板交互状态；未启用 Dev 时为 nil。
 func (a *Application) Panel() *panelState { return a.panel }
+
+// ChatInput 是 `chatInput` 的导出别名：`ChatInput()` 的返回类型需要能被
+// capture 子包的消费端接口签名命名，而具体结构体保持非导出。别名与方法集
+// 零变化，不得当作扩大聊天输入内部访问面的依据。
+type ChatInput = chatInput
 
 // ChatInput 返回聊天输入框状态（可调用 Open/Append/Cancel 等动作）。
 func (a *Application) ChatInput() *chatInput { return &a.chatInput }

@@ -1,4 +1,4 @@
-package main
+package capture
 
 // capture_water_underwater_test.go 钉住水下视觉场景必须位于 capture 场景表末尾的
 // 位置性契约，避免权威高 tick 浸没状态污染后续场景。

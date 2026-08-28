@@ -1,4 +1,4 @@
-package main
+package capture
 
 import (
 	"errors"
@@ -27,8 +27,10 @@ const (
 	captureHeight = application.CaptureHeight
 )
 
-// captureDrainMax 是抓帧期间每帧处理的服务端消息上限，取值与 benchmark 一致。
-const captureDrainMax = benchmarkMessageDrainMax
+// captureDrainMax 是抓帧期间每帧处理的服务端消息上限，取值与 benchmark 域的
+// `benchmarkMessageDrainMax` 一致；两个域各自持有同值字面量，benchmark 迁入
+// 独立包时随加载等待函数族一并下沉 app 收敛为单一常量。
+const captureDrainMax = 4096
 
 // captureGlyphSettleFrames 是 Apply 之后、真正回读之前额外渲染的帧数，
 // 用来让字形图集的异步光栅化收敛。GlyphAtlas.Request 只把符文入队，
@@ -65,10 +67,10 @@ type captureScene struct {
 	// WarmupFrames 是 Apply 之前空跑的帧数，用来让上传预算与网格化收敛。
 	WarmupFrames int
 	// Prepare 在权威消息完成最后一次 drain 后装入固定镜像夹具。
-	Prepare func(*application.Application) error
+	Prepare func(SceneApplication) error
 	// Apply 在最后一帧渲染前执行，是场景对呈现状态的全部干预。
 	// 它跑在 drainServerMessages 之后，因此设置的值不会被当帧的服务端消息覆盖。
-	Apply func(*application.Application) error
+	Apply func(SceneApplication) error
 	// HUD 是仅在 capture 收敛与最终帧期间生效的临时生存状态。
 	HUD *captureHUDFixture
 	// Menu 可选，非 nil 时本场景以该快照渲染一帧 egui 主菜单（capture 专用）。
@@ -87,7 +89,7 @@ type captureScene struct {
 	// 存在的理由：Apply 跑在收敛帧之前，而收敛帧会推进帧间隔与权威 tick，
 	// 在 Apply 里设的值到最后一帧已经被覆盖。目前只有调试面板需要它——它的
 	// 读数区直接显示帧时与 tick，这两者在同一台机器上重复抓帧也会变。
-	PinVolatile func(*application.Application) error
+	PinVolatile func(SceneApplication) error
 }
 
 // captureContainerInventory 返回箱子和熔炉场景共用的 36 格已确认背包，刻意在
@@ -132,7 +134,7 @@ var captureScenes = []captureScene{
 	{
 		Name:         "terrain-noon",
 		WarmupFrames: 8,
-		Apply: func(app *application.Application) error {
+		Apply: func(app SceneApplication) error {
 			// 6000 tick 是正午，日光与太阳高度都取到最大值，
 			// 是昼夜管线上最容易看出偏差的相位。
 			app.SetWorldTimeTicks(6000)
@@ -147,7 +149,7 @@ var captureScenes = []captureScene{
 	{
 		Name:         "hud-hotbar-health",
 		WarmupFrames: 8,
-		Apply: func(app *application.Application) error {
+		Apply: func(app SceneApplication) error {
 			app.SetWorldTimeTicks(6000)
 			// 与 terrain-noon 一样显式钉死相机姿态：登录首条权威 PlayerState 的
 			// ResetView 会把 Yaw/Pitch 覆盖成出生朝向，不显式设置就不是常量。
@@ -179,7 +181,7 @@ var captureScenes = []captureScene{
 	{
 		Name:         "hud-survival-feedback",
 		WarmupFrames: 8,
-		Apply: func(app *application.Application) error {
+		Apply: func(app SceneApplication) error {
 			app.SetWorldTimeTicks(6000)
 			app.Camera().Yaw = 0
 			app.Camera().Pitch = -0.25
@@ -208,7 +210,7 @@ var captureScenes = []captureScene{
 	{
 		Name:         "avatar-nametag",
 		WarmupFrames: 8,
-		Apply: func(app *application.Application) error {
+		Apply: func(app SceneApplication) error {
 			app.SetWorldTimeTicks(6000)
 			app.Camera().Yaw = 0
 			app.Camera().Pitch = -0.25
@@ -239,7 +241,7 @@ var captureScenes = []captureScene{
 	{
 		Name:         "inventory-crafting",
 		WarmupFrames: 8,
-		Apply: func(app *application.Application) error {
+		Apply: func(app SceneApplication) error {
 			app.SetWorldTimeTicks(6000)
 			app.Camera().Yaw = 0
 			app.Camera().Pitch = -0.25
@@ -297,7 +299,7 @@ var captureScenes = []captureScene{
 		// scenario 迁移时统一生成。
 		Name:         "workbench-crafting",
 		WarmupFrames: 8,
-		Apply: func(app *application.Application) error {
+		Apply: func(app SceneApplication) error {
 			app.SetWorldTimeTicks(6000)
 			app.Camera().Yaw = 0
 			app.Camera().Pitch = -0.25
@@ -349,7 +351,7 @@ var captureScenes = []captureScene{
 	{
 		Name:         "chest-container",
 		WarmupFrames: 8,
-		Apply: func(app *application.Application) error {
+		Apply: func(app SceneApplication) error {
 			if err := resetCapturePresentation(app); err != nil {
 				return err
 			}
@@ -386,7 +388,7 @@ var captureScenes = []captureScene{
 	{
 		Name:         "furnace-container",
 		WarmupFrames: 8,
-		Apply: func(app *application.Application) error {
+		Apply: func(app SceneApplication) error {
 			if err := resetCapturePresentation(app); err != nil {
 				return err
 			}
@@ -426,7 +428,7 @@ var captureScenes = []captureScene{
 		// 全项目唯一大量绘制拉丁文本的界面，窄字符丢失在它身上最明显。
 		Name:         "debug-panel",
 		WarmupFrames: 8,
-		Apply: func(app *application.Application) error {
+		Apply: func(app SceneApplication) error {
 			app.SetWorldTimeTicks(6000)
 			app.Camera().Yaw = 0
 			app.Camera().Pitch = -0.25
@@ -449,7 +451,7 @@ var captureScenes = []captureScene{
 			app.Panel().SetVisible(true)
 			return nil
 		},
-		PinVolatile: func(app *application.Application) error {
+		PinVolatile: func(app SceneApplication) error {
 			// 面板读数区直接显示帧时与权威 tick，两者都随机器速度变化：
 			// 同机重复抓帧实测 tick 在 412..416 之间、帧时在 3.3..4.3ms 之间，
 			// 足以让基线比对超出阈值。
@@ -465,7 +467,7 @@ var captureScenes = []captureScene{
 		Name:         "skylight-tunnel",
 		WarmupFrames: 8,
 		Prepare:      prepareSkylightTunnel,
-		Apply: func(app *application.Application) error {
+		Apply: func(app SceneApplication) error {
 			app.SetWorldTimeTicks(6000)
 			app.Camera().Pos = mgl32.Vec3{0.5, 2.8, 8.5}
 			app.Camera().Yaw = 0
@@ -495,7 +497,7 @@ var captureScenes = []captureScene{
 		Name:         "block-light-room",
 		WarmupFrames: 8,
 		Prepare:      prepareBlockLightRoom,
-		Apply: func(app *application.Application) error {
+		Apply: func(app SceneApplication) error {
 			app.SetWorldTimeTicks(18000)
 			app.Camera().Pos = mgl32.Vec3{0.5, 2.8, 0.5}
 			app.Camera().Yaw = 0
@@ -527,7 +529,7 @@ var captureScenes = []captureScene{
 		Name:         "torch-night",
 		WarmupFrames: 8,
 		Prepare:      prepareTorchNightRoom,
-		Apply: func(app *application.Application) error {
+		Apply: func(app SceneApplication) error {
 			app.SetWorldTimeTicks(18000)
 			app.Camera().Pos = mgl32.Vec3{0.5, 2.8, 0.5}
 			app.Camera().Yaw = 0
@@ -550,7 +552,7 @@ var captureScenes = []captureScene{
 		Name:         "materials-showcase",
 		WarmupFrames: 8,
 		Prepare:      prepareMaterialsShowcase,
-		Apply: func(app *application.Application) error {
+		Apply: func(app SceneApplication) error {
 			app.SetWorldTimeTicks(6000)
 			app.Camera().Pos = mgl32.Vec3{0.5, 5.8, 13.5}
 			app.Camera().Yaw = 0
@@ -570,7 +572,7 @@ var captureScenes = []captureScene{
 		Name:         "target-block-feedback",
 		WarmupFrames: 8,
 		Prepare:      prepareTargetBlockFeedback,
-		Apply: func(app *application.Application) error {
+		Apply: func(app SceneApplication) error {
 			app.SetWorldTimeTicks(6000)
 			app.Camera().Pos = mgl32.Vec3{0.5, 3.5, 2.5}
 			app.Camera().Yaw, app.Camera().Pitch = 0, 0
@@ -605,7 +607,7 @@ var captureScenes = []captureScene{
 		Name:         "water-surface-slope",
 		WarmupFrames: 8,
 		Prepare:      prepareWaterBasin,
-		Apply: func(app *application.Application) error {
+		Apply: func(app SceneApplication) error {
 			if err := resetCapturePresentation(app); err != nil {
 				return err
 			}
@@ -647,7 +649,7 @@ var captureScenes = []captureScene{
 			// 复用交互主菜单的按钮表（四个按钮、进入/设置/退出可用、多人禁用）。
 			Buttons: application.MenuButtons(),
 		},
-		Apply: func(app *application.Application) error {
+		Apply: func(app SceneApplication) error {
 			if err := resetCapturePresentation(app); err != nil {
 				return err
 			}
@@ -681,7 +683,7 @@ var captureScenes = []captureScene{
 				WindowSize:      config.WindowSize960x540,
 			},
 		},
-		Apply: func(app *application.Application) error {
+		Apply: func(app SceneApplication) error {
 			if err := resetCapturePresentation(app); err != nil {
 				return err
 			}
@@ -734,9 +736,9 @@ var captureScenes = []captureScene{
 // 取一个与真实加载时长无关的常量即可，数值本身没有语义。
 const capturePinnedServerTick = 400
 
-// runCapture 依次跑完全部视觉场景。updateGolden 为真时把抓到的图写进 golden 基线；
+// RunCapture 依次跑完全部视觉场景。updateGolden 为真时把抓到的图写进 golden 基线；
 // 为假时与已有基线比对，超阈值的场景把实拍图与差异图写进 dir 并返回错误。
-func runCapture(app *application.Application, dir string, updateGolden bool) error {
+func RunCapture(app SceneApplication, dir string, updateGolden bool) error {
 	if err := prepareCaptureApplication(app); err != nil {
 		return err
 	}
@@ -755,11 +757,11 @@ func runCapture(app *application.Application, dir string, updateGolden bool) err
 	return errors.Join(errs...)
 }
 
-func prepareCaptureApplication(app *application.Application) error {
+func prepareCaptureApplication(app SceneApplication) error {
 	if err := validateCaptureApplication(app); err != nil {
 		return err
 	}
-	// 复用 benchmark 的加载等待：同样的视距、同样的收敛判据。
+	// 加载等待与 benchmark 域共用同一套判据（本包 capture_load.go 副本）：同样的视距、同样的收敛判据。
 	// 抓帧不另设视距，否则图里所见与真实客户端所见就会分歧，golden 随之失去意义。
 	if _, err := waitUntilLoaded(app, 5*time.Minute); err != nil {
 		return fmt.Errorf("固定场景加载: %w", err)
@@ -769,7 +771,7 @@ func prepareCaptureApplication(app *application.Application) error {
 
 // validateCaptureApplication 检查无头 capture 的固定 framebuffer 契约。单
 // application 与 LOD on/off control 都必须在开始消费服务端快照前通过它。
-func validateCaptureApplication(app *application.Application) error {
+func validateCaptureApplication(app SceneApplication) error {
 	if width, height := app.FramebufferSize(); width != captureWidth || height != captureHeight {
 		return fmt.Errorf("capture framebuffer=%dx%d，要求精确 %dx%d",
 			width, height, captureWidth, captureHeight)
@@ -784,10 +786,10 @@ func validateCaptureApplication(app *application.Application) error {
 // 初始加载。二者在构造后 Host 已开始发送完整快照，故不能先完整加载其中
 // 一个；否则另一侧的 bounded receiver 会在闲置时溢出。交错仅调用现有帧
 // 路径，不并发使用任何 renderer。
-func prepareGoldenUpdateControls(lodOn, lodOff *application.Application) error {
+func prepareGoldenUpdateControls(lodOn, lodOff SceneApplication) error {
 	for _, control := range []struct {
 		name string
-		app  *application.Application
+		app  SceneApplication
 	}{
 		{name: "LOD-on", app: lodOn},
 		{name: "LOD-off", app: lodOff},
@@ -802,7 +804,7 @@ func prepareGoldenUpdateControls(lodOn, lodOff *application.Application) error {
 	return nil
 }
 
-func captureOne(app *application.Application, dir string, scene captureScene, updateGolden bool) error {
+func captureOne(app SceneApplication, dir string, scene captureScene, updateGolden bool) error {
 	img, err := captureSceneImage(app, scene)
 	if err != nil {
 		return err
@@ -831,7 +833,7 @@ func captureOne(app *application.Application, dir string, scene captureScene, up
 
 // `captureSceneImage` 只完成既有场景的预热、状态装入、收敛和回读，不写文件。
 // update control 与正式 `captureOne` 共用它，保证两条路径没有第二套场景渲染逻辑。
-func captureSceneImage(app *application.Application, scene captureScene) (*image.NRGBA, error) {
+func captureSceneImage(app SceneApplication, scene captureScene) (*image.NRGBA, error) {
 	for i := 0; i < scene.WarmupFrames; i++ {
 		if _, err := app.Frame(captureDrainMax, captureDrainMax, physics.FixedDelta); err != nil {
 			return nil, fmt.Errorf("预热第 %d 帧: %w", i, err)
@@ -904,7 +906,7 @@ func captureSceneImage(app *application.Application, scene captureScene) (*image
 }
 
 func applyCaptureHUDFixture(
-	app *application.Application,
+	app SceneApplication,
 	fixture *captureHUDFixture,
 ) (func(), error) {
 	originalPredictor, originalMining := app.Predictor(), app.MiningOverlay()
@@ -940,26 +942,26 @@ func applyCaptureHUDFixture(
 	}, nil
 }
 
-// `runGoldenUpdateControl` 在两个 disposable application 上只抓取 far-horizon，
+// `RunGoldenUpdateControl` 在两个 disposable application 上只抓取 far-horizon，
 // 并在调用方可能写入任一 golden 前完成当前 LOD on/off 帧的近环比较。
-func runGoldenUpdateControl(lodOn, lodOff *application.Application, dir string) error {
+func RunGoldenUpdateControl(lodOn, lodOff SceneApplication, dir string) error {
 	if err := prepareGoldenUpdateControls(lodOn, lodOff); err != nil {
 		return err
 	}
 	return runGoldenUpdateControlWithCapture(
 		lodOn, lodOff, dir,
-		func(app *application.Application, scene captureScene) (*image.NRGBA, error) {
+		func(app SceneApplication, scene captureScene) (*image.NRGBA, error) {
 			return captureSceneImage(app, scene)
 		},
 	)
 }
 
 // `runGoldenUpdateControlWithCapture` 保留最小的抓帧 seam，让测试用合成当前帧
-// 覆盖 fail-closed guard；生产调用仍由 `runGoldenUpdateControl` 走真实完整链路。
+// 覆盖 fail-closed guard；生产调用仍由 `RunGoldenUpdateControl` 走真实完整链路。
 func runGoldenUpdateControlWithCapture(
-	lodOn, lodOff *application.Application,
+	lodOn, lodOff SceneApplication,
 	dir string,
-	capture func(*application.Application, captureScene) (*image.NRGBA, error),
+	capture func(SceneApplication, captureScene) (*image.NRGBA, error),
 ) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("创建抓帧输出目录 %s: %w", dir, err)

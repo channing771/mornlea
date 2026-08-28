@@ -1,6 +1,6 @@
 //go:build darwin
 
-package main
+package capture
 
 // capture_test_helpers_test.go：capture 场景主题测试的共享夹具（场景表名称
 // 查找、AI 伙伴确定性呈现状态的构造与断言）。白盒构造下沉为 app 包的导出

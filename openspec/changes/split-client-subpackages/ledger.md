@@ -49,6 +49,22 @@
 - Ruling: 基线继承的任务编号注释（`eating_overlay_test.go:5` 等 4 处）不在
   本 change 清理 — 本 change 只清理自身触碰改写的行；文件整体搬迁不算行级
   改写，混入清理违反最小聚焦。已誊入 proposal「延期与放弃」。
+- Ruling: 加载等待函数族在 capture 包内暂置同语义副本（Task 3 实施修订）—
+  `waitUntilLoaded`/`waitUntilLoadedPair` 定义在 benchmark 域
+  `benchmark_measure.go` 却被 capture 生产与测试引用，capture 成包后不可引用
+  main；benchmark 文件本 change 的 capture 任务禁改、app 导出面在 Task 3 冻结，
+  三条约束下唯一可行解是 capture 新建 `capture_load.go` 承载副本并把
+  `captureDrainMax` 改为同值字面量，Task 4 迁移 benchmark 时下沉 app 收敛。
+  已同步修订 design Decision 3 与文件簇映射。
+- Ruling: `ai_model_settings_test.go` 留 main 包（design 初稿举例否决）— 按
+  「Test 函数直接调用的生产符号」判定，其两个测试只调用 main 域
+  `runWithDependencies`/`runDependencies` 与 app 导出面，grep 核实无任何
+  capture 生产符号引用（初稿的「capture」字样来自错误信息字符串）。
+- Ruling: app 包为 capture 接口导出 `PanelState`/`ChatInput` 两个类型别名
+  （Task 3 对「零新增导出」的唯一突破）— `Panel()`/`ChatInput()` 返回未导出
+  类型，capture 无法命名返回类型则 `*Application` 无法隐式实现消费端接口，
+  debug-panel 等场景必需这两个面；别名不改变任何方法集与行为，具体结构体
+  保持非导出。已同步修订 design Decision 2。
 
 ## Review Log
 

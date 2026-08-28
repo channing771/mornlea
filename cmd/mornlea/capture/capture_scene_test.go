@@ -1,4 +1,4 @@
-package main
+package capture
 
 import (
 	"image"
@@ -795,7 +795,7 @@ func TestCaptureSkylightTunnelUnsettledErrorNamesScene(t *testing.T) {
 	t.Cleanup(func() { captureSettleTimeout = oldTimeout })
 	scene := captureScene{
 		Name: "skylight-tunnel",
-		Prepare: func(app *application.Application) error {
+		Prepare: func(app SceneApplication) error {
 			update, err := app.Mirror().Apply(network.ChunkSnapshot{
 				Dimension: core.Overworld, Revision: 1, Sections: sections,
 			})
@@ -807,7 +807,7 @@ func TestCaptureSkylightTunnelUnsettledErrorNamesScene(t *testing.T) {
 			app.Mesher().MarkDirty(update.Dirty...)
 			return nil
 		},
-		Apply: func(*application.Application) error { return nil },
+		Apply: func(SceneApplication) error { return nil },
 	}
 	dir := t.TempDir()
 	err := captureOne(app, dir, scene, false)

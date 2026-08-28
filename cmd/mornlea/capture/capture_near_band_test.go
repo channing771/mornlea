@@ -1,4 +1,4 @@
-package main
+package capture
 
 import (
 	"image"
@@ -43,7 +43,7 @@ func TestWaitUntilLoadedPairContinuesDrainingControlThatFinishedFirst(t *testing
 	first, second := &application.Application{}, &application.Application{}
 	firstCalls, secondCalls := 0, 0
 	err := waitUntilLoadedPairWithStep(first, second, time.Second,
-		func(app *application.Application) (bool, error) {
+		func(app SceneApplication) (bool, error) {
 			switch app {
 			case first:
 				firstCalls++
@@ -68,7 +68,7 @@ func TestWaitUntilLoadedPairContinuesDrainingControlThatFinishedFirst(t *testing
 func TestTextureGoldenUpdateControlRejectsProtectedRowsBeforeGoldenWrite(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
-	goldenDir := filepath.Join("cmd", "mornlea", "testdata", "golden")
+	goldenDir := filepath.Join("cmd", "mornlea", "capture", "testdata", "golden")
 	if err := os.MkdirAll(goldenDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestTextureGoldenUpdateControlRejectsProtectedRowsBeforeGoldenWrite(t *test
 	outDir := filepath.Join(root, "out")
 	err := runGoldenUpdateControlWithCapture(
 		lodOn, lodOff, outDir,
-		func(app *application.Application, scene captureScene) (*image.NRGBA, error) {
+		func(app SceneApplication, scene captureScene) (*image.NRGBA, error) {
 			if scene.Name != "far-horizon" {
 				t.Fatalf("control scene = %q，want far-horizon", scene.Name)
 			}
@@ -118,7 +118,7 @@ func TestTextureGoldenUpdateControlAllowsOnlyFarBandDifference(t *testing.T) {
 	var captured []string
 	err := runGoldenUpdateControlWithCapture(
 		lodOn, lodOff, t.TempDir(),
-		func(app *application.Application, scene captureScene) (*image.NRGBA, error) {
+		func(app SceneApplication, scene captureScene) (*image.NRGBA, error) {
 			captured = append(captured, scene.Name)
 			if app == lodOn {
 				return onFrame, nil

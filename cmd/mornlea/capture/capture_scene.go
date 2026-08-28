@@ -1,4 +1,4 @@
-package main
+package capture
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ import (
 
 var captureAICompanionID = companion.ID{0: 0x42, 6: 0x40, 8: 0x80, 15: 0x14}
 
-func prepareAICompanion(app *application.Application) error {
+func prepareAICompanion(app SceneApplication) error {
 	if err := prepareCaptureAirNeighborhood(app); err != nil {
 		return err
 	}
@@ -42,7 +42,7 @@ func prepareAICompanion(app *application.Application) error {
 	})
 }
 
-func applyAICompanionCaptureState(app *application.Application) error {
+func applyAICompanionCaptureState(app SceneApplication) error {
 	if app.RemotePlayers() == nil || app.Companions() == nil || app.ChatEvents() == nil || app.ItemDrops() == nil {
 		return fmt.Errorf("ai-companion 需要完整客户端呈现镜像")
 	}
@@ -105,7 +105,7 @@ func applyAICompanionCaptureState(app *application.Application) error {
 	return nil
 }
 
-func prepareSkylightTunnel(app *application.Application) error {
+func prepareSkylightTunnel(app SceneApplication) error {
 	if err := prepareCaptureAirNeighborhood(app); err != nil {
 		return err
 	}
@@ -165,7 +165,7 @@ func prepareSkylightTunnel(app *application.Application) error {
 	return nil
 }
 
-func prepareCaptureAirNeighborhood(app *application.Application) error {
+func prepareCaptureAirNeighborhood(app SceneApplication) error {
 	for z := int32(-1); z <= 1; z++ {
 		for x := int32(-1); x <= 1; x++ {
 			sections := make([]network.SectionData, core.SectionsPerChunk)
@@ -187,7 +187,7 @@ func prepareCaptureAirNeighborhood(app *application.Application) error {
 	return nil
 }
 
-func prepareBlockLightRoom(app *application.Application) error {
+func prepareBlockLightRoom(app SceneApplication) error {
 	if err := prepareCaptureAirNeighborhood(app); err != nil {
 		return err
 	}
@@ -202,7 +202,7 @@ func prepareBlockLightRoom(app *application.Application) error {
 // 另一端，远角与近处火把的距离差足够大，近亮远暗在画面里是一段可测的
 // 梯度而不是两个相邻色块。夹具经客户端只读镜像装入，不依赖任何服务端
 // 模拟推进。
-func prepareTorchNightRoom(app *application.Application) error {
+func prepareTorchNightRoom(app SceneApplication) error {
 	if err := prepareCaptureAirNeighborhood(app); err != nil {
 		return err
 	}
@@ -215,7 +215,7 @@ func prepareTorchNightRoom(app *application.Application) error {
 // 石块，夹具因此与真实放置结果一致、不是悬空摆拍。墙面形态选 ±X 两种：
 // 这两种形态的可见斜板朝 ±Z，正对纵深方向平视的相机恰好各看到一片完整
 // 的火柄斜影。
-func applyCaptureTorchNightChanges(app *application.Application) error {
+func applyCaptureTorchNightChanges(app SceneApplication) error {
 	blocks := make(map[core.ChunkPos]map[core.BlockPos]core.BlockID)
 	setBlock := func(position core.BlockPos, block core.BlockID) {
 		chunk := position.Chunk()
@@ -249,7 +249,7 @@ func applyCaptureTorchNightChanges(app *application.Application) error {
 	return applyCaptureBlocks(app, blocks, captureWaterBasinChunkRadius, "火把夜景")
 }
 
-func applyCaptureBlockLightRoomChanges(app *application.Application) error {
+func applyCaptureBlockLightRoomChanges(app SceneApplication) error {
 	blocks := make(map[core.ChunkPos]map[core.BlockPos]core.BlockID)
 	setBlock := func(position core.BlockPos, block core.BlockID) {
 		chunk := position.Chunk()
@@ -305,7 +305,7 @@ func applyCaptureBlockLightRoomChanges(app *application.Application) error {
 	return nil
 }
 
-func prepareMaterialsShowcase(app *application.Application) error {
+func prepareMaterialsShowcase(app SceneApplication) error {
 	if err := prepareCaptureAirNeighborhood(app); err != nil {
 		return err
 	}
@@ -389,7 +389,7 @@ func prepareMaterialsShowcase(app *application.Application) error {
 	return nil
 }
 
-func prepareTargetBlockFeedback(app *application.Application) error {
+func prepareTargetBlockFeedback(app SceneApplication) error {
 	if err := prepareCaptureAirNeighborhood(app); err != nil {
 		return err
 	}
@@ -405,7 +405,7 @@ func prepareTargetBlockFeedback(app *application.Application) error {
 	})
 }
 
-func applyCaptureMirror(app *application.Application, message network.ServerMessage) error {
+func applyCaptureMirror(app SceneApplication, message network.ServerMessage) error {
 	update, err := app.Mirror().Apply(message)
 	if err != nil {
 		return err
@@ -432,7 +432,7 @@ const captureWaterBasinChunkRadius = 1
 //     三种材质在水下的可辨识度是「水下变暗但不立刻归零」的直接证据。
 //
 // 夹具全部走客户端只读镜像装入，不依赖任何流体模拟推进，因此与机器速度无关。
-func prepareWaterBasin(app *application.Application) error {
+func prepareWaterBasin(app SceneApplication) error {
 	if err := prepareCaptureAirNeighborhood(app); err != nil {
 		return err
 	}
@@ -513,7 +513,7 @@ func prepareWaterBasin(app *application.Application) error {
 // 每个区块内按 world.ChunkBlockIndex 排序后再发，保证同一份夹具在任何机器上
 // 都产生逐字节相同的 BlockChanges——map 的遍历序不能进线上字节。
 func applyCaptureBlocks(
-	app *application.Application,
+	app SceneApplication,
 	blocks map[core.ChunkPos]map[core.BlockPos]core.BlockID,
 	chunkRadius int32,
 	label string,
@@ -550,7 +550,7 @@ func applyCaptureBlocks(
 // 聊天输入与格式化缓存——不显式清掉就会静默出现在水面上。清理项与
 // applyAICompanionCaptureState 自己开头的那段一一对应：谁留下的谁负责被清掉，
 // 但清理的落点必须在**后一个**场景，因为场景表没有 teardown 钩子。
-func resetCapturePresentation(app *application.Application) error {
+func resetCapturePresentation(app SceneApplication) error {
 	if app.RemotePlayers() == nil || app.Companions() == nil ||
 		app.ChatEvents() == nil || app.ItemDrops() == nil {
 		return fmt.Errorf("水景场景需要完整客户端呈现镜像")
@@ -605,7 +605,7 @@ const captureUnderwaterOxygen = 160
 //
 // 注入走非 Reset 分支：Reset 会命中 Predictor.Begin，而 Begin 手上没有方块视图，
 // 按其文档把标志置为 false，画面就会变成"人在水里但视觉没入水"。
-func applyWaterUnderwaterCaptureState(app *application.Application) error {
+func applyWaterUnderwaterCaptureState(app SceneApplication) error {
 	if err := resetCapturePresentation(app); err != nil {
 		return err
 	}
@@ -653,7 +653,7 @@ func applyWaterUnderwaterCaptureState(app *application.Application) error {
 // 天空、雾过渡带、壳带、近景四段齐备。相机 y=110 保持在壳上界(112)之下,
 // 与近处不变断言的截止推导自洽。a.center 与 lodTileCenter 刻意不动:场景
 // 不得触发近环 DropOutside 或远环增量入队,收敛域与 terrain-noon 同源。
-func applyFarHorizonCaptureState(app *application.Application) error {
+func applyFarHorizonCaptureState(app SceneApplication) error {
 	if err := resetCapturePresentation(app); err != nil {
 		return err
 	}

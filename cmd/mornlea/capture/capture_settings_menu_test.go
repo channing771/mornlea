@@ -1,4 +1,4 @@
-package main
+package capture
 
 // capture_settings_menu_test.go 钉住设置页 capture 使用正式 client ABI v9
 // layout v2 及确定性的非默认设置快照。

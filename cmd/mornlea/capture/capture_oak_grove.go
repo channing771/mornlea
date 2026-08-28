@@ -1,11 +1,10 @@
-package main
+package capture
 
 import (
 	"fmt"
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
@@ -16,7 +15,7 @@ import (
 const captureOakGroveSeed int64 = 42
 
 // prepareOakGrove 把固定 3×3 生成区块经既有网络快照和 mirror 路径装入。
-func prepareOakGrove(app *application.Application) error {
+func prepareOakGrove(app SceneApplication) error {
 	// 注水必须与抓帧进程自己的世界一致：抓帧路径把 FluidEnabled 钉成编译期
 	// 默认值（见 main.go 的 resolveConfig 与 options.Application.FluidEnabled），
 	// 而本夹具的种子与抓帧世界的默认种子同为 42，覆盖的又只是区块 (-1..1)。
@@ -61,7 +60,7 @@ func captureOakGroveSnapshot(chunk *world.Chunk) network.ChunkSnapshot {
 	}
 }
 
-func applyOakGroveCaptureState(app *application.Application) error {
+func applyOakGroveCaptureState(app SceneApplication) error {
 	app.SetWorldTimeTicks(6000)
 	app.Camera().Pos = mgl32.Vec3{-3.5, 75.5, 12.5}
 	app.Camera().Yaw = 0

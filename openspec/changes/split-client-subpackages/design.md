@@ -39,7 +39,7 @@
 |---|---|---|
 | main（保留） | `main.go`、`options.go` | `options_test.go`、`run_test.go`（含原 `storage_test.go` 的 main 域入口测试与原 `app_settings_test.go` 的 `TestRunPassesRawResolvedAndWindowSettingsWithAutomationIsolation`） |
 | app | `app.go`、`app_startup.go`、`app_dependencies.go`、`app_lifecycle.go`、`app_frame.go`、`app_render.go`、`app_input.go`、`interactive.go`、`target_block.go`、`chat.go`、`app_messages.go`、`app_menu.go`、`app_pause.go`、`app_settings.go`、`debug_panel.go`、`damage_feedback.go`、`app_metrics.go`、`app_audio.go`、`app_lod.go` | `app_*_test.go` 全系、`interactive_test.go`、`chat_test.go`、`debug_panel_test.go`、`target_block_test.go`、`app_test_helpers_test.go`、`presentation_conversion_test.go`、`app_protocol_test.go`、`damage_feedback_test.go`、`eating_overlay_test.go`、`health_hud_test.go`、`storage_test.go`（store 选择主题）及其他仅引用 app 域符号的测试 |
-| capture | `capture.go`、`capture_scene.go`、`capture_near_band.go`、`capture_oak_grove.go`、`capture_image.go`、`visual_compare.go` | 13 个 `capture_*_test.go`、`visual_compare_test.go`、引用 capture 场景表的测试（如 `ai_model_settings_test.go`，按符号引用判定） |
+| capture | `capture.go`、`capture_scene.go`、`capture_near_band.go`、`capture_oak_grove.go`、`capture_image.go`、`visual_compare.go`；Task 3 新增 `scene_application.go`（消费端接口 `SceneApplication`）与 `capture_load.go`（加载等待函数族，见 Decision 3 实施修订） | 12 个 `capture_*_test.go`、`visual_compare_test.go`；经符号引用核实，`ai_model_settings_test.go` 的 Test 函数只调用 main 域 `runWithDependencies`/`runDependencies` 与 app 导出面、不引用任何 capture 生产符号，留 main（design 初稿的举例按判定规则否决） |
 | benchmark | `benchmark.go`、`benchmark_measure.go`、`benchmark_report.go`、`multiplayer_benchmark.go`、`multiplayer_benchmark_server.go`、`multiplayer_benchmark_transport.go`、`multiplayer_probe_epoch.go` | `benchmark_*_test.go`、`multiplayer_probe_epoch_test.go`、`multiplayer_capacity_test.go`、`gpu_batch_test.go`、`cooldown_test.go`、`benchmark_helpers_test.go`、`benchmark_server_race_helpers_test.go`、`benchmark_server_norace_helpers_test.go` |
 
 Task 2 期间的 main 侧临时归属：capture 专属夹具（`captureSceneByName` 等）
@@ -75,11 +75,27 @@ capture、benchmark 在各自包内定义所需能力的接口（Go 消费端接
 接口方法集以「迁移完成后 capture/benchmark 实际引用为准」，允许收敛重复
 方法；禁止为对称性添加无人消费的方法。
 
+Task 3 实施修订：`app.Panel()` 与 `app.ChatInput()` 的返回类型 `panelState`/
+`chatInput` 未导出，capture 无法在接口声明里命名这两个返回类型，`*Application`
+因此无法隐式实现包含这两个方法的接口，而 debug-panel 等场景必需这两个访问面。
+最小处置：app 包导出两个类型别名 `PanelState = panelState`、
+`ChatInput = chatInput`（具体结构体保持非导出，方法集与行为零变化），
+capture 的接口签名写 `*application.PanelState`/`*application.ChatInput`。
+
 ### 3. 共享常量下沉 app
 
 `captureDrainMax = benchmarkMessageDrainMax` 等跨 capture/benchmark 共享的
 常量移入 app 包导出，capture 与 benchmark 保持互不依赖。仅被其中一方使用
 的常量随域迁移。
+
+Task 3 实施修订：下沉时机落在 benchmark 迁移任务。加载等待函数族
+（`waitUntilLoaded`、`loadedChunkTarget`、`applicationLoadComplete`、
+`waitUntilLoadedPair`、`waitUntilLoadedPairWithStep`）定义在 benchmark 域的
+`benchmark_measure.go`，却同时被 capture 生产与测试引用；capture 独立成包后
+无法引用 main。Task 3 在 capture 包内新建 `capture_load.go` 承载同语义副本
+（benchmark 文件零触碰、app 零新增导出），`captureDrainMax` 同步改为 capture
+内同值字面量；Task 4 把 benchmark 迁入独立包时，本函数族与 drain 常量一并
+下沉 app，两份副本收敛为单一实现。
 
 ### 4. golden 资产 `git mv` 随迁，常量同步
 

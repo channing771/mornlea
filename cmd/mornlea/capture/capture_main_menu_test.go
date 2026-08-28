@@ -1,4 +1,4 @@
-package main
+package capture
 
 // capture_main_menu_test.go 钉住正式主菜单 capture 快照、按钮语义以及它与
 // settings-menu、far-horizon 的相对位置。

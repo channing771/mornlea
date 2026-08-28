@@ -1,4 +1,4 @@
-package main
+package capture
 
 // capture_ai_companion_test.go 钉住 AI 伙伴视觉场景清除全部前序客户端呈现状态，
 // 避免共享 `app.Application` 把旧实体、容器、反馈或聊天缓存带入伙伴 golden。

@@ -13,6 +13,7 @@ import (
 	"slices"
 
 	application "github.com/channing771/mornlea/cmd/mornlea/app"
+	"github.com/channing771/mornlea/cmd/mornlea/capture"
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/logging"
 	"github.com/channing771/mornlea/internal/network"
@@ -35,12 +36,18 @@ type runDependencies struct {
 
 func run(args []string) error {
 	return runWithDependencies(args, runDependencies{
-		newApplication:         application.New,
-		loadIdentity:           loadApplicationIdentity,
-		runInteractive:         application.RunInteractive,
-		runBenchmark:           runBenchmark,
-		runCapture:             runCapture,
-		runGoldenUpdateControl: runGoldenUpdateControl,
+		newApplication: application.New,
+		loadIdentity:   loadApplicationIdentity,
+		runInteractive: application.RunInteractive,
+		runBenchmark:   runBenchmark,
+		// capture 公开入口经其消费端接口 `SceneApplication` 表达；`*application.Application`
+		// 隐式实现该接口，这里的适配只为对齐 `runDependencies` 字段的具体签名。
+		runCapture: func(app *application.Application, dir string, updateGolden bool) error {
+			return capture.RunCapture(app, dir, updateGolden)
+		},
+		runGoldenUpdateControl: func(lodOn, lodOff *application.Application, dir string) error {
+			return capture.RunGoldenUpdateControl(lodOn, lodOff, dir)
+		},
 	})
 }
 

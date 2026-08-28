@@ -1,4 +1,4 @@
-package main
+package capture
 
 // capture_scene_order_test.go 钉住正式 capture 场景表的完整顺序；既有测试入口
 // 同时验证 ai-companion 夹具确定性，本次纯重组保留该入口的全部语义。
