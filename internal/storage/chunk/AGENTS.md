@@ -65,7 +65,11 @@ region 包：`Region.Save`/`Region.Load` 直接调用本包信封编解码并经
   容器读写与等 revision 冲突判定），根包以同一错误值别名再导出。
 - `File` 抽象 + `regionFileHooks`（原根包 `regionFile`/`regionFileHooks`）
   供根包编排测试注入文件观察桩；`Region.ReplaceFile`/`SetCompactionHooks`
-  是仅有的注入入口，生产装配不得绕过 `CreateRegion`/`OpenRegion`。
+  是仅有的注入入口，生产装配不得绕过 `CreateRegion`/`OpenRegion`。该装配
+  约定没有专属自动化断言兜底：archcheck 的
+  `TestInternalDependenciesAreOneWay` 把本包生产 import 面限制在根包
+  （实测唯一生产消费方），残余的绕过只能发生在根包内部，靠 openspec 主
+  规格 `repository-code-organization` 的容器编排条款评审把关。
 
 ## helper 中心与回归测试 (`chunk/chunk_codec_helpers_test.go`)
 
