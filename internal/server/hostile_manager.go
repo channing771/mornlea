@@ -264,8 +264,8 @@ func (m *hostileManager) revisionsCurrent(dimension core.DimensionID, revisions 
 }
 
 // advanceRunners 推进全部夜行者的 waypoint 执行（ID 升序）：先做攻击距离裁
-// 决——与所选目标的水平距离进入边界即停移并冻结一次攻击意图（冷却中不再重
-// 复冻结）；否则对既有路径做提交前重验（revision 与当前格），消费已到达的
+// 决——与所选目标的水平距离进入边界即停移并冻结一次攻击意图，cooldown 只由
+// sim 递减后准入；否则对既有路径做提交前重验（revision 与当前格），消费已到达的
 // waypoint 并把朝向下一 waypoint 的世界轴方向量经 `sim.HostileAction` 提交。
 // 失效路径清空并把重规划排到下一 tick；路径走尽同样下一 tick 以目标当前位置
 // 重规划。无路径的夜行者不提交任何移动意图——绝不穿墙直线接近目标。
@@ -283,13 +283,11 @@ func (m *hostileManager) advanceRunners() {
 			target, ok := m.targetByID(slot.target)
 			if ok && target.dimension == mob.Dimension &&
 				withinHostileAttackRange([3]float32(mob.State.Position), target.position) {
-				if mob.AttackCooldown == 0 {
-					m.engine.EnqueueHostileAction(sim.HostileAction{
-						ID:            mob.ID,
-						AttackTarget:  true,
-						TargetSession: target.session,
-					})
-				}
+				m.engine.EnqueueHostileAction(sim.HostileAction{
+					ID:            mob.ID,
+					AttackTarget:  true,
+					TargetSession: target.session,
+				})
 				continue
 			}
 		}

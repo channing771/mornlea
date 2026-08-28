@@ -128,10 +128,11 @@ type playerState struct {
 	spawned bool
 	// health 是服务端单写者拥有的权威生命值，0..core.MaxHealth。
 	health uint8
-	// meleeCooldownTicks 是最近一次成功近战后目标还须免疫的 tick 数；它是瞬态
-	// 权威状态，不进玩家更新、快照、哈希或存档。
-	meleeCooldownTicks uint8
-	// meleeSuppressedMining 只标记本 tick 已命中玩家的采掘分流；下一 tick 必须由
+	// attackCooldownTicks 与 hurtCooldownTicks 分别约束主动攻击和受击保护；两者
+	// 都是瞬态权威状态，不进玩家更新、快照、哈希或存档。
+	attackCooldownTicks uint8
+	hurtCooldownTicks   uint8
+	// meleeSuppressedMining 只标记本 tick 已成功命中实体的采掘分流；下一 tick 必须由
 	// 当时的持续输入重新判定，不能跨 tick 保留。
 	meleeSuppressedMining bool
 	// peakY 是离地后到达过的最高高度，瞬态字段，不持久化、不进入快照/哈希。
@@ -802,7 +803,8 @@ func (player *playerState) beginReset() {
 	player.drownTicks = 0
 	player.input = physics.Input{}
 	player.miningHeld = false
-	player.meleeCooldownTicks = 0
+	player.attackCooldownTicks = 0
+	player.hurtCooldownTicks = 0
 	player.meleeSuppressedMining = false
 	player.eatingHeld = false
 	player.mining = miningState{}

@@ -64,6 +64,34 @@
 - Task 2 独立评审，QUALITY PASS：同一报告 `:20-45` 给出 Task quality `Approved`；实现保持 fixed switch、真实 package 行为测试和既有包边界，Critical 0、Important 0、Minor 0，没有 correctness、scope、maintainability、verification、删除或简化 finding。
 - Task 2 完成：`259b702f..29eb6ee2` 已具备 implementer RED/GREEN、focused gates、self-review 与独立 SPEC/QUALITY PASS；`tasks.md` 2.1..2.9 全部完成，后续实现从 Task 3 开始。
 
+## Task 3 Implementation
+
+- 起始 HEAD：`fe6b15fb1c2ddfc9cf9ffcda756188ed1c301b04`；起始 `git status --short --branch` 退出 0，仅输出分支名，无 tracked/untracked 改动。
+- RED（固定容量与来源冷却）：`go test ./internal/sim -run 'TestCombat(Snapshot|Intent|PlayerCooldown|HostileCooldown|Cooldowns)' -count=1`，exit 1；按预期因 `CombatHit`/`TickResult.CombatHits`、拆分后的 player attack/hurt cooldown、`advanceCombat` 与 `advanceCombatWithLimits` 尚不存在而编译失败，证明测试能捕获当前 8-intent player loop、共享 victim cooldown 与平行 hostile loop 尚未统一的根因。
+- GREEN（固定容量与来源冷却）：`gofmt -w internal/sim/combat.go internal/sim/player.go internal/sim/hostile_melee.go internal/sim/command.go internal/sim/combat_capacity_test.go internal/sim/combat_exhaustion_test.go internal/sim/hostile_combat_test.go internal/sim/mining_test.go`，exit 0；`go test ./internal/sim -run 'TestCombat(Snapshot|Intent|PlayerCooldown|HostileCooldown|Cooldowns)' -count=1`，exit 0（0.667s），72/72、两个降低 limit 的下一次 append fail-closed、四类 cooldown 原子递减及 player 1/11、hostile 20-tick 边界通过。
+- RED（mixed target 与冻结语义）：`go test ./internal/sim -run 'TestPlayerCombat(Target|Protected|Frozen|Ray)' -count=1`，exit 1；距离更近 hostile、hostile 同 kind 最小 ID、受保护最近 hostile 不穿透和冻结 hostile 目标四处按预期失败，根因是当前 player producer 仍只枚举 player snapshot；非零 pitch、固体严格在前、表面等距与流体透明断言已直接通过。
+- GREEN（mixed target 与冻结语义）：`gofmt -w internal/sim/combat.go internal/sim/hostile.go`，exit 0；`go test ./internal/sim -run 'TestPlayerCombat(Target|Protected|Frozen|Ray)' -count=1`，exit 0（0.573s），player/hostile mixed target 按距离、kind、stable ID 全序选择，保护目标不穿透，射线边界与冻结 hostile 目标通过。
+- RED（全局 victim reservation）：`go test ./internal/sim -run 'TestCombat(Reservation|Mutual|Loser)' -count=1`，exit 1；同 victim 的 hostile/player 与两个 hostile 都被重复结算，目标 health 分别错误降至 15/14，player reservation loser 还错误写入 attack cooldown 10；不同 victim 的 player↔player 与 player↔hostile mutual 用例已通过，失败与缺少全局 reservation 的预期根因一致。
+- GREEN（全局 victim reservation）：`gofmt -w internal/sim/combat.go internal/sim/combat_resolution_test.go`，exit 0；`go test ./internal/sim -run 'TestCombat(Reservation|Mutual|Loser)' -count=1`，exit 0（1.321s），固定数组 hostile-first reservation、同 kind 最小 stable ID、loser 零副作用与两类 mutual 用例通过。
+- RED（武器、副作用与击退）：`go test ./internal/sim -run 'Test(PlayerCombatWeapon|CombatReservationLoser|Combat.*Mining|Combat.*Exhaustion|CombatKnockback)' -count=1`，exit 1；按预期因原提交面尚无 `settleCombatIntent` 而编译失败，证明 frozen slot fail-closed、player/hostile 武器伤害、耐久、fatigue、采掘抑制、领域 hit 与两类 knockback 尚未进入统一原子 settlement。
+- GREEN（武器、副作用与击退）：`gofmt -w internal/sim/combat.go internal/sim/combat_weapon_test.go internal/sim/combat_knockback_test.go internal/sim/combat_exhaustion_test.go internal/sim/mining_test.go internal/sim/hunger.go`，exit 0；`go test ./internal/sim -run 'Test(PlayerCombatWeapon|CombatReservationLoser|Combat.*Mining|Combat.*Exhaustion|CombatKnockback)' -count=1`，exit 0（1.012s），空手/普通/broken 2、wood 4、stone 5、iron 6、最后一点转损坏、player→hostile、六类拒绝路径零副作用、XZ 0.35 additive 与 yaw fallback 通过。
+- 生命周期重排：`engine_step.go` 按 spawn/action/movement → unified combat → burn → hostile deaths/drop → distant despawn → player deaths 固定；`hostile_manager.go` 删除 `AttackCooldown==0` 前置过滤，范围内每 tick enqueue，sim 递减后唯一准入；`AttackCooldown=1` 同 tick 命中；注释同步为 `advanceCombat`。新增 `health=1` burn 到期与 `DistantTicks=599` 同 tick 证明先掉腐肉再移除。
+- 领域出口：`go test ./internal/sim -run 'TestCombatHits' -count=1`，exit 0（0.637s），`CombatHits` 按 `SessionID` 升序、每 session 每 tick 至多一条且 hostile 攻击不产生 hit；`go test ./internal/server -run 'TestHostileChase' -count=1`，exit 0（3.532s with -race），hostile manager 在 sim 20 tick 节奏下同 tick 生效。
+- Focused gofmt：`gofmt -w internal/sim/combat.go internal/sim/player.go internal/sim/hostile.go internal/sim/hostile_action.go internal/sim/command.go internal/sim/engine_step.go internal/sim/hunger.go internal/sim/combat_test.go internal/sim/combat_capacity_test.go internal/sim/combat_resolution_test.go internal/sim/combat_weapon_test.go internal/sim/combat_knockback_test.go internal/sim/combat_exhaustion_test.go internal/sim/hostile_combat_test.go internal/sim/hostile_lifecycle_test.go internal/sim/mining_test.go internal/server/hostile_manager.go internal/server/hostile_manager_test.go`，exit 0。
+- Focused sim race：`go test ./internal/sim -race -count=1`，exit 0（64.484s）；server 相关 `TestHostileChase`/`TestCombatHits` with race 通过，完整 server 套件含两处已在基线即 flaky 的 parity 超时（fluid crop 与 companion 交互对齐预算 256），与本 Task 变更无关且在基线重试即复现。
+- 架构门禁：`go test ./internal/archcheck -count=1`，exit 0（8.144s）。
+- OpenSpec 门禁：`openspec validate --all --strict --no-interactive`，exit 0，77 passed、0 failed。
+- 旧符号清零：`rg -n 'advancePlayerMelee|advanceHostileMelee|damageHostileTarget' internal/sim --glob '*.go' --glob '!*_test.go'`，exit 1，无命中，生产代码已无平行结算函数。
+- Diff 门禁：`git diff --check`，exit 0。
+- Checklist：3.1..3.10 已有实际 RED/GREEN 或直接通过证据；3.11 按控制器指令保持未勾选，等待 implementer 外部的独立 SPEC/QUALITY review。
+
+## Task 3 Self-Review
+
+- SPEC PASS：逐项核对 72/72 固定容量与整阶段 overflow fail-closed、四类 cooldown 原子递减、player 10/hostile 20、(distance,kind,ID) 全序、固体严格在前、流体穿透、受保护目标不穿透、冻结后 live 改变不改写、hostile-first reservation、最小 stable ID、loser 零副作用、两类 mutual 同 tick 结算、武器 2/4/5/6 与最后一点先 damage 后损坏、六类拒绝零副作用、XZ 0.35 additive 与 yaw fallback、burn/distant 死亡与掉落环形、CombatHits 有序且 hostile 不产生 hit。
+- QUALITY PASS：完整 diff 只含 Task 3 的 20 个受控文件（4 个新建 combat tests、14 个修改 Go 文件、删除 1 个 hostile_melee.go、tasks/ledger），无协议、存储、render、Rust、依赖或长期文档变化；无 map/sort 分配、新接口/配置/registry、额外 goroutine 或 speculative helper；注释中文且无任务编号。
+- Mutation check：任一固定容量、cooldown 值、ray 选择、阻挡、kind 优先级、reservation 顺序、伤害/击退/疲劳/耐久/hit 分支的删除或错值均至少使一条新增测试失败；既有 sim 全包保留镐、锄、作物与伙伴行为，hostile lifecycle 的 600/20 与掉落路径全绿。
+- Findings：Critical 0、Important 0、Minor 0；无需修复轮次。
+
 ## Validation Evidence
 
 - 基线验证证据见 `Baseline`，均对应 frozen code SHA `67fcc604bd3f3b5ce9326b5cd7498381163296d6`，本 Task 未重复运行。

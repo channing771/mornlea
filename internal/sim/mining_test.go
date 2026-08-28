@@ -115,9 +115,9 @@ func TestMiningReleaseClearsSameTick(t *testing.T) {
 	}
 }
 
-// TestMeleeHitClearsMiningOnlyForThatTick 覆盖命中玩家时采掘进度必须清零；
+// TestCombatHitClearsMiningOnlyForThatTick 覆盖命中实体时采掘进度必须清零；
 // `miningHeld` 保留，下一 tick 仍由持续输入决定。
-func TestMeleeHitClearsMiningOnlyForThatTick(t *testing.T) {
+func TestCombatHitClearsMiningOnlyForThatTick(t *testing.T) {
 	engine, sessions, _ := readyMiningPlayers(t, 1)
 	player := engine.sessions[sessions[0]].player
 	player.mining = miningState{progressTicks: 3, requiredTicks: 5}
@@ -143,9 +143,9 @@ func TestMeleeHitClearsMiningOnlyForThatTick(t *testing.T) {
 	}
 }
 
-// TestMeleeMissKeepsMiningProgress 覆盖无合法玩家目标时，既有采掘状态机逐 tick
+// TestCombatMissKeepsMiningProgress 覆盖无合法实体目标时，既有采掘状态机逐 tick
 // 保持不变。
-func TestMeleeMissKeepsMiningProgress(t *testing.T) {
+func TestCombatMissKeepsMiningProgress(t *testing.T) {
 	engine, sessions, _ := readyMiningPlayers(t, 1)
 	player := engine.sessions[sessions[0]].player
 
@@ -275,13 +275,16 @@ func TestMiningLifecyclePathsClearIntentAndProgress(t *testing.T) {
 		engine, sessions, _ := readyMiningPlayers(t, 1)
 		advanceMiningOnce(engine)
 		player := engine.sessions[sessions[0]].player
-		player.meleeCooldownTicks = 4
+		player.attackCooldownTicks = 3
+		player.hurtCooldownTicks = 4
 		player.meleeSuppressedMining = true
 		player.beginReset()
 		if player.miningHeld || player.mining != (miningState{}) ||
-			player.meleeCooldownTicks != 0 || player.meleeSuppressedMining {
-			t.Fatalf("beginReset 后 held=%v mining=%+v cooldown=%d suppressed=%v",
-				player.miningHeld, player.mining, player.meleeCooldownTicks, player.meleeSuppressedMining)
+			player.attackCooldownTicks != 0 || player.hurtCooldownTicks != 0 ||
+			player.meleeSuppressedMining {
+			t.Fatalf("beginReset 后 held=%v mining=%+v attack=%d hurt=%d suppressed=%v",
+				player.miningHeld, player.mining, player.attackCooldownTicks,
+				player.hurtCooldownTicks, player.meleeSuppressedMining)
 		}
 	})
 

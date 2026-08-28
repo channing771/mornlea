@@ -150,6 +150,12 @@ type ResyncRequest struct {
 	HaveRevision uint64
 }
 
+type CombatHit struct {
+	Session    SessionID
+	Damage     uint8
+	TargetKind core.CombatTargetKind
+}
+
 type TickResult struct {
 	Acquire  []core.ChunkKey
 	Generate []core.ChunkKey
@@ -171,8 +177,9 @@ type TickResult struct {
 	Chests []ChestUpdate
 	// Craftings 是本 tick 发给网格所属玩家的完整权威合成网格状态
 	//（latest-wins、不广播，见 crafting.go 的 `publishCraftings`）。
-	Craftings []CraftingUpdate
-	Tick      uint64
+	Craftings  []CraftingUpdate
+	CombatHits []CombatHit
+	Tick       uint64
 	// WorldTimeTicks 是本 tick 结束时的权威绝对世界时间。
 	WorldTimeTicks uint64
 }

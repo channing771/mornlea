@@ -58,8 +58,8 @@ const (
 	// 它比阈值（4000）大，因此**一次调用会跨过多个阈值**——applyExhaustion
 	// 必须循环处理，只减一次阈值会让回血的代价凭空少掉三分之一。
 	exhaustionRegenPerHealthMilli uint16 = 6000
-	// exhaustionMeleeMilli 是一次成功近战命中的疲劳。判定点：`advancePlayerMelee`
-	// 的意图冻结分叉（落空、被方块遮挡、目标冷却免疫的输入不形成命中，不累积）。
+	// exhaustionMeleeMilli 是一次成功近战命中的疲劳。判定点：`advanceCombat`
+	// 的成功结算分叉（落空、被方块遮挡、目标冷却免疫的输入不形成命中，不累积）。
 	//
 	// 取 100 与参考实现同口径：参考实现的攻击疲劳是 0.1，按本表统一的 ×1000
 	// 换算成千分位，与既有五行同一换算口径。

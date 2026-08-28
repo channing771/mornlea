@@ -193,6 +193,28 @@ func TestHostileBurnDeathDropsSingleRottenFlesh(t *testing.T) {
 	}
 }
 
+func TestHostileBurnDeathPrecedesDistantDespawn(t *testing.T) {
+	engine, _ := readyMovementPlayer(t)
+	loadFlatChunks(t, engine.dimensions[core.Overworld], 4, 4, 0, 0)
+	mob := validTestHostile(31)
+	mob.State.Position = mgl32.Vec3{65.5, 1, 0.5}
+	mob.Health = 1
+	mob.BurnCooldown = 1
+	mob.DistantTicks = 599
+	if err := engine.RestoreHostile(mob); err != nil {
+		t.Fatalf("恢复夜行者：%v", err)
+	}
+	engine.worldTime.Store(testDayTick)
+
+	engine.Step()
+	if len(engine.hostiles.entries) != 0 {
+		t.Fatalf("灼烧死亡后夜行者仍在（数量=%d）", len(engine.hostiles.entries))
+	}
+	if got := countLoadedDrops(t, engine, core.ItemRottenFlesh); got != 1 {
+		t.Fatalf("灼烧死亡与 distant 同 tick 时腐肉=%d，想要先死亡掉落 1", got)
+	}
+}
+
 func TestHostileDeathDropRingsToNeighborChunkWhenDeathChunkFull(t *testing.T) {
 	engine, _ := readyMovementPlayer(t)
 	// 装载 3×3 邻域并填满死亡区块（原点）的全部掉落槽。

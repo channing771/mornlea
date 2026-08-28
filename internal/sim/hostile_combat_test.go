@@ -11,9 +11,8 @@ import (
 
 // 本文件锁定夜行者的移动意图消费与近战伤害结算：`HostileAction` 是有界追逐
 // worker 在 tick 边界提交的唯一轴量入口（世界轴方向 + 跳跃 + 一次攻击意图），
-// 近战结算在同一 tick 内先冻结全部意图、再按 ID 升序经既有 `applyDamage`
-// 入口统一结算 3 点伤害并进入 20 tick 冷却。伤害数值通道是统一近战结算落
-// 地前的临时接缝，届时随统一战斗收编迁移。
+// 近战结算在同一 tick 内先冻结全部意图、再按 ID 升序进入统一战斗结算，造成
+// 3 点伤害并进入 20 tick 冷却。
 
 // hostileCombatEngine 构造一名已激活玩家与夜间相位的 flat 世界夹具：夜相位
 // 使灼烧与夜间生成在后续推进中都不干扰伤害断言（生成候选落在未加载区块，
@@ -113,7 +112,7 @@ func TestHostileMeleeDealsExactlyThreeDamageAndEntersCooldown(t *testing.T) {
 	if got := engine.hostiles.entries[0].attackCooldown; got != hostileCooldownPeriodTicks {
 		t.Fatalf("攻击冷却=%d，想要 %d", got, hostileCooldownPeriodTicks)
 	}
-	if engine.sessions[session].player.meleeCooldownTicks == 0 {
+	if engine.sessions[session].player.hurtCooldownTicks == 0 {
 		t.Fatal("受击保护期未建立")
 	}
 }
