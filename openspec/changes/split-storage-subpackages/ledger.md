@@ -479,3 +479,67 @@
     `Totals: 77 passed, 0 failed (77 items)`。
 - 评审结论：待控制会话规格与质量双评审；tasks.md 5.1/5.2 勾选待评审通过后
   执行。
+
+### Task 6（文档与门禁收尾，6.1/6.2）
+
+- 文档体系：重写 `internal/storage/AGENTS.md` 为子树总纲（开头作用域段、
+  Directory Map、Dependency Direction、别名再导出政策、共享格式与数据
+  安全纪律、Documentation Sync Policy、Focused Verification；原单包指南的
+  迁移/上限/原子替换/Close 条文收敛为全树单点权威陈述，子包只点名各自
+  钉死测试）。按 `docs/agents-md-style.md` 四节子包骨架新建五份指南：
+  `region/AGENTS.md`、`chunk/AGENTS.md`、`player/AGENTS.md`、
+  `companion/AGENTS.md`、`hostile/AGENTS.md`，只写可判定不变量、点名实测
+  存在的测试函数。特例取舍：`storagedef` 不单独建 AGENTS.md——19 行叶子
+  包无独立可判定不变量可陈述（style guide「只在有独立不变量时新建」），
+  由总纲 Directory Map 一行提及、包注释自述；子树任何目录不放 CLAUDE.md，
+  `internal/archcheck` 的 `claudeImportDocs` 登记集（root/internal/engine/
+  cmd/mornlea）无需变化，`TestClaudeImportsAgentGuidance` 随 archcheck
+  全绿。
+- 门禁与路径适配：`.github/workflows/ci.yml`「架构、存储与协议门禁」改为
+  `go test ./internal/storage/... -v`（覆盖根加六子包，与文件内其余
+  `...` 枚举风格一致）；`docs/notes/test-quickstart.md` T0 存档行改
+  `./internal/storage/...`（同文其余 `internal/storage` 为概念性域提及，
+  不改）。`internal/AGENTS.md` 评估后不动：包所有权一行与「更具体的边界
+  见 `internal/storage/AGENTS.md`」指向仍准确，子包布局细节归子树总纲。
+- Task 4 遗留发现与修复：`internal/server/hunger_persistence_test.go`
+  只读读取的 v6 golden 路径未随 fixture 迁移更新，T2 全量首跑即失败
+  （`open ../storage/testdata/player-v6.bin: no such file or directory`）
+  ——前序任务验证均为 `./internal/storage/...` 定点与 archcheck，未触达
+  server 测试。修复为 `../storage/player/testdata/player-v6.bin` 并同步
+  文件头注释路径；属 fixture 路径引用适配，`storage.X` 符号消费面仍零
+  改动。
+- 注释清扫（T4/T5 deferred minors）：`companion/companion_types.go` 上界
+  推导指引改为现名 `MaxFileLength` 并收敛反引号；`hostile/hostile_types.go`
+  「类型在 storage 包内自包含定义」改为「本包内」、storage 改「存储子树」，
+  与包注释一致；`companion_restore_test.go`/`companion_summary_test.go`
+  文件头「全部用例不触盘（除显式 DiskStore 用例）」改为与
+  `companionFileFixture` 夹具一致的「经 companionFileFixture 在临时目录
+  内读写（域包测试不回接根包 DiskStore 编排）」；`player/codec_primitives.go`
+  移除对已删除 `byte_codec.go` 的引用，改列 chunk/companion/hostile 同源
+  副本。顺带移除 fixture 迁走后遗留的空 `internal/storage/testdata/`
+  目录（未跟踪，rmdir）。
+- tasks.md 1–6 全部勾选收尾（控制会话指示）。
+- 负载 flake 记录：dev-check 首跑 `TestMemoryTCPFluidDamBreakBroadcastParity`
+  （internal/server，Memory/TCP 溃坝广播逐 tick 对账）在高负载下报第 1 tick
+  不一致；单独重跑与第二次全量 dev-check 均通过。按
+  `docs/notes/test-quickstart.md` flake 协议记为负载 flake，不进修复
+  循环、不改生产代码。
+- 验证（本 worktree 实测，2026-08-28）：
+  - `go test ./internal/storage/... -race -count=1` → 根 `ok ... 16.836s`、
+    chunk `ok ... 10.434s`、companion `ok ... 2.329s`、hostile
+    `ok ... 3.069s`、player `ok ... 3.714s`、region `ok ... 4.040s`
+    （storagedef 无测试文件；对照 Baseline 单包 race 24.194s，只记录
+    不设门槛）；
+  - `go test ./internal/archcheck -count=1` → `ok ... 6.080s`；
+  - `go test ./internal/storage/... -list '.*'` 并集与
+    `baseline-test-list.txt` 逐名 diff 为空（234 = 223 Test + 7 Benchmark +
+    4 Fuzz）；
+  - `gofmt -l internal/storage` 无输出（dev-check 首步 `gofmt -l .` 亦
+    通过）；
+  - `openspec validate --all --strict --no-interactive` →
+    `Totals: 77 passed, 0 failed (77 items)`；
+  - `make dev-check`：修复 server fixture 路径后全绿（gofmt -l . +
+    `go vet ./...` + `go test ./... -short` + cargo fmt --check + clippy +
+    cargo test --workspace --locked；Rust 步骤实际运行未跳过）。首跑另
+    暴露上述 fixture 路径失败与负载 flake 各一，均已处置。
+- 评审结论：待控制会话规格与质量双评审。
