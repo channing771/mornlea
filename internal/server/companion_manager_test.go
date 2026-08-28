@@ -21,6 +21,7 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/internal/pathfind"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/storage"
 )
@@ -935,7 +936,7 @@ func TestCompanionManagerPlanSnapshotBoundedAndOrdered(t *testing.T) {
 			t.Fatalf("高度样本未按 (X,Z) 严格升序：%+v 后跟 %+v", previous, current)
 		}
 	}
-	if len(snapshot.ChunkRevisions) == 0 || len(snapshot.ChunkRevisions) > companion.MaxPlanChunkRevisions {
+	if len(snapshot.ChunkRevisions) == 0 || len(snapshot.ChunkRevisions) > pathfind.MaxPlanChunkRevisions {
 		t.Fatalf("区块 revision 数=%d", len(snapshot.ChunkRevisions))
 	}
 }
@@ -1025,10 +1026,10 @@ func TestCompanionManagerPathFailureBudgetResetsPerTask(t *testing.T) {
 	}
 	// 三次寻路失败需要两次固定冷却（2 × 20 tick）：Started 到 Failed 至少
 	// 跨 2*PathReplanCooldownTicks 个权威 tick。泄漏时该间距只有数 tick。
-	if span := failedTick - startedTick; span < 2*companion.PathReplanCooldownTicks {
+	if span := failedTick - startedTick; span < 2*pathfind.PathReplanCooldownTicks {
 		t.Fatalf("任务 B 从 TaskStarted(tick %d) 到 TaskFailed(tick %d) 仅 %d tick，"+
 			"三连失败预算被前任务泄漏（需要 ≥ %d tick 的两次冷却窗口）",
-			startedTick, failedTick, span, 2*companion.PathReplanCooldownTicks)
+			startedTick, failedTick, span, 2*pathfind.PathReplanCooldownTicks)
 	}
 }
 
@@ -1226,7 +1227,7 @@ func TestCompanionManagerStopSameTickOrdering(t *testing.T) {
 // 改成 WaterLevel7ID 后，农业编号追加又会再退化一次。用哨兵表达之后，新增
 // 方块编号自动纳入本门禁，不再需要人手推进上界。
 func TestCompanionManagerPathBlockTableMatchesCollisionOracle(t *testing.T) {
-	table := companion.NewPathBlockTable(productionCompanionPassableBlocks())
+	table := pathfind.NewPathBlockTable(productionCompanionPassableBlocks())
 	if !table.PassableForTest(core.AirID) {
 		t.Fatal("空气必须可通过")
 	}

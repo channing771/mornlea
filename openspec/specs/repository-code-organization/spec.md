@@ -50,3 +50,41 @@
 - **WHEN** 完成 Task 20 的主线同步审计
 - **THEN** 36 个同包拆分、2 个提取到唯一新包 `internal/render/hud`、0 个删除、374 个保留的结论 MUST 互斥且合计为 412
 - **AND** 不得新增其他包、恢复拆分前旧大文件或以更新 golden/baseline 掩盖差异
+
+### Requirement: TCP transport 具有单向包边界
+
+仓库 MUST 将 TCP listener、dial、stream、deadline 和 socket 生命周期实现置于
+`internal/network/tcp`。`internal/network/tcp` MUST 依赖
+`internal/network`，而 `internal/network` MUST NOT 依赖
+`internal/network/tcp`。根包 MUST 保留登录和应用装配使用的共享 packet stream
+接口。
+
+#### Scenario: 依赖图接受 TCP 子包
+- **GIVEN** 仓库包含 `internal/network/tcp`
+- **WHEN** 架构依赖检查枚举全部内部包
+- **THEN** 它 MUST 接受 `internal/network/tcp -> internal/network`
+- **AND** 它 MUST 拒绝从 `internal/network` 到 `internal/network/tcp` 的任何反向依赖
+
+#### Scenario: TCP 构造器由子包消费
+- **GIVEN** 应用或测试需要创建 TCP listener 或 dial TCP stream
+- **WHEN** 它针对整理后的仓库编译
+- **THEN** 它 MUST 经由 `internal/network/tcp` 解析构造器
+- **AND** 返回值 MUST 满足共享根包的 listener 或 packet stream 接口
+
+### Requirement: Transport 包整理保持传输行为
+
+仓库 MUST 在移动 TCP 实现文件时保持既有 Memory/TCP packet、登录、关闭、背压、
+deadline、peer-address、校验和错误语义。该整理 MUST NOT 改变 wire bytes、协议
+状态机转换或测试函数名。
+
+#### Scenario: Memory 与 TCP 保持相同登录契约
+- **GIVEN** 客户端和服务端使用 Memory transport 或 TCP transport
+- **WHEN** 它们执行既有 handshake、登录和 Play packet 流
+- **THEN** 两种 transport MUST 继续使用相同的登录状态机和 packet 校验契约
+- **AND** packet 值和登录结果 MUST 保持不变
+
+#### Scenario: 既有 transport 测试仍可寻址
+- **GIVEN** TCP white-box 测试已迁入 TCP 子包
+- **WHEN** 整理后的仓库运行包测试
+- **THEN** 每个既有 TCP 测试函数和子测试标签 MUST 保持存在且未重命名
+- **AND** Memory、codec、packet 和登录测试入口 MUST 保持存在

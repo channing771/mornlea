@@ -5,6 +5,7 @@ import (
 	"hash/fnv"
 
 	"github.com/channing771/mornlea/internal/companion"
+	"github.com/channing771/mornlea/internal/pathfind"
 )
 
 const (
@@ -28,7 +29,7 @@ func idleDialogueDue(now, deadline uint64) bool {
 func withinIdleDialogueDistance(from, to [3]float32) bool {
 	dx := from[0] - to[0]
 	dz := from[2] - to[2]
-	const radius = companion.PathWindowHorizontalRadius
+	const radius = pathfind.PathWindowHorizontalRadius
 	return dx*dx+dz*dz <= radius*radius
 }
 

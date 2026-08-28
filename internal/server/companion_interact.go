@@ -10,6 +10,7 @@ package server
 import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/pathfind"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/world"
@@ -440,11 +441,11 @@ func inventoryHoldsItem(inventory core.Inventory, item core.ItemID) bool {
 // 几何）时退回 (+X, 同层) 哨兵候选，交由寻路的三连失败语义以
 // PathUnreachable 终结——终点的启发式选择永远不是权威，可达性由 FindPath
 // 裁决。
-func (m *companionManager) interactionGoal(body companion.Body, step companion.PlanStep) companion.PathCell {
+func (m *companionManager) interactionGoal(body companion.Body, step companion.PlanStep) pathfind.PathCell {
 	view := m.chunkViewAt(body.Dimension, body.Position)
 	for _, dy := range [3]int32{0, 1, -1} {
 		for _, direction := range [4][2]int32{{-1, 0}, {1, 0}, {0, -1}, {0, 1}} {
-			cell := companion.PathCell{
+			cell := pathfind.PathCell{
 				X: step.X + direction[0],
 				Y: step.Y + dy,
 				Z: step.Z + direction[1],
@@ -454,7 +455,7 @@ func (m *companionManager) interactionGoal(body companion.Body, step companion.P
 			}
 		}
 	}
-	return companion.PathCell{X: step.X + 1, Y: step.Y, Z: step.Z}
+	return pathfind.PathCell{X: step.X + 1, Y: step.Y, Z: step.Z}
 }
 
 // standingCellInView 按 PathGrid.standing 的语义判定候选站立格：feet 与 head
@@ -463,7 +464,7 @@ func (m *companionManager) interactionGoal(body companion.Body, step companion.P
 // 作为交互终点的站立/头顶格仍要求是空气——零碰撞编号逐块对齐 collision
 // oracle 的约束只落在寻路阻挡表上，不由本判定承担。区块未 ready 的列判为不
 // 站立：宁可顺延到寻路阶段的重试语义，也不基于未知地形选终点。
-func standingCellInView(view companionChunkView, cell companion.PathCell) bool {
+func standingCellInView(view companionChunkView, cell pathfind.PathCell) bool {
 	feet, ok := view.blockAt(cell.X, cell.Y, cell.Z)
 	if !ok || feet != core.AirID {
 		return false

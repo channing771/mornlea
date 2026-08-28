@@ -9,6 +9,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/pathfind"
 	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -80,14 +81,14 @@ func (v companionChunkView) blockAt(x, y, z int32) (core.BlockID, bool) {
 // readyRevisions 返回视图中已 ready 区块的 (X,Z) 字典序升序 revision 列表，
 // 供寻路结果失效判定与快照使用。X 是主键：外层必须遍历 X（dx），否则
 // PlanSnapshot.Validate 的严格升序校验会在跨 Z 行时拒绝。
-func (v companionChunkView) readyRevisions() []companion.ChunkRevision {
-	ready := make([]companion.ChunkRevision, 0, 9)
+func (v companionChunkView) readyRevisions() []pathfind.ChunkRevision {
+	ready := make([]pathfind.ChunkRevision, 0, 9)
 	for dx := int32(0); dx < 3; dx++ {
 		for dz := int32(0); dz < 3; dz++ {
 			if v.chunks[dz*3+dx] == nil {
 				continue
 			}
-			ready = append(ready, companion.ChunkRevision{
+			ready = append(ready, pathfind.ChunkRevision{
 				Chunk:    core.ChunkPos{X: v.origin.X + dx, Z: v.origin.Z + dz},
 				Revision: v.revisions[dz*3+dx],
 			})
@@ -190,8 +191,8 @@ func (m *companionManager) scanEnvObservation(
 	centerZ := int32(math.Floor(float64(body.Position[2])))
 	exposed = make([]companion.PlanBlock, 0, companion.MaxPlanExposedBlocks)
 	heights = make([]companion.PlanHeight, 0, companion.MaxPlanHeightSamples)
-	lowY := max(centerY-companion.PathWindowVerticalRadius, core.MinY)
-	highY := min(centerY+companion.PathWindowVerticalRadius, core.MaxY-1)
+	lowY := max(centerY-pathfind.PathWindowVerticalRadius, core.MinY)
+	highY := min(centerY+pathfind.PathWindowVerticalRadius, core.MaxY-1)
 	for x := centerX - 16; x <= centerX+16; x++ {
 		for z := centerZ - 16; z <= centerZ+16; z++ {
 			chunk := view.chunkFor(x, z)
@@ -335,8 +336,8 @@ func (m *companionManager) taskStatusLabel(id companion.ID) string {
 // 区块未 ready 时返回 false——寻路顺延到下一 tick，不计入失败。
 func (m *companionManager) buildPathGrid(
 	body companion.Body,
-	window companion.PathWindow,
-) (companion.PathGrid, bool) {
+	window pathfind.PathWindow,
+) (pathfind.PathGrid, bool) {
 	view := m.chunkViewAt(body.Dimension, body.Position)
 	origin := window.Origin()
 	sizeX, sizeY, sizeZ := window.Size()
@@ -347,18 +348,18 @@ func (m *companionManager) buildPathGrid(
 	spanX := chunkEnd.X - chunkOrigin.X + 1
 	spanZ := chunkEnd.Z - chunkOrigin.Z + 1
 	if !view.allCoveredReady(chunkOrigin, spanX, spanZ) {
-		return companion.PathGrid{}, false
+		return pathfind.PathGrid{}, false
 	}
-	revisions := make([]companion.ChunkRevision, 0, spanX*spanZ)
+	revisions := make([]pathfind.ChunkRevision, 0, spanX*spanZ)
 	for dz := chunkOrigin.Z; dz <= chunkEnd.Z; dz++ {
 		for dx := chunkOrigin.X; dx <= chunkEnd.X; dx++ {
-			revisions = append(revisions, companion.ChunkRevision{
+			revisions = append(revisions, pathfind.ChunkRevision{
 				Chunk:    core.ChunkPos{X: dx, Z: dz},
 				Revision: view.revisionAt(dx, dz),
 			})
 		}
 	}
-	grid, err := companion.NewPathGrid(
+	grid, err := pathfind.NewPathGrid(
 		core.BlockPos{X: origin.X, Y: origin.Y, Z: origin.Z},
 		sizeX, sizeY, sizeZ,
 		m.table,
@@ -370,7 +371,7 @@ func (m *companionManager) buildPathGrid(
 		revisions,
 	)
 	if err != nil {
-		return companion.PathGrid{}, false
+		return pathfind.PathGrid{}, false
 	}
 	return grid, true
 }
@@ -378,12 +379,12 @@ func (m *companionManager) buildPathGrid(
 // windowRevisions 返回伙伴当前 3×3 兴趣区块的权威 revision，供路径点重验。
 // 重验是 Running 任务每 tick 的热路径，只读 ChunkInfo 的 revision 元数据，
 // 不做区块深拷贝；结果按 (X,Z) 字典序升序。
-func (m *companionManager) windowRevisions(body companion.Body) []companion.ChunkRevision {
+func (m *companionManager) windowRevisions(body companion.Body) []pathfind.ChunkRevision {
 	center := (core.BlockPos{
 		X: int32(math.Floor(float64(body.Position[0]))),
 		Z: int32(math.Floor(float64(body.Position[2]))),
 	}).Chunk()
-	revisions := make([]companion.ChunkRevision, 0, 9)
+	revisions := make([]pathfind.ChunkRevision, 0, 9)
 	for dx := int32(-companionViewRadiusChunks); dx <= companionViewRadiusChunks; dx++ {
 		for dz := int32(-companionViewRadiusChunks); dz <= companionViewRadiusChunks; dz++ {
 			key := core.ChunkKey{
@@ -394,7 +395,7 @@ func (m *companionManager) windowRevisions(body companion.Body) []companion.Chun
 			if !ok || info.State != sim.ChunkReady {
 				continue
 			}
-			revisions = append(revisions, companion.ChunkRevision{
+			revisions = append(revisions, pathfind.ChunkRevision{
 				Chunk:    key.Pos,
 				Revision: info.Revision,
 			})

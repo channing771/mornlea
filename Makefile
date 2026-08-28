@@ -61,6 +61,8 @@ rust:
 	@mkdir -p $(RUST_DIR)/target/release
 	@test -f $(CARGO_TARGET_DIR)/release/libmornlea_engine.dylib && cp -f $(CARGO_TARGET_DIR)/release/libmornlea_engine.dylib $(RUST_DYLIB) || true
 	@test -f $(CARGO_TARGET_DIR)/release/libmornlea_engine.so && cp -f $(CARGO_TARGET_DIR)/release/libmornlea_engine.so $(RUST_SO) || true
+	@test -f $(CARGO_TARGET_DIR)/release/libmornlea_client.dylib && cp -f $(CARGO_TARGET_DIR)/release/libmornlea_client.dylib $(RUST_DIR)/target/release/libmornlea_client.dylib || true
+	@test -f $(CARGO_TARGET_DIR)/release/libmornlea_client.so && cp -f $(CARGO_TARGET_DIR)/release/libmornlea_client.so $(RUST_DIR)/target/release/libmornlea_client.so || true
 
 rust-check:
 	cd $(RUST_DIR) && $(CARGO) fmt --check

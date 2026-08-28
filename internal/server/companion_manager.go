@@ -32,6 +32,7 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/internal/pathfind"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/storage"
@@ -104,8 +105,8 @@ type companionTaskSlot struct {
 	// 路径执行状态（仅 Running 有效）。三连失败预算属于单个任务而非槽位：
 	// dispatchPlanning 消费新队首与 restoreQueue 成功恢复时都会把 policy
 	// 归零，前一个任务的失败计数绝不削减下一个任务的预算。
-	policy       companion.PathPolicy
-	path         *companion.PathResult
+	policy       pathfind.PathPolicy
+	path         *pathfind.PathResult
 	waypoint     int
 	pathInFlight bool
 	replanAtTick uint64
@@ -117,7 +118,7 @@ type companionTaskSlot struct {
 	// follow 寻路派发会整体覆写。目标玩家持续移动时 advanceRunners 以它
 	// 判定「终点漂移超出重算阈值」并丢弃既有路径，令 follow 复用 go_to 的
 	// 寻路/冷却/三连失败语义而不必每 tick 重算。
-	followGoal    companion.PathCell
+	followGoal    pathfind.PathCell
 	hasFollowGoal bool
 
 	// 交互执行状态（仅 mine/place 步骤的 Running 任务有效）。interactStepIndex
@@ -152,7 +153,7 @@ type plannerOutcome struct {
 type pathOutcome struct {
 	id         companion.ID
 	generation uint64
-	result     companion.PathResult
+	result     pathfind.PathResult
 	err        error
 }
 
@@ -174,7 +175,7 @@ type companionManager struct {
 	engine         *sim.Engine
 	planner        companionPlanner
 	timeoutMinutes int
-	table          companion.PathBlockTable
+	table          pathfind.PathBlockTable
 
 	// onlinePlayers 返回 tick 边界的在线玩家事实（稳定 ID + 权威位置，已按
 	// ID 升序去重归一），由 Server 在构造后注入——会话注册表归 Server 所有，
@@ -233,7 +234,7 @@ func newCompanionManager(
 		planner:         planner,
 		dialogue:        dialogue,
 		timeoutMinutes:  config.AIModel.TaskTimeout(),
-		table:           companion.NewPathBlockTable(productionCompanionPassableBlocks()),
+		table:           pathfind.NewPathBlockTable(productionCompanionPassableBlocks()),
 		slots:           make(map[companion.ID]*companionTaskSlot, len(config.Companions)),
 		orderedIDs:      make([]companion.ID, 0, len(config.Companions)),
 		bodies:          make(map[companion.ID]companion.Body, companion.MaxActive),
@@ -796,7 +797,7 @@ func withinFollowDistance(from, to [3]float32) bool {
 
 // followGoalDrifted 报告目标当前位置相对上次寻路终点的水平漂移是否超出
 // 重算阈值（平方比较避免开方）。基准取方块中心（+0.5）与站立格语义一致。
-func followGoalDrifted(goal companion.PathCell, targetPos [3]float32) bool {
+func followGoalDrifted(goal pathfind.PathCell, targetPos [3]float32) bool {
 	dx := float32(goal.X) + 0.5 - targetPos[0]
 	dz := float32(goal.Z) + 0.5 - targetPos[2]
 	const limit = companionFollowReplanDriftBlocks * companionFollowReplanDriftBlocks
@@ -807,8 +808,8 @@ func followGoalDrifted(goal companion.PathCell, targetPos [3]float32) bool {
 // Y 取 floor，与寻路网格的方块中心基准一致。玩家脚下格天然满足寻路端点的
 // 站立约束（feet/head 可通过、正下方支撑）；个别悬空/嵌墙瞬间由寻路失败
 // 与既有冷却重试语义兜底，不在此特判。
-func standingCellOf(position [3]float32) companion.PathCell {
-	return companion.PathCell{
+func standingCellOf(position [3]float32) pathfind.PathCell {
+	return pathfind.PathCell{
 		X: int32(math.Floor(float64(position[0]))),
 		Y: int32(math.Floor(float64(position[1]))),
 		Z: int32(math.Floor(float64(position[2]))),
@@ -858,7 +859,7 @@ func (m *companionManager) dispatchPlanning() {
 			// 任务的就绪标记与采掘进度记忆不属于新任务。台词节点状态同理：
 			// 进展集合将在新任务进入 Running 时重导出，follow 首达标志与
 			// 台词预算按「属于任务」重新计（design.md 裁决预算不持久化）。
-			slot.policy = companion.PathPolicy{}
+			slot.policy = pathfind.PathPolicy{}
 			slot.resetInteraction()
 			slot.progressSteps = nil
 			slot.followArrivalSpoken = false
@@ -978,7 +979,7 @@ func (m *companionManager) submitPathRequest(
 		return
 	}
 	step := current.Plan.Steps[current.StepIndex]
-	goal := companion.PathCell{X: step.X, Y: step.Y, Z: step.Z}
+	goal := pathfind.PathCell{X: step.X, Y: step.Y, Z: step.Z}
 	if step.Kind == companion.PlanStepMine || step.Kind == companion.PlanStepPlace {
 		goal = m.interactionGoal(body, step)
 	}
@@ -999,7 +1000,7 @@ func (m *companionManager) submitPathRequest(
 		slot.followGoal = goal
 		slot.hasFollowGoal = true
 	}
-	grid, ok := m.buildPathGrid(body, companion.PathWindow{Center: center})
+	grid, ok := m.buildPathGrid(body, pathfind.PathWindow{Center: center})
 	if !ok {
 		return
 	}
@@ -1012,11 +1013,11 @@ func (m *companionManager) submitPathRequest(
 func (m *companionManager) pathWorker(
 	id companion.ID,
 	generation uint64,
-	grid companion.PathGrid,
-	start, goal companion.PathCell,
+	grid pathfind.PathGrid,
+	start, goal pathfind.PathCell,
 ) {
 	defer m.waitGroup.Done()
-	result, err := companion.FindPath(grid, start, goal)
+	result, err := pathfind.FindPath(grid, start, goal)
 	select {
 	case m.pathResults <- pathOutcome{id: id, generation: generation, result: result, err: err}:
 	case <-m.ctx.Done():
@@ -1108,7 +1109,7 @@ func (m *companionManager) restoreQueue(slot *companionTaskSlot, queue storage.S
 			// 「预算属于任务」的同一不变量补一次显式归零，防止未来的恢复
 			// 时机变化把上一段运行期的计数带入恢复任务。交互状态同样按
 			// 任务边界归零（恢复的 Running mine/place 任务从走近段重新开始）。
-			slot.policy = companion.PathPolicy{}
+			slot.policy = pathfind.PathPolicy{}
 			slot.resetInteraction()
 			slot.progressSteps = nil
 			slot.followArrivalSpoken = false
@@ -1269,7 +1270,7 @@ const waypointArrivalRadiusSquared = float32(0.35 * 0.35)
 
 // arrivedAtWaypoint 报告伙伴水平位置是否到达路径点（方块中心 ±0.35 格）。
 // 只用水平距离：go_to 的垂直分量由跳跃/下落的物理语义保证。
-func arrivedAtWaypoint(position [3]float32, cell companion.PathCell) bool {
+func arrivedAtWaypoint(position [3]float32, cell pathfind.PathCell) bool {
 	dx := position[0] - (float32(cell.X) + 0.5)
 	dz := position[2] - (float32(cell.Z) + 0.5)
 	return dx*dx+dz*dz <= waypointArrivalRadiusSquared
@@ -1281,7 +1282,7 @@ func arrivedAtWaypoint(position [3]float32, cell companion.PathCell) bool {
 // 与跨一格间隙都由权威物理裁决。每 tick 每伙伴最多提交这一个输入，实际
 // 位移永远由权威物理决定；寻路结果与物理的分歧以物理为准（伙伴贴墙等待
 // 重算或超时，绝不改写世界）。
-func movementInputToward(position [3]float32, target companion.PathCell) physics.Input {
+func movementInputToward(position [3]float32, target pathfind.PathCell) physics.Input {
 	dx := float32(target.X) + 0.5 - position[0]
 	dz := float32(target.Z) + 0.5 - position[2]
 	input := physics.Input{MoveZ: 1, Yaw: float32(math.Atan2(-float64(dx), -float64(dz)))}
