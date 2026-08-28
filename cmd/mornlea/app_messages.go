@@ -61,7 +61,10 @@ func (a *application) drainServerMessages(maxMessages int) {
 				}
 			}
 			a.serverTick = state.ServerTick
+			// 世界时间与显示相位偏移来自同一份权威状态、同一接受纪律（上面的
+			// ServerTick 守卫已挡掉旧/重复状态）：偏移只平移昼夜呈现相位。
 			a.worldTimeTicks = state.WorldTimeTicks
+			a.dayPhaseOffset = state.DayPhaseOffset
 			if state.Reset || !state.MiningActive {
 				a.miningOverlay = hud.MiningOverlay{}
 			} else {

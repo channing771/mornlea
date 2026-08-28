@@ -438,6 +438,7 @@ func (a *application) startWorld() error {
 	a.sequence = 0
 	a.serverTick = 0
 	a.worldTimeTicks = 0
+	a.dayPhaseOffset = 0
 	a.observerFloor = 0
 	a.clientSessionClosed = false
 

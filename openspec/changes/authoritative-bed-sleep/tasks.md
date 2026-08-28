@@ -35,9 +35,9 @@
 
 ## 6. 协议、客户端显示相位与版本基线
 
-- [ ] 6.1 失败测试：`PlayerState` 尾部追加 `DayPhaseOffset` u16（0..23999，>23999 拒绝；Memory/TCP round trip + transcript 一致；协议版本号取实现期 `main` 下一空闲并更新 `packet.go` 版本注释）
-- [ ] 6.2 失败测试：客户端显示相位 `(WorldTimeTicks + offset) % 24000`（`render/daylight.go`；offset 变更后天空/光照随下一份权威状态切换；旧值不回退）后实现；`go test ./internal/network ./internal/client ./internal/render -race -count=1`
-- [ ] 6.3 两份基线文档协议版本行、玩家 schema v8、metadata v3 版本行同步（逐字节相同，`cmp -s`）+ `TestBaselineVersionsMatchCode`；`gofmt -w internal/network internal/client internal/render`、`make rust`；SPEC+QUALITY 双评审后提交 `feat: deliver day phase offset to clients`
+- [x] 6.1 失败测试：`PlayerState` 尾部追加 `DayPhaseOffset` u16（0..23999，>23999 拒绝；Memory/TCP round trip + transcript 一致；协议版本号取实现期 `main` 下一空闲并更新 `packet.go` 版本注释）
+- [x] 6.2 失败测试：客户端显示相位 `(WorldTimeTicks + offset) % 24000`（`render/daylight.go`；offset 变更后天空/光照随下一份权威状态切换；旧值不回退）后实现；`go test ./internal/network ./internal/client ./internal/render -race -count=1`
+- [x] 6.3 两份基线文档协议版本行、玩家 schema v8、metadata v3 版本行同步（逐字节相同，`cmp -s`）+ `TestBaselineVersionsMatchCode`；`gofmt -w internal/network internal/client internal/render`、`make rust`；SPEC+QUALITY 双评审后提交 `feat: deliver day phase offset to clients`
 
 ## 7. 视觉场景与功能线终审
 

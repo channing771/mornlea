@@ -247,6 +247,47 @@ func TestSleepThroughNightJumpsPhaseToDayStart(t *testing.T) {
 	}
 }
 
+// TestSleepThroughNightPublishesOffsetInSameTick 锁定「offset 变更随下一份权威
+// 状态切换生效」的权威半部：跳夜 tick 发布的 `PlayerUpdate` 必须已经携带新偏移
+// （跳夜结算先于玩家发布执行），客户端由此在跳夜后的第一份权威状态上立即看到
+// 白昼相位；绝对世界时间照常推进，两者互不干扰。
+func TestSleepThroughNightPublishesOffsetInSameTick(t *testing.T) {
+	engine, _, _ := doorTestReadyEngine(t, core.Hotbar{})
+	session, yaw, pitch := placeSleepBed(t, engine, sleepBedFoot, 3.5)
+	engine.SetWorldTimeForTest(18000)
+	engine.Enqueue(Command{Session: session, Sequence: 10, Kind: CommandInteractBed, Yaw: yaw, Pitch: pitch})
+	result := engine.Step()
+	if len(result.Rejected) != 0 {
+		t.Fatalf("入睡被拒绝: %+v", result.Rejected)
+	}
+	want := uint16((24000 - (18000+1)%24000) % 24000)
+	found := false
+	for _, update := range result.Players {
+		if update.Session != session {
+			continue
+		}
+		found = true
+		if update.DayPhaseOffset != want {
+			t.Fatalf("跳夜 tick 发布的偏移 = %d，想要 %d", update.DayPhaseOffset, want)
+		}
+		if update.WorldTimeTicks != 18001 {
+			t.Fatalf("跳夜 tick 发布的世界时间 = %d，想要 18001", update.WorldTimeTicks)
+		}
+	}
+	if !found {
+		t.Fatal("跳夜 tick 未发布该玩家的权威状态")
+	}
+
+	// 未跳夜的普通 tick 发布既有偏移：偏移不随 tick 推进漂移，客户端持续读到
+	// 同一权威单值。
+	next := engine.Step()
+	for _, update := range next.Players {
+		if update.Session == session && update.DayPhaseOffset != want {
+			t.Fatalf("后续 tick 发布的偏移 = %d，想要保持 %d", update.DayPhaseOffset, want)
+		}
+	}
+}
+
 // TestSleepThroughNightWaitsForAllActivePlayers 覆盖 spec 场景「有玩家未入睡
 // 则不跳」：任一活跃玩家未入睡时，偏移不得变化、已入睡玩家保持入睡；全员入睡
 // 后才在 tick 边界完成跳夜。

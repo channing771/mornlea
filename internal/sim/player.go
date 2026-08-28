@@ -41,6 +41,10 @@ type PlayerUpdate struct {
 	// SaturationZero 是 `saturationMilli==0` 的瞬态提示位，随 `Hunger` 同频下发
 	// （`ProtocolVersion 29` 尾部 1 bool），仅驱动 HUD 抖动呈现。
 	SaturationZero bool
+	// DayPhaseOffset 是本 tick 生效的显示相位偏移（引擎单值，0..23999），与
+	// `WorldTimeTicks` 同频下发。它只进入显示相位
+	// `(WorldTimeTicks + DayPhaseOffset) % 24000`，绝不回写绝对时间。
+	DayPhaseOffset uint16
 	// WorldTimeTicks 是本 tick 结束时的权威绝对世界时间。
 	WorldTimeTicks uint64
 }
@@ -317,7 +321,7 @@ func (engine *Engine) Player(id SessionID) (PlayerUpdate, bool) {
 	if session == nil || session.player == nil {
 		return PlayerUpdate{}, false
 	}
-	return session.player.update(id, session, engine.WorldTime()), true
+	return session.player.update(id, session, engine.WorldTime(), engine.DayPhaseOffset()), true
 }
 
 func (engine *Engine) PlayerSnapshot(id SessionID) (PlayerSnapshot, bool) {
@@ -468,12 +472,14 @@ func (player *playerState) update(
 	id SessionID,
 	session *sessionState,
 	worldTime uint64,
+	dayPhaseOffset uint16,
 ) PlayerUpdate {
 	// 每 tick 定格饱和度归零提示位：`applyExhaustion`/`eating`/`resetHunger`
 	// 均已在权威阶段内完成写入，此处统一收敛，不在各写者处分散同步。
 	player.saturationZero = player.saturationMilli == 0
 	return PlayerUpdate{
 		WorldTimeTicks:    worldTime,
+		DayPhaseOffset:    dayPhaseOffset,
 		Session:           id,
 		Dimension:         session.dimension,
 		ViewCenter:        session.center,
@@ -501,8 +507,12 @@ func (engine *Engine) publishPlayers(result *TickResult) {
 	sort.Slice(sessions, func(i, j int) bool { return sessions[i] < sessions[j] })
 	for _, id := range sessions {
 		session := engine.sessions[id]
+		// 偏移在本 tick 已由跳夜结算（先于玩家发布执行）写入，读到的就是随本
+		// 份权威状态下发的值；跳夜 tick 的客户端即刻看到白昼相位。
 		result.Players = append(
-			result.Players, session.player.update(id, session, result.WorldTimeTicks),
+			result.Players, session.player.update(
+				id, session, result.WorldTimeTicks, engine.DayPhaseOffset(),
+			),
 		)
 		session.player.reset = false
 	}
