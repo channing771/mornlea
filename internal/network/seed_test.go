@@ -3,15 +3,41 @@ package network
 import (
 	"context"
 	"testing"
+
+	"github.com/channing771/mornlea/internal/core"
 )
+
+// mustSeedPlayerID 返回固定测试玩家 ID；seed 域测试与 codec 域测试各自持有
+// 同值夹具，跨包复制系测试跟随被测主体的机械结果。
+func mustSeedPlayerID(t *testing.T) core.PlayerID {
+	t.Helper()
+	id, err := core.ParsePlayerID("00112233-4455-4677-8899-aabbccddeeff")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+// mustSeedCodec 返回会话域测试共用的 `Codec` 门面：LoginSuccess 的 wire 编解码
+// 属编解码子包内部实现，根包测试经根包别名 `NewCodec` 的导出方法驱动同一路径。
+func mustSeedCodec(t *testing.T) *Codec {
+	t.Helper()
+	codec, err := NewCodec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = codec.Close() })
+	return codec
+}
 
 // TestProtocolV23LoginSuccessCarriesWorldSeed 验证种子字段恰好追加在
 // `PlayerID` 之后：固定 16 字节 UUID + little-endian uint64，全值域可往返，
 // 任何截断或尾随字节都必须被拒绝，不产生部分包。
 func TestProtocolV23LoginSuccessCarriesWorldSeed(t *testing.T) {
-	id := mustCodecPlayerID(t)
+	id := mustSeedPlayerID(t)
+	codec := mustSeedCodec(t)
 	packet := LoginSuccess{PlayerID: id, WorldSeed: 0x1122334455667788}
-	gotID, payload, err := encodeServerControlPayload(StateLogin, packet)
+	gotID, payload, err := codec.EncodeServer(StateLogin, packet)
 	if err != nil || gotID != 0 {
 		t.Fatalf("encode = (id %d, %v)", gotID, err)
 	}
@@ -21,7 +47,7 @@ func TestProtocolV23LoginSuccessCarriesWorldSeed(t *testing.T) {
 		t.Fatalf("payload = %x，想要 %x（UUID 后跟 LE uint64 种子）", payload, want)
 	}
 
-	round, err := decodeServerControlPayload(StateLogin, gotID, payload)
+	round, err := codec.DecodeServer(StateLogin, gotID, payload)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,11 +57,11 @@ func TestProtocolV23LoginSuccessCarriesWorldSeed(t *testing.T) {
 
 	// payload 是固定长度 24 字节：所有截断与尾随字节都必须被拒绝。
 	for length := 0; length < len(payload); length++ {
-		if _, err := decodeServerControlPayload(StateLogin, gotID, payload[:length]); err == nil {
+		if _, err := codec.DecodeServer(StateLogin, gotID, payload[:length]); err == nil {
 			t.Fatalf("截断到 %d 字节被接受", length)
 		}
 	}
-	if _, err := decodeServerControlPayload(StateLogin, gotID, append(payload, 0)); err == nil {
+	if _, err := codec.DecodeServer(StateLogin, gotID, append(payload, 0)); err == nil {
 		t.Fatal("多出尾随字节被接受")
 	}
 }
@@ -44,14 +70,15 @@ func TestProtocolV23LoginSuccessCarriesWorldSeed(t *testing.T) {
 // （含 0 与最大值）都不携带任何隐式校验：种子的语义解释属于客户端远环
 // 播种（任务 5.2），wire 层只负责无损搬运。
 func TestProtocolV23LoginSuccessWorldSeedAcceptsFullRange(t *testing.T) {
-	id := mustCodecPlayerID(t)
+	id := mustSeedPlayerID(t)
+	codec := mustSeedCodec(t)
 	for _, seed := range []uint64{0, 1, 0x7fff_ffff_ffff_ffff, ^uint64(0)} {
 		packet := LoginSuccess{PlayerID: id, WorldSeed: seed}
-		gotID, payload, err := encodeServerControlPayload(StateLogin, packet)
+		gotID, payload, err := codec.EncodeServer(StateLogin, packet)
 		if err != nil {
 			t.Fatalf("种子 %d 编码失败：%v", seed, err)
 		}
-		round, err := decodeServerControlPayload(StateLogin, gotID, payload)
+		round, err := codec.DecodeServer(StateLogin, gotID, payload)
 		if err != nil {
 			t.Fatalf("种子 %d 解码失败：%v", seed, err)
 		}

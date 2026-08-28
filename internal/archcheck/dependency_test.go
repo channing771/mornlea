@@ -29,20 +29,28 @@ import (
 // 也不预先登记未使用的边）；fluid MUST NOT 反向依赖 sim/network/render/storage，
 // 否则它会退化成 sim 的内部实现，丧失独立测试的意义。
 var allowed = map[string][]string{
-	"internal/archcheck":   {},
-	"internal/audio":       {},
-	"internal/companion":   {"internal/core", "internal/pathfind"},
-	"internal/core":        {"internal/nativeabi"},
-	"internal/nativeabi":   {},
-	"internal/config":      {"internal/companion", "internal/core", "internal/physics", "internal/sim", "internal/logging"},
-	"internal/fluid":       {"internal/core"},
-	"internal/physics":     {"internal/core", "internal/nativeabi"},
-	"internal/pathfind":    {"internal/core"},
-	"internal/logging":     {},
-	"internal/network":     {"internal/companion", "internal/core"},
-	"internal/network/tcp": {"internal/network"},
-	"internal/profile":     {"internal/core"},
-	"internal/sim":         {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/world"},
+	"internal/archcheck": {},
+	"internal/audio":     {},
+	"internal/companion": {"internal/core", "internal/pathfind"},
+	"internal/core":      {"internal/nativeabi"},
+	"internal/nativeabi": {},
+	"internal/config":    {"internal/companion", "internal/core", "internal/physics", "internal/sim", "internal/logging"},
+	"internal/fluid":     {"internal/core"},
+	"internal/physics":   {"internal/core", "internal/nativeabi"},
+	"internal/pathfind":  {"internal/core"},
+	"internal/logging":   {},
+	// internal/network 拆分后根包保留会话与传输编排，协议消息层
+	// （packet/message DTO/registry/snapshot）落位 protocol 子包，编解码层
+	// （wire 原语、packet 编解码、快照信封、帧封装）落位 codec 子包；根包
+	// internal/companion 边随 message_companion.go 移交 protocol 后一并移交，
+	// 根包经 types.go 别名再导出保持消费面不变。codec 的 wire 常量经
+	// protocol 取值，不得直接依赖 internal/companion。
+	"internal/network":          {"internal/core", "internal/network/codec", "internal/network/protocol"},
+	"internal/network/codec":    {"internal/core", "internal/network/protocol"},
+	"internal/network/protocol": {"internal/companion", "internal/core"},
+	"internal/network/tcp":      {"internal/network"},
+	"internal/profile":          {"internal/core"},
+	"internal/sim":              {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/world"},
 	"internal/storage": {
 		"internal/core",
 		"internal/storage/chunk", "internal/storage/companion", "internal/storage/hostile",

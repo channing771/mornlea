@@ -14,14 +14,14 @@ Mornlea 由 Go 应用与两个 Rust `cdylib` 组成。Go 持有应用装配、�
 
 普通本地游戏使用 Memory transport，远程游戏使用 TCP transport；两者复用同一 packet/codec 契约、登录状态机、会话装配和权威模拟。Memory 只改变传送介质，不提供绕过登录、输入校验或服务端裁决的同进程特权路径。
 
-`internal/network` 负责 packet、codec、登录状态机、共享 stream 接口和 Memory transport；`internal/network/tcp` 负责 TCP listener、dial、stream 实现，且只承担 transport 职责。Host 与模拟层消费相同的已验证命令，因此本地和远程模式共享行为语义。
+`internal/network` 负责会话与传输编排：共享 stream 接口、Play endpoint 门面、登录状态机和 Memory transport，并以别名再导出对协议消息子包 `internal/network/protocol`（packet/message/registry/snapshot 协议层）与编解码子包 `internal/network/codec`（packet↔wire 编解码与帧封装）保持既有 `network.X` 消费面；`internal/network/tcp` 负责 TCP listener、dial、stream 实现，且只承担 transport 职责。Host 与模拟层消费相同的已验证命令，因此本地和远程模式共享行为语义。
 
 ## 4. Go 包职责与 archcheck 依赖边界
 
 - `cmd/mornlea` 和 `cmd/mornlea-server` 负责应用入口与资源生命周期装配。
 - `internal/world` 持有区块、section、容器和掉落物等世界数据模型。
 - `internal/sim` 持有权威 tick、规则结算和世界变更编排。
-- `internal/network` 持有 packet、codec、登录状态机、共享 stream 接口与 Memory transport；`internal/network/tcp` 持有 TCP listener、dial、stream 实现，只依赖 `internal/network` 且保持 transport-only。
+- `internal/network` 持有会话与传输编排（共享 stream 接口、endpoint 门面、登录状态机与 Memory transport）加别名再导出门面；`internal/network/protocol` 持有 packet/message/registry/snapshot 协议层，`internal/network/codec` 持有编解码与帧封装；`internal/network/tcp` 持有 TCP listener、dial、stream 实现，只依赖 `internal/network` 且保持 transport-only。
 - `internal/storage` 持有世界、玩家和伙伴数据的编码、迁移、恢复与磁盘生命周期。
 - `internal/server` 装配 Host、会话、权威模拟与持久化 worker。
 - `internal/pathfind` 持有不可变快照上的有界寻路且只依赖 `internal/core`；`internal/companion` 与 `internal/server` 消费它，但寻路不拥有玩法或世界访问。
