@@ -63,11 +63,12 @@ core}。companion 存储域 MUST 经既有 `internal/companion` 边访问伙伴�
 
 ### Requirement: 存储别名再导出保持消费面与格式语义
 
-拆分 MUST 保持全部既有消费方源码零改动：根包 MUST 以类型别名与错误值别名
-再导出全部迁出符号，既有 `storage.X` 引用 MUST 继续以同一名称与类型身份解析；
-`ErrCorrupt`/`ErrFutureVersion` 别名 MUST 与 `storagedef` 定义为同一错误值。
-拆分 MUST NOT 改变 schema 号、迁移表、错误消息、原子替换路径或格式字节；
-版本化 bin fixture MUST 逐字节随所属域包迁移。
+拆分 MUST 保持消费方生产代码零改动：根包 MUST 以类型别名与错误值别名再导出
+全部迁出符号，既有 `storage.X` 引用 MUST 继续以同一名称与类型身份解析；
+`ErrCorrupt`/`ErrFutureVersion` 别名 MUST 与 `storagedef` 定义为同一错误值；
+消费方测试因版本化 bin fixture 随所属域包迁移所需的 fixture 相对路径更新
+MUST NOT 视为消费方改动。拆分 MUST NOT 改变 schema 号、迁移表、错误消息、
+原子替换路径或格式字节；版本化 bin fixture MUST 逐字节随所属域包迁移。
 
 #### Scenario: 消费方符号继续可寻址
 
@@ -75,7 +76,9 @@ core}。companion 存储域 MUST 经既有 `internal/companion` 边访问伙伴�
   `cmd/mornlea-server` 等消费方以 `storage.X` 引用迁出符号
 - **WHEN** 拆分完成并编译全仓
 - **THEN** 全部既有 `storage.X` 符号 MUST 继续以同一名称与类型身份解析
-- **AND** 消费方源码 MUST 零改动
+- **AND** 消费方生产代码 MUST 零改动
+- **AND** 消费方测试仅因 fixture 随域包迁移更新的 fixture 相对路径 MUST NOT
+  视为消费方改动
 
 #### Scenario: 错误哨兵身份与 fixture 字节不变
 

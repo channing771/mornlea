@@ -30,7 +30,8 @@ companions v1–v4、hostile-mobs v1）集中在 `internal/storage/testdata`。
 - 让实体域 codec 迭代可定点：`go test ./internal/storage/<域>` 不编译执行其他
   域的测试。
 - 依赖方向单向并由 archcheck 登记允许边，防漂移。
-- 消费方源码零改动：既有 `storage.X` 符号面逐符号保持。
+- 消费方生产代码零改动：既有 `storage.X` 符号面逐符号保持；消费方测试因
+  fixture 随域包迁移所需的相对路径更新不在此限。
 - 文档按子包地图重组：根 `AGENTS.md` 总纲 + 五个域子包各一份 AGENTS.md。
 
 **Non-Goals:**
@@ -141,7 +142,8 @@ ledger。`region.go` 属 chunk 记录层（其 `save`/`load` 直接调用 chunk 
 - 别名只覆盖上表「迁出 + 别名再导出」清单；未列入的域内导出不加别名，根包
   内部代码直接以 `region.`/`chunk.`/`player.`/`companion.`/`hostile.` 限定名
   消费。
-- 验收锚点：拆分前后全仓 `storage.` 符号引用清单 diff 为空（消费方源码零改动）。
+- 验收锚点：拆分前后全仓 `storage.` 符号引用清单 diff 为空（消费方生产代码
+  零改动；消费方测试因 fixture 随域迁移的相对路径更新除外）。
 
 ## Decisions
 

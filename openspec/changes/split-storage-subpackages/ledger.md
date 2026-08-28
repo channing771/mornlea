@@ -560,3 +560,41 @@
     生产 import 面实测仅根包）加 openspec 主规格
     `repository-code-organization` 容器编排条款评审把关。
 - 评审结论：待控制会话规格与质量双评审。
+
+### Final Review 修复轮（final reviewer 裁决：收窄「消费方零改动」绝对化措辞）
+
+- 裁决：delta spec「消费方源码 MUST 零改动」是绝对化表述，与本 change 的
+  「版本化 bin fixture 逐字节随所属域包迁移」条款结构性互斥——兑现后者已在
+  commit `c2d89fce` 修改 `internal/server/hunger_persistence_test.go` 的
+  fixture 相对路径（`../storage/testdata/player-v6.bin` →
+  `../storage/player/testdata/player-v6.bin`）。绝对化措辞归档进主规格后将
+  与仓库历史自相矛盾，归档前 MUST 收窄为语义契约口径：消费方 `storage.X`
+  符号引用与类型身份不变，消费方生产代码零改动；消费方测试因 fixture 随域
+  迁移所需的相对路径更新不在此限。
+- 修复点（统一按上述口径收窄，保持 MUST/GIVEN-WHEN-THEN 语言风格）：
+  1. `specs/repository-code-organization/spec.md` Requirement「存储别名再导出
+     保持消费面与格式语义」首句与 Scenario「消费方符号继续可寻址」AND 条款：
+     「全部既有消费方源码零改动」/「消费方源码 MUST 零改动」收窄为「消费方
+     生产代码零改动」，并新增 fixture 相对路径更新不计为消费方改动的豁免
+     条款。
+  2. `proposal.md` What Changes「消费面零改动」条与 Impact「消费方零改动」
+     条：「源码不得因拆分而修改」收窄为「生产代码」，补 fixture 路径豁免；
+     Impact 条点名 `internal/server` player golden 路径适配为已知例外。
+  3. `design.md` Goals 条与「导出面清单与别名策略」验收锚点：「消费方源码
+     零改动」收窄为「消费方生产代码零改动」并补豁免。
+  4. `tasks.md` Execution Protocol 共用验收锚点：`git status` 检查收窄为
+     「不含 `internal/server`、`cmd/` 生产文件」，注明 fixture 相对路径
+     更新除外。
+  5. 执行计划 `docs/superpowers/plans/2026-08-28-split-storage-subpackages.md`
+     Global Constraints 首条：「代码不得因拆分而修改」收窄为「生产代码」，
+     补 fixture 路径豁免。
+- 历史 ledger 条目（Baseline 与 Task 2–5 验证记录中的「消费方源码零改动/
+  `git status` 无 `internal/server`/`cmd/` 文件」）为对应 commit 时点的实测
+  事实，不回溯改写；Task 6 条目已记录 fixture 路径适配与「`storage.X` 符号
+  消费面仍零改动」的区分，与本裁决口径一致。
+- 验证（本 worktree 实测，2026-08-28）：
+  - `openspec validate --all --strict --no-interactive` →
+    `Totals: 77 passed, 0 failed (77 items)`，其中
+    `✓ change/split-storage-subpackages`；
+  - `go test ./internal/archcheck -count=1` → `ok ... 6.898s`。
+- 本轮为纯文档措辞收窄，未改任何 Go 代码。

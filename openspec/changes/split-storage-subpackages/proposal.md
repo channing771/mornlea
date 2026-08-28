@@ -34,9 +34,10 @@
   chunk → region；实体域 → storagedef；region → storagedef；子包之间不得互相
   导入（chunk → region 除外）；companion 域保留既有 `internal/companion` 边。
 - 消费面零改动：`internal/server`、`cmd/mornlea/app`、`cmd/mornlea/benchmark`、
-  `cmd/mornlea-server` 等消费方的源码不得因拆分而修改；根包别名再导出保证既有
-  `storage.X` 符号全部继续可寻址，`ErrCorrupt`/`ErrFutureVersion` 别名与
-  `storagedef` 定义为同一错误值。
+  `cmd/mornlea-server` 等消费方的生产代码不得因拆分而修改，既有 `storage.X`
+  符号引用与类型身份不变；消费方测试因 fixture 随域包迁移所需的相对路径更新
+  不在此限。根包别名再导出保证既有 `storage.X` 符号全部继续可寻址，
+  `ErrCorrupt`/`ErrFutureVersion` 别名与 `storagedef` 定义为同一错误值。
 - 测试入口并集不变：拆分前 `go test ./internal/storage -list '.*'` 的
   223 Test + 7 Benchmark + 4 Fuzz 逐名冻结进基线，拆分后各子包 `-list` 并集与
   基线完全一致；测试函数名与 `t.Run` 标签逐一不变。
@@ -63,8 +64,10 @@
 
 - 受影响生产包：`internal/storage`（缩为编排根包）与新增
   `internal/storage/{storagedef,region,chunk,player,companion,hostile}`。
-- 消费方零改动：`internal/server`、`cmd/mornlea/app`、`cmd/mornlea/benchmark`、
-  `cmd/mornlea-server` 对 `storage.X` 的既有引用保持不变（别名再导出承接）。
+- 消费方生产代码零改动：`internal/server`、`cmd/mornlea/app`、
+  `cmd/mornlea/benchmark`、`cmd/mornlea-server` 对 `storage.X` 的既有引用保持
+  不变（别名再导出承接）；消费方测试仅 fixture 相对路径随域迁移适配
+  （如 `internal/server` 的 player golden 路径）。
 - 受影响架构守卫：`internal/archcheck/dependency_test.go` 登记新包与允许边。
 - 受影响资产：`internal/storage/testdata` 的 22 个版本化 bin 按域随包
   `git mv`（git 保留历史）。

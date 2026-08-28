@@ -7,7 +7,8 @@
 
 每个实现任务共用验收锚点：`go test ./internal/storage/... -list '.*'` 并集与
 `baseline-test-list.txt` 完全一致（223 Test + 7 Benchmark + 4 Fuzz，逐名）；
-消费方源码零改动（`git status` 不含 `internal/server`、`cmd/` 文件）。
+消费方生产代码零改动（`git status` 不含 `internal/server`、`cmd/` 生产文件；
+消费方测试因 fixture 随域迁移所需的相对路径更新除外）。
 
 ## 1. 基线与 change 建立
 

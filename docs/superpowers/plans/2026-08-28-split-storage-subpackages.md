@@ -5,7 +5,7 @@
 
 ## Global Constraints
 
-- 消费面零改动：`internal/server`、`internal/sim`、`cmd/mornlea`、`cmd/mornlea/app`、`cmd/mornlea/benchmark`、`cmd/mornlea-server` 的代码不得因拆分而修改。
+- 消费面零改动：`internal/server`、`internal/sim`、`cmd/mornlea`、`cmd/mornlea/app`、`cmd/mornlea/benchmark`、`cmd/mornlea-server` 的生产代码不得因拆分而修改，既有 `storage.X` 符号引用与类型身份不变；消费方测试因 fixture 随域包迁移所需的相对路径更新不在此限。
 - 测试入口并集不变：改造前 `go test ./internal/storage -list '.*'` 的 223 Test + 7 Benchmark + 4 Fuzz 逐名冻结进 change ledger；每个 Task 后 `go test ./internal/storage/... -list '.*'` 并集必须与基线完全一致。
 - 行为不变：schema 号、迁移表、错误哨兵消息与 `errors.Is` 身份、原子替换路径、格式字节一律不变；golden/版本化 fixture 原样随包 `git mv`。
 - 依赖方向单向并由 archcheck 登记：root → 5 个域包；chunk → {region, storagedef, core, world}；player/companion/hostile → {storagedef, core, world（+companion 既有边）}；region → {storagedef, core}；子包之间不得互相导入（chunk 依赖 region 除外）。
