@@ -80,6 +80,63 @@
   拆分说明、风险节）与执行计划文档的 Task 2/3 边界随 Task 2 前置文档修订
   落地。代价：若错，Task 3 单任务偏大（约 6.5k 行机械迁移），由 `-list`
   并集对照 + 逐域定点 race 兜底。
+- Ruling T3-1: `maxCompressedChunk` 随 region 包、导出为
+  `region.MaxCompressedChunk` — design 文件簇映射未覆盖该常量的归属；代码
+  实测 `validateRegionBank`（region 格式原语）按它拒绝超限 entry，而 region
+  不得反向依赖 chunk，故单一事实来源必须落 region 包，chunk 信封编解码改为
+  引用 `region.MaxCompressedChunk`，两包不各自漂移。
+- Ruling T3-2: `ErrChunkNotFound`/`ErrRevisionConflict` 定义随 chunk 记录层
+  迁入 chunk 包，根包以 `var` 绑定同一错误值再导出 — design 导出面清单把
+  二者列为「留根不动」，但 `region.go` 的 load/save 路径直接产生这两个哨兵，
+  chunk 不得反向导入根包；且 delta spec 锁定 storagedef「只承载
+  ErrCorrupt/ErrFutureVersion」，不能往 storagedef 塞。错误消息逐字节不变，
+  `errors.Is` 身份不变（同一错误值），消费面零改动。ErrRevisionConflict 在
+  T4/T5 的归属（player/companion/hostile 不得依赖 chunk）留给对应 task 裁决。
+- Ruling T3-3: `SaveResult` 留根不别名，chunk 另持同构 `chunk.SaveResult` —
+  design 清单权威于 brief（brief 建议别名）。region 容器 `Save` 返回
+  `chunk.SaveResult`，根包 `SaveBatch` 沿既有合并循环把 `Committed` 拷入
+  `storage.SaveResult`，消费面类型身份零变化。
+- Ruling T3-4: 共享 codec 字节原语按域持同构副本 — `byteDecoder`/
+  `appendU32`/`appendU64`/`corrupt` 随 `chunk_codec_primitives.go` 入 chunk
+  包，而根包 player/companion/hostile codec（T4/T5 才迁）同样引用它们；根包
+  新建 `byte_codec.go` 持同构副本（sentinel 走 storagedef），`fillFullDurability`
+  同理由根包 `player_migration.go` 持副本。T4/T5 迁移实体 codec 时各自带走，
+  不为 T3 预设共享原语包。
+- Ruling T3-5: chunk 容器导出面与根包白盒注入点 — 容器导出为
+  `chunk.Region`（原 `*region`），入口 `CreateRegion`/`OpenRegion` 与方法
+  `Load`/`Save`/`Sync`/`Close`/`ShouldCompact`/`Compact`/`Bank()`（ChunkKeys
+  枚举槽位用）；`regionFile` 接口导出为 `chunk.File`，另设 `File()`/
+  `ReplaceFile()`/`SetCompactionHooks()` 三个仅根包编排测试消费的注入点
+  （delta spec「文件注入钩子 MUST 位于 chunk 包」场景的落地形态）；
+  `regionCompactionHooks` 导出为 `region.CompactionHooks`（字段
+  BeforeTempSync/Rename/SyncDirectory），`productionRegionSpacePolicy` 导出为
+  可变量 `region.ProductionSpacePolicy`（根包 disk.go 读取、disk_test 同进程
+  替换，与拆分前语义一致）。
+- Ruling T3-6: `TestPlayerSchemaV8KeepsM4EItems` 按「跟随被测主体」改判留根 —
+  实测其位于 `chunk_furnace_test.go` 内，但被测主体是 player codec
+  （`encodePlayer`/`decodePlayer`/`fixturePlayerSave`），随 chunk 文件整体
+  迁移会违反域归属；函数连同断言逐字移入根包 `player_codec_test.go`（仅加
+  一条落位说明注释），`-list` 并集逐名不变。
+- Ruling T3-7: `region_space_test.go` 按容器/原语拆分落位 — 两个 allocator
+  测试随原语入 `region/region_space_test.go`，
+  `TestRegionSaveReusesInactiveOnlyExtentWithoutGrowing`（经 openRegion 测容器）
+  落 `chunk/region_space_test.go`；`region_space.go` 的四个 `*region` 方法
+  （shouldCompact/writeCompactedFile/reopenCanonical/compact）落
+  `chunk/region_space.go`（同文件名落 chunk 包，方法体逐行保持）。
+- Ruling T3-8: `region_crash_test.go` 复核维持暂判 chunk — 逐行核实其经
+  `openRegionWithHooks` + `r.Save`/`r.Load` 测容器提交原子性与 crash/reopen，
+  不是纯格式原语测试，无需改判 region 包。
+- Ruling T3-9: DiskStore/MemoryStore 夹具随域装配改造 — `bench_test.go` 的
+  `BenchmarkDiskStoreSave32`/`BenchmarkDiskStoreColdLoad` 改为直接组合
+  region 记录层（CreateRegion+Save / OpenRegion+Load+Close，路径沿用
+  dimensions/N/regions 布局），`derived_state_test.go` 的 MemoryStore 夹具
+  改为 CreateRegion+Save+Load+Close；测试函数名、子测试标签与断言逐字不变，
+  只动装配。计时数值只记录不设门槛。
+- Ruling T3-10: 不新增 storage 子包方向源码级守卫测试 — design Decision 6
+  与 delta spec 场景以 archcheck 白名单登记为准；`TestClientCommand...`
+  之所以用 AST 源码解析是因 cmd/mornlea 带 GOOS 构建约束会导致 `go list`
+  导入边随平台翻转，internal/storage 各包无构建约束，go-list 检查平台无关，
+  按既有检查器复用即可。
 
 ## Review Log
 
@@ -174,3 +231,42 @@
     `go vet ./internal/storage/... ./internal/archcheck` 通过。
 - 评审结论：待控制会话规格与质量双评审；tasks.md 2.1 勾选待评审通过后
   执行。
+
+### Task 3（region 格式原语 + chunk 记录层同任务原子迁移）
+
+- 实现：commit `a1e1381a` — 新建 `internal/storage/region`（package doc 中文，
+  只依赖 core+storagedef：`RegionKey`/`RegionFor`/`floorDiv32`、superblock/bank
+  编解码、`FreeSectorExtents`/`AllocateExtent`、`SpacePolicy`/
+  `ProductionSpacePolicy`/`CompactionHooks`、`MaxCompressedChunk`）与
+  `internal/storage/chunk`（依赖 region+storagedef+core+world：`Region` 容器、
+  `CreateRegion`/`OpenRegion` 与 Load/Save/Sync/Close/ShouldCompact/Compact/
+  Bank、`File` 接口与 File()/ReplaceFile()/SetCompactionHooks() 注入点、
+  `Encode`/`Decode`/`DecodedPayload`/`ValidateChunkSave`、`ChunkSave`/
+  `StoredChunk`/`SaveResult`、`ErrChunkNotFound`/`ErrRevisionConflict`、
+  migration 链与 chunk-v1..v9.bin）。根包 `types.go` 别名再导出
+  `RegionKey`/`RegionFor`/`StoredChunk`/`ChunkSave` 与错误值别名；
+  `disk.go`/`memory.go`/`chunk_keys.go` 改经 `chunk.`/`region.` 限定名消费；
+  archcheck 登记 `internal/storage/region`（core+storagedef）、
+  `internal/storage/chunk`（core+region+storagedef+world）并把两者加入根包
+  允许集；`baseline_test.go` 区块 schema 权威来源路径同步为
+  `internal/storage/chunk/chunk_codec.go`。
+- 归属裁决与适配：见 Rulings T3-1..T3-10（含 TestPlayerSchemaV8KeepsM4EItems
+  改判留根、region_space 测试拆分、byte 原语按域持副本）。
+- fixture：chunk-v1..v9.bin 以 `git mv` 随 chunk 包迁移，字节逐字节不变；
+  根 testdata 保留 player/companions/hostile 域 fixture。
+- 验证（commit `a1e1381a` 实测，2026-08-28）：
+  - `go test ./internal/storage/... -race -count=1` → 根 `ok ... 23.920s`、
+    chunk `ok ... 12.376s`、region `ok ... 1.632s`（对照 Baseline 单包
+    race 24.194s，拆包后总量略降，只记录不设门槛）；
+  - 非 race：根 `ok ... 4.434s`、chunk `ok ... 1.797s`、region
+    `ok ... 0.453s`（对照 4.433s）；
+  - `go test ./internal/archcheck -count=1` → `ok ... 9.262s`；
+  - `go build ./internal/server ./internal/sim ./cmd/...` → 通过；`git status`
+    无 `internal/server`/`cmd/` 文件（消费方源码零改动）；
+  - `go test ./internal/storage/... -list '.*'` 并集与
+    `baseline-test-list.txt` 逐名 diff 为空（234 = 223 Test + 7 Benchmark +
+    4 Fuzz）；
+  - `gofmt -l internal/storage internal/archcheck` 无输出；
+    `go vet ./internal/storage/... ./internal/archcheck` 通过。
+- 评审结论：待控制会话规格与质量双评审；tasks.md 3.1/3.2/3.3 勾选待评审
+  通过后执行。
