@@ -10,6 +10,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/sim/realm"
 )
 
 type PlayerLifecycle uint8
@@ -136,7 +137,7 @@ type playerState struct {
 }
 
 func (engine *Engine) RegisterPlayer(id SessionID, restore PlayerRestore) {
-	if engine.dimensions[restore.SpawnDimension] == nil {
+	if engine.dimension(restore.SpawnDimension) == nil {
 		panic("sim: register session in unknown dimension")
 	}
 	if engine.sessions[id] != nil {
@@ -492,12 +493,12 @@ func (engine *Engine) advanceActivePlayers() {
 			engine.subscriptionsDirty = true
 			continue
 		}
-		if !engine.tryUnstick(player, engine.dimensions[session.dimension]) {
+		if !engine.tryUnstick(player, engine.dimension(session.dimension)) {
 			player.beginReset()
 			engine.subscriptionsDirty = true
 			continue
 		}
-		source := dimensionCollisionSource{dimension: engine.dimensions[session.dimension]}
+		source := dimensionCollisionSource{dimension: engine.dimension(session.dimension)}
 		// 浸没标志由权威侧在 tick 边界用共享纯函数从自己的方块镜像算出，
 		// 再随 Input 传进物理步——流体没有碰撞盒，prism 里区分不出水与空气。
 		input := player.input
@@ -611,7 +612,7 @@ func (engine *Engine) updateSafeLocation(session *sessionState) {
 	if !player.state.OnGround {
 		return
 	}
-	dimension := engine.dimensions[session.dimension]
+	dimension := engine.dimension(session.dimension)
 	if dimension == nil || !restoreLocationChunksReady(
 		dimension,
 		player.state.Position,
@@ -646,7 +647,7 @@ func restoreLocationChunksReady(
 		for z := minZ; z <= maxZ; z++ {
 			chunk := (core.BlockPos{X: x, Z: z}).Chunk()
 			info, exists := dimension.Info(chunk)
-			if !exists || info.State != ChunkReady {
+			if !exists || info.State != realm.ChunkReady {
 				return false
 			}
 		}

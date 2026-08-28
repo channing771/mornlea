@@ -13,15 +13,11 @@ import (
 // containerChunk 解析一个容器引用所在的区块；区块未加载或未 Ready 都视为失效。
 // 熔炉与箱子共用同一份区块解析，只有槽位本身的读取按 Kind 分叉。
 func (engine *Engine) containerChunk(ref core.ContainerRef) (*world.Chunk, bool) {
-	dimension := engine.dimensions[ref.Dimension]
+	dimension := engine.dimension(ref.Dimension)
 	if dimension == nil {
 		return nil, false
 	}
-	record, ok := dimension.Records[ref.Chunk]
-	if !ok || record.State != ChunkReady || record.Chunk == nil {
-		return nil, false
-	}
-	return record.Chunk, true
+	return dimension.ReadyChunk(ref.Chunk)
 }
 
 // chestView 定位一个箱子引用当前指向的槽；引用失效时返回 false。
@@ -66,7 +62,7 @@ func (engine *Engine) openContainer(id SessionID, command Command) (RejectReason
 	if session == nil || session.player == nil || session.player.lifecycle != PlayerActive {
 		return RejectPlayerNotReady, true
 	}
-	dimension := engine.dimensions[session.dimension]
+	dimension := engine.dimension(session.dimension)
 	if dimension == nil {
 		return RejectChunkNotReady, true
 	}
@@ -107,8 +103,8 @@ func (engine *Engine) openContainer(id SessionID, command Command) (RejectReason
 		return RejectNoTarget, true
 	}
 	key := core.ChunkKey{Dimension: session.dimension, Pos: hit.Block.Chunk()}
-	record, exists := dimension.Records[key.Pos]
-	if !exists || record.State != ChunkReady || record.Chunk == nil {
+	chunk, exists := dimension.ReadyChunk(key.Pos)
+	if !exists {
 		return RejectChunkNotReady, true
 	}
 	index, indexed := world.ChunkBlockIndex(hit.Block)
@@ -130,22 +126,22 @@ func (engine *Engine) openContainer(id SessionID, command Command) (RejectReason
 	var ref core.ContainerRef
 	switch kind {
 	case core.ContainerKindFurnace:
-		slot, found := record.Chunk.FurnaceAt(index)
+		slot, found := chunk.FurnaceAt(index)
 		if !found {
 			return RejectNoTarget, true
 		}
 		ref = core.ContainerRef{
 			Dimension: session.dimension, Chunk: key.Pos, Kind: kind,
-			Slot: uint8(slot), Generation: record.Chunk.Furnace(slot).Generation,
+			Slot: uint8(slot), Generation: chunk.Furnace(slot).Generation,
 		}
 	case core.ContainerKindChest:
-		slot, found := record.Chunk.ChestAt(index)
+		slot, found := chunk.ChestAt(index)
 		if !found {
 			return RejectNoTarget, true
 		}
 		ref = core.ContainerRef{
 			Dimension: session.dimension, Chunk: key.Pos, Kind: kind,
-			Slot: uint8(slot), Generation: record.Chunk.Chest(slot).Generation,
+			Slot: uint8(slot), Generation: chunk.Chest(slot).Generation,
 		}
 	}
 	session.container = ref
@@ -395,11 +391,9 @@ func (engine *Engine) SetChunkChestForTest(
 	slot int,
 	value world.ChestSlot,
 ) {
-	dimension := engine.dimensions[key.Dimension]
+	dimension := engine.dimension(key.Dimension)
 	if dimension == nil {
 		return
 	}
-	if record, ok := dimension.Records[key.Pos]; ok && record.Chunk != nil {
-		record.Chunk.SetChest(slot, value)
-	}
+	dimension.UpdateReadyChunk(key.Pos, func(chunk *world.Chunk) { chunk.SetChest(slot, value) })
 }

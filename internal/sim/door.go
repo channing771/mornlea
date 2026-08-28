@@ -74,7 +74,7 @@ func (engine *Engine) tryPlaceDoor(dimensionID core.DimensionID, lower core.Bloc
 	if lower.Y < core.MinY || lower.Y >= core.MaxY || upper.Y < core.MinY || upper.Y >= core.MaxY {
 		return RejectChunkNotReady, true
 	}
-	dimension := engine.dimensions[dimensionID]
+	dimension := engine.dimension(dimensionID)
 	if dimension == nil {
 		return RejectChunkNotReady, true
 	}
@@ -121,7 +121,7 @@ func (engine *Engine) tryPlaceDoor(dimensionID core.DimensionID, lower core.Bloc
 
 // handleInteractDoor 处理对门方块的右键交互，上下联动切换 Closed<->Open。
 func handleInteractDoor(engine *Engine, dimensionID core.DimensionID, pos core.BlockPos, pending *pendingChunkChanges) bool {
-	dimension := engine.dimensions[dimensionID]
+	dimension := engine.dimension(dimensionID)
 	if dimension == nil {
 		return false
 	}
@@ -169,7 +169,7 @@ func (engine *Engine) executeInteractDoor(command Command, pending *pendingChunk
 		return RejectPlayerNotReady, true
 	}
 	dimensionID := session.dimension
-	dimension := engine.dimensions[dimensionID]
+	dimension := engine.dimension(dimensionID)
 	if dimension == nil || !session.hasView {
 		return RejectInvalidRay, true
 	}

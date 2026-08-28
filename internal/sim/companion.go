@@ -10,6 +10,7 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/sim/realm"
 )
 
 const (
@@ -47,7 +48,7 @@ func (engine *Engine) RegisterCompanion(restore CompanionRestore) {
 	if !restore.ID.Valid() {
 		panic("sim: register companion with invalid ID")
 	}
-	if engine.dimensions[restore.SpawnDimension] == nil {
+	if engine.dimension(restore.SpawnDimension) == nil {
 		panic("sim: register companion in unknown spawn dimension")
 	}
 	if engine.companions[restore.ID] != nil {
@@ -142,7 +143,7 @@ func (engine *Engine) advancePendingCompanion(state *companionState) {
 		engine.subscriptionsDirty = true
 	}
 
-	dimension := engine.dimensions[state.dimension]
+	dimension := engine.dimension(state.dimension)
 	if state.exhausted {
 		if !spawnChunkRevisionsChanged(dimension, state.spawnChunks, state.exhaustedRevisions) {
 			return
@@ -163,7 +164,7 @@ func (engine *Engine) advancePendingCompanion(state *companionState) {
 		}
 		position, tier, ready := findSpawnInColumn(candidate, dimension, source)
 		if !ready {
-			if info, ok := dimension.Info(chunk); !ok || info.State == ChunkFailed {
+			if info, ok := dimension.Info(chunk); !ok || info.State == realm.ChunkFailed {
 				engine.subscriptionsDirty = true
 			}
 			return
@@ -190,7 +191,7 @@ func (engine *Engine) advancePendingCompanion(state *companionState) {
 	state.exhaustedRevisions = make([]uint64, len(state.spawnChunks))
 	for index, chunk := range state.spawnChunks {
 		info, ok := dimension.Info(chunk)
-		if !ok || info.State != ChunkReady {
+		if !ok || info.State != realm.ChunkReady {
 			panic("sim: exhausted companion spawn chunk is not ready")
 		}
 		state.exhaustedRevisions[index] = info.Revision

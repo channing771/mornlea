@@ -234,34 +234,6 @@ func dirtyPlayerEngine(t *testing.T, key core.ChunkKey) *sim.Engine {
 	return engine
 }
 
-type persistenceRevisions struct {
-	current, persisted, inFlight uint64
-}
-
-func persistenceRevisionsForTest(
-	t *testing.T,
-	engine *sim.Engine,
-	key core.ChunkKey,
-) persistenceRevisions {
-	t.Helper()
-	dimensions := reflect.ValueOf(engine).Elem().FieldByName("dimensions")
-	dimension := dimensions.MapIndex(reflect.ValueOf(key.Dimension))
-	if !dimension.IsValid() || dimension.IsNil() {
-		t.Fatalf("dimension %d missing", key.Dimension)
-	}
-	records := dimension.Elem().FieldByName("records")
-	record := records.MapIndex(reflect.ValueOf(key.Pos))
-	if !record.IsValid() || record.IsNil() {
-		t.Fatalf("chunk %+v missing", key)
-	}
-	value := record.Elem()
-	return persistenceRevisions{
-		current:   value.FieldByName("Revision").Uint(),
-		persisted: value.FieldByName("PersistedRevision").Uint(),
-		inFlight:  value.FieldByName("SaveInFlightRevision").Uint(),
-	}
-}
-
 func receiveSaveCall(t *testing.T, store *persistenceTestStore) []storage.ChunkSave {
 	t.Helper()
 	select {

@@ -157,7 +157,7 @@ func (engine *Engine) advanceActiveCompanions() {
 		step := physics.Step(
 			entry.state,
 			entry.input,
-			dimensionCollisionSource{dimension: engine.dimensions[entry.dimension]},
+			dimensionCollisionSource{dimension: engine.dimension(entry.dimension)},
 		)
 		entry.state = step.State
 		if companionChunk(entry.state.Position) != before {

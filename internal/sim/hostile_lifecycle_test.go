@@ -24,13 +24,14 @@ const (
 func countLoadedDrops(t *testing.T, engine *Engine, item core.ItemID) int {
 	t.Helper()
 	count := 0
-	dimension := engine.dimensions[core.Overworld]
-	for _, record := range dimension.Records {
-		if record.State != ChunkReady || record.Chunk == nil {
+	dimension := engine.dimension(core.Overworld)
+	for _, pos := range dimension.ReadyChunkPositions(nil) {
+		chunk, ready := dimension.ReadyChunk(pos)
+		if !ready {
 			continue
 		}
 		for slot := range core.DropsPerChunk {
-			if drop := record.Chunk.Drop(slot); drop.Active && drop.Stack.Item == item {
+			if drop := chunk.Drop(slot); drop.Active && drop.Stack.Item == item {
 				count++
 			}
 		}
@@ -196,11 +197,14 @@ func TestHostileBurnDeathDropsSingleRottenFlesh(t *testing.T) {
 func TestHostileDeathDropRingsToNeighborChunkWhenDeathChunkFull(t *testing.T) {
 	engine, _ := readyMovementPlayer(t)
 	// 装载 3×3 邻域并填满死亡区块（原点）的全部掉落槽。
-	loadFlatChunks(t, engine.dimensions[core.Overworld], -1, 1, -1, 1)
-	dimension := engine.dimensions[core.Overworld]
-	originRecord := dimension.Records[core.ChunkPos{}]
+	loadFlatChunks(t, engine.dimension(core.Overworld), -1, 1, -1, 1)
+	dimension := engine.dimension(core.Overworld)
+	origin, ready := dimension.ReadyChunk(core.ChunkPos{})
+	if !ready {
+		t.Fatal("origin chunk is not ready")
+	}
 	for slot := range core.DropsPerChunk {
-		originRecord.Chunk.SetDrop(slot, world.DropSlot{
+		origin.SetDrop(slot, world.DropSlot{
 			Generation: 1,
 			Active:     true,
 			Stack:      core.ItemStack{Item: core.ItemTorch, Count: 1},
@@ -232,14 +236,15 @@ func TestHostileDeathDropRingsToNeighborChunkWhenDeathChunkFull(t *testing.T) {
 func TestHostileDeathWithAllSlotsFullOmitsDropDeterministically(t *testing.T) {
 	engine, _ := readyMovementPlayer(t)
 	// 3×3 邻域全部填满：死亡完成但确定性省略掉落，且不动任何已有物品。
-	loadFlatChunks(t, engine.dimensions[core.Overworld], -1, 1, -1, 1)
-	dimension := engine.dimensions[core.Overworld]
-	for _, record := range dimension.Records {
-		if record.State != ChunkReady || record.Chunk == nil {
+	loadFlatChunks(t, engine.dimension(core.Overworld), -1, 1, -1, 1)
+	dimension := engine.dimension(core.Overworld)
+	for _, pos := range dimension.ReadyChunkPositions(nil) {
+		chunk, ready := dimension.ReadyChunk(pos)
+		if !ready {
 			continue
 		}
 		for slot := range core.DropsPerChunk {
-			record.Chunk.SetDrop(slot, world.DropSlot{
+			chunk.SetDrop(slot, world.DropSlot{
 				Generation: 1,
 				Active:     true,
 				Stack:      core.ItemStack{Item: core.ItemTorch, Count: 1},

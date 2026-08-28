@@ -100,9 +100,9 @@ type fluidWorld struct {
 	pending *pendingChunkChanges
 }
 
-// record 定位 position 所属的可读写区块记录；越界、超出推进范围或区块未就绪
+// chunk 定位 position 所属的可读写区块；越界、超出推进范围或区块未就绪
 // 时返回 nil。
-func (w *fluidWorld) record(position core.BlockPos) *ChunkRecord {
+func (w *fluidWorld) chunk(position core.BlockPos) *world.Chunk {
 	if position.Y < core.MinY || position.Y >= core.MaxY {
 		// 世界高度之外同样按「不可替换」处理。Dimension.BlockAt 在这里返回
 		// 空气，若沿用那条语义，贴着世界底面的水会永远向 MinY-1 写、永远写
@@ -113,21 +113,21 @@ func (w *fluidWorld) record(position core.BlockPos) *ChunkRecord {
 	if _, inScope := w.scope[key]; !inScope {
 		return nil
 	}
-	record := w.dimension.Records[key.Pos]
-	if record == nil || record.State != ChunkReady || record.Chunk == nil {
+	chunk, ok := w.dimension.ReadyChunk(key.Pos)
+	if !ok {
 		return nil
 	}
-	return record
+	return chunk
 }
 
 // BlockAt 实现 fluid.FluidWorld：范围外的格读作 core.BarrierID（见类型注释）。
 func (w *fluidWorld) BlockAt(position core.BlockPos) core.BlockID {
-	record := w.record(position)
-	if record == nil {
+	chunk := w.chunk(position)
+	if chunk == nil {
 		return core.BarrierID
 	}
 	x, _, z := position.Local()
-	return record.Chunk.BlockAt(x, position.Y, z)
+	return chunk.BlockAt(x, position.Y, z)
 }
 
 // SetBlock 实现 fluid.FluidWorld：写入区块并把变更汇入本 tick 的
@@ -137,26 +137,26 @@ func (w *fluidWorld) BlockAt(position core.BlockPos) core.BlockID {
 // D2：这里是全部流体写入的唯一汇聚点，每目标格每 tick 恰好一次最终生效写入，
 // 冲毁因此恰好结算一次）；范围外防御分支先行不变。
 func (w *fluidWorld) SetBlock(position core.BlockPos, id core.BlockID) {
-	record := w.record(position)
-	if record == nil {
+	chunk := w.chunk(position)
+	if chunk == nil {
 		// 防御性分支。BlockAt 已把范围外的格读作不可替换，evalCell 因此不会
 		// 把写入目标定在范围外；真走到这里说明规则集发生了变化，此时丢弃写入
 		// 比越界改写未加载区块安全。
 		return
 	}
 	x, _, z := position.Local()
-	old := record.Chunk.BlockAt(x, position.Y, z)
+	old := chunk.BlockAt(x, position.Y, z)
 	if old == id {
 		return
 	}
-	if settleFloodedCrop(w, record, position, old, id) {
+	if settleFloodedCrop(w, chunk, position, old, id) {
 		// 冲毁可能因掉落容量不足而拒绝写入，必须读回最终值后再判定 membership。
-		if next := record.Chunk.BlockAt(x, position.Y, z); core.IsFluid(old) != core.IsFluid(next) {
+		if next := chunk.BlockAt(x, position.Y, z); core.IsFluid(old) != core.IsFluid(next) {
 			w.engine.enqueueFarmlandMoistureAroundFluid(w.id, position)
 		}
 		return
 	}
-	record.Chunk.SetBlock(x, position.Y, z, id)
+	chunk.SetBlock(x, position.Y, z, id)
 	if core.IsFluid(old) != core.IsFluid(id) {
 		w.engine.enqueueFarmlandMoistureAroundFluid(w.id, position)
 	}
@@ -206,26 +206,26 @@ func (engine *Engine) rescanChunkFluids(
 	now, delay uint64,
 	budget int,
 ) (spent int, done bool) {
-	record := dimension.Records[pos]
-	if record == nil || record.Chunk == nil {
+	chunk, ready := dimension.ReadyChunk(pos)
+	if !ready {
 		engine.fluidRescan.resetCursor()
 		return 0, true
 	}
 	state := &engine.fluidRescan
 	// plane == 0 是本区块整块；plane 1..4 依次是四个水平邻块的边界平面。
 	for state.plane <= len(fluidBoundaryPlanes) {
-		chunk, chunkPos := record.Chunk, pos
+		chunkPos := pos
 		x0, x1, z0, z1 := 0, core.SectionMask, 0, core.SectionMask
 		if state.plane > 0 {
 			plane := fluidBoundaryPlanes[state.plane-1]
 			chunkPos = core.ChunkPos{X: pos.X + plane.dx, Z: pos.Z + plane.dz}
-			neighbor := dimension.Records[chunkPos]
-			if neighbor == nil || neighbor.State != ChunkReady || neighbor.Chunk == nil {
+			neighbor, ready := dimension.ReadyChunk(chunkPos)
+			if !ready {
 				state.plane++
 				state.section = 0
 				continue
 			}
-			chunk = neighbor.Chunk
+			chunk = neighbor
 			x0, x1, z0, z1 = plane.x0, plane.x1, plane.z0, plane.z1
 		}
 		used, finished := enqueueChunkFluids(
@@ -256,12 +256,12 @@ func fluidRescanBlockAt(dimension *Dimension, position core.BlockPos) core.Block
 	if position.Y < core.MinY || position.Y >= core.MaxY {
 		return core.BarrierID
 	}
-	record := dimension.Records[position.Chunk()]
-	if record == nil || record.State != ChunkReady || record.Chunk == nil {
+	chunk, ready := dimension.ReadyChunk(position.Chunk())
+	if !ready {
 		return core.BarrierID
 	}
 	x, _, z := position.Local()
-	return record.Chunk.BlockAt(x, position.Y, z)
+	return chunk.BlockAt(x, position.Y, z)
 }
 
 // fluidSealedSourceOffsets 是水源不动点判据要检查的五个邻格偏移：下方与四个
@@ -312,8 +312,8 @@ var fluidSealedSourceOffsets = [5][3]int32{
 // 就是 O(表面)，不值得为它把论证复杂化。
 //
 // section 与 localX/localY/localZ 是 position 所在区段及其区段内局部坐标：邻格
-// 仍落在同一区段内时直接读区段（这是绝大多数情况），避开 dimension.Records 的
-// map 查找；只有跨区段/跨区块的邻格才走 fluidRescanBlockAt。两条路径读的是同一
+// 仍落在同一区段内时直接读区段（这是绝大多数情况），避开跨区块受控查询；只有
+// 跨区段/跨区块的邻格才走 fluidRescanBlockAt。两条路径读的是同一
 // 份数据，只是快慢不同。
 func fluidSourceIsFixedPoint(
 	dimension *Dimension,
@@ -350,11 +350,11 @@ func fluidSectionUnreplaceable(dimension *Dimension, pos core.ChunkPos, sectionI
 	if sectionIndex < 0 || sectionIndex >= core.SectionsPerChunk {
 		return true
 	}
-	record := dimension.Records[pos]
-	if record == nil || record.State != ChunkReady || record.Chunk == nil {
+	chunk, ready := dimension.ReadyChunk(pos)
+	if !ready {
 		return true
 	}
-	id, uniform := record.Chunk.Section(sectionIndex).Blocks.IsUniform()
+	id, uniform := chunk.Section(sectionIndex).Blocks.IsUniform()
 	return uniform && !fluid.Replaceable(id, 1)
 }
 
@@ -536,7 +536,7 @@ func (engine *Engine) runFluidRescans(now, delay uint64) {
 	budget := int(engine.tunables.FluidRescanCellsPerTick)
 	for budget > 0 && len(state.pending) > 0 {
 		key := state.pending[0]
-		dimension := engine.dimensions[key.Dimension]
+		dimension := engine.dimension(key.Dimension)
 		if dimension == nil {
 			// 维度消失（正常运行里不会发生）：丢弃这条待办，不能让它卡住队首。
 			state.resetCursor()
@@ -588,12 +588,11 @@ func (engine *Engine) advanceFluids(pending *pendingChunkChanges) {
 	clear(engine.fluidScopeNext)
 	keys := engine.activeInterestKeys()
 	for _, key := range keys {
-		dimension := engine.dimensions[key.Dimension]
+		dimension := engine.dimension(key.Dimension)
 		if dimension == nil {
 			continue
 		}
-		record, ok := dimension.Records[key.Pos]
-		if !ok || record.State != ChunkReady || record.Chunk == nil {
+		if _, ok := dimension.ReadyChunk(key.Pos); !ok {
 			continue
 		}
 		engine.fluidScopeNext[key] = struct{}{}
@@ -614,7 +613,7 @@ func (engine *Engine) advanceFluids(pending *pendingChunkChanges) {
 
 	for _, id := range engine.sortedFluidDimensions() {
 		queue := engine.fluidQueues[id]
-		dimension := engine.dimensions[id]
+		dimension := engine.dimension(id)
 		if dimension == nil || queue.Len() == 0 {
 			continue
 		}

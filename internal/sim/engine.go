@@ -47,7 +47,6 @@ type Engine struct {
 	// 权威模拟不 import storage（archcheck 的依赖白名单禁止），因此种子只能经
 	// 构造参数注入，不在 sim 内引入第二个种子来源。测试一律传 0。
 	seed       int64
-	dimensions map[core.DimensionID]*Dimension
 	sessions   map[SessionID]*sessionState
 	companions map[companion.ID]*companionState
 	// hostiles 是夜行者的权威身体集合（按 ID 严格升序、容量 64 的切片，
@@ -136,7 +135,6 @@ func NewEngine(viewRadius int, worldTime uint64, seed int64) *Engine {
 	engine := &Engine{
 		viewRadius:   viewRadius,
 		seed:         seed,
-		dimensions:   realmState.Dimensions(),
 		realm:        realmState,
 		sessions:     make(map[SessionID]*sessionState),
 		companions:   make(map[companion.ID]*companionState),
@@ -150,6 +148,10 @@ func NewEngine(viewRadius int, worldTime uint64, seed int64) *Engine {
 	engine.tunables = tuning.ActiveTunables()
 	engine.physicsTunables = physics.ActiveTunables()
 	return engine
+}
+
+func (engine *Engine) dimension(id core.DimensionID) *Dimension {
+	return engine.realm.Dimension(id)
 }
 
 // SeedForTest 读出构造时传入的世界种子，仅供测试断言 host 接线是否把
@@ -221,7 +223,7 @@ func (engine *Engine) TickCount() uint64 {
 func (engine *Engine) CloneReadyChunk(
 	key core.ChunkKey,
 ) (*world.Chunk, uint64, bool) {
-	dimension := engine.dimensions[key.Dimension]
+	dimension := engine.dimension(key.Dimension)
 	if dimension == nil {
 		return nil, 0, false
 	}
@@ -241,11 +243,18 @@ func (engine *Engine) ChunkHash(
 func (engine *Engine) ChunkInfo(
 	key core.ChunkKey,
 ) (ChunkInfo, bool) {
-	dimension := engine.dimensions[key.Dimension]
+	dimension := engine.dimension(key.Dimension)
 	if dimension == nil {
 		return ChunkInfo{}, false
 	}
-	return dimension.Info(key.Pos)
+	info, ok := dimension.Info(key.Pos)
+	return ChunkInfo{
+		State:                ChunkState(info.State),
+		Revision:             info.Revision,
+		PersistedRevision:    info.PersistedRevision,
+		SaveInFlightRevision: info.SaveInFlightRevision,
+		Err:                  info.Err,
+	}, ok
 }
 
 func (engine *Engine) takeInbox() ([]Command, []AcquiredChunk, []GeneratedChunk) {

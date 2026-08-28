@@ -24,7 +24,7 @@ func (engine *Engine) tryPlaceBed(dimensionID core.DimensionID, foot core.BlockP
 	if foot.Y < core.MinY || foot.Y >= core.MaxY {
 		return RejectChunkNotReady, true
 	}
-	dimension := engine.dimensions[dimensionID]
+	dimension := engine.dimension(dimensionID)
 	if dimension == nil {
 		return RejectChunkNotReady, true
 	}
@@ -105,7 +105,7 @@ func (engine *Engine) clearBedPair(
 	footPos, headPos core.BlockPos,
 	pending *pendingChunkChanges,
 ) (RejectReason, bool) {
-	dimension := engine.dimensions[dimensionID]
+	dimension := engine.dimension(dimensionID)
 	oldFoot, _ := dimension.BlockAt(footPos)
 	_, _, errFoot := dimension.SetBlock(footPos, core.AirID)
 	if errFoot != nil {
@@ -133,10 +133,10 @@ func (engine *Engine) removeBedWithDrop(
 	drop bool,
 	pending *pendingChunkChanges,
 ) (RejectReason, bool) {
-	dimension := engine.dimensions[dimensionID]
-	record, recordOK := dimension.Records[dropPos.Chunk()]
+	dimension := engine.dimension(dimensionID)
+	chunk, recordOK := dimension.ReadyChunk(dropPos.Chunk())
 	index, indexOK := world.ChunkBlockIndex(dropPos)
-	if !recordOK || record.State != ChunkReady || record.Chunk == nil || !indexOK {
+	if !recordOK || !indexOK {
 		return RejectChunkNotReady, true
 	}
 	if _, ok := world.ChunkBlockIndex(footPos); !ok {
@@ -149,7 +149,7 @@ func (engine *Engine) removeBedWithDrop(
 	if drop {
 		stacks := [1]core.ItemStack{{Item: core.ItemBed, Count: 1}}
 		var capacityOK bool
-		next, capacityOK = record.Chunk.PrepareDropBatch(
+		next, capacityOK = chunk.PrepareDropBatch(
 			stacks[:], index, engine.tunables.DropPickupDelayTicks,
 		)
 		if !capacityOK {
@@ -161,7 +161,7 @@ func (engine *Engine) removeBedWithDrop(
 		return reason, true
 	}
 	if drop {
-		record.Chunk.CommitDropBatch(next)
+		chunk.CommitDropBatch(next)
 	}
 	return 0, false
 }
@@ -209,7 +209,7 @@ func (engine *Engine) invalidateBedSupportedBy(
 	position core.BlockPos,
 	pending *pendingChunkChanges,
 ) {
-	dimension := engine.dimensions[dimensionID]
+	dimension := engine.dimension(dimensionID)
 	if dimension == nil {
 		return
 	}

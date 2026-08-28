@@ -62,7 +62,7 @@ func TestPlayerMeleeTarget(t *testing.T) {
 		setMeleePlayer(engine, sessions[2], mgl32.Vec3{0.5, 1, 2.5}, 0)
 		engine.sessions[sessions[1]].player.lifecycle = PlayerPendingSpawn
 		engine.sessions[sessions[2]].dimension = core.DimensionID(1)
-		engine.dimensions[core.DimensionID(1)] = NewDimension(core.DimensionID(1))
+		engine.realm.SetDimension(NewDimension(core.DimensionID(1)))
 
 		companionID := companion.ID{1}
 		engine.companions[companionID] = &companionState{

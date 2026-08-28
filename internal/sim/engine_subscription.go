@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/sim/realm"
 )
 
 func (engine *Engine) RegisterObserverSession(id SessionID) {
@@ -55,9 +56,9 @@ func (engine *Engine) reconcileSubscriptions(result *TickResult) {
 	candidates := make([]core.ChunkKey, 0)
 	for key := range union {
 		_, wasWanted := engine.wanted[key]
-		dimension := engine.dimensions[key.Dimension]
+		dimension := engine.dimension(key.Dimension)
 		info, exists := dimension.Info(key.Pos)
-		if !wasWanted || exists && info.State == ChunkFailed {
+		if !wasWanted || exists && info.State == realm.ChunkFailed {
 			candidates = append(candidates, key)
 		}
 	}
@@ -70,7 +71,7 @@ func (engine *Engine) reconcileSubscriptions(result *TickResult) {
 		return chunkKeyLess(candidates[i], candidates[j])
 	})
 	for _, key := range candidates {
-		dimension := engine.dimensions[key.Dimension]
+		dimension := engine.dimension(key.Dimension)
 		if dimension.CancelUnload(key.Pos) {
 			result.Ready = append(result.Ready, key)
 			continue
@@ -84,8 +85,8 @@ func (engine *Engine) reconcileSubscriptions(result *TickResult) {
 		if _, retained := union[key]; retained {
 			continue
 		}
-		dimension := engine.dimensions[key.Dimension]
-		if info, ok := dimension.Info(key.Pos); ok && info.State == ChunkReady {
+		dimension := engine.dimension(key.Dimension)
+		if info, ok := dimension.Info(key.Pos); ok && info.State == realm.ChunkReady {
 			dimension.RequestUnload(key.Pos)
 		}
 	}
@@ -133,7 +134,7 @@ func (engine *Engine) sessionWantedSnapshot(
 	session *sessionState,
 ) map[core.ChunkKey]struct{} {
 	wanted := make(map[core.ChunkKey]struct{})
-	if session.hasView && engine.dimensions[session.dimension] != nil {
+	if session.hasView && engine.dimension(session.dimension) != nil {
 		for dz := -engine.viewRadius; dz <= engine.viewRadius; dz++ {
 			for dx := -engine.viewRadius; dx <= engine.viewRadius; dx++ {
 				key := core.ChunkKey{
@@ -168,12 +169,12 @@ func (engine *Engine) applyAcquired(
 	})
 	for _, acquiredChunk := range acquired {
 		key := acquiredChunk.Key
-		dimension := engine.dimensions[key.Dimension]
+		dimension := engine.dimension(key.Dimension)
 		if dimension == nil {
 			continue
 		}
 		info, ok := dimension.Info(key.Pos)
-		if !ok || info.State != ChunkLoading {
+		if !ok || info.State != realm.ChunkLoading {
 			continue
 		}
 		switch {
@@ -321,12 +322,12 @@ func (engine *Engine) applyGenerated(
 			Dimension: generatedChunk.Dimension,
 			Pos:       generatedChunk.Pos,
 		}
-		dimension := engine.dimensions[key.Dimension]
+		dimension := engine.dimension(key.Dimension)
 		if dimension == nil {
 			continue
 		}
 		info, ok := dimension.Info(key.Pos)
-		if !ok || info.State != ChunkGenerating {
+		if !ok || info.State != realm.ChunkGenerating {
 			continue
 		}
 		if generatedChunk.Err != nil {

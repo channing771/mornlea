@@ -99,10 +99,10 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 			t.Fatalf("dir %d 放置被拒绝 reason %d want %d", dir, reason, wantLower)
 		}
 		engine.finishChanges(pending, &TickResult{})
-		if got, _ := engine.dimensions[core.Overworld].BlockAt(target); got != wantLower {
+		if got, _ := engine.dimension(core.Overworld).BlockAt(target); got != wantLower {
 			t.Fatalf("dir %d lower=%d want %d", dir, got, wantLower)
 		}
-		if got, _ := engine.dimensions[core.Overworld].BlockAt(core.BlockPos{X: 0, Y: 3, Z: 4}); got != core.DoorUpper {
+		if got, _ := engine.dimension(core.Overworld).BlockAt(core.BlockPos{X: 0, Y: 3, Z: 4}); got != core.DoorUpper {
 			t.Fatalf("dir %d upper=%d want DoorUpper", dir, got)
 		}
 	}
@@ -137,13 +137,13 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 		if !handleInteractDoor(engine, core.Overworld, lower, engine.newMutation()) {
 			t.Fatal("interact lower should succeed")
 		}
-		if got, _ := engine.dimensions[core.Overworld].BlockAt(lower); got != core.DoorLowerSouthOpen {
+		if got, _ := engine.dimension(core.Overworld).BlockAt(lower); got != core.DoorLowerSouthOpen {
 			t.Fatalf("toggle to open got %d want open", got)
 		}
 		if !handleInteractDoor(engine, core.Overworld, upper, engine.newMutation()) {
 			t.Fatal("interact upper should succeed")
 		}
-		if got, _ := engine.dimensions[core.Overworld].BlockAt(lower); got != core.DoorLowerSouthClosed {
+		if got, _ := engine.dimension(core.Overworld).BlockAt(lower); got != core.DoorLowerSouthClosed {
 			t.Fatalf("toggle back to closed got %d", got)
 		}
 	}
@@ -160,7 +160,7 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 			engine.SetBlockForTest(core.BlockPos{X: 0, Y: 3, Z: 5}, core.DoorUpper)
 		}
 		pending := engine.newMutation()
-		block, _ := engine.dimensions[core.Overworld].BlockAt(target)
+		block, _ := engine.dimension(core.Overworld).BlockAt(target)
 		reason, rejected := engine.completeMining(core.Overworld, target, block, true, pending)
 		if rejected {
 			t.Fatalf("hitUpper %v completeMining rejected %d", hitUpper, reason)
@@ -168,14 +168,17 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 		engine.finishChanges(pending, &TickResult{})
 		lowerPos := core.BlockPos{X: 0, Y: 2, Z: 5}
 		upperPos := core.BlockPos{X: 0, Y: 3, Z: 5}
-		if got, _ := engine.dimensions[core.Overworld].BlockAt(lowerPos); got != core.AirID {
+		if got, _ := engine.dimension(core.Overworld).BlockAt(lowerPos); got != core.AirID {
 			t.Fatalf("hitUpper %v lower not air %d", hitUpper, got)
 		}
-		if got, _ := engine.dimensions[core.Overworld].BlockAt(upperPos); got != core.AirID {
+		if got, _ := engine.dimension(core.Overworld).BlockAt(upperPos); got != core.AirID {
 			t.Fatalf("hitUpper %v upper not air %d", hitUpper, got)
 		}
-		rec := engine.dimensions[core.Overworld].Records[lowerPos.Chunk()]
-		found := miningDropTotals(rec.Chunk)[core.ItemDoor]
+		chunk, ready := engine.dimension(core.Overworld).ReadyChunk(lowerPos.Chunk())
+		if !ready {
+			t.Fatal("door chunk is not ready")
+		}
+		found := miningDropTotals(chunk)[core.ItemDoor]
 		if found != 1 {
 			t.Fatalf("hitUpper %v drop ItemDoor=%d want 1", hitUpper, found)
 		}
@@ -211,20 +214,23 @@ func TestDoorPlaceAndToggle(t *testing.T) {
 		engine.SetBlockForTest(lowerPos, core.DoorLowerSouthClosed)
 		engine.SetBlockForTest(upperPos, core.DoorUpper)
 		pending := engine.newMutation()
-		block, _ := engine.dimensions[core.Overworld].BlockAt(lowerPos)
+		block, _ := engine.dimension(core.Overworld).BlockAt(lowerPos)
 		reason, rejected := engine.completeMining(core.Overworld, lowerPos, block, false, pending)
 		if rejected {
 			t.Fatalf("DoDrop false rejected %d", reason)
 		}
 		engine.finishChanges(pending, &TickResult{})
-		if got, _ := engine.dimensions[core.Overworld].BlockAt(lowerPos); got != core.AirID {
+		if got, _ := engine.dimension(core.Overworld).BlockAt(lowerPos); got != core.AirID {
 			t.Fatalf("DoDrop false lower not air %d", got)
 		}
-		if got, _ := engine.dimensions[core.Overworld].BlockAt(upperPos); got != core.AirID {
+		if got, _ := engine.dimension(core.Overworld).BlockAt(upperPos); got != core.AirID {
 			t.Fatalf("DoDrop false upper not air %d", got)
 		}
-		rec := engine.dimensions[core.Overworld].Records[lowerPos.Chunk()]
-		if got := miningDropTotals(rec.Chunk)[core.ItemDoor]; got != 0 {
+		chunk, ready := engine.dimension(core.Overworld).ReadyChunk(lowerPos.Chunk())
+		if !ready {
+			t.Fatal("door chunk is not ready")
+		}
+		if got := miningDropTotals(chunk)[core.ItemDoor]; got != 0 {
 			t.Fatalf("DoDrop false drop %d want 0", got)
 		}
 	}
@@ -323,7 +329,7 @@ func TestDoorInteractViaRaycast(t *testing.T) {
 	if len(result.Rejected) != 0 {
 		t.Fatalf("interact via ray rejected %+v", result.Rejected)
 	}
-	if got, _ := engine.dimensions[core.Overworld].BlockAt(lower); got != core.DoorLowerSouthOpen {
+	if got, _ := engine.dimension(core.Overworld).BlockAt(lower); got != core.DoorLowerSouthOpen {
 		t.Fatalf("ray interact lower: got %d want open", got)
 	}
 	pending := engine.newMutation()
@@ -331,10 +337,10 @@ func TestDoorInteractViaRaycast(t *testing.T) {
 		t.Fatal("interact upper should succeed to toggle back")
 	}
 	engine.finishChanges(pending, &TickResult{})
-	if got, _ := engine.dimensions[core.Overworld].BlockAt(lower); got != core.DoorLowerSouthClosed {
+	if got, _ := engine.dimension(core.Overworld).BlockAt(lower); got != core.DoorLowerSouthClosed {
 		t.Fatalf("upper interact toggle back: got %d want closed", got)
 	}
-	if got, _ := engine.dimensions[core.Overworld].BlockAt(upper); got != core.DoorUpper {
+	if got, _ := engine.dimension(core.Overworld).BlockAt(upper); got != core.DoorUpper {
 		t.Fatalf("upper should stay DoorUpper got %d", got)
 	}
 }
@@ -357,7 +363,7 @@ func TestDoorUpperInteractDirPreserved(t *testing.T) {
 			t.Fatalf("dir %d upper interact should succeed", dir)
 		}
 		engine.finishChanges(pending, &TickResult{})
-		got, _ := engine.dimensions[core.Overworld].BlockAt(lower)
+		got, _ := engine.dimension(core.Overworld).BlockAt(lower)
 		if core.DoorDir(got) != dir {
 			t.Fatalf("dir %d after upper toggle got dir %d block %d", dir, core.DoorDir(got), got)
 		}
@@ -470,7 +476,7 @@ func TestDoorPhysicsFluidDivergence(t *testing.T) {
 	engine.SetBlockForTest(core.BlockPos{X: 0, Y: 1, Z: 5}, core.StoneID)
 	engine.SetBlockForTest(lower, core.DoorLowerSouthClosed)
 	engine.SetBlockForTest(upper, core.DoorUpper)
-	sampler := blockRaycastSampler(engine.dimensions[core.Overworld])
+	sampler := blockRaycastSampler(engine.dimension(core.Overworld))
 	if solid, _ := sampler(lower); !solid {
 		t.Fatal("closed lower sampler should be solid")
 	}
@@ -499,7 +505,7 @@ func TestDoorMiningDropCapacity(t *testing.T) {
 	beforeHash := record.Chunk.Hash()
 	beforeRevision := record.Revision
 	pending := engine.newMutation()
-	block, _ := engine.dimensions[core.Overworld].BlockAt(lowerPos)
+	block, _ := engine.dimension(core.Overworld).BlockAt(lowerPos)
 	reason, rejected := engine.completeMining(core.Overworld, lowerPos, block, true, pending)
 	if !rejected || reason != RejectDropCapacity {
 		t.Fatalf("full drops should reject DropCapacity got %d rejected %v", reason, rejected)
@@ -514,7 +520,7 @@ func TestDoorMiningDropCapacity(t *testing.T) {
 		t.Fatal("capacity failure should not produce pending")
 	}
 	pending2 := engine.newMutation()
-	block2, _ := engine.dimensions[core.Overworld].BlockAt(upperPos)
+	block2, _ := engine.dimension(core.Overworld).BlockAt(upperPos)
 	reason2, rejected2 := engine.completeMining(core.Overworld, upperPos, block2, true, pending2)
 	if !rejected2 || reason2 != RejectDropCapacity {
 		t.Fatalf("upper full drops should also reject got %d %v", reason2, rejected2)
@@ -533,10 +539,10 @@ func TestDoorPlaceUpperRollback(t *testing.T) {
 	if !rejected {
 		t.Fatal("upper occupied should be rejected")
 	}
-	if got, _ := engine.dimensions[core.Overworld].BlockAt(lower); got != core.AirID {
+	if got, _ := engine.dimension(core.Overworld).BlockAt(lower); got != core.AirID {
 		t.Fatalf("rollback should keep lower Air got %d", got)
 	}
-	if got, _ := engine.dimensions[core.Overworld].BlockAt(upper); got != core.StoneID {
+	if got, _ := engine.dimension(core.Overworld).BlockAt(upper); got != core.StoneID {
 		t.Fatalf("upper should stay Stone got %d", got)
 	}
 	if pending.Len() != 0 {

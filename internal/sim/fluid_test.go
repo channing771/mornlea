@@ -7,6 +7,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/fluid"
+	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -81,7 +82,7 @@ func readyFluidPlayer(
 // fluidBlockAt 读取主世界某格的权威方块，区块未就绪时直接失败。
 func fluidBlockAt(t *testing.T, engine *Engine, position core.BlockPos) core.BlockID {
 	t.Helper()
-	block, ready := engine.dimensions[core.Overworld].BlockAt(position)
+	block, ready := engine.dimension(core.Overworld).BlockAt(position)
 	if !ready {
 		t.Fatalf("读取 %+v 时区块未就绪", position)
 	}
@@ -131,7 +132,7 @@ func TestFluidWorldTreatsOutOfScopeAsUnreplaceable(t *testing.T) {
 	}
 
 	engine, _, _ := readyFluidPlayer(t, nil, nil)
-	dimension := engine.dimensions[core.Overworld]
+	dimension := engine.dimension(core.Overworld)
 
 	// 手工载入一个远在推进范围之外、但确实持有真实水方块的区块。
 	outsidePos := core.ChunkPos{X: 9}
@@ -292,7 +293,7 @@ func TestFluidOutsideInterestRangeHoldsAndResumes(t *testing.T) {
 
 	engine := NewEngine(DropInterestRadius, 0, 0)
 	const session = SessionID(1)
-	dimension := engine.dimensions[core.Overworld]
+	dimension := engine.dimension(core.Overworld)
 	if !dimension.BeginGeneration(outsidePos) {
 		t.Fatal("范围外区块未开始生成")
 	}
@@ -322,7 +323,7 @@ func TestFluidOutsideInterestRangeHoldsAndResumes(t *testing.T) {
 	for range 60 {
 		engine.Step()
 	}
-	if info, ok := dimension.Info(outsidePos); !ok || info.State != ChunkReady {
+	if info, ok := dimension.Info(outsidePos); !ok || info.State != realm.ChunkReady {
 		t.Fatalf("范围外区块被卸载了: %+v", info)
 	}
 	// 对照组：范围内的同款孤立水必须已经消失，证明重扫与推进确实作用到了
@@ -419,8 +420,8 @@ var fluidBasinPockets = [4]fluidBasinPocket{
 //     才会入队。这一处专门钉死「区段级判据恒真」这类改坏。
 //   - **四处单向凹槽**（fluidBasinPockets）：分别钉死四个水平偏移。
 //   - **竖井与气泡**（区块 {0,0}）：钉死「下方」偏移与水体内部的普通不平衡。
-func fluidBasinDimension() (*Dimension, []core.ChunkPos) {
-	dimension := NewDimension(core.Overworld)
+func fluidBasinDimension(id core.DimensionID) (*Dimension, []core.ChunkPos) {
+	dimension := NewDimension(id)
 	positions := make([]core.ChunkPos, 0, 4)
 	holeChunk := core.ChunkPos{X: 1, Z: 1}
 	for x := int32(0); x < 2; x++ {
@@ -470,7 +471,12 @@ func fluidBasinDimension() (*Dimension, []core.ChunkPos) {
 				}
 			}
 			chunk.Compact()
-			dimension.Records[pos] = &ChunkRecord{State: ChunkReady, Chunk: chunk}
+			if !dimension.BeginGeneration(pos) {
+				panic("fluid basin chunk did not begin generation")
+			}
+			if err := dimension.ApplyGenerated(pos, chunk); err != nil {
+				panic(err)
+			}
 			positions = append(positions, pos)
 		}
 	}
@@ -532,7 +538,10 @@ func assertFluidBasinPremises(t *testing.T, dimension *Dimension, positions []co
 
 	uniformSkipped, uniformDeclined := 0, 0
 	for _, pos := range positions {
-		chunk := dimension.Records[pos].Chunk
+		chunk, ready := dimension.ReadyChunk(pos)
+		if !ready {
+			t.Fatalf("basin chunk %+v is not ready", pos)
+		}
 		for sectionIndex := range core.SectionsPerChunk {
 			section := chunk.Section(sectionIndex)
 			id, uniform := section.Blocks.IsUniform()
@@ -562,7 +571,10 @@ func assertFluidBasinPremises(t *testing.T, dimension *Dimension, positions []co
 
 	var singleOpening [len(fluidSealedSourceOffsets)]int
 	for _, pos := range positions {
-		chunk := dimension.Records[pos].Chunk
+		chunk, ready := dimension.ReadyChunk(pos)
+		if !ready {
+			t.Fatalf("basin chunk %+v is not ready", pos)
+		}
 		baseX := pos.X << core.SectionShift
 		baseZ := pos.Z << core.SectionShift
 		for y := int32(core.MinY); y < core.MaxY; y++ {
@@ -609,11 +621,15 @@ func assertFluidBasinPremises(t *testing.T, dimension *Dimension, positions []co
 // enqueueEveryFluidCell 是重扫的朴素参照实现：不做任何不动点判断，把维度内全部
 // 流体格原样入队。它是 fluidSourceIsFixedPoint 捷径的对照组。
 func enqueueEveryFluidCell(queue *fluid.Queue, dimension *Dimension, now, delay uint64) {
-	for pos, record := range dimension.Records {
+	for _, pos := range dimension.ReadyChunkPositions(nil) {
+		record, ready := dimension.ReadyChunk(pos)
+		if !ready {
+			continue
+		}
 		for y := int32(core.MinY); y < core.MaxY; y++ {
 			for lx := range core.SectionSize {
 				for lz := range core.SectionSize {
-					if !core.IsFluid(record.Chunk.BlockAt(lx, y, lz)) {
+					if !core.IsFluid(record.BlockAt(lx, y, lz)) {
 						continue
 					}
 					queue.Enqueue(core.BlockPos{
@@ -632,8 +648,8 @@ func enqueueEveryFluidCell(queue *fluid.Queue, dimension *Dimension, now, delay 
 func settleFluids(t *testing.T, queue *fluid.Queue, dimension *Dimension, positions []core.ChunkPos) {
 	t.Helper()
 	engine := NewEngine(0, 0, 0)
-	// recordChange 会经 engine.dimensions 定位区块 revision，这里把被测维度挂上去。
-	engine.dimensions[core.Overworld] = dimension
+	// recordChange 经 `realm.State` 定位区块 revision，这里替换被测维度。
+	engine.realm.SetDimension(dimension)
 	scope := make(map[core.ChunkKey]struct{}, len(positions))
 	for _, pos := range positions {
 		scope[core.ChunkKey{Dimension: core.Overworld, Pos: pos}] = struct{}{}
@@ -657,7 +673,11 @@ func settleFluids(t *testing.T, queue *fluid.Queue, dimension *Dimension, positi
 func dimensionHashes(dimension *Dimension, positions []core.ChunkPos) map[core.ChunkPos][32]byte {
 	hashes := make(map[core.ChunkPos][32]byte, len(positions))
 	for _, pos := range positions {
-		hashes[pos] = dimension.Records[pos].Chunk.Hash()
+		chunk, ready := dimension.ReadyChunk(pos)
+		if !ready {
+			panic("basin chunk is not ready")
+		}
+		hashes[pos] = chunk.Hash()
 	}
 	return hashes
 }
@@ -677,7 +697,7 @@ func dimensionHashes(dimension *Dimension, positions []core.ChunkPos) map[core.C
 // fluidSourceIsFixedPoint 的注释里写了完整推导，但注释不会变红；规则一旦变了，
 // 是这条测试负责报警。因此夹具的形状不能随手简化，见 fluidBasinDimension。
 func TestFluidRescanFixedPointSkipMatchesFullRescan(t *testing.T) {
-	fastDimension, positions := fluidBasinDimension()
+	fastDimension, positions := fluidBasinDimension(core.Overworld)
 	fastQueue := fluid.NewQueue()
 	fastEngine := NewEngine(0, 0, 0)
 	for _, pos := range positions {
@@ -685,7 +705,7 @@ func TestFluidRescanFixedPointSkipMatchesFullRescan(t *testing.T) {
 	}
 	fastEnqueued := fastQueue.Len()
 
-	fullDimension, _ := fluidBasinDimension()
+	fullDimension, _ := fluidBasinDimension(core.Overworld)
 	fullQueue := fluid.NewQueue()
 	enqueueEveryFluidCell(fullQueue, fullDimension, 0, 1)
 	fullEnqueued := fullQueue.Len()
@@ -710,7 +730,7 @@ func TestFluidRescanFixedPointSkipMatchesFullRescan(t *testing.T) {
 	// 只有在判据正确、两个世界仍然一致时，才轮到"夹具是不是已经不约束任何东西"
 	// 这个问题。前提检查本身要用到判据，放在前面会把代码坏掉误报成夹具坏掉。
 	// 用一份全新的夹具：上面两次 settleFluids 已经把 fastDimension 推到平衡态了。
-	premiseDimension, premisePositions := fluidBasinDimension()
+	premiseDimension, premisePositions := fluidBasinDimension(core.Overworld)
 	assertFluidBasinPremises(t, premiseDimension, premisePositions)
 }
 
@@ -720,7 +740,7 @@ func fluidRescanEngine(dimension *Dimension, positions []core.ChunkPos, budget u
 	engine := NewEngine(0, 0, 0)
 	engine.tunables = tuning.DefaultTunables()
 	engine.tunables.FluidRescanCellsPerTick = budget
-	engine.dimensions[core.Overworld] = dimension
+	engine.realm.SetDimension(dimension)
 	engine.fluidScope = make(map[core.ChunkKey]struct{}, len(positions))
 	for _, pos := range positions {
 		engine.fluidScope[core.ChunkKey{Dimension: core.Overworld, Pos: pos}] = struct{}{}
@@ -735,14 +755,14 @@ func fluidRescanEngine(dimension *Dimension, positions []core.ChunkPos, budget u
 // 这条等价性正是 design.md D5 允许延后重扫的依据：不动点性质只要求重扫最终
 // 发生在该区块处于推进范围内的某个 tick，不要求发生在它进入范围的那一 tick。
 func TestFluidRescanSpreadsAcrossTicksAndStaysComplete(t *testing.T) {
-	referenceDimension, positions := fluidBasinDimension()
+	referenceDimension, positions := fluidBasinDimension(core.Overworld)
 	referenceQueue := fluid.NewQueue()
 	referenceEngine := NewEngine(0, 0, 0)
 	for _, pos := range positions {
 		referenceEngine.rescanChunkFluids(referenceQueue, referenceDimension, pos, 0, 1, 1<<30)
 	}
 
-	dimension, _ := fluidBasinDimension()
+	dimension, _ := fluidBasinDimension(core.Overworld)
 	engine := fluidRescanEngine(dimension, positions, 4096)
 	for _, pos := range positions {
 		engine.fluidRescan.enqueueChunk(core.ChunkKey{Dimension: core.Overworld, Pos: pos})
@@ -783,7 +803,7 @@ func TestFluidRescanSpreadsAcrossTicksAndStaysComplete(t *testing.T) {
 // 区块离开范围后被 Advance 取出、读到 core.BarrierID、产出空写入并从队列移除，
 // 之后再也没有东西唤醒它们。只有从头重扫才能恢复重扫的完整性。
 func TestFluidRescanDropsChunkThatLeavesScope(t *testing.T) {
-	dimension, positions := fluidBasinDimension()
+	dimension, positions := fluidBasinDimension(core.Overworld)
 	// 预算 1 保证一个 tick 最多推进一个区段，重扫必然停在半路。
 	engine := fluidRescanEngine(dimension, positions, 1)
 	key := core.ChunkKey{Dimension: core.Overworld, Pos: positions[0]}
@@ -836,11 +856,11 @@ func TestFluidRescanDropsChunkThatLeavesScope(t *testing.T) {
 // 维度**不是** core.Overworld，混桶就会立刻暴露：水会进错队列。
 func TestFluidRescanUsesQueueOfItsOwnDimension(t *testing.T) {
 	const other = core.Overworld + 1
-	dimension, positions := fluidBasinDimension()
+	dimension, positions := fluidBasinDimension(other)
 	engine := NewEngine(0, 0, 0)
 	engine.tunables = tuning.DefaultTunables()
 	engine.tunables.FluidRescanCellsPerTick = 1 << 20
-	engine.dimensions[other] = dimension
+	engine.realm.SetDimension(dimension)
 	engine.fluidScope = make(map[core.ChunkKey]struct{}, len(positions))
 	for _, pos := range positions {
 		key := core.ChunkKey{Dimension: other, Pos: pos}

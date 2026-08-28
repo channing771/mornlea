@@ -76,7 +76,7 @@ func (engine *Engine) dropInventoryOnDeath(
 	pending *pendingChunkChanges,
 ) {
 	player := session.player
-	dimension := engine.dimensions[session.dimension]
+	dimension := engine.dimension(session.dimension)
 	if dimension == nil {
 		return
 	}
@@ -86,8 +86,8 @@ func (engine *Engine) dropInventoryOnDeath(
 		Z: int32(math.Floor(float64(player.state.Position.Z()))),
 	}
 	for _, key := range engine.deathDropChunks(session.dimension, death.Chunk()) {
-		record := dimension.Records[key.Pos]
-		if record == nil || record.State != ChunkReady || record.Chunk == nil {
+		chunk, ready := dimension.ReadyChunk(key.Pos)
+		if !ready {
 			continue
 		}
 		blockIndex, indexed := world.ChunkBlockIndex(clampBlockToChunk(death, key.Pos))
@@ -95,7 +95,7 @@ func (engine *Engine) dropInventoryOnDeath(
 			continue
 		}
 		changed, remaining := placeDeathDrops(
-			player, record.Chunk, blockIndex, engine.tunables.PlayerDropPickupDelayTicks,
+			player, chunk, blockIndex, engine.tunables.PlayerDropPickupDelayTicks,
 		)
 		if changed {
 			// 每个被写入的区块各自登记 revision barrier；死亡掉落不做跨区块原子提交。
@@ -114,12 +114,10 @@ func (engine *Engine) deathDropChunks(
 	dimensionID core.DimensionID,
 	death core.ChunkPos,
 ) []core.ChunkKey {
-	dimension := engine.dimensions[dimensionID]
-	keys := make([]core.ChunkKey, 0, len(dimension.Records))
-	for pos, record := range dimension.Records {
-		if record.State != ChunkReady || record.Chunk == nil {
-			continue
-		}
+	dimension := engine.dimension(dimensionID)
+	positions := dimension.ReadyChunkPositions(nil)
+	keys := make([]core.ChunkKey, 0, len(positions))
+	for _, pos := range positions {
 		keys = append(keys, core.ChunkKey{Dimension: dimensionID, Pos: pos})
 	}
 	sortChunkKeys(keys)

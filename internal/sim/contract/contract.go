@@ -318,9 +318,11 @@ const (
 )
 
 type ChunkInfo struct {
-	State    ChunkState
-	Revision uint64
-	Err      error
+	State                ChunkState
+	Revision             uint64
+	PersistedRevision    uint64
+	SaveInFlightRevision uint64
+	Err                  error
 }
 
 const HostileAttackRange = float32(1.8)

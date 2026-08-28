@@ -25,7 +25,19 @@ func (engine *Engine) recordChange(
 }
 
 func (engine *Engine) finishChanges(pending *pendingChunkChanges, result *TickResult) {
-	result.Changes = append(result.Changes, pending.Commit()...)
+	for _, batch := range pending.Commit() {
+		changes := make([]BlockChange, len(batch.Changes))
+		for index, change := range batch.Changes {
+			changes[index] = BlockChange{Position: change.Position, Block: change.Block}
+		}
+		result.Changes = append(result.Changes, ChunkChangeBatch{
+			Dimension:    batch.Dimension,
+			Chunk:        batch.Chunk,
+			BaseRevision: batch.BaseRevision,
+			NewRevision:  batch.NewRevision,
+			Changes:      changes,
+		})
+	}
 }
 
 // sortChunkKeys 用泛型排序避免 sort.Slice 的反射 swapper 分配，

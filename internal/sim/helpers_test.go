@@ -6,6 +6,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -44,7 +45,7 @@ func loadFlatChunks(t *testing.T, dimension *Dimension, minX, maxX, minZ, maxZ i
 	t.Helper()
 	for x := minX; x <= maxX; x++ {
 		for z := minZ; z <= maxZ; z++ {
-			if info, ok := dimension.Info(core.ChunkPos{X: x, Z: z}); ok && info.State == ChunkReady {
+			if info, ok := dimension.Info(core.ChunkPos{X: x, Z: z}); ok && info.State == realm.ChunkReady {
 				continue
 			}
 			chunk := world.NewChunk(core.ChunkPos{X: x, Z: z})

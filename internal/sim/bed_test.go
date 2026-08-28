@@ -48,10 +48,10 @@ func TestTryPlaceBedWritesBothHalvesPerDirection(t *testing.T) {
 		if rejected {
 			t.Fatalf("dir %d 放置被拒绝 reason %d", dir, reason)
 		}
-		if got, _ := engine.dimensions[core.Overworld].BlockAt(foot); got != core.BedFootID(dir) {
+		if got, _ := engine.dimension(core.Overworld).BlockAt(foot); got != core.BedFootID(dir) {
 			t.Fatalf("dir %d foot=%d want %d", dir, got, core.BedFootID(dir))
 		}
-		if got, _ := engine.dimensions[core.Overworld].BlockAt(head); got != core.BedHeadID(dir) {
+		if got, _ := engine.dimension(core.Overworld).BlockAt(head); got != core.BedHeadID(dir) {
 			t.Fatalf("dir %d head=%d want %d", dir, got, core.BedHeadID(dir))
 		}
 		engine.finishChanges(pending, &TickResult{})
@@ -121,10 +121,10 @@ func TestTryPlaceBedRejectionsWithoutWrites(t *testing.T) {
 			if !rejected {
 				t.Fatalf("%s 应整单拒绝", tc.name)
 			}
-			if got, _ := engine.dimensions[core.Overworld].BlockAt(foot); got == core.BedFootID(tc.dir) {
+			if got, _ := engine.dimension(core.Overworld).BlockAt(foot); got == core.BedFootID(tc.dir) {
 				t.Fatalf("%s 床尾被写入 %d", tc.name, got)
 			}
-			if got, _ := engine.dimensions[core.Overworld].BlockAt(head); got == core.BedHeadID(tc.dir) {
+			if got, _ := engine.dimension(core.Overworld).BlockAt(head); got == core.BedHeadID(tc.dir) {
 				t.Fatalf("%s 床头被写入 %d", tc.name, got)
 			}
 			if pending.Len() != 0 {
@@ -158,7 +158,7 @@ func TestTryPlaceBedCrossChunkRejected(t *testing.T) {
 	if !rejected {
 		t.Fatal("床头格跨区块未就绪应整单拒绝")
 	}
-	if got, _ := engine.dimensions[core.Overworld].BlockAt(foot); got != core.AirID {
+	if got, _ := engine.dimension(core.Overworld).BlockAt(foot); got != core.AirID {
 		t.Fatalf("床尾格被写入 %d", got)
 	}
 	if pending.Len() != 0 {
@@ -259,23 +259,26 @@ func TestCompleteMiningBedClearsBothHalvesAndDropsOne(t *testing.T) {
 				target = head
 			}
 			pending := engine.newMutation()
-			block, _ := engine.dimensions[core.Overworld].BlockAt(target)
+			block, _ := engine.dimension(core.Overworld).BlockAt(target)
 			reason, rejected := engine.completeMining(core.Overworld, target, block, harvestable, pending)
 			if rejected {
 				t.Fatalf("hitHead %v harvestable %v completeMining rejected %d", hitHead, harvestable, reason)
 			}
 			engine.finishChanges(pending, &TickResult{})
 			for _, pos := range []core.BlockPos{foot, head} {
-				if got, _ := engine.dimensions[core.Overworld].BlockAt(pos); got != core.AirID {
+				if got, _ := engine.dimension(core.Overworld).BlockAt(pos); got != core.AirID {
 					t.Fatalf("hitHead %v harvestable %v: %+v 未清空 = %d", hitHead, harvestable, pos, got)
 				}
 			}
-			rec := engine.dimensions[core.Overworld].Records[foot.Chunk()]
+			chunk, ready := engine.dimension(core.Overworld).ReadyChunk(foot.Chunk())
+			if !ready {
+				t.Fatal("bed chunk is not ready")
+			}
 			wantCount := uint8(0)
 			if harvestable {
 				wantCount = 1
 			}
-			if found := miningDropTotals(rec.Chunk)[core.ItemBed]; found != wantCount {
+			if found := miningDropTotals(chunk)[core.ItemBed]; found != wantCount {
 				t.Fatalf("hitHead %v harvestable %v: 掉落 ItemBed=%d want %d", hitHead, harvestable, found, wantCount)
 			}
 		}
@@ -295,7 +298,7 @@ func TestCompleteMiningBedDropCapacityAtomic(t *testing.T) {
 	beforeHash := record.Chunk.Hash()
 	beforeRevision := record.Revision
 	pending := engine.newMutation()
-	block, _ := engine.dimensions[core.Overworld].BlockAt(foot)
+	block, _ := engine.dimension(core.Overworld).BlockAt(foot)
 	reason, rejected := engine.completeMining(core.Overworld, foot, block, true, pending)
 	if !rejected || reason != RejectDropCapacity {
 		t.Fatalf("掉落满仓应拒绝 DropCapacity got %d rejected %v", reason, rejected)
@@ -309,10 +312,10 @@ func TestCompleteMiningBedDropCapacityAtomic(t *testing.T) {
 	if pending.Len() != 0 {
 		t.Fatalf("容量失败不应产生待发布变更 %+v", pending)
 	}
-	if got, _ := engine.dimensions[core.Overworld].BlockAt(foot); got != core.BedFootSouthID {
+	if got, _ := engine.dimension(core.Overworld).BlockAt(foot); got != core.BedFootSouthID {
 		t.Fatalf("容量失败床尾被改 %d", got)
 	}
-	if got, _ := engine.dimensions[core.Overworld].BlockAt(head); got != core.BedHeadSouthID {
+	if got, _ := engine.dimension(core.Overworld).BlockAt(head); got != core.BedHeadSouthID {
 		t.Fatalf("容量失败床头被改 %d", got)
 	}
 }

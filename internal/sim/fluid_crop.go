@@ -42,7 +42,7 @@ import (
 // 重新入队的内部实现细节。
 func settleFloodedCrop(
 	w *fluidWorld,
-	record *ChunkRecord,
+	chunk *world.Chunk,
 	position core.BlockPos,
 	old core.BlockID,
 	id core.BlockID,
@@ -79,7 +79,7 @@ func settleFloodedCrop(
 		}
 	}
 	if count > 0 {
-		next, capacityOK := record.Chunk.PrepareDropBatch(
+		next, capacityOK := chunk.PrepareDropBatch(
 			stacks[:count], blockIndex, w.engine.tunables.DropPickupDelayTicks,
 		)
 		if !capacityOK {
@@ -87,9 +87,9 @@ func settleFloodedCrop(
 			w.engine.enqueueFluidUpdate(w.id, position)
 			return true
 		}
-		record.Chunk.SetBlock(x, position.Y, z, id)
+		chunk.SetBlock(x, position.Y, z, id)
 		w.engine.recordChange(w.id, position, id, w.pending)
-		record.Chunk.CommitDropBatch(next)
+		chunk.CommitDropBatch(next)
 		return true
 	}
 	// 作物的全部生长阶段今天都在 core.BlockDrop 里登记了掉落；count == 0 只可能

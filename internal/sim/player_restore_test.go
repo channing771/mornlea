@@ -8,6 +8,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -435,7 +436,7 @@ func makeRestoreWorldReady(
 						chunk.SetBlock(x, 0, z, core.GrassID)
 					}
 				}
-				loadSpawnTestChunk(t, engine.dimensions[key.Dimension], chunk)
+				loadSpawnTestChunk(t, engine.dimension(key.Dimension), chunk)
 			}
 		}
 	}
@@ -460,13 +461,15 @@ func setRestoreBlock(
 	block core.BlockID,
 ) {
 	t.Helper()
-	record := engine.dimensions[core.Overworld].Records[position.Chunk()]
-	if record == nil || record.State != ChunkReady {
+	dimension := engine.dimension(core.Overworld)
+	if info, exists := dimension.Info(position.Chunk()); !exists || info.State != realm.ChunkReady {
 		t.Fatalf("chunk %+v is not Ready", position.Chunk())
 	}
 	x, _, z := position.Local()
-	record.Chunk.SetBlock(x, position.Y, z, block)
-	record.Revision++
+	dimension.UpdateReadyChunk(position.Chunk(), func(chunk *world.Chunk) {
+		chunk.SetBlock(x, position.Y, z, block)
+	})
+	dimension.Touch(position.Chunk())
 }
 
 func loadRestoreFlatChunk(
@@ -481,10 +484,10 @@ func loadRestoreFlatChunk(
 			chunk.SetBlock(x, 0, z, core.GrassID)
 		}
 	}
-	dimension := engine.dimensions[core.Overworld]
+	dimension := engine.dimension(core.Overworld)
 	if info, exists := dimension.Info(position); !exists {
 		loadSpawnTestChunk(t, dimension, chunk)
-	} else if info.State == ChunkLoading {
+	} else if info.State == realm.ChunkLoading {
 		if !dimension.MarkGenerating(position) {
 			t.Fatalf("chunk %+v did not transition Loading -> Generating", position)
 		}

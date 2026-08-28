@@ -273,7 +273,10 @@ type fluidCropSlotView struct {
 
 // fluidCropChunkSlots 读取区块 (0,0) 全部掉落槽的语义投影。
 func fluidCropChunkSlots(engine *Engine) [core.DropsPerChunk]fluidCropSlotView {
-	chunk := engine.dimensions[core.Overworld].Records[core.ChunkPos{}].Chunk
+	chunk, ok := engine.dimension(core.Overworld).ReadyChunk(core.ChunkPos{})
+	if !ok {
+		return [core.DropsPerChunk]fluidCropSlotView{}
+	}
 	var views [core.DropsPerChunk]fluidCropSlotView
 	for slot := range core.DropsPerChunk {
 		drop := chunk.Drop(slot)
@@ -361,9 +364,11 @@ func TestFluidCropCapacityFullRejectsAndRetriesUntilSlotFreed(t *testing.T) {
 	}
 
 	// 释放一个槽位：重试到期后冲毁应当完成，种子占据腾出的槽位。
-	engine.dimensions[core.Overworld].Records[core.ChunkPos{}].Chunk.ClearDrop(
-		core.DropsPerChunk - 1,
-	)
+	if !engine.dimension(core.Overworld).UpdateReadyChunk(core.ChunkPos{}, func(chunk *world.Chunk) {
+		chunk.ClearDrop(core.DropsPerChunk - 1)
+	}) {
+		t.Fatal("origin chunk is not ready")
+	}
 	stepUntilFluidCropFlooded(t, engine, fluidCropCell, core.WaterLevel1ID)
 
 	// 兴趣范围内此时同时存在占位石头与本次冲毁的产物，不能做全集相等断言；

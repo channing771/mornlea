@@ -121,7 +121,7 @@ func (engine *Engine) invalidateTorchesSupportedBy(
 	position core.BlockPos,
 	pending *pendingChunkChanges,
 ) {
-	dimension := engine.dimensions[dimensionID]
+	dimension := engine.dimension(dimensionID)
 	if dimension == nil {
 		return
 	}
@@ -159,13 +159,13 @@ func (engine *Engine) removeUnsupportedTorch(
 	position core.BlockPos,
 	pending *pendingChunkChanges,
 ) {
-	dimension := engine.dimensions[dimensionID]
-	record, recordOK := dimension.Records[position.Chunk()]
+	dimension := engine.dimension(dimensionID)
+	chunk, recordOK := dimension.ReadyChunk(position.Chunk())
 	index, indexOK := world.ChunkBlockIndex(position)
-	if !recordOK || record.State != ChunkReady || record.Chunk == nil || !indexOK {
+	if !recordOK || !indexOK {
 		return
 	}
-	slot, capacityOK := record.Chunk.PrepareDrop(core.ItemTorch, index)
+	slot, capacityOK := chunk.PrepareDrop(core.ItemTorch, index)
 	if !capacityOK {
 		return
 	}
@@ -176,7 +176,7 @@ func (engine *Engine) removeUnsupportedTorch(
 		return
 	}
 	engine.recordChange(dimensionID, position, core.AirID, pending)
-	record.Chunk.CommitDrop(
+	chunk.CommitDrop(
 		slot,
 		core.ItemStack{Item: core.ItemTorch, Count: 1},
 		index,

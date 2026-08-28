@@ -225,7 +225,7 @@ func TestMiningInvalidTargetsClearWithoutRejection(t *testing.T) {
 				engine.SetBlockForTest(target, core.AirID)
 				session.player.state.Position = mgl32.Vec3{8.5, 1, 1.5}
 				session.player.pitch = 0
-				delete(engine.dimensions[core.Overworld].Records, core.ChunkPos{Z: -1})
+				engine.dimension(core.Overworld).RequestUnload(core.ChunkPos{Z: -1})
 			},
 		},
 		{
@@ -663,7 +663,7 @@ func TestMiningProtectedAndUnreadyRejectionsPreserveDurability(t *testing.T) {
 		{
 			name: "区块未就绪", block: core.StoneID, want: RejectChunkNotReady,
 			mutate: func(engine *Engine, target core.BlockPos) {
-				delete(engine.dimensions[core.Overworld].Records, target.Chunk())
+				engine.dimension(core.Overworld).RequestUnload(target.Chunk())
 			},
 		},
 	}
@@ -921,8 +921,9 @@ func TestMiningWrongToolCompletesWithFullDropCapacity(t *testing.T) {
 		t.Fatalf("错误工具被掉落容量阻止=%+v", result.Rejected)
 	}
 	x, _, z := target.Local()
-	if record.Chunk.BlockAt(x, target.Y, z) != core.AirID || record.Revision != beforeRevision+1 {
-		t.Fatalf("错误工具未原子完成: revision=%d want=%d", record.Revision, beforeRevision+1)
+	revision := requireChunkInfo(t, engine.dimension(core.Overworld), target.Chunk()).Revision
+	if record.Chunk.BlockAt(x, target.Y, z) != core.AirID || revision != beforeRevision+1 {
+		t.Fatalf("错误工具未原子完成: revision=%d want=%d", revision, beforeRevision+1)
 	}
 	if got := miningDropTotals(record.Chunk); !equalMiningDropTotals(got, beforeDrops) {
 		t.Fatalf("错误工具修改了掉落物: got=%+v want=%+v", got, beforeDrops)
@@ -1122,13 +1123,18 @@ func setMiningHeldItem(player *playerState, item core.ItemID) {
 	player.inventory.Hotbar.Slots[0] = core.ItemStack{Item: item, Count: 1, Durability: full}
 }
 
-func miningTargetRecord(t *testing.T, engine *Engine, target core.BlockPos) *ChunkRecord {
+type miningTargetChunk struct {
+	Chunk    *world.Chunk
+	Revision uint64
+}
+
+func miningTargetRecord(t *testing.T, engine *Engine, target core.BlockPos) miningTargetChunk {
 	t.Helper()
-	record := engine.dimensions[core.Overworld].Records[target.Chunk()]
-	if record == nil || record.Chunk == nil {
+	info, exists := engine.dimension(core.Overworld).Info(target.Chunk())
+	if !exists || info.Chunk == nil {
 		t.Fatalf("目标区块 %+v 未就绪", target.Chunk())
 	}
-	return record
+	return miningTargetChunk{Chunk: info.Chunk, Revision: info.Revision}
 }
 
 func miningDropTotals(chunk *world.Chunk) map[core.ItemID]uint8 {
@@ -1219,7 +1225,7 @@ func readyMiningPlayers(
 func readyMiningBenchmarkPlayers(b *testing.B) *Engine {
 	b.Helper()
 	engine := NewEngine(0, 0, 0)
-	dimension := engine.dimensions[core.Overworld]
+	dimension := engine.dimension(core.Overworld)
 	if !dimension.BeginGeneration(core.ChunkPos{}) {
 		b.Fatal("benchmark 区块未开始生成")
 	}

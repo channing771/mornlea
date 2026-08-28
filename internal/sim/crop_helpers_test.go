@@ -173,7 +173,7 @@ func newCropWorld(t *testing.T, fixture cropFixture) *Engine {
 // cropBlockAt 读取主世界某格的权威方块，区块未就绪时直接失败。
 func cropBlockAt(t *testing.T, engine *Engine, position core.BlockPos) core.BlockID {
 	t.Helper()
-	block, ready := engine.dimensions[core.Overworld].BlockAt(position)
+	block, ready := engine.dimension(core.Overworld).BlockAt(position)
 	if !ready {
 		t.Fatalf("方块 %+v 所在区块未就绪", position)
 	}
@@ -187,7 +187,7 @@ func stepUntilBlock(
 ) (ticks int, ok bool) {
 	for tick := 1; tick <= cropFixtureTicks; tick++ {
 		engine.Step()
-		block, ready := engine.dimensions[core.Overworld].BlockAt(position)
+		block, ready := engine.dimension(core.Overworld).BlockAt(position)
 		if ready && block == want {
 			return tick, true
 		}

@@ -21,7 +21,7 @@ func (engine *Engine) executeBoneMeal(
 		session.player.lifecycle != PlayerActive {
 		return RejectPlayerNotReady, true
 	}
-	dimension := engine.dimensions[session.dimension]
+	dimension := engine.dimension(session.dimension)
 	if dimension == nil {
 		return RejectChunkNotReady, true
 	}

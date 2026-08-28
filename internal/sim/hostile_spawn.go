@@ -5,6 +5,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/sim/realm"
 )
 
 // 夜间生成的固定数值契约（边界测试锁定，不随世界规模放大）。周期/上限与
@@ -77,13 +78,13 @@ func (engine *Engine) advanceHostileSpawn() {
 	if anchorSession == nil || anchorSession.player == nil {
 		return
 	}
-	dimension := engine.dimensions[anchorSession.dimension]
+	dimension := engine.dimension(anchorSession.dimension)
 	if dimension == nil {
 		return
 	}
 	anchor := blockPosOf(anchorSession.player.state.Position)
 	x, z, _, _ := hostileSpawnColumn(splitmix64(uint64(engine.seed)^now), anchor.X, anchor.Z)
-	if info, ok := dimension.Info(core.BlockPos{X: x, Z: z}.Chunk()); !ok || info.State != ChunkReady {
+	if info, ok := dimension.Info(core.BlockPos{X: x, Z: z}.Chunk()); !ok || info.State != realm.ChunkReady {
 		return
 	}
 	y, ok := hostileSpawnColumnSpot(dimension, x, z)

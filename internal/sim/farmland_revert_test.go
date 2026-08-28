@@ -25,7 +25,7 @@ func TestFarmlandRevertDryWithAirEventuallyReverts(t *testing.T) {
 	reverted := false
 	for range 500 {
 		engine.Step()
-		if block, _ := engine.dimensions[core.Overworld].BlockAt(pos); block == core.DirtID {
+		if block, _ := engine.dimension(core.Overworld).BlockAt(pos); block == core.DirtID {
 			reverted = true
 			break
 		}
@@ -44,12 +44,12 @@ func TestFarmlandRevertWithCropAboveDoesNotRevert(t *testing.T) {
 
 	for range 200 {
 		engine.Step()
-		if block, _ := engine.dimensions[core.Overworld].BlockAt(pos); block == core.DirtID {
+		if block, _ := engine.dimension(core.Overworld).BlockAt(pos); block == core.DirtID {
 			t.Fatalf("干耕地上有作物时不应退化，却在 tick %d 变为泥土", engine.tick.Load())
 		}
 	}
 	// 仍为干耕地，未被踩踏或水分改变
-	if block, _ := engine.dimensions[core.Overworld].BlockAt(pos); block != core.FarmlandDryID {
+	if block, _ := engine.dimension(core.Overworld).BlockAt(pos); block != core.FarmlandDryID {
 		t.Fatalf("有作物覆盖时耕地应保持干耕地，实得 %d", block)
 	}
 }
@@ -64,13 +64,13 @@ func TestFarmlandRevertWetDoesNotRevert(t *testing.T) {
 	engine.SetBlockForTest(wetPos, core.WaterSourceID)
 	// 推进一 tick 让湿度队列把耕地判为湿（有界队列同 tick 生效）
 	engine.Step()
-	if block, _ := engine.dimensions[core.Overworld].BlockAt(pos); block != core.FarmlandWetID {
+	if block, _ := engine.dimension(core.Overworld).BlockAt(pos); block != core.FarmlandWetID {
 		t.Fatalf("预设湿耕地未保持湿，实得 %d", block)
 	}
 
 	for range 200 {
 		engine.Step()
-		if block, _ := engine.dimensions[core.Overworld].BlockAt(pos); block == core.DirtID {
+		if block, _ := engine.dimension(core.Overworld).BlockAt(pos); block == core.DirtID {
 			t.Fatalf("湿耕地不应退化")
 		}
 	}
@@ -104,7 +104,7 @@ func farmlandMoistureSetupDry(t *testing.T, engine *Engine, pos core.BlockPos) {
 				if p == pos {
 					continue
 				}
-				if block, ready := engine.dimensions[core.Overworld].BlockAt(p); ready && core.IsFluid(block) {
+				if block, ready := engine.dimension(core.Overworld).BlockAt(p); ready && core.IsFluid(block) {
 					engine.SetBlockForTest(p, core.AirID)
 				}
 			}

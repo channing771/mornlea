@@ -192,7 +192,7 @@ func TestPlayerRecoveryUsesFirstFreeSixteenth(t *testing.T) {
 	player := engine.sessions[session].player
 	player.state.Position[1] = 15.0 / 16.0
 	before := player.state.Position.Y()
-	if !engine.tryUnstick(player, engine.dimensions[core.Overworld]) {
+	if !engine.tryUnstick(player, engine.dimension(core.Overworld)) {
 		t.Fatal("可向上解除的卡入被拒绝")
 	}
 	if player.state.Position.Y()-before != 1.0/16.0 {
@@ -414,7 +414,7 @@ func TestPlayerHashGoldenLittleEndianLayout(t *testing.T) {
 func TestEngineMovesBeforeReconcilingAndExecutingInteractions(t *testing.T) {
 	engine, sessionID := readyMovementPlayer(t)
 	nextChunk := core.ChunkPos{X: 1}
-	loadMovementChunk(t, engine.dimensions[core.Overworld], movementFlatChunk(nextChunk))
+	loadMovementChunk(t, engine.dimension(core.Overworld), movementFlatChunk(nextChunk))
 	player := engine.sessions[sessionID].player
 	player.state = physics.State{
 		Position: mgl32.Vec3{15.9, 1, 0.5},
@@ -446,7 +446,7 @@ func TestEngineMovesBeforeReconcilingAndExecutingInteractions(t *testing.T) {
 func TestPlayerCenterDerivationAlsoRunsWhenTrustedObserverChanges(t *testing.T) {
 	engine, sessionID := readyMovementPlayer(t)
 	engine.RegisterObserverSession(2)
-	loadMovementChunk(t, engine.dimensions[core.Overworld], movementFlatChunk(core.ChunkPos{X: 1}))
+	loadMovementChunk(t, engine.dimension(core.Overworld), movementFlatChunk(core.ChunkPos{X: 1}))
 	player := engine.sessions[sessionID].player
 	player.state = physics.State{
 		Position: mgl32.Vec3{15.9, 1, 0.5},

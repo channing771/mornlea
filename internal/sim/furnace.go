@@ -13,15 +13,15 @@ func (engine *Engine) advanceFurnaces(pending *pendingChunkChanges) {
 	burnTicks := engine.tunables.FurnaceBurnTicks
 	smeltTicks := engine.tunables.FurnaceSmeltTicks
 	for _, key := range keys {
-		dimension := engine.dimensions[key.Dimension]
+		dimension := engine.dimension(key.Dimension)
 		if dimension == nil {
 			continue
 		}
-		record, ok := dimension.Records[key.Pos]
-		if !ok || record.State != ChunkReady || record.Chunk == nil {
+		chunk, ok := dimension.ReadyChunk(key.Pos)
+		if !ok {
 			continue
 		}
-		if advanceChunkFurnaces(record.Chunk, burnTicks, smeltTicks) {
+		if advanceChunkFurnaces(chunk, burnTicks, smeltTicks) {
 			engine.touchChunk(key, pending)
 		}
 	}
@@ -100,13 +100,11 @@ func (engine *Engine) SetChunkFurnaceForTest(
 	slot int,
 	value world.FurnaceSlot,
 ) {
-	dimension := engine.dimensions[key.Dimension]
+	dimension := engine.dimension(key.Dimension)
 	if dimension == nil {
 		return
 	}
-	if record, ok := dimension.Records[key.Pos]; ok && record.Chunk != nil {
-		record.Chunk.SetFurnace(slot, value)
-	}
+	dimension.UpdateReadyChunk(key.Pos, func(chunk *world.Chunk) { chunk.SetFurnace(slot, value) })
 }
 
 // AdvanceFurnacesForBenchmark 只在活动区块上推进熔炉本身，
@@ -115,15 +113,15 @@ func (engine *Engine) AdvanceFurnacesForBenchmark() {
 	burnTicks := engine.tunables.FurnaceBurnTicks
 	smeltTicks := engine.tunables.FurnaceSmeltTicks
 	for _, key := range engine.activeInterestKeys() {
-		dimension := engine.dimensions[key.Dimension]
+		dimension := engine.dimension(key.Dimension)
 		if dimension == nil {
 			continue
 		}
-		record, ok := dimension.Records[key.Pos]
-		if !ok || record.State != ChunkReady || record.Chunk == nil {
+		chunk, ok := dimension.ReadyChunk(key.Pos)
+		if !ok {
 			continue
 		}
-		advanceChunkFurnaces(record.Chunk, burnTicks, smeltTicks)
+		advanceChunkFurnaces(chunk, burnTicks, smeltTicks)
 	}
 }
 

@@ -135,7 +135,7 @@ func TestHostileMovementReusesPlayerPhysicsStep(t *testing.T) {
 	if err := engine.RestoreHostile(mob); err != nil {
 		t.Fatalf("恢复夜行者：%v", err)
 	}
-	source := dimensionCollisionSource{dimension: engine.dimensions[core.Overworld]}
+	source := dimensionCollisionSource{dimension: engine.dimension(core.Overworld)}
 	engine.advanceHostileMovement()
 	entry := &engine.hostiles.entries[0]
 	want := physics.Step(start, entry.input, source).State
@@ -176,7 +176,7 @@ func TestHostileMovementReusesSubmersionFlags(t *testing.T) {
 		t.Fatalf("恢复夜行者：%v", err)
 	}
 	engine.advanceHostileMovement()
-	source := dimensionCollisionSource{dimension: engine.dimensions[core.Overworld]}
+	source := dimensionCollisionSource{dimension: engine.dimension(core.Overworld)}
 	bodyInFluid, eyeInFluid := physics.SubmersionFlags(mgl32.Vec3{0.5, 1, 0.5}, source)
 	if !bodyInFluid || eyeInFluid {
 		t.Fatalf("SubmersionFlags=(%v,%v)，想要身体浸没且眼睛在水上", bodyInFluid, eyeInFluid)

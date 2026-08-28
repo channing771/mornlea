@@ -61,3 +61,31 @@ func TestMutationCommitOrdersChunksAndBlocks(t *testing.T) {
 		t.Fatalf("third batch = %+v", got)
 	}
 }
+
+func TestMutationCommitOnlyOnce(t *testing.T) {
+	state := NewState(core.Overworld)
+	dimension := state.Dimension(core.Overworld)
+	position := core.BlockPos{Y: 2}
+	if !dimension.BeginGeneration(position.Chunk()) {
+		t.Fatal("BeginGeneration() = false")
+	}
+	if err := dimension.ApplyGenerated(position.Chunk(), world.NewChunk(position.Chunk())); err != nil {
+		t.Fatal(err)
+	}
+	if _, changed, err := dimension.SetBlock(position, core.StoneID); err != nil || !changed {
+		t.Fatalf("SetBlock() = (_, %v, %v)", changed, err)
+	}
+
+	mutation := state.NewMutation()
+	mutation.Record(core.Overworld, position, core.StoneID)
+	if batches := mutation.Commit(); len(batches) != 1 {
+		t.Fatalf("first Commit() batch count = %d, want 1", len(batches))
+	}
+	if batches := mutation.Commit(); len(batches) != 0 {
+		t.Fatalf("second Commit() batch count = %d, want 0", len(batches))
+	}
+	info, ok := dimension.Info(position.Chunk())
+	if !ok || info.Revision != 2 {
+		t.Fatalf("revision after second Commit() = (%d, %v), want (2, true)", info.Revision, ok)
+	}
+}

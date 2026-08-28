@@ -9,6 +9,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -222,12 +223,15 @@ func TestCompanionSpawnRetriesAfterFailedChunkRevisionChanges(t *testing.T) {
 	if updates := engine.Step().Companions; len(updates) != 0 || !engine.companions[id].exhausted {
 		t.Fatalf("全空气出生扫描=%+v exhausted=%v", updates, engine.companions[id].exhausted)
 	}
-	record := engine.dimensions[core.Overworld].Records[core.ChunkPos{}]
-	record.Chunk.SetBlock(0, 0, 0, core.GrassID)
+	chunk, ready := engine.dimension(core.Overworld).ReadyChunk(core.ChunkPos{})
+	if !ready {
+		t.Fatal("origin chunk is not ready")
+	}
+	chunk.SetBlock(0, 0, 0, core.GrassID)
 	if updates := engine.Step().Companions; len(updates) != 0 {
 		t.Fatalf("revision 未变却重试出生: %+v", updates)
 	}
-	record.Revision++
+	engine.TouchChunkForTest(core.ChunkKey{Dimension: core.Overworld})
 	updates := engine.Step().Companions
 	if len(updates) != 1 || updates[0].State.Position != (mgl32.Vec3{0.5, 1, 0.5}) {
 		t.Fatalf("revision 改变后未重试: %+v", updates)
@@ -364,7 +368,7 @@ func loadCompanionAirChunks(t *testing.T, engine *Engine, center core.ChunkPos, 
 	for dz := -radius; dz <= radius; dz++ {
 		for dx := -radius; dx <= radius; dx++ {
 			position := core.ChunkPos{X: center.X + dx, Z: center.Z + dz}
-			loadSpawnTestChunk(t, engine.dimensions[core.Overworld], world.NewChunk(position))
+			loadSpawnTestChunk(t, engine.dimension(core.Overworld), world.NewChunk(position))
 		}
 	}
 }
@@ -372,10 +376,10 @@ func loadCompanionAirChunks(t *testing.T, engine *Engine, center core.ChunkPos, 
 func loadCompanionFlatChunk(t *testing.T, engine *Engine, position core.ChunkPos) {
 	t.Helper()
 	chunk := companionFlatChunk(position)
-	dimension := engine.dimensions[core.Overworld]
+	dimension := engine.dimension(core.Overworld)
 	if info, exists := dimension.Info(position); !exists {
 		loadSpawnTestChunk(t, dimension, chunk)
-	} else if info.State == ChunkLoading {
+	} else if info.State == realm.ChunkLoading {
 		if !dimension.MarkGenerating(position) {
 			t.Fatalf("区块 %+v 未转入 Generating", position)
 		}

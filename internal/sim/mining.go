@@ -225,7 +225,7 @@ func (engine *Engine) advanceMining(
 			player.mining = miningState{}
 			continue
 		}
-		dimension := engine.dimensions[session.dimension]
+		dimension := engine.dimension(session.dimension)
 		if dimension == nil {
 			player.mining = miningState{}
 			continue
@@ -308,7 +308,7 @@ func (engine *Engine) advanceCompanionMining(
 		entry.mining = miningState{}
 		return
 	}
-	dimension := engine.dimensions[entry.dimension]
+	dimension := engine.dimension(entry.dimension)
 	if dimension == nil {
 		entry.mining = miningState{}
 		return
@@ -454,7 +454,7 @@ func (engine *Engine) completeCompanionMining(
 			return
 		}
 	}
-	_, changed, err := engine.dimensions[entry.dimension].SetBlock(entry.mining.target, core.AirID)
+	_, changed, err := engine.dimension(entry.dimension).SetBlock(entry.mining.target, core.AirID)
 	if err != nil || !changed {
 		// 区块失效或方块已被同 tick 更早的 actor 移除：对齐玩家 RejectNoTarget
 		// 语义，清零进度且不结算。
@@ -490,10 +490,10 @@ func (engine *Engine) completeCompanionContainerMining(
 	entry *companionState,
 	pending *pendingChunkChanges,
 ) {
-	dimension := engine.dimensions[entry.dimension]
-	record, recordOK := dimension.Records[entry.mining.target.Chunk()]
+	dimension := engine.dimension(entry.dimension)
+	chunk, recordOK := dimension.ReadyChunk(entry.mining.target.Chunk())
 	blockIndex, indexOK := world.ChunkBlockIndex(entry.mining.target)
-	if !recordOK || record.State != ChunkReady || record.Chunk == nil || !indexOK {
+	if !recordOK || !indexOK {
 		entry.mining = miningState{}
 		return
 	}
@@ -504,22 +504,22 @@ func (engine *Engine) completeCompanionContainerMining(
 	chestSlot, furnaceSlot := 0, 0
 	switch entry.mining.block {
 	case core.ChestID:
-		slot, found := record.Chunk.ChestAt(blockIndex)
+		slot, found := chunk.ChestAt(blockIndex)
 		if !found {
 			entry.mining = miningState{}
 			return
 		}
 		chestSlot = slot
-		chest := record.Chunk.Chest(slot)
+		chest := chunk.Chest(slot)
 		contents = chest.Items[:]
 	case core.FurnaceID:
-		slot, found := record.Chunk.FurnaceAt(blockIndex)
+		slot, found := chunk.FurnaceAt(blockIndex)
 		if !found {
 			entry.mining = miningState{}
 			return
 		}
 		furnaceSlot = slot
-		furnace := record.Chunk.Furnace(slot)
+		furnace := chunk.Furnace(slot)
 		contents = []core.ItemStack{furnace.Input, furnace.Fuel, furnace.Output}
 	}
 	_, staged, ok := CompanionMineContainerStaging(
@@ -538,9 +538,9 @@ func (engine *Engine) completeCompanionContainerMining(
 	engine.recordChange(entry.dimension, entry.mining.target, core.AirID, pending)
 	switch entry.mining.block {
 	case core.ChestID:
-		record.Chunk.DeactivateChest(chestSlot)
+		chunk.DeactivateChest(chestSlot)
 	case core.FurnaceID:
-		record.Chunk.DeactivateFurnace(furnaceSlot)
+		chunk.DeactivateFurnace(furnaceSlot)
 	}
 	entry.inventory = staged
 	entry.inventoryDirty = true
@@ -590,13 +590,13 @@ func (engine *Engine) completeMining(
 	harvestable bool,
 	pending *pendingChunkChanges,
 ) (RejectReason, bool) {
-	dimension := engine.dimensions[dimensionID]
+	dimension := engine.dimension(dimensionID)
 	if dimension == nil {
 		return RejectChunkNotReady, true
 	}
-	record, recordOK := dimension.Records[target.Chunk()]
+	chunk, recordOK := dimension.ReadyChunk(target.Chunk())
 	blockIndex, indexOK := world.ChunkBlockIndex(target)
-	if !recordOK || record.State != ChunkReady || record.Chunk == nil || !indexOK {
+	if !recordOK || !indexOK {
 		return RejectChunkNotReady, true
 	}
 
@@ -610,10 +610,9 @@ func (engine *Engine) completeMining(
 			lowerPos = target
 			upperPos = core.BlockPos{X: target.X, Y: target.Y + 1, Z: target.Z}
 		}
-		lowerRecord, lowerOK := dimension.Records[lowerPos.Chunk()]
-		upperRecord, upperOK := dimension.Records[upperPos.Chunk()]
-		if !lowerOK || lowerRecord.State != ChunkReady || lowerRecord.Chunk == nil ||
-			!upperOK || upperRecord.State != ChunkReady || upperRecord.Chunk == nil {
+		lowerChunk, lowerOK := dimension.ReadyChunk(lowerPos.Chunk())
+		_, upperOK := dimension.ReadyChunk(upperPos.Chunk())
+		if !lowerOK || !upperOK {
 			return RejectChunkNotReady, true
 		}
 		lowerIndex, lowerIndexed := world.ChunkBlockIndex(lowerPos)
@@ -626,7 +625,7 @@ func (engine *Engine) completeMining(
 		var hasNext bool
 		if harvestable {
 			stacks := [1]core.ItemStack{{Item: core.ItemDoor, Count: 1}}
-			next, ok := lowerRecord.Chunk.PrepareDropBatch(stacks[:], lowerIndex, engine.tunables.DropPickupDelayTicks)
+			next, ok := lowerChunk.PrepareDropBatch(stacks[:], lowerIndex, engine.tunables.DropPickupDelayTicks)
 			if !ok {
 				return RejectDropCapacity, true
 			}
@@ -652,7 +651,7 @@ func (engine *Engine) completeMining(
 		engine.recordChange(dimensionID, lowerPos, core.AirID, pending)
 		engine.recordChange(dimensionID, upperPos, core.AirID, pending)
 		if hasNext {
-			lowerRecord.Chunk.CommitDropBatch(nextDrops)
+			lowerChunk.CommitDropBatch(nextDrops)
 		}
 		return 0, false
 	}
@@ -669,19 +668,18 @@ func (engine *Engine) completeMining(
 		if otherPos == target {
 			otherPos = footPos
 		}
-		if otherRecord, otherOK := dimension.Records[otherPos.Chunk()]; !otherOK ||
-			otherRecord.State != ChunkReady || otherRecord.Chunk == nil {
+		if _, otherOK := dimension.ReadyChunk(otherPos.Chunk()); !otherOK {
 			return RejectChunkNotReady, true
 		}
 		return engine.removeBedWithDrop(dimensionID, target, footPos, headPos, harvestable, pending)
 	}
 
 	if block == core.FurnaceID {
-		furnaceSlot, found := record.Chunk.FurnaceAt(blockIndex)
+		furnaceSlot, found := chunk.FurnaceAt(blockIndex)
 		if !found {
 			return RejectChunkNotReady, true
 		}
-		furnace := record.Chunk.Furnace(furnaceSlot)
+		furnace := chunk.Furnace(furnaceSlot)
 		stacks := [4]core.ItemStack{
 			{},
 			furnace.Input,
@@ -691,7 +689,7 @@ func (engine *Engine) completeMining(
 		if harvestable {
 			stacks[0] = core.ItemStack{Item: core.ItemFurnace, Count: 1}
 		}
-		next, capacityOK := record.Chunk.PrepareDropBatch(
+		next, capacityOK := chunk.PrepareDropBatch(
 			stacks[:], blockIndex, engine.tunables.DropPickupDelayTicks,
 		)
 		if !capacityOK {
@@ -705,23 +703,23 @@ func (engine *Engine) completeMining(
 			return RejectNoTarget, true
 		}
 		engine.recordChange(dimensionID, target, core.AirID, pending)
-		record.Chunk.DeactivateFurnace(furnaceSlot)
-		record.Chunk.CommitDropBatch(next)
+		chunk.DeactivateFurnace(furnaceSlot)
+		chunk.CommitDropBatch(next)
 		return 0, false
 	}
 
 	if block == core.ChestID {
-		chestSlot, found := record.Chunk.ChestAt(blockIndex)
+		chestSlot, found := chunk.ChestAt(blockIndex)
 		if !found {
 			return RejectChunkNotReady, true
 		}
-		chest := record.Chunk.Chest(chestSlot)
+		chest := chunk.Chest(chestSlot)
 		var stacks [1 + core.ChestSlots]core.ItemStack
 		if harvestable {
 			stacks[0] = core.ItemStack{Item: core.ItemChest, Count: 1}
 		}
 		copy(stacks[1:], chest.Items[:])
-		next, capacityOK := record.Chunk.PrepareDropBatch(
+		next, capacityOK := chunk.PrepareDropBatch(
 			stacks[:], blockIndex, engine.tunables.DropPickupDelayTicks,
 		)
 		if !capacityOK {
@@ -735,8 +733,8 @@ func (engine *Engine) completeMining(
 			return RejectNoTarget, true
 		}
 		engine.recordChange(dimensionID, target, core.AirID, pending)
-		record.Chunk.DeactivateChest(chestSlot)
-		record.Chunk.CommitDropBatch(next)
+		chunk.DeactivateChest(chestSlot)
+		chunk.CommitDropBatch(next)
 		return 0, false
 	}
 
@@ -763,7 +761,7 @@ func (engine *Engine) completeMining(
 			stacks[1] = core.ItemStack{Item: core.ItemPoisonousPotato, Count: 1}
 			stackCount = 2
 		}
-		next, capacityOK := record.Chunk.PrepareDropBatch(stacks[:stackCount], blockIndex, engine.tunables.DropPickupDelayTicks)
+		next, capacityOK := chunk.PrepareDropBatch(stacks[:stackCount], blockIndex, engine.tunables.DropPickupDelayTicks)
 		if !capacityOK {
 			return RejectDropCapacity, true
 		}
@@ -775,7 +773,7 @@ func (engine *Engine) completeMining(
 			return RejectNoTarget, true
 		}
 		engine.recordChange(dimensionID, target, core.AirID, pending)
-		record.Chunk.CommitDropBatch(next)
+		chunk.CommitDropBatch(next)
 		return 0, false
 	}
 	if block == core.CarrotStage7ID {
@@ -792,7 +790,7 @@ func (engine *Engine) completeMining(
 		}
 		n := cropYieldRollsCarrot(engine.seed, engine.tick.Load(), dimensionID, target)
 		stacks := [1]core.ItemStack{{Item: core.ItemCarrot, Count: n}}
-		next, capacityOK := record.Chunk.PrepareDropBatch(stacks[:], blockIndex, engine.tunables.DropPickupDelayTicks)
+		next, capacityOK := chunk.PrepareDropBatch(stacks[:], blockIndex, engine.tunables.DropPickupDelayTicks)
 		if !capacityOK {
 			return RejectDropCapacity, true
 		}
@@ -804,7 +802,7 @@ func (engine *Engine) completeMining(
 			return RejectNoTarget, true
 		}
 		engine.recordChange(dimensionID, target, core.AirID, pending)
-		record.Chunk.CommitDropBatch(next)
+		chunk.CommitDropBatch(next)
 		return 0, false
 	}
 	if block >= core.PotatoStage0ID && block <= core.PotatoStage6ID {
@@ -820,7 +818,7 @@ func (engine *Engine) completeMining(
 			return 0, false
 		}
 		stacks := [1]core.ItemStack{{Item: core.ItemPotato, Count: 1}}
-		next, capacityOK := record.Chunk.PrepareDropBatch(stacks[:], blockIndex, engine.tunables.DropPickupDelayTicks)
+		next, capacityOK := chunk.PrepareDropBatch(stacks[:], blockIndex, engine.tunables.DropPickupDelayTicks)
 		if !capacityOK {
 			return RejectDropCapacity, true
 		}
@@ -832,7 +830,7 @@ func (engine *Engine) completeMining(
 			return RejectNoTarget, true
 		}
 		engine.recordChange(dimensionID, target, core.AirID, pending)
-		record.Chunk.CommitDropBatch(next)
+		chunk.CommitDropBatch(next)
 		return 0, false
 	}
 	if block >= core.CarrotStage0ID && block <= core.CarrotStage6ID {
@@ -848,7 +846,7 @@ func (engine *Engine) completeMining(
 			return 0, false
 		}
 		stacks := [1]core.ItemStack{{Item: core.ItemCarrot, Count: 1}}
-		next, capacityOK := record.Chunk.PrepareDropBatch(stacks[:], blockIndex, engine.tunables.DropPickupDelayTicks)
+		next, capacityOK := chunk.PrepareDropBatch(stacks[:], blockIndex, engine.tunables.DropPickupDelayTicks)
 		if !capacityOK {
 			return RejectDropCapacity, true
 		}
@@ -860,7 +858,7 @@ func (engine *Engine) completeMining(
 			return RejectNoTarget, true
 		}
 		engine.recordChange(dimensionID, target, core.AirID, pending)
-		record.Chunk.CommitDropBatch(next)
+		chunk.CommitDropBatch(next)
 		return 0, false
 	}
 
@@ -891,7 +889,7 @@ func (engine *Engine) completeMining(
 			{Item: item, Count: wheatCount},
 			{Item: core.ItemWheatSeeds, Count: seedCount},
 		}
-		next, capacityOK := record.Chunk.PrepareDropBatch(
+		next, capacityOK := chunk.PrepareDropBatch(
 			stacks[:], blockIndex, engine.tunables.DropPickupDelayTicks,
 		)
 		if !capacityOK {
@@ -905,14 +903,14 @@ func (engine *Engine) completeMining(
 			return RejectNoTarget, true
 		}
 		engine.recordChange(dimensionID, target, core.AirID, pending)
-		record.Chunk.CommitDropBatch(next)
+		chunk.CommitDropBatch(next)
 		return 0, false
 	}
 
 	dropSlot := 0
 	if harvestable {
 		var capacityOK bool
-		dropSlot, capacityOK = record.Chunk.PrepareDrop(item, blockIndex)
+		dropSlot, capacityOK = chunk.PrepareDrop(item, blockIndex)
 		if !capacityOK {
 			return RejectDropCapacity, true
 		}
@@ -926,7 +924,7 @@ func (engine *Engine) completeMining(
 	}
 	engine.recordChange(dimensionID, target, core.AirID, pending)
 	if harvestable {
-		record.Chunk.CommitDrop(
+		chunk.CommitDrop(
 			dropSlot,
 			core.ItemStack{Item: item, Count: 1},
 			blockIndex,

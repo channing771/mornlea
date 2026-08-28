@@ -43,13 +43,13 @@ func setColumn(t *testing.T, engine *Engine, position mgl32.Vec3, block core.Blo
 		Y: 1,
 		Z: int32(math.Floor(float64(position.Z()))),
 	}
-	record := engine.dimensions[core.Overworld].Records[base.Chunk()]
-	if record == nil || record.Chunk == nil {
+	chunk, ready := engine.dimension(core.Overworld).ReadyChunk(base.Chunk())
+	if !ready {
 		t.Fatalf("列 %+v 所在区块未就绪", base)
 	}
 	x, _, z := base.Local()
 	for y := int32(1); y <= 2; y++ {
-		record.Chunk.SetBlock(x, y, z, block)
+		chunk.SetBlock(x, y, z, block)
 	}
 }
 
@@ -287,7 +287,7 @@ func TestOxygenAfterReconnectUnderwaterCountsDownFromFull(t *testing.T) {
 // 供夹具承重守卫使用。
 func playerSubmersion(engine *Engine, id SessionID) (bodyInFluid, eyeInFluid bool) {
 	session := engine.sessions[id]
-	source := dimensionCollisionSource{dimension: engine.dimensions[session.dimension]}
+	source := dimensionCollisionSource{dimension: engine.dimension(session.dimension)}
 	return physics.SubmersionFlags(session.player.state.Position, source)
 }
 
@@ -304,12 +304,12 @@ func waistDeepPlayerColumn(t *testing.T, engine *Engine, position mgl32.Vec3) {
 		Y: 1,
 		Z: int32(math.Floor(float64(position.Z()))),
 	}
-	record := engine.dimensions[core.Overworld].Records[base.Chunk()]
-	if record == nil || record.Chunk == nil {
+	chunk, ready := engine.dimension(core.Overworld).ReadyChunk(base.Chunk())
+	if !ready {
 		t.Fatalf("列 %+v 所在区块未就绪", base)
 	}
 	x, _, z := base.Local()
-	record.Chunk.SetBlock(x, base.Y, z, core.WaterSourceID)
+	chunk.SetBlock(x, base.Y, z, core.WaterSourceID)
 }
 
 // TestOxygenIgnoresBodySubmersionWithDryEye 钉住 advanceOxygen 收的是**眼睛**

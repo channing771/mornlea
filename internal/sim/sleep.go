@@ -24,7 +24,7 @@ func (engine *Engine) executeInteractBed(command Command) (RejectReason, bool) {
 		return RejectPlayerNotReady, true
 	}
 	dimensionID := session.dimension
-	dimension := engine.dimensions[dimensionID]
+	dimension := engine.dimension(dimensionID)
 	if dimension == nil || !session.hasView {
 		return RejectInvalidRay, true
 	}
@@ -145,7 +145,7 @@ func (engine *Engine) bedRespawnCandidate(player *playerState) *restoreCandidate
 	if !player.respawnPresent {
 		return nil
 	}
-	dimension := engine.dimensions[player.respawnDim]
+	dimension := engine.dimension(player.respawnDim)
 	if dimension == nil {
 		return nil
 	}

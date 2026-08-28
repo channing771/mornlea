@@ -83,7 +83,7 @@ func till(engine *Engine, session SessionID, yaw, pitch float32) TickResult {
 
 func tillBlockAt(t *testing.T, engine *Engine, position core.BlockPos) core.BlockID {
 	t.Helper()
-	block, ready := engine.dimensions[core.Overworld].BlockAt(position)
+	block, ready := engine.dimension(core.Overworld).BlockAt(position)
 	if !ready {
 		t.Fatalf("方块 %+v 所在区块未就绪", position)
 	}
@@ -610,7 +610,7 @@ func harvest(
 	t *testing.T,
 	block core.BlockID,
 	ticks int,
-) (*Engine, TickResult, *ChunkRecord, core.BlockPos) {
+) (*Engine, TickResult, miningTargetChunk, core.BlockPos) {
 	t.Helper()
 	engine, _, targets := readyMiningPlayers(t, 1)
 	target := targets[0]
@@ -622,7 +622,7 @@ func harvest(
 	return engine, result, miningTargetRecord(t, engine, target), target
 }
 
-func harvestBlockAt(t *testing.T, record *ChunkRecord, target core.BlockPos) core.BlockID {
+func harvestBlockAt(t *testing.T, record miningTargetChunk, target core.BlockPos) core.BlockID {
 	t.Helper()
 	x, _, z := target.Local()
 	return record.Chunk.BlockAt(x, target.Y, z)

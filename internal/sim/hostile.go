@@ -126,7 +126,7 @@ func (engine *Engine) RestoreHostile(mob HostileMob) error {
 	if err := validateHostileMob(mob); err != nil {
 		return err
 	}
-	if engine.dimensions[mob.Dimension] == nil {
+	if engine.dimension(mob.Dimension) == nil {
 		return fmt.Errorf("sim: hostile dimension %d is unknown", mob.Dimension)
 	}
 	if engine.hostiles.findIndex(mob.ID) >= 0 {
@@ -248,7 +248,7 @@ func (engine *Engine) advanceHostileMovement() {
 			index++
 			continue
 		}
-		source := dimensionCollisionSource{dimension: engine.dimensions[entry.dimension]}
+		source := dimensionCollisionSource{dimension: engine.dimension(entry.dimension)}
 		input := entry.input
 		input.BodyInFluid, input.EyeInFluid = physics.SubmersionFlags(entry.state.Position, source)
 		entry.state = physics.Step(entry.state, input, source).State
@@ -329,7 +329,7 @@ func (engine *Engine) advanceHostileBurn(worldTime uint64) {
 	}
 	for index := range engine.hostiles.entries {
 		entry := &engine.hostiles.entries[index]
-		dimension := engine.dimensions[entry.dimension]
+		dimension := engine.dimension(entry.dimension)
 		if !engine.hostileSkyExposed(dimension, entry.state.Position) {
 			entry.burnCooldown = hostileCooldownPeriodTicks
 			continue
@@ -434,28 +434,28 @@ func (engine *Engine) dropHostileLoot(
 	entry *hostileState,
 	pending *pendingChunkChanges,
 ) {
-	dimension := engine.dimensions[entry.dimension]
+	dimension := engine.dimension(entry.dimension)
 	if dimension == nil {
 		return
 	}
 	death := blockPosOf(entry.state.Position)
 	batch := [1]core.ItemStack{{Item: core.ItemRottenFlesh, Count: 1}}
 	for _, key := range engine.deathDropChunks(entry.dimension, death.Chunk()) {
-		record := dimension.Records[key.Pos]
-		if record == nil || record.State != ChunkReady || record.Chunk == nil {
+		chunk, ready := dimension.ReadyChunk(key.Pos)
+		if !ready {
 			continue
 		}
 		blockIndex, indexed := world.ChunkBlockIndex(clampBlockToChunk(death, key.Pos))
 		if !indexed {
 			continue
 		}
-		next, ok := record.Chunk.PrepareDropBatch(
+		next, ok := chunk.PrepareDropBatch(
 			batch[:], blockIndex, engine.tunables.DropPickupDelayTicks,
 		)
 		if !ok {
 			continue
 		}
-		record.Chunk.CommitDropBatch(next)
+		chunk.CommitDropBatch(next)
 		engine.touchChunk(key, pending)
 		return
 	}

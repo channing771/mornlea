@@ -290,7 +290,7 @@ func cropSkyExposed(chunk *world.Chunk, position core.BlockPos) bool {
 //
 // **枚举顺序全序、绝不遍历 map**：区块来自 activeInterestKeys()（已按
 // chunkKeyLess 排好），区段按索引升序，区段内的 n 条抽样按 i 升序。
-// dimension.Records[...] 是 map **查找**不是 map 遍历，不引入顺序不确定性。
+// 区块按位置受控查询，不引入 map 遍历带来的顺序不确定性。
 //
 // 成本契约：本 tick 触及的格数恒等于「已就绪的活动区块数 × 24 个区段 ×
 // RandomTicksPerSection」，与世界里有多少株作物无关。这里刻意**不**跳过均匀
@@ -314,12 +314,12 @@ func (engine *Engine) advanceCrops(pending *pendingChunkChanges) {
 	}
 	tick := engine.tick.Load()
 	for _, key := range engine.activeInterestKeys() {
-		dimension := engine.dimensions[key.Dimension]
+		dimension := engine.dimension(key.Dimension)
 		if dimension == nil {
 			continue
 		}
-		record := dimension.Records[key.Pos]
-		if record == nil || record.State != ChunkReady || record.Chunk == nil {
+		chunk, ready := dimension.ReadyChunk(key.Pos)
+		if !ready {
 			continue
 		}
 		baseX := key.Pos.X << core.SectionShift
@@ -336,7 +336,7 @@ func (engine *Engine) advanceCrops(pending *pendingChunkChanges) {
 				localZ := (cell >> core.SectionShift) & core.SectionMask
 				localY := cell >> (core.SectionShift * 2)
 				engine.cropCellsExamined++
-				engine.advanceCropCell(dimension, key.Dimension, record.Chunk, core.BlockPos{
+				engine.advanceCropCell(dimension, key.Dimension, chunk, core.BlockPos{
 					X: baseX + int32(localX),
 					Y: baseY + int32(localY),
 					Z: baseZ + int32(localZ),

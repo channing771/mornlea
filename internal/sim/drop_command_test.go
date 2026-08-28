@@ -66,7 +66,10 @@ func TestDropSelectedItemRejectsFullDropCapacityAtomically(t *testing.T) {
 	state := engine.sessions[session]
 	state.player.inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 2}
 	state.player.inventory.Hotbar.Selected = 0
-	chunk := engine.dimensions[state.dimension].Records[core.ChunkPos{}].Chunk
+	chunk, ok := engine.dimension(state.dimension).ReadyChunk(core.ChunkPos{})
+	if !ok {
+		t.Fatal("origin chunk is not ready")
+	}
 	// 用满堆且物品不匹配的槽占满 32 个容量：既不能合并也不能新建。
 	for slot := range core.DropsPerChunk {
 		chunk.SetDrop(slot, world.DropSlot{
@@ -108,8 +111,11 @@ func BenchmarkDropSelectedItem(b *testing.B) {
 		engine, session := readyMovementPlayerForBench(b)
 		state := engine.sessions[session]
 		state.player.inventory.Hotbar.Selected = 0
-		record := engine.dimensions[state.dimension].Records[core.ChunkPos{}]
-		return engine, state, record.Chunk
+		chunk, ok := engine.dimension(state.dimension).ReadyChunk(core.ChunkPos{})
+		if !ok {
+			b.Fatal("origin chunk is not ready")
+		}
+		return engine, state, chunk
 	}
 
 	b.Run("create", func(b *testing.B) {

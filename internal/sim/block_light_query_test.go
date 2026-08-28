@@ -13,7 +13,7 @@ import (
 
 func TestLocalBlockLightSeedsEmissionAndSpreadsByOne(t *testing.T) {
 	engine, _ := readyMovementPlayer(t)
-	dimension := engine.dimensions[core.Overworld]
+	dimension := engine.dimension(core.Overworld)
 	// 落地火把：所在格发光 14，向六邻域逐步 −1。
 	engine.SetBlockForTest(core.BlockPos{X: 8, Y: 1, Z: 8}, core.TorchStandingID)
 	scratch := newBlockLightScratch()
@@ -44,7 +44,7 @@ func TestLocalBlockLightSeedsEmissionAndSpreadsByOne(t *testing.T) {
 
 func TestLocalBlockLightOpaqueBlocksAndFluidAttenuates(t *testing.T) {
 	engine, _ := readyMovementPlayer(t)
-	dimension := engine.dimensions[core.Overworld]
+	dimension := engine.dimension(core.Overworld)
 	scratch := newBlockLightScratch()
 	engine.SetBlockForTest(core.BlockPos{X: 8, Y: 1, Z: 8}, core.TorchStandingID)
 	// 完整不透明隔层：整个区块的 y=3 平面填实，光无法越过（区块边界外为
@@ -74,7 +74,7 @@ func TestLocalBlockLightOpaqueBlocksAndFluidAttenuates(t *testing.T) {
 
 func TestLocalBlockLightTreatsUnknownAndUnloadedAsBlocking(t *testing.T) {
 	engine, _ := readyMovementPlayer(t)
-	dimension := engine.dimensions[core.Overworld]
+	dimension := engine.dimension(core.Overworld)
 	scratch := newBlockLightScratch()
 	// 只有原点区块已加载：光源贴近区块边界，跨边界即进入未加载区块。
 	engine.SetBlockForTest(core.BlockPos{X: 0, Y: 1, Z: 0}, core.TorchStandingID)
@@ -145,7 +145,7 @@ func TestLocalBlockLightMatchesClientOracleOnSharedRuleFixtures(t *testing.T) {
 	// 在该定义域内「不透明阻挡 + 1+衰减(=1) 步长」与客户端的「只进空气、
 	// 固定 −1」逐位等价，因此整窗逐格对照必须全等。
 	engine, _ := readyMovementPlayer(t)
-	dimension := engine.dimensions[core.Overworld]
+	dimension := engine.dimension(core.Overworld)
 	loadFlatChunks(t, dimension, -1, 1, -1, 1)
 	engine.SetBlockForTest(core.BlockPos{X: 8, Y: 5, Z: 8}, core.TorchStandingID)
 	engine.SetBlockForTest(core.BlockPos{X: 8, Y: 4, Z: 8}, core.StoneID)
@@ -177,7 +177,7 @@ func TestLocalBlockLightDocumentsTransparentCellDivergence(t *testing.T) {
 	// 穿过透明非空气方块时出现；本测试把差异域与服务端取值显式钉住，防止
 	// 无声漂移成第三套规则。
 	engine, _ := readyMovementPlayer(t)
-	dimension := engine.dimensions[core.Overworld]
+	dimension := engine.dimension(core.Overworld)
 	scratch := newBlockLightScratch()
 	engine.SetBlockForTest(core.BlockPos{X: 8, Y: 1, Z: 8}, core.TorchStandingID)
 	engine.SetBlockForTest(core.BlockPos{X: 8, Y: 1, Z: 7}, core.GlassID)
@@ -196,7 +196,7 @@ func TestLocalBlockLightDocumentsTransparentCellDivergence(t *testing.T) {
 
 func TestLocalBlockLightQueryIsAllocationFree(t *testing.T) {
 	engine, _ := readyMovementPlayer(t)
-	dimension := engine.dimensions[core.Overworld]
+	dimension := engine.dimension(core.Overworld)
 	engine.SetBlockForTest(core.BlockPos{X: 8, Y: 1, Z: 8}, core.TorchStandingID)
 	center := core.BlockPos{X: 8, Y: 2, Z: 8}
 	if got := localBlockLight(dimension, engine.hostileLight, center); got == 0 {
@@ -213,7 +213,7 @@ func TestLocalBlockLightFullWindowOfEmissiveCellsStaysBounded(t *testing.T) {
 	// 最坏情形：整个窗口全是发射方块（种子数 = 29³）。预分配 scratch 必须
 	// 恰好有界，溢出以 panic 暴露而不是静默截断。
 	engine, _ := readyMovementPlayer(t)
-	dimension := engine.dimensions[core.Overworld]
+	dimension := engine.dimension(core.Overworld)
 	loadFlatChunks(t, dimension, -1, 1, -1, 1)
 	center := core.BlockPos{X: 8, Y: 40, Z: 8}
 	baseX, baseY, baseZ := center.X-hostileLightRadius, center.Y-hostileLightRadius, center.Z-hostileLightRadius

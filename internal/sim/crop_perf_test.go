@@ -209,27 +209,26 @@ func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 	}
 	readyChunks := 0
 	for _, key := range engine.activeInterestKeys() {
-		dimension := engine.dimensions[key.Dimension]
+		dimension := engine.dimension(key.Dimension)
 		if dimension == nil {
 			continue
 		}
-		record := dimension.Records[key.Pos]
-		if record != nil && record.State == ChunkReady && record.Chunk != nil {
+		if _, ready := dimension.ReadyChunk(key.Pos); ready {
 			readyChunks++
 		}
 	}
 	if readyChunks != 1 {
 		b.Fatalf("Ready 区块数=%d，想要 1", readyChunks)
 	}
-	record := engine.dimensions[core.Overworld].Records[core.ChunkPos{}]
-	if record == nil || record.State != ChunkReady || record.Chunk == nil {
+	chunk, ready := engine.dimension(core.Overworld).ReadyChunk(core.ChunkPos{})
+	if !ready {
 		b.Fatal("原点区块未 Ready")
 	}
 	farmland, crops := 0, 0
 	for y := int32(core.MinY); y < int32(core.MaxY); y++ {
 		for x := range core.SectionSize {
 			for z := range core.SectionSize {
-				block := record.Chunk.BlockAt(x, y, z)
+				block := chunk.BlockAt(x, y, z)
 				if core.IsFarmland(block) {
 					farmland++
 				}
@@ -258,7 +257,7 @@ func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 	// 少量 Dirt 写入；pending 非空不再视为失败，只要变更仅为 FarmlandDry→Dirt。
 	if pending.Len() != 0 {
 		for _, change := range pending.ChangedBlocks() {
-			block, ready := engine.dimensions[change.Dimension].BlockAt(change.Position)
+			block, ready := engine.dimension(change.Dimension).BlockAt(change.Position)
 			if !ready || block != core.DirtID {
 				b.Fatalf("全耕地世界 unexpected 变更 %d（仅允许 FarmlandDry→Dirt）", block)
 			}

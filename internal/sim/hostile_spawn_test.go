@@ -94,7 +94,7 @@ func abs32(v int32) int32 {
 // loadSpawnArena 装载覆盖 [minX,maxX]×[minZ,maxZ] 方块范围的 flat 竞技场。
 func loadSpawnArena(t *testing.T, engine *Engine, minX, maxX, minZ, maxZ int32) {
 	t.Helper()
-	loadFlatChunks(t, engine.dimensions[core.Overworld],
+	loadFlatChunks(t, engine.dimension(core.Overworld),
 		minX>>core.SectionShift, maxX>>core.SectionShift,
 		minZ>>core.SectionShift, maxZ>>core.SectionShift)
 }
@@ -211,7 +211,7 @@ func TestHostileSpawnRejectsBrightCandidate(t *testing.T) {
 	engine.SetBlockForTest(core.BlockPos{X: candidate.X + 6, Y: 1, Z: candidate.Z}, core.AirID)
 	engine.SetBlockForTest(core.BlockPos{X: candidate.X + 7, Y: 1, Z: candidate.Z}, core.TorchStandingID)
 	engine.advanceHostileSpawn()
-	if got := engine.hostileBlockLight(engine.dimensions[core.Overworld], candidate); got != 7 {
+	if got := engine.hostileBlockLight(engine.dimension(core.Overworld), candidate); got != 7 {
 		t.Fatalf("夹具候选光=%d，想要 7", got)
 	}
 	if len(engine.hostiles.entries) != 1 {

@@ -225,7 +225,7 @@ func assertWaterIsLoadBearing(
 			t.Fatalf("夹具失效：射线路径上的 %+v=%d 已不是流体", position, got)
 		}
 	}
-	dimension := engine.dimensions[core.Overworld]
+	dimension := engine.dimension(core.Overworld)
 	hit, ok, err := core.RaycastBlocks(
 		origin,
 		direction,

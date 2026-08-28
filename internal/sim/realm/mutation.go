@@ -4,20 +4,33 @@ import (
 	"sort"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/world"
 )
 
+type BlockChange struct {
+	Position core.BlockPos
+	Block    core.BlockID
+}
+
+type ChunkChangeBatch struct {
+	Dimension    core.DimensionID
+	Chunk        core.ChunkPos
+	BaseRevision uint64
+	NewRevision  uint64
+	Changes      []BlockChange
+}
+
 type pendingChunkChanges struct {
 	baseRevision uint64
-	changes      map[uint32]contract.BlockChange
+	changes      map[uint32]BlockChange
 	dirty        map[int]struct{}
 }
 
 // Mutation 收集一个权威 tick 内全部区块变更，并只在 Commit 时推进 revision。
 type Mutation struct {
-	state   *State
-	pending map[core.ChunkKey]*pendingChunkChanges
+	state     *State
+	pending   map[core.ChunkKey]*pendingChunkChanges
+	committed bool
 }
 
 type ChangedBlock struct {
@@ -33,10 +46,10 @@ func (mutation *Mutation) Record(dimensionID core.DimensionID, position core.Blo
 	key := core.ChunkKey{Dimension: dimensionID, Pos: position.Chunk()}
 	changeSet := mutation.pending[key]
 	if changeSet == nil {
-		record := mutation.state.dimensions[dimensionID].Records[key.Pos]
+		record := mutation.state.dimensions[dimensionID].records[key.Pos]
 		changeSet = &pendingChunkChanges{
 			baseRevision: record.Revision,
-			changes:      make(map[uint32]contract.BlockChange),
+			changes:      make(map[uint32]BlockChange),
 			dirty:        make(map[int]struct{}),
 		}
 		mutation.pending[key] = changeSet
@@ -45,7 +58,7 @@ func (mutation *Mutation) Record(dimensionID core.DimensionID, position core.Blo
 	if !ok {
 		panic("sim: changed block has no chunk index")
 	}
-	changeSet.changes[index] = contract.BlockChange{Position: position, Block: block}
+	changeSet.changes[index] = BlockChange{Position: position, Block: block}
 	changeSet.dirty[position.SectionIndex()] = struct{}{}
 }
 
@@ -54,10 +67,10 @@ func (mutation *Mutation) Touch(key core.ChunkKey) {
 	if mutation.pending[key] != nil {
 		return
 	}
-	record := mutation.state.dimensions[key.Dimension].Records[key.Pos]
+	record := mutation.state.dimensions[key.Dimension].records[key.Pos]
 	mutation.pending[key] = &pendingChunkChanges{
 		baseRevision: record.Revision,
-		changes:      make(map[uint32]contract.BlockChange),
+		changes:      make(map[uint32]BlockChange),
 		dirty:        make(map[int]struct{}),
 	}
 }
@@ -83,23 +96,27 @@ func (mutation *Mutation) ChangedBlocks() []ChangedBlock {
 	return changes
 }
 
-func (mutation *Mutation) Commit() []contract.ChunkChangeBatch {
+func (mutation *Mutation) Commit() []ChunkChangeBatch {
+	if mutation.committed {
+		return nil
+	}
+	mutation.committed = true
 	keys := mutation.sortedKeys()
-	batches := make([]contract.ChunkChangeBatch, 0, len(keys))
+	batches := make([]ChunkChangeBatch, 0, len(keys))
 	for _, key := range keys {
 		changeSet := mutation.pending[key]
-		record := mutation.state.dimensions[key.Dimension].Records[key.Pos]
+		record := mutation.state.dimensions[key.Dimension].records[key.Pos]
 		for sectionIndex := range changeSet.dirty {
 			record.Chunk.Section(sectionIndex).Blocks.Compact()
 		}
 		record.Revision++
 
 		indices := sortedIndices(changeSet.changes)
-		changes := make([]contract.BlockChange, 0, len(indices))
+		changes := make([]BlockChange, 0, len(indices))
 		for _, index := range indices {
 			changes = append(changes, changeSet.changes[index])
 		}
-		batches = append(batches, contract.ChunkChangeBatch{
+		batches = append(batches, ChunkChangeBatch{
 			Dimension:    key.Dimension,
 			Chunk:        key.Pos,
 			BaseRevision: changeSet.baseRevision,
@@ -119,7 +136,7 @@ func (mutation *Mutation) sortedKeys() []core.ChunkKey {
 	return keys
 }
 
-func sortedIndices(changes map[uint32]contract.BlockChange) []uint32 {
+func sortedIndices(changes map[uint32]BlockChange) []uint32 {
 	indices := make([]uint32, 0, len(changes))
 	for index := range changes {
 		indices = append(indices, index)

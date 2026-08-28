@@ -313,7 +313,7 @@ func (engine *Engine) advanceWorkbenchLifecycle() {
 // Ready、方块仍是工作台且玩家仍在触及距离内。距离判定与容器查看
 // （`withinContainerReach`）同一来源：眼睛位置到方块中心 ≤ InteractionReach。
 func (engine *Engine) workbenchAnchorValid(session *sessionState) bool {
-	dimension := engine.dimensions[session.dimension]
+	dimension := engine.dimension(session.dimension)
 	if dimension == nil {
 		return false
 	}

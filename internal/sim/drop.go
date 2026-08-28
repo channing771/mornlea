@@ -22,7 +22,7 @@ func (engine *Engine) sessionDropWantedSnapshot(
 ) map[core.ChunkKey]struct{} {
 	wanted := make(map[core.ChunkKey]struct{})
 	if session.player == nil || session.player.lifecycle != PlayerActive ||
-		engine.dimensions[session.dimension] == nil {
+		engine.dimension(session.dimension) == nil {
 		return wanted
 	}
 	for dz := -DropInterestRadius; dz <= DropInterestRadius; dz++ {
@@ -50,15 +50,15 @@ func (engine *Engine) advanceDrops(pending *pendingChunkChanges) {
 	lifetimeTicks := engine.tunables.DropLifetimeTicks
 	pickupRange := engine.tunables.DropPickupRange
 	for _, key := range keys {
-		dimension := engine.dimensions[key.Dimension]
+		dimension := engine.dimension(key.Dimension)
 		if dimension == nil {
 			continue
 		}
-		record, ok := dimension.Records[key.Pos]
-		if !ok || record.State != ChunkReady || record.Chunk == nil {
+		chunk, ok := dimension.ReadyChunk(key.Pos)
+		if !ok {
 			continue
 		}
-		if engine.advanceChunkDrops(key, record.Chunk, sessions, lifetimeTicks, pickupRange) {
+		if engine.advanceChunkDrops(key, chunk, sessions, lifetimeTicks, pickupRange) {
 			engine.touchChunk(key, pending)
 		}
 	}
@@ -182,7 +182,7 @@ func (engine *Engine) activeInterestKeys() []core.ChunkKey {
 	keys := engine.dropKeyScratch[:0]
 	for _, session := range engine.sessions {
 		if session.player == nil || session.player.lifecycle != PlayerActive ||
-			engine.dimensions[session.dimension] == nil {
+			engine.dimension(session.dimension) == nil {
 			continue
 		}
 		for dx := -DropInterestRadius; dx <= DropInterestRadius; dx++ {
@@ -233,18 +233,16 @@ func (engine *Engine) SetChunkDropForTest(
 	slot int,
 	value world.DropSlot,
 ) {
-	dimension := engine.dimensions[key.Dimension]
+	dimension := engine.dimension(key.Dimension)
 	if dimension == nil {
 		return
 	}
-	if record, ok := dimension.Records[key.Pos]; ok && record.Chunk != nil {
-		record.Chunk.SetDrop(slot, value)
-	}
+	dimension.UpdateReadyChunk(key.Pos, func(chunk *world.Chunk) { chunk.SetDrop(slot, value) })
 }
 
 // SetBlockForTest 直接写入一个已 Ready 区块的方块，仅供测试构造固定场景。
 func (engine *Engine) SetBlockForTest(position core.BlockPos, block core.BlockID) {
-	dimension := engine.dimensions[core.Overworld]
+	dimension := engine.dimension(core.Overworld)
 	if dimension == nil {
 		return
 	}
@@ -259,7 +257,7 @@ func (engine *Engine) AppendSessionDrops(id SessionID, dst []DropSnapshot) []Dro
 		session.player.lifecycle != PlayerActive {
 		return dst
 	}
-	dimension := engine.dimensions[session.dimension]
+	dimension := engine.dimension(session.dimension)
 	if dimension == nil {
 		return dst
 	}
@@ -273,11 +271,11 @@ func (engine *Engine) AppendSessionDrops(id SessionID, dst []DropSnapshot) []Dro
 					Z: session.center.Z + int32(dz),
 				},
 			}
-			record, ok := dimension.Records[key.Pos]
-			if !ok || record.State != ChunkReady || record.Chunk == nil {
+			chunk, ok := dimension.ReadyChunk(key.Pos)
+			if !ok {
 				continue
 			}
-			dst = appendChunkDrops(dst, key, record.Chunk)
+			dst = appendChunkDrops(dst, key, chunk)
 		}
 	}
 	return dst
@@ -333,25 +331,25 @@ func (engine *Engine) dropSelectedItem(
 		Z: int32(math.Floor(float64(player.state.Position.Z()))),
 	}
 	key := core.ChunkKey{Dimension: session.dimension, Pos: position.Chunk()}
-	dimension := engine.dimensions[key.Dimension]
+	dimension := engine.dimension(key.Dimension)
 	if dimension == nil {
 		return RejectChunkNotReady, true
 	}
-	record := dimension.Records[key.Pos]
-	if record == nil || record.State != ChunkReady || record.Chunk == nil {
+	chunk, ready := dimension.ReadyChunk(key.Pos)
+	if !ready {
 		return RejectChunkNotReady, true
 	}
 	blockIndex, ok := world.ChunkBlockIndex(position)
 	if !ok {
 		return RejectChunkNotReady, true
 	}
-	dropSlot, ok := record.Chunk.PrepareDrop(stack.Item, blockIndex)
+	dropSlot, ok := chunk.PrepareDrop(stack.Item, blockIndex)
 	if !ok {
 		return RejectDropCapacity, true
 	}
 	dropped := stack
 	dropped.Count = 1
-	record.Chunk.CommitDrop(dropSlot, dropped, blockIndex, engine.tunables.PlayerDropPickupDelayTicks)
+	chunk.CommitDrop(dropSlot, dropped, blockIndex, engine.tunables.PlayerDropPickupDelayTicks)
 	player.inventory.Hotbar = nextHotbar
 	player.inventoryDirty = true
 	engine.touchChunk(key, pending)

@@ -107,7 +107,7 @@ func (engine *Engine) playerMeleeTarget(
 	if !sessionInSnapshot(attackerID, sessions) {
 		return 0, false
 	}
-	dimension := engine.dimensions[attacker.dimension]
+	dimension := engine.dimension(attacker.dimension)
 	if dimension == nil {
 		return 0, false
 	}

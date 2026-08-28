@@ -306,7 +306,7 @@ func TestCompanionInterestSlidesWithBody(t *testing.T) {
 	}
 	// 离开的干净区块必须按既有规则释放：RequestUnload 对无未落盘修改的区块
 	// 直接删除记录。
-	if _, exists := engine.dimensions[core.Overworld].Info(core.ChunkPos{X: -1}); exists {
+	if _, exists := engine.dimension(core.Overworld).Info(core.ChunkPos{X: -1}); exists {
 		t.Fatal("离开兴趣的干净区块未被释放")
 	}
 }

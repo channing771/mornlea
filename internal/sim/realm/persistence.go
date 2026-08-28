@@ -5,9 +5,34 @@ import (
 	"sort"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/world"
 )
+
+type SaveMode uint8
+
+const (
+	SaveUrgent SaveMode = iota
+	SaveAll
+)
+
+type ChunkSaveSnapshot struct {
+	Key            core.ChunkKey
+	Revision       uint64
+	EstimatedBytes int
+	Chunk          *world.Chunk
+}
+
+type PersistedChunk struct {
+	Key      core.ChunkKey
+	Revision uint64
+}
+
+type PersistenceStats struct {
+	DirtyChunks    int
+	EstimatedBytes int64
+	InFlightChunks int
+	UnloadWaiting  int
+}
 
 type persistenceCandidate struct {
 	key    core.ChunkKey
@@ -19,13 +44,13 @@ type persistenceInFlight struct {
 	estimatedBytes int
 }
 
-func (state *State) PersistenceSnapshots(maxChunks int, maxBytes int, mode contract.SaveMode) []contract.ChunkSaveSnapshot {
+func (state *State) PersistenceSnapshots(maxChunks int, maxBytes int, mode SaveMode) []ChunkSaveSnapshot {
 	candidates := make([]persistenceCandidate, 0)
 	for dimensionID, dimension := range state.dimensions {
-		for pos, record := range dimension.Records {
+		for pos, record := range dimension.records {
 			key := core.ChunkKey{Dimension: dimensionID, Pos: pos}
 			_, inFlight := state.persistenceInFlight(key, record)
-			if record.Chunk == nil || !record.Dirty() || inFlight || mode == contract.SaveUrgent && !record.UnloadRequested {
+			if record.Chunk == nil || !record.Dirty() || inFlight || mode == SaveUrgent && !record.UnloadRequested {
 				continue
 			}
 			candidates = append(candidates, persistenceCandidate{key: key, record: record})
@@ -42,7 +67,7 @@ func (state *State) PersistenceSnapshots(maxChunks int, maxBytes int, mode contr
 	if state.inFlightSaves == nil {
 		state.inFlightSaves = make(map[core.ChunkKey]persistenceInFlight)
 	}
-	snapshots := make([]contract.ChunkSaveSnapshot, 0, min(maxChunks, len(candidates)))
+	snapshots := make([]ChunkSaveSnapshot, 0, min(maxChunks, len(candidates)))
 	estimatedBytes := 0
 	for _, candidate := range candidates {
 		estimate := estimateChunkBytes(candidate.record.Chunk)
@@ -52,7 +77,7 @@ func (state *State) PersistenceSnapshots(maxChunks int, maxBytes int, mode contr
 		clone := candidate.record.Chunk.Clone()
 		candidate.record.SaveInFlightRevision = candidate.record.Revision
 		state.inFlightSaves[candidate.key] = persistenceInFlight{revision: candidate.record.Revision, estimatedBytes: estimate}
-		snapshots = append(snapshots, contract.ChunkSaveSnapshot{
+		snapshots = append(snapshots, ChunkSaveSnapshot{
 			Key: candidate.key, Revision: candidate.record.Revision, EstimatedBytes: estimate, Chunk: clone,
 		})
 		estimatedBytes += estimate
@@ -60,13 +85,13 @@ func (state *State) PersistenceSnapshots(maxChunks int, maxBytes int, mode contr
 	return snapshots
 }
 
-func (state *State) ApplyPersisted(acks []contract.PersistedChunk) {
+func (state *State) ApplyPersisted(acks []PersistedChunk) {
 	for _, ack := range acks {
 		dimension := state.dimensions[ack.Key.Dimension]
 		if dimension == nil {
 			continue
 		}
-		record := dimension.Records[ack.Key.Pos]
+		record := dimension.records[ack.Key.Pos]
 		if record == nil {
 			continue
 		}
@@ -86,13 +111,13 @@ func (state *State) ApplyPersisted(acks []contract.PersistedChunk) {
 	}
 }
 
-func (state *State) FailPersistence(snapshots []contract.ChunkSaveSnapshot) {
+func (state *State) FailPersistence(snapshots []ChunkSaveSnapshot) {
 	for _, snapshot := range snapshots {
 		dimension := state.dimensions[snapshot.Key.Dimension]
 		if dimension == nil {
 			continue
 		}
-		record := dimension.Records[snapshot.Key.Pos]
+		record := dimension.records[snapshot.Key.Pos]
 		if record == nil {
 			continue
 		}
@@ -105,10 +130,10 @@ func (state *State) FailPersistence(snapshots []contract.ChunkSaveSnapshot) {
 	}
 }
 
-func (state *State) PersistenceStats() contract.PersistenceStats {
-	var stats contract.PersistenceStats
+func (state *State) PersistenceStats() PersistenceStats {
+	var stats PersistenceStats
 	for dimensionID, dimension := range state.dimensions {
-		for pos, record := range dimension.Records {
+		for pos, record := range dimension.records {
 			if record.Dirty() && record.Chunk != nil {
 				stats.DirtyChunks++
 				stats.EstimatedBytes += int64(estimateChunkBytes(record.Chunk))

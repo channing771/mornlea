@@ -12,7 +12,7 @@ import (
 func TestSpawnFarmlandSupportTop(t *testing.T) {
 	engine := NewEngine(0, 0, 0)
 	engine.RegisterSession(1, core.Overworld, core.ChunkPos{})
-	dimension := engine.dimensions[core.Overworld]
+	dimension := engine.dimension(core.Overworld)
 	for x := int32(-1); x <= 1; x++ {
 		for z := int32(-1); z <= 1; z++ {
 			chunk := world.NewChunk(core.ChunkPos{X: x, Z: z})

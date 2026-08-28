@@ -9,6 +9,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/sim/realm"
 )
 
 type spawnColumn struct {
@@ -116,7 +117,7 @@ func (engine *Engine) advancePendingPlayer(id SessionID, session *sessionState) 
 		player.nextRestore++
 	}
 
-	dimension := engine.dimensions[session.dimension]
+	dimension := engine.dimension(session.dimension)
 	if player.exhausted {
 		if !spawnRevisionsChanged(dimension, player) {
 			if (engine.tick.Load()+1)%100 == 0 {
@@ -168,7 +169,7 @@ func (engine *Engine) advancePendingPlayer(id SessionID, session *sessionState) 
 	player.exhaustedRevisions = make([]uint64, len(player.candidateChunks))
 	for index, chunk := range player.candidateChunks {
 		info, ok := dimension.Info(chunk)
-		if !ok || info.State != ChunkReady {
+		if !ok || info.State != realm.ChunkReady {
 			panic("sim: exhausted spawn candidate chunk is not ready")
 		}
 		player.exhaustedRevisions[index] = info.Revision
@@ -226,13 +227,13 @@ func (engine *Engine) validateRestoreCandidate(
 	if bounds.Min.Y() < float32(core.MinY) || bounds.Max.Y() > float32(core.MaxY) {
 		return false, true, false
 	}
-	dimension := engine.dimensions[candidate.location.Dimension]
+	dimension := engine.dimension(candidate.location.Dimension)
 	if dimension == nil {
 		return false, true, false
 	}
 	for _, key := range restoreCandidateChunks(candidate.location) {
 		info, exists := dimension.Info(key.Pos)
-		if !exists || info.State != ChunkReady {
+		if !exists || info.State != realm.ChunkReady {
 			return false, false, false
 		}
 	}
@@ -332,8 +333,8 @@ func (engine *Engine) retryFailedSpawnChunk(
 	session *sessionState,
 	chunk core.ChunkPos,
 ) {
-	info, ok := engine.dimensions[session.dimension].Info(chunk)
-	if !ok || info.State == ChunkFailed {
+	info, ok := engine.dimension(session.dimension).Info(chunk)
+	if !ok || info.State == realm.ChunkFailed {
 		engine.subscriptionsDirty = true
 	}
 }
@@ -549,7 +550,7 @@ func spawnChunkRevisionsChanged(
 ) bool {
 	for index, chunk := range chunks {
 		info, ok := dimension.Info(chunk)
-		if !ok || info.State != ChunkReady || info.Revision != revisions[index] {
+		if !ok || info.State != realm.ChunkReady || info.Revision != revisions[index] {
 			return true
 		}
 	}

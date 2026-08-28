@@ -6,6 +6,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
@@ -25,7 +26,7 @@ func farmlandMoistureFluidAdapter(
 	return &fluidWorld{
 		engine:    engine,
 		id:        core.Overworld,
-		dimension: engine.dimensions[core.Overworld],
+		dimension: engine.dimension(core.Overworld),
 		scope:     engine.fluidScope,
 		pending:   engine.newMutation(),
 	}
@@ -237,7 +238,7 @@ func TestFarmlandMoistureRestartRecoversStaleWetFarmland(t *testing.T) {
 				Chunk:     chunk,
 			})
 		}
-		if block, ready := engine.dimensions[core.Overworld].BlockAt(farmland); ready && block == core.FarmlandDryID {
+		if block, ready := engine.dimension(core.Overworld).BlockAt(farmland); ready && block == core.FarmlandDryID {
 			return
 		}
 	}
@@ -388,12 +389,12 @@ func TestFarmlandMoistureReentryRecoversStaleWetFarmland(t *testing.T) {
 	}
 	// 邻块不在 Ready scope 时直接改测试夹具，模拟存档侧失水；这条写入刻意不经过
 	// `fluidWorld.SetBlock`，因此不会生产事件，恢复只能来自后续重扫。
-	rightRecord := engine.dimensions[core.Overworld].Records[right]
-	if rightRecord == nil || rightRecord.State == ChunkReady || rightRecord.Chunk == nil {
-		t.Fatalf("邻块离开后记录不适合模拟失水：%+v", rightRecord)
+	rightInfo, exists := engine.dimension(core.Overworld).Info(right)
+	if !exists || rightInfo.State == realm.ChunkReady || rightInfo.Chunk == nil {
+		t.Fatalf("邻块离开后记录不适合模拟失水：%+v", rightInfo)
 	}
 	waterX, _, waterZ := water.Local()
-	rightRecord.Chunk.SetBlock(waterX, water.Y, waterZ, core.AirID)
+	rightInfo.Chunk.SetBlock(waterX, water.Y, waterZ, core.AirID)
 	farmlandKey := farmlandMoistureKey{dimension: core.Overworld, position: farmland}
 	if _, queued := engine.farmlandMoisture.queued[farmlandKey]; queued {
 		t.Fatal("邻块重入前已有耕地候选，无法证明恢复来自重扫")
@@ -416,7 +417,7 @@ func TestFarmlandMoistureReentryRecoversStaleWetFarmland(t *testing.T) {
 		}
 		if _, ready := engine.fluidScope[rightKey]; ready {
 			reentered = true
-			block, blockReady := engine.dimensions[core.Overworld].BlockAt(water)
+			block, blockReady := engine.dimension(core.Overworld).BlockAt(water)
 			if !blockReady || core.IsFluid(block) {
 				t.Fatalf("邻块重入后水格 ready=%v block=%s，想要已失去流体",
 					blockReady, blockLabel(block))

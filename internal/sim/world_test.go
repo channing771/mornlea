@@ -6,17 +6,18 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/world"
 )
 
 func TestDimensionLifecycleReadyUnloadAndRetry(t *testing.T) {
-	dimension := sim.NewDimension(core.Overworld)
+	dimension := realm.NewDimension(core.Overworld)
 	pos := core.ChunkPos{X: -2, Z: 3}
 
 	if !dimension.BeginGeneration(pos) {
 		t.Fatal("Absent → Generating 没有发生")
 	}
-	assertChunkInfo(t, dimension, pos, sim.ChunkGenerating, 0, nil)
+	assertChunkInfo(t, dimension, pos, realm.ChunkGenerating, 0, nil)
 	if dimension.BeginGeneration(pos) {
 		t.Fatal("重复 BeginGeneration 不应重复排队")
 	}
@@ -26,7 +27,7 @@ func TestDimensionLifecycleReadyUnloadAndRetry(t *testing.T) {
 	if err := dimension.ApplyGenerated(pos, generated); err != nil {
 		t.Fatal(err)
 	}
-	assertChunkInfo(t, dimension, pos, sim.ChunkReady, 1, nil)
+	assertChunkInfo(t, dimension, pos, realm.ChunkReady, 1, nil)
 
 	generated.SetBlock(1, 0, 2, core.DirtID)
 	blockPos := core.BlockPos{
@@ -50,7 +51,7 @@ func TestDimensionLifecycleReadyUnloadAndRetry(t *testing.T) {
 	if dimension.RequestUnload(pos) {
 		t.Fatal("未持久的生成区块被立即卸载")
 	}
-	assertChunkInfo(t, dimension, pos, sim.ChunkUnloading, 1, nil)
+	assertChunkInfo(t, dimension, pos, realm.ChunkUnloading, 1, nil)
 	if !dimension.CancelUnload(pos) {
 		t.Fatal("未取消生成区块的卸载请求")
 	}
@@ -85,16 +86,16 @@ func TestDimensionLifecycleReadyUnloadAndRetry(t *testing.T) {
 	}
 	wantErr := errors.New("generator failed")
 	dimension.MarkFailed(failedPos, wantErr)
-	assertChunkInfo(t, dimension, failedPos, sim.ChunkFailed, 0, wantErr)
+	assertChunkInfo(t, dimension, failedPos, realm.ChunkFailed, 0, wantErr)
 	if !dimension.BeginGeneration(failedPos) {
 		t.Fatal("Failed → Generating 没有发生")
 	}
-	assertChunkInfo(t, dimension, failedPos, sim.ChunkGenerating, 0, nil)
+	assertChunkInfo(t, dimension, failedPos, realm.ChunkGenerating, 0, nil)
 }
 
 func TestDimensionLifecycleRejectsInvalidTransitions(t *testing.T) {
-	newDimension := func() *sim.Dimension {
-		return sim.NewDimension(core.Overworld)
+	newDimension := func() *realm.Dimension {
+		return realm.NewDimension(core.Overworld)
 	}
 	pos := core.ChunkPos{}
 
@@ -116,15 +117,15 @@ func TestDimensionLifecycleRejectsInvalidTransitions(t *testing.T) {
 	); err == nil {
 		t.Fatal("错误坐标的生成结果被接受")
 	}
-	assertChunkInfo(t, dimension, pos, sim.ChunkGenerating, 0, nil)
+	assertChunkInfo(t, dimension, pos, realm.ChunkGenerating, 0, nil)
 	if err := dimension.ApplyGenerated(pos, nil); err == nil {
 		t.Fatal("nil 生成结果被接受")
 	}
-	assertChunkInfo(t, dimension, pos, sim.ChunkGenerating, 0, nil)
+	assertChunkInfo(t, dimension, pos, realm.ChunkGenerating, 0, nil)
 }
 
 func TestDimensionSetBlockRequiresReadyAndWorldHeight(t *testing.T) {
-	dimension := sim.NewDimension(core.Overworld)
+	dimension := realm.NewDimension(core.Overworld)
 	if _, _, err := dimension.SetBlock(
 		core.BlockPos{Y: 0},
 		core.StoneID,
@@ -141,9 +142,9 @@ func TestDimensionSetBlockRequiresReadyAndWorldHeight(t *testing.T) {
 
 func assertChunkInfo(
 	t *testing.T,
-	dimension *sim.Dimension,
+	dimension *realm.Dimension,
 	pos core.ChunkPos,
-	state sim.ChunkState,
+	state realm.ChunkState,
 	revision uint64,
 	wantErr error,
 ) {

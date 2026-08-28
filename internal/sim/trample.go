@@ -57,7 +57,7 @@ type tramplePendingCell struct {
 // 维度必须随坐标一起暂存：`core.BlockPos` 不携带维度，多维度世界里收集与
 // 结算之间无法从坐标反推归属。
 func (engine *Engine) noteTrampleLanding(session *sessionState, player *playerState) {
-	if engine.dimensions[session.dimension] == nil {
+	if engine.dimension(session.dimension) == nil {
 		return
 	}
 	position := player.state.Position
@@ -102,7 +102,7 @@ func (engine *Engine) settleTrampleCell(
 	cell tramplePendingCell,
 	pending *pendingChunkChanges,
 ) {
-	dimension := engine.dimensions[cell.dimension]
+	dimension := engine.dimension(cell.dimension)
 	if dimension == nil {
 		return
 	}
@@ -128,9 +128,9 @@ func (engine *Engine) settleTrampleCell(
 	// 上方有作物：按采掘同形规则准备掉落——成熟小麦走 `cropYieldRolls` 确定性
 	// 双产物，未成熟作物走 `core.BlockDrop` 的单产物（1 颗种子）。掉落预演
 	// （容量前验）必须先于任何方块写入，整格原子性由它保证。
-	record, recordOK := dimension.Records[crop.Chunk()]
+	chunk, recordOK := dimension.ReadyChunk(crop.Chunk())
 	blockIndex, indexOK := world.ChunkBlockIndex(crop)
-	if !recordOK || record.State != ChunkReady || record.Chunk == nil || !indexOK {
+	if !recordOK || !indexOK {
 		return
 	}
 	item, ok := core.BlockDrop(cropBlock)
@@ -145,7 +145,7 @@ func (engine *Engine) settleTrampleCell(
 			{Item: item, Count: wheatCount},
 			{Item: core.ItemWheatSeeds, Count: seedCount},
 		}
-		next, capacityOK := record.Chunk.PrepareDropBatch(
+		next, capacityOK := chunk.PrepareDropBatch(
 			stacks[:], blockIndex, engine.tunables.DropPickupDelayTicks,
 		)
 		if !capacityOK {
@@ -154,17 +154,17 @@ func (engine *Engine) settleTrampleCell(
 		if !engine.commitTrample(dimension, cell, crop, pending) {
 			return
 		}
-		record.Chunk.CommitDropBatch(next)
+		chunk.CommitDropBatch(next)
 		return
 	}
-	dropSlot, capacityOK := record.Chunk.PrepareDrop(item, blockIndex)
+	dropSlot, capacityOK := chunk.PrepareDrop(item, blockIndex)
 	if !capacityOK {
 		return
 	}
 	if !engine.commitTrample(dimension, cell, crop, pending) {
 		return
 	}
-	record.Chunk.CommitDrop(
+	chunk.CommitDrop(
 		dropSlot,
 		core.ItemStack{Item: item, Count: 1},
 		blockIndex,

@@ -143,7 +143,7 @@ func fluidPerfAdapter(engine *Engine) *fluidWorld {
 	return &fluidWorld{
 		engine:    engine,
 		id:        core.Overworld,
-		dimension: engine.dimensions[core.Overworld],
+		dimension: engine.dimension(core.Overworld),
 		scope:     engine.fluidScope,
 		pending:   engine.newMutation(),
 	}

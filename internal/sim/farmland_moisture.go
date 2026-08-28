@@ -167,7 +167,7 @@ func (engine *Engine) runFarmlandMoistureRescans(budget int) {
 	state.dropOutOfScope(engine.fluidScope)
 	for budget > 0 && len(state.pending) > 0 {
 		key := state.pending[0]
-		dimension := engine.dimensions[key.Dimension]
+		dimension := engine.dimension(key.Dimension)
 		if dimension == nil {
 			state.pop()
 			continue
@@ -209,7 +209,7 @@ func (engine *Engine) advanceFarmlandMoisture(
 			state.pop()
 			continue
 		}
-		dimension := engine.dimensions[key.dimension]
+		dimension := engine.dimension(key.dimension)
 		if dimension == nil {
 			state.pop()
 			continue

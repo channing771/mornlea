@@ -27,7 +27,7 @@ func (engine *Engine) executePlacement(
 	dimensionID := session.dimension
 	origin := session.player.state.Position.Add(mgl32.Vec3{0, engine.physicsTunables.EyeHeight, 0})
 	direction := LookDirection(command.Yaw, command.Pitch)
-	dimension := engine.dimensions[dimensionID]
+	dimension := engine.dimension(dimensionID)
 	originBlock := core.BlockPos{
 		X: int32(math.Floor(float64(origin.X()))),
 		Y: int32(math.Floor(float64(origin.Y()))),
@@ -188,25 +188,25 @@ func (engine *Engine) executePlacement(
 		}
 	}
 	// 放置熔炉或箱子必须先预留槽位；槽位耗尽时不改方块也不扣物品。
-	targetRecord, targetOK := dimension.Records[target.Chunk()]
+	targetChunk, targetOK := dimension.ReadyChunk(target.Chunk())
 	targetIndex, targetIndexed := world.ChunkBlockIndex(target)
 	furnaceSlot, reserveFurnace := -1, false
 	chestSlot, reserveChest := -1, false
 	if placement == core.FurnaceID {
-		if !targetOK || targetRecord.Chunk == nil || !targetIndexed {
+		if !targetOK || !targetIndexed {
 			return RejectChunkNotReady, true
 		}
-		slot, ok := targetRecord.Chunk.PrepareFurnace(targetIndex)
+		slot, ok := targetChunk.PrepareFurnace(targetIndex)
 		if !ok {
 			return RejectContainerCapacity, true
 		}
 		furnaceSlot, reserveFurnace = slot, true
 	}
 	if placement == core.ChestID {
-		if !targetOK || targetRecord.Chunk == nil || !targetIndexed {
+		if !targetOK || !targetIndexed {
 			return RejectChunkNotReady, true
 		}
-		slot, ok := targetRecord.Chunk.PrepareChest(targetIndex)
+		slot, ok := targetChunk.PrepareChest(targetIndex)
 		if !ok {
 			return RejectContainerCapacity, true
 		}
@@ -227,10 +227,10 @@ func (engine *Engine) executePlacement(
 			engine.enqueueFarmlandMoistureAroundFluid(dimensionID, target)
 		}
 		if reserveFurnace {
-			targetRecord.Chunk.CommitFurnace(furnaceSlot, targetIndex)
+			targetChunk.CommitFurnace(furnaceSlot, targetIndex)
 		}
 		if reserveChest {
-			targetRecord.Chunk.CommitChest(chestSlot, targetIndex)
+			targetChunk.CommitChest(chestSlot, targetIndex)
 		}
 		player.inventory.Hotbar = consumed
 		player.inventoryDirty = true

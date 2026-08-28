@@ -224,7 +224,7 @@ func TestSwimmingAccumulatesExhaustionAndStandingStillDoesNot(t *testing.T) {
 				floodAroundPlayer(t, engine, player.state.Position)
 				// 夹具自证：负向分支（水中静止不累积）如果夹具压根没把玩家泡
 				// 进水里，读数同样是零疲劳，用例就成了空转。
-				source := dimensionCollisionSource{dimension: engine.dimensions[core.Overworld]}
+				source := dimensionCollisionSource{dimension: engine.dimension(core.Overworld)}
 				if body, _ := physics.SubmersionFlags(player.state.Position, source); !body {
 					t.Fatalf("夹具没能把玩家泡进水里: 位置=%v", player.state.Position)
 				}

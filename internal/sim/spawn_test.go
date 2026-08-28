@@ -8,6 +8,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -53,7 +54,7 @@ func TestSpawnWaitsForEarlierUnknownCandidate(t *testing.T) {
 
 	laterChunk := world.NewChunk(core.ChunkPos{X: -1})
 	laterChunk.SetBlock(15, 0, 0, core.GrassID)
-	loadSpawnTestChunk(t, engine.dimensions[core.Overworld], laterChunk)
+	loadSpawnTestChunk(t, engine.dimension(core.Overworld), laterChunk)
 	if player := onlyInternalPlayer(t, engine.Step()); player.Ready {
 		t.Fatalf("较早候选仍 unknown 时跳到了较晚 surface: %+v", player)
 	}
@@ -146,17 +147,17 @@ func TestPendingSpawnGenerateRetainActivateAndForget(t *testing.T) {
 	if !reflect.DeepEqual(engine.wanted, map[core.ChunkKey]struct{}{target: {}}) {
 		t.Fatalf("Active union wanted=%+v，想要仅 target", engine.wanted)
 	}
-	record := engine.dimensions[core.Overworld].Records[anchor.Pos]
-	if record == nil || record.State != ChunkUnloading || record.Chunk == nil ||
-		!record.UnloadRequested || !record.Dirty() {
-		t.Fatalf("activate forget 后未保留待持久 anchor: %+v", record)
+	info := requireChunkInfo(t, engine.dimension(core.Overworld), anchor.Pos)
+	if info.State != realm.ChunkUnloading || info.Chunk == nil ||
+		!info.UnloadRequested || !info.Dirty {
+		t.Fatalf("activate forget 后未保留待持久 anchor: %+v", info)
 	}
 }
 
 func TestExhaustedSpawnRetriesOnlyAfterRevisionChange(t *testing.T) {
 	engine := NewEngine(0, 0, 0)
 	engine.RegisterSession(1, core.Overworld, core.ChunkPos{})
-	dimension := engine.dimensions[core.Overworld]
+	dimension := engine.dimension(core.Overworld)
 	for x := int32(-1); x <= 1; x++ {
 		for z := int32(-1); z <= 1; z++ {
 			loadSpawnTestChunk(t, dimension, world.NewChunk(core.ChunkPos{X: x, Z: z}))
@@ -166,13 +167,14 @@ func TestExhaustedSpawnRetriesOnlyAfterRevisionChange(t *testing.T) {
 	if player := onlyInternalPlayer(t, engine.Step()); player.Ready {
 		t.Fatalf("全空气候选不应 Ready: %+v", player)
 	}
-	record := dimension.Records[core.ChunkPos{}]
-	record.Chunk.SetBlock(0, 0, 0, core.GrassID)
+	dimension.UpdateReadyChunk(core.ChunkPos{}, func(chunk *world.Chunk) {
+		chunk.SetBlock(0, 0, 0, core.GrassID)
+	})
 	if player := onlyInternalPlayer(t, engine.Step()); player.Ready {
 		t.Fatalf("revision 未变却重新扫描: %+v", player)
 	}
 
-	record.Revision++
+	dimension.Touch(core.ChunkPos{})
 	player := onlyInternalPlayer(t, engine.Step())
 	if !player.Ready || player.State.Position != (mgl32.Vec3{0.5, 1, 0.5}) {
 		t.Fatalf("revision 改变后未从首候选重试: %+v", player)
@@ -216,7 +218,7 @@ func spawnTestChunk(pos core.ChunkPos, support core.BlockPos) *world.Chunk {
 func TestSpawnSkipsSubmergedColumn(t *testing.T) {
 	engine := NewEngine(0, 0, 0)
 	engine.RegisterSession(1, core.Overworld, core.ChunkPos{})
-	dimension := engine.dimensions[core.Overworld]
+	dimension := engine.dimension(core.Overworld)
 
 	chunk := world.NewChunk(core.ChunkPos{})
 	chunk.SetBlock(0, 0, 0, core.GrassID)
@@ -290,7 +292,7 @@ func spawnLadderEngine(
 	t.Helper()
 	engine := NewEngine(0, 0, 0)
 	engine.RegisterSession(1, core.Overworld, core.ChunkPos{})
-	dimension := engine.dimensions[core.Overworld]
+	dimension := engine.dimension(core.Overworld)
 	chunks := make(map[core.ChunkPos]*world.Chunk)
 	for _, pos := range engine.sessions[1].player.candidateChunks {
 		chunks[pos] = spawnLadderChunk(pos, depth)
@@ -310,7 +312,7 @@ func spawnLadderEngine(
 
 // spawnTierAt 复算某个落脚点的档位，供夹具承重守卫使用。
 func spawnTierAt(engine *Engine, position mgl32.Vec3) spawnTier {
-	source := dimensionCollisionSource{dimension: engine.dimensions[core.Overworld]}
+	source := dimensionCollisionSource{dimension: engine.dimension(core.Overworld)}
 	bodyInFluid, eyeInFluid := physics.SubmersionFlags(position, source)
 	switch {
 	case eyeInFluid:
@@ -418,7 +420,7 @@ func spawnLadderPillar(chunk *world.Chunk, column core.BlockPos, top int32) {
 func TestSpawnFallbackSurvivesChunkReadinessGap(t *testing.T) {
 	engine := NewEngine(0, 0, 0)
 	engine.RegisterSession(1, core.Overworld, core.ChunkPos{})
-	dimension := engine.dimensions[core.Overworld]
+	dimension := engine.dimension(core.Overworld)
 	gap := core.ChunkPos{X: -1, Z: -1}
 	pillar := core.BlockPos{X: 0, Z: 0}
 
