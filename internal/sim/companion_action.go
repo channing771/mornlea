@@ -6,40 +6,6 @@ import (
 	"github.com/channing771/mornlea/internal/physics"
 )
 
-// CompanionActionKind 标识伙伴 action 的四种判别载荷之一。零值刻意不是合法
-// 载荷：未经初始化的 action 必须被确定性丢弃，而不是被当作移动静默应用。
-type CompanionActionKind uint8
-
-const (
-	// CompanionActionMove 是既有规范移动输入载荷。
-	CompanionActionMove CompanionActionKind = iota + 1
-	// CompanionActionMineHold 是采掘按住载荷，携带目标 BlockPos，语义与玩家
-	// Mining:true 输入一致：进度由 sim 依 miningRule 累积。
-	CompanionActionMineHold
-	// CompanionActionMineRelease 是采掘释放载荷，同 tick 清空采掘意图与进度。
-	CompanionActionMineRelease
-	// CompanionActionPlace 是放置载荷，携带目标 BlockPos 与方块；action 阶段
-	// 记录单次放置意图，结算本体（校验链 + 原子扣料写方块）在同一 tick 的
-	// settleCompanionPlacements 完成。
-	CompanionActionPlace
-)
-
-// CompanionAction 是 Task Runner 在 tick 边界提交的伙伴意图，按 CompanionID
-// 寻址。action 刻意不携带 SessionID 或任何玩家会话身份——伙伴独立于玩家会话语义，
-// 这条约束由结构体的字段面（ID + 判别载荷）在编译期保证，并由
-// TestCompanionActionInboxBoundedAndSessionless 反射锁定。go_to 等任务只能经由
-// 这里提交规范移动输入或采掘/放置意图，实际位移与方块变更永远由权威模拟决定。
-type CompanionAction struct {
-	ID   companion.ID
-	Kind CompanionActionKind
-	// Input 只在 Kind == CompanionActionMove 时有意义（规范移动输入）。
-	Input physics.Input
-	// Target 是 MineHold 与 Place 载荷的目标方块坐标。
-	Target core.BlockPos
-	// Block 是 Place 载荷要写入的方块。
-	Block core.BlockID
-}
-
 // EnqueueCompanionAction 可由 Task Runner 并发调用，把一个伙伴 action 投递进有界
 // inbox。容量按全局计：每 tick 至多 companion.MaxActive 条（active 伙伴至多
 // MaxActive 个、每伙伴每 tick 至多应用一条 action），满员时立即丢弃并返回

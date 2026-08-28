@@ -6,28 +6,6 @@ import (
 	"github.com/channing771/mornlea/internal/physics"
 )
 
-// HostileAction 是有界追逐 worker 在 tick 边界提交的夜行者意图，按稳定 ID 寻
-// 址。MoveX/MoveZ 是**世界轴**方向量（不是 `physics.Input` 的体轴分量）：模
-// 长被消费端归一，方向折算成朝向后以既有 per-actor `physics.Step` 前进，因此
-// 字段面无需携带 yaw；Jump 表达本 tick 起跳意图；AttackTarget 冻结一次近战攻
-// 击意图，TargetSession 指出被攻击玩家的会话——会话到玩家的解析归 server 编
-// 排层所有，`sim` 不维护 PlayerID 到会话的映射，攻击载荷因此直接携带会话身
-// 份并由结算阶段做距离/维度/存活重验。
-type HostileAction struct {
-	// ID 是被寻址夜行者的稳定非零 ID；未知 ID 的意图确定性丢弃。
-	ID uint64
-	// MoveX/MoveZ 只表达方向，取值必须有限且落在 [-1,1]；零向量表示本 tick
-	// 不移动（保持朝向）。
-	MoveX, MoveZ float32
-	// Jump 只在有移动意图时有意义；无移动时照常透传，由权威物理裁决。
-	Jump bool
-	// AttackTarget 为 true 时 TargetSession 必须非零；二者成对约束与
-	// CompanionAction 的判别载荷纪律一致。
-	AttackTarget bool
-	// TargetSession 是攻击意图的目标玩家会话；仅在 AttackTarget 时有效。
-	TargetSession SessionID
-}
-
 // EnqueueHostileAction 可由 server 编排层在持有 `stepMu` 的 tick 路径并发安
 // 全调用，把一条夜行者意图投递进有界 inbox。容量按全集合计：每 tick 每只夜
 // 行者至多一条合法意图（≤`maxHostiles` 条），满员时立即丢弃并返回 false，绝

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -67,7 +67,7 @@ func (server *Server) applySaveCompletion(completion saveCompletion) error {
 	if completion.Job.Kind == saveKindMetadata {
 		return server.applyMetadataCompletion(completion)
 	}
-	uncommitted := make([]sim.ChunkSaveSnapshot, 0, len(completion.Job.Snapshots))
+	uncommitted := make([]contract.ChunkSaveSnapshot, 0, len(completion.Job.Snapshots))
 	for _, snapshot := range completion.Job.Snapshots {
 		if revision, ok := completion.Result.Committed[snapshot.Key]; ok {
 			server.applyCommittedSnapshot(snapshot, revision)
@@ -91,22 +91,22 @@ func (server *Server) applySaveCompletion(completion saveCompletion) error {
 }
 
 func (server *Server) applyCommittedSnapshot(
-	snapshot sim.ChunkSaveSnapshot,
+	snapshot contract.ChunkSaveSnapshot,
 	committedRevision uint64,
 ) {
 	info, exists := server.engine.ChunkInfo(snapshot.Key)
 	if !exists || committedRevision < snapshot.Revision ||
 		committedRevision > info.Revision {
-		server.engine.FailPersistence([]sim.ChunkSaveSnapshot{snapshot})
+		server.engine.FailPersistence([]contract.ChunkSaveSnapshot{snapshot})
 		return
 	}
 	if committedRevision > snapshot.Revision {
-		server.engine.FailPersistence([]sim.ChunkSaveSnapshot{snapshot})
+		server.engine.FailPersistence([]contract.ChunkSaveSnapshot{snapshot})
 		if committedRevision >= info.Revision {
 			return
 		}
 	}
-	server.engine.ApplyPersisted([]sim.PersistedChunk{{
+	server.engine.ApplyPersisted([]contract.PersistedChunk{{
 		Key: snapshot.Key, Revision: committedRevision,
 	}})
 }

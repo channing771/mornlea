@@ -118,23 +118,6 @@ func (set *hostileSet) removeAt(index int) {
 	set.entries = set.entries[:len(set.entries)-1]
 }
 
-// HostileMob 是一只夜行者的值快照，字段面与存档记录同构；保存与发布方
-// 只读该值，转换到 `internal/storage` 的记录类型由 server 装配层完成。
-type HostileMob struct {
-	ID              uint64
-	Dimension       core.DimensionID
-	State           physics.State
-	Yaw             float32
-	Health          uint8
-	AttackCooldown  uint8
-	HurtCooldown    uint8
-	BurnCooldown    uint8
-	HasTarget       bool
-	PlayerID        core.PlayerID
-	NextRepathTicks uint64
-	DistantTicks    uint16
-}
-
 // RestoreHostile 把一条持久化记录恢复为权威身体。校验与存档侧的记录矩阵
 // 对齐：ID 非零且不重复、维度存在、身体状态有限且位置在世界高度内、生命
 // 为正且不超上限、三个冷却不越过周期、远离累计不越界、目标成对一致。任何

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/world"
 	"github.com/channing771/mornlea/internal/worldgen"
 )
@@ -33,7 +33,7 @@ func (probe *TerrainProbe) HeightAt(x, z int32) int32 {
 func runGeneration(
 	generator Generator,
 	key core.ChunkKey,
-) (result sim.GeneratedChunk) {
+) (result contract.GeneratedChunk) {
 	result.Dimension = key.Dimension
 	result.Pos = key.Pos
 	defer func() {

@@ -3,7 +3,7 @@ package server
 import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -59,8 +59,8 @@ func (server *Server) publishDrops(current *session, tick uint64) bool {
 
 func appendChangedDropUpserts(
 	dst []network.ItemDrop,
-	drops []sim.DropSnapshot,
-	published map[core.DropID]sim.DropSnapshot,
+	drops []contract.DropSnapshot,
+	published map[core.DropID]contract.DropSnapshot,
 ) []network.ItemDrop {
 	for _, drop := range drops {
 		previous, known := published[drop.ID]
@@ -75,14 +75,14 @@ func appendChangedDropUpserts(
 	return dst
 }
 
-func dropSnapshotFromItemDrop(drop network.ItemDrop) sim.DropSnapshot {
-	return sim.DropSnapshot{
+func dropSnapshotFromItemDrop(drop network.ItemDrop) contract.DropSnapshot {
+	return contract.DropSnapshot{
 		ID: drop.ID, BlockIndex: drop.BlockIndex, Item: drop.Item, Count: drop.Count,
 		Durability: drop.Durability,
 	}
 }
 
-func containsDropID(drops []sim.DropSnapshot, id core.DropID) bool {
+func containsDropID(drops []contract.DropSnapshot, id core.DropID) bool {
 	for _, drop := range drops {
 		if drop.ID == id {
 			return true

@@ -14,17 +14,6 @@ var (
 	ErrBlockOutOfWorld = errors.New("sim: block outside world height")
 )
 
-type ChunkState uint8
-
-const (
-	ChunkAbsent ChunkState = iota
-	ChunkLoading
-	ChunkGenerating
-	ChunkReady
-	ChunkFailed
-	ChunkUnloading
-)
-
 type ChunkRecord struct {
 	State                ChunkState
 	Chunk                *world.Chunk
@@ -39,12 +28,6 @@ type ChunkRecord struct {
 
 func (record *ChunkRecord) Dirty() bool {
 	return record.Revision > record.PersistedRevision || record.NeedsRewrite
-}
-
-type ChunkInfo struct {
-	State    ChunkState
-	Revision uint64
-	Err      error
 }
 
 // Dimension 由 Engine 的单写者 tick 独占，不提供内部锁。

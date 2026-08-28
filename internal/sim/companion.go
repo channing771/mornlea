@@ -17,26 +17,6 @@ const (
 	companionSpawnRadius    = int32(16)
 )
 
-// CompanionRestore 描述伙伴的可选持久化身体和出生回退锚点。
-type CompanionRestore struct {
-	ID             companion.ID
-	Body           *companion.Body
-	SpawnDimension core.DimensionID
-	SpawnAnchor    core.ChunkPos
-}
-
-// CompanionUpdate 是一个已激活伙伴在当前权威 tick 的静态身体状态。
-// Mining 对齐玩家 MiningUpdate 语义承载本 tick 的采掘进度；这是 sim→server
-// 的内部结构，wire 上的 CompanionStates 形状不变。
-type CompanionUpdate struct {
-	ID         companion.ID
-	Dimension  core.DimensionID
-	State      physics.State
-	Yaw, Pitch float32
-	Reset      bool
-	Mining     MiningUpdate
-}
-
 type companionState struct {
 	// actorState 内嵌玩家与伙伴共有的运动/朝向/背包/采掘状态（物理体由提升的
 	// state 字段承载，等价于旧 body 字段）；稳定 CompanionID 与激活状态等

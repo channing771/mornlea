@@ -35,6 +35,7 @@ import (
 	"github.com/channing771/mornlea/internal/pathfind"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -190,7 +191,7 @@ type companionManager struct {
 	// mining 缓存每个已激活伙伴在上一次权威 TickResult 中的采掘进度
 	//（observeTickResult 回填），与 bodies 同属「上一 tick 末」的一致观察
 	// 截面，mine 步骤执行器的完成与失败判定只读这一缓存。
-	mining map[companion.ID]sim.MiningUpdate
+	mining map[companion.ID]contract.MiningUpdate
 
 	semaphore      chan struct{}
 	plannerResults chan plannerOutcome
@@ -238,7 +239,7 @@ func newCompanionManager(
 		slots:           make(map[companion.ID]*companionTaskSlot, len(config.Companions)),
 		orderedIDs:      make([]companion.ID, 0, len(config.Companions)),
 		bodies:          make(map[companion.ID]companion.Body, companion.MaxActive),
-		mining:          make(map[companion.ID]sim.MiningUpdate, companion.MaxActive),
+		mining:          make(map[companion.ID]contract.MiningUpdate, companion.MaxActive),
 		semaphore:       make(chan struct{}, companion.MaxActive),
 		plannerResults:  make(chan plannerOutcome, companion.MaxActive),
 		pathResults:     make(chan pathOutcome, companion.MaxActive),
@@ -318,7 +319,7 @@ func (m *companionManager) stopCompanion(definition companion.Definition) bool {
 func (m *companionManager) captureIssuer(
 	playerID core.PlayerID,
 	name string,
-	session sim.SessionID,
+	session contract.SessionID,
 ) companionTaskIssuer {
 	issuer := companionTaskIssuer{
 		playerID: playerID,
@@ -339,7 +340,7 @@ func (m *companionManager) captureIssuer(
 // issuerLookHit 用确定性 DDA 求发令者视线命中的第一个实心方块。射线只穿
 // 发令者 3×3 兴趣内的已 ready 区块；未加载方块按未命中处理（快照只描述
 // 确凿看见的世界）。
-func (m *companionManager) issuerLookHit(player sim.PlayerUpdate) (core.BlockPos, bool) {
+func (m *companionManager) issuerLookHit(player contract.PlayerUpdate) (core.BlockPos, bool) {
 	view := m.chunkViewAt(player.Dimension, [3]float32(player.State.Position))
 	origin := player.State.Position.Add(
 		mgl32.Vec3{0, physics.ActiveTunables().EyeHeight, 0},
@@ -681,9 +682,9 @@ func (m *companionManager) advancePathMovement(
 		slot.hasReplanAt = false
 		return true
 	}
-	m.engine.EnqueueCompanionAction(sim.CompanionAction{
+	m.engine.EnqueueCompanionAction(contract.CompanionAction{
 		ID:   id,
-		Kind: sim.CompanionActionMove,
+		Kind: contract.CompanionActionMove,
 		Input: movementInputToward(
 			body.Position, slot.path.Waypoints[slot.waypoint]),
 	})

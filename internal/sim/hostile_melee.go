@@ -6,8 +6,6 @@ package sim
 const (
 	// hostileMeleeDamage 是一次近战命中的伤害点数。
 	hostileMeleeDamage = int32(3)
-	// HostileAttackRange 是近战攻击的水平距离边界（含）。
-	HostileAttackRange = float32(1.8)
 )
 
 // hostileAttackRangeSquared 是攻击距离边界的平方。刻意用变量承载运行时乘积而

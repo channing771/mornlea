@@ -12,7 +12,7 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -26,10 +26,10 @@ type Host struct {
 	preLogin        chan struct{}
 	mu              sync.Mutex
 	activeByPlayer  map[core.PlayerID]*activeLogin
-	activeBySession map[sim.SessionID]*activeLogin
+	activeBySession map[contract.SessionID]*activeLogin
 	preLoginStreams map[uint64]*pendingLoginStream
 	nextPreLogin    uint64
-	nextSession     sim.SessionID
+	nextSession     contract.SessionID
 	nextGeneration  uint64
 	listener        network.Listener
 	runtimeCancel   context.CancelFunc
@@ -217,7 +217,7 @@ func NewHost(
 		players:         newPlayerPersistence(store, config),
 		preLogin:        make(chan struct{}, hostPreLoginCapacity),
 		activeByPlayer:  make(map[core.PlayerID]*activeLogin),
-		activeBySession: make(map[sim.SessionID]*activeLogin),
+		activeBySession: make(map[contract.SessionID]*activeLogin),
 		preLoginStreams: make(map[uint64]*pendingLoginStream),
 		runtimeDone:     make(chan error, 1),
 		shutdownGate:    gate,

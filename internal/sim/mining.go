@@ -7,17 +7,6 @@ import (
 	"github.com/channing771/mornlea/internal/world"
 )
 
-// MiningUpdate 是一名玩家本 tick 发布的规范权威采掘进度。M5C 起同一结构也
-// 承载伙伴的采掘进度发布（CompanionUpdate.Mining），两类 actor 的进度语义
-// 完全一致，共用这一个载体。
-type MiningUpdate struct {
-	Active        bool
-	Target        core.BlockPos
-	ProgressTicks uint16
-	RequiredTicks uint16
-	Harvestable   bool
-}
-
 // miningState 是玩家与伙伴两类 actor 共有的权威采掘进度状态机（原
 // playerMiningState 整体上移 actorState）：记录目标、命中时的方块、持握工具
 // 与进度计数。同一 target/block/held 连续命中时进度递增，任一变化即从 1

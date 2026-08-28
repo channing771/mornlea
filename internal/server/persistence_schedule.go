@@ -4,7 +4,7 @@ import (
 	"sort"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -13,7 +13,7 @@ func (server *Server) schedulePersistence(tick uint64) {
 	server.dispatchPersistence(server.engine.PersistenceSnapshots(
 		server.config.SaveChunks,
 		server.config.SaveBytes,
-		sim.SaveUrgent,
+		contract.SaveUrgent,
 	))
 	if tick%server.config.AutosaveTicks == 0 {
 		server.autosaveActive = true
@@ -24,7 +24,7 @@ func (server *Server) schedulePersistence(tick uint64) {
 	server.dispatchPersistence(server.engine.PersistenceSnapshots(
 		server.config.SaveChunks,
 		server.config.SaveBytes,
-		sim.SaveAll,
+		contract.SaveAll,
 	))
 	stats := server.engine.PersistenceStats()
 	if stats.DirtyChunks == 0 && stats.InFlightChunks == 0 {
@@ -32,7 +32,7 @@ func (server *Server) schedulePersistence(tick uint64) {
 	}
 }
 
-func (server *Server) dispatchPersistence(snapshots []sim.ChunkSaveSnapshot) {
+func (server *Server) dispatchPersistence(snapshots []contract.ChunkSaveSnapshot) {
 	for _, job := range groupSaveJobs(snapshots) {
 		job.Attempt = 1
 		select {
@@ -43,8 +43,8 @@ func (server *Server) dispatchPersistence(snapshots []sim.ChunkSaveSnapshot) {
 	}
 }
 
-func groupSaveJobs(snapshots []sim.ChunkSaveSnapshot) []saveJob {
-	grouped := make(map[storage.RegionKey][]sim.ChunkSaveSnapshot)
+func groupSaveJobs(snapshots []contract.ChunkSaveSnapshot) []saveJob {
+	grouped := make(map[storage.RegionKey][]contract.ChunkSaveSnapshot)
 	for _, snapshot := range snapshots {
 		region, _ := storage.RegionFor(snapshot.Key)
 		grouped[region] = append(grouped[region], snapshot)

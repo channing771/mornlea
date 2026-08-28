@@ -3,7 +3,7 @@ package server
 import (
 	"time"
 
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -18,7 +18,7 @@ const (
 type saveJob struct {
 	Kind      saveKind
 	Region    storage.RegionKey
-	Snapshots []sim.ChunkSaveSnapshot
+	Snapshots []contract.ChunkSaveSnapshot
 	Attempt   uint32
 	Retry     bool
 	RetryID   uint64

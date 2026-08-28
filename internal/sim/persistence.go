@@ -8,32 +8,6 @@ import (
 	"github.com/channing771/mornlea/internal/world"
 )
 
-type SaveMode uint8
-
-const (
-	SaveUrgent SaveMode = iota
-	SaveAll
-)
-
-type ChunkSaveSnapshot struct {
-	Key            core.ChunkKey
-	Revision       uint64
-	EstimatedBytes int
-	Chunk          *world.Chunk
-}
-
-type PersistedChunk struct {
-	Key      core.ChunkKey
-	Revision uint64
-}
-
-type PersistenceStats struct {
-	DirtyChunks    int
-	EstimatedBytes int64
-	InFlightChunks int
-	UnloadWaiting  int
-}
-
 type persistenceCandidate struct {
 	key    core.ChunkKey
 	record *ChunkRecord

@@ -13,6 +13,7 @@ import (
 	"github.com/channing771/mornlea/internal/pathfind"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -277,8 +278,8 @@ func (m *companionManager) holdMining(
 	target core.BlockPos,
 ) {
 	slot.miningHeld = true
-	m.engine.EnqueueCompanionAction(sim.CompanionAction{
-		ID: id, Kind: sim.CompanionActionMineHold, Target: target,
+	m.engine.EnqueueCompanionAction(contract.CompanionAction{
+		ID: id, Kind: contract.CompanionActionMineHold, Target: target,
 	})
 }
 
@@ -333,8 +334,8 @@ func (m *companionManager) submitCompanionPlacement(
 		// deadline 兜底。sim 不校验放置距离，这道门是唯一关卡。
 		return
 	}
-	m.engine.EnqueueCompanionAction(sim.CompanionAction{
-		ID: id, Kind: sim.CompanionActionPlace, Target: target, Block: step.Block,
+	m.engine.EnqueueCompanionAction(contract.CompanionAction{
+		ID: id, Kind: contract.CompanionActionPlace, Target: target, Block: step.Block,
 	})
 }
 
@@ -365,8 +366,8 @@ func (m *companionManager) releaseFinishedMining() {
 			continue
 		}
 		slot.miningHeld = false
-		m.engine.EnqueueCompanionAction(sim.CompanionAction{
-			ID: id, Kind: sim.CompanionActionMineRelease,
+		m.engine.EnqueueCompanionAction(contract.CompanionAction{
+			ID: id, Kind: contract.CompanionActionMineRelease,
 		})
 	}
 }
@@ -386,7 +387,7 @@ func (m *companionManager) releaseFinishedMining() {
 // 后残留，而那正是 gate 拦截的情形（当前引擎的 activate 单向、没有去激活
 // 路径，残留仅是面向未来语义的结构余量）；条目总数又受注册伙伴上限封顶，
 // 逐 tick 清理换不来任何可观察正确性。
-func (m *companionManager) observeTickResult(result sim.TickResult) {
+func (m *companionManager) observeTickResult(result contract.TickResult) {
 	for _, update := range result.Companions {
 		m.mining[update.ID] = update.Mining
 	}

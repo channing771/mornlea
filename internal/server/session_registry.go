@@ -6,10 +6,10 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
-const trustedObserverSessionID = sim.SessionID(^uint64(0))
+const trustedObserverSessionID = contract.SessionID(^uint64(0))
 
 // attachSessionLocked owns player session construction and registry mutation.
 // The public AttachSession entry establishes server.stepMu before calling it.
@@ -49,7 +49,7 @@ func (server *Server) attachSessionLocked(
 // detachSessionLocked owns player session teardown and registry mutation.
 // The public DetachSession entry and shutdown caller establish server.stepMu.
 func (server *Server) detachSessionLocked(
-	id sim.SessionID,
+	id contract.SessionID,
 	generation uint64,
 	cause error,
 ) bool {
@@ -104,7 +104,7 @@ func (server *Server) attachTrustedObserverLocked(
 // detachTrustedObserverLocked owns observer teardown and registry mutation.
 // Its callers establish server.stepMu before calling it.
 func (server *Server) detachTrustedObserverLocked(
-	id sim.SessionID,
+	id contract.SessionID,
 	generation uint64,
 	_ error,
 ) bool {
@@ -164,8 +164,8 @@ func (server *Server) appliedTrustedObserverCenterLocked() (
 }
 
 // sortedSessionIDsLocked is used by registry callers while server.stepMu is held.
-func (server *Server) sortedSessionIDsLocked() []sim.SessionID {
-	ids := make([]sim.SessionID, 0, len(server.sessions))
+func (server *Server) sortedSessionIDsLocked() []contract.SessionID {
+	ids := make([]contract.SessionID, 0, len(server.sessions))
 	for id := range server.sessions {
 		ids = append(ids, id)
 	}

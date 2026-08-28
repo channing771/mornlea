@@ -4,13 +4,13 @@ import (
 	"sort"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
 func (server *Server) retainFailedSave(
 	job saveJob,
-	uncommitted []sim.ChunkSaveSnapshot,
+	uncommitted []contract.ChunkSaveSnapshot,
 	err error,
 ) {
 	if job.Retry {
@@ -81,7 +81,7 @@ func (server *Server) allocateRetryID() uint64 {
 }
 
 func (server *Server) enqueueRetryCohort(incoming retrySave) {
-	unique := make([]sim.ChunkSaveSnapshot, 0, len(incoming.Job.Snapshots))
+	unique := make([]contract.ChunkSaveSnapshot, 0, len(incoming.Job.Snapshots))
 	for _, snapshot := range incoming.Job.Snapshots {
 		if !server.ownsRetrySnapshot(snapshot) {
 			unique = append(unique, snapshot)
@@ -108,7 +108,7 @@ func (server *Server) enqueueRetryCohort(incoming retrySave) {
 	server.retry[incoming.Job.Region] = append(cohorts, incoming)
 }
 
-func (server *Server) ownsRetrySnapshot(snapshot sim.ChunkSaveSnapshot) bool {
+func (server *Server) ownsRetrySnapshot(snapshot contract.ChunkSaveSnapshot) bool {
 	for _, cohorts := range server.retry {
 		for _, cohort := range cohorts {
 			for _, owned := range cohort.Job.Snapshots {
@@ -165,7 +165,7 @@ func (server *Server) dispatchDueRetries(tick uint64) {
 		}
 		job := saveJob{
 			Region:    candidate.region,
-			Snapshots: append([]sim.ChunkSaveSnapshot(nil), retained.Job.Snapshots...),
+			Snapshots: append([]contract.ChunkSaveSnapshot(nil), retained.Job.Snapshots...),
 			Attempt:   attempt,
 			Retry:     true,
 			RetryID:   retained.Job.RetryID,
@@ -212,10 +212,10 @@ func (server *Server) removePendingRetryCohort(
 }
 
 func mergeRetrySnapshots(
-	existing []sim.ChunkSaveSnapshot,
-	incoming []sim.ChunkSaveSnapshot,
-) []sim.ChunkSaveSnapshot {
-	byKey := make(map[core.ChunkKey]sim.ChunkSaveSnapshot, len(existing)+len(incoming))
+	existing []contract.ChunkSaveSnapshot,
+	incoming []contract.ChunkSaveSnapshot,
+) []contract.ChunkSaveSnapshot {
+	byKey := make(map[core.ChunkKey]contract.ChunkSaveSnapshot, len(existing)+len(incoming))
 	for _, snapshot := range existing {
 		byKey[snapshot.Key] = snapshot
 	}
@@ -225,7 +225,7 @@ func mergeRetrySnapshots(
 			byKey[snapshot.Key] = snapshot
 		}
 	}
-	merged := make([]sim.ChunkSaveSnapshot, 0, len(byKey))
+	merged := make([]contract.ChunkSaveSnapshot, 0, len(byKey))
 	for _, snapshot := range byKey {
 		merged = append(merged, snapshot)
 	}

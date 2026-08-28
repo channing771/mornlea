@@ -11,6 +11,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/pathfind"
 	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -410,7 +411,7 @@ func chunkRevisionsAround(
 				Pos:       core.ChunkPos{X: center.X + dx, Z: center.Z + dz},
 			}
 			info, ok := engine.ChunkInfo(key)
-			if !ok || info.State != sim.ChunkReady {
+			if !ok || info.State != contract.ChunkReady {
 				continue
 			}
 			revisions = append(revisions, pathfind.ChunkRevision{

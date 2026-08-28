@@ -4,12 +4,12 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
-func (player *cachedPlayer) restore(metadata storage.Metadata) sim.PlayerRestore {
-	restore := sim.PlayerRestore{
+func (player *cachedPlayer) restore(metadata storage.Metadata) contract.PlayerRestore {
+	restore := contract.PlayerRestore{
 		SpawnDimension: metadata.SpawnDimension,
 		SpawnAnchor:    metadata.SpawnAnchor,
 	}
@@ -43,8 +43,8 @@ func (player *cachedPlayer) restore(metadata storage.Metadata) sim.PlayerRestore
 }
 
 func cachedPlayerFromStored(stored storage.StoredPlayer, pendingName string) *cachedPlayer {
-	snapshot := sim.PlayerSnapshot{
-		Current: sim.PlayerLocation{
+	snapshot := contract.PlayerSnapshot{
+		Current: contract.PlayerLocation{
 			Dimension: stored.Current.Dimension,
 			Position:  mgl32.Vec3(stored.Current.Position),
 		},
@@ -64,7 +64,7 @@ func cachedPlayerFromStored(stored storage.StoredPlayer, pendingName string) *ca
 		RespawnDimension: stored.RespawnDimension,
 	}
 	if stored.Safe != nil {
-		snapshot.Safe = &sim.PlayerLocation{
+		snapshot.Safe = &contract.PlayerLocation{
 			Dimension: stored.Safe.Dimension,
 			Position:  mgl32.Vec3(stored.Safe.Position),
 		}
@@ -90,7 +90,7 @@ func newMissingCachedPlayer(
 	return &cachedPlayer{
 		id:          id,
 		pendingName: name,
-		snapshot: sim.PlayerSnapshot{Current: sim.PlayerLocation{
+		snapshot: contract.PlayerSnapshot{Current: contract.PlayerLocation{
 			Dimension: metadata.SpawnDimension,
 			Position: mgl32.Vec3{
 				float32(anchor.X)*core.SectionSize + 0.5,
@@ -203,7 +203,7 @@ func clonePlayerSave(save storage.PlayerSave) storage.PlayerSave {
 	return clone
 }
 
-func clonePlayerSnapshot(snapshot sim.PlayerSnapshot) sim.PlayerSnapshot {
+func clonePlayerSnapshot(snapshot contract.PlayerSnapshot) contract.PlayerSnapshot {
 	clone := snapshot
 	if snapshot.Safe != nil {
 		safe := *snapshot.Safe
@@ -212,7 +212,7 @@ func clonePlayerSnapshot(snapshot sim.PlayerSnapshot) sim.PlayerSnapshot {
 	return clone
 }
 
-func playerSnapshotsEqual(left, right sim.PlayerSnapshot) bool {
+func playerSnapshotsEqual(left, right contract.PlayerSnapshot) bool {
 	// 三层饥饿状态参与变更检测：饥饿是唯一会在玩家原地不动时独自变化的状态，
 	// 漏掉任何一个字段都会让"只有饥饿变了"的 tick 被判为无变化而永不落盘。
 	// 重生点同理：入睡只改重生点、不动位置，漏掉它会让"睡一觉"永不落盘。

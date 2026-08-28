@@ -7,7 +7,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -190,7 +190,7 @@ func (server *Server) flushFrozen(ctx context.Context) error {
 			snapshots := server.engine.PersistenceSnapshots(
 				server.config.SaveChunks,
 				server.config.SaveBytes,
-				sim.SaveAll,
+				contract.SaveAll,
 			)
 			if len(snapshots) != 0 {
 				pending = groupSaveJobs(snapshots)
@@ -352,7 +352,7 @@ func (server *Server) dispatchShutdownRetry() bool {
 	}
 	job := saveJob{
 		Region:    selected.region,
-		Snapshots: append([]sim.ChunkSaveSnapshot(nil), selected.retry.Job.Snapshots...),
+		Snapshots: append([]contract.ChunkSaveSnapshot(nil), selected.retry.Job.Snapshots...),
 		Attempt:   attempt,
 		Retry:     true,
 		RetryID:   selected.retry.Job.RetryID,

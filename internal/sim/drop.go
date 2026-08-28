@@ -272,18 +272,6 @@ func (engine *Engine) SetBlockForTest(position core.BlockPos, block core.BlockID
 	_, _, _ = dimension.SetBlock(position, block)
 }
 
-// DropSnapshot 是一个权威掉落物堆在本 tick 的完整可见值。
-type DropSnapshot struct {
-	ID         core.DropID
-	BlockIndex uint32
-	Item       core.ItemID
-	Count      uint8
-	Durability uint16
-}
-
-// MaxSessionDrops 是单个会话镜像的固定上限：25 个兴趣区块 × 每区块 32 槽。
-const MaxSessionDrops = core.MaxSessionDrops
-
 // AppendSessionDrops 按稳定 ID 顺序把该会话兴趣范围内的当前掉落物追加到 dst。
 // 调用方可复用 dst 底层数组；结果最多 MaxSessionDrops 项。
 func (engine *Engine) AppendSessionDrops(id SessionID, dst []DropSnapshot) []DropSnapshot {

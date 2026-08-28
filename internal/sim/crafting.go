@@ -326,16 +326,6 @@ func (engine *Engine) workbenchAnchorValid(session *sessionState) bool {
 	return center.Sub(eye).Len() <= engine.tunables.InteractionReach
 }
 
-// CraftingUpdate 是本 tick 发给某个玩家的完整权威合成网格状态：latest-wins、
-// 不增量、不广播给其他玩家。Output 是服务端从当前网格匹配派生的产物，
-// 无匹配时为空栈——客户端不得自行声明产物。
-type CraftingUpdate struct {
-	Session SessionID
-	Size    uint8
-	Slots   [core.CraftingGridSlots]core.ItemStack
-	Output  core.ItemStack
-}
-
 // PlayerCrafting 返回某会话当前的权威合成网格与服务端派生的产物；
 // 会话不存在时返回 false。这是测试与任务组 3 publication 的观察点；
 // 网格永不进入 `PlayerSnapshot`（不落盘）。
