@@ -19,7 +19,7 @@
 - **本地与 CI 不双跑全量 race**：CI 的 `go-race` 已按 cmd / internal-server / internal-rest 三分片并行执行全量。默认路径是 T2 绿 → 推送 → 信任 CI；本地 T3 只在 (a) 改动涉及 `internal/sim`/`internal/server`/`internal/network`/`internal/storage`/`internal/physics` 的并发或时序语义，或 (b) CI 红了需要本地复现时执行。`AGENT_MODE=merge`（不经 PR 直推）时 T3 本地必跑。
 - **flake 分诊协议**：高负载下出现「等待预算/超时」类失败时，先对**失败包单独重跑**（`go test ./该包 -race -count=1`）；单独通过即记录为负载 flake（写进 ledger 或 PR 备注），不进修复循环、不为此改生产代码。同一 flake 一天内重现 ≥2 次才立待修任务（参照 E-11 模式）。
 - **验证证据可继承**：同一基线 SHA 下已记入 change `ledger.md` 的验证输出直接引用，不重跑同等命令；评审复核用 focused 测试抽查（见 `docs/development-process.md` 阶段 3）。
-- **T1 闭包的边界**：`race-changed.sh` 的反向依赖沿生产 import 边传递，测试 import 只算一层直接依赖（否则触碰 `internal/core` 这类底座包时闭包近似全仓）；残余盲区由 T3 与 CI 兜底。迭代验证涉及 `cmd/mornlea/capture`、`cmd/mornlea/benchmark` 或 `internal/server` 的重型测试时可对这几个包追加 `-short`；脚本的「集合含重型包」提示目前只识别 `cmd/mornlea`（分包后仅剩薄 main，秒级）与 `internal/server`。
+- **T1 闭包的边界**：`race-changed.sh` 的反向依赖沿生产 import 边传递，测试 import 只算一层直接依赖（否则触碰 `internal/core` 这类底座包时闭包近似全仓）；残余盲区由 T3 与 CI 兜底。迭代验证涉及 `cmd/mornlea/capture`、`cmd/mornlea/benchmark` 或 `internal/server` 的重型测试时可对这几个包追加 `-short`；脚本的「集合含重型包」提示识别 `cmd/mornlea/app`、`cmd/mornlea/benchmark` 与 `internal/server`。
 
 ## T0：定点测试
 
@@ -45,7 +45,7 @@ make test-race-changed RACE_BASE=<ref>   # 换比较基线（如批次共享 SHA
 scripts/agents/race-changed.sh --diff    # 只打印包集合不运行（核对闭包用）
 ```
 
-集合 = 改动包（已提交 diff ∪ 暂存 ∪ 未暂存 ∪ 未跟踪的 .go）∪ 生产 import 反向依赖（传递）∪ 测试 import 直接依赖 ∪ `internal/archcheck`。闭包含 cdylib 消费包（nativeabi/core/physics/mesh/client/sim/server/cmd/mornlea[-server]）时脚本先按需 `make rust`；纯 Go 叶子改动不构建 Rust。
+集合 = 改动包（已提交 diff ∪ 暂存 ∪ 未暂存 ∪ 未跟踪的 .go）∪ 生产 import 反向依赖（传递）∪ 测试 import 直接依赖 ∪ `internal/archcheck`。闭包含 cdylib 消费包（nativeabi/core/physics/mesh/client/sim/server/cmd/mornlea 及其 app/capture/benchmark 子包/cmd/mornlea-server）时脚本先按需 `make rust`；纯 Go 叶子改动不构建 Rust。
 
 ## T2：短模式与一键快检
 
