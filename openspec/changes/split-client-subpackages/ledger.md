@@ -68,6 +68,41 @@
 
 ## Review Log
 
+### Task 3.1 + 3.2（capture 包提取与 golden 路径同步）
+
+- 实现 SHA：`47723a20`（Task 3.1 包迁移）；Task 3.2 为 golden 引用同步与
+  tasks/ledger 勾选，与本文更新同批提交（该提交自身 SHA 无法写入自身，
+  由控制会话复核时补记）。
+- 验证输出摘要（worktree `refactor/client-subpackages`，基线 `73748fee`）：
+  - `make rust`：release 增量构建通过；`engine/target/release/` 同时有
+    `libmornlea_engine.dylib` 与 `libmornlea_client.dylib`。
+  - `go build ./...`：通过；`gofmt -l cmd/mornlea`：无输出；
+    `go vet ./cmd/mornlea/... ./internal/archcheck`：通过。
+  - `-list` 并集比对：`go test ./cmd/mornlea ./cmd/mornlea/app
+    ./cmd/mornlea/capture -list '.*'` 与 `baseline-test-list.txt` 排序后
+    `diff` 零差异（384 Test + 1 Benchmark，385 行逐一相同）。
+  - `go test ./internal/archcheck -count=1`：通过（8.5s，含注释标识符与
+    platform 守卫）。
+  - `go test ./cmd/mornlea/capture -race -count=1`：`ok ... 6.1s`（无缓存）。
+  - `make visual-check`：21 场景全绿，全部「最大通道差 0，差异像素
+    0/230400」；无 `*-actual.png`/`*-diff.png` 产生；golden 21 张在
+    `git status` 下均为纯 rename（100% 相似，0 内容变更）。
+- 实施裁决（详见 Rulings）：
+  - 加载等待函数族在 capture 包内暂置 `capture_load.go` 同语义副本，
+    `captureDrainMax` 改同值字面量 4096；benchmark 域文件零触碰，main 侧
+    `waitUntilLoadedPair`/`waitUntilLoadedPairWithStep` 因此暂无调用方，
+    Task 4 迁移 benchmark 时随函数族下沉 app 一并收敛。
+  - app 导出 `PanelState`/`ChatInput` 类型别名（本任务对「零新增导出」的
+    唯一突破，共 2 个声明，方法集与行为零变化）。
+  - `ai_model_settings_test.go` 经符号核实留 main（design 初稿举例否决）。
+  - golden 引用同步点：`captureGoldenDir` 常量、`capture_near_band_test.go`
+    字面路径、`README.md`/`README.en.md`（8 处 img src）、
+    `scripts/make_demo_gif.swift`、`docs/notes/visual-verification.md`
+    （golden 目录与两处代码文件位置）。`.github/workflows/ci.yml` 与
+    `Makefile` 无 golden 路径引用，核对后零改动；`docs/superpowers/`、
+    `openspec/changes/archive/`、`docs/notes/fix-grass-block-texture/`、
+    `docs/feature-backlog.md` 为历史记录，语义指当时事实，不改写。
+
 ### Task 2.1 + 2.2（app 包提取与 archcheck 子树守卫适配）
 
 - 实现 SHA：`daa859c4`（Task 2.1 app 包提取）、`675ffea1`（Task 2.2 守卫适配）。

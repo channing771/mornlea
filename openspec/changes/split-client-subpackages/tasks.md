@@ -10,8 +10,8 @@
 
 ## 3. capture 包提取
 
-- [ ] 3.1 创建 `cmd/mornlea/capture`（`package capture`），迁入 capture 生产文件、`visual_compare.go`、对应测试与 `testdata/golden`（git mv）；`captureGoldenDir` 常量同步；capture 经包内消费端接口访问 app 状态；建立 capture helper 中心（每包一个 `*_helpers_test.go`）。验证：`go test ./cmd/mornlea/capture -race -count=1`；`go test ./cmd/mornlea/... -list '.*'` 并集仍与基线一致。
-- [ ] 3.2 同步 golden 路径引用（`.github/workflows/ci.yml`、`scripts/`、`docs/notes/perf-baseline.*` 如有）；运行 `make visual-check` 确认全场景通过且无 `*-actual.png`/`*-diff.png` 产生。
+- [x] 3.1 创建 `cmd/mornlea/capture`（`package capture`），迁入 capture 生产文件、`visual_compare.go`、对应测试与 `testdata/golden`（git mv）；`captureGoldenDir` 常量同步；capture 经包内消费端接口访问 app 状态；建立 capture helper 中心（每包一个 `*_helpers_test.go`）。验证：`go test ./cmd/mornlea/capture -race -count=1`；`go test ./cmd/mornlea/... -list '.*'` 并集仍与基线一致。
+- [x] 3.2 同步 golden 路径引用（`.github/workflows/ci.yml`、`scripts/`、`docs/notes/perf-baseline.*` 如有）；运行 `make visual-check` 确认全场景通过且无 `*-actual.png`/`*-diff.png` 产生。
 
 ## 4. benchmark 包提取
 
