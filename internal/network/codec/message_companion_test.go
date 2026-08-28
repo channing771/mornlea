@@ -435,23 +435,23 @@ func TestCompanionMessageGolden(t *testing.T) {
 		wantID  uint32
 		wantHex string
 	}{
-		{"protocol.ChatCommand", protocol.ChatCommand{Text: "@A x"}, nil, 12, "0440412078"},
-		{"protocol.ChatEvent", nil, validAcceptedChatEvent(), 16,
+		{"ChatCommand", protocol.ChatCommand{Text: "@A x"}, nil, 12, "0440412078"},
+		{"ChatEvent", nil, validAcceptedChatEvent(), 16,
 			"0100000000000000" + "10000000000040008000000000000009" + "044368656e" +
 				"10000000000040008000000000000001" + "0141" + "0100" + "0178"},
-		{"protocol.ChatEventTaskStarted", nil, taskChatEvent(2, protocol.ChatEventTaskStarted, protocol.ChatRejectNone), 16,
+		{"ChatEventTaskStarted", nil, taskChatEvent(2, protocol.ChatEventTaskStarted, protocol.ChatRejectNone), 16,
 			"0200000000000000" + "10000000000040008000000000000009" + "044368656e" +
 				"10000000000040008000000000000001" + "0141" + "0300" + "0178"},
-		{"protocol.ChatEventTaskProgress", nil, taskChatEvent(3, protocol.ChatEventTaskProgress, protocol.ChatRejectNone), 16,
+		{"ChatEventTaskProgress", nil, taskChatEvent(3, protocol.ChatEventTaskProgress, protocol.ChatRejectNone), 16,
 			"0300000000000000" + "10000000000040008000000000000009" + "044368656e" +
 				"10000000000040008000000000000001" + "0141" + "0400" + "0178"},
-		{"protocol.ChatEventTaskCompleted", nil, taskChatEvent(4, protocol.ChatEventTaskCompleted, protocol.ChatRejectNone), 16,
+		{"ChatEventTaskCompleted", nil, taskChatEvent(4, protocol.ChatEventTaskCompleted, protocol.ChatRejectNone), 16,
 			"0400000000000000" + "10000000000040008000000000000009" + "044368656e" +
 				"10000000000040008000000000000001" + "0141" + "0500" + "0178"},
-		{"protocol.ChatEventTaskFailed", nil, taskChatEvent(5, protocol.ChatEventTaskFailed, protocol.ChatRejectReason(protocol.TaskFailPlannerUnavailable)), 16,
+		{"ChatEventTaskFailed", nil, taskChatEvent(5, protocol.ChatEventTaskFailed, protocol.ChatRejectReason(protocol.TaskFailPlannerUnavailable)), 16,
 			"0500000000000000" + "10000000000040008000000000000009" + "044368656e" +
 				"10000000000040008000000000000001" + "0141" + "0610" + "0178"},
-		{"protocol.ChatEventTaskTimedOut", nil, taskChatEvent(6, protocol.ChatEventTaskTimedOut, protocol.ChatRejectNone), 16,
+		{"ChatEventTaskTimedOut", nil, taskChatEvent(6, protocol.ChatEventTaskTimedOut, protocol.ChatRejectNone), 16,
 			"0600000000000000" + "10000000000040008000000000000009" + "044368656e" +
 				"10000000000040008000000000000001" + "0141" + "0700" + "0178"},
 		{"ChatEventQueueFull", nil, taskChatEvent(7, protocol.ChatEventRejected, protocol.ChatRejectQueueFull), 16,
@@ -460,23 +460,23 @@ func TestCompanionMessageGolden(t *testing.T) {
 		{"ChatEventNotFollowing", nil, taskChatEvent(14, protocol.ChatEventRejected, protocol.ChatRejectNotFollowing), 16,
 			"0e00000000000000" + "10000000000040008000000000000009" + "044368656e" +
 				"10000000000040008000000000000001" + "0141" + "0205" + "0178"},
-		{"protocol.ChatEventTaskStopped", nil, taskChatEvent(13, protocol.ChatEventTaskStopped, protocol.ChatRejectNone), 16,
+		{"ChatEventTaskStopped", nil, taskChatEvent(13, protocol.ChatEventTaskStopped, protocol.ChatRejectNone), 16,
 			"0d00000000000000" + "10000000000040008000000000000009" + "044368656e" +
 				"10000000000040008000000000000001" + "0141" + "0800" + "0178"},
 		{"ChatEventTaskFailInventoryFull", nil, taskChatEvent(15, protocol.ChatEventTaskFailed, protocol.ChatRejectReason(protocol.TaskFailInventoryFull)), 16,
 			"0f00000000000000" + "10000000000040008000000000000009" + "044368656e" +
 				"10000000000040008000000000000001" + "0141" + "0614" + "0178"},
 		// v19 台词事件：kind 9、reason 0，台词复用既有文本槽位（此处为 6-byte "台词"）。
-		{"protocol.ChatEventCompanionSpeech", nil, companionSpeechEvent(16, "台词"), 16,
+		{"ChatEventCompanionSpeech", nil, companionSpeechEvent(16, "台词"), 16,
 			"1000000000000000" + "10000000000040008000000000000009" + "044368656e" +
 				"10000000000040008000000000000001" + "0141" + "0900" + "06e58fb0e8af8d"},
-		{"protocol.CompanionSpawn", nil, protocol.CompanionSpawn{ID: testCompanionID(1), Name: "A", Tick: 1}, 17,
+		{"CompanionSpawn", nil, protocol.CompanionSpawn{ID: testCompanionID(1), Name: "A", Tick: 1}, 17,
 			"10000000000040008000000000000001" + "0141" + "0100000000000000" +
 				"00000000" + "000000000000000000000000" + "0000000000000000"},
-		{"protocol.CompanionStates", nil, protocol.CompanionStates{Tick: 2, States: []protocol.CompanionState{{ID: testCompanionID(1)}}}, 18,
+		{"CompanionStates", nil, protocol.CompanionStates{Tick: 2, States: []protocol.CompanionState{{ID: testCompanionID(1)}}}, 18,
 			"0200000000000000" + "01" + "10000000000040008000000000000001" +
 				"00000000" + "000000000000000000000000" + "0000000000000000" + "00"},
-		{"protocol.CompanionDespawn", nil, protocol.CompanionDespawn{ID: testCompanionID(1)}, 19,
+		{"CompanionDespawn", nil, protocol.CompanionDespawn{ID: testCompanionID(1)}, 19,
 			"10000000000040008000000000000001"},
 	}
 	for _, test := range tests {
@@ -676,26 +676,26 @@ func TestCompanionMessagesHaveFixedMaximumWireLengths(t *testing.T) {
 		want int
 		call func() ([]byte, error)
 	}{
-		{"protocol.ChatCommand", 1026, func() ([]byte, error) {
+		{"ChatCommand", 1026, func() ([]byte, error) {
 			_, payload, err := encodeClientPacketPayload(protocol.StatePlay, protocol.ChatCommand{Text: maxCommand})
 			return payload, err
 		}},
-		{"protocol.CompanionSpawn", 178, func() ([]byte, error) {
+		{"CompanionSpawn", 178, func() ([]byte, error) {
 			_, payload, err := encodeServerControlPayload(protocol.StatePlay, protocol.CompanionSpawn{ID: id, Name: maxName, Dimension: core.Overworld})
 			return payload, err
 		}},
-		{"protocol.CompanionStates", 173, func() ([]byte, error) {
+		{"CompanionStates", 173, func() ([]byte, error) {
 			_, payload, err := encodeServerControlPayload(protocol.StatePlay, protocol.CompanionStates{States: states})
 			return payload, err
 		}},
-		{"protocol.ChatEvent", 1328, func() ([]byte, error) {
+		{"ChatEvent", 1328, func() ([]byte, error) {
 			_, payload, err := encodeServerControlPayload(protocol.StatePlay, protocol.ChatEvent{EventID: 1,
 				PlayerID: core.PlayerID(testCompanionID(9)), PlayerName: maxName, CompanionID: id,
 				CompanionName: maxName, Kind: protocol.ChatEventAccepted, RejectReason: protocol.ChatRejectNone, Command: maxCommand})
 			return payload, err
 		}},
 		// 任务事件复用同一 wire 形状，固定上限仍是 1328 bytes。
-		{"protocol.ChatEventTaskFailed", 1328, func() ([]byte, error) {
+		{"ChatEventTaskFailed", 1328, func() ([]byte, error) {
 			_, payload, err := encodeServerControlPayload(protocol.StatePlay, protocol.ChatEvent{EventID: 1,
 				PlayerID: core.PlayerID(testCompanionID(9)), PlayerName: maxName, CompanionID: id,
 				CompanionName: maxName, Kind: protocol.ChatEventTaskFailed,
@@ -703,7 +703,7 @@ func TestCompanionMessagesHaveFixedMaximumWireLengths(t *testing.T) {
 			return payload, err
 		}},
 		// v18 新增的 TaskStopped 与 NotFollowing 同样复用既有 wire 形状，不改变上限。
-		{"protocol.ChatEventTaskStopped", 1328, func() ([]byte, error) {
+		{"ChatEventTaskStopped", 1328, func() ([]byte, error) {
 			_, payload, err := encodeServerControlPayload(protocol.StatePlay, protocol.ChatEvent{EventID: 1,
 				PlayerID: core.PlayerID(testCompanionID(9)), PlayerName: maxName, CompanionID: id,
 				CompanionName: maxName, Kind: protocol.ChatEventTaskStopped,
@@ -719,7 +719,7 @@ func TestCompanionMessagesHaveFixedMaximumWireLengths(t *testing.T) {
 		}},
 		// v19 的 CompanionSpeech 复用既有文本槽位：256-byte 台词 + 最长身份的事件
 		// 只有 560 bytes，固定上限 1328 bytes 不变。
-		{"protocol.ChatEventCompanionSpeech", 560, func() ([]byte, error) {
+		{"ChatEventCompanionSpeech", 560, func() ([]byte, error) {
 			_, payload, err := encodeServerControlPayload(protocol.StatePlay, protocol.ChatEvent{EventID: 1,
 				PlayerID: core.PlayerID(testCompanionID(9)), PlayerName: maxName, CompanionID: id,
 				CompanionName: maxName, Kind: protocol.ChatEventCompanionSpeech,

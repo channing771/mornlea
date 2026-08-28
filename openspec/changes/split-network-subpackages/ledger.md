@@ -147,6 +147,13 @@
     终态理由「codec 域测试跨包消费 protocol 冻结值域上界」——两常量由
     protocol `Validate` 生产自用，撤销导出会使 codec 测试退回裸字面量，违背
     同源锁定意图；无生产消费者以外的导出面扩张。
+    更正（T3-1 评审裁决）：`MaxChunkBlockIndex` 的消费前提记录有误——
+    `TestItemDropMessagesValidateBoundedBatches` 拆分后落位 protocol 包内
+    （in-package），codec 侧零引用，导出成为孤儿。回收导出：`message_chunk.go`
+    更名 `maxChunkBlockIndex`（unexported，`ItemDrop.Validate` 值域检查与
+    protocol 包内 drop 测试自用）。`GridCraftingViewSlots` 维持转正：
+    `codec_inventory_test.go` 跨包消费属实，维持「codec 域测试跨包消费」
+    终态理由。
   - wire encode/decode 函数 12+1 个：按 Task 2 裁决 `git mv`
     `companion_wire.go`/`hostile_wire.go` 进 codec，包内直呼，保持
     unexported，回收完成（无导出面）。

@@ -23,7 +23,7 @@ func (drop ItemDrop) validate() error {
 	if !drop.ID.Valid() {
 		return errors.New("network: invalid item drop ID")
 	}
-	if drop.BlockIndex >= MaxChunkBlockIndex {
+	if drop.BlockIndex >= maxChunkBlockIndex {
 		return errors.New("network: item drop block index is outside the chunk")
 	}
 	stack := core.ItemStack{

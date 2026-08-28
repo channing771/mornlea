@@ -65,7 +65,7 @@ func TestItemDropMessagesValidateBoundedBatches(t *testing.T) {
 			ID: dropTestID(0, 1), Item: core.ItemStone, Count: core.MaxStackCount + 1,
 		}}},
 		ItemDropUpserts{Drops: []ItemDrop{{
-			ID: dropTestID(0, 1), Item: core.ItemStone, Count: 1, BlockIndex: MaxChunkBlockIndex,
+			ID: dropTestID(0, 1), Item: core.ItemStone, Count: 1, BlockIndex: maxChunkBlockIndex,
 		}}},
 		ItemDropUpserts{Drops: []ItemDrop{{
 			ID: dropTestID(0, 1), Item: core.ItemStonePickaxe, Count: 2,
