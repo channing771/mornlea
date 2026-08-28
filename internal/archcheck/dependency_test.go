@@ -40,11 +40,13 @@ var allowed = map[string][]string{
 	"internal/pathfind":  {"internal/core"},
 	"internal/logging":   {},
 	// internal/network 拆分后根包保留会话与传输编排，协议消息层
-	// （packet/message DTO/registry/snapshot）落位 protocol 子包；根包原
+	// （packet/message DTO/registry/snapshot）落位 protocol 子包，编解码层
+	// （wire 原语、packet 编解码、快照信封、帧封装）落位 codec 子包；根包
 	// internal/companion 边随 message_companion.go 移交 protocol 后一并移交，
-	// 编解码簇（codec*.go、chunk_codec.go、frame.go）暂留根包，待其子包落地
-	// 再登记 codec 边。
-	"internal/network":          {"internal/core", "internal/network/protocol"},
+	// 根包经 types.go 别名再导出保持消费面不变。codec 的 wire 常量经
+	// protocol 取值，不得直接依赖 internal/companion。
+	"internal/network":          {"internal/core", "internal/network/codec", "internal/network/protocol"},
+	"internal/network/codec":    {"internal/core", "internal/network/protocol"},
 	"internal/network/protocol": {"internal/companion", "internal/core"},
 	"internal/network/tcp":      {"internal/network"},
 	"internal/profile":          {"internal/core"},

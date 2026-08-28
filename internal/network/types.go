@@ -1,16 +1,19 @@
 // Package network 定义端无关消息协议与传输接口。
 //
 // 拆分后根包保留会话与传输编排：登录状态机（login.go）、共享 stream 接口、
-// Memory transport 与 Play endpoint 门面，外加对协议消息子包 `protocol` 的
-// 别名再导出——既有 `network.X` 消费方（server/client/sim/cmd 与 tcp 子包）
-// 的引用逐符号保持可寻址、同名称、同类型/错误/常量身份，源码零改动。类型
-// 别名（`type X = protocol.X`）保方法集，常量与函数经 var/const 绑定同一
-// 底层值，不产生运行时转发。编解码簇（codec*.go、chunk_codec.go、frame.go）
-// 暂留本包并直接以 `protocol.` 限定名消费协议层。依赖方向单向：
-// network → protocol，protocol 不反向依赖本包。
+// Memory transport 与 Play endpoint 门面，外加对协议消息子包 `protocol` 与
+// 编解码子包 `codec` 的别名再导出——既有 `network.X` 消费方（server/client/
+// sim/cmd 与 tcp 子包）的引用逐符号保持可寻址、同名称、同类型/错误/常量身份，
+// 源码零改动。类型别名（`type X = protocol.X`、`type Codec = codec.Codec`）
+// 保方法集，常量与函数经 var/const 绑定同一底层值，不产生运行时转发。依赖
+// 方向单向：network → {protocol, codec}，codec → protocol，任何子包不反向
+// 依赖本包。
 package network
 
-import "github.com/channing771/mornlea/internal/network/protocol"
+import (
+	"github.com/channing771/mornlea/internal/network/codec"
+	"github.com/channing771/mornlea/internal/network/protocol"
+)
 
 // ClientPacket 是客户端可在线上发送的封闭 packet 集合，定义在 protocol
 // 包（密封 marker 同包钉死）；类型别名保方法集与 switch 断言身份。
@@ -336,3 +339,35 @@ const (
 	// SectionDirect 表示全量直存。
 	SectionDirect = protocol.SectionDirect
 )
+
+// Codec 是 Play 阶段 packet 与区块快照的编解码器，定义在 codec 包（zstd 快照
+// 信封 + 全部控制 packet 的 wire 编解码门面）；类型别名保方法集，tcp 传输与
+// 根包会话路径经既有 `network.Codec` 引用继续可用。
+type Codec = codec.Codec
+
+// 快照信封与帧边界常量定义在 codec 包，是 wire 契约的一部分；再导出保持既有
+// network.X 引用与值不变。
+const (
+	// MaxCompressedSnapshot 是单条快照信封压缩载荷的字节上限。
+	MaxCompressedSnapshot = codec.MaxCompressedSnapshot
+	// MaxDecodedSnapshot 是解压后逻辑快照的字节上限。
+	MaxDecodedSnapshot = codec.MaxDecodedSnapshot
+	// MaxSmallPayload 是单个控制 packet 载荷的字节上限。
+	MaxSmallPayload = codec.MaxSmallPayload
+	// MaxFrameBytes 是单帧（packet ID + 载荷）的字节上限。
+	MaxFrameBytes = codec.MaxFrameBytes
+)
+
+// 帧读写函数定义在 codec 包（帧封装复用 codec 的 canonical uvarint）；var
+// 别名绑定同一函数值，tcp 传输经 `network.WriteFrame`/`network.ReadFrame`
+// 的既有引用与直接调用 `codec.WriteFrame` 完全等价。
+var (
+	// WriteFrame 写入一条长度前缀封帧的 packet ID 与载荷。
+	WriteFrame = codec.WriteFrame
+	// ReadFrame 读取一条有界长度前缀封帧的 packet。
+	ReadFrame = codec.ReadFrame
+)
+
+// NewCodec 创建 `Codec`；var 别名绑定同一函数值，消费方经
+// `network.NewCodec` 与经 `codec.NewCodec` 调用完全等价。
+var NewCodec = codec.NewCodec

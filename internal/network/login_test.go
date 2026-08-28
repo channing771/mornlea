@@ -659,3 +659,43 @@ func (stream *staticClientHelloStream) Recv(context.Context, State) (ClientPacke
 
 func (*staticClientHelloStream) Peer() string { return "test" }
 func (*staticClientHelloStream) Close() error { return nil }
+
+func TestProtocolV26RejectsPriorVersionsBeforePlay(t *testing.T) {
+	// v24 是上一版本（authoritative-hunger 交付的进食与饥饿字段），必须和
+	// 更早版本一样在 Handshake 阶段稳定拒绝，并给出版本不匹配原因。
+	// 循环上界是 `ProtocolVersion` 而不是某个字面量：升版时刚退役的那一版
+	// 必须自动进入覆盖，否则这条用例只测得到远古版本。
+	for version := uint32(1); version < ProtocolVersion; version++ {
+		stream := &staticClientHelloStream{version: version}
+		if _, err := BeginServerLogin(t.Context(), stream, 0); err == nil {
+			t.Fatalf("v%d ClientHello 被接受", version)
+		}
+		reject, ok := stream.sent.(HandshakeReject)
+		if !ok || reject.ServerProtocolVersion != ProtocolVersion ||
+			reject.Code != HandshakeVersionMismatch {
+			t.Fatalf("v%d 拒绝结果 = %#v，想要 v%d HandshakeReject", version, stream.sent, ProtocolVersion)
+		}
+	}
+}
+
+func TestHandshakeAcceptsCurrentVersion(t *testing.T) {
+	// 当前版本的 ClientHello 必须通过握手：服务端读取后以同版本 ServerHello
+	// 回应，而不是版本不匹配拒绝。（版本无关命名：测试始终跟随
+	// `ProtocolVersion` 常量，协议升版时无需改名。）
+	client, server := NewMemoryStreamPair(4)
+	t.Cleanup(func() { _ = client.Close(); _ = server.Close() })
+	if err := client.Send(t.Context(), StateHandshake, ClientHello{ProtocolVersion: ProtocolVersion}); err != nil {
+		t.Fatal(err)
+	}
+	hello, err := server.Recv(t.Context(), StateHandshake)
+	if err != nil || hello != (ClientHello{ProtocolVersion: ProtocolVersion}) {
+		t.Fatalf("当前版本 ClientHello = (%#v,%v)", hello, err)
+	}
+	if err := server.Send(t.Context(), StateHandshake, ServerHello{ProtocolVersion: ProtocolVersion}); err != nil {
+		t.Fatal(err)
+	}
+	greeting, err := client.Recv(t.Context(), StateHandshake)
+	if err != nil || greeting != (ServerHello{ProtocolVersion: ProtocolVersion}) {
+		t.Fatalf("当前版本 ServerHello = (%#v,%v)", greeting, err)
+	}
+}
