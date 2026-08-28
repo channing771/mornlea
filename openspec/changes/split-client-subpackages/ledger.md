@@ -40,6 +40,15 @@
   等待从 1ms 放宽到 50ms — 分包后 app 包测试与 main 的 GPU 重型测试并行执行，
   -race 高负载下 1ms 交接实测出现过一次漏读导致断言失败（隔离重跑 5 次全过，
   判定为并行负载 flake 而非语义回归）；不改动任何测试函数名、标签与断言。
+- Ruling: Task 2 双评审后 R1 修复（`3e24cead`）— SPEC PASS、QUALITY
+  CHANGES_REQUESTED；按 QUALITY 意见恢复 5 处被顺手大写的局部标识符
+  （`health`/`chatOverlay`/`draft`/`patchSettings` 及形参），修正
+  `app_menu.go` 陈旧的 package main 归属注释，去除已触碰行的「B-14」编号，
+  `DamageFeedback.Update` 经 grep 核实无外部消费后回退非导出 `update`；
+  导出面零变化，`-list` 并集与基线零差异。
+- Ruling: 基线继承的任务编号注释（`eating_overlay_test.go:5` 等 4 处）不在
+  本 change 清理 — 本 change 只清理自身触碰改写的行；文件整体搬迁不算行级
+  改写，混入清理违反最小聚焦。已誊入 proposal「延期与放弃」。
 
 ## Review Log
 

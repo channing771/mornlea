@@ -61,3 +61,12 @@
   `captureGoldenDir` 常量同步。
 - 这是仓库内部源码 import path 的变更；无线上 wire、存档或 ABI 兼容性影响。
   性能基准数值只记录，不改变退出状态；golden 内容逐字节不变。
+
+## 延期与放弃
+
+- `internal/client` 的 `Receiver` 缺少就绪探测 API（inbox 深度/ack 信号），测试
+  helper 只能以 sleep 概率性交接（T2 中 1ms → 50ms）——登记独立跟进项以消除
+  时序 flake 根因；涉及 `internal/*` 重构，超出本 change 非目标。
+- 全仓继承的任务编号注释清理（`cmd/mornlea/main.go:112`、`app/app.go:56`、
+  `app/app_startup.go:715`、`app/eating_overlay_test.go:5` 等）——留独立
+  cleanup 任务，不混入本 change。
