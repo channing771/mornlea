@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/go-gl/mathgl/mgl32"
+
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
@@ -571,4 +573,80 @@ func (stream *rawMemoryServerStream) Close() error {
 
 func (pair *rawMemoryPair) close() {
 	pair.closeOnce.Do(func() { close(pair.done) })
+}
+
+// hostileSpawnFixture 返回 3 条字段各异、ID 严格升序的合法 spawn 记录：
+// 生命取非零非满的中间值，保证「字段根本没搬运」与默认值不可分辨。
+func hostileSpawnFixture() []network.HostileSpawnRecord {
+	return []network.HostileSpawnRecord{
+		{ID: 7, Dimension: core.Overworld, Position: mgl32.Vec3{2.5, 1, -3.25}, Yaw: 1.25, Health: 14},
+		{ID: 9, Dimension: core.Overworld, Position: mgl32.Vec3{-8.5, 65.5, 12.75}, Yaw: -2.5, Health: core.MaxHealth},
+		{ID: 12, Dimension: core.Overworld, Position: mgl32.Vec3{30.5, 70, -3.25}, Yaw: 3, Health: 1},
+	}
+}
+
+// hostileStateFixture 返回 2 条 ID 严格升序的合法 state 记录：速度取非零值，
+// 保证速度分量的搬运与丢弃可分辨。
+func hostileStateFixture() []network.HostileStateRecord {
+	return []network.HostileStateRecord{
+		{ID: 7, Position: mgl32.Vec3{2.5, 1, -3.25}, Velocity: mgl32.Vec3{0.5, -1.25, 0}, Yaw: 1.25, Health: 13},
+		{ID: 9, Position: mgl32.Vec3{-8.5, 65.5, 12.75}, Velocity: mgl32.Vec3{0, 0.25, 3}, Yaw: -2.5, Health: 7},
+	}
+}
+
+func hostileSpawnMessage() network.HostileSpawn {
+	return network.HostileSpawn{ServerTick: 0x0102030405060708, Spawns: hostileSpawnFixture()}
+}
+
+func hostileStateMessage() network.HostileState {
+	return network.HostileState{ServerTick: 0x0102030405060708, States: hostileStateFixture()}
+}
+
+func hostileDespawnMessage() network.HostileDespawn {
+	return network.HostileDespawn{ServerTick: 0x0102030405060708, IDs: []uint64{7, 9, 12}}
+}
+
+func TestHostileMessagesRoundTripMemoryAndTCP(t *testing.T) {
+	messages := []network.ServerMessage{hostileSpawnMessage(), hostileStateMessage(), hostileDespawnMessage()}
+	for _, open := range transportOpeners {
+		t.Run(open.name, func(t *testing.T) {
+			clientStream, serverStream := open.open(t)
+			t.Cleanup(func() { _ = clientStream.Close(); _ = serverStream.Close() })
+			serverDone := make(chan error, 1)
+			go func() {
+				pending, err := network.BeginServerLogin(context.Background(), serverStream, 0)
+				if err != nil {
+					serverDone <- err
+					return
+				}
+				var endpoint network.ServerEndpoint
+				err = pending.Accept(context.Background(), func(attached network.ServerEndpoint) error {
+					endpoint = attached
+					return nil
+				})
+				if err == nil {
+					for _, message := range messages {
+						if err = endpoint.Send(context.Background(), message); err != nil {
+							break
+						}
+					}
+				}
+				serverDone <- err
+			}()
+
+			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(21))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for index, want := range messages {
+				got, err := endpoint.Recv(context.Background())
+				if err != nil || !reflect.DeepEqual(got, want) {
+					t.Fatalf("第 %d 条消息 = (%#v, %v)，想要 %#v", index, got, err, want)
+				}
+			}
+			if err := <-serverDone; err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
 }

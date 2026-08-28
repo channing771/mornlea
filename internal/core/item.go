@@ -79,6 +79,12 @@ const (
 	// 因此它不出现在面向无关的 ItemPlacement 表里——命中面 → 方块形态的唯一
 	// 映射窗口是 PlaceableBlockAtFace，任何放置方都不得绕开该窗口为它选形态。
 	ItemTorch
+	// ItemRottenFlesh 是腐肉：夜行者死亡掉落的可食用战利品，堆叠 64、不可放置、
+	// 没有耐久。食物值 4/0（饱和 0 毫秒，吃完立刻零饱和）登记在 FoodValue 唯一
+	// 一张表里；没有中毒等状态效果——有界状态效果系统落地前它就是一块普通食物。
+	// 它不出现在 BlockDrop 表：世界上没有任何方块采掘出腐肉，唯一来源是权威
+	// 模拟在夜行者死亡 chunk 的掉落放置。同样只能追加在 ItemIDMax 哨兵之前。
+	ItemRottenFlesh
 	// ItemIDMax 是合法物品编号的独占上界（最后一个合法 ItemID + 1），本身不是
 	// 物品枚举成员。它供测试以「item < ItemIDMax」穷举全部物品，替代依赖
 	//「某个具体物品恰为枚举末项」的脆弱写法；放在 core 是因为物品注册表归属
@@ -282,7 +288,7 @@ func ItemStackLimit(item ItemID) (uint8, bool) {
 		ItemWheatSeeds, ItemWheat, ItemBread,
 		ItemStick, ItemWorkbench, ItemBoneMeal,
 		ItemPotato, ItemCarrot, ItemPoisonousPotato, ItemDoor,
-		ItemTorch:
+		ItemTorch, ItemRottenFlesh:
 		return MaxStackCount, true
 	case ItemStonePickaxe, ItemIronPickaxe,
 		ItemBrokenStonePickaxe, ItemBrokenIronPickaxe,

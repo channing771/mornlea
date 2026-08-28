@@ -158,6 +158,13 @@ func serverPacketID(state State, packet ServerPacket) (uint32, bool) {
 		// 格子工作台的网格状态：始终完整 9 格 + 产物格，只发所属玩家。
 		case CraftingState:
 			return 21, true
+		// 夜行者三类 S→C 消息：spawn/state/despawn 依次占用 22/23/24。
+		case HostileSpawn:
+			return 22, true
+		case HostileState:
+			return 23, true
+		case HostileDespawn:
+			return 24, true
 		}
 	}
 	return 0, false
@@ -226,6 +233,13 @@ func serverPacketForID(state State, id uint32) (ServerPacket, bool) {
 			return PlaceBlockSucceeded{}, true
 		case 21:
 			return CraftingState{}, true
+		// 夜行者三类 S→C 消息：与 `serverPacketID` 的 22/23/24 对称。
+		case 22:
+			return HostileSpawn{}, true
+		case 23:
+			return HostileState{}, true
+		case 24:
+			return HostileDespawn{}, true
 		}
 	}
 	return nil, false

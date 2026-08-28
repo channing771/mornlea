@@ -12,7 +12,11 @@ import (
 )
 
 const (
-	maxAvatars          = 11
+	// maxAvatars 是共享渲染通道的每帧身体上限（75 具 × 6 部件 = 450 个
+	// 80-byte instance），与 Rust 侧 `AVATAR_MAX_INSTANCES` 同源同步；夜行
+	// 者上线后按「玩家 + 伙伴 + 敌怪」的合计呈现预留，第 76 具在帧边界被
+	// App 层稳定拒绝。
+	maxAvatars          = 75
 	avatarPartsPerBody  = 6
 	maxAvatarParts      = maxAvatars * avatarPartsPerBody
 	avatarInstanceBytes = 80
@@ -36,12 +40,27 @@ const (
 	EntityCompanion EntityKind = 2
 	// EntityTarget 表示当前方块目标名牌域。
 	EntityTarget EntityKind = 3
+	// EntityHostile 表示夜行者等敌怪身份域；编号 3 已被 EntityTarget 实占，
+	// 敌怪取下一个空闲值以保持键域两两不相交。
+	EntityHostile EntityKind = 4
 )
 
 // EntityKey 由身份域和独立的 16-byte ID 组成。
 type EntityKey struct {
 	Kind EntityKind
 	ID   [16]byte
+}
+
+// HostileEntityKey 把夜行者的 u64 稳定 ID 写进 16-byte 键槽位（little-endian
+// 占低 8 字节、高 8 字节保持零）：身份域由 Kind 隔离，ID 槽位只需在域内
+// 一一对应。
+func HostileEntityKey(id uint64) EntityKey {
+	var key EntityKey
+	key.Kind = EntityHostile
+	for index := range 8 {
+		key.ID[index] = byte(id >> (8 * index))
+	}
+	return key
 }
 
 func compareEntityKeys(left, right EntityKey) int {
@@ -100,6 +119,10 @@ func orderedAvatarsInto(dst []Avatar, avatars []Avatar) []Avatar {
 
 func buildOrderedAvatarParts(dst []avatarPart, ordered []Avatar) []avatarPart {
 	for _, avatar := range ordered {
+		if avatar.Key.Kind == EntityHostile {
+			dst = appendHostileAvatarParts(dst, avatar)
+			continue
+		}
 		root := mgl32.Translate3D(avatar.Position[0], avatar.Position[1], avatar.Position[2]).Mul4(
 			mgl32.HomogRotate3DY(avatar.Yaw),
 		)
@@ -117,6 +140,42 @@ func buildOrderedAvatarParts(dst []avatarPart, ordered []Avatar) []avatarPart {
 			avatarCuboid(root, mgl32.Vec3{0.1, 0.35, 0}, mgl32.Vec3{0.18, 0.7, 0.25}, avatarShade(base, 0.82)),
 		)
 	}
+	return dst
+}
+
+// hostilePalette 是夜行者的原创固定调色：暗青基底（蓝绿主导）与灰紫头部
+// （红蓝主导且互相接近）。它不进入玩家/伙伴共用的 per-ID 调色板，与全部
+// 共用槽位不重合；数值为原创设计，不取自任何第三方资源。
+var (
+	hostileBaseColor = [4]float32{0.22, 0.48, 0.52, 0.9}
+	hostileHeadColor = [4]float32{0.45, 0.4, 0.5, 0.9}
+)
+
+const (
+	hostileLimbShade = float32(0.78)
+	hostileHeadShade = float32(1.1)
+)
+
+// appendHostileAvatarParts 追加一只夜行者的 6 个 cuboid：与玩家同构的双臂
+// 双腿直立骨架，但头身比例刻意不同——头部更大（0.72 宽）、躯干更短
+// （0.55 高）、手臂更长（0.85），叠加灰紫头部与暗青躯干构成与玩家/伙伴
+// 一眼可辨的原创轮廓。身体仍锚定在站位 Y（脚底），俯仰只作用于头部。
+func appendHostileAvatarParts(dst []avatarPart, avatar Avatar) []avatarPart {
+	root := mgl32.Translate3D(avatar.Position[0], avatar.Position[1], avatar.Position[2]).Mul4(
+		mgl32.HomogRotate3DY(avatar.Yaw),
+	)
+	head := root.Mul4(mgl32.Translate3D(0, 1.5, 0)).
+		Mul4(mgl32.HomogRotate3DX(avatar.Pitch)).
+		Mul4(mgl32.Translate3D(0, 0.25, 0)).
+		Mul4(mgl32.Scale3D(0.72, 0.5, 0.72))
+	dst = append(dst,
+		avatarPart{transform: head, color: avatarShade(hostileHeadColor, hostileHeadShade)},
+		avatarCuboid(root, mgl32.Vec3{0, 1.0, 0}, mgl32.Vec3{0.34, 0.55, 0.22}, hostileBaseColor),
+		avatarCuboid(root, mgl32.Vec3{-0.23, 0.98, 0}, mgl32.Vec3{0.1, 0.85, 0.2}, avatarShade(hostileBaseColor, hostileLimbShade)),
+		avatarCuboid(root, mgl32.Vec3{0.23, 0.98, 0}, mgl32.Vec3{0.1, 0.85, 0.2}, avatarShade(hostileBaseColor, hostileLimbShade)),
+		avatarCuboid(root, mgl32.Vec3{-0.09, 0.275, 0}, mgl32.Vec3{0.15, 0.55, 0.2}, avatarShade(hostileBaseColor, hostileLimbShade)),
+		avatarCuboid(root, mgl32.Vec3{0.09, 0.275, 0}, mgl32.Vec3{0.15, 0.55, 0.2}, avatarShade(hostileBaseColor, hostileLimbShade)),
+	)
 	return dst
 }
 
@@ -171,6 +230,11 @@ func AvatarColor(playerID core.PlayerID) [4]float32 {
 func avatarColor(key EntityKey) [4]float32 {
 	if key.Kind == EntityPlayer {
 		return AvatarColor(core.PlayerID(key.ID))
+	}
+	if key.Kind == EntityHostile {
+		// 夜行者使用固定原创调色：不按 ID 索引共用调色板，颜色域与玩家/
+		// 伙伴全部槽位天然隔离。
+		return hostileBaseColor
 	}
 	if key.Kind != EntityCompanion {
 		panic("render: avatar color requires player or companion key")

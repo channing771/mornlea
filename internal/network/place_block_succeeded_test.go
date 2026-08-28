@@ -45,10 +45,10 @@ func TestProtocolV26PlaceBlockSucceededRegistryBoundary(t *testing.T) {
 	if _, ok := registered.(PlaceBlockSucceeded); !ok {
 		t.Fatalf("Play S→C ID 20=%T，想要 PlaceBlockSucceeded", registered)
 	}
-	if _, ok := serverPacketForID(StatePlay, 22); ok {
-		t.Fatal("Play S→C ID 22 必须保持未分配")
+	if _, ok := serverPacketForID(StatePlay, 25); ok {
+		t.Fatal("Play S→C ID 25 必须保持未分配")
 	}
-	if _, err := decodeServerControlPayload(StatePlay, 22, nil); !errors.Is(err, errUnknownPacketID) {
-		t.Fatalf("Play S→C ID 22 解码错误=%v，想要 %v", err, errUnknownPacketID)
+	if _, err := decodeServerControlPayload(StatePlay, 25, nil); !errors.Is(err, errUnknownPacketID) {
+		t.Fatalf("Play S→C ID 25 解码错误=%v，想要 %v", err, errUnknownPacketID)
 	}
 }

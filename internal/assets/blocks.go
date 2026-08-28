@@ -242,24 +242,25 @@ func NewRegistry() *Registry {
 }
 
 // Opaque 返回方块是否完全不透明。实现 mesh.Registry。
-// 流体（IsFluid）与玻璃、树叶一样是透明方块。
 //
-// 这里的 `!core.IsFluid(id)` 是一条与 mesh snapshot 范围无关、恒成立的事实，
-// **不得删除**：internal/mesh/visibility.go 的 ComputeConnectivity 洪水填充
-// 直接拿活体 Section 的方块数据调用本函数，那条路径根本不经过快照。若删掉
-// 这处排除，整片水会被当成实心遮挡体，区段面连通性塌成全不可达，进而错误
-// 剔除水体后方的整批区段。守卫见 internal/mesh 的
+// 不透明判定完全转调 core.BlockOpaque——那是全仓唯一的不透明判定表，本包不得
+// 保留任何重复分支；新增透明或实心方块只改 core 一张表，这里与 mesh registry
+// 快照自动跟随（与 Emission/LightAttenuation 的转调同形）。
+//
+// 这条转调必须保持**无条件**：internal/mesh/visibility.go 的
+// ComputeConnectivity 洪水填充直接拿活体 Section 的方块数据调用本函数，那条
+// 路径根本不经过快照。core 表对流体判 false，若在这里或 core 里丢掉这条排除，
+// 整片水会被当成实心遮挡体，区段面连通性塌成全不可达，进而错误剔除水体后方
+// 的整批区段。守卫见 internal/mesh 的
 // TestConnectivityTreatsFluidAsTransparentOnLiveSectionData。
-// 作物（core.IsCrop）同样在排除之列：它与玻璃、树叶同属 cutout 类，几何是方块
-// 内部的两片交叉斜面，既不填满格子也不该挡光。这一条直接决定了「作物下方的耕地
-// 仍被照亮」——Rust 天空光 BFS 的阻断判据就是本函数（light.rs 的 build_sky 只看
-// opaque），作物一旦不透明，它下方那格的派生天空光会归零、耕地顶面变全黑。
-// 火把（core.IsTorch）与作物同类排除：零碰撞的窄柱/贴墙形态既不填满格子也不
-// 遮挡邻面，且自身是发光体，被判成不透明会同时挡死邻域光照与出面。
+// core 表对作物同样判 false：作物与玻璃、树叶同属 cutout 类，几何是方块内部
+// 的两片交叉斜面，既不填满格子也不该挡光。这一条直接决定了「作物下方的耕地
+// 仍被照亮」——Rust 天空光 BFS 的阻断判据就是本函数（light.rs 的 build_sky
+// 只看 opaque），作物一旦不透明，它下方那格的派生天空光会归零、耕地顶面变全黑。
+// 火把与作物同类判 false：零碰撞的窄柱/贴墙形态既不填满格子也不遮挡邻面，且
+// 自身是发光体，被判成不透明会同时挡死邻域光照与出面。
 func (r *Registry) Opaque(id world.BlockID) bool {
-	return core.RegisteredBlock(id) && id != core.AirID && id != core.GlassID &&
-		id != core.LeavesID && !core.IsFluid(id) && !core.IsCrop(id) && !core.IsDoor(id) &&
-		!core.IsTorch(id)
+	return core.BlockOpaque(id)
 }
 
 // FaceVisible 返回当前方块朝向相邻方块的面是否可绘制。实现 mesh.Registry。

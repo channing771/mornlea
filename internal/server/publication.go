@@ -27,6 +27,9 @@ func (server *Server) publishWithChats(result sim.TickResult, chats []chatDelive
 			definitions[definition.ID] = definition
 		}
 	}
+	// 夜行者发布走 tick 末的单一值快照（Engine 集合秩序即 ID 升序）：集合
+	// 为空时容量为 0 的 make 不产生分配，无夜行者的世界不为此付出代价。
+	hostiles := server.engine.HostileMobs()
 	for _, id := range server.sortedPublicationIDsLocked() {
 		current := server.publicationSessionLocked(id)
 		if current == nil || current.closed() {
@@ -34,10 +37,10 @@ func (server *Server) publishWithChats(result sim.TickResult, chats []chatDelive
 		}
 		if observer := server.config.InterestObserver; observer != nil {
 			started := time.Now()
-			server.publishSession(current, result, players, definitions, chats)
+			server.publishSession(current, result, players, definitions, chats, hostiles)
 			observer(time.Since(started))
 		} else {
-			server.publishSession(current, result, players, definitions, chats)
+			server.publishSession(current, result, players, definitions, chats, hostiles)
 		}
 	}
 }
@@ -48,6 +51,7 @@ func (server *Server) publishSession(
 	players map[sim.SessionID]sim.PlayerUpdate,
 	definitions map[companion.ID]companion.Definition,
 	chats []chatDelivery,
+	hostiles []sim.HostileMob,
 ) {
 	companions, ok := server.companionPublicationCandidates(current, result.Companions, definitions)
 	if !ok {
@@ -73,6 +77,9 @@ func (server *Server) publishSession(
 		return
 	}
 	if !server.publishRemoteSpawnsAndStates(current, result.Tick, players) {
+		return
+	}
+	if !server.publishHostiles(current, result.Tick, hostiles) {
 		return
 	}
 	if !server.publishDrops(current, result.Tick) {

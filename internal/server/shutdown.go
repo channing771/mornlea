@@ -70,6 +70,9 @@ func (server *Server) Shutdown(ctx context.Context) error {
 		if server.companionManager != nil {
 			server.companionManager.beginShutdown()
 		}
+		if server.hostileManager != nil {
+			server.hostileManager.beginShutdown()
+		}
 		server.engine.Step()
 		if server.companions != nil {
 			server.companions.Observe(
@@ -77,6 +80,11 @@ func (server *Server) Shutdown(ctx context.Context) error {
 				server.companionManagerTaskStates(),
 				server.companionManagerSummaries(),
 			)
+		}
+		if server.hostiles != nil {
+			// 关服最终快照与伙伴同一时点冻结：末次 `engine.Step` 之后、会话
+			// 拆除之前，目标等权威事实不因拆除而漂移。
+			server.hostiles.Observe(server.engine.HostileMobs())
 		}
 		if hasTrustedCenter {
 			server.appliedTrustedObserver = appliedTrustedObserverCenter{
@@ -119,6 +127,15 @@ func (server *Server) Shutdown(ctx context.Context) error {
 			)
 		}
 	}
+	// 夜行者关服屏障失败同样整体失败：存档可能落后于权威事实，绝不谎报成
+	// 功——可重试的关服状态由本函数的 phase 语义保留。
+	if server.hostiles != nil {
+		if err := server.hostiles.Flush(ctx); err != nil {
+			return server.persistenceErrorWithContext(
+				fmt.Errorf("flush hostiles: %w", err), ctx,
+			)
+		}
+	}
 	if server.storePhase == storeShutdownNeedsSync {
 		if err := server.store.Sync(ctx); err != nil {
 			return server.persistenceErrorWithContext(fmt.Errorf("sync world: %w", err), ctx)
@@ -137,8 +154,14 @@ func (server *Server) Shutdown(ctx context.Context) error {
 	if server.companions != nil {
 		server.companions.Close()
 	}
+	if server.hostiles != nil {
+		server.hostiles.Close()
+	}
 	if server.companionManager != nil {
 		server.companionManager.close()
+	}
+	if server.hostileManager != nil {
+		server.hostileManager.close()
 	}
 	server.cancelSaves()
 	<-server.saveDone

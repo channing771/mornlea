@@ -32,6 +32,13 @@ type companionChunkView struct {
 // chunkViewAt 构造以 position 为中心的 3×3 区块视图。只拷贝当前 Ready 的区块；
 // 调用方决定未就绪区块的处理策略（规划快照跳过缺失列，寻路顺延）。
 func (m *companionManager) chunkViewAt(dimension core.DimensionID, position [3]float32) companionChunkView {
+	return companionChunkViewFor(m.engine, dimension, position)
+}
+
+// companionChunkViewFor 是区块视图构造的包级实现：伙伴与夜行者两套编排共用
+// 同一份「深拷贝即隔离」的世界读取纪律（构造只发生在持有 stepMu 的 tick 边
+// 界，拷贝出的区块与权威世界的一切后续变化无关）。
+func companionChunkViewFor(engine *sim.Engine, dimension core.DimensionID, position [3]float32) companionChunkView {
 	center := (core.BlockPos{
 		X: int32(math.Floor(float64(position[0]))),
 		Z: int32(math.Floor(float64(position[2]))),
@@ -46,7 +53,7 @@ func (m *companionManager) chunkViewAt(dimension core.DimensionID, position [3]f
 				Dimension: dimension,
 				Pos:       core.ChunkPos{X: center.X + dx, Z: center.Z + dz},
 			}
-			chunk, revision, ready := m.engine.CloneReadyChunk(key)
+			chunk, revision, ready := engine.CloneReadyChunk(key)
 			if !ready {
 				continue
 			}
@@ -380,18 +387,29 @@ func (m *companionManager) buildPathGrid(
 // 重验是 Running 任务每 tick 的热路径，只读 ChunkInfo 的 revision 元数据，
 // 不做区块深拷贝；结果按 (X,Z) 字典序升序。
 func (m *companionManager) windowRevisions(body companion.Body) []pathfind.ChunkRevision {
+	return chunkRevisionsAround(m.engine, body.Dimension, body.Position)
+}
+
+// chunkRevisionsAround 是 3×3 兴趣区块 revision 读取的包级实现：伙伴与夜行
+// 者的 waypoint 重验消费同一份「只读 revision 元数据」的廉价路径，缺失或未
+// ready 的区块直接跳过（重验方按「结果 revision 必须全部命中」裁决）。
+func chunkRevisionsAround(
+	engine *sim.Engine,
+	dimension core.DimensionID,
+	position [3]float32,
+) []pathfind.ChunkRevision {
 	center := (core.BlockPos{
-		X: int32(math.Floor(float64(body.Position[0]))),
-		Z: int32(math.Floor(float64(body.Position[2]))),
+		X: int32(math.Floor(float64(position[0]))),
+		Z: int32(math.Floor(float64(position[2]))),
 	}).Chunk()
 	revisions := make([]pathfind.ChunkRevision, 0, 9)
 	for dx := int32(-companionViewRadiusChunks); dx <= companionViewRadiusChunks; dx++ {
 		for dz := int32(-companionViewRadiusChunks); dz <= companionViewRadiusChunks; dz++ {
 			key := core.ChunkKey{
-				Dimension: body.Dimension,
+				Dimension: dimension,
 				Pos:       core.ChunkPos{X: center.X + dx, Z: center.Z + dz},
 			}
-			info, ok := m.engine.ChunkInfo(key)
+			info, ok := engine.ChunkInfo(key)
 			if !ok || info.State != sim.ChunkReady {
 				continue
 			}

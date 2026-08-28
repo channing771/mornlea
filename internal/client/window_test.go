@@ -19,14 +19,16 @@ func buildSnapshot(mutate func([]byte)) []byte {
 }
 
 func TestClientABIVersionMatchesHeader(t *testing.T) {
-	// v9:设置页 layout v2 与结构化事件批取代裸按钮 id；v8 是 egui 菜单
-	// 两出口与帧 UI 段。变基重编:v5 归 main 的 water pass,远环 tile 出口
-	// v6、雾 setter v7、菜单 UI v8、设置事件 v9。
-	if got := ClientABIVersion(); got != 9 {
-		t.Fatalf("client ABI version=%d,想要 9", got)
+	// v10:avatar 通道扩至 75 具身体（450 实例）与敌怪身份域；v9 是设置页
+	// layout v2 与结构化事件批。变基重编:v5 归 main 的 water pass,远环
+	// tile 出口 v6、雾 setter v7、菜单 UI v8、设置事件 v9。
+	// 导出版本与编译期 header 常量必须逐位一致：加载低于 v10 的旧动态库
+	// 会在首个 FFI 入口被稳定拒绝（STATUS_ABI_VERSION），不产生半启动。
+	if got := ClientABIVersion(); got != 10 {
+		t.Fatalf("client ABI version=%d,想要 10", got)
 	}
-	if got := clientABIHeaderVersion(); got != 9 {
-		t.Fatalf("client header ABI version=%d,想要 9", got)
+	if got := clientABIHeaderVersion(); got != 10 {
+		t.Fatalf("client header ABI version=%d,想要 10", got)
 	}
 }
 

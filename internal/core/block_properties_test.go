@@ -117,6 +117,50 @@ func TestBlockLightAttenuationExhaustiveMatrix(t *testing.T) {
 	}
 }
 
+// TestBlockOpaqueExhaustiveMatrix 穷举全部已注册方块的不透明判定，判据以既有
+// internal/assets 的 Registry.Opaque 实际实现为准（迁移单一表时逐值保真，本测试
+// 就是迁移后的权威锚点）：已注册且不是空气、玻璃、树叶、流体、作物、门、火把
+// 的方块一律不透明。注意判据比「非 air/glass/leaves/fluid/作物」更严：门是
+// 厚度 3/16 的薄板、火把是零碰撞的发光形态，二者都不填满格子，同样判 false；
+// 屏障虽不可见，但现行表按普通实心立方体判 true，这里一并锁定以免迁移走样。
+// core.BlockOpaque 是全仓唯一的不透明判定表：客户端注册表（internal/assets 的
+// Opaque 只做转调）与服务端夜行者的局部暗度判定都消费这里，不允许出现第二套。
+func TestBlockOpaqueExhaustiveMatrix(t *testing.T) {
+	for id := core.AirID; id < core.BlockIDMax; id++ {
+		want := core.RegisteredBlock(id) && id != core.AirID && id != core.GlassID &&
+			id != core.LeavesID && !core.IsFluid(id) && !core.IsCrop(id) && !core.IsDoor(id) &&
+			!core.IsTorch(id)
+		if got := core.BlockOpaque(id); got != want {
+			t.Fatalf("BlockOpaque(%d) = %v，想要 %v", id, got, want)
+		}
+	}
+	// 关键取值点名：普通实心立方体（含干湿耕地与工作台）不透明；透明类逐类点名。
+	for _, id := range []core.BlockID{
+		core.StoneID, core.BedrockID, core.FarmlandDryID, core.FarmlandWetID,
+		core.WorkbenchID, core.BarrierID, core.LightBlockID,
+	} {
+		if !core.BlockOpaque(id) {
+			t.Fatalf("BlockOpaque(%d) = false，普通实心立方体必须不透明", id)
+		}
+	}
+	for _, id := range []core.BlockID{
+		core.AirID, core.GlassID, core.LeavesID, core.WaterSourceID, core.WaterLevel7ID,
+		core.WheatStage0ID, core.PotatoStage7ID, core.CarrotStage3ID,
+		core.DoorLowerSouthClosed, core.DoorUpper,
+		core.TorchStandingID, core.TorchWallNegZID,
+	} {
+		if core.BlockOpaque(id) {
+			t.Fatalf("BlockOpaque(%d) = true，透明类方块不得判为不透明", id)
+		}
+	}
+	// 未知/越界编号：哨兵、哨兵之后一格与远端编号都必须稳定返回 false。
+	for _, id := range []core.BlockID{core.BlockIDMax, core.BlockIDMax + 1, core.BlockID(65535)} {
+		if core.BlockOpaque(id) {
+			t.Fatalf("BlockOpaque(%d) = true，越界编号必须返回 false", id)
+		}
+	}
+}
+
 // TestPlaceableBlockAtFaceTorchPerFace 覆盖 spec Scenario「火把逐面映射」：
 // 顶面 → 落地形态，四个水平侧面 → 形态名与命中面同名的墙面形态，底面拒绝。
 // 支撑格恒位于命中面的反方向（face.Opposite()），该契约由放置执行方消费，
