@@ -91,3 +91,13 @@
 - ledger「内容确认记录」与「重定基线裁决」两节已全文誊录既有批准结论（q1/q2、批准轮与 2026-08-28 重定基线各裁决），与 proposal/design/tasks 现文逐项一致：批次合流取消、本行自带协议 v30/client ABI v10/`hostile_mobs` v1/golden 同步、S→C 编号取 22/23/24（实现期以注册表实占空闲位为准）、发光/衰减表走「直接消费 + 只新增 `BlockOpaque`」路径、与并行床行仅共享 `DisplayDayPhase(ticks, offset)`（本行 offset 恒 0）。
 - 上述事实核对 a–f 与 design「Context」记载的基线逐项吻合，未发现偏差。
 - 结论：Task 1 通过，无需修复，可进入 Task 2。
+
+## 集成记录（rebase 到 f1496847，2026-08-28）
+
+分支 rebase 到 `origin/main`（`f1496847`，含网络 TCP 子包拆分与 core-only 寻路包提取两个已合并变更），19 个提交全部重放，提交边界与提交信息不变。语义性适配共三处：
+
+- `internal/server/companion_snapshot.go`：解冲突时保留本行的包级提取（`companionChunkViewFor`/`chunkRevisionsAround`），区块 revision 类型对齐 main 现行的 `pathfind.ChunkRevision`——两套编排继续共享同一视图构造与 revision 读取路径。
+- `internal/server/hostile_manager.go` 与 `hostile_manager_test.go`：寻路符号（`PathGrid`/`FindPath`/`PathWindow`/`PathPolicy`/`PathCell`/`ChunkRevision` 等）自 `internal/companion` 改指 `internal/pathfind`，符号名与语义不变。
+- `TestHostileMessagesRoundTripMemoryAndTCP` 自 `internal/network/message_hostile_test.go` 迁入 `internal/network/tcp/transport_consistency_test.go`（TCP 拆分后 `transportOpeners`/`testIdentity` 归属 tcp 包）：测试逻辑与 fixture 数值不变，符号改为 `network.` 限定，fixture 在 tcp 包内落为本地 helper；其余敌怪 codec 测试留在原文件。
+
+集成后验证（数值只记录）：`make rust` 通过；`go build ./...`、`go vet ./...`、`gofmt -l .`（无输出）通过；`go test ./... -race -count=1` 全部 `ok`（server 235.215s、cmd/mornlea 326.727s、sim 60.165s 等，exit 0）；`go test ./internal/archcheck -count=1` 通过（5.864s）；`openspec validate --all --strict --no-interactive` 73 passed, 0 failed；`make visual-check` exit 0，22/22 场景最大通道差 0。
