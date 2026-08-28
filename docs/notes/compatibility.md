@@ -4,7 +4,7 @@
 
 ## 线上协议
 
-- 线上协议为 v31（`internal/network` 的 `ProtocolVersion`）；所有不匹配版本都会在握手阶段、进入 Play 前被稳定拒绝，不提供版本协商或降级解码；更早版本的逐版语义见 `internal/network/packet.go` 顶部注释；
+- 线上协议为 v31（定义在 `internal/network/protocol` 的 `ProtocolVersion`，根包 `internal/network` 别名再导出）；所有不匹配版本都会在握手阶段、进入 Play 前被稳定拒绝，不提供版本协商或降级解码；更早版本的逐版语义见 `internal/network/protocol/packet.go` 顶部注释；
 - 近几版协议全部是既有 packet 尾部追加或新增消息，不改变任何既有长度上限，也不新增 `RejectReason`：
   - v26 新增 Play S→C ID 20 `PlaceBlockSucceeded(sequence)`，只回发给放置发起会话作为成功放置确认；
   - v27 新增 Play C→S ID 14 `BoneMeal`，与 `TillSoil` 同形（序号 + 朝向），目标格由权威射线决定；

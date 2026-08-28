@@ -116,7 +116,7 @@ jobs:
       - name: Agent Hooks 策略测试
         run: node --test scripts/agent-hooks/guard.test.mjs
       - name: 架构、存储与协议门禁
-        run: go test ./internal/archcheck ./internal/storage/... ./internal/network ./internal/physics -v
+        run: go test ./internal/archcheck ./internal/storage/... ./internal/network/... ./internal/physics -v
       - name: Race 分片全集自检
         run: |
           go list ./... | sort -u > /tmp/all-packages.txt
