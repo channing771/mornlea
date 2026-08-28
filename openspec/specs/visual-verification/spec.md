@@ -479,3 +479,45 @@
 - **WHEN** 检查其外接矩形边缘
 - **THEN** 边缘 MUST 存在 alpha=0 的透明像素，证明不是实心矩形精灵
 
+### Requirement: 夜行者无窗口场景
+
+无窗口 capture 场景表 SHALL 新增 `hostile-mob` 场景，位于 `ai-companion` 之后、`water-surface-slope` 之前；`water-underwater` MUST 仍为唯一末场景、`far-horizon` MUST 仍为倒数第二。场景 MUST 装入固定夜间确定性夹具：火把边缘固定位置呈现 8 只夜行者（其中一只处于受击状态、一只处于追逐中），场景 MUST 经与交互客户端相同的完整呈现链路无窗口抓取，MUST NOT 创建或聚焦前台游戏窗口，并 MUST 继续使用既有双阈值比对。本变更 SHALL 携带该场景的 golden PNG（torch-night 先例，场景总数 21→22 口径），并在归档时把新增场景同步进主规格。
+
+#### Scenario: 场景表顺序与导出
+
+- **GIVEN** 完整 capture 场景表
+- **WHEN** 检查 `ai-companion` 之后的场景
+- **THEN** `hostile-mob` MUST 位于 `ai-companion` 之后、`water-surface-slope` 之前，`far-horizon` MUST 为倒数第二，`water-underwater` MUST 为唯一末场景
+- **AND** 抓帧运行 MUST 产出 `hostile-mob` 图像
+
+#### Scenario: 夹具确定性且无名标
+
+- **GIVEN** `hostile-mob` 夹具已装入客户端镜像（8 只夜行者，1 只受击、1 只追逐）
+- **WHEN** 场景完成预热、网格收敛与上传并抓帧
+- **THEN** 图像 MUST 同时显示 8 只夜行者人形，其中 MUST 可辨认受击与追逐呈现，MUST NOT 出现任何相关名称标签，并 MUST 与既有双阈值保持一致
+- **AND** 场景结束后临时夜行者、受击与追逐状态 MUST 一并恢复，使后续场景不继承任何夹具值
+
+#### Scenario: 无窗口完整链路
+
+- **GIVEN** `hostile-mob` 场景使用固定夜间世界时间与固定相机
+- **WHEN** 生成或比对 `hostile-mob`
+- **THEN** 抓帧 MUST 使用与交互客户端相同的完整呈现链路，MUST NOT 创建或聚焦前台游戏窗口
+
+
+### Requirement: `bed-night` 无窗口夜景场景
+
+无窗口 capture MUST 提供 `bed-night` 场景（位于 `torch-night` 之后、`ai-companion` 之前；`far-horizon` MUST 仍为倒数第二、`water-underwater` MUST 仍为唯一末场景）：固定夜间卧室内同时呈现至少两种朝向的床形态，并用像素差证明床的原创配色与半高轮廓在夜间光照下可辨认。场景 MUST 经与交互客户端相同的完整呈现链路收敛后抓取，MUST NOT 创建或聚焦任何前台窗口；其 golden 由本变更经显式基线更新写入并逐图人工复核，MUST NOT 通过放宽双阈值接受差异。
+
+#### Scenario: 场景可构造且包含多朝向
+
+- **GIVEN** `bed-night` 场景构造代码
+- **WHEN** 无窗口运行该场景
+- **THEN** 场景 MUST 至少包含两个不同朝向的完整床形态（床头与床尾同框）
+- **AND** 运行不得创建或聚焦前台窗口
+
+#### Scenario: 夜间配色可辨认且不污染后续场景
+
+- **GIVEN** `bed-night` 场景完成预热、收敛与抓帧
+- **WHEN** 与其 golden 按既有双阈值比对
+- **THEN** 比对 MUST 通过，且床的配色与半高轮廓 MUST 可从图像辨认
+- **AND** 场景结束后临时床与时间夹具 MUST 一并恢复，使后续场景不继承任何夹具值
