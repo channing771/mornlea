@@ -42,14 +42,16 @@ func TestHotbarTextureAtlasUIIconsAreDistinctBinaryAndDeterministic(t *testing.T
 
 	registry := assets.NewRegistry()
 	pixels := buildHotbarTextureAtlas(registry)
+	// 钉值随图标 mask 精修（design D6）更新：精修前的旧基线摘要保留在
+	// atlas_mask_test.go，用于守护「不得回退到旧剪影」。
 	wantPixels := [...]string{
-		"bdb177bfce78a5bca1d04eed6b6ce954f222cfb0f41b43a8813ea32054ee4d26",
-		"9eef31f2c9548f026ce5988bf3b3f6cb5ad592c25b111d58a5adfc48272c6224",
-		"cb940fd384be20ccc48135828d0b7dcd9286130215295f73d2de3ebb276a4416",
-		"7aad989947193a882c88f7210afae1fbebce180ba22ea3d1926253b0b47af365",
-		"3d60edf7c03d74fa7c2bbf184f144a80105bfe743da689f21c45a320eeae50f9",
-		"deb1316bf75c14273ce8e47781bf12f4c93d2f0af03e034db6d57befe40e4e9a",
-		"ef98ab478ef3e8f276feacce353bd021012ba2ecfc6e9bf18eda47ea4510bfe5",
+		"5cd8aad2c1fabdc318af4b38bcb467a2382a357abfe475f27ca116d1c0bb7779",
+		"4778bb86c328352b28b59400bb631a0f6ec94c455b354c9708e7a1eb61b6d74f",
+		"417b62b97d40a9d10461de45848693a579a55d743ced3a51bbd2c5147ea024d9",
+		"d76a113889779a438a631fee9cbcc1e3b3b1fd975b52116f66fea0b6aa626870",
+		"0d1a6cd057e2bfa51e9b5b78c21ece3e53abd756af2d0e95917cf9b7ecd90072",
+		"4a9077aeb6129c8ce99ca65422591c6e905876b9a23b738c3ad50e5e0a43c2d0",
+		"21cd4f6f480aecdb7c1071cd908f97d9cce0b2822292897be97798697e55473d",
 	}
 	for column, want := range wantPixels {
 		got := sha256.Sum256(hotbarTextureCell(pixels, column))

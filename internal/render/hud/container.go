@@ -121,7 +121,7 @@ func appendFurnaceRow(
 	dst.quads = append(dst.quads, hotbarInstance{
 		X: panelX - padding, Y: barTop - padding - containerHeaderHeight*scale,
 		Width: panelWidth, Height: slotY + hotbarSlotSize*scale - barTop + 2*padding + containerHeaderHeight*scale,
-		Color: [4]float32{0.035, 0.05, 0.065, 0.96},
+		Color: panelSurface,
 	})
 	stacks := [3]core.ItemStack{overlay.Input, overlay.Fuel, overlay.Output}
 	slotUV := hotbarTextureUV(hotbarContainerSlotColumn)
@@ -156,7 +156,7 @@ func appendFurnaceRow(
 		y := barTop + float32(index)*(furnaceBarHeight+furnaceBarGap)*scale
 		dst.quads = append(dst.quads, hotbarInstance{
 			X: barX, Y: y, Width: barWidth, Height: furnaceBarHeight * scale,
-			Color: [4]float32{0.05, 0.05, 0.06, 0.62},
+			Color: miningTrackColor,
 		})
 		fraction := min(bar.fraction, 1)
 		if fraction <= 0 {
@@ -231,7 +231,7 @@ func appendChestGrid(
 	dst.quads = append(dst.quads, hotbarInstance{
 		X: left - padding, Y: top - padding - containerHeaderHeight*scale,
 		Width: totalWidth + 2*padding, Height: bottomY + hotbarSlotSize*scale - top + 2*padding + containerHeaderHeight*scale,
-		Color: [4]float32{0.035, 0.05, 0.065, 0.96},
+		Color: panelSurface,
 	})
 	slotUV := hotbarTextureUV(hotbarContainerSlotColumn)
 	for index := range core.ChestSlots {
@@ -318,7 +318,7 @@ func appendCraftingGrid(
 		X: left - padding, Y: top - padding - containerHeaderHeight*scale,
 		Width:  outputX + hotbarSlotSize*scale - left + 2*padding,
 		Height: bottomY + hotbarSlotSize*scale - top + 2*padding + containerHeaderHeight*scale,
-		Color:  [4]float32{0.035, 0.05, 0.065, 0.96},
+		Color:  panelSurface,
 	})
 	slotUV := hotbarTextureUV(hotbarContainerSlotColumn)
 	appendCraftingCell := func(stack core.ItemStack, x, y float32) {

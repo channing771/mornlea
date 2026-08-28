@@ -22,11 +22,6 @@ type EatingOverlay struct {
 	Progress float32
 }
 
-// eatingFillColor 是进食填充的固定暖金色：与 `miningHarvestableColor` 的绿、
-// `miningBlockedColor` 的橙都拉开距离，玩家靠颜色即可分辨三条同锚点进度条
-// （互斥保证它们永不同帧出现，颜色区分只为连续观看时的语义连贯）。
-var eatingFillColor = [4]float32{0.92, 0.78, 0.42, 0.95}
-
 // appendEatingBar 在永久预留的两行状态栈上方绘制进食进度条。
 //
 // 互斥判定在本函数内部：mining 激活时采掘优先，本函数一个实例都不追加——

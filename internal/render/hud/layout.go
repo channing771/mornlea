@@ -163,7 +163,7 @@ func layoutInventory(
 				Y:      sourceY - selectBorder,
 				Width:  slotSize + 2*selectBorder,
 				Height: slotSize + 2*selectBorder,
-				Color:  [4]float32{0.25, 0.72, 1, 0.98},
+				Color:  containerSourceHighlightColor,
 			})
 		}
 	}
@@ -249,26 +249,28 @@ func appendInventoryPanel(dst *hotbarLayout, open bool, width, height, scale flo
 	dst.quads = append(dst.quads, hotbarInstance{
 		X: left - padding, Y: top - padding,
 		Width: totalWidth + 2*padding, Height: hotbarY + hotbarSlotSize*scale - top + 2*padding,
-		Color: [4]float32{0.025, 0.03, 0.035, 0.88},
+		Color: panelShadow,
 	})
 	_, backpackBottomY := inventorySlotOrigin(core.InventorySlots-1, true, width, height)
 	innerPadding := padding * 0.5
+	// 打开态面板族：外层背衬与快捷栏行取投影色形成凹陷分组，背包表面取表面
+	// 色，分组分隔线取 1px 亮边令牌。仍然只有四层 quad，无描边实例。
 	dst.quads = append(dst.quads,
 		hotbarInstance{
 			X: left - innerPadding, Y: top - innerPadding,
 			Width:  totalWidth + 2*innerPadding,
 			Height: backpackBottomY + hotbarSlotSize*scale - top + 2*innerPadding,
-			Color:  [4]float32{0.045, 0.052, 0.06, 0.94},
+			Color:  panelSurface,
 		},
 		hotbarInstance{
 			X: left - innerPadding, Y: hotbarY - innerPadding,
 			Width: totalWidth + 2*innerPadding, Height: hotbarSlotSize*scale + 2*innerPadding,
-			Color: [4]float32{0.06, 0.052, 0.04, 0.94},
+			Color: panelShadow,
 		},
 		hotbarInstance{
 			X: left, Y: (backpackBottomY + hotbarSlotSize*scale + hotbarY) * 0.5,
 			Width: totalWidth, Height: scale * 2,
-			Color: [4]float32{0.25, 0.30, 0.34, 0.92},
+			Color: panelBorderLight,
 		},
 	)
 }
@@ -322,12 +324,12 @@ func appendDurabilityBarScaled(
 	y := slotY + (hotbarSlotSize-durabilityBarInset-durabilityBarHeight)*scale
 	dst.quads = append(dst.quads, hotbarInstance{
 		X: x, Y: y, Width: barWidth, Height: durabilityBarHeight * scale,
-		Color: [4]float32{0.05, 0.05, 0.06, 0.85},
+		Color: durabilityTrackColor,
 	})
 	fraction := float32(stack.Durability) / float32(maxDurability)
-	color := [4]float32{0.30, 0.78, 0.36, 0.95}
+	color := durabilityHealthyColor
 	if fraction < 0.25 {
-		color = [4]float32{0.90, 0.35, 0.25, 0.95}
+		color = durabilityLowColor
 	}
 	dst.quads = append(dst.quads, hotbarInstance{
 		X: x, Y: y, Width: barWidth * fraction, Height: durabilityBarHeight * scale,
@@ -524,7 +526,7 @@ func appendHotbarCountScaled(
 			Width:  glyph.Width * scale,
 			Height: glyph.Height * scale,
 			U0:     glyph.U0, V0: glyph.V0, U1: glyph.U1, V1: glyph.V1,
-			Color: [4]float32{0.02, 0.025, 0.03, 0.95},
+			Color: textPrimaryShadow,
 		})
 		penX += glyph.Advance * scale
 		if index+1 < length {
@@ -540,7 +542,7 @@ func appendHotbarCountScaled(
 			Width:  glyph.Width * scale,
 			Height: glyph.Height * scale,
 			U0:     glyph.U0, V0: glyph.V0, U1: glyph.U1, V1: glyph.V1,
-			Color: [4]float32{1, 0.94, 0.78, 1},
+			Color: textPrimaryFg,
 		})
 		penX += glyph.Advance * scale
 		if index+1 < length {
