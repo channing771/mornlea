@@ -5,7 +5,7 @@
 ## 1. Baseline And Leaf Packages
 
 - [x] 1.1 在变更 workspace 保存 `go test ./internal/sim -list '.*'` 的 Test、Benchmark、Fuzz 名称和全部 `t.Run` 标签清单；运行 `make rust`、`go test ./internal/sim ./internal/archcheck -race -count=1` 记录基线，并在 ledger 写入清单路径和输出摘要。
-- [ ] 1.2 新建 `internal/sim/contract`，迁移 `internal/sim/command.go` 的命令、拒绝、区块 ingress 与 tick 输出值，以及其余跨 package 的纯值 DTO；更新暂存根包和直接调用者，保留值形状、错误和测试入口。目标包：`internal/sim/contract`、原 command/publication 值定义及对应测试。验证：`go test ./internal/sim/contract ./internal/sim -race -count=1`。
+- [x] 1.2 新建 `internal/sim/contract`，迁移 `internal/sim/command.go` 的命令、拒绝、区块 ingress 与 tick 输出值，以及其余跨 package 的纯值 DTO；更新暂存根包和直接调用者，保留值形状、错误和测试入口。目标包：`internal/sim/contract`、原 command/publication 值定义及对应测试。验证：`go test ./internal/sim/contract ./internal/sim -race -count=1`。
 - [ ] 1.3 新建 `internal/sim/tuning`，迁移 `Tunables`、默认值、钳制和原子活动快照；让 config 与客户端调试装配直接消费新包，根包只作本阶段必要的临时内部调用。目标包：`internal/sim/tuning`、`internal/config`、`cmd/mornlea` 与相关测试。验证：`go test ./internal/sim/tuning ./internal/config ./cmd/mornlea -race -count=1`。
 
 ## 2. Realm State And Transaction
