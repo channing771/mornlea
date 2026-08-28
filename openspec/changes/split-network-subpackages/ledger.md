@@ -46,6 +46,77 @@
   「51 文件」系笔误——计划自身的 23+30 分解与行数实测一致；按「不强迫
   数字吻合、记录实测」纪律处理，proposal 采用实测值。
 
+## Task 4 实现记录（门禁与文档收尾）
+
+- 实现内容（纯文档与门禁同步，Go 代码零改动，`git status` 实证仅含下列
+  文件）：
+  - 重写 `internal/network/AGENTS.md` 为子树总纲（按
+    `docs/agents-md-style.md` 总纲骨架）：开头作用域段（声明本子树不放
+    `CLAUDE.md`）+ Directory Map（根包 types.go/stream.go/transport.go/
+    memory.go/login.go 与 protocol/codec/tcp 子包行）+ Dependency
+    Direction（根包 → {core, protocol, codec}；protocol → {core,
+    companion}；codec → {protocol, core}；tcp → 根包；拒绝反向导入与
+    codec→companion 边，强制点 `TestInternalDependenciesAreOneWay`）+
+    别名再导出政策（`network/types.go` 闭集别名、`ProtocolVersion` 定义
+    点在 `protocol/packet.go`）+ 既有信任边界/传输一致性/协议演进三大
+    契约保留（传输一致性一节的包职责句更新为新结构，其余措辞沿用）+
+    Documentation Sync Policy + Focused Verification 表（按改动域定点
+    命令，全子树命令 `go test ./internal/network/... -race -count=1`）。
+  - 新建 `internal/network/protocol/AGENTS.md`（密封接口与版本钉死、
+    冻结包 ID 注册表、Validate 契约、companion 常量同源契约四节 + 回归
+    测试组织 + 定点验证；节标题内嵌 `protocol/packet.go` 等真实路径，
+    点名测试经 `-list` 核实）。
+  - 新建 `internal/network/codec/AGENTS.md`（规范 uvarint 与字节原语、
+    编码原子性与分发、帧封装、上限守卫与 chunk snapshot、fuzz 与 golden
+    义务五节 + helper 中心与回归测试 + 定点验证；fuzz 冒烟示例命令
+    `-fuzz FuzzSmallPacketCodec -fuzztime 10s` 实测可执行）。
+  - `.github/workflows/ci.yml`「架构、存储与协议门禁」步骤
+    `./internal/network` → `./internal/network/...`；:266 M3C 微基准
+    步骤与其余行零改动（diff 实证）。`Makefile` `bench-multiplayer`
+    零改动（核对确认）。`tcp/AGENTS.md` 零改动。
+  - `docs/notes/test-quickstart.md` T0「协议 / 网络 / 存档」行
+    `./internal/network` → `./internal/network/...`（storage 部分原样）；
+    T3 race-required 域清单本就按包名列 `internal/network`，语义不变。
+  - `docs/architecture.md` §3/§4 网络边界句更新为「根包会话与传输编排
+    （stream 接口、endpoint 门面、登录状态机、Memory transport）+ 别名
+    再导出门面；protocol 持协议消息层，codec 持编解码与帧封装；tcp 边
+    不变」。
+  - `docs/notes/compatibility.md` ProtocolVersion 指涉更新为「定义在
+    `internal/network/protocol` 的 `ProtocolVersion`，根包
+    `internal/network` 别名再导出」，逐版语义注释路径同步指向
+    `internal/network/protocol/packet.go`。
+- archcheck：按 preflight-2 裁决本任务不改 `allowed` 表（Task 2/3 已
+  增量登记），仅复验通过。
+- 验证（同实现工作区实测，2026-08-28，darwin/arm64，go1.26.0；计时只
+  记录不设门槛）：
+  - `go test ./internal/archcheck -count=1` → `ok ... 5.531s`。
+  - `openspec validate --all --strict --no-interactive` →
+    `Totals: 77 passed, 0 failed (77 items)`。
+  - `go test ./internal/network/... -list '.*'` 剥离 `#` 行与空行后
+    197 项与 `baseline-test-list.txt` 排序 diff 为空（逐名一致）；分布
+    根包 43（Test 36 + Benchmark 7）、protocol 29、codec 92
+    （Test 86 + Fuzz 6）、tcp 33。
+  - `go test ./internal/network/... -bench . -benchtime 1x`（盲区预演，
+    数值只记录）：4 包 ok，52 条基准结果行全部可运行（含根包
+    `BenchmarkTCPLoopback*`）；代表值——`BenchmarkRemotePlayerStateCodec`
+    Encode 7.6 µs / Decode 9.3 µs、`BenchmarkWorstLegalChunkSnapshot`
+    Encode 205 µs / Decode 272 µs（compression-ratio 426.8、logical
+    196749 B、wire 461 B）、`BenchmarkTCPLoopbackPlayerInput` 117 µs、
+    `BenchmarkTCPLoopbackChunkSnapshot` 834 µs（0.55 MB/s）。1x 单样本
+    噪声大，不与既有记录比对。
+  - `make dev-check` → exit 0（wall 1m09s；内含 `gofmt -l .` 无输出与
+    `go vet ./...` 清洁，即收尾门禁 4.3 的 gofmt/vet 项；Go short 全 ok
+    含 network 四包；Rust fmt/clippy/单测 171+175 passed）。
+  - `make test-race`（`go test ./... -race`）→ exit 0，38 包 ok 零
+    FAIL；`internal/network` 2.786s、`codec` 2.236s、`protocol` 1.583s、
+    `tcp` 2.113s。
+- AGENTS.md 自查（`docs/agents-md-style.md` 清单）：节标题内嵌路径逐一
+  核实存在；点名测试函数全部经 `-list` 核实；无抄录的会漂移数值（上限
+  一律点名常量与测试）；与父级 `internal/AGENTS.md`/本总纲无重复条文
+  （跨包契约只在总纲陈述一次，子包指南以指针引用）；protocol/codec
+  目录无 `CLAUDE.md`；无任务编号。
+
+
 ## Task 3 实现记录（codec 子包）
 
 - 实现 SHA：`bc95ac24`（`refactor(network): extract codec subpackage with
@@ -260,3 +331,15 @@
   ./internal/network/...` → 清洁；`-list` 并集与基线 197 项逐名 diff 为空；
   附带 `go vet` 编译 9 个消费包（含测试）与 `gofmt -l` 全仓清洁；消费方与
   tcp 生产源码零改动（git status 实证）。
+
+
+## 完成记录
+
+- 2026-08-28：Task 1–4 全部完成，`tasks.md` 清单全勾。子树终态：
+  `internal/network` 根包（types.go 别名门面 + stream/transport/memory/
+  login + 会话测试与基准）、`protocol/`（12 生产文件 + 协议层测试）、
+  `codec/`（9 生产文件含 companion_wire.go/hostile_wire.go + 编解码测试
+  与 testdata）、`tcp/`（未动）。`-list` 并集终对照基线 197 项逐名一致；
+  收尾门禁（archcheck、openspec strict、dev-check、test-race、bench
+  预演）全绿，证据见 Task 4 节。待办：whole-branch review → 推送 →
+  CI（微基准盲区留意）→ 合并 → openspec archive → 清理。

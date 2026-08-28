@@ -23,7 +23,7 @@
 
 ## 2. protocol 子包（协议消息层）
 
-- [ ] 2.1 新建 `internal/network/protocol`（package protocol），以 `git mv`
+- [x] 2.1 新建 `internal/network/protocol`（package protocol），以 `git mv`
   迁移 `packet.go`、`message.go`、`message_chunk.go`、`message_command.go`、
   `message_companion.go`、`message_container.go`、`message_drop.go`、
   `message_hostile.go`、`message_inventory.go`、`message_player.go`、
@@ -34,13 +34,13 @@
   /`commandRejectReasonID`/`commandRejectReasonForID`，导出名按仓库命名习惯
   定并记 ledger）与 companion/hostile 的 wire 常量及 encode/decode 函数
   （临时导出，供仍留守根包的 codec 文件过渡调用）。
-- [ ] 2.2 新建根包 `types.go`：package doc（根包保留会话与传输编排 + 别名
+- [x] 2.2 新建根包 `types.go`：package doc（根包保留会话与传输编排 + 别名
   再导出保证）+ 全部迁移符号的别名再导出（类型/常量/错误/var 函数别名，
   逐个别名带中文注释说明归属与身份保证）；留守根包的 codec 文件改
   `protocol.` 限定调用；根包 `package network` 测试引用已迁移 unexported
   符号处就地 `protocol.` 限定或按被测主体提前随迁（测试函数名与 `t.Run`
   标签逐名保留，preflight 裁决记 ledger）。
-- [ ] 2.3 archcheck 登记 `"internal/network/protocol": {"internal/core",
+- [x] 2.3 archcheck 登记 `"internal/network/protocol": {"internal/core",
   "internal/companion"}`，根包边移除 internal/companion、新增 protocol 边。
   验证：`go build ./...`；`go test ./internal/network/... -race -count=1`；
   `go test ./internal/archcheck -count=1`；`-list` 并集与基线逐名一致；
@@ -48,14 +48,14 @@
 
 ## 3. codec 子包（编解码层）
 
-- [ ] 3.1 新建 `internal/network/codec`（package codec），以 `git mv` 迁移
+- [x] 3.1 新建 `internal/network/codec`（package codec），以 `git mv` 迁移
   `chunk_codec.go`、`codec.go`、`codec_client.go`、`codec_server.go`、
   `codec_values.go`、`codec_primitives.go`、`frame.go`；companion/hostile
   的 wire encode/decode 函数自 protocol 归位 codec（恢复 unexported，其
   调用点 `codec_server.go`/`codec_client.go` 回到包内直呼）；wire 常量留
   在 protocol 保持导出；包 ID 访问器与 `ValidateDecodedClientWirePacket`
   保持导出（codec 永久消费）；回收裁决逐项记 ledger。
-- [ ] 3.2 测试随迁（跟随被测主体）：codec 收 `chunk_codec_test.go`(+fuzz)、
+- [x] 3.2 测试随迁（跟随被测主体）：codec 收 `chunk_codec_test.go`(+fuzz)、
   `codec_fuzz_test.go`、`codec_golden_test.go`、`codec_invalid_test.go`、
   `codec_inventory_test.go`、`codec_helpers_test.go`、
   `codec_primitives_test.go`(+fuzz)、`frame_test.go`(+fuzz)、`drop_test.go`
@@ -66,7 +66,7 @@
   根包留 `login_test.go`/`memory_test.go`/`seed_test.go`/`benchmark_test.go`
   /`benchmark_helpers_test.go`；`testdata/chunk-snapshot-v1.bin` 迁至
   `internal/network/codec/testdata`（`git mv`，逐字节不变）。
-- [ ] 3.3 根 `types.go` 增补 codec 侧别名（`Codec`/`NewCodec`/
+- [x] 3.3 根 `types.go` 增补 codec 侧别名（`Codec`/`NewCodec`/
   `MaxCompressedSnapshot`/`MaxDecodedSnapshot`/`MaxSmallPayload`/
   `MaxFrameBytes`/`WriteFrame`/`ReadFrame` 等）；archcheck 登记
   `"internal/network/codec": {"internal/network/protocol", "internal/core"}`。
@@ -75,17 +75,17 @@
 
 ## 4. 文档与收尾门禁
 
-- [ ] 4.1 重写 `internal/network/AGENTS.md`（根包会话/传输范围 +
+- [x] 4.1 重写 `internal/network/AGENTS.md`（根包会话/传输范围 +
   protocol/codec/tcp 子包地图 + 依赖方向 + 既有信任边界/传输一致性/协议
   演进契约保留），新建 `protocol/AGENTS.md`、`codec/AGENTS.md`（按
   `docs/agents-md-style.md`，子包不放 CLAUDE.md；`tcp/AGENTS.md` 不动）。
-- [ ] 4.2 CI 与文档同步：`.github/workflows/ci.yml` 架构门禁步骤
+- [x] 4.2 CI 与文档同步：`.github/workflows/ci.yml` 架构门禁步骤
   `./internal/network` → `./internal/network/...`（M3C 步骤与 Makefile
   `bench-multiplayer` 不动）；`docs/notes/test-quickstart.md` 定点命令行改
   `./internal/network/...`；`docs/architecture.md` 网络边界描述、
   `docs/notes/compatibility.md` 的 `ProtocolVersion` 指涉（别名说明）同步。
   验证：`go test ./internal/archcheck -count=1`（本任务不改 archcheck 表）。
-- [ ] 4.3 收尾门禁：`-list` 并集终对照（与 `baseline-test-list.txt` 逐名
+- [x] 4.3 收尾门禁：`-list` 并集终对照（与 `baseline-test-list.txt` 逐名
   diff 为空）；`gofmt -l .` 无输出；`go vet ./...`；`make dev-check`；
   `make test-race`；`go test ./internal/network/... -bench . -benchtime 1x`
   （数值只记录）；`openspec validate --all --strict --no-interactive`；
