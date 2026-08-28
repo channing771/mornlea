@@ -43,4 +43,4 @@
 
 - [x] 7.1 `bed-night` 场景构造（固定夜间卧室、多朝向床形态、夜空呈现；插入 `torch-night` 之后、`ai-companion` 之前；不创建/聚焦前台窗口）并生成 golden（合并时基于届时基线口径顺延），`visual-check` 全表比对全绿
 - [x] 7.2 功能线验证：`make rust`、`go test ./... -race`（合并前全量）、`go test ./internal/archcheck -count=1`、`go vet ./...`、`gofmt -l .` 无输出、`openspec validate --all --strict --no-interactive`、`git diff --check`；benchmark/perfcheck 输出摘要记录（数值只记录）
-- [ ] 7.3 独立整分支终审（规格合规 + 原子放置矩阵 + 跳夜全员语义 + 重生点校验矩阵 + v7→v8/v2→v3 迁移 + wire 尾部追加 + 绝对时间不受影响 + 无版权资源）；终审结论与验证摘要写入 `ledger.md`；推送分支开 PR，评审通过后合并 main
+- [x] 7.3 独立整分支终审（规格合规 + 原子放置矩阵 + 跳夜全员语义 + 重生点校验矩阵 + v7→v8/v2→v3 迁移 + wire 尾部追加 + 绝对时间不受影响 + 无版权资源）；终审结论与验证摘要写入 `ledger.md`；推送分支开 PR，评审通过后合并 main

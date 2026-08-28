@@ -52,6 +52,46 @@
 - **Task 4（入睡/跳夜/重生点）**：实现提交 `451b0efb`；评审 SPEC PASS + QUALITY PASS，五项自报裁决全部核实成立（offset 基准取 tick 完成后绝对时间；「未验证 ≠ 失效」经 spec 措辞+Requirement 标题+禁停摆三重佐证成立并以 `TestDeathWithUnverifiedRespawnKeepsRecord` 钉定；`CommandInteractDoor` 先例确无 wire 映射、本任务零碰 network；`SetWorldTimeForTest` 无生产调用；敌怪对拍无可接线点、判夜入口已收敛 `Engine.displayDayPhase()`）。评审指出的两处产物-代码不一致（design D1 公式缺 +1 基准、delta spec 缺「区块未就绪」场景）已由控制会话修订（`c7f3d76a`），另修一处注释空格。修复轮：0。
 - **Task 3（放置/采掘/支撑）**：实现提交 `5eb7b581`；评审 SPEC PASS + QUALITY PASS，三项自报裁决经核实全部成立（支撑扫除比照火把系 spec 明文要求且门无先例可抄；伙伴采掘床双清分支防半床残留；现行命令集确无命中床的 use 路径）。非阻塞建议四条留归档期参考（`clearBedPair` 防御纵深不对称、`bedHalfPositions` 第二份坐标拷贝、级联举例、火把触发床失效当 tick 覆盖缺直测）。修复轮：0。实现者裁决：支撑扫除比照火把先例（门无运行时扫除而 spec 明文要求整床移除掉落）、伙伴采掘床双清分支（避免通用单清残留半床）、右键交互留待 Task 4。
 
-## 最终验证输出摘要（收尾补）
+## 最终验证输出摘要（7.3 整分支终审补全，2026-08-28）
 
-- （待整分支终审后补：make rust、focused -race、archcheck、vet、gofmt、openspec strict、visual-check 的数值摘要；benchmark 数值只记录）
+- `make rust`：通过（exit 0；release 增量构建 0.37s，`--locked`）。
+- `go test ./... -race -count=1`（全量两次）：本分支交付包在两次全量中全绿（`sim` 73.7s/74.4s、`storage` 38.9s/34.0s、`network`、`core`、`render`、`client`、`assets`、`mesh`、`physics`、`fluid` 均 ok）。两次全量各出现 1..2 例**负载性 flake**，全部位于本分支 diff 之外的既有时序敏感测试：run1 `internal/server TestDropSurvivesShutdownAndRestart`（90.42s 重启后区块 Ready 超时）；run2 `internal/server TestDroppedItemSurvivesShutdownAndRestart`（90.56s 同类超时）+ `cmd/mornlea TestCraftingStateSizeThreeOpensWorkbenchUI`（0.00s UI 状态未达，包耗时 601.8s）。终审期间同机 load average 9..13（534 进程，多会话并行，与 Task 7 记录的同类资源竞争一致）。三例隔离复跑全绿（0.38s/2.49s/1.80s）；两个受影响包整包复跑全绿（`internal/server` 210.2s、213.3s；`cmd/mornlea` 288.2s）。裁决：环境性 flake，非本分支缺陷。
+- `go test ./internal/archcheck -count=1`：ok 5.505s（`TestBaselineVersionsMatchCode` 等全绿）。
+- `go vet ./...`：无输出，exit 0。
+- `gofmt -l .`：无输出。
+- `openspec validate --all --strict --no-interactive`：72 passed, 0 failed。
+- `git diff --check`：无输出，exit 0。
+- `make visual-check`：22/22 场景全绿，每场景「最大通道差 0，差异像素 0/230400」。
+
+## 整分支终审（7.3，2026-08-28）
+
+终审对象：全分支 diff `691a0b7e..28158229`（150 文件，+6221/−534）。终审员不修改生产代码；本节与 `tasks.md` 7.3 勾选为仅有的写动作。
+
+### 专项一：shader 修复（Task 7 根因修复）
+
+- **a) 闭合「床顶 9×9 巨型石板」缺陷：PASS**。`terrain.wgsl` 新增 `bed_material`（60..67 闭区间）接入角高度分流门；Rust 回归三件套直接锁缺陷：`bed_top_face_covers_only_its_own_cell`（9×9 石板回归的直接锁——有/无床两帧对拍，邻格 (9,8)/(8,9)/(9,9) 逐像素不变、床格自身必须变化防夹具空转）、`bed_top_edge_sinks_below_a_full_height_control`（9/16 下沉幅度 ≈28 行带宽 26..=30，锁 (8+1)/16 算式）、`corner_height_quads_route_regardless_of_material`（侧板处境复现：层 20 橡木板 + 四角 8 的 quad 不在短方块集合内也必须走角高度路径）。Go 侧 `TestBedSurfaceLayerReachesMesherThroughProductionRegistry` 穿透生产注册表验证顶面层可达 mesher，`TestNativeMeshBedQuadsRoundTripThroughGoUnpack` 逐条钉 5 条 quad 的面序/角高/材质。
+- **b) fallback 不误吞既有语义：PASS**。新增析取 `corner_height(lo, hi, 2u) != 0u` 与 material 判别汇入**同一条**角高度分支（并集析取，命中哪条析取不改变解码）；耕地（29..30）/火把（59）仍走各自 material 门且其角 2 原值本就非零（耕地 14、火把薄板 8..13），行为零变化。结构判别的安全前提两侧同源强制：Rust `quad.rs pack` 普通 quad `high=0`（角 2 位恒 0，`corners==[0;4]` 走默认分支）+ 植物 material 反向断言；Go `UnpackQuad` 以「角 2 非零 ⟺ 角高度 quad」为信任边界（越界 panic），`TestQuadPackRoundTripCarriesCornerHeights` 对角 2 非零全组合穷举往返。普通 quad 不可能被误分流。
+- **c) 两侧钉子同源防漂移：PASS（沿耕地/火把既定三方手工同步纪律）**。真值源为 Go 层枚举 `LayerBedFootSouth..LayerBedHeadEast`（60..67）；Go 钉子 `TestBedLayerNumbersMatchClientShaderContract` 硬编码 60/67 + 紧邻断言（`LayerTorch`=下界−1、`LayerCount`=上界+1，插层必撞）+ 八形态 PosY material 全落区间；Rust 钉子 `bed_range_constants_match_go_layer_enum` 硬编码同值（区间宽恰 7）+ `shader_sources_stay_pinned_to_the_range_constants` 扫 `terrain.wgsl` 字面量（`>= 60u`/`<= 67u`）与分流门接入门禁。与耕地先例同构：无共享生成定义、双侧失败报警点在注释中互相指名。
+
+### 专项二：v30 撞号重订预案
+
+- `packet.go` 顶部注释明写重订纪律（「版本号撞号纪律……合并序居后者基于届时 main 把自己的行重订为下一个空闲版本（wire 形状不受影响）。当前 v30 与并行夜行者行撞号，合并时按此纪律重订」），与 A-02 先例一致：**PASS**。
+- 重订面清单（合并期把 v30→空闲版本时逐处更新；全部为精确匹配断言/字面量，漏改必红）：生产 `internal/network/packet.go`（const + 顶部版本注释）、`internal/network/message_player.go`（「协议 v30 起」注释）、`internal/network/codec_server.go`（「v30：」注释）、`AGENTS.md` 契约行（`TestBaselineVersionsMatchCode` 八条映射联动，漏改 archcheck 红）；测试 `internal/network/packet_test.go:87`、`worldtime_test.go:15`、`registry_test.go:72 与 :105`、`drop_test.go:140`、`codec_golden_test.go:22/67/68`（golden hex `1e`=30，重订为 `1f` 等随版本字节联动）、`cmd/mornlea-server/main_test.go:104 与 :334`、`cmd/mornlea/app_protocol_test.go:34`。wire 形状零变化，重订面完全可控。
+
+### 终审清单 11 项
+
+1. **规格合规：PASS** — 五份 delta 的每个 Requirement/Scenario 均有实现与测试对应（明细见第 2..9 项）；proposal 延期条款五项逐一核实无突破：无入睡多人姿态（wire 无 sleeping 字段）、床跨区块仍整单拒绝（无 B-21 事务）、判夜/跳夜零敌怪查询（全分支无 hostile 符号）、跳夜无直接清怪、`WorldTimeTicks` 语义未动（作物对拍锁）。
+2. **放置原子性矩阵：PASS** — `TestTryPlaceBedWritesBothHalvesPerDirection`（4 朝向双写）；`TestTryPlaceBedRejectionsWithoutWrites` 六例（床尾/床头被占、两侧下方非实心、两半流体占据=RejectOccupied）+ 非法 dir 两例，全部断言零写入零 pending；`TestTryPlaceBedCrossChunkRejected` + `TestBedPlacementViaCommandCrossChunkKeepsItem`（跨区块整单拒绝不消耗）；`TestBedPlacementViaCommand`（恰好消耗 1）；床头写入失败回滚床尾在 `tryPlaceBed` 实现内（门先例同构）。
+3. **跳夜全员语义：PASS** — `TestSleepThroughNightJumpsPhaseToDayStart`（offset=(24000−(t+1)%24000)%24000，本 tick 完成后相位恰 0，绝对时间恰 18001）；`TestSleepThroughNightWaitsForAllActivePlayers`（全员判定、单人未睡不跳不清）；`TestSleepThroughNightOverwritesPreviousOffset`（覆盖旧值且二次入睡按旧 offset 折算相位）；`TestSleepThroughNightKeepsCropPaceIdentical`（跳/不跳双世界逐位一致）；`TestSleepThroughNightPublishesOffsetInSameTick`（同 tick 下发）+ `TestPlayerStatePublishesDayPhaseOffset`（两会话同值）；清醒扫描覆盖非当期活跃名单防残留位污染。
+4. **重生点校验矩阵：PASS** — `TestDeathRespawnsAtBedFootWhenBedIntact`（床尾中心 + 9/16 站高 + 满血满饥饿 + 记录保留）；`TestDeathFallsBackToAnchorWhenBedMined`（整床破坏回落清记录）；`TestDeathFallsBackWhenBedHalfMissing`（半破坏同判）；`TestDeathFallsBackWhenBedSupportSwept`（真实采掘支撑触发扫除后回落）；`TestDeathWithUnverifiedRespawnKeepsRecord`（区块未就绪回落锚点但保留记录，与 delta「未验证 ≠ 失效」逐字对齐）；`TestRespawnPointsIndependentAcrossPlayers`（两床互不影响，另一玩家仍回自己床尾）。
+5. **迁移：PASS** — v7→v8：17B 定长尾（1+12+4）、present=0 规范为零的确定性编码、冻结 fixture `testdata/player-v8.bin`（297B）`TestPlayerV8Fixture`、`TestPlayerV7FixtureMigratesToNoRespawn` + `TestPlayerV7MigrationClearsRespawn`、fuzz 不 panic；v2→v3：`TestMetadataV3GoldenBytes`/`TestMetadataV2LegacyGoldenBytes` 字节级 golden、`TestMetadataV2MigratesToV3WithZeroOffset`、`TestMetadataV1MigratesToV3WithZeroTimeAndOffset`、`TestOpenDiskMigratesV2MetadataFile`（**打开不落盘改写**：磁盘字节读回断言 v2 未动、保存后才升 v3）、`TestMetadataOffsetSurvivesRestart`；损坏矩阵 `TestMetadataVersionsRejectMalformedBytes`/`TestPlayerCodecRejectsCorruptEnvelope` 等沿用既有错误面。
+6. **wire：PASS** — `PlayerState` 尾部 u16 落位 `SaturationZero` 与 `WorldTimeTicks` 之间（payload 尾字节断言 + 截断/尾随全拒）；`TestProtocolV30PlayerStateRejectsOutOfRangeDayPhaseOffset` 三处拒绝（Validate/编码/解码改字节）；两侧语义分界在 `message_player.go`/`server.go` 注释互指：wire 严格拒 >23999、metadata 装配 `%24000` 宽容归一；`TestProtocolV30PlayerStateCarriesDayPhaseOffset` + Memory/TCP transcript 一致性既有全量；v30 pin 连锁无漏改（`TestBaselineVersionsMatchCode` + 上述 pin 清单全绿）。
+7. **客户端相位：PASS** — `DayNightAt(worldTime, offset)` 唯一算式经 `core.DisplayDayPhase`（客户端不自建，云漂移仍走绝对时间）；`app_celestial_test` 锁 offset 随下一份权威状态切换、旧/重复状态不回退（与 worldTimeTicks 同一 ServerTick 接受纪律）。
+8. **`DisplayDayPhase` 双交付去重预案：PASS** — 签名与 tasks.md 头部钉定逐字一致 `(worldTime uint64, offset uint16) uint16`；语义「先 `%24000` 再相加取模」由 4 条边界测试锁（纯模对拍、MaxUint64 不溢出、23999+1 回绕 0、夜间窗 13000..23000 含两端）；`day_phase.go` 与测试文件均带去重标记（「rebase 合并时与夜行者行的同一函数去重，只保留一份」）。
+9. **呈现：PASS** — `bed-night` 插 `torch-night` 后、`ai-companion` 前（`TestBedNightCaptureScenePosition` + 尾序不变量）；四朝向全摆（超出 spec 两种下限）且 `TestBedNightScenePixelsShowMultiOrientationBedsAtNight` 以床头亮带像素探针逐床验证（含石面对照扣照明）；夹具恢复直测（后续场景床/火把格回空气）；golden 逐字节零差（22/22 全 0 差异像素）；床纹理全程序化原创橡木配色，无版权资源。
+10. **注释纪律：PASS** — 全 diff 新增注释 1207 条，非中文者 39 条全为分隔线/公式/跨行标识符片段（唯一含英文叙述者为 DayNightAt 的 sun 公式行，正当）；新增行无 `[A-F]-[0-9]{2}` 任务编号（全部命中均在 openspec 规划产物内，属允许区）；标识符反引号与意图式注释抽查合格。
+11. **并行行边界：PASS** — 全分支无 `BlockOpaque`/夜行者/敌怪符号，`DisplayDayPhase` 为自带交付（含独立边界测试），不依赖 A-04 未合并代码；文件交集仅 `internal/core` 追加段（bed/day_phase 新文件）、`AGENTS.md` 基线行与（如夜行者行改）`registry.go` 常量段，append-only，撞号预案见专项二。
+
+### 终审结论
+
+**PASS（可进 PR）**。两项专项与 11 项清单全绿，无 FAIL 项。合并期待办（非缺陷，预案已备）：① 协议版本按届时 `main` 重订（专项二清单）；② `DisplayDayPhase` 与夜行者行去重保留一份；③ `bed-night` golden 基于届时基线口径顺延。验证数值见上节；两次全量 `-race` 的 3 例 flake 均已隔离与整包复跑证伪为同机高负载（load 9..13）环境因素，涉及测试均在本分支 diff 之外。
