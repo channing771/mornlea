@@ -110,6 +110,11 @@ func (a *Application) resetSessionOwnedState() {
 	//（spec authoritative-grid-crafting「断线清空客户端镜像」）。
 	a.crafting.Reset()
 	a.miningOverlay = hud.MiningOverlay{}
+	// 物品名弹条与其确认基线随会话一并清空：断线后不显示上一会话的选中名，
+	// 重连后的第一次确认按新基线处理、不触发弹条。
+	a.itemPopup = hud.PopupOverlay{}
+	a.popupSelection = 0
+	a.popupSelectionSeen = false
 	// 进食进度是纯呈现预测，随会话一起清零，不得漏进重连后的第一帧。
 	a.eatingTracker.Reset()
 	a.damageFeedback.Reset()

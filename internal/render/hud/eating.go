@@ -4,8 +4,7 @@ package hud
 //
 // 刻意不超过采掘条的 `miningBarQuads`+`miningWarningNotches`=5：进食条与采掘条
 // 同锚点且互斥（采掘优先，见 `appendEatingBar`），布局的最坏情况 quad 数不变，
-// scenario v19 已锁定的 `maxHotbarQuads`/`hotbarUploadBytes` 固定上传容量得以
-// 保持（design D2）。
+// `maxHotbarQuads`/`hotbarUploadBytes` 已锁定的固定上传容量得以保持。
 const eatingBarQuads = 2
 
 // EatingOverlay 是客户端预测的进食进度。字段形态参照 `MiningOverlay`，但有两处

@@ -26,7 +26,7 @@ HUD 布局逻辑全部在 Go 侧 `internal/render/hud/`（固定容量 quad/glyp
 | `crosshairShadow` / `crosshairFg` | (0, 0, 0, 0.55) / (0.96, 0.96, 0.96, 0.92) | 准星双层 |
 | 语义色保留 | 生命红系、饥饿棕系、氧气青白系、耐久绿→红、采掘可采绿/不可采琥珀橙 | 图标与状态语义色不变相 |
 
-规则：强调色只允许出现在「选中、进度、产物、tooltip 标记」四类语义；警告与错误沿用既有红/橙语义色；禁止新增第二种强调色相。Rust 侧对应新增 `engine/crates/mornlea_client/src/ui/style.rs`（egui 令牌，见 D5），两侧令牌表并排写进本文件，互不引用（无 ABI 通道）。
+规则：强调色只允许出现在「选中、进度、产物、tooltip 标记」四类语义；警告与错误沿用既有红/橙语义色；禁止新增第二种强调色相。`panelBorderLight` 亮边只适用于容器浮动面板与 egui 面板；底部快捷栏贴条保持「投影+表面」双层结构（无边），与原版热栏的贴条形态一致——这也保住关闭态最坏恰 100 的预算钉。Rust 侧对应新增 `engine/crates/mornlea_client/src/ui/style.rs`（egui 令牌，见 D5），两侧令牌表并排写进本文件，互不引用（无 ABI 通道）。
 
 ## D2 生存 HUD 布局对齐 + 准星 + 物品名弹条
 
@@ -40,9 +40,9 @@ HUD 布局逻辑全部在 Go 侧 `internal/render/hud/`（固定容量 quad/glyp
 新增 quad 来源：准星 4（关闭+打开）、浮动面板描边 4（打开）、tooltip 背景 2（打开）。最坏组合重算并以固定预算测试钉住：
 
 - 关闭最坏：96 + 4 = **100**
-- 打开最坏：266 + 2（面板 2→7：投影+表面+四边亮边+标题，净 +2）+ 4（准星）+ 2（tooltip 背景）= **274**
+- 打开最坏：实算基线 257（旧 spec 的 266 为历史口径）+ 4（准星）= 261，T3 落地面板净增（描边等）与 tooltip 背景（+2）后**由 T3 固定预算测试实算**，届时同步修正本行与 delta 钉值（先例：glyph 预算 548 实测修正）
 - 容量：`maxHotbarQuads` 267→**320**；quad 区 256 + 320×48 = 15616 = glyph offset（256 对齐保持）
-- glyph：`maxHotbarGlyphs` 700→**768**（现有最坏 + 弹条 ≤16 + tooltip ≤16 后留余量；实现须以测试断言实测最坏并记录）；总容量 15616 + 768×48 = **52480**
+- glyph：`maxHotbarGlyphs` 700→**768**（现有最坏 + 弹条 ≤64（32 rune × 阴影/前景双层）+ tooltip ≤16 后留余量；关闭态实测最坏 548；实现须以测试断言实测最坏并记录）；总容量 15616 + 768×48 = **52480**
 - benchmark scenario v19→v20：scenario 常量、测试断言、README 双语版本矩阵、`docs/notes/compatibility.md`、`docs/architecture.md`（如有提及）、`internal/render/hud/layout.go` 注释同步。协议/schema/ABI/配置版本全部不动。
 
 ## D4 容器原版式浮动面板
