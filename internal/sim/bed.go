@@ -172,32 +172,11 @@ type bedSweepCell struct {
 	position  core.BlockPos
 }
 
-// sweepUnsupportedBeds 在 finishChanges 之前对本 tick 全部已变位置做一次有界
-// 的床支撑复核：床的支撑只在正下方，这里只复核每个已变位置的正上方一格——
-// 那里是床的一半且其下方支撑（即变化格）的最终内容不再满足 `isSolidSupport`
-// 时，整床双清并掉落恰好 1 个床物品。移除写入同样经 `recordChange` 汇入
-// pending，与原变化共享同一批 revision、广播与存档。
-//
-// 有界性：工作量为已变位置数 × 1 次上方读取，不随世界中床总数增长；快照
-// 先按稳定顺序收齐再处理，处理期间的移除写入不会反馈进本轮复核。同 tick
-// 级联边界：本复核排在火把复核之后，火把复核的移除（也是一种权威变化）
-// 触发的床失效当 tick 即被覆盖；床自身移除而失效的依附物（如床顶面的火把）
-// 在床被采掘时已由更早的写入覆盖，仅「床被本复核移除」这一三阶路径顺延到
-// 该格下一次权威变化，与火把复核的单级取舍一致。
+// sweepUnsupportedBeds 委托至 realm 的环境复核。
 func (engine *Engine) sweepUnsupportedBeds(
 	pending *pendingChunkChanges,
 ) {
-	changes := pending.ChangedBlocks()
-	if len(changes) == 0 {
-		return
-	}
-	cells := make([]bedSweepCell, len(changes))
-	for index, change := range changes {
-		cells[index] = bedSweepCell{dimension: change.Dimension, position: change.Position}
-	}
-	for _, cell := range cells {
-		engine.invalidateBedSupportedBy(cell.dimension, cell.position, pending)
-	}
+	engine.realm.SweepUnsupportedBeds(pending)
 }
 
 // invalidateBedSupportedBy 检查 position 正上方一格：若那里是床的一半且其

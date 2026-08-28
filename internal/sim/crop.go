@@ -301,49 +301,12 @@ func cropSkyExposed(chunk *world.Chunk, position core.BlockPos) bool {
 // 每条样本读取自身一次；只有作物再读取正下方持久化的干/湿耕地编号一次，因此
 // 单阶段方块读取不会超过考察格数的两倍。
 func (engine *Engine) advanceCrops(pending *pendingChunkChanges) {
-	engine.cropCellsExamined = 0
-	engine.cropBlockReads = 0
-	// 踩踏结算（trample.go）：落地边沿在物理阶段收集（reconcileSubscriptions
-	// 之前），方块写入必须延迟到这里的区块写入区，且与耕地干湿转换共用同一份
-	// pending。排在下方随机 tick 抽样之前：本 tick 被踩成泥土的格不再是耕地，
-	// 抽样天然跳过。
 	engine.settleTramples(pending)
-	samples := int(engine.tunables.RandomTicksPerSection)
-	if samples <= 0 {
-		return
-	}
-	tick := engine.tick.Load()
-	for _, key := range engine.activeInterestKeys() {
-		dimension := engine.dimension(key.Dimension)
-		if dimension == nil {
-			continue
-		}
-		chunk, ready := dimension.ReadyChunk(key.Pos)
-		if !ready {
-			continue
-		}
-		baseX := key.Pos.X << core.SectionShift
-		baseZ := key.Pos.Z << core.SectionShift
-		for sectionY := range core.SectionsPerChunk {
-			baseY := int32(sectionY<<core.SectionShift) + core.MinY
-			engine.cropCellScratch = sampleCells(
-				engine.seed, tick, key, sectionY, samples, engine.cropCellScratch,
-			)
-			for _, cell := range engine.cropCellScratch {
-				// 紧凑下标 y*256 + z*16 + x 还原成区段内局部坐标，与
-				// world.ChunkBlockIndex 的区段内编号规则一致。
-				localX := cell & core.SectionMask
-				localZ := (cell >> core.SectionShift) & core.SectionMask
-				localY := cell >> (core.SectionShift * 2)
-				engine.cropCellsExamined++
-				engine.advanceCropCell(dimension, key.Dimension, chunk, core.BlockPos{
-					X: baseX + int32(localX),
-					Y: baseY + int32(localY),
-					Z: baseZ + int32(localZ),
-				}, tick, pending)
-			}
-		}
-	}
+	active := engine.activeInterestKeys()
+	engine.realm.AdvanceCrops(active, pending)
+	examined, reads := engine.realm.CropStats()
+	engine.cropCellsExamined = examined
+	engine.cropBlockReads = reads
 }
 
 // advanceCropCell 只处理被随机 tick 抽中的作物与满足“干+上方为空气”的干耕地退化；

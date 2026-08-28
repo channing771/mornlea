@@ -20,8 +20,7 @@ func (engine *Engine) recordChange(
 	pending *pendingChunkChanges,
 ) {
 	pending.Record(dimensionID, position, block)
-	// 环境写者尚未迁移前，保持原有入队时点，避免流体同 tick 观察到不同世界状态。
-	engine.enqueueFluidUpdate(dimensionID, position)
+	engine.realm.EnqueueFluidUpdate(dimensionID, position)
 }
 
 func (engine *Engine) finishChanges(pending *pendingChunkChanges, result *TickResult) {

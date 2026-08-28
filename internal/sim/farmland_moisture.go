@@ -112,6 +112,7 @@ func (engine *Engine) enqueueFarmlandMoisture(
 	}
 	state.queued[key] = struct{}{}
 	state.pending = append(state.pending, key)
+	engine.realm.EnqueueFarmlandMoisture(dimension, position)
 }
 
 // enqueueFarmlandMoistureAroundFluid 按 `y,z,x` 顺序登记可能受流体格影响的耕地。

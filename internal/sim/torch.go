@@ -85,31 +85,11 @@ type torchSweepCell struct {
 	position  core.BlockPos
 }
 
-// sweepUnsupportedTorches 在 finishChanges 之前对本 tick 全部已变位置做一次
-// 有界的火把支撑复核：任何权威方块变化（采掘、流体推进、作物替换、放置等）
-// 都经 recordChange 汇入 pending，这里只复核这些位置的精确六邻居——邻居是
-// 火把且其支撑格恰是该变化格、且变化后的最终内容不再实心时，把火把写成
-// 空气并经既有掉落通路补一枚火把掉落。移除写入同样经 recordChange 汇入
-// pending，与原变化共享同一批 revision、广播与存档。
-//
-// 有界性：工作量为已变位置数 × 6 次邻居读取，不随世界中火把总数增长；
-// pending 的 changes 以「区块 × 格索引」为键，天然去重，先按稳定顺序把位置
-// 收集成快照再处理，处理期间的移除写入不会反馈进本轮复核（火把零碰撞、
-// 不可能支撑任何火把，单级就是闭包）。
+// sweepUnsupportedTorches 委托至 realm 的环境复核，保持有界与单级语义。
 func (engine *Engine) sweepUnsupportedTorches(
 	pending *pendingChunkChanges,
 ) {
-	changes := pending.ChangedBlocks()
-	if len(changes) == 0 {
-		return
-	}
-	cells := make([]torchSweepCell, len(changes))
-	for index, change := range changes {
-		cells[index] = torchSweepCell{dimension: change.Dimension, position: change.Position}
-	}
-	for _, cell := range cells {
-		engine.invalidateTorchesSupportedBy(cell.dimension, cell.position, pending)
-	}
+	engine.realm.SweepUnsupportedTorches(pending)
 }
 
 // invalidateTorchesSupportedBy 检查 position 的精确六邻居，移除支撑格恰为

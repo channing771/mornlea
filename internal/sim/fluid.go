@@ -19,14 +19,12 @@ import (
 // 失效，而且任何单维度测试都照样全绿。因此队列必须按 DimensionID 分桶，
 // 绝不能合并成一个全局 Queue。
 func (engine *Engine) fluidQueue(dimension core.DimensionID) *fluid.Queue {
+	queue := engine.realm.FluidQueue(dimension)
+	// 同步至 Engine 旧字段，供白盒测试直接读取
 	if engine.fluidQueues == nil {
 		engine.fluidQueues = make(map[core.DimensionID]*fluid.Queue)
 	}
-	queue := engine.fluidQueues[dimension]
-	if queue == nil {
-		queue = fluid.NewQueue()
-		engine.fluidQueues[dimension] = queue
-	}
+	engine.fluidQueues[dimension] = queue
 	return queue
 }
 
@@ -47,25 +45,11 @@ func fluidNeighbors(position core.BlockPos) [6]core.BlockPos {
 }
 
 // enqueueFluidUpdate 把一次权威方块写入的格及其六个面邻格加入流体待更新队列。
-//
-// 它挂在 recordChange 上，而不是逐个挂在放置、采掘、伙伴放置、伙伴采掘各自的
-// 写入点：recordChange 是权威 tick 里「方块真的变了」的唯一汇聚点，挂一次就
-// 覆盖全部现有写者，将来新增的方块写者也不可能漏接入队。
-//
-// 流体自身的写入（fluidWorld.SetBlock）同样流经这里，与 Queue.Advance 在提交
-// 之后做的重新入队重复。这份重复是无害的：两边用的是同一个 now（本 tick 的
-// engine.tick）与同一个 delay（本 tick 的 tunable 快照），而 Enqueue 按位置去
-// 重并保留更早的 dueTick，因此重复入队幂等，不改变任何结果。
 func (engine *Engine) enqueueFluidUpdate(
 	dimension core.DimensionID,
 	position core.BlockPos,
 ) {
-	queue := engine.fluidQueue(dimension)
-	now, delay := engine.fluidClock()
-	queue.Enqueue(position, now, delay)
-	for _, neighbor := range fluidNeighbors(position) {
-		queue.Enqueue(neighbor, now, delay)
-	}
+	engine.realm.EnqueueFluidUpdate(dimension, position)
 }
 
 // fluidClock 返回本 tick 的流体时基：now 是当前已完成的 tick 计数（Step 末尾
@@ -578,52 +562,11 @@ func (engine *Engine) runFluidRescans(now, delay uint64) {
 // 它的工作量正比于新进入范围的方块数，与 FluidUpdatesPerTick 无关，不分摊会在
 // 大批区块同时进入范围时直接击穿 tick 预算。
 func (engine *Engine) advanceFluids(pending *pendingChunkChanges) {
-	now, delay := engine.fluidClock()
-	budget := int(engine.tunables.FluidUpdatesPerTick)
-
-	if engine.fluidScope == nil {
-		engine.fluidScope = make(map[core.ChunkKey]struct{})
-		engine.fluidScopeNext = make(map[core.ChunkKey]struct{})
-	}
-	clear(engine.fluidScopeNext)
-	keys := engine.activeInterestKeys()
-	for _, key := range keys {
-		dimension := engine.dimension(key.Dimension)
-		if dimension == nil {
-			continue
-		}
-		if _, ok := dimension.ReadyChunk(key.Pos); !ok {
-			continue
-		}
-		engine.fluidScopeNext[key] = struct{}{}
-	}
-	// activeInterestKeys 已按 chunkKeyLess 排好序，重扫待办因此按稳定顺序登记。
-	for _, key := range keys {
-		if _, inScope := engine.fluidScopeNext[key]; !inScope {
-			continue
-		}
-		if _, wasInScope := engine.fluidScope[key]; wasInScope {
-			continue
-		}
-		engine.fluidRescan.enqueueChunk(key)
-		engine.farmlandMoisture.rescans.enqueueChunk(key)
-	}
-	engine.fluidScope, engine.fluidScopeNext = engine.fluidScopeNext, engine.fluidScope
-	engine.runFluidRescans(now, delay)
-
-	for _, id := range engine.sortedFluidDimensions() {
-		queue := engine.fluidQueues[id]
-		dimension := engine.dimension(id)
-		if dimension == nil || queue.Len() == 0 {
-			continue
-		}
-		queue.Advance(now, &fluidWorld{
-			engine:    engine,
-			id:        id,
-			dimension: dimension,
-			scope:     engine.fluidScope,
-			pending:   pending,
-		}, budget, delay)
+	active := engine.activeInterestKeys()
+	engine.realm.AdvanceFluids(active, pending)
+	// 同步白盒测试可观察的已迁移字段
+	if scope := engine.realm.FluidScope(); scope != nil {
+		engine.fluidScope = scope
 	}
 }
 

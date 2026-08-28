@@ -5,6 +5,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
@@ -64,6 +65,14 @@ func (engine *Engine) notifyStepPhase(phase stepPhase) {
 func (engine *Engine) Step() TickResult {
 	engine.tunables = tuning.ActiveTunables()
 	engine.physicsTunables = physics.ActiveTunables()
+	engine.realm.SetEnvironmentTick(engine.tick.Load(), engine.seed, realm.EnvironmentConfig{
+		FluidFlowDelayTicks:     engine.tunables.FluidFlowDelayTicks,
+		FluidUpdatesPerTick:     engine.tunables.FluidUpdatesPerTick,
+		FluidRescanCellsPerTick: engine.tunables.FluidRescanCellsPerTick,
+		DropPickupDelayTicks:    engine.tunables.DropPickupDelayTicks,
+		RandomTicksPerSection:   engine.tunables.RandomTicksPerSection,
+		CropGrowthChancePercent: engine.tunables.CropGrowthChancePercent,
+	})
 	commands, acquired, generated := engine.takeInbox()
 	companionActions := engine.takeCompanionActions()
 	engine.notifyStepPhase(phasePlayerCommands)
@@ -521,13 +530,40 @@ func (engine *Engine) Step() TickResult {
 	engine.advanceDrops(pending)
 	engine.advanceFurnaces(pending)
 	engine.notifyStepPhase(phaseFluidAdvance)
-	engine.advanceFluids(pending)
+	activeForEnv := engine.activeInterestKeys()
+	engine.realm.AdvanceFluids(activeForEnv, pending)
+	if scope := engine.realm.FluidScope(); scope != nil {
+		engine.fluidScope = scope
+	}
+	if queues := engine.realm.FluidQueuesMap(); queues != nil {
+		engine.fluidQueues = queues
+	}
 	engine.notifyStepPhase(phaseFarmlandMoistureAdvance)
-	engine.advanceFarmlandMoisture(pending)
+	envMutation := engine.realm.NewEnvironmentMutation(pending, engine.tick.Load(), realm.EnvironmentConfig{
+		FluidFlowDelayTicks:     engine.tunables.FluidFlowDelayTicks,
+		FluidUpdatesPerTick:     engine.tunables.FluidUpdatesPerTick,
+		FluidRescanCellsPerTick: engine.tunables.FluidRescanCellsPerTick,
+		DropPickupDelayTicks:    engine.tunables.DropPickupDelayTicks,
+		RandomTicksPerSection:   engine.tunables.RandomTicksPerSection,
+		CropGrowthChancePercent: engine.tunables.CropGrowthChancePercent,
+	})
+	engine.realm.AdvanceFarmlandMoisture(activeForEnv, envMutation)
+	if scope := engine.realm.FluidScope(); scope != nil {
+		engine.fluidScope = scope
+	}
+	// 同步 farmland 统计与 rescans 供白盒测试观测
+	engine.farmlandMoisture.blockReads = engine.realm.FarmlandBlockReads()
+	engine.farmlandMoisture.rescans.cursor = engine.realm.FarmlandRescanCursor()
+	// pending 与 queued 的同步通过查询 API 完成，测试中直接检查 engine.realm 时无需同步
 	engine.notifyStepPhase(phaseCropAdvance)
 	// 作物随机 tick 紧跟湿度阶段，因此生长判定能读到同 tick 最终的耕地编号。
 	// 三个阶段的写入共用 `pending`，在 finishChanges 前按位置合并为一次发布。
-	engine.advanceCrops(pending)
+	// 踩踏结算仍在 Engine（收集落地边沿），作物推进委托至 realm。
+	engine.settleTramples(pending)
+	engine.realm.AdvanceCrops(activeForEnv, pending)
+	examined, reads := engine.realm.CropStats()
+	engine.cropCellsExamined = examined
+	engine.cropBlockReads = reads
 	for _, command := range containerMoves {
 		if reason, rejected := engine.applyContainerMove(command.Session, command, pending); rejected {
 			result.Rejected = append(result.Rejected, Rejection{

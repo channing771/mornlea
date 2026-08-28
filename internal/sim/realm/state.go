@@ -71,6 +71,7 @@ func NewDimension(id core.DimensionID) *Dimension {
 type State struct {
 	dimensions    map[core.DimensionID]*Dimension
 	inFlightSaves map[core.ChunkKey]persistenceInFlight
+	environment   environmentState
 }
 
 func NewState(ids ...core.DimensionID) *State {
