@@ -5,8 +5,8 @@
 
 ## 2. app 包提取
 
-- [ ] 2.1 创建 `cmd/mornlea/app`（`package app`），按 design 文件簇映射迁入 app 域生产与测试文件；`application` 导出为 `Application`，导出 main 包装配所需的最小构造器与方法；`main.go`/`options.go`/`app_dependencies.go` 留在 main 包并改为导入 `app`；注释中的标识符引用同步改名。测试文件归属按 design 判定规则用符号引用核实。验证：`go build ./...`；`go test ./cmd/mornlea ./cmd/mornlea/app -list '.*'` 并集与基线快照一致；`gofmt -l cmd/mornlea` 无输出。
-- [ ] 2.2 适配 `internal/archcheck` 中对 `cmd/mornlea` 生产源码的字符串守卫扫描范围（登录路径守卫、benchmark TCP 路径守卫覆盖子树，保持断言模式不变）。验证：`go test ./internal/archcheck -count=1`；`go test ./cmd/mornlea/app -race -count=1`。
+- [x] 2.1 创建 `cmd/mornlea/app`（`package app`），按 design 文件簇映射迁入 app 域生产与测试文件；`application` 导出为 `Application`，导出 main 包装配所需的最小构造器与方法；`main.go`/`options.go` 留在 main 包并改为导入 `app`；`app_dependencies.go` 的全部消费方位于 app 域，随 `Application` 一并迁入（见 design「文件簇映射」实施修订）。注释中的标识符引用同步改名。测试文件归属按 design 判定规则用符号引用核实。验证：`go build ./...`；`go test ./cmd/mornlea ./cmd/mornlea/app -list '.*'` 并集与基线快照一致；`gofmt -l cmd/mornlea` 无输出。
+- [x] 2.2 适配 `internal/archcheck` 中对 `cmd/mornlea` 生产源码的字符串守卫扫描范围（登录路径守卫、benchmark TCP 路径守卫覆盖子树，保持断言模式不变）。验证：`go test ./internal/archcheck -count=1`；`go test ./cmd/mornlea/app -race -count=1`。
 
 ## 3. capture 包提取
 

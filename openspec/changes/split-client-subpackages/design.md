@@ -30,12 +30,24 @@
 
 ## 文件簇映射（迁移判定基准）
 
+> Task 2 实施修订：符号引用核实后，`app_dependencies.go` 随 `application`
+> 一起迁入 app——`Application.startupDeps` 要求 `Dependencies` 类型住在
+> app 包，且该文件的全部消费方（`New` 的字段回退与本域测试）都在 app 域；
+> main 直接使用 `app.New`。下表已按实施结果更新。
+
 | 目标包 | 生产文件 | 测试文件 |
 |---|---|---|
-| main（保留） | `main.go`、`options.go`、`app_dependencies.go` | `options_test.go`、`run_test.go` |
-| app | `app.go`、`app_startup.go`、`app_lifecycle.go`、`app_frame.go`、`app_render.go`、`app_input.go`、`interactive.go`、`target_block.go`、`chat.go`、`app_messages.go`、`app_menu.go`、`app_pause.go`、`app_settings.go`、`debug_panel.go`、`damage_feedback.go`、`app_metrics.go`、`app_audio.go`、`app_lod.go` | `app_*_test.go` 全系、`interactive_test.go`、`chat_test.go`、`debug_panel_test.go`、`target_block_test.go`、`app_test_helpers_test.go`、`presentation_conversion_test.go` 及其他仅引用 app 域符号的测试 |
+| main（保留） | `main.go`、`options.go` | `options_test.go`、`run_test.go`（含原 `storage_test.go` 的 main 域入口测试与原 `app_settings_test.go` 的 `TestRunPassesRawResolvedAndWindowSettingsWithAutomationIsolation`） |
+| app | `app.go`、`app_startup.go`、`app_dependencies.go`、`app_lifecycle.go`、`app_frame.go`、`app_render.go`、`app_input.go`、`interactive.go`、`target_block.go`、`chat.go`、`app_messages.go`、`app_menu.go`、`app_pause.go`、`app_settings.go`、`debug_panel.go`、`damage_feedback.go`、`app_metrics.go`、`app_audio.go`、`app_lod.go` | `app_*_test.go` 全系、`interactive_test.go`、`chat_test.go`、`debug_panel_test.go`、`target_block_test.go`、`app_test_helpers_test.go`、`presentation_conversion_test.go`、`app_protocol_test.go`、`damage_feedback_test.go`、`eating_overlay_test.go`、`health_hud_test.go`、`storage_test.go`（store 选择主题）及其他仅引用 app 域符号的测试 |
 | capture | `capture.go`、`capture_scene.go`、`capture_near_band.go`、`capture_oak_grove.go`、`capture_image.go`、`visual_compare.go` | 13 个 `capture_*_test.go`、`visual_compare_test.go`、引用 capture 场景表的测试（如 `ai_model_settings_test.go`，按符号引用判定） |
 | benchmark | `benchmark.go`、`benchmark_measure.go`、`benchmark_report.go`、`multiplayer_benchmark.go`、`multiplayer_benchmark_server.go`、`multiplayer_benchmark_transport.go`、`multiplayer_probe_epoch.go` | `benchmark_*_test.go`、`multiplayer_probe_epoch_test.go`、`multiplayer_capacity_test.go`、`gpu_batch_test.go`、`cooldown_test.go`、`benchmark_helpers_test.go`、`benchmark_server_race_helpers_test.go`、`benchmark_server_norace_helpers_test.go` |
+
+Task 2 期间的 main 侧临时归属：capture 专属夹具（`captureSceneByName` 等）
+自 `app_test_helpers_test.go` 拆出后暂居 main 的 `capture_test_helpers_test.go`，
+Task 3 随 capture 包迁移；共享常量/夹具按 Decision 3 下沉 app 导出
+（`BenchmarkSeed`、`CaptureWidth/Height`、`SteadyFrameMeshWorkMax`、
+`MaxFrameNameTags`、`MultiplayerRenderTiming`、`MultiplayerBenchmarkScenario`、
+`BenchmarkPlayerID`）；跨包白盒装配收敛为 `app/testkit.go` 的导出测试装配入口。
 
 测试文件归属判定规则：跟随其 Test 函数直接调用的生产符号所在包；同时引用
 两个子包的测试随被测主域迁移。实施时以 `grep` 符号引用核实，不得凭文件名

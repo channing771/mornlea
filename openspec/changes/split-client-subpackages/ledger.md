@@ -25,7 +25,45 @@
 - Ruling: 测试文件归属按「Test 函数直接调用的生产符号所在包」判定，不凭
   文件名 — 同时引用两个子包的测试随被测主域迁移，避免为归属便利而导出
   额外 app 符号。
+- Ruling: `app_dependencies.go` 随 `application` 迁入 app 包（修订 T2.1 原计划
+  留在 main）— `Application.startupDeps` 要求 `Dependencies` 类型住在 app 包，
+  且该文件全部消费方（`New` 的字段回退与本域测试）都在 app 域，留在 main
+  会造成不可编译的跨 main 引用；main 装配直接使用 `app.New`。已同步修订
+  design「文件簇映射」与 tasks 2.1 表述。
+- Ruling: 跨包白盒测试装配收敛为 `app/testkit.go` 导出测试构造函数（Decision 6
+  的「下沉 app」落点）— `_test.go` 内的 helper 对其他包的测试二进制不可见，
+  main（及 Task 3/4 的 capture/benchmark）共用的离屏渲染替身、连接测试依赖、
+  关闭链路替身必须住在非测试文件；导出面以实际引用为准，已按外部消费审计
+  回退 `NewTickRecorder`、`BenchmarkPlayerID` 并删除无人消费的
+  `MultiplayerRenderNow`/`SetLoadedChunks`/`ClientEndpoint` 访问器。
+- Ruling: `app_test_helpers_test.go` 的 `sendInteractiveServerMessage` 消息交接
+  等待从 1ms 放宽到 50ms — 分包后 app 包测试与 main 的 GPU 重型测试并行执行，
+  -race 高负载下 1ms 交接实测出现过一次漏读导致断言失败（隔离重跑 5 次全过，
+  判定为并行负载 flake 而非语义回归）；不改动任何测试函数名、标签与断言。
 
 ## Review Log
 
-（每 Task 的实现 SHA、验证输出摘要与 SPEC/QUALITY 裁决在此追加。）
+### Task 2.1 + 2.2（app 包提取与 archcheck 子树守卫适配）
+
+- 实现 SHA：`daa859c4`（Task 2.1 app 包提取）、`675ffea1`（Task 2.2 守卫适配）。
+- 验证输出摘要（worktree `refactor/client-subpackages`，基线 `9b8bc38f`）：
+  - `make rust`：release 构建通过；共享缓存回拷 `libmornlea_engine.dylib`，
+    另按 cgo 链接需要回拷 `libmornlea_client.dylib` 到 `engine/target/release/`。
+  - `go build ./...`：通过（含 cmd/gfxspike、cmd/perfcheck 链接）。
+  - `gofmt -l cmd/mornlea`：无输出。
+  - `go vet ./cmd/mornlea/... ./internal/archcheck`：通过。
+  - `-list` 并集比对：`go test ./cmd/mornlea ./cmd/mornlea/app -list '.*'`
+    与 `baseline-test-list.txt` 排序后 `diff` 零差异（384 Test + 1 Benchmark）；
+    `t.Run` 标签集合与基线逐一相同。
+  - `go test ./internal/archcheck -count=1`：通过（守卫适配前两条源码守卫
+    实测转红，递归扫描后转绿；identity/comment/platform 守卫全绿）。
+  - `go test ./cmd/mornlea/... -race -count=1`：
+    `ok cmd/mornlea 144.7s`、`ok cmd/mornlea/app 53.5s`。
+- SPEC 裁决（自评，供评审复核）：
+  - 入口并集、`t.Run` 标签、golden 与场景语义零变化；capture/benchmark 生产
+    与测试本任务未迁出 main，仅改为经导出访问面读写。
+  - 导出面按「实际被引用」收敛；app 包非测试导出经外部消费审计，无未消费
+    导出（`NewTickRecorder`/`BenchmarkPlayerID` 回退非导出，三个无人消费的
+    访问器已删除）。
+  - 依赖方向：main → app 单向；app 不导入 capture/benchmark（源码 import
+    经 archcheck dependency 守卫与 `go list` 复核）。
