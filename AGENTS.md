@@ -46,6 +46,7 @@ Mornlea 是使用 Go 1.26 编写的独立体素游戏，Go module 为 `github.co
 - 注释中提及 Go 标识符时用反引号包裹，并解释意图、边界与取舍，而非机械复述代码。
 - 禁止在任何代码注释、GoDoc 或 Rust doc comment 中出现任务标识（形如 `A-01`、`B-23` 等 `[A-F]-[0-9]{2}` 编号）；需关联任务时改为描述功能或契约名称，溯源以 `docs/feature-backlog.md`、Discussion #71 与 OpenSpec change 为准——该编号仅允许出现在规划层产物（`docs/feature-backlog.md`、`docs/notes/`、`docs/agents/` 对规则本身的举例、OpenSpec 产物、`scripts/` 等）中，不得出现在生产或测试代码的注释里。
 - 保护用户已有和无关改动；不得擅自回退、覆盖或清理它们。
+- Git 提交信息（所有 agent 会话一律遵守）只写**单行英文**，格式 `<type>(<scope>): <subject>`：`type` 取 `feat`/`fix`/`docs`/`refactor`/`perf`/`test`/`chore`，`scope` 可省略；`subject` 用英文祈使句、小写开头、不以句号结尾，可含任务编号；不写正文、页脚与 `Co-Authored-By`（合并提交等工具自动生成信息除外）。
 - 禁止破坏性 Git 操作、强制推送、跳过 Hook 或用豁免变量绕过失败，除非用户明确授权。
 
 ## 开发流程
