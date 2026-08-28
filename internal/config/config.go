@@ -159,11 +159,11 @@ type Config struct {
 // 它与 `Config` 分离，避免设置页把加载时钳制后的运行值重新序列化，从而
 // 覆盖同一文件里不属于设置页的未知扩展或未暴露配置。
 type SettingsPatch struct {
-	// AudioVolume 是要写入 `audioVolume` 的本机总音量。
+	// AudioVolume 是要写入顶层成员「audioVolume」的本机总音量。
 	AudioVolume float32
-	// TexturePackPath 是要写入 `texturePackPath` 的未解析单行路径原文。
+	// TexturePackPath 是要写入顶层成员「texturePackPath」的未解析单行路径原文。
 	TexturePackPath string
-	// WindowSize 是要写入 `windowSize` 的固定逻辑尺寸预设。
+	// WindowSize 是要写入顶层成员「windowSize」的固定逻辑尺寸预设。
 	WindowSize WindowSize
 }
 
@@ -1011,7 +1011,7 @@ func lookupCaseInsensitive(m map[string]json.RawMessage, key string) (json.RawMe
 }
 
 // PatchSettings 从磁盘读取并完整校验当前 v1 配置，然后只原子替换设置页拥有的
-// `audioVolume`、`texturePackPath` 与 `windowSize` 三个顶层成员。其他成员的
+// 「audioVolume」、「texturePackPath」与「windowSize」三个顶层成员。其他成员的
 // json.RawMessage 原样写回；即使加载阶段会把某个运行值钳制，保存设置也不会
 // 把钳制结果反写。文件缺失时以 `Defaults` 构造一份可再次加载的 v1 配置。
 func PatchSettings(path string, patch SettingsPatch) (PersistenceResult, error) {

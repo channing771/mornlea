@@ -24,12 +24,12 @@ The static screenshots below are taken from the headless visual-verification gol
 
 <table>
   <tr>
-    <td><img src="cmd/mornlea/testdata/golden/terrain-noon.png" width="380" alt="terrain-noon"></td>
-    <td><img src="cmd/mornlea/testdata/golden/oak-grove.png" width="380" alt="oak-grove"></td>
+    <td><img src="cmd/mornlea/capture/testdata/golden/terrain-noon.png" width="380" alt="terrain-noon"></td>
+    <td><img src="cmd/mornlea/capture/testdata/golden/oak-grove.png" width="380" alt="oak-grove"></td>
   </tr>
   <tr>
-    <td><img src="cmd/mornlea/testdata/golden/block-light-room.png" width="380" alt="block-light-room"></td>
-    <td><img src="cmd/mornlea/testdata/golden/materials-showcase.png" width="380" alt="materials-showcase"></td>
+    <td><img src="cmd/mornlea/capture/testdata/golden/block-light-room.png" width="380" alt="block-light-room"></td>
+    <td><img src="cmd/mornlea/capture/testdata/golden/materials-showcase.png" width="380" alt="materials-showcase"></td>
   </tr>
 </table>
 

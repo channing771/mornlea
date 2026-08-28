@@ -1,0 +1,171 @@
+# 基线：testdata/golden 与 captureGoldenDir 全仓引用（b6d3a90d）
+README.md:43:    <td><img src="cmd/mornlea/testdata/golden/terrain-noon.png" width="380" alt="terrain-noon 正午地形"></td>
+README.md:44:    <td><img src="cmd/mornlea/testdata/golden/oak-grove.png" width="380" alt="oak-grove 橡树林"></td>
+README.md:47:    <td><img src="cmd/mornlea/testdata/golden/block-light-room.png" width="380" alt="block-light-room 方块光房间"></td>
+README.md:48:    <td><img src="cmd/mornlea/testdata/golden/materials-showcase.png" width="380" alt="materials-showcase 材料展示"></td>
+README.en.md:27:    <td><img src="cmd/mornlea/testdata/golden/terrain-noon.png" width="380" alt="terrain-noon"></td>
+README.en.md:28:    <td><img src="cmd/mornlea/testdata/golden/oak-grove.png" width="380" alt="oak-grove"></td>
+README.en.md:31:    <td><img src="cmd/mornlea/testdata/golden/block-light-room.png" width="380" alt="block-light-room"></td>
+README.en.md:32:    <td><img src="cmd/mornlea/testdata/golden/materials-showcase.png" width="380" alt="materials-showcase"></td>
+cmd/mornlea/capture_image.go:12:// captureGoldenDir 是 golden 基线目录，相对仓库根目录。
+cmd/mornlea/capture_image.go:15:const captureGoldenDir = "cmd/mornlea/testdata/golden"
+cmd/mornlea/capture_image.go:29:// goldenDir 作为参数而非直接用 captureGoldenDir 常量，是为了让单元测试
+cmd/mornlea/capture.go:816:		goldenPath := filepath.Join(captureGoldenDir, scene.Name+".png")
+cmd/mornlea/capture.go:817:		if err := os.MkdirAll(captureGoldenDir, 0o755); err != nil {
+cmd/mornlea/capture.go:818:			return fmt.Errorf("创建 golden 基线目录 %s: %w", captureGoldenDir, err)
+cmd/mornlea/capture.go:826:	diff, err := compareAgainstGolden(captureGoldenDir, dir, scene.Name, img, captureThresholds)
+internal/worldgen/fluid_test.go:7:// 变更之前录制的 testdata/golden_seed42.txt 锁住字节级不变。三者合起来构成
+docs/feature-backlog.md:186:| F-05 | 视觉基线再生 | `make visual-check` 预存失败的 10 场景 golden 再生（含从未入库的 `workbench-crafting.png`） | 无代码变更（`cmd/mornlea/testdata/golden/*.png` 再生） | 已完成 | zcode-implementer @ fix/F-05-visual-golden-refresh | D-02 收尾移交（archive/2026-08-27-pause-menu ledger「4 收尾门禁」行）；2026-08-27 用户指令修复并当日完成：13 改 + 1 新增共 14 张（4 张通过场景的亚阈值漂移一并钉准）；逐图确认 3 张容器/合成 UI 为 A-01 后预期演进、其余为亚感知像素漂移；`make visual-update` 后 `make visual-check` 全绿（20 场景）；CI 首轮 integration 1 例 `TestTCPPlayerAndWorldSaveFailureRecovery` 时序 flake，重跑 8/8 全绿后合并；以 PR #105 merge `114bef75` 合入。独占文件集仅 `cmd/mornlea/testdata/golden/*.png`，未碰 capture 场景表与代码 |
+docs/notes/visual-verification.md:7:抓帧依次跑完 `cmd/mornlea/capture.go` 里表驱动的 21 个固定场景：`terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`workbench-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`torch-night`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`water-surface-slope`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`。场景按清单顺序共用同一个 application，`far-horizon` 恒为倒数第二，`water-underwater` 恒为唯一末场景。每张 640×360 PNG 都与 `cmd/mornlea/testdata/golden/` 下的基线比对；抓帧与 golden 固定使用内嵌默认材质，不随本机配置或用户材质漂移。抓帧模式不能与 `--benchmark` 或 `--connect` 同时启用。
+docs/notes/visual-verification.md:14:make visual-update             # 重新生成基线，写入 cmd/mornlea/testdata/golden/
+docs/notes/fix-grass-block-texture/brief.md:48:   （会重写 `cmd/mornlea/testdata/golden/*.png`，内部自带 LOD on/off 近环 control）。用 `git status` 检查变化的 golden 集合应只包含
+docs/notes/fix-grass-block-texture/report-implementer-r2.md:15:- `cmd/mornlea/testdata/golden/*.png`：全部 17 张 golden 重生成。
+docs/superpowers/plans/2026-08-23-first-night-survival-parallel-wave.md:189:- Create: `cmd/mornlea/testdata/golden/workbench-crafting.png`
+docs/superpowers/plans/2026-08-23-first-night-survival-parallel-wave.md:190:- Create: `cmd/mornlea/testdata/golden/torch-night.png`
+docs/superpowers/plans/2026-08-23-first-night-survival-parallel-wave.md:191:- Create: `cmd/mornlea/testdata/golden/sword-combat.png`
+docs/superpowers/plans/2026-08-23-first-night-survival-parallel-wave.md:192:- Create: `cmd/mornlea/testdata/golden/hostile-mob.png`
+docs/superpowers/plans/2026-08-23-first-night-survival-parallel-wave.md:193:- Create: `cmd/mornlea/testdata/golden/bed-sleep.png`
+docs/superpowers/plans/2026-08-09-confirmed-damage-feedback.md:1048:- `git diff --name-only cmd/mcgo/testdata/golden` 无输出。
+docs/superpowers/plans/2026-08-09-confirmed-damage-feedback.md:1079:git diff main...HEAD -- internal/network internal/storage internal/sim internal/render/hotbar.go internal/render/shader/terrain.wgsl cmd/mcgo/capture.go cmd/mcgo/testdata/golden
+docs/superpowers/plans/2026-08-09-confirmed-damage-feedback.md:1102:git diff --name-only cmd/mcgo/testdata/golden
+docs/superpowers/plans/2026-08-21-mornlea-texture-pack.md:633:- Modify: existing files under `cmd/mornlea/testdata/golden/` selected by the post-LOD `captureScenes` table
+docs/superpowers/plans/2026-08-21-mornlea-texture-pack.md:712:	cmd/mornlea/capture_near_band_test.go cmd/mornlea/testdata/golden
+docs/superpowers/plans/2026-08-09-target-block-feedback.md:203:- Create: `cmd/mcgo/testdata/golden/target-block-feedback.png`
+docs/superpowers/plans/2026-08-09-target-block-feedback.md:239:test -f cmd/mcgo/testdata/golden/target-block-feedback.png
+docs/superpowers/plans/2026-08-09-target-block-feedback.md:240:test -z "$(git diff --name-only -- cmd/mcgo/testdata/golden/inventory-crafting.png)"
+docs/superpowers/plans/2026-08-09-target-block-feedback.md:249:git add cmd/mcgo/capture.go cmd/mcgo/capture_test.go cmd/mcgo/testdata/golden openspec/changes/target-block-feedback/tasks.md
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:39:- Modify: `cmd/mcgo/testdata/golden/inventory-crafting.png` — 唯一允许变化的视觉基线。
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:60:  - `cmd/mcgo/testdata/golden/terrain-noon.png`
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:61:  - `cmd/mcgo/testdata/golden/hud-hotbar-health.png`
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:62:  - `cmd/mcgo/testdata/golden/avatar-nametag.png`
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:63:  - `cmd/mcgo/testdata/golden/inventory-crafting.png`
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:64:  - `cmd/mcgo/testdata/golden/debug-panel.png`
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:65:  - `cmd/mcgo/testdata/golden/materials-showcase.png`
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:66:  - `cmd/mcgo/testdata/golden/oak-grove.png`
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:68:  - `cmd/mcgo/testdata/golden/skylight-tunnel.png`
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:69:  - `cmd/mcgo/testdata/golden/block-light-room.png`
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:70:  - `cmd/mcgo/testdata/golden/target-block-feedback.png`
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:121:- Modify after approval: `cmd/mcgo/testdata/golden/inventory-crafting.png`
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:153:for LIGHT_GOLDEN in cmd/mcgo/testdata/golden/*.png; do
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:170:cp "$LIGHT_VISUAL_DIR/inventory-crafting.png" cmd/mcgo/testdata/golden/inventory-crafting.png
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:171:git diff --name-only -- cmd/mcgo/testdata/golden
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:183:  cmd/mcgo/testdata/golden/inventory-crafting.png \
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:423:  cmp -s "cmd/mcgo/testdata/golden/$CLOUD_NAME" "$CLOUD_VISUAL_DIR/$CLOUD_NAME" && exit 1
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:426:  cmp -s "cmd/mcgo/testdata/golden/$CLOUD_NAME" "$CLOUD_VISUAL_DIR/$CLOUD_NAME"
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:441:  cp "$CLOUD_VISUAL_DIR/$CLOUD_NAME" "cmd/mcgo/testdata/golden/$CLOUD_NAME"
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:443:git diff --name-only -- cmd/mcgo/testdata/golden
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:454:git add cmd/mcgo/testdata/golden/terrain-noon.png \
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:455:  cmd/mcgo/testdata/golden/hud-hotbar-health.png \
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:456:  cmd/mcgo/testdata/golden/avatar-nametag.png \
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:457:  cmd/mcgo/testdata/golden/inventory-crafting.png \
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:458:  cmd/mcgo/testdata/golden/debug-panel.png \
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:459:  cmd/mcgo/testdata/golden/materials-showcase.png \
+docs/superpowers/plans/2026-08-10-current-wave-closeout.md:460:  cmd/mcgo/testdata/golden/oak-grove.png \
+docs/superpowers/plans/2026-07-26-m0-m1-flyable-world.md:2305:- Create: `internal/worldgen/testdata/golden_seed42.txt`
+docs/superpowers/plans/2026-07-26-m0-m1-flyable-world.md:2719:预期：`-update` 生成 `testdata/golden_seed42.txt`，随后全部测试 PASS。
+docs/superpowers/plans/2026-08-13-m5a-companion-entity-chat.md:40:- `cmd/mornlea/testdata/golden/ai-companion.png`：人工确认后加入的唯一新视觉基线。
+docs/superpowers/plans/2026-08-13-m5a-companion-entity-chat.md:1369:- Create after approval: `cmd/mornlea/testdata/golden/ai-companion.png`
+docs/superpowers/plans/2026-08-13-m5a-companion-entity-chat.md:1419:test "$(git status --short --untracked-files=all -- cmd/mornlea/testdata/golden)" = \
+docs/superpowers/plans/2026-08-13-m5a-companion-entity-chat.md:1420:  "?? cmd/mornlea/testdata/golden/ai-companion.png"
+docs/superpowers/plans/2026-08-13-m5a-companion-entity-chat.md:1425:Expected: status 精确只列 `?? cmd/mornlea/testdata/golden/ai-companion.png`，没有旧 golden 修改；两次 visual-check 都按既有最大通道差/差异像素比例双阈值全场景 PASS。不得追加逐字节相等门禁。
+docs/superpowers/plans/2026-08-13-m5a-companion-entity-chat.md:1437:git add cmd/mornlea/capture.go cmd/mornlea/capture_scene.go cmd/mornlea/capture_ai_companion_test.go cmd/mornlea/capture_oak_grove_test.go cmd/mornlea/capture_scene_test.go cmd/mornlea/capture_image_test.go README.md cmd/mornlea/testdata/golden/ai-companion.png openspec/changes/m5a-companion-entity-chat/tasks.md
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud-main-integration.md:48:- Modify: `cmd/mornlea/testdata/golden/*.png`（固定 15 张，全部重生成）
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud-main-integration.md:154:cmd/mornlea/testdata/golden/ai-companion.png
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud-main-integration.md:155:cmd/mornlea/testdata/golden/avatar-nametag.png
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud-main-integration.md:156:cmd/mornlea/testdata/golden/block-light-room.png
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud-main-integration.md:157:cmd/mornlea/testdata/golden/debug-panel.png
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud-main-integration.md:158:cmd/mornlea/testdata/golden/far-horizon.png
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud-main-integration.md:159:cmd/mornlea/testdata/golden/hud-hotbar-health.png
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud-main-integration.md:160:cmd/mornlea/testdata/golden/inventory-crafting.png
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud-main-integration.md:161:cmd/mornlea/testdata/golden/materials-showcase.png
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud-main-integration.md:162:cmd/mornlea/testdata/golden/oak-grove.png
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud-main-integration.md:163:cmd/mornlea/testdata/golden/skylight-tunnel.png
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud-main-integration.md:164:cmd/mornlea/testdata/golden/target-block-feedback.png
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud-main-integration.md:165:cmd/mornlea/testdata/golden/terrain-noon.png
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud-main-integration.md:166:cmd/mornlea/testdata/golden/water-surface-slope.png
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud-main-integration.md:167:cmd/mornlea/testdata/golden/water-underwater.png
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud-main-integration.md:627:find cmd/mornlea/testdata/golden \
+docs/superpowers/plans/2026-08-22-container-ui-visual-alignment.md:149:- Create: `cmd/mornlea/testdata/golden/chest-container.png`
+docs/superpowers/plans/2026-08-22-container-ui-visual-alignment.md:150:- Create: `cmd/mornlea/testdata/golden/furnace-container.png`
+docs/superpowers/plans/2026-08-22-container-ui-visual-alignment.md:151:- Modify: `cmd/mornlea/testdata/golden/*.png`
+docs/superpowers/plans/2026-08-09-common-block-materials.md:40:| 无窗口展示场景和 golden | `cmd/mcgo/capture.go`, `cmd/mcgo/testdata/golden/*.png` |
+docs/superpowers/plans/2026-08-09-common-block-materials.md:922:- Create: `cmd/mcgo/testdata/golden/materials-showcase.png`
+docs/superpowers/plans/2026-08-09-common-block-materials.md:923:- Modify: `cmd/mcgo/testdata/golden/*.png`（只保留世界 UV 实际改变的既有场景）
+docs/superpowers/plans/2026-08-09-common-block-materials.md:1030:Expected: 两条命令均完成全部场景，第二条沿用 `MaxChannelDelta=2` 与 `MaxDiffPixelRatio=0.0001` 并通过；输出目录含每个 scene 的 PNG。使用本地图片查看工具逐张打开 `/private/tmp/common-block-materials-visual-check/*.png`，确认：14 种材料可区分、草带无相位断层、玻璃/树叶孔洞可信、原木顶/侧可见、既有场景无破损。删除或恢复无实际差异的 golden，只提交 `git diff --name-only cmd/mcgo/testdata/golden` 列出的真实变化。
+docs/superpowers/plans/2026-08-09-common-block-materials.md:1035:git add cmd/mcgo/capture.go cmd/mcgo/capture_test.go internal/mesh/greedy_test.go cmd/mcgo/testdata/golden openspec/changes/common-block-materials/tasks.md
+docs/superpowers/plans/2026-08-04-m4e-authoritative-smelting.md:317:- Modify: `internal/worldgen/testdata/golden_seed42.txt`
+docs/superpowers/plans/2026-08-04-m4e-authoritative-smelting.md:407:git add internal/core/block.go internal/core/item.go internal/core/inventory.go internal/core/recipe.go internal/core/item_test.go internal/core/inventory_test.go internal/core/recipe_test.go internal/worldgen/generator.go internal/worldgen/generator_test.go internal/worldgen/testdata/golden_seed42.txt internal/assets/blocks.go internal/assets/procedural.go internal/assets/blocks_test.go internal/render/hotbar.go internal/render/drop.go internal/render/hotbar_test.go internal/render/drop_test.go openspec/changes/m4e-authoritative-smelting/tasks.md
+docs/superpowers/plans/2026-08-07-visual-verification.md:23:- 视觉图分辨率 **640×360**，golden 存放于 `cmd/mcgo/testdata/golden/`。
+docs/superpowers/plans/2026-08-07-visual-verification.md:1057:- Create: `cmd/mcgo/testdata/golden/terrain-noon.png`、`hud-hotbar-health.png`、`avatar-nametag.png`
+docs/superpowers/plans/2026-08-07-visual-verification.md:1080:- `updateGolden` 为真：把抓到的图写进 `cmd/mcgo/testdata/golden/<name>.png`。
+docs/superpowers/plans/2026-08-07-visual-verification.md:1116:git add cmd/mcgo/testdata/golden/terrain-noon.png \
+docs/superpowers/plans/2026-08-07-visual-verification.md:1117:        cmd/mcgo/testdata/golden/hud-hotbar-health.png \
+docs/superpowers/plans/2026-08-07-visual-verification.md:1118:        cmd/mcgo/testdata/golden/avatar-nametag.png
+docs/superpowers/plans/2026-08-07-visual-verification.md:1120:du -h cmd/mcgo/testdata/golden/
+docs/superpowers/plans/2026-08-08-m4m-propagated-skylight.md:41:- Create: `cmd/mcgo/testdata/golden/skylight-tunnel.png` — 人工确认后的第四张基线。
+docs/superpowers/plans/2026-08-08-m4m-propagated-skylight.md:468:- Create: `cmd/mcgo/testdata/golden/skylight-tunnel.png`
+docs/superpowers/plans/2026-08-08-m4m-propagated-skylight.md:469:- Modify: `cmd/mcgo/testdata/golden/{terrain-noon,hud-hotbar-health,avatar-nametag}.png` only if propagation legitimately changes pixels after human review
+docs/superpowers/plans/2026-08-08-m4m-propagated-skylight.md:531:git add cmd/mcgo/capture.go cmd/mcgo/capture_test.go cmd/mcgo/testdata/golden
+docs/superpowers/plans/2026-08-09-material-processing-loop.md:24:- [ ] Task 6 独占 `cmd/mcgo/testdata/golden/inventory-crafting.png`；其他 golden 若发生漂移，停止并定位，不纳入提交。
+docs/superpowers/plans/2026-08-09-material-processing-loop.md:232:- Modify: `cmd/mcgo/testdata/golden/inventory-crafting.png`
+docs/superpowers/plans/2026-08-09-material-processing-loop.md:257:test "$(git diff --name-only -- cmd/mcgo/testdata/golden | tr -d '\n')" = "cmd/mcgo/testdata/golden/inventory-crafting.png"
+docs/superpowers/plans/2026-08-09-material-processing-loop.md:267:git add internal/render/hotbar.go internal/render/hotbar_test.go cmd/mcgo/app_test.go cmd/mcgo/capture.go cmd/mcgo/testdata/golden/inventory-crafting.png openspec/changes/material-processing-loop/tasks.md
+docs/superpowers/plans/2026-08-09-natural-material-generation.md:69:- Modify: `internal/worldgen/testdata/golden_seed42.txt`
+docs/superpowers/plans/2026-08-10-procedural-block-clouds.md:37:- Modify after final rebase: `cmd/mcgo/testdata/golden/*.png` — 只提交实际受天空改变的图片。
+docs/superpowers/plans/2026-08-10-procedural-block-clouds.md:300:- Modify: `cmd/mcgo/testdata/golden/*.png`（仅实际变化者）
+docs/superpowers/plans/2026-08-10-procedural-block-clouds.md:322:git diff --name-only -- cmd/mcgo/testdata/golden
+docs/superpowers/plans/2026-08-10-procedural-block-clouds.md:331:git add cmd/mcgo/testdata/golden openspec/changes/procedural-block-clouds/tasks.md
+docs/superpowers/plans/2026-08-14-rust-engine-collision-raycast-ci-stability.md:1384:- Preserve byte-for-byte: `cmd/mornlea/testdata/golden/*.png`
+docs/superpowers/plans/2026-08-14-rust-engine-collision-raycast-ci-stability.md:1413:test -z "$(git diff --name-status 88558088beecf74d76669d23d83622358b87a73f..HEAD -- cmd/mornlea/testdata/golden)"
+docs/superpowers/plans/2026-08-14-rust-engine-collision-raycast-ci-stability.md:1414:test "$(find cmd/mornlea/testdata/golden -maxdepth 1 -type f -name '*.png' | wc -l | tr -d ' ')" -eq 11
+docs/superpowers/plans/2026-08-14-rust-engine-collision-raycast-ci-stability.md:1563:test -z "$(git diff --name-status 88558088beecf74d76669d23d83622358b87a73f..HEAD -- cmd/mornlea/testdata/golden)"
+docs/superpowers/plans/2026-08-14-rust-engine-collision-raycast-ci-stability.md:1574:  docs/notes/perf-baseline-m5.json cmd/mornlea/testdata/golden)"
+docs/superpowers/plans/2026-08-10-light-block-recipe.md:35:- Modify: `cmd/mcgo/testdata/golden/inventory-crafting.png` — 八行 HUD 基线。
+docs/superpowers/plans/2026-08-10-light-block-recipe.md:263:- Modify: `cmd/mcgo/testdata/golden/inventory-crafting.png`
+docs/superpowers/plans/2026-08-10-light-block-recipe.md:277:git diff --name-only -- cmd/mcgo/testdata/golden
+docs/superpowers/plans/2026-08-10-light-block-recipe.md:286:git add cmd/mcgo/capture.go cmd/mcgo/testdata/golden/inventory-crafting.png \
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud.md:401:- Modify: `cmd/mornlea/testdata/golden/hud-hotbar-health.png`
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud.md:402:- Create: `cmd/mornlea/testdata/golden/hud-survival-feedback.png`
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud.md:480:  git status --short cmd/mornlea/testdata/golden
+docs/superpowers/plans/2026-08-22-bedrock-survival-hud.md:508:  git add cmd/mornlea/capture.go cmd/mornlea/capture_ai_companion_test.go cmd/mornlea/capture_hud_test.go cmd/mornlea/testdata/golden
+docs/superpowers/plans/2026-08-12-mornlea-project-rename.md:243:for file in cmd/mcgo/testdata/golden/*.png; do
+docs/superpowers/plans/2026-08-12-mornlea-project-rename.md:968:for file in cmd/mcgo/testdata/golden/*.png; do
+docs/superpowers/plans/2026-08-12-mornlea-project-rename.md:1027:Within moved command code, mechanically update Command comments, FlagSet names, error/log prefixes, window title, `captureGoldenDir`, test identifiers and helper env names. Use `mornleaServerHost`/`mornleaServer*` for former `mcgod*` identifiers. Do not change scenario, timings, fixtures or test entry set except identity-driven test renames.
+docs/superpowers/plans/2026-08-12-mornlea-project-rename.md:1063:for file in cmd/mornlea/testdata/golden/*.png; do
+docs/superpowers/plans/2026-08-12-mornlea-project-rename.md:1284:for file in cmd/mornlea/testdata/golden/*.png; do
+docs/superpowers/plans/2026-08-09-m4n-static-block-light.md:47:- Create: `cmd/mcgo/testdata/golden/block-light-room.png`
+docs/superpowers/plans/2026-08-09-m4n-static-block-light.md:726:- Create: `cmd/mcgo/testdata/golden/block-light-room.png`
+docs/superpowers/plans/2026-08-09-m4n-static-block-light.md:829:打开 `cmd/mcgo/testdata/golden/block-light-room.png`，确认：中央暖色发光块可见；墙面由近到远衰减；午夜没有天空光伪亮；房外和边界没有亮缝。若语义不成立，修 fixture 或生产根因后重生成，不调整阈值。
+docs/superpowers/plans/2026-08-09-m4n-static-block-light.md:834:git add cmd/mcgo/capture.go cmd/mcgo/capture_test.go cmd/mcgo/testdata/golden/block-light-room.png
+docs/superpowers/plans/2026-08-10-m4o-responsibility-oriented-code-organization.md:1417:  captureGoldenDir, captureThresholds, compareAgainstGolden,
+docs/superpowers/plans/2026-08-10-m4o-responsibility-oriented-code-organization.md:1690:for file in cmd/mcgo/testdata/golden/*.png; do shasum -a 256 "$file"; done
+docs/superpowers/plans/2026-08-10-m4o-responsibility-oriented-code-organization.md:1886:  cmd/mcgo/testdata/golden
+docs/superpowers/plans/2026-08-10-m4o-responsibility-oriented-code-organization.md:1887:test "$(git ls-tree -r --name-only 37cdb3e -- cmd/mcgo/testdata/golden | rg '\.png$' | wc -l | tr -d ' ')" = 10
+docs/superpowers/plans/2026-08-10-deterministic-oak-trees.md:34:- Modify: `internal/worldgen/testdata/golden_seed42.txt` — 审核后的新生成结果。
+docs/superpowers/plans/2026-08-10-deterministic-oak-trees.md:39:- Create: `cmd/mcgo/testdata/golden/oak-grove.png` — 经人工确认的无窗口基线。
+docs/superpowers/plans/2026-08-10-deterministic-oak-trees.md:40:- Modify: `cmd/mcgo/testdata/golden/README.md` — 登记新场景。
+docs/superpowers/plans/2026-08-10-deterministic-oak-trees.md:243:  internal/worldgen/testdata/golden_seed42.txt \
+docs/superpowers/plans/2026-08-10-deterministic-oak-trees.md:255:- Create: `cmd/mcgo/testdata/golden/oak-grove.png`
+docs/superpowers/plans/2026-08-10-deterministic-oak-trees.md:256:- Modify: `cmd/mcgo/testdata/golden/README.md`
+docs/superpowers/plans/2026-08-10-deterministic-oak-trees.md:294:  cmd/mcgo/testdata/golden cmd/mcgo/testdata/golden/README.md \
+docs/superpowers/specs/2026-08-22-bedrock-survival-hud-design.md:93:- `cmd/mornlea/testdata/golden/`：只更新受影响 HUD 场景并加入新场景。
+docs/superpowers/specs/2026-08-07-visual-verification-design.md:86:golden 图存放于 `cmd/mcgo/testdata/golden/*.png`，640×360。
+docs/superpowers/specs/2026-08-12-mornlea-project-rename-design.md:129:Go module、全仓 import、两个 `cmd` 目录、Rust crate/ABI、Makefile、CI、Hook、架构守卫和当前测试必须在同一任务提交中切换，使每个提交末端都能构建。命令目录整体移动，包括测试与 `testdata/golden`；PNG 只移动路径，字节不得改变。
+.zcode/plans/plan-sess_5f57bee8-b6e4-46e6-b598-f9034bc60f82.md:18:├── capture/           # package capture：capture* + visual_compare + testdata/golden（21 张随迁）
+.zcode/plans/plan-sess_5f57bee8-b6e4-46e6-b598-f9034bc60f82.md:32:4. **golden 资产**：`testdata/golden` 随 capture 迁到 `cmd/mornlea/capture/testdata/golden`（git mv 保历史），`captureGoldenDir` 常量同步；核对 `.github/workflows/ci.yml`、`scripts/`、`docs/notes/perf-baseline.*` 对旧路径的引用。
+openspec/changes/archive/2026-08-09-material-processing-loop/tasks.md:23:- [x] 6.2 通过 `cmd/mcgo/capture.go` 的现有无窗口 `inventory-crafting` 场景更新且只更新 `cmd/mcgo/testdata/golden/inventory-crafting.png`；运行 `make visual-update`，再用 `test "$(git diff --name-only -- cmd/mcgo/testdata/golden)" = "cmd/mcgo/testdata/golden/inventory-crafting.png"` 断言没有其他 golden 变化，随后运行 `make visual-check` 与 `git diff --check`；不得启动或聚焦前台窗口。
+openspec/changes/archive/2026-08-09-target-block-feedback/tasks.md:25:- [x] 5.2 生成 `cmd/mcgo/testdata/golden/target-block-feedback.png`，仅更新正常目标提示实际改变的既有 golden，逐张复核完整场景且保持 `inventory-crafting.png` 逐字节不变；验证：`zsh -ic 'make visual-update VISUAL_OUT=/private/tmp/target-block-feedback-visual-update'`、`test -f cmd/mcgo/testdata/golden/target-block-feedback.png`、`test -z "$(git diff --name-only -- cmd/mcgo/testdata/golden/inventory-crafting.png)"` 和 `zsh -ic 'make visual-check VISUAL_OUT=/private/tmp/target-block-feedback-visual-check'`。
+openspec/changes/archive/2026-08-25-hud-atlas-texel-stable-uv/ledger.md:11:- 2026-08-25 Task 3.1（视觉基线对比，golden 裁决）：本机（Apple Silicon，当前开发机）先在 main 基线 `4f89fe1c` 跑 `make visual-check`——**main 本身即有 13 景超阈值**（固有机器 vs golden 生成机偏差，如 10px@(423,123)、oak-grove 56px），证明该门禁在本机对 main 本就不绿。本分支与 main 的**净差异**（同机实拍逐像素比对）恰好只有两景：`hud-hotbar-health`/`hud-survival-feedback` 各 +81px，全部位于心形图标区（x[113,174], y[300,323]）——收进使距内部纹素边界 <1/256 纹素的采样翻到相邻纹素，即设计预测的「贴边界样本」；这批样本正是下次扩列时本来就会翻转的同一批（farming 0.115% 的同类）。其余 16 景净差异为 0。按 design D3 升级裁决，用户显式批准「外科手术式再生两张 golden」：仅从本分支实拍拷贝两张 PNG 进 `testdata/golden/`，不触碰其余 16 景。再生后两景在本机 `make visual-check` 差异归零；每张 golden 相对旧基线的 91px 变更 = 81px 收进翻转 + 10px 本机既有偏差（后者随本机实拍固化，与其余 16 景的偏差同类）。CI 不运行视觉门禁，无跨机器门禁风险。
+openspec/changes/archive/2026-08-13-m4q-mornlea-project-rename/tasks.md:74:for file in cmd/mcgo/testdata/golden/*.png; do
+openspec/changes/archive/2026-08-13-m4q-mornlea-project-rename/tasks.md:101:for file in cmd/mornlea/testdata/golden/*.png; do
+openspec/changes/archive/2026-08-13-m4q-mornlea-project-rename/tasks.md:232:for file in cmd/mornlea/testdata/golden/*.png; do
+openspec/changes/archive/2026-08-14-m5a-companion-entity-chat/tasks.md:77:- [x] 13.3 使用 `view_image` 检查 `/private/tmp/mornlea-m5a-ai-companion-candidate/ai-companion.png` 并运行 `shasum -a 256 /private/tmp/mornlea-m5a-ai-companion-candidate/ai-companion.png`；向用户报告绝对路径和 SHA-256，只有收到明确人工确认后才运行 `VISUAL_OUT=/private/tmp/mornlea-m5a-ai-companion-update make visual-update` 与 `test "$(git status --short --untracked-files=all -- cmd/mornlea/testdata/golden)" = "?? cmd/mornlea/testdata/golden/ai-companion.png"`。
+openspec/changes/archive/2026-08-09-m4n-static-block-light/tasks.md:32:- [x] 6.3 运行 `zsh -ic 'go run ./cmd/mcgo --capture /private/tmp/mcgo-m4n-capture --update-golden'` 生成唯一新增 `cmd/mcgo/testdata/golden/block-light-room.png`，再运行 `zsh -ic 'go run ./cmd/mcgo --capture /private/tmp/mcgo-m4n-capture-verify'`；人工确认中央暖色光源、近远衰减、午夜无天空伪亮且房外无边界漏光，不调整既有阈值。该次 Apple M2 更新与复核证据按用户裁决满足视觉验收，设备型号不构成额外门禁；报告仍如实记录 Apple M2，性能基线硬件身份规则不变。
+openspec/changes/archive/2026-08-23-bedrock-survival-hud/ledger.md:59:| `/root/hud_merge_final_review`（fresh whole-branch reviewer） | committed `cmd/mornlea/testdata/golden/*.png` 原始分辨率 | `terrain-noon.png`、`hud-hotbar-health.png`、`hud-survival-feedback.png`、`avatar-nametag.png`、`inventory-crafting.png`、`debug-panel.png`、`skylight-tunnel.png`、`block-light-room.png`、`materials-showcase.png`、`target-block-feedback.png`、`oak-grove.png`、`ai-companion.png`、`water-surface-slope.png`、`far-horizon.png`、`water-underwater.png` | 无 | 独立逐图验收 15/15 PASS；重点确认 hotbar 左右缘、closed/open oxygen 向外堆叠、mining 完整栈锚点、36 inventory cells/10 recipes 分离，以及水景/LOD 尾序；未把 2 张 diagnostic controls 计入正式 scene |
+openspec/changes/archive/2026-08-07-visual-verification/proposal.md:31:- `cmd/mcgo/testdata/golden/*.png`（新增）：三张基线图，合计应在百 KB 量级。
+openspec/changes/archive/2026-08-23-bedrock-survival-hud/tasks.md:44:- [x] 4.5 在可用 Metal 环境运行 `make visual-update VISUAL_OUT=build/visual-bedrock-survival-hud-update`；确认场景共 15 张、新增 `hud-survival-feedback.png`，且只提交实际受影响的 `cmd/mornlea/testdata/golden` 文件，不移动场景尾序、不放宽双阈值。
+openspec/changes/archive/2026-08-07-visual-verification/tasks.md:45:- [x] 6.3 提交三张基线图到 `cmd/mcgo/testdata/golden/`，确认合计在百 KB 量级；显著更大时先查分辨率或格式配置，不得直接入库。
+openspec/changes/archive/2026-08-10-light-block-recipe/proposal.md:28:- OpenSpec 将修改 `authoritative-crafting`、`static-block-light` 与 `voxel-visual-presentation` 三项行为契约；唯一允许变化的视觉 golden 是 `cmd/mcgo/testdata/golden/inventory-crafting.png`。
+openspec/changes/archive/2026-08-10-light-block-recipe/design.md:35:`cmd/mcgo` 的 `inventory-crafting` fixture 提供使 ID `8` 可合成的玻璃，并让无窗口抓帧覆盖第八行。唯一允许更新的视觉 golden 是 `cmd/mcgo/testdata/golden/inventory-crafting.png`；其他场景、相机和比较阈值保持不变。
+openspec/changes/archive/2026-08-26-spec-oracle-wording-hygiene/design.md:34:| Scenario「同种子区块与 Go oracle 逐位一致」GIVEN/WHEN/THEN | 「区块内每个 (x,y,z) 的 BlockID 与测试内 Go oracle 实现完全一致」 | 冻结语料的种子与区块坐标上，全区块 BlockID 序列的 SHA256 摘要与提交入库的黄金文件逐字节一致（`internal/worldgen/testdata/golden_seed42.txt`，`generator_test.go`），同种子重复生成逐格一致。GIVEN 相应从「任意种子与任意区块坐标」收敛为「黄金文件冻结的种子与区块坐标」——黄金摘要只钉固定语料，不得虚构任意性覆盖 |
+openspec/changes/archive/2026-08-09-natural-material-generation/tasks.md:5:- [x] 2.3 更新 `internal/worldgen/testdata/golden_seed42.txt` 与相关 worldgen 测试，仅接受批准的生成变化；运行 `go test ./internal/worldgen -run TestGenerateChunkGolden -update -count=1`、`go test ./internal/worldgen -race -count=1`、`gofmt -w internal/worldgen`、`gofmt -l internal/worldgen` 和 `git diff --check`。

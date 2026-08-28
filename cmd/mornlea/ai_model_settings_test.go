@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/network"
@@ -21,7 +22,7 @@ func TestRunLocalAIModelSettingsReachServerConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	definitions := []companion.Definition{{ID: id, Name: "阿木"}}
-	options := localConnectionOptions()
+	options := application.LocalConnectionTestOptions()
 	options.Companions = definitions
 	options.AIModel = companion.ModelSettings{
 		Endpoint:           "https://example.invalid/v1",
@@ -31,18 +32,18 @@ func TestRunLocalAIModelSettingsReachServerConfig(t *testing.T) {
 	}
 	options.AIAPIKey = "secret-value"
 	want := errors.New("stop after server config")
-	dependencies := connectionTestDependencies(t)
-	dependencies.openStore = func(context.Context, applicationOptions) (storage.WorldStore, error) {
-		return newConnectionTestStore(42), nil
+	dependencies := application.NewConnectionTestDependencies(t)
+	dependencies.OpenStore = func(context.Context, application.Options) (storage.WorldStore, error) {
+		return application.NewConnectionTestStore(42), nil
 	}
-	dependencies.newHost = func(_ context.Context, config server.Config, _ server.Generator, _ storage.WorldStore) (applicationHost, error) {
+	dependencies.NewHost = func(_ context.Context, config server.Config, _ server.Generator, _ storage.WorldStore) (application.Host, error) {
 		if config.AIModel != options.AIModel || config.AIAPIKey != "secret-value" {
 			t.Fatalf("server AIModel=%+v AIAPIKey=%q，want %+v/secret-value",
 				config.AIModel, config.AIAPIKey, options.AIModel)
 		}
 		return nil, want
 	}
-	_, gotErr := newApplicationWithDependencies(options, dependencies)
+	_, gotErr := application.NewWithDependencies(options, dependencies)
 	if !errors.Is(gotErr, want) {
 		t.Fatalf("newApplication error = %v，want %v", gotErr, want)
 	}
@@ -76,7 +77,7 @@ func TestRunResolvesAIModelKeyFromEnvironment(t *testing.T) {
 	stop := errors.New("stop after config capture")
 	err = runWithDependencies([]string{"--config", path}, runDependencies{
 		loadIdentity: func(*string) (network.Identity, error) { return network.Identity{}, nil },
-		newApplication: func(options applicationOptions) (*application, error) {
+		newApplication: func(options application.Options) (*application.Application, error) {
 			gotKey = options.AIAPIKey
 			gotModel = options.AIModel
 			return nil, stop

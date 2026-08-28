@@ -93,7 +93,7 @@ var baselineVersionMappings = []baselineVersionMapping{
 	{
 		name:        "benchmark scenario",
 		docPattern:  `benchmark scenario 为 v(\d+)`,
-		sourcePath:  filepath.Join("cmd", "mornlea", "benchmark.go"),
+		sourcePath:  filepath.Join("cmd", "mornlea", "benchmark", "benchmark.go"),
 		codePattern: `scenarioVersion\s*=\s*(\w+)`,
 		why:         "scenarioVersion 是 benchmark 报告写出的场景版本，场景迁移链以它为终点。",
 	},
@@ -125,6 +125,11 @@ var claudeImportDocs = []string{
 	filepath.Join("internal", "CLAUDE.md"),
 	filepath.Join("engine", "CLAUDE.md"),
 	filepath.Join("cmd", "mornlea", "CLAUDE.md"),
+	// 客户端命令的三个功能域子包各有自己的 AGENTS.md，薄导入必须逐字节
+	// 规范；子包文档拆出后漏登记会让新 CLAUDE.md 静默脱离本门禁。
+	filepath.Join("cmd", "mornlea", "app", "CLAUDE.md"),
+	filepath.Join("cmd", "mornlea", "capture", "CLAUDE.md"),
+	filepath.Join("cmd", "mornlea", "benchmark", "CLAUDE.md"),
 }
 
 func TestClaudeImportsAgentGuidance(t *testing.T) {

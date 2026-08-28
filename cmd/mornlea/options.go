@@ -8,18 +8,19 @@ import (
 	"fmt"
 	"io"
 
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim"
 )
 
 type mainOptions struct {
-	Application   applicationOptions
+	Application   application.Options
 	PerfOutput    string
 	RequestedName *string
 	CaptureDir    string
 	// UpdateGolden 为真时，抓帧结果写入 golden 基线而不是与之比对。
-	// 与 applicationOptions 无关：它只影响 runCapture 的行为，从
+	// 与 application.Options 无关：它只影响 runCapture 的行为，从
 	// runWithDependencies 直接传给 dependencies.runCapture。
 	UpdateGolden bool
 	// ConfigPath 是调参配置文件路径；留空表示使用 config.DefaultPath()。
@@ -83,10 +84,10 @@ func parseMainOptions(args []string) (mainOptions, error) {
 	}
 	seed := int64(42)
 	if *benchmark {
-		seed = benchmarkSeed
+		seed = application.BenchmarkSeed
 	}
 	return mainOptions{
-		Application: applicationOptions{
+		Application: application.Options{
 			Seed:               seed,
 			Benchmark:          *benchmark,
 			BenchmarkTransport: *benchmarkTransport,

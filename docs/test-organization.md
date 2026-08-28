@@ -73,8 +73,10 @@ helper 落位规则与验收清单都在这里。条文是原则，本文件是�
 ## helper 中心规则
 
 - 每包**最多一个**共享 helper 中心：优先扩展包内既有 `*_helpers_test.go`；没有才
-  新建 `helpers_test.go`；不得另立并行中心（如 `cmd/mornlea` 已有
-  `app_test_helpers_test.go` 与 `benchmark_helpers_test.go`，扩展它们，不要再建）。
+  新建 `helpers_test.go`；不得另立并行中心（如客户端三个子包各有自己的中心：
+  `cmd/mornlea/app` 的 `app_test_helpers_test.go`、`cmd/mornlea/capture` 的
+  `capture_test_helpers_test.go`、`cmd/mornlea/benchmark` 的
+  `benchmark_helpers_test.go`，各自扩展，不要再建）。
 - 纯 helper 文件（不含任何 `Test`/`Benchmark`/`Fuzz` 函数）必须以
   `*_helpers_test.go` 命名，不得顶着普通测试文件名。
 - 中心体量上限：超过约 500 行、或横跨两个以上不相干域（如测试替身 + 地形夹具 +
@@ -101,12 +103,22 @@ helper 落位规则与验收清单都在这里。条文是原则，本文件是�
 | `memworld_test.go`（33 行纯 helper，无测试函数） | 并入 `helpers_test.go`（393 行） |
 | `queue_bounded_test.go` 顶部跨文件 helper | `sortItems`/`queuedDueTick` 入 `helpers_test.go`；`boundedPos` 单文件私有，留原处 |
 
-混装识别范例：`cmd/mornlea/app_input_test.go`（约 1300 行、38 个测试，前缀横跨输入
+客户端命令分包（2026-08，openspec change `split-client-subpackages`）：
+`cmd/mornlea` 单包（89 个 Go 文件）按功能域 git mv 迁移为薄 main 加 `app/`、
+`capture/`、`benchmark/` 三个子包；全程测试函数名与 `t.Run` 标签逐一不变，
+三个子包 `go test -list` 入口并集与迁移前单包集合一致；helper 中心按「每包
+一个」落位（见上文 helper 中心规则），跨包白盒装配收敛为
+`cmd/mornlea/app/testkit.go` 的导出测试装配入口；golden 资产随 capture 域
+git mv 至 `cmd/mornlea/capture/testdata/golden`，子包依赖方向由
+`internal/archcheck` 的 `TestClientCommandSubpackageDependencyDirections` 强制。
+
+混装识别范例：`cmd/mornlea` 单包时期的 `app_input_test.go`（约 1300 行、38 个测试，前缀横跨输入
 预测门控、挖掘 overlay、快捷栏放置、熔炉 UI、箱子 UI、合成、丢弃/进食/使用键七个
 功能域）已于 2026-08 按本文件拆为 `app_input_prediction_test.go`、`app_mining_overlay_test.go`、
 `app_hotbar_placement_test.go`、`app_furnace_ui_test.go`、`app_chest_ui_test.go`、
-`app_inventory_crafting_test.go` 与 `app_use_key_test.go`，共享消息/镜像助手迁入
-`app_test_helpers_test.go`（此例为识别示范；新候选以判据为准）。
+`app_inventory_crafting_test.go` 与 `app_use_key_test.go`（客户端分包后均居
+`cmd/mornlea/app/`），共享消息/镜像助手迁入同包的 `app_test_helpers_test.go`
+（此例为识别示范；新候选以判据为准）。
 
 ## Rust 映射
 

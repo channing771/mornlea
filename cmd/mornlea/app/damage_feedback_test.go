@@ -1,0 +1,138 @@
+//go:build darwin
+
+package app
+
+import (
+	"testing"
+	"time"
+
+	"github.com/go-gl/mathgl/mgl32"
+
+	"github.com/channing771/mornlea/internal/client"
+	"github.com/channing771/mornlea/internal/config"
+	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/network"
+)
+
+func TestDamageFeedbackUsesOnlyConfirmedDecrease(t *testing.T) {
+	var feedback DamageFeedback
+	if got := feedback.update(12, true, time.Second); got != 0 {
+		t.Fatalf("首次确认强度=%v，想要 0", got)
+	}
+	if got := feedback.update(7, true, time.Second); got != 1 {
+		t.Fatalf("确认下降当帧强度=%v，想要 1", got)
+	}
+	if got := feedback.update(8, true, 90*time.Millisecond); got != 0.5 {
+		t.Fatalf("回复且淡出 90ms 强度=%v，想要 0.5", got)
+	}
+	if got := feedback.update(8, true, 90*time.Millisecond); got != 0 {
+		t.Fatalf("完整 180ms 后强度=%v，想要 0", got)
+	}
+}
+
+func TestDamageFeedbackRepeatedDamageRestartsFullDuration(t *testing.T) {
+	var feedback DamageFeedback
+	feedback.update(20, true, 0)
+	feedback.update(15, true, 0)
+	if got := feedback.update(15, true, 90*time.Millisecond); got != 0.5 {
+		t.Fatalf("首次伤害淡出强度=%v，想要 0.5", got)
+	}
+	if got := feedback.update(10, true, time.Second); got != 1 {
+		t.Fatalf("连续伤害当帧强度=%v，想要重新为 1", got)
+	}
+	if got := feedback.update(10, true, 179*time.Millisecond); got <= 0 {
+		t.Fatalf("重置后 179ms 强度=%v，想要仍大于 0", got)
+	}
+}
+
+func TestDamageFeedbackElapsedBoundsAndReset(t *testing.T) {
+	var feedback DamageFeedback
+	feedback.update(20, true, 0)
+	feedback.update(10, true, 0)
+	if got := feedback.update(10, true, -time.Second); got != 1 {
+		t.Fatalf("负 elapsed 强度=%v，想要保持 1", got)
+	}
+	if got := feedback.update(10, false, 0); got != 0 {
+		t.Fatalf("not-ready 强度=%v，想要 0", got)
+	}
+	if got := feedback.update(4, true, 0); got != 0 {
+		t.Fatalf("reset 后首次 ready 强度=%v，想要 0", got)
+	}
+	feedback.update(2, true, 0)
+	feedback.Reset()
+	if feedback != (DamageFeedback{}) {
+		t.Fatalf("显式 Reset 后状态=%+v，想要零值", feedback)
+	}
+}
+
+func applyDamageFeedbackHealth(t *testing.T, app *Application, tick uint64, Health uint8, ready bool) {
+	t.Helper()
+	if _, err := app.predictor.ApplyPlayerState(network.PlayerState{
+		ServerTick: tick, Dimension: core.Overworld,
+		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true,
+		Ready: ready, Health: Health,
+	}, client.MirrorCollisionSource{Mirror: app.mirror, Dimension: core.Overworld}); err != nil {
+		t.Fatalf("应用 Health=%d ready=%v: %v", Health, ready, err)
+	}
+}
+
+func TestApplicationDamageOverlayUsesConfirmedHealthAndStaysBelowHUD(t *testing.T) {
+	glyphs := &IntegrationGlyphSource{}
+	app := newRemoteRenderApplication(t, glyphs)
+	app.panel = newPanelStateFromActive(config.Defaults().Render)
+	app.panel.visible = true
+	if err := app.remotePlayers.Apply(RemoteSpawn(1, "Remote-1", 1, mgl32.Vec3{1, 2, 3})); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.inventory.Apply(network.InventoryState{Inventory: core.Inventory{}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.predictor.Begin(network.PlayerState{
+		ServerTick: 1, Dimension: core.Overworld,
+		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true,
+		Ready: true, Health: 12,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if rendered, err := app.Frame(0, 1, 0); err != nil || !rendered {
+		t.Fatalf("建立基线 frame=(%v,%v)", rendered, err)
+	}
+	if app.damageStrength != 0 {
+		t.Fatalf("首次确认误画 overlay: strength=%v", app.damageStrength)
+	}
+
+	applyDamageFeedbackHealth(t, app, 2, 7, true)
+	if rendered, err := app.Frame(0, 1, time.Second); err != nil || !rendered {
+		t.Fatalf("确认受伤 frame=(%v,%v)", rendered, err)
+	}
+	// 受伤当帧 overlay 强度进帧协议;强度值即旧 uniform 首 4 字节。
+	if app.damageStrength != 1 {
+		t.Fatalf("受伤当帧 strength=%v，想要 1", app.damageStrength)
+	}
+
+	applyDamageFeedbackHealth(t, app, 3, 8, true)
+	if rendered, err := app.Frame(0, 1, 90*time.Millisecond); err != nil || !rendered {
+		t.Fatalf("回复期间淡出 frame=(%v,%v)", rendered, err)
+	}
+	if app.damageStrength != 0.5 {
+		t.Fatalf("回复不得重启反馈，90ms strength=%v，想要 0.5", app.damageStrength)
+	}
+
+	applyDamageFeedbackHealth(t, app, 4, 0, false)
+	if rendered, err := app.Frame(0, 1, 0); err != nil || !rendered {
+		t.Fatalf("not-ready frame=(%v,%v)", rendered, err)
+	}
+	if app.damageStrength != 0 {
+		t.Fatalf("not-ready 后仍画 overlay: strength=%v", app.damageStrength)
+	}
+}
+
+func TestDamageFeedbackResetsWithClientSession(t *testing.T) {
+	app, _ := newInteractiveTestApplication(t)
+	app.damageFeedback.update(20, true, 0)
+	app.damageStrength = app.damageFeedback.update(10, true, 0)
+	app.CloseClientSession(nil)
+	if app.damageFeedback != (DamageFeedback{}) || app.damageStrength != 0 {
+		t.Fatalf("会话清理后 feedback=%+v strength=%v，想要零值", app.damageFeedback, app.damageStrength)
+	}
+}

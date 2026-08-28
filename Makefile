@@ -105,7 +105,7 @@ test-race-changed:
 	scripts/agents/race-changed.sh $(if $(RACE_BASE),--base $(RACE_BASE),)
 
 test-multiplayer:
-	$(GO) test ./internal/client ./internal/server ./cmd/mornlea ./cmd/perfcheck \
+	$(GO) test ./internal/client ./internal/server ./cmd/mornlea/benchmark ./cmd/perfcheck \
 		-run 'Test(PerfReportV6|ScenarioV6|PerfcheckV6|PerfcheckV5SameScenario|PerformanceThresholds|InterestObserver|HostStats|BenchmarkServerEpoch|BenchmarkServerMeasuredWindow)' -count=1
 
 bench-multiplayer:

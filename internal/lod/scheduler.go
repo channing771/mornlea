@@ -167,7 +167,7 @@ func (s *Scheduler) QueueTile(tile TilePos) {
 // 原因是壳的步长窗高取 max,系统性高于精细地表,若在近环内渲染会
 // poke 出地表、以更近的深度遮挡近处 mesh——capture 的「近处像素不变」
 // 门禁因此在构造上依赖内盘排除。inner 由调用方按 `viewDistance` 推导
-// (cmd/mornlea 的 `lodNearTileRadius`,保证壳最小覆盖块 ≥ 近 mesh 覆盖
+// (cmd/mornlea 的 `LodNearTileRadius`,保证壳最小覆盖块 ≥ 近 mesh 覆盖
 // 半径、与近 mesh 零重叠);inner=0 退化为全盘入队(旧语义)。
 // inner < 0 或 outer < inner 不入队任何 tile。关闭后为安全 no-op。
 func (s *Scheduler) QueueRing(center TilePos, inner, outer int) {
