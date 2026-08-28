@@ -63,11 +63,6 @@ type fluidRescanState struct {
 	section int
 }
 
-type tramplePendingCell struct {
-	dimension core.DimensionID
-	position  core.BlockPos
-}
-
 type environmentState struct {
 	config                EnvironmentConfig
 	tick                  uint64
@@ -81,7 +76,6 @@ type environmentState struct {
 	cropCellScratch       []int
 	cropCellsExamined     int
 	cropBlockReads        int
-	tramplePending        []tramplePendingCell
 }
 
 // NewEnvironmentMutation 将环境参数附着到当前 tick 的区块事务。
@@ -954,8 +948,6 @@ func farmlandRevertRoll(seed int64, tick uint64, dimension core.DimensionID, pos
 }
 
 func (state *State) AdvanceCrops(active []core.ChunkKey, mutation *Mutation) {
-	// 清理上次 trample 残留（若 Engine 未消费）
-	state.environment.tramplePending = state.environment.tramplePending[:0]
 	samples := int(state.environment.config.RandomTicksPerSection)
 	state.environment.cropCellsExamined = 0
 	state.environment.cropBlockReads = 0
@@ -1032,8 +1024,11 @@ func (state *State) advanceCropCell(
 		) {
 			return
 		}
+		// 先写入区块，成功后再登记变更，避免幽灵变更
+		if _, changed, err := dimension.SetBlock(position, grown); err != nil || !changed {
+			return
+		}
 		mutation.Record(dimensionID, position, grown)
-		_, _, _ = dimension.SetBlock(position, grown)
 		return
 	}
 	if block == core.FarmlandDryID {
@@ -1047,109 +1042,12 @@ func (state *State) advanceCropCell(
 		if !farmlandRevertRoll(state.environment.seed, tick, dimensionID, position) {
 			return
 		}
+		// 先写入区块，成功后再登记变更，避免幽灵变更
+		if _, changed, err := dimension.SetBlock(position, core.DirtID); err != nil || !changed {
+			return
+		}
 		mutation.Record(dimensionID, position, core.DirtID)
-		_, _, _ = dimension.SetBlock(position, core.DirtID)
 	}
-}
-
-// 记录 trample 候选
-func (state *State) NoteTrample(dimension core.DimensionID, position core.BlockPos) {
-	state.environment.tramplePending = append(state.environment.tramplePending, tramplePendingCell{
-		dimension: dimension,
-		position:  position,
-	})
-}
-
-func (state *State) SettleTramples(mutation *Mutation) {
-	cells := state.environment.tramplePending
-	for index := range cells {
-		state.settleTrampleCell(cells[index], mutation)
-	}
-	state.environment.tramplePending = state.environment.tramplePending[:0]
-}
-
-func (state *State) settleTrampleCell(
-	cell tramplePendingCell,
-	mutation *Mutation,
-) {
-	dimension := state.Dimension(cell.dimension)
-	if dimension == nil {
-		return
-	}
-	ground, ready := dimension.BlockAt(cell.position)
-	if !ready || !core.IsFarmland(ground) {
-		return
-	}
-	crop := cell.position
-	crop.Y++
-	cropBlock, cropReady := dimension.BlockAt(crop)
-	hasCrop := cropReady && core.IsCrop(cropBlock)
-	if !hasCrop {
-		mutation.Record(cell.dimension, cell.position, core.DirtID)
-		_, _, _ = dimension.SetBlock(cell.position, core.DirtID)
-		return
-	}
-	chunk, recordOK := dimension.ReadyChunk(crop.Chunk())
-	blockIndex, indexOK := world.ChunkBlockIndex(crop)
-	if !recordOK || !indexOK {
-		return
-	}
-	item, ok := core.BlockDrop(cropBlock)
-	if !ok {
-		return
-	}
-	if cropBlock == core.WheatStage7ID {
-		wheatCount, seedCount := cropYieldRolls(
-			state.environment.seed, state.environment.tick, cell.dimension, crop,
-		)
-		stacks := [2]core.ItemStack{
-			{Item: item, Count: wheatCount},
-			{Item: core.ItemWheatSeeds, Count: seedCount},
-		}
-		next, capacityOK := chunk.PrepareDropBatch(
-			stacks[:], blockIndex, state.environment.config.DropPickupDelayTicks,
-		)
-		if !capacityOK {
-			return
-		}
-		if !state.commitTrample(dimension, cell, crop, mutation) {
-			return
-		}
-		chunk.CommitDropBatch(next)
-		return
-	}
-	// 其他作物
-	dropSlot, capacityOK := chunk.PrepareDrop(item, blockIndex)
-	if !capacityOK {
-		return
-	}
-	if !state.commitTrample(dimension, cell, crop, mutation) {
-		return
-	}
-	chunk.CommitDrop(
-		dropSlot,
-		core.ItemStack{Item: item, Count: 1},
-		blockIndex,
-		state.environment.config.DropPickupDelayTicks,
-	)
-}
-
-func (state *State) commitTrample(
-	dimension *Dimension,
-	cell tramplePendingCell,
-	crop core.BlockPos,
-	mutation *Mutation,
-) bool {
-	if _, changed, err := dimension.SetBlock(cell.position, core.DirtID); err != nil || !changed {
-		return false
-	}
-	mutation.Record(cell.dimension, cell.position, core.DirtID)
-	_, changed, err := dimension.SetBlock(crop, core.AirID)
-	if err != nil || !changed {
-		return false
-	}
-	mutation.Record(cell.dimension, crop, core.AirID)
-	return true
 }
 
 // Torch/Bed support
@@ -1184,6 +1082,9 @@ func torchSupport(block core.BlockID, pos core.BlockPos) (core.BlockPos, bool) {
 }
 
 func torchSupportBlockSolid(id core.BlockID) bool {
+	// 火把支撑判定等价于原 `physics.BlockCollisionBoxes(id, true).Count > 0`：
+	// 零碰撞的空气/流体/作物/火把与门上半不计为实心，其余已注册方块（含玻璃、树叶、床、门下半等）均有碰撞体。
+	// 与床的 `isSolidSupport` 区分：床要求不透明实心（排除全部门），火把仅排除上半。
 	if id == core.AirID || core.IsFluid(id) || core.IsCrop(id) || core.IsTorch(id) || core.IsDoorUpper(id) {
 		return false
 	}
@@ -1299,6 +1200,7 @@ func bedHalfPositions(target core.BlockPos, block core.BlockID) (core.BlockPos, 
 }
 
 func isSolidSupport(id core.BlockID) bool {
+	// 床/门支撑判定：要求不透明实心（耕地特判为实心，全部门形态均不计），与火把的零碰撞判定区分。
 	return core.IsFarmland(id) || (core.RegisteredBlock(id) && id != core.AirID && id != core.GlassID && id != core.LeavesID && !core.IsFluid(id) && !core.IsCrop(id) && !core.IsDoor(id))
 }
 
@@ -1493,21 +1395,9 @@ func (state *State) BedSupportCandidates(mutation *Mutation) []BedSupportCandida
 		if !ready || !core.IsBed(block) {
 			continue
 		}
-		foot, head, ok := bedHalfPositions(above, block)
-		if !ok {
-			continue
-		}
-		supportPos := change.Position
-		// 床的支撑是正下方，且 foot/head 对应支撑格应为变化格
-		if above != foot && above != head {
-			continue
-		}
-		// 简化：只要上方是床且正下方是变化格即候选
-		_ = foot
-		_ = head
 		candidates = append(candidates, BedSupportCandidate{
 			Position: above,
-			Support:  supportPos,
+			Support:  change.Position,
 			Block:    block,
 		})
 	}

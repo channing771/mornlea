@@ -532,10 +532,19 @@ func (engine *Engine) Step() TickResult {
 	engine.notifyStepPhase(phaseFluidAdvance)
 	activeForEnv := engine.activeInterestKeys()
 	engine.realm.AdvanceFluids(activeForEnv, pending)
+	// 拷贝而非共享引用，避免 realm 后续 clear/swap 静默影响 engine 字段
 	if scope := engine.realm.FluidScope(); scope != nil {
-		engine.fluidScope = scope
+		if engine.fluidScope == nil {
+			engine.fluidScope = make(map[core.ChunkKey]struct{}, len(scope))
+		} else {
+			clear(engine.fluidScope)
+		}
+		for k, v := range scope {
+			engine.fluidScope[k] = v
+		}
 	}
 	if queues := engine.realm.FluidQueuesMap(); queues != nil {
+		// 队列对象为指针，共享同一权威队列是预期的；map 引用共享即可
 		engine.fluidQueues = queues
 	}
 	engine.notifyStepPhase(phaseFarmlandMoistureAdvance)
@@ -549,12 +558,19 @@ func (engine *Engine) Step() TickResult {
 	})
 	engine.realm.AdvanceFarmlandMoisture(activeForEnv, envMutation)
 	if scope := engine.realm.FluidScope(); scope != nil {
-		engine.fluidScope = scope
+		if engine.fluidScope == nil {
+			engine.fluidScope = make(map[core.ChunkKey]struct{}, len(scope))
+		} else {
+			clear(engine.fluidScope)
+		}
+		for k, v := range scope {
+			engine.fluidScope[k] = v
+		}
 	}
-	// 同步 farmland 统计与 rescans 供白盒测试观测
+	// 同步 farmland 统计与 rescans 供白盒测试观测；pending/head/queued 通过 realm API 观测
 	engine.farmlandMoisture.blockReads = engine.realm.FarmlandBlockReads()
+	engine.farmlandMoisture.candidateInspections = engine.realm.FarmlandCandidateInspections()
 	engine.farmlandMoisture.rescans.cursor = engine.realm.FarmlandRescanCursor()
-	// pending 与 queued 的同步通过查询 API 完成，测试中直接检查 engine.realm 时无需同步
 	engine.notifyStepPhase(phaseCropAdvance)
 	// 作物随机 tick 紧跟湿度阶段，因此生长判定能读到同 tick 最终的耕地编号。
 	// 三个阶段的写入共用 `pending`，在 finishChanges 前按位置合并为一次发布。
