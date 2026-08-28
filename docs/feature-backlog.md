@@ -151,6 +151,7 @@
 | D-07 | 耕地 mesh 顶面下沉 | 按 material 固定下移顶面，或复用水面角高度位 | capture golden 更新 | 已完成 | ox-alpha-implementer @ feat/D-07-farmland-mesh-top-sink | farming 遗留 13；2026-08-26 认领并当日完成：PR #91 已合并（CI 8/8 首跑全绿），change `farmland-mesh-top-sink` 已归档；registry +1 字节 `block_top_raw`（engine ABI v7）、terrain.wgsl 客户端解码半边、showcase 扩两列并单景再生 golden；执行期发现并补齐客户端解码缺口（design D2a），与演进后 main 变基集成零版本碰撞 |
 | D-08 | 农田+花草 capture 场景 | 植物种类增多后补视觉场景并记录差异来源 | capture 场景与 golden 追加 | 设计候选 | — | farming 遗留 24 |
 | D-09 | 第三人称与角色姿态呈现 | 第三人称相机模式与角色姿态（游泳等） | client ABI 可能扩展（相机/姿态） | 设计候选 | — | fluid-presentation proposal 非目标（不做游泳姿态动画与第三人称呈现）；avatar pass 为基础 |
+| D-10 | 客户端 UI 对齐原版布局与风格精修 | 准星与切槽物品名弹条补全；背包/工作台/熔炉/箱子改原版式居中浮动面板（熔炉原版图式、个人背包保留十条配方右栏）+ 悬停 tooltip；HUD/容器/egui 菜单统一混合风格（像素图标 × 现代面板） | benchmark scenario v19→v20；协议/schema/ABI/存档不变；golden 23→24 | 已认领 | zcode-control @ feat/client-ui-vanilla-alignment | 2026-08-29 用户裁决：范围 HUD+容器+egui 全量、浮动面板、混合风格；change `client-ui-vanilla-alignment`（资源契约重钉 quad 320 / glyph 768 / offset 15616 / 总量 52480） |
 
 ## E. 工程与基础设施（后续任务候选）
 
