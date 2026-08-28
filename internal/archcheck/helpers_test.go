@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,12 +25,28 @@ func TestProductionGoSourceScansSplitFiles(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	got := productionGoSource(t, dir)
-	if !strings.Contains(got, "firstMarker") || !strings.Contains(got, "secondMarker") {
-		t.Fatalf("production source missed split file: %q", got)
+	// 子包目录同样必须纳入扫描：客户端命令拆出 app/capture/benchmark 子包后，
+	// 生产源码不再全部平铺在顶层，扁平扫描会静默丢失子树覆盖。
+	nested := filepath.Join(dir, "app")
+	if err := os.MkdirAll(nested, 0o700); err != nil {
+		t.Fatal(err)
 	}
-	if strings.Contains(got, "ignoredMarker") {
-		t.Fatalf("production source included test file: %q", got)
+	if err := os.WriteFile(filepath.Join(nested, "third.go"), []byte("package app\nfunc thirdMarker() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "third_test.go"), []byte("package app\nfunc thirdIgnoredMarker() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := productionGoSource(t, dir)
+	for _, marker := range []string{"firstMarker", "secondMarker", "thirdMarker"} {
+		if !strings.Contains(got, marker) {
+			t.Fatalf("production source missed marker %s: %q", marker, got)
+		}
+	}
+	for _, ignored := range []string{"ignoredMarker", "thirdIgnoredMarker"} {
+		if strings.Contains(got, ignored) {
+			t.Fatalf("production source included test marker %s: %q", ignored, got)
+		}
 	}
 }
 
@@ -56,26 +73,32 @@ func TestTopLevelDeclarationNamesInScansSplitFiles(t *testing.T) {
 	}
 }
 
+// productionGoSource 拼接 directory 子树内全部生产 Go 源码（递归遍历，跳过
+// `_test.go`）。必须递归：cmd/mornlea 的生产源码已按功能域拆入 app/capture/
+// benchmark 子包，只扫顶层会让字符串级架构守卫静默丢失子包覆盖。
 func productionGoSource(t *testing.T, directory string) string {
 	t.Helper()
-	entries, err := os.ReadDir(directory)
-	if err != nil {
-		t.Fatalf("读取 %s: %v", directory, err)
-	}
-	slices.SortFunc(entries, func(left, right os.DirEntry) int {
-		return strings.Compare(left.Name(), right.Name())
-	})
 	var source strings.Builder
-	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
+	err := filepath.WalkDir(directory, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
-		data, err := os.ReadFile(filepath.Join(directory, name))
+		name := entry.Name()
+		if entry.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
 		if err != nil {
-			t.Fatalf("读取 %s: %v", name, err)
+			return err
 		}
 		source.Write(data)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("遍历 %s: %v", directory, err)
 	}
 	return source.String()
 }
