@@ -91,6 +91,9 @@
 - QUALITY PASS：完整 diff 只含 Task 3 的 20 个受控文件（4 个新建 combat tests、14 个修改 Go 文件、删除 1 个 hostile_melee.go、tasks/ledger），无协议、存储、render、Rust、依赖或长期文档变化；无 map/sort 分配、新接口/配置/registry、额外 goroutine 或 speculative helper；注释中文且无任务编号。
 - Mutation check：任一固定容量、cooldown 值、ray 选择、阻挡、kind 优先级、reservation 顺序、伤害/击退/疲劳/耐久/hit 分支的删除或错值均至少使一条新增测试失败；既有 sim 全包保留镐、锄、作物与伙伴行为，hostile lifecycle 的 600/20 与掉落路径全绿。
 - Findings：Critical 0、Important 0、Minor 0；无需修复轮次。
+- Task 3 独立评审，SPEC PASS：报告 `.superpowers/sdd/2026-08-28-tiered-swords-unified-combat/task-3-review.md:7-81` 对提交区间 `fe6b15fb..c82a9a5e` 完成 15 项契约核对；72/72 fail-closed、四类冷却、射线全序与冻结、hostile-first reservation、loser 零副作用、mutual、武器与耐久、六类拒绝、0.35 击退、生命周期与 CombatHits 均符合 Task 3 brief；Minor 1 为清单性偏差（brief 列 `mining.go` 未改）。
+- Task 3 独立评审，QUALITY PASS：同一报告 `:84-109` 给出 Task quality `Approved`；范围收敛、固定数组、私有值、无接口/配置/协议/存档/Rust 扩张，Critical 0、Important 0、Minor 1 且不影响玩法/安全契约。
+- Task 3 完成：`fe6b15fb..c82a9a5e` 已具备 implementer RED/GREEN、focused gates、self-review 与独立 SPEC/QUALITY PASS；`tasks.md` 3.1..3.11 全部完成，后续实现从 Task 4 开始。
 
 ## Validation Evidence
 
