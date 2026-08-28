@@ -3,6 +3,7 @@ package chunk
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -77,6 +78,12 @@ func BenchmarkDiskStoreSave32(b *testing.B) {
 		b.TempDir(), "dimensions", "0", "regions",
 		fmt.Sprintf("r.%d.%d.region", regionKey.X, regionKey.Z),
 	)
+	// 基准沿用的 dimensions/0/regions 层级在生产由 `DiskStore` 落盘前代建，
+	// 域内直装配不含这一步；而 `CreateRegion` 要在同目录落原子临时文件，
+	// 父目录缺失会直接 ENOENT，故先补齐目录再创建。
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		b.Fatal(err)
+	}
 	opened, err := CreateRegion(ctx, path, regionKey)
 	if err != nil {
 		b.Fatal(err)
@@ -106,6 +113,11 @@ func BenchmarkDiskStoreColdLoad(b *testing.B) {
 		b.TempDir(), "dimensions", "0", "regions",
 		fmt.Sprintf("r.%d.%d.region", regionKey.X, regionKey.Z),
 	)
+	// 与 Save32 同理：域内直装配不经 world_files 布局，region 父目录
+	// 须由基准自行补齐，否则 `CreateRegion` 的原子临时文件无处落盘。
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		b.Fatal(err)
+	}
 	created, err := CreateRegion(ctx, path, regionKey)
 	if err != nil {
 		b.Fatal(err)

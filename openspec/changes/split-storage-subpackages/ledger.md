@@ -598,3 +598,34 @@
     `✓ change/split-storage-subpackages`；
   - `go test ./internal/archcheck -count=1` → `ok ... 6.898s`。
 - 本轮为纯文档措辞收窄，未改任何 Go 代码。
+
+### CI 修复轮（PR #119 integration「微基准与平台无关阈值」红灯）
+
+- CI 失败签名（job 98899818099，`go test ./... -bench=. -benchtime=1x -run='^$'`）：
+  `BenchmarkDiskStoreSave32` 与 `BenchmarkDiskStoreColdLoad` 在
+  `bench_test.go` 报 `create temporary region ".../dimensions/0/regions/.r.X.Z.region.create-*":
+  no such file or directory`（ENOENT），chunk 包整体 FAIL。
+- 根因：两个基准保持基线函数名与原 `DiskStore` 存储布局（`dimensions/0/regions/`
+  多级路径），但夹具已改为 chunk 域内直装配——旧路径下目录层级由 world_files
+  装配代建，直装配无人建目录；`CreateRegion` 的原子创建需在目标目录落
+  `.r.X.Z.region.create-*` 临时文件，父目录缺失即 ENOENT。本地验证矩阵
+  （`-list` 枚举、`-race` 测试、`dev-check -short`）都不执行 benchmark 本体，
+  CI 微基准步骤是唯一运行处。
+- 修复点：`internal/storage/chunk/bench_test.go` 两个基准在 `CreateRegion` 前
+  `os.MkdirAll(filepath.Dir(path), 0o755)` 补齐目录层级（生产路径无需改动，
+  `DiskStore` 落盘前已有等价 `MkdirAll`）。
+- 同类隐患排查结论：grep 全部子包测试/基准的 `CreateRegion(`/`OpenRegion(`
+  调用点，其余各处（`region_test.go`、`region_crash_test.go` 及其 `seededRegion`
+  夹具、`region_compact_test.go`、`region_recovery_test.go`、`derived_state_test.go`）
+  region 文件均直接落在 `t.TempDir()` 根下，目录天然存在，无同类问题；
+  生产调用点（`internal/storage/disk.go`、`internal/storage/chunk_keys.go`）
+  经 `DiskStore` 的 `MkdirAll` 与 world_files 布局保证目录存在。
+- 验证（本 worktree 实测，2026-08-28，macOS arm64 与 CI runner 同构）：
+  - `go test ./internal/storage/chunk -bench . -benchtime 1x -count=1` →
+    4 个基准（含上述两个）全部 PASS；
+  - 复跑 CI 步骤原命令 `go test ./... -bench=. -benchtime=1x -run='^$'` →
+    退出码 0，全仓库微基准通过；
+  - `go test ./internal/storage/... -race -count=1` → 6 包全 `ok`；
+  - `go test ./internal/storage/... -list '.*'` 名称并集（Test 223 +
+    Benchmark 7 + Fuzz 4 = 234）与 `baseline-test-list.txt` 逐名一致，
+    测试函数名未变化。
