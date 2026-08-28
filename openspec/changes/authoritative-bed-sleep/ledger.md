@@ -95,3 +95,31 @@
 ### 终审结论
 
 **PASS（可进 PR）**。两项专项与 11 项清单全绿，无 FAIL 项。合并期待办（非缺陷，预案已备）：① 协议版本按届时 `main` 重订（专项二清单）；② `DisplayDayPhase` 与夜行者行去重保留一份；③ `bed-night` golden 基于届时基线口径顺延。验证数值见上节；两次全量 `-race` 的 3 例 flake 均已隔离与整包复跑证伪为同机高负载（load 9..13）环境因素，涉及测试均在本分支 diff 之外。
+
+## 集成记录（rebase 到 1688e4e1，2026-08-28）
+
+按合并序裁决（A-04 夜行者行先合并、本行重订）把 `feat/A-05-authoritative-bed-sleep` rebase 到 `origin/main`（`1688e4e1`，含 PR #111 全部交付）。17 个提交逐个重放，提交边界与信息保持不变；语义适配折入对应原提交。
+
+### 提交映射（旧 → 新）
+
+`4d20e3cc`→`d61cc895`、`3e846534`→`79ae6a56`、`c710d542`→`b3b9ce4d`、`dc43e746`→`38933390`、`5eb7b581`→`73f3893d`、`e6c7852a`→`0fcde984`、`8a653471`→`e9bed287`、`451b0efb`→`ed262bc0`、`c7f3d76a`→`cea69165`、`20eb17c1`→`002e49e2`、`9b4a0ff3`→`f455aea0`、`9a144a47`→`07485ba9`、`45b4cdce`→`831df19d`、`428bd5fd`→`2fdaa1f7`、`083d4b38`→`e1391460`、`28158229`→`929d9648`、`8274de7b`→`cef2998e`。
+
+### 冲突与重订清单（对照预案）
+
+1. **协议 v30→v31**：`packet.go` 版本历史保留夜行者 v30 行（S→C 22/23/24），本行条目重订为 v31（`PlayerState` 尾部追加 `DayPhaseOffset` u16）；原「版本号撞号纪律」段落已删除（撞号化解）。pin 全改：`packet_test`、`worldtime_test`（`TestProtocolVersionPinned`）、`registry_test`×2、`drop_test`、`app_protocol_test`、`main_test`×2；`codec_golden_test` 的 hello/server hello/handshake reject hex `1e`→`1f` 与 PlayerState golden 夹具注释（v31 起）；`message_player.go`「协议 v31 起」、`codec_server.go`「v31：」注释与 `TestProtocolV31PlayerState*` 两测试名随之重订。
+2. **`core/day_phase.go` 去重**：保留本行超集版本（`DayLengthTicks`/`DisplayNightBegin/End`/`IsDisplayNightPhase` + `DisplayDayPhase`）；两侧 `day_phase_test.go` 经比对逐字节一致（MaxUint64 回绕边界用例本行已有），取一份。夜行者侧判夜点核实：`internal/sim/hostile_spawn.go`（生成窗口 `phase < 13000 || phase > 23000`）与 `internal/sim/hostile.go`（白昼灼烧 `phaseIsDay`）现行写法与本行谓词语义等价（同为含端点区间），按最小集成面保持不动。
+3. **`core.ItemBed` 45→46**：枚举序 `ItemTorch`(44)→`ItemRottenFlesh`(45，夜行者)→`ItemBed`(46)→`ItemIDMax`(47)；连锁同步：`ItemStackLimit` 豁免表、`item_test` 枚举守护/追加序断言（哨兵 47）、`bed_test` 注册断言（紧随腐肉）、companion place 豁免表随穷举测试自动覆盖。食物五种不变。
+4. **方块/配方/碰撞/mesh**：预期无冲突成立——`BlockIDMax`=84（床八形态 76..83）、mesh 容量 96（Go `nativeMaxRegistryEntries` 与 Rust `MAX_REGISTRY_ENTRIES` 两侧一致）、`RecipeBed`=16、shader `bed_material` 集合均为本行独有。一处语义适配：main 已把 `assets.Registry.Opaque` 重构为转调 `core.BlockOpaque` 单一表，本行的床不透明排除随之改写入 `core.BlockOpaque`（`!IsBed`）及 `block_properties_test` 穷举矩阵，assets 侧只保留转调与注释。
+5. **`internal/server`**：`server.go` 合并两者——夜行者的 `newWorld` hostiles 恢复接线与本行的 `RestoreDayPhaseOffset` 装配恢复并存。`engine_step.go` 阶段序合并为「玩家命令→伙伴行动→统一物理→夜行者（`phaseHostileAdvance`）→近战/死亡/伙伴放置→interactions（含 `CommandInteractBed`）→`settleSleepThroughNight`→掉落→熔炉→流体→湿度→作物」，与裁决并存序一致；`Engine.dayPhaseOffset` 合并为单一 `atomic.Uint64`（删除夜行者行的占位 `uint16` 字段，`hostile.go`/`hostile_spawn.go` 判夜读点改经 `DayPhaseOffset()`）。
+6. **`AGENTS.md` 版本行**：合并为「协议 v31；玩家 schema v8、区块 schema v9、世界 metadata v3、独立 `companions.ai` schema v4、独立 `hostile_mobs` schema v1、engine ABI v8、client ABI v10，benchmark scenario 为 v19」；`internal/archcheck` `TestBaselineVersionsMatchCode` 绿。
+7. **golden**：union 23 张（main 22 张含 `hostile-mob` + 本行 `bed-night`，插 `torch-night` 后/`ai-companion` 前不变）；`bed-night.png` 字节零改动（pre-rebase 与现在 sha1 同为 `560f8a2f`）；`make visual-check` 全表 23/23 全 0 差异像素。
+8. **shotgun 检查**：全仓 grep 无残留——`ProtocolVersion` 现行 pin 无 30（版本历史叙述除外）、无 `ItemBed`=45、无 `"1e"` hello hex、无 `FormatVersion: 2` 字面量。
+9. **集成期新发现与处置**（预案外）：a) main 的 TCP 包拆分把 `internal/network` 传输一致性测试迁至 `internal/network/tcp/`，本行同名旧文件删除、其唯一增量（transcript 携带 `DayPhaseOffset: 12399` 及注释 v24/v31）折入 `tcp/transport_consistency_test.go`；b) main 夜行者测试 5 处 `FormatVersion: 2` 字面量随 metadata v3 重订为 3（`hostile_persistence/publication/restart/restore_test`），其引发的 shutdown 级联 goroutine 超时随根因修复消失。
+
+### 集成验证摘要（数值只记录）
+
+- `make rust`：release 构建完成。
+- `go test ./... -race -count=1`：28 包全 ok（`cmd/mornlea` 291s、`internal/server` 218s、`internal/sim` 52s）。
+- `go test ./internal/archcheck -count=1`：ok。`go vet ./...`：无输出。`gofmt -l .`：无输出。
+- `openspec validate --all --strict --no-interactive`：74 passed, 0 failed。
+- `make visual-check`：23/23 场景，全部最大通道差 0、差异像素 0/230400。
