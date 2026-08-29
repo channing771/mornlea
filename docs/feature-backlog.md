@@ -152,6 +152,7 @@
 | D-08 | 农田+花草 capture 场景 | 植物种类增多后补视觉场景并记录差异来源 | capture 场景与 golden 追加 | 设计候选 | — | farming 遗留 24 |
 | D-09 | 第三人称与角色姿态呈现 | 第三人称相机模式与角色姿态（游泳等） | client ABI 可能扩展（相机/姿态） | 设计候选 | — | fluid-presentation proposal 非目标（不做游泳姿态动画与第三人称呈现）；avatar pass 为基础 |
 | D-10 | 客户端 UI 对齐原版布局与风格精修 | 准星与切槽物品名弹条补全；背包/工作台/熔炉/箱子改原版式居中浮动面板（熔炉原版图式、个人背包保留十条配方右栏）+ 悬停 tooltip；HUD/容器/egui 菜单统一混合风格（像素图标 × 现代面板） | benchmark scenario v19→v20；协议/schema/ABI/存档不变；golden 23→24 | 已认领 | zcode-control @ feat/client-ui-vanilla-alignment | 2026-08-29 用户裁决：范围 HUD+容器+egui 全量、浮动面板、混合风格；change `client-ui-vanilla-alignment`（资源契约重钉 quad 320 / glyph 768 / offset 15616 / 总量 52480） |
+| D-11 | 非放置物品 HUD 图标 | 木棍/工具/食物等无 `core.ItemPlacement` 的物品在 HUD/容器中只画素色面无 sprite（`hotbarItemUV` 返回 false）；workbench-crafting 场景产物格因此不可视辨认 | 无 wire（HUD 图集加列 + 程序化图标）；golden 更新 | 设计候选 | — | 2026-08-29 client-ui-vanilla-alignment golden 人工复核发现（main 旧 golden 同病，既现限制非该 change 引入）；「视觉基线覆盖三类容器像素界面」的「非空产物格」可审查性依赖此项 |
 
 ## E. 工程与基础设施（后续任务候选）
 

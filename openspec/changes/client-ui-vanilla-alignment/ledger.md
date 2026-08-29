@@ -40,3 +40,10 @@
 - QUALITY PASS：egui 0.35 API 逐项对照本机源码核实；单 Context 单接线路径；跨侧令牌同族性逐令牌核对（×255 口径 RGB 逐字节一致，刻意分歧均有注释）。
 - 控制会话裁决：派生令牌 `ACCENT_WASH`/`CONTROL_WELL` 纳入 design D5 正式令牌表。
 - 观察记录（非本 change 缺陷）：Go HUD 令牌自述 linear 但实际经 sRGB 管线原样透传，与 egui 侧严格 gamma 口径存在既有分岔——未来跨侧视觉 parity 时单独裁决。
+
+### T5 capture 场景 + golden 重生成 + scenario v20 — PASS（两轮文档修复）
+
+- Implementer 报告：`hud-item-name-popup` 场景（真实触发路径：确认选中 2→1 变化、收敛帧不 drain 使 tick 冻结、窗口恒在开头；快照/恢复带幂等护栏，失败路径也恢复）；两个 HUD 场景的弹条泄漏真回归被发现并修复（基线重放 `ResetItemPopupBaseline`，与会话起点同语义、非注入后门）；24 张 golden 重生成（`make visual-check` 24/24 零差异）；scenario v20 全链（benchmark 常量/测试、README×2、compatibility、AGENTS 基线句）；perfcheck 迁移授权 18:19→19:20（正负用例矩阵，含「退役 18:19 必败」「跳级必败」「授权无效不掩盖报告不完整」）；`bounded-benchmark-workload` delta 由控制会话补写（v20 段 + 19:20 唯一迁移）。
+- 控制会话 golden 逐张人工复核：24/24 PASS，带一条**既现例外**——workbench 场景产物格/木棍格无可视 sprite，根因 `hotbarItemUV` 对无 `core.ItemPlacement` 的物品返回 false（只画素色面），与 main 旧 golden 逐像素同病，非本分支引入；已开 backlog D-11（非放置物品 HUD 图标），不在本 change 修复。
+- SPEC R0 FAIL（compatibility.md:35 同文件漏改 18:19）→ R1 修复 + R2 修复（perf-baseline.md 首句 live 声明停在 v19 的同段自相矛盾，按 820c27e6 先例整句改写 v20 + 上一代轮换）；SPEC(RE2) PASS。
+- QUALITY R0 FAIL（同 compatibility.md 项）→ R1/R2 同步收敛；QUALITY(RE2) PASS（全链终态无互相矛盾处）。

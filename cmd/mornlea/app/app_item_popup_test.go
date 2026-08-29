@@ -299,6 +299,59 @@ func TestApplicationItemPopupPresentationSuppressedByPause(t *testing.T) {
 	}
 }
 
+// TestApplicationItemPopupBaselineResetReplaysSessionStart 锁定会话起点重放
+// 语义：ResetItemPopupBaseline 清空已记录弹条并丢弃确认基线，之后的第一次
+// 确认观察只建基线、不触发；再下一次确认变化才照常记录。无头 capture 场景
+// 依赖该语义呈现「静态确认状态」而不误触发弹条。
+func TestApplicationItemPopupBaselineResetReplaysSessionStart(t *testing.T) {
+	app := newRemoteRenderApplication(t, &IntegrationGlyphSource{})
+	var inventory core.Inventory
+	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 1}
+	if err := app.inventory.Apply(network.InventoryState{Inventory: inventory}); err != nil {
+		t.Fatal(err)
+	}
+	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
+		t.Fatalf("基线帧 RenderFrame=(%v,%v)", rendered, err)
+	}
+	var changed core.Inventory
+	changed.Hotbar.Selected = 1
+	changed.Hotbar.Slots[1] = core.ItemStack{Item: core.ItemStone, Count: 1}
+	if err := app.inventory.Apply(network.InventoryState{Inventory: changed}); err != nil {
+		t.Fatal(err)
+	}
+	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
+		t.Fatalf("触发帧 RenderFrame=(%v,%v)", rendered, err)
+	}
+	if !app.itemPopup.Valid || app.itemPopup.Text != "石头" {
+		t.Fatalf("夹具弹条=%+v，想要先记录一条「石头」", app.itemPopup)
+	}
+
+	app.ResetItemPopupBaseline()
+	if app.itemPopup.Valid {
+		t.Fatalf("重放后已记录弹条未被清空: %+v", app.itemPopup)
+	}
+	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
+		t.Fatalf("重放后首帧 RenderFrame=(%v,%v)", rendered, err)
+	}
+	if app.itemPopup.Valid {
+		t.Fatalf("重放后的首次确认观察触发了弹条: %+v", app.itemPopup)
+	}
+
+	// 再下一次确认变化照常触发：重放只还原会话起点，不改触发规则本身。
+	var resumed core.Inventory
+	resumed.Hotbar.Selected = 2
+	resumed.Hotbar.Slots[2] = core.ItemStack{Item: core.ItemDirt, Count: 1}
+	if err := app.inventory.Apply(network.InventoryState{Inventory: resumed}); err != nil {
+		t.Fatal(err)
+	}
+	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
+		t.Fatalf("恢复帧 RenderFrame=(%v,%v)", rendered, err)
+	}
+	if !app.itemPopup.Valid || app.itemPopup.Text != "泥土" {
+		t.Fatalf("重放后的确认变化弹条=%+v，想要「泥土」", app.itemPopup)
+	}
+}
+
 // TestApplicationCrosshairGatedByMenuPhase 端到端见证准星相位门控：游戏相位
 // 产生 4 个准星 quad，暂停覆盖层可见时不产生任何准星实例。
 func TestApplicationCrosshairGatedByMenuPhase(t *testing.T) {
