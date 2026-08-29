@@ -26,7 +26,7 @@
 - 场景清单是表驱动的 `captureScenes`，新增场景即新增一行；全部场景按表序
   共用同一个 application，前一场景留下的呈现状态由后续场景的 `Prepare`/
   `Apply` 负责清场；`resetCapturePresentation` 负责清 `combatFeedback` 与相关呈现，避免污染后续场景。
-- 场景顺序与 24 项正式清单以 `captureScenes` 及其顺序测试为准，固定上传容量以布局代码和容量
+- 场景顺序与 25 项正式清单以 `captureScenes` 及其顺序测试为准，固定上传容量以布局代码和容量
   测试为准；不要在指南复制会漂移的清单或数字。
 
 ## 消费端接口 (`capture/scene_application.go`)

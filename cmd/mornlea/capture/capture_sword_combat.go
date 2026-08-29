@@ -31,6 +31,8 @@ func applySwordCombatCaptureState(app SceneApplication) error {
 		return err
 	}
 	app.SetWorldTimeTicks(6000)
+	// 这是静态确认状态，不是选中变化；丢弃前序场景的选中基线，避免装入铁剑时触发弹条。
+	app.ResetItemPopupBaseline()
 	*app.Camera() = client.Camera{
 		Pos: mgl32.Vec3{5.5, 3.2, 9.5}, Yaw: 0, Pitch: -0.05,
 		FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
