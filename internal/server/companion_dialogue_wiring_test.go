@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/companion"
+	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/internal/server/persistence"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -616,17 +618,17 @@ func TestCompanionDialogueSummaryLifecycle(t *testing.T) {
 // 保存侧接线：无任务无 FIFO 但有摘要的 active 伙伴不被守卫丢弃、
 // equalStoredQueues 把摘要差异判为 dirty、未激活伙伴的摘要按 dropped 报告。
 func TestCompanionDialogueSummaryOnlyQueuePersistence(t *testing.T) {
-	body := companionBody(1, 10)
-	summaries := []companionSummaryState{{ID: body.ID, Summary: "最近完成了任务"}}
+	body := companionDialogueWiringBody(1, 10)
+	summaries := []persistence.CompanionSummary{{ID: body.ID, Summary: "最近完成了任务"}}
 
-	queues, dropped := companionQueuesForSave(nil, []companion.Body{body}, summaries)
+	queues, dropped := persistence.CompanionQueuesForSaveForTest(nil, []companion.Body{body}, summaries)
 	if dropped || len(queues) != 1 || queues[0].ID != body.ID ||
 		queues[0].Summary != "最近完成了任务" || queues[0].HasCurrent || len(queues[0].Pending) != 0 {
 		t.Fatalf("summary-only 载荷=%+v dropped=%v，想要仅含摘要的队列条目", queues, dropped)
 	}
 
 	// 摘要差异不得被判 clean：否则摘要变化后保存被跳过。
-	if equalStoredQueues(
+	if persistence.EqualStoredQueuesForTest(
 		[]storage.StoredCompanionQueue{{ID: body.ID, Summary: "旧摘要"}},
 		[]storage.StoredCompanionQueue{{ID: body.ID, Summary: "新摘要"}},
 	) {
@@ -634,24 +636,37 @@ func TestCompanionDialogueSummaryOnlyQueuePersistence(t *testing.T) {
 	}
 
 	// 身体尚未激活（records 缺席）的摘要按 dropped 报告，保持 dirty 等激活。
-	if _, dropped := companionQueuesForSave(nil, nil, summaries); !dropped {
+	if _, dropped := persistence.CompanionQueuesForSaveForTest(nil, nil, summaries); !dropped {
 		t.Fatal("无记录伙伴的摘要未按 dropped 报告")
 	}
 
 	// 持久化观察：摘要变化触发保存，载荷携带 summary-only 条目。
-	persistenceStore := newControllableCompanionStore()
-	persistence := newCompanionPersistence(persistenceStore, storage.StoredCompanions{}, companionPersistenceTestConfig())
-	t.Cleanup(persistence.Close)
-	persistence.Observe([]companion.Body{body}, nil, summaries)
-	if err := persistence.Poll(10); err != nil {
+	store := storage.NewMemory(storage.Metadata{FormatVersion: 3, Seed: 42})
+	compStore := persistence.NewCompanions(store, storage.StoredCompanions{}, persistence.Options{AutosaveTicks: 10, RetryBaseTicks: 2, RetryMaxTicks: 8})
+	t.Cleanup(compStore.Close)
+	compStore.Observe([]companion.Body{body}, nil, summaries)
+	if err := compStore.Poll(10); err != nil {
 		t.Fatal(err)
 	}
-	save := receiveCompanionSave(t, persistenceStore)
-	if len(save.Queues) != 1 || save.Queues[0].ID != body.ID ||
-		save.Queues[0].Summary != "最近完成了任务" {
-		t.Fatalf("保存载荷=%+v，想要 summary-only 队列", save.Queues)
+	// 使用 Flush 确保落盘并验证 summary-only 队列可通过真实存档 round-trip。
+	if err := compStore.Flush(context.Background()); err != nil {
+		t.Fatalf("Flush: %v", err)
 	}
-	persistenceStore.complete(nil)
+	loaded, err := store.LoadCompanions(context.Background())
+	if err != nil {
+		t.Fatalf("LoadCompanions: %v", err)
+	}
+	if len(loaded.Queues) != 1 || loaded.Queues[0].ID != body.ID || loaded.Queues[0].Summary != "最近完成了任务" {
+		t.Fatalf("保存载荷=%+v，想要 summary-only 队列", loaded.Queues)
+	}
+}
+
+func companionDialogueWiringBody(id, position byte) companion.Body {
+	return companion.Body{
+		ID:        companion.ID{0, 0, 0, 0, 0, 0, 0x40, 0, 0x80, 0, 0, 0, 0, 0, 0, id},
+		Dimension: core.Overworld,
+		Position:  [3]float32{float32(position), 70, -float32(position)},
+	}
 }
 
 // TestCompanionDialogueSuccessfulSpeechKeepsFactSequence 验证成功台词场景下
