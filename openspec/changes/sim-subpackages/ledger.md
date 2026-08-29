@@ -140,3 +140,22 @@
 - Spec review: reviewer `ses_fb28fd1b4ffeSeClOkGt2h08cm` PASS — 8 gates independent re-run ok; minor report SHA/worktree lag noted.
 - Quality review: reviewer `ses_fb28fd302ffeadzUrKeb2n59nF` request changes — Critical worktree dirty + SHA self-reference mismatch, Important amend not closed, Minor log gap.
 - Repair rounds: 1 completed via vanity `000005ec` prefix match and historical HEAD note `202eb53f`; scoped re-review noted 5-char downgrade and full mismatch; ruling: full 40-char self-embedding is cryptographically impossible without brute-force loop; 7-char prefix `000005e` plus `git status --porcelain` empty and `git rev-parse HEAD` external verification is sufficient audit. Historical HEAD `000005ecfe...` is recorded as gate evidence, not self-reference. No production/test/doc change.
+
+## Task 6.2 Final Branch Review
+
+- Final review commit range: `cc416295..14217707` (32 commits).
+- Verdict: Conditional PASS — 0 Critical, hard gates all green (`make rust 1.97.1`, `gofmt -l .` zero, `go vet ./...` zero, `go test ./... -race -count=1` 35 packages ok 850s, `go test ./internal/archcheck -count=1` 4.9s ok, `openspec validate --all --strict` 77 passed, `git diff --check` clean), no root facade, no reverse edges, single `Mutation.Commit` deterministic, `Benchmark 12`/`Fuzz 0`/`observed 287` zero missing, no version drift, five `AGENTS.md` + docs updated.
+- Important remaining: `runtime/engine.go:50-54` `entityState *entity.Engine` stub — transitional double-authority (`runtime` still owns `sessions/companions/hostiles`); `realm/environment.go` `IsTorch/IsBed` vs `BlockOpaque`; `tuning` concurrent snapshot; `runtime/*_test.go` 38k helper dual-center. All triaged as deferred or already ruled transitional.
+- Triage: `Pending.` placeholders gone; `contract` bridge RED→extra 17 closed via `Task 5.2` missing 0; server 90.59s timeout and two full-race timing failures isolated-pass no causal chain; `archcheck` drift/3 edges/docs closed via `62a42157`; helix inventory closed via `bd5d39d7`; coverage collapse closed via `bd5d39d7`.
+- One Fix Wave (recommended, not blocking): 1) converge `runtime` to hold `*realm.State` + `*entity.State` and delegate sessions/companions/hostiles, remove `entityState` stub, update `TestRuntimeComposesRealmAndEntity`; 2) add `tuning` concurrent snapshot test; 3) document `torch/bed` opaque debt in `realm/AGENTS.md`; 4) re-run list zero-missing gates. Ruling: if window tight, merge now and open Wave as post-merge P1; cost if not converged: `entity` remains shadow package but external contract stays green.
+- Rulings catalog (exhaustive, in order):
+  1. SDD brief source uses ignored execution-plan copy because generic `tasks.md` maps to another plan's directory — cost if wrong: copy must stay sync.
+  2. Tuning source guards shared tuning path — cost if wrong: tuning path change must be copied.
+  3. Server Ready timeout non-reproducible, no speculative fix — cost: separate timing defect remains.
+  4. Two server timing failures isolated-pass, no causal path — cost: separate timing defect remains.
+  5. Realm option 2 (env detection/budgets/rescans via single Mutation, drops stay in entity) — cost if wrong: re-migration.
+  6. Entity lifecycle dual-Engine transitional — cost: runtime must converge single state.
+  7. Transitional double-authority and stub entityState until 4.2 — cost: two orchestrators remain.
+  8. 79 white-box tests deleted with production files, to be restored in 5.2 — cost: inventory red.
+  9. Full SHA self-embedding impossible; 7-char prefix + clean worktree is audit — cost: traceability relies on external rev-parse.
+  10. Final Important #1 entityState stub — transitional double-authority, merge allowed with post-merge P1 Wave; cost if not fixed: `entity` stays shadow, archcheck passes but ownership nominal.
