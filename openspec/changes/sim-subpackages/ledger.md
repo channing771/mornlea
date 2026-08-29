@@ -96,3 +96,12 @@
 - Quality review: reviewer `ses_fb4258ccaffeUopa4iaGTEQ4H9` conditional pass — 0 Critical but 4 Important (tunables snapshot not threaded, weak settlement tests, solid-support incomplete, farmland enqueue no-op).
 - Repair: re-review `ses_fb41a2f66ffeOSpcP06G4op6Sb` PASS — `mining.go:386-399` replaced with chain `splitmix64(hash^field)` + 4 salts + wheat/seeds double draw, and `placement.go:200` now delegates to `realm.EnqueueFarmlandMoistureAroundFluid`; no new Critical/Important.
 - Deferred minor: `isSolidSupport` single-layer farmland check, tunable snapshot threading for `furnace/drop/placement/mining`, and extended negative settlement tests to be completed before runtime cutover.
+
+## Task 4.1 Runtime Orchestration
+
+- Implementer: fresh implementer `ses_fb416ffe1ffe28zc6eI65Ul2wN`.
+- Commit: `5dd37c24`.
+- Validation: `go test ./internal/sim/runtime -race -count=1` (4 tests), `go test ./internal/sim -race -count=1`, `go test ./internal/sim/entity ./internal/sim/realm ./internal/sim/contract ./internal/sim/tuning -race -count=1`, `go test ./internal/archcheck -count=1`, `go vet ./...`, `git diff --check` clean; `TestRuntimeStepPhaseOrder` retained.
+- Spec review: reviewer `ses_fb40e9c9bffecB1XhKjjVrkZjf` conditional pass — Engine/inbox/subscription/clock/phase probe/Step, 7-phase order, stable sort, single commit, publish order are complete; `realm.State` is composed but `entityState *entity.Engine` is stub (assigned only, never used) and `internal/sim` still retains full allowlist alongside `runtime`, so “runtime is sole orchestrator” and full copy of 38 files beyond 3 target files remain as transitional debt.
+- Quality review: reviewer `ses_fb40e9c81ffei3MUtQa1sz473M` conditional pass — stage order/probe, concurrency/stable sort, single mutation, subscription/clock, behavior parity are verbatim copy and green; 2 Critical noted as range overgrowth (43 files vs 3 target) and stub `entityState` composition, plus Important dual-scratch sharing and thin TDD.
+- Ruling: transitional double-authority (`sim` 43 files retained + `runtime` 43 files as `sed package runtime` mirror) and stub `entityState` are intentional to keep `sim` authoritative until caller migration in 4.2; `fluidScope`/`farmlandMoisture` dual-copy is bounded and race-clean. Cost if not converged in 4.2/5.x: archcheck still shows two full orchestrators and spec “no root facade” remains red until `internal/sim` production files are removed and `runtime` is trimmed to engine/step/subscription with delegation to `realm`/`entity`.

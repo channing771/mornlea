@@ -20,7 +20,7 @@
 
 ## 4. Runtime Cutover
 
-- [ ] 4.1 新建 `internal/sim/runtime`，迁移 `Engine`、inbox、订阅、时钟、阶段探针和 `Step`；由 runtime 组合 `realm.State` 与 `entity.State`，保持既有阶段顺序、并发入口、命令稳定排序、一次 mutation commit 和发布顺序。目标包：`engine.go`、`engine_step.go`、`engine_subscription.go` 与运行时测试。验证：`go test ./internal/sim/runtime -race -count=1`，并保留阶段顺序测试。
+- [x] 4.1 新建 `internal/sim/runtime`，迁移 `Engine`、inbox、订阅、时钟、阶段探针和 `Step`；由 runtime 组合 `realm.State` 与 `entity.State`，保持既有阶段顺序、并发入口、命令稳定排序、一次 mutation commit 和发布顺序。目标包：`engine.go`、`engine_step.go`、`engine_subscription.go` 与运行时测试。验证：`go test ./internal/sim/runtime -race -count=1`，并保留阶段顺序测试。
 - [ ] 4.2 将 `internal/server` 的 engine 装配与会话入口迁至 `runtime`/`contract`，将 config 和客户端调试路径迁至 `tuning`，更新所有其余生产调用方；删除根 `internal/sim` 的全部生产 Go 文件和临时桥接，不保留 alias 或 forwarding API。验证：`go test ./internal/sim/... ./internal/server ./internal/config ./cmd/mornlea -race -count=1` 与全仓旧 `sim` import/符号搜索无遗留。
 
 ## 5. Boundary Guards, Tests, And Documentation
