@@ -572,6 +572,11 @@ func TestTCPPlayerAndWorldSaveFailureRecovery(t *testing.T) {
 		state, ok := message.(network.PlayerState)
 		return ok && state.LastInputSequence == 1 && state.Position[0] > 0.5
 	})
+	sendIntegration(t, first.Endpoint, network.PlayerInput{Sequence: 2})
+	waitIntegrationState(t, first, func(message network.ServerMessage) bool {
+		state, ok := message.(network.PlayerState)
+		return ok && state.LastInputSequence >= 2 && state.Velocity[0] == 0 && state.Velocity[2] == 0
+	})
 	want := host.PlayerSnapshot(t, firstIdentity.PlayerID)
 	_ = first.Close()
 	host.WaitPlayerReleased(t, firstIdentity.PlayerID)
