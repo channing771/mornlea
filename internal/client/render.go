@@ -32,6 +32,10 @@ package client
 #cgo nocallback mornlea_client_render_drain_ui_events
 #cgo noescape mornlea_client_render_frame
 #cgo nocallback mornlea_client_render_frame
+#cgo noescape mornlea_client_render_prepare_benchmark_batch
+#cgo nocallback mornlea_client_render_prepare_benchmark_batch
+#cgo noescape mornlea_client_render_submit_benchmark_batch
+#cgo nocallback mornlea_client_render_submit_benchmark_batch
 #cgo noescape mornlea_client_render_readback
 #cgo nocallback mornlea_client_render_readback
 #cgo noescape mornlea_client_render_upload_glyph_rect
@@ -71,6 +75,8 @@ type Renderer struct {
 	windowed bool
 	// frameCalls 统计 RenderFrame 触发的 FFI 次数,供"每帧一次"断言。
 	frameCalls int
+	// benchmarkBatchCalls 统计 benchmark prepare/submit FFI 次数,供采样边界断言。
+	benchmarkBatchCalls int
 	// uploadCalls 统计 section 上传 FFI 次数,供"无变化不上传"断言。
 	uploadCalls int
 	// uiEventScratch 是 client ABI v9 结构化事件 batch 的固定复用缓冲。
@@ -500,6 +506,9 @@ func uiSegmentCapacity(menu UIMenu) int {
 // FrameCalls 返回累计的 RenderFrame FFI 调用次数。
 func (r *Renderer) FrameCalls() int { return r.frameCalls }
 
+// BenchmarkBatchCalls 返回累计的 benchmark prepare/submit FFI 调用次数。
+func (r *Renderer) BenchmarkBatchCalls() int { return r.benchmarkBatchCalls }
+
 // UploadCalls 返回累计的 section 上传 FFI 调用次数。
 func (r *Renderer) UploadCalls() int { return r.uploadCalls }
 
@@ -519,6 +528,28 @@ func (r *Renderer) RenderFrame(frame RenderFrame) bool {
 	}
 	r.check("frame", status)
 	return true
+}
+
+// PrepareBenchmarkBatch 在调用方开始计时前编码固定重复帧，但不提交 GPU 工作。
+func (r *Renderer) PrepareBenchmarkBatch(frame RenderFrame, repeats uint32) {
+	r.benchmarkBatchCalls++
+	encoded := EncodeRenderFrame(frame)
+	r.check("prepare benchmark batch", uint32(C.mornlea_client_render_prepare_benchmark_batch(
+		C.MORNLEA_CLIENT_ABI_VERSION,
+		C.uint64_t(r.handle),
+		(*C.uint8_t)(unsafe.Pointer(unsafe.SliceData(encoded))),
+		C.size_t(len(encoded)),
+		C.uint32_t(repeats),
+	)))
+}
+
+// SubmitBenchmarkBatch 提交已准备的批次并等待 GPU 完成。
+func (r *Renderer) SubmitBenchmarkBatch() {
+	r.benchmarkBatchCalls++
+	r.check("submit benchmark batch", uint32(C.mornlea_client_render_submit_benchmark_batch(
+		C.MORNLEA_CLIENT_ABI_VERSION,
+		C.uint64_t(r.handle),
+	)))
 }
 
 // UploadGlyphRect 上传字形图集的一块 R8 矩形(与 Go GlyphAtlas 同字节)。

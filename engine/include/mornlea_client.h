@@ -4,7 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* v10:avatar 通道容量扩至 75 具身体(450 个 80-byte instance)并新增敌怪
+/* v11:新增离屏 benchmark batch prepare/submit 入口；v10:avatar 通道容量扩至
+ * 75 具身体(450 个 80-byte instance)并新增敌怪
  * EntityHostile 身份域;v9:新增设置页 layout v2，并把 render_drain_ui_events 升级为结构化事件
  * batch 与整批容量门禁；v8:新增 egui 主菜单两出口
  * render_upload_ui_font / render_drain_ui_events
@@ -13,7 +14,7 @@
  * 契约);v6:新增远环 LOD tile 出口(render_upload_lod_tile/drop_lod_tile)。
  * 变基重编:远环两项出口在旧基线上原编号 v5/v6,main 的 water pass
  * (按 material 分流 + 半透明 water pass)占用 v5 后整体顺延一格。 */
-#define MORNLEA_CLIENT_ABI_VERSION 10u
+#define MORNLEA_CLIENT_ABI_VERSION 11u
 
 #define MORNLEA_CLIENT_STATUS_OK 0u
 #define MORNLEA_CLIENT_STATUS_ABI_VERSION 1u
@@ -157,6 +158,21 @@ uint32_t mornlea_client_render_frame(
     uint64_t handle,
     const uint8_t *frame,
     size_t frame_len);
+
+/* 离屏 benchmark 批次(client ABI v11):prepare 校验 frame 与 `1..=256` 次数后
+ * 录制一个未提交的 command buffer；同一 renderer 已有 batch 时返回
+ * INVALID_ARGUMENT 且保留原 batch。submit 消费该 buffer，一次提交并等待 GPU
+ * 完成；没有 prepared batch 时返回 INVALID_ARGUMENT。 */
+uint32_t mornlea_client_render_prepare_benchmark_batch(
+    uint32_t abi_version,
+    uint64_t handle,
+    const uint8_t *frame,
+    size_t frame_len,
+    uint32_t repeat);
+
+uint32_t mornlea_client_render_submit_benchmark_batch(
+    uint32_t abi_version,
+    uint64_t handle);
 
 uint32_t mornlea_client_render_upload_glyph_rect(
     uint32_t abi_version,

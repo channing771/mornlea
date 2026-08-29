@@ -23,7 +23,7 @@ Rust 测试按 `docs/test-organization.md` 的主题子模块与 helper 中心�
 ## 验证与入口
 
 - 构建 cdylib：`make rust`。
-- Cargo 目标目录由仓库 Makefile 导出为 `~/.cache/mornlea-cargo-target`，跨 worktree 共享编译产物；绕过 make 直接调用 cargo 时自行 export 同名变量可复用产物。
+- Makefile 为 `make rust` 默认设置当前 worktree 的 `CARGO_TARGET_DIR=engine/target/cargo`；`make rust` 将 release dylibs 复制到 `engine/target/release`。直接调用 cargo 不读取 Makefile，需要该目录或其他目标时须显式设置 `CARGO_TARGET_DIR`；CI 也显式设置，传给 `make rust` 的值可覆盖默认值。
 - workspace 门禁：`make rust-check`。
 - crate 定点：`cd engine && cargo test -p mornlea_engine --locked`、`cd engine && cargo test -p mornlea_client --locked`。
 - 当前文档入口：`docs/notes/go-rust-division.md`、`docs/test-organization.md`。

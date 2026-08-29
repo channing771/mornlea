@@ -37,7 +37,7 @@ mod water_tests;
 use std::collections::HashMap;
 
 use self::egui::{EguiError, EguiPass};
-use crate::ui::{decode_ui_frame, take_ui_events};
+use crate::ui::{UiFrame, decode_ui_frame, take_ui_events};
 use entity::{EntityPass, EntityPipelineKind};
 use lod::{Frustum, LodPass};
 use pool::{Alloc, Pool};
@@ -47,6 +47,8 @@ use quads::{QuadPass, QuadPassConfig};
 pub const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8UnormSrgb;
 /// 深度格式,与 Go 渲染器的 `FormatDepth32Float` 一致。
 pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+/// benchmark 单批固定录制的最大帧数。
+pub const BENCHMARK_BATCH_MAX_REPETITIONS: u32 = 256;
 
 // 容量与 Go 渲染器默认值一致(pool 面数、origin 槽位)。
 const POOL_FACES: u32 = 4_500_000;
@@ -167,6 +169,15 @@ pub struct FrameInput {
     /// 语义合法性由 [`decode_ui_frame`] 在 parse_frame 层校验(违约即拒绝并
     /// 转 `INVALID_ARGUMENT`),此处原样携带供渲染器解码后驱动 egui pass。
     pub ui_segment: Vec<u8>,
+}
+
+type QuadSegment<'a> = (&'a [u8], &'a [u8], &'a [u8]);
+
+struct ValidatedFrame<'a> {
+    name_tag_segment: Option<QuadSegment<'a>>,
+    hud_segment: Option<QuadSegment<'a>>,
+    debug_segment: Option<QuadSegment<'a>>,
+    ui_frame: Option<UiFrame>,
 }
 
 impl FrameInput {
@@ -462,6 +473,14 @@ fn sort_water_draws(draws: &mut [(f32, Alloc, u32)]) {
     draws.sort_unstable_by(|a, b| b.0.total_cmp(&a.0).then(a.1.offset.cmp(&b.1.offset)));
 }
 
+/// 已录制但尚未提交的离屏 benchmark 批次。
+///
+/// command buffer 保留 renderer GPU 资源的引用；提交前不得改写这些资源。
+struct PreparedBenchmarkBatch {
+    main: wgpu::CommandBuffer,
+    callbacks: Vec<wgpu::CommandBuffer>,
+}
+
 /// 离屏世界渲染器。
 pub struct OffscreenRenderer {
     device: wgpu::Device,
@@ -469,6 +488,8 @@ pub struct OffscreenRenderer {
     width: u32,
     height: u32,
     mode: TargetMode,
+    /// 已录制但尚未提交的离屏 benchmark 批次；同一 renderer 最多保留一个。
+    prepared_benchmark_batch: Option<PreparedBenchmarkBatch>,
     depth_view: wgpu::TextureView,
 
     faces: wgpu::Buffer,
@@ -1133,6 +1154,7 @@ impl OffscreenRenderer {
             width,
             height,
             mode,
+            prepared_benchmark_batch: None,
             depth_view,
             faces,
             instances,
@@ -1191,6 +1213,9 @@ impl OffscreenRenderer {
     /// 上传材质 atlas:`pixels` 为逐 layer、逐 mip 拼接的 RGBA 字节
     /// (与 Go `Registry.UploadTo` 写入 GPU 的字节完全一致)。
     pub fn upload_atlas(&mut self, layers: u32, pixels: &[u8]) -> bool {
+        if self.prepared_benchmark_batch.is_some() {
+            return false;
+        }
         let bytes_per_layer: usize = (0..ATLAS_MIPS)
             .map(|mip| {
                 let size = (ATLAS_TEX_SIZE >> mip).max(1) as usize;
@@ -1317,6 +1342,9 @@ impl OffscreenRenderer {
     /// 返回 false 表示某个池或 origin 槽位不足;此时该区段已完全退回未上传态,
     /// 不留半条流。
     pub fn upload_section(&mut self, pos: (i32, i32, i32), opaque: &[u8], water: &[u8]) -> bool {
+        if self.prepared_benchmark_batch.is_some() {
+            return false;
+        }
         debug_assert_eq!(opaque.len() % 8, 0);
         debug_assert_eq!(water.len() % 8, 0);
         if opaque.is_empty() && water.is_empty() {
@@ -1411,7 +1439,10 @@ impl OffscreenRenderer {
     }
 
     /// 丢弃一个 section;不存在时为幂等空操作。两条流的分配都要归还。
-    pub fn drop_section(&mut self, pos: (i32, i32, i32)) {
+    pub fn drop_section(&mut self, pos: (i32, i32, i32)) -> bool {
+        if self.prepared_benchmark_batch.is_some() {
+            return false;
+        }
         if let Some(slot) = self.sections.remove(&pos) {
             if let Some(alloc) = slot.alloc {
                 self.pool.free(alloc);
@@ -1421,6 +1452,7 @@ impl OffscreenRenderer {
             }
             self.free_origins.push(slot.origin_idx);
         }
+        true
     }
 
     /// 上传/替换一个远环 tile 的壳 quad 字节流(20 字节/quad;空等价
@@ -1431,13 +1463,20 @@ impl OffscreenRenderer {
         tile: (i32, i32),
         quads: &[u8],
     ) -> Result<(), lod::LodUploadError> {
+        if self.prepared_benchmark_batch.is_some() {
+            return Err(lod::LodUploadError::Invalid);
+        }
         self.lod_pass
             .upload_tile(&self.device, &self.queue, tile, quads)
     }
 
     /// 丢弃一个远环 tile;不存在时为幂等空操作。
-    pub fn drop_lod_tile(&mut self, tile: (i32, i32)) {
+    pub fn drop_lod_tile(&mut self, tile: (i32, i32)) -> bool {
+        if self.prepared_benchmark_batch.is_some() {
+            return false;
+        }
         self.lod_pass.drop_tile(tile);
+        true
     }
 
     /// 设置远环距离雾参数(start 起雾距离、full 全雾距离,block);校验
@@ -1445,6 +1484,9 @@ impl OffscreenRenderer {
     /// 非法参数返回 false 且不改变状态。默认 768/1152 锚定
     /// lodFarMultiplier=3 的默认几何;5.2 接线按配置推导后调用。
     pub fn set_lod_fog(&mut self, start: f32, full: f32) -> bool {
+        if self.prepared_benchmark_batch.is_some() {
+            return false;
+        }
         self.lod_pass.set_fog(start, full)
     }
 
@@ -1456,6 +1498,9 @@ impl OffscreenRenderer {
     /// 上传字形图集的一块 R8 矩形;越界或长度不符返回 false。
     /// 内容必须与 Go `GlyphAtlas` 写入自身纹理的字节一致(单源约定)。
     pub fn upload_glyph_rect(&mut self, x: u32, y: u32, w: u32, h: u32, pixels: &[u8]) -> bool {
+        if self.prepared_benchmark_batch.is_some() {
+            return false;
+        }
         if w == 0
             || h == 0
             || x.checked_add(w).is_none_or(|edge| edge > GLYPH_ATLAS_SIZE)
@@ -1488,6 +1533,9 @@ impl OffscreenRenderer {
 
     /// 上传 HUD 图集(一次性 RGBA;重复上传替换);长度不符返回 false。
     pub fn upload_hud_atlas(&mut self, width: u32, height: u32, pixels: &[u8]) -> bool {
+        if self.prepared_benchmark_batch.is_some() {
+            return false;
+        }
         if width == 0 || height == 0 || pixels.len() != (width * height * 4) as usize {
             return false;
         }
@@ -1544,43 +1592,19 @@ impl OffscreenRenderer {
             .sum()
     }
 
-    /// 渲染一帧,pass 顺序镜像 Go `Render`:
-    /// 候选 record → uniform → 清零 indirect → cull(可选 HiZ)→
-    /// render pass(clear 天空色 → sky → terrain indirect)→ HiZ build。
+    /// 是否持有尚未提交的 benchmark 批次，FFI 用它区分容量与冻结拒绝。
+    pub(crate) fn has_prepared_benchmark_batch(&self) -> bool {
+        self.prepared_benchmark_batch.is_some()
+    }
+
+    /// 渲染一帧并立即提交；每次调用只提交一个主 command buffer。
     pub fn render_frame(&mut self, input: &FrameInput) -> FrameResult {
-        // 语义校验先于任何 GPU 写入:非法 pass 段拒绝且不触碰 target。
-        if !self.avatar_pass.instances_valid(&input.avatar_instances)
-            || !self.drop_pass.instances_valid(&input.drop_instances)
-            || !self.outline_pass.instances_valid(&input.outline)
-            || input.overlay_strength.is_nan()
-            || input.water_tint.iter().any(|value| value.is_nan())
-        {
+        if self.prepared_benchmark_batch.is_some() {
             return FrameResult::Invalid;
         }
-        // 文本类段:非空时必须能按各自布局解析,失败在任何 GPU 写入前拒绝。
-        let name_tag_segment = if input.name_tag_vertices.is_empty() {
-            None
-        } else {
-            match self.name_tag_pass.parse_segment(&input.name_tag_vertices) {
-                Some(parts) => Some(parts),
-                None => return FrameResult::Invalid,
-            }
-        };
-        let hud_segment = if input.hud_vertices.is_empty() {
-            None
-        } else {
-            match self.hud_pass.parse_segment(&input.hud_vertices) {
-                Some(parts) => Some(parts),
-                None => return FrameResult::Invalid,
-            }
-        };
-        let debug_segment = if input.debug_vertices.is_empty() {
-            None
-        } else {
-            match self.debug_pass.parse_segment(&input.debug_vertices) {
-                Some(parts) => Some(parts),
-                None => return FrameResult::Invalid,
-            }
+        let validated = match self.validate_frame(input) {
+            Ok(validated) => validated,
+            Err(result) => return result,
         };
         // 窗口模式先获取 surface 纹理:失败(遮挡/过期)跳帧,镜像 Go
         // `Surface.Acquire` 返回 nil 的语义;离屏模式使用固定 color 纹理。
@@ -1601,7 +1625,155 @@ impl OffscreenRenderer {
                 .create_view(&wgpu::TextureViewDescriptor::default()),
             _ => unreachable!("windowed 模式必有已获取的 surface 纹理"),
         };
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("frame"),
+            });
+        let mut callback_buffers = Vec::new();
+        let result = self.record_frame(
+            input,
+            &validated,
+            &frame_view,
+            &mut encoder,
+            &mut callback_buffers,
+        );
+        if result != FrameResult::Rendered {
+            return result;
+        }
+        if callback_buffers.is_empty() {
+            self.queue.submit([encoder.finish()]);
+        } else {
+            callback_buffers.push(encoder.finish());
+            self.queue.submit(callback_buffers);
+        }
+        if let Some(frame) = acquired {
+            frame.present();
+        }
+        FrameResult::Rendered
+    }
 
+    /// 为离屏 benchmark 录制固定批次但不提交；同一 renderer 只保留一个批次。
+    pub fn prepare_benchmark_batch(&mut self, input: &FrameInput, repeat: u32) -> FrameResult {
+        if !(1..=BENCHMARK_BATCH_MAX_REPETITIONS).contains(&repeat)
+            || self.prepared_benchmark_batch.is_some()
+        {
+            return FrameResult::Invalid;
+        }
+        let TargetMode::Offscreen { color_view, .. } = &self.mode else {
+            return FrameResult::Invalid;
+        };
+        let validated = match self.validate_frame(input) {
+            Ok(validated) => validated,
+            Err(result) => return result,
+        };
+        let frame_view = color_view.clone();
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("benchmark batch"),
+            });
+        let mut callback_buffers = Vec::new();
+        for _ in 0..repeat {
+            let result = self.record_frame(
+                input,
+                &validated,
+                &frame_view,
+                &mut encoder,
+                &mut callback_buffers,
+            );
+            if result != FrameResult::Rendered {
+                return result;
+            }
+        }
+        self.prepared_benchmark_batch = Some(PreparedBenchmarkBatch {
+            main: encoder.finish(),
+            callbacks: callback_buffers,
+        });
+        FrameResult::Rendered
+    }
+
+    /// 提交已录制的 benchmark 批次并等待 GPU 完成；提交前即转移 buffer 所有权。
+    pub fn submit_benchmark_batch(&mut self) -> FrameResult {
+        let Some(PreparedBenchmarkBatch { main, callbacks }) = self.prepared_benchmark_batch.take()
+        else {
+            return FrameResult::Invalid;
+        };
+        self.queue
+            .submit(callbacks.into_iter().chain(std::iter::once(main)));
+        let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
+        FrameResult::Rendered
+    }
+
+    fn validate_frame<'a>(&self, input: &'a FrameInput) -> Result<ValidatedFrame<'a>, FrameResult> {
+        // 语义校验先于任何 GPU 写入:非法 pass 段拒绝且不触碰 target。
+        if !self.avatar_pass.instances_valid(&input.avatar_instances)
+            || !self.drop_pass.instances_valid(&input.drop_instances)
+            || !self.outline_pass.instances_valid(&input.outline)
+            || input.overlay_strength.is_nan()
+            || input.water_tint.iter().any(|value| value.is_nan())
+        {
+            return Err(FrameResult::Invalid);
+        }
+        let name_tag_segment = if input.name_tag_vertices.is_empty() {
+            None
+        } else {
+            self.name_tag_pass
+                .parse_segment(&input.name_tag_vertices)
+                .ok_or(FrameResult::Invalid)
+                .map(Some)?
+        };
+        let hud_segment = if input.hud_vertices.is_empty() {
+            None
+        } else {
+            self.hud_pass
+                .parse_segment(&input.hud_vertices)
+                .ok_or(FrameResult::Invalid)
+                .map(Some)?
+        };
+        let debug_segment = if input.debug_vertices.is_empty() {
+            None
+        } else {
+            self.debug_pass
+                .parse_segment(&input.debug_vertices)
+                .ok_or(FrameResult::Invalid)
+                .map(Some)?
+        };
+        let ui_frame = if input.ui_segment.is_empty() {
+            None
+        } else {
+            let frame = decode_ui_frame(&input.ui_segment).map_err(|_| FrameResult::Invalid)?;
+            let has_font = self
+                .egui_pass
+                .as_ref()
+                .map(|pass| pass.has_font())
+                .unwrap_or(false);
+            if frame.visible() && !has_font {
+                return Err(FrameResult::Invalid);
+            }
+            if let Some(egui_pass) = self.egui_pass.as_ref()
+                && !egui_pass.has_frame_capacity(&frame)
+            {
+                return Err(FrameResult::Capacity);
+            }
+            Some(frame)
+        };
+        Ok(ValidatedFrame {
+            name_tag_segment,
+            hud_segment,
+            debug_segment,
+            ui_frame,
+        })
+    }
+
+    fn record_frame(
+        &mut self,
+        input: &FrameInput,
+        validated: &ValidatedFrame<'_>,
+        frame_view: &wgpu::TextureView,
+        encoder: &mut wgpu::CommandEncoder,
+        callback_buffers: &mut Vec<wgpu::CommandBuffer>,
+    ) -> FrameResult {
         // 构建候选 record(编码镜像 Go sectionRecords)。
         let mut records: Vec<u8> = Vec::with_capacity(input.visible.len() * SECTION_RECORD_BYTES);
         let mut candidates = 0u32;
@@ -1725,11 +1897,6 @@ impl OffscreenRenderer {
             Some(Frustum::from_view_proj(&input.view_proj))
         };
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("frame"),
-            });
         encoder.copy_buffer_to_buffer(&self.zero_args, 0, &self.indirect, 0, 20);
         if candidates > 0 {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -1768,7 +1935,7 @@ impl OffscreenRenderer {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("terrain pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &frame_view,
+                    view: frame_view,
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
@@ -1848,7 +2015,7 @@ impl OffscreenRenderer {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("water pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &frame_view,
+                    view: frame_view,
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
@@ -1878,7 +2045,7 @@ impl OffscreenRenderer {
             }
         }
         self.water_draws = draws;
-        self.hiz.build(&self.device, &mut encoder, &self.depth_view);
+        self.hiz.build(&self.device, encoder, &self.depth_view);
         // 实体 pass:顺序镜像 app_frame(avatar → item drop),空段跳过。
         if !input.avatar_instances.is_empty() {
             self.avatar_pass.upload(
@@ -1888,7 +2055,7 @@ impl OffscreenRenderer {
                 &input.avatar_instances,
             );
             self.avatar_pass
-                .record(&mut encoder, &frame_view, &self.depth_view, "avatar pass");
+                .record(encoder, frame_view, &self.depth_view, "avatar pass");
         }
         if !input.drop_instances.is_empty() {
             self.drop_pass.upload(
@@ -1897,12 +2064,8 @@ impl OffscreenRenderer {
                 input.daylight,
                 &input.drop_instances,
             );
-            self.drop_pass.record(
-                &mut encoder,
-                &frame_view,
-                &self.depth_view,
-                "item drop pass",
-            );
+            self.drop_pass
+                .record(encoder, frame_view, &self.depth_view, "item drop pass");
         }
         // 轮廓 pass(Go 顺序:drop 之后、名牌之前)。
         if !input.outline.is_empty() {
@@ -1912,19 +2075,15 @@ impl OffscreenRenderer {
                 input.daylight,
                 &input.outline,
             );
-            self.outline_pass.record(
-                &mut encoder,
-                &frame_view,
-                &self.depth_view,
-                "block outline pass",
-            );
+            self.outline_pass
+                .record(encoder, frame_view, &self.depth_view, "block outline pass");
         }
         // 名牌(Go 顺序:outline 之后、overlay 之前)。
-        if let Some((uniform, backgrounds, glyphs)) = name_tag_segment {
+        if let Some((uniform, backgrounds, glyphs)) = validated.name_tag_segment {
             self.name_tag_pass.upload_and_record(
                 &self.queue,
-                &mut encoder,
-                &frame_view,
+                encoder,
+                frame_view,
                 Some(&self.depth_view),
                 uniform,
                 backgrounds,
@@ -1967,7 +2126,7 @@ impl OffscreenRenderer {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("screen tint pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &frame_view,
+                    view: frame_view,
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
@@ -1991,62 +2150,42 @@ impl OffscreenRenderer {
             }
         }
         // HUD 与调试面板(Go 顺序:overlay 之后,面板最后)。
-        if let Some((uniform, quads, glyphs)) = hud_segment {
+        if let Some((uniform, quads, glyphs)) = validated.hud_segment {
             self.hud_pass.upload_and_record(
                 &self.queue,
-                &mut encoder,
-                &frame_view,
+                encoder,
+                frame_view,
                 None,
                 uniform,
                 quads,
                 glyphs,
             );
         }
-        if let Some((uniform, quads, glyphs)) = debug_segment {
+        if let Some((uniform, quads, glyphs)) = validated.debug_segment {
             self.debug_pass.upload_and_record(
                 &self.queue,
-                &mut encoder,
-                &frame_view,
+                encoder,
+                frame_view,
                 None,
                 uniform,
                 quads,
                 glyphs,
             );
         }
-        // egui 菜单 pass(最上层,screen-space 无深度):只在 UI 段非空时运行。
-        // 空段仍 take 并丢弃以防游戏期积压；可见段必须先完成输出最坏容量
-        // 预检，再 take window input。否则 Capacity 会清空 click/text/scroll，
-        // 下一帧虽能重试输出却永远无法重放用户输入。
-        if !input.ui_segment.is_empty() {
-            let frame = match decode_ui_frame(&input.ui_segment) {
-                Ok(frame) => frame,
-                // parse_frame 已校验通过;此处防御性返回 Invalid。
-                Err(_) => return FrameResult::Invalid,
-            };
-            let has_font = self
-                .egui_pass
-                .as_ref()
-                .map(|pass| pass.has_font())
-                .unwrap_or(false);
-            if frame.visible() && !has_font {
-                return FrameResult::Invalid;
-            }
-            if let Some(egui_pass) = self.egui_pass.as_ref()
-                && !egui_pass.has_frame_capacity(&frame)
-            {
-                return FrameResult::Capacity;
-            }
+        // egui 菜单 pass(最上层,screen-space 无深度):校验已在录制前完成，
+        // 空段仍 take 并丢弃以防游戏期积压。
+        if let Some(frame) = validated.ui_frame.as_ref() {
             let ui_events = take_ui_events();
             if let Some(egui_pass) = self.egui_pass.as_mut() {
                 match egui_pass.run_and_record(
                     &self.device,
                     &self.queue,
-                    &mut encoder,
-                    &frame_view,
-                    &frame,
+                    encoder,
+                    frame_view,
+                    frame,
                     ui_events,
                 ) {
-                    Ok(_) => {}
+                    Ok((_, buffers)) => callback_buffers.extend(buffers),
                     Err(EguiError::OutputCapacity) => return FrameResult::Capacity,
                     Err(EguiError::FontInvalid | EguiError::OutputInvalid) => {
                         return FrameResult::Invalid;
@@ -2059,10 +2198,6 @@ impl OffscreenRenderer {
         self.last_pos = input.pos;
         self.last_view_proj = input.view_proj;
         self.have_last_camera = true;
-        self.queue.submit([encoder.finish()]);
-        if let Some(frame) = acquired {
-            frame.present();
-        }
         FrameResult::Rendered
     }
 
@@ -2071,6 +2206,9 @@ impl OffscreenRenderer {
     /// 空/超上限字节由 [`EguiPass::upload_font`] 拒绝并返回 Err;成功则安装
     /// 到 [`crate::ui::UiState`](proportional + monospace 同族)。
     pub fn upload_ui_font(&mut self, bytes: &[u8]) -> Result<(), EguiError> {
+        if self.prepared_benchmark_batch.is_some() {
+            return Err(EguiError::FontInvalid);
+        }
         self.egui_pass
             .as_mut()
             .expect("egui_pass 应已创建")
@@ -2094,11 +2232,25 @@ impl OffscreenRenderer {
             .test_fill_actions(count);
     }
 
+    /// 测试专用：让下一帧 egui 返回独立 callback command buffer。
+    #[cfg(test)]
+    pub(crate) fn test_emit_egui_callback_buffer(
+        &mut self,
+    ) -> std::sync::Arc<std::sync::atomic::AtomicUsize> {
+        self.egui_pass
+            .as_mut()
+            .expect("egui_pass 应已创建")
+            .test_emit_callback_buffer()
+    }
+
     /// 调整输出尺寸:重建 depth 与 HiZ,离屏重建 color,窗口重配 surface;
     /// HiZ 失效一帧(镜像 Go `Resize` 重置 haveLastCamera)。
-    pub fn resize(&mut self, width: u32, height: u32) {
+    pub fn resize(&mut self, width: u32, height: u32) -> bool {
+        if self.prepared_benchmark_batch.is_some() {
+            return false;
+        }
         if width == self.width && height == self.height {
-            return;
+            return true;
         }
         self.width = width;
         self.height = height;
@@ -2165,6 +2317,7 @@ impl OffscreenRenderer {
         if let Some(egui_pass) = self.egui_pass.as_mut() {
             egui_pass.set_size(width, height, pixels_per_point);
         }
+        true
     }
 
     /// 阻塞回读离屏 color(BGRA,逐行紧密拼接);`out` 长度必须恰为

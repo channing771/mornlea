@@ -58,6 +58,34 @@ func TestRendererRoundtripOrSkip(t *testing.T) {
 	}
 }
 
+func TestRendererPreparedBenchmarkBatchRoundtripOrSkip(t *testing.T) {
+	renderer, err := NewRenderer(32, 16)
+	if errors.Is(err, ErrNoGPUAdapter) {
+		t.Skip("无 GPU 适配器")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer renderer.Close()
+
+	frame := RenderFrame{Daylight: 1, SkyColor: [4]float32{0.2, 0.4, 1, 1}}
+	for i := 0; i < 4; i++ {
+		frame.ViewProj[i*4+i] = 1
+		frame.ViewProjInv[i*4+i] = 1
+	}
+	renderer.PrepareBenchmarkBatch(frame, 1)
+	renderer.SubmitBenchmarkBatch()
+	if got := renderer.BenchmarkBatchCalls(); got != 2 {
+		t.Fatalf("benchmark batch FFI=%d,想要 2", got)
+	}
+	if got := renderer.FrameCalls(); got != 0 {
+		t.Fatalf("prepared batch 调用了 render_frame %d 次", got)
+	}
+	if len(renderer.Readback()) != 32*16*4 {
+		t.Fatal("prepared batch 回读长度错误")
+	}
+}
+
 // TestDrainUIEventsEmptyAfterCreate 验证 `DrainUIEvents` 的正常路径:新建离屏
 // 渲染器尚无菜单事件时返回空切片，并走完 cgo v9 新签名(out_written 字节数 +
 // 合法空 batch)的全链路。参数校验由 Rust 层兜底,这里只测「状态码 OK + 空 batch → 空切片」;

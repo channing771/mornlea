@@ -21,6 +21,8 @@
 
 use crate::ui::{UiEvent, UiFrame, UiOutputError, UiState};
 use egui::{Rect, pos2, vec2};
+#[cfg(test)]
+use std::sync::{Arc, atomic::AtomicUsize};
 
 /// 字体一次上传的字节上界(32 MiB;实际 Noto CJK OTF 约 16 MiB,留两倍余量)。
 pub const MAX_UI_FONT_BYTES: usize = 32 * 1024 * 1024;
@@ -45,6 +47,8 @@ pub struct EguiPass {
     screen: egui_wgpu::ScreenDescriptor,
     /// egui 上下文与点击事件队列(纯状态,无 GPU)。
     ui: UiState,
+    #[cfg(test)]
+    test_callback_probe: Option<Arc<AtomicUsize>>,
 }
 
 impl EguiPass {
@@ -81,6 +85,8 @@ impl EguiPass {
             renderer,
             screen,
             ui: UiState::new(),
+            #[cfg(test)]
+            test_callback_probe: None,
         }
     }
 
@@ -126,11 +132,19 @@ impl EguiPass {
         self.ui.test_fill_actions(count);
     }
 
+    /// 测试专用：让下一帧 egui 输出一个会返回独立 command buffer 的 callback。
+    #[cfg(test)]
+    pub(crate) fn test_emit_callback_buffer(&mut self) -> Arc<AtomicUsize> {
+        let probe = Arc::new(AtomicUsize::new(0));
+        self.test_callback_probe = Some(probe.clone());
+        probe
+    }
+
     /// 运行一帧菜单并在 encoder 上录制 egui pass。
     ///
     /// 输入事件 events 来自 crate::ui::take_ui_events(本帧已取走)。
-    /// 返回 Ok(true) 表示已录制 pass;Ok(false) 表示零工作(菜单不可见或
-    /// 未装字体;调用方应已先判过,此为防御性返回);Err 表示输入/字体违约。
+    /// 返回的 callback command buffers 必须与主 frame buffer 一起提交；空列表
+    /// 表示无回调工作。`Ok(true)` 表示已录制 pass，`Ok(false)` 表示零工作。
     ///
     /// 帧序:本 pass 排在整个帧的**最上层**(HUD/debug 之后),与 HUD 一致的
     /// screen-space 语义,无深度缓冲(feathering 自灭锯齿)。
@@ -143,9 +157,9 @@ impl EguiPass {
         frame_view: &wgpu::TextureView,
         frame: &UiFrame,
         events: Vec<UiEvent>,
-    ) -> Result<bool, EguiError> {
+    ) -> Result<(bool, Vec<wgpu::CommandBuffer>), EguiError> {
         if !frame.visible() || !self.has_font() {
-            return Ok(false);
+            return Ok((false, Vec::new()));
         }
         let ppp = self.screen.pixels_per_point;
         let [w, h] = self.screen.size_in_pixels;
@@ -156,7 +170,7 @@ impl EguiPass {
         let full = match self.ui.run_frame(raw, frame, ppp) {
             Ok(Some(full)) => full,
             // 无字体/不可见:run_frame 返回 None,本 pass 零工作。
-            Ok(None) => return Ok(false),
+            Ok(None) => return Ok((false, Vec::new())),
             Err(UiOutputError::Capacity) => return Err(EguiError::OutputCapacity),
             Err(UiOutputError::Invalid) => return Err(EguiError::OutputInvalid),
         };
@@ -166,6 +180,18 @@ impl EguiPass {
             pixels_per_point,
             ..
         } = full;
+        #[cfg(test)]
+        let mut shapes = shapes;
+        #[cfg(test)]
+        if let Some(probe) = &self.test_callback_probe {
+            shapes.push(egui::epaint::ClippedShape {
+                clip_rect: screen_rect,
+                shape: egui::Shape::Callback(egui_wgpu::Callback::new_paint_callback(
+                    screen_rect,
+                    super::ui_replay_tests::TestCallback::new(probe.clone(), frame_view.clone()),
+                )),
+            });
+        }
 
         // 纹理增量先应用(渲染前),释放延迟到渲染后由 egui-wgpu 内部处理:
         // 菜单字形/图集纹理经 renderer.update_texture/free_texture 维护,
@@ -208,9 +234,6 @@ impl EguiPass {
         self.renderer.render(&mut pass, &jobs, &self.screen);
         drop(pass);
 
-        // 回调命令缓冲(常规为空)随主编码器一并提交,保证回调侧资源就绪。
-        queue.submit(callback_buffers);
-
-        Ok(true)
+        Ok((true, callback_buffers))
     }
 }
