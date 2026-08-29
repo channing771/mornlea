@@ -162,5 +162,5 @@
 ## Deferred And Abandoned
 
 - 无未决玩法、协议、容量、兼容或视觉数值。
-- OpenSpec sync/archive、长期版本文档、`openspec/config.yaml`、backlog/Discussion、PR/CI 与 worktree cleanup 明确属于计划 Task 6，不是本 active change checklist 的延期项。
+- 当前条目文档与 `openspec/config.yaml` 同步已在 closeout 期间完成；backlog/Discussion、PR/CI 与 worktree cleanup 仍明确属于计划 Task 6 的范围，不是本 active change checklist 的延期项。
 - dirty sibling worktrees 与 `docs/notes/lan-server.md` 永久排除在本 change 文件范围之外。
