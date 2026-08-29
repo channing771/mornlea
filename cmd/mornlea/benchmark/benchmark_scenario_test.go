@@ -23,9 +23,9 @@ import (
 	"github.com/channing771/mornlea/internal/worldgen"
 )
 
-func TestScenarioV19ContainsSevenSortedUnicodeRemotePlayers(t *testing.T) {
-	if scenarioVersion != 19 {
-		t.Fatalf("scenarioVersion=%d, want 19", scenarioVersion)
+func TestScenarioV20ContainsSevenSortedUnicodeRemotePlayers(t *testing.T) {
+	if scenarioVersion != 20 {
+		t.Fatalf("scenarioVersion=%d, want 20", scenarioVersion)
 	}
 	if input := fixedBenchmarkPlayerInput(); input.Mining {
 		t.Fatalf("固定 benchmark PlayerInput.Mining=%t，想要 false", input.Mining)
@@ -66,9 +66,9 @@ func TestScenarioV19ContainsSevenSortedUnicodeRemotePlayers(t *testing.T) {
 	}
 }
 
-func TestBenchmarkScenarioV19AccountsForCompanionRendererUploadLayout(t *testing.T) {
-	if scenarioVersion != 19 {
-		t.Fatalf("scenarioVersion=%d，想要 19", scenarioVersion)
+func TestBenchmarkScenarioV20AccountsForCompanionRendererUploadLayout(t *testing.T) {
+	if scenarioVersion != 20 {
+		t.Fatalf("scenarioVersion=%d，想要 20", scenarioVersion)
 	}
 	scenario := application.NewMultiplayerBenchmarkScenario()
 	if len(scenario.Spawns) != 7 || len(scenario.Tags) != 7 {

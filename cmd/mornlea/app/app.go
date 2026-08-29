@@ -135,6 +135,14 @@ type Application struct {
 	// 尺寸全部以服务端状态为准，客户端不预测；尺寸 3 表示工作台视图。
 	crafting      client.CraftingMirror
 	miningOverlay hud.MiningOverlay
+	// itemPopup 是已记录的物品名弹条：Text/ShownAtTick/Valid 在已确认镜像的
+	// 选中下标变化时记录一次，WorldTick 每帧由 `updateItemPopup` 注入当前权威
+	// tick，可见窗口判定留给 HUD 布局（tick 驱动，golden 确定）。
+	itemPopup hud.PopupOverlay
+	// popupSelection 与 popupSelectionSeen 是弹条触发的确认基线：只消费
+	// `InventoryMirror` 的已确认选中下标，本地选择请求不推进基线。
+	popupSelection     uint8
+	popupSelectionSeen bool
 	// eatingTracker 是进食进度的客户端预测状态机：`RenderFrame` 在
 	// `Prepare` 调用处按帧间时长推进；纯呈现，不进入权威或预测物理状态。
 	eatingTracker     client.EatingProgressTracker

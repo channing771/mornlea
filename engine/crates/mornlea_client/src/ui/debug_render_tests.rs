@@ -1,6 +1,8 @@
 //! 调试面板无头呈现与交互测试：读数区、行呈现、键盘动作与编辑态事件。
 
-use super::test_support::{screen_rect, shape_text, take_output_events, test_font};
+use super::test_support::{
+    collect_rects_and_texts, screen_rect, shape_text, take_output_events, test_font, text_color,
+};
 use super::*;
 
 fn panel_action(action: u32) -> UiOutputEvent {
@@ -126,6 +128,73 @@ fn debug_panel_renders_readout_and_rows() {
             "缺少文本 {expected:?}，全部文本：{text}"
         );
     }
+}
+
+#[test]
+fn debug_panel_visuals_use_panel_tokens() {
+    let mut state = UiState::new();
+    state.install_font(test_font());
+    let frame = sample_frame();
+    let full = state
+        .run_frame(raw_input(&[], screen_rect(), 1.0, None), &frame, 1.0)
+        .unwrap()
+        .unwrap();
+    let (rects, texts) = collect_rects_and_texts(&full);
+
+    // 面板 = 半透明表面 + 1 逻辑点亮边。
+    assert!(
+        rects.iter().any(|r| r.fill == style::PANEL_FILL),
+        "调试面板应为令牌 PANEL_FILL"
+    );
+    assert!(
+        rects
+            .iter()
+            .any(|r| r.stroke.color == style::PANEL_STROKE.color),
+        "调试面板应带 1 逻辑点亮边描边"
+    );
+
+    // 文字层级:标签一律次级文字;读数与普通行的值为主文字,只读行的值
+    // 也降为次级以表达「不可编辑」。
+    for (needle, expected) in [
+        ("帧时", style::TEXT_SECONDARY),
+        ("12.50 ms", style::TEXT_PRIMARY),
+        ("── physics ──", style::TEXT_SECONDARY),
+        ("gravity", style::TEXT_SECONDARY),
+        ("9.8", style::TEXT_PRIMARY),
+        ("viewDistance", style::TEXT_SECONDARY),
+        ("16", style::TEXT_SECONDARY),
+    ] {
+        let hit = texts
+            .iter()
+            .find(|text| text.galley.job.text == needle)
+            .unwrap_or_else(|| panic!("缺少文本 {needle:?}"));
+        assert_eq!(text_color(hit), expected, "文本 {needle:?} 颜色");
+    }
+
+    // 选中行 = 琥珀左缘标记(整行高、固定窄条),替代旧的整行高亮背景。
+    let mark = rects
+        .iter()
+        .find(|r| r.fill == style::ACCENT_AMBER)
+        .expect("选中行应有琥珀左缘标记");
+    assert_eq!(mark.rect.width(), DEBUG_PANEL_SELECTED_MARK_WIDTH);
+    assert_eq!(mark.rect.height(), DEBUG_PANEL_ROW_HEIGHT);
+}
+
+#[test]
+fn debug_panel_editing_frame_is_amber_stroked() {
+    let mut state = UiState::new();
+    state.install_font(text_edit_font());
+    let frame = debug_frame(vec![row("fovDegrees", "70", false, true, true, true)]);
+    render(&mut state, &frame, &[]);
+    let full = state
+        .run_frame(raw_input(&[], screen_rect(), 1.0, None), &frame, 1.0)
+        .unwrap()
+        .unwrap();
+    let (rects, _) = collect_rects_and_texts(&full);
+    assert!(
+        rects.iter().any(|r| r.stroke.color == style::ACCENT_AMBER),
+        "编辑态输入框应有琥珀描边"
+    );
 }
 
 #[test]

@@ -235,8 +235,9 @@ func TestHUDHungerBarFollowsAuthoritativePlayerState(t *testing.T) {
 		t.Fatalf("已确认权威状态 RenderFrame=(%v,%v)", rendered, err)
 	}
 	widths := hudQuadWidths()
-	if got, want := len(widths), healthQuadInstancesForHUDTest+15; got != want {
-		t.Fatalf("quad=%d，想要 %d（生命 14 的 10 个 + 饥饿 9 的 15 个）", got, want)
+	// 准星在物品镜像未确认但 HUD 可见的帧里也要呈现（游戏相位），共 4 个。
+	if got, want := len(widths), 4+healthQuadInstancesForHUDTest+15; got != want {
+		t.Fatalf("quad=%d，想要 %d（准星 4 个 + 生命 14 的 10 个 + 饥饿 9 的 15 个）", got, want)
 	}
 	// 两条 bar 的格尺寸相同，因此整格宽度就是最大值，半格恰为它的一半。
 	fullWidth := slices.Max(widths)

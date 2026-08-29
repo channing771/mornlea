@@ -1,6 +1,9 @@
 //! 设置页无头呈现与交互测试：控件、滚动布局、有界输入和事件顺序。
 
-use super::test_support::{click_ui, screen_rect, shape_text, take_output_events, test_font};
+use super::test_support::{
+    click_ui, collect_rects_and_texts, screen_rect, shape_text, take_output_events, test_font,
+    text_color,
+};
 use super::*;
 
 fn small_screen_rect() -> Rect {
@@ -310,6 +313,91 @@ fn settings_small_default_frame_shows_actions_without_clipping() {
             "动作文字 {label:?} 被 clip rect 裁剪"
         );
     }
+}
+
+#[test]
+fn settings_visuals_use_panel_tokens() {
+    let mut state = UiState::new();
+    state.install_font(test_font());
+    let frame = settings_frame(
+        0.25,
+        UiSettingsWindow::Size960x540,
+        "packs/local",
+        true,
+        "设置已保存",
+        "保存失败：无权限",
+    );
+    let full = state
+        .run_frame(raw_input(&[], screen_rect(), 1.0, None), &frame, 1.0)
+        .unwrap()
+        .unwrap();
+    let (rects, texts) = collect_rects_and_texts(&full);
+    let panel = rect(&state, SettingsElement::Panel);
+
+    // 面板 = 半透明表面 + 1 逻辑点亮边,几何与生产面板矩形重合。
+    assert!(
+        rects
+            .iter()
+            .any(|r| r.rect == panel && r.fill == style::PANEL_FILL),
+        "设置面板应为令牌 PANEL_FILL"
+    );
+    assert!(
+        rects
+            .iter()
+            .any(|r| r.rect == panel && r.stroke.color == style::PANEL_STROKE.color),
+        "设置面板应带 1 逻辑点亮边描边"
+    );
+
+    // 反馈行层级:错误 = 告警红、脏草稿 = 琥珀、状态 = 主文字、提示 = 次级。
+    for (needle, expected) in [
+        ("保存失败：无权限", style::DANGER),
+        ("有未保存的更改", style::ACCENT_AMBER),
+        ("设置已保存", style::TEXT_PRIMARY),
+        ("材质包路径保存后将在下次启动生效", style::TEXT_SECONDARY),
+    ] {
+        let hit = texts
+            .iter()
+            .find(|text| text.galley.job.text.contains(needle))
+            .unwrap_or_else(|| panic!("缺少反馈行 {needle:?}"));
+        assert_eq!(text_color(hit), expected, "反馈行 {needle:?} 颜色");
+    }
+}
+
+#[test]
+fn settings_text_edit_focus_stroke_is_amber() {
+    let mut state = UiState::new();
+    state.install_font(text_edit_font());
+    let frame = settings_frame(0.5, UiSettingsWindow::Size960x540, "pack", false, "", "");
+    render(&mut state, &frame, screen_rect(), &[]);
+
+    // 未聚焦时无琥珀描边。
+    let full = state
+        .run_frame(raw_input(&[], screen_rect(), 1.0, None), &frame, 1.0)
+        .unwrap()
+        .unwrap();
+    let (rects, _) = collect_rects_and_texts(&full);
+    assert!(
+        !rects.iter().any(|r| r.stroke.color == style::ACCENT_AMBER),
+        "未聚焦的输入框不应出现琥珀描边"
+    );
+
+    // 聚焦材质路径输入框后,焦点描边为琥珀(egui 从 selection.stroke 取色)。
+    request_path_focus(&mut state, &frame, screen_rect());
+    let path = rect(&state, SettingsElement::TexturePath);
+    let full = state
+        .run_frame(raw_input(&[], screen_rect(), 1.0, None), &frame, 1.0)
+        .unwrap()
+        .unwrap();
+    let (rects, _) = collect_rects_and_texts(&full);
+    let amber = rects
+        .iter()
+        .filter(|r| r.stroke.color == style::ACCENT_AMBER)
+        .copied()
+        .collect::<Vec<_>>();
+    assert!(
+        amber.iter().any(|r| r.rect.expand(4.0).intersects(path)),
+        "聚焦的材质路径输入框应有琥珀描边：{amber:?} / {path:?}"
+    );
 }
 
 #[test]
