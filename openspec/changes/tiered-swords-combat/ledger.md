@@ -112,6 +112,9 @@
 - QUALITY PASS：完整 diff 只含 Task 4 的 23 个受控文件（新增 4 个：`message_combat.go`、`message_combat_test.go`、`combat_hit_publication_test.go`、`sword_combat_parity_test.go`；修改 15 个 network/server/app/根文件、tasks/ledger），无 core schemas、sim combat 逻辑、render/app capture 超范围修改、Rust 长期文档或 sibling worktrees 变化；无重试/dedupe map/战斗专用队列或 trusted observer 特例；注释中文且无任务编号；wire 编码固定 `u64/u8/u8`，解码在分配前要求恰好 10 bytes 并依赖 done-check 拒绝尾随。
 - Mutation check：任一 CombatHit 字段/值域/ID/长度校验、protocol 升版、registry 单侧缺口、golden 单字节漂移、fuzz 缺失合法种子、publication 私发过滤/顺序/backpressure 分支、parity 中耐久/伤害/间隔/跨传输去 origin 比较的删除或错值均至少使一条新增测试失败；既有 network 全包、sim 全包、server 全包、archcheck 与 OpenSpec 均绿。
 - Findings：Critical 0、Important 0、Minor 0；无需修复轮次。
+- Task 4 独立评审，SPEC PASS：报告 `.superpowers/sdd/2026-08-28-tiered-swords-unified-combat/task-4-review.md:11-66` 对提交区间 `2d6d88df..9f82b654` 完成 7 项契约核对；固定 10-byte `08070605040302010602`、tick>0 damage 1..20 kind 1/2、ID 25/26 boundary、golden `1f→20`、`publication` 私有顺序与 backpressure、10-tick parity 均符合 Task 4 brief；无遗漏或超规。
+- Task 4 独立评审，QUALITY PASS：同一报告 `:68-101` 给出 Task quality `Approved`；范围收敛、固定 codec、私有发布无重试/dedupe、根 `AGENTS.md` v32、23+1 文件 scope clean，Critical 0、Important 0、Minor 0。
+- Task 4 完成：`2d6d88df..9f82b654` 已具备 implementer RED/GREEN、focused gates、self-review 与独立 SPEC/QUALITY PASS；`tasks.md` 4.1..4.8 全部完成，后续实现从 Task 5 开始。
 
 ## Validation Evidence
 
