@@ -142,18 +142,21 @@ func adjacentBlock(block core.BlockPos, face core.BlockFace) core.BlockPos {
 }
 
 func yawToDoorDir(yaw float32) int {
-	// 与 sim 的 yawToDoorDir 对齐
-	yaw = normalizeYaw(yaw)
-	if yaw >= -math.Pi/4 && yaw < math.Pi/4 {
-		return 2
+	normalized := math.Mod(float64(yaw)+math.Pi, 2*math.Pi)
+	if normalized < 0 {
+		normalized += 2 * math.Pi
 	}
-	if yaw >= math.Pi/4 && yaw < 3*math.Pi/4 {
-		return 3
+	yawNorm := float32(normalized - math.Pi)
+	if yawNorm >= -math.Pi/4 && yawNorm < math.Pi/4 {
+		return 0
 	}
-	if yaw >= -3*math.Pi/4 && yaw < -math.Pi/4 {
+	if yawNorm >= math.Pi/4 && yawNorm < 3*math.Pi/4 {
 		return 1
 	}
-	return 0
+	if yawNorm >= 3*math.Pi/4 || yawNorm < -3*math.Pi/4 {
+		return 2
+	}
+	return 3
 }
 
 func blockCenterVec3(target core.BlockPos) mgl32.Vec3 {

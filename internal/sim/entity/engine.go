@@ -54,6 +54,10 @@ type Engine struct {
 	stepPhaseObserver func(stepPhase)
 	tunables        tuning.Tunables
 	physicsTunables physics.Tunables
+	dropKeySeen            map[core.ChunkKey]struct{}
+	dropKeyScratch         []core.ChunkKey
+	containerViewerScratch []SessionID
+	dropSessionScratch     []SessionID
 }
 
 func NewEngine(viewRadius int, worldTime uint64, seed int64) *Engine {
