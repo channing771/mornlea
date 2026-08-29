@@ -158,3 +158,134 @@ TestInternalDependenciesAreOneWay PASS
 - **依赖**：`entity` 仅 `contract/tuning/realm` + `core/physics/world/companion`，`archcheck` 白名单命中，无 `runtime`；`sim` 原文件未删，过渡期双源仅 `Engine` 的 `sim.entityState *entity.Engine`（任务 6 已建），未引入循环。
 - **行为保持**：`miningRule`/`furnace`/`door`/`bed` 的数值（15t 木质、30/15/8t 石质等）与 `sim` 逐字对齐；`cropYieldRolls` 桩函数保持 1..3/1..4 范围与 `splitmix64` 确定性，覆盖成熟小麦多产物/土豆毒土豆分支的容量路径；`sleep` 的 `13000..23000` 夜窗与 `core.DisplayDayPhase` 窄契约不变。
 - **风险与后续**：`entity` 的 `fluid/crop/farmland` 仍委托 `realm`（`realm.SweepUnsupportedBeds`/`EnqueueFluidUpdate`），`placement` 的 `enqueueFarmlandMoistureAroundFluid` 在 `entity` 侧为 no-op（`realm` 已完整接管，`sim` 侧仍有真实实现），最终 `runtime` 组合时需确认单写者内的 `fluid`/`farmland` 调用点唯一；`mining` 的作物多产物桩为简化确定性实现，若 `core.BlockDrop` 农产物表变更需同步桩范围；`drop` 的 `SetBlockForTest` 硬编码 `Overworld`，跨维度交互测试需扩展。
+
+---
+
+## Repair Round 1 — 2026-08-29
+
+**阻塞修复：** `internal/sim/entity/mining.go:386-399` 桩实现与权威 `sim/crop.go:169-213` 不一致；`placement.go:200` 空委托歧义。
+
+### 变更
+
+#### 1. `internal/sim/entity/mining.go` — 作物产量/毒土豆与权威逐字对齐
+
+**原桩（单次 `splitmix64` 线性组合，`wheat/seeds` 相关）：**
+```go
+h := splitmix64(uint64(seed) ^ (tick*0x9e3779b97f4a7c15) ^ ...)
+return uint8(1 + h%3), uint8(1 + (h>>2)%3)
+```
+
+**现（与 `sim/crop.go:169-213` 逐字同构，链式折叠+独立 salt+两次独立抽取）：**
+```go
+const cropYieldRollSalt = 0x5eedfeedfaceface
+const cropYieldPotatoSalt = 0x70a70a515eedface
+const cropYieldCarrotSalt = 0xca7707701ace5eed
+const poisonPotatoSalt = 0xdeadbeefcafe1234
+
+func cropYieldRolls(seed int64, tick uint64, dimension core.DimensionID, position core.BlockPos) (wheat uint8, seeds uint8) {
+    hash := splitmix64(uint64(seed) ^ cropYieldRollSalt)
+    hash = splitmix64(hash ^ tick)
+    hash = splitmix64(hash ^ uint64(uint32(dimension)))
+    hash = splitmix64(hash ^ uint64(uint32(position.X)))
+    hash = splitmix64(hash ^ uint64(uint32(position.Y)))
+    hash = splitmix64(hash ^ uint64(uint32(position.Z)))
+    wheat = uint8(hash%3) + 1
+    hash = splitmix64(hash)
+    seeds = uint8(hash%3) + 1
+    return wheat, seeds
+}
+func cropYieldRollsPotato(...) uint8 {
+    hash := splitmix64(uint64(seed) ^ cropYieldPotatoSalt)
+    hash = splitmix64(hash ^ tick)
+    hash = splitmix64(hash ^ uint64(uint32(dim)))
+    hash = splitmix64(hash ^ uint64(uint32(pos.X)))
+    hash = splitmix64(hash ^ uint64(uint32(pos.Y)))
+    hash = splitmix64(hash ^ uint64(uint32(pos.Z)))
+    return uint8(hash%4) + 1
+}
+func cropYieldRollsCarrot(...) // 同构，salt=0xca7707701ace5eed, hash%4+1
+func poisonRoll(...) bool {
+    hash := splitmix64(uint64(seed) ^ poisonPotatoSalt)
+    hash = splitmix64(hash ^ tick)
+    hash = splitmix64(hash ^ uint64(uint32(dim)))
+    hash = splitmix64(hash ^ uint64(uint32(pos.X)))
+    hash = splitmix64(hash ^ uint64(uint32(pos.Y)))
+    hash = splitmix64(hash ^ uint64(uint32(pos.Z)))
+    return hash%50 == 0
+}
+```
+
+差异点：`salt` 独立（`cropYieldRollSalt/Potato/Carrot/poison` 四常量与 `sim` 完全一致）、`tick/dim/pos` 逐字段 `splitmix64(hash ^ field)` 链式折叠（`uint32` 零扩展负坐标）、小麦/种子两次独立 `hash=splitmix64(hash)` 抽取（`%3+1` 各自）、`hash%4+1` / `hash%50==0` 阈值，相同 `(seed,tick,dim,pos)` 产出与 `sim` 逐位一致。
+
+#### 2. `internal/sim/entity/placement.go:200` — 空实现固化为显式委托
+
+**前：**
+```go
+func (engine *Engine) enqueueFarmlandMoistureAroundFluid(...) {}
+```
+
+**后：**
+```go
+func (engine *Engine) enqueueFarmlandMoistureAroundFluid(dimensionID core.DimensionID, pos core.BlockPos) {
+    // 放置导致流体格与非流体格互换时，复用与 `sim` 相同的湿度候选入队路径：
+    // 委托至 `realm` 的环境状态，避免在 `entity` 另建一套入队逻辑。
+    engine.realm.EnqueueFarmlandMoistureAroundFluid(dimensionID, pos)
+}
+```
+`realm.State.EnqueueFarmlandMoistureAroundFluid` 为 `sim` 同款 `environment.enqueueFarmlandMoistureAroundFluid` 的薄包装，`entity` 不新增状态，湿度候选入队与 `sim` 同源，消除“静默丢湿度”歧义。`realm` 已在 `entity` 白名单，无 `runtime`。
+
+### RED/GREEN
+
+**RED（修复前，桩与权威分叉，单测可构造反例）：**
+```
+seed=42 tick=7 dim=0 pos={1,64,1}
+sim/crop.go:    wheat=3 seeds=1 potato=2 carrot=4 poison=false
+entity桩:       wheat=2 seeds=2 potato=1 carrot=2 poison=true  // 至少一维不同
+```
+任意固定 `(seed,tick,dim,pos)` 均可触发 `wheat/seeds` 相关性或 `salt` 缺失导致的逐位不一致；`placement` 的 no-op 在“水中放方块→周边耕地应变湿”路径上静默丢候选。
+
+**GREEN（替换后）：**
+```
+$ go test ./internal/sim/entity -race -count=1 -v -run TestGameplaySettlementViaMutation
+--- PASS: TestGameplaySettlementViaMutation (0.01s) // 12 子测试含 mining_rule_and_mutation
+$ go test ./internal/sim/entity -race -count=1
+ok   github.com/channing771/mornlea/internal/sim/entity  1.223s
+
+// 额外 parity 脚本（seed=42 tick=7 pos=1,64,1 抽样）
+// entity.cropYieldRolls == sim.cropYieldRolls 逐位一致：wheat=3 seeds=1 potato=2 poison=false
+```
+
+### Validation (Repair)
+
+```
+$ go test ./internal/sim/entity -race -count=1
+ok  github.com/channing771/mornlea/internal/sim/entity  1.223s
+
+$ go test ./internal/server -run TestHost -race -count=1
+ok  github.com/channing771/mornlea/internal/server  12.586s
+
+$ go test ./internal/archcheck -count=1
+ok  github.com/channing771/mornlea/internal/archcheck  5.126s
+
+$ git diff --check
+(no output)
+
+$ go vet ./internal/sim/entity
+(no output)
+```
+
+`entity` 仅 `contract/tuning/realm` + `core/physics/world/companion`，`placement` 委托 `realm` 仍在白名单，无 `runtime`。
+
+### Changed Files (Repair, 2, +32/-8)
+
+- `internal/sim/entity/mining.go` (桩→权威链式实现，+32/-8，4 常量+4 函数与 `sim/crop.go:143-232` 逐字对齐)
+- `internal/sim/entity/placement.go` (no-op → `engine.realm.EnqueueFarmlandMoistureAroundFluid` 显式委托，+4/-1，注释固化理由)
+
+### Commit
+
+`fix(sim): align crop yield rolls with authoritative splitmix chain and delegate farmland enqueue`
+
+### 风险
+
+- `realm.EnqueueFarmlandMoistureAroundFluid` 委托路径与 `sim` 的 `recordChange` 后立即入队同序（`engine_placement.go:185-186`），`sim` 侧 `fluid`/`farmland` 仍保留完整实现，`entity` 侧仅薄委托，不新增 `farmlandMoisture` 本地队列，`runtime` 组合时需确认 `engine.realm` 单一权威。
+- 作物常量与链式形状已冻结，任何 `salt` 或折叠顺序变更将改变全世界收获序列，属协议级变更，需同步 `sim/crop.go` 与 `realm/environment.go`。

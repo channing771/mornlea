@@ -197,4 +197,8 @@ func (engine *Engine) executePlacement(
 	return 0, false
 }
 
-func (engine *Engine) enqueueFarmlandMoistureAroundFluid(dimensionID core.DimensionID, pos core.BlockPos) {}
+func (engine *Engine) enqueueFarmlandMoistureAroundFluid(dimensionID core.DimensionID, pos core.BlockPos) {
+	// 放置导致流体格与非流体格互换时，复用与 `sim` 相同的湿度候选入队路径：
+	// 委托至 `realm` 的环境状态，避免在 `entity` 另建一套入队逻辑。
+	engine.realm.EnqueueFarmlandMoistureAroundFluid(dimensionID, pos)
+}

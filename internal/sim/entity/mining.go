@@ -383,22 +383,52 @@ func (engine *Engine) completeCompanionContainerMining(
 	entry.mining = miningState{}
 }
 
-func cropYieldRolls(seed int64, tick uint64, dim core.DimensionID, pos core.BlockPos) (uint8, uint8) {
-	// 简化：返回中间值，保持在 1..3 范围内，满足成熟小麦的多产物约束
-	h := splitmix64(uint64(seed) ^ (tick*0x9e3779b97f4a7c15) ^ uint64(pos.X)*31 ^ uint64(pos.Y)*131 ^ uint64(pos.Z)*731 ^ uint64(dim)*997)
-	return uint8(1 + h%3), uint8(1 + (h>>2)%3)
+const cropYieldRollSalt = 0x5eedfeedfaceface
+const cropYieldPotatoSalt = 0x70a70a515eedface
+const cropYieldCarrotSalt = 0xca7707701ace5eed
+const poisonPotatoSalt = 0xdeadbeefcafe1234
+
+func cropYieldRolls(seed int64, tick uint64, dimension core.DimensionID, position core.BlockPos) (wheat uint8, seeds uint8) {
+	hash := splitmix64(uint64(seed) ^ cropYieldRollSalt)
+	hash = splitmix64(hash ^ tick)
+	hash = splitmix64(hash ^ uint64(uint32(dimension)))
+	hash = splitmix64(hash ^ uint64(uint32(position.X)))
+	hash = splitmix64(hash ^ uint64(uint32(position.Y)))
+	hash = splitmix64(hash ^ uint64(uint32(position.Z)))
+	wheat = uint8(hash%3) + 1
+	hash = splitmix64(hash)
+	seeds = uint8(hash%3) + 1
+	return wheat, seeds
 }
+
 func cropYieldRollsPotato(seed int64, tick uint64, dim core.DimensionID, pos core.BlockPos) uint8 {
-	h := splitmix64(uint64(seed) ^ tick ^ uint64(pos.X)*17 ^ uint64(pos.Z)*19)
-	return uint8(1 + h%4)
+	hash := splitmix64(uint64(seed) ^ cropYieldPotatoSalt)
+	hash = splitmix64(hash ^ tick)
+	hash = splitmix64(hash ^ uint64(uint32(dim)))
+	hash = splitmix64(hash ^ uint64(uint32(pos.X)))
+	hash = splitmix64(hash ^ uint64(uint32(pos.Y)))
+	hash = splitmix64(hash ^ uint64(uint32(pos.Z)))
+	return uint8(hash%4) + 1
 }
+
 func cropYieldRollsCarrot(seed int64, tick uint64, dim core.DimensionID, pos core.BlockPos) uint8 {
-	h := splitmix64(uint64(seed) ^ (tick*0x85ebca6b) ^ uint64(pos.X)*23)
-	return uint8(1 + h%4)
+	hash := splitmix64(uint64(seed) ^ cropYieldCarrotSalt)
+	hash = splitmix64(hash ^ tick)
+	hash = splitmix64(hash ^ uint64(uint32(dim)))
+	hash = splitmix64(hash ^ uint64(uint32(pos.X)))
+	hash = splitmix64(hash ^ uint64(uint32(pos.Y)))
+	hash = splitmix64(hash ^ uint64(uint32(pos.Z)))
+	return uint8(hash%4) + 1
 }
+
 func poisonRoll(seed int64, tick uint64, dim core.DimensionID, pos core.BlockPos) bool {
-	h := splitmix64(uint64(seed) ^ (tick*0xc2b2ae35) ^ uint64(pos.Y)*7)
-	return h%50 == 0
+	hash := splitmix64(uint64(seed) ^ poisonPotatoSalt)
+	hash = splitmix64(hash ^ tick)
+	hash = splitmix64(hash ^ uint64(uint32(dim)))
+	hash = splitmix64(hash ^ uint64(uint32(pos.X)))
+	hash = splitmix64(hash ^ uint64(uint32(pos.Y)))
+	hash = splitmix64(hash ^ uint64(uint32(pos.Z)))
+	return hash%50 == 0
 }
 
 func hoeHarvestDurabilityExempt(block core.BlockID, item core.ItemID) bool {
