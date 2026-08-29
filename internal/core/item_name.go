@@ -36,6 +36,12 @@ var itemDisplayNames = map[ItemID]string{
 	ItemTorch:              "火把",
 	ItemBed:                "床",
 	ItemRottenFlesh:        "腐肉",
+	ItemWoodenSword:        "木剑",
+	ItemStoneSword:         "石剑",
+	ItemIronSword:          "铁剑",
+	ItemBrokenWoodenSword:  "损坏的木剑",
+	ItemBrokenStoneSword:   "损坏的石剑",
+	ItemBrokenIronSword:    "损坏的铁剑",
 }
 
 // ItemDisplayName 返回物品的中文显示名，供客户端物品名弹条与容器 tooltip
