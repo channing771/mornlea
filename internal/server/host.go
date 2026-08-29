@@ -14,7 +14,6 @@ import (
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/server/persistence"
 	"github.com/channing771/mornlea/internal/sim/contract"
-	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/storage"
 )
 

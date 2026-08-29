@@ -17,7 +17,7 @@ import (
 const (
 	waitDeadline            = 2 * time.Second
 	integrationPollInterval = time.Millisecond
-	testSessionID           = sim.SessionID(1)
+	testSessionID           = contract.SessionID(1)
 )
 
 // emptyChunkEstimateBytes 是全空区块的存档估算：512 信封 + 32 个固定掉落物槽 +
@@ -205,7 +205,7 @@ func (running *persistenceTestWorld) syncWorldForTest() {
 	running.world.options.UnsavedBytes = running.config.UnsavedBytes
 }
 
-func (running *persistenceTestWorld) StepForTest() sim.TickResult {
+func (running *persistenceTestWorld) StepForTest() contract.TickResult {
 	running.syncWorldForTest()
 	_ = running.world.Drain()
 	result := running.engine.Step()

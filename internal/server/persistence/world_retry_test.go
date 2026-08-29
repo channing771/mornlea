@@ -188,7 +188,7 @@ func TestSaveNilErrorOmissionRetainsSubmittedSnapshot(t *testing.T) {
 func TestFlushFrozenFailureReleasesUnsentPendingJobsForLaterRetry(t *testing.T) {
 	keys := []core.ChunkKey{chunkKey(0, 0), chunkKey(32, 0), chunkKey(64, 0)}
 	engine := dirtyReadyEngine(t, keys)
-	first := engine.PersistenceSnapshots(1, 1<<20, sim.SaveAll)
+	first := engine.PersistenceSnapshots(1, 1<<20, contract.SaveAll)
 	if len(first) != 1 || first[0].Key != keys[0] {
 		t.Fatalf("initial snapshot=%+v, want %v", first, keys[0])
 	}
@@ -251,7 +251,7 @@ func TestFlushFrozenFailureReleasesUnsentPendingJobsForLaterRetry(t *testing.T) 
 			if !containsChunkKey(saved, keys[1]) || !containsChunkKey(saved, keys[2]) {
 				t.Fatalf("retry flush did not persist released jobs: %v", saved)
 			}
-			if got := engine.PersistenceStats(); got != (sim.PersistenceStats{}) {
+			if got := engine.PersistenceStats(); got != (contract.PersistenceStats{}) {
 				t.Fatalf("retry flush persistence=%+v, want drained", got)
 			}
 			return

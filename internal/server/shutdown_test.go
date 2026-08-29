@@ -255,8 +255,8 @@ func TestShutdownFlushSerializesPublicEngineReads(t *testing.T) {
 	running, _ := newShutdownTestServer(t, store)
 	key := chunkKey(0, 0)
 	engine := dirtyReadyEngine(t, []core.ChunkKey{key})
-	engine.Enqueue(sim.Command{
-		Session: 1, Sequence: 2, Kind: sim.CommandTrustedObserverCenter,
+	engine.Enqueue(contract.Command{
+		Session: 1, Sequence: 2, Kind: contract.CommandTrustedObserverCenter,
 		Dimension: key.Dimension, Center: core.ChunkPos{X: key.Pos.X + 100, Z: key.Pos.Z + 100},
 	})
 	engine.Step()
