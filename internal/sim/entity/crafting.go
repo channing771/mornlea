@@ -6,6 +6,9 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/sim/realm"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
 // 网格有效尺寸的固定取值：个人 2×2 与工作台 3×3 共用同一份 9 格存储。
@@ -301,7 +304,7 @@ func (engine *Engine) advanceWorkbenchLifecycle() {
 	for _, id := range sessions {
 		session := engine.sessions[id]
 		player := session.player
-		if player.lifecycle != PlayerActive || !engine.workbenchAnchorValid(session) {
+		if player.lifecycle != PlayerActive || !engine.workbenchAnchorValid(session, engine.realm, engine.tunables, engine.physicsTunables) {
 			if !player.closeWorkbench() {
 				panic("sim: 自动关闭工作台时网格回收失败（回收不变量被破坏）")
 			}
@@ -312,8 +315,8 @@ func (engine *Engine) advanceWorkbenchLifecycle() {
 // workbenchAnchorValid 报告该会话记录的工作台锚点是否仍然成立：所在区块
 // Ready、方块仍是工作台且玩家仍在触及距离内。距离判定与容器查看
 // （`withinContainerReach`）同一来源：眼睛位置到方块中心 ≤ InteractionReach。
-func (engine *Engine) workbenchAnchorValid(session *sessionState) bool {
-	dimension := engine.dimension(session.dimension)
+func (engine *Engine) workbenchAnchorValid(session *sessionState, realmState *realm.State, tunables tuning.Tunables, physicsTunables physics.Tunables) bool {
+	dimension := realmState.Dimension(session.dimension)
 	if dimension == nil {
 		return false
 	}
@@ -321,9 +324,14 @@ func (engine *Engine) workbenchAnchorValid(session *sessionState) bool {
 	if !ready || block != core.WorkbenchID {
 		return false
 	}
-	eye := session.player.state.Position.Add(mgl32.Vec3{0, engine.physicsTunables.EyeHeight, 0})
+	eye := session.player.state.Position.Add(mgl32.Vec3{0, physicsTunables.EyeHeight, 0})
 	center := blockCenterVec3(session.player.workbench)
-	return center.Sub(eye).Len() <= engine.tunables.InteractionReach
+	return center.Sub(eye).Len() <= tunables.InteractionReach
+}
+
+// workbenchAnchorValidLegacy 保留旧签名的过渡包装
+func (engine *Engine) workbenchAnchorValidLegacy(session *sessionState) bool {
+	return engine.workbenchAnchorValid(session, engine.realm, engine.tunables, engine.physicsTunables)
 }
 
 // PlayerCrafting 返回某会话当前的权威合成网格与服务端派生的产物；

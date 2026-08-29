@@ -7,9 +7,7 @@ import (
 	"github.com/channing771/mornlea/internal/sim/realm"
 )
 
-type pendingChunkChanges = realm.Mutation
-
-func (engine *Engine) newMutation() *pendingChunkChanges {
+func (engine *Engine) newMutation() *realm.Mutation {
 	return engine.realm.NewMutation()
 }
 
@@ -17,14 +15,14 @@ func (engine *Engine) recordChange(
 	dimensionID core.DimensionID,
 	position core.BlockPos,
 	block core.BlockID,
-	pending *pendingChunkChanges,
+	mutation *realm.Mutation,
 ) {
-	pending.Record(dimensionID, position, block)
+	mutation.Record(dimensionID, position, block)
 	engine.realm.EnqueueFluidUpdate(dimensionID, position)
 }
 
-func (engine *Engine) finishChanges(pending *pendingChunkChanges, result *TickResult) {
-	for _, batch := range pending.Commit() {
+func (engine *Engine) finishChanges(mutation *realm.Mutation, result *TickResult) {
+	for _, batch := range mutation.Commit() {
 		changes := make([]BlockChange, len(batch.Changes))
 		for index, change := range batch.Changes {
 			changes[index] = BlockChange{Position: change.Position, Block: change.Block}

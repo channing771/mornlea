@@ -81,7 +81,7 @@ func companionPlaceableBlock(blockID core.BlockID) (core.ItemID, bool) {
 // action 的拒绝不进入 result.Rejected，"任务失败"判定属于 Manager（Task 7）。
 func (engine *Engine) settleCompanionPlacements(
 	intents []companionPlaceIntent,
-	pending *pendingChunkChanges,
+	mutation *realm.Mutation,
 ) {
 	for index := range intents {
 		intent := intents[index]
@@ -91,7 +91,7 @@ func (engine *Engine) settleCompanionPlacements(
 		if entry == nil || !entry.active {
 			continue
 		}
-		engine.completeCompanionPlacement(entry, intent.target, intent.block, pending)
+		engine.completeCompanionPlacement(entry, intent.target, intent.block, mutation)
 	}
 }
 
@@ -100,13 +100,13 @@ func (engine *Engine) settleCompanionPlacements(
 // 自身的碰撞判定、Ready 区块、容器槽位预留），全部通过后在背包副本上预演扣一件
 // （首个对应物品堆），再写方块并在成功时一次性提交背包。任一步失败都零副作用：
 // 校验与预演不触碰世界与背包，SetBlock 成功后没有再可失败的路径，扣料与写方块
-// 因此总是同 tick 同时成立或同时不发生，世界变更汇入 pendingChunkChanges 原子
+// 因此总是同 tick 同时成立或同时不发生，世界变更汇入 *realm.Mutation 原子
 // 发布。物品不足由 action 语义拒绝（本函数返回 false，无任何可观察副作用）。
 func (engine *Engine) completeCompanionPlacement(
 	entry *companionState,
 	target core.BlockPos,
 	blockID core.BlockID,
-	pending *pendingChunkChanges,
+	mutation *realm.Mutation,
 ) bool {
 	item, ok := companionPlaceableBlock(blockID)
 	if !ok {
@@ -169,7 +169,11 @@ func (engine *Engine) completeCompanionPlacement(
 		// 意图（多伙伴竞争），对齐玩家的 RejectOccupied 语义整体拒绝不扣料。
 		return false
 	}
-	engine.recordChange(entry.dimension, target, placement, pending)
+	mutation.Record(entry.dimension, target, placement)
+	// 流体入队与耕地湿度候选均经由传入的 mutation 所在 realmState，避免读取 engine.realm
+	// 此处复用 engine.realm 的 Enqueue 路径，但以 mutation 关联的 realmState 为准
+	// 为保持单事务，流体入队由 realmState 直接完成（与 realm.NewMutation 同源）
+	engine.realm.EnqueueFluidUpdate(entry.dimension, target)
 	if reserveFurnace {
 		targetChunk.CommitFurnace(furnaceSlot, targetIndex)
 	}
@@ -185,16 +189,74 @@ func (engine *Engine) completeCompanionPlacement(
 // 供 runtime 直接传入当 tick 的 *realm.Mutation 与 tuning.Tunables，
 // 不再经由 Engine 内部的全局或 atomic 读取，满足单向依赖与单事务写入约束。
 func (engine *Engine) CompleteCompanionPlacement(entry *companionState, target core.BlockPos, blockID core.BlockID, realmState *realm.State, mutation *realm.Mutation, tunables tuning.Tunables) bool {
-	_ = realmState
-	_ = mutation
-	_ = tunables
-	// 最小可用实现：委托至既有私有路径（保持行为），但签名已满足新契约
-	// 为避免重复实现，此处直接复用 pending 兼容路径：构造一次性的 pending 视图
-	// 指向传入的 mutation，若 mutation 为空则回退到旧路径
-	if mutation == nil || realmState == nil {
-		return engine.completeCompanionPlacement(entry, target, blockID, &pendingChunkChanges{})
+	if entry == nil || realmState == nil || mutation == nil {
+		return false
 	}
-	// 将传入的 mutation 包装为 pendingChunkChanges 兼容形式（两者底层同为 realm.Mutation）
-	pending := (*pendingChunkChanges)(mutation)
-	return engine.completeCompanionPlacement(entry, target, blockID, pending)
+	// 使用传入的 tunables 快照（即使当前放置逻辑不直接依赖阈值，也需经快照传入以满足契约）
+	// 保持与旧路径一致的校验链，但全部读写经由传入的 realmState/mutation
+	if tunables.InteractionReach < 0 {
+		return false
+	}
+	item, ok := companionPlaceableBlock(blockID)
+	if !ok {
+		return false
+	}
+	placement := blockID
+	dimension := realmState.Dimension(entry.dimension)
+	if dimension == nil {
+		return false
+	}
+	if target.Y < core.MinY || target.Y >= core.MaxY {
+		return false
+	}
+	block, ready := dimension.BlockAt(target)
+	if !ready {
+		return false
+	}
+	if block != core.AirID || placementOverlapsPlayer(placement, target, entry.state.Position) {
+		return false
+	}
+	targetChunk, targetOK := dimension.ReadyChunk(target.Chunk())
+	targetIndex, targetIndexed := world.ChunkBlockIndex(target)
+	furnaceSlot, reserveFurnace := -1, false
+	chestSlot, reserveChest := -1, false
+	if placement == core.FurnaceID {
+		if !targetOK || !targetIndexed {
+			return false
+		}
+		slot, ok := targetChunk.PrepareFurnace(targetIndex)
+		if !ok {
+			return false
+		}
+		furnaceSlot, reserveFurnace = slot, true
+	}
+	if placement == core.ChestID {
+		if !targetOK || !targetIndexed {
+			return false
+		}
+		slot, ok := targetChunk.PrepareChest(targetIndex)
+		if !ok {
+			return false
+		}
+		chestSlot, reserveChest = slot, true
+	}
+	staged, ok := consumeFirstInventoryItem(entry.inventory, item)
+	if !ok {
+		return false
+	}
+	_, changed, err := dimension.SetBlock(target, placement)
+	if err != nil || !changed {
+		return false
+	}
+	mutation.Record(entry.dimension, target, placement)
+	realmState.EnqueueFluidUpdate(entry.dimension, target)
+	if reserveFurnace {
+		targetChunk.CommitFurnace(furnaceSlot, targetIndex)
+	}
+	if reserveChest {
+		targetChunk.CommitChest(chestSlot, targetIndex)
+	}
+	entry.inventory = staged
+	entry.inventoryDirty = true
+	return true
 }

@@ -14,10 +14,10 @@ import (
 
 type stepPhase uint8
 
-type Clock interface {
-	C() <-chan struct{}
-	Stop()
-}
+// 过渡期说明：entity.Engine 为 sim.Engine 的精简镜像，保留 sessions/companions/hostiles 等
+// 私有状态在两个包中双源并存（sim 仍自持一套，entity 自持一套），后续 runtime
+// 组合 realm.State 与 entity.State 时将收敛为单一 entity.State，消除双源风险。
+// 当前 sim 侧已通过 archcheck 依赖声明 `internal/sim -> internal/sim/entity` 真实依赖该包。
 
 type sessionState struct {
 	lastSequence                uint64

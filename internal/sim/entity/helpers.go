@@ -7,6 +7,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/sim/realm"
 )
 
 func finiteInputComponent(value float32) bool {
@@ -182,8 +183,8 @@ func respawnBlockFromPosition(position [3]float32) core.BlockPos {
 	}
 }
 
-func (engine *Engine) touchChunk(key core.ChunkKey, pending *pendingChunkChanges) {
-	pending.Touch(key)
+func (engine *Engine) touchChunk(key core.ChunkKey, mutation *realm.Mutation) {
+	mutation.Touch(key)
 }
 
 func (engine *Engine) noteTrampleLanding(session *sessionState, player *playerState) {}

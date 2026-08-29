@@ -10,6 +10,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim/realm"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
 type spawnColumn struct {
@@ -97,6 +98,95 @@ func (engine *Engine) advancePendingPlayers() {
 	sort.Slice(sessions, func(i, j int) bool { return sessions[i] < sessions[j] })
 	for _, id := range sessions {
 		engine.advancePendingPlayer(id, engine.sessions[id])
+	}
+}
+
+func (engine *Engine) AdvancePendingPlayers(realmState *realm.State, _ *realm.Mutation, _ tuning.Tunables) {
+	if realmState == nil {
+		return
+	}
+	sessions := make([]SessionID, 0, len(engine.sessions))
+	for id, session := range engine.sessions {
+		if session.player != nil && session.player.lifecycle == PlayerPendingSpawn {
+			sessions = append(sessions, id)
+		}
+	}
+	sort.Slice(sessions, func(i, j int) bool { return sessions[i] < sessions[j] })
+	for _, id := range sessions {
+		engine.AdvancePendingPlayerWithState(id, engine.sessions[id], realmState)
+	}
+}
+
+func (engine *Engine) AdvancePendingPlayerWithState(id SessionID, session *sessionState, realmState *realm.State) {
+	// 使用传入的 realmState 进行世界读取，避免直接读 engine.realm
+	if realmState == nil {
+		return
+	}
+	player := session.player
+	for player.nextRestore < len(player.restoreCandidates) {
+		candidate := player.restoreCandidates[player.nextRestore]
+		engine.retainRestoreChunks(session, candidate)
+		valid, ready, onGround := engine.validateRestoreCandidateWithState(candidate, realmState)
+		if !ready {
+			return
+		}
+		if valid {
+			player.activate(session, candidate.location, onGround)
+			engine.subscriptionsDirty = true
+			return
+		}
+		player.nextRestore++
+	}
+	dimension := realmState.Dimension(session.dimension)
+	if player.exhausted {
+		if !spawnRevisionsChanged(dimension, player) {
+			if (engine.tick.Load()+1)%100 == 0 {
+				slog.Warn("玩家仍在等待可用出生点", "session", id)
+			}
+			return
+		}
+		player.exhausted = false
+		player.exhaustedRevisions = nil
+		player.nextCandidate = 0
+		player.spawnFallback = spawnFallback{}
+	}
+	source := dimensionCollisionSource{dimension: dimension}
+	for player.nextCandidate < len(player.candidates) {
+		candidate := player.candidates[player.nextCandidate]
+		engine.retainSpawnChunk(session, (core.BlockPos{X: candidate.X, Z: candidate.Z}).Chunk())
+		position, tier, ready := findSpawnInColumn(candidate, dimension, source)
+		if !ready {
+			engine.retryFailedSpawnChunk(session, (core.BlockPos{X: candidate.X, Z: candidate.Z}).Chunk())
+			return
+		}
+		if tier == spawnTierDry {
+			player.spawnFallback = spawnFallback{}
+			player.activate(session, PlayerLocation{
+				Dimension: session.dimension,
+				Position:  position,
+			}, true)
+			engine.subscriptionsDirty = true
+			return
+		}
+		player.spawnFallback.consider(position, tier)
+		player.nextCandidate++
+	}
+	if position, ok := player.spawnFallback.take(); ok {
+		player.activate(session, PlayerLocation{
+			Dimension: session.dimension,
+			Position:  position,
+		}, true)
+		engine.subscriptionsDirty = true
+		return
+	}
+	player.exhausted = true
+	player.exhaustedRevisions = make([]uint64, len(player.candidateChunks))
+	for index, chunk := range player.candidateChunks {
+		info, ok := dimension.Info(chunk)
+		if !ok || info.State != realm.ChunkReady {
+			panic("entity: exhausted spawn candidate chunk is not ready")
+		}
+		player.exhaustedRevisions[index] = info.Revision
 	}
 }
 
@@ -220,6 +310,16 @@ func (engine *Engine) retainRestoreChunks(
 func (engine *Engine) validateRestoreCandidate(
 	candidate restoreCandidate,
 ) (valid bool, ready bool, onGround bool) {
+	return engine.validateRestoreCandidateWithState(candidate, engine.realm)
+}
+
+func (engine *Engine) validateRestoreCandidateWithState(
+	candidate restoreCandidate,
+	realmState *realm.State,
+) (valid bool, ready bool, onGround bool) {
+	if realmState == nil {
+		return false, false, false
+	}
 	if !physics.ValidState(physics.State{Position: candidate.location.Position}) {
 		return false, true, false
 	}
@@ -227,7 +327,7 @@ func (engine *Engine) validateRestoreCandidate(
 	if bounds.Min.Y() < float32(core.MinY) || bounds.Max.Y() > float32(core.MaxY) {
 		return false, true, false
 	}
-	dimension := engine.dimension(candidate.location.Dimension)
+	dimension := realmState.Dimension(candidate.location.Dimension)
 	if dimension == nil {
 		return false, true, false
 	}

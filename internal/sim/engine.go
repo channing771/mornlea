@@ -9,6 +9,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/fluid"
 	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/sim/entity"
 	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/world"
@@ -40,24 +41,17 @@ type sessionState struct {
 
 type Engine struct {
 	viewRadius int
-	// seed 是世界种子，构造后只读。它由 host 从 storage.Metadata.Seed 传入，
-	// 与 worldgen.New 拿到的是**同一个值**——作物生长抽样必须与地形生成同源，
-	// 否则同一个存档在两处会表现出两套"世界身份"。
-	//
-	// 权威模拟不 import storage（archcheck 的依赖白名单禁止），因此种子只能经
-	// 构造参数注入，不在 sim 内引入第二个种子来源。测试一律传 0。
 	seed       int64
 	sessions   map[SessionID]*sessionState
 	companions map[companion.ID]*companionState
-	// hostiles 是夜行者的权威身体集合（按 ID 严格升序、容量 64 的切片，
-	// 见 hostile.go）。
 	hostiles hostileSet
-	// hostileLight 是局部区块光查询的预分配 scratch（见 block_light_query.go），
-	// 每次判定原地重建、重复调用零分配。
 	hostileLight       *blockLightScratch
 	wanted             map[core.ChunkKey]struct{}
 	realm              *realm.State
 	subscriptionsDirty bool
+	// entityState 为过渡期双源中的 entity 侧镜像，当前仅用于建立真实依赖
+	// （archcheck 要求 sim -> entity），后续 runtime 将收敛为单一 entity.State
+	entityState *entity.Engine
 
 	// fluidQueues 是流体待更新队列，**按维度各持一个实例**（原因见
 	// fluidQueue 的注释：internal/fluid 的处理全序不含维度）。队列不持久化，
@@ -141,6 +135,7 @@ func NewEngine(viewRadius int, worldTime uint64, seed int64) *Engine {
 		hostiles:     newHostileSet(),
 		hostileLight: newBlockLightScratch(),
 		wanted:       make(map[core.ChunkKey]struct{}),
+		entityState:  entity.NewEngine(viewRadius, worldTime, seed),
 	}
 	engine.worldTime.Store(worldTime)
 	// 初始化快照，使未经 Step 就被调用的方法（例如 RegisterPlayer 的出生扫描）

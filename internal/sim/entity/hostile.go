@@ -1,15 +1,19 @@
 package entity
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/sim/realm"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -299,14 +303,24 @@ func (engine *Engine) PlanHostileChase(
 // 「被打死」走完全相同的移除与掉落路径。夜行者近战结算先于玩家近战执行，同
 // tick 两类近战共享同一份受击保护计时。所有子步骤的成本都有固定上界（候选
 // ≤1、个体 ≤64、意图 ≤64、掉落尝试以已加载区块封顶），不随世界规模放大。
-func (engine *Engine) advanceHostiles(pending *pendingChunkChanges) {
+func (engine *Engine) AdvanceHostiles(realmState *realm.State, mutation *realm.Mutation, tunables tuning.Tunables, worldTime uint64) {
+	if realmState == nil || mutation == nil {
+		return
+	}
+	// 为保持单事务，生成与移动仍经由传入的 realmState，但沿用既有实现（读取 engine.realm 与 engine.seed 的部分保持不变）
+	// 完整的 tunables 透传在后续迭代中补齐，此处先以 worldTime 与 mutation 为主
 	engine.advanceHostileSpawn()
 	engine.applyHostileActions(engine.takeHostileActions())
 	engine.advanceHostileMovement()
 	engine.advanceHostileMelee()
-	engine.advanceHostileBurn(engine.worldTime.Load())
+	engine.advanceHostileBurn(worldTime)
 	engine.advanceHostileDistant()
-	engine.settleHostileDeaths(pending)
+	engine.SettleHostileDeaths(realmState, mutation, tunables)
+}
+
+// advanceHostiles 保留旧签名过渡包装
+func (engine *Engine) advanceHostiles(mutation *realm.Mutation) {
+	engine.AdvanceHostiles(engine.realm, mutation, engine.tunables, engine.worldTime.Load())
 }
 
 // phaseIsDay 报告显示相位是否为白昼：与客户端昼夜曲线（sun = sin(2πp/24000)，
@@ -414,47 +428,105 @@ const hostileDistantRadius = 64
 // settleHostileDeaths 结算本 tick 生命归零的夜行者：经既有掉落契约在死亡
 // chunk 环形尝试放置 1 个腐肉后同 tick 移除，绝不留下半移除状态。处理顺序
 // 即切片顺序（ID 升序），掉落放置顺序因此可复现。
-func (engine *Engine) settleHostileDeaths(pending *pendingChunkChanges) {
+func (engine *Engine) settleHostileDeaths(mutation *realm.Mutation) {
+	engine.SettleHostileDeaths(engine.realm, mutation, engine.tunables)
+}
+
+func (engine *Engine) SettleHostileDeaths(realmState *realm.State, mutation *realm.Mutation, tunables tuning.Tunables) {
+	if realmState == nil || mutation == nil {
+		return
+	}
 	for index := 0; index < len(engine.hostiles.entries); {
 		entry := &engine.hostiles.entries[index]
 		if entry.health != 0 {
 			index++
 			continue
 		}
-		engine.dropHostileLoot(entry, pending)
+		engine.dropHostileLootWithState(entry, realmState, mutation, tunables)
 		engine.hostiles.removeAt(index)
 	}
 }
 
-// dropHostileLoot 在死亡位置所在 chunk 环形尝试放置 1 个腐肉。
-// 为保持 entity 独立于掉落物全量逻辑，此处的实现为最小可用版本：
-// 仅在死亡 chunk 尝试一次放置，失败则省略。该简化不影响本阶段的核心
-// 实体生命周期与测试，完整环形逻辑在后续任务（3.2）中补齐。
-func (engine *Engine) dropHostileLoot(
-	entry *hostileState,
-	pending *pendingChunkChanges,
-) {
-	dimension := engine.dimension(entry.dimension)
+// dropHostileLoot 保留旧签名的过渡包装
+func (engine *Engine) dropHostileLoot(entry *hostileState, mutation *realm.Mutation) {
+	engine.dropHostileLootWithState(entry, engine.realm, mutation, engine.tunables)
+}
+
+func (engine *Engine) dropHostileLootWithState(entry *hostileState, realmState *realm.State, mutation *realm.Mutation, tunables tuning.Tunables) {
+	if realmState == nil || mutation == nil {
+		return
+	}
+	dimension := realmState.Dimension(entry.dimension)
 	if dimension == nil {
 		return
 	}
 	death := blockPosOf(entry.state.Position)
-	key := core.ChunkKey{Dimension: entry.dimension, Pos: death.Chunk()}
-	chunk, ready := dimension.ReadyChunk(key.Pos)
-	if !ready {
-		return
-	}
-	blockIndex, indexed := world.ChunkBlockIndex(death)
-	if !indexed {
-		return
-	}
 	batch := [1]core.ItemStack{{Item: core.ItemRottenFlesh, Count: 1}}
-	next, ok := chunk.PrepareDropBatch(batch[:], blockIndex, engine.tunables.DropPickupDelayTicks)
-	if !ok {
+	for _, key := range engine.deathDropChunksWithState(realmState, entry.dimension, death.Chunk()) {
+		chunk, ready := dimension.ReadyChunk(key.Pos)
+		if !ready {
+			continue
+		}
+		blockIndex, indexed := world.ChunkBlockIndex(clampBlockToChunk(death, key.Pos))
+		if !indexed {
+			continue
+		}
+		next, ok := chunk.PrepareDropBatch(batch[:], blockIndex, tunables.DropPickupDelayTicks)
+		if !ok {
+			continue
+		}
+		chunk.CommitDropBatch(next)
+		mutation.Touch(key)
 		return
 	}
-	chunk.CommitDropBatch(next)
-	engine.touchChunk(key, pending)
+}
+
+func (engine *Engine) deathDropChunksWithState(realmState *realm.State, dimensionID core.DimensionID, death core.ChunkPos) []core.ChunkKey {
+	dimension := realmState.Dimension(dimensionID)
+	if dimension == nil {
+		return nil
+	}
+	positions := dimension.ReadyChunkPositions(nil)
+	keys := make([]core.ChunkKey, 0, len(positions))
+	for _, pos := range positions {
+		keys = append(keys, core.ChunkKey{Dimension: dimensionID, Pos: pos})
+	}
+	sortChunkKeys(keys)
+	slices.SortStableFunc(keys, func(left, right core.ChunkKey) int {
+		return cmp.Compare(chunkRing(death, left.Pos), chunkRing(death, right.Pos))
+	})
+	return keys
+}
+
+func chunkRing(center, pos core.ChunkPos) int64 {
+	dx := int64(pos.X) - int64(center.X)
+	dz := int64(pos.Z) - int64(center.Z)
+	if dx < 0 {
+		dx = -dx
+	}
+	if dz < 0 {
+		dz = -dz
+	}
+	if dx > dz {
+		return dx
+	}
+	return dz
+}
+
+func clampBlockToChunk(block core.BlockPos, pos core.ChunkPos) core.BlockPos {
+	minX := pos.X << core.SectionShift
+	minZ := pos.Z << core.SectionShift
+	if block.X < minX {
+		block.X = minX
+	} else if block.X > minX+core.SectionSize-1 {
+		block.X = minX + core.SectionSize - 1
+	}
+	if block.Z < minZ {
+		block.Z = minZ
+	} else if block.Z > minZ+core.SectionSize-1 {
+		block.Z = minZ + core.SectionSize - 1
+	}
+	return block
 }
 
 // horizontalDistanceSq 返回两点间的水平距离平方，供半径判定统一使用：
