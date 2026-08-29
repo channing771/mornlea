@@ -123,3 +123,11 @@
 - Spec review: reviewer `ses_fb3cd4eaeffer0SKMslDD55jqQ` docs pass with acceptable extension (required edges/unregistered) and two light incompletenesses (drift guard, 3 synthetic edges).
 - Quality review: reviewer `ses_fb3cd4e7cffetIny4PCt4g87d9` conditional pass — whitelist consistent, double assertion symmetric, guides minimal; 3 Important (dual table drift, 3 missing synthetic edges, docs mismatch).
 - Repair: re-review `ses_fb3c6e368ffe0zgoPTzLylGc3h` PASS — `TestSimAllowedEdgesMatchesGlobalAllowed` sync, 13 reverse edges full coverage, `AGENTS.md:67` aligned; no new Critical/Important.
+
+## Task 5.2 Remaining Tests And Documentation
+
+- Implementer: fresh implementer `ses_fb3c4fc39ffe1K2uaXGKWkljIT`.
+- Commit: `bd5d39d7`.
+- Validation: `go test ./internal/sim/... -race -count=1` 5 packages, `go test ./internal/archcheck -count=1`, `go vet ./...`, `gofmt -l .`, `git diff --check` clean; `Test/Benchmark/Fuzz` baseline 606 `missing 0` `extra 17` (new定向), `observed subtests` 287 `missing 0` `extra 76`, `t.Run` 126→138 `extra 12`.
+- Spec review: reviewer `ses_fb3b4c44dffe0fd66kPOIAUyXY` pass — 79 runtime tests (60 whitebox+19 external) migrated, Tunables snapshot补回, persistence rename aligned, docs updated, list zero missing verified via `LC_ALL=C sort`.
+- Quality review: reviewer `ses_fb3b4c577ffeMb1vHLavlDIN6D` pass — list zero missing, tags preserved, docs minimal, scope controlled; Minor notes dual helper centers (helpers_test.go + crop_helpers_test.go 306 lines) inherited, tunables_snapshot count distinction, single-package承载 risk deferred.
