@@ -7,7 +7,7 @@ capture（方向由 `TestClientCommandSubpackageDependencyDirections` 强制）�
 
 ## 场景契约 (`benchmark/benchmark.go`)
 
-- 场景身份是 `scenarioVersion`（当前 v19）：场景语义、GPU 完成时间定义与报告
+- 场景身份是 `scenarioVersion`（当前 v20）：场景语义、GPU 完成时间定义与报告
   结构都绑定版本，迁移链以它为终点。根 `AGENTS.md` 的「benchmark scenario
   vN」基线断言由 `internal/archcheck` 的 `TestBaselineVersionsMatchCode` 直接
   读取本包常量核对——升版时必须同步根文档。

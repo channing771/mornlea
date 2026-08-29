@@ -68,9 +68,11 @@
 
 系统 SHALL 复用既有 hotbar atlas、layout、48-byte instance 编码和 HUD GPU pass。三类 overlay 各自只比当前组成增加一个标题 quad 且零 glyph；最大打开态（含浮动面板描边、准星与悬停 tooltip 背景）MUST 为 264 quad，不超过 scenario v20 固定的 320 quad。固定 glyph 上限 MUST 为 768，glyph offset MUST 为 15616 bytes，总容量 MUST 为 52480 bytes，所有固定区间 MUST 继续按 256 bytes 对齐。稳定态 MUST 只更新既有固定上传资源的实际实例前缀，不得创建每帧动态 GPU 资源。
 
-#### Scenario: 最大打开态仍装入 scenario v19 固定缓冲
+combat marker 可见时 MUST 只追加 4 个 quad，打开态合法最坏组合 MUST 为 268 quad，仍不超过固定上限 320；marker 不得改变 glyph 上限、offset、总容量或对齐。
 
-> 标题沿用历史名（MODIFIED 漂移守卫不支持 Scenario 改名）；本变更后该缓冲为 scenario v20 口径（320 quad / 768 glyph / 15616 offset / 52480 总量）。
+#### Scenario: 最大打开态仍装入 scenario v20 固定缓冲
+
+> 本场景按当前 scenario v20 口径验证（320 quad / 768 glyph / 15616 offset / 52480 总量）。
 
 - **GIVEN** 打开态同时取合法 overlay、物品数量、来源轮廓、生存状态、准星与悬停 tooltip 的最坏互斥组合
 - **WHEN** HUD 准备 quad 与 glyph 实例
@@ -85,6 +87,12 @@
 - **THEN** 零尺寸 MUST 不发出实例，正尺寸的打开态高度约束 MUST 包含浮动面板高度，全部实例 MUST 有限且严格位于 framebuffer 内
 - **AND** 极窄或极矮正尺寸 MUST 继续由统一 HUD 缩放比缩放绘制与命中，面板、标题、tooltip 和所有命中矩形 MUST 保持不相交
 - **AND** 系统 MUST NOT 为容器换肤分配动态 GPU 资源或放宽固定容量
+
+#### Scenario: 最大打开态加入 marker 仍不扩容
+
+- **GIVEN** 合法最大打开态收到新鲜 combat 确认
+- **WHEN** HUD 同时准备 4-quad marker
+- **THEN** quad 数量 MUST 恰好为 268，固定上限 MUST 仍为 320，所有 buffer offset 与总容量 MUST 不变化
 
 ### Requirement: 悬停栏位以 tooltip 呈现物品中文名
 
@@ -107,4 +115,3 @@
 - **GIVEN** 同一物品分别在悬停 tooltip 与物品名弹条中呈现
 - **WHEN** 比较两者文本
 - **THEN** 两者 MUST 使用同一显示名来源且文本一致
-
