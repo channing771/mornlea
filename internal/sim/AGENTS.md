@@ -64,7 +64,7 @@ internal/sim/
 子包依赖以 `internal/archcheck/dependency_test.go` 的 `allowed` 表为唯一真相；本包不得依赖 `internal/client`、`internal/render` 或具体 network transport，模拟只消费领域命令并产出权威结果。依赖方向单向且由 `internal/archcheck` 强制（契约见 `openspec/specs/repository-code-organization`）：
 
 - 接受：`runtime` → `contract`/`tuning`/`realm`/`entity`；`entity` → `contract`/`tuning`/`realm`；`realm` → `core`/`fluid`/`world`；`contract` → `core`/`world`/`companion`/`physics`；`tuning` → `core`。
-- 拒绝：`contract`/`tuning` 反向依赖 `realm`/`entity`/`runtime`；`realm` 反向依赖 `entity`/`runtime`；`entity` 反向依赖 `runtime`；子树出现未登记的新包；`runtime` 缺少对四者的必需编排边。
+- 拒绝：`contract` 依赖 `tuning`/`realm`/`entity`/`runtime`；`tuning` 依赖 `contract`/`realm`/`entity`/`runtime`；`realm` 依赖 `contract`/`tuning`/`entity`/`runtime`；`entity` 依赖 `runtime`；子树出现未登记的新包；`runtime` 缺少对四者的必需编排边。
 - 强制点：`TestInternalDependenciesAreOneWay` 以 `go list` 覆盖全仓内部包完整白名单；`TestSimSubpackageDependencyDirections` 源码级扫描 `internal/sim` 子树生产 import 边（`parser.ImportsOnly`，不随 GOOS 翻转）；`TestSimDependencyViolationsDetectDrift` 以合成反向边钉住检查器本身。新增子包或依赖边必须先登记 `allowed` 与 `simAllowedEdges`/`simRequiredEdges`。
 
 ## 定点验证与入口

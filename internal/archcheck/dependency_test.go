@@ -336,6 +336,31 @@ var simRequiredEdges = map[string][]string{
 	"internal/sim/runtime": {"internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "internal/sim/tuning"},
 }
 
+// TestSimAllowedEdgesMatchesGlobalAllowed 校验模拟子树的局部白名单
+// 与全局 `allowed` 的对应项完全一致，防止双真相表静默漂移。
+func TestSimAllowedEdgesMatchesGlobalAllowed(t *testing.T) {
+	for pkg, simAllowed := range simAllowedEdges {
+		globalAllowed, ok := allowed[pkg]
+		if !ok {
+			t.Fatalf("模拟子树包 %s 未在全局 allowed 中登记", pkg)
+		}
+		sortedSim := slices.Clone(simAllowed)
+		slices.Sort(sortedSim)
+		sortedGlobal := slices.Clone(globalAllowed)
+		slices.Sort(sortedGlobal)
+		if !slices.Equal(sortedSim, sortedGlobal) {
+			t.Errorf("模拟子树包 %s 的局部白名单与全局 allowed 不一致：局部 %v，全局 %v", pkg, sortedSim, sortedGlobal)
+		}
+	}
+	for pkg := range allowed {
+		if isSimPackage(pkg) {
+			if _, ok := simAllowedEdges[pkg]; !ok {
+				t.Errorf("全局 allowed 中的模拟子树包 %s 未在 simAllowedEdges 中登记", pkg)
+			}
+		}
+	}
+}
+
 // isSimPackage 报告本地 import path 是否落在权威模拟子树内。
 func isSimPackage(localPath string) bool {
 	return localPath == "internal/sim" || strings.HasPrefix(localPath, "internal/sim/")
@@ -364,7 +389,7 @@ func simDependencyViolations(edges map[string][]string) []string {
 				continue
 			}
 			violations = append(violations, fmt.Sprintf(
-				"模拟子包 %s 不允许依赖 %s：方向必须是 contract/tuning 叶子、realm 不依赖 entity/runtime、entity 不依赖 runtime、runtime 编排其余四者",
+				"模拟子包 %s 不允许依赖 %s：方向必须是 contract/tuning 互不依赖且不依赖 realm/entity/runtime、realm 不依赖 contract/tuning/entity/runtime、entity 不依赖 runtime、runtime 编排其余四者",
 				pkg, dependency))
 		}
 	}
@@ -474,6 +499,7 @@ func TestSimDependencyViolationsDetectDrift(t *testing.T) {
 		from string
 		to   string
 	}{
+		{"contract反向依赖tuning", "internal/sim/contract", "internal/sim/tuning"},
 		{"contract反向依赖realm", "internal/sim/contract", "internal/sim/realm"},
 		{"contract反向依赖entity", "internal/sim/contract", "internal/sim/entity"},
 		{"contract反向依赖runtime", "internal/sim/contract", "internal/sim/runtime"},
@@ -481,6 +507,8 @@ func TestSimDependencyViolationsDetectDrift(t *testing.T) {
 		{"tuning反向依赖realm", "internal/sim/tuning", "internal/sim/realm"},
 		{"tuning反向依赖entity", "internal/sim/tuning", "internal/sim/entity"},
 		{"tuning反向依赖runtime", "internal/sim/tuning", "internal/sim/runtime"},
+		{"realm反向依赖contract", "internal/sim/realm", "internal/sim/contract"},
+		{"realm反向依赖tuning", "internal/sim/realm", "internal/sim/tuning"},
 		{"realm反向依赖entity", "internal/sim/realm", "internal/sim/entity"},
 		{"realm反向依赖runtime", "internal/sim/realm", "internal/sim/runtime"},
 		{"entity反向依赖runtime", "internal/sim/entity", "internal/sim/runtime"},
