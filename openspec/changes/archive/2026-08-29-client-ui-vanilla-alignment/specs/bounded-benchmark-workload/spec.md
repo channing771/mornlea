@@ -91,12 +91,14 @@ Avatar、NameTag 与 Hotbar HUD 为容纳最多七名远端玩家、四个伙伴
 - **WHEN** 比较器执行同场景比较
 - **THEN** 比较器 MUST 输出既有绝对指标和相对回归记录，且任何性能数值变差都 MUST 返回成功
 
-#### Scenario: 只接受 19:20 跨场景迁移
+#### Scenario: 只接受 18:19 跨场景迁移
+
+> 标题沿用历史名（openspec 的 MODIFIED 漂移守卫不支持 Scenario 改名）；本变更后该场景语义为 19:20，历史 `18:19` 随 producer 升到 scenario v20 退役。
 
 - **GIVEN** 一份 scenario v19 基线与一份 scenario v20 当前报告
 - **WHEN** 比较器以显式 `19:20` 迁移参数运行
 - **THEN** 比较器 MUST 校验报告完整性与硬件身份并跳过跨 workload 的相对回归判定
-- **AND** 任何其他迁移参数（含历史的 `18:19` 与 `17:18`）MUST 失败
+- **AND** 任何其他迁移参数（含已退役的 `18:19` 与 `17:18`）MUST 失败
 
 #### Scenario: v17 同场景比较只记录性能
 
