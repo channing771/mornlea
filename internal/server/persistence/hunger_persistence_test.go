@@ -208,7 +208,7 @@ func assertRestoreMatchesSnapshot(
 // 服务端一半：一份**冻结的 v6 玩家存档文件**放进磁盘世界，登录拿到的
 // sim.PlayerRestore 必须带上固定初值，其余字段一个不变。
 //
-// 输入是 internal/storage/testdata/player-v6.bin 的原始字节，不是当前编码器
+// 输入是 internal/storage/player/testdata/player-v6.bin 的原始字节，不是当前编码器
 // 现场生成的存档：当前编码器已经写 v7，用它"生成 v6"只会得到一份带饥饿字段的
 // v7 记录，迁移分支根本不会被执行。该 golden 是冻结的，字段取值不会漂移。
 func TestLegacyPlayerFileMigratesToInitialHunger(t *testing.T) {
@@ -218,7 +218,7 @@ func TestLegacyPlayerFileMigratesToInitialHunger(t *testing.T) {
 		t.Fatalf("创建磁盘世界: %v", err)
 	}
 	encoded, err := os.ReadFile(
-		filepath.Join("..", "..", "storage", "testdata", "player-v6.bin"),
+		filepath.Join("..", "..", "storage", "player", "testdata", "player-v6.bin"),
 	)
 	if err != nil {
 		t.Fatalf("读取 v6 golden: %v", err)

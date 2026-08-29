@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -10,7 +11,60 @@ import (
 	"reflect"
 	"slices"
 	"testing"
+
+	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage/hostile"
 )
+
+// fixtureHostileTargetPlayerID/fixtureHostileRecords/fixtureHostileRecordsSorted
+// 是 hostile 包 hostile_codec_test.go 同名夹具的同构副本：根包 store 测试不能
+// 导入子包测试夹具（测试文件不跨包可见），而断言依赖同一份非初值取值承重，
+// 故按域持副本，改动任一侧取值时必须同步另一侧。
+
+// fixtureHostileTargetPlayerID 返回一个合法 UUIDv4 目标玩家 ID：byte[6]
+// 高半字节为版本 4，byte[8] 高两位为变体 10。
+func fixtureHostileTargetPlayerID() core.PlayerID {
+	return core.PlayerID{
+		0x6f, 0xce, 0x82, 0x77, 0xa9, 0x33, 0x46, 0xcb,
+		0x9a, 0x1f, 0xda, 0x13, 0xb7, 0xee, 0x56, 0x44,
+	}
+}
+
+// fixtureHostileRecords 返回三条字段各异的合法记录。顺序刻意逆序：编码端
+// 必须按 ID 升序写出，磁盘形态与调用方传入顺序解耦（companion 先例）。
+func fixtureHostileRecords() []StoredHostileMob {
+	tracking := StoredHostileMob{
+		ID: 0x8000000000000002, Dimension: core.Overworld,
+		Position: [3]float32{-12.5, 70.25, 3.5}, Velocity: [3]float32{-1.25, 0, 0.5},
+		OnGround: true, Yaw: 1.25,
+		Health: 17, AttackCooldown: 3, HurtCooldown: 1, BurnCooldown: 5,
+		HasTarget: true, PlayerID: fixtureHostileTargetPlayerID(),
+		NextRepathTicks: 905, DistantTicks: 120,
+	}
+	idle := StoredHostileMob{
+		ID: 0x4000000000000001, Dimension: core.Overworld,
+		Position: [3]float32{0.5, 64, -9.75}, Velocity: [3]float32{0, -3.25, 0},
+		OnGround: false, Yaw: -2.5,
+		Health: core.MaxHealth,
+	}
+	// DistantTicks 600 镜像 hostile 包 despawn 累计上限 maxHostileDistantTicks
+	//（包内非导出常量，副本以字面量同步）。
+	far := StoredHostileMob{
+		ID: 1, Dimension: core.Overworld,
+		Position: [3]float32{8.5, 65.5, 9.75}, Velocity: [3]float32{2, 0, -2},
+		OnGround: true, Yaw: 3,
+		Health: 1, BurnCooldown: 19, DistantTicks: 600,
+	}
+	return []StoredHostileMob{tracking, idle, far}
+}
+
+func fixtureHostileRecordsSorted() []StoredHostileMob {
+	sorted := slices.Clone(fixtureHostileRecords())
+	slices.SortFunc(sorted, func(a, b StoredHostileMob) int {
+		return cmp.Compare(a.ID, b.ID)
+	})
+	return sorted
+}
 
 type closeableHostileStore interface {
 	HostileMobStore
@@ -213,7 +267,7 @@ func TestDiskHostileSaveDoesNotOverwriteCorruptOrFutureFile(t *testing.T) {
 		{
 			name: "future",
 			mutate: func(encoded []byte) {
-				binary.LittleEndian.PutUint32(encoded[8:12], currentHostileSchema+1)
+				binary.LittleEndian.PutUint32(encoded[8:12], hostile.CurrentSchema+1)
 			},
 			wantErr: ErrFutureVersion,
 		},
@@ -223,7 +277,7 @@ func TestDiskHostileSaveDoesNotOverwriteCorruptOrFutureFile(t *testing.T) {
 			root := t.TempDir()
 			store := openHostileDisk(t, root)
 			path := filepath.Join(root, "hostile_mobs.bin")
-			before, err := encodeHostileMobs(HostileMobsSave{
+			before, err := hostile.Encode(HostileMobsSave{
 				Revision: 1, Records: fixtureHostileRecords(),
 			})
 			if err != nil {
@@ -253,7 +307,7 @@ func TestDiskHostileOversizedFileIsCorruptAndSaveDoesNotOverwriteIt(t *testing.T
 	root := t.TempDir()
 	store := openHostileDisk(t, root)
 	path := filepath.Join(root, "hostile_mobs.bin")
-	oversized := bytes.Repeat([]byte{0x5a}, maxHostileFileLength+1)
+	oversized := bytes.Repeat([]byte{0x5a}, hostile.MaxFileLength+1)
 	if err := os.WriteFile(path, oversized, 0o600); err != nil {
 		t.Fatal(err)
 	}

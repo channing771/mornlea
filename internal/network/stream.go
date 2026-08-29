@@ -1,16 +1,20 @@
 package network
 
-import "context"
+import (
+	"context"
+
+	"github.com/channing771/mornlea/internal/network/protocol"
+)
 
 type ClientPacketStream interface {
-	Send(context.Context, State, ClientPacket) error
-	Recv(context.Context, State) (ServerPacket, error)
+	Send(context.Context, protocol.State, protocol.ClientPacket) error
+	Recv(context.Context, protocol.State) (protocol.ServerPacket, error)
 	Close() error
 }
 
 type ServerPacketStream interface {
-	Send(context.Context, State, ServerPacket) error
-	Recv(context.Context, State) (ClientPacket, error)
+	Send(context.Context, protocol.State, protocol.ServerPacket) error
+	Recv(context.Context, protocol.State) (protocol.ClientPacket, error)
 	Peer() string
 	Close() error
 }

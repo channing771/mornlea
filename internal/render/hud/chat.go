@@ -124,7 +124,7 @@ func appendChatOverlay(
 		inputY := bottom - inputHeight
 		dst.quads = append(dst.quads, hotbarInstance{
 			X: x, Y: inputY, Width: chatTextWidth(atlas, overlay.Input, scale) + 2*padding,
-			Height: inputHeight, Color: [4]float32{0.02, 0.025, 0.03, 0.82},
+			Height: inputHeight, Color: panelShadow,
 		})
 		appendChatText(dst, atlas, overlay.Input, x+padding, inputY+padding, scale)
 		bottom = inputY - chatPanelGap*scale
@@ -140,7 +140,7 @@ func appendChatOverlay(
 	panelY := bottom - panelHeight
 	dst.quads = append(dst.quads, hotbarInstance{
 		X: x, Y: panelY, Width: panelWidth + 2*padding, Height: panelHeight,
-		Color: [4]float32{0.02, 0.025, 0.03, 0.72},
+		Color: panelSurface,
 	})
 	for index, line := range lines {
 		appendChatText(dst, atlas, line, x+padding, panelY+padding+float32(index)*lineHeight, scale)
@@ -187,10 +187,10 @@ func appendChatText(dst *hotbarLayout, atlas render.GlyphSource, text string, x,
 			}
 			glyph := atlas.Glyph(char)
 			offset := float32(0)
-			color := [4]float32{0.94, 0.96, 1, 1}
+			color := textPrimaryFg
 			if pass == 0 {
 				offset = scale
-				color = [4]float32{0.01, 0.015, 0.02, 0.92}
+				color = textPrimaryShadow
 			}
 			dst.glyphs = append(dst.glyphs, hotbarInstance{
 				X:     penX + glyph.BearingX*scale + offset,

@@ -29,24 +29,65 @@ import (
 // 也不预先登记未使用的边）；fluid MUST NOT 反向依赖 sim/network/render/storage，
 // 否则它会退化成 sim 的内部实现，丧失独立测试的意义。
 var allowed = map[string][]string{
-	"internal/archcheck":   {},
-	"internal/audio":       {},
-	"internal/companion":   {"internal/core", "internal/pathfind"},
-	"internal/core":        {"internal/nativeabi"},
-	"internal/nativeabi":   {},
-	"internal/config":      {"internal/companion", "internal/core", "internal/physics", "internal/sim", "internal/logging"},
-	"internal/fluid":       {"internal/core"},
-	"internal/physics":     {"internal/core", "internal/nativeabi"},
-	"internal/pathfind":    {"internal/core"},
-	"internal/logging":     {},
-	"internal/network":     {"internal/companion", "internal/core"},
-	"internal/network/tcp": {"internal/network"},
-	"internal/profile":     {"internal/core"},
-	"internal/sim":         {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/world"},
-	"internal/storage":     {"internal/companion", "internal/core", "internal/world"},
-	"internal/world":       {"internal/core"},
-	"internal/worldgen":    {"internal/core", "internal/world", "internal/nativeabi"},
-	"internal/mesh":        {"internal/core", "internal/world", "internal/nativeabi"},
+	"internal/archcheck": {},
+	"internal/audio":     {},
+	"internal/companion": {"internal/core", "internal/pathfind"},
+	"internal/core":      {"internal/nativeabi"},
+	"internal/nativeabi": {},
+	"internal/config":    {"internal/companion", "internal/core", "internal/physics", "internal/sim", "internal/logging"},
+	"internal/fluid":     {"internal/core"},
+	"internal/physics":   {"internal/core", "internal/nativeabi"},
+	"internal/pathfind":  {"internal/core"},
+	"internal/logging":   {},
+	// internal/network 拆分后根包保留会话与传输编排，协议消息层
+	// （packet/message DTO/registry/snapshot）落位 protocol 子包，编解码层
+	// （wire 原语、packet 编解码、快照信封、帧封装）落位 codec 子包；根包
+	// internal/companion 边随 message_companion.go 移交 protocol 后一并移交，
+	// 根包经 types.go 别名再导出保持消费面不变。codec 的 wire 常量经
+	// protocol 取值，不得直接依赖 internal/companion。
+	"internal/network":          {"internal/core", "internal/network/codec", "internal/network/protocol"},
+	"internal/network/codec":    {"internal/core", "internal/network/protocol"},
+	"internal/network/protocol": {"internal/companion", "internal/core"},
+	"internal/network/tcp":      {"internal/network"},
+	"internal/profile":          {"internal/core"},
+	"internal/sim":              {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/world"},
+	"internal/storage": {
+		"internal/core",
+		"internal/storage/chunk", "internal/storage/companion", "internal/storage/hostile",
+		"internal/storage/player", "internal/storage/region",
+		"internal/storage/storagedef", "internal/world",
+	},
+	// internal/storage/chunk 是 chunk 记录层容器与信封编解码域：region 格式
+	// 原语与哨兵经 storagedef/region 取，值类型直接依赖 world，不得反向依赖
+	// 根包或其他实体域子包。
+	"internal/storage/chunk": {"internal/core", "internal/storage/region", "internal/storage/storagedef", "internal/world"},
+	// internal/storage/player 是 player 存档域的纯 codec 包（MCPL 信封编解码
+	// 与 schema 迁移链）：只依赖 core 值类型与 storagedef 哨兵，不感知 chunk/
+	// region 记录层与根包编排（player 文件的原子替换与路径编排在根包），依赖
+	// 更宽即意味着 codec 越界感知存储布局。
+	"internal/storage/player": {"internal/core", "internal/storage/storagedef"},
+	// internal/storage/companion 是 companion 存档域的纯 codec 包（companions.ai
+	// 信封编解码、任务区/FIFO/摘要载荷校验）：依赖 internal/companion 领域模型
+	// 与 core 值类型并经 storagedef 取哨兵；不感知根包编排（companions.ai 文件
+	// 的原子替换与路径编排在根包），依赖更宽即意味着 codec 越界感知存储布局。
+	"internal/storage/companion": {"internal/companion", "internal/core", "internal/storage/storagedef"},
+	// internal/storage/hostile 是 hostile（夜行者）存档域的纯 codec 包
+	// （hostile_mobs.bin 信封编解码与记录字段校验）：夜行者身体类型自包含
+	// 定义（权威侧身体类型属于 internal/sim，存储不得依赖 sim），只依赖 core
+	// 值类型并经 storagedef 取哨兵，不感知根包编排。
+	"internal/storage/hostile": {"internal/core", "internal/storage/storagedef"},
+	// internal/storage/region 是 region 格式原语叶子（superblock/bank 编解码、
+	// 扇区空间分配、RegionKey/RegionFor）：只允许 core 与 storagedef，
+	// 不得感知 chunk 记录层容器，否则记录层容器随 chunk 域落位、region 只收
+	// 格式原语的拆分前提失守。
+	"internal/storage/region": {"internal/core", "internal/storage/storagedef"},
+	// internal/storage/storagedef 是世界存储的哨兵错误叶子（ErrCorrupt/
+	// ErrFutureVersion 的公共下沉）：region 与四个实体域子包都经它取哨兵，
+	// 自身不得依赖任何 internal 包，否则叶子就失去了斩断 root↔子包循环的作用。
+	"internal/storage/storagedef": {},
+	"internal/world":              {"internal/core"},
+	"internal/worldgen":           {"internal/core", "internal/world", "internal/nativeabi"},
+	"internal/mesh":               {"internal/core", "internal/world", "internal/nativeabi"},
 	// internal/lod 只做远环壳的请求编码、quad 解码与编排(依赖方向镜像
 	// worldgen/mesh:core 提供 ChunkPos 等领域类型,nativeabi 是唯一 engine
 	// ABI 入口);按 design 裁决不得依赖 render/sim/network。

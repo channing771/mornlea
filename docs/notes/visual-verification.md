@@ -4,7 +4,7 @@
 
 ## 场景与基线
 
-抓帧依次跑完 `cmd/mornlea/capture.go` 里表驱动的 23 个固定场景：`terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`workbench-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`torch-night`、`bed-night`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`hostile-mob`、`water-surface-slope`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`。场景按清单顺序共用同一个 application，`far-horizon` 恒为倒数第二，`water-underwater` 恒为唯一末场景。每张 640×360 PNG 都与 `cmd/mornlea/capture/testdata/golden/` 下的基线比对；抓帧与 golden 固定使用内嵌默认材质，不随本机配置或用户材质漂移。抓帧模式不能与 `--benchmark` 或 `--connect` 同时启用。
+抓帧依次跑完 `cmd/mornlea/capture.go` 里表驱动的 24 个固定场景：`terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`hud-item-name-popup`、`avatar-nametag`、`inventory-crafting`、`workbench-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`torch-night`、`bed-night`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`hostile-mob`、`water-surface-slope`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`。场景按清单顺序共用同一个 application，`far-horizon` 恒为倒数第二，`water-underwater` 恒为唯一末场景。每张 640×360 PNG 都与 `cmd/mornlea/capture/testdata/golden/` 下的基线比对；抓帧与 golden 固定使用内嵌默认材质，不随本机配置或用户材质漂移。抓帧模式不能与 `--benchmark` 或 `--connect` 同时启用。
 
 比对是双阈值而非逐字节相等（定义见 `cmd/mornlea/capture/visual_compare.go`）：单像素最大通道差与差异像素占比，两项都在阈值内才算通过。当前阈值为最大通道差 `2`、差异像素占比 `0.01%`，取值来自同机重复抓帧的实测漂移分布（见设计文档 §6）。基线缺失时不会静默创建，必须显式请求更新。
 

@@ -5,12 +5,75 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"testing"
+
+	"github.com/channing771/mornlea/internal/companion"
+	"github.com/channing771/mornlea/internal/core"
+	// companioncodec 别名消解与领域模型包 internal/companion 的标识符冲突；
+	// 本文件其余根包代码（disk/memory/types）以裸名 companion 指代存储域包。
+	companioncodec "github.com/channing771/mornlea/internal/storage/companion"
 )
+
+// fixtureCompanionBodies/fixtureCompanionQueues 是 companion 包
+// companion_codec_test.go / companion_restore_test.go 同名夹具的同构副本：
+// 根包 store 测试不能导入子包测试夹具（测试文件不跨包可见），而断言依赖
+// 同一份非初值取值承重，故按域持副本，改动任一侧取值时必须同步另一侧。
+
+func fixtureCompanionBodies() []companion.Body {
+	stoneFull, _ := core.ItemMaxDurability(core.ItemStonePickaxe)
+	ironFull, _ := core.ItemMaxDurability(core.ItemIronPickaxe)
+	high := companion.Body{
+		ID: fixtureCompanionID(2), Dimension: core.Overworld,
+		Position: [3]float32{-12.5, 70, 3.25}, Yaw: 1.25, Pitch: -0.5,
+	}
+	high.Inventory.Hotbar.Selected = 4
+	high.Inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 64}
+	high.Inventory.Hotbar.Slots[4] = core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: stoneFull}
+	high.Inventory.Backpack[0] = core.ItemStack{Item: core.ItemOakLog, Count: 7}
+
+	low := companion.Body{
+		ID: fixtureCompanionID(1), Dimension: core.Overworld,
+		Position: [3]float32{8.5, 65, -9.75}, Yaw: -2.5, Pitch: 0.75,
+	}
+	low.Inventory.Hotbar.Selected = 2
+	low.Inventory.Hotbar.Slots[2] = core.ItemStack{Item: core.ItemGlass, Count: 12}
+	low.Inventory.Backpack[7] = core.ItemStack{Item: core.ItemIronPickaxe, Count: 1, Durability: ironFull}
+	low.Inventory.Backpack[core.BackpackSlots-1] = core.ItemStack{Item: core.ItemDirt, Count: 5}
+	return []companion.Body{high, low}
+}
+
+func fixtureCompanionID(last byte) companion.ID {
+	return companion.ID{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, last}
+}
+
+func fixtureCompanionQueues() []StoredCompanionQueue {
+	queue := StoredCompanionQueue{
+		ID:         fixtureCompanionID(1),
+		HasCurrent: true,
+		Current: StoredCompanionTask{
+			Command: "先去那棵橡树再看一眼",
+			PlanSteps: []companion.PlanStep{
+				{Kind: companion.PlanStepGoTo, X: -8, Y: 70, Z: 6},
+				{Kind: companion.PlanStepGoTo, X: -4, Y: 70, Z: 9},
+				{Kind: companion.PlanStepGoTo, X: 0, Y: 71, Z: 12},
+			},
+			StepIndex:     1,
+			State:         companion.TaskRunning,
+			StartTick:     1200,
+			DeadlineTicks: 3600,
+		},
+		Pending: make([]string, companioncodec.MaxCompanionFIFOEntries),
+	}
+	for index := range queue.Pending {
+		queue.Pending[index] = fmt.Sprintf("排队指令第%d条", index+1)
+	}
+	return []StoredCompanionQueue{queue}
+}
 
 type closeableCompanionStore interface {
 	CompanionStore
@@ -385,7 +448,7 @@ func TestDiskCompanionOversizedFileIsCorruptAndSaveDoesNotOverwriteIt(t *testing
 	root := t.TempDir()
 	store := openCompanionDisk(t, root)
 	path := filepath.Join(root, "companions.ai")
-	oversized := bytes.Repeat([]byte{0x5a}, maxCompanionFileLength+1)
+	oversized := bytes.Repeat([]byte{0x5a}, companioncodec.MaxFileLength+1)
 	if err := os.WriteFile(path, oversized, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -423,7 +486,7 @@ func TestDiskCompanionSaveDoesNotOverwriteCorruptOrFutureFile(t *testing.T) {
 		{
 			name: "future",
 			mutate: func(encoded []byte) {
-				binary.LittleEndian.PutUint32(encoded[8:12], currentCompanionSchema+1)
+				binary.LittleEndian.PutUint32(encoded[8:12], companioncodec.CurrentSchema+1)
 			},
 			wantErr: ErrFutureVersion,
 		},
@@ -433,7 +496,7 @@ func TestDiskCompanionSaveDoesNotOverwriteCorruptOrFutureFile(t *testing.T) {
 			root := t.TempDir()
 			store := openCompanionDisk(t, root)
 			path := filepath.Join(root, "companions.ai")
-			before, err := encodeCompanions(CompanionSave{
+			before, err := companioncodec.Encode(CompanionSave{
 				Revision: 1, Records: fixtureCompanionBodies(),
 			})
 			if err != nil {

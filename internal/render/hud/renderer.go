@@ -30,6 +30,9 @@ func (renderer *HotbarRenderer) Prepare(
 	oxygen OxygenOverlay,
 	hunger HungerOverlay,
 	chat ChatOverlay,
+	popup PopupOverlay,
+	crosshair CrosshairOverlay,
+	tooltip TooltipOverlay,
 	width, height uint32,
 	budget *render.UploadBudget,
 ) error {
@@ -39,6 +42,9 @@ func (renderer *HotbarRenderer) Prepare(
 		textRequested = true
 	}
 	textRequested = requestChatText(renderer.atlas, chat) || textRequested
+	textRequested = requestPopupText(renderer.atlas, popup, open) || textRequested
+	textRequested = requestTooltipText(renderer.atlas, tooltip, inventory, crafting, overlay, chest,
+		open, float32(width), float32(height)) || textRequested
 	if textRequested {
 		if err := renderer.atlas.FlushUploads(budget); err != nil {
 			return err
@@ -47,18 +53,29 @@ func (renderer *HotbarRenderer) Prepare(
 	if inventoryConfirmed {
 		layoutInventory(
 			&renderer.layout, renderer.atlas, inventory, open, source, crafting, overlay, chest, mining, eating,
-			float32(width), float32(height),
+			crosshair, float32(width), float32(height),
 		)
 	} else {
 		renderer.layout.quads = renderer.layout.quads[:0]
 		renderer.layout.glyphs = renderer.layout.glyphs[:0]
 		renderer.layout.scale = hudScale(open, float32(width), float32(height))
 		renderer.layout.open = open
+		// 物品镜像未确认时快捷栏与状态条都不布局，但准星只依赖 framebuffer
+		// 几何与相位门控，HUD 可见即呈现（游戏相位登录早期等场景）。
+		appendCrosshair(&renderer.layout, crosshair, float32(width), float32(height))
 	}
 	appendHealthBar(&renderer.layout, health, open, float32(width), float32(height))
 	appendOxygenBar(&renderer.layout, oxygen, open, float32(width), float32(height))
 	appendHungerBar(&renderer.layout, hunger, open, float32(width), float32(height))
 	appendChatOverlay(&renderer.layout, renderer.atlas, chat, float32(width), float32(height))
+	// 弹条最后布局：它只追加 glyph、锚在关闭态几何上，与物品镜像确认状态无关。
+	appendPopupOverlay(&renderer.layout, renderer.atlas, popup, open, float32(width), float32(height))
+	// tooltip 只在打开态布局：悬停解析与命中测试共用同一几何，实例追加在
+	// 一切 HUD 内容之后，保证浮在最上层。
+	if open && inventoryConfirmed {
+		appendTooltipOverlay(&renderer.layout, renderer.atlas, tooltip, inventory, crafting, overlay, chest,
+			float32(width), float32(height))
+	}
 	encodeHotbarViewport(
 		renderer.upload[hotbarViewportOffset:hotbarViewportOffset+hotbarViewportBytes],
 		float32(width), float32(height),

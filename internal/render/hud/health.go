@@ -72,7 +72,9 @@ func paintHotbarHeart(dst []byte, column int, fill heartFill) {
 				color = [4]byte{96, 28, 36, 255}
 			} else if fill == heartFull || fill == heartHalf && x < hotbarTextureSize/2 {
 				color = [4]byte{226, 42, 52, 255}
-				if x <= 5 && y >= 4 && y <= 6 {
+				// 左上叶内部的一小块高光：亮斑收进轮廓内 1 px，避免与描边
+				// 混成一片，16 px 下也能读出体积。
+				if x <= 4 && y >= 3 && y <= 4 {
 					color = [4]byte{255, 105, 112, 255}
 				}
 			}
@@ -98,6 +100,8 @@ func paintHotbarBubble(dst []byte, column int, full bool) {
 				color = [4]byte{72, 148, 184, 255}
 			} else if full {
 				color = [4]byte{48, 172, 222, 255}
+				// 左上象限高光：气泡的透气感来自这块不对称亮斑，窗口收到
+				// 轮廓内侧，边界像素仍由描边色统一。
 				if x <= 6 && y <= 7 {
 					color = [4]byte{160, 232, 255, 255}
 				}
@@ -109,45 +113,51 @@ func paintHotbarBubble(dst []byte, column int, full bool) {
 }
 
 func hotbarBubblePixel(x, y int) bool {
+	// 满幅圆盘：每行的左右界都关于 x=7.5 镜像，y=2/y=13 的短行把圆收圆。
+	// 相比旧剪影外扩一圈填满 14 px 宽度，与心形鸡腿共用同一视觉字号；
+	// 空/满两态只差配色，轮廓完全一致。
 	switch y {
 	case 2:
-		return x >= 6 && x <= 9
+		return x >= 5 && x <= 10
 	case 3:
-		return x >= 4 && x <= 11
+		return x >= 3 && x <= 12
 	case 4, 5:
-		return x >= 3 && x <= 12
-	case 6, 7, 8, 9:
 		return x >= 2 && x <= 13
+	case 6, 7, 8, 9:
+		return x >= 1 && x <= 14
 	case 10, 11:
-		return x >= 3 && x <= 12
+		return x >= 2 && x <= 13
 	case 12:
-		return x >= 4 && x <= 11
+		return x >= 3 && x <= 12
 	case 13:
-		return x >= 6 && x <= 9
+		return x >= 5 && x <= 10
 	default:
 		return false
 	}
 }
 func hotbarHeartPixel(x, y int) bool {
+	// 剪影左右镜像、上宽下尖：两枚圆叶各占两行后在 y=5 合流，底部逐行收尖，
+	// 并不上下对称。相比旧剪影去掉四行等宽的「方肩」，叶间裂口加深一行，
+	// 心形在 16 px 下更易辨识；空/半/满三态共用同一轮廓，半心只按 x 中线换色。
 	switch y {
 	case 2:
-		return x >= 2 && x <= 6 || x >= 9 && x <= 13
-	case 3:
+		return x >= 2 && x <= 5 || x >= 10 && x <= 13
+	case 3, 4:
+		return x >= 1 && x <= 6 || x >= 9 && x <= 14
+	case 5:
 		return x >= 1 && x <= 14
-	case 4, 5, 6, 7:
-		return x >= 0 && x <= 15
-	case 8:
-		return x >= 1 && x <= 14
-	case 9:
+	case 6, 7:
 		return x >= 2 && x <= 13
-	case 10:
+	case 8:
 		return x >= 3 && x <= 12
-	case 11:
+	case 9:
 		return x >= 4 && x <= 11
-	case 12:
+	case 10:
 		return x >= 5 && x <= 10
-	case 13:
+	case 11:
 		return x >= 6 && x <= 9
+	case 12:
+		return x >= 7 && x <= 8
 	default:
 		return false
 	}
