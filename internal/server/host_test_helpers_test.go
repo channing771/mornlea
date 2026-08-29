@@ -8,9 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-gl/mathgl/mgl32"
+
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -83,6 +86,35 @@ func playerIdentity(number byte) network.Identity {
 	return network.Identity{
 		PlayerID:    core.PlayerID{0, 0, 0, 0, 0, 0, 0x40, 0, 0x80, 0, 0, 0, 0, 0, 0, number},
 		DisplayName: fmt.Sprintf("player-%d", number),
+	}
+}
+
+func playerID(value byte) core.PlayerID {
+	return core.PlayerID{0, 0, 0, 0, 0, 0, 0x40, 0, 0x80, 0, 0, 0, 0, 0, 0, value}
+}
+
+func testMetadata() storage.Metadata {
+	return storage.Metadata{
+		FormatVersion:  3,
+		Seed:           42,
+		SpawnDimension: core.Overworld,
+		SpawnAnchor:    core.ChunkPos{X: 2, Z: -3},
+	}
+}
+
+func testPlayerSnapshot(position float32) sim.PlayerSnapshot {
+	safe := sim.PlayerLocation{
+		Dimension: core.Overworld,
+		Position:  mgl32.Vec3{position - 1, 64, -position},
+	}
+	return sim.PlayerSnapshot{
+		Current: sim.PlayerLocation{
+			Dimension: core.Overworld,
+			Position:  mgl32.Vec3{position, 70, -position},
+		},
+		Yaw:   position / 10,
+		Pitch: -position / 20,
+		Safe:  &safe,
 	}
 }
 

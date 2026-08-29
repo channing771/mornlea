@@ -15,6 +15,8 @@ import (
 	"github.com/channing771/mornlea/internal/storage"
 )
 
+const hungerLoopStarterSeedSlot = 14
+
 // 端到端饥饿脚本的固定预算与夹具量。预算的**唯一职责**是把挂起变成一条读得懂
 // 的失败而不是 go test 超时，因此它们不是性能断言，宁可宽到几乎不可能误伤。
 const (
@@ -184,9 +186,9 @@ func TestHungerLoopEndToEndMemory(t *testing.T) {
 		},
 	)
 	wantSeeds := core.ItemStack{Item: core.ItemWheatSeeds, Count: core.MaxStackCount}
-	if got := wireInventory.Backpack[starterSeedSlot]; got != wantSeeds {
+	if got := wireInventory.Backpack[hungerLoopStarterSeedSlot]; got != wantSeeds {
 		t.Fatalf("登录后材料包第 %d 格 = %+v，想要 %+v",
-			starterSeedSlot+1, got, wantSeeds)
+			hungerLoopStarterSeedSlot+1, got, wantSeeds)
 	}
 	// 「没有食物」必须扫全部 36 格：材料包若顺手发一块面包，后面的合成与
 	// 「饿到门控之下」两步都会失去意义，而只看快捷栏的断言抓不住那种材料包。

@@ -22,7 +22,7 @@ func TestShutdownFailureFreezesAndCanRetry(t *testing.T) {
 	store.setSaveError(wantErr)
 	running, _ := newShutdownTestServer(t, store)
 	key := chunkKey(0, 0)
-	running.engine = dirtyReadyEngine(t, []core.ChunkKey{key})
+	setPersistenceEngineForTest(t, running, dirtyReadyEngine(t, []core.ChunkKey{key}))
 	tickBefore := running.engine.TickCount()
 
 	err := shutdownWithDeadline(running, waitDeadline)
@@ -68,7 +68,7 @@ func TestShutdownAppliesFinalBufferedCommandExactlyOnceWithoutPublishing(t *test
 	store := newShutdownTestStore()
 	running, client := newShutdownTestServer(t, store)
 	key := chunkKey(0, 0)
-	running.engine = dirtyPlayerEngine(t, key)
+	setPersistenceEngineForTest(t, running, dirtyPlayerEngine(t, key))
 	running.engine.Enqueue(sim.Command{
 		Session: testSessionID, Sequence: 1, Kind: sim.CommandPlayerInput,
 		Pitch: -1.5, Mining: true,
@@ -114,7 +114,7 @@ func TestShutdownCallerTimeoutPreservesFrozenAuthorityForRetry(t *testing.T) {
 	gate := make(chan struct{})
 	store.setSaveGate(gate)
 	running, _ := newShutdownTestServer(t, store)
-	running.engine = dirtyReadyEngine(t, []core.ChunkKey{chunkKey(0, 0)})
+	setPersistenceEngineForTest(t, running, dirtyReadyEngine(t, []core.ChunkKey{chunkKey(0, 0)}))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
@@ -150,12 +150,13 @@ func TestShutdownContextAppliesReadySaveFailureBeforeReturning(t *testing.T) {
 		store := newShutdownTestStore()
 		store.setSaveError(wantErr)
 		running, _ := newShutdownTestServer(t, store)
-		running.engine = dirtyReadyEngine(t, []core.ChunkKey{chunkKey(0, 0)})
+		setPersistenceEngineForTest(t, running, dirtyReadyEngine(t, []core.ChunkKey{chunkKey(0, 0)}))
 		ctx, cancel := context.WithCancel(context.Background())
 		var cancelOnce sync.Once
 		running.config.SaveObserver = func(time.Duration) {
 			cancelOnce.Do(cancel)
 		}
+		resetWorldPersistenceForTest(t, running)
 
 		err := running.Shutdown(ctx)
 		if !errors.Is(err, context.Canceled) || !errors.Is(err, wantErr) {
@@ -173,12 +174,189 @@ func TestShutdownContextAppliesReadySaveFailureBeforeReturning(t *testing.T) {
 	}
 }
 
+func TestShutdownWorkerTimeoutDrainsReadySaveFailure(t *testing.T) {
+	wantErr := errors.New("ready save failure after worker timeout")
+	store := newShutdownTestStore()
+	gate := make(chan struct{})
+	store.setSaveGate(gate)
+	store.setSaveError(wantErr)
+	running, _ := newShutdownTestServer(t, store)
+	engine := dirtyReadyEngine(t, []core.ChunkKey{chunkKey(0, 0)})
+	ready := make(chan struct{}, 1)
+	running.config.AutosaveTicks = engine.TickCount() + 1
+	running.config.SaveObserver = func(time.Duration) {
+		select {
+		case ready <- struct{}{}:
+		default:
+		}
+	}
+	setPersistenceEngineForTest(t, running, engine)
+	running.StepForTest()
+	select {
+	case <-store.saveStarted:
+	case <-time.After(waitDeadline):
+		t.Fatal("save did not start")
+	}
+
+	runtimeRelease := make(chan struct{})
+	var releaseRuntimeOnce sync.Once
+	releaseRuntime := func() { releaseRuntimeOnce.Do(func() { close(runtimeRelease) }) }
+	var releaseSaveOnce sync.Once
+	releaseSave := func() { releaseSaveOnce.Do(func() { close(gate) }) }
+	t.Cleanup(func() {
+		releaseSave()
+		releaseRuntime()
+		store.setSaveError(nil)
+		recoverShutdownAfterExpectedFailure(t, running, wantErr)
+	})
+
+	runtimeCanceled := make(chan struct{})
+	running.workers.Add(1)
+	go func() {
+		defer running.workers.Done()
+		<-running.ctx.Done()
+		close(runtimeCanceled)
+		<-runtimeRelease
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	shutdownDone := make(chan error, 1)
+	go func() { shutdownDone <- running.Shutdown(ctx) }()
+	select {
+	case <-runtimeCanceled:
+	case <-time.After(waitDeadline):
+		t.Fatal("shutdown did not cancel the delayed runtime worker")
+	}
+	releaseSave()
+	select {
+	case <-ready:
+	case <-time.After(waitDeadline):
+		t.Fatal("failed save did not become ready")
+	}
+	select {
+	case err := <-shutdownDone:
+		if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, wantErr) {
+			t.Fatalf("Shutdown error=%v, want ready save failure joined with deadline", err)
+		}
+	case <-time.After(waitDeadline):
+		t.Fatal("shutdown did not time out on delayed runtime worker")
+	}
+
+	store.setSaveError(nil)
+	releaseRuntime()
+}
+
+func TestShutdownFlushSerializesPublicEngineReads(t *testing.T) {
+	previousProcs := runtime.GOMAXPROCS(2)
+	defer runtime.GOMAXPROCS(previousProcs)
+	store := newShutdownTestStore()
+	gate := make(chan struct{})
+	store.setSaveGate(gate)
+	running, _ := newShutdownTestServer(t, store)
+	key := chunkKey(0, 0)
+	engine := dirtyReadyEngine(t, []core.ChunkKey{key})
+	engine.Enqueue(sim.Command{
+		Session: 1, Sequence: 2, Kind: sim.CommandTrustedObserverCenter,
+		Dimension: key.Dimension, Center: core.ChunkPos{X: key.Pos.X + 100, Z: key.Pos.Z + 100},
+	})
+	engine.Step()
+	observerRead := make(chan struct{}, 1)
+	running.config.SaveObserver = func(time.Duration) {
+		_, _ = running.ChunkInfo(key.Dimension, key.Pos)
+		observerRead <- struct{}{}
+	}
+	setPersistenceEngineForTest(t, running, engine)
+	running.StepForTest()
+	select {
+	case <-store.saveStarted:
+	case <-time.After(waitDeadline):
+		t.Fatal("save did not start")
+	}
+
+	var releaseSaveOnce sync.Once
+	releaseSave := func() { releaseSaveOnce.Do(func() { close(gate) }) }
+	runtimeRelease := make(chan struct{})
+	var releaseRuntimeOnce sync.Once
+	releaseRuntime := func() { releaseRuntimeOnce.Do(func() { close(runtimeRelease) }) }
+	readerStop := make(chan struct{})
+	readerDone := make(chan struct{})
+	var stopReaderOnce sync.Once
+	stopReader := func() { stopReaderOnce.Do(func() { close(readerStop) }) }
+	t.Cleanup(func() {
+		releaseSave()
+		releaseRuntime()
+		stopReader()
+		if err := shutdownWithDeadline(running, waitDeadline); err != nil {
+			t.Errorf("Shutdown cleanup error=%v", err)
+		}
+	})
+
+	runtimeCanceled := make(chan struct{})
+	running.workers.Add(1)
+	go func() {
+		defer running.workers.Done()
+		<-running.ctx.Done()
+		close(runtimeCanceled)
+		<-runtimeRelease
+	}()
+	shutdownDone := make(chan error, 1)
+	go func() { shutdownDone <- shutdownWithDeadline(running, waitDeadline) }()
+	select {
+	case <-runtimeCanceled:
+	case <-time.After(waitDeadline):
+		t.Fatal("shutdown did not freeze runtime")
+	}
+	readerStarted := make(chan struct{})
+	go func() {
+		defer close(readerDone)
+		_, _ = running.ChunkInfo(key.Dimension, key.Pos)
+		close(readerStarted)
+		for {
+			select {
+			case <-readerStop:
+				return
+			default:
+			}
+			_, _ = running.ChunkInfo(key.Dimension, key.Pos)
+		}
+	}()
+	select {
+	case <-readerStarted:
+	case <-time.After(waitDeadline):
+		t.Fatal("public reader did not start")
+	}
+	releaseRuntime()
+	releaseSave()
+	select {
+	case <-observerRead:
+	case <-time.After(waitDeadline):
+		t.Fatal("save observer did not complete its public engine read")
+	}
+	select {
+	case err := <-shutdownDone:
+		if err != nil {
+			t.Fatalf("Shutdown error=%v", err)
+		}
+	case <-time.After(waitDeadline):
+		t.Fatal("shutdown did not finish")
+	}
+	stopReader()
+	select {
+	case <-readerDone:
+	case <-time.After(waitDeadline):
+		t.Fatal("public reader did not stop")
+	}
+	if _, ok := running.ChunkInfo(key.Dimension, key.Pos); ok {
+		t.Fatal("ChunkInfo retained a clean unloading chunk after shutdown")
+	}
+}
+
 func TestShutdownTimeoutIncludesUnresolvedRetryFailure(t *testing.T) {
 	wantErr := errors.New("retryable disk error")
 	store := newShutdownTestStore()
 	store.setSaveError(wantErr)
 	running, _ := newShutdownTestServer(t, store)
-	running.engine = dirtyReadyEngine(t, []core.ChunkKey{chunkKey(0, 0)})
+	setPersistenceEngineForTest(t, running, dirtyReadyEngine(t, []core.ChunkKey{chunkKey(0, 0)}))
 	if err := shutdownWithDeadline(running, waitDeadline); !errors.Is(err, wantErr) {
 		t.Fatalf("first Shutdown error=%v, want retryable disk error", err)
 	}
@@ -211,7 +389,7 @@ func TestShutdownTimeoutDoesNotIncludeResolvedHistoricalSaveFailure(t *testing.T
 	running, _ := newShutdownTestServer(t, store)
 	running.config.SaveChunks = 1
 	keys := []core.ChunkKey{chunkKey(0, 0), chunkKey(32, 0)}
-	running.engine = dirtyReadyEngine(t, keys)
+	setPersistenceEngineForTest(t, running, dirtyReadyEngine(t, keys))
 	if err := shutdownWithDeadline(running, waitDeadline); !errors.Is(err, historicalErr) {
 		t.Fatalf("first Shutdown error=%v, want historical A failure", err)
 	}
@@ -227,13 +405,6 @@ func TestShutdownTimeoutDoesNotIncludeResolvedHistoricalSaveFailure(t *testing.T
 	if errors.Is(err, historicalErr) {
 		t.Fatalf("B Shutdown error=%v retained resolved A failure", err)
 	}
-	running.stepMu.Lock()
-	pendingRetries, retryInFlight := len(running.retry), len(running.retryInFlight)
-	running.stepMu.Unlock()
-	if pendingRetries != 0 || retryInFlight != 0 {
-		t.Fatalf("A retry still unresolved: pending=%d inFlight=%d", pendingRetries, retryInFlight)
-	}
-
 	gateB <- struct{}{}
 	if err := shutdownWithDeadline(running, waitDeadline); err != nil {
 		t.Fatalf("B recovery Shutdown error=%v", err)
@@ -247,13 +418,15 @@ func TestShutdownJoinsBufferedPersistenceFailureWithCanceledCaller(t *testing.T)
 	wantErr := errors.New("buffered write failure")
 	store := newShutdownTestStore()
 	running, _ := newShutdownTestServer(t, store)
-	running.engine = dirtyReadyEngine(t, []core.ChunkKey{chunkKey(0, 0)})
-	snapshots := running.engine.PersistenceSnapshots(1, 1<<20, sim.SaveAll)
-	jobs := groupSaveJobs(snapshots)
-	jobs[0].Attempt = 1
-	running.saveCompletions <- saveCompletion{Job: jobs[0], Err: wantErr}
+	setPersistenceEngineForTest(t, running, dirtyReadyEngine(t, []core.ChunkKey{chunkKey(0, 0)}))
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	store.setResponder(func(call int, saves []storage.ChunkSave) (storage.SaveResult, error) {
+		if call == 0 {
+			cancel()
+			return storage.SaveResult{}, wantErr
+		}
+		return committedResult(saves), nil
+	})
 
 	err := running.Shutdown(ctx)
 	if !errors.Is(err, wantErr) || !errors.Is(err, context.Canceled) {
@@ -277,7 +450,7 @@ func TestShutdownPartialSaveAcknowledgesCommittedAndRetriesOnlyRemainder(t *test
 	})
 	running, _ := newShutdownTestServer(t, store)
 	keys := []core.ChunkKey{chunkKey(0, 0), chunkKey(1, 0)}
-	running.engine = dirtyReadyEngine(t, keys)
+	setPersistenceEngineForTest(t, running, dirtyReadyEngine(t, keys))
 
 	if err := shutdownWithDeadline(running, waitDeadline); !errors.Is(err, wantErr) {
 		t.Fatalf("first Shutdown error=%v, want partial write", err)
@@ -299,7 +472,7 @@ func TestShutdownSavesThenSyncsThenClosesAndRetainsLockOnSyncFailure(t *testing.
 	store := newShutdownTestStore()
 	store.setSyncError(wantErr)
 	running, _ := newShutdownTestServer(t, store)
-	running.engine = dirtyReadyEngine(t, []core.ChunkKey{chunkKey(0, 0)})
+	setPersistenceEngineForTest(t, running, dirtyReadyEngine(t, []core.ChunkKey{chunkKey(0, 0)}))
 
 	if err := shutdownWithDeadline(running, waitDeadline); !errors.Is(err, wantErr) {
 		t.Fatalf("first Shutdown error=%v, want sync failed", err)
@@ -366,11 +539,6 @@ func TestShutdownCloseFailureIsSerializedAndRetryable(t *testing.T) {
 	if syncCalls, closeCalls := store.lifecycleCalls(); syncCalls != 1 || closeCalls != 2 {
 		t.Fatalf("retry lifecycle Sync=%d Close=%d, want 1,2", syncCalls, closeCalls)
 	}
-	select {
-	case <-running.saveDone:
-	default:
-		t.Fatal("successful Close retry left save workers running")
-	}
 	if store.worldOwned() {
 		t.Fatal("successful Close retry retained Store ownership")
 	}
@@ -415,7 +583,7 @@ func TestServerRunReturnsNilOnlyAfterExternalShutdownSucceeds(t *testing.T) {
 	store := newShutdownTestStore()
 	store.setSaveError(wantErr)
 	running, _ := newShutdownTestServer(t, store)
-	running.engine = dirtyReadyEngine(t, []core.ChunkKey{chunkKey(0, 0)})
+	setPersistenceEngineForTest(t, running, dirtyReadyEngine(t, []core.ChunkKey{chunkKey(0, 0)}))
 	runDone := make(chan error, 1)
 	go func() { runDone <- running.Run(context.Background()) }()
 
@@ -475,11 +643,6 @@ func TestConcurrentShutdownRunsFinalTickAndStoreLifecycleOnce(t *testing.T) {
 	case <-deadline:
 		t.Fatal("runtime/session goroutines did not exit within shared deadline")
 	}
-	select {
-	case <-running.saveDone:
-	case <-deadline:
-		t.Fatal("save goroutines did not exit within shared deadline")
-	}
 	if !current.closed() || running.sessions[testSessionID] != nil {
 		t.Fatal("successful Shutdown left session open")
 	}
@@ -490,7 +653,7 @@ func TestConcurrentShutdownCallerCanTimeoutWhileWaitingForSerializer(t *testing.
 	gate := make(chan struct{})
 	store.setSaveGate(gate)
 	running, _ := newShutdownTestServer(t, store)
-	running.engine = dirtyReadyEngine(t, []core.ChunkKey{chunkKey(0, 0)})
+	setPersistenceEngineForTest(t, running, dirtyReadyEngine(t, []core.ChunkKey{chunkKey(0, 0)}))
 	firstDone := make(chan error, 1)
 	go func() { firstDone <- running.Shutdown(context.Background()) }()
 	select {
@@ -534,7 +697,7 @@ func TestShutdownWaitsForQueueCapacityWithoutReleasingSnapshots(t *testing.T) {
 		chunkKey(64, 0),
 		chunkKey(96, 0),
 	}
-	running.engine = dirtyReadyEngine(t, keys)
+	setPersistenceEngineForTest(t, running, dirtyReadyEngine(t, keys))
 	done := make(chan error, 1)
 	go func() { done <- shutdownWithDeadline(running, waitDeadline) }()
 

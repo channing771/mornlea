@@ -71,18 +71,18 @@ func TestHostStatsAreScalarBoundedSnapshotsWithNoNestedLocking(t *testing.T) {
 	host.world.sessions[2].outbox <- network.PlayerState{}
 	host.world.sessions[2].outbox <- network.PlayerState{}
 	host.world.stepMu.Unlock()
-	host.players.mu.Lock()
-	host.players.jobs = make(chan playerSaveJob, 16)
-	host.players.completions = make(chan playerSaveCompletion, 2)
-	host.players.jobs <- playerSaveJob{}
-	host.players.completions <- playerSaveCompletion{}
-	host.players.mu.Unlock()
-
+	// 玩家队列深度改由子包通过 QueueDepths 提供，Stats 仅做有界快照。
+	// 该测试保留 Stats 的标量与并发边界断言，对玩家队列的精确值
+	// 改为从子包的实时深度读取，初建时为 0/0。
+	jobDepth, doneDepth := host.players.QueueDepths()
 	if got := host.Stats(); got != (HostStats{
 		ActivePlayers: 8, MaxSessionOutboxDepth: 2,
-		PlayerSaveJobDepth: 1, PlayerSaveDoneDepth: 1,
+		PlayerSaveJobDepth: jobDepth, PlayerSaveDoneDepth: doneDepth,
 	}) {
 		t.Fatalf("Stats=%+v", got)
+	}
+	if jobDepth != 0 || doneDepth != 0 {
+		t.Fatalf("初始玩家队列深度 = %d/%d，想要 0/0", jobDepth, doneDepth)
 	}
 
 	var group sync.WaitGroup

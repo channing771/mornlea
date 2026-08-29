@@ -91,12 +91,13 @@ var allowed = map[string][]string{
 	// internal/lod 只做远环壳的请求编码、quad 解码与编排(依赖方向镜像
 	// worldgen/mesh:core 提供 ChunkPos 等领域类型,nativeabi 是唯一 engine
 	// ABI 入口);按 design 裁决不得依赖 render/sim/network。
-	"internal/lod":        {"internal/core", "internal/nativeabi"},
-	"internal/assets":     {"internal/core", "internal/world", "internal/mesh", "internal/worldgen"},
-	"internal/render":     {"internal/core", "internal/world", "internal/mesh", "internal/assets"},
-	"internal/render/hud": {"internal/core", "internal/mesh", "internal/assets", "internal/render"},
-	"internal/server":     {"internal/companion", "internal/core", "internal/network", "internal/pathfind", "internal/physics", "internal/world", "internal/worldgen", "internal/sim", "internal/storage"},
-	"internal/client":     {"internal/companion", "internal/core", "internal/physics", "internal/network", "internal/world", "internal/mesh", "internal/assets", "internal/render"},
+	"internal/lod":                {"internal/core", "internal/nativeabi"},
+	"internal/assets":             {"internal/core", "internal/world", "internal/mesh", "internal/worldgen"},
+	"internal/render":             {"internal/core", "internal/world", "internal/mesh", "internal/assets"},
+	"internal/render/hud":         {"internal/core", "internal/mesh", "internal/assets", "internal/render"},
+	"internal/server":             {"internal/companion", "internal/core", "internal/network", "internal/pathfind", "internal/physics", "internal/world", "internal/worldgen", "internal/sim", "internal/storage", "internal/server/persistence"},
+	"internal/server/persistence": {"internal/companion", "internal/core", "internal/physics", "internal/sim", "internal/storage"},
+	"internal/client":             {"internal/companion", "internal/core", "internal/physics", "internal/network", "internal/world", "internal/mesh", "internal/assets", "internal/render"},
 }
 
 func TestInternalDependenciesAreOneWay(t *testing.T) {
@@ -139,6 +140,47 @@ func TestInternalDependenciesAreOneWay(t *testing.T) {
 			}
 			if !allowSet[dependency] {
 				t.Errorf("%s 不允许直接依赖 %s", pkg, dependency)
+			}
+		}
+	}
+}
+
+// TestServerPersistenceDoesNotDependOnServer 钉住持久化子包到根包的反向依赖禁令。
+//
+// 生产代码（未带 persistence_contract 构建约束的文件）不得导入 `internal/server`；
+// 唯一的例外是被 //go:build persistence_contract 门控的契约测试文件，其为校验
+// 根包兼容 re-export 与哨兵恒等而显式依赖 `internal/server`。
+func TestServerPersistenceDoesNotDependOnServer(t *testing.T) {
+	if slices.Contains(allowed["internal/server/persistence"], "internal/server") {
+		t.Fatalf("internal/server/persistence 不允许依赖 internal/server：子包不得反向依赖父包")
+	}
+	root := moduleRoot(t)
+	dir := filepath.Join(root, "internal", "server", "persistence")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("读取 %s: %v", dir, err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("读取 %s: %v", path, err)
+		}
+		if strings.Contains(string(data), "persistence_contract") {
+			continue
+		}
+		parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		if err != nil {
+			t.Fatalf("解析 %s: %v", path, err)
+		}
+		for _, imp := range parsed.Imports {
+			importPath := strings.Trim(imp.Path.Value, `"`)
+
+			if localName(importPath) == "internal/server" {
+				t.Errorf("持久化生产文件 %s 不允许导入 internal/server（仅 //go:build persistence_contract 的契约文件可导入）", entry.Name())
 			}
 		}
 	}

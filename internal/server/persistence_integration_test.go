@@ -920,6 +920,7 @@ func containsPersistentServerGoroutine(dump string) bool {
 		"(*Server).endpointReader",
 		"(*Server).chunkWorker",
 		"(*Server).saveWorker",
+		"(*persistence.World).saveWorker",
 		"(*session).writeLoop",
 	} {
 		if strings.Contains(dump, name) {
@@ -927,4 +928,10 @@ func containsPersistentServerGoroutine(dump string) bool {
 		}
 	}
 	return false
+}
+
+func TestPersistentServerGoroutineMatcherIncludesWorldSaveWorker(t *testing.T) {
+	if !containsPersistentServerGoroutine("(*persistence.World).saveWorker") {
+		t.Fatal("world save worker was not recognized as a persistent server goroutine")
+	}
 }
