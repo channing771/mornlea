@@ -1,7 +1,7 @@
 # Rust 客户端渲染数据平面迁移设计
 
 - 日期：2026-08-29
-- 状态：设计已逐节确认，等待书面评审
+- 状态：设计已确认；流体排除使共享 kernel 的源码抽取延后到第二个 change
 - 范围：客户端区块 mesh、光照、连通性、可见性与 GPU 上传的数据平面迁移
 - 排除：流体状态、传播、专属调度及其协议；它们由独立的 Rust Engine 流体迁移设计负责
 
@@ -44,7 +44,7 @@ Rust 不解析网络包、不持有权威世界、不决定游戏规则，也不
 
 ### 流体的明确排除
 
-本设计不改变流体 block 的状态、传播、tick、重扫、队列、协议或专属网格策略。现有水材质若作为通用 voxel mesh 的既有输出出现，继续按现有 material 语义消费；本 change 不定义任何流体行为或优化契约。
+本设计不改变流体 block 的状态、传播、tick、重扫、队列、协议或专属网格策略。现有水材质若作为通用 voxel mesh 的既有输出出现，继续按现有 material 语义消费；本 change 不定义任何流体行为或优化契约。由于当前 engine 的 input、light、quad 与 greedy 源码均直接包含流体语义，第一个 change 也不得机械移动这些文件；它只缓存不解释 block ID 与 palette/bitpack，避免和流体负责人的源码边界重叠。
 
 ## 目标架构
 
@@ -61,20 +61,20 @@ Rust 不解析网络包、不持有权威世界、不决定游戏规则，也不
 
 ### 单一 Rust 算法实现
 
-新增 workspace 内部 crate “mornlea_voxel_kernel”。它只包含无状态、无窗口、无 GPU 的 voxel 数值实现：mesh、light、connectivity 与其共享数据结构。
+迁移最终新增 workspace 内部 crate “mornlea_voxel_kernel”。它只包含无状态、无窗口、无 GPU 的 voxel 数值实现：mesh、light、connectivity 与其共享数据结构。
 
-mornlea_engine 继续作为 engine ABI v8 的 C ABI 封装，并依赖该 crate；mornlea_client 直接在 Rust 进程内依赖同一 crate。算法源代码迁移而非复制，因此不存在第二份生产 mesh/light/connectivity 实现，也不需要让 Rust client 经 C ABI 再调用 Rust engine。
+在流体负责人交付稳定的 mesh 边界前，第一个 change 不创建该 crate，也不触碰当前 engine 的流体感知 mesh 源码。第二个 change 以该交付为前置条件，建立由 mornlea_engine 以 engine ABI v8 封装的 kernel，mornlea_client 在 Rust 进程内直接依赖同一 crate。算法源代码迁移而非复制，因此最终不存在第二份生产 mesh/light/connectivity 实现，也不需要让 Rust client 经 C ABI 再调用 Rust engine。
 
 ### RenderWorld
 
 RenderWorld 是 mornlea_client 内的状态对象，随 renderer 创建与销毁。它以 section key 为索引保存：
 
-- 规范化的连续 block-id 数据；
+- 紧凑、已验证的 palette/bitpack section 数据；
 - height map、section/column revision 与 world epoch；
 - generation、dirty 状态、connectivity 和最近一次 GPU slot；
 - 供 worker 借用的不可变 section 数据。
 
-Go 发送 palette/bitpack 存储而不是 4096 格的展开数组。Rust 在 update 到达时只解码一次，写入紧凑连续 section 数据；后续 mesh 直接访问 Rust 内存。为此，Go world 层只新增一个不泄漏内部指针的只读存储序列化视图，不把 Go slice 或对象长期交给 FFI。
+Go 发送 palette/bitpack 存储而不是 4096 格的展开数组。Rust 在 update 到达时只验证并规范化为自己的紧凑缓存；后续 worker 直接访问 Rust 内存。Go 使用既有 `world.ContainerSnapshot`，不新增 world 层序列化视图，也不把 Go slice 或对象长期交给 FFI。
 
 ## 更新 ABI 与状态机
 
@@ -110,9 +110,9 @@ GPU 写入永远在渲染线程进行。worker 不触碰 wgpu 资源，也不持
 
 ## 可见性与帧输入
 
-RenderWorld 保存最新 connectivity；Rust client 在 render frame 内用相机 origin、frustum 和现有固定 radius 运行可见性 BFS。可见 section 列表直接驱动 GPU section slot 绘制，绝不回传 Go。
+完成第三个 change 后，RenderWorld 保存最新 connectivity；Rust client 在 render frame 内用相机 origin、frustum 和现有固定 radius 运行可见性 BFS。可见 section 列表直接驱动 GPU section slot 绘制，绝不回传 Go。
 
-Go 仍传递相机、昼夜、实体、UI、文字与其他渲染语义输入；frame ABI v12 删除由 Go 编码的 Visible 区段载荷。renderer 从 RenderWorld 提取可见 section，完成 mesh 结果回收、上传、visibility 与 draw，再返回有界帧统计。
+Go 仍传递相机、昼夜、实体、UI、文字与其他渲染语义输入。第一个 change 的 client ABI v12 只新增 RenderWorld update 入口，既有 RenderFrame 的 Visible 区段载荷与字节布局保持不变；第三个 change 才在另一个 ABI 版本中收缩 frame 输入、由 renderer 从 RenderWorld 提取可见 section，完成 mesh 结果回收、上传、visibility 与 draw，再返回有界帧统计。
 
 迁移完成时，下列 Go 生产职责被删除或收敛为 test-only oracle：
 
@@ -143,13 +143,14 @@ extern “C” 边界必须捕获 panic，禁止 unwind 越过 ABI。所有长�
 
 ### 1. rust-render-world-cache
 
-- 建立 mornlea_voxel_kernel 并让 mornlea_engine 保持 ABI v8 行为；
 - 建立 client ABI v12、MRW1 编解码、RenderWorld、epoch/revision/tombstone 状态机；
-- 用单元、FFI、fuzz 与 test-only driver 验证 cache 输入和重建；
+- 用单元、FFI、fuzz 与 test-only driver 验证 cache 输入和重建；不从实时 app 消息路径喂入尚未消费的缓存，避免在替换 Go mesh 工作前增加生产复制；
+- 不触碰当前 engine 的 fluid-aware mesh/light/quad/greedy 源码；
 - 不切换用户可见的 mesh 或 draw 路径。
 
 ### 2. rust-render-mesh-pipeline
 
+- 以流体负责人已合入的稳定 mesh 边界为前置条件，建立 mornlea_voxel_kernel 并让 mornlea_engine 保持 ABI v8 行为；
 - 建立固定 worker、Arc 邻域、Rust mesh/light/connectivity 和 GPU 上传队列；
 - 将 Go Mesher 与 SectionScheduler 从生产路径移除；
 - 迁移期间 Go 可以临时保留 connectivity/visibility oracle 以供现有 frame 输入工作，但不再传递 geometry；
@@ -187,11 +188,11 @@ extern “C” 边界必须捕获 panic，禁止 unwind 越过 ABI。所有长�
 
 ## 风险与取舍
 
-- Rust 渲染缓存占用更多常驻内存：以加载/卸载生命周期回收，使用紧凑 block-id 表示，并记录 cache、worker、GPU pool 峰值；
+- Rust 渲染缓存占用更多常驻内存：以加载/卸载生命周期回收，使用紧凑 palette/bitpack 表示，并记录 cache、worker、GPU pool 峰值；
 - update 顺序与陈旧 worker 结果容易造成视觉错误：epoch、revision、generation 和 tombstone 全部进入状态机测试；
 - GPU 资源失败不能显示旧 revision：宁可暂时隐藏 section，也不显示已知过时 geometry；
 - ABI 升级容易出现混装：v12 身份检查、C header/Rust/Go 同步测试和 make rust 纪律共同约束；
-- 共享 kernel 重构可能影响既有 engine 行为：engine ABI v8 的现有输出保留为 oracle，并在首个 change 中锁定；
+- 共享 kernel 重构可能影响既有 engine 行为：engine ABI v8 的现有输出保留为 oracle，并在流体边界稳定后的第二个 change 中锁定；
 - Rust 直接解析网络包会侵蚀语言边界：MRW1 只接受 Go 已验证的语义化存储，不复用网络 wire format。
 
 ## 被否决的方案
@@ -205,7 +206,7 @@ extern “C” 边界必须捕获 panic，禁止 unwind 越过 ABI。所有长�
 
 - Rust RenderWorld 是客户端区块渲染数据平面的唯一生产所有者；
 - Go 只发送已验证 render update 与帧语义，不传递邻域、quad 或 visible section；
-- client ABI v12 的 header、Rust、Go、版本检查和测试一致，engine ABI 仍为 v8；
+- client ABI v12 的缓存入口、header、Rust、Go、版本检查和测试一致，engine ABI 仍为 v8；后续 frame 输入收缩使用独立 ABI 升版；
 - mesh/light/connectivity/visibility 与现有视觉和功能语义一致，流体系统未被本项目修改；
 - Go 生产帧路径消除 3×3×3 深拷贝、MGM1 客户端编码、Go visibility 与逐 section upload；
 - 正确性、并发、ABI、capture、架构和 OpenSpec 门禁通过，性能证据完整记录；
