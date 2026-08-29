@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mornlea://bridge/schema.json",
+  "title": "Mornlea 菜单层桥协议（单源 schema）",
+  "description": "客户端菜单层的桥协议单源定义。下行 uiState 由 Go 组装、经 Rust evaluateJavaScript 调用 window.mornlea.onState 注入，仅在状态变化时推送；上行 uplinkEnvelope 由前端经 window.webkit.messageHandlers.mornlea.postMessage 发出，由 Rust 排空后交给 Go 依序消费。Go/Rust/TS 三端测试共同引用本文件钉值；未知相位、未知动作、未知事件类型一律拒绝。字符串长度上界为码点数，与 Go 组装侧的字节上界（如调试行两侧各 24 字节）取宽松侧：字节精确约束由 Go 组装时维持。",
+  "oneOf": [
+    { "$ref": "#/$defs/uiState" },
+    { "$ref": "#/$defs/uplinkEnvelope" }
+  ],
+  "$defs": {
+    "uiState": {
+      "type": "object",
+      "description": "下行状态快照。相位决定的分节按需出现：menu 出现在 menu/starting 相位，settings 出现在 settings 相位，pause 出现在 paused 相位，debug 可见于任意相位（F3 调试面板可叠加在游戏之上）。",
+      "additionalProperties": false,
+      "required": ["phase"],
+      "properties": {
+        "phase": { "$ref": "#/$defs/phase" },
+        "menu": { "$ref": "#/$defs/menuState" },
+        "settings": { "$ref": "#/$defs/settingsState" },
+        "pause": { "$ref": "#/$defs/pauseState" },
+        "debug": { "$ref": "#/$defs/debugState" }
+      }
+    },
+    "phase": {
+      "description": "菜单相位机当前相位，语义与 Go 侧 MenuPhase 一一对应：game=世界已装配；menu=主菜单可见；starting=世界装配进行中（主菜单仍可见，重复点击由 Go 忽略）；settings=设置页可见；paused=暂停层可见、权威模拟冻结。",
+      "enum": ["game", "menu", "starting", "settings", "paused"]
+    },
+    "menuAction": {
+      "description": "菜单动作 id，与 Go cmd/mornlea/app 的 menuAction* 常量及 Rust 既有 UI_ACTION_* 清单逐值互钉：enter-game=1 进入游戏、multiplayer=2 多人游戏（禁用态）、open-settings=3 设置、quit=4 退出游戏、settings-save=5 保存、settings-cancel=6 取消更改、settings-back=7 返回或 Esc、pause-back=8 返回游戏、pause-quit-to-menu=9 退回主菜单。两侧任何一方不得单方面改动映射。",
+      "enum": [
+        "enter-game",
+        "multiplayer",
+        "open-settings",
+        "quit",
+        "settings-save",
+        "settings-cancel",
+        "settings-back",
+        "pause-back",
+        "pause-quit-to-menu"
+      ]
+    },
+    "menuButton": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "enabled"],
+      "properties": {
+        "id": { "$ref": "#/$defs/menuAction" },
+        "label": { "type": "string", "maxLength": 64 },
+        "enabled": {
+          "description": "禁用态按钮置灰且不得发出上行动作事件（多人游戏当前恒为 false）。",
+          "type": "boolean"
+        }
+      }
+    },
+    "menuState": {
+      "type": "object",
+      "description": "主菜单分节：标题、版本行、装配失败错误行与按钮表，文本由 Go 权威下发。",
+      "additionalProperties": false,
+      "required": ["title", "version", "error", "buttons"],
+      "properties": {
+        "title": { "type": "string", "maxLength": 128 },
+        "version": { "type": "string", "maxLength": 64 },
+        "error": { "type": "string", "maxLength": 256 },
+        "buttons": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/menuButton" }
+        }
+      }
+    },
+    "settingsValues": {
+      "type": "object",
+      "description": "设置三字段的取值。audioVolume 取闭区间 [0,1]；windowSize 与 Go UISettingsWindow 1/2/3 逐值互钉。",
+      "additionalProperties": false,
+      "required": ["audioVolume", "texturePackPath", "windowSize"],
+      "properties": {
+        "audioVolume": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "texturePackPath": {
+          "type": "string",
+          "maxLength": 1024,
+          "pattern": "^[^\\r\\n]*$"
+        },
+        "windowSize": { "$ref": "#/$defs/windowSize" }
+      }
+    },
+    "windowSize": {
+      "description": "三个固定逻辑窗口预设（Go UISettingsWindow640x360/960x540/1280x720）。",
+      "enum": ["640x360", "960x540", "1280x720"]
+    },
+    "settingsState": {
+      "type": "object",
+      "description": "设置页分节：draft 为当前草稿，saved 为已保存值，dirty 由 Go 裁决（前端不得自行比较持久化），status/error 为有界提示行。",
+      "additionalProperties": false,
+      "required": ["draft", "saved", "dirty", "status", "error"],
+      "properties": {
+        "draft": { "$ref": "#/$defs/settingsValues" },
+        "saved": { "$ref": "#/$defs/settingsValues" },
+        "dirty": { "type": "boolean" },
+        "status": { "type": "string", "maxLength": 256 },
+        "error": { "type": "string", "maxLength": 256 }
+      }
+    },
+    "pauseState": {
+      "type": "object",
+      "description": "暂停层分节。标题与两枚固定按钮文案由前端常量呈现（与 Rust PAUSE_* 常量一致）；remote=true 时追加远程注明行。",
+      "additionalProperties": false,
+      "required": ["remote"],
+      "properties": {
+        "remote": { "type": "boolean" }
+      }
+    },
+    "debugState": {
+      "type": "object",
+      "description": "F3 调试面板分节。visible 决定面板是否叠加呈现（可出现在任意相位）；mode 是顶部连接模式文案；rows 上限 64 行。",
+      "additionalProperties": false,
+      "required": ["visible", "mode", "rows"],
+      "properties": {
+        "visible": { "type": "boolean" },
+        "mode": { "type": "string", "maxLength": 64 },
+        "rows": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/debugRow" }
+        }
+      }
+    },
+    "debugRow": {
+      "type": "object",
+      "description": "调试面板行。kind=readout 为顶部只读读数行、section 为分组段头（值恒空）、param 为可选中/编辑的参数行。readonly 行不得被选中或进入编辑（对应 Rust flags 语义：EDITING 置位行必须同时可编辑）。",
+      "additionalProperties": false,
+      "required": ["label", "value", "kind", "readonly", "selected", "editing"],
+      "properties": {
+        "label": { "type": "string", "maxLength": 24 },
+        "value": { "type": "string", "maxLength": 24 },
+        "kind": { "enum": ["readout", "section", "param"] },
+        "readonly": { "type": "boolean" },
+        "selected": { "type": "boolean" },
+        "editing": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "readonly": { "const": true } }, "required": ["readonly"] },
+          "then": {
+            "properties": {
+              "selected": { "const": false },
+              "editing": { "const": false }
+            }
+          }
+        }
+      ]
+    },
+    "uplinkEnvelope": {
+      "type": "object",
+      "description": "上行事件信封：版本化（v 恒为 1），Rust 排空后按序交 Go 消费。单批事件数上界与 Go maxUIEventsPerBatch 同值。",
+      "additionalProperties": false,
+      "required": ["v", "events"],
+      "properties": {
+        "v": { "const": 1 },
+        "events": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/uplinkEvent" }
+        }
+      }
+    },
+    "uplinkEvent": {
+      "description": "上行事件三型：action 为菜单动作、settings-change 为单字段设置草稿变化、debug-edit 为调试面板编辑事件。未知 type 落不进任何分支即被拒绝。",
+      "oneOf": [
+        { "$ref": "#/$defs/actionEvent" },
+        { "$ref": "#/$defs/settingsChangeEvent" },
+        { "$ref": "#/$defs/debugEditEvent" }
+      ]
+    },
+    "actionEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": { "const": "action" },
+        "id": { "$ref": "#/$defs/menuAction" }
+      }
+    },
+    "settingsChangeEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "field", "value"],
+      "properties": {
+        "type": { "const": "settings-change" },
+        "field": { "enum": ["audioVolume", "texturePackPath", "windowSize"] },
+        "value": {}
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "field": { "const": "audioVolume" } }, "required": ["field"] },
+          "then": { "properties": { "value": { "type": "number", "minimum": 0, "maximum": 1 } } }
+        },
+        {
+          "if": { "properties": { "field": { "const": "texturePackPath" } }, "required": ["field"] },
+          "then": { "properties": { "value": { "type": "string", "maxLength": 1024, "pattern": "^[^\\r\\n]*$" } } }
+        },
+        {
+          "if": { "properties": { "field": { "const": "windowSize" } }, "required": ["field"] },
+          "then": { "properties": { "value": { "$ref": "#/$defs/windowSize" } } }
+        }
+      ]
+    },
+    "debugEditEvent": {
+      "type": "object",
+      "description": "调试面板编辑事件，op 与 Go DebugPanelAction* 1..7 逐值互钉。edit-value/confirm 必须携带 value 文本，其余 op 禁止携带。",
+      "additionalProperties": false,
+      "required": ["type", "op"],
+      "properties": {
+        "type": { "const": "debug-edit" },
+        "op": {
+          "enum": [
+            "select-next",
+            "select-prev",
+            "enter-edit",
+            "edit-value",
+            "confirm",
+            "cancel",
+            "close"
+          ]
+        },
+        "value": { "type": "string", "maxLength": 64, "pattern": "^[^\\r\\n]*$" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "op": { "enum": ["edit-value", "confirm"] } }, "required": ["op"] },
+          "then": {
+            "required": ["value"],
+            "properties": {
+              "value": { "type": "string", "maxLength": 64, "pattern": "^[^\\r\\n]*$" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "op": { "enum": ["select-next", "select-prev", "enter-edit", "cancel", "close"] } },
+            "required": ["op"]
+          },
+          "then": { "properties": { "value": false } }
+        }
+      ]
+    }
+  }
+}

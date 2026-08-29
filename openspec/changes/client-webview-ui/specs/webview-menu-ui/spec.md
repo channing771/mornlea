@@ -182,13 +182,13 @@
 
 ### Requirement: 前端资产与构建链
 
-`mornlea_client` 的菜单前端 SHALL 位于 `frontend/`（Vite + TypeScript + React），依赖由提交的锁文件钉死；构建产物 dist SHALL 提交入库并被 Rust 二进制内嵌；构建链 MUST 保证 `npm ci + 类型检查 + 组件测试 + 构建` 后的 dist 与入库版本逐字节一致，任何漂移 MUST 使门禁失败。
+`mornlea_client` 的菜单前端 SHALL 位于 `frontend/`（Vite + TypeScript + React），依赖由提交的 pnpm 锁文件钉死（corepack `packageManager` 钉版）；构建产物 dist SHALL 提交入库并被 Rust 二进制内嵌；构建链 MUST 保证 `pnpm install --frozen-lockfile + 类型检查 + 组件测试 + 构建` 后的 dist 与入库版本逐字节一致，任何漂移 MUST 使门禁失败。
 
 #### Scenario: dist 一致性门禁
 
 - **GIVEN** 干净检出的仓库
 - **WHEN** 运行前端检查门禁
-- **THEN** `npm ci`、TypeScript 检查、组件测试与 `vite build` MUST 全部通过
+- **THEN** `pnpm install --frozen-lockfile`、TypeScript 检查、组件测试与 `vite build` MUST 全部通过
 - **AND** 重新构建的 dist 与入库 dist MUST 逐字节一致，否则 MUST 失败
 
 #### Scenario: 离线运行

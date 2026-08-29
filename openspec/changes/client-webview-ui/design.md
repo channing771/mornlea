@@ -64,7 +64,7 @@ PR #121 已交付 HUD/容器的原版对齐与混合风格（Go quad 管线 + `s
 
 1. **透明背景**：`drawsBackground=false` 为半文档特性。T2 首日 spike 验证；若失败，降级为 WebView 自绘不透明菜单背景（全景仅透过缝隙不可行时放弃全景并回退纯 CSS 背景），ledger 记录裁决。
 2. **焦点路由**：webview firstResponder 与 winit 事件循环共存是集成核心风险；spike 验证键盘/指针双相切换与 Esc 语义。
-3. **node 供应链**：lockfile 锁定 + `npm ci`（禁 install）+ dist 入库一致性门禁；不引入 postinstall 脚本依赖。
+3. **node 供应链**：lockfile 锁定 + `pnpm install --frozen-lockfile`（禁开放安装）+ dist 入库一致性门禁；不引入 postinstall 脚本依赖。
 4. **桥类型安全**：schema 三端钉值 + 越界/未知事件拒绝（对应旧 ABI 拒绝语义）。
 
 ## D10 护栏
