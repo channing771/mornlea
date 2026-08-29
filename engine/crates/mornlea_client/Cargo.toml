@@ -11,7 +11,8 @@ crate-type = ["rlib", "cdylib"]
 [target.'cfg(target_os = "macos")'.dependencies]
 winit = "0.30"
 raw-window-handle = "0.6"
-objc2 = "0.6"
+# "exception" 供 KVC 透明背景写入的 @try/@catch 兜底(旧系统无公开选择器)。
+objc2 = { version = "0.6", features = ["exception"] }
 # `NSScreen.visibleFrame` 返回 `NSRect`（逻辑 point），设置预设与创建期钳制
 # 直接消费真实工作区，不再用 monitor 全尺寸的 90% 代替系统菜单栏/Dock。
 objc2-foundation = "0.3"
@@ -31,3 +32,27 @@ egui = { version = "0.35", default-features = false }
 # 不启用 webgl/winit/capture feature;绝不引入 egui-winit(把 winit 版本
 # 耦合给 egui-winit,而菜单输入翻译量很小,裁决手工 RawInput)。
 egui-wgpu = { version = "0.35", default-features = false, features = ["macos-window-resize-jitter-fix"] }
+# 菜单层 WebView:进程内 WKWebView(透明、无第二窗口栈),资产经
+# `mornlea://` URL scheme handler 从二进制内嵌字节供给,上行事件经
+# WKScriptMessageHandler 入队。按 design 裁决手写 objc2 绑定,不引入
+# wry/tao。类特性按需开启;block2 供 evaluateJavaScript。
+objc2-web-kit = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "block2",
+    # WKWebView 以 NSView 为父类,类绑定经 objc2-app-kit feature 携带;
+    # initWithFrame:configuration: 的 CGRect 类型经 objc2-core-foundation。
+    "objc2-app-kit",
+    "objc2-core-foundation",
+    "WKNavigation",
+    "WKNavigationDelegate",
+    "WKScriptMessage",
+    "WKScriptMessageHandler",
+    "WKURLSchemeHandler",
+    "WKURLSchemeTask",
+    "WKUserContentController",
+    "WKWebView",
+    "WKWebViewConfiguration",
+] }
+# serde_json:桥信封(上行事件批)的解析与再序列化。Go 下行状态 JSON 只做
+# 相位浅校验,深校验在 Go 侧;序列化输出直接作为 evaluateJavaScript 表达式。
+serde_json = "1.0.145"

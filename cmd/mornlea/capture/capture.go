@@ -84,15 +84,14 @@ type captureScene struct {
 	// 物品栏、换上夹具物品栏，场景图回读后恢复快照并重放会话起点基线
 	// （与 HUD 夹具同一 defer 语义），保证触发弹条的临时选中不泄入后续场景。
 	Popup *capturePopupFixture
-	// Menu 可选，非 nil 时本场景以该快照渲染一帧 egui 主菜单（capture 专用）。
-	// 默认 nil 表示无菜单。每个场景在 captureSceneImage 里于 Apply 之后、收敛
-	// 循环之前无条件设置 app.menuOverride = scene.Menu（nil 即清除），因此
-	// 场景表天然清空上一场景的菜单，不需要 teardown 钩子；egui pass 只在 UI 段
-	// 存在时运行，多数场景（nil）因此零参与、输出像素与引入菜单前逐字节一致。
-	Menu *client.UIMenu
-	// Settings 可选，非 nil 时本场景通过正常的设置相位与 `uiSegment` 路径编码
-	// layout v2。它与 Menu 互斥；每个场景都会显式重置菜单相位，避免设置页污染
-	// 后续共用同一 application 的场景。
+	// Menu 可选，为真时本场景以主菜单相位呈现。菜单层已迁 WebView（client
+	// ABI v12）且无头路径零参与，本场景输出无菜单 chrome 的世界底图——
+	// golden 待全景场景落地时重生成。它与 Settings 互斥；每个场景都会
+	// 显式重置菜单相位，避免设置页污染后续共用同一 application 的场景。
+	Menu bool
+	// Settings 可选，非 nil 时本场景进入正常的设置相位。它与 Menu 互斥；
+	// 每个场景都会显式重置菜单相位，避免设置页污染后续共用同一 application
+	// 的场景。
 	Settings *application.SettingsState
 	// PinVolatile 可选，在字形收敛帧之后、最后一帧渲染之前执行，用来钉住那些
 	// 随机器速度变化、因而不属于场景三要素的量。
@@ -751,30 +750,18 @@ var captureScenes = []captureScene{
 		// main-menu 是 egui 主菜单的无窗口 capture 场景：含标题「Mornlea」、
 		// 版本行「dev」、真实装配错误行与四个按钮（进入/设置/退出可用、多人禁用）。
 		//
-		// Error 非空是有意的：一来覆盖真实装配错误行（菜单因打开不了存档而显示
-		// 错误文本），二来其内容「存档无法打开」是中文 UTF-8，整个 UI 段的字节长度
-		// 因此落在非 4 对齐上，专门走 Ruling 8 豁免的「非 4 对齐 TLV 文本段跨语言
-		// 回圆」路径——golden 由此覆盖一条真实菜单、也是 capture 路径第一条非 4 对齐
-		// 的 UI 段。
+		// 菜单层已迁 WebView:本场景不再注入菜单快照,输出无 chrome 的世界
+		// 底图(菜单相位抑制准星与弹条),golden 待全景场景落地时重生成。
 		//
 		// Apply 里 resetCapturePresentation 清空前序场景（water-surface-slope）留下的
-		// 全部共享呈现状态，并把相机钉在出生点上空：菜单面板不透明地覆盖全屏，世界
-		// 内容不可见，相机位置只作确定性占位，不影响菜单像素。egui pass 只在 UI 段
-		// 存在时运行，本场景与紧随其后的 settings-menu 是仅有的 UI 场景。
+		// 全部共享呈现状态，并把相机钉在出生点上空。本场景与紧随其后的
+		// settings-menu 是仅有的菜单相位场景。
 		//
 		// 排序约束：本场景 MUST 排在 far-horizon 之前（far-horizon 仍为倒数第二、
 		// water-underwater 仍为最后），由 TestMainMenuCaptureScenePosition 兜底。
 		Name:         "main-menu",
 		WarmupFrames: 8,
-		Menu: &client.UIMenu{
-			Visible: true,
-			Title:   "Mornlea",
-			Version: "dev",
-			// 见上：真实错误行 + 非 4 对齐 UI 段（Ruling 8）。
-			Error: "存档无法打开",
-			// 复用交互主菜单的按钮表（四个按钮、进入/设置/退出可用、多人禁用）。
-			Buttons: application.MenuButtons(),
-		},
+		Menu:         true,
 		Apply: func(app SceneApplication) error {
 			if err := resetCapturePresentation(app); err != nil {
 				return err
@@ -977,18 +964,20 @@ func captureSceneImage(app SceneApplication, scene captureScene) (*image.NRGBA, 
 	if err := scene.Apply(app); err != nil {
 		return nil, fmt.Errorf("应用场景状态: %w", err)
 	}
-	// UI 覆盖在 Apply 之后、收敛循环之前装入。无条件清理菜单覆盖与相位是刻意
-	// 而为：场景共用同一个 application，若不显式清除，上一场景的主菜单或设置页
-	// 会静默留在后续画面上。设置场景仍走正式 `uiSegment` layout v2 路径；多数
-	// 场景恢复 game 相位，因此 egui pass 零参与。
-	if scene.Menu != nil && scene.Settings != nil {
+	// 菜单相位在 Apply 之后、收敛循环之前装入。无条件重置相位是刻意而为：
+	// 场景共用同一个 application，若不显式清除，上一场景的主菜单或设置页
+	// 会静默留在后续画面上。多数场景恢复 game 相位;菜单相位抑制准星与弹条
+	// (无头路径 WebView 零参与,不产生任何桥推送)。
+	if scene.Menu && scene.Settings != nil {
 		return nil, fmt.Errorf("场景 %s 同时设置 Menu 与 Settings", scene.Name)
 	}
-	app.SetMenuOverride(scene.Menu)
-	if scene.Settings != nil {
+	switch {
+	case scene.Settings != nil:
 		app.SetMenuPhase(application.MenuPhaseSettings)
 		app.SetSettings(*scene.Settings)
-	} else {
+	case scene.Menu:
+		app.SetMenuPhase(application.MenuPhaseMenu)
+	default:
 		app.SetMenuPhase(application.MenuPhaseGame)
 	}
 	if scene.HUD != nil {

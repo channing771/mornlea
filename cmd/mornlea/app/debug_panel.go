@@ -3,14 +3,11 @@
 package app
 
 import (
-	"encoding/binary"
 	"errors"
-	"math"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/go-gl/mathgl/mgl32"
 
@@ -110,9 +107,9 @@ type panelKeys struct {
 type panelState struct {
 	visible  bool
 	selected int
-	// editing 表示选中行正处于文本编辑态。文本草稿留在 Rust egui
-	// TextEdit 里（design §3「编辑中的文本留在 Rust 文本框」），Go 只向下行
-	// 播种初始文本与光标；确认（CONFIRM 写回）或取消（CANCEL）后翻转结束会话。
+	// editing 表示选中行正处于文本编辑态。文本草稿留在 WebView 前端的
+	// 输入框里（编辑中的文本不回传，Go 只在确认时收到最终文本），确认
+	// （confirm 写回）或取消（cancel）后翻转结束会话。
 	editing   bool
 	effective config.Config
 }
@@ -305,177 +302,23 @@ func clampFloat(value, min, max float64) float64 {
 	return value
 }
 
-// layout v3 段的线格式常量，与 Rust ui.rs 的 UI_DEBUG_LAYOUT_VERSION、
-// DEBUG_PANEL_ROW_FLAG_*、MAX_DEBUG_PANEL_* 逐值一致（见 design.md §2
-// 字节级契约）。
-const (
-	debugPanelLayoutVersion = 3
-	debugPanelFlagVisible   = 1
-
-	debugPanelRowFlagReadonly = 1
-	debugPanelRowFlagSelected = 2
-	debugPanelRowFlagEditable = 4
-	debugPanelRowFlagEditing  = 8
-
-	debugPanelFixedFieldLen   = 24
-	debugPanelModeMaxBytes    = 64
-	debugPanelEditValueMaxLen = 64
-	debugPanelRowsMax         = 64
-
-	// maxUISegmentBytes 是 UI 段的总长度上界。权威常量是 Rust
-	// `engine/crates/mornlea_client/src/ui.rs` 的 `MAX_UI_SEGMENT_BYTES`，
-	// 此处是与之逐值一致的跨语言副本（约束性检查 encodeDebugPanelSegment
-	// 里的段长 panic 用），不是运行时对 Rust 的校验。
-	maxUISegmentBytes = 4096
-)
-
-// encodeDebugPanelSegment 把一帧面板状态编码为 client ABI v9 layout v3 段字节
-// （小端），与 Rust decode_debug_frame 逐字节对应。visible 为假时返回 nil
-// （面板关闭时整个 UI 段缺席，Rust 运行零工作）。编辑态行的 edit_value 字段取该行
-// 全精度原始值（rows 填的 EditValue，缺失时回退展示值）并按 rune 边界截断到 64
-// 字节，edit_cursor 为末位字节偏移（=len），与 Rust 的字符边界校验一致。
-//
-// 输入违约（非空/单行/有限数）是调用方编程错误，按既有段落编码口径 panic；
-// 段长受 maxUISegmentBytes 上界约束（64 行 × ≤120 字节记录 + 段头 ≤128 字节
-// 在单编辑态不变量下恒小于上界，防御性检查兜底）。
-func encodeDebugPanelSegment(
-	visible, editing bool,
-	readout render.PanelReadout,
-	rows []render.PanelRow,
-) []byte {
-	if !visible {
-		return nil
-	}
-	if !validDebugReadout(readout) {
-		panic("debug_panel: 读数含 NaN/Inf 或负帧时")
-	}
-	if !validDebugSingleLine(readout.Mode, debugPanelModeMaxBytes) {
-		panic("debug_panel: 模式名非法")
-	}
-	if len(rows) > debugPanelRowsMax {
-		rows = rows[:debugPanelRowsMax]
-	}
-	out := make([]byte, 0, 68+len(readout.Mode)+len(rows)*64)
-	out = binary.LittleEndian.AppendUint32(out, debugPanelLayoutVersion)
-	out = binary.LittleEndian.AppendUint32(out, debugPanelFlagVisible)
-	out = binary.LittleEndian.AppendUint64(out, math.Float64bits(readout.FrameMillis))
-	for _, value := range readout.Position {
-		out = appendDebugFloat32(out, value)
-	}
-	out = appendDebugFloat32(out, readout.Yaw)
-	out = appendDebugFloat32(out, readout.Pitch)
-	out = binary.LittleEndian.AppendUint64(out, readout.Tick)
-	out = binary.LittleEndian.AppendUint64(out, readout.WorldTime)
-	out = binary.LittleEndian.AppendUint32(out, uint32(readout.LoadedChunks))
-	out = binary.LittleEndian.AppendUint32(out, uint32(len(readout.Mode)))
-	out = append(out, readout.Mode...)
-	out = binary.LittleEndian.AppendUint32(out, uint32(len(rows)))
-	editEmitted := false
-	for _, row := range rows {
-		out = appendDebugFixedField(out, row.Label)
-		out = appendDebugFixedField(out, row.Value)
-		flags := uint32(0)
-		if row.ReadOnly {
-			flags |= debugPanelRowFlagReadonly
-		}
-		selected := row.Selected && !row.ReadOnly
-		if selected {
-			flags |= debugPanelRowFlagSelected
-		}
-		if !row.ReadOnly {
-			flags |= debugPanelRowFlagEditable
-		}
-		// 编辑态载荷只允许一行（规则由 Rust 解码器整体强制）；rows() 恒只有
-		// 一个 Selected 行，逐个选中行发射是防御性收口而已。
-		editRow := false
-		if editing && selected && !editEmitted {
-			editEmitted = true
-			editRow = true
-			flags |= debugPanelRowFlagEditing
-		}
-		out = binary.LittleEndian.AppendUint32(out, flags)
-		if editRow {
-			// 播种全精度原始值而非展示值（展示值已按 4 位有效数字舍入），
-			// 否则「不改文本直接确认」会把有效值写成显示形式。EditValue 由
-			// panelState.rows 填充；手构造的行（测试夹具）为空时回退展示值。
-			seed := row.EditValue
-			if seed == "" {
-				seed = row.Value
-			}
-			seed = truncateDebugText(seed, debugPanelEditValueMaxLen)
-			out = binary.LittleEndian.AppendUint32(out, uint32(len(seed)))
-			out = append(out, seed...)
-			out = binary.LittleEndian.AppendUint32(out, uint32(len(seed)))
-		}
-	}
-	if len(out) > maxUISegmentBytes {
-		panic("debug_panel: 段长超过 MAX_UI_SEGMENT_BYTES")
-	}
-	return out
-}
-
-// validDebugReadout 校验段头数值：帧时有限且 ≥0，位置/朝向有限——与 Rust
-// 解码器的数值校验一致。由 encodeDebugPanelSegment 调用方保证。
-func validDebugReadout(readout render.PanelReadout) bool {
-	if math.IsNaN(readout.FrameMillis) || math.IsInf(readout.FrameMillis, 0) || readout.FrameMillis < 0 {
-		return false
-	}
-	for _, value := range readout.Position {
-		if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
-			return false
-		}
-	}
-	return !math.IsNaN(float64(readout.Yaw)) && !math.IsInf(float64(readout.Yaw), 0) &&
-		!math.IsNaN(float64(readout.Pitch)) && !math.IsInf(float64(readout.Pitch), 0)
-}
-
-// validDebugSingleLine 校验非空、≤max 字节、无换行、合法 UTF-8。
-func validDebugSingleLine(text string, maxBytes int) bool {
-	return text != "" && len(text) <= maxBytes && utf8.ValidString(text) &&
-		!strings.ContainsAny(text, "\r\n")
-}
-
-func appendDebugFloat32(out []byte, value float32) []byte {
-	return binary.LittleEndian.AppendUint32(out, math.Float32bits(value))
-}
-
-// appendDebugFixedField 追加一个 24 字节零填充定宽字段：文本按 rune 边界截断
-// 到 ≤24 字节后拷贝，其后全零（Rust fixed24_string 要求首个 NUL 后全零）。
-func appendDebugFixedField(out []byte, text string) []byte {
-	var field [debugPanelFixedFieldLen]byte
-	copy(field[:], truncateDebugText(text, debugPanelFixedFieldLen))
-	return append(out, field[:]...)
-}
-
-// truncateDebugText 把文本截断到至多 max 字节且保证 rune 边界完整，多字节字符
-// 绝不被切成半个。max 超出文本长度时原样返回。
-func truncateDebugText(text string, maxBytes int) string {
-	if len(text) <= maxBytes {
-		return text
-	}
-	cut := maxBytes
-	for cut > 0 && !utf8.RuneStart(text[cut]) {
-		cut--
-	}
-	return text[:cut]
-}
-
-// debugPanelEvent 是一条解码后的调试面板动作；Rust egui 按固定顺序产生
-// （选中移动 → 进入编辑 → 编辑值 → 确认 → 取消 → 关闭）。
+// debugPanelEvent 是一条解码后的调试面板编辑事件(op 为字符串 id);WebView
+// 前端按固定顺序产生(选中移动 → 进入编辑 → 编辑值 → 确认 → 取消 → 关闭)。
 type debugPanelEvent struct {
-	action uint32
-	value  string
+	op    string
+	value string
 }
 
-// decodeDebugPanelEvents 从 typed UI 事件里筛出调试面板动作，保持 arrive 顺序。
-// 线格式校验已在 `client.DecodeUIEventBatch` 完成（未知 action 拒绝）。
+// decodeDebugPanelEvents 从桥事件里筛出调试面板编辑事件,保持到达顺序。
+// 线格式校验(未知 op、value 携带规则、文本上界)已在
+// `client.DecodeUIEventBatch` 完成。
 func decodeDebugPanelEvents(events []client.UIEvent) []debugPanelEvent {
 	out := make([]debugPanelEvent, 0, len(events))
 	for _, event := range events {
 		if event.Kind != client.UIEventDebugAction {
 			continue
 		}
-		out = append(out, debugPanelEvent{action: event.PanelAction, value: event.PanelValue})
+		out = append(out, debugPanelEvent{op: event.PanelAction, value: event.PanelValue})
 	}
 	return out
 }
@@ -486,7 +329,7 @@ func decodeDebugPanelEvents(events []client.UIEvent) []debugPanelEvent {
 // 新值原文并校验写回（design §3）。
 func (s *panelState) applyPanelEvents(events []debugPanelEvent, remote bool) (changed bool) {
 	for _, event := range events {
-		switch event.action {
+		switch event.op {
 		case client.DebugPanelActionSelectNext, client.DebugPanelActionSelectPrev:
 			if s.editing || !s.visible || len(config.Fields()) == 0 {
 				continue
@@ -495,7 +338,7 @@ func (s *panelState) applyPanelEvents(events []debugPanelEvent, remote bool) (ch
 				s.selected = 0
 			}
 			direction := 1
-			if event.action == client.DebugPanelActionSelectPrev {
+			if event.op == client.DebugPanelActionSelectPrev {
 				direction = -1
 			}
 			s.moveSelection(config.Fields(), remote, direction)

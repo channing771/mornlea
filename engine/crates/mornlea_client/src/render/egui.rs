@@ -21,8 +21,6 @@
 
 use crate::ui::{UiEvent, UiFrame, UiOutputError, UiState};
 use egui::{Rect, pos2, vec2};
-#[cfg(test)]
-use std::sync::{Arc, atomic::AtomicUsize};
 
 /// 字体一次上传的字节上界(32 MiB;实际 Noto CJK OTF 约 16 MiB,留两倍余量)。
 pub const MAX_UI_FONT_BYTES: usize = 32 * 1024 * 1024;
@@ -47,8 +45,6 @@ pub struct EguiPass {
     screen: egui_wgpu::ScreenDescriptor,
     /// egui 上下文与点击事件队列(纯状态,无 GPU)。
     ui: UiState,
-    #[cfg(test)]
-    test_callback_probe: Option<Arc<AtomicUsize>>,
 }
 
 impl EguiPass {
@@ -85,8 +81,6 @@ impl EguiPass {
             renderer,
             screen,
             ui: UiState::new(),
-            #[cfg(test)]
-            test_callback_probe: None,
         }
     }
 
@@ -126,20 +120,6 @@ impl EguiPass {
         self.ui.has_frame_capacity(frame)
     }
 
-    /// 测试专用：用合法 action 填充输出队列，构造 renderer 外层容量失败。
-    #[cfg(test)]
-    pub(crate) fn test_fill_actions(&mut self, count: usize) {
-        self.ui.test_fill_actions(count);
-    }
-
-    /// 测试专用：让下一帧 egui 输出一个会返回独立 command buffer 的 callback。
-    #[cfg(test)]
-    pub(crate) fn test_emit_callback_buffer(&mut self) -> Arc<AtomicUsize> {
-        let probe = Arc::new(AtomicUsize::new(0));
-        self.test_callback_probe = Some(probe.clone());
-        probe
-    }
-
     /// 运行一帧菜单并在 encoder 上录制 egui pass。
     ///
     /// 输入事件 events 来自 crate::ui::take_ui_events(本帧已取走)。
@@ -154,7 +134,7 @@ impl EguiPass {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
-        frame_view: &wgpu::TextureView,
+        _frame_view: &wgpu::TextureView,
         frame: &UiFrame,
         events: Vec<UiEvent>,
     ) -> Result<(bool, Vec<wgpu::CommandBuffer>), EguiError> {
@@ -180,18 +160,6 @@ impl EguiPass {
             pixels_per_point,
             ..
         } = full;
-        #[cfg(test)]
-        let mut shapes = shapes;
-        #[cfg(test)]
-        if let Some(probe) = &self.test_callback_probe {
-            shapes.push(egui::epaint::ClippedShape {
-                clip_rect: screen_rect,
-                shape: egui::Shape::Callback(egui_wgpu::Callback::new_paint_callback(
-                    screen_rect,
-                    super::ui_replay_tests::TestCallback::new(probe.clone(), frame_view.clone()),
-                )),
-            });
-        }
 
         // 纹理增量先应用(渲染前),释放延迟到渲染后由 egui-wgpu 内部处理:
         // 菜单字形/图集纹理经 renderer.update_texture/free_texture 维护,
@@ -217,7 +185,7 @@ impl EguiPass {
         let pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("egui pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: frame_view,
+                view: _frame_view,
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {

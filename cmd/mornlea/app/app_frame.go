@@ -64,7 +64,7 @@ func (a *Application) updateItemPopup() hud.PopupOverlay {
 			a.popupSelection = hotbar.Selected
 		case hotbar.Selected != a.popupSelection:
 			a.popupSelection = hotbar.Selected
-			suppressed := a.inventoryOpen || a.menu.phase != MenuPhaseGame || a.menuOverride != nil
+			suppressed := a.inventoryOpen || a.menu.phase != MenuPhaseGame
 			if !suppressed {
 				if name, ok := core.ItemDisplayName(hotbar.Slots[hotbar.Selected].Item); ok {
 					a.itemPopup = hud.PopupOverlay{Text: name, ShownAtTick: a.serverTick, Valid: true}
@@ -79,7 +79,7 @@ func (a *Application) updateItemPopup() hud.PopupOverlay {
 	// 呈现抑制：界面打开或菜单相位期间一个字形都不产生（delta「容器与菜单
 	// 抑制」不只约束变化触发，也约束呈现）；已记录的弹条在相位恢复且仍在
 	// 40 tick 窗口内时继续显示剩余时长——抑制是隐藏而非清除。
-	if a.inventoryOpen || a.menu.phase != MenuPhaseGame || a.menuOverride != nil {
+	if a.inventoryOpen || a.menu.phase != MenuPhaseGame {
 		return hud.PopupOverlay{}
 	}
 	return popup
@@ -215,7 +215,7 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	// 准星只在游戏相位（主菜单、设置页、暂停覆盖层与菜单快照覆盖之外）呈现；
 	// HUD 段本身仍由 hudVisible 门控。
 	crosshair := hud.CrosshairOverlay{
-		Visible: a.menu.phase == MenuPhaseGame && a.menuOverride == nil,
+		Visible: a.menu.phase == MenuPhaseGame,
 	}
 	// 容器悬停 tooltip：界面打开时把本帧指针坐标传入渲染层，与点击命中同一
 	// 坐标源（`window.CursorPos`）；无头路径 window 为 nil，恒为无效输入，
@@ -263,12 +263,9 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 			return false, fmt.Errorf("准备快捷栏 HUD: %w", err)
 		}
 	}
-	var panelUISegment []byte
-	if a.panel != nil {
-		// 面板读数与参数行只构造一次：喂给 layout v3 段（egui 面板）。
-		readout, rows := a.panelFrameInput(time.Now())
-		panelUISegment = encodeDebugPanelSegment(a.panel.visible, a.panel.editing, readout, rows)
-	}
+	// 菜单层已迁 WebView:每帧一次「状态变化才下行」的 UI 状态推送,替代
+	// 旧的帧内 UI 段组装;无窗口(基准/capture)恒为空操作。
+	a.pushUIStateIfChanged()
 	a.scheduler.DropOutside(a.center, a.render.ViewDistance)
 	// 远环半部:跨 tile 边界增量入队 → BeginFrame → FlushUploads →
 	// DropOutside(远环半径)。全部非阻塞;禁用时 lodScheduler 为 nil,
@@ -341,12 +338,6 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		hudViewport, hudQuads, hudGlyphs := a.hotbarRenderer.FrameStreams()
 		hudSegment = client.EncodeQuadSegment(hudViewport, hudQuads, hudGlyphs, 48)
 	}
-	// UI 段：菜单相位走 layout v1/v2；游戏相位的调试面板走 layout v3，
-	// 两种相位互斥，优先级为菜单段优先。
-	uiSegment := a.uiSegment()
-	if uiSegment == nil {
-		uiSegment = panelUISegment
-	}
 	rendered := a.renderer.RenderFrame(client.RenderFrame{
 		ViewProj:         viewProj,
 		ViewProjInv:      viewProjInv,
@@ -365,7 +356,6 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		WaterTint:        underwater.Tint,
 		NameTagSegment:   nameTagSegment,
 		HUDSegment:       hudSegment,
-		UISegment:        uiSegment,
 	})
 	a.combatFeedback.AfterRender(rendered)
 	if !rendered {

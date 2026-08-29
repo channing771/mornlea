@@ -17,7 +17,7 @@ use winit::platform::pump_events::EventLoopExtPumpEvents;
 use winit::window::{CursorGrabMode, Window, WindowId, WindowLevel};
 
 use crate::input::InputState;
-use crate::ui;
+use crate::webview::MenuWebview;
 
 /// 窗口创建失败的稳定原因,FFI 层统一转为错误状态码。
 #[derive(Debug)]
@@ -38,11 +38,6 @@ struct App {
     /// IME 组合是否激活;激活期间按键的 `text` 不直接入队,以 `Ime::Commit`
     /// 为准,避免组合过程中的重复字符。
     ime_active: bool,
-    /// 菜单 UI 事件桥当前累积的修饰键状态(Shift/Control/Alt 左变体)。
-    ///
-    /// 由 [`ui::winit_to_ui_events`] 在每个键盘事件处理点先更新再发射,是
-    /// 进程内持续状态;与 `InputState` 的游戏按键状态彼此独立。
-    ui_modifiers: egui::Modifiers,
 }
 
 impl App {
@@ -54,7 +49,6 @@ impl App {
             width,
             height,
             ime_active: false,
-            ui_modifiers: egui::Modifiers::default(),
         }
     }
 
@@ -108,21 +102,11 @@ impl ApplicationHandler for App {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
-        // UI 事件桥:把 winit 事件翻译为 [`UiEvent`] 并压入输入队列,与游戏
-        // 输入(InputState)并存。`scale` 与既有 `InputState` 的
-        // `CursorMoved` 换算一致;这里**不判断菜单可见性**(渲染侧每帧 take,
-        // 菜单不可见时事件被丢弃是设计)。修饰键状态经
-        // [`ui::winit_to_ui_events`] 在此进程内累积。
-        let scale = self.window.as_ref().map_or(1.0_f64, |w| w.scale_factor());
-        for ui_event in ui::winit_to_ui_events(
-            std::slice::from_ref(&event),
-            scale,
-            self.ime_active,
-            &mut self.ui_modifiers,
-        ) {
-            ui::push_ui_event(ui_event);
-        }
-
+        // 菜单层输入已迁 WebView:菜单相位下 WebView 是 firstResponder,键盘
+        // 与指针在本窗口路径天然静默,经桥上行;游戏相位 WebView 隐藏并把
+        // firstResponder 归还 winit 视图,本路径恢复独占采集。旧 egui 的
+        // winit→UI 事件翻译随 egui 停用一并移除(`ui` 模块待 egui 退役时
+        // 删除)。
         match event {
             WindowEvent::CloseRequested => self.input.request_close(),
             WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
@@ -187,6 +171,12 @@ impl ApplicationHandler for App {
 pub struct ClientWindow {
     event_loop: EventLoop<()>,
     app: App,
+    /// 菜单层 WebView;首个菜单状态推送时惰性挂载(基准/capture 等从不
+    /// 推送的进程保持 None,零参与)。
+    webview: Option<MenuWebview>,
+    /// 挂载失败哨兵:非主线程或视图句柄缺失等失败不可自愈,置位后不再
+    /// 重试——上层按「无 WebView」降级,菜单呈现在此类环境缺席。
+    webview_attach_failed: bool,
 }
 
 impl ClientWindow {
@@ -198,7 +188,55 @@ impl ClientWindow {
         if app.window.is_none() {
             return Err(CreateError::Window);
         }
-        Ok(Self { event_loop, app })
+        Ok(Self {
+            event_loop,
+            app,
+            webview: None,
+            webview_attach_failed: false,
+        })
+    }
+
+    /// 下行菜单状态推送:首次「需要可见」的状态推送时把 WebView 挂到本窗口
+    /// 的 contentView 之上(此后生命周期由 WebView 自管);游戏相位的推送在
+    /// WebView 尚未挂载时是纯校验空操作——`-connect` 直进游戏与基准/capture
+    /// 路径因此永不创建 WebView,零参与。挂载失败的环境里按「无 WebView」
+    /// 降级。JSON 非法(非 UTF-8/缺 phase)返回 false,由 FFI 层转参数错误。
+    pub fn push_ui_state(&mut self, json: &[u8]) -> bool {
+        let wants_visible = match crate::webview::state_wants_visible(json) {
+            Ok(wants_visible) => wants_visible,
+            Err(_) => return false,
+        };
+        if self.webview.is_none() && !self.webview_attach_failed {
+            if !wants_visible {
+                // 状态合法但无需呈现:不挂载、不报错(纯校验空操作)。
+                return true;
+            }
+            let (ns_window, ns_view) = match (self.ns_window(), self.ns_view()) {
+                (Some(ns_window), Some(ns_view)) => (ns_window, ns_view),
+                // 句柄未注册(窗口已销毁或非本线程表)视为无窗口降级:推送
+                // 被接受但不挂载,不向 FFI 层报参数错误。
+                _ => {
+                    self.webview_attach_failed = true;
+                    return true;
+                }
+            };
+            // SAFETY: 两个指针来自活动窗口句柄,本方法与窗口创建同线程
+            // (FFI thread-local 约束),attach 内部再验主线程。
+            match unsafe {
+                MenuWebview::attach(
+                    ns_window as *mut objc2::runtime::AnyObject,
+                    ns_view as *mut objc2::runtime::AnyObject,
+                )
+            } {
+                Some(webview) => self.webview = Some(webview),
+                None => self.webview_attach_failed = true,
+            }
+        }
+        match &mut self.webview {
+            Some(webview) => webview.push_state(json).is_ok(),
+            // 挂载失败后的降级路径:推送被接受但不产生任何呈现。
+            None => true,
+        }
     }
 
     /// 每帧一次:泵完积压事件并把输入快照编码进 `out`
@@ -270,18 +308,28 @@ impl ClientWindow {
         self.app.window.clone()
     }
 
-    /// 返回 NSWindow 指针供 gfx 创建 Metal surface。
-    ///
-    /// winit 的 raw-window-handle 只暴露 NSView;此处经 objc `[view window]`
-    /// 取回 NSWindow,与旧 GLFW `GetCocoaWindow` 语义一致,gfx 零改动。
-    pub fn ns_window(&self) -> Option<usize> {
+    /// 返回本窗口的 NSView(winit 渲染视图)指针,供 WebView 挂载与游戏
+    /// 相位归还 firstResponder。
+    pub fn ns_view(&self) -> Option<usize> {
         use raw_window_handle::{HasWindowHandle, RawWindowHandle};
         let window = self.app.window.as_ref()?;
         let handle = window.window_handle().ok()?.as_raw();
         let RawWindowHandle::AppKit(appkit) = handle else {
             return None;
         };
-        let ns_view: *mut objc2::runtime::AnyObject = appkit.ns_view.as_ptr().cast();
+        let ns_view = appkit.ns_view.as_ptr().cast::<objc2::runtime::AnyObject>();
+        if ns_view.is_null() {
+            return None;
+        }
+        Some(ns_view as usize)
+    }
+
+    /// 返回 NSWindow 指针供 gfx 创建 Metal surface。
+    ///
+    /// winit 的 raw-window-handle 只暴露 NSView;此处经 objc `[view window]`
+    /// 取回 NSWindow,与旧 GLFW `GetCocoaWindow` 语义一致,gfx 零改动。
+    pub fn ns_window(&self) -> Option<usize> {
+        let ns_view = self.ns_view()? as *mut objc2::runtime::AnyObject;
         // SAFETY: ns_view 来自活动窗口的有效句柄,`window` 消息在主线程发送。
         let ns_window: *mut objc2::runtime::AnyObject =
             unsafe { objc2::msg_send![ns_view, window] };

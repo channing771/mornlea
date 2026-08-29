@@ -84,7 +84,6 @@ type SceneApplication interface {
 	// UI 相位与菜单覆盖。
 	SetInventoryOpen(open bool)
 	SetInventorySource(source int)
-	SetMenuOverride(override *client.UIMenu)
 	SetMenuPhase(phase application.MenuPhase)
 	SetSettings(settings application.SettingsState)
 	Panel() *application.PanelState

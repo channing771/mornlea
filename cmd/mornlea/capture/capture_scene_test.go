@@ -829,7 +829,7 @@ func TestTorchNightCaptureSceneIsRegistered(t *testing.T) {
 	if scene.WarmupFrames != 8 {
 		t.Fatalf("torch-night WarmupFrames=%d，想要 8", scene.WarmupFrames)
 	}
-	if scene.HUD != nil || scene.Menu != nil || scene.Settings != nil || scene.PinVolatile != nil {
+	if scene.HUD != nil || scene.Menu || scene.Settings != nil || scene.PinVolatile != nil {
 		t.Fatalf("torch-night 不应携带 HUD/菜单/设置/易变钉住夹具: %+v", scene)
 	}
 }
@@ -1160,7 +1160,7 @@ func TestBedNightCaptureSceneIsRegistered(t *testing.T) {
 	if scene.WarmupFrames != 8 {
 		t.Fatalf("bed-night WarmupFrames=%d，想要 8", scene.WarmupFrames)
 	}
-	if scene.HUD != nil || scene.Menu != nil || scene.Settings != nil || scene.PinVolatile != nil {
+	if scene.HUD != nil || scene.Menu || scene.Settings != nil || scene.PinVolatile != nil {
 		t.Fatalf("bed-night 不应携带 HUD/菜单/设置/易变钉住夹具: %+v", scene)
 	}
 }

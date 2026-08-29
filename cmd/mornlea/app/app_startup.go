@@ -341,12 +341,8 @@ func NewWithDependencies(
 	app.hotbarRenderer = hud.NewHotbarLayout(app.glyphAtlas, reg)
 	hudWidth, hudHeight, hudPixels := app.hotbarRenderer.AtlasPixels()
 	rustRenderer.UploadHUDAtlas(hudWidth, hudHeight, hudPixels)
-	// 菜单字体一次性上传：交互与 capture 路径（未 benchmark）在渲染器创建后上传内嵌
-	// Noto CJK，供 egui 主菜单渲染（spec「菜单字体只经 ABI 上传一次」）；benchmark 不参与
-	// 菜单、零上传。上传发生在任何 UI 段被渲染之前，否则 Rust 侧会以编程错误拒绝 UI 帧。
-	if !options.Benchmark {
-		rustRenderer.UploadUIFont(render.EmbeddedCJKFont())
-	}
+	// 菜单层已迁 WebView(client ABI v12):不再上传菜单字体;菜单 chrome 由
+	// 桥下行状态驱动 WebView 呈现,benchmark 路径零参与。
 	if options.Dev {
 		// 面板的初始生效值取当前已生效的 physics/sim 快照（main.go 在构造
 		// Application 之前已经调用过 config.Config.Apply）与调用方传入的

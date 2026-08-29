@@ -210,9 +210,9 @@ type Application struct {
 	// 可信服）内持的权威世界，远程 TCP 形态恒为 nil。nil 即「本会话无权威模拟
 	// 可冻结」，开层只呈现、不调用任何服务端接口。
 	pauseGate applicationPauseGate
-	// menuOverride 是 capture 场景注入的一帧菜单快照；非 nil 时 uiSegment 优先采用它，
-	// 交互路径保持 nil（正常相位逻辑）。每个场景在 Prepare 前设置或清除，无 teardown。
-	menuOverride *client.UIMenu
+	// pushedUIState 是上次下行的 UI 状态 JSON 原文,驱动「状态变化才推送」
+	// 的事件驱动语义(见 app_ui_state.go);零值表示尚未推送过任何状态。
+	pushedUIState string
 }
 
 type Window interface {
@@ -230,6 +230,9 @@ type Window interface {
 	SetContentSize(int, int)
 	CancelClose()
 	Close()
+	// PushUIState 下行一份菜单层 UI 状态 JSON(client ABI v12);测试桩
+	// 记录调用供断言,无头实现可空操作。
+	PushUIState([]byte)
 }
 
 type Host interface {

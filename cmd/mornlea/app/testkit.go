@@ -83,9 +83,6 @@ func NewOffscreenRenderApplicationForTest(
 	reg := assets.NewDefaultRegistry()
 	layers, pixels := reg.AtlasPixels()
 	renderer.UploadAtlas(layers, pixels)
-	// 与非 benchmark 渲染器保持一致：UI 字体先上传，否则面板可见的游戏
-	// 相位帧携带 layout v3 段时被 Rust 以缺字体拒绝。
-	renderer.UploadUIFont(render.EmbeddedCJKFont())
 	application := &Application{
 		renderer:        renderer,
 		scheduler:       render.NewSectionScheduler(renderer, applicationUploadPerFrame),

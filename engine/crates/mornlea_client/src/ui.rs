@@ -975,16 +975,6 @@ impl UiState {
             .has_frame_capacity(max_output_events_per_frame(frame))
     }
 
-    /// 测试专用：用合法 action 填充输出队列。
-    #[cfg(test)]
-    pub(crate) fn test_fill_actions(&mut self, count: usize) {
-        for action in 0..count {
-            self.pending_events
-                .enqueue(UiOutputEvent::Action(action as u32))
-                .expect("测试填充不得超过输出队列上限");
-        }
-    }
-
     /// 运行一帧 UI:无字体或当前布局不可见时返回 `None`(零工作)。
     ///
     /// `pixels_per_point` 被写进 ROOT 视口的 `native_pixels_per_point`,

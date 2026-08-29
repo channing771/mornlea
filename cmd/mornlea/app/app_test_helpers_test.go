@@ -25,6 +25,14 @@ import (
 
 type fakeInteractiveWindow struct {
 	captured bool
+	// pushedUIStates 记录 PushUIState 收到的下行状态原文,供「状态变化才
+	// 推送」断言复用。
+	pushedUIStates [][]byte
+}
+
+// PushUIState 记录一份下行 UI 状态(桥下行;替身不做任何呈现)。
+func (window *fakeInteractiveWindow) PushUIState(payload []byte) {
+	window.pushedUIStates = append(window.pushedUIStates, append([]byte(nil), payload...))
 }
 
 func (window *fakeInteractiveWindow) SetCursorCaptured(captured bool) {
