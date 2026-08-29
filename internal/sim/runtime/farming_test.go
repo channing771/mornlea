@@ -155,7 +155,7 @@ func TestTillInWaterRangePublishesWetFarmland(t *testing.T) {
 	water := tillTarget
 	water.X += farmlandWetRadius
 	placeContainedWater(t, engine, water)
-	engine.farmlandMoisture = farmlandMoistureState{}
+	engine.realm.ResetFarmlandMoisture()
 
 	result := till(engine, session, yaw, pitch)
 
@@ -213,11 +213,8 @@ func TestTillRejectsWhenBlockAboveIsNotAir(t *testing.T) {
 			full, _ := core.ItemMaxDurability(core.ItemStoneHoe)
 			held := core.ItemStack{Item: core.ItemStoneHoe, Count: 1, Durability: full}
 			engine, session, yaw, pitch := readyTillPlayer(t, held, core.DirtID, tc.above)
-			engine.farmlandMoisture = farmlandMoistureState{}
-			watch := watchFarmlandMoistureCandidateAtPhase(engine, farmlandMoistureKey{
-				dimension: core.Overworld,
-				position:  tillTarget,
-			})
+			engine.realm.ResetFarmlandMoisture()
+			watch := watchFarmlandMoistureCandidateAtPhase(engine, core.Overworld, tillTarget)
 
 			result := till(engine, session, yaw, pitch)
 			engine.stepPhaseObserver = nil
@@ -260,11 +257,8 @@ func TestTillRejectsNonHoeHeldItems(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			engine, session, yaw, pitch := readyTillPlayer(t, tc.held, core.GrassID, core.AirID)
-			engine.farmlandMoisture = farmlandMoistureState{}
-			watch := watchFarmlandMoistureCandidateAtPhase(engine, farmlandMoistureKey{
-				dimension: core.Overworld,
-				position:  tillTarget,
-			})
+			engine.realm.ResetFarmlandMoisture()
+			watch := watchFarmlandMoistureCandidateAtPhase(engine, core.Overworld, tillTarget)
 
 			result := till(engine, session, yaw, pitch)
 			engine.stepPhaseObserver = nil
@@ -303,11 +297,8 @@ func TestTillRejectsTargetsThatAreNotDirtOrGrass(t *testing.T) {
 		full, _ := core.ItemMaxDurability(core.ItemIronHoe)
 		held := core.ItemStack{Item: core.ItemIronHoe, Count: 1, Durability: full}
 		engine, session, yaw, pitch := readyTillPlayer(t, held, target, core.AirID)
-		engine.farmlandMoisture = farmlandMoistureState{}
-		watch := watchFarmlandMoistureCandidateAtPhase(engine, farmlandMoistureKey{
-			dimension: core.Overworld,
-			position:  tillTarget,
-		})
+		engine.realm.ResetFarmlandMoisture()
+		watch := watchFarmlandMoistureCandidateAtPhase(engine, core.Overworld, tillTarget)
 
 		result := till(engine, session, yaw, pitch)
 		engine.stepPhaseObserver = nil

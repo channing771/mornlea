@@ -224,7 +224,7 @@ func (engine *Engine) executePlacement(
 			pending,
 		)
 		if core.IsFluid(block) != core.IsFluid(placement) {
-			engine.enqueueFarmlandMoistureAroundFluid(dimensionID, target)
+			engine.realm.EnqueueFarmlandMoistureAroundFluid(dimensionID, target)
 		}
 		if reserveFurnace {
 			targetChunk.CommitFurnace(furnaceSlot, targetIndex)

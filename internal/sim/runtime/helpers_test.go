@@ -65,11 +65,12 @@ type farmlandMoistureCandidateWatch struct {
 	candidateSeen bool
 }
 
-// watchFarmlandMoistureCandidateAtPhase 在 `advanceFarmlandMoisture` 消费队列前，
+// watchFarmlandMoistureCandidateAtPhase 在 `realm.AdvanceFarmlandMoisture` 消费队列前，
 // 记录 `key` 是否曾经位于去重集合中。
 func watchFarmlandMoistureCandidateAtPhase(
 	engine *Engine,
-	key farmlandMoistureKey,
+	dimension core.DimensionID,
+	position core.BlockPos,
 ) *farmlandMoistureCandidateWatch {
 	watch := &farmlandMoistureCandidateWatch{}
 	engine.stepPhaseObserver = func(phase stepPhase) {
@@ -77,7 +78,7 @@ func watchFarmlandMoistureCandidateAtPhase(
 			return
 		}
 		watch.phaseSeen = true
-		if _, queued := engine.farmlandMoisture.queued[key]; queued {
+		if engine.realm.FarmlandQueued(dimension, position) {
 			watch.candidateSeen = true
 		}
 	}

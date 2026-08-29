@@ -10,6 +10,11 @@ import (
 	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
+const (
+	farmlandWetRadius            = 4
+	farmlandMoistureReadsPerTick = 65_536
+)
+
 // farmlandMoistureFluidAdapter 构造真实的流体写入适配器，并把目标格六邻中的空气
 // 封成石头，保证写入的水不会在夹具外自行流动。
 func farmlandMoistureFluidAdapter(
@@ -42,16 +47,49 @@ func TestFarmlandMoistureFluidMembershipChanges(t *testing.T) {
 	adapter := farmlandMoistureFluidAdapter(t, engine, water)
 
 	adapter.SetBlock(water, core.WaterSourceID)
-	engine.advanceFarmlandMoisture(adapter.pending)
+	advanceFarmlandMoistureForTest(t, engine, adapter.pending)
 	if got := cropBlockAt(t, engine, farmland); got != core.FarmlandWetID {
 		t.Fatalf("同 tick 放水后耕地=%s，想要湿耕地", blockLabel(got))
 	}
 
 	adapter.SetBlock(water, core.AirID)
-	engine.advanceFarmlandMoisture(adapter.pending)
+	advanceFarmlandMoistureForTest(t, engine, adapter.pending)
 	if got := cropBlockAt(t, engine, farmland); got != core.FarmlandDryID {
 		t.Fatalf("同 tick 失水后耕地=%s，想要干耕地", blockLabel(got))
 	}
+}
+
+// TestFarmlandMoistureRepeatedFluidEventsUseRealmQueue 锁定重复流体事件不能被过期的
+// runtime 去重状态吞掉：第一次事件由 realm 消费后，第二次同位置事件仍必须生效。
+func TestFarmlandMoistureRepeatedFluidEventsUseRealmQueue(t *testing.T) {
+	engine, _ := readyCropWorld(t)
+	farmland := cropFixtureFarmland
+	water := farmland
+	water.X += farmlandWetRadius
+	engine.SetBlockForTest(farmland, core.FarmlandDryID)
+	adapter := farmlandMoistureFluidAdapter(t, engine, water)
+	engine.realm.ResetFarmlandMoisture()
+
+	adapter.SetBlock(water, core.WaterSourceID)
+	advanceFarmlandMoistureForTest(t, engine, adapter.pending)
+	if got := cropBlockAt(t, engine, farmland); got != core.FarmlandWetID {
+		t.Fatalf("首次放水后耕地=%s，想要湿耕地", blockLabel(got))
+	}
+
+	adapter.pending = engine.newMutation()
+	adapter.SetBlock(water, core.AirID)
+	advanceFarmlandMoistureForTest(t, engine, adapter.pending)
+	if got := cropBlockAt(t, engine, farmland); got != core.FarmlandDryID {
+		t.Fatalf("第二次流体事件后耕地=%s，想要干耕地", blockLabel(got))
+	}
+}
+
+func advanceFarmlandMoistureForTest(t *testing.T, engine *Engine, pending *pendingChunkChanges) {
+	t.Helper()
+	engine.realm.AdvanceFarmlandMoisture(
+		engine.activeInterestKeys(),
+		engine.realm.NewEnvironmentMutation(pending, engine.tick.Load(), realm.EnvironmentConfig{}),
+	)
 }
 
 // TestPlayerPlacementRemovingLastIrrigationDriesFarmlandSameTick 锁定普通玩家放置
@@ -68,7 +106,7 @@ func TestPlayerPlacementRemovingLastIrrigationDriesFarmlandSameTick(t *testing.T
 		}
 		engine.Step()
 	}
-	if pending := engine.realm.FarmlandMoisturePendingLen() - engine.farmlandMoisture.head; pending != 0 {
+	if pending := engine.realm.FarmlandMoisturePendingLen() - engine.realm.FarmlandMoistureHead(); pending != 0 {
 		t.Fatalf("放置前仍有 %d 个旧湿度候选", pending)
 	}
 
@@ -86,10 +124,7 @@ func TestPlayerPlacementRemovingLastIrrigationDriesFarmlandSameTick(t *testing.T
 	player.inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 2}
 	eye := player.state.Position.Add(mgl32.Vec3{0, engine.physicsTunables.EyeHeight, 0})
 	yaw, pitch := lookAtBlockCenter(eye, support)
-	watch := watchFarmlandMoistureCandidateAtPhase(engine, farmlandMoistureKey{
-		dimension: core.Overworld,
-		position:  farmland,
-	})
+	watch := watchFarmlandMoistureCandidateAtPhase(engine, core.Overworld, farmland)
 
 	engine.Enqueue(Command{
 		Session: session, Sequence: 2, Kind: CommandPlaceBlock,
@@ -149,7 +184,7 @@ func TestFarmlandMoistureFluidBoundaries(t *testing.T) {
 			adapter := farmlandMoistureFluidAdapter(t, engine, water)
 
 			adapter.SetBlock(water, core.WaterSourceID)
-			engine.advanceFarmlandMoisture(adapter.pending)
+			advanceFarmlandMoistureForTest(t, engine, adapter.pending)
 			if got := cropBlockAt(t, engine, farmland); got != tc.want {
 				t.Fatalf("真实流体写入后耕地=%s，想要 %s", blockLabel(got), blockLabel(tc.want))
 			}
@@ -164,7 +199,6 @@ func TestFarmlandMoistureFluidLevelChangeDoesNotEnqueue(t *testing.T) {
 	water.X += farmlandWetRadius
 	adapter := farmlandMoistureFluidAdapter(t, engine, water)
 	engine.SetBlockForTest(water, core.WaterSourceID)
-	engine.farmlandMoisture = farmlandMoistureState{}
 	engine.realm.ResetFarmlandMoisture()
 
 	adapter.SetBlock(water, core.WaterLevel1ID)
@@ -189,7 +223,7 @@ func TestFarmlandMoistureFluidFloodedCropMembershipChange(t *testing.T) {
 	if got := cropBlockAt(t, engine, water); got != core.WaterSourceID {
 		t.Fatalf("作物冲毁后目标=%s，想要水源", blockLabel(got))
 	}
-	engine.advanceFarmlandMoisture(adapter.pending)
+	advanceFarmlandMoistureForTest(t, engine, adapter.pending)
 	if got := cropBlockAt(t, engine, farmland); got != core.FarmlandWetID {
 		t.Fatalf("作物冲毁产生流体后耕地=%s，想要湿耕地", blockLabel(got))
 	}
@@ -204,7 +238,7 @@ func TestFarmlandMoistureFluidCrossChunkBoundary(t *testing.T) {
 	adapter := farmlandMoistureFluidAdapter(t, engine, water)
 
 	adapter.SetBlock(water, core.WaterSourceID)
-	engine.advanceFarmlandMoisture(adapter.pending)
+	advanceFarmlandMoistureForTest(t, engine, adapter.pending)
 	if got := cropBlockAt(t, engine, farmland); got != core.FarmlandWetID {
 		t.Fatalf("跨区块真实流体写入后耕地=%s，想要湿耕地", blockLabel(got))
 	}
@@ -259,7 +293,6 @@ func TestFarmlandMoistureReentryRestartsRescan(t *testing.T) {
 	engine, sessions := readyCropWorldAt(t, center, right)
 	engine.SetBlockForTest(farmland, core.FarmlandWetID)
 	placeContainedWater(t, engine, water)
-	engine.farmlandMoisture = farmlandMoistureState{}
 	engine.realm.ResetFarmlandMoisture()
 	step := func(stage string) TickResult {
 		result := engine.Step()
@@ -338,14 +371,13 @@ func TestFarmlandMoistureReentryRestartsRescan(t *testing.T) {
 	if got := cropBlockAt(t, engine, farmland); got != core.FarmlandDryID {
 		t.Fatalf("再次重入前耕地=%s，想要强制的陈旧干耕地", blockLabel(got))
 	}
-	farmlandKey := farmlandMoistureKey{dimension: core.Overworld, position: farmland}
-	if queued := engine.realm.FarmlandQueued(farmlandKey.dimension, farmlandKey.position); queued {
+	if queued := engine.realm.FarmlandQueued(core.Overworld, farmland); queued {
 		t.Fatal("再次重入前已有耕地候选，无法证明恢复来自重扫")
 	}
 	if cursor := restore(sessions[1]); cursor != farmlandMoistureReadsPerTick {
 		t.Fatalf("再次重入游标=%d，想要从零推进到 %d", cursor, farmlandMoistureReadsPerTick)
 	}
-	if queued := engine.realm.FarmlandQueued(farmlandKey.dimension, farmlandKey.position); !queued {
+	if queued := engine.realm.FarmlandQueued(core.Overworld, farmland); !queued {
 		t.Fatal("再次重入的重扫没有发现并登记边界耕地")
 	}
 	for range 8 {
@@ -369,7 +401,6 @@ func TestFarmlandMoistureReentryRecoversStaleWetFarmland(t *testing.T) {
 	engine, sessions := readyCropWorldAt(t, center, right)
 	engine.SetBlockForTest(farmland, core.FarmlandWetID)
 	placeContainedWater(t, engine, water)
-	engine.farmlandMoisture = farmlandMoistureState{}
 	engine.realm.ResetFarmlandMoisture()
 	step := func(stage string) TickResult {
 		result := engine.Step()
@@ -398,8 +429,7 @@ func TestFarmlandMoistureReentryRecoversStaleWetFarmland(t *testing.T) {
 	}
 	waterX, _, waterZ := water.Local()
 	rightInfo.Chunk.SetBlock(waterX, water.Y, waterZ, core.AirID)
-	farmlandKey := farmlandMoistureKey{dimension: core.Overworld, position: farmland}
-	if queued := engine.realm.FarmlandQueued(farmlandKey.dimension, farmlandKey.position); queued {
+	if queued := engine.realm.FarmlandQueued(core.Overworld, farmland); queued {
 		t.Fatal("邻块重入前已有耕地候选，无法证明恢复来自重扫")
 	}
 
@@ -426,7 +456,7 @@ func TestFarmlandMoistureReentryRecoversStaleWetFarmland(t *testing.T) {
 					blockReady, blockLabel(block))
 			}
 		}
-		if queued := engine.realm.FarmlandQueued(farmlandKey.dimension, farmlandKey.position); queued {
+		if queued := engine.realm.FarmlandQueued(core.Overworld, farmland); queued {
 			queuedByRescan = true
 		}
 		if cropBlockAt(t, engine, farmland) != core.FarmlandDryID {
@@ -456,7 +486,7 @@ func TestFarmlandTurnsWetWithWaterInRange(t *testing.T) {
 	adapter := farmlandMoistureFluidAdapter(t, engine, water)
 
 	adapter.SetBlock(water, core.WaterSourceID)
-	engine.advanceFarmlandMoisture(adapter.pending)
+	advanceFarmlandMoistureForTest(t, engine, adapter.pending)
 	if got := cropBlockAt(t, engine, farmland); got != core.FarmlandWetID {
 		t.Fatalf("同 tick 放水后耕地=%s，范围内有水时必须变湿", blockLabel(got))
 	}
@@ -474,13 +504,13 @@ func TestFarmlandTurnsDryAfterWaterRemoved(t *testing.T) {
 	adapter := farmlandMoistureFluidAdapter(t, engine, water)
 
 	adapter.SetBlock(water, core.WaterSourceID)
-	engine.advanceFarmlandMoisture(adapter.pending)
+	advanceFarmlandMoistureForTest(t, engine, adapter.pending)
 	if got := cropBlockAt(t, engine, farmland); got != core.FarmlandWetID {
 		t.Fatalf("前置失败：放水后耕地=%s，「变干」无从谈起", blockLabel(got))
 	}
 
 	adapter.SetBlock(water, core.AirID)
-	engine.advanceFarmlandMoisture(adapter.pending)
+	advanceFarmlandMoistureForTest(t, engine, adapter.pending)
 	if got := cropBlockAt(t, engine, farmland); got != core.FarmlandDryID {
 		t.Fatalf("同 tick 移除最后一格水后耕地=%s，范围内无水时必须变干", blockLabel(got))
 	}
@@ -517,7 +547,7 @@ func TestFarmlandWetnessRangeBoundary(t *testing.T) {
 			adapter := farmlandMoistureFluidAdapter(t, engine, water)
 
 			adapter.SetBlock(water, core.WaterSourceID)
-			engine.advanceFarmlandMoisture(adapter.pending)
+			advanceFarmlandMoistureForTest(t, engine, adapter.pending)
 			if got := cropBlockAt(t, engine, farmland); got != tc.want {
 				t.Fatalf("同 tick 真实流体写入后耕地=%s，想要 %s",
 					blockLabel(got), blockLabel(tc.want))
@@ -543,7 +573,7 @@ func TestFarmlandWetnessCrossesChunkBoundary(t *testing.T) {
 	adapter := farmlandMoistureFluidAdapter(t, engine, cropCrossWater)
 
 	adapter.SetBlock(cropCrossWater, core.WaterSourceID)
-	engine.advanceFarmlandMoisture(adapter.pending)
+	advanceFarmlandMoistureForTest(t, engine, adapter.pending)
 	if got := cropBlockAt(t, engine, cropCrossFarmland); got != core.FarmlandWetID {
 		t.Fatalf("同 tick 邻块放水后耕地=%s：湿润窗口没有读进相邻区块", blockLabel(got))
 	}

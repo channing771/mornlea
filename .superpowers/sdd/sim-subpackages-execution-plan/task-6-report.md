@@ -1,8 +1,8 @@
 # Task 6 Report — Entity State And Lifecycle Migration
 
-**Branch:** `refactor/sim-subpackages`  
-**Commit:** `4b9794002ed7c282fb8f41aa6f1cef86ab5ffabb` `refactor(sim): extract entity package for actor, player, companion and hostile lifecycle`  
-**Worktree:** `/Users/chen/work/mornlea/.worktrees/sim-subpackages`  
+**Branch:** `refactor/sim-subpackages`
+**Commit:** `4b9794002ed7c282fb8f41aa6f1cef86ab5ffabb` `refactor(sim): extract entity package for actor, player, companion and hostile lifecycle`
+**Worktree:** `/Users/chen/work/mornlea/.worktrees/sim-subpackages`
 **Date:** 2026-08-29
 
 ## Summary
@@ -159,7 +159,7 @@ github.com/channing771/mornlea/internal/sim/entity:
 
 # Repair Round 1 — 2026-08-29
 
-**Commit:** `4ff016e1308f3dd430e9b4ef6659f0acebbad3c4` `fix(sim): use concrete mutation and tunables snapshot in entity`  
+**Commit:** `4ff016e1308f3dd430e9b4ef6659f0acebbad3c4` `fix(sim): use concrete mutation and tunables snapshot in entity`
 **Review blocking items:** 4 Critical + 2 Important
 
 ## Fixes

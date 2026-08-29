@@ -325,11 +325,8 @@ func fillFluidCropDropSlots(t *testing.T, engine *Engine) {
 func TestFluidCropCapacityFullRejectsAndRetriesUntilSlotFreed(t *testing.T) {
 	engine, session := readyFluidCropWorld(t, core.WheatStage3ID)
 	fillFluidCropDropSlots(t, engine)
-	engine.farmlandMoisture = farmlandMoistureState{}
-	watch := watchFarmlandMoistureCandidateAtPhase(engine, farmlandMoistureKey{
-		dimension: core.Overworld,
-		position:  fluidCropFarmland,
-	})
+	engine.realm.ResetFarmlandMoisture()
+	watch := watchFarmlandMoistureCandidateAtPhase(engine, core.Overworld, fluidCropFarmland)
 	full := fluidCropChunkSlots(engine)
 	active := 0
 	for _, view := range full {

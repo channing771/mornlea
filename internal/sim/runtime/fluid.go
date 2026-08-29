@@ -136,13 +136,13 @@ func (w *fluidWorld) SetBlock(position core.BlockPos, id core.BlockID) {
 	if settleFloodedCrop(w, chunk, position, old, id) {
 		// 冲毁可能因掉落容量不足而拒绝写入，必须读回最终值后再判定 membership。
 		if next := chunk.BlockAt(x, position.Y, z); core.IsFluid(old) != core.IsFluid(next) {
-			w.engine.enqueueFarmlandMoistureAroundFluid(w.id, position)
+			w.engine.realm.EnqueueFarmlandMoistureAroundFluid(w.id, position)
 		}
 		return
 	}
 	chunk.SetBlock(x, position.Y, z, id)
 	if core.IsFluid(old) != core.IsFluid(id) {
-		w.engine.enqueueFarmlandMoistureAroundFluid(w.id, position)
+		w.engine.realm.EnqueueFarmlandMoistureAroundFluid(w.id, position)
 	}
 	w.engine.recordChange(w.id, position, id, w.pending)
 }

@@ -569,10 +569,6 @@ func (engine *Engine) Step() TickResult {
 			engine.fluidScope[k] = v
 		}
 	}
-	// 同步 farmland 统计与 rescans 供白盒测试观测；pending/head/queued 通过 realm API 观测
-	engine.farmlandMoisture.blockReads = engine.realm.FarmlandBlockReads()
-	engine.farmlandMoisture.candidateInspections = engine.realm.FarmlandCandidateInspections()
-	engine.farmlandMoisture.rescans.cursor = engine.realm.FarmlandRescanCursor()
 	engine.notifyStepPhase(phaseCropAdvance)
 	// 作物随机 tick 紧跟湿度阶段，因此生长判定能读到同 tick 最终的耕地编号。
 	// 三个阶段的写入共用 `pending`，在 finishChanges 前按位置合并为一次发布。

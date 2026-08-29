@@ -66,9 +66,6 @@ type Engine struct {
 	fluidDimensionScratch []core.DimensionID
 	// fluidRescan 是跨 tick 的边界重扫待办，见 fluidRescanState。
 	fluidRescan fluidRescanState
-	// farmlandMoisture 是耕地湿度候选与恢复重扫的瞬态状态，只由权威 tick 读写。
-	farmlandMoisture farmlandMoistureState
-
 	// cropCellScratch 是作物随机 tick 抽样下标的复用缓冲；抽样每 tick 执行
 	// 「活动区块数 × 24 个区段」次，不复用就会在权威 tick 上产生同量级的分配。
 	cropCellScratch []int

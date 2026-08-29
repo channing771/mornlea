@@ -1,8 +1,8 @@
 # Task 5 Report — Realm Environmental Migration
 
-**Branch:** `refactor/sim-subpackages`  
-**Commit:** `e6252dc3` `refactor(sim): migrate environmental logic to realm`  
-**Worktree:** `/Users/chen/work/mornlea/.worktrees/sim-subpackages`  
+**Branch:** `refactor/sim-subpackages`
+**Commit:** `e6252dc3` `refactor(sim): migrate environmental logic to realm`
+**Worktree:** `/Users/chen/work/mornlea/.worktrees/sim-subpackages`
 **Date:** 2026-08-29
 
 ## Summary
