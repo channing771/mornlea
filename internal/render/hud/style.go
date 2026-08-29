@@ -9,8 +9,8 @@ package hud
 // 标题、火焰、箭头）的 [4]byte 像素调色板是声明内的例外：它们是逐像素 mask
 // 的语义色族，留在各自 painter 文件里，由图集 mask 测试按色族守护。
 //
-// 强调色纪律：`accentAmber` 只允许出现在「选中、进度、产物、tooltip 标记」
-// 四类语义；警告与错误沿用既有红/橙语义色；不得引入第二种强调色相。
+// 强调色纪律：`accentAmber` 只允许出现在「选中、进度、产物」
+// 三类语义；警告与错误沿用既有红/橙语义色；不得引入第二种强调色相。
 var (
 	// panelShadow 是面板投影层：比表面更暗、更不透明，形成贴地阴影语义。
 	panelShadow = [4]float32{0.008, 0.010, 0.014, 0.90}
@@ -25,7 +25,7 @@ var (
 	slotWell = [4]float32{0.020, 0.024, 0.030, 0.92}
 	// slotWellEdge 是槽位凹槽上沿的 1 design px 内高光。
 	slotWellEdge = [4]float32{1, 1, 1, 0.07}
-	// accentAmber 是唯一强调色：选中格内衬、进度填充、tooltip 标记、产物格
+	// accentAmber 是唯一强调色：选中格内衬、进度填充、产物格
 	// 轮廓共用同一色相。
 	accentAmber = [4]float32{1, 0.72, 0.24, 0.98}
 	// textPrimaryFg 与 textPrimaryShadow 构成全部 HUD 文字（聊天行、快捷栏

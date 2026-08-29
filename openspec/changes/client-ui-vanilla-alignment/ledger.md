@@ -47,3 +47,10 @@
 - 控制会话 golden 逐张人工复核：24/24 PASS，带一条**既现例外**——workbench 场景产物格/木棍格无可视 sprite，根因 `hotbarItemUV` 对无 `core.ItemPlacement` 的物品返回 false（只画素色面），与 main 旧 golden 逐像素同病，非本分支引入；已开 backlog D-11（非放置物品 HUD 图标），不在本 change 修复。
 - SPEC R0 FAIL（compatibility.md:35 同文件漏改 18:19）→ R1 修复 + R2 修复（perf-baseline.md 首句 live 声明停在 v19 的同段自相矛盾，按 820c27e6 先例整句改写 v20 + 上一代轮换）；SPEC(RE2) PASS。
 - QUALITY R0 FAIL（同 compatibility.md 项）→ R1/R2 同步收敛；QUALITY(RE2) PASS（全链终态无互相矛盾处）。
+
+### T6 基线文档同步 + 全量门禁 — PASS；整分支终审 FINAL: PASS
+
+- 文档：gameplay.md（准星/弹条/浮动面板/tooltip/菜单风格/配方入口如实记录为「展示+悬停提示、点击不触发合成」）、limitations.md（硬切、无护甲/经验条、D-11 指引）、progress.md chronicle 一条。
+- 门禁（T6 implementer + 终审者分别复跑）：`make rust`、`make dev-check`（cargo 175 测试+clippy -D warnings）、`make test-race-changed`（首跑 internal/server 聚合并行负载 flake，单包与整线复跑 exit 0，既有先例同型）、`go test ./internal/archcheck`、`openspec validate --all --strict`（77/77）、`make visual-check`（24/24 零差异）、gofmt 干净。
+- 整分支终审：D9 八条护栏逐条 PASS；tasks 六组完整；四份 delta 一致；钉值修正链（274→261→264）可溯；回归面 100 文件全部归属本 change。唯一非阻塞项（style.go 强调色注释仍写四类口径）已由控制会话按 D1 裁决修正（一行注释，零行为）。
+- 遗留移交：PR 开启后归档期将 backlog D-10 标记完成态；D-11（非放置物品 sprite）为新增设计候选行。
