@@ -249,7 +249,7 @@ func ServerPacketForID(state State, id uint32) (ServerPacket, bool) {
 			return HostileState{}, true
 		case 24:
 			return HostileDespawn{}, true
-		// 私有战斗命中确认：与 `serverPacketID` 的 25 对称。
+		// 私有战斗命中确认：与 `ServerPacketID` 的 25 对称。
 		case 25:
 			return CombatHit{}, true
 		}

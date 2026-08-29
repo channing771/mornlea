@@ -108,11 +108,11 @@ func TestCompanionCodecCurrentSchemaRoundTripsSwordItems(t *testing.T) {
 	}
 	copy(want.Inventory.Hotbar.Slots[:], stacks[:])
 
-	encoded, err := encodeCompanions(CompanionSave{Revision: 29, Records: []companion.Body{want}})
+	encoded, err := Encode(CompanionSave{Revision: 29, Records: []companion.Body{want}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := decodeCompanions(encoded)
+	got, err := Decode(encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,18 +201,14 @@ func TestCompanionCodecRejectsCRCTruncationFutureVersionAndOversizedRecords(t *t
 			p[75] = 1
 			repairCompanionCRC(p)
 			return p
-<<<<<<< HEAD:internal/storage/companion_codec_test.go
-		}, ErrCorrupt},
+		}, storagedef.ErrCorrupt},
 		{"item sentinel", func() []byte {
 			p := bytes.Clone(valid)
 			binary.LittleEndian.PutUint16(p[73:], uint16(core.ItemIDMax))
 			p[75] = 1
 			repairCompanionCRC(p)
 			return p
-		}, ErrCorrupt},
-=======
 		}, storagedef.ErrCorrupt},
->>>>>>> origin/main:internal/storage/companion/companion_codec_test.go
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

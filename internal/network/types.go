@@ -313,6 +313,8 @@ type (
 	HostileState = protocol.HostileState
 	// HostileDespawn 是夜行者移除批次通知。
 	HostileDespawn = protocol.HostileDespawn
+	// CombatHit 是私有战斗命中确认。
+	CombatHit = protocol.CombatHit
 )
 
 // 区块快照值类型定义在 protocol 包（密封接口与 Validate 同包）；再导出保持

@@ -1,4 +1,4 @@
-package network
+package protocol
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 )
 
-const combatHitWireBytes = 10
+const CombatHitWireBytes = 10
 
 type CombatHit struct {
 	ServerTick uint64

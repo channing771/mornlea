@@ -109,11 +109,11 @@ func TestPlayerCodecCurrentSchemaRoundTripsSwordItems(t *testing.T) {
 	}
 	copy(want.Inventory.Hotbar.Slots[:], stacks[:])
 
-	encoded, err := encodePlayer(want)
+	encoded, err := Encode(want)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := decodePlayer(want.PlayerID, encoded)
+	got, err := Decode(want.PlayerID, encoded)
 	if err != nil {
 		t.Fatal(err)
 	}

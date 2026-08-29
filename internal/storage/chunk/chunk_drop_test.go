@@ -89,11 +89,11 @@ func TestChunkCodecRoundTripsSwordItemDrops(t *testing.T) {
 		})
 	}
 
-	encoded, err := encodeChunkPayload(ChunkSave{Key: key, Revision: 31, Chunk: want})
+	encoded, err := Encode(ChunkSave{Key: key, Revision: 31, Chunk: want})
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := decodeChunkPayload(key, 31, encoded)
+	got, err := Decode(key, 31, encoded)
 	if err != nil {
 		t.Fatal(err)
 	}

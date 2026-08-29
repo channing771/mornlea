@@ -201,7 +201,7 @@ func TestPrepareLayoutsPopupGlyphs(t *testing.T) {
 	renderer := newTestHotbarRenderer()
 	if err := renderer.Prepare(
 		core.Inventory{}, true, false, -1, nil, nil, nil, MiningOverlay{}, EatingOverlay{},
-		HealthOverlay{}, OxygenOverlay{}, HungerOverlay{}, ChatOverlay{},
+		HealthOverlay{}, OxygenOverlay{}, HungerOverlay{}, ChatOverlay{}, false,
 		PopupOverlay{Text: "石头", ShownAtTick: 1, WorldTick: 1, Valid: true},
 		CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 800, render.NewUploadBudget(1024),
 	); err != nil {
