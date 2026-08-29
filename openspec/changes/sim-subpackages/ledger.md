@@ -86,3 +86,13 @@
 - Quality review: reviewer `ses_fb45d27c1ffeh8I4zbBl7xoq4b` request changes — Critical stub discarding `realmState`/`tunables`, tunables not threaded, ring drop loss, plus weak TDD and dual-Engine copy.
 - Repair: re-review `ses_fb43e411bfferV315q560XrW1x` conditional pass — 4 Critical addressed (concrete mutation/tunables, alias removed, ring restored) and behavior tests added; residual Important noted as fake guard `_ = tunables`, dual-write split, duplicated placement logic, incomplete `AdvancePendingPlayers` wiring, and `sim`/`entity` dual-Engine placeholder to be converged in `runtime`.
 - Deferred minor: `entity`/`sim` dual state, fake tunables guard, and duplicated `completeCompanionPlacement` require final convergence in runtime cutover.
+
+## Task 3.2 Gameplay Settlement Ownership
+
+- Implementer: fresh implementer `ses_fb4399b7affeHx8dxEaiiNux9U`.
+- Commits: `fb119428` and repair `78091010`.
+- Validation: `go test ./internal/sim/entity -race -count=1` (17 tests inc 12 sub-tests), `go test ./internal/server -run TestHost -race`, `go test ./internal/archcheck -count=1`, `go vet ./...`, `git diff --check` clean.
+- Spec review: reviewer `ses_fb4258cbfffe8g3cTjSg1WnWf3` conditional pass — placement/drop/combat/sleep/door/bed via `*realm.Mutation` are atomic, but crop yield桩 inconsistent with `sim/crop.go` chain and `enqueueFarmlandMoistureAroundFluid` no-op.
+- Quality review: reviewer `ses_fb4258ccaffeUopa4iaGTEQ4H9` conditional pass — 0 Critical but 4 Important (tunables snapshot not threaded, weak settlement tests, solid-support incomplete, farmland enqueue no-op).
+- Repair: re-review `ses_fb41a2f66ffeOSpcP06G4op6Sb` PASS — `mining.go:386-399` replaced with chain `splitmix64(hash^field)` + 4 salts + wheat/seeds double draw, and `placement.go:200` now delegates to `realm.EnqueueFarmlandMoistureAroundFluid`; no new Critical/Important.
+- Deferred minor: `isSolidSupport` single-layer farmland check, tunable snapshot threading for `furnace/drop/placement/mining`, and extended negative settlement tests to be completed before runtime cutover.
