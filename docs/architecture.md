@@ -20,7 +20,7 @@ Mornlea 由 Go 应用与两个 Rust `cdylib` 组成。Go 持有应用装配、�
 
 - `cmd/mornlea` 和 `cmd/mornlea-server` 负责应用入口与资源生命周期装配。
 - `internal/world` 持有区块、section、容器和掉落物等世界数据模型。
-- `internal/sim` 持有权威 tick、规则结算和世界变更编排。
+- `internal/sim` 为仅含指导文档的目录，权威模拟由五个子包承载：`contract`（跨边界 DTO）、`tuning`（Tunables 快照）、`realm`（世界维度与单 tick 事务）、`entity`（玩家/伙伴/夜行者与玩法结算）、`runtime`（Engine 与 Step 编排）；依赖方向与单次提交纪律见 `internal/sim/AGENTS.md` 与 `internal/archcheck`。
 - `internal/network` 持有 packet、codec、登录状态机、共享 stream 接口与 Memory transport；`internal/network/tcp` 持有 TCP listener、dial、stream 实现，只依赖 `internal/network` 且保持 transport-only。
 - `internal/storage` 持有世界、玩家和伙伴数据的编码、迁移、恢复与磁盘生命周期。
 - `internal/server` 装配 Host、会话、权威模拟与持久化 worker。
@@ -89,7 +89,12 @@ Linux 专服发布单元由 `mornlea-server` 与相邻的 `libmornlea_engine.so`
 │   ├── world/               区块和世界数据模型
 │   ├── worldgen/            worldgen seed→perm 播种、Rust 调用与区块回写
 │   ├── physics/             玩家运动与碰撞
-│   ├── sim/                 权威世界模拟
+│   ├── sim/                 权威模拟指导目录（生产见 contract/tuning/realm/entity/runtime 子包）
+│   │   ├── contract/        跨边界 DTO
+│   │   ├── tuning/          Tunables 快照与校验
+│   │   ├── realm/           世界维度、持久化与环境事务
+│   │   ├── entity/          玩家/伙伴/夜行者与玩法结算
+│   │   └── runtime/         Engine、订阅与 Step 编排
 │   ├── server/              服务端 Host、会话、发布与玩家持久化
 │   ├── network/             二进制协议、登录状态机与 Memory/TCP 传输
 │   ├── storage/             世界、区域文件与玩家状态持久化

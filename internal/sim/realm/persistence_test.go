@@ -7,7 +7,7 @@ import (
 	"github.com/channing771/mornlea/internal/world"
 )
 
-func TestInFlightCleanChunkIsRetainedOnUnload(t *testing.T) {
+func TestPersistenceLifecycleInFlightCleanChunkIsRetainedOnUnload(t *testing.T) {
 	state := NewState(core.Overworld)
 	dimension := state.Dimension(core.Overworld)
 	pos := core.ChunkPos{Z: -9}
