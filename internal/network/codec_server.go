@@ -189,6 +189,10 @@ func encodeServerControlPayload(state State, packet ServerPacket) (packetID uint
 			encodeHostileState(&e, message)
 		case HostileDespawn:
 			encodeHostileDespawn(&e, message)
+		case CombatHit:
+			e.u64(message.ServerTick)
+			e.u8(message.Damage)
+			e.u8(uint8(message.TargetKind))
 		default:
 			return 0, nil, codecError("encode server", state, packetID, invalidServerPacket(state, packet))
 		}
@@ -219,6 +223,8 @@ func decodeServerControlPayload(state State, packetID uint32, payload []byte) (S
 			max = hostileStateMaxWireBytes
 		case 24:
 			max = hostileDespawnMaxWireBytes
+		case 25:
+			max = combatHitWireBytes
 		}
 		if max > 0 && len(payload) > max {
 			return nil, codecError("decode server", state, packetID, errors.New("network: payload exceeds fixed maximum"))
@@ -490,6 +496,22 @@ func decodeServerControlPayload(state State, packetID uint32, payload []byte) (S
 			packet, err = decodeHostileState(&d)
 		case 24:
 			packet, err = decodeHostileDespawn(&d)
+		case 25:
+			if len(payload) != combatHitWireBytes {
+				err = errors.New("network: combat hit payload must be exactly 10 bytes")
+			} else {
+				var hit CombatHit
+				hit.ServerTick, err = d.u64()
+				if err == nil {
+					hit.Damage, err = d.u8()
+				}
+				if err == nil {
+					var kind uint8
+					kind, err = d.u8()
+					hit.TargetKind = core.CombatTargetKind(kind)
+				}
+				packet = hit
+			}
 		default:
 			return nil, codecError("decode server", state, packetID, errUnknownPacketID)
 		}

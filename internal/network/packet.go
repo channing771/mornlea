@@ -7,18 +7,23 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 )
 
-// ProtocolVersion 是当前唯一支持的协议版本；v31 在 `PlayerState` 尾部追加
-// `DayPhaseOffset` 显示相位偏移（u16，0..23999，紧跟 `SaturationZero` 之后、
-// `WorldTimeTicks` 之前，越界拒绝）；v30 新增 Play S→C ID 22/23/24
-// 三类夜行者消息 `HostileSpawn`/`HostileState`/`HostileDespawn`（每类
+// ProtocolVersion 是当前唯一支持的协议版本；v32 在 Play S→C 尾部追加
+// ID 25 的 10-byte 私有 `CombatHit`（`ServerTick` u64 + `Damage` u8 +
+// `TargetKind` u8，little-endian，固定 10 字节，要求 tick>0、damage 1..20、
+// kind 仅 player/hostile，拒绝截断、尾随、unknown kind、wrong state 及 ID 26）；
+// v31 在 `PlayerState` 尾部追加 `DayPhaseOffset` 显示相位偏移（u16，0..23999，
+// 紧跟 `SaturationZero` 之后、`WorldTimeTicks` 之前，越界拒绝）；v30 新增 Play S→C
+// ID 22/23/24 三类夜行者消息 `HostileSpawn`/`HostileState`/`HostileDespawn`（每类
 // `ServerTick` u64 + count u8 + ≤64 条按 ID 严格升序的 record；spawn 携带
 // ID/dimension/position/yaw/health，state 携带 ID/position/velocity/yaw/health，
 // despawn 只携带 ID），并维护旧客户端握手拒绝语义；v29 在 `PlayerState` 尾部追加
 // `SaturationZero` 饱和度归零提示位（紧跟 `Hunger` 之后、`WorldTimeTicks` 之前）；v28 在 `PlayerInput` 尾部追加 `Sprinting` 疾跑位（紧跟 `Eating` 之后）；v27 新增 Play C→S ID 14 `BoneMeal`，v26 新增 Play S→C ID 20 `PlaceBlockSucceeded`，v25 只扩展既有 `Mining` 位语义不新增字段，v24 上线权威饥饿 Eating/Hunger 并拒绝 v23 及更早登录。
 //
-// v31 是纯追加：不新增 C→S 消息、不改动既有 packet 的 wire 形状与全部长度
-// 上限、不新增 `RejectReason`。v30 新增三类 S→C 消息；v29/v28/v24 同为既有
-// packet 尾部追加：
+// v32 是纯追加：只在 Play S→C 尾部新增 ID 25 的 `CombatHit`，不新增 C→S 消息、
+// 不改动既有 packet 的 wire 形状与全部长度上限、不新增 `RejectReason`。v31 是
+// 纯追加：不新增 C→S 消息、不改动既有 packet 的 wire 形状与全部长度上限、
+// 不新增 `RejectReason`。v30 新增三类 S→C 消息；v29/v28/v24 同为既有 packet
+// 尾部追加：
 //
 //   - `PlayerInput`（Play/C→S ID 0）末尾追加 1 字节 `Sprinting`，紧跟 `Eating` 之后。
 //     三者同形：客户端只声明按键意图，权威结算全在服务端。
@@ -32,7 +37,7 @@ import (
 // v21 在 `PlayerState` 末尾追加 2 字节权威氧气（只发给玩家本人的权威
 // 值）；v20 追加 8 个流体方块编号（只扩方块 ID 集合，wire 形状不变），流体
 // 变更走既有区块变更通道（design.md D8）。
-const ProtocolVersion uint32 = 31
+const ProtocolVersion uint32 = 32
 
 // State 标识连接当前允许交换的 packet 集合。
 type State uint8
@@ -305,6 +310,8 @@ func ValidateServerPacket(state State, packet ServerPacket) error {
 		case HostileState:
 			return serverPacket.Validate()
 		case HostileDespawn:
+			return serverPacket.Validate()
+		case CombatHit:
 			return serverPacket.Validate()
 		default:
 			return invalidServerPacket(state, packet)

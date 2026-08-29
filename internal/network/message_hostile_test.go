@@ -87,7 +87,7 @@ func TestHostileMessagesWireLayoutIsFrozen(t *testing.T) {
 }
 
 // TestHostileMessageIDsAreFrozen 钉死夜行者三类消息的最终编号：S→C 22/23/24
-// （21 已被 `CraftingState` 实占；`serverPacketID` 与 `serverPacketForID` 两处
+// （21 已被 `CraftingState` 实占；25 已被 `CombatHit` 实占；`serverPacketID` 与 `serverPacketForID` 两处
 // 对称）。上界断言写成「末项 +1」，下次追加 packet 时它跟着末项走。
 func TestHostileMessageIDsAreFrozen(t *testing.T) {
 	assertServerRegistry(t, []struct {
@@ -104,8 +104,11 @@ func TestHostileMessageIDsAreFrozen(t *testing.T) {
 			t.Fatalf("Play server packet ID %d 未注册", id)
 		}
 	}
-	if _, ok := serverPacketForID(StatePlay, 24+1); ok {
-		t.Fatal("Play server packet ID 25 必须保持未分配")
+	if _, ok := serverPacketForID(StatePlay, 25); !ok {
+		t.Fatal("Play server packet ID 25 必须已分配给 CombatHit")
+	}
+	if _, ok := serverPacketForID(StatePlay, 26); ok {
+		t.Fatal("Play server packet ID 26 必须保持未分配")
 	}
 }
 

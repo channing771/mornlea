@@ -165,6 +165,9 @@ func serverPacketID(state State, packet ServerPacket) (uint32, bool) {
 			return 23, true
 		case HostileDespawn:
 			return 24, true
+		// 私有战斗命中确认：固定 10-byte `CombatHit` 占用 25，下一 ID 26 仍未分配。
+		case CombatHit:
+			return 25, true
 		}
 	}
 	return 0, false
@@ -240,6 +243,9 @@ func serverPacketForID(state State, id uint32) (ServerPacket, bool) {
 			return HostileState{}, true
 		case 24:
 			return HostileDespawn{}, true
+		// 私有战斗命中确认：与 `serverPacketID` 的 25 对称。
+		case 25:
+			return CombatHit{}, true
 		}
 	}
 	return nil, false
