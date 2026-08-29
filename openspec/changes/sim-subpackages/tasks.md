@@ -30,5 +30,5 @@
 
 ## 6. Final Verification And Review
 
-- [ ] 6.1 运行 `make rust`、`gofmt -l .`、`go vet ./...`、`go test ./... -race -count=1`、`go test ./internal/archcheck -count=1`、`openspec validate sim-subpackages --strict --no-interactive`、`openspec validate --all --strict --no-interactive` 与 `git diff --check`；记录所有 gate 输出，`gofmt -l .` 必须无输出。
+- [x] 6.1 运行 `make rust`、`gofmt -l .`、`go vet ./...`、`go test ./... -race -count=1`、`go test ./internal/archcheck -count=1`、`openspec validate sim-subpackages --strict --no-interactive`、`openspec validate --all --strict --no-interactive` 与 `git diff --check`；记录所有 gate 输出，`gofmt -l .` 必须无输出。
 - [ ] 6.2 完成整分支规格与质量终审，核对无根 `sim` facade、无 package 反向依赖、单 mutation 提交路径、测试清单零差异和无版本/行为漂移；在 ledger 记录裁决后才标记本 change 完成。
