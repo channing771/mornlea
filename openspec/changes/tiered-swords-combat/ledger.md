@@ -140,6 +140,9 @@
 - QUALITY PASS：完整 diff 只含 Task 5 的 27 个受控文件（新增 6：`combat_feedback.go`、`combat_feedback_test.go`、`combat_feedback_application_test.go`、`combat_marker.go`、`capture_sword_combat.go`、`capture_sword_combat_test.go`、`sword-combat.png`；修改 20：audio、render、hud、app、capture、tasks/ledger、AGENTS），无 core 协议外 schema、sim/server 存档、Rust、依赖或长期文档超范围修改；无 map/sort 分配、新接口/配置或 speculative helper；注释中文且无任务编号；HUD 保持 267/700/13312/46912 与 256 对齐，不改 shader/pipeline/atlas 生产计算。
 - Mutation check：任一 combat tick 去重、剩余帧、`AfterRender` 条件、`Reset` 范围、`CombatHit` 分支位置、`PlayerState.Reset`/`resetSessionOwnedState`/`resetCapturePresentation` 清理、`CueCombatHit` 参数/hash、`Prepare` 签名与 `appendCombatMarker` 条件/公式/颜色/容量、`ItemColor` 任一剑颜色、`hotbarTextureWidth` 探针、`sword-combat` 任一夹具/相机/耐久/UUID/距离/marker/PinVolatile/顺序 的删除或错值均至少使一条新增测试失败；既有 audio 全包、render 全包、hud 全包、app 全包、capture 全包、archcheck 与 OpenSpec 均绿。
 - Findings：Critical 0、Important 0、Minor 0；无需修复轮次。
+- Task 5 独立评审，SPEC PASS：报告 `.superpowers/sdd/2026-08-28-tiered-swords-unified-combat/task-5-review.md:12-62` 对提交区间 `ee44f6a7..1be4a9f7` 完成 8 项契约核对；Darwin 6 帧严格递增、`AfterRender` 仅 rendered、`CueCombatHit` 1323/520→180/10500 SHA、`4 quad` 几何与 `100/261≤267`、成功 render 后扣帧、6 剑颜色与 1056 atlas、`sword-combat` 125/UUIDv4/0.35/24 顺序均符合 Task 5 brief；无遗漏或超规。
+- Task 5 独立评审，QUALITY PASS：同一报告 `:63-89` 给出 Task quality `Approved`；范围收敛、无 animation manager/shader/pipeline、中文注释无任务编号，Critical 0、Important 0、Minor 1（未提交 100/261 定量锁，行为正确且不影响发布契约）。
+- Task 5 完成：`ee44f6a7..1be4a9f7` 已具备 implementer RED/GREEN、focused gates、self-review 与独立 SPEC/QUALITY PASS；`tasks.md` 5.1..5.13 全部完成，后续实现进入 Task 6。
 
 ## Validation Evidence
 
