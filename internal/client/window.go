@@ -8,6 +8,7 @@ package client
 // 同帧内的按键/鼠标/光标/尺寸读取全部来自缓存,不产生额外窗口 FFI 调用。
 
 /*
+// client ABI v11: C header 常量与 Rust 动态库必须同批重建。
 #cgo CFLAGS: -I${SRCDIR}/../../engine/include
 #cgo LDFLAGS: -L${SRCDIR}/../../engine/target/release -lmornlea_client -Wl,-rpath,${SRCDIR}/../../engine/target/release
 #cgo noescape mornlea_client_abi_version

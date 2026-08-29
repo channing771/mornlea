@@ -19,20 +19,21 @@ const (
 	// benchmarkMessageDrainMax 是每帧服务端消息 drain 预算，单一取值住在
 	// app 包（`MessageDrainMax`），与 capture 共用同一无头帧节奏契约。
 	benchmarkMessageDrainMax = application.MessageDrainMax
-	// scenarioVersion 是 benchmark producer 的场景身份。v18 → v19 的判定与
-	// v17 → v18、v15 → v16 同源：benchmark 的固定输入（七名远端玩家、零伙伴、
+	// scenarioVersion 是 benchmark producer 的场景身份。v19 → v20 的判定与
+	// v18 → v19、v15 → v16 同源：benchmark 的固定输入（七名远端玩家、零伙伴、
 	// 不注入聊天）与被测世界（不注水、同一 seed、不含农业方块）一格未动，但
-	// authoritative-hunger 又一次改变了**被测进程本身**——HUD 新增右下角饥饿条，
-	// `maxHotbarQuads` 从 247 涨到 267（十格常驻空鸡腿加最多十格填充），
-	// **固定 GPU 上传布局**随之移动：glyph offset 12288 → 13312、总容量
-	// 45888 → 46912 bytes、空聊天帧每帧实际写入也从 12288 变成 13312 bytes。
-	// HUD 图集同时从 2 列非物品格扩到 4 列（多出空/满两列鸡腿），每帧上传的
-	// 图集宽度随之变化。
+	// 客户端 UI 对齐原版布局与风格精修又一次改变了**被测进程本身**——HUD 布
+	// 局对齐并新增准星与物品名弹条，`maxHotbarQuads` 从 267 重钉到 320、
+	// `maxHotbarGlyphs` 从 700 重钉到 768（准星与弹条加入关闭态最坏，容器浮动
+	// 面板与 tooltip 加入打开态最坏），**固定 GPU 上传布局**随之移动：glyph
+	// offset 13312 → 15616、总容量 46912 → 52480 bytes，空聊天帧每帧实际写入
+	// 也从 13312 变成 15616 bytes。
 	//
-	// 这条正是主规格判定 v15 → v16 与 v17 → v18 时用的同一条条文（「改变固定
-	// GPU 上传布局、offset 与每帧写入字节数」），独立成立即可升版。权威侧的
-	// 饥饿推进落在服务端 tick 上，benchmark 的 tick 指标同样不可与 v18 直接比较。
-	scenarioVersion = 19
+	// 这条正是主规格判定 v15 → v16、v17 → v18 与 v18 → v19 时用的同一条条文
+	// （「改变固定 GPU 上传布局、offset 与每帧写入字节数」），独立成立即可升
+	// 版。权威侧模拟一格未动，tick 工作量与 v19 相同；但每帧上传字节数已移动，
+	// v19 与 v20 的每帧上传数字因此不可直接比较。
+	scenarioVersion = 20
 )
 
 var (

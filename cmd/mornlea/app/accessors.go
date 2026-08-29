@@ -231,6 +231,18 @@ func (a *Application) SetCenter(center core.ChunkPos) { a.center = center }
 // SetServerTick 固定调试面板读数用的权威 tick（capture 场景钉住读数）。
 func (a *Application) SetServerTick(tick uint64) { a.serverTick = tick }
 
+// ResetItemPopupBaseline 把物品名弹条重放回会话起点：清空已记录弹条并丢弃
+// 确认选中基线，之后的第一次确认观察只建基线、不触发。交互客户端在会话开始
+// 时经 `resetSessionOwnedState` 达成同一语义；无头 capture 场景共用同一个
+// application，需要按场景重放该起点，让呈现静态确认状态的场景不把夹具选中
+// 误当成一次选中变化（真实调用方：capture 场景 `hud-hotbar-health`、
+// `hud-survival-feedback` 与弹条夹具恢复闭包）。
+func (a *Application) ResetItemPopupBaseline() {
+	a.itemPopup = hud.PopupOverlay{}
+	a.popupSelection = 0
+	a.popupSelectionSeen = false
+}
+
 // BlockTargetReset 读取「本帧隐藏方块目标」的一次性标志。
 func (a *Application) BlockTargetReset() bool { return a.blockTargetReset }
 

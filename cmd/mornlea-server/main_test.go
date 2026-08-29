@@ -437,6 +437,117 @@ func TestNewHostFailureClosesDedicatedListenerAndStore(t *testing.T) {
 	}
 }
 
+func TestRunCancellationDuringHostConstruction(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	store := &mornleaServerClosingStore{WorldStore: storage.NewMemory(storage.Metadata{FormatVersion: 3})}
+	listener := &mornleaServerClosingListener{}
+	err := run(ctx, absentConfigArgs(t), dependencies{
+		openDisk:  func(context.Context, string, storage.OpenOptions) (storage.WorldStore, error) { return store, nil },
+		listenTCP: func(string) (network.Listener, error) { return listener, nil },
+		newHost: func(got context.Context, _ server.Config, _ server.Generator, _ storage.WorldStore) (mornleaServerHost, error) {
+			cancel()
+			return nil, fmt.Errorf("load hostiles: %w", got.Err())
+		},
+	})
+	if err != nil {
+		t.Fatalf("run error=%v, want clean shutdown", err)
+	}
+	if store.closes != 1 || listener.closes != 1 {
+		t.Fatalf("store/listener closes=%d/%d, want 1/1", store.closes, listener.closes)
+	}
+}
+
+func TestRunUncancelledHostConstructionError(t *testing.T) {
+	want := errors.New("host construction failed")
+	store := &mornleaServerClosingStore{WorldStore: storage.NewMemory(storage.Metadata{FormatVersion: 3})}
+	listener := &mornleaServerClosingListener{}
+	err := run(context.Background(), absentConfigArgs(t), dependencies{
+		openDisk:  func(context.Context, string, storage.OpenOptions) (storage.WorldStore, error) { return store, nil },
+		listenTCP: func(string) (network.Listener, error) { return listener, nil },
+		newHost: func(context.Context, server.Config, server.Generator, storage.WorldStore) (mornleaServerHost, error) {
+			return nil, want
+		},
+	})
+	if !errors.Is(err, want) {
+		t.Fatalf("run error=%v, want construction error %v", err, want)
+	}
+	if store.closes != 1 || listener.closes != 1 {
+		t.Fatalf("store/listener closes=%d/%d, want 1/1", store.closes, listener.closes)
+	}
+}
+
+func TestRunHostConstructionCancellationRequiresBothConditions(t *testing.T) {
+	canceledConstructionErr := fmt.Errorf("load hostiles: %w", context.Canceled)
+	for _, test := range []struct {
+		name string
+		ctx  func() context.Context
+		want error
+	}{
+		{
+			name: "canceled caller keeps non-cancellation construction error",
+			ctx: func() context.Context {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				return ctx
+			},
+			want: errors.New("host construction failed"),
+		},
+		{
+			name: "uncanceled caller keeps cancellation construction error",
+			ctx:  context.Background,
+			want: canceledConstructionErr,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			store := &mornleaServerClosingStore{WorldStore: storage.NewMemory(storage.Metadata{FormatVersion: 3})}
+			listener := &mornleaServerClosingListener{}
+			err := run(test.ctx(), absentConfigArgs(t), dependencies{
+				openDisk:  func(context.Context, string, storage.OpenOptions) (storage.WorldStore, error) { return store, nil },
+				listenTCP: func(string) (network.Listener, error) { return listener, nil },
+				newHost: func(context.Context, server.Config, server.Generator, storage.WorldStore) (mornleaServerHost, error) {
+					return nil, test.want
+				},
+			})
+			if !errors.Is(err, test.want) {
+				t.Fatalf("run error=%v, want construction error %v", err, test.want)
+			}
+			if store.closes != 1 || listener.closes != 1 {
+				t.Fatalf("store/listener closes=%d/%d, want 1/1", store.closes, listener.closes)
+			}
+		})
+	}
+}
+
+func TestRunCancellationDuringHostConstructionRetainsCleanupErrors(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	listenerCloseErr := errors.New("listener close failed")
+	storeCloseErr := errors.New("store close failed")
+	store := &mornleaServerClosingStore{
+		WorldStore: storage.NewMemory(storage.Metadata{FormatVersion: 3}),
+		closeErr:   storeCloseErr,
+	}
+	listener := &mornleaServerClosingListener{closeErr: listenerCloseErr}
+	err := run(ctx, absentConfigArgs(t), dependencies{
+		openDisk:  func(context.Context, string, storage.OpenOptions) (storage.WorldStore, error) { return store, nil },
+		listenTCP: func(string) (network.Listener, error) { return listener, nil },
+		newHost: func(got context.Context, _ server.Config, _ server.Generator, _ storage.WorldStore) (mornleaServerHost, error) {
+			cancel()
+			return nil, fmt.Errorf("load hostiles: %w", got.Err())
+		},
+	})
+	if !errors.Is(err, listenerCloseErr) || !errors.Is(err, storeCloseErr) {
+		t.Fatalf("run error=%v, want cleanup errors %v and %v", err, listenerCloseErr, storeCloseErr)
+	}
+	if errors.Is(err, context.Canceled) {
+		t.Fatalf("run error=%v, must exclude construction cancellation", err)
+	}
+	if store.closes != 1 || listener.closes != 1 {
+		t.Fatalf("store/listener closes=%d/%d, want 1/1", store.closes, listener.closes)
+	}
+}
+
 func TestRunCancellationLetsHostPerformSafeShutdown(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	host := &mornleaServerTestHost{shutdownOnCancel: true, started: make(chan struct{})}
@@ -548,7 +659,10 @@ func (listener mornleaServerTestListener) Accept(context.Context) (network.Serve
 func (listener mornleaServerTestListener) Addr() string { return listener.addr }
 func (mornleaServerTestListener) Close() error          { return nil }
 
-type mornleaServerClosingListener struct{ closes int }
+type mornleaServerClosingListener struct {
+	closes   int
+	closeErr error
+}
 
 func (*mornleaServerClosingListener) Accept(context.Context) (network.ServerPacketStream, error) {
 	return nil, network.ErrClosed
@@ -556,17 +670,18 @@ func (*mornleaServerClosingListener) Accept(context.Context) (network.ServerPack
 func (*mornleaServerClosingListener) Addr() string { return "127.0.0.1:9" }
 func (listener *mornleaServerClosingListener) Close() error {
 	listener.closes++
-	return nil
+	return listener.closeErr
 }
 
 type mornleaServerClosingStore struct {
 	storage.WorldStore
-	closes int
+	closes   int
+	closeErr error
 }
 
 func (store *mornleaServerClosingStore) Close() error {
 	store.closes++
-	return store.WorldStore.Close()
+	return errors.Join(store.WorldStore.Close(), store.closeErr)
 }
 
 func TestParseOptionsAcceptsConfig(t *testing.T) {

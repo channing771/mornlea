@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/channing771/mornlea/internal/network/protocol"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,7 +23,7 @@ const (
 )
 
 type RemoteError struct {
-	State   State
+	State   protocol.State
 	Code    uint8
 	Message string
 }
@@ -46,7 +47,7 @@ type PendingLogin struct {
 }
 
 // BeginServerLogin 在 stream 上执行服务端握手与登录接收。worldSeed 是
-// 该服务端的权威世界种子：登录成功时应答（LoginSuccess.WorldSeed）把它
+// 该服务端的权威世界种子：登录成功时应答（protocol.LoginSuccess.WorldSeed）把它
 // 原样下发，供客户端确定性生成远环壳；值在连接建立时固定，登录期间
 // 不可变更。
 func BeginServerLogin(ctx context.Context, stream ServerPacketStream, worldSeed uint64) (_ *PendingLogin, err error) {
@@ -61,20 +62,20 @@ func BeginServerLogin(ctx context.Context, stream ServerPacketStream, worldSeed 
 
 	handshake, cancelHandshake := context.WithTimeout(ctx, HandshakeTimeout)
 	defer cancelHandshake()
-	packet, err := stream.Recv(handshake, StateHandshake)
+	packet, err := stream.Recv(handshake, protocol.StateHandshake)
 	if err != nil {
 		return nil, loginReceiveError(err)
 	}
-	hello, ok := packet.(ClientHello)
-	if !ok || hello.ProtocolVersion != ProtocolVersion {
-		_ = stream.Send(handshake, StateHandshake, HandshakeReject{
-			ServerProtocolVersion: ProtocolVersion,
-			Code:                  HandshakeVersionMismatch,
+	hello, ok := packet.(protocol.ClientHello)
+	if !ok || hello.ProtocolVersion != protocol.ProtocolVersion {
+		_ = stream.Send(handshake, protocol.StateHandshake, protocol.HandshakeReject{
+			ServerProtocolVersion: protocol.ProtocolVersion,
+			Code:                  protocol.HandshakeVersionMismatch,
 			Message:               "协议版本不匹配",
 		})
 		return nil, protocolViolation(errors.New("unexpected client handshake packet"))
 	}
-	if err := stream.Send(handshake, StateHandshake, ServerHello{ProtocolVersion: ProtocolVersion}); err != nil {
+	if err := stream.Send(handshake, protocol.StateHandshake, protocol.ServerHello{ProtocolVersion: protocol.ProtocolVersion}); err != nil {
 		return nil, err
 	}
 
@@ -84,18 +85,18 @@ func BeginServerLogin(ctx context.Context, stream ServerPacketStream, worldSeed 
 			cancelLogin()
 		}
 	}()
-	packet, err = stream.Recv(login, StateLogin)
+	packet, err = stream.Recv(login, protocol.StateLogin)
 	if err != nil {
 		return nil, loginReceiveError(err)
 	}
-	start, ok := packet.(LoginStart)
+	start, ok := packet.(protocol.LoginStart)
 	if !ok {
 		return nil, protocolViolation(errors.New("unexpected client login packet"))
 	}
 	canonicalName, identityErr := core.NormalizeDisplayName(start.DisplayName)
 	if !start.PlayerID.Valid() || identityErr != nil {
-		_ = stream.Send(login, StateLogin, LoginReject{
-			Code:    LoginInvalidIdentity,
+		_ = stream.Send(login, protocol.StateLogin, protocol.LoginReject{
+			Code:    protocol.LoginInvalidIdentity,
 			Message: "玩家 ID 或昵称非法",
 		})
 		return nil, errors.New("network: invalid login identity")
@@ -131,12 +132,12 @@ func (pending *PendingLogin) Accept(ctx context.Context, attach func(ServerEndpo
 	endpoint := newGatedServerPlayEndpoint(pending.stream, pending.login)
 	if err := attach(endpoint); err != nil {
 		endpoint.abort()
-		_ = pending.send(ctx, LoginReject{Code: LoginInternalError, Message: "服务端无法建立会话"})
+		_ = pending.send(ctx, protocol.LoginReject{Code: protocol.LoginInternalError, Message: "服务端无法建立会话"})
 		pending.finish()
 		pending.close()
 		return err
 	}
-	if err := pending.send(ctx, LoginSuccess{PlayerID: pending.identity.PlayerID, WorldSeed: pending.worldSeed}); err != nil {
+	if err := pending.send(ctx, protocol.LoginSuccess{PlayerID: pending.identity.PlayerID, WorldSeed: pending.worldSeed}); err != nil {
 		endpoint.abort()
 		pending.finish()
 		pending.close()
@@ -149,11 +150,11 @@ func (pending *PendingLogin) Accept(ctx context.Context, attach func(ServerEndpo
 	return nil
 }
 
-func (pending *PendingLogin) Reject(ctx context.Context, code LoginRejectCode, message string) error {
+func (pending *PendingLogin) Reject(ctx context.Context, code protocol.LoginRejectCode, message string) error {
 	if err := pending.decide(); err != nil {
 		return err
 	}
-	err := pending.send(ctx, LoginReject{Code: code, Message: message})
+	err := pending.send(ctx, protocol.LoginReject{Code: code, Message: message})
 	phaseErr := pending.finish()
 	pending.close()
 	if err != nil {
@@ -180,7 +181,7 @@ func (pending *PendingLogin) decide() error {
 	return nil
 }
 
-func (pending *PendingLogin) send(ctx context.Context, packet ServerPacket) error {
+func (pending *PendingLogin) send(ctx context.Context, packet protocol.ServerPacket) error {
 	if err := pending.login.Err(); err != nil {
 		return err
 	}
@@ -188,7 +189,7 @@ func (pending *PendingLogin) send(ctx context.Context, packet ServerPacket) erro
 		return err
 	}
 	op, cleanup := pending.operationContext(ctx)
-	err := pending.stream.Send(op, StateLogin, packet)
+	err := pending.stream.Send(op, protocol.StateLogin, packet)
 	cleanup()
 	if phaseErr := pending.login.Err(); phaseErr != nil {
 		return phaseErr
@@ -255,7 +256,7 @@ func (pending *PendingLogin) close() {
 }
 
 // LoginClient 在 stream 上执行客户端登录状态机并返回进入 Play 阶段的
-// 端点。登录应答携带的权威世界种子(LoginSuccess.WorldSeed)在这里被
+// 端点。登录应答携带的权威世界种子(protocol.LoginSuccess.WorldSeed)在这里被
 // 丢弃；需要种子的调用方(远环壳播种)改用 LoginClientWithSeed。
 func LoginClient(ctx context.Context, stream ClientPacketStream, identity Identity) (ClientEndpoint, error) {
 	endpoint, _, err := LoginClientWithSeed(ctx, stream, identity)
@@ -263,7 +264,7 @@ func LoginClient(ctx context.Context, stream ClientPacketStream, identity Identi
 }
 
 // LoginClientWithSeed 执行与 LoginClient 完全相同的客户端登录状态机，并
-// 额外把 LoginSuccess.WorldSeed 返回给调用方：单机与 TCP 远程共用同一条
+// 额外把 protocol.LoginSuccess.WorldSeed 返回给调用方：单机与 TCP 远程共用同一条
 // 登录路径，cmd/mornlea 在登录成功的装配点持有种子并构造 worldgen perm
 // 输入，播种确定性的远环壳(internal/lod)。种子是 uint64 全值域无损搬运
 // (int64 按 two's complement 下发，0 是合法种子)，登录失败时返回 0 与
@@ -280,41 +281,41 @@ func LoginClientWithSeed(ctx context.Context, stream ClientPacketStream, identit
 
 	handshake, cancelHandshake := context.WithTimeout(ctx, HandshakeTimeout)
 	defer cancelHandshake()
-	if err = stream.Send(handshake, StateHandshake, ClientHello{ProtocolVersion: ProtocolVersion}); err != nil {
+	if err = stream.Send(handshake, protocol.StateHandshake, protocol.ClientHello{ProtocolVersion: protocol.ProtocolVersion}); err != nil {
 		return nil, 0, err
 	}
-	packet, err := stream.Recv(handshake, StateHandshake)
+	packet, err := stream.Recv(handshake, protocol.StateHandshake)
 	if err != nil {
 		return nil, 0, loginReceiveError(err)
 	}
 	switch hello := packet.(type) {
-	case ServerHello:
-		if hello.ProtocolVersion != ProtocolVersion {
+	case protocol.ServerHello:
+		if hello.ProtocolVersion != protocol.ProtocolVersion {
 			return nil, 0, protocolViolation(errors.New("server handshake version mismatch"))
 		}
-	case HandshakeReject:
-		return nil, 0, &RemoteError{State: StateHandshake, Code: uint8(hello.Code), Message: hello.Message}
+	case protocol.HandshakeReject:
+		return nil, 0, &RemoteError{State: protocol.StateHandshake, Code: uint8(hello.Code), Message: hello.Message}
 	default:
 		return nil, 0, protocolViolation(errors.New("unexpected server handshake packet"))
 	}
 
 	login, cancelLogin := context.WithTimeout(ctx, LoginTimeout)
 	defer cancelLogin()
-	if err = stream.Send(login, StateLogin, LoginStart{PlayerID: identity.PlayerID, DisplayName: identity.DisplayName}); err != nil {
+	if err = stream.Send(login, protocol.StateLogin, protocol.LoginStart{PlayerID: identity.PlayerID, DisplayName: identity.DisplayName}); err != nil {
 		return nil, 0, err
 	}
-	packet, err = stream.Recv(login, StateLogin)
+	packet, err = stream.Recv(login, protocol.StateLogin)
 	if err != nil {
 		return nil, 0, loginReceiveError(err)
 	}
 	switch result := packet.(type) {
-	case LoginSuccess:
+	case protocol.LoginSuccess:
 		if result.PlayerID != identity.PlayerID {
 			return nil, 0, protocolViolation(errors.New("login success player ID does not match request"))
 		}
 		worldSeed = result.WorldSeed
-	case LoginReject:
-		return nil, 0, &RemoteError{State: StateLogin, Code: uint8(result.Code), Message: result.Message}
+	case protocol.LoginReject:
+		return nil, 0, &RemoteError{State: protocol.StateLogin, Code: uint8(result.Code), Message: result.Message}
 	default:
 		return nil, 0, protocolViolation(errors.New("unexpected server login packet"))
 	}
@@ -350,14 +351,14 @@ func newGatedServerPlayEndpoint(stream ServerPacketStream, login context.Context
 	}
 }
 
-func (endpoint *gatedServerPlayEndpoint) Send(ctx context.Context, message ServerMessage) error {
+func (endpoint *gatedServerPlayEndpoint) Send(ctx context.Context, message protocol.ServerMessage) error {
 	if err := endpoint.wait(ctx); err != nil {
 		return err
 	}
 	return newServerPlayEndpoint(endpoint.stream).Send(ctx, message)
 }
 
-func (endpoint *gatedServerPlayEndpoint) Recv(ctx context.Context) (ClientMessage, error) {
+func (endpoint *gatedServerPlayEndpoint) Recv(ctx context.Context) (protocol.ClientMessage, error) {
 	if err := endpoint.wait(ctx); err != nil {
 		return nil, err
 	}

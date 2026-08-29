@@ -23,7 +23,8 @@ import (
 // 之后、ai-companion 之前（与 materials-showcase 之间）。
 func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 	wantNames := []string{
-		"terrain-noon", "hud-hotbar-health", "hud-survival-feedback", "avatar-nametag", "inventory-crafting",
+		"terrain-noon", "hud-hotbar-health", "hud-survival-feedback", "hud-item-name-popup",
+		"avatar-nametag", "inventory-crafting",
 		"workbench-crafting", "chest-container", "furnace-container",
 		"debug-panel", "skylight-tunnel", "block-light-room", "torch-night", "bed-night",
 		"materials-showcase",

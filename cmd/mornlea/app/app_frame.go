@@ -43,6 +43,48 @@ func (a *Application) nextSequence() uint64 {
 	return a.sequence
 }
 
+// updateItemPopup 检测已确认镜像选中下标的变化并组装本帧弹条输入。
+//
+// 触发与抑制规则：
+//
+//   - 只比较 `InventoryMirror` 的已确认选中下标——本地选择请求绝不推进基线，
+//     服务端确认到达那一刻才可能触发（「未确认变化不触发」）；
+//   - 背包/容器界面打开或菜单相位（含 capture 菜单快照）期间，确认值变化只
+//     推进基线、不记录弹条，保证抑制期间的变化不会在相位恢复后延迟出现；
+//   - 变化落在无显示名的栏位（空栏位、未注册物品）时清空既有弹条——
+//     「均缺省则不显示」。
+//
+// 检测每帧运行（HUD 隐藏时基线也要跟进）；返回值在此基础上注入当前权威
+// tick，40 tick 可见窗口判定由 HUD 布局完成，保持 tick 驱动的确定性。
+func (a *Application) updateItemPopup() hud.PopupOverlay {
+	if hotbar, confirmed := a.inventory.Hotbar(); confirmed {
+		switch {
+		case !a.popupSelectionSeen:
+			a.popupSelectionSeen = true
+			a.popupSelection = hotbar.Selected
+		case hotbar.Selected != a.popupSelection:
+			a.popupSelection = hotbar.Selected
+			suppressed := a.inventoryOpen || a.menu.phase != MenuPhaseGame || a.menuOverride != nil
+			if !suppressed {
+				if name, ok := core.ItemDisplayName(hotbar.Slots[hotbar.Selected].Item); ok {
+					a.itemPopup = hud.PopupOverlay{Text: name, ShownAtTick: a.serverTick, Valid: true}
+				} else {
+					a.itemPopup = hud.PopupOverlay{}
+				}
+			}
+		}
+	}
+	popup := a.itemPopup
+	popup.WorldTick = a.serverTick
+	// 呈现抑制：界面打开或菜单相位期间一个字形都不产生（delta「容器与菜单
+	// 抑制」不只约束变化触发，也约束呈现）；已记录的弹条在相位恢复且仍在
+	// 40 tick 窗口内时继续显示剩余时长——抑制是隐藏而非清除。
+	if a.inventoryOpen || a.menu.phase != MenuPhaseGame || a.menuOverride != nil {
+		return hud.PopupOverlay{}
+	}
+	return popup
+}
+
 // frame 应用服务端消息后绘制一帧。
 func (a *Application) Frame(drainMax, meshWorkMax int, elapsed time.Duration) (bool, error) {
 	a.DrainServerMessages(drainMax)
@@ -167,9 +209,24 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	hunger, hungerReady := a.predictor.Hunger()
 	saturationZero, _ := a.predictor.SaturationZero()
 	chatOverlay := a.ChatOverlay()
-	combatMarker := a.combatFeedback.MarkerVisible()
+	// 弹条检测每帧运行（HUD 隐藏时也要推进确认基线），抑制相位只推进不记录；
+	// 组装结果再注入本帧权威 tick 供 HUD 做 40 tick 窗口判定。
+	popup := a.updateItemPopup()
+	// 准星只在游戏相位（主菜单、设置页、暂停覆盖层与菜单快照覆盖之外）呈现；
+	// HUD 段本身仍由 hudVisible 门控。
+	crosshair := hud.CrosshairOverlay{
+		Visible: a.menu.phase == MenuPhaseGame && a.menuOverride == nil,
+	}
+	// 容器悬停 tooltip：界面打开时把本帧指针坐标传入渲染层，与点击命中同一
+	// 坐标源（`window.CursorPos`）；无头路径 window 为 nil，恒为无效输入，
+	// 零实例。
+	tooltip := hud.TooltipOverlay{}
+	if a.inventoryOpen && a.window != nil {
+		cursorX, cursorY := a.window.CursorPos()
+		tooltip = hud.TooltipOverlay{Valid: true, CursorX: cursorX, CursorY: cursorY}
+	}
 	hudVisible := inventoryConfirmed || (healthReady && !a.clientSessionClosed) ||
-		chatOverlay.Open || len(chatOverlay.Lines) != 0 || combatMarker
+		chatOverlay.Open || len(chatOverlay.Lines) != 0
 	if hudVisible {
 		// 进食进度条：纯客户端预测。输入位在 `RenderFrame` 作用域没有现成的
 		// 当帧 `Control.Eating`，故按 `interactive.go` 置位的同源状态派生（光标
@@ -198,7 +255,8 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 			hud.EatingOverlay{Active: eatingActive, Progress: eatingProgress},
 			hud.HealthOverlay{Confirmed: healthReady, Value: health},
 			hud.OxygenOverlay{Confirmed: oxygenReady, Value: oxygen},
-			hud.HungerOverlay{Confirmed: hungerReady, Value: hunger, SaturationZero: saturationZero}, chatOverlay, combatMarker,
+			hud.HungerOverlay{Confirmed: hungerReady, Value: hunger, SaturationZero: saturationZero}, chatOverlay,
+			popup, crosshair, tooltip,
 			uint32(width), uint32(height), a.scheduler.UploadBudget(),
 		); err != nil {
 			return false, fmt.Errorf("准备快捷栏 HUD: %w", err)
@@ -308,7 +366,6 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		HUDSegment:       hudSegment,
 		UISegment:        uiSegment,
 	})
-	a.combatFeedback.AfterRender(rendered)
 	if !rendered {
 		return false, nil
 	}

@@ -14,16 +14,17 @@ Mornlea 由 Go 应用与两个 Rust `cdylib` 组成。Go 持有应用装配、�
 
 普通本地游戏使用 Memory transport，远程游戏使用 TCP transport；两者复用同一 packet/codec 契约、登录状态机、会话装配和权威模拟。Memory 只改变传送介质，不提供绕过登录、输入校验或服务端裁决的同进程特权路径。
 
-`internal/network` 负责 packet、codec、登录状态机、共享 stream 接口和 Memory transport；`internal/network/tcp` 负责 TCP listener、dial、stream 实现，且只承担 transport 职责。Host 与模拟层消费相同的已验证命令，因此本地和远程模式共享行为语义。
+`internal/network` 负责会话与传输编排：共享 stream 接口、Play endpoint 门面、登录状态机和 Memory transport，并以别名再导出对协议消息子包 `internal/network/protocol`（packet/message/registry/snapshot 协议层）与编解码子包 `internal/network/codec`（packet↔wire 编解码与帧封装）保持既有 `network.X` 消费面；`internal/network/tcp` 负责 TCP listener、dial、stream 实现，且只承担 transport 职责。Host 与模拟层消费相同的已验证命令，因此本地和远程模式共享行为语义。
 
 ## 4. Go 包职责与 archcheck 依赖边界
 
 - `cmd/mornlea` 和 `cmd/mornlea-server` 负责应用入口与资源生命周期装配。
 - `internal/world` 持有区块、section、容器和掉落物等世界数据模型。
 - `internal/sim` 持有权威 tick、规则结算和世界变更编排。
-- `internal/network` 持有 packet、codec、登录状态机、共享 stream 接口与 Memory transport；`internal/network/tcp` 持有 TCP listener、dial、stream 实现，只依赖 `internal/network` 且保持 transport-only。
-- `internal/storage` 持有世界、玩家和伙伴数据的编码、迁移、恢复与磁盘生命周期。
-- `internal/server` 装配 Host、会话、权威模拟与持久化 worker。
+- `internal/network` 持有会话与传输编排（共享 stream 接口、endpoint 门面、登录状态机与 Memory transport）并以别名再导出对协议消息子包 `internal/network/protocol`（packet/message/registry/snapshot 协议层）与编解码子包 `internal/network/codec`（packet↔wire 编解码与帧封装）保持既有 `network.X` 消费面；`internal/network/tcp` 持有 TCP listener、dial、stream 实现，只依赖 `internal/network` 且保持 transport-only。
+- `internal/storage` 持有世界、玩家、伙伴和夜行者数据的编码、迁移、恢复与磁盘生命周期，并以子包 `internal/storage/chunk`、`internal/storage/player`、`internal/storage/companion`、`internal/storage/hostile`、`internal/storage/region` 等细化实现，顶层保持外部消费面。
+- `internal/server` 装配 Host、Server、登录、会话、权威 tick、发布和关服编排；通过 `internal/server/persistence` 委派存档生命周期，自身不持有保存队列、重试状态或 worker，实现只保留 `PersistenceStatus` 与 `ErrPlayerPersistenceBackpressure` 的兼容 re-export。
+- `internal/server/persistence` 单独持有世界区块与 metadata、玩家、伙伴、夜行者四类存档的加载、观察、异步保存、重试、flush/close 与 worker 生命周期；生产代码仅依赖 `internal/companion`、`internal/core`、`internal/physics`、`internal/sim`、`internal/storage`，不得反向导入 `internal/server` 或访问 Host/Server 私有状态，依赖方向以 `internal/archcheck` 为准。
 - `internal/pathfind` 持有不可变快照上的有界寻路且只依赖 `internal/core`；`internal/companion` 与 `internal/server` 消费它，但寻路不拥有玩法或世界访问。
 - `internal/client` 持有客户端镜像、输入预测、消息接收、client ABI bridge 和渲染侧 CPU 编排。
 - `internal/render`、`internal/mesh`、`internal/assets`、`internal/lod` 与 `internal/worldgen` 持有领域数据描述、CPU 编码和 Rust 调用编排，不拥有 GPU 后端或第二套数值生产实现。
@@ -54,6 +55,7 @@ Linux 专服发布单元由 `mornlea-server` 与相邻的 `libmornlea_engine.so`
 - 跨 goroutine 发送成功后的消息及其 slice 视为不可变；后续修改必须复制。
 - 权威 tick、渲染和网络热路径只执行有界工作，不阻塞磁盘、网络、模型调用或其他重 CPU 工作。
 - 重工作通过有界队列、不可变快照或 worker 离开热路径，并在所有权清晰的边界汇合结果。
+- 持久化并发边界：`internal/server/persistence` 的四类所有者各自以有界 channel 与固定数量 worker 隔离磁盘 I/O——`World` 由 `Options.SaveWorkers` 决定 worker 数（`saveJobs`/`saveCompletions` 容量为 `SaveWorkers*2`），`Players` 固定 2 worker（`playerSaveJobCapacity=16`/`playerSaveDoneCapacity=2`），`Companions` 与 `Hostiles` 各 1 worker（容量各 1）。权威 tick 仅执行有界、非阻塞的 `World.Observe`/`Drain`、`Players.Observe`/`Poll`、`Companions.Observe`/`Poll`、`Hostiles.Observe`/`Poll` 调度，绝不阻塞等待落盘；`SaveObserver` 仅在 `World` worker 的 `SaveBatch` 计时路径中调用，不在 tick 路径执行。`World.Flush` 与 `World.ShutdownContextError` 通过 `Options.EngineLocker`（根 `Server.stepMu`，子包独立构造时回退到私有 `sync.Mutex`）先于 `World.mu` 做短暂的 engine/state 变迁，随后立即释放两者再等待 channel/context；`Drain`/`Status` 仍保持调用方持有 tick 锁的既有契约。
 - 协议、存档和 FFI 入口先校验类型、长度、计数、容量与版本，再分配、遍历或写输出。
 - overflow、数据丢失、报告身份不完整和 I/O 错误必须显式失败，不能静默截断或吞错。
 
@@ -90,7 +92,8 @@ Linux 专服发布单元由 `mornlea-server` 与相邻的 `libmornlea_engine.so`
 │   ├── worldgen/            worldgen seed→perm 播种、Rust 调用与区块回写
 │   ├── physics/             玩家运动与碰撞
 │   ├── sim/                 权威世界模拟
-│   ├── server/              服务端 Host、会话、发布与玩家持久化
+│   ├── server/              服务端 Host、Server、登录、会话、权威 tick、发布与关服编排
+│   │   └── persistence/     四类存档（世界/玩家/伙伴/夜行者）加载、观察、异步保存、重试、flush 与 worker
 │   ├── network/             二进制协议、登录状态机与 Memory/TCP 传输
 │   ├── storage/             世界、区域文件与玩家状态持久化
 │   ├── client/              输入、相机、预测、窗口/client ABI 与客户端镜像

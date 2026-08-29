@@ -3,7 +3,8 @@
 //! 契约:
 //! - 所有入口第一个参数是调用方期望的 ABI 版本,不匹配立即返回
 //!   `MORNLEA_CLIENT_STATUS_ABI_VERSION`;当前版本见 [`CLIENT_ABI_VERSION`]
-//!   (v6 起远环 tile 出口加入,v7 起雾 setter 出口加入,v9 起结构化 UI 事件)。
+//!   (v6 起远环 tile 出口加入,v7 起雾 setter 出口加入,v9 起结构化 UI 事件,
+//!   v11 起离屏 benchmark batch)。
 //! - 窗口句柄存放在 thread-local 表中:句柄只在创建线程有效,跨线程调用
 //!   查不到句柄而返回 `MORNLEA_CLIENT_STATUS_WINDOW`——这同时兜住了 winit
 //!   macOS 的主线程约束(Go 侧已 `LockOSThread`)。
@@ -30,8 +31,9 @@ use crate::window::ClientWindow;
 /// 分成不透明与水面两条流,新增半透明 water pass)占用,故整体顺延一格。
 /// 必须与 `engine/include/mornlea_client.h` 的 `MORNLEA_CLIENT_ABI_VERSION`
 /// 逐版本一致。
+/// v11:新增离屏 benchmark batch prepare/submit 入口。
 /// v10:avatar 通道容量扩至 75 具身体(450 实例)并新增敌怪身份域。
-pub const CLIENT_ABI_VERSION: u32 = 10;
+pub const CLIENT_ABI_VERSION: u32 = 11;
 
 /// 调用成功。
 pub const MORNLEA_CLIENT_STATUS_OK: u32 = 0;
@@ -281,10 +283,10 @@ mod tests {
     // 校验拒绝路径:ABI 版本、参数校验与无效句柄。
 
     #[test]
-    fn abi_version_is_ten() {
-        // v10 扩大 avatar 通道容量（75 具身体 / 450 实例）并新增敌怪
-        // EntityHostile 身份域；v9 的设置 layout v2 与结构化事件 batch 保持。
-        assert_eq!(mornlea_client_abi_version(), 10);
+    fn abi_version_is_eleven() {
+        // v11 新增离屏 benchmark batch prepare/submit 入口；v10 扩大 avatar
+        // 通道容量（75 具身体 / 450 实例）并新增敌怪 EntityHostile 身份域。
+        assert_eq!(mornlea_client_abi_version(), 11);
     }
 
     #[test]
@@ -395,7 +397,9 @@ mod tests {
 
 // ---- render 入口族(client ABI v2)----
 
-use crate::render::{FrameInput, FrameResult, OffscreenRenderer, RenderCreateError};
+use crate::render::{
+    BENCHMARK_BATCH_MAX_REPETITIONS, FrameInput, FrameResult, OffscreenRenderer, RenderCreateError,
+};
 
 /// 本机无可用 GPU 适配器;调用方(测试)应据此跳过而非失败。
 pub const MORNLEA_CLIENT_STATUS_ADAPTER: u32 = 5;
@@ -420,6 +424,15 @@ fn with_renderer(handle: u64, operation: impl FnOnce(&mut OffscreenRenderer) -> 
     match guard.get_or_insert_with(HashMap::new).get_mut(&handle) {
         Some(renderer) => operation(renderer),
         None => MORNLEA_CLIENT_STATUS_WINDOW,
+    }
+}
+
+fn frame_result_status(result: FrameResult) -> u32 {
+    match result {
+        FrameResult::Rendered => MORNLEA_CLIENT_STATUS_OK,
+        FrameResult::Skipped => MORNLEA_CLIENT_STATUS_SKIPPED,
+        FrameResult::Invalid => MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT,
+        FrameResult::Capacity => MORNLEA_CLIENT_STATUS_CAPACITY,
     }
 }
 
@@ -536,6 +549,9 @@ pub unsafe extern "C" fn mornlea_client_render_upload_section(
     }
     catch(|| {
         with_renderer(handle, |renderer| {
+            if renderer.has_prepared_benchmark_batch() {
+                return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+            }
             let data = if quads_len == 0 {
                 &[][..]
             } else {
@@ -571,8 +587,11 @@ pub extern "C" fn mornlea_client_render_drop_section(
     }
     catch(|| {
         with_renderer(handle, |renderer| {
-            renderer.drop_section((section_x, section_y, section_z));
-            MORNLEA_CLIENT_STATUS_OK
+            if renderer.drop_section((section_x, section_y, section_z)) {
+                MORNLEA_CLIENT_STATUS_OK
+            } else {
+                MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+            }
         })
     })
 }
@@ -745,11 +764,60 @@ pub unsafe extern "C" fn mornlea_client_render_frame(
         let Some(input) = parse_frame(bytes) else {
             return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
         };
-        with_renderer(handle, |renderer| match renderer.render_frame(&input) {
-            FrameResult::Rendered => MORNLEA_CLIENT_STATUS_OK,
-            FrameResult::Skipped => MORNLEA_CLIENT_STATUS_SKIPPED,
-            FrameResult::Invalid => MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT,
-            FrameResult::Capacity => MORNLEA_CLIENT_STATUS_CAPACITY,
+        with_renderer(handle, |renderer| {
+            frame_result_status(renderer.render_frame(&input))
+        })
+    })
+}
+
+/// 录制离屏 benchmark 批次但不提交。
+///
+/// `frame` 必须指向 `frame_len` 个可读字节，`repeat` 只接受
+/// `1..=BENCHMARK_BATCH_MAX_REPETITIONS`。调用不保留 `frame` 指针；输入、
+/// renderer 状态或离屏约束违约时返回 `INVALID_ARGUMENT`，不得替换已有批次。
+/// 此入口与 header 的 client ABI v11 声明必须同步。
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn mornlea_client_render_prepare_benchmark_batch(
+    abi_version: u32,
+    handle: u64,
+    frame: *const u8,
+    frame_len: usize,
+    repeat: u32,
+) -> u32 {
+    if abi_version != CLIENT_ABI_VERSION {
+        return MORNLEA_CLIENT_STATUS_ABI_VERSION;
+    }
+    if frame.is_null() || !(1..=BENCHMARK_BATCH_MAX_REPETITIONS).contains(&repeat) {
+        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+    }
+    catch(|| {
+        // SAFETY: frame 非空,调用方保证 frame_len 字节可读。
+        let bytes = unsafe { std::slice::from_raw_parts(frame, frame_len) };
+        let Some(input) = parse_frame(bytes) else {
+            return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+        };
+        with_renderer(handle, |renderer| {
+            frame_result_status(renderer.prepare_benchmark_batch(&input, repeat))
+        })
+    })
+}
+
+/// 提交已录制的离屏 benchmark 批次并等待 GPU 完成。
+///
+/// 入口消费 renderer 持有的唯一 command buffer；不存在 prepared batch 时返回
+/// `INVALID_ARGUMENT`。无裸指针，调用方不转移其他资源所有权；此入口与 header
+/// 的 client ABI v11 声明必须同步。
+#[unsafe(no_mangle)]
+pub extern "C" fn mornlea_client_render_submit_benchmark_batch(
+    abi_version: u32,
+    handle: u64,
+) -> u32 {
+    if abi_version != CLIENT_ABI_VERSION {
+        return MORNLEA_CLIENT_STATUS_ABI_VERSION;
+    }
+    catch(|| {
+        with_renderer(handle, |renderer| {
+            frame_result_status(renderer.submit_benchmark_batch())
         })
     })
 }
@@ -847,6 +915,383 @@ mod render_ffi_tests {
             mornlea_client_render_frame(CLIENT_ABI_VERSION, 0xBEEF, frame.as_ptr(), frame.len())
         };
         assert_eq!(status, MORNLEA_CLIENT_STATUS_WINDOW);
+    }
+
+    #[test]
+    fn prepare_benchmark_batch_validates_input_and_count_range() {
+        let frame = [0u8; FRAME_HEADER_BYTES];
+        let mut malformed = frame;
+        malformed[188..192].copy_from_slice(&1u32.to_le_bytes());
+        // SAFETY: 空指针、畸形帧和范围外次数均为入口必须在句柄查找前拒绝的非法输入。
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_prepare_benchmark_batch(
+                    CLIENT_ABI_VERSION,
+                    0xF00D,
+                    std::ptr::null(),
+                    0,
+                    1,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        // SAFETY: 指针来自有效局部数组；layout 1 不是合法帧布局。
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_prepare_benchmark_batch(
+                    CLIENT_ABI_VERSION,
+                    0xF00D,
+                    malformed.as_ptr(),
+                    malformed.len(),
+                    1,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        // SAFETY: 指针来自有效局部数组；`0` 与 `257` 均在 ABI `1..=256` 范围外。
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_prepare_benchmark_batch(
+                    CLIENT_ABI_VERSION,
+                    0xF00D,
+                    frame.as_ptr(),
+                    frame.len(),
+                    0,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_prepare_benchmark_batch(
+                    CLIENT_ABI_VERSION,
+                    0xF00D,
+                    frame.as_ptr(),
+                    frame.len(),
+                    257,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        // SAFETY: 最大合法次数通过参数校验后才因未知句柄被拒绝。
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_prepare_benchmark_batch(
+                    CLIENT_ABI_VERSION,
+                    0xF00D,
+                    frame.as_ptr(),
+                    frame.len(),
+                    256,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_WINDOW
+        );
+    }
+
+    #[test]
+    fn submit_benchmark_batch_rejects_unprepared_renderer() {
+        let mut handle = 0u64;
+        // SAFETY: 指针来自有效局部变量。
+        let create =
+            unsafe { mornlea_client_render_create(CLIENT_ABI_VERSION, 16, 16, &mut handle) };
+        if create == MORNLEA_CLIENT_STATUS_ADAPTER {
+            return;
+        }
+        assert_eq!(create, MORNLEA_CLIENT_STATUS_OK);
+
+        assert_eq!(
+            mornlea_client_render_submit_benchmark_batch(CLIENT_ABI_VERSION, handle),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            mornlea_client_render_destroy(CLIENT_ABI_VERSION, handle),
+            MORNLEA_CLIENT_STATUS_OK
+        );
+    }
+
+    #[test]
+    fn prepared_benchmark_batch_rejects_mutations_and_preserves_first_frame() {
+        let mut handle = 0u64;
+        // SAFETY: 指针来自有效局部变量。
+        let create =
+            unsafe { mornlea_client_render_create(CLIENT_ABI_VERSION, 32, 16, &mut handle) };
+        if create == MORNLEA_CLIENT_STATUS_ADAPTER {
+            return;
+        }
+        assert_eq!(create, MORNLEA_CLIENT_STATUS_OK);
+
+        let mut first = [0u8; FRAME_HEADER_BYTES];
+        let mut second = [0u8; FRAME_HEADER_BYTES];
+        for i in 0..4 {
+            let one = 1.0f32.to_le_bytes();
+            first[i * 16 + i * 4..i * 16 + i * 4 + 4].copy_from_slice(&one);
+            first[64 + i * 16 + i * 4..64 + i * 16 + i * 4 + 4].copy_from_slice(&one);
+            second[i * 16 + i * 4..i * 16 + i * 4 + 4].copy_from_slice(&one);
+            second[64 + i * 16 + i * 4..64 + i * 16 + i * 4 + 4].copy_from_slice(&one);
+        }
+        first[132..136].copy_from_slice(&192.0f32.to_le_bytes());
+        first[140..144].copy_from_slice(&1.0f32.to_le_bytes());
+        first[148..152].copy_from_slice(&1.0f32.to_le_bytes());
+        first[160..176].copy_from_slice(&[1.0f32, 0.0, 0.0, 1.0].map(f32::to_le_bytes).concat());
+        second.copy_from_slice(&first);
+        second[140..144].copy_from_slice(&0.0f32.to_le_bytes());
+        second[160..176].copy_from_slice(&[0.0f32, 0.0, 1.0, 1.0].map(f32::to_le_bytes).concat());
+
+        let mut first_output = vec![0u8; 32 * 16 * 4];
+        let mut second_output = vec![0u8; 32 * 16 * 4];
+        // 两帧天空色不同；daylight 同时变化以确保全屏天空 pass 的回读可区分。
+        // SAFETY: 帧和回读指针均来自有效局部数组。
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_frame(CLIENT_ABI_VERSION, handle, first.as_ptr(), first.len())
+            },
+            MORNLEA_CLIENT_STATUS_OK
+        );
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_readback(
+                    CLIENT_ABI_VERSION,
+                    handle,
+                    first_output.as_mut_ptr(),
+                    first_output.len(),
+                )
+            },
+            MORNLEA_CLIENT_STATUS_OK
+        );
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_frame(
+                    CLIENT_ABI_VERSION,
+                    handle,
+                    second.as_ptr(),
+                    second.len(),
+                )
+            },
+            MORNLEA_CLIENT_STATUS_OK
+        );
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_readback(
+                    CLIENT_ABI_VERSION,
+                    handle,
+                    second_output.as_mut_ptr(),
+                    second_output.len(),
+                )
+            },
+            MORNLEA_CLIENT_STATUS_OK
+        );
+        assert_ne!(first_output, second_output, "两份合法帧的回读必须可区分");
+
+        // SAFETY: 帧指针来自有效局部数组。
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_prepare_benchmark_batch(
+                    CLIENT_ABI_VERSION,
+                    handle,
+                    first.as_ptr(),
+                    first.len(),
+                    1,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_OK
+        );
+        let atlas = vec![
+            0u8;
+            (0..crate::render::ATLAS_MIPS)
+                .map(|mip| {
+                    let size = (crate::render::ATLAS_TEX_SIZE >> mip).max(1) as usize;
+                    size * size * 4
+                })
+                .sum()
+        ];
+        let section = [0u8; 8];
+        let lod_tile = [0u8; crate::render::lod::LOD_QUAD_BYTES];
+        let glyph = [0u8; 1];
+        let hud = [0u8; 4];
+        let font = include_bytes!("ui/testdata/demo.ttf");
+        // prepared batch 持有所有这些 GPU 资源的引用；它提交前每项变更都必须拒绝。
+        // SAFETY: 所有指针均来自本测试的有效局部数组或静态字体字节。
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_frame(
+                    CLIENT_ABI_VERSION,
+                    handle,
+                    second.as_ptr(),
+                    second.len(),
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            mornlea_client_render_resize(CLIENT_ABI_VERSION, handle, 16, 32),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_upload_atlas(
+                    CLIENT_ABI_VERSION,
+                    handle,
+                    1,
+                    atlas.as_ptr(),
+                    atlas.len(),
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_upload_section(
+                    CLIENT_ABI_VERSION,
+                    handle,
+                    0,
+                    0,
+                    0,
+                    section.as_ptr(),
+                    section.len(),
+                    std::ptr::null(),
+                    0,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            mornlea_client_render_drop_section(CLIENT_ABI_VERSION, handle, 0, 0, 0),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_upload_lod_tile(
+                    CLIENT_ABI_VERSION,
+                    handle,
+                    0,
+                    0,
+                    lod_tile.as_ptr(),
+                    lod_tile.len(),
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            mornlea_client_render_drop_lod_tile(CLIENT_ABI_VERSION, handle, 0, 0),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            mornlea_client_render_set_lod_fog(CLIENT_ABI_VERSION, handle, 768.0, 1152.0),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_upload_glyph_rect(
+                    CLIENT_ABI_VERSION,
+                    handle,
+                    0,
+                    0,
+                    1,
+                    1,
+                    glyph.as_ptr(),
+                    glyph.len(),
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_upload_hud_atlas(
+                    CLIENT_ABI_VERSION,
+                    handle,
+                    1,
+                    1,
+                    hud.as_ptr(),
+                    hud.len(),
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_upload_ui_font(
+                    CLIENT_ABI_VERSION,
+                    handle,
+                    font.as_ptr(),
+                    font.len(),
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        // SAFETY: 同一 prepared batch 未 submit 前不得被第二帧覆盖。
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_prepare_benchmark_batch(
+                    CLIENT_ABI_VERSION,
+                    handle,
+                    second.as_ptr(),
+                    second.len(),
+                    1,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            mornlea_client_render_submit_benchmark_batch(CLIENT_ABI_VERSION, handle),
+            MORNLEA_CLIENT_STATUS_OK
+        );
+        let mut submitted = vec![0u8; 32 * 16 * 4];
+        // SAFETY: 回读指针来自有效局部数组。
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_readback(
+                    CLIENT_ABI_VERSION,
+                    handle,
+                    submitted.as_mut_ptr(),
+                    submitted.len(),
+                )
+            },
+            MORNLEA_CLIENT_STATUS_OK
+        );
+        assert_eq!(submitted, first_output, "拒绝重复 prepare 后必须提交首批帧");
+        assert_eq!(
+            mornlea_client_render_destroy(CLIENT_ABI_VERSION, handle),
+            MORNLEA_CLIENT_STATUS_OK
+        );
+    }
+
+    #[test]
+    fn submit_benchmark_batch_consumes_prepared_batch_once() {
+        let mut handle = 0u64;
+        // SAFETY: 指针来自有效局部变量。
+        let create =
+            unsafe { mornlea_client_render_create(CLIENT_ABI_VERSION, 16, 16, &mut handle) };
+        if create == MORNLEA_CLIENT_STATUS_ADAPTER {
+            return;
+        }
+        assert_eq!(create, MORNLEA_CLIENT_STATUS_OK);
+
+        let frame = [0u8; FRAME_HEADER_BYTES];
+        // SAFETY: 帧指针来自有效局部数组。
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_prepare_benchmark_batch(
+                    CLIENT_ABI_VERSION,
+                    handle,
+                    frame.as_ptr(),
+                    frame.len(),
+                    1,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_OK
+        );
+        assert_eq!(
+            mornlea_client_render_submit_benchmark_batch(CLIENT_ABI_VERSION, handle),
+            MORNLEA_CLIENT_STATUS_OK
+        );
+        assert_eq!(
+            mornlea_client_render_submit_benchmark_batch(CLIENT_ABI_VERSION, handle),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            mornlea_client_render_destroy(CLIENT_ABI_VERSION, handle),
+            MORNLEA_CLIENT_STATUS_OK
+        );
     }
 
     #[test]
@@ -1378,8 +1823,11 @@ pub extern "C" fn mornlea_client_render_drop_lod_tile(
     }
     catch(|| {
         with_renderer(handle, |renderer| {
-            renderer.drop_lod_tile((tile_x, tile_z));
-            MORNLEA_CLIENT_STATUS_OK
+            if renderer.drop_lod_tile((tile_x, tile_z)) {
+                MORNLEA_CLIENT_STATUS_OK
+            } else {
+                MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+            }
         })
     })
 }
@@ -1405,9 +1853,12 @@ pub extern "C" fn mornlea_client_render_set_lod_fog(
     catch(|| {
         with_renderer(handle, |renderer| {
             // 入口校验已通过;渲染器层同契约再校验一次(防御直连调用方),
-            // 理论上恒为 true。
-            renderer.set_lod_fog(start, full);
-            MORNLEA_CLIENT_STATUS_OK
+            // 除 prepared batch 冻结外恒为 true。
+            if renderer.set_lod_fog(start, full) {
+                MORNLEA_CLIENT_STATUS_OK
+            } else {
+                MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+            }
         })
     })
 }
@@ -1579,8 +2030,11 @@ pub extern "C" fn mornlea_client_render_resize(
     }
     catch(|| {
         with_renderer(handle, |renderer| {
-            renderer.resize(width, height);
-            MORNLEA_CLIENT_STATUS_OK
+            if renderer.resize(width, height) {
+                MORNLEA_CLIENT_STATUS_OK
+            } else {
+                MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+            }
         })
     })
 }

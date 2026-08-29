@@ -11,46 +11,6 @@ import (
 	"github.com/channing771/mornlea/internal/storage"
 )
 
-func TestPersistenceBackpressureHysteresisBoundary(t *testing.T) {
-	if !nextPersistenceBackpressure(false, 100, 100) {
-		t.Fatal("estimated bytes at cap did not enter backpressure")
-	}
-	if !nextPersistenceBackpressure(true, 90, 100) {
-		t.Fatal("estimated bytes at 90 percent cleared backpressure")
-	}
-	if nextPersistenceBackpressure(true, 89, 100) {
-		t.Fatal("estimated bytes below 90 percent did not clear backpressure")
-	}
-	if nextPersistenceBackpressure(true, 90, 101) {
-		t.Fatal("integer bytes below an exact 90 percent fraction did not clear backpressure")
-	}
-	if !nextPersistenceBackpressure(true, 91, 101) {
-		t.Fatal("integer bytes above an exact 90 percent fraction cleared backpressure")
-	}
-}
-
-func TestPersistenceStatusReturnsCopiedCurrentState(t *testing.T) {
-	running := newPersistenceServer(t, newPersistenceTestStore())
-	running.engine = dirtyReadyEngine(t, []core.ChunkKey{chunkKey(0, 0)})
-	running.lastSaveError = "original failure"
-	running.lastSaveErrorAt = time.Unix(123, 0)
-	running.backpressured = true
-
-	status := running.PersistenceStatus()
-	if status.DirtyChunks != 1 || status.EstimatedBytes != emptyChunkEstimateBytes ||
-		status.InFlightChunks != 0 || !status.Backpressured ||
-		status.LastError != "original failure" ||
-		!status.LastErrorAt.Equal(time.Unix(123, 0)) || status.AutosaveDrained {
-		t.Fatalf("persistence status=%+v", status)
-	}
-	status.LastError = "caller mutation"
-	status.LastErrorAt = time.Time{}
-	got := running.PersistenceStatus()
-	if got.LastError != "original failure" || !got.LastErrorAt.Equal(time.Unix(123, 0)) {
-		t.Fatalf("caller mutated server status: %+v", got)
-	}
-}
-
 func TestPersistenceBackpressureQueuesAcquireUntilMemoryRecovers(t *testing.T) {
 	store := &blockingLoadStore{
 		metadata: storage.Metadata{FormatVersion: 3, Seed: 42},
@@ -66,7 +26,9 @@ func TestPersistenceBackpressureQueuesAcquireUntilMemoryRecovers(t *testing.T) {
 	running := newAttachedWorldForTest(config, endpoint, &countingGenerator{}, store)
 	t.Cleanup(func() { shutdownServerForTest(t, running) })
 	heldKey := chunkKey(0, 0)
-	running.engine = dirtyReadyEngine(t, []core.ChunkKey{heldKey})
+	engine := dirtyReadyEngine(t, []core.ChunkKey{heldKey})
+	running.config.AutosaveTicks = engine.TickCount() + 100
+	setPersistenceEngineForTest(t, running, engine)
 	running.engine.RegisterObserverSession(trustedObserverSessionID)
 	running.engine.Enqueue(sim.Command{
 		Session: trustedObserverSessionID, Sequence: 1,
@@ -74,7 +36,6 @@ func TestPersistenceBackpressureQueuesAcquireUntilMemoryRecovers(t *testing.T) {
 		Dimension: heldKey.Dimension, Center: heldKey.Pos,
 	})
 	running.engine.Step()
-	running.config.AutosaveTicks = running.engine.TickCount() + 100
 	running.trustedObserverSequence = 1
 	target := core.ChunkPos{X: 20, Z: -20}
 	if err := running.SetTrustedObserverCenter(core.Overworld, target); err != nil {

@@ -218,7 +218,22 @@ func hostileRestartStorageRecords(host *Host) []storage.StoredHostileMob {
 	mobs := host.world.engine.HostileMobs()
 	records := make([]storage.StoredHostileMob, 0, len(mobs))
 	for _, mob := range mobs {
-		records = append(records, hostileStorageRecord(mob))
+		records = append(records, storage.StoredHostileMob{
+			ID:              mob.ID,
+			Dimension:       mob.Dimension,
+			Position:        [3]float32(mob.State.Position),
+			Velocity:        [3]float32(mob.State.Velocity),
+			OnGround:        mob.State.OnGround,
+			Yaw:             mob.Yaw,
+			Health:          mob.Health,
+			AttackCooldown:  mob.AttackCooldown,
+			HurtCooldown:    mob.HurtCooldown,
+			BurnCooldown:    mob.BurnCooldown,
+			HasTarget:       mob.HasTarget,
+			PlayerID:        mob.PlayerID,
+			NextRepathTicks: mob.NextRepathTicks,
+			DistantTicks:    mob.DistantTicks,
+		})
 	}
 	return records
 }

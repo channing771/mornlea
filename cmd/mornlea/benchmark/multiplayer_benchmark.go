@@ -5,7 +5,6 @@ package benchmark
 import (
 	"fmt"
 	"math"
-	"runtime"
 	"time"
 
 	"github.com/go-gl/mathgl/mgl32"
@@ -138,14 +137,9 @@ func benchmarkBillboardCamera(app BenchmarkApplication) render.BillboardCamera {
 	}
 }
 
-// gpuCompletionChunks 是一个样本拆成的 command buffer 数量。
-const gpuCompletionChunks = client.ScenarioV12GPUCompletionBatch /
-	client.ScenarioV12GPUCompletionChunk
-
 func (probe *multiplayerClientProbe) measureGPUCompletion(app BenchmarkApplication) error {
 	avatars, tags := application.RemoteRenderPresentations(probe.roster.Presentations())
-	// 切换到 Rust 渲染器后,一个样本是一批完整 RenderFrame(含提交与完成)
-	// 的总耗时摊到批次数;Poll 的固定节拍在样本内只出现一次,被摊薄到可忽略。
+	// 一个样本先在 Go 编码并 prepare 固定批次；两个读钟之间只提交并等待一次。
 	for range client.ScenarioV12GPUCompletionSamples {
 		if err := app.NameTagRenderer().Prepare(tags, app.Scheduler().UploadBudget()); err != nil {
 			return err
@@ -165,14 +159,10 @@ func (probe *multiplayerClientProbe) measureGPUCompletion(app BenchmarkApplicati
 				render.EncodeBillboardCameraBytes(nil, billboard), backgrounds, glyphs, 64,
 			),
 		}
+		app.Renderer().PrepareBenchmarkBatch(frame, client.ScenarioV12GPUCompletionBatch)
 		started := probe.now()
-		for range client.ScenarioV12GPUCompletionBatch {
-			app.Renderer().RenderFrame(frame)
-		}
+		app.Renderer().SubmitBenchmarkBatch()
 		probe.gpuComplete.Add(probe.now().Sub(started) / client.ScenarioV12GPUCompletionBatch)
-		// 每个样本都回收:ru_maxrss 是进程生命周期的历史峰值,必须阻止
-		// 采样过程中的对象累积。
-		runtime.GC()
 	}
 	return nil
 }

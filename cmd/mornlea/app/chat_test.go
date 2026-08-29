@@ -486,10 +486,11 @@ func TestApplicationRendersHealthBeforeInventoryConfirmation(t *testing.T) {
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("RenderFrame=(%v,%v)", rendered, err)
 	}
-	// 未确认背包时 HUD 只画生命条与饥饿条(quad 流恰为两条 bar 的实例数之和)。
-	want := healthQuadInstancesForHUDTest + hungerQuadInstancesForHUDTest
+	// 未确认背包时 HUD 画准星与生命条、饥饿条（quad 流 = 准星 4 + 两条 bar 的
+	// 实例数之和）。
+	want := 4 + healthQuadInstancesForHUDTest + hungerQuadInstancesForHUDTest
 	if _, quads, _ := app.hotbarRenderer.FrameStreams(); len(quads)/48 != want {
-		t.Fatalf("unconfirmed inventory Health+hunger quads=%d want=%d", len(quads)/48, want)
+		t.Fatalf("unconfirmed inventory crosshair+Health+hunger quads=%d want=%d", len(quads)/48, want)
 	}
 }
 

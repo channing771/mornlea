@@ -4,8 +4,7 @@ package hud
 //
 // 刻意不超过采掘条的 `miningBarQuads`+`miningWarningNotches`=5：进食条与采掘条
 // 同锚点且互斥（采掘优先，见 `appendEatingBar`），布局的最坏情况 quad 数不变，
-// scenario v19 已锁定的 `maxHotbarQuads`/`hotbarUploadBytes` 固定上传容量得以
-// 保持（design D2）。
+// `maxHotbarQuads`/`hotbarUploadBytes` 已锁定的固定上传容量得以保持。
 const eatingBarQuads = 2
 
 // EatingOverlay 是客户端预测的进食进度。字段形态参照 `MiningOverlay`，但有两处
@@ -22,11 +21,6 @@ type EatingOverlay struct {
 	Active   bool
 	Progress float32
 }
-
-// eatingFillColor 是进食填充的固定暖金色：与 `miningHarvestableColor` 的绿、
-// `miningBlockedColor` 的橙都拉开距离，玩家靠颜色即可分辨三条同锚点进度条
-// （互斥保证它们永不同帧出现，颜色区分只为连续观看时的语义连贯）。
-var eatingFillColor = [4]float32{0.92, 0.78, 0.42, 0.95}
 
 // appendEatingBar 在永久预留的两行状态栈上方绘制进食进度条。
 //

@@ -17,10 +17,14 @@ use std::sync::Arc;
 
 use egui::{
     Align, Align2, Color32, CornerRadius, Direction, FontData, FontDefinitions, FontFamily, FontId,
-    Id, Key, Layout, RawInput, Rect, RichText, UiBuilder, ViewportId, pos2, vec2,
+    Id, Key, Layout, RawInput, Rect, RichText, StrokeKind, UiBuilder, ViewportId, pos2, vec2,
 };
 use winit::event::{ElementState, Ime, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};
+
+/// egui 视觉令牌与全局 `Style` 构造;四个界面的颜色/描边/圆角唯一样式来源。
+#[path = "ui/style.rs"]
+mod style;
 
 // ---------------------------------------------------------------------------
 // ABI 布局常量(与 Go `EncodeUIMenu` 逐字节对应,小端;任何改动必须同时改 Go)。
@@ -124,7 +128,10 @@ pub const MENU_BUTTON_HEIGHT: f32 = 40.0;
 /// 按钮纵向间距(逻辑点)。
 pub const MENU_BUTTON_SPACING: f32 = 8.0;
 /// 标题「Mornlea」字号。
-pub const MENU_TITLE_FONT_SIZE: f32 = 32.0;
+///
+/// 上传字体只有单一字重,标题的视觉权重以加大字号承担;布局关系不变——
+/// 标题仍锚在按钮列上方(`CENTER_BOTTOM` 对齐,字号向上生长不侵入按钮列)。
+pub const MENU_TITLE_FONT_SIZE: f32 = 40.0;
 /// 按钮文本字号。
 pub const MENU_BUTTON_FONT_SIZE: f32 = 18.0;
 /// 底部版本行字号。
@@ -142,12 +149,6 @@ pub const MENU_ERROR_BUTTON_GAP: f32 = 16.0;
 /// 标题绘制不依赖按钮列几何:有按钮时标题锚在首按钮上方,无按钮时用此
 /// 固定偏移落在屏幕上半部,避免标题丢失。
 pub const MENU_TITLE_EMPTY_CENTER_GAP: f32 = 120.0;
-/// 全屏不透明深灰背景色(参考经典标题画面基调)。
-pub const MENU_BACKGROUND: Color32 = Color32::from_rgb(32, 36, 42);
-/// 标题/版本行的白色。
-pub const MENU_TEXT_COLOR: Color32 = Color32::WHITE;
-/// 错误行红色。
-pub const MENU_ERROR_COLOR: Color32 = Color32::from_rgb(240, 90, 90);
 
 // ---------------------------------------------------------------------------
 // 设置页布局常量。
@@ -166,14 +167,6 @@ const SETTINGS_PANEL_SCREEN_GAP: f32 = 32.0;
 const SETTINGS_PANEL_PADDING: f32 = 12.0;
 /// 设置页动作按钮高度。
 const SETTINGS_ACTION_HEIGHT: f32 = 36.0;
-/// 设置页深色面板背景。
-const SETTINGS_PANEL_BACKGROUND: Color32 = Color32::from_rgb(43, 48, 56);
-/// 设置页次要说明文字颜色。
-const SETTINGS_MUTED_COLOR: Color32 = Color32::from_rgb(184, 190, 200);
-/// 设置页正常状态文字颜色。
-const SETTINGS_STATUS_COLOR: Color32 = Color32::from_rgb(134, 210, 160);
-/// 设置页脏草稿提示颜色。
-const SETTINGS_DIRTY_COLOR: Color32 = Color32::from_rgb(244, 196, 96);
 /// 材质路径 TextEdit 的跨帧稳定 id 来源。
 const SETTINGS_TEXTURE_PATH_ID_SOURCE: &str = "mornlea-settings-texture-path";
 
@@ -931,10 +924,13 @@ impl Default for UiState {
 }
 
 impl UiState {
-    /// 新建空状态:无字体、空事件队列。
+    /// 新建空状态:无字体、空事件队列;构造期把视觉令牌一次性接入 egui
+    /// 全局 [`egui::Style`],此后所有界面帧共享同一份面板语言。
     pub fn new() -> Self {
+        let ctx = egui::Context::default();
+        ctx.set_global_style(style::ui_style());
         Self {
-            ctx: egui::Context::default(),
+            ctx,
             pending_events: UiOutputQueue::new(),
             font_loaded: false,
             #[cfg(test)]
@@ -1247,9 +1243,10 @@ fn menu_button_layout(screen: Rect, n: usize) -> Vec<Rect> {
 fn draw_menu(ui: &mut egui::Ui, frame: &UiMenuFrame, pending: &mut Vec<UiOutputEvent>) {
     let screen = ui.max_rect();
 
-    // 全屏不透明深灰背景。
+    // 全屏不透明深底(标题画面基调色取自令牌表);按钮的半透明面板/亮边/
+    // 琥珀悬停描边经全局 Style 批量接入,draw 侧无需逐按钮指定。
     ui.painter()
-        .rect_filled(screen, CornerRadius::ZERO, MENU_BACKGROUND);
+        .rect_filled(screen, CornerRadius::ZERO, style::MENU_BACKGROUND);
 
     let rects = menu_button_layout(screen, frame.buttons.len());
 
@@ -1265,7 +1262,7 @@ fn draw_menu(ui: &mut egui::Ui, frame: &UiMenuFrame, pending: &mut Vec<UiOutputE
         Align2::CENTER_BOTTOM,
         &frame.title,
         FontId::proportional(MENU_TITLE_FONT_SIZE),
-        MENU_TEXT_COLOR,
+        style::TEXT_PRIMARY,
     );
 
     // 中心纵排按钮列:固定宽高,`add_enabled` 实现禁用态。
@@ -1284,16 +1281,16 @@ fn draw_menu(ui: &mut egui::Ui, frame: &UiMenuFrame, pending: &mut Vec<UiOutputE
         }
     }
 
-    // 版本行:左下固定边距。
+    // 版本行:左下固定边距,次级文字层级。
     ui.painter().text(
         pos2(MENU_VERSION_MARGIN, screen.max.y - MENU_VERSION_MARGIN),
         Align2::LEFT_BOTTOM,
         &frame.version,
         FontId::proportional(MENU_VERSION_FONT_SIZE),
-        MENU_TEXT_COLOR,
+        style::TEXT_SECONDARY,
     );
 
-    // 错误行:按钮列下方、水平居中、红色;空串不绘制。
+    // 错误行:按钮列下方、水平居中、告警红;空串不绘制。
     if !frame.error.is_empty()
         && let Some(last) = rects.last()
     {
@@ -1302,7 +1299,7 @@ fn draw_menu(ui: &mut egui::Ui, frame: &UiMenuFrame, pending: &mut Vec<UiOutputE
             Align2::CENTER_TOP,
             &frame.error,
             FontId::proportional(MENU_ERROR_FONT_SIZE),
-            MENU_ERROR_COLOR,
+            style::DANGER,
         );
     }
 }
@@ -1391,12 +1388,19 @@ fn draw_settings(
 ) {
     let screen = ui.max_rect();
     ui.painter()
-        .rect_filled(screen, CornerRadius::ZERO, MENU_BACKGROUND);
+        .rect_filled(screen, CornerRadius::ZERO, style::MENU_BACKGROUND);
 
     let panel = settings_panel_rect(screen);
     record(SettingsElement::Panel, panel, None);
+    // 面板 = 半透明表面 + 1 逻辑点亮边(亮边画在矩形内侧,不外扩几何)。
     ui.painter()
-        .rect_filled(panel, CornerRadius::same(8), SETTINGS_PANEL_BACKGROUND);
+        .rect_filled(panel, CornerRadius::same(8), style::PANEL_FILL);
+    ui.painter().rect_stroke(
+        panel,
+        CornerRadius::same(8),
+        style::PANEL_STROKE,
+        StrokeKind::Inside,
+    );
     let inner = panel.shrink(SETTINGS_PANEL_PADDING);
     let child = UiBuilder::new()
         .max_rect(inner)
@@ -1456,7 +1460,7 @@ fn draw_settings(
                     let hint = ui.label(
                         RichText::new("材质包路径保存后将在下次启动生效")
                             .small()
-                            .color(SETTINGS_MUTED_COLOR),
+                            .color(style::TEXT_SECONDARY),
                     );
                     record(SettingsElement::MaterialHint, hint.rect, Some(hint.id));
                     ui.add_space(12.0);
@@ -1512,14 +1516,14 @@ fn draw_settings(
                         ui.label(
                             RichText::new("有未保存的更改")
                                 .strong()
-                                .color(SETTINGS_DIRTY_COLOR),
+                                .color(style::ACCENT_AMBER),
                         );
                     }
                     if !frame.status.is_empty() {
-                        ui.label(RichText::new(&frame.status).color(SETTINGS_STATUS_COLOR));
+                        ui.label(RichText::new(&frame.status).color(style::TEXT_PRIMARY));
                     }
                     if !frame.error.is_empty() {
-                        ui.label(RichText::new(&frame.error).strong().color(MENU_ERROR_COLOR));
+                        ui.label(RichText::new(&frame.error).strong().color(style::DANGER));
                     }
                     ui.add_space(12.0);
                     let separator = ui.separator();
@@ -1575,10 +1579,6 @@ fn draw_settings(
 // 暂停覆盖层绘制(半透明遮罩 + 标题 + 两固定按钮 + 可选远程注明行)。
 // ---------------------------------------------------------------------------
 
-/// 暂停覆盖层的半透明深灰遮罩;背后世界帧保持隐约可见是暂停层语义。
-const PAUSE_OVERLAY_BACKGROUND: Color32 = Color32::from_rgba_unmultiplied_const(10, 10, 13, 209);
-/// 远程注明行文字颜色(琥珀色,与错误红、正文白区分,表明提示而非故障)。
-const PAUSE_REMOTE_NOTE_COLOR: Color32 = Color32::from_rgb(244, 196, 96);
 /// 暂停页固定标题文案。
 const PAUSE_TITLE_TEXT: &str = "已暂停";
 /// 「返回游戏」按钮文案。
@@ -1597,8 +1597,9 @@ const PAUSE_REMOTE_NOTE_TEXT: &str = "远程世界不会暂停，服务端仍在
 /// 本函数只把按钮点击翻译成 typed action。
 fn draw_pause(ui: &mut egui::Ui, frame: &UiPauseFrame, actions: &mut PauseActions) {
     let screen = ui.max_rect();
+    // 半透明遮罩:面板族同色、透明度更低,保住「背后世界隐约可见」语义。
     ui.painter()
-        .rect_filled(screen, CornerRadius::ZERO, PAUSE_OVERLAY_BACKGROUND);
+        .rect_filled(screen, CornerRadius::ZERO, style::PAUSE_OVERLAY);
 
     let rects = menu_button_layout(screen, 2);
 
@@ -1612,7 +1613,7 @@ fn draw_pause(ui: &mut egui::Ui, frame: &UiPauseFrame, actions: &mut PauseAction
         Align2::CENTER_BOTTOM,
         PAUSE_TITLE_TEXT,
         FontId::proportional(MENU_TITLE_FONT_SIZE),
-        MENU_TEXT_COLOR,
+        style::TEXT_PRIMARY,
     );
 
     if pause_overlay_button(ui, rects[0], PAUSE_BACK_LABEL) {
@@ -1630,7 +1631,7 @@ fn draw_pause(ui: &mut egui::Ui, frame: &UiPauseFrame, actions: &mut PauseAction
             Align2::CENTER_TOP,
             PAUSE_REMOTE_NOTE_TEXT,
             FontId::proportional(MENU_ERROR_FONT_SIZE),
-            PAUSE_REMOTE_NOTE_COLOR,
+            style::TEXT_SECONDARY,
         );
     }
 
@@ -1670,19 +1671,12 @@ const DEBUG_PANEL_ROW_HEIGHT: f32 = 26.0;
 const DEBUG_PANEL_READOUT_GAP: f32 = 8.0;
 /// 行文本距行左下角的横向内移(逻辑点)。
 const DEBUG_PANEL_TEXT_PADDING_X: f32 = 2.0;
+/// 选中行琥珀左缘标记的窄条宽度(逻辑点);靠左整高,几何上即选中位置。
+const DEBUG_PANEL_SELECTED_MARK_WIDTH: f32 = 3.0;
 /// 行值文本列 x 偏移(逻辑点,旧面板 label 列宽 260)。
 const DEBUG_PANEL_VALUE_X: f32 = 260.0;
 /// 面板文本字号。
 const DEBUG_PANEL_FONT_SIZE: f32 = 14.0;
-/// 半透明深灰面板背景。
-const DEBUG_PANEL_BACKGROUND: Color32 = Color32::from_rgba_unmultiplied_const(10, 10, 13, 209);
-/// 只读行文本颜色。
-const DEBUG_PANEL_READONLY_COLOR: Color32 = Color32::from_rgb(128, 128, 128);
-/// 普通行文本颜色。
-const DEBUG_PANEL_TEXT_COLOR: Color32 = Color32::WHITE;
-/// 选中行背景高亮。
-const DEBUG_PANEL_SELECTED_BACKGROUND: Color32 =
-    Color32::from_rgba_unmultiplied_const(77, 158, 242, 89);
 /// 顶部读数区固定标签;值来自段头结构化字段。
 const DEBUG_PANEL_READOUT_LABELS: [&str; 7] =
     ["帧时", "坐标", "朝向", "Tick", "时刻", "区块数", "模式"];
@@ -1706,8 +1700,15 @@ fn draw_debug_panel(
         pos2(DEBUG_PANEL_MARGIN, DEBUG_PANEL_MARGIN),
         vec2(width, height),
     );
+    // 面板 = 半透明表面 + 1 逻辑点亮边,与设置页同一面板语言。
     ui.painter()
-        .rect_filled(panel, CornerRadius::same(6), DEBUG_PANEL_BACKGROUND);
+        .rect_filled(panel, CornerRadius::same(6), style::PANEL_FILL);
+    ui.painter().rect_stroke(
+        panel,
+        CornerRadius::same(6),
+        style::PANEL_STROKE,
+        StrokeKind::Inside,
+    );
     let inner = panel.shrink(DEBUG_PANEL_PADDING);
     let child = UiBuilder::new()
         .max_rect(inner)
@@ -1772,7 +1773,8 @@ fn draw_debug_readout(ui: &mut egui::Ui, frame: &UiDebugFrame) {
         frame.mode.clone(),
     ];
     for (label, value) in DEBUG_PANEL_READOUT_LABELS.iter().zip(values) {
-        debug_row_text_pair(ui, label, &value, DEBUG_PANEL_READONLY_COLOR);
+        // 读数区:标签次级、值主文字(只读信息仍按「值可读」呈现)。
+        debug_row_text_pair(ui, label, &value, style::TEXT_PRIMARY);
     }
 }
 
@@ -1825,34 +1827,59 @@ fn draw_debug_row(
         }
         return;
     }
-    let color = if row.readonly {
-        DEBUG_PANEL_READONLY_COLOR
+    // 值颜色按行语义分层:只读行降为次级文字表达「不可编辑」,普通行的
+    // 值用主文字;标签一律次级文字(见 `debug_row_text_pair_at`)。
+    let value_color = if row.readonly {
+        style::TEXT_SECONDARY
     } else {
-        DEBUG_PANEL_TEXT_COLOR
+        style::TEXT_PRIMARY
     };
     let (rect, _) = ui.allocate_exact_size(
         vec2(ui.available_width(), DEBUG_PANEL_ROW_HEIGHT),
         egui::Sense::hover(),
     );
     if row.selected {
-        ui.painter()
-            .rect_filled(rect, CornerRadius::same(4), DEBUG_PANEL_SELECTED_BACKGROUND);
+        // 选中行用琥珀左缘标记替代整行高亮:窄条贴行左缘、整行高,选中
+        // 位置靠几何即可读,不依赖颜色。
+        ui.painter().rect_filled(
+            Rect::from_min_size(
+                rect.min,
+                vec2(DEBUG_PANEL_SELECTED_MARK_WIDTH, rect.height()),
+            ),
+            CornerRadius::ZERO,
+            style::ACCENT_AMBER,
+        );
     }
-    debug_row_text_pair_at(ui, rect, &row.label, &row.value, color);
+    debug_row_text_pair_at(ui, rect, &row.label, &row.value, value_color);
 }
 
 /// 在行矩形内绘制一对标签/值文本；值列偏移见 [`DEBUG_PANEL_VALUE_X`]。
-fn debug_row_text_pair(ui: &mut egui::Ui, label: &str, value: &str, color: Color32) {
+///
+/// 标签一律次级文字,值色由调用方按行语义给出——标签是骨架、值是内容,
+/// 两级文字在同一行内天然分层。
+fn debug_row_text_pair(ui: &mut egui::Ui, label: &str, value: &str, value_color: Color32) {
     let (rect, _) = ui.allocate_exact_size(
         vec2(ui.available_width(), DEBUG_PANEL_ROW_HEIGHT),
         egui::Sense::hover(),
     );
-    debug_row_text_pair_at(ui, rect, label, value, color);
+    debug_row_text_pair_at(ui, rect, label, value, value_color);
 }
 
-fn debug_row_text_pair_at(ui: &mut egui::Ui, rect: Rect, label: &str, value: &str, color: Color32) {
-    debug_row_text_at(ui, rect, label, color, DEBUG_PANEL_TEXT_PADDING_X);
-    debug_row_text_at(ui, rect, value, color, DEBUG_PANEL_VALUE_X);
+fn debug_row_text_pair_at(
+    ui: &mut egui::Ui,
+    rect: Rect,
+    label: &str,
+    value: &str,
+    value_color: Color32,
+) {
+    debug_row_text_at(
+        ui,
+        rect,
+        label,
+        style::TEXT_SECONDARY,
+        DEBUG_PANEL_TEXT_PADDING_X,
+    );
+    debug_row_text_at(ui, rect, value, value_color, DEBUG_PANEL_VALUE_X);
 }
 
 fn debug_row_text_at(ui: &mut egui::Ui, rect: Rect, text: &str, color: Color32, x_offset: f32) {
@@ -2240,6 +2267,9 @@ mod settings_abi_tests;
 #[cfg(test)]
 #[path = "ui/settings_render_tests.rs"]
 mod settings_render_tests;
+#[cfg(test)]
+#[path = "ui/style_tests.rs"]
+mod style_tests;
 #[cfg(test)]
 #[path = "ui/test_support.rs"]
 mod test_support;

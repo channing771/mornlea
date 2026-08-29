@@ -2,8 +2,69 @@
 
 use super::{FrameResult, tests_support::*};
 use crate::ui::{UI_OUTPUT_QUEUE_CAPACITY, UiEvent, pending_ui_event_count, push_ui_event};
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 
 const ENTER_ACTION: u32 = 11;
+
+pub(super) struct TestCallback {
+    prepared: Arc<AtomicUsize>,
+    frame_view: wgpu::TextureView,
+}
+
+impl TestCallback {
+    pub(super) fn new(prepared: Arc<AtomicUsize>, frame_view: wgpu::TextureView) -> Self {
+        Self {
+            prepared,
+            frame_view,
+        }
+    }
+}
+
+impl egui_wgpu::CallbackTrait for TestCallback {
+    fn prepare(
+        &self,
+        device: &wgpu::Device,
+        _queue: &wgpu::Queue,
+        _screen: &egui_wgpu::ScreenDescriptor,
+        _egui_encoder: &mut wgpu::CommandEncoder,
+        _resources: &mut egui_wgpu::CallbackResources,
+    ) -> Vec<wgpu::CommandBuffer> {
+        self.prepared.fetch_add(1, Ordering::Relaxed);
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("test egui callback"),
+        });
+        {
+            let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("test egui callback clear"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.frame_view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::RED),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
+                multiview_mask: None,
+            });
+        }
+        vec![encoder.finish()]
+    }
+
+    fn paint(
+        &self,
+        _info: egui::PaintCallbackInfo,
+        _pass: &mut wgpu::RenderPass<'static>,
+        _resources: &egui_wgpu::CallbackResources,
+    ) {
+    }
+}
 
 /// 输出队列预检必须发生在全局 window-input 队列排空之前；容量恢复后，同一批
 /// click/text/scroll 输入重试得到的动作必须与无失败路径相同。
@@ -63,6 +124,31 @@ fn output_capacity_preserves_window_input_for_retry() {
             .windows(4)
             .any(|word| word == ENTER_ACTION.to_le_bytes())
     );
+}
+
+#[test]
+fn benchmark_batch_submits_egui_callbacks_before_main() {
+    let Some(mut renderer) = renderer_or_skip_pub(320, 180) else {
+        return;
+    };
+    renderer
+        .upload_ui_font(include_bytes!("../ui/testdata/demo.ttf"))
+        .unwrap();
+    let callback_buffers = renderer.test_emit_egui_callback_buffer();
+
+    assert_eq!(renderer.render_frame(&menu_frame()), FrameResult::Rendered);
+    let mut immediate = vec![0u8; renderer.output_bytes()];
+    assert!(renderer.readback(&mut immediate));
+
+    assert_eq!(
+        renderer.prepare_benchmark_batch(&menu_frame(), 1),
+        FrameResult::Rendered
+    );
+    assert_eq!(callback_buffers.load(Ordering::Relaxed), 2);
+    assert_eq!(renderer.submit_benchmark_batch(), FrameResult::Rendered);
+    let mut batched = vec![0u8; renderer.output_bytes()];
+    assert!(renderer.readback(&mut batched));
+    assert_eq!(batched, immediate);
 }
 
 fn drain_batch(renderer: &mut super::OffscreenRenderer) -> Vec<u8> {

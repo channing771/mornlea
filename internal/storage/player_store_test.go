@@ -12,7 +12,46 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage/player"
 )
+
+// fixturePlayerID/fixturePlayerSave/fixturePlayerInventory 是 player 包
+// player_codec_test.go 同名夹具的同构副本：根包 store 测试不能导入子包测试
+// 夹具（测试文件不跨包可见），而断言依赖同一份非初值取值承重，故按域持副本，
+// 改动任一侧取值时必须同步另一侧。
+
+func fixturePlayerID() core.PlayerID {
+	return core.PlayerID{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
+}
+
+func fixturePlayerSave(id core.PlayerID, revision uint64) PlayerSave {
+	safe := PlayerLocation{Dimension: core.Overworld, Position: [3]float32{1.5, 65, -2.5}}
+	return PlayerSave{
+		PlayerID: id, Revision: revision, DisplayName: "Chen",
+		Current: PlayerLocation{Dimension: core.Overworld, Position: [3]float32{2.5, 70, -3.5}},
+		Yaw:     1.25, Pitch: -0.5, Safe: &safe, Inventory: fixturePlayerInventory(),
+		Health: 13,
+		// 三层饥饿状态**全部取非初值**（初值是 20 / core.InitialSaturationMilli / 0）：
+		// 任何一个字段在编码、迁移或接线里被漏写，读回来都会落在初值上，
+		// 与这里的取值不同，往返与迁移用例因此才承重。饱和 2500 ≤ 12×1000，
+		// 满足 player 包 validatePlayerDTO 的上界。
+		Hunger: 12, SaturationMilli: 2500, ExhaustionMilli: 1750,
+	}
+}
+
+func fixturePlayerInventory() core.Inventory {
+	var inventory core.Inventory
+	inventory.Hotbar.Selected = 3
+	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: core.MaxStackCount}
+	stoneFull, _ := core.ItemMaxDurability(core.ItemStonePickaxe)
+	ironFull, _ := core.ItemMaxDurability(core.ItemIronPickaxe)
+	inventory.Hotbar.Slots[4] = core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: stoneFull}
+	inventory.Hotbar.Slots[6] = core.ItemStack{Item: core.ItemGrass, Count: 1}
+	inventory.Backpack[0] = core.ItemStack{Item: core.ItemDirt, Count: 12}
+	inventory.Backpack[7] = core.ItemStack{Item: core.ItemIronPickaxe, Count: 1, Durability: ironFull}
+	inventory.Backpack[core.BackpackSlots-1] = core.ItemStack{Item: core.ItemStone, Count: 5}
+	return inventory
+}
 
 func TestPlayerStoreContract(t *testing.T) {
 	implementations := []struct {
@@ -299,7 +338,7 @@ func TestDiskPlayerSaveDoesNotOverwriteCorruptOrFutureFile(t *testing.T) {
 		{
 			name: "future",
 			mutate: func(encoded []byte) {
-				binary.LittleEndian.PutUint32(encoded[8:12], currentPlayerSchema+1)
+				binary.LittleEndian.PutUint32(encoded[8:12], player.CurrentSchema+1)
 			},
 			wantErr: ErrFutureVersion,
 		},
@@ -313,7 +352,7 @@ func TestDiskPlayerSaveDoesNotOverwriteCorruptOrFutureFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			path := filepath.Join(root, "players", id.String()+".player")
-			before, err := encodePlayer(fixturePlayerSave(id, 1))
+			before, err := player.Encode(fixturePlayerSave(id, 1))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -342,7 +381,7 @@ func TestDiskPlayerSaveDoesNotOverwriteCorruptOrFutureFile(t *testing.T) {
 func TestBoundedPlayerFileReaderRejectsLimitPlusOne(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "oversized.player")
 	oversized := bytes.Repeat(
-		[]byte{0x5a}, playerEnvelopeLength+int(maxPlayerPayload)+1,
+		[]byte{0x5a}, player.EnvelopeLength+int(player.MaxPayload)+1,
 	)
 	if err := os.WriteFile(path, oversized, 0o600); err != nil {
 		t.Fatal(err)
@@ -358,7 +397,7 @@ func TestDiskPlayerOversizedCanonicalFileIsCorruptAndNeverOverwritten(t *testing
 	store := openPlayerDisk(t, root)
 	path := filepath.Join(root, "players", id.String()+".player")
 	oversized := bytes.Repeat(
-		[]byte{0x5a}, playerEnvelopeLength+int(maxPlayerPayload)+1,
+		[]byte{0x5a}, player.EnvelopeLength+int(player.MaxPayload)+1,
 	)
 	if err := os.WriteFile(path, oversized, 0o600); err != nil {
 		t.Fatal(err)
@@ -678,12 +717,90 @@ func assertStoredPlayerMatchesSave(t *testing.T, got StoredPlayer, want PlayerSa
 	}
 }
 
+// 以下两个基准与 codec 基准（player 包 BenchmarkPlayerCodec）同源：被测主体
+// 是 DiskStore/MemoryStore 的 player 存取编排，而 player 子包没有可域内装配的
+// 记录层，故按「跟随被测主体」留在根包。benchmarkPlayerSave 是 player 包同名
+// 夹具的同构副本，改动任一侧取值必须同步另一侧。
+
+var (
+	benchmarkStoredPlayer   StoredPlayer
+	benchmarkPlayerRevision uint64
+)
+
+func BenchmarkMemoryPlayerStore(b *testing.B) {
+	store := NewMemory(benchmarkPlayerMetadata())
+	benchmarkPlayerStore(b, store)
+}
+
+func BenchmarkDiskPlayerStore(b *testing.B) {
+	store, err := OpenDisk(context.Background(), b.TempDir(), OpenOptions{Create: benchmarkPlayerMetadata()})
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			b.Fatal(err)
+		}
+	}()
+	benchmarkPlayerStore(b, store)
+}
+
+func benchmarkPlayerStore(b *testing.B, store PlayerStore) {
+	b.Helper()
+	ctx := context.Background()
+	var latestRevision uint64
+	b.Run("Save", func(b *testing.B) {
+		b.ReportAllocs()
+		for iteration := range b.N {
+			save := benchmarkPlayerSave(uint64(iteration + 1))
+			revision, err := store.SavePlayer(ctx, save)
+			if err != nil {
+				b.Fatal(err)
+			}
+			benchmarkPlayerRevision = revision
+			latestRevision = revision
+		}
+	})
+	if latestRevision == 0 {
+		if _, err := store.SavePlayer(ctx, benchmarkPlayerSave(1)); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.Run("Load", func(b *testing.B) {
+		id := benchmarkPlayerSave(1).PlayerID
+		b.ReportAllocs()
+		for range b.N {
+			player, err := store.LoadPlayer(ctx, id)
+			if err != nil {
+				b.Fatal(err)
+			}
+			benchmarkStoredPlayer = player
+		}
+	})
+}
+
+func benchmarkPlayerSave(revision uint64) PlayerSave {
+	safe := PlayerLocation{Dimension: core.Overworld, Position: [3]float32{4.5, 65, -6.5}}
+	return PlayerSave{
+		PlayerID: core.PlayerID{0x6f, 0xce, 0x82, 0x77, 0xa9, 0x33, 0x46, 0xcb, 0x9a, 0x1f, 0xda, 0x13, 0xb7, 0xee, 0x56, 0x44},
+		Revision: revision, DisplayName: "Benchmark",
+		Current: PlayerLocation{Dimension: core.Overworld, Position: [3]float32{8.5, 70, -9.5}},
+		Yaw:     0.75, Pitch: -0.25, Safe: &safe,
+	}
+}
+
+func benchmarkPlayerMetadata() Metadata {
+	return Metadata{FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld}
+}
+
 // TestDiskStoreV4PlayerFileMigratesToFullHealth 覆盖 DiskStore 侧的 v4 迁移：
 // 磁盘上的旧格式玩家文件（没有生命值字段）读回后必须是满血并标记需要重写。
 func TestDiskStoreV4PlayerFileMigratesToFullHealth(t *testing.T) {
 	root := t.TempDir()
 	store := openPlayerDisk(t, root)
-	encoded, err := os.ReadFile(filepath.Join("testdata", "player-v4.bin"))
+	// 冻结的 v4 字节归 player 域所有（随包落在 player/testdata），根包编排
+	// 测试以只读方式取用，不在根 testdata 复制第二份 golden。
+	encoded, err := os.ReadFile(filepath.Join("player", "testdata", "player-v4.bin"))
 	if err != nil {
 		t.Fatal(err)
 	}

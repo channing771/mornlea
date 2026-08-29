@@ -13,7 +13,7 @@ const hungerQuads = healthSegmentCount * 2
 // Predictor 的已确认镜像转换；Confirmed 为 false 时表示尚未收到权威状态，
 // 渲染器不画任何饥饿元素——饥饿是权威值，客户端绝不显示预测或陈旧的数值。
 //
-// SaturationZero 为 true 时追加 1×scale 的垂直抖动偏移（B-12 仅呈现分支，
+// SaturationZero 为 true 时追加 1×scale 的垂直抖动偏移（仅呈现分支，
 // 不新增绘制管线，false 时像素逐字节一致）。
 type HungerOverlay struct {
 	Confirmed      bool
@@ -113,8 +113,9 @@ func paintHotbarDrumstick(dst []byte, column int, full bool) {
 				color = [4]byte{240, 228, 196, 255}
 			default:
 				color = [4]byte{176, 96, 46, 255}
-				// 左上一小片高光，让肉的体积在 16px 下也读得出来。
-				if x <= 8 && y >= 7 && y <= 9 {
+				// 左上一小片高光，让肉的体积在 16px 下也读得出来；窗口落在
+				// 骨柄入肉处的下方，避免被骨色覆盖。
+				if x <= 8 && y >= 9 && y <= 11 {
 					color = [4]byte{214, 138, 74, 255}
 				}
 			}
@@ -142,8 +143,10 @@ func hotbarDrumstickBonePixel(x, y int) bool {
 	return dx*dx+dy*dy <= 2
 }
 
-// hotbarDrumstickMeatPixel 是右下角的肉：以 (9,9) 为心、半径约 5.5 的整数圆盘。
+// hotbarDrumstickMeatPixel 是右下角的肉：以 (10,10) 为心、半径约 4.7 的整数
+// 圆盘。相比旧剪影收紧一圈并向右下挪一格，让骨柄以更短的入肉距离托住肉球，
+// 右下留出的边距与心形剪影的收尖方向一致。
 func hotbarDrumstickMeatPixel(x, y int) bool {
-	dx, dy := x-9, y-9
-	return dx*dx+dy*dy <= 30
+	dx, dy := x-10, y-10
+	return dx*dx+dy*dy <= 22
 }

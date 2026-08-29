@@ -4,7 +4,7 @@
 
 ## 线上协议
 
-- 线上协议为 v31（`internal/network` 的 `ProtocolVersion`）；所有不匹配版本都会在握手阶段、进入 Play 前被稳定拒绝，不提供版本协商或降级解码；更早版本的逐版语义见 `internal/network/packet.go` 顶部注释；
+- 线上协议为 v31（定义在 `internal/network/protocol` 的 `ProtocolVersion`，根包 `internal/network` 别名再导出）；所有不匹配版本都会在握手阶段、进入 Play 前被稳定拒绝，不提供版本协商或降级解码；更早版本的逐版语义见 `internal/network/protocol/packet.go` 顶部注释；
 - 近几版协议全部是既有 packet 尾部追加或新增消息，不改变任何既有长度上限，也不新增 `RejectReason`：
   - v26 新增 Play S→C ID 20 `PlaceBlockSucceeded(sequence)`，只回发给放置发起会话作为成功放置确认；
   - v27 新增 Play C→S ID 14 `BoneMeal`，与 `TillSoil` 同形（序号 + 朝向），目标格由权威射线决定；
@@ -31,7 +31,7 @@
 
 ## benchmark 报告兼容
 
-- benchmark producer 为 scenario v19，固定输入仍是七名远端玩家、零伙伴、不注入聊天，被测世界不注水且不含农业方块；scenario 版本变化记录的是被测进程本身的改变（HUD 固定上传布局、HUD 图集列数、权威 tick 工作量等），性能数值只在同 scenario 版本内可比；
-- 旧 scenario 版本的报告仍可读取并做同版本比较；跨 scenario 比较只接受显式 `--allow-scenario-upgrade 18:19`，这是当前唯一显式迁移授权；
+- benchmark producer 为 scenario v20，固定输入仍是七名远端玩家、零伙伴、不注入聊天，被测世界不注水且不含农业方块；scenario 版本变化记录的是被测进程本身的改变（HUD 固定上传布局、HUD 图集列数、权威 tick 工作量等），性能数值只在同 scenario 版本内可比；
+- 旧 scenario 版本的报告仍可读取并做同版本比较；跨 scenario 比较只接受显式 `--allow-scenario-upgrade 19:20`，这是当前唯一显式迁移授权（历史的 `18:19` 随 producer 升到 scenario v20 退役，只作归档证据，不再是当前可授权迁移）；
 - 跨 transport 比较要求两侧 scenario 版本与 `git_commit` 都一致，否则拒绝；
 - 性能数值只记录，不改变退出状态；报告结构、来源身份、真实 overflow、数据丢失和 I/O 错误仍然硬失败。

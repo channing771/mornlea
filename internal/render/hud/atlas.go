@@ -61,21 +61,26 @@ func buildHotbarTextureAtlas(registry *assets.Registry) []byte {
 }
 
 var (
+	// 三枚标题 cell 各由两幅 7×7 原创字形拼成，摆位由 `paintContainerTitle`
+	// 固定在 (1,4) 与 (8,4)。字形全部单连通、无孤立像素：合成是网格加锤、
+	// 箱子是箱体加锁孔、熔炉是炉体开口加火苗。
 	craftingTitleMasks = [2][7]string{
-		{".###...", "#...#..", "#####..", "#...#..", "#...#..", "#...#..", "......."},
-		{"#....#.", ".#..#..", "..##...", ".##.#..", "#..#...", "#...#..", "......."},
+		{"#####..", "#.#.#..", "#####..", "#.#.#..", "#####..", ".......", "......."},
+		{".#####.", ".#####.", "...#...", "...#...", "...#...", "...#...", "......."},
 	}
 	chestTitleMasks = [2][7]string{
-		{"#.#.#..", ".#.#...", "#####..", ".#.#...", "#####..", ".#.#...", "......."},
-		{".###...", "...#...", ".###...", "...#...", "...#...", ".###...", "......."},
+		{".#####.", "#######", "#.....#", "#######", "#.....#", "#######", "......."},
+		{"..###..", "..#.#..", "..###..", "...#...", "...#...", ".......", "......."},
 	}
 	furnaceTitleMasks = [2][7]string{
-		{"#...#..", "#####..", ".#.#...", "#####..", ".#.#...", "#...#..", "......."},
-		{"#......", "#####..", "#.#....", "#.#....", "#.#....", "#.#....", "......."},
+		{"#######", "#.....#", "#.###.#", "#.#.#.#", "#.###.#", "#######", "......."},
+		{"...#...", "..###..", ".#####.", "..###..", "...#...", ".......", "......."},
 	}
 )
 
 // paintContainerSlot 以浅边、面色和深边绘制可复用的 16px 凹槽，不依赖外部美术。
+// 边缘统一为 1 px：上左受光、下右背光，去掉旧版中间调过渡行，凹槽在面板上
+// 更干脆；边缘语义与图标描边保持同一宽度。
 func paintContainerSlot(dst []byte, column int) {
 	for y := range hotbarTextureSize {
 		for x := range hotbarTextureSize {
@@ -83,10 +88,8 @@ func paintContainerSlot(dst []byte, column int) {
 			switch {
 			case x == 0 || y == 0:
 				color = [4]byte{148, 166, 174, 255}
-			case x >= hotbarTextureSize-2 || y >= hotbarTextureSize-2:
+			case x == hotbarTextureSize-1 || y == hotbarTextureSize-1:
 				color = [4]byte{16, 24, 30, 255}
-			case x == 1 || y == 1:
-				color = [4]byte{90, 108, 116, 255}
 			}
 			paintContainerPixel(dst, column, x, y, color)
 		}
@@ -112,14 +115,16 @@ func paintPixelMask(dst []byte, column, offsetX, offsetY int, mask [7]string, co
 }
 
 // paintContainerFlame 以固定整数像素给熔炉燃烧进度一枚不依赖字体的原创图示。
+// 剪影是顶尖底圆的泪滴：行宽沿中轴 x=7.5 对称，明黄内核收在下半段中轴两列，
+// 自下而上的燃烧填充恰好先亮起内核。
 func paintContainerFlame(dst []byte, column int) {
 	rows := [...]struct{ left, right int }{
-		{7, 8}, {6, 8}, {6, 9}, {5, 10}, {5, 10}, {6, 9}, {6, 9}, {7, 8},
+		{7, 8}, {6, 9}, {6, 9}, {5, 10}, {5, 10}, {4, 11}, {4, 11}, {5, 10},
 	}
 	for y, row := range rows {
 		for x := row.left; x <= row.right; x++ {
 			color := [4]byte{238, 116, 30, 255}
-			if y >= 5 && x >= 7 && x <= 8 {
+			if y >= 4 && x >= 7 && x <= 8 {
 				color = [4]byte{255, 218, 86, 255}
 			}
 			paintContainerPixel(dst, column, x, y+3, color)
@@ -127,17 +132,20 @@ func paintContainerFlame(dst []byte, column int) {
 	}
 }
 
-// paintContainerArrow 以固定整数像素给熔炼进度一枚右向图示。
+// paintContainerArrow 以固定整数像素给熔炼进度一枚右向图示。箭头只许中性灰：
+// 柄取中灰、头取亮灰的两层明暗表达方向感，不与琥珀强调色或任何语义色相竞争；
+// 填充自左向右裁剪时先亮柄后亮头，进度读法与形状一致。
 func paintContainerArrow(dst []byte, column int) {
-	color := [4]byte{102, 202, 238, 255}
+	shaft := [4]byte{150, 156, 166, 255}
+	head := [4]byte{206, 212, 222, 255}
 	for y := 6; y <= 9; y++ {
-		for x := 3; x <= 10; x++ {
-			paintContainerPixel(dst, column, x, y, color)
+		for x := 3; x <= 9; x++ {
+			paintContainerPixel(dst, column, x, y, shaft)
 		}
 	}
-	for y, width := range [...]int{1, 2, 3, 4, 3, 2, 1} {
+	for y, width := range [...]int{1, 2, 3, 4, 4, 3, 2, 1} {
 		for x := 0; x < width; x++ {
-			paintContainerPixel(dst, column, 10+x, y+4, color)
+			paintContainerPixel(dst, column, 10+x, y+4, head)
 		}
 	}
 }

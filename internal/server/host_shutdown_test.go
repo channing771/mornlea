@@ -176,7 +176,7 @@ func TestHostShutdownMultiplayerFlushFailurePreservesRuntimeAndRetries(t *testin
 		t.Fatalf("failed Flush closed world: sync=%d close=%d", store.syncCount(), store.closeCount())
 	}
 	select {
-	case <-host.players.done:
+	case <-host.players.Done():
 		t.Fatal("failed Flush closed player workers")
 	default:
 	}
@@ -204,7 +204,7 @@ func TestHostShutdownMultiplayerFlushFailurePreservesRuntimeAndRetries(t *testin
 		}
 	}
 	select {
-	case <-host.players.done:
+	case <-host.players.Done():
 	default:
 		t.Fatal("successful Shutdown returned before player workers exited")
 	}
@@ -300,14 +300,11 @@ func TestHostShutdownWorldFailureKeepsPlayerWorkersRetryable(t *testing.T) {
 				t.Fatal("failed world shutdown released Store ownership")
 			}
 			select {
-			case <-host.players.done:
+			case <-host.players.Done():
 				t.Fatal("world failure closed player workers")
 			default:
 			}
-			host.players.scheduler.submitMu.RLock()
-			jobsClosed := host.players.scheduler.closed
-			host.players.scheduler.submitMu.RUnlock()
-			if jobsClosed {
+			if host.players.IsJobsClosed() {
 				t.Fatal("world failure closed player save jobs")
 			}
 			waitLoginDone(t, login.Done)
@@ -353,7 +350,7 @@ func TestHostShutdownWorldFailureKeepsPlayerWorkersRetryable(t *testing.T) {
 					store.syncCount(), store.closeCount(), test.successfulSyncs, test.successfulClose)
 			}
 			select {
-			case <-host.players.done:
+			case <-host.players.Done():
 			default:
 				t.Fatal("successful retry did not close player workers")
 			}
@@ -467,6 +464,11 @@ func setShutdownPlayerRotation(
 			Pitch: snapshot.Pitch,
 		}
 	}
+}
+
+type playerSaveKey struct {
+	playerID core.PlayerID
+	revision uint64
 }
 
 type strictShutdownStore struct {

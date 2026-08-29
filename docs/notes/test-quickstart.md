@@ -26,7 +26,7 @@
 | 改动域 | 快检命令 |
 |---|---|
 | 窗口 / 渲染 / 材质 / WGSL | `cargo test -p mornlea_client --locked` + `go test ./cmd/mornlea/app -run 'TestFitFramebuffer\|TestApplicationConnection'` |
-| 协议 / 网络 / 存档 | `go test ./internal/network ./internal/storage ./internal/core` |
+| 协议 / 网络 / 存档 | `go test ./internal/network/... ./internal/storage/... ./internal/core` |
 | 服务端 tick / 伙伴 / 农业 | `go test ./internal/server ./internal/sim -run '关键词'` |
 | 资产 / 材质包 / provenance | `go test ./internal/assets` |
 | 视觉 golden | 预期不变：`make visual-check`；预期变化：逐图确认后 `make visual-update`，再运行 `make visual-check` |
@@ -35,7 +35,7 @@
 要点：
 
 - `go test ./pkg` 不带 `-count=1` 时未改动包命中缓存秒回；`-race` 与 `-count=1` 会强制失效缓存，只留给 T1 及以上。
-- Rust 增量构建从不清 `target/`；`CARGO_TARGET_DIR` 默认指向 `~/.cache/mornlea-cargo-target`（Makefile 已导出），worktree 之间共享编译产物，新分支不再冷编译 wgpu 全家桶。日常用 `cargo test -p <crate> --locked`，`make rust-check` 留到提交前。
+- Rust 增量构建从不清 `target/`；Makefile 为 `make rust` 默认设置当前 worktree 的 `CARGO_TARGET_DIR=engine/target/cargo`，避免跨 worktree 复用产物。直接调用 cargo 不读取 Makefile，需要该目录或其他目标时须显式设置 `CARGO_TARGET_DIR`；CI 也显式设置，传给 `make rust` 的值可覆盖默认值。日常用 `cargo test -p <crate> --locked`，`make rust-check` 留到提交前。
 
 ## T1：race-changed
 
