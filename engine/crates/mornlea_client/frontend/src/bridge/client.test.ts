@@ -108,6 +108,51 @@ describe("parseState", () => {
     expect(() => parseState(raw)).toThrow(BridgeProtocolError);
   });
 
+  it("editValue 播种键合法时被解析保留", () => {
+    const raw = {
+      phase: "game",
+      debug: {
+        visible: true,
+        mode: "本地单机",
+        rows: [
+          {
+            label: "gravity",
+            value: "9.807",
+            kind: "param",
+            readonly: false,
+            selected: true,
+            editing: true,
+            editValue: "9.80665",
+          },
+        ],
+      },
+    };
+    const state = parseState(raw);
+    expect(state.debug?.rows[0]?.editValue).toBe("9.80665");
+  });
+
+  it("readonly 调试行携带 editValue 抛 BridgeProtocolError", () => {
+    const raw = {
+      phase: "game",
+      debug: {
+        visible: true,
+        mode: "本地单机",
+        rows: [
+          {
+            label: "viewDistance",
+            value: "8",
+            kind: "param",
+            readonly: true,
+            selected: false,
+            editing: false,
+            editValue: "8",
+          },
+        ],
+      },
+    };
+    expect(() => parseState(raw)).toThrow(BridgeProtocolError);
+  });
+
   it("顶层未知属性抛 BridgeProtocolError", () => {
     expect(() => parseState({ phase: "menu", cheat: true })).toThrow(BridgeProtocolError);
   });

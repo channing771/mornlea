@@ -72,6 +72,8 @@ export interface DebugRow {
   readonly label: string;
   readonly value: string;
   readonly kind: DebugRowKind;
+  /** 编辑播种文本（全精度），仅可编辑 param 行携带；缺席时以 value 播种。 */
+  readonly editValue?: string;
   readonly readonly: boolean;
   readonly selected: boolean;
   readonly editing: boolean;
@@ -172,6 +174,8 @@ const MAX_MESSAGE = 256;
 const MAX_PATH = 1024;
 const MAX_DEBUG_SIDE = 24;
 const MAX_MODE = 64;
+/** editValue 播种文本上界，与 schema `debugRow.editValue` maxLength 同值。 */
+const MAX_DEBUG_SEED = 64;
 
 type RecordLike = Record<string, unknown>;
 
@@ -182,9 +186,12 @@ function asRecord(value: unknown, context: string): RecordLike {
   return value as RecordLike;
 }
 
-function requireKeys(record: RecordLike, allowed: readonly string[], context: string): void {
+/** requireKeys 执行 additionalProperties:false 检查：record 的键必须全部落在
+ * allowed∪optional 内，任何未知键都拒绝（可选键是否出现由字段校验决定）。 */
+function requireKeys(record: RecordLike, allowed: readonly string[], context: string, optional: readonly string[] = []): void {
+  const permitted = [...allowed, ...optional];
   for (const key of Object.keys(record)) {
-    if (!allowed.includes(key)) {
+    if (!permitted.includes(key)) {
       throw new BridgeProtocolError(`桥协议 ${context} 含未知属性「${key}」`);
     }
   }
@@ -296,7 +303,14 @@ function parseSettings(record: RecordLike): SettingsState {
 
 function parseDebugRow(raw: unknown, context: string): DebugRow {
   const record = asRecord(raw, context);
-  requireKeys(record, ["label", "value", "kind", "readonly", "selected", "editing"], context);
+  // editValue 是可选播种键：键集合按「必填 + 可选」一次验收（未知键仍拒绝），
+  // 可选键出现时再按字段校验（单行有界字符串）。
+  requireKeys(
+    record,
+    ["label", "value", "kind", "readonly", "selected", "editing"],
+    context,
+    ["editValue"],
+  );
   const row: DebugRow = {
     label: requireString(record, "label", MAX_DEBUG_SIDE, context),
     value: requireString(record, "value", MAX_DEBUG_SIDE, context),
@@ -304,10 +318,18 @@ function parseDebugRow(raw: unknown, context: string): DebugRow {
     readonly: requireBoolean(record, "readonly", context),
     selected: requireBoolean(record, "selected", context),
     editing: requireBoolean(record, "editing", context),
+    editValue:
+      "editValue" in record
+        ? requireSingleLine(requireString(record, "editValue", MAX_DEBUG_SEED, context), context)
+        : undefined,
   };
   // 与 Rust flags 语义互钉：EDITING 置位行必须可编辑，选中只落在可编辑行。
   if (row.readonly && (row.selected || row.editing)) {
     throw new BridgeProtocolError(`桥协议 ${context} readonly 行不得置位 selected/editing`);
+  }
+  // 只读行不可能进入编辑，播种文本只对可编辑行有意义。
+  if (row.readonly && row.editValue !== undefined) {
+    throw new BridgeProtocolError(`桥协议 ${context} readonly 行不得携带 editValue`);
   }
   return row;
 }

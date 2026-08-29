@@ -350,10 +350,12 @@ type menuInputSpyWindow struct {
 	polled             bool
 	gameKeyQueries     atomic.Int32
 	cursorCaptureCalls atomic.Int32
+	focusCalls         atomic.Int32
 }
 
 func (window *menuInputSpyWindow) ShouldClose() bool { return window.polled }
 func (window *menuInputSpyWindow) Poll()             { window.polled = true }
+func (window *menuInputSpyWindow) Focus()            { window.focusCalls.Add(1) }
 func (window *menuInputSpyWindow) KeyDown(client.Key) bool {
 	window.gameKeyQueries.Add(1)
 	return false
@@ -406,6 +408,10 @@ func TestMenuPhaseInputIsolation(t *testing.T) {
 			if got := spy.cursorCaptureCalls.Load(); got != 0 {
 				t.Fatalf("菜单相位（未点击进入游戏）不应捕获光标，捕获 = %d", got)
 			}
+			// 交互路径启动时窗口前置一次（后台启动体验项）。
+			if got := spy.focusCalls.Load(); got != 1 {
+				t.Fatalf("RunInteractive 应恰请求一次窗口前置，实际 %d", got)
+			}
 		})
 	}
 }
@@ -437,5 +443,26 @@ func TestBuildUIStateRealMenuContentLock(t *testing.T) {
 	}
 	if state.Menu.Buttons[1].ID != menuActionMultiplayer || state.Menu.Buttons[1].Enabled {
 		t.Fatalf("多人游戏按钮应保持禁用: %+v", state.Menu.Buttons[1])
+	}
+}
+
+// TestBuildUIStateStartingDisablesEnterGame 锁定装配进行中的下行防重呈现：
+// starting 相位的菜单分节把「进入游戏」按钮置为禁用，前端经下行状态置灰且
+// 不再产生点击/默认按钮事件；其余按钮的可用性不变。
+func TestBuildUIStateStartingDisablesEnterGame(t *testing.T) {
+	app := &Application{menu: menuState{
+		phase: MenuPhaseStarting, title: "Mornlea", version: "dev",
+	}}
+	state := app.buildUIState()
+	if state.Menu == nil {
+		t.Fatal("starting 相位应携带 menu 分节")
+	}
+	if state.Menu.Buttons[0].ID != menuActionStart || state.Menu.Buttons[0].Enabled {
+		t.Fatalf("starting 相位进入游戏按钮应经下行禁用: %+v", state.Menu.Buttons[0])
+	}
+	// 回到菜单相位后按钮恢复可用。
+	app.menu.phase = MenuPhaseMenu
+	if buttons := app.buildUIState().Menu.Buttons; !buttons[0].Enabled {
+		t.Fatalf("菜单相位进入游戏按钮应恢复可用: %+v", buttons[0])
 	}
 }

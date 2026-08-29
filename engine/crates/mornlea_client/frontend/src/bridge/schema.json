@@ -130,13 +130,14 @@
     },
     "debugRow": {
       "type": "object",
-      "description": "调试面板行。kind=readout 为顶部只读读数行、section 为分组段头（值恒空）、param 为可选中/编辑的参数行。readonly 行不得被选中或进入编辑（对应 Rust flags 语义：EDITING 置位行必须同时可编辑）。",
+      "description": "调试面板行。kind=readout 为顶部只读读数行、section 为分组段头（值恒空）、param 为可选中/编辑的参数行。readonly 行不得被选中或进入编辑（对应 Rust flags 语义：EDITING 置位行必须同时可编辑）。editValue 为可选的编辑播种文本：展示值只有 4 位有效数字，输入框必须以全精度文本播种，「不改文本直接确认」才不会把有效值悄悄写成显示形式；仅可编辑 param 行携带，只读行与段头缺席。",
       "additionalProperties": false,
       "required": ["label", "value", "kind", "readonly", "selected", "editing"],
       "properties": {
         "label": { "type": "string", "maxLength": 24 },
         "value": { "type": "string", "maxLength": 24 },
         "kind": { "enum": ["readout", "section", "param"] },
+        "editValue": { "type": "string", "maxLength": 64, "pattern": "^[^\\r\\n]*$" },
         "readonly": { "type": "boolean" },
         "selected": { "type": "boolean" },
         "editing": { "type": "boolean" }

@@ -5,7 +5,7 @@ import "@testing-library/jest-dom/vitest";
 import { fireEvent } from "@testing-library/dom";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BridgeClient, type MenuState, type UIState, type UplinkEvent } from "../bridge/client";
+import { BridgeClient, type DebugRow, type MenuState, type UIState, type UplinkEvent } from "../bridge/client";
 import { App } from "./App";
 import { PAUSE_BACK_LABEL, PAUSE_QUIT_TO_MENU_LABEL } from "./copy";
 
@@ -213,5 +213,145 @@ describe("App 相位切换", () => {
       v: 1,
       events: [{ type: "action", id: "quit" }],
     });
+  });
+
+  it("禁用按钮点击不产生任何桥事件（多人游戏）", () => {
+    const { events } = renderWithState(menuState, true);
+    fireEvent.click(screen.getByRole("button", { name: "多人游戏" }));
+    expect(events).toEqual([]);
+  });
+});
+
+describe("App 键盘路由（WebView 是 firstResponder，菜单键经桥上行）", () => {
+  it("主菜单 Enter 触发默认按钮（进入游戏）恰一次", () => {
+    const { events } = renderWithState(menuState, true);
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(events).toEqual([{ type: "action", id: "enter-game" }]);
+  });
+
+  it("starting 相位进入游戏按钮禁用：Enter 不产生事件（防重经下行禁用态驱动）", () => {
+    // Go 下行在 starting 相位把进入游戏按钮置为禁用；前端契约是禁用态
+    // 既不响应点击，也不响应默认按钮 Enter。
+    const startingMenu: MenuState = {
+      ...menu,
+      buttons: menu.buttons.map((button) =>
+        button.id === "enter-game" ? { ...button, enabled: false } : button,
+      ),
+    };
+    const { events } = renderWithState({ phase: "starting", menu: startingMenu }, true);
+    expect(screen.getByRole("button", { name: "进入游戏" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.keyDown(window, { key: "Enter" });
+    fireEvent.click(screen.getByRole("button", { name: "进入游戏" }));
+    expect(events).toEqual([]);
+  });
+
+  it("主菜单 Escape 无语义：不产生事件", () => {
+    const { events } = renderWithState(menuState, true);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(events).toEqual([]);
+  });
+
+  it("焦点在按钮上时 Enter 交给原生激活语义，中枢不重复发默认按钮", () => {
+    const { events } = renderWithState(menuState, true);
+    fireEvent.keyDown(screen.getByRole("button", { name: "设置" }), { key: "Enter" });
+    expect(events).toEqual([]);
+  });
+
+  it("设置页 Escape = 返回（脏草稿由 Go 裁决阻止）", () => {
+    const { events } = renderWithState(
+      {
+        phase: "settings",
+        settings: {
+          draft: { audioVolume: 0.5, texturePackPath: "", windowSize: "640x360" },
+          saved: { audioVolume: 0.5, texturePackPath: "", windowSize: "640x360" },
+          dirty: true,
+          status: "",
+          error: "",
+        },
+      },
+      true,
+    );
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(events).toEqual([{ type: "action", id: "settings-back" }]);
+  });
+
+  it("暂停层 Escape = 返回游戏（面板可见时 winit 收不到 Esc，经桥重组）", () => {
+    const { events } = renderWithState({ phase: "paused", pause: { remote: false } }, true);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(events).toEqual([{ type: "action", id: "pause-back" }]);
+  });
+
+  const debugState = (rows: readonly DebugRow[]): UIState => ({
+    phase: "game",
+    debug: { visible: true, mode: "本地单机", rows },
+  });
+
+  const paramRows = (overrides: Partial<{ selected: boolean; editing: boolean; readonly: boolean; editValue?: string }> = {}) => [
+    {
+      label: "gravity",
+      value: "9.807",
+      kind: "param" as const,
+      readonly: false,
+      selected: true,
+      editing: false,
+      ...overrides,
+    },
+  ];
+
+  it("调试面板可见：F3 关闭面板（close op 上行）", () => {
+    const { events } = renderWithState(debugState(paramRows()), true);
+    fireEvent.keyDown(window, { key: "F3" });
+    expect(events).toEqual([{ type: "debug-edit", op: "close" }]);
+  });
+
+  it("调试面板非编辑态：Esc 关闭、方向键移动选中、Enter 进入编辑", () => {
+    const { events } = renderWithState(debugState(paramRows()), true);
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    fireEvent.keyDown(window, { key: "Enter" });
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(events).toEqual([
+      { type: "debug-edit", op: "select-next" },
+      { type: "debug-edit", op: "select-prev" },
+      { type: "debug-edit", op: "enter-edit" },
+      { type: "debug-edit", op: "close" },
+    ]);
+  });
+
+  it("调试面板编辑态：Esc 取消编辑，方向键与 Enter 被忽略（阻止选中切换）", () => {
+    const { events } = renderWithState(debugState(paramRows({ editing: true })), true);
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    fireEvent.keyDown(window, { key: "Enter" });
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(events).toEqual([{ type: "debug-edit", op: "cancel" }]);
+  });
+
+  it("编辑播种用下行 editValue 全精度文本：不改文本确认不漂移", () => {
+    const { events } = renderWithState(
+      debugState(paramRows({ editing: true, editValue: "9.80665" })),
+      true,
+    );
+    const input = screen.getByRole("textbox", { name: "gravity" }) as HTMLInputElement;
+    expect(input.value).toBe("9.80665");
+    fireEvent.keyDown(input, { key: "Enter" });
+    // confirm 携带输入框原文；编辑态 Enter 不得再尾随 enter-edit。
+    expect(events).toEqual([{ type: "debug-edit", op: "confirm", value: "9.80665" }]);
+  });
+
+  it("无 editValue 时编辑播种回退为行展示值", () => {
+    renderWithState(debugState(paramRows({ editing: true })), true);
+    const input = screen.getByRole("textbox", { name: "gravity" }) as HTMLInputElement;
+    expect(input.value).toBe("9.807");
+  });
+
+  it("只读参数行以 aria-disabled 呈现（禁止选中与编辑的呈现面）", () => {
+    renderWithState(
+      debugState([
+        { label: "viewDistance", value: "8", kind: "param", readonly: true, selected: false, editing: false },
+      ]),
+      true,
+    );
+    expect(screen.getByText("viewDistance").closest(".debug-row")?.getAttribute("aria-disabled")).toBe("true");
   });
 });

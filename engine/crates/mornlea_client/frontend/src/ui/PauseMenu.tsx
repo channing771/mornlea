@@ -1,6 +1,8 @@
 // 暂停层屏：半透明遮罩 + 固定标题 + 两枚固定按钮 + 远程注明行。按钮文案与
-// ui.rs PAUSE_* 常量一致；「返回/退回」动作经桥上行，Esc 的开合由 Go 键位栈
-// 裁决（Rust/前端不合成 Escape 动作），恢复或拆链的裁决权在 Go 相位机。
+// ui.rs PAUSE_* 常量一致；「返回/退回」动作经桥上行。覆盖层可见时 WebView 是
+// firstResponder，winit 收不到 Esc——Esc=返回游戏经 App 的窗口级键盘路由上行
+// pause-back（开层的 Esc 在游戏相位仍由 winit 捕获，两侧不会同帧回声），
+// 恢复或拆链的裁决权在 Go 相位机（防重入哨兵保证重复事件只生效一次）。
 import type { PauseState, UplinkEvent } from "../bridge/client";
 import {
   PAUSE_BACK_LABEL,

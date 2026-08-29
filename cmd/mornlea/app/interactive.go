@@ -26,6 +26,12 @@ const SteadyFrameMeshWorkMax = 64
 // 直接进入游戏循环。暂停页「退回主菜单」把相位送回菜单，外层循环据此在两条
 // 相位循环之间往返；「退出游戏」或窗口关闭返回 nil 正常退出。
 func RunInteractive(app *Application) error {
+	// 交互路径启动即请求窗口前置:后台启动(如被启动脚本或聚焦竞态抢占)时
+	// 窗口偶发不前置,用户面对一个看不见的客户端。benchmark/capture 不走本
+	// 入口;无窗口(测试直接构造)时跳过。
+	if app.window != nil {
+		app.window.Focus()
+	}
 	for !app.window.ShouldClose() {
 		if app.menu.phase != MenuPhaseGame {
 			if err := runMenuPhase(app); err != nil {

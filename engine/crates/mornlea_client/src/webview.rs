@@ -20,6 +20,8 @@
 //!   时不做任何求值,页面 DOM 状态在隐藏期间保持,重新显示无需重置。
 //! - **页面就绪重推**:WebView 是异步加载的,加载完成前的求值会丢失;
 //!   `didFinishNavigation` 后把缓存的最近状态重推给新文档,保证首屏有状态。
+//!   同一回调也是渲染进程崩溃(`webViewWebContentProcessDidTerminate`)后的
+//!   自愈通道:崩溃即重载页面,重载完成走既有的就绪重推,菜单呈现自行恢复。
 //!
 //! 线程约束:全部方法必须在创建窗口的 OS 主线程调用(与 `ClientWindow`
 //! 的 FFI 线程约束一致);WebKit 对象都要求主线程。
@@ -136,6 +138,11 @@ define_class!(
             let detail = error.localizedDescription();
             eprintln!("mornlea webview: 导航失败: {detail}");
         }
+
+        #[unsafe(method(webViewWebContentProcessDidTerminate:))]
+        unsafe fn web_view_web_content_process_did_terminate(&self, web_view: &WKWebView) {
+            self.web_content_process_did_terminate(web_view);
+        }
     }
 );
 
@@ -184,6 +191,17 @@ impl BridgeDelegate {
         let Some(state) = state else { return };
         evaluate_state(webview, &state);
         *shared.last_evaluated.lock().expect("桥幂等基准锁中毒") = Some(state);
+    }
+
+    /// 渲染进程(WebContent)崩溃兜底:进程终止时页面失去全部脚本状态,菜单
+    /// 会无声消失。这里立即重载页面;重载完成后的 [`Self::did_finish_navigation`]
+    /// 把缓存的最近状态重推给新文档,Go 侧无需感知崩溃——下次状态变化前菜单
+    /// 就已按崩溃前内容恢复。
+    fn web_content_process_did_terminate(&self, webview: &WKWebView) {
+        eprintln!("mornlea webview: WebContent 进程终止,重载菜单页面自愈");
+        // SAFETY: 主线程回调;返回的导航对象无需保留(完成回调经
+        // didFinishNavigation 送达同一 delegate)。
+        let _ = unsafe { webview.reload() };
     }
 }
 

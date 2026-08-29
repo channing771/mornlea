@@ -340,6 +340,12 @@ body {
   white-space: nowrap;
 }
 
+/* 只读参数行：数值随标签同用次级文字色，与 aria-disabled 一同呈现
+ * 「不可选中/编辑」的禁用语义（亮度层级，不依赖单一色相）。 */
+.debug-row.is-readonly .debug-value {
+  color: var(--text-secondary);
+}
+
 .debug-edit-input {
   box-sizing: border-box;
   flex: 1;

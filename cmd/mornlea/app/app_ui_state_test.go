@@ -326,3 +326,49 @@ func TestUIStateRejectsSchemaViolations(t *testing.T) {
 		t.Fatal("超长标题应被 schema 拒绝")
 	}
 }
+
+// TestPushUIStateOnlyOnChange 锁定「变化才推送」的事件驱动下行语义(T2 移交
+// 项):同一状态重复驱动不产生新推送,状态每次变化恰好推送一份完整快照,游戏
+// 相位走常量快路径同样幂等。
+func TestPushUIStateOnlyOnChange(t *testing.T) {
+	window := &fakeInteractiveWindow{}
+	app := &Application{
+		menu:     menuState{phase: MenuPhaseMenu, title: "Mornlea", version: "dev"},
+		settings: SettingsState{Committed: SettingsValues{AudioVolume: 0.5}, Draft: SettingsValues{AudioVolume: 0.5}},
+		window:   window,
+	}
+
+	app.pushUIStateIfChanged()
+	if got := len(window.pushedUIStates); got != 1 {
+		t.Fatalf("首次驱动应推送一次,实际 %d", got)
+	}
+	first := string(window.pushedUIStates[0])
+
+	// 同态重复驱动:零推送。
+	app.pushUIStateIfChanged()
+	app.pushUIStateIfChanged()
+	if got := len(window.pushedUIStates); got != 1 {
+		t.Fatalf("同状态不得重复推送,实际 %d", got)
+	}
+
+	// 状态变化一次:恰好再推送一份,且是新快照。
+	app.menu.error = "存档无法打开"
+	app.pushUIStateIfChanged()
+	if got := len(window.pushedUIStates); got != 2 {
+		t.Fatalf("状态变化应恰推送一次,实际 %d", got)
+	}
+	if string(window.pushedUIStates[1]) == first {
+		t.Fatal("第二次推送应携带变化后的新状态")
+	}
+
+	// 进入游戏相位:常量快路径推送一次,此后每帧零推送。
+	app.menu.phase = MenuPhaseGame
+	app.pushUIStateIfChanged()
+	app.pushUIStateIfChanged()
+	if got := len(window.pushedUIStates); got != 3 {
+		t.Fatalf("游戏相位快路径应只推送一次,实际 %d", got)
+	}
+	if got := string(window.pushedUIStates[2]); got != `{"phase":"game"}` {
+		t.Fatalf("游戏相位快路径状态 = %q", got)
+	}
+}

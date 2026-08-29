@@ -316,6 +316,49 @@ func TestDebugUIStateReadOnlyRowNeverSelectedOrEditing(t *testing.T) {
 	}
 }
 
+// TestDebugUIStateEditSeedCarriesPreciseValue 锁住编辑播种的下行契约:可编辑
+// param 行携带全精度 editValue 播种文本,前端输入框以它播种,「不改文本直接
+// 确认」写回的原文才不会把有效值悄悄写成 4 位有效数字的展示形式;只读行与
+// 读数行不携带播种(前端拒绝只读行携带 editValue 的状态)。
+func TestDebugUIStateEditSeedCarriesPreciseValue(t *testing.T) {
+	state := newPanelState(config.Defaults())
+	state.visible = true
+	state.effective.Physics.Gravity = 9.80665
+	state.selectFieldForTest(t, "physics.gravity")
+	rows := state.rows(false)
+	var seedRow render.PanelRow
+	for _, row := range rows {
+		if row.Label == "gravity" {
+			seedRow = row
+			break
+		}
+	}
+	if seedRow.EditValue == "" || seedRow.Value == seedRow.EditValue {
+		t.Fatalf("面板行应携带全精度播种与展示双值: %+v", seedRow)
+	}
+	got := debugUIState(false, render.PanelReadout{Mode: "单机"}, rows)
+	var gotGravity *uiDebugRowJSON
+	for i := range got.Rows {
+		if got.Rows[i].Label == "gravity" {
+			gotGravity = &got.Rows[i]
+			break
+		}
+	}
+	if gotGravity == nil {
+		t.Fatal("下行应包含 gravity 行")
+	}
+	// 下行 editValue 必须逐字等于面板行的全精度播种原文(float32 最短往返
+	// 表示),展示值(4 位有效数字)不得顶替它。
+	if gotGravity.EditValue != seedRow.EditValue {
+		t.Fatalf("下行 editValue = %q, want 全精度播种原文 %q", gotGravity.EditValue, seedRow.EditValue)
+	}
+	for i := range got.Rows {
+		if got.Rows[i].ReadOnly && got.Rows[i].EditValue != "" {
+			t.Fatalf("只读行不得携带 editValue: %+v", got.Rows[i])
+		}
+	}
+}
+
 // TestDebugUIStateAbsentWhenPanelHidden 锁住「面板关闭时零参与」:面板不可见
 // 的组装不产出 debug 分节。
 func TestDebugUIStateAbsentWhenPanelHidden(t *testing.T) {

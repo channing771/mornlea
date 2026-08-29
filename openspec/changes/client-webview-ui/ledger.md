@@ -30,3 +30,12 @@
 - 冒烟实证（控制会话亲核截图）：WebView 呈现 React 主菜单（标题/四按钮/多人禁用/版本行），挂在 wgpu 暗色天空上；一次设置页截图溯源为光标 click-through，反向实证按钮命中→上行→相位切换→下行完整回路。
 - SPEC PASS（范围纪律：egui 仅停用未删，符合 T4 边界）。QUALITY R0 FAIL（cargo fmt 18 处、clippy 4 条、SAFETY 注释失实、任务编号泄漏三处、注释损伤两处）→ R1 全修：fmt/clippy 归零；治本删除多余 `HostShared.webview` 弱引用字段（navigation delegate 消息自带 &WKWebView）；删无谓 `unsafe impl Send`；线程模型注释如实化；句柄缺失分支改降级语义；编号/措辞/注释全清。QUALITY(RE) PASS。
 - 移交 T3/T4：DrainUIEvents 对页面枚举漂移是 panic 口径（三端钉值 CI 拦截，T3 评估）；WebContent 崩溃无自动 reload（`webViewWebContentProcessDidTerminate` 兜底）；`pushedUIStates` 夹具无消费测试（补「变化才推送」断言）；F3 场景每帧推送 ~60Hz（与旧 egui 同量级，措辞勿理解为降频）；编辑播种精度与面板可见时 F3/Esc 经桥重组（T3 核心项）；后台启动窗口偶发不前置（启动时 `window.Focus()` 体验项）。
+
+### T3 四屏行为语义平移 — PASS（零修复轮；工作树含超时会话遗留改动，implementer 审查整合并修复一处损坏）
+
+- Implementer 报告：键盘路由集中 `App.tsx routeKeyDown`（Esc 优先级栈：调试面板→暂停→设置；menu Enter 默认按钮；编辑态忽略方向键/Enter 不 preventDefault 保光标）；settings Esc=返回脏草稿由 Go 裁决；暂停层 Esc 关层经 React→`pause-back`，与 winit 开层互斥无回声（arm/takeResume 哨兵）；F3 面板编辑播种以下行 `editValue`（schema 唯一新增字段三端同步：TS 解析守卫/Go 组装 omitempty 只读行不携带/校验器全量验证），全精度不变量两端互钉；移交项全收口（`TestPushUIStateOnlyOnChange`、`webViewWebContentProcessDidTerminate` reload 自愈、启动 Focus 恰一次、DrainUIEvents panic 口径评估维持现状）。
+- 冒烟：AXPress 点击注入成功，12 张截图全链路（主菜单→设置→脏草稿 Esc 阻止提示→取消→装配隐藏 WebView→暂停层→F3 面板→退出 exit 0）。
+- SPEC PASS：settings-menu/debug-panel/webview-menu-ui 三 spec 行为逐条有测试；路由表逐行核验；三端同步证据齐（81 vitest/go race/cargo 188 全绿亲自复跑）。
+- QUALITY PASS：遗留改动整合连贯无死代码；editValue 64 vs 24 截断口径核实（播种值不截断、构造性上界成立）；reload 不自激循环。
+- 控制会话顺手收口：app_menu.go Escape 注释陈旧更新、debug_panel.go 引用不存在的测试名改正。
+- **预存缺陷发现（记 backlog）**：暂停门置位时 `server.step` 整体跳过（含 KeepAlive 处理）而心跳走墙钟——暂停层停留 ~15-20s 必心跳超时拆链 exit 1；egui 时代已存在，与本地单机暂停语义无关远端时暴露，需独立 change（心跳循环与暂停门解耦）。

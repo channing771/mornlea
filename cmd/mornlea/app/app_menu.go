@@ -26,7 +26,7 @@ const (
 // 菜单与暂停动作 id:桥动作字符串,与 client.UIAction* 常量及单源 schema
 // `menuAction` 枚举逐值互钉(数字时代代 1..9,映射不得单方面改动)。
 // 「返回游戏」由按钮产生;Esc 的开合由 Go 键位栈暂停档裁决(interactive.go),
-// WebView 侧不合成 Escape 动作——宿主 winit 泵同帧回声会把开层立即回声成关层。
+// 开层 Escape 由宿主 winit 消费（WebView 隐藏），关层 Escape 经面板界面上行——两侧互斥于 firstResponder，无同帧回声。
 const (
 	menuActionStart           = client.UIActionEnterGame       // 进入游戏
 	menuActionMultiplayer     = client.UIActionMultiplayer     // 多人游戏(本版本禁用)

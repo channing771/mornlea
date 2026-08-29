@@ -195,6 +195,43 @@ describe("schema：下行 uiState 非法用例一律拒绝", () => {
     ).toBe(false);
   });
 
+  it("参数行携带 editValue 编辑播种文本通过校验", () => {
+    expect(
+      validateUiState({
+        phase: "game",
+        debug: {
+          visible: true,
+          mode: "本地单机",
+          rows: [
+            {
+              label: "gravity",
+              value: "9.807",
+              kind: "param",
+              readonly: false,
+              selected: true,
+              editing: true,
+              editValue: "9.80665",
+            },
+          ],
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it("editValue 含换行或非字符串拒绝", () => {
+    const row = (editValue: unknown) => ({
+      label: "gravity",
+      value: "9.807",
+      kind: "param",
+      readonly: false,
+      selected: true,
+      editing: true,
+      editValue,
+    });
+    expect(validateUiState({ phase: "game", debug: { visible: true, mode: "本地单机", rows: [row("9.80\n665")] } })).toBe(false);
+    expect(validateUiState({ phase: "game", debug: { visible: true, mode: "本地单机", rows: [row(9.80665)] } })).toBe(false);
+  });
+
   it("调试行超过 64 行拒绝", () => {
     const rows = Array.from({ length: 65 }, () => ({
       label: "x",

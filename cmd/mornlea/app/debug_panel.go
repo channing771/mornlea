@@ -284,7 +284,7 @@ func formatFieldValue(v reflect.Value) string {
 // 表示（FormatFloat 'g' -1），整数与布尔与展示形式完全相同。编辑态的播种
 // 文本必须走这个变体——展示值只有 4 位有效数字，用户在 TextEdit 里不改文本
 // 直接 CONFIRM 时，确认事件回传的播种文本若是展示形式，会把有效值悄悄写成
-// 显示形式（9.80665 → "9.807" → 9.807，见 TestPanelEditSeedFullPrecisionDoesNotDrift）。
+// 显示形式（9.80665 → "9.807" → 9.807，见 TestPanelConfirmFullPrecisionKeepsValue）。
 func formatFieldValuePrecise(v reflect.Value) string {
 	if v.Kind() == reflect.Float32 || v.Kind() == reflect.Float64 {
 		return strconv.FormatFloat(v.Float(), 'g', -1, 64)

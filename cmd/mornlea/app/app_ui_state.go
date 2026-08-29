@@ -69,13 +69,16 @@ type uiPauseJSON struct {
 }
 
 // uiDebugRowJSON 对应 schema `$defs/debugRow`;kind 取 readout/section/param。
+// editValue 是可选编辑播种文本(全精度),仅可编辑 param 行携带——展示值只有
+// 4 位有效数字,前端输入框以播种原文初始化,「不改文本直接确认」写回才不漂移。
 type uiDebugRowJSON struct {
-	Label    string `json:"label"`
-	Value    string `json:"value"`
-	Kind     string `json:"kind"`
-	ReadOnly bool   `json:"readonly"`
-	Selected bool   `json:"selected"`
-	Editing  bool   `json:"editing"`
+	Label     string `json:"label"`
+	Value     string `json:"value"`
+	Kind      string `json:"kind"`
+	EditValue string `json:"editValue,omitempty"`
+	ReadOnly  bool   `json:"readonly"`
+	Selected  bool   `json:"selected"`
+	Editing   bool   `json:"editing"`
 }
 
 // uiDebugJSON 对应 schema `$defs/debugState`:面板可叠加于任意相位。
@@ -117,11 +120,17 @@ func (a *Application) buildUIState() uiStateJSON {
 	state := uiStateJSON{Phase: a.menu.phase.uiPhase()}
 	switch a.menu.phase {
 	case MenuPhaseMenu, MenuPhaseStarting:
+		buttons := MenuButtons()
+		if a.menu.phase == MenuPhaseStarting {
+			// 装配进行中:进入游戏按钮经下行禁用,前端置灰且不再产生点击或
+			// 默认按钮事件——防重不只靠 Go 消费侧守卫,呈现面同步收敛。
+			buttons[0].Enabled = false
+		}
 		state.Menu = &uiMenuJSON{
 			Title:   a.menu.title,
 			Version: a.menu.version,
 			Error:   a.menu.error,
-			Buttons: MenuButtons(),
+			Buttons: buttons,
 		}
 	case MenuPhaseSettings:
 		state.Settings = a.settings.uiSettingsJSON()
@@ -178,13 +187,19 @@ func debugUIState(editing bool, readout render.PanelReadout, rows []render.Panel
 			value = ""
 		}
 		selected := row.Selected && !row.ReadOnly
+		// 播种文本只对可编辑 param 行有意义;只读行携带会被前端解析层整份拒绝。
+		editSeed := ""
+		if !row.ReadOnly {
+			editSeed = row.EditValue
+		}
 		state.Rows = append(state.Rows, uiDebugRowJSON{
-			Label:    truncateDebugRunes(row.Label, debugRowMaxRunes),
-			Value:    truncateDebugRunes(value, debugRowMaxRunes),
-			Kind:     kind,
-			ReadOnly: row.ReadOnly,
-			Selected: selected,
-			Editing:  editing && selected,
+			Label:     truncateDebugRunes(row.Label, debugRowMaxRunes),
+			Value:     truncateDebugRunes(value, debugRowMaxRunes),
+			Kind:      kind,
+			EditValue: editSeed,
+			ReadOnly:  row.ReadOnly,
+			Selected:  selected,
+			Editing:   editing && selected,
 		})
 	}
 	if len(state.Rows) > debugPanelRowsMax {

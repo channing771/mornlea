@@ -53,6 +53,7 @@ func (*fakeInteractiveWindow) ContentSize() (int, int)     { return 1, 1 }
 func (*fakeInteractiveWindow) SetContentSize(int, int)     {}
 func (*fakeInteractiveWindow) CancelClose()                {}
 func (*fakeInteractiveWindow) Close()                      {}
+func (*fakeInteractiveWindow) Focus()                      {}
 
 // newRemoteRenderApplication 构造 64×64 离屏渲染替身，供本包渲染主题测试
 // 使用与既有用例相同的尺寸与零值渲染配置；跨包消费者直接使用 testkit 的

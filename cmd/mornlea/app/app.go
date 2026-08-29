@@ -230,6 +230,8 @@ type Window interface {
 	SetContentSize(int, int)
 	CancelClose()
 	Close()
+	// Focus 请求把窗口前置并聚焦(交互启动体验:后台启动时窗口偶发不前置)。
+	Focus()
 	// PushUIState 下行一份菜单层 UI 状态 JSON(client ABI v12);测试桩
 	// 记录调用供断言,无头实现可空操作。
 	PushUIState([]byte)
