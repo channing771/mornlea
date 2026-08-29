@@ -10,8 +10,8 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/pathfind"
-	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -39,7 +39,7 @@ func (m *companionManager) chunkViewAt(dimension core.DimensionID, position [3]f
 // companionChunkViewFor 是区块视图构造的包级实现：伙伴与夜行者两套编排共用
 // 同一份「深拷贝即隔离」的世界读取纪律（构造只发生在持有 stepMu 的 tick 边
 // 界，拷贝出的区块与权威世界的一切后续变化无关）。
-func companionChunkViewFor(engine *sim.Engine, dimension core.DimensionID, position [3]float32) companionChunkView {
+func companionChunkViewFor(engine *runtime.Engine, dimension core.DimensionID, position [3]float32) companionChunkView {
 	center := (core.BlockPos{
 		X: int32(math.Floor(float64(position[0]))),
 		Z: int32(math.Floor(float64(position[2]))),
@@ -149,7 +149,7 @@ func (v companionChunkView) revisionAt(chunkX, chunkZ int32) uint64 {
 //
 // 退出条件（**两条都成立才可以放开流体**，缺一条就是制造故障）：
 //
-//  1. 伙伴走与玩家同一套水中积分——即 sim.advanceActiveCompanions 喂给
+//  1. 伙伴走与玩家同一套水中积分——即 runtime.advanceActiveCompanions 喂给
 //     physics.Step 的 physics.Input 里 BodyInFluid 由 physics.SubmersionFlags
 //     真实算出，而不是像现在这样恒为零值；
 //  2. 伙伴有自己的氧气与溺水结算——即 sim 的 advanceOxygen 对伙伴也成立。
@@ -395,7 +395,7 @@ func (m *companionManager) windowRevisions(body companion.Body) []pathfind.Chunk
 // 者的 waypoint 重验消费同一份「只读 revision 元数据」的廉价路径，缺失或未
 // ready 的区块直接跳过（重验方按「结果 revision 必须全部命中」裁决）。
 func chunkRevisionsAround(
-	engine *sim.Engine,
+	engine *runtime.Engine,
 	dimension core.DimensionID,
 	position [3]float32,
 ) []pathfind.ChunkRevision {

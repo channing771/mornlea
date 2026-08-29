@@ -16,8 +16,8 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	networktcp "github.com/channing771/mornlea/internal/network/tcp"
-	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -793,7 +793,7 @@ func parityBusinessMessage(
 // 状态、物品状态与拒绝）、末态权威网格与服务端派生产物、末态权威背包。
 type craftingGridParityResult struct {
 	Transcript []string
-	FinalGrid  sim.CraftingGrid
+	FinalGrid  runtime.CraftingGrid
 	FinalOuput core.ItemStack
 	Inventory  core.Inventory
 }
@@ -841,7 +841,7 @@ func TestMemoryTCPCraftingGridConvergence(t *testing.T) {
 	if countItem(memory.Inventory, core.ItemStone) != 0 || countItem(memory.Inventory, core.ItemStick) != 0 {
 		t.Fatalf("取出后原料未清零: %+v", memory.Inventory)
 	}
-	if memory.FinalGrid != (sim.CraftingGrid{Size: sim.CraftingGridSizePersonal}) {
+	if memory.FinalGrid != (runtime.CraftingGrid{Size: runtime.CraftingGridSizePersonal}) {
 		t.Fatalf("末态网格 = %+v，想要个人尺寸空网格", memory.FinalGrid)
 	}
 }

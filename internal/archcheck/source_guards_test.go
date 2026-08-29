@@ -36,7 +36,6 @@ func tunableSourceGuardPackages() map[string][]string {
 			"TerminalFallSpeed", "FluidGravity", "FluidSinkSpeed",
 			"FluidAscendSpeed", "FluidHorizontalDrag",
 		},
-		filepath.Join("internal", "sim"):           simTunables,
 		filepath.Join("internal", "sim", "tuning"): simTunables,
 	}
 }

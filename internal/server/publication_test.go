@@ -9,8 +9,8 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -273,7 +273,7 @@ func TestForgetSplits4097ChunksIntoValidDeterministicPackets(t *testing.T) {
 
 func TestDefaultRadiusLargeCenterMovePublishesBoundedForgetPackets(t *testing.T) {
 	config := DefaultConfig(1)
-	engine := sim.NewEngine(config.ViewRadius, 0, 0)
+	engine := runtime.NewEngine(config.ViewRadius, 0, 0)
 	const observer = contract.SessionID(77)
 	engine.RegisterObserverSession(observer)
 	engine.Enqueue(contract.Command{

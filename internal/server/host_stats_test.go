@@ -10,8 +10,8 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 )
 
 func TestInterestObserverSamplesEachObserverAndNilIsOptional(t *testing.T) {
@@ -27,7 +27,7 @@ func TestInterestObserverSamplesEachObserverAndNilIsOptional(t *testing.T) {
 	// （与 queueReadyAndResync 的订阅判定同一结构前提）。
 	running := &Server{
 		config:   config,
-		engine:   sim.NewEngine(0, 0, 0),
+		engine:   runtime.NewEngine(0, 0, 0),
 		sessions: make(map[contract.SessionID]*session),
 	}
 	for index := 1; index <= 8; index++ {

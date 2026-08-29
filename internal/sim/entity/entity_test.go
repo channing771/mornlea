@@ -147,8 +147,8 @@ func TestTunablesSnapshotAffectsWorkbench(t *testing.T) {
 		dimension: core.Overworld,
 		player: &playerState{
 			actorState: actorState{state: physics.State{Position: mgl32.Vec3{0.5, 1, 0.5}}},
-			workbench: core.BlockPos{X: 0, Y: 1, Z: 0},
-			lifecycle: PlayerActive,
+			workbench:  core.BlockPos{X: 0, Y: 1, Z: 0},
+			lifecycle:  PlayerActive,
 		},
 	}
 	// 近距离应有效

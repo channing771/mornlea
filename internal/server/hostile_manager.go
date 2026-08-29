@@ -23,8 +23,8 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/pathfind"
-	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 )
 
 // 有界追逐的固定数值契约：每 tick 至多构造 2 份路径快照、在途 A* 恒 ≤2（两
@@ -97,7 +97,7 @@ type hostilePathJob struct {
 // hostileManager 编排全部夜行者的有界追逐。零值不可用，经 newHostileManager
 // 构造；关闭顺序见 beginShutdown/close。
 type hostileManager struct {
-	engine *sim.Engine
+	engine *runtime.Engine
 	table  pathfind.PathBlockTable
 
 	// onlinePlayers 返回 tick 边界的在线玩家事实（按 ID 升序、仅存活且已激
@@ -122,7 +122,7 @@ type hostileManager struct {
 
 // newHostileManager 构造夜行者追逐编排。worker 纪律与 companion manager 同
 // 构：goroutine 随派发创建、结果经有界 channel 回送、ctx 取消时放弃结果。
-func newHostileManager(engine *sim.Engine) *hostileManager {
+func newHostileManager(engine *runtime.Engine) *hostileManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &hostileManager{
 		engine:    engine,

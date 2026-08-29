@@ -9,8 +9,8 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -161,9 +161,9 @@ func newPersistenceServerWithoutCleanup(t *testing.T, store storage.Store) *Serv
 	return newAttachedWorldForTest(config, endpoint, playerTestGenerator{}, store)
 }
 
-func dirtyReadyEngine(t *testing.T, keys []core.ChunkKey) *sim.Engine {
+func dirtyReadyEngine(t *testing.T, keys []core.ChunkKey) *runtime.Engine {
 	t.Helper()
-	engine := sim.NewEngine(0, 0, 0)
+	engine := runtime.NewEngine(0, 0, 0)
 	for index, key := range keys {
 		session := contract.SessionID(index + 1)
 		engine.RegisterObserverSession(session)
@@ -193,7 +193,7 @@ func dirtyReadyEngine(t *testing.T, keys []core.ChunkKey) *sim.Engine {
 	return engine
 }
 
-func dirtyUnloadingEngine(t *testing.T, key core.ChunkKey) *sim.Engine {
+func dirtyUnloadingEngine(t *testing.T, key core.ChunkKey) *runtime.Engine {
 	t.Helper()
 	engine := dirtyReadyEngine(t, []core.ChunkKey{key})
 	engine.Enqueue(contract.Command{
@@ -209,9 +209,9 @@ func dirtyUnloadingEngine(t *testing.T, key core.ChunkKey) *sim.Engine {
 	return engine
 }
 
-func dirtyPlayerEngine(t *testing.T, key core.ChunkKey) *sim.Engine {
+func dirtyPlayerEngine(t *testing.T, key core.ChunkKey) *runtime.Engine {
 	t.Helper()
-	engine := sim.NewEngine(0, 0, 0)
+	engine := runtime.NewEngine(0, 0, 0)
 	engine.RegisterSession(testSessionID, key.Dimension, key.Pos)
 	requested := engine.Step()
 	if !reflect.DeepEqual(requested.Acquire, []core.ChunkKey{key}) {

@@ -13,8 +13,8 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	simruntime "github.com/channing771/mornlea/internal/sim/runtime"
 )
 
 func TestChatCommandAddressesExactConfiguredCompanionAtTickBoundary(t *testing.T) {
@@ -963,7 +963,7 @@ func newCompanionChatRoutingServer(
 	config.Companions = append([]companion.Definition(nil), definitions...)
 	running := &Server{
 		config:           config,
-		engine:           sim.NewEngine(0, 0, 0),
+		engine:           simruntime.NewEngine(0, 0, 0),
 		sessions:         make(map[contract.SessionID]*session, len(capacities)),
 		playerSessions:   make(map[core.PlayerID]contract.SessionID, len(capacities)),
 		ctx:              ctx,

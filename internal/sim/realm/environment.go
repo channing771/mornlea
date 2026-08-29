@@ -22,12 +22,12 @@ const (
 
 // EnvironmentConfig 是环境阶段在一个权威 tick 内固定使用的参数快照。
 type EnvironmentConfig struct {
-	FluidFlowDelayTicks       uint32
-	FluidUpdatesPerTick       uint32
-	FluidRescanCellsPerTick   uint32
-	DropPickupDelayTicks      uint8
-	RandomTicksPerSection     uint8
-	CropGrowthChancePercent   uint8
+	FluidFlowDelayTicks     uint32
+	FluidUpdatesPerTick     uint32
+	FluidRescanCellsPerTick uint32
+	DropPickupDelayTicks    uint8
+	RandomTicksPerSection   uint8
+	CropGrowthChancePercent uint8
 }
 
 // EnvironmentMutation 将环境写入和同 tick 的区块变更收敛到同一事务。
@@ -1434,9 +1434,15 @@ func (state *State) FarmlandMoistureStats() (candidates int, reads int) {
 }
 
 func (state *State) FarmlandBlockReads() int { return state.environment.farmlandMoisture.blockReads }
-func (state *State) FarmlandCandidateInspections() int { return state.environment.farmlandMoisture.candidateInspections }
-func (state *State) FarmlandRescanCursor() int { return state.environment.farmlandMoisture.rescans.cursor }
-func (state *State) FarmlandRescanPendingLen() int { return len(state.environment.farmlandMoisture.rescans.pending) }
+func (state *State) FarmlandCandidateInspections() int {
+	return state.environment.farmlandMoisture.candidateInspections
+}
+func (state *State) FarmlandRescanCursor() int {
+	return state.environment.farmlandMoisture.rescans.cursor
+}
+func (state *State) FarmlandRescanPendingLen() int {
+	return len(state.environment.farmlandMoisture.rescans.pending)
+}
 func (state *State) FarmlandQueued(dim core.DimensionID, pos core.BlockPos) bool {
 	key := farmlandMoistureKey{dimension: dim, position: pos}
 	_, ok := state.environment.farmlandMoisture.queued[key]
@@ -1445,7 +1451,11 @@ func (state *State) FarmlandQueued(dim core.DimensionID, pos core.BlockPos) bool
 func (state *State) FarmlandRescanPending() []core.ChunkKey {
 	return append([]core.ChunkKey(nil), state.environment.farmlandMoisture.rescans.pending...)
 }
-func (state *State) FarmlandMoisturePendingLen() int { return len(state.environment.farmlandMoisture.pending) }
+func (state *State) FarmlandMoisturePendingLen() int {
+	return len(state.environment.farmlandMoisture.pending)
+}
 func (state *State) FarmlandMoistureHead() int { return state.environment.farmlandMoisture.head }
-func (state *State) FarmlandQueuedCount() int { return len(state.environment.farmlandMoisture.queued) }
-func (state *State) ResetFarmlandMoisture() { state.environment.farmlandMoisture = farmlandMoistureState{} }
+func (state *State) FarmlandQueuedCount() int  { return len(state.environment.farmlandMoisture.queued) }
+func (state *State) ResetFarmlandMoisture() {
+	state.environment.farmlandMoisture = farmlandMoistureState{}
+}

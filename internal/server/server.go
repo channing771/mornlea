@@ -13,8 +13,8 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -30,7 +30,7 @@ type Server struct {
 	config                    Config
 	generator                 Generator
 	store                     storage.Store
-	engine                    *sim.Engine
+	engine                    *runtime.Engine
 	sessions                  map[contract.SessionID]*session
 	playerSessions            map[core.PlayerID]contract.SessionID
 	trustedObserver           *session
@@ -127,7 +127,7 @@ func newWorld(
 		config:          config,
 		generator:       generator,
 		store:           store,
-		engine:          sim.NewEngine(config.ViewRadius, metadata.WorldTimeTicks, metadata.Seed),
+		engine:          runtime.NewEngine(config.ViewRadius, metadata.WorldTimeTicks, metadata.Seed),
 		sessions:        make(map[contract.SessionID]*session),
 		playerSessions:  make(map[core.PlayerID]contract.SessionID),
 		ctx:             ctx,

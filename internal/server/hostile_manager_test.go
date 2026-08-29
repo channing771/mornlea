@@ -9,8 +9,8 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/pathfind"
 	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -60,7 +60,7 @@ func chaseMob(id uint64, position mgl32.Vec3) contract.HostileMob {
 }
 
 // restoreChaseHostile 把一只夜行者恢复进引擎集合。
-func restoreChaseHostile(t *testing.T, engine *sim.Engine, mob contract.HostileMob) {
+func restoreChaseHostile(t *testing.T, engine *runtime.Engine, mob contract.HostileMob) {
 	t.Helper()
 	if err := engine.RestoreHostile(mob); err != nil {
 		t.Fatalf("恢复夜行者 %d：%v", mob.ID, err)
@@ -109,12 +109,12 @@ func chaseBoxedChunk(pos core.ChunkPos) *world.Chunk {
 func newHostileChaseWorld(
 	t *testing.T,
 	chunkFactory func(core.ChunkPos) *world.Chunk,
-) (*sim.Engine, *hostileManager, func([]hostileTargetPlayer)) {
+) (*runtime.Engine, *hostileManager, func([]hostileTargetPlayer)) {
 	t.Helper()
 	if chunkFactory == nil {
 		chunkFactory = chaseFlatChunk
 	}
-	engine := sim.NewEngine(2, chaseNightTicks, 0)
+	engine := runtime.NewEngine(2, chaseNightTicks, 0)
 	engine.RegisterSession(1, core.Overworld, core.ChunkPos{})
 	for range 40 {
 		result := engine.Step()

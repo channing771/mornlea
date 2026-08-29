@@ -34,8 +34,8 @@ import (
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/pathfind"
 	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/storage"
 )
@@ -174,7 +174,7 @@ type taskEventFact struct {
 // companionManager 编排全部伙伴的任务执行。零值不可用，经 newCompanionManager
 // 构造；关闭顺序见 beginShutdown/close。
 type companionManager struct {
-	engine         *sim.Engine
+	engine         *runtime.Engine
 	planner        companionPlanner
 	timeoutMinutes int
 	table          pathfind.PathBlockTable
@@ -225,7 +225,7 @@ type companionManager struct {
 // AIModel 与伙伴定义（NewHost 的第二道边界保证）；dialogue 是台词模型依赖
 // 面，与 planner 共用同一 AIModel 设置构造。
 func newCompanionManager(
-	engine *sim.Engine,
+	engine *runtime.Engine,
 	config Config,
 	planner companionPlanner,
 	dialogue companionDialogue,
@@ -346,7 +346,7 @@ func (m *companionManager) issuerLookHit(player contract.PlayerUpdate) (core.Blo
 	origin := player.State.Position.Add(
 		mgl32.Vec3{0, physics.ActiveTunables().EyeHeight, 0},
 	)
-	direction := sim.LookDirection(player.Yaw, player.Pitch)
+	direction := runtime.LookDirection(player.Yaw, player.Pitch)
 	hit, ok, err := core.RaycastBlocks(
 		origin,
 		direction,

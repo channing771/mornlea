@@ -123,7 +123,7 @@ func TestSessionIdentityDoesNotLeakIntoContractPublicValues(t *testing.T) {
 		typeOf := reflect.TypeOf(value)
 		for _, forbidden := range []string{"PlayerID", "DisplayName"} {
 			if _, ok := typeOf.FieldByName(forbidden); ok {
-			t.Fatalf("contract.%s unexpectedly exposes %s", typeOf.Name(), forbidden)
+				t.Fatalf("contract.%s unexpectedly exposes %s", typeOf.Name(), forbidden)
 			}
 		}
 	}

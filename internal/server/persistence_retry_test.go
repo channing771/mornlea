@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -447,7 +447,7 @@ func TestOldestDueRetryPreventsFixedRegionStarvation(t *testing.T) {
 	config := DefaultConfig(42)
 	config.RetryBaseTicks = 1
 	config.RetryMaxTicks = 1
-	engine := sim.NewEngine(0, 0, 0)
+	engine := runtime.NewEngine(0, 0, 0)
 	running := &Server{
 		config:          config,
 		engine:          engine,

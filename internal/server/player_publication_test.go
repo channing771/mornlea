@@ -10,8 +10,8 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -335,7 +335,7 @@ func newRemotePublicationHarness(t *testing.T, ids ...contract.SessionID) *remot
 	config.OutboxCapacity = 32
 	running := &Server{
 		config:         config,
-		engine:         sim.NewEngine(0, 0, 0),
+		engine:         runtime.NewEngine(0, 0, 0),
 		sessions:       make(map[contract.SessionID]*session),
 		playerSessions: make(map[core.PlayerID]contract.SessionID),
 		lifecycle:      serverRunning,

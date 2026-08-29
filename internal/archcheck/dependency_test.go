@@ -42,7 +42,6 @@ var allowed = map[string][]string{
 	"internal/network":      {"internal/companion", "internal/core"},
 	"internal/network/tcp":  {"internal/network"},
 	"internal/profile":      {"internal/core"},
-	"internal/sim":          {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "internal/sim/tuning", "internal/world"},
 	"internal/sim/contract": {"internal/companion", "internal/core", "internal/physics", "internal/world"},
 	"internal/sim/entity":   {"internal/companion", "internal/core", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/realm", "internal/sim/tuning"},
 	"internal/sim/realm":    {"internal/core", "internal/fluid", "internal/world"},
@@ -59,7 +58,7 @@ var allowed = map[string][]string{
 	"internal/assets":     {"internal/core", "internal/world", "internal/mesh", "internal/worldgen"},
 	"internal/render":     {"internal/core", "internal/world", "internal/mesh", "internal/assets"},
 	"internal/render/hud": {"internal/core", "internal/mesh", "internal/assets", "internal/render"},
-	"internal/server":     {"internal/companion", "internal/core", "internal/network", "internal/pathfind", "internal/physics", "internal/world", "internal/worldgen", "internal/sim", "internal/sim/contract", "internal/sim/tuning", "internal/storage"},
+	"internal/server":     {"internal/companion", "internal/core", "internal/network", "internal/pathfind", "internal/physics", "internal/world", "internal/worldgen", "internal/sim/contract", "internal/sim/runtime", "internal/sim/tuning", "internal/storage"},
 	"internal/client":     {"internal/companion", "internal/core", "internal/physics", "internal/network", "internal/world", "internal/mesh", "internal/assets", "internal/render"},
 }
 

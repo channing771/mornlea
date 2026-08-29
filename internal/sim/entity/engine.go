@@ -33,27 +33,27 @@ type sessionState struct {
 }
 
 type Engine struct {
-	viewRadius int
-	seed       int64
-	sessions   map[SessionID]*sessionState
-	companions map[companion.ID]*companionState
-	hostiles   hostileSet
-	hostileLight *blockLightScratch
-	wanted             map[core.ChunkKey]struct{}
-	realm              *realm.State
-	subscriptionsDirty bool
-	inboxMu          sync.Mutex
-	commands         []Command
-	companionActions []CompanionAction
-	hostileActions   []HostileAction
-	acquired         []AcquiredChunk
-	generated        []GeneratedChunk
-	tick             atomic.Uint64
-	worldTime        atomic.Uint64
-	dayPhaseOffset   atomic.Uint64
-	stepPhaseObserver func(stepPhase)
-	tunables        tuning.Tunables
-	physicsTunables physics.Tunables
+	viewRadius             int
+	seed                   int64
+	sessions               map[SessionID]*sessionState
+	companions             map[companion.ID]*companionState
+	hostiles               hostileSet
+	hostileLight           *blockLightScratch
+	wanted                 map[core.ChunkKey]struct{}
+	realm                  *realm.State
+	subscriptionsDirty     bool
+	inboxMu                sync.Mutex
+	commands               []Command
+	companionActions       []CompanionAction
+	hostileActions         []HostileAction
+	acquired               []AcquiredChunk
+	generated              []GeneratedChunk
+	tick                   atomic.Uint64
+	worldTime              atomic.Uint64
+	dayPhaseOffset         atomic.Uint64
+	stepPhaseObserver      func(stepPhase)
+	tunables               tuning.Tunables
+	physicsTunables        physics.Tunables
 	dropKeySeen            map[core.ChunkKey]struct{}
 	dropKeyScratch         []core.ChunkKey
 	containerViewerScratch []SessionID
@@ -85,15 +85,19 @@ func (engine *Engine) dimension(id core.DimensionID) *Dimension {
 	return engine.realm.Dimension(id)
 }
 
-func (engine *Engine) SeedForTest() int64 { return engine.seed }
-func (engine *Engine) WorldTime() uint64 { return engine.worldTime.Load() }
+func (engine *Engine) SeedForTest() int64     { return engine.seed }
+func (engine *Engine) WorldTime() uint64      { return engine.worldTime.Load() }
 func (engine *Engine) DayPhaseOffset() uint16 { return uint16(engine.dayPhaseOffset.Load()) }
-func (engine *Engine) RestoreDayPhaseOffset(offset uint16) { engine.dayPhaseOffset.Store(uint64(offset)) }
+func (engine *Engine) RestoreDayPhaseOffset(offset uint16) {
+	engine.dayPhaseOffset.Store(uint64(offset))
+}
 func (engine *Engine) displayDayPhase() uint16 {
 	return core.DisplayDayPhase(engine.worldTime.Load(), engine.DayPhaseOffset())
 }
 func (engine *Engine) SetWorldTimeForTest(ticks uint64) { engine.worldTime.Store(ticks) }
-func (engine *Engine) SetDayPhaseOffsetForTest(offset uint16) { engine.dayPhaseOffset.Store(uint64(offset)) }
+func (engine *Engine) SetDayPhaseOffsetForTest(offset uint16) {
+	engine.dayPhaseOffset.Store(uint64(offset))
+}
 func (engine *Engine) advanceWorldTime() uint64 { return engine.worldTime.Add(1) }
 func (engine *Engine) Enqueue(command Command) {
 	engine.inboxMu.Lock()

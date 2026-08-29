@@ -111,7 +111,7 @@ func torchCellOverlapsPlayer(position core.BlockPos, playerPosition mgl32.Vec3) 
 	playerBounds := physics.PlayerBounds(playerPosition)
 	cell := core.AABB{
 		Min: mgl32.Vec3{float32(position.X), float32(position.Y), float32(position.Z)},
-		Max: mgl32.Vec3{float32(position.X + 1), float32(position.Y+1), float32(position.Z+1)},
+		Max: mgl32.Vec3{float32(position.X + 1), float32(position.Y + 1), float32(position.Z + 1)},
 	}
 	return playerBounds.Overlaps(cell)
 }

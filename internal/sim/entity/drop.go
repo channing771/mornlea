@@ -309,5 +309,3 @@ func (engine *Engine) dropSelectedItem(
 	engine.touchChunk(key, mutation)
 	return 0, false
 }
-
-
