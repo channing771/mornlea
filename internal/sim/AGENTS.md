@@ -1,33 +1,93 @@
 # 权威模拟
 
-本目录仅保留指导文档，不含生产 Go Package；权威模拟由五个子包承载，单向依赖，见下表与 `internal/archcheck`。
+本目录仅保留指导文档，不含生产 Go Package；权威模拟由五个子包承载，单向依赖，见下表与 `internal/archcheck`。根 `internal/sim` 不得保留生产 Go 文件、类型别名或转发函数，调用方必须直接导入所属子包。
+
+## Directory Map
+
+```
+internal/sim/
+├── AGENTS.md                # 子树总纲：目录地图、依赖方向、Mutation 与定点验证
+├── contract/                # 跨边界纯值 DTO（指南见 contract/AGENTS.md）
+│   ├── contract.go          # Command/Reject/ChunkChangeBatch/TickResult 等值类型
+│   └── contract_test.go
+├── tuning/                  # Tunables 默认值、钳制与原子活动快照（指南见 tuning/AGENTS.md）
+│   ├── tunables.go
+│   └── tunables_test.go
+├── realm/                   # 世界维度、区块生命周期与单 tick Mutation 事务（指南见 realm/AGENTS.md）
+│   ├── state.go             # State/Dimension 权威世界状态
+│   ├── mutation.go          # Mutation 单 tick 事务与 Commit
+│   ├── persistence.go       # revision/持久化与卸载
+│   ├── environment.go       # 流体/耕地/作物等环境推进
+│   └── *_test.go            # mutation/state/persistence/environment 白盒测试
+├── entity/                  # 玩家/伙伴/夜行者与玩法结算（指南见 entity/AGENTS.md）
+│   ├── entity.go            # State 组合与 Register/Spawn
+│   ├── player.go / companion.go / hostile.go / actor.go
+│   ├── crafting.go / container.go / furnace.go / mining.go / combat.go / drop.go / hunger.go / eating.go / sleep.go
+│   ├── placement.go / world.go / engine_changes.go
+│   └── *_test.go
+└── runtime/                 # Engine、inbox、订阅与 Step 固定编排（指南见 runtime/AGENTS.md）
+    ├── engine.go            # Engine 结构与生命周期
+    ├── engine_step.go       # Step 阶段顺序与单次 Mutation Commit
+    ├── engine_subscription.go # 订阅/发布与阶段探针
+    ├── engine_run.go / engine_placement.go / persistence.go 等
+    └── *_test.go
+```
 
 ## 子包所有权
 
 | 子包 | 持有状态与职责 |
 | --- | --- |
-| `contract` | 跨边界命令、拒绝、区块 ingress 与 tick 输出等纯值 DTO |
+| `contract` | 跨边界命令、拒绝、区块 ingress 与 tick 输出等纯值 DTO；`internal/server` 与 `internal/network` 消费该层值类型 |
 | `tuning` | `Tunables`、默认值、钳制与原子活动快照；`internal/config` 与客户端调试直接消费 |
 | `realm` | 世界维度、区块生命周期、持久化 revision、流体/耕地/作物等环境状态与单 tick `realm.Mutation` 事务 |
 | `entity` | 玩家、伙伴、夜行者、背包、容器、合成、战斗、掉落、睡眠等私有状态与结算（接收 `*realm.Mutation` 与 `tuning.Tunables`） |
 | `runtime` | `Engine`、inbox、订阅、阶段探针与 `Step` 固定编排；唯一允许同时编排其余四个子包的权威入口 |
 
-`contract`/`tuning` 不依赖 `realm`/`entity`/`runtime`；`realm` 不依赖 `entity`/`runtime`；`entity` 可依赖 `contract`/`tuning`/`realm`；`runtime` 编排全部四者。
+`contract`/`tuning` 不依赖 `realm`/`entity`/`runtime`；`realm` 不依赖 `entity`/`runtime`；`entity` 可依赖 `contract`/`tuning`/`realm`；`runtime` 编排全部四者。`internal/sim` 成为仅含指导文档的目录，所有生产状态与行为分属五个子包。
+
+## Mutation 与单次提交
+
+- `realm.State` 拥有维度记录、队列、持久化 revision 与环境 scratch，由权威 tick 单写者独占，不设内部锁。
+- 每 tick 由 `runtime` 打开唯一 `*realm.Mutation`，全部方块读取与写入经该事务汇入；`entity` 的结算入口接收 `*realm.Mutation` 与 `tuning.Tunables` 快照，不直接持有 world。
+- `Mutation.Record`/`Touch` 收集 `pendingChunkChanges`，`Commit` 在 `finishChanges` 阶段一次性推进 revision、压缩 section 并产出 `ChunkChangeBatch` 发布批次；不得另设平行通道或二次提交。
+- 相同输入在同一 tick 内按区块与索引的确定性排序提交，保证 revision、持久化请求与发布批次在重放时一致。
 
 ## 结算与事务规则
 
 - 状态只在成功路径提交，相互依赖时先副本预演再同 tick 原子落地。
-- 方块写入经 `realm.Mutation` 汇入当前 tick，由 `finishChanges` 统一推进 revision 与发布批次，不另设平行通道。
+- 方块写入经 `realm.Mutation` 汇入当前 tick，由 `Commit` 统一推进 revision 与发布批次，不另设平行通道。
 - 每 tick 工作必须有界且保持确定性顺序，磁盘/网络/模型调用经有界队列或快照离开热路径。
 - `Engine.Step` 串行组合固定阶段，新增阶段或写者先核对 `engine_step.go` 的顺序约束、订阅收敛点与最终发布边界。
 
 ## 依赖方向
 
-子包依赖以 `internal/archcheck/dependency_test.go` 的 `allowed` 表为唯一真相；本包不得依赖 `internal/client`、`internal/render` 或具体 network transport，模拟只消费领域命令并产出权威结果。
+子包依赖以 `internal/archcheck/dependency_test.go` 的 `allowed` 表为唯一真相；本包不得依赖 `internal/client`、`internal/render` 或具体 network transport，模拟只消费领域命令并产出权威结果。依赖方向单向且由 `internal/archcheck` 强制（契约见 `openspec/specs/repository-code-organization`）：
+
+- 接受：`runtime` → `contract`/`tuning`/`realm`/`entity`；`entity` → `contract`/`tuning`/`realm`；`realm` → `core`/`fluid`/`world`；`contract` → `core`/`world`/`companion`/`physics`；`tuning` → `core`。
+- 拒绝：`contract`/`tuning` 反向依赖 `realm`/`entity`/`runtime`；`realm` 反向依赖 `entity`/`runtime`；`entity` 反向依赖 `runtime`；子树出现未登记的新包；`runtime` 缺少对四者的必需编排边。
+- 强制点：`TestInternalDependenciesAreOneWay` 以 `go list` 覆盖全仓内部包完整白名单；`TestSimSubpackageDependencyDirections` 源码级扫描 `internal/sim` 子树生产 import 边（`parser.ImportsOnly`，不随 GOOS 翻转）；`TestSimDependencyViolationsDetectDrift` 以合成反向边钉住检查器本身。新增子包或依赖边必须先登记 `allowed` 与 `simAllowedEdges`/`simRequiredEdges`。
 
 ## 定点验证与入口
 
-- 子树全量：`go test ./internal/sim/... -race -count=1`
-- 分包定点：`go test ./internal/sim/contract|tuning|realm|entity|runtime -race -count=1`
-- 依赖边界：`go test ./internal/archcheck -count=1`
-- 当前文档入口：`docs/notes/go-rust-division.md`。
+按子包定点（分层纪律见 `docs/notes/test-quickstart.md`；涉 Rust 侧先 `make rust`）：
+
+| 改动域 | 命令 |
+| --- | --- |
+| 子树全量 | `go test ./internal/sim/... -race -count=1` |
+| `contract` 值类型 | `go test ./internal/sim/contract -race -count=1` |
+| `tuning` 快照 | `go test ./internal/sim/tuning -race -count=1` |
+| `realm` 事务与环境 | `go test ./internal/sim/realm -race -count=1` |
+| `entity` 结算 | `go test ./internal/sim/entity -race -count=1` |
+| `runtime` 编排 | `go test ./internal/sim/runtime -race -count=1` |
+| 依赖边界 | `go test ./internal/archcheck -count=1` |
+
+- 当前文档入口：`docs/notes/go-rust-division.md`、`docs/test-organization.md`。
+- 子树根的 `internal/sim/AGENTS.md` 是目录地图与边界总纲，子包细节见各自 `AGENTS.md`；修改任一子包的行为、导出面或测试入口必须同步对应指南。
+
+## 子包指南
+
+- `contract/AGENTS.md`：值类型所有权与跨边界 DTO 纪律。
+- `tuning/AGENTS.md`：Tunables 校验与快照边界。
+- `realm/AGENTS.md`：State/Mutation 所有权与单次提交。
+- `entity/AGENTS.md`：结算签名与 `*realm.Mutation` 注入。
+- `runtime/AGENTS.md`：Engine 编排、Step 顺序与发布边界。

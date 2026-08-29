@@ -313,3 +313,210 @@ func TestClientCommandDependencyViolationsDetectDrift(t *testing.T) {
 		}
 	})
 }
+
+// simAllowedEdges 列出权威模拟子树 `internal/sim` 五个子包允许的内部依赖
+// 边（本地 import path）。依赖方向契约为：`contract`/`tuning` 为叶子，
+// `realm` 只依赖环境，`entity` 可依赖 `contract`/`tuning`/`realm`，
+// `runtime` 是唯一允许同时编排其余四者的权威入口；任何反向边都会让
+// 事务边界或快照所有权重新耦合，`go test` 的单包定点与事务收敛同时失效。
+// 该表与全局 `allowed` 中对应五项保持一致，重复列出是为了让子树检查器
+// 可在不依赖全局表的情况下独立校验方向与合成反向边。
+var simAllowedEdges = map[string][]string{
+	"internal/sim/contract": {"internal/companion", "internal/core", "internal/physics", "internal/world"},
+	"internal/sim/tuning":   {"internal/core"},
+	"internal/sim/realm":    {"internal/core", "internal/fluid", "internal/world"},
+	"internal/sim/entity":   {"internal/companion", "internal/core", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/realm", "internal/sim/tuning"},
+	"internal/sim/runtime":  {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "internal/sim/tuning"},
+}
+
+// simRequiredEdges 是模拟子树必须真实存在的编排边：`runtime` 必须同时
+// 装配四个下层子包，否则权威 tick 的阶段编排会悄悄绕过某层状态的所有权
+// 边界，单 mutation 提交路径不再覆盖全部写入。
+var simRequiredEdges = map[string][]string{
+	"internal/sim/runtime": {"internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "internal/sim/tuning"},
+}
+
+// isSimPackage 报告本地 import path 是否落在权威模拟子树内。
+func isSimPackage(localPath string) bool {
+	return localPath == "internal/sim" || strings.HasPrefix(localPath, "internal/sim/")
+}
+
+// simDependencyViolations 对照模拟子树的允许边表与必需边表检查给定的
+// 包依赖边，返回全部违规描述；空切片表示符合契约。输入是「本地包路径 →
+// 生产 import 的本地路径有序列表」，与真实目录解耦，使「注入反向边」
+// 的失败路径可以在纯内存中核对，不必改动源码树。
+func simDependencyViolations(edges map[string][]string) []string {
+	var violations []string
+	for pkg, packageImports := range edges {
+		allowed, registered := simAllowedEdges[pkg]
+		if !registered {
+			if isSimPackage(pkg) {
+				violations = append(violations, fmt.Sprintf("模拟子树新增包 %s 未登记依赖白名单", pkg))
+			}
+			continue
+		}
+		allowSet := make(map[string]bool, len(allowed))
+		for _, dependency := range allowed {
+			allowSet[dependency] = true
+		}
+		for _, dependency := range packageImports {
+			if allowSet[dependency] {
+				continue
+			}
+			violations = append(violations, fmt.Sprintf(
+				"模拟子包 %s 不允许依赖 %s：方向必须是 contract/tuning 叶子、realm 不依赖 entity/runtime、entity 不依赖 runtime、runtime 编排其余四者",
+				pkg, dependency))
+		}
+	}
+	// 逐包核对必需边；包整体被删除时由「必需边找不到宿主」统一暴露。
+	for pkg, required := range simRequiredEdges {
+		importSet := make(map[string]bool, len(edges[pkg]))
+		for _, dependency := range edges[pkg] {
+			importSet[dependency] = true
+		}
+		for _, dependency := range required {
+			if !importSet[dependency] {
+				violations = append(violations, fmt.Sprintf("模拟子包 %s 缺少必需依赖边 → %s", pkg, dependency))
+			}
+		}
+	}
+	slices.Sort(violations)
+	return violations
+}
+
+// simImportEdges 扫描 `internal/sim` 子树内全部含生产 Go 源文件的目录，
+// 返回「本地包路径 → 去重排序后的本地生产 import 列表」。子树内出现
+// 未登记的新包目录时由检查器的白名单核对报错，新增子包不可能静默绕过。
+func simImportEdges(t *testing.T) map[string][]string {
+	t.Helper()
+	root := moduleRoot(t)
+	subtree := filepath.Join(root, "internal", "sim")
+	edges := make(map[string][]string)
+	err := filepath.WalkDir(subtree, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if !entry.IsDir() {
+			return nil
+		}
+		entries, err := os.ReadDir(path)
+		if err != nil {
+			return err
+		}
+		imports := make(map[string]bool)
+		for _, file := range entries {
+			name := file.Name()
+			if file.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+				continue
+			}
+			parsed, err := parser.ParseFile(token.NewFileSet(), filepath.Join(path, name), nil, parser.ImportsOnly)
+			if err != nil {
+				return err
+			}
+			for _, imported := range parsed.Imports {
+				importPath := strings.Trim(imported.Path.Value, `"`)
+				if local := localName(importPath); local != importPath {
+					imports[local] = true
+				}
+			}
+		}
+		if !hasProductionGoFile(entries) {
+			return nil
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		edges[filepath.ToSlash(relative)] = slices.Sorted(maps.Keys(imports))
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("扫描 %s: %v", subtree, err)
+	}
+	return edges
+}
+
+// TestSimSubpackageDependencyDirections 把真实源码树的模拟子树包依赖边
+// 喂给 `simDependencyViolations`，钉住权威模拟的依赖方向契约。
+//
+// 边的来源是逐文件解析生产 .go（parser.ImportsOnly 模式，跳过 `_test.go`），
+// 与 `TestClientCommandSubpackageDependencyDirections` 同理保持平台无关。
+// 测试文件不计入——子包测试经同包或跨包测试装配复用是合法的，不应污染
+// 生产依赖方向；全局 `TestInternalDependenciesAreOneWay` 另以 `go list`
+// 覆盖全仓内部包的完整白名单，本测试聚焦模拟子树内部的方向与必需边。
+func TestSimSubpackageDependencyDirections(t *testing.T) {
+	edges := simImportEdges(t)
+	if violations := simDependencyViolations(edges); len(violations) > 0 {
+		t.Errorf("模拟子树依赖方向违反契约，%d 条违规：\n%s", len(violations), strings.Join(violations, "\n"))
+	}
+}
+
+// TestSimDependencyViolationsDetectDrift 用合成边核对检查器对每类漂移
+// 都真的报错。真实源码树处于契约内时，方向断言的负向路径没有天然的
+// 失败信号；必须另有合成断言钉住检查器本身，否则检查逻辑被改坏后门禁
+// 静默变松。
+func TestSimDependencyViolationsDetectDrift(t *testing.T) {
+	contractEdges := func() map[string][]string {
+		return map[string][]string{
+			"internal/sim/contract": {"internal/core", "internal/world", "internal/companion", "internal/physics"},
+			"internal/sim/tuning":   {"internal/core"},
+			"internal/sim/realm":    {"internal/core", "internal/fluid", "internal/world"},
+			"internal/sim/entity":   {"internal/companion", "internal/core", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/realm", "internal/sim/tuning"},
+			"internal/sim/runtime":  {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "internal/sim/tuning"},
+		}
+	}
+	if violations := simDependencyViolations(contractEdges()); len(violations) != 0 {
+		t.Fatalf("契约内的合成边不应报违规: %v", violations)
+	}
+
+	for _, edge := range []struct {
+		name string
+		from string
+		to   string
+	}{
+		{"contract反向依赖realm", "internal/sim/contract", "internal/sim/realm"},
+		{"contract反向依赖entity", "internal/sim/contract", "internal/sim/entity"},
+		{"contract反向依赖runtime", "internal/sim/contract", "internal/sim/runtime"},
+		{"tuning反向依赖contract", "internal/sim/tuning", "internal/sim/contract"},
+		{"tuning反向依赖realm", "internal/sim/tuning", "internal/sim/realm"},
+		{"tuning反向依赖entity", "internal/sim/tuning", "internal/sim/entity"},
+		{"tuning反向依赖runtime", "internal/sim/tuning", "internal/sim/runtime"},
+		{"realm反向依赖entity", "internal/sim/realm", "internal/sim/entity"},
+		{"realm反向依赖runtime", "internal/sim/realm", "internal/sim/runtime"},
+		{"entity反向依赖runtime", "internal/sim/entity", "internal/sim/runtime"},
+	} {
+		t.Run(edge.name, func(t *testing.T) {
+			edges := contractEdges()
+			edges[edge.from] = append(edges[edge.from], edge.to)
+			violations := simDependencyViolations(edges)
+			if len(violations) != 1 || !strings.Contains(violations[0], edge.from+" 不允许依赖 "+edge.to) {
+				t.Fatalf("注入禁止边 %s → %s 未被拒绝: %v", edge.from, edge.to, violations)
+			}
+		})
+	}
+
+	t.Run("必需边缺失", func(t *testing.T) {
+		edges := contractEdges()
+		edges["internal/sim/runtime"] = []string{"internal/sim/contract", "internal/sim/realm", "internal/sim/tuning"}
+		violations := simDependencyViolations(edges)
+		found := false
+		for _, violation := range violations {
+			if strings.Contains(violation, "缺少必需依赖边") && strings.Contains(violation, "internal/sim/entity") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("runtime 卸掉 entity 装配应报缺失: %v", violations)
+		}
+	})
+
+	t.Run("未登记新包", func(t *testing.T) {
+		edges := contractEdges()
+		edges["internal/sim/extra"] = []string{"internal/core"}
+		violations := simDependencyViolations(edges)
+		if len(violations) != 1 || !strings.Contains(violations[0], "未登记依赖白名单") {
+			t.Fatalf("未登记子包未被拒绝: %v", violations)
+		}
+	})
+}
