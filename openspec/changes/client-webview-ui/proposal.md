@@ -6,7 +6,7 @@
 
 ## What Changes
 
-- **新前端栈**：`engine/crates/mornlea_client/frontend/` 新增 Vite + TypeScript + React 应用（设计令牌 CSS、类型化桥 client、四屏组件），`npm ci + tsc + vitest + vite build`，构建产物 dist 提交入库并被 Rust 二进制内嵌；仓库新增 node 构建链（Makefile `frontend-check`、CI 步骤、frontend 局部指南）。
+- **新前端栈**：`engine/crates/mornlea_client/frontend/` 新增 Vite + TypeScript + React 应用（设计令牌 CSS、类型化桥 client、四屏组件），包管理 pnpm（corepack `packageManager` 钉版），`pnpm install --frozen-lockfile + typecheck + vitest + vite build`，构建产物 dist 提交入库并被 Rust 二进制内嵌；仓库新增 node 构建链（Makefile `frontend-check`、CI 步骤、frontend 局部指南）。
 - **WKWebView 集成**：`objc2-web-kit` 手写 WKWebView 挂到既有 winit NSWindow contentView 上层；`drawsBackground=false` 透明覆盖露出 wgpu 画面；资产经 `WKURLSchemeHandler` 从内嵌字节供给（`mornlea://`，零磁盘写入、零网络）；菜单相位 WebView 接管输入，游戏相位 `hidden` 零参与。
 - **桥协议**：Go 保持菜单状态权威——下行 `push_ui_state`（JSON、事件驱动）替代帧 TLV tag 9 的 layout v1–v4；上行 WKScriptMessageHandler → Rust 队列 → 结构化 JSON 事件批（保留 drain 形态）；桥 schema 单源文件 + Go/Rust/TS 三端钉值测试。
 - **client ABI v11→v12**：`upload_ui_font` 退役（字体随 web 资源内嵌）、UI 帧段语义退役；协议/schema/存档/engine ABI/benchmark scenario 均不变。

@@ -5,7 +5,7 @@
 ## 1. 前端基建与脚手架
 
 - [ ] 1.1 `engine/crates/mornlea_client/frontend/`：Vite + React + TS(strict) 脚手架、`src/tokens.css` 设计令牌、`src/bridge/schema.json` 与类型化 `bridge/client.ts` 骨架、四屏组件空壳。
-- [ ] 1.2 构建链：package-lock 提交、`engines.node` 钉版、`make frontend-check`（npm ci + tsc + vitest + build + dist 一致性）、CI 步骤、dist 首次入库；`.gitignore` 只忽略 node_modules。
+- [ ] 1.2 构建链：pnpm 锁定（`packageManager` 字段 + corepack、`pnpm-lock.yaml` 提交）、`make frontend-check`（pnpm install --frozen-lockfile + typecheck + vitest + build + dist 一致性）、CI 步骤、dist 首次入库；`.gitignore` 只忽略 node_modules。
 - [ ] 1.3 vitest 首批组件冒烟测试（App 渲染四相位切换）；`docs/agents-md-style.md` 口径的 `frontend/AGENTS.md` 局部指南。
 - 验证：`make frontend-check` exit 0；CI 本地等价命令绿。
 

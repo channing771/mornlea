@@ -9,4 +9,7 @@
 
 ## 评审与裁决记录
 
-（随流水线追加：每个任务组的 implementer/SPEC/QUALITY 结论、修复轮次、整分支终审。）
+### 控制会话补充裁决（change 文档修订）
+
+- 包管理工具用户裁决：**pnpm**（corepack `packageManager` 钉版、`pnpm-lock.yaml` 提交、`--frozen-lockfile` 唯一安装姿势）；design D3 / tasks 1.2 / proposal 已同步。本机 corepack 0.35.0 可用、pnpm 未全局安装（由 corepack 按钉版自动供给）。
+- T1 首次派发被用户取消（未执行），按 pnpm 口径重发。

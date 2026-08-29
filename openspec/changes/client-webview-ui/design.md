@@ -22,9 +22,9 @@ PR #121 已交付 HUD/容器的原版对齐与混合风格（Go quad 管线 + `s
 
 ## D3 前端栈与构建链
 
-- `engine/crates/mornlea_client/frontend/`：Vite + React + TypeScript（strict）。npm（package-lock 提交，`engines.node` 钉 LTS 主版本，CI 用同版本）。
+- `engine/crates/mornlea_client/frontend/`：Vite + React + TypeScript（strict）。包管理 **pnpm**：`package.json` 的 `packageManager` 字段经 corepack 钉版本（`pnpm-lock.yaml` 提交，`pnpm install --frozen-lockfile` 为唯一安装姿势；CI 用官方 setup 读同一字段），本机与 CI 版本一致。
 - 结构：`src/ui/`（App、MainMenu、PauseMenu、SettingsPanel、DebugPanel 组件）、`src/bridge/`（类型化 client：`window.mornlea` 注入对象 + 事件订阅）、`src/tokens.css`（设计令牌：色板/间距/字号/圆角/阴影，与 HUD 令牌表同族并排记录）、vitest 组件断言（@testing-library/react）。
-- 产物：`vite build` 输出 `frontend/dist/` **提交入库**（本仓库哲学：可复现、离线、无 CI 隐依赖）；`make frontend-check` = `npm ci && tsc --noEmit && vitest run && vite build && git diff --exit-code dist`（构建产物与入库版本一致性门禁）；CI 增加同步骤。
+- 产物：`vite build` 输出 `frontend/dist/` **提交入库**（本仓库哲学：可复现、离线、无 CI 隐依赖）；`make frontend-check` = `pnpm install --frozen-lockfile && pnpm typecheck && pnpm test && pnpm build && git diff --exit-code dist`（构建产物与入库版本一致性门禁）；CI 增加同步骤。
 - 排版/材质：面板 = 深色半透明 + 1px 亮边 + 圆角 8 + 大间距尺度（设计令牌驱动）；按钮三态（静默/悬停/焦点琥珀描边）；`prefers-reduced-motion` 时动效全关。
 
 ## D4 桥协议
