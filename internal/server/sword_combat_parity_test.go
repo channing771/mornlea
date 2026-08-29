@@ -25,6 +25,8 @@ type swordCombatTranscript struct {
 	HealthByTick      []uint64
 }
 
+const swordCombatVelocityTolerance = float32(1e-5)
+
 func TestSwordCombatParity(t *testing.T) {
 	memory := runSwordCombatWireScript(t, "memory")
 	tcp := runSwordCombatWireScript(t, "tcp")
@@ -45,8 +47,28 @@ func TestSwordCombatParity(t *testing.T) {
 		}
 		return tr
 	}
-	if !reflect.DeepEqual(normalize(memory), normalize(tcp)) {
+	normalizedMemory := normalize(memory)
+	normalizedTCP := normalize(tcp)
+	memoryVelocities := normalizedMemory.HostileVelocities
+	tcpVelocities := normalizedTCP.HostileVelocities
+	normalizedMemory.HostileVelocities = nil
+	normalizedTCP.HostileVelocities = nil
+	if !reflect.DeepEqual(normalizedMemory, normalizedTCP) {
 		t.Fatalf("剑-夜行者 Memory/TCP transcript 不一致\nmemory=%+v\ntcp=%+v", memory, tcp)
+	}
+	if len(memoryVelocities) != len(tcpVelocities) {
+		t.Fatalf("剑-夜行者 velocity 样本数不一致: memory=%d tcp=%d", len(memoryVelocities), len(tcpVelocities))
+	}
+	// 两种传输的 tick 与业务状态必须一致；追逐物理中的浮点运算受 goroutine
+	// 调度顺序影响，速度只允许吸收远小于一个物理 tick 的数值误差。
+	for sample := range memoryVelocities {
+		for axis := range 3 {
+			got := math.Float32frombits(memoryVelocities[sample][axis])
+			want := math.Float32frombits(tcpVelocities[sample][axis])
+			if difference := float32(math.Abs(float64(got - want))); difference > swordCombatVelocityTolerance {
+				t.Fatalf("velocity[%d][%d]=%g，TCP=%g，difference=%g tolerance=%g", sample, axis, got, want, difference, swordCombatVelocityTolerance)
+			}
+		}
 	}
 	for _, tr := range []swordCombatTranscript{memory, tcp} {
 		for i := 1; i < len(tr.Hits); i++ {
