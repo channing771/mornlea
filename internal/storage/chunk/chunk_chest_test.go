@@ -70,6 +70,34 @@ func TestChunkCodecRoundTripsChests(t *testing.T) {
 	}
 }
 
+func TestChunkCodecRoundTripsSwordItemsInChests(t *testing.T) {
+	key := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: -3, Z: 7}}
+	want := chestFixtureChunk(t, key.Pos)
+	chest := want.Chest(0)
+	chest.Items = [core.ChestSlots]core.ItemStack{
+		{Item: core.ItemWoodenSword, Count: 1, Durability: 58},
+		{Item: core.ItemStoneSword, Count: 1, Durability: 130},
+		{Item: core.ItemIronSword, Count: 1, Durability: 249},
+		{Item: core.ItemBrokenWoodenSword, Count: 1},
+		{Item: core.ItemBrokenStoneSword, Count: 1},
+		{Item: core.ItemBrokenIronSword, Count: 1},
+	}
+	want.SetChest(0, chest)
+
+	encoded, err := Encode(ChunkSave{Key: key, Revision: 29, Chunk: want})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Decode(key, 29, encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Chunk.Chest(0).Items != chest.Items || got.Migrated {
+		t.Fatalf("箱中剑物品往返 = %+v, migrated=%v，想要 %+v, false",
+			got.Chunk.Chest(0).Items, got.Migrated, chest.Items)
+	}
+}
+
 func TestChunkV5FixtureMigratesToEmptyChests(t *testing.T) {
 	key := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: -3, Z: 7}}
 	encoded, err := os.ReadFile(filepath.Join("testdata", "chunk-v5.bin"))
@@ -204,6 +232,10 @@ func TestChunkCodecRejectsInvalidChestSlots(t *testing.T) {
 		{"未知物品", world.ChestSlot{
 			Generation: 1, Active: true, BlockIndex: index,
 			Items: chestItems(0, core.ItemStack{Item: core.ItemID(4242), Count: 1}),
+		}},
+		{"物品哨兵", world.ChestSlot{
+			Generation: 1, Active: true, BlockIndex: index,
+			Items: chestItems(0, core.ItemStack{Item: core.ItemIDMax, Count: 1}),
 		}},
 		{"数量超限", world.ChestSlot{
 			Generation: 1, Active: true, BlockIndex: index,

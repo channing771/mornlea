@@ -514,3 +514,105 @@ func TestApplicationItemDropMirrorResetsWithSession(t *testing.T) {
 		t.Fatalf("关闭会话后镜像 = %+v，想要为空", got)
 	}
 }
+
+func TestCombatMarkerOnlyConsumedAfterSuccessfulNativeRender(t *testing.T) {
+	glyphs := &IntegrationGlyphSource{}
+	app := newRemoteRenderApplication(t, glyphs)
+	configureTargetFeedback(t, app)
+	// 确保有 HUD 可见，避免零 HUD 路径不进 Prepare
+	var inv core.Hotbar
+	inv.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 1}
+	if err := app.Inventory().Apply(network.InventoryState{Inventory: core.Inventory{Hotbar: inv}}); err != nil {
+		t.Fatal(err)
+	}
+	app.ArmCombatMarker()
+	if !app.CombatMarkerVisible() {
+		t.Fatal("Arm 后不可见")
+	}
+	// 零 framebuffer 不扣帧
+	origWindow := app.window
+	origW, origH := app.frameWidth, app.frameHeight
+	app.window = &zeroFramebufferWindow{}
+	if rendered, err := app.RenderFrame(1); err != nil || rendered {
+		t.Fatalf("零 framebuffer RenderFrame=(%v,%v)", rendered, err)
+	}
+	if !app.CombatMarkerVisible() {
+		t.Fatalf("零 framebuffer 后 marker 被消耗")
+	}
+	// 恢复
+	app.window = origWindow
+	app.frameWidth, app.frameHeight = origW, origH
+	// entity overflow 不扣帧
+	for i := range 76 {
+		if err := app.RemotePlayers().Apply(RemoteSpawn(byte(i%255+1), "R", 1, mgl32.Vec3{float32(i), 2, -4})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if rendered, err := app.RenderFrame(1); err == nil || rendered {
+		t.Fatalf("overflow RenderFrame=(%v,%v) want error", rendered, err)
+	}
+	if !app.CombatMarkerVisible() {
+		t.Fatalf("overflow 后 marker 被消耗")
+	}
+	app.RemotePlayers().Reset()
+	// name-tag prepare error 不扣帧
+	glyphs.FlushErr = errors.New("glyph fail")
+	if err := app.RemotePlayers().Apply(RemoteSpawn(1, "A", 1, mgl32.Vec3{0, 2, -4})); err != nil {
+		t.Fatal(err)
+	}
+	if rendered, err := app.RenderFrame(1); err == nil || rendered {
+		t.Fatalf("nameTag error RenderFrame=(%v,%v)", rendered, err)
+	}
+	if !app.CombatMarkerVisible() {
+		t.Fatalf("nameTag error 后 marker 被消耗")
+	}
+	glyphs.FlushErr = nil
+	// HUD prepare error 不扣帧：需要 HUD 可见且触发 flush
+	glyphs.FlushErr = errors.New("hud fail")
+	// 确保 HUD 可见：已通过 inventory 确认
+	if rendered, err := app.RenderFrame(1); err == nil || rendered {
+		t.Fatalf("HUD error RenderFrame=(%v,%v)", rendered, err)
+	}
+	if !app.CombatMarkerVisible() {
+		t.Fatalf("HUD error 后 marker 被消耗")
+	}
+	glyphs.FlushErr = nil
+	// 成功渲染才扣一帧
+	initial := app.CombatMarkerVisible()
+	if !initial {
+		t.Fatal("成功前 marker 不可见")
+	}
+	remainingBefore := app.combatFeedback.remainingFrames
+	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
+		t.Fatalf("成功 RenderFrame=(%v,%v)", rendered, err)
+	}
+	if app.combatFeedback.remainingFrames != remainingBefore-1 {
+		t.Fatalf("成功后剩余帧未递减")
+	}
+	// 再成功 5 次后不可见
+	for i := 0; i < 5; i++ {
+		if _, err := app.RenderFrame(1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if app.CombatMarkerVisible() {
+		t.Fatalf("六次成功后仍可见")
+	}
+}
+
+type zeroFramebufferWindow struct{}
+
+func (w *zeroFramebufferWindow) SetCursorCaptured(bool)               {}
+func (w *zeroFramebufferWindow) CursorPos() (float64, float64)        { return 0, 0 }
+func (w *zeroFramebufferWindow) ShouldClose() bool                    { return false }
+func (w *zeroFramebufferWindow) Poll()                                {}
+func (w *zeroFramebufferWindow) DrainTextInput([]rune) ([]rune, bool) { return nil, false }
+func (w *zeroFramebufferWindow) KeyDown(client.Key) bool              { return false }
+func (w *zeroFramebufferWindow) PrimaryButtonDown() bool              { return false }
+func (w *zeroFramebufferWindow) SecondaryButtonDown() bool            { return false }
+func (w *zeroFramebufferWindow) CursorCaptured() bool                 { return false }
+func (w *zeroFramebufferWindow) FramebufferSize() (int, int)          { return 0, 0 }
+func (w *zeroFramebufferWindow) ContentSize() (int, int)              { return 0, 0 }
+func (w *zeroFramebufferWindow) SetContentSize(int, int)              {}
+func (w *zeroFramebufferWindow) CancelClose()                         {}
+func (w *zeroFramebufferWindow) Close()                               {}

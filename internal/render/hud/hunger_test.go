@@ -166,7 +166,7 @@ func TestHotbarPrepareDrawsHungerBar(t *testing.T) {
 		t.Helper()
 		if err := renderer.Prepare(
 			core.Inventory{}, false, false, -1, nil, nil, nil, MiningOverlay{}, EatingOverlay{},
-			HealthOverlay{}, OxygenOverlay{}, hunger, ChatOverlay{}, PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 720, budget,
+			HealthOverlay{}, OxygenOverlay{}, hunger, ChatOverlay{}, false, PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 720, budget,
 		); err != nil {
 			t.Fatal(err)
 		}

@@ -82,6 +82,28 @@ func TestCueWaterSplashSynthesisProperty(t *testing.T) {
 	}
 }
 
+// TestCueCombatHitPCM 锁定命中确认提示音的固定参数与波形。
+func TestCueCombatHitPCM(t *testing.T) {
+	if CueCombatHit != CueWaterSplash+1 {
+		t.Fatalf("CueCombatHit = %d, want %d", CueCombatHit, CueWaterSplash+1)
+	}
+	if cueCount != CueCombatHit+1 {
+		t.Fatalf("cueCount = %d, want %d", cueCount, CueCombatHit+1)
+	}
+	spec := cueSpecs[CueCombatHit]
+	if spec.samples != 1323 || spec.startHz != 520 || spec.endHz != 180 || spec.amplitude != 10500 {
+		t.Fatalf("cue spec = %+v, want samples=1323 start=520 end=180 amplitude=10500", spec)
+	}
+	pcm := synthesize(spec)
+	if len(pcm) != 1323 {
+		t.Fatalf("samples = %d, want 1323", len(pcm))
+	}
+	checkBasicPCM(t, pcm, 10500)
+	if got := pcmSHA256(pcm); got != "17752cdda0232ebb88b0e6db1e39fa4a4889e5469bac0c28a07044b677710dae" {
+		t.Fatalf("little-endian PCM SHA-256 = %s, want 17752cdda0232ebb88b0e6db1e39fa4a4889e5469bac0c28a07044b677710dae", got)
+	}
+}
+
 // checkBasicPCM 断言合成 PCM 的基础性质：全程非零、无 int16 溢出且峰值恰为
 // 振幅。供 `TestCuePCM` 与 `TestCueWaterSplashSynthesisProperty` 共用。
 func checkBasicPCM(t *testing.T, pcm []int16, amplitude int16) {

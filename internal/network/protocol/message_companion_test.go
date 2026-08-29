@@ -58,10 +58,10 @@ func TestCompanionMessageIDsAreAppendOnly(t *testing.T) {
 		t.Fatal("未知 client packet ID 16 被接受")
 	}
 	// 格子工作台把 21 分配给了 `CraftingState`，夜行者把 22/23/24 分配给
-	// `HostileSpawn`/`HostileState`/`HostileDespawn`；下一个仍未分配的上界
-	// 推进到 25。
-	if _, ok := ServerPacketForID(StatePlay, 25); ok {
-		t.Fatal("未知 server packet ID 25 被接受")
+	// `HostileSpawn`/`HostileState`/`HostileDespawn`，私有战斗命中把 25 分配给
+	// `CombatHit`；下一个仍未分配的上界推进到 26。
+	if _, ok := ServerPacketForID(StatePlay, 26); ok {
+		t.Fatal("未知 server packet ID 26 被接受")
 	}
 }
 

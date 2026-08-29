@@ -20,8 +20,9 @@ import (
 )
 
 // TestHostileMobCaptureScenePosition 锁住 hostile-mob 的表内位置：夹在
-// `ai-companion` 与 `water-surface-slope` 之间（spec visual-verification
-// delta「场景表顺序与导出」），同时确认既有尾段不变量未被本场景移动——
+// `sword-combat` 与 `water-surface-slope` 之间（spec visual-verification
+// delta「场景表顺序与导出」，完整相邻链为 ai-companion、sword-combat、
+// hostile-mob、water-surface-slope），同时确认既有尾段不变量未被本场景移动——
 // `far-horizon` 仍为倒数第二、`water-underwater` 仍为唯一末场景。
 // 断言写「相邻关系」而不是「在表里」：后者是存在性断言，插到别的位置也
 // 照样通过，正是要挡的那种改动。
@@ -39,9 +40,13 @@ func TestHostileMobCaptureScenePosition(t *testing.T) {
 	if scene.Prepare == nil || scene.Apply == nil || scene.WarmupFrames != 8 {
 		t.Fatalf("hostile-mob 场景不完整: %+v", scene)
 	}
-	if indexOf("hostile-mob") != indexOf("ai-companion")+1 {
-		t.Fatalf("hostile-mob=%d 必须紧随 ai-companion=%d",
-			indexOf("hostile-mob"), indexOf("ai-companion"))
+	if indexOf("sword-combat") != indexOf("ai-companion")+1 {
+		t.Fatalf("sword-combat=%d 必须紧随 ai-companion=%d",
+			indexOf("sword-combat"), indexOf("ai-companion"))
+	}
+	if indexOf("hostile-mob") != indexOf("sword-combat")+1 {
+		t.Fatalf("hostile-mob=%d 必须紧随 sword-combat=%d",
+			indexOf("hostile-mob"), indexOf("sword-combat"))
 	}
 	if indexOf("water-surface-slope") != indexOf("hostile-mob")+1 {
 		t.Fatalf("water-surface-slope=%d 必须紧随 hostile-mob=%d",
