@@ -151,7 +151,7 @@
 - 归档前按当前 main 重新执行视觉验证：`go clean -cache` 清除旧的 cgo package cache（capture 进程曾观察到 Go bridge `ABIVersion=7` 而当前 engine 为 8）；`make rust`、`go test ./cmd/mornlea/capture -race -count=1`、`go test ./cmd/mornlea/app -run 'TestApplicationItemPopup|TestCombatFeedback' -race -count=1` 与 `go test ./internal/nativeabi -race -count=1` 均通过。
 - 初次 `make visual-check` 仅 `sword-combat` 失败（最大通道差 213、差异像素 13.3342%）；图像与调用链复核确认 `prepareAICompanion` 遗留的选中基线使装入第 2 格铁剑时错误触发“铁剑”弹条，并使该场景 HUD 与现有 golden 偏移。`applySwordCombatCaptureState` 增加既有 `ResetItemPopupBaseline`，不放宽阈值。
 - `make visual-update VISUAL_OUT=build/visual-update` 首次因 120 秒门限中止且未写入 golden；随后以 600 秒门限完成，逐图复核并确认仅 `cmd/mornlea/capture/testdata/golden/sword-combat.png` 改变。当前正式 capture 与 golden 均为 25 项。
-- 修复后 `make visual-check VISUAL_OUT=build/visual-final` 通过，25/25 场景最大通道差与差异像素均为 0；`go test ./cmd/mornlea/capture ./cmd/mornlea/app -race -count=1`、`go test ./internal/render/hud -race -count=1`、`openspec validate --all --strict --no-interactive`（78 passed、0 failed）和 `git diff --check` 均通过。
+- 修复后 `make visual-check VISUAL_OUT=build/visual-final` 通过，25/25 场景最大通道差与差异像素均为 0；`go test ./cmd/mornlea/capture ./cmd/mornlea/app -race -count=1`、`go test ./internal/render/hud -race -count=1`、`openspec validate --all --strict --no-interactive`（77 passed、0 failed）和 `git diff --check` 均通过。
 - `go test ./internal/archcheck -count=1` 当前被工作区已有配置变化阻断：`.codex/hooks.json` 被删除且 `.claude/settings.json` 被修改，`TestMornleaCurrentIdentity` 因缺失 `.codex/hooks.json` 失败；本次不恢复、不覆盖这些用户配置。
 
 - 基线验证证据见 `Baseline`，均对应 frozen code SHA `67fcc604bd3f3b5ce9326b5cd7498381163296d6`，本 Task 未重复运行。
