@@ -97,16 +97,6 @@ func TestSwordCombatCaptureState(t *testing.T) {
 	if !app.CombatMarkerVisible() {
 		t.Fatalf("marker 不可见")
 	}
-	// PinVolatile 在收敛后重新武装
-	// 模拟收敛消耗 6 帧后不可见
-	for i := 0; i < 6; i++ {
-		app.CombatMarkerVisible() // just check
-		// 直接通过 AfterRender 模拟 RenderFrame 消耗
-		// 这里通过临时获取 feedback 并调用 AfterRender
-		// 但我们有方法 ArmCombatMarker, 所以用 Reset + Arm 来模拟消耗
-		// 简化：直接调用 ResetCombatFeedback 的 inverse：通过多次 AfterRender
-		// 为了不直接访问私有字段，我们通过 PinVolatile 前的状态：先让 marker 失效
-	}
 	// 先让 marker 失效
 	app.ResetCombatFeedback()
 	if app.CombatMarkerVisible() {
