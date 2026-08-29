@@ -137,8 +137,7 @@ fn parse_envelope_events(bytes: &[u8]) -> Result<Vec<serde_json::Value>, Envelop
 pub struct SharedUiEventQueue(Arc<Mutex<UiEventQueue>>);
 
 /// 进程级桥事件队列单例:WebView 挂在窗口侧,而上行事件的既有排空出口
-/// (`drain_ui_events`)在渲染器句柄上,两侧经本单例交汇。拓扑与旧 egui
-/// 路径的「全局输入事件队列 + 渲染器逐帧 take」一致;benchmark/capture
+/// (`drain_ui_events`)在渲染器句柄上,两侧经本单例交汇;benchmark/capture
 /// 进程从不创建 WebView,队列恒空,零参与语义天然成立。
 static SHARED_QUEUE: std::sync::OnceLock<SharedUiEventQueue> = std::sync::OnceLock::new();
 

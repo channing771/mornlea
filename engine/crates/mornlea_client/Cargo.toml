@@ -20,18 +20,6 @@ objc2-foundation = "0.3"
 wgpu = "29"
 # wgpu 异步初始化的最小执行器。
 pollster = "0.4"
-# egui 即时模式 UI 的纯布局/输入/字体生态;默认关闭 default_fonts,字体经
-# client ABI v8 的一次性上传(Go embed 的 Noto CJK OTF),避免双份二进制进仓。
-# egui 0.35 线声明 wgpu ^29,与仓库直接 wgpu 29 同线;0.36 线声明 wgpu ^30,
-# 违反"绝不单侧升级 wgpu"裁决,故钉死 0.35。
-egui = { version = "0.35", default-features = false }
-# egui_wgpu 渲染器:关闭 default_features(wgpu 依赖退化为 std/wgsl),
-# 只开 macos-window-resize-jitter-fix(转发 wgpu/metal)。wgpu 的 default 特性
-# 由本 crate 上方直接依赖 wgpu=29(未关闭 default_features)经特性统一携带,
-# 故此处不再用 Cargo 非法语法 wgpu/default 重复开启。
-# 不启用 webgl/winit/capture feature;绝不引入 egui-winit(把 winit 版本
-# 耦合给 egui-winit,而菜单输入翻译量很小,裁决手工 RawInput)。
-egui-wgpu = { version = "0.35", default-features = false, features = ["macos-window-resize-jitter-fix"] }
 # 菜单层 WebView:进程内 WKWebView(透明、无第二窗口栈),资产经
 # `mornlea://` URL scheme handler 从二进制内嵌字节供给,上行事件经
 # WKScriptMessageHandler 入队。按 design 裁决手写 objc2 绑定,不引入

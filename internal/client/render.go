@@ -314,7 +314,7 @@ const (
 	frameTagHUD     = 6
 	frameTagDebug   = 7
 	// frameTagWater 是水下水色叠加段(4 个 f32:RGBA),client ABI v5 内的追加
-	// TLV tag,不升 ABI 版本。tag 9(旧 egui UI 段)已在 client ABI v12 退役:
+	// TLV tag,不升 ABI 版本。tag 9(旧菜单 UI 段)已在 client ABI v12 退役:
 	// 不再编码,下发即被 Rust 侧拒绝。
 	frameTagWater = 8
 )

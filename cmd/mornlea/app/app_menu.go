@@ -67,7 +67,7 @@ type menuState struct {
 //
 // 优先取构建信息（runtime/debug.ReadBuildInfo）里主模块的版本号；空值或
 // "(devel)"（本地未打版本标签的构建）都视为「无法取得真实版本号」，显示
-// "dev"（spec egui-tool-ui「版本行 SHALL 显示应用版本号，无法取得时显示 dev」）。
+// "dev"（spec webview-menu-ui「版本行 SHALL 显示应用版本号，无法取得时显示 dev」）。
 func menuVersion() string {
 	if info, ok := debug.ReadBuildInfo(); ok {
 		if version := info.Main.Version; version != "" && version != "(devel)" {
@@ -78,8 +78,7 @@ func menuVersion() string {
 }
 
 // MenuButtons 返回主菜单的按钮表：进入游戏、设置与退出游戏可用，多人游戏
-// 继续禁用（禁用态由前端呈现为灰色且不产生点击事件）。文案经桥下行权威
-// 下发,与旧 egui 菜单逐字一致。
+// 继续禁用（禁用态由前端呈现为灰色且不产生点击事件）。文案经桥下行权威下发。
 func MenuButtons() []UIMenuButton {
 	return []UIMenuButton{
 		{ID: menuActionStart, Label: "进入游戏", Enabled: true},

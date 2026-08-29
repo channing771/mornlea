@@ -39,3 +39,11 @@
 - QUALITY PASS：遗留改动整合连贯无死代码；editValue 64 vs 24 截断口径核实（播种值不截断、构造性上界成立）；reload 不自激循环。
 - 控制会话顺手收口：app_menu.go Escape 注释陈旧更新、debug_panel.go 引用不存在的测试名改正。
 - **预存缺陷发现（记 backlog）**：暂停门置位时 `server.step` 整体跳过（含 KeepAlive 处理）而心跳走墙钟——暂停层停留 ~15-20s 必心跳超时拆链 exit 1；egui 时代已存在，与本地单机暂停语义无关远端时暴露，需独立 change（心跳循环与暂停门解耦）。
+
+### T4 egui 完全退役 — PASS（零修复轮；含控制会话裁决的 archcheck 顺手修）
+
+- 删除面：~5959 行 Rust（`ui.rs` 2268 + `src/ui/` 12 测试文件 99 测试 + `render/egui.rs` 207 + callback_buffers 余渣三处齐清）+ egui/egui-wgpu 依赖（Cargo.lock −308）；`cargo tree` egui 归零；cargo 89 测试精确吻合 188−99（逐文件账目闭合）。
+- 保留项消费方证据齐全：DEBUG_PANEL/NAME_TAG/DAMAGE_OVERLAY/HUD_HOTBAR 四 shader 均有生产 pass；glyph 链未损；`EmbeddedCJKFont` 仅注释修改；benchmark prepared batch 契约（PR #122）逐条不变。
+- archcheck 顺手修（控制会话裁决）：`TestCommentBacktickIdentifiersExist` 存在域扩展到桥契约语料（schema.json + frontend/src ts/tsx；空语料 Fatal 守卫；正/负/空语料三断言）——9 条跨语言引用误报（`menuAction`/`uiState`/`uplinkEnvelope` 等 TS schema 名）全数转绿；已知红仅余 BaselineVersions（AGENTS.md v11→v12 属 6.1）与 MornleaCurrentIdentity（node_modules 环境现象）。
+- SPEC PASS / QUALITY PASS（双零修复）：纯删除纪律（非注释新增行穷举仅死管道简化+pass 计数连带+授权扩展项）；dylib −6.6KB；冒烟 React 主菜单正常、`nm | grep -ci egui` = 0。
+- 移交 T5/T6：mornlea_client/AGENTS.md「egui 布局」措辞（6.1）；`TestMornleaCurrentIdentity` 扫 frontend/node_modules 环境现象——6.2 dev-check 前裁决是否钉路径排除（建议 corpus walker 同款排除）；docs/architecture.md egui 描述（6.1）。

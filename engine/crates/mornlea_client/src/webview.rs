@@ -74,8 +74,8 @@ fn embedded_asset(path: &str) -> Option<(&'static [u8], &'static str)> {
 ///
 /// 事件队列用 [`SharedUiEventQueue`](crate::bridge::SharedUiEventQueue) 克隆自
 /// 进程级单例:上行事件的排空出口在渲染器(`drain_ui_events`)上,而 WebView
-/// 挂在窗口侧,两侧经同一单例交汇——与旧 egui 路径「全局事件队列 + 渲染器
-/// 逐帧 take」的拓扑一致。类型整体 Send+Sync,但按线程模型只在主线程访问。
+/// 挂在窗口侧,两侧经同一单例交汇。类型整体 Send+Sync,但按线程模型只在
+/// 主线程访问。
 struct HostShared {
     queue: SharedUiEventQueue,
     /// 最近一次 `push_state` 收到的状态 JSON 原文(浅校验过)。

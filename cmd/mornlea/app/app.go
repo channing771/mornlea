@@ -71,7 +71,7 @@ type Options struct {
 	// 服务端权威决定。
 	FluidEnabled bool
 	// StartAtMenu 为真时交互客户端启动停留在主菜单，世界装配延迟到点击
-	// 「进入游戏」之后（spec egui-tool-ui「交互客户端启动停留在主菜单」）。
+	// 「进入游戏」之后（spec webview-menu-ui「交互客户端启动停留在主菜单」）。
 	// 其余路径（-connect/benchmark/capture）保持 false，行为与引入菜单前一致。
 	StartAtMenu bool
 }

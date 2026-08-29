@@ -30,7 +30,7 @@ func (a *Application) remote() bool {
 // panelVisible 报告调试面板当前是否可见；未开 --dev 时 panel 为 nil，恒为 false。
 //
 // 面板可见期间游戏输入被整体捕获（spec「面板可见时捕获全部键盘输入」）：
-// 移动/动作/朝向一律不产生上行，交互语义全部留在 Rust egui。
+// 移动/动作/朝向一律不产生上行，交互语义全部留在 WebView 面板。
 func (a *Application) panelVisible() bool {
 	return a.panel != nil && a.panel.visible
 }
@@ -67,7 +67,7 @@ func (a *Application) applyPanelChange() {
 // 分配一个 20 余行的切片、三处段头字符串拼接与十余次 strconv.FormatFloat，
 // 而 Prepare 的 visible 提前返回拦不住实参求值——把 rows() 写成 Prepare 的
 // 实参，等于在 --dev 开着但面板关着时每帧都往渲染热路径上倒一堆垃圾。
-// spec「无 UI 帧时 egui 零参与」（openspec/specs/egui-tool-ui/spec.md）与
+// spec「无 UI 状态零参与」（spec webview-menu-ui）与
 // design.md 风险项「段仅在面板可见时编码」要求的是关闭状态下整个 pass
 // 跳过、不产出任何实例，输入构造同样在这条要求之内。
 //
@@ -184,7 +184,7 @@ func (s *panelState) fieldReadOnly(field config.Field, remote bool) bool {
 // handleKeys 消费本帧面板按键边沿。F3 边沿由 Go 检测（spec「F3 切换显示」），
 // 面板隐藏时把悬置的编辑态一并复位，避免重开后残留上一段会话的草稿
 // （design 风险项「面板可见性变化时清空编辑态」）。选中/数值交互已迁入
-// Rust egui，经事件批回传，不在这里处理。
+// WebView 面板，经桥上行事件回传，不在这里处理。
 func (s *panelState) handleKeys(keys panelKeys) {
 	if keys.Toggle {
 		s.visible = !s.visible

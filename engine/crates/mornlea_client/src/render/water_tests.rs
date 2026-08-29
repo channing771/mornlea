@@ -652,9 +652,11 @@ fn water_is_the_only_added_render_pass() {
         .iter()
         .map(|(name, text)| format!("{name}={}", text.matches("begin_render_pass").count()))
         .collect();
+    // 固定总数 5:菜单层 pass 已随 client ABI v12 退役整体删除,余下调用点
+    // 为 mod.rs(terrain/water/screen tint)、entity.rs 与 quads.rs。
     assert_eq!(
         total,
-        6,
+        5,
         "src/render 下的 render pass 调用点总数变了（{}）：新增额外的半透明阶段\
          需要先修订 voxel-visual-presentation 的边界",
         per_file.join(" ")

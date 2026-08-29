@@ -2,8 +2,8 @@
 //!
 //! 本 crate 以 winit 独占客户端窗口与输入采集的生产实现,通过独立 C ABI
 //! (版本见 `mornlea_client_abi_version`,当前 v12,与 `mornlea_engine` ABI
-//! 互不耦合)供 Go `internal/client` 调用。client ABI v12 退役 egui 菜单
-//! 字体上传出口与帧 tag 9 UI 段,新增 `mornlea_client_ui_push_state` 菜单
+//! 互不耦合)供 Go `internal/client` 调用。client ABI v12 退役菜单字体
+//! 上传出口与帧 tag 9 UI 段,新增 `mornlea_client_ui_push_state` 菜单
 //! 状态下行出口;事件排空出口格式改为版本化 JSON 信封。
 //! 控制权保持在 Go 主线程:每帧一次
 //! `mornlea_client_window_poll` 以零超时 `pump_app_events` 驱动事件循环,
@@ -18,8 +18,6 @@ pub mod bridge;
 pub mod input;
 #[cfg(target_os = "macos")]
 pub mod render;
-#[cfg(target_os = "macos")]
-pub mod ui;
 #[cfg(target_os = "macos")]
 pub mod webview;
 #[cfg(target_os = "macos")]

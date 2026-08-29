@@ -214,8 +214,8 @@ func isPanelSectionHeader(row render.PanelRow) bool {
 	return row.ReadOnly && row.Value == "" && strings.HasPrefix(row.Label, "── ")
 }
 
-// debugReadoutRows 把面板读数区转成只读行;标签与旧 egui 读数区固定标签
-// 逐字一致(模式字段走分节顶部 mode,不在此重复)。
+// debugReadoutRows 把面板读数区转成只读行;标签为固定文案(模式字段走分节
+// 顶部 mode,不在此重复)。
 func debugReadoutRows(readout render.PanelReadout) []uiDebugRowJSON {
 	return []uiDebugRowJSON{
 		{Label: "帧时", Kind: "readout", ReadOnly: true,

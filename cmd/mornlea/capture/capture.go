@@ -747,8 +747,7 @@ var captureScenes = []captureScene{
 		},
 	},
 	{
-		// main-menu 是 egui 主菜单的无窗口 capture 场景：含标题「Mornlea」、
-		// 版本行「dev」、真实装配错误行与四个按钮（进入/设置/退出可用、多人禁用）。
+		// main-menu 是主菜单相位的无窗口 capture 场景。
 		//
 		// 菜单层已迁 WebView:本场景不再注入菜单快照,输出无 chrome 的世界
 		// 底图(菜单相位抑制准星与弹条),golden 待全景场景落地时重生成。

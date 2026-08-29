@@ -193,7 +193,7 @@ func runGamePhase(app *Application) error {
 				justCaptured = true
 			default:
 				// 游戏相位的默认档：Esc 从「仅释放光标」升级为打开暂停层，
-				// 打开动作本身必须释放光标（spec egui-tool-ui）。
+				// 打开动作本身必须释放光标（spec webview-menu-ui）。
 				app.openPauseOverlay()
 			}
 		}

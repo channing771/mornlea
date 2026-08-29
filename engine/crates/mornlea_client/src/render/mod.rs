@@ -8,15 +8,13 @@
 //! 金字塔遮挡。uniform 布局、clear 值与 pass 顺序保持一致,保证同输入
 //! 同图像。远环 LOD 壳 pass(v6)绘制在天空与近环 terrain 之间:世界
 //! 坐标大 quad + 距离雾 + tile 级 CPU 视锥剔除,不进 HiZ/GPU culling。
-//! 菜单层已迁进程内 WKWebView(client ABI v12):本模块不再有 egui pass,
-//! 旧 egui 模块(`egui`/`ui`)保留但停用,由后续清理任务删除。
+//! 菜单层已迁进程内 WKWebView(client ABI v12):本模块不含任何菜单 pass。
 //!
 //! 约束:
 //! - color `Bgra8UnormSrgb`(Go capture 同格式),depth `Depth32Float`;
 //! - mesh packed face 字节只在 section 变脏时过境一次;
 //! - 每帧一次 [`OffscreenRenderer::render_frame`],帧内无逐 pass FFI。
 
-pub mod egui;
 pub mod entity;
 #[cfg(test)]
 mod farmland_tests;
@@ -467,7 +465,6 @@ fn sort_water_draws(draws: &mut [(f32, Alloc, u32)]) {
 /// command buffer 保留 renderer GPU 资源的引用；提交前不得改写这些资源。
 struct PreparedBenchmarkBatch {
     main: wgpu::CommandBuffer,
-    callbacks: Vec<wgpu::CommandBuffer>,
 }
 
 /// 离屏世界渲染器。
@@ -1594,23 +1591,11 @@ impl OffscreenRenderer {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("frame"),
             });
-        let mut callback_buffers = Vec::new();
-        let result = self.record_frame(
-            input,
-            &validated,
-            &frame_view,
-            &mut encoder,
-            &mut callback_buffers,
-        );
+        let result = self.record_frame(input, &validated, &frame_view, &mut encoder);
         if result != FrameResult::Rendered {
             return result;
         }
-        if callback_buffers.is_empty() {
-            self.queue.submit([encoder.finish()]);
-        } else {
-            callback_buffers.push(encoder.finish());
-            self.queue.submit(callback_buffers);
-        }
+        self.queue.submit([encoder.finish()]);
         if let Some(frame) = acquired {
             frame.present();
         }
@@ -1637,34 +1622,24 @@ impl OffscreenRenderer {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("benchmark batch"),
             });
-        let mut callback_buffers = Vec::new();
         for _ in 0..repeat {
-            let result = self.record_frame(
-                input,
-                &validated,
-                &frame_view,
-                &mut encoder,
-                &mut callback_buffers,
-            );
+            let result = self.record_frame(input, &validated, &frame_view, &mut encoder);
             if result != FrameResult::Rendered {
                 return result;
             }
         }
         self.prepared_benchmark_batch = Some(PreparedBenchmarkBatch {
             main: encoder.finish(),
-            callbacks: callback_buffers,
         });
         FrameResult::Rendered
     }
 
     /// 提交已录制的 benchmark 批次并等待 GPU 完成；提交前即转移 buffer 所有权。
     pub fn submit_benchmark_batch(&mut self) -> FrameResult {
-        let Some(PreparedBenchmarkBatch { main, callbacks }) = self.prepared_benchmark_batch.take()
-        else {
+        let Some(PreparedBenchmarkBatch { main }) = self.prepared_benchmark_batch.take() else {
             return FrameResult::Invalid;
         };
-        self.queue
-            .submit(callbacks.into_iter().chain(std::iter::once(main)));
+        self.queue.submit([main]);
         let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
         FrameResult::Rendered
     }
@@ -1716,11 +1691,7 @@ impl OffscreenRenderer {
         validated: &ValidatedFrame<'_>,
         frame_view: &wgpu::TextureView,
         encoder: &mut wgpu::CommandEncoder,
-        callback_buffers: &mut Vec<wgpu::CommandBuffer>,
     ) -> FrameResult {
-        // 菜单层已迁 WebView(client ABI v12):不再有 egui 回调命令缓冲,
-        // 参数由 benchmark 批次录制路径沿用,待 egui 依赖退役时一并清理。
-        let _ = (&validated, &frame_view, &callback_buffers);
         // 构建候选 record(编码镜像 Go sectionRecords)。
         let mut records: Vec<u8> = Vec::with_capacity(input.visible.len() * SECTION_RECORD_BYTES);
         let mut candidates = 0u32;
@@ -2119,8 +2090,8 @@ impl OffscreenRenderer {
                 glyphs,
             );
         }
-        // 菜单层已迁 WebView(client ABI v12):帧内不再有 egui pass;
-        // 上行事件由桥队列直供 drain 出口,与渲染帧解耦。
+        // 菜单层由进程内 WebView 承担,不在本渲染帧内;上行事件由桥队列
+        // 直供 drain 出口,与渲染帧解耦。
         self.last_pos = input.pos;
         self.last_view_proj = input.view_proj;
         self.have_last_camera = true;

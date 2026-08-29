@@ -104,9 +104,7 @@ impl ApplicationHandler for App {
     ) {
         // 菜单层输入已迁 WebView:菜单相位下 WebView 是 firstResponder,键盘
         // 与指针在本窗口路径天然静默,经桥上行;游戏相位 WebView 隐藏并把
-        // firstResponder 归还 winit 视图,本路径恢复独占采集。旧 egui 的
-        // winit→UI 事件翻译随 egui 停用一并移除(`ui` 模块待 egui 退役时
-        // 删除)。
+        // firstResponder 归还 winit 视图,本路径恢复独占采集。
         match event {
             WindowEvent::CloseRequested => self.input.request_close(),
             WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {

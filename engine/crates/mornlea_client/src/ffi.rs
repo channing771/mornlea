@@ -19,15 +19,15 @@ use crate::window::ClientWindow;
 
 /// 当前 client ABI 版本。
 ///
-/// v12:退役 egui 菜单出口 `render_upload_ui_font` 与帧 TLV tag 9 UI 段
+/// v12:退役菜单出口 `render_upload_ui_font` 与帧 TLV tag 9 UI 段
 /// (layout v1–v4 编解码随之作废);新增菜单状态下行出口 `ui_push_state`
 /// (窗口句柄域,JSON 字符串);`render_drain_ui_events` 签名不变、字节格式
 /// 改为版本化 JSON 事件信封(空队列写 0 字节)。菜单呈现改由进程内
 /// WKWebView 承担。新增导出面即 bump,ABI 版本是"同版本 = 同表面"的
 /// 不可混装契约(与 engine v3→v4、client v4→5 同一先例)。
 /// v9:设置页 layout v2 与结构化事件 batch 取代裸按钮 id，排空改为整批
-/// 容量门禁；v8:新增 egui 主菜单两条出口 `render_upload_ui_font`/`render_drain_ui_events`
-/// 与帧 TLV tag 9(egui 菜单段)。
+/// 容量门禁；v8:新增主菜单两条出口 `render_upload_ui_font`/`render_drain_ui_events`
+/// 与帧 TLV tag 9(菜单 UI 段)。
 /// v7:终审修复波(Ruling 14/16)新增雾参数化 `render_set_lod_fog` 出口;
 /// 既有入口签名不变。
 /// v6:新增远环 `render_upload_lod_tile`/`render_drop_lod_tile` 出口。
@@ -322,7 +322,7 @@ mod tests {
 
     #[test]
     fn abi_version_is_twelve() {
-        // v12 退役 egui 菜单字体上传出口与帧 tag 9 UI 段,新增
+        // v12 退役菜单字体上传出口与帧 tag 9 UI 段,新增
         // `ui_push_state` 状态下行出口,drain 改版本化 JSON 信封;
         // v11 新增离屏 benchmark batch prepare/submit 入口。
         assert_eq!(mornlea_client_abi_version(), 12);
@@ -645,7 +645,7 @@ const FRAME_TAG_HUD: u32 = 6;
 const FRAME_TAG_DEBUG: u32 = 7;
 /// 水下水色叠加段(4 个 f32:RGBA)。client ABI v5 内的追加 tag,不升 ABI 版本。
 const FRAME_TAG_WATER: u32 = 8;
-/// 白名单内的最高 TLV tag。client ABI v12 退役了 v8–v11 的 tag 9 egui UI 段:
+/// 白名单内的最高 TLV tag。client ABI v12 退役了 v8–v11 的 tag 9 UI 段:
 /// 携带该段的帧按未知 tag 同一路径拒绝,不触碰渲染器状态。
 const FRAME_TAG_MAX: u32 = 8;
 
@@ -1415,7 +1415,7 @@ mod frame_v2_tests {
             parse_status(&v2_frame(&tlv(10, &[0u8; 4]))),
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
-        // 已退役 tag 9(v8–v11 的 egui UI 段):与未知 tag 同路径拒绝,
+        // 已退役 tag 9(v8–v11 的菜单 UI 段):与未知 tag 同路径拒绝,
         // 先于句柄查找、不触碰渲染器状态。
         assert_eq!(
             parse_status(&v2_frame(&tlv(9, &[0u8; 4]))),
