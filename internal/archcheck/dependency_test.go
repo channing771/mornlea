@@ -46,6 +46,7 @@ var allowed = map[string][]string{
 	"internal/sim/contract": {"internal/companion", "internal/core", "internal/physics", "internal/world"},
 	"internal/sim/entity":   {"internal/companion", "internal/core", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/realm", "internal/sim/tuning"},
 	"internal/sim/realm":    {"internal/core", "internal/fluid", "internal/world"},
+	"internal/sim/runtime":  {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "internal/sim/tuning"},
 	"internal/sim/tuning":   {"internal/core"},
 	"internal/storage":      {"internal/companion", "internal/core", "internal/world"},
 	"internal/world":        {"internal/core"},
