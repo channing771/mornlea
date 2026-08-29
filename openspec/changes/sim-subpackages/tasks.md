@@ -25,7 +25,7 @@
 
 ## 5. Boundary Guards, Tests, And Documentation
 
-- [ ] 5.1 在 `internal/archcheck/dependency_test.go` 登记五个子包的完整依赖白名单，并增加真实树和合成反向边的断言；更新 `internal/sim/AGENTS.md` 为子树目录图、所有权、mutation 与 focused test 入口，按需新增局部子包指南。验证：`go test ./internal/archcheck -count=1` 与 `git diff --check`。
+- [x] 5.1 在 `internal/archcheck/dependency_test.go` 登记五个子包的完整依赖白名单，并增加真实树和合成反向边的断言；更新 `internal/sim/AGENTS.md` 为子树目录图、所有权、mutation 与 focused test 入口，按需新增局部子包指南。验证：`go test ./internal/archcheck -count=1` 与 `git diff --check`。
 - [ ] 5.2 将其余白盒测试与 owner package 一同迁移，比较迁移前后的 Test、Benchmark、Fuzz 和 `t.Run` 清单；更新 `docs/architecture.md` 与 `docs/test-organization.md` 的现行路径说明。验证：`go test ./internal/sim/... -race -count=1`，清单比较为零差异，且 `git diff --check` 通过。
 
 ## 6. Final Verification And Review

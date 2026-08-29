@@ -114,3 +114,12 @@
 - Spec review: reviewer `ses_fb3d89edcffeyOjaB4s1BiVdnY` conditional — server→runtime migration and root production deletion (43 files inc `command.go` bridge) complete, but notes 79 white-box `*_test.go` also deleted (outside “production files only”) reducing inventory 594+12 → 22, and `config`/`cmd/mornlea`→`tuning` not visible in this diff (already done in 1.3).
 - Quality review: reviewer `ses_fb3d8a071ffefdfXp2fg6anOXq` pass — caller convergence, root facade removal, archcheck, no alias, minimal test import redirects; Important notes temporary white-box coverage collapse pending task 5.2 and mixed format+functional commit.
 - Ruling: root test deletion beyond brief is intentional transitional collapse; coverage will be restored by migrating white-box tests to owner packages in 5.2. Config/client tuning migration was completed in 1.3 and verified zero `internal/sim` imports. Cost if not restored in 5.2: baseline inventory comparison will remain red.
+
+## Task 5.1 Boundary Guards And Guidance
+
+- Implementer: fresh implementer `ses_fb3d31606ffeQke8Ke3D1NZYEj`.
+- Commits: `56d33b6f` and repair `62a42157`.
+- Validation: `go test ./internal/archcheck -count=1`, `go test ./internal/sim/... -count=1`, `go vet ./...`, `gofmt -l .`, `git diff --check` clean.
+- Spec review: reviewer `ses_fb3cd4eaeffer0SKMslDD55jqQ` docs pass with acceptable extension (required edges/unregistered) and two light incompletenesses (drift guard, 3 synthetic edges).
+- Quality review: reviewer `ses_fb3cd4e7cffetIny4PCt4g87d9` conditional pass — whitelist consistent, double assertion symmetric, guides minimal; 3 Important (dual table drift, 3 missing synthetic edges, docs mismatch).
+- Repair: re-review `ses_fb3c6e368ffe0zgoPTzLylGc3h` PASS — `TestSimAllowedEdgesMatchesGlobalAllowed` sync, 13 reverse edges full coverage, `AGENTS.md:67` aligned; no new Critical/Important.
