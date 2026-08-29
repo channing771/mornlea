@@ -57,6 +57,7 @@ type SceneApplication interface {
 	SetPredictor(predictor *client.Predictor)
 	MiningOverlay() hud.MiningOverlay
 	SetMiningOverlay(overlay hud.MiningOverlay)
+	ResetItemPopupBaseline()
 	SetDamageFeedback(feedback application.DamageFeedback)
 	SetDamageStrength(strength float32)
 	RemotePresentations() []client.RemotePresentation

@@ -12,7 +12,9 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/internal/server/persistence"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -21,7 +23,7 @@ const hostPreLoginCapacity = 16
 type Host struct {
 	config  Config
 	world   *Server
-	players *playerPersistence
+	players *persistence.Players
 
 	preLogin        chan struct{}
 	mu              sync.Mutex
@@ -63,10 +65,7 @@ func (h *Host) Stats() HostStats {
 	}
 	h.world.stepMu.Unlock()
 
-	h.players.mu.Lock()
-	stats.PlayerSaveJobDepth = len(h.players.jobs)
-	stats.PlayerSaveDoneDepth = len(h.players.completions)
-	h.players.mu.Unlock()
+	stats.PlayerSaveJobDepth, stats.PlayerSaveDoneDepth = h.players.QueueDepths()
 	return stats
 }
 
@@ -153,7 +152,7 @@ func NewHost(
 	if generator == nil {
 		panic("server: nil generator")
 	}
-	var companions *companionPersistence
+	var companions *persistence.Companions
 	if len(config.Companions) != 0 {
 		// 伙伴启用即要求模型运行时就绪。config.Load 已在配置层守住静态完整性，
 		// 这里是第二道边界：直接构造 server.Config 的入口（测试、未来的嵌入方）
@@ -187,7 +186,7 @@ func NewHost(
 				len(ids), companion.MaxStored,
 			)
 		}
-		companions = newCompanionPersistence(store, loaded, config)
+		companions = persistence.NewCompanions(store, loaded, persistenceOptions(config, nil))
 	}
 	// 夜行者聚合存档与伙伴配置解耦，凡世界存储都参与启动矩阵：missing 视同
 	// 空集合；损坏/未来版本/读取失败在此整体拒绝（tick 与路径 worker 都不会
@@ -201,11 +200,14 @@ func NewHost(
 	} else if err != nil {
 		return nil, fmt.Errorf("load hostiles: %w", err)
 	}
-	hostiles := newHostilePersistence(store, loadedHostiles, config)
+	hostiles := persistence.NewHostiles(store, loadedHostiles, persistenceOptions(config, nil))
 	world, err := newWorld(config, generator, store, companions, hostiles)
 	if err != nil {
 		// 持久化 worker 已随构造启动；恢复/装配阶段的任何失败都必须先停掉
 		// worker 再返回，否则每次启动失败都泄漏一个永不退出的 goroutine。
+		if companions != nil {
+			companions.Close()
+		}
 		hostiles.Close()
 		return nil, err
 	}
@@ -214,7 +216,7 @@ func NewHost(
 	return &Host{
 		config:          config,
 		world:           world,
-		players:         newPlayerPersistence(store, config),
+		players:         persistence.NewPlayers(store, persistenceOptions(config, nil)),
 		preLogin:        make(chan struct{}, hostPreLoginCapacity),
 		activeByPlayer:  make(map[core.PlayerID]*activeLogin),
 		activeBySession: make(map[contract.SessionID]*activeLogin),

@@ -556,8 +556,9 @@ func sampleMultiplayerQueues(host *Host) multiplayerQueueSample {
 		current.mu.Unlock()
 	}
 	host.world.stepMu.Unlock()
-	sample.playerJobs, sample.playerJobsCapacity = len(host.players.jobs), cap(host.players.jobs)
-	sample.completions, sample.completionsCapacity = len(host.players.completions), cap(host.players.completions)
+	sample.playerJobs, sample.completions = host.players.QueueDepths()
+	sample.playerJobsCapacity = 16
+	sample.completionsCapacity = 2
 	return sample
 }
 

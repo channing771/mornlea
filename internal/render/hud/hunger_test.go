@@ -166,7 +166,7 @@ func TestHotbarPrepareDrawsHungerBar(t *testing.T) {
 		t.Helper()
 		if err := renderer.Prepare(
 			core.Inventory{}, false, false, -1, nil, nil, nil, MiningOverlay{}, EatingOverlay{},
-			HealthOverlay{}, OxygenOverlay{}, hunger, ChatOverlay{}, 1280, 720, budget,
+			HealthOverlay{}, OxygenOverlay{}, hunger, ChatOverlay{}, PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 720, budget,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -187,5 +187,34 @@ func TestHotbarPrepareDrawsHungerBar(t *testing.T) {
 	}
 	if empty, full := countDrumsticks(HungerOverlay{Confirmed: false, Value: 13}); empty != 0 || full != 0 {
 		t.Fatalf("未确认饥饿值仍画出 %d/%d 个鸡腿", empty, full)
+	}
+}
+
+// TestHungerBarSaturationZeroJitterIsExactlyOneScaledPixel 是饱和度归零抖动的
+// HUD 层直达对照测试：`SaturationZero` 为 true 时饥饿行整体下移恰 1×scale，
+// 为 false 时复位；抖动只改 Y，X、尺寸、UV 与颜色逐字段一致。
+func TestHungerBarSaturationZeroJitterIsExactlyOneScaledPixel(t *testing.T) {
+	for _, open := range []bool{false, true} {
+		var steady, jittered hotbarLayout
+		appendHungerBar(&steady, HungerOverlay{Confirmed: true, Value: 13}, open, 1280, 800)
+		appendHungerBar(&jittered, HungerOverlay{Confirmed: true, Value: 13, SaturationZero: true}, open, 1280, 800)
+		if len(steady.quads) == 0 || len(steady.quads) != len(jittered.quads) {
+			t.Fatalf("open=%t 饥饿 quad 数=%d/%d，想要同量且非空", open, len(steady.quads), len(jittered.quads))
+		}
+		scale := hudScale(open, 1280, 800)
+		if scale <= 0 {
+			t.Fatalf("open=%t scale=%v，想要正值", open, scale)
+		}
+		for index := range steady.quads {
+			steadyQuad, jitterQuad := steady.quads[index], jittered.quads[index]
+			if jitterQuad.Y-steadyQuad.Y != scale {
+				t.Fatalf("open=%t quad %d Y 偏移=%v，想要恰 1×scale=%v",
+					open, index, jitterQuad.Y-steadyQuad.Y, scale)
+			}
+			steadyQuad.Y, jitterQuad.Y = 0, 0
+			if steadyQuad != jitterQuad {
+				t.Fatalf("open=%t quad %d 除 Y 外不一致: %+v / %+v", open, index, steadyQuad, jitterQuad)
+			}
+		}
 	}
 }

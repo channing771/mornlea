@@ -165,13 +165,17 @@ func TestHostDisconnectDeactivatesCachedPlayer(t *testing.T) {
 	case <-time.After(waitDeadline):
 		t.Fatal("AcceptStream did not return after disconnect")
 	}
-
-	host.players.mu.Lock()
-	cached := host.players.cache[identity.PlayerID]
-	active := cached != nil && cached.active
-	host.players.mu.Unlock()
-	if active {
-		t.Fatal("disconnected player remained active in persistence cache")
+	waitForNoActiveLogin(t, host)
+	// 同一身份应可立即重连：若 Deactivate 遗漏，reserveLogin 会因 active 仍在而拒绝。
+	reconnect := startMemoryLogin(t, host, identity)
+	waitReady(t, host, reconnect)
+	if err := reconnect.Client.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-reconnect.Done:
+	case <-time.After(waitDeadline):
+		t.Fatal("reconnect AcceptStream did not return")
 	}
 
 	cancelRun()

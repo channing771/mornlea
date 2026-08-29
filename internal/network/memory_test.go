@@ -3,10 +3,12 @@ package network_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 )
 
@@ -275,5 +277,39 @@ func TestMemoryPacketStreamValidatesStateBeforeSend(t *testing.T) {
 	}
 	if err := server.Send(context.Background(), network.StateHandshake, network.PlayerState{}); err == nil {
 		t.Fatal("Play packet in Handshake state was sent")
+	}
+}
+
+// TestProtocolV11CarriesWornToolDropOnCodecAndMemory 验证 v11 磨损工具掉落物
+// 跨层可达：wire 编解码（经根包 `NewCodec` 别名驱动的 codec 门面，与包内直呼
+// 同一编码路径）与 Memory transport（校验在 `Send` 前置）都接受同一合法值。
+// 编解码主体测试在 codec 子包，本条留在根包是因为它同时驱动根包的传输路径。
+func TestProtocolV11CarriesWornToolDropOnCodecAndMemory(t *testing.T) {
+	full, _ := core.ItemMaxDurability(core.ItemStonePickaxe)
+	worn := network.ItemDropUpserts{Drops: []network.ItemDrop{{
+		ID:         core.DropID{Dimension: core.Overworld, Chunk: core.ChunkPos{X: 1, Z: -2}, Slot: 0, Generation: 1},
+		BlockIndex: 9,
+		Item:       core.ItemStonePickaxe, Count: 1, Durability: full - 1,
+	}}}
+	if err := worn.Validate(); err != nil {
+		t.Fatalf("v11 拒绝磨损工具掉落物: %v", err)
+	}
+	codec, err := network.NewCodec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = codec.Close() }()
+	packetID, payload, err := codec.EncodeServer(network.StatePlay, worn)
+	if err != nil {
+		t.Fatalf("v11 codec 拒绝磨损工具掉落物: %v", err)
+	}
+	round, err := codec.DecodeServer(network.StatePlay, packetID, payload)
+	if err != nil || !reflect.DeepEqual(round, worn) {
+		t.Fatalf("磨损工具掉落物往返 = %#v, %v，想要 %#v", round, err, worn)
+	}
+	client, server := network.NewMemoryStreamPair(1)
+	t.Cleanup(func() { _ = client.Close() })
+	if err := server.Send(context.Background(), network.StatePlay, worn); err != nil {
+		t.Fatalf("Memory transport 拒绝磨损工具掉落物: %v", err)
 	}
 }

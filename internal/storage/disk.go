@@ -14,15 +14,20 @@ import (
 	"sync/atomic"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage/chunk"
+	"github.com/channing771/mornlea/internal/storage/companion"
+	"github.com/channing771/mornlea/internal/storage/hostile"
+	"github.com/channing771/mornlea/internal/storage/player"
+	"github.com/channing771/mornlea/internal/storage/region"
 )
 
-const maxPlayerFileLength = int64(playerEnvelopeLength) + int64(maxPlayerPayload)
+const maxPlayerFileLength = int64(player.EnvelopeLength) + int64(player.MaxPayload)
 
 // DiskStore persists chunks in lazily opened region files under one locked world.
 type DiskStore struct {
 	mu      sync.Mutex
 	files   *worldFiles
-	regions map[RegionKey]*region
+	regions map[RegionKey]*chunk.Region
 	closing atomic.Bool
 	closed  bool
 
@@ -39,7 +44,7 @@ func OpenDisk(ctx context.Context, root string, options OpenOptions) (*DiskStore
 	}
 	return &DiskStore{
 		files:   files,
-		regions: make(map[RegionKey]*region),
+		regions: make(map[RegionKey]*chunk.Region),
 	}, nil
 }
 
@@ -106,7 +111,7 @@ func (store *DiskStore) LoadChunk(
 	opened, ok := store.regions[regionKey]
 	if !ok {
 		var err error
-		opened, err = openRegion(ctx, store.regionPath(regionKey), regionKey)
+		opened, err = chunk.OpenRegion(ctx, store.regionPath(regionKey), regionKey)
 		if errors.Is(err, os.ErrNotExist) {
 			return StoredChunk{}, fmt.Errorf("%w: %v", ErrChunkNotFound, key)
 		}
@@ -115,7 +120,7 @@ func (store *DiskStore) LoadChunk(
 		}
 		store.regions[regionKey] = opened
 	}
-	return opened.load(ctx, key)
+	return opened.Load(ctx, key)
 }
 
 func (store *DiskStore) SaveBatch(
@@ -165,15 +170,15 @@ func (store *DiskStore) SaveBatch(
 		if err != nil {
 			return result, err
 		}
-		regionResult, err := opened.save(ctx, grouped[key])
+		regionResult, err := opened.Save(ctx, grouped[key])
 		for chunkKey, revision := range regionResult.Committed {
 			result.Committed[chunkKey] = revision
 		}
 		if err != nil {
 			return result, fmt.Errorf("save region %+v: %w", key, err)
 		}
-		if opened.shouldCompact(productionRegionSpacePolicy) {
-			if err := opened.compact(ctx); err != nil {
+		if opened.ShouldCompact(region.ProductionSpacePolicy) {
+			if err := opened.Compact(ctx); err != nil {
 				return result, fmt.Errorf("compact region %+v: %w", key, err)
 			}
 		}
@@ -210,7 +215,7 @@ func (store *DiskStore) LoadPlayer(
 	if err != nil {
 		return StoredPlayer{}, fmt.Errorf("read player %s: %w", id, err)
 	}
-	return decodePlayer(id, encoded)
+	return player.Decode(id, encoded)
 }
 
 func (store *DiskStore) SavePlayer(
@@ -223,7 +228,7 @@ func (store *DiskStore) SavePlayer(
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	encoded, err := encodePlayer(save)
+	encoded, err := player.Encode(save)
 	if err != nil {
 		return 0, err
 	}
@@ -241,7 +246,7 @@ func (store *DiskStore) SavePlayer(
 	previous, err := readPlayerFile(path)
 	switch {
 	case err == nil:
-		stored, decodeErr := decodePlayer(save.PlayerID, previous)
+		stored, decodeErr := player.Decode(save.PlayerID, previous)
 		if decodeErr != nil {
 			return 0, fmt.Errorf("read existing player %s: %w", save.PlayerID, decodeErr)
 		}
@@ -300,7 +305,7 @@ func (store *DiskStore) LoadCompanions(ctx context.Context) (StoredCompanions, e
 	if err != nil {
 		return StoredCompanions{}, fmt.Errorf("read companions: %w", err)
 	}
-	stored, err := decodeCompanions(encoded)
+	stored, err := companion.Decode(encoded)
 	if err != nil {
 		return StoredCompanions{}, fmt.Errorf("decode companions: %w", err)
 	}
@@ -314,7 +319,7 @@ func (store *DiskStore) SaveCompanions(ctx context.Context, save CompanionSave) 
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	encoded, err := encodeCompanions(save)
+	encoded, err := companion.Encode(save)
 	if err != nil {
 		return err
 	}
@@ -331,7 +336,7 @@ func (store *DiskStore) SaveCompanions(ctx context.Context, save CompanionSave) 
 	previous, err := readCompanionFile(path)
 	switch {
 	case err == nil:
-		stored, decodeErr := decodeCompanions(previous)
+		stored, decodeErr := companion.Decode(previous)
 		if decodeErr != nil {
 			return fmt.Errorf("read existing companions: %w", decodeErr)
 		}
@@ -386,7 +391,7 @@ func (store *DiskStore) LoadHostileMobs(ctx context.Context) (StoredHostileMobs,
 	if err != nil {
 		return StoredHostileMobs{}, fmt.Errorf("read hostile mobs: %w", err)
 	}
-	stored, err := decodeHostileMobs(encoded)
+	stored, err := hostile.Decode(encoded)
 	if err != nil {
 		return StoredHostileMobs{}, fmt.Errorf("decode hostile mobs: %w", err)
 	}
@@ -400,7 +405,7 @@ func (store *DiskStore) SaveHostileMobs(ctx context.Context, save HostileMobsSav
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	encoded, err := encodeHostileMobs(save)
+	encoded, err := hostile.Encode(save)
 	if err != nil {
 		return err
 	}
@@ -417,7 +422,7 @@ func (store *DiskStore) SaveHostileMobs(ctx context.Context, save HostileMobsSav
 	previous, err := readHostileFile(path)
 	switch {
 	case err == nil:
-		stored, decodeErr := decodeHostileMobs(previous)
+		stored, decodeErr := hostile.Decode(previous)
 		if decodeErr != nil {
 			// 正式文件损坏或为未来版本时拒绝保存并保留原文件：覆盖等于把
 			// 「读不回的数据」洗成合法存档，重启会静默清怪。
@@ -455,7 +460,7 @@ func (store *DiskStore) SaveHostileMobs(ctx context.Context, save HostileMobsSav
 func validateAndNormalizeSaves(saves []ChunkSave) ([]ChunkSave, error) {
 	maxRevisions := make(map[core.ChunkKey]uint64, len(saves))
 	for _, save := range saves {
-		if err := validateChunkSave(save); err != nil {
+		if err := chunk.ValidateChunkSave(save); err != nil {
 			return nil, err
 		}
 		if save.Revision > maxRevisions[save.Key] {
@@ -516,7 +521,7 @@ func (store *DiskStore) Sync(ctx context.Context) error {
 	keys := store.regionKeys()
 	errs := make([]error, 0, len(keys))
 	for _, key := range keys {
-		if err := store.regions[key].sync(ctx); err != nil {
+		if err := store.regions[key].Sync(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("sync region %+v: %w", key, err))
 		}
 	}
@@ -535,7 +540,7 @@ func (store *DiskStore) Close() error {
 	keys := store.regionKeys()
 	errs := make([]error, 0, len(keys))
 	for _, key := range keys {
-		if err := store.regions[key].close(); err != nil {
+		if err := store.regions[key].Close(); err != nil {
 			errs = append(errs, fmt.Errorf("close region %+v: %w", key, err))
 			continue
 		}
@@ -592,13 +597,13 @@ func readCompanionFile(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	encoded, readErr := io.ReadAll(io.LimitReader(file, int64(maxCompanionFileLength)+1))
+	encoded, readErr := io.ReadAll(io.LimitReader(file, int64(companion.MaxFileLength)+1))
 	if err := errors.Join(readErr, file.Close()); err != nil {
 		return nil, err
 	}
-	if len(encoded) > maxCompanionFileLength {
+	if len(encoded) > companion.MaxFileLength {
 		return nil, fmt.Errorf(
-			"%w: companion file exceeds %d bytes", ErrCorrupt, maxCompanionFileLength,
+			"%w: companion file exceeds %d bytes", ErrCorrupt, companion.MaxFileLength,
 		)
 	}
 	return encoded, nil
@@ -611,19 +616,19 @@ func readHostileFile(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	encoded, readErr := io.ReadAll(io.LimitReader(file, int64(maxHostileFileLength)+1))
+	encoded, readErr := io.ReadAll(io.LimitReader(file, int64(hostile.MaxFileLength)+1))
 	if err := errors.Join(readErr, file.Close()); err != nil {
 		return nil, err
 	}
-	if len(encoded) > maxHostileFileLength {
+	if len(encoded) > hostile.MaxFileLength {
 		return nil, fmt.Errorf(
-			"%w: hostile file exceeds %d bytes", ErrCorrupt, maxHostileFileLength,
+			"%w: hostile file exceeds %d bytes", ErrCorrupt, hostile.MaxFileLength,
 		)
 	}
 	return encoded, nil
 }
 
-func (store *DiskStore) regionForSave(ctx context.Context, key RegionKey) (*region, error) {
+func (store *DiskStore) regionForSave(ctx context.Context, key RegionKey) (*chunk.Region, error) {
 	if opened, ok := store.regions[key]; ok {
 		return opened, nil
 	}
@@ -631,9 +636,9 @@ func (store *DiskStore) regionForSave(ctx context.Context, key RegionKey) (*regi
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, fmt.Errorf("create region directory %q: %w", filepath.Dir(path), err)
 	}
-	opened, err := openRegion(ctx, path, key)
+	opened, err := chunk.OpenRegion(ctx, path, key)
 	if errors.Is(err, os.ErrNotExist) {
-		opened, err = createRegion(ctx, path, key)
+		opened, err = chunk.CreateRegion(ctx, path, key)
 	}
 	if err != nil {
 		return nil, err

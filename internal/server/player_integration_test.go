@@ -690,6 +690,7 @@ func (h *delayedPlayerHarness) closeAndAssertNoGoroutineLeak(timeout time.Durati
 			serverLeak := strings.Contains(dump, "(*Server).endpointReader") ||
 				strings.Contains(dump, "(*Server).chunkWorker") ||
 				strings.Contains(dump, "(*Server).saveWorker") ||
+				strings.Contains(dump, "(*persistence.World).saveWorker") ||
 				strings.Contains(dump, "(*session).writeLoop")
 			return !serverLeak && runtime.NumGoroutine() <= h.goroutines
 		},

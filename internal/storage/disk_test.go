@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage/chunk"
+	"github.com/channing771/mornlea/internal/storage/region"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -301,11 +303,11 @@ func TestDiskStoreSaveBatchOrdersRegionGroups(t *testing.T) {
 
 	events := make([]RegionKey, 0, len(keys)*2)
 	for key, opened := range store.regions {
-		opened.file = &observedRegionFile{
-			regionFile: opened.file,
+		opened.ReplaceFile(&observedRegionFile{
+			File:       opened.File(),
 			key:        key,
 			syncEvents: &events,
-		}
+		})
 	}
 	if _, err := store.SaveBatch(context.Background(), diskSavesFor(keys, 2)); err != nil {
 		t.Fatal(err)
@@ -339,11 +341,11 @@ func TestDiskStoreSaveBatchReturnsEarlierRegionCommitsOnLaterFailure(t *testing.
 	injected := errors.New("injected second-region sync failure")
 	secondRegion, _ := RegionFor(second)
 	opened := store.regions[secondRegion]
-	opened.file = &observedRegionFile{
-		regionFile: opened.file,
+	opened.ReplaceFile(&observedRegionFile{
+		File:       opened.File(),
 		key:        secondRegion,
 		syncErrors: []error{injected},
-	}
+	})
 	result, err := store.SaveBatch(
 		context.Background(), diskSavesFor([]core.ChunkKey{second, first}, 2),
 	)
@@ -375,16 +377,16 @@ func TestDiskStoreSaveBatchRunsProductionCompactionAndPreservesCommitOnFailure(t
 		}
 	}
 
-	oldPolicy := productionRegionSpacePolicy
-	productionRegionSpacePolicy = regionSpacePolicy{WasteRatio: 0.20, MinWaste: sectorSize}
-	defer func() { productionRegionSpacePolicy = oldPolicy }()
+	oldPolicy := region.ProductionSpacePolicy
+	region.ProductionSpacePolicy = region.SpacePolicy{WasteRatio: 0.20, MinWaste: region.SectorSize}
+	defer func() { region.ProductionSpacePolicy = oldPolicy }()
 	regionKey, _ := RegionFor(key)
 	opened := store.regions[regionKey]
-	if !opened.shouldCompact(productionRegionSpacePolicy) {
+	if !opened.ShouldCompact(region.ProductionSpacePolicy) {
 		t.Fatal("fragmented test region does not meet production compaction hook policy")
 	}
 	injected := errors.New("injected production compaction failure")
-	opened.compactionHooks.beforeTempSync = func() error { return injected }
+	opened.SetCompactionHooks(region.CompactionHooks{BeforeTempSync: func() error { return injected }})
 
 	result, err := store.SaveBatch(
 		context.Background(), diskSavesFor([]core.ChunkKey{key}, 3),
@@ -424,12 +426,12 @@ func TestDiskStoreSyncVisitsAllRegionsInOrderAndJoinsErrors(t *testing.T) {
 		if key == (RegionKey{Dimension: 1, X: 0, Z: 0}) {
 			syncErrors = []error{lastErr}
 		}
-		opened.file = &observedRegionFile{
-			regionFile: opened.file,
+		opened.ReplaceFile(&observedRegionFile{
+			File:       opened.File(),
 			key:        key,
 			syncEvents: &events,
 			syncErrors: syncErrors,
-		}
+		})
 	}
 	err := store.Sync(context.Background())
 	if !errors.Is(err, firstErr) || !errors.Is(err, lastErr) {
@@ -475,12 +477,12 @@ func TestDiskStoreCloseRetriesOnlyFailuresAndRetainsLock(t *testing.T) {
 			closeErrors = []error{lastErr}
 		}
 		wrapped := &observedRegionFile{
-			regionFile:  opened.file,
+			File:        opened.File(),
 			key:         key,
 			closeEvents: &events,
 			closeErrors: closeErrors,
 		}
-		opened.file = wrapped
+		opened.ReplaceFile(wrapped)
 		observed[key] = wrapped
 	}
 
@@ -506,7 +508,7 @@ func TestDiskStoreCloseRetriesOnlyFailuresAndRetainsLock(t *testing.T) {
 		{Dimension: 0, X: -1, Z: 0},
 		{Dimension: 0, X: 1, Z: 0},
 	} {
-		if store.regions[key].file != nil {
+		if store.regions[key].File() != nil {
 			t.Fatalf("failed region %+v retained consumed file ownership", key)
 		}
 	}
@@ -565,11 +567,11 @@ func TestDiskStoreClosePublishesClosingBeforeWaitingForActiveOperation(t *testin
 	defer releaseOnce.Do(func() { close(release) })
 	regionKey, _ := RegionFor(key)
 	opened := store.regions[regionKey]
-	opened.file = &gatedReadRegionFile{
-		regionFile: opened.file,
-		started:    started,
-		release:    release,
-	}
+	opened.ReplaceFile(&gatedReadRegionFile{
+		File:    opened.File(),
+		started: started,
+		release: release,
+	})
 
 	activeResult := make(chan error, 1)
 	go func() {
@@ -612,7 +614,7 @@ func TestDiskStoreClosePublishesClosingBeforeWaitingForActiveOperation(t *testin
 }
 
 type observedRegionFile struct {
-	regionFile
+	chunk.File
 	key         RegionKey
 	syncEvents  *[]RegionKey
 	closeEvents *[]RegionKey
@@ -623,7 +625,7 @@ type observedRegionFile struct {
 }
 
 type gatedReadRegionFile struct {
-	regionFile
+	chunk.File
 	started chan struct{}
 	release <-chan struct{}
 	once    sync.Once
@@ -632,7 +634,7 @@ type gatedReadRegionFile struct {
 func (file *gatedReadRegionFile) ReadAt(data []byte, offset int64) (int, error) {
 	file.once.Do(func() { close(file.started) })
 	<-file.release
-	return file.regionFile.ReadAt(data, offset)
+	return file.File.ReadAt(data, offset)
 }
 
 func (file *observedRegionFile) Sync() error {
@@ -644,7 +646,7 @@ func (file *observedRegionFile) Sync() error {
 	if index < len(file.syncErrors) && file.syncErrors[index] != nil {
 		return file.syncErrors[index]
 	}
-	return file.regionFile.Sync()
+	return file.File.Sync()
 }
 
 func (file *observedRegionFile) Close() error {
@@ -653,7 +655,7 @@ func (file *observedRegionFile) Close() error {
 	}
 	index := file.closeCalls
 	file.closeCalls++
-	underlyingErr := file.regionFile.Close()
+	underlyingErr := file.File.Close()
 	if index < len(file.closeErrors) && file.closeErrors[index] != nil {
 		return errors.Join(underlyingErr, file.closeErrors[index])
 	}

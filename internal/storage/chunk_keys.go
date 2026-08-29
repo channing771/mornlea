@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage/chunk"
 )
 
 // ChunkKeys 返回磁盘上已有区块键的稳定只读快照。
@@ -92,18 +93,18 @@ func (store *DiskStore) ChunkKeys(ctx context.Context) ([]core.ChunkKey, error) 
 				X:         int32(regionX),
 				Z:         int32(regionZ),
 			}
-			opened, err := openRegion(ctx, filepath.Join(regionsPath, entry.Name()), regionKey)
+			opened, err := chunk.OpenRegion(ctx, filepath.Join(regionsPath, entry.Name()), regionKey)
 			if err != nil {
 				return nil, fmt.Errorf("open region %+v: %w", regionKey, err)
 			}
-			for slot, regionEntry := range opened.bank.Entries {
+			for slot, regionEntry := range opened.Bank().Entries {
 				if regionEntry.OffsetSector == 0 {
 					continue
 				}
 				x := int64(regionKey.X)*32 + int64(slot%32)
 				z := int64(regionKey.Z)*32 + int64(slot/32)
 				if x < math.MinInt32 || x > math.MaxInt32 || z < math.MinInt32 || z > math.MaxInt32 {
-					_ = opened.close()
+					_ = opened.Close()
 					return nil, fmt.Errorf("%w: region %+v slot %d overflows chunk coordinates", ErrCorrupt, regionKey, slot)
 				}
 				keys = append(keys, core.ChunkKey{
@@ -111,7 +112,7 @@ func (store *DiskStore) ChunkKeys(ctx context.Context) ([]core.ChunkKey, error) 
 					Pos:       core.ChunkPos{X: int32(x), Z: int32(z)},
 				})
 			}
-			if err := opened.close(); err != nil {
+			if err := opened.Close(); err != nil {
 				return nil, fmt.Errorf("close region %+v: %w", regionKey, err)
 			}
 		}

@@ -39,27 +39,38 @@ var allowed = map[string][]string{
 	"internal/physics":      {"internal/core", "internal/nativeabi"},
 	"internal/pathfind":     {"internal/core"},
 	"internal/logging":      {},
-	"internal/network":      {"internal/companion", "internal/core"},
-	"internal/network/tcp":  {"internal/network"},
-	"internal/profile":      {"internal/core"},
+	"internal/network":          {"internal/core", "internal/network/codec", "internal/network/protocol"},
+	"internal/network/codec":    {"internal/core", "internal/network/protocol"},
+	"internal/network/protocol": {"internal/companion", "internal/core"},
+	"internal/network/tcp":      {"internal/network"},
+	"internal/profile":          {"internal/core"},
 	"internal/sim/contract": {"internal/companion", "internal/core", "internal/physics", "internal/world"},
 	"internal/sim/entity":   {"internal/companion", "internal/core", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/realm", "internal/sim/tuning"},
 	"internal/sim/realm":    {"internal/core", "internal/fluid", "internal/world"},
 	"internal/sim/runtime":  {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "internal/sim/tuning"},
 	"internal/sim/tuning":   {"internal/core"},
-	"internal/storage":      {"internal/companion", "internal/core", "internal/world"},
-	"internal/world":        {"internal/core"},
-	"internal/worldgen":     {"internal/core", "internal/world", "internal/nativeabi"},
-	"internal/mesh":         {"internal/core", "internal/world", "internal/nativeabi"},
-	// internal/lod 只做远环壳的请求编码、quad 解码与编排(依赖方向镜像
-	// worldgen/mesh:core 提供 ChunkPos 等领域类型,nativeabi 是唯一 engine
-	// ABI 入口);按 design 裁决不得依赖 render/sim/network。
-	"internal/lod":        {"internal/core", "internal/nativeabi"},
-	"internal/assets":     {"internal/core", "internal/world", "internal/mesh", "internal/worldgen"},
-	"internal/render":     {"internal/core", "internal/world", "internal/mesh", "internal/assets"},
-	"internal/render/hud": {"internal/core", "internal/mesh", "internal/assets", "internal/render"},
-	"internal/server":     {"internal/companion", "internal/core", "internal/network", "internal/pathfind", "internal/physics", "internal/world", "internal/worldgen", "internal/sim/contract", "internal/sim/runtime", "internal/sim/tuning", "internal/storage"},
-	"internal/client":     {"internal/companion", "internal/core", "internal/physics", "internal/network", "internal/world", "internal/mesh", "internal/assets", "internal/render"},
+	"internal/storage": {
+		"internal/core",
+		"internal/storage/chunk", "internal/storage/companion", "internal/storage/hostile",
+		"internal/storage/player", "internal/storage/region",
+		"internal/storage/storagedef", "internal/world",
+	},
+	"internal/storage/chunk": {"internal/core", "internal/storage/region", "internal/storage/storagedef", "internal/world"},
+	"internal/storage/player": {"internal/core", "internal/storage/storagedef"},
+	"internal/storage/companion": {"internal/companion", "internal/core", "internal/storage/storagedef"},
+	"internal/storage/hostile": {"internal/core", "internal/storage/storagedef"},
+	"internal/storage/region": {"internal/core", "internal/storage/storagedef"},
+	"internal/storage/storagedef": {},
+	"internal/world":              {"internal/core"},
+	"internal/worldgen":           {"internal/core", "internal/world", "internal/nativeabi"},
+	"internal/mesh":               {"internal/core", "internal/world", "internal/nativeabi"},
+	"internal/lod":                {"internal/core", "internal/nativeabi"},
+	"internal/assets":             {"internal/core", "internal/world", "internal/mesh", "internal/worldgen"},
+	"internal/render":             {"internal/core", "internal/world", "internal/mesh", "internal/assets"},
+	"internal/render/hud":         {"internal/core", "internal/mesh", "internal/assets", "internal/render"},
+	"internal/server":             {"internal/companion", "internal/core", "internal/network", "internal/pathfind", "internal/physics", "internal/world", "internal/worldgen", "internal/sim/contract", "internal/sim/runtime", "internal/sim/tuning", "internal/storage", "internal/server/persistence"},
+	"internal/server/persistence": {"internal/companion", "internal/core", "internal/physics", "internal/sim/runtime", "internal/storage"},
+	"internal/client":             {"internal/companion", "internal/core", "internal/physics", "internal/network", "internal/world", "internal/mesh", "internal/assets", "internal/render"},
 }
 
 func TestInternalDependenciesAreOneWay(t *testing.T) {
@@ -102,6 +113,47 @@ func TestInternalDependenciesAreOneWay(t *testing.T) {
 			}
 			if !allowSet[dependency] {
 				t.Errorf("%s 不允许直接依赖 %s", pkg, dependency)
+			}
+		}
+	}
+}
+
+// TestServerPersistenceDoesNotDependOnServer 钉住持久化子包到根包的反向依赖禁令。
+//
+// 生产代码（未带 persistence_contract 构建约束的文件）不得导入 `internal/server`；
+// 唯一的例外是被 //go:build persistence_contract 门控的契约测试文件，其为校验
+// 根包兼容 re-export 与哨兵恒等而显式依赖 `internal/server`。
+func TestServerPersistenceDoesNotDependOnServer(t *testing.T) {
+	if slices.Contains(allowed["internal/server/persistence"], "internal/server") {
+		t.Fatalf("internal/server/persistence 不允许依赖 internal/server：子包不得反向依赖父包")
+	}
+	root := moduleRoot(t)
+	dir := filepath.Join(root, "internal", "server", "persistence")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("读取 %s: %v", dir, err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("读取 %s: %v", path, err)
+		}
+		if strings.Contains(string(data), "persistence_contract") {
+			continue
+		}
+		parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		if err != nil {
+			t.Fatalf("解析 %s: %v", path, err)
+		}
+		for _, imp := range parsed.Imports {
+			importPath := strings.Trim(imp.Path.Value, `"`)
+
+			if localName(importPath) == "internal/server" {
+				t.Errorf("持久化生产文件 %s 不允许导入 internal/server（仅 //go:build persistence_contract 的契约文件可导入）", entry.Name())
 			}
 		}
 	}

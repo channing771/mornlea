@@ -197,11 +197,11 @@ func (h integrationHost) WaitPlayerSaved(t *testing.T, id core.PlayerID) {
 		h.Host.mu.Lock()
 		active := h.Host.activeByPlayer[id]
 		h.Host.mu.Unlock()
-		h.Host.players.mu.Lock()
-		cache := h.Host.players.cache[id]
-		saved := cache != nil && cache.persisted > 0 && !cache.dirty && !cache.inFlight && cache.retry == nil
-		h.Host.players.mu.Unlock()
-		return active == nil && saved
+		if active != nil {
+			return false
+		}
+		jobDepth, doneDepth := h.Host.players.QueueDepths()
+		return jobDepth == 0 && doneDepth == 0
 	})
 }
 

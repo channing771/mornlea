@@ -9,18 +9,20 @@ package server
 import (
 	"context"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/internal/server/persistence"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
 func TestCompanionPersistenceSavePayloadNormalizesPlanningAndValidating(t *testing.T) {
-	store := newControllableCompanionStore()
-	p := newCompanionPersistence(store, storage.StoredCompanions{}, companionPersistenceTestConfig())
+	store := newRestoreControllableCompanionStore()
+	p := persistence.NewCompanions(store, storage.StoredCompanions{}, persistence.Options{AutosaveTicks: 10, RetryBaseTicks: 2, RetryMaxTicks: 8})
 	t.Cleanup(p.Close)
 
 	running := companion.TaskQueueState{
@@ -333,5 +335,66 @@ func TestCompanionManagerRestoredRunningTaskRevalidatesAndDoesNotBlindWalk(t *te
 	final := currentCompanionBody(t, host, id)
 	if final.Position[0] != 0.5 || final.Position[2] != 0.5 {
 		t.Fatalf("不可达恢复任务产生了位移：%v", final.Position)
+	}
+}
+
+func companionBody(id, position byte) companion.Body {
+	return companion.Body{
+		ID:        companion.ID{0, 0, 0, 0, 0, 0, 0x40, 0, 0x80, 0, 0, 0, 0, 0, 0, id},
+		Dimension: core.Overworld,
+		Position:  [3]float32{float32(position), 70, -float32(position)},
+	}
+}
+
+type restoreControllableCompanionStore struct {
+	mu      sync.Mutex
+	started chan storage.CompanionSave
+	results chan error
+}
+
+func newRestoreControllableCompanionStore() *restoreControllableCompanionStore {
+	return &restoreControllableCompanionStore{
+		started: make(chan storage.CompanionSave, 4),
+		results: make(chan error),
+	}
+}
+
+func (store *restoreControllableCompanionStore) LoadCompanions(context.Context) (storage.StoredCompanions, error) {
+	return storage.StoredCompanions{}, storage.ErrCompanionsNotFound
+}
+
+func (store *restoreControllableCompanionStore) SaveCompanions(ctx context.Context, save storage.CompanionSave) error {
+	copy := save
+	copy.Records = append([]companion.Body(nil), save.Records...)
+	queues := make([]storage.StoredCompanionQueue, len(save.Queues))
+	for i := range save.Queues {
+		queues[i] = save.Queues[i]
+		queues[i].Current.PlanSteps = append([]companion.PlanStep(nil), save.Queues[i].Current.PlanSteps...)
+		queues[i].Pending = append([]string(nil), save.Queues[i].Pending...)
+	}
+	copy.Queues = queues
+	select {
+	case store.started <- copy:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	select {
+	case err := <-store.results:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (store *restoreControllableCompanionStore) complete(err error) { store.results <- err }
+
+func receiveCompanionSave(t *testing.T, store *restoreControllableCompanionStore) storage.CompanionSave {
+	t.Helper()
+	select {
+	case save := <-store.started:
+		return save
+	case <-time.After(waitDeadline):
+		t.Fatal("SaveCompanions was not started")
+		return storage.CompanionSave{}
 	}
 }

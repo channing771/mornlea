@@ -1,0 +1,14 @@
+internal/server/persistence_retry_test.go:199:		t.Run(test.name, func(t *testing.T) {
+internal/server/persistence_schedule_test.go:359:		t.Run(test.name, func(t *testing.T) {
+internal/server/persistence_schedule_test.go:404:		t.Run(test.name, func(t *testing.T) {
+internal/server/player_persistence_lifecycle_test.go:281:	t.Run("force", func(t *testing.T) {
+internal/server/player_persistence_lifecycle_test.go:298:	t.Run("autosave", func(t *testing.T) {
+internal/server/player_persistence_lifecycle_test.go:318:	t.Run("flush", func(t *testing.T) {
+internal/server/player_persistence_lifecycle_test.go:346:	t.Run("abort", func(t *testing.T) {
+internal/server/player_persistence_lifecycle_test.go:367:	t.Run("clean cache can switch identity", func(t *testing.T) {
+internal/server/player_persistence_retry_test.go:167:	t.Run("autosave", func(t *testing.T) {
+internal/server/player_persistence_retry_test.go:190:	t.Run("retry", func(t *testing.T) {
+internal/server/hunger_persistence_test.go:340:		t.Run(testCase.name, func(t *testing.T) {
+internal/server/respawn_persistence_test.go:116:		t.Run(testCase.name, func(t *testing.T) {
+internal/server/companion_persistence_test.go:187:		t.Run(test.name, func(t *testing.T) {
+internal/server/hostile_persistence_test.go:152:		t.Run(test.name, func(t *testing.T) {

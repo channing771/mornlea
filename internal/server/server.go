@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/internal/server/persistence"
 	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/storage"
@@ -31,16 +31,14 @@ type Server struct {
 	generator                 Generator
 	store                     storage.Store
 	engine                    *runtime.Engine
+	world                     *persistence.World
 	sessions                  map[contract.SessionID]*session
 	playerSessions            map[core.PlayerID]contract.SessionID
 	trustedObserver           *session
 	trustedObserverGeneration uint64
 
-	ctx         context.Context
-	cancel      context.CancelFunc
-	saveCtx     context.Context
-	cancelSaves context.CancelFunc
-
+	ctx              context.Context
+	cancel           context.CancelFunc
 	incoming         chan incomingCommand
 	incomingChats    chan incomingChat
 	companionsByName map[string]companion.Definition
@@ -59,24 +57,12 @@ type Server struct {
 	trustedObserverSequence uint64
 	appliedTrustedObserver  appliedTrustedObserverCenter
 
-	workers         sync.WaitGroup
-	saveWorkers     sync.WaitGroup
-	saveJobs        chan saveJob
-	saveCompletions chan saveCompletion
-	autosaveActive  bool
-	metadataSave    metadataSaveState
-	companions      *companionPersistence
-	hostiles        *hostilePersistence
-	retry           map[storage.RegionKey][]retrySave
-	retryInFlight   map[uint64]retrySave
-	nextRetryID     uint64
-	backpressured   bool
-	lastSaveSuccess time.Time
-	lastSaveError   string
-	lastSaveErrorAt time.Time
-	stepMu          sync.Mutex
-	shutdownGate    chan struct{}
-	lifecycle       serverLifecycle
+	workers      sync.WaitGroup
+	companions   *persistence.Companions
+	hostiles     *persistence.Hostiles
+	stepMu       sync.Mutex
+	shutdownGate chan struct{}
+	lifecycle    serverLifecycle
 	// paused 是权威暂停门：置位时整个权威 tick 不被调度执行——世界时间、
 	// 随机 tick、作物、流体、实体与持久化调度全部停走，而消息接收 goroutine、
 	// chunk/save worker 与既有缓冲保持存活，暂停期到达的命令在恢复后按序结算。
@@ -84,7 +70,6 @@ type Server struct {
 	// 热路径零分配、零锁竞争；幂等由布尔语义天然保证。
 	paused      atomic.Bool
 	runtimeDone chan struct{}
-	saveDone    chan struct{}
 	closedDone  chan struct{}
 	storePhase  storeShutdownPhase
 }
@@ -107,8 +92,8 @@ func newWorld(
 	config Config,
 	generator Generator,
 	store storage.Store,
-	companions *companionPersistence,
-	hostiles *hostilePersistence,
+	companions *persistence.Companions,
+	hostiles *persistence.Hostiles,
 ) (*Server, error) {
 	config.validate()
 	if generator == nil {
@@ -118,37 +103,29 @@ func newWorld(
 		panic("server: nil store")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	saveCtx, cancelSaves := context.WithCancel(context.Background())
 	shutdownGate := make(chan struct{}, 1)
 	shutdownGate <- struct{}{}
 	queueCapacity := max(1, config.Workers*2)
 	metadata := store.Metadata()
 	server := &Server{
-		config:          config,
-		generator:       generator,
-		store:           store,
-		engine:          runtime.NewEngine(config.ViewRadius, metadata.WorldTimeTicks, metadata.Seed),
-		sessions:        make(map[contract.SessionID]*session),
-		playerSessions:  make(map[core.PlayerID]contract.SessionID),
-		ctx:             ctx,
-		cancel:          cancel,
-		saveCtx:         saveCtx,
-		cancelSaves:     cancelSaves,
-		incoming:        make(chan incomingCommand, inputCapacity),
-		incomingChats:   make(chan incomingChat, inputCapacity),
-		jobs:            make(chan chunkJob, queueCapacity),
-		acquired:        make(chan contract.AcquiredChunk, queueCapacity),
-		generated:       make(chan contract.GeneratedChunk, queueCapacity),
-		saveJobs:        make(chan saveJob, config.SaveWorkers*2),
-		saveCompletions: make(chan saveCompletion, config.SaveWorkers*2),
-		retry:           make(map[storage.RegionKey][]retrySave),
-		retryInFlight:   make(map[uint64]retrySave),
-		queued:          make(map[core.ChunkKey]struct{}),
-		runtimeDone:     make(chan struct{}),
-		saveDone:        make(chan struct{}),
-		closedDone:      make(chan struct{}),
-		shutdownGate:    shutdownGate,
-		companions:      companions,
+		config:         config,
+		generator:      generator,
+		store:          store,
+		engine:         runtime.NewEngine(config.ViewRadius, metadata.WorldTimeTicks, metadata.Seed),
+		sessions:       make(map[contract.SessionID]*session),
+		playerSessions: make(map[core.PlayerID]contract.SessionID),
+		ctx:            ctx,
+		cancel:         cancel,
+		incoming:       make(chan incomingCommand, inputCapacity),
+		incomingChats:  make(chan incomingChat, inputCapacity),
+		jobs:           make(chan chunkJob, queueCapacity),
+		acquired:       make(chan contract.AcquiredChunk, queueCapacity),
+		generated:      make(chan contract.GeneratedChunk, queueCapacity),
+		queued:         make(map[core.ChunkKey]struct{}),
+		runtimeDone:    make(chan struct{}),
+		closedDone:     make(chan struct{}),
+		shutdownGate:   shutdownGate,
+		companions:     companions,
 	}
 	if len(config.Companions) != 0 {
 		server.companionsByName = make(
@@ -173,10 +150,7 @@ func newWorld(
 	// 包袱。两侧策略不同是刻意的，装配归一后的值随后经 wire 下发时必然合法。
 	server.engine.RestoreDayPhaseOffset(uint16(metadata.DayPhaseOffset % core.DayLengthTicks))
 	if companions != nil {
-		companions.mu.Lock()
-		records := slices.Clone(companions.records)
-		loadedQueues := cloneStoredQueues(companions.loadedQueues)
-		companions.mu.Unlock()
+		records, loadedQueues := companions.Restore()
 		for _, definition := range config.Companions {
 			restore := contract.CompanionRestore{
 				ID:             definition.ID,
@@ -220,12 +194,9 @@ func newWorld(
 	// sim 侧全部记录不变量（重复/超限在加载边界已被拒），恢复失败属不可达
 	// 防御路径——绝不允许以「跳过该条」的截断姿态静默继续。
 	if hostiles != nil {
-		hostiles.mu.Lock()
-		hostileRecords := slices.Clone(hostiles.records)
-		hostiles.mu.Unlock()
-		for _, record := range hostileRecords {
-			if err := server.engine.RestoreHostile(hostileRestoreRecord(record)); err != nil {
-				return nil, fmt.Errorf("restore hostile %d: %w", record.ID, err)
+		for _, mob := range hostiles.Restore() {
+			if err := server.engine.RestoreHostile(mob); err != nil {
+				return nil, fmt.Errorf("restore hostile %d: %w", mob.ID, err)
 			}
 		}
 		server.hostiles = hostiles
@@ -235,19 +206,26 @@ func newWorld(
 	for range config.Workers {
 		go server.chunkWorker()
 	}
-	server.saveWorkers.Add(config.SaveWorkers)
-	for range config.SaveWorkers {
-		go server.saveWorker()
-	}
+	server.world = persistence.NewWorld(store, server.engine, persistenceOptions(config, &server.stepMu))
 	go func() {
 		server.workers.Wait()
 		close(server.runtimeDone)
 	}()
-	go func() {
-		server.saveWorkers.Wait()
-		close(server.saveDone)
-	}()
 	return server, nil
+}
+
+func persistenceOptions(config Config, engineLocker sync.Locker) persistence.Options {
+	return persistence.Options{
+		SaveWorkers:    config.SaveWorkers,
+		SaveChunks:     config.SaveChunks,
+		SaveBytes:      config.SaveBytes,
+		AutosaveTicks:  config.AutosaveTicks,
+		RetryBaseTicks: config.RetryBaseTicks,
+		RetryMaxTicks:  config.RetryMaxTicks,
+		UnsavedBytes:   config.UnsavedBytes,
+		SaveObserver:   config.SaveObserver,
+		EngineLocker:   engineLocker,
+	}
 }
 
 func (server *Server) AttachSession(spec SessionSpec) (<-chan SessionExit, error) {
@@ -344,7 +322,7 @@ func (server *Server) step(scheduled time.Time) contract.TickResult {
 		}()
 	}
 
-	server.drainSaveCompletions()
+	_ = server.world.Drain()
 	trustedCenter, trustedSequence, hasTrustedCenter := server.drainTrustedObserverCenter()
 	server.drainIncoming()
 	chatDeliveries := server.drainIncomingChats()
@@ -392,10 +370,8 @@ func (server *Server) step(scheduled time.Time) contract.TickResult {
 	server.cancelUnwantedPending()
 	server.appendChunkRequests(chunkJobLoad, result.Acquire)
 	server.appendChunkRequests(chunkJobGenerate, result.Generate)
-	server.schedulePersistence(result.Tick)
-	server.scheduleMetadataSave(result.Tick, result.WorldTimeTicks)
-	server.updatePersistenceBackpressure()
-	if !server.backpressured {
+	server.world.Observe(result.Tick, result.WorldTimeTicks)
+	if !server.world.Status().Backpressured {
 		server.scheduleChunkJobs()
 	}
 	return result

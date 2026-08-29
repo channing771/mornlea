@@ -576,10 +576,9 @@ func TestTCPPlayerAndWorldSaveFailureRecovery(t *testing.T) {
 	_ = first.Close()
 	host.WaitPlayerReleased(t, firstIdentity.PlayerID)
 	waitIntegrationCondition(t, "failed player save retained for retry", func() bool {
-		host.Host.players.mu.Lock()
-		defer host.Host.players.mu.Unlock()
-		cache := host.Host.players.cache[firstIdentity.PlayerID]
-		return cache != nil && cache.retry != nil && cache.dirty && !cache.inFlight
+		return host.Host.players.PlayerHasRetry(firstIdentity.PlayerID) &&
+			host.Host.players.PlayerIsDirty(firstIdentity.PlayerID) &&
+			!host.Host.players.PlayerIsInFlight(firstIdentity.PlayerID)
 	})
 
 	same := dialIntegrationClient(t, host.Addr, network.Identity{
@@ -593,10 +592,8 @@ func TestTCPPlayerAndWorldSaveFailureRecovery(t *testing.T) {
 	_ = same.Close()
 	host.WaitPlayerReleased(t, firstIdentity.PlayerID)
 	waitIntegrationCondition(t, "same-ID disconnect retry retained", func() bool {
-		host.Host.players.mu.Lock()
-		defer host.Host.players.mu.Unlock()
-		cache := host.Host.players.cache[firstIdentity.PlayerID]
-		return cache != nil && cache.retry != nil && cache.dirty
+		return host.Host.players.PlayerHasRetry(firstIdentity.PlayerID) &&
+			host.Host.players.PlayerIsDirty(firstIdentity.PlayerID)
 	})
 
 	differentIdentity := integrationIdentity(0x62, "IndependentRetry")
@@ -606,10 +603,10 @@ func TestTCPPlayerAndWorldSaveFailureRecovery(t *testing.T) {
 	host.WaitPlayerReleased(t, differentIdentity.PlayerID)
 	store.setSaveError(nil)
 	waitIntegrationCondition(t, "player save retry success", func() bool {
-		host.Host.players.mu.Lock()
-		defer host.Host.players.mu.Unlock()
-		cache := host.Host.players.cache[firstIdentity.PlayerID]
-		return cache != nil && cache.persisted > 0 && !cache.dirty && !cache.inFlight && cache.retry == nil
+		return host.Host.players.PlayerPersisted(firstIdentity.PlayerID) > 0 &&
+			!host.Host.players.PlayerIsDirty(firstIdentity.PlayerID) &&
+			!host.Host.players.PlayerIsInFlight(firstIdentity.PlayerID) &&
+			!host.Host.players.PlayerHasRetry(firstIdentity.PlayerID)
 	})
 
 	otherIdentity := integrationIdentity(0x63, "AfterRetry")

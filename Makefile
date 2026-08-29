@@ -2,11 +2,8 @@
 
 GO := go
 CARGO ?= rustup run 1.97.1 cargo
-# 共享 Cargo 目标目录:worktree 隔离开发下每个分支不再各自冷编译 wgpu 全家桶,
-# 新 worktree 的 `make rust`/`rust-check` 直接吃既有增量产物。并行构建会在 cargo
-# 的文件锁上串行等待,与「重型验证管线不并发」的纪律一致。变量已导出给全部
-# recipe;绕过 make 直接调用 cargo 时需自行 export 同名变量才能复用产物。
-export CARGO_TARGET_DIR ?= $(HOME)/.cache/mornlea-cargo-target
+# 默认目标目录隔离到当前 worktree；显式 CARGO_TARGET_DIR 仍可覆盖。
+export CARGO_TARGET_DIR ?= $(CURDIR)/engine/target/cargo
 RUST_DIR := engine
 RUST_DYLIB := $(RUST_DIR)/target/release/libmornlea_engine.dylib
 RUST_SO := $(RUST_DIR)/target/release/libmornlea_engine.so

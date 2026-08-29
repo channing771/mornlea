@@ -2,12 +2,13 @@ package network
 
 import (
 	"context"
+	"github.com/channing771/mornlea/internal/network/protocol"
 	"sync"
 )
 
 type memoryPair struct {
-	clientToServer chan ClientPacket
-	serverToClient chan ServerPacket
+	clientToServer chan protocol.ClientPacket
+	serverToClient chan protocol.ServerPacket
 	done           chan struct{}
 
 	closeOnce sync.Once
@@ -31,8 +32,8 @@ func NewMemoryStreamPair(capacity int) (ClientPacketStream, ServerPacketStream) 
 		panic("network: memory transport capacity must be positive")
 	}
 	pair := &memoryPair{
-		clientToServer: make(chan ClientPacket, capacity),
-		serverToClient: make(chan ServerPacket, capacity),
+		clientToServer: make(chan protocol.ClientPacket, capacity),
+		serverToClient: make(chan protocol.ServerPacket, capacity),
 		done:           make(chan struct{}),
 	}
 	return &memoryClientStream{pair: pair}, &memoryServerStream{pair: pair, peer: "memory"}
@@ -44,19 +45,19 @@ func NewMemoryPair(capacity int) (ClientEndpoint, ServerEndpoint) {
 	return newClientPlayEndpoint(client), newServerPlayEndpoint(server)
 }
 
-func (stream *memoryClientStream) Send(ctx context.Context, state State, packet ClientPacket) error {
-	if err := ValidateClientPacket(state, packet); err != nil {
+func (stream *memoryClientStream) Send(ctx context.Context, state protocol.State, packet protocol.ClientPacket) error {
+	if err := protocol.ValidateClientPacket(state, packet); err != nil {
 		return err
 	}
 	return memorySend(ctx, stream.pair, stream.pair.clientToServer, packet)
 }
 
-func (stream *memoryClientStream) Recv(ctx context.Context, state State) (ServerPacket, error) {
+func (stream *memoryClientStream) Recv(ctx context.Context, state protocol.State) (protocol.ServerPacket, error) {
 	packet, err := memoryReceive(ctx, stream.pair, stream.pair.serverToClient)
 	if err != nil {
 		return nil, err
 	}
-	if err := ValidateServerPacket(state, packet); err != nil {
+	if err := protocol.ValidateServerPacket(state, packet); err != nil {
 		stream.pair.close()
 		return nil, protocolViolation(err)
 	}
@@ -68,19 +69,19 @@ func (stream *memoryClientStream) Close() error {
 	return nil
 }
 
-func (stream *memoryServerStream) Send(ctx context.Context, state State, packet ServerPacket) error {
-	if err := ValidateServerPacket(state, packet); err != nil {
+func (stream *memoryServerStream) Send(ctx context.Context, state protocol.State, packet protocol.ServerPacket) error {
+	if err := protocol.ValidateServerPacket(state, packet); err != nil {
 		return err
 	}
 	return memorySend(ctx, stream.pair, stream.pair.serverToClient, packet)
 }
 
-func (stream *memoryServerStream) Recv(ctx context.Context, state State) (ClientPacket, error) {
+func (stream *memoryServerStream) Recv(ctx context.Context, state protocol.State) (protocol.ClientPacket, error) {
 	packet, err := memoryReceive(ctx, stream.pair, stream.pair.clientToServer)
 	if err != nil {
 		return nil, err
 	}
-	if err := validateDecodedClientWirePacket(state, packet); err != nil {
+	if err := protocol.ValidateDecodedClientWirePacket(state, packet); err != nil {
 		stream.pair.close()
 		return nil, protocolViolation(err)
 	}

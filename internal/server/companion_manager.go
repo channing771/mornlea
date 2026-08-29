@@ -34,6 +34,7 @@ import (
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/pathfind"
 	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/server/persistence"
 	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/sim/tuning"
@@ -1162,18 +1163,18 @@ func (server *Server) companionManagerTaskStates() []companion.TaskQueueState {
 // （调用方必须持有 stepMu，与 taskStates 同一单写者边界）。inactive 伙伴没有
 // 槽位，天然不出现——「inactive 记录不保存摘要」由队列载荷只覆盖 active
 // 伙伴结构性保证。
-func (m *companionManager) companionSummaries() []companionSummaryState {
-	summaries := make([]companionSummaryState, 0, len(m.orderedIDs))
+func (m *companionManager) companionSummaries() []persistence.CompanionSummary {
+	summaries := make([]persistence.CompanionSummary, 0, len(m.orderedIDs))
 	for _, id := range m.orderedIDs {
 		if summary := m.slots[id].summary; summary != "" {
-			summaries = append(summaries, companionSummaryState{ID: id, Summary: summary})
+			summaries = append(summaries, persistence.CompanionSummary{ID: id, Summary: summary})
 		}
 	}
 	return summaries
 }
 
 // companionManagerSummaries 是 Observe 调用的空值安全包装。
-func (server *Server) companionManagerSummaries() []companionSummaryState {
+func (server *Server) companionManagerSummaries() []persistence.CompanionSummary {
 	if server.companionManager == nil {
 		return nil
 	}
