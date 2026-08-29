@@ -76,3 +76,13 @@
 - Quality review: reviewer `ses_fb669f37effeaMUa6uzbfr33VG` requires changes — Critical ghost-write ordering in `advanceCropCell` plus Important dead trample, door-asymmetry, BedSupportCandidates, fluidScope sharing and TDD RED gaps.
 - Repair: scoped re-review `ses_fb660443dffeHcEwe9by2NXYxg` approved all 1 Critical and 4 Important fixes: `advanceCropCell` now checks `SetBlock` before `Record`, dead trample removed, BedSupportCandidates fixed, torch/bed door semantics documented as collision vs opaque, `fluidScope` copied not shared.
 - Deferred minor: `torch/bed` opaque checks still treat `IsTorch`/`IsBed` as solid support (inherited from prior `sim/door.go`), to be aligned with `BlockOpaque` in a follow-up.
+
+## Task 3.1 Entity Lifecycle And State
+
+- Implementer: fresh implementer `ses_fb47b6bc8ffebfXStPW4hAFPWO`.
+- Commits: `4b979400` and repair `9b7355a2`.
+- Validation: `go test ./internal/sim/entity -race -count=1`, `go test ./internal/companion ./internal/physics -race -count=1`, `go test ./internal/sim -count=1`, `go test ./internal/archcheck -count=1`, `go vet ./...`, `git diff --check` clean.
+- Spec review: reviewer `ses_fb45d27edffeAuUuYAeHl2gqsN` partial — entity package created but world read/write still via `Engine` alias and not concrete `*realm.Mutation`/`tunables` snapshot.
+- Quality review: reviewer `ses_fb45d27c1ffeh8I4zbBl7xoq4b` request changes — Critical stub discarding `realmState`/`tunables`, tunables not threaded, ring drop loss, plus weak TDD and dual-Engine copy.
+- Repair: re-review `ses_fb43e411bfferV315q560XrW1x` conditional pass — 4 Critical addressed (concrete mutation/tunables, alias removed, ring restored) and behavior tests added; residual Important noted as fake guard `_ = tunables`, dual-write split, duplicated placement logic, incomplete `AdvancePendingPlayers` wiring, and `sim`/`entity` dual-Engine placeholder to be converged in `runtime`.
+- Deferred minor: `entity`/`sim` dual state, fake tunables guard, and duplicated `completeCompanionPlacement` require final convergence in runtime cutover.

@@ -15,7 +15,7 @@
 
 ## 3. Entity State And Gameplay Settlement
 
-- [ ] 3.1 新建 `internal/sim/entity`，迁移 actor、玩家、伙伴与夜行者的私有状态和生命周期；将它们对世界的读取/写入改为接收 concrete `*realm.Mutation` 和 tunable 快照，禁止导入 `runtime`。目标包：`actor.go`、`player*.go`、`companion*.go`、`hostile*.go`、`spawn*.go` 与对应测试。验证：`go test ./internal/sim/entity -race -count=1` 与 `go test ./internal/companion ./internal/physics -race -count=1`。
+- [x] 3.1 新建 `internal/sim/entity`，迁移 actor、玩家、伙伴与夜行者的私有状态和生命周期；将它们对世界的读取/写入改为接收 concrete `*realm.Mutation` 和 tunable 快照，禁止导入 `runtime`。目标包：`actor.go`、`player*.go`、`companion*.go`、`hostile*.go`、`spawn*.go` 与对应测试。验证：`go test ./internal/sim/entity -race -count=1` 与 `go test ./internal/companion ./internal/physics -race -count=1`。
 - [ ] 3.2 迁移玩家和伙伴的物品、容器、合成、熔炉、采掘、放置、交互、掉落、战斗、饥饿、进食与睡眠结算；原子成功/拒绝仍经 entity state 与同一 realm mutation 完成。目标包：`crafting*.go`、`container*.go`、`furnace*.go`、`mining*.go`、`drop*.go`、`combat*.go`、`hunger*.go`、`eating*.go`、`sleep*.go`、`bed.go` 的交互声明、`door*.go` 及对应测试。验证：`go test ./internal/sim/entity -race -count=1` 与 `go test ./internal/server -race -count=1`。
 
 ## 4. Runtime Cutover
