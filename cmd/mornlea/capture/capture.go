@@ -703,14 +703,22 @@ var captureScenes = []captureScene{
 		Apply:        applyAICompanionCaptureState,
 	},
 	{
+		Name:         "sword-combat",
+		WarmupFrames: 8,
+		Prepare:      prepareSwordCombat,
+		Apply:        applySwordCombatCaptureState,
+		PinVolatile:  pinSwordCombatVolatile,
+	},
+	{
 		// hostile-mob 是夜行者的无窗口夜景 capture 场景：固定夜晚（18000
 		// tick）的开阔草地，三朵落地火把构成亮池，8 只夜行者经客户端镜像
 		// 夹具固定在火把边缘——其中一只处于受击状态（生命 13、位置后撤）、
 		// 一只处于追逐中（向相机推进并正对观察者）；夜行者绝不产生名称
 		// 标签。夹具与注入细节见 capture_hostile_mob.go。
 		//
-		// 排序约束：本场景 MUST 位于 ai-companion 之后、water-surface-slope
-		// 之前（spec visual-verification「场景表顺序与导出」），由
+		// 排序约束：本场景 MUST 位于 sword-combat 之后、water-surface-slope
+		// 之前，完整相邻链为 ai-companion、sword-combat、hostile-mob、
+		// water-surface-slope（spec visual-verification「场景表顺序与导出」），由
 		// TestHostileMobCaptureScenePosition 兜底；far-horizon 仍为倒数第二、
 		// water-underwater 仍为唯一末场景。
 		Name:         "hostile-mob",

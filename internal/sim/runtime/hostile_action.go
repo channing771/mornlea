@@ -51,7 +51,7 @@ func validHostileAction(action HostileAction) bool {
 // 再按入队顺序取每个 ID 最早的一条合法意图。重复或非法意图确定性丢弃，未知
 // ID 的意图同样丢弃。移动意图把世界轴方向折算为朝向（yaw=0 面 -Z，故
 // yaw=atan2(-x,-z)）并以前进挡前进，实际位移永远由权威物理决定；攻击意图只
-// 冻结（记录目标会话），结算统一推迟到同 tick 稍后的 advanceHostileMelee。
+// 冻结（记录目标会话），结算统一推迟到同 tick 稍后的 advanceCombat。
 //
 // 与伙伴输入同款的每 tick 重写语义：无意图的夜行者与未收到任何意图的 tick 都
 // 回到中性输入，重力与碰撞照常生效，夜行者在地面保持静止。

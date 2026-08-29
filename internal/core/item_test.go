@@ -21,14 +21,13 @@ func TestCanonicalItemIDsStayStable(t *testing.T) {
 }
 
 // TestItemIDMaxGuardsExhaustiveEnumeration 锁定 ItemIDMax 独占哨兵与枚举末项的
-// 关系：当前最后一个合法物品必须是 ItemBed（紧随 ItemRottenFlesh 追加；腐肉是
-// 夜行者死亡掉落的可食用战利品，床是床与睡眠行的合成与放置物品）。物品演进
+// 关系：当前最后一个合法物品必须是损坏铁剑。物品演进
 // 纪律是只能在哨兵之前追加；将来追加新物品时第一个断言变红，迫使开发者同步
 // 审视全部以「item < ItemIDMax」为穷举界的测试（例如 companion 的 place 注册表
 // 覆盖测试），而不是让穷举测试静默失去对新物品的覆盖。
 func TestItemIDMaxGuardsExhaustiveEnumeration(t *testing.T) {
-	if core.ItemBed != core.ItemIDMax-1 {
-		t.Fatalf("ItemID 枚举末项不再是 ItemBed（ItemIDMax-1 = %d）；"+
+	if core.ItemBrokenIronSword != core.ItemIDMax-1 {
+		t.Fatalf("ItemID 枚举末项不再是 ItemBrokenIronSword（ItemIDMax-1 = %d）；"+
 			"新增物品必须同步审视全部以 ItemIDMax 为穷举界的测试", core.ItemIDMax-1)
 	}
 	// 哨兵之外不得再出现已注册物品：若有人把新物品追加在哨兵之后，穷举界会
@@ -41,8 +40,8 @@ func TestItemIDMaxGuardsExhaustiveEnumeration(t *testing.T) {
 }
 
 func TestItemIDsAppendOnly(t *testing.T) {
-	if core.ItemBed != core.ItemIDMax-1 {
-		t.Fatal("Bed must be last before Max")
+	if core.ItemBrokenIronSword != core.ItemIDMax-1 {
+		t.Fatal("Broken iron sword must be last before Max")
 	}
 	if core.ItemRottenFlesh != core.ItemBed-1 {
 		t.Fatal("Rotten flesh must sit right before Bed")
@@ -67,6 +66,66 @@ func TestItemIDsAppendOnly(t *testing.T) {
 	}
 	if block, ok := core.ItemPlacement(core.ItemPoisonousPotato); ok || block != core.AirID {
 		t.Fatalf("ItemPlacement(ItemPoisonousPotato)=(%d,%v), want (AirID,false): poisonous not placeable", block, ok)
+	}
+}
+
+func TestSwordItemsAreRegisteredWithFixedSemantics(t *testing.T) {
+	tests := []struct {
+		name       string
+		item       core.ItemID
+		id         core.ItemID
+		durability uint16
+		broken     core.ItemID
+		damage     int32
+		intact     bool
+	}{
+		{"木剑", core.ItemWoodenSword, 47, 59, core.ItemBrokenWoodenSword, 4, true},
+		{"石剑", core.ItemStoneSword, 48, 131, core.ItemBrokenStoneSword, 5, true},
+		{"铁剑", core.ItemIronSword, 49, 250, core.ItemBrokenIronSword, 6, true},
+		{"损坏木剑", core.ItemBrokenWoodenSword, 50, 0, core.ItemNone, 2, false},
+		{"损坏石剑", core.ItemBrokenStoneSword, 51, 0, core.ItemNone, 2, false},
+		{"损坏铁剑", core.ItemBrokenIronSword, 52, 0, core.ItemNone, 2, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.item != test.id {
+				t.Fatalf("ItemID = %d，想要 %d", test.item, test.id)
+			}
+			if limit, ok := core.ItemStackLimit(test.item); !ok || limit != 1 {
+				t.Fatalf("ItemStackLimit(%d) = (%d,%v)，想要 (1,true)", test.item, limit, ok)
+			}
+			if got := core.IsIntactSword(test.item); got != test.intact {
+				t.Fatalf("IsIntactSword(%d) = %v，想要 %v", test.item, got, test.intact)
+			}
+			if got := core.WeaponDamage(test.item); got != test.damage {
+				t.Fatalf("WeaponDamage(%d) = %d，想要 %d", test.item, got, test.damage)
+			}
+			gotDurability, hasDurability := core.ItemMaxDurability(test.item)
+			if gotDurability != test.durability || hasDurability != test.intact {
+				t.Fatalf("ItemMaxDurability(%d) = (%d,%v)，想要 (%d,%v)",
+					test.item, gotDurability, hasDurability, test.durability, test.intact)
+			}
+			gotBroken, hasBroken := core.ItemBrokenForm(test.item)
+			if gotBroken != test.broken || hasBroken != test.intact {
+				t.Fatalf("ItemBrokenForm(%d) = (%d,%v)，想要 (%d,%v)",
+					test.item, gotBroken, hasBroken, test.broken, test.intact)
+			}
+			stack := core.ItemStack{Item: test.item, Count: 1, Durability: test.durability}
+			if !stack.Valid() {
+				t.Fatalf("剑物品栈 %+v 应当有效", stack)
+			}
+		})
+	}
+	if core.ItemIDMax != 53 {
+		t.Fatalf("ItemIDMax = %d，想要 53", core.ItemIDMax)
+	}
+	for _, item := range []core.ItemID{core.ItemNone, core.ItemDirt} {
+		if core.IsIntactSword(item) {
+			t.Fatalf("普通物品 %d 被识别为完好剑", item)
+		}
+		if got := core.WeaponDamage(item); got != 2 {
+			t.Fatalf("WeaponDamage(%d) = %d，想要基础伤害 2", item, got)
+		}
 	}
 }
 
@@ -504,8 +563,8 @@ func TestBrokenToolsAreRegisteredAndUnstackable(t *testing.T) {
 
 // TestGridCraftingIDsAppendBeforeSentinels 锁定格子工作台批次追加的稳定编号：
 // 木棍 `ItemStick=37`、工作台物品 `ItemWorkbench=38`、骨粉 `ItemBoneMeal=39`
-// （三者 + 马铃薯/胡萝卜/毒土豆都紧贴 `ItemIDMax` 哨兵之前，该批次落定后哨兵为
-// 43；门物品与火把物品追加后为 45，夜行者死亡掉落的腐肉物品追加后现为 46），
+// （三者 + 马铃薯/胡萝卜/毒土豆都曾紧贴 `ItemIDMax` 哨兵之前；门、火把、腐肉、
+// 床与剑批次依次追加后，哨兵现为 53），
 // 工作台方块 `WorkbenchID=45`（紧随
 // `WheatStage7ID`，后接马铃薯/胡萝卜，该批次落定后 `BlockIDMax` 为 62；门 9 个
 // 与火把五形态追加后现为 76）。
@@ -544,7 +603,7 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 	}
 	// 火把物品紧随门物品追加（面向相关的可放置物品，放置映射走
 	// PlaceableBlockAtFace）；夜行者死亡掉落的腐肉物品紧随火把追加，
-	// 床物品紧随腐肉追加（可合成的双格放置物品），哨兵随之后移到 47。
+	// 床物品紧随腐肉追加（可合成的双格放置物品），剑批次随后占用 47..52。
 	if core.ItemTorch != core.ItemDoor+1 {
 		t.Fatalf("ItemTorch = %d，必须紧随 ItemDoor(%d)",
 			core.ItemTorch, core.ItemDoor)
@@ -557,9 +616,8 @@ func TestGridCraftingIDsAppendBeforeSentinels(t *testing.T) {
 		t.Fatalf("ItemBed = %d，必须紧随 ItemRottenFlesh(%d)",
 			core.ItemBed, core.ItemRottenFlesh)
 	}
-	if core.ItemIDMax != 47 {
-		t.Fatalf("ItemIDMax = %d，必须紧随 ItemBed(%d) 后移到 47",
-			core.ItemIDMax, core.ItemBed)
+	if core.ItemIDMax != 53 {
+		t.Fatalf("ItemIDMax = %d，必须在剑批次后移到 53", core.ItemIDMax)
 	}
 	if core.WorkbenchID != 45 {
 		t.Fatalf("WorkbenchID = %d，必须稳定为 45 且紧随 WheatStage7ID(%d)",
@@ -639,7 +697,7 @@ func TestWorkbenchItemPlacesAndDropsBack(t *testing.T) {
 }
 
 // TestTorchItemIsRegisteredStackableMaterial 锁定火把物品语义：编号 44（紧随
-// 门物品；其后是夜行者死亡掉落的腐肉物品与床物品，ItemIDMax 后移到 47）、
+// 门物品；其后依次追加腐肉、床与剑批次，ItemIDMax 后移到 53）、
 // 堆叠 64、没有耐久、不是工具、不是食物。
 // 放置不经 ItemPlacement（面向无关的旧窗口），只经 PlaceableBlockAtFace 的
 // 面 → 形态映射——因此火把对 ItemPlacement 必须保持不可放置，防止任何调用方
@@ -661,8 +719,8 @@ func TestTorchItemIsRegisteredStackableMaterial(t *testing.T) {
 		t.Fatalf("ItemBed = %d，必须紧随 ItemRottenFlesh(%d)",
 			core.ItemBed, core.ItemRottenFlesh)
 	}
-	if core.ItemIDMax != 47 {
-		t.Fatalf("ItemIDMax = %d，必须后移到 47", core.ItemIDMax)
+	if core.ItemIDMax != 53 {
+		t.Fatalf("ItemIDMax = %d，必须后移到 53", core.ItemIDMax)
 	}
 	if !core.RegisteredItem(core.ItemTorch) {
 		t.Fatal("ItemTorch 未注册")
@@ -708,7 +766,7 @@ func TestTorchFormsDropBackOneTorch(t *testing.T) {
 }
 
 func TestItemDoorPlacementDrop(t *testing.T) {
-	if core.ItemDoor != 43 || core.ItemIDMax != 47 {
+	if core.ItemDoor != 43 || core.ItemIDMax != 53 {
 		t.Fatal("ItemDoor IDs")
 	}
 	if got, ok := core.ItemPlacement(core.ItemDoor); !ok || got != core.DoorLowerSouthClosed {

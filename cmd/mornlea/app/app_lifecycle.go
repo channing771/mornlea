@@ -104,6 +104,10 @@ func (a *Application) resetSessionOwnedState() {
 	a.chatEventBuffer = [client.ChatEventCapacity]network.ChatEvent{}
 	a.inventory.Reset()
 	a.audioFeedback.Reset()
+	a.combatFeedback.Reset()
+	if a.hostiles != nil {
+		a.hostiles.Reset()
+	}
 	a.furnace.Reset()
 	a.chest.Reset()
 	// 合成网格镜像随会话一并清空：断线后不继承任何已确认网格状态

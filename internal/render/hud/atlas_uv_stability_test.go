@@ -7,10 +7,16 @@ import (
 )
 
 // stabilityAtlasWidths 是图集 UV 稳定性性质扫描的宽度集：全部是固定列宽
-// 16 纹素的倍数，首项是当前真实宽度（50 列 × 16），其余项模拟未来扩列，
+// 16 纹素的倍数，首项是当前真实宽度，其余项模拟未来扩列，
 // 同时覆盖 2 的幂（除法精确舍入）与非 2 幂（除法有舍入噪声）两类行为。
 // 仅被本文件的三个稳定性测试使用，不进共享 helper 中心。
-var stabilityAtlasWidths = [...]int{800, 816, 832, 1024, 4096}
+var stabilityAtlasWidths = [...]int{
+	hotbarTextureWidth,
+	hotbarTextureWidth + hotbarTextureSize,
+	hotbarTextureWidth + 2*hotbarTextureSize,
+	2048,
+	4096,
+}
 
 // stabilityMinMarginTexels 是 delta spec 要求的最小安全裕度：解码回纹素空间后
 // 的列界必须距两侧列边界各不少于 1/512 纹素，才能保证 f32 重归一化噪声

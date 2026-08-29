@@ -252,6 +252,20 @@ func (server *Server) publishLocalResult(
 			WorldTimeTicks: playerUpdate.WorldTimeTicks,
 		}) {
 			server.closePublicationSessionLocked(current, errSessionOutboxFull)
+			return
+		}
+		for _, hit := range result.CombatHits {
+			if hit.Session != current.id {
+				continue
+			}
+			if !current.enqueue(network.CombatHit{
+				ServerTick: result.Tick,
+				Damage:     hit.Damage,
+				TargetKind: hit.TargetKind,
+			}) {
+				server.closePublicationSessionLocked(current, errSessionOutboxFull)
+				return
+			}
 		}
 	}
 }

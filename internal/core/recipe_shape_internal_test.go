@@ -2,7 +2,7 @@ package core
 
 import "testing"
 
-// 本文件是形状匹配器的白盒单元层：注册表 recipe 1..13 里不存在「左右不对称
+// 本文件是形状匹配器的白盒单元层：注册表 recipe 1..19 里不存在「左右不对称
 // 且开 `Mirror` 位」的形状（唯一不对称的石锄/铁锄按 design.md D3 刻意关闭
 // 镜像位），「水平镜像允许、垂直翻转与旋转永不允许」只能在合成形状上对私有
 // `matchesPattern` 直接证明。注册表级的匹配行为由 recipe_test.go 的
@@ -23,6 +23,51 @@ var asymmetricPattern = RecipePattern{
 		ItemNone, ItemNone, ItemNone,
 	},
 	Output: ItemStack{Item: ItemStoneBrick, Count: 1},
+}
+
+func TestSwordRecipePatternsAreStable(t *testing.T) {
+	tests := []struct {
+		id      RecipeID
+		wantID  RecipeID
+		pattern RecipePattern
+	}{
+		{RecipeWoodenSword, 17, RecipePattern{
+			Width: 1, Height: 3, Mirror: true,
+			Cells: [CraftingGridSlots]ItemID{
+				ItemOakPlanks, ItemNone, ItemNone,
+				ItemOakPlanks, ItemNone, ItemNone,
+				ItemStick, ItemNone, ItemNone,
+			},
+			Output: ItemStack{Item: ItemWoodenSword, Count: 1, Durability: 59},
+		}},
+		{RecipeStoneSword, 18, RecipePattern{
+			Width: 1, Height: 3, Mirror: true,
+			Cells: [CraftingGridSlots]ItemID{
+				ItemCobblestone, ItemNone, ItemNone,
+				ItemCobblestone, ItemNone, ItemNone,
+				ItemStick, ItemNone, ItemNone,
+			},
+			Output: ItemStack{Item: ItemStoneSword, Count: 1, Durability: 131},
+		}},
+		{RecipeIronSword, 19, RecipePattern{
+			Width: 1, Height: 3, Mirror: true,
+			Cells: [CraftingGridSlots]ItemID{
+				ItemIronIngot, ItemNone, ItemNone,
+				ItemIronIngot, ItemNone, ItemNone,
+				ItemStick, ItemNone, ItemNone,
+			},
+			Output: ItemStack{Item: ItemIronSword, Count: 1, Durability: 250},
+		}},
+	}
+	for _, test := range tests {
+		if test.id != test.wantID {
+			t.Fatalf("recipe ID = %d，想要 %d", test.id, test.wantID)
+		}
+		pattern, ok := recipePattern(test.id)
+		if !ok || pattern != test.pattern {
+			t.Fatalf("recipe %d = %+v, %v，想要 %+v", test.id, pattern, ok, test.pattern)
+		}
+	}
 }
 
 // TestMatchesPatternAllowsOnlyHorizontalMirror 锁定 spec Requirement「形状匹配

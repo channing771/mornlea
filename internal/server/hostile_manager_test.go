@@ -493,6 +493,24 @@ func TestHostileChaseHoldsAttackWhileCooldownActive(t *testing.T) {
 	}
 }
 
+func TestHostileChaseCooldownOneAttacksSameTick(t *testing.T) {
+	engine, manager, setTargets := newHostileChaseWorld(t, nil)
+	mob := chaseMob(11, mgl32.Vec3{2.0, 1, 0.5})
+	mob.AttackCooldown = 1
+	restoreChaseHostile(t, engine, mob)
+	setTargets([]hostileTargetPlayer{chaseTarget(0x02, 1, [3]float32{0.5, 1, 0.5})})
+	engine.SetPlayerPositionForTest(1, mgl32.Vec3{0.5, 1, 0.5})
+
+	manager.advance()
+	engine.Step()
+	if got, ok := engine.Player(1); !ok || got.Health != core.MaxHealth-3 {
+		t.Fatalf("cooldown 1 同 tick 生命=%v（ok=%v），想要 %d", got.Health, ok, core.MaxHealth-3)
+	}
+	if got := engine.HostileMobs()[0].AttackCooldown; got != 20 {
+		t.Fatalf("命中后 attack cooldown=%d，想要 20", got)
+	}
+}
+
 func TestHostileChaseNeverCutsCornersWithoutPath(t *testing.T) {
 	engine, manager, setTargets := newHostileChaseWorld(t, chaseBoxedChunk)
 	// 夜行者被封顶石盒围死：A* 不可达，重规划按契约逐 tick 重试，但夜行者

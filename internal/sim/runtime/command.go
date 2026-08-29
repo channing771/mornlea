@@ -21,6 +21,7 @@ type (
 	Rejection           = contract.Rejection
 	PlacementSuccess    = contract.PlacementSuccess
 	ResyncRequest       = contract.ResyncRequest
+	CombatHit           = contract.CombatHit
 	TickResult          = contract.TickResult
 	FurnaceUpdate       = contract.FurnaceUpdate
 	FurnaceEnd          = contract.FurnaceEnd

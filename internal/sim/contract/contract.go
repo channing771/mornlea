@@ -122,6 +122,12 @@ type ResyncRequest struct {
 	HaveRevision uint64
 }
 
+type CombatHit struct {
+	Session    SessionID
+	Damage     uint8
+	TargetKind core.CombatTargetKind
+}
+
 type MiningUpdate struct {
 	Active        bool
 	Target        core.BlockPos
@@ -206,6 +212,7 @@ type TickResult struct {
 	FurnaceEnds        []FurnaceEnd
 	Chests             []ChestUpdate
 	Craftings          []CraftingUpdate
+	CombatHits         []CombatHit
 	Tick               uint64
 	WorldTimeTicks     uint64
 }

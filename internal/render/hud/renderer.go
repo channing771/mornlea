@@ -30,6 +30,7 @@ func (renderer *HotbarRenderer) Prepare(
 	oxygen OxygenOverlay,
 	hunger HungerOverlay,
 	chat ChatOverlay,
+	combatMarker bool,
 	popup PopupOverlay,
 	crosshair CrosshairOverlay,
 	tooltip TooltipOverlay,
@@ -68,6 +69,7 @@ func (renderer *HotbarRenderer) Prepare(
 	appendOxygenBar(&renderer.layout, oxygen, open, float32(width), float32(height))
 	appendHungerBar(&renderer.layout, hunger, open, float32(width), float32(height))
 	appendChatOverlay(&renderer.layout, renderer.atlas, chat, float32(width), float32(height))
+	appendCombatMarker(&renderer.layout, combatMarker, float32(width), float32(height))
 	// 弹条最后布局：它只追加 glyph、锚在关闭态几何上，与物品镜像确认状态无关。
 	appendPopupOverlay(&renderer.layout, renderer.atlas, popup, open, float32(width), float32(height))
 	// tooltip 只在打开态布局：悬停解析与命中测试共用同一几何，实例追加在

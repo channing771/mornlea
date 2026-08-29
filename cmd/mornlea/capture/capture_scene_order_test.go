@@ -28,7 +28,7 @@ func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 		"workbench-crafting", "chest-container", "furnace-container",
 		"debug-panel", "skylight-tunnel", "block-light-room", "torch-night", "bed-night",
 		"materials-showcase",
-		"target-block-feedback", "oak-grove", "ai-companion",
+		"target-block-feedback", "oak-grove", "ai-companion", "sword-combat",
 		"hostile-mob", "water-surface-slope", "main-menu", "settings-menu", "far-horizon", "water-underwater",
 	}
 	gotNames := make([]string, len(captureScenes))

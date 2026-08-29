@@ -445,26 +445,18 @@ func TestRecipeShapeTableOneToThirteenIsFrozen(t *testing.T) {
 }
 
 // TestRecipeRejectsUnknownIDs 覆盖 spec Scenario「未登记配方被拒绝」：
-// recipe 0、批次其余功能线尚未合流的编号段（两把剑）以及任意更大
-// 编号都必须稳定拒绝且不产生产物。写成 `RecipeBed+1` 起步而不是裸字面量，
+// recipe 0 与任意大于当前末项的编号都必须稳定拒绝且不产生产物。
+// 写成 `RecipeIronSword+1` 起步而不是裸字面量，
 // 下次追加配方时这段循环自动跟着末项走。
 func TestRecipeRejectsUnknownIDs(t *testing.T) {
 	unknown := []core.RecipeID{0}
-	for id := core.RecipeBed + 1; id <= core.RecipeBed+5; id++ {
+	for id := core.RecipeIronSword + 1; id <= core.RecipeIronSword+5; id++ {
 		unknown = append(unknown, id)
 	}
 	unknown = append(unknown, 200, 255)
 	for _, id := range unknown {
 		if pattern, ok := core.Recipe(id); ok {
 			t.Fatalf("recipe %d 被接受为 %+v：表末之后的编号必须稳定拒绝", id, pattern)
-		}
-	}
-	// 17..18 是批次计划里的既定编号段（两把剑，归各自功能行；白床已由
-	// 床与睡眠功能行以 RecipeBed=16 落地）：在它们合流之前逐个点名拒绝，
-	// 比「表末 +1」更能钉住「暂缺但已规划」。
-	for id := core.RecipeID(17); id <= 18; id++ {
-		if _, ok := core.Recipe(id); ok {
-			t.Fatalf("规划中的 recipe %d 在合流前被注册", id)
 		}
 	}
 	// 对照组：火把与床配方都在表内，必须可查询。
@@ -482,7 +474,7 @@ func TestRecipeRejectsUnknownIDs(t *testing.T) {
 // `matchesPattern` 只比较子矩形内的格，若形状把材料写到子矩形外，那格会被
 // 静默忽略、配方从此少一份原料也照常匹配。本用例不冻结具体形状（那是
 // `TestRecipeShapeTableOneToThirteenIsFrozen` 与火把配方用例的职责），只守结构
-// 不变量，未来追加 recipe 15..18 时自动生效；编号连续性断言同时钉住「注册表
+// 不变量，未来追加 recipe 时自动生效；编号连续性断言同时钉住「注册表
 // 无空洞」。
 func TestRegisteredRecipeCellsStayInsideShapeBounds(t *testing.T) {
 	checked := 0
@@ -515,9 +507,73 @@ func TestRegisteredRecipeCellsStayInsideShapeBounds(t *testing.T) {
 	}
 	// 注册表从 1 起无空洞连续注册到末项常量：循环按「首个未注册即停」推进，
 	// 中间留洞会让后面的配方全部漏检，这里用计数把洞钉出来。
-	if checked != int(core.RecipeBed) {
+	if checked != int(core.RecipeIronSword) {
 		t.Fatalf("注册表枚举到 %d 条，想要与末项常量一致的 %d 条（注册表出现空洞？）",
-			checked, core.RecipeBed)
+			checked, core.RecipeIronSword)
+	}
+}
+
+func TestSwordRecipesMatchAllColumns(t *testing.T) {
+	tests := []struct {
+		name     string
+		material core.ItemID
+		id       core.RecipeID
+		output   core.ItemStack
+	}{
+		{"木剑", core.ItemOakPlanks, core.RecipeWoodenSword, core.ItemStack{Item: core.ItemWoodenSword, Count: 1, Durability: 59}},
+		{"石剑", core.ItemCobblestone, core.RecipeStoneSword, core.ItemStack{Item: core.ItemStoneSword, Count: 1, Durability: 131}},
+		{"铁剑", core.ItemIronIngot, core.RecipeIronSword, core.ItemStack{Item: core.ItemIronSword, Count: 1, Durability: 250}},
+	}
+	for _, test := range tests {
+		for column := uint8(0); column < 3; column++ {
+			t.Run(test.name+string(rune('0'+column)), func(t *testing.T) {
+				grid := buildCraftingGrid(
+					gridCell{column, test.material},
+					gridCell{column + 3, test.material},
+					gridCell{column + 6, core.ItemStick},
+				)
+				id, output, ok := core.MatchCraftingGrid(3, grid)
+				if !ok || id != test.id || output != test.output {
+					t.Fatalf("第 %d 列匹配 = (%d, %+v, %v)，想要 (%d, %+v, true)",
+						column, id, output, ok, test.id, test.output)
+				}
+			})
+		}
+	}
+}
+
+func TestSwordRecipesRejectInvalidShapes(t *testing.T) {
+	tests := []struct {
+		name     string
+		material core.ItemID
+	}{
+		{"木剑", core.ItemOakPlanks},
+		{"石剑", core.ItemCobblestone},
+		{"铁剑", core.ItemIronIngot},
+	}
+	for _, test := range tests {
+		invalid := map[string][core.CraftingGridSlots]core.ItemStack{
+			"横放": buildCraftingGrid(
+				gridCell{0, test.material}, gridCell{1, test.material}, gridCell{2, core.ItemStick},
+			),
+			"倒放": buildCraftingGrid(
+				gridCell{0, core.ItemStick}, gridCell{3, test.material}, gridCell{6, test.material},
+			),
+			"错料": buildCraftingGrid(
+				gridCell{0, core.ItemDirt}, gridCell{3, test.material}, gridCell{6, core.ItemStick},
+			),
+			"多料": buildCraftingGrid(
+				gridCell{0, test.material}, gridCell{1, core.ItemDirt},
+				gridCell{3, test.material}, gridCell{6, core.ItemStick},
+			),
+		}
+		for name, grid := range invalid {
+			t.Run(test.name+name, func(t *testing.T) {
+				if id, output, ok := core.MatchCraftingGrid(3, grid); ok {
+					t.Fatalf("非法摆放匹配了 recipe %d，产物 %+v", id, output)
+				}
+			})
+		}
 	}
 }
 

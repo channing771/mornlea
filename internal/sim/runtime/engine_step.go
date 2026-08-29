@@ -19,14 +19,13 @@ const (
 	phasePlayerCommands stepPhase = iota + 1
 	phaseCompanionActions
 	phasePhysicsAdvance
-	// phaseHostileAdvance 是夜行者的固定次序编排（生成 → 意图消费 → 移动 →
-	// 近战结算 → 灼烧 → 远离 → 死亡掉落，见 advanceHostiles）。相对统一物理，
+	// phaseHostileAdvance 是夜行者与统一战斗的固定次序编排（生成 → 意图消费 →
+	// 移动 → 统一战斗 → 灼烧 → 死亡掉落 → 远离）。相对统一物理，
 	// 它保持「玩家 → 伙伴 → 夜行者」的逐 actor 积分顺序；通知次序（物理之后、
 	// 流体之前）与常量次序一致，而实际代码位置按「一切区块写者位于
 	// reconcileSubscriptions 之后」的阶段顺序契约放在收敛点之后——死亡掉落是
-	// 区块写者，必须与其它写者共享同一批 revision、广播与存盘。它同样位于
-	// advancePlayerMelee 之前：夜行者近战意图在同 tick 内先冻结先结算，再走
-	// 玩家近战，两类近战共享同一份受击保护计时。
+	// 区块写者，必须与其它写者共享同一批 revision、广播与存盘。player 与
+	// hostile intent 由 `advanceCombat` 在同一快照上冻结和结算。
 	phaseHostileAdvance
 	// phaseFluidAdvance 位于熔炉推进之后、容器移动之前。
 	//
@@ -440,6 +439,10 @@ func (engine *Engine) Step() TickResult {
 	// 新生个体下一 tick 才积分；死亡掉落与其它区块写者共用同一份 pending。
 	engine.notifyStepPhase(phaseHostileAdvance)
 	engine.advanceHostiles(pending)
+	engine.advanceCombat(&result)
+	engine.advanceHostileBurn(engine.worldTime.Load())
+	engine.settleHostileDeaths(pending)
+	engine.advanceHostileDistant()
 
 	// 阶段顺序契约：所有区块写者必须位于 reconcileSubscriptions 之后。近战先冻结
 	// 伤害意图，再立刻结算死亡；两者都不写区块，死亡掉落与其后的其他写者仍在
@@ -452,7 +455,6 @@ func (engine *Engine) Step() TickResult {
 	// 已经推高 revision，区块转脏，RequestUnload 只会走 Unloading 分支。
 	// settleDeaths 同时必须早于本 tick 末尾的状态发布，外部才观察不到生命值为 0 的
 	// 中间状态。
-	engine.advancePlayerMelee()
 	engine.settleDeaths(pending)
 
 	// 伙伴放置结算：Place 意图在 action 阶段收集，世界写统一放在

@@ -58,7 +58,7 @@ type hostileState struct {
 	nextRepathTicks uint64
 	// attackIntent 与 attackTargetSession 是本 tick 已冻结的攻击意图（瞬态，
 	// 不进快照或存档）：由 applyHostileActions 在 tick 边界统一写定，由
-	// advanceHostileMelee 在同 tick 稍后统一结算并清零。
+	// advanceCombat 在同 tick 稍后统一结算并清零。
 	attackIntent        bool
 	attackTargetSession SessionID
 	// distantTicks 是距全部 active 玩家水平超过 despawn 半径的累计 tick，
@@ -227,6 +227,17 @@ func (engine *Engine) hostileMobAt(index int) HostileMob {
 	}
 }
 
+func (hostile *hostileState) applyDamage(damage int32) {
+	if damage <= 0 {
+		return
+	}
+	if damage >= int32(hostile.health) {
+		hostile.health = 0
+		return
+	}
+	hostile.health -= uint8(damage)
+}
+
 // advanceHostileMovement 把全部夜行者汇入与玩家/伙伴相同的 Rust
 // `physics.Step` 积分出口：每个个体用既有输入步进恰好一次，位移完全由权威
 // 物理决定，不新写任何 Go 积分。身体与玩家同形（同 AABB），浸没标志复用
@@ -289,24 +300,12 @@ func (engine *Engine) PlanHostileChase(
 	return true
 }
 
-// advanceHostiles 是夜行者阶段的固定次序编排，由 `Engine.Step` 在订阅收敛
-// 之后、玩家近战之前调用：生成（tick 边界判定，先于物理语义，新个体下一
-// tick 才积分）→ 意图消费（有界追逐 worker 提交的移动/攻击意图，本 tick 的
-// 全部攻击意图在此冻结）→ 移动（与玩家/伙伴同一积分出口，ID 升序）→ 近战
-// 结算（先冻结的意图按 ID 升序统一结算）→ 灼烧（白昼露天每 20 tick 扣 1）→
-// 远离消失（>64 格累计 600 active tick，无掉落）→ 死亡掉落（同 tick 移除，
-// 环形尝试放 1 个腐肉）。灼烧致死的个体由死亡结算统一移除，因此「烧死」与
-// 「被打死」走完全相同的移除与掉落路径。夜行者近战结算先于玩家近战执行，同
-// tick 两类近战共享同一份受击保护计时。所有子步骤的成本都有固定上界（候选
-// ≤1、个体 ≤64、意图 ≤64、掉落尝试以已加载区块封顶），不随世界规模放大。
+// advanceHostiles 只推进生成、意图消费和移动；统一战斗、灼烧、死亡与远离消失
+// 由 `Engine.Step` 紧随其后按固定生命周期顺序编排。
 func (engine *Engine) advanceHostiles(pending *pendingChunkChanges) {
 	engine.advanceHostileSpawn()
 	engine.applyHostileActions(engine.takeHostileActions())
 	engine.advanceHostileMovement()
-	engine.advanceHostileMelee()
-	engine.advanceHostileBurn(engine.worldTime.Load())
-	engine.advanceHostileDistant()
-	engine.settleHostileDeaths(pending)
 }
 
 // phaseIsDay 报告显示相位是否为白昼：与客户端昼夜曲线（sun = sin(2πp/24000)，

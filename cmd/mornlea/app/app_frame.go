@@ -225,8 +225,9 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		cursorX, cursorY := a.window.CursorPos()
 		tooltip = hud.TooltipOverlay{Valid: true, CursorX: cursorX, CursorY: cursorY}
 	}
+	combatMarker := a.combatFeedback.MarkerVisible()
 	hudVisible := inventoryConfirmed || (healthReady && !a.clientSessionClosed) ||
-		chatOverlay.Open || len(chatOverlay.Lines) != 0
+		chatOverlay.Open || len(chatOverlay.Lines) != 0 || combatMarker
 	if hudVisible {
 		// 进食进度条：纯客户端预测。输入位在 `RenderFrame` 作用域没有现成的
 		// 当帧 `Control.Eating`，故按 `interactive.go` 置位的同源状态派生（光标
@@ -255,7 +256,7 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 			hud.EatingOverlay{Active: eatingActive, Progress: eatingProgress},
 			hud.HealthOverlay{Confirmed: healthReady, Value: health},
 			hud.OxygenOverlay{Confirmed: oxygenReady, Value: oxygen},
-			hud.HungerOverlay{Confirmed: hungerReady, Value: hunger, SaturationZero: saturationZero}, chatOverlay,
+			hud.HungerOverlay{Confirmed: hungerReady, Value: hunger, SaturationZero: saturationZero}, chatOverlay, combatMarker,
 			popup, crosshair, tooltip,
 			uint32(width), uint32(height), a.scheduler.UploadBudget(),
 		); err != nil {
@@ -366,6 +367,7 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		HUDSegment:       hudSegment,
 		UISegment:        uiSegment,
 	})
+	a.combatFeedback.AfterRender(rendered)
 	if !rendered {
 		return false, nil
 	}

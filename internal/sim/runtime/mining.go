@@ -562,24 +562,39 @@ func hoeHarvestDurabilityExempt(block core.BlockID, item core.ItemID) bool {
 	return core.IsCrop(block) && core.TillingTool(item)
 }
 
-// consumeToolDurability 在成功破坏方块后扣减选中工具的耐久。
+// consumeToolDurability 在成功方块动作后扣减选中工具的耐久，完好剑除外。
 // 耐久归零时把栏位整体替换为损坏形态。返回背包是否发生变化。
 func consumeToolDurability(actor *actorState) bool {
 	selected := actor.inventory.Hotbar.Selected
 	stack := actor.inventory.Hotbar.Slots[selected]
+	if core.IsIntactSword(stack.Item) {
+		return false
+	}
+	return consumeToolDurabilityAt(actor, selected, stack.Item)
+}
+
+// consumeToolDurabilityAt 只在栏位与物品身份仍匹配时原子扣减耐久。
+func consumeToolDurabilityAt(actor *actorState, slot uint8, expected core.ItemID) bool {
+	if slot >= core.HotbarSlots {
+		return false
+	}
+	stack := actor.inventory.Hotbar.Slots[slot]
+	if stack.Item != expected || stack.Count != 1 {
+		return false
+	}
 	if _, ok := core.ItemMaxDurability(stack.Item); !ok {
 		return false
 	}
 	if stack.Durability > 1 {
 		stack.Durability--
-		actor.inventory.Hotbar.Slots[selected] = stack
+		actor.inventory.Hotbar.Slots[slot] = stack
 		return true
 	}
 	broken, ok := core.ItemBrokenForm(stack.Item)
 	if !ok {
 		return false
 	}
-	actor.inventory.Hotbar.Slots[selected] = core.ItemStack{Item: broken, Count: 1}
+	actor.inventory.Hotbar.Slots[slot] = core.ItemStack{Item: broken, Count: 1}
 	return true
 }
 

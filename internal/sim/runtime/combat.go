@@ -11,54 +11,382 @@ import (
 
 const (
 	playerMeleeReach         = float32(3)
-	playerMeleeDamage        = int32(2)
 	playerMeleeCooldownTicks = uint8(10)
+	hostileMeleeDamage       = int32(3)
+	maxCombatActors          = 72
+	maxCombatIntents         = 72
 )
 
-type meleeIntent struct {
-	attacker SessionID
-	target   SessionID
+var hostileAttackRangeSquared = HostileAttackRange * HostileAttackRange
+
+type combatActor struct {
+	kind core.CombatTargetKind
+	id   uint64
 }
 
-// advancePlayerMelee 在同一份已排序 active 会话快照上先收集全部有效近战意图，
-// 再统一结算伤害。收集与应用分开，确保同 tick 被打到零血的攻击者仍会提交已冻结
-// 的反击意图；死亡交给紧随其后的 `settleDeaths` 结算。
-func (engine *Engine) advancePlayerMelee() {
-	sessions := engine.sortedActiveSessions()
-	for _, id := range sessions {
-		player := engine.sessions[id].player
-		player.meleeSuppressedMining = false
-		if player.meleeCooldownTicks > 0 {
-			player.meleeCooldownTicks--
+type combatActorSnapshot struct {
+	actor          combatActor
+	dimension      core.DimensionID
+	position       mgl32.Vec3
+	yaw            float32
+	pitch          float32
+	health         uint8
+	attackCooldown uint8
+	hurtCooldown   uint8
+	attacking      bool
+	targetSession  SessionID
+	selectedSlot   uint8
+	selectedItem   core.ItemID
+	selectedCount  uint8
+}
+
+type combatIntent struct {
+	attacker         combatActor
+	target           combatActor
+	dimension        core.DimensionID
+	damage           int32
+	distance         float32
+	attackerPosition mgl32.Vec3
+	targetPosition   mgl32.Vec3
+	attackerYaw      float32
+	selectedSlot     uint8
+	selectedItem     core.ItemID
+	selectedCount    uint8
+}
+
+func (engine *Engine) advanceCombat(result *TickResult) {
+	engine.advanceCombatWithLimits(result, maxCombatActors, maxCombatIntents)
+}
+
+// advanceCombatWithLimits 先在固定数组中完成快照、冷却预演与全部 intent 追加；
+// 任一追加越界都在提交前失败，只有 tick-local 采掘抑制会在入口清零。
+func (engine *Engine) advanceCombatWithLimits(
+	result *TickResult,
+	actorLimit, intentLimit int,
+) bool {
+	var playerIDs [maxCombatActors]SessionID
+	playerCount := 0
+	for id, session := range engine.sessions {
+		if session == nil || session.player == nil || session.player.lifecycle != PlayerActive {
+			continue
+		}
+		session.player.meleeSuppressedMining = false
+		if playerCount == len(playerIDs) {
+			return false
+		}
+		index := playerCount
+		for index > 0 && playerIDs[index-1] > id {
+			playerIDs[index] = playerIDs[index-1]
+			index--
+		}
+		playerIDs[index] = id
+		playerCount++
+	}
+
+	var snapshots [maxCombatActors]combatActorSnapshot
+	snapshotCount := 0
+	for index := range engine.hostiles.entries {
+		if snapshotCount >= actorLimit || snapshotCount == len(snapshots) {
+			return false
+		}
+		hostile := &engine.hostiles.entries[index]
+		snapshots[snapshotCount] = combatActorSnapshot{
+			actor:          combatActor{kind: core.CombatTargetHostile, id: hostile.id},
+			dimension:      hostile.dimension,
+			position:       hostile.state.Position,
+			yaw:            hostile.yaw,
+			health:         hostile.health,
+			attackCooldown: hostile.attackCooldown,
+			hurtCooldown:   hostile.hurtCooldown,
+			attacking:      hostile.attackIntent,
+			targetSession:  hostile.attackTargetSession,
+		}
+		snapshotCount++
+	}
+	for _, id := range playerIDs[:playerCount] {
+		if snapshotCount >= actorLimit || snapshotCount == len(snapshots) {
+			return false
+		}
+		session := engine.sessions[id]
+		player := session.player
+		selectedSlot := player.inventory.Hotbar.Selected
+		selectedItem := core.ItemNone
+		selectedCount := uint8(0)
+		if selectedSlot < core.HotbarSlots {
+			stack := player.inventory.Hotbar.Slots[selectedSlot]
+			selectedItem, selectedCount = stack.Item, stack.Count
+		}
+		snapshots[snapshotCount] = combatActorSnapshot{
+			actor:          combatActor{kind: core.CombatTargetPlayer, id: uint64(id)},
+			dimension:      session.dimension,
+			position:       player.state.Position,
+			yaw:            player.yaw,
+			pitch:          player.pitch,
+			health:         player.health,
+			attackCooldown: player.attackCooldownTicks,
+			hurtCooldown:   player.hurtCooldownTicks,
+			attacking:      player.miningHeld,
+			selectedSlot:   selectedSlot,
+			selectedItem:   selectedItem,
+			selectedCount:  selectedCount,
+		}
+		snapshotCount++
+	}
+	for index := range snapshotCount {
+		if snapshots[index].attackCooldown > 0 {
+			snapshots[index].attackCooldown--
+		}
+		if snapshots[index].hurtCooldown > 0 {
+			snapshots[index].hurtCooldown--
 		}
 	}
 
-	var intents [8]meleeIntent
-	count := 0
-	for _, id := range sessions {
-		attacker := engine.sessions[id].player
-		if !attacker.miningHeld {
+	var intents [maxCombatIntents]combatIntent
+	intentCount := 0
+	for index := range engine.hostiles.entries {
+		attacker := combatSnapshotForActor(
+			snapshots[:snapshotCount],
+			combatActor{kind: core.CombatTargetHostile, id: engine.hostiles.entries[index].id},
+		)
+		if attacker == nil || !attacker.attacking || attacker.health == 0 || attacker.attackCooldown != 0 {
 			continue
 		}
-		targetID, ok := engine.playerMeleeTarget(id, sessions)
+		target := combatSnapshotForActor(
+			snapshots[:snapshotCount],
+			combatActor{kind: core.CombatTargetPlayer, id: uint64(attacker.targetSession)},
+		)
+		if target == nil || target.health == 0 || target.hurtCooldown != 0 ||
+			target.dimension != attacker.dimension ||
+			horizontalDistanceSq(attacker.position, target.position) > hostileAttackRangeSquared {
+			continue
+		}
+		if intentCount >= intentLimit || intentCount == len(intents) {
+			return false
+		}
+		intents[intentCount] = combatIntent{
+			attacker: attacker.actor, target: target.actor, damage: hostileMeleeDamage,
+			dimension:        attacker.dimension,
+			distance:         float32(math.Sqrt(float64(horizontalDistanceSq(attacker.position, target.position)))),
+			attackerPosition: attacker.position, targetPosition: target.position,
+			attackerYaw: attacker.yaw,
+		}
+		intentCount++
+	}
+	for _, id := range playerIDs[:playerCount] {
+		attacker := combatSnapshotForActor(
+			snapshots[:snapshotCount], combatActor{kind: core.CombatTargetPlayer, id: uint64(id)},
+		)
+		intent, ok := engine.playerCombatIntent(attacker, snapshots[:snapshotCount])
 		if !ok {
 			continue
 		}
-		target := engine.sessions[targetID].player
-		if target.meleeCooldownTicks != 0 {
+		if intentCount >= intentLimit || intentCount == len(intents) {
+			return false
+		}
+		intents[intentCount] = intent
+		intentCount++
+	}
+
+	for index := range snapshotCount {
+		snapshot := &snapshots[index]
+		switch snapshot.actor.kind {
+		case core.CombatTargetPlayer:
+			session := engine.sessions[SessionID(snapshot.actor.id)]
+			if session != nil && session.player != nil {
+				session.player.attackCooldownTicks = snapshot.attackCooldown
+				session.player.hurtCooldownTicks = snapshot.hurtCooldown
+			}
+		case core.CombatTargetHostile:
+			if hostileIndex := engine.hostiles.findIndex(snapshot.actor.id); hostileIndex >= 0 {
+				hostile := &engine.hostiles.entries[hostileIndex]
+				hostile.attackCooldown = snapshot.attackCooldown
+				hostile.hurtCooldown = snapshot.hurtCooldown
+			}
+		}
+	}
+	var reservedVictims [maxCombatIntents]combatActor
+	reservedCount := 0
+	for index := range intentCount {
+		intent := intents[index]
+		reserved := false
+		for reservedIndex := range reservedCount {
+			if reservedVictims[reservedIndex] == intent.target {
+				reserved = true
+				break
+			}
+		}
+		if reserved {
 			continue
 		}
-		attacker.meleeSuppressedMining = true
-		target.meleeCooldownTicks = playerMeleeCooldownTicks
-		// 疲劳在意图冻结时收取而不是留到结算循环：同 tick 被反击致死的攻击者
-		// 仍要为已成功的命中付费，结算循环因此保持只做 `applyDamage`。
-		attacker.applyExhaustion(exhaustionMeleeMilli, engine.tunables.ExhaustionThresholdMilli)
-		intents[count] = meleeIntent{attacker: id, target: targetID}
-		count++
+		reservedVictims[reservedCount] = intent.target
+		reservedCount++
+		engine.settleCombatIntent(result, intent)
 	}
-	for _, intent := range intents[:count] {
-		engine.sessions[intent.target].player.applyDamage(playerMeleeDamage)
+	return true
+}
+
+func combatSnapshotForActor(
+	snapshots []combatActorSnapshot,
+	actor combatActor,
+) *combatActorSnapshot {
+	for index := range snapshots {
+		if snapshots[index].actor == actor {
+			return &snapshots[index]
+		}
 	}
+	return nil
+}
+
+func (engine *Engine) playerCombatIntent(
+	attacker *combatActorSnapshot,
+	snapshots []combatActorSnapshot,
+) (combatIntent, bool) {
+	if attacker == nil || !attacker.attacking || attacker.health == 0 || attacker.attackCooldown != 0 {
+		return combatIntent{}, false
+	}
+	dimension := engine.dimension(attacker.dimension)
+	if dimension == nil {
+		return combatIntent{}, false
+	}
+	eye := attacker.position.Add(mgl32.Vec3{0, engine.physicsTunables.EyeHeight, 0})
+	direction := LookDirection(attacker.yaw, attacker.pitch)
+	var target *combatActorSnapshot
+	targetDistance := playerMeleeReach
+	for index := range snapshots {
+		candidate := &snapshots[index]
+		if !candidate.actor.kind.Valid() || candidate.actor == attacker.actor ||
+			candidate.dimension != attacker.dimension || candidate.health == 0 {
+			continue
+		}
+		distance, hit := rayAABBDistance(eye, direction, physics.PlayerBounds(candidate.position))
+		if !hit || distance > targetDistance || distance == targetDistance && target != nil &&
+			(candidate.actor.kind > target.actor.kind ||
+				candidate.actor.kind == target.actor.kind && candidate.actor.id > target.actor.id) {
+			continue
+		}
+		target, targetDistance = candidate, distance
+	}
+	if target == nil || target.hurtCooldown != 0 {
+		return combatIntent{}, false
+	}
+	hit, blocked, err := core.RaycastBlocks(
+		eye, direction, playerMeleeReach, blockRaycastSampler(dimension),
+	)
+	if err != nil || blocked && hit.Distance < targetDistance {
+		return combatIntent{}, false
+	}
+	return combatIntent{
+		attacker: attacker.actor, target: target.actor, dimension: attacker.dimension,
+		damage:   core.WeaponDamage(attacker.selectedItem),
+		distance: targetDistance, attackerPosition: attacker.position, targetPosition: target.position,
+		attackerYaw: attacker.yaw, selectedSlot: attacker.selectedSlot, selectedItem: attacker.selectedItem,
+		selectedCount: attacker.selectedCount,
+	}, true
+}
+
+func combatKnockback(from, to mgl32.Vec3, yaw float32) mgl32.Vec3 {
+	delta := mgl32.Vec3{to.X() - from.X(), 0, to.Z() - from.Z()}
+	if delta.LenSqr() == 0 {
+		look := LookDirection(yaw, 0)
+		delta = mgl32.Vec3{look.X(), 0, look.Z()}
+	}
+	return delta.Normalize().Mul(0.35)
+}
+
+// settleCombatIntent 在任何状态写入前解析全部 live 身份与冻结栏位；验证成功后
+// 按固定顺序一次提交该 intent，失败不会留下部分副作用。
+func (engine *Engine) settleCombatIntent(result *TickResult, intent combatIntent) bool {
+	var attackerPlayer *playerState
+	var attackerHostile *hostileState
+	var attackerDimension core.DimensionID
+	switch intent.attacker.kind {
+	case core.CombatTargetPlayer:
+		session := engine.sessions[SessionID(intent.attacker.id)]
+		if session == nil || session.player == nil || session.player.lifecycle != PlayerActive {
+			return false
+		}
+		attackerPlayer = session.player
+		attackerDimension = session.dimension
+		if intent.selectedSlot >= core.HotbarSlots ||
+			attackerPlayer.inventory.Hotbar.Selected != intent.selectedSlot {
+			return false
+		}
+		stack := attackerPlayer.inventory.Hotbar.Slots[intent.selectedSlot]
+		if stack.Item != intent.selectedItem || stack.Count != intent.selectedCount {
+			return false
+		}
+	case core.CombatTargetHostile:
+		index := engine.hostiles.findIndex(intent.attacker.id)
+		if index < 0 {
+			return false
+		}
+		attackerHostile = &engine.hostiles.entries[index]
+		attackerDimension = attackerHostile.dimension
+	default:
+		return false
+	}
+	if attackerDimension != intent.dimension || intent.damage <= 0 {
+		return false
+	}
+
+	var targetPlayer *playerState
+	var targetHostile *hostileState
+	var targetDimension core.DimensionID
+	switch intent.target.kind {
+	case core.CombatTargetPlayer:
+		session := engine.sessions[SessionID(intent.target.id)]
+		if session == nil || session.player == nil || session.player.lifecycle != PlayerActive {
+			return false
+		}
+		targetPlayer = session.player
+		targetDimension = session.dimension
+	case core.CombatTargetHostile:
+		index := engine.hostiles.findIndex(intent.target.id)
+		if index < 0 {
+			return false
+		}
+		targetHostile = &engine.hostiles.entries[index]
+		targetDimension = targetHostile.dimension
+	default:
+		return false
+	}
+	if targetDimension != intent.dimension || attackerHostile != nil && targetPlayer == nil {
+		return false
+	}
+
+	if targetPlayer != nil {
+		targetPlayer.applyDamage(intent.damage)
+		targetPlayer.state.Velocity = targetPlayer.state.Velocity.Add(combatKnockback(
+			intent.attackerPosition, intent.targetPosition, intent.attackerYaw,
+		))
+	} else {
+		targetHostile.applyDamage(intent.damage)
+		targetHostile.state.Velocity = targetHostile.state.Velocity.Add(combatKnockback(
+			intent.attackerPosition, intent.targetPosition, intent.attackerYaw,
+		))
+	}
+
+	if attackerPlayer != nil {
+		attackerPlayer.attackCooldownTicks = playerMeleeCooldownTicks
+		if targetPlayer != nil {
+			targetPlayer.hurtCooldownTicks = playerMeleeCooldownTicks
+		} else {
+			targetHostile.hurtCooldown = playerMeleeCooldownTicks
+		}
+		attackerPlayer.applyExhaustion(exhaustionMeleeMilli, engine.tunables.ExhaustionThresholdMilli)
+		attackerPlayer.meleeSuppressedMining = true
+		if core.IsIntactSword(intent.selectedItem) &&
+			consumeToolDurabilityAt(&attackerPlayer.actorState, intent.selectedSlot, intent.selectedItem) {
+			attackerPlayer.inventoryDirty = true
+		}
+		result.CombatHits = append(result.CombatHits, CombatHit{
+			Session: SessionID(intent.attacker.id), Damage: uint8(intent.damage), TargetKind: intent.target.kind,
+		})
+	} else {
+		attackerHostile.attackCooldown = hostileCooldownPeriodTicks
+		targetPlayer.hurtCooldownTicks = hostileCooldownPeriodTicks
+	}
+	return true
 }
 
 // rayAABBDistance 返回单位方向射线最早进入 bounds 的非负距离。近战只接受三格内
@@ -91,69 +419,4 @@ func rayAABBDistance(origin, direction mgl32.Vec3, bounds core.AABB) (float32, b
 		return 0, false
 	}
 	return near, true
-}
-
-// playerMeleeTarget 从本 tick 的 active 会话快照中选择攻击者射线最先命中的同维
-// 活着玩家。方块只在玩家表面前方才阻挡，因而与玩家表面同距的方块不改写命中。
-func (engine *Engine) playerMeleeTarget(
-	attackerID SessionID,
-	sessions []SessionID,
-) (SessionID, bool) {
-	attacker := engine.sessions[attackerID]
-	if attacker == nil || attacker.player == nil ||
-		attacker.player.lifecycle != PlayerActive || attacker.player.health == 0 {
-		return 0, false
-	}
-	if !sessionInSnapshot(attackerID, sessions) {
-		return 0, false
-	}
-	dimension := engine.dimension(attacker.dimension)
-	if dimension == nil {
-		return 0, false
-	}
-	player := attacker.player
-	eye := player.state.Position.Add(mgl32.Vec3{0, engine.physicsTunables.EyeHeight, 0})
-	direction := LookDirection(player.yaw, player.pitch)
-	var target SessionID
-	targetDistance := playerMeleeReach
-	for _, id := range sessions {
-		candidate := engine.sessions[id]
-		if id == attackerID || candidate == nil || candidate.player == nil ||
-			candidate.player.lifecycle != PlayerActive || candidate.player.health == 0 ||
-			candidate.dimension != attacker.dimension {
-			continue
-		}
-		distance, hit := rayAABBDistance(
-			eye,
-			direction,
-			physics.PlayerBounds(candidate.player.state.Position),
-		)
-		if !hit || distance > targetDistance ||
-			distance == targetDistance && target != 0 && id > target {
-			continue
-		}
-		target, targetDistance = id, distance
-	}
-	if target == 0 {
-		return 0, false
-	}
-	hit, blocked, err := core.RaycastBlocks(
-		eye,
-		direction,
-		playerMeleeReach,
-		blockRaycastSampler(dimension),
-	)
-	if err != nil || blocked && hit.Distance < targetDistance {
-		return 0, false
-	}
-	return target, true
-}
-
-func sessionInSnapshot(id SessionID, sessions []SessionID) bool {
-	for _, candidate := range sessions {
-		if candidate == id {
-			return true
-		}
-	}
-	return false
 }

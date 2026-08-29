@@ -66,11 +66,11 @@ func TestGridCraftingPacketIDsAreFrozen(t *testing.T) {
 	if _, ok := ClientPacketForID(StatePlay, 15+1); ok {
 		t.Fatal("Play client packet ID 16 必须保持未分配")
 	}
-	if _, ok := ServerPacketForID(StatePlay, 24+1); ok {
-		t.Fatal("Play server packet ID 25 必须保持未分配")
+	if _, ok := ServerPacketForID(StatePlay, 25+1); ok {
+		t.Fatal("Play server packet ID 26 必须保持未分配")
 	}
-	if ProtocolVersion != 31 {
-		t.Fatalf("协议版本 = %d，想要 31——夜行者三类消息由 v30 承载、显示相位偏移由 v31 承载", ProtocolVersion)
+	if ProtocolVersion != 32 {
+		t.Fatalf("协议版本 = %d，想要 32——夜行者三类消息由 v30 承载、显示相位偏移由 v31 承载、私有战斗命中由 v32 承载", ProtocolVersion)
 	}
 }
 
@@ -102,8 +102,8 @@ func TestProtocolV22TillSoilPacketIDIsFrozen(t *testing.T) {
 	} else if _, isTake := packet.(TakeCraftingOutput); !isTake {
 		t.Fatalf("Play client packet ID 15 = %T，想要 TakeCraftingOutput", packet)
 	}
-	if ProtocolVersion != 31 {
-		t.Fatalf("协议版本 = %d，想要 31", ProtocolVersion)
+	if ProtocolVersion != 32 {
+		t.Fatalf("协议版本 = %d，想要 32", ProtocolVersion)
 	}
 }
 
@@ -164,7 +164,7 @@ func TestProtocolV1RegistryRejectsUnknownIDsAndStates(t *testing.T) {
 	if _, ok := ClientPacketForID(StateHandshake, 1); ok {
 		t.Fatal("unknown handshake client packet ID accepted")
 	}
-	if _, ok := ServerPacketForID(StatePlay, 25); ok {
+	if _, ok := ServerPacketForID(StatePlay, 26); ok {
 		t.Fatal("unknown play server packet ID accepted")
 	}
 	if _, ok := ClientPacketID(StateLogin, ClientHello{}); ok {
@@ -388,6 +388,9 @@ func sameServerPacketType(left, right ServerPacket) bool {
 		return ok
 	case HostileDespawn:
 		_, ok := right.(HostileDespawn)
+		return ok
+	case CombatHit:
+		_, ok := right.(CombatHit)
 		return ok
 	}
 	return false

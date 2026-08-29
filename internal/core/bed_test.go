@@ -157,7 +157,7 @@ func TestBedDirAndPlacementMapping(t *testing.T) {
 }
 
 // TestItemBedRegistration 锁定床物品的稳定语义：编号紧随腐肉物品（夜行者行
-// 先合并占 45，床顺延为 46）、哨兵后移到 47、堆叠 64、无耐久、不是食物也不是
+// 先合并占 45，床顺延为 46）、剑批次追加后哨兵为 53、堆叠 64、无耐久、不是食物也不是
 // 工具；放置映射按门先例给出默认形态（南向床尾），采掘映射把八个床形态全部
 // 还原成恰好 1 个床物品。
 func TestItemBedRegistration(t *testing.T) {
@@ -167,8 +167,8 @@ func TestItemBedRegistration(t *testing.T) {
 	if core.ItemBed != 46 {
 		t.Fatalf("ItemBed = %d，必须稳定为 46", core.ItemBed)
 	}
-	if core.ItemIDMax != 47 {
-		t.Fatalf("ItemIDMax = %d，必须紧随 ItemBed(%d) 后移到 47", core.ItemIDMax, core.ItemBed)
+	if core.ItemIDMax != 53 {
+		t.Fatalf("ItemIDMax = %d，必须在剑批次后移到 53", core.ItemIDMax)
 	}
 	if !core.RegisteredItem(core.ItemBed) {
 		t.Fatal("ItemBed 未注册")

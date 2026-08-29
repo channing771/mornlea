@@ -96,6 +96,31 @@ func TestCompanionCodecV1RoundTripAndGolden(t *testing.T) {
 	}
 }
 
+func TestCompanionCodecCurrentSchemaRoundTripsSwordItems(t *testing.T) {
+	want := fixtureCompanionBodies()[0]
+	stacks := [...]core.ItemStack{
+		{Item: core.ItemWoodenSword, Count: 1, Durability: 58},
+		{Item: core.ItemStoneSword, Count: 1, Durability: 130},
+		{Item: core.ItemIronSword, Count: 1, Durability: 249},
+		{Item: core.ItemBrokenWoodenSword, Count: 1},
+		{Item: core.ItemBrokenStoneSword, Count: 1},
+		{Item: core.ItemBrokenIronSword, Count: 1},
+	}
+	copy(want.Inventory.Hotbar.Slots[:], stacks[:])
+
+	encoded, err := Encode(CompanionSave{Revision: 29, Records: []companion.Body{want}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Decode(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Records) != 1 || got.Records[0].Inventory != want.Inventory {
+		t.Fatalf("伙伴剑物品往返 = %+v，想要 %+v", got.Records, want.Inventory)
+	}
+}
+
 func TestCompanionCodecAcceptsMaximumStoredRecords(t *testing.T) {
 	records := make([]companion.Body, companion.MaxStored)
 	for index := range records {
@@ -173,6 +198,13 @@ func TestCompanionCodecRejectsCRCTruncationFutureVersionAndOversizedRecords(t *t
 		{"invalid inventory", func() []byte {
 			p := bytes.Clone(valid)
 			binary.LittleEndian.PutUint16(p[73:], 4242)
+			p[75] = 1
+			repairCompanionCRC(p)
+			return p
+		}, storagedef.ErrCorrupt},
+		{"item sentinel", func() []byte {
+			p := bytes.Clone(valid)
+			binary.LittleEndian.PutUint16(p[73:], uint16(core.ItemIDMax))
 			p[75] = 1
 			repairCompanionCRC(p)
 			return p

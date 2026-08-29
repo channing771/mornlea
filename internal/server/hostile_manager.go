@@ -284,13 +284,11 @@ func (m *hostileManager) advanceRunners() {
 			target, ok := m.targetByID(slot.target)
 			if ok && target.dimension == mob.Dimension &&
 				withinHostileAttackRange([3]float32(mob.State.Position), target.position) {
-				if mob.AttackCooldown == 0 {
-					m.engine.EnqueueHostileAction(contract.HostileAction{
-						ID:            mob.ID,
-						AttackTarget:  true,
-						TargetSession: target.session,
-					})
-				}
+				m.engine.EnqueueHostileAction(contract.HostileAction{
+					ID:            mob.ID,
+					AttackTarget:  true,
+					TargetSession: target.session,
+				})
 				continue
 			}
 		}

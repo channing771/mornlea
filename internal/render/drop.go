@@ -104,6 +104,18 @@ func ItemColor(item core.ItemID) [4]float32 {
 		return [4]float32{66.0 / 255, 60.0 / 255, 58.0 / 255, 1}
 	case core.ItemBrokenIronPickaxe:
 		return [4]float32{96.0 / 255, 88.0 / 255, 92.0 / 255, 1}
+	case core.ItemWoodenSword:
+		return [4]float32{184.0 / 255, 134.0 / 255, 72.0 / 255, 1}
+	case core.ItemStoneSword:
+		return [4]float32{148.0 / 255, 148.0 / 255, 148.0 / 255, 1}
+	case core.ItemIronSword:
+		return [4]float32{200.0 / 255, 205.0 / 255, 210.0 / 255, 1}
+	case core.ItemBrokenWoodenSword:
+		return [4]float32{92.0 / 255, 67.0 / 255, 33.0 / 255, 1}
+	case core.ItemBrokenStoneSword:
+		return [4]float32{82.0 / 255, 82.0 / 255, 80.0 / 255, 1}
+	case core.ItemBrokenIronSword:
+		return [4]float32{115.0 / 255, 120.0 / 255, 125.0 / 255, 1}
 	default:
 		return [4]float32{}
 	}
