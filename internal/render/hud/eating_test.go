@@ -116,14 +116,14 @@ func TestHotbarPrepareEatingFrameQuadsNotExceedMiningFrame(t *testing.T) {
 	miningFrame := MiningOverlay{Active: true, ProgressTicks: 6, RequiredTicks: 15}
 	if err := renderer.Prepare(core.Inventory{}, true, false, -1, nil, nil, nil,
 		miningFrame, EatingOverlay{}, HealthOverlay{}, OxygenOverlay{}, HungerOverlay{},
-		ChatOverlay{}, 1280, 800, budget); err != nil {
+		ChatOverlay{}, false, 1280, 800, budget); err != nil {
 		t.Fatalf("采掘激活帧 Prepare: %v", err)
 	}
 	miningQuads := len(renderer.layout.quads)
 	if err := renderer.Prepare(core.Inventory{}, true, false, -1, nil, nil, nil,
 		MiningOverlay{}, EatingOverlay{Active: true, Progress: 1},
 		HealthOverlay{}, OxygenOverlay{}, HungerOverlay{},
-		ChatOverlay{}, 1280, 800, budget); err != nil {
+		ChatOverlay{}, false, 1280, 800, budget); err != nil {
 		t.Fatalf("进食激活帧 Prepare: %v", err)
 	}
 	eatingQuads := len(renderer.layout.quads)

@@ -110,3 +110,37 @@ func TestItemDropColorCoversRegisteredNonPlaceableItems(t *testing.T) {
 		t.Fatal("未知物品被绘制")
 	}
 }
+
+func TestSwordItemColorsAreVisibleAndDistinct(t *testing.T) {
+	swords := []core.ItemID{
+		core.ItemWoodenSword, core.ItemStoneSword, core.ItemIronSword,
+		core.ItemBrokenWoodenSword, core.ItemBrokenStoneSword, core.ItemBrokenIronSword,
+	}
+	seen := make(map[[4]float32]struct{})
+	for _, item := range swords {
+		color := ItemColor(item)
+		if color == ([4]float32{}) {
+			t.Fatalf("剑物品 %d 颜色为零值", item)
+		}
+		if color[3] != 1 {
+			t.Fatalf("剑物品 %d alpha=%v，想要 1", item, color[3])
+		}
+		if _, ok := seen[color]; ok {
+			t.Fatalf("剑物品 %d 颜色与其他剑重复 %v", item, color)
+		}
+		seen[color] = struct{}{}
+		if _, ok := itemDropColor(item); !ok {
+			t.Fatalf("剑物品 %d 掉落不可见", item)
+		}
+	}
+	pairs := [][2]core.ItemID{
+		{core.ItemWoodenSword, core.ItemBrokenWoodenSword},
+		{core.ItemStoneSword, core.ItemBrokenStoneSword},
+		{core.ItemIronSword, core.ItemBrokenIronSword},
+	}
+	for _, pair := range pairs {
+		if ItemColor(pair[0]) == ItemColor(pair[1]) {
+			t.Fatalf("完好 %d 与损坏 %d 颜色相同", pair[0], pair[1])
+		}
+	}
+}

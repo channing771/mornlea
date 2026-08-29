@@ -645,6 +645,7 @@ func resetCapturePresentation(app SceneApplication) error {
 	app.SetMiningOverlay(hud.MiningOverlay{})
 	app.SetDamageFeedback(application.DamageFeedback{})
 	app.SetDamageStrength(0)
+	app.ResetCombatFeedback()
 	app.Furnace().Reset()
 	app.Chest().Reset()
 	app.Crafting().Reset()

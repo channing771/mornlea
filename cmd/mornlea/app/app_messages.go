@@ -45,6 +45,7 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			}
 			if state.Reset {
 				a.audioFeedback.Reset()
+				a.combatFeedback.Reset()
 			} else {
 				// 浸没标志在权威位置上对只读镜像就地求值，与预测共用
 				// `physics.SubmersionFlags` 唯一实现；缺块按干燥（宁可漏响不假响）。
@@ -86,6 +87,12 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			if result.ResetView {
 				a.camera.Yaw = result.Yaw
 				a.camera.Pitch = result.Pitch
+			}
+			continue
+		}
+		if hit, ok := message.(network.CombatHit); ok {
+			if a.combatFeedback.Observe(hit.ServerTick) {
+				a.playLocalCue(audio.CueCombatHit)
 			}
 			continue
 		}

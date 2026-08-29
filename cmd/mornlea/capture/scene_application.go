@@ -76,6 +76,9 @@ type SceneApplication interface {
 	SetChatLines(lines [6]string)
 	SetChatLineCount(count int)
 	SetFormattedChatEventID(id uint64)
+	ArmCombatMarker()
+	ResetCombatFeedback()
+	CombatMarkerVisible() bool
 
 	// UI 相位与菜单覆盖。
 	SetInventoryOpen(open bool)

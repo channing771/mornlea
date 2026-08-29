@@ -39,12 +39,12 @@ func TestHotbarPrepareReusesLayoutAndUploadStorage(t *testing.T) {
 	// 饥饿取奇数值：预热路径必须走到半格分支，否则「零每帧分配」对它只是空转。
 	hunger := HungerOverlay{Confirmed: true, Value: 13}
 	budget := render.NewUploadBudget(1024)
-	if err := renderer.Prepare(inventory, true, true, 3, nil, nil, nil, MiningOverlay{}, EatingOverlay{}, health, oxygen, hunger, ChatOverlay{}, 1280, 720, budget); err != nil {
+	if err := renderer.Prepare(inventory, true, true, 3, nil, nil, nil, MiningOverlay{}, EatingOverlay{}, health, oxygen, hunger, ChatOverlay{}, false, 1280, 720, budget); err != nil {
 		t.Fatalf("warm Prepare: %v", err)
 	}
 	allocations := testing.AllocsPerRun(1000, func() {
 		source.requestCount = 0
-		if err := renderer.Prepare(inventory, true, true, 3, nil, nil, nil, MiningOverlay{}, EatingOverlay{}, health, oxygen, hunger, ChatOverlay{}, 1280, 720, budget); err != nil {
+		if err := renderer.Prepare(inventory, true, true, 3, nil, nil, nil, MiningOverlay{}, EatingOverlay{}, health, oxygen, hunger, ChatOverlay{}, false, 1280, 720, budget); err != nil {
 			panic(err)
 		}
 	})
@@ -67,7 +67,7 @@ func TestHotbarPrepareClosedMiningEncodesLayeredFeedback(t *testing.T) {
 	if err := renderer.Prepare(
 		core.Inventory{}, true, false, -1, nil, nil, nil,
 		MiningOverlay{Active: true, ProgressTicks: 6, RequiredTicks: 15}, EatingOverlay{},
-		HealthOverlay{}, OxygenOverlay{}, HungerOverlay{}, ChatOverlay{}, 1280, 800, render.NewUploadBudget(1024),
+		HealthOverlay{}, OxygenOverlay{}, HungerOverlay{}, ChatOverlay{}, false, 1280, 800, render.NewUploadBudget(1024),
 	); err != nil {
 		t.Fatalf("关闭态 Prepare: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestResponsiveHotbarPrepareKeepsEveryInstanceInFramebuffer(t *testing.T) {
 				HealthOverlay{Confirmed: true, Value: 7},
 				OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1},
 				HungerOverlay{Confirmed: true, Value: core.MaxHunger},
-				ChatOverlay{}, size[0], size[1], render.NewUploadBudget(1024)); err != nil {
+				ChatOverlay{}, false, size[0], size[1], render.NewUploadBudget(1024)); err != nil {
 				t.Fatalf("framebuffer %v open=%v Prepare: %v", size, open, err)
 			}
 			for index, quad := range renderer.layout.quads {
@@ -152,7 +152,7 @@ func TestResponsiveHotbarPrepareKeepsEveryInstanceInFramebuffer(t *testing.T) {
 		renderer := newTestHotbarRenderer()
 		if err := renderer.Prepare(maxQuadTestInventory(), true, true, 5, nil, nil, fullChestOverlay(), MiningOverlay{}, EatingOverlay{},
 			HealthOverlay{Confirmed: true, Value: 7}, OxygenOverlay{Confirmed: true, Value: 1},
-			HungerOverlay{}, ChatOverlay{}, size[0], size[1], render.NewUploadBudget(1024)); err != nil {
+			HungerOverlay{}, ChatOverlay{}, false, size[0], size[1], render.NewUploadBudget(1024)); err != nil {
 			t.Fatalf("framebuffer %v Prepare: %v", size, err)
 		}
 		if len(renderer.layout.quads) != 0 || len(renderer.layout.glyphs) != 0 {
@@ -186,7 +186,7 @@ func TestHotbarMaximumBranchesAndEncodingContract(t *testing.T) {
 		MiningOverlay{Active: true, ProgressTicks: 6, RequiredTicks: 15}, EatingOverlay{},
 		HealthOverlay{Confirmed: true, Value: core.MaxHealth},
 		OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1},
-		HungerOverlay{Confirmed: true, Value: core.MaxHunger}, chat,
+		HungerOverlay{Confirmed: true, Value: core.MaxHunger}, chat, false,
 		1280, 800, render.NewUploadBudget(1024)); err != nil {
 		t.Fatalf("关闭最大分支 Prepare: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestHotbarMaximumBranchesAndEncodingContract(t *testing.T) {
 	if err := renderer.Prepare(maxQuadTestInventory(), true, true, 5, nil, nil, fullChestOverlay(), MiningOverlay{}, EatingOverlay{},
 		HealthOverlay{Confirmed: true, Value: core.MaxHealth},
 		OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1},
-		HungerOverlay{Confirmed: true, Value: core.MaxHunger}, chat,
+		HungerOverlay{Confirmed: true, Value: core.MaxHunger}, chat, false,
 		1280, 800, render.NewUploadBudget(1024)); err != nil {
 		t.Fatalf("打开最大分支 Prepare: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestHotbarMaximumBranchesAndEncodingContract(t *testing.T) {
 	if err := renderer.Prepare(maxQuadTestInventory(), true, true, 5, fullCraftingOverlay(), nil, nil, MiningOverlay{}, EatingOverlay{},
 		HealthOverlay{Confirmed: true, Value: core.MaxHealth},
 		OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1},
-		HungerOverlay{Confirmed: true, Value: core.MaxHunger}, chat,
+		HungerOverlay{Confirmed: true, Value: core.MaxHunger}, chat, false,
 		1280, 800, render.NewUploadBudget(1024)); err != nil {
 		t.Fatalf("打开合成最大分支 Prepare: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestHotbarMaximumBranchesAndEncodingContract(t *testing.T) {
 
 	if err := renderer.Prepare(fullTestInventory(), true, true, 5, nil, nil, fullChestOverlay(), MiningOverlay{}, EatingOverlay{},
 		HealthOverlay{Confirmed: true, Value: core.MaxHealth}, OxygenOverlay{Confirmed: true, Value: 0},
-		HungerOverlay{Confirmed: true, Value: core.MaxHunger}, chat,
+		HungerOverlay{Confirmed: true, Value: core.MaxHunger}, chat, false,
 		1280, 800, render.NewUploadBudget(1024)); err != nil {
 		t.Fatalf("glyph 最大分支 Prepare: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestHotbarMaximumBranchesAndEncodingContract(t *testing.T) {
 	}
 
 	if err := renderer.Prepare(core.Inventory{}, true, false, -1, nil, nil, nil, MiningOverlay{}, EatingOverlay{},
-		HealthOverlay{}, OxygenOverlay{}, HungerOverlay{}, ChatOverlay{}, 1280, 800, render.NewUploadBudget(1024)); err != nil {
+		HealthOverlay{}, OxygenOverlay{}, HungerOverlay{}, ChatOverlay{}, false, 1280, 800, render.NewUploadBudget(1024)); err != nil {
 		t.Fatalf("最小前缀 Prepare: %v", err)
 	}
 	_, quads, glyphs = renderer.FrameStreams()

@@ -25,15 +25,15 @@
 
 - 场景清单是表驱动的 `captureScenes`，新增场景即新增一行；全部场景按表序
   共用同一个 application，前一场景留下的呈现状态由后续场景的 `Prepare`/
-  `Apply` 负责清场。
-- 场景顺序以 `captureScenes` 及其顺序测试为准，固定上传容量以布局代码和容量
+  `Apply` 负责清场；`resetCapturePresentation` 负责清 `combatFeedback` 与相关呈现，避免污染后续场景。
+- 场景顺序与 24 项正式清单以 `captureScenes` 及其顺序测试为准，固定上传容量以布局代码和容量
   测试为准；不要在指南复制会漂移的清单或数字。
 
 ## 消费端接口 (`capture/scene_application.go`)
 
 - `SceneApplication` 是 capture 对宿主应用状态的唯一访问面：场景表的
   `Prepare`/`Apply`/`PinVolatile` 闭包与抓帧管线只经接口方法读写，不感知
-  `app.Application` 具体类型（`*Application` 隐式实现）。
+  `app.Application` 具体类型（`*Application` 隐式实现）；战斗场景仅通过 `ArmCombatMarker`、`ResetCombatFeedback`、`CombatMarkerVisible` 三个最小消费方法与 `Application` 的 `combatFeedback` 交互。
 - 方法集以 capture 的实际引用为准：不为对称性添加无人消费的方法，也不把
   app 内部字段经接口扩散。`Panel`/`ChatInput` 的返回类型经 app 导出别名
   `PanelState`/`ChatInput` 表达，具体结构体保持非导出。

@@ -19,7 +19,7 @@ cmd/mornlea/app/
 ├── interactive.go             # RunInteractive：菜单/游戏两相位交互循环
 ├── app_menu.go、app_pause.go、app_settings.go、debug_panel.go  # UI 状态域
 ├── chat.go、app_messages.go   # 聊天输入与服务端消息呈现
-├── target_block.go、damage_feedback.go、app_metrics.go、app_audio.go、app_lod.go
+├── target_block.go、damage_feedback.go、combat_feedback.go、app_metrics.go、app_audio.go、app_lod.go
 ├── app_load.go                # WaitUntilLoaded 函数族与 LoadingApplication 接口
 ├── multiplayer_benchmark_scenario.go、multiplayer_render_timing.go  # 多人 benchmark 共享状态
 ├── accessors.go               # 面向兄弟子包的最小访问面
@@ -83,6 +83,11 @@ cmd/mornlea/app/
 - 本包测试私有、但被多个测试文件引用的替身与消息收发/镜像夹具住这里；跨包
   共用的装配入口不落这里（归 `testkit.go`）。每包最多一个 helper 中心，规则
   见 `docs/test-organization.md`。
+
+## 战斗反馈 (`app/combat_feedback.go`)
+
+- `combatFeedback` 独立于 `audioFeedback` 与 `serverTick`，仅由严格递增的 `network.CombatHit` 驱动，`Observe` 严格递增、`ArmMarker` 重置 6 帧、`AfterRender(rendered)` 仅在 `rendered==true` 时递减、`Reset` 清零；`Application` 直接持有该值，不复用 animation manager。
+- 仅导出 capture 最小消费面 `ArmCombatMarker`、`ResetCombatFeedback`、`CombatMarkerVisible`；`DrainServerMessages` 在 `PlayerState` 分支后消费 `CombatHit` 且仅在 `Observe` 成功时播放 `CueCombatHit`；`PlayerState.Reset` 清 `audioFeedback` 与 `combatFeedback`，`resetSessionOwnedState` 清 `combatFeedback` 并在非 nil 时 `hostiles.Reset()`，`resetCapturePresentation` 清 `combatFeedback`，不新增重复生命周期调用。
 
 ## 平台与验证
 
