@@ -65,3 +65,14 @@
 
 
 - Pending.
+
+## Task 2.2 Realm Environmental Simulation
+
+- Implementer: fresh implementer `ses_fb68d6c28ffeS4gGaAsHWAR3Wv` (initial `ses_fb6a6fa9fffeaGtKBNPvpKmYuu` paused for drop-ownership ruling without commit and was replaced by this fresh implementer completing `e6252dc3`).
+- Ruling: option 2 — `realm` owns environmental detection, candidate budgets, rescans and all block mutations via the single caller-provided `*realm.Mutation`; drop settlement stays in `entity`, kept only as a minimal transitional `world.Chunk.PrepareDrop` bridge. No parallel block-write path is introduced. Cost if wrong: trample/bed/torch drop boundaries would be mis-owned and require re-migration.
+- Commits: `e6252dc3` and repair `bdabd368`.
+- Validation: `go test ./internal/sim/realm ./internal/fluid -race -count=1`, `go test ./internal/sim -count=1`, `go test ./internal/archcheck -count=1`, `go vet ./...`, `git diff --check` clean; benchmarks record-only `BenchmarkCropAdvanceFullInterest*` and `BenchmarkFluidPerf` preserved.
+- Spec review: reviewer `ses_fb669f3ebffePHSk9uDbztGX6T` conditional pass — environmental scope, single mutation, budgets/rescans/sampling/ordering and `realm` dependency boundary are met, but noted transitional dual-writes and `BedSupportCandidates` dead logic.
+- Quality review: reviewer `ses_fb669f37effeaMUa6uzbfr33VG` requires changes — Critical ghost-write ordering in `advanceCropCell` plus Important dead trample, door-asymmetry, BedSupportCandidates, fluidScope sharing and TDD RED gaps.
+- Repair: scoped re-review `ses_fb660443dffeHcEwe9by2NXYxg` approved all 1 Critical and 4 Important fixes: `advanceCropCell` now checks `SetBlock` before `Record`, dead trample removed, BedSupportCandidates fixed, torch/bed door semantics documented as collision vs opaque, `fluidScope` copied not shared.
+- Deferred minor: `torch/bed` opaque checks still treat `IsTorch`/`IsBed` as solid support (inherited from prior `sim/door.go`), to be aligned with `BlockOpaque` in a follow-up.
