@@ -80,7 +80,7 @@ Go 发送 palette/bitpack 存储而不是 4096 格的展开数组。Rust 在 upd
 
 client ABI 从 v11 升级到 v12。新增批量入口的语义为 “apply render updates”，所有现有 C header、Rust FFI、Go binding、动态库身份检查和跨语言版本测试必须同步更新。engine ABI 保持 v8；网络协议、存档 schema 和 benchmark scenario v20 不变。
 
-更新数据使用独立于网络协议的版本化小端 envelope “MRC1”。它只表达已经由 Go 校验过的渲染状态，包含 world epoch 和下列记录：
+更新数据使用独立于网络协议的版本化小端 envelope “MRW1”。它只表达已经由 Go 校验过的渲染状态，包含 world epoch 和下列记录：
 
 1. section upsert：dimension、section position、单调 revision、palette/bitpack 存储；
 2. column metadata upsert：height map 与其 revision；
@@ -144,7 +144,7 @@ extern “C” 边界必须捕获 panic，禁止 unwind 越过 ABI。所有长�
 ### 1. rust-render-world-cache
 
 - 建立 mornlea_voxel_kernel 并让 mornlea_engine 保持 ABI v8 行为；
-- 建立 client ABI v12、MRC1 编解码、RenderWorld、epoch/revision/tombstone 状态机；
+- 建立 client ABI v12、MRW1 编解码、RenderWorld、epoch/revision/tombstone 状态机；
 - 用单元、FFI、fuzz 与 test-only driver 验证 cache 输入和重建；
 - 不切换用户可见的 mesh 或 draw 路径。
 
@@ -192,7 +192,7 @@ extern “C” 边界必须捕获 panic，禁止 unwind 越过 ABI。所有长�
 - GPU 资源失败不能显示旧 revision：宁可暂时隐藏 section，也不显示已知过时 geometry；
 - ABI 升级容易出现混装：v12 身份检查、C header/Rust/Go 同步测试和 make rust 纪律共同约束；
 - 共享 kernel 重构可能影响既有 engine 行为：engine ABI v8 的现有输出保留为 oracle，并在首个 change 中锁定；
-- Rust 直接解析网络包会侵蚀语言边界：MRC1 只接受 Go 已验证的语义化存储，不复用网络 wire format。
+- Rust 直接解析网络包会侵蚀语言边界：MRW1 只接受 Go 已验证的语义化存储，不复用网络 wire format。
 
 ## 被否决的方案
 
