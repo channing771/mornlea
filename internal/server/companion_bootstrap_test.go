@@ -12,6 +12,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/server/persistence"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -224,7 +225,7 @@ func TestCompanionShutdownFlushFailureIsRetryable(t *testing.T) {
 	t.Cleanup(companions.Close)
 	workerDone := make(chan struct{})
 	go func() {
-		companions.waitGroup.Wait()
+		companions.WaitGroup().Wait()
 		close(workerDone)
 	}()
 	latest := companionBootstrapBody(id, 9.5)
@@ -426,31 +427,28 @@ func assertNoCompanionBootstrapSave(t *testing.T, store *companionBootstrapStore
 	}
 }
 
-func waitForCompanionBootstrapCompletion(t *testing.T, persistence *companionPersistence) {
+func waitForCompanionBootstrapCompletion(t *testing.T, persistence *persistence.Companions) {
 	t.Helper()
 	deadline := time.Now().Add(shortWaitDeadline)
-	for len(persistence.completions) == 0 && time.Now().Before(deadline) {
+	for !persistence.HasPendingCompletion() && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
-	if len(persistence.completions) == 0 {
+	if !persistence.HasPendingCompletion() {
 		t.Fatal("伙伴保存 completion 未返回")
 	}
 }
 
 func assertCompanionBootstrapPersistenceOpen(
 	t *testing.T,
-	persistence *companionPersistence,
+	persistence *persistence.Companions,
 	workerDone <-chan struct{},
 ) {
 	t.Helper()
-	persistence.mu.Lock()
-	closed := persistence.closed
-	persistence.mu.Unlock()
-	if closed {
+	if persistence.IsClosed() {
 		t.Fatal("失败 Shutdown 关闭了伙伴 persistence")
 	}
 	select {
-	case <-persistence.ctx.Done():
+	case <-persistence.Context().Done():
 		t.Fatal("失败 Shutdown 取消了伙伴 worker context")
 	default:
 	}
@@ -463,18 +461,15 @@ func assertCompanionBootstrapPersistenceOpen(
 
 func assertCompanionBootstrapPersistenceClosed(
 	t *testing.T,
-	persistence *companionPersistence,
+	persistence *persistence.Companions,
 	workerDone <-chan struct{},
 ) {
 	t.Helper()
-	persistence.mu.Lock()
-	closed := persistence.closed
-	persistence.mu.Unlock()
-	if !closed {
+	if !persistence.IsClosed() {
 		t.Fatal("成功 Shutdown 未关闭伙伴 persistence")
 	}
 	select {
-	case <-persistence.ctx.Done():
+	case <-persistence.Context().Done():
 	default:
 		t.Fatal("成功 Shutdown 未取消伙伴 worker context")
 	}
@@ -486,9 +481,7 @@ func assertCompanionBootstrapPersistenceClosed(
 }
 
 func companionBootstrapRecords(host *Host) ([]companion.Body, uint64) {
-	host.world.companions.mu.Lock()
-	defer host.world.companions.mu.Unlock()
-	return slices.Clone(host.world.companions.records), host.world.companions.persisted
+	return host.world.companions.RecordsAndRevision()
 }
 
 func waitForCompanionBootstrapChannel[T any](t *testing.T, channel <-chan T) {

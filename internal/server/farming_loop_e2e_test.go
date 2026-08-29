@@ -12,6 +12,8 @@ import (
 	"github.com/channing771/mornlea/internal/storage"
 )
 
+const farmingStarterSeedSlot = 14
+
 // 端到端脚本用到的固定坐标。玩家在 flatGenerator 的平坦世界里出生在 (0,0) 这
 // 一列的地面上（草在 y=0，其上全是空气），因此脚下那格就是 farmingSurface。
 //
@@ -179,9 +181,9 @@ func TestFarmingLoopEndToEndMemory(t *testing.T) {
 	)
 	start := authoritativeInventory()
 	wantSeeds := core.ItemStack{Item: core.ItemWheatSeeds, Count: core.MaxStackCount}
-	if got := start.Backpack[starterSeedSlot]; got != wantSeeds {
+	if got := start.Backpack[farmingStarterSeedSlot]; got != wantSeeds {
 		t.Fatalf("登录后材料包第 %d 格 = %+v，想要 %+v",
-			starterSeedSlot+1, got, wantSeeds)
+			farmingStarterSeedSlot+1, got, wantSeeds)
 	}
 	// 「没有锄头」必须扫全部 36 格：只看快捷栏的话，一个把锄头塞进背包的
 	// 材料包照样能让这一步绿，而那种材料包会让后面的合成步骤失去意义。
@@ -329,7 +331,7 @@ func TestFarmingLoopEndToEndMemory(t *testing.T) {
 	// 种子必须先搬进快捷栏：PlaceBlock 只接受 0..8 的快捷栏栏位。
 	sequence++
 	send(network.MoveInventoryStack{
-		Sequence: sequence, From: uint8(core.HotbarSlots + starterSeedSlot), To: 1,
+		Sequence: sequence, From: uint8(core.HotbarSlots + farmingStarterSeedSlot), To: 1,
 	})
 	settle()
 	if got := authoritativeInventory().Hotbar.Slots[1]; got != wantSeeds {
