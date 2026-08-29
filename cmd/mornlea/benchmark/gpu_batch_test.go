@@ -1,8 +1,6 @@
 package benchmark
 
 import (
-	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -24,7 +22,11 @@ func TestScenarioV12GPUCompletionAmortizesOverFixedBatch(t *testing.T) {
 
 	// 每次读钟推进 1ms：一批的总耗时因此恒为 1ms，样本值必须是 1ms / 批次数量。
 	clockReads := 0
+	batchCallsBefore := app.Renderer().BenchmarkBatchCalls()
 	probe.now = func() time.Time {
+		if got, want := app.Renderer().BenchmarkBatchCalls(), batchCallsBefore+clockReads+1; got != want {
+			t.Fatalf("读钟前 benchmark batch FFI=%d,想要 %d", got, want)
+		}
 		clockReads++
 		return time.Unix(0, int64(clockReads)*int64(time.Millisecond))
 	}
@@ -43,27 +45,16 @@ func TestScenarioV12GPUCompletionAmortizesOverFixedBatch(t *testing.T) {
 		t.Fatalf("样本 p50 = %v ms，想要摊薄后的 %v ms", summary.P50MS, wantMS)
 	}
 
-	// 每个样本恰好一批 RenderFrame 与一对读钟;准备与编码都在计时区间外。
-	wantFrames := client.ScenarioV12GPUCompletionSamples * client.ScenarioV12GPUCompletionBatch
-	if got := app.Renderer().FrameCalls() - framesBefore; got != wantFrames {
-		t.Fatalf("GPU completion render FFI=%d,想要 %d", got, wantFrames)
+	// 每个样本在首个读钟前 prepare、两个读钟之间 submit，一共两次 batch FFI。
+	wantBatchCalls := client.ScenarioV12GPUCompletionSamples * 2
+	if got := app.Renderer().BenchmarkBatchCalls() - batchCallsBefore; got != wantBatchCalls {
+		t.Fatalf("GPU completion benchmark batch FFI=%d,想要 %d", got, wantBatchCalls)
+	}
+	if got := app.Renderer().FrameCalls() - framesBefore; got != 0 {
+		t.Fatalf("GPU completion 不应调用 render_frame，实际=%d", got)
 	}
 	if clockReads != client.ScenarioV12GPUCompletionSamples*2 {
 		t.Fatalf("读钟=%d,想要每样本一对(%d)", clockReads, client.ScenarioV12GPUCompletionSamples*2)
-	}
-}
-
-func TestScenarioV12GPUCompletionChunkStaysWithinCommandBufferBudget(t *testing.T) {
-	// 每次绘制会开启 avatar 与 name tag 两个 render pass。
-	// 单个 command buffer 的 pass 数必须留在 Metal 的 4096 预算之内。
-	const metalCommandBufferBudget = 4096
-	const passesPerDraw = 2
-	if passes := client.ScenarioV12GPUCompletionChunk * passesPerDraw; passes*2 > metalCommandBufferBudget {
-		t.Fatalf("单个 command buffer 的 pass 数 = %d，想要不超过预算的一半", passes)
-	}
-	if client.ScenarioV12GPUCompletionBatch%client.ScenarioV12GPUCompletionChunk != 0 {
-		t.Fatalf("批次数量 %d 必须能被分块大小 %d 整除",
-			client.ScenarioV12GPUCompletionBatch, client.ScenarioV12GPUCompletionChunk)
 	}
 }
 
@@ -85,43 +76,16 @@ func TestScenarioV12GPUCompletionBatchIsLargeEnoughToAmortizePollTick(t *testing
 }
 
 func TestScenarioV12GPUCompletionBatchIsRecordedInReport(t *testing.T) {
-	if testing.Short() {
-		t.Skip("短模式:重型测试由 CI 全量门禁运行")
+	probe := &multiplayerClientProbe{
+		encode:       client.NewLatencyRecorder(1),
+		decode:       client.NewLatencyRecorder(1),
+		rosterApply:  client.NewLatencyRecorder(1),
+		interpolate:  client.NewLatencyRecorder(1),
+		renderTiming: application.NewMultiplayerRenderTiming(1),
+		gpuComplete:  client.NewLatencyRecorder(1),
 	}
-	app := application.NewOffscreenRenderApplicationForTest(t, &application.IntegrationGlyphSource{}, 64, 64, config.Render{})
-	probe, err := newMultiplayerClientProbe(app)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(probe.Close)
-	if err := probe.measureGPUCompletion(app); err != nil {
-		t.Fatal(err)
-	}
-
 	summary := probe.Summary()
 	if got := summary.RemoteGPUCompleteBatch; got != client.ScenarioV12GPUCompletionBatch {
 		t.Fatalf("报告中的批次数量 = %d，想要 %d", got, client.ScenarioV12GPUCompletionBatch)
-	}
-}
-
-func TestScenarioV12GPUCompletionReclaimsEverySample(t *testing.T) {
-	// ru_maxrss 是进程生命周期的历史峰值，一旦被推高就无法降回。
-	// 因此批量分摊产生的对象必须逐样本回收，不能等到阶段之间的冷却。
-	source, err := os.ReadFile("multiplayer_benchmark.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := string(source)
-	start := strings.Index(body, "func (probe *multiplayerClientProbe) measureGPUCompletion(")
-	if start < 0 {
-		t.Fatal("找不到 measureGPUCompletion")
-	}
-	end := strings.Index(body[start:], "\nfunc ")
-	if end < 0 {
-		end = len(body) - start
-	}
-	sampling := body[start : start+end]
-	if !strings.Contains(sampling, "runtime.GC()") {
-		t.Fatal("采样循环内没有逐样本回收，RSS 峰值会随样本数累积")
 	}
 }

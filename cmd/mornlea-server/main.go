@@ -168,10 +168,13 @@ func run(ctx context.Context, args []string, injected dependencies) error {
 	config.MaxPlayers = options.MaxPlayers
 	host, err := dependencies.newHost(ctx, config, worldgen.New(metadata.Seed, effective.FluidEnabled), store)
 	if err != nil {
+		closeErr := errors.Join(listener.Close(), store.Close())
+		if ctx.Err() != nil && errors.Is(err, context.Canceled) {
+			return closeErr
+		}
 		return errors.Join(
 			fmt.Errorf("创建服务端 Host: %w", err),
-			listener.Close(),
-			store.Close(),
+			closeErr,
 		)
 	}
 	dependencies.logger.Info("mornlea-server 已启动", "listen", listener.Addr(), "world", options.World, "protocol", network.ProtocolVersion)
