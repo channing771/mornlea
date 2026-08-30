@@ -25,6 +25,9 @@
 # GitNexus 本机索引
 /.gitnexus/
 
+# ZCode 本机会话产物（计划文件等运行态）
+/.zcode/
+
 # 本机 Claude Code 权限配置（可能包含宽泛的 shell 授权）
 /.claude/settings.local.json
 
