@@ -20,6 +20,9 @@ const STORAGE_SINGLE: u8 = 0;
 const STORAGE_INDEXED: u8 = 1;
 const STORAGE_DIRECT: u8 = 2;
 
+#[cfg(test)]
+type IndexedPayloadArcs<'a> = (&'a Arc<[u16]>, &'a Arc<[u64]>);
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct SectionKey {
     dimension: i32,
@@ -67,11 +70,11 @@ pub(super) enum SectionData {
     Single(u16),
     Indexed {
         bits: u8,
-        palette: Box<[u16]>,
-        packed_words: Box<[u64]>,
+        palette: Arc<[u16]>,
+        packed_words: Arc<[u64]>,
     },
     Direct {
-        packed_words: Box<[u64]>,
+        packed_words: Arc<[u64]>,
     },
 }
 
@@ -259,6 +262,29 @@ impl RenderWorld {
                 state: SectionState::Live(data),
                 ..
             }) => Some(data),
+            _ => None,
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn indexed_payload_arcs_for_test(
+        &self,
+        key: SectionKey,
+    ) -> Option<IndexedPayloadArcs<'_>> {
+        match self.section_for_test(key) {
+            Some(SectionData::Indexed {
+                palette,
+                packed_words,
+                ..
+            }) => Some((palette, packed_words)),
+            _ => None,
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn direct_payload_arc_for_test(&self, key: SectionKey) -> Option<&Arc<[u64]>> {
+        match self.section_for_test(key) {
+            Some(SectionData::Direct { packed_words }) => Some(packed_words),
             _ => None,
         }
     }
@@ -464,8 +490,8 @@ fn parse_section(
             }
             Ok(SectionData::Indexed {
                 bits,
-                palette: palette.into_boxed_slice(),
-                packed_words: packed_words.into_boxed_slice(),
+                palette: Arc::from(palette.into_boxed_slice()),
+                packed_words: Arc::from(packed_words.into_boxed_slice()),
             })
         }
         STORAGE_DIRECT => {
@@ -481,7 +507,7 @@ fn parse_section(
                 return Err(RenderWorldError::Invalid);
             }
             Ok(SectionData::Direct {
-                packed_words: packed_words.into_boxed_slice(),
+                packed_words: Arc::from(packed_words.into_boxed_slice()),
             })
         }
         _ => Err(RenderWorldError::Invalid),

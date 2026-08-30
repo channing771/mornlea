@@ -474,6 +474,65 @@ fn staged_snapshot_shares_immutable_column_payload() {
 }
 
 #[test]
+fn staged_snapshot_shares_and_isolates_immutable_section_payloads() {
+    let mut initial_direct = direct(1, 0x1234);
+    initial_direct.x = 2;
+    let direct_key = SectionKey::new(0, 2, 2, 3);
+    let world = world_from_reset(&[indexed(1, 4, &[11, 22], 1), initial_direct]);
+    let (live_palette, live_indexed_words) = world.indexed_payload_arcs_for_test(KEY).unwrap();
+    let live_direct_words = world.direct_payload_arc_for_test(direct_key).unwrap();
+    assert_eq!(Arc::strong_count(live_palette), 1);
+    assert_eq!(Arc::strong_count(live_indexed_words), 1);
+    assert_eq!(Arc::strong_count(live_direct_words), 1);
+
+    let mut staged = world.snapshot_for_test();
+    {
+        let (staged_palette, staged_indexed_words) =
+            staged.indexed_payload_arcs_for_test(KEY).unwrap();
+        let staged_direct_words = staged.direct_payload_arc_for_test(direct_key).unwrap();
+        assert!(Arc::ptr_eq(live_palette, staged_palette));
+        assert!(Arc::ptr_eq(live_indexed_words, staged_indexed_words));
+        assert!(Arc::ptr_eq(live_direct_words, staged_direct_words));
+    }
+    assert_eq!(Arc::strong_count(live_palette), 2);
+    assert_eq!(Arc::strong_count(live_indexed_words), 2);
+    assert_eq!(Arc::strong_count(live_direct_words), 2);
+
+    let mut replacement_direct = direct(2, 0x4321);
+    replacement_direct.x = 2;
+    staged
+        .apply_update_batch(&batch(
+            1,
+            &[indexed(2, 4, &[33, 44], 0), replacement_direct],
+        ))
+        .unwrap();
+
+    assert_eq!(Arc::strong_count(live_palette), 1);
+    assert_eq!(Arc::strong_count(live_indexed_words), 1);
+    assert_eq!(Arc::strong_count(live_direct_words), 1);
+    assert_eq!(live_palette.as_ref(), &[11, 22]);
+    assert!(
+        live_indexed_words
+            .iter()
+            .all(|word| *word == 0x1111_1111_1111_1111)
+    );
+    let original_direct_word =
+        0x1234u64 | (0x1234u64 << 15) | (0x1234u64 << 30) | (0x1234u64 << 45);
+    assert!(
+        live_direct_words
+            .iter()
+            .all(|word| *word == original_direct_word)
+    );
+
+    let (replacement_palette, replacement_indexed_words) =
+        staged.indexed_payload_arcs_for_test(KEY).unwrap();
+    let replacement_direct_words = staged.direct_payload_arc_for_test(direct_key).unwrap();
+    assert!(!Arc::ptr_eq(live_palette, replacement_palette));
+    assert!(!Arc::ptr_eq(live_indexed_words, replacement_indexed_words));
+    assert!(!Arc::ptr_eq(live_direct_words, replacement_direct_words));
+}
+
+#[test]
 fn rejects_wrong_column_payload_length_and_metadata() {
     let mut world = seeded_world();
     let mut storage = Record::column(1, vec![0; 512]);
