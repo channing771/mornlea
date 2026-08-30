@@ -463,11 +463,15 @@ body {
 
 /* 调试参数行行内编辑框：PixelInput 包装层在 26px 行高内承载 retroui 像素
  * 描边框——内部输入框高度按行高减去上下框宽推导，行布局（flex 撑满、
- * 溢出裁切）与焦点路由语义零改动；焦点环见 .pixel-input 公共层。 */
+ * 溢出裁切）与焦点路由语义零改动；焦点环见 .pixel-input 公共层。字号钉回
+ * 面板令牌：retroui 包装层硬编码 16px 会经 `font: inherit` 穿透到内部
+ * 输入框，既偏离改造前 .debug-panel 的字号，也放大 16px 高输入框的竖向
+ * 裁切风险。 */
 .debug-edit-input {
   flex: 1;
   min-width: 0;
   margin: 0;
+  font-size: var(--font-message);
 }
 
 .debug-edit-input input {
