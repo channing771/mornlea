@@ -8,7 +8,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/server"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -31,7 +31,7 @@ func newMemoryAttachedWorldWithHotbar(
 		}
 		return running
 	}
-	restore := sim.PlayerRestore{
+	restore := contract.PlayerRestore{
 		SpawnDimension: config.SpawnDimension,
 		SpawnAnchor:    config.SpawnAnchor,
 		Inventory:      core.Inventory{Hotbar: hotbar},
@@ -49,7 +49,7 @@ func stockedTestHotbar(item core.ItemID) core.Hotbar {
 	return hotbar
 }
 
-func playerStateForExternalTest(running *server.Server) (sim.PlayerUpdate, bool) {
+func playerStateForExternalTest(running *server.Server) (contract.PlayerUpdate, bool) {
 	return running.PlayerStateFor(1)
 }
 
@@ -61,7 +61,7 @@ func newAttachedPersistentWorldForExternalTest(config server.Config, endpoint ne
 		}
 		return running
 	}
-	restore := sim.PlayerRestore{
+	restore := contract.PlayerRestore{
 		SpawnDimension: config.SpawnDimension,
 		SpawnAnchor:    config.SpawnAnchor,
 		Inventory:      core.Inventory{Hotbar: persistentTestHotbar},
@@ -76,10 +76,10 @@ func newAttachedPersistentWorldForExternalTest(config server.Config, endpoint ne
 var persistentTestHotbar = stockedTestHotbar(core.ItemStone)
 
 func externalSessionSpec(
-	id sim.SessionID,
+	id contract.SessionID,
 	generation uint64,
 	endpoint network.ServerEndpoint,
-	restore sim.PlayerRestore,
+	restore contract.PlayerRestore,
 ) server.SessionSpec {
 	return server.SessionSpec{
 		ID:          id,

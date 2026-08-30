@@ -4,19 +4,19 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 func TestDropPublicationKeepsDurabilityAndDetectsDurabilityOnlyChange(t *testing.T) {
 	id := core.DropID{Dimension: core.Overworld, Slot: 1, Generation: 1}
-	current := sim.DropSnapshot{
+	current := contract.DropSnapshot{
 		ID: id, BlockIndex: 7, Item: core.ItemStonePickaxe, Count: 1, Durability: 72,
 	}
-	published := map[core.DropID]sim.DropSnapshot{
+	published := map[core.DropID]contract.DropSnapshot{
 		id: {ID: id, BlockIndex: 7, Item: core.ItemStonePickaxe, Count: 1, Durability: 73},
 	}
 
-	upserts := appendChangedDropUpserts(nil, []sim.DropSnapshot{current}, published)
+	upserts := appendChangedDropUpserts(nil, []contract.DropSnapshot{current}, published)
 	if len(upserts) != 1 || upserts[0].Durability != current.Durability {
 		t.Fatalf("耐久-only 差分 = %+v，想要耐久 %d 的 upsert", upserts, current.Durability)
 	}

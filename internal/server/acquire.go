@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -50,9 +50,9 @@ func (server *Server) chunkWorker() {
 	}
 }
 
-func (server *Server) runAcquisition(key core.ChunkKey) sim.AcquiredChunk {
+func (server *Server) runAcquisition(key core.ChunkKey) contract.AcquiredChunk {
 	stored, err := server.store.LoadChunk(server.ctx, key)
-	result := sim.AcquiredChunk{Key: key}
+	result := contract.AcquiredChunk{Key: key}
 	switch {
 	case err == nil:
 		result.Chunk = stored.Chunk

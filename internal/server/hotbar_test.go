@@ -10,7 +10,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/server"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -65,7 +65,7 @@ func TestHotbarStateStaysWithOwningSession(t *testing.T) {
 	running := newMemoryAttachedWorldForExternalTest(
 		hotbarTestConfig(2), firstServer, server.FlatTestGenerator{},
 	)
-	if _, err := running.AttachSession(externalSessionSpec(2, 1, secondServer, sim.PlayerRestore{
+	if _, err := running.AttachSession(externalSessionSpec(2, 1, secondServer, contract.PlayerRestore{
 		SpawnDimension: core.Overworld,
 	})); err != nil {
 		t.Fatalf("附加第二个会话: %v", err)
@@ -197,7 +197,7 @@ func TestFullHotbarStillBreaksBlockIntoGroundDrop(t *testing.T) {
 	for slot := range full.Slots {
 		full.Slots[slot] = core.ItemStack{Item: core.ItemStone, Count: core.MaxStackCount}
 	}
-	if _, err := running.AttachSession(externalSessionSpec(1, 1, serverEndpoint, sim.PlayerRestore{
+	if _, err := running.AttachSession(externalSessionSpec(1, 1, serverEndpoint, contract.PlayerRestore{
 		SpawnDimension: core.Overworld,
 		Inventory:      core.Inventory{Hotbar: full},
 	})); err != nil {

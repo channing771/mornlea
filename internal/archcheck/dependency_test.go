@@ -29,74 +29,47 @@ import (
 // 也不预先登记未使用的边）；fluid MUST NOT 反向依赖 sim/network/render/storage，
 // 否则它会退化成 sim 的内部实现，丧失独立测试的意义。
 var allowed = map[string][]string{
-	"internal/archcheck": {},
-	"internal/audio":     {},
-	"internal/companion": {"internal/core", "internal/pathfind"},
-	"internal/core":      {"internal/nativeabi"},
-	"internal/nativeabi": {},
-	"internal/config":    {"internal/companion", "internal/core", "internal/physics", "internal/sim", "internal/logging"},
-	"internal/fluid":     {"internal/core"},
-	"internal/physics":   {"internal/core", "internal/nativeabi"},
-	"internal/pathfind":  {"internal/core"},
-	"internal/logging":   {},
-	// internal/network 拆分后根包保留会话与传输编排，协议消息层
-	// （packet/message DTO/registry/snapshot）落位 protocol 子包，编解码层
-	// （wire 原语、packet 编解码、快照信封、帧封装）落位 codec 子包；根包
-	// internal/companion 边随 message_companion.go 移交 protocol 后一并移交，
-	// 根包经 types.go 别名再导出保持消费面不变。codec 的 wire 常量经
-	// protocol 取值，不得直接依赖 internal/companion。
+	"internal/archcheck":        {},
+	"internal/audio":            {},
+	"internal/companion":        {"internal/core", "internal/pathfind"},
+	"internal/core":             {"internal/nativeabi"},
+	"internal/nativeabi":        {},
+	"internal/config":           {"internal/companion", "internal/core", "internal/physics", "internal/sim/tuning", "internal/logging"},
+	"internal/fluid":            {"internal/core"},
+	"internal/physics":          {"internal/core", "internal/nativeabi"},
+	"internal/pathfind":         {"internal/core"},
+	"internal/logging":          {},
 	"internal/network":          {"internal/core", "internal/network/codec", "internal/network/protocol"},
 	"internal/network/codec":    {"internal/core", "internal/network/protocol"},
 	"internal/network/protocol": {"internal/companion", "internal/core"},
 	"internal/network/tcp":      {"internal/network"},
 	"internal/profile":          {"internal/core"},
-	"internal/sim":              {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/world"},
+	"internal/sim/contract":     {"internal/companion", "internal/core", "internal/physics", "internal/world"},
+	"internal/sim/entity":       {"internal/companion", "internal/core", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/realm", "internal/sim/tuning"},
+	"internal/sim/realm":        {"internal/core", "internal/fluid", "internal/world"},
+	"internal/sim/runtime":      {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "internal/sim/tuning"},
+	"internal/sim/tuning":       {"internal/core"},
 	"internal/storage": {
 		"internal/core",
 		"internal/storage/chunk", "internal/storage/companion", "internal/storage/hostile",
 		"internal/storage/player", "internal/storage/region",
 		"internal/storage/storagedef", "internal/world",
 	},
-	// internal/storage/chunk 是 chunk 记录层容器与信封编解码域：region 格式
-	// 原语与哨兵经 storagedef/region 取，值类型直接依赖 world，不得反向依赖
-	// 根包或其他实体域子包。
-	"internal/storage/chunk": {"internal/core", "internal/storage/region", "internal/storage/storagedef", "internal/world"},
-	// internal/storage/player 是 player 存档域的纯 codec 包（MCPL 信封编解码
-	// 与 schema 迁移链）：只依赖 core 值类型与 storagedef 哨兵，不感知 chunk/
-	// region 记录层与根包编排（player 文件的原子替换与路径编排在根包），依赖
-	// 更宽即意味着 codec 越界感知存储布局。
-	"internal/storage/player": {"internal/core", "internal/storage/storagedef"},
-	// internal/storage/companion 是 companion 存档域的纯 codec 包（companions.ai
-	// 信封编解码、任务区/FIFO/摘要载荷校验）：依赖 internal/companion 领域模型
-	// 与 core 值类型并经 storagedef 取哨兵；不感知根包编排（companions.ai 文件
-	// 的原子替换与路径编排在根包），依赖更宽即意味着 codec 越界感知存储布局。
-	"internal/storage/companion": {"internal/companion", "internal/core", "internal/storage/storagedef"},
-	// internal/storage/hostile 是 hostile（夜行者）存档域的纯 codec 包
-	// （hostile_mobs.bin 信封编解码与记录字段校验）：夜行者身体类型自包含
-	// 定义（权威侧身体类型属于 internal/sim，存储不得依赖 sim），只依赖 core
-	// 值类型并经 storagedef 取哨兵，不感知根包编排。
-	"internal/storage/hostile": {"internal/core", "internal/storage/storagedef"},
-	// internal/storage/region 是 region 格式原语叶子（superblock/bank 编解码、
-	// 扇区空间分配、RegionKey/RegionFor）：只允许 core 与 storagedef，
-	// 不得感知 chunk 记录层容器，否则记录层容器随 chunk 域落位、region 只收
-	// 格式原语的拆分前提失守。
-	"internal/storage/region": {"internal/core", "internal/storage/storagedef"},
-	// internal/storage/storagedef 是世界存储的哨兵错误叶子（ErrCorrupt/
-	// ErrFutureVersion 的公共下沉）：region 与四个实体域子包都经它取哨兵，
-	// 自身不得依赖任何 internal 包，否则叶子就失去了斩断 root↔子包循环的作用。
+	"internal/storage/chunk":      {"internal/core", "internal/storage/region", "internal/storage/storagedef", "internal/world"},
+	"internal/storage/player":     {"internal/core", "internal/storage/storagedef"},
+	"internal/storage/companion":  {"internal/companion", "internal/core", "internal/storage/storagedef"},
+	"internal/storage/hostile":    {"internal/core", "internal/storage/storagedef"},
+	"internal/storage/region":     {"internal/core", "internal/storage/storagedef"},
 	"internal/storage/storagedef": {},
 	"internal/world":              {"internal/core"},
 	"internal/worldgen":           {"internal/core", "internal/world", "internal/nativeabi"},
 	"internal/mesh":               {"internal/core", "internal/world", "internal/nativeabi"},
-	// internal/lod 只做远环壳的请求编码、quad 解码与编排(依赖方向镜像
-	// worldgen/mesh:core 提供 ChunkPos 等领域类型,nativeabi 是唯一 engine
-	// ABI 入口);按 design 裁决不得依赖 render/sim/network。
 	"internal/lod":                {"internal/core", "internal/nativeabi"},
 	"internal/assets":             {"internal/core", "internal/world", "internal/mesh", "internal/worldgen"},
 	"internal/render":             {"internal/core", "internal/world", "internal/mesh", "internal/assets"},
 	"internal/render/hud":         {"internal/core", "internal/mesh", "internal/assets", "internal/render"},
-	"internal/server":             {"internal/companion", "internal/core", "internal/network", "internal/pathfind", "internal/physics", "internal/world", "internal/worldgen", "internal/sim", "internal/storage", "internal/server/persistence"},
-	"internal/server/persistence": {"internal/companion", "internal/core", "internal/physics", "internal/sim", "internal/storage"},
+	"internal/server":             {"internal/companion", "internal/core", "internal/network", "internal/pathfind", "internal/physics", "internal/world", "internal/worldgen", "internal/sim/contract", "internal/sim/runtime", "internal/sim/tuning", "internal/storage", "internal/server/persistence"},
+	"internal/server/persistence": {"internal/companion", "internal/core", "internal/physics", "internal/sim/contract", "internal/sim/runtime", "internal/storage"},
 	"internal/client":             {"internal/companion", "internal/core", "internal/physics", "internal/network", "internal/world", "internal/mesh", "internal/assets", "internal/render"},
 }
 
@@ -387,6 +360,241 @@ func TestClientCommandDependencyViolationsDetectDrift(t *testing.T) {
 		edges := contractEdges()
 		edges["cmd/mornlea/widgets"] = []string{"cmd/mornlea/app"}
 		violations := clientCommandDependencyViolations(edges)
+		if len(violations) != 1 || !strings.Contains(violations[0], "未登记依赖白名单") {
+			t.Fatalf("未登记子包未被拒绝: %v", violations)
+		}
+	})
+}
+
+// simAllowedEdges 列出权威模拟子树 `internal/sim` 五个子包允许的内部依赖
+// 边（本地 import path）。依赖方向契约为：`contract`/`tuning` 为叶子，
+// `realm` 只依赖环境，`entity` 可依赖 `contract`/`tuning`/`realm`，
+// `runtime` 是唯一允许同时编排其余四者的权威入口；任何反向边都会让
+// 事务边界或快照所有权重新耦合，`go test` 的单包定点与事务收敛同时失效。
+// 该表与全局 `allowed` 中对应五项保持一致，重复列出是为了让子树检查器
+// 可在不依赖全局表的情况下独立校验方向与合成反向边。
+var simAllowedEdges = map[string][]string{
+	"internal/sim/contract": {"internal/companion", "internal/core", "internal/physics", "internal/world"},
+	"internal/sim/tuning":   {"internal/core"},
+	"internal/sim/realm":    {"internal/core", "internal/fluid", "internal/world"},
+	"internal/sim/entity":   {"internal/companion", "internal/core", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/realm", "internal/sim/tuning"},
+	"internal/sim/runtime":  {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "internal/sim/tuning"},
+}
+
+// simRequiredEdges 是模拟子树必须真实存在的编排边：`runtime` 必须同时
+// 装配四个下层子包，否则权威 tick 的阶段编排会悄悄绕过某层状态的所有权
+// 边界，单 mutation 提交路径不再覆盖全部写入。
+var simRequiredEdges = map[string][]string{
+	"internal/sim/runtime": {"internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "internal/sim/tuning"},
+}
+
+// TestSimAllowedEdgesMatchesGlobalAllowed 校验模拟子树的局部白名单
+// 与全局 `allowed` 的对应项完全一致，防止双真相表静默漂移。
+func TestSimAllowedEdgesMatchesGlobalAllowed(t *testing.T) {
+	for pkg, simAllowed := range simAllowedEdges {
+		globalAllowed, ok := allowed[pkg]
+		if !ok {
+			t.Fatalf("模拟子树包 %s 未在全局 allowed 中登记", pkg)
+		}
+		sortedSim := slices.Clone(simAllowed)
+		slices.Sort(sortedSim)
+		sortedGlobal := slices.Clone(globalAllowed)
+		slices.Sort(sortedGlobal)
+		if !slices.Equal(sortedSim, sortedGlobal) {
+			t.Errorf("模拟子树包 %s 的局部白名单与全局 allowed 不一致：局部 %v，全局 %v", pkg, sortedSim, sortedGlobal)
+		}
+	}
+	for pkg := range allowed {
+		if isSimPackage(pkg) {
+			if _, ok := simAllowedEdges[pkg]; !ok {
+				t.Errorf("全局 allowed 中的模拟子树包 %s 未在 simAllowedEdges 中登记", pkg)
+			}
+		}
+	}
+}
+
+// isSimPackage 报告本地 import path 是否落在权威模拟子树内。
+func isSimPackage(localPath string) bool {
+	return localPath == "internal/sim" || strings.HasPrefix(localPath, "internal/sim/")
+}
+
+// simDependencyViolations 对照模拟子树的允许边表与必需边表检查给定的
+// 包依赖边，返回全部违规描述；空切片表示符合契约。输入是「本地包路径 →
+// 生产 import 的本地路径有序列表」，与真实目录解耦，使「注入反向边」
+// 的失败路径可以在纯内存中核对，不必改动源码树。
+func simDependencyViolations(edges map[string][]string) []string {
+	var violations []string
+	for pkg, packageImports := range edges {
+		allowed, registered := simAllowedEdges[pkg]
+		if !registered {
+			if isSimPackage(pkg) {
+				violations = append(violations, fmt.Sprintf("模拟子树新增包 %s 未登记依赖白名单", pkg))
+			}
+			continue
+		}
+		allowSet := make(map[string]bool, len(allowed))
+		for _, dependency := range allowed {
+			allowSet[dependency] = true
+		}
+		for _, dependency := range packageImports {
+			if allowSet[dependency] {
+				continue
+			}
+			violations = append(violations, fmt.Sprintf(
+				"模拟子包 %s 不允许依赖 %s：方向必须是 contract/tuning 互不依赖且不依赖 realm/entity/runtime、realm 不依赖 contract/tuning/entity/runtime、entity 不依赖 runtime、runtime 编排其余四者",
+				pkg, dependency))
+		}
+	}
+	// 逐包核对必需边；包整体被删除时由「必需边找不到宿主」统一暴露。
+	for pkg, required := range simRequiredEdges {
+		importSet := make(map[string]bool, len(edges[pkg]))
+		for _, dependency := range edges[pkg] {
+			importSet[dependency] = true
+		}
+		for _, dependency := range required {
+			if !importSet[dependency] {
+				violations = append(violations, fmt.Sprintf("模拟子包 %s 缺少必需依赖边 → %s", pkg, dependency))
+			}
+		}
+	}
+	slices.Sort(violations)
+	return violations
+}
+
+// simImportEdges 扫描 `internal/sim` 子树内全部含生产 Go 源文件的目录，
+// 返回「本地包路径 → 去重排序后的本地生产 import 列表」。子树内出现
+// 未登记的新包目录时由检查器的白名单核对报错，新增子包不可能静默绕过。
+func simImportEdges(t *testing.T) map[string][]string {
+	t.Helper()
+	root := moduleRoot(t)
+	subtree := filepath.Join(root, "internal", "sim")
+	edges := make(map[string][]string)
+	err := filepath.WalkDir(subtree, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if !entry.IsDir() {
+			return nil
+		}
+		entries, err := os.ReadDir(path)
+		if err != nil {
+			return err
+		}
+		imports := make(map[string]bool)
+		for _, file := range entries {
+			name := file.Name()
+			if file.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+				continue
+			}
+			parsed, err := parser.ParseFile(token.NewFileSet(), filepath.Join(path, name), nil, parser.ImportsOnly)
+			if err != nil {
+				return err
+			}
+			for _, imported := range parsed.Imports {
+				importPath := strings.Trim(imported.Path.Value, `"`)
+				if local := localName(importPath); local != importPath {
+					imports[local] = true
+				}
+			}
+		}
+		if !hasProductionGoFile(entries) {
+			return nil
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		edges[filepath.ToSlash(relative)] = slices.Sorted(maps.Keys(imports))
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("扫描 %s: %v", subtree, err)
+	}
+	return edges
+}
+
+// TestSimSubpackageDependencyDirections 把真实源码树的模拟子树包依赖边
+// 喂给 `simDependencyViolations`，钉住权威模拟的依赖方向契约。
+//
+// 边的来源是逐文件解析生产 .go（parser.ImportsOnly 模式，跳过 `_test.go`），
+// 与 `TestClientCommandSubpackageDependencyDirections` 同理保持平台无关。
+// 测试文件不计入——子包测试经同包或跨包测试装配复用是合法的，不应污染
+// 生产依赖方向；全局 `TestInternalDependenciesAreOneWay` 另以 `go list`
+// 覆盖全仓内部包的完整白名单，本测试聚焦模拟子树内部的方向与必需边。
+func TestSimSubpackageDependencyDirections(t *testing.T) {
+	edges := simImportEdges(t)
+	if violations := simDependencyViolations(edges); len(violations) > 0 {
+		t.Errorf("模拟子树依赖方向违反契约，%d 条违规：\n%s", len(violations), strings.Join(violations, "\n"))
+	}
+}
+
+// TestSimDependencyViolationsDetectDrift 用合成边核对检查器对每类漂移
+// 都真的报错。真实源码树处于契约内时，方向断言的负向路径没有天然的
+// 失败信号；必须另有合成断言钉住检查器本身，否则检查逻辑被改坏后门禁
+// 静默变松。
+func TestSimDependencyViolationsDetectDrift(t *testing.T) {
+	contractEdges := func() map[string][]string {
+		return map[string][]string{
+			"internal/sim/contract": {"internal/core", "internal/world", "internal/companion", "internal/physics"},
+			"internal/sim/tuning":   {"internal/core"},
+			"internal/sim/realm":    {"internal/core", "internal/fluid", "internal/world"},
+			"internal/sim/entity":   {"internal/companion", "internal/core", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/realm", "internal/sim/tuning"},
+			"internal/sim/runtime":  {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "internal/sim/tuning"},
+		}
+	}
+	if violations := simDependencyViolations(contractEdges()); len(violations) != 0 {
+		t.Fatalf("契约内的合成边不应报违规: %v", violations)
+	}
+
+	for _, edge := range []struct {
+		name string
+		from string
+		to   string
+	}{
+		{"contract反向依赖tuning", "internal/sim/contract", "internal/sim/tuning"},
+		{"contract反向依赖realm", "internal/sim/contract", "internal/sim/realm"},
+		{"contract反向依赖entity", "internal/sim/contract", "internal/sim/entity"},
+		{"contract反向依赖runtime", "internal/sim/contract", "internal/sim/runtime"},
+		{"tuning反向依赖contract", "internal/sim/tuning", "internal/sim/contract"},
+		{"tuning反向依赖realm", "internal/sim/tuning", "internal/sim/realm"},
+		{"tuning反向依赖entity", "internal/sim/tuning", "internal/sim/entity"},
+		{"tuning反向依赖runtime", "internal/sim/tuning", "internal/sim/runtime"},
+		{"realm反向依赖contract", "internal/sim/realm", "internal/sim/contract"},
+		{"realm反向依赖tuning", "internal/sim/realm", "internal/sim/tuning"},
+		{"realm反向依赖entity", "internal/sim/realm", "internal/sim/entity"},
+		{"realm反向依赖runtime", "internal/sim/realm", "internal/sim/runtime"},
+		{"entity反向依赖runtime", "internal/sim/entity", "internal/sim/runtime"},
+	} {
+		t.Run(edge.name, func(t *testing.T) {
+			edges := contractEdges()
+			edges[edge.from] = append(edges[edge.from], edge.to)
+			violations := simDependencyViolations(edges)
+			if len(violations) != 1 || !strings.Contains(violations[0], edge.from+" 不允许依赖 "+edge.to) {
+				t.Fatalf("注入禁止边 %s → %s 未被拒绝: %v", edge.from, edge.to, violations)
+			}
+		})
+	}
+
+	t.Run("必需边缺失", func(t *testing.T) {
+		edges := contractEdges()
+		edges["internal/sim/runtime"] = []string{"internal/sim/contract", "internal/sim/realm", "internal/sim/tuning"}
+		violations := simDependencyViolations(edges)
+		found := false
+		for _, violation := range violations {
+			if strings.Contains(violation, "缺少必需依赖边") && strings.Contains(violation, "internal/sim/entity") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("runtime 卸掉 entity 装配应报缺失: %v", violations)
+		}
+	})
+
+	t.Run("未登记新包", func(t *testing.T) {
+		edges := contractEdges()
+		edges["internal/sim/extra"] = []string{"internal/core"}
+		violations := simDependencyViolations(edges)
 		if len(violations) != 1 || !strings.Contains(violations[0], "未登记依赖白名单") {
 			t.Fatalf("未登记子包未被拒绝: %v", violations)
 		}

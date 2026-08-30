@@ -13,7 +13,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	networktcp "github.com/channing771/mornlea/internal/network/tcp"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -146,7 +146,7 @@ func runEightPlayersSurviveDiskRestart(t *testing.T) {
 	}
 	waitRestartSequences(t, clients, []uint64{3, 2, 2, 2, 2, 2, 2, 2})
 
-	expectedSnapshots := make(map[core.PlayerID]sim.PlayerSnapshot, multiplayerClientCount)
+	expectedSnapshots := make(map[core.PlayerID]contract.PlayerSnapshot, multiplayerClientCount)
 	currentPositions := make(map[mgl32.Vec3]core.PlayerID, multiplayerClientCount)
 	safePositions := make(map[mgl32.Vec3]core.PlayerID, multiplayerClientCount)
 	for index, identity := range identities {
@@ -233,7 +233,7 @@ func runEightPlayersSurviveDiskRestart(t *testing.T) {
 	order := []int{5, 2, 7, 0, 6, 1, 4, 3}
 	reconnected = connectRestartClients(t, second.addr, identities, order)
 	waitRestartClientsReady(t, reconnected)
-	seenSessions := make(map[sim.SessionID]struct{}, multiplayerClientCount)
+	seenSessions := make(map[contract.SessionID]struct{}, multiplayerClientCount)
 	for index, identity := range identities {
 		active := activeLoginForPlayer(t, second.host, identity.PlayerID)
 		if active.Session == 0 {
@@ -387,14 +387,14 @@ func waitRestartSequences(t *testing.T, clients []*multiplayerTCPClient, sequenc
 	}
 }
 
-func assertStoredMatchesSnapshot(t *testing.T, stored storage.StoredPlayer, snapshot sim.PlayerSnapshot) {
+func assertStoredMatchesSnapshot(t *testing.T, stored storage.StoredPlayer, snapshot contract.PlayerSnapshot) {
 	t.Helper()
 	if !storedMatchesSnapshot(stored, snapshot) {
 		t.Fatalf("stored player fields=%+v, want snapshot=%+v", stored, snapshot)
 	}
 }
 
-func storedMatchesSnapshot(stored storage.StoredPlayer, snapshot sim.PlayerSnapshot) bool {
+func storedMatchesSnapshot(stored storage.StoredPlayer, snapshot contract.PlayerSnapshot) bool {
 	return stored.Current.Dimension == snapshot.Current.Dimension && stored.Current.Position == [3]float32(snapshot.Current.Position) &&
 		stored.Yaw == snapshot.Yaw && stored.Pitch == snapshot.Pitch && stored.Safe != nil && snapshot.Safe != nil &&
 		stored.Safe.Dimension == snapshot.Safe.Dimension && stored.Safe.Position == [3]float32(snapshot.Safe.Position)
@@ -415,7 +415,7 @@ func waitRestartSnapshotsPersisted(
 	t *testing.T,
 	store *storage.DiskStore,
 	identities []network.Identity,
-	snapshots map[core.PlayerID]sim.PlayerSnapshot,
+	snapshots map[core.PlayerID]contract.PlayerSnapshot,
 ) map[core.PlayerID]storage.StoredPlayer {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), longWaitDeadline)

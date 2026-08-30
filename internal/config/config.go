@@ -26,7 +26,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/logging"
 	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
 // CurrentVersion 是本程序认识的配置文件版本。
@@ -128,7 +128,7 @@ type Config struct {
 	Version int              `json:"version"`
 	Logging logging.Config   `json:"logging"`
 	Physics physics.Tunables `json:"physics"`
-	Sim     sim.Tunables     `json:"sim"`
+	Sim     tuning.Tunables  `json:"sim"`
 	Render  Render           `json:"render"`
 	AI      *AI              `json:"ai,omitempty"`
 	// TexturePackPath 是配置文件原文，供保存时无损往返。
@@ -209,7 +209,7 @@ func Defaults() Config {
 			Modules: map[string]slog.Level{},
 		},
 		Physics: physics.DefaultTunables(),
-		Sim:     sim.DefaultTunables(),
+		Sim:     tuning.DefaultTunables(),
 		Render: Render{
 			ViewDistance:     32,
 			FovDegrees:       70,
@@ -1268,7 +1268,7 @@ func writeAtomicWithFileOps(path string, body []byte, ops atomicFileOps) (
 // render 组不在这里处理：它是纯数据，由 cmd/mornlea 自行消费。
 func (c Config) Apply() {
 	physics.SetTunables(c.Physics)
-	sim.SetTunables(c.Sim)
+	tuning.SetTunables(c.Sim)
 }
 
 // Field 描述一个可调项在调试面板中的区间与步长；同一份定义也用于 Load 时的

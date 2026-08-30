@@ -7,25 +7,25 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 type visiblePlayer struct {
-	Session    sim.SessionID
+	Session    contract.SessionID
 	Generation uint64
 }
 
 type visibleCandidate struct {
 	PlayerID    core.PlayerID
 	DisplayName string
-	Session     sim.SessionID
+	Session     contract.SessionID
 	Generation  uint64
-	Update      sim.PlayerUpdate
+	Update      contract.PlayerUpdate
 }
 
 func (server *Server) publishRemoteDespawns(
 	current *session,
-	players map[sim.SessionID]sim.PlayerUpdate,
+	players map[contract.SessionID]contract.PlayerUpdate,
 ) bool {
 	candidates := server.visibleCandidates(current, players)
 	ids := make([]core.PlayerID, 0, len(current.visiblePlayers))
@@ -52,7 +52,7 @@ func (server *Server) publishRemoteDespawns(
 func (server *Server) publishRemoteSpawnsAndStates(
 	current *session,
 	tick uint64,
-	players map[sim.SessionID]sim.PlayerUpdate,
+	players map[contract.SessionID]contract.PlayerUpdate,
 ) bool {
 	candidates := server.visibleCandidates(current, players)
 	ids := make([]core.PlayerID, 0, len(candidates))
@@ -118,7 +118,7 @@ func (server *Server) publishRemoteSpawnsAndStates(
 
 func (server *Server) visibleCandidates(
 	current *session,
-	players map[sim.SessionID]sim.PlayerUpdate,
+	players map[contract.SessionID]contract.PlayerUpdate,
 ) map[core.PlayerID]visibleCandidate {
 	observer, ok := players[current.id]
 	if !ok || !observer.Ready {

@@ -8,7 +8,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -28,7 +28,7 @@ type pendingLoginStream struct {
 type activeLogin struct {
 	PlayerID   core.PlayerID
 	Name       string
-	Session    sim.SessionID
+	Session    contract.SessionID
 	Generation uint64
 }
 
@@ -82,7 +82,7 @@ func (h *Host) reserveLogin(playerID core.PlayerID) (*activeLogin, error) {
 	return entry, nil
 }
 
-func (h *Host) promoteLogin(entry *activeLogin, session sim.SessionID, generation uint64) error {
+func (h *Host) promoteLogin(entry *activeLogin, session contract.SessionID, generation uint64) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if entry == nil || h.activeByPlayer[entry.PlayerID] != entry {
@@ -207,7 +207,7 @@ func (h *Host) acceptStream(
 	}
 
 	h.mu.Lock()
-	if h.nextSession == ^sim.SessionID(0) || h.nextGeneration == ^uint64(0) {
+	if h.nextSession == ^contract.SessionID(0) || h.nextGeneration == ^uint64(0) {
 		h.mu.Unlock()
 		_ = pending.Reject(ctx, network.LoginInternalError, "服务端会话编号已耗尽")
 		return errHostSessionIDExhausted
@@ -269,7 +269,7 @@ func (h *Host) bindPendingCancel(streamID uint64, cancel context.CancelFunc) {
 
 func (h *Host) promotePendingLogin(
 	entry *activeLogin,
-	session sim.SessionID,
+	session contract.SessionID,
 	generation uint64,
 	streamID uint64,
 ) error {

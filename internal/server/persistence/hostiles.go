@@ -10,7 +10,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -72,10 +72,10 @@ func NewHostiles(
 
 // Restore 返回启动加载的权威夜行者值快照的深拷贝，调用方持有后可用于
 // 管理器恢复接线。返回按 ID 严格升序。
-func (p *Hostiles) Restore() []sim.HostileMob {
+func (p *Hostiles) Restore() []contract.HostileMob {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	mobs := make([]sim.HostileMob, 0, len(p.records))
+	mobs := make([]contract.HostileMob, 0, len(p.records))
 	for _, record := range p.records {
 		mobs = append(mobs, hostileRestoreRecord(record))
 	}
@@ -86,7 +86,7 @@ func (p *Hostiles) Restore() []sim.HostileMob {
 // 标记存档 dirty。输入来自持有 stepMu 的 tick 路径（`Engine.HostileMobs`
 // 的排序值快照），本方法冻结深拷贝，调用方后续的任何变化都不影响已冻结
 // 的快照。容量守卫与权威侧 `maxHostiles` 同源，越界是不可达的防御路径。
-func (p *Hostiles) Observe(active []sim.HostileMob) {
+func (p *Hostiles) Observe(active []contract.HostileMob) {
 	if len(active) > storage.MaxHostileMobs {
 		panic("server: hostile persistence exceeds stored record limit")
 	}
@@ -346,7 +346,7 @@ func cloneAndSortHostileRecords(records []storage.StoredHostileMob) []storage.St
 
 // hostileStorageRecord 把权威夜行者值快照转换为存档记录：字段面一一对应，
 // 路径与 worker generation 等运行时派生物不在权威值内，天然不落盘。
-func hostileStorageRecord(mob sim.HostileMob) storage.StoredHostileMob {
+func hostileStorageRecord(mob contract.HostileMob) storage.StoredHostileMob {
 	return storage.StoredHostileMob{
 		ID:              mob.ID,
 		Dimension:       mob.Dimension,
@@ -367,8 +367,8 @@ func hostileStorageRecord(mob sim.HostileMob) storage.StoredHostileMob {
 
 // hostileRestoreRecord 把存档记录恢复为权威值快照：与 hostileStorageRecord
 // 互为逆变换，供启动恢复接线使用。
-func hostileRestoreRecord(record storage.StoredHostileMob) sim.HostileMob {
-	return sim.HostileMob{
+func hostileRestoreRecord(record storage.StoredHostileMob) contract.HostileMob {
+	return contract.HostileMob{
 		ID:        record.ID,
 		Dimension: record.Dimension,
 		State: physics.State{

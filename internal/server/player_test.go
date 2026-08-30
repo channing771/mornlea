@@ -11,7 +11,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -132,7 +132,7 @@ func TestTrustedObserverAppliedCenterWaitsForStepWithPreloadedTarget(t *testing.
 	}
 	submitServerAcquiredMisses(running, requested.Acquire)
 	running.engine.Step()
-	running.engine.SubmitGenerated(sim.GeneratedChunk{
+	running.engine.SubmitGenerated(contract.GeneratedChunk{
 		Dimension: core.Overworld,
 		Pos:       target,
 		Chunk:     generator.chunk(target),
@@ -169,15 +169,15 @@ func TestTranslatePlayerMessage(t *testing.T) {
 	tests := []struct {
 		name    string
 		message network.ClientMessage
-		want    sim.Command
+		want    contract.Command
 	}{
 		{
 			name:    "drop selected item carries only the sequence",
 			message: network.DropSelectedItem{Sequence: 17},
-			want: sim.Command{
+			want: contract.Command{
 				Session:  testSessionID,
 				Sequence: 17,
-				Kind:     sim.CommandDropSelectedItem,
+				Kind:     contract.CommandDropSelectedItem,
 			},
 		},
 		{
@@ -191,10 +191,10 @@ func TestTranslatePlayerMessage(t *testing.T) {
 				Pitch:    -0.25,
 				Mining:   true,
 			},
-			want: sim.Command{
+			want: contract.Command{
 				Session:  testSessionID,
 				Sequence: 11,
-				Kind:     sim.CommandPlayerInput,
+				Kind:     contract.CommandPlayerInput,
 				MoveX:    -1,
 				MoveZ:    1,
 				Jump:     true,
@@ -211,10 +211,10 @@ func TestTranslatePlayerMessage(t *testing.T) {
 				Pitch:    -0.75,
 				Slot:     4,
 			},
-			want: sim.Command{
+			want: contract.Command{
 				Session:  testSessionID,
 				Sequence: 13,
-				Kind:     sim.CommandPlaceBlock,
+				Kind:     contract.CommandPlaceBlock,
 				Yaw:      1.5,
 				Pitch:    -0.75,
 				Slot:     4,
@@ -223,10 +223,10 @@ func TestTranslatePlayerMessage(t *testing.T) {
 		{
 			name:    "move crafting stack carries only the view slots",
 			message: network.MoveCraftingStack{Sequence: 16, From: 9, To: 0},
-			want: sim.Command{
+			want: contract.Command{
 				Session:  testSessionID,
 				Sequence: 16,
-				Kind:     sim.CommandMoveCraftingStack,
+				Kind:     contract.CommandMoveCraftingStack,
 				Slot:     9,
 				ToSlot:   0,
 			},
@@ -234,10 +234,10 @@ func TestTranslatePlayerMessage(t *testing.T) {
 		{
 			name:    "move inventory stack carries only the slots",
 			message: network.MoveInventoryStack{Sequence: 15, From: 2, To: 30},
-			want: sim.Command{
+			want: contract.Command{
 				Session:  testSessionID,
 				Sequence: 15,
-				Kind:     sim.CommandMoveInventoryStack,
+				Kind:     contract.CommandMoveInventoryStack,
 				Slot:     2,
 				ToSlot:   30,
 			},
@@ -245,10 +245,10 @@ func TestTranslatePlayerMessage(t *testing.T) {
 		{
 			name:    "select hotbar carries only the slot",
 			message: network.SelectHotbar{Sequence: 14, Slot: 7},
-			want: sim.Command{
+			want: contract.Command{
 				Session:  testSessionID,
 				Sequence: 14,
-				Kind:     sim.CommandSelectHotbar,
+				Kind:     contract.CommandSelectHotbar,
 				Slot:     7,
 			},
 		},
@@ -261,10 +261,10 @@ func TestTranslatePlayerMessage(t *testing.T) {
 				Yaw:      2.25,
 				Pitch:    -0.4,
 			},
-			want: sim.Command{
+			want: contract.Command{
 				Session:  testSessionID,
 				Sequence: 20,
-				Kind:     sim.CommandOpenFurnace,
+				Kind:     contract.CommandOpenFurnace,
 				Yaw:      2.25,
 				Pitch:    -0.4,
 			},
@@ -279,10 +279,10 @@ func TestTranslatePlayerMessage(t *testing.T) {
 				},
 				From: 2, To: 40,
 			},
-			want: sim.Command{
+			want: contract.Command{
 				Session:  testSessionID,
 				Sequence: 21,
-				Kind:     sim.CommandMoveFurnaceStack,
+				Kind:     contract.CommandMoveFurnaceStack,
 				Furnace: core.ContainerRef{
 					Dimension: core.Overworld, Chunk: core.ChunkPos{X: 3, Z: -2},
 					Kind: core.ContainerKindChest, Slot: 5, Generation: 9,
@@ -294,10 +294,10 @@ func TestTranslatePlayerMessage(t *testing.T) {
 		{
 			name:    "close container carries only the sequence",
 			message: network.CloseContainer{Sequence: 22},
-			want: sim.Command{
+			want: contract.Command{
 				Session:  testSessionID,
 				Sequence: 22,
-				Kind:     sim.CommandCloseFurnace,
+				Kind:     contract.CommandCloseFurnace,
 			},
 		},
 		{
@@ -310,10 +310,10 @@ func TestTranslatePlayerMessage(t *testing.T) {
 				Yaw:      -1.75,
 				Pitch:    0.3,
 			},
-			want: sim.Command{
+			want: contract.Command{
 				Session:  testSessionID,
 				Sequence: 23,
-				Kind:     sim.CommandTillSoil,
+				Kind:     contract.CommandTillSoil,
 				Yaw:      -1.75,
 				Pitch:    0.3,
 			},
@@ -323,10 +323,10 @@ func TestTranslatePlayerMessage(t *testing.T) {
 			// e2e 只能证明「移动生效」，调换两个字段会让网格与背包互换角色。
 			name:    "move crafting stack carries both unified slots",
 			message: network.MoveCraftingStack{Sequence: 24, From: 9, To: 0},
-			want: sim.Command{
+			want: contract.Command{
 				Session:  testSessionID,
 				Sequence: 24,
-				Kind:     sim.CommandMoveCraftingStack,
+				Kind:     contract.CommandMoveCraftingStack,
 				Slot:     9,
 				ToSlot:   0,
 			},
@@ -334,10 +334,10 @@ func TestTranslatePlayerMessage(t *testing.T) {
 		{
 			name:    "take crafting output carries only the sequence",
 			message: network.TakeCraftingOutput{Sequence: 25},
-			want: sim.Command{
+			want: contract.Command{
 				Session:  testSessionID,
 				Sequence: 25,
-				Kind:     sim.CommandTakeCraftingOutput,
+				Kind:     contract.CommandTakeCraftingOutput,
 			},
 		},
 	}
@@ -351,11 +351,11 @@ func TestTranslatePlayerMessage(t *testing.T) {
 	}
 
 	reasons := []struct {
-		sim     sim.RejectReason
+		sim     contract.RejectReason
 		network network.RejectReason
 	}{
-		{sim: sim.RejectInvalidInput, network: network.RejectInvalidInput},
-		{sim: sim.RejectPlayerNotReady, network: network.RejectPlayerNotReady},
+		{sim: contract.RejectInvalidInput, network: network.RejectInvalidInput},
+		{sim: contract.RejectPlayerNotReady, network: network.RejectPlayerNotReady},
 	}
 	for _, reason := range reasons {
 		got, ok := networkRejectReason(reason.sim)
@@ -419,7 +419,7 @@ func TestPlayerStatePublicationOrder(t *testing.T) {
 		t.Fatalf("Generate=%+v", generated.Generate)
 	}
 
-	running.engine.SubmitGenerated(sim.GeneratedChunk{
+	running.engine.SubmitGenerated(contract.GeneratedChunk{
 		Dimension: core.Overworld,
 		Pos:       core.ChunkPos{},
 		Chunk:     generator.chunk(core.ChunkPos{}),
@@ -457,8 +457,8 @@ func TestPlayerStatePublicationOrder(t *testing.T) {
 		t.Fatalf("Ready tick 尾消息 = %#v", readyMessages[3])
 	}
 
-	running.engine.Enqueue(sim.Command{
-		Session: testSessionID, Sequence: 1, Kind: sim.CommandPlayerInput,
+	running.engine.Enqueue(contract.Command{
+		Session: testSessionID, Sequence: 1, Kind: contract.CommandPlayerInput,
 		Yaw: 0, Pitch: -1.5, Mining: true,
 	})
 	for range 4 {
@@ -468,10 +468,10 @@ func TestPlayerStatePublicationOrder(t *testing.T) {
 	}
 	running.incoming <- incomingCommand{
 		Session: testSessionID, Generation: 1,
-		Command: sim.Command{
+		Command: contract.Command{
 			Session:  testSessionID,
 			Sequence: 2,
-			Kind:     sim.CommandSelectHotbar,
+			Kind:     contract.CommandSelectHotbar,
 			Slot:     core.HotbarSlots,
 		},
 	}
@@ -509,12 +509,12 @@ func TestPlayerStatePublicationOrder(t *testing.T) {
 		t.Fatal("本地玩家不存在")
 	}
 	forgetTick := changed.Tick + 1
-	running.publish(sim.TickResult{
+	running.publish(contract.TickResult{
 		Tick: forgetTick,
-		Forget: map[sim.SessionID][]core.ChunkKey{
+		Forget: map[contract.SessionID][]core.ChunkKey{
 			testSessionID: {forgottenKey},
 		},
-		Players: []sim.PlayerUpdate{player},
+		Players: []contract.PlayerUpdate{player},
 	})
 	forgetMessage := recvServerMessage(t, client)
 	forget, ok := forgetMessage.(network.ForgetChunks)

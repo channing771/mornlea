@@ -8,7 +8,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/server"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -232,7 +232,7 @@ func newTwoPlayerChestWorld(t *testing.T) (
 		FormatVersion: 3, Seed: config.Seed,
 		SpawnDimension: config.SpawnDimension, SpawnAnchor: config.SpawnAnchor,
 	}))
-	restore := sim.PlayerRestore{SpawnDimension: config.SpawnDimension, SpawnAnchor: config.SpawnAnchor}
+	restore := contract.PlayerRestore{SpawnDimension: config.SpawnDimension, SpawnAnchor: config.SpawnAnchor}
 	if _, err := running.AttachSession(externalSessionSpec(1, 1, firstServerEndpoint, restore)); err != nil {
 		t.Fatalf("附加第一名玩家: %v", err)
 	}

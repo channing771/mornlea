@@ -7,7 +7,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 // TestPlayerStatePublishesDayPhaseOffset 锁定显示相位偏移的下发链路：sim 在
@@ -23,9 +23,9 @@ func TestPlayerStatePublishesDayPhaseOffset(t *testing.T) {
 	second := h.playerUpdate(2, true, core.Overworld, mgl32.Vec3{0.75, 2, 0.5})
 	second.DayPhaseOffset = 12399
 
-	h.publish(sim.TickResult{Tick: 5, Players: []sim.PlayerUpdate{first, second}})
+	h.publish(contract.TickResult{Tick: 5, Players: []contract.PlayerUpdate{first, second}})
 
-	for _, id := range []sim.SessionID{1, 2} {
+	for _, id := range []contract.SessionID{1, 2} {
 		states := 0
 		for _, message := range h.drain(id) {
 			state, ok := message.(network.PlayerState)

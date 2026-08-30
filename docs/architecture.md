@@ -20,11 +20,11 @@ Mornlea 由 Go 应用与两个 Rust `cdylib` 组成。Go 持有应用装配、�
 
 - `cmd/mornlea` 和 `cmd/mornlea-server` 负责应用入口与资源生命周期装配。
 - `internal/world` 持有区块、section、容器和掉落物等世界数据模型。
-- `internal/sim` 持有权威 tick、规则结算和世界变更编排。
+- `internal/sim` 为仅含指导文档的目录，权威模拟由五个子包承载：`contract`（跨边界 DTO）、`tuning`（Tunables 快照）、`realm`（世界维度与单 tick 事务）、`entity`（玩家/伙伴/夜行者与玩法结算）、`runtime`（Engine 与 Step 编排）；依赖方向与单次提交纪律见 `internal/sim/AGENTS.md` 与 `internal/archcheck`。
 - `internal/network` 持有会话与传输编排（共享 stream 接口、endpoint 门面、登录状态机与 Memory transport）并以别名再导出对协议消息子包 `internal/network/protocol`（packet/message/registry/snapshot 协议层）与编解码子包 `internal/network/codec`（packet↔wire 编解码与帧封装）保持既有 `network.X` 消费面；`internal/network/tcp` 持有 TCP listener、dial、stream 实现，只依赖 `internal/network` 且保持 transport-only。
 - `internal/storage` 持有世界、玩家、伙伴和夜行者数据的编码、迁移、恢复与磁盘生命周期，并以子包 `internal/storage/chunk`、`internal/storage/player`、`internal/storage/companion`、`internal/storage/hostile`、`internal/storage/region` 等细化实现，顶层保持外部消费面。
 - `internal/server` 装配 Host、Server、登录、会话、权威 tick、发布和关服编排；通过 `internal/server/persistence` 委派存档生命周期，自身不持有保存队列、重试状态或 worker，实现只保留 `PersistenceStatus` 与 `ErrPlayerPersistenceBackpressure` 的兼容 re-export。
-- `internal/server/persistence` 单独持有世界区块与 metadata、玩家、伙伴、夜行者四类存档的加载、观察、异步保存、重试、flush/close 与 worker 生命周期；生产代码仅依赖 `internal/companion`、`internal/core`、`internal/physics`、`internal/sim`、`internal/storage`，不得反向导入 `internal/server` 或访问 Host/Server 私有状态，依赖方向以 `internal/archcheck` 为准。
+- `internal/server/persistence` 单独持有世界区块与 metadata、玩家、伙伴、夜行者四类存档的加载、观察、异步保存、重试、flush/close 与 worker 生命周期；生产代码仅依赖 `internal/companion`、`internal/core`、`internal/physics`、`internal/sim/runtime`、`internal/storage`，不得反向导入 `internal/server` 或访问 Host/Server 私有状态，依赖方向以 `internal/archcheck` 为准。
 - `internal/pathfind` 持有不可变快照上的有界寻路且只依赖 `internal/core`；`internal/companion` 与 `internal/server` 消费它，但寻路不拥有玩法或世界访问。
 - `internal/client` 持有客户端镜像、输入预测、消息接收、client ABI bridge 和渲染侧 CPU 编排。
 - `internal/render`、`internal/mesh`、`internal/assets`、`internal/lod` 与 `internal/worldgen` 持有领域数据描述、CPU 编码和 Rust 调用编排，不拥有 GPU 后端或第二套数值生产实现。
@@ -91,7 +91,12 @@ Linux 专服发布单元由 `mornlea-server` 与相邻的 `libmornlea_engine.so`
 │   ├── world/               区块和世界数据模型
 │   ├── worldgen/            worldgen seed→perm 播种、Rust 调用与区块回写
 │   ├── physics/             玩家运动与碰撞
-│   ├── sim/                 权威世界模拟
+│   ├── sim/                 权威模拟指导目录（生产见 contract/tuning/realm/entity/runtime 子包）
+│   │   ├── contract/        跨边界 DTO
+│   │   ├── tuning/          Tunables 快照与校验
+│   │   ├── realm/           世界维度、持久化与环境事务
+│   │   ├── entity/          玩家/伙伴/夜行者与玩法结算
+│   │   └── runtime/         Engine、订阅与 Step 编排
 │   ├── server/              服务端 Host、Server、登录、会话、权威 tick、发布与关服编排
 │   │   └── persistence/     四类存档（世界/玩家/伙伴/夜行者）加载、观察、异步保存、重试、flush 与 worker
 │   ├── network/             二进制协议、登录状态机与 Memory/TCP 传输

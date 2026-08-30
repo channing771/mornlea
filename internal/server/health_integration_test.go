@@ -10,7 +10,7 @@ import (
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 const (
@@ -38,7 +38,7 @@ func runHealthFallDeathAndPickupScript(
 	t *testing.T,
 	running *Server,
 	faller, other integrationClient,
-	fallerSession, otherSession sim.SessionID,
+	fallerSession, otherSession contract.SessionID,
 ) {
 	t.Helper()
 	key := core.ChunkKey{Dimension: core.Overworld}
@@ -127,7 +127,7 @@ func healthScriptGrounded(position mgl32.Vec3) func(network.PlayerState) bool {
 func assertScriptSnapshot(
 	t *testing.T,
 	running *Server,
-	session sim.SessionID,
+	session contract.SessionID,
 	position mgl32.Vec3,
 	inventory core.Inventory,
 ) {
@@ -199,7 +199,7 @@ func TestHealthFallDeathAndPickupOverMemory(t *testing.T) {
 	t.Cleanup(cancel)
 	go func() { _ = running.RunTicks(ctx) }()
 
-	loc := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
+	loc := contract.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
 	var fallerHotbar core.Hotbar
 	fallerHotbar.Slots[0] = healthScriptDrop
 
@@ -235,14 +235,14 @@ func TestHealthFallDeathAndPickupOverTCP(t *testing.T) {
 	root := t.TempDir()
 	fallerIdentity := integrationIdentity(0x95, "Faller")
 	otherIdentity := integrationIdentity(0x96, "Keeper")
-	loc := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
+	loc := contract.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
 	var fallerHotbar core.Hotbar
 	fallerHotbar.Slots[0] = healthScriptDrop
 
-	seedIntegrationPlayer(t, root, fallerIdentity, sim.PlayerSnapshot{
+	seedIntegrationPlayer(t, root, fallerIdentity, contract.PlayerSnapshot{
 		Current: loc, Inventory: core.Inventory{Hotbar: fallerHotbar},
 	})
-	seedIntegrationPlayer(t, root, otherIdentity, sim.PlayerSnapshot{Current: loc})
+	seedIntegrationPlayer(t, root, otherIdentity, contract.PlayerSnapshot{Current: loc})
 
 	host := startDiskHost(t, root, "127.0.0.1:0", changedGenerator{})
 	faller := dialIntegrationClient(t, host.Addr, fallerIdentity)
@@ -266,9 +266,9 @@ func TestHealthFallDeathAndPickupOverTCP(t *testing.T) {
 }
 
 func healthScriptSessionSpec(
-	id sim.SessionID,
+	id contract.SessionID,
 	endpoint network.ServerEndpoint,
-	location sim.PlayerLocation,
+	location contract.PlayerLocation,
 	hotbar core.Hotbar,
 ) SessionSpec {
 	return SessionSpec{
@@ -276,7 +276,7 @@ func healthScriptSessionSpec(
 		PlayerID:    core.PlayerID{0, 0, 0, 0, 0, 0, 0x40, 0, 0x80, 0, 0, 0, 0, 0, 0, byte(id)},
 		DisplayName: fmt.Sprintf("HealthScript-%d", id),
 		Endpoint:    endpoint,
-		Restore: sim.PlayerRestore{
+		Restore: contract.PlayerRestore{
 			Current: &location, Safe: &location, SpawnDimension: location.Dimension,
 			Inventory: core.Inventory{Hotbar: hotbar},
 		},

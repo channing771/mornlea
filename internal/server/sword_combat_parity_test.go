@@ -13,7 +13,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -119,10 +119,12 @@ func runSwordCombatWireScript(t *testing.T, transport string) swordCombatTranscr
 	config.ViewRadius = 1
 	config.AutosaveTicks = 1000
 	host := mustNewHost(t, config, flatGenerator{}, store)
-	mob := sim.HostileMob{
+	// 让夜行者从首个 tick 起处于攻击距离内，避免异步寻路完成时机污染战斗
+	// parity 的速度快照；追逐调度由 hostile manager 测试覆盖。
+	mob := runtime.HostileMob{
 		ID:        7,
 		Dimension: core.Overworld,
-		State:     physics.State{Position: mgl32.Vec3{0.5, 1, 2.5}, Velocity: mgl32.Vec3{0, 0, 0}, OnGround: true},
+		State:     physics.State{Position: mgl32.Vec3{0.5, 1, 4}, Velocity: mgl32.Vec3{0, 0, 0}, OnGround: true},
 		Yaw:       0,
 		Health:    20,
 	}

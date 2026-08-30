@@ -10,7 +10,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -35,8 +35,8 @@ func TestServerRejectsStaleSessionGeneration(t *testing.T) {
 	}
 	running.enqueueIncoming(context.Background(), incomingCommand{
 		Session: 7, Generation: 1,
-		Command: sim.Command{
-			Session: 7, Sequence: 99, Kind: sim.CommandPlayerInput,
+		Command: contract.Command{
+			Session: 7, Sequence: 99, Kind: contract.CommandPlayerInput,
 		},
 	})
 	running.StepForTest()
@@ -98,11 +98,11 @@ func TestSessionRegistryAcceptsArbitraryPlayerID(t *testing.T) {
 	}
 	requested := running.engine.Step()
 	for _, key := range requested.Acquire {
-		running.engine.SubmitAcquired(sim.AcquiredChunk{Key: key, Missing: true})
+		running.engine.SubmitAcquired(contract.AcquiredChunk{Key: key, Missing: true})
 	}
 	generated := running.engine.Step()
 	for _, key := range generated.Generate {
-		running.engine.SubmitGenerated(sim.GeneratedChunk{
+		running.engine.SubmitGenerated(contract.GeneratedChunk{
 			Dimension: key.Dimension,
 			Pos:       key.Pos,
 			Chunk:     playerTestGenerator{}.GenerateChunk(key.Pos),
@@ -160,15 +160,15 @@ func TestSessionRegistryPublishesOnlyToTargetSession(t *testing.T) {
 		}
 	}
 
-	running.publish(sim.TickResult{
+	running.publish(contract.TickResult{
 		Tick: 42,
-		Players: []sim.PlayerUpdate{
+		Players: []contract.PlayerUpdate{
 			{Session: 8, Dimension: core.Overworld, ViewCenter: core.ChunkPos{X: 8}},
 			{Session: 7, Dimension: core.Overworld, ViewCenter: core.ChunkPos{X: 7}},
 		},
-		Rejected: []sim.Rejection{
-			{Session: 8, Sequence: 18, Reason: sim.RejectInvalidInput},
-			{Session: 7, Sequence: 17, Reason: sim.RejectNoTarget},
+		Rejected: []contract.Rejection{
+			{Session: 8, Sequence: 18, Reason: contract.RejectInvalidInput},
+			{Session: 7, Sequence: 17, Reason: contract.RejectNoTarget},
 		},
 	})
 
@@ -198,12 +198,12 @@ func TestSessionRegistryPublishesOnlyToTargetSession(t *testing.T) {
 func TestSessionRegistryShutdownDetachesInIDOrderAndExitsOnce(t *testing.T) {
 	running := NewWorld(registryTestConfig(), playerTestGenerator{}, testStore())
 	var closeMu sync.Mutex
-	var closeOrder []sim.SessionID
-	exits := make(map[sim.SessionID]<-chan SessionExit)
-	for _, id := range []sim.SessionID{9, 3, 7} {
+	var closeOrder []contract.SessionID
+	exits := make(map[contract.SessionID]<-chan SessionExit)
+	for _, id := range []contract.SessionID{9, 3, 7} {
 		endpoint := &orderedCloseEndpoint{
 			id: id,
-			record: func(id sim.SessionID) {
+			record: func(id contract.SessionID) {
 				closeMu.Lock()
 				closeOrder = append(closeOrder, id)
 				closeMu.Unlock()
@@ -222,9 +222,9 @@ func TestSessionRegistryShutdownDetachesInIDOrderAndExitsOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	closeMu.Lock()
-	gotOrder := append([]sim.SessionID(nil), closeOrder...)
+	gotOrder := append([]contract.SessionID(nil), closeOrder...)
 	closeMu.Unlock()
-	if want := []sim.SessionID{3, 7, 9}; !reflect.DeepEqual(gotOrder, want) {
+	if want := []contract.SessionID{3, 7, 9}; !reflect.DeepEqual(gotOrder, want) {
 		t.Fatalf("endpoint close order = %v，想要 %v", gotOrder, want)
 	}
 	for id, exit := range exits {
@@ -248,7 +248,7 @@ func TestSessionRegistryLateFailureCannotDetachNewGeneration(t *testing.T) {
 	}
 	old := running.sessions[7]
 	called := make(chan bool, 1)
-	old.detach = func(id sim.SessionID, generation uint64, cause error) bool {
+	old.detach = func(id contract.SessionID, generation uint64, cause error) bool {
 		detached := running.DetachSession(id, generation, cause)
 		called <- detached
 		return detached
@@ -282,7 +282,7 @@ func TestSessionRegistryDetachReleasesReaderBlockedOnFullIncoming(t *testing.T) 
 	running.incoming = make(chan incomingCommand, 1)
 	running.incoming <- incomingCommand{
 		Session: 99, Generation: 1,
-		Command: sim.Command{Session: 99, Sequence: 1, Kind: sim.CommandPlayerInput},
+		Command: contract.Command{Session: 99, Sequence: 1, Kind: contract.CommandPlayerInput},
 	}
 	endpoint := &countingRecvEndpoint{
 		calls: make(chan int, 2),
@@ -326,9 +326,9 @@ func TestSessionRegistrySlowSessionDoesNotCloseHealthySession(t *testing.T) {
 	publishRejection := func(sequence uint64) {
 		running.stepMu.Lock()
 		defer running.stepMu.Unlock()
-		running.publish(sim.TickResult{Rejected: []sim.Rejection{
-			{Session: 7, Sequence: sequence, Reason: sim.RejectNoTarget},
-			{Session: 8, Sequence: sequence, Reason: sim.RejectNoTarget},
+		running.publish(contract.TickResult{Rejected: []contract.Rejection{
+			{Session: 7, Sequence: sequence, Reason: contract.RejectNoTarget},
+			{Session: 8, Sequence: sequence, Reason: contract.RejectNoTarget},
 		}})
 	}
 	publishRejection(1)
@@ -390,8 +390,8 @@ func TestSessionRegistryInvalidRejectionClosesOnlyTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 	running.stepMu.Lock()
-	running.publish(sim.TickResult{Rejected: []sim.Rejection{{
-		Session: 7, Sequence: 1, Reason: sim.RejectReason(255),
+	running.publish(contract.TickResult{Rejected: []contract.Rejection{{
+		Session: 7, Sequence: 1, Reason: contract.RejectReason(255),
 	}}})
 	running.stepMu.Unlock()
 	if got := waitSessionExit(t, exit); got.ID != 7 || got.Err == nil {
@@ -406,11 +406,11 @@ func TestSessionRegistryPublicationOrderIsStableByID(t *testing.T) {
 	running := NewWorld(registryTestConfig(), playerTestGenerator{}, testStore())
 	t.Cleanup(func() { shutdownServerForTest(t, running) })
 	var closeMu sync.Mutex
-	var closeOrder []sim.SessionID
-	for _, id := range []sim.SessionID{9, 3, 7} {
+	var closeOrder []contract.SessionID
+	for _, id := range []contract.SessionID{9, 3, 7} {
 		endpoint := &orderedCloseEndpoint{
 			id: id,
-			record: func(id sim.SessionID) {
+			record: func(id contract.SessionID) {
 				closeMu.Lock()
 				closeOrder = append(closeOrder, id)
 				closeMu.Unlock()
@@ -421,16 +421,16 @@ func TestSessionRegistryPublicationOrderIsStableByID(t *testing.T) {
 		}
 	}
 	running.stepMu.Lock()
-	running.publish(sim.TickResult{Rejected: []sim.Rejection{
-		{Session: 9, Reason: sim.RejectReason(255)},
-		{Session: 3, Reason: sim.RejectReason(255)},
-		{Session: 7, Reason: sim.RejectReason(255)},
+	running.publish(contract.TickResult{Rejected: []contract.Rejection{
+		{Session: 9, Reason: contract.RejectReason(255)},
+		{Session: 3, Reason: contract.RejectReason(255)},
+		{Session: 7, Reason: contract.RejectReason(255)},
 	}})
 	running.stepMu.Unlock()
 	closeMu.Lock()
-	got := append([]sim.SessionID(nil), closeOrder...)
+	got := append([]contract.SessionID(nil), closeOrder...)
 	closeMu.Unlock()
-	if want := []sim.SessionID{3, 7, 9}; !reflect.DeepEqual(got, want) {
+	if want := []contract.SessionID{3, 7, 9}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("publication close order = %v，想要 %v", got, want)
 	}
 }
@@ -442,7 +442,7 @@ func TestSessionRegistrySnapshotsDeltasAndForgetStayWithTarget(t *testing.T) {
 	client8, endpoint8 := network.NewMemoryPair(64)
 	defer client7.Close()
 	defer client8.Close()
-	restores := map[sim.SessionID]sim.PlayerRestore{
+	restores := map[contract.SessionID]contract.PlayerRestore{
 		7: {
 			SpawnDimension: core.Overworld,
 			SpawnAnchor:    core.ChunkPos{},
@@ -466,11 +466,11 @@ func TestSessionRegistrySnapshotsDeltasAndForgetStayWithTarget(t *testing.T) {
 		t.Fatalf("initial Acquire = %+v", requested.Acquire)
 	}
 	for _, key := range requested.Acquire {
-		running.engine.SubmitAcquired(sim.AcquiredChunk{Key: key, Missing: true})
+		running.engine.SubmitAcquired(contract.AcquiredChunk{Key: key, Missing: true})
 	}
 	generated := running.engine.Step()
 	for _, key := range generated.Generate {
-		running.engine.SubmitGenerated(sim.GeneratedChunk{
+		running.engine.SubmitGenerated(contract.GeneratedChunk{
 			Dimension: key.Dimension,
 			Pos:       key.Pos,
 			Chunk:     world.NewChunk(key.Pos),
@@ -489,12 +489,12 @@ func TestSessionRegistrySnapshotsDeltasAndForgetStayWithTarget(t *testing.T) {
 	assertNoWorldServerMessage(t, client7)
 	assertNoWorldServerMessage(t, client8)
 
-	running.publish(sim.TickResult{Changes: []sim.ChunkChangeBatch{{
+	running.publish(contract.TickResult{Changes: []contract.ChunkChangeBatch{{
 		Dimension:    key7.Dimension,
 		Chunk:        key7.Pos,
 		BaseRevision: snapshot7.Revision,
 		NewRevision:  snapshot7.Revision + 1,
-		Changes: []sim.BlockChange{{
+		Changes: []contract.BlockChange{{
 			Position: core.BlockPos{},
 			Block:    core.StoneID,
 		}},
@@ -504,8 +504,8 @@ func TestSessionRegistrySnapshotsDeltasAndForgetStayWithTarget(t *testing.T) {
 	}
 	assertNoWorldServerMessage(t, client8)
 
-	running.publish(sim.TickResult{
-		Forget: map[sim.SessionID][]core.ChunkKey{7: {key7}},
+	running.publish(contract.TickResult{
+		Forget: map[contract.SessionID][]core.ChunkKey{7: {key7}},
 	})
 	if forgotten := recvWorldServerMessage(t, client7).(network.ForgetChunks); !reflect.DeepEqual(
 		forgotten.Chunks,
@@ -526,14 +526,14 @@ func TestSessionRegistryResyncCannotReadOtherSessionReadyChunk(t *testing.T) {
 	for _, spec := range []SessionSpec{
 		registrySessionSpecWithRestore(
 			7, 1, endpoint7,
-			sim.PlayerRestore{
+			contract.PlayerRestore{
 				SpawnDimension: core.Overworld,
 				SpawnAnchor:    core.ChunkPos{},
 			},
 		),
 		registrySessionSpecWithRestore(
 			8, 1, endpoint8,
-			sim.PlayerRestore{
+			contract.PlayerRestore{
 				SpawnDimension: core.Overworld,
 				SpawnAnchor:    core.ChunkPos{X: 10},
 			},
@@ -546,11 +546,11 @@ func TestSessionRegistryResyncCannotReadOtherSessionReadyChunk(t *testing.T) {
 
 	requested := running.engine.Step()
 	for _, key := range requested.Acquire {
-		running.engine.SubmitAcquired(sim.AcquiredChunk{Key: key, Missing: true})
+		running.engine.SubmitAcquired(contract.AcquiredChunk{Key: key, Missing: true})
 	}
 	generated := running.engine.Step()
 	for _, key := range generated.Generate {
-		running.engine.SubmitGenerated(sim.GeneratedChunk{
+		running.engine.SubmitGenerated(contract.GeneratedChunk{
 			Dimension: key.Dimension,
 			Pos:       key.Pos,
 			Chunk:     world.NewChunk(key.Pos),
@@ -565,7 +565,7 @@ func TestSessionRegistryResyncCannotReadOtherSessionReadyChunk(t *testing.T) {
 	}
 
 	running.stepMu.Lock()
-	running.publish(sim.TickResult{Resync: []sim.ResyncRequest{{
+	running.publish(contract.TickResult{Resync: []contract.ResyncRequest{{
 		Session: 7, Sequence: 1,
 		Dimension: key8.Dimension, Chunk: key8.Pos,
 	}}})
@@ -577,7 +577,7 @@ func TestSessionRegistryResyncCannotReadOtherSessionReadyChunk(t *testing.T) {
 func TestSessionRegistryForgetDoesNotCancelUnionPendingWork(t *testing.T) {
 	running := NewWorld(registryTestConfig(), playerTestGenerator{}, testStore())
 	t.Cleanup(func() { shutdownServerForTest(t, running) })
-	for _, id := range []sim.SessionID{7, 8} {
+	for _, id := range []contract.SessionID{7, 8} {
 		_, endpoint := network.NewMemoryPair(8)
 		if _, err := running.AttachSession(registrySessionSpec(id, 1, endpoint)); err != nil {
 			t.Fatal(err)
@@ -631,7 +631,7 @@ func TestSessionRegistryDetachCancelsPendingWorkWithNoSubscribers(t *testing.T) 
 func TestSessionRegistryDetachKeepsPendingWorkForRemainingSubscriber(t *testing.T) {
 	running := NewWorld(registryTestConfig(), playerTestGenerator{}, testStore())
 	t.Cleanup(func() { shutdownServerForTest(t, running) })
-	for _, id := range []sim.SessionID{7, 8} {
+	for _, id := range []contract.SessionID{7, 8} {
 		_, endpoint := network.NewMemoryPair(8)
 		if _, err := running.AttachSession(registrySessionSpec(id, 1, endpoint)); err != nil {
 			t.Fatal(err)
@@ -668,8 +668,8 @@ func registryTestConfig() Config {
 	return config
 }
 
-func testRestore() sim.PlayerRestore {
-	return sim.PlayerRestore{
+func testRestore() contract.PlayerRestore {
+	return contract.PlayerRestore{
 		SpawnDimension: core.Overworld,
 		SpawnAnchor:    core.ChunkPos{},
 	}
@@ -687,7 +687,7 @@ func testStore() storage.Store {
 func detachAndWait(
 	t *testing.T,
 	running *Server,
-	id sim.SessionID,
+	id contract.SessionID,
 	generation uint64,
 	exit <-chan SessionExit,
 ) SessionExit {
@@ -705,8 +705,8 @@ func detachAndWait(
 }
 
 type orderedCloseEndpoint struct {
-	id        sim.SessionID
-	record    func(sim.SessionID)
+	id        contract.SessionID
+	record    func(contract.SessionID)
 	closeOnce sync.Once
 }
 

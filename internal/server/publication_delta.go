@@ -5,7 +5,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 type queuedDelta struct {
@@ -39,7 +39,7 @@ func (server *Server) publishDeltas(current *session, deltas []queuedDelta) bool
 
 func (server *Server) classifyDeltas(
 	current *session,
-	batches []sim.ChunkChangeBatch,
+	batches []contract.ChunkChangeBatch,
 ) []queuedDelta {
 	deltas := make([]queuedDelta, 0, len(batches))
 	for _, batch := range batches {
@@ -101,31 +101,31 @@ func chunkKeyLessForPublication(left, right core.ChunkKey) bool {
 	return left.Pos.Z < right.Pos.Z
 }
 
-func networkRejectReason(reason sim.RejectReason) (network.RejectReason, bool) {
+func networkRejectReason(reason contract.RejectReason) (network.RejectReason, bool) {
 	switch reason {
-	case sim.RejectInvalidRay:
+	case contract.RejectInvalidRay:
 		return network.RejectInvalidRay, true
-	case sim.RejectNoTarget:
+	case contract.RejectNoTarget:
 		return network.RejectNoTarget, true
-	case sim.RejectChunkNotReady:
+	case contract.RejectChunkNotReady:
 		return network.RejectChunkNotReady, true
-	case sim.RejectProtectedBlock:
+	case contract.RejectProtectedBlock:
 		return network.RejectProtectedBlock, true
-	case sim.RejectInvalidBlock:
+	case contract.RejectInvalidBlock:
 		return network.RejectInvalidBlock, true
-	case sim.RejectOccupied:
+	case contract.RejectOccupied:
 		return network.RejectOccupied, true
-	case sim.RejectInvalidInput:
+	case contract.RejectInvalidInput:
 		return network.RejectInvalidInput, true
-	case sim.RejectPlayerNotReady:
+	case contract.RejectPlayerNotReady:
 		return network.RejectPlayerNotReady, true
-	case sim.RejectInvalidSlot:
+	case contract.RejectInvalidSlot:
 		return network.RejectInvalidSlot, true
-	case sim.RejectHotbarFull:
+	case contract.RejectHotbarFull:
 		return network.RejectHotbarFull, true
-	case sim.RejectDropCapacity:
+	case contract.RejectDropCapacity:
 		return network.RejectDropCapacity, true
-	case sim.RejectContainerCapacity:
+	case contract.RejectContainerCapacity:
 		return network.RejectContainerCapacity, true
 	default:
 		return "", false

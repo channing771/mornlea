@@ -1,0 +1,126 @@
+internal/sim/player_test.go:95:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/player_test.go:120:	t.Run("duplicate", func(t *testing.T) {
+internal/sim/player_test.go:128:	t.Run("unknown dimension", func(t *testing.T) {
+internal/sim/bed_test.go:114:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/persistence_test.go:177:	t.Run("unloading", func(t *testing.T) {
+internal/sim/persistence_test.go:191:	t.Run("resubscribed", func(t *testing.T) {
+internal/sim/farming_test.go:107:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/farming_test.go:211:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/farming_test.go:260:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/farming_test.go:460:			t.Run(blockLabel(farmland)+"/"+aim.name, func(t *testing.T) {
+internal/sim/farming_test.go:494:		t.Run(blockLabel(below), func(t *testing.T) {
+internal/sim/farming_test.go:658:		t.Run(blockLabel(block), func(t *testing.T) {
+internal/sim/farming_test.go:682:		t.Run(blockLabel(farmland), func(t *testing.T) {
+internal/sim/chest_inventory_test.go:51:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/player_lifecycle_test.go:45:		t.Run(test.name, func(t *testing.T) {
+internal/sim/crop_growth_test.go:112:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/crop_growth_test.go:143:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/crop_growth_test.go:168:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/crop_growth_test.go:196:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/bone_meal_test.go:47:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/bone_meal_test.go:100:	t.Run("空气", func(t *testing.T) {
+internal/sim/bone_meal_test.go:209:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/bone_meal_test.go:237:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/mining_test.go:195:		t.Run(test.name, func(t *testing.T) {
+internal/sim/mining_test.go:257:		t.Run(test.name, func(t *testing.T) {
+internal/sim/mining_test.go:274:	t.Run("beginReset", func(t *testing.T) {
+internal/sim/mining_test.go:288:	t.Run("非法输入", func(t *testing.T) {
+internal/sim/mining_test.go:306:	t.Run("未就绪输入", func(t *testing.T) {
+internal/sim/mining_test.go:372:		t.Run(test.name, func(t *testing.T) {
+internal/sim/mining_test.go:412:		t.Run(test.name, func(t *testing.T) {
+internal/sim/mining_test.go:476:		t.Run(test.name, func(t *testing.T) {
+internal/sim/mining_test.go:616:		t.Run(test.name, func(t *testing.T) {
+internal/sim/mining_test.go:671:		t.Run(test.name, func(t *testing.T) {
+internal/sim/mining_test.go:722:		t.Run(test.name, func(t *testing.T) {
+internal/sim/mining_test.go:768:		t.Run(test.name, func(t *testing.T) {
+internal/sim/mining_test.go:834:		t.Run(test.name, func(t *testing.T) {
+internal/sim/mining_test.go:944:		t.Run(test.name, func(t *testing.T) {
+internal/sim/eating_test.go:69:		t.Run(testCase.name, func(t *testing.T) {
+internal/sim/eating_test.go:222:	t.Run("同格换成非食物再换回来必须从 0 重新计时", func(t *testing.T) {
+internal/sim/eating_test.go:267:	t.Run("记录物品与当前物品不一致时重新计时而不结算", func(t *testing.T) {
+internal/sim/eating_test.go:355:	t.Run("真正扣血清空进度且不扣料", func(t *testing.T) {
+internal/sim/eating_test.go:384:	t.Run("零伤害不中断", func(t *testing.T) {
+internal/sim/eating_test.go:513:	t.Run("容器持续打开", func(t *testing.T) {
+internal/sim/eating_test.go:538:	t.Run("视野未就绪", func(t *testing.T) {
+internal/sim/exhaustion_sources_test.go:48:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/exhaustion_sources_test.go:118:	t.Run("跳跃位移小于地面容差不重复计费", func(t *testing.T) {
+internal/sim/exhaustion_sources_test.go:146:	t.Run("默认参数持续按跳20tick对照", func(t *testing.T) {
+internal/sim/exhaustion_sources_test.go:219:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/exhaustion_sources_test.go:274:	t.Run("完成累积一次", func(t *testing.T) {
+internal/sim/exhaustion_sources_test.go:295:	t.Run("被拒绝不累积", func(t *testing.T) {
+internal/sim/exhaustion_sources_test.go:318:	t.Run("中途松手不累积", func(t *testing.T) {
+internal/sim/exhaustion_sources_test.go:347:	t.Run("翻地成功累积一次", func(t *testing.T) {
+internal/sim/exhaustion_sources_test.go:365:	t.Run("被拒绝不累积", func(t *testing.T) {
+internal/sim/combat_test.go:31:		t.Run(test.name, func(t *testing.T) {
+internal/sim/combat_test.go:42:	t.Run("选择最近且按会话平局", func(t *testing.T) {
+internal/sim/combat_test.go:58:	t.Run("排除非候选与伙伴", func(t *testing.T) {
+internal/sim/combat_test.go:80:	t.Run("排除死亡与超距", func(t *testing.T) {
+internal/sim/combat_test.go:92:	t.Run("固体阻挡而同距方块不阻挡", func(t *testing.T) {
+internal/sim/combat_test.go:110:	t.Run("流体穿透", func(t *testing.T) {
+internal/sim/combat_test.go:121:	t.Run("未就绪方块拒绝本 tick", func(t *testing.T) {
+internal/sim/player_restore_test.go:82:		t.Run(test.name, func(t *testing.T) {
+internal/sim/companion_action_test.go:148:	t.Run("action 不携带会话身份", func(t *testing.T) {
+internal/sim/companion_action_test.go:158:	t.Run("inbox 有界且满员即丢弃", func(t *testing.T) {
+internal/sim/companion_action_test.go:174:	t.Run("未知 ID 丢弃且无会话副作用", func(t *testing.T) {
+internal/sim/companion_action_test.go:194:	t.Run("未激活伙伴的 action 丢弃不跨 tick 滞留", func(t *testing.T) {
+internal/sim/companion_action_test.go:226:	t.Run("同 tick 重复 action 只应用最早入队的一个", func(t *testing.T) {
+internal/sim/companion_action_test.go:320:	t.Run("运动字段经 actorState 内嵌提升", func(t *testing.T) {
+internal/sim/companion_action_test.go:337:	t.Run("采掘字段经 actorState 内嵌共享", func(t *testing.T) {
+internal/sim/companion_action_test.go:368:	t.Run("移动采掘放置背包序列重放逐 tick 一致", func(t *testing.T) {
+internal/sim/crafting_test.go:162:		t.Run(testCase.name, func(t *testing.T) {
+internal/sim/crafting_test.go:341:	t.Run("恰可放", func(t *testing.T) {
+internal/sim/crafting_test.go:374:	t.Run("少一格不可放", func(t *testing.T) {
+internal/sim/crafting_test.go:533:		t.Run(testCase.name, func(t *testing.T) {
+internal/sim/persistence_lifecycle_test.go:92:		t.Run(test.name, func(t *testing.T) {
+internal/sim/trample_test.go:344:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/companion_placement_test.go:128:	t.Run("目标被其他方块占据", func(t *testing.T) {
+internal/sim/companion_placement_test.go:144:	t.Run("目标与放置者自身碰撞", func(t *testing.T) {
+internal/sim/companion_placement_test.go:167:	t.Run("目标区块未 Ready", func(t *testing.T) {
+internal/sim/companion_placement_test.go:190:	t.Run("方块不可由物品放置还原", func(t *testing.T) {
+internal/sim/companion_placement_test.go:230:	t.Run("多堆时扣统一索引首个", func(t *testing.T) {
+internal/sim/companion_placement_test.go:250:	t.Run("对应堆只在背包时扣背包首堆", func(t *testing.T) {
+internal/sim/companion_test.go:169:		t.Run(test.name, func(t *testing.T) {
+internal/sim/furnace_inventory_test.go:73:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/furnace_inventory_test.go:134:		t.Run(material.name, func(t *testing.T) {
+internal/sim/furnace_test.go:65:		t.Run(material.name, func(t *testing.T) {
+internal/sim/furnace_test.go:93:			t.Run(name, func(t *testing.T) {
+internal/sim/furnace_test.go:153:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/furnace_test.go:171:		t.Run(material.name, func(t *testing.T) {
+internal/sim/torch_test.go:136:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/torch_test.go:219:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/torch_test.go:240:	t.Run("未加载目标拒绝", func(t *testing.T) {
+internal/sim/hotbar_test.go:137:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/world_test.go:170:	t.Run(name, func(t *testing.T) {
+internal/sim/property_trample_yield_parity_test.go:44:		t.Run(fmt.Sprintf("crop%+v", cropPos), func(t *testing.T) {
+internal/sim/companion_mining_container_test.go:107:	t.Run("空箱子同tick原子回收", func(t *testing.T) {
+internal/sim/companion_mining_container_test.go:154:	t.Run("内容物按本体在前的槽位序入包", func(t *testing.T) {
+internal/sim/companion_mining_container_test.go:198:	t.Run("内容物超出背包余量时全或无", func(t *testing.T) {
+internal/sim/companion_mining_container_test.go:246:	t.Run("本体与三格内容物一并入包", func(t *testing.T) {
+internal/sim/companion_mining_container_test.go:289:	t.Run("不可容纳时全或无", func(t *testing.T) {
+internal/sim/companion_mining_container_test.go:370:	t.Run("完成tick容器槽缺失清零进度不结算", func(t *testing.T) {
+internal/sim/companion_mining_container_test.go:407:	t.Run("完成前方块被移除清零进度不结算", func(t *testing.T) {
+internal/sim/interaction_test.go:50:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/interaction_test.go:77:	t.Run("empty slot", func(t *testing.T) {
+internal/sim/interaction_test.go:86:	t.Run("origin inside solid is occupied", func(t *testing.T) {
+internal/sim/interaction_test.go:95:	t.Run("placeable blocks succeed", func(t *testing.T) {
+internal/sim/interaction_test.go:138:		t.Run(test.name, func(t *testing.T) {
+internal/sim/combat_exhaustion_test.go:56:	t.Run("跨阈值扣饱和度", func(t *testing.T) {
+internal/sim/combat_exhaustion_test.go:81:	t.Run("饱和度耗尽改扣饥饿值", func(t *testing.T) {
+internal/sim/combat_exhaustion_test.go:119:	t.Run("视线内无目标", func(t *testing.T) {
+internal/sim/combat_exhaustion_test.go:139:	t.Run("固体方块遮挡", func(t *testing.T) {
+internal/sim/combat_exhaustion_test.go:159:	t.Run("受击冷却免疫", func(t *testing.T) {
+internal/sim/inventory_test.go:77:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/farmland_moisture_integration_test.go:140:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/farmland_moisture_integration_test.go:505:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/property_crop_yield_test.go:35:		t.Run(input.name, func(t *testing.T) {
+internal/sim/player_interaction_test.go:115:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/drop_test.go:413:		t.Run(fmt.Sprint(item), func(t *testing.T) {
+internal/sim/drop_test.go:462:	t.Run("空选中栏位", func(t *testing.T) {
+internal/sim/hunger_test.go:85:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/companion_mining_test.go:283:	t.Run("替换为同可采掘方块重新计时", func(t *testing.T) {
+internal/sim/companion_mining_test.go:316:	t.Run("替换为基岩清零且永不破坏", func(t *testing.T) {
+internal/sim/movement_test.go:108:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/movement_test.go:160:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/movement_test.go:227:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/movement_test.go:314:		t.Run(tc.name, func(t *testing.T) {
+internal/sim/engine_test.go:445:		t.Run(tc.name, func(t *testing.T) {

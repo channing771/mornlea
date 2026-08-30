@@ -16,7 +16,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -24,8 +24,8 @@ import (
 // 中间值、朝向非零，保证「字段根本没搬运」与零值不可分辨。追逐事实保持
 // 无目标且重规划 tick 推到持久化时间轴的远端，发布测试与传输 parity 因此
 // 不受追逐编排派发时序的影响，只观察身体事实的网络呈现。
-func hostilePublicationMob(id uint64, position mgl32.Vec3) sim.HostileMob {
-	return sim.HostileMob{
+func hostilePublicationMob(id uint64, position mgl32.Vec3) contract.HostileMob {
+	return contract.HostileMob{
 		ID:              id,
 		Dimension:       core.Overworld,
 		State:           physics.State{Position: position, OnGround: true},
@@ -55,13 +55,13 @@ func TestHostilePublicationSpawnsAfterFootChunkSnapshotThenStates(t *testing.T) 
 	}
 
 	// 脚底 chunk 的快照尚未送达：夜行者事实必须对客户端隐身。
-	h.publish(sim.TickResult{Tick: 10})
+	h.publish(contract.TickResult{Tick: 10})
 	if messages := onlyHostileMessages(h.drain(1)); len(messages) != 0 {
 		t.Fatalf("snapshot 前收到夜行者消息：%#v", messages)
 	}
 
 	h.markSnapshotSent(1, core.ChunkPos{})
-	h.publish(sim.TickResult{Tick: 11})
+	h.publish(contract.TickResult{Tick: 11})
 	messages := onlyHostileMessages(h.drain(1))
 	if len(messages) != 1 {
 		t.Fatalf("spawn tick 夜行者消息=%#v，想要恰好 1 条 spawn", messages)
@@ -87,7 +87,7 @@ func TestHostilePublicationSpawnsAfterFootChunkSnapshotThenStates(t *testing.T) 
 	}
 
 	// 下一 tick 起只发 state：spawn 不重复，state 携带权威位置/速度/朝向/生命。
-	h.publish(sim.TickResult{Tick: 12})
+	h.publish(contract.TickResult{Tick: 12})
 	messages = onlyHostileMessages(h.drain(1))
 	if len(messages) != 1 {
 		t.Fatalf("稳定 tick 夜行者消息=%#v，想要恰好 1 条 state", messages)
@@ -125,7 +125,7 @@ func TestHostilePublicationUnsubscribedFootChunkNeverSends(t *testing.T) {
 		t.Fatalf("RestoreHostile: %v", err)
 	}
 	for tick := uint64(10); tick <= 11; tick++ {
-		h.publish(sim.TickResult{Tick: tick})
+		h.publish(contract.TickResult{Tick: tick})
 		if messages := onlyHostileMessages(h.drain(1)); len(messages) != 0 {
 			t.Fatalf("未订阅 chunk 收到夜行者消息：%#v", messages)
 		}
@@ -142,7 +142,7 @@ func TestHostilePublicationDespawnsOnInterestExit(t *testing.T) {
 		t.Fatalf("RestoreHostile: %v", err)
 	}
 	h.markSnapshotSent(1, core.ChunkPos{})
-	h.publish(sim.TickResult{Tick: 1})
+	h.publish(contract.TickResult{Tick: 1})
 	if messages := onlyHostileMessages(h.drain(1)); len(messages) != 1 {
 		t.Fatalf("首个可见 tick 消息=%#v，想要 1 条 spawn", messages)
 	}
@@ -150,7 +150,7 @@ func TestHostilePublicationDespawnsOnInterestExit(t *testing.T) {
 	// 兴趣中心移往相邻 chunk：旧 chunk 退出订阅集合，下一 tick 必须 despawn，
 	// 且此后不再收到该 ID 的 state。
 	moved := h.moveInterest(1, core.ChunkPos{X: 1})
-	h.publish(sim.TickResult{Tick: 2, Forget: moved.Forget})
+	h.publish(contract.TickResult{Tick: 2, Forget: moved.Forget})
 	messages := onlyHostileMessages(h.drain(1))
 	if len(messages) != 1 {
 		t.Fatalf("离开视野 tick 消息=%#v，想要 1 条 despawn", messages)
@@ -169,7 +169,7 @@ func TestHostilePublicationDespawnsOnInterestExit(t *testing.T) {
 		t.Fatal("despawn 后会话镜像未清除该夜行者")
 	}
 
-	h.publish(sim.TickResult{Tick: 3})
+	h.publish(contract.TickResult{Tick: 3})
 	if messages := onlyHostileMessages(h.drain(1)); len(messages) != 0 {
 		t.Fatalf("despawn 后仍收到夜行者消息：%#v", messages)
 	}

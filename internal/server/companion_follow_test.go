@@ -16,7 +16,7 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 // followPlanContent 构造单一 follow 步骤的受限计划 JSON 文本：目标玩家以
@@ -32,7 +32,7 @@ func followPlanContent(playerID core.PlayerID) string {
 }
 
 // setPlayerPosition 把一名在线玩家放到指定权威位置（测试构造确定性几何）。
-func setPlayerPosition(t *testing.T, host *Host, session sim.SessionID, position [3]float32) {
+func setPlayerPosition(t *testing.T, host *Host, session contract.SessionID, position [3]float32) {
 	t.Helper()
 	host.world.SetPlayerPositionForTest(session, mgl32.Vec3(position))
 }

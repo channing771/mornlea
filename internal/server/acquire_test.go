@@ -10,7 +10,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -28,7 +28,7 @@ func TestAcquireLoadsBeforeGenerating(t *testing.T) {
 	generator := &countingGenerator{}
 	running := newAcquireServer(t, store, generator)
 
-	stepUntilServer(t, running, func(result sim.TickResult) bool {
+	stepUntilServer(t, running, func(result contract.TickResult) bool {
 		_, revision, ready := running.ChunkHash(core.Overworld, key.Pos)
 		return ready && revision == 7
 	})
@@ -41,14 +41,14 @@ func TestAcquireOnlyTypedNotFoundFallsBackToGeneration(t *testing.T) {
 	tests := []struct {
 		name      string
 		loadErr   error
-		wantState sim.ChunkState
+		wantState contract.ChunkState
 		wantCalls int
 	}{
-		{name: "typed miss", loadErr: storage.ErrChunkNotFound, wantState: sim.ChunkReady, wantCalls: 1},
-		{name: "permission", loadErr: fs.ErrPermission, wantState: sim.ChunkFailed},
-		{name: "corrupt", loadErr: storage.ErrCorrupt, wantState: sim.ChunkFailed},
-		{name: "future", loadErr: storage.ErrFutureVersion, wantState: sim.ChunkFailed},
-		{name: "canceled", loadErr: context.Canceled, wantState: sim.ChunkFailed},
+		{name: "typed miss", loadErr: storage.ErrChunkNotFound, wantState: contract.ChunkReady, wantCalls: 1},
+		{name: "permission", loadErr: fs.ErrPermission, wantState: contract.ChunkFailed},
+		{name: "corrupt", loadErr: storage.ErrCorrupt, wantState: contract.ChunkFailed},
+		{name: "future", loadErr: storage.ErrFutureVersion, wantState: contract.ChunkFailed},
+		{name: "canceled", loadErr: context.Canceled, wantState: contract.ChunkFailed},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -60,14 +60,14 @@ func TestAcquireOnlyTypedNotFoundFallsBackToGeneration(t *testing.T) {
 			running := newAcquireServer(t, store, generator)
 			key := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{}}
 
-			stepUntilServer(t, running, func(sim.TickResult) bool {
+			stepUntilServer(t, running, func(contract.TickResult) bool {
 				info, ok := running.ChunkInfo(key.Dimension, key.Pos)
 				return ok && info.State == test.wantState
 			})
 			if calls := generator.Calls(); calls != test.wantCalls {
 				t.Fatalf("generator calls=%d, want %d", calls, test.wantCalls)
 			}
-			if test.wantState == sim.ChunkFailed {
+			if test.wantState == contract.ChunkFailed {
 				info, _ := running.ChunkInfo(key.Dimension, key.Pos)
 				if !errors.Is(info.Err, test.loadErr) {
 					t.Fatalf("failure=%v, want wrapping %v", info.Err, test.loadErr)
@@ -161,7 +161,7 @@ func newAcquireServer(t *testing.T, store storage.Store, generator Generator) *S
 	return running
 }
 
-func stepUntilServer(t *testing.T, running *Server, condition func(sim.TickResult) bool) {
+func stepUntilServer(t *testing.T, running *Server, condition func(contract.TickResult) bool) {
 	t.Helper()
 	deadline := time.Now().Add(waitDeadline)
 	for time.Now().Before(deadline) {

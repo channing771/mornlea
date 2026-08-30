@@ -10,7 +10,7 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 var (
@@ -25,18 +25,18 @@ var (
 )
 
 type SessionSpec struct {
-	ID          sim.SessionID
+	ID          contract.SessionID
 	Generation  uint64
 	PlayerID    core.PlayerID
 	DisplayName string
 	Endpoint    network.ServerEndpoint
-	Restore     sim.PlayerRestore
+	Restore     contract.PlayerRestore
 }
 
 type SessionExit struct {
-	ID          sim.SessionID
+	ID          contract.SessionID
 	Generation  uint64
-	Snapshot    sim.PlayerSnapshot
+	Snapshot    contract.PlayerSnapshot
 	HasSnapshot bool
 	Err         error
 }
@@ -52,7 +52,7 @@ type snapshotRequest struct {
 }
 
 type session struct {
-	id          sim.SessionID
+	id          contract.SessionID
 	generation  uint64
 	playerID    core.PlayerID
 	displayName string
@@ -62,7 +62,7 @@ type session struct {
 	outbox      chan network.ServerMessage
 	workers     *sync.WaitGroup
 	exit        chan SessionExit
-	detach      func(sim.SessionID, uint64, error) bool
+	detach      func(contract.SessionID, uint64, error) bool
 
 	mu               sync.Mutex
 	isClosed         bool
@@ -85,8 +85,8 @@ type session struct {
 	visibleHostiles map[uint64]struct{}
 
 	// 掉落物差分状态：已发布镜像与三块复用 scratch，容量固定为 MaxSessionDrops。
-	publishedDrops    map[core.DropID]sim.DropSnapshot
-	dropScratch       []sim.DropSnapshot
+	publishedDrops    map[core.DropID]contract.DropSnapshot
+	dropScratch       []contract.DropSnapshot
 	dropUpsertScratch []network.ItemDrop
 	dropRemoveScratch []core.DropID
 }
@@ -97,7 +97,7 @@ func newSession(
 	config Config,
 	workers *sync.WaitGroup,
 	clock heartbeatClock,
-	detach func(sim.SessionID, uint64, error) bool,
+	detach func(contract.SessionID, uint64, error) bool,
 ) *session {
 	if config.OutboxCapacity < 1 {
 		panic("server: session outbox capacity must be positive")
@@ -124,10 +124,10 @@ func newSession(
 		visiblePlayers:    make(map[core.PlayerID]visiblePlayer),
 		visibleCompanions: make(map[companion.ID]struct{}),
 		visibleHostiles:   make(map[uint64]struct{}),
-		publishedDrops:    make(map[core.DropID]sim.DropSnapshot, sim.MaxSessionDrops),
-		dropScratch:       make([]sim.DropSnapshot, 0, sim.MaxSessionDrops),
-		dropUpsertScratch: make([]network.ItemDrop, 0, sim.MaxSessionDrops),
-		dropRemoveScratch: make([]core.DropID, 0, sim.MaxSessionDrops),
+		publishedDrops:    make(map[core.DropID]contract.DropSnapshot, contract.MaxSessionDrops),
+		dropScratch:       make([]contract.DropSnapshot, 0, contract.MaxSessionDrops),
+		dropUpsertScratch: make([]network.ItemDrop, 0, contract.MaxSessionDrops),
+		dropRemoveScratch: make([]core.DropID, 0, contract.MaxSessionDrops),
 	}
 	workers.Add(2)
 	go current.writeLoop()
@@ -137,12 +137,12 @@ func newSession(
 
 func newObserverSession(
 	parent context.Context,
-	id sim.SessionID,
+	id contract.SessionID,
 	generation uint64,
 	endpoint network.ServerEndpoint,
 	capacity int,
 	workers *sync.WaitGroup,
-	detach func(sim.SessionID, uint64, error) bool,
+	detach func(contract.SessionID, uint64, error) bool,
 ) *session {
 	if capacity < 1 {
 		panic("server: session outbox capacity must be positive")
@@ -163,7 +163,7 @@ func newObserverSession(
 		visiblePlayers:    make(map[core.PlayerID]visiblePlayer),
 		visibleCompanions: make(map[companion.ID]struct{}),
 		visibleHostiles:   make(map[uint64]struct{}),
-		publishedDrops:    make(map[core.DropID]sim.DropSnapshot),
+		publishedDrops:    make(map[core.DropID]contract.DropSnapshot),
 	}
 	workers.Add(1)
 	go current.writeLoop()

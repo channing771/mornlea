@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -32,7 +32,7 @@ type cachedPlayer struct {
 	id                  core.PlayerID
 	name, pendingName   string
 	persisted           uint64
-	snapshot            sim.PlayerSnapshot
+	snapshot            contract.PlayerSnapshot
 	hasSnapshot         bool
 	hasObservedSnapshot bool
 	missing             bool
@@ -83,13 +83,13 @@ func (p *Players) Prepare(
 	id core.PlayerID,
 	name string,
 	metadata storage.Metadata,
-) (sim.PlayerRestore, error) {
+) (contract.PlayerRestore, error) {
 	for {
 		p.mu.Lock()
 		if player := p.cache[id]; player != nil {
 			if player.pendingName != "" && player.pendingName != name {
 				p.mu.Unlock()
-				return sim.PlayerRestore{}, ErrPlayerBackpressure
+				return contract.PlayerRestore{}, ErrPlayerBackpressure
 			}
 			if player.loading {
 				loadDone := player.loadDone
@@ -97,17 +97,17 @@ func (p *Players) Prepare(
 				select {
 				case <-loadDone:
 				case <-ctx.Done():
-					return sim.PlayerRestore{}, ctx.Err()
+					return contract.PlayerRestore{}, ctx.Err()
 				}
 				p.mu.Lock()
 				loadErr := player.loadErr
 				if loadErr != nil {
 					p.mu.Unlock()
-					return sim.PlayerRestore{}, loadErr
+					return contract.PlayerRestore{}, loadErr
 				}
 				if p.cache[id] != player || player.loading || player.pendingName != name {
 					p.mu.Unlock()
-					return sim.PlayerRestore{}, ErrPlayerBackpressure
+					return contract.PlayerRestore{}, ErrPlayerBackpressure
 				}
 				restore := player.restore(metadata)
 				p.mu.Unlock()
@@ -122,7 +122,7 @@ func (p *Players) Prepare(
 		p.evictCleanLocked()
 		if len(p.cache) >= playerCacheCapacity {
 			p.mu.Unlock()
-			return sim.PlayerRestore{}, ErrPlayerBackpressure
+			return contract.PlayerRestore{}, ErrPlayerBackpressure
 		}
 		placeholder := &cachedPlayer{
 			id:          id,
@@ -141,7 +141,7 @@ func (p *Players) Prepare(
 			placeholder.loading = false
 			close(loadDone)
 			p.mu.Unlock()
-			return sim.PlayerRestore{}, ErrPlayerBackpressure
+			return contract.PlayerRestore{}, ErrPlayerBackpressure
 		}
 		switch {
 		case errors.Is(err, storage.ErrPlayerNotFound):
@@ -156,7 +156,7 @@ func (p *Players) Prepare(
 			}
 			close(loadDone)
 			p.mu.Unlock()
-			return sim.PlayerRestore{}, err
+			return contract.PlayerRestore{}, err
 		default:
 			loaded := cachedPlayerFromStored(stored, name)
 			*placeholder = *loaded
@@ -239,7 +239,7 @@ func (p *Players) Deactivate(id core.PlayerID) {
 func (p *Players) Observe(
 	id core.PlayerID,
 	_ string,
-	snapshot sim.PlayerSnapshot,
+	snapshot contract.PlayerSnapshot,
 	tick uint64,
 	force bool,
 ) error {

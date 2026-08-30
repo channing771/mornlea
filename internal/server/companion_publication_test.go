@@ -11,7 +11,7 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -22,7 +22,7 @@ func TestCompanionPublicationWaitsForFootChunkSnapshot(t *testing.T) {
 	observer := h.playerUpdate(1, true, core.Overworld, mgl32.Vec3{0.5, 2, 0.5})
 	update := publicationCompanionUpdate(id, 0.5)
 
-	h.publish(sim.TickResult{Tick: 10, Players: []sim.PlayerUpdate{observer}, Companions: []sim.CompanionUpdate{update}})
+	h.publish(contract.TickResult{Tick: 10, Players: []contract.PlayerUpdate{observer}, Companions: []contract.CompanionUpdate{update}})
 	if messages := onlyCompanionMessages(h.drain(1)); len(messages) != 0 {
 		t.Fatalf("snapshot 前收到伙伴消息：%#v", messages)
 	}
@@ -31,12 +31,12 @@ func TestCompanionPublicationWaitsForFootChunkSnapshot(t *testing.T) {
 	}
 
 	key := overworldChunk(core.ChunkPos{})
-	h.running.engine.SubmitAcquired(sim.AcquiredChunk{Key: key, Missing: true})
+	h.running.engine.SubmitAcquired(contract.AcquiredChunk{Key: key, Missing: true})
 	generate := h.running.engine.Step()
 	if len(generate.Generate) != 1 || generate.Generate[0] != key {
 		t.Fatalf("Generate=%+v，想要 [%+v]", generate.Generate, key)
 	}
-	h.running.engine.SubmitGenerated(sim.GeneratedChunk{
+	h.running.engine.SubmitGenerated(contract.GeneratedChunk{
 		Dimension: key.Dimension,
 		Pos:       key.Pos,
 		Chunk:     world.NewChunk(key.Pos),
@@ -45,11 +45,11 @@ func TestCompanionPublicationWaitsForFootChunkSnapshot(t *testing.T) {
 	if len(ready.Ready) != 1 || ready.Ready[0] != key {
 		t.Fatalf("Ready=%+v，想要 [%+v]", ready.Ready, key)
 	}
-	h.publish(sim.TickResult{
+	h.publish(contract.TickResult{
 		Tick:       ready.Tick,
 		Ready:      ready.Ready,
-		Players:    []sim.PlayerUpdate{observer},
-		Companions: []sim.CompanionUpdate{update},
+		Players:    []contract.PlayerUpdate{observer},
+		Companions: []contract.CompanionUpdate{update},
 	})
 
 	messages := onlyChunkAndCompanionMessages(h.drain(1))
@@ -84,19 +84,19 @@ func TestCompanionPublicationStatesAreSortedAndNewSpawnsSkipCurrentTick(t *testi
 	}
 	h.markSnapshotSent(1, core.ChunkPos{})
 	observer := h.playerUpdate(1, true, core.Overworld, mgl32.Vec3{0.5, 2, 0.5})
-	firstUpdates := []sim.CompanionUpdate{
+	firstUpdates := []contract.CompanionUpdate{
 		publicationCompanionUpdate(ids[0], 3.5),
 		publicationCompanionUpdate(ids[1], 1.5),
 		publicationCompanionUpdate(ids[2], 2.5),
 	}
 
-	h.publish(sim.TickResult{Tick: 7, Players: []sim.PlayerUpdate{observer}, Companions: firstUpdates})
+	h.publish(contract.TickResult{Tick: 7, Players: []contract.PlayerUpdate{observer}, Companions: firstUpdates})
 	first := onlyCompanionMessages(h.drain(1))
 	assertCompanionSpawns(t, first, []companion.ID{ids[1], ids[2], ids[0]})
 
-	secondUpdates := append([]sim.CompanionUpdate{}, firstUpdates...)
+	secondUpdates := append([]contract.CompanionUpdate{}, firstUpdates...)
 	secondUpdates = append(secondUpdates, publicationCompanionUpdate(ids[3], 1.75))
-	h.publish(sim.TickResult{Tick: 8, Players: []sim.PlayerUpdate{observer}, Companions: secondUpdates})
+	h.publish(contract.TickResult{Tick: 8, Players: []contract.PlayerUpdate{observer}, Companions: secondUpdates})
 	second := onlyCompanionMessages(h.drain(1))
 	assertPublicationTypes(t, second, []reflect.Type{
 		reflect.TypeOf(network.CompanionSpawn{}),
@@ -112,7 +112,7 @@ func TestCompanionPublicationStatesAreSortedAndNewSpawnsSkipCurrentTick(t *testi
 	states := second[1].(network.CompanionStates)
 	assertCompanionStates(t, states, 8, []companion.ID{ids[1], ids[2], ids[0]})
 
-	h.publish(sim.TickResult{Tick: 9, Players: []sim.PlayerUpdate{observer}, Companions: secondUpdates})
+	h.publish(contract.TickResult{Tick: 9, Players: []contract.PlayerUpdate{observer}, Companions: secondUpdates})
 	third := onlyCompanionMessages(h.drain(1))
 	assertPublicationTypes(t, third, []reflect.Type{reflect.TypeOf(network.CompanionStates{})})
 	assertCompanionStates(t, third[0].(network.CompanionStates), 9, []companion.ID{ids[1], ids[3], ids[2], ids[0]})
@@ -126,21 +126,21 @@ func TestCompanionPublicationDespawnsOnInterestExit(t *testing.T) {
 	oldObserver := h.playerUpdate(1, true, core.Overworld, mgl32.Vec3{0.5, 2, 0.5})
 	oldTarget := h.playerUpdate(2, true, core.Overworld, mgl32.Vec3{0.75, 2, 0.5})
 	update := publicationCompanionUpdate(id, 0.5)
-	h.publish(sim.TickResult{
+	h.publish(contract.TickResult{
 		Tick:       1,
-		Players:    []sim.PlayerUpdate{oldObserver, oldTarget},
-		Companions: []sim.CompanionUpdate{update},
+		Players:    []contract.PlayerUpdate{oldObserver, oldTarget},
+		Companions: []contract.CompanionUpdate{update},
 	})
 	h.drain(1)
 
 	moved := h.moveInterest(1, core.ChunkPos{X: 1})
 	newObserver := h.playerUpdate(1, true, core.Overworld, mgl32.Vec3{16.5, 2, 0.5})
 	newObserver.ViewCenter = core.ChunkPos{X: 1}
-	h.publish(sim.TickResult{
+	h.publish(contract.TickResult{
 		Tick:       2,
 		Forget:     moved.Forget,
-		Players:    []sim.PlayerUpdate{newObserver, oldTarget},
-		Companions: []sim.CompanionUpdate{update},
+		Players:    []contract.PlayerUpdate{newObserver, oldTarget},
+		Companions: []contract.CompanionUpdate{update},
 	})
 
 	published := h.drain(1)
@@ -221,19 +221,19 @@ func TestCompanionPublicationRejectsUnknownDefinitionWithoutPartialVisibility(t 
 	h.running.config.Companions = []companion.Definition{{ID: known, Name: "阿木"}}
 	h.markSnapshotSent(1, core.ChunkPos{})
 	observer := h.playerUpdate(1, true, core.Overworld, mgl32.Vec3{0.5, 2, 0.5})
-	h.publish(sim.TickResult{
+	h.publish(contract.TickResult{
 		Tick:       1,
-		Players:    []sim.PlayerUpdate{observer},
-		Companions: []sim.CompanionUpdate{publicationCompanionUpdate(known, 0.5)},
+		Players:    []contract.PlayerUpdate{observer},
+		Companions: []contract.CompanionUpdate{publicationCompanionUpdate(known, 0.5)},
 	})
 	current := h.running.sessions[1]
 	h.drain(1)
 	wantVisible := maps.Clone(current.visibleCompanions)
 
-	h.publish(sim.TickResult{
+	h.publish(contract.TickResult{
 		Tick:    2,
-		Players: []sim.PlayerUpdate{observer},
-		Companions: []sim.CompanionUpdate{
+		Players: []contract.PlayerUpdate{observer},
+		Companions: []contract.CompanionUpdate{
 			publicationCompanionUpdate(known, 0.75),
 			publicationCompanionUpdate(unknown, 32.5),
 		},
@@ -253,8 +253,8 @@ func publicationCompanionID(suffix byte) companion.ID {
 	return companion.ID{0, 0, 0, 0, 0, 0, 0x40, 0, 0x80, 0, 0, 0, 0, 0, 0, suffix}
 }
 
-func publicationCompanionUpdate(id companion.ID, x float32) sim.CompanionUpdate {
-	update := sim.CompanionUpdate{
+func publicationCompanionUpdate(id companion.ID, x float32) contract.CompanionUpdate {
+	update := contract.CompanionUpdate{
 		ID:        id,
 		Dimension: core.Overworld,
 		Yaw:       x,
@@ -342,8 +342,8 @@ func assertCompanionStates(t *testing.T, states network.CompanionStates, tick ui
 func waitForIndependentCompanionCapacity(
 	t *testing.T,
 	host *Host,
-	observerSession sim.SessionID,
-	playerSession sim.SessionID,
+	observerSession contract.SessionID,
+	playerSession contract.SessionID,
 	playerID core.PlayerID,
 	companionID companion.ID,
 ) {
@@ -352,7 +352,7 @@ func waitForIndependentCompanionCapacity(
 	lastBodies, lastSessions, lastPlayers, lastCompanions := 0, 0, 0, 0
 	lastObserver := false
 	lastSnapshots := 0
-	var lastObserverUpdate, lastPlayerUpdate sim.PlayerUpdate
+	var lastObserverUpdate, lastPlayerUpdate contract.PlayerUpdate
 	var lastCompanionBody companion.Body
 	lastPlayerWanted, lastCompanionWanted := false, false
 	for time.Now().Before(deadline) {

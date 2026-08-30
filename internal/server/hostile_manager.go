@@ -1,6 +1,6 @@
 // 本文件实现 server 侧夜行者有界追逐编排（hostileManager）：目标选择、不可
 // 变路径快照的两槽非阻塞派发、结果在 tick 边界按 ID 序应用与过期丢弃、以及
-// 经 `sim.HostileAction` 轴量提交的 waypoint 执行。
+// 经 `contract.HostileAction` 轴量提交的 waypoint 执行。
 //
 // 并发模型与 companion manager 同构（权威 tick 是唯一写者）：
 //   - slots/mobs/targets 只在持有 stepMu 的 tick 路径读写（Server.step 的
@@ -23,7 +23,8 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/pathfind"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 )
 
 // 有界追逐的固定数值契约：每 tick 至多构造 2 份路径快照、在途 A* 恒 ≤2（两
@@ -46,14 +47,14 @@ const (
 
 // hostileAttackRangeSquared 是攻击距离边界的平方。与 sim 的结算重验使用同一
 // 份导出常量与同一表达式次序，两侧的 1.8 格边界逐位一致。
-var hostileAttackRangeSquared = sim.HostileAttackRange * sim.HostileAttackRange
+var hostileAttackRangeSquared = contract.HostileAttackRange * contract.HostileAttackRange
 
 // hostileTargetPlayer 是编排层消费的在线玩家事实：稳定 ID、所属会话（攻击
 // 意图的目标寻址，`sim` 不维护 PlayerID 到会话的映射）、维度与权威位置。
 // 生产实现来自会话注册表（onlineHostileTargets），测试可注入固定集合。
 type hostileTargetPlayer struct {
 	id        core.PlayerID
-	session   sim.SessionID
+	session   contract.SessionID
 	dimension core.DimensionID
 	position  [3]float32
 }
@@ -96,7 +97,7 @@ type hostilePathJob struct {
 // hostileManager 编排全部夜行者的有界追逐。零值不可用，经 newHostileManager
 // 构造；关闭顺序见 beginShutdown/close。
 type hostileManager struct {
-	engine *sim.Engine
+	engine *runtime.Engine
 	table  pathfind.PathBlockTable
 
 	// onlinePlayers 返回 tick 边界的在线玩家事实（按 ID 升序、仅存活且已激
@@ -107,7 +108,7 @@ type hostileManager struct {
 
 	// mobs/targets 是本 tick 的一致观察截面（refreshMobs 一次取齐），编排各
 	// 阶段共用，避免重复读取；slots 按 ID 建档并随集合裁剪。
-	mobs    []sim.HostileMob
+	mobs    []contract.HostileMob
 	targets []hostileTargetPlayer
 	slots   map[uint64]*hostileChaseSlot
 
@@ -121,7 +122,7 @@ type hostileManager struct {
 
 // newHostileManager 构造夜行者追逐编排。worker 纪律与 companion manager 同
 // 构：goroutine 随派发创建、结果经有界 channel 回送、ctx 取消时放弃结果。
-func newHostileManager(engine *sim.Engine) *hostileManager {
+func newHostileManager(engine *runtime.Engine) *hostileManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &hostileManager{
 		engine:    engine,
@@ -256,7 +257,7 @@ func (m *hostileManager) applyPathOutcome(outcome hostilePathOutcome) {
 func (m *hostileManager) revisionsCurrent(dimension core.DimensionID, revisions []pathfind.ChunkRevision) bool {
 	for _, want := range revisions {
 		info, ok := m.engine.ChunkInfo(core.ChunkKey{Dimension: dimension, Pos: want.Chunk})
-		if !ok || info.State != sim.ChunkReady || info.Revision != want.Revision {
+		if !ok || info.State != contract.ChunkReady || info.Revision != want.Revision {
 			return false
 		}
 	}
@@ -264,9 +265,9 @@ func (m *hostileManager) revisionsCurrent(dimension core.DimensionID, revisions 
 }
 
 // advanceRunners 推进全部夜行者的 waypoint 执行（ID 升序）：先做攻击距离裁
-// 决——与所选目标的水平距离进入边界即停移并冻结一次攻击意图，cooldown 只由
-// sim 递减后准入；否则对既有路径做提交前重验（revision 与当前格），消费已到达的
-// waypoint 并把朝向下一 waypoint 的世界轴方向量经 `sim.HostileAction` 提交。
+// 决——与所选目标的水平距离进入边界即停移并冻结一次攻击意图（冷却中不再重
+// 复冻结）；否则对既有路径做提交前重验（revision 与当前格），消费已到达的
+// waypoint 并把朝向下一 waypoint 的世界轴方向量经 `contract.HostileAction` 提交。
 // 失效路径清空并把重规划排到下一 tick；路径走尽同样下一 tick 以目标当前位置
 // 重规划。无路径的夜行者不提交任何移动意图——绝不穿墙直线接近目标。
 func (m *hostileManager) advanceRunners() {
@@ -283,7 +284,7 @@ func (m *hostileManager) advanceRunners() {
 			target, ok := m.targetByID(slot.target)
 			if ok && target.dimension == mob.Dimension &&
 				withinHostileAttackRange([3]float32(mob.State.Position), target.position) {
-				m.engine.EnqueueHostileAction(sim.HostileAction{
+				m.engine.EnqueueHostileAction(contract.HostileAction{
 					ID:            mob.ID,
 					AttackTarget:  true,
 					TargetSession: target.session,
@@ -327,7 +328,7 @@ func (m *hostileManager) advanceRunners() {
 		if length == 0 {
 			continue
 		}
-		action := sim.HostileAction{
+		action := contract.HostileAction{
 			ID:    mob.ID,
 			MoveX: dx / length,
 			MoveZ: dz / length,
@@ -441,7 +442,7 @@ func (m *hostileManager) pathWorker(job hostilePathJob) {
 // nearestTarget 选择最近的 active 同维 live 玩家：比较在平方域进行，等距按
 // `PlayerID` 字节序取较小者。targets 已按 ID 升序注入，扫描次序确定，同一观
 // 察截面上的选择可重放。
-func (m *hostileManager) nearestTarget(mob *sim.HostileMob) (hostileTargetPlayer, bool) {
+func (m *hostileManager) nearestTarget(mob *contract.HostileMob) (hostileTargetPlayer, bool) {
 	var nearest hostileTargetPlayer
 	found := false
 	var nearestDistance float32
@@ -476,7 +477,7 @@ func (m *hostileManager) targetByID(id core.PlayerID) (hostileTargetPlayer, bool
 // 区块先经 ChunkInfo 元数据检查（廉价前置，未就绪即顺延、不做深拷贝），再整
 // 份拷贝进 `pathfind.NewPathGrid`。终点经 chaseGoal 钳制解析。
 func (m *hostileManager) buildChaseGrid(
-	mob sim.HostileMob,
+	mob contract.HostileMob,
 	target hostileTargetPlayer,
 ) (pathfind.PathGrid, pathfind.PathCell, pathfind.PathCell, bool) {
 	center := standingCellOf([3]float32(mob.State.Position))

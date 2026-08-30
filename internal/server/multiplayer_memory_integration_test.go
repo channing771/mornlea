@@ -19,7 +19,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	networktcp "github.com/channing771/mornlea/internal/network/tcp"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -404,7 +404,7 @@ func runEightManualMultiplayer(t *testing.T, transport string, ticks uint64) mul
 		_, _ = combined.Write([]byte{byte(index)})
 		digest := canonicalMultiplayerTranscript(connected.transcript)
 		_, _ = combined.Write(digest[:])
-		snapshot, ok := running.PlayerSnapshotFor(sim.SessionID(index + 1))
+		snapshot, ok := running.PlayerSnapshotFor(contract.SessionID(index + 1))
 		if !ok {
 			t.Fatalf("%s player %d snapshot unavailable", transport, index)
 		}
@@ -618,11 +618,11 @@ func assertRawBusinessTicks(
 }
 
 func multiplayerSessionSpec(index int, identity network.Identity, endpoint network.ServerEndpoint) SessionSpec {
-	location := sim.PlayerLocation{Dimension: core.Overworld, Position: multiplayerStartPositions[index]}
+	location := contract.PlayerLocation{Dimension: core.Overworld, Position: multiplayerStartPositions[index]}
 	return SessionSpec{
-		ID: sim.SessionID(index + 1), Generation: 1,
+		ID: contract.SessionID(index + 1), Generation: 1,
 		PlayerID: identity.PlayerID, DisplayName: identity.DisplayName, Endpoint: endpoint,
-		Restore: sim.PlayerRestore{Current: &location, Safe: &location, SpawnDimension: core.Overworld},
+		Restore: contract.PlayerRestore{Current: &location, Safe: &location, SpawnDimension: core.Overworld},
 	}
 }
 
@@ -704,7 +704,7 @@ func multiplayerDiagnosticsMany(clients []*multiplayerTCPClient) string {
 	return output.String()
 }
 
-func snapshotDigest(snapshot sim.PlayerSnapshot) [32]byte {
+func snapshotDigest(snapshot contract.PlayerSnapshot) [32]byte {
 	var encoded bytes.Buffer
 	_ = binary.Write(&encoded, binary.LittleEndian, int32(snapshot.Current.Dimension))
 	for _, value := range snapshot.Current.Position {
