@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, Self
+from collections.abc import Mapping
+from typing import Annotated, Any, ClassVar, Literal, Self
 
 from pydantic import (
     BeforeValidator,
@@ -128,11 +129,16 @@ class Plan(StrictModel):
     summary: PlanSummary
     steps: PlanSteps
 
-    @model_validator(mode="after")
-    def validate_follow_and_size(self) -> Self:
-        for index, step in enumerate(self.steps[:-1]):
+    @field_validator("steps")
+    @classmethod
+    def validate_follow_is_last(cls, value: tuple[PlanStep, ...]) -> tuple[PlanStep, ...]:
+        for index, step in enumerate(value[:-1]):
             if isinstance(step, FollowStep):
                 raise ValueError(f"follow step at index {index} must be final")
+        return value
+
+    @model_validator(mode="after")
+    def validate_payload_size(self) -> Self:
         require_canonical_size(self, 65536, "plan")
         return self
 
@@ -291,11 +297,18 @@ VisibleBlockMatches = Annotated[
 class FindVisibleBlocksResult(StrictModel):
     matches: VisibleBlockMatches
 
-    @model_validator(mode="after")
-    def validate_sort_and_size(self) -> Self:
-        coordinates = [(item.position.x, item.position.y, item.position.z) for item in self.matches]
+    @field_validator("matches")
+    @classmethod
+    def validate_coordinate_sort(
+        cls, value: tuple[VisibleBlockMatch, ...]
+    ) -> tuple[VisibleBlockMatch, ...]:
+        coordinates = [(item.position.x, item.position.y, item.position.z) for item in value]
         if any(left >= right for left, right in zip(coordinates, coordinates[1:], strict=False)):
             raise ValueError("matches must use strictly increasing x/y/z coordinate order")
+        return value
+
+    @model_validator(mode="after")
+    def validate_payload_size(self) -> Self:
         require_canonical_size(self, 16384, "find_visible_blocks result")
         return self
 
@@ -328,13 +341,20 @@ _TERRAIN_CONTEXT_ADAPTER = TypeAdapter(TerrainPositions)
 class QueryTerrainResult(StrictModel):
     terrain: TerrainItems
 
-    @model_validator(mode="after")
-    def validate_positions_and_size(self, info: ValidationInfo) -> Self:
+    @field_validator("terrain")
+    @classmethod
+    def validate_input_positions(
+        cls, value: tuple[TerrainItem, ...], info: ValidationInfo
+    ) -> tuple[TerrainItem, ...]:
         if not isinstance(info.context, dict) or "positions" not in info.context:
             raise ValueError("query_terrain result requires input positions in validation context")
         expected = _TERRAIN_CONTEXT_ADAPTER.validate_python(info.context["positions"])
-        if tuple(item.position for item in self.terrain) != expected:
+        if tuple(item.position for item in value) != expected:
             raise ValueError("terrain positions must match input count and order")
+        return value
+
+    @model_validator(mode="after")
+    def validate_payload_size(self) -> Self:
         require_canonical_size(self, 16384, "query_terrain result")
         return self
 
@@ -349,6 +369,7 @@ class ValidatePlanInput(StrictModel):
 
 
 class ValidatePlanSuccessResult(StrictModel):
+    exact_constants: ClassVar[Mapping[str, object]] = {"accepted": True}
     accepted: Literal[True]
     snapshot_digest: SHA256
     plan: Plan
@@ -360,6 +381,7 @@ class ValidatePlanSuccessResult(StrictModel):
 
 
 class ValidatePlanFailureResult(StrictModel):
+    exact_constants: ClassVar[Mapping[str, object]] = {"accepted": False}
     accepted: Literal[False]
     code: ValidatorCode
     hint: ValidatorHint

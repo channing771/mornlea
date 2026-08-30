@@ -26,6 +26,7 @@ from pydantic import (
 
 _ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _URI_SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
+_DNS_LABEL = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 
 
 class ConfigError(ValueError):
@@ -112,9 +113,14 @@ class StorageConfig(_StrictFrozenModel):
         candidate = Path(text)
         if not candidate.is_absolute():
             candidate = config_dir / candidate
-        resolved = candidate.resolve(strict=False)
-        if resolved.exists() and not resolved.is_file():
-            raise ValueError("storage.sqlite_path must name a file, not a directory")
+        try:
+            resolved = candidate.resolve(strict=False)
+            if resolved.exists() and not resolved.is_file():
+                raise ValueError("storage.sqlite_path must name a file, not a directory")
+        except (OSError, RuntimeError) as error:
+            raise ValueError(
+                "storage.sqlite_path cannot be resolved as a persistent file"
+            ) from error
         return resolved
 
 
@@ -127,6 +133,8 @@ class ProviderConfig(_StrictFrozenModel):
     @classmethod
     def validate_base_url(cls, value: str) -> str:
         _validate_nonempty_text(value, field="provider.base_url")
+        if "\\" in value:
+            raise ValueError("provider.base_url must not contain backslash")
         try:
             parsed = urlsplit(value)
             parsed_port = parsed.port
@@ -136,11 +144,64 @@ class ProviderConfig(_StrictFrozenModel):
             raise ValueError("provider.base_url must use http or https")
         if parsed.hostname is None or parsed.username is not None or parsed.password is not None:
             raise ValueError("provider.base_url must have a host and no userinfo")
+        if any(character.isspace() for character in parsed.netloc):
+            raise ValueError("provider.base_url authority must not contain whitespace")
         if parsed_port is not None and not 1 <= parsed_port <= 65535:
             raise ValueError("provider.base_url has an invalid port")
         if "?" in value or "#" in value:
             raise ValueError("provider.base_url must not contain query or fragment")
+        if parsed.netloc.startswith("["):
+            try:
+                ip_address(parsed.hostname)
+            except ValueError as error:
+                raise ValueError(
+                    "provider.base_url bracketed hostname must be a valid IP literal"
+                ) from error
+        cls.validate_provider_host(parsed.hostname)
         return value
+
+    @classmethod
+    def validate_provider_host(cls, host: str) -> None:
+        try:
+            ip_address(host)
+            return
+        except ValueError:
+            pass
+        if host.startswith(".") or host.endswith(".") or ".." in host:
+            raise ValueError("provider.base_url hostname must not contain empty DNS labels")
+        unicode_labels = host.split(".")
+        if len(unicode_labels) == 4 and all(
+            label.isascii() and label.isdecimal() for label in unicode_labels
+        ):
+            raise ValueError("provider.base_url hostname is an invalid IPv4 address")
+        if (
+            unicodedata.normalize("NFC", host) != host
+            or unicodedata.normalize("NFKC", host) != host
+        ):
+            raise ValueError("provider.base_url hostname must use normalized IDNA text")
+        for label in unicode_labels:
+            for index, character in enumerate(label):
+                if character.isascii():
+                    continue
+                category = unicodedata.category(character)
+                if category[0] not in {"L", "M", "N"} or (index == 0 and category[0] == "M"):
+                    raise ValueError("provider.base_url hostname contains invalid IDNA characters")
+        try:
+            ascii_host = host.encode("idna", errors="strict").decode("ascii")
+        except UnicodeError as error:
+            raise ValueError("provider.base_url hostname must be valid IDNA") from error
+        if len(ascii_host) > 253:
+            raise ValueError("provider.base_url hostname is too long")
+        labels = ascii_host.split(".")
+        if any(_DNS_LABEL.fullmatch(label) is None for label in labels):
+            raise ValueError("provider.base_url hostname contains an invalid DNS label")
+        for label in labels:
+            if not label.lower().startswith("xn--"):
+                continue
+            try:
+                label.encode("ascii").decode("idna")
+            except UnicodeError as error:
+                raise ValueError("provider.base_url hostname contains invalid punycode") from error
 
     @field_validator("model")
     @classmethod
@@ -250,9 +311,11 @@ def _secret_from_environment(environment: Mapping[str, str], name: str) -> Secre
             f"environment variable {name} must contain a non-empty header-safe secret"
         )
     try:
-        value.encode("utf-8")
+        value.encode("ascii", errors="strict")
     except UnicodeEncodeError:
-        raise ConfigError(f"environment variable {name} must contain valid UTF-8") from None
+        raise ConfigError(
+            f"environment variable {name} must contain an ASCII header-safe secret"
+        ) from None
     return SecretStr(value)
 
 

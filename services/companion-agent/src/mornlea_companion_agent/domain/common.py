@@ -6,7 +6,8 @@ import json
 import math
 import re
 import unicodedata
-from typing import Annotated, Any
+from collections.abc import Mapping
+from typing import Annotated, Any, ClassVar
 from urllib.parse import urlsplit
 
 from pydantic import (
@@ -18,6 +19,7 @@ from pydantic import (
     StrictFloat,
     StrictInt,
     StrictStr,
+    model_validator,
 )
 
 UINT64_MAX = (1 << 64) - 1
@@ -34,6 +36,20 @@ class StrictModel(BaseModel):
     """所有 application contract object 的共同 strict/frozen 规则。"""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    exact_constants: ClassVar[Mapping[str, object]] = {}
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_exact_constant_types(cls, value: Any) -> Any:
+        if not isinstance(value, Mapping):
+            return value
+        for field, expected in cls.exact_constants.items():
+            if field not in value:
+                continue
+            actual = value[field]
+            if type(actual) is not type(expected) or actual != expected:
+                raise ValueError(f"{field} must preserve the exact JSON constant type")
+        return value
 
 
 def _utf8(value: str) -> bytes:

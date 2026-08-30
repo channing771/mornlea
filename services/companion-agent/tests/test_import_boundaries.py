@@ -57,6 +57,107 @@ def _resolve_from(source: str, level: int, module: str | None, *, is_package: bo
     return ".".join((*base, *(module.split(".") if module else ())))
 
 
+def _is_import_callable(
+    node: ast.expr,
+    importlib_aliases: set[str],
+    builtins_aliases: set[str],
+    callable_aliases: set[str],
+) -> bool:
+    if isinstance(node, ast.Name):
+        return node.id in callable_aliases
+    if isinstance(node, ast.Attribute):
+        if not isinstance(node.value, ast.Name):
+            return False
+        return (node.value.id in importlib_aliases and node.attr == "import_module") or (
+            node.value.id in builtins_aliases and node.attr == "__import__"
+        )
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "getattr"
+        and len(node.args) >= 2
+        and isinstance(node.args[0], ast.Name)
+    ):
+        module = node.args[0].id
+        name = _constant_string(node.args[1])
+        if module in importlib_aliases:
+            return name in {None, "import_module"}
+        if module in builtins_aliases:
+            return name in {None, "__import__"}
+    if (
+        isinstance(node, ast.Subscript)
+        and isinstance(node.value, ast.Attribute)
+        and node.value.attr == "__dict__"
+        and isinstance(node.value.value, ast.Name)
+    ):
+        module = node.value.value.id
+        name = _constant_string(node.slice)
+        if module in importlib_aliases:
+            return name in {None, "import_module"}
+        if module in builtins_aliases:
+            return name in {None, "__import__"}
+    return False
+
+
+def _constant_string(node: ast.expr) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = _constant_string(node.left)
+        right = _constant_string(node.right)
+        if left is not None and right is not None:
+            return left + right
+    return None
+
+
+def _dynamic_import_bindings(tree: ast.AST) -> tuple[set[str], set[str], set[str]]:
+    importlib_aliases: set[str] = set()
+    builtins_aliases: set[str] = set()
+    callable_aliases: set[str] = {"__import__"}
+    assignments: list[tuple[list[ast.expr], ast.expr]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "importlib":
+                    importlib_aliases.add(alias.asname or alias.name)
+                if alias.name == "builtins":
+                    builtins_aliases.add(alias.asname or alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if node.module == "importlib" and alias.name == "import_module":
+                    callable_aliases.add(alias.asname or alias.name)
+                if node.module == "builtins" and alias.name == "__import__":
+                    callable_aliases.add(alias.asname or alias.name)
+        elif isinstance(node, ast.Assign):
+            assignments.append((list(node.targets), node.value))
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            assignments.append(([node.target], node.value))
+    changed = True
+    while changed:
+        changed = False
+        for targets, value in assignments:
+            for target in targets:
+                if not isinstance(target, ast.Name):
+                    continue
+                if isinstance(value, ast.Name) and value.id in importlib_aliases:
+                    if target.id not in importlib_aliases:
+                        importlib_aliases.add(target.id)
+                        changed = True
+                if isinstance(value, ast.Name) and value.id in builtins_aliases:
+                    if target.id not in builtins_aliases:
+                        builtins_aliases.add(target.id)
+                        changed = True
+                if (
+                    _is_import_callable(
+                        value, importlib_aliases, builtins_aliases, callable_aliases
+                    )
+                    and target.id not in callable_aliases
+                ):
+                    callable_aliases.add(target.id)
+                    changed = True
+    return importlib_aliases, builtins_aliases, callable_aliases
+
+
 def _scan(package_root: Path = PACKAGE_ROOT) -> tuple[list[ImportEdge], list[str]]:
     edges: list[ImportEdge] = []
     errors: list[str] = []
@@ -68,6 +169,7 @@ def _scan(package_root: Path = PACKAGE_ROOT) -> tuple[list[ImportEdge], list[str
             errors.append(f"{path}:{getattr(error, 'lineno', 0)}: {error}")
             continue
         is_package = path.name == "__init__.py"
+        importlib_aliases, builtins_aliases, callable_aliases = _dynamic_import_bindings(tree)
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 edges.extend(ImportEdge(source, alias.name, node.lineno) for alias in node.names)
@@ -75,11 +177,9 @@ def _scan(package_root: Path = PACKAGE_ROOT) -> tuple[list[ImportEdge], list[str
                 target = _resolve_from(source, node.level, node.module, is_package=is_package)
                 edges.append(ImportEdge(source, target, node.lineno))
             elif isinstance(node, ast.Call):
-                dynamic_import = (
-                    isinstance(node.func, ast.Name)
-                    and node.func.id in {"__import__", "import_module"}
-                ) or (isinstance(node.func, ast.Attribute) and node.func.attr == "import_module")
-                if not dynamic_import:
+                if not _is_import_callable(
+                    node.func, importlib_aliases, builtins_aliases, callable_aliases
+                ):
                     continue
                 if (
                     node.args
@@ -135,7 +235,7 @@ def _boundary_errors(package_root: Path = PACKAGE_ROOT) -> list[str]:
         if target_layer != "external" and target_layer not in allowed_local[source_layer]:
             errors.append(f"{edge.source}:{edge.line}: forbidden {source_layer}->{target_layer}")
     for path in sorted(package_root.iterdir()):
-        if path.name.startswith("__"):
+        if path.name in {"__init__.py", "__main__.py", "__pycache__"}:
             continue
         name = path.stem if path.is_file() else path.name
         if name not in {"cli", "config", "domain", "harness", "adapters", "storage", "app"}:
@@ -176,6 +276,39 @@ def test_scanner_rejects_dynamic_boundary_bypasses(tmp_path: Path) -> None:
     )
     errors = _boundary_errors(package)
     assert any("eager heavy import fastapi" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'from importlib import import_module as load\nload("fastapi")\n',
+        'from builtins import __import__ as load\nload("fastapi")\n',
+        'import importlib as x\nx.import_module("fastapi")\n',
+        'import importlib\ngetattr(importlib, "import_module")("fastapi")\n',
+        'import importlib\nload = getattr(importlib, "import_module")\nload("fastapi")\n',
+        'import builtins as b\nb.__import__("fastapi")\n',
+        'import importlib as il\nalias = il\nalias.import_module("fastapi")\n',
+        ('from importlib import import_module\nalias: object = import_module\nalias("fastapi")\n'),
+        ('import importlib\nload = getattr(importlib, "import_" + "module")\nload("fastapi")\n'),
+        ('import importlib\nload = importlib.__dict__["import_module"]\nload("fastapi")\n'),
+    ],
+)
+def test_scanner_rejects_common_dynamic_import_aliases(tmp_path: Path, source: str) -> None:
+    package = tmp_path / PACKAGE_NAME
+    (package / "domain").mkdir(parents=True)
+    (package / "domain/__init__.py").write_text(source, encoding="utf-8")
+    errors = _boundary_errors(package)
+    assert any("eager heavy import fastapi" in error for error in errors), errors
+
+
+@pytest.mark.parametrize("relative", ["__escape.py", "__escape/__init__.py"])
+def test_scanner_rejects_empty_unknown_dunder_layers(tmp_path: Path, relative: str) -> None:
+    package = tmp_path / PACKAGE_NAME
+    target = package / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("", encoding="utf-8")
+    errors = _boundary_errors(package)
+    assert any("unknown package layer" in error for error in errors), errors
 
 
 @pytest.mark.parametrize(

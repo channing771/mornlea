@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 from pydantic import ValidationError
 
@@ -140,6 +142,22 @@ def test_sqlite_path_rejects_existing_directory_without_creating_anything(tmp_pa
     assert list(database_dir.iterdir()) == []
 
 
+def test_sqlite_path_symlink_loop_becomes_redacted_config_error(tmp_path: Path) -> None:
+    loop = tmp_path / "loop.sqlite3"
+    try:
+        loop.symlink_to(loop.name)
+    except (NotImplementedError, OSError) as error:
+        pytest.skip(f"symlink unavailable: {error}")
+    config_path = _replace(
+        _write_config(tmp_path / "agent.yaml"),
+        "state/companion.sqlite3",
+        loop.name,
+    )
+    with pytest.raises(ConfigError, match="storage.sqlite_path") as captured:
+        load_config(config_path)
+    assert "symlink" not in str(captured.value).lower()
+
+
 @pytest.mark.parametrize(
     ("old", "new", "field"),
     [
@@ -183,7 +201,68 @@ def test_provider_base_url_rejects_unsafe_shapes(tmp_path: Path, url: str) -> No
 
 
 @pytest.mark.parametrize(
-    "url", ["https://models.example.test/v1", "http://127.0.0.1:11434/openai/v1"]
+    "url",
+    [
+        "https://bad host.example/v1",
+        "https://bad..example/v1",
+        "https://.example.test/v1",
+        "https://example.test./v1",
+        "https://bad_label.example/v1",
+        "https://-bad.example/v1",
+        "https://bad-.example/v1",
+        "https://xn--.example/v1",
+        f"https://{'a' * 64}.example/v1",
+        "https://example.test\\evil/v1",
+        "http://exa\u200bmple.com/v1",
+        "http://a\u200cb.com/v1",
+        "http://a\u200db.com/v1",
+        "http://\ufeffexample.com/v1",
+        "http://example\u2060.com/v1",
+        "http://ｅｘａｍｐｌｅ.com/v1",
+        "http://💩.com/v1",
+        "http://[v1.foo]/v1",
+        "http://0127.0.0.1/v1",
+        "http://999.1.1.1/v1",
+    ],
+)
+def test_provider_base_url_rejects_httpx_unsendable_authorities(tmp_path: Path, url: str) -> None:
+    config_path = _replace(
+        _write_config(tmp_path / "agent.yaml"),
+        "https://models.example.test/v1",
+        json.dumps(url, ensure_ascii=False),
+    )
+    with pytest.raises(ConfigError, match="provider.base_url"):
+        load_config(config_path)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://exa\u200bmple.com/v1",
+        "http://a\u200cb.com/v1",
+        "http://a\u200db.com/v1",
+        "http://\ufeffexample.com/v1",
+        "http://example\u2060.com/v1",
+        "http://ｅｘａｍｐｌｅ.com/v1",
+        "http://💩.com/v1",
+        "http://[v1.foo]/v1",
+        "http://0127.0.0.1/v1",
+        "http://999.1.1.1/v1",
+    ],
+)
+def test_provider_host_probes_are_rejected_by_httpx(url: str) -> None:
+    with pytest.raises(httpx.InvalidURL):
+        httpx.URL(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://models.example.test/v1",
+        "http://127.0.0.1:11434/openai/v1",
+        "https://例子.测试/v1",
+        "http://[::1]:11434/v1",
+    ],
 )
 def test_provider_base_url_accepts_openai_compatible_paths(tmp_path: Path, url: str) -> None:
     config_path = _replace(
@@ -275,6 +354,39 @@ def test_secret_resolution_is_separate_and_redacted(tmp_path: Path) -> None:
         with pytest.raises(ConfigError) as error:
             resolve_secrets(config, environment)
         assert secret_value not in str(error.value)
+
+
+@pytest.mark.parametrize("secret_env", ["MORNLEA_AGENT_TOKEN", "MORNLEA_PROVIDER_KEY"])
+@pytest.mark.parametrize(
+    "secret", ["令牌", "café", "token token", "token\tvalue", "token\x00value"]
+)
+def test_resolved_secrets_are_ascii_header_safe_and_redacted(
+    tmp_path: Path, secret_env: str, secret: str
+) -> None:
+    config = load_config(_write_config(tmp_path / "agent.yaml"))
+    environment = {
+        "MORNLEA_AGENT_TOKEN": "agent-token",
+        "MORNLEA_PROVIDER_KEY": "provider-token",
+    }
+    environment[secret_env] = secret
+    with pytest.raises(ConfigError) as captured:
+        resolve_secrets(config, environment)
+    assert secret_env in str(captured.value)
+    assert secret not in str(captured.value)
+
+
+def test_resolved_secrets_can_be_encoded_as_httpx_authorization_headers(tmp_path: Path) -> None:
+    config = load_config(_write_config(tmp_path / "agent.yaml"))
+    secrets = resolve_secrets(
+        config,
+        {
+            "MORNLEA_AGENT_TOKEN": "agent-token_123.~+/=",
+            "MORNLEA_PROVIDER_KEY": "provider-token_456.~+/=",
+        },
+    )
+    for secret in (secrets.http_bearer_token, secrets.provider_api_key):
+        headers = httpx.Headers({"Authorization": f"Bearer {secret.get_secret_value()}"})
+        assert headers.raw[0][1].isascii()
 
 
 def test_cli_version_and_help_are_lightweight(capsys: pytest.CaptureFixture[str]) -> None:

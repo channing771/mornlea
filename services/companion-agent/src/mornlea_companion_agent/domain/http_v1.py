@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from collections.abc import Mapping
+from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import BeforeValidator, Field, StrictInt
 
@@ -46,6 +47,7 @@ class AcquireRequest(StrictModel):
 
 
 class AcquireResponse(AcquireRequest):
+    exact_constants: ClassVar[Mapping[str, object]] = {"lease_expires_in_ms": 15000}
     lease_id: UUIDv4
     lease_expires_in_ms: Literal[15000]
 
@@ -55,10 +57,12 @@ class LeaseRequest(AcquireRequest):
 
 
 class HeartbeatResponse(LeaseRequest):
+    exact_constants: ClassVar[Mapping[str, object]] = {"lease_expires_in_ms": 15000}
     lease_expires_in_ms: Literal[15000]
 
 
 class ReleaseResponse(LeaseRequest):
+    exact_constants: ClassVar[Mapping[str, object]] = {"released": True}
     released: Literal[True]
 
 
@@ -174,6 +178,7 @@ class DialogueRunIdentity(LeaseRequest):
 
 
 class DialogueNonterminalRequest(DialogueRunIdentity):
+    exact_constants: ClassVar[Mapping[str, object]] = {"terminal": False}
     deadline_unix_ms: DeadlineUnixMilliseconds
     persona: PersonaText
     fact_node: DialogueNonterminalFactNode
@@ -182,6 +187,7 @@ class DialogueNonterminalRequest(DialogueRunIdentity):
 
 
 class DialogueTerminalRequest(DialogueRunIdentity):
+    exact_constants: ClassVar[Mapping[str, object]] = {"terminal": True}
     deadline_unix_ms: DeadlineUnixMilliseconds
     persona: PersonaText
     fact_node: DialogueTerminalFactNode
@@ -214,6 +220,7 @@ DialogueResponse = DialogueNonterminalResponse | DialogueTerminalResponse
 
 
 class MemoryStateZero(StrictModel):
+    exact_constants: ClassVar[Mapping[str, object]] = {"revision": 0}
     revision: Literal[0]
     operation_id: None
     summary: Literal[""]
@@ -234,12 +241,14 @@ class MemoryIdentity(LeaseRequest):
 
 
 class MemoryReconcileActiveRequest(MemoryIdentity):
+    exact_constants: ClassVar[Mapping[str, object]] = {"active": True}
     active: Literal[True]
     tombstone_operation_id: None
     mirror: MemoryState
 
 
 class MemoryReconcileInactiveRequest(MemoryIdentity):
+    exact_constants: ClassVar[Mapping[str, object]] = {"active": False}
     active: Literal[False]
     tombstone_operation_id: UUIDv4
     mirror: None
@@ -252,12 +261,14 @@ MemoryReconcileRequest = Annotated[
 
 
 class MemoryReconcileActiveResponse(MemoryIdentity):
+    exact_constants: ClassVar[Mapping[str, object]] = {"active": True}
     active: Literal[True]
     tombstone_operation_id: None
     memory: MemoryState
 
 
 class MemoryReconcileInactiveResponse(MemoryIdentity):
+    exact_constants: ClassVar[Mapping[str, object]] = {"active": False}
     active: Literal[False]
     tombstone_operation_id: UUIDv4
     memory: None
