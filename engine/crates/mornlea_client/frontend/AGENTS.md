@@ -121,10 +121,11 @@ Rust 侧只消费本目录的构建产物 `dist/`（经 `mornlea://` scheme 内�
   update 入口覆盖；漂移先看差异图定位，再决定修代码还是更新基线。该基线是
   测试夹具二进制（与世界 golden PNG 同一入库先例），不属于 `dist/`「零二进制
   Web 资产」白名单约束范畴——那只约束生产 dist 资产。
-- fixture 名称清单在 `visual/fixture-names.json` 单源（`fixtures.tsx` 与
-  `visual.mjs` 共读，注册表在模块加载时与清单互钉）；新增部件先加清单与
-  注册表，再跑 update 入库基线。harness 的 TS 自检用 `visual/tsconfig.json`
-  （`tsc --noEmit -p visual/tsconfig.json`），不并入生产 `tsconfig.json`。
+- fixture 名称清单在 `visual/fixture-names.ts` 单源（`as const` 数组让注册表
+  键得到编译期互钉；`visual.mjs` 按严格格式提取同一数组，格式偏离即报错）；
+  新增部件先加清单与注册表，再跑 update 入库基线。harness 的 TS 自检经
+  `corepack pnpm visual-typecheck`（`visual/tsconfig.json`，并作为
+  `visual-check` 的前置步骤），不并入生产 `tsconfig.json`。
 
 ## Focused Verification
 

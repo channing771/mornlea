@@ -29,10 +29,20 @@ const goldenDir = path.join(visualDir, "golden");
 // 候选实拍图与差异图统一留在仓库根 build/visual-ui/（根 /build/ 已 gitignored）。
 const outDir = path.join(repoRoot, "build", "visual-ui");
 
-// fixture 名称清单以 fixture-names.json 为单源，与 fixtures.tsx 的注册表互钉
-// （后者在模块加载时校验一致性），本脚本只消费这份清单驱动截图与比对。
-const fixtureNamesPath = path.join(visualDir, "fixture-names.json");
-const fixtureNames = JSON.parse(fs.readFileSync(fixtureNamesPath, "utf8"));
+// fixture 名称清单以 fixture-names.ts 的 `as const` 数组为单源（fixtures.tsx
+// 经字面量联合获得编译期互钉），本脚本按该文件的严格格式约定提取数组字面量
+// 驱动截图与比对；格式偏离立即报错，绝不静默漏拍。
+const fixtureNamesPath = path.join(visualDir, "fixture-names.ts");
+const namesMatch = fs
+  .readFileSync(fixtureNamesPath, "utf8")
+  .match(/export const fixtureNames = \[\n((?:  "[a-z0-9-]+",\n)+)\] as const;/);
+if (namesMatch === null) {
+  throw new Error(
+    `fixture-names.ts 不符合格式约定（export const fixtureNames = [ 每行一个双引号 kebab-case 名称加逗号 ] as const;）：${fixtureNamesPath}`,
+  );
+}
+// 去掉末项尾逗号后按 JSON 解析（数组字面量刻意保持 JSON 兼容写法）。
+const fixtureNames = JSON.parse(`[\n${namesMatch[1].replace(/,\n$/, "\n")}]`);
 if (
   !Array.isArray(fixtureNames) ||
   fixtureNames.length === 0 ||
@@ -232,13 +242,15 @@ function captureScreenshot({ chromeBin, url, destPath, profileDir }) {
       finish(error);
     });
     child.on("close", () => {
-      removeDirSafe(profileDir);
+      // 先消费 shot.png 再清理 profile 目录：截图就落在 profileDir 内，
+      // 顺序颠倒会让正常退出型 Chrome（Linux 或上游修复挂起后）每张必报失败。
       if (fs.existsSync(shotPath)) {
         fs.copyFileSync(shotPath, destPath);
         finish();
       } else {
         finish(new Error(`Chrome 截图失败：${url}${stderrTail === "" ? "" : `\n${stderrTail}`}`));
       }
+      removeDirSafe(profileDir);
     });
     const hardTimer = setTimeout(() => {
       finish(
@@ -440,6 +452,8 @@ async function main() {
     }
   } finally {
     server.close();
+    // 截图用的 keep-alive 连接可能还挂着，不主动断会让进程退出被拖住。
+    server.closeAllConnections();
   }
 }
 

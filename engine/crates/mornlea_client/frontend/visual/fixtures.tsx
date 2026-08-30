@@ -6,8 +6,10 @@
 //   - 组件态 fixture 只复用 ui.css 的既有语义 class（menu-button、settings-*、
 //     debug-*），不引入 Tailwind 工具类：tailwind content 只扫描 src/** 与
 //     retroui 产物，harness 侧新增的工具类不会被生成。
-//   - 名称清单在 fixture-names.json 单源（本文件与 visual.mjs 共读），注册表
-//     与清单在模块加载时互钉，漂移立即抛错，避免部件静默缺基线。
+//   - 名称清单在 fixture-names.ts 单源（本文件经 `as const` 推导字面量联合，
+//     visual.mjs 按严格格式提取同一数组），注册表键以
+//     `Record<FixtureName, ReactElement>` 钉死：注册表多键/缺键都在编译期
+//     报错，模块加载时另与清单运行期互钉兜底（防 .mjs 提取漂移）。
 import type { ReactElement } from "react";
 import type {
   DebugState,
@@ -21,7 +23,7 @@ import { MainMenu } from "../src/ui/MainMenu";
 import { PauseMenu } from "../src/ui/PauseMenu";
 import { SettingsPanel } from "../src/ui/SettingsPanel";
 import { PixelButton, PixelInput } from "../src/ui/pixel";
-import fixtureNames from "./fixture-names.json";
+import { fixtureNames, type FixtureName } from "./fixture-names";
 
 // noEvent：fixture 渲染的空上行收集器。回调签名与生产一致；截图场景无头、
 // 无交互，回调不应被触发，留作防御性兜底。
@@ -77,8 +79,9 @@ const debugRowsFixture: DebugState = {
   ],
 };
 
-// stage 把组件态 fixture 放进舞台：列宽与设置面板同款（min(460px, ...)），
-// 控件在生产语境下的几何（全宽输入/滑杆、按钮组 flex）不因 harness 变形。
+// stage 把组件态 fixture 放进舞台：列宽与设置面板同款（见 visual.css
+// `.visual-column` 的交叉引用注释），控件在生产语境下的几何（全宽输入/滑杆、
+// 按钮组 flex）不因 harness 变形。
 function stage(child: ReactElement): ReactElement {
   return (
     <div className="visual-stage">
@@ -87,9 +90,10 @@ function stage(child: ReactElement): ReactElement {
   );
 }
 
-// 注册表：键集合与 fixture-names.json 完全一致（模块加载即互钉）。新增部件
-// 先加清单条目再补注册，随后跑 update 入口把基线随部件一并入库。
-const registry: Record<string, ReactElement> = {
+// 注册表：键集合被 `Record<FixtureName, ReactElement>` 与 fixture-names.ts 的
+// 字面量联合双向钉死（新增部件先加清单条目，否则这里编译不过），随后跑
+// update 入口把基线随部件一并入库。
+const registry: Record<FixtureName, ReactElement> = {
   "panel-main-menu": <MainMenu menu={menuFixture} onEvent={noEvent} />,
   "panel-settings": <SettingsPanel settings={settingsFixture} onEvent={noEvent} />,
   "panel-pause": <PauseMenu pause={pauseFixture} onEvent={noEvent} />,
@@ -148,8 +152,8 @@ const registry: Record<string, ReactElement> = {
   "error-line": stage(<p className="menu-error" role="alert">世界装配失败</p>),
 };
 
-// 注册表与清单互钉：任一侧多/少条目都在模块加载时报错，而不是等到 check
-// 才表现为「缺基线」或「静默漏拍」。
+// 注册表与清单运行期互钉兜底（编译期已由 Record<FixtureName, …> 钉死注册表
+// 侧；这段防的是 visual.mjs 对 fixture-names.ts 的严格格式提取漂移）。
 const registryKeys = Object.keys(registry).sort();
 const manifestKeys = [...fixtureNames].sort();
 if (
@@ -157,17 +161,22 @@ if (
   registryKeys.some((key, index) => key !== manifestKeys[index])
 ) {
   throw new Error(
-    `fixture 注册表与 fixture-names.json 不一致：registry=[${registryKeys.join(", ")}] manifest=[${manifestKeys.join(", ")}]`,
+    `fixture 注册表与 fixture-names.ts 不一致：registry=[${registryKeys.join(", ")}] manifest=[${manifestKeys.join(", ")}]`,
   );
+}
+
+// isFixtureName 收窄 URL 查询参数到清单内的合法名称。
+function isFixtureName(value: string): value is FixtureName {
+  return value in registry;
 }
 
 // resolveFixture 按名取呈现；未知名称直接抛错（截图会是空白页，宁可构建期
 // 失败也不入库错误基线）。
 export function resolveFixture(name: string | null): ReactElement {
-  const element = name === null ? undefined : registry[name];
+  const element = name !== null && isFixtureName(name) ? registry[name] : undefined;
   if (element === undefined) {
     throw new Error(
-      `未知 fixture：${name ?? "(URL 缺 ?fixture= 参数)"}，可用清单见 visual/fixture-names.json`,
+      `未知 fixture：${name ?? "(URL 缺 ?fixture= 参数)"}，可用清单见 visual/fixture-names.ts`,
     );
   }
   return element;

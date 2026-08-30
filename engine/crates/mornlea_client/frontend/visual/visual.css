@@ -13,7 +13,9 @@
   justify-content: center;
 }
 
-/* 列宽与设置面板同款，控件几何（全宽输入/滑杆、按钮组 flex）与生产语境一致。 */
+/* 列宽镜像 ui.css `.settings-panel` 的宽度表达式（min(460px, …)，harness 侧
+ * 不进生产令牌）：此字面量与 fixtures.tsx `stage` 的注释互为交叉引用，两处
+ * 改动须同步。 */
 .visual-column {
   box-sizing: border-box;
   display: flex;

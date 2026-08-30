@@ -13,7 +13,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "check": "pnpm typecheck && pnpm test && pnpm build",
-    "visual-check": "node visual/visual.mjs check",
+    "visual-check": "tsc --noEmit -p visual/tsconfig.json && node visual/visual.mjs check",
+    "visual-typecheck": "tsc --noEmit -p visual/tsconfig.json",
     "visual-update": "node visual/visual.mjs update"
   },
   "dependencies": {
