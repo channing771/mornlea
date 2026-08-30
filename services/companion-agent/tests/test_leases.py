@@ -639,6 +639,73 @@ def test_run_cancellation_reaches_a_bound_task_and_finish_is_exception_safe() ->
     run(scenario())
 
 
+def test_repeated_run_cancellation_does_not_interrupt_async_worker_cleanup() -> None:
+    async def scenario() -> None:
+        gate = RunGate()
+        lease = LeaseIdentity(
+            namespace_id=NAMESPACE_A,
+            client_instance_id=CLIENT_A,
+            lease_id=LEASE_A,
+        )
+        handle = await gate.try_acquire(
+            lease,
+            companion_id=COMPANION_A,
+            run_id=RUN_A,
+            kind=RunKind.DIALOGUE,
+        )
+        cleanup_started = asyncio.Event()
+        allow_cleanup = asyncio.Event()
+        cleanup_finished = asyncio.Event()
+        worker_started = asyncio.Event()
+
+        async def worker() -> None:
+            worker_started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cleanup_started.set()
+                await allow_cleanup.wait()
+                cleanup_finished.set()
+                raise
+
+        task = asyncio.create_task(worker())
+        await worker_started.wait()
+        await handle.bind_task(task)
+        assert await gate.cancel_run(lease, RUN_A)
+        await cleanup_started.wait()
+
+        assert await gate.cancel_run(lease, RUN_A)
+        assert await gate.cancel_lease(lease) == (RUN_A,)
+        assert await gate.cancel_all() == (RUN_A,)
+        await asyncio.sleep(0)
+        assert not task.done()
+        assert gate.active_count == 1
+
+        allow_cleanup.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert cleanup_finished.is_set()
+        assert gate.active_count == 1
+        with pytest.raises(RunOverloaded):
+            await gate.try_acquire(
+                lease,
+                companion_id=COMPANION_A,
+                run_id=RUN_B,
+                kind=RunKind.PLANNER,
+            )
+        await handle.finish()
+        successor = await gate.try_acquire(
+            lease,
+            companion_id=COMPANION_A,
+            run_id=RUN_B,
+            kind=RunKind.PLANNER,
+        )
+        await successor.finish()
+        assert gate.active_count == 0
+
+    run(scenario())
+
+
 def test_concurrent_acquire_is_atomic_across_store_instances(tmp_path: Path) -> None:
     async def scenario() -> None:
         path = tmp_path / "memory.sqlite3"

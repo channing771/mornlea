@@ -11,8 +11,10 @@ from mornlea_companion_agent.domain.memory import (
     LeaseIdentity,
     MemoryCommit,
     MemoryReconcile,
+    MemoryStateNonzero,
     MemoryStateZero,
     MemoryStorageFailure,
+    StorageCorruption,
 )
 from mornlea_companion_agent.harness.leases import NamespaceLeaseManager
 from mornlea_companion_agent.storage.sqlite_memory import SQLiteMemoryStore
@@ -328,5 +330,209 @@ def test_existing_foreign_key_violation_fails_readiness_without_repair(tmp_path:
         with pytest.raises(MemoryStorageFailure):
             await SQLiteMemoryStore.open(path, clock_ms=ManualClock())
         assert path.read_bytes() == before
+
+    run(scenario())
+
+
+@pytest.mark.parametrize(
+    "damage",
+    ["missing", "kind", "epoch", "revision", "state_fingerprint"],
+)
+def test_existing_current_active_receipt_damage_fails_closed(
+    tmp_path: Path,
+    damage: str,
+) -> None:
+    async def scenario() -> None:
+        path = tmp_path / f"active-receipt-{damage}.sqlite3"
+        store = await SQLiteMemoryStore.open(path, clock_ms=ManualClock())
+        manager = NamespaceLeaseManager(store, lease_id_factory=uuid_sequence(LEASE))
+        grant = await manager.acquire(NAMESPACE, CLIENT)
+        identity = LeaseIdentity(
+            namespace_id=NAMESPACE,
+            client_instance_id=CLIENT,
+            lease_id=grant.lease_id,
+        )
+        await store.reconcile(
+            identity,
+            MemoryReconcile(
+                namespace_id=NAMESPACE,
+                companion_id=COMPANION,
+                memory_epoch=1,
+                active=True,
+                tombstone_operation_id=None,
+                mirror=MemoryStateZero(revision=0, operation_id=None, summary=""),
+            ),
+        )
+        await store.commit(
+            identity,
+            MemoryCommit(
+                namespace_id=NAMESPACE,
+                companion_id=COMPANION,
+                memory_epoch=1,
+                base_revision=0,
+                operation_id=OPERATION,
+                summary="current",
+            ),
+        )
+        await store.close()
+
+        connection = sqlite3.connect(path)
+        try:
+            if damage == "missing":
+                connection.execute("DELETE FROM memory_operations")
+            elif damage == "kind":
+                connection.execute("UPDATE memory_operations SET operation_kind = 'active_mirror'")
+            elif damage == "epoch":
+                connection.execute(
+                    "UPDATE memory_operations SET result_epoch = ?",
+                    ((2).to_bytes(8, "big"),),
+                )
+            elif damage == "revision":
+                connection.execute(
+                    "UPDATE memory_operations SET result_revision = ?",
+                    ((2).to_bytes(8, "big"),),
+                )
+            else:
+                connection.execute(
+                    "UPDATE memory_operations SET state_fingerprint = ?",
+                    (b"x" * 32,),
+                )
+            connection.commit()
+        finally:
+            connection.close()
+
+        before = path.read_bytes()
+        unexpected: SQLiteMemoryStore | None = None
+        try:
+            with pytest.raises(StorageCorruption):
+                unexpected = await SQLiteMemoryStore.open(path, clock_ms=ManualClock())
+        finally:
+            if unexpected is not None:
+                await unexpected.close()
+        assert path.read_bytes() == before
+
+    run(scenario())
+
+
+def test_existing_current_active_mirror_requires_matching_receipt_payload(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        path = tmp_path / "active-mirror-receipt.sqlite3"
+        store = await SQLiteMemoryStore.open(path, clock_ms=ManualClock())
+        manager = NamespaceLeaseManager(store, lease_id_factory=uuid_sequence(LEASE))
+        grant = await manager.acquire(NAMESPACE, CLIENT)
+        await store.reconcile(
+            LeaseIdentity(
+                namespace_id=NAMESPACE,
+                client_instance_id=CLIENT,
+                lease_id=grant.lease_id,
+            ),
+            MemoryReconcile(
+                namespace_id=NAMESPACE,
+                companion_id=COMPANION,
+                memory_epoch=1,
+                active=True,
+                tombstone_operation_id=None,
+                mirror=MemoryStateNonzero(
+                    revision=1,
+                    operation_id=OPERATION,
+                    summary="mirror",
+                ),
+            ),
+        )
+        await store.close()
+
+        connection = sqlite3.connect(path)
+        try:
+            connection.execute(
+                "UPDATE memory_operations SET payload_fingerprint = ?",
+                (b"x" * 32,),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        before = path.read_bytes()
+        unexpected: SQLiteMemoryStore | None = None
+        try:
+            with pytest.raises(StorageCorruption):
+                unexpected = await SQLiteMemoryStore.open(path, clock_ms=ManualClock())
+        finally:
+            if unexpected is not None:
+                await unexpected.close()
+        assert path.read_bytes() == before
+
+    run(scenario())
+
+
+def test_existing_current_tombstone_requires_its_receipt(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        path = tmp_path / "tombstone-receipt.sqlite3"
+        store = await SQLiteMemoryStore.open(path, clock_ms=ManualClock())
+        manager = NamespaceLeaseManager(store, lease_id_factory=uuid_sequence(LEASE))
+        grant = await manager.acquire(NAMESPACE, CLIENT)
+        await store.reconcile(
+            LeaseIdentity(
+                namespace_id=NAMESPACE,
+                client_instance_id=CLIENT,
+                lease_id=grant.lease_id,
+            ),
+            MemoryReconcile(
+                namespace_id=NAMESPACE,
+                companion_id=COMPANION,
+                memory_epoch=1,
+                active=False,
+                tombstone_operation_id=OPERATION,
+                mirror=None,
+            ),
+        )
+        await store.close()
+
+        connection = sqlite3.connect(path)
+        try:
+            connection.execute("DELETE FROM memory_operations")
+            connection.commit()
+        finally:
+            connection.close()
+
+        before = path.read_bytes()
+        unexpected: SQLiteMemoryStore | None = None
+        try:
+            with pytest.raises(StorageCorruption):
+                unexpected = await SQLiteMemoryStore.open(path, clock_ms=ManualClock())
+        finally:
+            if unexpected is not None:
+                await unexpected.close()
+        assert path.read_bytes() == before
+
+    run(scenario())
+
+
+def test_existing_zero_memory_does_not_require_a_receipt(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        path = tmp_path / "zero-memory.sqlite3"
+        store = await SQLiteMemoryStore.open(path, clock_ms=ManualClock())
+        manager = NamespaceLeaseManager(store, lease_id_factory=uuid_sequence(LEASE))
+        grant = await manager.acquire(NAMESPACE, CLIENT)
+        await store.reconcile(
+            LeaseIdentity(
+                namespace_id=NAMESPACE,
+                client_instance_id=CLIENT,
+                lease_id=grant.lease_id,
+            ),
+            MemoryReconcile(
+                namespace_id=NAMESPACE,
+                companion_id=COMPANION,
+                memory_epoch=1,
+                active=True,
+                tombstone_operation_id=None,
+                mirror=MemoryStateZero(revision=0, operation_id=None, summary=""),
+            ),
+        )
+        await store.close()
+
+        reopened = await SQLiteMemoryStore.open(path, clock_ms=ManualClock())
+        await reopened.close()
 
     run(scenario())

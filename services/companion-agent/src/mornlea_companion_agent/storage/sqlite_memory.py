@@ -798,6 +798,20 @@ class SQLiteMemoryStore:
         check = await self._fetchall("PRAGMA quick_check")
         if len(check) != 1 or tuple(check[0]) != ("ok",):
             raise StorageCorruption
+        await self._validate_current_memory_receipts()
+
+    async def _validate_current_memory_receipts(self) -> None:
+        rows = await self._fetchall(
+            "SELECT * FROM companion_memory ORDER BY namespace_id, companion_id"
+        )
+        for row in rows:
+            try:
+                record = self._decode_record(row)
+                await self._claim_reconcile_operation(record, require_existing=True)
+            except StorageCorruption:
+                raise
+            except MemoryConflict:
+                raise StorageCorruption from None
 
     @asynccontextmanager
     async def _write_transaction(self) -> AsyncIterator[None]:

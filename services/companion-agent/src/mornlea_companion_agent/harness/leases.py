@@ -140,6 +140,8 @@ class RunHandle:
         await self.finish()
 
     def _cancel(self) -> None:
+        if self._cancelled.is_set():
+            return
         self._cancelled.set()
         if self._task is not None and not self._task.done():
             self._task.cancel()
