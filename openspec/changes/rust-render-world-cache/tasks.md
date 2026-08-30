@@ -6,10 +6,11 @@
 > 的 completed 状态、selected-main 证据与历史文字同样不得改写。旧 selected main
 > `e1e2e287` 上的完整 PASS、`5e5243a7` 的 17/18 binding failure、`bcc053e8` 无关 planning
 > sync，以及 `eccdca39` 因 `be5ff22b` contract drift 产生的 0/18 preflight cancellation 都是
-> 收尾历史。planning 时 observed latest main `a83192b7` 已把 capture 分配给 client ABI v13，
-> 包含 `4c553f3b` 的 SDK option bits code fix 及随后 docs-only Task 2 review bookkeeping，
-> 因此 pending 收尾重排为
-> Tasks 6.7–6.10，最终目标是 client ABI v14 / inherited engine ABI v9。
+> 收尾历史。planning-fix 时 observed latest main `9bb84c68` 已把 capture 与 app frame-loop pump
+> 分配给 client ABI v13，包含 `4c553f3b` 的 SDK option bits code fix、`a83192b7` 的 docs-only
+> Task 2 review bookkeeping、`522c7d6a` 的 app pump 实现及 `9bb84c68` 的 docs-only Task 3
+> review bookkeeping，因此 pending 收尾重排为 Tasks 6.7–6.10，最终目标是 client ABI v14 /
+> inherited engine ABI v9。
 > implementer、reviewer、两项 verdict、findings、修复轮次、验证和裁决必须先写入
 > `ledger.md`，再勾选任务。控制会话不得直接实现。
 
@@ -161,35 +162,50 @@
   `design.md`、`tasks.md` 与 `ledger.md`，并写 ignored
   `task-6.7-v14-replanning-report.md`。完整记录并保留 Tasks 1–6.6 历史、17/18 exact-main
   binding failure、`bcc053e8` 无关 planning sync 与 0/18 preflight cancellation；精确审计
-  `bcc053e8..a83192b7` 的三个 commits/全部 paths 及 main capture header/FFI/window/Rust/Go
+  `bcc053e8..9bb84c68` 的五个 commits/全部 paths 及 main capture header/FFI/window/Rust/Go
   tests；其中 `be5ff22b` 引入 v13 capture，`4c553f3b` 只修改 `capture.rs`（38+/11-），把
   CoreGraphics option FFI width 校正为 SDK `u32`、IncludingWindow/BestResolution 位值校正为
   `1<<3`/`1<<3` 并新增防回归测试；`a83192b7` 只修改 `dev-capture` design/ledger/tasks
   （43+/4-），记录 Task 2 review rounds 与已实现 validation order，不改变 production/test code、
-  v13 export/identity/header/Go surface 或 contract。锁定 selected-main v13 为 28 versioned + 1 identity、
-  capture 新 export 恰为
+  v13 export/identity/header/Go surface 或 contract。`a83192b7..522c7d6a` 恰有 1 个 app pump
+  commit，只修改 `cmd/mornlea/app/app_dependencies.go`、`cmd/mornlea/app/dev_capture.go`、
+  `cmd/mornlea/app/dev_capture_test.go`、`cmd/mornlea/app/interactive.go`（356+/0-），新增并锁定
+  `CaptureCoordinator`/`SetCaptureCoordinator`、菜单与游戏两处 poll 后 render 前
+  `pumpDevCapture`、nil/idle 非阻塞、single outstanding、pixels ownership/error 原样交付与
+  7 个 tests；`522c7d6a..9bb84c68` 恰有 1 个 docs-only commit，只修改 dev-capture
+  ledger/tasks（21+/1-），记录 Task 3 双 PASS 并勾选 3.1，不改变 app/ABI/contract。锁定
+  selected-main v13 为 28 versioned + 1 identity、capture 新 export 恰为
   `mornlea_client_window_capture`，以及 final v14 union 为 29 versioned + 1 identity、总计 30。
   planning 必须裁决 v14/v13 双向 ABI-first、v14-only MRW1 bind hard failure、capture/fluid
-  rollback 保留、latest-main drift gate、non-rewriting merge、protected/golden zero-diff 与
-  Tasks 6.8–6.10；不得修改生产/测试代码、main specs、current docs、config 或 main，不得
-  merge/rebase/archive/push。随后由未参与本轮修改的 independent planning reviewer 同时给出
-  spec-compliance 与 quality verdict；reviewer identity、findings、修复轮次与裁决写入 ledger
-  后，只有两项 verdict 均通过且 0 open findings 才可勾选。本次 planning implementer 不得
-  自行 review，本提交前保持未勾选。
+  rollback 保留、latest-main drift gate、non-rewriting merge、四个 app paths exact selected-main
+  zero-diff/gofmt/7 focused tests、protected/golden zero-diff 与 Tasks 6.8–6.10；不得修改生产/测试
+  代码、main specs、current docs、config 或 main，不得 merge/rebase/archive/push。commit
+  `6d69db84` 的首轮 independent planning review 所报 1 个 app-pump Important、原 implementer
+  无可消费回执后的 fresh handoff、修订证据与复审裁决必须 append-only 写入 ledger。随后由未参与
+  本轮修改的 independent planning reviewer 同时给出 spec-compliance 与 quality verdict；reviewer
+  identity、findings、修复轮次与裁决写入 ledger 后，只有两项 verdict 均通过且 0 open findings
+  才可勾选。本次 planning-fix implementer 不得自行 review，本提交前保持未勾选。
 - [ ] 6.8 由 fresh implementer 在 merge 命令前即时固定 latest local main；当前 observed main
-  为 `a83192b7d9a95cb622fc29035b199a8a6de5645c`；若它超过该已审计锚点，先完整记录新增
-  commits/paths，并审计版本、
-  ABI、header/FFI/window/capture、identity、MRW1、fluid 所有权和排除项；任何 contract-
+  为 `9bb84c6841b59a18b030256d5952ed60acc215da`；若它超过该已审计锚点，先完整记录新增
+  commits/paths，并审计版本、ABI、header/FFI/window/capture/app-pump、identity、MRW1、fluid
+  所有权和排除项；任何 contract-
   affecting drift 必须先回到 planning 与 independent planning review。契约未变时执行
   `make rust`，再以 `git merge --no-commit --no-ff main` 做 non-rewriting sync，记录 actual
   selected-main-parent、双亲、全部冲突与逐项裁决；重点核验 client header、`ffi.rs`、`lib.rs`、
-  `window.rs`、Go `window.go`/`window_test.go` 与 current identity docs。最小实现统一 client
+  `window.rs`、Go `window.go`/`window_test.go`、current identity docs，以及
+  `cmd/mornlea/app/app_dependencies.go`、`cmd/mornlea/app/dev_capture.go`、
+  `cmd/mornlea/app/dev_capture_test.go`、`cmd/mornlea/app/interactive.go`。四个 app paths 必须
+  相对 actual selected main exact zero-diff，并全部纳入 `gofmt -w` 后零差异证明；运行
+  `go test ./cmd/mornlea/app -race -run 'Test(PumpDevCapture|RunInteractive(Game|Menu)LoopPumpsPendingCaptureOnce)' -count=1`
+  证明既有 7 tests。最小实现统一 client
   ABI v14 / inherited engine ABI v9：完整保留 selected-main v13 的 28 个 versioned exports、
   capture status/两段式容量/top-down BGRA8/Go bridge/Rust-Go tests、SDK `u32` option FFI width
   与 IncludingWindow/BestResolution=`1<<3`/`1<<3`、ABI→output pointers/zero-capacity
-  consistency→handle→capacity validation order、WKWebView/UI surface，只
-  叠加 v14-only MRW1，形成 29 versioned + 1 identity；MRW1 保持 cache-only、无 production
-  caller。最终 v14 全部 29 个 versioned exports 对 ABI 13 ABI-first，exact selected-main v13
+  consistency→handle→capacity validation order、WKWebView/UI surface，以及 app pump 的
+  coordinator 注入、菜单/游戏两处 poll 后 render 前调用、nil/idle 非阻塞、single outstanding、
+  pixels ownership 与 error 原样交付，只叠加 v14-only MRW1，形成 29 versioned + 1 identity；
+  MRW1 保持 cache-only、无 production caller，且不实现或接管其余 dev-capture service、HTTP、
+  options、recording 或 docs。最终 v14 全部 29 个 versioned exports 对 ABI 13 ABI-first，exact selected-main v13
   全部 28 个 versioned exports 对 ABI 14 ABI-first，v13 缺 MRW1 symbol 时 bind hard-fail，
   不得有动态加载或 Go fallback；五组 protected engine/fluid paths 与 golden 相对 actual
   selected main 零 diff。完成后分别取得 fresh spec-compliance review 与 fresh quality review，
@@ -199,6 +215,9 @@
   OpenSpec strict 使用执行时实际全量计数，client contract 审计精确覆盖 final v14 29+1、
   selected-main v13 28+1 reverse mix、capture symbol/status/capacity/BGRA8/production bridge/tests、
   SDK `u32` option FFI width 与两个 `1<<3` option bits、
+  四个 app paths exact selected-main zero-diff 与 gofmt 零差异、上述 7 个 app-pump focused tests、
+  coordinator 注入、菜单/游戏两处 pump、nil/idle 非阻塞、single outstanding、pixels ownership/
+  error 原样交付，
   v14-only MRW1 bind hard failure/no fallback、MRW1 atomic/cache-only/no production caller、
   frame/readback 不变、RPATH/release dylib SHA、identity
   protocol32/player8/chunk9/world3/companions4/hostile1/engine9/client14/benchmark20、
@@ -208,8 +227,9 @@
 - [ ] 6.10 由未参与 Task 6.7 planning/review、Task 6.8 sync/implementation/reviews 或 Task 6.9
   validation/review 的 fresh whole-integration reviewer 同时给出 spec-compliance 与 quality
   verdict。显式核验 immutable history、actual selected-main-parent/merge 双亲/conflicts、
-  v14/v13 export 数与双向 ABI-first、capture/UI 保留、MRW1 hard bind/cache-only、身份矩阵、
-  rollback 只回 selected-main v13 capture、fluid 排除、protected/golden zero-diff 与 18 门禁
+  v14/v13 export 数与双向 ABI-first、capture/UI 与 app frame-loop pump 保留、四个 app paths
+  exact selected-main zero-diff、MRW1 hard bind/cache-only/no-production-caller、身份矩阵、
+  rollback 只回 selected-main v13 capture/app-pump、fluid 排除、protected/golden zero-diff 与 18 门禁
   同基线证据；先将 reviewer identity、findings、修复轮次与最终裁决写入 ledger，只有两项
   verdict 均通过且 0 open findings 才可勾选并宣告 implementation complete，仍不得 archive、
   push 或 merge feature into main。

@@ -67,9 +67,11 @@ section upsert MUST 按 `ContainerSnapshot` 三态接收紧凑数据：single �
 
 ### Requirement: client ABI v14 合并 v13 capture 与 MRW1 surface 并早期拒绝混装
 
-client C header、Rust 导出、Go bridge 与当前身份文档的 ABI 版本常数 MUST 同步为 14；无参数 identity export `mornlea_client_abi_version()` MUST 始终报告 14。latest selected main v13 的实际 surface MUST 作为 predecessor：它包含 28 个接受 ABI version 参数的 exports 与 1 个 identity export，并且相对此前 v12 恰好新增 `mornlea_client_window_capture`。planning 时 observed main `a83192b7` 相对 capture code-fix `4c553f3b` 只有 `dev-capture` design/ledger/tasks review bookkeeping，MUST NOT 被解释为 v13 export、identity 或公共 capture contract 变化；Task 6.8 仍须在 merge 前按 latest main 重新固定事实。最终 v14 动态库 MUST 完整保留这 28 个 versioned exports，再叠加 v14-only `mornlea_client_render_apply_world_updates`，形成 29 个 versioned exports 与 1 个 identity export、总计 30 个 exports。全部 29 个 v14 versioned exports MUST 在其他适用 validation 或状态改变前拒绝包括 13 在内的每一个其他版本；版本错误 MUST 在 handle、pointer、capture/UI/MRW1 内容或 renderer/RenderWorld 状态改变前返回 `ABI_VERSION`。
+client C header、Rust 导出、Go bridge 与当前身份文档的 ABI 版本常数 MUST 同步为 14；无参数 identity export `mornlea_client_abi_version()` MUST 始终报告 14。latest selected main v13 的实际 surface MUST 作为 predecessor：它包含 28 个接受 ABI version 参数的 exports 与 1 个 identity export，并且相对此前 v12 恰好新增 `mornlea_client_window_capture`。planning 时 observed main `a83192b7` 相对 capture code-fix `4c553f3b` 只有 `dev-capture` design/ledger/tasks review bookkeeping，MUST NOT 被解释为 v13 export、identity 或公共 capture contract 变化；随后 observed main `522c7d6a` 新增 app frame-loop capture pump，但没有改变 v13 ABI、export/header/FFI/Go bridge 集合。planning-fix 时 observed latest main `9bb84c68` 相对 `522c7d6a` 也只有 `dev-capture` ledger/tasks review bookkeeping，不改变 app pump、ABI 或 public contract。Task 6.8 仍须在 merge 前按 latest main 重新固定事实。最终 v14 动态库 MUST 完整保留这 28 个 versioned exports，再叠加 v14-only `mornlea_client_render_apply_world_updates`，形成 29 个 versioned exports 与 1 个 identity export、总计 30 个 exports。全部 29 个 v14 versioned exports MUST 在其他适用 validation 或状态改变前拒绝包括 13 在内的每一个其他版本；版本错误 MUST 在 handle、pointer、capture/UI/MRW1 内容或 renderer/RenderWorld 状态改变前返回 `ABI_VERSION`。
 
 v14 surface MUST 保留 selected-main v13 的 `mornlea_client_window_capture` export、capture status、两段式容量查询、紧凑 top-down BGRA8 bytes、Go `Window.Capture` bridge 与 Rust/Go capture tests。capture export MUST 继续按 ABI version、output pointer/zero-capacity consistency、handle、capacity 的顺序验证，并 MUST 保留其按 SDK header 校正的 CoreGraphics option 契约：`CGWindowListOption`/`CGWindowImageOption` FFI 参数为 `u32`，IncludingWindow 与 BestResolution 位值均为 `1<<3`，BGRA bitmap bits 与对应防回归测试保持有效。v14 还 MUST 保留 `ui_push_state` 与版本化 JSON UI event drain。它 MUST NOT 恢复已退役的 `render_upload_ui_font`、frame TLV tag 9 或 UI layout v1–v4；系统 MUST NOT 提供 v13 兼容入口、动态加载兼容层或 Go fallback。最终集成树 MUST 原样继承所选 main 的 engine ABI v9 与既有 fluid 行为；本 change MUST NOT 增加替代 engine/fluid 生产路径或改变相同 fluid 输入的结果。
+
+v14 集成 MUST 原样保留 selected-main 的 app frame-loop capture pump：`CaptureCoordinator` 与 `SetCaptureCoordinator` 继续作为启动前注入边界，菜单和游戏帧循环继续在 window poll 后、render 前各调用一次 `pumpDevCapture`。nil coordinator 与无 pending request 的帧 MUST 非阻塞返回；有请求时每帧 MUST 至多捕获和交付一次，coordinator MUST 维持 single outstanding request 而不是帧循环队列。紧凑 top-down BGRA8 pixels 成功发送后 MUST 由 service goroutine 持有，pump MUST NOT 再持有或修改；capture error（包括 typed `ErrCaptureUnavailable`）MUST 原样交付，不得吞掉、重试或伪造图像。selected-main 的 7 个 app-pump tests MUST 保留并通过。该继承要求 MUST NOT 把 `mornlea_client_render_apply_world_updates` 接入 app：MRW1 继续无 production caller。本 change 只保护已选择的 app pump，MUST NOT 实现或接管其余 `dev-capture` service、HTTP、options、recording 或 docs 工作。
 
 反向混装时，selected-main v13 动态库的全部 28 个 versioned exports MUST 在收到 14 时先返回 `ABI_VERSION`，并且不得读取其他输入或改变状态。v14-only 的 `mornlea_client_render_apply_world_updates` symbol 在 selected-main v13 动态库中不存在；尝试把要求该 symbol 的 v14 bridge 与 v13 动态库组合 MUST 在 link、load 或 bind 阶段硬失败，MUST NOT 被描述为一次会返回 client status 的调用，MUST NOT 进入任何 FFI body、改变任何状态或使用兼容入口/fallback。
 
@@ -111,6 +113,22 @@ v14 surface MUST 保留 selected-main v13 的 `mornlea_client_window_capture` ex
 - AND `ui_push_state` 与版本化 JSON UI events MUST 保持可用
 - AND `render_upload_ui_font`、frame TLV tag 9 与 UI layout v1–v4 MUST 保持不可用
 
+#### Scenario: v14 集成原样保留 selected-main app frame-loop capture pump
+
+- GIVEN selected-main 已通过 `CaptureCoordinator`/`SetCaptureCoordinator` 在菜单与游戏帧循环接入 window capture
+- WHEN combined client ABI v14 只叠加 MRW1 cache/update
+- THEN 两处帧循环 MUST 继续在 poll 后、render 前调用 `pumpDevCapture`
+- AND nil/idle 帧 MUST 非阻塞，有 pending 时每帧至多完成一次 single-outstanding capture
+- AND top-down BGRA8 pixels 成功交付后的所有权与 capture error 原样交付语义 MUST 保持不变
+- AND selected-main 的 7 个 app-pump tests MUST 保留并通过
+- AND MRW1 MUST 仍无 production caller
+
+#### Scenario: app pump 保留不扩大 dev-capture 所有权
+
+- GIVEN selected-main 还有独立规划的 dev-capture service、HTTP、options、recording 或 docs 工作
+- WHEN 本 change 合并并验证既有 app frame-loop pump
+- THEN 本 change MUST NOT 实现、接管或扩大这些其余 dev-capture 工作
+
 #### Scenario: client v14 集成原样继承 engine ABI v9 与 fluid 行为
 
 - GIVEN selected-main v13 报告 engine ABI v9，且其伙伴交付的 fluid eval/rescan 对固定输入已有确定结果
@@ -124,7 +142,7 @@ v14 surface MUST 保留 selected-main v13 的 `mornlea_client_window_capture` ex
 - GIVEN 已在 selected-main client v13 capture、engine ABI v9 与伙伴 fluid 基线上加入 MRW1/client-v14 增量
 - WHEN 回退该 MRW1/client-v14 增量
 - THEN client surface MUST 回到 selected-main v13 capture predecessor，而不是 v12
-- AND engine ABI MUST 仍为 9，伙伴 fluid 行为与 capture surface MUST 保持不变
+- AND engine ABI MUST 仍为 9，伙伴 fluid 行为、capture surface 与 app frame-loop pump MUST 保持不变
 - AND 回退 MUST NOT 删除 capture/fluid 或恢复已退役的字体上传出口、frame TLV tag 9 与 UI layout v1–v4
 
 #### Scenario: 新输入入口按 ABI 优先的输入矩阵拒绝
@@ -143,7 +161,7 @@ v14 surface MUST 保留 selected-main v13 的 `mornlea_client_window_capture` ex
 
 ### Requirement: 本 change 不改变 draw 或 frame 可观察结果
 
-RenderWorld update 入口 MUST 只更新尚未接管绘制的派生 cache，MUST NOT 接入实时 app 消息路径，MUST NOT 改变既有 `RenderFrame.Visible` 载荷、frame ABI 字节布局、Go CPU mesh/connectivity/visibility、逐 section upload 或 Rust draw 选择。应用合法 MRW1 batch 前后的现有离屏 frame 编码与输出 MUST 保持字节不变。
+RenderWorld update 入口 MUST 只更新尚未接管绘制的派生 cache，MUST NOT 接入实时 app 消息路径或成为 selected-main capture pump 的 caller，MUST NOT 改变既有 `RenderFrame.Visible` 载荷、frame ABI 字节布局、Go CPU mesh/connectivity/visibility、逐 section upload 或 Rust draw 选择。应用合法 MRW1 batch 前后的现有离屏 frame 编码与输出 MUST 保持字节不变。
 
 #### Scenario: 新缓存入口不改变现有 frame 编码
 

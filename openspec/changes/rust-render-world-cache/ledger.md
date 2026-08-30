@@ -1466,3 +1466,104 @@ delta 行为契约、代码、current docs、main specs 或配置，不执行 me
   `a83192b7d9a95cb622fc29035b199a8a6de5645c` 且 main worktree clean。
 - 这些结果在本 validation bookkeeping 写入后还须再执行一次最终 OpenSpec/instructions/
   diff/scope rerun；最终 rerun 证据写入 ignored report 与提交回执，避免递归改写 ledger。
+
+## Task 6.7 planning fix round 1：保留 selected-main app frame-loop capture pump（待独立复审）
+
+### 首轮评审 finding 与 fresh handoff
+
+- 首轮 independent planning reviewer identity：
+  `01a052ca-b23b-76d1-9b90-7cedb5d7bece`；评审对象为 planning commit
+  `6d69db84c7890640b8a53e683d55df6a0b81bbbf`。完整 ignored report 为
+  `.superpowers/sdd/2026-08-30-rust-render-world-main-integration/task-6.7-v14-planning-review.md`。
+- 首轮 verdict：spec-compliance **Needs fixes**、quality **Needs fixes**；0 Critical、
+  1 Important、0 Minor、1 open。Important 指出 review 期间 main 已到 `522c7d6a`，新增的
+  production app frame-loop capture pump 虽不改变 client ABI/export，却属于必须显式继承的
+  selected-main capture contract；原 planning 锚点、四路径冲突/零差异审计、gofmt、7 tests、
+  ownership/error 语义与验证证据均不充分，因此 Task 6.7 不得 bookkeeping，Task 6.8 不得开始。
+- 原 planning implementer `01a052b4-dd1d-79f0-b61d-62093022ad90` 在本修复轮交接请求后未返回
+  可消费回执；控制会话据此把单一 finding 转交 replacement planning-fix implementer
+  `01a052d8-5eb9-7dd2-b866-f70b8da51e94`。该 replacement 保留 proposal、唯一 delta spec、
+  design 的既有部分草稿，并把修订扩展到 tasks、ledger 与 ignored replanning report；平台额度
+  错误使其在提交和最终验证前中断，但五个 allowed tracked planning files 的 unstaged 修订均被
+  原样保留。
+- 当前 takeover planning-fix implementer 为
+  `01a052e6-2e58-7fb2-b6ca-a4b83f09db57`。接手时 feature HEAD 仍为 `6d69db84`，branch
+  `feat/rust-render-world-cache`，五个 allowed tracked planning files 均有 unstaged 修订；当前
+  implementer 没有回退 replacement 草稿，而是逐项对照 committed main、首轮 review 与任务 brief
+  复核并完成。该交接链只改变 fix-round 执行者，不改写原 implementer 的初始 planning 贡献或
+  首轮 review 事实。
+- 开始本 fix-round append 前既有 1,468 行 ledger 与 `6d69db84` committed ledger SHA-256 均为
+  `24e56cd078d6826c04746fe31d747d0d479fc6aa423107f79fa3e19c6a171bad`；Tasks 2.1–6.6 body 的
+  committed/working SHA-256 均为
+  `c1c7966e2ffa4cd771d8deb9771235cf3a273d440c77566cce509befa621f05d`，因此本节之前的历史与
+  completed task bodies 保持逐字不变。
+
+### latest-main 追加漂移审计
+
+- 本轮首次复核时 main 仍为 `522c7d6a795fd4b4baf7b88fd1c0bc1a4949040f`；完整审计确认
+  `a83192b7..522c7d6a` 恰有 1 commit `feat(app): add frame loop capture pump`、4 paths、
+  356 insertions / 0 deletions：
+  `cmd/mornlea/app/app_dependencies.go`、新增 `cmd/mornlea/app/dev_capture.go`、新增
+  `cmd/mornlea/app/dev_capture_test.go`、`cmd/mornlea/app/interactive.go`。client/header/Rust/Go
+  bridge、ABI/export/identity、五组 protected paths 与 visual golden 均零 diff。
+- 写入前 main 又前进到 `9bb84c6841b59a18b030256d5952ed60acc215da`。独立审计确认
+  `522c7d6a..9bb84c68` 恰有 1 commit `docs: record dev-capture task 3 review verdict`，只修改
+  `openspec/changes/dev-capture/ledger.md` 与 `tasks.md`，21 insertions / 1 deletion。它记录
+  app pump Task 3 的实现、7 tests、验证与 independent spec/quality 双 PASS 并勾选 3.1；
+  app source/tests、client/ABI/export/identity、protected/golden、current docs/main specs/config
+  全部零 diff，因此是同一 dev-capture 范围的 docs-only bookkeeping，不是新的 contract drift。
+- 最新已审计范围 `bcc053e8..9bb84c68` 精确为 5 commits、15 unique paths、1192 insertions /
+  30 deletions；`a83192b7..9bb84c68` 精确为 2 commits、6 unique paths、377 insertions /
+  1 deletion。latest observed merge-time audit anchor 更新为 `9bb84c68`，app pump 实现锚点仍为
+  `522c7d6a`。Task 6.8 merge 前仍须即时重读 main；若超过 `9bb84c68`，按 D8 重新审计。
+- 当前 takeover 对 committed objects 的复核确认 `522c7d6a..9bb84c68` 在四个 app paths 上
+  `git diff --exit-code` 精确零差异；`dev_capture_test.go` 恰有 7 个 `Test`，其中 5 个锁定
+  nil/idle、single outstanding、pixels/error 交付与无 capture source，另 2 个锁定菜单/游戏
+  loop。`interactive.go` 的两处 `pumpDevCapture` 分别位于 `Window.Poll` 后、`RenderFrame` 前；
+  main production Go 对 MRW1 update 入口仍为 0 caller。
+
+### 修订契约与严格范围
+
+- 五个 existing planning artifacts 统一要求原样保留 selected-main 的
+  `CaptureCoordinator`/`SetCaptureCoordinator`、菜单与游戏两处 `Window.Poll` 后 render 前
+  `pumpDevCapture`、nil coordinator/idle frame 非阻塞、每帧至多一次且 coordinator 维持
+  single outstanding、成功交付后 pixels 归 service goroutine 且 pump 不再持有/修改、包括
+  typed `client.ErrCaptureUnavailable` 在内的 capture error 原样交付且不吞错/重试/伪造。
+- Task 6.8 必须把四个 app paths 纳入完整 conflict audit，并证明 final 内容相对 actual
+  selected main exact zero-diff；四文件全部进入 gofmt 零差异检查，并运行
+  `go test ./cmd/mornlea/app -race -run 'Test(PumpDevCapture|RunInteractive(Game|Menu)LoopPumpsPendingCaptureOnce)' -count=1`
+  证明既有 7 个 focused tests。Task 6.9 的 18 门禁与 Task 6.10 whole-integration review同步
+  纳入这些证据。
+- MRW1 仍为 cache-only/test-only、无 production caller；selected-main app pump 只调用既有
+  `Window.Capture`，不得成为 MRW1 caller。本 change 只继承已经进入 selected main 的 pump，
+  不实现、不接管或扩大其余 `dev-capture` service、HTTP、options、recording 或 docs 工作。
+- rollback 只移除 MRW1/client-v14 增量并回到 actual selected-main v13 capture/app-pump
+  predecessor；capture、app pump、engine ABI v9 与伙伴 fluid 均必须保留，不得回到 v12。
+- 本修复只允许修改 proposal、唯一 delta spec、design、tasks、ledger 五个 tracked planning
+  files，并更新 ignored `task-6.7-v14-replanning-report.md`。未修改生产/测试代码、current docs、
+  main specs、config、main、protected paths 或 golden；未 merge、rebase、archive、push，也未
+  开始 Task 6.8。
+- Task 6.7 继续保持 unchecked，任务数预期仍为 25 total / 21 complete / 4 remaining。只有未参与
+  本修复的 independent planning reviewer 对 spec-compliance 与 quality 均给出 PASS 且
+  0 open findings，并把 identity/findings/verdict 写入 ledger 后，才可进行 bookkeeping。
+
+### Takeover planning validation 与精确审计
+
+- `openspec validate rust-render-world-cache --strict --no-interactive`：exit 0；输出
+  `Change 'rust-render-world-cache' is valid`。
+- `openspec validate --all --strict --no-interactive`：exit 0；80 passed、0 failed。
+- `openspec status --change rust-render-world-cache --json`：exit 0；schema `spec-driven`，
+  proposal/specs/design/tasks 四类 artifacts 全部 `done`，唯一 delta spec 路径正确，
+  `isComplete: true`。
+- `openspec instructions apply --change rust-render-world-cache --json`：exit 0；`state: ready`，
+  25 total、21 complete、4 remaining；Tasks 6.7–6.10 恰为四个 pending，Task 6.7 保持 unchecked。
+- `git diff --check`：exit 0且无输出。精确 scope audit 确认 dirty tracked files 恰为五个 allowed
+  planning files、staged 0；ignored replanning report 仍由 `/.superpowers/` 规则排除。
+- 精确 main/path/semantic audit 的首个 harness 因把期望调用顺序中的 `\t` 写成字面反斜杠而
+  exit 1、无输出；仓库状态未改变。改用真实 tab 的 corrected full audit exit 0，证明 main
+  精确为 `9bb84c68`，`bcc053e8..main` 为 5 commits/15 paths，app pump 范围为 1 commit/4 paths，
+  `522c7d6a..main` 四个 app paths 精确零差异，7 tests、两处 poll→pump→render 顺序、MRW1
+  production caller 0、ledger 1,468 行前缀及 Tasks 2.1–6.6 bodies 均保持不变。
+- 以上证据写入 ledger 后仍须最终重跑全部五个指定命令及 exact audit；最终 rerun、提交前 main
+  复读、commit 与 tracked-clean 结果写入 ignored report，避免为了记录 commit SHA 递归改写
+  tracked ledger。本轮不自行给出 planning review verdict，不勾选 Task 6.7，也不开始 Task 6.8。
