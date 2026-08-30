@@ -1985,3 +1985,59 @@ delta 行为契约、代码、current docs、main specs 或配置，不执行 me
   `scope_ok paths=2 ledger_prefix_bytes=147027 tasks=25 complete=23 pending=2 staged=0`。
 - 以上是提交前 working-diff 证据；提交后的 full SHA、exact two-file scope、80/80、25/23/2
   与 clean status 将写入 ignored `task-6.8-report.md`，避免递归修改 tracked ledger。
+
+## Task 6.9：immutable final HEAD 18-gate validation and independent review
+
+### Validation boundary and provenance
+
+- Fresh validation implementer 在 exact immutable HEAD
+  `2abd192903f7f2674e7d3ab5b9d485c3c0954cf0` 完成了 Gates 1–18；验证报告为 ignored
+  `.superpowers/sdd/2026-08-30-rust-render-world-main-integration/task-6.9-validation-report.md`。
+  本轮不读取、比较或追赶 local `main`，selected-main parent 永久固定为
+  `9bb84c6841b59a18b030256d5952ed60acc215da`。
+- preserved non-rewriting merge `6f622407b1078d264707d8643f7fec41c553a48e` 是 exact HEAD 祖先，
+  ordered parents 精确为 `9dc22f1b9a8106f71a5f6496ac2bd708c31c5584` 与
+  `9bb84c6841b59a18b030256d5952ed60acc215da`；其后 merge count 为 0，未引入 frozen parent
+  之后的 main commits。Task 6.8 的实现/review/fix 与本次 validation 均未执行第二次 main merge。
+- Gate 1–18 全部为 PASS，product failure 0、product Skip 0；report 最终稳定为 18 个 gate
+  headings 与 18 个 PASS summary。Gate 16 的九个 harness-only false negatives 均保留原始命令、
+  exit/time/原因及 corrected proof，没有伪装为 product failure 或用 retry 掩盖。
+- 实际全量计数：Rust client 135 + engine 218 = 353 passed；changed race 23 packages =
+  22 tested + 1 no-test；cache-cleared full race 46 packages = 43 tested + 3 no-test；offscreen
+  visual 25/25 scenes、5,760,000 pixels、0 differing、0 adapter/scene Skip、0 golden update；
+  OpenSpec strict 80/80；protected paths 与 visual golden 相对 frozen parent 均零 diff。
+
+### Contract and artifact evidence
+
+- final client ABI v14 为 29 versioned + 1 identity，29/29 ABI-first 拒绝 ABI 13；exact frozen v13
+  predecessor 为 28 versioned + 1 identity，28/28 reverse ABI-first 拒绝 ABI 14，v13 缺 MRW1 symbol，
+  v14 Go bridge 对 v13 在 bind/link 阶段按预期 hard-fail，未进入 FFI body、无 dynamic loader 与
+  Go fallback。
+- capture contract 22/22；保留 status 8/9、两阶段 capacity、top-down compact BGRA8、SDK `u32`
+  option width 与两个 `1<<3` bits、Rust/Go tests 和 production bridge。app focused tests 7/7，
+  四个 app paths 相对 frozen parent 零 diff，coordinator 注入及 menu/game 的 poll→pump→render、
+  nil/idle、single outstanding、pixels ownership 与原样 error delivery 均通过审计。
+- MRW1 static contract 28/28；Rust world tests 32、focused Go 19 reported cases；atomic staged
+  apply、cache-only、无 production caller，未接管 mesh/light/fluid/draw/frame/readback/app pump。
+  retained UI 2/2、retired surfaces 0，代码注释任务编号匹配 0，Go GPU/WebGPU 边界与 CPU ownership
+  通过，current identity 精确为 protocol32/player8/chunk9/world3/companions4/hostile1/engine9/
+  client14/benchmark20。
+- Gate 16 的 feature client RPATH 2/2 canonicalize 到本 worktree release 目录；最终 SHA-256 为
+  client `d9bbedc4b0c79d6b1f3261e7c6c293e0af6e7bf074d81c1184c2e63956cbd04`、engine
+  `8ad9ed6d4121fe105742863f5abc872591ca916fbdffcce91e5135a92a868e45`。Gate 1/9/12 是 release
+  producer，Gate 12 后无新的 feature release producer；Gate 6/11/12/SHA 都绑定同一 immutable HEAD。
+- final clean proof：tracked/staged/untracked porcelain 0、`git diff --check` 0、report ignored 且
+  untracked、`/tmp/mornlea-task69-*` remnants 0；本次 validation 不修改 tracked files。
+
+### Independent spec/quality review and acceptance
+
+- Fresh independent reviewer `01a0539d-205c-7bb3-b111-791093dc43de` 在 ignored
+  `.superpowers/sdd/2026-08-30-rust-render-world-main-integration/task-6.9-review.md` 对 exact
+  `2abd1929` 完成只读审查；未读取或比较 local `main`，未重跑昂贵 gate，未修改 tasks/ledger/产品文件。
+- Reviewer 完整核验了 root/nearest guides、OpenSpec change、Task 6.9 report、ABI/capture/app/MRW1/
+  RPATH/SHA/protected/golden/provenance/clean-state 证据，并给出 spec-compliance **PASS** 与
+  quality **Approved**；Critical 0、Important 0、Minor 0、open findings 0。不存在 fix round，
+  无需新一轮 product validation。
+- Controller acceptance：Task 6.9 的 18-gate evidence 与 independent review 均闭环，允许勾选本任务。
+  Tasks 6.1–6.9 现为 complete，Task 6.10 保持 pending；本记录只做 append-only bookkeeping，
+  不 archive、push、rebase 或 merge feature into main。

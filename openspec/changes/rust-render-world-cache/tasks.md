@@ -215,7 +215,7 @@
   `9bb84c68` 零 diff。若冻结裁决遗漏 later-main 的无关或兼容工作，留待独立后续集成，不改变
   本任务判定。完成后分别取得 fresh spec-compliance review 与 fresh quality review，0 open
   findings 后才可勾选；已完成 merge 本身不足以改变当前 unchecked 状态。
-- [ ] 6.9 由 fresh validation implementer 在 Task 6.8 reviews 通过后的 immutable final HEAD
+- [x] 6.9 由 fresh validation implementer 在 Task 6.8 reviews 通过后的 immutable final HEAD
   完整重跑 Task 6.6 的 18 门禁并逐项记录真实命令、wall time、exit status、计数与 Skip；
   OpenSpec strict 使用执行时实际全量计数，client contract 审计精确覆盖 final v14 29+1、
   exact `9bb84c68` v13 28+1 reverse mix、capture symbol/status/capacity/BGRA8/production bridge/tests、
