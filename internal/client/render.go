@@ -4,7 +4,8 @@ package client
 
 // 本文件是 `mornlea_client` render ABI 族的 Go 绑定(v2 引入,v6 增补
 // 远环 tile 上传/丢弃入口,v7 增补雾参数化 SetLodFog——变基重编后
-// v5 归 main 的 water pass,远环两项出口顺延为 v6/v7):R2a 的离屏
+// v5 归 main 的 water pass,远环两项出口顺延为 v6/v7；v12 增补
+// render world update 入口):R2a 的离屏
 // Rust 渲染器只被双后端对照测试与后续期使用,生产渲染仍是 Go 路径。
 // 链接与 include 标志在 window.go 的 cgo 序言中声明,此处只补 render
 // 入口的逃逸与回调指令。
@@ -20,6 +21,8 @@ package client
 #cgo nocallback mornlea_client_render_upload_section
 #cgo noescape mornlea_client_render_drop_section
 #cgo nocallback mornlea_client_render_drop_section
+#cgo noescape mornlea_client_render_apply_world_updates
+#cgo nocallback mornlea_client_render_apply_world_updates
 #cgo noescape mornlea_client_render_upload_lod_tile
 #cgo nocallback mornlea_client_render_upload_lod_tile
 #cgo noescape mornlea_client_render_drop_lod_tile
@@ -237,6 +240,22 @@ func (r *Renderer) DropSection(x, y, z int32) {
 		C.uint64_t(r.handle),
 		C.int32_t(x), C.int32_t(y), C.int32_t(z),
 	)))
+}
+
+// ApplyRenderWorldUpdates 同步更新尚未接管绘制的 Rust 派生缓存。encoded
+// 只在本次 FFI 调用期间借给 Rust；空输入是调用方编程错误。
+func (r *Renderer) ApplyRenderWorldUpdates(encoded []byte) {
+	if len(encoded) == 0 {
+		panic("client: render world update为空")
+	}
+	r.check("apply render world updates", uint32(
+		C.mornlea_client_render_apply_world_updates(
+			C.MORNLEA_CLIENT_ABI_VERSION,
+			C.uint64_t(r.handle),
+			(*C.uint8_t)(unsafe.Pointer(unsafe.SliceData(encoded))),
+			C.size_t(len(encoded)),
+		),
+	))
 }
 
 // UploadLodTile 上传/替换一个远环 tile 的壳 quad 字节流(每 quad 20 字节

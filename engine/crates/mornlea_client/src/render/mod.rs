@@ -1219,7 +1219,6 @@ impl OffscreenRenderer {
     }
 
     /// 只更新尚未接管绘制的派生世界缓存。
-    #[allow(dead_code)]
     pub(crate) fn apply_render_world_updates(&mut self, bytes: &[u8]) -> bool {
         self.render_world.apply_update_batch(bytes).is_ok()
     }

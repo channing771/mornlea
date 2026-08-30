@@ -4,7 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* v11:新增离屏 benchmark batch prepare/submit 入口；v10:avatar 通道容量扩至
+/* v12:新增 render world update 入口；v11:新增离屏 benchmark batch
+ * prepare/submit 入口；v10:avatar 通道容量扩至
  * 75 具身体(450 个 80-byte instance)并新增敌怪
  * EntityHostile 身份域;v9:新增设置页 layout v2，并把 render_drain_ui_events 升级为结构化事件
  * batch 与整批容量门禁；v8:新增 egui 主菜单两出口
@@ -14,7 +15,7 @@
  * 契约);v6:新增远环 LOD tile 出口(render_upload_lod_tile/drop_lod_tile)。
  * 变基重编:远环两项出口在旧基线上原编号 v5/v6,main 的 water pass
  * (按 material 分流 + 半透明 water pass)占用 v5 后整体顺延一格。 */
-#define MORNLEA_CLIENT_ABI_VERSION 11u
+#define MORNLEA_CLIENT_ABI_VERSION 12u
 
 #define MORNLEA_CLIENT_STATUS_OK 0u
 #define MORNLEA_CLIENT_STATUS_ABI_VERSION 1u
@@ -103,6 +104,16 @@ uint32_t mornlea_client_render_drop_section(
     int32_t section_x,
     int32_t section_y,
     int32_t section_z);
+
+/* 更新尚未接管绘制的 MRW1 派生缓存(client ABI v12)。updates_len 必须在
+ * 1..=4 MiB，updates 非空且地址范围不得溢出；通过这些表示层检查后，
+ * 调用方保证 updates_len 字节可读。Rust 只在本次同步调用内借用输入，
+ * 不保存 updates pointer。 */
+uint32_t mornlea_client_render_apply_world_updates(
+    uint32_t abi_version,
+    uint64_t handle,
+    const uint8_t *updates,
+    size_t updates_len);
 
 /* 远环 LOD tile(client ABI v6):上传/替换一个 tile 的壳 quad 字节流。
  * 每 quad 20 字节 LE:x/z/y i32、w/d u16、face u8(顶面 + 四向侧裙共
