@@ -48,7 +48,7 @@
 
 ## 5. options/main 接线
 
-- [ ] 5.1 `--dev-capture`（默认关）与 `--dev-capture-addr`（默认
+- [x] 5.1 `--dev-capture`（默认关）与 `--dev-capture-addr`（默认
       `127.0.0.1:17790`）接入 `cmd/mornlea/options.go`（互斥矩阵追加
       `--benchmark`/`--capture`，options 测试先行），`main.go` 启动服务、
       注册优雅关闭与端口文件清理，与 `--connect` 组合可用；app 侧补最小
@@ -56,7 +56,10 @@
       适配（勘定：4.1 实现发现 app 现无 phase 访问器，`/status` 的 phase
       契约需要这一次最小 app 面补充）；
       Files：`cmd/mornlea/{options.go,options_test.go,main.go}`、
-      `cmd/mornlea/app/{dev_capture.go,accessors.go}`；
+      `cmd/mornlea/app/{dev_capture.go,dev_capture_test.go,app.go}`、
+      `internal/archcheck/dependency_test.go`（勘定修正：状态快照原子字段
+      必须落在 `Application` 定义所在的 `app.go`；main import devcapture
+      装配需登记 `main → devcapture` 边；测试文件为 TDD 纪律应有项）；
       验证：`go test ./cmd/mornlea ./cmd/mornlea/app ./cmd/mornlea/devcapture
       -race -count=1`、`go build ./...`。
 

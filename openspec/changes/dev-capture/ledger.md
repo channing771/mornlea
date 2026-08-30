@@ -111,3 +111,32 @@
 - 勘定（控制会话记入 tasks.md 5.1）：app 现无 phase 访问器，
   `devcapture.StatusSource` 的 phase 契约需 app 补一个最小并发安全访问器，
   归 5.1 交付（Files 增 `cmd/mornlea/app/{dev_capture.go,accessors.go}`）。
+
+## Task 5: options/main 接线 + app 状态访问器
+
+- Commits: `e249b61e` `feat(mornlea): wire dev capture service flag and
+  lifecycle`。
+- 实现：`--dev-capture`/`--dev-capture-addr`（默认 `127.0.0.1:17790`）+
+  parse 层互斥（× benchmark/capture；× connect 放行；addr 单独使用惰性，
+  沿 `--perf-output` 先例）；`main.go` 装配时序 app 构造 → `devcapture.New`
+  → `SetCaptureCoordinator`（注入即播种）→ `Start` → stdout 打印 →
+  `runInteractive` 返回后 `Stop`（errors.Join）→ `app.Close`（先停服务再关
+  app）；Start 失败语义 Warn + 撤销协调器 + 游戏照常（失败路径不写端口
+  文件，经 devcapture 失败分支核实）；app 侧并发安全状态源：泵每帧 3 次
+  `atomic.Int32` 发布（phase 复用 `uiPhase()` 单源、尺寸读 `ContentSize`
+  本帧快照字段非 FFI），访问器原子读至多落后一帧；archcheck 登记
+  `main → devcapture` 边（五处同步）。
+- 三处自报越界的评审裁决：`app.go` 原子字段必要（`Application` 定义所在）、
+  `dev_capture_test.go` 应当有（TDD）、archcheck 机械必需——均接受，tasks.md
+  Files 清单已勘定修正。
+- 评审（独立评审子代理）：规格合规 PASS + 代码质量 PASS。重点裁决：启用态
+  空闲帧 3 次原子发布 vs spec「仅新增一次待办检查」字面张力——裁决为合理
+  调和而非违反（MUST 层零捕获桥调用/零分配/零监听全成立且被测试钉住），
+  代码不返修；Important 一项为工件同步，已由控制会话执行：spec「空闲帧
+  零捕获调用」THEN 补「每帧常数次非阻塞原子状态发布」语义（本 ledger 即
+  调和记录）。评审另给出 Minor 四项（接线级测试需端口路径注入才可落盘、
+  app.go 裸原子可收敛、非回环 addr 由运行期防御闸降级、上游 portfile 截断
+  残留理论项），均记录不阻塞。
+- 验证：`go test ./cmd/mornlea ./cmd/mornlea/app ./cmd/mornlea/devcapture
+  -race -count=1` ok、`go test ./internal/archcheck -count=1` ok、
+  `go build ./...` ok、既有泵测试零改动仍绿。
