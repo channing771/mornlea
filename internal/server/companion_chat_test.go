@@ -13,7 +13,8 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
+	simruntime "github.com/channing771/mornlea/internal/sim/runtime"
 )
 
 func TestChatCommandAddressesExactConfiguredCompanionAtTickBoundary(t *testing.T) {
@@ -80,7 +81,7 @@ func TestChatCommandAddressesExactConfiguredCompanionAtTickBoundary(t *testing.T
 }
 
 func TestMalformedOrUnknownCompanionChatRejectsOnlySender(t *testing.T) {
-	server := newCompanionChatRoutingServer(t, chatTestDefinitions(), map[sim.SessionID]int{
+	server := newCompanionChatRoutingServer(t, chatTestDefinitions(), map[contract.SessionID]int{
 		1: 16,
 		2: 16,
 	})
@@ -117,7 +118,7 @@ func TestMalformedOrUnknownCompanionChatRejectsOnlySender(t *testing.T) {
 		if err := delivery.event.Validate(); err != nil {
 			t.Fatalf("case %d ChatEvent.Validate: %v", index, err)
 		}
-		server.publishWithChats(sim.TickResult{}, deliveries)
+		server.publishWithChats(contract.TickResult{}, deliveries)
 		if got := companionChatEvents(drainCompanionChatOutbox(server.sessions[1])); len(got) != 1 || got[0].EventID != wantID {
 			t.Fatalf("case %d sender events=%v", index, got)
 		}
@@ -128,7 +129,7 @@ func TestMalformedOrUnknownCompanionChatRejectsOnlySender(t *testing.T) {
 }
 
 func TestCompanionAddressNameBoundaryIsThirtyTwoRunesAnd128Bytes(t *testing.T) {
-	server := newCompanionChatRoutingServer(t, nil, map[sim.SessionID]int{1: 16})
+	server := newCompanionChatRoutingServer(t, nil, map[contract.SessionID]int{1: 16})
 	cases := []struct {
 		name   string
 		reason network.ChatRejectReason
@@ -202,7 +203,7 @@ func TestCompanionAddressRejectsControlAndUsesUnicodeSpaceDelimiter(t *testing.T
 }
 
 func TestAcceptedCompanionChatBroadcastsInChannelOrder(t *testing.T) {
-	server := newCompanionChatRoutingServer(t, chatTestDefinitions(), map[sim.SessionID]int{
+	server := newCompanionChatRoutingServer(t, chatTestDefinitions(), map[contract.SessionID]int{
 		1: 16,
 		2: 16,
 		3: 16,
@@ -229,7 +230,7 @@ func TestAcceptedCompanionChatBroadcastsInChannelOrder(t *testing.T) {
 			t.Fatalf("delivery[%d].Validate: %v", index, err)
 		}
 	}
-	server.publishWithChats(sim.TickResult{}, deliveries)
+	server.publishWithChats(contract.TickResult{}, deliveries)
 
 	first := companionChatEvents(drainCompanionChatOutbox(server.sessions[1]))
 	second := companionChatEvents(drainCompanionChatOutbox(server.sessions[2]))
@@ -243,7 +244,7 @@ func TestAcceptedCompanionChatBroadcastsInChannelOrder(t *testing.T) {
 }
 
 func TestAcceptedCompanionChatSlowRecipientDoesNotBlockHealthyBroadcast(t *testing.T) {
-	server := newCompanionChatRoutingServer(t, chatTestDefinitions(), map[sim.SessionID]int{
+	server := newCompanionChatRoutingServer(t, chatTestDefinitions(), map[contract.SessionID]int{
 		1: 4,
 		2: 1,
 		3: 4,
@@ -253,7 +254,7 @@ func TestAcceptedCompanionChatSlowRecipientDoesNotBlockHealthyBroadcast(t *testi
 		sessionID: 1, generation: 1,
 		command: network.ChatCommand{Text: "@阿木 挖石头"},
 	}
-	server.publishWithChats(sim.TickResult{}, server.drainIncomingChats())
+	server.publishWithChats(contract.TickResult{}, server.drainIncomingChats())
 
 	first := companionChatEvents(drainCompanionChatOutbox(server.sessions[1]))
 	third := companionChatEvents(drainCompanionChatOutbox(server.sessions[3]))
@@ -268,7 +269,7 @@ func TestAcceptedCompanionChatSlowRecipientDoesNotBlockHealthyBroadcast(t *testi
 		sessionID: 1, generation: 1,
 		command: network.ChatCommand{Text: "@阿木甲 等待"},
 	}
-	server.publishWithChats(sim.TickResult{}, server.drainIncomingChats())
+	server.publishWithChats(contract.TickResult{}, server.drainIncomingChats())
 	first = companionChatEvents(drainCompanionChatOutbox(server.sessions[1]))
 	third = companionChatEvents(drainCompanionChatOutbox(server.sessions[3]))
 	if len(first) != 1 || len(third) != 1 || first[0].EventID != 2 ||
@@ -278,7 +279,7 @@ func TestAcceptedCompanionChatSlowRecipientDoesNotBlockHealthyBroadcast(t *testi
 }
 
 func TestStaleSessionChatGenerationIsDroppedWithoutConsumingEventID(t *testing.T) {
-	server := newCompanionChatRoutingServer(t, chatTestDefinitions(), map[sim.SessionID]int{1: 8})
+	server := newCompanionChatRoutingServer(t, chatTestDefinitions(), map[contract.SessionID]int{1: 8})
 	server.sessions[1].generation = 2
 	server.incomingChats <- incomingChat{
 		sessionID: 1, generation: 1,
@@ -322,7 +323,7 @@ func TestStaleSessionChatGenerationIsDroppedWithoutConsumingEventID(t *testing.T
 
 func TestChatCommandIngressIsBoundedAndCancellationWakesBlockedReader(t *testing.T) {
 	t.Run("cancellation", func(t *testing.T) {
-		server := newCompanionChatRoutingServer(t, chatTestDefinitions(), map[sim.SessionID]int{1: 8})
+		server := newCompanionChatRoutingServer(t, chatTestDefinitions(), map[contract.SessionID]int{1: 8})
 		if got := cap(server.incomingChats); got != inputCapacity || inputCapacity != 256 {
 			t.Fatalf("incomingChats cap=%d，想要 %d", cap(server.incomingChats), inputCapacity)
 		}
@@ -357,7 +358,7 @@ func TestChatCommandIngressIsBoundedAndCancellationWakesBlockedReader(t *testing
 	t.Run("tick-snapshot", func(t *testing.T) {
 		oldProcs := runtime.GOMAXPROCS(1)
 		defer runtime.GOMAXPROCS(oldProcs)
-		server := newCompanionChatRoutingServer(t, chatTestDefinitions(), map[sim.SessionID]int{1: 8})
+		server := newCompanionChatRoutingServer(t, chatTestDefinitions(), map[contract.SessionID]int{1: 8})
 		for range inputCapacity {
 			server.incomingChats <- incomingChat{
 				sessionID: 1, generation: 1,
@@ -439,8 +440,8 @@ func TestChatCommandDoesNotMutateSimulationOrCreateCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("读取 companion_chat.go: %v", err)
 	}
-	if bytes.Contains(source, []byte("sim.Command")) || bytes.Contains(source, []byte("engine.Enqueue")) {
-		t.Fatal("companion_chat.go 不得构造 sim.Command 或调用 engine.Enqueue")
+	if bytes.Contains(source, []byte("contract.Command")) || bytes.Contains(source, []byte("engine.Enqueue")) {
+		t.Fatal("companion_chat.go 不得构造 contract.Command 或调用 engine.Enqueue")
 	}
 }
 
@@ -953,7 +954,7 @@ func waitForIncomingChatDepth(t *testing.T, server *Server, want int) {
 func newCompanionChatRoutingServer(
 	t *testing.T,
 	definitions []companion.Definition,
-	capacities map[sim.SessionID]int,
+	capacities map[contract.SessionID]int,
 ) *Server {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -962,9 +963,9 @@ func newCompanionChatRoutingServer(
 	config.Companions = append([]companion.Definition(nil), definitions...)
 	running := &Server{
 		config:           config,
-		engine:           sim.NewEngine(0, 0, 0),
-		sessions:         make(map[sim.SessionID]*session, len(capacities)),
-		playerSessions:   make(map[core.PlayerID]sim.SessionID, len(capacities)),
+		engine:           simruntime.NewEngine(0, 0, 0),
+		sessions:         make(map[contract.SessionID]*session, len(capacities)),
+		playerSessions:   make(map[core.PlayerID]contract.SessionID, len(capacities)),
 		ctx:              ctx,
 		cancel:           cancel,
 		incomingChats:    make(chan incomingChat, inputCapacity),
@@ -991,7 +992,7 @@ func newCompanionChatRoutingServer(
 			pendingSnapshots:  make(map[core.ChunkKey]snapshotRequest),
 			visiblePlayers:    make(map[core.PlayerID]visiblePlayer),
 			visibleCompanions: make(map[companion.ID]struct{}),
-			publishedDrops:    make(map[core.DropID]sim.DropSnapshot),
+			publishedDrops:    make(map[core.DropID]contract.DropSnapshot),
 		}
 		running.engine.RegisterObserverSession(id)
 		running.sessions[id] = current
@@ -1016,7 +1017,7 @@ func benchmarkCompanionChatServer(definitions []companion.Definition) *Server {
 	running := &Server{
 		ctx:              ctx,
 		cancel:           cancel,
-		sessions:         map[sim.SessionID]*session{1: current},
+		sessions:         map[contract.SessionID]*session{1: current},
 		incomingChats:    make(chan incomingChat, inputCapacity),
 		companionsByName: make(map[string]companion.Definition, len(definitions)),
 	}

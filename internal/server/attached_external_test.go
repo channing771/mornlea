@@ -6,7 +6,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/server"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -32,7 +32,7 @@ func TestExternalCallerAttachesDynamicSession(t *testing.T) {
 		41,
 		3,
 		endpoint,
-		sim.PlayerRestore{
+		contract.PlayerRestore{
 			SpawnDimension: core.Overworld,
 			SpawnAnchor:    core.ChunkPos{},
 		},

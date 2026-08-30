@@ -8,15 +8,15 @@ import (
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
-func (server *Server) publish(result sim.TickResult) {
+func (server *Server) publish(result contract.TickResult) {
 	server.publishWithChats(result, nil)
 }
 
-func (server *Server) publishWithChats(result sim.TickResult, chats []chatDelivery) {
-	players := make(map[sim.SessionID]sim.PlayerUpdate, len(result.Players))
+func (server *Server) publishWithChats(result contract.TickResult, chats []chatDelivery) {
+	players := make(map[contract.SessionID]contract.PlayerUpdate, len(result.Players))
 	for _, player := range result.Players {
 		players[player.Session] = player
 	}
@@ -47,11 +47,11 @@ func (server *Server) publishWithChats(result sim.TickResult, chats []chatDelive
 
 func (server *Server) publishSession(
 	current *session,
-	result sim.TickResult,
-	players map[sim.SessionID]sim.PlayerUpdate,
+	result contract.TickResult,
+	players map[contract.SessionID]contract.PlayerUpdate,
 	definitions map[companion.ID]companion.Definition,
 	chats []chatDelivery,
-	hostiles []sim.HostileMob,
+	hostiles []contract.HostileMob,
 ) {
 	companions, ok := server.companionPublicationCandidates(current, result.Companions, definitions)
 	if !ok {
@@ -107,7 +107,7 @@ func (server *Server) publishChatDeliveries(current *session, chats []chatDelive
 	return true
 }
 
-func (server *Server) updateSessionView(current *session, player sim.PlayerUpdate) {
+func (server *Server) updateSessionView(current *session, player contract.PlayerUpdate) {
 	if player.Session != current.id {
 		return
 	}
@@ -118,8 +118,8 @@ func (server *Server) updateSessionView(current *session, player sim.PlayerUpdat
 
 func (server *Server) publishLocalResult(
 	current *session,
-	result sim.TickResult,
-	playerUpdate sim.PlayerUpdate,
+	result contract.TickResult,
+	playerUpdate contract.PlayerUpdate,
 ) {
 	for _, rejection := range result.Rejected {
 		if rejection.Session != current.id {
@@ -282,7 +282,7 @@ func (server *Server) closePublicationSessionLocked(current *session, cause erro
 	server.detachSessionLocked(current.id, current.generation, cause)
 }
 
-func (server *Server) sortedPublicationIDsLocked() []sim.SessionID {
+func (server *Server) sortedPublicationIDsLocked() []contract.SessionID {
 	ids := server.sortedSessionIDsLocked()
 	if server.trustedObserver != nil {
 		ids = append(ids, server.trustedObserver.id)
@@ -291,7 +291,7 @@ func (server *Server) sortedPublicationIDsLocked() []sim.SessionID {
 	return ids
 }
 
-func (server *Server) publicationSessionLocked(id sim.SessionID) *session {
+func (server *Server) publicationSessionLocked(id contract.SessionID) *session {
 	if server.trustedObserver != nil && server.trustedObserver.id == id {
 		return server.trustedObserver
 	}

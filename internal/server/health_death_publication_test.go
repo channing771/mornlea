@@ -10,7 +10,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/server"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 // healthLethalFallHeight 是从满血摔死所需的落差：伤害 = floor(落差) − 3 = 20。
@@ -150,7 +150,7 @@ func stepHealthTick(
 func drainHealthTick(
 	t *testing.T,
 	endpoint network.ClientEndpoint,
-	result sim.TickResult,
+	result contract.TickResult,
 ) healthTick {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)

@@ -4,14 +4,14 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 // TestPlayerPersistenceDirtyDetectionIncludesHealth 覆盖"只有生命值变化也必须被
 // 持久化"：玩家原地站着回血时位置与物品都不变，快照比较与存档比较都必须把生命值
 // 算进去，否则这次变化会被当成无变化而丢失。
 func TestPlayerPersistenceDirtyDetectionIncludesHealth(t *testing.T) {
-	full := sim.PlayerSnapshot{Health: core.MaxHealth}
+	full := contract.PlayerSnapshot{Health: core.MaxHealth}
 	hurt := full
 	hurt.Health = 7
 	if playerSnapshotsEqual(full, hurt) {

@@ -13,7 +13,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 const (
@@ -36,7 +36,7 @@ func TestPauseFreezesWorldTimeAcrossExplicitSteps(t *testing.T) {
 	running.Pause()
 	for range 4 {
 		result := running.StepForTest()
-		if !reflect.DeepEqual(result, sim.TickResult{}) {
+		if !reflect.DeepEqual(result, contract.TickResult{}) {
 			t.Fatalf("暂停期返回了非空 tick 结果: %+v", result)
 		}
 		if got := running.TickCount(); got != frozenAt {
@@ -62,7 +62,7 @@ func TestPauseIsIdempotent(t *testing.T) {
 	if got := running.TickCount(); got != beforeRepeat {
 		t.Fatalf("重复 Pause 改变了状态: %d -> %d", beforeRepeat, got)
 	}
-	if result := running.StepForTest(); !reflect.DeepEqual(result, sim.TickResult{}) {
+	if result := running.StepForTest(); !reflect.DeepEqual(result, contract.TickResult{}) {
 		t.Fatalf("重复 Pause 后 tick 未被跳过: %+v", result)
 	}
 
@@ -136,7 +136,7 @@ func TestPausedIntervalPreservesDeterministicContinuation(t *testing.T) {
 	frozenTick := paused.TickCount()
 	for range pausedCycles {
 		skipped := paused.StepForTest()
-		if !reflect.DeepEqual(skipped, sim.TickResult{}) {
+		if !reflect.DeepEqual(skipped, contract.TickResult{}) {
 			t.Fatalf("暂停期返回了非空 tick 结果: %+v", skipped)
 		}
 	}
@@ -148,10 +148,10 @@ func TestPausedIntervalPreservesDeterministicContinuation(t *testing.T) {
 	// 续跑段两侧注入同序玩家输入并逐 tick 对照：结算结果给出位置这类连续
 	// 模拟量，冻结缺口不得在任一侧留下可观测漂移。
 	for step := range replaySteps {
-		command := sim.Command{
+		command := contract.Command{
 			Session:  testSessionID,
 			Sequence: inputSequence + uint64(step),
-			Kind:     sim.CommandPlayerInput,
+			Kind:     contract.CommandPlayerInput,
 			MoveZ:    1,
 			Yaw:      0,
 			Pitch:    -0.25,
@@ -219,8 +219,8 @@ func TestRunTicksSchedulerDoesNotExecuteTickWhilePaused(t *testing.T) {
 func assertSinglePlayerAligned(
 	t *testing.T,
 	step int,
-	fromPaused []sim.PlayerUpdate,
-	fromUnpaused []sim.PlayerUpdate,
+	fromPaused []contract.PlayerUpdate,
+	fromUnpaused []contract.PlayerUpdate,
 ) {
 	t.Helper()
 	if len(fromPaused) != 1 || len(fromUnpaused) != 1 {
@@ -287,7 +287,7 @@ func readySpawnChunkForDeterministicReplay(t *testing.T, running *Server) {
 	if len(generated.Generate) != 1 || generated.Generate[0] != spawnKey {
 		t.Fatalf("Generate = %+v，想要 [%+v]", generated.Generate, spawnKey)
 	}
-	running.engine.SubmitGenerated(sim.GeneratedChunk{
+	running.engine.SubmitGenerated(contract.GeneratedChunk{
 		Dimension: spawnKey.Dimension,
 		Pos:       spawnKey.Pos,
 		Chunk:     playerTestGenerator{}.GenerateChunk(spawnKey.Pos),
@@ -315,7 +315,7 @@ func TestHostPausePassthroughFreezesWorldUntilResume(t *testing.T) {
 	frozenAt := host.world.TickCount()
 
 	host.Pause()
-	if result := host.world.StepForTest(); !reflect.DeepEqual(result, sim.TickResult{}) {
+	if result := host.world.StepForTest(); !reflect.DeepEqual(result, contract.TickResult{}) {
 		t.Fatalf("宿主暂停后 tick 未被跳过: %+v", result)
 	}
 	if got := host.world.TickCount(); got != frozenAt {
@@ -339,7 +339,7 @@ func TestHostPausePassthroughIsIdempotent(t *testing.T) {
 	// 置位侧幂等：重复 Pause 只写同一原子位，不排队、不计数。
 	host.Pause()
 	host.Pause()
-	if result := host.world.StepForTest(); !reflect.DeepEqual(result, sim.TickResult{}) {
+	if result := host.world.StepForTest(); !reflect.DeepEqual(result, contract.TickResult{}) {
 		t.Fatalf("重复 Pause 后 tick 未被跳过: %+v", result)
 	}
 	if got := host.world.TickCount(); got != frozenAt {

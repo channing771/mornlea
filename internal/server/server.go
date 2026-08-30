@@ -13,7 +13,8 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/server/persistence"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -29,10 +30,10 @@ type Server struct {
 	config                    Config
 	generator                 Generator
 	store                     storage.Store
-	engine                    *sim.Engine
+	engine                    *runtime.Engine
 	world                     *persistence.World
-	sessions                  map[sim.SessionID]*session
-	playerSessions            map[core.PlayerID]sim.SessionID
+	sessions                  map[contract.SessionID]*session
+	playerSessions            map[core.PlayerID]contract.SessionID
 	trustedObserver           *session
 	trustedObserverGeneration uint64
 
@@ -46,8 +47,8 @@ type Server struct {
 	hostileManager   *hostileManager
 	inputBoundary    atomic.Pointer[inputIngressBoundary]
 	jobs             chan chunkJob
-	acquired         chan sim.AcquiredChunk
-	generated        chan sim.GeneratedChunk
+	acquired         chan contract.AcquiredChunk
+	generated        chan contract.GeneratedChunk
 	pending          []chunkJob
 	queued           map[core.ChunkKey]struct{}
 
@@ -110,16 +111,16 @@ func newWorld(
 		config:         config,
 		generator:      generator,
 		store:          store,
-		engine:         sim.NewEngine(config.ViewRadius, metadata.WorldTimeTicks, metadata.Seed),
-		sessions:       make(map[sim.SessionID]*session),
-		playerSessions: make(map[core.PlayerID]sim.SessionID),
+		engine:         runtime.NewEngine(config.ViewRadius, metadata.WorldTimeTicks, metadata.Seed),
+		sessions:       make(map[contract.SessionID]*session),
+		playerSessions: make(map[core.PlayerID]contract.SessionID),
 		ctx:            ctx,
 		cancel:         cancel,
 		incoming:       make(chan incomingCommand, inputCapacity),
 		incomingChats:  make(chan incomingChat, inputCapacity),
 		jobs:           make(chan chunkJob, queueCapacity),
-		acquired:       make(chan sim.AcquiredChunk, queueCapacity),
-		generated:      make(chan sim.GeneratedChunk, queueCapacity),
+		acquired:       make(chan contract.AcquiredChunk, queueCapacity),
+		generated:      make(chan contract.GeneratedChunk, queueCapacity),
 		queued:         make(map[core.ChunkKey]struct{}),
 		runtimeDone:    make(chan struct{}),
 		closedDone:     make(chan struct{}),
@@ -151,7 +152,7 @@ func newWorld(
 	if companions != nil {
 		records, loadedQueues := companions.Restore()
 		for _, definition := range config.Companions {
-			restore := sim.CompanionRestore{
+			restore := contract.CompanionRestore{
 				ID:             definition.ID,
 				SpawnDimension: metadata.SpawnDimension,
 				SpawnAnchor:    metadata.SpawnAnchor,
@@ -234,7 +235,7 @@ func (server *Server) AttachSession(spec SessionSpec) (<-chan SessionExit, error
 }
 
 func (server *Server) DetachSession(
-	id sim.SessionID,
+	id contract.SessionID,
 	generation uint64,
 	cause error,
 ) bool {
@@ -261,7 +262,7 @@ func (server *Server) CloseTrustedObserver() error {
 }
 
 func (server *Server) detachTrustedObserver(
-	id sim.SessionID,
+	id contract.SessionID,
 	generation uint64,
 	cause error,
 ) bool {
@@ -291,21 +292,21 @@ func (server *Server) AppliedTrustedObserverCenter() (
 }
 
 // Step 执行一次服务端编排与权威模拟 tick。
-func (server *Server) Step() sim.TickResult {
+func (server *Server) Step() contract.TickResult {
 	return server.step(time.Time{})
 }
 
-func (server *Server) step(scheduled time.Time) sim.TickResult {
+func (server *Server) step(scheduled time.Time) contract.TickResult {
 	server.stepMu.Lock()
 	defer server.stepMu.Unlock()
 	if server.lifecycle != serverRunning {
-		return sim.TickResult{}
+		return contract.TickResult{}
 	}
 	// 暂停门放在编排最前面、observer 计时登记之前：被跳过的周期不发时长
 	// 样本、无持久化副作用。这里与 `RunTicks` 的前置读共享同一份原子位，
 	// 因此包括显式 `Step` 在内的全部推进点都受同一道门约束。
 	if server.paused.Load() {
-		return sim.TickResult{}
+		return contract.TickResult{}
 	}
 	started := time.Now()
 	if server.config.TickObserver != nil ||
@@ -377,7 +378,7 @@ func (server *Server) step(scheduled time.Time) sim.TickResult {
 }
 
 // StepForTest 显式推进一个完整 tick，供无头确定性集成测试使用。
-func (server *Server) StepForTest() sim.TickResult {
+func (server *Server) StepForTest() contract.TickResult {
 	return server.Step()
 }
 
@@ -450,7 +451,7 @@ func (server *Server) shutdownAfterRunCancellation(runErr error) error {
 func (server *Server) ChunkInfo(
 	dimension core.DimensionID,
 	pos core.ChunkPos,
-) (sim.ChunkInfo, bool) {
+) (contract.ChunkInfo, bool) {
 	server.stepMu.Lock()
 	defer server.stepMu.Unlock()
 	return server.engine.ChunkInfo(core.ChunkKey{
@@ -459,13 +460,13 @@ func (server *Server) ChunkInfo(
 	})
 }
 
-func (server *Server) PlayerStateFor(id sim.SessionID) (sim.PlayerUpdate, bool) {
+func (server *Server) PlayerStateFor(id contract.SessionID) (contract.PlayerUpdate, bool) {
 	server.stepMu.Lock()
 	defer server.stepMu.Unlock()
 	return server.engine.Player(id)
 }
 
-func (server *Server) PlayerSnapshotFor(id sim.SessionID) (sim.PlayerSnapshot, bool) {
+func (server *Server) PlayerSnapshotFor(id contract.SessionID) (contract.PlayerSnapshot, bool) {
 	server.stepMu.Lock()
 	defer server.stepMu.Unlock()
 	return server.engine.PlayerSnapshot(id)

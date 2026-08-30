@@ -11,7 +11,7 @@ import (
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -42,7 +42,7 @@ import (
 //
 // 对时间平移**不**不变的唯一剩余活动是作物的随机 tick（抽样哈希含绝对 tick）：
 // 耕地干湿转换会在不可预测的相对位置插进录像，破坏逐 tick 比对。录制前用
-// `sim.SetTunables` 把 `RandomTicksPerSection` 置零（farming_loop_e2e_test.go 的
+// `tuning.SetTunables` 把 `RandomTicksPerSection` 置零（farming_loop_e2e_test.go 的
 // 同款先例），本测试的契约只关心流体冲毁，不需要随机 tick 参与。
 
 // floodCropFarmland 是夹具中作物格正下方的耕地。
@@ -182,10 +182,10 @@ func recordFluidCropParity(t *testing.T, transport string) fluidCropParityRecord
 	// 关掉作物随机 tick（见文件头注释）：抽样数为 0 时 advanceCrops 直接返回，
 	// 录像里只剩对时间平移不变的流体与移动事件。引擎每个 Step 入口从全局快照
 	// 生效参数，因此这里在创建 host 之前设置即可覆盖本次录制的全部 tick。
-	t.Cleanup(func() { sim.SetTunables(sim.DefaultTunables()) })
-	tunables := sim.ActiveTunables()
+	t.Cleanup(func() { tuning.SetTunables(tuning.DefaultTunables()) })
+	tunables := tuning.ActiveTunables()
 	tunables.RandomTicksPerSection = 0
-	sim.SetTunables(tunables)
+	tuning.SetTunables(tunables)
 
 	store := storage.NewMemory(storage.Metadata{
 		FormatVersion: 3, Seed: 42, SpawnDimension: core.Overworld,

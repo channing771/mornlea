@@ -8,7 +8,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -46,7 +46,7 @@ func TestDeathBeforeRespawnDisconnectDoesNotDuplicateInventory(t *testing.T) {
 	identity := integrationIdentity(0x9d, "Doomed")
 	// 玩家远离出生锚点登录：死亡掉落留在远处的死亡区块，重生只能走出生候选列，
 	// 而出生候选列全是空气，因此重生永不完成。
-	far := sim.PlayerLocation{
+	far := contract.PlayerLocation{
 		Dimension: core.Overworld,
 		Position:  mgl32.Vec3{2000.5, 1.001, 2000.5},
 	}
@@ -54,7 +54,7 @@ func TestDeathBeforeRespawnDisconnectDoesNotDuplicateInventory(t *testing.T) {
 	inventory.Hotbar.Slots[0] = core.ItemStack{
 		Item: core.ItemStone, Count: deathDropStoneCount,
 	}
-	seedIntegrationPlayer(t, root, identity, sim.PlayerSnapshot{
+	seedIntegrationPlayer(t, root, identity, contract.PlayerSnapshot{
 		Current: far, Safe: &far, Inventory: inventory,
 	})
 

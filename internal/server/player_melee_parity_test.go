@@ -14,7 +14,7 @@ import (
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -215,11 +215,11 @@ func eightMeleeSessionSpec(index int, identity network.Identity, endpoint networ
 			position[2] = 2.5
 		}
 	}
-	location := sim.PlayerLocation{Dimension: core.Overworld, Position: position}
+	location := contract.PlayerLocation{Dimension: core.Overworld, Position: position}
 	return SessionSpec{
-		ID: sim.SessionID(index + 1), Generation: 1,
+		ID: contract.SessionID(index + 1), Generation: 1,
 		PlayerID: identity.PlayerID, DisplayName: identity.DisplayName, Endpoint: endpoint,
-		Restore: sim.PlayerRestore{Current: &location, Safe: &location, SpawnDimension: core.Overworld},
+		Restore: contract.PlayerRestore{Current: &location, Safe: &location, SpawnDimension: core.Overworld},
 	}
 }
 

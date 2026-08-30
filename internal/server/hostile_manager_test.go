@@ -9,7 +9,8 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/pathfind"
 	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -38,7 +39,7 @@ func chasePlayerID(seed byte) core.PlayerID {
 }
 
 // chaseTarget 构造一条注入编排层的在线玩家事实。
-func chaseTarget(seed byte, session sim.SessionID, position [3]float32) hostileTargetPlayer {
+func chaseTarget(seed byte, session contract.SessionID, position [3]float32) hostileTargetPlayer {
 	return hostileTargetPlayer{
 		id:        chasePlayerID(seed),
 		session:   session,
@@ -48,8 +49,8 @@ func chaseTarget(seed byte, session sim.SessionID, position [3]float32) hostileT
 }
 
 // chaseMob 构造一只可通过恢复校验的夜行者记录基线。
-func chaseMob(id uint64, position mgl32.Vec3) sim.HostileMob {
-	return sim.HostileMob{
+func chaseMob(id uint64, position mgl32.Vec3) contract.HostileMob {
+	return contract.HostileMob{
 		ID:           id,
 		Dimension:    core.Overworld,
 		State:        physics.State{Position: position, OnGround: true},
@@ -59,7 +60,7 @@ func chaseMob(id uint64, position mgl32.Vec3) sim.HostileMob {
 }
 
 // restoreChaseHostile 把一只夜行者恢复进引擎集合。
-func restoreChaseHostile(t *testing.T, engine *sim.Engine, mob sim.HostileMob) {
+func restoreChaseHostile(t *testing.T, engine *runtime.Engine, mob contract.HostileMob) {
 	t.Helper()
 	if err := engine.RestoreHostile(mob); err != nil {
 		t.Fatalf("恢复夜行者 %d：%v", mob.ID, err)
@@ -108,20 +109,20 @@ func chaseBoxedChunk(pos core.ChunkPos) *world.Chunk {
 func newHostileChaseWorld(
 	t *testing.T,
 	chunkFactory func(core.ChunkPos) *world.Chunk,
-) (*sim.Engine, *hostileManager, func([]hostileTargetPlayer)) {
+) (*runtime.Engine, *hostileManager, func([]hostileTargetPlayer)) {
 	t.Helper()
 	if chunkFactory == nil {
 		chunkFactory = chaseFlatChunk
 	}
-	engine := sim.NewEngine(2, chaseNightTicks, 0)
+	engine := runtime.NewEngine(2, chaseNightTicks, 0)
 	engine.RegisterSession(1, core.Overworld, core.ChunkPos{})
 	for range 40 {
 		result := engine.Step()
 		for _, key := range result.Acquire {
-			engine.SubmitAcquired(sim.AcquiredChunk{Key: key, Missing: true})
+			engine.SubmitAcquired(contract.AcquiredChunk{Key: key, Missing: true})
 		}
 		for _, key := range result.Generate {
-			engine.SubmitGenerated(sim.GeneratedChunk{
+			engine.SubmitGenerated(contract.GeneratedChunk{
 				Dimension: core.Overworld,
 				Pos:       key.Pos,
 				Chunk:     chunkFactory(key.Pos),
@@ -137,7 +138,7 @@ func newHostileChaseWorld(
 				Dimension: core.Overworld,
 				Pos:       core.ChunkPos{X: dx, Z: dz},
 			})
-			if !ok || info.State != sim.ChunkReady {
+			if !ok || info.State != contract.ChunkReady {
 				t.Fatalf("夹具世界区块 (%d,%d) 未就绪", dx, dz)
 			}
 		}
@@ -427,7 +428,7 @@ func TestHostileChaseClampsGoalToWindowEdgeTowardPlayer(t *testing.T) {
 	}
 	for _, want := range path.Revisions {
 		info, ok := engine.ChunkInfo(core.ChunkKey{Dimension: core.Overworld, Pos: want.Chunk})
-		if !ok || info.State != sim.ChunkReady || info.Revision != want.Revision {
+		if !ok || info.State != contract.ChunkReady || info.Revision != want.Revision {
 			t.Fatalf("路径 revision 与权威状态不符：%+v", want)
 		}
 	}
@@ -548,7 +549,7 @@ func TestHostileChaseWalksWaypointsAndAttacksTarget(t *testing.T) {
 		mob := engine.HostileMobs()[0]
 		dx := 10.5 - mob.State.Position.X()
 		dz := 0.5 - mob.State.Position.Z()
-		if dx*dx+dz*dz <= sim.HostileAttackRange*sim.HostileAttackRange {
+		if dx*dx+dz*dz <= contract.HostileAttackRange*contract.HostileAttackRange {
 			attacked = true
 		}
 	}

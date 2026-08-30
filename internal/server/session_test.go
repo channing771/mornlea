@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 func TestSessionOutboxPreservesFIFO(t *testing.T) {
@@ -210,7 +210,7 @@ func TestSessionFailKeepsExistingSemantics(t *testing.T) {
 	detached := make(chan error, 4)
 	session := newObserverSession(
 		context.Background(), testSessionID, 1, endpoint, 4, &workers,
-		func(_ sim.SessionID, _ uint64, cause error) bool {
+		func(_ contract.SessionID, _ uint64, cause error) bool {
 			detached <- cause
 			return true
 		},

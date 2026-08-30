@@ -8,29 +8,29 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 )
 
 func TestCombatHitPublication(t *testing.T) {
 	t.Run("attacker receives inventory then playerstate then combatHit", func(t *testing.T) {
 		h := newCombatHitHarness(t, 1, 2, 3)
-		attacker := sim.SessionID(1)
-		victim := sim.SessionID(2)
-		bystander := sim.SessionID(3)
+		attacker := runtime.SessionID(1)
+		victim := runtime.SessionID(2)
+		bystander := runtime.SessionID(3)
 		var inv core.Inventory
 		inv.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 1}
 		tick := uint64(42)
-		result := sim.TickResult{
+		result := runtime.TickResult{
 			Tick: tick,
-			Players: []sim.PlayerUpdate{
+			Players: []runtime.PlayerUpdate{
 				h.playerUpdate(attacker, tick),
 				h.playerUpdate(victim, tick),
 				h.playerUpdate(bystander, tick),
 			},
-			Inventories: []sim.InventoryUpdate{
+			Inventories: []runtime.InventoryUpdate{
 				{Session: attacker, Inventory: inv},
 			},
-			CombatHits: []sim.CombatHit{
+			CombatHits: []runtime.CombatHit{
 				{Session: attacker, Damage: 6, TargetKind: core.CombatTargetHostile},
 			},
 		}
@@ -58,7 +58,7 @@ func TestCombatHitPublication(t *testing.T) {
 			t.Fatalf("CombatHit=%+v want tick %d damage 6 hostile", hit, tick)
 		}
 
-		for _, id := range []sim.SessionID{victim, bystander} {
+		for _, id := range []runtime.SessionID{victim, bystander} {
 			msgs := h.drain(id)
 			for _, msg := range msgs {
 				if _, isHit := msg.(network.CombatHit); isHit {
@@ -69,12 +69,12 @@ func TestCombatHitPublication(t *testing.T) {
 
 		// trusted observer 不得收到
 		h.addTrustedObserver(t)
-		result2 := sim.TickResult{
+		result2 := runtime.TickResult{
 			Tick: tick + 1,
-			Players: []sim.PlayerUpdate{
+			Players: []runtime.PlayerUpdate{
 				h.playerUpdate(attacker, tick+1),
 			},
-			CombatHits: []sim.CombatHit{
+			CombatHits: []runtime.CombatHit{
 				{Session: attacker, Damage: 6, TargetKind: core.CombatTargetHostile},
 			},
 		}
@@ -89,8 +89,8 @@ func TestCombatHitPublication(t *testing.T) {
 
 	t.Run("slow session backpressure", func(t *testing.T) {
 		h := newCombatHitHarness(t, 1, 2)
-		attackerSlow := sim.SessionID(1)
-		attackerHealthy := sim.SessionID(2)
+		attackerSlow := runtime.SessionID(1)
+		attackerHealthy := runtime.SessionID(2)
 		h.setOutboxCapacity(attackerSlow, 2)
 		h.setOutboxCapacity(attackerHealthy, 32)
 
@@ -98,17 +98,17 @@ func TestCombatHitPublication(t *testing.T) {
 		inv1.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 1}
 		inv2.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 2}
 		tick := uint64(100)
-		result := sim.TickResult{
+		result := runtime.TickResult{
 			Tick: tick,
-			Players: []sim.PlayerUpdate{
+			Players: []runtime.PlayerUpdate{
 				h.playerUpdate(attackerSlow, tick),
 				h.playerUpdate(attackerHealthy, tick),
 			},
-			Inventories: []sim.InventoryUpdate{
+			Inventories: []runtime.InventoryUpdate{
 				{Session: attackerSlow, Inventory: inv1},
 				{Session: attackerHealthy, Inventory: inv2},
 			},
-			CombatHits: []sim.CombatHit{
+			CombatHits: []runtime.CombatHit{
 				{Session: attackerSlow, Damage: 6, TargetKind: core.CombatTargetPlayer},
 				{Session: attackerHealthy, Damage: 5, TargetKind: core.CombatTargetHostile},
 			},
@@ -140,19 +140,19 @@ func TestCombatHitPublication(t *testing.T) {
 func TestCombatHitPublicationFiltersBySession(t *testing.T) {
 	h := newCombatHitHarness(t, 1, 2, 3)
 	tick := uint64(55)
-	result := sim.TickResult{
+	result := runtime.TickResult{
 		Tick: tick,
-		Players: []sim.PlayerUpdate{
+		Players: []runtime.PlayerUpdate{
 			h.playerUpdate(1, tick),
 			h.playerUpdate(2, tick),
 			h.playerUpdate(3, tick),
 		},
-		CombatHits: []sim.CombatHit{
+		CombatHits: []runtime.CombatHit{
 			{Session: 2, Damage: 4, TargetKind: core.CombatTargetHostile},
 		},
 	}
 	h.publish(result)
-	for _, id := range []sim.SessionID{1, 3} {
+	for _, id := range []runtime.SessionID{1, 3} {
 		for _, msg := range h.drain(id) {
 			if _, ok := msg.(network.CombatHit); ok {
 				t.Fatalf("session %d 收到不属于自己的 hit", id)
@@ -177,12 +177,12 @@ func TestCombatHitPublicationFiltersBySession(t *testing.T) {
 func TestCombatHitUsesTickFromResult(t *testing.T) {
 	h := newCombatHitHarness(t, 1)
 	tick := uint64(999)
-	result := sim.TickResult{
+	result := runtime.TickResult{
 		Tick: tick,
-		Players: []sim.PlayerUpdate{
+		Players: []runtime.PlayerUpdate{
 			h.playerUpdate(1, tick),
 		},
-		CombatHits: []sim.CombatHit{
+		CombatHits: []runtime.CombatHit{
 			{Session: 1, Damage: 6, TargetKind: core.CombatTargetPlayer},
 		},
 	}
@@ -211,7 +211,7 @@ type combatHitHarness struct {
 	running *Server
 }
 
-func newCombatHitHarness(t *testing.T, ids ...sim.SessionID) *combatHitHarness {
+func newCombatHitHarness(t *testing.T, ids ...runtime.SessionID) *combatHitHarness {
 	t.Helper()
 	config := DefaultConfig(1)
 	config.ViewRadius = 0
@@ -220,9 +220,9 @@ func newCombatHitHarness(t *testing.T, ids ...sim.SessionID) *combatHitHarness {
 	config.OutboxCapacity = 32
 	running := &Server{
 		config:         config,
-		engine:         sim.NewEngine(0, 0, 0),
-		sessions:       make(map[sim.SessionID]*session),
-		playerSessions: make(map[core.PlayerID]sim.SessionID),
+		engine:         runtime.NewEngine(0, 0, 0),
+		sessions:       make(map[runtime.SessionID]*session),
+		playerSessions: make(map[core.PlayerID]runtime.SessionID),
 		lifecycle:      serverRunning,
 	}
 	h := &combatHitHarness{t: t, running: running}
@@ -244,7 +244,7 @@ func newCombatHitHarness(t *testing.T, ids ...sim.SessionID) *combatHitHarness {
 	return h
 }
 
-func (h *combatHitHarness) newSession(id sim.SessionID, playerID core.PlayerID, capacity int) *session {
+func (h *combatHitHarness) newSession(id runtime.SessionID, playerID core.PlayerID, capacity int) *session {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &session{
 		id:               id,
@@ -261,8 +261,8 @@ func (h *combatHitHarness) newSession(id sim.SessionID, playerID core.PlayerID, 
 	}
 }
 
-func (h *combatHitHarness) playerUpdate(id sim.SessionID, tick uint64) sim.PlayerUpdate {
-	update := sim.PlayerUpdate{
+func (h *combatHitHarness) playerUpdate(id runtime.SessionID, tick uint64) runtime.PlayerUpdate {
+	update := runtime.PlayerUpdate{
 		Session:    id,
 		Dimension:  core.Overworld,
 		ViewCenter: core.ChunkPos{},
@@ -274,11 +274,11 @@ func (h *combatHitHarness) playerUpdate(id sim.SessionID, tick uint64) sim.Playe
 	return update
 }
 
-func (h *combatHitHarness) publish(result sim.TickResult) {
+func (h *combatHitHarness) publish(result runtime.TickResult) {
 	h.running.publish(result)
 }
 
-func (h *combatHitHarness) drain(id sim.SessionID) []network.ServerMessage {
+func (h *combatHitHarness) drain(id runtime.SessionID) []network.ServerMessage {
 	current := h.running.sessions[id]
 	if current == nil {
 		return nil
@@ -323,7 +323,7 @@ func (h *combatHitHarness) addTrustedObserver(t *testing.T) *session {
 	return sess
 }
 
-func (h *combatHitHarness) setOutboxCapacity(id sim.SessionID, cap int) {
+func (h *combatHitHarness) setOutboxCapacity(id runtime.SessionID, cap int) {
 	sess := h.running.sessions[id]
 	if sess == nil {
 		return
@@ -342,7 +342,7 @@ func (h *combatHitHarness) setOutboxCapacity(id sim.SessionID, cap int) {
 	sess.outbox = newOutbox
 }
 
-func (h *combatHitHarness) hasSession(id sim.SessionID) bool {
+func (h *combatHitHarness) hasSession(id runtime.SessionID) bool {
 	_, ok := h.running.sessions[id]
 	return ok
 }

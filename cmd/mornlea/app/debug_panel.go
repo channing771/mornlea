@@ -18,7 +18,7 @@ import (
 	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/render"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
 // remote 报告本进程是单纯的联机客户端——既没有内嵌单机 Host，也不是
@@ -59,7 +59,7 @@ func (a *Application) panelModeLabel() string {
 // 实际视野角度会纹丝不动。
 func (a *Application) applyPanelChange() {
 	physics.SetTunables(a.panel.effective.Physics)
-	sim.SetTunables(a.panel.effective.Sim)
+	tuning.SetTunables(a.panel.effective.Sim)
 	a.render = a.panel.effective.Render
 	a.camera.FovY = mgl32.DegToRad(a.render.FovDegrees)
 }
@@ -131,7 +131,7 @@ func newPanelState(effective config.Config) *panelState {
 func newPanelStateFromActive(renderConfig config.Render) *panelState {
 	return newPanelState(config.Config{
 		Physics: physics.ActiveTunables(),
-		Sim:     sim.ActiveTunables(),
+		Sim:     tuning.ActiveTunables(),
 		Render:  renderConfig,
 	})
 }

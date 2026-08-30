@@ -12,7 +12,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/server"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 // TestCraftingStateStaysWithOwningSession 锁死网格发布的私有性：两名玩家各自
@@ -26,7 +26,7 @@ func TestCraftingStateStaysWithOwningSession(t *testing.T) {
 		hotbarTestConfig(2), firstServer, server.FlatTestGenerator{},
 		stockedTestHotbar(core.ItemStone),
 	)
-	if _, err := running.AttachSession(externalSessionSpec(2, 1, secondServer, sim.PlayerRestore{
+	if _, err := running.AttachSession(externalSessionSpec(2, 1, secondServer, contract.PlayerRestore{
 		SpawnDimension: core.Overworld,
 	})); err != nil {
 		t.Fatalf("附加第二个会话: %v", err)

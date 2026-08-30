@@ -1,5 +1,5 @@
 // mine 步骤满格饱和分支对容器目标（箱子/熔炉）的批量容量判定测试（change
-// companion-mine-containers Task 3）：Runner 与 sim 用同一 `sim.CompanionMineContainerStaging`
+// companion-mine-containers Task 3）：Runner 与 sim 用同一 `runtime.CompanionMineContainerStaging`
 // 批量预演——内容物可容纳时任务正常完成（不误报容量失败，产物入伙伴背包）；
 // 单件本体能放下而批量放不下时以既有 TaskFailInventoryFull 稳定失败且方块与
 // 容器内容物不变；Memory 与 TCP 两条传输的 transcript 与世界结果完全一致。
@@ -12,7 +12,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -264,7 +264,7 @@ func runContainerMineParity(t *testing.T, transport string) containerMineParityR
 	var transcript []network.ChatEvent
 	// stepParityTick 推进一个权威 tick 并排空本 tick 的全部客户端消息（保持
 	// 流同步），把 ChatEvent 追加进 transcript。
-	stepParityTick := func() sim.TickResult {
+	stepParityTick := func() contract.TickResult {
 		tickResult := host.world.StepForTest()
 		transcript = append(transcript,
 			companionChatEvents(receiveCompanionChatTick(t, client, tickResult.Tick))...)

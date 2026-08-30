@@ -6,12 +6,12 @@ import (
 	"sort"
 
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 func (h *Host) collectSessionExit(
 	active *activeLogin,
-	session sim.SessionID,
+	session contract.SessionID,
 	generation uint64,
 	exit <-chan SessionExit,
 	cause error,

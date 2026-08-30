@@ -8,15 +8,15 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 const inputCapacity = 256
 
 type incomingCommand struct {
-	Session    sim.SessionID
+	Session    contract.SessionID
 	Generation uint64
-	Command    sim.Command
+	Command    contract.Command
 }
 
 type inputIngressBoundary struct {
@@ -25,7 +25,7 @@ type inputIngressBoundary struct {
 	done     chan struct{}
 
 	mu       sync.Mutex
-	sessions map[sim.SessionID]struct{}
+	sessions map[contract.SessionID]struct{}
 	closed   bool
 }
 
@@ -34,12 +34,12 @@ func newInputIngressBoundary(sequence uint64, want int) *inputIngressBoundary {
 		sequence: sequence,
 		want:     want,
 		done:     make(chan struct{}),
-		sessions: make(map[sim.SessionID]struct{}, want),
+		sessions: make(map[contract.SessionID]struct{}, want),
 	}
 }
 
 func (boundary *inputIngressBoundary) observe(command incomingCommand) {
-	if command.Command.Kind != sim.CommandPlayerInput ||
+	if command.Command.Kind != contract.CommandPlayerInput ||
 		command.Command.Sequence != boundary.sequence {
 		return
 	}
@@ -111,15 +111,15 @@ func (server *Server) endpointReader(current *session) {
 }
 
 func translateClientMessage(
-	id sim.SessionID,
+	id contract.SessionID,
 	message network.ClientMessage,
-) (sim.Command, bool) {
+) (contract.Command, bool) {
 	switch message := message.(type) {
 	case network.PlayerInput:
-		return sim.Command{
+		return contract.Command{
 			Session:   id,
 			Sequence:  message.Sequence,
-			Kind:      sim.CommandPlayerInput,
+			Kind:      contract.CommandPlayerInput,
 			MoveX:     message.MoveX,
 			MoveZ:     message.MoveZ,
 			Jump:      message.Jump,
@@ -130,34 +130,34 @@ func translateClientMessage(
 			Sprinting: message.Sprinting,
 		}, true
 	case network.PlaceBlock:
-		return sim.Command{
+		return contract.Command{
 			Session:  id,
 			Sequence: message.Sequence,
-			Kind:     sim.CommandPlaceBlock,
+			Kind:     contract.CommandPlaceBlock,
 			Yaw:      message.Yaw,
 			Pitch:    message.Pitch,
 			Slot:     message.Slot,
 		}, true
 	case network.SelectHotbar:
-		return sim.Command{
+		return contract.Command{
 			Session:  id,
 			Sequence: message.Sequence,
-			Kind:     sim.CommandSelectHotbar,
+			Kind:     contract.CommandSelectHotbar,
 			Slot:     message.Slot,
 		}, true
 	case network.OpenContainer:
-		return sim.Command{
+		return contract.Command{
 			Session:  id,
 			Sequence: message.Sequence,
-			Kind:     sim.CommandOpenFurnace,
+			Kind:     contract.CommandOpenFurnace,
 			Yaw:      message.Yaw,
 			Pitch:    message.Pitch,
 		}, true
 	case network.MoveContainerStack:
-		return sim.Command{
+		return contract.Command{
 			Session:  id,
 			Sequence: message.Sequence,
-			Kind:     sim.CommandMoveFurnaceStack,
+			Kind:     contract.CommandMoveFurnaceStack,
 			Furnace:  message.Container,
 			Slot:     message.From,
 			ToSlot:   message.To,
@@ -165,70 +165,70 @@ func translateClientMessage(
 	case network.TillSoil:
 		// 与 OpenContainer 同形：只搬运序号与朝向，目标与栏位都由 sim 从权威
 		// 状态取得，server 不做第二次校验。
-		return sim.Command{
+		return contract.Command{
 			Session:  id,
 			Sequence: message.Sequence,
-			Kind:     sim.CommandTillSoil,
+			Kind:     contract.CommandTillSoil,
 			Yaw:      message.Yaw,
 			Pitch:    message.Pitch,
 		}, true
 	case network.BoneMeal:
-		return sim.Command{
+		return contract.Command{
 			Session:  id,
 			Sequence: message.Sequence,
-			Kind:     sim.CommandBoneMeal,
+			Kind:     contract.CommandBoneMeal,
 			Yaw:      message.Yaw,
 			Pitch:    message.Pitch,
 		}, true
 	case network.CloseContainer:
-		return sim.Command{
+		return contract.Command{
 			Session:  id,
 			Sequence: message.Sequence,
-			Kind:     sim.CommandCloseFurnace,
+			Kind:     contract.CommandCloseFurnace,
 		}, true
 	case network.DropSelectedItem:
 		// 只搬运序号：栏位与位置都由 sim 从权威状态取得，server 不做第二次校验。
-		return sim.Command{
+		return contract.Command{
 			Session:  id,
 			Sequence: message.Sequence,
-			Kind:     sim.CommandDropSelectedItem,
+			Kind:     contract.CommandDropSelectedItem,
 		}, true
 	case network.MoveCraftingStack:
 		// 网格移动的统一视图格直接搬运（网格 0..8、背包 9..44）；值域已在
 		// 网络层校验，尺寸相关拒绝（个人扩展格）与整堆语义由 sim 权威执行。
-		return sim.Command{
+		return contract.Command{
 			Session:  id,
 			Sequence: message.Sequence,
-			Kind:     sim.CommandMoveCraftingStack,
+			Kind:     contract.CommandMoveCraftingStack,
 			Slot:     message.From,
 			ToSlot:   message.To,
 		}, true
 	case network.TakeCraftingOutput:
 		// 只搬运序号：产物、扣料与容量全部由 sim 从权威网格派生。
-		return sim.Command{
+		return contract.Command{
 			Session:  id,
 			Sequence: message.Sequence,
-			Kind:     sim.CommandTakeCraftingOutput,
+			Kind:     contract.CommandTakeCraftingOutput,
 		}, true
 	case network.MoveInventoryStack:
-		return sim.Command{
+		return contract.Command{
 			Session:  id,
 			Sequence: message.Sequence,
-			Kind:     sim.CommandMoveInventoryStack,
+			Kind:     contract.CommandMoveInventoryStack,
 			Slot:     message.From,
 			ToSlot:   message.To,
 		}, true
 	case network.RequestChunkResync:
-		return sim.Command{
+		return contract.Command{
 			Session:      id,
 			Sequence:     message.Sequence,
-			Kind:         sim.CommandResync,
+			Kind:         contract.CommandResync,
 			Dimension:    message.Dimension,
 			Chunk:        message.Chunk,
 			HaveRevision: message.HaveRevision,
 		}, true
 	default:
-		return sim.Command{}, false
+		return contract.Command{}, false
 	}
 }
 
@@ -247,10 +247,10 @@ func (server *Server) drainTrustedObserverCenter() (
 		server.trustedObserver.hasView = true
 		server.trustedObserver.viewDimension = request.dimension
 		server.trustedObserver.viewCenter = request.center
-		server.engine.Enqueue(sim.Command{
+		server.engine.Enqueue(contract.Command{
 			Session:   trustedObserverSessionID,
 			Sequence:  server.trustedObserverSequence,
-			Kind:      sim.CommandTrustedObserverCenter,
+			Kind:      contract.CommandTrustedObserverCenter,
 			Dimension: request.dimension,
 			Center:    request.center,
 		})
@@ -276,7 +276,7 @@ func (server *Server) enqueueIncoming(
 
 // drainIncoming runs during Step while server.stepMu is held.
 func (server *Server) drainIncoming() {
-	var commands []sim.Command
+	var commands []contract.Command
 	for {
 		select {
 		case incoming := <-server.incoming:

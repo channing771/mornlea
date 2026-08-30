@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -110,7 +110,7 @@ func TestSaveCompletionIsAcknowledgedOnlyAtNextStepStart(t *testing.T) {
 	}
 
 	running.StepForTest()
-	if got := running.engine.PersistenceStats(); got != (sim.PersistenceStats{}) {
+	if got := running.engine.PersistenceStats(); got != (contract.PersistenceStats{}) {
 		t.Fatalf("next Step did not acknowledge save: %+v", got)
 	}
 	if running.world.autosaveActive {
@@ -144,7 +144,7 @@ func TestSaveErrorAcknowledgesOnlyCommittedAndRetainsUncommitted(t *testing.T) {
 	if got := running.engine.PersistenceStats(); got.DirtyChunks != 1 || got.InFlightChunks != 1 {
 		t.Fatalf("partial failure stats=%+v, want one retained in-flight chunk", got)
 	}
-	if duplicate := running.engine.PersistenceSnapshots(2, 1<<20, sim.SaveAll); len(duplicate) != 0 {
+	if duplicate := running.engine.PersistenceSnapshots(2, 1<<20, contract.SaveAll); len(duplicate) != 0 {
 		t.Fatalf("retained retry became selectable again: %+v", duplicate)
 	}
 	region, _ := storage.RegionFor(keys[1])
@@ -186,13 +186,13 @@ func TestSaveCompletionAboveCurrentReleasesSnapshotWithoutFalseAck(t *testing.T)
 	if !ok || info.Revision != 1 {
 		t.Fatalf("authority info=%+v,%v, want current revision 1", info, ok)
 	}
-	if got := persistenceRevisionsForTest(t, running.engine, key); got.persisted != 0 {
-		t.Fatalf("persisted revision=%d, want 0 after impossible committed revision", got.persisted)
+	if info.PersistedRevision != 0 || info.SaveInFlightRevision != 0 {
+		t.Fatalf("authority info=%+v, want persisted and in-flight revisions cleared", info)
 	}
 	if got := running.engine.PersistenceStats(); got.DirtyChunks != 1 || got.InFlightChunks != 0 {
 		t.Fatalf("high committed revision stats=%+v, want dirty retryable authority", got)
 	}
-	retry := running.engine.PersistenceSnapshots(1, 1<<20, sim.SaveAll)
+	retry := running.engine.PersistenceSnapshots(1, 1<<20, contract.SaveAll)
 	if len(retry) != 1 || retry[0].Key != key || retry[0].Revision != 1 {
 		t.Fatalf("retry snapshots=%+v, want key at revision 1", retry)
 	}
@@ -219,9 +219,9 @@ func TestSaveCompletionAheadOfSnapshotAcceptsBoundedPersistedRevision(t *testing
 	}
 	for sequence, wantRevision := range []uint64{2, 3} {
 		running.engine.SetBlockForTest(core.BlockPos{}, core.GrassID)
-		running.engine.Enqueue(sim.Command{
+		running.engine.Enqueue(contract.Command{
 			Session: testSessionID, Sequence: uint64(sequence + 1),
-			Kind: sim.CommandPlayerInput, Pitch: -1.5, Mining: true,
+			Kind: contract.CommandPlayerInput, Pitch: -1.5, Mining: true,
 		})
 		for range 4 {
 			if primed := running.engine.Step(); len(primed.Changes) != 0 {
@@ -245,11 +245,11 @@ func TestSaveCompletionAheadOfSnapshotAcceptsBoundedPersistedRevision(t *testing
 	waitCompletionQueued(t, running)
 	running.StepForTest()
 
-	if got := persistenceRevisionsForTest(t, running.engine, key); got.current != 3 ||
-		got.persisted != 2 || got.inFlight != 0 {
-		t.Fatalf("persistence revisions=%+v, want current=3 persisted=2 inFlight=0", got)
+	info, ok = running.engine.ChunkInfo(key)
+	if !ok || info.Revision != 3 || info.PersistedRevision != 2 || info.SaveInFlightRevision != 0 {
+		t.Fatalf("authority info=%+v,%v, want current=3 persisted=2 inFlight=0", info, ok)
 	}
-	retry := running.engine.PersistenceSnapshots(1, 1<<20, sim.SaveAll)
+	retry := running.engine.PersistenceSnapshots(1, 1<<20, contract.SaveAll)
 	if len(retry) != 1 || retry[0].Key != key || retry[0].Revision != 3 {
 		t.Fatalf("retry snapshots=%+v, want key at revision 3", retry)
 	}
@@ -283,8 +283,8 @@ func TestSaveCompletionEqualToNewerAuthorityDoesNotClaimForeignContent(t *testin
 	if len(call) != 1 || call[0].Revision != 1 {
 		t.Fatalf("save call=%+v, want revision 1", call)
 	}
-	running.engine.Enqueue(sim.Command{
-		Session: testSessionID, Sequence: 1, Kind: sim.CommandPlayerInput,
+	running.engine.Enqueue(contract.Command{
+		Session: testSessionID, Sequence: 1, Kind: contract.CommandPlayerInput,
 		Pitch: -1.5, Mining: true,
 	})
 	for range 4 {
@@ -315,14 +315,14 @@ func TestSaveCompletionEqualToNewerAuthorityDoesNotClaimForeignContent(t *testin
 	waitCompletionQueued(t, running)
 	running.StepForTest()
 
-	if got := persistenceRevisionsForTest(t, running.engine, key); got.current != 2 ||
-		got.persisted != 0 || got.inFlight != 0 {
-		t.Fatalf("persistence revisions=%+v, want current=2 persisted=0 inFlight=0", got)
+	info, ok := running.engine.ChunkInfo(key)
+	if !ok || info.Revision != 2 || info.PersistedRevision != 0 || info.SaveInFlightRevision != 0 {
+		t.Fatalf("authority info=%+v,%v, want current=2 persisted=0 inFlight=0", info, ok)
 	}
 	if got := running.engine.PersistenceStats(); got.DirtyChunks != 1 || got.InFlightChunks != 0 {
 		t.Fatalf("foreign committed content stats=%+v, want dirty retryable authority", got)
 	}
-	retry := running.engine.PersistenceSnapshots(1, 1<<20, sim.SaveAll)
+	retry := running.engine.PersistenceSnapshots(1, 1<<20, contract.SaveAll)
 	if len(retry) != 1 || retry[0].Key != key || retry[0].Revision != 2 {
 		t.Fatalf("retry snapshots=%+v, want key at revision 2", retry)
 	}

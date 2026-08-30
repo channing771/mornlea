@@ -9,12 +9,12 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
 type playerPrepareResult struct {
-	restore sim.PlayerRestore
+	restore contract.PlayerRestore
 	err     error
 }
 
@@ -175,13 +175,13 @@ func testMetadata() storage.Metadata {
 	}
 }
 
-func testPlayerSnapshot(position float32) sim.PlayerSnapshot {
-	safe := sim.PlayerLocation{
+func testPlayerSnapshot(position float32) contract.PlayerSnapshot {
+	safe := contract.PlayerLocation{
 		Dimension: core.Overworld,
 		Position:  mgl32.Vec3{position - 1, 64, -position},
 	}
-	return sim.PlayerSnapshot{
-		Current: sim.PlayerLocation{
+	return contract.PlayerSnapshot{
+		Current: contract.PlayerLocation{
 			Dimension: core.Overworld,
 			Position:  mgl32.Vec3{position, 70, -position},
 		},
@@ -413,7 +413,7 @@ func storedPlayerForTest(
 	id core.PlayerID,
 	revision uint64,
 	name string,
-	snapshot sim.PlayerSnapshot,
+	snapshot contract.PlayerSnapshot,
 ) storage.StoredPlayer {
 	stored := storage.StoredPlayer{
 		PlayerID:    id,

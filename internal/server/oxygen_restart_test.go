@@ -11,7 +11,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -65,8 +65,8 @@ func TestOxygenIsNotPersistedAcrossDiskRestart(t *testing.T) {
 	}
 	root := t.TempDir()
 	identity := integrationIdentity(0x98, "Diver")
-	loc := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
-	seedIntegrationPlayer(t, root, identity, sim.PlayerSnapshot{Current: loc})
+	loc := contract.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
+	seedIntegrationPlayer(t, root, identity, contract.PlayerSnapshot{Current: loc})
 
 	first := startDiskHost(t, root, "127.0.0.1:0", drownedSpawnGenerator{})
 	connected := dialIntegrationClient(t, first.Addr, identity)

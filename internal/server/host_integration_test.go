@@ -54,7 +54,7 @@ func TestHostTCPLoginDisconnectAndShutdown(t *testing.T) {
 }
 
 // TestNewHostWiresEngineSeedFromStoreMetadata 断言 NewHost 把
-// store.Metadata().Seed 原样传给了 sim.NewEngine：host.world.engine 的种子
+// store.Metadata().Seed 原样传给了 runtime.NewEngine：host.world.engine 的种子
 // 必须与存档 metadata 的种子一致。newHostTestStore 用非零种子 42，避免和
 // 「接线断了、engine 悄悄退回默认零值」这种失败混淆。
 func TestNewHostWiresEngineSeedFromStoreMetadata(t *testing.T) {

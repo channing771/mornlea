@@ -11,7 +11,7 @@ import (
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -222,8 +222,8 @@ func TestChestSharedByTwoPlayersOverMemory(t *testing.T) {
 	go func() { _ = running.RunTicks(ctx) }()
 
 	breakerHotbar, otherHotbar := chestScriptHotbars()
-	breakerLocation := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
-	otherLocation := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 3.5}}
+	breakerLocation := contract.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
+	otherLocation := contract.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 3.5}}
 
 	breakerClientEndpoint, breakerServerEndpoint := network.NewMemoryPair(4096)
 	otherClientEndpoint, otherServerEndpoint := network.NewMemoryPair(4096)
@@ -251,13 +251,13 @@ func TestChestSharedByTwoPlayersOverTCP(t *testing.T) {
 	breakerIdentity := integrationIdentity(0x93, "Breaker")
 	otherIdentity := integrationIdentity(0x94, "Watcher")
 	breakerHotbar, otherHotbar := chestScriptHotbars()
-	breakerLocation := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
-	otherLocation := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 3.5}}
+	breakerLocation := contract.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
+	otherLocation := contract.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 3.5}}
 
-	seedIntegrationPlayer(t, root, breakerIdentity, sim.PlayerSnapshot{
+	seedIntegrationPlayer(t, root, breakerIdentity, contract.PlayerSnapshot{
 		Current: breakerLocation, Inventory: core.Inventory{Hotbar: breakerHotbar},
 	})
-	seedIntegrationPlayer(t, root, otherIdentity, sim.PlayerSnapshot{
+	seedIntegrationPlayer(t, root, otherIdentity, contract.PlayerSnapshot{
 		Current: otherLocation, Inventory: core.Inventory{Hotbar: otherHotbar},
 	})
 
@@ -297,9 +297,9 @@ func waitScriptClientReady(t *testing.T, connected integrationClient) {
 }
 
 func chestScriptSessionSpec(
-	id sim.SessionID,
+	id contract.SessionID,
 	endpoint network.ServerEndpoint,
-	location sim.PlayerLocation,
+	location contract.PlayerLocation,
 	hotbar core.Hotbar,
 ) SessionSpec {
 	return SessionSpec{
@@ -307,7 +307,7 @@ func chestScriptSessionSpec(
 		PlayerID:    core.PlayerID{0, 0, 0, 0, 0, 0, 0x40, 0, 0x80, 0, 0, 0, 0, 0, 0, byte(id)},
 		DisplayName: fmt.Sprintf("ChestScript-%d", id),
 		Endpoint:    endpoint,
-		Restore: sim.PlayerRestore{
+		Restore: contract.PlayerRestore{
 			Current: &location, Safe: &location, SpawnDimension: location.Dimension,
 			Inventory: core.Inventory{Hotbar: hotbar},
 		},

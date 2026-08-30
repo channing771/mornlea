@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -53,7 +53,7 @@ func hostileRestoreFixture() []storage.StoredHostileMob {
 // assertHostilesRestored 逐字段断言权威侧夜行者集合与存档记录一致（按 ID
 // 升序），覆盖位置/速度/生命/冷却/目标/重规划节奏/远离累计的全部持久化
 // 字段。路径是运行时派生物，不存在于记录或权威侧，因此天然不参与比对。
-func assertHostilesRestored(t *testing.T, mobs []sim.HostileMob, want []storage.StoredHostileMob) {
+func assertHostilesRestored(t *testing.T, mobs []contract.HostileMob, want []storage.StoredHostileMob) {
 	t.Helper()
 	if len(mobs) != len(want) {
 		t.Fatalf("夜行者数量=%d，想要 %d（记录=%v）", len(mobs), len(want), mobs)
