@@ -1691,3 +1691,41 @@ delta 行为契约、代码、current docs、main specs 或配置，不执行 me
   一致，且均未 staged。`git diff --check`：exit 0且无输出。
 - 以上结果写入 ledger 后仍须最终 fresh rerun；最终结果、commit SHA、提交仅含五文件以及
   preserved dirty paths 写入 ignored planning report，避免递归修改 tracked ledger。
+
+## Task 6.8 fixed-parent planning review bookkeeping
+
+### Independent review verdict 与恢复裁决
+
+- Independent planning reviewer session identity：
+  `01a05320-856f-7e21-87e5-7631a04d1adb`。完整 ignored review 为
+  `.superpowers/sdd/2026-08-30-rust-render-world-main-integration/task-6.8-fixed-parent-planning-review.md`；
+  报告内 Reviewer ID 为 `c79582f4-8ce6-481c-85fe-1169282989d3`，两项 identity 一并保留以便
+  追溯 controller/session 与 review report 记录。
+- Exact review range：
+  `6f622407b1078d264707d8643f7fec41c553a48e..6614510211692fcfc320fd08f65dee8b1abf3b29`；
+  planning commit 为 `6614510211692fcfc320fd08f65dee8b1abf3b29`
+  `docs(openspec): freeze render cache selected main parent`，唯一父为 `6f622407...`。
+- Final verdict：spec-compliance **PASS**；quality **Approved**；0 Critical、0 Important、
+  0 Minor、0 open findings。Reviewer 没有要求 fix round。
+- Reviewer 独立确认 fixed-parent amendment 只冻结 provenance，不弱化 ABI、capture/app-pump、
+  MRW1、fluid 排除、rollback、identity、18-gate validation 或 release 边界；历史 17/18 binding
+  failure 与 0/18 preflight cancellation 保持原样，Tasks 2–6.7 与 ledger prefix 保持不可改写。
+- Frozen-parent 裁决继续固定 selected-main
+  `9bb84c6841b59a18b030256d5952ed60acc215da`，保留 merge `6f622407` 的 feature
+  `9dc22f1b...` / selected-main `9bb84c68...` 双亲；不得因 local `main` 的当前位置执行第二次
+  main merge、later-main adoption audit 或 exact-current-main parity。本批准不授权 archive、
+  push、history rewrite、修改 main 或把 feature merge into main。
+- Controller 接受上述 clean planning verdict。**Task 6.8 may resume**：暂停 implementer 可继续
+  exact `9bb84c68` 上剩余的 combined client ABI v14 实现。该批准不代表 implementation 或其
+  fresh spec/quality reviews 已完成，因此 Task 6.8 保持 unchecked；Tasks 6.9–6.10 同样 pending，
+  进度保持 25 total / 22 complete / 3 remaining、`state: ready`。
+
+### Bookkeeping 范围基线
+
+- 本 bookkeeping 前 committed ledger 为 1,693 行、129,684 bytes，SHA-256
+  `3355e69a24982c598c12e21af9aab469284ed912811f0a789ec6a3806f4bfc3a`；本节只追加在该
+  prefix 之后。
+- 本 bookkeeping 只允许本 `ledger.md` 形成 tracked diff，不修改 `tasks.md` checkbox 或任何
+  其他 tracked file；19 个 paused implementation paths 必须保持 byte-identical、dirty、unstaged，
+  staged scope 必须为零。验证只运行 OpenSpec strict/status/apply 与 diff/scope checks，不运行
+  产品测试、build、race、GPU、visual、release 或 merge 命令。
