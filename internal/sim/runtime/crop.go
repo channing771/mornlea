@@ -301,7 +301,6 @@ func cropSkyExposed(chunk *world.Chunk, position core.BlockPos) bool {
 // 每条样本读取自身一次；只有作物再读取正下方持久化的干/湿耕地编号一次，因此
 // 单阶段方块读取不会超过考察格数的两倍。
 func (engine *Engine) advanceCrops(pending *pendingChunkChanges) {
-	engine.settleTramples(pending)
 	active := engine.activeInterestKeys()
 	engine.realm.AdvanceCrops(active, pending)
 	examined, reads := engine.realm.CropStats()

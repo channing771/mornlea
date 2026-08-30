@@ -9,10 +9,10 @@ import (
 )
 
 func (engine *Engine) RegisterObserverSession(id SessionID) {
-	if engine.sessions[id] != nil {
+	if engine.subscriptions[id] != nil {
 		panic("sim: duplicate registered session")
 	}
-	engine.sessions[id] = &sessionState{
+	engine.subscriptions[id] = &subscriptionState{
 		trustedObserver: true,
 		wanted:          make(map[core.ChunkKey]struct{}),
 	}
@@ -28,7 +28,7 @@ func (engine *Engine) WantsChunk(key core.ChunkKey) bool {
 // SessionWantsChunk reports whether id currently subscribes to key.
 // Callers serialize this query with Step and session lifecycle operations.
 func (engine *Engine) SessionWantsChunk(id SessionID, key core.ChunkKey) bool {
-	session := engine.sessions[id]
+	session := engine.subscriptions[id]
 	if session == nil {
 		return false
 	}
@@ -38,8 +38,15 @@ func (engine *Engine) SessionWantsChunk(id SessionID, key core.ChunkKey) bool {
 
 func (engine *Engine) reconcileSubscriptions(result *TickResult) {
 	union := make(map[core.ChunkKey]struct{})
-	for sessionID, session := range engine.sessions {
-		next := engine.sessionWantedSnapshot(session)
+	for sessionID, session := range engine.subscriptions {
+		if !session.trustedObserver {
+			if subscription, ok := engine.entities.SessionSubscription(sessionID); ok {
+				session.hasView = true
+				session.dimension = subscription.Dimension
+				session.center = subscription.Center
+			}
+		}
+		next := engine.sessionWantedSnapshot(sessionID, session)
 		for key := range next {
 			union[key] = struct{}{}
 		}
@@ -51,7 +58,7 @@ func (engine *Engine) reconcileSubscriptions(result *TickResult) {
 		sortChunkKeys(result.Forget[sessionID])
 		session.wanted = next
 	}
-	engine.addCompanionWanted(union)
+	engine.entities.AddCompanionWanted(union)
 
 	candidates := make([]core.ChunkKey, 0)
 	for key := range union {
@@ -95,43 +102,18 @@ func (engine *Engine) reconcileSubscriptions(result *TickResult) {
 
 func (engine *Engine) wantedSnapshot() map[core.ChunkKey]struct{} {
 	wanted := make(map[core.ChunkKey]struct{})
-	for _, session := range engine.sessions {
-		for key := range engine.sessionWantedSnapshot(session) {
+	for id, session := range engine.subscriptions {
+		for key := range engine.sessionWantedSnapshot(id, session) {
 			wanted[key] = struct{}{}
 		}
 	}
-	engine.addCompanionWanted(wanted)
+	engine.entities.AddCompanionWanted(wanted)
 	return wanted
 }
 
-func (engine *Engine) addCompanionWanted(wanted map[core.ChunkKey]struct{}) {
-	for _, state := range engine.companions {
-		if state.active {
-			center := companionChunk(state.state.Position)
-			for dz := -companionInterestRadius; dz <= companionInterestRadius; dz++ {
-				for dx := -companionInterestRadius; dx <= companionInterestRadius; dx++ {
-					wanted[core.ChunkKey{
-						Dimension: state.dimension,
-						Pos: core.ChunkPos{
-							X: center.X + int32(dx),
-							Z: center.Z + int32(dz),
-						},
-					}] = struct{}{}
-				}
-			}
-			continue
-		}
-		for key := range state.restoreWanted {
-			wanted[key] = struct{}{}
-		}
-		for chunk := range state.spawnWanted {
-			wanted[core.ChunkKey{Dimension: state.dimension, Pos: chunk}] = struct{}{}
-		}
-	}
-}
-
 func (engine *Engine) sessionWantedSnapshot(
-	session *sessionState,
+	id SessionID,
+	session *subscriptionState,
 ) map[core.ChunkKey]struct{} {
 	wanted := make(map[core.ChunkKey]struct{})
 	if session.hasView && engine.dimension(session.dimension) != nil {
@@ -148,12 +130,11 @@ func (engine *Engine) sessionWantedSnapshot(
 			}
 		}
 	}
-	if session.player != nil && session.player.lifecycle == PlayerPendingSpawn {
-		for key := range session.player.restoreWanted {
-			wanted[key] = struct{}{}
-		}
-		for chunk := range session.player.spawnWanted {
-			wanted[core.ChunkKey{Dimension: session.dimension, Pos: chunk}] = struct{}{}
+	if !session.trustedObserver {
+		if subscription, ok := engine.entities.SessionSubscription(id); ok {
+			for _, key := range subscription.Pending {
+				wanted[key] = struct{}{}
+			}
 		}
 	}
 	return wanted
@@ -216,7 +197,7 @@ func (engine *Engine) applyAcquired(
 
 func (engine *Engine) subscriptionDistanceSquared(key core.ChunkKey) int64 {
 	distance := int64(math.MaxInt64)
-	for _, session := range engine.sessions {
+	for _, session := range engine.subscriptions {
 		if _, wanted := session.wanted[key]; !wanted {
 			continue
 		}
@@ -227,78 +208,20 @@ func (engine *Engine) subscriptionDistanceSquared(key core.ChunkKey) int64 {
 			distance = candidate
 		}
 	}
-	for _, state := range engine.companions {
-		candidate, relevant := companionSubscriptionDistanceSquared(state, key)
-		if relevant && candidate < distance {
-			distance = candidate
-		}
+	if candidate, relevant := engine.entities.CompanionSubscriptionDistanceSquared(key); relevant && candidate < distance {
+		distance = candidate
 	}
 	return distance
 }
 
-func companionSubscriptionDistanceSquared(
-	state *companionState,
-	key core.ChunkKey,
-) (int64, bool) {
-	if state.active {
-		if key.Dimension != state.dimension {
-			return 0, false
-		}
-		center := companionChunk(state.state.Position)
-		if absChunkDelta(key.Pos.X, center.X) > companionInterestRadius ||
-			absChunkDelta(key.Pos.Z, center.Z) > companionInterestRadius {
-			return 0, false
-		}
-		return chunkDistanceSquared(key.Pos, center), true
-	}
-	distance := int64(math.MaxInt64)
-	relevant := false
-	if _, wanted := state.restoreWanted[key]; wanted {
-		for _, candidate := range state.restoreCandidates {
-			if candidate.location.Dimension != key.Dimension {
-				continue
-			}
-			distance = min(distance, chunkDistanceSquared(
-				key.Pos,
-				companionChunk(candidate.location.Position),
-			))
-			relevant = true
-		}
-	}
-	if key.Dimension == state.dimension {
-		if _, wanted := state.spawnWanted[key.Pos]; wanted && len(state.spawnCandidates) != 0 {
-			anchor := (core.BlockPos{
-				X: state.spawnCandidates[0].X,
-				Z: state.spawnCandidates[0].Z,
-			}).Chunk()
-			distance = min(distance, chunkDistanceSquared(key.Pos, anchor))
-			relevant = true
-		}
-	}
-	return distance, relevant
-}
-
 func (engine *Engine) companionWantsChunk(key core.ChunkKey) bool {
-	for _, state := range engine.companions {
-		if _, relevant := companionSubscriptionDistanceSquared(state, key); relevant {
-			return true
-		}
-	}
-	return false
+	return engine.entities.CompanionWantsChunk(key)
 }
 
 func chunkDistanceSquared(left, right core.ChunkPos) int64 {
 	dx := int64(left.X - right.X)
 	dz := int64(left.Z - right.Z)
 	return dx*dx + dz*dz
-}
-
-func absChunkDelta(left, right int32) int {
-	delta := left - right
-	if delta < 0 {
-		delta = -delta
-	}
-	return int(delta)
 }
 
 func (engine *Engine) applyGenerated(

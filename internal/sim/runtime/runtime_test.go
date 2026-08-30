@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/physics"
 )
 
 func TestRuntimeStepPhaseOrder(t *testing.T) {
@@ -71,7 +72,7 @@ func TestRuntimeComposesRealmAndEntity(t *testing.T) {
 	if engine.realm == nil {
 		t.Fatalf("realm.State 未组合")
 	}
-	if engine.entityState == nil {
+	if engine.entities == nil {
 		t.Fatalf("entity.State 未组合")
 	}
 	if engine.SeedForTest() != 0x1234 {
@@ -81,4 +82,68 @@ func TestRuntimeComposesRealmAndEntity(t *testing.T) {
 	if engine.viewRadius != 1 {
 		t.Fatalf("viewRadius=%d，想要 1", engine.viewRadius)
 	}
+
+	t.Run("玩家状态来自 entity owner", func(t *testing.T) {
+		engine.RegisterSession(1, core.Overworld, core.ChunkPos{})
+		runtimeHash, ok := engine.PlayerHash(1)
+		if !ok {
+			t.Fatal("runtime 未登记玩家")
+		}
+		entityHash, ok := engine.entities.PlayerHash(1)
+		if !ok {
+			t.Fatal("runtime 登记的玩家在 entity owner 中不可见")
+		}
+		if entityHash != runtimeHash {
+			t.Fatalf("玩家权威状态分叉：runtime=%x entity=%x", runtimeHash, entityHash)
+		}
+	})
+
+	t.Run("夜行者状态来自 entity owner", func(t *testing.T) {
+		mob := HostileMob{
+			ID:        1,
+			Dimension: core.Overworld,
+			State: physics.State{
+				Position: [3]float32{0.5, 1, 0.5},
+				OnGround: true,
+			},
+			Health:       core.MaxHealth,
+			BurnCooldown: 20,
+		}
+		if err := engine.RestoreHostile(mob); err != nil {
+			t.Fatalf("runtime 恢复夜行者：%v", err)
+		}
+		ownerMobs := engine.entities.HostileMobs()
+		if len(ownerMobs) != 1 || ownerMobs[0] != mob {
+			t.Fatalf("runtime 恢复的夜行者在 entity owner 中不一致：%+v", ownerMobs)
+		}
+	})
+
+	t.Run("runtime 不保留实体镜像字段", func(t *testing.T) {
+		engineType := reflect.TypeOf(*engine)
+		forbidden := map[string]struct{}{
+			"sessions": {}, "companions": {}, "hostiles": {}, "hostileLight": {},
+			"dropKeySeen": {}, "dropKeyScratch": {}, "containerViewerScratch": {},
+			"dropSessionScratch": {}, "tramplePending": {},
+		}
+		var realmOwners, entityOwners int
+		for index := 0; index < engineType.NumField(); index++ {
+			field := engineType.Field(index)
+			if _, mirrored := forbidden[field.Name]; mirrored {
+				t.Errorf("runtime.Engine 仍保留实体权威字段 %q", field.Name)
+			}
+			if field.Type.Kind() != reflect.Pointer {
+				continue
+			}
+			elem := field.Type.Elem()
+			switch {
+			case elem.PkgPath() == "github.com/channing771/mornlea/internal/sim/realm" && elem.Name() == "State":
+				realmOwners++
+			case elem.PkgPath() == "github.com/channing771/mornlea/internal/sim/entity" && elem.Name() == "State":
+				entityOwners++
+			}
+		}
+		if realmOwners != 1 || entityOwners != 1 {
+			t.Fatalf("runtime.Engine 组合 owner 数量 realm=%d entity=%d，想要各 1", realmOwners, entityOwners)
+		}
+	})
 }

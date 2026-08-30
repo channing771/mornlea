@@ -1,19 +1,15 @@
 package entity
 
 import (
-	"cmp"
 	"errors"
 	"fmt"
 	"math"
-	"slices"
 	"sort"
 
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/sim/realm"
-	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -62,7 +58,7 @@ type hostileState struct {
 	nextRepathTicks uint64
 	// attackIntent 与 attackTargetSession 是本 tick 已冻结的攻击意图（瞬态，
 	// 不进快照或存档）：由 applyHostileActions 在 tick 边界统一写定，由
-	// advanceHostileMelee 在同 tick 稍后统一结算并清零。
+	// advanceCombat 在同 tick 稍后统一结算并清零。
 	attackIntent        bool
 	attackTargetSession SessionID
 	// distantTicks 是距全部 active 玩家水平超过 despawn 半径的累计 tick，
@@ -126,7 +122,7 @@ func (set *hostileSet) removeAt(index int) {
 // 对齐：ID 非零且不重复、维度存在、身体状态有限且位置在世界高度内、生命
 // 为正且不超上限、三个冷却不越过周期、远离累计不越界、目标成对一致。任何
 // 一条不成立都整体拒绝且不改变既有集合，由调用方决定启动是否失败。
-func (engine *Engine) RestoreHostile(mob HostileMob) error {
+func (engine *engineContext) RestoreHostile(mob HostileMob) error {
 	if err := validateHostileMob(mob); err != nil {
 		return err
 	}
@@ -205,7 +201,7 @@ func validateHostileMob(mob HostileMob) error {
 
 // HostileMobs 返回按 ID 升序的全量值快照。调用频率由保存与发布节奏决定，
 // 不在权威 tick 热路径上，因此分配一份新切片。
-func (engine *Engine) HostileMobs() []HostileMob {
+func (engine *engineContext) HostileMobs() []HostileMob {
 	mobs := make([]HostileMob, 0, len(engine.hostiles.entries))
 	for index := range engine.hostiles.entries {
 		mobs = append(mobs, engine.hostileMobAt(index))
@@ -213,7 +209,7 @@ func (engine *Engine) HostileMobs() []HostileMob {
 	return mobs
 }
 
-func (engine *Engine) hostileMobAt(index int) HostileMob {
+func (engine *engineContext) hostileMobAt(index int) HostileMob {
 	entry := &engine.hostiles.entries[index]
 	return HostileMob{
 		ID:              entry.id,
@@ -231,6 +227,17 @@ func (engine *Engine) hostileMobAt(index int) HostileMob {
 	}
 }
 
+func (hostile *hostileState) applyDamage(damage int32) {
+	if damage <= 0 {
+		return
+	}
+	if damage >= int32(hostile.health) {
+		hostile.health = 0
+		return
+	}
+	hostile.health -= uint8(damage)
+}
+
 // advanceHostileMovement 把全部夜行者汇入与玩家/伙伴相同的 Rust
 // `physics.Step` 积分出口：每个个体用既有输入步进恰好一次，位移完全由权威
 // 物理决定，不新写任何 Go 积分。身体与玩家同形（同 AABB），浸没标志复用
@@ -244,7 +251,7 @@ func (engine *Engine) hostileMobAt(index int) HostileMob {
 // （`Y < core.MinY` 即移除）：坠落个体会滞留，世界下界以下的任何位置都过
 // 不了存档记录校验，容许 `[MinY-16, MinY)` 滞留窗只会把不可持久化的位置
 // 写进存档、令重启恢复整体失败。
-func (engine *Engine) advanceHostileMovement() {
+func (engine *engineContext) advanceHostileMovement() {
 	for index := 0; index < len(engine.hostiles.entries); {
 		entry := &engine.hostiles.entries[index]
 		if entry.fresh {
@@ -269,7 +276,7 @@ func (engine *Engine) advanceHostileMovement() {
 // UUIDv4），`nextRepathTicks` 是持久化世界时间轴上的下一次重规划 tick。唯一
 // 调用方是持有 `stepMu` 的 server 编排层（tick 边界单写者）；未知 ID 或成对
 // 约束不成立时整体拒绝并返回 false，绝不留下半更新的追逐事实。
-func (engine *Engine) PlanHostileChase(
+func (engine *engineContext) PlanHostileChase(
 	id uint64,
 	hasTarget bool,
 	target core.PlayerID,
@@ -293,34 +300,12 @@ func (engine *Engine) PlanHostileChase(
 	return true
 }
 
-// advanceHostiles 是夜行者阶段的固定次序编排，由 `Engine.Step` 在订阅收敛
-// 之后、玩家近战之前调用：生成（tick 边界判定，先于物理语义，新个体下一
-// tick 才积分）→ 意图消费（有界追逐 worker 提交的移动/攻击意图，本 tick 的
-// 全部攻击意图在此冻结）→ 移动（与玩家/伙伴同一积分出口，ID 升序）→ 近战
-// 结算（先冻结的意图按 ID 升序统一结算）→ 灼烧（白昼露天每 20 tick 扣 1）→
-// 远离消失（>64 格累计 600 active tick，无掉落）→ 死亡掉落（同 tick 移除，
-// 环形尝试放 1 个腐肉）。灼烧致死的个体由死亡结算统一移除，因此「烧死」与
-// 「被打死」走完全相同的移除与掉落路径。夜行者近战结算先于玩家近战执行，同
-// tick 两类近战共享同一份受击保护计时。所有子步骤的成本都有固定上界（候选
-// ≤1、个体 ≤64、意图 ≤64、掉落尝试以已加载区块封顶），不随世界规模放大。
-func (engine *Engine) AdvanceHostiles(realmState *realm.State, mutation *realm.Mutation, tunables tuning.Tunables, worldTime uint64) {
-	if realmState == nil || mutation == nil {
-		return
-	}
-	// 为保持单事务，生成与移动仍经由传入的 realmState，但沿用既有实现（读取 engine.realm 与 engine.seed 的部分保持不变）
-	// 完整的 tunables 透传在后续迭代中补齐，此处先以 worldTime 与 mutation 为主
+// advanceHostiles 只推进生成、意图消费和移动；统一战斗、灼烧、死亡与远离消失
+// 由 `State.Step` 紧随其后按固定生命周期顺序编排。
+func (engine *engineContext) advanceHostiles(actions []HostileAction) {
 	engine.advanceHostileSpawn()
-	engine.applyHostileActions(engine.takeHostileActions())
+	engine.applyHostileActions(actions)
 	engine.advanceHostileMovement()
-	engine.advanceHostileMelee()
-	engine.advanceHostileBurn(worldTime)
-	engine.advanceHostileDistant()
-	engine.SettleHostileDeaths(realmState, mutation, tunables)
-}
-
-// advanceHostiles 保留旧签名过渡包装
-func (engine *Engine) advanceHostiles(mutation *realm.Mutation) {
-	engine.AdvanceHostiles(engine.realm, mutation, engine.tunables, engine.worldTime.Load())
 }
 
 // phaseIsDay 报告显示相位是否为白昼：与客户端昼夜曲线（sun = sin(2πp/24000)，
@@ -335,7 +320,7 @@ func phaseIsDay(phase uint16) bool {
 // 归零即扣 1 点生命并回到满周期；遮顶或夜间一律把计时重置回满周期（等价于
 // 「已灼烧的累计从 0 重新开始」）。生命归零的个体由本 tick 稍后的
 // settleHostileDeaths 统一移除与掉落。
-func (engine *Engine) advanceHostileBurn(worldTime uint64) {
+func (engine *engineContext) advanceHostileBurn(worldTime uint64) {
 	phase := core.DisplayDayPhase(worldTime, engine.DayPhaseOffset())
 	if !phaseIsDay(phase) {
 		engine.resetHostileBurnTimers()
@@ -360,7 +345,7 @@ func (engine *Engine) advanceHostileBurn(worldTime uint64) {
 	}
 }
 
-func (engine *Engine) resetHostileBurnTimers() {
+func (engine *engineContext) resetHostileBurnTimers() {
 	for index := range engine.hostiles.entries {
 		engine.hostiles.entries[index].burnCooldown = hostileCooldownPeriodTicks
 	}
@@ -370,7 +355,7 @@ func (engine *Engine) resetHostileBurnTimers() {
 // 检查，任何 `core.BlockOpaque` 方块（玻璃/树叶等透明方块不算遮挡）都判为
 // 遮顶。上空进入未加载区块时按「不露天」保守处理——灼烧宁可漏判也不能凭
 // 借未加载的世界状态扣血。
-func (engine *Engine) hostileSkyExposed(dimension *Dimension, position mgl32.Vec3) bool {
+func (engine *engineContext) hostileSkyExposed(dimension *Dimension, position mgl32.Vec3) bool {
 	if dimension == nil {
 		return false
 	}
@@ -391,7 +376,7 @@ func (engine *Engine) hostileSkyExposed(dimension *Dimension, position mgl32.Vec
 // >64 格时逐 tick 累计 `DistantTicks`，累计满 600 即移除且不产生掉落；回到
 // 范围内（≤64）立即清零累计。没有 active 玩家时「距全部玩家 >64」按空集
 // 成立，累计照常推进。
-func (engine *Engine) advanceHostileDistant() {
+func (engine *engineContext) advanceHostileDistant() {
 	distantSq := float32(hostileDistantRadius) * float32(hostileDistantRadius)
 	sessions := engine.sortedActiveSessions()
 	for index := 0; index < len(engine.hostiles.entries); {
@@ -428,41 +413,33 @@ const hostileDistantRadius = 64
 // settleHostileDeaths 结算本 tick 生命归零的夜行者：经既有掉落契约在死亡
 // chunk 环形尝试放置 1 个腐肉后同 tick 移除，绝不留下半移除状态。处理顺序
 // 即切片顺序（ID 升序），掉落放置顺序因此可复现。
-func (engine *Engine) settleHostileDeaths(mutation *realm.Mutation) {
-	engine.SettleHostileDeaths(engine.realm, mutation, engine.tunables)
-}
-
-func (engine *Engine) SettleHostileDeaths(realmState *realm.State, mutation *realm.Mutation, tunables tuning.Tunables) {
-	if realmState == nil || mutation == nil {
-		return
-	}
+func (engine *engineContext) settleHostileDeaths(pending *pendingChunkChanges) {
 	for index := 0; index < len(engine.hostiles.entries); {
 		entry := &engine.hostiles.entries[index]
 		if entry.health != 0 {
 			index++
 			continue
 		}
-		engine.dropHostileLootWithState(entry, realmState, mutation, tunables)
+		engine.dropHostileLoot(entry, pending)
 		engine.hostiles.removeAt(index)
 	}
 }
 
-// dropHostileLoot 保留旧签名的过渡包装
-func (engine *Engine) dropHostileLoot(entry *hostileState, mutation *realm.Mutation) {
-	engine.dropHostileLootWithState(entry, engine.realm, mutation, engine.tunables)
-}
-
-func (engine *Engine) dropHostileLootWithState(entry *hostileState, realmState *realm.State, mutation *realm.Mutation, tunables tuning.Tunables) {
-	if realmState == nil || mutation == nil {
-		return
-	}
-	dimension := realmState.Dimension(entry.dimension)
+// dropHostileLoot 在死亡位置所在 chunk 环形尝试放置 1 个腐肉：候选 chunk 按
+// deathDropChunks 的既定全序（环形半径 0、1、2…，同圈稳定排序）逐个预演，
+// 首个有容量的 chunk 承接掉落；全部已加载可用 chunk 均满时确定性省略掉落，
+// 死亡仍由调用方完成。
+func (engine *engineContext) dropHostileLoot(
+	entry *hostileState,
+	pending *pendingChunkChanges,
+) {
+	dimension := engine.dimension(entry.dimension)
 	if dimension == nil {
 		return
 	}
 	death := blockPosOf(entry.state.Position)
 	batch := [1]core.ItemStack{{Item: core.ItemRottenFlesh, Count: 1}}
-	for _, key := range engine.deathDropChunksWithState(realmState, entry.dimension, death.Chunk()) {
+	for _, key := range engine.deathDropChunks(entry.dimension, death.Chunk()) {
 		chunk, ready := dimension.ReadyChunk(key.Pos)
 		if !ready {
 			continue
@@ -471,62 +448,16 @@ func (engine *Engine) dropHostileLootWithState(entry *hostileState, realmState *
 		if !indexed {
 			continue
 		}
-		next, ok := chunk.PrepareDropBatch(batch[:], blockIndex, tunables.DropPickupDelayTicks)
+		next, ok := chunk.PrepareDropBatch(
+			batch[:], blockIndex, engine.tunables.DropPickupDelayTicks,
+		)
 		if !ok {
 			continue
 		}
 		chunk.CommitDropBatch(next)
-		mutation.Touch(key)
+		engine.touchChunk(key, pending)
 		return
 	}
-}
-
-func (engine *Engine) deathDropChunksWithState(realmState *realm.State, dimensionID core.DimensionID, death core.ChunkPos) []core.ChunkKey {
-	dimension := realmState.Dimension(dimensionID)
-	if dimension == nil {
-		return nil
-	}
-	positions := dimension.ReadyChunkPositions(nil)
-	keys := make([]core.ChunkKey, 0, len(positions))
-	for _, pos := range positions {
-		keys = append(keys, core.ChunkKey{Dimension: dimensionID, Pos: pos})
-	}
-	sortChunkKeys(keys)
-	slices.SortStableFunc(keys, func(left, right core.ChunkKey) int {
-		return cmp.Compare(chunkRing(death, left.Pos), chunkRing(death, right.Pos))
-	})
-	return keys
-}
-
-func chunkRing(center, pos core.ChunkPos) int64 {
-	dx := int64(pos.X) - int64(center.X)
-	dz := int64(pos.Z) - int64(center.Z)
-	if dx < 0 {
-		dx = -dx
-	}
-	if dz < 0 {
-		dz = -dz
-	}
-	if dx > dz {
-		return dx
-	}
-	return dz
-}
-
-func clampBlockToChunk(block core.BlockPos, pos core.ChunkPos) core.BlockPos {
-	minX := pos.X << core.SectionShift
-	minZ := pos.Z << core.SectionShift
-	if block.X < minX {
-		block.X = minX
-	} else if block.X > minX+core.SectionSize-1 {
-		block.X = minX + core.SectionSize - 1
-	}
-	if block.Z < minZ {
-		block.Z = minZ
-	} else if block.Z > minZ+core.SectionSize-1 {
-		block.Z = minZ + core.SectionSize - 1
-	}
-	return block
 }
 
 // horizontalDistanceSq 返回两点间的水平距离平方，供半径判定统一使用：

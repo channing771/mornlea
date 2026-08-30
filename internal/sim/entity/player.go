@@ -11,7 +11,6 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim/realm"
-	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
 type PlayerLifecycle uint8
@@ -40,10 +39,11 @@ type playerState struct {
 	spawned bool
 	// health 是服务端单写者拥有的权威生命值，0..core.MaxHealth。
 	health uint8
-	// meleeCooldownTicks 是最近一次成功近战后目标还须免疫的 tick 数；它是瞬态
-	// 权威状态，不进玩家更新、快照、哈希或存档。
-	meleeCooldownTicks uint8
-	// meleeSuppressedMining 只标记本 tick 已命中玩家的采掘分流；下一 tick 必须由
+	// attackCooldownTicks 与 hurtCooldownTicks 分别约束主动攻击和受击保护；两者
+	// 都是瞬态权威状态，不进玩家更新、快照、哈希或存档。
+	attackCooldownTicks uint8
+	hurtCooldownTicks   uint8
+	// meleeSuppressedMining 只标记本 tick 已成功命中实体的采掘分流；下一 tick 必须由
 	// 当时的持续输入重新判定，不能跨 tick 保留。
 	meleeSuppressedMining bool
 	// peakY 是离地后到达过的最高高度，瞬态字段，不持久化、不进入快照/哈希。
@@ -137,17 +137,17 @@ type playerState struct {
 	exhaustedRevisions []uint64
 }
 
-func (engine *Engine) RegisterPlayer(id SessionID, restore PlayerRestore, realmState *realm.State, tunables tuning.Tunables) {
-	if realmState == nil || realmState.Dimension(restore.SpawnDimension) == nil {
-		panic("entity: register session in unknown dimension")
+func (engine *engineContext) RegisterPlayer(id SessionID, restore PlayerRestore) {
+	if engine.dimension(restore.SpawnDimension) == nil {
+		panic("sim: register session in unknown dimension")
 	}
 	if engine.sessions[id] != nil {
-		panic("entity: duplicate registered session")
+		panic("sim: duplicate registered session")
 	}
 	if !restore.Inventory.Valid() {
-		panic("entity: register session with invalid inventory")
+		panic("sim: register session with invalid inventory")
 	}
-	candidates := spawnCandidates(restore.SpawnAnchor, tunables.SpawnRadius)
+	candidates := spawnCandidates(restore.SpawnAnchor, engine.tunables.SpawnRadius)
 	health := restore.Health
 	if health == 0 {
 		health = core.MaxHealth
@@ -208,46 +208,39 @@ func (engine *Engine) RegisterPlayer(id SessionID, restore PlayerRestore, realmS
 	}
 	player.spawnWanted[restore.SpawnAnchor] = struct{}{}
 	engine.sessions[id] = &sessionState{
-		hasView:   true,
+		id:        id,
 		dimension: restore.SpawnDimension,
-		center:    restore.SpawnAnchor,
-		wanted:    make(map[core.ChunkKey]struct{}),
 		player:    player,
 	}
 	engine.subscriptionsDirty = true
 }
 
-func (engine *Engine) RegisterSession(
+func (engine *engineContext) RegisterSession(
 	id SessionID,
 	dimensionID core.DimensionID,
 	anchor core.ChunkPos,
-	realmState *realm.State,
-	tunables tuning.Tunables,
 ) {
 	engine.RegisterPlayer(id, PlayerRestore{
 		SpawnDimension: dimensionID,
 		SpawnAnchor:    anchor,
-	}, realmState, tunables)
+	})
 }
 
-// RegisterSessionLegacy 保留旧签名的过渡包装，仅供未迁移的内部调用
-func (engine *Engine) RegisterSessionLegacy(
-	id SessionID,
-	dimensionID core.DimensionID,
-	anchor core.ChunkPos,
-) {
-	engine.RegisterSession(id, dimensionID, anchor, engine.realm, engine.tunables)
-}
-
-func (engine *Engine) Player(id SessionID) (PlayerUpdate, bool) {
+func (engine *engineContext) Player(id SessionID) (PlayerUpdate, bool) {
 	session := engine.sessions[id]
 	if session == nil || session.player == nil {
 		return PlayerUpdate{}, false
 	}
-	return session.player.update(id, session, engine.WorldTime(), engine.DayPhaseOffset()), true
+	return session.player.update(
+		id,
+		session,
+		engine.sessionView(session).Center,
+		engine.WorldTime(),
+		engine.DayPhaseOffset(),
+	), true
 }
 
-func (engine *Engine) PlayerSnapshot(id SessionID) (PlayerSnapshot, bool) {
+func (engine *engineContext) PlayerSnapshot(id SessionID) (PlayerSnapshot, bool) {
 	session := engine.sessions[id]
 	if session == nil || session.player == nil || !session.player.persistable() {
 		return PlayerSnapshot{}, false
@@ -270,7 +263,7 @@ func (player *playerState) persistable() bool {
 
 // SetPlayerPositionForTest 直接写入某个会话玩家的权威位置，仅供测试构造固定场景，
 // 例如把玩家踩到世界高度下界以下触发 beginReset。
-func (engine *Engine) SetPlayerPositionForTest(id SessionID, position mgl32.Vec3) {
+func (engine *engineContext) SetPlayerPositionForTest(id SessionID, position mgl32.Vec3) {
 	session := engine.sessions[id]
 	if session == nil || session.player == nil {
 		return
@@ -278,7 +271,7 @@ func (engine *Engine) SetPlayerPositionForTest(id SessionID, position mgl32.Vec3
 	session.player.state.Position = position
 }
 
-func (engine *Engine) UnregisterSession(id SessionID) (PlayerSnapshot, bool) {
+func (engine *engineContext) UnregisterSession(id SessionID) (PlayerSnapshot, bool) {
 	session := engine.sessions[id]
 	if session == nil {
 		return PlayerSnapshot{}, false
@@ -329,7 +322,7 @@ func (player *playerState) snapshot(
 	return snapshot
 }
 
-func (engine *Engine) PlayerHash(id SessionID) ([32]byte, bool) {
+func (engine *engineContext) PlayerHash(id SessionID) ([32]byte, bool) {
 	session := engine.sessions[id]
 	if session == nil || session.player == nil {
 		return [32]byte{}, false
@@ -394,6 +387,7 @@ func (engine *Engine) PlayerHash(id SessionID) ([32]byte, bool) {
 func (player *playerState) update(
 	id SessionID,
 	session *sessionState,
+	viewCenter core.ChunkPos,
 	worldTime uint64,
 	dayPhaseOffset uint16,
 ) PlayerUpdate {
@@ -405,7 +399,7 @@ func (player *playerState) update(
 		DayPhaseOffset:    dayPhaseOffset,
 		Session:           id,
 		Dimension:         session.dimension,
-		ViewCenter:        session.center,
+		ViewCenter:        viewCenter,
 		State:             player.state,
 		Yaw:               player.yaw,
 		Pitch:             player.pitch,
@@ -420,7 +414,7 @@ func (player *playerState) update(
 	}
 }
 
-func (engine *Engine) publishPlayers(result *TickResult) {
+func (engine *engineContext) publishPlayers(result *TickResult) {
 	sessions := make([]SessionID, 0, len(engine.sessions))
 	for id, session := range engine.sessions {
 		if session.player != nil {
@@ -434,7 +428,11 @@ func (engine *Engine) publishPlayers(result *TickResult) {
 		// 份权威状态下发的值；跳夜 tick 的客户端即刻看到白昼相位。
 		result.Players = append(
 			result.Players, session.player.update(
-				id, session, result.WorldTimeTicks, engine.DayPhaseOffset(),
+				id,
+				session,
+				engine.sessionView(session).Center,
+				result.WorldTimeTicks,
+				engine.DayPhaseOffset(),
 			),
 		)
 		session.player.reset = false
@@ -442,7 +440,7 @@ func (engine *Engine) publishPlayers(result *TickResult) {
 }
 
 // publishInventories 为每名 Active 且 dirty 的玩家产出本 tick 唯一一份完整物品状态。
-func (engine *Engine) publishInventories(result *TickResult) {
+func (engine *engineContext) publishInventories(result *TickResult) {
 	sessions := make([]SessionID, 0, len(engine.sessions))
 	for id, session := range engine.sessions {
 		if session.player != nil && session.player.inventoryDirty &&
@@ -461,7 +459,7 @@ func (engine *Engine) publishInventories(result *TickResult) {
 	}
 }
 
-func (engine *Engine) AdvanceActivePlayers(realmState *realm.State, _ *realm.Mutation, tunables tuning.Tunables, physicsTunables physics.Tunables) {
+func (engine *engineContext) advanceActivePlayers() {
 	sessions := make([]SessionID, 0, len(engine.sessions))
 	for id, session := range engine.sessions {
 		if session.player != nil && session.player.lifecycle == PlayerActive {
@@ -472,17 +470,34 @@ func (engine *Engine) AdvanceActivePlayers(realmState *realm.State, _ *realm.Mut
 	for _, id := range sessions {
 		session := engine.sessions[id]
 		player := session.player
+		// 自动回复只在 Active 期间推进，这是有意的：待重生玩家不在世界里，
+		// 计时冻结；重生本身回满生命值，冻结与否都观察不到差别。计时放在
+		// reset 短路之前同样是有意的：reset 只是位置跳变的当 tick 标记，
+		// 玩家仍在世界里，回复不应因此停摆。
 		if player.advanceHealthRegen(
-			tunables.RegenDelayTicks,
-			tunables.RegenIntervalTicks,
-			tunables.RegenHungerThreshold,
+			engine.tunables.RegenDelayTicks,
+			engine.tunables.RegenIntervalTicks,
+			engine.tunables.RegenHungerThreshold,
 		) {
+			// 疲劳表：自然回血每回 1 点生命值累积固定疲劳（见 hunger.go）。
+			// 它是全表最大的一项，一次调用会跨过多个阈值。
 			player.applyExhaustion(
-				exhaustionRegenPerHealthMilli, tunables.ExhaustionThresholdMilli,
+				exhaustionRegenPerHealthMilli, engine.tunables.ExhaustionThresholdMilli,
 			)
 		}
-		player.advanceStarvation(tunables.StarvationDamageIntervalTicks)
-		player.advanceEating(tunables.EatingTicks, session.viewContainer || !session.hasView)
+		// 饥饿伤害与回血计时同处：它同样只在 Active 期间推进，也同样放在 reset
+		// 短路之前——reset 只是位置跳变的当 tick 标记，玩家仍在世界里挨饿。
+		player.advanceStarvation(engine.tunables.StarvationDamageIntervalTicks)
+		// 进食推进排在饥饿伤害之后：饥饿伤害走 `applyDamage`，而 `applyDamage` 会
+		// 中断进食。反过来排的话，"饿到零的玩家在挨这一拳的同一 tick 吃完面包"
+		// 会先结算进食、再被同一 tick 的伤害打断一个已经不存在的进度——读起来
+		// 像是伤害没能打断进食。它同样放在 `reset` 短路之前：`reset` 只是位置跳变
+		// 的当 tick 标记，而"位置跳变中断进食"由 `advanceEating` 自己的 `reset`
+		// 判据表达，不靠这里的短路代劳。
+		player.advanceEating(
+			engine.tunables.EatingTicks,
+			session.viewContainer || !engine.sessionView(session).Ready,
+		)
 		if player.reset {
 			continue
 		}
@@ -491,24 +506,24 @@ func (engine *Engine) AdvanceActivePlayers(realmState *realm.State, _ *realm.Mut
 			engine.subscriptionsDirty = true
 			continue
 		}
-		dim := realmState.Dimension(session.dimension)
-		if dim == nil {
+		if !engine.tryUnstick(player, engine.dimension(session.dimension)) {
 			player.beginReset()
 			engine.subscriptionsDirty = true
 			continue
 		}
-		if !engine.tryUnstick(player, dim) {
-			player.beginReset()
-			engine.subscriptionsDirty = true
-			continue
-		}
-		source := dimensionCollisionSource{dimension: dim}
+		source := dimensionCollisionSource{dimension: engine.dimension(session.dimension)}
+		// 浸没标志由权威侧在 tick 边界用共享纯函数从自己的方块镜像算出，
+		// 再随 Input 传进物理步——流体没有碰撞盒，prism 里区分不出水与空气。
 		input := player.input
 		input.BodyInFluid, input.EyeInFluid = physics.SubmersionFlags(player.state.Position, source)
+		// 疾跑饥饿门控：饥饿<6 时不触发加速与疲劳（与 MC 同阈值），sim 侧清位
+		// 后 physics 侧的地面/前移/浸没复核仍各做一遍，保证 sweep bounds 自检一致。
 		if player.hunger < 6 {
 			input.Sprinting = false
 		}
-		player.advanceOxygen(input.EyeInFluid, tunables.DrownDamageIntervalTicks)
+		// 氧气按「本 tick 开始时的眼睛浸没标志」结算，与传给物理步的是同一个值：
+		// 水下视觉、水中积分与溺水三处共用这一份判定，不存在第二套。
+		player.advanceOxygen(input.EyeInFluid, engine.tunables.DrownDamageIntervalTicks)
 		wasOnGround := player.state.OnGround
 		// 步首这次重置在「玩家自己游进水里」的路径上是冗余的：步末那次每 tick
 		// 无条件执行，而本 tick 的步首位置恒等于上 tick 的步末位置。它唯一还能
@@ -536,18 +551,20 @@ func (engine *Engine) AdvanceActivePlayers(realmState *realm.State, _ *realm.Mut
 		// physics.Step 的输出里没有现成的「本步起跳了」标志位，所以判据只能在
 		// 这里由 sim 可见的量复刻；将来若 physics 输出该标志，这里应改为直接复用。
 		if input.Jump && wasOnGround && !input.BodyInFluid && !player.state.OnGround {
-			player.applyExhaustion(exhaustionJumpMilli, tunables.ExhaustionThresholdMilli)
+			player.applyExhaustion(exhaustionJumpMilli, engine.tunables.ExhaustionThresholdMilli)
 		}
+		// 游泳：身体浸没时按本步的水平位移计费。位移为零（原地泡着）自然得到
+		// 零疲劳，不需要额外分支。
 		if input.BodyInFluid {
 			player.applyExhaustion(
 				swimExhaustionMilli(positionBeforeStep, player.state.Position),
-				tunables.ExhaustionThresholdMilli,
+				engine.tunables.ExhaustionThresholdMilli,
 			)
 		}
+		// 疾跑：仅当本 tick 实际按 1.3× 加速时（门控全过）按固定表计费，未加速不计费。
 		if input.Sprinting && input.MoveZ > 0 && wasOnGround && !input.BodyInFluid {
-			player.applyExhaustion(exhaustionSprintMilli, tunables.ExhaustionThresholdMilli)
+			player.applyExhaustion(exhaustionSprintMilli, engine.tunables.ExhaustionThresholdMilli)
 		}
-		_ = physicsTunables
 		// 落点也要判一次：水浅、下落又快时，本步开始时玩家还在水面之上、结束
 		// 时已经踩到水底，只看步首标志会让这一跤照旧结算摔落伤害。
 		if landedInFluid, _ := physics.SubmersionFlags(player.state.Position, source); landedInFluid {
@@ -603,7 +620,7 @@ func (player *playerState) applyDamage(damage int32) {
 	player.health -= uint8(damage)
 }
 
-func (engine *Engine) updateSafeLocation(session *sessionState) {
+func (engine *engineContext) updateSafeLocation(session *sessionState) {
 	player := session.player
 	if !player.state.OnGround {
 		return
@@ -651,7 +668,7 @@ func restoreLocationChunksReady(
 	return true
 }
 
-func (engine *Engine) advancePendingPlayersPreservingInputSequence() {
+func (engine *engineContext) advancePendingPlayersPreservingInputSequence() {
 	type pendingAck struct {
 		player   *playerState
 		sequence uint64
@@ -673,7 +690,7 @@ func (engine *Engine) advancePendingPlayersPreservingInputSequence() {
 	}
 }
 
-func (engine *Engine) tryUnstick(player *playerState, dimension *Dimension) bool {
+func (engine *engineContext) tryUnstick(player *playerState, dimension *Dimension) bool {
 	source := dimensionCollisionSource{dimension: dimension}
 	if free, ready := playerBoundsAreFree(player.state.Position, source); !ready {
 		return false
@@ -709,7 +726,8 @@ func (player *playerState) beginReset() {
 	player.drownTicks = 0
 	player.input = physics.Input{}
 	player.miningHeld = false
-	player.meleeCooldownTicks = 0
+	player.attackCooldownTicks = 0
+	player.hurtCooldownTicks = 0
 	player.meleeSuppressedMining = false
 	player.eatingHeld = false
 	player.mining = miningState{}
@@ -728,7 +746,7 @@ func (player *playerState) beginReset() {
 	player.spawnWanted[player.anchor] = struct{}{}
 }
 
-func (engine *Engine) derivePlayerCenters() bool {
+func (engine *engineContext) derivePlayerCenters() bool {
 	changed := false
 	for _, session := range engine.sessions {
 		if session.player == nil {
@@ -741,8 +759,7 @@ func (engine *Engine) derivePlayerCenters() bool {
 				Z: int32(math.Floor(float64(session.player.state.Position.Z()))),
 			}).Chunk()
 		}
-		if center != session.center {
-			session.center = center
+		if center != engine.sessionView(session).Center {
 			changed = true
 		}
 	}

@@ -27,7 +27,7 @@ func TestEntityReceivesMutationAndTunables(t *testing.T) {
 	// 下面这行在 RED 阶段将编译失败（方法不存在或签名不匹配），GREEN 阶段应可编译
 	// 为保持测试可运行，此处通过接口断言新签名存在性
 	type placementSettler interface {
-		CompleteCompanionPlacement(entry *companionState, target core.BlockPos, blockID core.BlockID, realmState *realm.State, mutation *realm.Mutation, tunables tuning.Tunables) bool
+		completeCompanionPlacement(entry *companionState, target core.BlockPos, blockID core.BlockID, mutation *pendingChunkChanges) bool
 	}
 	var _ placementSettler = engine
 	if engine == nil || realmState == nil {
@@ -118,11 +118,13 @@ func TestTunablesSnapshotAffectsRegister(t *testing.T) {
 	// 验证 RegisterPlayer 使用传入的 tunables 而非全局
 	restore := PlayerRestore{SpawnDimension: core.Overworld, SpawnAnchor: core.ChunkPos{}, Inventory: core.Inventory{}}
 	// 使用小半径注册
-	engineSmall.RegisterPlayer(1, restore, realmState, smallTunables)
+	engineSmall.tunables = smallTunables
+	engineSmall.RegisterPlayer(1, restore)
 	if len(engineSmall.sessions[1].player.candidates) != len(smallCandidates) {
 		t.Fatalf("RegisterPlayer snapshot not used: got %d want %d", len(engineSmall.sessions[1].player.candidates), len(smallCandidates))
 	}
-	engineLarge.RegisterPlayer(2, restore, realmState, largeTunables)
+	engineLarge.tunables = largeTunables
+	engineLarge.RegisterPlayer(2, restore)
 	if len(engineLarge.sessions[2].player.candidates) != len(largeCandidates) {
 		t.Fatalf("RegisterPlayer large snapshot not used")
 	}
@@ -157,12 +159,15 @@ func TestTunablesSnapshotAffectsWorkbench(t *testing.T) {
 	farTunables := tuning.DefaultTunables()
 	farTunables.InteractionReach = 1
 	physicsTunables := physics.ActiveTunables()
-	if !engine.workbenchAnchorValid(session, realmState, nearTunables, physicsTunables) {
+	engine.tunables = nearTunables
+	engine.physicsTunables = physicsTunables
+	if !engine.workbenchAnchorValid(session) {
 		t.Fatalf("near tunables should be valid")
 	}
 	// 将玩家移远，远距离应无效
 	session.player.state.Position = mgl32.Vec3{100, 1, 100}
-	if engine.workbenchAnchorValid(session, realmState, farTunables, physicsTunables) {
+	engine.tunables = farTunables
+	if engine.workbenchAnchorValid(session) {
 		t.Fatalf("far tunables should be invalid when far")
 	}
 }

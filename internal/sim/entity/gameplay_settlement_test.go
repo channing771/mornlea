@@ -160,7 +160,7 @@ func TestGameplaySettlementViaMutation(t *testing.T) {
 		}
 		eng := NewEngine(1, 0, 1)
 		eng.realm = rs
-		eng.RegisterSession(1, core.Overworld, core.ChunkPos{}, rs, eng.tunables)
+		eng.RegisterSession(1, core.Overworld, core.ChunkPos{})
 		// 强制激活
 		for i := 0; i < 30; i++ {
 			rs.Dimension(core.Overworld).ReadyChunk(pos) // ensure ready
@@ -173,7 +173,9 @@ func TestGameplaySettlementViaMutation(t *testing.T) {
 			t.Skip("未激活，跳过拾取")
 		}
 		eng.sessions[1].player.state.Position = mgl32.Vec3{0.5, 1, 0.5}
-		eng.sessions[1].center = core.ChunkPos{}
+		eng.views[1] = testSessionView{
+			SessionView: SessionView{Ready: true, Center: core.ChunkPos{}},
+		}
 		mut := rs.NewMutation()
 		// 在脚下放掉落物
 		ch2, _ := rs.Dimension(core.Overworld).ReadyChunk(pos)
@@ -221,7 +223,7 @@ func TestGameplaySettlementViaMutation(t *testing.T) {
 		eng := NewEngine(1, 0, 1)
 		rs := realm.NewState(core.Overworld)
 		eng.realm = rs
-		eng.RegisterSession(1, core.Overworld, core.ChunkPos{}, rs, eng.tunables)
+		eng.RegisterSession(1, core.Overworld, core.ChunkPos{})
 		p := eng.sessions[1].player
 		p.hunger = 10
 		p.saturationMilli = 1000
@@ -235,7 +237,7 @@ func TestGameplaySettlementViaMutation(t *testing.T) {
 		eng := NewEngine(1, 0, 1)
 		rs := realm.NewState(core.Overworld)
 		eng.realm = rs
-		eng.RegisterSession(1, core.Overworld, core.ChunkPos{}, rs, eng.tunables)
+		eng.RegisterSession(1, core.Overworld, core.ChunkPos{})
 		p := eng.sessions[1].player
 		p.hunger = 10
 		p.inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemBread, Count: 1}
@@ -253,8 +255,8 @@ func TestGameplaySettlementViaMutation(t *testing.T) {
 		eng := NewEngine(1, 0, 0)
 		rs := realm.NewState(core.Overworld)
 		eng.realm = rs
-		eng.RegisterSession(1, core.Overworld, core.ChunkPos{}, rs, eng.tunables)
-		eng.RegisterSession(2, core.Overworld, core.ChunkPos{}, rs, eng.tunables)
+		eng.RegisterSession(1, core.Overworld, core.ChunkPos{})
+		eng.RegisterSession(2, core.Overworld, core.ChunkPos{})
 		for i := 0; i < 30; i++ {
 			eng.advancePendingPlayers()
 		}
@@ -297,7 +299,12 @@ func TestGameplaySettlementViaMutation(t *testing.T) {
 		}
 		_ = mut.Commit()
 		mut2 := rs.NewMutation()
-		ok := handleInteractDoor(eng, core.Overworld, core.BlockPos{X: 0, Y: 1, Z: 0}, mut2)
+		ok := handleInteractDoor(
+			eng.engineContext,
+			core.Overworld,
+			core.BlockPos{X: 0, Y: 1, Z: 0},
+			mut2,
+		)
 		if !ok {
 			t.Fatalf("门交互应翻转")
 		}

@@ -336,9 +336,9 @@ func TestFluidOutsideInterestRangeHoldsAndResumes(t *testing.T) {
 	}
 
 	// 让玩家走进区块 (3,0)，该区块重新进入活动兴趣范围。
-	engine.sessions[session].player.state.Position = mgl32.Vec3{
+	engine.SetPlayerPositionForTest(session, mgl32.Vec3{
 		float32(3<<core.SectionShift) + 8.5, 1, 8.5,
-	}
+	})
 	for range 60 {
 		engine.Step()
 	}

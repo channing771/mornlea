@@ -44,7 +44,7 @@ type companionState struct {
 }
 
 // RegisterCompanion 注册一个独立于玩家会话的待恢复伙伴。
-func (engine *Engine) RegisterCompanion(restore CompanionRestore) {
+func (engine *engineContext) RegisterCompanion(restore CompanionRestore) {
 	if !restore.ID.Valid() {
 		panic("sim: register companion with invalid ID")
 	}
@@ -88,7 +88,7 @@ func (engine *Engine) RegisterCompanion(restore CompanionRestore) {
 }
 
 // CompanionBodies 返回按伙伴 ID 排序的已激活身体快照。
-func (engine *Engine) CompanionBodies() []companion.Body {
+func (engine *engineContext) CompanionBodies() []companion.Body {
 	ids := engine.activeCompanionIDs()
 	bodies := make([]companion.Body, 0, len(ids))
 	for _, id := range ids {
@@ -105,7 +105,7 @@ func (engine *Engine) CompanionBodies() []companion.Body {
 	return bodies
 }
 
-func (engine *Engine) advancePendingCompanions() {
+func (engine *engineContext) advancePendingCompanions() {
 	ids := make([]companion.ID, 0, len(engine.companions))
 	for id, state := range engine.companions {
 		if !state.active {
@@ -118,7 +118,7 @@ func (engine *Engine) advancePendingCompanions() {
 	}
 }
 
-func (engine *Engine) advancePendingCompanion(state *companionState) {
+func (engine *engineContext) advancePendingCompanion(state *companionState) {
 	for state.nextRestore < len(state.restoreCandidates) {
 		candidate := state.restoreCandidates[state.nextRestore]
 		for _, key := range restoreCandidateChunks(candidate.location) {
@@ -207,7 +207,7 @@ func (state *companionState) activate(location PlayerLocation, onGround bool) {
 	state.restoreWanted = nil
 }
 
-func (engine *Engine) publishCompanions(result *TickResult) {
+func (engine *engineContext) publishCompanions(result *TickResult) {
 	for _, id := range engine.activeCompanionIDs() {
 		state := engine.companions[id]
 		result.Companions = append(result.Companions, CompanionUpdate{
@@ -219,7 +219,7 @@ func (engine *Engine) publishCompanions(result *TickResult) {
 	}
 }
 
-func (engine *Engine) activeCompanionIDs() []companion.ID {
+func (engine *engineContext) activeCompanionIDs() []companion.ID {
 	ids := make([]companion.ID, 0, len(engine.companions))
 	for id, state := range engine.companions {
 		if state.active {

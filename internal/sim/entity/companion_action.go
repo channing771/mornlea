@@ -6,33 +6,6 @@ import (
 	"github.com/channing771/mornlea/internal/physics"
 )
 
-// EnqueueCompanionAction 可由 Task Runner 并发调用，把一个伙伴 action 投递进有界
-// inbox。容量按全局计：每 tick 至多 companion.MaxActive 条（active 伙伴至多
-// MaxActive 个、每伙伴每 tick 至多应用一条 action），满员时立即丢弃并返回
-// false，绝不阻塞权威 tick，也不像玩家命令 inbox 一样无界累积——丢弃是安全
-// 的：位置始终权威，下一 tick 重新提交即可。注意同一伙伴重复提交的 action
-// 同样占用全局名额，极端情况下可占满 inbox 并饿死其他伙伴本 tick 的 action
-// （权威侧按 ID 去重后每个伙伴只消费最早一条合法 action）。
-func (engine *Engine) EnqueueCompanionAction(action CompanionAction) bool {
-	engine.inboxMu.Lock()
-	defer engine.inboxMu.Unlock()
-	if len(engine.companionActions) >= companion.MaxActive {
-		return false
-	}
-	engine.companionActions = append(engine.companionActions, action)
-	return true
-}
-
-// takeCompanionActions 与其他 inbox 一起在 Step 入口同一把锁内完成 tick 边界
-// 排空；返回的切片此后只被权威 tick 单写者触碰。
-func (engine *Engine) takeCompanionActions() []CompanionAction {
-	engine.inboxMu.Lock()
-	actions := append([]CompanionAction(nil), engine.companionActions...)
-	engine.companionActions = engine.companionActions[:0]
-	engine.inboxMu.Unlock()
-	return actions
-}
-
 // validCompanionActionInput 与玩家输入校验同界：移动分量必须在 [-1,1]，yaw 必须
 // 有限。action 来自服务端 Task Runner 而非网络，这里仍是防御性校验——
 // physics.Step 对非法输入直接 panic，权威 tick 绝不能被坏 action 打崩。
@@ -89,7 +62,7 @@ func validCompanionAction(action CompanionAction) bool {
 //
 // 返回值是本 tick 收集的放置意图，按 CompanionID 字节序排列（active 快照本身
 // 有序），由 Step 在写入区结算后即丢弃。
-func (engine *Engine) applyCompanionActions(actions []CompanionAction) []companionPlaceIntent {
+func (engine *engineContext) applyCompanionActions(actions []CompanionAction) []companionPlaceIntent {
 	var intents map[companion.ID]CompanionAction
 	var placements []companionPlaceIntent
 	if len(actions) != 0 {
@@ -150,7 +123,7 @@ func (engine *Engine) applyCompanionActions(actions []CompanionAction) []compani
 // 脚下区块变化时置 subscriptionsDirty，让 3×3 兴趣在同一 tick 的 reconcile 中
 // 滑动到新中心：新增区块走既有 acquire/generate/persistence 流程，离开的区块按
 // 既有规则释放。
-func (engine *Engine) advanceActiveCompanions() {
+func (engine *engineContext) advanceActiveCompanions() {
 	for _, id := range engine.activeCompanionIDs() {
 		entry := engine.companions[id]
 		before := companionChunk(entry.state.Position)

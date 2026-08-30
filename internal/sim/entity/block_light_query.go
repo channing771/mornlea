@@ -20,7 +20,7 @@ import "github.com/channing771/mornlea/internal/core"
 //
 // # 有界性与零分配
 //
-// Engine 持有一份预分配 scratch（levels/next/head），每次查询原地重建，重复
+// State 持有一份预分配 scratch（levels/next/head），每次查询原地重建，重复
 // 调用零堆分配（由 testing.AllocsPerRun 锁定）。传播按光等级降序逐桶（16 桶）
 // 进行：松弛目标只会进入严格更低的桶，而桶处理是降序的，所以每个格子收到
 // 的报价按时间非递增、**至多入队一次**——链表槽就是格子自身下标，固定容量
@@ -159,13 +159,13 @@ func (scratch *blockLightScratch) spread(
 }
 
 // localBlockLight 返回 center 格在局部区块光场中的光值。scratch 由调用方
-// （Engine 或测试）持有并复用，重复调用不产生堆分配。
+// （State 或测试）持有并复用，重复调用不产生堆分配。
 func localBlockLight(dimension *Dimension, scratch *blockLightScratch, center core.BlockPos) uint8 {
 	scratch.build(dimension, center)
 	return scratch.levels[hostileLightIndex(hostileLightRadius, hostileLightRadius, hostileLightRadius)]
 }
 
-// hostileBlockLight 是权威 tick 使用的引擎入口：复用 Engine 预分配的 scratch。
-func (engine *Engine) hostileBlockLight(dimension *Dimension, center core.BlockPos) uint8 {
+// hostileBlockLight 是权威 tick 使用的引擎入口：复用 State 预分配的 scratch。
+func (engine *engineContext) hostileBlockLight(dimension *Dimension, center core.BlockPos) uint8 {
 	return localBlockLight(dimension, engine.hostileLight, center)
 }

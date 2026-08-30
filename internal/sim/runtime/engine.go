@@ -5,7 +5,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/fluid"
 	"github.com/channing771/mornlea/internal/physics"
@@ -25,7 +24,7 @@ type Clock interface {
 	Stop()
 }
 
-type sessionState struct {
+type subscriptionState struct {
 	lastSequence                uint64
 	lastTrustedObserverSequence uint64
 	trustedObserver             bool
@@ -33,25 +32,16 @@ type sessionState struct {
 	dimension                   core.DimensionID
 	center                      core.ChunkPos
 	wanted                      map[core.ChunkKey]struct{}
-	player                      *playerState
-	// 每名玩家同时最多查看一个容器（熔炉或箱子）；引用失效时由权威 tick 统一清除。
-	container     core.ContainerRef
-	viewContainer bool
 }
 
 type Engine struct {
 	viewRadius         int
 	seed               int64
-	sessions           map[SessionID]*sessionState
-	companions         map[companion.ID]*companionState
-	hostiles           hostileSet
-	hostileLight       *blockLightScratch
+	subscriptions      map[SessionID]*subscriptionState
 	wanted             map[core.ChunkKey]struct{}
 	realm              *realm.State
+	entities           *entity.State
 	subscriptionsDirty bool
-	// entityState 为过渡期双源中的 entity 侧镜像，当前仅用于建立真实依赖
-	// （archcheck 要求 sim -> entity），后续 runtime 将收敛为单一 entity.State
-	entityState *entity.Engine
 
 	// fluidQueues 是流体待更新队列，**按维度各持一个实例**（原因见
 	// fluidQueue 的注释：internal/fluid 的处理全序不含维度）。队列不持久化，
@@ -77,17 +67,6 @@ type Engine struct {
 	cropCellsExamined int
 	// cropBlockReads 是最近一个作物阶段为规则判定读取的方块编号数。
 	cropBlockReads int
-
-	// tramplePending 是本权威 tick 内落地边沿收集的踩踏候选格（trample.go）：
-	// 物理阶段收集、区块写入区结算的跨阶段载体。瞬态暂存、不持久化、不进快照
-	// 或哈希，每 tick 由 `settleTramples` 结算后清空，重启无残留语义。
-	tramplePending []tramplePendingCell
-
-	// 掉落物 tick 的复用 scratch，避免每 tick 分配固定上限集合。
-	dropKeySeen            map[core.ChunkKey]struct{}
-	dropKeyScratch         []core.ChunkKey
-	containerViewerScratch []SessionID
-	dropSessionScratch     []SessionID
 
 	inboxMu          sync.Mutex
 	commands         []Command
@@ -124,15 +103,12 @@ func NewEngine(viewRadius int, worldTime uint64, seed int64) *Engine {
 	}
 	realmState := realm.NewState(core.Overworld)
 	engine := &Engine{
-		viewRadius:   viewRadius,
-		seed:         seed,
-		realm:        realmState,
-		sessions:     make(map[SessionID]*sessionState),
-		companions:   make(map[companion.ID]*companionState),
-		hostiles:     newHostileSet(),
-		hostileLight: newBlockLightScratch(),
-		wanted:       make(map[core.ChunkKey]struct{}),
-		entityState:  entity.NewEngine(viewRadius, worldTime, seed),
+		viewRadius:    viewRadius,
+		seed:          seed,
+		realm:         realmState,
+		entities:      entity.NewState(seed),
+		subscriptions: make(map[SessionID]*subscriptionState),
+		wanted:        make(map[core.ChunkKey]struct{}),
 	}
 	engine.worldTime.Store(worldTime)
 	// 初始化快照，使未经 Step 就被调用的方法（例如 RegisterPlayer 的出生扫描）
