@@ -1018,3 +1018,75 @@ delta 行为契约、代码、current docs、main specs 或配置，不执行 me
 - `git diff --name-only`：退出 0；tracked scope 仅为本 change 的 existing `ledger.md`。
   ignored review report 不形成 tracked diff；proposal、delta、design、tasks、代码、current
   docs、main specs 与配置均保持零 diff。
+
+## Task 6.5：main cleanup、feature sync 与独立评审完成裁决
+
+### Main-side cleanup、独立 review 与 local main fast-forward
+
+- Main-side fresh implementer：`01a0520d-e3c4-7e71-b926-77f4ccc055fc`。它从 clean local
+  main `a23833f92a80abb808b2b629c4dc043d2043f90a` 先新增常驻
+  `internal/archcheck/code_comment_task_id_test.go`，以清理前当前树取得真实 RED：focused
+  repository guard 退出 1，精确命中原终审列出的 25 处代码注释；随后最小改写这 25 处注释，
+  保留 agent-board 合法任务数据并取得 GREEN。实现 commit 为
+  `e1e2e287cb3454e6bbca6bf5bcd7cf9e92482efc`
+  `fix(archcheck): reject task ids in code comments`，唯一父为 `a23833f9...`。
+- Cleanup parent-to-commit diff 恰为 17 个文件：新增 1 个 archcheck guard，其余 16 个既有
+  Go/Rust 文件机械审计均为 comment-only，25 处语义保持且非注释 changed lines 为零；没有
+  行为、标识符、测试数据、协议、ABI、OpenSpec、golden 或 feature 实现改动。
+- Main-side independent reviewer：`01a05217-f961-7080-b8f5-fd56b27400cd`。Final verdict：
+  spec ✅、quality Approved；0 Critical、0 Important、0 Minor、0 open。reviewer 独立接受
+  scanner 的 Go/Rust comment-only lexical 边界、历史 RED、最终 GREEN、17-file scope、25 处
+  cleanup 与 agent-board 数据保真，并重跑 `make rust`、focused/full archcheck、agent-board、
+  Rust window tests、format 与 diff checks，全部 PASS。
+- Controller 只在上述 clean review 后把 local `main` 从 `a23833f9...` fast-forward 到
+  `e1e2e287...`；review report 时间为 `2026-08-30T17:59:04+0800`，local main FF reflog 为
+  `2026-08-30T17:59:29+0800`。当前 main tree 与 cleanup commit tree 相同，feature 未被合入
+  main，也未 push。
+
+### Feature non-rewriting sync 与两处 comment fix
+
+- Fresh feature implementer：`01a0521c-c76e-7090-838e-e137292d6bcb`，identity 由
+  controller spawn record 核对。它从 exact clean feature HEAD
+  `bc30fbfd9124bfda538370354fa7bd80e234c58e` 开始，pre-merge `make rust` PASS，并在 merge
+  命令紧前再次确认 local main 精确为 reviewed cleanup `e1e2e287...`，没有后续漂移。
+- 实际命令 `git merge --no-commit --no-ff main` clean apply，0 conflict、0 人工 resolution。
+  Merge commit 为 `d1cec0f4ff582e252b346fede24e369806eeb84b`
+  `chore: sync reviewed main comment cleanup`；双亲依次为 feature `bc30fbfd...` 与 new selected
+  main `e1e2e287...`。`bc30fbfd...` 仍为 final implementation HEAD 的 ancestor；merge
+  first-parent delta 与 reviewed cleanup 的 stable patch-id 均为
+  `3c1a46d1a38d01bbdb074967524d3afa3d9bc1dc`，证明只重放 reviewed cleanup 且 feature 历史
+  未改写。
+- Comment-only fix commit 为 `5959f31441c11cfbacd622ef8cf39cc915f818f1`
+  `docs(client): clarify render ABI ownership`，唯一父为 merge commit `d1cec0f4...`。它只修改
+  `internal/client/render.go` 与 `engine/crates/mornlea_client/src/ffi.rs` 的 5 insertions /
+  2 deletions，非注释 changed lines 为零：Go 注释现准确说明 Rust client 独占生产 GPU、Go
+  保留 CPU mesh/visibility/frame input、v13 RenderWorld cache 仍 test-only；Rust module docs
+  现准确区分 1 个无参数 identity export 与 28 个 versioned exports。
+- Implementer 的 pre/post `make rust`、`make rust-check`、client Cargo 124/124、Go client race、
+  archcheck、agent-board、focused comment guard、OpenSpec strict 79/79、selected-main protected /
+  golden zero-diff、29 = 1 + 28 exports、no-production-MRW1、parent/scope/OpenSpec zero-diff、
+  `git diff --check` 与 clean status 均 PASS。完整证据见 ignored
+  `task-6.5-feature-sync-report.md`。
+
+### Task 6.5 fresh independent review 与完成裁决
+
+- Fresh independent reviewer：`01a05221-de1c-7922-9d87-71be0de4a1cb`；未参与
+  final-findings planning、main cleanup 或 feature sync/comment fixes。Reviewed exact
+  implementation HEAD：`5959f31441c11cfbacd622ef8cf39cc915f818f1`；selected-main-parent
+  与当前 local main 均为 `e1e2e287cb3454e6bbca6bf5bcd7cf9e92482efc`。
+- Final verdict：spec ✅；quality Approved；0 Critical、0 Important、0 Minor、0 open。
+  Reviewer 接受 cleanup TDD/guard/25-comment scope、先 review 后 FF、non-rewriting merge 双亲、
+  zero-conflict/remerge/patch-id、两处 comment-only fix、client/engine ABI 13/9、29 = 1 + 28
+  exports、无 production MRW1、五组 protected paths 与 visual golden 相对新 selected main
+  零 diff，以及 Task 6.5 没有改写 OpenSpec implementation artifacts 的范围证明。
+- Reviewer 在 exact implementation HEAD 独立执行的 scoped validation 全部 PASS：`make rust`；
+  `make rust-check`（client 124/124、engine 218/218，0 failed/ignored）；client race；archcheck；
+  agent-board；focused comment repository/scanner tests（零命中）；OpenSpec strict 79/79；
+  protected/golden diff；parent、patch-id、ABI、app、comment-only 与 scope audits；
+  `git diff --check` 和 tracked clean status。
+- Reviewer 明确未运行 full race 或 visual；这不是 Task 6.5 finding，也不替代 Task 6.6。旧
+  `10f8e8ab` 的 Task 6.4 PASS 仍只作历史证据；Task 6.6 必须在本 bookkeeping 之后冻结的
+  new final HEAD 完整重跑全部 18 门禁。
+- Controller 接受该 clean verdict；Task 6.5 现完成并勾选，change 预期进度推进为 20/22、
+  2 remaining、`ready`。Tasks 6.6 与 6.7 保持未勾选；本 bookkeeping 不运行 full gates，
+  不 archive、push、rebase，也不把 feature merge into main。

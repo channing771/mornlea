@@ -129,7 +129,7 @@
   `git diff --check`；任何 Skip、真实失败、protected path feature-side diff 或相对 selected
   main 新增/修改 visual golden 都不得计为 PASS，release dylib、Go ABI 与视觉证据必须来自
   同一 merged baseline，并取得独立 spec/quality review。
-- [ ] 6.5 先由独立 main-side implementer 在 latest local main 上清理原终审确认的 25 处代码
+- [x] 6.5 先由独立 main-side implementer 在 latest local main 上清理原终审确认的 25 处代码
   注释任务编号；若增加防回归 `internal/archcheck`，必须先以当前违规树取得 RED，再完成
   GREEN。取得未参与实现者的独立 spec/quality review 后，local main 只可 fast-forward 到该
   reviewed cleanup，不得 push。随后由 fresh feature implementer 在 merge 前即时记录 latest
