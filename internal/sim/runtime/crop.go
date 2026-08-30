@@ -311,7 +311,7 @@ func (engine *Engine) advanceCrops(pending *pendingChunkChanges) {
 
 // advanceCropCell 只处理被随机 tick 抽中的作物与满足“干+上方为空气”的干耕地退化；
 // 其余方块读取一次后立即跳过。作物的湿润条件读取正下方已经持久化的干/湿耕地编号；
-// 湿度维护由独立的有界阶段负责，本阶段不扫描流体邻域。干耕地退化（B-06）复用同一
+// 湿度维护由独立的有界阶段负责，本阶段不扫描流体邻域。干耕地退化复用同一
 // 抽样本轮与有界性（`RandomTicksPerSection`），命中后以 `farmlandRevertRoll` 的
 // 固定概率退回泥土，有作物覆盖时永不触发，零掉落、原子写入。
 func (engine *Engine) advanceCropCell(

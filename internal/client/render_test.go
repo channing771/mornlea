@@ -3,11 +3,87 @@
 package client
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"math"
 	"testing"
+
+	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/world"
 )
+
+func TestRendererApplyRenderWorldUpdates(t *testing.T) {
+	renderer, err := NewRenderer(32, 16)
+	if errors.Is(err, ErrNoGPUAdapter) {
+		t.Skip("无 GPU 适配器")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer renderer.Close()
+
+	frame := RenderFrame{
+		Daylight: 1,
+		SkyColor: [4]float32{0.2, 0.4, 1, 1},
+		Visible:  [][3]int32{{0, 0, 0}},
+	}
+	for i := 0; i < 4; i++ {
+		frame.ViewProj[i*4+i] = 1
+		frame.ViewProjInv[i*4+i] = 1
+	}
+	beforeFrame := EncodeRenderFrame(frame)
+	renderer.RenderFrame(frame)
+	beforeReadback := renderer.Readback()
+
+	encoded, err := EncodeRenderWorldBatch(RenderWorldBatch{
+		Epoch: 1,
+		Updates: []RenderWorldUpdate{
+			{Kind: RenderWorldReset},
+			{
+				Kind: RenderWorldSectionUpsert,
+				Key: core.SectionKey{
+					Dimension: core.Overworld,
+					Pos:       core.SectionPos{X: 0, Y: 0, Z: 0},
+				},
+				Revision: 1,
+				Snapshot: world.ContainerSnapshot{
+					Kind:   world.StorageSingle,
+					Single: core.StoneID,
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	frameCalls, uploadCalls := renderer.FrameCalls(), renderer.UploadCalls()
+	renderer.ApplyRenderWorldUpdates(encoded)
+	if got := renderer.FrameCalls(); got != frameCalls {
+		t.Fatalf("cache update 后 frame FFI=%d,想要 %d", got, frameCalls)
+	}
+	if got := renderer.UploadCalls(); got != uploadCalls {
+		t.Fatalf("cache update 后 upload FFI=%d,想要 %d", got, uploadCalls)
+	}
+	afterFrame := EncodeRenderFrame(frame)
+	if !bytes.Equal(beforeFrame, afterFrame) {
+		t.Fatal("cache update 改变了相同 RenderFrame 的编码")
+	}
+	renderer.RenderFrame(frame)
+	afterReadback := renderer.Readback()
+	if !bytes.Equal(beforeReadback, afterReadback) {
+		t.Fatal("cache update 改变了相同 RenderFrame 的 readback")
+	}
+}
+
+func TestRendererApplyRenderWorldUpdatesRejectsEmpty(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("空 render world update 应 panic")
+		}
+	}()
+	new(Renderer).ApplyRenderWorldUpdates(nil)
+}
 
 // TestRendererRoundtripOrSkip 走一遍 create→atlas→section→frame→readback:
 // 无 GPU 适配器时跳过(与 gfx.NewHeadlessDevice 约定一致)。

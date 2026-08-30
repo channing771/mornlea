@@ -5,6 +5,7 @@ package client
 import (
 	"encoding/binary"
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -19,17 +20,31 @@ func buildSnapshot(mutate func([]byte)) []byte {
 }
 
 func TestClientABIVersionMatchesHeader(t *testing.T) {
-	// v12:菜单层迁 WebView——退役字体上传出口与帧 tag 9 段,新增
-	// ui_push_state 状态下行,drain 改版本化 JSON 信封;v11:离屏 benchmark
-	// batch prepare/submit 入口。导出版本与编译期 header 常量必须逐位一致:
-	// 加载低于 v12 的旧动态库会在首个 FFI 入口被稳定拒绝
-	// （STATUS_ABI_VERSION），不产生半启动。
-	if got := ClientABIVersion(); got != 12 {
-		t.Fatalf("client ABI version=%d,想要 12", got)
+	// v14 在 selected-main v13 窗口合成捕获表面上叠加 render world
+	// update；动态库 identity 与编译期 header 必须同步切换。
+	if got := ClientABIVersion(); got != 14 {
+		t.Fatalf("client ABI version=%d,想要 14", got)
 	}
-	if got := clientABIHeaderVersion(); got != 12 {
-		t.Fatalf("client header ABI version=%d,想要 12", got)
+	if got := clientABIHeaderVersion(); got != 14 {
+		t.Fatalf("client header ABI version=%d,想要 14", got)
 	}
+}
+
+func TestWindowCapturePanicsWithStableTextOnUnknownHandle(t *testing.T) {
+	// 零值 Window 的句柄在 Rust 侧 thread-local 表中不存在:捕获必须以
+	// 稳定中文文案 panic,不得返回部分结果或让 Rust 状态泄漏为裸错误。
+	defer func() {
+		value := recover()
+		if value == nil {
+			t.Fatal("无效句柄的捕获必须 panic")
+		}
+		text, ok := value.(string)
+		if !ok || !strings.Contains(text, "client 窗口句柄无效或窗口操作失败") {
+			t.Fatalf("panic=%v,缺少稳定状态文案", value)
+		}
+	}()
+	var window Window
+	window.Capture()
 }
 
 func TestWindowMapsBackspaceAndReportsTextOverflow(t *testing.T) {
