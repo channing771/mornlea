@@ -120,7 +120,19 @@ fn section_payload(single: u16, palette: &[u16], packed_words: &[u64], reserved:
 }
 
 fn single(block: u16) -> Record {
-    Record::section(7, 0, 0, section_payload(block, &[], &[], 0))
+    single_at_revision(7, block)
+}
+
+fn single_at_revision(revision: u64, block: u16) -> Record {
+    Record::section(revision, 0, 0, section_payload(block, &[], &[], 0))
+}
+
+fn constant_column(revision: u64, height: i16) -> Record {
+    let mut payload = Vec::with_capacity(512);
+    for _ in 0..256 {
+        payload.extend_from_slice(&height.to_le_bytes());
+    }
+    Record::column(revision, payload)
 }
 
 fn indexed(revision: u64, bits: u8, palette: &[u16], slot: u8) -> Record {
@@ -160,12 +172,30 @@ fn seeded_world() -> RenderWorld {
     world
 }
 
+fn world_from_reset(records: &[Record]) -> RenderWorld {
+    let mut world = RenderWorld::default();
+    world.apply_update_batch(&reset_then(1, records)).unwrap();
+    world
+}
+
 fn assert_invalid_unchanged(world: &mut RenderWorld, bytes: &[u8]) {
     let before = world.snapshot_for_test();
     assert_eq!(
         world.apply_update_batch(bytes),
         Err(RenderWorldError::Invalid)
     );
+    assert_eq!(world.snapshot_for_test(), before);
+}
+
+fn assert_invalid_without_panic_unchanged(world: &mut RenderWorld, bytes: &[u8]) {
+    let before = world.snapshot_for_test();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        world.apply_update_batch(bytes)
+    }));
+    match result {
+        Ok(result) => assert_eq!(result, Err(RenderWorldError::Invalid)),
+        Err(_) => panic!("invalid MRW1 mutation panicked"),
+    }
     assert_eq!(world.snapshot_for_test(), before);
 }
 
@@ -365,6 +395,42 @@ fn equal_revision_is_idempotent_and_greater_revision_replaces() {
 }
 
 #[test]
+fn same_batch_section_duplicates_follow_sequential_revision_semantics() {
+    let world = world_from_reset(&[single_at_revision(1, 1), single_at_revision(2, 2)]);
+    assert_eq!(world.section_for_test(KEY), Some(&SectionData::Single(2)));
+
+    let world = world_from_reset(&[single_at_revision(2, 2), single_at_revision(1, 1)]);
+    assert_eq!(world.section_for_test(KEY), Some(&SectionData::Single(2)));
+
+    let world = world_from_reset(&[single_at_revision(1, 1), single_at_revision(1, 2)]);
+    assert_eq!(world.section_for_test(KEY), Some(&SectionData::Single(1)));
+
+    let world = world_from_reset(&[single_at_revision(1, 1), Record::section_tombstone(2)]);
+    assert!(world.section_for_test(KEY).is_none());
+
+    let world = world_from_reset(&[Record::section_tombstone(1), single_at_revision(2, 2)]);
+    assert_eq!(world.section_for_test(KEY), Some(&SectionData::Single(2)));
+}
+
+#[test]
+fn same_batch_column_duplicates_follow_sequential_revision_semantics() {
+    let world = world_from_reset(&[constant_column(1, 1), constant_column(2, 2)]);
+    assert_eq!(world.column_for_test(0, 1, 3), Some(&[2; 256]));
+
+    let world = world_from_reset(&[constant_column(2, 2), constant_column(1, 1)]);
+    assert_eq!(world.column_for_test(0, 1, 3), Some(&[2; 256]));
+
+    let world = world_from_reset(&[constant_column(1, 1), constant_column(1, 2)]);
+    assert_eq!(world.column_for_test(0, 1, 3), Some(&[1; 256]));
+
+    let world = world_from_reset(&[constant_column(1, 1), Record::column_tombstone(2)]);
+    assert!(world.column_for_test(0, 1, 3).is_none());
+
+    let world = world_from_reset(&[Record::column_tombstone(1), constant_column(2, 2)]);
+    assert_eq!(world.column_for_test(0, 1, 3), Some(&[2; 256]));
+}
+
+#[test]
 fn column_round_trips_and_tombstone_revision_is_retained() {
     let heights: Vec<i16> = (0..256).map(|index| index as i16 - 128).collect();
     let payload: Vec<u8> = heights
@@ -445,14 +511,30 @@ fn rejects_reserved_fields() {
 #[test]
 fn rejects_record_count_and_batch_size_limits() {
     let zero_records = batch(1, &[]);
-    let mut too_many_records = batch(1, &[]);
-    too_many_records[16..20].copy_from_slice(&4097u32.to_le_bytes());
     let mut world = seeded_world();
     assert_invalid_unchanged(&mut world, &zero_records);
-    assert_invalid_unchanged(&mut world, &too_many_records);
 
-    let oversized = vec![0; MAX_BATCH_BYTES + 1];
+    let mut direct_records = Vec::with_capacity(510);
+    for x in 0..510 {
+        let mut record = direct(8, 1);
+        record.x = x;
+        direct_records.push(record);
+    }
+    let oversized = batch(1, &direct_records);
+    assert!(oversized.len() > MAX_BATCH_BYTES);
+    assert!(direct_records.len() <= 4096);
     assert_invalid_unchanged(&mut world, &oversized);
+
+    let mut tombstones = Vec::with_capacity(4097);
+    for x in 0..4097 {
+        let mut record = Record::section_tombstone(8);
+        record.x = x;
+        tombstones.push(record);
+    }
+    let too_many_records = batch(1, &tombstones);
+    assert_eq!(tombstones.len(), 4097);
+    assert!(too_many_records.len() <= MAX_BATCH_BYTES);
+    assert_invalid_unchanged(&mut world, &too_many_records);
 }
 
 #[test]
@@ -510,6 +592,53 @@ fn rejects_malformed_payload_lengths_without_panicking() {
     let mut overflowing = batch(1, &[single(8)]);
     overflowing[52..56].copy_from_slice(&u32::MAX.to_le_bytes());
     assert_invalid_unchanged(&mut world, &overflowing);
+}
+
+#[test]
+fn mutation_properties_reject_truncation_and_declared_lengths_atomically() {
+    let record = indexed(8, 4, &[1, 2], 1);
+    let payload_len = record.payload.len() as u32;
+    let valid = batch(1, &[record]);
+    let mut world = seeded_world();
+
+    for length in 0..valid.len() {
+        assert_invalid_without_panic_unchanged(&mut world, &valid[..length]);
+    }
+
+    for declared_length in [0, 1, payload_len - 1, payload_len + 1, u32::MAX] {
+        let mut mutated = valid.clone();
+        mutated[52..56].copy_from_slice(&declared_length.to_le_bytes());
+        assert_invalid_without_panic_unchanged(&mut world, &mutated);
+    }
+}
+
+#[test]
+fn mutation_properties_reject_packed_words_and_palette_slots_atomically() {
+    let indexed = batch(1, &[indexed(8, 4, &[1, 2], 1)]);
+    let mut world = seeded_world();
+
+    for packed_word_count in [0, 1, 255, 257, 512, u16::MAX] {
+        let mut mutated = indexed.clone();
+        mutated[60..62].copy_from_slice(&packed_word_count.to_le_bytes());
+        assert_invalid_without_panic_unchanged(&mut world, &mutated);
+    }
+
+    let packed_words_offset = 68;
+    for word_index in 0..256 {
+        let mut mutated = indexed.clone();
+        let slot_offset = packed_words_offset + word_index * 8;
+        mutated[slot_offset] = (mutated[slot_offset] & 0xf0) | 2;
+        assert_invalid_without_panic_unchanged(&mut world, &mutated);
+    }
+
+    let direct = batch(1, &[direct(8, 1)]);
+    let direct_words_offset = 64;
+    for word_index in 0..1024 {
+        let mut mutated = direct.clone();
+        let high_byte_offset = direct_words_offset + word_index * 8 + 7;
+        mutated[high_byte_offset] |= 0xf0;
+        assert_invalid_without_panic_unchanged(&mut world, &mutated);
+    }
 }
 
 #[test]
