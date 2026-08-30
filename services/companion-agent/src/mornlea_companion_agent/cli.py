@@ -30,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _load_serve_runner() -> ServeRunner:
-    """Task 5 会提供 app seam；这里保持 import 轻量且不创建占位路由。"""
+    """延迟导入 app，避免帮助和版本命令初始化服务依赖。"""
 
     try:
         module = import_module("mornlea_companion_agent.app")
