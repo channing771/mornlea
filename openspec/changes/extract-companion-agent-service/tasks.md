@@ -4,7 +4,7 @@
 
 ## Task 2: Python scaffold, configuration and domain models
 
-- [ ] 2.1 先在 `services/companion-agent/tests` 写直接消费 Task 1 fixtures 的 Python 3.12 config/CLI/strict Pydantic/import-boundary RED tests，再实现 `pyproject.toml`、`uv.lock`、`mornlea_companion_agent/{cli.py,config.py,domain}` 与单 worker skeleton；config 固定 loopback bind、port、workers=1、SQLite path、HTTP credential env、provider base URL/model/key env、3/5 model、4/8 tool、30/60s timeout且拒绝未知字段，钉 `mcp>=1.28.1,<2`，以 `cd services/companion-agent && uv sync --locked && uv run ruff check . && uv run mypy src && uv run pytest tests/test_config.py tests/test_contracts.py tests/test_import_boundaries.py -q` 验证。
+- [x] 2.1 先在 `services/companion-agent/tests` 写直接消费 Task 1 fixtures 的 Python 3.12 config/CLI/strict Pydantic/import-boundary RED tests，再实现 `pyproject.toml`、`uv.lock`、`mornlea_companion_agent/{cli.py,config.py,domain}` 与单 worker skeleton；config 固定 loopback bind、port、workers=1、SQLite path、HTTP credential env、provider base URL/model/key env、3/5 model、4/8 tool、30/60s timeout且拒绝未知字段，钉 `mcp>=1.28.1,<2`，以 `cd services/companion-agent && uv sync --locked && uv run ruff check . && uv run mypy src && uv run pytest tests/test_config.py tests/test_contracts.py tests/test_import_boundaries.py -q` 验证。
 
 ## Task 3: Python namespace leases and compact memory
 

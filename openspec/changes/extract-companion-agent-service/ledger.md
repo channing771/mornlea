@@ -22,7 +22,7 @@
 | Task | Implementer | 起始 SHA | RED/GREEN 与提交 | SPEC 评审 | QUALITY 评审 | 裁决 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `task1_contracts_impl` | `af57e420` | RED：缺少 HTTP schema；复审 RED：UTF-8 byte/权威常量、非确定 `oneOf` 与未支持 keyword；GREEN：focused `-count=100`、companion race、diff-check；提交 `36eed9d9`、`7d019d1c`、`a1640211` | `task1_spec_review` round 3 PASS | `task1_quality_review` round 3 PASS | Accepted |
-| 2 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
+| 2 | `task2_python_scaffold_impl` | `5d368f8c` | RED：package 缺失；复审 RED：exact const、URL/secret/path、golden path 与 import boundary；GREEN：locked sync、ruff/format、mypy、focused 两轮各 199 passed、diff-check；提交 `91bca693`、`665d609a`、`40c57fce` | `task2_spec_review` round 3 PASS | `task2_quality_review` round 3 PASS | Accepted |
 | 3 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 4 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 5 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
@@ -40,6 +40,13 @@
 - Round 2：原规格缺口关闭；两路评审共同拒绝依赖 Go map 顺序选择 `oneOf` 子错误，QUALITY 另要求未知标准 JSON Schema validation keyword 硬失败。
 - Round 3：SPEC 与 QUALITY 均 PASS；`oneOf` 使用稳定父级错误，关键叶级规则由 direct fixtures 校验，schema keyword allowlist/audit、私有扩展硬失败与 100 次 focused 重复测试通过。
 - 控制会话复验：`go test ./internal/companion -run 'ContractFixture' -count=100` exit 0；工作树在 ledger 更新前 clean。
+
+### Task 2 评审修复记录
+
+- Round 1：SPEC 与 QUALITY 拒绝 Pydantic `Literal` 的 bool/number 交叉强转；QUALITY 另拒绝任意 invalid error、非 ASCII header secret、不完整 provider authority/IDNA、SQLite symlink 裸异常及可绕过的 import boundary。
+- Round 2：exact const、golden path、secret 与 SQLite value 修复通过；两路评审继续拒绝配置文件路径裸异常、手写 IDNA 与 httpx 双向漂移，以及未按 future layer 收口的动态 import/external dependency 门禁。
+- Round 3：SPEC 与 QUALITY 均 PASS；配置 path 全收口，直接 `idna` 依赖与 httpx 兼容，CLI/app 是唯一 dynamic seam，harness/adapters/storage 采用集中 fail-closed allowlist 且 Task 3/4 合法依赖 probes 通过。
+- 控制会话复验：`uv sync --locked`、ruff format/check、mypy exit 0；focused pytest 连续两轮均 199 passed；`git diff --check` exit 0。
 
 ## 整分支终审与门禁
 
