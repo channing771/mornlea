@@ -233,7 +233,7 @@
   HEAD 与 tracked/staged/untracked clean status 仍 mandatory，local `main` 指向其他提交不得
   单独导致失败。任何 tracked post-validation fix 或 sync 都必须从 Gate 1 完整重跑；取得未参与执行者的独立
   spec/quality review且 0 open findings 后才可勾选。
-- [ ] 6.10 由未参与 Task 6.7 planning/review、Task 6.8 sync/implementation/reviews 或 Task 6.9
+- [x] 6.10 由未参与 Task 6.7 planning/review、Task 6.8 sync/implementation/reviews 或 Task 6.9
   validation/review 的 fresh whole-integration reviewer 同时给出 spec-compliance 与 quality
   verdict。显式核验 immutable history、`6f622407` 的 exact frozen-parent provenance 与双亲、
   无 later-main merge、
