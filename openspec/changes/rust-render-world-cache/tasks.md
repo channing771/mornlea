@@ -89,7 +89,7 @@
   保持 `render_upload_ui_font`、frame TLV tag 9 和 UI layout v1–v4 退役，只叠加 MRW1 cache
   与 update 入口，不改变 main 现有行为。验证：`git status --short`、
   `git diff --check`，并把 merge base、main HEAD、冲突路径与逐项裁决记入 `ledger.md`。
-- [ ] 6.2 由 fresh implementer 在 clean worktree 先执行 `make rust`，并在 merge 命令前即时
+- [x] 6.2 由 fresh implementer 在 clean worktree 先执行 `make rust`，并在 merge 命令前即时
   记录 latest local `main`。若其超过已审计的 `a23833f9`，先核验新增 commits/paths；只有不
   改变版本、ABI、client/MRW1 surface、fluid 所有权或排除项时才直接继续，否则先更新 planning
   并完成独立 planning review。随后以 `git merge --no-commit --no-ff main` 做 non-rewriting

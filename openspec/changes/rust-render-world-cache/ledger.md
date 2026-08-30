@@ -736,3 +736,50 @@ base 起零 diff；其 ready/spawn warmup 循环按 transport 收包时机决定
 - `git diff --check`：退出 0且无输出；`git diff --name-only` 的 tracked scope 仅为
   `openspec/changes/rust-render-world-cache/ledger.md`。ignored review report/progress 只同步
   reviewer 与 verdict，不形成 tracked diff。
+
+## Task 6.2：follow-up main sync 与独立评审完成裁决
+
+### 实现与固定双亲
+
+- Fresh implementer：`01a05191-5f24-7391-8aa7-0668afdc97a2`。
+- Implementer 从 clean feature HEAD
+  `53d7902869db831b169b5656de940aceeeb5d56b` 先执行 `make rust` 并通过；merge 命令前即时
+  核验 local `main` 与 `origin/main` 均仍为已评审的
+  `a23833f92a80abb808b2b629c4dc043d2043f90a`，没有新增漂移或契约变化。
+- Follow-up merge commit：`d07fead5f78a9dfd943de376d2df46c984eaa63f`
+  `chore: sync latest main into rust render world cache`；双亲依次为 feature
+  `53d7902869db831b169b5656de940aceeeb5d56b` 与 selected main
+  `a23833f92a80abb808b2b629c4dc043d2043f90a`。
+- 实际冲突仅为 `AGENTS.md` 与 `docs/architecture.md`。前者合成 client ABI v13 / engine
+  ABI v9 根身份并保留 hook 下线说明；后者保留 main 的 engine v9/fluid 架构事实与 feature
+  的 client v13/WKWebView JSON/MRW1 cache-only 事实。没有其他冲突或 production MRW1 接线。
+- 相对 selected main，五组 protected paths
+  `engine/crates/mornlea_engine/`、`engine/include/mornlea_engine.h`、`internal/fluid/`、
+  `internal/nativeabi/`、`internal/sim/realm/` 均 byte-for-byte 零 diff；glyph atlas、dialogue
+  shutdown、dropped-item restart 与 fluid parity readiness 四项稳定性修复也逐字继承。
+  `.codex/hooks.json` 与 `.claude/settings.json` 同样相对 selected main 零 feature-side diff。
+
+### 实现验证与独立 review
+
+- Implementer 证据：pre/post merge `make rust` 均通过；post-merge release build 重建
+  `mornlea_engine` 并签名两个 dylib；`go test ./internal/archcheck -count=1` 通过；
+  `openspec validate --all --strict --no-interactive` 为 79 passed、0 failed；无 unmerged path，
+  protected/stability/hook selected-parent diff、ABI/UI/MRW1 source audit、selected-parent
+  `git diff --check`、merge parent/subject 与 scope 检查全部通过。完整实现证据见 ignored
+  `task-6.2-report.md`。
+- Independent reviewer：`01a05195-ca6d-7261-afdf-0c352440cbd3`。
+- Final verdict：spec ✅；quality Approved；0 Critical、0 Important、0 Minor、0 open。
+- Reviewer 接受 selected main 无漂移、两项冲突裁决、五组 protected-path zero-diff、四项
+  main 稳定性修复、hook 下线状态、79/79 OpenSpec 与 build/archcheck/diff 证据；没有要求
+  fix round。Controller 接受该 clean verdict，Task 6.2 现完成；Tasks 6.3–6.5 保持未开始。
+
+### Bookkeeping validation
+
+- 在 reviewed merge HEAD `d07fead5f78a9dfd943de376d2df46c984eaa63f` 与本次纯
+  bookkeeping working diff 上执行 `openspec validate --all --strict --no-interactive`：
+  退出 0；79 passed、0 failed。
+- `openspec instructions apply --change rust-render-world-cache --json`：退出 0；20 tasks、
+  17 complete、3 remaining、`state: ready`；仅 Task 6.2 新增完成状态，Tasks 6.3–6.5
+  保持未完成。
+- `git diff --check`：退出 0且无输出；tracked scope 恰为本 change 的 `tasks.md` 与
+  `ledger.md`，ignored `task-6.2-report.md` / `progress.md` 只同步 review 与状态事实。
