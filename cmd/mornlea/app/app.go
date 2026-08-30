@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/channing771/mornlea/internal/assets"
@@ -223,6 +224,13 @@ type Application struct {
 	// menuVistaPhase 记录全景最近一次推进时的菜单相位，用于把「主菜单 ⇄
 	// 设置页」切换识别为相位重进（自转 tick 归零，确定性同画面）。
 	menuVistaPhase MenuPhase
+	// devCapture{Phase,Width,Height} 是开发捕获服务的 /status 观察快照（发布
+	// 与读取见 dev_capture.go）：仅在注入捕获协调器后由帧循环每帧原子覆写，
+	// HTTP 服务 goroutine 经 `Phase`/`WindowWidth`/`WindowHeight` 读到最近帧
+	// 的值；未启用捕获时零写入，帧循环对快照零参与。
+	devCapturePhase  atomic.Int32
+	devCaptureWidth  atomic.Int32
+	devCaptureHeight atomic.Int32
 }
 
 type Window interface {

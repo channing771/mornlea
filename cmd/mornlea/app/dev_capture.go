@@ -61,8 +61,14 @@ type CaptureCoordinator interface {
 // app 构造后、进入交互循环前装配：服务要消费 app 状态访问器，天然晚于
 // app 存在。写入发生在启动序列的同一 goroutine 上，与帧循环的每帧读取
 // 构成 happens-before；循环运行中并发改写是调用方编程错误，不加锁。
+//
+// 注入同时播种一次状态快照（`publishDevCaptureStatus`）：服务的 HTTP 面
+// 在 `Start` 之后随时可能收到 `/status`，播种保证首个请求读到的是注入时刻
+// 的相位与尺寸而不是构造零值。以 nil 清除后快照不再更新，但此时服务随
+// 之不可达（main 侧仅在启动失败清除协调器，监听并未建立），没有观察者。
 func (a *Application) SetCaptureCoordinator(coordinator CaptureCoordinator) {
 	a.startupDeps.CaptureCoordinator = coordinator
+	a.publishDevCaptureStatus()
 }
 
 // captureCoordinator 读取当前生效的协调器。存储复用 `NewWithDependencies`
@@ -74,7 +80,8 @@ func (a *Application) captureCoordinator() CaptureCoordinator {
 
 // pumpDevCapture 是交互帧循环的捕获泵，由菜单与游戏两处循环在
 // `Window.Poll` 之后、渲染之前各调用一次。未注入协调器时早退；注入后每帧
-// 也只做一次非阻塞待办检查，有待办时在当前线程（与 `Window.Poll` 同线程，
+// 先把相位与窗口尺寸发布进 /status 原子快照，再做一次非阻塞待办检查，
+// 有待办时在当前线程（与 `Window.Poll` 同线程，
 // 沿用窗口 FFI 的线程约束）同步执行恰好一次捕获并立即交付结果。泵不做
 // 任何缓冲、不吞错、不重试：编码与打包都发生在协调器侧的帧循环之外，
 // 帧循环只承受捕获本身的一次窗口合成拷贝开销。
@@ -83,6 +90,9 @@ func (a *Application) pumpDevCapture() {
 	if coordinator == nil {
 		return
 	}
+	// 状态发布在待办检查之前：/status 读到的相位与尺寸对应本次待办捕获
+	// 即将取样的同一帧窗口，观察面与画面不脱节。
+	a.publishDevCaptureStatus()
 	request, pending := coordinator.PendingCapture()
 	if !pending {
 		return
@@ -90,6 +100,39 @@ func (a *Application) pumpDevCapture() {
 	pixels, width, height, err := a.captureFrame()
 	coordinator.CompleteCapture(request, pixels, width, height, err)
 }
+
+// publishDevCaptureStatus 在帧循环 goroutine 上把当前相位与窗口逻辑尺寸写入
+// 原子快照，供 devcapture 的 `StatusSource` 适配器跨 goroutine 读取。发布只
+// 在协调器已注入时发生（泵入口判空先行），未启用捕获时帧循环对这里零调用；
+// 启用后的空闲帧成本是三次原子存储——无捕获桥调用、无分配，满足 spec 的
+// 空闲零开销硬约束。快照是三个独立原子整数，观察者可能读到相邻两帧的组合；
+// 对 /status 这种人类可读的观察面足够，不值得为此引入每帧分配的一致性结构。
+// 无窗口（无头替身）时尺寸保持非正值，按 StatusSource 契约表示未知。
+func (a *Application) publishDevCaptureStatus() {
+	a.devCapturePhase.Store(int32(a.menu.phase))
+	if a.window != nil {
+		width, height := a.window.ContentSize()
+		a.devCaptureWidth.Store(int32(width))
+		a.devCaptureHeight.Store(int32(height))
+	}
+}
+
+// Phase 返回快照中的菜单相位字符串，取值与 UI 桥 schema 的 `$defs/phase`
+// 枚举一致（menu/settings/starting/paused/game）。它是 `devcapture.StatusSource`
+// 的相位注入面：快照仅在注入捕获协调器后由帧循环维护，未注入时读到构造
+// 零值——零值相位即游戏相位（`MenuPhaseGame`），与「非 StartAtMenu 路径
+// 零值直接进游戏循环」的既有约定一致。并发语义：原子读取，可在任意
+// goroutine 调用，读到的值至多落后帧循环一帧。
+func (a *Application) Phase() string {
+	return MenuPhase(a.devCapturePhase.Load()).uiPhase()
+}
+
+// WindowWidth 返回快照中的窗口逻辑点宽度；非正值（含未注入协调器时的零值）
+// 表示未知，观察方按 StatusSource 契约呈现 unknown 而不是猜测尺寸。
+func (a *Application) WindowWidth() int { return int(a.devCaptureWidth.Load()) }
+
+// WindowHeight 返回快照中的窗口逻辑点高度；非正值表示未知。
+func (a *Application) WindowHeight() int { return int(a.devCaptureHeight.Load()) }
 
 // captureFrame 从当前窗口同步抓取一帧合成画面。窗口不具备捕获能力（无头
 // 装配没有窗口、测试替身未实现捕获）时按 `client.ErrCaptureUnavailable`

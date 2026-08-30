@@ -9,6 +9,7 @@ import (
 	"io"
 
 	application "github.com/channing771/mornlea/cmd/mornlea/app"
+	"github.com/channing771/mornlea/cmd/mornlea/devcapture"
 	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim/tuning"
@@ -28,6 +29,14 @@ type mainOptions struct {
 	// Dev 为真时启用调试面板（F3 切换）。它只门控面板可用性，不门控配置文件
 	// 是否生效——配置文件里调过的值无论 Dev 是否为真都同样生效。
 	Dev bool
+	// DevCapture 为真时在交互式客户端内启用本地开发捕获服务（`devcapture`
+	// 包）：仅绑定回环地址，实际端口写入 ~/.mornlea/dev-capture.json。与
+	// --benchmark/--capture 互斥——那两条路径无头运行，没有窗口可捕获。
+	DevCapture bool
+	// DevCaptureAddr 是开发捕获服务的监听地址，仅接受回环地址（服务内还有
+	// 一道绑定前的回环防御闸）。独立 flag（同 --perf-output）：不带
+	// --dev-capture 时允许给出但无任何效果。
+	DevCaptureAddr string
 }
 
 func parseMainOptions(args []string) (mainOptions, error) {
@@ -43,6 +52,8 @@ func parseMainOptions(args []string) (mainOptions, error) {
 	updateGolden := flags.Bool("update-golden", false, "把本次抓帧结果写入 golden 基线")
 	dev := flags.Bool("dev", false, "启用调试面板（F3 切换）")
 	configPath := flags.String("config", "", "配置文件路径，留空使用默认路径")
+	devCapture := flags.Bool("dev-capture", false, "启用本地开发捕获服务（仅绑定回环地址）")
+	devCaptureAddr := flags.String("dev-capture-addr", devcapture.DefaultAddr, "开发捕获服务监听地址，仅接受回环地址")
 	if err := flags.Parse(args); err != nil {
 		return mainOptions{}, err
 	}
@@ -57,6 +68,14 @@ func parseMainOptions(args []string) (mainOptions, error) {
 	}
 	if *capture != "" && *connect != "" {
 		return mainOptions{}, errors.New("--capture 不能与 --connect 同时使用")
+	}
+	// --dev-capture 消费交互窗口的合成画面；benchmark 与 capture 无头运行，
+	// 没有窗口可捕获，组合语义无法定义，直接拒绝而不是让一方静默胜出。
+	if *devCapture && *benchmark {
+		return mainOptions{}, errors.New("--dev-capture 不能与 --benchmark 同时使用")
+	}
+	if *devCapture && *capture != "" {
+		return mainOptions{}, errors.New("--dev-capture 不能与 --capture 同时使用")
 	}
 	if *updateGolden && *capture == "" {
 		return mainOptions{}, errors.New("--update-golden 只能与 --capture 同时使用")
@@ -106,6 +125,9 @@ func parseMainOptions(args []string) (mainOptions, error) {
 		UpdateGolden: *updateGolden,
 		ConfigPath:   *configPath,
 		Dev:          *dev,
+
+		DevCapture:     *devCapture,
+		DevCaptureAddr: *devCaptureAddr,
 	}, nil
 }
 

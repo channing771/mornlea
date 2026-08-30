@@ -239,3 +239,57 @@ func TestRunInteractiveMenuLoopPumpsPendingCaptureOnce(t *testing.T) {
 		t.Fatalf("交付结果 %+v，want 原样像素 2×1", outcome)
 	}
 }
+
+// TestSetCaptureCoordinatorSeedsStatusSnapshot 钉住播种语义：注入发生在服务
+// `Start` 之前，首个 `/status` 读到的必须是注入时刻的相位与窗口尺寸，而不是
+// 构造零值（game / 0×0）。
+func TestSetCaptureCoordinatorSeedsStatusSnapshot(t *testing.T) {
+	application := &Application{window: &fakeInteractiveWindow{}}
+	application.menu.phase = MenuPhaseSettings
+
+	application.SetCaptureCoordinator(&fakeDevCaptureCoordinator{})
+
+	if application.Phase() != "settings" {
+		t.Fatalf("注入后 Phase() = %q，want settings", application.Phase())
+	}
+	if application.WindowWidth() != 1 || application.WindowHeight() != 1 {
+		t.Fatalf("注入后尺寸 (%d,%d)，want 替身报告的 (1,1)",
+			application.WindowWidth(), application.WindowHeight())
+	}
+}
+
+// TestPumpDevCapturePublishesStatusSnapshot 钉住发布语义：泵把当前帧的相位
+// 同步进 /status 快照，导出访问器读到的是最近一次泵经过时的值。
+func TestPumpDevCapturePublishesStatusSnapshot(t *testing.T) {
+	window := &capturePumpWindow{}
+	application := &Application{window: window}
+	application.SetCaptureCoordinator(&fakeDevCaptureCoordinator{})
+
+	application.menu.phase = menuPhasePaused
+	application.pumpDevCapture()
+
+	if application.Phase() != "paused" {
+		t.Fatalf("泵后 Phase() = %q，want paused", application.Phase())
+	}
+	if application.WindowWidth() != 1 || application.WindowHeight() != 1 {
+		t.Fatalf("泵后尺寸 (%d,%d)，want 替身报告的 (1,1)",
+			application.WindowWidth(), application.WindowHeight())
+	}
+}
+
+// TestDevCaptureStatusAccessorsDegradeWithoutWindow 钉住无头降级：无窗口的
+// Application 注入协调器后，尺寸快照保持非正值（StatusSource 契约的「未知」），
+// 相位仍可安全读取，发布路径不触碰空窗口。
+func TestDevCaptureStatusAccessorsDegradeWithoutWindow(t *testing.T) {
+	application := &Application{}
+	application.SetCaptureCoordinator(&fakeDevCaptureCoordinator{})
+	application.pumpDevCapture()
+
+	if application.WindowWidth() != 0 || application.WindowHeight() != 0 {
+		t.Fatalf("无窗口时尺寸 (%d,%d)，want 保持 0 表示未知",
+			application.WindowWidth(), application.WindowHeight())
+	}
+	if application.Phase() != "game" {
+		t.Fatalf("无窗口时 Phase() = %q，want 零值相位 game", application.Phase())
+	}
+}

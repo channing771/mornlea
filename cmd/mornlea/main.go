@@ -15,6 +15,7 @@ import (
 	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/cmd/mornlea/benchmark"
 	"github.com/channing771/mornlea/cmd/mornlea/capture"
+	"github.com/channing771/mornlea/cmd/mornlea/devcapture"
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/logging"
 	"github.com/channing771/mornlea/internal/network"
@@ -182,9 +183,63 @@ func runWithDependencies(args []string, dependencies runDependencies) error {
 			runErr = fmt.Errorf("性能记录失败: %w", err)
 		}
 	} else {
+		// 开发捕获服务只挂在交互路径：与 benchmark/capture 的互斥已在
+		// parse 层拒绝，无头路径不经过本分支，这是第二道双保险。
+		var captureService *devcapture.Service
+		if options.DevCapture {
+			captureService = startDevCapture(app, options.DevCaptureAddr)
+		}
 		runErr = dependencies.runInteractive(app)
+		if captureService != nil {
+			// 先停服务再关 app：监听关闭后 /status|/screenshot 不再触达
+			// 已开始释放的 app；端口发现文件由 `Stop` 清除，即使
+			// runInteractive 已带错返回也要执行。
+			if err := captureService.Stop(); err != nil {
+				runErr = errors.Join(runErr, fmt.Errorf("停止开发捕获服务: %w", err))
+			}
+		}
 	}
 	return errors.Join(runErr, app.Close())
+}
+
+// devCaptureStatusSource 把 `*application.Application` 的最小状态访问器适配成
+// `devcapture.StatusSource`，供 `/status` 观察客户端相位与窗口尺寸。降级语义
+// （无窗口、未注入协调器时的未知值）全部收敛在 app 侧访问器内，这里只做纯
+// 转发、不持有状态。
+type devCaptureStatusSource struct {
+	app *application.Application
+}
+
+// devCaptureStatusSource 必须持续满足 StatusSource：签名漂移在编译期暴露。
+var _ devcapture.StatusSource = devCaptureStatusSource{}
+
+func (s devCaptureStatusSource) Phase() string     { return s.app.Phase() }
+func (s devCaptureStatusSource) WindowWidth() int  { return s.app.WindowWidth() }
+func (s devCaptureStatusSource) WindowHeight() int { return s.app.WindowHeight() }
+
+// startDevCapture 装配并启动本地开发捕获服务：注入状态适配器、把服务登记为
+// 帧循环的捕获协调器，然后绑定监听并写入端口发现文件（路径留空由 devcapture
+// 包回落 ~/.mornlea 默认值）。实际绑定地址打印到 stdout——顺延绑定可能偏离
+// 请求端口，stdout 与发现文件是两个独立的发现渠道。
+//
+// 启动失败（端口耗尽、发现文件不可写等）不让游戏崩溃：捕获是纯增益的调试
+// 服务，这里告警并清除协调器，让帧循环回到零参与状态，游戏照常运行。
+func startDevCapture(app *application.Application, addr string) *devcapture.Service {
+	service := devcapture.New(devcapture.Options{
+		Status: devCaptureStatusSource{app: app},
+		Addr:   addr,
+	})
+	// 先注入再启动：`Start` 之后 HTTP handler 随时可能读取状态适配器并经
+	// 协调器发起捕获，协调器必须在第一个请求可能到达前就位。
+	app.SetCaptureCoordinator(service)
+	listenAddr, err := service.Start()
+	if err != nil {
+		app.SetCaptureCoordinator(nil)
+		slog.Warn("开发捕获服务启动失败，本次运行禁用画面捕获", "error", err)
+		return service
+	}
+	fmt.Println("开发捕获服务已启动: http://" + listenAddr)
+	return service
 }
 
 func loadApplicationIdentity(requestedName *string) (network.Identity, error) {
