@@ -413,6 +413,8 @@ def test_initialize_pins_wire_and_application_versions(field: str, value: str) -
         "reordered",
         "input_schema",
         "output_schema",
+        "input_schema_bool_int",
+        "input_schema_int_float",
     ],
 )
 def test_tool_discovery_requires_exact_unique_six_without_pagination(mutation: str) -> None:
@@ -433,8 +435,12 @@ def test_tool_discovery_requires_exact_unique_six_without_pagination(mutation: s
                     tools.reverse()
                 elif mutation == "input_schema":
                     tools[2]["inputSchema"]["properties"]["limit"]["maximum"] = 37
-                else:
+                elif mutation == "output_schema":
                     tools[4]["outputSchema"]["properties"]["terrain"]["maxItems"] = 65
+                elif mutation == "input_schema_bool_int":
+                    tools[2]["inputSchema"]["properties"]["limit"]["minimum"] = True
+                else:
+                    tools[2]["inputSchema"]["properties"]["limit"]["minimum"] = 1.0
                 return httpx.Response(
                     200,
                     headers={"content-type": "application/json"},
@@ -445,6 +451,24 @@ def test_tool_discovery_requires_exact_unique_six_without_pagination(mutation: s
 
     async def scenario() -> None:
         mock = ToolListMock()
+        with pytest.raises(PlannerUnavailable):
+            async with MCPToolSessionFactory(transport=httpx.MockTransport(mock)).open(
+                request(), timeout_seconds=5
+            ):
+                pass
+
+    run(scenario())
+
+
+def test_tool_schema_serialization_failure_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_serialization(_: object) -> bytes:
+        raise TypeError("unserializable schema")
+
+    async def scenario() -> None:
+        mock = MCPMock()
+        monkeypatch.setattr(mcp_adapter, "canonical_json_bytes", fail_serialization)
         with pytest.raises(PlannerUnavailable):
             async with MCPToolSessionFactory(transport=httpx.MockTransport(mock)).open(
                 request(), timeout_seconds=5

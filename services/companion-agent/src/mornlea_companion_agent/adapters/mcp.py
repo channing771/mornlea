@@ -233,10 +233,19 @@ class MCPToolSessionFactory:
         if result.nextCursor is not None or len(result.tools) != len(_TOOL_CONTRACTS):
             raise PlannerUnavailable
         for advertised, expected in zip(result.tools, _TOOL_CONTRACTS, strict=True):
+            try:
+                input_schema_matches = canonical_json_bytes(
+                    advertised.inputSchema
+                ) == canonical_json_bytes(expected.input_schema)
+                output_schema_matches = canonical_json_bytes(
+                    advertised.outputSchema
+                ) == canonical_json_bytes(expected.output_schema)
+            except (TypeError, ValueError, UnicodeError, RecursionError, OverflowError):
+                raise PlannerUnavailable from None
             if (
                 advertised.name != expected.name
-                or advertised.inputSchema != expected.input_schema
-                or advertised.outputSchema != expected.output_schema
+                or not input_schema_matches
+                or not output_schema_matches
             ):
                 raise PlannerUnavailable
 

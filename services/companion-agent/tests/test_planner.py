@@ -827,8 +827,9 @@ def test_model_adapter_exposes_only_four_local_tools_and_converts_ai_message() -
         assert [function["name"] for function in functions] == [
             tool["name"] for tool in contract_tools
         ]
-        assert [function["parameters"] for function in functions] == [
-            resolved_contract_schema(tool["input_schema"]) for tool in contract_tools
+        assert [canonical_json_bytes(function["parameters"]) for function in functions] == [
+            canonical_json_bytes(resolved_contract_schema(tool["input_schema"]))
+            for tool in contract_tools
         ]
         find_schema = functions[2]["parameters"]
         assert find_schema["properties"]["block_names"]["maxItems"] == 16
