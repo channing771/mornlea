@@ -32,8 +32,6 @@
 - Ruling: task 1 evidence is complete after specification approval and quality repair. The unheaded placeholders are documentation-only and do not affect the immutable baseline artifacts; cost if wrong: the final ledger would be less readable, not behaviorally incorrect.
 
 
-- Pending.
-
 ## Task 1.2 Contract Leaf Package
 
 - Implementer: fresh implementer `ses_fb7cf5787ffeRYrz4RaK15fmcM`.
@@ -63,8 +61,6 @@
 - Quality review: fresh reviewer `ses_fb70f9475ffejjwAvPdOs9rWT5` found no issue in the initial diff; the stricter specification findings governed the repair.
 - Ruling: a full race run after the repair failed only in two server timing tests that each passed in isolated reruns. No causal code path was established and task-specific gates passed, so no speculative retry or timeout change is made. Cost if wrong: the existing timing-dependent server tests require a reproducible, separately scoped fix.
 
-
-- Pending.
 
 ## Task 2.2 Realm Environmental Simulation
 
