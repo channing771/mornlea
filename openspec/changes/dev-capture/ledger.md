@@ -17,4 +17,43 @@
 - 产物：proposal.md、design.md、specs/dev-capture/spec.md（4 条 ADDED
   Requirement、11 个 Scenario）、tasks.md、本 ledger。
 - 验证：`openspec validate dev-capture --strict --no-interactive` 与
-  `openspec validate --all --strict --no-interactive` 结果见任务勾选前回执。
+  `openspec validate --all --strict --no-interactive` 结果见任务勾选前回执
+  （`Change 'dev-capture' is valid`；`Totals: 79 passed, 0 failed (79 items)`）。
+- Commits: `bcc053e8` `docs: add dev-capture change products`。
+
+## Task 2: Rust 捕获原语 + client ABI v13 + Go 桥接
+
+- Round 1（implementer `be5ff22b` `feat(client): add window composite capture
+  with client abi v13`）：
+  - 实现：`capture.rs` 新模块（CG 最小 extern 绑定 + RAII + 行翻转/去 padding
+    纯函数 6 单测）、`ffi.rs` 状态码 CAPTURE_OVERFLOW=8 / CAPTURE_UNAVAILABLE=9
+    + 导出 `mornlea_client_window_capture` + FFI 测试、header 13u、
+    `Window.Capture` 两段式 + `ErrCaptureUnavailable`、Go 钉位 13、
+    根 AGENTS.md 基线 v13。验证：`make rust-check` 绿、client 97 passed、
+    `go test ./internal/client -race` ok、archcheck ok。
+  - 自报偏差：校验顺序按被镜像的 `mornlea_client_render_readback` 实际顺序
+    （abi → 出参指针 → 句柄）而非 brief 箭头——评审裁决成立，design.md 箭头
+    系笔误已由控制会话修正（abi_version → 出参指针判空与空-容一致性 → 句柄 →
+    容量）。
+  - 评审（独立评审子代理）：规格合规 FAIL + 代码质量 FAIL——Blocker B-1/B-2：
+    `CG_WINDOW_LIST_OPTION_INCLUDING_WINDOW`（1<<0，实为 OnScreenOnly 位）、
+    `CG_WINDOW_IMAGE_BEST_RESOLUTION`（1<<8，非文档位）与 SDK 头
+    （均为 1<<3、u32）不符，真实窗口下会静默截错图/整屏；extern 形参宽度
+    u64 与 CF_OPTIONS(uint32_t) 不符且 SAFETY 注释论断错误。溢出路径无头
+    不可测的豁免成立，缺陷只会进人工验收。
+  - 修复轮 1：`4c553f3b` `fix(client): align window capture cg option bits
+    with sdk headers`——两个枚举常量改 u32 = 1 << 3（implementer 读本机 SDK
+    `CGWindow.h` 逐项核实，并确认 1 << 0 即 `kCGWindowListOptionOnScreenOnly`
+    的语义陷阱）、extern 形参改 u32、SAFETY 注释改写为
+    `CF_OPTIONS(uint32_t, ...)` 论断、新增
+    `window_list_option_values_match_sdk_header` 钉值测试顺带钉住位图布局
+    手抄面。验证：`make rust-check` 绿、`cargo test -p mornlea_client capture
+    --locked` 10 passed、`go test ./internal/client -race` ok 4.682s。
+  - 控制会话核对修复 diff 逐项对应评审清单，Blocker 闭环；其余评审发现
+    （Praise 若干、`#![allow(deprecated)]` 为意图标记的 Minor）不要求返修。
+  - 双裁决终局：规格合规 PASS、代码质量 PASS。
+- Commits: `be5ff22b` `feat(client): add window composite capture with client
+  abi v13`、`4c553f3b` `fix(client): align window capture cg option bits with
+  sdk headers`。
+- 遗留（记录不阻塞）：溢出回填与真实画面内容无头不可测，留给 Task 7.2
+  人工验收核对截图尺寸与图层内容。

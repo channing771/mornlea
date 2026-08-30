@@ -65,8 +65,8 @@ int32_t mornlea_client_window_capture(
   resolution，取 backing scale 尺寸）→ `CGBitmapContextCreate`（BGRA8
   premultiplied first / little endian，与既有 readback 字节序一致）→
   `CGContextDrawImage` → 拷贝行字节。Rust 不编码 PNG。
-- 校验顺序镜像 `mornlea_client_render_readback`：abi_version → 句柄 →
-  出参指针 → 容量；容量不足返回独立溢出状态并回填 `*out_required`，输出
+- 校验顺序镜像 `mornlea_client_render_readback`：abi_version → 出参指针判空
+  与空-容一致性 → 句柄 → 容量；容量不足返回独立溢出状态并回填 `*out_required`，输出
   缓冲原样；捕获不可用（窗口号取不到、CGImage 为空、位图上下文创建失败）
   返回独立「不可用」状态——这是运行期预期条件，映射为 Go 类型化错误而非
   panic；其余违约沿用稳定中文文案 panic。
