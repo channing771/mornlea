@@ -9,7 +9,7 @@
 
 ## 2. pixel-retroui + Tailwind 构建链接入
 
-- [ ] 2.1 `pixel-retroui` 运行时依赖 + `tailwindcss@^3.4`/`postcss`/
+- [x] 2.1 `pixel-retroui` 运行时依赖 + `tailwindcss@^3.4`/`postcss`/
       `autoprefixer` 开发依赖接入 `frontend`：tailwind.config（content 扫
       `src/**` 与 `node_modules/pixel-retroui/dist/**`，`corePlugins.preflight:
       false`）、postcss 配置、vite 联动；逐依赖核验零 postinstall 脚本；
