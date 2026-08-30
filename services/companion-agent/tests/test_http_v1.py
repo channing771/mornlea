@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from pathlib import Path
+from types import FunctionType, MethodType, ModuleType
 from typing import Any, cast
 
 import httpx
@@ -99,6 +100,12 @@ class FakeCloser:
             self.order.append("model")
 
 
+class FailingCloser(FakeCloser):
+    async def aclose(self) -> None:
+        await super().aclose()
+        raise RuntimeError("SECRET_MODEL_CLOSE_FAILURE")
+
+
 class EchoPlanner:
     async def run(self, request: PlanRequest) -> PlanResponse:
         return PlanResponse(
@@ -163,6 +170,41 @@ class BlockingPlanner(EchoPlanner):
             await asyncio.Future()
         except asyncio.CancelledError:
             self.cancelled += 1
+            raise
+
+
+class BlockingDialogue(EchoDialogue):
+    def __init__(self) -> None:
+        self.started_event = asyncio.Event()
+        self.cancelled = 0
+
+    async def run(
+        self,
+        request: DialogueNonterminalRequest | DialogueTerminalRequest,
+    ) -> DialogueNonterminalResponse | DialogueTerminalResponse:
+        del request
+        self.started_event.set()
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            self.cancelled += 1
+            raise
+
+
+class SlowCancellationPlanner(EchoPlanner):
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.cancelling = asyncio.Event()
+        self.finish_cancellation = asyncio.Event()
+
+    async def run(self, request: PlanRequest) -> PlanResponse:
+        del request
+        self.started.set()
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            self.cancelling.set()
+            await self.finish_cancellation.wait()
             raise
 
 
@@ -239,9 +281,9 @@ def app_with_components(
 
     async def factory(
         agent_config: AgentConfig,
-        resolved: ResolvedSecrets,
+        provider_api_key: SecretStr,
     ) -> AppComponents:
-        del resolved
+        del provider_api_key
         store = await SQLiteMemoryStore.open(agent_config.storage.sqlite_path)
         if order is not None:
             original_close = store.close
@@ -300,6 +342,47 @@ def plan_payload(
     return payload
 
 
+def recursively_retained_values(root: object) -> tuple[object, ...]:
+    retained: list[object] = []
+    seen: set[int] = set()
+
+    def visit(value: object, depth: int) -> None:
+        if depth > 20 or id(value) in seen:
+            return
+        seen.add(id(value))
+        retained.append(value)
+        if isinstance(value, (str, bytes, int, float, bool, type(None), ModuleType, type)):
+            return
+        if isinstance(value, FunctionType):
+            for cell in value.__closure__ or ():
+                try:
+                    visit(cell.cell_contents, depth + 1)
+                except ValueError:
+                    continue
+            return
+        if isinstance(value, MethodType):
+            visit(value.__self__, depth + 1)
+            visit(value.__func__, depth + 1)
+            return
+        if isinstance(value, dict):
+            for key, item in value.items():
+                visit(key, depth + 1)
+                visit(item, depth + 1)
+            return
+        if isinstance(value, (list, tuple, set, frozenset)):
+            for item in value:
+                visit(item, depth + 1)
+            return
+        try:
+            attributes = vars(value)
+        except TypeError:
+            return
+        visit(attributes, depth + 1)
+
+    visit(root, 0)
+    return tuple(retained)
+
+
 def test_app_exposes_only_manifest_routes_and_health_auth(tmp_path: Path) -> None:
     async def scenario() -> None:
         app, _, _ = app_with_components(tmp_path)
@@ -343,6 +426,26 @@ def test_app_exposes_only_manifest_routes_and_health_auth(tmp_path: Path) -> Non
                 response = await client.request(method, path, follow_redirects=False)
                 assert not response.is_redirect
                 assert response.status_code in {400, 404}
+
+    run(scenario())
+
+
+def test_app_lifespan_does_not_retain_resolved_secrets_or_raw_tokens(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        app, _, _ = app_with_components(tmp_path)
+        retained_before = recursively_retained_values(
+            (app.router.lifespan_context, vars(app), app.user_middleware)
+        )
+        assert not any(isinstance(value, ResolvedSecrets) for value in retained_before)
+        assert TOKEN not in {value for value in retained_before if type(value) is str}
+
+        async with app.router.lifespan_context(app):
+            retained_after = recursively_retained_values(
+                (app.router.lifespan_context, vars(app), app.user_middleware)
+            )
+            retained_text = {value for value in retained_after if type(value) is str}
+            assert TOKEN not in retained_text
+            assert "PROVIDER_TEST_KEY" not in retained_text
 
     run(scenario())
 
@@ -443,9 +546,9 @@ def test_terminal_dialogue_returns_only_proposal_without_committing_memory(
 
     async def factory(
         agent_config: AgentConfig,
-        resolved: ResolvedSecrets,
+        provider_api_key: SecretStr,
     ) -> AppComponents:
-        del resolved
+        del provider_api_key
         store = await SQLiteMemoryStore.open(agent_config.storage.sqlite_path)
         stores["store"] = store
         return AppComponents(
@@ -689,6 +792,252 @@ async def raw_asgi_request(
     start = next(item for item in sent if item["type"] == "http.response.start")
     body = b"".join(item.get("body", b"") for item in sent if item["type"] == "http.response.body")
     return int(start["status"]), body, receive_calls
+
+
+def test_send_failure_after_response_start_does_not_start_a_second_response(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        app, _, _ = app_with_components(tmp_path)
+        sent: list[dict[str, object]] = []
+        body_failed = False
+
+        async def receive() -> dict[str, object]:
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message: dict[str, object]) -> None:
+            nonlocal body_failed
+            sent.append(message)
+            if message["type"] == "http.response.body" and not body_failed:
+                body_failed = True
+                raise RuntimeError("simulated disconnected send")
+
+        await app(
+            {
+                "type": "http",
+                "asgi": {"version": "3.0", "spec_version": "2.4"},
+                "http_version": "1.1",
+                "method": "GET",
+                "scheme": "http",
+                "path": "/livez",
+                "raw_path": b"/livez",
+                "query_string": b"",
+                "root_path": "",
+                "headers": [(b"host", b"127.0.0.1:8765")],
+                "client": ("127.0.0.1", 50000),
+                "server": ("127.0.0.1", 8765),
+                "state": {},
+            },
+            receive,
+            send,
+        )
+        assert sum(message["type"] == "http.response.start" for message in sent) == 1
+
+    run(scenario())
+
+
+@pytest.mark.parametrize("run_kind", ["plan", "dialogue"])
+def test_http_disconnect_cancels_inflight_run_and_releases_capacity(
+    tmp_path: Path,
+    run_kind: str,
+) -> None:
+    async def scenario() -> None:
+        planner = BlockingPlanner()
+        dialogue = BlockingDialogue()
+        app, _, _ = app_with_components(
+            tmp_path,
+            planner=planner,
+            dialogue=dialogue,
+        )
+        async with app.router.lifespan_context(app):
+            transport = httpx.ASGITransport(
+                app=app,
+                client=("127.0.0.1", 50000),
+                raise_app_exceptions=False,
+            )
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://127.0.0.1:8765",
+            ) as client:
+                namespace = uuid4_text(51 if run_kind == "plan" else 52)
+                owner = uuid4_text(151 if run_kind == "plan" else 152)
+                grant = await acquire(client, namespace=namespace, owner=owner)
+
+            if run_kind == "plan":
+                path = "/v1/plan"
+                started = planner.started_event
+                runner = planner
+                payload = plan_payload(
+                    namespace=namespace,
+                    owner=owner,
+                    lease=grant["lease_id"],
+                    companion=uuid4_text(251),
+                    run_id=uuid4_text(351),
+                )
+            else:
+                path = "/v1/dialogue"
+                started = dialogue.started_event
+                runner = dialogue
+                payload = golden("nonterminal dialogue run")
+                payload.update(
+                    client_instance_id=owner,
+                    namespace_id=namespace,
+                    lease_id=grant["lease_id"],
+                    companion_id=uuid4_text(252),
+                    run_id=uuid4_text(352),
+                    deadline_unix_ms=4_000_000_000_000,
+                )
+
+            body = json.dumps(payload, separators=(",", ":")).encode()
+            messages = [
+                {"type": "http.request", "body": body, "more_body": False},
+                {"type": "http.disconnect"},
+                {"type": "http.disconnect"},
+            ]
+            disconnect_observed = asyncio.Event()
+            receive_calls = 0
+            sent: list[dict[str, object]] = []
+
+            async def receive() -> dict[str, object]:
+                nonlocal receive_calls
+                receive_calls += 1
+                message = messages.pop(0)
+                if message["type"] == "http.disconnect":
+                    await started.wait()
+                    disconnect_observed.set()
+                return message
+
+            async def send(message: dict[str, object]) -> None:
+                sent.append(message)
+
+            request = asyncio.create_task(
+                app(
+                    {
+                        "type": "http",
+                        "asgi": {"version": "3.0", "spec_version": "2.4"},
+                        "http_version": "1.1",
+                        "method": "POST",
+                        "scheme": "http",
+                        "path": path,
+                        "raw_path": path.encode("ascii"),
+                        "query_string": b"",
+                        "root_path": "",
+                        "headers": [
+                            (b"host", b"127.0.0.1:8765"),
+                            (b"authorization", f"Bearer {TOKEN}".encode()),
+                            (b"content-type", b"application/json"),
+                            (b"content-length", str(len(body)).encode()),
+                        ],
+                        "client": ("127.0.0.1", 50000),
+                        "server": ("127.0.0.1", 8765),
+                        "state": {},
+                    },
+                    receive,
+                    send,
+                )
+            )
+            try:
+                await asyncio.wait_for(started.wait(), timeout=1)
+                await asyncio.sleep(0.05)
+                assert disconnect_observed.is_set()
+                assert request.done()
+                await request
+                assert receive_calls == 2
+                assert runner.cancelled == 1
+                assert sent == []
+                assert app.state.agent_runtime.leases.run_gate.active_count == 0
+            finally:
+                if not request.done():
+                    request.cancel()
+                await asyncio.gather(request, return_exceptions=True)
+
+    run(scenario())
+
+
+def test_asgi_context_cancellation_drains_pending_disconnect_watcher(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        planner = BlockingPlanner()
+        app, _, _ = app_with_components(tmp_path, planner=planner)
+        async with client_for(app) as client:
+            namespace = uuid4_text(53)
+            owner = uuid4_text(153)
+            grant = await acquire(client, namespace=namespace, owner=owner)
+            payload = plan_payload(
+                namespace=namespace,
+                owner=owner,
+                lease=grant["lease_id"],
+                companion=uuid4_text(253),
+                run_id=uuid4_text(353),
+            )
+            request = asyncio.create_task(
+                client.post(
+                    "/v1/plan",
+                    json=payload,
+                    headers={"Authorization": f"Bearer {TOKEN}"},
+                )
+            )
+            await asyncio.wait_for(planner.started_event.wait(), timeout=1)
+            request.cancel()
+            request.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await request
+            await asyncio.sleep(0)
+
+            assert planner.cancelled == 1
+            assert app.state.agent_runtime.leases.run_gate.active_count == 0
+            assert not any(
+                task.get_name() in {"companion-agent-http-run", "companion-agent-http-disconnect"}
+                for task in asyncio.all_tasks()
+                if not task.done()
+            )
+
+    run(scenario())
+
+
+def test_double_cancellation_during_run_bind_still_releases_capacity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def scenario() -> None:
+        planner = SlowCancellationPlanner()
+        app, _, _ = app_with_components(tmp_path, planner=planner)
+        async with app.router.lifespan_context(app):
+            runtime = app.state.agent_runtime
+            leases = runtime.leases
+            assert leases is not None
+            namespace = uuid4_text(54)
+            owner = uuid4_text(154)
+            grant = await leases.acquire(namespace, owner)
+            payload = plan_payload(
+                namespace=namespace,
+                owner=owner,
+                lease=grant.lease_id,
+                companion=uuid4_text(254),
+                run_id=uuid4_text(354),
+            )
+            bind_entered = asyncio.Event()
+
+            async def blocking_bind(handle: object, task: asyncio.Task[object]) -> None:
+                del handle, task
+                bind_entered.set()
+                await asyncio.Future()
+
+            monkeypatch.setattr(leases.run_gate, "_bind_task", blocking_bind)
+            operation = asyncio.create_task(
+                runtime.run_planner(PlanRequest.model_validate(payload))
+            )
+            await asyncio.wait_for(bind_entered.wait(), timeout=1)
+            await asyncio.wait_for(planner.started.wait(), timeout=1)
+
+            operation.cancel()
+            await asyncio.wait_for(planner.cancelling.wait(), timeout=1)
+            operation.cancel()
+            planner.finish_cancellation.set()
+            await asyncio.gather(operation, return_exceptions=True)
+
+            assert leases.run_gate.active_count == 0
+
+    run(scenario())
 
 
 def test_auth_header_and_content_length_fail_before_body_receive(tmp_path: Path) -> None:
@@ -1019,7 +1368,12 @@ def test_serve_uses_single_worker_h11_without_proxy_or_access_log(
     assert captured["port"] == 8765
     assert captured["workers"] == 1
     assert captured["http"] == "h11"
-    assert captured["h11_max_incomplete_event_size"] == 16_384
+    manifest = contract_document("manifest.json")
+    maximum_request_line = max(
+        len(f"{route['method']} {route['path']} HTTP/1.1\r\n".encode("ascii"))
+        for route in manifest["routes"]
+    )
+    assert captured["h11_max_incomplete_event_size"] == 16_384 + maximum_request_line + 2
     assert captured["access_log"] is False
     assert captured["proxy_headers"] is False
 
@@ -1088,8 +1442,8 @@ def test_global_run_overload_is_immediate_and_cancel_releases_slots(tmp_path: Pa
 
 
 def test_bootstrap_failure_keeps_live_but_not_ready(tmp_path: Path) -> None:
-    async def factory(config: AgentConfig, resolved: ResolvedSecrets) -> AppComponents:
-        del config, resolved
+    async def factory(config: AgentConfig, provider_api_key: SecretStr) -> AppComponents:
+        del config, provider_api_key
         raise RuntimeError("SECRET_BOOTSTRAP_BODY")
 
     async def scenario() -> None:
@@ -1107,6 +1461,93 @@ def test_bootstrap_failure_keeps_live_but_not_ready(tmp_path: Path) -> None:
             )
             assert response.status_code == 500
             assert "SECRET_BOOTSTRAP_BODY" not in response.text
+
+    run(scenario())
+
+
+def test_shutdown_closes_sqlite_and_clears_state_when_model_close_fails(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        order: list[str] = []
+        closer = FailingCloser(order)
+        app, stores, _ = app_with_components(
+            tmp_path,
+            closer=closer,
+            order=order,
+        )
+        lifespan = app.router.lifespan_context(app)
+        await lifespan.__aenter__()
+        runtime = app.state.agent_runtime
+        shutdown_error: BaseException | None = None
+        try:
+            await lifespan.__aexit__(None, None, None)
+        except BaseException as error:
+            shutdown_error = error
+        closed_during_shutdown = stores["store"]._closed
+        order_during_shutdown = tuple(order)
+        components_after_shutdown = runtime.components
+        leases_after_shutdown = runtime.leases
+        if not closed_during_shutdown:
+            await stores["store"].close()
+
+        assert shutdown_error is None
+        assert closed_during_shutdown
+        assert order_during_shutdown == ("model", "sqlite")
+        assert components_after_shutdown is None
+        assert leases_after_shutdown is None
+
+    run(scenario())
+
+
+def test_shutdown_cancellation_while_waiting_for_state_lock_drains_all_resources(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        order: list[str] = []
+        closer = FakeCloser(order)
+        app, stores, _ = app_with_components(
+            tmp_path,
+            closer=closer,
+            order=order,
+        )
+        lifespan = app.router.lifespan_context(app)
+        await lifespan.__aenter__()
+        runtime = app.state.agent_runtime
+        expiry = runtime._expiry_task
+        shutdown: asyncio.Task[None] | None = None
+        lock_held = False
+        try:
+            await runtime._state_lock.acquire()
+            lock_held = True
+            shutdown = asyncio.create_task(runtime.shutdown())
+            await asyncio.sleep(0)
+            shutdown.cancel()
+            await asyncio.sleep(0)
+            draining_after_cancellation = not shutdown.done()
+            runtime._state_lock.release()
+            lock_held = False
+
+            with pytest.raises(asyncio.CancelledError):
+                await shutdown
+
+            assert draining_after_cancellation
+            assert closer.closed
+            assert stores["store"]._closed
+            assert order == ["model", "sqlite"]
+            assert expiry is not None and expiry.done()
+            assert runtime._expiry_task is None
+            assert runtime.components is None
+            assert runtime.leases is None
+        finally:
+            if lock_held:
+                runtime._state_lock.release()
+            if shutdown is not None and not shutdown.done():
+                shutdown.cancel()
+                await asyncio.gather(shutdown, return_exceptions=True)
+            await lifespan.__aexit__(None, None, None)
+            if not stores["store"]._closed:
+                await stores["store"].close()
 
     run(scenario())
 

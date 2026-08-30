@@ -15,8 +15,8 @@ from typing import Any, Protocol, cast
 
 import uvicorn
 from fastapi import FastAPI, Request, Response
-from pydantic import BaseModel, TypeAdapter, ValidationError
-from starlette.types import ASGIApp, Receive, Scope, Send
+from pydantic import BaseModel, SecretStr, TypeAdapter, ValidationError
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from mornlea_companion_agent.adapters.mcp import MCPToolSessionFactory
 from mornlea_companion_agent.adapters.model import ChatOpenAIModelAdapters
@@ -112,7 +112,7 @@ class AppComponents:
 
 
 ComponentFactory = Callable[
-    [AgentConfig, ResolvedSecrets],
+    [AgentConfig, SecretStr],
     Awaitable[AppComponents],
 ]
 
@@ -145,6 +145,11 @@ _ROUTES = (
     _RouteContract("POST", "/v1/runs/cancel", True, "cancel_request"),
 )
 _ROUTE_BY_KEY = {(route.method, route.path): route for route in _ROUTES}
+_RUN_REQUEST_SCHEMAS = frozenset({"plan_request", "dialogue_request"})
+_MAX_REQUEST_LINE_BYTES = max(
+    len(f"{route.method} {route.path} HTTP/1.1\r\n".encode("ascii")) for route in _ROUTES
+)
+H11_INCOMPLETE_EVENT_BYTES_LIMIT = HEADER_BYTES_LIMIT + _MAX_REQUEST_LINE_BYTES + len(b"\r\n")
 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -318,12 +323,71 @@ class _StrictHTTPGate:
         self._config = config
         self._authorization_digest = authorization_digest
 
+    async def _dispatch_run(
+        self,
+        scope: Scope,
+        receive: Receive,
+        send: Send,
+    ) -> None:
+        async def run_application() -> None:
+            await self._app(scope, receive, send)
+
+        async def wait_for_disconnect() -> Message:
+            return await receive()
+
+        application: asyncio.Task[None] = asyncio.create_task(
+            run_application(),
+            name="companion-agent-http-run",
+        )
+        disconnect: asyncio.Task[Message] = asyncio.create_task(
+            wait_for_disconnect(),
+            name="companion-agent-http-disconnect",
+        )
+        try:
+            done, _ = await asyncio.wait(
+                (application, disconnect),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if application in done:
+                cleanup_cancellation = await _cancel_tasks(disconnect)
+                if cleanup_cancellation is not None:
+                    raise cleanup_cancellation
+                application.result()
+                return
+
+            try:
+                message = disconnect.result()
+            except Exception:
+                cleanup_cancellation = await _cancel_tasks(application)
+                if cleanup_cancellation is not None:
+                    raise cleanup_cancellation from None
+                raise
+            if not isinstance(message, dict) or message.get("type") != "http.disconnect":
+                cleanup_cancellation = await _cancel_tasks(application)
+                if cleanup_cancellation is not None:
+                    raise cleanup_cancellation
+                raise _HTTPFailure("invalid_request")
+            cleanup_cancellation = await _cancel_tasks(application)
+            if cleanup_cancellation is not None:
+                raise cleanup_cancellation
+        except asyncio.CancelledError:
+            await _cancel_tasks(application, disconnect)
+            raise
+
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self._app(scope, receive, send)
             return
         request_id: str | None = None
         dispatched = False
+        response_started = False
+
+        async def tracked_send(message: Message) -> None:
+            nonlocal response_started
+            if message.get("type") == "http.response.start":
+                response_started = True
+            await send(message)
+
         try:
             raw_headers = scope.get("headers")
             if not isinstance(raw_headers, list) or any(
@@ -437,11 +501,18 @@ class _StrictHTTPGate:
                 state["contract_request"] = parsed
                 state["request_id"] = request_id
             dispatched = True
-            await self._app(scope, receive, send)
+            if route.request_schema in _RUN_REQUEST_SCHEMAS:
+                await self._dispatch_run(scope, receive, tracked_send)
+            else:
+                await self._app(scope, receive, tracked_send)
         except _HTTPFailure as error:
+            if response_started:
+                return
             status = _ERROR_STATUSES.get(error.code, 500)
             await _send_json(send, status, _error_payload(error.code, request_id))
         except Exception as error:
+            if response_started:
+                return
             code = _map_exception(error) if dispatched else "internal_error"
             await _send_json(send, _ERROR_STATUSES[code], _error_payload(code, request_id))
 
@@ -455,11 +526,25 @@ async def _drain_cleanup(awaitable: Awaitable[object]) -> BaseException | None:
         except asyncio.CancelledError as error:
             if cancellation is None:
                 cancellation = error
+        except BaseException:
+            break
     try:
         task.result()
     except BaseException as error:
         return cancellation or error
     return cancellation
+
+
+async def _cancel_tasks(
+    *tasks: asyncio.Task[Any],
+) -> asyncio.CancelledError | None:
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+    cleanup_error = await _drain_cleanup(asyncio.gather(*tasks, return_exceptions=True))
+    if isinstance(cleanup_error, asyncio.CancelledError):
+        return cleanup_error
+    return None
 
 
 class _AgentRuntime:
@@ -592,38 +677,64 @@ class _AgentRuntime:
             handle.ensure_running()
             return result
         finally:
-            if child is not None and not child.done():
-                child.cancel()
-                await asyncio.gather(child, return_exceptions=True)
-            await handle.finish()
+
+            async def cleanup() -> None:
+                if child is not None:
+                    if not child.done():
+                        child.cancel()
+                    await asyncio.gather(child, return_exceptions=True)
+                await handle.finish()
+
+            cleanup_error = await _drain_cleanup(cleanup())
+            if cleanup_error is not None:
+                raise cleanup_error
 
     async def shutdown(self) -> None:
-        current = asyncio.current_task()
-        async with self._state_lock:
-            self.accepting = False
-            self.ready = False
-            expiry = self._expiry_task
-            self._expiry_task = None
-        if expiry is not None:
-            expiry.cancel()
-            await asyncio.gather(expiry, return_exceptions=True)
-        leases = self.leases
-        if leases is not None:
-            await leases.run_gate.cancel_all()
-        while True:
+        caller = asyncio.current_task()
+        cleanup_error = await _drain_cleanup(self._shutdown_pipeline(caller))
+        if cleanup_error is not None:
+            raise cleanup_error
+
+    async def _shutdown_pipeline(self, caller: asyncio.Task[Any] | None) -> None:
+        cancellation: asyncio.CancelledError | None = None
+
+        async def drain(awaitable: Awaitable[object]) -> None:
+            nonlocal cancellation
+            cleanup_error = await _drain_cleanup(awaitable)
+            if isinstance(cleanup_error, asyncio.CancelledError) and cancellation is None:
+                cancellation = cleanup_error
+
+        try:
             async with self._state_lock:
-                pending = tuple(
-                    task for task in self._business_tasks if task is not current and not task.done()
-                )
-            if not pending:
-                break
-            await asyncio.gather(*pending, return_exceptions=True)
-        components = self.components
-        if components is not None:
-            await _drain_cleanup(components.model_owner.aclose())
-            await _drain_cleanup(components.store.close())
-        self.components = None
-        self.leases = None
+                self.accepting = False
+                self.ready = False
+                expiry = self._expiry_task
+                self._expiry_task = None
+            if expiry is not None:
+                expiry.cancel()
+                await drain(asyncio.gather(expiry, return_exceptions=True))
+            leases = self.leases
+            if leases is not None:
+                await drain(leases.run_gate.cancel_all())
+            while True:
+                async with self._state_lock:
+                    pending = tuple(
+                        task
+                        for task in self._business_tasks
+                        if task is not caller and not task.done()
+                    )
+                if not pending:
+                    break
+                await drain(asyncio.gather(*pending, return_exceptions=True))
+            components = self.components
+            if components is not None:
+                await drain(components.model_owner.aclose())
+                await drain(components.store.close())
+        finally:
+            self.components = None
+            self.leases = None
+        if cancellation is not None:
+            raise cancellation
 
 
 def _lease_identity(request: LeaseRequest) -> LeaseIdentity:
@@ -636,7 +747,7 @@ def _lease_identity(request: LeaseRequest) -> LeaseIdentity:
 
 async def _default_component_factory(
     config: AgentConfig,
-    secrets: ResolvedSecrets,
+    provider_api_key: SecretStr,
 ) -> AppComponents:
     store: SQLiteMemoryStore | None = None
     models: ChatOpenAIModelAdapters | None = None
@@ -645,7 +756,7 @@ async def _default_component_factory(
         models = await ChatOpenAIModelAdapters.create(
             base_url=config.provider.base_url,
             model=config.provider.model,
-            api_key=secrets.provider_api_key,
+            api_key=provider_api_key,
         )
         planner = PlannerHarness(
             models.planner,
@@ -738,11 +849,27 @@ def create_app(
 
     runtime = _AgentRuntime()
     factory = component_factory or _default_component_factory
+    authorization_digest = hashlib.sha256(
+        b"Bearer " + secrets.http_bearer_token.get_secret_value().encode("ascii")
+    ).digest()
+    bootstrap_provider_api_key: SecretStr | None = secrets.provider_api_key
+    del secrets
+
+    async def bootstrap_components() -> AppComponents:
+        nonlocal bootstrap_provider_api_key
+        provider_api_key = bootstrap_provider_api_key
+        bootstrap_provider_api_key = None
+        if provider_api_key is None:
+            raise RuntimeError("component bootstrap already attempted")
+        try:
+            return await factory(config, provider_api_key)
+        finally:
+            del provider_api_key
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         try:
-            components = await factory(config, secrets)
+            components = await bootstrap_components()
             await runtime.start(components)
         except asyncio.CancelledError:
             raise
@@ -763,9 +890,6 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.agent_runtime = runtime
-    authorization_digest = hashlib.sha256(
-        b"Bearer " + secrets.http_bearer_token.get_secret_value().encode("ascii")
-    ).digest()
     app.add_middleware(
         _StrictHTTPGate,
         config=config,
@@ -981,7 +1105,7 @@ def serve(config: AgentConfig, secrets: ResolvedSecrets) -> int:
         port=config.http.port,
         workers=config.http.workers,
         http="h11",
-        h11_max_incomplete_event_size=HEADER_BYTES_LIMIT,
+        h11_max_incomplete_event_size=H11_INCOMPLETE_EVENT_BYTES_LIMIT,
         access_log=False,
         proxy_headers=False,
         server_header=False,
@@ -991,6 +1115,7 @@ def serve(config: AgentConfig, secrets: ResolvedSecrets) -> int:
 
 __all__ = [
     "AppComponents",
+    "H11_INCOMPLETE_EVENT_BYTES_LIMIT",
     "HEADER_BYTES_LIMIT",
     "REQUEST_BODY_BYTES_LIMIT",
     "RESPONSE_BODY_BYTES_LIMIT",
