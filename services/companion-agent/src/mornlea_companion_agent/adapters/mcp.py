@@ -12,14 +12,17 @@ from mcp import ClientSession, types
 from mcp.client.streamable_http import streamable_http_client
 from pydantic import ValidationError
 
+from mornlea_companion_agent.adapters.response_limit import BoundedAsyncTransport
 from mornlea_companion_agent.domain import adapter_for
 from mornlea_companion_agent.domain.common import canonical_json_bytes
 from mornlea_companion_agent.domain.http_v1 import PlanRequest
+from mornlea_companion_agent.domain.mcp_contract import mcp_tool_contracts
 from mornlea_companion_agent.domain.mcp_v1 import (
     GetPlanningContextResult,
     Plan,
     QueryTerrainInput,
     ValidatePlanFailureResult,
+    ValidatePlanInput,
     ValidatePlanSuccessResult,
 )
 from mornlea_companion_agent.domain.planner import (
@@ -34,11 +37,10 @@ from mornlea_companion_agent.domain.planner import (
 )
 
 MCP_PROTOCOL_VERSION = "2025-11-25"
-_ALL_TOOLS = (
-    "get_planning_context",
-    *MODEL_VISIBLE_TOOLS,
-    "validate_plan",
-)
+MCP_RESPONSE_BODY_LIMIT = 160 * 1024
+_TOOL_CONTRACTS = mcp_tool_contracts()
+if tuple(tool.name for tool in _TOOL_CONTRACTS if tool.model_visible) != MODEL_VISIBLE_TOOLS:
+    raise RuntimeError("MCP manifest model-visible tools do not match planner contract")
 
 
 class _MCPPlanningToolSession:
@@ -65,9 +67,13 @@ class _MCPPlanningToolSession:
     async def validate_plan(
         self, plan: Plan
     ) -> ValidatePlanSuccessResult | ValidatePlanFailureResult:
+        try:
+            parsed = ValidatePlanInput.model_validate({"plan": plan})
+        except ValidationError:
+            raise PlannerUnavailable from None
         value = await self._call(
             "validate_plan",
-            {"plan": plan.model_dump(mode="json")},
+            parsed.model_dump(mode="json"),
             "validate_plan_result",
         )
         if not isinstance(value, (ValidatePlanSuccessResult, ValidatePlanFailureResult)):
@@ -110,6 +116,12 @@ class _MCPPlanningToolSession:
         if not isinstance(content, types.TextContent):
             raise PlannerUnavailable
         try:
+            encoded_text = content.text.encode("utf-8", errors="strict")
+        except UnicodeEncodeError:
+            raise PlannerUnavailable from None
+        if len(encoded_text) > MCP_RESPONSE_BODY_LIMIT:
+            raise PlannerUnavailable
+        try:
             text_value = strict_json_object(content.text)
         except PlannerFailure:
             raise PlannerUnavailable from None
@@ -118,7 +130,13 @@ class _MCPPlanningToolSession:
             return text_value
         if type(structured) is not dict:
             raise PlannerUnavailable
-        if canonical_json_bytes(structured) != canonical_json_bytes(text_value):
+        try:
+            structured_bytes = canonical_json_bytes(structured)
+        except (TypeError, ValueError, UnicodeEncodeError):
+            raise PlannerUnavailable from None
+        if len(structured_bytes) > MCP_RESPONSE_BODY_LIMIT:
+            raise PlannerUnavailable
+        if structured_bytes != canonical_json_bytes(text_value):
             raise PlannerUnavailable
         return structured
 
@@ -146,14 +164,21 @@ class MCPToolSessionFactory:
                 or "mcp-session-id" in response.headers
                 or content_type.startswith("text/event-stream")
             ):
+                await response.aclose()
                 raise PlannerUnavailable
 
         client = httpx.AsyncClient(
-            headers={"Authorization": f"Bearer {request.mcp_capability}"},
+            headers={
+                "Accept-Encoding": "identity",
+                "Authorization": f"Bearer {request.mcp_capability}",
+            },
             follow_redirects=False,
             trust_env=False,
             timeout=httpx.Timeout(timeout_seconds),
-            transport=self._transport,
+            transport=BoundedAsyncTransport(
+                self._transport or httpx.AsyncHTTPTransport(retries=0),
+                maximum_bytes=MCP_RESPONSE_BODY_LIMIT,
+            ),
             event_hooks={"response": [reject_stateful_response]},
         )
         try:
@@ -205,9 +230,15 @@ class MCPToolSessionFactory:
 
     @staticmethod
     def _validate_tools(result: types.ListToolsResult) -> None:
-        names = tuple(tool.name for tool in result.tools)
-        if result.nextCursor is not None or names != _ALL_TOOLS or len(set(names)) != len(names):
+        if result.nextCursor is not None or len(result.tools) != len(_TOOL_CONTRACTS):
             raise PlannerUnavailable
+        for advertised, expected in zip(result.tools, _TOOL_CONTRACTS, strict=True):
+            if (
+                advertised.name != expected.name
+                or advertised.inputSchema != expected.input_schema
+                or advertised.outputSchema != expected.output_schema
+            ):
+                raise PlannerUnavailable
 
 
-__all__ = ["MCP_PROTOCOL_VERSION", "MCPToolSessionFactory"]
+__all__ = ["MCP_PROTOCOL_VERSION", "MCP_RESPONSE_BODY_LIMIT", "MCPToolSessionFactory"]

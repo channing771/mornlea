@@ -39,6 +39,7 @@ _SYSTEM_PROMPT = (
     "你是 Mornlea 伙伴规划器。只依据本次冻结事实和只读工具，返回一个严格 JSON Plan；"
     "不得返回代码、链接、解释或未交付步骤。"
 )
+_HTTP_RESPONSE_BODY_LIMIT = 65_536
 
 
 class _GraphState(TypedDict, total=False):
@@ -115,7 +116,7 @@ class _PlannerRun:
             if isinstance(result, ValidatePlanFailureResult):
                 raise InvalidModelOutput
         self._assert_accepted(request, candidate, result)
-        return PlanResponse(
+        response = PlanResponse(
             contract_version=request.contract_version,
             request_id=request.request_id,
             client_instance_id=request.client_instance_id,
@@ -128,6 +129,9 @@ class _PlannerRun:
             snapshot_digest=request.snapshot_digest,
             plan=candidate,
         )
+        if len(canonical_json_bytes(response)) > _HTTP_RESPONSE_BODY_LIMIT:
+            raise InvalidModelOutput
+        return response
 
     async def _get_context(self, request: PlanRequest) -> GetPlanningContextResult:
         try:

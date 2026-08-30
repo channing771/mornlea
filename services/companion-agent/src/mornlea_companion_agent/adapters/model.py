@@ -3,20 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 from typing import Any
 
+import httpx
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, SecretStr
+from pydantic import SecretStr
 
-from mornlea_companion_agent.domain.mcp_v1 import (
-    EmptyInput,
-    FindVisibleBlocksInput,
-    InspectInventoryInput,
-    QueryTerrainInput,
-)
+from mornlea_companion_agent.adapters.response_limit import BoundedAsyncTransport
+from mornlea_companion_agent.domain.mcp_contract import mcp_tool_contracts
 from mornlea_companion_agent.domain.planner import (
     InvalidModelOutput,
     ModelOutput,
@@ -25,31 +23,36 @@ from mornlea_companion_agent.domain.planner import (
     PlannerUnavailable,
 )
 
-_MODEL_TOOL_TYPES: dict[str, type[BaseModel]] = {
-    "list_affordances": EmptyInput,
-    "inspect_inventory": InspectInventoryInput,
-    "find_visible_blocks": FindVisibleBlocksInput,
-    "query_terrain": QueryTerrainInput,
-}
+# provider envelope 会再次转义最大 64 KiB 的 canonical `Plan`；1 MiB 保留有界放大余量。
+PROVIDER_RESPONSE_BODY_LIMIT = 1024 * 1024
 _MODEL_TOOL_DEFINITIONS = tuple(
     {
         "type": "function",
         "function": {
-            "name": name,
-            "description": f"Mornlea read-only planner tool: {name}",
-            "parameters": model.model_json_schema(),
+            "name": tool.name,
+            "description": f"Mornlea read-only planner tool: {tool.name}",
+            "parameters": tool.input_schema,
         },
     }
-    for name, model in _MODEL_TOOL_TYPES.items()
+    for tool in mcp_tool_contracts()
+    if tool.model_visible
 )
 
 
 class ChatOpenAIPlannerModel:
     """禁用 provider retry、streaming 与多候选的模型适配器。"""
 
-    def __init__(self, chat_model: BaseChatModel) -> None:
+    def __init__(
+        self,
+        chat_model: BaseChatModel,
+        *,
+        http_client: httpx.AsyncClient | None = None,
+    ) -> None:
         self._chat_model = chat_model
-        self._tool_model: Runnable[Any, Any] = chat_model.bind_tools(list(_MODEL_TOOL_DEFINITIONS))
+        self._tool_model: Runnable[Any, Any] = chat_model.bind_tools(
+            deepcopy(list(_MODEL_TOOL_DEFINITIONS))
+        )
+        self._http_client = http_client
 
     @classmethod
     def create(
@@ -58,17 +61,41 @@ class ChatOpenAIPlannerModel:
         base_url: str,
         model: str,
         api_key: SecretStr,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> ChatOpenAIPlannerModel:
-        return cls(
-            ChatOpenAI(
-                base_url=base_url,
-                model=model,
-                api_key=api_key,
-                max_retries=0,
-                streaming=False,
-                n=1,
-            )
+        async def provider_api_key() -> str:
+            return api_key.get_secret_value()
+
+        inner_transport = transport or httpx.AsyncHTTPTransport(retries=0)
+        http_client = httpx.AsyncClient(
+            headers={"Accept-Encoding": "identity"},
+            follow_redirects=False,
+            trust_env=False,
+            timeout=httpx.Timeout(60.0),
+            transport=BoundedAsyncTransport(
+                inner_transport,
+                maximum_bytes=PROVIDER_RESPONSE_BODY_LIMIT,
+            ),
         )
+        chat_model = ChatOpenAI(
+            base_url=base_url,
+            model=model,
+            api_key=provider_api_key,
+            http_async_client=http_client,
+            max_retries=0,
+            streaming=False,
+            n=1,
+        )
+        return cls(chat_model, http_client=http_client)
+
+    async def aclose(self) -> None:
+        """关闭该适配器拥有的 provider client；直接注入模型时为空操作。"""
+
+        if self._http_client is None:
+            return
+        client = self._http_client
+        self._http_client = None
+        await client.aclose()
 
     async def complete(
         self,
@@ -128,4 +155,4 @@ class ChatOpenAIPlannerModel:
         raise InvalidModelOutput
 
 
-__all__ = ["ChatOpenAIPlannerModel"]
+__all__ = ["PROVIDER_RESPONSE_BODY_LIMIT", "ChatOpenAIPlannerModel"]

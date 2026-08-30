@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Awaitable
+from collections.abc import AsyncIterator, Awaitable
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -11,7 +11,10 @@ import httpx
 import pytest
 
 from mornlea_companion_agent.adapters import mcp as mcp_adapter
-from mornlea_companion_agent.adapters.mcp import MCPToolSessionFactory
+from mornlea_companion_agent.adapters.mcp import (
+    MCP_RESPONSE_BODY_LIMIT,
+    MCPToolSessionFactory,
+)
 from mornlea_companion_agent.domain.http_v1 import PlanRequest
 from mornlea_companion_agent.domain.mcp_v1 import (
     ListAffordancesResult,
@@ -23,6 +26,7 @@ from mornlea_companion_agent.domain.planner import PlannerUnavailable
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CONTRACT_ROOT = REPOSITORY_ROOT / "contracts/companion-agent"
 PROTOCOL_VERSION = "2025-11-25"
+MCP_WIRE_LIMIT = MCP_RESPONSE_BODY_LIMIT
 TOOL_NAMES = (
     "get_planning_context",
     "list_affordances",
@@ -42,6 +46,45 @@ def golden(contract: str, kind: str, name: str) -> dict[str, Any]:
         (CONTRACT_ROOT / contract / "golden" / f"{kind}.json").read_text(encoding="utf-8")
     )
     return next(deepcopy(case) for case in document["cases"] if case["name"] == name)
+
+
+def contract_document(name: str) -> dict[str, Any]:
+    return json.loads((CONTRACT_ROOT / "mcp-v1" / name).read_text(encoding="utf-8"))
+
+
+def resolve_contract_schema(name: str) -> dict[str, object]:
+    definitions = contract_document("schema.json")["$defs"]
+
+    def resolve(value: object, stack: tuple[str, ...] = ()) -> object:
+        if isinstance(value, dict):
+            reference = value.get("$ref")
+            if set(value) == {"$ref"} and isinstance(reference, str):
+                prefix = "#/$defs/"
+                assert reference.startswith(prefix)
+                target = reference.removeprefix(prefix)
+                assert target not in stack
+                return resolve(definitions[target], (*stack, target))
+            return {key: resolve(item, stack) for key, item in value.items()}
+        if isinstance(value, list):
+            return [resolve(item, stack) for item in value]
+        return value
+
+    resolved = resolve(definitions[name], (name,))
+    assert isinstance(resolved, dict)
+    return resolved
+
+
+def contract_tools() -> list[dict[str, object]]:
+    manifest = contract_document("manifest.json")
+    return [
+        {
+            "name": tool["name"],
+            "description": f"Mornlea {tool['name']}",
+            "inputSchema": resolve_contract_schema(tool["input_schema"]),
+            "outputSchema": resolve_contract_schema(tool["result_schema"]),
+        }
+        for tool in manifest["tools"]
+    ]
 
 
 def request() -> PlanRequest:
@@ -101,17 +144,7 @@ class MCPMock:
         elif method == "notifications/initialized":
             return httpx.Response(202, request=raw)
         elif method == "tools/list":
-            result = {
-                "tools": [
-                    {
-                        "name": name,
-                        "description": f"Mornlea {name}",
-                        "inputSchema": {"type": "object", "additionalProperties": False},
-                        "outputSchema": {"type": "object"},
-                    }
-                    for name in TOOL_NAMES
-                ]
-            }
+            result = {"tools": contract_tools()}
         elif method == "tools/call":
             params = body["params"]
             name = params["name"]
@@ -133,6 +166,54 @@ class MCPMock:
             200,
             headers={"content-type": "application/json"},
             json={"jsonrpc": "2.0", "id": body["id"], "result": result},
+            request=raw,
+        )
+
+
+class TrackingStream(httpx.AsyncByteStream):
+    def __init__(self, chunks: tuple[bytes, ...]) -> None:
+        self.chunks = chunks
+        self.bytes_yielded = 0
+        self.closed = False
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        for chunk in self.chunks:
+            self.bytes_yielded += len(chunk)
+            yield chunk
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+class OversizedPhaseMock(MCPMock):
+    def __init__(self, *, phase: str, mode: str) -> None:
+        super().__init__()
+        self.phase = phase
+        self.mode = mode
+        self.stream: TrackingStream | None = None
+
+    async def __call__(self, raw: httpx.Request) -> httpx.Response:
+        response = await super().__call__(raw)
+        body = json.loads(raw.content)
+        if body["method"] != self.phase:
+            return response
+        if self.mode == "content_length":
+            self.stream = TrackingStream((response.content,))
+            return httpx.Response(
+                response.status_code,
+                headers={
+                    "content-type": response.headers.get("content-type", "application/json"),
+                    "content-length": str(MCP_WIRE_LIMIT + 1),
+                },
+                stream=self.stream,
+                request=raw,
+            )
+        padding = b" " * (MCP_WIRE_LIMIT + 1 - len(response.content))
+        self.stream = TrackingStream((response.content, padding))
+        return httpx.Response(
+            response.status_code,
+            headers={"content-type": response.headers.get("content-type", "application/json")},
+            stream=self.stream,
             request=raw,
         )
 
@@ -177,12 +258,75 @@ def test_real_sdk_session_uses_exact_wire_sequence_headers_and_one_session() -> 
         assert not ({"ping", "subscriptions/listen"} & set(methods))
         for index, (_, headers, _) in enumerate(mock.requests):
             assert headers["authorization"] == f"Bearer {current.mcp_capability}"
+            assert headers["accept-encoding"] == "identity"
             assert headers["content-type"] == "application/json"
             assert "text/event-stream" in headers["accept"]
             if index == 0:
                 assert "mcp-protocol-version" not in headers
             else:
                 assert headers["mcp-protocol-version"] == PROTOCOL_VERSION
+
+    run(scenario())
+
+
+@pytest.mark.parametrize("phase", ["initialize", "tools/list", "tools/call"])
+@pytest.mark.parametrize("mode", ["content_length", "chunked"])
+def test_mcp_transport_rejects_oversized_response_before_sdk_buffers(
+    phase: str,
+    mode: str,
+) -> None:
+    async def scenario() -> None:
+        mock = OversizedPhaseMock(phase=phase, mode=mode)
+        factory = MCPToolSessionFactory(transport=httpx.MockTransport(mock))
+        with pytest.raises(PlannerUnavailable):
+            async with factory.open(request(), timeout_seconds=5) as session:
+                if phase == "tools/call":
+                    await session.call_model_tool(
+                        "inspect_inventory",
+                        golden("mcp-v1", "valid", "inventory query is paged")["value"],
+                    )
+        if mock.stream is not None:
+            assert mock.stream.closed
+            if mode == "content_length":
+                assert mock.stream.bytes_yielded == 0
+            else:
+                assert mock.stream.bytes_yielded <= MCP_WIRE_LIMIT + 1
+
+    run(scenario())
+
+
+def test_mcp_transport_accepts_exact_wire_limit() -> None:
+    class ExactLimitMock(MCPMock):
+        def __init__(self) -> None:
+            super().__init__()
+            self.stream: TrackingStream | None = None
+
+        async def __call__(self, raw: httpx.Request) -> httpx.Response:
+            response = await super().__call__(raw)
+            body = json.loads(raw.content)
+            if body["method"] != "initialize":
+                return response
+            padding = b" " * (MCP_WIRE_LIMIT - len(response.content))
+            self.stream = TrackingStream((response.content, padding))
+            return httpx.Response(
+                200,
+                headers={
+                    "content-length": str(MCP_WIRE_LIMIT),
+                    "content-type": "application/json",
+                },
+                stream=self.stream,
+                request=raw,
+            )
+
+    async def scenario() -> None:
+        mock = ExactLimitMock()
+        async with MCPToolSessionFactory(transport=httpx.MockTransport(mock)).open(
+            request(), timeout_seconds=5
+        ):
+            pass
+        assert mock.stream is not None
+        assert mock.stream.bytes_yielded == MCP_WIRE_LIMIT
+        assert mock.stream.closed
 
     run(scenario())
 
@@ -260,7 +404,17 @@ def test_initialize_pins_wire_and_application_versions(field: str, value: str) -
     run(scenario())
 
 
-@pytest.mark.parametrize("mutation", ["duplicate", "missing", "pagination", "reordered"])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "duplicate",
+        "missing",
+        "pagination",
+        "reordered",
+        "input_schema",
+        "output_schema",
+    ],
+)
 def test_tool_discovery_requires_exact_unique_six_without_pagination(mutation: str) -> None:
     class ToolListMock(MCPMock):
         async def __call__(self, raw: httpx.Request) -> httpx.Response:
@@ -275,8 +429,12 @@ def test_tool_discovery_requires_exact_unique_six_without_pagination(mutation: s
                     tools.pop()
                 elif mutation == "pagination":
                     payload["result"]["nextCursor"] = "more"
-                else:
+                elif mutation == "reordered":
                     tools.reverse()
+                elif mutation == "input_schema":
+                    tools[2]["inputSchema"]["properties"]["limit"]["maximum"] = 37
+                else:
+                    tools[4]["outputSchema"]["properties"]["terrain"]["maxItems"] = 65
                 return httpx.Response(
                     200,
                     headers={"content-type": "application/json"},
@@ -292,6 +450,25 @@ def test_tool_discovery_requires_exact_unique_six_without_pagination(mutation: s
                 request(), timeout_seconds=5
             ):
                 pass
+
+    run(scenario())
+
+
+def near_wrapper_limit_plan() -> Plan:
+    return Plan(
+        summary="x" * 512,
+        steps=tuple({"kind": "go_to", "x": 0, "y": 0, "z": 0} for _ in range(1857)),
+    )
+
+
+def test_validate_plan_rejects_oversized_wrapper_before_wire_call() -> None:
+    async def scenario() -> None:
+        mock = MCPMock()
+        factory = MCPToolSessionFactory(transport=httpx.MockTransport(mock))
+        async with factory.open(request(), timeout_seconds=5) as session:
+            with pytest.raises(PlannerUnavailable):
+                await session.validate_plan(near_wrapper_limit_plan())
+        assert [body["method"] for _, _, body in mock.requests].count("tools/call") == 0
 
     run(scenario())
 
@@ -383,12 +560,13 @@ def test_http_client_disables_environment_and_redirects(monkeypatch: pytest.Monk
 
     def recording_client(**kwargs: object) -> httpx.AsyncClient:
         captured.update(kwargs)
-        kwargs["transport"] = httpx.MockTransport(mock)
         return original(**kwargs)
 
     async def scenario() -> None:
         monkeypatch.setattr(mcp_adapter.httpx, "AsyncClient", recording_client)
-        async with MCPToolSessionFactory().open(request(), timeout_seconds=5):
+        async with MCPToolSessionFactory(transport=httpx.MockTransport(mock)).open(
+            request(), timeout_seconds=5
+        ):
             pass
         assert captured["trust_env"] is False
         assert captured["follow_redirects"] is False
@@ -425,6 +603,73 @@ def test_text_fallback_is_strict_json_and_never_retries_tool_call() -> None:
                     golden("mcp-v1", "valid", "inventory query is paged")["value"],
                 )
         assert [body["method"] for _, _, body in mock.requests].count("tools/call") == 1
+
+    run(scenario())
+
+
+class DirectResultSession:
+    def __init__(self, result: object) -> None:
+        self.result = result
+        self.calls = 0
+
+    async def send_request(self, *args: object, **kwargs: object) -> object:
+        del args, kwargs
+        self.calls += 1
+        return self.result
+
+
+def test_oversized_text_content_is_rejected_before_json_decode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    decoded = 0
+
+    def forbidden_decode(value: str) -> dict[str, object]:
+        nonlocal decoded
+        del value
+        decoded += 1
+        raise AssertionError("oversized text reached JSON decoder")
+
+    result = mcp_adapter.types.CallToolResult(
+        content=[mcp_adapter.types.TextContent(type="text", text=" " * (MCP_WIRE_LIMIT + 1))],
+        isError=False,
+    )
+    direct = DirectResultSession(result)
+
+    async def scenario() -> None:
+        monkeypatch.setattr(mcp_adapter, "strict_json_object", forbidden_decode)
+        session = mcp_adapter._MCPPlanningToolSession(direct, timeout_seconds=5)
+        with pytest.raises(PlannerUnavailable):
+            await session._raw_call("inspect_inventory", {"offset": 0, "limit": 1})
+        assert decoded == 0
+        assert direct.calls == 1
+
+    run(scenario())
+
+
+def test_oversized_structured_content_stops_before_text_comparison(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = mcp_adapter.types.CallToolResult(
+        content=[mcp_adapter.types.TextContent(type="text", text="{}")],
+        structuredContent={"padding": "x" * MCP_WIRE_LIMIT},
+        isError=False,
+    )
+    direct = DirectResultSession(result)
+    original = mcp_adapter.canonical_json_bytes
+    canonical_sizes: list[int] = []
+
+    def recording_canonical(value: object) -> bytes:
+        encoded = original(value)
+        canonical_sizes.append(len(encoded))
+        return encoded
+
+    async def scenario() -> None:
+        monkeypatch.setattr(mcp_adapter, "canonical_json_bytes", recording_canonical)
+        session = mcp_adapter._MCPPlanningToolSession(direct, timeout_seconds=5)
+        with pytest.raises(PlannerUnavailable):
+            await session._raw_call("inspect_inventory", {"offset": 0, "limit": 1})
+        assert canonical_sizes == [MCP_WIRE_LIMIT + len('{"padding":""}')]
+        assert direct.calls == 1
 
     run(scenario())
 

@@ -8,13 +8,18 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, cast
 
+import httpx
 import pytest
 from langchain_core.messages import AIMessage
 from pydantic import ValidationError
 from pydantic.types import SecretStr
 
 from mornlea_companion_agent.adapters import model as model_adapter
-from mornlea_companion_agent.adapters.model import ChatOpenAIPlannerModel
+from mornlea_companion_agent.adapters.model import (
+    PROVIDER_RESPONSE_BODY_LIMIT,
+    ChatOpenAIPlannerModel,
+)
+from mornlea_companion_agent.domain.common import canonical_json_bytes
 from mornlea_companion_agent.domain.http_v1 import PlanRequest
 from mornlea_companion_agent.domain.mcp_v1 import (
     GetPlanningContextResult,
@@ -38,6 +43,7 @@ from mornlea_companion_agent.harness.planner import PlannerHarness
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CONTRACT_ROOT = REPOSITORY_ROOT / "contracts/companion-agent"
+PROVIDER_RESPONSE_LIMIT = PROVIDER_RESPONSE_BODY_LIMIT
 
 
 def run(coroutine: Awaitable[object]) -> object:
@@ -49,6 +55,32 @@ def golden(contract: str, kind: str, name: str) -> dict[str, Any]:
         (CONTRACT_ROOT / contract / "golden" / f"{kind}.json").read_text(encoding="utf-8")
     )
     return next(deepcopy(case) for case in document["cases"] if case["name"] == name)
+
+
+def resolved_contract_schema(name: str) -> dict[str, object]:
+    document = json.loads((CONTRACT_ROOT / "mcp-v1/schema.json").read_text(encoding="utf-8"))
+    definitions = document["$defs"]
+
+    def resolve(value: object, stack: tuple[str, ...] = ()) -> object:
+        if isinstance(value, dict):
+            reference = value.get("$ref")
+            if set(value) == {"$ref"} and isinstance(reference, str):
+                target = reference.removeprefix("#/$defs/")
+                assert target not in stack
+                return resolve(definitions[target], (*stack, target))
+            return {key: resolve(item, stack) for key, item in value.items()}
+        if isinstance(value, list):
+            return [resolve(item, stack) for item in value]
+        return value
+
+    resolved = resolve(definitions[name], (name,))
+    assert isinstance(resolved, dict)
+    return resolved
+
+
+def model_visible_contract_tools() -> list[dict[str, object]]:
+    manifest = json.loads((CONTRACT_ROOT / "mcp-v1/manifest.json").read_text(encoding="utf-8"))
+    return [tool for tool in manifest["tools"] if tool["model_visible"]]
 
 
 def plan_request() -> PlanRequest:
@@ -78,6 +110,15 @@ def accepted_plan() -> Plan:
 def plan_json(plan: Plan | None = None) -> str:
     value = plan or accepted_plan()
     return json.dumps(value.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
+
+
+def response_envelope_overflow_plan() -> Plan:
+    plan = Plan(
+        summary="x" * 512,
+        steps=tuple({"kind": "go_to", "x": 0, "y": 0, "z": 0} for _ in range(1843)),
+    )
+    assert len(canonical_json_bytes(plan)) <= 65_536
+    return plan
 
 
 class ScriptedModel(PlannerModel):
@@ -246,6 +287,26 @@ def test_planner_calls_context_once_and_returns_strict_correlated_plan() -> None
             "secret",
         ):
             assert forbidden not in visible_prompt
+
+    run(scenario())
+
+
+def test_full_plan_response_envelope_must_fit_http_v1_limit() -> None:
+    async def scenario() -> None:
+        request = plan_request()
+        context = planning_context(request)
+        plan = response_envelope_overflow_plan()
+        tools = FakeTools(
+            context=context,
+            validator_results=[accepted_result(context, plan)],
+        )
+        with pytest.raises(InvalidModelOutput):
+            await PlannerHarness(
+                ScriptedModel(ModelOutput(content=plan_json(plan), tool_calls=())),
+                FakeToolFactory(tools),
+                wall_clock=lambda: 1_700_000_000.0,
+            ).run(request)
+        assert tools.validator_calls == [plan]
 
     run(scenario())
 
@@ -702,6 +763,32 @@ class FakeChatModel(FakeRunnable):
         return self.bound
 
 
+class HTTPXTrackingStream(httpx.AsyncByteStream):
+    def __init__(self, chunks: tuple[bytes, ...]) -> None:
+        self.chunks = chunks
+        self.bytes_yielded = 0
+        self.closed = False
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        for chunk in self.chunks:
+            self.bytes_yielded += len(chunk)
+            yield chunk
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+class ProviderHTTPChatModel(FakeChatModel):
+    def __init__(self, client: httpx.AsyncClient) -> None:
+        super().__init__()
+        self.client = client
+
+    async def ainvoke(self, messages: object) -> object:
+        del messages
+        await self.client.get("https://provider.example/v1/chat/completions")
+        return AIMessage(content=plan_json())
+
+
 def test_model_adapter_exposes_only_four_local_tools_and_converts_ai_message() -> None:
     async def scenario() -> None:
         tool_message = AIMessage(
@@ -736,19 +823,45 @@ def test_model_adapter_exposes_only_four_local_tools_and_converts_ai_message() -
         assert final_output.content == plan_json()
         assert fake.bound_tools is not None
         functions = [definition["function"] for definition in fake.bound_tools]
+        contract_tools = model_visible_contract_tools()
         assert [function["name"] for function in functions] == [
-            "list_affordances",
-            "inspect_inventory",
-            "find_visible_blocks",
-            "query_terrain",
+            tool["name"] for tool in contract_tools
         ]
-        assert all(
-            function["parameters"]["additionalProperties"] is False for function in functions
+        assert [function["parameters"] for function in functions] == [
+            resolved_contract_schema(tool["input_schema"]) for tool in contract_tools
+        ]
+        find_schema = functions[2]["parameters"]
+        assert find_schema["properties"]["block_names"]["maxItems"] == 16
+        assert (
+            find_schema["properties"]["block_names"]["items"]["x-mornlea-rules"][0][
+                "max_utf8_bytes"
+            ]
+            == 64
         )
         assert len(fake.bound.messages) == 1
         assert len(fake.messages) == 1
 
     run(scenario())
+
+
+def test_model_tool_binding_cannot_pollute_later_adapter_instances() -> None:
+    first = FakeChatModel()
+    ChatOpenAIPlannerModel(cast(Any, first))
+    assert first.bound_tools is not None
+    first_function = first.bound_tools[0]["function"]
+    assert isinstance(first_function, dict)
+    first_parameters = first_function["parameters"]
+    assert isinstance(first_parameters, dict)
+    first_parameters["provider_mutation"] = True
+
+    second = FakeChatModel()
+    ChatOpenAIPlannerModel(cast(Any, second))
+    assert second.bound_tools is not None
+    second_function = second.bound_tools[0]["function"]
+    assert isinstance(second_function, dict)
+    second_parameters = second_function["parameters"]
+    assert isinstance(second_parameters, dict)
+    assert "provider_mutation" not in second_parameters
 
 
 def test_model_adapter_preserves_invalid_tool_signal_and_non_string_content() -> None:
@@ -814,6 +927,113 @@ def test_model_create_disables_retry_streaming_and_multiple_candidates(
     assert "response_format" not in captured
     assert "provider-secret" not in repr(captured)
     assert "provider-secret" not in repr(adapter)
+    run(adapter.aclose())
+
+
+def test_real_model_create_owns_only_bounded_async_client() -> None:
+    async def response(_: httpx.Request) -> httpx.Response:
+        raise AssertionError("model construction must not contact provider")
+
+    async def scenario() -> None:
+        adapter = ChatOpenAIPlannerModel.create(
+            base_url="https://provider.example/v1",
+            model="planner-model",
+            api_key=SecretStr("provider-secret"),
+            transport=httpx.MockTransport(response),
+        )
+        chat_model = cast(Any, adapter)._chat_model
+        client = cast(Any, adapter)._http_client
+        assert chat_model.root_client is None
+        assert chat_model.client is None
+        assert isinstance(client, httpx.AsyncClient)
+        assert not client.is_closed
+        await adapter.aclose()
+        await adapter.aclose()
+        assert client.is_closed
+
+    run(scenario())
+
+
+@pytest.mark.parametrize("mode", ["content_length", "chunked"])
+def test_provider_transport_caps_response_before_chat_sdk_buffers(
+    mode: str,
+) -> None:
+    requests: list[httpx.Request] = []
+    stream: HTTPXTrackingStream
+    if mode == "content_length":
+        stream = HTTPXTrackingStream((b"{}",))
+        headers = {"content-length": str(PROVIDER_RESPONSE_LIMIT + 1)}
+    else:
+        stream = HTTPXTrackingStream((b"{}", b" " * (PROVIDER_RESPONSE_LIMIT - 1)))
+        headers = {}
+
+    async def response(raw: httpx.Request) -> httpx.Response:
+        requests.append(raw)
+        return httpx.Response(200, headers=headers, stream=stream)
+
+    async def scenario() -> None:
+        adapter = ChatOpenAIPlannerModel.create(
+            base_url="https://provider.example/v1",
+            model="planner-model",
+            api_key=SecretStr("provider-secret"),
+            transport=httpx.MockTransport(response),
+        )
+        try:
+            with pytest.raises(PlannerUnavailable):
+                await adapter.complete(
+                    (PlannerMessage(role="user", content="facts"),),
+                    allow_tools=False,
+                )
+        finally:
+            await adapter.aclose()
+        assert stream.closed
+        if mode == "content_length":
+            assert stream.bytes_yielded == 0
+        else:
+            assert stream.bytes_yielded <= PROVIDER_RESPONSE_LIMIT + 1
+        assert len(requests) == 1
+        assert requests[0].headers["accept-encoding"] == "identity"
+
+    run(scenario())
+
+
+def test_provider_transport_accepts_exact_body_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stream = HTTPXTrackingStream((b" " * PROVIDER_RESPONSE_LIMIT,))
+
+    async def response(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-length": str(PROVIDER_RESPONSE_LIMIT)},
+            stream=stream,
+        )
+
+    def fake_chat_openai(**kwargs: object) -> object:
+        client = kwargs["http_async_client"]
+        assert isinstance(client, httpx.AsyncClient)
+        return ProviderHTTPChatModel(client)
+
+    async def scenario() -> None:
+        adapter = ChatOpenAIPlannerModel.create(
+            base_url="https://provider.example/v1",
+            model="planner-model",
+            api_key=SecretStr("provider-secret"),
+            transport=httpx.MockTransport(response),
+        )
+        try:
+            output = await adapter.complete(
+                (PlannerMessage(role="user", content="facts"),),
+                allow_tools=False,
+            )
+        finally:
+            await adapter.aclose()
+        assert output.content == plan_json()
+        assert stream.bytes_yielded == PROVIDER_RESPONSE_LIMIT
+        assert stream.closed
+
+    monkeypatch.setattr(model_adapter, "ChatOpenAI", fake_chat_openai)
+    run(scenario())
 
 
 def test_explicit_cancellation_is_not_swallowed_and_closes_session() -> None:
