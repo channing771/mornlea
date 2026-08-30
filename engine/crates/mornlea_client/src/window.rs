@@ -336,6 +336,23 @@ impl ClientWindow {
         }
         Some(ns_window as usize)
     }
+
+    /// 返回本窗口的 `NSWindow windowNumber`(即窗口服务器侧的 CGWindowID),
+    /// 供窗口合成捕获定位窗口。
+    ///
+    /// `windowNumber` 为 0 表示窗口未在任何 screen 上注册,窗口服务器无法
+    /// 按号寻址,与句柄缺失一样返回 `None`,由上层按「捕获不可用」降级。
+    pub fn window_number(&self) -> Option<i64> {
+        let ns_window = self.ns_window()? as *mut objc2::runtime::AnyObject;
+        // SAFETY: ns_window 来自活动窗口的有效句柄,`windowNumber` 消息与
+        // 窗口创建同线程(FFI thread-local 约束)发出;NSInteger 按 isize
+        // 接收,与 64 位 AppKit ABI 对齐。
+        let number: isize = unsafe { objc2::msg_send![ns_window, windowNumber] };
+        if number == 0 {
+            return None;
+        }
+        Some(number as i64)
+    }
 }
 
 /// AppKit 不可用时的保守显示器边距系数。正常 Darwin 路径读取当前 NSWindow

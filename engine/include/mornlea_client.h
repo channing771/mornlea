@@ -4,7 +4,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* v13:在 v12 WKWebView 菜单桥表面上新增 render world update 入口。
+/* v13:新增窗口合成捕获出口 mornlea_client_window_capture(NSWindow
+ * windowNumber → CGWindowListCreateImage → CGBitmapContext,输出紧凑
+ * BGRA8 原始字节,两段式容量协议;新增溢出与捕获不可用两个状态码)，
+ * 并在 v12 WKWebView 菜单桥表面上新增 render world update 入口。
  * v12:菜单层迁进程内 WKWebView——退役 render_upload_ui_font 出口与帧
  * TLV tag 9 UI 段(layout v1–v4 编解码随之作废,下发即 INVALID_ARGUMENT);
  * 新增 ui_push_state 状态下行出口(窗口句柄域,JSON 字符串);
@@ -29,6 +32,12 @@
 #define MORNLEA_CLIENT_STATUS_ADAPTER 5u
 #define MORNLEA_CLIENT_STATUS_CAPACITY 6u
 #define MORNLEA_CLIENT_STATUS_SKIPPED 7u
+/* v13:窗口合成捕获状态。CAPTURE_OVERFLOW = 输出缓冲不足(所需字节数已
+ * 回填 *out_required,两段式协议按其重试);CAPTURE_UNAVAILABLE = 捕获
+ * 不可用(窗口号缺失、屏幕录制授权未授予、系统返回空图等运行期预期
+ * 条件),调用方映射为可观察失败而非契约违约。 */
+#define MORNLEA_CLIENT_STATUS_CAPTURE_OVERFLOW 8u
+#define MORNLEA_CLIENT_STATUS_CAPTURE_UNAVAILABLE 9u
 
 /* 输入快照:64 字节头 + 1024 x u32 文本段,布局见 crate input 模块文档。 */
 #define MORNLEA_CLIENT_SNAPSHOT_BYTES 4160u
@@ -161,6 +170,24 @@ uint32_t mornlea_client_ui_push_state(
     uint64_t handle,
     const uint8_t *json,
     size_t json_len);
+
+/* 窗口合成捕获(client ABI v13):抓取窗口完整合成画面(世界 + wgpu HUD +
+ * WebView 菜单层),输出自上而下、无行 padding 的 BGRA8 原始字节,长度恰为
+ * width×height×4。两段式容量协议:out_capacity 不足返回 CAPTURE_OVERFLOW,
+ * 所需字节数回填 out_required、尺寸回填 out_width 与 out_height,输出缓冲
+ * 保持调用前内容;成功时三个出参同样回填。捕获不可用(窗口号缺失、屏幕
+ * 录制授权未授予、系统返回空图等运行期预期条件)返回 CAPTURE_UNAVAILABLE,
+ * 出参与输出缓冲均原样。out_pixels 仅在 out_capacity 非 0 时须非空(零容量
+ * 查询传 NULL,此时捕获仍真实执行)。必须在窗口 poll 线程调用(窗口句柄
+ * 表是 thread-local 的)。 */
+uint32_t mornlea_client_window_capture(
+    uint32_t abi_version,
+    uint64_t handle,
+    uint8_t *out_pixels,
+    uint64_t out_capacity,
+    uint64_t *out_required,
+    uint32_t *out_width,
+    uint32_t *out_height);
 
 /* 排空版本化 JSON UI 事件信封(client ABI v12 引入、v13 保留):只有完整信封可装入 out 时
  * 才写入、排空并把字节数写进 *out_written；容量不足返回 CAPACITY，三个对象

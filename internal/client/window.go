@@ -31,6 +31,8 @@ package client
 #cgo nocallback mornlea_client_window_cancel_close
 #cgo noescape mornlea_client_ui_push_state
 #cgo nocallback mornlea_client_ui_push_state
+#cgo noescape mornlea_client_window_capture
+#cgo nocallback mornlea_client_window_capture
 #cgo noescape mornlea_client_render_drain_ui_events
 #cgo nocallback mornlea_client_render_drain_ui_events
 #include "mornlea_client.h"
@@ -39,6 +41,7 @@ import "C"
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"unsafe"
@@ -305,6 +308,73 @@ func (w *Window) PushUIState(json []byte) {
 	)))
 }
 
+// ErrCaptureUnavailable 表示窗口合成捕获当前不可用:窗口号取不到、屏幕录制
+// 授权未授予、系统返回空图等运行期预期条件。调用方应把它映射为可观察的
+// 失败(如 HTTP 503),不得当作致命错误终止帧循环。
+var ErrCaptureUnavailable = errors.New("client: 窗口合成捕获不可用")
+
+// Capture 抓取当前窗口完整合成画面(世界 + wgpu HUD + WebView 菜单层),
+// 返回自上而下、无行 padding 的 BGRA8 原始字节与合成图宽高,输出长度恰为
+// width*height*4。
+//
+// client ABI v13 两段式容量协议:先以零容量调用拿所需字节数与尺寸(零容量
+// 必然溢出,同时回填尺寸),再按 required 分配重试一次;第二次仍溢出说明
+// 窗口尺寸在两次调用之间被外部改变,按契约违约 panic。捕获不可用返回
+// `ErrCaptureUnavailable`;其余非 OK 状态以稳定中文文案 panic(与既有窗口
+// 操作口径一致)。
+//
+// 线程约束:必须在窗口 poll 线程(与 `Poll` 同一线程)调用,Rust 侧窗口
+// 句柄表是 thread-local 的。
+func (w *Window) Capture() ([]byte, int, int, error) {
+	status, required, width, height := w.captureInto(nil)
+	switch status {
+	case uint32(C.MORNLEA_CLIENT_STATUS_OK):
+		panic("client: capture 零容量查询不应成功")
+	case uint32(C.MORNLEA_CLIENT_STATUS_CAPTURE_UNAVAILABLE):
+		return nil, 0, 0, ErrCaptureUnavailable
+	case uint32(C.MORNLEA_CLIENT_STATUS_CAPTURE_OVERFLOW):
+		// 预期路径:required 与尺寸已在出参回填。
+	default:
+		panic("client: capture " + windowStatusText(status))
+	}
+	pixels := make([]byte, required)
+	status, required, width, height = w.captureInto(pixels)
+	switch status {
+	case uint32(C.MORNLEA_CLIENT_STATUS_OK):
+	case uint32(C.MORNLEA_CLIENT_STATUS_CAPTURE_UNAVAILABLE):
+		// 两次调用之间授权被收回等竞态:同样按不可用降级,不 panic。
+		return nil, 0, 0, ErrCaptureUnavailable
+	default:
+		panic("client: capture " + windowStatusText(status))
+	}
+	if int(required) != len(pixels) || int(width)*int(height)*4 != len(pixels) {
+		panic("client: capture 输出长度与合成图尺寸不一致")
+	}
+	return pixels, int(width), int(height), nil
+}
+
+// captureInto 以给定输出缓冲调用窗口捕获导出;out 为 nil 表示零容量查询。
+// 无论溢出还是成功,都带回回填的所需字节数与合成图尺寸(更早的失败路径
+// 由 Rust 侧保证出参原样,调用方只需按状态码分流)。
+func (w *Window) captureInto(out []byte) (status uint32, required uint64, width, height uint32) {
+	var outPtr *C.uint8_t
+	if len(out) > 0 {
+		outPtr = (*C.uint8_t)(unsafe.Pointer(&out[0]))
+	}
+	var requiredC C.uint64_t
+	var widthC, heightC C.uint32_t
+	status = uint32(C.mornlea_client_window_capture(
+		C.MORNLEA_CLIENT_ABI_VERSION,
+		C.uint64_t(w.handle),
+		outPtr,
+		C.uint64_t(len(out)),
+		&requiredC,
+		&widthC,
+		&heightC,
+	))
+	return status, uint64(requiredC), uint32(widthC), uint32(heightC)
+}
+
 // Close 销毁窗口;重复调用安全。
 func (w *Window) Close() {
 	if w.closed {
@@ -332,6 +402,10 @@ func windowStatusText(status uint32) string {
 		return "client 窗口句柄无效或窗口操作失败"
 	case uint32(C.MORNLEA_CLIENT_STATUS_PANIC):
 		return "client Rust panic"
+	case uint32(C.MORNLEA_CLIENT_STATUS_CAPTURE_OVERFLOW):
+		return "client 窗口捕获输出缓冲溢出"
+	case uint32(C.MORNLEA_CLIENT_STATUS_CAPTURE_UNAVAILABLE):
+		return "client 窗口合成捕获不可用"
 	default:
 		return "client 未知状态"
 	}

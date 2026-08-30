@@ -5,6 +5,7 @@ package client
 import (
 	"encoding/binary"
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -19,15 +20,32 @@ func buildSnapshot(mutate func([]byte)) []byte {
 }
 
 func TestClientABIVersionMatchesHeader(t *testing.T) {
-	// v13 在 v12 WebView 菜单桥表面上新增 render world update 入口；
-	// 导出版本与编译期 header 常量必须逐位一致，旧动态库会在首个共有
-	// FFI 入口被稳定拒绝，不产生半启动。
+	// v13 合并窗口合成捕获与 render world update；导出版本与编译期
+	// header 常量必须逐位一致，旧动态库会在首个共有 FFI 入口被稳定
+	// 拒绝，不产生半启动。
 	if got := ClientABIVersion(); got != 13 {
 		t.Fatalf("client ABI version=%d,想要 13", got)
 	}
 	if got := clientABIHeaderVersion(); got != 13 {
 		t.Fatalf("client header ABI version=%d,想要 13", got)
 	}
+}
+
+func TestWindowCapturePanicsWithStableTextOnUnknownHandle(t *testing.T) {
+	// 零值 Window 的句柄在 Rust 侧 thread-local 表中不存在:捕获必须以
+	// 稳定中文文案 panic,不得返回部分结果或让 Rust 状态泄漏为裸错误。
+	defer func() {
+		value := recover()
+		if value == nil {
+			t.Fatal("无效句柄的捕获必须 panic")
+		}
+		text, ok := value.(string)
+		if !ok || !strings.Contains(text, "client 窗口句柄无效或窗口操作失败") {
+			t.Fatalf("panic=%v,缺少稳定状态文案", value)
+		}
+	}()
+	var window Window
+	window.Capture()
 }
 
 func TestWindowMapsBackspaceAndReportsTextOverflow(t *testing.T) {

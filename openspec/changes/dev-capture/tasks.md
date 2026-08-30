@@ -8,7 +8,7 @@
 
 ## 2. Rust 捕获原语 + client ABI v13 + Go 桥接
 
-- [ ] 2.1 `mornlea_client` 新增捕获模块（`CGWindowListCreateImage` →
+- [x] 2.1 `mornlea_client` 新增捕获模块（`CGWindowListCreateImage` →
       `CGBitmapContext` → BGRA8 拷贝；校验顺序镜像 `render_readback`；两段式
       溢出回填 `out_required`；「不可用」独立状态），`ffi.rs` 导出
       `mornlea_client_window_capture`，header 升
@@ -23,7 +23,7 @@
 
 ## 3. app 帧循环捕获泵
 
-- [ ] 3.1 `cmd/mornlea/app` 新增 `dev_capture.go`（`CaptureRequest` /
+- [x] 3.1 `cmd/mornlea/app` 新增 `dev_capture.go`（`CaptureRequest` /
       `CaptureOutcome` / `CaptureCoordinator` 接口 + 可空注入点），泵测试先行
       （fake 协调器计数：空闲零捕获调用、待办时每帧至多一次、交付非阻塞），
       `interactive.go` 菜单与游戏两处循环接入；
