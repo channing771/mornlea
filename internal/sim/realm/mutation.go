@@ -105,11 +105,14 @@ func (mutation *Mutation) Commit() []ChunkChangeBatch {
 	batches := make([]ChunkChangeBatch, 0, len(keys))
 	for _, key := range keys {
 		changeSet := mutation.pending[key]
-		record := mutation.state.dimensions[key.Dimension].records[key.Pos]
+		dimension := mutation.state.dimensions[key.Dimension]
+		record := dimension.records[key.Pos]
 		for sectionIndex := range changeSet.dirty {
 			record.Chunk.Section(sectionIndex).Blocks.Compact()
 		}
 		record.Revision++
+		// section 压缩与 revision 推进同时落地：估算缓存键随之失效并重算。
+		dimension.refreshRecord(key.Pos, record)
 
 		indices := sortedIndices(changeSet.changes)
 		changes := make([]BlockChange, 0, len(indices))
