@@ -275,6 +275,7 @@ def app_with_components(
     dialogue: object | None = None,
     closer: FakeCloser | None = None,
     order: list[str] | None = None,
+    factory_completed: asyncio.Event | None = None,
 ) -> tuple[Any, dict[str, SQLiteMemoryStore], FakeCloser]:
     stores: dict[str, SQLiteMemoryStore] = {}
     owned_closer = closer or FakeCloser(order)
@@ -294,12 +295,15 @@ def app_with_components(
 
             store.close = tracked_close  # type: ignore[method-assign]
         stores["store"] = store
-        return AppComponents(
+        components = AppComponents(
             store=store,
             planner=planner or EchoPlanner(),
             dialogue=dialogue or EchoDialogue(),
             model_owner=owned_closer,
         )
+        if factory_completed is not None:
+            factory_completed.set()
+        return components
 
     return create_app(config(tmp_path), secrets(), component_factory=factory), stores, owned_closer
 
@@ -1461,6 +1465,108 @@ def test_bootstrap_failure_keeps_live_but_not_ready(tmp_path: Path) -> None:
             )
             assert response.status_code == 500
             assert "SECRET_BOOTSTRAP_BODY" not in response.text
+
+    run(scenario())
+
+
+def test_startup_cancellation_after_factory_return_closes_transferred_components(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        order: list[str] = []
+        factory_completed = asyncio.Event()
+        closer = FailingCloser(order)
+        app, stores, _ = app_with_components(
+            tmp_path,
+            closer=closer,
+            order=order,
+            factory_completed=factory_completed,
+        )
+        runtime = app.state.agent_runtime
+        lifespan = app.router.lifespan_context(app)
+        startup: asyncio.Task[object] | None = None
+        lock_held = False
+        try:
+            await runtime._state_lock.acquire()
+            lock_held = True
+            startup = asyncio.create_task(lifespan.__aenter__())
+            await asyncio.wait_for(factory_completed.wait(), timeout=1)
+            await asyncio.sleep(0)
+
+            startup.cancel()
+            await asyncio.sleep(0)
+            startup.cancel()
+            await asyncio.sleep(0)
+            draining_after_cancellation = not startup.done()
+            runtime._state_lock.release()
+            lock_held = False
+
+            with pytest.raises(asyncio.CancelledError):
+                await startup
+
+            assert draining_after_cancellation
+            assert closer.closed
+            assert stores["store"]._closed
+            assert order == ["model", "sqlite"]
+            assert runtime.components is None
+            assert runtime.leases is None
+            assert runtime._expiry_task is None
+            assert not any(
+                task.get_name() == "companion-agent-lease-expiry"
+                for task in asyncio.all_tasks()
+                if not task.done()
+            )
+        finally:
+            if lock_held:
+                runtime._state_lock.release()
+            if startup is not None and not startup.done():
+                startup.cancel()
+                await asyncio.gather(startup, return_exceptions=True)
+            store = stores.get("store")
+            if store is not None and not store._closed:
+                await store.close()
+
+    run(scenario())
+
+
+def test_start_failure_closes_untransferred_components_after_model_close_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class StartupAbort(BaseException):
+        pass
+
+    async def scenario() -> None:
+        order: list[str] = []
+        closer = FailingCloser(order)
+        app, stores, _ = app_with_components(
+            tmp_path,
+            closer=closer,
+            order=order,
+        )
+        runtime = app.state.agent_runtime
+
+        async def fail_start(components: AppComponents) -> None:
+            del components
+            raise StartupAbort
+
+        monkeypatch.setattr(runtime, "start", fail_start)
+        lifespan = app.router.lifespan_context(app)
+        with pytest.raises(StartupAbort):
+            await lifespan.__aenter__()
+        model_closed = closer.closed
+        store_closed = stores["store"]._closed
+        close_order = tuple(order)
+        components = runtime.components
+        leases = runtime.leases
+        if not store_closed:
+            await stores["store"].close()
+
+        assert model_closed
+        assert store_closed
+        assert close_order == ("model", "sqlite")
+        assert components is None
+        assert leases is None
 
     run(scenario())
 

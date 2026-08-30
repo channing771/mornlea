@@ -547,6 +547,17 @@ async def _cancel_tasks(
     return None
 
 
+async def _close_unowned_components(
+    components: AppComponents,
+) -> asyncio.CancelledError | None:
+    cancellation: asyncio.CancelledError | None = None
+    for close in (components.model_owner.aclose, components.store.close):
+        cleanup_error = await _drain_cleanup(close())
+        if isinstance(cleanup_error, asyncio.CancelledError) and cancellation is None:
+            cancellation = cleanup_error
+    return cancellation
+
+
 class _AgentRuntime:
     def __init__(self) -> None:
         self.components: AppComponents | None = None
@@ -559,16 +570,18 @@ class _AgentRuntime:
         self._expiry_task: asyncio.Task[None] | None = None
 
     async def start(self, components: AppComponents) -> None:
+        leases = NamespaceLeaseManager(components.store)
         async with self._state_lock:
-            self.components = components
-            self.leases = NamespaceLeaseManager(components.store)
-            self.accepting = True
-            self.ready = True
-            self.bootstrap_failed = False
-            self._expiry_task = asyncio.create_task(
+            expiry = asyncio.create_task(
                 self._expire_loop(),
                 name="companion-agent-lease-expiry",
             )
+            self.components = components
+            self.leases = leases
+            self.accepting = True
+            self.ready = True
+            self.bootstrap_failed = False
+            self._expiry_task = expiry
 
     @property
     def is_ready(self) -> bool:
@@ -866,16 +879,25 @@ def create_app(
         finally:
             del provider_api_key
 
+    async def bootstrap_runtime() -> None:
+        components = await bootstrap_components()
+        try:
+            await runtime.start(components)
+        except BaseException:
+            await _close_unowned_components(components)
+            raise
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         try:
-            components = await bootstrap_components()
-            await runtime.start(components)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            runtime.bootstrap_failed = True
-        try:
+            try:
+                startup_error = await _drain_cleanup(bootstrap_runtime())
+                if startup_error is not None:
+                    raise startup_error
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                runtime.bootstrap_failed = True
             yield
         finally:
             cleanup_error = await _drain_cleanup(runtime.shutdown())
