@@ -18,7 +18,10 @@
 ## engine 与 client ABI
 
 - 数值引擎的 engine ABI 为 v9：同一次构建的 Go binary 与 `libmornlea_engine` 是不可跨版本混装的 release unit；v9 在 v8 mesh registry surface 上增加流体批量求值与重扫入口，`internal/nativeabi`、C header 和 Rust 动态库必须同步替换，不提供旧版 fallback；
-- 图形客户端的 client ABI 为 v13：同一次构建的 `mornlea` 与 `libmornlea_client.dylib` 是不可跨版本混装的 release unit。v13 在 v12 WKWebView 菜单 surface 上增加 MRW1 RenderWorld cache update 入口；共有 FFI 出口会优先拒绝版本不匹配，v12 动态库又缺少 v13-only MRW1 symbol，因此 v12 与 v13 必须在 link、load 或 bind 阶段或首个共有调用处硬失败，不能降级运行；无图形专服不链接 client 库，不受 client ABI 演进影响；
+- 图形客户端的 client ABI 为 v13：同一次构建的 `mornlea` 与 `libmornlea_client.dylib` 是不可跨版本混装的 release unit；无图形专服不链接 client 库，不受 client ABI 演进影响；
+- 无参数 identity export `mornlea_client_abi_version()` 只报告实际动态库身份 13，不接收期望版本，也不执行协商或返回 client status；
+- v12/v13 双方共有且接受 ABI 参数的 exports 在版本不匹配时返回 `ABI_VERSION`，并在读取语义输入或改变 window、renderer、UI/cache 状态前拒绝调用；
+- v13-only 的 `mornlea_client_render_apply_world_updates` 在 v12 动态库中不存在；要求该 MRW1 symbol 的 v13 bridge 与 v12 动态库组合时 MUST 在 link、load 或 bind 阶段硬失败，不进入 FFI body、不返回 client status，也不使用兼容入口或 fallback；
 - v12 引入进程内 WKWebView 菜单桥：`render_upload_ui_font` 出口与帧 TLV tag 9 UI 段（layout v1–v4 编解码）退役（下发即 `INVALID_ARGUMENT`），新增 `ui_push_state` JSON 状态下行出口，`render_drain_ui_events` 签名不变、字节格式改为版本化 JSON 事件信封（空队列 0 字节）；这些 surface 在 v13 中继续保留；
 - 协议、存档 schema 与 benchmark scenario 不随两条 ABI 演进，既有世界与玩家存档在新客户端上照常读取。
 
