@@ -1,6 +1,6 @@
 # Execution Ledger: rust-render-world-cache
 
-## Task 1：change 设立与基线
+## Task 1：change 设立、基线与验证
 
 - 起始提交：`2344ca8551277317a31d4c1614c6086acd4ce328`。
 - 起始工作区：`openspec/changes/rust-render-world-cache/` 是唯一未跟踪路径；其中
@@ -8,6 +8,9 @@
   生产代码或无关 OpenSpec 改动。
 - 工具链：`rustc 1.97.1 (8bab26f4f 2026-07-14)`；
   `cargo 1.97.1 (c980f4866 2026-06-30)`；`go version go1.26.0 darwin/arm64`。
+  `make rust` 明确使用 `rustup run 1.97.1 cargo build --locked --release`；基线的原样
+  `cd engine && cargo test -p mornlea_client --locked` 成功，其输出不主张未捕获的默认
+  Cargo toolchain 版本。
 
 ### 基线命令
 
@@ -18,23 +21,45 @@
 | `go test ./internal/client -race -count=1` | 退出 0；`ok github.com/channing771/mornlea/internal/client`，4.242s。 |
 | `go test ./internal/archcheck -count=1` | 退出 0；`ok github.com/channing771/mornlea/internal/archcheck`，10.024s。 |
 
-### 裁决与范围
+### 固定契约与范围
 
 - MRW1 v1 的 24 字节 batch header、32 字节 record header、4 MiB/4096 上限、
   `ContainerSnapshot` 三态、world reset 首 record、epoch/revision/tombstone 和坐标裁决
   以 Task 1 binding brief 为唯一固定契约；不得以网络 packet 或未列出的兼容格式替代。
 - `RenderWorld` 是 renderer 独占、可丢弃的派生缓存；Go Mirror 仍为逻辑真相来源。
-  Task 1 不允许它接入 app、mesh、visibility、upload 或 draw。
+  本 change 不允许它接入 app、mesh、visibility、upload 或 draw。
 - client ABI 升至 v12 并拒绝 v11 混装；engine ABI 保持 v8。流体源码、流体语义与
   benchmark scenario v20 均不在范围内。
 - Task 1 是文档/bootstrap 工作，没有代码 RED/GREEN 循环。控制器明确要求本任务不派发
-  subagent；后续 Tasks 2–5 必须遵循 `tasks.md` 的 fresh implementer 与双独立评审流程。
+  subagent；Tasks 2–5 每项使用 fresh implementer 和一名同时给出 spec-compliance、
+  quality verdict 的独立 reviewer。
 
-## Task 1 验证与自检
+### Task 1 完成证据
 
 - `openspec status --change rust-render-world-cache --json`：所有 proposal、specs、design 与
   tasks artifact 均为 `done`，`isComplete` 为 true。
 - `openspec validate --all --strict --no-interactive`：退出 0，78 passed、0 failed。
 - `git diff --check -- openspec/changes/rust-render-world-cache`：退出 0 且无输出。
-- 产物限于本 change；未修改 Rust/Go 生产代码、fluid-aware engine 源码、hook 配置或
-  无关 OpenSpec change。
+- 自审确认 proposal、delta spec、design、tasks 与 ledger 均为 cache-only；没有生产
+  Rust/Go、fluid-aware engine 源码、hook 或无关 OpenSpec change 改动。
+- Task 1 提交：`4a93156d3d62dd89c6eacc635c848f9a6923e5fd`
+  `docs(openspec): propose rust render world cache`。
+
+## Task 1：后续写入收敛
+
+- 提交后发现 `ledger.md` 与 `tasks.md` 有同范围未提交替换。收敛时保留了其与 approved
+  scope 一致的 Task 2→3→4→5 顺序（纯 Rust cache、Go encoder、client ABI v12、版本事实
+  与验收），删除了与项目 SDD 契约不一致的双 reviewer 流程、未证实 toolchain/时间数据、
+  已通过检查的“pending”表述，以及超过 brief 的额外必需工作。
+- `openspec status --change rust-render-world-cache --json`：全部 planning artifact 仍为
+  `done`，`isComplete` 为 true。
+- `openspec validate --all --strict --no-interactive`：退出 0，78 passed、0 failed。
+- `git diff --check`：退出 0 且无输出。
+- 自审：只修改本 change 的 `tasks.md` 与 `ledger.md`；任务严格按 Task 2→3→4→5 排列，
+  每项仅要求一名独立 reviewer 同时给出 spec-compliance 与 quality verdict；没有引入
+  未获 brief 支持的生产、archive 或额外强制工作。
+
+## Tasks 2–5 执行记录
+
+- 尚未开始。每个任务开始、RED/GREEN、review verdict、修复轮次、commit 和验证结果都
+  必须按 `tasks.md` 追加在本节。

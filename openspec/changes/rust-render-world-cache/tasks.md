@@ -1,56 +1,69 @@
 # Tasks: Rust RenderWorld Cache
 
-> Task 1 已建立本 change 与基线 ledger。下列每个未勾选实现任务必须按项目
-> subagent-driven-development 流程由 fresh implementer 完成，并接受彼此独立的规格与
-> 质量评审；实现者、评审结论、发现、修复轮次和裁决必须先记入 `ledger.md`，再勾选。
-> 控制会话不得直接实现。
+> Task 1 已建立 change、基线与 ledger。Tasks 2–5 各由 fresh implementer 完成；每项完成后，
+> 一名未参与实现的独立 task reviewer 必须同时给出 spec-compliance 和 quality verdict。
+> implementer、reviewer、两项 verdict、findings、修复轮次、验证和裁决必须先写入
+> `ledger.md`，再勾选任务。控制会话不得直接实现。
 
-## 2. MRW1 与 RenderWorld 原子状态机
+## 2. 实现纯 Rust RenderWorld 与 MRW1 原子状态机
 
-- [ ] 2.1 在 `engine/crates/mornlea_client/src/` 新增 `RenderWorld` 与 MRW1 v1 decoder 的
-  RED 单元/性质测试：24/32 字节 header、4 MiB/4096 上限、reserved、tag、payload、
-  signed i32 X/Z/dimension 与 Y 坐标裁决均须先失败；以
-  `cd engine && cargo test -p mornlea_client --locked render_world` 验证。
-- [ ] 2.2 实现预检后一次性提交的 decoder 与紧凑 cache：`ContainerSnapshot` 的
-  single/indexed/direct、column height、reset/epoch、revision/tombstone 和 overflow；测试
-  合法首 reset、非法第二 record 及旧 revision 均不产生部分状态，以同一 Cargo 定点测试
-  验证。
-- [ ] 2.3 为 MRW1 parser 增加 malformed length、palette slot、packed word、epoch、
-  reset 首记录与坐标边界 fuzz/性质测试；以
-  `cd engine && cargo test -p mornlea_client --locked` 验证。
+- [ ] 2.1 在 `engine/crates/mornlea_client/src/render/` 先为 MRW1 的 24/32 字节布局、
+  4 MiB/4096 限制、reserved、tag、payload、坐标、三态 storage、world reset 首 record、
+  epoch/revision/tombstone 和非法 batch 原子失败建立 RED 测试；验证：
+  `cd engine && cargo test -p mornlea_client --locked render::world`。
+- [ ] 2.2 新增紧凑的 `RenderWorld` parser/cache，并在 renderer 内建立仅更新派生 cache 的
+  内部入口；不展开 4096 block、不创建 worker/GPU pool、不接入 mesh、visibility、upload
+  或 draw；验证：`cd engine && cargo test -p mornlea_client --locked render::world`。
+- [ ] 2.3 补全 malformed length、palette slot、packed word、overflow 与状态机边界的性质或
+  fuzz 测试；验证：`cd engine && cargo test -p mornlea_client --locked`。
+- [ ] 2.4 取得该任务的单一独立 review，其报告同时包含 spec-compliance 与 quality verdict；
+  以定点 Cargo 测试和 `git diff --check -- engine/crates/mornlea_client/src/render` 复核，
+  将 verdict 与裁决记入 `ledger.md`。
 
-## 3. client ABI v12 与 Go bridge
+## 3. 实现 Go MRW1 编码器
 
-- [ ] 3.1 在 `engine/crates/mornlea_client/src/ffi.rs`、`src/lib.rs` 和
-  `engine/include/mornlea_client.h` 将 client ABI 同步升级到 v12，新增
-  `mornlea_client_render_apply_world_updates`；先以错误 ABI、无效 pointer/bytes 和未知
-  handle 的 RED FFI 测试锁定 ABI_VERSION 优先于输入读取，再实现入口；以
-  `cd engine && cargo test -p mornlea_client --locked ffi` 验证。
-- [ ] 3.2 在 `internal/client/` 更新动态库身份检查和 Go binding，新增同步
-  `ApplyRenderWorldUpdates` bridge；测试 header/Rust/Go 版本一致、v11 混装 fail fast 与
-  Go 内存不被 Rust 保留；以 `make rust && go test ./internal/client -race -count=1` 验证。
+- [ ] 3.1 在 `internal/client/` 先为 `world.ContainerSnapshot` 的 single、indexed、direct、
+  column、tombstone、reset、4/8/15-bit 及坐标边界建立 MRW1 encoder RED 测试；验证：
+  `go test ./internal/client -run 'Test(BuildRenderWorld|EncodeRenderWorld)' -count=1`。
+- [ ] 3.2 实现有界、checked 的 Go MRW1 batch encoder 与完整 chunk update 构造；它不导入
+  network、不发送隐式 reset、不展开 4096 block，且尚不接入实时 app；验证：
+  `go test ./internal/client -run 'Test(BuildRenderWorld|EncodeRenderWorld)' -count=1` 与
+  `go test ./internal/world -run 'Test.*Snapshot' -count=1`。
+- [ ] 3.3 取得该任务的单一独立 review，其报告同时包含 spec-compliance 与 quality verdict；
+  以 Go 定点/race 测试和 `go test ./internal/archcheck -count=1` 复核，将 verdict 与裁决
+  记入 `ledger.md`。
 
-## 4. test-only 输入与绘制不变量
+## 4. 升级 client ABI 到 v12 并接通 cache-only 输入入口
 
-- [ ] 4.1 在 `internal/client/` 为 test-only driver 编码既有 `world.ContainerSnapshot` 的
-  single/indexed/direct、column、tombstone 和 reset MRW1 batch；测试 4/8/15-bit 与所有
-  坐标边界，不改 `cmd/mornlea/app`；以
-  `go test ./internal/client -race -count=1` 验证。
-- [ ] 4.2 在 `engine/crates/mornlea_client/src/` 与 `internal/client/` 添加离屏断言：应用
-  合法 cache batch 前后的既有 frame encoding 与 readback 逐字节一致，且不增加 frame 或
-  section upload；以 `make rust && go test ./internal/client -race -count=1` 与
-  `cd engine && cargo test -p mornlea_client --locked` 验证。
-- [ ] 4.3 审计 diff，确认没有修改 `internal/client/mesher.go`、Go visibility、
-  `RenderFrame.Visible`、draw/upload 生产路径或任何 fluid-aware engine 源码；以
-  `git diff --check`、`go test ./internal/archcheck -count=1` 与定点 Rust/Go 测试验证。
+- [ ] 4.1 在 `engine/include/mornlea_client.h`、`engine/crates/mornlea_client/src/` 与
+  `internal/client/` 先建立 v12、错误 ABI 优先、invalid pointer/bytes、unknown handle 与
+  合法 MRW1 batch 的 RED FFI/bridge 测试；验证：
+  `cd engine && cargo test -p mornlea_client --locked` 与
+  `go test ./internal/client -run TestRendererApplyRenderWorldUpdates -count=1`。
+- [ ] 4.2 同步升级 C header、Rust export 和 Go bridge，并新增
+  `mornlea_client_render_apply_world_updates`；Rust 复制或规范化输入且不保存 Go pointer，
+  所有 client ABI 入口对非 v12 先返回 `ABI_VERSION`，engine ABI 保持 v8；验证：
+  `make rust && go test ./internal/client -race -count=1`。
+- [ ] 4.3 以 test-only driver 验证合法 cache update 前后的 frame encoding/readback 字节不变，
+  frame/upload 计数不因 update 增加；不修改 `RenderFrame.Visible`、app、Go mesh/visibility、
+  upload、draw 或任何 fluid-aware 源码；验证：
+  `make rust && cd engine && cargo test -p mornlea_client --locked && go test ./internal/client -race -count=1`。
+- [ ] 4.4 取得该任务的单一独立 review，其报告同时包含 spec-compliance 与 quality verdict；
+  复核 ABI/FFI 安全、原子失败、无 v11 fallback、engine ABI v8 与 cache-only 边界，并将
+  verdict 与裁决记入 `ledger.md`。
 
-## 5. 收尾门禁与独立终审
+## 5. 同步版本事实、完成验收并记录证据
 
-- [ ] 5.1 执行 `make rust`、`cd engine && cargo test -p mornlea_client --locked`、
-  `gofmt -l .`、`go vet ./...`、`go test ./... -race -count=1`、
-  `go test ./internal/archcheck -count=1`、
-  `openspec validate --all --strict --no-interactive` 与 `git diff --check`；将每项实际输出
-  和任何环境性失败记入 `ledger.md`。
-- [ ] 5.2 由未参与实现的规格与质量评审者分别对 proposal、delta spec、design、tasks、
-  MRW1 wire 契约、cache-only 范围、流体零触碰、engine ABI v8 和 frame/draw 字节不变
-  进行终审；记录 verdict、findings、修复轮次与最终裁决，再提交或移交 change。
+- [ ] 5.1 将已实现的 client ABI v12 事实同步到受影响版本说明、架构说明和本 change
+  artifacts；只记录已实现的 RenderWorld cache，明确 Go mesh/visibility/upload/draw 尚未
+  迁移，不改变协议、schema、benchmark scenario、engine ABI、流体或 golden。
+- [ ] 5.2 对照已验证实现更新 delta spec、design、tasks 与 ledger；每一项只在已经执行、
+  验证并经独立 review 后勾选。验证：
+  `openspec validate --all --strict --no-interactive`。
+- [ ] 5.3 执行 `make rust`、`gofmt -l .`、`go vet ./...`、
+  `go test ./internal/client -race -count=1`、`go test ./internal/archcheck -count=1`、
+  `go test ./... -race`、`openspec validate --all --strict --no-interactive` 与
+  `git diff --check`；逐项将实际输出、失败或 Skip 写入 `ledger.md`。
+- [ ] 5.4 取得该任务的单一独立终审，其报告同时包含 spec-compliance 与 quality verdict；
+  审查 MRW1 24/32 字节与 4 MiB/4096 上限、v12/v8、流体零触碰、无共享 kernel、无实时
+  app 接线与完整验证证据，并将最终裁决记入 `ledger.md`。
