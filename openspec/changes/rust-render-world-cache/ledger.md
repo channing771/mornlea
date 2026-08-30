@@ -986,3 +986,35 @@ delta 行为契约、代码、current docs、main specs 或配置，不执行 me
 - `git diff --name-only`：退出 0；tracked scope 恰为本 change 的 existing `proposal.md`、
   `design.md`、`tasks.md` 与 `ledger.md`。唯一 delta spec 保持零 diff；没有代码、current docs、
   main specs、配置、merge/rebase/archive 或其他 tracked 改动。
+
+## Final-findings planning independent review 与 controller acceptance
+
+- Independent planning reviewer：`01a05207-684b-7993-ad69-453d60686a6f`。
+- Reviewed commit：`67099b968cd71a262b0ca1030caf880492a07559`
+  `docs(openspec): plan final review fixes`；baseline parent 为
+  `10f8e8ab22188dbbfe8f210bf60c12249f4885de`。
+- Review report：ignored
+  `.superpowers/sdd/2026-08-30-rust-render-world-main-integration/final-findings-planning-review.md`。
+- Final verdict：spec ✅；quality Approved；0 Critical、0 Important、0 Minor、0 open。
+- Reviewer 独立确认 planning commit 只修改 existing `proposal.md`、`design.md`、`tasks.md`
+  与 `ledger.md`，共 162 insertions / 12 deletions；delta spec byte-for-byte 不变，Tasks
+  6.1–6.4 的文字、完成状态与历史 selected-main 证据均未改写。
+- Reviewer 接受原 final-review 三项 finding 的归属与 Tasks 6.5–6.7 顺序：main-side cleanup
+  独立评审后 local-main fast-forward、feature non-rewriting sync 与两处最小 comment fix、
+  新 immutable HEAD 的完整 18 门禁、最终 fresh whole-integration review；archive、push 与
+  merge feature into main 仍未授权。
+- Reviewer 的 read-only validation 为 OpenSpec strict 79/79，apply 状态 22 tasks、
+  19 complete、3 remaining、`state: ready`；scope、delta 与 worktree 检查均通过。
+- Controller 接受该 clean planning verdict，确认 final-findings planning 已完成并可交给
+  Task 6.5 apply 流程。本 bookkeeping 不勾选 Task 6.5，不完成任何 implementation task，
+  也不修改 proposal、delta、design、tasks、代码、current docs、main specs 或配置。
+
+### Planning review bookkeeping validation
+
+- `openspec validate --all --strict --no-interactive`：退出 0；79 passed、0 failed。
+- `openspec instructions apply --change rust-render-world-cache --json`：退出 0；22 tasks、
+  19 complete、3 remaining、`state: ready`；只有 Tasks 6.5–6.7 pending，Task 6.5 未勾选。
+- `git diff --check`：退出 0且无输出。
+- `git diff --name-only`：退出 0；tracked scope 仅为本 change 的 existing `ledger.md`。
+  ignored review report 不形成 tracked diff；proposal、delta、design、tasks、代码、current
+  docs、main specs 与配置均保持零 diff。
