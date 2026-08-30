@@ -1,7 +1,8 @@
 //! mornlea_client 的 C ABI 出口。
 //!
 //! 契约:
-//! - 所有入口第一个参数是调用方期望的 ABI 版本,不匹配立即返回
+//! - 无参数 `mornlea_client_abi_version()` 只报告当前动态库 identity。
+//! - 其余 28 个接受 `abi_version` 的入口首先拒绝非当前版本并返回
 //!   `MORNLEA_CLIENT_STATUS_ABI_VERSION`;当前版本见 [`CLIENT_ABI_VERSION`]
 //!   (v6 起远环 tile 出口加入,v7 起雾 setter 出口加入,v9 起结构化 UI 事件,
 //!   v11 起离屏 benchmark batch,v12 起菜单桥出口,v13 起 render world update)。

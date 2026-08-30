@@ -6,7 +6,9 @@ package client
 // 远环 tile 上传/丢弃入口,v7 增补雾参数化 SetLodFog——变基重编后
 // v5 归 main 的 water pass,远环两项出口顺延为 v6/v7；v13 增补
 // render world update 入口):R2a 的离屏
-// Rust 渲染器只被双后端对照测试与后续期使用,生产渲染仍是 Go 路径。
+// Rust client 是生产 GPU 渲染的唯一实现；Go 保留 CPU mesh、visibility
+// 与 frame input 准备。v13 RenderWorld cache 当前只由测试驱动，尚未接入
+// production app 消息路径。
 // 链接与 include 标志在 window.go 的 cgo 序言中声明,此处只补 render
 // 入口的逃逸与回调指令。
 
