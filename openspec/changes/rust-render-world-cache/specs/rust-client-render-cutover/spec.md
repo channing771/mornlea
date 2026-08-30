@@ -65,24 +65,31 @@ section upsert MUST 按 `ContainerSnapshot` 三态接收紧凑数据：single �
 - WHEN 收到同一 key 的 revision 12 合法 upsert
 - THEN revision 12 的紧凑 section 状态替换 tombstone
 
-### Requirement: client ABI v12 混装早期拒绝
+### Requirement: client ABI v13 统一 surface 并早期拒绝混装
 
-client C header、Rust 导出与 Go bridge 的 ABI 版本常数 MUST 同步为 12，新增的 render world update 入口及全部既有 client ABI 入口 MUST 拒绝其他版本。每个 export MUST 在其其他适用 validation 前检查 ABI version；现有 all-export ABI checks MUST 保留。版本错误 MUST 在 handle、pointer、batch 内容或 RenderWorld 状态改变前返回 `ABI_VERSION`；系统 MUST NOT 提供 v11 兼容入口或 Go fallback。engine ABI MUST 保持 v8。
+client C header、Rust 导出与 Go bridge 的 ABI 版本常数 MUST 同步为 13，新增的 render world update 入口及全部既有 client ABI 入口 MUST 拒绝每一个其他版本。每个 export MUST 在其其他适用 validation 或状态改变前检查 ABI version；现有 all-export ABI checks MUST 保留。版本错误 MUST 在 handle、pointer、UI/MRW1 内容或 renderer/RenderWorld 状态改变前返回 `ABI_VERSION`。v13 surface MUST 保留 main v12 的 `ui_push_state` 与版本化 JSON UI event drain，MUST NOT 恢复已退役的 `render_upload_ui_font`、frame TLV tag 9 或 UI layout v1–v4；系统 MUST NOT 提供 v12 兼容入口或 Go fallback。engine ABI MUST 保持 v8。
 
 输入型 `mornlea_client_render_apply_world_updates` MUST 按以下顺序在改变 RenderWorld 前验证：ABI version、非零且不超过 MRW1 上限的 length、非空 pointer、address range 不溢出、已有 renderer handle、MRW1 layout 与容量。该入口没有输出 buffer，MUST NOT 要求 output capacity 或 overlap 检查；这些检查只适用于拥有输出的 export。任何 client ABI export MUST NOT 让 panic 穿过 FFI；panic MUST 映射为 `PANIC` 且不得留下部分 RenderWorld 状态。
 
-#### Scenario: v11 动态库不能与 v12 Go bridge 混用
+#### Scenario: main v12 动态库不能与 v13 Go bridge 混用
 
-- GIVEN client ABI v11 的动态库
-- WHEN v12 Go bridge 创建 renderer 或提交 render update
-- THEN 调用 MUST 在任何 RenderWorld 状态改变前返回 ABI_VERSION
+- GIVEN main client ABI v12 的 WKWebView/UI 动态库
+- WHEN v13 Go bridge 创建 window 或 renderer、推送 UI 状态或提交 render update
+- THEN 调用 MUST 在任何输入解析或 renderer、UI、RenderWorld 状态改变前返回 ABI_VERSION
 
 #### Scenario: 错误 ABI 优先于输入内容检查
 
-- GIVEN ABI version 不为 12 且 handle、pointer 或 MRW1 bytes 也无效的调用
+- GIVEN ABI version 不为 13 且 handle、pointer、UI JSON 或 MRW1 bytes 也无效的调用
 - WHEN 调用任一 client ABI 入口
 - THEN 调用返回 ABI_VERSION
 - AND 不读取无效输入或改变 renderer 状态
+
+#### Scenario: v13 保留 main UI surface 且不复活旧 TLV
+
+- GIVEN main v12 已提供 `ui_push_state` 与版本化 JSON UI events，并已退役字体上传出口和 frame TLV tag 9
+- WHEN 合并后的 client ABI v13 surface 加入 MRW1 update 入口
+- THEN `ui_push_state` 与版本化 JSON UI events MUST 保持可用
+- AND `render_upload_ui_font`、frame TLV tag 9 与 UI layout v1–v4 MUST 保持不可用
 
 #### Scenario: 新输入入口按 ABI 优先的输入矩阵拒绝
 

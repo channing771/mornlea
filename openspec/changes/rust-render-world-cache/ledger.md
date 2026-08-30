@@ -495,3 +495,45 @@ base 起零 diff；其 ready/spawn warmup 循环按 transport 收包时机决定
   `openspec validate --all --strict --no-interactive` 为 78 passed、0 failed（real 1.49s）；
   `openspec instructions apply --change rust-render-world-cache --json` 为 15/15、remaining 0、
   `state: all_done`（real 1.48s）；`git diff --check` 无输出（real 0.02s）。
+
+## Main integration planning：client ABI v13
+
+### 已观察分叉与重叠面
+
+- Planning start feature HEAD：`0f91b626623af9c8de1c4e60a2e810ff7edd52a7`；observed main
+  HEAD：`8b8891a3d1068cedb02b74266ed2b1334fdcea69`；共同 merge base：
+  `2344ca8551277317a31d4c1614c6086acd4ce328`。main 自 merge base 前进 74 commits，feature
+  前进 23 commits。本 planning task 未 merge、rebase 或改写任一分支。
+- `git diff --name-only` 两侧交集恰为 15 个路径：
+  `AGENTS.md`、`README.en.md`、`README.md`、`docs/architecture.md`、
+  `docs/notes/progress.md`、`engine/crates/mornlea_client/src/ffi.rs`、
+  `engine/crates/mornlea_client/src/lib.rs`、`engine/crates/mornlea_client/src/render/mod.rs`、
+  `engine/include/mornlea_client.h`、`internal/client/render.go`、
+  `internal/client/render_test.go`、`internal/client/window.go`、
+  `internal/client/window_test.go`、`internal/server/sword_combat_parity_test.go`、
+  `openspec/specs/tiered-swords-combat/spec.md`。
+- current main 的 C header 与 Rust `CLIENT_ABI_VERSION` 均为 12，Go bridge 使用 header macro。
+  v12 的实际 UI surface 已退役 `mornlea_client_render_upload_ui_font` 与 frame TLV tag 9
+  （UI layout v1–v4），保留 `mornlea_client_ui_push_state`，并让
+  `mornlea_client_render_drain_ui_events` 传输 `{"v":1,"events":[...]}` 版本化 JSON
+  信封。feature 则独立把同一个 v12 分配给 MRW1 update export；两者是不同 export surface，
+  不能以相同 ABI identity 合并。
+
+### 用户确认与规划裁决
+
+- 用户明确确认：以 main v12 WKWebView/UI surface 为 predecessor，把合并后的统一 client ABI
+  分配为 v13；冲突解决必须保留 main 已退役的 UI exports/TLV 状态以及当前
+  `ui_push_state`/versioned JSON UI events，只叠加 MRW1 cache/update。若错误地继续共用 v12，
+  header、dylib 与 Go bridge 会接受两个不兼容 surface，因此该替代方案被否决。
+- engine ABI 保持 v8；MRW1 24/32 字节、4 MiB/4096、epoch/revision/tombstone、非法 batch
+  原子失败、cache-only 与 no-fallback 契约不变。协议 v32、全部 schema/world metadata、
+  benchmark scenario v20、流体、生产 app 接线、共享 kernel、mesh worker/GPU pool、Rust
+  visibility、frame/draw 与 visual golden 继续排除。
+- Tasks 2–5 保持已勾选，作为 pre-main-integration feature 基线的历史完成事实；新增 Task 6
+  重新打开 change，依次要求 non-rewriting main merge、v13 current-fact/spec/test 同步、同一
+  merged baseline 的 release/race/visual/OpenSpec 验证，以及独立 integration review。
+- Planning implementer：`<pending-controller-fill>`。
+- Independent planning reviewer：`<pending-controller-dispatch>`。
+- 当前只完成 integration planning artifact 修订；没有运行或声称任何 merged-baseline
+  implementation/ABI/race/visual 验证。archive 与 merge into main 仍未获授权，change 保持
+  active；只有 Task 6 实现、验证和独立评审全部完成后才能重新申请 archive/merge 裁决。

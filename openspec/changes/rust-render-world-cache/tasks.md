@@ -1,6 +1,8 @@
 # Tasks: Rust RenderWorld Cache
 
-> Task 1 已建立 change、基线与 ledger。Tasks 2–5 各由 fresh implementer 完成；每项完成后，
+> Task 1 已建立 change、基线与 ledger。Tasks 2–5 是 feature 分支在独立 pre-main-integration
+> 基线已经完成并评审的历史工作，其 v12 表述记录当时事实，不代表合并后的目标版本。
+> Task 6 由新的 fresh implementer 执行；每项完成后，
 > 一名未参与实现的独立 task reviewer 必须同时给出 spec-compliance 和 quality verdict。
 > implementer、reviewer、两项 verdict、findings、修复轮次、验证和裁决必须先写入
 > `ledger.md`，再勾选任务。控制会话不得直接实现。
@@ -74,3 +76,32 @@
 - [x] 5.4 取得该任务的单一独立终审，其报告同时包含 spec-compliance 与 quality verdict；
   审查 MRW1 24/32 字节与 4 MiB/4096 上限、v12/v8、流体零触碰、无共享 kernel、无实时
   app 接线与完整验证证据，并将最终裁决记入 `ledger.md`。
+
+## 6. 合入 main 并建立统一 client ABI v13
+
+- [ ] 6.1 在 clean worktree 以 `git merge --no-commit --no-ff main` 合入执行时最新 main，
+  重新读取 merged `AGENTS.md` 与目标目录局部指南；以 main 的 client ABI v12
+  WKWebView/UI surface 为冲突解决基线，保留 `ui_push_state` 与版本化 JSON UI events，
+  保持 `render_upload_ui_font`、frame TLV tag 9 和 UI layout v1–v4 退役，只叠加 MRW1 cache
+  与 update 入口，不改变 main 现有行为。验证：`git status --short`、
+  `git diff --check`，并把 merge base、main HEAD、冲突路径与逐项裁决记入 `ledger.md`。
+- [ ] 6.2 将 `engine/include/mornlea_client.h`、`engine/crates/mornlea_client/src/`、
+  `internal/client/` 的 header/Rust exports/Go bridge 与 all-export tests 统一为 client ABI v13，
+  同步根版本说明、当前 docs、`openspec/config.yaml` 和受影响 main specs；保留 main UI JSON
+  surface、MRW1 24/32 字节与 4 MiB/4096、原子 cache、v12 predecessor fail-fast、无 fallback
+  和 engine ABI v8。验证：`make rust && go test ./internal/client -race -count=1`、
+  `go test ./internal/archcheck -count=1`、`rg -n 'CLIENT_ABI_VERSION|MORNLEA_CLIENT_ABI_VERSION|client ABI v13' engine internal/client AGENTS.md README.md README.en.md docs openspec/config.yaml openspec/specs`。
+- [ ] 6.3 在 merged implementation HEAD 逐项执行并记录 `make rust`、`make rust-check`、
+  `gofmt -w internal/client/render_world_update.go internal/client/render_world_update_test.go internal/client/render.go internal/client/render_test.go internal/client/window.go internal/client/window_test.go internal/server/sword_combat_parity_test.go`、
+  `go vet ./...`、
+  `go test ./internal/client -race -count=1`、`go test ./internal/mesh -race -count=1`、
+  `go test ./internal/archcheck -count=1`、`make test-race-changed`、`go clean -testcache`、
+  `go test ./... -race -count=1`、`make visual-check`、
+  `openspec validate --all --strict --no-interactive`、`git diff --check` 与
+  `git diff --exit-code main...HEAD -- cmd/mornlea/capture/testdata/golden`；任何 Skip、真实失败
+  或相对 main 新增/修改 visual golden 都不得计为 PASS，release dylib、Go ABI 与视觉证据
+  必须来自同一 merged baseline。
+- [ ] 6.4 取得一名未参与集成实现的独立 reviewer，对 merge conflict resolution、统一 v13
+  export surface、main UI 保留/旧 UI 退役、MRW1/FFI/atomic/cache-only 边界、流体与其他排除项
+  以及 6.3 的完整证据同时给出 spec-compliance 与 quality verdict；先把 reviewer identity、
+  findings、修复轮次与最终裁决写入 `ledger.md`，再勾选本项并宣告 integration 完成。

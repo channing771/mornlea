@@ -12,12 +12,18 @@ connectivity、visibility、GPU upload 或 draw。
 `internal/client/` 与相应测试。`internal/nativeabi` 仍是唯一接触 engine ABI 的边界；
 本 change 不改变 engine ABI v8。
 
+feature 基线曾独立把 MRW1 export 分配给 client ABI v12；与此同时，当前 main 已把
+client ABI v12 分配给进程内 WKWebView/UI cutover：退役 `render_upload_ui_font` 与 frame
+TLV tag 9（UI layout v1–v4），新增 `ui_push_state`，并把 `render_drain_ui_events` 的载荷改为
+版本化 JSON 信封。两套不同 export surface 不能共享同一 ABI 版本，因此集成必须以 main
+v12 为前代基线，把“main UI surface + MRW1”统一分配为 v13。
+
 ## Goals / Non-Goals
 
 **Goals:**
 
-- 建立 client ABI v12 的同步身份、MRW1 v1 更新入口，以及原子、可重建的
-  `RenderWorld` cache。
+- 建立集成 client ABI v13 的同步身份，在 main v12 UI surface 上加入 MRW1 v1 更新入口，
+  以及原子、可重建的 `RenderWorld` cache。
 - 在 Rust 拷贝或规范化 Go 同步调用期间提供的 bytes；之后不保存 Go 指针、slice 或
   对象，且按 epoch、revision、tombstone 决定派生缓存状态。
 - 用单元、FFI、Go bridge、fuzz 与 test-only driver 锁定 wire 校验、原子失败和离屏
@@ -121,13 +127,19 @@ column key 保存已验证的紧凑 palette/bitpack、height、epoch、revision 
 否决“让 Go 长期持有 Rust cache 的借用或每格回调查询”：两者都会破坏 FFI 生命周期与
 语言职责边界，且会在后续数据平面中重新引入高频跨语言访问。
 
-### D4: ABI v12 必须整套同步并 fail fast
+### D4: 以 main v12 为前代，把统一 surface 分配为 ABI v13
 
-client C header、Rust 常数和导出、Go bridge、动态库身份检查与跨语言测试一起升级为
-v12。所有 client ABI export 保留既有的 all-export ABI 检查，并在其任何其他适用
-validation 前检查版本；错误版本在读取 handle、pointer 或 MRW1 bytes 前返回
-`ABI_VERSION`。不存在 v11 兼容入口或 Go fallback。engine ABI 保持 v8，因为本 change
-未改变无状态 engine 数值 ABI，也不移动其 fluid-aware 源码。
+冲突解决必须以 main 的 v12 header、Rust exports 与 Go bridge 为基线：保留
+`mornlea_client_ui_push_state`、版本化 JSON `mornlea_client_render_drain_ui_events` 及其
+WKWebView 路径；保持 `mornlea_client_render_upload_ui_font`、frame TLV tag 9 与 UI layout
+v1–v4 退役；只把 feature 的 `mornlea_client_render_apply_world_updates`、RenderWorld 与
+MRW1 tests 加入该 surface。随后 client C header、Rust 常数和导出、Go bridge、动态库身份
+检查、当前文档/配置/主规格与跨语言测试一起升级为 v13。
+
+所有 client ABI export 保留既有的 all-export ABI 检查，并在其任何其他适用 validation
+或状态改变前检查版本；每一个非 v13 版本都在读取 handle、pointer、UI JSON 或 MRW1 bytes
+前返回 `ABI_VERSION`。不存在 v12 兼容入口或 Go fallback。engine ABI 保持 v8，因为本
+change 未改变无状态 engine 数值 ABI，也不移动其 fluid-aware 源码。
 
 新 `mornlea_client_render_apply_world_updates` 是 input-only `u8` entry，且严格按 ABI
 version、非零且受 MRW1 上限约束的 length、non-null pointer、无 overflow 的 address
@@ -136,8 +148,10 @@ range、existing renderer handle、MRW1 layout/capacity 的顺序验证，随后
 约束仅由带输出的既有 entry 按适用性承担。所有 client ABI export 均在 panic catcher 内，
 panic 映射为 `PANIC`，并且不得 unwind 穿过 FFI 或留下部分 RenderWorld 状态。
 
-否决“保持 v11 并只添加可选符号”：这会允许 header、dylib 与 Go binding 混装，不能
-在改变 cache 前可靠失败。
+否决“让两套不同 surface 继续共用 v12”或“在 main v12 上只添加可选 MRW1 符号”：这会
+让 header、dylib 与 Go binding 对 v12 的含义产生歧义，不能在改变 UI/cache 状态前可靠失败。
+也否决“用 feature 的 v12 header 覆盖 main”：这会复活已退役的 egui 字体/TLV surface，
+并丢失当前 WKWebView/JSON UI 契约。
 
 ### D5: 现有 frame/draw 是可验证的不变量
 
@@ -154,9 +168,13 @@ connectivity/visibility、geometry upload、`RenderFrame.Visible` payload、fram
 - [错误的长度、乘法、indexed word count、尾随 bytes 或 packed 索引导致越界或部分应用]
   → 先做全量 checked 预检，固定 4-bit=256、8-bit=512、direct=1024 word 计数，并以
   atomic invalid-batch、边界与 fuzz 测试锁定失败前状态。
-- [v11/v12 header、dylib 和 Go binding 混装，或 input ABI 检查顺序不安全] → 保留
-  all-export ABI 检查；为新入口锁定 version-first、length、pointer/address、handle、layout
-  次序与 panic-to-PANIC 的矩阵测试，并在 clean Rust build 后运行 Go bridge race 测试。
+- [main v12 与集成 v13 header、dylib 和 Go binding 混装，或 input ABI 检查顺序不安全]
+  → 保留 all-export ABI 检查；为 UI 与 MRW1 入口锁定 version-first matrix，为新入口锁定
+  length、pointer/address、handle、layout 次序与 panic-to-PANIC，并在 clean release Rust
+  build 后运行 Go bridge race 测试。
+- [冲突解决复活已退役 UI export/TLV 或丢失 main JSON bridge] → 以 main v12 header/UI tests
+  为基线，只叠加 MRW1；对 export 列表、frame tag 拒绝、`ui_push_state` 与 JSON event
+  envelope 做定点审计和回归测试。
 - [cache 误接入既有 draw] → test-only driver、frame 编码及 readback 字节相等测试；
   不修改 app、mesher、scheduler 或 fluid-aware 源码。
 - [紧凑缓存提高常驻内存] → 4 MiB 单 batch和 4096 record 上限，按 tombstone/reset
@@ -164,14 +182,18 @@ connectivity/visibility、geometry upload、`RenderFrame.Visible` payload、fram
 
 ## Migration Plan
 
-1. 先以失败测试固定 MRW1 解析、原子预检、epoch/revision/tombstone 与 v12 fail-fast；
-   再实现最小 `RenderWorld` 与 C/Go ABI 接线。
+1. 保留已完成的 feature 基线测试与实现证据；集成前以 `--no-commit --no-ff` 合入最新
+   main，重新读取 merged `AGENTS.md`，并以 main v12 WKWebView/UI surface 解决冲突。
 2. 由 Go test-only encoder 从 `ContainerSnapshot` 生成 MRW1，覆盖 single、indexed、
-   direct、column、tombstone、reset 和坐标边界；不把入口接入实时 app。
-3. 以离屏 renderer 对应用前后完全相同的既有 frame input 做编码与 readback 比较，
-   并保留 Go mesh/visibility/upload 原路径。
-4. 发布时 client ABI v12 与动态库同步替换；v11 混装显式失败。若发现 cache 输入或
-   ABI 问题，回退本 change 即恢复 v11 与原始绘制路径；没有网络、存档或世界数据迁移。
+   direct、column、tombstone、reset 和坐标边界；冲突解决只将该入口叠加到 main surface，
+   不把入口接入实时 app。
+3. 把 C header、Rust、Go、当前文档、active config、main specs 与 tests 同步为 v13；验证
+   main v12 动态库与任一 v13 bridge 调用 fail fast，同时保留 UI JSON 与 MRW1 契约。
+4. 在 merged baseline 重建 release dylib，再以离屏 renderer 对应用前后完全相同的既有
+   frame input 做编码与 readback/visual 比较，并保留 Go mesh/visibility/upload 原路径。
+5. 发布时 client ABI v13 与动态库同步替换；main v12 混装显式失败。若集成发现问题，
+   回退 MRW1/v13 增量即返回 main v12 WKWebView/UI predecessor，而不是恢复 feature 的旧
+   egui/TLV surface；没有网络、存档或世界数据迁移。
 
 ## Verification
 
@@ -183,11 +205,13 @@ connectivity/visibility、geometry upload、`RenderFrame.Visible` payload、fram
 - `go test ./internal/mesh -race -count=1`
 - `go test ./internal/archcheck -count=1`
 - `make test-race-changed`
+- `go clean -testcache`
 - `go test ./... -race`
 - `make visual-check`
 - `openspec validate --all --strict --no-interactive`
 - `git diff --check`
 
-实现与验证保持 cache-only：client ABI 当前为 v12、engine ABI 保持 v8，MRW1 固定布局、
-坐标裁决、边界与阶段范围均由 binding brief 确定。生产 app、Go mesh/visibility/upload/draw、
-共享 kernel、流体、协议、schema、benchmark scenario 与 visual golden 均未改变。
+集成实现与验证保持 cache-only：main predecessor client ABI 为 v12，统一目标为 v13，
+engine ABI 保持 v8；MRW1 固定布局、坐标裁决、边界与阶段范围均由 binding brief 确定。
+生产 app 的 MRW1 接线、Go mesh/visibility/upload/draw、共享 kernel、流体、协议、schema、
+benchmark scenario 与 visual golden 均不得改变。本节列出的 merged-baseline 验证尚未执行。
