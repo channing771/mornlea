@@ -26,6 +26,11 @@ from mornlea_companion_agent.domain.common import (
     json_tuple,
 )
 from mornlea_companion_agent.domain.mcp_v1 import Plan
+from mornlea_companion_agent.domain.memory import (
+    MemoryState,
+    MemoryStateNonzero,
+    MemoryStateZero,
+)
 
 ContractVersion = Literal["v1"]
 DeadlineUnixMilliseconds = Annotated[StrictInt, Field(ge=1, le=(1 << 63) - 1)]
@@ -217,22 +222,6 @@ class DialogueTerminalResponse(DialogueRunIdentity):
 
 
 DialogueResponse = DialogueNonterminalResponse | DialogueTerminalResponse
-
-
-class MemoryStateZero(StrictModel):
-    exact_constants: ClassVar[Mapping[str, object]] = {"revision": 0}
-    revision: Literal[0]
-    operation_id: None
-    summary: Literal[""]
-
-
-class MemoryStateNonzero(StrictModel):
-    revision: PositiveUInt64
-    operation_id: UUIDv4
-    summary: MemorySummary
-
-
-MemoryState = MemoryStateZero | MemoryStateNonzero
 
 
 class MemoryIdentity(LeaseRequest):
