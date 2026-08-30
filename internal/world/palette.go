@@ -1,7 +1,11 @@
 // Package world 提供世界数据模型：区块、区段、调色板存储与光照。
 package world
 
-import "github.com/channing771/mornlea/internal/core"
+import (
+	"encoding/binary"
+
+	"github.com/channing771/mornlea/internal/core"
+)
 
 // BlockID 是核心域方块 ID 的兼容别名。
 type BlockID = core.BlockID
@@ -58,6 +62,34 @@ func (c *PalettedContainer) Get(x, y, z int) BlockID {
 		return BlockID(v)
 	}
 	return c.palette[v]
+}
+
+// appendBlocksLE 把区段内全部方块按线性索引序（YZX）以小端 u16 追加进 dst，
+// 返回扩展后的切片。
+//
+// 线性序恰是逐体素 y→z→x 遍历的顺序，因此输出与逐体素小端编码逐字节一致，
+// 供 `Chunk.Hash` 这类批量导出把逐体素 2 字节小写入合并为每区段一次大写入。
+// 调用方保证剩余容量不少于 `core.BlocksPerSection`*2 字节时不会触发再分配。
+// 单值态直填同一字节对（多数区段是空气或整层岩石，走快路径）；索引态经
+// `readRaw` 位解包后查调色板，直接态的解包结果即全局 ID。
+func (c *PalettedContainer) appendBlocksLE(dst []byte) []byte {
+	if c.kind == kindSingle {
+		lo, hi := byte(c.single), byte(c.single>>8)
+		for i := 0; i < core.BlocksPerSection; i++ {
+			dst = append(dst, lo, hi)
+		}
+		return dst
+	}
+	if c.kind == kindDirect {
+		for i := 0; i < core.BlocksPerSection; i++ {
+			dst = binary.LittleEndian.AppendUint16(dst, uint16(c.readRaw(i)))
+		}
+		return dst
+	}
+	for i := 0; i < core.BlocksPerSection; i++ {
+		dst = binary.LittleEndian.AppendUint16(dst, uint16(c.palette[c.readRaw(i)]))
+	}
+	return dst
 }
 
 // readRaw 从位打包数据中读出第 i 个槽的原始值。
