@@ -140,3 +140,22 @@
 - 验证：`go test ./cmd/mornlea ./cmd/mornlea/app ./cmd/mornlea/devcapture
   -race -count=1` ok、`go test ./internal/archcheck -count=1` ok、
   `go build ./...` ok、既有泵测试零改动仍绿。
+
+## Task 6: 文档同步
+
+- Commits: `42dfdf84` `docs: add dev capture service guide`、`bc9a7802`
+  `docs: qualify dev capture port file cleanup wording`。
+- 实现：新建 `docs/notes/dev-capture.md`（启动/互斥/端口发现文件/三端点
+  契约含逐字 503 文案/录制上限与 zip 布局/TCC 排查/agent 工作流）、
+  `docs/README.md` 导航行、`docs/agents/README.md` 开发捕获服务小节、
+  `cmd/mornlea/AGENTS.md`（Directory Map/依赖边/Entry Modes/Focused
+  Verification 四处）、新建 `cmd/mornlea/devcapture/AGENTS.md`（style
+  guide 骨架四节，不变量全带真实测试名）、`cmd/mornlea/app/AGENTS.md`
+  新导出面纪律。
+- 评审（独立评审子代理）：事实性 PASS（逐条对照代码：flag/端口顺延/phase
+  枚举/manifest 字段名/503 文案/录制上限全部一致，23 个被引用测试名逐一
+  grep 存在，无失实无超前承诺）+ 规范 PASS（无任务编号、导航不复制正文、
+  骨架合规）。3 项 Minor：docs/agents/README.md 丢「优雅」限定（修复轮 1
+  已收口，并补 Ctrl+C 残留发现文件的排查句，经 grep 核实无信号处理）、
+  小节命令与主文档重复（可接受取舍，有指回指针）、AGENTS.md 耗时描述缺
+  实测限定（事实无误）。

@@ -65,7 +65,7 @@
 
 ## 6. 文档同步
 
-- [ ] 6.1 新建 `docs/notes/dev-capture.md`（用法、端点契约、录制上限、
+- [x] 6.1 新建 `docs/notes/dev-capture.md`（用法、端点契约、录制上限、
       屏幕录制授权与失败语义、端口发现文件），`docs/README.md` 索引挂链，
       `docs/agents/README.md` 增加代理使用小节（仿 agent-board 小节），
       `cmd/mornlea/AGENTS.md` 模式表与子包导览更新，新建
