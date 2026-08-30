@@ -19,3 +19,12 @@
 - **修复轮 1（原 implementer）**：`ed796a8f` 删除空转子测试、新增诚实判例 `DirectBoundaryIDs`（直接态+边界 ID 断言缓冲编码==逐体素 oracle，命名与注释如实说明钉的是解包一致性而非排列不变性）、取值池先排序再打乱（随机性收敛到种子一处）；`03d56782` 补 `[32]byte`＝`sha256.Size` 注释。`go test ./internal/world ./internal/storage/... -race -count=1` 全绿，gofmt/vet/编号正则干净。控制会话核验 diff 后接受修复，双评审结论闭合。
 
 
+
+### Task 2：`realm` 持久化统计增量记账 + 脏区块索引（2026-08-30）
+
+- **Implementer**（fresh subagent）：交付 `7a63ff52 perf(realm): maintain persistence stats via incremental dirty index`（4 文件 +850/−22，仅 `internal/sim/realm`）。记账三件套 `refreshRecord`/`settleRecord`/`rebuildStats`；14 类挂接点逐一落地（Touch、Mutation.Commit、四态转换、ApplyGenerated/ApplyLoaded、MarkFailed×2、RequestUnload/CancelUnload、deleteCleanUnloading、派发在途字节、ApplyPersisted、FailPersistence、SetDimension、NewState）；`PersistenceStats` 变 O(维度数) 纯聚合读、`PersistenceSnapshots` 只迭代脏索引并复验全部四项过滤。oracle（全量扫描统计+全记录候选收集）移入测试；随机操作序列属性测试、双计入钉住、Dirty() 探针 O(1) 成本测试（旧实现红 2/2000，新 0/0）、SetDimension 重建覆盖。environment 不变量结论（全部内容写入经 Mutation.Commit 推进 revision；非方块槽位在 PayloadBytes 中为常量）写入 `recordStats` doc comment 并有专测。TDD 期间属性测试抓出真 bug（dirty→dirty 估算重算时旧值先被覆盖致聚合漏增量）并修复（先存 previousEstimate 再重算）。验证：sim 全树与 server 全树 `-race -count=1` 全绿（server 178s）、gofmt/vet 干净。
+- **Implementer 报备的偏离（待评审裁决）**：①聚合放 `Dimension` 级而非 design 写的 State 级（Dimension 写入方法无 State 反向引用，避免扩面/循环；State 只持在途字节；spec 成本 Requirement 仍逐字满足）；②每记录缓存形状裁剪掉冗余字段；③`InFlightChunks=len(inFlightSaves)` 在「SetDimension 悬空在途」不可达态下与逐记录计数有理论差异（原实现该态 panic，生产行为不变，已注释+测试说明）；④O(1) 探针缝挂 `ChunkRecord.Dirty()`（生产恒 nil）。
+- SPEC/QUALITY 双评审：进行中。
+- SPEC 评审（独立子代理）：**PASS-with-notes**，零阻塞。6 项裁决全 PASS：14 类挂接点逐一核对落地（错误路径零半记账）；oracle 与旧实现逐行一致且从生产移除、操作池覆盖 16 类迁移操作（超出 spec 的 9 类）+SetDimension 专测、双计入显式断言、假想改错必红（5 类故意改错形态推演均会红）；O(1) 探针旧实现真红（2 vs 2000）；候选收集过滤/排序/预算与父提交逐字相同；非目标遵守（导出面不变、双计入未修正、无锁）。记录性发现 A：估算缓存键精确性实际依赖表示级不变量（palette 只增不减），「写后无事务回滚」路径当前被守卫排除不可达，已按裁决写入 design D1 不变量警示。
+- QUALITY 评审（独立子代理）：**PASS-with-notes**，仅 3 Nit 无 Critical/Important。diff 顺序修复核验完整（先存 previousEstimate）；33 处 refresh/settle 调用点穷尽配对无双记；缓存键失效覆盖同 revision 换 chunk；环境不变量逐路径核验属实；并发边界零新增锁；性能反噬评估惰性重算正确（PayloadBytes 是纯元数据求和无逐方块遍历）；oracle/属性测试有牙齿。Nit：SetDimension 悬空在途的未来结算责任、`recordStats.dirty` 命名语义、派发处可复用缓存估算（收益微小）。
+- **控制会话裁决**：①接受聚合放 `Dimension` 级（design D1 已同步修订并记录理由）；③重分类为 design 一致（`SetDimension` 生产零调用方，不可达态差异已在测试注释说明）；②④记录在案不构成偏离；发现 A 写入 design D1 不变量警示。三条 Nit 记录不修（SetDimension 无生产调用方、命名语义已有注释、微优化收益不足）。Task 2 无修复轮，双评审结论闭合。

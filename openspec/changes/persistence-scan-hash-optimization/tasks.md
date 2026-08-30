@@ -11,9 +11,9 @@
 
 ## 2. `realm` 持久化统计增量记账 + 脏区块索引
 
-- [ ] 2.1 在 `internal/sim/realm` 实现每记录贡献缓存（键含 revision 与 chunk 指针）、State 级聚合值与脏区块索引；`refreshRecord` 单一入口挂接 design.md D1 清单的全部 14 类迁移点；`PersistenceStats` 变 O(1) 查询（`InFlightChunks` 取 `len(inFlightSaves)`）；`PersistenceSnapshots` 候选收集只迭代脏索引并复验原有过滤，排序不变。
-- [ ] 2.2 把现行全量扫描 `PersistenceStats`/候选收集实现移入测试文件作为 oracle；新增随机操作序列属性测试（逐步断言增量==全量）、「脏且在途双计入」钉住测试、记录访问探针的 O(1) 成本测试（2 区块 vs 2,000 区块）；`SetDimension`/`NewState` 路径覆盖。
-- [ ] 2.3 全量既有持久化/卸载/恢复测试绿：`go test ./internal/sim/... -race -count=1`、`go test ./internal/server/... -race -count=1`。
+- [x] 2.1 在 `internal/sim/realm` 实现每记录贡献缓存（键含 revision 与 chunk 指针）、State 级聚合值与脏区块索引；`refreshRecord` 单一入口挂接 design.md D1 清单的全部 14 类迁移点；`PersistenceStats` 变 O(1) 查询（`InFlightChunks` 取 `len(inFlightSaves)`）；`PersistenceSnapshots` 候选收集只迭代脏索引并复验原有过滤，排序不变。
+- [x] 2.2 把现行全量扫描 `PersistenceStats`/候选收集实现移入测试文件作为 oracle；新增随机操作序列属性测试（逐步断言增量==全量）、「脏且在途双计入」钉住测试、记录访问探针的 O(1) 成本测试（2 区块 vs 2,000 区块）；`SetDimension`/`NewState` 路径覆盖。
+- [x] 2.3 全量既有持久化/卸载/恢复测试绿：`go test ./internal/sim/... -race -count=1`、`go test ./internal/server/... -race -count=1`。
 - 验证：上述两条命令 + `go test ./internal/sim/realm -run Stats -race -count=1`。
 
 ## 3. 收尾门禁与整分支终审

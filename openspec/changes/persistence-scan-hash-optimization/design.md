@@ -13,9 +13,10 @@
 
 `realm.State` 新增聚合记账（随 `Dimension` 一起由单写者 tick 独占，不新增锁）：
 
-- 每记录贡献缓存：在 `ChunkRecord` 旁挂（`Dimension` 级 `map[core.ChunkPos]recordStats` 或记录内嵌私有字段，实现自选，但不得进入任何导出结构或 `Info()` 快照）：`{dirty bool, estimatedBytes int, inFlight bool, unloadWaiting bool, revision uint64, chunk *world.Chunk}`。前四项是该记录当前对聚合值的贡献；后两项是估算缓存键（见下）。
-- `State` 级聚合：`dirtyChunks int`、`estimatedBytesTotal int64`、`unloadWaiting int`。`InFlightChunks` 恒等于 `len(state.inFlightSaves)`（`persistenceInFlight` 对不一致已 panic 兜底），不需要单独计数。
-- 脏索引：`Dimension` 级 `map[core.ChunkPos]struct{}`（或等价集合），成员 = `record.Dirty()` 为真的记录。`PersistenceSnapshots` 迭代该集合并复验 `record.Chunk != nil && record.Dirty() && !inFlight` 等原有过滤，排序逻辑不变。
+- 每记录贡献缓存：在 `ChunkRecord` 旁挂（记录内嵌私有字段 `stats`，不进入任何导出结构或 `Info()` 快照）：`{dirty, estimatedBytes, unloadWaiting, revision, chunk}`。前三项是该记录当前对聚合值的贡献；后两项是估算缓存键（见下）。`dirty` 存的语义是 `Dirty() && Chunk != nil`（与旧全量扫描的计数条件一致）。**实现裁决（2026-08-30，评审后修订）**：聚合放 `Dimension` 级（`dirtyChunks/dirtyEstimatedBytes/unloadWaiting` + 脏索引随维度）而非本节最初草拟的 State 级——`Dimension` 的全部写入方法没有 `State` 反向引用，State 级聚合必须扩调用方签名或引入 back-pointer；且 `SetDimension` 整维替换语义下维度自有聚合天然随表项失效。`State` 只持有跨维度的在途字节 `inFlightEstimatedBytes`（在途条目仅在 State 方法里增删），`PersistenceStats` 按维度求和。
+- `InFlightChunks` 恒等于 `len(state.inFlightSaves)`（`persistenceInFlight` 对不一致已 panic 兜底），不需要单独计数。`SetDimension` 换出带在途条目的维度属测试专用路径（生产零调用方），悬空在途的计数差异沿用既有语义并已在测试注释说明。
+- 脏索引：`Dimension` 级集合，成员 = `record.Dirty()` 为真的记录。`PersistenceSnapshots` 迭代该集合并复验 `record.Chunk == nil || !record.Dirty() || inFlight || (SaveUrgent && !record.UnloadRequested)` 等原有过滤，排序逻辑不变。
+- **不变量警示（对后续开发者）**：估算缓存键 `(revision, chunk 指针)` 的精确性依赖「生产方块写入必配 `Mutation.Record`/经事务 Commit 推进 revision」的约定（`UpdateReadyChunk` 旁路只写非方块槽位，在 `PayloadBytes` 中是常量）。当前全部生产写入路径满足该约定（评审逐路径核验：`Dimension.SetBlock` 的错误还原路径在同一同步调用内被守卫排除）；新增方块写入路径必须遵守，否则脏区块的估算缓存会陈旧。
 
 ### 记账挂接点（全集，实现必须逐一覆盖）
 
