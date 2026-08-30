@@ -14,7 +14,7 @@ git clone 后运行 `scripts/agents/confirm/install-listener.sh`（macOS）即�
 |---|---|
 | 全部工作者脚本 | `scripts/agents/`：`run-agent.sh`、`relay.sh`、`pr-finalize.sh`、`gates.sh`、`refresh-discussion.py`、`install-*.sh` 与 `scripts/agents/confirm/`（`confirm.sh`、`feishu.sh`、`feishu-listener.js`） |
 | 确认通道依赖 | `scripts/agents/confirm/package.json` + **`package-lock.json`**（`npm ci` 可复现 `@larksuiteoapi/node-sdk`）；`node_modules` 被 gitignore，**不随库走** |
-| 仓库 hooks | `.codex/hooks.json` / `.claude/settings.json` → `scripts/agent-hooks/guard.mjs`（已入库，跨机一致生效） |
+| 仓库 hooks 实现 | `scripts/agent-hooks/guard.mjs`（实现与测试随库走；当前 hook 配置已移除，未挂接） |
 | 文档与规划表 | `docs/feature-backlog.md`、`docs/development-process.md`、`docs/agents/*`、本文件 |
 | CI | `.github/workflows/ci.yml` 在 GitHub 侧执行，与机器无关 |
 | 仓库身份 | git remote、Discussion #71 id（`D_kwDOToJS8M4Aou6G`，硬编码在 `refresh-discussion.py` 与评论模板）——clone 同一个仓库即有效 |
@@ -107,7 +107,7 @@ scripts/agents/install-launchd.sh planner
 | `open_id` 变了 | 换了飞书应用或换用户账号——重跑 `--bootstrap` |
 | 飞书 SDK 版本漂移 | 用 `npm ci`（有 lock 文件）；不要 `npm install` 升级到未验证的大版本（卡片回调/表单 schema 依赖当前线） |
 | Card 2.0 表单 schema | 脚本已处理（form 内元素必须有 `name`、提交按钮必须 `form_action_type: submit`）；手工改卡片时注意 |
-| `AGENT_SAFE` | 默认 full-permission（claude `--dangerously-skip-permissions`；codex `--dangerously-bypass-approvals-and-sandbox`）；要受限模式设 `AGENT_SAFE=1`。仓库 hooks（`guard.mjs`）始终独立生效 |
+| `AGENT_SAFE` | 默认 full-permission（claude `--dangerously-skip-permissions`；codex `--dangerously-bypass-approvals-and-sandbox`）；要受限模式设 `AGENT_SAFE=1` |
 | 讨论区纪律 | 卡片已送达但用户未回复 ≠ 通道降级——不往 Discussion #71 写卡片转录，只等 listener 续跑；状态评论发出后用 `python3 scripts/agents/refresh-discussion.py --update` 同步正文（状态评论 + 正文同时到位） |
 | 卡片样式 | 新版面：头部按类型分色（澄清=橙/确认=蓝）、选项只保留按钮、底部说明默认不显示；手工改 `feishu.sh` 时注意 Card 2.0（form 内元素必须有 `name`、提交按钮 `form_action_type: submit`） |
 | 时间与 CI | 本机不用管 CI（GitHub 侧）；`pr-finalize.sh` 收尾守护依赖 `gh` 已登录 |

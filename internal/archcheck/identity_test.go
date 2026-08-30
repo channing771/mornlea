@@ -42,7 +42,6 @@ var (
 		"engine/include",
 		"Makefile",
 		".github/workflows/ci.yml",
-		".codex/hooks.json",
 		"scripts/agent-hooks",
 		".gitignore",
 	}

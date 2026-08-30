@@ -72,4 +72,4 @@ benchmark 与 `perfcheck` 的性能数值只记录，不改变退出状态；报
 
 ## Hook
 
-`.codex/hooks.json` 与 `.claude/settings.json` 共用 `scripts/agent-hooks/guard.mjs` 实现。Codex 配置包含 `PreToolUse`、`PostToolUse` 和 `Stop`；Claude 当前只配置 `PreToolUse` 与 `PostToolUse`。Hook 失败时修复根因，不得削弱或绕过门禁。
+原先挂在 `.codex/hooks.json` 与 `.claude/settings.json` 上的 `scripts/agent-hooks/guard.mjs` 钩子门禁已下线：两处 hook 配置均已移除，`guard.mjs` 实现与 `node --test scripts/agent-hooks/guard.test.mjs` 仍保留在仓库与 CI。钩子不再自动拦截后，代理仍须自觉遵守上文全部门禁，不得以钩子下线为由放宽验证。

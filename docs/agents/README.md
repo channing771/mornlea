@@ -89,4 +89,3 @@ scripts/agents/install-launchd.sh
 - **讨论与仓库不一致**：以 `docs/feature-backlog.md` 为准，改讨论正文。
 - **模型如何选择**：不设 `AGENT_MODEL` 时用各 CLI 配置的默认模型（本机：claude → `claude-fable-5[1m]`；codex → `gpt-5.6-sol`）。需要更高能力或更快模型时用 `AGENT_MODEL=<模型名> make agent-planner` 覆盖；模型名称以对应 CLI 支持列表为准。
 - **版本号冲突**：认领前按 `docs/development-process.md`「版本号互斥」检查所有 `就绪` 行的契约影响列。
-- **钩子拦截**：`.codex/hooks.json` 与 `.claude/settings.json` 共用 `scripts/agent-hooks/guard.mjs`，两者都配置 `PreToolUse` 与 `PostToolUse`，当前只有 Codex 配置 `Stop`；不得绕过，失败时修复根因。

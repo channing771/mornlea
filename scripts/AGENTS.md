@@ -8,7 +8,7 @@ Hook、gate、发布和 agent 自动化脚本改变的是仓库开发契约，�
 
 ## Hook 生命周期
 
-`.codex/hooks.json` 与 `.claude/settings.json` 共用 `scripts/agent-hooks/guard.mjs`，但生命周期配置不同：两者都运行 `PreToolUse` 和 `PostToolUse`，当前只有 Codex 配置 `Stop`。修改共享实现时必须分别核对两套调用协议，不能假定生命周期相同。
+`scripts/agent-hooks/guard.mjs` 曾由 `.codex/hooks.json` 与 `.claude/settings.json` 挂接；两处 hook 配置现已移除，该实现当前仅由 CI 的 `node --test scripts/agent-hooks/guard.test.mjs` 覆盖。修改 `guard.mjs` 时以该测试为准，不得假设仍存在钩子调用方或生命周期差异。
 
 ## Gate 现状
 
