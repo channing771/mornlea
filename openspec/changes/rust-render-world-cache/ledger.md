@@ -697,8 +697,25 @@ base 起零 diff；其 ready/spawn warmup 循环按 transport 收包时机决定
   docs、main specs、`openspec/config.yaml`，没有 merge/rebase main，也没有 archive。当前分支
   root identity/config 中尚未同步的 engine ABI v9 属于 Task 6.3，而不是本 planning task 的
   越权修复。
-- Follow-up planning independent review：pending。本节只记录 planning 实施事实，不把尚未
-  发生的独立评审写成通过。
+- Follow-up planning independent reviewer：`01a0518b-5a0f-7f03-a3b3-357f1fc23d9e`。
+
+### planning independent review
+
+- Reviewed planning commit：`a9161acf772c0065e744add1a53366e6eb2d5f14`
+  `docs(openspec): plan engine ABI v9 main sync`；planning implementer 为
+  `01a05184-9302-7b31-90f9-feeb5509b005`。
+- Final verdict：spec ✅；quality Approved；0 Critical、0 Important、0 Minor、0 open。
+- Reviewer 独立核验 local `main` 与 `origin/main` 均为
+  `a23833f92a80abb808b2b629c4dc043d2043f90a`，`8b8891a3..a23833f9` 恰为 22 commits、
+  42 paths；确认 follow-up sync 的 protected paths 覆盖 `engine/crates/mornlea_engine/`、
+  `engine/include/mornlea_engine.h`、`internal/fluid/`、`internal/nativeabi/` 与
+  `internal/sim/realm/`。
+- Reviewer 确认 OpenSpec 状态为 16/20 complete、4 remaining、`ready`，Task 6.2 未勾选；
+  Task 6.1 固定父上的 engine ABI v8 是不可改写的历史事实，最终 engine ABI v9 是从 selected
+  main 原样继承的目标事实，两者边界一致且无冲突。
+- Controller 接受该 clean planning verdict；follow-up planning 现可交给 Task 6.2 apply 流程。
+  本 bookkeeping 不勾选 Task 6.2，不修改其他 planning artifact、代码、current docs/config、
+  main specs，也不执行 merge 或 archive。
 
 ### planning validation
 
@@ -708,3 +725,14 @@ base 起零 diff；其 ready/spawn warmup 循环按 transport 收包时机决定
 - `git diff --check`：退出 0且无输出。`git diff --name-only` 的 tracked scope 恰为 existing
   `proposal.md`、唯一 delta spec、`design.md`、`tasks.md` 与 `ledger.md`；无代码、current
   docs/main specs/config、merge 或其他 tracked diff。
+
+### planning review bookkeeping validation
+
+- 在 reviewed planning HEAD `a9161acf772c0065e744add1a53366e6eb2d5f14` 与本次纯 ledger
+  working diff 上执行 `openspec validate --all --strict --no-interactive`：退出 0，78 passed、
+  0 failed。
+- `openspec instructions apply --change rust-render-world-cache --json`：退出 0；16/20 complete、
+  4 remaining、`state: ready`，Task 6.2 仍未勾选。
+- `git diff --check`：退出 0且无输出；`git diff --name-only` 的 tracked scope 仅为
+  `openspec/changes/rust-render-world-cache/ledger.md`。ignored review report/progress 只同步
+  reviewer 与 verdict，不形成 tracked diff。
