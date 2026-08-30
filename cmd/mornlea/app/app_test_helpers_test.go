@@ -25,6 +25,14 @@ import (
 
 type fakeInteractiveWindow struct {
 	captured bool
+	// pushedUIStates 记录 PushUIState 收到的下行状态原文,供「状态变化才
+	// 推送」断言复用。
+	pushedUIStates [][]byte
+}
+
+// PushUIState 记录一份下行 UI 状态(桥下行;替身不做任何呈现)。
+func (window *fakeInteractiveWindow) PushUIState(payload []byte) {
+	window.pushedUIStates = append(window.pushedUIStates, append([]byte(nil), payload...))
 }
 
 func (window *fakeInteractiveWindow) SetCursorCaptured(captured bool) {
@@ -45,6 +53,7 @@ func (*fakeInteractiveWindow) ContentSize() (int, int)     { return 1, 1 }
 func (*fakeInteractiveWindow) SetContentSize(int, int)     {}
 func (*fakeInteractiveWindow) CancelClose()                {}
 func (*fakeInteractiveWindow) Close()                      {}
+func (*fakeInteractiveWindow) Focus()                      {}
 
 // newRemoteRenderApplication 构造 64×64 离屏渲染替身，供本包渲染主题测试
 // 使用与既有用例相同的尺寸与零值渲染配置；跨包消费者直接使用 testkit 的

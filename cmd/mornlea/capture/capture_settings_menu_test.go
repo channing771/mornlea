@@ -1,37 +1,38 @@
 package capture
 
-// capture_settings_menu_test.go 钉住设置页 capture 使用正式 client ABI v9
-// layout v2 及确定性的非默认设置快照。
+// capture_settings_menu_test.go 钉住设置页 capture 使用确定性的非默认设置
+// 快照(草稿与已保存值一致、不脏);下行呈现由桥状态组装承担。
 
 import (
-	"encoding/binary"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/client"
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
+	"github.com/channing771/mornlea/internal/config"
 )
 
-// TestSettingsMenuCaptureSceneUsesLayoutV2Fixture 钉住设置页视觉场景使用正式
-// layout v2 的完整非默认快照，而不是另画一套测试专用表单。
-func TestSettingsMenuCaptureSceneUsesLayoutV2Fixture(t *testing.T) {
+// TestSettingsMenuCaptureSceneUsesCleanFixture 钉住设置页视觉场景携带完整
+// 非默认设置快照，而不是另画一套测试专用表单。
+func TestSettingsMenuCaptureSceneUsesCleanFixture(t *testing.T) {
 	scene := captureSceneByName(t, "settings-menu")
 	if scene.Settings == nil {
 		t.Fatal("settings-menu 场景必须携带 Settings 设置快照")
 	}
-	want := client.UISettings{
-		Visible:         true,
+	want := application.SettingsValues{
 		AudioVolume:     0.25,
-		Window:          client.UISettingsWindow960x540,
 		TexturePackPath: "packs/local",
-		Dirty:           false,
+		WindowSize:      config.WindowSize960x540,
 	}
-	if got := scene.Settings.UISettings(); got != want {
-		t.Fatalf("settings-menu Settings=%+v，想要 %+v", got, want)
+	if scene.Settings.Committed != want || scene.Settings.Draft != want {
+		t.Fatalf("settings-menu Settings=%+v，想要已保存与草稿均为 %+v", scene.Settings, want)
 	}
-	if scene.Menu != nil || scene.WarmupFrames != 8 || scene.Apply == nil {
-		t.Fatalf("settings-menu 场景不完整或混入主菜单快照: %+v", scene)
+	if scene.Settings.Draft != scene.Settings.Committed {
+		t.Fatalf("settings-menu 快照不应为脏草稿: %+v", scene.Settings)
 	}
-	encoded := client.EncodeUISettings(scene.Settings.UISettings())
-	if len(encoded) < 4 || binary.LittleEndian.Uint32(encoded[:4]) != 2 {
-		t.Fatalf("settings-menu 未编码为 layout v2: %v", encoded)
+	if scene.Menu || scene.WarmupFrames != 8 || scene.Apply == nil {
+		t.Fatalf("settings-menu 场景不完整或混入主菜单相位: %+v", scene)
+	}
+	// 设置页底图同为 menu-vista 全景：必须钉住与主菜单不同的自转时刻。
+	if scene.PinVolatile == nil {
+		t.Fatal("settings-menu 场景必须钉住全景自转 tick")
 	}
 }

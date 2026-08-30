@@ -1,0 +1,92 @@
+/*
+ * 设计令牌：菜单层的唯一样式数值来源，与 HUD 的
+ * internal/render/hud/style.go 面板族同语义。色值换算口径为
+ * 「linear RGBA 分量 × 255 四舍五入」转 sRGB：
+ *   - 标注「style.go」的行直接换算自该文件的令牌表；
+ *   - 标注「egui 皮肤令牌」的行取自已退役 egui 菜单皮肤的令牌数值（历史出处，
+ *     精修的第二份权威），供 style.go 未定义的次级文字/危险/相位底色沿用。
+ * 强调色纪律：琥珀是唯一强调色相，只用于选中、进度与焦点/编辑态；错误行走
+ * 危险红；不得引入第二种强调色相。
+ */
+:root {
+  color-scheme: dark;
+
+  /* ---- 表面与描边（style.go linear RGBA → sRGB） ---- */
+  /* panelSurface 0.045,0.052,0.062,0.84：半透明面板表面，透出世界画面。 */
+  --panel-surface: rgba(11, 13, 16, 0.84);
+  /* panelShadow 0.008,0.010,0.014,0.90：贴地投影层。 */
+  --panel-shadow: rgba(2, 3, 4, 0.9);
+  /* panelBorderLight 0.92,0.93,0.95,0.16：1px 亮边，把面板从暗背景「切」出来。 */
+  --panel-border: rgba(235, 237, 242, 0.16);
+  /* slotWell 0.020,0.024,0.030,0.92：输入框/滑杆轨道的凹陷底。 */
+  --slot-well: rgba(5, 6, 8, 0.92);
+  /* slotWellEdge 1,1,1,0.07：凹槽上沿内高光。 */
+  --slot-well-edge: rgba(255, 255, 255, 0.07);
+
+  /* ---- 强调（唯一琥珀色相） ---- */
+  /* accentAmber 1,0.72,0.24,0.98：sRGB (255,184,61)。 */
+  --accent-amber: rgba(255, 184, 61, 0.98);
+  /* 焦点/悬停描边用不透明形态（egui 皮肤令牌 ACCENT_STROKE 沿用值）。 */
+  --accent-amber-solid: rgb(255, 184, 61);
+  /* 强调色 25% 透明变体：进度填充与选中底衬（egui 皮肤令牌 ACCENT_WASH 沿用值）。 */
+  --accent-wash: rgba(255, 184, 61, 0.25);
+
+  /* ---- 文字 ---- */
+  /* textPrimaryFg 0.96,0.96,0.97,1（style.go）。 */
+  --text-primary: rgb(245, 245, 247);
+  /* 次级文字：行标签、版本行、注明行、提示（egui 皮肤令牌 TEXT_SECONDARY 沿用值）。 */
+  --text-secondary: rgb(158, 166, 179);
+  /* textPrimaryShadow 0,0,0,0.85（style.go）：文字投影双层规范。 */
+  --text-shadow: rgba(0, 0, 0, 0.85);
+  /* 错误行告警红（egui 皮肤令牌 DANGER 沿用值）。 */
+  --danger: rgb(240, 89, 89);
+
+  /* ---- 相位底色 ---- */
+  /* 主菜单/设置页整屏底：透明化让 wgpu 世界全景从 WebView 下层透出，
+   * 只保留上下深色渐变 scrim（panel 族同色），保证标题、按钮与版本行在
+   * 任何天空/地形亮度下可读；按钮与面板自身的表面不透明度不受影响。 */
+  --menu-background: linear-gradient(
+    180deg,
+    rgba(11, 13, 16, 0.44) 0%,
+    rgba(11, 13, 16, 0.08) 42%,
+    rgba(11, 13, 16, 0.5) 100%
+  );
+  /* 暂停遮罩：面板族同色 0.82 透明变体（egui 皮肤令牌 PAUSE_OVERLAY 沿用值）。 */
+  --pause-overlay: rgba(11, 13, 16, 0.82);
+
+  /* ---- 几何（退役 egui 菜单的布局常量沿用值） ---- */
+  --radius-panel: 8px;
+  --radius-control: 2px;
+  --hairline: 1px;
+  --menu-button-width: 220px;
+  --menu-button-height: 40px;
+  --menu-button-gap: 8px;
+  --title-button-gap: 24px;
+  --error-button-gap: 16px;
+  --panel-padding: 12px;
+  --settings-action-height: 36px;
+  --debug-panel-width: 460px;
+  --debug-row-height: 26px;
+  --debug-selected-mark: 3px;
+  --debug-value-column: 260px;
+
+  /* ---- 字号（退役 egui 菜单的 MENU_*_FONT_SIZE 沿用值） ---- */
+  --font-title: 40px;
+  --font-heading: 28px;
+  --font-button: 18px;
+  --font-message: 14px;
+  --font-version: 12px;
+
+  /* ---- 动效时长尺度：所有 transition 只消费这些令牌 ---- */
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* prefers-reduced-motion：动效时长全部归零，其余取值不变。 */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+  }
+}

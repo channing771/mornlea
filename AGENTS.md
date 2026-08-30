@@ -6,7 +6,7 @@ Agent 指南沿目录祖先链叠加生效；离目标文件最近的 `AGENTS.md
 
 ## 项目与契约
 
-Mornlea 是使用 Go 1.26 编写的独立体素游戏，Go module 为 `github.com/channing771/mornlea`，包含自研客户端、权威服务端、世界存储、物理、Rust `mornlea_engine` 数值引擎和 Rust `mornlea_client` wgpu 渲染客户端；项目不兼容官方 Minecraft 协议、存档或版权资源。当前基线已经包含协议 v32；玩家 schema v8、区块 schema v9、世界 metadata v3、独立 `companions.ai` schema v4、独立 `hostile_mobs` schema v1、engine ABI v8、client ABI v11，benchmark scenario 为 v20。
+Mornlea 是使用 Go 1.26 编写的独立体素游戏，Go module 为 `github.com/channing771/mornlea`，包含自研客户端、权威服务端、世界存储、物理、Rust `mornlea_engine` 数值引擎和 Rust `mornlea_client` wgpu 渲染客户端；项目不兼容官方 Minecraft 协议、存档或版权资源。当前基线已经包含协议 v32；玩家 schema v8、区块 schema v9、世界 metadata v3、独立 `companions.ai` schema v4、独立 `hostile_mobs` schema v1、engine ABI v8、client ABI v12，benchmark scenario 为 v20。
 
 ## 真相优先级
 
@@ -72,4 +72,4 @@ benchmark 与 `perfcheck` 的性能数值只记录，不改变退出状态；报
 
 ## Hook
 
-`.codex/hooks.json` 与 `.claude/settings.json` 共用 `scripts/agent-hooks/guard.mjs` 实现。Codex 配置包含 `PreToolUse`、`PostToolUse` 和 `Stop`；Claude 当前只配置 `PreToolUse` 与 `PostToolUse`。Hook 失败时修复根因，不得削弱或绕过门禁。
+原先挂在 `.codex/hooks.json` 与 `.claude/settings.json` 上的 `scripts/agent-hooks/guard.mjs` 钩子门禁已下线：两处 hook 配置均已移除，`guard.mjs` 实现与 `node --test scripts/agent-hooks/guard.test.mjs` 仍保留在仓库与 CI。钩子不再自动拦截后，代理仍须自觉遵守上文全部门禁，不得以钩子下线为由放宽验证。

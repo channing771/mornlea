@@ -554,11 +554,12 @@ func TestCaptureTargetBlockFeedbackFindsSceneByName(t *testing.T) {
 
 func TestCaptureSettled(t *testing.T) {
 	tests := []struct {
-		name    string
-		stats   client.MesherStats
-		pending int
-		lodBusy int
-		want    bool
+		name         string
+		stats        client.MesherStats
+		pending      int
+		lodBusy      int
+		vistaPending int
+		want         bool
 	}{
 		{name: "全部归零", want: true},
 		{name: "仍有 dirty", stats: client.MesherStats{DirtySections: 1}},
@@ -569,12 +570,15 @@ func TestCaptureSettled(t *testing.T) {
 		// 远环 tile 未收敛时同样不能判定 settled：异步上传依赖机器速度，
 		// 提前抓帧会让 golden 里远景带时有时无，不可复现。
 		{name: "远环仍有 tile", lodBusy: 1},
+		// 全景管线（菜单相位场景）未装配完同样不能抓帧：全景底图的地形带
+		// 与远环壳必须全部就绪。
+		{name: "全景仍有工作", vistaPending: 1},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := captureSettled(tc.stats, tc.pending, tc.lodBusy); got != tc.want {
-				t.Fatalf("captureSettled(%+v, %d, %d) = %v，想要 %v",
-					tc.stats, tc.pending, tc.lodBusy, got, tc.want)
+			if got := captureSettled(tc.stats, tc.pending, tc.lodBusy, tc.vistaPending); got != tc.want {
+				t.Fatalf("captureSettled(%+v, %d, %d, %d) = %v，想要 %v",
+					tc.stats, tc.pending, tc.lodBusy, tc.vistaPending, got, tc.want)
 			}
 		})
 	}
@@ -829,7 +833,7 @@ func TestTorchNightCaptureSceneIsRegistered(t *testing.T) {
 	if scene.WarmupFrames != 8 {
 		t.Fatalf("torch-night WarmupFrames=%d，想要 8", scene.WarmupFrames)
 	}
-	if scene.HUD != nil || scene.Menu != nil || scene.Settings != nil || scene.PinVolatile != nil {
+	if scene.HUD != nil || scene.Menu || scene.Settings != nil || scene.PinVolatile != nil {
 		t.Fatalf("torch-night 不应携带 HUD/菜单/设置/易变钉住夹具: %+v", scene)
 	}
 }
@@ -1160,7 +1164,7 @@ func TestBedNightCaptureSceneIsRegistered(t *testing.T) {
 	if scene.WarmupFrames != 8 {
 		t.Fatalf("bed-night WarmupFrames=%d，想要 8", scene.WarmupFrames)
 	}
-	if scene.HUD != nil || scene.Menu != nil || scene.Settings != nil || scene.PinVolatile != nil {
+	if scene.HUD != nil || scene.Menu || scene.Settings != nil || scene.PinVolatile != nil {
 		t.Fatalf("bed-night 不应携带 HUD/菜单/设置/易变钉住夹具: %+v", scene)
 	}
 }

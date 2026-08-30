@@ -26,6 +26,12 @@ const SteadyFrameMeshWorkMax = 64
 // 直接进入游戏循环。暂停页「退回主菜单」把相位送回菜单，外层循环据此在两条
 // 相位循环之间往返；「退出游戏」或窗口关闭返回 nil 正常退出。
 func RunInteractive(app *Application) error {
+	// 交互路径启动即请求窗口前置:后台启动(如被启动脚本或聚焦竞态抢占)时
+	// 窗口偶发不前置,用户面对一个看不见的客户端。benchmark/capture 不走本
+	// 入口;无窗口(测试直接构造)时跳过。
+	if app.window != nil {
+		app.window.Focus()
+	}
 	for !app.window.ShouldClose() {
 		if app.menu.phase != MenuPhaseGame {
 			if err := runMenuPhase(app); err != nil {
@@ -50,9 +56,10 @@ func RunInteractive(app *Application) error {
 }
 
 // runMenuPhase 运行主菜单相位：不捕获光标、不读取 WASD/面板/聊天/快捷栏输入，
-// 每帧 Poll → DrainUIEvents → typed 分派 → 渲染（含 UI 段）。
-// 「进入游戏」装配成功（startWorld 置 phase=game）后立即 SetCursorCaptured(true)
-// 并刷新鼠标基线，返回 nil 交给游戏相位；「退出游戏」或窗口关闭同样返回 nil。
+// 每帧 Poll → DrainUIEvents → 桥事件分派 → 渲染（菜单 chrome 由 WebView 呈现，
+// 帧内不再有 UI 段）。「进入游戏」装配成功（startWorld 置 phase=game）后立即
+// SetCursorCaptured(true) 并刷新鼠标基线,返回 nil 交给游戏相位；「退出游戏」
+// 或窗口关闭同样返回 nil。
 func runMenuPhase(app *Application) error {
 	for !app.window.ShouldClose() {
 		app.window.Poll()
@@ -86,8 +93,9 @@ const (
 	menuUIEventHandled
 )
 
-// handleMenuUIEvent 把 client ABI v9 的 typed 事件接到 Go 菜单语义。设置变化
-// 只在设置相位接受；非法、未知或错相位事件明确忽略，不把 `ActionID` 误执行。
+// handleMenuUIEvent 把 client ABI v12 的桥事件接到 Go 菜单语义。设置字段
+// 变化只在设置相位接受;动作按字符串 id 分发;非法、未知或错相位事件明确
+// 忽略,不把动作 id 误执行。
 func (a *Application) handleMenuUIEvent(event client.UIEvent) (quit bool, disposition menuUIEventDisposition) {
 	switch event.Kind {
 	case client.UIEventAction:
@@ -96,12 +104,10 @@ func (a *Application) handleMenuUIEvent(event client.UIEvent) (quit bool, dispos
 		if a.menu.phase != MenuPhaseSettings {
 			return false, menuUIEventIgnored
 		}
-		values, err := settingsValuesFromUI(event.Settings)
-		if err != nil {
+		if err := a.applySettingsFieldChange(event.Field, event.Value); err != nil {
 			slog.Warn("忽略非法设置草稿事件", "error", err)
 			return false, menuUIEventIgnored
 		}
-		a.settings.Draft = values
 		a.settings.status = ""
 		a.settings.error = ""
 		return false, menuUIEventHandled
@@ -175,8 +181,9 @@ func runGamePhase(app *Application) error {
 				lastMouseX, lastMouseY = app.window.CursorPos()
 				justCaptured = true
 			case app.panelVisible():
-				// 面板期间的 Esc 由 Rust egui 消费（编辑中取消编辑、非编辑
-				// 态关闭面板），Go 不释放光标；CLOSE 事件回传后由本侧复位。
+				// 面板期间的 Esc 由面板界面经桥上行消费（编辑中取消编辑、
+				// 非编辑态回传关闭动作），Go 不释放光标；关闭动作到达后由
+				// 本侧复位。
 			case app.pauseVisible():
 				// 暂停覆盖层占据栈顶时 Esc 即返回游戏；与「返回游戏」按钮
 				// 动作共用防重入哨兵，双通路同帧到达只生效一次。Esc 关闭
@@ -186,7 +193,7 @@ func runGamePhase(app *Application) error {
 				justCaptured = true
 			default:
 				// 游戏相位的默认档：Esc 从「仅释放光标」升级为打开暂停层，
-				// 打开动作本身必须释放光标（spec egui-tool-ui）。
+				// 打开动作本身必须释放光标（spec webview-menu-ui）。
 				app.openPauseOverlay()
 			}
 		}
@@ -219,8 +226,8 @@ func runGamePhase(app *Application) error {
 		}
 		pausedUI := app.pauseVisible()
 
-		// 调试面板：F3 边沿仍由 Go 检测；选中/编辑/确认/取消/关闭由 Rust egui
-		// 处理并回传结构化事件，这里按序消费并同步运行时快照。面板不存在时
+		// 调试面板：F3 边沿仍由 Go 检测；选中/编辑/确认/取消/关闭经桥上行
+		// 事件回传，这里按序消费并同步运行时快照。面板不存在时
 		// （未开 --dev）整段直接跳过。暂停期不再叠加新界面：切换边沿被整体
 		// 抑制，恢复后需重新按下才生效。
 		if app.panel != nil && !pausedUI {

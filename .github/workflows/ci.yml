@@ -143,6 +143,40 @@ jobs:
             echo "runner: ${RUNNER_OS}/$(uname -m)"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 记录开始时间
+        run: echo "CI_START_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      # pnpm 版本读 frontend package.json 的 packageManager 字段（与本地 corepack
+      # 钉版同源）；必须在 setup-node 之前安装，node 缓存才能调用 pnpm store。
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: engine/crates/mornlea_client/frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          # 与 frontend engines（>=22 <25）一致的大版本。
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: engine/crates/mornlea_client/frontend/pnpm-lock.yaml
+      - name: 前端门禁（冻结安装 + typecheck + vitest + 构建）
+        run: |
+          cd engine/crates/mornlea_client/frontend
+          corepack pnpm install --frozen-lockfile
+          corepack pnpm typecheck
+          corepack pnpm test
+          corepack pnpm build
+      - name: dist 入库一致性
+        run: git diff --exit-code -- engine/crates/mornlea_client/frontend/dist
+      - name: 记录 frontend 信息
+        if: ${{ always() }}
+        run: |
+          {
+            echo "frontend seconds: $(( $(date +%s) - CI_START_EPOCH ))"
+            echo "runner: ${RUNNER_OS}/$(uname -m)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   go-race:
     needs: native-macos
     runs-on: macos-latest
@@ -332,13 +366,14 @@ jobs:
 
   test:
     if: ${{ always() }}
-    needs: [native-macos, quality, go-race, integration, linux-server]
+    needs: [native-macos, quality, frontend, go-race, integration, linux-server]
     runs-on: ubuntu-latest
     steps:
       - name: 汇总全部必需门禁
         run: |
           test "${{ needs.native-macos.result }}" = success
           test "${{ needs.quality.result }}" = success
+          test "${{ needs.frontend.result }}" = success
           test "${{ needs['go-race'].result }}" = success
           test "${{ needs.integration.result }}" = success
           test "${{ needs.linux-server.result }}" = success

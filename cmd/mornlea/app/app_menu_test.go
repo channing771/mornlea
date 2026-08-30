@@ -5,10 +5,11 @@ package app
 // app_menu_test.go：主菜单状态机与延迟世界装配的测试。复用 app_test_helpers_test.go
 // 的假窗口与 app_connection_test.go 的反依赖注入，验证 StartAtMenu 构造停留菜单、
 // 「进入游戏」延迟装配、装配失败可退出、starting 防重入、菜单相位输入不生效，以及
-// 真实菜单内容的跨语言段编码（Ruling 8 非 4 对齐）锁。
+// 真实菜单内容的桥下行状态组装锁。
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -116,25 +117,24 @@ func TestStartAtMenuConstructsMenuWithoutWorld(t *testing.T) {
 		t.Fatal("menu.version 不应为空（dev 或构建信息版本）")
 	}
 
-	menu := app.menu.uiMenu()
-	if !menu.Visible {
-		t.Fatal("menu.Visible 应为 true（菜单相位可见）")
+	state := app.buildUIState()
+	if state.Phase != "menu" {
+		t.Fatalf("桥相位 = %q，want menu", state.Phase)
 	}
-	if menu.Title != "Mornlea" || menu.Version != app.menu.version || menu.Error != "" {
-		t.Fatalf("menu 标题/版本/错误行不符: %+v", menu)
+	if state.Menu == nil {
+		t.Fatal("菜单相位应携带 menu 分节")
 	}
-	wantButtons := []client.UIButton{
+	if state.Menu.Title != "Mornlea" || state.Menu.Version != app.menu.version || state.Menu.Error != "" {
+		t.Fatalf("menu 标题/版本/错误行不符: %+v", state.Menu)
+	}
+	wantButtons := []UIMenuButton{
 		{ID: menuActionStart, Label: "进入游戏", Enabled: true},
 		{ID: menuActionMultiplayer, Label: "多人游戏", Enabled: false},
 		{ID: menuActionSettings, Label: "设置", Enabled: true},
 		{ID: menuActionQuit, Label: "退出游戏", Enabled: true},
 	}
-	if !reflect.DeepEqual(menu.Buttons, wantButtons) {
-		t.Fatalf("菜单按钮不符: got=%+v want=%+v", menu.Buttons, wantButtons)
-	}
-
-	if segment := app.uiSegment(); len(segment) == 0 {
-		t.Fatal("菜单相位 uiSegment() 应产出非空 UI 段")
+	if !reflect.DeepEqual(state.Menu.Buttons, wantButtons) {
+		t.Fatalf("菜单按钮不符: got=%+v want=%+v", state.Menu.Buttons, wantButtons)
 	}
 }
 
@@ -156,13 +156,9 @@ func TestHandleMenuUIEventRoutesAction(t *testing.T) {
 func TestHandleMenuUIEventIgnoresNonActionOutsideSettings(t *testing.T) {
 	app := &Application{menu: menuState{phase: MenuPhaseMenu, error: "保留"}}
 	quit, disposition := app.handleMenuUIEvent(client.UIEvent{
-		Kind:     client.UIEventSettingsChanged,
-		ActionID: menuActionQuit,
-		Settings: client.UISettingsValues{
-			AudioVolume:     0.25,
-			Window:          client.UISettingsWindow960x540,
-			TexturePackPath: "packs/local",
-		},
+		Kind:  client.UIEventSettingsChanged,
+		Field: client.UISettingsFieldAudioVolume,
+		Value: json.RawMessage("0.25"),
 	})
 	if quit || disposition != menuUIEventIgnored {
 		t.Fatalf("settings quit=%v disposition=%v", quit, disposition)
@@ -334,9 +330,9 @@ func TestHandleMenuEventQuitRequestsClose(t *testing.T) {
 // TestHandleMenuEventUnknownIDIgnored 验证未知/禁用按钮 id 被忽略，不改变菜单状态。
 func TestHandleMenuEventUnknownIDIgnored(t *testing.T) {
 	app := newStartWorldTestApp(t, startWorldSuccessDeps(t))
-	for _, id := range []uint32{menuActionMultiplayer, 99} {
+	for _, id := range []string{menuActionMultiplayer, "unknown-action"} {
 		if quit := app.handleMenuEvent(id); quit {
-			t.Fatalf("禁用/未知 id %d 不应请求退出", id)
+			t.Fatalf("禁用/未知 id %q 不应请求退出", id)
 		}
 	}
 	if app.menu.phase != MenuPhaseMenu {
@@ -354,10 +350,12 @@ type menuInputSpyWindow struct {
 	polled             bool
 	gameKeyQueries     atomic.Int32
 	cursorCaptureCalls atomic.Int32
+	focusCalls         atomic.Int32
 }
 
 func (window *menuInputSpyWindow) ShouldClose() bool { return window.polled }
 func (window *menuInputSpyWindow) Poll()             { window.polled = true }
+func (window *menuInputSpyWindow) Focus()            { window.focusCalls.Add(1) }
 func (window *menuInputSpyWindow) KeyDown(client.Key) bool {
 	window.gameKeyQueries.Add(1)
 	return false
@@ -410,6 +408,10 @@ func TestMenuPhaseInputIsolation(t *testing.T) {
 			if got := spy.cursorCaptureCalls.Load(); got != 0 {
 				t.Fatalf("菜单相位（未点击进入游戏）不应捕获光标，捕获 = %d", got)
 			}
+			// 交互路径启动时窗口前置一次（后台启动体验项）。
+			if got := spy.focusCalls.Load(); got != 1 {
+				t.Fatalf("RunInteractive 应恰请求一次窗口前置，实际 %d", got)
+			}
 		})
 	}
 }
@@ -421,63 +423,46 @@ func newMenuWindowedTestDepsWithWindow(t *testing.T, renderer *client.Renderer, 
 	return deps
 }
 
-// TestUISegmentRealMenuEncodingLock 锁定真实菜单内容（中文标签、错误行）的跨语言段编码：
-// 段字节长度与 EncodeUIMenu 算术预期一致，且非 4 对齐（Ruling 8：TLV 文本段豁免 4 对齐）。
-func TestUISegmentRealMenuEncodingLock(t *testing.T) {
-	menu := client.UIMenu{
-		Visible: true,
-		Title:   "Mornlea",
-		Version: "dev",
-		Error:   "存档无法打开",
-		Buttons: MenuButtons(),
+// TestBuildUIStateRealMenuContentLock 锁定真实菜单内容（中文标签、错误行、
+// 版本行、四按钮语义)在桥下行状态中的形状:内容与交互主菜单逐字一致,
+// 供三端钉值测试以同一份输入对照 schema。
+func TestBuildUIStateRealMenuContentLock(t *testing.T) {
+	app := &Application{menu: menuState{
+		phase: MenuPhaseMenu, title: "Mornlea", version: "dev", error: "存档无法打开",
+	}}
+	state := app.buildUIState()
+	if state.Menu == nil {
+		t.Fatal("菜单相位应携带 menu 分节")
 	}
-	app := &Application{menuOverride: &menu}
-
-	segment := app.uiSegment()
-	expected := uiSegmentArithmeticLength(menu)
-	if len(segment) != expected {
-		t.Fatalf("真实菜单段长度 = %d，算术预期 %d", len(segment), expected)
+	if state.Menu.Title != "Mornlea" || state.Menu.Version != "dev" ||
+		state.Menu.Error != "存档无法打开" {
+		t.Fatalf("menu 分节内容不符: %+v", state.Menu)
 	}
-	if len(segment)%4 == 0 {
-		t.Fatalf("真实菜单段长度 %d 不应 4 对齐（Ruling 8 非对齐 TLV 文本段）", len(segment))
+	if len(state.Menu.Buttons) != 4 {
+		t.Fatalf("按钮数=%d，想要 4", len(state.Menu.Buttons))
 	}
-	if len(segment) == 0 {
-		t.Fatal("菜单段不应为空")
+	if state.Menu.Buttons[1].ID != menuActionMultiplayer || state.Menu.Buttons[1].Enabled {
+		t.Fatalf("多人游戏按钮应保持禁用: %+v", state.Menu.Buttons[1])
 	}
 }
 
-// TestUISegmentMenuOverrideNilClear 锁定 menuOverride 的 nil 语义:非 nil(如 capture
-// 场景注入)时 uiSegment() 产出非空段;复位 nil 后切回既有相位判定(零值 Application 的
-// menu.phase == MenuPhaseGame),返回 nil——菜单覆盖只对一帧生效,场景切换后清除。
-func TestUISegmentMenuOverrideNilClear(t *testing.T) {
-	menu := client.UIMenu{
-		Visible: true,
-		Title:   "Mornlea",
-		Version: "dev",
-		Error:   "存档无法打开",
-		Buttons: MenuButtons(),
+// TestBuildUIStateStartingDisablesEnterGame 锁定装配进行中的下行防重呈现：
+// starting 相位的菜单分节把「进入游戏」按钮置为禁用，前端经下行状态置灰且
+// 不再产生点击/默认按钮事件；其余按钮的可用性不变。
+func TestBuildUIStateStartingDisablesEnterGame(t *testing.T) {
+	app := &Application{menu: menuState{
+		phase: MenuPhaseStarting, title: "Mornlea", version: "dev",
+	}}
+	state := app.buildUIState()
+	if state.Menu == nil {
+		t.Fatal("starting 相位应携带 menu 分节")
 	}
-	app := &Application{}
-	app.menuOverride = &menu
-	if segment := app.uiSegment(); len(segment) == 0 {
-		t.Fatal("menuOverride 非空时 uiSegment() 应产出非空 UI 段")
+	if state.Menu.Buttons[0].ID != menuActionStart || state.Menu.Buttons[0].Enabled {
+		t.Fatalf("starting 相位进入游戏按钮应经下行禁用: %+v", state.Menu.Buttons[0])
 	}
-	app.menuOverride = nil
-	if segment := app.uiSegment(); segment != nil {
-		t.Fatalf("menuOverride 复位 nil 后 uiSegment() 应为 nil,got %d 字节", len(segment))
+	// 回到菜单相位后按钮恢复可用。
+	app.menu.phase = MenuPhaseMenu
+	if buttons := app.buildUIState().Menu.Buttons; !buttons[0].Enabled {
+		t.Fatalf("菜单相位进入游戏按钮应恢复可用: %+v", buttons[0])
 	}
-}
-
-// uiSegmentArithmeticLength 按 EncodeUIMenu 的字段布局算术计算段字节长度：
-// 固定 4 个 u32（layout/flags/buttonCount）+ 每按钮 [u32 id + u32 label_len + label + u32 enabled]
-// + 三个字符串字段 [u32 len + bytes]。
-func uiSegmentArithmeticLength(menu client.UIMenu) int {
-	length := 3 * 4
-	for _, button := range menu.Buttons {
-		length += 4 + 4 + len([]byte(button.Label)) + 4
-	}
-	length += 4 + len([]byte(menu.Title))
-	length += 4 + len([]byte(menu.Version))
-	length += 4 + len([]byte(menu.Error))
-	return length
 }

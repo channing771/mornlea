@@ -80,6 +80,10 @@ func (s *SectionScheduler) Connectivity(p core.SectionPos) (mesh.Connectivity, b
 }
 
 // FlushUploads 按与中心区块的水平距离从近到远上传,预算耗尽即停。
+//
+// 排序键除距离外显式补 X/Y/Z 兜底:pending 是 map,range 顺序逐进程随机,
+// 而 slices.SortFunc 不稳定——若等距区段的先后随 map 迭代漂移,顶点池的
+// 布局就随进程变化,渲染输出失去逐进程可复现性(golden 双阈值契约的前提)。
 func (s *SectionScheduler) FlushUploads(center core.ChunkPos) {
 	s.keys = s.keys[:0]
 	for p := range s.pending {
@@ -88,7 +92,16 @@ func (s *SectionScheduler) FlushUploads(center core.ChunkPos) {
 	// 用 slices.SortFunc 而非 sort.Slice:后者要为 reflect swapper 逃逸一次闭包,
 	// 每帧一次堆分配;而 water pass 的边界写死了「预热后不产生每帧堆分配」。
 	slices.SortFunc(s.keys, func(a, b core.SectionPos) int {
-		return cmp.Compare(schedulerDistance2(a, center), schedulerDistance2(b, center))
+		if c := cmp.Compare(schedulerDistance2(a, center), schedulerDistance2(b, center)); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(a.X, b.X); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(a.Y, b.Y); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Z, b.Z)
 	})
 	for _, p := range s.keys {
 		quads := s.pending[p]
