@@ -1842,3 +1842,80 @@ delta 行为契约、代码、current docs、main specs 或配置，不执行 me
   bookkeeping；Task 6.9 的 immutable-HEAD 18 门禁与 Task 6.10 whole-integration review 均未
   在本任务执行。implementation commit SHA、final-HEAD 复验与 clean status 写入 ignored
   `task-6.8-report.md`，避免递归改写 tracked ledger。
+
+## Task 6.8 quality fix round 1/5：capture nullable handle 与 checked row end
+
+### Review verdict、finding 与修复范围
+
+- FIX_BASE 精确为 `09a732cceae6845531ec52f586d58c120ad4dc47`，工作树开始时 tracked
+  clean；冻结 selected-main 仍为
+  `9bb84c6841b59a18b030256d5952ed60acc215da`，本轮未读取、比较、审计或合入 live main。
+- Fresh independent spec review 报告
+  `.superpowers/sdd/2026-08-30-rust-render-world-main-integration/task-6.8-spec-review.md`
+  对 `09a732cc` 给出 spec-compliance **PASS**，0 Critical、0 Important、0 Minor、0 open。
+- Fresh independent quality review 报告
+  `.superpowers/sdd/2026-08-30-rust-render-world-main-integration/task-6.8-quality-review.md`
+  对同一 HEAD 给出 quality **Needs fixes**：0 Critical、1 Important、1 Minor、2 open。
+  Important 指出 `AutoRelease(CGHandle)` 可先包装三个 CoreGraphics create 函数返回的 NULL，
+  随后 error return 会在 `Drop` 中无条件 `CFRelease(NULL)` 并导致 runtime crash，破坏
+  `CaptureUnavailable` / Go typed error / app pump 原样错误交付。Minor 指出
+  `copy_rows_top_down` 的 `last_row_start + width_bytes` 未 checked，与 overflow 返回 false 且
+  不写 `dst` 的 helper 契约不一致。
+- 技术复核确认两项 finding 均真实。本轮按用户裁决由同一 fix implementer 关闭 Important 与
+  同文件安全边界内的 Minor；未派发子代理。tracked 修改严格限于
+  `engine/crates/mornlea_client/src/capture.rs` 与本 append-only ledger；未修改 reviewer report、
+  `tasks.md`、app、header/ABI、Go bridge、protected/golden 或其他生产/测试路径。写入前 ledger
+  committed prefix 为 1,844 行、141,329 bytes，SHA-256
+  `880029594b3d3b7ba69222741f788ae50b8da44677604212c0bcbf43f72542cc`。
+
+### 严格 TDD：RED、最小实现与 GREEN
+
+- Important RED：先新增不依赖真实窗口的纯测试
+  `capture::tests::auto_release_rejects_null_handle`，要求 nullable create result 返回 `None`、
+  不能形成 release guard；再运行
+  `cargo test -p mornlea_client --locked capture::tests::auto_release_rejects_null_handle`。
+  退出 101，唯一编译错误为 `E0599`：`AutoRelease::from_nullable` 尚不存在，符合旧类型无法表达
+  nullable→non-null 收窄边界的预期。
+- Important 最小实现：把 `AutoRelease` 字段改为 `NonNull<c_void>`，新增
+  `from_nullable(CGHandle) -> Option<AutoRelease>` 与生命周期内 `as_ptr`；
+  `CGWindowListCreateImage`、`CGColorSpaceCreateDeviceRGB`、`CGBitmapContextCreate` 三个创建点
+  均先把 NULL 映射为 `CaptureUnavailable`，只对 non-null handle 建 guard。`Drop` 的类型不变量
+  现保证 `CFRelease` 参数非 NULL。相同 targeted command 退出 0，1 passed、0 failed、
+  133 filtered out。
+- Minor RED：Important 已 GREEN 后，新增纯 helper test
+  `copy_rows_top_down_rejects_last_row_end_overflow_without_partial_writes`，输入
+  `stride=usize::MAX`、`width_bytes=1`、`height=2` 并钉死 `dst` 不变；运行 exact targeted
+  command 退出 101，目标 test 在旧 `last_row_start + width_bytes` 处按预期发生
+  `attempt to add with overflow`，0 passed、1 failed、134 filtered out。
+- Minor 最小实现：把末行结束位置改为 `last_row_start.checked_add(width_bytes)`，溢出直接返回
+  false；后续各行 start/end 都不超过已验证的末行范围。相同 exact targeted command 退出 0，
+  1 passed、0 failed、134 filtered out，且 test 证明 `dst` 保持 `[0xAA; 2]`。
+- `cargo fmt --manifest-path engine/Cargo.toml --all` 后运行
+  `cd engine && cargo test -p mornlea_client --locked capture`：退出 0，12 passed、0 failed、
+  123 filtered out；覆盖两项新回归、既有 top-down/padding/SDK option tests 与 capture FFI tests，
+  未启动或聚焦真实窗口。
+
+### Focused validation、ABI 与待复审裁决
+
+- `cd engine && cargo test -p mornlea_client --locked`：退出 0，135 passed、0 failed、0 ignored；
+  doc-tests 0 failed。
+- `make rust`：退出 0；release `mornlea_client` 重建并重签两个 dylib。
+- `go test ./internal/client -race -count=1`：退出 0，package PASS。
+- `go test ./cmd/mornlea/app -race -run
+  'Test(PumpDevCapture|RunInteractive(Game|Menu)LoopPumpsPendingCaptureOnce)' -count=1`：退出 0，
+  package PASS；冻结父的 7 个 focused tests 保持。
+- `go test ./internal/archcheck -count=1`：退出 0，package PASS。
+- `openspec validate rust-render-world-cache --strict --no-interactive`：退出 0，change valid；
+  `openspec validate --all --strict --no-interactive`：退出 0，80 passed、0 failed。
+- v14 release audit：header 与 dynamic set 精确为 29 versioned + 1 identity、总计 30；runtime
+  identity 14；29/29 versioned exports 只传 ABI 13 时均返回 status 1 `ABI_VERSION`。本次
+  pre-commit dylib SHA-256 为
+  `d9bbedc4b0c79d6b1f3261e7c6c293e0af6e7bf074d81c1184c2e63956cbd04a`。
+- 四个 app paths、五组 protected engine/fluid paths 的 committed/worktree diff，以及 visual
+  golden 的 three-dot/worktree diff，相对 exact `9bb84c68` 全部为零；`git diff --check`
+  无输出。
+- 本节记录 fix implementer 的 addressed evidence，不冒充独立 reviewer closure。Task 6.8
+  必须继续 unchecked，进度保持 25 total / 22 complete / 3 remaining；修复提交、final-HEAD
+  focused rerun、artifact SHA、clean status 与 concerns 写入 ignored `task-6.8-report.md`。后续
+  fresh scoped quality re-review 需确认 1 Important + 1 Minor 均关闭且 0 open，才能进入
+  Task 6.8 bookkeeping；本轮不运行 Task 6.9 全 18 门禁，不 archive、push、merge 或 rebase。

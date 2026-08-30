@@ -27,7 +27,7 @@
 // 本模块。
 #![allow(deprecated)]
 
-use std::os::raw::c_void;
+use std::{os::raw::c_void, ptr::NonNull};
 
 /// CG 不透明句柄:`CGImageRef`/`CGColorSpaceRef`/`CGContextRef` 的统一形态。
 /// 句柄全部由本模块创建,经 [`AutoRelease`] 成对释放,不跨模块流转。
@@ -145,14 +145,27 @@ unsafe extern "C" {
 }
 
 /// RAII 守卫:Drop 时恰好 `CFRelease` 一次。字段顺序决定释放顺序(逆序
-/// Drop),调用方保证 `raw` 行缓冲声明在 context 守卫之前。
-struct AutoRelease(CGHandle);
+/// Drop),调用方保证 `raw` 行缓冲声明在 context 守卫之前。字段的
+/// `NonNull` 不变量保证系统创建失败的 NULL 永远不会进入 `Drop`。
+struct AutoRelease(NonNull<c_void>);
+
+impl AutoRelease {
+    /// 把 CoreGraphics 创建函数的 nullable 结果收窄为可释放守卫。
+    fn from_nullable(handle: CGHandle) -> Option<Self> {
+        NonNull::new(handle).map(Self)
+    }
+
+    /// 返回只在守卫生命周期内有效的 CoreGraphics 原始句柄。
+    fn as_ptr(&self) -> CGHandle {
+        self.0.as_ptr()
+    }
+}
 
 impl Drop for AutoRelease {
     fn drop(&mut self) {
-        // SAFETY: 句柄由本模块的 CG 创建函数取得,Drop 保证恰好释放一次,
-        // 不存在二次释放或悬垂借用。
-        unsafe { CFRelease(self.0) };
+        // SAFETY: `NonNull` 保证句柄非空,句柄由本模块的 CG 创建函数取得,
+        // Drop 保证恰好释放一次,不存在二次释放或悬垂借用。
+        unsafe { CFRelease(self.0.as_ptr()) };
     }
 }
 
@@ -179,19 +192,23 @@ pub fn capture_window(window_number: i64) -> Result<CapturedFrame, CaptureUnavai
     }
     // SAFETY: 纯查询调用,窗口服务器对无效窗口号返回 NULL 而非未定义行为;
     // 返回的 CGImage 由 AutoRelease 成对释放。
-    let image = AutoRelease(unsafe {
+    let Some(image) = AutoRelease::from_nullable(unsafe {
         CGWindowListCreateImage(
             CG_RECT_NULL,
             CG_WINDOW_LIST_OPTION_INCLUDING_WINDOW,
             window_number as u32,
             CG_WINDOW_IMAGE_BEST_RESOLUTION,
         )
-    });
-    if image.0.is_null() {
+    }) else {
         return Err(CaptureUnavailable);
-    }
+    };
     // SAFETY: image 是上方刚创建并验非空的有效 CGImage。
-    let (width, height) = unsafe { (CGImageGetWidth(image.0), CGImageGetHeight(image.0)) };
+    let (width, height) = unsafe {
+        (
+            CGImageGetWidth(image.as_ptr()),
+            CGImageGetHeight(image.as_ptr()),
+        )
+    };
     if width == 0 || height == 0 || width > MAX_CAPTURE_DIMENSION || height > MAX_CAPTURE_DIMENSION
     {
         return Err(CaptureUnavailable);
@@ -204,10 +221,10 @@ pub fn capture_window(window_number: i64) -> Result<CapturedFrame, CaptureUnavai
     };
     // SAFETY: 设备 RGB 色彩空间为常驻对象,失败返回 NULL;句柄由
     // AutoRelease 成对释放。
-    let color_space = AutoRelease(unsafe { CGColorSpaceCreateDeviceRGB() });
-    if color_space.0.is_null() {
+    let Some(color_space) = AutoRelease::from_nullable(unsafe { CGColorSpaceCreateDeviceRGB() })
+    else {
         return Err(CaptureUnavailable);
-    }
+    };
     let width_bytes = width * BYTES_PER_PIXEL;
     let Some(stride) = align_up(width_bytes, STRIDE_ALIGNMENT) else {
         return Err(CaptureUnavailable);
@@ -221,23 +238,22 @@ pub fn capture_window(window_number: i64) -> Result<CapturedFrame, CaptureUnavai
     // SAFETY: raw 覆盖 stride×height 字节且后于 context 释放;8 bpp +
     // premultiplied first + 32-bit little endian 是文档保证支持的组合,
     // 行距不小于 width_bytes。
-    let context = AutoRelease(unsafe {
+    let Some(context) = AutoRelease::from_nullable(unsafe {
         CGBitmapContextCreate(
             raw.as_mut_ptr().cast::<c_void>(),
             width,
             height,
             8,
             stride,
-            color_space.0,
+            color_space.as_ptr(),
             BITMAP_INFO,
         )
-    });
-    if context.0.is_null() {
+    }) else {
         return Err(CaptureUnavailable);
-    }
+    };
     // SAFETY: image 与 context 均为本函数创建的有效句柄,绘制矩形铺满
     // 整个上下文。
-    unsafe { CGContextDrawImage(context.0, full_rect(width, height), image.0) };
+    unsafe { CGContextDrawImage(context.as_ptr(), full_rect(width, height), image.as_ptr()) };
     // CG 上下文原点在左下,内存第 0 行是画面底行;逐行反序拷出同时剥离
     // 行距 padding,输出与 readback 的自上而下行序一致。
     let mut pixels = vec![0u8; pixels_len];
@@ -297,7 +313,10 @@ fn copy_rows_top_down(
     let Some(last_row_start) = (height - 1).checked_mul(stride) else {
         return false;
     };
-    if src.len() < last_row_start + width_bytes {
+    let Some(last_row_end) = last_row_start.checked_add(width_bytes) else {
+        return false;
+    };
+    if src.len() < last_row_end {
         return false;
     }
     for row in 0..height {
@@ -311,10 +330,17 @@ fn copy_rows_top_down(
 #[cfg(test)]
 mod tests {
     use super::{
-        BITMAP_INFO, CG_BITMAP_BYTE_ORDER_32_LITTLE, CG_IMAGE_ALPHA_PREMULTIPLIED_FIRST,
-        CG_WINDOW_IMAGE_BEST_RESOLUTION, CG_WINDOW_LIST_OPTION_INCLUDING_WINDOW,
-        MAX_CAPTURE_DIMENSION, align_up, copy_rows_top_down,
+        AutoRelease, BITMAP_INFO, CG_BITMAP_BYTE_ORDER_32_LITTLE,
+        CG_IMAGE_ALPHA_PREMULTIPLIED_FIRST, CG_WINDOW_IMAGE_BEST_RESOLUTION,
+        CG_WINDOW_LIST_OPTION_INCLUDING_WINDOW, MAX_CAPTURE_DIMENSION, align_up,
+        copy_rows_top_down,
     };
+
+    /// CoreGraphics 创建函数返回 NULL 时不得形成会执行 `CFRelease` 的守卫。
+    #[test]
+    fn auto_release_rejects_null_handle() {
+        assert!(AutoRelease::from_nullable(std::ptr::null_mut()).is_none());
+    }
 
     /// 手抄的 CG 枚举位值必须与本机 SDK 头(`CGWindow.h`/`CGImage.h`)逐位
     /// 一致:窗口列表与图像分辨率两个枚举都是 `CF_OPTIONS(uint32_t, ...)`,
@@ -360,6 +386,15 @@ mod tests {
         let mut dst = vec![0xAAu8; 8];
         assert!(!copy_rows_top_down(&src, 8, 4, 2, &mut dst));
         assert!(dst.iter().all(|&byte| byte == 0xAA), "失败不得写 dst");
+    }
+
+    /// 末行结束位置溢出必须整体拒绝,不得 panic 或写入部分输出。
+    #[test]
+    fn copy_rows_top_down_rejects_last_row_end_overflow_without_partial_writes() {
+        let src = [0x11u8, 0x22];
+        let mut dst = [0xAAu8; 2];
+        assert!(!copy_rows_top_down(&src, usize::MAX, 1, 2, &mut dst));
+        assert_eq!(dst, [0xAA; 2], "失败不得写 dst");
     }
 
     /// 输出缓冲长度与 width_bytes×height 不符必须拒绝。
