@@ -280,28 +280,30 @@
         }
       ]
     },
+    "dialogue_terminal_nonfailed_fact_node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "state", "reason"],
+      "properties": {
+        "kind": {"const": "terminal"},
+        "state": {"enum": ["completed", "timed_out", "stopped"]},
+        "reason": {"const": "none"}
+      }
+    },
+    "dialogue_terminal_failed_fact_node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "state", "reason"],
+      "properties": {
+        "kind": {"const": "terminal"},
+        "state": {"const": "failed"},
+        "reason": {"enum": ["planner_unavailable", "invalid_plan", "path_unreachable", "world_changed", "inventory_full"]}
+      }
+    },
     "dialogue_terminal_fact_node": {
       "oneOf": [
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["kind", "state", "reason"],
-          "properties": {
-            "kind": {"const": "terminal"},
-            "state": {"enum": ["completed", "timed_out", "stopped"]},
-            "reason": {"const": "none"}
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["kind", "state", "reason"],
-          "properties": {
-            "kind": {"const": "terminal"},
-            "state": {"const": "failed"},
-            "reason": {"enum": ["planner_unavailable", "invalid_plan", "path_unreachable", "world_changed", "inventory_full"]}
-          }
-        }
+        {"$ref": "#/$defs/dialogue_terminal_nonfailed_fact_node"},
+        {"$ref": "#/$defs/dialogue_terminal_failed_fact_node"}
       ]
     },
     "dialogue_fact_node": {
@@ -443,28 +445,30 @@
         {"$ref": "#/$defs/dialogue_terminal_response"}
       ]
     },
+    "memory_state_zero": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "operation_id", "summary"],
+      "properties": {
+        "revision": {"const": 0},
+        "operation_id": {"type": "null"},
+        "summary": {"const": ""}
+      }
+    },
+    "memory_state_nonzero": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "operation_id", "summary"],
+      "properties": {
+        "revision": {"$ref": "#/$defs/positive_uint64"},
+        "operation_id": {"$ref": "#/$defs/uuid_v4"},
+        "summary": {"$ref": "#/$defs/memory_summary"}
+      }
+    },
     "memory_state": {
       "oneOf": [
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["revision", "operation_id", "summary"],
-          "properties": {
-            "revision": {"const": 0},
-            "operation_id": {"type": "null"},
-            "summary": {"const": ""}
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["revision", "operation_id", "summary"],
-          "properties": {
-            "revision": {"$ref": "#/$defs/positive_uint64"},
-            "operation_id": {"$ref": "#/$defs/uuid_v4"},
-            "summary": {"$ref": "#/$defs/memory_summary"}
-          }
-        }
+        {"$ref": "#/$defs/memory_state_zero"},
+        {"$ref": "#/$defs/memory_state_nonzero"}
       ]
     },
     "memory_reconcile_active_request": {

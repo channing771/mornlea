@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -73,6 +74,9 @@ func TestContractFixtureSchemasValidateGoldens(t *testing.T) {
 		}
 		contractAssertStrictObjects(t, document, name)
 		contractAssertKnownMornleaExtensions(t, document, name)
+		if err := contractAuditSchemaKeywords(document, name); err != nil {
+			t.Errorf("%s 使用 validator 未支持的 schema 关键字: %v", name, err)
+		}
 	}
 
 	for _, fixture := range []struct {
@@ -125,7 +129,7 @@ func TestContractFixtureSchemasValidateGoldens(t *testing.T) {
 			}
 			if validationError.Path != testCase.ExpectedError.Path ||
 				validationError.Keyword != testCase.ExpectedError.Keyword ||
-				(testCase.ExpectedError.Rule != "" && validationError.Rule != testCase.ExpectedError.Rule) {
+				validationError.Rule != testCase.ExpectedError.Rule {
 				t.Errorf("非法 golden %q 错误 = {%s %s %s}，want {%s %s %s}（reason=%s）",
 					testCase.Name, validationError.Path, validationError.Keyword, validationError.Rule,
 					testCase.ExpectedError.Path, testCase.ExpectedError.Keyword, testCase.ExpectedError.Rule,
@@ -738,6 +742,112 @@ func TestContractFixtureRejectsUnknownMachineRules(t *testing.T) {
 	}
 }
 
+// TestContractFixtureOneOfFailureUsesParentPath 保证复合 schema 零匹配时只返回
+// 父级 `oneOf` 错误，不从分支中挑选可能受 map 遍历顺序影响的叶级错误。
+func TestContractFixtureOneOfFailureUsesParentPath(t *testing.T) {
+	t.Parallel()
+
+	schemas := contractLoadSchemas(t)
+	schema := map[string]any{
+		"oneOf": []any{
+			map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"required":             []any{"kind", "left"},
+				"properties": map[string]any{
+					"kind": map[string]any{"const": "left"},
+					"left": map[string]any{"type": "integer"},
+				},
+			},
+			map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"required":             []any{"kind", "right"},
+				"properties": map[string]any{
+					"kind":  map[string]any{"const": "right"},
+					"right": map[string]any{"type": "string"},
+				},
+			},
+		},
+	}
+	value := map[string]any{"kind": "unknown", "left": "not-an-integer", "right": json.Number("1")}
+	err := schemas.validate("http-v1/schema.json", schema, value, "$.candidate", nil)
+	var validationError *contractValidationError
+	if !errors.As(err, &validationError) {
+		t.Fatalf("oneOf 零匹配返回非结构化错误: %v", err)
+	}
+	if validationError.Path != "$.candidate" || validationError.Keyword != "oneOf" || validationError.Rule != "" {
+		t.Fatalf("oneOf 零匹配错误 = {%s %s %s}，want {$.candidate oneOf <empty>}",
+			validationError.Path, validationError.Keyword, validationError.Rule)
+	}
+}
+
+// TestContractFixtureRejectsUnsupportedSchemaKeywords 保证 fixture validator 的
+// 标准关键字能力是显式 allowlist；新增未实现验证语义时必须先扩展 validator。
+func TestContractFixtureRejectsUnsupportedSchemaKeywords(t *testing.T) {
+	t.Parallel()
+
+	schemas := contractLoadSchemas(t)
+	tests := []struct {
+		keyword string
+		schema  map[string]any
+		value   any
+	}{
+		{"allOf", map[string]any{"type": "string", "allOf": []any{map[string]any{"minLength": json.Number("1")}}}, "value"},
+		{"not", map[string]any{"type": "string", "not": map[string]any{"const": "forbidden"}}, "value"},
+		{"contains", map[string]any{"type": "array", "contains": map[string]any{"type": "integer"}}, []any{json.Number("1")}},
+		{"unevaluatedProperties", map[string]any{"type": "object", "unevaluatedProperties": false}, map[string]any{}},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.keyword, func(t *testing.T) {
+			err := schemas.validate("http-v1/schema.json", testCase.schema, testCase.value, "$", nil)
+			var validationError *contractValidationError
+			if !errors.As(err, &validationError) {
+				t.Fatalf("未实现关键字 %s 返回非结构化错误: %v", testCase.keyword, err)
+			}
+			if validationError.Path != "$" || validationError.Keyword != "schema-keyword" || validationError.Rule != testCase.keyword {
+				t.Fatalf("未实现关键字 %s 错误 = {%s %s %s}，want {$ schema-keyword %s}",
+					testCase.keyword, validationError.Path, validationError.Keyword, validationError.Rule, testCase.keyword)
+			}
+		})
+	}
+}
+
+// TestContractFixtureSchemaKeywordAuditUnderstandsContainers 防止 allowlist 把
+// annotation 或 `properties`、`$defs` 下恰好同名的成员误判为 schema keyword。
+func TestContractFixtureSchemaKeywordAuditUnderstandsContainers(t *testing.T) {
+	t.Parallel()
+
+	schemas := contractLoadSchemas(t)
+	schema := map[string]any{
+		"$comment":             "annotation",
+		"title":                "annotation",
+		"description":          "annotation",
+		"default":              map[string]any{"x-mornlea-annotation-data": true},
+		"examples":             []any{map[string]any{}},
+		"readOnly":             true,
+		"writeOnly":            false,
+		"deprecated":           false,
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"allOf":              map[string]any{"type": "string"},
+			"not":                map[string]any{"type": "integer"},
+			"x-mornlea-property": map[string]any{"type": "string"},
+		},
+		"$defs": map[string]any{
+			"contains":              map[string]any{"type": "string"},
+			"unevaluatedProperties": map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{}},
+			"x-mornlea-definition":  map[string]any{"type": "string"},
+		},
+	}
+	value := map[string]any{"allOf": "value", "not": json.Number("1"), "x-mornlea-property": "value"}
+	if err := schemas.validate("http-v1/schema.json", schema, value, "$", nil); err != nil {
+		t.Fatalf("annotation 或 schema container 成员名被误报: %v", err)
+	}
+	contractAssertKnownMornleaExtensions(t, schema, "synthetic schema")
+}
+
 // TestContractFixtureMineValidationMatchesAuthority 把跨语言 mine golden 与当前
 // Go 权威规则逐项对照，防止服务抽离时误拒 Chest/Furnace 或放开未交付语义。
 func TestContractFixtureMineValidationMatchesAuthority(t *testing.T) {
@@ -888,9 +998,18 @@ func (schemas contractSchemaSet) validateDefinition(document, name string, value
 	return schemas.validate(document, schema, value, "$", context)
 }
 
-// validate 实现本 change schema 实际使用的 JSON Schema 2020-12 关键字。它
-// 刻意留在测试文件，作用是交叉检查 fixtures，不成为未来 transport 的旁路。
+// validate 先审计完整 schema tree，再执行本 change 实际使用的 JSON Schema
+// 2020-12 子集；未实现的标准关键字和私有扩展都必须硬失败。
 func (schemas contractSchemaSet) validate(document string, rawSchema, value any, valuePath string, context any) error {
+	if err := contractAuditSchemaKeywords(rawSchema, valuePath); err != nil {
+		return err
+	}
+	return schemas.validateChecked(document, rawSchema, value, valuePath, context)
+}
+
+// validateChecked 只处理已经通过 capability audit 的 schema。它刻意留在
+// 测试文件，作用是交叉检查 fixtures，不成为未来 transport 的旁路。
+func (schemas contractSchemaSet) validateChecked(document string, rawSchema, value any, valuePath string, context any) error {
 	switch schema := rawSchema.(type) {
 	case bool:
 		if schema {
@@ -898,11 +1017,6 @@ func (schemas contractSchemaSet) validate(document string, rawSchema, value any,
 		}
 		return contractViolation(valuePath, "falseSchema", "", "被 false schema 拒绝")
 	case map[string]any:
-		for keyword := range schema {
-			if strings.HasPrefix(keyword, "x-mornlea-") && keyword != "x-mornlea-rules" {
-				return contractViolation(valuePath, "x-mornlea-extension", keyword, "未知或未实现的扩展")
-			}
-		}
 		if rawRef, ok := schema["$ref"]; ok {
 			ref, ok := rawRef.(string)
 			if !ok {
@@ -912,7 +1026,7 @@ func (schemas contractSchemaSet) validate(document string, rawSchema, value any,
 			if err != nil {
 				return contractViolation(valuePath, "schema", "$ref", "%v", err)
 			}
-			return schemas.validate(targetDocument, target, value, valuePath, context)
+			return schemas.validateChecked(targetDocument, target, value, valuePath, context)
 		}
 		if rawOneOf, ok := schema["oneOf"]; ok {
 			branches, ok := rawOneOf.([]any)
@@ -920,22 +1034,13 @@ func (schemas contractSchemaSet) validate(document string, rawSchema, value any,
 				return contractViolation(valuePath, "schema", "oneOf", "oneOf 非法")
 			}
 			matched := 0
-			var best *contractValidationError
 			for _, branch := range branches {
-				err := schemas.validate(document, branch, value, valuePath, context)
+				err := schemas.validateChecked(document, branch, value, valuePath, context)
 				if err == nil {
 					matched++
-					continue
-				}
-				var candidate *contractValidationError
-				if errors.As(err, &candidate) && (best == nil || len(candidate.Path) > len(best.Path)) {
-					best = candidate
 				}
 			}
 			if matched == 0 {
-				if best != nil {
-					return best
-				}
 				return contractViolation(valuePath, "oneOf", "", "没有匹配分支")
 			}
 			if matched > 1 {
@@ -1039,7 +1144,7 @@ func (schemas contractSchemaSet) validate(document string, rawSchema, value any,
 					itemSchema, hasSchema = rawItems, true
 				}
 				if hasSchema {
-					if err := schemas.validate(document, itemSchema, item, fmt.Sprintf("%s[%d]", valuePath, index), context); err != nil {
+					if err := schemas.validateChecked(document, itemSchema, item, fmt.Sprintf("%s[%d]", valuePath, index), context); err != nil {
 						return err
 					}
 				}
@@ -1070,7 +1175,7 @@ func (schemas contractSchemaSet) validate(document string, rawSchema, value any,
 					}
 					continue
 				}
-				if err := schemas.validate(document, propertySchema, member, valuePath+"."+name, context); err != nil {
+				if err := schemas.validateChecked(document, propertySchema, member, valuePath+"."+name, context); err != nil {
 					return err
 				}
 			}
@@ -1078,6 +1183,105 @@ func (schemas contractSchemaSet) validate(document string, rawSchema, value any,
 		if rules, exists := schema["x-mornlea-rules"]; exists {
 			if err := schemas.validateMornleaRules(document, rules, value, valuePath, context); err != nil {
 				return err
+			}
+		}
+		return nil
+	default:
+		return contractViolation(valuePath, "schema", "type", "schema 不是 object 或 boolean")
+	}
+}
+
+var contractSupportedSchemaKeywords = map[string]struct{}{
+	"$comment":             {},
+	"$defs":                {},
+	"$id":                  {},
+	"$ref":                 {},
+	"$schema":              {},
+	"additionalProperties": {},
+	"const":                {},
+	"default":              {},
+	"deprecated":           {},
+	"description":          {},
+	"enum":                 {},
+	"examples":             {},
+	"format":               {},
+	"items":                {},
+	"maxItems":             {},
+	"maxLength":            {},
+	"maximum":              {},
+	"minItems":             {},
+	"minLength":            {},
+	"minimum":              {},
+	"oneOf":                {},
+	"pattern":              {},
+	"prefixItems":          {},
+	"properties":           {},
+	"readOnly":             {},
+	"required":             {},
+	"title":                {},
+	"type":                 {},
+	"uniqueItems":          {},
+	"writeOnly":            {},
+	"x-mornlea-rules":      {},
+}
+
+// contractAuditSchemaKeywords 遍历 schema-valued 位置并拒绝 validator 未实现
+// 的关键字。annotation 的任意载荷，以及 `properties`/`$defs` 的成员名，都不
+// 是 schema keyword；只有这些容器里的成员值会继续按 schema 审计。
+func contractAuditSchemaKeywords(rawSchema any, valuePath string) error {
+	switch schema := rawSchema.(type) {
+	case bool:
+		return nil
+	case map[string]any:
+		keywords := make([]string, 0, len(schema))
+		for keyword := range schema {
+			keywords = append(keywords, keyword)
+		}
+		sort.Strings(keywords)
+		for _, keyword := range keywords {
+			if strings.HasPrefix(keyword, "x-mornlea-") && keyword != "x-mornlea-rules" {
+				return contractViolation(valuePath, "x-mornlea-extension", keyword, "未知或未实现的扩展")
+			}
+			if _, ok := contractSupportedSchemaKeywords[keyword]; !ok {
+				return contractViolation(valuePath, "schema-keyword", keyword, "validator 未实现 schema keyword")
+			}
+		}
+		for _, keyword := range keywords {
+			child := schema[keyword]
+			switch keyword {
+			case "$defs", "properties":
+				members, ok := child.(map[string]any)
+				if !ok {
+					return contractViolation(valuePath, "schema", keyword, "%s 必须是 object", keyword)
+				}
+				names := make([]string, 0, len(members))
+				for name := range members {
+					names = append(names, name)
+				}
+				sort.Strings(names)
+				for _, name := range names {
+					if err := contractAuditSchemaKeywords(members[name], valuePath+"."+keyword+"."+name); err != nil {
+						return err
+					}
+				}
+			case "oneOf", "prefixItems":
+				children, ok := child.([]any)
+				if !ok {
+					return contractViolation(valuePath, "schema", keyword, "%s 必须是 array", keyword)
+				}
+				for index, nested := range children {
+					if err := contractAuditSchemaKeywords(nested, fmt.Sprintf("%s.%s[%d]", valuePath, keyword, index)); err != nil {
+						return err
+					}
+				}
+			case "items":
+				if err := contractAuditSchemaKeywords(child, valuePath+".items"); err != nil {
+					return err
+				}
+			case "additionalProperties":
+				if _, ok := child.(bool); !ok {
+					return contractViolation(valuePath, "schema-keyword", "additionalProperties", "只实现 boolean 形态")
+				}
 			}
 		}
 		return nil
@@ -1575,41 +1779,51 @@ func contractAssertKnownMornleaExtensions(t *testing.T, value any, valuePath str
 	}
 	var visit func(any, string)
 	visit = func(current any, path string) {
-		switch typed := current.(type) {
-		case map[string]any:
-			for keyword, child := range typed {
-				if strings.HasPrefix(keyword, "x-mornlea-") {
-					if keyword != "x-mornlea-rules" {
-						t.Errorf("schema %s 声明未知或未实现扩展 %s", path, keyword)
+		schema, ok := current.(map[string]any)
+		if !ok {
+			return
+		}
+		for keyword := range schema {
+			if strings.HasPrefix(keyword, "x-mornlea-") && keyword != "x-mornlea-rules" {
+				t.Errorf("schema %s 声明未知或未实现扩展 %s", path, keyword)
+			}
+		}
+		if child, exists := schema["x-mornlea-rules"]; exists {
+			rules, ok := child.([]any)
+			if !ok || len(rules) == 0 {
+				t.Errorf("schema %s 的 x-mornlea-rules 必须是非空 array", path)
+			} else {
+				for index, rawRule := range rules {
+					rule, ok := rawRule.(map[string]any)
+					if !ok {
+						t.Errorf("schema %s 的 machine rule[%d] 不是 object", path, index)
 						continue
 					}
-					rules, ok := child.([]any)
-					if !ok || len(rules) == 0 {
-						t.Errorf("schema %s 的 x-mornlea-rules 必须是非空 array", path)
+					name, ok := rule["name"].(string)
+					if !ok || name == "" {
+						t.Errorf("schema %s 的 machine rule[%d] 缺少 name", path, index)
 						continue
 					}
-					for index, rawRule := range rules {
-						rule, ok := rawRule.(map[string]any)
-						if !ok {
-							t.Errorf("schema %s 的 machine rule[%d] 不是 object", path, index)
-							continue
-						}
-						name, ok := rule["name"].(string)
-						if !ok || name == "" {
-							t.Errorf("schema %s 的 machine rule[%d] 缺少 name", path, index)
-							continue
-						}
-						if _, ok := knownRules[name]; !ok {
-							t.Errorf("schema %s 声明未知或未实现 machine rule %q", path, name)
-						}
+					if _, ok := knownRules[name]; !ok {
+						t.Errorf("schema %s 声明未知或未实现 machine rule %q", path, name)
 					}
 				}
-				visit(child, path+"."+keyword)
 			}
-		case []any:
-			for index, child := range typed {
-				visit(child, fmt.Sprintf("%s[%d]", path, index))
+		}
+		for _, keyword := range []string{"$defs", "properties"} {
+			members, _ := schema[keyword].(map[string]any)
+			for name, child := range members {
+				visit(child, path+"."+keyword+"."+name)
 			}
+		}
+		for _, keyword := range []string{"oneOf", "prefixItems"} {
+			children, _ := schema[keyword].([]any)
+			for index, child := range children {
+				visit(child, fmt.Sprintf("%s.%s[%d]", path, keyword, index))
+			}
+		}
+		if child, exists := schema["items"]; exists {
+			visit(child, path+".items")
 		}
 	}
 	visit(value, valuePath)
