@@ -47,7 +47,10 @@ type persistenceInFlight struct {
 func (state *State) PersistenceSnapshots(maxChunks int, maxBytes int, mode SaveMode) []ChunkSaveSnapshot {
 	candidates := make([]persistenceCandidate, 0)
 	for dimensionID, dimension := range state.dimensions {
-		for pos, record := range dimension.records {
+		// 候选收集只迭代脏区块索引；索引成员资格由 refreshRecord 与记录同生命
+		// 周期维护，迭代时仍复验原有全部过滤条件，保证与全量扫描语义一致。
+		for pos := range dimension.dirtyIndex {
+			record := dimension.records[pos]
 			key := core.ChunkKey{Dimension: dimensionID, Pos: pos}
 			_, inFlight := state.persistenceInFlight(key, record)
 			if record.Chunk == nil || !record.Dirty() || inFlight || mode == SaveUrgent && !record.UnloadRequested {
@@ -77,6 +80,9 @@ func (state *State) PersistenceSnapshots(maxChunks int, maxBytes int, mode SaveM
 		clone := candidate.record.Chunk.Clone()
 		candidate.record.SaveInFlightRevision = candidate.record.Revision
 		state.inFlightSaves[candidate.key] = persistenceInFlight{revision: candidate.record.Revision, estimatedBytes: estimate}
+		// 派发只置 SaveInFlightRevision 与在途条目，不影响 Dirty() 贡献；对
+		// EstimatedBytes 的增量维护是累加在途估算字节，与脏估算双计入。
+		state.inFlightEstimatedBytes += int64(estimate)
 		snapshots = append(snapshots, ChunkSaveSnapshot{
 			Key: candidate.key, Revision: candidate.record.Revision, EstimatedBytes: estimate, Chunk: clone,
 		})
@@ -103,10 +109,12 @@ func (state *State) ApplyPersisted(acks []PersistedChunk) {
 		if exists && inFlight.revision == ack.Revision {
 			record.SaveInFlightRevision = 0
 			delete(state.inFlightSaves, ack.Key)
+			state.inFlightEstimatedBytes -= int64(inFlight.estimatedBytes)
 		}
 		if ack.Revision == record.Revision {
 			record.NeedsRewrite = false
 		}
+		dimension.refreshRecord(ack.Key.Pos, record)
 		dimension.deleteCleanUnloading(ack.Key.Pos)
 	}
 }
@@ -127,27 +135,24 @@ func (state *State) FailPersistence(snapshots []ChunkSaveSnapshot) {
 		}
 		record.SaveInFlightRevision = 0
 		delete(state.inFlightSaves, snapshot.Key)
+		// 失败结算只清在途标记与条目，Dirty() 贡献不受影响，无需刷新记录。
+		state.inFlightEstimatedBytes -= int64(inFlight.estimatedBytes)
 	}
 }
 
+// PersistenceStats 是 O(维度数) 的增量聚合读取：不触碰任何区块记录，成本与已
+// 加载区块数解耦。EstimatedBytes 同时含各维度脏区块的当前估算与在途快照估算
+// （「脏且在途」双计入的现行语义）；InFlightChunks 取在途条目数——条目与记录
+// 标记由派发/结算路径成对维护，一致性由 persistenceInFlight 的 panic 检查兜底。
 func (state *State) PersistenceStats() PersistenceStats {
 	var stats PersistenceStats
-	for dimensionID, dimension := range state.dimensions {
-		for pos, record := range dimension.records {
-			if record.Dirty() && record.Chunk != nil {
-				stats.DirtyChunks++
-				stats.EstimatedBytes += int64(estimateChunkBytes(record.Chunk))
-			}
-			key := core.ChunkKey{Dimension: dimensionID, Pos: pos}
-			if inFlight, exists := state.persistenceInFlight(key, record); exists {
-				stats.InFlightChunks++
-				stats.EstimatedBytes += int64(inFlight.estimatedBytes)
-			}
-			if record.UnloadRequested {
-				stats.UnloadWaiting++
-			}
-		}
+	for _, dimension := range state.dimensions {
+		stats.DirtyChunks += dimension.dirtyChunks
+		stats.EstimatedBytes += dimension.dirtyEstimatedBytes
+		stats.UnloadWaiting += dimension.unloadWaiting
 	}
+	stats.EstimatedBytes += state.inFlightEstimatedBytes
+	stats.InFlightChunks = len(state.inFlightSaves)
 	return stats
 }
 

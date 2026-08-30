@@ -19,6 +19,7 @@ import (
 	"github.com/channing771/mornlea/internal/storage/hostile"
 	"github.com/channing771/mornlea/internal/storage/player"
 	"github.com/channing771/mornlea/internal/storage/region"
+	"github.com/channing771/mornlea/internal/world"
 )
 
 const maxPlayerFileLength = int64(player.EnvelopeLength) + int64(player.MaxPayload)
@@ -457,7 +458,21 @@ func (store *DiskStore) SaveHostileMobs(ctx context.Context, save HostileMobsSav
 	return nil
 }
 
+// hashChunkFunc 是批量保存去重比对的内容哈希入口。生产路径固定为
+// `world.Chunk.Hash`；探针测试注入计数包装，钉住「同批次同区块只哈希一次」。
+// 返回值 `[32]byte` 即 `sha256.Size` 字节的 SHA-256 摘要（与 memory.go 的
+// revision 记账同形），不为此引入 crypto/sha256 import。
+type hashChunkFunc func(*world.Chunk) [32]byte
+
 func validateAndNormalizeSaves(saves []ChunkSave) ([]ChunkSave, error) {
+	return validateAndNormalizeSavesWithHash(saves, (*world.Chunk).Hash)
+}
+
+// validateAndNormalizeSavesWithHash 校验整批保存并按键收敛到最高 revision 的
+// 单一保存：同键同 revision 的多个候选以内容哈希判一致，内容不同即整批拒绝。
+// 内容哈希经 hashChunk 计算并按区块指针在整批内复用；单候选键没有比对需求，
+// 不产生哈希计算——这是保存热路径上的纯开销消除，不改变任何接受/拒绝结果。
+func validateAndNormalizeSavesWithHash(saves []ChunkSave, hashChunk hashChunkFunc) ([]ChunkSave, error) {
 	maxRevisions := make(map[core.ChunkKey]uint64, len(saves))
 	for _, save := range saves {
 		if err := chunk.ValidateChunkSave(save); err != nil {
@@ -480,15 +495,33 @@ func validateAndNormalizeSaves(saves []ChunkSave) ([]ChunkSave, error) {
 	}
 	sortChunkKeys(keys)
 
+	// 哈希缓存按区块指针复用：合法批次里同一指针只可能出现在同一键下，
+	// 但整批一张表更简单；首个需要比对的键才建立，纯单候选批次零开销。
+	var hashCache map[*world.Chunk][32]byte
+	hashOf := func(c *world.Chunk) [32]byte {
+		if cached, ok := hashCache[c]; ok {
+			return cached
+		}
+		computed := hashChunk(c)
+		if hashCache == nil {
+			hashCache = make(map[*world.Chunk][32]byte)
+		}
+		hashCache[c] = computed
+		return computed
+	}
+
 	normalized := make([]ChunkSave, 0, len(keys))
 	for _, key := range keys {
-		selected := candidates[key][0]
-		selectedHash := selected.Chunk.Hash()
-		for _, candidate := range candidates[key][1:] {
-			if candidate.Chunk.Hash() != selectedHash {
-				return nil, fmt.Errorf(
-					"%w: %v revision %d", ErrRevisionConflict, key, selected.Revision,
-				)
+		keyCandidates := candidates[key]
+		selected := keyCandidates[0]
+		if len(keyCandidates) > 1 {
+			selectedHash := hashOf(selected.Chunk)
+			for _, candidate := range keyCandidates[1:] {
+				if hashOf(candidate.Chunk) != selectedHash {
+					return nil, fmt.Errorf(
+						"%w: %v revision %d", ErrRevisionConflict, key, selected.Revision,
+					)
+				}
 			}
 		}
 		normalized = append(normalized, selected)
