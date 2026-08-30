@@ -2,8 +2,10 @@
 
 > Task 1 已建立 change、基线与 ledger。Tasks 2–5 是 feature 分支在独立 pre-main-integration
 > 基线已经完成并评审的历史工作，其 v12 表述记录当时事实，不代表合并后的目标版本。
-> Task 6 由新的 fresh implementer 执行；每项完成后，
-> 一名未参与实现的独立 task reviewer 必须同时给出 spec-compliance 和 quality verdict。
+> 已评审 Task 6.1 保留固定父 `8b8891a3` / engine ABI v8 的历史事实，不得改写。Tasks 6.2–6.4
+> 各由新的 fresh implementer 执行；每项完成后，一名未参与实现的独立 task reviewer 必须
+> 同时给出 spec-compliance 和 quality verdict。Task 6.5 由未参与集成实现的 fresh reviewer
+> 执行 whole-integration review。
 > implementer、reviewer、两项 verdict、findings、修复轮次、验证和裁决必须先写入
 > `ledger.md`，再勾选任务。控制会话不得直接实现。
 
@@ -87,30 +89,49 @@
   保持 `render_upload_ui_font`、frame TLV tag 9 和 UI layout v1–v4 退役，只叠加 MRW1 cache
   与 update 入口，不改变 main 现有行为。验证：`git status --short`、
   `git diff --check`，并把 merge base、main HEAD、冲突路径与逐项裁决记入 `ledger.md`。
-- [ ] 6.2 将 `engine/include/mornlea_client.h`、`engine/crates/mornlea_client/src/`、
+- [ ] 6.2 由 fresh implementer 在 clean worktree 先执行 `make rust`，并在 merge 命令前即时
+  记录 latest local `main`。若其超过已审计的 `a23833f9`，先核验新增 commits/paths；只有不
+  改变版本、ABI、client/MRW1 surface、fluid 所有权或排除项时才直接继续，否则先更新 planning
+  并完成独立 planning review。随后以 `git merge --no-commit --no-ff main` 做 non-rewriting
+  follow-up sync，重新读取 merged root/nearest guides，只逐项解决真实 overlap。actual
+  selected-main-parent 的 `engine/crates/mornlea_engine/`、`engine/include/mornlea_engine.h`、
+  `internal/fluid/`、`internal/nativeabi/` 与 `internal/sim/realm/` MUST 在最终 merge tree 中
+  byte-for-byte 保持一致；根 identity/current docs 只允许 client ABI v13 与 cache-only 所需
+  feature-side 差异。保留 main 的 engine ABI v9、伙伴 fluid 和四项测试稳定性修复，不修改或
+  接管其实现；记录 parent、冲突与裁决，并取得独立 spec/quality review。验证：`make rust`、
+  `go test ./internal/archcheck -count=1`、
+  `git diff --exit-code <selected-main-parent>..HEAD -- engine/crates/mornlea_engine engine/include/mornlea_engine.h internal/fluid internal/nativeabi internal/sim/realm`、
+  `openspec validate --all --strict --no-interactive`、`git diff --check`。
+- [ ] 6.3 将 `engine/include/mornlea_client.h`、`engine/crates/mornlea_client/src/`、
   `internal/client/` 的 header/Rust exports/Go bridge、identity test 与 all-versioned-export
-  tests 统一为 client ABI v13，
-  同步根版本说明、当前 docs、`openspec/config.yaml` 和受影响 main specs；保留 main UI JSON
-  surface、MRW1 24/32 字节与 4 MiB/4096、原子 cache、无 fallback 和 engine ABI v8。测试必须
-  分别锁定：无参数 `mornlea_client_abi_version()` 始终报告 13；v13 动态库的每个
-  versioned export 收 ABI 12 时返回 `ABI_VERSION`；main v12
-  动态库的共有 versioned exports 收 ABI 13 时返回 `ABI_VERSION`；v13-only MRW1 symbol 在
-  main v12 动态库中缺失时于 link/load/bind 阶段硬失败，不进入 FFI、不返回 client status、
-  不改变状态或 fallback。MRW1 input-only `u8` 入口只按 ABI、bounded nonzero length、non-null
-  pointer、address-range overflow、handle、MRW1 校验，不增加 alignment、output capacity 或
-  overlap 检查。验证：`make rust && go test ./internal/client -race -count=1`、
-  `go test ./internal/archcheck -count=1`、`rg -n 'CLIENT_ABI_VERSION|MORNLEA_CLIENT_ABI_VERSION|client ABI v13' engine internal/client AGENTS.md README.md README.en.md docs openspec/config.yaml openspec/specs`。
-- [ ] 6.3 在 merged implementation HEAD 逐项执行并记录 `make rust`、`make rust-check`、
+  tests 统一为 client ABI v13，并同步根版本说明、当前 docs、`openspec/config.yaml` 和受影响
+  main specs 为 client ABI v13 / engine ABI v9；engine v9 与 fluid 只继承 selected main，
+  不修改 Task 6.2 的 protected paths。保留 main UI JSON surface、MRW1 24/32 字节与
+  4 MiB/4096、原子 cache 和无 fallback。测试必须分别锁定：无参数
+  `mornlea_client_abi_version()` 始终报告 13；v13 动态库的每个 versioned export 收 ABI 12
+  时返回 `ABI_VERSION`；main v12 动态库的共有 versioned exports 收 ABI 13 时返回
+  `ABI_VERSION`；v13-only MRW1 symbol 在 main v12 动态库中缺失时于 link/load/bind 阶段
+  硬失败，不进入 FFI、不返回 client status、不改变状态或 fallback。MRW1 input-only `u8`
+  入口只按 ABI、bounded nonzero length、non-null pointer、address-range overflow、handle、
+  MRW1 校验，不增加 alignment、output capacity 或 overlap 检查。验证：
+  `make rust && go test ./internal/client -race -count=1`、
+  `go test ./internal/archcheck -count=1`、
+  `rg -n 'CLIENT_ABI_VERSION|MORNLEA_CLIENT_ABI_VERSION|ENGINE_ABI_VERSION|MORNLEA_ENGINE_ABI_VERSION|client ABI v13|engine ABI v9' engine internal/client AGENTS.md README.md README.en.md docs openspec/config.yaml openspec/specs`，并取得独立 spec/quality review。
+- [ ] 6.4 在 selected-main-parent 后的同一 merged implementation HEAD 逐项执行并记录
+  `make rust`、`make rust-check`、
   `gofmt -w internal/client/render_world_update.go internal/client/render_world_update_test.go internal/client/render.go internal/client/render_test.go internal/client/window.go internal/client/window_test.go internal/server/sword_combat_parity_test.go`、
-  `go vet ./...`、
-  `go test ./internal/client -race -count=1`、`go test ./internal/mesh -race -count=1`、
-  `go test ./internal/archcheck -count=1`、`make test-race-changed`、`go clean -testcache`、
-  `go test ./... -race -count=1`、`make visual-check`、
-  `openspec validate --all --strict --no-interactive`、`git diff --check` 与
-  `git diff --exit-code main...HEAD -- cmd/mornlea/capture/testdata/golden`；任何 Skip、真实失败
-  或相对 main 新增/修改 visual golden 都不得计为 PASS，release dylib、Go ABI 与视觉证据
-  必须来自同一 merged baseline。
-- [ ] 6.4 取得一名未参与集成实现的独立 reviewer，对 merge conflict resolution、统一 v13
-  export surface、main UI 保留/旧 UI 退役、MRW1/FFI/atomic/cache-only 边界、流体与其他排除项
-  以及 6.3 的完整证据同时给出 spec-compliance 与 quality verdict；先把 reviewer identity、
-  findings、修复轮次与最终裁决写入 `ledger.md`，再勾选本项并宣告 integration 完成。
+  `go vet ./...`、`go test ./internal/client -race -count=1`、
+  `go test ./internal/mesh -race -count=1`、`go test ./internal/archcheck -count=1`、
+  `make test-race-changed`、`go clean -testcache`、`go test ./... -race -count=1`、
+  `make visual-check`、`openspec validate --all --strict --no-interactive`、
+  `git diff --exit-code <selected-main-parent>..HEAD -- engine/crates/mornlea_engine engine/include/mornlea_engine.h internal/fluid internal/nativeabi internal/sim/realm`、
+  `git diff --exit-code <selected-main-parent>...HEAD -- cmd/mornlea/capture/testdata/golden` 与
+  `git diff --check`；任何 Skip、真实失败、protected path feature-side diff 或相对 selected
+  main 新增/修改 visual golden 都不得计为 PASS，release dylib、Go ABI 与视觉证据必须来自
+  同一 merged baseline，并取得独立 spec/quality review。
+- [ ] 6.5 取得一名未参与 follow-up planning、main sync、current-fact 同步或验证实现的 fresh
+  reviewer，对 Task 6.1 固定父历史、Task 6.2 selected-main-parent 与全部 conflict resolution、
+  engine ABI v9/fluid protected-path zero-diff、统一 client ABI v13 export surface、main UI
+  保留/旧 UI 退役、MRW1/FFI/atomic/cache-only 边界、rollback 保留 engine v9/fluid、其他排除项
+  以及 6.4 的完整同基线证据同时给出 spec-compliance 与 quality verdict；先把 reviewer
+  identity、findings、修复轮次与最终裁决写入 `ledger.md`，再勾选本项并宣告 integration 完成。

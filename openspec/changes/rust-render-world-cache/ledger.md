@@ -654,3 +654,57 @@ base 起零 diff；其 ready/spawn warmup 循环按 transport 收包时机决定
 - `git diff --check`：退出 0且无输出。`git diff --name-only` 的 tracked 范围恰为本 change 的
   `tasks.md` 与 `ledger.md`；ignored `progress.md` / `merge-report.md` 仅同步 review 事实，没有
   production、fluid/kernel、engine ABI、main spec 或其他 tracked 改动。
+
+## Follow-up integration planning：继承 main engine ABI v9
+
+### main 漂移只读审计与用户裁决
+
+- Planning implementer：`01a05184-9302-7b31-90f9-feeb5509b005`。起始 feature HEAD 为
+  `ef6c75919a85aa23d4e4d47c002ca08a1df11a8c`，worktree clean；local `main` 与
+  `origin/main` 均为 `a23833f92a80abb808b2b629c4dc043d2043f90a`。
+- Task 6.1 的 actual second parent 固定为
+  `8b8891a3d1068cedb02b74266ed2b1334fdcea69`；`git merge-base 8b8891a3 a23833f9`
+  返回同一个 `8b8891a3...`。`8b8891a3..a23833f9` 恰为 22 commits、42 paths、
+  5722 insertions / 287 deletions。
+- 该范围交付伙伴负责的 Rust engine fluid eval/rescan、Go `internal/fluid` 与
+  `internal/nativeabi` bridge、`internal/sim/realm` 集成以及 engine ABI v9，并包含四项 main
+  测试稳定性修复：glyph atlas exhaustion、dialogue shutdown cancellation、dropped-item
+  restart client 与 fluid parity readiness。范围没有修改 `mornlea_client`、`internal/client`
+  或 `cmd/mornlea`，没有改变 main client ABI v12 WKWebView/UI surface，也没有加入 MRW1。
+- `git show main:engine/include/mornlea_engine.h` 证明 main engine ABI 为 9；
+  `git show main:engine/include/mornlea_client.h` 证明 main client ABI 仍为 12。受保护实现范围
+  固定为 `engine/crates/mornlea_engine/`、`engine/include/mornlea_engine.h`、
+  `internal/fluid/`、`internal/nativeabi/` 与 `internal/sim/realm/`。
+- 用户明确要求持续到完成，并确认最终目标为 client ABI v13、继承 main engine ABI v9。
+  流体继续由伙伴负责：本 change 只通过 non-rewriting main sync 原样继承，不设计、修改、
+  接管或扩展 engine/fluid 生产路径。若 follow-up merge 开始前 local main 再前进，implementer
+  必须即时重审新增 commits/paths；契约或范围变化先回到 planning，否则选定并记录最新父。
+
+### planning artifact 修订
+
+- `proposal.md`、唯一 `rust-client-render-cutover` delta 与 `design.md` 的 present-tense/final
+  target 已改为 client ABI v13 / inherited engine ABI v9；Task 6.1 固定父 engine ABI v8 仍作为
+  历史事实保留，没有改写 Tasks 1–5 或既有验证证据。
+- `design.md` 新增 follow-up sync 决策、main 再漂移闸门、selected-main-parent、五组 protected
+  path byte-for-byte audit 与回退边界。rollback 只移除 MRW1/client-v13 增量并回到所选 main
+  的 client v12 WKWebView predecessor，必须保留 engine ABI v9、伙伴 fluid 与 main 稳定性修复；
+  不得恢复旧 egui/TLV UI。
+- `tasks.md` 保留已完成 6.1；新增 6.2 non-rewriting follow-up main sync，原 pending 6.2–6.4
+  顺延为 6.3–6.5。planning 后预期状态为 16/20 complete、4 remaining、`ready`。Tasks 6.2–6.4
+  各要求 fresh implementer 与独立 spec/quality review，6.5 要求未参与 follow-up 的 fresh
+  whole-integration reviewer。
+- 本轮严格限定为 existing change artifacts 与本 ledger；没有修改生产/测试代码、current
+  docs、main specs、`openspec/config.yaml`，没有 merge/rebase main，也没有 archive。当前分支
+  root identity/config 中尚未同步的 engine ABI v9 属于 Task 6.3，而不是本 planning task 的
+  越权修复。
+- Follow-up planning independent review：pending。本节只记录 planning 实施事实，不把尚未
+  发生的独立评审写成通过。
+
+### planning validation
+
+- `openspec validate --all --strict --no-interactive`：退出 0；78 passed、0 failed。
+- `openspec instructions apply --change rust-render-world-cache --json`：退出 0；20 tasks、
+  16 complete、4 remaining、`state: ready`，Task 6.1 保持完成，6.2–6.5 均未勾选。
+- `git diff --check`：退出 0且无输出。`git diff --name-only` 的 tracked scope 恰为 existing
+  `proposal.md`、唯一 delta spec、`design.md`、`tasks.md` 与 `ledger.md`；无代码、current
+  docs/main specs/config、merge 或其他 tracked diff。

@@ -7,10 +7,13 @@
 从已验证 Go 状态派生的渲染缓存，随 renderer 创建和销毁。缓存尚不接管 mesh、light、
 connectivity、visibility、GPU upload 或 draw。
 
-受影响文件限定为未来实现时的
+受影响文件限定为本 change 自有实现的
 `engine/crates/mornlea_client/src/`、`engine/include/mornlea_client.h`、
-`internal/client/` 与相应测试。`internal/nativeabi` 仍是唯一接触 engine ABI 的边界；
-本 change 不改变 engine ABI v8。
+`internal/client/` 与相应测试。`internal/nativeabi` 仍是唯一接触 engine ABI 的边界。
+follow-up main sync 会把 main 已交付的 engine ABI v9 与 fluid 实现带入最终树，但
+`engine/crates/mornlea_engine/`、`engine/include/mornlea_engine.h`、`internal/fluid/`、
+`internal/nativeabi/` 和 `internal/sim/realm/` 都是受保护路径，必须相对所选 main 父提交
+保持零 feature-side diff。
 
 feature 基线曾独立把 MRW1 export 分配给 client ABI v12；与此同时，当前 main 已把
 client ABI v12 分配给进程内 WKWebView/UI cutover：退役 `render_upload_ui_font` 与 frame
@@ -18,12 +21,20 @@ TLV tag 9（UI layout v1–v4），新增 `ui_push_state`，并把 `render_drain
 版本化 JSON 信封。两套不同 export surface 不能共享同一 ABI 版本，因此集成必须以 main
 v12 为前代基线，把“main UI surface + MRW1”统一分配为 v13。
 
+已评审 Task 6.1 的固定 main 父是 `8b8891a3`，该提交当时仍为 engine ABI v8；这是一条
+不可改写的历史事实。Task 6.1 进行期间 local main 前进 22 commits 到 `a23833f9`：该范围
+加入伙伴负责的 Rust/Go fluid eval/rescan、engine ABI v9 与四项测试稳定性修复，没有改变
+client ABI v12 WKWebView surface，也没有加入 MRW1。最终集成因此需要一次新的 non-rewriting
+main sync：继承 engine ABI v9/fluid，但不把它们纳入本 change 的设计或实现所有权。
+
 ## Goals / Non-Goals
 
 **Goals:**
 
 - 建立集成 client ABI v13 的同步身份，在 main v12 UI surface 上加入 MRW1 v1 更新入口，
   以及原子、可重建的 `RenderWorld` cache。
+- 以 non-rewriting merge 跟进执行时最新 local main，原样继承其 engine ABI v9 与伙伴 fluid
+  实现，并以受保护路径审计证明本 change 没有 feature-side engine/fluid 修改。
 - 在 Rust 拷贝或规范化 Go 同步调用期间提供的 bytes；之后不保存 Go 指针、slice 或
   对象，且按 epoch、revision、tombstone 决定派生缓存状态。
 - 用单元、FFI、Go bridge、fuzz 与 test-only driver 锁定 wire 校验、原子失败和离屏
@@ -35,9 +46,9 @@ v12 为前代基线，把“main UI surface + MRW1”统一分配为 v13。
 - 不接入 `cmd/mornlea/app` 实时消息路径，不替换 Go CPU mesh、connectivity、visibility、
   `RenderFrame.Visible`、逐 section upload 或 draw。
 - 不移动、复制或重构任何 engine 的 fluid-aware input、light、quad 或 greedy 源码；
-  不改变流体状态、传播、tick、协议或专属 mesh 语义。
+  不接管、改写或扩展伙伴交付的流体状态、传播、tick、协议或专属 mesh 语义。
 - 不创建共享 voxel kernel，不改网络协议 v32、存档 schema、world metadata、benchmark
-  scenario v20 或 engine ABI v8。
+  scenario v20；engine ABI v9 仅作为所选 main 的既有身份原样继承。
 
 ## Decisions
 
@@ -149,8 +160,10 @@ MRW1 tests 加入该 surface。随后 client C header、Rust 常数和导出、G
 exports 收到 v13 bridge 传入的 13 时，在读取其他输入或改变状态前返回 `ABI_VERSION`；但
 main v12 根本不导出 `mornlea_client_render_apply_world_updates`，因此要求该 symbol 的 v13
 bridge 必须在 link/load/bind 阶段硬失败，不能声称一次不存在的 FFI 调用会返回 status。
-该失败不得进入 FFI body、改变状态或转入兼容入口/Go fallback。engine ABI 保持 v8，因为本
-change 未改变无状态 engine 数值 ABI，也不移动其 fluid-aware 源码。
+该失败不得进入 FFI body、改变状态或转入兼容入口/Go fallback。最终 engine ABI 为 v9，
+因为 follow-up sync 原样继承所选 main 的既有 engine/fluid surface；本 change 不修改该 ABI、
+数值 kernel 或 fluid-aware 源码。Task 6.1 固定父仍为 engine ABI v8 的历史证据，不得被
+解释成最终版本目标。
 
 新 `mornlea_client_render_apply_world_updates` 是 input-only `u8` entry，且严格按 ABI
 version、非零且受 MRW1 上限约束的 length、non-null pointer、无 overflow 的 address
@@ -175,6 +188,25 @@ connectivity/visibility、geometry upload、`RenderFrame.Visible` payload、fram
 否决“在 cache 建立后立即切换一个 draw 分支”：它会混合 cache 输入与 mesh/draw
 迁移，无法独立审查或归因视觉回归。
 
+### D6: follow-up main sync 固定执行时父提交并保护伙伴路径
+
+新的 Task 6.2 必须由 fresh implementer 在 clean worktree 中执行。它在 merge 命令前立即
+读取 local `main`；若 `main` 已超过已审计的 `a23833f9`，先记录新增 commits/paths 并判断
+是否改变版本、ABI、client surface、MRW1、fluid 所有权或排除项。只有新提交不改变契约与
+范围时才可直接选为 main 父；若改变，则先更新本 change planning 并完成相应独立 planning
+review。随后使用 `git merge --no-commit --no-ff main`，不 rebase、不改写已评审 Task 6.1。
+
+merge 开始后以实际 `MERGE_HEAD` 为不可变 selected-main-parent，重新读取 merged root 与目标
+目录 `AGENTS.md`，逐项解决真实 overlap。`engine/crates/mornlea_engine/`、
+`engine/include/mornlea_engine.h`、`internal/fluid/`、`internal/nativeabi/` 和
+`internal/sim/realm/` 必须与 selected-main-parent 逐字一致；根版本身份与 current docs/main
+specs 只允许产生 client ABI v13 与 cache-only 事实所需的 feature-side 差异。fresh reviewer
+必须独立核验 merge parent、全部 conflict resolution 和 protected path zero-diff 后，Task 6.2
+才可完成。
+
+否决“为了排除流体而跳过新 main”：这会让最终树停留在已过时的 engine ABI v8。也否决
+“把伙伴 fluid 复制进 feature 再手工重放”：这会模糊所有权、破坏路径同一性并扩大冲突面。
+
 ## Risks / Trade-offs
 
 - [错误的长度、乘法、indexed word count、尾随 bytes 或 packed 索引导致越界或部分应用]
@@ -190,43 +222,54 @@ connectivity/visibility、geometry upload、`RenderFrame.Visible` payload、fram
   envelope 做定点审计和回归测试。
 - [cache 误接入既有 draw] → test-only driver、frame 编码及 readback 字节相等测试；
   不修改 app、mesher、scheduler 或 fluid-aware 源码。
+- [follow-up sync 覆盖伙伴 fluid/engine 或 main 在执行前再次漂移] → merge 前即时固定并记录
+  latest local main；若新增提交改变契约/范围则先修订 planning。merge 后以 actual
+  selected-main-parent 对五组受保护路径执行 zero-diff 审计，并由独立 reviewer 复核。
 - [紧凑缓存提高常驻内存] → 4 MiB 单 batch和 4096 record 上限，按 tombstone/reset
   丢弃旧派生状态；本阶段不建立无界后台队列。
 
 ## Migration Plan
 
-1. 保留已完成的 feature 基线测试与实现证据；集成前以 `--no-commit --no-ff` 合入最新
-   main，重新读取 merged `AGENTS.md`，并以 main v12 WKWebView/UI surface 解决冲突。
-2. 由 Go test-only encoder 从 `ContainerSnapshot` 生成 MRW1，覆盖 single、indexed、
-   direct、column、tombstone、reset 和坐标边界；冲突解决只将该入口叠加到 main surface，
-   不把入口接入实时 app。
-3. 把 C header、Rust、Go、当前文档、active config、main specs 与 tests 同步为 v13；验证
-   v13 动态库对全部 versioned exports 的 ABI 12 调用返回 `ABI_VERSION`，main v12 动态库的
-   共有 exports 对 ABI 13 返回 `ABI_VERSION`，而 v13-only MRW1 symbol 对 v12 动态库在
-   link/load/bind 阶段硬失败、没有 status 或 fallback；同时保留 UI JSON 与 MRW1 契约。
-4. 在 merged baseline 重建 release dylib，再以离屏 renderer 对应用前后完全相同的既有
-   frame input 做编码与 readback/visual 比较，并保留 Go mesh/visibility/upload 原路径。
-5. 发布时 client ABI v13 与动态库同步替换；main v12 混装显式失败。若集成发现问题，
-   回退 MRW1/v13 增量即返回 main v12 WKWebView/UI predecessor，而不是恢复 feature 的旧
-   egui/TLV surface；没有网络、存档或世界数据迁移。
+1. 保留已完成的 feature 基线与 Task 6.1 证据；Task 6.1 的 actual main 父固定为
+   `8b8891a3`、engine ABI v8，不改写该 merge 或其已通过的独立评审。
+2. fresh implementer 在 follow-up merge 前即时读取 latest local main。若它超过已审计的
+   `a23833f9`，先记录新增 commits/paths；契约或范围变化必须先更新 planning，否则选定该
+   latest main，并以 `git merge --no-commit --no-ff main` 做 non-rewriting sync。
+3. 重新读取 merged guides，逐项解决真实 overlap；以 actual selected-main-parent 对
+   `mornlea_engine`、engine header、`internal/fluid`、`internal/nativeabi` 与
+   `internal/sim/realm` 做 byte-for-byte zero-diff 审计。独立 reviewer 接受后，最终树继承
+   main 的 engine ABI v9/fluid，本 change 仍不拥有这些生产路径。
+4. 把 client C header、Rust、Go、当前文档、active config、main specs 与 tests 同步为
+   client ABI v13 / engine ABI v9；验证 v13/v12 双向共有 export 拒绝、v12 缺失 v13-only
+   MRW1 symbol 的 bind hard failure，并保留 UI JSON 与 MRW1 cache-only 契约。
+5. 在同一 merged baseline 重建 release dylib，运行 release/race/visual/OpenSpec 全部门禁，
+   并以离屏 renderer 验证 MRW1 应用前后 frame encoding/readback 不变；Go
+   mesh/visibility/upload、production app 与 draw 继续使用原路径。
+6. 发布时 client ABI v13 与动态库同步替换；main v12 混装显式失败。若集成发现问题，只
+   回退 MRW1/client-v13 增量到所选 main 的 client v12 WKWebView predecessor；必须保留
+   main 的 engine ABI v9、伙伴 fluid 实现及其测试稳定性修复，不得恢复旧 egui/TLV surface。
+   没有网络、存档或世界数据迁移。
 
 ## Verification
 
 - `make rust`
 - `make rust-check`
-- `gofmt -w internal/client/render_world_update.go internal/client/render_world_update_test.go internal/client/render.go internal/client/render_test.go internal/client/window.go internal/client/window_test.go`
+- `gofmt -w internal/client/render_world_update.go internal/client/render_world_update_test.go internal/client/render.go internal/client/render_test.go internal/client/window.go internal/client/window_test.go internal/server/sword_combat_parity_test.go`
 - `go vet ./...`
 - `go test ./internal/client -race -count=1`
 - `go test ./internal/mesh -race -count=1`
 - `go test ./internal/archcheck -count=1`
 - `make test-race-changed`
 - `go clean -testcache`
-- `go test ./... -race`
+- `go test ./... -race -count=1`
 - `make visual-check`
 - `openspec validate --all --strict --no-interactive`
+- `git diff --exit-code <selected-main-parent>..HEAD -- engine/crates/mornlea_engine engine/include/mornlea_engine.h internal/fluid internal/nativeabi internal/sim/realm`
+- `git diff --exit-code <selected-main-parent>...HEAD -- cmd/mornlea/capture/testdata/golden`
 - `git diff --check`
 
 集成实现与验证保持 cache-only：main predecessor client ABI 为 v12，统一目标为 v13，
-engine ABI 保持 v8；MRW1 固定布局、坐标裁决、边界与阶段范围均由 binding brief 确定。
-生产 app 的 MRW1 接线、Go mesh/visibility/upload/draw、共享 kernel、流体、协议、schema、
-benchmark scenario 与 visual golden 均不得改变。本节列出的 merged-baseline 验证尚未执行。
+最终 engine ABI 为从 selected-main-parent 原样继承的 v9；MRW1 固定布局、坐标裁决、边界与
+阶段范围均由 binding brief 确定。生产 app 的 MRW1 接线、Go mesh/visibility/upload/draw、
+共享 kernel、伙伴 fluid/engine 实现、协议、schema、benchmark scenario 与 visual golden
+均不得产生 feature-side 改动。本节列出的 follow-up merged-baseline 验证尚未执行。

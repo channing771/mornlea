@@ -67,7 +67,7 @@ section upsert MUST 按 `ContainerSnapshot` 三态接收紧凑数据：single �
 
 ### Requirement: client ABI v13 统一 surface 并早期拒绝混装
 
-client C header、Rust 导出与 Go bridge 的 ABI 版本常数 MUST 同步为 13；无参数 identity export `mornlea_client_abi_version()` MUST 始终报告 13。集成 v13 动态库中每个接受 ABI version 参数的 export MUST 拒绝包括 12 在内的每一个其他版本。每个此类 v13 export MUST 在其其他适用 validation 或状态改变前检查 ABI version；现有 all-versioned-export ABI checks MUST 保留。版本错误 MUST 在 handle、pointer、UI/MRW1 内容或 renderer/RenderWorld 状态改变前返回 `ABI_VERSION`。v13 surface MUST 保留 main v12 的 `ui_push_state` 与版本化 JSON UI event drain，MUST NOT 恢复已退役的 `render_upload_ui_font`、frame TLV tag 9 或 UI layout v1–v4；系统 MUST NOT 提供 v12 兼容入口或 Go fallback。engine ABI MUST 保持 v8。
+client C header、Rust 导出与 Go bridge 的 ABI 版本常数 MUST 同步为 13；无参数 identity export `mornlea_client_abi_version()` MUST 始终报告 13。集成 v13 动态库中每个接受 ABI version 参数的 export MUST 拒绝包括 12 在内的每一个其他版本。每个此类 v13 export MUST 在其其他适用 validation 或状态改变前检查 ABI version；现有 all-versioned-export ABI checks MUST 保留。版本错误 MUST 在 handle、pointer、UI/MRW1 内容或 renderer/RenderWorld 状态改变前返回 `ABI_VERSION`。v13 surface MUST 保留 main v12 的 `ui_push_state` 与版本化 JSON UI event drain，MUST NOT 恢复已退役的 `render_upload_ui_font`、frame TLV tag 9 或 UI layout v1–v4；系统 MUST NOT 提供 v12 兼容入口或 Go fallback。最终集成树 MUST 原样继承所选 main 的 engine ABI v9 与既有 fluid 行为；本 change MUST NOT 增加替代 engine/fluid 生产路径或改变相同 fluid 输入的结果。
 
 反向混装时，main v12 动态库与 v13 bridge 共有且接受 ABI version 的 exports MUST 在收到 13 时返回 `ABI_VERSION`，并且不得读取其他输入或改变状态。v13-only 的 `mornlea_client_render_apply_world_updates` symbol 在 main v12 动态库中不存在；尝试把要求该 symbol 的 v13 bridge 与 main v12 动态库组合 MUST 在 link、load 或 bind 阶段硬失败，MUST NOT 被描述为一次会返回 client status 的调用，MUST NOT 进入任何 FFI body、改变任何状态或使用兼容入口/fallback。
 
@@ -106,6 +106,22 @@ client C header、Rust 导出与 Go bridge 的 ABI 版本常数 MUST 同步为 1
 - WHEN 合并后的 client ABI v13 surface 加入 MRW1 update 入口
 - THEN `ui_push_state` 与版本化 JSON UI events MUST 保持可用
 - AND `render_upload_ui_font`、frame TLV tag 9 与 UI layout v1–v4 MUST 保持不可用
+
+#### Scenario: client v13 集成原样继承 engine ABI v9 与 fluid 行为
+
+- GIVEN 所选 main 父提交报告 engine ABI v9，且其伙伴交付的 fluid eval/rescan 对固定输入已有确定结果
+- WHEN 在该 main 基线上集成 client ABI v13 与 MRW1 cache-only 增量
+- THEN 最终树报告的 engine ABI MUST 仍为 9
+- AND 相同 fluid 输入的结果 MUST 与所选 main 父提交一致
+- AND 系统 MUST NOT 使用本 change 新增的 engine/fluid 替代路径
+
+#### Scenario: 回退 client v13 增量仍保留 main engine v9 与 fluid
+
+- GIVEN 已在所选 main 的 client v12 WKWebView、engine ABI v9 与伙伴 fluid 基线上加入 MRW1/client-v13 增量
+- WHEN 回退该 MRW1/client-v13 增量
+- THEN client surface MUST 回到所选 main 的 v12 WKWebView predecessor
+- AND engine ABI MUST 仍为 9，伙伴 fluid 行为 MUST 保持不变
+- AND 已退役的字体上传出口、frame TLV tag 9 与 UI layout v1–v4 MUST NOT 恢复
 
 #### Scenario: 新输入入口按 ABI 优先的输入矩阵拒绝
 
