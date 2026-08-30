@@ -12,7 +12,7 @@
 
 ## Task 4: Python Planner graph and MCP/model adapters
 
-- [ ] 4.1 先用 fake model/fake MCP 与 Task 1 tool golden 写固定 context、3/5 model、4/8 tool、串行去重、一次 repair、固定 validator、30/60s cancel、strict output 与无 checkpoint RED tests，再实现 `mornlea_companion_agent/{harness/planner.py,adapters/model.py,adapters/mcp.py}`；wire 固定 `2025-11-25` initialize+initialized/no ping，raw cancellation 不作为 snapshot 清理保证，以 `cd services/companion-agent && uv run pytest tests/test_planner.py tests/test_mcp_adapter.py tests/test_planner_no_checkpoint.py -q` 验证。
+- [x] 4.1 先用 fake model/fake MCP 与 Task 1 tool golden 写固定 context、3/5 model、4/8 tool、串行去重、一次 repair、固定 validator、30/60s cancel、strict output 与无 checkpoint RED tests，再实现 `mornlea_companion_agent/{harness/planner.py,adapters/model.py,adapters/mcp.py}`；wire 固定 `2025-11-25` initialize+initialized/no ping，raw cancellation 不作为 snapshot 清理保证，以 `cd services/companion-agent && uv run pytest tests/test_planner.py tests/test_mcp_adapter.py tests/test_planner_no_checkpoint.py -q` 验证。
 
 ## Task 5: Python Dialogue graph and FastAPI v1
 

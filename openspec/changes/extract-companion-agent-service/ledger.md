@@ -24,7 +24,7 @@
 | 1 | `task1_contracts_impl` | `af57e420` | RED：缺少 HTTP schema；复审 RED：UTF-8 byte/权威常量、非确定 `oneOf` 与未支持 keyword；GREEN：focused `-count=100`、companion race、diff-check；提交 `36eed9d9`、`7d019d1c`、`a1640211` | `task1_spec_review` round 3 PASS | `task1_quality_review` round 3 PASS | Accepted |
 | 2 | `task2_python_scaffold_impl` | `5d368f8c` | RED：package 缺失；复审 RED：exact const、URL/secret/path、golden path 与 import boundary；GREEN：locked sync、ruff/format、mypy、focused 两轮各 199 passed、diff-check；提交 `91bca693`、`665d609a`、`40c57fce` | `task2_spec_review` round 3 PASS | `task2_quality_review` round 3 PASS | Accepted |
 | 3 | `task3_memory_impl` | `ea82d028` | RED：缺少 memory module；复审 RED：operation 复用、lease/SQLite 取消窗口、损坏库修补、重复 cancel 与 receipt 篡改；GREEN：focused 61 passed、full 260 passed、locked sync/ruff/mypy/diff-check；提交 `dcb99bc6`、`225fdb09`、`f68a6eca`、`7a1af977` | `memory_design_audit` round 4 PASS | `openspec_artifacts` round 4 PASS | Accepted |
-| 4 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
+| 4 | `openspec_artifacts` | `69f6e6ec` | RED：缺少 Planner/adapters；复审 RED：schema 漂移、transport/envelope 上限、validator wrapper 与 JSON 类型混淆；GREEN：focused 77 passed、full 337 passed、import boundary 48 passed、locked sync/ruff/mypy/wheel/diff-check；提交 `06473b29`、`e4b5dc8f`、`0e773804` | `task4_graph_spec_audit` round 3 PASS | `task4_quality_review` round 3 PASS | Accepted |
 | 5 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 6 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 7 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
@@ -55,6 +55,13 @@
 - Round 3：SPEC PASS；QUALITY 拒绝 current commit `payload_fingerprint` 无法从持久元数据重算。修复持久 canonical `commit_lease_id`，按 lease/epoch/base/current summary 重算 payload，并用 nullable FK 关联永久 lease history，不保存历史 summary。
 - Round 4：SPEC 与 QUALITY 均 PASS；合法 lease rotation/reopen、旧 operation exact replay、active-mirror/tombstone/zero control、transaction double-cancel、run cleanup、schema/FK 与 close retry 对抗探针通过。
 - 控制会话复验：原 lease cancellation 窗口探针已关闭；Task 3 focused `61 passed`；工作树在 ledger 更新前 clean。
+
+### Task 4 评审修复记录
+
+- Round 1：SPEC 拒绝模型工具与 MCP discovery 未精确使用 checked-in schema、`validate_plan` 绕过 wrapper 上限；QUALITY 拒绝 MCP/provider 在 SDK 缓冲前无正文硬上限，以及完整 `PlanResponse` 可超过 HTTP 64 KiB。修复增加 wheel 内置 contract、type-safe schema pin、MCP 160 KiB/provider 1 MiB bounded transport、validator wrapper 与完整 response envelope 检查。
+- Round 2：原 transport、wrapper、envelope 与 schema 漂移缺口关闭；SPEC 继续拒绝 Python dict equality 把 JSON `true`/`1` 和 `1.0`/`1` 视为相等。修复改用 canonical JSON bytes 做 schema 类型精确比较并 fail closed。
+- Round 3：SPEC 与 QUALITY 均 PASS；bool/int、int/float、序列化失败、Content-Length/chunked/content-encoding、取消与 close、wheel 脱离源码导入、单 session/no retry、fresh graph/no checkpoint 对抗测试通过。
+- 控制会话复验：Task 4 focused `77 passed`；完整 Python `337 passed`；工作树在 ledger 更新前 clean。
 
 ## 整分支终审与门禁
 
