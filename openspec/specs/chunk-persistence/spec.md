@@ -60,3 +60,4 @@ TBD - created by archiving change persistence-scan-hash-optimization. Update Pur
 - **Given** 既有 `SaveBatch` 测试所覆盖的同 revision 幂等重存、更高 revision 覆盖、revision 回退且内容相同时的接受与拒绝判例
 - **When** 运行这些既有测试与新增的「同批次重复区块只哈希一次」探针测试
 - **Then** 全部结果与优化前一致
+

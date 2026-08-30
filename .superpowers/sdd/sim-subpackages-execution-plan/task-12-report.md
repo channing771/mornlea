@@ -247,3 +247,4 @@ $ git rev-parse --short HEAD
 ### 改动文件
 
 - `.superpowers/sdd/sim-subpackages-execution-plan/task-12-report.md`：更新 `SHA` 为短前缀并追加本修复节，`git add -f` 后 `git commit --amend` 使 HEAD 自指。
+
