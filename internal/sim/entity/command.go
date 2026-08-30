@@ -8,7 +8,7 @@ import (
 	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
-// 根包在拆分期间仅供尚未迁走的内部实现使用这些别名。
+// 这些别名让 entity 结算边界沿用 contract 的命令与结果类型。
 type (
 	SessionID           = contract.SessionID
 	CommandKind         = contract.CommandKind

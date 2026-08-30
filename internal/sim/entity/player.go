@@ -130,7 +130,7 @@ type playerState struct {
 	candidateChunks   []core.ChunkPos
 	nextCandidate     int
 	// spawnFallback 是本轮候选扫描中最优的降级出生点，跨 tick 保留（见
-	// internal/sim/spawn.go 的 spawnFallback）。
+	// internal/sim/entity/spawn.go 的 spawnFallback）。
 	spawnFallback      spawnFallback
 	spawnWanted        map[core.ChunkPos]struct{}
 	exhausted          bool

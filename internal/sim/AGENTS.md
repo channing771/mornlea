@@ -74,7 +74,7 @@ internal/sim/
 
 - 接受：`runtime` → `contract`/`tuning`/`realm`/`entity`；`entity` → `contract`/`tuning`/`realm`；`realm` → `core`/`fluid`/`world`；`contract` → `core`/`world`/`companion`/`physics`；`tuning` → `core`。
 - 拒绝：`contract` 依赖 `tuning`/`realm`/`entity`/`runtime`；`tuning` 依赖 `contract`/`realm`/`entity`/`runtime`；`realm` 依赖 `contract`/`tuning`/`entity`/`runtime`；`entity` 依赖 `runtime`；子树出现未登记的新包；`runtime` 缺少对四者的必需编排边。
-- 强制点：`TestInternalDependenciesAreOneWay` 以 `go list` 覆盖全仓内部包完整白名单；`TestSimSubpackageDependencyDirections` 与 `TestSimDependencyViolationsDetectDrift` 守住真实/合成依赖边；`TestSimAuthorityStateOwnershipStaysExplicit` 锁定 runtime/entity owner、窄订阅状态与唯一 mutation/commit；`TestAuthorityTickTunablesStayExplicit` 守住活动快照捕获与显式传递。新增 owner 字段、子包或依赖边必须同步对应门禁。
+- 强制点：`TestInternalDependenciesAreOneWay` 以 `go list` 覆盖全仓内部包完整白名单；`TestSimSubpackageDependencyDirections` 与 `TestSimDependencyViolationsDetectDrift` 守住真实/合成依赖边；`TestSimAuthorityStateOwnershipStaysExplicit` 扫描 runtime 包变量及全部 holder，锁定 runtime/entity owner、窄订阅状态，并把唯一 mutation/commit 绑定到 `StepWithTunables` 的真实调用路径；`TestAuthorityTickTunablesStayExplicit` 守住活动快照捕获与显式传递。新增 owner 字段、子包或依赖边必须同步对应门禁。
 
 ## 定点验证与入口
 

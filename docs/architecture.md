@@ -30,7 +30,7 @@ Mornlea 由 Go 应用与两个 Rust `cdylib` 组成。Go 持有应用装配、�
 - `internal/render`、`internal/mesh`、`internal/assets`、`internal/lod`、`internal/worldgen` 与 `internal/fluid` 持有领域数据描述、CPU 编码和 Rust 调用编排，不拥有 GPU 后端或第二套数值生产实现。
 - `internal/nativeabi` 是 engine ABI 的唯一 Go bridge。
 
-内部包允许的直接依赖以 `internal/archcheck/dependency_test.go` 的 `allowed` 表为准。`internal/archcheck` 同时以 `TestSimAuthorityStateOwnershipStaysExplicit` 守住 runtime/entity owner 与唯一 mutation/commit，以 `TestAuthorityTickTunablesStayExplicit` 守住权威 tick 参数捕获和传递，并守住无 WebGPU Go 依赖、无图形专服闭包及长期版本基线；架构文档不复制会随包演进的依赖白名单。
+内部包允许的直接依赖以 `internal/archcheck/dependency_test.go` 的 `allowed` 表为准。`internal/archcheck` 同时以 `TestSimAuthorityStateOwnershipStaysExplicit` 扫描 runtime 的包变量与全部 holder，并把唯一 mutation/commit 绑定到 `StepWithTunables` 的真实调用路径；`TestAuthorityTickTunablesStayExplicit` 守住权威 tick 参数捕获和传递。其余门禁守住无 WebGPU Go 依赖、无图形专服闭包及长期版本基线；架构文档不复制会随包演进的依赖白名单。
 
 ## 5. `mornlea_engine` / engine ABI v9
 

@@ -1,4 +1,4 @@
-// Package sim 实现与协议和渲染无关的权威世界状态。
+// Package entity 实现玩家、伙伴、敌对生物与物品生命周期的权威状态。
 package entity
 
 import "github.com/channing771/mornlea/internal/sim/realm"

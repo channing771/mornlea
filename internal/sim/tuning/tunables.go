@@ -26,9 +26,9 @@ const (
 
 // Tunables 是可在运行时调整的权威模拟参数。
 //
-// 它按值传递并整体替换。读取方在 tick 入口取一次快照（见 Engine.Step）后全程
-// 使用该快照，因此单个 tick 内参数不会中途变化，模拟仍然确定性。写入只做一次
-// 原子指针交换，读写之间无锁无竞争。
+// 它按值传递并整体替换。runtime 的权威 tick 入口把它捕获进 `TickTunables` 后
+// 全程使用同一份值，因此单个 tick 内参数不会中途变化，模拟仍然确定性。写入
+// 只做一次原子指针交换，读写之间无锁无竞争。
 //
 // 只有 cmd 的启动装配与调试面板应当调用 SetTunables。
 //
@@ -43,7 +43,7 @@ type Tunables struct {
 	// RegenIntervalTicks 是进入回复阶段后，每回复 1 点生命值需要经过的 tick 数。
 	RegenIntervalTicks uint32 `json:"regenIntervalTicks"`
 	// DrownDamageIntervalTicks 是氧气归零后两次溺水伤害之间的 tick 数
-	// （变更 fluid-presentation-survival，internal/sim/oxygen.go 的 advanceOxygen）。
+	// （internal/sim/entity/oxygen.go 的 `advanceOxygen`）。
 	//
 	// 它只决定「多久扣一次血」，不决定「多久开始扣血」——后者由
 	// core.MaxOxygenTicks 这个不可调的存档无关常量固定。取 0 会退化成每 tick
@@ -81,9 +81,8 @@ type Tunables struct {
 	// 它同时是"水看起来在流动而不是瞬移"的观感来源，也是天然的合并窗口——
 	// 同一格在延迟窗口内被重复标记只会合并成一次到期处理。internal/fluid
 	// 本身不读取这个值（archcheck 禁止 fluid 依赖 sim），本字段只是快照源，
-	// 由 sim 侧在 tick 入口读出后作为调用参数传给 fluid.Queue.Advance——
-	// 该接线由 internal/sim/fluid.go 的 fluidClock 在 tick 入口读出后传给
-	// fluid.Queue.Advance（任务组 4 已交付）。
+	// runtime 在 tick 入口捕获本字段并写入 realm 的环境配置；
+	// `realm.State.AdvanceFluids` 再把它传给 `fluid.Queue.Advance`。
 	FluidFlowDelayTicks uint32 `json:"fluidFlowDelayTicks"`
 	// FluidUpdatesPerTick 是单个权威 tick 内允许处理的流体格数上限
 	// （变更 authoritative-fluid，internal/fluid.Queue.Advance 的 budget 参数）。
@@ -98,11 +97,11 @@ type Tunables struct {
 	// 更快也可能更慢，取决于水体形状与处理顺序如何与合并窗口相互作用——
 	// 实测部分随机形状在 budget=512 下 118 tick 收敛，不受限反而要 126 tick。
 	// 因此收敛 tick 数不得被当作性能指标使用，也不能假设调大预算必然让水
-	// 更快静止。消费方是 internal/sim/fluid.go 的 advanceFluids（任务组 4 已
-	// 交付）。
+	// 更快静止。消费方是 internal/sim/realm/environment.go 的
+	// `realm.State.AdvanceFluids`。
 	FluidUpdatesPerTick uint32 `json:"fluidUpdatesPerTick"`
 	// FluidRescanCellsPerTick 是单个权威 tick 内允许用于**边界重扫**的格数
-	// 预算（变更 authoritative-fluid，internal/sim/fluid.go 的 advanceFluids）。
+	// 预算（internal/sim/realm/environment.go 的 `realm.State.AdvanceFluids`）。
 	//
 	// 它与 FluidUpdatesPerTick 管的是两件不同的事，不能互相替代：
 	// FluidUpdatesPerTick 截断的是「处理已在队列里的项」，而区块进入推进范围时
@@ -119,13 +118,13 @@ type Tunables struct {
 	// 是续扫游标只需记录「第几个平面、第几个区段」两个小整数。
 	//
 	// 调小它只会让重扫铺开到更多 tick，不会丢掉任何重扫：待重扫区块记在
-	// engine.fluidRescan 里跨 tick 保留。这条安全性来自 design.md D5——不动点
+	// `realm.State` 的流体重扫状态里跨 tick 保留。这条安全性来自 design.md D5——不动点
 	// 性质只要求重扫**最终**发生在该区块处于推进范围内的某个 tick，不要求发生
 	// 在它进入范围的那一 tick。区块在重扫完成前离开范围会被整条丢弃并在重新
 	// 进入时从头重扫，因此也不会留下"只扫了一半"的区块。
 	FluidRescanCellsPerTick uint32 `json:"fluidRescanCellsPerTick"`
 	// RandomTicksPerSection 是单个权威 tick 内每个已加载区段被抽样考察的格数
-	// （变更 authoritative-farming，internal/sim/crop.go 的 advanceCrops）。
+	// （internal/sim/realm/environment.go 的 `realm.State.AdvanceCrops`）。
 	//
 	// 它是「生长推进的成本与作物数量无关」这条 spec 契约的唯一成本旋钮：本 tick
 	// 触及的格数恒等于「活动兴趣范围内的区段数 × 本字段」，与世界里有多少株
@@ -137,8 +136,7 @@ type Tunables struct {
 	// 正确，但 64 已经是默认值的 20 倍，再大只会白烧 tick 预算。
 	RandomTicksPerSection uint8 `json:"randomTicksPerSection"`
 	// CropGrowthChancePercent 是被抽中的未成熟作物在环境满足时推进一个阶段的
-	// 百分比概率（变更 authoritative-farming，internal/sim/crop.go 的
-	// cropGrowthRoll）。
+	// 百分比概率（internal/sim/realm/environment.go 的 `cropGrowthRoll`）。
 	//
 	// 判定用纯整数哈希 `hash(worldSeed, tick, 方块坐标) % 100 < 本字段`，不是
 	// 全局 RNG，因此重放同一段 tick 必然得到同一串结果。
@@ -148,14 +146,14 @@ type Tunables struct {
 	// 取 0 表示作物永不推进（耕地干湿转换不受影响）。
 	CropGrowthChancePercent uint8 `json:"cropGrowthChancePercent"`
 	// StarvationDamageIntervalTicks 是饥饿值归零后两次饥饿伤害之间的 tick 数
-	// （变更 authoritative-hunger，internal/sim/hunger.go 的 advanceStarvation）。
+	// （internal/sim/entity/hunger.go 的 `advanceStarvation`）。
 	//
 	// 它只决定「多久扣一次血」，不决定「扣到哪里为止」——后者是硬地板 1 点生命，
 	// 不可调：饥饿伤害不致死是玩法裁决，不是参数。取 0 会退化成每 tick 扣血，
 	// 配置层已把下限钳到 1，advanceStarvation 另有一次 max(…, 1) 兜底。
 	StarvationDamageIntervalTicks uint32 `json:"starvationDamageIntervalTicks"`
 	// ExhaustionThresholdMilli 是疲劳值累积到多少（千分位）结算一次消耗
-	// （变更 authoritative-hunger，internal/sim/hunger.go 的 applyExhaustion）。
+	// （internal/sim/entity/hunger.go 的 `applyExhaustion`）。
 	//
 	// 调小它让饥饿掉得快，调大让整条饥饿曲线变慢；疲劳来源表的五个数值本身
 	// 固定，因此这是「饥饿速度」的唯一旋钮。取 0 会让 applyExhaustion 的循环
@@ -163,7 +161,7 @@ type Tunables struct {
 	// max(…, 1) 兜底。
 	ExhaustionThresholdMilli uint16 `json:"exhaustionThresholdMilli"`
 	// RegenHungerThreshold 是允许自然回血的最低饥饿值
-	// （变更 authoritative-hunger，internal/sim/health_regen.go 的入口门控）。
+	// （internal/sim/entity/health_regen.go 的入口门控）。
 	//
 	// 区间 0..core.MaxHunger（由配置层钳制）两端都是合法的调试取值，不是错误：
 	// 0 等于取消门控（任何饥饿值都能回血），core.MaxHunger 等于只有吃饱才回血。
@@ -172,7 +170,7 @@ type Tunables struct {
 	// 那一刻若计时已满就立即回血。
 	RegenHungerThreshold uint8 `json:"regenHungerThreshold"`
 	// EatingTicks 是吃完一件食物需要连续保持进食输入的 tick 数
-	// （变更 authoritative-hunger，internal/sim/eating.go 的 `advanceEating`）。
+	// （internal/sim/entity/eating.go 的 `advanceEating`）。
 	//
 	// 它同时是"中断窗口"的长度：调大让进食更容易被打断，调小到 1 等于按一下
 	// 就吃完（合法的调试取值，不是错误）。取 0 会让进度永远够不到结算——进度
@@ -180,10 +178,10 @@ type Tunables struct {
 	EatingTicks uint16 `json:"eatingTicks"`
 }
 
-// 以下是流体三个 tunable 的编译期默认值。它们的消费方都在
-// internal/sim/fluid.go 一个文件里（fluidClock 读延迟，advanceFluids 读两条
-// 预算），没有各自独立的消费方文件，因此集中定义在这里，而不是像
-// defaultRegenDelayTicks 等常量那样分散到各自的消费方文件。
+// 以下是流体三个 tunable 的编译期默认值。它们都由
+// internal/sim/realm/environment.go 的 `realm.State.AdvanceFluids` 消费，因此
+// 集中定义在这里，而不是像 defaultRegenDelayTicks 等常量那样分散到各自的
+// 消费方文件。
 const (
 	// defaultFluidFlowDelayTicks 见 Tunables.FluidFlowDelayTicks 的字段说明。
 	defaultFluidFlowDelayTicks = 5
@@ -200,7 +198,8 @@ const (
 )
 
 // 以下是作物随机 tick 两个 tunable 的编译期默认值。它们唯一的消费方是
-// internal/sim/crop.go 的 advanceCrops，与流体三项同理集中定义在这里。
+// internal/sim/realm/environment.go 的 `realm.State.AdvanceCrops`，与流体三项
+// 同理集中定义在这里。
 const (
 	// defaultRandomTicksPerSection 取 3，与 MC 的 randomTickSpeed 默认值一致：
 	// 每个 16³ 区段每 tick 抽 3 格，单格被抽中的概率是 3/4096。

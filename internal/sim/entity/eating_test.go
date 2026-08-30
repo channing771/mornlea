@@ -407,7 +407,7 @@ func TestDamageInterruptsEatingOnlyWhenHealthActuallyDrops(t *testing.T) {
 //
 // 中断必须发生在 (0, `EatingTicks`) 的开区间内——取 7 tick，与既有松手/切格
 // 用例的 17 tick 错开，避免三条用例共用同一个夹具常数后一起被同一种 off-by-one
-// 骗过。容器打开那一 tick 进食输入**仍然按住**：这正是 B-31 的动机构造——手持
+// 骗过。容器打开那一 tick 进食输入**仍然按住**：这对应手持
 // 食物对准容器按「使用」，界面打开的同刻输入还没来得及松。
 //
 // 关箱重启沿用 `TestEatingReleaseKeepsFoodAndRestartsFromZero` 的形状：关箱后

@@ -181,7 +181,7 @@ func BenchmarkCropAdvanceFullInterestDense(b *testing.B) {
 }
 
 // BenchmarkCropAdvanceAllFarmland 锁定随机作物阶段不再扫描耕地湿润邻域。
-// 单个区块的 24 个区段全部填满干耕地，B-06 后每样本需额外读取正上方是否为 `core.AirID`
+// 单个区块的 24 个区段全部填满干耕地；退化规则让每样本额外读取正上方是否为 `core.AirID`
 // （干+无作物才退），因此读取为每样本两次；benchmark 同时守卫并报告 Ready 区块、
 // 耕地与作物数，以解析式读取等式作为正确性门禁。
 func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
@@ -262,7 +262,7 @@ func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 	b.ReportMetric(float64(readyChunks), "chunks")
 	b.ReportMetric(float64(farmland), "farmland")
 	b.ReportMetric(float64(crops), "crops")
-	// 全耕地世界顶层（y=MaxY-1）上方为世界外空气，满足 B-06“干+无作物才退”，会产生
+	// 全耕地世界顶层（y=MaxY-1）上方为世界外空气，满足“干+无作物才退”，会产生
 	// 少量 Dirt 写入；pending 非空不再视为失败，只要变更仅为 FarmlandDry→Dirt。
 	if pending.Len() != 0 {
 		for _, change := range pending.ChangedBlocks() {

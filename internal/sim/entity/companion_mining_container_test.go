@@ -80,7 +80,7 @@ func companionFurnaceAt(t *testing.T, fixture companionMiningFixture) world.Furn
 
 // TestCompanionMineableBlockContainerTargets 锁定防御清单的容器放开：箱子与
 // 熔炉是合法的伙伴采掘目标（其批量结算的容量安全由完成分叉的全或无预演保证，
-// 不再由目标清单承担）；农业十编号的显式拒绝保持不变（C-11 未裁决）。
+// 不再由目标清单承担）；农业方块的显式拒绝保持不变。
 func TestCompanionMineableBlockContainerTargets(t *testing.T) {
 	if !companionMineableBlock(core.ChestID) {
 		t.Fatal("companionMineableBlock(ChestID) = false，箱子必须是合法的伙伴采掘目标")
