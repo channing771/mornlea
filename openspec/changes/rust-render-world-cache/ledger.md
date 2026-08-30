@@ -862,3 +862,66 @@ base 起零 diff；其 ready/spawn warmup 循环按 transport 收包时机决定
   `tasks.md` 与 `ledger.md`。相对 selected main 的五组 protected paths 与
   `cmd/mornlea/capture/testdata/golden/` 再次确认零 diff；ignored `task-6.3-report.md` /
   `progress.md` 只同步 review、bookkeeping 与临时审计目录处置事实，不形成 tracked diff。
+
+## Task 6.4：同基线完整验证、review fixes 与完成裁决
+
+### Validation implementer、执行基线与完整门禁
+
+- Fresh validation implementer：`01a051bb-2e5f-7df0-906f-64dde34be06e`。
+- Implementer 在 exact clean merged implementation HEAD
+  `c60bfc3c8185da3f004fab4f0a14753e79e1c19e` 上执行；selected-main-parent 仍为
+  `a23833f92a80abb808b2b629c4dc043d2043f90a`。首轮观察到另一个 session 在独立 worktree
+  运行 long Go race，未把可能受共享机器资源影响的并发结果冒充最终串行证据；等待外部进程
+  结束后，按 brief 原顺序严格串行重跑 gates 1–18。
+- 严格串行证据中全部产品门禁 PASS：Rust client 124 passed、engine 218 passed，0 failed、
+  0 ignored；`make test-race-changed` 的 11-package closure 为 10 个 tested packages passed +
+  1 个 `[no test files]`；清空 test cache 后的 full race 为 43 packages passed + 3 个
+  `[no test files]`；visual 25/25 scenes 均为零 differing pixels、零 max delta，未启动前台窗口，
+  未更新 golden；OpenSpec strict 为 79 passed、0 failed。
+- 最终 release dylib SHA-256 为 client
+  `c343f6f7aeaf91fec8e707ea5070070119557b49b4ebfe9975056aae73377f50`、engine
+  `8ad9ed6d4121fe105742863f5abc872591ca916fbdffcce91e5135a92a868e45`；Go race test binary
+  通过 `@rpath/libmornlea_client.dylib` 解析到本 worktree 的 `engine/target/release`。release
+  dylib、Go ABI/race 与 visual 均来自上述不可变 execution HEAD，SHA 与各 release-producing
+  gate 后的基线一致。
+- 相对 selected main 的五组 protected paths
+  `engine/crates/mornlea_engine/`、`engine/include/mornlea_engine.h`、`internal/fluid/`、
+  `internal/nativeabi/`、`internal/sim/realm/` 为零 feature-side diff；
+  `cmd/mornlea/capture/testdata/golden/` 为零 diff；gofmt、tracked/staged/final status 与
+  `git diff --check` 均为零。没有 Skip 或真实产品 failure。
+- 初轮并发事实、首次 RPATH textual-regex exit 1，以及 fix round 1 中 selected-main
+  single-test aggregation、无效 `rg -E`、SHA shell quoting/错误期望转录和 post-write checker
+  quoting 等 audit-harness false negatives 均原样保留；每项均以独立计时、只读且不掩盖原结果
+  的正确审计补足。逐命令 exact command、exit status、真实 wall time、输出/计数与诊断见 ignored
+  `.superpowers/sdd/2026-08-30-rust-render-world-main-integration/task-6.4-report.md`。
+
+### 独立 review、fix round 1/5 与 fix round 2/5
+
+- Independent reviewer：`01a051cd-90c0-7243-8e57-dad74180c33a`。
+- Initial verdict：spec ❌；quality Needs fixes；1 Important。finding 为 18 项证据缺少逐命令的
+  真实 wall time 与完整 audit commands，package 内 timing、active wait 或近似 elapsed 不能满足
+  brief。
+- Fix round 1/5 由同一 validation implementer 在外部并发结束后，于 exact execution HEAD
+  严格串行重跑 gates 1–18；每个 gate、gofmt 零 diff、cache clear、protected/golden diff、
+  gate 16 各 focused source/symbol/reverse/no-fallback/retired-surface/no-production-MRW1/RPATH/SHA
+  audit、`git diff --check` 与 final status 均以 `/usr/bin/time -p` 单独记录。全部产品门禁 PASS；
+  原并发/RPATH 与本轮所有 harness false negatives 未删除、未覆盖、未冒充 PASS。
+- Round 1 scoped re-review：spec ✅；quality Needs fixes。原 Important 已 addressed；新增 1 Minor：
+  ignored report 的 changed-race package accounting 把真实 `cmd/perfcheck` 路径误写为嵌套路径。
+- Fix round 2/5 仅修改 ignored `task-6.4-report.md`，把 package path 修正为真实
+  `cmd/perfcheck`，并以静态全文检查证明同类误写 0、修正后的原始 accounting occurrence 1；
+  未重跑门禁，未改变任何 timing、count 或产品结果。
+- Final scoped re-review：spec ✅；quality Approved；0 new、0 open。Controller 接受该 clean
+  final verdict；Task 6.4 现完成并勾选，change 预期进度推进为 19/20、`ready`，Task 6.5
+  保持未完成。
+
+### Bookkeeping validation
+
+- 在 reviewed execution HEAD `c60bfc3c8185da3f004fab4f0a14753e79e1c19e` 与本次纯
+  bookkeeping working diff 上执行 `openspec validate --all --strict --no-interactive`：退出 0；
+  79 passed、0 failed。
+- `openspec instructions apply --change rust-render-world-cache --json`：退出 0；20 tasks、
+  19 complete、1 remaining、`state: ready`；Task 6.4 已完成，Task 6.5 保持未完成。
+- `git diff --check`：退出 0且无输出；`git diff --name-only` 的 tracked scope 恰为本 change 的
+  `tasks.md` 与 `ledger.md`。本 bookkeeping 未重跑产品门禁；ignored `task-6.4-report.md` 保留
+  完整逐命令证据与两轮 report fix，不形成 tracked diff。

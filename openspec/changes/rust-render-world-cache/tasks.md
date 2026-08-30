@@ -117,7 +117,7 @@
   `make rust && go test ./internal/client -race -count=1`、
   `go test ./internal/archcheck -count=1`、
   `rg -n 'CLIENT_ABI_VERSION|MORNLEA_CLIENT_ABI_VERSION|ENGINE_ABI_VERSION|MORNLEA_ENGINE_ABI_VERSION|client ABI v13|engine ABI v9' engine internal/client AGENTS.md README.md README.en.md docs openspec/config.yaml openspec/specs`，并取得独立 spec/quality review。
-- [ ] 6.4 在 selected-main-parent 后的同一 merged implementation HEAD 逐项执行并记录
+- [x] 6.4 在 selected-main-parent 后的同一 merged implementation HEAD 逐项执行并记录
   `make rust`、`make rust-check`、
   `gofmt -w internal/client/render_world_update.go internal/client/render_world_update_test.go internal/client/render.go internal/client/render_test.go internal/client/window.go internal/client/window_test.go internal/server/sword_combat_parity_test.go`、
   `go vet ./...`、`go test ./internal/client -race -count=1`、
