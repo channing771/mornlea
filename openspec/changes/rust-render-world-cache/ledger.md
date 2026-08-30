@@ -925,3 +925,64 @@ base 起零 diff；其 ready/spawn warmup 循环按 transport 收包时机决定
 - `git diff --check`：退出 0且无输出；`git diff --name-only` 的 tracked scope 恰为本 change 的
   `tasks.md` 与 `ledger.md`。本 bookkeeping 未重跑产品门禁；ignored `task-6.4-report.md` 保留
   完整逐命令证据与两轮 report fix，不形成 tracked diff。
+
+## 原 Task 6.5：whole-integration final review 未通过
+
+### Reviewer、基线与四项 verdict
+
+- Fresh whole-integration reviewer：`01a051f1-06a4-7d83-b747-2d2b2f097725`。
+- Reviewed final tree：`10f8e8ab22188dbbfe8f210bf60c12249f4885de`；selected-main-parent
+  仍为 `a23833f92a80abb808b2b629c4dc043d2043f90a`。
+- Overall ready：❌。
+- Specification compliance：✅。
+- Code quality：Needs fixes。
+- Validation evidence：Complete，但只适用于 immutable HEAD `10f8e8ab`；任何后续 tracked
+  commit 或 main sync 都必须在新的 final HEAD 重跑 Task 6.4 的完整 18 门禁，不能继承 PASS。
+- Findings：0 Critical、1 Important、2 Minor、3 open，因此原 Task 6.5 未勾选，不能宣告
+  integration complete。
+
+### 三项 finding、归属与裁决
+
+1. Important：最终树有 25 处代码注释包含 `[A-F]-[0-9]{2}` 形态的任务编号，违反根
+   `AGENTS.md`。25 处均继承自 selected main，feature-added lines 为零，也不在
+   `engine/crates/mornlea_engine/`、`engine/include/mornlea_engine.h`、`internal/fluid/`、
+   `internal/nativeabi/`、`internal/sim/realm/` 五组 protected paths。归属为独立 main-side
+   repository-discipline cleanup；不得直接把这 25 处 unrelated cleanup 扫入 feature diff。
+2. Minor：`internal/client/render.go` 的注释错误声称生产渲染仍走 Go。真实边界是 Rust client
+   独占生产 GPU 渲染，Go 保留 CPU mesh、visibility 与 frame input；只有 v13 RenderWorld
+   cache 仍是 test-only、尚未接入 production app。该路径与 feature current-fact 同步相邻，
+   归属为 feature sync 后的最小 comment fix。
+3. Minor：`engine/crates/mornlea_client/src/ffi.rs` 的模块注释错误声称所有入口首参数都是 ABI
+   version。真实边界是无参数 `mornlea_client_abi_version()` 只报告 identity，其余 28 个
+   versioned exports 接受 `abi_version` 并版本优先拒绝错误版本。该路径属于 feature ABI
+   surface，归属为 feature sync 后的最小 comment fix。
+
+### Recommended sequence 与 planning 裁决
+
+1. 先由独立 main-side implementer 清理 25 处继承注释；可增加防回归 archcheck，但必须先有
+   RED。取得独立 spec/quality review 后，local main 只 fast-forward 到 reviewed cleanup，
+   不 push。
+2. fresh feature implementer 在 merge 前即时固定新的 latest main，审计 reviewed cleanup 后
+   的任何漂移，并以 non-rewriting merge 同步；记录新的 selected-main-parent、双亲、冲突和
+   裁决，不改写 Tasks 6.1–6.4 或 Task 6.2 的历史 selected-main 证据。
+3. 相对新的 selected-main-parent 重新证明五组 protected paths 与 visual golden 零 diff，再
+   最小修复上述两处 feature 相关注释，并取得独立 spec/quality review。
+4. 在新的 immutable final HEAD 由 fresh validation implementer 重跑完整 18 门禁，并由独立
+   reviewer 核验；`10f8e8ab` 的 Task 6.4 PASS 只保留为历史证据。
+5. 最后由未参与 planning、cleanup、sync/fixes 或 validation 的 fresh reviewer 做 whole-
+   integration review；只有 spec/quality 均通过且 0 open findings 才完成实现。
+
+据此 pending 收尾重排为 Tasks 6.5–6.7；Tasks 6.1–6.4 的完成状态、历史文字与证据保持不变。
+规划完成后的预期状态为 22 tasks、19 complete、3 remaining、`state: ready`。本规划不修改
+delta 行为契约、代码、current docs、main specs 或配置，不执行 merge/rebase/archive，也不
+构成 push 或 merge feature into main 授权。
+
+### Final-findings planning validation
+
+- `openspec validate --all --strict --no-interactive`：退出 0；79 passed、0 failed。
+- `openspec instructions apply --change rust-render-world-cache --json`：退出 0；22 tasks、
+  19 complete、3 remaining、`state: ready`，仅 Tasks 6.5–6.7 未完成。
+- `git diff --check`：退出 0且无输出。
+- `git diff --name-only`：退出 0；tracked scope 恰为本 change 的 existing `proposal.md`、
+  `design.md`、`tasks.md` 与 `ledger.md`。唯一 delta spec 保持零 diff；没有代码、current docs、
+  main specs、配置、merge/rebase/archive 或其他 tracked 改动。

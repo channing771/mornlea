@@ -22,7 +22,7 @@
 
 ## Impact
 
-- 受影响实现：`engine/crates/mornlea_client`、`engine/include/mornlea_client.h` 与 `internal/client`。原 cache-only 实现与整分支终审已在独立的 feature 基线上完成；Task 6.1 已把 client ABI v12 WKWebView/UI predecessor 与 MRW1 合成 v13，但其固定 main 父 `8b8891a3` 当时仍是 engine ABI v8。main 随后前进到 `a23833f9`，交付伙伴负责的 fluid/engine ABI v9。change 仍须以 non-rewriting merge 跟进执行时最新 main，证明受保护的 fluid/engine 路径相对所选 main 父零 feature-side diff，再同步当前事实并完成同一合并基线验证与独立评审。本结论不代表 archive 或 merge into main 授权。
+- 受影响实现：`engine/crates/mornlea_client`、`engine/include/mornlea_client.h` 与 `internal/client`。cache-only 实现以及 client ABI v13 / engine ABI v9 集成已在 `10f8e8ab` 完成 Tasks 6.1–6.4；该 HEAD 的原 Task 6.5 终审确认行为规格合规，但发现继承自 selected main 的代码注释任务编号，以及两处当前职责/ABI 注释失真，因此整体尚未 ready。收尾必须先在独立 main-side cleanup 中修复并评审继承问题，只将 local main fast-forward 到 reviewed cleanup；feature 随后以 non-rewriting merge 重新固定新的 selected-main-parent，最小修复两处 feature 相关注释，并证明受保护的 fluid/engine 路径与 visual golden 相对新父零 feature-side diff。任何 post-`10f8e8ab` 提交都会使 Task 6.4 的完整 PASS 证据失效，必须在新的 immutable final HEAD 重跑全部 18 门禁并接受 fresh whole-integration review。本结论不代表 archive、push 或 merge feature into main 授权。
 - 所有权与并发：Go Mirror 继续是客户端逻辑真相来源；RenderWorld 仅由 renderer 持有派生渲染缓存。本 change 不新增 worker、goroutine、GPU 写入或生产热路径调用。
 - 兼容性：集成后的 client ABI v13 与 main 的 v12 动态库不兼容并早期拒绝混装；不提供 v12 兼容入口或 Go fallback。main v12 已退役的 UI exports/TLV payload 保持退役，当前 JSON UI surface 保持可用。最终 engine ABI 为从 main 原样继承的 v9；回退 MRW1/client-v13 增量时仍保留 main 的 engine ABI v9 与伙伴 fluid 实现。
 - 协议与存档：协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`companions.ai` v4、`hostile_mobs` v1 与 benchmark scenario v20 均不变；MRW1 不复用已分配给 raycast cursor 的 `MRC1`，也不解析网络 wire packet。

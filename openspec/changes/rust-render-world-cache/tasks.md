@@ -3,9 +3,9 @@
 > Task 1 已建立 change、基线与 ledger。Tasks 2–5 是 feature 分支在独立 pre-main-integration
 > 基线已经完成并评审的历史工作，其 v12 表述记录当时事实，不代表合并后的目标版本。
 > 已评审 Task 6.1 保留固定父 `8b8891a3` / engine ABI v8 的历史事实，不得改写。Tasks 6.2–6.4
-> 各由新的 fresh implementer 执行；每项完成后，一名未参与实现的独立 task reviewer 必须
-> 同时给出 spec-compliance 和 quality verdict。Task 6.5 由未参与集成实现的 fresh reviewer
-> 执行 whole-integration review。
+> 的 completed 状态、selected-main 证据与历史文字同样不得改写。原 Task 6.5 fresh final
+> review 在 `10f8e8ab` 上行为规格通过但 quality 未通过，因此 pending 收尾重排为 Tasks
+> 6.5–6.7；旧 HEAD 的 Task 6.4 完整验证不得继承到新的 final HEAD。
 > implementer、reviewer、两项 verdict、findings、修复轮次、验证和裁决必须先写入
 > `ledger.md`，再勾选任务。控制会话不得直接实现。
 
@@ -129,9 +129,35 @@
   `git diff --check`；任何 Skip、真实失败、protected path feature-side diff 或相对 selected
   main 新增/修改 visual golden 都不得计为 PASS，release dylib、Go ABI 与视觉证据必须来自
   同一 merged baseline，并取得独立 spec/quality review。
-- [ ] 6.5 取得一名未参与 follow-up planning、main sync、current-fact 同步或验证实现的 fresh
-  reviewer，对 Task 6.1 固定父历史、Task 6.2 selected-main-parent 与全部 conflict resolution、
-  engine ABI v9/fluid protected-path zero-diff、统一 client ABI v13 export surface、main UI
-  保留/旧 UI 退役、MRW1/FFI/atomic/cache-only 边界、rollback 保留 engine v9/fluid、其他排除项
-  以及 6.4 的完整同基线证据同时给出 spec-compliance 与 quality verdict；先把 reviewer
-  identity、findings、修复轮次与最终裁决写入 `ledger.md`，再勾选本项并宣告 integration 完成。
+- [ ] 6.5 先由独立 main-side implementer 在 latest local main 上清理原终审确认的 25 处代码
+  注释任务编号；若增加防回归 `internal/archcheck`，必须先以当前违规树取得 RED，再完成
+  GREEN。取得未参与实现者的独立 spec/quality review 后，local main 只可 fast-forward 到该
+  reviewed cleanup，不得 push。随后由 fresh feature implementer 在 merge 前即时记录 latest
+  main；若它超过 reviewed cleanup，先审计新增 commits/paths，契约或范围变化先更新 planning。
+  契约不变时以 `git merge --no-commit --no-ff main` 做 non-rewriting sync，记录实际
+  selected-main-parent、merge 双亲、冲突与裁决，并证明相对新父的
+  `engine/crates/mornlea_engine/`、`engine/include/mornlea_engine.h`、`internal/fluid/`、
+  `internal/nativeabi/`、`internal/sim/realm/` 及 `cmd/mornlea/capture/testdata/golden/` 零 diff。
+  最小修复 `internal/client/render.go` 的 Rust production GPU / Go CPU / test-only RenderWorld
+  职责注释，以及 `engine/crates/mornlea_client/src/ffi.rs` 的 identity export / 28 versioned
+  exports 注释，再取得独立 spec/quality review；验证：`make rust`、
+  `go test ./internal/client -race -count=1`、`go test ./internal/archcheck -count=1`、
+  `openspec validate --all --strict --no-interactive`、上述 protected/golden diff 与
+  `git diff --check`。
+- [ ] 6.6 由 fresh validation implementer 在 Task 6.5 review 通过后的 immutable final HEAD
+  完整重跑并逐项记录 Task 6.4 的 18 门禁：`make rust`、`make rust-check`、指定七个 Go 文件的
+  `gofmt -w` 及零 diff、`go vet ./...`、client race、mesh race、archcheck、
+  `make test-race-changed`、`go clean -testcache`、`go test ./... -race -count=1`、
+  `make visual-check`、OpenSpec strict、new selected-main protected zero-diff、golden zero-diff、
+  client symbol/identity/reverse-mix/v13-only bind/no-fallback/retired-UI/no-production-MRW1/RPATH/
+  dylib-SHA 与代码注释任务编号零匹配审计、`git diff --check`、exact HEAD/final clean status；
+  每项记录真实 wall time、exit status、计数与 Skip。`10f8e8ab` 的 Task 6.4 PASS 不得计入本项。
+  取得未参与执行者的独立 spec/quality review，0 open 后才能勾选。
+- [ ] 6.7 取得一名未参与 final-findings planning、main-side cleanup、feature sync/fixes 或
+  validation 的 fresh whole-integration reviewer；同时给出 spec-compliance 与 quality verdict，
+  显式核验代码注释任务编号零匹配、`internal/client/render.go` 与 client `ffi.rs` 两处 finding、
+  新 selected-main-parent/merge 双亲/conflict resolution、五组 protected paths 与 golden 零 diff、
+  client ABI v13 / inherited engine ABI v9、main UI 保留/旧 UI 退役、MRW1/FFI/atomic/cache-only、
+  rollback/排除项以及 Task 6.6 的完整同基线证据。先把 reviewer identity、findings、修复轮次
+  与最终裁决写入 `ledger.md`；只有两项 verdict 均通过且 0 open findings 才可勾选并宣告
+  implementation complete，仍不得 archive、push 或 merge feature into main。

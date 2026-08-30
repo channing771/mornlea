@@ -27,6 +27,12 @@ v12 为前代基线，把“main UI surface + MRW1”统一分配为 v13。
 client ABI v12 WKWebView surface，也没有加入 MRW1。最终集成因此需要一次新的 non-rewriting
 main sync：继承 engine ABI v9/fluid，但不把它们纳入本 change 的设计或实现所有权。
 
+Tasks 6.1–6.4 已在 feature HEAD `10f8e8ab` 完成，所选 main 父仍为 `a23833f9`。原
+Task 6.5 whole-integration review 的行为规格裁决通过，但 quality 未通过：最终树继承了
+selected main 的 25 处代码注释任务编号，并有两处 feature 邻近注释错误描述生产 GPU
+所有权和 versioned export 数量。该 review 之后的任何 tracked 修改或 main sync 都会产生
+新的实现 HEAD，因此 Task 6.4 的完整验证证据只属于 `10f8e8ab`，不得沿用到收尾后的树。
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -39,6 +45,8 @@ main sync：继承 engine ABI v9/fluid，但不把它们纳入本 change 的设�
   对象，且按 epoch、revision、tombstone 决定派生缓存状态。
 - 用单元、FFI、Go bridge、fuzz 与 test-only driver 锁定 wire 校验、原子失败和离屏
   frame 字节不变。
+- 在不扩大 MRW1 行为范围的前提下，确保最终代码注释满足任务编号纪律，并准确描述 Rust
+  client 的生产 GPU 所有权、Go 的 CPU 半部以及 identity/versioned export 边界。
 
 **Non-Goals:**
 
@@ -49,6 +57,8 @@ main sync：继承 engine ABI v9/fluid，但不把它们纳入本 change 的设�
   不接管、改写或扩展伙伴交付的流体状态、传播、tick、协议或专属 mesh 语义。
 - 不创建共享 voxel kernel，不改网络协议 v32、存档 schema、world metadata、benchmark
   scenario v20；engine ABI v9 仅作为所选 main 的既有身份原样继承。
+- 不把 selected main 继承的 25 处无关注释清理直接扫入 feature-side diff，不 push，不 archive，
+  也不把 feature merge into main；local main 只允许 fast-forward 到独立评审通过的 cleanup。
 
 ## Decisions
 
@@ -207,6 +217,38 @@ specs 只允许产生 client ABI v13 与 cache-only 事实所需的 feature-side
 否决“为了排除流体而跳过新 main”：这会让最终树停留在已过时的 engine ABI v8。也否决
 “把伙伴 fluid 复制进 feature 再手工重放”：这会模糊所有权、破坏路径同一性并扩大冲突面。
 
+### D7: 终审修复先清理 main，再重新固定集成基线
+
+原 Task 6.5 的 Important finding 属于 selected main：25 处代码注释包含
+`[A-F]-[0-9]{2}` 形态的任务编号，feature-added lines 为零，且不位于五组 protected paths。
+因此先由独立 main-side implementer 在 latest local main 上做 comment-only cleanup；若增加
+防回归 archcheck，必须先以现有违规注释证明 RED，再完成 GREEN。独立 reviewer 同时给出
+spec-compliance 与 quality verdict 后，local main 才可用 fast-forward 前进到该 reviewed
+cleanup；不得 push，也不得把 feature 合回 main。
+
+随后由 fresh feature implementer 在 merge 命令前即时读取新的 local main。若 reviewed
+cleanup 后 main 又前进，必须先审计新增 commits/paths；任何版本、ABI、client/MRW1 surface、
+fluid 所有权或排除项变化都先回到 planning。契约不变时，以
+`git merge --no-commit --no-ff main` 做 non-rewriting sync，并以实际 `MERGE_HEAD` 重新记录
+selected-main-parent、merge 双亲、冲突和逐项裁决。最终树相对新父的五组 protected paths 与
+visual golden 必须零 diff。
+
+feature 只最小修正两处终审 Minor finding：`internal/client/render.go` 必须说明 Rust client
+独占生产 GPU 渲染、Go 保留 CPU mesh/visibility/frame input，而 v13 RenderWorld cache 才是
+仅测试驱动；`engine/crates/mornlea_client/src/ffi.rs` 必须区分无参数 identity export 与其余
+28 个接受 `abi_version` 的 versioned exports。该 sync/fix 取得独立 spec/quality review 后，
+才能冻结新的 final HEAD。
+
+新的 validation implementer 必须在该 immutable final HEAD 重跑 Task 6.4 的完整 18 门禁；
+不得把 `10f8e8ab` 的 PASS 继承为新 HEAD 证据。最后一名未参与 planning、main cleanup、
+feature sync/fixes 或 validation 的 fresh reviewer 必须同时核验行为规格、代码质量、代码注释
+任务编号零匹配、两处注释修复、新 selected-main protected/golden zero-diff 与完整同基线证据。
+只有 0 open findings 才可完成 change implementation。
+
+否决“直接在 feature 清扫 25 处继承注释”：这会把无关 main hygiene 伪装为 feature 改动并
+破坏 selected-main 归属。也否决“只跑定点测试或复用旧完整验证”：main merge 和 tracked
+comment fixes 已改变最终 commit identity，旧 HEAD 的 release/race/visual 证据不能证明新树。
+
 ## Risks / Trade-offs
 
 - [错误的长度、乘法、indexed word count、尾随 bytes 或 packed 索引导致越界或部分应用]
@@ -225,6 +267,9 @@ specs 只允许产生 client ABI v13 与 cache-only 事实所需的 feature-side
 - [follow-up sync 覆盖伙伴 fluid/engine 或 main 在执行前再次漂移] → merge 前即时固定并记录
   latest local main；若新增提交改变契约/范围则先修订 planning。merge 后以 actual
   selected-main-parent 对五组受保护路径执行 zero-diff 审计，并由独立 reviewer 复核。
+- [继承的代码注释违规被误归入 feature，或注释修复后继续沿用旧验证] → 先在独立 main-side
+  cleanup 中清零并评审任务编号，再 non-rewriting sync；任何新 tracked HEAD 都重跑完整
+  18 门禁，最终 fresh reviewer 复核零匹配与同基线证据。
 - [紧凑缓存提高常驻内存] → 4 MiB 单 batch和 4096 record 上限，按 tombstone/reset
   丢弃旧派生状态；本阶段不建立无界后台队列。
 
@@ -245,12 +290,25 @@ specs 只允许产生 client ABI v13 与 cache-only 事实所需的 feature-side
 5. 在同一 merged baseline 重建 release dylib，运行 release/race/visual/OpenSpec 全部门禁，
    并以离屏 renderer 验证 MRW1 应用前后 frame encoding/readback 不变；Go
    mesh/visibility/upload、production app 与 draw 继续使用原路径。
-6. 发布时 client ABI v13 与动态库同步替换；main v12 混装显式失败。若集成发现问题，只
+6. 在独立 main-side cleanup 中修复并评审继承的代码注释任务编号；可选 archcheck 必须先有
+   RED。只把 local main fast-forward 到 reviewed cleanup，不 push、不接入 feature 实现。
+7. fresh feature implementer 即时固定该 latest main，审计漂移并做 non-rewriting merge；记录
+   新 selected-main-parent、双亲与冲突，证明五组 protected paths 和 visual golden 零 diff，
+   再最小修复生产 GPU/Go CPU 职责注释与 identity/28 versioned exports 注释，并独立评审。
+8. 在新的 immutable final HEAD 重跑 Task 6.4 的完整 18 门禁，由独立 reviewer 核验报告；
+   `10f8e8ab` 的完整 PASS 只保留为历史，不计入新 HEAD 的完成证据。
+9. 由未参与上述 planning、cleanup、sync/fixes 或 validation 的 fresh reviewer 做 whole-
+   integration review；只有 spec/quality 均通过且 0 open findings 才宣告 implementation complete。
+10. 发布时 client ABI v13 与动态库同步替换；main v12 混装显式失败。若集成发现问题，只
    回退 MRW1/client-v13 增量到所选 main 的 client v12 WKWebView predecessor；必须保留
    main 的 engine ABI v9、伙伴 fluid 实现及其测试稳定性修复，不得恢复旧 egui/TLV surface。
    没有网络、存档或世界数据迁移。
 
 ## Verification
+
+Task 6.6 必须在 post-cleanup/post-sync/post-comment-fix 的同一个 immutable final HEAD 完整
+重跑以下门禁并记录逐命令输出、exit status、真实 wall time、Skip 与基线身份；不得继承
+`10f8e8ab` 的 Task 6.4 PASS：
 
 - `make rust`
 - `make rust-check`
@@ -266,10 +324,15 @@ specs 只允许产生 client ABI v13 与 cache-only 事实所需的 feature-side
 - `openspec validate --all --strict --no-interactive`
 - `git diff --exit-code <selected-main-parent>..HEAD -- engine/crates/mornlea_engine engine/include/mornlea_engine.h internal/fluid internal/nativeabi internal/sim/realm`
 - `git diff --exit-code <selected-main-parent>...HEAD -- cmd/mornlea/capture/testdata/golden`
+- current/selected-main client symbols、identity、双向 version-mix、v13-only bind hard failure、
+  no fallback、retired UI、no production MRW1、Go test-binary RPATH 与 release dylib SHA 审计
+- 代码注释中的 `[A-F]-[0-9]{2}` 任务编号零匹配，以及 `internal/client/render.go`、
+  `engine/crates/mornlea_client/src/ffi.rs` 两处修正的定点审计
 - `git diff --check`
+- exact HEAD、tracked/staged/untracked clean status 与全部证据同基线证明
 
 集成实现与验证保持 cache-only：main predecessor client ABI 为 v12，统一目标为 v13，
 最终 engine ABI 为从 selected-main-parent 原样继承的 v9；MRW1 固定布局、坐标裁决、边界与
 阶段范围均由 binding brief 确定。生产 app 的 MRW1 接线、Go mesh/visibility/upload/draw、
 共享 kernel、伙伴 fluid/engine 实现、协议、schema、benchmark scenario 与 visual golden
-均不得产生 feature-side 改动。本节列出的 follow-up merged-baseline 验证尚未执行。
+均不得产生 feature-side 改动。本节列出的新 final-HEAD 验证尚未执行。
