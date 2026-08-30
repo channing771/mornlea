@@ -1,12 +1,8 @@
 package runtime
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"os"
 	"reflect"
-	"strings"
 	"sync"
 	"testing"
 
@@ -237,96 +233,12 @@ func TestRuntimeComposesRealmAndEntity(t *testing.T) {
 			}
 		}
 
-		parsed, err := parser.ParseFile(token.NewFileSet(), "../entity/tick.go", nil, 0)
+		violations, err := analyzeEntityOwnershipDirectory("../entity")
 		if err != nil {
 			t.Fatal(err)
 		}
-		ast.Inspect(parsed, func(node ast.Node) bool {
-			switch value := node.(type) {
-			case *ast.TypeSpec:
-				if value.Name.Name == "StepHooks" {
-					t.Error("entity 仍声明反向 runtime 回调表 StepHooks")
-				}
-			case *ast.FuncDecl:
-				if value.Name.Name != "Step" || value.Recv == nil || len(value.Recv.List) != 1 {
-					break
-				}
-				receiver := value.Recv.List[0].Type
-				if pointer, ok := receiver.(*ast.StarExpr); ok {
-					receiver = pointer.X
-				}
-				if name, ok := receiver.(*ast.Ident); ok && name.Name == "State" {
-					t.Error("entity.State 仍持有权威 tick 总调度入口 Step")
-				}
-			}
-			return true
-		})
-
-		testPackages, err := parser.ParseDir(
-			token.NewFileSet(),
-			"../entity",
-			func(info os.FileInfo) bool { return strings.HasSuffix(info.Name(), "_test.go") },
-			0,
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		forbiddenFields := map[string]struct{}{
-			"commands": {}, "companionActions": {}, "hostileActions": {},
-			"acquired": {}, "generated": {},
-		}
-		for _, testPackage := range testPackages {
-			for filename, testParsed := range testPackage.Files {
-				ast.Inspect(testParsed, func(node ast.Node) bool {
-					switch value := node.(type) {
-					case *ast.TypeSpec:
-						if fixture, ok := value.Type.(*ast.StructType); ok {
-							for _, field := range fixture.Fields.List {
-								for _, name := range field.Names {
-									if _, forbidden := forbiddenFields[name.Name]; forbidden {
-										t.Errorf(
-											"entity 测试夹具 %s 仍保留 runtime inbox %q",
-											filename,
-											name.Name,
-										)
-									}
-								}
-							}
-						}
-					case *ast.FuncDecl:
-						if value.Name.Name == "Step" {
-							t.Errorf("entity 测试夹具 %s 仍复制 runtime 的通用 Step", filename)
-						}
-						stages := make(map[string]struct{})
-						ast.Inspect(value.Body, func(inner ast.Node) bool {
-							selector, ok := inner.(*ast.SelectorExpr)
-							if ok {
-								stages[selector.Sel.Name] = struct{}{}
-							}
-							return true
-						})
-						complete := true
-						for _, stage := range []string{
-							"ApplyPlayerCommands", "ApplyCompanionActions", "AdvanceActors",
-							"AdvanceHostiles", "AdvanceFluids", "AdvanceFarmlandMoisture",
-							"AdvanceCrops", "FinishWorld", "Publish",
-						} {
-							if _, present := stages[stage]; !present {
-								complete = false
-								break
-							}
-						}
-						if complete {
-							t.Errorf(
-								"entity 测试夹具 %s 的 %s 仍复制完整 runtime 阶段",
-								filename,
-								value.Name.Name,
-							)
-						}
-					}
-					return true
-				})
-			}
+		for _, violation := range violations {
+			t.Error(violation)
 		}
 	})
 }

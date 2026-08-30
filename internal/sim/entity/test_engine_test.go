@@ -161,10 +161,6 @@ func (engine *Engine) SetWorldTimeForTest(value uint64) {
 	engine.worldTime.Store(value)
 }
 
-func (engine *Engine) RestoreDayPhaseOffset(value uint16) {
-	engine.dayPhaseOffset.Store(uint64(value))
-}
-
 func (engine *Engine) TouchChunkForTest(key core.ChunkKey) {
 	if dimension := engine.dimension(key.Dimension); dimension != nil {
 		dimension.Touch(key.Pos)

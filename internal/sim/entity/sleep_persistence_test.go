@@ -62,24 +62,3 @@ func TestRespawnPointFlowsThroughSnapshotAndRestore(t *testing.T) {
 		t.Fatalf("重启后重生位置 = %+v，想要床尾格中心", pos)
 	}
 }
-
-// TestRestoreDayPhaseOffsetFeedsDisplayPhase 锁定宿主装配恢复路径：从 metadata
-// 恢复的偏移必须直接参与显示相位计算，首个 tick 之前即可观察。
-func TestRestoreDayPhaseOffsetFeedsDisplayPhase(t *testing.T) {
-	engine := NewEngine(0, 18000, 0)
-	if got := engine.DayPhaseOffset(); got != 0 {
-		t.Fatalf("未恢复前偏移 = %d，想要 0", got)
-	}
-	engine.RestoreDayPhaseOffset(6000)
-	if got := engine.DayPhaseOffset(); got != 6000 {
-		t.Fatalf("恢复后偏移 = %d，想要 6000", got)
-	}
-	// (18000 + 6000) % 24000 = 0：恢复的偏移立刻进入相位，而不是等首个 tick。
-	if phase := engine.displayDayPhase(); phase != 0 {
-		t.Fatalf("恢复后的显示相位 = %d，想要 0", phase)
-	}
-	// 绝对时间不受恢复的偏移影响：从恢复值继续每 tick 恰好 +1。
-	if result := advanceActorsTick(engine); result.WorldTimeTicks != 18001 {
-		t.Fatalf("恢复偏移后首个 tick 世界时间 = %d，想要 18001", result.WorldTimeTicks)
-	}
-}

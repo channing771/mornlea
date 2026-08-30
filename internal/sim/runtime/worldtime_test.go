@@ -19,6 +19,44 @@ func TestEngineRestoresAbsoluteWorldTime(t *testing.T) {
 	}
 }
 
+// TestRestoreDayPhaseOffsetFeedsDisplayPhase 锁定宿主装配恢复路径：从 metadata
+// 恢复的偏移必须立即参与显示相位，后续权威 tick 只推进绝对时间。
+func TestRestoreDayPhaseOffsetFeedsDisplayPhase(t *testing.T) {
+	engine := NewEngine(0, 18000, 0)
+	if got := engine.DayPhaseOffset(); got != 0 {
+		t.Fatalf("未恢复前偏移 = %d，想要 0", got)
+	}
+
+	engine.RestoreDayPhaseOffset(6000)
+	if got := engine.DayPhaseOffset(); got != 6000 {
+		t.Fatalf("恢复后偏移 = %d，想要 6000", got)
+	}
+	if phase := core.DisplayDayPhase(engine.WorldTime(), engine.DayPhaseOffset()); phase != 0 {
+		t.Fatalf("恢复后的显示相位 = %d，想要 0", phase)
+	}
+
+	previous := engine.WorldTime()
+	for step := uint64(1); step <= 2; step++ {
+		result := engine.Step()
+		if result.WorldTimeTicks != previous+1 || engine.WorldTime() != previous+1 {
+			t.Fatalf(
+				"第 %d 个 tick 世界时间 result/engine=%d/%d，想要 %d",
+				step,
+				result.WorldTimeTicks,
+				engine.WorldTime(),
+				previous+1,
+			)
+		}
+		if got := engine.DayPhaseOffset(); got != 6000 {
+			t.Fatalf("第 %d 个 tick 后恢复偏移 = %d，想要 6000", step, got)
+		}
+		if phase := core.DisplayDayPhase(result.WorldTimeTicks, engine.DayPhaseOffset()); phase != uint16(step) {
+			t.Fatalf("第 %d 个 tick 显示相位 = %d，想要 %d", step, phase, step)
+		}
+		previous = result.WorldTimeTicks
+	}
+}
+
 func TestEngineAdvancesWorldTimeExactlyOncePerStep(t *testing.T) {
 	engine := NewEngine(0, 0, 0)
 	for step := uint64(1); step <= 5; step++ {
