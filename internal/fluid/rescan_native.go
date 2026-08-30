@@ -46,6 +46,10 @@ const (
 	// tunable（`FluidRescanCellsPerTick` 量级）的 2^20 条，超出部分交给两段式
 	// overflow 扩容重试精确补足。
 	rescanOutputPositionCap = 1 << 20
+	// rescanBoxColumnMax 是扫描区域列坐标（盒内局部列）的最大合法值：布局域
+	// 含裙边列 0 与 `core.SectionSize+1`，生产五段平面只传中心列
+	// 1..`core.SectionSize`。
+	rescanBoxColumnMax = core.SectionSize + 1
 )
 
 // RescanRegion 描述一次重扫调用的扫描区域与预算。
@@ -94,6 +98,18 @@ func ScanRescanRegion(
 	}
 	if budget > math.MaxUint32 {
 		budget = math.MaxUint32
+	}
+	// 列域与起始区段先显式校验再编码：header 的这两个域窄于 int，越界值若靠
+	// u16/u8 静默截断会编码出**另一个合法或非法区域**（例如 X0=-1 截成 65535
+	// 后才被 kernel 以通用「输入非法」拒绝、StartSection=256 截成 0 后从头重扫
+	// 且完全不报错），报错点远离病因。调用方是权威 tick 单写者，越界只能是
+	// 契约 bug，立即以稳定中文文案暴露。
+	if region.X0 < 0 || region.X0 > region.X1 || region.X1 > rescanBoxColumnMax ||
+		region.Z0 < 0 || region.Z0 > region.Z1 || region.Z1 > rescanBoxColumnMax {
+		panic("internal/fluid: fluid rescan 扫描区域列范围非法")
+	}
+	if region.StartSection < 0 || region.StartSection >= core.SectionsPerChunk {
+		panic("internal/fluid: fluid rescan 起始区段越界")
 	}
 	input := rescanAssembleInput(scratch, box, meta, region, budget)
 	output := rescanEnsureOutput(scratch, region, budget)

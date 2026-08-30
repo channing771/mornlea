@@ -17,7 +17,8 @@ package realm
 // 语义）；入队集合相等。集合相等用「双向并入 + 基数」证明：`Queue.Enqueue`
 // 对已在队的位置不新增条目，故 native 坐标并入 oracle 队列后 `Len` 不变 ⟺
 // native 集 ⊆ oracle 集，反向同理——两侧都成立即集合相等，只依赖公共 API，
-// 不触碰队列内部结构。
+// 不触碰队列内部结构。另以 `TestScanRescanRegionRejectsInvalidRegion` 钉死
+// 包装函数对扫描区域列域与起始区段的显式校验（稳定中文 panic，先于编码）。
 
 import (
 	"slices"
@@ -465,4 +466,53 @@ func TestRescanDifferentialBudgetResumeAcrossTicks(t *testing.T) {
 	for _, budget := range []int{1, 2, 23, 24, 25, 119, 120, 121} {
 		diffRescanChunk(t, state, dimension, core.ChunkPos{}, budget)
 	}
+}
+
+// TestScanRescanRegionRejectsInvalidRegion：钉死 `fluid.ScanRescanRegion` 对
+// 扫描区域列域与起始区段的显式校验。header 的这两个域窄于 int，越界值若靠
+// 静默截断编码，列域越界会落进 kernel 的通用「输入非法」panic（远离病因），
+// 起始区段 256 更会截成 0 后从头重扫、完全不报错——两者都比报错更危险。
+func TestScanRescanRegionRejectsInvalidRegion(t *testing.T) {
+	_, dimension := newDifferentialState(t, buildOceanChunk(core.ChunkPos{}, -1))
+	box, meta := encodeRescanBox(nil, nil, dimension, core.ChunkPos{})
+	withRegion := func(x0, x1, z0, z1, startSection int) fluid.RescanRegion {
+		return fluid.RescanRegion{
+			Center: core.ChunkPos{},
+			X0:     x0, X1: x1, Z0: z0, Z1: z1,
+			StartSection: startSection,
+			Budget:       8,
+		}
+	}
+	for _, testCase := range []struct {
+		name      string
+		region    fluid.RescanRegion
+		wantPanic string
+	}{
+		{"x 列为负", withRegion(-1, 16, 1, 16, 0), "internal/fluid: fluid rescan 扫描区域列范围非法"},
+		{"x 列超裙边", withRegion(1, 18, 1, 16, 0), "internal/fluid: fluid rescan 扫描区域列范围非法"},
+		{"x 列区间为空", withRegion(5, 4, 1, 16, 0), "internal/fluid: fluid rescan 扫描区域列范围非法"},
+		{"z 列为负", withRegion(1, 16, -1, 16, 0), "internal/fluid: fluid rescan 扫描区域列范围非法"},
+		{"z 列超裙边", withRegion(1, 16, 1, 18, 0), "internal/fluid: fluid rescan 扫描区域列范围非法"},
+		{"z 列区间为空", withRegion(1, 16, 6, 5, 0), "internal/fluid: fluid rescan 扫描区域列范围非法"},
+		{"起始区段为负", withRegion(1, 16, 1, 16, -1), "internal/fluid: fluid rescan 起始区段越界"},
+		{"起始区段越界", withRegion(1, 16, 1, 16, 24), "internal/fluid: fluid rescan 起始区段越界"},
+		{"起始区段截断为合法值", withRegion(1, 16, 1, 16, 256), "internal/fluid: fluid rescan 起始区段越界"},
+	} {
+		func() {
+			defer func() {
+				recovered := recover()
+				if recovered == nil {
+					t.Fatalf("%s：期望 panic，调用正常返回", testCase.name)
+				}
+				if recovered != testCase.wantPanic {
+					t.Fatalf("%s：panic 文案=%v，想要 %q", testCase.name, recovered, testCase.wantPanic)
+				}
+			}()
+			var scratch fluid.RescanScratch
+			fluid.ScanRescanRegion(box, meta, testCase.region, &scratch)
+		}()
+	}
+	// 合法区域（生产五段平面的中心列 + 正常起始区段）不受校验影响。
+	var scratch fluid.RescanScratch
+	fluid.ScanRescanRegion(box, meta, withRegion(1, 16, 1, 16, 0), &scratch)
 }

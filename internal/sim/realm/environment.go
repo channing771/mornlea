@@ -582,8 +582,9 @@ func (state *State) rescanChunkFluids(
 // 盒中心必须是被扫描区块（engine header 契约「被扫描区块是盒中心区块」）：
 // 五段平面各有自己的「当前区块」，边界平面的盒中心是邻块，扫描条带落在该
 // 盒的中心列 1..16（chunkPos 的局部 x0..x1/z0..z1 加 1 映射为盒内局部列）。
-// 剩余额度可为 0 或负（前序平面整段超支后）：kernel 以 budget=0 语义零进度
-// 返回未完成，与旧 Go 实现的 `spent >= budget` 入口检查对非正预算的行为一致。
+// 非正剩余额度（前序平面整段超支后）在编码盒之前零进度返回未完成：镜像旧
+// Go 实现 `enqueueChunkFluids` 入口的 `spent >= budget` 检查对非正预算的行为，
+// 同时省掉一次注定零进度的盒编码。
 func (rs *fluidRescanState) scanPlane(
 	queue *fluid.Queue,
 	dimension *Dimension,
@@ -592,6 +593,9 @@ func (rs *fluidRescanState) scanPlane(
 	now, delay uint64,
 	budget int,
 ) (spent int, done bool) {
+	if budget <= 0 {
+		return 0, false
+	}
 	rs.box, rs.meta = encodeRescanBox(rs.box, rs.meta, dimension, chunkPos)
 	positions, spent, done, resume := fluid.ScanRescanRegion(rs.box, rs.meta, fluid.RescanRegion{
 		Center:       chunkPos,
