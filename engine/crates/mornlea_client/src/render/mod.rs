@@ -33,10 +33,14 @@ mod side_tests;
 mod ui_replay_tests;
 #[cfg(test)]
 mod water_tests;
+mod world;
+#[cfg(test)]
+mod world_tests;
 
 use std::collections::HashMap;
 
 use self::egui::{EguiError, EguiPass};
+use self::world::RenderWorld;
 use crate::ui::{UiFrame, decode_ui_frame, take_ui_events};
 use entity::{EntityPass, EntityPipelineKind};
 use lod::{Frustum, LodPass};
@@ -490,6 +494,9 @@ pub struct OffscreenRenderer {
     mode: TargetMode,
     /// 已录制但尚未提交的离屏 benchmark 批次；同一 renderer 最多保留一个。
     prepared_benchmark_batch: Option<PreparedBenchmarkBatch>,
+    /// 尚未接管绘制的 renderer 派生世界缓存。
+    #[allow(dead_code)]
+    render_world: RenderWorld,
     depth_view: wgpu::TextureView,
 
     faces: wgpu::Buffer,
@@ -1155,6 +1162,7 @@ impl OffscreenRenderer {
             height,
             mode,
             prepared_benchmark_batch: None,
+            render_world: RenderWorld::default(),
             depth_view,
             faces,
             instances,
@@ -1208,6 +1216,12 @@ impl OffscreenRenderer {
             last_pos: [0.0; 3],
             last_view_proj: [0.0; 16],
         })
+    }
+
+    /// 只更新尚未接管绘制的派生世界缓存。
+    #[allow(dead_code)]
+    pub(crate) fn apply_render_world_updates(&mut self, bytes: &[u8]) -> bool {
+        self.render_world.apply_update_batch(bytes).is_ok()
     }
 
     /// 上传材质 atlas:`pixels` 为逐 layer、逐 mip 拼接的 RGBA 字节
