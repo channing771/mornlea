@@ -28,6 +28,9 @@ Fusion Pixel，OFL-1.1）。
   钉死「以滑块呈现」而 retroui 无滑块组件）。文案、上行事件、焦点与键盘
   语义零改动。
 - `frontend/AGENTS.md` 同步像素组件与字体资产的样式纪律。
+- 新增 UI 部件视觉基线管线：每个 UI 部件（四整屏 + 各控件态）一张入库
+  基线 PNG，无头浏览器截取、双阈值比对（口径同世界 golden 管线），
+  check/update 两个 Make 入口；本机开发工具，不进 CI、不触 dist。
 
 ## Capabilities
 
