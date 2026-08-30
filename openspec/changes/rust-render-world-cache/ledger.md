@@ -362,3 +362,25 @@ base 起零 diff；其 ready/spawn warmup 循环按 transport 收包时机决定
   或 `openspec/config.yaml`。
 - OpenSpec 5.1–5.3 保持已勾选；5.4 **仍保持未勾选**。本记录不预先宣称 Task 5 scoped
   re-review verdict，change 保持 active，等待 controller 派发本 round 独立复审。
+
+## Task 5 Scoped Re-review 与完成裁决
+
+- Independent reviewer：`01a050c9-d4c4-7102-a03c-4ded50301019`。初审范围为
+  `e484364..a4f6dbf`，初始 verdict 为 spec ❌、quality Needs fixes；两个 Important finding
+  分别是 Task 2 `large_enum_variant` 阻塞 `make rust-check`，以及 transport-dependent
+  `TestSwordCombatParity` 阻塞 `go test ./... -race`。
+- 修复与证据范围为 `a4f6dbf..0a1f05c`。其中 `8b0243c8` 消除 clippy finding，独立 reviewer
+  `01a050d0-a776-7ce3-ad06-5a30d4557f04` 判定 spec ✅、quality Needs fixes，并指出 staged
+  column deep-copy allocation；`d170e198` 以 immutable `Arc` 消除该 allocation，同一 reviewer
+  scoped re-review 判定 spec ✅、quality Approved、0 open；`2e833ff6` 以 test-only tick barrier
+  稳定 parity gate，独立 reviewer `01a050d9-ef20-7ce3-98c0-eaac06ea9eac` 判定 spec ✅、
+  quality Approved、无 findings；`0a1f05c5` 记录修复后的完整 current-HEAD gate 证据。
+- Task 5 scoped re-review 同时复核初始范围与上述修复/证据范围，最终 verdict 为 spec ✅、
+  quality Approved；两个原 Important findings 均 addressed，0 open。reviewer 明确确认当前
+  evidence 适用，并确认终审前 change 保持 active、进度为 14/15。
+- Controller 接受该 clean verdict；Task 5.4 现已完成，OpenSpec tasks 为 15/15。change 继续
+  保持 active，不在本任务 archive；实现与验收已完成，等待 archive。
+- Final bookkeeping validation 在 pre-commit HEAD `0a1f05c5` 单独执行且均退出 0：
+  `openspec validate --all --strict --no-interactive` 为 78 passed、0 failed（real 2.53s）；
+  `openspec instructions apply --change rust-render-world-cache --json` 为 15/15、remaining 0、
+  `state: all_done`（real 2.96s）；`git diff --check` 无输出（real 0.02s）。

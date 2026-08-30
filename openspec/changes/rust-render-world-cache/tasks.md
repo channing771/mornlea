@@ -71,6 +71,6 @@
   `make test-race-changed`、`go test ./... -race`、`make visual-check`、
   `openspec validate --all --strict --no-interactive` 与 `git diff --check`；逐项将实际输出、
   失败或 Skip 写入 `ledger.md`。
-- [ ] 5.4 取得该任务的单一独立终审，其报告同时包含 spec-compliance 与 quality verdict；
+- [x] 5.4 取得该任务的单一独立终审，其报告同时包含 spec-compliance 与 quality verdict；
   审查 MRW1 24/32 字节与 4 MiB/4096 上限、v12/v8、流体零触碰、无共享 kernel、无实时
   app 接线与完整验证证据，并将最终裁决记入 `ledger.md`。
