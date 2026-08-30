@@ -42,8 +42,15 @@
   --danger: rgb(240, 89, 89);
 
   /* ---- 相位底色 ---- */
-  /* 主菜单整屏不透明底（ui/style.rs MENU_BACKGROUND）。 */
-  --menu-background: rgb(14, 16, 19);
+  /* 主菜单/设置页整屏底：透明化让 wgpu 世界全景从 WebView 下层透出，
+   * 只保留上下深色渐变 scrim（panel 族同色），保证标题、按钮与版本行在
+   * 任何天空/地形亮度下可读；按钮与面板自身的表面不透明度不受影响。 */
+  --menu-background: linear-gradient(
+    180deg,
+    rgba(11, 13, 16, 0.44) 0%,
+    rgba(11, 13, 16, 0.08) 42%,
+    rgba(11, 13, 16, 0.5) 100%
+  );
   /* 暂停遮罩：面板族同色 0.82 透明变体（ui/style.rs PAUSE_OVERLAY）。 */
   --pause-overlay: rgba(11, 13, 16, 0.82);
 

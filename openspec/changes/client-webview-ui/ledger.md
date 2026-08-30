@@ -47,3 +47,14 @@
 - archcheck 顺手修（控制会话裁决）：`TestCommentBacktickIdentifiersExist` 存在域扩展到桥契约语料（schema.json + frontend/src ts/tsx；空语料 Fatal 守卫；正/负/空语料三断言）——9 条跨语言引用误报（`menuAction`/`uiState`/`uplinkEnvelope` 等 TS schema 名）全数转绿；已知红仅余 BaselineVersions（AGENTS.md v11→v12 属 6.1）与 MornleaCurrentIdentity（node_modules 环境现象）。
 - SPEC PASS / QUALITY PASS（双零修复）：纯删除纪律（非注释新增行穷举仅死管道简化+pass 计数连带+授权扩展项）；dylib −6.6KB；冒烟 React 主菜单正常、`nm | grep -ci egui` = 0。
 - 移交 T5/T6：mornlea_client/AGENTS.md「egui 布局」措辞（6.1）；`TestMornleaCurrentIdentity` 扫 frontend/node_modules 环境现象——6.2 dev-check 前裁决是否钉路径排除（建议 corpus walker 同款排除）；docs/architecture.md egui 描述（6.1）。
+
+### T5 世界全景 + golden 替换 — PASS（R1 顺手修一轮）
+
+- menu-vista 路径：worldgen 纯函数（固定种子）→ `server.BuildChunkSnapshot`（包级纯函数导出，非 server 生命周期）→ 专属 mirror/mesher/scheduler/远环带 → 既有 pass；锚点 (1024,1024) 隔离；`TestMenuVistaDoesNotAssembleWorld` 源扫描红线测试。相机 `menuVistaYawAt` tick 纯函数（mod 2880）、渲染后推进、相位重进归零、capture 钉 1/8 与 3/8 周期。
+- 途中修复真实确定性漏洞：`SectionScheduler.FlushUploads` 等距区段上传顺序随 map 迭代漂移 → dist2→X→Y→Z tiebreak（游戏路径同函数但仅固化既有的非确定性，21 张世界 golden 零差实证中性）；另经构图调整（相机 36→30）规避单像素 HiZ 翻转，8 连跑 + visual-check 全净。
+- 前端 scrim：`--menu-background` 不透明→渐变（0.44/0.08/0.50），按钮/面板不透明度不动，dist 重构建一致。
+- golden 3 张（控制会话裁决）：main-menu/settings-menu 全景底图 + debug-panel（T4 egui 退役遗留，旧图含已退役面板像素）；其余 21 张零变化。
+- 越范围两件（控制会话裁决提前完成 6.1/6.2 项）：AGENTS.md client ABI v11→v12 一行；archcheck identity node_modules SkipDir（pnpm 冻结安装产物不入身份契约）。
+- SPEC PASS（红线/确定性/隔离/delta 逐条；BuildChunkSnapshot 纯函数性核验）；QUALITY PASS（隔离边界/生命周期/性能画像）。双审共同指出 pump 缺 `BeginFrame()`（4MiB 预算成一次性总额的未来脆弱点）→ R1 修复 + 补 `TestFlushUploadsOrdersUploadsByDistanceThenXYZ` 排序契约钉值测试（带突变验证：去 tiebreak 第 0 轮即红）。
+- 冒烟受限（控制台锁屏）由 golden+vitest 承担视觉验证，解锁后补验交互全景穿透（T2 KVC 已实证写入成功）。
+- 遗留：app 套件一次未复现失败（133s vs 基线 87s，疑似环境负载 flake，4 连跑未复现，关注）；菜单相位 Poll 模式 ~96% CPU 为既有行为。

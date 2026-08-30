@@ -97,6 +97,7 @@ func NewOffscreenRenderApplicationForTest(
 		mirror:          client.NewMirror(),
 		predictor:       client.NewPredictor(),
 		mesher:          client.NewMesher(reg, 1),
+		registry:        reg,
 		camera: client.Camera{
 			FovY:   mgl32.DegToRad(70),
 			Aspect: float32(width) / float32(height),

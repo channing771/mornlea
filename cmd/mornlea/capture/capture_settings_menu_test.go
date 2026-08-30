@@ -31,4 +31,8 @@ func TestSettingsMenuCaptureSceneUsesCleanFixture(t *testing.T) {
 	if scene.Menu || scene.WarmupFrames != 8 || scene.Apply == nil {
 		t.Fatalf("settings-menu 场景不完整或混入主菜单相位: %+v", scene)
 	}
+	// 设置页底图同为 menu-vista 全景：必须钉住与主菜单不同的自转时刻。
+	if scene.PinVolatile == nil {
+		t.Fatal("settings-menu 场景必须钉住全景自转 tick")
+	}
 }

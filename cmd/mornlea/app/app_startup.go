@@ -329,7 +329,9 @@ func NewWithDependencies(
 		settings: SettingsState{Committed: initialSettings, Draft: initialSettings},
 	}
 	app.releaseResources = app.releaseOwnedResources
-	// 材质与 HUD 图集一次性上传;mesh 上传调度经 SectionScheduler 下沉。
+	// 材质注册表供菜单全景的 mesher 复用（与近环同一材质映射）；材质与
+	// HUD 图集一次性上传;mesh 上传调度经 SectionScheduler 下沉。
+	app.registry = reg
 	atlasLayers, atlasPixels := reg.AtlasPixels()
 	rustRenderer.UploadAtlas(atlasLayers, atlasPixels)
 	app.scheduler = render.NewSectionScheduler(rustRenderer, applicationUploadPerFrame)
@@ -437,6 +439,9 @@ func (a *Application) startWorld() error {
 	a.dayPhaseOffset = 0
 	a.observerFloor = 0
 	a.clientSessionClosed = false
+	// 全景随装配丢弃：游戏相位渲染真实世界，重进菜单相位时按同种子重建
+	// 出确定性相同的画面（spec webview-menu-ui「全景背景确定性」）。
+	a.discardMenuVista()
 
 	a.menu.phase = MenuPhaseGame
 	a.menu.starting = false

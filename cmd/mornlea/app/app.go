@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/channing771/mornlea/internal/assets"
 	"github.com/channing771/mornlea/internal/audio"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/companion"
@@ -213,6 +214,15 @@ type Application struct {
 	// pushedUIState 是上次下行的 UI 状态 JSON 原文,驱动「状态变化才推送」
 	// 的事件驱动语义(见 app_ui_state.go);零值表示尚未推送过任何状态。
 	pushedUIState string
+	// registry 是会话材质注册表：近环 mesher 与菜单全景的 mesher 共享同一
+	// 份材质映射，全景与游戏画面因此呈现同一套材质。
+	registry *assets.Registry
+	// menuVista 是主菜单/设置页相位的世界全景管线（见 app_menu_vista.go）：
+	// 进入菜单相位惰性构建，世界装配或关闭时丢弃；nil 即全景零参与。
+	menuVista *menuVista
+	// menuVistaPhase 记录全景最近一次推进时的菜单相位，用于把「主菜单 ⇄
+	// 设置页」切换识别为相位重进（自转 tick 归零，确定性同画面）。
+	menuVistaPhase MenuPhase
 }
 
 type Window interface {
