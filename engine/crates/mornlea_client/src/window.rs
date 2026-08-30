@@ -613,7 +613,7 @@ fn clamp_logical_to_work_area(
         return requested;
     }
     // 以最简宽高比的整数倍缩小，避免两个轴分别 round 后产生一像素的比例
-    // 漂移。D-01 的三个请求均为 16:9，因此运行期与创建期都保持精确比例。
+    // 漂移。交互窗口的三个预设请求均为 16:9，因此运行期与创建期都保持精确比例。
     let divisor = greatest_common_divisor(requested.width, requested.height);
     let unit_width = requested.width / divisor;
     let unit_height = requested.height / divisor;

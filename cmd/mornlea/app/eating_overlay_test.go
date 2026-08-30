@@ -2,7 +2,7 @@
 
 package app
 
-// eating_overlay_test.go：B-14 三处裁决点位的定点测试——
+// eating_overlay_test.go：进食覆盖层三处裁决点位的定点测试——
 // `app.go` 的 tracker 字段、`app_frame.go` 在 `Prepare` 调用处的 overlay 构造、
 // `app_lifecycle.go` 的会话复位行。端到端断言走既有 health_hud_test.go 的
 // FrameStreams 范式：从真实 `RenderFrame` 的 quad 字节流里读出进食条。

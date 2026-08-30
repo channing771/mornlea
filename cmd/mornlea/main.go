@@ -117,8 +117,8 @@ func runWithDependencies(args []string, dependencies runDependencies) error {
 	// 视觉门禁，把水排除在外等于让门禁看不见默认开启的主要世界内容。翻默认值
 	// 因此必须连带重新生成 golden——这正是期望行为。
 	options.Application.FluidEnabled = effective.FluidEnabled && !options.Application.Benchmark
-	// ConfigPath 是设置页（D-01）的配置保存目标；调试面板 F5 保存已随 D-03
-	// 移除（面板不落盘配置），不再需要保存路径的只有不进交互循环的
+	// ConfigPath 是设置页的配置保存目标；调试面板 F5 保存已被移除
+	// （面板不落盘配置），不再需要保存路径的只有不进交互循环的
 	// benchmark 与抓帧路径。
 	if !options.Application.Benchmark && options.CaptureDir == "" {
 		configPath, err := resolveConfigPath(options)
