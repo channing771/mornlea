@@ -1,10 +1,4 @@
-# authoritative-player-melee Specification
-
-## Purpose
-
-为最多八名局域网玩家提供确定且有界的服务端权威近战结算，使持续 primary action、方块遮挡、目标冷却、伤害入口与既有采掘路径共享同一 tick 事实。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: 服务端权威玩家近战
 
