@@ -9,6 +9,7 @@
 - 当前版本事实：protocol v32、player v8、chunk v9、metadata v3、companions v4、hostile v1、engine ABI v9、client ABI v13、scenario v20。
 - 计划目标：仅 companions 升 v5；Agent HTTP application contract v1；MCP tool contract v1；MCP wire `2025-11-25`。
 - Ruling: 以执行时 `main` 的 engine ABI v9/client ABI v13 为不变基线，本 change 不认领 native ABI 升版 — 代码与用户更新的项目指南高于旧规划中的 v8/v11/v12 文档事实 — 若裁决错误，成本是收尾版本文档与钉死测试需重做，不改变 Agent HTTP/MCP 合同。
+- Ruling: Task 6 只移除 Go config 的 provider/direct-model 生产语义并新增强类型 Agent HTTP client；现有 Planner/Dialogue direct-model 实现保留为未接线的编译过渡，由 Task 9/10 在权威编排切换时删除 — 这避免 Task 6 提前改变运行路径，也不引入 fallback、隐式映射或 backend 开关 — 若裁决错误，成本是 Task 9/10 的删除面扩大，不影响 Task 6 合同。
 
 ## 规划裁决
 
