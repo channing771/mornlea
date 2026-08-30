@@ -1275,3 +1275,194 @@ delta 行为契约、代码、current docs、main specs 或配置，不执行 me
   恰为 1、checked checkbox 为 0。五组 protected paths 与 visual golden 的 committed/worktree
   diff 均为零，`git diff --check` 无输出。首次 scope checker 把无匹配的 checked count 当作
   空字符串做整数比较而退出；修正为 zero-match 断言后退出 0，real 0.24s，且未改变仓库状态。
+
+## Task 6.7：contract-affecting main drift 的 client ABI v14 replanning（待独立 review）
+
+### Planning implementer、起始基线与只规划范围
+
+- Fresh planning implementer identity：`01a052b4-dd1d-79f0-b61d-62093022ad90`。本会话由用户
+  明确指定为 `rust-render-world-cache` planning implementer；控制会话不得直接实现，本会话
+  也只修改 OpenSpec planning，不承担独立 review。
+- 起始 feature HEAD 精确为 `eccdca39f7c4ead448d8824d5ebc1141c02b6bd3`，branch
+  `feat/rust-render-world-cache`；开始修改前 tracked/staged/untracked 为零。planning 时首次
+  observed local main 为 `be5ff22bf3b5c35199884177e8e0a595d5713c30`，随后 main 先前进到
+  capture code-fix `4c553f3b3b34f575ebb5304d67984af3425c7209`，再前进到当前 observed
+  latest `a83192b7d9a95cb622fc29035b199a8a6de5645c`。
+- main worktree 在观察 `4c553f3b` 时另有未提交的
+  `openspec/changes/dev-capture/design.md` 与 `openspec/changes/dev-capture/ledger.md`；它们不在
+  `4c553f3b` commit 中，属于外部/用户状态。本 implementer 未读取其 working diff、未修改或
+  清理它们。它们与一项 tasks checkbox 后来由外部会话提交为 `a83192b7`；本 implementer 随后
+  完整读取该 commit patch 及更新后的 dev-capture design/ledger/tasks。`a83192b7` main
+  worktree 观察时为 clean。
+- 已完整读取根与最近局部 `AGENTS.md`（root、`engine/`、client crate、`internal/`、
+  `internal/client/`）、`openspec/config.yaml`、本 change proposal、唯一 delta spec、design、
+  tasks 与本轮开始时 1,277 行完整 ledger。还完整读取 ignored
+  `task-6.7-revalidation-report.md`（754 行）、`task-6.7-main-resync-report.md`（267 行）、
+  `task-6.7-main-resync-review.md`（68 行）与
+  `task-6.7-post-resync-revalidation-report.md`（151 行），以及 main `dev-capture` 的 proposal、
+  唯一 delta spec、design、tasks、完整 ledger。
+- 已完整审计 main 的 client header、`ffi.rs`、`lib.rs`、`window.rs`、`capture.rs`、Go
+  `window.go`/`window_test.go`、相关 Rust/Go tests 与 `bcc053e8..main` commit patches；使用
+  `openspec-update-change` workflow 并在写入前读取 proposal/specs/design/tasks instructions。
+- 本轮 tracked 写入严格限制为
+  `openspec/changes/rust-render-world-cache/{proposal.md,design.md,tasks.md,ledger.md}` 与唯一
+  `specs/rust-client-render-cutover/spec.md`；另写 ignored
+  `.superpowers/sdd/2026-08-30-rust-render-world-main-integration/task-6.7-v14-replanning-report.md`。
+  未修改生产/测试代码、main specs、current docs、config、main branch、protected paths 或
+  golden；未 merge、rebase、archive、push，也未把 feature merge into main。
+
+### 不可改写历史与 cancelled validation
+
+- Tasks 1–6.6 的 completed 状态和历史文字保持不变。旧 selected main
+  `e1e2e287cb3454e6bbca6bf5bcd7cf9e92482efc` 上曾取得完整 18/18 PASS；这只证明其当时
+  exact baseline。
+- exact feature HEAD `5e5243a7659936da778bb235156fd4428c2ec8d2` 的后续 revalidation 完成
+  Gates 1–17 后，Gate 18 发现 local main 已从 `e1e2e287` 前进到
+  `bcc053e88278991e9069438ff82c28a8dc7bb53d`。最终裁决保持为 17 PASS / 1 exact-main
+  binding FAIL、0 product failures、0 Skip，不得弱化或冒充全通过。
+- 随后 fresh implementer 只把 `bcc053e8` 的 5 个无关 `dev-capture` planning files 做
+  non-rewriting sync，产生 merge `65ac703ae00534d5055c64db821ab59bac3c414a` 与本轮起始 ledger
+  commit `eccdca39`；该 resync 没有修改代码、版本、ABI、client/MRW1 surface、protected paths
+  或 golden，独立 scoped review 只批准重新验证。
+- `eccdca39` 上的新 revalidation 在 Gate 1 前 preflight 发现 local main 已到
+  `be5ff22b`，因此取消并精确记录 0/18 gates started、0 product failures。它没有运行产品
+  gate，不能作为 final validation 证据；这次 capture/client ABI drift 必须先回到 planning。
+
+### `bcc053e8..a83192b7` main capture 与 docs 漂移的精确审计
+
+- `bcc053e8..a83192b7` 恰有 3 commits、11 个 unique paths，combined diff 为 815 insertions /
+  29 deletions：
+  1. `be5ff22bf3b5c35199884177e8e0a595d5713c30 feat(client): add window composite capture with client abi v13`
+  2. `4c553f3b3b34f575ebb5304d67984af3425c7209 fix(client): align window capture cg option bits with sdk headers`
+  3. `a83192b7d9a95cb622fc29035b199a8a6de5645c docs: record dev-capture task 2 review rounds`
+- 第一提交修改根 `AGENTS.md`，新增 `engine/crates/mornlea_client/src/capture.rs`，并修改
+  client `ffi.rs`、`lib.rs`、`window.rs`、C header、Go `window.go` 与 `window_test.go`。它把
+  client ABI 从 v12 升到 v13，并恰好新增一个 versioned export
+  `mornlea_client_window_capture`。
+- `be5ff22b..4c553f3b` 恰有 1 commit、1 path：只修改
+  `engine/crates/mornlea_client/src/capture.rs`，38 insertions / 11 deletions。完整 patch 审计
+  确认它把 `CGWindowListOption`/`CGWindowImageOption` FFI 参数从错误的 `u64` 改为 SDK
+  `CF_OPTIONS(uint32_t, ...)` 对应的 `u32`；把 IncludingWindow 位值从错误的 `1<<0` 改为
+  `1<<3`，把 BestResolution 从错误的 `1<<8` 改为 `1<<3`；同时新增
+  `window_list_option_values_match_sdk_header`，钉死这两个 option bits、
+  AlphaPremultipliedFirst、ByteOrder32Little 与 BGRA bitmap 组合。
+- 后一提交没有 header、`ffi.rs`、`lib.rs`、Go bridge/test 或 identity diff；`be5ff22b` 与
+  `4c553f3b` 的 Rust FFI export 名单 SHA-256 均为
+  `5741648dd956049653cedf09d04a70bcafd50be35b839ba830a5c1c08e379239`。因此它是同一 v13
+  capture surface 的实现正确性修复，必须由最终 v14 原样继承，但不改变 union 数量或版本裁决。
+- `4c553f3b..a83192b7` 恰有 1 commit、3 paths，只修改
+  `openspec/changes/dev-capture/{design.md,ledger.md,tasks.md}`，43 insertions / 4 deletions。
+  它记录 Task 2 initial implementation、独立 review 的两个 Blocker、`4c553f3b` fix round 与最终
+  spec/quality PASS，勾选 dev-capture Task 2.1；design 只把 capture validation-order 文字从
+  错误概括校正为已实现的 ABI version → output pointer/zero-capacity consistency → handle →
+  capacity。对 `engine`、`internal`、root identity/current docs/config/main specs 的 committed
+  diff 为零；a831 的 source/header export 仍为 28 versioned + 1 identity，export-list SHA-256
+  仍为 `5741648dd956049653cedf09d04a70bcafd50be35b839ba830a5c1c08e379239`。因此该 commit
+  是 docs-only review bookkeeping，不改变 client ABI v13 public export/contract 或 v14 union。
+- main capture contract 为：`NSWindow windowNumber` 定位目标窗口；
+  `CGWindowListCreateImage` 使用 SDK-correct IncludingWindow/BestResolution 后交给
+  `CGBitmapContext`；export 的 validation order 是 ABI version → output pointers/zero-capacity
+  consistency → handle → capacity；输出为去除 row padding、翻转为 top-down 的紧凑 BGRA8。两段式调用用
+  `CAPTURE_OVERFLOW=8` 返回 required/width/height 且保持 caller buffer，不可用用
+  `CAPTURE_UNAVAILABLE=9` 且保持 outputs；nil pixels 只允许 zero capacity。Go
+  `Window.Capture` 先查询容量、分配后重试，不可用映射 typed `ErrCaptureUnavailable`，未知
+  handle 保持稳定 panic。Rust tests 覆盖 row flip/padding、bounds、错误 ABI/参数/no-write、
+  unknown handle 与 SDK bits；Go tests 覆盖 v13 identity/header 和 unknown handle panic。
+
+### 精确 export 现状与 final v14 union
+
+- `bcc053e8` predecessor：client ABI v12，27 个 versioned exports + 1 个 identity export，
+  总计 28；Rust/header 的 27 个 versioned exports 全部 ABI-first。
+- observed latest main `a83192b7`：client ABI v13，28 个 versioned exports + 1 个 identity
+  export，总计 29；Rust/header 28/28 ABI-first。28 个 versioned exports 精确为：
+  `mornlea_client_render_create`、`mornlea_client_render_create_windowed`、
+  `mornlea_client_render_destroy`、`mornlea_client_render_drain_ui_events`、
+  `mornlea_client_render_drop_lod_tile`、`mornlea_client_render_drop_section`、
+  `mornlea_client_render_frame`、`mornlea_client_render_prepare_benchmark_batch`、
+  `mornlea_client_render_readback`、`mornlea_client_render_resize`、
+  `mornlea_client_render_set_lod_fog`、`mornlea_client_render_submit_benchmark_batch`、
+  `mornlea_client_render_upload_atlas`、`mornlea_client_render_upload_glyph_rect`、
+  `mornlea_client_render_upload_hud_atlas`、`mornlea_client_render_upload_lod_tile`、
+  `mornlea_client_render_upload_section`、`mornlea_client_ui_push_state`、
+  `mornlea_client_window_cancel_close`、`mornlea_client_window_capture`、
+  `mornlea_client_window_create`、`mornlea_client_window_destroy`、
+  `mornlea_client_window_focus`、`mornlea_client_window_ns_window`、
+  `mornlea_client_window_poll`、`mornlea_client_window_set_content_size`、
+  `mornlea_client_window_set_cursor_captured`、`mornlea_client_window_set_floating`。
+  唯一 identity export 是无参数 `mornlea_client_abi_version`。
+- current feature `eccdca39`：client ABI v13，28 个 versioned exports + 1 identity，总计 29；
+  它相对 `bcc053e8` 恰好新增
+  `mornlea_client_render_apply_world_updates`，但没有 main-only capture。main-only 与
+  feature-only 的两个 symbol 必须取 union，不能互相覆盖。
+- final client ABI v14 精确为 29 个 versioned exports + 1 identity，总计 30。29 个 versioned
+  exports 是上述 main 28 个的完整集合，再加
+  `mornlea_client_render_apply_world_updates`；没有第三个新增或删除 symbol。最终 all-versioned
+  ABI-first test 必须精确枚举全部 29 个，包括 capture 与 MRW1。
+
+### Planning 裁决、任务重排与最终身份
+
+- final v14 dylib 的全部 29 个 versioned exports 收到 ABI 13 时必须先返回 `ABI_VERSION`，
+  不得先读取 handle/pointer/capture/UI/MRW1 或改变状态。exact actual selected-main v13 dylib
+  的全部 28 个 versioned exports 收到 ABI 14 时同样先拒绝。v14-only MRW1 symbol 在 v13
+  dylib 上不存在，必须由 link/load/bind hard failure 证明；不得动态加载可选 symbol，不得
+  增加 Go fallback，也不得把 symbol absence 描述为一次返回 client status 的 FFI 调用。
+- final v14 必须完整继承 actual selected-main v13 capture exports/behavior/production bridge/tests，
+  包括 `4c553f3b` 的 SDK `u32` option width 与两个 `1<<3` bits；只叠加 MRW1 cache/update。
+  MRW1 保持 cache-only、test-only driver、无 production caller，不改变 Go mesh/visibility/
+  upload、`RenderFrame.Visible`、frame encoding/readback 或 draw。
+- rollback 只能移除 MRW1/client-v14 增量并回到 actual selected-main v13 capture predecessor；
+  不得回到 v12，不得删除 capture/fluid。final identity 固定为 protocol 32、player 8、chunk 9、
+  world 3、companions 4、hostile 1、engine 9、client 14、benchmark 20。
+- Task 6.8 fresh implementer 必须在 merge 前即时固定 latest main。当前 observed/已审计锚点是
+  `a83192b7d9a95cb622fc29035b199a8a6de5645c`；若 main 再前进，先记录该锚点到 latest main 的
+  全部 commits/paths并审计版本、ABI、header/FFI/window/capture、identity、MRW1、fluid 所有权
+  与排除项。任何 contract-affecting drift 先回 planning；契约不变才做
+  `git merge --no-commit --no-ff main`，不改写历史。
+- 冲突重点为 client header、`ffi.rs`、`lib.rs`、`window.rs`、Go `window.go`/`window_test.go`
+  与 current identity docs；真实冲突必须全部记录。相对 actual selected main，五组 protected
+  paths `engine/crates/mornlea_engine`、`engine/include/mornlea_engine.h`、`internal/fluid`、
+  `internal/nativeabi`、`internal/sim/realm` 与 visual golden 必须零 diff。Task 6.8 最小实现后
+  分别取得 fresh spec/quality review。
+- pending 收尾重排为 Tasks 6.7–6.10。planning review 前 tasks 应精确为 25 total、21
+  completed、4 pending，Task 6.7 不勾选；6.8 是 latest-main sync + combined v14 + 独立
+  spec/quality review，6.9 是 immutable final HEAD 完整 18 门禁，6.10 是 fresh whole-
+  integration final review。
+- Task 6.9 的 18 门禁必须覆盖执行时 OpenSpec 实际全量计数、v14 29+1、selected-main v13
+  28+1 reverse mix、capture symbol/status/capacity/BGRA8/SDK option bits/production bridge/tests、
+  MRW1 bind/atomic/cache-only/no production caller、RPATH/release dylib SHA、身份矩阵、
+  protected/golden zero-diff 与 exact clean HEAD。任何 tracked post-validation fix 或 sync 都
+  必须从 Gate 1 完整重跑。
+
+### 首轮 planning validation（后续 main docs drift 前的历史结果）
+
+- `openspec validate --all --strict --no-interactive`：exit 0，real 10.72s；80 passed、0 failed，
+  包含 `change/dev-capture` 与 `change/rust-render-world-cache`。
+- `openspec status --change rust-render-world-cache --json`：exit 0，real 10.71s；schema
+  `spec-driven`，proposal/specs/design/tasks 四类 artifacts 全部 `done`，unique delta spec 路径
+  仍恰为 `specs/rust-client-render-cutover/spec.md`，`isComplete: true`。
+- `openspec instructions apply --change rust-render-world-cache --json`：exit 0，real 10.71s；
+  `state: ready`，25 total、21 complete、4 remaining；pending 恰为 Tasks 6.7、6.8、6.9、6.10。
+- `git diff --check`：exit 0且无输出。tracked dirty scope 恰为允许的 proposal、唯一 delta spec、
+  design、tasks、ledger 五个 existing planning files；staged scope 为零，生产/测试代码、main
+  specs、current docs、config、protected/golden diff 为零。ignored report 存在并由根
+  `.gitignore` 的 `/.superpowers/` 规则排除。
+- 该轮执行时 observed main 还是 `4c553f3b`；随后 main 前进到 docs-only `a83192b7` 并触发
+  planning 记录更新，因此这些结果只作首轮历史，不作为提交前最终验证。必须在
+  `a83192b7` current statements 写入后重跑全部 planning 命令。独立 planning review 尚未
+  执行，本 implementer 不自评、不勾选 6.7，也不宣告 implementation complete。
+
+### Post-`a83192b7` planning validation 与提交前状态
+
+- 在 `a83192b7` docs-only audit、current statements 与 merge-time anchor 全部写入后，
+  `openspec validate --all --strict --no-interactive`：exit 0，real 2.41s；80 passed、0 failed。
+- `openspec status --change rust-render-world-cache --json`：exit 0，real 1.86s；schema
+  `spec-driven`，四类 artifacts 全部 `done`，唯一 delta spec 路径正确，`isComplete: true`。
+- `openspec instructions apply --change rust-render-world-cache --json`：exit 0，real 1.86s；
+  `state: ready`，25 total、21 complete、4 remaining，Tasks 6.7–6.10 全部 pending。
+- `git diff --check` exit 0；scope assertion exit 0：dirty tracked files 恰为允许的五个 planning
+  files，staged 0，Task counts 25/21/4，Task 6.7 unchecked，ignored report 命中
+  `/.superpowers/` 规则。feature HEAD 仍为
+  `eccdca39f7c4ead448d8824d5ebc1141c02b6bd3`；observed latest main 精确为
+  `a83192b7d9a95cb622fc29035b199a8a6de5645c` 且 main worktree clean。
+- 这些结果在本 validation bookkeeping 写入后还须再执行一次最终 OpenSpec/instructions/
+  diff/scope rerun；最终 rerun 证据写入 ignored report 与提交回执，避免递归改写 ledger。

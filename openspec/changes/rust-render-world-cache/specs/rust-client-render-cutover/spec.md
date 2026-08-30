@@ -65,63 +65,67 @@ section upsert MUST 按 `ContainerSnapshot` 三态接收紧凑数据：single �
 - WHEN 收到同一 key 的 revision 12 合法 upsert
 - THEN revision 12 的紧凑 section 状态替换 tombstone
 
-### Requirement: client ABI v13 统一 surface 并早期拒绝混装
+### Requirement: client ABI v14 合并 v13 capture 与 MRW1 surface 并早期拒绝混装
 
-client C header、Rust 导出与 Go bridge 的 ABI 版本常数 MUST 同步为 13；无参数 identity export `mornlea_client_abi_version()` MUST 始终报告 13。集成 v13 动态库中每个接受 ABI version 参数的 export MUST 拒绝包括 12 在内的每一个其他版本。每个此类 v13 export MUST 在其其他适用 validation 或状态改变前检查 ABI version；现有 all-versioned-export ABI checks MUST 保留。版本错误 MUST 在 handle、pointer、UI/MRW1 内容或 renderer/RenderWorld 状态改变前返回 `ABI_VERSION`。v13 surface MUST 保留 main v12 的 `ui_push_state` 与版本化 JSON UI event drain，MUST NOT 恢复已退役的 `render_upload_ui_font`、frame TLV tag 9 或 UI layout v1–v4；系统 MUST NOT 提供 v12 兼容入口或 Go fallback。最终集成树 MUST 原样继承所选 main 的 engine ABI v9 与既有 fluid 行为；本 change MUST NOT 增加替代 engine/fluid 生产路径或改变相同 fluid 输入的结果。
+client C header、Rust 导出、Go bridge 与当前身份文档的 ABI 版本常数 MUST 同步为 14；无参数 identity export `mornlea_client_abi_version()` MUST 始终报告 14。latest selected main v13 的实际 surface MUST 作为 predecessor：它包含 28 个接受 ABI version 参数的 exports 与 1 个 identity export，并且相对此前 v12 恰好新增 `mornlea_client_window_capture`。planning 时 observed main `a83192b7` 相对 capture code-fix `4c553f3b` 只有 `dev-capture` design/ledger/tasks review bookkeeping，MUST NOT 被解释为 v13 export、identity 或公共 capture contract 变化；Task 6.8 仍须在 merge 前按 latest main 重新固定事实。最终 v14 动态库 MUST 完整保留这 28 个 versioned exports，再叠加 v14-only `mornlea_client_render_apply_world_updates`，形成 29 个 versioned exports 与 1 个 identity export、总计 30 个 exports。全部 29 个 v14 versioned exports MUST 在其他适用 validation 或状态改变前拒绝包括 13 在内的每一个其他版本；版本错误 MUST 在 handle、pointer、capture/UI/MRW1 内容或 renderer/RenderWorld 状态改变前返回 `ABI_VERSION`。
 
-反向混装时，main v12 动态库与 v13 bridge 共有且接受 ABI version 的 exports MUST 在收到 13 时返回 `ABI_VERSION`，并且不得读取其他输入或改变状态。v13-only 的 `mornlea_client_render_apply_world_updates` symbol 在 main v12 动态库中不存在；尝试把要求该 symbol 的 v13 bridge 与 main v12 动态库组合 MUST 在 link、load 或 bind 阶段硬失败，MUST NOT 被描述为一次会返回 client status 的调用，MUST NOT 进入任何 FFI body、改变任何状态或使用兼容入口/fallback。
+v14 surface MUST 保留 selected-main v13 的 `mornlea_client_window_capture` export、capture status、两段式容量查询、紧凑 top-down BGRA8 bytes、Go `Window.Capture` bridge 与 Rust/Go capture tests。capture export MUST 继续按 ABI version、output pointer/zero-capacity consistency、handle、capacity 的顺序验证，并 MUST 保留其按 SDK header 校正的 CoreGraphics option 契约：`CGWindowListOption`/`CGWindowImageOption` FFI 参数为 `u32`，IncludingWindow 与 BestResolution 位值均为 `1<<3`，BGRA bitmap bits 与对应防回归测试保持有效。v14 还 MUST 保留 `ui_push_state` 与版本化 JSON UI event drain。它 MUST NOT 恢复已退役的 `render_upload_ui_font`、frame TLV tag 9 或 UI layout v1–v4；系统 MUST NOT 提供 v13 兼容入口、动态加载兼容层或 Go fallback。最终集成树 MUST 原样继承所选 main 的 engine ABI v9 与既有 fluid 行为；本 change MUST NOT 增加替代 engine/fluid 生产路径或改变相同 fluid 输入的结果。
+
+反向混装时，selected-main v13 动态库的全部 28 个 versioned exports MUST 在收到 14 时先返回 `ABI_VERSION`，并且不得读取其他输入或改变状态。v14-only 的 `mornlea_client_render_apply_world_updates` symbol 在 selected-main v13 动态库中不存在；尝试把要求该 symbol 的 v14 bridge 与 v13 动态库组合 MUST 在 link、load 或 bind 阶段硬失败，MUST NOT 被描述为一次会返回 client status 的调用，MUST NOT 进入任何 FFI body、改变任何状态或使用兼容入口/fallback。
 
 输入型 `mornlea_client_render_apply_world_updates` MUST 按以下顺序在改变 RenderWorld 前验证：ABI version、非零且不超过 MRW1 上限的 length、非空 pointer、address range 不溢出、已有 renderer handle、MRW1 layout 与容量。该入口没有输出 buffer，MUST NOT 要求 output capacity 或 overlap 检查；这些检查只适用于拥有输出的 export。任何 client ABI export MUST NOT 让 panic 穿过 FFI；panic MUST 映射为 `PANIC` 且不得留下部分 RenderWorld 状态。
 
-#### Scenario: v13 动态库拒绝 ABI v12 调用方
+#### Scenario: v14 动态库的全部 29 个 versioned exports 拒绝 ABI v13
 
-- GIVEN 集成 client ABI v13 的动态库
-- WHEN 调用方对每个接受 ABI version 的 export 传入 12
+- GIVEN 集成 client ABI v14 的动态库及其 29 个接受 ABI version 参数的 exports
+- WHEN 调用方对每个 export 传入 13
 - THEN 每个调用 MUST 在其他 validation 或状态改变前返回 ABI_VERSION
 
-#### Scenario: main v12 动态库的共有 exports 拒绝 ABI v13
+#### Scenario: selected-main v13 动态库的全部 28 个 versioned exports 拒绝 ABI v14
 
-- GIVEN main client ABI v12 的 WKWebView/UI 动态库与 v13 bridge
-- WHEN v13 bridge 调用双方共有的 window、renderer 或 UI export 并传入 13
-- THEN 该 v12 export MUST 在读取其他输入或改变 renderer、UI 状态前返回 ABI_VERSION
+- GIVEN selected-main client ABI v13 的 capture/WKWebView/UI 动态库
+- WHEN v14 bridge 对其 28 个 versioned exports 分别传入 14
+- THEN 每个 v13 export MUST 在读取其他输入或改变 window、renderer、capture 或 UI 状态前返回 ABI_VERSION
 
-#### Scenario: main v12 动态库缺少 v13-only MRW1 symbol
+#### Scenario: selected-main v13 动态库缺少 v14-only MRW1 symbol
 
-- GIVEN main client ABI v12 动态库不导出 `mornlea_client_render_apply_world_updates`
-- WHEN 尝试 link、load 或 bind 要求该 symbol 的 v13 bridge
+- GIVEN selected-main client ABI v13 动态库不导出 `mornlea_client_render_apply_world_updates`
+- WHEN 尝试 link、load 或 bind 要求该 symbol 的 v14 bridge
 - THEN 组合 MUST 在进入 FFI 调用前硬失败
-- AND 系统 MUST NOT 声称返回 client status、改变 RenderWorld 或使用 fallback
+- AND 系统 MUST NOT 声称返回 client status、改变 RenderWorld 或使用动态加载/Go fallback
 
 #### Scenario: 错误 ABI 优先于输入内容检查
 
-- GIVEN ABI version 不为 13 且 handle、pointer、UI JSON 或 MRW1 bytes 也无效的调用
+- GIVEN ABI version 不为 14 且 handle、pointer、capture/UI 数据或 MRW1 bytes 也无效的调用
 - WHEN 调用任一接受 ABI version 参数的 client export
 - THEN 调用返回 ABI_VERSION
-- AND 不读取无效输入或改变 renderer 状态
-- AND 无参数 `mornlea_client_abi_version()` 不接收该错误版本并始终报告 13
+- AND 不读取无效输入或改变 window、renderer、capture、UI 或 RenderWorld 状态
+- AND 无参数 `mornlea_client_abi_version()` 不接收该错误版本并始终报告 14
 
-#### Scenario: v13 保留 main UI surface 且不复活旧 TLV
+#### Scenario: v14 保留 selected-main v13 capture 与 UI surface
 
-- GIVEN main v12 已提供 `ui_push_state` 与版本化 JSON UI events，并已退役字体上传出口和 frame TLV tag 9
-- WHEN 合并后的 client ABI v13 surface 加入 MRW1 update 入口
-- THEN `ui_push_state` 与版本化 JSON UI events MUST 保持可用
+- GIVEN selected-main v13 已提供 window composite capture、`ui_push_state` 与版本化 JSON UI events，并已退役字体上传出口和 frame TLV tag 9
+- WHEN 合并后的 client ABI v14 surface 加入 MRW1 update 入口
+- THEN capture export、status、两段式容量、top-down BGRA8、Go bridge 与 Rust/Go capture tests MUST 保持可用
+- AND CoreGraphics option FFI width MUST 保持 SDK `u32`，IncludingWindow 与 BestResolution 位值 MUST 均保持 `1<<3`
+- AND `ui_push_state` 与版本化 JSON UI events MUST 保持可用
 - AND `render_upload_ui_font`、frame TLV tag 9 与 UI layout v1–v4 MUST 保持不可用
 
-#### Scenario: client v13 集成原样继承 engine ABI v9 与 fluid 行为
+#### Scenario: client v14 集成原样继承 engine ABI v9 与 fluid 行为
 
-- GIVEN 所选 main 父提交报告 engine ABI v9，且其伙伴交付的 fluid eval/rescan 对固定输入已有确定结果
-- WHEN 在该 main 基线上集成 client ABI v13 与 MRW1 cache-only 增量
+- GIVEN selected-main v13 报告 engine ABI v9，且其伙伴交付的 fluid eval/rescan 对固定输入已有确定结果
+- WHEN 在该 main 基线上集成 client ABI v14 与 MRW1 cache-only 增量
 - THEN 最终树报告的 engine ABI MUST 仍为 9
-- AND 相同 fluid 输入的结果 MUST 与所选 main 父提交一致
+- AND 相同 fluid 输入的结果 MUST 与实际 selected main 一致
 - AND 系统 MUST NOT 使用本 change 新增的 engine/fluid 替代路径
 
-#### Scenario: 回退 client v13 增量仍保留 main engine v9 与 fluid
+#### Scenario: 回退 client v14 增量仍保留 selected-main v13 capture、engine 与 fluid
 
-- GIVEN 已在所选 main 的 client v12 WKWebView、engine ABI v9 与伙伴 fluid 基线上加入 MRW1/client-v13 增量
-- WHEN 回退该 MRW1/client-v13 增量
-- THEN client surface MUST 回到所选 main 的 v12 WKWebView predecessor
-- AND engine ABI MUST 仍为 9，伙伴 fluid 行为 MUST 保持不变
-- AND 已退役的字体上传出口、frame TLV tag 9 与 UI layout v1–v4 MUST NOT 恢复
+- GIVEN 已在 selected-main client v13 capture、engine ABI v9 与伙伴 fluid 基线上加入 MRW1/client-v14 增量
+- WHEN 回退该 MRW1/client-v14 增量
+- THEN client surface MUST 回到 selected-main v13 capture predecessor，而不是 v12
+- AND engine ABI MUST 仍为 9，伙伴 fluid 行为与 capture surface MUST 保持不变
+- AND 回退 MUST NOT 删除 capture/fluid 或恢复已退役的字体上传出口、frame TLV tag 9 与 UI layout v1–v4
 
 #### Scenario: 新输入入口按 ABI 优先的输入矩阵拒绝
 
