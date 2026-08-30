@@ -140,3 +140,47 @@
   `engine/crates/mornlea_client/src/render/{mod.rs,world.rs,world_tests.rs}`；fix round 1 只修改
   `world_tests.rs`。Task 2 没有修改 ABI/version/header/Go、app、`mornlea_engine`、fluid-aware
   source、依赖或 Tasks 3–5 实现；cache 仍未接管既有 mesh/visibility/upload/frame/draw 行为。
+
+## Task 3 Independent Review Record
+
+- BASE：`015c36e97d042cbd93a13920f0e1962e9742ebb2`。
+- Implementer：`01a05099-a9dd-7852-a703-fb6b846b9c67`。
+- Independent reviewer：`01a0509f-a0a3-7562-97fb-b78b37d6ef3b`。
+- RED：先新增 encoder 测试，再运行
+  `go test ./internal/client -run 'Test(BuildRenderWorld|EncodeRenderWorld)' -count=1`；退出 1，
+  编译器报告 `undefined: client.BuildRenderWorldChunkBatch`、
+  `client.RenderWorldSectionUpsert`、`client.RenderWorldColumnUpsert`、
+  `client.EncodeRenderWorldBatch`、`client.RenderWorldBatch` 与
+  `client.RenderWorldUpdate`，符合目标 API 尚不存在的预期。
+- Implementation commit：`db655a7a feat(client): encode render world updates`。新增纯 Go MRW1
+  值对象、全值预检与 checked sizing encoder、完整 chunk section/height-map batch builder，未接入
+  app、network、cgo 或 ABI。
+- GREEN：`gofmt -w internal/client/render_world_update.go internal/client/render_world_update_test.go`
+  退出 0；focused
+  `go test ./internal/client -run 'Test(BuildRenderWorld|EncodeRenderWorld)' -count=1` 退出 0，
+  `ok github.com/channing771/mornlea/internal/client`；snapshot regression
+  `go test ./internal/world -run 'Test.*Snapshot' -count=1` 退出 0，
+  `ok github.com/channing771/mornlea/internal/world`；package race
+  `go test ./internal/client -race -count=1` 退出 0，
+  `ok github.com/channing771/mornlea/internal/client`；dependency check
+  `go test ./internal/archcheck -count=1` 退出 0，
+  `ok github.com/channing771/mornlea/internal/archcheck`。
+- Initial independent review：spec verdict ❌；quality verdict Needs fixes。两个 Important finding：
+  1. 容量覆盖只有 4097-record 拒绝，先触发 record-count gate，未用 otherwise-valid、
+     <=4096-record 输入证明 4 MiB gate 本身；删除 size gate 后该测试仍可通过。
+  2. 缺少不依赖 encoder/parser helper 的完整字节 oracle，24/32-byte header、reserved、payload
+     length、signed little-endian 坐标/revision 与 section payload 的同源解析断言可能共同掩盖
+     wire layout 回归。
+- Fix round 1 commit：`89b58ab4 test(client): strengthen render world encoder coverage`。新增 510 条
+  合法 direct section update（总长 4,198,344 bytes、少于 4096 records）的 4 MiB 拒绝测试，及
+  reset + single section 的 96-byte literal MRW1 oracle。`gofmt -w
+  internal/client/render_world_update_test.go` 退出 0；focused encoder 测试退出 0，
+  `ok github.com/channing771/mornlea/internal/client 0.791s`；
+  `go test ./internal/client -race -count=1` 退出 0，
+  `ok github.com/channing771/mornlea/internal/client 2.821s`；`git diff --check` 无输出。
+- Scoped re-review：两个 Important finding 均为 ADDRESSED；没有新的 Critical/Important breakage，
+  也没有 out-of-scope observations。
+- Final scope proof：Task 3 implementation 仅新增
+  `internal/client/render_world_update.go` 与 `internal/client/render_world_update_test.go`；fix round 1
+  仅修改测试文件。没有修改 proposal/spec/design、生产 app/network/world、Rust、ABI/header/version
+  或 Tasks 4–5 的实现。

@@ -23,14 +23,14 @@
 
 ## 3. 实现 Go MRW1 编码器
 
-- [ ] 3.1 在 `internal/client/` 先为 `world.ContainerSnapshot` 的 single、indexed、direct、
+- [x] 3.1 在 `internal/client/` 先为 `world.ContainerSnapshot` 的 single、indexed、direct、
   column、tombstone、reset、4/8/15-bit 及坐标边界建立 MRW1 encoder RED 测试；验证：
   `go test ./internal/client -run 'Test(BuildRenderWorld|EncodeRenderWorld)' -count=1`。
-- [ ] 3.2 实现有界、checked 的 Go MRW1 batch encoder 与完整 chunk update 构造；它不导入
+- [x] 3.2 实现有界、checked 的 Go MRW1 batch encoder 与完整 chunk update 构造；它不导入
   network、不发送隐式 reset、不展开 4096 block，且尚不接入实时 app；验证：
   `go test ./internal/client -run 'Test(BuildRenderWorld|EncodeRenderWorld)' -count=1` 与
   `go test ./internal/world -run 'Test.*Snapshot' -count=1`。
-- [ ] 3.3 取得该任务的单一独立 review，其报告同时包含 spec-compliance 与 quality verdict；
+- [x] 3.3 取得该任务的单一独立 review，其报告同时包含 spec-compliance 与 quality verdict；
   以 Go 定点/race 测试和 `go test ./internal/archcheck -count=1` 复核，将 verdict 与裁决
   记入 `ledger.md`。
 
