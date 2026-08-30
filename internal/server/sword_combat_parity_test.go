@@ -46,7 +46,7 @@ func TestSwordCombatParity(t *testing.T) {
 	if len(memoryVelocities) != len(tcpVelocities) {
 		t.Fatalf("剑-夜行者 velocity 样本数不一致: memory=%d tcp=%d", len(memoryVelocities), len(tcpVelocities))
 	}
-	// 两种传输的 tick 与业务状态必须一致；追逐物理中的浮点运算受 goroutine
+	// 两种传输的 tick 与业务状态必须一致；击退/受击物理中的浮点运算受 goroutine
 	// 调度顺序影响，速度只允许吸收远小于一个物理 tick 的数值误差。
 	for sample := range memoryVelocities {
 		for axis := range 3 {
