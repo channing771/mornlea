@@ -159,3 +159,46 @@
   已收口，并补 Ctrl+C 残留发现文件的排查句，经 grep 核实无信号处理）、
   小节命令与主文档重复（可接受取舍，有指回指针）、AGENTS.md 耗时描述缺
   实测限定（事实无误）。
+- 修复轮 1：`bc9a7802` `docs: qualify dev capture port file cleanup wording`。
+
+## Task 7: 收尾门禁与人工验收
+
+- 7.1 全量门禁（分阶段真实捕获，最终 HEAD 复跑项见末尾）：
+  - `gofmt -l`（全仓）无输出、`go vet ./...` 干净（99752dc9 后）。
+  - `make rust && make rust-check`：client 98 passed / engine 218 passed
+    （748a0712 后，Rust 自此未再改动）。
+  - `go test ./... -race -count=1`：44 包全 ok（约 4.5 分钟；因 ff161008 /
+    d46b749a 再改 Go 代码，最终 HEAD 复跑结果见本节末尾回执）。
+  - `go test ./internal/archcheck -count=1`：ok（d46b749a 后）。
+  - `openspec validate --all --strict --no-interactive`：Totals: 79 passed,
+    0 failed。
+- 7.2 人工验收（真实窗口，`go run ./cmd/mornlea --dev-capture --world
+  worlds/default`，抓出两个真缺陷并闭环）：
+  - 缺陷一（Blocker，Rust）：首版截图**上下颠倒**——`copy_rows_top_down`
+    基于「CGBitmapContext 内存自下而上」的错误假设做行反序，实际其内存
+    第 0 行即画面顶行。修复 `748a0712`（任务 2 修复轮 2）：删翻转、陷阱
+    注释三处同步、单测改钉自上而下语义。修复后截图核验：标题栏、React
+    菜单（进入游戏/多人游戏/设置/退出游戏）、wgpu 世界三层端正，Retina
+    2x 全分辨率。
+  - 缺陷二（设计缺陷，Go）：`/record?seconds=2&fps=8&format=gif` 实测 503
+    超总时长。实测定位：单帧 /screenshot 全链路 3.6s，大头是 `png.Encode`
+    默认压缩对含阴影包围盒的 Retina 全分辨率（2784×1728）帧的秒级编码；
+    且最坏 240 帧在固定 30s 余量下数学上不可能达标。修复 `ff161008`
+    （BestSpeed 共用编码器 + 截止公式随帧数扩展）与 `d46b749a`（逐帧预算
+    1s→2.5s 覆盖 GIF 量化实测 ~2.2s/帧）。
+  - 终验数据：/status 正确回 pid/phase=menu/窗口尺寸；/screenshot 0.385s
+    （提速约 9 倍）；/record 2s×8fps 纯 PNG 6.7s（≈0.42s/帧）、+gif 35s
+    （≈2.2s/帧），zip 16/16 帧、dropped=0、manifest 帧时间戳单调、
+    preview.gif 可解码、逐帧目检三层内容正确；端口发现文件写入/清理正确；
+    录制期间帧循环存活（/status 全程可答）。
+  - 屏幕录制授权：本机已授权，未触发弹窗；未授权路径（画面不含游戏窗口）
+    由 /status last_capture 与文档排查指引兜底，未实测。
+- 终局门禁复跑回执（最终 HEAD `d46b749a`）：`go test ./... -race -count=1`
+  exit 0 全绿（此前一次因控制会话工作目录漂移空跑，已自仓库根重跑）；
+  `openspec validate --all --strict --no-interactive` → Totals: 79 passed,
+  0 failed。
+- 终局：全任务双裁决 PASS；修复轮总计：任务 2 两轮、任务 4 三轮、任务 6
+  一轮，均在 5 轮上限内。
+- 遗留（记录不阻塞）：未授权路径与窗口最小化过期画面未实测（文档已写排查
+  指引）；GIF 路径逐帧 ~2.2s 量化成本（预算常数已覆盖，后续如需提速可另立
+  change 换量化实现）。

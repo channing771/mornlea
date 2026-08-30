@@ -78,12 +78,12 @@
 
 ## 7. 收尾门禁
 
-- [ ] 7.1 全量门禁与 ledger 终局：`gofmt`、`go vet ./...`、
+- [x] 7.1 全量门禁与 ledger 终局：`gofmt`、`go vet ./...`、
       `go test ./... -race`、`make rust && make rust-check`、
       `go test ./internal/archcheck -count=1`、
       `openspec validate --all --strict --no-interactive`，输出摘要记入
       ledger；
       验证：以上命令全绿。
-- [ ] 7.2 人工验收一次真实链路：`--dev-capture` 启动 → `curl /status`、
+- [x] 7.2 人工验收一次真实链路：`--dev-capture` 启动 → `curl /status`、
       `/screenshot`、`/record`，画面内容逐层核对（世界 + HUD + 菜单层），
       结论记入 ledger（不进自动测试）。
