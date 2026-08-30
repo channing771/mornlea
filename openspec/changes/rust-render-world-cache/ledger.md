@@ -1208,3 +1208,70 @@ delta 行为契约、代码、current docs、main specs 或配置，不执行 me
   恰为 1 个 pending；bookkeeping 前 execution HEAD 仍为 `768a0ea79e02dde00aaa8e212fa86c710308e960`，
   local main 仍为 `e1e2e287cb3454e6bbca6bf5bcd7cf9e92482efc`。没有其他 tracked、代码、
   current docs、main specs、配置、protected path 或 golden 改动，也没有重跑 product gate。
+
+## Task 6.7 fix round 2：latest-main resync
+
+### 上一轮验证漂移裁决与执行身份
+
+- 上一轮 exact-new-HEAD revalidation 在
+  `5e5243a7659936da778bb235156fd4428c2ec8d2` 完成 Gates 1–17 后，local `main` 由外部会话
+  从 selected main `e1e2e287cb3454e6bbca6bf5bcd7cf9e92482efc` 前进到
+  `bcc053e88278991e9069438ff82c28a8dc7bb53d`，因此 Gate 18 的 exact-main binding 失败。
+  ignored `task-6.7-revalidation-report.md` 的最终裁决保持为 17 PASS / 1 binding FAIL、
+  0 product test failures、0 Skip；该报告不作为新的 all-pass 证据，也未通过重试弱化失败。
+- 本轮 fresh feature implementer：`01a052a4-9bd5-7a52-b8c1-df08ad58f1fa`。起始 feature
+  HEAD 精确为 `5e5243a7659936da778bb235156fd4428c2ec8d2`，tracked、staged、untracked 均为零；
+  已完整读取根/相关局部指南、OpenSpec config、proposal、唯一 delta spec、design、tasks、
+  1,210 行既有 ledger 与 754 行上一轮 ignored report。pre-merge `make rust` 退出 0，
+  release build 0.26s、real 0.47s，并重签两个 dylib。
+
+### latest-main 漂移审计与 non-rewriting merge
+
+- merge 前即时确认 local `main` 仍为 `bcc053e88278991e9069438ff82c28a8dc7bb53d`；旧 selected
+  main 是其祖先，`e1e2e287..bcc053e8` 恰为 1 commit、5 paths、430 insertions / 0 deletions。
+  唯一提交为 `docs: add dev-capture change products`，只新增
+  `openspec/changes/dev-capture/{proposal.md,design.md,tasks.md,ledger.md}` 与
+  `openspec/changes/dev-capture/specs/dev-capture/spec.md`。完整 patch 审计确认代码、当前版本
+  identity、engine/client ABI 实现、client/MRW1 surface、fluid 所有权、五组 protected paths、
+  visual golden、根 current docs/config 与 main specs 均零变更；`dev-capture` 对未来 client
+  ABI 的规划不改变当前 main 的已实现契约，因此按 D7 作为无关 planning/docs 漂移继续。
+- 首次 guarded pre-merge harness 因使用 zsh 只读变量名 `status` 在 merge 前退出，仓库仍为
+  exact clean `5e5243a7` 且没有 merge state；修正为 `tree_state` 后再次即时核验同一 HEAD/main/
+  clean 三项，随后执行 `git merge --no-commit --no-ff main`。实际 `MERGE_HEAD` 精确为
+  `bcc053e88278991e9069438ff82c28a8dc7bb53d`，automatic merge 0 conflict、0 unmerged path、
+  0 人工 resolution；index 恰为上述 5 个新增规划文件且与 second parent 逐字一致。
+- Merge commit：`65ac703ae00534d5055c64db821ab59bac3c414a`
+  `chore: sync latest main planning changes`；双亲依次为 feature
+  `5e5243a7659936da778bb235156fd4428c2ec8d2` 与新 selected-main-parent
+  `bcc053e88278991e9069438ff82c28a8dc7bb53d`。没有 rebase、reset、push、archive，也没有把
+  feature merge into main。
+
+### scoped validation 与范围
+
+- Post-merge `make rust`：退出 0；release build 0.26s、real 0.47s，两个 dylib 重签。
+- `go test ./internal/archcheck -count=1`：退出 0；package 6.217s、real 6.94s。
+- `openspec validate --all --strict --no-interactive`：退出 0；80 passed、0 failed，real 1.31s；
+  新增的第 80 项是 merged `change/dev-capture`。
+- 相对新 selected-main-parent 的五组 protected paths committed diff 与 worktree diff 均为零；
+  `cmd/mornlea/capture/testdata/golden` committed diff 与 worktree diff 均为零。旧 selected
+  main 到新 main 的敏感路径命中 0，范围仍恰为 5 个 `dev-capture` planning files。
+- 首次聚合 scope harness 的嵌套 `awk` 引号错误退出且未改变状态；改用直接 Git 断言后退出 0，
+  real 0.34s，确认 merge 双亲 2、conflict 0、main drift 1 commit / 5 paths / 430 insertions、
+  protected groups 5、protected/golden committed/worktree diff 0、`git diff --check` 0、
+  porcelain entries 0。工具性 harness 失败不计为产品失败，且未被删除或冒充 PASS。
+- 本 resync 只同步新 selected main 的无关 planning/docs，并追加本 ledger；不修改
+  proposal、delta spec、design、tasks、生产/测试代码、current docs/main specs/config、
+  protected paths 或 golden。Task 6.7 保持未勾选，后续必须由 fresh validation implementer
+  在本轮 ledger commit 后的新 immutable HEAD 重跑完整 18 门禁，再交回原 fresh whole-
+  integration reviewer；本节不宣告 implementation complete。
+
+### Ledger working-diff validation
+
+- 本节首次写入后，`openspec validate --all --strict --no-interactive` 退出 0，80 passed、
+  0 failed，real 1.68s；`openspec instructions apply --change rust-render-world-cache --json`
+  退出 0，schema `spec-driven`，22 tasks、21 complete、1 remaining、`state: ready`，唯一 pending
+  仍为 Task 6.7，real 1.34s。
+- tracked working diff 恰为 existing `ledger.md`，staged diff 为零；Task 6.7 pending checkbox
+  恰为 1、checked checkbox 为 0。五组 protected paths 与 visual golden 的 committed/worktree
+  diff 均为零，`git diff --check` 无输出。首次 scope checker 把无匹配的 checked count 当作
+  空字符串做整数比较而退出；修正为 zero-match 断言后退出 0，real 0.24s，且未改变仓库状态。
