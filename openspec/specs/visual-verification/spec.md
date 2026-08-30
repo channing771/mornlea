@@ -419,7 +419,7 @@
 
 ### Requirement: 主菜单与设置菜单无窗口 capture 场景
 
-视觉场景表 SHALL 包含 `main-menu` 与紧随其后的 `settings-menu`：两者均以既有 `640x360` 离屏渲染路径运行，回读像素并与 golden 按既有双阈值比对。`main-menu` MUST 显示启用的「设置」按钮；`settings-menu` MUST 以确定性的非默认音量、短材质路径和窗口预设覆盖全部首版控件。两场景 MUST 依次排在 `far-horizon` 之前，`far-horizon` 仍为倒数第二、`water-underwater` 仍为最后。
+视觉场景表 SHALL 包含 `main-menu` 与紧随其后的 `settings-menu`：两者均以既有 `640x360` 离屏渲染路径运行，回读像素并与 golden 按既有双阈值比对。菜单 chrome 由 WebView 呈现且 MUST NOT 参与无头 capture——两张 golden 的内容 SHALL 为对应相位的世界全景底图（纯 wgpu 渲染、确定性像素），WebView 层的结构与视觉 MUST 由前端组件断言测试覆盖而非像素 golden。两场景 MUST 依次排在 `far-horizon` 之前，`far-horizon` 仍为倒数第二、`water-underwater` 仍为最后。
 
 #### Scenario: 场景表顺序与两张 UI 图产出
 
@@ -435,7 +435,7 @@
 - **WHEN** 执行到 `main-menu` 与 `settings-menu`
 - **THEN** 两张 PNG MUST 分别与对应 golden 逐像素比对
 - **AND** MUST 继续使用既有阈值与差异图产出规则
-
+- **AND** 比对对象 MUST 为纯 wgpu 全景底图，无头路径 MUST NOT 初始化 WebView、产生任何菜单 chrome 像素或网络请求
 ### Requirement: 未受影响场景 golden 逐字节不变
 
 本变更 MAY 只更新因「设置」启用而改变的 `main-menu.png` 并新增 `settings-menu.png`；所有不携带设置 UI 的既有正式场景 golden SHALL 保持逐字节不变。
