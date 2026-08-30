@@ -81,3 +81,22 @@
   exact payload consumption；所有 client export 的 version-first 契约与既有 ABI matrix
   保留，新 input-only entry 的 ordered validation、output-only 例外和 panic isolation
   均已覆盖；cache-only 与 fluid-excluded 边界不变。
+
+## Task 1 Independent Review Record
+
+- Implementer：`01a05073-773c-7243-b2dc-acaa499d4230`。
+- Independent reviewer：`01a0507c-5bcb-7c03-9bc3-f8dfee30d6a4`。
+- Initial review range：`2344ca8..d6c39ca`。spec verdict：❌；quality verdict：Needs fixes。
+  两项 Important finding 为 indexed payload 未固定 4-bit=256 / 8-bit=512 packed `u64`
+  并拒绝 trailing bytes，以及 all-export version-first / 新 update entry validation
+  matrix 未完整；详见本 ledger 的 Task 1 Fix Round 1。
+- Fix round 1 commit：`7c913f44`
+  `docs(openspec): tighten render world cache contracts`。
+- Scoped re-review verdict：两项 finding 均为 ADDRESSED；没有新的 Critical/Important
+  breakage，也没有 out-of-scope observations。
+- Task 1 final commits：`4a93156d`、`d6c39caf`、`7c913f44`。
+- Validation summary：基线 `make rust`、`cd engine && cargo test -p mornlea_client --locked`、
+  `go test ./internal/client -race -count=1` 与
+  `go test ./internal/archcheck -count=1` 均通过；所有 Task 1 strict validation 均为
+  `openspec validate --all --strict --no-interactive` 78 passed、0 failed，target diff
+  check 无输出。
