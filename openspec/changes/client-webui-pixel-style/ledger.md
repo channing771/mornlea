@@ -138,3 +138,32 @@
   含未推送 dev-capture 18 提交）之上 14 笔提交，工作树干净，未 push。
 - 遗留：合并/推送方式待用户指令；PixelDropdown 上游残留面首个消费方前须
   补映射；孤儿令牌（--radius-control/--slot-well-edge）后续顺手清理。
+## Task 7: UI 部件视觉基线
+
+- Commits: `2f27721e` `feat(frontend): add per widget visual baselines`、
+  `a5722f75` `fix(frontend): harden visual capture close path`。
+- 实现：`frontend/visual/`——`fixtures.tsx` 注册表（12 部件：四整屏以
+  fixture props 原样渲染生产面板组件；button-default/disabled/pressed、
+  input-text、preset-group、slider、debug-rows、error-line 走 pixel.tsx 与
+  生产语义 class，零假货）、`fixture-names.ts` 单源（`as const` + 字面量
+  联合，registry `Record<FixtureName, …>` 编译期互钉，双向 TS 实验：
+  多键 TS2353/缺键 TS2741）、`visual.vite.config.ts` 独立构建到 gitignored
+  的 `visual-dist/`（dist/ 与其字节门禁零触碰，复跑 frontend-check 绿）、
+  `visual.mjs` 自包含管线（随机端口静态服务 + Chrome headless CLI +
+  pngjs 双阈值比对，MAX_CHANNEL_DELTA=2 / MAX_DIFF_PIXEL_RATIO=0.0001 与
+  `visual_compare.go` 同值同义；缺基线报错不自动创建；候选与 diff 图出
+  `build/visual-ui/`）；Make 目标 `frontend-visual-check`/
+  `frontend-visual-update`；12 张 1280×720 基线 PNG（208K）入库。
+- 确定性与检出证据：连续两次 update 12 张 sha256 逐字节一致；人为 1px
+  margin 漂移被 check 指认正确部件（通道差 245、差异 0.1286%）并出红标
+  diff 图，复原后 12/12 绿。pngjs 7.0.0 零依赖零 install 钩子（独立复核）。
+- 评审（独立评审子代理）：规格合规 PASS + 代码质量 PASS。修复轮 1：
+  `a5722f75`——close 分支先消费截图再清 profile（原顺序对正常退出型
+  Chrome 必失败）、`visual-typecheck` 接线为 check 前置、单源改 .ts 实现
+  编译期互钉（JSON 宽化经实证无效）、`closeAllConnections()`、460px 字面量
+  双向交叉引用注释。执行偏差一处：pnpm 不在脚本 PATH，visual-check 内联
+  tsc 命令（仓库禁 npm 嵌套，合理）。
+- 本机工具口径：不进 CI、零网络、Chrome 路径 env `CHROME_BIN` > 默认路径；
+  Chrome 151 写完截图挂起为上游已知行为，管线以尺寸稳定轮询 + 进程组终止
+  兜底并记入 AGENTS.md；exec 沙箱会挡 Chrome 写自身目录，管线须在正常
+  终端执行。

@@ -62,7 +62,7 @@
 
 ## 7. UI 部件视觉基线
 
-- [ ] 7.1 前端部件视觉基线管线：fixture 注册表（四整屏面板 + pixel 组件各
+- [x] 7.1 前端部件视觉基线管线：fixture 注册表（四整屏面板 + pixel 组件各
       呈现态）+ 独立 harness 构建（不改 dist 与其字节门禁）+ 无头浏览器
       截图脚本 + pngjs 双阈值比对（口径同 `cmd/mornlea/capture/
       visual_compare.go`）+ `frontend-visual-check`/`frontend-visual-update`
