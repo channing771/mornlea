@@ -9,7 +9,13 @@ import (
 	"github.com/channing771/mornlea/internal/world"
 )
 
-func buildChunkSnapshot(
+// BuildChunkSnapshot 把一个权威区块编码为线上快照消息。
+//
+// 它是「world.Chunk → network.ChunkSnapshot」编码的唯一出口：权威发布链路
+// （`publication_snapshot.go`）与客户端菜单全景的本地演示世界（cmd/mornlea
+// 的 menu-vista，只读 worldgen 直供区块、不经任何服务端装配）共用同一份
+// 编码，保证两侧产出对相同区块逐字节一致。revision 必须非零，调用方自保证。
+func BuildChunkSnapshot(
 	dimension core.DimensionID,
 	chunk *world.Chunk,
 	revision uint64,

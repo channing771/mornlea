@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/channing771/mornlea/internal/assets"
 	"github.com/channing771/mornlea/internal/audio"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/companion"
@@ -71,7 +72,7 @@ type Options struct {
 	// 服务端权威决定。
 	FluidEnabled bool
 	// StartAtMenu 为真时交互客户端启动停留在主菜单，世界装配延迟到点击
-	// 「进入游戏」之后（spec egui-tool-ui「交互客户端启动停留在主菜单」）。
+	// 「进入游戏」之后（spec webview-menu-ui「交互客户端启动停留在主菜单」）。
 	// 其余路径（-connect/benchmark/capture）保持 false，行为与引入菜单前一致。
 	StartAtMenu bool
 }
@@ -210,9 +211,18 @@ type Application struct {
 	// 可信服）内持的权威世界，远程 TCP 形态恒为 nil。nil 即「本会话无权威模拟
 	// 可冻结」，开层只呈现、不调用任何服务端接口。
 	pauseGate applicationPauseGate
-	// menuOverride 是 capture 场景注入的一帧菜单快照；非 nil 时 uiSegment 优先采用它，
-	// 交互路径保持 nil（正常相位逻辑）。每个场景在 Prepare 前设置或清除，无 teardown。
-	menuOverride *client.UIMenu
+	// pushedUIState 是上次下行的 UI 状态 JSON 原文,驱动「状态变化才推送」
+	// 的事件驱动语义(见 app_ui_state.go);零值表示尚未推送过任何状态。
+	pushedUIState string
+	// registry 是会话材质注册表：近环 mesher 与菜单全景的 mesher 共享同一
+	// 份材质映射，全景与游戏画面因此呈现同一套材质。
+	registry *assets.Registry
+	// menuVista 是主菜单/设置页相位的世界全景管线（见 app_menu_vista.go）：
+	// 进入菜单相位惰性构建，世界装配或关闭时丢弃；nil 即全景零参与。
+	menuVista *menuVista
+	// menuVistaPhase 记录全景最近一次推进时的菜单相位，用于把「主菜单 ⇄
+	// 设置页」切换识别为相位重进（自转 tick 归零，确定性同画面）。
+	menuVistaPhase MenuPhase
 }
 
 type Window interface {
@@ -230,6 +240,11 @@ type Window interface {
 	SetContentSize(int, int)
 	CancelClose()
 	Close()
+	// Focus 请求把窗口前置并聚焦(交互启动体验:后台启动时窗口偶发不前置)。
+	Focus()
+	// PushUIState 下行一份菜单层 UI 状态 JSON(client ABI v12);测试桩
+	// 记录调用供断言,无头实现可空操作。
+	PushUIState([]byte)
 }
 
 type Host interface {

@@ -117,7 +117,7 @@ func (server *Server) publishSnapshots(current *session) bool {
 			}
 			continue
 		}
-		message, err := buildChunkSnapshot(key.Dimension, chunk, revision)
+		message, err := BuildChunkSnapshot(key.Dimension, chunk, revision)
 		if err != nil {
 			slog.Error(
 				"构造区块快照失败",

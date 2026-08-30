@@ -413,6 +413,12 @@ func scanCurrentIdentityRoot(t *testing.T, root, relative string, actual []int, 
 		if err != nil {
 			return err
 		}
+		// node_modules 是冻结安装（pnpm install --frozen-lockfile）产出的
+		// 依赖仓库：gitignored、内容并非本仓库作者身份的一部分，第三方
+		// 二进制里的字节不参与身份契约，整目录跳过。
+		if entry.IsDir() && entry.Name() == "node_modules" {
+			return fs.SkipDir
+		}
 		scanCurrentIdentityPath(t, filepath.ToSlash(entryRelative))
 		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
 			return nil
