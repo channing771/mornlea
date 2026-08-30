@@ -1,8 +1,9 @@
-//! 离屏 wgpu 世界渲染器(R2a)。
+//! Rust client 的 wgpu 世界渲染器。
 //!
-//! 本模块是 Go `internal/render` 世界地形路径的平行 Rust 实现:纯离屏、
-//! 不接窗口 surface,生产客户端仍由 Go 渲染;双后端图像对照门禁在 Go 侧
-//! 测试中执行。GPU 数据流逐一镜像 Go 版:全局 face 池(packed u64 face)、
+//! 本模块同时承载交互 windowed surface 与 offscreen capture/benchmark 的生产
+//! GPU 后端；全部 GPU pass 由 Rust client 持有。Go `internal/render` 保留 CPU
+//! mesh、visibility 与 frame input 准备，不是生产 GPU renderer；offscreen 路径
+//! 仍由 Go 侧现有逐字节图像对照测试验证。GPU 数据流逐一镜像 Go 版:全局 face 池(packed u64 face)、
 //! origin 槽位、32 字节 section record、cull compute 写 visible instances
 //! 与 indirect args、单次 indexed indirect draw、sky 全屏三角与 HiZ
 //! 金字塔遮挡。uniform 布局、clear 值与 pass 顺序保持一致,保证同输入
