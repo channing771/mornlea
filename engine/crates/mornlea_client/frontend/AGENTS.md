@@ -26,7 +26,7 @@ Rust 侧只消费本目录的构建产物 `dist/`（经 `mornlea://` scheme 内�
   （资产全部经 `mornlea://` 内嵌供给）。强制点：评审 grep 兜底
   （`grep -rnE 'localStorage|fetch\(' src/` 应为空）。
 
-## 设计令牌与样式（`src/tokens.css`、`src/ui/ui.css`）
+## 设计令牌与样式（`src/tokens.css`、`src/ui/ui.css`、`src/ui/pixel.tsx`）
 
 - 颜色、字号、圆角、几何与动效时长只允许以 `src/tokens.css` 的 CSS 自定义
   属性定义；`src/ui/ui.css` 消费令牌，不得出现裸色值、裸字号、裸时长。
@@ -36,6 +36,31 @@ Rust 侧只消费本目录的构建产物 `dist/`（经 `mornlea://` scheme 内�
 - 琥珀是唯一强调色相，只用于选中、进度、焦点/编辑态；错误行专用危险红。
   `prefers-reduced-motion` 下动效时长令牌归零，组件样式不得绕开令牌另设
   transition。
+- 四面板按钮与表单控件必须经 `src/ui/pixel.tsx` 桥接层
+  （`PixelButton`/`PixelInput`/`PixelCard`/`PixelDropdown`）或按
+  `tokens.css` 令牌重绘的自绘控件呈现（音量滑块为后者的既定先例）；
+  面板不得直接 import `pixel-retroui`，组件内不得裸写颜色。组件主题只经
+  `tokens.css` 的「像素组件换肤段」变量映射供给（retroui 组件类按
+  `var(--xx-custom-*, var(--bg-button, #亮色兜底))` 回退链取色）。该段
+  选择器双写 `:root:root` 是有意为之：`ui.css` 顶部 @import 的上游产物
+  自带 `:root` 亮色兜底且打包顺序在后，单写 `:root` 会被其覆盖。强制点：
+  评审兜底（无自动 lint）。
+- retroui 组件样式表 `pixel-retroui/dist/index.css` 是预编译 CSS Modules，
+  由 `src/ui/ui.css` 顶部 `@import` 显式引入（`@import` 必须先于其他规则；
+  不引入则 retroui 组件无样式）。升级 `pixel-retroui` 时须核对其产物
+  `:root` 是否新增兜底变量，新增即补进换肤段映射，避免亮色兜底穿透。
+  强制点：评审兜底 + dist 字节门禁。
+- retroui 上游的两条已核实约束，触碰组件层时必须绕开：
+  `DropdownMenu` 是无键盘语义的弹出菜单件（选项为普通 div、不参与 label
+  关联、选中后不收起），不得用于表单语义控件——窗口预设等选择场景用
+  `PixelButton` + `aria-pressed` 保持按钮组语义；`Input` 包装层
+  `.pixelContainer` 硬编码 `font-size: 16px`，会经内部 input 的
+  `font: inherit` 穿透，包装层 class 必须钉回字号令牌（先例：
+  `.debug-edit-input` 的 `var(--font-message)`）。
+- Tailwind `content` 扫描 `node_modules/pixel-retroui/dist/**`，retroui
+  产物引用的工具类与其自带样式表会把 `.hidden`/`.shadow`/`.container`
+  等通用名带进全局命名空间：前端类名保持既有 `menu-*`/`settings-*`/
+  `pause-*`/`debug-*`/`pixel-*` 前缀隔离，不得裸用通用工具类名。
 
 ## 固定文案（`src/ui/copy.ts`）
 
