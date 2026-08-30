@@ -16,7 +16,7 @@
 
 ## Task 5: Python Dialogue graph and FastAPI v1
 
-- [ ] 5.1 先写 transient Dialogue input/line/proposal、terminal 不预提交、persona 不落盘，以及 FastAPI live/ready/auth/严格 body/header/error、acquire/heartbeat/run/memory/cancel 字段例外、stale lease=`not_found`、run cancel RED tests，再实现 `mornlea_companion_agent/{harness/dialogue.py,app.py}` 与 lifespan；所有 route 直接消费 Task 1 HTTP golden，以 `cd services/companion-agent && uv run pytest tests/test_dialogue.py tests/test_dialogue_no_checkpoint.py tests/test_http_v1.py -q` 验证。
+- [x] 5.1 先写 transient Dialogue input/line/proposal、terminal 不预提交、persona 不落盘，以及 FastAPI live/ready/auth/严格 body/header/error、acquire/heartbeat/run/memory/cancel 字段例外、stale lease=`not_found`、run cancel RED tests，再实现 `mornlea_companion_agent/{harness/dialogue.py,app.py}` 与 lifespan；所有 route 直接消费 Task 1 HTTP golden，以 `cd services/companion-agent && uv run pytest tests/test_dialogue.py tests/test_dialogue_no_checkpoint.py tests/test_http_v1.py -q` 验证。
 
 ## Task 6: Go configuration and Agent HTTP client
 
@@ -44,4 +44,4 @@
 
 ## Task 12: CI, documentation, versions and full gates
 
-- [ ] 12.1 更新 Makefile/CI/架构检查、根 `README.md`/`README.en.md`、`docs/architecture.md`、`docs/notes/{configuration.md,lan-server.md,test-quickstart.md,progress.md}`，以及根 `AGENTS.md`、`openspec/config.yaml` 和版本测试为 companions v5/client ABI v12（其他版本不变）；提供 `make companion-agent-check` 并完成 `cd services/companion-agent && uv sync --locked && uv run ruff format --check . && uv run ruff check . && uv run mypy src && uv run pytest -q`、`gofmt` clean、`go vet ./...`、`go test ./... -race`、`make rust`、`make companion-agent-check`、`make companion-agent-integration`、`git diff --check`、`openspec validate --all --strict --no-interactive`，把实际结果与每 Task 独立 SPEC+QUALITY 裁决写入 `ledger.md`。
+- [ ] 12.1 更新 Makefile/CI/架构检查、根 `README.md`/`README.en.md`、`docs/architecture.md`、`docs/notes/{configuration.md,lan-server.md,test-quickstart.md,progress.md}`，以及根 `AGENTS.md`、`openspec/config.yaml` 和版本测试为 companions v5，并保持当前 engine ABI v9/client ABI v13（其他版本不变）；提供 `make companion-agent-check` 并完成 `cd services/companion-agent && uv sync --locked && uv run ruff format --check . && uv run ruff check . && uv run mypy src && uv run pytest -q`、`gofmt` clean、`go vet ./...`、`go test ./... -race`、`make rust`、`make companion-agent-check`、`make companion-agent-integration`、`git diff --check`、`openspec validate --all --strict --no-interactive`，把实际结果与每 Task 独立 SPEC+QUALITY 裁决写入 `ledger.md`。

@@ -14,7 +14,7 @@
 - `companions.ai` v4 到 v5；
 - 配置、CI、架构检查与运维文档。
 
-当前代码与头文件确认 client ABI 已是 v12；`openspec/config.yaml` 中 v11 是待收尾修正的文档漂移。
+当前代码与头文件确认 engine ABI 已是 v9、client ABI 已是 v13；旧 `openspec/config.yaml` 与长期文档中的 v8/v11/v12 是待收尾修正的文档漂移。
 本 change 只有 `companions.ai` 从 v4 升至 v5，其他游戏协议、schema、ABI 与 benchmark 版本保持不变。
 
 实现采用 Python 3.12、单进程 Uvicorn、单 SQLite writer。

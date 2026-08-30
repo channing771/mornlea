@@ -31,13 +31,13 @@
 
 ### Requirement: Agent 抽离只升级 companions.ai 版本
 
-本 change 完成时，游戏协议 MUST 保持 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`hostile_mobs` schema v1、engine ABI v8、client ABI v12 与 benchmark scenario v20；只有 `companions.ai` SHALL 从 schema v4 升到 v5。Agent HTTP application contract SHALL 为 v1，Go MCP application tool contract SHALL 为 v1；二者不是游戏 wire 或 native ABI 版本。
+本 change 完成时，游戏协议 MUST 保持 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`hostile_mobs` schema v1、engine ABI v9、client ABI v13 与 benchmark scenario v20；只有 `companions.ai` SHALL 从 schema v4 升到 v5。Agent HTTP application contract SHALL 为 v1，Go MCP application tool contract SHALL 为 v1；二者不是游戏 wire 或 native ABI 版本。
 
 #### Scenario: 基线版本矩阵只变化一个存档域
 
 - **GIVEN** 实现前版本矩阵与本 change 完成后的构建
 - **WHEN** 运行版本一致性和协议/存档/ABI 钉死测试
-- **THEN** 除 `companions.ai` 为 v5 外，协议 v32、玩家 v8、区块 v9、metadata v3、hostile v1、engine ABI v8、client ABI v12 与 scenario v20 MUST 逐项不变
+- **THEN** 除 `companions.ai` 为 v5 外，协议 v32、玩家 v8、区块 v9、metadata v3、hostile v1、engine ABI v9、client ABI v13 与 scenario v20 MUST 逐项不变
 
 #### Scenario: Agent contract 不触发游戏协议升版
 

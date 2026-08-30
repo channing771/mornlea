@@ -6,8 +6,9 @@
 - 执行模型：每个 Task 使用 fresh implementer；每项完成后由独立 SPEC reviewer 与 QUALITY reviewer 双裁决；控制会话不直接实现生产代码。
 - 修复循环：单任务最多 5 轮；未通过双评审不得勾选 `tasks.md`。
 - 验证复用：只有相同基线 SHA、命令与范围的完整输出可复用；所有结果记录实际 exit code，不把未完成命令写成通过。
-- 当前版本事实：protocol v32、player v8、chunk v9、metadata v3、companions v4、hostile v1、engine ABI v8、client ABI v12、scenario v20。
+- 当前版本事实：protocol v32、player v8、chunk v9、metadata v3、companions v4、hostile v1、engine ABI v9、client ABI v13、scenario v20。
 - 计划目标：仅 companions 升 v5；Agent HTTP application contract v1；MCP tool contract v1；MCP wire `2025-11-25`。
+- Ruling: 以执行时 `main` 的 engine ABI v9/client ABI v13 为不变基线，本 change 不认领 native ABI 升版 — 代码与用户更新的项目指南高于旧规划中的 v8/v11/v12 文档事实 — 若裁决错误，成本是收尾版本文档与钉死测试需重做，不改变 Agent HTTP/MCP 合同。
 
 ## 规划裁决
 
@@ -25,7 +26,7 @@
 | 2 | `task2_python_scaffold_impl` | `5d368f8c` | RED：package 缺失；复审 RED：exact const、URL/secret/path、golden path 与 import boundary；GREEN：locked sync、ruff/format、mypy、focused 两轮各 199 passed、diff-check；提交 `91bca693`、`665d609a`、`40c57fce` | `task2_spec_review` round 3 PASS | `task2_quality_review` round 3 PASS | Accepted |
 | 3 | `task3_memory_impl` | `ea82d028` | RED：缺少 memory module；复审 RED：operation 复用、lease/SQLite 取消窗口、损坏库修补、重复 cancel 与 receipt 篡改；GREEN：focused 61 passed、full 260 passed、locked sync/ruff/mypy/diff-check；提交 `dcb99bc6`、`225fdb09`、`f68a6eca`、`7a1af977` | `memory_design_audit` round 4 PASS | `openspec_artifacts` round 4 PASS | Accepted |
 | 4 | `openspec_artifacts` | `69f6e6ec` | RED：缺少 Planner/adapters；复审 RED：schema 漂移、transport/envelope 上限、validator wrapper 与 JSON 类型混淆；GREEN：focused 77 passed、full 337 passed、import boundary 48 passed、locked sync/ruff/mypy/wheel/diff-check；提交 `06473b29`、`e4b5dc8f`、`0e773804` | `task4_graph_spec_audit` round 3 PASS | `task4_quality_review` round 3 PASS | Accepted |
-| 5 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
+| 5 | `task5_http_research`、`task5_startup_cancel_fix` | `f4009ec0` | RED：缺少 Dialogue/FastAPI；复审 RED：HTTP disconnect、重复取消、响应 fence、关闭与 startup 所有权；GREEN：focused `56 passed`、full Python `393 passed`、import boundary `48 passed`、locked/ruff/mypy/diff-check；提交 `fb569bdd`、`ff7b5be9`、`962e361e`、`2d9042bf` | `task4_fix_quality` round 4 PASS | `task5_quality_review` round 4 PASS | Accepted |
 | 6 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 7 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 8 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
@@ -62,6 +63,14 @@
 - Round 2：原 transport、wrapper、envelope 与 schema 漂移缺口关闭；SPEC 继续拒绝 Python dict equality 把 JSON `true`/`1` 和 `1.0`/`1` 视为相等。修复改用 canonical JSON bytes 做 schema 类型精确比较并 fail closed。
 - Round 3：SPEC 与 QUALITY 均 PASS；bool/int、int/float、序列化失败、Content-Length/chunked/content-encoding、取消与 close、wheel 脱离源码导入、单 session/no retry、fresh graph/no checkpoint 对抗测试通过。
 - 控制会话复验：Task 4 focused `77 passed`；完整 Python `337 passed`；工作树在 ledger 更新前 clean。
+
+### Task 5 评审修复记录
+
+- Round 1：SPEC 拒绝 body 读完后不再监听 ASGI `http.disconnect`；QUALITY 另拒绝重复 cancellation 泄漏 `RunGate`、model close 失败跳过 SQLite、response start 后双发、h11 header 边界及 lifespan credential 强引用。修复增加 run 期 disconnect watcher、response-start fence、cancellation-safe 槽位/关闭 pipeline、h11 余量与 one-shot secret bootstrap。
+- Round 2：SPEC 未发现新违例；QUALITY 拒绝 component factory 成功后、移交 runtime 前取消会泄漏 model/SQLite。修复建立 factory 结果的临时所有权，成功 `runtime.start` 后才原子移交。
+- Round 3：SPEC 与 QUALITY 共同拒绝用 `_drain_cleanup` shield 整个 bootstrap；阻塞 factory 在外部取消后不收到 `CancelledError`，使 startup/关服可无界等待。修复改为主动取消 owned bootstrap task，再 cancellation-safe drain 其资源清理。
+- Round 4：SPEC 与 QUALITY 均 PASS；阻塞 factory 单次/重复取消、慢清理、close 异常、完成/取消同 tick 竞态、disconnect、lease/correlation、no checkpoint 与 terminal no-precommit 对抗通过；32 次重复取消与 200 次所有权竞态无死锁、泄漏或双关。
+- 控制会话复验：Task 5 focused `56 passed`；完整 Python `393 passed`；asyncio debug + warnings-as-errors HTTP `36 passed`；工作树在 ledger 更新前 clean。
 
 ## 整分支终审与门禁
 

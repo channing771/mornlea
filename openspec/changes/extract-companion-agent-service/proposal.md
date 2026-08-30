@@ -12,7 +12,7 @@
 - **BREAKING**：配置从 Go 直接模型 `ai.endpoint/model/apiKeyEnv` 硬切换到 `ai.agentService.endpoint/apiKeyEnv`；旧字段只产生可操作的迁移错误，不保留 direct-model fallback。
 - **BREAKING**：`companions.ai` 从 schema v4 升为 v5，增加稳定 Agent namespace、每伙伴 memory epoch、幂等恢复镜像与停用 tombstone；v1..v4 只读迁移，v5 不向旧程序降级写回。
 - Python 服务是运行期摘要权威，Go v5 镜像只用于恢复；服务不可用时世界继续运行，Planner 任务以稳定原因失败，Dialogue 跳过，权威 tick 不等待网络、磁盘或模型。
-- 保持协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`hostile_mobs` schema v1、engine ABI v8、client ABI v12 与 benchmark scenario v20 不变。
+- 保持协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`hostile_mobs` schema v1、engine ABI v9、client ABI v13 与 benchmark scenario v20 不变。
 
 ## Non-Goals
 
