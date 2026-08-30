@@ -88,8 +88,13 @@
 - [ ] 6.2 将 `engine/include/mornlea_client.h`、`engine/crates/mornlea_client/src/`、
   `internal/client/` 的 header/Rust exports/Go bridge 与 all-export tests 统一为 client ABI v13，
   同步根版本说明、当前 docs、`openspec/config.yaml` 和受影响 main specs；保留 main UI JSON
-  surface、MRW1 24/32 字节与 4 MiB/4096、原子 cache、v12 predecessor fail-fast、无 fallback
-  和 engine ABI v8。验证：`make rust && go test ./internal/client -race -count=1`、
+  surface、MRW1 24/32 字节与 4 MiB/4096、原子 cache、无 fallback 和 engine ABI v8。测试必须
+  分别锁定：v13 动态库的每个 versioned export 收 ABI 12 时返回 `ABI_VERSION`；main v12
+  动态库的共有 versioned exports 收 ABI 13 时返回 `ABI_VERSION`；v13-only MRW1 symbol 在
+  main v12 动态库中缺失时于 link/load/bind 阶段硬失败，不进入 FFI、不返回 client status、
+  不改变状态或 fallback。MRW1 input-only `u8` 入口只按 ABI、bounded nonzero length、non-null
+  pointer、address-range overflow、handle、MRW1 校验，不增加 alignment、output capacity 或
+  overlap 检查。验证：`make rust && go test ./internal/client -race -count=1`、
   `go test ./internal/archcheck -count=1`、`rg -n 'CLIENT_ABI_VERSION|MORNLEA_CLIENT_ABI_VERSION|client ABI v13' engine internal/client AGENTS.md README.md README.en.md docs openspec/config.yaml openspec/specs`。
 - [ ] 6.3 在 merged implementation HEAD 逐项执行并记录 `make rust`、`make rust-check`、
   `gofmt -w internal/client/render_world_update.go internal/client/render_world_update_test.go internal/client/render.go internal/client/render_test.go internal/client/window.go internal/client/window_test.go internal/server/sword_combat_parity_test.go`、

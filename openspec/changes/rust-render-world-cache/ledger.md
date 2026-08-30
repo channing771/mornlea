@@ -533,7 +533,28 @@ base 起零 diff；其 ready/spawn warmup 循环按 transport 收包时机决定
   重新打开 change，依次要求 non-rewriting main merge、v13 current-fact/spec/test 同步、同一
   merged baseline 的 release/race/visual/OpenSpec 验证，以及独立 integration review。
 - Planning implementer：`<pending-controller-fill>`。
-- Independent planning reviewer：`<pending-controller-dispatch>`。
+- Independent planning reviewer：`01a0514d...`（controller 提供的 abbreviated identity；完整
+  agent id 待 controller 回填）。
 - 当前只完成 integration planning artifact 修订；没有运行或声称任何 merged-baseline
   implementation/ABI/race/visual 验证。archive 与 merge into main 仍未获授权，change 保持
   active；只有 Task 6 实现、验证和独立评审全部完成后才能重新申请 archive/merge 裁决。
+
+### Planning independent review：Fix round 1/5
+
+- Reviewed planning commit：`bd698ae213cef7a8a8cf2ece865b85829bf512a6`。Independent
+  reviewer `01a0514d...` 的 initial verdict 为 spec ❌、quality Needs fixes；无 Critical，
+  两项 Important。
+- Important 1：原 delta/design/Task 6.2 把 main v12 动态库与 v13 bridge 的全部反向混装都
+  描述成可进入 export 并返回 `ABI_VERSION`，但 v13-only
+  `mornlea_client_render_apply_world_updates` 在 main v12 动态库中根本不存在，无法返回
+  client status。Fix round 1 明确拆成三条：集成 v13 动态库的全部 versioned exports 收 ABI 12
+  均先返回 `ABI_VERSION`；main v12 动态库的共有 versioned exports 收 ABI 13 均先返回
+  `ABI_VERSION`；v13-only MRW1 symbol 对 main v12 动态库只能在 link/load/bind 阶段硬失败，
+  不进入 FFI、不返回 status、不改变状态且没有兼容入口或 fallback。
+- Important 2：原 design D1 声称 input 解引用前还做 capacity、alignment 和 overlap 检查，
+  与 input-only `u8` 入口不符。Fix round 1 把唯一顺序统一为 ABI version、bounded nonzero
+  length、non-null `u8` pointer、address-range overflow、existing handle、MRW1，并明确没有
+  额外 alignment、output capacity 或 overlap 检查。
+- 本 fix 只修改 existing delta spec、`design.md`、`tasks.md` 的 6.2 与本 ledger；proposal
+  已保持正确的通用“早期硬拒绝”表述，无需修改。没有代码、main specs、merge、archive、
+  current docs/config 或任何 Task 6 implementation/validation 改动；Tasks 仍为 15/19。

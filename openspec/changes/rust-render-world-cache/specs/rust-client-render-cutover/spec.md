@@ -67,15 +67,30 @@ section upsert MUST 按 `ContainerSnapshot` 三态接收紧凑数据：single �
 
 ### Requirement: client ABI v13 统一 surface 并早期拒绝混装
 
-client C header、Rust 导出与 Go bridge 的 ABI 版本常数 MUST 同步为 13，新增的 render world update 入口及全部既有 client ABI 入口 MUST 拒绝每一个其他版本。每个 export MUST 在其其他适用 validation 或状态改变前检查 ABI version；现有 all-export ABI checks MUST 保留。版本错误 MUST 在 handle、pointer、UI/MRW1 内容或 renderer/RenderWorld 状态改变前返回 `ABI_VERSION`。v13 surface MUST 保留 main v12 的 `ui_push_state` 与版本化 JSON UI event drain，MUST NOT 恢复已退役的 `render_upload_ui_font`、frame TLV tag 9 或 UI layout v1–v4；系统 MUST NOT 提供 v12 兼容入口或 Go fallback。engine ABI MUST 保持 v8。
+client C header、Rust 导出与 Go bridge 的 ABI 版本常数 MUST 同步为 13，ABI identity export MUST 报告 13；集成 v13 动态库中每个接受 ABI version 的 export MUST 拒绝包括 12 在内的每一个其他版本。每个此类 v13 export MUST 在其其他适用 validation 或状态改变前检查 ABI version；现有 all-export ABI checks MUST 保留。版本错误 MUST 在 handle、pointer、UI/MRW1 内容或 renderer/RenderWorld 状态改变前返回 `ABI_VERSION`。v13 surface MUST 保留 main v12 的 `ui_push_state` 与版本化 JSON UI event drain，MUST NOT 恢复已退役的 `render_upload_ui_font`、frame TLV tag 9 或 UI layout v1–v4；系统 MUST NOT 提供 v12 兼容入口或 Go fallback。engine ABI MUST 保持 v8。
+
+反向混装时，main v12 动态库与 v13 bridge 共有且接受 ABI version 的 exports MUST 在收到 13 时返回 `ABI_VERSION`，并且不得读取其他输入或改变状态。v13-only 的 `mornlea_client_render_apply_world_updates` symbol 在 main v12 动态库中不存在；尝试把要求该 symbol 的 v13 bridge 与 main v12 动态库组合 MUST 在 link、load 或 bind 阶段硬失败，MUST NOT 被描述为一次会返回 client status 的调用，MUST NOT 进入任何 FFI body、改变任何状态或使用兼容入口/fallback。
 
 输入型 `mornlea_client_render_apply_world_updates` MUST 按以下顺序在改变 RenderWorld 前验证：ABI version、非零且不超过 MRW1 上限的 length、非空 pointer、address range 不溢出、已有 renderer handle、MRW1 layout 与容量。该入口没有输出 buffer，MUST NOT 要求 output capacity 或 overlap 检查；这些检查只适用于拥有输出的 export。任何 client ABI export MUST NOT 让 panic 穿过 FFI；panic MUST 映射为 `PANIC` 且不得留下部分 RenderWorld 状态。
 
-#### Scenario: main v12 动态库不能与 v13 Go bridge 混用
+#### Scenario: v13 动态库拒绝 ABI v12 调用方
 
-- GIVEN main client ABI v12 的 WKWebView/UI 动态库
-- WHEN v13 Go bridge 创建 window 或 renderer、推送 UI 状态或提交 render update
-- THEN 调用 MUST 在任何输入解析或 renderer、UI、RenderWorld 状态改变前返回 ABI_VERSION
+- GIVEN 集成 client ABI v13 的动态库
+- WHEN 调用方对每个接受 ABI version 的 export 传入 12
+- THEN 每个调用 MUST 在其他 validation 或状态改变前返回 ABI_VERSION
+
+#### Scenario: main v12 动态库的共有 exports 拒绝 ABI v13
+
+- GIVEN main client ABI v12 的 WKWebView/UI 动态库与 v13 bridge
+- WHEN v13 bridge 调用双方共有的 window、renderer 或 UI export 并传入 13
+- THEN 该 v12 export MUST 在读取其他输入或改变 renderer、UI 状态前返回 ABI_VERSION
+
+#### Scenario: main v12 动态库缺少 v13-only MRW1 symbol
+
+- GIVEN main client ABI v12 动态库不导出 `mornlea_client_render_apply_world_updates`
+- WHEN 尝试 link、load 或 bind 要求该 symbol 的 v13 bridge
+- THEN 组合 MUST 在进入 FFI 调用前硬失败
+- AND 系统 MUST NOT 声称返回 client status、改变 RenderWorld 或使用 fallback
 
 #### Scenario: 错误 ABI 优先于输入内容检查
 

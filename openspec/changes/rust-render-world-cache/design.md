@@ -101,7 +101,10 @@ record 仅允许作为 batch 第一条，所有坐标、revision、storage 元�
 
 section record 的 X/Z/dimension 使用完整 signed i32 域，section Y 必须在
 `0..core.SectionsPerChunk`；column record 的 section Y 必须为 0。所有长度计算使用
-checked arithmetic，并在解引用 input 前完成 pointer、长度、容量、对齐和重叠检查。
+checked arithmetic。FFI 在解引用 input 前只按固定顺序检查：ABI version、非零且不超过
+4 MiB 的 length、non-null `u8` pointer、address range 不溢出、existing renderer handle；
+通过后才把输入作为 bytes 校验 MRW1 layout/capacity。`u8` input 没有额外 alignment 要求；
+该入口是 input-only，因此没有 output capacity 或 overlap 检查。
 
 否决“将网络包原样交给 Rust”：它会把协议解析责任越过 Go 的既有边界，也会使 MRW1
 与网络版本演进耦合。
@@ -136,16 +139,24 @@ v1–v4 退役；只把 feature 的 `mornlea_client_render_apply_world_updates`�
 MRW1 tests 加入该 surface。随后 client C header、Rust 常数和导出、Go bridge、动态库身份
 检查、当前文档/配置/主规格与跨语言测试一起升级为 v13。
 
-所有 client ABI export 保留既有的 all-export ABI 检查，并在其任何其他适用 validation
-或状态改变前检查版本；每一个非 v13 版本都在读取 handle、pointer、UI JSON 或 MRW1 bytes
-前返回 `ABI_VERSION`。不存在 v12 兼容入口或 Go fallback。engine ABI 保持 v8，因为本
+集成 v13 动态库的 ABI identity export 报告 13；其他每个接受 ABI version 的 client export
+保留既有 all-export ABI 检查，并在其任何其他适用 validation 或状态改变前检查版本。它们
+收到包括 12 在内的任一非 v13 版本时，必须在读取 handle、pointer、UI JSON 或 MRW1 bytes
+前返回 `ABI_VERSION`。
+
+反向混装需要区分“共有 export”与“v13-only symbol”。main v12 动态库的共有 versioned
+exports 收到 v13 bridge 传入的 13 时，在读取其他输入或改变状态前返回 `ABI_VERSION`；但
+main v12 根本不导出 `mornlea_client_render_apply_world_updates`，因此要求该 symbol 的 v13
+bridge 必须在 link/load/bind 阶段硬失败，不能声称一次不存在的 FFI 调用会返回 status。
+该失败不得进入 FFI body、改变状态或转入兼容入口/Go fallback。engine ABI 保持 v8，因为本
 change 未改变无状态 engine 数值 ABI，也不移动其 fluid-aware 源码。
 
 新 `mornlea_client_render_apply_world_updates` 是 input-only `u8` entry，且严格按 ABI
 version、非零且受 MRW1 上限约束的 length、non-null pointer、无 overflow 的 address
 range、existing renderer handle、MRW1 layout/capacity 的顺序验证，随后才允许预检并原子
-改变 `RenderWorld`。它没有输出 buffer，因此不执行 output-capacity 或 overlap 检查；这些
-约束仅由带输出的既有 entry 按适用性承担。所有 client ABI export 均在 panic catcher 内，
+改变 `RenderWorld`。`u8` pointer 没有额外 alignment 检查；入口没有输出 buffer，因此不执行
+output-capacity 或 overlap 检查，这些约束仅由带输出的既有 entry 按适用性承担。所有 client
+ABI export 均在 panic catcher 内，
 panic 映射为 `PANIC`，并且不得 unwind 穿过 FFI 或留下部分 RenderWorld 状态。
 
 否决“让两套不同 surface 继续共用 v12”或“在 main v12 上只添加可选 MRW1 符号”：这会
@@ -169,9 +180,10 @@ connectivity/visibility、geometry upload、`RenderFrame.Visible` payload、fram
   → 先做全量 checked 预检，固定 4-bit=256、8-bit=512、direct=1024 word 计数，并以
   atomic invalid-batch、边界与 fuzz 测试锁定失败前状态。
 - [main v12 与集成 v13 header、dylib 和 Go binding 混装，或 input ABI 检查顺序不安全]
-  → 保留 all-export ABI 检查；为 UI 与 MRW1 入口锁定 version-first matrix，为新入口锁定
-  length、pointer/address、handle、layout 次序与 panic-to-PANIC，并在 clean release Rust
-  build 后运行 Go bridge race 测试。
+  → 双向分层验证：v13 动态库的全部 versioned exports 对 ABI 12 返回 `ABI_VERSION`；main
+  v12 动态库的共有 exports 对 ABI 13 返回 `ABI_VERSION`；v12 缺失的 MRW1 symbol 必须在
+  link/load/bind 阶段硬失败且无 fallback。新 input-only `u8` 入口只锁定 version、bounded
+  nonzero length、pointer/address、handle、MRW1 次序，不增加 alignment/output/overlap 检查。
 - [冲突解决复活已退役 UI export/TLV 或丢失 main JSON bridge] → 以 main v12 header/UI tests
   为基线，只叠加 MRW1；对 export 列表、frame tag 拒绝、`ui_push_state` 与 JSON event
   envelope 做定点审计和回归测试。
@@ -188,7 +200,9 @@ connectivity/visibility、geometry upload、`RenderFrame.Visible` payload、fram
    direct、column、tombstone、reset 和坐标边界；冲突解决只将该入口叠加到 main surface，
    不把入口接入实时 app。
 3. 把 C header、Rust、Go、当前文档、active config、main specs 与 tests 同步为 v13；验证
-   main v12 动态库与任一 v13 bridge 调用 fail fast，同时保留 UI JSON 与 MRW1 契约。
+   v13 动态库对全部 versioned exports 的 ABI 12 调用返回 `ABI_VERSION`，main v12 动态库的
+   共有 exports 对 ABI 13 返回 `ABI_VERSION`，而 v13-only MRW1 symbol 对 v12 动态库在
+   link/load/bind 阶段硬失败、没有 status 或 fallback；同时保留 UI JSON 与 MRW1 契约。
 4. 在 merged baseline 重建 release dylib，再以离屏 renderer 对应用前后完全相同的既有
    frame input 做编码与 readback/visual 比较，并保留 Go mesh/visibility/upload 原路径。
 5. 发布时 client ABI v13 与动态库同步替换；main v12 混装显式失败。若集成发现问题，
