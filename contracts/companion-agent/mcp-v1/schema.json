@@ -1,0 +1,386 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mornlea:companion-agent:mcp-tools:v1",
+  "title": "Mornlea companion Agent MCP application tool contract v1",
+  "$defs": {
+    "uuid_v4": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "uint64": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "position": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {"type": "number"}
+    },
+    "block_position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
+        "y": {"type": "integer", "minimum": -64, "maximum": 319},
+        "z": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647}
+      }
+    },
+    "go_to_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "x", "y", "z"],
+      "properties": {
+        "kind": {"const": "go_to"},
+        "x": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
+        "y": {"type": "integer", "minimum": -64, "maximum": 319},
+        "z": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647}
+      }
+    },
+    "mine_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "x", "y", "z"],
+      "properties": {
+        "kind": {"const": "mine"},
+        "x": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
+        "y": {"type": "integer", "minimum": -64, "maximum": 319},
+        "z": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647}
+      }
+    },
+    "place_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "x", "y", "z", "block"],
+      "properties": {
+        "kind": {"const": "place"},
+        "x": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
+        "y": {"type": "integer", "minimum": -64, "maximum": 319},
+        "z": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
+        "block": {
+          "enum": [
+            "brick",
+            "chest",
+            "clay",
+            "cobblestone",
+            "dirt",
+            "furnace",
+            "glass",
+            "grass",
+            "gravel",
+            "iron_block",
+            "leaves",
+            "light_block",
+            "mossy_cobblestone",
+            "oak_log",
+            "oak_planks",
+            "roof_tile",
+            "sand",
+            "smooth_stone",
+            "snow_block",
+            "stone",
+            "stone_brick",
+            "white_wool",
+            "workbench"
+          ]
+        }
+      }
+    },
+    "follow_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "player_id"],
+      "properties": {
+        "kind": {"const": "follow"},
+        "player_id": {"$ref": "#/$defs/uuid_v4"}
+      }
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-mornlea-rules": ["follow_must_be_last", "utf8_byte_limits_apply"],
+      "required": ["summary", "steps"],
+      "properties": {
+        "summary": {"type": "string", "minLength": 1, "maxLength": 512},
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5000,
+          "items": {
+            "oneOf": [
+              {"$ref": "#/$defs/go_to_step"},
+              {"$ref": "#/$defs/mine_step"},
+              {"$ref": "#/$defs/place_step"},
+              {"$ref": "#/$defs/follow_step"}
+            ]
+          }
+        }
+      }
+    },
+    "empty_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "get_planning_context_input": {
+      "$ref": "#/$defs/empty_input"
+    },
+    "get_planning_context_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snapshot_digest", "instruction", "issuer", "companion", "world_time_ticks", "chunk_revisions"],
+      "properties": {
+        "snapshot_digest": {"$ref": "#/$defs/sha256"},
+        "instruction": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "issuer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["player_id", "position", "yaw", "pitch", "look_hit"],
+          "properties": {
+            "player_id": {"$ref": "#/$defs/uuid_v4"},
+            "position": {"$ref": "#/$defs/position"},
+            "yaw": {"type": "number"},
+            "pitch": {"type": "number"},
+            "look_hit": {
+              "oneOf": [
+                {"$ref": "#/$defs/block_position"},
+                {"type": "null"}
+              ]
+            }
+          }
+        },
+        "companion": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["companion_id", "position", "yaw", "pitch", "task_status"],
+          "properties": {
+            "companion_id": {"$ref": "#/$defs/uuid_v4"},
+            "position": {"$ref": "#/$defs/position"},
+            "yaw": {"type": "number"},
+            "pitch": {"type": "number"},
+            "task_status": {"type": "string", "maxLength": 96}
+          }
+        },
+        "world_time_ticks": {"$ref": "#/$defs/uint64"},
+        "chunk_revisions": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["x", "z", "revision"],
+            "properties": {
+              "x": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
+              "z": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
+              "revision": {"$ref": "#/$defs/uint64"}
+            }
+          }
+        }
+      }
+    },
+    "list_affordances_input": {
+      "$ref": "#/$defs/empty_input"
+    },
+    "list_affordances_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step_kinds", "online_players", "visible_blocks"],
+      "properties": {
+        "step_kinds": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "prefixItems": [
+            {"const": "go_to"},
+            {"const": "follow"},
+            {"const": "mine"},
+            {"const": "place"}
+          ],
+          "items": false
+        },
+        "online_players": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["player_id", "position"],
+            "properties": {
+              "player_id": {"$ref": "#/$defs/uuid_v4"},
+              "position": {"$ref": "#/$defs/position"}
+            }
+          }
+        },
+        "visible_blocks": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["position", "block_id", "block_name", "drop_item", "mine_semantics"],
+            "properties": {
+              "position": {"$ref": "#/$defs/block_position"},
+              "block_id": {"type": "integer", "minimum": 1, "maximum": 65534},
+              "block_name": {"type": "string", "minLength": 1, "maxLength": 64},
+              "drop_item": {
+                "oneOf": [
+                  {"type": "string", "minLength": 1, "maxLength": 64},
+                  {"type": "null"}
+                ]
+              },
+              "mine_semantics": {
+                "enum": ["single_drop", "container_batch", "forbidden_farming", "forbidden_torch", "no_drop", "undelivered_multi_drop"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "inspect_inventory_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["offset", "limit"],
+      "properties": {
+        "offset": {"type": "integer", "minimum": 0, "maximum": 35},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 36}
+      }
+    },
+    "inspect_inventory_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slots"],
+      "properties": {
+        "slots": {
+          "type": "array",
+          "maxItems": 36,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["slot", "item", "count"],
+            "properties": {
+              "slot": {"type": "integer", "minimum": 0, "maximum": 35},
+              "item": {"type": "string", "minLength": 1, "maxLength": 64},
+              "count": {"type": "integer", "minimum": 1, "maximum": 255}
+            }
+          }
+        }
+      }
+    },
+    "find_visible_blocks_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["block_names", "limit"],
+      "properties": {
+        "block_names": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 64}
+        },
+        "limit": {"type": "integer", "minimum": 1, "maximum": 64}
+      }
+    },
+    "find_visible_blocks_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["matches"],
+      "properties": {
+        "matches": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["position", "block_name", "drop_item"],
+            "properties": {
+              "position": {"$ref": "#/$defs/block_position"},
+              "block_name": {"type": "string", "minLength": 1, "maxLength": 64},
+              "drop_item": {
+                "oneOf": [
+                  {"type": "string", "minLength": 1, "maxLength": 64},
+                  {"type": "null"}
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "query_terrain_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["positions"],
+      "properties": {
+        "positions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {"$ref": "#/$defs/block_position"}
+        }
+      }
+    },
+    "query_terrain_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["terrain"],
+      "properties": {
+        "terrain": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["position", "height", "block_name"],
+            "properties": {
+              "position": {"$ref": "#/$defs/block_position"},
+              "height": {"type": "integer", "minimum": -65, "maximum": 319},
+              "block_name": {"type": "string", "minLength": 1, "maxLength": 64}
+            }
+          }
+        }
+      }
+    },
+    "validate_plan_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-mornlea-canonical-bytes": 65536,
+      "required": ["plan"],
+      "properties": {
+        "plan": {"$ref": "#/$defs/plan"}
+      }
+    },
+    "validate_plan_result": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["accepted", "snapshot_digest", "plan"],
+          "properties": {
+            "accepted": {"const": true},
+            "snapshot_digest": {"$ref": "#/$defs/sha256"},
+            "plan": {"$ref": "#/$defs/plan"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["accepted", "code", "hint"],
+          "properties": {
+            "accepted": {"const": false},
+            "code": {
+              "enum": ["invalid_schema", "out_of_bounds", "unknown_player", "unmineable_target", "unknown_block", "missing_item", "snapshot_mismatch"]
+            },
+            "hint": {"type": "string", "maxLength": 256}
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,151 @@
+{
+  "contract": "mornlea-companion-agent-mcp-tools-v1",
+  "cases": [
+    {
+      "name": "fixed context input exposes no runtime identity",
+      "schema": "get_planning_context_input",
+      "value": {}
+    },
+    {
+      "name": "planning context is a bounded projection",
+      "schema": "get_planning_context_result",
+      "value": {
+        "snapshot_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "instruction": "采一块石头后跟上玩家",
+        "issuer": {
+          "player_id": "99999999-9999-4999-8999-999999999999",
+          "position": [4.5, 64, -1.5],
+          "yaw": 90,
+          "pitch": 0,
+          "look_hit": {"x": 8, "y": 63, "z": -2}
+        },
+        "companion": {
+          "companion_id": "66666666-6666-4666-8666-666666666666",
+          "position": [5.5, 64, -1.5],
+          "yaw": 0,
+          "pitch": 0,
+          "task_status": "规划中"
+        },
+        "world_time_ticks": 1200,
+        "chunk_revisions": [{"x": 0, "z": -1, "revision": 17}]
+      }
+    },
+    {
+      "name": "affordance input exposes no runtime identity",
+      "schema": "list_affordances_input",
+      "value": {}
+    },
+    {
+      "name": "affordances include fixed steps and mine classifications",
+      "schema": "list_affordances_result",
+      "value": {
+        "step_kinds": ["go_to", "follow", "mine", "place"],
+        "online_players": [
+          {"player_id": "99999999-9999-4999-8999-999999999999", "position": [4.5, 64, -1.5]}
+        ],
+        "visible_blocks": [
+          {
+            "position": {"x": 8, "y": 63, "z": -2},
+            "block_id": 2,
+            "block_name": "stone",
+            "drop_item": "stone",
+            "mine_semantics": "single_drop"
+          },
+          {
+            "position": {"x": 9, "y": 63, "z": -2},
+            "block_id": 11,
+            "block_name": "chest",
+            "drop_item": "chest",
+            "mine_semantics": "container_batch"
+          }
+        ]
+      }
+    },
+    {
+      "name": "inventory query is paged",
+      "schema": "inspect_inventory_input",
+      "value": {"offset": 0, "limit": 36}
+    },
+    {
+      "name": "inventory result contains bounded occupied slots",
+      "schema": "inspect_inventory_result",
+      "value": {
+        "slots": [
+          {"slot": 0, "item": "stone", "count": 32},
+          {"slot": 4, "item": "chest", "count": 1}
+        ]
+      }
+    },
+    {
+      "name": "visible block query is bounded",
+      "schema": "find_visible_blocks_input",
+      "value": {"block_names": ["chest", "furnace"], "limit": 64}
+    },
+    {
+      "name": "visible block result is coordinate ordered",
+      "schema": "find_visible_blocks_result",
+      "value": {
+        "matches": [
+          {"position": {"x": 9, "y": 63, "z": -2}, "block_name": "chest", "drop_item": "chest"},
+          {"position": {"x": 10, "y": 63, "z": -2}, "block_name": "furnace", "drop_item": "furnace"}
+        ]
+      }
+    },
+    {
+      "name": "terrain query preserves input order",
+      "schema": "query_terrain_input",
+      "value": {
+        "positions": [
+          {"x": 4, "y": 64, "z": -1},
+          {"x": 8, "y": 64, "z": -2}
+        ]
+      }
+    },
+    {
+      "name": "terrain result preserves input order",
+      "schema": "query_terrain_result",
+      "value": {
+        "terrain": [
+          {"position": {"x": 4, "y": 64, "z": -1}, "height": 63, "block_name": "air"},
+          {"position": {"x": 8, "y": 64, "z": -2}, "height": 63, "block_name": "air"}
+        ]
+      }
+    },
+    {
+      "name": "validator accepts the complete delivered step set",
+      "schema": "validate_plan_input",
+      "value": {
+        "plan": {
+          "summary": "走近目标，采集石头，放置箱子并跟随玩家",
+          "steps": [
+            {"kind": "go_to", "x": 8, "y": 64, "z": -2},
+            {"kind": "mine", "x": 8, "y": 63, "z": -2},
+            {"kind": "place", "x": 7, "y": 64, "z": -2, "block": "chest"},
+            {"kind": "follow", "player_id": "99999999-9999-4999-8999-999999999999"}
+          ]
+        }
+      }
+    },
+    {
+      "name": "validator accepted result echoes digest and canonical plan",
+      "schema": "validate_plan_result",
+      "value": {
+        "accepted": true,
+        "snapshot_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "plan": {
+          "summary": "采一块石头",
+          "steps": [{"kind": "mine", "x": 8, "y": 63, "z": -2}]
+        }
+      }
+    },
+    {
+      "name": "validator rejected result contains one stable code and bounded hint",
+      "schema": "validate_plan_result",
+      "value": {
+        "accepted": false,
+        "code": "unmineable_target",
+        "hint": "目标不属于当前快照可采掘语义"
+      }
+    }
+  ]
+}

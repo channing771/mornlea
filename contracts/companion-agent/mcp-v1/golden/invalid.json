@@ -1,0 +1,164 @@
+{
+  "contract": "mornlea-companion-agent-mcp-tools-v1",
+  "cases": [
+    {
+      "name": "runtime snapshot identity is not model-visible input",
+      "schema": "get_planning_context_input",
+      "reason": "runtime_identity_injected",
+      "value": {"snapshot_id": "77777777-7777-4777-8777-777777777777"}
+    },
+    {
+      "name": "planning context cannot expose persona",
+      "schema": "get_planning_context_result",
+      "reason": "unknown_field",
+      "value": {
+        "snapshot_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "instruction": "向前走",
+        "issuer": {
+          "player_id": "99999999-9999-4999-8999-999999999999",
+          "position": [4.5, 64, -1.5],
+          "yaw": 90,
+          "pitch": 0,
+          "look_hit": null
+        },
+        "companion": {
+          "companion_id": "66666666-6666-4666-8666-666666666666",
+          "position": [5.5, 64, -1.5],
+          "yaw": 0,
+          "pitch": 0,
+          "task_status": "规划中"
+        },
+        "world_time_ticks": 1200,
+        "chunk_revisions": [],
+        "persona": "must-not-enter-planner"
+      }
+    },
+    {
+      "name": "affordance step kinds are fixed and ordered",
+      "schema": "list_affordances_result",
+      "reason": "unfixed_step_set",
+      "value": {
+        "step_kinds": ["go_to", "mine", "place", "follow"],
+        "online_players": [],
+        "visible_blocks": []
+      }
+    },
+    {
+      "name": "inventory offset is bounded",
+      "schema": "inspect_inventory_input",
+      "reason": "out_of_bounds",
+      "value": {"offset": 36, "limit": 1}
+    },
+    {
+      "name": "inventory limit is bounded",
+      "schema": "inspect_inventory_input",
+      "reason": "out_of_bounds",
+      "value": {"offset": 0, "limit": 37}
+    },
+    {
+      "name": "visible block names must be unique",
+      "schema": "find_visible_blocks_input",
+      "reason": "duplicate_query",
+      "value": {"block_names": ["chest", "chest"], "limit": 2}
+    },
+    {
+      "name": "visible block query cannot be empty",
+      "schema": "find_visible_blocks_input",
+      "reason": "empty_query",
+      "value": {"block_names": [], "limit": 1}
+    },
+    {
+      "name": "terrain query cannot be empty",
+      "schema": "query_terrain_input",
+      "reason": "empty_query",
+      "value": {"positions": []}
+    },
+    {
+      "name": "terrain query y is a world block coordinate",
+      "schema": "query_terrain_input",
+      "reason": "out_of_bounds",
+      "value": {"positions": [{"x": 0, "y": 320, "z": 0}]}
+    },
+    {
+      "name": "plan rejects unknown top-level field",
+      "schema": "validate_plan_input",
+      "reason": "unknown_field",
+      "value": {
+        "plan": {
+          "summary": "向前走",
+          "steps": [{"kind": "go_to", "x": 1, "y": 64, "z": 0}],
+          "tool": "move"
+        }
+      }
+    },
+    {
+      "name": "plan rejects unknown step kind",
+      "schema": "validate_plan_input",
+      "reason": "undelivered_step",
+      "value": {
+        "plan": {
+          "summary": "攻击目标",
+          "steps": [{"kind": "attack", "x": 1, "y": 64, "z": 0}]
+        }
+      }
+    },
+    {
+      "name": "step rejects explicit null exclusive field",
+      "schema": "validate_plan_input",
+      "reason": "explicit_null",
+      "value": {
+        "plan": {
+          "summary": "跟随玩家",
+          "steps": [{"kind": "follow", "player_id": "99999999-9999-4999-8999-999999999999", "x": null}]
+        }
+      }
+    },
+    {
+      "name": "follow must be the final step",
+      "schema": "validate_plan_input",
+      "reason": "follow_not_last",
+      "value": {
+        "plan": {
+          "summary": "先跟随再走动",
+          "steps": [
+            {"kind": "follow", "player_id": "99999999-9999-4999-8999-999999999999"},
+            {"kind": "go_to", "x": 1, "y": 64, "z": 0}
+          ]
+        }
+      }
+    },
+    {
+      "name": "plan steps cannot be empty",
+      "schema": "validate_plan_input",
+      "reason": "empty_plan",
+      "value": {"plan": {"summary": "没有动作", "steps": []}}
+    },
+    {
+      "name": "validator accepted result rejects failure fields",
+      "schema": "validate_plan_result",
+      "reason": "exclusive_result_fields",
+      "value": {
+        "accepted": true,
+        "snapshot_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "plan": {"summary": "向前走", "steps": [{"kind": "go_to", "x": 1, "y": 64, "z": 0}]},
+        "hint": "must-not-coexist"
+      }
+    },
+    {
+      "name": "validator failure code is stable",
+      "schema": "validate_plan_result",
+      "reason": "unknown_code",
+      "value": {"accepted": false, "code": "write_denied", "hint": ""}
+    },
+    {
+      "name": "validator hint is bounded",
+      "schema": "validate_plan_result",
+      "reason": "hint_too_long",
+      "value": {
+        "accepted": false,
+        "code": "invalid_schema",
+        "hint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ]
+}
