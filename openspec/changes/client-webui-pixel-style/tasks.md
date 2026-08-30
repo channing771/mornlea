@@ -39,7 +39,7 @@
 
 ## 4. pixel.tsx 主题桥接 + 四面板 retroui 化
 
-- [ ] 4.1 新建 `src/ui/pixel.tsx`（PixelButton/PixelCard/PixelInput/
+- [x] 4.1 新建 `src/ui/pixel.tsx`（PixelButton/PixelCard/PixelInput/
       PixelDropdown 薄封装，颜色/几何全经 tokens.css 令牌）；四面板改造：
       主菜单按钮列、设置 Input/Dropdown、音量滑块自绘像素重绘（滑块形态
       不变）、暂停层、调试面板行内编辑；文案/事件/焦点语义零改动，

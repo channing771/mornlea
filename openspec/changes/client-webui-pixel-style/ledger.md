@@ -76,3 +76,26 @@
   任务 5.1 人工验收（实现未伪造自动断言）；评审提示：WKWebView 对
   mornlea:// scheme 的字体请求走 CORS 判同源应放行，若被拒则按回退链
   优雅降级，5.1 目检时专门确认。
+## Task 4: pixel.tsx 主题桥接 + 四面板 retroui 化
+
+- Commits: `8abd9b8a` `feat(frontend): unify panels on pixel retroui
+  components`、`2aeb1392` `fix(frontend): pin debug edit input font size to
+  token`。
+- 实现：`src/ui/pixel.tsx` 薄桥接（PixelButton/PixelInput/PixelCard/
+  PixelDropdown，原生属性全透传、主题全经变量）；retroui 组件样式表
+  `pixel-retroui/dist/index.css` 显式引入；tokens.css 新增像素组件变量段
+  （`:root:root` 双写压过 retroui 产物自带 `:root` 亮色兜底，评审实测
+  编译产物规则序证实必要）；四面板改造 + 音量滑块纯 CSS 像素重绘（滑块
+  形态与键盘/ARIA 零改动）；`--pixel-*` 几何令牌与琥珀强调映射（选中/
+  悬停/焦点环/滑块拇指），危险红仍专属错误。
+- 偏差裁决（评审独立核实成立）：窗口三预设弃 retroui DropdownMenu——上游
+  实现为点击弹出菜单件（菜单项普通 div、零键盘处理、事件不透传、选中不
+  收起），采用必违反「焦点/键盘语义逐项一致」MUST 并打破 App.test 钉值
+  断言；保持 PixelButton + `aria-pressed`。
+- 测试：App.test.tsx 零改动 82/82 全绿；dist index.css 31.89 kB /
+  index.js 208,202 B，两次构建字节一致。
+- 评审（独立评审子代理）：规格合规 PASS + 代码质量 PASS。修复轮 1：
+  `2aeb1392` 钉 `.debug-edit-input` 字号到 `--font-message`（上游
+  `.pixelContainer` 硬编码 16px 穿透链 + 16px 高内容框裁切风险）。Minor
+  记录：PixelDropdown 上游残留面（未渲染路径，首个消费方前须补映射与
+  reduced-motion）、孤儿令牌保留、格式 nit。
