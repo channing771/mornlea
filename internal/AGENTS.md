@@ -5,6 +5,7 @@
 本文件补充仓库根 `AGENTS.md`，适用于 `internal/`。更具体的边界见：
 
 - `internal/client/AGENTS.md`
+- `internal/fluid/AGENTS.md`
 - `internal/nativeabi/AGENTS.md`
 - `internal/network/AGENTS.md`
 - `internal/sim/AGENTS.md`
