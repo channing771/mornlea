@@ -70,12 +70,18 @@ const CG_RECT_NULL: CGRect = CGRect {
     },
 };
 
-/// `kCGWindowListOptionIncludingWindow`:只抓目标窗口自身,不把遮挡其上的
-/// 其他窗口叠进合成图。
-const CG_WINDOW_LIST_OPTION_INCLUDING_WINDOW: u64 = 1 << 0;
-/// `kCGWindowImageBestResolution`:按 backing scale(Retina 为 2x)输出
-/// 物理像素尺寸,与 wgpu framebuffer 的尺寸来源一致。
-const CG_WINDOW_IMAGE_BEST_RESOLUTION: u64 = 1 << 8;
+/// `kCGWindowListOptionIncludingWindow`(SDK `CGWindow.h`,`CF_OPTIONS(uint32_t,
+/// CGWindowListOption)`):把 `relativeToWindow` 指定的窗口纳入合成列表,配合
+/// `CGRectNull` 即只抓目标窗口自身,不把遮挡其上的其他窗口叠进合成图。
+/// 位值 1 << 3 由本机 SDK 头钉死,勿凭记忆改写(1 << 0 是
+/// `kCGWindowListOptionOnScreenOnly`,语义要求 `kCGNullWindowID`,与传入真实
+/// 窗口号的用法冲突)。
+const CG_WINDOW_LIST_OPTION_INCLUDING_WINDOW: u32 = 1 << 3;
+/// `kCGWindowImageBestResolution`(SDK `CGWindow.h`,`CF_OPTIONS(uint32_t,
+/// CGWindowImageOption)`):按 backing scale(Retina 为 2x)输出物理像素尺寸,
+/// 与 wgpu framebuffer 的尺寸来源一致。位值 1 << 3 同样以 SDK 头为准
+/// (1 << 4 是 `kCGWindowImageNominalResolution`)。
+const CG_WINDOW_IMAGE_BEST_RESOLUTION: u32 = 1 << 3;
 /// `kCGImageAlphaPremultipliedFirst`:alpha 位于「首」分量,配合 32 位小端
 /// 字节序即内存 B,G,R,A —— 与 `Bgra8Unorm` readback 逐字一致。
 const CG_IMAGE_ALPHA_PREMULTIPLIED_FIRST: u32 = 1 << 1;
@@ -98,8 +104,8 @@ const MAX_CAPTURE_DIMENSION: usize = 16384;
 // CoreGraphics 位图与窗口列表函数;darwin 平台框架恒在。
 //
 // SAFETY(整体):以下签名与系统 `CoreGraphics` 头逐字对齐——
-// `CGWindowListOption`/`CGWindowImageOption` 的底层 `CFOptionFlags` 在
-// 64 位平台是 `unsigned long`,按 `u64` 传递;`CGBitmapInfo` 是
+// `CGWindowListOption`/`CGWindowImageOption` 都是系统头里的
+// `CF_OPTIONS(uint32_t, ...)` 枚举,按 `u32` 传递;`CGBitmapInfo` 是
 // `uint32_t`,按 `u32` 传递。宽度错一位即是未定义行为。
 #[link(name = "CoreGraphics", kind = "framework")]
 unsafe extern "C" {
@@ -107,9 +113,9 @@ unsafe extern "C" {
     /// 模块。失败返回 NULL。
     fn CGWindowListCreateImage(
         screen_bounds: CGRect,
-        list_option: u64,
+        list_option: u32,
         window_id: u32,
-        image_option: u64,
+        image_option: u32,
     ) -> CGHandle;
     /// 创建指定位图布局的绘制上下文;`data` 为调用方提供的行缓冲,失败
     /// 返回 NULL。
@@ -304,7 +310,28 @@ fn copy_rows_top_down(
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_CAPTURE_DIMENSION, align_up, copy_rows_top_down};
+    use super::{
+        BITMAP_INFO, CG_BITMAP_BYTE_ORDER_32_LITTLE, CG_IMAGE_ALPHA_PREMULTIPLIED_FIRST,
+        CG_WINDOW_IMAGE_BEST_RESOLUTION, CG_WINDOW_LIST_OPTION_INCLUDING_WINDOW,
+        MAX_CAPTURE_DIMENSION, align_up, copy_rows_top_down,
+    };
+
+    /// 手抄的 CG 枚举位值必须与本机 SDK 头(`CGWindow.h`/`CGImage.h`)逐位
+    /// 一致:窗口列表与图像分辨率两个枚举都是 `CF_OPTIONS(uint32_t, ...)`,
+    /// 位值错一位会把「抓目标窗口 best resolution」静默变成「截全屏 nominal
+    /// 分辨率」这类语义错误,且无窗测试无法暴露,只能靠钉值防回退。
+    #[test]
+    fn window_list_option_values_match_sdk_header() {
+        // kCGWindowListOptionIncludingWindow = (1 << 3)。
+        assert_eq!(CG_WINDOW_LIST_OPTION_INCLUDING_WINDOW, 1 << 3);
+        // kCGWindowImageBestResolution = (1 << 3);1 << 4 是 nominal 分辨率。
+        assert_eq!(CG_WINDOW_IMAGE_BEST_RESOLUTION, 1 << 3);
+        // 位图布局同样手抄自系统头:kCGImageAlphaPremultipliedFirst = (1 << 1),
+        // kCGBitmapByteOrder32Little = (2 << 12),组合即 BGRA8。
+        assert_eq!(CG_IMAGE_ALPHA_PREMULTIPLIED_FIRST, 1 << 1);
+        assert_eq!(CG_BITMAP_BYTE_ORDER_32_LITTLE, 2 << 12);
+        assert_eq!(BITMAP_INFO, (1 << 1) | (2 << 12));
+    }
 
     /// 逐行反序拷贝:剥离行尾 padding,同时把左下原点的 CG 行序翻转为
     /// 自上而下。
