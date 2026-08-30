@@ -373,7 +373,7 @@ git commit -m "feat: add rust engine fluid rescan kernel"
 
 - [ ] **Step 2: 实现 encodeRescanBox 与接线**
 
-按 Files 节实现。编码顺序与 Task 4 Step 1 布局逐字节对应;中心区段采样:`section.Blocks.IsUniform()` 命中走 kind=0,否则 kind=1 按 `blockIndex` 同序线性展开。**盒组装粒度 = 每区块一次**:`State.rescanChunkFluids` 入口组装一次(裙边列取就绪邻块数据,未就绪邻块列填 Barrier),平面循环内只改 header 的 x0..x1/z0..z1/start_section/budget 复用同一份盒体;未就绪邻块的平面在 Go 侧跳过、不调 kernel、不记额度(与现行语义逐字一致)。接线后 sim 侧不再直接依赖 `fluid.Replaceable`(生产调用点清零;`Replaceable` 本体保留在 `internal/fluid/rules.go` 作为 spec 判定面,供 oracle 与性质测试使用)。
+按 Files 节实现。编码顺序与 Task 4 Step 1 布局逐字节对应;中心区段采样:`section.Blocks.IsUniform()` 命中走 kind=0,否则 kind=1 按 `blockIndex` 同序线性展开。**盒组装粒度 = 每平面各自居中(执行期勘定,取代本行初稿的「每区块一盒复用」)**:每平面以被扫区块为中心组装一盒——共享盒会把平面条带落在最外裙边列,kernel 固定点读越界、tier-2 错读中心记录,几何上不可行;未就绪邻块的平面在 Go 侧跳过、不调 kernel、不记额度(与现行语义逐字一致)。接线后 sim 侧不再直接依赖 `fluid.Replaceable`(生产调用点清零;`Replaceable` 本体保留在 `internal/fluid/rules.go` 作为 spec 判定面,供 oracle 与性质测试使用)。
 
 - [ ] **Step 3: 全量验证**
 
