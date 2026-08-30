@@ -22,7 +22,7 @@
 
 ## Impact
 
-- 受影响实现：`engine/crates/mornlea_client`、`engine/include/mornlea_client.h` 与 `internal/client`；完成时同步当前版本事实与 `rust-client-render-cutover` 主规格。
+- 受影响实现：`engine/crates/mornlea_client`、`engine/include/mornlea_client.h` 与 `internal/client`；实现已同步 client ABI v12 当前事实与 `rust-client-render-cutover` 主规格，同时保持 change active 以等待独立终审。
 - 所有权与并发：Go Mirror 继续是客户端逻辑真相来源；RenderWorld 仅由 renderer 持有派生渲染缓存。本 change 不新增 worker、goroutine、GPU 写入或生产热路径调用。
 - 兼容性：client ABI v11/v12 不兼容并早期拒绝混装；不提供兼容入口或 Go fallback。engine ABI v8 不变。
 - 协议与存档：协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`companions.ai` v4、`hostile_mobs` v1 与 benchmark scenario v20 均不变；MRW1 不复用已分配给 raycast cursor 的 `MRC1`，也不解析网络 wire packet。

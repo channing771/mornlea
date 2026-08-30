@@ -176,12 +176,18 @@ connectivity/visibility、geometry upload、`RenderFrame.Visible` payload、fram
 ## Verification
 
 - `make rust`
-- `cd engine && cargo test -p mornlea_client --locked`
-- `go test ./internal/client -race -count=1`
-- `go test ./internal/archcheck -count=1`
-- `gofmt -l .`
+- `make rust-check`
+- `gofmt -w internal/client/render_world_update.go internal/client/render_world_update_test.go internal/client/render.go internal/client/render_test.go internal/client/window.go internal/client/window_test.go`
 - `go vet ./...`
-- `go test ./... -race -count=1`
+- `go test ./internal/client -race -count=1`
+- `go test ./internal/mesh -race -count=1`
+- `go test ./internal/archcheck -count=1`
+- `make test-race-changed`
+- `go test ./... -race`
+- `make visual-check`
 - `openspec validate --all --strict --no-interactive`
+- `git diff --check`
 
-没有未决问题；MRW1 固定布局、坐标裁决、边界与阶段范围均由 binding brief 确定。
+实现与验证保持 cache-only：client ABI 当前为 v12、engine ABI 保持 v8，MRW1 固定布局、
+坐标裁决、边界与阶段范围均由 binding brief 确定。生产 app、Go mesh/visibility/upload/draw、
+共享 kernel、流体、协议、schema、benchmark scenario 与 visual golden 均未改变。

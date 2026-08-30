@@ -224,3 +224,93 @@
   exports 保留 ABI-first matrix；未知 handle 路径不解引用 input；panic 映射 `PANIC`；
   transactional MRW1 失败不留下部分状态。Task 5、proposal、delta spec、design 与根版本文档
   留待后续同步，本记录未提前修改。
+
+## Task 5：版本事实、主规格同步与阶段验收
+
+- 执行基线与全部阶段命令的 execution HEAD：
+  `e4843642f169eb513f0ff91c911540c97a6bce67`。Task 5 是 documentation/verification，
+  没有新增代码 RED，也没有虚构 RED；指定 gofmt 未产生生产 Go diff。
+- `openspec status --change rust-render-world-cache --json` 恰在首次主规格写入前运行一次并
+  退出 0；`planningHome.root` 为当前 worktree，唯一选中的
+  `artifactPaths.specs.existingOutputPaths` 是
+  `openspec/changes/rust-render-world-cache/specs/rust-client-render-cutover/spec.md`，未从目录猜测
+  delta。
+- `openspec instructions specs --change rust-render-world-cache --json` 在首次主规格写入前恰好
+  运行一次并退出 0，返回有效 `artifactId: specs` JSON。合并遵守其三条 rules：中文可观察
+  行为与 SHALL/MUST、每条 Requirement 的可判定 Given/When/Then、只在 spec 保留行为契约。
+- 主规格 merge 保留原 Purpose 与原 4 条 Requirement，把选中 delta 的 4 条 ADDED
+  Requirement 合入唯一 `## Requirements`；主规格现有 8 条 Requirement、无 delta operation
+  header。delta 与新增主规格块逐字节内容仅边界空行不同，再次执行相同语义 merge 不产生
+  diff；change 保持 active，未 archive。
+
+### 当前事实与历史事实审计
+
+- 根 AGENTS、双语 README、architecture、LAN 版本矩阵与两个受影响 main spec 的当前 client
+  ABI 已由 v11 同步为 v12；`docs/notes/progress.md` 另增本 change 的 cache-only 编年记录。
+- 进度日志中 `client-ui-vanilla-alignment` 当时“client ABI v11 不变”、
+  `fix-gpu-benchmark-batch` 的 v10→v11，以及 `tiered-swords-combat` 合入时的 v11 基线是历史
+  引入事实，保持原文 v11；delta 中“v11 动态库不能与 v12 bridge 混用”也是兼容性场景，
+  不是陈旧当前值。
+- `docs/architecture.md` 明确 RenderWorld 只是 renderer 独占、由 MRW1 原子更新的紧凑派生
+  cache，Go Mirror 仍为逻辑真相；入口仅由测试驱动。Go 仍持有生产 mesh 调度、
+  connectivity/visibility、逐 section upload 与 draw 输入，后续 change 才迁移。
+- `proposal.md` 已把“完成时同步”收敛为 v12/current-spec 已同步且 change 等待独立终审；
+  `design.md` 的 Verification 已与 binding brief 的完整逐项命令一致，并重申 cache-only
+  当前边界。delta spec 已与代码一致，无需为了制造 diff 重写。`openspec/config.yaml` 的
+  client ABI v11 版本矩阵是既有跨功能陈旧 context，按 binding brief 明确排除且保持字节不变。
+
+### 阶段边界验证
+
+下表命令均单独执行，HEAD 均为
+`e4843642f169eb513f0ff91c911540c97a6bce67`；没有 Skip，也没有更新 golden：
+
+| 命令 | 结果与关键计数/时长 |
+| --- | --- |
+| `make rust` | PASS，退出 0；release build 0.29s，命令墙钟约 0.41s，两个 dylib 重签名。 |
+| `make rust-check` | **FAIL**，`make` 退出 2（clippy 101），约 21.0s；Rust 1.97.1 `-D warnings` 在 Task 2 的 `world.rs` 报 2 个 `large_enum_variant`：`ColumnState::Live([i16; 256])` 与 `ParsedRecord::ColumnUpsert.heights`。fmt 已通过，失败发生在 clippy，workspace tests 未开始。Task 5 禁止修改生产 Rust，也不得加 allow 或弱化 gate，因此未越权修复。 |
+| `gofmt -w internal/client/render_world_update.go internal/client/render_world_update_test.go internal/client/render.go internal/client/render_test.go internal/client/window.go internal/client/window_test.go` | PASS，退出 0，<0.1s，无输出且六个文件相对 execution HEAD 零 diff。 |
+| `go vet ./...` | PASS，退出 0，约 3.83s，无输出。 |
+| `go test ./internal/client -race -count=1` | PASS，退出 0；package 5.219s。 |
+| `go test ./internal/mesh -race -count=1` | PASS，退出 0；package 20.463s。 |
+| `go test ./internal/archcheck -count=1` | PASS，退出 0；package 4.921s，动态版本门禁接受 client v12/engine v8，无需修改 `baseline_test.go`。 |
+| `make test-race-changed` | PASS，退出 0；origin/main 识别 1 个改动包 `internal/client`，反向依赖闭包 10 包，9 个测试包通过、`cmd/gfxspike` 无测试；最慢 `internal/server` 221.482s，`internal/sim` 46.645s。 |
+| `go test ./... -race` | **FAIL**，退出 1；42 个 package 输出中 38 PASS、1 FAIL、3 `[no test files]`，失败仅为既有 `internal/server/TestSwordCombatParity`（server package 249.275s）：velocity 3.65 vs TCP 1.15，差 2.5。 |
+| `make visual-check` | PASS，退出 0，约 83s；本机 macOS/arm64 Metal adapter 实际离屏运行 25 个场景，每场 230400 pixels，全部最大通道差 0、差异像素 0（0.0000%）；无 GPU Skip、无 golden 更新。 |
+| `openspec validate --all --strict --no-interactive` | PASS，退出 0；78 passed、0 failed，约 1.27s。 |
+| `git diff --check` | PASS，退出 0，<0.1s，无输出。 |
+
+附加诊断 `go test ./internal/server -race -run '^TestSwordCombatParity$' -count=1` 再次退出 1
+（package 5.733s），且差异方向反转为 Memory 1.15 vs TCP 3.65，仍恰差 2.5。该测试由
+`90188fbc feat(tiered-swords): unify swords and authoritative melee combat (#124)` 引入，自 Task 5
+base 起零 diff；其 ready/spawn warmup 循环按 transport 收包时机决定推进多少个权威 tick，
+随后却直接比较 hostile velocity，因此调度会改变采样前状态。该失败不是 cache ABI 路径，
+本任务也无权修改战斗测试或协议实现；原始全量 FAIL 保留，不以 focused 结果替代。
+
+### 版本、容量与范围证明
+
+- C header `MORNLEA_CLIENT_ABI_VERSION` 与 Rust `CLIENT_ABI_VERSION` 均为 12；Go window/render
+  bridge 直接编译并传递同一 header macro。engine header 仍为 ABI 8。
+- Rust `world.rs` 与 Go encoder 分别固定 MRW1 4 MiB/4096；delta/main spec 同步固定 24-byte
+  batch header、32-byte record header、4 MiB/4096 上限、非法 batch 原子失败、v11 混装早期
+  拒绝，以及合法 update 前后 frame 编码不变。
+- 协议、schema 与 benchmark 的代码权威值仍为 protocol 32、player 8、chunk 9、world
+  metadata 3、companions 4、hostile 1、scenario 20；`git diff 2344ca85 --` 对
+  `internal/network/protocol`、`internal/storage`、`cmd/mornlea/benchmark`、
+  `cmd/mornlea/app`、`internal/fluid`、`engine/crates/mornlea_engine`、golden 目录和
+  `openspec/config.yaml` 均为空。
+- Task 5 相对 execution HEAD 的 diff 仅是 brief 授权的版本/架构/进度文档、change 的
+  `proposal.md`/`design.md`/`tasks.md`/`ledger.md` 与两个 main specs；没有生产 Rust/Go、
+  `internal/archcheck`、hook、
+  protocol/schema/benchmark/fluid/kernel/app/golden 改动。全 change 也未创建共享 kernel、
+  worker/GPU pool，未把 cache 连接到实时 app。
+
+### 自审与待评审项
+
+- 已逐项把 README/architecture/spec/ledger 的 v12/v8、cache-only、MRW1、frame/golden 与
+  排除项主张回对代码常数、whole-change path diff 和实际命令输出；主规格结构与幂等性检查
+  PASS，历史 v11 引入事实未被现代化。
+- 阶段正确性未全绿：`make rust-check` 的两个 change 内 clippy finding 与全量 race 的既有
+  sword parity test failure 均如实保留。前者需要后续获准修改 Task 2 生产 Rust，后者需要
+  `tiered-swords-combat` 所有者修正测试前置状态；本任务没有绕过或削弱任何 gate。
+- 5.1–5.3 已完成事实同步、spec sync、命令执行与证据记录；5.4 **保持未勾选**，明确等待
+  controller 派发的独立 task review。本 change 保持 active。

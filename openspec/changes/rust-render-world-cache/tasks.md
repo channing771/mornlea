@@ -59,16 +59,18 @@
 
 ## 5. 同步版本事实、完成验收并记录证据
 
-- [ ] 5.1 将已实现的 client ABI v12 事实同步到受影响版本说明、架构说明和本 change
+- [x] 5.1 将已实现的 client ABI v12 事实同步到受影响版本说明、架构说明和本 change
   artifacts；只记录已实现的 RenderWorld cache，明确 Go mesh/visibility/upload/draw 尚未
   迁移，不改变协议、schema、benchmark scenario、engine ABI、流体或 golden。
-- [ ] 5.2 对照已验证实现更新 delta spec、design、tasks 与 ledger；每一项只在已经执行、
+- [x] 5.2 对照已验证实现更新 delta spec、design、tasks 与 ledger；每一项只在已经执行、
   验证并经独立 review 后勾选。验证：
   `openspec validate --all --strict --no-interactive`。
-- [ ] 5.3 执行 `make rust`、`gofmt -l .`、`go vet ./...`、
-  `go test ./internal/client -race -count=1`、`go test ./internal/archcheck -count=1`、
-  `go test ./... -race`、`openspec validate --all --strict --no-interactive` 与
-  `git diff --check`；逐项将实际输出、失败或 Skip 写入 `ledger.md`。
+- [x] 5.3 执行 `make rust`、`make rust-check`、指定六个 Go 文件的 `gofmt -w`、
+  `go vet ./...`、`go test ./internal/client -race -count=1`、
+  `go test ./internal/mesh -race -count=1`、`go test ./internal/archcheck -count=1`、
+  `make test-race-changed`、`go test ./... -race`、`make visual-check`、
+  `openspec validate --all --strict --no-interactive` 与 `git diff --check`；逐项将实际输出、
+  失败或 Skip 写入 `ledger.md`。
 - [ ] 5.4 取得该任务的单一独立终审，其报告同时包含 spec-compliance 与 quality verdict；
   审查 MRW1 24/32 字节与 4 MiB/4096 上限、v12/v8、流体零触碰、无共享 kernel、无实时
   app 接线与完整验证证据，并将最终裁决记入 `ledger.md`。

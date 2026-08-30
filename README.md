@@ -17,7 +17,7 @@
 <details>
 <summary>English overview</summary>
 
-Mornlea is an original voxel game written from scratch in Go 1.26 — no Mojang assets, protocol, or saves. It ships a custom client, an authoritative server, persistent worlds, physics, and a Rust wgpu renderer. The current baseline uses protocol v32, player schema v8, chunk schema v9, world metadata v3, `companions.ai` schema v4, `hostile_mobs` schema v1, engine ABI v8, client ABI v11, and benchmark scenario v20. The survival loop covers water, farming (wheat, potatoes, carrots, bone meal), hunger with saturation and exhaustion, oxygen, tiered swords with server-authoritative player and nightwalker melee, tool durability, doors, torches, a workbench with server-authoritative 2×2/3×3 crafting grids, sprinting, beds with night sleeping (all-sleep skips to dawn and sets a personal respawn point), and night-time nightwalkers that chase players, burn in daylight, and persist across restarts; up to four named server-authoritative companions plan queued `go_to`/`follow`/`mine`/`place` tasks and speak through a bounded persona/dialogue path. The local client starts at an egui main menu with a Settings page and an in-game pause overlay (single-player freezes the authoritative tick; remote sessions keep ticking). The graphical client is macOS-only; the headless Linux dedicated-server bundle uses CGO and an adjacent `libmornlea_engine.so`. MIT licensed.
+Mornlea is an original voxel game written from scratch in Go 1.26 — no Mojang assets, protocol, or saves. It ships a custom client, an authoritative server, persistent worlds, physics, and a Rust wgpu renderer. The current baseline uses protocol v32, player schema v8, chunk schema v9, world metadata v3, `companions.ai` schema v4, `hostile_mobs` schema v1, engine ABI v8, client ABI v12, and benchmark scenario v20. The survival loop covers water, farming (wheat, potatoes, carrots, bone meal), hunger with saturation and exhaustion, oxygen, tiered swords with server-authoritative player and nightwalker melee, tool durability, doors, torches, a workbench with server-authoritative 2×2/3×3 crafting grids, sprinting, beds with night sleeping (all-sleep skips to dawn and sets a personal respawn point), and night-time nightwalkers that chase players, burn in daylight, and persist across restarts; up to four named server-authoritative companions plan queued `go_to`/`follow`/`mine`/`place` tasks and speak through a bounded persona/dialogue path. The local client starts at an egui main menu with a Settings page and an in-game pause overlay (single-player freezes the authoritative tick; remote sessions keep ticking). The graphical client is macOS-only; the headless Linux dedicated-server bundle uses CGO and an adjacent `libmornlea_engine.so`. MIT licensed.
 
 ```bash
 git clone https://github.com/channing771/mornlea.git
@@ -30,7 +30,7 @@ Milestone history lives in [实现进度](docs/notes/progress.md); the LAN serve
 
 项目仍处于早期开发阶段，已具备程序化地形、GPU 地形渲染、玩家移动与碰撞、客户端预测、方块挖掘与放置、内置权威服务端、世界持久化、有界二进制协议、TCP 直连与无图形专用服务端。已交付里程碑与版本演进见[实现进度](docs/notes/progress.md)。
 
-当前基线使用协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`companions.ai` schema v4、`hostile_mobs` v1、engine ABI v8、client ABI v11 与 benchmark scenario v20。生存循环包含水、农业（小麦/马铃薯/胡萝卜与骨粉催熟）、饥饿/饱和/疲劳、氧气、三级剑与玩家/夜行者统一权威近战、工具耐久、木门、火把、工作台合成、床与睡眠（夜间入睡、全员跳夜与个人重生点）、夜间夜行者（追逐近战、白昼灼烧、跨重启持久）与疾跑；最多四名具名伙伴由服务端权威执行 `go_to`/`follow`/`mine`/`place` 队列任务并经有界台词路径发言。普通本地客户端从 egui 主菜单进入游戏，提供设置页与游戏内暂停覆盖层（单机暂停会冻结权威 tick，远程会话不宣称暂停）。完整玩法细节见[玩家手册](docs/notes/gameplay.md)。
+当前基线使用协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`companions.ai` schema v4、`hostile_mobs` v1、engine ABI v8、client ABI v12 与 benchmark scenario v20。生存循环包含水、农业（小麦/马铃薯/胡萝卜与骨粉催熟）、饥饿/饱和/疲劳、氧气、三级剑与玩家/夜行者统一权威近战、工具耐久、木门、火把、工作台合成、床与睡眠（夜间入睡、全员跳夜与个人重生点）、夜间夜行者（追逐近战、白昼灼烧、跨重启持久）与疾跑；最多四名具名伙伴由服务端权威执行 `go_to`/`follow`/`mine`/`place` 队列任务并经有界台词路径发言。普通本地客户端从 egui 主菜单进入游戏，提供设置页与游戏内暂停覆盖层（单机暂停会冻结权威 tick，远程会话不宣称暂停）。完整玩法细节见[玩家手册](docs/notes/gameplay.md)。
 
 ## 截图
 
@@ -131,7 +131,7 @@ go run ./cmd/mornlea --connect 127.0.0.1:25565 --name 玩家甲
 
 ## Rust 与 Go 的职责划分
 
-固定 Rust 1.97.1 workspace 包含 `mornlea_engine`（mesh/light、collision、raycast、physics 积分与 worldgen 的唯一生产实现，engine ABI v8）与 `mornlea_client`（Darwin 窗口、事件循环与全部 GPU 渲染及 egui 界面，client ABI v11）两个 cdylib。Go 拥有 app、world、sim、network、storage 与渲染 CPU 半部，不接触 GPU API，也没有生产 fallback；两条 ABI 各自是不可跨版本混装的 release-unit 边界。组件所有权与依赖方向见[当前架构说明](docs/architecture.md)，新代码归属规矩见 [docs/notes/go-rust-division.md](docs/notes/go-rust-division.md)。
+固定 Rust 1.97.1 workspace 包含 `mornlea_engine`（mesh/light、collision、raycast、physics 积分与 worldgen 的唯一生产实现，engine ABI v8）与 `mornlea_client`（Darwin 窗口、事件循环与全部 GPU 渲染及 egui 界面，client ABI v12）两个 cdylib。Go 拥有 app、world、sim、network、storage 与渲染 CPU 半部，不接触 GPU API，也没有生产 fallback；两条 ABI 各自是不可跨版本混装的 release-unit 边界。组件所有权与依赖方向见[当前架构说明](docs/architecture.md)，新代码归属规矩见 [docs/notes/go-rust-division.md](docs/notes/go-rust-division.md)。
 
 ## 使用 OpenSpec 开发
 

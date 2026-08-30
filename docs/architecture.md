@@ -38,11 +38,13 @@ Mornlea 由 Go 应用与两个 Rust `cdylib` 组成。Go 持有应用装配、�
 
 engine C ABI 当前为 v8。Go 侧只有 `internal/nativeabi` 可以接触该 ABI；领域包构造语义输入并解码结果。header、Rust FFI、Go bridge、ABI 版本和跨语言一致性检查必须成套演进，调用结束后任一侧都不得保留对方指针。
 
-## 6. `mornlea_client` / client ABI v11
+## 6. `mornlea_client` / client ABI v12
 
 `mornlea_client` 持有 Darwin 窗口与事件采集、egui、GPU 资源、shader、render pass、窗口 surface 和离屏渲染。Go 不导入 WebGPU 绑定，只通过 `internal/client` 提供的 client ABI bridge 使用窗口和 renderer 领域接口。
 
-client C ABI 当前为 v11，并与 engine ABI 独立演进。header、Rust FFI、`internal/client` bridge、版本和跨语言检查必须同步更新；失败或容量不足不能发布部分输出。
+client C ABI 当前为 v12，并与 engine ABI 独立演进。header、Rust FFI、`internal/client` bridge、版本和跨语言检查必须同步更新；失败或容量不足不能发布部分输出。
+
+renderer 已拥有由 MRW1 原子更新的紧凑 `RenderWorld` 派生缓存，Go Mirror 仍是客户端逻辑状态的真相来源。该缓存入口目前只由 Rust/Go 测试驱动，尚未接入 `cmd/mornlea/app`；Go 仍持有生产 mesh 调度、connectivity/visibility、逐 section upload 与 draw 输入，迁移这些职责属于后续 change。
 
 ## 7. 图形客户端与无图形专服 release unit
 

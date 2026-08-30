@@ -121,7 +121,7 @@
 
 ### Requirement: 版本与存档兼容矩阵明确
 
-变更后的版本矩阵 MUST 为：协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`companions.ai` schema v4、`hostile_mobs` schema v1、engine ABI v8、client ABI v11、benchmark scenario v20。player attack/hurt cooldown MUST 是重连清零的运行态；hostile MUST 复用 schema v1 既有 attack/hurt cooldown 字段且上限保持 20。当前程序 MUST 在玩家、区块容器/掉落和伙伴背包路径无损保存新增 ItemID；不知道新增 ItemID 的旧程序 MUST 安全拒绝，项目 MUST NOT 提供向后降级写入。
+变更后的版本矩阵 MUST 为：协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`companions.ai` schema v4、`hostile_mobs` schema v1、engine ABI v8、client ABI v12、benchmark scenario v20。player attack/hurt cooldown MUST 是重连清零的运行态；hostile MUST 复用 schema v1 既有 attack/hurt cooldown 字段且上限保持 20。当前程序 MUST 在玩家、区块容器/掉落和伙伴背包路径无损保存新增 ItemID；不知道新增 ItemID 的旧程序 MUST 安全拒绝，项目 MUST NOT 提供向后降级写入。
 
 #### Scenario: v31 对端在 Play 前被拒绝
 
@@ -133,7 +133,7 @@
 
 - **GIVEN** 变更已完整实现并通过验证
 - **WHEN** 检查持久化 schema、ABI 与 benchmark 版本
-- **THEN** player/chunk/world/companions/hostile MUST 保持 8/9/3/4/1，engine/client ABI MUST 保持 8/11，benchmark scenario MUST 保持 20
+- **THEN** player/chunk/world/companions/hostile MUST 保持 8/9/3/4/1，engine/client ABI MUST 保持 8/12，benchmark scenario MUST 保持 20
 
 #### Scenario: 含新剑的存档不能降级解释
 

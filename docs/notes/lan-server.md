@@ -94,7 +94,7 @@ go run ./cmd/mornlea-server --listen 127.0.0.1:25565 --world worlds/local --max-
 
 当前线上协议为 v32，服务端和客户端必须成套升级。v31 及其他不匹配版本会在握手阶段、进入 Play 前被稳定拒绝；不提供版本协商或降级解码。协议 v32 在 Play S→C registry 尾部追加 ID 25 的固定 10-byte 私有 `CombatHit`，携带最终 `ServerTick`、伤害和目标类型，只发送给成功玩家攻击的发起者。
 
-版本矩阵：协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`companions.ai` schema v4、`hostile_mobs` schema v1、engine ABI v8、client ABI v11、benchmark scenario v20。升级前必须正常关服并备份完整世界目录；不要让旧程序直接打开已升级目录后继续写入。异常退出时各文件分别原子更新，但文件之间没有跨文件事务。
+版本矩阵：协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`companions.ai` schema v4、`hostile_mobs` schema v1、engine ABI v8、client ABI v12、benchmark scenario v20。升级前必须正常关服并备份完整世界目录；不要让旧程序直接打开已升级目录后继续写入。异常退出时各文件分别原子更新，但文件之间没有跨文件事务。
 
 当前没有服务器发现、游戏内连接菜单或断线自动重连；图形客户端仅支持 macOS，Linux amd64 专服使用 CGO 并依赖相邻 `libmornlea_engine.so`。
 
