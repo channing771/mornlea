@@ -84,9 +84,9 @@ input/scratch/output buffer,`#cgo noescape nocallback`,失败返回状态码,pan
 
 队列、游标、预算、`strongerWrite` 同 tick 冲突合并(次序无关性的承重点,合并量
 ≤4×budget,不在热点上)、`lessPos` 排序提交、`settleFloodedCrop` 冲毁结算、
-`recordChange` 广播、变更再入队全部留 Go;接线后 sim 侧生产代码不再直接依赖
-`fluid.Replaceable`(本体保留在 `internal/fluid/rules.go` 作为 spec 判定面,供
-oracle 与性质测试使用)。
+`recordChange` 广播、变更再入队全部留 Go;接线后生产代码对 `fluid.Replaceable`
+的调用清零(本体保留在 `internal/fluid/rules.go` 作为冻结判定面,供 oracle 与
+性质测试使用)。
 
 ### 旧 Go 实现降为测试 oracle
 
@@ -132,8 +132,9 @@ vectors(垂直流、水平扩散、多源汇合取最强、作物冲毁、门四
 
 - **邻域盒编码 bug**:裙边 8 区块、双态区段,错一格即行为分叉——逐位差分 + 边界
   地形 golden 兜住;编码器单测覆盖 8 个裙边方向与未就绪邻居。
-- **重扫组装成本**:每 (区块, 平面) 窗口现场组装 ≤~170KB,均匀段占绝对多数时
-  实际远小;数值 record-only,若实测超预期,布局已预留 Palette 直通路径。
+- **重扫组装成本**:每区块一次组装、平面循环复用,全展开最坏 ≈244KB,均匀段占
+  绝对多数时实际远小;数值 record-only,若实测超预期,布局已预留 Palette 直通
+  路径。
 - **ABI 混装**:握手拒绝混装测试覆盖;`make rust` 重建纪律防陈旧 dylib 静默挂起。
 - **基线缺失**:`internal/fluid` 现无 micro-bench(见 ledger 基线记录),迁移收益
   对照以首次 oracle 差分 bench 为基线,scenario 数值只记录。

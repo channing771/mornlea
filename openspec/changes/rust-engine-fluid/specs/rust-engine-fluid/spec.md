@@ -11,9 +11,10 @@
 ### Requirement: 流体规则求值由 engine 承担
 
 `internal/fluid` 的单格流体规则(存活判定、垂直优先、水平传播等级 +1 且 ≤7、
-`Replaceable` 判定表)MUST 由 engine 的批量求值内核唯一生产;Go 生产路径 MUST 不
-包含逐格规则实现,旧 Go 实现(`evalCell`/`flowingSurvives` 与判定表)只允许存在于
-测试 oracle。
+可替换判定)MUST 由 engine 的批量求值内核唯一生产;Go 生产路径 MUST 不包含逐格
+规则实现:`evalCell`/`flowingSurvives` 只允许存在于测试 oracle,`Replaceable`
+判定表保留在 `internal/fluid/rules.go` 作为冻结判定面,生产路径零调用(任务 3/5
+将清除全部生产调用点)。
 
 #### Scenario: 批量求值产出与 Go oracle 逐位一致
 

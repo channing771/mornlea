@@ -18,8 +18,7 @@
 
 ## Task 1: OpenSpec change 产物与基线快照
 
-- Implementer: fresh implementer(本任务不派发子代理,由实现者直接完成)。
-- Commits: 见本节末(单笔 `docs: add rust-engine-fluid change products`)。
+- Commits: `7f98b4ce` `docs: add rust-engine-fluid change products`。
 - 产物:五文件——proposal.md、design.md、tasks.md、ledger.md(本文件)、
   specs/rust-engine-fluid/spec.md(4 条 ADDED Requirement:流体规则求值由 engine
   承担/流体重扫扫描由 engine 承担/流体状态与编排留在 Go/迁移保持逐位行为与测试网,
@@ -67,6 +66,13 @@
   `Totals: 79 passed, 0 failed (79 items)`。
 - Ruling:设计文档(2026-08-29)写的 benchmark scenario v19 与代码现状 v20 不符,
   按真相优先级以代码为准,change 产物统一写 v20;不影响任何行为契约。
+- Repair rounds: 1——评审 2 Important + 2 Minor 修复:邻域盒尺寸 18×256×18 订正
+  为 18×384×18 且最坏容量估算订正(proposal 与来源设计 spec 同步,全展开最坏
+  26 + 24×8194 + 68×384×2 + 648 ≈ 249.6KB);delta spec Requirement 1 的
+  `Replaceable` 口径统一(留在 `internal/fluid/rules.go` 作冻结判定面、生产路径
+  零调用,change design.md 同步);design 风险节组装粒度改为「每区块一次组装、
+  平面循环复用」;ledger 中性化。修复提交见 task-1-report.md 修复附录与 git log;
+  `openspec validate rust-engine-fluid --strict --no-interactive` 复验绿。
 
 ## Task 2: Pending.
 

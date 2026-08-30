@@ -25,7 +25,7 @@
   无状态纯函数(调用方持有全部 buffer,失败返回状态码,panic 收敛)。
 - `internal/fluid` 接入 nativeabi:`Queue.Advance` 阶段一改为「先按现行循环弹出
   ≤budget 项、再一次批量求值」;sim 侧重扫侧由 realm 组装以被扫区块为中心的
-  18×256×18 邻域盒(含 8 邻块裙边列与区段元数据),交 `internal/fluid` 导出的
+  18×384×18 邻域盒(含 8 邻块裙边列与区段元数据),交 `internal/fluid` 导出的
   扫描包装函数执行,`nativeabi` 边不进 sim。
 - Go 实现转 test-only oracle:`evalCell`/`flowingSurvives` 与重扫扫描/两级不动点
   判据移入测试文件,新增逐位差分、golden vectors 与 fuzz 门禁;现有性质测试、
