@@ -754,7 +754,7 @@ func TestDroppedItemSurvivesShutdownAndRestart(t *testing.T) {
 
 	flushDropWorld(t, first, firstStore)
 
-	second, secondStore, _ := newDropDiskWorld(t, root)
+	second, secondStore, secondClient := newDropDiskWorld(t, root)
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
 		defer cancel()
@@ -767,11 +767,13 @@ func TestDroppedItemSurvivesShutdownAndRestart(t *testing.T) {
 	}()
 
 	deadline = time.Now().Add(waitDeadline)
+	secondReady := false
 	for {
 		if time.Now().After(deadline) {
 			t.Fatal("等待重启后区块 Ready 超时")
 		}
-		second.StepForTest()
+		result := second.StepForTest()
+		dropDrainTick(t, secondClient, result.Tick, &secondReady)
 		chunk, _, ok := second.CloneReadyChunkForTest(key)
 		if !ok {
 			continue

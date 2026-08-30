@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
@@ -220,6 +221,7 @@ func recordFluidCropParity(t *testing.T, transport string) fluidCropParityRecord
 			}
 		}
 		readySteps++
+		time.Sleep(integrationPollInterval)
 	}
 	if readySteps > floodCropParityAlignTicks {
 		t.Fatalf("%s 就绪耗时 %d tick 已超过对齐预算 %d：绝对 tick 对齐前提失效，"+

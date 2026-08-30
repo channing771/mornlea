@@ -36,6 +36,11 @@ type Dependencies struct {
 	// 设置页拥有的三个 raw JSON 顶层成员，不重写同文件的其他字段。返回的
 	// `PersistenceResult` 明确标记 rename 是否已提交，防止目录同步警告被误判。
 	PatchSettings func(string, config.SettingsPatch) (config.PersistenceResult, error)
+	// CaptureCoordinator 是开发捕获服务的可空协调器（实现住
+	// `cmd/mornlea/devcapture`）。它不是构造工厂而是注入实例：main 经
+	// `SetCaptureCoordinator` 在 app 构造后写入 `NewWithDependencies` 保存的
+	// 同一载体。nil（默认）时交互帧循环对捕获零参与，只余一次判空。
+	CaptureCoordinator CaptureCoordinator
 }
 
 func defaultDependencies() Dependencies {

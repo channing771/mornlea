@@ -54,8 +54,8 @@ func TestGlyphAtlasRequestDeduplicatesAndWorkerIsFIFO(t *testing.T) {
 
 	atlas.Request("中A中VAA")
 	waitForResultCount(t, atlas, 3)
-	for i := 0; i < 3; i++ {
-		flushOneGlyph(t, atlas)
+	for _, char := range []rune("中AV") {
+		flushOneGlyph(t, atlas, char)
 	}
 
 	if got := raster.snapshotRunes(); string(got) != "中AV" {
@@ -193,7 +193,7 @@ func TestGlyphAtlasExhaustionPermanentlyUsesTofu(t *testing.T) {
 	}
 	atlas.Request(string(runes))
 	for i := 0; i < len(runes); i++ {
-		flushOneGlyph(t, atlas)
+		flushOneGlyph(t, atlas, runes[i])
 	}
 	if got := atlas.Glyph(runes[1022]).Slot; got != 1023 {
 		t.Fatalf("last lifetime slot = %d, want 1023", got)
@@ -437,15 +437,17 @@ func mustGlyphTestAtlasNoCleanup(t *testing.T, sink *glyphTestSink, renderFace, 
 	return atlas
 }
 
-func flushOneGlyph(t *testing.T, atlas *GlyphAtlas) {
+func flushOneGlyph(t *testing.T, atlas *GlyphAtlas, char rune) {
 	t.Helper()
 	waitUntil(t, func() bool {
-		before := atlas.nextSlot
 		budget := NewUploadBudget(1024)
 		if err := atlas.FlushUploads(budget); err != nil {
 			t.Fatalf("FlushUploads: %v", err)
 		}
-		return atlas.nextSlot != before || atlas.exhausted
+		atlas.mu.Lock()
+		defer atlas.mu.Unlock()
+		_, processed := atlas.glyphs[char]
+		return processed
 	})
 }
 

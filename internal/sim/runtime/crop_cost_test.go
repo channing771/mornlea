@@ -106,7 +106,7 @@ func TestCropTickCostIsIndependentOfCropCount(t *testing.T) {
 	}
 }
 
-// TestCropAllFarmlandReadsEachSampleOnce 锁定非作物样本的读取上界：干耕地退化（B-06）
+// TestCropAllFarmlandReadsEachSampleOnce 锁定非作物样本的读取上界：干耕地退化
 // 复用同一抽样本轮，需额外读取正上方是否为 `core.AirID`，因此每样本至多两次读取。
 func TestCropAllFarmlandReadsEachSampleOnce(t *testing.T) {
 	engine, _ := readyCropWorld(t)
