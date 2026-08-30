@@ -56,6 +56,10 @@ Rust 侧只消费本目录的构建产物 `dist/`（经 `mornlea://` scheme 内�
   `dist/` 提交入库供 Rust 内嵌，禁止手工编辑 `dist/` 内文件。强制点：
   `make frontend-check` 末行的 `git diff --exit-code -- …/dist`（dist 入库后
   任何漂移即红）与两次连续构建实测（2026-08 实测一致）。
+- 二进制 Web 资产仅限 `src/ui/fonts/` 的字体白名单：缝合像素字体
+  （Fusion Pixel，OFL-1.1，许可文本与字体同目录入库），经 `@font-face`
+  进产物、由 Rust 侧 `webview.rs` 资产表内嵌供给，除此之外不得新增任何
+  二进制资产；零网络纪律不变（资产全部经 `mornlea://` 内嵌供给）。
 
 ## 测试组织（`src/bridge/schema.test.ts`、`src/bridge/client.test.ts`、`src/ui/App.test.tsx`）
 

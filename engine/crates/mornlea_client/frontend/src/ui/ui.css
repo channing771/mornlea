@@ -10,6 +10,20 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * UI 像素字体：缝合像素字体（Fusion Pixel，OFL-1.1），仓库唯一白名单
+ * 二进制 Web 资产。来源 TakWolf/fusion-pixel-font release 2026.08.11
+ * （12px proportional zh_hans 变体，OFL.txt 同目录随库入库）；经
+ * `mornlea://` 内嵌 scheme 供给，零网络请求。族名与文件内部 name 表一致，
+ * @font-face 只声明来源与格式，不含数值语义（令牌纪律不受影响）。
+ */
+@font-face {
+  font-family: "Fusion Pixel 12px Prop zh_hans";
+  src: url(./fonts/fusion-pixel-12px-proportional-zh_hans.ttf.woff2) format("woff2");
+  /* swap：字体短暂不可用时先用回退栈呈现，加载完成后切换，文本不消失。 */
+  font-display: swap;
+}
+
 
 html,
 body,
@@ -21,8 +35,10 @@ body {
   margin: 0;
   background: var(--menu-background);
   color: var(--text-primary);
-  /* 系统字体栈：仓库零二进制字体资产、零网络请求。 */
+  /* 字体栈：像素字体优先（唯一 OFL 白名单二进制资产），系统 CJK 栈兜底；
+   * 字体资产缺失或不受支持时按声明顺序逐级回退，布局不因字体缺失失败。 */
   font-family:
+    "Fusion Pixel 12px Prop zh_hans",
     -apple-system,
     "SF Pro Text",
     "PingFang SC",
