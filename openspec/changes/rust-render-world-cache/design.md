@@ -85,12 +85,13 @@ section upsert payload 是 8 字节 meta 后接 palette 与 packed words：
 ```
 
 `storage_kind` 与 `world.ContainerSnapshot` 一一对应：0=single、1=indexed、
-2=direct。single 要求 bits/palette/packed 均为零；indexed 只允许 bits 4 或 8，
-并校验所有 packed slot 小于 palette_count；direct 要求 bits 15、palette_count 为零、
-packed_word_count 为 1024，且每个 word 的高四位为零。column upsert 的 payload 恰为
-256 个 i16 LE height；其 section_y、storage_kind、bits 均为零。tombstone 的 payload
-长度为零。world reset 的 record 仅允许作为 batch 第一条，所有坐标、revision、storage
-元数据和 payload 均为零。
+2=direct。single 要求 bits/palette/packed 均为零；indexed 只允许 bits 4 或 8，并校验
+所有 packed slot 小于 palette_count；bits 为 4 时 packed_word_count 必须恰为 256，bits
+为 8 时必须恰为 512。direct 要求 bits 15、palette_count 为零、packed_word_count 为
+1024，且每个 word 的高四位为零。section payload 解析后必须恰好耗尽 payload_len，任何
+尾随 bytes 都使整个 batch 失败。column upsert 的 payload 恰为 256 个 i16 LE height；
+其 section_y、storage_kind、bits 均为零。tombstone 的 payload 长度为零。world reset 的
+record 仅允许作为 batch 第一条，所有坐标、revision、storage 元数据和 payload 均为零。
 
 section record 的 X/Z/dimension 使用完整 signed i32 域，section Y 必须在
 `0..core.SectionsPerChunk`；column record 的 section Y 必须为 0。所有长度计算使用
@@ -123,9 +124,17 @@ column key 保存已验证的紧凑 palette/bitpack、height、epoch、revision 
 ### D4: ABI v12 必须整套同步并 fail fast
 
 client C header、Rust 常数和导出、Go bridge、动态库身份检查与跨语言测试一起升级为
-v12。每个 client ABI 入口先验证版本；错误版本在读取 handle、pointer 或 MRW1 bytes
-前返回 `ABI_VERSION`。不存在 v11 兼容入口或 Go fallback。engine ABI 保持 v8，因为
-本 change 未改变无状态 engine 数值 ABI，也不移动其 fluid-aware 源码。
+v12。所有 client ABI export 保留既有的 all-export ABI 检查，并在其任何其他适用
+validation 前检查版本；错误版本在读取 handle、pointer 或 MRW1 bytes 前返回
+`ABI_VERSION`。不存在 v11 兼容入口或 Go fallback。engine ABI 保持 v8，因为本 change
+未改变无状态 engine 数值 ABI，也不移动其 fluid-aware 源码。
+
+新 `mornlea_client_render_apply_world_updates` 是 input-only `u8` entry，且严格按 ABI
+version、非零且受 MRW1 上限约束的 length、non-null pointer、无 overflow 的 address
+range、existing renderer handle、MRW1 layout/capacity 的顺序验证，随后才允许预检并原子
+改变 `RenderWorld`。它没有输出 buffer，因此不执行 output-capacity 或 overlap 检查；这些
+约束仅由带输出的既有 entry 按适用性承担。所有 client ABI export 均在 panic catcher 内，
+panic 映射为 `PANIC`，并且不得 unwind 穿过 FFI 或留下部分 RenderWorld 状态。
 
 否决“保持 v11 并只添加可选符号”：这会允许 header、dylib 与 Go binding 混装，不能
 在改变 cache 前可靠失败。
@@ -142,10 +151,12 @@ connectivity/visibility、geometry upload、`RenderFrame.Visible` payload、fram
 
 ## Risks / Trade-offs
 
-- [错误的长度、乘法或 packed 索引导致越界或部分应用] → 先做全量 checked 预检，
-  以 atomic invalid-batch、边界与 fuzz 测试锁定失败前状态。
-- [v11/v12 header、dylib 和 Go binding 混装] → 全入口 ABI 优先检查、版本常数测试，
-  并在 clean Rust build 后运行 Go bridge race 测试。
+- [错误的长度、乘法、indexed word count、尾随 bytes 或 packed 索引导致越界或部分应用]
+  → 先做全量 checked 预检，固定 4-bit=256、8-bit=512、direct=1024 word 计数，并以
+  atomic invalid-batch、边界与 fuzz 测试锁定失败前状态。
+- [v11/v12 header、dylib 和 Go binding 混装，或 input ABI 检查顺序不安全] → 保留
+  all-export ABI 检查；为新入口锁定 version-first、length、pointer/address、handle、layout
+  次序与 panic-to-PANIC 的矩阵测试，并在 clean Rust build 后运行 Go bridge race 测试。
 - [cache 误接入既有 draw] → test-only driver、frame 编码及 readback 字节相等测试；
   不修改 app、mesher、scheduler 或 fluid-aware 源码。
 - [紧凑缓存提高常驻内存] → 4 MiB 单 batch和 4096 record 上限，按 tombstone/reset

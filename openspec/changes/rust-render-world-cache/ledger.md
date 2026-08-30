@@ -63,3 +63,21 @@
 
 - 尚未开始。每个任务开始、RED/GREEN、review verdict、修复轮次、commit 和验证结果都
   必须按 `tasks.md` 追加在本节。
+
+## Task 1 Fix Round 1
+
+- Reviewer finding（spec ❌，quality needs fixes）：indexed section 的 payload 未固定 4-bit
+  为 256 个 packed `u64`、8-bit 为 512 个，且未明确拒绝 payload 尾随 bytes。已在
+  proposal、delta spec、design 与 Task 2 中补充 exact word count、exact consumption 及
+  boundary/rejection/atomicity 测试。
+- Reviewer finding（spec ❌，quality needs fixes）：ABI 安全契约未完整覆盖 all-export
+  version-first 行为和新输入入口的 validation 次序。已明确保留全部既有 export 的 ABI
+  matrix；新入口按 ABI、length、pointer、address range、handle、MRW1 顺序校验，只有
+  output-bearing entries 适用 output-capacity/overlap，panic 映射为 `PANIC` 且不留下部分
+  状态。Task 4 现要求 matrix 测试与审计。
+- `openspec validate --all --strict --no-interactive`：退出 0，78 passed、0 failed。
+- `git diff --check -- openspec/changes/rust-render-world-cache`：退出 0 且无输出。
+- 自审：proposal、delta spec、design、tasks 与 ledger 一致要求 4-bit=256、8-bit=512、
+  exact payload consumption；所有 client export 的 version-first 契约与既有 ABI matrix
+  保留，新 input-only entry 的 ordered validation、output-only 例外和 panic isolation
+  均已覆盖；cache-only 与 fluid-excluded 边界不变。

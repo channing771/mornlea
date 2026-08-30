@@ -4,7 +4,7 @@
 
 客户端 SHALL 只接受 magic 为 `MRW1`、layout version 为 1、两个 batch reserved 字段均为零且 epoch 非零的小端 render update batch。batch header MUST 恰为 24 字节，每条 record header MUST 恰为 32 字节，batch 总长度 MUST 不超过 4 MiB，record count MUST 在 1..=4096；record tag MUST 分别只表示 section upsert(1)、column upsert(2)、section tombstone(3)、column tombstone(4) 或 world reset(5)，其 record reserved 字节 MUST 为零。section record 的 dimension、X、Z MUST 接受完整 signed `i32` 域，Y MUST 在 `0..core.SectionsPerChunk`；column record 的 Y、storage kind、bits MUST 均为零。任一 record 的长度、保留字节、坐标、palette、bitpack、epoch、revision 或 payload 违反契约时，客户端 MUST 返回 `INVALID_ARGUMENT`、拒绝整个 batch 且保持 RenderWorld 调用前状态。`MRC1` MUST NOT 用作 render update magic。
 
-section upsert MUST 按 `ContainerSnapshot` 三态接收紧凑数据：single 对应 storage kind 0，bits、palette 与 packed words 均为零；indexed 对应 storage kind 1、bits 只允许 4 或 8 且每个 packed slot 小于 palette count；direct 对应 storage kind 2、bits 为 15、palette count 为零、包含 1024 个 packed words 且每个 word 高四位为零。column upsert MUST 恰含 256 个小端 `i16` height；tombstone MUST 无 payload。world reset 只允许为 batch 第一条，且其坐标、revision、storage 元数据与 payload MUST 均为零。
+section upsert MUST 按 `ContainerSnapshot` 三态接收紧凑数据：single 对应 storage kind 0，bits、palette 与 packed words 均为零；indexed 对应 storage kind 1、bits 只允许 4 或 8 且每个 packed slot 小于 palette count，bits 为 4 时 packed word count MUST 恰为 256，bits 为 8 时 MUST 恰为 512；direct 对应 storage kind 2、bits 为 15、palette count 为零、包含 1024 个 packed words 且每个 word 高四位为零。各 section payload MUST 按其声明的字段恰好消费完毕，不得接受尾随 bytes。column upsert MUST 恰含 256 个小端 `i16` height；tombstone MUST 无 payload。world reset 只允许为 batch 第一条，且其坐标、revision、storage 元数据与 payload MUST 均为零。
 
 #### Scenario: 非法 indexed section 不产生部分缓存
 
@@ -26,6 +26,13 @@ section upsert MUST 按 `ContainerSnapshot` 三态接收紧凑数据：single �
 - WHEN Go 编码后由 client ABI 应用到 RenderWorld
 - THEN cache 保留等价的紧凑 palette/bitpack 状态
 - AND 不展开为 4096 个 block ID
+
+#### Scenario: indexed packed words 的边界或尾随 bytes 原子失败
+
+- GIVEN 已含 revision 7 section 的 RenderWorld
+- WHEN 收到 bits 为 4 但 packed word count 非 256、bits 为 8 但非 512，或 payload 留有尾随 bytes 的 indexed section batch
+- THEN 调用返回 INVALID_ARGUMENT
+- AND revision 7 仍是唯一可见缓存状态
 
 ### Requirement: RenderWorld 以 reset、epoch、revision 与 tombstone 决定状态
 
@@ -60,7 +67,9 @@ section upsert MUST 按 `ContainerSnapshot` 三态接收紧凑数据：single �
 
 ### Requirement: client ABI v12 混装早期拒绝
 
-client C header、Rust 导出与 Go bridge 的 ABI 版本常数 MUST 同步为 12，新增的 render world update 入口及全部既有 client ABI 入口 MUST 拒绝其他版本。版本错误 MUST 在 handle、pointer、batch 内容或 RenderWorld 状态改变前返回 `ABI_VERSION`；系统 MUST NOT 提供 v11 兼容入口或 Go fallback。engine ABI MUST 保持 v8。
+client C header、Rust 导出与 Go bridge 的 ABI 版本常数 MUST 同步为 12，新增的 render world update 入口及全部既有 client ABI 入口 MUST 拒绝其他版本。每个 export MUST 在其其他适用 validation 前检查 ABI version；现有 all-export ABI checks MUST 保留。版本错误 MUST 在 handle、pointer、batch 内容或 RenderWorld 状态改变前返回 `ABI_VERSION`；系统 MUST NOT 提供 v11 兼容入口或 Go fallback。engine ABI MUST 保持 v8。
+
+输入型 `mornlea_client_render_apply_world_updates` MUST 按以下顺序在改变 RenderWorld 前验证：ABI version、非零且不超过 MRW1 上限的 length、非空 pointer、address range 不溢出、已有 renderer handle、MRW1 layout 与容量。该入口没有输出 buffer，MUST NOT 要求 output capacity 或 overlap 检查；这些检查只适用于拥有输出的 export。任何 client ABI export MUST NOT 让 panic 穿过 FFI；panic MUST 映射为 `PANIC` 且不得留下部分 RenderWorld 状态。
 
 #### Scenario: v11 动态库不能与 v12 Go bridge 混用
 
@@ -74,6 +83,20 @@ client C header、Rust 导出与 Go bridge 的 ABI 版本常数 MUST 同步为 1
 - WHEN 调用任一 client ABI 入口
 - THEN 调用返回 ABI_VERSION
 - AND 不读取无效输入或改变 renderer 状态
+
+#### Scenario: 新输入入口按 ABI 优先的输入矩阵拒绝
+
+- GIVEN 一个错误 ABI，或 ABI 正确但依次存在零/超限 length、null pointer、address overflow、未知 handle 或非法 MRW1 的调用
+- WHEN 调用 render world update 入口
+- THEN 错误 ABI 返回 ABI_VERSION，其他情况按所列顺序在状态改变前返回对应错误
+- AND 输入型入口不执行 output capacity 或 overlap 检查
+
+#### Scenario: panic 不跨越 client ABI
+
+- GIVEN 任一 client ABI export 在其 Rust 实现内发生 panic
+- WHEN export 返回给调用方
+- THEN 调用返回 PANIC
+- AND RenderWorld 保持调用前状态
 
 ### Requirement: 本 change 不改变 draw 或 frame 可观察结果
 

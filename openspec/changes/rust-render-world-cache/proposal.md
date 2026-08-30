@@ -4,9 +4,9 @@
 
 ## What Changes
 
-- 新增独立于网络协议的 MRW1 v1 小端 render update batch；Go 从 `world.ContainerSnapshot` 编码 single、indexed 或 direct 紧凑 section、column height、tombstone 与 world reset。
+- 新增独立于网络协议的 MRW1 v1 小端 render update batch；Go 从 `world.ContainerSnapshot` 编码 single、indexed 或 direct 紧凑 section、column height、tombstone 与 world reset。indexed section 的 packed words 固定为 4-bit 256 个或 8-bit 512 个，并且 payload 必须恰好消费完毕。
 - 在 `mornlea_client` 内新增派生、可丢弃并可重建的 `RenderWorld` cache，以原子 batch 校验和应用 epoch、revision 与 tombstone 状态；失败不保留部分更新，也不保存 Go 指针。
-- **BREAKING**：client ABI 从 v11 升到 v12，新增 `mornlea_client_render_apply_world_updates` 与 `Renderer.ApplyRenderWorldUpdates`，版本混装在改变缓存前 fail fast；engine ABI 保持 v8。
+- **BREAKING**：client ABI 从 v11 升到 v12，新增 `mornlea_client_render_apply_world_updates` 与 `Renderer.ApplyRenderWorldUpdates`。全部 client ABI export 均版本优先拒绝混装；新输入入口在改变缓存前按 ABI、长度、pointer/address、handle、MRW1 的顺序校验；engine ABI 保持 v8。
 - 新入口只由 Rust/Go ABI 测试和 test-only driver 驱动，不接入 `cmd/mornlea/app` 实时消息路径。现有 Go CPU mesh 调度、geometry 上传、connectivity、visibility、`RenderFrame.Visible`、frame 编码与 draw 输出保持不变。
 - 不创建共享 voxel kernel、mesh worker 或 GPU pool，不移动或重构 engine 的 input/light/quad/greedy，不改变流体状态、传播、tick、协议或专属 mesh 语义；这些工作属于后续 change。
 
