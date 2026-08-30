@@ -55,6 +55,49 @@ class ManualClock:
         self.now_ms += milliseconds
 
 
+class BlockingCancellationGate(RunGate):
+    def __init__(self) -> None:
+        super().__init__()
+        self.entered = asyncio.Event()
+        self.allow = asyncio.Event()
+        self.armed = False
+
+    async def cancel_namespace_lease(
+        self,
+        namespace_id: str,
+        lease_id: str,
+    ) -> tuple[str, ...]:
+        if self.armed:
+            self.entered.set()
+            await self.allow.wait()
+        return await super().cancel_namespace_lease(namespace_id, lease_id)
+
+
+class BlockingReturnGate(RunGate):
+    def __init__(self) -> None:
+        super().__init__()
+        self.entered = asyncio.Event()
+        self.allow = asyncio.Event()
+
+    async def try_acquire(
+        self,
+        lease: LeaseIdentity,
+        *,
+        companion_id: str,
+        run_id: str,
+        kind: RunKind,
+    ):
+        handle = await super().try_acquire(
+            lease,
+            companion_id=companion_id,
+            run_id=run_id,
+            kind=kind,
+        )
+        self.entered.set()
+        await self.allow.wait()
+        return handle
+
+
 def uuid_sequence(*values: str) -> Callable[[], str]:
     iterator: Iterator[str] = iter(values)
     return lambda: next(iterator)
@@ -275,6 +318,184 @@ def test_expiry_cancels_old_runs_and_takeover_hides_the_new_owner(tmp_path: Path
             assert LEASE_B not in str(captured.value)
             await handle.finish()
         finally:
+            await store.close()
+
+    run(scenario())
+
+
+@pytest.mark.parametrize("transition", ["acquire", "release", "expire"])
+def test_persistent_lease_transition_drains_run_cancellation_before_propagating_cancel(
+    tmp_path: Path,
+    transition: str,
+) -> None:
+    async def scenario() -> None:
+        clock = ManualClock()
+        store = await SQLiteMemoryStore.open(tmp_path / "memory.sqlite3", clock_ms=clock)
+        gate = BlockingCancellationGate()
+        manager = NamespaceLeaseManager(
+            store,
+            run_gate=gate,
+            lease_id_factory=uuid_sequence(LEASE_A, LEASE_B),
+        )
+        old_identity = LeaseIdentity(
+            namespace_id=NAMESPACE_A,
+            client_instance_id=CLIENT_A,
+            lease_id=LEASE_A,
+        )
+        try:
+            await manager.acquire(NAMESPACE_A, CLIENT_A)
+            handle = await manager.reserve_run(
+                old_identity,
+                companion_id=COMPANION_A,
+                run_id=RUN_A,
+                kind=RunKind.PLANNER,
+            )
+            gate.armed = True
+            if transition == "acquire":
+                operation = asyncio.create_task(manager.acquire(NAMESPACE_A, CLIENT_A))
+            elif transition == "release":
+                operation = asyncio.create_task(manager.release(old_identity))
+            else:
+                clock.advance(LEASE_TTL_MS)
+                operation = asyncio.create_task(manager.expire_stale())
+
+            await gate.entered.wait()
+            operation.cancel()
+            operation.cancel()
+            await asyncio.sleep(0)
+            assert not operation.done()
+            gate.allow.set()
+            with pytest.raises(asyncio.CancelledError):
+                await operation
+
+            assert handle.cancelled
+            assert manager.run_gate.active_count == 1
+            if transition == "acquire":
+                await manager.assert_current(
+                    LeaseIdentity(
+                        namespace_id=NAMESPACE_A,
+                        client_instance_id=CLIENT_A,
+                        lease_id=LEASE_B,
+                    )
+                )
+            else:
+                with pytest.raises(LeaseNotFound):
+                    await manager.assert_current(old_identity)
+            await handle.finish()
+        finally:
+            gate.allow.set()
+            await store.close()
+
+    run(scenario())
+
+
+def test_acquire_cancellation_after_repository_commit_still_cancels_old_runs(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        store = await SQLiteMemoryStore.open(tmp_path / "memory.sqlite3")
+        manager = NamespaceLeaseManager(
+            store,
+            lease_id_factory=uuid_sequence(LEASE_A, LEASE_B),
+        )
+        old_identity = LeaseIdentity(
+            namespace_id=NAMESPACE_A,
+            client_instance_id=CLIENT_A,
+            lease_id=LEASE_A,
+        )
+        original_acquire = store.acquire_namespace
+        committed = asyncio.Event()
+        allow_return = asyncio.Event()
+
+        async def blocking_acquire(
+            namespace_id: str,
+            client_instance_id: str,
+            new_lease_id: str,
+        ):
+            transition = await original_acquire(
+                namespace_id,
+                client_instance_id,
+                new_lease_id,
+            )
+            if new_lease_id == LEASE_B:
+                committed.set()
+                await allow_return.wait()
+            return transition
+
+        store.acquire_namespace = blocking_acquire
+        try:
+            await manager.acquire(NAMESPACE_A, CLIENT_A)
+            handle = await manager.reserve_run(
+                old_identity,
+                companion_id=COMPANION_A,
+                run_id=RUN_A,
+                kind=RunKind.PLANNER,
+            )
+            reacquire = asyncio.create_task(manager.acquire(NAMESPACE_A, CLIENT_A))
+            await committed.wait()
+            reacquire.cancel()
+            reacquire.cancel()
+            await asyncio.sleep(0)
+            assert not reacquire.done()
+            allow_return.set()
+            with pytest.raises(asyncio.CancelledError):
+                await reacquire
+
+            assert handle.cancelled
+            assert manager.run_gate.active_count == 1
+            await manager.assert_current(
+                LeaseIdentity(
+                    namespace_id=NAMESPACE_A,
+                    client_instance_id=CLIENT_A,
+                    lease_id=LEASE_B,
+                )
+            )
+            await handle.finish()
+        finally:
+            allow_return.set()
+            await store.close()
+
+    run(scenario())
+
+
+def test_cancelled_reserve_after_slot_creation_does_not_orphan_a_handle(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        store = await SQLiteMemoryStore.open(tmp_path / "memory.sqlite3")
+        gate = BlockingReturnGate()
+        manager = NamespaceLeaseManager(
+            store,
+            run_gate=gate,
+            lease_id_factory=uuid_sequence(LEASE_A),
+        )
+        identity = LeaseIdentity(
+            namespace_id=NAMESPACE_A,
+            client_instance_id=CLIENT_A,
+            lease_id=LEASE_A,
+        )
+        try:
+            await manager.acquire(NAMESPACE_A, CLIENT_A)
+            pending = asyncio.create_task(
+                manager.reserve_run(
+                    identity,
+                    companion_id=COMPANION_A,
+                    run_id=RUN_A,
+                    kind=RunKind.DIALOGUE,
+                )
+            )
+            await gate.entered.wait()
+            assert gate.active_count == 1
+            pending.cancel()
+            pending.cancel()
+            await asyncio.sleep(0)
+            assert not pending.done()
+            gate.allow.set()
+            with pytest.raises(asyncio.CancelledError):
+                await pending
+            assert gate.active_count == 0
+        finally:
+            gate.allow.set()
             await store.close()
 
     run(scenario())

@@ -5,11 +5,14 @@ import sqlite3
 from collections.abc import Awaitable, Callable, Iterator
 from pathlib import Path
 
+import pytest
+
 from mornlea_companion_agent.domain.memory import (
     LeaseIdentity,
     MemoryCommit,
     MemoryReconcile,
     MemoryStateZero,
+    MemoryStorageFailure,
 )
 from mornlea_companion_agent.harness.leases import NamespaceLeaseManager
 from mornlea_companion_agent.storage.sqlite_memory import SQLiteMemoryStore
@@ -98,9 +101,20 @@ def test_sqlite_schema_and_rows_only_hold_lease_and_compact_memory(tmp_path: Pat
                 "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
             )
         }
-        assert tables == {"namespace_lease_history", "namespace_leases", "companion_memory"}
+        assert tables == {
+            "agent_schema",
+            "namespace_lease_history",
+            "namespace_leases",
+            "companion_memory",
+            "memory_operations",
+        }
+        assert connection.execute("PRAGMA user_version").fetchone() == (1,)
+        assert connection.execute(
+            "SELECT singleton, schema_version FROM agent_schema"
+        ).fetchall() == [(1, 1)]
 
         expected_columns = {
+            "agent_schema": {"singleton", "schema_version"},
             "namespace_lease_history": {"lease_id"},
             "namespace_leases": {
                 "namespace_id",
@@ -118,12 +132,16 @@ def test_sqlite_schema_and_rows_only_hold_lease_and_compact_memory(tmp_path: Pat
                 "summary",
                 "tombstone_operation_id",
                 "tombstone_old_epoch",
-                "last_commit_lease_id",
-                "last_commit_epoch",
-                "last_commit_base_revision",
-                "last_commit_operation_id",
-                "last_commit_summary",
-                "last_commit_revision",
+            },
+            "memory_operations": {
+                "namespace_id",
+                "companion_id",
+                "operation_id",
+                "operation_kind",
+                "payload_fingerprint",
+                "state_fingerprint",
+                "result_epoch",
+                "result_revision",
             },
         }
         for table, columns in expected_columns.items():
@@ -141,8 +159,7 @@ def test_sqlite_schema_and_rows_only_hold_lease_and_compact_memory(tmp_path: Pat
         memory = connection.execute(
             """
             SELECT namespace_id, companion_id, memory_epoch, active, revision,
-                   operation_id, summary, tombstone_operation_id,
-                   last_commit_operation_id, last_commit_summary
+                   operation_id, summary, tombstone_operation_id
             FROM companion_memory
             """
         ).fetchone()
@@ -155,8 +172,21 @@ def test_sqlite_schema_and_rows_only_hold_lease_and_compact_memory(tmp_path: Pat
             OPERATION,
             b"compact memory only",
             None,
+        )
+        receipt = connection.execute(
+            """
+            SELECT operation_id, operation_kind, length(payload_fingerprint),
+                   length(state_fingerprint), result_epoch, result_revision
+            FROM memory_operations
+            """
+        ).fetchone()
+        assert receipt == (
             OPERATION,
-            b"compact memory only",
+            "commit",
+            32,
+            32,
+            (1).to_bytes(8, "big"),
+            (1).to_bytes(8, "big"),
         )
     finally:
         connection.close()
@@ -177,3 +207,126 @@ def test_project_does_not_add_the_sqlite_langgraph_checkpointer() -> None:
     lock = (service_root / "uv.lock").read_text(encoding="utf-8").lower()
     assert "langgraph-checkpoint-sqlite" not in manifest
     assert 'name = "langgraph-checkpoint-sqlite"' not in lock
+
+
+def test_existing_empty_database_is_rejected_without_initializing_it(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        path = tmp_path / "existing.sqlite3"
+        path.write_bytes(b"")
+        before = path.read_bytes()
+        with pytest.raises(MemoryStorageFailure):
+            await SQLiteMemoryStore.open(path, clock_ms=ManualClock())
+        assert path.read_bytes() == before
+
+    run(scenario())
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "missing_table",
+        "ddl_drift",
+        "weak_ddl",
+        "extra_object",
+        "schema_version",
+        "user_version",
+    ],
+)
+def test_existing_schema_damage_fails_closed_without_repair(
+    tmp_path: Path,
+    damage: str,
+) -> None:
+    async def scenario() -> None:
+        path = tmp_path / f"{damage}.sqlite3"
+        store = await SQLiteMemoryStore.open(path, clock_ms=ManualClock())
+        await store.close()
+
+        connection = sqlite3.connect(path)
+        try:
+            if damage == "missing_table":
+                connection.execute("DROP TABLE memory_operations")
+            elif damage == "ddl_drift":
+                connection.execute("ALTER TABLE companion_memory ADD COLUMN drift TEXT")
+            elif damage == "weak_ddl":
+                connection.execute("DROP TABLE memory_operations")
+                connection.execute(
+                    """
+                    CREATE TABLE memory_operations (
+                        namespace_id TEXT,
+                        companion_id TEXT,
+                        operation_id TEXT,
+                        operation_kind TEXT,
+                        payload_fingerprint BLOB,
+                        state_fingerprint BLOB,
+                        result_epoch BLOB,
+                        result_revision BLOB
+                    )
+                    """
+                )
+            elif damage == "extra_object":
+                connection.execute(
+                    """
+                    CREATE TRIGGER unexpected_trigger
+                    AFTER INSERT ON companion_memory
+                    BEGIN
+                        SELECT 1;
+                    END
+                    """
+                )
+            elif damage == "schema_version":
+                connection.execute("PRAGMA ignore_check_constraints = ON")
+                connection.execute("UPDATE agent_schema SET schema_version = 2")
+            else:
+                connection.execute("PRAGMA user_version = 2")
+            connection.commit()
+        finally:
+            connection.close()
+
+        before = path.read_bytes()
+        with pytest.raises(MemoryStorageFailure):
+            await SQLiteMemoryStore.open(path, clock_ms=ManualClock())
+        assert path.read_bytes() == before
+
+    run(scenario())
+
+
+def test_existing_unversioned_partial_database_is_not_bootstrapped(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        path = tmp_path / "partial.sqlite3"
+        connection = sqlite3.connect(path)
+        try:
+            connection.execute("CREATE TABLE namespace_leases (namespace_id TEXT)")
+            connection.commit()
+        finally:
+            connection.close()
+
+        before = path.read_bytes()
+        with pytest.raises(MemoryStorageFailure):
+            await SQLiteMemoryStore.open(path, clock_ms=ManualClock())
+        assert path.read_bytes() == before
+
+    run(scenario())
+
+
+def test_existing_foreign_key_violation_fails_readiness_without_repair(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        path = tmp_path / "foreign-key.sqlite3"
+        store = await SQLiteMemoryStore.open(path, clock_ms=ManualClock())
+        manager = NamespaceLeaseManager(store, lease_id_factory=uuid_sequence(LEASE))
+        await manager.acquire(NAMESPACE, CLIENT)
+        await store.close()
+
+        connection = sqlite3.connect(path)
+        try:
+            connection.execute("PRAGMA foreign_keys = OFF")
+            connection.execute("DELETE FROM namespace_lease_history WHERE lease_id = ?", (LEASE,))
+            connection.commit()
+        finally:
+            connection.close()
+
+        before = path.read_bytes()
+        with pytest.raises(MemoryStorageFailure):
+            await SQLiteMemoryStore.open(path, clock_ms=ManualClock())
+        assert path.read_bytes() == before
+
+    run(scenario())

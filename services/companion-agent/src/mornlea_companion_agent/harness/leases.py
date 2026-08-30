@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from enum import StrEnum
 from typing import Protocol
 from uuid import uuid4
@@ -21,6 +21,35 @@ from mornlea_companion_agent.domain.memory import (
 
 GLOBAL_RUN_LIMIT = 4
 PER_COMPANION_RUN_LIMIT = 1
+
+
+async def _drain_mandatory[T](
+    awaitable: Awaitable[T],
+) -> tuple[T, asyncio.CancelledError | None]:
+    """延迟外层取消，直到已经提交的生命周期动作完成必要清理。"""
+
+    owned = asyncio.ensure_future(awaitable)
+    cancellation: asyncio.CancelledError | None = None
+    while not owned.done():
+        try:
+            await asyncio.shield(owned)
+        except asyncio.CancelledError as error:
+            if cancellation is None:
+                cancellation = error
+    try:
+        result = owned.result()
+    except BaseException:
+        if cancellation is not None:
+            raise cancellation from None
+        raise
+    return result, cancellation
+
+
+def _merge_cancellation(
+    current: asyncio.CancelledError | None,
+    candidate: asyncio.CancelledError | None,
+) -> asyncio.CancelledError | None:
+    return current if current is not None else candidate
 
 
 class LeaseRepository(Protocol):
@@ -95,7 +124,9 @@ class RunHandle:
         await self._gate._bind_task(self, task)
 
     async def finish(self) -> None:
-        await self._gate._finish(self)
+        _, cancellation = await _drain_mandatory(self._gate._finish(self))
+        if cancellation is not None:
+            raise cancellation from None
 
     async def __aenter__(self) -> RunHandle:
         return self
@@ -253,29 +284,44 @@ class NamespaceLeaseManager:
             for _ in range(64):
                 candidate = self._lease_id_factory()
                 try:
-                    transition = await self._repository.acquire_namespace(
-                        namespace_id,
-                        client_instance_id,
-                        candidate,
+                    transition, cancellation = await _drain_mandatory(
+                        self._repository.acquire_namespace(
+                            namespace_id,
+                            client_instance_id,
+                            candidate,
+                        )
                     )
                 except LeaseIDReuse:
                     continue
                 if transition.replaced_lease_id is not None:
-                    await self.run_gate.cancel_namespace_lease(
-                        namespace_id,
-                        transition.replaced_lease_id,
+                    _, cleanup_cancellation = await _drain_mandatory(
+                        self.run_gate.cancel_namespace_lease(
+                            namespace_id,
+                            transition.replaced_lease_id,
+                        )
                     )
+                    cancellation = _merge_cancellation(cancellation, cleanup_cancellation)
+                if cancellation is not None:
+                    raise cancellation
                 return transition.grant
             raise LeaseIDReuse
 
     async def heartbeat(self, identity: LeaseIdentity) -> LeaseGrant:
         async with self._fence_lock:
-            return await self._repository.heartbeat_namespace(identity)
+            grant, cancellation = await _drain_mandatory(
+                self._repository.heartbeat_namespace(identity)
+            )
+            if cancellation is not None:
+                raise cancellation
+            return grant
 
     async def release(self, identity: LeaseIdentity) -> None:
         async with self._fence_lock:
-            await self._repository.release_namespace(identity)
-            await self.run_gate.cancel_lease(identity)
+            _, cancellation = await _drain_mandatory(self._repository.release_namespace(identity))
+            _, cleanup_cancellation = await _drain_mandatory(self.run_gate.cancel_lease(identity))
+            cancellation = _merge_cancellation(cancellation, cleanup_cancellation)
+            if cancellation is not None:
+                raise cancellation
 
     async def assert_current(self, identity: LeaseIdentity) -> None:
         async with self._fence_lock:
@@ -291,23 +337,41 @@ class NamespaceLeaseManager:
     ) -> RunHandle:
         async with self._fence_lock:
             await self._repository.assert_current_lease(identity)
-            return await self.run_gate.try_acquire(
-                identity,
-                companion_id=companion_id,
-                run_id=run_id,
-                kind=kind,
+            handle, cancellation = await _drain_mandatory(
+                self.run_gate.try_acquire(
+                    identity,
+                    companion_id=companion_id,
+                    run_id=run_id,
+                    kind=kind,
+                )
             )
+            if cancellation is not None:
+                _, cleanup_cancellation = await _drain_mandatory(handle.finish())
+                cancellation = _merge_cancellation(cancellation, cleanup_cancellation)
+                assert cancellation is not None
+                raise cancellation from None
+            return handle
 
     async def cancel_run(self, identity: LeaseIdentity, run_id: str) -> bool:
         async with self._fence_lock:
             await self._repository.assert_current_lease(identity)
-            return await self.run_gate.cancel_run(identity, run_id)
+            cancelled, cancellation = await _drain_mandatory(
+                self.run_gate.cancel_run(identity, run_id)
+            )
+            if cancellation is not None:
+                raise cancellation
+            return cancelled
 
     async def expire_stale(self) -> int:
         async with self._fence_lock:
-            expired = await self._repository.expire_namespaces()
+            expired, cancellation = await _drain_mandatory(self._repository.expire_namespaces())
             for identity in expired:
-                await self.run_gate.cancel_lease(identity)
+                _, cleanup_cancellation = await _drain_mandatory(
+                    self.run_gate.cancel_lease(identity)
+                )
+                cancellation = _merge_cancellation(cancellation, cleanup_cancellation)
+            if cancellation is not None:
+                raise cancellation
             return len(expired)
 
 
