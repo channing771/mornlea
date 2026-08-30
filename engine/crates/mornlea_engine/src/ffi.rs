@@ -4,6 +4,7 @@ use crate::collision::{COLLISION_STEP_HEIGHT_OFFSET, resolve_collision};
 use crate::fluid_eval::{
     EVAL_ITEM_OUTPUT_BYTES, EVAL_SLOTS_PER_ITEM, eval_one, parse_eval_input, read_eval_item,
 };
+use crate::fluid_rescan::{RescanView, fluid_rescan, parse_rescan_input};
 use crate::greedy::{MeshError as GreedyError, center_is_air, mesh_section};
 use crate::input::{InputError, MeshInput};
 use crate::light::{LIGHT_VOLUME, LightScratch, MeshError as LightError, build_light};
@@ -21,10 +22,11 @@ use crate::worldgen::{
 /// engine ABI v9:v8(mesh registry 条目 20 字节布局)之上新增流体双内核
 /// `mornlea_fluid_eval_batch`(批量单格流体规则求值:输入布局 v1 = 8 字节头 +
 /// 每项 14 字节 7×u16,输出每项定长 12 字节;输出尺寸是输入的确定函数,
-/// 容量不足按参数违约拒绝,无两段式探测)与 `mornlea_fluid_rescan`(流体
-/// 重扫扫描;其 FFI 声明随后续重扫任务追加,本版本先完成版本号记账)——
-/// rust-engine-fluid 变更。既有入口签名与语义不变;旧 dylib 与新二进制混装
-/// 被版本握手拒绝(二者本就是同一不可跨版本混装的 release unit)。
+/// 容量不足按参数违约拒绝,无两段式探测)与 `mornlea_fluid_rescan`(确定性
+/// 流体重扫扫描:输入 MFL1 布局 v1,输出世界坐标流 + summary,两段式输出
+/// 容量探测)——rust-engine-fluid 变更。既有入口签名与语义不变;旧 dylib
+/// 与新二进制混装被版本握手拒绝(二者本就是同一不可跨版本混装的 release
+/// unit)。
 /// engine ABI v8:v7(`block_top_raw` 短方块几何)之上把 mesh `MGM1` 输入的
 /// 单条 registry 条目从 19 字节扩到 20 字节——末尾追加 `model`(有限模型 tag
 /// 的封闭集合:0=默认、1..=5=火把五形态、6=床保留即拒绝、其余未知拒绝),
@@ -1081,6 +1083,133 @@ unsafe fn fluid_eval_batch_with(
     }
 }
 
+/// 流体重扫扫描生产入口(两段式容量探测)。
+///
+/// 输入为 MFL1 布局 v1,四段:26 字节 header(u32 layout_version=1 |
+/// i32 center_chunk_x | i32 center_chunk_z | u16 x0/x1/z0/z1(盒内局部列
+/// 0..17)| u8 start_section(0..23)| u8 reserved=0 | u32 budget)+ 中心
+/// 区块 24 区段记录(u8 kind(0=均匀:u16 uniform_id,记录 4B;1=密集:
+/// 4096×u16 LE,区段内序 x + z*16 + y16*256)+ u8 pad=0)+ 裙边 68 列 ×
+/// 384 u16 + 元数据 9 区块 × 24 区段 × 3B;位布局与 `fluid_rescan` 模块
+/// 及 `engine/include/mornlea_engine.h` 的同步注释三方一致。
+///
+/// 输出 = 流体格世界坐标流(每条 12 字节:u32 x、u32 y、u32 z LE;世界
+/// 坐标可为负,按二进制补码编码,Go 侧以 int32 重读)+ 尾部 summary
+/// 8 字节(u32 spent | u8 done | u8[3] pad)。
+///
+/// 容量语义(两段式探测)同 `mornlea_lod_shell`:`output_capacity` 不足
+/// 时返回 `MORNLEA_STATUS_OUTPUT_OVERFLOW` 并把所需字节数写入
+/// `*output_len`(不触碰输出缓冲),调用方扩容后重试即成功;成功时
+/// `*output_len` 为实际写入字节数。`layout_version`、区段记录或元数据
+/// 违约返回 `MORNLEA_STATUS_INPUT`;其余状态语义与既有导出一致;Rust
+/// panic 收敛为 status 9。除两段式 overflow 报告所需容量外,失败路径
+/// `*output_len` 恒为 0 且输出缓冲原样。
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn mornlea_fluid_rescan(
+    abi_version: u32,
+    input: *const u8,
+    input_len: usize,
+    output: *mut u8,
+    output_capacity: usize,
+    output_len: *mut usize,
+) -> u32 {
+    // SAFETY: C 调用方提供原始缓冲区；helper 会在解引用前验证指针、范围、长度与重叠。
+    unsafe {
+        fluid_rescan_with(
+            abi_version,
+            input,
+            input_len,
+            output,
+            output_capacity,
+            output_len,
+            fluid_rescan,
+        )
+    }
+}
+
+/// `mornlea_fluid_rescan` 的校验与发布核心;scanner 参数只为注入 panic
+/// 测试(同 collision/raycast/lod/eval 的 *_with 先例),生产路径恒传
+/// [`fluid_rescan`]。
+///
+/// 校验顺序镜像 `mornlea_lod_shell`:先验证 `output_len` metadata 指针并
+/// 清零(此后任何提前返回调用方都能读到确定值),再依次检查 ABI 版本、
+/// 空指针、输入/输出范围与两两重叠;扫描与编码全部在本地缓冲完成后才
+/// 一次性拷贝发布,失败路径不触碰调用方输出。
+unsafe fn fluid_rescan_with(
+    abi_version: u32,
+    input: *const u8,
+    input_len: usize,
+    output: *mut u8,
+    output_capacity: usize,
+    output_len: *mut usize,
+    scanner: impl FnOnce(&RescanView) -> Vec<u8>,
+) -> u32 {
+    if output_len.is_null()
+        || !(output_len as usize).is_multiple_of(align_of::<usize>())
+        || output_len.addr().checked_add(size_of::<usize>()).is_none()
+    {
+        return MORNLEA_STATUS_INVALID_ARGUMENT;
+    }
+    // SAFETY: 指针已检查非空且满足 usize 对齐，调用期间独占写入一个值。
+    unsafe { output_len.write(0) };
+    if abi_version != ABI_VERSION {
+        return MORNLEA_STATUS_ABI_VERSION;
+    }
+    if input.is_null() || output.is_null() {
+        return MORNLEA_STATUS_INVALID_ARGUMENT;
+    }
+    if !input_range_is_valid(input, input_len) {
+        return MORNLEA_STATUS_INPUT;
+    }
+    if !byte_range_is_valid(output, output_capacity) {
+        return MORNLEA_STATUS_INVALID_ARGUMENT;
+    }
+    if ranges_overlap(input.addr(), input_len, output.addr(), output_capacity)
+        || ranges_overlap(
+            input.addr(),
+            input_len,
+            output_len.addr(),
+            size_of::<usize>(),
+        )
+        || ranges_overlap(
+            output.addr(),
+            output_capacity,
+            output_len.addr(),
+            size_of::<usize>(),
+        )
+    {
+        return MORNLEA_STATUS_INVALID_ARGUMENT;
+    }
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // SAFETY: input 非空，范围不超过 isize::MAX 且地址加法不回绕；已验证与 output/output_len 不重叠。
+        let bytes = unsafe { std::slice::from_raw_parts(input, input_len) };
+        let view = parse_rescan_input(bytes).ok_or(MORNLEA_STATUS_INPUT)?;
+        // 先在本地缓冲完成扫描,成功后一次拷贝,保证失败路径不触碰调用方输出。
+        Ok::<Vec<u8>, u32>(scanner(&view))
+    }));
+    match result {
+        Ok(Ok(encoded)) => {
+            let needed = encoded.len();
+            if output_capacity < needed {
+                // 两段式探测第一段:所需容量只有扫描完成后才可知,这里向调用方
+                // 报告精确字节数(输出缓冲保持原样);扩容重试即进入第二段。
+                // SAFETY: output_len 已验证非空、对齐且地址不回绕。
+                unsafe { output_len.write(needed) };
+                return MORNLEA_STATUS_OUTPUT_OVERFLOW;
+            }
+            // SAFETY: output 非空、范围有效且与 input/output_len 不重叠；只在完整成功后一次发布。
+            unsafe {
+                std::ptr::copy_nonoverlapping(encoded.as_ptr(), output, needed);
+                output_len.write(needed);
+            }
+            MORNLEA_STATUS_OK
+        }
+        Ok(Err(status)) => status,
+        Err(_) => MORNLEA_STATUS_PANIC,
+    }
+}
+
 #[cfg(test)]
 mod mesh_tests {
     use super::*;
@@ -1089,10 +1218,10 @@ mod mesh_tests {
     fn exported_version_is_nine() {
         // engine ABI v9:v8(mesh registry 条目 20 字节布局)之上新增流体双内核
         // `mornlea_fluid_eval_batch`(批量单格流体规则求值)与
-        // `mornlea_fluid_rescan`(重扫扫描;声明随后续重扫任务追加),详见
-        // ABI_VERSION 的 doc comment 与 engine/include/mornlea_engine.h 的
-        // 版本史注释。mesh registry 条目上限不在 engine ABI 版本契约内:
-        // Go/Rust 两侧数值是否一致由容量同步测试
+        // `mornlea_fluid_rescan`(重扫扫描,输入布局与两段式容量探测见其
+        // FFI doc comment),详见 ABI_VERSION 的 doc comment 与
+        // engine/include/mornlea_engine.h 的版本史注释。mesh registry 条目上限
+        // 不在 engine ABI 版本契约内:Go/Rust 两侧数值是否一致由容量同步测试
         // TestNativeAcceptsRegistryAtGoCapacity 守护,跨版本混装由 release unit
         // 纪律兜底。历史记录(仅记账,不代表升级触发条件):v5 时 27 → 35(流体
         // 进入 registry 快照)且条目 16 → 18 字节,后续变更 35 → 48、18 → 19
@@ -3814,5 +3943,320 @@ mod tests {
         assert_eq!(output_status, MORNLEA_STATUS_INVALID_ARGUMENT);
         assert_eq!(shared_output[0], 0);
         assert_eq!(shared_output[1..], before[1..]);
+    }
+
+    use super::{fluid_rescan_with, mornlea_fluid_rescan};
+    use crate::fluid_rescan::test_support::{RescanBox, STONE, decode_positions, decode_summary};
+    use crate::fluid_rescan::{fluid_rescan as module_scan, parse_rescan_input};
+
+    /// 标准测试盒:中心 (−2,3),全区块列扫描;段 2 密集含一个流动格与
+    /// 一个下方空气的源格,段 5 均匀水源且区段级不动点成立(计 1)。
+    /// 期望产出 [(-29,-31,52), (-27,-30,54)],spent = 4119。
+    fn fluid_rescan_test_box() -> RescanBox {
+        let mut box_ = RescanBox::new(-2, 3);
+        box_.dense_section(2, |_, _, _| STONE);
+        box_.set_center_cell(2, 3, 1, 4, crate::fluid_eval::WATER_SOURCE + 2);
+        box_.set_center_cell(2, 5, 2, 6, crate::fluid_eval::WATER_SOURCE);
+        box_.set_center_cell(2, 5, 1, 6, crate::fluid_eval::AIR);
+        box_.uniform_section(5, crate::fluid_eval::WATER_SOURCE);
+        box_
+    }
+
+    /// 统一透传参数调用 `mornlea_fluid_rescan` 的测试助手,返回 status。
+    unsafe fn call_fluid_rescan(
+        abi_version: u32,
+        input: &[u8],
+        output: *mut u8,
+        output_capacity: usize,
+        output_len: *mut usize,
+    ) -> u32 {
+        // SAFETY: 指针来自有效分配,容量不超出实际分配范围。
+        unsafe {
+            mornlea_fluid_rescan(
+                abi_version,
+                input.as_ptr(),
+                input.len(),
+                output,
+                output_capacity,
+                output_len,
+            )
+        }
+    }
+
+    #[test]
+    fn fluid_rescan_success_matches_module_scan() {
+        let box_ = fluid_rescan_test_box();
+        let input = box_.build();
+        let view = parse_rescan_input(&input).expect("测试盒必须合法");
+        let expected = module_scan(&view);
+        // 2 条坐标 + summary。
+        assert_eq!(expected.len(), 2 * 12 + 8);
+        assert_eq!(
+            decode_positions(&expected),
+            vec![(-29, -31, 52), (-27, -30, 54)]
+        );
+        assert_eq!(decode_summary(&expected), (4119, true));
+
+        // 恰好容量成功,字节与模块级扫描逐位一致。
+        let mut output = vec![0_u8; expected.len()];
+        let mut output_len = usize::MAX;
+        // SAFETY: 指针来自有效 Vec,长度与容量一致。
+        let status = unsafe {
+            call_fluid_rescan(
+                ABI_VERSION,
+                &input,
+                output.as_mut_ptr(),
+                output.len(),
+                &mut output_len,
+            )
+        };
+        assert_eq!(status, MORNLEA_STATUS_OK);
+        assert_eq!(output_len, expected.len());
+        assert_eq!(output, expected);
+
+        // 确定性契约:同输入两次调用逐字节一致。
+        let mut second = vec![0_u8; expected.len()];
+        let mut second_len = usize::MAX;
+        // SAFETY: 指针来自有效 Vec,长度与容量一致。
+        let second_status = unsafe {
+            call_fluid_rescan(
+                ABI_VERSION,
+                &input,
+                second.as_mut_ptr(),
+                second.len(),
+                &mut second_len,
+            )
+        };
+        assert_eq!(second_status, MORNLEA_STATUS_OK);
+        assert_eq!(second, output);
+
+        // 富余容量成功:只写实际输出,尾部不被触碰。
+        let mut padded = vec![0xA5_u8; expected.len() + 8];
+        let padded_canary = padded.clone();
+        let mut padded_len = usize::MAX;
+        // SAFETY: 指针来自有效 Vec,容量覆盖写入区。
+        let padded_status = unsafe {
+            call_fluid_rescan(
+                ABI_VERSION,
+                &input,
+                padded.as_mut_ptr(),
+                padded.len(),
+                &mut padded_len,
+            )
+        };
+        assert_eq!(padded_status, MORNLEA_STATUS_OK);
+        assert_eq!(padded_len, expected.len());
+        assert_eq!(&padded[..expected.len()], &expected[..]);
+        assert_eq!(&padded[expected.len()..], &padded_canary[expected.len()..]);
+    }
+
+    #[test]
+    fn fluid_rescan_two_phase_overflow_is_exact_and_atomic() {
+        let box_ = fluid_rescan_test_box();
+        let input = box_.build();
+        let view = parse_rescan_input(&input).expect("测试盒必须合法");
+        let needed = module_scan(&view).len();
+
+        // 第一段:容量 1 不足,报告所需字节数且不写输出缓冲。
+        let mut tiny = vec![0xA5_u8; 1];
+        let mut output_len = usize::MAX;
+        // SAFETY: 指针来自有效 Vec;仅容量参数不足。
+        let status = unsafe {
+            call_fluid_rescan(
+                ABI_VERSION,
+                &input,
+                tiny.as_mut_ptr(),
+                tiny.len(),
+                &mut output_len,
+            )
+        };
+        assert_eq!(status, MORNLEA_STATUS_OUTPUT_OVERFLOW);
+        assert_eq!(output_len, needed);
+        assert_eq!(tiny, vec![0xA5_u8; 1]);
+
+        // 差 1 字节仍是 overflow,所需字节数保持不变。
+        let mut short = vec![0xA5_u8; needed - 1];
+        // SAFETY: 指针来自有效 Vec;容量差 1。
+        let status = unsafe {
+            call_fluid_rescan(
+                ABI_VERSION,
+                &input,
+                short.as_mut_ptr(),
+                short.len(),
+                &mut output_len,
+            )
+        };
+        assert_eq!(status, MORNLEA_STATUS_OUTPUT_OVERFLOW);
+        assert_eq!(output_len, needed);
+        assert_eq!(short, vec![0xA5_u8; needed - 1]);
+
+        // 恰好容量即成功,写入字节数 == 所需。
+        let mut exact = vec![0_u8; needed];
+        // SAFETY: 指针来自有效 Vec,长度与容量一致。
+        let status = unsafe {
+            call_fluid_rescan(
+                ABI_VERSION,
+                &input,
+                exact.as_mut_ptr(),
+                exact.len(),
+                &mut output_len,
+            )
+        };
+        assert_eq!(status, MORNLEA_STATUS_OK);
+        assert_eq!(output_len, needed);
+        assert_eq!(exact, module_scan(&view));
+    }
+
+    #[test]
+    fn fluid_rescan_invalid_input_matrix_is_atomic() {
+        let valid = fluid_rescan_test_box().build();
+        let mut wrong_layout = valid.clone();
+        wrong_layout[0..4].copy_from_slice(&2_u32.to_le_bytes());
+        let mut bad_start = valid.clone();
+        bad_start[20] = 24;
+        let mut reserved = valid.clone();
+        reserved[21] = 1;
+        let cases: Vec<(&str, Vec<u8>)> = vec![
+            ("short header", valid[..25].to_vec()),
+            ("short input", valid[..valid.len() - 1].to_vec()),
+            ("long input", {
+                let mut long = valid.clone();
+                long.push(0);
+                long
+            }),
+            ("wrong layout version", wrong_layout),
+            ("start section out of range", bad_start),
+            ("reserved not zero", reserved),
+        ];
+        for (name, input) in cases {
+            let mut output = vec![0xA5_u8; 64];
+            let canary = output.clone();
+            let mut output_len = usize::MAX;
+            // SAFETY: 指针来自有效 Vec,长度与缓冲容量一致。
+            let status = unsafe {
+                call_fluid_rescan(
+                    ABI_VERSION,
+                    &input,
+                    output.as_mut_ptr(),
+                    output.len(),
+                    &mut output_len,
+                )
+            };
+            assert_eq!(status, MORNLEA_STATUS_INPUT, "{name}");
+            assert_eq!(output_len, 0, "{name}");
+            assert_eq!(output, canary, "{name}");
+        }
+
+        // ABI 版本不匹配。
+        let mut output = vec![0xA5_u8; 64];
+        let canary = output.clone();
+        let mut output_len = usize::MAX;
+        // SAFETY: 指针来自有效 Vec;仅 abi_version 不匹配。
+        let status = unsafe {
+            call_fluid_rescan(
+                ABI_VERSION + 1,
+                &valid,
+                output.as_mut_ptr(),
+                output.len(),
+                &mut output_len,
+            )
+        };
+        assert_eq!(status, MORNLEA_STATUS_ABI_VERSION);
+        assert_eq!(output_len, 0);
+        assert_eq!(output, canary);
+
+        // input/output 别名。
+        let mut shared = valid.clone();
+        let mut output_len = usize::MAX;
+        // SAFETY: 指针来自有效 Vec,刻意把输出指向输入缓冲以验证别名拒绝。
+        let status = unsafe {
+            mornlea_fluid_rescan(
+                ABI_VERSION,
+                shared.as_ptr(),
+                shared.len(),
+                shared.as_mut_ptr(),
+                shared.len(),
+                &mut output_len,
+            )
+        };
+        assert_eq!(status, MORNLEA_STATUS_INVALID_ARGUMENT);
+        assert_eq!(output_len, 0);
+        assert_eq!(shared, valid);
+    }
+
+    #[test]
+    fn fluid_rescan_pointer_arguments_are_atomic() {
+        let input = fluid_rescan_test_box().build();
+        let mut output = vec![0xA5_u8; 64];
+        let canary = output.clone();
+        let mut output_len = usize::MAX;
+
+        // 空输入指针。
+        // SAFETY: 其余指针来自有效 Vec;仅验证空输入指针的拒绝路径。
+        let mut status = unsafe {
+            mornlea_fluid_rescan(
+                ABI_VERSION,
+                std::ptr::null(),
+                input.len(),
+                output.as_mut_ptr(),
+                output.len(),
+                &mut output_len,
+            )
+        };
+        assert_eq!(status, MORNLEA_STATUS_INVALID_ARGUMENT);
+        assert_eq!(output_len, 0);
+
+        // 空输出指针。
+        // SAFETY: 输入指针来自有效 Vec;仅验证空输出指针的拒绝路径。
+        status = unsafe {
+            mornlea_fluid_rescan(
+                ABI_VERSION,
+                input.as_ptr(),
+                input.len(),
+                std::ptr::null_mut(),
+                0,
+                &mut output_len,
+            )
+        };
+        assert_eq!(status, MORNLEA_STATUS_INVALID_ARGUMENT);
+        assert_eq!(output_len, 0);
+
+        // 空输出长度指针:必须在任何写入前拒绝。
+        // SAFETY: 指针来自有效 Vec;仅验证空 metadata 指针的拒绝路径。
+        status = unsafe {
+            mornlea_fluid_rescan(
+                ABI_VERSION,
+                input.as_ptr(),
+                input.len(),
+                output.as_mut_ptr(),
+                output.len(),
+                std::ptr::null_mut(),
+            )
+        };
+        assert_eq!(status, MORNLEA_STATUS_INVALID_ARGUMENT);
+        assert_eq!(output, canary);
+    }
+
+    #[test]
+    fn fluid_rescan_panic_is_contained_without_output() {
+        let input = fluid_rescan_test_box().build();
+        let mut output = vec![0xA5_u8; 64];
+        let canary = output.clone();
+        let mut output_len = usize::MAX;
+        // SAFETY: 指针来自有效 Vec;scanner 注入 panic 验证收敛为 status 9。
+        let status = unsafe {
+            fluid_rescan_with(
+                ABI_VERSION,
+                input.as_ptr(),
+                input.len(),
+                output.as_mut_ptr(),
+                output.len(),
+                &mut output_len,
+                |_| panic!("测试 panic"),
+            )
+        };
+        assert_eq!(status, MORNLEA_STATUS_PANIC);
+        assert_eq!(output_len, 0);
+        assert_eq!(output, canary);
     }
 }

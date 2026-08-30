@@ -3,6 +3,7 @@
 package nativeabi
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -25,8 +26,8 @@ func TestABIValuesMatchEngineContract(t *testing.T) {
 	// 显式钉住 v9：上面的相等断言在 header 与 dylib 同源时恒真（二者一起停在
 	// 旧版本不会被发现），本条把「本次布局扩容确实升了版」变成可执行契约。
 	// v9 承载流体双内核 mornlea_fluid_eval_batch（批量单格规则求值）与
-	// mornlea_fluid_rescan（重扫扫描，声明随后续任务追加）——rust-engine-fluid
-	// 变更；既有入口签名与语义不变。
+	// mornlea_fluid_rescan（重扫扫描内核）——rust-engine-fluid 变更；既有
+	// 入口签名与语义不变。
 	if ABIVersion != 9 {
 		t.Fatalf("engine ABI=%d，想要 9", ABIVersion)
 	}
@@ -106,6 +107,8 @@ func TestEngineCgoDirectivesArePresent(t *testing.T) {
 		"#cgo nocallback mornlea_lod_shell",
 		"#cgo noescape mornlea_fluid_eval_batch",
 		"#cgo nocallback mornlea_fluid_eval_batch",
+		"#cgo noescape mornlea_fluid_rescan",
+		"#cgo nocallback mornlea_fluid_rescan",
 	} {
 		if !strings.Contains(string(contents), directive) {
 			t.Errorf("缺少 %s", directive)
@@ -944,5 +947,120 @@ func TestFluidEvalStatusPanicTextIsStable(t *testing.T) {
 		if got := fluidEvalStatusPanicText(test.status); got != test.want {
 			t.Fatalf("status %d panic=%q，想要 %q", test.status, got, test.want)
 		}
+	}
+}
+
+// testFluidRescanInput 手编最小 MFL1 v1 输入盒(方块编号是协议稳定值,
+// 与 internal/core/block.go 的 iota 实测一致:空气 0、石头 2、源 27、
+// 流动水 27+N),刻意不复用绑定侧任何算式:
+//
+//	header:layout_version=1、中心区块 (-2,3)、全区块列扫描
+//	  (x0=1..x1=16、z0=1..z1=16)、start_section=0、budget 充裕;
+//	段 0..5、7..23:均匀石头(各计 1;段 5 在密集段与源段之间充当
+//	  「下方区段」,保持均匀以成全区段级不动点);
+//	段 4:密集,除 (lx=2,y16=3,lz=5) = 30(等级 3 流动水)外全石 →
+//	  产出世界坐标 (-30, 3, 53),逐格计 4096;
+//	段 6:均匀源 + 下方均匀石 + 四邻元数据均匀石 → 区段级不动点,计 1;
+//	裙边 68 列 × 384 u16 与元数据 9×24×3B:全均匀石。
+//
+// 期望:positions = [(-30,3,53)],spent = 4+4096+2+17 = 4119,done = 1。
+func testFluidRescanInput() []byte {
+	input := make([]byte, 0, 26+23*4+8194+68*384*2+9*24*3)
+	centerX := int32(-2)
+	centerZ := int32(3)
+	input = binary.LittleEndian.AppendUint32(input, 1)               // layout_version
+	input = binary.LittleEndian.AppendUint32(input, uint32(centerX)) // center_chunk_x
+	input = binary.LittleEndian.AppendUint32(input, uint32(centerZ)) // center_chunk_z
+	input = binary.LittleEndian.AppendUint16(input, 1)               // x0
+	input = binary.LittleEndian.AppendUint16(input, 16)              // x1
+	input = binary.LittleEndian.AppendUint16(input, 1)               // z0
+	input = binary.LittleEndian.AppendUint16(input, 16)              // z1
+	input = append(input, 0)                                         // start_section
+	input = append(input, 0)                                         // reserved
+	input = binary.LittleEndian.AppendUint32(input, 65536)           // budget
+	for section := 0; section < 24; section++ {
+		switch section {
+		case 4:
+			// 密集段:kind=1 + pad + 4096×u16(区段内序 x + z*16 + y16*256)。
+			dense := bytes.Repeat([]byte{2, 0}, 4096)
+			// (lx=2, y16=3, lz=5) → 区段内序 2 + 5*16 + 3*256 = 850。
+			binary.LittleEndian.PutUint16(dense[850*2:], 30)
+			input = append(input, 1, 0)
+			input = append(input, dense...)
+		default:
+			// 均匀段:kind=0 + pad + uniform_id;段 5 是源,其余是石头。
+			id := uint16(2)
+			if section == 6 {
+				id = 27
+			}
+			input = append(input, 0, 0)
+			input = binary.LittleEndian.AppendUint16(input, id)
+		}
+	}
+	// 裙边 68 列 × 384 u16:全石。
+	input = append(input, bytes.Repeat([]byte{2, 0}, 68*384)...)
+	// 元数据 9 区块 × 24 区段 × 3B:全均匀石。
+	input = append(input, bytes.Repeat([]byte{1, 2, 0}, 9*24)...)
+	return input
+}
+
+func TestFluidRescanBinding(t *testing.T) {
+	input := testFluidRescanInput()
+	output := make([]byte, 20)
+	status, written := FluidRescan(input, output)
+	if status != StatusOK || written != 20 {
+		t.Fatalf("status/written=%d/%d，想要 OK/20", status, written)
+	}
+	// 坐标 (-30, 3, 53):x 为负,按二进制补码读回 int32。
+	if x := int32(binary.LittleEndian.Uint32(output[0:4])); x != -30 {
+		t.Fatalf("x=%d，想要 -30", x)
+	}
+	if y := int32(binary.LittleEndian.Uint32(output[4:8])); y != 3 {
+		t.Fatalf("y=%d，想要 3", y)
+	}
+	if z := int32(binary.LittleEndian.Uint32(output[8:12])); z != 53 {
+		t.Fatalf("z=%d，想要 53", z)
+	}
+	// spent = 22(均匀石)+ 4096(密集逐格)+ 1(密封源段)。
+	if spent := binary.LittleEndian.Uint32(output[12:16]); spent != 4119 {
+		t.Fatalf("spent=%d，想要 4119", spent)
+	}
+	if done := output[16]; done != 1 {
+		t.Fatalf("done=%d，想要 1", done)
+	}
+	if pad := output[17:20]; !slices.Equal(pad, []byte{0, 0, 0}) {
+		t.Fatalf("summary pad=% X，想要 0", pad)
+	}
+
+	// 两段式容量探测:容量不足 → OUTPUT_OVERFLOW + 所需字节数,输出不被
+	// 触碰;扩容到精确容量重试即成功且字节一致。
+	tiny := make([]byte, 1)
+	status, needed := FluidRescan(input, tiny)
+	if status != StatusOutputOverflow || needed != 20 || tiny[0] != 0 {
+		t.Fatalf("probe status/needed=%d/%d，想要 overflow/20", status, needed)
+	}
+	exact := make([]byte, needed)
+	if status, written := FluidRescan(input, exact); status != StatusOK || written != needed || !slices.Equal(exact, output) {
+		t.Fatalf("retry status/written=%d/%d", status, written)
+	}
+
+	// 失败原子性:layout_version=2 按 INPUT 拒绝且不触碰输出(本绑定直接
+	// 返回状态,panic 包装由 internal/fluid 的调用方负责)。
+	canary := make([]byte, 20)
+	for i := range canary {
+		canary[i] = 0xA5
+	}
+	badVersion := slices.Clone(input)
+	binary.LittleEndian.PutUint32(badVersion[0:4], 2)
+	if status, written := FluidRescan(badVersion, canary); status != StatusInput || written != 0 {
+		t.Fatalf("bad version status/written=%d/%d，想要 INPUT/0", status, written)
+	}
+	if !slices.Equal(canary, slices.Repeat([]byte{0xA5}, 20)) {
+		t.Fatal("失败调用修改了 caller-owned output")
+	}
+
+	// 空输入指针按参数非法拒绝(其余状态语义与既有导出一致)。
+	if status, written := FluidRescan(nil, canary); status != StatusInvalidArgument || written != 0 {
+		t.Fatalf("nil input status/written=%d/%d，想要 INVALID_ARGUMENT/0", status, written)
 	}
 }

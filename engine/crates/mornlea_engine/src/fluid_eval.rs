@@ -39,12 +39,15 @@ const MAX_FLUID_LEVEL: u8 = 7;
 // 方块编号是协议稳定值,与 Go `internal/core/block.go` 的 iota 逐一对应
 // (两侧注释互指;该文件明确约定这些编号只能追加、不能重排,故此处固化为
 // 字面量是安全的,数值已于实现时用 Go 侧实测钉位):
-// Air=0、Stone=2、WaterSource=27..WaterLevel7=34(流体 8 连号,
+// Air=0、Barrier=1、Stone=2、WaterSource=27..WaterLevel7=34(流体 8 连号,
 // WaterLevelN == WaterSource+N)、WheatStage0..7=37..44、Workbench=45、
 // PotatoStage0..7=46..53、CarrotStage0..7=54..61、门下半 62..69
 // (南/西/北/东 × 关/开,开态 = 63/65/67/69)、门上半 70。
-const AIR: u16 = 0;
-const WATER_SOURCE: u16 = 27;
+pub(crate) const AIR: u16 = 0;
+/// Barrier:越界/未就绪世界读的替身,重扫 kernel 与 Go `fluidRescanBlockAt`
+/// 共用同一语义(Barrier 不可替换,视作密封)。
+pub(crate) const BARRIER: u16 = 1;
+pub(crate) const WATER_SOURCE: u16 = 27;
 const WATER_LEVEL_7: u16 = 34;
 const WHEAT_STAGE_0: u16 = 37;
 const WHEAT_STAGE_7: u16 = 44;
@@ -60,7 +63,7 @@ const DOOR_LOWER_EAST_OPEN: u16 = 69;
 const DOOR_UPPER: u16 = 70;
 
 /// 镜像 Go `core.IsFluid`:流体 = 源 + 7 档流动水,共 8 个连续编号。
-fn is_fluid(id: u16) -> bool {
+pub(crate) fn is_fluid(id: u16) -> bool {
     (WATER_SOURCE..=WATER_LEVEL_7).contains(&id)
 }
 
@@ -101,7 +104,8 @@ fn is_door_open_lower(id: u16) -> bool {
 ///
 /// `new_level` 由调用方按当前传播算出(垂直恒为 1,水平为 N+1),本函数只做
 /// 纯比较;作物冲毁后的掉落结算是权威写入侧(Go sim)的职责,kernel 不感知。
-fn replaceable(target: u16, new_level: u8) -> bool {
+/// 重扫 kernel 以 `replaceable(id, 1)` 复用本表做密封(不动点)判定。
+pub(crate) fn replaceable(target: u16, new_level: u8) -> bool {
     if target == AIR {
         return true;
     }
@@ -297,10 +301,12 @@ mod tests {
     #[test]
     fn block_id_constants_match_go_core() {
         // 方块编号钉位:这些数值与 Go `internal/core/block.go` 的 iota 实测值
-        // 逐一对应(源 27、流动水 28..34、麦 37..44、工作台 45、马铃薯
-        // 46..53、胡萝卜 54..61、下半门 62..69、上半门 70)。重排即破坏协议
-        // 稳定契约,本断言负责在 Rust 侧被误改时报警。
+        // 逐一对应(空气 0、Barrier 1、石头 2、源 27、流动水 28..34、麦
+        // 37..44、工作台 45、马铃薯 46..53、胡萝卜 54..61、下半门 62..69、
+        // 上半门 70)。重排即破坏协议稳定契约,本断言负责在 Rust 侧被误改
+        // 时报警。
         assert_eq!(AIR, 0);
+        assert_eq!(BARRIER, 1);
         assert_eq!(WATER_SOURCE, 27);
         assert_eq!(WATER_SOURCE + 1, 28);
         assert_eq!(WATER_LEVEL_7, 34);

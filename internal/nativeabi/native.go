@@ -24,6 +24,8 @@ package nativeabi
 #cgo nocallback mornlea_lod_shell
 #cgo noescape mornlea_fluid_eval_batch
 #cgo nocallback mornlea_fluid_eval_batch
+#cgo noescape mornlea_fluid_rescan
+#cgo nocallback mornlea_fluid_rescan
 #include "mornlea_engine.h"
 */
 import "C"
@@ -401,4 +403,25 @@ func fluidEvalStatusPanicText(status Status) string {
 	default:
 		return "nativeabi: fluid eval 未知状态"
 	}
+}
+
+// FluidRescan 把调用方拥有的 fluid rescan input 与 output 传给 engine。
+// 返回状态与写入 output 的字节数;OUTPUT_OVERFLOW 时 *output_len 为所需
+// 容量且 output 未被触碰,由调用方扩容重试。其余非 OK 状态由调用方以
+// 稳定中文文案 panic(见 internal/fluid 的包装)。
+func FluidRescan(input, output []byte) (Status, int) {
+	return fluidRescanVersion(ABIVersion, input, output)
+}
+
+func fluidRescanVersion(version uint32, input, output []byte) (Status, int) {
+	var outputLen C.size_t
+	status := C.mornlea_fluid_rescan(
+		C.uint32_t(version),
+		(*C.uint8_t)(unsafe.Pointer(unsafe.SliceData(input))),
+		C.size_t(len(input)),
+		(*C.uint8_t)(unsafe.Pointer(unsafe.SliceData(output))),
+		C.size_t(len(output)),
+		&outputLen,
+	)
+	return Status(status), int(outputLen)
 }
