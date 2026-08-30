@@ -100,3 +100,43 @@
   `go test ./internal/archcheck -count=1` 均通过；所有 Task 1 strict validation 均为
   `openspec validate --all --strict --no-interactive` 78 passed、0 failed，target diff
   check 无输出。
+
+## Task 2 Independent Review Record
+
+- Implementer：`01a05084-0244-7ca0-acba-9ffe027a2c2a`。
+- Independent reviewer：`01a0508d-02c1-7ad1-9d37-5dd6bbe06258`。
+- BASE：`e3c2057c8f5def699a3f798271d0233a078e7dc5`。
+- RED：先挂载 `render::world_tests` 且目标模块尚不存在，再运行
+  `cd engine && cargo test -p mornlea_client --locked render::world_tests`；退出 101，
+  `world_tests.rs:1` 报 `error[E0432]: unresolved import super::world`、
+  `could not find world in super`，符合缺少 `RenderWorld`/MRW1 入口的预期失败。
+- Implementation commit：`766c0de7 feat(client): add render world cache`。新增私有
+  `RenderWorld`/MRW1 parser、renderer-owned cache 字段与内部更新方法，以及状态机测试；
+  未连接 mesh、visibility、upload、frame、draw、app 或 fluid 路径。
+- Implementation GREEN：focused `render::world_tests` 退出 0，26 passed、0 failed、
+  186 filtered out；`cargo fmt --check` 退出 0 且无输出；crate regression
+  `cargo test -p mornlea_client --locked` 退出 0，212 passed、0 failed，doc-tests
+  0 passed、0 failed。
+- Initial independent review：spec verdict ❌；quality verdict Needs fixes。三个 Important
+  findings：
+  1. `world_tests.rs` 的容量测试是 vacuous：超过 4 MiB 的输入同时 magic 非法，4097 count
+     只有 header 而没有实际 records，删除对应 limit check 后测试仍可能通过。
+  2. Task 2.3 要求 property 或 fuzz 覆盖，但初始测试没有对 truncation、declared length、
+     packed word 与 palette slot 做性质式 mutation 并锁定 no panic/Invalid/atomic unchanged。
+  3. 缺少 section 与 column 在同一 reset batch 内重复 key 的 ascending、descending、equal
+     revision，以及 tombstone/upsert 两种顺序语义。
+- Fix round 1 commit：`8b4feefe test(client): strengthen render world state coverage`。容量测试
+  改为 510 条合法 direct records 组成的 otherwise-valid >4 MiB batch，以及 4097 条实际合法
+  tombstones 组成且不超过 4 MiB 的 batch；新增 deterministic property-style mutation loops，
+  以 `catch_unwind`、`Invalid` 和 snapshot 相等锁定失败语义；新增 section/column 同 batch
+  重复 key 的 revision 与 tombstone/upsert 顺序测试。新测试未暴露生产实现缺陷。
+- Fix round 1 GREEN：focused `render::world_tests` 退出 0，30 passed、0 failed、
+  186 filtered out；`cargo fmt --check` 退出 0 且无输出；crate regression
+  `cargo test -p mornlea_client --locked` 退出 0，216 passed、0 failed，doc-tests
+  0 passed、0 failed。
+- Scoped re-review：三个 Important findings 均为 ADDRESSED；没有新的 Critical/Important
+  breakage，也没有 out-of-scope observations。
+- Final scope proof：实现提交只修改
+  `engine/crates/mornlea_client/src/render/{mod.rs,world.rs,world_tests.rs}`；fix round 1 只修改
+  `world_tests.rs`。Task 2 没有修改 ABI/version/header/Go、app、`mornlea_engine`、fluid-aware
+  source、依赖或 Tasks 3–5 实现；cache 仍未接管既有 mesh/visibility/upload/frame/draw 行为。

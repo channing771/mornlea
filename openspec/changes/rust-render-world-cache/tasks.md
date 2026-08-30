@@ -7,17 +7,17 @@
 
 ## 2. 实现纯 Rust RenderWorld 与 MRW1 原子状态机
 
-- [ ] 2.1 在 `engine/crates/mornlea_client/src/render/` 先为 MRW1 的 24/32 字节布局、
+- [x] 2.1 在 `engine/crates/mornlea_client/src/render/` 先为 MRW1 的 24/32 字节布局、
   4 MiB/4096 限制、reserved、tag、payload、坐标、三态 storage、world reset 首 record、
   epoch/revision/tombstone 和非法 batch 原子失败建立 RED 测试；indexed 必须覆盖 4-bit 恰为
   256 words、8-bit 恰为 512 words、短缺/超额 word count 与尾随 bytes 的拒绝及原子性；验证：
   `cd engine && cargo test -p mornlea_client --locked render::world`。
-- [ ] 2.2 新增紧凑的 `RenderWorld` parser/cache，并在 renderer 内建立仅更新派生 cache 的
+- [x] 2.2 新增紧凑的 `RenderWorld` parser/cache，并在 renderer 内建立仅更新派生 cache 的
   内部入口；不展开 4096 block、不创建 worker/GPU pool、不接入 mesh、visibility、upload
   或 draw；验证：`cd engine && cargo test -p mornlea_client --locked render::world`。
-- [ ] 2.3 补全 malformed length、palette slot、packed word、overflow 与状态机边界的性质或
+- [x] 2.3 补全 malformed length、palette slot、packed word、overflow 与状态机边界的性质或
   fuzz 测试；验证：`cd engine && cargo test -p mornlea_client --locked`。
-- [ ] 2.4 取得该任务的单一独立 review，其报告同时包含 spec-compliance 与 quality verdict；
+- [x] 2.4 取得该任务的单一独立 review，其报告同时包含 spec-compliance 与 quality verdict；
   以定点 Cargo 测试和 `git diff --check -- engine/crates/mornlea_client/src/render` 复核，
   将 verdict 与裁决记入 `ledger.md`。
 
