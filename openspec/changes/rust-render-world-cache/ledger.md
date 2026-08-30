@@ -384,3 +384,95 @@ base 起零 diff；其 ready/spawn warmup 循环按 transport 收包时机决定
   `openspec validate --all --strict --no-interactive` 为 78 passed、0 failed（real 2.53s）；
   `openspec instructions apply --change rust-render-world-cache --json` 为 15/15、remaining 0、
   `state: all_done`（real 2.96s）；`git diff --check` 无输出（real 0.02s）。
+
+## Whole-branch Final Fix Wave：validation/docs
+
+### Final review findings 与修复范围
+
+- Whole-branch final reviewer：`01a050ea-070a-7932-b0aa-bef57a3353bf`；review range
+  `2344ca8..f8d4f87`，package `review-final-2344ca8..f8d4f87.diff`（18 commits）。初始
+  verdict 为 overall ❌、spec ❌、quality Needs fixes；本节不把它改写成 clean。
+- 两个 Important findings：transactional staging 仍深拷贝 boxed indexed/direct section
+  payload；最终 Rust representation change 后缺少同一最终实现基线的 release dylib rebuild、
+  Go ABI 与 visual 完整闭环。一个 Minor finding：active `openspec/config.yaml` context 仍写
+  client ABI v11。
+- Rust fix commit `f8d51683 perf(client): share render world section payloads` 把 indexed
+  palette/packed 与 direct packed 改为不可变 `Arc`，并以 pointer identity、release 与
+  copy-on-replacement isolation regression 锁定 shallow staging。Task 2 fix round 4 已记录
+  focused 32/32、client crate 221/221、strict clippy 与 `make rust-check` PASS。
+- 本 validation/docs wave 只把 active `openspec/config.yaml` 当前矩阵的一处 client ABI
+  v11 改为 v12，并更新本 ledger、proposal 与 ignored Task 5 report；不修改 implementation、
+  main specs 或 `tasks.md`（保持 15/15），也不 archive change。
+
+### 最终实现基线完整验证
+
+以下命令均在最终源码 HEAD
+`f8d51683a67b81bd8b0bc15f5ba4f4532b264f2d` 上逐条执行；运行时只有上述 config 一行文档
+修正。除明确标注的 changed-race failure 外均退出 0；无环境 Skip：
+
+| 命令 | 实际结果、计数与时长 |
+| --- | --- |
+| `make rust` | PASS；release profile 实际重新编译 `mornlea_client`，Cargo 4.26s、real 4.57s；重新签名 `libmornlea_engine.dylib` 与 `libmornlea_client.dylib`。 |
+| `make rust-check` | PASS；workspace fmt 与 all-target clippy `-D warnings` clean；`mornlea_client` 221 passed、0 failed、0 ignored（1.32s），`mornlea_engine` 175 passed、0 failed、0 ignored（0.59s），两 crate doc-tests 0 failed；real 3.28s。 |
+| `gofmt -w internal/client/render_world_update.go internal/client/render_world_update_test.go internal/client/render.go internal/client/render_test.go internal/client/window.go internal/client/window_test.go` | PASS；无输出、六文件零 diff；real 0.03s。 |
+| `go vet ./...` | PASS；无输出；real 1.99s。 |
+| `go test ./internal/client -race -count=1` | PASS；package 9.158s、real 10.33s。 |
+| `go test ./internal/mesh -race -count=1` | PASS；package 36.193s、real 36.74s。 |
+| `go test ./internal/archcheck -count=1` | PASS；fresh package 9.901s、real 10.53s；动态门禁接受 client ABI v12 / engine ABI v8。 |
+| `make test-race-changed` | **FAIL**；exit 2、real 256.94s。2 个改动包形成 11 包闭包：9 个 tested packages PASS、`cmd/gfxspike` no-tests；唯一失败 `internal/server/TestSwordCombatParity`，Memory velocity 3.65 / TCP 1.15、difference 2.5；server 243.726s，sim 61.749s。 |
+| `go clean -testcache` | PASS；real 0.01s；在精确 full race 前清除 Go test cache。 |
+| `go test ./... -race` | PASS；清缓存后 42 package lines：39 PASS、3 no-tests；server 229.719s、sim 62.041s、client 4.581s、mesh 35.528s、archcheck 57.765s；real 252.63s。 |
+| `make visual-check` | PASS；先再次 release build/sign（Cargo 0.29s），随后真实 GPU capture 25 场景，每场 230400 pixels，全部最大通道差 0、差异像素 0（0.0000%）；无 GPU Skip、无 golden 更新；real 82.27s。 |
+| `openspec validate --all --strict --no-interactive` | PASS；78 passed、0 failed；real 2.68s。 |
+| `git diff --check` | PASS；无输出；real 0.02s。 |
+
+### ABI、GPU、scope 与待复审裁决
+
+- `libmornlea_client.dylib` 的最终 SHA-256 为
+  `519ff7d27c69f6f79f0f3af6748e373800b0b07a011b9845c6b3f97dd254e898`。额外编译的 race
+  client test binary 依赖 `@rpath/libmornlea_client.dylib`，其 LC_RPATH 精确指向本工作树
+  `engine/target/release`；因此 Go ABI tests 消费的是本轮重建的 release dylib。额外 client
+  JSON run 记录 332 pass actions、0 skip、0 fail。
+- C header `MORNLEA_CLIENT_ABI_VERSION` 与 Rust `CLIENT_ABI_VERSION` 均为 12，Go bridge
+  使用 header macro；engine header ABI 保持 8。active OpenSpec context 现与这些代码事实一致。
+- `make visual-check` 实际执行 capture，25 个 tracked golden 均零 diff。gofmt 后 Go 文件零 diff；
+  `f8d4f87..f8d51683` 只修改 Rust `render/world.rs` 与 `world_tests.rs`。本 docs wave 不修改
+  main specs、tasks、app、protocol/schema/benchmark/fluid/kernel、hook 或 golden。
+- `make test-race-changed` 的唯一 parity failure 与随后清缓存 full race PASS 发生在同一源码
+  基线，说明该 gate 仍有调度型不稳定迹象；本 docs-only wave 不修改或绕过测试，并保留该
+  concern 供 scoped final reviewer 裁决。
+- Final review 目前**不是 clean**。change 保持 active、OpenSpec tasks 保持 15/15，等待
+  reviewer `01a050ea-070a-7932-b0aa-bef57a3353bf` 对 `f8d4f87..` fix wave 做 scoped final
+  re-review；本轮不 archive。
+
+### Parity gate fix round 2 与 final HEAD 重验
+
+- 上节 `make test-race-changed` 的真实 FAIL 保持原样，不以之后的 PASS 覆盖。诊断证明 round 1
+  只对齐 packet tail，hostile 在 readiness 期间仍受 bounded A* worker 完成时机影响，导致 sword
+  input 前的权威位置、速度与 path state 可按 scheduler 分叉。
+- Test-only fix commit `1d458865 test(server): align sword combat authority state` 在 login ready
+  后安装确定性 hostile fixture，以 `RunAtInputBoundary` 固定 input consumption boundary，并按
+  input-relative tick 比较 transcript；没有 retry、Skip、timeout inflation 或生产 server/network/
+  combat 变更。原 parity reviewer `01a050d9-ef20-7ce3-98c0-eaac06ea9eac` 判定 spec ✅、
+  quality Approved，确认 A* timing gap addressed；唯一 Minor stale comment 已由 comment-only
+  `93879482 test(server): clarify sword combat parity scope` 修正并 closed。
+- `f8d51683..93879482` 只修改 `internal/server/sword_combat_parity_test.go`。因此上一节 final
+  Rust baseline 上已经 PASS 的 `make rust`、`make rust-check`、client/mesh/archcheck race、
+  release dylib ABI proof、25-scene visual capture、OpenSpec strict 与 diff evidence 继续适用；
+  此后没有 Rust、ABI、GPU、golden、app、fluid、protocol/schema/benchmark 或 main-spec 变更。
+- 以下门禁在 final HEAD
+  `93879482990f434b2cb9d21d46daedf566764b7b` 重新逐条执行，均退出 0：
+
+| 命令 | 实际结果、计数与时长 |
+| --- | --- |
+| `make test-race-changed` | PASS；2 个改动包形成 11 包闭包，10 个 tested packages PASS、`cmd/gfxspike` no-tests；server 227.786s、sim 67.137s、app 68.625s、archcheck 61.768s、client 7.785s；real 240.30s。脚本内 release build 0.24s 并重新签名两个 dylib。 |
+| `go clean -testcache` | PASS；real 0.01s。 |
+| `go test ./... -race` | PASS；清缓存后 42 package lines：39 PASS、3 no-tests；server 223.195s、sim 50.077s、app 49.549s、archcheck 47.427s、mesh 26.793s、client 2.711s；real 243.64s。 |
+| `openspec validate --all --strict --no-interactive` | PASS；78 passed、0 failed；real 1.46s。 |
+| `git diff --check` | PASS；无输出；real 0.02s。 |
+
+- 两条 Go 门禁现均在 final HEAD PASS；此前 parity FAIL、根因、reviewed fix chain 与最终 PASS
+  均保留为连续证据。当前没有未解决 gate failure。
+- Whole-branch final review 仍**不得写成 clean**：change active、tasks 15/15、未 archive，等待
+  reviewer `01a050ea-070a-7932-b0aa-bef57a3353bf` 对包含 `f8d51683`、`1d458865`、
+  `93879482` 与本 validation/docs evidence 的 fix wave 做 scoped final re-review。
