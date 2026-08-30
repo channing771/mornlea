@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
+import idna
 import yaml
 from pydantic import (
     BaseModel,
@@ -167,41 +168,21 @@ class ProviderConfig(_StrictFrozenModel):
             return
         except ValueError:
             pass
-        if host.startswith(".") or host.endswith(".") or ".." in host:
-            raise ValueError("provider.base_url hostname must not contain empty DNS labels")
         unicode_labels = host.split(".")
         if len(unicode_labels) == 4 and all(
             label.isascii() and label.isdecimal() for label in unicode_labels
         ):
             raise ValueError("provider.base_url hostname is an invalid IPv4 address")
-        if (
-            unicodedata.normalize("NFC", host) != host
-            or unicodedata.normalize("NFKC", host) != host
-        ):
-            raise ValueError("provider.base_url hostname must use normalized IDNA text")
-        for label in unicode_labels:
-            for index, character in enumerate(label):
-                if character.isascii():
-                    continue
-                category = unicodedata.category(character)
-                if category[0] not in {"L", "M", "N"} or (index == 0 and category[0] == "M"):
-                    raise ValueError("provider.base_url hostname contains invalid IDNA characters")
         try:
-            ascii_host = host.encode("idna", errors="strict").decode("ascii")
-        except UnicodeError as error:
-            raise ValueError("provider.base_url hostname must be valid IDNA") from error
-        if len(ascii_host) > 253:
+            ascii_host = idna.encode(host.lower()).decode("ascii")
+        except idna.IDNAError as error:
+            raise ValueError("provider.base_url hostname must be valid IDNA2008") from error
+        dns_host = ascii_host[:-1] if ascii_host.endswith(".") else ascii_host
+        if not dns_host or len(dns_host) > 253:
             raise ValueError("provider.base_url hostname is too long")
-        labels = ascii_host.split(".")
+        labels = dns_host.split(".")
         if any(_DNS_LABEL.fullmatch(label) is None for label in labels):
             raise ValueError("provider.base_url hostname contains an invalid DNS label")
-        for label in labels:
-            if not label.lower().startswith("xn--"):
-                continue
-            try:
-                label.encode("ascii").decode("idna")
-            except UnicodeError as error:
-                raise ValueError("provider.base_url hostname contains invalid punycode") from error
 
     @field_validator("model")
     @classmethod
@@ -280,15 +261,13 @@ def _format_validation_fields(error: ValidationError) -> str:
 def load_config(path: str | os.PathLike[str]) -> AgentConfig:
     """加载一个 YAML mapping，并相对配置文件解析持久数据库路径。"""
 
-    config_path = Path(path).expanduser().resolve(strict=False)
     try:
+        config_path = Path(path).expanduser().resolve(strict=False)
         raw_bytes = config_path.read_bytes()
         document = raw_bytes.decode("utf-8", errors="strict")
         raw = yaml.load(document, Loader=_UniqueKeyLoader)
-    except (OSError, UnicodeError, yaml.YAMLError) as error:
-        raise ConfigError(
-            f"unable to load configuration {config_path}: invalid YAML or UTF-8"
-        ) from error
+    except (OSError, RuntimeError, UnicodeError, yaml.YAMLError):
+        raise ConfigError("unable to load configuration: invalid path, YAML, or UTF-8") from None
     if type(raw) is not dict:
         raise ConfigError("configuration root must be a single YAML mapping")
     try:

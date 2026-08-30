@@ -28,6 +28,34 @@ HEAVY_IMPORTS = {
     "starlette",
     "uvicorn",
 }
+DYNAMIC_SEAM_LAYERS = {"cli", "app"}
+LOCAL_ALLOWED = {
+    "root": set(),
+    "domain": {"domain"},
+    "config": set(),
+    "harness": {"domain", "harness"},
+    "adapters": {"domain", "adapters"},
+    "storage": {"domain", "storage"},
+    "app": {"config", "domain", "harness", "adapters", "storage", "app"},
+    "cli": {"root", "config", "app", "cli"},
+}
+THIRD_PARTY_ALLOWED = {
+    "root": set(),
+    "cli": set(),
+    "config": {"idna", "pydantic", "yaml"},
+    "domain": {"pydantic"},
+    "harness": {"langchain_core", "langgraph", "pydantic"},
+    "adapters": {
+        "httpx",
+        "langchain_core",
+        "langchain_mcp_adapters",
+        "langchain_openai",
+        "mcp",
+        "pydantic",
+    },
+    "storage": {"aiosqlite", "pydantic"},
+    "app": {"fastapi", "pydantic", "starlette", "uvicorn"},
+}
 
 
 @dataclass(frozen=True)
@@ -57,105 +85,33 @@ def _resolve_from(source: str, level: int, module: str | None, *, is_package: bo
     return ".".join((*base, *(module.split(".") if module else ())))
 
 
-def _is_import_callable(
-    node: ast.expr,
-    importlib_aliases: set[str],
-    builtins_aliases: set[str],
-    callable_aliases: set[str],
-) -> bool:
-    if isinstance(node, ast.Name):
-        return node.id in callable_aliases
-    if isinstance(node, ast.Attribute):
-        if not isinstance(node.value, ast.Name):
-            return False
-        return (node.value.id in importlib_aliases and node.attr == "import_module") or (
-            node.value.id in builtins_aliases and node.attr == "__import__"
-        )
-    if (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "getattr"
-        and len(node.args) >= 2
-        and isinstance(node.args[0], ast.Name)
-    ):
-        module = node.args[0].id
-        name = _constant_string(node.args[1])
-        if module in importlib_aliases:
-            return name in {None, "import_module"}
-        if module in builtins_aliases:
-            return name in {None, "__import__"}
-    if (
-        isinstance(node, ast.Subscript)
-        and isinstance(node.value, ast.Attribute)
-        and node.value.attr == "__dict__"
-        and isinstance(node.value.value, ast.Name)
-    ):
-        module = node.value.value.id
-        name = _constant_string(node.slice)
-        if module in importlib_aliases:
-            return name in {None, "import_module"}
-        if module in builtins_aliases:
-            return name in {None, "__import__"}
-    return False
-
-
-def _constant_string(node: ast.expr) -> str | None:
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        left = _constant_string(node.left)
-        right = _constant_string(node.right)
-        if left is not None and right is not None:
-            return left + right
-    return None
-
-
-def _dynamic_import_bindings(tree: ast.AST) -> tuple[set[str], set[str], set[str]]:
-    importlib_aliases: set[str] = set()
-    builtins_aliases: set[str] = set()
-    callable_aliases: set[str] = {"__import__"}
-    assignments: list[tuple[list[ast.expr], ast.expr]] = []
+def _dynamic_surface_errors(tree: ast.AST, source: str) -> list[str]:
+    source_layer = _layer(source)
+    if source_layer in DYNAMIC_SEAM_LAYERS:
+        return []
+    errors: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name == "importlib":
-                    importlib_aliases.add(alias.asname or alias.name)
-                if alias.name == "builtins":
-                    builtins_aliases.add(alias.asname or alias.name)
-        elif isinstance(node, ast.ImportFrom):
-            for alias in node.names:
-                if node.module == "importlib" and alias.name == "import_module":
-                    callable_aliases.add(alias.asname or alias.name)
-                if node.module == "builtins" and alias.name == "__import__":
-                    callable_aliases.add(alias.asname or alias.name)
-        elif isinstance(node, ast.Assign):
-            assignments.append((list(node.targets), node.value))
-        elif isinstance(node, ast.AnnAssign) and node.value is not None:
-            assignments.append(([node.target], node.value))
-    changed = True
-    while changed:
-        changed = False
-        for targets, value in assignments:
-            for target in targets:
-                if not isinstance(target, ast.Name):
-                    continue
-                if isinstance(value, ast.Name) and value.id in importlib_aliases:
-                    if target.id not in importlib_aliases:
-                        importlib_aliases.add(target.id)
-                        changed = True
-                if isinstance(value, ast.Name) and value.id in builtins_aliases:
-                    if target.id not in builtins_aliases:
-                        builtins_aliases.add(target.id)
-                        changed = True
-                if (
-                    _is_import_callable(
-                        value, importlib_aliases, builtins_aliases, callable_aliases
+                if alias.name.split(".", 1)[0] in {"builtins", "importlib"}:
+                    errors.append(
+                        f"{source}:{node.lineno}: dynamic import surface forbidden "
+                        f"in {source_layer}"
                     )
-                    and target.id not in callable_aliases
-                ):
-                    callable_aliases.add(target.id)
-                    changed = True
-    return importlib_aliases, builtins_aliases, callable_aliases
+        elif isinstance(node, ast.ImportFrom):
+            if (node.module or "").split(".", 1)[0] in {"builtins", "importlib"}:
+                errors.append(
+                    f"{source}:{node.lineno}: dynamic import surface forbidden in {source_layer}"
+                )
+        elif (
+            isinstance(node, ast.Name)
+            and isinstance(node.ctx, ast.Load)
+            and node.id == "__import__"
+        ):
+            errors.append(
+                f"{source}:{node.lineno}: dynamic import surface forbidden in {source_layer}"
+            )
+    return errors
 
 
 def _scan(package_root: Path = PACKAGE_ROOT) -> tuple[list[ImportEdge], list[str]]:
@@ -169,26 +125,13 @@ def _scan(package_root: Path = PACKAGE_ROOT) -> tuple[list[ImportEdge], list[str
             errors.append(f"{path}:{getattr(error, 'lineno', 0)}: {error}")
             continue
         is_package = path.name == "__init__.py"
-        importlib_aliases, builtins_aliases, callable_aliases = _dynamic_import_bindings(tree)
+        errors.extend(_dynamic_surface_errors(tree, source))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 edges.extend(ImportEdge(source, alias.name, node.lineno) for alias in node.names)
             elif isinstance(node, ast.ImportFrom):
                 target = _resolve_from(source, node.level, node.module, is_package=is_package)
                 edges.append(ImportEdge(source, target, node.lineno))
-            elif isinstance(node, ast.Call):
-                if not _is_import_callable(
-                    node.func, importlib_aliases, builtins_aliases, callable_aliases
-                ):
-                    continue
-                if (
-                    node.args
-                    and isinstance(node.args[0], ast.Constant)
-                    and isinstance(node.args[0].value, str)
-                ):
-                    edges.append(ImportEdge(source, node.args[0].value, node.lineno))
-                else:
-                    edges.append(ImportEdge(source, "<unresolved-dynamic-import>", node.lineno))
     return edges, errors
 
 
@@ -207,16 +150,6 @@ def _layer(module: str) -> str:
 
 def _boundary_errors(package_root: Path = PACKAGE_ROOT) -> list[str]:
     edges, errors = _scan(package_root)
-    allowed_local = {
-        "root": set(),
-        "domain": {"domain"},
-        "config": set(),
-        "harness": {"domain", "harness"},
-        "adapters": {"domain", "adapters"},
-        "storage": {"domain", "storage"},
-        "app": {"config", "domain", "harness", "adapters", "storage", "app"},
-        "cli": {"root", "config", "app", "cli"},
-    }
     for edge in edges:
         source_layer = _layer(edge.source)
         target_layer = _layer(edge.target)
@@ -226,13 +159,18 @@ def _boundary_errors(package_root: Path = PACKAGE_ROOT) -> list[str]:
         if target_layer.startswith("unknown:"):
             errors.append(f"{edge.source}:{edge.line}: unknown target layer {edge.target}")
             continue
-        if edge.target == "<unresolved-dynamic-import>":
-            errors.append(f"{edge.source}:{edge.line}: unresolved dynamic import")
-            continue
         target_root = edge.target.split(".", 1)[0]
-        if source_layer in {"root", "domain", "config"} and target_root in HEAVY_IMPORTS:
-            errors.append(f"{edge.source}:{edge.line}: eager heavy import {edge.target}")
-        if target_layer != "external" and target_layer not in allowed_local[source_layer]:
+        if target_layer == "external":
+            if (
+                target_root not in sys.stdlib_module_names
+                and target_root not in THIRD_PARTY_ALLOWED[source_layer]
+            ):
+                errors.append(
+                    f"{edge.source}:{edge.line}: forbidden external dependency "
+                    f"{source_layer}->{edge.target}"
+                )
+            continue
+        if target_layer not in LOCAL_ALLOWED[source_layer]:
             errors.append(f"{edge.source}:{edge.line}: forbidden {source_layer}->{target_layer}")
     for path in sorted(package_root.iterdir()):
         if path.name in {"__init__.py", "__main__.py", "__pycache__"}:
@@ -275,7 +213,7 @@ def test_scanner_rejects_dynamic_boundary_bypasses(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     errors = _boundary_errors(package)
-    assert any("eager heavy import fastapi" in error for error in errors)
+    assert any("dynamic import surface" in error for error in errors)
 
 
 @pytest.mark.parametrize(
@@ -298,7 +236,106 @@ def test_scanner_rejects_common_dynamic_import_aliases(tmp_path: Path, source: s
     (package / "domain").mkdir(parents=True)
     (package / "domain/__init__.py").write_text(source, encoding="utf-8")
     errors = _boundary_errors(package)
-    assert any("eager heavy import fastapi" in error for error in errors), errors
+    assert any("dynamic import surface" in error for error in errors), errors
+
+
+@pytest.mark.parametrize(
+    ("layer", "source"),
+    [
+        (
+            "domain",
+            "from functools import partial\n"
+            "from importlib import import_module\n"
+            'load = partial(import_module, "fastapi")\n'
+            "load()\n",
+        ),
+        ("config", 'load = (__import__,)[0]\nload("fastapi")\n'),
+        ("harness", "def load(loader=__import__):\n    return loader('fastapi')\n"),
+    ],
+)
+def test_protected_layers_forbid_dynamic_import_surfaces(
+    tmp_path: Path, layer: str, source: str
+) -> None:
+    package = tmp_path / PACKAGE_NAME
+    target = package / (f"{layer}.py" if layer == "config" else f"{layer}/__init__.py")
+    target.parent.mkdir(parents=True)
+    target.write_text(source, encoding="utf-8")
+    errors = _boundary_errors(package)
+    assert any("dynamic import surface" in error for error in errors), errors
+
+
+@pytest.mark.parametrize(
+    ("layer", "module"),
+    [
+        ("harness", "fastapi"),
+        ("harness", "uvicorn"),
+        ("harness", "starlette"),
+        ("harness", "mornlea_companion_agent.adapters"),
+        ("harness", "mornlea_companion_agent.storage"),
+        ("harness", "langchain_openai"),
+        ("harness", "mcp"),
+        ("adapters", "aiosqlite"),
+        ("adapters", "fastapi"),
+        ("adapters", "mornlea_companion_agent.storage"),
+        ("storage", "httpx"),
+        ("storage", "langgraph"),
+        ("storage", "mornlea_companion_agent.adapters"),
+    ],
+)
+def test_future_layers_reject_out_of_role_dependencies(
+    tmp_path: Path, layer: str, module: str
+) -> None:
+    package = tmp_path / PACKAGE_NAME
+    target = package / f"{layer}/__init__.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(f"import {module}\n", encoding="utf-8")
+    errors = _boundary_errors(package)
+    assert any("forbidden" in error for error in errors), errors
+
+
+@pytest.mark.parametrize(
+    ("layer", "module"),
+    [
+        ("harness", "langgraph"),
+        ("harness", "langchain_core"),
+        ("harness", "mornlea_companion_agent.domain"),
+        ("adapters", "httpx"),
+        ("adapters", "langchain_openai"),
+        ("adapters", "langchain_mcp_adapters"),
+        ("adapters", "mcp"),
+        ("storage", "aiosqlite"),
+        ("storage", "sqlite3"),
+    ],
+)
+def test_future_layers_allow_role_specific_dependencies(
+    tmp_path: Path, layer: str, module: str
+) -> None:
+    package = tmp_path / PACKAGE_NAME
+    target = package / f"{layer}/__init__.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(f"import {module}\n", encoding="utf-8")
+    assert _boundary_errors(package) == []
+
+
+def test_unknown_third_party_dependency_is_rejected_by_default(tmp_path: Path) -> None:
+    package = tmp_path / PACKAGE_NAME
+    (package / "harness").mkdir(parents=True)
+    (package / "harness/__init__.py").write_text("import requests\n", encoding="utf-8")
+    errors = _boundary_errors(package)
+    assert any("forbidden external dependency harness->requests" in error for error in errors)
+
+
+@pytest.mark.parametrize("relative", ["cli.py", "app.py"])
+def test_composition_layers_are_the_only_dynamic_import_seams(
+    tmp_path: Path, relative: str
+) -> None:
+    package = tmp_path / PACKAGE_NAME
+    package.mkdir(parents=True)
+    (package / relative).write_text(
+        'from importlib import import_module\nimport_module("mornlea_companion_agent.app")\n',
+        encoding="utf-8",
+    )
+    assert _boundary_errors(package) == []
 
 
 @pytest.mark.parametrize("relative", ["__escape.py", "__escape/__init__.py"])

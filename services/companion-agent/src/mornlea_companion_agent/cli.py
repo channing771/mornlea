@@ -51,10 +51,13 @@ def main(argv: Sequence[str] | None = None, *, serve_runner: ServeRunner | None 
             return 0
         raise
     if arguments.command == "serve":
-        from mornlea_companion_agent.config import load_config, resolve_secrets
+        from mornlea_companion_agent.config import ConfigError, load_config, resolve_secrets
 
-        config = load_config(arguments.config)
-        secrets = resolve_secrets(config)
+        try:
+            config = load_config(arguments.config)
+            secrets = resolve_secrets(config)
+        except ConfigError as error:
+            parser.error(str(error))
         runner = serve_runner if serve_runner is not None else _load_serve_runner()
         return runner(config, secrets)
     parser.error("unknown command")

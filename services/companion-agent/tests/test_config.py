@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -158,6 +160,27 @@ def test_sqlite_path_symlink_loop_becomes_redacted_config_error(tmp_path: Path) 
     assert "symlink" not in str(captured.value).lower()
 
 
+def test_config_path_symlink_loop_is_a_controlled_cli_error(tmp_path: Path) -> None:
+    loop = tmp_path / "agent.yaml"
+    try:
+        loop.symlink_to(loop.name)
+    except (NotImplementedError, OSError) as error:
+        pytest.skip(f"symlink unavailable: {error}")
+
+    with pytest.raises(ConfigError, match="unable to load configuration"):
+        load_config(loop)
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "mornlea_companion_agent", "serve", "--config", os.fspath(loop)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 2
+    assert "unable to load configuration" in completed.stderr
+    assert "Traceback" not in completed.stderr
+
+
 @pytest.mark.parametrize(
     ("old", "new", "field"),
     [
@@ -206,7 +229,6 @@ def test_provider_base_url_rejects_unsafe_shapes(tmp_path: Path, url: str) -> No
         "https://bad host.example/v1",
         "https://bad..example/v1",
         "https://.example.test/v1",
-        "https://example.test./v1",
         "https://bad_label.example/v1",
         "https://-bad.example/v1",
         "https://bad-.example/v1",
@@ -258,9 +280,41 @@ def test_provider_host_probes_are_rejected_by_httpx(url: str) -> None:
 @pytest.mark.parametrize(
     "url",
     [
+        "https://a\u034fb.example/v1",
+        "https://a\u0660b.example/v1",
+    ],
+)
+def test_provider_base_url_matches_httpx_idna2008_rejections(tmp_path: Path, url: str) -> None:
+    with pytest.raises(httpx.InvalidURL):
+        httpx.URL(url)
+    config_path = _replace(
+        _write_config(tmp_path / "agent.yaml"),
+        "https://models.example.test/v1",
+        json.dumps(url, ensure_ascii=False),
+    )
+    with pytest.raises(ConfigError, match="provider.base_url"):
+        load_config(config_path)
+
+
+@pytest.mark.parametrize("host", ["xn--", "xn--a.example", "xn--0.pt"])
+def test_provider_base_url_rejects_malformed_a_labels(tmp_path: Path, host: str) -> None:
+    config_path = _replace(
+        _write_config(tmp_path / "agent.yaml"),
+        "https://models.example.test/v1",
+        f"https://{host}/v1",
+    )
+    with pytest.raises(ConfigError, match="provider.base_url"):
+        load_config(config_path)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
         "https://models.example.test/v1",
         "http://127.0.0.1:11434/openai/v1",
         "https://例子.测试/v1",
+        "https://क्‍ष.com/v1",
+        "https://example.com./v1",
         "http://[::1]:11434/v1",
     ],
 )
@@ -268,6 +322,7 @@ def test_provider_base_url_accepts_openai_compatible_paths(tmp_path: Path, url: 
     config_path = _replace(
         _write_config(tmp_path / "agent.yaml"), "https://models.example.test/v1", url
     )
+    assert httpx.URL(url)
     assert load_config(config_path).provider.base_url == url
 
 
