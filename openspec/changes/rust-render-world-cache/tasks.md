@@ -158,7 +158,7 @@
   dylib-SHA 与代码注释任务编号零匹配审计、`git diff --check`、exact HEAD/final clean status；
   每项记录真实 wall time、exit status、计数与 Skip。`10f8e8ab` 的 Task 6.4 PASS 不得计入本项。
   取得未参与执行者的独立 spec/quality review，0 open 后才能勾选。
-- [ ] 6.7 由 fresh planning implementer 只修订本 change 的 `proposal.md`、唯一 delta spec、
+- [x] 6.7 由 fresh planning implementer 只修订本 change 的 `proposal.md`、唯一 delta spec、
   `design.md`、`tasks.md` 与 `ledger.md`，并写 ignored
   `task-6.7-v14-replanning-report.md`。完整记录并保留 Tasks 1–6.6 历史、17/18 exact-main
   binding failure、`bcc053e8` 无关 planning sync 与 0/18 preflight cancellation；精确审计

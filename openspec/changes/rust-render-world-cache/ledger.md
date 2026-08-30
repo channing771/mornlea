@@ -1567,3 +1567,49 @@ delta 行为契约、代码、current docs、main specs 或配置，不执行 me
 - 以上证据写入 ledger 后仍须最终重跑全部五个指定命令及 exact audit；最终 rerun、提交前 main
   复读、commit 与 tracked-clean 结果写入 ignored report，避免为了记录 commit SHA 递归改写
   tracked ledger。本轮不自行给出 planning review verdict，不勾选 Task 6.7，也不开始 Task 6.8。
+
+## Task 6.7 planning fix round 1：scoped re-review 与完成裁决
+
+### Independent re-review、finding 关闭与 controller 裁决
+
+- Independent reviewer 仍为 `01a052ca-b23b-76d1-9b90-7cedb5d7bece`；scoped re-review range
+  为 `6d69db84c7890640b8a53e683d55df6a0b81bbbf..c5b0fd377ede4d621e50d29f851365c808ff4323`。
+  该范围恰有 1 个 commit `docs(openspec): preserve app capture pump in v14 plan`、5 个既有
+  planning files、272 insertions / 63 deletions；完整 review 继续记录于 ignored
+  `.superpowers/sdd/2026-08-30-rust-render-world-main-integration/task-6.7-v14-planning-review.md`。
+- Reviewer 确认首轮 1 个 Important 已 **ADDRESSED**：修订后的 v14 planning 显式保留
+  `CaptureCoordinator`/`SetCaptureCoordinator`、菜单与游戏两处 poll 后 render 前 pump、
+  nil/idle non-blocking、single outstanding、pixels ownership、error 原样交付、7 个 app-pump
+  tests，以及四个 app paths 的 conflict/exact-zero-diff/gofmt/focused-test 审计；MRW1 仍为
+  cache-only/test-only、无 production caller，不接管其余 dev-capture 工作，rollback 保留
+  selected-main v13 capture/app-pump、engine ABI v9 与 fluid。
+- Final verdict：spec-compliance **PASS**；quality **Approved**；0 Critical、0 Important、
+  0 Minor、0 open。Reviewer 明确允许 Task 6.7 进入 bookkeeping，并允许 Task 6.8 在本次
+  bookkeeping 完成后开始；Task 6.8 仍须在 merge 前即时重读 main 并执行 D8 漂移门禁。
+- Review 时与本次 bookkeeping 开始时的 local main 均精确为
+  `9bb84c6841b59a18b030256d5952ed60acc215da`，没有新增漂移可吸收。本次只记录已通过的规划
+  裁决并勾选 Task 6.7；Tasks 6.8–6.10 保持 pending，没有开始实现、merge、rebase、archive
+  或 push，也没有修改 proposal、delta spec、design、代码、current docs、main specs、config
+  或 main。
+- Controller 接受上述 clean verdict。本次 bookkeeping implementer identity 为
+  `01a052e6-2e58-7fb2-b6ca-a4b83f09db57`；Task 6.7 现完成，预期进度为 25 total、22 complete、
+  3 remaining、`state: ready`。
+
+### Planning review bookkeeping validation
+
+- `openspec validate rust-render-world-cache --strict --no-interactive`：exit 0；输出
+  `Change 'rust-render-world-cache' is valid`。
+- `openspec validate --all --strict --no-interactive`：exit 0；80 passed、0 failed。
+- `openspec status --change rust-render-world-cache --json`：exit 0；schema `spec-driven`，
+  proposal/specs/design/tasks 四类 artifacts 全部 `done`，唯一 delta spec 路径正确，
+  `isComplete: true`。
+- `openspec instructions apply --change rust-render-world-cache --json`：exit 0；`state: ready`，
+  25 total、22 complete、3 remaining；Task 6.7 done，Tasks 6.8–6.10 保持 pending。
+- `git diff --check`：exit 0且无输出。精确 scope audit 确认 tracked working diff 恰为本 change
+  的 existing `ledger.md` 与 `tasks.md`，staged scope 为零；`tasks.md` 唯一变更是 Task 6.7
+  checkbox 从 unchecked 改为 checked。bookkeeping 前 1,569 行 ledger 的 committed/working
+  prefix SHA-256 均为 `5d546ec1cd61a1cd7361733e20de8f47a08ebb31c4c2c7582372c7618433d8c4`，
+  因而历史前缀保持逐字不变。
+- 上述证据写入 ledger 后仍须最终重跑全部五个指定命令、复读 main 并执行 exact scope/task
+  audit；最终 rerun、commit SHA 与 clean 状态写入 ignored replanning report，避免递归改写
+  tracked ledger。
