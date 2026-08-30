@@ -13,5 +13,5 @@
 | 开发流程 | [`docs/development-process.md`](development-process.md) | 任务角色、执行阶段、评审和门禁 |
 | 测试组织与快检 | [`docs/test-organization.md`](test-organization.md)、[`docs/notes/test-quickstart.md`](notes/test-quickstart.md) | 测试文件组织、分层与定点命令 |
 | 进度与 backlog | [`docs/notes/progress.md`](notes/progress.md)、[`docs/feature-backlog.md`](feature-backlog.md) | 实现编年史、当前规划与待办 |
-| Agent 自动化 | [`docs/agents/README.md`](agents/README.md) | 工作者角色、调度入口和本地状态看板 |
+| Agent 自动化 | [`docs/agents/README.md`](agents/README.md)、[`docs/notes/dev-capture.md`](notes/dev-capture.md) | 工作者角色、调度入口、本地状态看板与运行中客户端的画面捕获 |
 | 历史背景 | [`docs/superpowers/`](superpowers/)、[`openspec/changes/archive/`](../openspec/changes/archive/) | 历史设计、计划与已归档 change 证据 |

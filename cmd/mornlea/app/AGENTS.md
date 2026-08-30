@@ -2,8 +2,8 @@
 
 `cmd/mornlea/app` 承载图形客户端的运行时主体：窗口与无头两种形态的
 `Application`、输入/UI、帧循环、生命周期、音频、LOD 与消息管线。main、
-capture、benchmark 都只经本包导出面驱动它；本包不导入任何客户端兄弟子包
-（方向由 `TestClientCommandSubpackageDependencyDirections` 强制）。
+capture、benchmark、devcapture 都只经本包导出面驱动它；本包不导入任何客户端
+兄弟子包（方向由 `TestClientCommandSubpackageDependencyDirections` 强制）。
 
 ## Directory Map
 
@@ -17,6 +17,7 @@ cmd/mornlea/app/
 ├── app_render.go              # 呈现装配：HUD、名牌、覆盖层绘制
 ├── app_input.go               # 交互输入处理
 ├── interactive.go             # RunInteractive：菜单/游戏两相位交互循环
+├── dev_capture.go             # 开发捕获泵：CaptureCoordinator 注入面与 /status 原子快照访问器
 ├── app_menu.go、app_pause.go、app_settings.go、debug_panel.go  # UI 状态域
 ├── chat.go、app_messages.go   # 聊天输入与服务端消息呈现
 ├── target_block.go、damage_feedback.go、combat_feedback.go、app_metrics.go、app_audio.go、app_lod.go
@@ -53,6 +54,15 @@ cmd/mornlea/app/
   （`multiplayer_benchmark_scenario.go`，配
   `NewMultiplayerBenchmarkScenario`）。main/capture/benchmark 多方消费它们；
   任何一侧本地复制都会让固定场景互不可比。
+- 开发捕获导出面住 `dev_capture.go`：`CaptureCoordinator` 是 main 注入捕获
+  服务的消费端接口（接口声明在本包、由 `cmd/mornlea/devcapture` 实现），
+  `SetCaptureCoordinator` 供 main 在启动序列注入/清除（循环运行中并发改写是
+  调用方编程错误）；`Phase`/`WindowWidth`/`WindowHeight` 是 `/status` 观察面
+  的原子快照访问器，仅在协调器注入后由帧循环维护。泵 `pumpDevCapture` 由菜单
+  与游戏两处循环每帧各调用一次：空闲零捕获调用、待办时每帧至多捕获一次且
+  非阻塞交付，编码全部离开帧循环
+  （`TestPumpDevCaptureIdleFrameChecksPendingOnly`、
+  `TestPumpDevCaptureDeliversPendingFrameExactlyOnce`）。
 
 ## 帧驱动与加载判据 (`app/app_frame.go`, `app/app_load.go`)
 

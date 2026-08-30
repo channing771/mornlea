@@ -51,6 +51,28 @@ make agent-ui-dev
 - 数据范围：全部为本机采集（`ps`/`git`/`gh`/日志文件），无远程依赖；刷新间隔固定 5 秒。
 - gh 未登录或不可用时，PR 区自动降级为说明文字，不影响其它小节；该看板不会启动或影响任何 agent。
 
+## 开发捕获服务（可选）
+
+客户端以 `--dev-capture` 启动时会内嵌一个仅绑定回环地址的本地 HTTP 捕获服务，供 agent 观察运行中的游戏画面（世界 + HUD + WebView 菜单层）：直接 curl 拉取 PNG 截图或短录屏帧序列，无需人工截图。服务默认关闭；无头的 `--benchmark`/`--capture` 路径不可用。
+
+```bash
+# 启动交互式客户端并打开捕获服务（可与 --connect 组合；实际地址打印到 stdout）
+go run ./cmd/mornlea --dev-capture
+
+# 服务实际端口优先读发现文件（字段 pid/port/started_at，进程退出时删除）
+cat ~/.mornlea/dev-capture.json
+
+# 截图
+curl -s -o /tmp/mornlea-shot.png http://127.0.0.1:17790/screenshot
+
+# 录制 2s @ 8fps 并解包逐帧查看
+curl -s -o /tmp/mornlea-rec.zip 'http://127.0.0.1:17790/record?seconds=2&fps=8'
+unzip -d /tmp/mornlea-rec /tmp/mornlea-rec.zip
+```
+
+- 首次捕获可能触发 macOS「屏幕录制」授权弹窗；画面不含游戏窗口时检查系统设置的屏幕录制授权并重试。
+- 端点契约、录制参数上限与失败语义见 `docs/notes/dev-capture.md`。
+
 ## 每天固定时间：cron
 
 ```bash
