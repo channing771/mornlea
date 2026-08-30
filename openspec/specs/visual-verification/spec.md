@@ -190,7 +190,7 @@
 
 `materials-showcase` MUST 保持既有固定正午、固定相机和确定性夹具，并经与交互客户端相同的完整呈现链路收敛后无窗口抓取，不得创建或聚焦前台游戏窗口。夹具 MUST 同时覆盖 14 种新材料、八格连续草地、相邻玻璃、相邻树叶、原木顶面年轮与侧面树皮，以及干耕地与湿耕地各至少一个可见列（含下沉顶面的完整几何）。既有双阈值 MUST 保持不变。
 
-抓帧场景清单 MUST 按以下完整顺序运行（19 景）：`terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`water-surface-slope`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`。清单 MUST 保留 `target-block-feedback`、`oak-grove` 与 `ai-companion` 的既有名称及相对顺序，`ai-companion` MUST 继续紧随 `oak-grove`，并 MUST 保留当前尾段的 `water-surface-slope`、`main-menu`、`settings-menu`、倒数第二的 `far-horizon` 与唯一末场景 `water-underwater`。`settings-menu` MUST 紧随 `main-menu`，`target-block-feedback` MUST 使用固定正午、固定相机和确定性夹具，且经与交互客户端相同的完整呈现链路收敛后无窗口抓取。它 MUST 命中一个已注册材料方块，并同时可审查细轮廓、中文名称和正确的遮挡关系；抓帧或比对 MUST NOT 使用隐藏目标提示的专用开关。`inventory-crafting` 因打开背包而隐藏目标提示，其目标提示隐藏状态、背包与合成区域语义 MUST 保持不变；若内嵌默认材质、程序化回退或共享地形背景改变可观察像素，其 golden MAY 在逐图复核后更新。`oak-grove` MUST 使用固定世界种子、固定生成区块、固定正午和固定相机，并经与交互客户端相同的完整呈现链路收敛后无窗口抓取，不得创建或聚焦前台游戏窗口。`ai-companion` MUST 使用固定世界时间、相机、伙伴身份、维度、位置与朝向，显示中文名牌“阿木”、一条 accepted ChatEvent 和打开的 `@阿木 挖石头` 输入，并经统一的人形、名牌和聊天 HUD 呈现链路无窗口抓取。
+抓帧场景清单 MUST 按以下完整顺序运行（25 景）：`terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`hud-item-name-popup`、`avatar-nametag`、`inventory-crafting`、`workbench-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`torch-night`、`bed-night`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`sword-combat`、`hostile-mob`、`water-surface-slope`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`。清单 MUST 保留 `target-block-feedback`、`oak-grove` 与 `ai-companion` 的既有名称及相对顺序，`ai-companion` MUST 继续紧随 `oak-grove`，并 MUST 保留当前尾段的 `water-surface-slope`、`main-menu`、`settings-menu`、倒数第二的 `far-horizon` 与唯一末场景 `water-underwater`。`settings-menu` MUST 紧随 `main-menu`，`target-block-feedback` MUST 使用固定正午、固定相机和确定性夹具，且经与交互客户端相同的完整呈现链路收敛后无窗口抓取。它 MUST 命中一个已注册材料方块，并同时可审查细轮廓、中文名称和正确的遮挡关系；抓帧或比对 MUST NOT 使用隐藏目标提示的专用开关。`inventory-crafting` 因打开背包而隐藏目标提示，其目标提示隐藏状态、背包与合成区域语义 MUST 保持不变；若内嵌默认材质、程序化回退或共享地形背景改变可观察像素，其 golden MAY 在逐图复核后更新。`oak-grove` MUST 使用固定世界种子、固定生成区块、固定正午和固定相机，并经与交互客户端相同的完整呈现链路收敛后无窗口抓取，不得创建或聚焦前台游戏窗口。`ai-companion` MUST 使用固定世界时间、相机、伙伴身份、维度、位置与朝向，显示中文名牌“阿木”、一条 accepted ChatEvent 和打开的 `@阿木 挖石头` 输入，并经统一的人形、名牌和聊天 HUD 呈现链路无窗口抓帧。
 
 #### Scenario: 地形与 HUD 风格变化产生可审查基线
 
@@ -207,7 +207,7 @@
 
 - **GIVEN** 完整无窗口 capture 场景清单
 - **WHEN** 检查全部场景名称与顺序
-- **THEN** 清单 MUST 依次为 `terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`water-surface-slope`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`
+- **THEN** 清单 MUST 依次为 `terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`hud-item-name-popup`、`avatar-nametag`、`inventory-crafting`、`workbench-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`torch-night`、`bed-night`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`sword-combat`、`hostile-mob`、`water-surface-slope`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`
 - **AND** `far-horizon` MUST 是倒数第二个场景，`water-underwater` MUST 是唯一末场景
 
 #### Scenario: 生存反馈场景固定且不污染后续场景
@@ -249,15 +249,15 @@
 
 - **GIVEN** 当前分支的 Pixel Perfection HUD 与 main 的 authoritative hunger 已语义合并
 - **WHEN** 显式更新视觉基线
-- **THEN** 系统 MUST 按既有完整顺序重新生成全部 19 张正式 golden
-- **AND** 调用方 MUST 逐张人工复核全部 19 张图像后才能接受更新，且既有双阈值 MUST 保持不变
+- **THEN** 系统 MUST 按既有完整顺序重新生成全部 25 张正式 golden
+- **AND** 调用方 MUST 逐张人工复核全部 25 张图像后才能接受更新，且既有双阈值 MUST 保持不变
 
 #### Scenario: 伙伴场景与当前末尾顺序并存
 
 - **GIVEN** 完整无窗口场景清单
 - **WHEN** 检查 `target-block-feedback` 之后的场景名称与顺序
 - **THEN** `oak-grove` 与 `ai-companion` MUST 保持既有名称，且 `ai-companion` MUST 紧随 `oak-grove`
-- **AND** `water-surface-slope` MUST 位于 `ai-companion` 之后，`main-menu` 与 `settings-menu` MUST 依次相邻并位于 `far-horizon` 之前，`far-horizon` MUST 是倒数第二个场景，`water-underwater` MUST 是唯一末场景
+- **AND** `sword-combat` 与 `hostile-mob` MUST 依次位于 `ai-companion` 之后，`water-surface-slope` MUST 紧随 `hostile-mob`，`main-menu` 与 `settings-menu` MUST 依次相邻并位于 `far-horizon` 之前，`far-horizon` MUST 是倒数第二个场景，`water-underwater` MUST 是唯一末场景
 
 #### Scenario: 橡树林通过正常渲染链路抓取
 
@@ -297,15 +297,15 @@
 
 ### Requirement: 视觉基线覆盖三类容器像素界面
 
-系统 SHALL 具有恰好 21 个正式无窗口场景，`workbench-crafting` MUST 紧随 `inventory-crafting`，`chest-container` 与 `furnace-container` MUST 依次紧随 `workbench-crafting`，`torch-night` MUST 紧随 `block-light-room` 且先于 `materials-showcase`。完整顺序 MUST 为 `terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`workbench-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`torch-night`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`water-surface-slope`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`。既有显式更新、无窗口完整渲染链路和双阈值 MUST 保持不变；两张 far-horizon diagnostic controls MUST 继续不计入正式场景或 golden。golden 基线 SHALL 为 21 张：集成基线的既有 20 张（含 main 侧已补齐的 `workbench-crafting.png` 与经 F-05 再生的其余基线）加上本变更新增的 `torch-night.png`；本变更 MUST NOT 借机放宽任何阈值。
+系统 SHALL 具有恰好 25 个正式无窗口场景，`workbench-crafting` MUST 紧随 `inventory-crafting`，`chest-container` 与 `furnace-container` MUST 依次紧随 `workbench-crafting`，`torch-night` MUST 紧随 `block-light-room` 且先于 `materials-showcase`。完整顺序 MUST 为 `terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`hud-item-name-popup`、`avatar-nametag`、`inventory-crafting`、`workbench-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`torch-night`、`bed-night`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`sword-combat`、`hostile-mob`、`water-surface-slope`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`。既有显式更新、无窗口完整渲染链路和双阈值 MUST 保持不变；两张 far-horizon diagnostic controls MUST 继续不计入正式场景或 golden。golden 基线 SHALL 为 25 张正式 PNG；本变更 MUST NOT 借机放宽任何阈值。
 
-#### Scenario: 完整场景顺序固定为 19 项
+#### Scenario: 完整场景顺序固定为 25 项
 
-> 标题沿用历史名（openspec 1.7 的 MODIFIED 漂移守卫不支持 Scenario 改名）；本变更后该清单为 21 项，语义以下述断言为准。
+> 标题沿用历史名；当前清单为 25 项，语义以下述断言为准。
 
 - **GIVEN** 完整正式 capture 场景清单
 - **WHEN** 检查场景数量、名称与顺序
-- **THEN** 清单 MUST 恰好包含上述 21 项
+- **THEN** 清单 MUST 恰好包含上述 25 项
 - **AND** `workbench-crafting` MUST 紧随 `inventory-crafting` 且在 `chest-container` 之前
 - **AND** `torch-night` MUST 紧随 `block-light-room` 且在 `materials-showcase` 之前
 - **AND** `far-horizon` MUST 保持倒数第二，`water-underwater` MUST 保持唯一末项
@@ -342,8 +342,8 @@
 
 - **GIVEN** 容器 atlas、火把纹理层与全部 overlay 的最终实现已经通过聚焦测试
 - **WHEN** 显式更新视觉基线
-- **THEN** 系统 MUST 重新生成全部 21 张正式 golden，并只提交实际场景文件
-- **AND** 调用方 MUST 逐张人工复核 21 张图像后才能接受，且 MUST NOT 通过放宽双阈值接受差异
+- **THEN** 系统 MUST 重新生成全部 25 张正式 golden，并只提交实际场景文件
+- **AND** 调用方 MUST 逐张人工复核 25 张图像后才能接受，且 MUST NOT 通过放宽双阈值接受差异
 - **AND** 抓帧 MUST NOT 创建或聚焦前台游戏窗口，MUST NOT 导入、临摹或复制 Mojang 像素
 
 #### Scenario: torch-night 纳入 golden 比对
@@ -351,7 +351,7 @@
 - **GIVEN** 非更新模式运行 capture
 - **WHEN** 执行到 `torch-night`
 - **THEN** 该场景 MUST 与对应 golden 按既有双阈值比对，差异图规则与其它场景一致
-- **AND** golden 目录 MUST 存在 `torch-night.png`，正式 golden 总数 MUST 为 21 张
+- **AND** golden 目录 MUST 存在 `torch-night.png`，正式 golden 总数 MUST 为 25 张
 
 #### Scenario: 未受影响场景 golden 逐字节不变
 
@@ -481,14 +481,14 @@
 
 ### Requirement: 夜行者无窗口场景
 
-无窗口 capture 场景表 SHALL 新增 `hostile-mob` 场景，位于 `ai-companion` 之后、`water-surface-slope` 之前；`water-underwater` MUST 仍为唯一末场景、`far-horizon` MUST 仍为倒数第二。场景 MUST 装入固定夜间确定性夹具：火把边缘固定位置呈现 8 只夜行者（其中一只处于受击状态、一只处于追逐中），场景 MUST 经与交互客户端相同的完整呈现链路无窗口抓取，MUST NOT 创建或聚焦前台游戏窗口，并 MUST 继续使用既有双阈值比对。本变更 SHALL 携带该场景的 golden PNG（torch-night 先例，场景总数 21→22 口径），并在归档时把新增场景同步进主规格。
+无窗口 capture 场景表 SHALL 保留 `hostile-mob` 场景，位于新增 `sword-combat` 之后、`water-surface-slope` 之前；完整相邻顺序 MUST 为 `ai-companion`、`sword-combat`、`hostile-mob`、`water-surface-slope`。`water-underwater` MUST 仍为唯一末场景、`far-horizon` MUST 仍为倒数第二。场景 MUST 装入固定夜间确定性夹具：火把边缘固定位置呈现 8 只夜行者（其中一只处于受击状态、一只处于追逐中），场景 MUST 经与交互客户端相同的完整呈现链路无窗口抓取，MUST NOT 创建或聚焦前台游戏窗口，并 MUST 继续使用既有双阈值比对。正式场景与 golden 总数 MUST 为 25。
 
 #### Scenario: 场景表顺序与导出
 
 - **GIVEN** 完整 capture 场景表
 - **WHEN** 检查 `ai-companion` 之后的场景
-- **THEN** `hostile-mob` MUST 位于 `ai-companion` 之后、`water-surface-slope` 之前，`far-horizon` MUST 为倒数第二，`water-underwater` MUST 为唯一末场景
-- **AND** 抓帧运行 MUST 产出 `hostile-mob` 图像
+- **THEN** `hostile-mob` MUST 位于 `sword-combat` 之后、`water-surface-slope` 之前，`far-horizon` MUST 为倒数第二，`water-underwater` MUST 为唯一末场景
+- **AND** 抓帧运行 MUST 产出 `hostile-mob` 图像，正式场景总数 MUST 为 25
 
 #### Scenario: 夹具确定性且无名标
 
@@ -502,6 +502,30 @@
 - **GIVEN** `hostile-mob` 场景使用固定夜间世界时间与固定相机
 - **WHEN** 生成或比对 `hostile-mob`
 - **THEN** 抓帧 MUST 使用与交互客户端相同的完整呈现链路，MUST NOT 创建或聚焦前台游戏窗口
+
+### Requirement: sword-combat 无窗口场景固定呈现权威命中反馈
+
+无窗口 capture SHALL 新增 `sword-combat` 场景，位于 `ai-companion` 之后、`hostile-mob` 之前。场景 MUST 使用固定相机与世界时间，选中 `Durability=125` 的铁剑，通过合法 UUIDv4 远端玩家 spawn/state 镜像呈现一次权威确认后的受击者，并显示 0.35 水平击退后的姿态或位置关系及处于 6 帧窗口内的 4-quad hit marker。场景收敛后、最终帧前，`PinVolatile` MUST 重新武装 marker；场景切换的共享 reset MUST 清除 combat feedback，避免污染后续 `hostile-mob`。场景 MUST 生成并比对 `sword-combat.png`，使用既有双阈值且不得创建或聚焦前台游戏窗口。
+
+#### Scenario: 场景状态包含非满耐久铁剑、目标和 marker
+- **GIVEN** `sword-combat` 固定夹具已装入
+- **WHEN** 场景完成预热与上传并准备最终帧
+- **THEN** MUST 显示选中的 `Durability=125` 铁剑、合法远端玩家、权威 hit marker 和可观察的 0.35 水平击退关系
+
+#### Scenario: PinVolatile 在最终帧前重新武装 marker
+- **GIVEN** 场景收敛帧可能已经消耗初次 marker 窗口
+- **WHEN** capture 准备最终抓帧
+- **THEN** `PinVolatile` MUST 把 marker 重置为 6 个成功呈现帧，最终 PNG MUST 包含 marker
+
+#### Scenario: 场景切换清除 combat feedback
+- **GIVEN** `sword-combat` 已留下 combat tick 与 marker 帧数
+- **WHEN** capture 切换到 `hostile-mob`
+- **THEN** shared presentation reset MUST 清除 combat feedback，后续场景 MUST 不继承 marker 或去重状态
+
+#### Scenario: golden 只新增 sword-combat
+- **GIVEN** 现有正式 golden 已作为当前基线
+- **WHEN** 显式生成并逐图审核完整场景清单
+- **THEN** tracked golden MUST 包含 `sword-combat.png`；任何既有 PNG 变化 MUST 逐图归因并明确批准，否则不得接受
 
 ### Requirement: `bed-night` 无窗口夜景场景
 
@@ -523,7 +547,7 @@
 
 ### Requirement: 选中弹条无窗口场景
 
-无窗口 capture 场景表 SHALL 新增 `hud-item-name-popup` 场景，位于 `hud-survival-feedback` 之后、`avatar-nametag` 之前；`far-horizon` MUST 仍为倒数第二、`water-underwater` MUST 仍为唯一末场景。场景 MUST 装入确定性夹具：已确认镜像中选中栏位指向含已知中文名物品的格、确认变化所属 tick 与固定世界时间使弹条处于 40 tick 可见窗口内，且准星常显；场景 MUST 经与交互客户端相同的完整呈现链路无窗口抓取，MUST NOT 创建或聚焦前台游戏窗口，并 MUST 继续使用既有双阈值比对。本变更 SHALL 携带该场景的 golden PNG（场景总数 23→24 口径），并在归档时把新增场景同步进主规格；本变更同时 MUST 以显式基线更新重新生成受 HUD、容器面板与菜单换肤波及的全部既有 golden 并逐图人工复核，MUST NOT 通过放宽双阈值接受差异。
+无窗口 capture 场景表 SHALL 保留 `hud-item-name-popup` 场景，位于 `hud-survival-feedback` 之后、`avatar-nametag` 之前；`far-horizon` MUST 仍为倒数第二、`water-underwater` MUST 仍为唯一末场景。场景 MUST 装入确定性夹具：已确认镜像中选中栏位指向含已知中文名物品的格、确认变化所属 tick 与固定世界时间使弹条处于 40 tick 可见窗口内，且准星常显；场景 MUST 经与交互客户端相同的完整呈现链路无窗口抓取，MUST NOT 创建或聚焦前台游戏窗口，并 MUST 继续使用既有双阈值比对。正式场景与 golden 总数 MUST 为 25，本变更同时 MUST 以显式基线更新重新生成受 HUD、容器面板与菜单换肤波及的全部既有 golden 并逐图人工复核，MUST NOT 通过放宽双阈值接受差异。
 
 #### Scenario: 场景表顺序与导出
 
