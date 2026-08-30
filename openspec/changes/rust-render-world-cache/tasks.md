@@ -81,7 +81,7 @@
 
 ## 6. 合入 main 并建立统一 client ABI v13
 
-- [ ] 6.1 在 clean worktree 以 `git merge --no-commit --no-ff main` 合入执行时最新 main，
+- [x] 6.1 在 clean worktree 以 `git merge --no-commit --no-ff main` 合入执行时最新 main，
   重新读取 merged `AGENTS.md` 与目标目录局部指南；以 main 的 client ABI v12
   WKWebView/UI surface 为冲突解决基线，保留 `ui_push_state` 与版本化 JSON UI events，
   保持 `render_upload_ui_font`、frame TLV tag 9 和 UI layout v1–v4 退役，只叠加 MRW1 cache

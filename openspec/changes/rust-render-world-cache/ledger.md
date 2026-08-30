@@ -594,3 +594,63 @@ base 起零 diff；其 ready/spawn warmup 循环按 transport 收包时机决定
   `openspec validate --all --strict --no-interactive` 为 78 passed、0 failed；
   `openspec instructions apply --change rust-render-world-cache --json` 为 15/19、remaining 4、
   `state: ready`；`git diff --check` 无输出，tracked diff 仅本 ledger。
+
+## Task 6.1：main merge、review fix 与完成裁决
+
+### 实现与固定双亲
+
+- Fresh implementer：`01a0515c-d1e0-7373-a6e5-fc6e5f2abd86`。
+- Implementer 在 clean feature HEAD
+  `a59d998f08f1ec25321a3c998eb2bfd5ae9b5a58` 先执行 `make rust` 并通过，再以
+  `git merge --no-commit --no-ff main` 合入当时已核验的 local main
+  `8b8891a3d1068cedb02b74266ed2b1334fdcea69`；共同 merge base 为
+  `2344ca8551277317a31d4c1614c6086acd4ce328`。
+- Merge commit：`3c8c5da18e67dc0768e545247cb993d4957053ad`
+  `chore: merge main into rust render world cache`；双亲依次为 feature `a59d998f...` 与
+  actual `MERGE_HEAD` `8b8891a3...`。冲突逐项以 main v12 WKWebView/JSON UI surface 为基线，
+  只叠加 MRW1 cache/update 形成 client ABI v13；保留 hook 删除与其他 main 行为，没有接入
+  production MRW1，也没有 feature-side fluid/kernel 改动。
+- 实际实现与验证证据以 ignored
+  `.superpowers/sdd/2026-08-30-rust-render-world-main-integration/merge-report.md` 为准。该报告记录
+  10 个冲突路径及逐项裁决、ABI/symbol/retired-surface/cache-only 审计，并记录 pre/post/final
+  `make rust`、`cargo fmt --all -- --check`、124 项 Rust client tests、
+  `go test ./internal/client -race -count=1`、`go test ./internal/archcheck -count=1`、
+  `go test ./internal/server -run '^TestSwordCombatParity$' -race -count=20`、OpenSpec strict
+  78/78、release dylib symbol、production-scope、fixed-parent 与 diff checks 全部最终 PASS。
+
+### 独立 review 与 fix round 1/5
+
+- Independent reviewer：`01a0516d-4a5b-75f3-928a-dfc1ebb6b37c`。
+- Initial verdict：spec ✅；quality Needs fixes。唯一 finding 为 1 个 Minor：merge 相对 second
+  parent 对 4 个无关 main 文件做了 EOF normalization，使它们产生纯末尾空行 diff。
+- Fix round 1 commit：`db4625b0fbcf0540e7dcbe24efdca14047de88c7`
+  `fix(merge): preserve main file endings`。该提交只把 3 个 SDD process report 与
+  `openspec/specs/chunk-persistence/spec.md` 逐字恢复为 second parent 内容；四路径相对
+  `8b8891a3...` 零 diff，Task/ledger、fluid/kernel 均未改动。
+- Scoped re-review verdict：spec ✅；quality Approved。原 Minor finding addressed，
+  0 new、0 open。Controller 接受该 clean task verdict；Task 6.1 现完成并勾选，OpenSpec
+  进度推进为 16/19。Task 6.2–6.4 仍未开始，本节不改写其任务或 engine ABI 契约。
+
+### merge 期间 main 前进的后续裁决边界
+
+- 固定双亲 merge 进行期间，local `main` 从 actual `MERGE_HEAD` `8b8891a3...` 前进 22 commits
+  到 `a23833f92a80abb808b2b629c4dc043d2043f90a`，其中包含伙伴负责的 fluid 与 engine ABI v9
+  工作。已启动 merge 的第二父提交保持 `8b8891a3...`，因此该 ref 漂移不使 Task 6.1 失败，
+  也不允许改写既有 merge commit。
+- 本 change 最终交付前必须先取得明确 OpenSpec 决策，再由 fresh implementer 做
+  non-rewriting follow-up sync，并接受独立规划评审与实现评审；在 controller 获得用户确认前，
+  不得自行新增或改写 Task 6.2–6.4，也不得改写当前 engine ABI 契约。
+- 用户排除流体的含义是：后续 sync 原样继承所选 main 的 fluid/engine 结果，并以相对该 main
+  的路径与语义审计证明 feature-side 零改动；本 change 不接管、重写或扩展流体实现。
+
+### Bookkeeping validation
+
+- 在 pre-commit HEAD `db4625b0fbcf0540e7dcbe24efdca14047de88c7` 与本次纯 planning
+  working diff 上执行 `openspec validate --all --strict --no-interactive`：退出 0，
+  78 passed、0 failed。
+- `openspec instructions apply --change rust-render-world-cache --json`：退出 0；schema
+  `spec-driven`，16/19 complete、3 remaining、`state: ready`；仅 Task 6.1 新增完成状态，
+  6.2–6.4 内容与未完成状态不变。
+- `git diff --check`：退出 0且无输出。`git diff --name-only` 的 tracked 范围恰为本 change 的
+  `tasks.md` 与 `ledger.md`；ignored `progress.md` / `merge-report.md` 仅同步 review 事实，没有
+  production、fluid/kernel、engine ABI、main spec 或其他 tracked 改动。
