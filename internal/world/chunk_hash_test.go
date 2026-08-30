@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math/rand"
+	"slices"
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
@@ -52,6 +53,7 @@ func sectionWorldY(section, y int) int32 {
 
 // distinctBlockIDs 生成 count 个互不相同且在直接态可表达范围内的 block ID。
 // boundary 为真时把空气（0）与直接态上界（32767）掺入取值池，覆盖边界值。
+// 结果由 rng 完全决定：失败时凭 seed 可重建确切换入输入。
 func distinctBlockIDs(rng *rand.Rand, count int, boundary bool) []world.BlockID {
 	seen := make(map[world.BlockID]struct{}, count)
 	if boundary {
@@ -65,7 +67,9 @@ func distinctBlockIDs(rng *rand.Rand, count int, boundary bool) []world.BlockID 
 	for id := range seen {
 		pool = append(pool, id)
 	}
-	// 打乱取值池：palette 槽位按首次写入顺序分配，池序随机化即随机 palette。
+	// 先排序再打乱：map 迭代序本身随机，直接打乱会让同一 seed 产生不同
+	// 取值池；排序把全部随机性收敛到 rng 一处，保证可凭 seed 复现。
+	slices.Sort(pool)
 	rng.Shuffle(len(pool), func(i, j int) { pool[i], pool[j] = pool[j], pool[i] })
 	return pool
 }
@@ -123,6 +127,28 @@ func TestChunkHashMatchesVoxelwiseOracle(t *testing.T) {
 			}
 		})
 	}
+
+	// 直接态 + 边界 ID 的确定性判例。直接态逐槽即全局 ID、没有 palette，
+	// 不存在排列维度——这里钉住的是直接态解包导出与逐体素读取的一致性，
+	// 而非排列不变性。
+	t.Run("DirectBoundaryIDs", func(t *testing.T) {
+		rng := rand.New(rand.NewSource(31))
+		chunk := world.NewChunk(core.ChunkPos{X: -4, Z: 9})
+		values := distinctBlockIDs(rng, 400, true)
+		// i%len(values) 会遍历全部取值：实际用量 400 超过 256，区段确定性
+		// 升级为直接态；取值池含空气与直接态上界两个边界 ID。
+		for i := 0; i < core.BlocksPerSection; i++ {
+			chunk.SetBlock(
+				i&core.SectionMask,
+				sectionWorldY(2, i>>8),
+				i>>4&core.SectionMask,
+				values[i%len(values)],
+			)
+		}
+		if got, want := chunk.Hash(), chunkHashOracle(chunk); got != want {
+			t.Fatal("直接态缓冲编码摘要与逐体素 oracle 不一致")
+		}
+	})
 }
 
 // refillShuffled 读取 source 的全部方块内容，按打乱的体素顺序写入新区块：
@@ -176,27 +202,6 @@ func TestChunkHashIgnoresPaletteArrangementAndBitPacking(t *testing.T) {
 		rebuilt := refillShuffled(rng, pos, source)
 		if source.Hash() != rebuilt.Hash() {
 			t.Fatal("同内容、8 位与 4 位索引态排列互异的区块摘要不同")
-		}
-	})
-
-	t.Run("DirectStorage", func(t *testing.T) {
-		rng := rand.New(rand.NewSource(23))
-		pos := core.ChunkPos{X: -4, Z: 9}
-		source := world.NewChunk(pos)
-		values := distinctBlockIDs(rng, 400, true)
-		// 覆盖全部体素且实际用量超过 256，区段升级为直接态；
-		// 取值池含空气与直接态上界两个边界 ID。
-		for i := 0; i < core.BlocksPerSection; i++ {
-			source.SetBlock(
-				i&core.SectionMask,
-				sectionWorldY(2, i>>8),
-				i>>4&core.SectionMask,
-				values[i%len(values)],
-			)
-		}
-		rebuilt := refillShuffled(rng, pos, source)
-		if source.Hash() != rebuilt.Hash() {
-			t.Fatal("同内容、位打包排列互异的直接态区块摘要不同")
 		}
 	})
 
