@@ -36,23 +36,23 @@
 
 ## 4. 升级 client ABI 到 v12 并接通 cache-only 输入入口
 
-- [ ] 4.1 在 `engine/include/mornlea_client.h`、`engine/crates/mornlea_client/src/` 与
+- [x] 4.1 在 `engine/include/mornlea_client.h`、`engine/crates/mornlea_client/src/` 与
   `internal/client/` 保留全部既有 client ABI exports 的 ABI-version matrix，并为新输入入口
   建立 RED FFI/bridge matrix：ABI 优先，随后 non-zero/bounded length、non-null pointer、
   address range/no overflow、existing handle、MRW1 layout/capacity，再到合法 batch；验证：
   `cd engine && cargo test -p mornlea_client --locked` 与
   `go test ./internal/client -run TestRendererApplyRenderWorldUpdates -count=1`。
-- [ ] 4.2 同步升级 C header、Rust export 和 Go bridge，并新增
+- [x] 4.2 同步升级 C header、Rust export 和 Go bridge，并新增
   `mornlea_client_render_apply_world_updates`；Rust 复制或规范化输入且不保存 Go pointer，
   所有 client ABI 入口对非 v12 先返回 `ABI_VERSION`。新 input-only `u8` 入口不执行
   output-capacity/overlap 检查（这些仅适用于带输出 entry），并在 panic catcher 内将 panic
   映射为 `PANIC`、不产生部分状态；engine ABI 保持 v8；验证：
   `make rust && go test ./internal/client -race -count=1`。
-- [ ] 4.3 以 test-only driver 验证合法 cache update 前后的 frame encoding/readback 字节不变，
+- [x] 4.3 以 test-only driver 验证合法 cache update 前后的 frame encoding/readback 字节不变，
   frame/upload 计数不因 update 增加；不修改 `RenderFrame.Visible`、app、Go mesh/visibility、
   upload、draw 或任何 fluid-aware 源码；验证：
   `make rust && cd engine && cargo test -p mornlea_client --locked && go test ./internal/client -race -count=1`。
-- [ ] 4.4 取得该任务的单一独立 review，其报告同时包含 spec-compliance 与 quality verdict；
+- [x] 4.4 取得该任务的单一独立 review，其报告同时包含 spec-compliance 与 quality verdict；
   审计全部 export 的既有 ABI checks 与新入口 validation matrix、input-only 例外、panic
   隔离、原子失败、无 v11 fallback、engine ABI v8 与 cache-only 边界，并将 verdict 与
   裁决记入 `ledger.md`。

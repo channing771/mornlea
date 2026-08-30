@@ -184,3 +184,43 @@
   `internal/client/render_world_update.go` 与 `internal/client/render_world_update_test.go`；fix round 1
   仅修改测试文件。没有修改 proposal/spec/design、生产 app/network/world、Rust、ABI/header/version
   或 Tasks 4–5 的实现。
+
+## Task 4 Independent Review Record
+
+- BASE：`301e375dfdb4a301c347daaebe5e0b93d397d1b2`。
+- Implementer：`01a050a7-4f57-7253-94c6-df2c7fdaea80`。
+- Independent reviewer：`01a050af-30ef-7181-aa6a-aba204e0f62b`。
+- RED：先新增 Rust FFI 与 Go offscreen/bridge 测试。运行
+  `cd engine && cargo test -p mornlea_client --locked
+  apply_world_updates_rejects_wrong_abi_and_invalid_bytes` 退出 101，Rust 报
+  `error[E0425]: cannot find function mornlea_client_render_apply_world_updates in this scope`；
+  运行 `go test ./internal/client -run TestRendererApplyRenderWorldUpdates -count=1` 退出 1，
+  编译器报告 `Renderer.ApplyRenderWorldUpdates undefined`，符合新 C export 与 Go method
+  尚不存在的预期失败。
+- Implementation commit：`06dd4439 feat(client): add render world update ABI`。client C header、
+  Rust 常数/export 与 Go bridge 同步升级为 v12；新 input-only 入口按 ABI、length、pointer、
+  address range、handle、MRW1 顺序校验并在 catcher 内调用 renderer-owned cache，不保存 Go
+  pointer，也不接入 app、mesh/visibility、upload、frame 或 draw。
+- GREEN：focused Rust update test 退出 0，1 passed、0 failed、218 filtered out；`make rust`
+  退出 0并同步 release dylib；focused Go update tests 退出 0，2 passed。完整
+  `cd engine && cargo test -p mornlea_client --locked` 退出 0，219 passed、0 failed，doc-tests
+  0 failed；`go test ./internal/client -run
+  'Test(RendererApplyRenderWorldUpdates|RendererRoundtripOrSkip|EncodeRenderFrameLayout)'
+  -count=1 -v` 退出 0，4 tests passed；`go test ./internal/client -race -count=1` 退出 0。
+- Format、symbol 与 scope：`cargo fmt --manifest-path engine/Cargo.toml --all --check &&
+  test -z "$(gofmt -l .)" && git diff --check` 退出 0且无输出；release dylib 的 `nm -gU`
+  结果包含 `_mornlea_client_render_apply_world_updates`；C header 与 Rust client 常数均为 v12，
+  engine ABI 保持 v8。相对 BASE 的实现 diff 仅含 brief 授权的 8 个 header/client crate/Go
+  bridge 与 current-version assertion 文件，`openspec`、app、`mornlea_engine` 与 fluid-aware
+  源码均无实现 diff。
+- GPU：无 Skip；本机 adapter 可用，Rust 真实 renderer、Go identity frame render/readback
+  与既有 roundtrip 均实际执行并通过。相同 `RenderFrame` 的 encode/readback 字节在 apply
+  前后相等，apply 不增加 frame/upload 计数。
+- Independent review verdict：spec-compliance ✅；quality Approved；无 findings。reviewer 按
+  指令未重跑 suites，因此报告中的 cannot-rerun ⚠️ 不是实现缺陷或未决 finding；controller
+  裁决为 Task 4 detailed report 已提供 RED、GREEN、full Rust、Go focused/race、format、symbol、
+  scope 与 GPU 实跑证据，满足该验证关注并接受 review verdict。
+- Final scope proof：没有 v11 compatibility export 或 Go fallback；全部 versioned client
+  exports 保留 ABI-first matrix；未知 handle 路径不解引用 input；panic 映射 `PANIC`；
+  transactional MRW1 失败不留下部分状态。Task 5、proposal、delta spec、design 与根版本文档
+  留待后续同步，本记录未提前修改。
