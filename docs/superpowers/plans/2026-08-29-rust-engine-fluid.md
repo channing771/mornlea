@@ -220,6 +220,7 @@ git commit -m "feat: add rust engine fluid eval batch kernel with abi v9"
 - Create: `internal/fluid/eval_native.go`(输入编码 + 输出解码 + scratch 管理;包内唯一 nativeabi 调用点)
 - Create: `internal/fluid/oracle_test.go`(从 `rules.go` 移入 `evalCell`/`flowingSurvives`,包内测试专用)
 - Modify: `internal/fluid/rules.go`(删除 `evalCell`/`flowingSurvives`;`Replaceable`/`strongerWrite`/邻格函数保留)
+- Modify: `internal/archcheck/dependency_test.go`(:`"internal/fluid": {"internal/core"}` → `{"internal/core", "internal/nativeabi"}`——本任务引入该导入边,必须随本任务登记,否则任务自身的 archcheck 门禁即红;注释说明流体 kernel 边)
 - Test: `internal/fluid/eval_differential_test.go`、`internal/fluid/eval_golden_test.go`、`internal/fluid/eval_fuzz_test.go`、`internal/fluid/eval_alloc_test.go`、`internal/fluid/eval_bench_test.go`
 
 **Interfaces:**
@@ -297,12 +298,12 @@ git commit -m "feat: route fluid advance eval through nativeabi batch kernel"
 
 **Interfaces:**
 - Consumes: Task 2 的 v9 版本基座。
-- Produces: `nativeabi.FluidRescan(input, output []byte) (Status, int)`;输入布局 v1(MFL1,三段:header 24B + 中心区块 24 区段记录 + 裙边 68 列×384 u16 + 元数据 9 区块×24×3B)。
+- Produces: `nativeabi.FluidRescan(input, output []byte) (Status, int)`;输入布局 v1(MFL1,三段:header 26B + 中心区块 24 区段记录 + 裙边 68 列×384 u16 + 元数据 9 区块×24×3B)。
 
 - [ ] **Step 1: 字节布局定稿(写入 header 注释与 Rust 单测)**
 
 ```
-header(24B): u32 layout_version=1 | i32 center_chunk_x | i32 center_chunk_z
+header(26B): u32 layout_version=1 | i32 center_chunk_x | i32 center_chunk_z
   | u16 x0 | u16 x1 | u16 z0 | u16 z1(盒内局部列 0..17,含裙边)
   | u8 start_section(0..23) | u8 reserved=0 | u32 budget
 中心区块 24 区段记录(按 y 区段 0..23):u8 kind(0=均匀) | u8 pad
@@ -372,7 +373,7 @@ git commit -m "feat: add rust engine fluid rescan kernel"
 
 - [ ] **Step 2: 实现 encodeRescanBox 与接线**
 
-按 Files 节实现。编码顺序与 Task 4 Step 1 布局逐字节对应;中心区段采样:`section.Blocks.IsUniform()` 命中走 kind=0,否则 kind=1 按 `blockIndex` 同序线性展开。接线后 sim 侧不再直接依赖 `fluid.Replaceable`(生产调用点清零;`Replaceable` 本体保留在 `internal/fluid/rules.go` 作为 spec 判定面,供 oracle 与性质测试使用)。
+按 Files 节实现。编码顺序与 Task 4 Step 1 布局逐字节对应;中心区段采样:`section.Blocks.IsUniform()` 命中走 kind=0,否则 kind=1 按 `blockIndex` 同序线性展开。**盒组装粒度 = 每区块一次**:`State.rescanChunkFluids` 入口组装一次(裙边列取就绪邻块数据,未就绪邻块列填 Barrier),平面循环内只改 header 的 x0..x1/z0..z1/start_section/budget 复用同一份盒体;未就绪邻块的平面在 Go 侧跳过、不调 kernel、不记额度(与现行语义逐字一致)。接线后 sim 侧不再直接依赖 `fluid.Replaceable`(生产调用点清零;`Replaceable` 本体保留在 `internal/fluid/rules.go` 作为 spec 判定面,供 oracle 与性质测试使用)。
 
 - [ ] **Step 3: 全量验证**
 
@@ -397,12 +398,13 @@ git commit -m "feat: route fluid rescan through nativeabi scan kernel"
 ### Task 6: 文档、archcheck 与全量门禁收尾
 
 **Files:**
-- Modify: `internal/archcheck/dependency_test.go`(:`"internal/fluid": {"internal/core"}` → `{"internal/core", "internal/nativeabi"}`,注释说明流体 kernel 边)
 - Modify: `docs/notes/go-rust-division.md`(领域归属表加流体一行:规则求值与重扫扫描归 engine,状态/编排/冲毁结算留 Go)
 - Modify: `docs/architecture.md`(边界描述同步流体)
 - Modify: `docs/notes/test-quickstart.md`(定点命令补 `./internal/fluid`)
 - Create: `internal/fluid/AGENTS.md`(包职责、nativeabi 边、oracle 地位、布局 v1 契约指针;按 `docs/agents-md-style.md`)
 - Modify: `openspec/changes/rust-engine-fluid/ledger.md`(终局证据)
+
+(注:`internal/fluid → internal/nativeabi` 的 archcheck 边登记已随 Task 3 落地——引入导入边的任务必须同步登记;本任务只复核门禁绿。)
 
 **Interfaces:**
 - Consumes: Task 2-5 的全部产物。
