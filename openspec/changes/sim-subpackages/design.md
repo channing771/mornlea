@@ -88,6 +88,33 @@ The move does not create independently scheduled child ticks. The existing mutex
 inboxes, atomic time/tunable snapshots, stable command ordering, fixed budgets, and
 cross-goroutine immutability rule remain at the same ownership boundary.
 
+### Final ownership convergence after branch review
+
+The initial runtime cutover left `runtime.Engine` with copied player, companion, and
+hostile state while also constructing an unused `entity.State`. That transitional shape
+does not satisfy the approved ownership graph and must be repaired before archive.
+
+`runtime.Engine` owns only runtime concerns: inboxes, subscriptions, clocks, phase
+ordering, and composition of one `realm.State` plus one `entity.State`. Player,
+companion, hostile, inventory, container, combat, drop, and gameplay lifecycle state
+exists only in `entity.State`. Runtime-facing lifecycle methods may remain on
+`runtime.Engine` as narrow orchestration entry points, but they delegate to the entity
+owner and must not mirror or dual-write entity collections.
+
+At the start of each authoritative tick, runtime obtains one immutable
+`tuning.Tunables` snapshot and passes that value through every entity and realm stage.
+Production entity physics, collision-prism, and submersion calls use an explicit
+per-step physics tunables value derived from that same snapshot; they do not read a
+second global active snapshot during the tick. Compatibility wrappers may remain for
+non-authoritative callers, but the server tick path has one observable parameter
+snapshot.
+
+The repair preserves the existing public runtime API, tick phase order, actor ordering,
+bounded queues, persistence bytes, wire bytes, test-entry inventory, and all version
+numbers. Tests must prove that state restored or mutated through runtime is the same
+state observed from the composed entity owner, rather than merely asserting that an
+entity pointer is non-nil.
+
 ### Caller and test migration
 
 `internal/server` imports `runtime` for the authority engine and `contract` for commands

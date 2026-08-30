@@ -32,3 +32,9 @@
 
 - [x] 6.1 运行 `make rust`、`gofmt -l .`、`go vet ./...`、`go test ./... -race -count=1`、`go test ./internal/archcheck -count=1`、`openspec validate sim-subpackages --strict --no-interactive`、`openspec validate --all --strict --no-interactive` 与 `git diff --check`；记录所有 gate 输出，`gofmt -l .` 必须无输出。
 - [x] 6.2 完成整分支规格与质量终审，核对无根 `sim` facade、无 package 反向依赖、单 mutation 提交路径、测试清单零差异和无版本/行为漂移；在 ledger 记录裁决后才标记本 change 完成。
+
+## 7. Post-review Ownership Convergence
+
+- [ ] 7.1 先增加会在当前双重所有权下失败的定向测试，再让 `runtime.Engine` 只组合一个 `realm.State` 和一个 `entity.State`；将玩家、伙伴、夜行者、背包、容器、战斗、掉落与生命周期状态收敛到 `entity.State`，runtime 对外方法仅做窄委派和 tick 编排；删除 runtime 内对应集合、镜像字段和双写。保持现有对外 API、tick 阶段、稳定排序、存档和 wire 行为不变。验证：`go test ./internal/sim/entity ./internal/sim/runtime ./internal/server -race -count=1`、`go test ./internal/archcheck -count=1`、`git diff --check`。
+- [ ] 7.2 先用并发快照和单 tick 参数一致性测试证明当前生产路径会重读全局参数，再在 runtime tick 入口只读取一次 `tuning.Tunables`，将其显式传递给 entity、realm 与 physics。为权威实体物理/浸没增加接收显式 physics tunables 的入口，保留既有 wrapper 供非权威调用方兼容；不改变默认数值或物理结果。验证：`go test ./internal/sim/tuning ./internal/sim/entity ./internal/sim/runtime ./internal/physics -race -count=1`、Go/Rust 既有 physics golden/差分用例、`git diff --check`。
+- [ ] 7.3 更新所有权文档和架构门禁，重新比较迁移前 Test、Benchmark、Fuzz 及 `t.Run` 清单为零缺失；运行 `make rust`、`gofmt -l .`、`go vet ./...`、`go test ./... -race -count=1`、`go test ./internal/archcheck -count=1`、`openspec validate sim-subpackages --strict --no-interactive`、`openspec validate --all --strict --no-interactive` 与 `git diff --check`。完成新的整 change 规格/质量终审，只有确认 runtime 无实体权威镜像、entity 为单一所有者、每 tick 单一 tunables 快照且测试入口零缺失后才再标记 change 完成。
