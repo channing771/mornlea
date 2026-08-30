@@ -3,6 +3,7 @@
 package app
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -39,33 +40,35 @@ func (state SettingsState) dirty() bool {
 	return state.Draft != state.Committed
 }
 
-func (state SettingsState) UISettings() client.UISettings {
-	return client.UISettings{
-		Visible:         true,
-		AudioVolume:     state.Draft.AudioVolume,
-		Window:          uiWindowFromConfig(state.Draft.WindowSize),
-		TexturePackPath: state.Draft.TexturePackPath,
-		Dirty:           state.dirty(),
-		Status:          boundedSettingsMessage(state.status),
-		Error:           boundedSettingsMessage(state.error),
+// applySettingsFieldChange 把一条 `settings-change` 桥事件并入设置草稿。
+// 字段与取值的线格式校验已在 client.DecodeUIEventBatch 完成(取值范围、
+// 枚举、单行文本),这里做并入与跨字段语义:字段名未知即拒绝。草稿不落盘、
+// 不触碰运行态——只有「保存」动作经 saveSettings 原子提交。
+func (a *Application) applySettingsFieldChange(field string, value json.RawMessage) error {
+	switch field {
+	case client.UISettingsFieldAudioVolume:
+		var audio float32
+		if err := json.Unmarshal(value, &audio); err != nil {
+			return fmt.Errorf("AudioVolume: %w", err)
+		}
+		a.settings.Draft.AudioVolume = audio
+	case client.UISettingsFieldTexturePackPath:
+		var path string
+		if err := json.Unmarshal(value, &path); err != nil {
+			return fmt.Errorf("TexturePackPath: %w", err)
+		}
+		a.settings.Draft.TexturePackPath = path
+	case client.UISettingsFieldWindowSize:
+		var size string
+		if err := json.Unmarshal(value, &size); err != nil {
+			return fmt.Errorf("WindowSize: %w", err)
+		}
+		// 解码层已把取值收窄到三个预设;config.WindowSize 与桥枚举同字符串。
+		a.settings.Draft.WindowSize = config.WindowSize(size)
+	default:
+		return fmt.Errorf("未知设置字段 %q", field)
 	}
-}
-
-func settingsValuesFromUI(values client.UISettingsValues) (SettingsValues, error) {
-	window, ok := configWindowFromUI(values.Window)
-	if !ok {
-		return SettingsValues{}, fmt.Errorf("WindowSize: 未知 UI 预设 %d", values.Window)
-	}
-	result := SettingsValues{
-		AudioVolume:     values.AudioVolume,
-		TexturePackPath: values.TexturePackPath,
-		WindowSize:      window,
-	}
-	if err := result.validate(); err != nil {
-		return SettingsValues{}, err
-	}
-	return result, nil
-
+	return nil
 }
 
 func (values SettingsValues) validate() error {
@@ -90,31 +93,8 @@ func (values SettingsValues) validate() error {
 	return nil
 }
 
-func uiWindowFromConfig(size config.WindowSize) client.UISettingsWindow {
-	switch size {
-	case config.WindowSize640x360:
-		return client.UISettingsWindow640x360
-	case config.WindowSize960x540:
-		return client.UISettingsWindow960x540
-	case config.WindowSize1280x720:
-		return client.UISettingsWindow1280x720
-	default:
-		panic("mornlea: 设置页收到非法窗口预设")
-	}
-}
-
-func configWindowFromUI(window client.UISettingsWindow) (config.WindowSize, bool) {
-	switch window {
-	case client.UISettingsWindow640x360:
-		return config.WindowSize640x360, true
-	case client.UISettingsWindow960x540:
-		return config.WindowSize960x540, true
-	case client.UISettingsWindow1280x720:
-		return config.WindowSize1280x720, true
-	default:
-		return "", false
-	}
-}
+// 窗口预设的下行呈现直接取 config.WindowSize 原文(见 app_ui_state.go);
+// 上行变化经 applySettingsFieldChange 同字符串并回,无独立映射表。
 
 // saveSettings 严格按「草稿校验 → 变化材质候选校验 → 校验并 patch 最新磁盘配置 →
 // rename 提交 → 更新 Committed → 替换运行时音频和窗口」执行。rename 前失败时

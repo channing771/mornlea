@@ -95,12 +95,16 @@ func TestSettingsNavigationDraftCancelAndBack(t *testing.T) {
 		t.Fatalf("设置初始化错误: %+v", app.settings)
 	}
 
-	changed := client.UISettingsValues{
-		AudioVolume: 0.5, TexturePackPath: "packs/next", Window: client.UISettingsWindow640x360,
-	}
-	quit, disposition := app.handleMenuUIEvent(client.UIEvent{Kind: client.UIEventSettingsChanged, Settings: changed})
-	if quit || disposition != menuUIEventHandled {
-		t.Fatalf("typed change quit=%v disposition=%v", quit, disposition)
+	// 桥上行是逐字段变化:三条 settings-change 相继到达,草稿逐步收敛到目标值。
+	for _, change := range []client.UIEvent{
+		{Kind: client.UIEventSettingsChanged, Field: client.UISettingsFieldAudioVolume, Value: json.RawMessage("0.5")},
+		{Kind: client.UIEventSettingsChanged, Field: client.UISettingsFieldTexturePackPath, Value: json.RawMessage(`"packs/next"`)},
+		{Kind: client.UIEventSettingsChanged, Field: client.UISettingsFieldWindowSize, Value: json.RawMessage(`"640x360"`)},
+	} {
+		quit, disposition := app.handleMenuUIEvent(change)
+		if quit || disposition != menuUIEventHandled {
+			t.Fatalf("change %s quit=%v disposition=%v", change.Field, quit, disposition)
+		}
 	}
 	wantDraft := SettingsValues{AudioVolume: 0.5, TexturePackPath: "packs/next", WindowSize: config.WindowSize640x360}
 	if app.settings.Draft != wantDraft || !app.settings.dirty() {
@@ -141,28 +145,39 @@ func TestSettingsEscapeUsesSameDirtyGuard(t *testing.T) {
 func TestSettingsTypedChangeIsDefensiveAndPhaseScoped(t *testing.T) {
 	values := SettingsValues{AudioVolume: 0.7, WindowSize: config.WindowSize1280x720}
 	app := newSettingsStateTestApplication(values)
-	valid := client.UIEvent{Kind: client.UIEventSettingsChanged, Settings: client.UISettingsValues{
-		AudioVolume: 0.1, Window: client.UISettingsWindow640x360, TexturePackPath: "packs/local",
-	}}
+	valid := client.UIEvent{
+		Kind: client.UIEventSettingsChanged, Field: client.UISettingsFieldAudioVolume,
+		Value: json.RawMessage("0.1"),
+	}
 
 	_, disposition := app.handleMenuUIEvent(valid)
 	if disposition != menuUIEventIgnored || app.settings.Draft != values {
 		t.Fatalf("非设置相位接受了 change: disposition=%v Draft=%+v", disposition, app.settings.Draft)
 	}
 	app.handleMenuEvent(menuActionSettings)
-	invalid := valid
-	invalid.Settings.TexturePackPath = "bad\npath"
+	// 单行文本校验在 client 解码层;这里锁 app 侧对错相位/未知 kind 的兜底
+	// 忽略,以及字段值并入的相位范围。
+	invalid := client.UIEvent{
+		Kind: client.UIEventSettingsChanged, Field: client.UISettingsFieldTexturePackPath,
+		Value: json.RawMessage(`"packs/local"`),
+	}
+	app.menu.phase = MenuPhaseMenu
 	_, disposition = app.handleMenuUIEvent(invalid)
 	if disposition != menuUIEventIgnored || app.settings.Draft != values {
-		t.Fatalf("非法 change 被接受: disposition=%v Draft=%+v", disposition, app.settings.Draft)
+		t.Fatalf("错相位 change 被接受: disposition=%v Draft=%+v", disposition, app.settings.Draft)
+	}
+	app.handleMenuEvent(menuActionSettings)
+	_, disposition = app.handleMenuUIEvent(invalid)
+	if disposition != menuUIEventHandled || app.settings.Draft.TexturePackPath != "packs/local" {
+		t.Fatalf("设置相位的合法 change 未并入: disposition=%v Draft=%+v", disposition, app.settings.Draft)
 	}
 	_, disposition = app.handleMenuUIEvent(client.UIEvent{Kind: client.UIEventKind(99), ActionID: menuActionSettingsSave})
-	if disposition != menuUIEventIgnored || app.settings.Draft != values {
+	if disposition != menuUIEventIgnored || app.settings.Draft.TexturePackPath != "packs/local" {
 		t.Fatalf("未知 typed event 产生副作用: disposition=%v", disposition)
 	}
 }
 
-func TestSettingsUISegmentReflectsDraftDirtyStatusAndError(t *testing.T) {
+func TestSettingsUIStateReflectsDraftDirtyStatusAndError(t *testing.T) {
 	app := newSettingsStateTestApplication(SettingsValues{
 		AudioVolume: 0.25, TexturePackPath: "packs/local", WindowSize: config.WindowSize960x540,
 	})
@@ -170,16 +185,20 @@ func TestSettingsUISegmentReflectsDraftDirtyStatusAndError(t *testing.T) {
 	app.settings.Draft.AudioVolume = 0.5
 	app.settings.status = "先保存或取消"
 	app.settings.error = "校验失败"
-	want := client.EncodeUISettings(client.UISettings{
-		Visible: true, AudioVolume: 0.5, Window: client.UISettingsWindow960x540,
-		TexturePackPath: "packs/local", Dirty: true, Status: "先保存或取消", Error: "校验失败",
-	})
-	if got := app.uiSegment(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("settings layout v2 不符:\ngot=%v\nwant=%v", got, want)
+	state := app.buildUIState()
+	if state.Phase != "settings" || state.Settings == nil {
+		t.Fatalf("设置相位应携带 settings 分节: %+v", state)
+	}
+	if state.Settings.Draft.AudioVolume != 0.5 || !state.Settings.Dirty ||
+		state.Settings.Status != "先保存或取消" || state.Settings.Error != "校验失败" {
+		t.Fatalf("settings 分节不符: %+v", state.Settings)
+	}
+	if state.Settings.Saved.AudioVolume != 0.25 || state.Settings.Saved.WindowSize != "960x540" {
+		t.Fatalf("saved 分节应保持已保存值: %+v", state.Settings.Saved)
 	}
 	app.menu.phase = MenuPhaseMenu
-	if got := app.uiSegment(); len(got) == 0 || reflect.DeepEqual(got, want) {
-		t.Fatal("主菜单应继续输出 layout v1")
+	if state := app.buildUIState(); state.Menu == nil || state.Settings != nil {
+		t.Fatalf("主菜单应切回 menu 分节: %+v", state)
 	}
 }
 
@@ -761,11 +780,13 @@ func TestLoadedConfigEntersSettingsAndEncodesLayoutV2(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = app.Close() })
 	app.handleMenuEvent(menuActionSettings)
-	want := client.EncodeUISettings(client.UISettings{
-		Visible: true, AudioVolume: 0.25, Window: client.UISettingsWindow960x540,
-	})
-	if got := app.uiSegment(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("正常配置 settings layout v2 不符:\ngot=%v\nwant=%v", got, want)
+	state := app.buildUIState()
+	if state.Phase != "settings" || state.Settings == nil {
+		t.Fatalf("设置相位应携带 settings 分节: %+v", state)
+	}
+	if state.Settings.Draft.AudioVolume != 0.25 || state.Settings.Draft.WindowSize != "960x540" ||
+		state.Settings.Dirty {
+		t.Fatalf("正常配置的 settings 分节不符: %+v", state.Settings)
 	}
 }
 

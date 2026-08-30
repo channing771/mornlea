@@ -19,16 +19,16 @@ func buildSnapshot(mutate func([]byte)) []byte {
 }
 
 func TestClientABIVersionMatchesHeader(t *testing.T) {
-	// v11:离屏 benchmark batch prepare/submit 入口；v10:avatar 通道扩至 75
-	// 具身体（450 实例）与敌怪身份域。变基重编:v5 归 main 的 water pass,
-	// 远环 tile 出口 v6、雾 setter v7、菜单 UI v8、设置事件 v9。
-	// 导出版本与编译期 header 常量必须逐位一致：加载低于 v11 的旧动态库
-	// 会在首个 FFI 入口被稳定拒绝（STATUS_ABI_VERSION），不产生半启动。
-	if got := ClientABIVersion(); got != 11 {
-		t.Fatalf("client ABI version=%d,想要 11", got)
+	// v12:菜单层迁 WebView——退役字体上传出口与帧 tag 9 段,新增
+	// ui_push_state 状态下行,drain 改版本化 JSON 信封;v11:离屏 benchmark
+	// batch prepare/submit 入口。导出版本与编译期 header 常量必须逐位一致:
+	// 加载低于 v12 的旧动态库会在首个 FFI 入口被稳定拒绝
+	// （STATUS_ABI_VERSION），不产生半启动。
+	if got := ClientABIVersion(); got != 12 {
+		t.Fatalf("client ABI version=%d,想要 12", got)
 	}
-	if got := clientABIHeaderVersion(); got != 11 {
-		t.Fatalf("client header ABI version=%d,想要 11", got)
+	if got := clientABIHeaderVersion(); got != 12 {
+		t.Fatalf("client header ABI version=%d,想要 12", got)
 	}
 }
 

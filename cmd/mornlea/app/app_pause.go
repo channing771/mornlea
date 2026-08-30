@@ -3,7 +3,6 @@
 package app
 
 import (
-	"encoding/binary"
 	"errors"
 	"log/slog"
 )
@@ -24,31 +23,8 @@ func applicationPauseGateOf(controlled any) applicationPauseGate {
 	return gate
 }
 
-// uiPauseLayoutVersion 是暂停页 UI 下行段的内部布局版本，与 Rust 侧
-// engine/crates/mornlea_client/src/ui.rs 的 UI_PAUSE_LAYOUT_VERSION 同值互钉；
-// 既有主菜单 1 / 设置页 2 / 调试面板 3 的常量与线格式不动。任何一侧不得单方面
-// 改动数字。
-const uiPauseLayoutVersion = 4
-
-// uiPauseFlagVisible 是 layout v4 段内 visible 布尔的置位值；段只在暂停相位
-// 编码，因此可见位恒为真。
-const uiPauseFlagVisible = 1
-
-// encodeUIPauseSegment 构造一帧暂停页段字节（小端）：版本号之后仅两个 u32
-// 布尔——可见位与远程位，与 Rust decode_pause_frame 逐值对应。remote 为真表示
-// 本会话经远程连接，页面将注明「世界不会停止」；此时不存在可调用的本地暂停门，
-// 该标志只是呈现语义，不改变服务端推进。段无变长字段，恒 12 字节。
-func encodeUIPauseSegment(remote bool) []byte {
-	out := make([]byte, 0, 12)
-	out = binary.LittleEndian.AppendUint32(out, uiPauseLayoutVersion)
-	out = binary.LittleEndian.AppendUint32(out, uiPauseFlagVisible)
-	if remote {
-		out = binary.LittleEndian.AppendUint32(out, 1)
-	} else {
-		out = binary.LittleEndian.AppendUint32(out, 0)
-	}
-	return out
-}
+// 暂停层的下行状态(pause.remote)由 app_ui_state.go 组装;本文件只保留
+// 相位机与暂停门语义。「世界不会停止」注明行由前端按 remote 位呈现。
 
 // pauseState 承载一个开合周期内的恢复防重入哨兵。打开覆盖层时武装；Esc 键位
 // 边沿与「返回游戏」按钮点击可能同帧相继到达（Escape 键事件由 Go 键位栈裁决，

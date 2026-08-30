@@ -1,0 +1,364 @@
+/*
+ * 菜单层组件样式：全部数值消费 src/tokens.css 的令牌，本文件不得出现裸色值、
+ * 裸字号与裸时长。几何信息不依赖颜色（选中/焦点另有文字与几何标记）。
+ */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--menu-background);
+  color: var(--text-primary);
+  /* 系统字体栈：仓库零二进制字体资产、零网络请求。 */
+  font-family:
+    -apple-system,
+    "SF Pro Text",
+    "PingFang SC",
+    "Helvetica Neue",
+    "Segoe UI",
+    Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- 主菜单 / 暂停层共用的全屏相位容器 ---- */
+
+.menu-screen,
+.pause-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--title-button-gap);
+}
+
+/* ---- 主菜单 ---- */
+
+.menu-title {
+  margin: 0;
+  font-size: var(--font-title);
+  font-weight: 600;
+  /* 文字双层规范：1px 右下投影先于前景（style.go textPrimaryShadow）。 */
+  text-shadow: 1px 1px 0 var(--text-shadow);
+}
+
+.menu-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--menu-button-gap);
+}
+
+.menu-button {
+  box-sizing: border-box;
+  width: var(--menu-button-width);
+  min-height: var(--menu-button-height);
+  padding: 0;
+  border: var(--hairline) solid var(--panel-border);
+  border-radius: var(--radius-panel);
+  background: var(--panel-surface);
+  color: var(--text-primary);
+  font-size: var(--font-button);
+  text-shadow: 1px 1px 0 var(--text-shadow);
+  cursor: pointer;
+  transition:
+    border-color var(--motion-fast) var(--motion-ease),
+    background-color var(--motion-fast) var(--motion-ease);
+}
+
+.menu-button:hover:not(:disabled),
+.menu-button:focus-visible {
+  border-color: var(--accent-amber-solid);
+  outline: none;
+}
+
+.menu-button:focus-visible {
+  background: var(--accent-wash);
+}
+
+.menu-button:disabled {
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.menu-error {
+  margin: 0;
+  font-size: var(--font-message);
+  color: var(--danger);
+  text-shadow: 1px 1px 0 var(--text-shadow);
+}
+
+.menu-version {
+  position: absolute;
+  right: var(--menu-button-gap);
+  bottom: var(--menu-button-gap);
+  margin: 0;
+  font-size: var(--font-version);
+  color: var(--text-secondary);
+}
+
+/* ---- 设置页 ---- */
+
+.settings-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-panel {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--title-button-gap);
+  width: min(460px, calc(100% - 2 * var(--panel-padding)));
+  max-height: calc(100% - 2 * var(--panel-padding));
+  overflow-y: auto;
+  padding: var(--panel-padding);
+  border: var(--hairline) solid var(--panel-border);
+  border-radius: var(--radius-panel);
+  background: var(--panel-surface);
+  box-shadow: 0 8px 24px var(--panel-shadow);
+}
+
+.settings-title {
+  margin: 0;
+  font-size: var(--font-heading);
+  text-shadow: 1px 1px 0 var(--text-shadow);
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--menu-button-gap);
+}
+
+.settings-field-label {
+  font-size: var(--font-message);
+  font-weight: 600;
+}
+
+.settings-text-input {
+  box-sizing: border-box;
+  height: var(--settings-action-height);
+  padding: 0 var(--menu-button-gap);
+  border: var(--hairline) solid var(--panel-border);
+  border-radius: var(--radius-control);
+  background: var(--slot-well);
+  box-shadow: inset 0 1px 0 var(--slot-well-edge);
+  color: var(--text-primary);
+  font-size: var(--font-message);
+}
+
+.settings-text-input:focus-visible {
+  border-color: var(--accent-amber-solid);
+  outline: none;
+}
+
+.settings-hint,
+.settings-status {
+  margin: 0;
+  font-size: var(--font-version);
+  color: var(--text-secondary);
+}
+
+.settings-dirty {
+  margin: 0;
+  font-size: var(--font-message);
+  font-weight: 600;
+  color: var(--accent-amber-solid);
+}
+
+.settings-error {
+  margin: 0;
+  font-size: var(--font-message);
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.settings-window {
+  display: flex;
+  gap: var(--menu-button-gap);
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.settings-window legend {
+  padding: 0;
+  margin-bottom: var(--menu-button-gap);
+  font-size: var(--font-message);
+  font-weight: 600;
+}
+
+.settings-window-button {
+  flex: 1;
+  box-sizing: border-box;
+  min-height: var(--settings-action-height);
+  padding: 0;
+  border: var(--hairline) solid var(--panel-border);
+  border-radius: var(--radius-control);
+  background: var(--panel-surface);
+  color: var(--text-primary);
+  font-size: var(--font-message);
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--motion-ease);
+}
+
+.settings-window-button[aria-pressed="true"] {
+  border-color: var(--accent-amber-solid);
+  background: var(--accent-wash);
+}
+
+.settings-window-button:focus-visible {
+  border-color: var(--accent-amber-solid);
+  outline: none;
+}
+
+.settings-actions {
+  display: flex;
+  gap: var(--menu-button-gap);
+}
+
+.settings-actions .menu-button {
+  flex: 1;
+  width: auto;
+  min-height: var(--settings-action-height);
+  font-size: var(--font-message);
+}
+
+/* ---- 暂停层 ---- */
+
+.pause-screen {
+  background: var(--pause-overlay);
+}
+
+.pause-title {
+  margin: 0;
+  font-size: var(--font-title);
+  text-shadow: 1px 1px 0 var(--text-shadow);
+}
+
+.pause-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--menu-button-gap);
+}
+
+.pause-remote-note {
+  margin: var(--error-button-gap) 0 0;
+  font-size: var(--font-message);
+  color: var(--text-secondary);
+}
+
+/* ---- F3 调试面板（叠加于任意相位） ---- */
+
+.debug-screen {
+  position: absolute;
+  top: var(--title-button-gap);
+  left: var(--title-button-gap);
+}
+
+.debug-panel {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--menu-button-gap);
+  width: var(--debug-panel-width);
+  padding: var(--menu-button-gap);
+  border: var(--hairline) solid var(--panel-border);
+  border-radius: var(--radius-panel);
+  background: var(--panel-surface);
+  box-shadow: 0 8px 24px var(--panel-shadow);
+  font-size: var(--font-message);
+}
+
+.debug-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: var(--menu-button-gap);
+  border-bottom: var(--hairline) solid var(--panel-border);
+}
+
+.debug-mode {
+  font-weight: 600;
+}
+
+.debug-readout-row {
+  display: flex;
+  margin: 0;
+}
+
+.debug-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.debug-section {
+  min-height: var(--debug-row-height);
+  color: var(--text-secondary);
+  line-height: var(--debug-row-height);
+}
+
+.debug-row {
+  position: relative;
+  display: flex;
+  min-height: var(--debug-row-height);
+  line-height: var(--debug-row-height);
+}
+
+/* 选中标记：靠左整高琥珀窄条，几何上即选中位置（颜色无关可辨）。 */
+.debug-row.is-selected::before {
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--menu-button-gap));
+  width: var(--debug-selected-mark);
+  height: 100%;
+  background: var(--accent-amber-solid);
+}
+
+.debug-row .debug-label {
+  flex: 0 0 auto;
+  min-width: var(--debug-value-column);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.debug-row .debug-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 只读参数行：数值随标签同用次级文字色，与 aria-disabled 一同呈现
+ * 「不可选中/编辑」的禁用语义（亮度层级，不依赖单一色相）。 */
+.debug-row.is-readonly .debug-value {
+  color: var(--text-secondary);
+}
+
+.debug-edit-input {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  height: calc(var(--debug-row-height) - 2 * var(--hairline));
+  padding: 0 2px;
+  border: var(--hairline) solid var(--accent-amber-solid);
+  border-radius: var(--radius-control);
+  background: var(--slot-well);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.debug-edit-input:focus-visible {
+  outline: none;
+}

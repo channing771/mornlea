@@ -44,5 +44,7 @@ mem.prof
 
 # 设备确认通道（scripts/agents/confirm）的 Node 工具链产物
 **/node_modules/
+# 菜单 WebView 前端的 node_modules（dist 不忽略、提交入库）
+engine/crates/mornlea_client/frontend/node_modules/
 scripts/agents/.npm-cache/
 /web/agent-board/dist/
