@@ -57,3 +57,23 @@
   sdk headers`。
 - 遗留（记录不阻塞）：溢出回填与真实画面内容无头不可测，留给 Task 7.2
   人工验收核对截图尺寸与图层内容。
+
+## Task 3: app 帧循环捕获泵
+
+- Commits: `522c7d6a` `feat(app): add frame loop capture pump`。
+- 实现：`dev_capture.go` 定义 `CaptureOutcome`/`CaptureRequest`（`Done` 为
+  `chan<-` 单向，类型系统阻止泵侧接收/关闭）与 `CaptureCoordinator` 接口；
+  泵 `(*Application).pumpDevCapture()` 无状态零分配，经私有 `captureSource`
+  接口收窄捕获来源（`*client.Window` 隐式满足，无头替身可注入，无捕获能力
+  交付 `client.ErrCaptureUnavailable`）；注入口为 `Dependencies` 字段 +
+  `SetCaptureCoordinator` setter（main 时序晚于 app 构造，构造期注入会环，
+  setter 与 `runCapture` 适配器 consumer 先例一致）；`interactive.go`
+  `runMenuPhase`/`runGamePhase` 在 `Poll()` 后渲染前各接入一次（暂停为
+  `runGamePhase` 内覆盖层状态，无独立循环，两处覆盖暂停帧）。
+- TDD：7 测试先行 RED（undefined 符号）→ GREEN，含两条经 `RunInteractive`
+  真实走循环的集成断言（单帧恰好 1 检查/1 捕获/1 交付，凭据恒等 + 逐字段）。
+- 验证：`go test ./cmd/mornlea/app -race -count=1` ok 66.7s、vet/gofmt 干净、
+  `go build ./...` ok。
+- 评审（独立评审子代理）：规格合规 PASS + 代码质量 PASS，零返修。评审提示
+  下游必查项：4.1 需钉「`Done` 满时帧循环不被阻塞」（任务 3.1 只以泵内无
+  channel 操作间接钉住非阻塞语义）。

@@ -23,7 +23,7 @@
 
 ## 3. app 帧循环捕获泵
 
-- [ ] 3.1 `cmd/mornlea/app` 新增 `dev_capture.go`（`CaptureRequest` /
+- [x] 3.1 `cmd/mornlea/app` 新增 `dev_capture.go`（`CaptureRequest` /
       `CaptureOutcome` / `CaptureCoordinator` 接口 + 可空注入点），泵测试先行
       （fake 协调器计数：空闲零捕获调用、待办时每帧至多一次、交付非阻塞），
       `interactive.go` 菜单与游戏两处循环接入；
