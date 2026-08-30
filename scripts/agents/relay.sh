@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 实现者接力器：当前实现者会话完成（或放弃）后，自动启动下一个实现者认领下一行任务。
-# 由 implementer.md 收尾清单调用；也可手动启动整个循环：AGENT_LOOP=1 make agent-implementer
+# 由实现者收尾流程调用；也可手动启动整个循环：AGENT_LOOP=1 make agent-implementer
 # 环境变量: MORNLEA_LOOP_GUARD(默认 ~/.mornlea/loop.guard) / MORNLEA_LOOP_LOG
 set -euo pipefail
 

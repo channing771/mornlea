@@ -41,6 +41,10 @@ type SceneApplication interface {
 	SetServerTick(tick uint64)
 	SetPanelLastFrameAt(at time.Time)
 	SetBlockTargetReset(reset bool)
+	// 菜单全景（menu-vista）：PinVolatile 在收敛后钉住自转时刻，收敛判据
+	// 消费未完成工作量；非菜单相位场景两者均为零参与。
+	SetMenuVistaTick(tick uint64)
+	MenuVistaPending() int
 
 	// 镜像与实体呈现面。
 	Inventory() *client.InventoryMirror
@@ -84,7 +88,6 @@ type SceneApplication interface {
 	// UI 相位与菜单覆盖。
 	SetInventoryOpen(open bool)
 	SetInventorySource(source int)
-	SetMenuOverride(override *client.UIMenu)
 	SetMenuPhase(phase application.MenuPhase)
 	SetSettings(settings application.SettingsState)
 	Panel() *application.PanelState

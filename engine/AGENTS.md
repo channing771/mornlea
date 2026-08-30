@@ -8,7 +8,7 @@
 
 - `engine/rust-toolchain.toml` 固定 Rust 1.97.1；不要单独升级 compiler、Cargo lock 或 wgpu 依赖线。
 - `mornlea_engine` 是无窗口数值内核，提供 mesh/light、collision、raycast、physics 与 worldgen 的 engine ABI。
-- `mornlea_client` 是 Darwin 窗口、事件、egui 和 GPU 后端，提供独立的 client ABI。两个 ABI 独立演进，不共享版本号。
+- `mornlea_client` 是 Darwin 窗口、事件、进程内 WKWebView 菜单层和 GPU 后端，提供独立的 client ABI。两个 ABI 独立演进，不共享版本号。
 
 ## FFI
 

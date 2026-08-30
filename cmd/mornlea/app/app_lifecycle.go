@@ -44,6 +44,9 @@ func (a *Application) releaseOwnedResources() {
 	if a.mesher != nil {
 		a.mesher.Close()
 	}
+	// 全景管线先于渲染器释放：其 GPU 段与远环 tile 的释放调用必须落到仍然
+	// 存活的渲染器句柄上。幂等且 nil 安全。
+	a.discardMenuVista()
 	// 远环调度器先于渲染器关闭:Close 停 worker 并等待在途生成返回,之后
 	// 不再有任何 sink 调用落到已释放的渲染器句柄上。幂等且 nil 安全。
 	if a.lodScheduler != nil {

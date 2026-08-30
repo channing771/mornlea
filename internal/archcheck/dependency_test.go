@@ -25,9 +25,13 @@ import (
 // 算法（待更新队列、全序排序、封闭盆地上的不动点收敛）被拆成独立包，使其能脱离权威
 // 引擎被穷举性质测试；流动的数据所有权仍在 realm，fluid 只暴露
 // Advance(now, FluidWorld, budget) 这样的无状态纯函数入口，不持有世界。
-// fluid 只允许依赖 internal/core（当前实现未依赖 internal/world，即便设计意图允许，
-// 也不预先登记未使用的边）；fluid MUST NOT 反向依赖 sim/network/render/storage，
-// 否则它会退化成 sim 的内部实现，丧失独立测试的意义。
+// internal/fluid → internal/nativeabi（变更 rust-engine-fluid）：Advance 的单格
+// 流体规则求值经 FluidEvalBatch 批量送入 Rust engine kernel（eval_native.go 是
+// 包内唯一调用点），Go 侧保留全部编排（调度、预算、冲突合并、排序提交），kernel
+// 只做逐项无状态纯函数求值。fluid 除此之外只允许依赖 internal/core（当前实现未
+// 依赖 internal/world，即便设计意图允许，也不预先登记未使用的边）；fluid MUST
+// NOT 反向依赖 sim/network/render/storage，否则它会退化成 sim 的内部实现，丧失
+// 独立测试的意义。
 var allowed = map[string][]string{
 	"internal/archcheck":        {},
 	"internal/audio":            {},
@@ -35,7 +39,7 @@ var allowed = map[string][]string{
 	"internal/core":             {"internal/nativeabi"},
 	"internal/nativeabi":        {},
 	"internal/config":           {"internal/companion", "internal/core", "internal/physics", "internal/sim/tuning", "internal/logging"},
-	"internal/fluid":            {"internal/core"},
+	"internal/fluid":            {"internal/core", "internal/nativeabi"},
 	"internal/physics":          {"internal/core", "internal/nativeabi"},
 	"internal/pathfind":         {"internal/core"},
 	"internal/logging":          {},

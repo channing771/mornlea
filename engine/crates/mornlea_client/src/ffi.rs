@@ -4,7 +4,7 @@
 //! - 所有入口第一个参数是调用方期望的 ABI 版本,不匹配立即返回
 //!   `MORNLEA_CLIENT_STATUS_ABI_VERSION`;当前版本见 [`CLIENT_ABI_VERSION`]
 //!   (v6 起远环 tile 出口加入,v7 起雾 setter 出口加入,v9 起结构化 UI 事件,
-//!   v11 起离屏 benchmark batch)。
+//!   v11 起离屏 benchmark batch,v12 起菜单桥出口)。
 //! - 窗口句柄存放在 thread-local 表中:句柄只在创建线程有效,跨线程调用
 //!   查不到句柄而返回 `MORNLEA_CLIENT_STATUS_WINDOW`——这同时兜住了 winit
 //!   macOS 的主线程约束(Go 侧已 `LockOSThread`)。
@@ -19,10 +19,15 @@ use crate::window::ClientWindow;
 
 /// 当前 client ABI 版本。
 ///
+/// v12:退役菜单出口 `render_upload_ui_font` 与帧 TLV tag 9 UI 段
+/// (layout v1–v4 编解码随之作废);新增菜单状态下行出口 `ui_push_state`
+/// (窗口句柄域,JSON 字符串);`render_drain_ui_events` 签名不变、字节格式
+/// 改为版本化 JSON 事件信封(空队列写 0 字节)。菜单呈现改由进程内
+/// WKWebView 承担。新增导出面即 bump,ABI 版本是"同版本 = 同表面"的
+/// 不可混装契约(与 engine v3→v4、client v4→5 同一先例)。
 /// v9:设置页 layout v2 与结构化事件 batch 取代裸按钮 id，排空改为整批
-/// 容量门禁；v8:新增 egui 主菜单两条出口 `render_upload_ui_font`/`render_drain_ui_events`
-/// 与帧 TLV tag 9(egui 菜单段)——新增导出面即 bump,ABI 版本是
-/// "同版本 = 同表面"的不可混装契约(与 engine v3→v4、client v4→5 同一先例)。
+/// 容量门禁；v8:新增主菜单两条出口 `render_upload_ui_font`/`render_drain_ui_events`
+/// 与帧 TLV tag 9(菜单 UI 段)。
 /// v7:终审修复波(Ruling 14/16)新增雾参数化 `render_set_lod_fog` 出口;
 /// 既有入口签名不变。
 /// v6:新增远环 `render_upload_lod_tile`/`render_drop_lod_tile` 出口。
@@ -33,7 +38,7 @@ use crate::window::ClientWindow;
 /// 逐版本一致。
 /// v11:新增离屏 benchmark batch prepare/submit 入口。
 /// v10:avatar 通道容量扩至 75 具身体(450 实例)并新增敌怪身份域。
-pub const CLIENT_ABI_VERSION: u32 = 11;
+pub const CLIENT_ABI_VERSION: u32 = 12;
 
 /// 调用成功。
 pub const MORNLEA_CLIENT_STATUS_OK: u32 = 0;
@@ -275,6 +280,39 @@ pub unsafe extern "C" fn mornlea_client_window_ns_window(
     })
 }
 
+/// 下行菜单状态推送(client ABI v12):把 Go 组装的 UI 状态 JSON 转发给
+/// 挂在本窗口上的 WebView(`window.mornlea.onState` 求值)。首次调用惰性
+/// 挂载 WebView;从未调用的进程(基准/capture)不创建任何 WebView,零参与。
+///
+/// 入口校验(ABI 版本、`json` 非空)先于句柄查找;JSON 内容合法性
+/// (UTF-8、可解析、含 `phase` 字段)由窗口层校验,违约返回
+/// `INVALID_ARGUMENT`。推送是幂等的:与上次相同的状态不产生新的 JS 求值。
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn mornlea_client_ui_push_state(
+    abi_version: u32,
+    handle: u64,
+    json: *const u8,
+    json_len: usize,
+) -> u32 {
+    if abi_version != CLIENT_ABI_VERSION {
+        return MORNLEA_CLIENT_STATUS_ABI_VERSION;
+    }
+    if json.is_null() || json_len == 0 {
+        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+    }
+    catch(|| {
+        // SAFETY: json 非空,调用方保证 json_len 字节可读。
+        let bytes = unsafe { std::slice::from_raw_parts(json, json_len) };
+        with_window(handle, |window| {
+            if window.push_ui_state(bytes) {
+                MORNLEA_CLIENT_STATUS_OK
+            } else {
+                MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+            }
+        })
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,10 +321,11 @@ mod tests {
     // 校验拒绝路径:ABI 版本、参数校验与无效句柄。
 
     #[test]
-    fn abi_version_is_eleven() {
-        // v11 新增离屏 benchmark batch prepare/submit 入口；v10 扩大 avatar
-        // 通道容量（75 具身体 / 450 实例）并新增敌怪 EntityHostile 身份域。
-        assert_eq!(mornlea_client_abi_version(), 11);
+    fn abi_version_is_twelve() {
+        // v12 退役菜单字体上传出口与帧 tag 9 UI 段,新增
+        // `ui_push_state` 状态下行出口,drain 改版本化 JSON 信封;
+        // v11 新增离屏 benchmark batch prepare/submit 入口。
+        assert_eq!(mornlea_client_abi_version(), 12);
     }
 
     #[test]
@@ -606,20 +645,15 @@ const FRAME_TAG_HUD: u32 = 6;
 const FRAME_TAG_DEBUG: u32 = 7;
 /// 水下水色叠加段(4 个 f32:RGBA)。client ABI v5 内的追加 tag,不升 ABI 版本。
 const FRAME_TAG_WATER: u32 = 8;
-/// egui UI 段(client ABI v9):layout v1/v2 字节,见 [`crate::ui::decode_ui_frame`]。
-const FRAME_TAG_UI: u32 = 9;
+/// 白名单内的最高 TLV tag。client ABI v12 退役了 v8–v11 的 tag 9 UI 段:
+/// 携带该段的帧按未知 tag 同一路径拒绝,不触碰渲染器状态。
+const FRAME_TAG_MAX: u32 = 8;
 
 /// 解析 render_frame 输入;违约返回 None。
 ///
 /// header@188 是 layout version:0 为 v1(纯地形,精确长度),2 为 v2
 /// (可见列表之后跟 TLV pass 段序列:tag u32 + length u32 + bytes,
-/// 除 UI 段外各段 length 4 对齐,未知 tag/越界/重复段拒绝)。
-///
-/// UI 段(FRAME_TAG_UI)豁免 4 对齐:它是 UTF-8 字段序列(layout/flags/按钮数/
-/// 各按钮 id+label+enabled/title/version/error),长度由字段自身界定,不保证
-/// 4 对齐(如四按钮 + 中文 error 的 142 字节);其余 pass 段(avatar/drop/outline/
-/// 字样/水色)是定长实例数组,天然 4 对齐,故各段校验不变。UI 段内容合法性由
-/// decode_ui_frame 在解析层校验。
+/// 各段 length 4 对齐,未知/已退役 tag、越界、重复段拒绝)。
 fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
     if bytes.len() < FRAME_HEADER_BYTES {
         return None;
@@ -661,10 +695,9 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
     let mut name_tag_vertices = Vec::new();
     let mut hud_vertices = Vec::new();
     let mut debug_vertices = Vec::new();
-    let mut ui_segment = Vec::new();
     if layout == 2 {
         let mut cursor = sections_end;
-        let mut seen = [false; 10];
+        let mut seen = [false; 9];
         while cursor < bytes.len() {
             if bytes.len() - cursor < 8 {
                 return None;
@@ -672,16 +705,15 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
             let tag = read_u32(cursor);
             let length = read_u32(cursor + 4) as usize;
             cursor += 8;
-            // 除 UI 段(UTF-8 字段序列,长度由字段界定)外,其余 pass 段均为定长
-            // 实例数组(长度天然 4 对齐),故对齐检查对非 UI 段保持一致;UI 段
-            // 只做越界检查,内容合法性由 decode_ui_frame 在解析层保证。
-            if (tag != FRAME_TAG_UI && !length.is_multiple_of(4)) || bytes.len() - cursor < length {
+            // 各 pass 段均为定长实例数组(长度天然 4 对齐),对齐检查统一;
+            // tag 白名单 1..=8,已退役的 tag 9 与未知 tag 同路径拒绝。
+            if !length.is_multiple_of(4) || bytes.len() - cursor < length {
                 return None;
             }
             let payload = &bytes[cursor..cursor + length];
             cursor += length;
             let index = tag as usize;
-            if !(1..=9).contains(&index) || seen[index] {
+            if !(1..=(FRAME_TAG_MAX as usize)).contains(&index) || seen[index] {
                 return None;
             }
             seen[index] = true;
@@ -708,15 +740,6 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
                         );
                     }
                 }
-                FRAME_TAG_UI => {
-                    ui_segment = payload.to_vec();
-                    // UI 段语义校验在解析层完成:decode_ui_frame 违约即拒绝,
-                    // 先于渲染器状态、不触碰帧 target,与既有"未知 tag/越界/重复
-                    // 段拒绝"同一路径(ffi 层统一转 INVALID_ARGUMENT)。
-                    if crate::ui::decode_ui_frame(&ui_segment).is_err() {
-                        return None;
-                    }
-                }
                 _ => return None,
             }
         }
@@ -740,7 +763,6 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
         name_tag_vertices,
         hud_vertices,
         debug_vertices,
-        ui_segment,
     })
 }
 
@@ -1108,7 +1130,6 @@ mod render_ffi_tests {
         let lod_tile = [0u8; crate::render::lod::LOD_QUAD_BYTES];
         let glyph = [0u8; 1];
         let hud = [0u8; 4];
-        let font = include_bytes!("ui/testdata/demo.ttf");
         // prepared batch 持有所有这些 GPU 资源的引用；它提交前每项变更都必须拒绝。
         // SAFETY: 所有指针均来自本测试的有效局部数组或静态字体字节。
         assert_eq!(
@@ -1203,17 +1224,6 @@ mod render_ffi_tests {
                     1,
                     hud.as_ptr(),
                     hud.len(),
-                )
-            },
-            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
-        );
-        assert_eq!(
-            unsafe {
-                mornlea_client_render_upload_ui_font(
-                    CLIENT_ABI_VERSION,
-                    handle,
-                    font.as_ptr(),
-                    font.len(),
                 )
             },
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
@@ -1400,9 +1410,26 @@ mod frame_v2_tests {
         // 空 pass 段序列同样合法(v2 允许零段)。
         assert_eq!(parse_status(&v2_frame(&[])), MORNLEA_CLIENT_STATUS_WINDOW);
 
-        // 未知 tag(10 超出白名单 1..=9)。
+        // 未知 tag(10 超出白名单 1..=8)。
         assert_eq!(
             parse_status(&v2_frame(&tlv(10, &[0u8; 4]))),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        // 已退役 tag 9(v8–v11 的菜单 UI 段):与未知 tag 同路径拒绝,
+        // 先于句柄查找、不触碰渲染器状态。
+        assert_eq!(
+            parse_status(&v2_frame(&tlv(9, &[0u8; 4]))),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        // 退役 UI 段的真实形状(layout v1 菜单段字节,非 4 对齐)同样拒绝:
+        // v12 起该段不再有任何合法形态。
+        let mut retired_ui = Vec::new();
+        retired_ui.extend_from_slice(&1u32.to_le_bytes());
+        retired_ui.extend_from_slice(&1u32.to_le_bytes());
+        retired_ui.extend_from_slice(&0u32.to_le_bytes());
+        retired_ui.extend_from_slice(&[0u8; 2]);
+        assert_eq!(
+            parse_status(&v2_frame(&tlv(9, &retired_ui))),
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
         // 重复段。
@@ -1448,139 +1475,6 @@ mod frame_v2_tests {
         v1_trailing[188] = 0;
         assert_eq!(
             parse_status(&v1_trailing),
-            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
-        );
-    }
-    /// 最小合法 UI 段:layout v1 + visible + 0 按钮 + 三个空串(24 字节,4 对齐)。
-    fn ui_segment_minimal() -> Vec<u8> {
-        let mut out = Vec::new();
-        out.extend_from_slice(&crate::ui::UI_LAYOUT_VERSION.to_le_bytes());
-        out.extend_from_slice(&crate::ui::UI_FLAG_VISIBLE.to_le_bytes());
-        out.extend_from_slice(&0u32.to_le_bytes()); // 按钮数
-        out.extend_from_slice(&0u32.to_le_bytes()); // title len
-        out.extend_from_slice(&0u32.to_le_bytes()); // version len
-        out.extend_from_slice(&0u32.to_le_bytes()); // error len
-        out
-    }
-
-    #[test]
-    fn v2_ui_segment_parses_and_carries_bytes() {
-        // 合法 UI 段:解析通过(句柄未知停在 WINDOW 证明接受);无 tag 帧也合法,
-        // ui_segment 为空。
-        let seg = ui_segment_minimal();
-        assert_eq!(
-            parse_status(&v2_frame(&tlv(FRAME_TAG_UI, &seg))),
-            MORNLEA_CLIENT_STATUS_WINDOW
-        );
-        assert_eq!(parse_status(&v2_frame(&[])), MORNLEA_CLIENT_STATUS_WINDOW);
-    }
-
-    #[test]
-    fn v2_invalid_ui_segment_rejected_same_path() {
-        // 非法 UI 段(layout 版本错误)经 render_frame 回调 → INVALID_ARGUMENT,
-        // 与既有非法 pass 段同一拒绝种类。
-        let mut bad = Vec::new();
-        bad.extend_from_slice(&0u32.to_le_bytes()); // layout=0 非法
-        bad.extend_from_slice(&0u32.to_le_bytes()); // flags
-        bad.extend_from_slice(&0u32.to_le_bytes()); // 按钮数
-        bad.extend_from_slice(&0u32.to_le_bytes());
-        bad.extend_from_slice(&0u32.to_le_bytes());
-        bad.extend_from_slice(&0u32.to_le_bytes());
-        assert_eq!(
-            parse_status(&v2_frame(&tlv(FRAME_TAG_UI, &bad))),
-            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
-        );
-    }
-
-    fn ui_settings_segment() -> Vec<u8> {
-        let mut out = Vec::new();
-        out.extend_from_slice(&crate::ui::UI_SETTINGS_LAYOUT_VERSION.to_le_bytes());
-        out.extend_from_slice(&1u32.to_le_bytes());
-        out.extend_from_slice(&0.25f32.to_bits().to_le_bytes());
-        out.extend_from_slice(&2u32.to_le_bytes());
-        out.extend_from_slice(&11u32.to_le_bytes());
-        out.extend_from_slice(b"packs/local");
-        out.extend_from_slice(&1u32.to_le_bytes());
-        out.extend_from_slice(&0u32.to_le_bytes());
-        out.extend_from_slice(&0u32.to_le_bytes());
-        out
-    }
-
-    #[test]
-    fn v2_settings_ui_invalid_values_fail_before_handle_lookup() {
-        let valid = ui_settings_segment();
-        assert_eq!(
-            parse_status(&v2_frame(&tlv(FRAME_TAG_UI, &valid))),
-            MORNLEA_CLIENT_STATUS_WINDOW
-        );
-
-        for (name, offset, value) in [
-            ("flags", 4usize, 2u32),
-            ("nan audio", 8, f32::NAN.to_bits()),
-            ("window", 12, 99),
-            ("dirty", 31, 2),
-        ] {
-            let mut bad = valid.clone();
-            bad[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
-            assert_eq!(
-                parse_status(&v2_frame(&tlv(FRAME_TAG_UI, &bad))),
-                MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT,
-                "case={name}"
-            );
-        }
-        let mut tail = valid;
-        tail.push(0);
-        assert_eq!(
-            parse_status(&v2_frame(&tlv(FRAME_TAG_UI, &tail))),
-            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
-        );
-    }
-
-    /// 构造真实菜单 UI 段(四按钮 + 中文 error,与 Go EncodeUIMenu 同一语义):
-    /// 142 字节,非 4 对齐(142 % 4 == 2)。用于证明 parse 层接受非对齐 UI 段。
-    fn ui_segment_four_button_error() -> Vec<u8> {
-        let mut out = Vec::new();
-        out.extend_from_slice(&crate::ui::UI_LAYOUT_VERSION.to_le_bytes()); // layout
-        out.extend_from_slice(&crate::ui::UI_FLAG_VISIBLE.to_le_bytes()); // flags visible
-        out.extend_from_slice(&4u32.to_le_bytes()); // button count
-        let buttons = [
-            (1u32, "进入游戏", 1u32),
-            (2, "多人游戏", 0),
-            (3, "设置", 0),
-            (4, "退出游戏", 1),
-        ];
-        for (id, label, enabled) in buttons {
-            out.extend_from_slice(&id.to_le_bytes());
-            out.extend_from_slice(&(label.len() as u32).to_le_bytes());
-            out.extend_from_slice(label.as_bytes());
-            out.extend_from_slice(&enabled.to_le_bytes());
-        }
-        let title = "Mornlea";
-        out.extend_from_slice(&(title.len() as u32).to_le_bytes());
-        out.extend_from_slice(title.as_bytes());
-        let version = "dev";
-        out.extend_from_slice(&(version.len() as u32).to_le_bytes());
-        out.extend_from_slice(version.as_bytes());
-        let error = "存档无法打开";
-        out.extend_from_slice(&(error.len() as u32).to_le_bytes());
-        out.extend_from_slice(error.as_bytes());
-        out
-    }
-
-    #[test]
-    fn v2_ui_segment_non_aligned_length_accepted() {
-        // 真实菜单(四按钮 + 中文 error)编码为 142 字节,非 4 对齐。
-        let seg = ui_segment_four_button_error();
-        assert_eq!(seg.len(), 142);
-        assert_eq!(seg.len() % 4, 2);
-        // parse 层必须接受非对齐 UI 段:停在句柄层 WINDOW(而非 INVALID_ARGUMENT)。
-        assert_eq!(
-            parse_status(&v2_frame(&tlv(FRAME_TAG_UI, &seg))),
-            MORNLEA_CLIENT_STATUS_WINDOW
-        );
-        // 非 UI 段仍拒绝非对齐长度(既有 4 对齐守卫不因豁免而放松)。
-        assert_eq!(
-            parse_status(&v2_frame(&tlv(FRAME_TAG_NAME_TAG, &[0u8; 6]))),
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
     }
@@ -2038,45 +1932,14 @@ pub extern "C" fn mornlea_client_render_resize(
         })
     })
 }
-/// 上传 egui 菜单字体(client ABI v9 保留出口):字节负载须非空且 <= 32 MiB。
-///
-/// 入口校验(空指针、零长度 -> INVALID_ARGUMENT;超 32 MiB -> CAPACITY)
-/// 先于句柄查找(与 set_lod_fog 同一约定,无头可测);成功则安装到
-/// EguiPass 的 UiState(proportional + monospace 同族)。
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn mornlea_client_render_upload_ui_font(
-    abi_version: u32,
-    handle: u64,
-    bytes: *const u8,
-    len: usize,
-) -> u32 {
-    if abi_version != CLIENT_ABI_VERSION {
-        return MORNLEA_CLIENT_STATUS_ABI_VERSION;
-    }
-    if bytes.is_null() || len == 0 {
-        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
-    }
-    if len > crate::render::egui::MAX_UI_FONT_BYTES {
-        return MORNLEA_CLIENT_STATUS_CAPACITY;
-    }
-    catch(|| {
-        with_renderer(handle, |renderer| {
-            // SAFETY: bytes 非空,调用方保证 len 字节可读。
-            let data = unsafe { std::slice::from_raw_parts(bytes, len) };
-            match renderer.upload_ui_font(data) {
-                Ok(()) => MORNLEA_CLIENT_STATUS_OK,
-                Err(_) => MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT,
-            }
-        })
-    })
-}
-
-/// 排空 client ABI v9 结构化 UI 事件：只有完整 batch 能装入 `out` 时才
-/// 写入并清空队列，把实际字节数写入 `*out_written`。容量不足返回
+/// 排空 client ABI v12 版本化 JSON UI 事件信封:只有完整信封能装入 `out`
+/// 时才写入并清空队列，把实际字节数写入 `*out_written`。容量不足返回
 /// `MORNLEA_CLIENT_STATUS_CAPACITY`，三个对象均保持不变。
 ///
 /// 入口校验(ABI 版本、`out` 与 `out_written` 非空)先于句柄查找；校验失败
-/// 不触碰调用方对象。空队列仍输出 8 字节合法空 batch。
+/// 不触碰调用方对象。空队列写 0 字节(无 UI 状态的空结果);信封内容为
+/// `{"v":1,"events":[...]}`,事件按 WebView 产生顺序出现,单批至多 64 条,
+/// 深层校验(未知动作/越界字段)由 Go 消费侧执行。
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn mornlea_client_render_drain_ui_events(
     abi_version: u32,
@@ -2103,7 +1966,7 @@ pub unsafe extern "C" fn mornlea_client_render_drain_ui_events(
 /// 把排空结果映射为 FFI 状态；只有成功才写 `out_written`，失败路径保持调用
 /// 方 marker 不变。调用方必须先保证指针非空且可写。
 fn finish_ui_event_drain(
-    result: Result<usize, crate::ui::UiOutputError>,
+    result: Result<usize, crate::bridge::DrainError>,
     out_written: *mut usize,
 ) -> u32 {
     match result {
@@ -2112,8 +1975,7 @@ fn finish_ui_event_drain(
             unsafe { out_written.write(written) };
             MORNLEA_CLIENT_STATUS_OK
         }
-        Err(crate::ui::UiOutputError::Capacity) => MORNLEA_CLIENT_STATUS_CAPACITY,
-        Err(crate::ui::UiOutputError::Invalid) => MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT,
+        Err(crate::bridge::DrainError::Capacity) => MORNLEA_CLIENT_STATUS_CAPACITY,
     }
 }
 
@@ -2121,18 +1983,19 @@ fn finish_ui_event_drain(
 mod ui_ffi_tests {
     use super::*;
 
-    // 菜单两条出口(client ABI v9)的无头校验:错误 ABI、非法参数先于句柄查找。
+    // 菜单桥出口(client ABI v12)的无头校验:错误 ABI、非法参数先于句柄查找。
 
     #[test]
-    fn upload_ui_font_rejects_bad_arguments_before_handle_lookup() {
+    fn ui_push_state_rejects_bad_arguments_before_handle_lookup() {
+        let state = br#"{"phase":"game"}"#;
         // 错误 ABI 优先。
         assert_eq!(
             unsafe {
-                mornlea_client_render_upload_ui_font(
+                mornlea_client_ui_push_state(
                     CLIENT_ABI_VERSION + 1,
                     0xF00D,
-                    std::ptr::null(),
-                    0,
+                    state.as_ptr(),
+                    state.len(),
                 )
             },
             MORNLEA_CLIENT_STATUS_ABI_VERSION
@@ -2140,34 +2003,26 @@ mod ui_ffi_tests {
         // 空指针 -> INVALID_ARGUMENT(先于句柄查找)。
         assert_eq!(
             unsafe {
-                mornlea_client_render_upload_ui_font(
-                    CLIENT_ABI_VERSION,
-                    0xF00D,
-                    std::ptr::null(),
-                    4,
-                )
+                mornlea_client_ui_push_state(CLIENT_ABI_VERSION, 0xF00D, std::ptr::null(), 4)
             },
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
         // 零长度 -> INVALID_ARGUMENT。
-        let dummy = [0u8; 4];
         assert_eq!(
-            unsafe {
-                mornlea_client_render_upload_ui_font(CLIENT_ABI_VERSION, 0xF00D, dummy.as_ptr(), 0)
-            },
+            unsafe { mornlea_client_ui_push_state(CLIENT_ABI_VERSION, 0xF00D, state.as_ptr(), 0) },
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
-        // 超 32 MiB -> CAPACITY。
+        // 参数合法但句柄未知 -> WINDOW(不创建任何 WebView)。
         assert_eq!(
             unsafe {
-                mornlea_client_render_upload_ui_font(
+                mornlea_client_ui_push_state(
                     CLIENT_ABI_VERSION,
                     0xF00D,
-                    dummy.as_ptr(),
-                    crate::render::egui::MAX_UI_FONT_BYTES + 1,
+                    state.as_ptr(),
+                    state.len(),
                 )
             },
-            MORNLEA_CLIENT_STATUS_CAPACITY
+            MORNLEA_CLIENT_STATUS_WINDOW
         );
     }
 
@@ -2253,7 +2108,7 @@ mod ui_ffi_tests {
     fn drain_capacity_does_not_write_out_written() {
         let mut marker = 0xA5A5A5A5usize;
         assert_eq!(
-            finish_ui_event_drain(Err(crate::ui::UiOutputError::Capacity), &mut marker),
+            finish_ui_event_drain(Err(crate::bridge::DrainError::Capacity), &mut marker),
             MORNLEA_CLIENT_STATUS_CAPACITY
         );
         assert_eq!(marker, 0xA5A5A5A5);

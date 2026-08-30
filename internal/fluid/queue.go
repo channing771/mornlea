@@ -124,6 +124,14 @@ type Queue struct {
 	// 于是「守卫真的触发了」会表现成 CI 红灯，而不是生产里一声不响的吞吐损失。
 	// 见 advanceExamineLimit 的注释。
 	advanceExamineLimitHits int
+	// evalInput/evalOutput/evalPositions 是单格求值 native 批量调用的复用
+	// scratch：阶段一逐项把 7 格邻域编码进 evalInput 并把弹出项坐标记进
+	// evalPositions，收批时按需扩容 evalOutput 后一次 FluidEvalBatch 求值全部
+	// 条目。三者只在 Advance 内部使用、按需增长且跨 tick 复用，容量稳定后
+	// 单次推进不再分配（见 eval_native.go 与 eval_alloc_test.go）。
+	evalInput     []byte
+	evalOutput    []byte
+	evalPositions []core.BlockPos
 }
 
 // NewQueue 构造一个空的待更新队列。
@@ -289,16 +297,17 @@ func advanceExamineLimit(budget int) int {
 //     （spec.md「预算不改变平衡态」）。除 budget 外还有一条无条件的探视上界
 //     advanceExamineLimit，用来在过时条目堆积时封顶本 tick 的工作量；触发它的
 //     效果与「本 tick 预算更小」完全一致，同样不丢项，见 Queue 的类型注释。
-//  3. 存活/替换判定只读取 w 在本次 Advance 调用开始时的状态：evalCell 只
-//     读不写，本函数在整个处理循环期间不调用 w.SetBlock，全部候选写入先
-//     收集到 pendingWrites，循环结束后才一次性提交。这避免了同一 tick 内
-//     一次写入被后续求值读到，从而让处理次序影响结果（design.md 提到的
-//     振荡风险）。
+//  3. 存活/替换判定只读取 w 在本次 Advance 调用开始时的状态：单格求值经
+//     nativeabi.FluidEvalBatch 批量送入 Rust engine kernel，编码只经
+//     `w.BlockAt` 读取 7 格邻域，本函数在整个处理循环期间不调用 w.SetBlock，
+//     全部候选写入先收集到 pendingWrites，循环结束后才一次性提交。这避免了
+//     同一 tick 内一次写入被后续求值读到，从而让处理次序影响结果（design.md
+//     提到的振荡风险）。
 //  4. 若同一 tick 内多个来源（不同待更新格的传播）都想写同一目标格，取
 //     流体等级最小（最强）者生效（spec.md「同 tick 冲突写入取最强者」）；
 //     合并用 strongerWrite 实现，是可交换、可结合的运算，结果只取决于
 //     参与合并的候选值集合本身，与这些候选值被枚举/合并的次序无关——不管
-//     process 的处理次序、不管 evalCell 内部 map 的遍历次序。
+//     process 的处理次序、不管 kernel 输出条目的解码次序。
 //  5. 因本 tick 变化（包括消失为空气）的格，其自身与六个面邻格以
 //     dueTick=now+delay 重新入队，供后续 tick 继续推进。返回值按 lessPos
 //     排序而非处理次序，与提交顺序、广播顺序保持同一套确定性排序口径。
@@ -315,6 +324,12 @@ func (q *Queue) Advance(now uint64, w FluidWorld, budget int, delay uint64) []co
 	// 阶段一：按全序取出至多 budget 个到期项，就地只读求值，把全部候选写入
 	// 合并进 pendingWrites。
 	//
+	// 求值分两步走：弹出循环里逐项把 7 格邻域经 `w.BlockAt` 编码进 scratch
+	// （见 eval_native.go），循环结束后一次 `FluidEvalBatch` 求值全部条目、解
+	// 码并合并。两步与迁移前逐项 `evalCell` 逐位等价：kernel 是逐项无状态纯
+	// 函数（项间互不可见），编码读取的 7 格与 `evalCell` 的全部读取完全相同，
+	// 且整个阶段一没有任何 `w.SetBlock`——每项看到的都是 tick 起始状态。
+	//
 	// 同一目标格可能被多个不同的待更新格同 tick 写入（比如两股水从不同方向
 	// 汇合到同一格）：spec.md「同 tick 冲突写入取最强者」要求取流体等级
 	// 最小（最强）者，且结果不依赖参与合并的源格之间的遍历顺序——用
@@ -322,16 +337,16 @@ func (q *Queue) Advance(now uint64, w FluidWorld, budget int, delay uint64) []co
 	// 取出次序已经按全序排好这件事。
 	//
 	// 「一格自身消亡写 Air」与「某邻居同 tick 向该格写水」这两类写入不会
-	// 冲突：evalCell 的自我消亡分支只在 flowingSurvives 判否时触发，而
-	// flowingSurvives 判否恰好意味着「上方不是流体」且「不存在等级更小的
-	// 水平邻居」；反过来，任何能把水写进该格的邻居 B——不论是 B 在其正上方
-	// 做垂直传播（此时 B 本身就是「上方是流体」的见证），还是 B 做水平传播
-	// 且 nextLevel < 本格等级（此时 B 本身就是「等级更小的水平邻居」）——都
-	// 恰好构成该格的存活支撑，使 flowingSurvives 判真、自我消亡分支根本不会
-	// 触发。两者在当前规则集下不可达同 tick 冲突，strongerWrite 里让流体
-	// 优先于空气纯粹是防御性兜底（万一将来规则变化打破这条论证），不是当前
-	// 规则下真的会走到的分支。
+	// 冲突：单格求值的自我消亡分支只在存活判定判否时触发，而存活判定判否
+	// 恰好意味着「上方不是流体」且「不存在等级更小的水平邻居」；反过来，
+	// 任何能把水写进该格的邻居 B——不论是 B 在其正上方做垂直传播（此时 B
+	// 本身就是「上方是流体」的见证），还是 B 做水平传播且 nextLevel < 本格
+	// 等级（此时 B 本身就是「等级更小的水平邻居」）——都恰好构成该格的
+	// 存活支撑，使存活判定为真、自我消亡分支根本不会触发。两者在当前规则集
+	// 下不可达同 tick 冲突，strongerWrite 里让流体优先于空气纯粹是防御性兜底
+	// （万一将来规则变化打破这条论证），不是当前规则下真的会走到的分支。
 	pendingWrites := make(map[core.BlockPos]core.BlockID)
+	q.beginEvalBatch()
 	examineLimit := advanceExamineLimit(budget)
 	for processed := 0; processed < budget && len(q.order) > 0; {
 		if q.lastAdvanceExamined >= examineLimit {
@@ -359,14 +374,9 @@ func (q *Queue) Advance(now uint64, w FluidWorld, budget int, delay uint64) []co
 		it := q.popOrder()
 		q.lastAdvanceExamined++
 		processed++
-		for pos, id := range evalCell(it.pos, w) {
-			if existing, ok := pendingWrites[pos]; ok {
-				pendingWrites[pos] = strongerWrite(existing, id)
-			} else {
-				pendingWrites[pos] = id
-			}
-		}
+		q.enqueueEvalItem(w, it.pos)
 	}
+	q.finishEvalBatch(pendingWrites)
 
 	// 阶段二：一次性提交，并只把「值真的变了」的格计入本 tick 的变化集合。
 	// pendingWrites 是 map，遍历顺序随机；先按 lessPos 排序目标格再遍历，
@@ -375,7 +385,7 @@ func (q *Queue) Advance(now uint64, w FluidWorld, budget int, delay uint64) []co
 	// 附带 dirty 标记与区块变更广播，无变化的写入会产生纯噪声的存档改写与
 	// 网络广播，因此不能无条件调用。
 	//
-	// 这里的排序规模由 budget 封顶（至多 budget 次 evalCell，每次至多 4 个
+	// 这里的排序规模由 budget 封顶（至多 budget 次单格求值，每次至多 4 个
 	// 目标格），同样与队列规模 len(order) 无关。
 	targets := make([]core.BlockPos, 0, len(pendingWrites))
 	for pos := range pendingWrites {

@@ -15,6 +15,12 @@
 - v32 在 Play S→C registry 尾部追加 ID 25 `CombatHit(ServerTick, Damage, TargetKind)`；固定 10-byte 载荷只私发给成功攻击的玩家会话，受击者、旁观者、trusted observer 与 hostile 攻击目标均不接收；
 - 客户端只声明按键意图，权威结算全在服务端；`SaturationZero` 是瞬态提示位、不入任何存档，饱和度与疲劳数值是纯服务端量、不占 wire 字段；`DayPhaseOffset` 只经世界 metadata v3 持久化，不进玩家存档。
 
+## client ABI
+
+- 图形客户端的 client ABI 为 v12：同一次构建的 `mornlea` 与 `libmornlea_client.dylib` 是不可跨版本混装的 release unit，v11 与 v12 的二进制不可混装，版本不匹配经各 FFI 入口的版本检查稳定拒绝；无图形专服不链接 client 库，不受其演进影响；
+- v12 随菜单层迁进程内 WKWebView：`render_upload_ui_font` 出口与帧 TLV tag 9 UI 段（layout v1–v4 编解码）退役（下发即 `INVALID_ARGUMENT`），新增 `ui_push_state` JSON 状态下行出口，`render_drain_ui_events` 签名不变、字节格式改为版本化 JSON 事件信封（空队列 0 字节）；
+- 协议、存档 schema 与 benchmark scenario 不随 client ABI 演进，既有世界与玩家存档在新客户端上照常读取。
+
 ## 存档版本
 
 - 世界 metadata 保持 v3，在 v2 载荷末尾追加 8 字节 `DayPhaseOffset`（u64，值域 `0..23999`，越界旧值读入时归一），既有段布局一字不动；v1/v2 世界读入即迁移：世界时间保持原值、偏移取 `0`（显示相位行为不变），并在下一次正常自动保存或关服时写为 v3；只认识旧版本的程序遇到未来 metadata 必须稳定拒绝且不得覆盖原文件；

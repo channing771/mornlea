@@ -17,7 +17,7 @@ PIXEL_PERFECTION_NOTICE_DIR := internal/assets/packs/pixel_perfection
 PIXEL_PERFECTION_NOTICE_DEST := bin/third-party/pixel-perfection
 ARGS ?=
 
-.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check dev-check agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev
+.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check frontend-check dev-check agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev
 
 run test test-multiplayer bench-multiplayer visual-check visual-update: rust
 build: rust
@@ -39,12 +39,12 @@ help:
 		'  make archcheck        验证依赖闭包与无图形服务端边界' \
 		'  make rust             构建固定版本的 Rust cdylib' \
 		'  make rust-check       运行 Rust 格式、clippy 与单测' \
+		'  make frontend-check   菜单 WebView 前端门禁(冻结安装+typecheck+vitest+构建+dist 一致)' \
 		'  make fmt              格式化全部 Rust 与 Go 源码' \
 		'  make visual-check     跑视觉场景并与 golden 基线比对' \
 		'  make visual-update    重新生成 golden 基线（VISUAL_OUT 覆盖输出目录）' \
 		'  make clean            删除 bin 目录' \
 		'  make agent-planner    手动运行规划者工作者(docs/agents/planner.md)' \
-		'  make agent-implementer 手动运行实现者工作者(docs/agents/implementer.md)' \
 		'  make agent-gates      运行标准门禁汇总(scripts/agents/gates.sh)' \
 		'  make agent-dashboard   构建并启动本地执行状态看板' \
 		'  make agent-ui-dev      启动看板前端开发服务器(代理 /api)' \
@@ -77,6 +77,16 @@ rust-check:
 	cd $(RUST_DIR) && $(CARGO) fmt --check
 	cd $(RUST_DIR) && $(CARGO) clippy --workspace --all-targets -- -D warnings
 	cd $(RUST_DIR) && $(CARGO) test --workspace --locked
+
+# frontend-check:菜单 WebView 前端门禁。pnpm 不全局安装,由 package.json 的
+# packageManager 字段经 corepack 按钉版自动供给,--frozen-lockfile 是唯一安装
+# 姿势;末行校验构建产物与入库 dist 一致,dist 入库后任何漂移都会让门禁变红。
+FRONTEND_DIR := engine/crates/mornlea_client/frontend
+
+frontend-check:
+	cd $(FRONTEND_DIR) && corepack pnpm install --frozen-lockfile
+	cd $(FRONTEND_DIR) && corepack pnpm typecheck && corepack pnpm test && corepack pnpm build
+	git diff --exit-code -- $(FRONTEND_DIR)/dist
 
 build:
 	@mkdir -p $(dir $(BINARY))

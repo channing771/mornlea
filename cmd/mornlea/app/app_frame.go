@@ -64,7 +64,7 @@ func (a *Application) updateItemPopup() hud.PopupOverlay {
 			a.popupSelection = hotbar.Selected
 		case hotbar.Selected != a.popupSelection:
 			a.popupSelection = hotbar.Selected
-			suppressed := a.inventoryOpen || a.menu.phase != MenuPhaseGame || a.menuOverride != nil
+			suppressed := a.inventoryOpen || a.menu.phase != MenuPhaseGame
 			if !suppressed {
 				if name, ok := core.ItemDisplayName(hotbar.Slots[hotbar.Selected].Item); ok {
 					a.itemPopup = hud.PopupOverlay{Text: name, ShownAtTick: a.serverTick, Valid: true}
@@ -79,7 +79,7 @@ func (a *Application) updateItemPopup() hud.PopupOverlay {
 	// 呈现抑制：界面打开或菜单相位期间一个字形都不产生（delta「容器与菜单
 	// 抑制」不只约束变化触发，也约束呈现）；已记录的弹条在相位恢复且仍在
 	// 40 tick 窗口内时继续显示剩余时长——抑制是隐藏而非清除。
-	if a.inventoryOpen || a.menu.phase != MenuPhaseGame || a.menuOverride != nil {
+	if a.inventoryOpen || a.menu.phase != MenuPhaseGame {
 		return hud.PopupOverlay{}
 	}
 	return popup
@@ -151,16 +151,26 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		a.camera.Aspect = float32(width) / float32(height)
 	}
 
+	// 菜单全景：主菜单/设置页相位返回惰性构建的全景管线（游戏相位 nil，
+	// 与引入全景前逐字节一致）。全景接管本帧的世界内容与相机；游戏调度器
+	// 与远环带在其间完全冻结，呈现状态互不渗透。
+	vista := a.menuVistaForFrame()
+	activeScheduler := a.scheduler
 	a.scheduler.BeginFrame()
-	a.mesher.Schedule(a.mirror, workMax)
-	for _, result := range a.mesher.Drain(a.mirror, workMax) {
-		if result.Dimension != core.Overworld {
-			continue
+	if vista != nil {
+		activeScheduler = vista.scheduler
+		vista.pump(workMax)
+	} else {
+		a.mesher.Schedule(a.mirror, workMax)
+		for _, result := range a.mesher.Drain(a.mirror, workMax) {
+			if result.Dimension != core.Overworld {
+				continue
+			}
+			a.scheduler.SetConnectivity(result.Pos, result.Conn)
+			a.scheduler.QueueSection(result.Pos, result.Quads)
 		}
-		a.scheduler.SetConnectivity(result.Pos, result.Conn)
-		a.scheduler.QueueSection(result.Pos, result.Quads)
+		a.scheduler.FlushUploads(a.center)
 	}
-	a.scheduler.FlushUploads(a.center)
 	renderTiming := a.multiplayerRenderTiming
 	var renderNow func() time.Time
 	var nameTagDuration time.Duration
@@ -215,7 +225,7 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	// 准星只在游戏相位（主菜单、设置页、暂停覆盖层与菜单快照覆盖之外）呈现；
 	// HUD 段本身仍由 hudVisible 门控。
 	crosshair := hud.CrosshairOverlay{
-		Visible: a.menu.phase == MenuPhaseGame && a.menuOverride == nil,
+		Visible: a.menu.phase == MenuPhaseGame,
 	}
 	// 容器悬停 tooltip：界面打开时把本帧指针坐标传入渲染层，与点击命中同一
 	// 坐标源（`window.CursorPos`）；无头路径 window 为 nil，恒为无效输入，
@@ -226,8 +236,9 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		tooltip = hud.TooltipOverlay{Valid: true, CursorX: cursorX, CursorY: cursorY}
 	}
 	combatMarker := a.combatFeedback.MarkerVisible()
-	hudVisible := inventoryConfirmed || (healthReady && !a.clientSessionClosed) ||
-		chatOverlay.Open || len(chatOverlay.Lines) != 0 || combatMarker
+	hudVisible := a.menuHUDVisible() &&
+		(inventoryConfirmed || (healthReady && !a.clientSessionClosed) ||
+			chatOverlay.Open || len(chatOverlay.Lines) != 0 || combatMarker)
 	if hudVisible {
 		// 进食进度条：纯客户端预测。输入位在 `RenderFrame` 作用域没有现成的
 		// 当帧 `Control.Eating`，故按 `interactive.go` 置位的同源状态派生（光标
@@ -263,38 +274,54 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 			return false, fmt.Errorf("准备快捷栏 HUD: %w", err)
 		}
 	}
-	var panelUISegment []byte
-	if a.panel != nil {
-		// 面板读数与参数行只构造一次：喂给 layout v3 段（egui 面板）。
-		readout, rows := a.panelFrameInput(time.Now())
-		panelUISegment = encodeDebugPanelSegment(a.panel.visible, a.panel.editing, readout, rows)
+	// 菜单层已迁 WebView:每帧一次「状态变化才下行」的 UI 状态推送,替代
+	// 旧的帧内 UI 段组装;无窗口(基准/capture)恒为空操作。
+	a.pushUIStateIfChanged()
+	// 游戏世界的调度半部在全景相位完全冻结：近环视距丢弃与远环增量入队
+	// 都以游戏中心为圆心，跑一次就会把全景内容或游戏内容错手释放。
+	if vista == nil {
+		a.scheduler.DropOutside(a.center, a.render.ViewDistance)
+		// 远环半部:跨 tile 边界增量入队 → BeginFrame → FlushUploads →
+		// DropOutside(远环半径)。全部非阻塞;禁用时 lodScheduler 为 nil,
+		// pumpLodFrame 只做一次 nil 检查即返回。
+		a.pumpLodFrame()
 	}
-	a.scheduler.DropOutside(a.center, a.render.ViewDistance)
-	// 远环半部:跨 tile 边界增量入队 → BeginFrame → FlushUploads →
-	// DropOutside(远环半径)。全部非阻塞;禁用时 lodScheduler 为 nil,
-	// pumpLodFrame 只做一次 nil 检查即返回。
-	a.pumpLodFrame()
 
 	// 每帧只从最后确认的权威世界时间与显示相位偏移计算一次昼夜（云层漂移仍
-	// 由绝对时间驱动）;ViewProj 及其逆矩阵同样只计算一次。
-	dayNight := render.DayNightAt(a.worldTimeTicks, a.dayPhaseOffset)
-	cloud := render.CloudOffsetAt(a.worldTimeTicks)
-	viewProj := a.camera.ViewProj()
+	// 由绝对时间驱动）;ViewProj 及其逆矩阵同样只计算一次。全景相位钉死在
+	// 正午，昼夜呈现不随任何权威时间漂移。
+	worldTime, dayPhaseOffset := a.worldTimeTicks, a.dayPhaseOffset
+	if vista != nil {
+		worldTime, dayPhaseOffset = menuVistaWorldTimeTicks, 0
+	}
+	dayNight := render.DayNightAt(worldTime, dayPhaseOffset)
+	cloud := render.CloudOffsetAt(worldTime)
+	cam := &a.camera
+	if vista != nil {
+		posed := vista.pose(a.camera)
+		cam = &posed
+	}
+	viewProj := cam.ViewProj()
 	viewProjInv := viewProj.Inv()
 
 	// 水下视觉:判定复用 Predictor 最近一次 physics.SubmersionFlags 算出的那一个
 	// 眼睛浸没标志——与服务端氧气结算同源,不另起一套(spec fluid-presentation
-	// 「视觉与溺水判定一致」)。
-	underwater := render.UnderwaterViewFor(a.predictor.EyeInFluid(), baseVisibleRadius)
+	// 「视觉与溺水判定一致」)。全景相位强制干眼：全景没有权威玩家状态，
+	// 前序场景残留的浸没标志不得渗入菜单底图。
+	eyeInFluid := a.predictor.EyeInFluid()
+	if vista != nil {
+		eyeInFluid = false
+	}
+	underwater := render.UnderwaterViewFor(eyeInFluid, baseVisibleRadius)
 
 	// 可见列表:BFS 连通性 + frustum,与旧 Go 渲染器同一算法与顺序。
 	// 半径在水下被压低,是"压低远处可见度"的落点。
 	a.visibleSections = mesh.VisibleSectionsInto(
 		a.visibleSections[:0], &a.visibleScratch,
-		cameraSectionPos(a.camera.Pos), underwater.VisibleRadius,
-		core.FrustumFrom(viewProj), a.scheduler.Connectivity,
+		cameraSectionPos(cam.Pos), underwater.VisibleRadius,
+		core.FrustumFrom(viewProj), activeScheduler.Connectivity,
 	)
-	a.lastFrameStats = a.scheduler.FrameStats(a.visibleSections)
+	a.lastFrameStats = activeScheduler.FrameStats(a.visibleSections)
 	if cap(a.rustVisible) < len(a.visibleSections) {
 		a.rustVisible = make([][3]int32, 0, len(a.visibleSections))
 	}
@@ -319,14 +346,14 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	a.outlineStream = a.entityEncoder.EncodeBlockOutlineInstances(a.outlineStream, blockOutline)
 
 	right := mgl32.Vec3{
-		float32(math.Cos(float64(a.camera.Yaw))),
+		float32(math.Cos(float64(cam.Yaw))),
 		0,
-		-float32(math.Sin(float64(a.camera.Yaw))),
+		-float32(math.Sin(float64(cam.Yaw))),
 	}
 	billboard := render.BillboardCamera{
 		ViewProj: viewProj,
 		Right:    right,
-		Up:       right.Cross(a.camera.Forward()).Normalize(),
+		Up:       right.Cross(cam.Forward()).Normalize(),
 	}
 	a.billboardBytes = render.EncodeBillboardCameraBytes(a.billboardBytes, billboard)
 	nameTagBackgrounds, nameTagGlyphs := a.nameTagRenderer.FrameStreams()
@@ -341,16 +368,10 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		hudViewport, hudQuads, hudGlyphs := a.hotbarRenderer.FrameStreams()
 		hudSegment = client.EncodeQuadSegment(hudViewport, hudQuads, hudGlyphs, 48)
 	}
-	// UI 段：菜单相位走 layout v1/v2；游戏相位的调试面板走 layout v3，
-	// 两种相位互斥，优先级为菜单段优先。
-	uiSegment := a.uiSegment()
-	if uiSegment == nil {
-		uiSegment = panelUISegment
-	}
 	rendered := a.renderer.RenderFrame(client.RenderFrame{
 		ViewProj:         viewProj,
 		ViewProjInv:      viewProjInv,
-		Pos:              a.camera.Pos,
+		Pos:              cam.Pos,
 		Daylight:         dayNight.Daylight,
 		SunDirection:     dayNight.SunDirection,
 		StarVisibility:   dayNight.StarVisibility,
@@ -365,11 +386,22 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		WaterTint:        underwater.Tint,
 		NameTagSegment:   nameTagSegment,
 		HUDSegment:       hudSegment,
-		UISegment:        uiSegment,
 	})
 	a.combatFeedback.AfterRender(rendered)
+	if vista != nil {
+		// 自转时钟在渲染之后推进：本帧画面严格是 pose(tick)，capture 钉住
+		// N 的下一帧恰好渲染 pose(N)。
+		vista.tick++
+	}
 	if !rendered {
 		return false, nil
 	}
 	return true, nil
+}
+
+// menuHUDVisible 报告当前相位是否允许绘制生存 HUD 段：只有游戏与暂停相位
+// 有已装配的世界，主菜单/设置页/装配中一律呈现纯全景底图（准星与弹条另有
+// 更细粒度的相位抑制）。
+func (a *Application) menuHUDVisible() bool {
+	return a.menu.phase == MenuPhaseGame || a.menu.phase == menuPhasePaused
 }

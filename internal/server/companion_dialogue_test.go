@@ -37,19 +37,20 @@ type dialogueRequestRecord struct {
 // （companion 包的稳定 wire 枚举 "terminal"）；每次请求的输入事实按到达顺序
 // 记录进 records（snapshotDialogueRequests 读取）。
 type fakeDialogueModel struct {
-	mu       sync.Mutex
-	requests int
-	inFlight int
-	cancels  int
-	block    chan struct{}
-	status   int
-	records  []dialogueRequestRecord
-	server   *httptest.Server
+	mu             sync.Mutex
+	requests       int
+	inFlight       int
+	cancels        int
+	block          chan struct{}
+	cancelObserved chan struct{}
+	status         int
+	records        []dialogueRequestRecord
+	server         *httptest.Server
 }
 
 func newFakeDialogueModel(t *testing.T) *fakeDialogueModel {
 	t.Helper()
-	model := &fakeDialogueModel{}
+	model := &fakeDialogueModel{cancelObserved: make(chan struct{})}
 	model.server = httptest.NewServer(http.HandlerFunc(model.handle))
 	t.Cleanup(model.server.Close)
 	return model
@@ -108,6 +109,9 @@ func (model *fakeDialogueModel) handle(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			model.mu.Lock()
 			model.cancels++
+			if model.cancels == 1 {
+				close(model.cancelObserved)
+			}
 			model.mu.Unlock()
 			return
 		}
@@ -156,6 +160,15 @@ func (model *fakeDialogueModel) snapshotCounts() (requests, inFlight, cancels in
 	model.mu.Lock()
 	defer model.mu.Unlock()
 	return model.requests, model.inFlight, model.cancels
+}
+
+func (model *fakeDialogueModel) waitForCancellation(t *testing.T) {
+	t.Helper()
+	select {
+	case <-model.cancelObserved:
+	case <-time.After(waitDeadline):
+		t.Fatal("timed out waiting for dialogue model cancellation")
+	}
 }
 
 // snapshotDialogueRequests 返回按到达顺序记录的请求输入事实快照。
@@ -619,6 +632,7 @@ func TestCompanionDialogueShutdownCancelsInFlight(t *testing.T) {
 	if err := host.Shutdown(ctx); err != nil {
 		t.Fatalf("Host.Shutdown: %v", err)
 	}
+	dialogue.waitForCancellation(t)
 	if _, _, cancels := dialogue.snapshotCounts(); cancels == 0 {
 		t.Fatal("关服未取消在途台词请求")
 	}

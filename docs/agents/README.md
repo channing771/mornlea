@@ -1,15 +1,14 @@
-# 工作者调度（Planner / Implementer）
+# 工作者调度（Planner）
 
-本目录是两个常驻工作者的角色卡：
+本目录是常驻规划者的角色卡：
 
 | 工作者 | 角色卡 | 职责 | 调度 |
 |---|---|---|---|
 | 规划者 Planner | `docs/agents/planner.md`（角色卡）/ `docs/agents/planner-prompt.md`（实际投喂的提示词）| 每日固定时间读取规划进度与 MC 缺口请求，扩展/校对 `docs/feature-backlog.md` 与 Discussion #71 | 每天固定时间（默认 09:00）|
-| 实现者 Implementer | `docs/agents/implementer.md` | 从规划认领任务，按 `docs/development-process.md` 开发并自动收尾 | 手动触发或规划者/控制会话点名 |
 
-开发流程的唯一说明在 `docs/development-process.md`，两个工作者卡与 `docs/feature-backlog.md` 均只引用它。
+开发流程的唯一说明在 `docs/development-process.md`，工作者卡与 `docs/feature-backlog.md` 均只引用它。
 
-规划表只允许 `就绪|已认领|开发中|待集成|排队|设计候选|已完成|已取消` 八种状态；实现者只选择 `就绪` 行。
+规划表只允许 `就绪|已认领|开发中|待集成|排队|设计候选|已完成|已取消` 八种状态。
 
 ## 前置条件
 
@@ -22,11 +21,9 @@
 ```bash
 # 手动运行（默认 claude，可用 AGENT_TOOL=codex / CLAUDE_BIN=... 覆盖）
 ./scripts/agents/run-agent.sh planner
-./scripts/agents/run-agent.sh implementer
 
 # 或通过 Makefile
 make agent-planner
-make agent-implementer
 
 # 完整提交前门禁（两项都必须通过）
 scripts/agents/gates.sh
@@ -37,7 +34,7 @@ make rust-check
 
 ## 执行状态看板（可选）
 
-这是一个只读的本地开发环境状态看板，展示当前哪些 AI（planner/implementer 工作者）正在执行及其执行状态。Go 后端默认监听 `http://127.0.0.1:8787`，React 前端位于 `web/agent-board/`。
+这是一个只读的本地开发环境状态看板，展示当前哪些 AI（planner 工作者）正在执行及其执行状态。Go 后端默认监听 `http://127.0.0.1:8787`，React 前端位于 `web/agent-board/`。
 
 ```bash
 # 安装锁定依赖、构建前端并启动 Go 后端（默认地址 127.0.0.1:8787）
@@ -78,13 +75,6 @@ scripts/agents/install-launchd.sh
 | `AGENT_TOOL` | `claude` | 用 `claude` 或 `codex` 执行 |
 | `AGENT_MODEL` | CLI 各自默认 | 固定模型，未设置时用 CLI 配置（claude：`~/.claude/settings.json` 的 `model`；codex：`~/.codex/config.toml` 的 `model`）|
 | `CLAUDE_BIN` / `CODEX_BIN` | PATH 查找 | 覆盖 CLI 路径 |
-| `AGENT_MODE` | `pr` | 实现者收尾模式（默认）：`pr` = 创建 PR → 监听 CI 至全绿（失败自动修复重推）→ merge 到 main；`merge` = 本地全绿后直接合并推送 |
-| `AGENT_LOOP` | `0` | 实现者接力循环：`1` 时每个实现者完成即经 `scripts/agents/relay.sh` 自动启动下一个，直到规划表无「就绪」任务 |
-| `WORKER_ID` | 空 | 链身份（如 `codex`）。空=主链（`loop.guard`）；非空=独立链（`loop.guard.<WORKER_ID>`）；独立守卫不放宽仅无版本影响且文件集合不交叠时才可并行的规则 |
-| `WORKER_TOOL` | `claude` | relay 接力保持的工具（与启动时 `AGENT_TOOL` 一致，如 `codex`）|
-| `AGENT_INTERACTIVE` | `0` | `1` 时 claude 以终端交互模式运行（可用 `ask_user_question` 直接问你；仅 claude 支持）|
-| `AGENT_CONFIRM_CHANNEL` | `auto` | 内容确认通道：`feishu`（推送设备）/ `discussion`（GitHub 评论）/ `none`（本地记录）/ `auto`（有飞书配置则 feishu，否则 none）|
-| `MORNLEA_CONFIRM_DIR` | `~/.mornlea/confirm` | 确认请求/回复/飞书配置文件目录 |
 | `AGENT_EXTRA_ARGS` | 空 | 透传给 agent CLI 的附加参数 |
 | `AGENT_SAFE` | `0` | 权限模式：`0`（默认）= 最高权限（claude `--dangerously-skip-permissions`；codex `--dangerously-bypass-approvals-and-sandbox`，经用户明确要求）；`1` = 受限（claude 逐项批准 / codex `--approve-for-me`）。仓库 hooks 始终独立生效 |
 
@@ -92,15 +82,10 @@ scripts/agents/install-launchd.sh
 
 - 日志：`~/Library/Logs/mornlea-planner.log`（可配 `PLANNER_LOG`）。
 - 每次运行把「本次变更行 ID 摘要」追加到 `docs/notes/agent-runs.md`（不存在则创建），便于回溯两处同步。
-- 失败处理：`run-agent.sh` 返回非零时调度器不改状态，当天可手动补跑，不影响实现者。
+- 失败处理：`run-agent.sh` 返回非零时调度器不改状态，当天可手动补跑。
 
 ## 常见问题
 
 - **讨论与仓库不一致**：以 `docs/feature-backlog.md` 为准，改讨论正文。
 - **模型如何选择**：不设 `AGENT_MODEL` 时用各 CLI 配置的默认模型（本机：claude → `claude-fable-5[1m]`；codex → `gpt-5.6-sol`）。需要更高能力或更快模型时用 `AGENT_MODEL=<模型名> make agent-planner` 覆盖；模型名称以对应 CLI 支持列表为准。
-- **brainstorm 需要用户选择怎么办**：**设备优先**——实现者 `confirm.sh ask` 把内容确认请求推送到你的飞书，回复「✅ 批准」或修改意见后，常驻 `feishu-listener.js` 写回复文件并自动续跑任务（`AGENT_RESUME`）；通道未配置/发送失败/超时则降级为 GitHub Discussion #71 评论协议（发评论 + 停止等待，回复后 `confirm.sh reply` 恢复）。完整机制与飞书配置（约 10 分钟）见 `docs/agents/confirmation-channel.md`。想终端即时问答：`AGENT_INTERACTIVE=1 scripts/agents/run-agent.sh implementer`。
-- **如何让实现者循环领取任务**：`AGENT_LOOP=1 make agent-implementer`（或首次 `scripts/agents/relay.sh`）——实现者完成后自动接力下一个，循环直到无就绪任务；每个任务仍要经过 brainstorm 确认（推你的飞书）。
-- **多工作者并行（如 claude + codex 各一条链）**：仅当候选任务均无版本影响且文件集合确实不交叠时，第二条链才用 `WORKER_ID=codex AGENT_TOOL=codex AGENT_LOOP=1 scripts/agents/run-agent.sh implementer` 启动——`WORKER_ID` 唯一即独立守卫，两条链互不排斥；接力时用 `WORKER_TOOL` 保持各自工具。**认领安全**：两链可能同时选中同一行——以仓库 git 提交先后为准，被拒/冲突的一方让位并改选其它 `就绪` 行。
 - **版本号冲突**：认领前按 `docs/development-process.md`「版本号互斥」检查所有 `就绪` 行的契约影响列。
-- **多个实现者同时跑**：只允许无版本影响且文件集合确实不交叠的任务并行；同一行只有一个认领人，冲突时后到者让位。
-- **钩子拦截**：`.codex/hooks.json` 与 `.claude/settings.json` 共用 `scripts/agent-hooks/guard.mjs`，两者都配置 `PreToolUse` 与 `PostToolUse`，当前只有 Codex 配置 `Stop`；不得绕过，失败时修复根因。
