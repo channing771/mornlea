@@ -168,6 +168,17 @@ func TestCombatMissKeepsMiningProgress(t *testing.T) {
 	}
 }
 
+// TestMeleeHitClearsMiningOnlyForThatTick 保留近战命中打断采掘的稳定
+// `-run` 入口，并执行现行统一战斗下的完整两 tick 断言。
+func TestMeleeHitClearsMiningOnlyForThatTick(t *testing.T) {
+	TestCombatHitClearsMiningOnlyForThatTick(t)
+}
+
+// TestMeleeMissKeepsMiningProgress 保留近战未命中时采掘连续推进的稳定入口。
+func TestMeleeMissKeepsMiningProgress(t *testing.T) {
+	TestCombatMissKeepsMiningProgress(t)
+}
+
 func TestMiningTargetBlockAndToolChangesRestartAtOne(t *testing.T) {
 	tests := []struct {
 		name   string

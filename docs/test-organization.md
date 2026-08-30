@@ -48,7 +48,7 @@ helper 落位规则与验收清单都在这里。条文是原则，本文件是�
   '^func Test' <file>` 后按函数名前缀聚类——前缀分属不同功能域即混装；或测试对应
   的被测源文件多于一个且无性质关联），就是拆分候选。
 - 行数只是检视信号，不是判据：文件超过约 800 行时检查是否混装；**单主题大文件
-  不拆**（如 `internal/sim/runtime/mining_test.go` 千余行全部是采掘，保持原样；`internal/sim/entity` 与 `internal/sim/realm` 同理）。
+  不拆**（如 `internal/sim/entity/mining_test.go` 千余行全部是采掘，保持原样；`internal/sim/runtime` 与 `internal/sim/realm` 同理）。
 - 拆分时机：该文件因任何改动被触碰时，顺势拆分；不为拆而拆地发起独立任务（批量
   推广走 OpenSpec）。
 

@@ -16,14 +16,14 @@ import (
 
 // allowed 列出每个内部包允许直接依赖的内部包。
 //
-// internal/server → internal/physics：M5B 任务编排（m5b-companion-planning-fifo）
-// 经 sim.CompanionAction 提交伙伴移动输入，该 API 的字段类型就是 physics.Input；
-// server 只消费物理的值类型与 ActiveTunables 快照（发令者射线的眼高），方向是
+// internal/server → internal/physics：伙伴任务编排经 CompanionAction 提交移动输入，
+// 该 API 的字段类型就是 physics.Input；发令者与伙伴交互几何从 tick 入口捕获的
+// runtime.TickTunables 显式消费 physics 值，不在 server 内重读活动快照。该方向是
 // 编排层依赖领域值类型，与 sim→physics 同向，不引入反向耦合。
 //
-// internal/sim → internal/fluid（变更 authoritative-fluid，design D2）：流动的调度
+// internal/sim/realm → internal/fluid：流动的调度
 // 算法（待更新队列、全序排序、封闭盆地上的不动点收敛）被拆成独立包，使其能脱离权威
-// 引擎被穷举性质测试；流动的数据所有权仍在权威模拟的 sim，fluid 只暴露
+// 引擎被穷举性质测试；流动的数据所有权仍在 realm，fluid 只暴露
 // Advance(now, FluidWorld, budget) 这样的无状态纯函数入口，不持有世界。
 // fluid 只允许依赖 internal/core（当前实现未依赖 internal/world，即便设计意图允许，
 // 也不预先登记未使用的边）；fluid MUST NOT 反向依赖 sim/network/render/storage，
@@ -47,7 +47,7 @@ var allowed = map[string][]string{
 	"internal/sim/contract":     {"internal/companion", "internal/core", "internal/physics", "internal/world"},
 	"internal/sim/entity":       {"internal/companion", "internal/core", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/realm", "internal/sim/tuning"},
 	"internal/sim/realm":        {"internal/core", "internal/fluid", "internal/world"},
-	"internal/sim/runtime":      {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "internal/sim/tuning"},
+	"internal/sim/runtime":      {"internal/companion", "internal/core", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "internal/sim/tuning"},
 	"internal/sim/tuning":       {"internal/core"},
 	"internal/storage": {
 		"internal/core",
@@ -68,7 +68,7 @@ var allowed = map[string][]string{
 	"internal/assets":             {"internal/core", "internal/world", "internal/mesh", "internal/worldgen"},
 	"internal/render":             {"internal/core", "internal/world", "internal/mesh", "internal/assets"},
 	"internal/render/hud":         {"internal/core", "internal/mesh", "internal/assets", "internal/render"},
-	"internal/server":             {"internal/companion", "internal/core", "internal/network", "internal/pathfind", "internal/physics", "internal/world", "internal/worldgen", "internal/sim/contract", "internal/sim/runtime", "internal/sim/tuning", "internal/storage", "internal/server/persistence"},
+	"internal/server":             {"internal/companion", "internal/core", "internal/network", "internal/pathfind", "internal/physics", "internal/world", "internal/worldgen", "internal/sim/contract", "internal/sim/runtime", "internal/storage", "internal/server/persistence"},
 	"internal/server/persistence": {"internal/companion", "internal/core", "internal/physics", "internal/sim/contract", "internal/sim/runtime", "internal/storage"},
 	"internal/client":             {"internal/companion", "internal/core", "internal/physics", "internal/network", "internal/world", "internal/mesh", "internal/assets", "internal/render"},
 }
@@ -378,7 +378,7 @@ var simAllowedEdges = map[string][]string{
 	"internal/sim/tuning":   {"internal/core"},
 	"internal/sim/realm":    {"internal/core", "internal/fluid", "internal/world"},
 	"internal/sim/entity":   {"internal/companion", "internal/core", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/realm", "internal/sim/tuning"},
-	"internal/sim/runtime":  {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "internal/sim/tuning"},
+	"internal/sim/runtime":  {"internal/companion", "internal/core", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "internal/sim/tuning"},
 }
 
 // simRequiredEdges 是模拟子树必须真实存在的编排边：`runtime` 必须同时
@@ -539,7 +539,7 @@ func TestSimDependencyViolationsDetectDrift(t *testing.T) {
 			"internal/sim/tuning":   {"internal/core"},
 			"internal/sim/realm":    {"internal/core", "internal/fluid", "internal/world"},
 			"internal/sim/entity":   {"internal/companion", "internal/core", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/realm", "internal/sim/tuning"},
-			"internal/sim/runtime":  {"internal/companion", "internal/core", "internal/fluid", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "internal/sim/tuning"},
+			"internal/sim/runtime":  {"internal/companion", "internal/core", "internal/physics", "internal/world", "internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "internal/sim/tuning"},
 		}
 	}
 	if violations := simDependencyViolations(contractEdges()); len(violations) != 0 {

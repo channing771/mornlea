@@ -20,16 +20,19 @@ internal/sim/
 │   ├── environment.go       # 流体/耕地/作物等环境推进
 │   └── *_test.go            # mutation/state/persistence/environment 白盒测试
 ├── entity/                  # 玩家/伙伴/夜行者与玩法结算（指南见 entity/AGENTS.md）
-│   ├── entity.go            # State 组合与 Register/Spawn
+│   ├── engine.go            # State 与实体权威集合
+│   ├── api.go / tick.go     # 窄生命周期 API 与 TickInput/TickContext
 │   ├── player.go / companion.go / hostile.go / actor.go
 │   ├── crafting.go / container.go / furnace.go / mining.go / combat.go / drop.go / hunger.go / eating.go / sleep.go
 │   ├── placement.go / world.go / engine_changes.go
 │   └── *_test.go
-└── runtime/                 # Engine、inbox、订阅与 Step 固定编排（指南见 runtime/AGENTS.md）
-    ├── engine.go            # Engine 结构与生命周期
-    ├── engine_step.go       # Step 阶段顺序与单次 Mutation Commit
+└── runtime/                 # Engine、inbox、订阅与固定 tick 编排（指南见 runtime/AGENTS.md）
+    ├── engine.go            # runtime 状态及唯一 realm/entity 组合
+    ├── engine_step.go       # StepWithTunables 阶段顺序与单次 Mutation Commit
     ├── engine_subscription.go # 订阅/发布与阶段探针
-    ├── engine_run.go / engine_placement.go / persistence.go 等
+    ├── entity_delegate.go   # 生命周期与查询的窄委派
+    ├── tick_tunables.go     # 单 tick simulation/physics 参数束
+    ├── engine_run.go / persistence.go
     └── *_test.go
 ```
 
@@ -40,24 +43,30 @@ internal/sim/
 | `contract` | 跨边界命令、拒绝、区块 ingress 与 tick 输出等纯值 DTO；`internal/server` 与 `internal/network` 消费该层值类型 |
 | `tuning` | `Tunables`、默认值、钳制与原子活动快照；`internal/config` 与客户端调试直接消费 |
 | `realm` | 世界维度、区块生命周期、持久化 revision、流体/耕地/作物等环境状态与单 tick `realm.Mutation` 事务 |
-| `entity` | 玩家、伙伴、夜行者、背包、容器、合成、战斗、掉落、睡眠等私有状态与结算（接收 `*realm.Mutation` 与 `tuning.Tunables`） |
-| `runtime` | `Engine`、inbox、订阅、阶段探针与 `Step` 固定编排；唯一允许同时编排其余四个子包的权威入口 |
+| `entity` | 玩家、伙伴、夜行者、背包、容器、合成、战斗、掉落、睡眠与生命周期的唯一 owner；`BeginTick` 经 `TickInput` 按值接收 simulation/physics 参数及同一 `*realm.Mutation` |
+| `runtime` | 只持 inbox、订阅、时钟、阶段探针与编排 scratch，恰好组合一个 `*realm.State` 和一个 `*entity.State`；公开生命周期/查询方法仅窄委派，固定 tick 编排是唯一跨子包权威入口 |
 
-`contract`/`tuning` 不依赖 `realm`/`entity`/`runtime`；`realm` 不依赖 `entity`/`runtime`；`entity` 可依赖 `contract`/`tuning`/`realm`；`runtime` 编排全部四者。`internal/sim` 成为仅含指导文档的目录，所有生产状态与行为分属五个子包。
+`contract`/`tuning` 不依赖 `realm`/`entity`/`runtime`；`realm` 不依赖 `entity`/`runtime`；`entity` 可依赖 `contract`/`tuning`/`realm`；`runtime` 编排全部四者。`runtime.subscriptionState` 只保存命令序号、观察中心与 wanted 集合，不是实体会话镜像。`internal/sim` 成为仅含指导文档的目录，所有生产状态与行为分属五个子包。
 
 ## Mutation 与单次提交
 
 - `realm.State` 拥有维度记录、队列、持久化 revision 与环境 scratch，由权威 tick 单写者独占，不设内部锁。
-- 每 tick 由 `runtime` 打开唯一 `*realm.Mutation`，全部方块读取与写入经该事务汇入；`entity` 的结算入口接收 `*realm.Mutation` 与 `tuning.Tunables` 快照，不直接持有 world。
-- `Mutation.Record`/`Touch` 收集 `pendingChunkChanges`，`Commit` 在 `finishChanges` 阶段一次性推进 revision、压缩 section 并产出 `ChunkChangeBatch` 发布批次；不得另设平行通道或二次提交。
+- 每个推进 tick 由 `runtime` 在同一个 `realm.State` 上打开唯一 `*realm.Mutation`；方块读取经该 `realm.State`，全部写入汇入该 mutation。`entity.State.BeginTick(TickInput, mutation)` 只在短命 `TickContext` 中借用二者，不复制世界或事务 owner。
+- `Mutation.Record`/`Touch` 收集 `pendingChunkChanges`，`Commit` 在 runtime tick 尾部一次性推进 revision、压缩 section 并产出 `ChunkChangeBatch` 发布批次；不得另设平行通道或二次提交。
 - 相同输入在同一 tick 内按区块与索引的确定性排序提交，保证 revision、持久化请求与发布批次在重放时一致。
+
+## 单 tick 参数束
+
+- `runtime.TickTunables` 按值携带一个 `tuning.Tunables` 与一个 `physics.Tunables`。两组活动快照彼此独立，各读取一次不构成跨组原子事务，`tuning` 不得因此依赖 `physics`。
+- `internal/server` 的实际推进路径在 lifecycle/pause 早退后、聊天与伙伴任务前调用一次 `ActiveTickTunables`，将同一局部值传给 manager 与 `Engine.StepWithTunables`；关服最终推进同样只捕获并复用一束。`Engine.Step` 仅是直接调用方的兼容捕获 wrapper。
+- runtime 从 simulation 值投影一次 `realm.EnvironmentConfig`，entity 显式接收两组值；权威 entity/runtime/server 路径不得在 tick 中重读任一 `ActiveTunables`，也不得调用隐式 `physics.Step`/`physics.SubmersionFlags` wrapper。
 
 ## 结算与事务规则
 
 - 状态只在成功路径提交，相互依赖时先副本预演再同 tick 原子落地。
 - 方块写入经 `realm.Mutation` 汇入当前 tick，由 `Commit` 统一推进 revision 与发布批次，不另设平行通道。
 - 每 tick 工作必须有界且保持确定性顺序，磁盘/网络/模型调用经有界队列或快照离开热路径。
-- `Engine.Step` 串行组合固定阶段，新增阶段或写者先核对 `engine_step.go` 的顺序约束、订阅收敛点与最终发布边界。
+- `Engine.StepWithTunables` 串行组合固定阶段，新增阶段或写者先核对 `engine_step.go` 的顺序约束、订阅收敛点与最终发布边界。
 
 ## 依赖方向
 
@@ -65,7 +74,7 @@ internal/sim/
 
 - 接受：`runtime` → `contract`/`tuning`/`realm`/`entity`；`entity` → `contract`/`tuning`/`realm`；`realm` → `core`/`fluid`/`world`；`contract` → `core`/`world`/`companion`/`physics`；`tuning` → `core`。
 - 拒绝：`contract` 依赖 `tuning`/`realm`/`entity`/`runtime`；`tuning` 依赖 `contract`/`realm`/`entity`/`runtime`；`realm` 依赖 `contract`/`tuning`/`entity`/`runtime`；`entity` 依赖 `runtime`；子树出现未登记的新包；`runtime` 缺少对四者的必需编排边。
-- 强制点：`TestInternalDependenciesAreOneWay` 以 `go list` 覆盖全仓内部包完整白名单；`TestSimSubpackageDependencyDirections` 源码级扫描 `internal/sim` 子树生产 import 边（`parser.ImportsOnly`，不随 GOOS 翻转）；`TestSimDependencyViolationsDetectDrift` 以合成反向边钉住检查器本身。新增子包或依赖边必须先登记 `allowed` 与 `simAllowedEdges`/`simRequiredEdges`。
+- 强制点：`TestInternalDependenciesAreOneWay` 以 `go list` 覆盖全仓内部包完整白名单；`TestSimSubpackageDependencyDirections` 与 `TestSimDependencyViolationsDetectDrift` 守住真实/合成依赖边；`TestSimAuthorityStateOwnershipStaysExplicit` 锁定 runtime/entity owner、窄订阅状态与唯一 mutation/commit；`TestAuthorityTickTunablesStayExplicit` 守住活动快照捕获与显式传递。新增 owner 字段、子包或依赖边必须同步对应门禁。
 
 ## 定点验证与入口
 
@@ -89,5 +98,5 @@ internal/sim/
 - `contract/AGENTS.md`：值类型所有权与跨边界 DTO 纪律。
 - `tuning/AGENTS.md`：Tunables 校验与快照边界。
 - `realm/AGENTS.md`：State/Mutation 所有权与单次提交。
-- `entity/AGENTS.md`：结算签名与 `*realm.Mutation` 注入。
-- `runtime/AGENTS.md`：Engine 编排、Step 顺序与发布边界。
+- `entity/AGENTS.md`：唯一实体 owner、`TickInput` 与 `*realm.Mutation` 注入。
+- `runtime/AGENTS.md`：Engine 组合、`StepWithTunables` 顺序与发布边界。

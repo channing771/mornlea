@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
+	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 )
 
@@ -254,6 +255,123 @@ func TestPlayerCombatRaySemantics(t *testing.T) {
 		engine.advanceCombat(&TickResult{})
 		if got := engine.sessions[sessions[1]].player.health; got != 18 {
 			t.Fatalf("流体错误阻挡，health=%d", got)
+		}
+	})
+}
+
+// TestPlayerMeleeTarget 保留玩家近战目标选择的稳定入口。六个既有标签逐项
+// 驱动现行统一战斗结算，既覆盖玩家候选，也证明伙伴不会成为战斗目标。
+func TestPlayerMeleeTarget(t *testing.T) {
+	t.Run("选择最近且按会话平局", func(t *testing.T) {
+		engine, sessions := readyMeleePlayers(t, 3)
+		setMeleePlayer(engine, sessions[0], mgl32.Vec3{0.5, 1, 4.5}, 0)
+		setMeleePlayer(engine, sessions[1], mgl32.Vec3{0.5, 1, 2.5}, 0)
+		setMeleePlayer(engine, sessions[2], mgl32.Vec3{0.5, 1, 1.5}, 0)
+		engine.sessions[sessions[0]].player.miningHeld = true
+		engine.advanceCombat(&TickResult{})
+		if got := engine.sessions[sessions[1]].player.health; got != 18 {
+			t.Fatalf("最近目标 health=%d，想要 18", got)
+		}
+		if got := engine.sessions[sessions[2]].player.health; got != 20 {
+			t.Fatalf("较远目标 health=%d，想要 20", got)
+		}
+
+		engine, sessions = readyMeleePlayers(t, 3)
+		setMeleePlayer(engine, sessions[0], mgl32.Vec3{0.5, 1, 4.5}, 0)
+		setMeleePlayer(engine, sessions[1], mgl32.Vec3{0.5, 1, 2.5}, 0)
+		setMeleePlayer(engine, sessions[2], mgl32.Vec3{0.5, 1, 2.5}, 0)
+		engine.sessions[sessions[0]].player.miningHeld = true
+		engine.advanceCombat(&TickResult{})
+		if got := engine.sessions[sessions[1]].player.health; got != 18 {
+			t.Fatalf("等距较小 SessionID health=%d，想要 18", got)
+		}
+		if got := engine.sessions[sessions[2]].player.health; got != 20 {
+			t.Fatalf("等距较大 SessionID health=%d，想要 20", got)
+		}
+	})
+
+	t.Run("排除非候选与伙伴", func(t *testing.T) {
+		engine, sessions := readyMeleePlayers(t, 3)
+		setMeleePlayer(engine, sessions[0], mgl32.Vec3{0.5, 1, 4.5}, 0)
+		setMeleePlayer(engine, sessions[1], mgl32.Vec3{0.5, 1, 2.5}, 0)
+		setMeleePlayer(engine, sessions[2], mgl32.Vec3{0.5, 1, 2.5}, 0)
+		engine.sessions[sessions[1]].player.lifecycle = PlayerPendingSpawn
+		engine.sessions[sessions[2]].dimension = core.DimensionID(1)
+		companionID := companionTestID(1)
+		engine.RegisterCompanion(CompanionRestore{
+			ID: companionID,
+			Body: &companion.Body{
+				ID: companionID, Dimension: core.Overworld,
+				Position: [3]float32{0.5, 1, 3.5},
+			},
+			SpawnDimension: core.Overworld,
+		})
+		engine.sessions[sessions[0]].player.miningHeld = true
+		result := TickResult{}
+		engine.advanceCombat(&result)
+		if len(result.CombatHits) != 0 {
+			t.Fatalf("非候选玩家或伙伴产生战斗命中：%+v", result.CombatHits)
+		}
+	})
+
+	t.Run("排除死亡与超距", func(t *testing.T) {
+		engine, sessions := readyMeleePlayers(t, 3)
+		setMeleePlayer(engine, sessions[0], mgl32.Vec3{0.5, 1, 4.5}, 0)
+		setMeleePlayer(engine, sessions[1], mgl32.Vec3{0.5, 1, 2.5}, 0)
+		setMeleePlayer(engine, sessions[2], mgl32.Vec3{0.5, 1, -1}, 0)
+		engine.sessions[sessions[1]].player.health = 0
+		engine.sessions[sessions[0]].player.miningHeld = true
+		result := TickResult{}
+		engine.advanceCombat(&result)
+		if len(result.CombatHits) != 0 {
+			t.Fatalf("死亡或超距玩家产生战斗命中：%+v", result.CombatHits)
+		}
+	})
+
+	t.Run("固体阻挡而同距方块不阻挡", func(t *testing.T) {
+		engine, sessions := readyMeleePlayers(t, 2)
+		setMeleePlayer(engine, sessions[0], mgl32.Vec3{0.5, 1, 4.5}, 0)
+		setMeleePlayer(engine, sessions[1], mgl32.Vec3{0.5, 1, 2.5}, 0)
+		engine.SetBlockForTest(core.BlockPos{X: 0, Y: 2, Z: 3}, core.StoneID)
+		engine.sessions[sessions[0]].player.miningHeld = true
+		engine.advanceCombat(&TickResult{})
+		if got := engine.sessions[sessions[1]].player.health; got != 20 {
+			t.Fatalf("被石块遮挡的目标 health=%d，想要 20", got)
+		}
+
+		engine, sessions = readyMeleePlayers(t, 2)
+		setMeleePlayer(engine, sessions[0], mgl32.Vec3{0.5, 1, 4.5}, 0)
+		setMeleePlayer(engine, sessions[1], mgl32.Vec3{0.5, 1, 2.7}, 0)
+		engine.SetBlockForTest(core.BlockPos{X: 0, Y: 2, Z: 2}, core.StoneID)
+		engine.sessions[sessions[0]].player.miningHeld = true
+		engine.advanceCombat(&TickResult{})
+		if got := engine.sessions[sessions[1]].player.health; got != 18 {
+			t.Fatalf("同距方块错误阻挡，health=%d，想要 18", got)
+		}
+	})
+
+	t.Run("流体穿透", func(t *testing.T) {
+		engine, sessions := readyMeleePlayers(t, 2)
+		setMeleePlayer(engine, sessions[0], mgl32.Vec3{0.5, 1, 4.5}, 0)
+		setMeleePlayer(engine, sessions[1], mgl32.Vec3{0.5, 1, 2.5}, 0)
+		engine.SetBlockForTest(core.BlockPos{X: 0, Y: 2, Z: 3}, core.WaterSourceID)
+		engine.sessions[sessions[0]].player.miningHeld = true
+		engine.advanceCombat(&TickResult{})
+		if got := engine.sessions[sessions[1]].player.health; got != 18 {
+			t.Fatalf("流体错误阻挡，health=%d，想要 18", got)
+		}
+	})
+
+	t.Run("未就绪方块拒绝本 tick", func(t *testing.T) {
+		engine, sessions := readyMeleePlayers(t, 2)
+		setMeleePlayer(engine, sessions[0], mgl32.Vec3{15.5, 1, 0.5}, -math.Pi/2)
+		setMeleePlayer(engine, sessions[1], mgl32.Vec3{17.5, 1, 0.5}, 0)
+		engine.sessions[sessions[0]].player.miningHeld = true
+		result := TickResult{}
+		engine.advanceCombat(&result)
+		if len(result.CombatHits) != 0 || engine.sessions[sessions[1]].player.health != 20 {
+			t.Fatalf("未就绪区块仍产生战斗命中：hits=%+v health=%d",
+				result.CombatHits, engine.sessions[sessions[1]].player.health)
 		}
 	})
 }

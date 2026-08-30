@@ -27,7 +27,7 @@
 |---|---|
 | 窗口 / 渲染 / 材质 / WGSL | `cargo test -p mornlea_client --locked` + `go test ./cmd/mornlea/app -run 'TestFitFramebuffer\|TestApplicationConnection'` |
 | 协议 / 网络 / 存档 | `go test ./internal/network/... ./internal/storage/... ./internal/core` |
-| 服务端 tick / 伙伴 / 农业 | `go test ./internal/server ./internal/sim -run '关键词'` |
+| 服务端 tick / 伙伴 / 农业 | `go test ./internal/server ./internal/sim/... -run '关键词'` |
 | 资产 / 材质包 / provenance | `go test ./internal/assets` |
 | 视觉 golden | 预期不变：`make visual-check`；预期变化：逐图确认后 `make visual-update`，再运行 `make visual-check` |
 | 依赖边界 / 文档一致性 | `go test ./internal/archcheck` |

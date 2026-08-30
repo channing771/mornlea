@@ -178,3 +178,21 @@ func TestCombatMissPathsAccumulateNoExhaustion(t *testing.T) {
 		}
 	})
 }
+
+// TestMeleeHitChargesAttackerExhaustionExactlyOnce 保留近战疲劳测试的稳定
+// `-run` 入口；统一战斗命名后的测试仍是同一组真实命中与疲劳断言。
+func TestMeleeHitChargesAttackerExhaustionExactlyOnce(t *testing.T) {
+	TestCombatHitChargesAttackerExhaustionExactlyOnce(t)
+}
+
+// TestMeleeExhaustionThresholdCrossSettlesSaturationThenHunger 保留近战疲劳
+// 阈值测试及其既有子测试路径，并复用现行统一战斗结算夹具。
+func TestMeleeExhaustionThresholdCrossSettlesSaturationThenHunger(t *testing.T) {
+	TestCombatExhaustionThresholdCrossSettlesSaturationThenHunger(t)
+}
+
+// TestMeleeMissPathsAccumulateNoExhaustion 保留未命中不累积疲劳的稳定入口；
+// 该入口执行现行测试的全部否定路径，不是空壳兼容名。
+func TestMeleeMissPathsAccumulateNoExhaustion(t *testing.T) {
+	TestCombatMissPathsAccumulateNoExhaustion(t)
+}
