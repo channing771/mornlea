@@ -88,7 +88,7 @@ struct SectionEntry {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum ColumnState {
-    Live([i16; COLUMN_HEIGHTS]),
+    Live(Box<[i16; COLUMN_HEIGHTS]>),
     Tombstone,
 }
 
@@ -124,7 +124,7 @@ enum ParsedRecord {
     ColumnUpsert {
         key: ColumnKey,
         revision: u64,
-        heights: [i16; COLUMN_HEIGHTS],
+        heights: Box<[i16; COLUMN_HEIGHTS]>,
     },
     SectionTombstone {
         key: SectionKey,
@@ -273,7 +273,7 @@ impl RenderWorld {
             Some(ColumnEntry {
                 state: ColumnState::Live(heights),
                 ..
-            }) => Some(heights),
+            }) => Some(heights.as_ref()),
             _ => None,
         }
     }
@@ -476,7 +476,7 @@ fn parse_section(
     }
 }
 
-fn parse_column(payload: &[u8]) -> Result<[i16; COLUMN_HEIGHTS], RenderWorldError> {
+fn parse_column(payload: &[u8]) -> Result<Box<[i16; COLUMN_HEIGHTS]>, RenderWorldError> {
     if payload.len() != COLUMN_PAYLOAD_BYTES {
         return Err(RenderWorldError::Invalid);
     }
@@ -488,7 +488,7 @@ fn parse_column(payload: &[u8]) -> Result<[i16; COLUMN_HEIGHTS], RenderWorldErro
     if !reader.is_finished() {
         return Err(RenderWorldError::Invalid);
     }
-    Ok(heights)
+    Ok(Box::new(heights))
 }
 
 fn read_u16_values(reader: &mut Reader<'_>, count: usize) -> Result<Vec<u16>, RenderWorldError> {
