@@ -4,9 +4,9 @@
 
 ## 1. `Chunk.Hash` 缓冲编码 + 摘要等价性
 
-- [ ] 1.1 在 `internal/world` 为 `PalettedContainer` 实现同包私有的线性序 u16 批量导出辅助（single 直填快路径；indexed/direct 走 `readRaw` 位解包），并将 `Chunk.Hash` 改为每区段一次缓冲编码 + 一次 `hash.Write`；摘要、字节序、区段顺序逐字节不变。
-- [ ] 1.2 在 `internal/world` 测试中保留旧逐体素实现作为 oracle：新增随机化摘要等价测试（覆盖三态、随机 palette、block ID 边界）与 palette 重排不变性测试；新增 `BenchmarkChunkHash` 微基准（数值只记录）。
-- [ ] 1.3 修复 `internal/storage/disk.go` 保存去重路径的重复哈希（同批次同区块至多哈希一次并复用），新增探针测试钉住；`internal/storage/chunk/region.go` 与 `memory.go` 不改语义。
+- [x] 1.1 在 `internal/world` 为 `PalettedContainer` 实现同包私有的线性序 u16 批量导出辅助（single 直填快路径；indexed/direct 走 `readRaw` 位解包），并将 `Chunk.Hash` 改为每区段一次缓冲编码 + 一次 `hash.Write`；摘要、字节序、区段顺序逐字节不变。
+- [x] 1.2 在 `internal/world` 测试中保留旧逐体素实现作为 oracle：新增随机化摘要等价测试（覆盖三态、随机 palette、block ID 边界）与 palette 重排不变性测试；新增 `BenchmarkChunkHash` 微基准（数值只记录）。
+- [x] 1.3 修复 `internal/storage/disk.go` 保存去重路径的重复哈希（同批次同区块至多哈希一次并复用），新增探针测试钉住；`internal/storage/chunk/region.go` 与 `memory.go` 不改语义。
 - 验证：`go test ./internal/world -race -count=1`、`go test ./internal/storage/... -race -count=1`、`go test ./internal/world ./internal/storage/... -run Hash -bench BenchmarkChunkHash -benchmem -count=1`（记录数值）。
 
 ## 2. `realm` 持久化统计增量记账 + 脏区块索引

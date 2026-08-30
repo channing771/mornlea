@@ -10,4 +10,12 @@
 
 ## 任务执行记录
 
-（后续按任务组追加：implementer 派发、SPEC/QUALITY 评审结论、修复轮与裁决。）
+### Task 1：`Chunk.Hash` 缓冲编码 + 摘要等价性（2026-08-30）
+
+- **Implementer**（fresh subagent）：交付 `2839651e perf(world): buffer chunk hash encoding`（`appendBlocksLE` 线性序批量导出 + 每区段一次 `hash.Write`；oracle 随机等价/重排不变/三态覆盖测试 + `BenchmarkChunkHash`）与 `87b6fb5f perf(storage): reuse chunk hash in disk save dedup`（`validateAndNormalizeSavesWithHash` 注入缝 + 指针键哈希缓存，单候选零哈希；探针钉住同批次同区块至多哈希一次）。基准（record-only）：UniformAir 621→121µs（5.1×）、Mixed 687→226µs（3.0×）、DenseDirect 710→260µs（2.7×），0 allocs/op 保持；`go test ./internal/world ./internal/storage/... -race` 全绿、vet/gofmt/archcheck 干净。
+- **Implementer 报备的偏离（控制会话裁决接受）**：①摘要逐字节相同即契约，1.1 无法构造先红测试，红→绿真实发生在 1.3 探针；②为探针引入最小未导出注入缝 `hashChunkFunc`（生产固定 `(*world.Chunk).Hash`）；③disk.go 新增显式 `internal/world` import（依赖边已登记，memory.go 同边先例）；④边界 block ID 取 0/32767（15 位直接态上界）；⑤测试按关注点独立成 `chunk_hash_test.go`。
+- SPEC 评审（独立子代理）：**PASS-with-notes**，零阻塞。6 项裁决全 PASS（任务完整性/三不变量可判定且假想改错必红/保存判例逐路径等价/线性序与小端编码实现级核验/四项偏离可接受/非目标遵守）；两条记录性备注：DirectStorage 子测试失败消息名不副实（后经修复轮处理）、基准数值跨机器波动属噪声（数值只记录）。
+- QUALITY 评审（独立子代理）：**PASS-with-notes**，1 Important + 1 Nit + 2 Nit。正确性（三态边界/逃逸分析 0 allocs/8KiB 栈缓冲合理）、注释命名（任务编号正则零匹配）、注入缝与风格全 PASS。Important：`DirectStorage` 子测试空转断言（直接态打包与写入序无关，两 chunk 存储表示相同，断言不可能因打包差异失败，注释声称验证排列敏感性属虚假信心）；Nit：取值池含 map 迭代随机序、种子不决定输入。
+- **修复轮 1（原 implementer）**：`ed796a8f` 删除空转子测试、新增诚实判例 `DirectBoundaryIDs`（直接态+边界 ID 断言缓冲编码==逐体素 oracle，命名与注释如实说明钉的是解包一致性而非排列不变性）、取值池先排序再打乱（随机性收敛到种子一处）；`03d56782` 补 `[32]byte`＝`sha256.Size` 注释。`go test ./internal/world ./internal/storage/... -race -count=1` 全绿，gofmt/vet/编号正则干净。控制会话核验 diff 后接受修复，双评审结论闭合。
+
+
