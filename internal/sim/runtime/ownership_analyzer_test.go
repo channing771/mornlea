@@ -29,13 +29,30 @@ type ownershipTypeDecl struct {
 }
 
 type ownershipFunction struct {
-	key    string
-	label  string
-	file   string
-	body   *ast.BlockStmt
-	direct uint64
-	edges  map[string]struct{}
+	key                string
+	label              string
+	file               string
+	body               *ast.BlockStmt
+	callableParameters []ownershipCallableParameter
+	direct             uint64
+	edges              map[string]struct{}
 }
+
+type ownershipCallableParameter struct {
+	position int
+	variadic bool
+}
+
+type ownershipCallableSet map[string]struct{}
+
+type ownershipCallableBindings map[string]ownershipCallableSet
+
+type ownershipBoundType struct {
+	expression ast.Expr
+	bindings   ownershipTypeBindings
+}
+
+type ownershipTypeBindings map[string]ownershipBoundType
 
 const (
 	stageApplyPlayerCommands uint64 = 1 << iota
@@ -198,21 +215,28 @@ func inspectFixtureOwnership(
 	}
 	violations := make([]string, 0)
 	visited := make(map[string]struct{})
-	var visitType func(string, string)
-	var visitExpression func(ast.Expr, string)
+	var visitType func(string, []ast.Expr, ownershipTypeBindings, string)
+	var visitExpression func(ast.Expr, ownershipTypeBindings, string)
 
-	visitType = func(name, path string) {
-		if _, seen := visited[name]; seen {
-			return
-		}
+	visitType = func(
+		name string,
+		arguments []ast.Expr,
+		outer ownershipTypeBindings,
+		path string,
+	) {
 		declaration, ok := types[name]
 		if !ok {
 			return
 		}
-		visited[name] = struct{}{}
-		visitExpression(declaration.spec.Type, path+" -> "+name)
+		bindings := ownershipBindTypeParameters(declaration.spec, arguments, outer)
+		instance := ownershipTypeInstanceKey(name, declaration.spec, bindings)
+		if _, seen := visited[instance]; seen {
+			return
+		}
+		visited[instance] = struct{}{}
+		visitExpression(declaration.spec.Type, bindings, path+" -> "+instance)
 	}
-	visitExpression = func(expression ast.Expr, path string) {
+	visitExpression = func(expression ast.Expr, bindings ownershipTypeBindings, path string) {
 		switch value := expression.(type) {
 		case *ast.StructType:
 			for _, field := range value.Fields.List {
@@ -220,47 +244,51 @@ func inspectFixtureOwnership(
 				if len(field.Names) != 0 {
 					fieldPath += "." + field.Names[0].Name
 				}
-				visitExpression(field.Type, fieldPath)
+				visitExpression(field.Type, bindings, fieldPath)
 			}
 		case *ast.Ident:
-			visitType(value.Name, path)
+			if bound, ok := bindings[value.Name]; ok {
+				visitExpression(bound.expression, bound.bindings, path)
+				return
+			}
+			visitType(value.Name, nil, nil, path)
 		case *ast.SelectorExpr:
 			return
 		case *ast.StarExpr:
-			visitExpression(value.X, path)
+			visitExpression(value.X, bindings, path)
 		case *ast.ParenExpr:
-			visitExpression(value.X, path)
+			visitExpression(value.X, bindings, path)
 		case *ast.ArrayType:
-			if payload := ownershipPayloadType(value.Elt, types, nil); payload != "" {
+			if payload := ownershipPayloadType(value.Elt, types, bindings, nil); payload != "" {
 				violations = append(violations,
 					fmt.Sprintf("%s: fixture Engine 可达 %s inbox (%s)", engine.file, payload, path))
 			}
-			visitExpression(value.Elt, path)
+			visitExpression(value.Elt, bindings, path)
 		case *ast.ChanType:
-			if payload := ownershipPayloadType(value.Value, types, nil); payload != "" {
+			if payload := ownershipPayloadType(value.Value, types, bindings, nil); payload != "" {
 				violations = append(violations,
 					fmt.Sprintf("%s: fixture Engine 可达 %s inbox (%s)", engine.file, payload, path))
 			}
-			visitExpression(value.Value, path)
+			visitExpression(value.Value, bindings, path)
 		case *ast.MapType:
 			for _, contained := range []ast.Expr{value.Key, value.Value} {
-				if payload := ownershipPayloadType(contained, types, nil); payload != "" {
+				if payload := ownershipPayloadType(contained, types, bindings, nil); payload != "" {
 					violations = append(violations,
 						fmt.Sprintf("%s: fixture Engine 可达 %s inbox (%s)", engine.file, payload, path))
 				}
-				visitExpression(contained, path)
+				visitExpression(contained, bindings, path)
 			}
 		case *ast.IndexExpr:
-			visitExpression(value.X, path)
-			visitExpression(value.Index, path)
+			if name := ownershipNamedType(value.X); name != "" {
+				visitType(name, []ast.Expr{value.Index}, bindings, path)
+			}
 		case *ast.IndexListExpr:
-			visitExpression(value.X, path)
-			for _, index := range value.Indices {
-				visitExpression(index, path)
+			if name := ownershipNamedType(value.X); name != "" {
+				visitType(name, value.Indices, bindings, path)
 			}
 		}
 	}
-	visitType("Engine", "Engine")
+	visitType("Engine", nil, nil, "Engine")
 
 	for _, source := range files {
 		if !source.isTest {
@@ -284,6 +312,7 @@ func inspectFixtureOwnership(
 func ownershipPayloadType(
 	expression ast.Expr,
 	types map[string]ownershipTypeDecl,
+	bindings ownershipTypeBindings,
 	seen map[string]struct{},
 ) string {
 	if seen == nil {
@@ -291,26 +320,157 @@ func ownershipPayloadType(
 	}
 	switch value := expression.(type) {
 	case *ast.Ident:
+		if bound, ok := bindings[value.Name]; ok {
+			return ownershipPayloadType(bound.expression, types, bound.bindings, seen)
+		}
 		if _, forbidden := forbiddenFixtureInboxTypes[value.Name]; forbidden {
 			return value.Name
-		}
-		if _, visited := seen[value.Name]; visited {
-			return ""
 		}
 		declaration, ok := types[value.Name]
 		if !ok {
 			return ""
 		}
-		seen[value.Name] = struct{}{}
-		return ownershipPayloadType(declaration.spec.Type, types, seen)
+		instance := ownershipTypeInstanceKey(value.Name, declaration.spec, nil)
+		if _, visited := seen[instance]; visited {
+			return ""
+		}
+		seen[instance] = struct{}{}
+		return ownershipPayloadType(declaration.spec.Type, types, nil, seen)
 	case *ast.SelectorExpr:
 		if _, forbidden := forbiddenFixtureInboxTypes[value.Sel.Name]; forbidden {
 			return value.Sel.Name
 		}
 	case *ast.StarExpr:
-		return ownershipPayloadType(value.X, types, seen)
+		return ownershipPayloadType(value.X, types, bindings, seen)
 	case *ast.ParenExpr:
-		return ownershipPayloadType(value.X, types, seen)
+		return ownershipPayloadType(value.X, types, bindings, seen)
+	case *ast.ArrayType:
+		return ownershipPayloadType(value.Elt, types, bindings, seen)
+	case *ast.ChanType:
+		return ownershipPayloadType(value.Value, types, bindings, seen)
+	case *ast.MapType:
+		if payload := ownershipPayloadType(value.Key, types, bindings, seen); payload != "" {
+			return payload
+		}
+		return ownershipPayloadType(value.Value, types, bindings, seen)
+	case *ast.IndexExpr:
+		return ownershipPayloadInstantiation(
+			value.X, []ast.Expr{value.Index}, types, bindings, seen,
+		)
+	case *ast.IndexListExpr:
+		return ownershipPayloadInstantiation(value.X, value.Indices, types, bindings, seen)
+	}
+	return ""
+}
+
+func ownershipPayloadInstantiation(
+	named ast.Expr,
+	arguments []ast.Expr,
+	types map[string]ownershipTypeDecl,
+	outer ownershipTypeBindings,
+	seen map[string]struct{},
+) string {
+	name := ownershipNamedType(named)
+	declaration, ok := types[name]
+	if !ok {
+		return ""
+	}
+	bindings := ownershipBindTypeParameters(declaration.spec, arguments, outer)
+	instance := ownershipTypeInstanceKey(name, declaration.spec, bindings)
+	if _, visited := seen[instance]; visited {
+		return ""
+	}
+	seen[instance] = struct{}{}
+	return ownershipPayloadType(declaration.spec.Type, types, bindings, seen)
+}
+
+func ownershipBindTypeParameters(
+	spec *ast.TypeSpec,
+	arguments []ast.Expr,
+	outer ownershipTypeBindings,
+) ownershipTypeBindings {
+	if spec.TypeParams == nil || len(arguments) == 0 {
+		return nil
+	}
+	bindings := make(ownershipTypeBindings)
+	argument := 0
+	for _, field := range spec.TypeParams.List {
+		for _, name := range field.Names {
+			if argument >= len(arguments) {
+				return bindings
+			}
+			bindings[name.Name] = ownershipBoundType{
+				expression: arguments[argument],
+				bindings:   outer,
+			}
+			argument++
+		}
+	}
+	return bindings
+}
+
+func ownershipTypeInstanceKey(
+	name string,
+	spec *ast.TypeSpec,
+	bindings ownershipTypeBindings,
+) string {
+	if spec.TypeParams == nil {
+		return name
+	}
+	arguments := make([]string, 0)
+	for _, field := range spec.TypeParams.List {
+		for _, parameter := range field.Names {
+			bound, ok := bindings[parameter.Name]
+			if !ok {
+				arguments = append(arguments, parameter.Name)
+				continue
+			}
+			arguments = append(arguments,
+				ownershipTypeExpressionKey(bound.expression, bound.bindings))
+		}
+	}
+	return name + "[" + strings.Join(arguments, ",") + "]"
+}
+
+func ownershipTypeExpressionKey(
+	expression ast.Expr,
+	bindings ownershipTypeBindings,
+) string {
+	switch value := expression.(type) {
+	case *ast.Ident:
+		if bound, ok := bindings[value.Name]; ok {
+			return ownershipTypeExpressionKey(bound.expression, bound.bindings)
+		}
+		return value.Name
+	case *ast.SelectorExpr:
+		return ownershipTypeExpressionKey(value.X, bindings) + "." + value.Sel.Name
+	case *ast.StarExpr:
+		return "*" + ownershipTypeExpressionKey(value.X, bindings)
+	case *ast.ArrayType:
+		return "[]" + ownershipTypeExpressionKey(value.Elt, bindings)
+	case *ast.MapType:
+		return "map[" + ownershipTypeExpressionKey(value.Key, bindings) + "]" +
+			ownershipTypeExpressionKey(value.Value, bindings)
+	case *ast.IndexExpr:
+		return ownershipTypeExpressionKey(value.X, bindings) + "[" +
+			ownershipTypeExpressionKey(value.Index, bindings) + "]"
+	case *ast.IndexListExpr:
+		parts := make([]string, 0, len(value.Indices))
+		for _, index := range value.Indices {
+			parts = append(parts, ownershipTypeExpressionKey(index, bindings))
+		}
+		return ownershipTypeExpressionKey(value.X, bindings) + "[" +
+			strings.Join(parts, ",") + "]"
+	}
+	return fmt.Sprintf("%T", expression)
+}
+
+func ownershipNamedType(expression ast.Expr) string {
+	switch value := expression.(type) {
+	case *ast.Ident:
+		return value.Name
+	case *ast.ParenExpr:
+		return ownershipNamedType(value.X)
 	}
 	return ""
 }
@@ -343,7 +503,8 @@ func inspectCopiedTickClosures(files []parsedOwnershipSource) []string {
 			}
 			functions[key] = &ownershipFunction{
 				key: key, label: label, file: source.name,
-				body: function.Body, edges: make(map[string]struct{}),
+				body: function.Body, callableParameters: ownershipCallableParameters(function.Type),
+				edges: make(map[string]struct{}),
 			}
 			ast.Inspect(function.Body, func(node ast.Node) bool {
 				literal, ok := node.(*ast.FuncLit)
@@ -355,7 +516,8 @@ func inspectCopiedTickClosures(files []parsedOwnershipSource) []string {
 				literalKeys[literal] = literalKey
 				functions[literalKey] = &ownershipFunction{
 					key: literalKey, label: literalKey, file: source.name,
-					body: literal.Body, edges: make(map[string]struct{}),
+					body: literal.Body, callableParameters: ownershipCallableParameters(literal.Type),
+					edges: make(map[string]struct{}),
 				}
 				return true
 			})
@@ -363,7 +525,12 @@ func inspectCopiedTickClosures(files []parsedOwnershipSource) []string {
 	}
 
 	for _, function := range functions {
-		bindings := ownershipLiteralBindings(function.body, literalKeys)
+		bindings := ownershipCallableBindingsForBody(
+			function.body,
+			literalKeys,
+			freeFunctions,
+			methods,
+		)
 		ast.Inspect(function.body, func(node ast.Node) bool {
 			if literal, ok := node.(*ast.FuncLit); ok {
 				_, isRoot := literalKeys[literal]
@@ -373,22 +540,32 @@ func inspectCopiedTickClosures(files []parsedOwnershipSource) []string {
 			if !ok {
 				return true
 			}
-			switch target := call.Fun.(type) {
-			case *ast.Ident:
-				if literalKey := bindings[target.Name]; literalKey != "" {
-					function.edges[literalKey] = struct{}{}
-				} else if key := freeFunctions[target.Name]; key != "" {
-					function.edges[key] = struct{}{}
-				}
-			case *ast.SelectorExpr:
+			if target, ok := call.Fun.(*ast.SelectorExpr); ok {
 				function.direct |= ownershipStageByCall[target.Sel.Name]
-				for _, key := range methods[target.Sel.Name] {
-					function.edges[key] = struct{}{}
+			}
+
+			targets := ownershipCallableExpression(
+				call.Fun,
+				bindings,
+				literalKeys,
+				freeFunctions,
+				methods,
+			)
+			for target := range targets {
+				function.edges[target] = struct{}{}
+				callee := functions[target]
+				if callee == nil {
+					continue
 				}
-			case *ast.FuncLit:
-				if key := literalKeys[target]; key != "" {
-					function.edges[key] = struct{}{}
-				}
+				ownershipLinkCallableArguments(
+					function.edges,
+					call.Args,
+					callee.callableParameters,
+					bindings,
+					literalKeys,
+					freeFunctions,
+					methods,
+				)
 			}
 			return true
 		})
@@ -426,11 +603,34 @@ func inspectCopiedTickClosures(files []parsedOwnershipSource) []string {
 	return violations
 }
 
-func ownershipLiteralBindings(
+func ownershipCallableBindingsForBody(
 	body *ast.BlockStmt,
 	literalKeys map[*ast.FuncLit]string,
-) map[string]string {
-	bindings := make(map[string]string)
+	freeFunctions map[string]string,
+	methods map[string][]string,
+) ownershipCallableBindings {
+	bindings := make(ownershipCallableBindings)
+	bind := func(name string, expression ast.Expr) {
+		if name == "_" {
+			return
+		}
+		callables := ownershipCallableExpression(
+			expression,
+			bindings,
+			literalKeys,
+			freeFunctions,
+			methods,
+		)
+		if len(callables) == 0 {
+			return
+		}
+		if bindings[name] == nil {
+			bindings[name] = make(ownershipCallableSet)
+		}
+		for callable := range callables {
+			bindings[name][callable] = struct{}{}
+		}
+	}
 	ast.Inspect(body, func(node ast.Node) bool {
 		if _, ok := node.(*ast.FuncLit); ok {
 			return false
@@ -438,27 +638,124 @@ func ownershipLiteralBindings(
 		switch value := node.(type) {
 		case *ast.AssignStmt:
 			for index, expression := range value.Rhs {
-				literal, ok := expression.(*ast.FuncLit)
-				if !ok || index >= len(value.Lhs) {
+				if index >= len(value.Lhs) {
 					continue
 				}
 				name, ok := value.Lhs[index].(*ast.Ident)
 				if ok {
-					bindings[name.Name] = literalKeys[literal]
+					bind(name.Name, expression)
 				}
 			}
 		case *ast.ValueSpec:
 			for index, expression := range value.Values {
-				literal, ok := expression.(*ast.FuncLit)
-				if !ok || index >= len(value.Names) {
+				if index >= len(value.Names) {
 					continue
 				}
-				bindings[value.Names[index].Name] = literalKeys[literal]
+				bind(value.Names[index].Name, expression)
 			}
 		}
 		return true
 	})
 	return bindings
+}
+
+func ownershipCallableParameters(function *ast.FuncType) []ownershipCallableParameter {
+	if function == nil || function.Params == nil {
+		return nil
+	}
+	parameters := make([]ownershipCallableParameter, 0)
+	position := 0
+	for _, field := range function.Params.List {
+		count := len(field.Names)
+		if count == 0 {
+			count = 1
+		}
+		typeExpression := field.Type
+		variadic := false
+		if ellipsis, ok := typeExpression.(*ast.Ellipsis); ok {
+			typeExpression = ellipsis.Elt
+			variadic = true
+		}
+		_, callable := typeExpression.(*ast.FuncType)
+		for index := 0; index < count; index++ {
+			if callable {
+				parameters = append(parameters, ownershipCallableParameter{
+					position: position,
+					variadic: variadic && index == count-1,
+				})
+			}
+			position++
+		}
+	}
+	return parameters
+}
+
+func ownershipCallableExpression(
+	expression ast.Expr,
+	bindings ownershipCallableBindings,
+	literalKeys map[*ast.FuncLit]string,
+	freeFunctions map[string]string,
+	methods map[string][]string,
+) ownershipCallableSet {
+	callables := make(ownershipCallableSet)
+	switch value := expression.(type) {
+	case *ast.Ident:
+		for callable := range bindings[value.Name] {
+			callables[callable] = struct{}{}
+		}
+		if callable := freeFunctions[value.Name]; callable != "" {
+			callables[callable] = struct{}{}
+		}
+	case *ast.SelectorExpr:
+		for _, callable := range methods[value.Sel.Name] {
+			callables[callable] = struct{}{}
+		}
+	case *ast.FuncLit:
+		if callable := literalKeys[value]; callable != "" {
+			callables[callable] = struct{}{}
+		}
+	case *ast.ParenExpr:
+		return ownershipCallableExpression(
+			value.X, bindings, literalKeys, freeFunctions, methods,
+		)
+	case *ast.IndexExpr:
+		return ownershipCallableExpression(
+			value.X, bindings, literalKeys, freeFunctions, methods,
+		)
+	case *ast.IndexListExpr:
+		return ownershipCallableExpression(
+			value.X, bindings, literalKeys, freeFunctions, methods,
+		)
+	}
+	return callables
+}
+
+func ownershipLinkCallableArguments(
+	edges map[string]struct{},
+	arguments []ast.Expr,
+	parameters []ownershipCallableParameter,
+	bindings ownershipCallableBindings,
+	literalKeys map[*ast.FuncLit]string,
+	freeFunctions map[string]string,
+	methods map[string][]string,
+) {
+	for _, parameter := range parameters {
+		end := parameter.position + 1
+		if parameter.variadic {
+			end = len(arguments)
+		}
+		if parameter.position >= len(arguments) {
+			continue
+		}
+		for index := parameter.position; index < end; index++ {
+			callables := ownershipCallableExpression(
+				arguments[index], bindings, literalKeys, freeFunctions, methods,
+			)
+			for callable := range callables {
+				edges[callable] = struct{}{}
+			}
+		}
+	}
 }
 
 func ownershipReceiverName(receiver *ast.FieldList) string {
