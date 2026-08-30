@@ -4,7 +4,6 @@ import (
 	"sort"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim/entity"
 	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/sim/tuning"
@@ -42,8 +41,13 @@ func realmEnvironmentConfig(tunables tuning.Tunables) realm.EnvironmentConfig {
 
 // Step 严格串行编排一个权威 tick；实体状态只经 `entity.State` 推进。
 func (engine *Engine) Step() TickResult {
-	engine.tunables = tuning.ActiveTunables()
-	engine.physicsTunables = physics.ActiveTunables()
+	return engine.StepWithTunables(ActiveTickTunables())
+}
+
+// StepWithTunables 使用调用方在 tick 边界捕获的参数束推进一个权威 tick。
+func (engine *Engine) StepWithTunables(tickTunables TickTunables) TickResult {
+	engine.tunables = tickTunables.Simulation
+	engine.physicsTunables = tickTunables.Physics
 	currentTick := engine.tick.Load()
 	currentWorldTime := engine.worldTime.Load()
 	config := realmEnvironmentConfig(engine.tunables)

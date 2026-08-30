@@ -99,7 +99,7 @@ func TestMalformedOrUnknownCompanionChatRejectsOnlySender(t *testing.T) {
 		server.incomingChats <- incomingChat{
 			sessionID: 1, generation: 1, command: network.ChatCommand{Text: test.text},
 		}
-		deliveries := server.drainIncomingChats()
+		deliveries := server.drainIncomingChats(simruntime.ActiveTickTunables())
 		if len(deliveries) != 1 {
 			t.Fatalf("case %d delivery=%d，想要 1", index, len(deliveries))
 		}
@@ -153,7 +153,7 @@ func TestCompanionAddressNameBoundaryIsThirtyTwoRunesAnd128Bytes(t *testing.T) {
 		server.incomingChats <- incomingChat{
 			sessionID: 1, generation: 1, command: network.ChatCommand{Text: text},
 		}
-		deliveries := server.drainIncomingChats()
+		deliveries := server.drainIncomingChats(simruntime.ActiveTickTunables())
 		if len(deliveries) != 1 || deliveries[0].event.RejectReason != test.reason {
 			t.Fatalf("case %d delivery=%+v，想要 reason=%d", index, deliveries, test.reason)
 		}
@@ -218,7 +218,7 @@ func TestAcceptedCompanionChatBroadcastsInChannelOrder(t *testing.T) {
 			sessionID: 1, generation: 1, command: network.ChatCommand{Text: text},
 		}
 	}
-	deliveries := server.drainIncomingChats()
+	deliveries := server.drainIncomingChats(simruntime.ActiveTickTunables())
 	if len(deliveries) != 4 {
 		t.Fatalf("deliveries=%d，想要 4", len(deliveries))
 	}
@@ -254,7 +254,9 @@ func TestAcceptedCompanionChatSlowRecipientDoesNotBlockHealthyBroadcast(t *testi
 		sessionID: 1, generation: 1,
 		command: network.ChatCommand{Text: "@阿木 挖石头"},
 	}
-	server.publishWithChats(contract.TickResult{}, server.drainIncomingChats())
+	server.publishWithChats(
+		contract.TickResult{}, server.drainIncomingChats(simruntime.ActiveTickTunables()),
+	)
 
 	first := companionChatEvents(drainCompanionChatOutbox(server.sessions[1]))
 	third := companionChatEvents(drainCompanionChatOutbox(server.sessions[3]))
@@ -269,7 +271,9 @@ func TestAcceptedCompanionChatSlowRecipientDoesNotBlockHealthyBroadcast(t *testi
 		sessionID: 1, generation: 1,
 		command: network.ChatCommand{Text: "@阿木甲 等待"},
 	}
-	server.publishWithChats(contract.TickResult{}, server.drainIncomingChats())
+	server.publishWithChats(
+		contract.TickResult{}, server.drainIncomingChats(simruntime.ActiveTickTunables()),
+	)
 	first = companionChatEvents(drainCompanionChatOutbox(server.sessions[1]))
 	third = companionChatEvents(drainCompanionChatOutbox(server.sessions[3]))
 	if len(first) != 1 || len(third) != 1 || first[0].EventID != 2 ||
@@ -285,7 +289,7 @@ func TestStaleSessionChatGenerationIsDroppedWithoutConsumingEventID(t *testing.T
 		sessionID: 1, generation: 1,
 		command: network.ChatCommand{Text: "即使解析也非法"},
 	}
-	if deliveries := server.drainIncomingChats(); len(deliveries) != 0 {
+	if deliveries := server.drainIncomingChats(simruntime.ActiveTickTunables()); len(deliveries) != 0 {
 		t.Fatalf("stale delivery=%+v，想要丢弃", deliveries)
 	}
 	if server.nextChatEventID != 0 {
@@ -296,7 +300,7 @@ func TestStaleSessionChatGenerationIsDroppedWithoutConsumingEventID(t *testing.T
 		sessionID: 1, generation: 2,
 		command: network.ChatCommand{Text: "@阿木 挖石头"},
 	}
-	deliveries := server.drainIncomingChats()
+	deliveries := server.drainIncomingChats(simruntime.ActiveTickTunables())
 	if len(deliveries) != 1 || deliveries[0].event.EventID != 1 ||
 		deliveries[0].event.Kind != network.ChatEventAccepted {
 		t.Fatalf("fresh delivery=%+v，想要首个 Accepted EventID=1", deliveries)
@@ -311,7 +315,7 @@ func TestStaleSessionChatGenerationIsDroppedWithoutConsumingEventID(t *testing.T
 		sessionID: 1, generation: 2,
 		command: network.ChatCommand{Text: "@阿木 编号耗尽"},
 	}
-	deliveries = server.drainIncomingChats()
+	deliveries = server.drainIncomingChats(simruntime.ActiveTickTunables())
 	if len(deliveries) != 1 || deliveries[0].event.EventID != ^uint64(0) {
 		t.Fatalf("EventID 耗尽 delivery=%+v，想要唯一 MaxUint64 事件", deliveries)
 	}
@@ -377,12 +381,12 @@ func TestChatCommandIngressIsBoundedAndCancellationWakesBlockedReader(t *testing
 		}()
 		<-started
 		runtime.Gosched()
-		deliveries := server.drainIncomingChats()
+		deliveries := server.drainIncomingChats(simruntime.ActiveTickTunables())
 		<-done
 		if len(deliveries) != inputCapacity || len(server.incomingChats) != 1 {
 			t.Fatalf("首 tick deliveries=%d remaining=%d", len(deliveries), len(server.incomingChats))
 		}
-		next := server.drainIncomingChats()
+		next := server.drainIncomingChats(simruntime.ActiveTickTunables())
 		if len(next) != 1 || next[0].event.EventID != inputCapacity+1 ||
 			next[0].event.Command != "下一 tick" {
 			t.Fatalf("下一 tick delivery=%+v", next)
@@ -791,7 +795,7 @@ func BenchmarkChatRoutingFourCompanions(b *testing.B) {
 		command: network.ChatCommand{Text: "@阿木 挖石头"},
 	}
 	server.incomingChats <- command
-	if deliveries := server.drainIncomingChats(); len(deliveries) != 1 {
+	if deliveries := server.drainIncomingChats(simruntime.ActiveTickTunables()); len(deliveries) != 1 {
 		b.Fatalf("预热 delivery=%d", len(deliveries))
 	}
 	server.nextChatEventID = 0
@@ -799,7 +803,7 @@ func BenchmarkChatRoutingFourCompanions(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		server.incomingChats <- command
-		if deliveries := server.drainIncomingChats(); len(deliveries) != 1 {
+		if deliveries := server.drainIncomingChats(simruntime.ActiveTickTunables()); len(deliveries) != 1 {
 			b.Fatalf("delivery=%d", len(deliveries))
 		}
 	}

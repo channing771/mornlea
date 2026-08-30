@@ -11,10 +11,8 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/pathfind"
-	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/sim/runtime"
-	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -68,6 +66,7 @@ func (m *companionManager) advanceInteractionRunner(
 	id companion.ID,
 	current companion.Task,
 	step companion.PlanStep,
+	tickTunables runtime.TickTunables,
 ) {
 	body, active := m.body(id)
 	if !active {
@@ -101,7 +100,7 @@ func (m *companionManager) advanceInteractionRunner(
 		m.holdCompanionMining(slot, id, body, step)
 		return
 	}
-	m.submitCompanionPlacement(slot, id, body, step)
+	m.submitCompanionPlacement(slot, id, body, step, tickTunables)
 }
 
 // holdCompanionMining 是 mine 步骤交互段的一 tick 编排：持续提交 MineHold
@@ -304,6 +303,7 @@ func (m *companionManager) submitCompanionPlacement(
 	id companion.ID,
 	body companion.Body,
 	step companion.PlanStep,
+	tickTunables runtime.TickTunables,
 ) {
 	target := core.BlockPos{X: step.X, Y: step.Y, Z: step.Z}
 	block, ready := m.blockAt(body.Dimension, target)
@@ -330,7 +330,7 @@ func (m *companionManager) submitCompanionPlacement(
 		m.applyQueueEvents(slot, slot.queue.FailRun(companion.TaskFailInventoryFull))
 		return
 	}
-	if !withinInteractionReach(body, target) {
+	if !withinInteractionReach(body, target, tickTunables) {
 		// 邻近站立格仍超出交互距离（罕见几何边缘）：不提交，等待物理微调，
 		// deadline 兜底。sim 不校验放置距离，这道门是唯一关卡。
 		return
@@ -414,12 +414,16 @@ func (m *companionManager) blockAt(dimension core.DimensionID, position core.Blo
 // 距离内。几何对齐 sim 采掘射线的锚点（眼位 → 方块中心）与同一
 // InteractionReach 常量；遮挡不在此判定——放置目标必然是空气格，无遮挡
 // 可言，距离是唯一需要 Runner 把关的自由度（C3 Ruling）。
-func withinInteractionReach(body companion.Body, target core.BlockPos) bool {
-	eyeY := body.Position[1] + physics.ActiveTunables().EyeHeight
+func withinInteractionReach(
+	body companion.Body,
+	target core.BlockPos,
+	tickTunables runtime.TickTunables,
+) bool {
+	eyeY := body.Position[1] + tickTunables.Physics.EyeHeight
 	dx := body.Position[0] - (float32(target.X) + 0.5)
 	dy := eyeY - (float32(target.Y) + 0.5)
 	dz := body.Position[2] - (float32(target.Z) + 0.5)
-	reach := tuning.ActiveTunables().InteractionReach
+	reach := tickTunables.Simulation.InteractionReach
 	return dx*dx+dy*dy+dz*dz <= reach*reach
 }
 

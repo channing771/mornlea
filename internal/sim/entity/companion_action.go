@@ -127,10 +127,11 @@ func (engine *engineContext) advanceActiveCompanions() {
 	for _, id := range engine.activeCompanionIDs() {
 		entry := engine.companions[id]
 		before := companionChunk(entry.state.Position)
-		step := physics.Step(
+		step := physics.StepWithTunables(
 			entry.state,
 			entry.input,
 			dimensionCollisionSource{dimension: engine.dimension(entry.dimension)},
+			engine.physicsTunables,
 		)
 		entry.state = step.State
 		if companionChunk(entry.state.Position) != before {

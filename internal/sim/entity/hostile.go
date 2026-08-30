@@ -261,8 +261,12 @@ func (engine *engineContext) advanceHostileMovement() {
 		}
 		source := dimensionCollisionSource{dimension: engine.dimension(entry.dimension)}
 		input := entry.input
-		input.BodyInFluid, input.EyeInFluid = physics.SubmersionFlags(entry.state.Position, source)
-		entry.state = physics.Step(entry.state, input, source).State
+		input.BodyInFluid, input.EyeInFluid = physics.SubmersionFlagsWithTunables(
+			entry.state.Position, source, engine.physicsTunables,
+		)
+		entry.state = physics.StepWithTunables(
+			entry.state, input, source, engine.physicsTunables,
+		).State
 		if !physics.ValidState(entry.state) || entry.state.Position.Y() < float32(core.MinY) {
 			engine.hostiles.removeAt(index)
 			continue

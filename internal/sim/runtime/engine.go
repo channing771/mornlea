@@ -89,8 +89,9 @@ func NewEngine(viewRadius int, worldTime uint64, seed int64) *Engine {
 	engine.worldTime.Store(worldTime)
 	// 初始化快照，使未经 Step 就被调用的方法（例如 RegisterPlayer 的出生扫描）
 	// 也有可用的参数快照。
-	engine.tunables = tuning.ActiveTunables()
-	engine.physicsTunables = physics.ActiveTunables()
+	initialTunables := ActiveTickTunables()
+	engine.tunables = initialTunables.Simulation
+	engine.physicsTunables = initialTunables.Physics
 	return engine
 }
 

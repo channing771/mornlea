@@ -136,7 +136,9 @@ func (engine *engineContext) advancePendingPlayer(id SessionID, session *session
 	for player.nextCandidate < len(player.candidates) {
 		candidate := player.candidates[player.nextCandidate]
 		engine.retainSpawnChunk(session, (core.BlockPos{X: candidate.X, Z: candidate.Z}).Chunk())
-		position, tier, ready := findSpawnInColumn(candidate, dimension, source)
+		position, tier, ready := findSpawnInColumn(
+			candidate, dimension, source, engine.physicsTunables,
+		)
 		if !ready {
 			engine.retryFailedSpawnChunk(session, (core.BlockPos{X: candidate.X, Z: candidate.Z}).Chunk())
 			return
@@ -435,6 +437,7 @@ func findSpawnInColumn(
 	candidate spawnColumn,
 	dimension *Dimension,
 	source dimensionCollisionSource,
+	physicsTunables physics.Tunables,
 ) (mgl32.Vec3, spawnTier, bool) {
 	var best spawnFallback
 	for y := int32(core.MaxY - 1); y >= core.MinY; y-- {
@@ -471,7 +474,7 @@ func findSpawnInColumn(
 			if !completeSupport {
 				continue
 			}
-			tier := spawnTierOf(position, source)
+			tier := spawnTierOf(position, source, physicsTunables)
 			if tier == spawnTierDry {
 				return position, spawnTierDry, true
 			}
@@ -487,8 +490,14 @@ func findSpawnInColumn(
 // 客户端预测同一个函数），不在这里另写一套逐格流体扫描——两套实现"一起写错"
 // 不会被任何 parity 断言抓到。流体零碰撞体，因此 playerBoundsAreFree 会把
 // 海平面以下的地表也读成"可站立"，档位判定是唯一能把它们区分开的东西。
-func spawnTierOf(position mgl32.Vec3, source dimensionCollisionSource) spawnTier {
-	bodyInFluid, eyeInFluid := physics.SubmersionFlags(position, source)
+func spawnTierOf(
+	position mgl32.Vec3,
+	source dimensionCollisionSource,
+	physicsTunables physics.Tunables,
+) spawnTier {
+	bodyInFluid, eyeInFluid := physics.SubmersionFlagsWithTunables(
+		position, source, physicsTunables,
+	)
 	switch {
 	case eyeInFluid:
 		return spawnTierSubmerged

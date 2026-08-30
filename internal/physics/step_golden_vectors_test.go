@@ -238,6 +238,13 @@ func TestStepGoldenVectors(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := physics.Step(test.state, test.input, test.world)
+			explicit := physics.StepWithTunables(
+				test.state, test.input, test.world, physics.DefaultTunables(),
+			)
+			if explicit != got {
+				t.Fatalf("显式 tunables 路径与兼容 wrapper 不同：explicit=%+v wrapper=%+v",
+					explicit, got)
+			}
 			for axis := range 3 {
 				if bits := math.Float32bits(got.State.Position[axis]); bits != test.wantPos[axis] {
 					t.Fatalf("position[%d] bits=%08x，want %08x", axis, bits, test.wantPos[axis])

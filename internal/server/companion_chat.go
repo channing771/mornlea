@@ -9,6 +9,7 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 )
 
 type incomingChat struct {
@@ -56,7 +57,7 @@ func (server *Server) enqueueIncomingChat(sessionCtx context.Context, chat incom
 }
 
 // drainIncomingChats 在持有 stepMu 的 tick 边界调用。
-func (server *Server) drainIncomingChats() []chatDelivery {
+func (server *Server) drainIncomingChats(tickTunables runtime.TickTunables) []chatDelivery {
 	// len(chan) 语言级恒不超过 cap(chan)，而 incomingChats 全部构造点的
 	// 缓冲恰为 inputCapacity，本值天然以 inputCapacity 为上界。
 	pending := len(server.incomingChats)
@@ -133,7 +134,7 @@ func (server *Server) drainIncomingChats() []chatDelivery {
 				definition,
 				companion.TaskCommand(command),
 				server.companionManager.captureIssuer(
-					current.playerID, current.displayName, chat.sessionID,
+					current.playerID, current.displayName, chat.sessionID, tickTunables,
 				),
 			) {
 				event.Kind = network.ChatEventRejected

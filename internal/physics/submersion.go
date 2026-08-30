@@ -41,7 +41,17 @@ type WorldSource interface {
 // position 是脚底中心，MUST 为有限值且落在 int32 可表示的范围内（调用方在权威
 // tick 里已由 ValidState 保证）；否则与 Step 一样 panic，不静默返回假值。
 func SubmersionFlags(position mgl32.Vec3, source FluidSource) (bodyInFluid, eyeInFluid bool) {
-	eyeHeight := ActiveTunables().EyeHeight
+	return SubmersionFlagsWithTunables(position, source, ActiveTunables())
+}
+
+// SubmersionFlagsWithTunables 使用调用方提供的参数计算浸没标志。权威 tick 用
+// 此入口保证眼高与同 tick 的射线、碰撞和氧气结算共享一个参数截面。
+func SubmersionFlagsWithTunables(
+	position mgl32.Vec3,
+	source FluidSource,
+	tunables Tunables,
+) (bodyInFluid, eyeInFluid bool) {
+	eyeHeight := tunables.EyeHeight
 	eyeInFluid = source.IsFluidAt(core.BlockPos{
 		X: collisionCheckedFloor(position.X()),
 		Y: collisionCheckedFloor(position.Y() + eyeHeight),

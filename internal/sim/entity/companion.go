@@ -162,7 +162,9 @@ func (engine *engineContext) advancePendingCompanion(state *companionState) {
 			state.spawnWanted[chunk] = struct{}{}
 			engine.subscriptionsDirty = true
 		}
-		position, tier, ready := findSpawnInColumn(candidate, dimension, source)
+		position, tier, ready := findSpawnInColumn(
+			candidate, dimension, source, engine.physicsTunables,
+		)
 		if !ready {
 			if info, ok := dimension.Info(chunk); !ok || info.State == realm.ChunkFailed {
 				engine.subscriptionsDirty = true

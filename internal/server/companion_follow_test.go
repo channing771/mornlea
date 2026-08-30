@@ -17,6 +17,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 )
 
 // followPlanContent 构造单一 follow 步骤的受限计划 JSON 文本：目标玩家以
@@ -392,7 +393,7 @@ func TestCompanionManagerFollowSnapshotOnlinePlayers(t *testing.T) {
 	secondLogin := activeLoginForPlayer(t, host, secondIdentity.PlayerID)
 	host.world.stepMu.Lock()
 	issuer := host.world.companionManager.captureIssuer(
-		firstIdentity.PlayerID, "玩家甲", firstLogin.Session,
+		firstIdentity.PlayerID, "玩家甲", firstLogin.Session, runtime.ActiveTickTunables(),
 	)
 	firstPlayer, firstOK := host.world.engine.Player(firstLogin.Session)
 	secondPlayer, secondOK := host.world.engine.Player(secondLogin.Session)

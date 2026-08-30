@@ -309,6 +309,7 @@ func (server *Server) step(scheduled time.Time) contract.TickResult {
 		return contract.TickResult{}
 	}
 	started := time.Now()
+	tickTunables := runtime.ActiveTickTunables()
 	if server.config.TickObserver != nil ||
 		(server.config.ScheduledTickObserver != nil && !scheduled.IsZero()) {
 		defer func() {
@@ -325,16 +326,16 @@ func (server *Server) step(scheduled time.Time) contract.TickResult {
 	_ = server.world.Drain()
 	trustedCenter, trustedSequence, hasTrustedCenter := server.drainTrustedObserverCenter()
 	server.drainIncoming()
-	chatDeliveries := server.drainIncomingChats()
+	chatDeliveries := server.drainIncomingChats(tickTunables)
 	server.drainAcquired()
 	server.drainGenerated()
 	// 任务编排位于聊天 drain 之后（Accepted 指令刚入队即可同 tick 派发规划）、
 	// engine.Step 之前（伙伴移动输入必须先进 inbox 才能被本 tick 消费）。
-	taskDeliveries := server.advanceCompanionTasks()
+	taskDeliveries := server.advanceCompanionTasks(tickTunables)
 	// 夜行者编排同样先于 engine.Step：有界追逐的移动/攻击意图必须先进
 	// inbox 才能被同 tick 的夜行者阶段消费；派发绝不等待 A*。
 	server.advanceHostileChase()
-	result := server.engine.Step()
+	result := server.engine.StepWithTunables(tickTunables)
 	if server.companionManager != nil {
 		// 采掘进度只在 TickResult.Companions 发布（CompanionBodies 不含采掘
 		// 域）：tick 末回填缓存，下一 tick 的 advanceRunners 与 bodies 缓存

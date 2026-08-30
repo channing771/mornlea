@@ -1,10 +1,117 @@
 package tuning
 
 import (
+	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
 )
+
+// TestConcurrentSetAndActiveTunablesReturnWholeSnapshots 证明并发读写只能观察到
+// 某次完整发布的值，不能把两个配置的字段拼成撕裂快照。
+func TestConcurrentSetAndActiveTunablesReturnWholeSnapshots(t *testing.T) {
+	t.Cleanup(func() { SetTunables(DefaultTunables()) })
+
+	first := wholeSnapshotFixture(1)
+	second := wholeSnapshotFixture(2)
+	firstValue := reflect.ValueOf(first)
+	secondValue := reflect.ValueOf(second)
+	for index := range firstValue.NumField() {
+		if reflect.DeepEqual(firstValue.Field(index).Interface(), secondValue.Field(index).Interface()) {
+			t.Fatalf("A/B 快照字段 %s 未取不同值", firstValue.Type().Field(index).Name)
+		}
+	}
+	SetTunables(first)
+
+	const readerCount = 8
+	readersReady := make(chan struct{}, readerCount)
+	startWriter := make(chan struct{})
+	writerStarted := make(chan struct{})
+	readersEntered := make(chan struct{}, readerCount)
+	startReads := make(chan struct{})
+	stopWriter := make(chan struct{})
+	writerDone := make(chan struct{})
+	unexpected := make(chan Tunables, 1)
+	var group sync.WaitGroup
+	group.Add(readerCount)
+	go func() {
+		defer close(writerDone)
+		<-startWriter
+		SetTunables(second)
+		close(writerStarted)
+		for range readerCount {
+			<-readersEntered
+		}
+		close(startReads)
+		for {
+			select {
+			case <-stopWriter:
+				return
+			default:
+				SetTunables(first)
+				SetTunables(second)
+			}
+		}
+	}()
+	for range readerCount {
+		go func() {
+			defer group.Done()
+			readersReady <- struct{}{}
+			<-writerStarted
+			readersEntered <- struct{}{}
+			<-startReads
+			for range 5000 {
+				got := ActiveTunables()
+				if got == first || got == second {
+					continue
+				}
+				select {
+				case unexpected <- got:
+				default:
+				}
+				return
+			}
+		}()
+	}
+	for range readerCount {
+		<-readersReady
+	}
+	close(startWriter)
+	group.Wait()
+	close(stopWriter)
+	<-writerDone
+	select {
+	case got := <-unexpected:
+		t.Fatalf("并发读取观察到撕裂快照：%+v", got)
+	default:
+	}
+}
+
+func wholeSnapshotFixture(value uint32) Tunables {
+	return Tunables{
+		InteractionReach:              float32(value),
+		RegenDelayTicks:               value,
+		RegenIntervalTicks:            value,
+		DrownDamageIntervalTicks:      value,
+		DropPickupDelayTicks:          uint8(value),
+		PlayerDropPickupDelayTicks:    uint8(value),
+		DropLifetimeTicks:             value,
+		DropPickupRange:               float32(value),
+		SpawnRadius:                   int32(value),
+		FurnaceSmeltTicks:             uint8(value),
+		FurnaceBurnTicks:              uint16(value),
+		FluidFlowDelayTicks:           value,
+		FluidUpdatesPerTick:           value,
+		FluidRescanCellsPerTick:       value,
+		RandomTicksPerSection:         uint8(value),
+		CropGrowthChancePercent:       uint8(value),
+		StarvationDamageIntervalTicks: value,
+		ExhaustionThresholdMilli:      uint16(value),
+		RegenHungerThreshold:          uint8(value),
+		EatingTicks:                   uint16(value),
+	}
+}
 
 func TestDefaultTunablesMatchLegacyConstants(t *testing.T) {
 	tunables := DefaultTunables()

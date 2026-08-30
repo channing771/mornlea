@@ -23,6 +23,7 @@ import (
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/pathfind"
 	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -894,7 +895,7 @@ func TestCompanionManagerPlanSnapshotBoundedAndOrdered(t *testing.T) {
 	host.world.stepMu.Lock()
 	identity := integrationIdentity(0x71, "发令者")
 	issuer := host.world.companionManager.captureIssuer(
-		identity.PlayerID, "发令者", active.Session,
+		identity.PlayerID, "发令者", active.Session, runtime.ActiveTickTunables(),
 	)
 	snapshot, err := host.world.companionManager.buildPlanSnapshot(
 		definitions[0], companion.TaskCommand("环顾四周"), issuer, body,

@@ -515,7 +515,9 @@ func (engine *engineContext) advanceActivePlayers() {
 		// 浸没标志由权威侧在 tick 边界用共享纯函数从自己的方块镜像算出，
 		// 再随 Input 传进物理步——流体没有碰撞盒，prism 里区分不出水与空气。
 		input := player.input
-		input.BodyInFluid, input.EyeInFluid = physics.SubmersionFlags(player.state.Position, source)
+		input.BodyInFluid, input.EyeInFluid = physics.SubmersionFlagsWithTunables(
+			player.state.Position, source, engine.physicsTunables,
+		)
 		// 疾跑饥饿门控：饥饿<6 时不触发加速与疲劳（与 MC 同阈值），sim 侧清位
 		// 后 physics 侧的地面/前移/浸没复核仍各做一遍，保证 sweep bounds 自检一致。
 		if player.hunger < 6 {
@@ -534,7 +536,9 @@ func (engine *engineContext) advanceActivePlayers() {
 			player.peakY = player.state.Position.Y()
 		}
 		positionBeforeStep := player.state.Position
-		step := physics.Step(player.state, input, source)
+		step := physics.StepWithTunables(
+			player.state, input, source, engine.physicsTunables,
+		)
 		player.state = step.State
 		// —— 疲劳表的两个运动判定点（见 hunger.go 的固定表）——
 		//
@@ -567,7 +571,9 @@ func (engine *engineContext) advanceActivePlayers() {
 		}
 		// 落点也要判一次：水浅、下落又快时，本步开始时玩家还在水面之上、结束
 		// 时已经踩到水底，只看步首标志会让这一跤照旧结算摔落伤害。
-		if landedInFluid, _ := physics.SubmersionFlags(player.state.Position, source); landedInFluid {
+		if landedInFluid, _ := physics.SubmersionFlagsWithTunables(
+			player.state.Position, source, engine.physicsTunables,
+		); landedInFluid {
 			player.peakY = player.state.Position.Y()
 		}
 		if player.state.OnGround {

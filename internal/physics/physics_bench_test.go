@@ -23,6 +23,19 @@ func TestStepPlayerDoesNotAllocate(t *testing.T) {
 	}
 }
 
+func TestStepPlayerWithTunablesDoesNotAllocate(t *testing.T) {
+	state := physics.State{Position: mgl32.Vec3{0.5, 1, 0.5}, OnGround: true}
+	input := physics.Input{MoveZ: 1}
+	world := benchmarkWorld{}
+	tunables := physics.DefaultTunables()
+	allocs := testing.AllocsPerRun(1000, func() {
+		_ = physics.StepWithTunables(state, input, world, tunables)
+	})
+	if allocs != 0 {
+		t.Fatalf("physics.StepWithTunables allocs/op=%f，想要 0", allocs)
+	}
+}
+
 func TestStepPlayerCollidingDoesNotAllocate(t *testing.T) {
 	state := physics.State{
 		Position: mgl32.Vec3{0.5, 1, 0.5},
