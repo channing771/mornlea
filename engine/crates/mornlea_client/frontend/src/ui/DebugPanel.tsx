@@ -5,6 +5,7 @@
 // 编辑输入框：Enter 就地确认（拦截冒泡避免中枢再解释），Esc 冒泡给中枢取消。
 import { useState } from "react";
 import type { DebugRow, DebugState, UplinkEvent } from "../bridge/client";
+import { PixelInput } from "./pixel";
 
 export interface DebugPanelProps {
   debug: DebugState;
@@ -69,11 +70,12 @@ function readOnlyRowClassName(row: DebugRow): string {
 //
 // autoFocus：编辑会话开启时 WebView 是 firstResponder，焦点必须落进输入框
 // 才能接收文本；confirm 事件 stopPropagation，避免冒泡到 App 的窗口级路由
-// 被再次解释（编辑态中枢本就忽略 Enter，这里双保险）。
+// 被再次解释（编辑态中枢本就忽略 Enter，这里双保险）。呈现面为 PixelInput
+// （像素描边框），aria-label/键盘/流式上行的语义保持原生零改动。
 function DebugRowEditor({ row, onEvent }: { row: DebugRow; onEvent: (event: UplinkEvent) => void }) {
   const [draft, setDraft] = useState(row.editValue ?? row.value);
   return (
-    <input
+    <PixelInput
       className="debug-edit-input"
       aria-label={row.label}
       autoFocus
