@@ -1,4 +1,4 @@
-package runtime
+package realm
 
 import (
 	"testing"

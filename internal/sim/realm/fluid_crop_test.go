@@ -1,12 +1,129 @@
-package runtime
+package realm
 
 import (
 	"sort"
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/world"
 )
+
+type fluidCropCounter uint64
+
+func (counter *fluidCropCounter) Load() uint64     { return uint64(*counter) }
+func (counter *fluidCropCounter) Add(delta uint64) { *counter += fluidCropCounter(delta) }
+
+type fluidCropEngine struct {
+	realm                 *State
+	seed                  int64
+	tick                  fluidCropCounter
+	lastFarmlandPhaseSeen bool
+	lastFarmlandCandidate bool
+}
+
+type fluidCropSession struct{}
+
+type fluidCropTickResult struct {
+	Changes []ChunkChangeBatch
+}
+
+func newFluidCropEngine(t *testing.T, crop core.BlockID) *fluidCropEngine {
+	t.Helper()
+	state := NewState(core.Overworld)
+	dimension := state.Dimension(core.Overworld)
+	position := core.ChunkPos{}
+	chunk := world.NewChunk(position)
+	for x := range core.SectionSize {
+		for z := range core.SectionSize {
+			chunk.SetBlock(x, 0, z, core.GrassID)
+		}
+	}
+	chunk.SetBlock(0, fluidCropFarmland.Y, 8, core.FarmlandDryID)
+	chunk.SetBlock(0, fluidCropCell.Y, 8, crop)
+	chunk.Compact()
+	if !dimension.BeginGeneration(position) {
+		t.Fatal("流体作物区块未开始生成")
+	}
+	if err := dimension.ApplyGenerated(position, chunk); err != nil {
+		t.Fatal(err)
+	}
+	return &fluidCropEngine{realm: state}
+}
+
+func (engine *fluidCropEngine) dimension(id core.DimensionID) *Dimension {
+	return engine.realm.Dimension(id)
+}
+
+func (engine *fluidCropEngine) SetBlockForTest(position core.BlockPos, block core.BlockID) {
+	if !engine.dimension(core.Overworld).UpdateReadyChunk(position.Chunk(), func(chunk *world.Chunk) {
+		x, _, z := position.Local()
+		chunk.SetBlock(x, position.Y, z, block)
+	}) {
+		panic("fluid crop fixture chunk is not ready")
+	}
+}
+
+func (engine *fluidCropEngine) SetChunkDropForTest(
+	key core.ChunkKey,
+	slot int,
+	drop world.DropSlot,
+) {
+	if !engine.dimension(key.Dimension).UpdateReadyChunk(key.Pos, func(chunk *world.Chunk) {
+		chunk.SetDrop(slot, drop)
+	}) {
+		panic("fluid crop fixture chunk is not ready")
+	}
+}
+
+func (engine *fluidCropEngine) enqueueFluidUpdate(
+	dimension core.DimensionID,
+	position core.BlockPos,
+) {
+	engine.realm.EnqueueFluidUpdate(dimension, position)
+}
+
+func (engine *fluidCropEngine) Step() fluidCropTickResult {
+	tunables := tuning.DefaultTunables()
+	config := EnvironmentConfig{
+		FluidFlowDelayTicks:     tunables.FluidFlowDelayTicks,
+		FluidUpdatesPerTick:     tunables.FluidUpdatesPerTick,
+		FluidRescanCellsPerTick: tunables.FluidRescanCellsPerTick,
+		DropPickupDelayTicks:    tunables.DropPickupDelayTicks,
+		RandomTicksPerSection:   tunables.RandomTicksPerSection,
+		CropGrowthChancePercent: tunables.CropGrowthChancePercent,
+	}
+	now := engine.tick.Load()
+	engine.realm.SetEnvironmentTick(now, engine.seed, config)
+	mutation := engine.realm.NewMutation()
+	active := []core.ChunkKey{{Dimension: core.Overworld}}
+	engine.realm.AdvanceFluids(active, mutation)
+	engine.lastFarmlandPhaseSeen = true
+	engine.lastFarmlandCandidate = engine.realm.FarmlandQueued(
+		core.Overworld, fluidCropFarmland,
+	)
+	engine.realm.AdvanceFarmlandMoisture(
+		active, engine.realm.NewEnvironmentMutation(mutation, now, config),
+	)
+	engine.realm.AdvanceCrops(active, mutation)
+	result := fluidCropTickResult{Changes: mutation.Commit()}
+	engine.tick.Add(1)
+	return result
+}
+
+func fluidBlockAt(t *testing.T, engine *fluidCropEngine, position core.BlockPos) core.BlockID {
+	t.Helper()
+	block, ready := engine.dimension(core.Overworld).BlockAt(position)
+	if !ready {
+		t.Fatalf("读取 %+v 时区块未就绪", position)
+	}
+	return block
+}
+
+func overworldFluidQueue(t *testing.T, engine *fluidCropEngine) interface{ Len() int } {
+	t.Helper()
+	return engine.realm.FluidQueue(core.Overworld)
+}
 
 // 本文件覆盖变更 flood-destroys-crops 在权威模拟侧的可观察行为：作物格被流动水
 // 替换时按采掘同表产出掉落物（spec Scenario「冲毁按采掘同表产出掉落物」）、单
@@ -31,14 +148,9 @@ var fluidCropCell = core.BlockPos{X: 0, Y: 1, Z: 8}
 func readyFluidCropWorld(
 	t *testing.T,
 	crop core.BlockID,
-) (*Engine, SessionID) {
+) (*fluidCropEngine, fluidCropSession) {
 	t.Helper()
-	seed := map[core.BlockPos]core.BlockID{
-		fluidCropFarmland: core.FarmlandDryID,
-		fluidCropCell:     crop,
-	}
-	engine, session, _ := readyFluidPlayer(t, seed, nil)
-	return engine, session
+	return newFluidCropEngine(t, crop), fluidCropSession{}
 }
 
 // floodFluidCropFrom 把 source 写成水源并显式唤醒它。
@@ -46,7 +158,7 @@ func readyFluidCropWorld(
 // `engine.SetBlockForTest` 绕过 recordChange，因此写入本身不会触发流体入队；与
 // buildFluidChannel 的既有实践一致，这里显式调用 `engine.enqueueFluidUpdate`，
 // 让水源从下一个延迟窗口开始按正常规则流动。
-func floodFluidCropFrom(engine *Engine, source core.BlockPos) {
+func floodFluidCropFrom(engine *fluidCropEngine, source core.BlockPos) {
 	engine.SetBlockForTest(source, core.WaterSourceID)
 	engine.enqueueFluidUpdate(core.Overworld, source)
 }
@@ -64,7 +176,7 @@ func fluidCropFloodSourceAbove() core.BlockPos {
 // 场景里静默通过。
 func stepUntilFluidCropFlooded(
 	t *testing.T,
-	engine *Engine,
+	engine *fluidCropEngine,
 	position core.BlockPos,
 	want core.BlockID,
 ) uint64 {
@@ -88,14 +200,19 @@ type fluidCropStack struct {
 }
 
 // fluidCropDropsOf 返回该会话兴趣范围内的全部掉落物投影，按稳定顺序排序。
-func fluidCropDropsOf(engine *Engine, session SessionID) []fluidCropStack {
-	snapshots := engine.AppendSessionDrops(session, nil)
-	stacks := make([]fluidCropStack, 0, len(snapshots))
-	for _, snapshot := range snapshots {
+func fluidCropDropsOf(engine *fluidCropEngine, _ fluidCropSession) []fluidCropStack {
+	chunk, ready := engine.dimension(core.Overworld).ReadyChunk(core.ChunkPos{})
+	if !ready {
+		return nil
+	}
+	stacks := make([]fluidCropStack, 0)
+	for slot := range core.DropsPerChunk {
+		drop := chunk.Drop(slot)
+		if !drop.Active {
+			continue
+		}
 		stacks = append(stacks, fluidCropStack{
-			BlockIndex: snapshot.BlockIndex,
-			Item:       snapshot.Item,
-			Count:      snapshot.Count,
+			BlockIndex: drop.BlockIndex, Item: drop.Stack.Item, Count: drop.Stack.Count,
 		})
 	}
 	sort.Slice(stacks, func(i, j int) bool {
@@ -113,8 +230,8 @@ func fluidCropDropsOf(engine *Engine, session SessionID) []fluidCropStack {
 // expectFluidCropDrops 断言当前掉落物集合恰好等于想要的一组堆。
 func expectFluidCropDrops(
 	t *testing.T,
-	engine *Engine,
-	session SessionID,
+	engine *fluidCropEngine,
+	session fluidCropSession,
 	want ...fluidCropStack,
 ) {
 	t.Helper()
@@ -272,7 +389,7 @@ type fluidCropSlotView struct {
 }
 
 // fluidCropChunkSlots 读取区块 (0,0) 全部掉落槽的语义投影。
-func fluidCropChunkSlots(engine *Engine) [core.DropsPerChunk]fluidCropSlotView {
+func fluidCropChunkSlots(engine *fluidCropEngine) [core.DropsPerChunk]fluidCropSlotView {
 	chunk, ok := engine.dimension(core.Overworld).ReadyChunk(core.ChunkPos{})
 	if !ok {
 		return [core.DropsPerChunk]fluidCropSlotView{}
@@ -293,7 +410,7 @@ func fluidCropChunkSlots(engine *Engine) [core.DropsPerChunk]fluidCropSlotView {
 
 // fillFluidCropDropSlots 用 32 个占位石头堆填满区块 (0,0) 的全部掉落槽。
 // 占位堆放在 (15,0,15)，远离作物列，避免与被测掉落物混淆。
-func fillFluidCropDropSlots(t *testing.T, engine *Engine) {
+func fillFluidCropDropSlots(t *testing.T, engine *fluidCropEngine) {
 	t.Helper()
 	blockIndex, indexed := world.ChunkBlockIndex(core.BlockPos{X: 15, Y: 0, Z: 15})
 	if !indexed {
@@ -326,7 +443,6 @@ func TestFluidCropCapacityFullRejectsAndRetriesUntilSlotFreed(t *testing.T) {
 	engine, session := readyFluidCropWorld(t, core.WheatStage3ID)
 	fillFluidCropDropSlots(t, engine)
 	engine.realm.ResetFarmlandMoisture()
-	watch := watchFarmlandMoistureCandidateAtPhase(engine, core.Overworld, fluidCropFarmland)
 	full := fluidCropChunkSlots(engine)
 	active := 0
 	for _, view := range full {
@@ -342,7 +458,6 @@ func TestFluidCropCapacityFullRejectsAndRetriesUntilSlotFreed(t *testing.T) {
 	for range 40 {
 		engine.Step()
 	}
-	engine.stepPhaseObserver = nil
 	if got := fluidBlockAt(t, engine, fluidCropCell); got != core.WheatStage3ID {
 		t.Fatalf("槽满期间作物格被改写为 %d，作物必须保持存在", got)
 	}
@@ -353,10 +468,10 @@ func TestFluidCropCapacityFullRejectsAndRetriesUntilSlotFreed(t *testing.T) {
 	if got := overworldFluidQueue(t, engine).Len(); got == 0 {
 		t.Fatal("拒绝之后目标格没有被重新排程，释放槽位后将永远无法完成冲毁")
 	}
-	if !watch.phaseSeen {
+	if !engine.lastFarmlandPhaseSeen {
 		t.Fatal("容量拒绝窗口未经过湿度阶段观察点")
 	}
-	if watch.candidateSeen {
+	if engine.lastFarmlandCandidate {
 		t.Fatal("容量拒绝的作物写入在湿度阶段消费前产生了耕地候选")
 	}
 

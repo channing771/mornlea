@@ -1,10 +1,15 @@
 package runtime
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
 	"reflect"
 	"sync"
 	"testing"
 
+	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
 )
@@ -15,6 +20,23 @@ func TestRuntimeStepPhaseOrder(t *testing.T) {
 	engine.stepPhaseObserver = func(phase stepPhase) { phases = append(phases, phase) }
 	engine.Step()
 	engine.stepPhaseObserver = nil
+	want := []stepPhase{
+		phasePlayerCommands, phaseCompanionActions, phasePhysicsAdvance,
+		phaseHostileAdvance, phaseFluidAdvance, phaseFarmlandMoistureAdvance,
+		phaseCropAdvance,
+	}
+	if !reflect.DeepEqual(phases, want) {
+		t.Fatalf("阶段顺序=%v，想要 %v", phases, want)
+	}
+}
+
+func TestStepRunsHostilePhasesBetweenPhysicsAndFluid(t *testing.T) {
+	engine := NewEngine(0, 0, 0)
+	var phases []stepPhase
+	engine.stepPhaseObserver = func(phase stepPhase) { phases = append(phases, phase) }
+	engine.Step()
+	engine.stepPhaseObserver = nil
+
 	want := []stepPhase{
 		phasePlayerCommands, phaseCompanionActions, phasePhysicsAdvance,
 		phaseHostileAdvance, phaseFluidAdvance, phaseFarmlandMoistureAdvance,
@@ -118,12 +140,68 @@ func TestRuntimeComposesRealmAndEntity(t *testing.T) {
 		}
 	})
 
+	t.Run("伙伴状态来自 entity owner", func(t *testing.T) {
+		ownerEngine, _ := readyMovementPlayer(t)
+		id := companion.ID{6: 0x40, 8: 0x80, 15: 1}
+		ownerEngine.RegisterCompanion(CompanionRestore{
+			ID: id,
+			Body: &companion.Body{
+				ID:        id,
+				Dimension: core.Overworld,
+				Position:  [3]float32{0.5, 1, 0.5},
+			},
+			SpawnDimension: core.Overworld,
+		})
+		ownerEngine.Step()
+		runtimeBodies := ownerEngine.CompanionBodies()
+		entityBodies := ownerEngine.entities.CompanionBodies()
+		if !reflect.DeepEqual(runtimeBodies, entityBodies) || len(runtimeBodies) != 1 {
+			t.Fatalf("runtime 与 entity 的伙伴状态分叉：runtime=%+v entity=%+v", runtimeBodies, entityBodies)
+		}
+	})
+
+	t.Run("runtime tick 直接修改 entity 背包", func(t *testing.T) {
+		ownerEngine, session := readyMovementPlayer(t)
+		ownerEngine.SetPlayerInventoryForTest(session, func(inventory core.Inventory) core.Inventory {
+			next, ok := inventory.SetSlot(0, core.ItemStack{Item: core.ItemStone, Count: 2})
+			if !ok {
+				t.Fatal("构造背包失败")
+			}
+			return next
+		})
+		ownerEngine.Enqueue(Command{
+			Session: session, Sequence: 1, Kind: CommandMoveInventoryStack,
+			Slot: 0, ToSlot: 1,
+		})
+		if result := ownerEngine.Step(); len(result.Rejected) != 0 {
+			t.Fatalf("背包移动被拒绝：%+v", result.Rejected)
+		}
+		runtimeSnapshot, ok := ownerEngine.PlayerSnapshot(session)
+		if !ok {
+			t.Fatal("runtime 玩家快照丢失")
+		}
+		entitySnapshot, ok := ownerEngine.entities.PlayerSnapshot(session)
+		if !ok {
+			t.Fatal("entity 玩家快照丢失")
+		}
+		if !reflect.DeepEqual(runtimeSnapshot.Inventory, entitySnapshot.Inventory) {
+			t.Fatalf("runtime 与 entity 的背包状态分叉：runtime=%+v entity=%+v", runtimeSnapshot.Inventory, entitySnapshot.Inventory)
+		}
+		moved, _ := entitySnapshot.Inventory.Slot(1)
+		if moved != (core.ItemStack{Item: core.ItemStone, Count: 2}) {
+			t.Fatalf("runtime tick 未修改 entity 背包：slot1=%+v", moved)
+		}
+	})
+
 	t.Run("runtime 不保留实体镜像字段", func(t *testing.T) {
-		engineType := reflect.TypeOf(*engine)
+		engineType := reflect.TypeOf(engine).Elem()
 		forbidden := map[string]struct{}{
 			"sessions": {}, "companions": {}, "hostiles": {}, "hostileLight": {},
 			"dropKeySeen": {}, "dropKeyScratch": {}, "containerViewerScratch": {},
-			"dropSessionScratch": {}, "tramplePending": {},
+			"dropSessionScratch": {}, "tramplePending": {}, "fluidQueues": {},
+			"fluidScope": {}, "fluidScopeNext": {}, "fluidDimensionScratch": {},
+			"fluidRescan": {}, "cropCellScratch": {}, "cropCellsExamined": {},
+			"cropBlockReads": {},
 		}
 		var realmOwners, entityOwners int
 		for index := 0; index < engineType.NumField(); index++ {
@@ -146,4 +224,67 @@ func TestRuntimeComposesRealmAndEntity(t *testing.T) {
 			t.Fatalf("runtime.Engine 组合 owner 数量 realm=%d entity=%d，想要各 1", realmOwners, entityOwners)
 		}
 	})
+
+	t.Run("production boundary 无反向回调或重复实现", func(t *testing.T) {
+		for _, name := range []string{
+			"engine_changes.go", "crop.go", "fluid.go", "fluid_crop.go", "farmland_revert.go",
+		} {
+			if _, err := os.Stat(name); err == nil {
+				t.Errorf("runtime 仍保留重复 production 文件 %q", name)
+			} else if !os.IsNotExist(err) {
+				t.Fatalf("检查 %q：%v", name, err)
+			}
+		}
+
+		parsed, err := parser.ParseFile(token.NewFileSet(), "../entity/tick.go", nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(parsed, func(node ast.Node) bool {
+			switch value := node.(type) {
+			case *ast.TypeSpec:
+				if value.Name.Name == "StepHooks" {
+					t.Error("entity 仍声明反向 runtime 回调表 StepHooks")
+				}
+			case *ast.FuncDecl:
+				if value.Name.Name != "Step" || value.Recv == nil || len(value.Recv.List) != 1 {
+					break
+				}
+				receiver := value.Recv.List[0].Type
+				if pointer, ok := receiver.(*ast.StarExpr); ok {
+					receiver = pointer.X
+				}
+				if name, ok := receiver.(*ast.Ident); ok && name.Name == "State" {
+					t.Error("entity.State 仍持有权威 tick 总调度入口 Step")
+				}
+			}
+			return true
+		})
+	})
+}
+
+func TestHostileActionsQueuedAtPhaseBoundaryRunInCurrentTick(t *testing.T) {
+	engine := NewEngine(0, 0, 0)
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	engine.stepPhaseObserver = func(phase stepPhase) {
+		if phase != phaseHostileAdvance {
+			return
+		}
+		close(entered)
+		<-release
+	}
+
+	done := make(chan TickResult, 1)
+	go func() { done <- engine.Step() }()
+	<-entered
+	if !engine.EnqueueHostileAction(HostileAction{ID: 1, MoveZ: 1}) {
+		t.Fatal("hostile action inbox 意外满员")
+	}
+	close(release)
+	<-done
+
+	if remaining := engine.takeHostileActions(); len(remaining) != 0 {
+		t.Fatalf("hostile phase 边界前入队的 action 留到下一 tick：%+v", remaining)
+	}
 }

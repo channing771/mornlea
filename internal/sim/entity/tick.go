@@ -1,59 +1,40 @@
 package entity
 
 import (
-	"sort"
-
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
-// StepHooks 让 runtime 在实体结算的固定边界完成阶段观测、区块收敛与订阅编排。
-// 回调不持久化进 `State`，每次调用结束后即失效。
-type StepHooks struct {
-	PlayerCommands         func()
-	CompanionActions       func()
-	ApplyChunks            func(*TickResult)
-	PhysicsAdvance         func()
-	ReconcileSubscriptions func(bool, *TickResult)
-	HostileAdvance         func()
-	FluidAdvance           func()
-	FarmlandAdvance        func()
-	CropAdvance            func()
-	ActiveInterest         func() []core.ChunkKey
+// TickInput 是单个权威 tick 借用的 entity 上下文快照。
+type TickInput struct {
+	Realm           *realm.State
+	Tick            uint64
+	WorldTime       uint64
+	DayPhaseOffset  uint16
+	Tunables        tuning.Tunables
+	PhysicsTunables physics.Tunables
+	Views           ViewSnapshot
 }
 
-// StepInput 是单个权威 tick 借用的编排快照。
-type StepInput struct {
-	Realm            *realm.State
-	Tick             uint64
-	WorldTime        uint64
-	DayPhaseOffset   uint16
-	Tunables         tuning.Tunables
-	PhysicsTunables  physics.Tunables
-	Views            SessionViews
-	Commands         []Command
-	CompanionActions []CompanionAction
-	HostileActions   []HostileAction
-	Hooks            StepHooks
+// TickContext 保存一个 tick 内仅 entity 能解释的交互意图。字段全部私有，runtime
+// 只能按固定阶段调用方法，不能取得玩家集合、暂存 slice 或其它可变实体状态。
+type TickContext struct {
+	engine              engineContext
+	mutation            *realm.Mutation
+	interactions        []Command
+	containerMoves      []Command
+	companionPlacements []companionPlaceIntent
 }
 
-// StepOutput 返回 runtime 时钟需要接收的结果，不把时钟权威留在 entity。
-type StepOutput struct {
-	Result         TickResult
-	DayPhaseOffset uint16
-}
-
-func invoke(hook func()) {
-	if hook != nil {
-		hook()
+// BeginTick 借用 runtime 创建的唯一 realm transaction，并返回短命 opaque 上下文。
+// 它不推进任何阶段；固定顺序由 runtime 的 `Engine.Step` 显式编排。
+func (state *State) BeginTick(input TickInput, mutation *realm.Mutation) TickContext {
+	if input.Realm == nil || mutation == nil {
+		panic("sim: entity tick requires realm state and mutation")
 	}
-}
-
-// Step 严格串行执行实体玩法阶段，realm 与时钟都只在本次调用期间借用。
-func (state *State) Step(input StepInput) StepOutput {
-	engine := state.context(
+	engine := state.contextValue(
 		input.Realm,
 		input.Tick,
 		input.WorldTime,
@@ -62,33 +43,14 @@ func (state *State) Step(input StepInput) StepOutput {
 		input.PhysicsTunables,
 		input.Views,
 	)
-	engine.realm.SetEnvironmentTick(engine.tick.Load(), engine.seed, realm.EnvironmentConfig{
-		FluidFlowDelayTicks:     engine.tunables.FluidFlowDelayTicks,
-		FluidUpdatesPerTick:     engine.tunables.FluidUpdatesPerTick,
-		FluidRescanCellsPerTick: engine.tunables.FluidRescanCellsPerTick,
-		DropPickupDelayTicks:    engine.tunables.DropPickupDelayTicks,
-		RandomTicksPerSection:   engine.tunables.RandomTicksPerSection,
-		CropGrowthChancePercent: engine.tunables.CropGrowthChancePercent,
-	})
-	result := engine.step(input)
-	return StepOutput{Result: result, DayPhaseOffset: engine.DayPhaseOffset()}
+	return TickContext{engine: engine, mutation: mutation}
 }
 
-func (engine *engineContext) step(input StepInput) TickResult {
-	commands := input.Commands
-	invoke(input.Hooks.PlayerCommands)
-	sort.SliceStable(commands, func(i, j int) bool {
-		if commands[i].Session != commands[j].Session {
-			return commands[i].Session < commands[j].Session
-		}
-		return commands[i].Sequence < commands[j].Sequence
-	})
-
-	result := TickResult{Forget: make(map[SessionID][]core.ChunkKey)}
-	interactions := make([]Command, 0, len(commands))
-	containerMoves := make([]Command, 0, len(commands))
-	// 命令阶段与后续掉落物/熔炉推进共用同一份待提交区块变更。
-	pending := engine.newMutation()
+// ApplyPlayerCommands 只结算 runtime 已稳定排序并完成序号过滤的玩家命令。
+func (tick *TickContext) ApplyPlayerCommands(commands []Command, result *TickResult) {
+	engine := &tick.engine
+	tick.interactions = make([]Command, 0, len(commands))
+	tick.containerMoves = make([]Command, 0, len(commands))
 	for _, command := range commands {
 		session := engine.sessions[command.Session]
 		if session == nil {
@@ -116,7 +78,7 @@ func (engine *engineContext) step(input StepInput) TickResult {
 			player.yaw = normalizeYaw(command.Yaw)
 			player.pitch = command.Pitch
 			player.input.Yaw = player.yaw
-			interactions = append(interactions, command)
+			tick.interactions = append(tick.interactions, command)
 		case CommandPlayerInput:
 			if session.player == nil || session.player.lifecycle != PlayerActive {
 				if session.player != nil {
@@ -180,7 +142,7 @@ func (engine *engineContext) step(input StepInput) TickResult {
 				})
 				continue
 			}
-			interactions = append(interactions, command)
+			tick.interactions = append(tick.interactions, command)
 		case CommandMoveInventoryStack:
 			if session.player == nil || session.player.lifecycle != PlayerActive {
 				result.Rejected = append(result.Rejected, Rejection{
@@ -230,7 +192,7 @@ func (engine *engineContext) step(input StepInput) TickResult {
 				})
 				continue
 			}
-			interactions = append(interactions, command)
+			tick.interactions = append(tick.interactions, command)
 		case CommandBoneMeal:
 			if session.player == nil || session.player.lifecycle != PlayerActive {
 				result.Rejected = append(result.Rejected, Rejection{
@@ -248,7 +210,7 @@ func (engine *engineContext) step(input StepInput) TickResult {
 				})
 				continue
 			}
-			interactions = append(interactions, command)
+			tick.interactions = append(tick.interactions, command)
 		case CommandInteractDoor:
 			if session.player == nil || session.player.lifecycle != PlayerActive {
 				result.Rejected = append(result.Rejected, Rejection{
@@ -266,7 +228,7 @@ func (engine *engineContext) step(input StepInput) TickResult {
 				})
 				continue
 			}
-			interactions = append(interactions, command)
+			tick.interactions = append(tick.interactions, command)
 		case CommandInteractBed:
 			// 与门同形的两段式：命令阶段只做玩家与朝向的廉价校验，真正的射线
 			// 与入睡判定推迟到 interactions 循环（阶段顺序契约）。
@@ -286,7 +248,7 @@ func (engine *engineContext) step(input StepInput) TickResult {
 				})
 				continue
 			}
-			interactions = append(interactions, command)
+			tick.interactions = append(tick.interactions, command)
 		case CommandOpenFurnace:
 			if reason, rejected := engine.openContainer(command.Session, command); rejected {
 				result.Rejected = append(result.Rejected, Rejection{
@@ -297,7 +259,7 @@ func (engine *engineContext) step(input StepInput) TickResult {
 			}
 		case CommandMoveFurnaceStack:
 			// 跨容器移动会改动区块，必须与其他交互共享同一批 pending 变化。
-			containerMoves = append(containerMoves, command)
+			tick.containerMoves = append(tick.containerMoves, command)
 		case CommandCloseFurnace:
 			// 关闭容器对玩家永远成功；关闭工作台要先按关闭规则回收格 4..8，
 			// 无法完整回收时拒绝关闭请求且状态不变（正常路径下回收不变量
@@ -373,7 +335,7 @@ func (engine *engineContext) step(input StepInput) TickResult {
 				})
 				continue
 			}
-			interactions = append(interactions, command)
+			tick.interactions = append(tick.interactions, command)
 		case CommandResync:
 			result.Resync = append(result.Resync, ResyncRequest{
 				Session:      command.Session,
@@ -390,56 +352,57 @@ func (engine *engineContext) step(input StepInput) TickResult {
 			})
 		}
 	}
+}
+
+// ApplyCompanionActions 记录伙伴本 tick 的输入与放置意图。
+func (tick *TickContext) ApplyCompanionActions(actions []CompanionAction) {
 	// 伙伴 action 阶段：必须严格位于玩家命令之后、统一物理推进之前，为同一
 	// tick 建立固定顺序（见 applyCompanionActions 的顺序契约注释）。
-	invoke(input.Hooks.CompanionActions)
-	companionPlacements := engine.applyCompanionActions(input.CompanionActions)
-	if input.Hooks.ApplyChunks != nil {
-		input.Hooks.ApplyChunks(&result)
-	}
+	tick.companionPlacements = tick.engine.applyCompanionActions(actions)
+}
+
+// AdvanceActors 推进待出生与 active 玩家/伙伴，并报告订阅输入是否改变。
+func (tick *TickContext) AdvanceActors() bool {
+	engine := &tick.engine
 	// 物理阶段：active 伙伴与玩家汇入同一 Rust physics.Step 积分出口，按先
 	// 玩家后伙伴的固定顺序逐 actor 步进；两类 actor 之间没有相互碰撞，顺序
 	// 只影响确定性，不影响结果。
-	invoke(input.Hooks.PhysicsAdvance)
 	engine.advancePendingCompanions()
 	engine.advancePendingPlayersPreservingInputSequence()
 	engine.advanceActivePlayers()
 	engine.advanceActiveCompanions()
 	entityViewChanged := engine.derivePlayerCenters() || engine.subscriptionsDirty
 	engine.subscriptionsDirty = false
-	if input.Hooks.ReconcileSubscriptions != nil {
-		input.Hooks.ReconcileSubscriptions(entityViewChanged, &result)
-	}
+	return entityViewChanged
+}
 
-	// 夜行者阶段（通知次序见 phaseHostileAdvance）：生成判定先于物理语义，
-	// 新生个体下一 tick 才积分；死亡掉落与其它区块写者共用同一份 pending。
-	invoke(input.Hooks.HostileAdvance)
-	engine.advanceHostiles(input.HostileActions)
-	engine.advanceCombat(&result)
+// SetViews 刷新物理阶段之后的订阅只读快照，供后续交互校验使用。
+func (tick *TickContext) SetViews(views ViewSnapshot) {
+	tick.engine.views = views
+}
+
+// AdvanceHostiles 推进夜行者、战斗、灼烧和死亡生命周期。
+func (tick *TickContext) AdvanceHostiles(actions []HostileAction, result *TickResult) {
+	engine := &tick.engine
+	pending := tick.mutation
+	// runtime 在阶段观察边界之后提供 action 快照，因此边界期间入队的 action
+	// 仍会在当前 tick 消费。
+	engine.advanceHostiles(actions)
+	engine.advanceCombat(result)
 	engine.advanceHostileBurn(engine.worldTime.Load())
 	engine.settleHostileDeaths(pending)
 	engine.advanceHostileDistant()
-
-	// 阶段顺序契约：所有区块写者必须位于 reconcileSubscriptions 之后。近战先冻结
-	// 伤害意图，再立刻结算死亡；两者都不写区块，死亡掉落与其后的其他写者仍在
-	// reconcileSubscriptions 之后。订阅收缩会把
-	// 干净区块（Revision == PersistedRevision）从 records 里立即删除，写在它之前的
-	// 写者留下的 revision barrier 会在 finishChanges 取到 nil record 而崩溃，
-	// 掉落物也随被删除的 record 一起消失。死亡结算是唯一会在写区块的同一 tick 里
-	// 让玩家跳回出生锚点、从而收缩订阅的写者，因此这条契约对它尤其关键：
-	// beginReset 置的 subscriptionsDirty 顺延到下一 tick 生效，而彼时 finishChanges
-	// 已经推高 revision，区块转脏，RequestUnload 只会走 Unloading 分支。
-	// settleDeaths 同时必须早于本 tick 末尾的状态发布，外部才观察不到生命值为 0 的
-	// 中间状态。
+	// 死亡产生的订阅脏位顺延到下一 tick，避免已经开始写区块后收缩订阅。
 	engine.settleDeaths(pending)
+}
 
-	// 伙伴放置结算：Place 意图在 action 阶段收集，世界写统一放在
-	// reconcileSubscriptions 之后的区块写入区（阶段顺序契约对一切区块写者成立，
-	// 玩家放置路径的 interactions 循环同样在收敛之后），扣料与写方块在同一
-	// 权威 tick 内原子成立，变更汇入同一份 pending。
-	engine.settleCompanionPlacements(companionPlacements, pending)
+// SettleGameplay 结算伙伴放置、玩家世界交互、跳夜、掉落和熔炉。
+func (tick *TickContext) SettleGameplay(result *TickResult) {
+	engine := &tick.engine
+	pending := tick.mutation
+	engine.settleCompanionPlacements(tick.companionPlacements, pending)
 
-	for _, command := range interactions {
+	for _, command := range tick.interactions {
 		switch command.Kind {
 		case CommandPlaceBlock:
 			if reason, rejected := engine.executePlacement(command, pending); rejected {
@@ -507,29 +470,24 @@ func (engine *engineContext) step(input StepInput) TickResult {
 	engine.settleSleepThroughNight()
 	engine.advanceDrops(pending)
 	engine.advanceFurnaces(pending)
-	invoke(input.Hooks.FluidAdvance)
-	var activeForEnv []core.ChunkKey
-	if input.Hooks.ActiveInterest != nil {
-		activeForEnv = input.Hooks.ActiveInterest()
-	}
-	engine.realm.AdvanceFluids(activeForEnv, pending)
-	invoke(input.Hooks.FarmlandAdvance)
-	envMutation := engine.realm.NewEnvironmentMutation(pending, engine.tick.Load(), realm.EnvironmentConfig{
-		FluidFlowDelayTicks:     engine.tunables.FluidFlowDelayTicks,
-		FluidUpdatesPerTick:     engine.tunables.FluidUpdatesPerTick,
-		FluidRescanCellsPerTick: engine.tunables.FluidRescanCellsPerTick,
-		DropPickupDelayTicks:    engine.tunables.DropPickupDelayTicks,
-		RandomTicksPerSection:   engine.tunables.RandomTicksPerSection,
-		CropGrowthChancePercent: engine.tunables.CropGrowthChancePercent,
-	})
-	engine.realm.AdvanceFarmlandMoisture(activeForEnv, envMutation)
-	invoke(input.Hooks.CropAdvance)
-	// 作物随机 tick 紧跟湿度阶段，因此生长判定能读到同 tick 最终的耕地编号。
-	// 三个阶段的写入共用 `pending`，在 finishChanges 前按位置合并为一次发布。
-	// 踩踏结算仍在 Engine（收集落地边沿），作物推进委托至 realm。
-	engine.settleTramples(pending)
-	engine.realm.AdvanceCrops(activeForEnv, pending)
-	for _, command := range containerMoves {
+}
+
+// AppendActiveInterestKeys 把确定性活动范围追加到调用方 scratch，不导出 entity
+// 持有的可变 slice。
+func (tick *TickContext) AppendActiveInterestKeys(dst []core.ChunkKey) []core.ChunkKey {
+	return append(dst, tick.engine.activeInterestKeys()...)
+}
+
+// SettleTramples 在 realm 作物阶段之前提交本 tick 的落地边沿。
+func (tick *TickContext) SettleTramples() {
+	tick.engine.settleTramples(tick.mutation)
+}
+
+// FinishWorld 结算容器、采掘与工作台生命周期；realm 的支撑复核由 runtime 编排。
+func (tick *TickContext) FinishWorld(result *TickResult) {
+	engine := &tick.engine
+	pending := tick.mutation
+	for _, command := range tick.containerMoves {
 		if reason, rejected := engine.applyContainerMove(command.Session, command, pending); rejected {
 			result.Rejected = append(result.Rejected, Rejection{
 				Session:  command.Session,
@@ -538,28 +496,20 @@ func (engine *engineContext) step(input StepInput) TickResult {
 			})
 		}
 	}
-	engine.advanceMining(pending, &result)
+	engine.advanceMining(pending, result)
 	// 工作台生命周期校验排在最后一个方块写者（advanceMining）之后：同 tick
 	// 被采掘的工作台在这里已经变空气，打开者随即回收降级（含同 tick 变空气）。
 	// 它只写玩家自身状态，不触碰区块。
 	engine.advanceWorkbenchLifecycle()
-	// 火把支撑失效复核：全部方块写者之后、finishChanges 之前对本 tick 已变
-	// 位置做一次有界六邻居复核，失去支撑的火把与原变化共享同一批 revision、
-	// 广播与存档（见 sweepUnsupportedTorches 的有界性论证）。
-	engine.sweepUnsupportedTorches(pending)
-	// 床支撑失效复核：与火把同一挂点、排在火把之后——火把复核的移除也是
-	// 权威变化，叠在其上的床当 tick 即被复核（见 sweepUnsupportedBeds 的
-	// 级联边界论证）。
-	engine.sweepUnsupportedBeds(pending)
-	engine.finishChanges(pending, &result)
-	sortChunkKeys(result.Ready)
+}
 
-	result.Tick = engine.tick.Load() + 1
-	result.WorldTimeTicks = engine.WorldTime() + 1
-	engine.publishInventories(&result)
-	engine.publishCraftings(&result)
-	engine.publishContainers(&result)
-	engine.publishPlayers(&result)
-	engine.publishCompanions(&result)
-	return result
+// Publish 追加本 tick 的实体只读发布，并返回跳夜结算后的显示相位偏移。
+func (tick *TickContext) Publish(result *TickResult) uint16 {
+	engine := &tick.engine
+	engine.publishInventories(result)
+	engine.publishCraftings(result)
+	engine.publishContainers(result)
+	engine.publishPlayers(result)
+	engine.publishCompanions(result)
+	return engine.DayPhaseOffset()
 }

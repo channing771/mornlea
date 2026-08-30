@@ -117,29 +117,34 @@ func cropPerfPlant(engine *Engine, chunks int) int {
 // tick 每轮 +1 是必要的：抽样是 (seed, tick, 位置) 的纯函数，tick 不动的话
 // 每一轮抽到的是同一批格，测出来的是被 CPU 缓存彻底喂熟的最好情况。
 func runCropPerf(b *testing.B, engine *Engine, crops int) {
-	pending := engine.newMutation()
+	pending := engine.realm.NewMutation()
+	active := engine.activeInterestKeys()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
 		engine.tick.Add(1)
-		engine.advanceCrops(pending)
+		engine.realm.SetEnvironmentTick(
+			engine.tick.Load(), engine.seed, realmEnvironmentConfig(engine.tunables),
+		)
+		engine.realm.AdvanceCrops(active, pending)
 	}
 	b.StopTimer()
 	if pending.Len() != 0 {
 		b.Fatalf("夹具产生了 %d 个区块的方块变更，两次测量不再只差「有没有作物」", pending.Len())
 	}
 	want := cropPerfChunks * core.SectionsPerChunk * int(tuning.DefaultTunables().RandomTicksPerSection)
-	if engine.cropCellsExamined != want {
+	examined, reads := engine.realm.CropStats()
+	if examined != want {
 		b.Fatalf("单 tick 触及 %d 格，想要 %d（%d 区块 × %d 区段 × %d 抽样）",
-			engine.cropCellsExamined, want, cropPerfChunks, core.SectionsPerChunk,
+			examined, want, cropPerfChunks, core.SectionsPerChunk,
 			tuning.DefaultTunables().RandomTicksPerSection)
 	}
-	if engine.cropBlockReads > 2*engine.cropCellsExamined {
+	if reads > 2*examined {
 		b.Fatalf("单 tick 方块读取 %d，超过考察格数 %d 的两倍",
-			engine.cropBlockReads, engine.cropCellsExamined)
+			reads, examined)
 	}
-	b.ReportMetric(float64(engine.cropCellsExamined), "cells/op")
-	b.ReportMetric(float64(engine.cropBlockReads), "block_reads/op")
+	b.ReportMetric(float64(examined), "cells/op")
+	b.ReportMetric(float64(reads), "block_reads/op")
 	b.ReportMetric(float64(cropPerfChunks), "chunks")
 	b.ReportMetric(float64(crops), "crops")
 }
@@ -242,12 +247,16 @@ func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 		b.Fatalf("工作负载耕地/作物=%d/%d，想要 %d/0", farmland, crops, wantFarmland)
 	}
 
-	pending := engine.newMutation()
+	pending := engine.realm.NewMutation()
+	active := engine.activeInterestKeys()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
 		engine.tick.Add(1)
-		engine.advanceCrops(pending)
+		engine.realm.SetEnvironmentTick(
+			engine.tick.Load(), engine.seed, realmEnvironmentConfig(engine.tunables),
+		)
+		engine.realm.AdvanceCrops(active, pending)
 	}
 	b.StopTimer()
 	b.ReportMetric(float64(readyChunks), "chunks")
@@ -264,13 +273,14 @@ func BenchmarkCropAdvanceAllFarmland(b *testing.B) {
 		}
 	}
 	want := core.SectionsPerChunk * int(tuning.DefaultTunables().RandomTicksPerSection)
-	if engine.cropCellsExamined != want {
-		b.Fatalf("单 tick 触及 %d 格，想要 %d", engine.cropCellsExamined, want)
+	examined, reads := engine.realm.CropStats()
+	if examined != want {
+		b.Fatalf("单 tick 触及 %d 格，想要 %d", examined, want)
 	}
-	if engine.cropBlockReads != 2*engine.cropCellsExamined {
+	if reads != 2*examined {
 		b.Fatalf("全耕地阶段读取=%d，想要每个样本两次（含上方判定）、共 %d",
-			engine.cropBlockReads, 2*engine.cropCellsExamined)
+			reads, 2*examined)
 	}
-	b.ReportMetric(float64(engine.cropCellsExamined), "cells/op")
-	b.ReportMetric(float64(engine.cropBlockReads), "block_reads/op")
+	b.ReportMetric(float64(examined), "cells/op")
+	b.ReportMetric(float64(reads), "block_reads/op")
 }

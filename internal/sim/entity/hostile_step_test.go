@@ -1,7 +1,6 @@
 package entity
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
@@ -105,37 +104,4 @@ func containsChunkKey(keys []core.ChunkKey, want core.ChunkKey) bool {
 		}
 	}
 	return false
-}
-
-func TestStepRunsHostilePhasesBetweenPhysicsAndFluid(t *testing.T) {
-	// 阶段顺序契约的夜行者部分：hostile 阶段（生成 → 移动 → 灼烧 → 远离 →
-	// 死亡）作为单一阶段事件出现在统一物理之后、流体推进之前。
-	engine := NewEngine(0, 0, 0)
-	engine.RegisterSession(1, core.Overworld, core.ChunkPos{})
-	requested := engine.Step()
-	for _, key := range requested.Acquire {
-		engine.SubmitAcquired(AcquiredChunk{Key: key, Missing: true})
-	}
-	generated := engine.Step()
-	for _, key := range generated.Generate {
-		engine.SubmitGenerated(GeneratedChunk{
-			Dimension: core.Overworld,
-			Chunk:     movementFlatChunk(key.Pos),
-		})
-	}
-	engine.Step()
-
-	var phases []stepPhase
-	engine.stepPhaseObserver = func(phase stepPhase) { phases = append(phases, phase) }
-	engine.Step()
-	engine.stepPhaseObserver = nil
-
-	want := []stepPhase{
-		phasePlayerCommands, phaseCompanionActions, phasePhysicsAdvance,
-		phaseHostileAdvance, phaseFluidAdvance, phaseFarmlandMoistureAdvance,
-		phaseCropAdvance,
-	}
-	if !reflect.DeepEqual(phases, want) {
-		t.Fatalf("阶段顺序=%v，想要 %v", phases, want)
-	}
 }

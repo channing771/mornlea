@@ -17,7 +17,7 @@ func (state *State) RegisterPlayer(
 	realmState *realm.State,
 	tunables tuning.Tunables,
 ) {
-	state.context(realmState, 0, 0, 0, tunables, physics.Tunables{}, nil).
+	state.context(realmState, 0, 0, 0, tunables, physics.Tunables{}, ViewSnapshot{}).
 		RegisterPlayer(id, restore)
 }
 
@@ -42,7 +42,7 @@ func (state *State) Player(
 ) (PlayerUpdate, bool) {
 	return state.context(
 		nil, 0, worldTime, dayPhaseOffset, tuning.Tunables{}, physics.Tunables{},
-		singleSessionView{id: id, view: view},
+		singleViewSnapshot(id, view),
 	).Player(id)
 }
 
@@ -66,7 +66,7 @@ func (state *State) RegisterCompanion(
 	restore CompanionRestore,
 	realmState *realm.State,
 ) {
-	state.context(realmState, 0, 0, 0, tuning.Tunables{}, physics.Tunables{}, nil).
+	state.context(realmState, 0, 0, 0, tuning.Tunables{}, physics.Tunables{}, ViewSnapshot{}).
 		RegisterCompanion(restore)
 }
 
@@ -78,7 +78,7 @@ func (state *State) RestoreHostile(
 	mob HostileMob,
 	realmState *realm.State,
 ) error {
-	return state.context(realmState, 0, 0, 0, tuning.Tunables{}, physics.Tunables{}, nil).
+	return state.context(realmState, 0, 0, 0, tuning.Tunables{}, physics.Tunables{}, ViewSnapshot{}).
 		RestoreHostile(mob)
 }
 
@@ -105,7 +105,7 @@ func (state *State) AppendSessionDrops(
 ) []DropSnapshot {
 	return state.context(
 		realmState, 0, 0, 0, tuning.Tunables{}, physics.Tunables{},
-		singleSessionView{id: id, view: view},
+		singleViewSnapshot(id, view),
 	).AppendSessionDrops(id, dst)
 }
 
@@ -133,7 +133,7 @@ func (state *State) SetChunkChestForTest(
 	chest world.ChestSlot,
 	realmState *realm.State,
 ) {
-	state.context(realmState, 0, 0, 0, tuning.Tunables{}, physics.Tunables{}, nil).
+	state.context(realmState, 0, 0, 0, tuning.Tunables{}, physics.Tunables{}, ViewSnapshot{}).
 		SetChunkChestForTest(key, blockIndex, chest)
 }
 
@@ -143,14 +143,14 @@ func (state *State) SetChunkFurnaceForTest(
 	furnace world.FurnaceSlot,
 	realmState *realm.State,
 ) {
-	state.context(realmState, 0, 0, 0, tuning.Tunables{}, physics.Tunables{}, nil).
+	state.context(realmState, 0, 0, 0, tuning.Tunables{}, physics.Tunables{}, ViewSnapshot{}).
 		SetChunkFurnaceForTest(key, blockIndex, furnace)
 }
 
 func (state *State) AdvanceFurnacesForBenchmark(
 	realmState *realm.State,
 	tunables tuning.Tunables,
-	views SessionViews,
+	views ViewSnapshot,
 ) {
 	// 基准入口把短命上下文保留在调用栈，避免跨包委派把固定工作量热路径
 	// 变成每 tick 一次堆分配。
@@ -163,13 +163,15 @@ func (state *State) AdvanceFurnacesForBenchmark(
 	context.AdvanceFurnacesForBenchmark()
 }
 
-func (state *State) ActiveInterestKeys(
+func (state *State) AppendActiveInterestKeys(
+	dst []core.ChunkKey,
 	realmState *realm.State,
-	views SessionViews,
+	views ViewSnapshot,
 ) []core.ChunkKey {
-	return state.context(
+	keys := state.context(
 		realmState, 0, 0, 0, tuning.Tunables{}, physics.Tunables{}, views,
 	).activeInterestKeys()
+	return append(dst, keys...)
 }
 
 func (state *State) SetChunkDropForTest(
@@ -178,7 +180,7 @@ func (state *State) SetChunkDropForTest(
 	drop world.DropSlot,
 	realmState *realm.State,
 ) {
-	state.context(realmState, 0, 0, 0, tuning.Tunables{}, physics.Tunables{}, nil).
+	state.context(realmState, 0, 0, 0, tuning.Tunables{}, physics.Tunables{}, ViewSnapshot{}).
 		SetChunkDropForTest(key, slot, drop)
 }
 
@@ -187,6 +189,6 @@ func (state *State) SetBlockForTest(
 	block core.BlockID,
 	realmState *realm.State,
 ) {
-	state.context(realmState, 0, 0, 0, tuning.Tunables{}, physics.Tunables{}, nil).
+	state.context(realmState, 0, 0, 0, tuning.Tunables{}, physics.Tunables{}, ViewSnapshot{}).
 		SetBlockForTest(position, block)
 }

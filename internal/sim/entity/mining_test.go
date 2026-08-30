@@ -1152,6 +1152,7 @@ func BenchmarkAuthoritativeMiningEightPlayers(b *testing.B) {
 }
 
 func advanceMiningOnce(engine *Engine) TickResult {
+	engine.engineContext.views = engine.viewSnapshot()
 	result := TickResult{}
 	pending := engine.newMutation()
 	engine.advanceMining(pending, &result)

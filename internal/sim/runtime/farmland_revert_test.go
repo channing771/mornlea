@@ -76,24 +76,6 @@ func TestFarmlandRevertWetDoesNotRevert(t *testing.T) {
 	}
 }
 
-func TestFarmlandRevertRollDeterministic(t *testing.T) {
-	pos := core.BlockPos{X: 5, Y: 1, Z: -3}
-	a := farmlandRevertRoll(12345, 99, core.Overworld, pos)
-	b := farmlandRevertRoll(12345, 99, core.Overworld, pos)
-	if a != b {
-		t.Fatalf("同一输入两次判定不一致 %v vs %v", a, b)
-	}
-	c := farmlandRevertRoll(12345, 100, core.Overworld, pos)
-	// 不同 tick 至少有概率不同，不强求必不同，但多次采样应有差异的可能；此处仅确保不全部相同是可观测的
-	if a == c {
-		// 允许偶然相同，但 30% 概率下连续相同并非异常，改为检查维度隔离
-		d := farmlandRevertRoll(12345, 99, core.DimensionID(1), pos)
-		if a == d {
-			t.Logf("相邻 tick/维度下判定均相同（偶然），测试仍通过")
-		}
-	}
-}
-
 // farmlandMoistureSetupDry 清除目标格周围 4 格内的流体，使其保持干。
 func farmlandMoistureSetupDry(t *testing.T, engine *Engine, pos core.BlockPos) {
 	t.Helper()

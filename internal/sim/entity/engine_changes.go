@@ -9,10 +9,6 @@ import (
 
 type pendingChunkChanges = realm.Mutation
 
-func (engine *engineContext) newMutation() *pendingChunkChanges {
-	return engine.realm.NewMutation()
-}
-
 func (engine *engineContext) recordChange(
 	dimensionID core.DimensionID,
 	position core.BlockPos,
@@ -21,22 +17,6 @@ func (engine *engineContext) recordChange(
 ) {
 	pending.Record(dimensionID, position, block)
 	engine.realm.EnqueueFluidUpdate(dimensionID, position)
-}
-
-func (engine *engineContext) finishChanges(pending *pendingChunkChanges, result *TickResult) {
-	for _, batch := range pending.Commit() {
-		changes := make([]BlockChange, len(batch.Changes))
-		for index, change := range batch.Changes {
-			changes[index] = BlockChange{Position: change.Position, Block: change.Block}
-		}
-		result.Changes = append(result.Changes, ChunkChangeBatch{
-			Dimension:    batch.Dimension,
-			Chunk:        batch.Chunk,
-			BaseRevision: batch.BaseRevision,
-			NewRevision:  batch.NewRevision,
-			Changes:      changes,
-		})
-	}
 }
 
 // sortChunkKeys 用泛型排序避免 sort.Slice 的反射 swapper 分配，

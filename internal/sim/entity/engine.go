@@ -1,8 +1,6 @@
 package entity
 
 import (
-	"sync/atomic"
-
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
@@ -40,12 +38,26 @@ type State struct {
 type engineContext struct {
 	*State
 	realm           *realm.State
-	tick            atomic.Uint64
-	worldTime       atomic.Uint64
-	dayPhaseOffset  atomic.Uint64
+	tick            localCounter
+	worldTime       localCounter
+	dayPhaseOffset  localCounter
 	tunables        tuning.Tunables
 	physicsTunables physics.Tunables
-	views           SessionViews
+	views           ViewSnapshot
+}
+
+// localCounter 只服务一次串行 entity 调用或包内测试夹具。权威并发时钟仍由
+// runtime 的原子字段持有；这里保留 `Load`/`Store`/`Add` 形状，避免短命 tick
+// 上下文携带不可复制的原子值。
+type localCounter uint64
+
+func (counter *localCounter) Load() uint64 { return uint64(*counter) }
+
+func (counter *localCounter) Store(value uint64) { *counter = localCounter(value) }
+
+func (counter *localCounter) Add(delta uint64) uint64 {
+	*counter += localCounter(delta)
+	return uint64(*counter)
 }
 
 // SessionView 是 runtime 在调用 entity 阶段时提供的只读订阅快照。
@@ -54,34 +66,56 @@ type SessionView struct {
 	Center core.ChunkPos
 }
 
-// SessionViews 让 runtime 以只读查询提供当前订阅视图，不复制或导出可变会话。
-type SessionViews interface {
-	EntitySessionView(SessionID) SessionView
-	EntitySessionWantsChunk(SessionID, core.ChunkKey) bool
+// TickSessionView 是 runtime 借给单个 tick 的会话视图值，不含可变订阅集合。
+type TickSessionView struct {
+	Session      SessionID
+	View         SessionView
+	Origin       core.ChunkKey
+	OriginWanted bool
 }
 
-type singleSessionView struct {
-	id     SessionID
-	view   SessionView
-	wanted map[core.ChunkKey]struct{}
+// ViewSnapshot 借用调用方在 tick 期间保持不变的视图 slice。内部只做线性只读
+// 查询，不把 runtime 的 map、会话指针或回调带入 entity。
+type ViewSnapshot struct {
+	entries     []TickSessionView
+	single      TickSessionView
+	singleValid bool
 }
 
-func (views singleSessionView) EntitySessionView(id SessionID) SessionView {
-	if id == views.id {
-		return views.view
+// NewViewSnapshot 构造短命只读视图；调用方在 entity 阶段结束前不得修改 entries。
+func NewViewSnapshot(entries []TickSessionView) ViewSnapshot {
+	return ViewSnapshot{entries: entries}
+}
+
+func singleViewSnapshot(id SessionID, view SessionView) ViewSnapshot {
+	return ViewSnapshot{
+		single: TickSessionView{Session: id, View: view}, singleValid: true,
+	}
+}
+
+func (views ViewSnapshot) sessionView(id SessionID) SessionView {
+	if views.singleValid && views.single.Session == id {
+		return views.single.View
+	}
+	for index := range views.entries {
+		if views.entries[index].Session == id {
+			return views.entries[index].View
+		}
 	}
 	return SessionView{}
 }
 
-func (views singleSessionView) EntitySessionWantsChunk(
-	id SessionID,
-	key core.ChunkKey,
-) bool {
-	if id != views.id {
-		return false
+func (views ViewSnapshot) sessionWantsChunk(id SessionID, key core.ChunkKey) bool {
+	if views.singleValid && views.single.Session == id {
+		return views.single.OriginWanted && views.single.Origin == key
 	}
-	_, wanted := views.wanted[key]
-	return wanted
+	for index := range views.entries {
+		entry := views.entries[index]
+		if entry.Session == id {
+			return entry.OriginWanted && entry.Origin == key
+		}
+	}
+	return false
 }
 
 // NewState 创建唯一的实体状态 owner。
@@ -102,9 +136,30 @@ func (state *State) context(
 	dayPhaseOffset uint16,
 	tunables tuning.Tunables,
 	physicsTunables physics.Tunables,
-	views SessionViews,
+	views ViewSnapshot,
 ) *engineContext {
-	context := &engineContext{
+	context := state.contextValue(
+		realmState,
+		tick,
+		worldTime,
+		dayPhaseOffset,
+		tunables,
+		physicsTunables,
+		views,
+	)
+	return &context
+}
+
+func (state *State) contextValue(
+	realmState *realm.State,
+	tick uint64,
+	worldTime uint64,
+	dayPhaseOffset uint16,
+	tunables tuning.Tunables,
+	physicsTunables physics.Tunables,
+	views ViewSnapshot,
+) engineContext {
+	context := engineContext{
 		State:           state,
 		realm:           realmState,
 		tunables:        tunables,
@@ -118,18 +173,17 @@ func (state *State) context(
 }
 
 func (engine *engineContext) sessionView(session *sessionState) SessionView {
-	if session == nil || engine.views == nil {
+	if session == nil {
 		return SessionView{}
 	}
-	return engine.views.EntitySessionView(session.id)
+	return engine.views.sessionView(session.id)
 }
 
 func (engine *engineContext) sessionWantsChunk(
 	session *sessionState,
 	key core.ChunkKey,
 ) bool {
-	return session != nil && engine.views != nil &&
-		engine.views.EntitySessionWantsChunk(session.id, key)
+	return session != nil && engine.views.sessionWantsChunk(session.id, key)
 }
 
 func (engine *engineContext) dimension(id core.DimensionID) *Dimension {

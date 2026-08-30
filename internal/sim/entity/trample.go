@@ -18,7 +18,8 @@ import (
 // `finishChanges` 取到 nil record 而崩溃），而落地边沿发生在
 // `advanceActivePlayers`（物理阶段，位于收敛之前）。因此踩踏必须两段分离：
 // 物理阶段只收集目标格到 `State.tramplePending`，真正的方块写入挂在
-// `advanceCrops` 首部——区块写入区内与耕地干湿转换同域，共用同一份
+// `TickContext.SettleTramples` 由 runtime 在 `AdvanceCrops` 前调用——区块
+// 写入区内与耕地干湿转换同域，共用同一份
 // pending 变更批次（revision、广播与存盘一次汇齐）。结算排在同函数随机
 // tick 抽样之前：本 tick 被踩成泥土的格不再是耕地，抽样天然跳过。
 //
@@ -78,7 +79,8 @@ func (engine *engineContext) noteTrampleLanding(session *sessionState, player *p
 }
 
 // settleTramples 结算本 tick 收集到的全部踩踏候选格，结算后清空暂存（每 tick
-// 调用一次，暂存绝无跨 tick 残留）。由 `advanceCrops` 首部调用，位于
+// 调用一次，暂存绝无跨 tick 残留）。由 `TickContext.SettleTramples`
+// 在 `AdvanceCrops` 前调用，位于
 // `reconcileSubscriptions` 之后的区块写入区，满足阶段顺序契约。
 func (engine *engineContext) settleTramples(pending *pendingChunkChanges) {
 	cells := engine.tramplePending

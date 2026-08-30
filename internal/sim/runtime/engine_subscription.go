@@ -2,11 +2,36 @@ package runtime
 
 import (
 	"math"
+	"slices"
 	"sort"
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim/realm"
 )
+
+// sortChunkKeys 使用显式全序整理区块键，避免反射排序在 tick 热路径分配。
+func sortChunkKeys(keys []core.ChunkKey) {
+	slices.SortFunc(keys, func(left, right core.ChunkKey) int {
+		switch {
+		case chunkKeyLess(left, right):
+			return -1
+		case chunkKeyLess(right, left):
+			return 1
+		default:
+			return 0
+		}
+	})
+}
+
+func chunkKeyLess(left, right core.ChunkKey) bool {
+	if left.Dimension != right.Dimension {
+		return left.Dimension < right.Dimension
+	}
+	if left.Pos.X != right.Pos.X {
+		return left.Pos.X < right.Pos.X
+	}
+	return left.Pos.Z < right.Pos.Z
+}
 
 func (engine *Engine) RegisterObserverSession(id SessionID) {
 	if engine.subscriptions[id] != nil {

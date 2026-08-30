@@ -24,6 +24,15 @@ type fluidWorld struct {
 	pending   *pendingChunkChanges
 }
 
+func fluidScopeSnapshot(state *realm.State) map[core.ChunkKey]struct{} {
+	keys := state.AppendFluidScopeKeys(nil)
+	scope := make(map[core.ChunkKey]struct{}, len(keys))
+	for _, key := range keys {
+		scope[key] = struct{}{}
+	}
+	return scope
+}
+
 func (adapter *fluidWorld) SetBlock(position core.BlockPos, block core.BlockID) {
 	old, ready := adapter.dimension.BlockAt(position)
 	if !ready || old == block {
@@ -67,7 +76,7 @@ func farmlandMoistureFluidAdapter(
 		engine:    engine,
 		id:        core.Overworld,
 		dimension: engine.dimension(core.Overworld),
-		scope:     engine.realm.FluidScope(),
+		scope:     fluidScopeSnapshot(engine.realm),
 		pending:   engine.newMutation(),
 	}
 }
@@ -159,8 +168,6 @@ func TestPlayerPlacementRemovingLastIrrigationDriesFarmlandSameTick(t *testing.T
 	player.inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 2}
 	eye := player.state.Position.Add(mgl32.Vec3{0, engine.physicsTunables.EyeHeight, 0})
 	yaw, pitch := lookAtBlockCenter(eye, support)
-	watch := watchFarmlandMoistureCandidateAtPhase(engine, core.Overworld, farmland)
-
 	engine.Enqueue(Command{
 		Session: session, Sequence: 2, Kind: CommandPlaceBlock,
 		Yaw: yaw, Pitch: pitch, Slot: 0,
@@ -170,9 +177,8 @@ func TestPlayerPlacementRemovingLastIrrigationDriesFarmlandSameTick(t *testing.T
 	if got := cropBlockAt(t, engine, water); got != core.StoneID {
 		t.Fatalf("放置目标=%s，想要石头", blockLabel(got))
 	}
-	if !watch.phaseSeen || !watch.candidateSeen {
-		t.Fatalf("湿度阶段未观察到耕地候选：phaseSeen=%v candidateSeen=%v",
-			watch.phaseSeen, watch.candidateSeen)
+	if got := engine.realm.FarmlandCandidateInspections(); got == 0 {
+		t.Fatal("放置覆盖灌溉水后未检查湿度候选")
 	}
 	if got := cropBlockAt(t, engine, farmland); got != core.FarmlandDryID {
 		t.Fatalf("覆盖最后灌溉水的同 tick 耕地=%s，想要干耕地；reads=%d inspections=%d",
@@ -376,8 +382,8 @@ func TestFarmlandMoistureReentryRestartsRescan(t *testing.T) {
 					Chunk:     chunk,
 				})
 			}
-			if _, ready := engine.realm.FluidScope()[rightKey]; ready {
-				if _, centerReady := engine.realm.FluidScope()[centerKey]; !centerReady {
+			if engine.realm.FluidScopeContains(rightKey) {
+				if !engine.realm.FluidScopeContains(centerKey) {
 					t.Fatal("边界耕地所在区块未与邻块同时恢复 Ready")
 				}
 				return engine.realm.FarmlandRescanCursor()
@@ -483,7 +489,7 @@ func TestFarmlandMoistureReentryRecoversStaleWetFarmland(t *testing.T) {
 				Chunk:     cropFlatChunk(key.Pos),
 			})
 		}
-		if _, ready := engine.realm.FluidScope()[rightKey]; ready {
+		if engine.realm.FluidScopeContains(rightKey) {
 			reentered = true
 			block, blockReady := engine.dimension(core.Overworld).BlockAt(water)
 			if !blockReady || core.IsFluid(block) {

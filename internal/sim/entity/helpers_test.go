@@ -80,29 +80,3 @@ func requireChunkInfo(
 	}
 	return info
 }
-
-// farmlandMoistureCandidateWatch 记录湿度阶段开始前是否观察到指定候选。
-type farmlandMoistureCandidateWatch struct {
-	phaseSeen     bool
-	candidateSeen bool
-}
-
-// watchFarmlandMoistureCandidateAtPhase 在 `realm.AdvanceFarmlandMoisture` 消费队列前，
-// 记录 `key` 是否曾经位于去重集合中。
-func watchFarmlandMoistureCandidateAtPhase(
-	engine *Engine,
-	dimension core.DimensionID,
-	position core.BlockPos,
-) *farmlandMoistureCandidateWatch {
-	watch := &farmlandMoistureCandidateWatch{}
-	engine.stepPhaseObserver = func(phase stepPhase) {
-		if phase != phaseFarmlandMoistureAdvance {
-			return
-		}
-		watch.phaseSeen = true
-		if engine.realm.FarmlandQueued(dimension, position) {
-			watch.candidateSeen = true
-		}
-	}
-	return watch
-}

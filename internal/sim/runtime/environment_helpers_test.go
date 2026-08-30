@@ -7,11 +7,88 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/fluid"
 	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/world"
 )
 
 const farmlandWetRadius = 4
+
+func (engine *Engine) fluidQueue(dimension core.DimensionID) *fluid.Queue {
+	return engine.realm.FluidQueue(dimension)
+}
+
+func (engine *Engine) enqueueFluidUpdate(
+	dimension core.DimensionID,
+	position core.BlockPos,
+) {
+	engine.realm.EnqueueFluidUpdate(dimension, position)
+}
+
+func fluidNeighbors(position core.BlockPos) [6]core.BlockPos {
+	return [6]core.BlockPos{
+		{X: position.X, Y: position.Y + 1, Z: position.Z},
+		{X: position.X, Y: position.Y - 1, Z: position.Z},
+		{X: position.X + 1, Y: position.Y, Z: position.Z},
+		{X: position.X - 1, Y: position.Y, Z: position.Z},
+		{X: position.X, Y: position.Y, Z: position.Z + 1},
+		{X: position.X, Y: position.Y, Z: position.Z - 1},
+	}
+}
+
+func fluidScopeSnapshot(engine *Engine) map[core.ChunkKey]struct{} {
+	keys := engine.realm.AppendFluidScopeKeys(nil)
+	result := make(map[core.ChunkKey]struct{}, len(keys))
+	for _, key := range keys {
+		result[key] = struct{}{}
+	}
+	return result
+}
+
+// fluidWorld 只给旧的流体队列白盒测试提供 realm-backed 适配器；生产 tick 直接
+// 调用 realm 的环境阶段，不经过该类型。
+type fluidWorld struct {
+	engine    *Engine
+	id        core.DimensionID
+	dimension *Dimension
+	scope     map[core.ChunkKey]struct{}
+	pending   *realm.Mutation
+}
+
+func (adapter *fluidWorld) chunk(position core.BlockPos) *world.Chunk {
+	if position.Y < core.MinY || position.Y >= core.MaxY {
+		return nil
+	}
+	key := core.ChunkKey{Dimension: adapter.id, Pos: position.Chunk()}
+	if _, ok := adapter.scope[key]; !ok {
+		return nil
+	}
+	chunk, _ := adapter.dimension.ReadyChunk(key.Pos)
+	return chunk
+}
+
+func (adapter *fluidWorld) BlockAt(position core.BlockPos) core.BlockID {
+	chunk := adapter.chunk(position)
+	if chunk == nil {
+		return core.BarrierID
+	}
+	x, _, z := position.Local()
+	return chunk.BlockAt(x, position.Y, z)
+}
+
+func (adapter *fluidWorld) SetBlock(position core.BlockPos, block core.BlockID) {
+	chunk := adapter.chunk(position)
+	if chunk == nil {
+		return
+	}
+	x, _, z := position.Local()
+	if chunk.BlockAt(x, position.Y, z) == block {
+		return
+	}
+	chunk.SetBlock(x, position.Y, z, block)
+	adapter.pending.Record(adapter.id, position, block)
+	adapter.engine.realm.EnqueueFluidUpdate(adapter.id, position)
+}
 
 func blockLabel(id core.BlockID) string {
 	name, _ := core.BlockDisplayName(id)

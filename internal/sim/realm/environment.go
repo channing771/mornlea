@@ -187,16 +187,33 @@ func (state *State) FluidQueue(dimension core.DimensionID) *fluid.Queue {
 	return state.environment.fluidQueue(dimension)
 }
 
-func (state *State) FluidScope() map[core.ChunkKey]struct{} {
-	return state.environment.scope
+// AppendFluidScopeKeys 把当前流体推进范围追加到调用方 slice，不导出 owner map。
+func (state *State) AppendFluidScopeKeys(dst []core.ChunkKey) []core.ChunkKey {
+	for key := range state.environment.scope {
+		dst = append(dst, key)
+	}
+	slices.SortFunc(dst, func(left, right core.ChunkKey) int {
+		switch {
+		case chunkKeyLess(left, right):
+			return -1
+		case chunkKeyLess(right, left):
+			return 1
+		default:
+			return 0
+		}
+	})
+	return dst
 }
 
-func (state *State) FluidQueuesMap() map[core.DimensionID]*fluid.Queue {
-	return state.environment.fluidQueues
+// FluidScopeContains 报告区块是否属于最近完成的流体推进范围。
+func (state *State) FluidScopeContains(key core.ChunkKey) bool {
+	_, contains := state.environment.scope[key]
+	return contains
 }
 
-func (state *State) FluidRescanPending() []core.ChunkKey {
-	return state.environment.fluidRescan.pending
+// FluidRescanPendingCount 返回尚未完成的边界重扫数量。
+func (state *State) FluidRescanPendingCount() int {
+	return len(state.environment.fluidRescan.pending)
 }
 
 func (state *State) CropCellsExamined() int {

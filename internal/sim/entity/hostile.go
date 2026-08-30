@@ -301,7 +301,7 @@ func (engine *engineContext) PlanHostileChase(
 }
 
 // advanceHostiles 只推进生成、意图消费和移动；统一战斗、灼烧、死亡与远离消失
-// 由 `State.Step` 紧随其后按固定生命周期顺序编排。
+// 由调用方在 hostile 阶段紧随其后按固定生命周期顺序编排。
 func (engine *engineContext) advanceHostiles(actions []HostileAction) {
 	engine.advanceHostileSpawn()
 	engine.applyHostileActions(actions)

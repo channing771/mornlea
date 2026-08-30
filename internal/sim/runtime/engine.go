@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/fluid"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim/entity"
 	"github.com/channing771/mornlea/internal/sim/realm"
@@ -42,31 +41,8 @@ type Engine struct {
 	realm              *realm.State
 	entities           *entity.State
 	subscriptionsDirty bool
-
-	// fluidQueues 是流体待更新队列，**按维度各持一个实例**（原因见
-	// fluidQueue 的注释：internal/fluid 的处理全序不含维度）。队列不持久化，
-	// 重启与区块进入推进范围时由 advanceFluids 的边界重扫恢复（design.md D5）。
-	fluidQueues map[core.DimensionID]*fluid.Queue
-	// fluidScope 是上一 tick 的流体推进范围，fluidScopeNext 是构建本 tick 范围
-	// 用的复用 scratch；两者每 tick 交换，用来识别「本 tick 新进入范围」的区块
-	// 并对其重扫。
-	fluidScope     map[core.ChunkKey]struct{}
-	fluidScopeNext map[core.ChunkKey]struct{}
-	// fluidDimensionScratch 是维度排序的复用缓冲。
-	fluidDimensionScratch []core.DimensionID
-	// fluidRescan 是跨 tick 的边界重扫待办，见 fluidRescanState。
-	fluidRescan fluidRescanState
-	// cropCellScratch 是作物随机 tick 抽样下标的复用缓冲；抽样每 tick 执行
-	// 「活动区块数 × 24 个区段」次，不复用就会在权威 tick 上产生同量级的分配。
-	cropCellScratch []int
-	// cropCellsExamined 是**最近一个 tick** 里被作物随机 tick 考察过的格数。
-	//
-	// 它是 spec「单个 tick 内被考察的格数 MUST NOT 随世界中作物的数量增长」
-	// 这条成本契约的可读计数：该断言无法从方块结果观察（两个世界的作物数不同，
-	// 方块结果本来就不同），只能靠一个显式计数。生产代码只写不读，包内测试读。
-	cropCellsExamined int
-	// cropBlockReads 是最近一个作物阶段为规则判定读取的方块编号数。
-	cropBlockReads int
+	entityViewScratch  []entity.TickSessionView
+	activeChunkScratch []core.ChunkKey
 
 	inboxMu          sync.Mutex
 	commands         []Command

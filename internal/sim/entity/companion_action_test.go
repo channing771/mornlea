@@ -12,15 +12,11 @@ import (
 	"github.com/channing771/mornlea/internal/physics"
 )
 
-// TestCompanionActionAppliesInIDOrderAfterPlayers 锁定权威 tick 的固定阶段顺序：
-// 玩家命令 → 按 ID 字节序的伙伴 action → 统一物理推进 → 流体推进 → 湿度推进
-// → 作物推进。仅凭外部结果无法完整观察六个阶段的边界，因此用
-// `stepPhaseObserver` 探针直接断言 `Step`
-// 进入阶段的次序（这也是突变验证的锚点），同时用两名玩家与两个伙伴的位移验证
-// 同 tick 双方都被处理、action 按 CompanionID 正确寻址且两次相同输入的重放
-// 产生完全一致的可观察结果。
+// TestCompanionActionAppliesInIDOrderAfterPlayers 用两名玩家与两个伙伴的
+// 位移验证同 tick 双方都被处理、action 按 CompanionID 正确寻址，
+// 且两次相同输入的重放产生完全一致的可观察结果。
 func TestCompanionActionAppliesInIDOrderAfterPlayers(t *testing.T) {
-	run := func() (phases []stepPhase, players [2]PlayerUpdate, companions [2]CompanionUpdate) {
+	run := func() (players [2]PlayerUpdate, companions [2]CompanionUpdate) {
 		engine := NewEngine(0, 0, 0)
 		sessionA, sessionB := SessionID(1), SessionID(2)
 		engine.RegisterSession(sessionA, core.Overworld, core.ChunkPos{})
@@ -41,7 +37,6 @@ func TestCompanionActionAppliesInIDOrderAfterPlayers(t *testing.T) {
 		activateCompanionAt(t, engine, companionA, mgl32.Vec3{0.5, 1, 4.5})
 		activateCompanionAt(t, engine, companionB, mgl32.Vec3{2.5, 1, 4.5})
 
-		engine.stepPhaseObserver = func(phase stepPhase) { phases = append(phases, phase) }
 		engine.Enqueue(Command{Session: sessionA, Sequence: 2, Kind: CommandPlayerInput, MoveX: 1})
 		engine.Enqueue(Command{Session: sessionB, Sequence: 2, Kind: CommandPlayerInput, MoveZ: -1})
 		// 故意按逆 ID 序入队：处理顺序必须由 ID 字节序决定，而不是入队顺序。
@@ -56,7 +51,6 @@ func TestCompanionActionAppliesInIDOrderAfterPlayers(t *testing.T) {
 			t.Fatal("伙伴 A 的 action 未入队")
 		}
 		result := engine.Step()
-		engine.stepPhaseObserver = nil
 
 		if len(result.Players) != 2 || len(result.Companions) != 2 {
 			t.Fatalf("Players=%d Companions=%d，想要 2/2", len(result.Players), len(result.Companions))
@@ -72,17 +66,10 @@ func TestCompanionActionAppliesInIDOrderAfterPlayers(t *testing.T) {
 			t.Fatalf("伙伴发布未按 ID 字节序: %+v", result.Companions)
 		}
 		companions[0], companions[1] = result.Companions[0], result.Companions[1]
-		return phases, players, companions
+		return players, companions
 	}
 
-	firstPhases, firstPlayers, firstCompanions := run()
-	if !reflect.DeepEqual(firstPhases, []stepPhase{
-		phasePlayerCommands, phaseCompanionActions, phasePhysicsAdvance,
-		phaseHostileAdvance, phaseFluidAdvance, phaseFarmlandMoistureAdvance,
-		phaseCropAdvance,
-	}) {
-		t.Fatalf("阶段顺序=%v，想要 [玩家命令 伙伴action 统一物理 夜行者 流体推进 湿度推进 作物推进]", firstPhases)
-	}
+	firstPlayers, firstCompanions := run()
 	// 玩家命令必须在同 tick 生效：玩家 A 沿 +X、玩家 B 沿 +Z 移动。
 	if firstPlayers[0].State.Position.X() <= 0.5 {
 		t.Fatalf("玩家 A 命令未同 tick 生效: %+v", firstPlayers[0])
@@ -99,9 +86,8 @@ func TestCompanionActionAppliesInIDOrderAfterPlayers(t *testing.T) {
 	}
 
 	// 规格场景：两个相同输入的重放必须产生相同的可观察结果。
-	secondPhases, secondPlayers, secondCompanions := run()
-	if !reflect.DeepEqual(firstPhases, secondPhases) ||
-		!reflect.DeepEqual(firstPlayers, secondPlayers) ||
+	secondPlayers, secondCompanions := run()
+	if !reflect.DeepEqual(firstPlayers, secondPlayers) ||
 		!reflect.DeepEqual(firstCompanions, secondCompanions) {
 		t.Fatal("相同输入的重放产生了不同的可观察结果")
 	}

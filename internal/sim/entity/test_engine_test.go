@@ -26,7 +26,28 @@ type Engine struct {
 	acquired           []AcquiredChunk
 	generated          []GeneratedChunk
 	subscriptionsDirty bool
-	stepPhaseObserver  func(stepPhase)
+	viewEntries        []TickSessionView
+}
+
+func (engine *engineContext) newMutation() *pendingChunkChanges {
+	return engine.realm.NewMutation()
+}
+
+func (engine *engineContext) finishChanges(
+	pending *pendingChunkChanges,
+	result *TickResult,
+) {
+	for _, batch := range pending.Commit() {
+		changes := make([]BlockChange, len(batch.Changes))
+		for index, change := range batch.Changes {
+			changes[index] = BlockChange{Position: change.Position, Block: change.Block}
+		}
+		result.Changes = append(result.Changes, ChunkChangeBatch{
+			Dimension: batch.Dimension, Chunk: batch.Chunk,
+			BaseRevision: batch.BaseRevision, NewRevision: batch.NewRevision,
+			Changes: changes,
+		})
+	}
 }
 
 type testObserver struct {
@@ -39,18 +60,6 @@ type testSessionView struct {
 	Wanted map[core.ChunkKey]struct{}
 }
 
-type stepPhase uint8
-
-const (
-	phasePlayerCommands stepPhase = iota + 1
-	phaseCompanionActions
-	phasePhysicsAdvance
-	phaseHostileAdvance
-	phaseFluidAdvance
-	phaseFarmlandMoistureAdvance
-	phaseCropAdvance
-)
-
 func NewEngine(viewRadius int, worldTime uint64, seed int64) *Engine {
 	context := NewState(seed).context(
 		realm.NewState(core.Overworld),
@@ -59,7 +68,7 @@ func NewEngine(viewRadius int, worldTime uint64, seed int64) *Engine {
 		0,
 		tuning.ActiveTunables(),
 		physics.ActiveTunables(),
-		nil,
+		ViewSnapshot{},
 	)
 	engine := &Engine{
 		engineContext: context,
@@ -69,8 +78,25 @@ func NewEngine(viewRadius int, worldTime uint64, seed int64) *Engine {
 		observers:     make(map[SessionID]*testObserver),
 		lastSequences: make(map[SessionID]uint64),
 	}
-	context.views = engine
 	return engine
+}
+
+func (engine *Engine) viewSnapshot() ViewSnapshot {
+	entries := engine.viewEntries[:0]
+	for id, view := range engine.views {
+		session := engine.sessions[id]
+		if session == nil {
+			continue
+		}
+		origin := core.ChunkKey{Dimension: session.dimension, Pos: view.Center}
+		_, wanted := view.Wanted[origin]
+		entries = append(entries, TickSessionView{
+			Session: id, View: view.SessionView,
+			Origin: origin, OriginWanted: wanted,
+		})
+	}
+	engine.viewEntries = entries
+	return NewViewSnapshot(entries)
 }
 
 func (engine *Engine) EntitySessionView(id SessionID) SessionView {
@@ -158,11 +184,11 @@ func (engine *Engine) RestoreDayPhaseOffset(value uint16) {
 func (engine *Engine) Step() TickResult {
 	engine.tunables = tuning.ActiveTunables()
 	engine.physicsTunables = physics.ActiveTunables()
-	commands := append([]Command(nil), engine.commands...)
-	companionActions := append([]CompanionAction(nil), engine.companionActions...)
-	hostileActions := append([]HostileAction(nil), engine.hostileActions...)
-	acquired := append([]AcquiredChunk(nil), engine.acquired...)
-	generated := append([]GeneratedChunk(nil), engine.generated...)
+	commands := engine.commands
+	companionActions := engine.companionActions
+	hostileActions := engine.hostileActions
+	acquired := engine.acquired
+	generated := engine.generated
 	engine.commands = engine.commands[:0]
 	engine.companionActions = engine.companionActions[:0]
 	engine.hostileActions = engine.hostileActions[:0]
@@ -208,53 +234,55 @@ func (engine *Engine) Step() TickResult {
 		entityCommands = append(entityCommands, command)
 	}
 
-	output := engine.State.Step(StepInput{
-		Realm:            engine.realm,
-		Tick:             engine.tick.Load(),
-		WorldTime:        engine.worldTime.Load(),
-		DayPhaseOffset:   engine.DayPhaseOffset(),
-		Tunables:         engine.tunables,
-		PhysicsTunables:  engine.physicsTunables,
-		Views:            engine,
-		Commands:         entityCommands,
-		CompanionActions: companionActions,
-		HostileActions:   hostileActions,
-		Hooks: StepHooks{
-			PlayerCommands:   func() { engine.notifyPhase(phasePlayerCommands) },
-			CompanionActions: func() { engine.notifyPhase(phaseCompanionActions) },
-			ApplyChunks: func(result *TickResult) {
-				engine.applyTestAcquired(acquired, result)
-				engine.applyTestGenerated(generated, result)
-			},
-			PhysicsAdvance: func() { engine.notifyPhase(phasePhysicsAdvance) },
-			ReconcileSubscriptions: func(changed bool, result *TickResult) {
-				if changed || observerChanged || engine.subscriptionsDirty ||
-					len(engine.views) != len(engine.sessions) {
-					engine.reconcileTestSubscriptions(result)
-					engine.subscriptionsDirty = false
-				}
-			},
-			HostileAdvance: func() { engine.notifyPhase(phaseHostileAdvance) },
-			FluidAdvance:   func() { engine.notifyPhase(phaseFluidAdvance) },
-			FarmlandAdvance: func() {
-				engine.notifyPhase(phaseFarmlandMoistureAdvance)
-			},
-			CropAdvance: func() { engine.notifyPhase(phaseCropAdvance) },
-			ActiveInterest: func() []core.ChunkKey {
-				return engine.activeInterestKeys()
-			},
-		},
-	})
-	engine.dayPhaseOffset.Store(uint64(output.DayPhaseOffset))
+	config := realm.EnvironmentConfig{
+		FluidFlowDelayTicks:     engine.tunables.FluidFlowDelayTicks,
+		FluidUpdatesPerTick:     engine.tunables.FluidUpdatesPerTick,
+		FluidRescanCellsPerTick: engine.tunables.FluidRescanCellsPerTick,
+		DropPickupDelayTicks:    engine.tunables.DropPickupDelayTicks,
+		RandomTicksPerSection:   engine.tunables.RandomTicksPerSection,
+		CropGrowthChancePercent: engine.tunables.CropGrowthChancePercent,
+	}
+	engine.realm.SetEnvironmentTick(engine.tick.Load(), engine.seed, config)
+	result := TickResult{Forget: make(map[SessionID][]core.ChunkKey)}
+	pending := engine.realm.NewMutation()
+	views := engine.viewSnapshot()
+	tick := engine.State.BeginTick(TickInput{
+		Realm: engine.realm, Tick: engine.tick.Load(), WorldTime: engine.worldTime.Load(),
+		DayPhaseOffset: engine.DayPhaseOffset(), Tunables: engine.tunables,
+		PhysicsTunables: engine.physicsTunables, Views: views,
+	}, pending)
+	tick.ApplyPlayerCommands(entityCommands, &result)
+	tick.ApplyCompanionActions(companionActions)
+	engine.applyTestAcquired(acquired, &result)
+	engine.applyTestGenerated(generated, &result)
+	changed := tick.AdvanceActors()
+	if changed || observerChanged || engine.subscriptionsDirty || len(engine.views) != len(engine.sessions) {
+		engine.reconcileTestSubscriptions(&result)
+		engine.subscriptionsDirty = false
+		views = engine.viewSnapshot()
+		tick.SetViews(views)
+	}
+	engine.engineContext.views = views
+	tick.AdvanceHostiles(hostileActions, &result)
+	tick.SettleGameplay(&result)
+	active := tick.AppendActiveInterestKeys(nil)
+	engine.realm.AdvanceFluids(active, pending)
+	engine.realm.AdvanceFarmlandMoisture(
+		active, engine.realm.NewEnvironmentMutation(pending, engine.tick.Load(), config),
+	)
+	tick.SettleTramples()
+	engine.realm.AdvanceCrops(active, pending)
+	tick.FinishWorld(&result)
+	engine.realm.SweepUnsupportedTorches(pending)
+	engine.realm.SweepUnsupportedBeds(pending)
+	engine.finishChanges(pending, &result)
+	sortChunkKeys(result.Ready)
+	result.Tick = engine.tick.Load() + 1
+	result.WorldTimeTicks = engine.worldTime.Load() + 1
+	engine.dayPhaseOffset.Store(uint64(tick.Publish(&result)))
 	engine.tick.Add(1)
 	engine.worldTime.Add(1)
-	return output.Result
-}
-
-func (engine *Engine) notifyPhase(phase stepPhase) {
-	if engine.stepPhaseObserver != nil {
-		engine.stepPhaseObserver(phase)
-	}
+	return result
 }
 
 func (engine *Engine) TouchChunkForTest(key core.ChunkKey) {

@@ -6,6 +6,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim/entity"
+	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
@@ -28,13 +29,27 @@ func (engine *Engine) notifyStepPhase(phase stepPhase) {
 	}
 }
 
+func realmEnvironmentConfig(tunables tuning.Tunables) realm.EnvironmentConfig {
+	return realm.EnvironmentConfig{
+		FluidFlowDelayTicks:     tunables.FluidFlowDelayTicks,
+		FluidUpdatesPerTick:     tunables.FluidUpdatesPerTick,
+		FluidRescanCellsPerTick: tunables.FluidRescanCellsPerTick,
+		DropPickupDelayTicks:    tunables.DropPickupDelayTicks,
+		RandomTicksPerSection:   tunables.RandomTicksPerSection,
+		CropGrowthChancePercent: tunables.CropGrowthChancePercent,
+	}
+}
+
 // Step 严格串行编排一个权威 tick；实体状态只经 `entity.State` 推进。
 func (engine *Engine) Step() TickResult {
 	engine.tunables = tuning.ActiveTunables()
 	engine.physicsTunables = physics.ActiveTunables()
+	currentTick := engine.tick.Load()
+	currentWorldTime := engine.worldTime.Load()
+	config := realmEnvironmentConfig(engine.tunables)
+	engine.realm.SetEnvironmentTick(currentTick, engine.seed, config)
 	commands, acquired, generated := engine.takeInbox()
 	companionActions := engine.takeCompanionActions()
-	hostileActions := engine.takeHostileActions()
 	sort.SliceStable(commands, func(i, j int) bool {
 		if commands[i].Session != commands[j].Session {
 			return commands[i].Session < commands[j].Session
@@ -68,68 +83,78 @@ func (engine *Engine) Step() TickResult {
 		entityCommands = append(entityCommands, command)
 	}
 
-	output := engine.entities.Step(entity.StepInput{
-		Realm:            engine.realm,
-		Tick:             engine.tick.Load(),
-		WorldTime:        engine.worldTime.Load(),
-		DayPhaseOffset:   engine.DayPhaseOffset(),
-		Tunables:         engine.tunables,
-		PhysicsTunables:  engine.physicsTunables,
-		Views:            engine,
-		Commands:         entityCommands,
-		CompanionActions: companionActions,
-		HostileActions:   hostileActions,
-		Hooks: entity.StepHooks{
-			PlayerCommands: func() { engine.notifyStepPhase(phasePlayerCommands) },
-			CompanionActions: func() {
-				engine.notifyStepPhase(phaseCompanionActions)
-			},
-			ApplyChunks: func(result *TickResult) {
-				var currentWanted map[core.ChunkKey]struct{}
-				if len(acquired) != 0 || len(generated) != 0 {
-					currentWanted = engine.wantedSnapshot()
-				}
-				engine.applyAcquired(acquired, currentWanted, result)
-				engine.applyGenerated(generated, currentWanted, result)
-			},
-			PhysicsAdvance: func() { engine.notifyStepPhase(phasePhysicsAdvance) },
-			ReconcileSubscriptions: func(entityChanged bool, result *TickResult) {
-				if !viewChanged && !entityChanged && !engine.subscriptionsDirty {
-					return
-				}
-				engine.subscriptionsDirty = false
-				engine.reconcileSubscriptions(result)
-			},
-			HostileAdvance: func() { engine.notifyStepPhase(phaseHostileAdvance) },
-			FluidAdvance:   func() { engine.notifyStepPhase(phaseFluidAdvance) },
-			FarmlandAdvance: func() {
-				engine.notifyStepPhase(phaseFarmlandMoistureAdvance)
-			},
-			CropAdvance:    func() { engine.notifyStepPhase(phaseCropAdvance) },
-			ActiveInterest: engine.activeInterestKeys,
-		},
-	})
+	result := TickResult{Forget: make(map[SessionID][]core.ChunkKey)}
+	pending := engine.realm.NewMutation()
+	tick := engine.entities.BeginTick(entity.TickInput{
+		Realm:           engine.realm,
+		Tick:            currentTick,
+		WorldTime:       currentWorldTime,
+		DayPhaseOffset:  engine.DayPhaseOffset(),
+		Tunables:        engine.tunables,
+		PhysicsTunables: engine.physicsTunables,
+		Views:           engine.entityViewSnapshot(),
+	}, pending)
 
-	engine.dayPhaseOffset.Store(uint64(output.DayPhaseOffset))
-	engine.syncRealmTestMirrors()
-	result := output.Result
+	engine.notifyStepPhase(phasePlayerCommands)
+	tick.ApplyPlayerCommands(entityCommands, &result)
+	engine.notifyStepPhase(phaseCompanionActions)
+	tick.ApplyCompanionActions(companionActions)
+
+	var currentWanted map[core.ChunkKey]struct{}
+	if len(acquired) != 0 || len(generated) != 0 {
+		currentWanted = engine.wantedSnapshot()
+	}
+	engine.applyAcquired(acquired, currentWanted, &result)
+	engine.applyGenerated(generated, currentWanted, &result)
+
+	engine.notifyStepPhase(phasePhysicsAdvance)
+	entityViewChanged := tick.AdvanceActors()
+	if viewChanged || entityViewChanged || engine.subscriptionsDirty {
+		engine.subscriptionsDirty = false
+		engine.reconcileSubscriptions(&result)
+		tick.SetViews(engine.entityViewSnapshot())
+	}
+
+	engine.notifyStepPhase(phaseHostileAdvance)
+	hostileActions := engine.takeHostileActions()
+	tick.AdvanceHostiles(hostileActions, &result)
+	tick.SettleGameplay(&result)
+
+	engine.activeChunkScratch = tick.AppendActiveInterestKeys(engine.activeChunkScratch[:0])
+	active := engine.activeChunkScratch
+	engine.notifyStepPhase(phaseFluidAdvance)
+	engine.realm.AdvanceFluids(active, pending)
+	engine.notifyStepPhase(phaseFarmlandMoistureAdvance)
+	environment := engine.realm.NewEnvironmentMutation(pending, currentTick, config)
+	engine.realm.AdvanceFarmlandMoisture(active, environment)
+	engine.notifyStepPhase(phaseCropAdvance)
+	tick.SettleTramples()
+	engine.realm.AdvanceCrops(active, pending)
+
+	tick.FinishWorld(&result)
+	engine.realm.SweepUnsupportedTorches(pending)
+	engine.realm.SweepUnsupportedBeds(pending)
+	finishRealmMutation(pending, &result)
+	sortChunkKeys(result.Ready)
+
+	result.Tick = currentTick + 1
+	result.WorldTimeTicks = currentWorldTime + 1
+	engine.dayPhaseOffset.Store(uint64(tick.Publish(&result)))
 	result.Tick = engine.tick.Add(1)
 	result.WorldTimeTicks = engine.advanceWorldTime()
 	return result
 }
 
-// syncRealmTestMirrors 维持既有包内环境测试探针；权威队列与统计仍只存在 realm。
-func (engine *Engine) syncRealmTestMirrors() {
-	if scope := engine.realm.FluidScope(); scope != nil {
-		if engine.fluidScope == nil {
-			engine.fluidScope = make(map[core.ChunkKey]struct{}, len(scope))
-		} else {
-			clear(engine.fluidScope)
+func finishRealmMutation(pending *realm.Mutation, result *TickResult) {
+	for _, batch := range pending.Commit() {
+		changes := make([]BlockChange, len(batch.Changes))
+		for index, change := range batch.Changes {
+			changes[index] = BlockChange{Position: change.Position, Block: change.Block}
 		}
-		for key := range scope {
-			engine.fluidScope[key] = struct{}{}
-		}
+		result.Changes = append(result.Changes, ChunkChangeBatch{
+			Dimension: batch.Dimension, Chunk: batch.Chunk,
+			BaseRevision: batch.BaseRevision, NewRevision: batch.NewRevision,
+			Changes: changes,
+		})
 	}
-	engine.fluidQueues = engine.realm.FluidQueuesMap()
-	engine.cropCellsExamined, engine.cropBlockReads = engine.realm.CropStats()
 }

@@ -7,56 +7,6 @@ import (
 	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
-// TestGrowCropIsExhaustivelySpecified 穷举 8 个小麦阶段 × {湿, 干} ×
-// {露天, 遮蔽} 共 32 种输入，逐条写死期望值。
-//
-// 期望值是**手写常量**而不是「再跑一遍实现」：后者在任何实现下都成立，等于
-// 没测。表里 WheatStage7ID 那两行（湿且露天）是成熟不推进这条规则的唯一守卫。
-func TestGrowCropIsExhaustivelySpecified(t *testing.T) {
-	stages := [8]core.BlockID{
-		core.WheatStage0ID, core.WheatStage1ID, core.WheatStage2ID, core.WheatStage3ID,
-		core.WheatStage4ID, core.WheatStage5ID, core.WheatStage6ID, core.WheatStage7ID,
-	}
-	// wantNext[stage] 是「湿且露天」时的期望结果；其余三种环境一律不变。
-	wantNext := [8]core.BlockID{
-		core.WheatStage1ID, core.WheatStage2ID, core.WheatStage3ID, core.WheatStage4ID,
-		core.WheatStage5ID, core.WheatStage6ID, core.WheatStage7ID, core.WheatStage7ID,
-	}
-	wantChanged := [8]bool{true, true, true, true, true, true, true, false}
-	for stage, block := range stages {
-		for _, env := range []struct {
-			wet, sky bool
-		}{{true, true}, {true, false}, {false, true}, {false, false}} {
-			next, changed := growCrop(block, env.wet, env.sky)
-			expectNext, expectChanged := block, false
-			if env.wet && env.sky {
-				expectNext, expectChanged = wantNext[stage], wantChanged[stage]
-			}
-			if next != expectNext || changed != expectChanged {
-				t.Errorf(
-					"growCrop(阶段 %d, wet=%v, sky=%v) = (%d, %v)，想要 (%d, %v)",
-					stage, env.wet, env.sky, next, changed, expectNext, expectChanged,
-				)
-			}
-		}
-	}
-}
-
-// TestGrowCropLeavesNonCropsAlone 证明非作物编号一律原样返回。耕地必须在其中
-// ——它与作物编号相邻，「落在农业编号区间内就推进」这类实现只有这条会红。
-func TestGrowCropLeavesNonCropsAlone(t *testing.T) {
-	for _, block := range []core.BlockID{
-		core.AirID, core.StoneID, core.DirtID, core.GrassID,
-		core.FarmlandDryID, core.FarmlandWetID,
-		core.WaterSourceID, core.WaterLevel1ID,
-	} {
-		next, changed := growCrop(block, true, true)
-		if next != block || changed {
-			t.Errorf("growCrop(%s) = (%d, %v)，非作物必须原样返回", blockLabel(block), next, changed)
-		}
-	}
-}
-
 // setCropGrowthChance 改写生效中的生长概率。readyCropWorldAt 已经登记了恢复
 // 默认值的 Cleanup，因此这里不必再登记一次。
 func setCropGrowthChance(percent uint8) {

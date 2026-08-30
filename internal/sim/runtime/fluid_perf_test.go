@@ -127,7 +127,7 @@ func fluidPerfEngine(t *testing.T, gen func(core.ChunkPos) *world.Chunk) *Engine
 	if player, ok := engine.Player(1); !ok || !player.Ready {
 		t.Fatalf("玩家未 Ready: %+v", player)
 	}
-	for tick := 0; len(engine.fluidRescan.pending) > 0; tick++ {
+	for tick := 0; engine.realm.FluidRescanPendingCount() > 0; tick++ {
 		if tick > 5000 {
 			t.Fatal("边界重扫在 5000 tick 内没有排空")
 		}
@@ -144,8 +144,8 @@ func fluidPerfAdapter(engine *Engine) *fluidWorld {
 		engine:    engine,
 		id:        core.Overworld,
 		dimension: engine.dimension(core.Overworld),
-		scope:     engine.fluidScope,
-		pending:   engine.newMutation(),
+		scope:     fluidScopeSnapshot(engine),
+		pending:   engine.realm.NewMutation(),
 	}
 }
 
@@ -419,7 +419,8 @@ func TestFluidPerfSyntheticRiskScale(t *testing.T) {
 	requireFluidPerf(t)
 	engine := fluidPerfEngine(t, damChunk)
 	queue := engine.fluidQueue(core.Overworld)
-	now, delay := engine.fluidClock()
+	now := engine.tick.Load()
+	delay := uint64(engine.tunables.FluidFlowDelayTicks)
 
 	// 在推进范围内、水面之上的空气层里逐格入队，直到达到风险规模。
 	// 选空气格是刻意的：它让处理阶段（evalCell 对非流体格恒产出空写入）尽可能

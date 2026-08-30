@@ -45,16 +45,24 @@ func (engine *Engine) EntitySessionView(id SessionID) entity.SessionView {
 	}
 }
 
-func (engine *Engine) EntitySessionWantsChunk(
-	id SessionID,
-	key core.ChunkKey,
-) bool {
-	session := engine.subscriptions[id]
-	if session == nil || session.trustedObserver {
-		return false
+func (engine *Engine) entityViewSnapshot() entity.ViewSnapshot {
+	entries := engine.entityViewScratch[:0]
+	for id, session := range engine.subscriptions {
+		if session == nil || session.trustedObserver {
+			continue
+		}
+		origin := core.ChunkKey{Dimension: session.dimension, Pos: session.center}
+		_, originWanted := session.wanted[origin]
+		entries = append(entries, entity.TickSessionView{
+			Session: id,
+			View: entity.SessionView{
+				Ready: session.hasView, Center: session.center,
+			},
+			Origin: origin, OriginWanted: originWanted,
+		})
 	}
-	_, wanted := session.wanted[key]
-	return wanted
+	engine.entityViewScratch = entries
+	return entity.NewViewSnapshot(entries)
 }
 
 // RegisterPlayer 同时建立 runtime 订阅记录与唯一的实体权威状态。
@@ -195,13 +203,18 @@ func (engine *Engine) SetBlockForTest(position core.BlockPos, block core.BlockID
 }
 
 func (engine *Engine) AdvanceFurnacesForBenchmark() {
-	engine.entities.AdvanceFurnacesForBenchmark(engine.realm, engine.tunables, engine)
+	engine.entities.AdvanceFurnacesForBenchmark(
+		engine.realm, engine.tunables, engine.entityViewSnapshot(),
+	)
 }
 
 func (engine *Engine) ActiveInterestKeysForTest() []core.ChunkKey {
-	return engine.activeInterestKeys()
+	return append([]core.ChunkKey(nil), engine.activeInterestKeys()...)
 }
 
 func (engine *Engine) activeInterestKeys() []core.ChunkKey {
-	return engine.entities.ActiveInterestKeys(engine.realm, engine)
+	engine.activeChunkScratch = engine.entities.AppendActiveInterestKeys(
+		engine.activeChunkScratch[:0], engine.realm, engine.entityViewSnapshot(),
+	)
+	return engine.activeChunkScratch
 }
