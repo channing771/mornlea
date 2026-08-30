@@ -1613,3 +1613,81 @@ delta 行为契约、代码、current docs、main specs 或配置，不执行 me
 - 上述证据写入 ledger 后仍须最终重跑全部五个指定命令、复读 main 并执行 exact scope/task
   audit；最终 rerun、commit SHA 与 clean 状态写入 ignored replanning report，避免递归改写
   tracked ledger。
+
+## Task 6.8 planning amendment：冻结 selected-main parent
+
+### 用户裁决、执行身份与固定 provenance
+
+- Fresh planning amendment implementer identity：
+  `01a05310-d72e-7232-b995-327b72a2d865`；本会话明确不得派发子代理，实际未派发任何
+  implementer 或 reviewer。本任务只修改既有 planning artifacts，不承担暂停中的 Task 6.8
+  产品实现或独立 planning review。
+- 用户在 Task 6.8 暂停点明确裁决：`不用管main，把自己的实现`。本 amendment 将该裁决窄化为
+  固定 selected-main parent
+  `9bb84c6841b59a18b030256d5952ed60acc215da`，并继续只在该 predecessor 上评估 combined
+  client ABI v14。
+- 已完成的 non-rewriting merge
+  `6f622407b1078d264707d8643f7fec41c553a48e` 必须保留；其双亲精确为 feature
+  `9dc22f1b9a8106f71a5f6496ac2bd708c31c5584` 与 selected-main `9bb84c68`。本裁决不授权
+  第二次 main merge、rebase、history rewrite、修改 main、archive、push 或把 feature merge
+  into main。
+- 只读观察到 local `main` 当前为
+  `8646c3130a9d0ea7bed839b54446a24e3c3855b9`；本 amendment 未审计、合入或要求 adoption /
+  parity 于该提交或任何 later-main commit。later-main movement 对本 change non-binding。
+- 若冻结裁决错误，代价是本 feature 可能遗漏 later-main 的无关或兼容工作，并需要未来单独的
+  integration；该风险不改变本 change 自己的 ABI v14 结果只相对 `9bb84c68` 判定的裁决。
+
+### 一致性修订、历史保护与暂停现场
+
+- 修订范围严格为现有 `proposal.md`、唯一 delta spec、`design.md`、`tasks.md` 与本
+  `ledger.md`；ignored report 为
+  `.superpowers/sdd/2026-08-30-rust-render-world-main-integration/task-6.8-fixed-parent-planning-report.md`。
+  未创建新 artifact，未修改 current docs、main specs、active config、root identity、产品代码
+  或测试。
+- proposal/spec/design/tasks 统一删除当前与未来的 moving-main、latest-main adoption 与
+  exact-current-main 绑定要求，改为 exact `9bb84c68` frozen-parent contract。Task 6.8 记录上述
+  merge 及双亲，不要求第二次 merge 或 later-main audit；四个 app paths、五组 protected paths
+  与 visual golden 均只相对 exact `9bb84c68` 比较。
+- Task 6.9 保留完整 18 门禁，只把 moving-ref/exact-main gate 改为 frozen-parent provenance：
+  `6f622407` 是 exact implementation HEAD 的祖先并保持 exact 双亲，之后没有额外 main merge
+  引入 `9bb84c68` 之后的 main commits；exact implementation HEAD 与 clean status 仍是硬门禁。
+  Task 6.10 使用同一 provenance，local `main` 指向其他提交本身不得导致失败。
+- 历史结果保持原样：`5e5243a7` 的 17/18 exact-main binding failure 仍是 failure；
+  `eccdca39` 上因 `be5ff22b` drift 产生的下一轮仍为 Gate 1 前取消、0/18 gates started。两者
+  均未改写成 PASS。Tasks 2–6.7 的 completed body 保持逐字不变。
+- Task 6.8 仍 unchecked；Task 6.9 与 6.10 同样 pending。进度保持 25 total / 22 complete /
+  3 remaining，直到暂停实现及其独立 spec/quality reviews 完成。本 amendment 也必须先取得
+  independent planning review，暂停 implementer 方可恢复。
+- 修改前 ledger committed prefix 为 1,615 行、123,874 bytes，SHA-256
+  `997664a840ac560edac61f58c4e6171446969d6c903e6155c4f52d2a11141a84`；本节只追加在该
+  prefix 之后。
+- 暂停的 dirty 现场共 19 个 tracked paths，均保持 unstaged 且不纳入本提交：
+  `AGENTS.md`、`README.en.md`、`README.md`、`docs/architecture.md`、
+  `docs/notes/compatibility.md`、`docs/notes/lan-server.md`、`docs/notes/progress.md`、
+  `engine/crates/mornlea_client/src/ffi.rs`、`engine/crates/mornlea_client/src/lib.rs`、
+  `engine/crates/mornlea_client/src/render/mod.rs`、`engine/include/mornlea_client.h`、
+  `internal/client/render.go`、`internal/client/ui_bridge.go`、`internal/client/window.go`、
+  `internal/client/window_test.go`、`openspec/config.yaml`、
+  `openspec/specs/rust-client-render-cutover/spec.md`、
+  `openspec/specs/tiered-swords-combat/spec.md` 与 `openspec/specs/webview-menu-ui/spec.md`。
+
+### Planning amendment 验证证据
+
+- `openspec validate rust-render-world-cache --strict --no-interactive`：exit 0，real 1.62s；
+  输出 `Change 'rust-render-world-cache' is valid`。
+- `openspec validate --all --strict --no-interactive`：exit 0，real 1.62s；80 passed、0 failed。
+- `openspec status --change rust-render-world-cache --json`：exit 0，real 1.63s；schema
+  `spec-driven`，proposal/specs/design/tasks 四类 artifacts 均为 `done`，唯一 delta spec 路径
+  正确，`isComplete: true`。
+- `openspec instructions apply --change rust-render-world-cache --json`：exit 0，real 1.61s；
+  `state: ready`，25 total、22 complete、3 remaining；Tasks 6.8–6.10 pending。
+- planning-scope audit：exit 0；dirty change paths 恰为允许的五个 existing planning files，
+  staged 0；ledger 前 123,874 bytes SHA-256 与 committed prefix 一致；Tasks 2–6.7 body 的
+  committed/working SHA-256 相等；任务计数为 25/22/3。
+- provenance 与 exact-parent audit：exit 0；`6f622407` 的双亲精确为 `9dc22f1b` /
+  `9bb84c68`，其后 main merge 数为 0；四个 app paths、五组 protected engine/fluid paths 与
+  visual golden 相对 exact `9bb84c68` 均 zero-diff。
+- 暂停现场 SHA-256 audit：exit 0；上述 19 个 dirty paths 全部 19/19 与 amendment 开始时
+  一致，且均未 staged。`git diff --check`：exit 0且无输出。
+- 以上结果写入 ledger 后仍须最终 fresh rerun；最终结果、commit SHA、提交仅含五文件以及
+  preserved dirty paths 写入 ignored planning report，避免递归修改 tracked ledger。

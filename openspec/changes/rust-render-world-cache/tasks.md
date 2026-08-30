@@ -6,10 +6,13 @@
 > 的 completed 状态、selected-main 证据与历史文字同样不得改写。旧 selected main
 > `e1e2e287` 上的完整 PASS、`5e5243a7` 的 17/18 binding failure、`bcc053e8` 无关 planning
 > sync，以及 `eccdca39` 因 `be5ff22b` contract drift 产生的 0/18 preflight cancellation 都是
-> 收尾历史。planning-fix 时 observed latest main `9bb84c68` 已把 capture 与 app frame-loop pump
+> 收尾历史。冻结 selected-main parent `9bb84c68` 已把 capture 与 app frame-loop pump
 > 分配给 client ABI v13，包含 `4c553f3b` 的 SDK option bits code fix、`a83192b7` 的 docs-only
 > Task 2 review bookkeeping、`522c7d6a` 的 app pump 实现及 `9bb84c68` 的 docs-only Task 3
-> review bookkeeping，因此 pending 收尾重排为 Tasks 6.7–6.10，最终目标是 client ABI v14 /
+> review bookkeeping。Task 6.8 已完成 merge `6f622407`，其双亲为 feature `9dc22f1b` 与
+> selected-main `9bb84c68`；该父现被冻结，`8646c313` 或任何更晚 main 均不再绑定本 change。
+> Task 6.8 的实现与独立 reviews 仍暂停且 unchecked，Tasks 6.8–6.10 继续作为 pending 收尾；
+> 当前进度保持 25 total / 22 complete / 3 remaining，最终目标是 client ABI v14 /
 > inherited engine ABI v9。
 > implementer、reviewer、两项 verdict、findings、修复轮次、验证和裁决必须先写入
 > `ledger.md`，再勾选任务。控制会话不得直接实现。
@@ -185,17 +188,18 @@
   本轮修改的 independent planning reviewer 同时给出 spec-compliance 与 quality verdict；reviewer
   identity、findings、修复轮次与裁决写入 ledger 后，只有两项 verdict 均通过且 0 open findings
   才可勾选。本次 planning-fix implementer 不得自行 review，本提交前保持未勾选。
-- [ ] 6.8 由 fresh implementer 在 merge 命令前即时固定 latest local main；当前 observed main
-  为 `9bb84c6841b59a18b030256d5952ed60acc215da`；若它超过该已审计锚点，先完整记录新增
-  commits/paths，并审计版本、ABI、header/FFI/window/capture/app-pump、identity、MRW1、fluid
-  所有权和排除项；任何 contract-
-  affecting drift 必须先回到 planning 与 independent planning review。契约未变时执行
-  `make rust`，再以 `git merge --no-commit --no-ff main` 做 non-rewriting sync，记录 actual
-  selected-main-parent、双亲、全部冲突与逐项裁决；重点核验 client header、`ffi.rs`、`lib.rs`、
+- [ ] 6.8 已完成并必须保留 non-rewriting merge
+  `6f622407b1078d264707d8643f7fec41c553a48e`；其双亲精确为 feature
+  `9dc22f1b9a8106f71a5f6496ac2bd708c31c5584` 与冻结 selected-main
+  `9bb84c6841b59a18b030256d5952ed60acc215da`。本任务不得执行第二次 main merge，不得审计
+  adoption 或要求 parity 于 `8646c313` 或任何更晚 main；later-main movement 对本 change
+  non-binding。先在本 planning amendment 取得 independent planning review，再由暂停的 fresh
+  implementer 继续自己的 combined client ABI v14 实现；不得改写历史、修改 main、丢失已继承
+  v13 capture/app-pump、触碰伙伴 fluid 或弱化门禁。继续核验 client header、`ffi.rs`、`lib.rs`、
   `window.rs`、Go `window.go`/`window_test.go`、current identity docs，以及
   `cmd/mornlea/app/app_dependencies.go`、`cmd/mornlea/app/dev_capture.go`、
   `cmd/mornlea/app/dev_capture_test.go`、`cmd/mornlea/app/interactive.go`。四个 app paths 必须
-  相对 actual selected main exact zero-diff，并全部纳入 `gofmt -w` 后零差异证明；运行
+  相对 exact `9bb84c68` zero-diff，并全部纳入 `gofmt -w` 后零差异证明；运行
   `go test ./cmd/mornlea/app -race -run 'Test(PumpDevCapture|RunInteractive(Game|Menu)LoopPumpsPendingCaptureOnce)' -count=1`
   证明既有 7 tests。最小实现统一 client
   ABI v14 / inherited engine ABI v9：完整保留 selected-main v13 的 28 个 versioned exports、
@@ -207,29 +211,35 @@
   MRW1 保持 cache-only、无 production caller，且不实现或接管其余 dev-capture service、HTTP、
   options、recording 或 docs。最终 v14 全部 29 个 versioned exports 对 ABI 13 ABI-first，exact selected-main v13
   全部 28 个 versioned exports 对 ABI 14 ABI-first，v13 缺 MRW1 symbol 时 bind hard-fail，
-  不得有动态加载或 Go fallback；五组 protected engine/fluid paths 与 golden 相对 actual
-  selected main 零 diff。完成后分别取得 fresh spec-compliance review 与 fresh quality review，
-  0 open findings 后才可勾选。
+  不得有动态加载或 Go fallback；五组 protected engine/fluid paths 与 golden 相对 exact
+  `9bb84c68` 零 diff。若冻结裁决遗漏 later-main 的无关或兼容工作，留待独立后续集成，不改变
+  本任务判定。完成后分别取得 fresh spec-compliance review 与 fresh quality review，0 open
+  findings 后才可勾选；已完成 merge 本身不足以改变当前 unchecked 状态。
 - [ ] 6.9 由 fresh validation implementer 在 Task 6.8 reviews 通过后的 immutable final HEAD
   完整重跑 Task 6.6 的 18 门禁并逐项记录真实命令、wall time、exit status、计数与 Skip；
   OpenSpec strict 使用执行时实际全量计数，client contract 审计精确覆盖 final v14 29+1、
-  selected-main v13 28+1 reverse mix、capture symbol/status/capacity/BGRA8/production bridge/tests、
+  exact `9bb84c68` v13 28+1 reverse mix、capture symbol/status/capacity/BGRA8/production bridge/tests、
   SDK `u32` option FFI width 与两个 `1<<3` option bits、
-  四个 app paths exact selected-main zero-diff 与 gofmt 零差异、上述 7 个 app-pump focused tests、
+  四个 app paths relative to exact `9bb84c68` zero-diff 与 gofmt 零差异、上述 7 个 app-pump focused tests、
   coordinator 注入、菜单/游戏两处 pump、nil/idle 非阻塞、single outstanding、pixels ownership/
   error 原样交付，
   v14-only MRW1 bind hard failure/no fallback、MRW1 atomic/cache-only/no production caller、
   frame/readback 不变、RPATH/release dylib SHA、identity
   protocol32/player8/chunk9/world3/companions4/hostile1/engine9/client14/benchmark20、
-  protected/golden zero-diff、代码注释纪律、`git diff --check` 与 exact clean HEAD。任何 tracked
-  post-validation fix 或 sync 都必须从 Gate 1 完整重跑；取得未参与执行者的独立
+  relative to exact `9bb84c68` protected/golden zero-diff、代码注释纪律与 `git diff --check`。
+  18 门禁中的 moving-ref/exact-main binding gate 改为 frozen-parent provenance gate：
+  `6f622407` 必须是 exact implementation HEAD 的祖先且双亲仍精确为 `9dc22f1b` / `9bb84c68`；
+  该 merge 后不得通过额外 main merge 引入 `9bb84c68` 之后的 main commits；exact implementation
+  HEAD 与 tracked/staged/untracked clean status 仍 mandatory，local `main` 指向其他提交不得
+  单独导致失败。任何 tracked post-validation fix 或 sync 都必须从 Gate 1 完整重跑；取得未参与执行者的独立
   spec/quality review且 0 open findings 后才可勾选。
 - [ ] 6.10 由未参与 Task 6.7 planning/review、Task 6.8 sync/implementation/reviews 或 Task 6.9
   validation/review 的 fresh whole-integration reviewer 同时给出 spec-compliance 与 quality
-  verdict。显式核验 immutable history、actual selected-main-parent/merge 双亲/conflicts、
+  verdict。显式核验 immutable history、`6f622407` 的 exact frozen-parent provenance 与双亲、
+  无 later-main merge、
   v14/v13 export 数与双向 ABI-first、capture/UI 与 app frame-loop pump 保留、四个 app paths
-  exact selected-main zero-diff、MRW1 hard bind/cache-only/no-production-caller、身份矩阵、
-  rollback 只回 selected-main v13 capture/app-pump、fluid 排除、protected/golden zero-diff 与 18 门禁
+  relative to exact `9bb84c68` zero-diff、MRW1 hard bind/cache-only/no-production-caller、身份矩阵、
+  rollback 只回 exact `9bb84c68` v13 capture/app-pump、fluid 排除、protected/golden zero-diff 与 18 门禁
   同基线证据；先将 reviewer identity、findings、修复轮次与最终裁决写入 ledger，只有两项
-  verdict 均通过且 0 open findings 才可勾选并宣告 implementation complete，仍不得 archive、
-  push 或 merge feature into main。
+  verdict 均通过且 0 open findings 才可勾选并宣告 implementation complete；不得仅因 local
+  `main` 指向 `8646c313` 或任何更晚提交而失败，仍不得 archive、push 或 merge feature into main。

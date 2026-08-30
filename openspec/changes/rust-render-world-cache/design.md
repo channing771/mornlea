@@ -79,6 +79,14 @@ main specs 与 config 均零 diff。因此它是同一 dev-capture 范围的 doc
 app pump 或 v14 union contract。`bcc053e8..9bb84c68` 精确为 5 commits、15 unique paths、
 1192 insertions / 30 deletions，当前 merge-time audit anchor 更新为 `9bb84c68`。
 
+Task 6.8 随后已完成 non-rewriting merge
+`6f622407b1078d264707d8643f7fec41c553a48e`，其双亲依次为 feature
+`9dc22f1b9a8106f71a5f6496ac2bd708c31c5584` 与 selected-main
+`9bb84c6841b59a18b030256d5952ed60acc215da`。用户在实现暂停点明确裁决“不用管 main，把自己的
+实现”，因此该 second parent 现冻结为本 change 的唯一 selected-main provenance；本分支不再
+合入、审计 adoption 或要求 parity 于 `8646c313` 或任何更晚 main。Task 6.8 的其余 ABI v14
+实现与独立 reviews 仍未完成，任务保持 unchecked。
+
 精确 source/header 审计显示，`bcc053e8` 是 client ABI v12，包含 27 个 versioned exports
 与 1 个 identity export；observed latest main `9bb84c68` 是 client ABI v13，包含 28 个 versioned
 exports 与 1 个 identity export，相对前者恰好新增 `mornlea_client_window_capture`。当前
@@ -92,15 +100,15 @@ exports、1 个 identity export、总计 30 个 exports。
 
 **Goals:**
 
-- 建立集成 client ABI v14 的同步身份，在 latest selected-main v13 capture/WKWebView/UI
+- 建立集成 client ABI v14 的同步身份，在 exact `9bb84c68` selected-main v13 capture/WKWebView/UI
   surface 上只叠加 MRW1 v1 更新入口与原子、可重建的 `RenderWorld` cache。
 - 完整保留 selected-main v13 的 28 个 versioned exports、window composite capture
   status/两段式容量/top-down BGRA8、Go bridge 与 Rust/Go tests，形成精确的 29+1 v14 union。
 - 原样保留 selected-main 的 `CaptureCoordinator`/`SetCaptureCoordinator`、菜单与游戏两处
   `pumpDevCapture`、非阻塞 single-outstanding/pixel ownership/error delivery 语义和 7 个
   app-pump tests，同时证明 MRW1 仍无 production caller。
-- 以 non-rewriting merge 跟进执行时最新 local main，原样继承其 engine ABI v9 与伙伴 fluid
-  实现，并以受保护路径审计证明本 change 没有 feature-side engine/fluid 修改。
+- 保留已完成的 non-rewriting merge `6f622407`，原样继承冻结父 `9bb84c68` 的 engine ABI v9
+  与伙伴 fluid 实现，并以受保护路径审计证明本 change 没有 feature-side engine/fluid 修改。
 - 在 Rust 拷贝或规范化 Go 同步调用期间提供的 bytes；之后不保存 Go 指针、slice 或
   对象，且按 epoch、revision、tombstone 决定派生缓存状态。
 - 用单元、FFI、Go bridge、fuzz 与 test-only driver 锁定 wire 校验、原子失败和离屏
@@ -122,6 +130,8 @@ exports、1 个 identity export、总计 30 个 exports。
   scenario v20；engine ABI v9 仅作为所选 main 的既有身份原样继承。
 - 不改写 Tasks 1–6.6 的历史，不修改 main，不 push、不 archive、不 rebase，也不把 feature
   merge into main；本轮先只修订 OpenSpec planning，等待独立 planning review。
+- 不合入、审计 adoption 或要求 parity 于 `8646c313` 或任何更晚 main；若 later-main 工作需要
+  集成，必须作为本 change 之外的独立后续工作处理。
 
 ## Decisions
 
@@ -216,8 +226,8 @@ column key 保存已验证的紧凑 palette/bitpack、height、epoch、revision 
 
 ### D4: 以 selected-main v13 capture 为前代，把最终 union 分配为 ABI v14
 
-冲突解决必须以执行时 actual selected-main 的 v13 header、Rust exports、Go bridge 与 app
-capture pump 为 predecessor。已审计的 observed latest main `9bb84c68` surface 包含 28 个 versioned exports 与 1 个 identity
+冲突解决与后续验证必须以 exact `9bb84c6841b59a18b030256d5952ed60acc215da` 的 v13 header、
+Rust exports、Go bridge 与 app capture pump 为 predecessor。该冻结父的 surface 包含 28 个 versioned exports 与 1 个 identity
 export；相对 `bcc053e8` 恰好新增 `mornlea_client_window_capture`。最终实现必须保留全部
 28 个 versioned exports，包括 capture 的 `CAPTURE_OVERFLOW`/`CAPTURE_UNAVAILABLE` status、
 两段式容量查询、`NSWindow windowNumber` 到 `CGWindowListCreateImage`/`CGBitmapContext` 的
@@ -255,8 +265,8 @@ layout/capacity 顺序验证，随后才允许预检并原子改变 `RenderWorld
 alignment 检查；入口没有输出 buffer，因此不执行 output-capacity 或 overlap 检查。全部
 client ABI exports 都必须在 panic catcher 内，panic 映射为 `PANIC` 且不得留下部分状态。
 
-最终 engine ABI 为从 actual selected main 原样继承的 v9；本 change 不修改 engine 数值
-kernel 或 fluid-aware 源码。回退只允许移除 MRW1/client-v14 增量并回到 selected-main v13
+最终 engine ABI 为从 exact `9bb84c68` 原样继承的 v9；本 change 不修改 engine 数值
+kernel 或 fluid-aware 源码。回退只允许移除 MRW1/client-v14 增量并回到 exact `9bb84c68` v13
 capture predecessor，必须保留 capture、app frame-loop pump、engine ABI v9 与伙伴 fluid，
 不得回到 v12。
 
@@ -329,7 +339,7 @@ comment fixes 已改变最终 commit identity，旧 HEAD 的 release/race/visual
 不可改写历史。它不授权在后续 main 漂移后继续沿用旧 binding，也不覆盖下面针对
 `be5ff22b` contract-affecting capture surface 及其 `4c553f3b` SDK option fix 的新裁决。
 
-### D8: contract-affecting main drift 先重规划，再做 v14 non-rewriting union
+### D8: 保留已完成 merge 并冻结 selected-main parent
 
 Task 6.7 只允许由 fresh planning implementer 修改本 change 的 5 个 planning artifacts，写入
 ignored planning report，并接受独立 planning review；不得修改生产/测试代码、main specs、
@@ -338,33 +348,36 @@ current docs、config 或 main，也不得 merge/rebase/archive/push。planning 
 给出 1 个 Important、spec/quality Needs fixes，明确禁止 Task 6.8 开始；本修复轮必须把该
 finding、修订证据与复审裁决 append 到 ledger，不得改写前轮或 Tasks 2–6.6 历史。
 
-Task 6.8 的 fresh implementer 必须在 merge 命令前即时固定 latest local main。当前 observed
-且已审计锚点是 `9bb84c6841b59a18b030256d5952ed60acc215da`；若 main 又前进，必须记录
-`9bb84c68..latest-main` 的全部 commits/paths，
-并重新审计版本、ABI、header/FFI/window/capture、身份、MRW1、fluid 所有权和排除项。任何
-新增 contract-affecting drift 都必须先回到 planning 与独立 planning review；不得边 merge
-边猜测新 union。契约未再变化时，才可用 `git merge --no-commit --no-ff main` 做
-non-rewriting sync，并以实际 `MERGE_HEAD` 固定 actual selected-main-parent。
+Task 6.8 已完成 non-rewriting merge `6f622407b1078d264707d8643f7fec41c553a48e`，其双亲必须
+保持为 feature `9dc22f1b9a8106f71a5f6496ac2bd708c31c5584` 与 selected-main
+`9bb84c6841b59a18b030256d5952ed60acc215da`。用户明确裁决冻结该 selected-main parent，并在
+这一基线上继续本分支自己的 combined client ABI v14 实现。Task 6.8 不得再执行第二次 main
+merge，不得审计 adoption 或要求 parity 于 `8646c313` 或任何更晚 main，也不得因此改写历史、
+修改 main、删除已继承的 v13 capture/app-pump contract、触碰伙伴 fluid 或弱化门禁。若该裁决
+遗漏 later-main 的无关或兼容工作，代价是未来另开一次独立集成；本 change 的 v14 正确性仍只
+相对冻结父判定。
 
-冲突审计重点是 `engine/include/mornlea_client.h`、client `ffi.rs`/`lib.rs`/`window.rs`、
-Go `window.go`/`window_test.go`、current identity docs，以及 app pump 的
+已完成 merge 的结果继续以 `engine/include/mornlea_client.h`、client
+`ffi.rs`/`lib.rs`/`window.rs`、Go `window.go`/`window_test.go`、current identity docs，以及 app pump 的
 `cmd/mornlea/app/app_dependencies.go`、`cmd/mornlea/app/dev_capture.go`、
-`cmd/mornlea/app/dev_capture_test.go`、`cmd/mornlea/app/interactive.go`；
-实际冲突无论是否在此清单中都必须逐项记录。四个 app paths 的最终内容必须相对 actual
-selected main 精确零 diff；若发生 unavoidable merge conflict，必须记录逐行裁决，但最终 resolution
-仍须恢复为 selected-main exact 内容，并在提交 Task 6.8 前取得独立 spec/quality review。所有被 merge 或 conflict
-resolution 触及的 app Go files 必须 `gofmt`，并运行 7 个 app-pump focused tests。最小实现统一
-client ABI v14，保留 selected-main capture exports/behavior/tests、生产 bridge 与 app pump，
+`cmd/mornlea/app/dev_capture_test.go`、`cmd/mornlea/app/interactive.go` 为继承基线。四个 app
+paths 的最终内容必须相对 exact `9bb84c68` 精确零 diff，并纳入 `gofmt` 零差异与 7 个
+app-pump focused tests。暂停的最小实现继续统一 client ABI v14，保留冻结父的 capture
+exports/behavior/tests、生产 bridge 与 app pump，
 只叠加 MRW1 cache-only/no-production-caller 增量；不得实现或接管其余 `dev-capture` service、
 HTTP、options、recording 或 docs。五组 protected paths
 `engine/crates/mornlea_engine`、`engine/include/mornlea_engine.h`、`internal/fluid`、
-`internal/nativeabi`、`internal/sim/realm` 与 visual golden 都必须相对 actual selected main
+`internal/nativeabi`、`internal/sim/realm` 与 visual golden 都必须相对 exact `9bb84c68`
 零 diff。完成实现后必须分别接受 fresh spec-compliance review 与 quality review。
 
 Task 6.9 由另一 fresh validation implementer 在 immutable final HEAD 运行完整 18 门禁；任何
-tracked post-validation fix 都会产生新 HEAD，必须从 Gate 1 完整重跑。Task 6.10 再由未参与
-planning、sync/implementation、reviews 或 validation 的 fresh reviewer 做 whole-integration
-终审；只有 0 open findings 才可宣告 implementation complete。
+tracked post-validation fix 都会产生新 HEAD，必须从 Gate 1 完整重跑。原 moving-ref /
+exact-current-main gate 改为 frozen-parent provenance gate：`6f622407` 必须是 final HEAD 的祖先
+并保持上述 exact 双亲，所有 app/protected/golden 比较使用 exact `9bb84c68`，且 `6f622407`
+之后不得再通过额外 main merge 引入该父之后的 main commits；exact implementation HEAD 与 clean
+status 仍是硬门禁。Task 6.10 再由未参与 planning、sync/implementation、reviews 或 validation
+的 fresh reviewer 按同一冻结 provenance 做 whole-integration 终审；local `main` 指向其他提交
+本身不得导致失败。只有 0 open findings 才可宣告 implementation complete。
 
 ## Risks / Trade-offs
 
@@ -377,23 +390,22 @@ planning、sync/implementation、reviews 或 validation 的 fresh reviewer 做 w
   先返回 `ABI_VERSION`；v13 缺失的 MRW1 symbol 必须在 link/load/bind 阶段硬失败且无动态
   加载/Go fallback。新 input-only `u8` 入口只锁定 version、bounded nonzero length、
   pointer/address、handle、MRW1 次序，不增加 alignment/output/overlap 检查。
-- [冲突解决删除 capture、复活已退役 UI export/TLV 或丢失 main JSON bridge] → 以 actual
-  selected-main v13 header、FFI/window/capture 与 Rust/Go tests 为基线，只叠加 MRW1；对
+- [冲突解决删除 capture、复活已退役 UI export/TLV 或丢失 main JSON bridge] → 以 exact
+  `9bb84c68` v13 header、FFI/window/capture 与 Rust/Go tests 为基线，只叠加 MRW1；对
   29+1 export union、capture status/容量/BGRA8/Go bridge、SDK `u32` option FFI width 与两个
   `1<<3` option bits、frame tag 拒绝、`ui_push_state` 与 JSON event envelope 做定点审计和
   回归测试。
-- [non-rewriting merge 静默删除、移动或改变 selected-main app capture pump] → 把四个 app
-  paths 纳入冲突日志和相对 actual selected-main 的精确 zero-diff；若发生 unavoidable conflict，
-  逐行记录并恢复为 selected-main exact 内容，再由独立 reviewer 核验 `CaptureCoordinator` 注入、菜单/游戏两处
+- [已完成的 non-rewriting merge 静默删除、移动或改变 selected-main app capture pump] → 把四个 app
+  paths 相对 exact `9bb84c68` 做精确 zero-diff，再由独立 reviewer 核验 `CaptureCoordinator` 注入、菜单/游戏两处
   poll 后 render 前 pump、非阻塞 single-outstanding、pixels ownership、error delivery 与 7 个
   focused tests。MRW1 仍无 production caller，且不接管其余 dev-capture 工作。
 - [cache 误接入既有 draw 或 inherited app pump] → test-only driver、no-production-caller、frame
   编码及 readback 字节相等测试；不改变 selected-main app pump、mesher、scheduler 或
   fluid-aware 源码。
-- [follow-up sync 覆盖伙伴 fluid/engine 或 main 在执行前再次漂移] → merge 前即时固定并记录
-  latest local main；完整审计 `9bb84c68..latest-main`，若新增提交改变契约/范围则先修订
-  planning。merge 后以 actual selected-main-parent 对五组受保护路径与 golden 执行 zero-diff
-  审计，并由独立 reviewer 复核。
+- [验证误把移动的 local `main` 重新绑定为 predecessor，或额外 main merge 覆盖伙伴
+  fluid/engine] → 把 `9bb84c68` 固定为唯一 provenance；核验 `6f622407` 的 exact 双亲，禁止
+  之后再引入 later-main 的 merge，并只以 `9bb84c68` 对五组受保护路径与 golden 执行 zero-diff
+  审计。local `main` 指向 `8646c313` 或任何更晚提交不改变本 change 的结果。
 - [继承的代码注释违规被误归入 feature，或注释修复后继续沿用旧验证] → 先在独立 main-side
   cleanup 中清零并评审任务编号，再 non-rewriting sync；任何新 tracked HEAD 都重跑完整
   18 门禁，最终 fresh reviewer 复核零匹配与同基线证据。
@@ -405,28 +417,24 @@ planning、sync/implementation、reviews 或 validation 的 fresh reviewer 做 w
 1. 保留 Tasks 1–6.6 的 completed 历史、旧 selected main `e1e2e287` 完整 PASS、
    `5e5243a7` 的 17/18 binding failure、`bcc053e8` 无关 planning sync 与 `eccdca39` 上因
    `be5ff22b` 漂移产生的 0/18 preflight cancellation；不得重写旧 merge/review/validation。
-2. Task 6.7 只更新 proposal、唯一 delta spec、design、tasks 与 ledger，记录 planning
+2. Task 6.7 已只更新 proposal、唯一 delta spec、design、tasks 与 ledger，记录 planning
    implementer identity 和 ignored report；同时记录 `6d69db84` review 的 app-pump Important
-   finding 与本修复轮证据，由独立 reviewer 复审通过后才能勾选。
-3. Task 6.8 fresh implementer 在 merge 前即时读取 latest local main。若超过已审计的
-   `9bb84c68`，完整记录新增 commits/paths；任何版本、ABI、client/capture/app-pump/MRW1、fluid
-   所有权或排除项变化先回到 planning。契约未变时，以 `git merge --no-commit --no-ff main`
-   做 non-rewriting sync，并以实际 `MERGE_HEAD` 固定 selected-main-parent。
-4. 重新读取 merged guides，逐项解决全部真实冲突，重点审计 client header、`ffi.rs`、
-   `lib.rs`、`window.rs`、Go `window.go`/`window_test.go`、identity docs 与四个 app pump paths。
-   四个 app paths 必须相对 actual selected main 精确 zero-diff；若发生 unavoidable conflict，
-   记录 resolution 并恢复 selected-main exact 内容，再由独立 reviewers 证明。对 merge/touch 的 app Go
-   files 运行 `gofmt` 与 7 个 focused tests。相对 actual
-   selected main，五组 protected engine/fluid paths 与 visual golden 必须 byte-for-byte
-   zero-diff。
-5. 最小实现把 C header、Rust、Go、current docs、active config、main specs 与 tests 同步为
+   finding 与本修复轮证据，并已由独立 reviewer 复审通过后勾选。
+3. Task 6.8 已以 non-rewriting merge `6f622407` 固定 feature parent `9dc22f1b` 与 selected-main
+   parent `9bb84c68`。保留该 merge，不执行第二次 main merge，不审计或吸收 `8646c313` 及
+   later-main；本 planning amendment 必须先接受独立 planning review，暂停实现方才可恢复。
+4. 恢复 Task 6.8 后，以 exact `9bb84c68` 审计 client header、`ffi.rs`、`lib.rs`、`window.rs`、
+   Go `window.go`/`window_test.go`、identity docs 与四个 app pump paths。四个 app paths 必须
+   exact zero-diff，并运行 `gofmt` 与 7 个 focused tests；五组 protected engine/fluid paths
+   与 visual golden 同样必须 byte-for-byte zero-diff。
+5. 继续暂停中的最小实现，把 C header、Rust、Go、current docs、active config、main specs 与 tests 同步为
    client ABI v14 / inherited engine ABI v9。保留 selected-main v13 的全部 28 个 versioned
    exports 与 capture/WKWebView/UI behavior/tests，并原样保留 app pump 的 coordinator 注入、
    两个 loop call sites、非阻塞 single-outstanding、pixels/error 交付与 7 tests；只叠加
    v14-only MRW1，形成 29+1 union。MRW1 继续 cache-only、no production caller；其余
    dev-capture service/HTTP/options/recording/docs 保持本 change 范围外。
 6. 在同一实现 HEAD 验证 v14 全部 29 个 versioned exports 对 ABI 13 的 ABI-first 拒绝、
-   selected-main v13 全部 28 个 versioned exports 对 ABI 14 的 ABI-first 拒绝，以及 v13
+   exact `9bb84c68` v13 全部 28 个 versioned exports 对 ABI 14 的 ABI-first 拒绝，以及 v13
    缺少 v14-only MRW1 symbol 的 bind hard failure；不得增加动态加载或 Go fallback。随后由
    fresh spec reviewer 与 fresh quality reviewer 分别审查 Task 6.8。
 7. Task 6.9 在独立 immutable final HEAD 重建 release dylib并运行完整 18 门禁，覆盖 capture
@@ -437,7 +445,7 @@ planning、sync/implementation、reviews 或 validation 的 fresh reviewer 做 w
    reviewer 做 whole-integration final review；只有 spec/quality 均通过且 0 open findings
    才宣告 implementation complete。
 9. 发布时 client ABI v14 header、Go bridge 与 dylib 同步替换，v13/v14 混装显式失败。若
-   集成发现问题，只回退 MRW1/client-v14 增量到 actual selected-main v13 capture predecessor；
+   集成发现问题，只回退 MRW1/client-v14 增量到 exact `9bb84c68` v13 capture/app-pump predecessor；
    必须保留 capture、app frame-loop pump、engine ABI v9、伙伴 fluid 与其测试，不得回到 v12
    或恢复旧 egui/TLV surface。没有网络、存档或世界数据迁移。
 
@@ -445,7 +453,7 @@ planning、sync/implementation、reviews 或 validation 的 fresh reviewer 做 w
 
 Task 6.9 必须在 Task 6.8 implementation 及其 spec/quality reviews 通过后的同一个 immutable
 final HEAD 完整运行以下 18 门禁，逐项记录命令、exit status、真实 wall time、Skip、exact
-selected-main-parent、final HEAD 和 artifact SHA。旧 Task 6.6 PASS、17/18 revalidation 与
+frozen parent `9bb84c6841b59a18b030256d5952ed60acc215da`、final HEAD 和 artifact SHA。旧 Task 6.6 PASS、17/18 revalidation 与
 0/18 cancellation 只保留为历史，不能计入本轮。任何 tracked post-validation fix 或 sync
 都会改变 HEAD，必须从 Gate 1 重新完整运行，不能只补跑失败项：
 
@@ -462,8 +470,8 @@ selected-main-parent、final HEAD 和 artifact SHA。旧 Task 6.6 PASS、17/18 r
 11. `make visual-check`
 12. `openspec validate --all --strict --no-interactive`；当前 planning 基线为 80/80 changes，
     若实现时仓库总数变化则记录并以当时实际全量计数为准
-13. `git diff --exit-code <actual-selected-main-parent>..HEAD -- engine/crates/mornlea_engine engine/include/mornlea_engine.h internal/fluid internal/nativeabi internal/sim/realm`
-14. `git diff --exit-code <actual-selected-main-parent>...HEAD -- cmd/mornlea/capture/testdata/golden`
+13. `git diff --exit-code 9bb84c6841b59a18b030256d5952ed60acc215da..HEAD -- engine/crates/mornlea_engine engine/include/mornlea_engine.h internal/fluid internal/nativeabi internal/sim/realm`
+14. `git diff --exit-code 9bb84c6841b59a18b030256d5952ed60acc215da...HEAD -- cmd/mornlea/capture/testdata/golden`
 15. client contract/artifact 审计：final v14 必须精确为 29 个 versioned exports + 1 identity
     export（总计 30），全部 29 个对 ABI 13 ABI-first；exact selected-main v13 必须精确为
     28 个 versioned exports + 1 identity export（总计 29），全部 28 个对 ABI 14 ABI-first；
@@ -474,7 +482,7 @@ selected-main-parent、final HEAD 和 artifact SHA。旧 Task 6.6 PASS、17/18 r
     production caller、frame encoding/readback 不变，以及 Go test-binary RPATH 指向同一
     release dylib 且记录 dylib SHA；capture audit 还必须钉死 SDK `u32` option FFI width、
     IncludingWindow=`1<<3`、BestResolution=`1<<3` 与对应防回归测试。app pump 还必须以
-    `git diff --exit-code <actual-selected-main-parent>..HEAD -- cmd/mornlea/app/app_dependencies.go cmd/mornlea/app/dev_capture.go cmd/mornlea/app/dev_capture_test.go cmd/mornlea/app/interactive.go`
+    `git diff --exit-code 9bb84c6841b59a18b030256d5952ed60acc215da..HEAD -- cmd/mornlea/app/app_dependencies.go cmd/mornlea/app/dev_capture.go cmd/mornlea/app/dev_capture_test.go cmd/mornlea/app/interactive.go`
     证明四路径 exact selected-main zero-diff，并运行
     `go test ./cmd/mornlea/app -race -run 'Test(PumpDevCapture|RunInteractive(Game|Menu)LoopPumpsPendingCaptureOnce)' -count=1`，
     证明 7 个 focused tests 保留；同时审计两处 poll 后 render 前调用、nil/idle 非阻塞、single
@@ -485,10 +493,13 @@ selected-main-parent、final HEAD 和 artifact SHA。旧 Task 6.6 PASS、17/18 r
     mesh/visibility/upload/draw、共享 kernel、伙伴 fluid/engine 与 visual golden 无 feature-side
     改动；其余 dev-capture service/HTTP/options/recording/docs 不属于本 change
 17. `git diff --check`
-18. exact final HEAD、tracked/staged/untracked clean status、selected main 未变与全部证据
-    同基线证明
+18. frozen-parent provenance：`6f622407b1078d264707d8643f7fec41c553a48e` 必须是 exact final
+    HEAD 的祖先且双亲仍精确为 `9dc22f1b` / `9bb84c68`；`6f622407` 之后不得存在把
+    `9bb84c68` 之后 main commits 引入本分支的额外 main merge；同时证明 exact implementation
+    HEAD、tracked/staged/untracked clean status 与全部证据同基线。local `main` ref 的当前位置
+    不参与 PASS/FAIL。
 
-集成实现与验证保持 cache-only：predecessor 是 actual selected-main client ABI v13 capture，
-统一目标是 client ABI v14，engine ABI 为从 selected main 原样继承的 v9。回退只回到该 v13
-capture predecessor，不能删除 capture/fluid 或回到 v12。本节列出的新 final-HEAD 18 门禁
+集成实现与验证保持 cache-only：predecessor 是 exact `9bb84c68` client ABI v13 capture/app-pump，
+统一目标是 client ABI v14，engine ABI 为从该冻结父原样继承的 v9。回退只回到该 v13
+capture/app-pump predecessor，不能删除 capture/fluid 或回到 v12。本节列出的新 final-HEAD 18 门禁
 尚未执行。
