@@ -155,11 +155,10 @@ func embeddedGlyphFontData() []byte {
 	return embeddedGlyphFont
 }
 
-// EmbeddedCJKFont 返回内嵌 Noto Sans CJK OTF 字体字节的**只读副本**(供 client
-// ABI 的菜单字体上传):调用方把它传给 `Renderer.UploadUIFont` 即可。返回副本而非
-// 直接返回嵌入切片,是为了保证调用方无法改写共享的嵌入字节——同一份嵌入字节同时
-// 供字形图集生成使用,被改写会污染全部字形。每次调用返回独立副本(只在启动时
-// 上传一次,16 MiB 的一次性拷贝可接受)。
+// EmbeddedCJKFont 返回内嵌 Noto Sans CJK OTF 字体字节的**只读副本**。菜单
+// 字体上传出口已随 client ABI v12 退役,本访问器仅由溯源测试用于锁定嵌入字节
+// 的长度与哈希。返回副本而非直接返回嵌入切片,是为了保证调用方无法改写共享
+// 的嵌入字节——同一份嵌入字节同时供字形图集生成使用,被改写会污染全部字形。
 func EmbeddedCJKFont() []byte {
 	out := make([]byte, len(embeddedGlyphFont))
 	copy(out, embeddedGlyphFont)

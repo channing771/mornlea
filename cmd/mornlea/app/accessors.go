@@ -327,9 +327,6 @@ func (a *Application) SetPanel(panel *panelState) {
 // SetPanelLastFrameAt 复位调试面板读数的采样时刻（capture 场景钉住 PanelReadout）。
 func (a *Application) SetPanelLastFrameAt(at time.Time) { a.panelLastFrameAt = at }
 
-// SetMenuOverride 写入一帧菜单快照覆盖（capture 主菜单场景注入；nil 即清除）。
-func (a *Application) SetMenuOverride(override *client.UIMenu) { a.menuOverride = override }
-
 // SetSettings 整体写入设置页状态（capture 设置页场景固定 committed/draft）。
 func (a *Application) SetSettings(settings SettingsState) { a.settings = settings }
 

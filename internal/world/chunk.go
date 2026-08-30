@@ -2,7 +2,6 @@ package world
 
 import (
 	"crypto/sha256"
-	"encoding/binary"
 
 	"github.com/channing771/mornlea/internal/core"
 )
@@ -53,22 +52,16 @@ func (c *Chunk) PayloadBytes() int {
 }
 
 // Hash 返回只由逻辑方块值决定的稳定 SHA-256。
+//
+// 每区段先在复用的 8KiB 缓冲里完成小端编码，再一次写入摘要器：把逐体素的
+// 2 字节小写入合并为每区段一次。进流顺序（区段 → 线性序 YZX）与摘要保持
+// 逐字节不变，等价性由测试中保留的逐体素 oracle 钉住。
 func (c *Chunk) Hash() [sha256.Size]byte {
 	hash := sha256.New()
-	var encoded [2]byte
+	var encoded [core.BlocksPerSection * 2]byte
 	for sectionIndex := 0; sectionIndex < core.SectionsPerChunk; sectionIndex++ {
 		section := c.sections[sectionIndex]
-		for y := 0; y < core.SectionSize; y++ {
-			for z := 0; z < core.SectionSize; z++ {
-				for x := 0; x < core.SectionSize; x++ {
-					binary.LittleEndian.PutUint16(
-						encoded[:],
-						uint16(section.Blocks.Get(x, y, z)),
-					)
-					_, _ = hash.Write(encoded[:])
-				}
-			}
-		}
+		_, _ = hash.Write(section.Blocks.appendBlocksLE(encoded[:0]))
 	}
 	var sum [sha256.Size]byte
 	hash.Sum(sum[:0])

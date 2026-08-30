@@ -357,3 +357,49 @@ func TestFlushUploadsKeepsPlantQuadsInTheTerrainStream(t *testing.T) {
 		t.Fatal("正/背标志在上传往返中丢失:两条本应一正一背")
 	}
 }
+
+// TestFlushUploadsOrdersUploadsByDistanceThenXYZ 锁定冲刷排序契约:上传顺序
+// 严格按 (dist2, X, Y, Z) 全序,等距区段之间的先后也不例外。
+//
+// 这是 golden 双阈值契约的前提:上传顺序决定各段进入渲染器的写入时序,顶点
+// 池布局随之而定;而 pending 是 map、slices.SortFunc 排序不稳定,等距区段的
+// tiebreak 一旦缺失,顺序就随 map 迭代逐轮漂移,渲染输出失去逐进程可复现性。
+// 夹具因此刻意在同一 dist2 组内放齐三种并列(同 X 同 Z 异 Y、同 X 同 Y 异 Z、
+// 纯 X 并列),并以打乱的入队顺序重复多轮「排队+冲刷」——map 迭代起点逐轮
+// 随机,任何一轮只要并列成员的相对次序偏离全序即当场红。
+func TestFlushUploadsOrdersUploadsByDistanceThenXYZ(t *testing.T) {
+	center := core.ChunkPos{X: 8, Z: 8}
+	// 11 个区段分属三个 dist2 组:0(中心列,Y 并列)、1(近邻,X/Y 并列)、
+	// 2(对角与斜邻,Z 并列)。入队顺序刻意与期望上传顺序不一致。
+	sections := []core.SectionPos{
+		{X: 8, Y: 3, Z: 8}, {X: 8, Y: 0, Z: 8}, {X: 8, Y: 1, Z: 8}, // dist2=0
+		{X: 9, Y: 0, Z: 8}, {X: 7, Y: 0, Z: 8}, {X: 8, Y: 5, Z: 9}, {X: 8, Y: 2, Z: 9}, // dist2=1
+		{X: 9, Y: 2, Z: 9}, {X: 7, Y: 0, Z: 9}, {X: 9, Y: 2, Z: 7}, {X: 7, Y: 0, Z: 7}, // dist2=2
+	}
+	want := []core.SectionPos{
+		{X: 8, Y: 0, Z: 8}, {X: 8, Y: 1, Z: 8}, {X: 8, Y: 3, Z: 8},
+		{X: 7, Y: 0, Z: 8}, {X: 8, Y: 2, Z: 9}, {X: 8, Y: 5, Z: 9}, {X: 9, Y: 0, Z: 8},
+		{X: 7, Y: 0, Z: 7}, {X: 7, Y: 0, Z: 9}, {X: 9, Y: 2, Z: 7}, {X: 9, Y: 2, Z: 9},
+	}
+	// 每段一条 quad、预算远大于总量:全部区段在同一帧冲刷,顺序因此完全可观测。
+	quads := []mesh.Quad{stoneQuad(0, 0, 0)}
+	sink := &recordingSink{}
+	scheduler := render.NewSectionScheduler(sink, 1<<20)
+	for round := 0; round < 64; round++ {
+		for _, p := range sections {
+			scheduler.QueueSection(p, quads)
+		}
+		scheduler.BeginFrame()
+		scheduler.FlushUploads(center)
+		if len(sink.uploads) != len(want) {
+			t.Fatalf("第 %d 轮上传 %d 段,想要 %d", round, len(sink.uploads), len(want))
+		}
+		for i, p := range want {
+			if got := sink.uploads[i].pos; got != p {
+				t.Fatalf("第 %d 轮第 %d 个上传 = %+v,想要 %+v:顺序必须严格按 dist2、X、Y、Z",
+					round, i, got, p)
+			}
+		}
+		sink.uploads = sink.uploads[:0]
+	}
+}

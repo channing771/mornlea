@@ -4,7 +4,7 @@
 
 ## 线上协议
 
-- 线上协议为 v31（定义在 `internal/network/protocol` 的 `ProtocolVersion`，根包 `internal/network` 别名再导出）；所有不匹配版本都会在握手阶段、进入 Play 前被稳定拒绝，不提供版本协商或降级解码；更早版本的逐版语义见 `internal/network/protocol/packet.go` 顶部注释；
+- 线上协议为 v32（定义在 `internal/network/protocol` 的 `ProtocolVersion`，根包 `internal/network` 别名再导出）；所有不匹配版本都会在握手阶段、进入 Play 前被稳定拒绝，不提供版本协商或降级解码；更早版本的逐版语义见 `internal/network/protocol/packet.go` 顶部注释；
 - 近几版协议全部是既有 packet 尾部追加或新增消息，不改变任何既有长度上限，也不新增 `RejectReason`：
   - v26 新增 Play S→C ID 20 `PlaceBlockSucceeded(sequence)`，只回发给放置发起会话作为成功放置确认；
   - v27 新增 Play C→S ID 14 `BoneMeal`，与 `TillSoil` 同形（序号 + 朝向），目标格由权威射线决定；
@@ -12,7 +12,14 @@
   - v29 在 `PlayerState` 尾部 `Hunger` 之后、`WorldTimeTicks` 之前追加 1 字节 `SaturationZero` 饱和度归零提示位；
   - v30 新增 Play S→C ID 22/23/24 三类夜行者消息 `HostileSpawn`/`HostileState`/`HostileDespawn`：每类为 `ServerTick` u64 加 count u8 加至多 64 条按 ID 严格升序的记录（spawn 携带 ID/维度/位置/朝向/生命，state 携带 ID/位置/速度/朝向/生命，despawn 只携带 ID），按会话视野订阅发布；
   - v31 在 `PlayerState` 尾部 `SaturationZero` 之后、`WorldTimeTicks` 之前追加 2 字节 `DayPhaseOffset` 显示相位偏移（u16，值域 `0..23999`，越界在校验与编解码处稳定拒绝）；显示相位按 `(WorldTimeTicks + DayPhaseOffset) % 24000` 计算，偏移只平移呈现相位、不回写绝对时间；
+- v32 在 Play S→C registry 尾部追加 ID 25 `CombatHit(ServerTick, Damage, TargetKind)`；固定 10-byte 载荷只私发给成功攻击的玩家会话，受击者、旁观者、trusted observer 与 hostile 攻击目标均不接收；
 - 客户端只声明按键意图，权威结算全在服务端；`SaturationZero` 是瞬态提示位、不入任何存档，饱和度与疲劳数值是纯服务端量、不占 wire 字段；`DayPhaseOffset` 只经世界 metadata v3 持久化，不进玩家存档。
+
+## client ABI
+
+- 图形客户端的 client ABI 为 v12：同一次构建的 `mornlea` 与 `libmornlea_client.dylib` 是不可跨版本混装的 release unit，v11 与 v12 的二进制不可混装，版本不匹配经各 FFI 入口的版本检查稳定拒绝；无图形专服不链接 client 库，不受其演进影响；
+- v12 随菜单层迁进程内 WKWebView：`render_upload_ui_font` 出口与帧 TLV tag 9 UI 段（layout v1–v4 编解码）退役（下发即 `INVALID_ARGUMENT`），新增 `ui_push_state` JSON 状态下行出口，`render_drain_ui_events` 签名不变、字节格式改为版本化 JSON 事件信封（空队列 0 字节）；
+- 协议、存档 schema 与 benchmark scenario 不随 client ABI 演进，既有世界与玩家存档在新客户端上照常读取。
 
 ## 存档版本
 

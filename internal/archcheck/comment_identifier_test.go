@@ -39,6 +39,16 @@ import (
 // 常量与变量名、结构体字段名、接口方法名。**不含**函数参数与局部变量——实测
 // 实测全仓当前的反引号提及均可解析，命中数随约定推广而增长；加进参数只会放宽判定。
 //
+// **跨语言扩展（webview 菜单桥契约域）**：菜单层迁 WebView 后，桥协议的单源在
+// `engine/crates/mornlea_client/frontend/src/`——schema.json 的 JSON 键名与前端
+// TS 的类型名/注入点名（`menuAction`、`uplinkEnvelope`、`window.mornlea.onState`
+// 一类）是 Go 注释可以合法提到的名字，却不在任何 Go 声明域里。因此判定域并入
+// 一份**桥契约语料**（schema.json + 前端 .ts/.tsx 源码文本）：反引号内容（完整
+// 提及或点路径末段）能在语料中子串命中即视为存在。子串匹配是有意的宽松——契约
+// 名以 JSON 键名与 TS 标识符两种形状出现，精确边界解析需要 JSON/TS 解析器，成本
+// 远超门禁价值，与 Go 域「扁平名字集合」的同名掩盖盲区同一量级。语料收集带守卫
+// （schema.json 缺失或语料过小直接 Fatal），不允许静默失去这个存在域。
+//
 // # 已知盲区（写在这里，别指望这条检查抓）
 //
 //   - **计数漂移**：枚举式注释写「三个阶段」而常量已有五个，句子里根本没有标识
@@ -109,14 +119,14 @@ func isShoutingName(name string) bool {
 	return true
 }
 
-// scanCommentBacktickIdentifiers 是本门禁的纯函数内核：给一组 Go 源码
-// （key 是用于报错的文件名，value 是源码字节），返回排序后的失真清单与全部
-// 已声明名字的集合。
+// scanCommentBacktickIdentifiers 是本门禁的纯函数内核：给一组 Go 源码（key 是
+// 用于报错的文件名，value 是源码字节）与跨语言桥契约语料（可为空，见顶部
+// 「跨语言扩展」一节），返回排序后的失真清单与全部已声明名字的集合。
 //
 // 之所以做成「吃 map、不碰磁盘」的形状，是为了让 9.2 的自检能喂一段内嵌的坏
 // 样本走**同一条代码路径**：一个恒真的扫描器与不扫描等价，而它看起来像扫过了，
 // 因此扫描器本身必须被已知坏样本证伪过。
-func scanCommentBacktickIdentifiers(sources map[string][]byte) (findings []string, declared map[string]bool, err error) {
+func scanCommentBacktickIdentifiers(sources map[string][]byte, bridgeCorpus string) (findings []string, declared map[string]bool, err error) {
 	files := token.NewFileSet()
 	parsed := make(map[string]*ast.File, len(sources))
 	declared = make(map[string]bool)
@@ -132,7 +142,7 @@ func scanCommentBacktickIdentifiers(sources map[string][]byte) (findings []strin
 	for _, name := range slices.Sorted(maps.Keys(parsed)) {
 		for _, group := range parsed[name].Comments {
 			for _, comment := range group.List {
-				findings = append(findings, findingsInComment(files, comment, declared)...)
+				findings = append(findings, findingsInComment(files, comment, declared, bridgeCorpus)...)
 			}
 		}
 	}
@@ -175,9 +185,28 @@ func collectDeclaredNames(file *ast.File, declared map[string]bool) {
 	})
 }
 
+// bridgeCorpusNameExists 报告一个反引号提及是否存在于跨语言桥契约语料中。
+//
+// 匹配是有意宽松的子串匹配：契约名在 schema.json 里以 JSON 键名出现（如
+// `"menuAction"`），在前端 TS 里以类型名/注入点字面量出现（如
+// `window.mornlea.onState`），两种形状都能被子串命中。点路径先试完整提及
+// （TS 里常以字面量原样出现），再退到末段（如 `uplinkEnvelope.v` 在 schema
+// 里是嵌套键名，完整点写并不出现）——与 Go 域「点路径只查末段」同一口径。
+// 空语料恒不命中：存在域扩展绝不能在语料缺失时静默退化成全放行。
+func bridgeCorpusNameExists(corpus, mention string) bool {
+	if corpus == "" {
+		return false
+	}
+	if strings.Contains(corpus, mention) {
+		return true
+	}
+	segments := strings.Split(mention, ".")
+	return strings.Contains(corpus, segments[len(segments)-1])
+}
+
 // findingsInComment 抽出一条注释里的失真。位置用反引号片段在注释内的字节偏移
 // 换算，因此块注释里第几行出的问题能精确指到那一行。
-func findingsInComment(files *token.FileSet, comment *ast.Comment, declared map[string]bool) []string {
+func findingsInComment(files *token.FileSet, comment *ast.Comment, declared map[string]bool, bridgeCorpus string) []string {
 	var findings []string
 	for _, match := range backtickPattern.FindAllStringSubmatchIndex(comment.Text, -1) {
 		mention := comment.Text[match[2]:match[3]]
@@ -198,8 +227,11 @@ func findingsInComment(files *token.FileSet, comment *ast.Comment, declared map[
 		if declared[last] {
 			continue
 		}
+		if bridgeCorpusNameExists(bridgeCorpus, mention) {
+			continue
+		}
 		position := files.Position(comment.Pos() + token.Pos(match[0]))
-		findings = append(findings, fmt.Sprintf("%s: 注释提到的标识符 %q 在全仓 Go 声明中未找到", position, mention))
+		findings = append(findings, fmt.Sprintf("%s: 注释提到的标识符 %q 在全仓 Go 声明与桥契约语料中均未找到", position, mention))
 	}
 	return findings
 }
@@ -249,10 +281,54 @@ func repositoryGoSources(t *testing.T) map[string][]byte {
 	return sources
 }
 
+// repositoryBridgeContractCorpus 收集跨语言桥契约语料：webview 菜单桥的
+// schema.json 与前端 .ts/.tsx 源码文本（见本文件顶部「跨语言扩展」一节）。
+//
+// 与 repositoryGoSources 同一条纪律：语料收集必须带守卫，schema.json 缺失或
+// 语料小得反常时直接 Fatal，绝不允许存在域静默消失、门禁退化为「对桥名全放行」。
+// 路径只钉 frontend/src，不涉 node_modules（在 src 之外），第三方文本不会进语料。
+func repositoryBridgeContractCorpus(t *testing.T) string {
+	t.Helper()
+	root := moduleRoot(t)
+	contractDir := filepath.Join(root, "engine", "crates", "mornlea_client", "frontend", "src")
+	schema, err := os.ReadFile(filepath.Join(contractDir, "bridge", "schema.json"))
+	if err != nil {
+		t.Fatalf("读取桥契约 schema.json: %v", err)
+	}
+	var corpus strings.Builder
+	corpus.Write(schema)
+	corpus.WriteByte('\n')
+	walkErr := filepath.WalkDir(contractDir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		switch ext := filepath.Ext(path); ext {
+		case ".ts", ".tsx":
+			data, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return readErr
+			}
+			corpus.Write(data)
+			corpus.WriteByte('\n')
+		}
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("遍历前端契约源码 %s: %v", contractDir, walkErr)
+	}
+	if corpus.Len() < 1000 {
+		t.Fatalf("桥契约语料只有 %d 字节，schema 与前端源码反常：目录迁移或读取失败时不得静默放行", corpus.Len())
+	}
+	return corpus.String()
+}
+
 // TestCommentBacktickIdentifiersExist 是全仓门禁：注释里反引号包裹的标识符
 // 必须真的存在。判定规则、豁免清单与已知盲区见本文件顶部的说明。
 func TestCommentBacktickIdentifiersExist(t *testing.T) {
-	findings, _, err := scanCommentBacktickIdentifiers(repositoryGoSources(t))
+	findings, _, err := scanCommentBacktickIdentifiers(repositoryGoSources(t), repositoryBridgeContractCorpus(t))
 	if err != nil {
 		t.Fatalf("扫描全仓注释: %v", err)
 	}
@@ -267,7 +343,7 @@ func TestCommentBacktickIdentifiersExist(t *testing.T) {
 // 形状豁免比逐条豁免危险得多——它会连未来的名字一起放过。一旦有人在 Go 里声明
 // 了 FOO_BAR，这条豁免就开始掩盖真失真，而现场不会有任何信号。这里让它自己失效。
 func TestShoutingExemptionHidesNoRealGoName(t *testing.T) {
-	_, declared, err := scanCommentBacktickIdentifiers(repositoryGoSources(t))
+	_, declared, err := scanCommentBacktickIdentifiers(repositoryGoSources(t), "")
 	if err != nil {
 		t.Fatalf("扫描全仓注释: %v", err)
 	}
@@ -342,17 +418,39 @@ const (
 		"// sampleNotes 提到 `MGW1` 这个 wire magic、`CLAUDE.md` 这个文档名，\n" +
 		"// 以及 `SEA_LEVEL_Y` 这个 Rust 侧常量。\n" +
 		"func sampleNotes() {}\n"
+
+	// selfCheckBridgeCorpus 是自检用的跨语言语料片段，键名形状与 schema.json
+	// 一致：契约名以 JSON 键名的形式出现，子串匹配可以直接命中。内容是**字符串
+	// 常量**、不是真实文件的读取，自检因此不依赖仓库布局。
+	selfCheckBridgeCorpus = "{\n" +
+		"  \"uplinkEnvelope\": { \"required\": [\"v\", \"events\"], \"properties\": { \"v\": { \"const\": 1 } } },\n" +
+		"  \"menuAction\": [\"enter-game\", \"open-settings\"]\n" +
+		"}\n"
+
+	// selfCheckBridgeGoodSource 是「注释提到的名字在桥契约语料里存在」的正例
+	// 样本：`menuAction` 在 Go 声明域里没有，只能在语料域解析。
+	selfCheckBridgeGoodSource = "package sample\n" +
+		"\n" +
+		"// sampleActions 的取值与 schema `menuAction` 枚举逐值互钉。\n" +
+		"func sampleActions() {}\n"
 )
 
-// selfCheckFindings 用内嵌样本跑一遍扫描器内核。extra 是样本文件名到源码的
-// 映射，与固定的 declarations.go 一起构成这次扫描的全部输入。
+// selfCheckFindings 用内嵌样本跑一遍扫描器内核（空语料域）。extra 是样本文件名
+// 到源码的映射，与固定的 declarations.go 一起构成这次扫描的全部输入。
 func selfCheckFindings(t *testing.T, extra map[string]string) []string {
+	t.Helper()
+	return selfCheckFindingsWithCorpus(t, "", extra)
+}
+
+// selfCheckFindingsWithCorpus 是带跨语言语料的变体：正例/负例断言都必须走与
+// 全仓门禁完全相同的判定路径。
+func selfCheckFindingsWithCorpus(t *testing.T, corpus string, extra map[string]string) []string {
 	t.Helper()
 	sources := map[string][]byte{"declarations.go": []byte(selfCheckDeclarationsSource)}
 	for name, source := range extra {
 		sources[name] = []byte(source)
 	}
-	findings, _, err := scanCommentBacktickIdentifiers(sources)
+	findings, _, err := scanCommentBacktickIdentifiers(sources, corpus)
 	if err != nil {
 		t.Fatalf("扫描内嵌样本: %v", err)
 	}
@@ -399,6 +497,21 @@ func TestCommentIdentifierScannerCatchesKnownBadSamples(t *testing.T) {
 	t.Run("豁免清单内的名字不得报错", func(t *testing.T) {
 		if findings := selfCheckFindings(t, map[string]string{"exempt.go": selfCheckExemptSource}); len(findings) != 0 {
 			t.Errorf("对已豁免的名字误报: %v", findings)
+		}
+	})
+
+	t.Run("桥契约名按语料域判定", func(t *testing.T) {
+		// 正例：schema 里真实存在的键名经语料子串命中，Go 声明域解析不到也不报。
+		if findings := selfCheckFindingsWithCorpus(t, selfCheckBridgeCorpus, map[string]string{"bridge.go": selfCheckBridgeGoodSource}); len(findings) != 0 {
+			t.Errorf("对桥契约语料中存在的名字误报: %v", findings)
+		}
+		// 负例：语料在场时编造的名字仍必须报——存在域扩展不得变成对桥名全放行。
+		if findings := selfCheckFindingsWithCorpus(t, selfCheckBridgeCorpus, map[string]string{"bridge.go": selfCheckBadSource}); len(findings) != 1 {
+			t.Errorf("语料在场时编造的名字未被拒: %v", findings)
+		}
+		// 空语料不是放行通道：同样的正例名字在语料缺失时必须回到失真清单。
+		if findings := selfCheckFindingsWithCorpus(t, "", map[string]string{"bridge.go": selfCheckBridgeGoodSource}); len(findings) != 1 {
+			t.Errorf("空语料未保持拒绝语义: %v", findings)
 		}
 	})
 }

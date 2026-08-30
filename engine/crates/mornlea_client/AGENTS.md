@@ -2,9 +2,10 @@
 
 ## 所有权
 
-- 本 crate 持有 Darwin 窗口、事件采集、GPU 资源与 pass、shader、egui 布局和 client ABI 出口。
+- 本 crate 持有 Darwin 窗口、事件采集、GPU 资源与 pass、shader、进程内 WKWebView 菜单层和 client ABI 出口。菜单呈现层源码在本 crate 的 `frontend/`（Vite + TypeScript + React），桥协议单源为 `frontend/src/bridge/schema.json`；前端纪律见 `frontend/AGENTS.md`，本 crate 只经桥出口与 WebView 交互，不导入前端源码。
 - Darwin 本地提示音的 `AudioQueue` 实现在 Go `internal/audio`，不属于本 crate；本 crate 只呈现设置 UI 中的音量值。
 - Linux 专用服务端不得依赖本 crate；非 Darwin workspace 构建保持空平台实现，不引入窗口或 GPU 运行时。
+- WebView 只在菜单相位挂载并消费输入；游戏相位隐藏且不参与 responder 链，`-connect`、benchmark 与 capture 路径永不创建 WebView。
 
 ## Client ABI
 

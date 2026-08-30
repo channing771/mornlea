@@ -84,15 +84,14 @@ type captureScene struct {
 	// 物品栏、换上夹具物品栏，场景图回读后恢复快照并重放会话起点基线
 	// （与 HUD 夹具同一 defer 语义），保证触发弹条的临时选中不泄入后续场景。
 	Popup *capturePopupFixture
-	// Menu 可选，非 nil 时本场景以该快照渲染一帧 egui 主菜单（capture 专用）。
-	// 默认 nil 表示无菜单。每个场景在 captureSceneImage 里于 Apply 之后、收敛
-	// 循环之前无条件设置 app.menuOverride = scene.Menu（nil 即清除），因此
-	// 场景表天然清空上一场景的菜单，不需要 teardown 钩子；egui pass 只在 UI 段
-	// 存在时运行，多数场景（nil）因此零参与、输出像素与引入菜单前逐字节一致。
-	Menu *client.UIMenu
-	// Settings 可选，非 nil 时本场景通过正常的设置相位与 `uiSegment` 路径编码
-	// layout v2。它与 Menu 互斥；每个场景都会显式重置菜单相位，避免设置页污染
-	// 后续共用同一 application 的场景。
+	// Menu 可选，为真时本场景以主菜单相位呈现。菜单层已迁 WebView（client
+	// ABI v12）且无头路径零参与，本场景输出无菜单 chrome 的世界底图——
+	// golden 待全景场景落地时重生成。它与 Settings 互斥；每个场景都会
+	// 显式重置菜单相位，避免设置页污染后续共用同一 application 的场景。
+	Menu bool
+	// Settings 可选，非 nil 时本场景进入正常的设置相位。它与 Menu 互斥；
+	// 每个场景都会显式重置菜单相位，避免设置页污染后续共用同一 application
+	// 的场景。
 	Settings *application.SettingsState
 	// PinVolatile 可选，在字形收敛帧之后、最后一帧渲染之前执行，用来钉住那些
 	// 随机器速度变化、因而不属于场景三要素的量。
@@ -148,14 +147,15 @@ func capturePopupTriggerInventory() core.Inventory {
 }
 
 // captureSettled 判定抓帧收敛。近环半部沿用 mesher stats + pending uploads；
-// lodBusy 是远环调度器的 Busy() 计数（未接线 LOD 的运行传 0）。远环 tile 的
-// 生成与上传完全异步，若不等它清零就回读，golden 里的远景带会随机器速度
-// 时有时无——远景带像素就成了不可复现的输入，这是 5.3 把 LOD 并入收敛
-// 判据的原因。
-func captureSettled(stats client.MesherStats, pending, lodBusy int) bool {
+// lodBusy 是远环调度器的 Busy() 计数（未接线 LOD 的运行传 0）。vistaPending
+// 是菜单全景管线的未完成工作量（非菜单相位恒为 0）。远环 tile 与全景区块
+// 的生成与上传完全异步，若不等它们清零就回读，golden 里的远景带/全景地形
+// 会随机器速度时有时无——远景像素就成了不可复现的输入，这是 5.3 把两者
+// 并入收敛判据的原因。
+func captureSettled(stats client.MesherStats, pending, lodBusy, vistaPending int) bool {
 	return stats.DirtySections == 0 && stats.QueuedJobs == 0 &&
 		stats.InFlightJobs == 0 && stats.ReadyResults == 0 && pending == 0 &&
-		lodBusy == 0
+		lodBusy == 0 && vistaPending == 0
 }
 
 // captureScenes 是表驱动的场景清单，新增场景即新增一行。
@@ -748,53 +748,46 @@ var captureScenes = []captureScene{
 		},
 	},
 	{
-		// main-menu 是 egui 主菜单的无窗口 capture 场景：含标题「Mornlea」、
-		// 版本行「dev」、真实装配错误行与四个按钮（进入/设置/退出可用、多人禁用）。
+		// main-menu 是主菜单相位的无窗口 capture 场景：底图由 menu-vista
+		// 全景路径产出（与交互主菜单同一渲染路径——固定种子 worldgen 区块、
+		// 专属镜像/mesher/远环带、正午固定世界时间与整数 tick 自转相机），
+		// 菜单 chrome 由 WebView 呈现且无头零参与。菜单相位抑制准星、弹条
+		// 与生存 HUD，画面是纯全景。
 		//
-		// Error 非空是有意的：一来覆盖真实装配错误行（菜单因打开不了存档而显示
-		// 错误文本），二来其内容「存档无法打开」是中文 UTF-8，整个 UI 段的字节长度
-		// 因此落在非 4 对齐上，专门走 Ruling 8 豁免的「非 4 对齐 TLV 文本段跨语言
-		// 回圆」路径——golden 由此覆盖一条真实菜单、也是 capture 路径第一条非 4 对齐
-		// 的 UI 段。
+		// Apply 里 resetCapturePresentation 清空前序场景（water-surface-slope）
+		// 留下的全部共享呈现状态。相机与世界内容不再由本场景摆拍：全景接管；
+		// a.center 保持出生点，后继世界场景（far-horizon）的近环收敛域不受
+		// 全景锚点影响。
 		//
-		// Apply 里 resetCapturePresentation 清空前序场景（water-surface-slope）留下的
-		// 全部共享呈现状态，并把相机钉在出生点上空：菜单面板不透明地覆盖全屏，世界
-		// 内容不可见，相机位置只作确定性占位，不影响菜单像素。egui pass 只在 UI 段
-		// 存在时运行，本场景与紧随其后的 settings-menu 是仅有的 UI 场景。
-		//
-		// 排序约束：本场景 MUST 排在 far-horizon 之前（far-horizon 仍为倒数第二、
-		// water-underwater 仍为最后），由 TestMainMenuCaptureScenePosition 兜底。
+		// 排序约束：本场景 MUST 排在 far-horizon 之前（far-horizon 仍为倒数
+		// 第二、water-underwater 仍为最后），由 TestMainMenuCaptureScenePosition
+		// 兜底。
 		Name:         "main-menu",
 		WarmupFrames: 8,
-		Menu: &client.UIMenu{
-			Visible: true,
-			Title:   "Mornlea",
-			Version: "dev",
-			// 见上：真实错误行 + 非 4 对齐 UI 段（Ruling 8）。
-			Error: "存档无法打开",
-			// 复用交互主菜单的按钮表（四个按钮、进入/设置/退出可用、多人禁用）。
-			Buttons: application.MenuButtons(),
-		},
+		Menu:         true,
 		Apply: func(app SceneApplication) error {
 			if err := resetCapturePresentation(app); err != nil {
 				return err
 			}
+			// 全景相位钉死正午；这里同步钉一份权威世界时间，防回归时把
+			// 相位门控改坏后画面悄悄变成黎明。
 			app.SetWorldTimeTicks(6000)
-			// 相机钉在出生点上空（出生锚点为原点区块，y=110 高位）；菜单面板不透明
-			// 覆盖全屏，世界内容不可见，此处只是确定性的占位姿态。
-			*app.Camera() = client.Camera{
-				Pos: mgl32.Vec3{0, 110, 0}, Yaw: 0, Pitch: -0.25,
-				FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
-				Near: 0.1, Far: 2000,
-			}
-			app.SetCenter(application.CameraChunk(app.Camera().Pos))
+			app.SetCenter(application.CameraChunk(mgl32.Vec3{0, 110, 0}))
+			return nil
+		},
+		PinVolatile: func(app SceneApplication) error {
+			// 收敛帧数随机器速度波动，自转 tick 在收敛后钉死：最终帧的相机
+			// 姿态是纯 tick 的确定函数（spec webview-menu-ui「全景背景
+			// 确定性」）。
+			app.SetMenuVistaTick(captureMenuVistaTickMainMenu)
 			return nil
 		},
 	},
 	{
-		// settings-menu 复用正式设置相位与 client ABI v9 layout v2，不另画测试
-		// 专用表单。夹具使用一组已保存的非默认值，因此三个控件都有明确选择，
-		// 同时保持 clean/空状态，让 640×360 首屏能完整显示三枚动作按钮。
+		// settings-menu 与 main-menu 共用同一份全景世界（同一个 application，
+		// 全景惰性构建一次、两场景复用），仅以不同的自转时刻区分两张底图；
+		// 设置夹具使用一组已保存的非默认值（草稿与已保存一致、不脏），因此
+		// 三个控件都有明确选择，同时保持 clean/空状态。
 		Name:         "settings-menu",
 		WarmupFrames: 8,
 		Settings: &application.SettingsState{
@@ -814,12 +807,11 @@ var captureScenes = []captureScene{
 				return err
 			}
 			app.SetWorldTimeTicks(6000)
-			*app.Camera() = client.Camera{
-				Pos: mgl32.Vec3{0, 110, 0}, Yaw: 0, Pitch: -0.25,
-				FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
-				Near: 0.1, Far: 2000,
-			}
-			app.SetCenter(application.CameraChunk(app.Camera().Pos))
+			app.SetCenter(application.CameraChunk(mgl32.Vec3{0, 110, 0}))
+			return nil
+		},
+		PinVolatile: func(app SceneApplication) error {
+			app.SetMenuVistaTick(captureMenuVistaTickSettingsMenu)
 			return nil
 		},
 	},
@@ -861,6 +853,16 @@ var captureScenes = []captureScene{
 // capturePinnedServerTick 是 debug-panel 场景钉死的权威 tick 值。
 // 取一个与真实加载时长无关的常量即可，数值本身没有语义。
 const capturePinnedServerTick = 400
+
+// 两个菜单场景钉住的全景自转时刻（单位：整数 tick，均在
+// `application.MenuVistaYawPeriodTicks` 一个周期内）：主菜单取 1/8 周期
+// （45°），设置页取 3/8 周期（135°）。同一份全景世界因此呈现两个可区分
+// 的相机时刻，两张底图不是同一张图的两份拷贝；取值与场景闭包共用本组
+// 常量，由 TestMenuCaptureScenesPinDistinctVistaTicks 钉住互异与界内。
+const (
+	captureMenuVistaTickMainMenu     = application.MenuVistaYawPeriodTicks / 8
+	captureMenuVistaTickSettingsMenu = application.MenuVistaYawPeriodTicks / 8 * 3
+)
 
 // RunCapture 依次跑完全部视觉场景。updateGolden 为真时把抓到的图写进 golden 基线；
 // 为假时与已有基线比对，超阈值的场景把实拍图与差异图写进 dir 并返回错误。
@@ -977,18 +979,20 @@ func captureSceneImage(app SceneApplication, scene captureScene) (*image.NRGBA, 
 	if err := scene.Apply(app); err != nil {
 		return nil, fmt.Errorf("应用场景状态: %w", err)
 	}
-	// UI 覆盖在 Apply 之后、收敛循环之前装入。无条件清理菜单覆盖与相位是刻意
-	// 而为：场景共用同一个 application，若不显式清除，上一场景的主菜单或设置页
-	// 会静默留在后续画面上。设置场景仍走正式 `uiSegment` layout v2 路径；多数
-	// 场景恢复 game 相位，因此 egui pass 零参与。
-	if scene.Menu != nil && scene.Settings != nil {
+	// 菜单相位在 Apply 之后、收敛循环之前装入。无条件重置相位是刻意而为：
+	// 场景共用同一个 application，若不显式清除，上一场景的主菜单或设置页
+	// 会静默留在后续画面上。多数场景恢复 game 相位;菜单相位抑制准星与弹条
+	// (无头路径 WebView 零参与,不产生任何桥推送)。
+	if scene.Menu && scene.Settings != nil {
 		return nil, fmt.Errorf("场景 %s 同时设置 Menu 与 Settings", scene.Name)
 	}
-	app.SetMenuOverride(scene.Menu)
-	if scene.Settings != nil {
+	switch {
+	case scene.Settings != nil:
 		app.SetMenuPhase(application.MenuPhaseSettings)
 		app.SetSettings(*scene.Settings)
-	} else {
+	case scene.Menu:
+		app.SetMenuPhase(application.MenuPhaseMenu)
+	default:
 		app.SetMenuPhase(application.MenuPhaseGame)
 	}
 	if scene.HUD != nil {
@@ -1012,17 +1016,19 @@ func captureSceneImage(app SceneApplication, scene captureScene) (*image.NRGBA, 
 		}
 		stats, pending := app.Mesher().Stats(), app.Scheduler().PendingUploads()
 		// 远环收敛判据与近环同源：pending==0 且 worker 空闲（Busy 归零）。
-		// 禁用路径 lodScheduler 为 nil，传 0 即与旧语义一致。
+		// 禁用路径 lodScheduler 为 nil，传 0 即与旧语义一致。全景 pending
+		// 只在菜单相位场景非零（世界内容与远环带由全景管线异步装配）。
 		lodBusy := 0
 		if app.LODScheduler() != nil {
 			lodBusy = app.LODScheduler().Busy()
 		}
-		if i+1 >= captureGlyphSettleFrames && captureSettled(stats, pending, lodBusy) {
+		vistaPending := app.MenuVistaPending()
+		if i+1 >= captureGlyphSettleFrames && captureSettled(stats, pending, lodBusy, vistaPending) {
 			break
 		}
 		if time.Now().After(settleDeadline) {
-			return nil, fmt.Errorf("场景 %s 在 %s 内未收敛：mesher=%+v pending=%d lodBusy=%d",
-				scene.Name, captureSettleTimeout, stats, pending, lodBusy)
+			return nil, fmt.Errorf("场景 %s 在 %s 内未收敛：mesher=%+v pending=%d lodBusy=%d vistaPending=%d",
+				scene.Name, captureSettleTimeout, stats, pending, lodBusy, vistaPending)
 		}
 	}
 	// PinVolatile 必须在收敛帧之后、最后一帧之前：收敛帧本身会推进那些随机器
@@ -1030,6 +1036,21 @@ func captureSceneImage(app SceneApplication, scene captureScene) (*image.NRGBA, 
 	if scene.PinVolatile != nil {
 		if err := scene.PinVolatile(app); err != nil {
 			return nil, fmt.Errorf("钉住易变读数: %w", err)
+		}
+	}
+	// 菜单全景场景的相机自转在收敛帧里持续推进：渲染器的高精度遮挡剔除
+	// （HiZ）以「相机与上一帧一致」为启用前提，最终帧的剔除态因此会随
+	// 收敛帧数的奇偶巧合漂移。这里先渲染一帧钉住位姿的预热帧（HiZ 用同
+	// 位姿深度图重建），再重钉一次并渲染真正回读的最终帧——最终帧的相机
+	// 稳定态与 HiZ 内容都与收敛历史无关，两次抓帧逐字节一致。
+	if scene.Menu || scene.Settings != nil {
+		if _, err := app.RenderFrame(captureDrainMax); err != nil {
+			return nil, fmt.Errorf("全景位姿预热帧: %w", err)
+		}
+		if scene.PinVolatile != nil {
+			if err := scene.PinVolatile(app); err != nil {
+				return nil, fmt.Errorf("重钉易变读数: %w", err)
+			}
 		}
 	}
 	if _, err := app.RenderFrame(captureDrainMax); err != nil {
