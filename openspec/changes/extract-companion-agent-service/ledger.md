@@ -21,7 +21,7 @@
 
 | Task | Implementer | 起始 SHA | RED/GREEN 与提交 | SPEC 评审 | QUALITY 评审 | 裁决 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
+| 1 | `task1_contracts_impl` | `af57e420` | RED：缺少 HTTP schema；复审 RED：UTF-8 byte/权威常量、非确定 `oneOf` 与未支持 keyword；GREEN：focused `-count=100`、companion race、diff-check；提交 `36eed9d9`、`7d019d1c`、`a1640211` | `task1_spec_review` round 3 PASS | `task1_quality_review` round 3 PASS | Accepted |
 | 2 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 3 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 4 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
@@ -33,6 +33,13 @@
 | 10 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 11 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 12 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
+
+### Task 1 评审修复记录
+
+- Round 1：两路评审拒绝 code-point 代替 UTF-8 byte、未约束 Dialogue 终态矩阵、任意 MCP callback URL、未机器化工具排序/位置对应，以及未交叉校验权威容量常量的初版契约。
+- Round 2：原规格缺口关闭；两路评审共同拒绝依赖 Go map 顺序选择 `oneOf` 子错误，QUALITY 另要求未知标准 JSON Schema validation keyword 硬失败。
+- Round 3：SPEC 与 QUALITY 均 PASS；`oneOf` 使用稳定父级错误，关键叶级规则由 direct fixtures 校验，schema keyword allowlist/audit、私有扩展硬失败与 100 次 focused 重复测试通过。
+- 控制会话复验：`go test ./internal/companion -run 'ContractFixture' -count=100` exit 0；工作树在 ledger 更新前 clean。
 
 ## 整分支终审与门禁
 

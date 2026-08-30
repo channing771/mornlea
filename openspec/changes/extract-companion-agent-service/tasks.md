@@ -1,6 +1,6 @@
 ## Task 1: Shared application contracts
 
-- [ ] 1.1 先在 `contracts/companion-agent/{http-v1,mcp-v1}` 创建 versioned machine-readable JSON Schema、HTTP method/path/status/error manifest、六工具 schema/stable-code manifest 与合法/非法 golden，再在 `internal/companion/contract_fixtures_test.go` 写 RED consistency tests，钉 strict object、identity 例外、canonical/wire size，以及 mine 接受 Chest/Furnace、拒农业/火把/无掉落/未交付多掉落的既有语义；只实现 fixtures/validator test，不实现 transport，以 `go test ./internal/companion -run 'ContractFixture' -count=1` 验证。
+- [x] 1.1 先在 `contracts/companion-agent/{http-v1,mcp-v1}` 创建 versioned machine-readable JSON Schema、HTTP method/path/status/error manifest、六工具 schema/stable-code manifest 与合法/非法 golden，再在 `internal/companion/contract_fixtures_test.go` 写 RED consistency tests，钉 strict object、identity 例外、canonical/wire size，以及 mine 接受 Chest/Furnace、拒农业/火把/无掉落/未交付多掉落的既有语义；只实现 fixtures/validator test，不实现 transport，以 `go test ./internal/companion -run 'ContractFixture' -count=1` 验证。
 
 ## Task 2: Python scaffold, configuration and domain models
 
