@@ -21,6 +21,99 @@
       "minimum": 1,
       "maximum": 18446744073709551615
     },
+    "instruction_text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "x-mornlea-rules": [
+        {
+          "name": "text",
+          "valid_utf8": true,
+          "min_utf8_bytes": 1,
+          "max_utf8_bytes": 1024,
+          "no_unicode_control": true,
+          "non_blank": true
+        }
+      ]
+    },
+    "persona_text": {
+      "type": "string",
+      "maxLength": 4096,
+      "x-mornlea-rules": [
+        {
+          "name": "text",
+          "valid_utf8": true,
+          "max_utf8_bytes": 4096,
+          "no_nul": true
+        }
+      ]
+    },
+    "dialogue_line": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "x-mornlea-rules": [
+        {
+          "name": "text",
+          "valid_utf8": true,
+          "min_utf8_bytes": 1,
+          "max_utf8_bytes": 256,
+          "no_nul": true,
+          "no_unicode_control": true,
+          "no_edge_unicode_whitespace": true
+        }
+      ]
+    },
+    "memory_summary": {
+      "type": "string",
+      "maxLength": 2048,
+      "x-mornlea-rules": [
+        {
+          "name": "text",
+          "valid_utf8": true,
+          "max_utf8_bytes": 2048,
+          "no_nul": true
+        }
+      ]
+    },
+    "mcp_capability": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "x-mornlea-rules": [
+        {
+          "name": "text",
+          "valid_utf8": true,
+          "min_utf8_bytes": 1,
+          "max_utf8_bytes": 512,
+          "no_unicode_control": true
+        }
+      ]
+    },
+    "mcp_endpoint": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "format": "uri",
+      "x-mornlea-rules": [
+        {
+          "name": "text",
+          "valid_utf8": true,
+          "min_utf8_bytes": 1,
+          "max_utf8_bytes": 256,
+          "no_unicode_control": true
+        },
+        {
+          "name": "loopback_mcp_url",
+          "scheme": "http",
+          "path": "/mcp",
+          "port_required": true,
+          "forbid_userinfo": true,
+          "forbid_query": true,
+          "forbid_fragment": true
+        }
+      ]
+    },
     "position": {
       "type": "array",
       "minItems": 3,
@@ -133,9 +226,9 @@
         "snapshot_id": {"$ref": "#/$defs/uuid_v4"},
         "snapshot_digest": {"$ref": "#/$defs/sha256"},
         "deadline_unix_ms": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
-        "mcp_endpoint": {"type": "string", "minLength": 1, "maxLength": 256, "format": "uri"},
-        "mcp_capability": {"type": "string", "minLength": 1, "maxLength": 512},
-        "instruction": {"type": "string", "minLength": 1, "maxLength": 1024}
+        "mcp_endpoint": {"$ref": "#/$defs/mcp_endpoint"},
+        "mcp_capability": {"$ref": "#/$defs/mcp_capability"},
+        "instruction": {"$ref": "#/$defs/instruction_text"}
       }
     },
     "plan_response": {
@@ -156,7 +249,7 @@
         "plan": {"$ref": "urn:mornlea:companion-agent:mcp-tools:v1#/$defs/plan"}
       }
     },
-    "dialogue_fact_node": {
+    "dialogue_nonterminal_fact_node": {
       "oneOf": [
         {
           "type": "object",
@@ -176,16 +269,6 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "state", "reason"],
-          "properties": {
-            "kind": {"const": "terminal"},
-            "state": {"enum": ["completed", "failed", "timed_out", "stopped"]},
-            "reason": {"enum": ["none", "planner_unavailable", "invalid_plan", "path_unreachable", "world_changed", "inventory_full"]}
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
           "required": ["kind"],
           "properties": {"kind": {"const": "first_arrival"}}
         },
@@ -195,6 +278,36 @@
           "required": ["kind"],
           "properties": {"kind": {"const": "idle"}}
         }
+      ]
+    },
+    "dialogue_terminal_fact_node": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "state", "reason"],
+          "properties": {
+            "kind": {"const": "terminal"},
+            "state": {"enum": ["completed", "timed_out", "stopped"]},
+            "reason": {"const": "none"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "state", "reason"],
+          "properties": {
+            "kind": {"const": "terminal"},
+            "state": {"const": "failed"},
+            "reason": {"enum": ["planner_unavailable", "invalid_plan", "path_unreachable", "world_changed", "inventory_full"]}
+          }
+        }
+      ]
+    },
+    "dialogue_fact_node": {
+      "oneOf": [
+        {"$ref": "#/$defs/dialogue_nonterminal_fact_node"},
+        {"$ref": "#/$defs/dialogue_terminal_fact_node"}
       ]
     },
     "dialogue_environment": {
@@ -231,7 +344,7 @@
         }
       }
     },
-    "dialogue_request": {
+    "dialogue_nonterminal_request": {
       "type": "object",
       "additionalProperties": false,
       "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "run_id", "companion_id", "generation", "memory_epoch", "deadline_unix_ms", "persona", "fact_node", "environment", "terminal"],
@@ -246,11 +359,38 @@
         "generation": {"$ref": "#/$defs/positive_uint64"},
         "memory_epoch": {"$ref": "#/$defs/positive_uint64"},
         "deadline_unix_ms": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
-        "persona": {"type": "string", "maxLength": 4096},
-        "fact_node": {"$ref": "#/$defs/dialogue_fact_node"},
+        "persona": {"$ref": "#/$defs/persona_text"},
+        "fact_node": {"$ref": "#/$defs/dialogue_nonterminal_fact_node"},
         "environment": {"$ref": "#/$defs/dialogue_environment"},
-        "terminal": {"type": "boolean"}
+        "terminal": {"const": false}
       }
+    },
+    "dialogue_terminal_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "run_id", "companion_id", "generation", "memory_epoch", "deadline_unix_ms", "persona", "fact_node", "environment", "terminal"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_id": {"$ref": "#/$defs/uuid_v4"},
+        "run_id": {"$ref": "#/$defs/uuid_v4"},
+        "companion_id": {"$ref": "#/$defs/uuid_v4"},
+        "generation": {"$ref": "#/$defs/positive_uint64"},
+        "memory_epoch": {"$ref": "#/$defs/positive_uint64"},
+        "deadline_unix_ms": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+        "persona": {"$ref": "#/$defs/persona_text"},
+        "fact_node": {"$ref": "#/$defs/dialogue_terminal_fact_node"},
+        "environment": {"$ref": "#/$defs/dialogue_environment"},
+        "terminal": {"const": true}
+      }
+    },
+    "dialogue_request": {
+      "oneOf": [
+        {"$ref": "#/$defs/dialogue_nonterminal_request"},
+        {"$ref": "#/$defs/dialogue_terminal_request"}
+      ]
     },
     "memory_proposal": {
       "type": "object",
@@ -259,12 +399,10 @@
       "properties": {
         "operation_id": {"$ref": "#/$defs/uuid_v4"},
         "base_revision": {"$ref": "#/$defs/uint64"},
-        "summary": {"type": "string", "maxLength": 2048}
+        "summary": {"$ref": "#/$defs/memory_summary"}
       }
     },
-    "dialogue_response": {
-      "oneOf": [
-        {
+    "dialogue_nonterminal_response": {
           "type": "object",
           "additionalProperties": false,
           "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "run_id", "companion_id", "generation", "memory_epoch", "line"],
@@ -278,10 +416,10 @@
             "companion_id": {"$ref": "#/$defs/uuid_v4"},
             "generation": {"$ref": "#/$defs/positive_uint64"},
             "memory_epoch": {"$ref": "#/$defs/positive_uint64"},
-            "line": {"type": "string", "minLength": 1, "maxLength": 256}
+            "line": {"$ref": "#/$defs/dialogue_line"}
           }
-        },
-        {
+    },
+    "dialogue_terminal_response": {
           "type": "object",
           "additionalProperties": false,
           "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "run_id", "companion_id", "generation", "memory_epoch", "line", "memory_proposal"],
@@ -295,10 +433,14 @@
             "companion_id": {"$ref": "#/$defs/uuid_v4"},
             "generation": {"$ref": "#/$defs/positive_uint64"},
             "memory_epoch": {"$ref": "#/$defs/positive_uint64"},
-            "line": {"type": "string", "minLength": 1, "maxLength": 256},
+            "line": {"$ref": "#/$defs/dialogue_line"},
             "memory_proposal": {"$ref": "#/$defs/memory_proposal"}
           }
-        }
+    },
+    "dialogue_response": {
+      "oneOf": [
+        {"$ref": "#/$defs/dialogue_nonterminal_response"},
+        {"$ref": "#/$defs/dialogue_terminal_response"}
       ]
     },
     "memory_state": {
@@ -320,7 +462,7 @@
           "properties": {
             "revision": {"$ref": "#/$defs/positive_uint64"},
             "operation_id": {"$ref": "#/$defs/uuid_v4"},
-            "summary": {"type": "string", "maxLength": 2048}
+            "summary": {"$ref": "#/$defs/memory_summary"}
           }
         }
       ]
@@ -419,7 +561,7 @@
         "memory_epoch": {"$ref": "#/$defs/positive_uint64"},
         "base_revision": {"$ref": "#/$defs/uint64"},
         "operation_id": {"$ref": "#/$defs/uuid_v4"},
-        "summary": {"type": "string", "maxLength": 2048}
+        "summary": {"$ref": "#/$defs/memory_summary"}
       }
     },
     "memory_commit_response": {

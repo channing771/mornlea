@@ -7,17 +7,21 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"net"
 	"net/url"
 	"os"
 	pathpkg "path"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/pathfind"
 )
 
 // TestContractFixtureFilesExist 先锁定共享契约的固定入口。Go 与 Python 后续都从
@@ -68,6 +72,7 @@ func TestContractFixtureSchemasValidateGoldens(t *testing.T) {
 			t.Fatalf("%s draft = %q，want JSON Schema 2020-12", name, got)
 		}
 		contractAssertStrictObjects(t, document, name)
+		contractAssertKnownMornleaExtensions(t, document, name)
 	}
 
 	for _, fixture := range []struct {
@@ -91,15 +96,40 @@ func TestContractFixtureSchemasValidateGoldens(t *testing.T) {
 			}
 			seenNames[testCase.Name] = struct{}{}
 			value := contractDecodeRaw(t, testCase.Value, fixture.path+"/"+testCase.Name)
-			err := schemas.validateDefinition(fixture.document, testCase.Schema, value)
-			if err == nil {
-				err = contractValidateGoldenSemantics(testCase.Schema, value)
+			var context any
+			if len(testCase.Context) != 0 {
+				context = contractDecodeRaw(t, testCase.Context, fixture.path+"/"+testCase.Name+"/context")
 			}
+			err := schemas.validateDefinition(fixture.document, testCase.Schema, value, context)
 			if fixture.valid && err != nil {
 				t.Errorf("合法 golden %q 未通过 %s: %v", testCase.Name, testCase.Schema, err)
 			}
-			if !fixture.valid && err == nil {
+			if fixture.valid {
+				if testCase.ExpectedError != (contractExpectedError{}) {
+					t.Errorf("合法 golden %q 不得声明 expected_error", testCase.Name)
+				}
+				continue
+			}
+			if testCase.ExpectedError.Path == "" || testCase.ExpectedError.Keyword == "" {
+				t.Errorf("非法 golden %q 缺少 expected_error.path/keyword", testCase.Name)
+				continue
+			}
+			if err == nil {
 				t.Errorf("非法 golden %q 被 %s 接受（reason=%s）", testCase.Name, testCase.Schema, testCase.Reason)
+				continue
+			}
+			var validationError *contractValidationError
+			if !errors.As(err, &validationError) {
+				t.Errorf("非法 golden %q 返回非结构化错误: %v", testCase.Name, err)
+				continue
+			}
+			if validationError.Path != testCase.ExpectedError.Path ||
+				validationError.Keyword != testCase.ExpectedError.Keyword ||
+				(testCase.ExpectedError.Rule != "" && validationError.Rule != testCase.ExpectedError.Rule) {
+				t.Errorf("非法 golden %q 错误 = {%s %s %s}，want {%s %s %s}（reason=%s）",
+					testCase.Name, validationError.Path, validationError.Keyword, validationError.Rule,
+					testCase.ExpectedError.Path, testCase.ExpectedError.Keyword, testCase.ExpectedError.Rule,
+					testCase.Reason)
 			}
 		}
 	}
@@ -330,13 +360,49 @@ func TestContractFixtureHTTPManifestConsistency(t *testing.T) {
 	contractAssertSchemaFields(t, schemas, "acquire_request", wantProfiles["acquire"], []string{"lease_id"})
 	contractAssertSchemaFields(t, schemas, "lease_request", wantProfiles["lease"], []string{"run_id", "companion_id", "generation"})
 	contractAssertSchemaContainsRequired(t, schemas, "plan_request", wantProfiles["plan_run"])
-	contractAssertSchemaContainsRequired(t, schemas, "dialogue_request", wantProfiles["dialogue_run"])
+	contractAssertSchemaContainsRequired(t, schemas, "dialogue_nonterminal_request", wantProfiles["dialogue_run"])
+	contractAssertSchemaContainsRequired(t, schemas, "dialogue_terminal_request", wantProfiles["dialogue_run"])
 	contractAssertSchemaContainsRequired(t, schemas, "memory_commit_request", wantProfiles["memory_commit"])
 	contractAssertSchemaContainsRequired(t, schemas, "memory_delete_request", wantProfiles["memory_delete"])
 	contractAssertSchemaContainsRequired(t, schemas, "memory_reconcile_active_request", wantProfiles["memory_reconcile"])
 	contractAssertSchemaContainsRequired(t, schemas, "memory_reconcile_inactive_request", wantProfiles["memory_reconcile"])
 	contractAssertSchemaFields(t, schemas, "cancel_request", wantProfiles["cancel"], []string{"companion_id", "generation", "memory_epoch"})
 	contractAssertSchemaFields(t, schemas, "error_response", append(wantProfiles["error"], "error"), []string{"client_instance_id", "namespace_id", "lease_id", "run_id", "companion_id"})
+
+	dialogueRoute := contractFindObjectByStringField(t, routes, "operation", "dialogue", "http routes")
+	variants := contractObject(t, dialogueRoute["request_response_variants"], "dialogue request/response variants")
+	if got := contractString(t, variants["discriminator"], "dialogue discriminator"); got != "terminal" {
+		t.Fatalf("Dialogue discriminator = %q，want terminal", got)
+	}
+	wantVariants := []struct {
+		value             bool
+		request, response string
+		proposal          string
+	}{
+		{false, "dialogue_nonterminal_request", "dialogue_nonterminal_response", "forbidden"},
+		{true, "dialogue_terminal_request", "dialogue_terminal_response", "required"},
+	}
+	rawVariants := contractArray(t, variants["variants"], "dialogue variants")
+	if len(rawVariants) != len(wantVariants) {
+		t.Fatalf("Dialogue variant 数 = %d，want %d", len(rawVariants), len(wantVariants))
+	}
+	for index, want := range wantVariants {
+		variant := contractObject(t, rawVariants[index], fmt.Sprintf("dialogue variants[%d]", index))
+		if got := contractBool(t, variant["value"], "dialogue variant value"); got != want.value {
+			t.Errorf("Dialogue variant[%d] value = %v，want %v", index, got, want.value)
+		}
+		for field, expected := range map[string]string{
+			"request_schema":  want.request,
+			"response_schema": want.response,
+			"memory_proposal": want.proposal,
+		} {
+			if got := contractString(t, variant[field], "dialogue variant "+field); got != expected {
+				t.Errorf("Dialogue variant[%d] %s = %q，want %q", index, field, got, expected)
+			}
+		}
+		schemas.definition(t, "http-v1/schema.json", want.request)
+		schemas.definition(t, "http-v1/schema.json", want.response)
+	}
 }
 
 // TestContractFixtureMCPManifestConsistency 锁定共同 wire、SDK 前 allowlist、仅
@@ -354,17 +420,53 @@ func TestContractFixtureMCPManifestConsistency(t *testing.T) {
 	if got := contractString(t, manifest["transport"], "mcp transport"); got != "streamable_http" {
 		t.Fatalf("MCP transport = %q，want streamable_http", got)
 	}
+	if got := contractString(t, manifest["endpoint_path"], "mcp endpoint path"); got != "/mcp" {
+		t.Fatalf("MCP endpoint path = %q，want /mcp", got)
+	}
 	for field, want := range map[string]bool{"stateless": true, "json_response": true, "sse": false, "sessions": false} {
 		if got := contractBool(t, manifest[field], "mcp "+field); got != want {
 			t.Errorf("MCP %s = %v，want %v", field, got, want)
 		}
 	}
-	origin := contractObject(t, manifest["origin"], "mcp origin")
+	network := contractObject(t, manifest["network"], "mcp network")
+	if got := contractString(t, network["scheme"], "mcp network scheme"); got != "http" {
+		t.Errorf("MCP scheme = %q，want http", got)
+	}
+	if got := contractString(t, network["bind_host"], "mcp bind host"); got != "loopback_ip_literal" {
+		t.Errorf("MCP bind host = %q，want loopback_ip_literal", got)
+	}
+	if got := contractString(t, network["request_host"], "mcp request Host"); got != "listener_authority" {
+		t.Errorf("MCP request Host policy = %q，want listener_authority", got)
+	}
+	if contractBool(t, network["redirects"], "mcp redirects") {
+		t.Error("MCP 不得跟随 redirect")
+	}
+	origin := contractObject(t, network["origin"], "mcp origin")
 	if !contractBool(t, origin["missing_allowed"], "mcp missing Origin") {
 		t.Fatal("Python httpx 不带 Origin 时必须合法")
 	}
 	if got := contractString(t, origin["present_value"], "mcp present Origin"); got != "listener_loopback_origin" {
 		t.Fatalf("MCP present Origin policy = %q", got)
+	}
+	authentication := contractObject(t, manifest["authentication"], "mcp authentication")
+	if got := contractString(t, authentication["scheme"], "mcp auth scheme"); got != "bearer" {
+		t.Errorf("MCP auth scheme = %q，want bearer", got)
+	}
+	if got := contractString(t, authentication["credential"], "mcp auth credential"); got != "per_run_capability" {
+		t.Errorf("MCP credential = %q，want per_run_capability", got)
+	}
+	if !contractBool(t, authentication["required"], "mcp auth required") {
+		t.Error("MCP Bearer capability 必须为 required")
+	}
+	protocolHeader := contractObject(t, manifest["protocol_header"], "mcp protocol header")
+	if got := contractString(t, protocolHeader["name"], "mcp protocol header name"); got != "Mcp-Protocol-Version" {
+		t.Errorf("MCP protocol header = %q，want Mcp-Protocol-Version", got)
+	}
+	if !contractBool(t, protocolHeader["required_after_initialize"], "mcp protocol header required") {
+		t.Error("initialize 后必须携带 MCP protocol header")
+	}
+	if got := contractString(t, protocolHeader["value"], "mcp protocol header value"); got != "2025-11-25" {
+		t.Errorf("MCP protocol header value = %q，want 2025-11-25", got)
 	}
 
 	methods := contractObject(t, manifest["methods"], "mcp methods")
@@ -450,6 +552,12 @@ func TestContractFixtureMCPManifestConsistency(t *testing.T) {
 		if got := contractBool(t, tool["fixed_graph_call"], name+" fixed graph call"); got != want.fixed {
 			t.Errorf("MCP tool %s fixed_graph_call = %v，want %v", name, got, want.fixed)
 		}
+		if name == "find_visible_blocks" || name == "query_terrain" {
+			resultSchema := contractObject(t, schemas.definition(t, "mcp-v1/schema.json", result), name+" result schema")
+			if !contractJSONEqual(tool["semantic_rules"], resultSchema["x-mornlea-rules"]) {
+				t.Errorf("MCP tool %s semantic_rules 未与 result schema 单源一致", name)
+			}
+		}
 	}
 	if maxCanonical != 72<<10 {
 		t.Fatalf("最大 canonical tool result = %d，want 72 KiB", maxCanonical)
@@ -473,10 +581,25 @@ func TestContractFixtureMCPManifestConsistency(t *testing.T) {
 	if len(validatorBranches) != 2 {
 		t.Fatalf("validate_plan result oneOf 分支 = %d，want 2", len(validatorBranches))
 	}
-	failureBranch := contractObject(t, validatorBranches[1], "validate_plan failure branch")
+	failureBranch := contractObject(t, schemas.definition(t, "mcp-v1/schema.json", "validate_plan_failure_result"), "validate_plan failure branch")
 	failureProperties := contractObject(t, failureBranch["properties"], "validate_plan failure properties")
 	validatorCodeSchema := contractObject(t, failureProperties["code"], "validate_plan failure code")
 	contractAssertStringList(t, validatorCodeSchema["enum"], wantCodes, "validate_plan schema codes")
+	planSchema := contractObject(t, schemas.definition(t, "mcp-v1/schema.json", "plan"), "plan schema")
+	planProperties := contractObject(t, planSchema["properties"], "plan properties")
+	stepsSchema := contractObject(t, planProperties["steps"], "plan steps")
+	stepItems := contractObject(t, stepsSchema["items"], "plan step items")
+	stepBranches := contractArray(t, stepItems["oneOf"], "plan step branches")
+	wantStepRefs := []string{"#/$defs/go_to_step", "#/$defs/mine_step", "#/$defs/place_step", "#/$defs/follow_step"}
+	if len(stepBranches) != len(wantStepRefs) {
+		t.Fatalf("plan step branch 数 = %d，want %d", len(stepBranches), len(wantStepRefs))
+	}
+	for index, wantRef := range wantStepRefs {
+		branch := contractObject(t, stepBranches[index], fmt.Sprintf("plan step branch[%d]", index))
+		if got := contractString(t, branch["$ref"], "plan step ref"); got != wantRef {
+			t.Errorf("plan step branch[%d] = %q，want %q", index, got, wantRef)
+		}
+	}
 	runtimeFields := []string{"snapshot_id", "namespace_id", "companion_id", "capability"}
 	contractAssertStringList(t, manifest["runtime_injected_fields"], runtimeFields, "MCP runtime-injected identity")
 	for name, want := range wantTools {
@@ -507,6 +630,111 @@ func TestContractFixtureMCPManifestConsistency(t *testing.T) {
 	}
 	if got := contractString(t, dependencies["python_mcp"], "python mcp range"); got != ">=1.28.1,<2" {
 		t.Errorf("Python MCP range = %q，want >=1.28.1,<2", got)
+	}
+}
+
+// TestContractFixtureMCPDomainLimits 防止共享 schema 脱离 Go 权威常量，导致
+// 冻结快照或物品堆在跨语言边界被静默扩大。
+func TestContractFixtureMCPDomainLimits(t *testing.T) {
+	t.Parallel()
+
+	schemas := contractLoadSchemas(t)
+	contextResult := contractObject(t, schemas.definition(t, "mcp-v1/schema.json", "get_planning_context_result"), "planning context result")
+	contextProperties := contractObject(t, contextResult["properties"], "planning context properties")
+	chunkRevisions := contractObject(t, contextProperties["chunk_revisions"], "chunk revisions")
+	if got := contractInt64(t, chunkRevisions["maxItems"], "chunk revisions maxItems"); got != pathfind.MaxPlanChunkRevisions {
+		t.Fatalf("chunk_revisions maxItems = %d，want pathfind.MaxPlanChunkRevisions=%d", got, pathfind.MaxPlanChunkRevisions)
+	}
+
+	inventoryResult := contractObject(t, schemas.definition(t, "mcp-v1/schema.json", "inspect_inventory_result"), "inventory result")
+	inventoryProperties := contractObject(t, inventoryResult["properties"], "inventory result properties")
+	slots := contractObject(t, inventoryProperties["slots"], "inventory slots")
+	slotSchema := contractObject(t, slots["items"], "inventory slot schema")
+	slotProperties := contractObject(t, slotSchema["properties"], "inventory slot properties")
+	count := contractObject(t, slotProperties["count"], "inventory count")
+	if got := contractInt64(t, count["maximum"], "inventory count maximum"); got != core.MaxStackCount {
+		t.Fatalf("inventory count maximum = %d，want core.MaxStackCount=%d", got, core.MaxStackCount)
+	}
+}
+
+// TestContractFixtureTextRulesMatchAuthority 把跨语言文本字段的 UTF-8 字节
+// 上限与既有 Go 校验常量对齐，并钉住台词、人设与摘要的字符纪律。
+func TestContractFixtureTextRulesMatchAuthority(t *testing.T) {
+	t.Parallel()
+
+	schemas := contractLoadSchemas(t)
+	cases := []struct {
+		document   string
+		definition string
+		maximum    int64
+		flags      []string
+	}{
+		{"http-v1/schema.json", "instruction_text", MaxPlanCommandBytes, []string{"valid_utf8", "no_unicode_control", "non_blank"}},
+		{"http-v1/schema.json", "persona_text", MaxPersonaBytes, []string{"valid_utf8", "no_nul"}},
+		{"http-v1/schema.json", "dialogue_line", MaxDialogueLineBytes, []string{"valid_utf8", "no_nul", "no_unicode_control", "no_edge_unicode_whitespace"}},
+		{"http-v1/schema.json", "memory_summary", MaxDialogueSummaryBytes, []string{"valid_utf8", "no_nul"}},
+		{"http-v1/schema.json", "mcp_capability", 512, []string{"valid_utf8", "no_unicode_control"}},
+		{"http-v1/schema.json", "mcp_endpoint", 256, []string{"valid_utf8", "no_unicode_control"}},
+		{"mcp-v1/schema.json", "instruction_text", MaxPlanCommandBytes, []string{"valid_utf8", "no_unicode_control", "non_blank"}},
+		{"mcp-v1/schema.json", "plan_summary", MaxPlanSummaryBytes, []string{"valid_utf8", "no_unicode_control", "non_blank"}},
+		{"mcp-v1/schema.json", "task_status_text", MaxPlanTaskStatusBytes, []string{"valid_utf8", "no_unicode_control"}},
+		{"mcp-v1/schema.json", "bounded_name", 64, []string{"valid_utf8", "no_unicode_control", "non_blank"}},
+		{"mcp-v1/schema.json", "validator_hint", 256, []string{"valid_utf8"}},
+	}
+	for _, testCase := range cases {
+		schema := contractObject(t, schemas.definition(t, testCase.document, testCase.definition), testCase.definition)
+		rule := contractFindRule(t, schema, "text", testCase.definition)
+		if got := contractInt64(t, rule["max_utf8_bytes"], testCase.definition+" max UTF-8 bytes"); got != testCase.maximum {
+			t.Errorf("%s max_utf8_bytes = %d，want %d", testCase.definition, got, testCase.maximum)
+		}
+		for _, flag := range testCase.flags {
+			if !contractBool(t, rule[flag], testCase.definition+" "+flag) {
+				t.Errorf("%s 必须声明 %s=true", testCase.definition, flag)
+			}
+		}
+	}
+}
+
+// TestContractFixtureRejectsUnknownMachineRules 保证新增私有扩展或规则不会被
+// 测试 validator 静默当作普通 annotation，从而掩盖未实现的跨语言语义。
+func TestContractFixtureRejectsUnknownMachineRules(t *testing.T) {
+	t.Parallel()
+
+	schemas := contractLoadSchemas(t)
+	tests := []struct {
+		name    string
+		schema  map[string]any
+		keyword string
+		rule    string
+	}{
+		{
+			name:    "未知扩展",
+			schema:  map[string]any{"type": "string", "x-mornlea-not-implemented": true},
+			keyword: "x-mornlea-extension",
+			rule:    "x-mornlea-not-implemented",
+		},
+		{
+			name: "未知规则",
+			schema: map[string]any{
+				"type":            "string",
+				"x-mornlea-rules": []any{map[string]any{"name": "not_implemented"}},
+			},
+			keyword: "x-mornlea-rules",
+			rule:    "not_implemented",
+		},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := schemas.validate("http-v1/schema.json", testCase.schema, "value", "$", nil)
+			var validationError *contractValidationError
+			if !errors.As(err, &validationError) {
+				t.Fatalf("未知 machine rule 返回非结构化错误: %v", err)
+			}
+			if validationError.Path != "$" || validationError.Keyword != testCase.keyword || validationError.Rule != testCase.rule {
+				t.Fatalf("未知 machine rule 错误 = {%s %s %s}，want {$ %s %s}",
+					validationError.Path, validationError.Keyword, validationError.Rule, testCase.keyword, testCase.rule)
+			}
+		})
 	}
 }
 
@@ -589,11 +817,33 @@ func TestContractFixtureMineValidationMatchesAuthority(t *testing.T) {
 type contractGolden struct {
 	Contract string `json:"contract"`
 	Cases    []struct {
-		Name   string          `json:"name"`
-		Schema string          `json:"schema"`
-		Reason string          `json:"reason,omitempty"`
-		Value  json.RawMessage `json:"value"`
+		Name          string                `json:"name"`
+		Schema        string                `json:"schema"`
+		Reason        string                `json:"reason,omitempty"`
+		Value         json.RawMessage       `json:"value"`
+		Context       json.RawMessage       `json:"context,omitempty"`
+		ExpectedError contractExpectedError `json:"expected_error,omitempty"`
 	} `json:"cases"`
+}
+
+type contractExpectedError struct {
+	Path    string `json:"path"`
+	Keyword string `json:"keyword"`
+	Rule    string `json:"rule,omitempty"`
+}
+
+type contractValidationError struct {
+	Path    string
+	Keyword string
+	Rule    string
+	Detail  string
+}
+
+func (err *contractValidationError) Error() string {
+	if err.Rule != "" {
+		return fmt.Sprintf("%s: %s/%s: %s", err.Path, err.Keyword, err.Rule, err.Detail)
+	}
+	return fmt.Sprintf("%s: %s: %s", err.Path, err.Keyword, err.Detail)
 }
 
 type contractSchemaSet struct {
@@ -622,74 +872,92 @@ func (schemas contractSchemaSet) definition(t *testing.T, document, name string)
 	return definition
 }
 
-func (schemas contractSchemaSet) validateDefinition(document, name string, value any) error {
+func (schemas contractSchemaSet) validateDefinition(document, name string, value, context any) error {
 	root, ok := schemas.documents[document]
 	if !ok {
-		return fmt.Errorf("缺少 schema document %q", document)
+		return contractViolation("$", "schema", "document", "缺少 schema document %q", document)
 	}
 	definitions, ok := root["$defs"].(map[string]any)
 	if !ok {
-		return fmt.Errorf("%s 缺少 $defs", document)
+		return contractViolation("$", "schema", "$defs", "%s 缺少 $defs", document)
 	}
 	schema, ok := definitions[name]
 	if !ok {
-		return fmt.Errorf("%s 缺少 definition %q", document, name)
+		return contractViolation("$", "schema", "definition", "%s 缺少 definition %q", document, name)
 	}
-	return schemas.validate(document, schema, value, "$")
+	return schemas.validate(document, schema, value, "$", context)
 }
 
 // validate 实现本 change schema 实际使用的 JSON Schema 2020-12 关键字。它
 // 刻意留在测试文件，作用是交叉检查 fixtures，不成为未来 transport 的旁路。
-func (schemas contractSchemaSet) validate(document string, rawSchema, value any, valuePath string) error {
+func (schemas contractSchemaSet) validate(document string, rawSchema, value any, valuePath string, context any) error {
 	switch schema := rawSchema.(type) {
 	case bool:
 		if schema {
 			return nil
 		}
-		return fmt.Errorf("%s 被 false schema 拒绝", valuePath)
+		return contractViolation(valuePath, "falseSchema", "", "被 false schema 拒绝")
 	case map[string]any:
+		for keyword := range schema {
+			if strings.HasPrefix(keyword, "x-mornlea-") && keyword != "x-mornlea-rules" {
+				return contractViolation(valuePath, "x-mornlea-extension", keyword, "未知或未实现的扩展")
+			}
+		}
 		if rawRef, ok := schema["$ref"]; ok {
 			ref, ok := rawRef.(string)
 			if !ok {
-				return fmt.Errorf("%s $ref 不是字符串", valuePath)
+				return contractViolation(valuePath, "schema", "$ref", "$ref 不是字符串")
 			}
 			targetDocument, target, err := schemas.resolveRef(document, ref)
 			if err != nil {
-				return fmt.Errorf("%s: %w", valuePath, err)
+				return contractViolation(valuePath, "schema", "$ref", "%v", err)
 			}
-			return schemas.validate(targetDocument, target, value, valuePath)
+			return schemas.validate(targetDocument, target, value, valuePath, context)
 		}
 		if rawOneOf, ok := schema["oneOf"]; ok {
 			branches, ok := rawOneOf.([]any)
 			if !ok || len(branches) == 0 {
-				return fmt.Errorf("%s oneOf 非法", valuePath)
+				return contractViolation(valuePath, "schema", "oneOf", "oneOf 非法")
 			}
 			matched := 0
+			var best *contractValidationError
 			for _, branch := range branches {
-				if schemas.validate(document, branch, value, valuePath) == nil {
+				err := schemas.validate(document, branch, value, valuePath, context)
+				if err == nil {
 					matched++
+					continue
+				}
+				var candidate *contractValidationError
+				if errors.As(err, &candidate) && (best == nil || len(candidate.Path) > len(best.Path)) {
+					best = candidate
 				}
 			}
-			if matched != 1 {
-				return fmt.Errorf("%s 匹配 oneOf 分支数 %d，want 1", valuePath, matched)
+			if matched == 0 {
+				if best != nil {
+					return best
+				}
+				return contractViolation(valuePath, "oneOf", "", "没有匹配分支")
+			}
+			if matched > 1 {
+				return contractViolation(valuePath, "oneOf", "", "匹配分支数 %d，want 1", matched)
 			}
 		}
 		if rawType, ok := schema["type"]; ok {
 			typeName, ok := rawType.(string)
 			if !ok {
-				return fmt.Errorf("%s schema type 不是字符串", valuePath)
+				return contractViolation(valuePath, "schema", "type", "schema type 不是字符串")
 			}
 			if err := contractValidateJSONType(typeName, value); err != nil {
-				return fmt.Errorf("%s: %w", valuePath, err)
+				return contractViolation(valuePath, "type", typeName, "%v", err)
 			}
 		}
 		if expected, ok := schema["const"]; ok && !contractJSONEqual(expected, value) {
-			return fmt.Errorf("%s 不等于 const", valuePath)
+			return contractViolation(valuePath, "const", "", "不等于 const")
 		}
 		if rawEnum, ok := schema["enum"]; ok {
 			values, ok := rawEnum.([]any)
 			if !ok {
-				return fmt.Errorf("%s enum 非数组", valuePath)
+				return contractViolation(valuePath, "schema", "enum", "enum 非数组")
 			}
 			found := false
 			for _, candidate := range values {
@@ -699,33 +967,33 @@ func (schemas contractSchemaSet) validate(document string, rawSchema, value any,
 				}
 			}
 			if !found {
-				return fmt.Errorf("%s 不在 enum 中", valuePath)
+				return contractViolation(valuePath, "enum", "", "不在 enum 中")
 			}
 		}
 		if text, ok := value.(string); ok {
 			if rawMin, exists := schema["minLength"]; exists && utf8.RuneCountInString(text) < int(contractSchemaInteger(rawMin)) {
-				return fmt.Errorf("%s 短于 minLength", valuePath)
+				return contractViolation(valuePath, "minLength", "", "短于 minLength")
 			}
 			if rawMax, exists := schema["maxLength"]; exists && utf8.RuneCountInString(text) > int(contractSchemaInteger(rawMax)) {
-				return fmt.Errorf("%s 长于 maxLength", valuePath)
+				return contractViolation(valuePath, "maxLength", "", "长于 maxLength")
 			}
 			if rawPattern, exists := schema["pattern"]; exists {
 				pattern, ok := rawPattern.(string)
 				if !ok {
-					return fmt.Errorf("%s pattern 不是字符串", valuePath)
+					return contractViolation(valuePath, "schema", "pattern", "pattern 不是字符串")
 				}
 				compiled, err := regexp.Compile(pattern)
 				if err != nil {
-					return fmt.Errorf("%s pattern 非法: %w", valuePath, err)
+					return contractViolation(valuePath, "schema", "pattern", "pattern 非法: %v", err)
 				}
 				if !compiled.MatchString(text) {
-					return fmt.Errorf("%s 不匹配 pattern", valuePath)
+					return contractViolation(valuePath, "pattern", "", "不匹配 pattern")
 				}
 			}
 			if format, exists := schema["format"]; exists && format == "uri" {
 				parsed, err := url.Parse(text)
 				if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-					return fmt.Errorf("%s 不是 absolute URI", valuePath)
+					return contractViolation(valuePath, "format", "uri", "不是 absolute URI")
 				}
 			}
 		}
@@ -733,22 +1001,22 @@ func (schemas contractSchemaSet) validate(document string, rawSchema, value any,
 			if rawMin, exists := schema["minimum"]; exists {
 				comparison, err := contractCompareJSONNumbers(number, rawMin)
 				if err != nil || comparison < 0 {
-					return fmt.Errorf("%s 小于 minimum", valuePath)
+					return contractViolation(valuePath, "minimum", "", "小于 minimum")
 				}
 			}
 			if rawMax, exists := schema["maximum"]; exists {
 				comparison, err := contractCompareJSONNumbers(number, rawMax)
 				if err != nil || comparison > 0 {
-					return fmt.Errorf("%s 大于 maximum", valuePath)
+					return contractViolation(valuePath, "maximum", "", "大于 maximum")
 				}
 			}
 		}
 		if array, ok := value.([]any); ok {
 			if rawMin, exists := schema["minItems"]; exists && len(array) < int(contractSchemaInteger(rawMin)) {
-				return fmt.Errorf("%s 少于 minItems", valuePath)
+				return contractViolation(valuePath, "minItems", "", "少于 minItems")
 			}
 			if rawMax, exists := schema["maxItems"]; exists && len(array) > int(contractSchemaInteger(rawMax)) {
-				return fmt.Errorf("%s 多于 maxItems", valuePath)
+				return contractViolation(valuePath, "maxItems", "", "多于 maxItems")
 			}
 			if unique, _ := schema["uniqueItems"].(bool); unique {
 				seen := make(map[string]struct{}, len(array))
@@ -756,7 +1024,7 @@ func (schemas contractSchemaSet) validate(document string, rawSchema, value any,
 					encoded, _ := json.Marshal(item)
 					key := string(encoded)
 					if _, duplicate := seen[key]; duplicate {
-						return fmt.Errorf("%s[%d] 违反 uniqueItems", valuePath, index)
+						return contractViolation(fmt.Sprintf("%s[%d]", valuePath, index), "uniqueItems", "", "数组成员重复")
 					}
 					seen[key] = struct{}{}
 				}
@@ -771,7 +1039,7 @@ func (schemas contractSchemaSet) validate(document string, rawSchema, value any,
 					itemSchema, hasSchema = rawItems, true
 				}
 				if hasSchema {
-					if err := schemas.validate(document, itemSchema, item, fmt.Sprintf("%s[%d]", valuePath, index)); err != nil {
+					if err := schemas.validate(document, itemSchema, item, fmt.Sprintf("%s[%d]", valuePath, index), context); err != nil {
 						return err
 					}
 				}
@@ -781,15 +1049,15 @@ func (schemas contractSchemaSet) validate(document string, rawSchema, value any,
 			if rawRequired, exists := schema["required"]; exists {
 				required, ok := rawRequired.([]any)
 				if !ok {
-					return fmt.Errorf("%s required 非数组", valuePath)
+					return contractViolation(valuePath, "schema", "required", "required 非数组")
 				}
 				for _, rawName := range required {
 					name, ok := rawName.(string)
 					if !ok {
-						return fmt.Errorf("%s required 成员不是字符串", valuePath)
+						return contractViolation(valuePath, "schema", "required", "required 成员不是字符串")
 					}
 					if _, exists := object[name]; !exists {
-						return fmt.Errorf("%s 缺少 required property %s", valuePath, name)
+						return contractViolation(valuePath+"."+name, "required", name, "缺少 required property")
 					}
 				}
 			}
@@ -798,19 +1066,265 @@ func (schemas contractSchemaSet) validate(document string, rawSchema, value any,
 				propertySchema, known := properties[name]
 				if !known {
 					if additional, exists := schema["additionalProperties"]; exists && additional == false {
-						return fmt.Errorf("%s 含未知 property %s", valuePath, name)
+						return contractViolation(valuePath+"."+name, "additionalProperties", "", "含未知 property")
 					}
 					continue
 				}
-				if err := schemas.validate(document, propertySchema, member, valuePath+"."+name); err != nil {
+				if err := schemas.validate(document, propertySchema, member, valuePath+"."+name, context); err != nil {
 					return err
 				}
 			}
 		}
+		if rules, exists := schema["x-mornlea-rules"]; exists {
+			if err := schemas.validateMornleaRules(document, rules, value, valuePath, context); err != nil {
+				return err
+			}
+		}
 		return nil
 	default:
-		return fmt.Errorf("%s schema 不是 object 或 boolean", valuePath)
+		return contractViolation(valuePath, "schema", "type", "schema 不是 object 或 boolean")
 	}
+}
+
+func contractViolation(path, keyword, rule, format string, args ...any) error {
+	return &contractValidationError{Path: path, Keyword: keyword, Rule: rule, Detail: fmt.Sprintf(format, args...)}
+}
+
+func (schemas contractSchemaSet) validateMornleaRules(document string, rawRules, value any, valuePath string, context any) error {
+	rules, ok := rawRules.([]any)
+	if !ok || len(rules) == 0 {
+		return contractViolation(valuePath, "schema", "x-mornlea-rules", "规则列表必须是非空 array")
+	}
+	for _, rawRule := range rules {
+		rule, ok := rawRule.(map[string]any)
+		if !ok {
+			return contractViolation(valuePath, "schema", "x-mornlea-rules", "规则必须是 object")
+		}
+		name, ok := rule["name"].(string)
+		if !ok || name == "" {
+			return contractViolation(valuePath, "schema", "x-mornlea-rules", "规则缺少 name")
+		}
+		var err error
+		switch name {
+		case "text":
+			err = contractValidateTextRule(rule, value, valuePath)
+		case "follow_must_be_last":
+			err = contractValidateFollowLastRule(rule, value, valuePath)
+		case "loopback_mcp_url":
+			err = contractValidateLoopbackMCPURLRule(rule, value, valuePath)
+		case "sorted_positions":
+			err = contractValidateSortedPositionsRule(rule, value, valuePath)
+		case "positions_match_context":
+			err = contractValidatePositionsMatchRule(rule, value, valuePath, context)
+		default:
+			return contractViolation(valuePath, "x-mornlea-rules", name, "未知或未实现的规则")
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func contractValidateTextRule(rule map[string]any, value any, valuePath string) error {
+	if err := contractRejectUnknownRuleFields(rule, "text", "name", "valid_utf8", "min_utf8_bytes", "max_utf8_bytes", "no_nul", "no_unicode_control", "no_edge_unicode_whitespace", "non_blank"); err != nil {
+		return contractViolation(valuePath, "schema", "text", "%v", err)
+	}
+	text, ok := value.(string)
+	if !ok {
+		return contractViolation(valuePath, "x-mornlea-rules", "text.type", "text rule 只能用于 string")
+	}
+	if contractRuleBool(rule, "valid_utf8") && !utf8.ValidString(text) {
+		return contractViolation(valuePath, "x-mornlea-rules", "text.valid_utf8", "不是有效 UTF-8")
+	}
+	if minimum, ok := contractOptionalRuleInteger(rule, "min_utf8_bytes"); ok && int64(len(text)) < minimum {
+		return contractViolation(valuePath, "x-mornlea-rules", "text.min_utf8_bytes", "UTF-8 字节数 %d 小于 %d", len(text), minimum)
+	}
+	if maximum, ok := contractOptionalRuleInteger(rule, "max_utf8_bytes"); ok && int64(len(text)) > maximum {
+		return contractViolation(valuePath, "x-mornlea-rules", "text.max_utf8_bytes", "UTF-8 字节数 %d 超过 %d", len(text), maximum)
+	}
+	if contractRuleBool(rule, "no_nul") && strings.ContainsRune(text, 0) {
+		return contractViolation(valuePath, "x-mornlea-rules", "text.no_nul", "包含 NUL")
+	}
+	if contractRuleBool(rule, "no_unicode_control") {
+		for _, character := range text {
+			if unicode.IsControl(character) {
+				return contractViolation(valuePath, "x-mornlea-rules", "text.no_unicode_control", "包含 Unicode control")
+			}
+		}
+	}
+	if contractRuleBool(rule, "no_edge_unicode_whitespace") && strings.TrimSpace(text) != text {
+		return contractViolation(valuePath, "x-mornlea-rules", "text.no_edge_unicode_whitespace", "首尾包含 Unicode whitespace")
+	}
+	if contractRuleBool(rule, "non_blank") && strings.TrimSpace(text) == "" {
+		return contractViolation(valuePath, "x-mornlea-rules", "text.non_blank", "文本为空白")
+	}
+	return nil
+}
+
+func contractValidateFollowLastRule(rule map[string]any, value any, valuePath string) error {
+	if err := contractRejectUnknownRuleFields(rule, "follow_must_be_last", "name"); err != nil {
+		return contractViolation(valuePath, "schema", "follow_must_be_last", "%v", err)
+	}
+	plan, ok := value.(map[string]any)
+	if !ok {
+		return contractViolation(valuePath, "x-mornlea-rules", "follow_must_be_last", "规则只能用于 plan object")
+	}
+	steps, _ := plan["steps"].([]any)
+	for index, rawStep := range steps {
+		step, _ := rawStep.(map[string]any)
+		if step["kind"] == "follow" && index != len(steps)-1 {
+			return contractViolation(fmt.Sprintf("%s.steps[%d]", valuePath, index), "x-mornlea-rules", "follow_must_be_last", "follow 不是最后一步")
+		}
+	}
+	return nil
+}
+
+func contractValidateLoopbackMCPURLRule(rule map[string]any, value any, valuePath string) error {
+	if err := contractRejectUnknownRuleFields(rule, "loopback_mcp_url", "name", "scheme", "path", "port_required", "forbid_userinfo", "forbid_query", "forbid_fragment"); err != nil {
+		return contractViolation(valuePath, "schema", "loopback_mcp_url", "%v", err)
+	}
+	text, ok := value.(string)
+	if !ok {
+		return contractViolation(valuePath, "x-mornlea-rules", "loopback_mcp_url", "规则只能用于 string")
+	}
+	parsed, err := url.Parse(text)
+	if err != nil {
+		return contractViolation(valuePath, "x-mornlea-rules", "loopback_mcp_url.parse", "URL 解析失败")
+	}
+	if scheme, _ := rule["scheme"].(string); parsed.Scheme != scheme {
+		return contractViolation(valuePath, "x-mornlea-rules", "loopback_mcp_url.scheme", "scheme = %q", parsed.Scheme)
+	}
+	if contractRuleBool(rule, "forbid_userinfo") && parsed.User != nil {
+		return contractViolation(valuePath, "x-mornlea-rules", "loopback_mcp_url.userinfo", "包含 userinfo")
+	}
+	if contractRuleBool(rule, "forbid_query") && (parsed.RawQuery != "" || parsed.ForceQuery) {
+		return contractViolation(valuePath, "x-mornlea-rules", "loopback_mcp_url.query", "包含 query")
+	}
+	if contractRuleBool(rule, "forbid_fragment") && strings.Contains(text, "#") {
+		return contractViolation(valuePath, "x-mornlea-rules", "loopback_mcp_url.fragment", "包含 fragment")
+	}
+	if expectedPath, _ := rule["path"].(string); parsed.EscapedPath() != expectedPath {
+		return contractViolation(valuePath, "x-mornlea-rules", "loopback_mcp_url.path", "path = %q", parsed.EscapedPath())
+	}
+	ip := net.ParseIP(parsed.Hostname())
+	if ip == nil || !ip.IsLoopback() {
+		return contractViolation(valuePath, "x-mornlea-rules", "loopback_mcp_url.host", "host 不是 loopback IP literal")
+	}
+	if contractRuleBool(rule, "port_required") {
+		port, err := strconv.Atoi(parsed.Port())
+		if err != nil || port < 1 || port > 65535 {
+			return contractViolation(valuePath, "x-mornlea-rules", "loopback_mcp_url.port", "缺少或非法 port")
+		}
+	}
+	return nil
+}
+
+func contractValidateSortedPositionsRule(rule map[string]any, value any, valuePath string) error {
+	if err := contractRejectUnknownRuleFields(rule, "sorted_positions", "name", "array_property", "position_property", "axes", "strict"); err != nil {
+		return contractViolation(valuePath, "schema", "sorted_positions", "%v", err)
+	}
+	object, _ := value.(map[string]any)
+	arrayProperty, _ := rule["array_property"].(string)
+	positionProperty, _ := rule["position_property"].(string)
+	items, _ := object[arrayProperty].([]any)
+	axes, err := contractRuleStringList(rule["axes"])
+	if err != nil || len(axes) == 0 {
+		return contractViolation(valuePath, "schema", "sorted_positions", "axes 非法")
+	}
+	if !contractRuleBool(rule, "strict") {
+		return contractViolation(valuePath, "schema", "sorted_positions", "strict 必须为 true")
+	}
+	var previous map[string]any
+	for index, rawItem := range items {
+		item, _ := rawItem.(map[string]any)
+		position, _ := item[positionProperty].(map[string]any)
+		if previous != nil && contractComparePosition(previous, position, axes) >= 0 {
+			return contractViolation(fmt.Sprintf("%s.%s[%d].%s", valuePath, arrayProperty, index, positionProperty), "x-mornlea-rules", "sorted_positions", "坐标不是严格升序")
+		}
+		previous = position
+	}
+	return nil
+}
+
+func contractValidatePositionsMatchRule(rule map[string]any, value any, valuePath string, context any) error {
+	if err := contractRejectUnknownRuleFields(rule, "positions_match_context", "name", "context_property", "result_property", "position_property"); err != nil {
+		return contractViolation(valuePath, "schema", "positions_match_context", "%v", err)
+	}
+	object, _ := value.(map[string]any)
+	contextObject, ok := context.(map[string]any)
+	if !ok {
+		return contractViolation(valuePath, "x-mornlea-rules", "positions_match_context.context", "缺少 input context")
+	}
+	contextProperty, _ := rule["context_property"].(string)
+	resultProperty, _ := rule["result_property"].(string)
+	positionProperty, _ := rule["position_property"].(string)
+	expected, _ := contextObject[contextProperty].([]any)
+	results, _ := object[resultProperty].([]any)
+	if len(expected) != len(results) {
+		return contractViolation(valuePath+"."+resultProperty, "x-mornlea-rules", "positions_match_context.length", "结果数 %d 与输入数 %d 不同", len(results), len(expected))
+	}
+	for index, rawResult := range results {
+		result, _ := rawResult.(map[string]any)
+		if !contractJSONEqual(result[positionProperty], expected[index]) {
+			return contractViolation(fmt.Sprintf("%s.%s[%d].%s", valuePath, resultProperty, index, positionProperty), "x-mornlea-rules", "positions_match_context", "位置与输入顺序不一致")
+		}
+	}
+	return nil
+}
+
+func contractRejectUnknownRuleFields(rule map[string]any, ruleName string, allowed ...string) error {
+	known := make(map[string]struct{}, len(allowed))
+	for _, field := range allowed {
+		known[field] = struct{}{}
+	}
+	for field := range rule {
+		if _, ok := known[field]; !ok {
+			return fmt.Errorf("规则 %s 含未知字段 %s", ruleName, field)
+		}
+	}
+	return nil
+}
+
+func contractRuleBool(rule map[string]any, name string) bool {
+	value, _ := rule[name].(bool)
+	return value
+}
+
+func contractOptionalRuleInteger(rule map[string]any, name string) (int64, bool) {
+	value, ok := rule[name]
+	if !ok {
+		return 0, false
+	}
+	return contractSchemaInteger(value), true
+}
+
+func contractRuleStringList(value any) ([]string, error) {
+	raw, ok := value.([]any)
+	if !ok {
+		return nil, errors.New("不是 array")
+	}
+	result := make([]string, len(raw))
+	for index, item := range raw {
+		text, ok := item.(string)
+		if !ok {
+			return nil, errors.New("成员不是 string")
+		}
+		result[index] = text
+	}
+	return result, nil
+}
+
+func contractComparePosition(left, right map[string]any, axes []string) int {
+	for _, axis := range axes {
+		leftNumber, _ := left[axis].(json.Number)
+		rightNumber, _ := right[axis].(json.Number)
+		comparison, _ := contractCompareJSONNumbers(leftNumber, rightNumber)
+		if comparison != 0 {
+			return comparison
+		}
+	}
+	return 0
 }
 
 func (schemas contractSchemaSet) resolveRef(document, ref string) (string, any, error) {
@@ -1012,13 +1526,18 @@ func contractMapKeys[V any](values map[string]V) []string {
 
 func contractFindNamedObject(t *testing.T, values []any, name, label string) map[string]any {
 	t.Helper()
+	return contractFindObjectByStringField(t, values, "name", name, label)
+}
+
+func contractFindObjectByStringField(t *testing.T, values []any, field, expected, label string) map[string]any {
+	t.Helper()
 	for index, value := range values {
 		object := contractObject(t, value, fmt.Sprintf("%s[%d]", label, index))
-		if contractString(t, object["name"], label+" name") == name {
+		if contractString(t, object[field], label+" "+field) == expected {
 			return object
 		}
 	}
-	t.Fatalf("%s 找不到 name=%q", label, name)
+	t.Fatalf("%s 找不到 %s=%q", label, field, expected)
 	return nil
 }
 
@@ -1043,6 +1562,69 @@ func contractAssertStrictObjects(t *testing.T, value any, valuePath string) {
 			contractAssertStrictObjects(t, child, fmt.Sprintf("%s/%d", valuePath, index))
 		}
 	}
+}
+
+func contractAssertKnownMornleaExtensions(t *testing.T, value any, valuePath string) {
+	t.Helper()
+	knownRules := map[string]struct{}{
+		"text":                    {},
+		"follow_must_be_last":     {},
+		"loopback_mcp_url":        {},
+		"sorted_positions":        {},
+		"positions_match_context": {},
+	}
+	var visit func(any, string)
+	visit = func(current any, path string) {
+		switch typed := current.(type) {
+		case map[string]any:
+			for keyword, child := range typed {
+				if strings.HasPrefix(keyword, "x-mornlea-") {
+					if keyword != "x-mornlea-rules" {
+						t.Errorf("schema %s 声明未知或未实现扩展 %s", path, keyword)
+						continue
+					}
+					rules, ok := child.([]any)
+					if !ok || len(rules) == 0 {
+						t.Errorf("schema %s 的 x-mornlea-rules 必须是非空 array", path)
+						continue
+					}
+					for index, rawRule := range rules {
+						rule, ok := rawRule.(map[string]any)
+						if !ok {
+							t.Errorf("schema %s 的 machine rule[%d] 不是 object", path, index)
+							continue
+						}
+						name, ok := rule["name"].(string)
+						if !ok || name == "" {
+							t.Errorf("schema %s 的 machine rule[%d] 缺少 name", path, index)
+							continue
+						}
+						if _, ok := knownRules[name]; !ok {
+							t.Errorf("schema %s 声明未知或未实现 machine rule %q", path, name)
+						}
+					}
+				}
+				visit(child, path+"."+keyword)
+			}
+		case []any:
+			for index, child := range typed {
+				visit(child, fmt.Sprintf("%s[%d]", path, index))
+			}
+		}
+	}
+	visit(value, valuePath)
+}
+
+func contractFindRule(t *testing.T, schema map[string]any, name, label string) map[string]any {
+	t.Helper()
+	for index, rawRule := range contractArray(t, schema["x-mornlea-rules"], label+" rules") {
+		rule := contractObject(t, rawRule, fmt.Sprintf("%s rules[%d]", label, index))
+		if contractString(t, rule["name"], label+" rule name") == name {
+			return rule
+		}
+	}
+	t.Fatalf("%s 缺少 machine rule %q", label, name)
+	return nil
 }
 
 func contractAssertSchemaContainsRequired(t *testing.T, schemas contractSchemaSet, definition string, want []string) {
@@ -1194,38 +1776,4 @@ func contractJSONEqual(left, right any) bool {
 	leftJSON, leftErr := json.Marshal(left)
 	rightJSON, rightErr := json.Marshal(right)
 	return leftErr == nil && rightErr == nil && bytes.Equal(leftJSON, rightJSON)
-}
-
-// contractValidateGoldenSemantics 补足标准 JSON Schema 无法表达的有限序列
-// 约束。扩展规则仍在 checked-in schema 的 x-mornlea-rules 中显式声明。
-func contractValidateGoldenSemantics(schemaName string, value any) error {
-	object, ok := value.(map[string]any)
-	if !ok {
-		return nil
-	}
-	var rawPlan any
-	switch schemaName {
-	case "validate_plan_input", "plan_response":
-		rawPlan = object["plan"]
-	default:
-		return nil
-	}
-	plan, ok := rawPlan.(map[string]any)
-	if !ok {
-		return nil
-	}
-	steps, ok := plan["steps"].([]any)
-	if !ok {
-		return nil
-	}
-	for index, rawStep := range steps {
-		step, ok := rawStep.(map[string]any)
-		if !ok {
-			continue
-		}
-		if step["kind"] == "follow" && index != len(steps)-1 {
-			return fmt.Errorf("plan.steps[%d] follow 不是最后一步", index)
-		}
-	}
-	return nil
 }

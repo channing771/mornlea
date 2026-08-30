@@ -89,6 +89,11 @@
       }
     },
     {
+      "name": "planner MCP endpoint accepts bracketed IPv6 loopback",
+      "schema": "mcp_endpoint",
+      "value": "http://[::1]:45831/mcp"
+    },
+    {
       "name": "planner response echoes all run and snapshot identity",
       "schema": "plan_response",
       "value": {
@@ -132,6 +137,66 @@
       }
     },
     {
+      "name": "terminal dialogue request carries completed fact",
+      "schema": "dialogue_request",
+      "value": {
+        "contract_version": "v1",
+        "request_id": "11111111-1111-4111-8111-111111111111",
+        "client_instance_id": "22222222-2222-4222-8222-222222222222",
+        "namespace_id": "33333333-3333-4333-8333-333333333333",
+        "lease_id": "44444444-4444-4444-8444-444444444444",
+        "run_id": "55555555-5555-4555-8555-555555555555",
+        "companion_id": "66666666-6666-4666-8666-666666666666",
+        "generation": 9,
+        "memory_epoch": 7,
+        "deadline_unix_ms": 1800000000000,
+        "persona": "",
+        "fact_node": {"kind": "terminal", "state": "completed", "reason": "none"},
+        "environment": {"exposed_blocks": [], "heights": []},
+        "terminal": true
+      }
+    },
+    {
+      "name": "failed dialogue fact carries stable reason",
+      "schema": "dialogue_terminal_fact_node",
+      "value": {"kind": "terminal", "state": "failed", "reason": "path_unreachable"}
+    },
+    {
+      "name": "timed out dialogue fact has no failure reason",
+      "schema": "dialogue_terminal_fact_node",
+      "value": {"kind": "terminal", "state": "timed_out", "reason": "none"}
+    },
+    {
+      "name": "stopped dialogue fact has no failure reason",
+      "schema": "dialogue_terminal_fact_node",
+      "value": {"kind": "terminal", "state": "stopped", "reason": "none"}
+    },
+    {
+      "name": "start dialogue fact has no payload",
+      "schema": "dialogue_nonterminal_fact_node",
+      "value": {"kind": "start"}
+    },
+    {
+      "name": "go to progress dialogue fact is nonterminal",
+      "schema": "dialogue_nonterminal_fact_node",
+      "value": {"kind": "progress", "step_kind": "go_to"}
+    },
+    {
+      "name": "place progress dialogue fact is nonterminal",
+      "schema": "dialogue_nonterminal_fact_node",
+      "value": {"kind": "progress", "step_kind": "place"}
+    },
+    {
+      "name": "first arrival dialogue fact has no payload",
+      "schema": "dialogue_nonterminal_fact_node",
+      "value": {"kind": "first_arrival"}
+    },
+    {
+      "name": "idle dialogue fact is nonterminal",
+      "schema": "dialogue_nonterminal_fact_node",
+      "value": {"kind": "idle"}
+    },
+    {
       "name": "nonterminal dialogue response has no proposal",
       "schema": "dialogue_response",
       "value": {
@@ -167,6 +232,21 @@
           "summary": "为玩家采集并交付了石料。"
         }
       }
+    },
+    {
+      "name": "dialogue line accepts exact 256-byte UTF-8 boundary",
+      "schema": "dialogue_line",
+      "value": "界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界a"
+    },
+    {
+      "name": "persona accepts exact 4096-byte UTF-8 boundary",
+      "schema": "persona_text",
+      "value": "界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界a"
+    },
+    {
+      "name": "memory summary accepts exact 2048-byte UTF-8 boundary",
+      "schema": "memory_summary",
+      "value": "界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界aa"
     },
     {
       "name": "active memory reconcile carries mirror",

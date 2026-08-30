@@ -5,14 +5,30 @@
   "schema": "schema.json",
   "endpoint_path": "/mcp",
   "transport": "streamable_http",
+  "network": {
+    "scheme": "http",
+    "bind_host": "loopback_ip_literal",
+    "request_host": "listener_authority",
+    "redirects": false,
+    "origin": {
+      "missing_allowed": true,
+      "present_value": "listener_loopback_origin"
+    }
+  },
+  "authentication": {
+    "scheme": "bearer",
+    "credential": "per_run_capability",
+    "required": true
+  },
+  "protocol_header": {
+    "name": "Mcp-Protocol-Version",
+    "required_after_initialize": true,
+    "value": "2025-11-25"
+  },
   "stateless": true,
   "json_response": true,
   "sse": false,
   "sessions": false,
-  "origin": {
-    "missing_allowed": true,
-    "present_value": "listener_loopback_origin"
-  },
   "capabilities": {
     "tools": {"listChanged": false},
     "logging": false,
@@ -68,6 +84,15 @@
       "input_schema": "find_visible_blocks_input",
       "result_schema": "find_visible_blocks_result",
       "canonical_result_bytes": 16384,
+      "semantic_rules": [
+        {
+          "name": "sorted_positions",
+          "array_property": "matches",
+          "position_property": "position",
+          "axes": ["x", "y", "z"],
+          "strict": true
+        }
+      ],
       "result_item_limits": {"matches": 64}
     },
     {
@@ -77,6 +102,14 @@
       "input_schema": "query_terrain_input",
       "result_schema": "query_terrain_result",
       "canonical_result_bytes": 16384,
+      "semantic_rules": [
+        {
+          "name": "positions_match_context",
+          "context_property": "positions",
+          "result_property": "terrain",
+          "position_property": "position"
+        }
+      ],
       "result_item_limits": {"terrain": 64}
     },
     {

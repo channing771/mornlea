@@ -117,6 +117,23 @@
       "authentication": "bearer",
       "identity_profile": "dialogue_run",
       "request_schema": "dialogue_request",
+      "request_response_variants": {
+        "discriminator": "terminal",
+        "variants": [
+          {
+            "value": false,
+            "request_schema": "dialogue_nonterminal_request",
+            "response_schema": "dialogue_nonterminal_response",
+            "memory_proposal": "forbidden"
+          },
+          {
+            "value": true,
+            "request_schema": "dialogue_terminal_request",
+            "response_schema": "dialogue_terminal_response",
+            "memory_proposal": "required"
+          }
+        ]
+      },
       "responses": [{"status": 200, "schema": "dialogue_response"}],
       "error_codes": ["invalid_request", "unauthorized", "unsupported_version", "overloaded", "deadline_exceeded", "agent_unavailable", "invalid_model_output", "memory_conflict", "not_found", "internal_error"]
     },

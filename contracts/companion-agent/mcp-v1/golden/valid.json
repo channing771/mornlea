@@ -71,7 +71,7 @@
       "schema": "inspect_inventory_result",
       "value": {
         "slots": [
-          {"slot": 0, "item": "stone", "count": 32},
+          {"slot": 0, "item": "stone", "count": 64},
           {"slot": 4, "item": "chest", "count": 1}
         ]
       }
@@ -104,6 +104,12 @@
     {
       "name": "terrain result preserves input order",
       "schema": "query_terrain_result",
+      "context": {
+        "positions": [
+          {"x": 4, "y": 64, "z": -1},
+          {"x": 8, "y": 64, "z": -2}
+        ]
+      },
       "value": {
         "terrain": [
           {"position": {"x": 4, "y": 64, "z": -1}, "height": 63, "block_name": "air"},
@@ -146,6 +152,26 @@
         "code": "unmineable_target",
         "hint": "目标不属于当前快照可采掘语义"
       }
+    },
+    {
+      "name": "plan summary accepts exact 512-byte UTF-8 boundary",
+      "schema": "plan_summary",
+      "value": "界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界aa"
+    },
+    {
+      "name": "validator hint accepts exact 256-byte UTF-8 boundary",
+      "schema": "validator_hint",
+      "value": "界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界a"
+    },
+    {
+      "name": "planning instruction accepts exact 1024-byte UTF-8 boundary",
+      "schema": "instruction_text",
+      "value": "界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界a"
+    },
+    {
+      "name": "task status accepts exact 96-byte UTF-8 boundary",
+      "schema": "task_status_text",
+      "value": "界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界"
     }
   ]
 }
