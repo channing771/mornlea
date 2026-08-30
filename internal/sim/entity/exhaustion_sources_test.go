@@ -90,8 +90,8 @@ func TestJumpAccumulatesExhaustionExactlyOncePerTakeoff(t *testing.T) {
 }
 
 // TestJumpDisplacementWithinGroundProbeToleranceDoesNotAccumulateExhaustion 覆盖
-// `internal/sim/player.go` 起跳疲劳判据里 `&& !player.state.OnGround`（步末已经
-// 离地）这一分项——变更前该分项零测试覆盖：删掉它 `go test ./internal/sim` 全绿。
+// `internal/sim/entity/player.go` 起跳疲劳判据里 `&& !player.state.OnGround`（步末已经
+// 离地）这一分项——变更前该分项零测试覆盖：删掉它 `go test ./internal/sim/entity` 全绿。
 //
 // 判据注释论证的场景是「贴着低天花板按住 Jump，冲量每 tick 都被碰撞解算吃掉，
 // 玩家步末仍在地面上」。但这个具体场景在当前引擎里**无法用天花板复现**：

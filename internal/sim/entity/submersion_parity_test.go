@@ -16,7 +16,7 @@ import (
 // 「权威与预测一致」：同一份方块数据、同一玩家位置下，服务端 Dimension 与
 // 客户端 Mirror 算出的两个浸没标志逐位相同。
 //
-// 本用例刻意跨包（package sim 的测试引用 internal/client）：只有把两个
+// 本用例刻意跨包（`package entity` 的测试引用 `internal/client`）：只有把两个
 // FluidSource 实现放进同一个进程、喂同一份方块数据，才谈得上「逐位相同」。
 // 生产依赖方向未变，internal/archcheck 扫的是生产 import，不受影响。
 //

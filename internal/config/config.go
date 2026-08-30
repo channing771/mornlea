@@ -1292,11 +1292,11 @@ type Field struct {
 //   - sim.furnaceSmeltTicks 上限取 core.FurnaceSmeltTicks，超过会让
 //     world.FurnaceSlot.Valid() 拒绝该值，导致区块存盘失败。
 //   - sim.furnaceBurnTicks 上限取 core.FurnaceBurnTicks，理由同上。
-//   - sim.regenIntervalTicks 下限为 1：internal/sim/health_regen.go 用它做
+//   - sim.regenIntervalTicks 下限为 1：internal/sim/entity/health_regen.go 用它做
 //     取模除数，0 会在权威 tick 内 panic。
-//   - sim.drownDamageIntervalTicks 下限为 1：internal/sim/oxygen.go 用它做
+//   - sim.drownDamageIntervalTicks 下限为 1：internal/sim/entity/oxygen.go 用它做
 //     「距上次溺水伤害多少 tick」的比较阈值，0 会退化成氧气一归零就每 tick 扣血。
-//   - sim.spawnRadius 区间为 1..64：internal/sim/spawn.go 用它按平方分配切片，
+//   - sim.spawnRadius 区间为 1..64：internal/sim/entity/spawn.go 用它按平方分配切片，
 //     不钳制会触发巨额分配。
 //   - sim.dropPickupDelayTicks 与 sim.playerDropPickupDelayTicks 上限为 255：
 //     由持久化的 1 字节字段 world.DropSlot.PickupDelayTicks 决定。
@@ -1315,15 +1315,15 @@ type Field struct {
 //     取值同样正确，但那已是默认值的 20 倍，再大只会线性烧掉权威 tick 预算。
 //   - sim.cropGrowthChancePercent 区间为 0..100：它是一个百分比，两端都有明确
 //     语义（0 = 永不推进，100 = 抽中即推进），越界值没有任何解释。
-//   - sim.starvationDamageIntervalTicks 下限为 1：internal/sim/hunger.go 用它做
+//   - sim.starvationDamageIntervalTicks 下限为 1：internal/sim/entity/hunger.go 用它做
 //     「距上次饥饿伤害多少 tick」的比较阈值，0 会退化成饥饿一归零就每 tick 扣血。
-//   - sim.exhaustionThresholdMilli 下限为 1000：internal/sim/hunger.go 的
+//   - sim.exhaustionThresholdMilli 下限为 1000：internal/sim/entity/hunger.go 的
 //     applyExhaustion 以它为循环条件，0 会让循环在权威 tick 内永不退出。下限取
 //     1000（一点饱和度的千分位）而不是 1，是因为再小的阈值意味着「一次跳跃烧掉
 //     50 点饱和度」，那不是调参而是坏配置。
 //   - sim.regenHungerThreshold 区间为 0..core.MaxHunger：两端都是合法调试取值
 //     （0 = 取消门控，20 = 只有吃饱才回血），越界值没有语义。
-//   - sim.eatingTicks 下限为 1：internal/sim/eating.go 的 `advanceEating` 以它为
+//   - sim.eatingTicks 下限为 1：internal/sim/entity/eating.go 的 `advanceEating` 以它为
 //     结算阈值，而进度从 1 起，0 会让进食永远结算不了。上限 200（10 秒）只是
 //     操作区间，再长的进食在受伤中断规则下等于吃不完。
 func Fields() []Field {

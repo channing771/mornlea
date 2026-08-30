@@ -67,30 +67,6 @@ var requiredEntitySessionFields = map[string]string{
 	"container": "core.ContainerRef",
 }
 
-var simAuthorityMirrorNames = map[string]bool{
-	"sessions":               true,
-	"player":                 true,
-	"players":                true,
-	"companions":             true,
-	"hostiles":               true,
-	"inventory":              true,
-	"inventories":            true,
-	"container":              true,
-	"containers":             true,
-	"combat":                 true,
-	"drop":                   true,
-	"drops":                  true,
-	"lifecycle":              true,
-	"lifecycles":             true,
-	"viewcontainer":          true,
-	"hostilelight":           true,
-	"tramplepending":         true,
-	"dropkeyseen":            true,
-	"dropkeyscratch":         true,
-	"containerviewerscratch": true,
-	"dropsessionscratch":     true,
-}
-
 func TestSimAuthorityStateOwnershipStaysExplicit(t *testing.T) {
 	violations, err := simAuthorityViolationsFromTree(moduleRoot(t))
 	if err != nil {
@@ -154,6 +130,8 @@ type Engine struct {
 }
 func (engine *Engine) StepWithTunables() { pending := engine.realm.NewMutation(); finishRealmMutation(pending) }
 func finishRealmMutation(pending *realm.Mutation) { pending.Commit() }
+func mutateAsync(*realm.Mutation) {}
+func mutateLater(*realm.Mutation) {}
 `
 	goodEntity := `package entity
 import (
@@ -186,7 +164,26 @@ type State struct {
 		name   string
 		mutate func(string, string) (string, string)
 		wants  []string
+		clean  bool
 	}{
+		{
+			name: "runtime 安全标量 holder",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource, "type Engine struct {", "type safeScalarHolder struct { player SessionID }\nvar safeScalar safeScalarHolder\ntype Engine struct {", 1), entitySource
+			},
+			clean: true,
+		},
+		{
+			name: "runtime 无关嵌套绑定不遮蔽顶层 helper",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource,
+					"pending := engine.realm.NewMutation(); finishRealmMutation(pending)",
+					"{ finishRealmMutation := 1; _ = finishRealmMutation }; pending := engine.realm.NewMutation(); finishRealmMutation(pending)",
+					1,
+				), entitySource
+			},
+			clean: true,
+		},
 		{
 			name: "runtime 增加包级 owner",
 			mutate: func(runtimeSource, entitySource string) (string, string) {
@@ -195,11 +192,60 @@ type State struct {
 			wants: []string{"runtime package variable extraRealm 保存额外 realm.State owner"},
 		},
 		{
+			name: "runtime 经 helper 返回包级 owner",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource, "type Engine struct {", "func newRealmOwner() *realm.State { return realm.NewState(core.Overworld) }\nvar extraRealm = newRealmOwner()\ntype Engine struct {", 1), entitySource
+			},
+			wants: []string{"runtime package variable extraRealm 保存额外 realm.State owner"},
+		},
+		{
+			name: "runtime 经 IIFE 返回包级 owner",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource, "type Engine struct {", "var extraRealm = func() *realm.State { return realm.NewState(core.Overworld) }()\ntype Engine struct {", 1), entitySource
+			},
+			wants: []string{"runtime package variable extraRealm 保存额外 realm.State owner"},
+		},
+		{
+			name: "runtime 经括号 IIFE 返回包级 owner",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource, "type Engine struct {", "var extraRealm = (func() *realm.State { return realm.NewState(core.Overworld) })()\ntype Engine struct {", 1), entitySource
+			},
+			wants: []string{"runtime package variable extraRealm 保存额外 realm.State owner"},
+		},
+		{
+			name: "runtime 未解析 method 返回包级 owner",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource, "type Engine struct {", "type ownerFactory struct{}\nfunc (ownerFactory) Make() *realm.State { return realm.NewState(core.Overworld) }\nvar extraRealm = ownerFactory{}.Make()\ntype Engine struct {", 1), entitySource
+			},
+			wants: []string{"runtime package variable extraRealm 保存递归 mutable state"},
+		},
+		{
 			name: "runtime 增加包级实体镜像",
 			mutate: func(runtimeSource, entitySource string) (string, string) {
 				return strings.Replace(runtimeSource, "type Engine struct {", "var sessions map[SessionID]int\ntype Engine struct {", 1), entitySource
 			},
-			wants: []string{"runtime package variable sessions 复制 entity 权威状态"},
+			wants: []string{"runtime package variable sessions 保存递归 mutable state"},
+		},
+		{
+			name: "runtime 中性字段嵌套包级实体镜像",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource, "type Engine struct {", "type playerSnapshot struct{}\ntype hiddenMirror struct { nested struct { byID map[SessionID]playerSnapshot } }\nvar hidden hiddenMirror\ntype Engine struct {", 1), entitySource
+			},
+			wants: []string{"runtime package variable hidden 保存递归 mutable state"},
+		},
+		{
+			name: "runtime 固定数组包级实体镜像",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource, "type Engine struct {", "type playerSnapshot struct{}\nvar hidden [2]playerSnapshot\ntype Engine struct {", 1), entitySource
+			},
+			wants: []string{"runtime package variable hidden 保存递归 mutable state"},
+		},
+		{
+			name: "runtime opaque 包级实体镜像",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource, "type Engine struct {", "var hidden sync.Map\ntype Engine struct {", 1), entitySource
+			},
+			wants: []string{"runtime package variable hidden 保存递归 mutable state"},
 		},
 		{
 			name: "runtime 增加独立命名 owner holder",
@@ -231,9 +277,9 @@ type State struct {
 		{
 			name: "runtime 增加独立命名实体镜像",
 			mutate: func(runtimeSource, entitySource string) (string, string) {
-				return strings.Replace(runtimeSource, "type Engine struct {", "type authorityMirror struct { companions map[uint64]int }\ntype Engine struct {", 1), entitySource
+				return strings.Replace(runtimeSource, "type Engine struct {", "type authorityMirror struct { companions map[uint64]int }\nvar mirror authorityMirror\ntype Engine struct {", 1), entitySource
 			},
-			wants: []string{"runtime.authorityMirror.companions 复制 entity 权威状态"},
+			wants: []string{"runtime package variable mirror 保存递归 mutable state"},
 		},
 		{
 			name: "runtime 增加匿名包级 owner holder",
@@ -245,9 +291,9 @@ type State struct {
 		{
 			name: "runtime 增加嵌套匿名实体镜像",
 			mutate: func(runtimeSource, entitySource string) (string, string) {
-				return strings.Replace(runtimeSource, "type Engine struct {", "type authorityHolder struct { nested struct { hostiles map[uint64]int } }\ntype Engine struct {", 1), entitySource
+				return strings.Replace(runtimeSource, "type Engine struct {", "type authorityHolder struct { nested struct { hostiles map[uint64]int } }\nvar mirror authorityHolder\ntype Engine struct {", 1), entitySource
 			},
-			wants: []string{"runtime anonymous holder", ".hostiles 复制 entity 权威状态"},
+			wants: []string{"runtime package variable mirror 保存递归 mutable state"},
 		},
 		{
 			name: "runtime 复制 realm owner",
@@ -261,7 +307,7 @@ type State struct {
 			mutate: func(runtimeSource, entitySource string) (string, string) {
 				return strings.Replace(runtimeSource, "\twanted map[core.ChunkKey]struct{}", "\twanted map[core.ChunkKey]struct{}\n\tplayers map[SessionID]int", 1), entitySource
 			},
-			wants: []string{"runtime.subscriptionState.players 复制 entity 权威状态"},
+			wants: []string{"runtime.subscriptionState 出现未评审字段 players"},
 		},
 		{
 			name: "entity 丢失 hostile owner",
@@ -275,7 +321,7 @@ type State struct {
 			mutate: func(runtimeSource, entitySource string) (string, string) {
 				return strings.Replace(runtimeSource, "pending.Commit()", "pending.Commit(); pending.Commit()", 1), entitySource
 			},
-			wants: []string{"局部 mutation \"pending\" 的可达 Commit 次数=2"},
+			wants: []string{"helper \"finishRealmMutation\" 对 mutation 参数 \"pending\" 的确定性 Commit 次数=2"},
 		},
 		{
 			name: "runtime 内层重绑 mutation 局部名",
@@ -313,6 +359,153 @@ type State struct {
 			wants: []string{"(*Engine).StepWithTunables 直接创建 realm mutation 次数=0"},
 		},
 		{
+			name: "runtime 局部函数遮蔽 mutation helper",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource,
+					"pending := engine.realm.NewMutation(); finishRealmMutation(pending)",
+					"pending := engine.realm.NewMutation(); finishRealmMutation := func(*realm.Mutation) {}; finishRealmMutation(pending)",
+					1,
+				), entitySource
+			},
+			wants: []string{"(*Engine).StepWithTunables 局部绑定遮蔽顶层 helper \"finishRealmMutation\""},
+		},
+		{
+			name: "runtime mutation 创建后提前返回",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource,
+					"pending := engine.realm.NewMutation(); finishRealmMutation(pending)",
+					"pending := engine.realm.NewMutation(); if true { return }; finishRealmMutation(pending)",
+					1,
+				), entitySource
+			},
+			wants: []string{"(*Engine).StepWithTunables 在 mutation 创建或 helper 调用前存在提前退出"},
+		},
+		{
+			name: "runtime mutation 创建前提前返回",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource,
+					"pending := engine.realm.NewMutation(); finishRealmMutation(pending)",
+					"if true { return }; pending := engine.realm.NewMutation(); finishRealmMutation(pending)",
+					1,
+				), entitySource
+			},
+			wants: []string{"(*Engine).StepWithTunables 在 mutation 创建或 helper 调用前存在提前退出"},
+		},
+		{
+			name: "runtime mutation 创建后 goto 跳过提交",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource,
+					"pending := engine.realm.NewMutation(); finishRealmMutation(pending)",
+					"pending := engine.realm.NewMutation(); goto afterCommit; finishRealmMutation(pending); afterCommit: _ = pending",
+					1,
+				), entitySource
+			},
+			wants: []string{"(*Engine).StepWithTunables 在 mutation 创建或 helper 调用前存在提前退出"},
+		},
+		{
+			name: "runtime mutation 被其他 goroutine 使用",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource,
+					"pending := engine.realm.NewMutation(); finishRealmMutation(pending)",
+					"pending := engine.realm.NewMutation(); go mutateAsync(pending); finishRealmMutation(pending)",
+					1,
+				), entitySource
+			},
+			wants: []string{"(*Engine).StepWithTunables mutation 生命周期不得包含 go"},
+		},
+		{
+			name: "runtime mutation alias 被其他 goroutine 使用",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource,
+					"pending := engine.realm.NewMutation(); finishRealmMutation(pending)",
+					"pending := engine.realm.NewMutation(); alias := pending; go mutateAsync(alias); finishRealmMutation(pending)",
+					1,
+				), entitySource
+			},
+			wants: []string{"(*Engine).StepWithTunables mutation 生命周期不得包含 go"},
+		},
+		{
+			name: "runtime mutation 被 defer 使用",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource,
+					"pending := engine.realm.NewMutation(); finishRealmMutation(pending)",
+					"pending := engine.realm.NewMutation(); defer mutateLater(pending); finishRealmMutation(pending)",
+					1,
+				), entitySource
+			},
+			wants: []string{"(*Engine).StepWithTunables mutation 生命周期不得包含 defer"},
+		},
+		{
+			name: "runtime 条件调用 mutation helper",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource, "finishRealmMutation(pending)", "if true { finishRealmMutation(pending) }", 1), entitySource
+			},
+			wants: []string{"helper \"finishRealmMutation\" 调用位于条件控制流"},
+		},
+		{
+			name: "runtime 循环调用 mutation helper",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource, "finishRealmMutation(pending)", "for range 2 { finishRealmMutation(pending) }", 1), entitySource
+			},
+			wants: []string{"helper \"finishRealmMutation\" 调用位于循环"},
+		},
+		{
+			name: "runtime go 调用 mutation helper",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource, "finishRealmMutation(pending)", "go finishRealmMutation(pending)", 1), entitySource
+			},
+			wants: []string{"helper \"finishRealmMutation\" 调用不得使用 go"},
+		},
+		{
+			name: "runtime defer 调用 mutation helper",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource, "finishRealmMutation(pending)", "defer finishRealmMutation(pending)", 1), entitySource
+			},
+			wants: []string{"helper \"finishRealmMutation\" 调用不得使用 defer"},
+		},
+		{
+			name: "runtime helper 提交前提前返回",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource, "pending.Commit()", "if true { return }; pending.Commit()", 1), entitySource
+			},
+			wants: []string{"helper \"finishRealmMutation\" 在 Commit 前存在提前退出"},
+		},
+		{
+			name: "runtime helper 条件提交 mutation",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource, "pending.Commit()", "if true { pending.Commit() }", 1), entitySource
+			},
+			wants: []string{"helper \"finishRealmMutation\" 的 Commit 调用位于条件控制流"},
+		},
+		{
+			name: "runtime helper 循环提交 mutation",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource, "pending.Commit()", "for range 2 { pending.Commit() }", 1), entitySource
+			},
+			wants: []string{"helper \"finishRealmMutation\" 的 Commit 调用位于循环"},
+		},
+		{
+			name: "runtime helper 异步提交 mutation",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource, "pending.Commit()", "go pending.Commit()", 1), entitySource
+			},
+			wants: []string{"helper \"finishRealmMutation\" 的 Commit 调用不得使用 go"},
+		},
+		{
+			name: "runtime helper 延迟提交 mutation",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource, "pending.Commit()", "defer pending.Commit()", 1), entitySource
+			},
+			wants: []string{"helper \"finishRealmMutation\" 的 Commit 调用不得使用 defer"},
+		},
+		{
+			name: "runtime helper 延迟旁路使用 mutation",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return strings.Replace(runtimeSource, "pending.Commit()", "defer mutateLater(pending); pending.Commit()", 1), entitySource
+			},
+			wants: []string{"helper \"finishRealmMutation\" mutation 生命周期不得包含 defer"},
+		},
+		{
 			name: "runtime 提交不同 mutation 局部值",
 			mutate: func(runtimeSource, entitySource string) (string, string) {
 				return strings.Replace(runtimeSource,
@@ -321,7 +514,7 @@ type State struct {
 					1,
 				), entitySource
 			},
-			wants: []string{"局部 mutation \"pending\" 的可达 Commit 次数=0"},
+			wants: []string{"使用 mutation local \"pending\" 的顶层 helper 调用次数=0"},
 		},
 	}
 	for _, testCase := range tests {
@@ -331,6 +524,12 @@ type State struct {
 			joined := strings.Join(violations, "; ")
 			if strings.Contains(joined, "解析 synthetic") {
 				t.Fatalf("synthetic 无法解析：%s", joined)
+			}
+			if testCase.clean {
+				if joined != "" {
+					t.Fatalf("安全形状被误拒绝：%s", joined)
+				}
+				return
 			}
 			for _, want := range testCase.wants {
 				if !strings.Contains(joined, want) {
@@ -457,20 +656,32 @@ func formatSimAuthorityNode(files *token.FileSet, node ast.Node) string {
 	return output.String()
 }
 
+type simAuthorityTypeDeclaration struct {
+	expression ast.Expr
+	aliases    map[string]string
+}
+
+type simAuthorityFunctionDeclaration struct {
+	function *ast.FuncDecl
+	aliases  map[string]string
+}
+
+type simAuthorityStorageIndex struct {
+	types     map[string]simAuthorityTypeDeclaration
+	functions map[string]simAuthorityFunctionDeclaration
+}
+
+type simAuthorityStorageTraits struct {
+	owners  map[string]bool
+	mutable bool
+}
+
 func simAuthorityRuntimeStorageDrift(files *token.FileSet, parsed []*ast.File) []string {
+	index := simAuthorityBuildStorageIndex(parsed)
 	namedStructs := make(map[token.Pos]string)
-	for _, file := range parsed {
-		for _, declaration := range file.Decls {
-			general, ok := declaration.(*ast.GenDecl)
-			if !ok || general.Tok != token.TYPE {
-				continue
-			}
-			for _, specification := range general.Specs {
-				typeSpec := specification.(*ast.TypeSpec)
-				if structure, ok := typeSpec.Type.(*ast.StructType); ok {
-					namedStructs[structure.Pos()] = "runtime." + typeSpec.Name.Name
-				}
-			}
+	for name, declaration := range index.types {
+		if structure, ok := declaration.expression.(*ast.StructType); ok {
+			namedStructs[structure.Pos()] = "runtime." + name
 		}
 	}
 
@@ -488,13 +699,13 @@ func simAuthorityRuntimeStorageDrift(files *token.FileSet, parsed []*ast.File) [
 			if general.Tok == token.TYPE {
 				for _, specification := range general.Specs {
 					typeSpec := specification.(*ast.TypeSpec)
-					if _, structure := typeSpec.Type.(*ast.StructType); !structure {
-						violations = append(violations, simAuthorityStoredOwnerDrift(
-							"runtime type "+typeSpec.Name.Name,
-							formatSimAuthorityNode(files, typeSpec.Type),
-							ownerAliases,
-						)...)
+					if _, structure := typeSpec.Type.(*ast.StructType); structure {
+						continue
 					}
+					traits := simAuthorityTypeStorageTraits(typeSpec.Type, ownerAliases, index, make(map[string]bool))
+					violations = append(violations, simAuthorityOwnerTraitViolations(
+						"runtime type "+typeSpec.Name.Name, traits,
+					)...)
 				}
 				continue
 			}
@@ -503,24 +714,23 @@ func simAuthorityRuntimeStorageDrift(files *token.FileSet, parsed []*ast.File) [
 			}
 			for _, specification := range general.Specs {
 				value := specification.(*ast.ValueSpec)
-				for index, name := range value.Names {
-					location := "runtime package variable " + name.Name
-					if simAuthorityMirrorNames[strings.ToLower(name.Name)] {
-						violations = append(violations, location+" 复制 entity 权威状态")
-					}
+				for valueIndex, name := range value.Names {
+					traits := simAuthorityStorageTraits{owners: make(map[string]bool)}
 					if value.Type != nil {
-						violations = append(violations, simAuthorityStoredOwnerDrift(
-							location, formatSimAuthorityNode(files, value.Type), ownerAliases,
-						)...)
+						traits.merge(simAuthorityTypeStorageTraits(
+							value.Type, ownerAliases, index, make(map[string]bool),
+						))
 					}
-					if index < len(value.Values) {
-						violations = append(violations, simAuthorityStoredValueOwnerDrift(
-							location, value.Values[index], files, ownerAliases,
-						)...)
-					} else if len(value.Values) == 1 {
-						violations = append(violations, simAuthorityStoredValueOwnerDrift(
-							location, value.Values[0], files, ownerAliases,
-						)...)
+					if initializer := simAuthorityValueInitializer(value, valueIndex); initializer != nil {
+						traits.merge(simAuthorityValueStorageTraits(
+							initializer, ownerAliases, index, make(map[string]bool),
+						))
+					}
+					location := "runtime package variable " + name.Name
+					ownerViolations := simAuthorityOwnerTraitViolations(location, traits)
+					violations = append(violations, ownerViolations...)
+					if len(ownerViolations) == 0 && traits.mutable {
+						violations = append(violations, location+" 保存递归 mutable state")
 					}
 				}
 			}
@@ -536,21 +746,17 @@ func simAuthorityRuntimeStorageDrift(files *token.FileSet, parsed []*ast.File) [
 				location = "runtime anonymous holder at " + files.Position(structure.Pos()).String()
 			}
 			for _, field := range structure.Fields.List {
-				fieldType := formatSimAuthorityNode(files, field.Type)
 				fieldNames := field.Names
 				if len(fieldNames) == 0 {
 					fieldNames = []*ast.Ident{{Name: "<embedded>"}}
 				}
+				traits := simAuthorityTypeStorageTraits(field.Type, ownerAliases, index, make(map[string]bool))
 				for _, name := range fieldNames {
-					fieldLocation := location + "." + name.Name
-					if simAuthorityMirrorNames[strings.ToLower(name.Name)] {
-						violations = append(violations, fieldLocation+" 复制 entity 权威状态")
-					}
-					allowed := location == "runtime.Engine" &&
-						((name.Name == "realm" && fieldType == "*realm.State") ||
-							(name.Name == "entities" && fieldType == "*entity.State"))
-					if !allowed {
-						violations = append(violations, simAuthorityStoredOwnerDrift(fieldLocation, fieldType, ownerAliases)...)
+					allowedOwner := simAuthorityAllowedEngineOwner(location, name.Name, field.Type, ownerAliases)
+					for owner := range traits.owners {
+						if owner != allowedOwner {
+							violations = append(violations, location+"."+name.Name+" 保存额外 "+owner+".State owner")
+						}
 					}
 				}
 			}
@@ -560,43 +766,270 @@ func simAuthorityRuntimeStorageDrift(files *token.FileSet, parsed []*ast.File) [
 	return violations
 }
 
-func simAuthorityStoredOwnerDrift(location, source string, ownerAliases map[string]string) []string {
-	violations := make([]string, 0, 2)
-	for alias, owner := range ownerAliases {
-		if alias != "." && strings.Contains(source, alias+".State") {
-			violations = append(violations, location+" 保存额外 "+owner+".State owner")
+func simAuthorityBuildStorageIndex(parsed []*ast.File) simAuthorityStorageIndex {
+	index := simAuthorityStorageIndex{
+		types:     make(map[string]simAuthorityTypeDeclaration),
+		functions: make(map[string]simAuthorityFunctionDeclaration),
+	}
+	for _, file := range parsed {
+		aliases := simAuthorityOwnerAliases(file)
+		for _, declaration := range file.Decls {
+			switch current := declaration.(type) {
+			case *ast.GenDecl:
+				if current.Tok != token.TYPE {
+					continue
+				}
+				for _, specification := range current.Specs {
+					typeSpec := specification.(*ast.TypeSpec)
+					index.types[typeSpec.Name.Name] = simAuthorityTypeDeclaration{
+						expression: typeSpec.Type,
+						aliases:    aliases,
+					}
+				}
+			case *ast.FuncDecl:
+				if current.Recv == nil {
+					index.functions[current.Name.Name] = simAuthorityFunctionDeclaration{
+						function: current,
+						aliases:  aliases,
+					}
+				}
+			}
 		}
+	}
+	return index
+}
+
+func simAuthorityValueInitializer(value *ast.ValueSpec, index int) ast.Expr {
+	if index < len(value.Values) {
+		return value.Values[index]
+	}
+	if len(value.Values) == 1 {
+		return value.Values[0]
+	}
+	return nil
+}
+
+func (traits *simAuthorityStorageTraits) merge(other simAuthorityStorageTraits) {
+	if traits.owners == nil {
+		traits.owners = make(map[string]bool)
+	}
+	for owner := range other.owners {
+		traits.owners[owner] = true
+	}
+	traits.mutable = traits.mutable || other.mutable
+}
+
+func simAuthorityOwnerTraitViolations(location string, traits simAuthorityStorageTraits) []string {
+	violations := make([]string, 0, len(traits.owners))
+	for owner := range traits.owners {
+		violations = append(violations, location+" 保存额外 "+owner+".State owner")
 	}
 	return violations
 }
 
-func simAuthorityStoredValueOwnerDrift(
-	location string,
+func simAuthorityTypeStorageTraits(
 	expression ast.Expr,
-	files *token.FileSet,
-	ownerAliases map[string]string,
-) []string {
+	aliases map[string]string,
+	index simAuthorityStorageIndex,
+	seenTypes map[string]bool,
+) simAuthorityStorageTraits {
+	traits := simAuthorityStorageTraits{owners: make(map[string]bool)}
 	switch current := expression.(type) {
 	case *ast.ParenExpr:
-		return simAuthorityStoredValueOwnerDrift(location, current.X, files, ownerAliases)
-	case *ast.UnaryExpr:
-		return simAuthorityStoredValueOwnerDrift(location, current.X, files, ownerAliases)
-	case *ast.CompositeLit:
-		return simAuthorityStoredOwnerDrift(location, formatSimAuthorityNode(files, current.Type), ownerAliases)
-	case *ast.CallExpr:
-		if identifier, ok := current.Fun.(*ast.Ident); ok && identifier.Name == "new" && len(current.Args) == 1 {
-			return simAuthorityStoredOwnerDrift(location, formatSimAuthorityNode(files, current.Args[0]), ownerAliases)
+		return simAuthorityTypeStorageTraits(current.X, aliases, index, seenTypes)
+	case *ast.StarExpr:
+		traits.mutable = true
+		traits.merge(simAuthorityTypeStorageTraits(current.X, aliases, index, seenTypes))
+	case *ast.ArrayType:
+		traits.mutable = true
+		traits.merge(simAuthorityTypeStorageTraits(current.Elt, aliases, index, seenTypes))
+	case *ast.MapType:
+		traits.mutable = true
+		traits.merge(simAuthorityTypeStorageTraits(current.Key, aliases, index, seenTypes))
+		traits.merge(simAuthorityTypeStorageTraits(current.Value, aliases, index, seenTypes))
+	case *ast.ChanType, *ast.FuncType, *ast.InterfaceType:
+		traits.mutable = true
+	case *ast.StructType:
+		for _, field := range current.Fields.List {
+			traits.merge(simAuthorityTypeStorageTraits(field.Type, aliases, index, seenTypes))
 		}
-		if selector, ok := current.Fun.(*ast.SelectorExpr); ok && selector.Sel.Name == "NewState" {
+	case *ast.SelectorExpr:
+		if packageName, ok := current.X.(*ast.Ident); ok && current.Sel.Name == "State" {
+			if owner := aliases[packageName.Name]; owner != "" {
+				traits.owners[owner] = true
+				traits.mutable = true
+				break
+			}
+		}
+		traits.mutable = true
+	case *ast.Ident:
+		if current.Name == "any" || current.Name == "error" {
+			traits.mutable = true
+			break
+		}
+		declaration, ok := index.types[current.Name]
+		if !ok || seenTypes[current.Name] {
+			break
+		}
+		seenTypes[current.Name] = true
+		traits.merge(simAuthorityTypeStorageTraits(declaration.expression, declaration.aliases, index, seenTypes))
+		delete(seenTypes, current.Name)
+	case *ast.IndexExpr:
+		traits.merge(simAuthorityTypeStorageTraits(current.X, aliases, index, seenTypes))
+		traits.merge(simAuthorityTypeStorageTraits(current.Index, aliases, index, seenTypes))
+	case *ast.IndexListExpr:
+		traits.merge(simAuthorityTypeStorageTraits(current.X, aliases, index, seenTypes))
+		for _, argument := range current.Indices {
+			traits.merge(simAuthorityTypeStorageTraits(argument, aliases, index, seenTypes))
+		}
+	}
+	return traits
+}
+
+func simAuthorityValueStorageTraits(
+	expression ast.Expr,
+	aliases map[string]string,
+	index simAuthorityStorageIndex,
+	seenFunctions map[string]bool,
+) simAuthorityStorageTraits {
+	traits := simAuthorityStorageTraits{owners: make(map[string]bool)}
+	switch current := expression.(type) {
+	case *ast.ParenExpr:
+		return simAuthorityValueStorageTraits(current.X, aliases, index, seenFunctions)
+	case *ast.UnaryExpr:
+		traits.merge(simAuthorityValueStorageTraits(current.X, aliases, index, seenFunctions))
+		if current.Op == token.AND {
+			traits.mutable = true
+		}
+	case *ast.CompositeLit:
+		traits.merge(simAuthorityTypeStorageTraits(current.Type, aliases, index, make(map[string]bool)))
+	case *ast.FuncLit:
+		traits.mutable = true
+	case *ast.CallExpr:
+		functionExpression := simAuthorityUnparenExpression(current.Fun)
+		identifier := simAuthorityCallableIdentifier(functionExpression)
+		if literal, ok := functionExpression.(*ast.FuncLit); ok {
+			if literal.Type.Results != nil {
+				for _, result := range literal.Type.Results.List {
+					traits.merge(simAuthorityTypeStorageTraits(
+						result.Type, aliases, index, make(map[string]bool),
+					))
+				}
+			}
+			break
+		}
+		if identifier != nil && identifier.Name == "new" && len(current.Args) == 1 {
+			traits.mutable = true
+			traits.merge(simAuthorityTypeStorageTraits(current.Args[0], aliases, index, make(map[string]bool)))
+			break
+		}
+		if identifier != nil && identifier.Name == "make" && len(current.Args) != 0 {
+			traits.mutable = true
+			traits.merge(simAuthorityTypeStorageTraits(current.Args[0], aliases, index, make(map[string]bool)))
+			break
+		}
+		if selector, ok := functionExpression.(*ast.SelectorExpr); ok && selector.Sel.Name == "NewState" {
 			if packageName, ok := selector.X.(*ast.Ident); ok {
-				if owner := ownerAliases[packageName.Name]; owner != "" {
-					return []string{location + " 保存额外 " + owner + ".State owner"}
+				if owner := aliases[packageName.Name]; owner != "" {
+					traits.owners[owner] = true
+					traits.mutable = true
+					break
 				}
 			}
 		}
-		return simAuthorityStoredOwnerDrift(location, formatSimAuthorityNode(files, current.Fun), ownerAliases)
+		resolved := false
+		switch functionExpression.(type) {
+		case *ast.StarExpr, *ast.ArrayType, *ast.MapType,
+			*ast.ChanType, *ast.FuncType, *ast.InterfaceType, *ast.StructType:
+			traits.merge(simAuthorityTypeStorageTraits(functionExpression, aliases, index, make(map[string]bool)))
+			resolved = true
+		}
+		if identifier != nil {
+			if declaration, ok := index.types[identifier.Name]; ok {
+				traits.merge(simAuthorityTypeStorageTraits(
+					declaration.expression, declaration.aliases, index, make(map[string]bool),
+				))
+				resolved = true
+			}
+			if simAuthorityBuiltinScalarType(identifier.Name) {
+				resolved = true
+			}
+			if declaration, ok := index.functions[identifier.Name]; ok && !seenFunctions[identifier.Name] {
+				seenFunctions[identifier.Name] = true
+				if declaration.function.Type.Results != nil {
+					for _, result := range declaration.function.Type.Results.List {
+						traits.merge(simAuthorityTypeStorageTraits(
+							result.Type, declaration.aliases, index, make(map[string]bool),
+						))
+					}
+				}
+				delete(seenFunctions, identifier.Name)
+				resolved = true
+			}
+		}
+		if !resolved {
+			traits.mutable = true
+		}
 	}
-	return nil
+	return traits
+}
+
+func simAuthorityUnparenExpression(expression ast.Expr) ast.Expr {
+	for {
+		parenthesized, ok := expression.(*ast.ParenExpr)
+		if !ok {
+			return expression
+		}
+		expression = parenthesized.X
+	}
+}
+
+func simAuthorityBuiltinScalarType(name string) bool {
+	switch name {
+	case "bool", "byte", "complex64", "complex128", "float32", "float64", "int", "int8", "int16",
+		"int32", "int64", "rune", "string", "uint", "uint8", "uint16", "uint32", "uint64", "uintptr":
+		return true
+	default:
+		return false
+	}
+}
+
+func simAuthorityCallableIdentifier(expression ast.Expr) *ast.Ident {
+	switch current := expression.(type) {
+	case *ast.Ident:
+		return current
+	case *ast.IndexExpr:
+		return simAuthorityCallableIdentifier(current.X)
+	case *ast.IndexListExpr:
+		return simAuthorityCallableIdentifier(current.X)
+	case *ast.ParenExpr:
+		return simAuthorityCallableIdentifier(current.X)
+	default:
+		return nil
+	}
+}
+
+func simAuthorityAllowedEngineOwner(location, fieldName string, expression ast.Expr, aliases map[string]string) string {
+	if location != "runtime.Engine" {
+		return ""
+	}
+	star, ok := expression.(*ast.StarExpr)
+	if !ok {
+		return ""
+	}
+	selector, ok := star.X.(*ast.SelectorExpr)
+	if !ok || selector.Sel.Name != "State" {
+		return ""
+	}
+	packageName, ok := selector.X.(*ast.Ident)
+	if !ok {
+		return ""
+	}
+	owner := aliases[packageName.Name]
+	if (fieldName == "realm" && owner == "realm") || (fieldName == "entities" && owner == "entity") {
+		return owner
+	}
+	return ""
 }
 
 func simAuthorityOwnerAliases(file *ast.File) map[string]string {
@@ -626,8 +1059,8 @@ func simAuthorityOwnerAliases(file *ast.File) map[string]string {
 }
 
 func simAuthorityRuntimeMutationDrift(files *token.FileSet, parsed []*ast.File) []string {
-	functions := make(map[string]*ast.FuncDecl)
 	steps := make([]*ast.FuncDecl, 0, 1)
+	helpers := make([]*ast.FuncDecl, 0, 1)
 	for _, file := range parsed {
 		for _, declaration := range file.Decls {
 			function, ok := declaration.(*ast.FuncDecl)
@@ -635,7 +1068,9 @@ func simAuthorityRuntimeMutationDrift(files *token.FileSet, parsed []*ast.File) 
 				continue
 			}
 			if function.Recv == nil {
-				functions[function.Name.Name] = function
+				if function.Name.Name == "finishRealmMutation" {
+					helpers = append(helpers, function)
+				}
 				continue
 			}
 			if function.Name.Name == "StepWithTunables" && simAuthorityEngineReceiver(function) != "" {
@@ -650,17 +1085,19 @@ func simAuthorityRuntimeMutationDrift(files *token.FileSet, parsed []*ast.File) 
 	step := steps[0]
 	receiver := simAuthorityEngineReceiver(step)
 	locals := make([]string, 0, 1)
-	simAuthorityInspectFunctionBody(step.Body, func(node ast.Node) {
-		assignment, ok := node.(*ast.AssignStmt)
+	creationIndices := make([]int, 0, 1)
+	for statementIndex, statement := range step.Body.List {
+		assignment, ok := statement.(*ast.AssignStmt)
 		if !ok || assignment.Tok != token.DEFINE || len(assignment.Lhs) != 1 || len(assignment.Rhs) != 1 {
-			return
+			continue
 		}
 		name, nameOK := assignment.Lhs[0].(*ast.Ident)
 		call, callOK := assignment.Rhs[0].(*ast.CallExpr)
 		if nameOK && callOK && simAuthorityEngineNewMutation(call, receiver) {
 			locals = append(locals, name.Name)
+			creationIndices = append(creationIndices, statementIndex)
 		}
-	})
+	}
 	if len(locals) != 1 {
 		return []string{fmt.Sprintf(
 			"%s：(*Engine).StepWithTunables 直接创建 realm mutation 次数=%d，想要 1",
@@ -674,38 +1111,109 @@ func simAuthorityRuntimeMutationDrift(files *token.FileSet, parsed []*ast.File) 
 		)}
 	}
 
-	commits := simAuthorityDirectCommitCount(step.Body, locals[0])
-	rebound := ""
-	simAuthorityInspectFunctionBody(step.Body, func(node ast.Node) {
-		call, ok := node.(*ast.CallExpr)
-		if !ok {
-			return
+	const helperName = "finishRealmMutation"
+	if len(helpers) != 1 {
+		return []string{fmt.Sprintf(
+			"%s：runtime 顶层 helper %q 数量=%d，想要 1",
+			files.Position(step.Pos()), helperName, len(helpers),
+		)}
+	}
+
+	directCalls, placementViolations := simAuthorityTopLevelHelperCalls(step.Body, helperName)
+	if len(placementViolations) != 0 {
+		return placementViolations
+	}
+	helperStatementIndex := -1
+	if len(directCalls) == 1 {
+		helperStatementIndex = simAuthorityTopLevelCallStatementIndex(step.Body, directCalls[0])
+		if simAuthorityFunctionBindsNameBefore(step, helperName, helperStatementIndex) {
+			return []string{fmt.Sprintf(
+				"%s：(*Engine).StepWithTunables 局部绑定遮蔽顶层 helper %q",
+				files.Position(step.Pos()), helperName,
+			)}
 		}
-		name, ok := call.Fun.(*ast.Ident)
-		if !ok || functions[name.Name] == nil {
-			return
-		}
-		for index, argument := range call.Args {
+	}
+	matchingArguments := make([]int, 0, 1)
+	for _, call := range directCalls {
+		for argumentIndex, argument := range call.Args {
 			identifier, ok := argument.(*ast.Ident)
-			if !ok || identifier.Name != locals[0] {
-				continue
-			}
-			if parameter := simAuthorityParameterAt(functions[name.Name], index); parameter != "" {
-				if writes := simAuthorityTrackedWrites(functions[name.Name].Body, parameter); writes != 0 {
-					rebound = fmt.Sprintf("helper %s 的 mutation 参数 %q 被重新声明或赋值 %d 次", name.Name, parameter, writes)
-					continue
-				}
-				commits += simAuthorityDirectCommitCount(functions[name.Name].Body, parameter)
+			if ok && identifier.Name == locals[0] {
+				matchingArguments = append(matchingArguments, argumentIndex)
 			}
 		}
-	})
-	if rebound != "" {
-		return []string{fmt.Sprintf("%s：(*Engine).StepWithTunables %s", files.Position(step.Pos()), rebound)}
+	}
+	if len(matchingArguments) != 1 {
+		return []string{fmt.Sprintf(
+			"%s：(*Engine).StepWithTunables 使用 mutation local %q 的顶层 helper 调用次数=%d，想要 1",
+			files.Position(step.Pos()), locals[0], len(matchingArguments),
+		)}
+	}
+	if len(directCalls) != 1 {
+		return []string{fmt.Sprintf(
+			"%s：(*Engine).StepWithTunables 顶层 helper %q 调用次数=%d，想要 1",
+			files.Position(step.Pos()), helperName, len(directCalls),
+		)}
+	}
+	if creationIndices[0] >= helperStatementIndex {
+		return []string{fmt.Sprintf(
+			"%s：(*Engine).StepWithTunables mutation 创建必须先于顶层 helper 调用",
+			files.Position(step.Pos()),
+		)}
+	}
+	if simAuthorityStatementsContainExit(step.Body.List[:helperStatementIndex], true) ||
+		simAuthorityStatementsContainExit(step.Body.List, false) {
+		return []string{fmt.Sprintf(
+			"%s：(*Engine).StepWithTunables 在 mutation 创建或 helper 调用前存在提前退出",
+			files.Position(step.Pos()),
+		)}
+	}
+	if kind := simAuthorityAsyncStatementKind(step.Body); kind != "" {
+		return []string{fmt.Sprintf(
+			"%s：(*Engine).StepWithTunables mutation 生命周期不得包含 %s",
+			files.Position(step.Pos()), kind,
+		)}
+	}
+	parameter := simAuthorityParameterAt(helpers[0], matchingArguments[0])
+	if parameter == "" {
+		return []string{fmt.Sprintf(
+			"%s：顶层 helper %q 缺少 mutation 参数位置 %d",
+			files.Position(helpers[0].Pos()), helperName, matchingArguments[0],
+		)}
+	}
+	if writes := simAuthorityTrackedWrites(helpers[0].Body, parameter); writes != 0 {
+		return []string{fmt.Sprintf(
+			"%s：(*Engine).StepWithTunables helper %s 的 mutation 参数 %q 被重新声明或赋值 %d 次",
+			files.Position(step.Pos()), helperName, parameter, writes,
+		)}
+	}
+	commits, commitViolations := simAuthorityDeterministicCommitCount(helpers[0].Body, parameter, helperName)
+	if len(commitViolations) != 0 {
+		return commitViolations
 	}
 	if commits != 1 {
 		return []string{fmt.Sprintf(
-			"%s：(*Engine).StepWithTunables 局部 mutation %q 的可达 Commit 次数=%d，想要 1",
-			files.Position(step.Pos()), locals[0], commits,
+			"%s：helper %q 对 mutation 参数 %q 的确定性 Commit 次数=%d，想要 1",
+			files.Position(helpers[0].Pos()), helperName, parameter, commits,
+		)}
+	}
+	commitStatementIndex := simAuthorityTopLevelCommitStatementIndex(helpers[0].Body, parameter)
+	if commitStatementIndex < 0 {
+		return []string{fmt.Sprintf(
+			"%s：helper %q 缺少确定性顶层 Commit 语句",
+			files.Position(helpers[0].Pos()), helperName,
+		)}
+	}
+	if simAuthorityStatementsContainExit(helpers[0].Body.List[:commitStatementIndex], true) ||
+		simAuthorityStatementsContainExit(helpers[0].Body.List, false) {
+		return []string{fmt.Sprintf(
+			"%s：helper %q 在 Commit 前存在提前退出",
+			files.Position(helpers[0].Pos()), helperName,
+		)}
+	}
+	if kind := simAuthorityAsyncStatementKind(helpers[0].Body); kind != "" {
+		return []string{fmt.Sprintf(
+			"%s：helper %q mutation 生命周期不得包含 %s",
+			files.Position(helpers[0].Pos()), helperName, kind,
 		)}
 	}
 	return nil
@@ -739,23 +1247,268 @@ func simAuthorityEngineNewMutation(call *ast.CallExpr, receiver string) bool {
 	return ok && realm.Sel.Name == "realm" && identifier.Name == receiver
 }
 
-func simAuthorityDirectCommitCount(body *ast.BlockStmt, local string) int {
-	commits := 0
-	simAuthorityInspectFunctionBody(body, func(node ast.Node) {
-		call, ok := node.(*ast.CallExpr)
+func simAuthorityFunctionBindsNameBefore(function *ast.FuncDecl, name string, statementIndex int) bool {
+	for _, fields := range []*ast.FieldList{function.Recv, function.Type.Params, function.Type.Results} {
+		if fields == nil {
+			continue
+		}
+		for _, field := range fields.List {
+			for _, fieldName := range field.Names {
+				if fieldName.Name == name {
+					return true
+				}
+			}
+		}
+	}
+	for index, statement := range function.Body.List {
+		if index >= statementIndex {
+			break
+		}
+		switch current := statement.(type) {
+		case *ast.AssignStmt:
+			for _, expression := range current.Lhs {
+				if identifier, ok := expression.(*ast.Ident); ok && identifier.Name == name {
+					return true
+				}
+			}
+		case *ast.DeclStmt:
+			general, ok := current.Decl.(*ast.GenDecl)
+			if !ok {
+				continue
+			}
+			for _, specification := range general.Specs {
+				switch spec := specification.(type) {
+				case *ast.ValueSpec:
+					for _, declaredName := range spec.Names {
+						if declaredName.Name == name {
+							return true
+						}
+					}
+				case *ast.TypeSpec:
+					if spec.Name.Name == name {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+func simAuthorityTopLevelHelperCalls(body *ast.BlockStmt, helperName string) ([]*ast.CallExpr, []string) {
+	calls := make([]*ast.CallExpr, 0, 1)
+	violations := make([]string, 0)
+	for _, statement := range body.List {
+		switch current := statement.(type) {
+		case *ast.ExprStmt:
+			if call, ok := current.X.(*ast.CallExpr); ok && simAuthorityNamedCall(call, helperName) {
+				calls = append(calls, call)
+				continue
+			}
+		case *ast.IfStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.SelectStmt:
+			if simAuthorityNodeContainsNamedCall(statement, helperName) {
+				violations = append(violations, fmt.Sprintf("helper %q 调用位于条件控制流", helperName))
+				continue
+			}
+		case *ast.ForStmt, *ast.RangeStmt:
+			if simAuthorityNodeContainsNamedCall(statement, helperName) {
+				violations = append(violations, fmt.Sprintf("helper %q 调用位于循环", helperName))
+				continue
+			}
+		case *ast.GoStmt:
+			if simAuthorityNamedCall(current.Call, helperName) {
+				violations = append(violations, fmt.Sprintf("helper %q 调用不得使用 go", helperName))
+				continue
+			}
+		case *ast.DeferStmt:
+			if simAuthorityNamedCall(current.Call, helperName) {
+				violations = append(violations, fmt.Sprintf("helper %q 调用不得使用 defer", helperName))
+				continue
+			}
+		}
+		if simAuthorityNodeContainsNamedCall(statement, helperName) {
+			violations = append(violations, fmt.Sprintf("helper %q 调用不是确定性顶层语句", helperName))
+		}
+	}
+	return calls, violations
+}
+
+func simAuthorityNamedCall(call *ast.CallExpr, name string) bool {
+	identifier, ok := call.Fun.(*ast.Ident)
+	return ok && identifier.Name == name
+}
+
+func simAuthorityTopLevelCallStatementIndex(body *ast.BlockStmt, target *ast.CallExpr) int {
+	for index, statement := range body.List {
+		expression, ok := statement.(*ast.ExprStmt)
 		if !ok {
-			return
+			continue
 		}
-		selector, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok {
-			return
+		call, ok := expression.X.(*ast.CallExpr)
+		if ok && call == target {
+			return index
 		}
-		identifier, ok := selector.X.(*ast.Ident)
-		if ok && selector.Sel.Name == "Commit" && identifier.Name == local {
-			commits++
+	}
+	return -1
+}
+
+func simAuthorityNodeContainsNamedCall(node ast.Node, name string) bool {
+	found := false
+	ast.Inspect(node, func(current ast.Node) bool {
+		if found {
+			return false
 		}
+		if _, nested := current.(*ast.FuncLit); nested {
+			return false
+		}
+		call, ok := current.(*ast.CallExpr)
+		if ok && simAuthorityNamedCall(call, name) {
+			found = true
+			return false
+		}
+		return true
 	})
-	return commits
+	return found
+}
+
+func simAuthorityDeterministicCommitCount(body *ast.BlockStmt, local, helperName string) (int, []string) {
+	commits := 0
+	violations := make([]string, 0)
+	for _, statement := range body.List {
+		switch current := statement.(type) {
+		case *ast.ExprStmt:
+			if call, ok := current.X.(*ast.CallExpr); ok && simAuthorityCommitCall(call, local) {
+				commits++
+				continue
+			}
+		case *ast.RangeStmt:
+			if call, ok := current.X.(*ast.CallExpr); ok && simAuthorityCommitCall(call, local) {
+				commits++
+			}
+			if simAuthorityNodeContainsCommit(current.Body, local) {
+				violations = append(violations, fmt.Sprintf("helper %q 的 Commit 调用位于循环", helperName))
+			}
+			continue
+		case *ast.ForStmt:
+			if simAuthorityNodeContainsCommit(current, local) {
+				violations = append(violations, fmt.Sprintf("helper %q 的 Commit 调用位于循环", helperName))
+			}
+			continue
+		case *ast.IfStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.SelectStmt:
+			if simAuthorityNodeContainsCommit(current, local) {
+				violations = append(violations, fmt.Sprintf("helper %q 的 Commit 调用位于条件控制流", helperName))
+			}
+			continue
+		case *ast.GoStmt:
+			if simAuthorityCommitCall(current.Call, local) {
+				violations = append(violations, fmt.Sprintf("helper %q 的 Commit 调用不得使用 go", helperName))
+			}
+			continue
+		case *ast.DeferStmt:
+			if simAuthorityCommitCall(current.Call, local) {
+				violations = append(violations, fmt.Sprintf("helper %q 的 Commit 调用不得使用 defer", helperName))
+			}
+			continue
+		}
+		if simAuthorityNodeContainsCommit(statement, local) {
+			violations = append(violations, fmt.Sprintf("helper %q 的 Commit 调用不是确定性顶层语句", helperName))
+		}
+	}
+	return commits, violations
+}
+
+func simAuthorityTopLevelCommitStatementIndex(body *ast.BlockStmt, local string) int {
+	for index, statement := range body.List {
+		switch current := statement.(type) {
+		case *ast.ExprStmt:
+			if call, ok := current.X.(*ast.CallExpr); ok && simAuthorityCommitCall(call, local) {
+				return index
+			}
+		case *ast.RangeStmt:
+			if call, ok := current.X.(*ast.CallExpr); ok && simAuthorityCommitCall(call, local) {
+				return index
+			}
+		}
+	}
+	return -1
+}
+
+func simAuthorityCommitCall(call *ast.CallExpr, local string) bool {
+	selector, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || selector.Sel.Name != "Commit" || len(call.Args) != 0 {
+		return false
+	}
+	identifier, ok := selector.X.(*ast.Ident)
+	return ok && identifier.Name == local
+}
+
+func simAuthorityNodeContainsCommit(node ast.Node, local string) bool {
+	found := false
+	ast.Inspect(node, func(current ast.Node) bool {
+		if found {
+			return false
+		}
+		if _, nested := current.(*ast.FuncLit); nested {
+			return false
+		}
+		call, ok := current.(*ast.CallExpr)
+		if ok && simAuthorityCommitCall(call, local) {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+func simAuthorityStatementsContainExit(statements []ast.Stmt, includeReturn bool) bool {
+	for _, statement := range statements {
+		found := false
+		ast.Inspect(statement, func(node ast.Node) bool {
+			if found {
+				return false
+			}
+			if _, nested := node.(*ast.FuncLit); nested {
+				return false
+			}
+			switch current := node.(type) {
+			case *ast.ReturnStmt:
+				if includeReturn {
+					found = true
+					return false
+				}
+			case *ast.BranchStmt:
+				if current.Tok == token.GOTO {
+					found = true
+					return false
+				}
+			}
+			return true
+		})
+		if found {
+			return true
+		}
+	}
+	return false
+}
+
+func simAuthorityAsyncStatementKind(body *ast.BlockStmt) string {
+	found := ""
+	ast.Inspect(body, func(node ast.Node) bool {
+		if found != "" {
+			return false
+		}
+		switch node.(type) {
+		case *ast.GoStmt:
+			found = "go"
+			return false
+		case *ast.DeferStmt:
+			found = "defer"
+			return false
+		}
+		return true
+	})
+	return found
 }
 
 func simAuthorityTrackedWrites(body *ast.BlockStmt, local string) int {
