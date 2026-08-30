@@ -81,6 +81,7 @@ func TestLoadDefaultPrefersExistingMornleaConfig(t *testing.T) {
 }
 
 func TestLoadDefaultMigratesLegacyConfigAndPreservesSource(t *testing.T) {
+	t.Setenv("MORNLEA_TEST_AGENT_KEY", "test-agent-key")
 	root := t.TempDir()
 	current := filepath.Join(root, "mornlea", "config.json")
 	legacy := filepath.Join(root, "minecraft-go", "config.json")
@@ -89,12 +90,10 @@ func TestLoadDefaultMigratesLegacyConfigAndPreservesSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// M5B 起非空伙伴必须携带完整模型设置才能通过 Load；这里用免密钥的
-	// loopback 形态，保持本测试"旧配置原样迁移且源文件不被改写"的主题不变。
 	want.AI = &AI{
-		ModelSettings: companion.ModelSettings{
-			Endpoint: "http://127.0.0.1:1/v1",
-			Model:    "test-model",
+		AgentService: companion.AgentServiceSettings{
+			Endpoint:  "http://127.0.0.1:1",
+			APIKeyEnv: "MORNLEA_TEST_AGENT_KEY",
 		},
 		Companions: []companion.Definition{{ID: id, Name: "阿木"}},
 	}

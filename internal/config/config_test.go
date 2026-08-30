@@ -165,6 +165,7 @@ func TestUnknownFieldsAreIgnored(t *testing.T) {
 }
 
 func TestConfigAICompanionUnknownFieldsWarnAndIgnore(t *testing.T) {
+	t.Setenv("MORNLEA_CONFIG_AGENT_KEY", "test-agent-key")
 	previous := slog.Default()
 	var records bytes.Buffer
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&records, nil)))
@@ -173,7 +174,7 @@ func TestConfigAICompanionUnknownFieldsWarnAndIgnore(t *testing.T) {
 	// M5B 起 ai.endpoint/ai.model 是已识别字段；M5D 起 companions[].persona
 	// 也已识别并解析进 Definition（不再告警）。用合法模型字段（loopback http
 	// 免密钥）构造配置，未知字段告警断言只保留 task 一项。
-	path := writeConfig(t, `{"version":1,"ai":{"endpoint":"http://127.0.0.1:1/v1","model":"test-model","companions":[`+
+	path := writeConfig(t, `{"version":1,"ai":{"agentService":{"endpoint":"http://127.0.0.1:1","apiKeyEnv":"MORNLEA_CONFIG_AGENT_KEY"},"companions":[`+
 		`{"id":"00112233-4455-4677-8899-aabbccddeeff","name":"阿木","persona":"later","task":"later"}]}}`)
 	loaded, err := config.Load(path)
 	if err != nil {

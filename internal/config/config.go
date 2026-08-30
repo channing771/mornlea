@@ -110,15 +110,21 @@ type Render struct {
 	LodStep int `json:"lodStep"`
 }
 
-// AI 是配置文件中的可选 ai 组：模型运行时设置与伙伴定义。
-//
-// 嵌入 companion.ModelSettings 让 endpoint/model/apiKeyEnv/taskTimeoutMinutes
-// 四个字段提升为 ai 组的直接键，随 Save/Load 与调试面板的"只覆盖 physics/sim/
-// render、其余原样保留"保存策略自动往返。APIKeyEnv 只是环境变量名——密钥值
-// 绝不进入配置文件，由各入口进程启动时解析进内存。
+// AI 是配置文件中的可选 ai 组：Agent 服务连接设置与伙伴定义。
 type AI struct {
-	companion.ModelSettings
-	Companions []companion.Definition `json:"companions,omitempty"`
+	AgentService       companion.AgentServiceSettings `json:"agentService"`
+	TaskTimeoutMinutes int                            `json:"taskTimeoutMinutes,omitempty"`
+	Companions         []companion.Definition         `json:"companions,omitempty"`
+	// ModelSettings 仅保留源码兼容，配置 loader 不读取或写出 direct-model 字段。
+	ModelSettings companion.ModelSettings `json:"-"`
+}
+
+// TaskTimeout 返回生效的 Agent 任务超时分钟数。
+func (a AI) TaskTimeout() int {
+	if a.TaskTimeoutMinutes == 0 {
+		return companion.TaskTimeoutDefaultMinutes
+	}
+	return a.TaskTimeoutMinutes
 }
 
 // Config 是完整的调参配置文件内容。
@@ -605,6 +611,7 @@ func applyLogging(cfg *Config, raw json.RawMessage) error {
 // applyAI 的条目级检查。
 var knownAIFieldKeys = []string{
 	"companions",
+	"agentService",
 	"endpoint",
 	"model",
 	"apiKeyEnv",
@@ -644,39 +651,34 @@ func applyAI(cfg *Config, raw json.RawMessage, configPath string) error {
 			slog.Warn("配置项未知字段已忽略", "field", "ai."+key)
 		}
 	}
-	var settings companion.ModelSettings
-	if value, exists := lookupCaseInsensitive(fields, "endpoint"); exists {
-		if err := json.Unmarshal(value, &settings.Endpoint); err != nil {
-			return fmt.Errorf("解析 ai.endpoint: %w", err)
-		}
-		if err := companion.ValidateModelEndpoint(settings.Endpoint); err != nil {
-			return fmt.Errorf("ai.endpoint: %w", err)
+	legacy := make([]string, 0, 3)
+	for _, key := range []string{"endpoint", "model", "apiKeyEnv"} {
+		if _, exists := lookupCaseInsensitive(fields, key); exists {
+			legacy = append(legacy, "ai."+key)
 		}
 	}
-	if value, exists := lookupCaseInsensitive(fields, "model"); exists {
-		if err := json.Unmarshal(value, &settings.Model); err != nil {
-			return fmt.Errorf("解析 ai.model: %w", err)
+	var settings companion.AgentServiceSettings
+	if value, exists := lookupCaseInsensitive(fields, "agentService"); exists {
+		if err := json.Unmarshal(value, &settings); err != nil {
+			return fmt.Errorf("解析 ai.agentService: %w", err)
 		}
 	}
-	if value, exists := lookupCaseInsensitive(fields, "apiKeyEnv"); exists {
-		if err := json.Unmarshal(value, &settings.APIKeyEnv); err != nil {
-			return fmt.Errorf("解析 ai.apiKeyEnv: %w", err)
-		}
-	}
+	var timeout int
 	if value, exists := lookupCaseInsensitive(fields, "taskTimeoutMinutes"); exists {
-		var minutes int
-		if err := json.Unmarshal(value, &minutes); err != nil {
+		if err := json.Unmarshal(value, &timeout); err != nil {
 			return fmt.Errorf("解析 ai.taskTimeoutMinutes: %w", err)
 		}
 		// 显式 0 也拒绝："0=未设置"只对字段缺席成立。显式写 0 几乎必然是想
 		// 表达别的意思（单位搞错、漏填数字），按错误暴露而不是悄悄落回默认。
-		if err := companion.ValidateTaskTimeoutMinutes(minutes); err != nil {
+		if err := companion.ValidateTaskTimeoutMinutes(timeout); err != nil {
 			return fmt.Errorf("ai.taskTimeoutMinutes: %w", err)
 		}
-		settings.TaskTimeoutMinutes = minutes
 	}
 	rawCompanions, ok := lookupCaseInsensitive(fields, "companions")
 	if !ok || string(rawCompanions) == "null" {
+		for _, field := range legacy {
+			slog.Warn("已退役的 direct-model 配置已忽略", "field", field)
+		}
 		return nil
 	}
 	var entries []json.RawMessage
@@ -684,6 +686,9 @@ func applyAI(cfg *Config, raw json.RawMessage, configPath string) error {
 		return fmt.Errorf("解析 ai.companions: %w", err)
 	}
 	if len(entries) == 0 {
+		for _, field := range legacy {
+			slog.Warn("已退役的 direct-model 配置已忽略", "field", field)
+		}
 		return nil
 	}
 	definitions := make([]companion.Definition, len(entries))
@@ -722,11 +727,17 @@ func applyAI(cfg *Config, raw json.RawMessage, configPath string) error {
 	if err := companion.ValidateDefinitions(definitions); err != nil {
 		return err
 	}
+	if len(legacy) != 0 {
+		return fmt.Errorf("%s 已退役；请迁移 Agent 地址和凭据到 ai.agentService，provider/model/key 请迁移到 Python Agent 配置", strings.Join(legacy, ", "))
+	}
 	if err := settings.Validate(); err != nil {
-		return fmt.Errorf("ai: %w", err)
+		return fmt.Errorf("ai.agentService: %w", err)
+	}
+	if os.Getenv(settings.APIKeyEnv) == "" {
+		return fmt.Errorf("ai.agentService.apiKeyEnv 指向的环境变量为空")
 	}
 	resolvePersonas(configPath, definitions)
-	cfg.AI = &AI{ModelSettings: settings, Companions: definitions}
+	cfg.AI = &AI{AgentService: settings, TaskTimeoutMinutes: timeout, Companions: definitions}
 	return nil
 }
 
