@@ -45,7 +45,6 @@ help:
 		'  make visual-update    重新生成 golden 基线（VISUAL_OUT 覆盖输出目录）' \
 		'  make clean            删除 bin 目录' \
 		'  make agent-planner    手动运行规划者工作者(docs/agents/planner.md)' \
-		'  make agent-implementer 手动运行实现者工作者(docs/agents/implementer.md)' \
 		'  make agent-gates      运行标准门禁汇总(scripts/agents/gates.sh)' \
 		'  make agent-dashboard   构建并启动本地执行状态看板' \
 		'  make agent-ui-dev      启动看板前端开发服务器(代理 /api)' \

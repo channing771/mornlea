@@ -1,6 +1,6 @@
 # 新机器落地指南（代理工作链套装）
 
-> 把「规划者＋实现者继电器＋飞书确认通道」整套机制搬到另一台电脑的完整步骤。机制设计为**仓库自带、机器自描述**：所有路径均按 `$HOME`/脚本位置动态解析，仓库内没有任何本机绝对路径硬编码；新机器只需：clone → 装依赖 → 生成本地配置 → 填飞书凭据 → 登录 CLI。
+> 把「规划者＋飞书确认通道」整套机制搬到另一台电脑的完整步骤。机制设计为**仓库自带、机器自描述**：所有路径均按 `$HOME`/脚本位置动态解析，仓库内没有任何本机绝对路径硬编码；新机器只需：clone → 装依赖 → 生成本地配置 → 填飞书凭据 → 登录 CLI。
 
 ## 0. 一句话结论
 
@@ -25,7 +25,6 @@ git clone 后运行 `scripts/agents/confirm/install-listener.sh`（macOS）即�
 |---|---|
 | **`~/.mornlea/confirm/feishu.json`**（appId / appSecret / receive.open_id / autoResume / resumeCmd） | 唯一需要迁移的配置。**复用同一个飞书应用**：拷贝 appId/appSecret 即可（open_id 是「应用×用户」维度，同应用同用户不变）；**新建应用**：填凭据后跑一次 `--bootstrap` 重捕 open_id |
 | `~/.mornlea/confirm/feishu-token.json`（token 缓存） | 可删，自动重新获取 |
-| `~/.mornlea/loop.guard` / `loop.guard.<WORKER_ID>`（链守卫 pid） | **别拷贝**——新机上全是死 pid；实现者会话启动时会识别存活 pid 并重新登记 |
 | `~/.mornlea/confirm/*.json` / `*.reply.json` / `resume-*.log`（历史请求/回复/续跑日志） | **别拷贝**——listener 会把旧 pending 请求当作待答问题，匹配与续跑都会混乱；从零开始 |
 | `~/Library/LaunchAgents/com.mornlea.*.plist` | 由 `install-listener.sh` / `install-launchd.sh` 按新机真实路径（node、仓库、日志）**重新生成**，绝不拷贝 |
 | CLI 登录态 | `gh auth`、`~/.claude`、`~/.codex` 每台机器各自登录；claude/codex 二进制另行安装 |
@@ -36,7 +35,6 @@ git clone 后运行 `scripts/agents/confirm/install-listener.sh`（macOS）即�
 | 用途 | 依赖 | 本机实测 |
 |---|---|---|
 | 所有机器 | git、node ≥ 18、npm、jq、python3、curl（系统自带）、gh CLI | node v26.5.0 / npm 11.17.0 / macOS 26（Apple Silicon） |
-| 跑实现者链（额外） | claude CLI（`~/.local/bin` 或 PATH）＋登录；codex CLI ＋登录；Go/Rust 工具链（`gates.sh` 用） | claude/codex 登录态在 `~/.claude`/`~/.codex`（独立于仓库）；其他 CLI（zcode/glm-cli 等）按需在 `run-agent.sh` 加 `TOOL` 分支后同样可开链（见 §3.8） |
 | 只跑规划者＋确认通道 | 不需要 Go/Rust、不需要 claude/codex | — |
 
 检查命令：`node --version && jq --version && gh --version`。
@@ -87,22 +85,6 @@ scripts/agents/install-cron.sh planner      # macOS/Linux 通用
 scripts/agents/install-launchd.sh planner
 ```
 
-**8.（可选）启动实现者继电器链**
-
-```bash
-# 主链（默认 claude，full-permission 模式；AGENT_SAFE=1 可回受限模式）
-AGENT_LOOP=1 make agent-implementer
-# 仅无版本影响且文件集合确实不交叠时开并行链；WORKER_ID 必须唯一
-WORKER_ID=codex AGENT_TOOL=codex AGENT_LOOP=1 make agent-implementer
-WORKER_ID=codex2 AGENT_TOOL=codex AGENT_LOOP=1 make agent-implementer   # 第三/四条同理
-# 其他 CLI 工具（如 zcode/glm-cli）接入：run-agent.sh 加 TOOL 分支后
-#   AGENT_TOOL=zcode WORKER_ID=zcode AGENT_LOOP=1 … 同样开链；飞书确认与 relay 自动继承
-```
-
-继电器行为：`relay.sh` 用原子锁 + `~/.mornlea/loop.guard[.$WORKER_ID]` 防止同链并发；下一棒以 **setsid 独立会话**拉起（脱离宿主 agent 会话进程组，收尾退出不会连带杀它）；实现者收尾时自动接力下一行，无「就绪」任务自动终结。**守卫由 `run-agent.sh` 统一以真实会话 pid 登记**（启动/接力/续跑都会检查存活 pid，防同一链双开）；链身份（WORKER_ID + AGENT_TOOL）经 relay 与 listener 续跑自动继承。
-
-> ⚠️ **claude 账号有用量上限**：会话撞限时以 `session limit` 提示退出（exit 1）——等 reset 时间后用 `AGENT_RESUME=<该行最近确认请求ID> … run-agent.sh implementer` 续跑**同一行**（详见 `docs/agents/implementer.md` 故障恢复）。符合并行条件时建议 codex 作主力多链，claude 只留 1 条。
-
 ## 4. Linux 落地差异
 
 - **Listener 常驻**：仓库只提供 macOS launchd 方案；Linux 二选一：
@@ -114,22 +96,19 @@ WORKER_ID=codex2 AGENT_TOOL=codex AGENT_LOOP=1 make agent-implementer   # 第三
 
 ## 5. 不要迁移的目录（`~/.mornlea/`）
 
-正确姿势：新机器上**什么都不拷**，全由 installer 与 agent 自然重建。若强拷，会产生：死 pid 的 guard、被误认成待答的旧请求文件、指向旧仓库路径的 `resumeCmd`。唯一可迁移的是 `feishu.json`（敏感，建议安全通道拷贝；若怀疑凭据曾外泄，直接走方案 B 新建应用）。
+正确姿势：新机器上**什么都不拷**，全由 installer 与 agent 自然重建。若强拷，会产生：被误认成待答的旧请求文件、指向旧仓库路径的 `resumeCmd`。唯一可迁移的是 `feishu.json`（敏感，建议安全通道拷贝；若怀疑凭据曾外泄，直接走方案 B 新建应用）。
 
 ## 6. 常见坑
 
 | 坑 | 说明 |
 |---|---|
-| 双机同时跑继电器链 | 不同机器的 guard 互不知情，会**抢同一张 backlog**。约定：循环链只在一台机器上跑；另一台按需手动 `make agent-implementer` |
 | 旧 pending 请求 | 新机跑 `confirm.sh list`，确认无历史 pending 再启用确认流 |
 | 卡片按钮无回传 | 「事件与回调 → 回调配置」未启用（macOS 安装步骤 4.B.2）。文本「回复」路径不受影响 |
 | `open_id` 变了 | 换了飞书应用或换用户账号——重跑 `--bootstrap` |
 | 飞书 SDK 版本漂移 | 用 `npm ci`（有 lock 文件）；不要 `npm install` 升级到未验证的大版本（卡片回调/表单 schema 依赖当前线） |
 | Card 2.0 表单 schema | 脚本已处理（form 内元素必须有 `name`、提交按钮必须 `form_action_type: submit`）；手工改卡片时注意 |
 | `AGENT_SAFE` | 默认 full-permission（claude `--dangerously-skip-permissions`；codex `--dangerously-bypass-approvals-and-sandbox`）；要受限模式设 `AGENT_SAFE=1`。仓库 hooks（`guard.mjs`）始终独立生效 |
-| claude 用量上限 | 撞限会话以 `session limit` 退出（exit 1）——等 reset 后用 `AGENT_RESUME=<确认ID>` 续跑同一行；不要重新认领（见第 3.8 节与 implementer 卡「故障恢复」） |
-| 守卫不要手动写 | `~/.mornlea/loop.guard*` 由 `run-agent.sh` 登记**真实会话 pid**；不要再 `echo $$`（旧写法写的是 bash 工具临时 shell 的 pid，命令一返回即死，防重入形同虚设） |
-| 讨论区纪律 | 卡片已送达但用户未回复 ≠ 通道降级——不往 Discussion #71 写卡片转录，只等 listener 续跑；实现者收尾用 `python3 scripts/agents/refresh-discussion.py --update` 同步正文（状态评论 + 正文同时到位） |
+| 讨论区纪律 | 卡片已送达但用户未回复 ≠ 通道降级——不往 Discussion #71 写卡片转录，只等 listener 续跑；状态评论发出后用 `python3 scripts/agents/refresh-discussion.py --update` 同步正文（状态评论 + 正文同时到位） |
 | 卡片样式 | 新版面：头部按类型分色（澄清=橙/确认=蓝）、选项只保留按钮、底部说明默认不显示；手工改 `feishu.sh` 时注意 Card 2.0（form 内元素必须有 `name`、提交按钮 `form_action_type: submit`） |
 | 时间与 CI | 本机不用管 CI（GitHub 侧）；`pr-finalize.sh` 收尾守护依赖 `gh` 已登录 |
 
@@ -144,9 +123,7 @@ WORKER_ID=codex2 AGENT_TOOL=codex AGENT_LOOP=1 make agent-implementer   # 第三
 □ gh auth status 显示已登录且对该仓库有写权限
 □ crontab -l / launchctl list 里有 planner 定时
 □ confirm.sh list 无历史 pending（失败时先清理）
-□ （可选）AGENT_LOOP=1 链已启动，backlog 出现「已认领」行
-□ 守卫真实 pid：`cat ~/.mornlea/loop.guard[.<WORKER_ID>]` 的 pid 用 `ps -p <pid>` 查得到（防双开生效）
-□ 收尾链路：状态评论发出后 `refresh-discussion.py --update` 正文同步（可人工跑一次验证）
+□ 正文同步：`python3 scripts/agents/refresh-discussion.py --update` 人工跑一次可正常推送
 ```
 
-> 相关文档：`docs/agents/confirmation-channel.md`（确认通道机制与飞书应用配置）、`docs/agents/planner.md` / `implementer.md`（角色卡）、`docs/development-process.md`（开发流程）。
+> 相关文档：`docs/agents/confirmation-channel.md`（确认通道机制与飞书应用配置）、`docs/agents/planner.md`（角色卡）、`docs/development-process.md`（开发流程）。

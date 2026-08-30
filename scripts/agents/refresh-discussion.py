@@ -53,7 +53,7 @@ def build_body(rows):
         "1. 只可选择 🟢 `就绪` 行 → 改仓库表该行状态/认领人并提交 → 从此负责到底；",
         "2. 开发流程唯一说明：repo `docs/development-process.md`（OpenSpec change → subagent-driven-development → 双评审 → 门禁 → PR+CI 全绿 → merge → 回填）；",
         "3. 每个任务先经过 brainstorming 内容确认（推送你的飞书，回复后自动续跑）；",
-        "4. 认领/完成/放弃等状态变化必须在讨论追加一条结构化评论（模板见 docs/agents/implementer.md）。",
+        "4. 认领/完成/放弃等状态变化必须在讨论追加一条结构化评论。",
         "",
     ]
     for label, icon, compact in GROUPS:
