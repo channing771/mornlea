@@ -59,7 +59,7 @@ make agent-ui-dev
 # 启动交互式客户端并打开捕获服务（可与 --connect 组合；实际地址打印到 stdout）
 go run ./cmd/mornlea --dev-capture
 
-# 服务实际端口优先读发现文件（字段 pid/port/started_at，进程退出时删除）
+# 服务实际端口优先读发现文件（字段 pid/port/started_at，优雅退出时删除）
 cat ~/.mornlea/dev-capture.json
 
 # 截图
@@ -70,6 +70,7 @@ curl -s -o /tmp/mornlea-rec.zip 'http://127.0.0.1:17790/record?seconds=2&fps=8'
 unzip -d /tmp/mornlea-rec /tmp/mornlea-rec.zip
 ```
 
+- 发现文件只在优雅退出时清理：Ctrl+C 强杀会残留该文件，读到端口文件不代表服务还活着，以文件内 pid 交叉确认进程存活后再拉端点。
 - 首次捕获可能触发 macOS「屏幕录制」授权弹窗；画面不含游戏窗口时检查系统设置的屏幕录制授权并重试。
 - 端点契约、录制参数上限与失败语义见 `docs/notes/dev-capture.md`。
 
