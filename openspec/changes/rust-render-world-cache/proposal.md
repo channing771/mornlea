@@ -6,7 +6,7 @@
 
 - 新增独立于网络协议的 MRW1 v1 小端 render update batch；Go 从 `world.ContainerSnapshot` 编码 single、indexed 或 direct 紧凑 section、column height、tombstone 与 world reset。indexed section 的 packed words 固定为 4-bit 256 个或 8-bit 512 个，并且 payload 必须恰好消费完毕。
 - 在 `mornlea_client` 内新增派生、可丢弃并可重建的 `RenderWorld` cache，以原子 batch 校验和应用 epoch、revision 与 tombstone 状态；失败不保留部分更新，也不保存 Go 指针。
-- **BREAKING**：以 main 已用于进程内 WKWebView/UI cutover 的 client ABI v12 为前代基线，把合并后的 client ABI 升到 v13，并新增 `mornlea_client_render_apply_world_updates` 与 `Renderer.ApplyRenderWorldUpdates`。v13 必须保留 main 的 `ui_push_state` 与版本化 JSON UI events，已经退役的 `render_upload_ui_font`、frame TLV tag 9 及 UI layout v1–v4 不得复活。全部 client ABI export 均版本优先拒绝混装；新输入入口在改变缓存前按 ABI、长度、pointer/address、handle、MRW1 的顺序校验；engine ABI 保持 v8。
+- **BREAKING**：以 main 已用于进程内 WKWebView/UI cutover 的 client ABI v12 为前代基线，把合并后的 client ABI 升到 v13，并新增 `mornlea_client_render_apply_world_updates` 与 `Renderer.ApplyRenderWorldUpdates`。v13 必须保留 main 的 `ui_push_state` 与版本化 JSON UI events，已经退役的 `render_upload_ui_font`、frame TLV tag 9 及 UI layout v1–v4 不得复活。无参数 identity export `mornlea_client_abi_version()` 始终报告 13；全部接受 ABI version 参数的 client exports 均版本优先拒绝混装。新输入入口在改变缓存前按 ABI、长度、pointer/address、handle、MRW1 的顺序校验；engine ABI 保持 v8。
 - 新入口只由 Rust/Go ABI 测试和 test-only driver 驱动，不接入 `cmd/mornlea/app` 实时消息路径。现有 Go CPU mesh 调度、geometry 上传、connectivity、visibility、`RenderFrame.Visible`、frame 编码与 draw 输出保持不变。
 - 不创建共享 voxel kernel、mesh worker 或 GPU pool，不移动或重构 engine 的 input/light/quad/greedy，不改变流体状态、传播、tick、协议或专属 mesh 语义；这些工作属于后续 change。
 

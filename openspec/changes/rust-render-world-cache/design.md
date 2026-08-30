@@ -139,8 +139,9 @@ v1–v4 退役；只把 feature 的 `mornlea_client_render_apply_world_updates`�
 MRW1 tests 加入该 surface。随后 client C header、Rust 常数和导出、Go bridge、动态库身份
 检查、当前文档/配置/主规格与跨语言测试一起升级为 v13。
 
-集成 v13 动态库的 ABI identity export 报告 13；其他每个接受 ABI version 的 client export
-保留既有 all-export ABI 检查，并在其任何其他适用 validation 或状态改变前检查版本。它们
+集成 v13 动态库的无参数 identity export `mornlea_client_abi_version()` 始终报告 13；其他
+每个接受 ABI version 参数的 client export 保留既有 all-versioned-export ABI 检查，并在其
+任何其他适用 validation 或状态改变前检查版本。它们
 收到包括 12 在内的任一非 v13 版本时，必须在读取 handle、pointer、UI JSON 或 MRW1 bytes
 前返回 `ABI_VERSION`。
 

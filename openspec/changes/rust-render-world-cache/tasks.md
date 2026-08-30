@@ -39,14 +39,15 @@
 ## 4. 升级 client ABI 到 v12 并接通 cache-only 输入入口
 
 - [x] 4.1 在 `engine/include/mornlea_client.h`、`engine/crates/mornlea_client/src/` 与
-  `internal/client/` 保留全部既有 client ABI exports 的 ABI-version matrix，并为新输入入口
+  `internal/client/` 保留全部接受 ABI version 参数的既有 client exports matrix，并为新输入入口
   建立 RED FFI/bridge matrix：ABI 优先，随后 non-zero/bounded length、non-null pointer、
   address range/no overflow、existing handle、MRW1 layout/capacity，再到合法 batch；验证：
   `cd engine && cargo test -p mornlea_client --locked` 与
   `go test ./internal/client -run TestRendererApplyRenderWorldUpdates -count=1`。
 - [x] 4.2 同步升级 C header、Rust export 和 Go bridge，并新增
   `mornlea_client_render_apply_world_updates`；Rust 复制或规范化输入且不保存 Go pointer，
-  所有 client ABI 入口对非 v12 先返回 `ABI_VERSION`。新 input-only `u8` 入口不执行
+  无参数 identity export 报告当时的 v12；所有接受 ABI version 参数的 client exports 对非
+  v12 先返回 `ABI_VERSION`。新 input-only `u8` 入口不执行
   output-capacity/overlap 检查（这些仅适用于带输出 entry），并在 panic catcher 内将 panic
   映射为 `PANIC`、不产生部分状态；engine ABI 保持 v8；验证：
   `make rust && go test ./internal/client -race -count=1`。
@@ -55,7 +56,8 @@
   upload、draw 或任何 fluid-aware 源码；验证：
   `make rust && cd engine && cargo test -p mornlea_client --locked && go test ./internal/client -race -count=1`。
 - [x] 4.4 取得该任务的单一独立 review，其报告同时包含 spec-compliance 与 quality verdict；
-  审计全部 export 的既有 ABI checks 与新入口 validation matrix、input-only 例外、panic
+  分别审计无参数 identity export 与全部 versioned exports 的既有 ABI checks、新入口
+  validation matrix、input-only 例外、panic
   隔离、原子失败、无 v11 fallback、engine ABI v8 与 cache-only 边界，并将 verdict 与
   裁决记入 `ledger.md`。
 
@@ -86,10 +88,12 @@
   与 update 入口，不改变 main 现有行为。验证：`git status --short`、
   `git diff --check`，并把 merge base、main HEAD、冲突路径与逐项裁决记入 `ledger.md`。
 - [ ] 6.2 将 `engine/include/mornlea_client.h`、`engine/crates/mornlea_client/src/`、
-  `internal/client/` 的 header/Rust exports/Go bridge 与 all-export tests 统一为 client ABI v13，
+  `internal/client/` 的 header/Rust exports/Go bridge、identity test 与 all-versioned-export
+  tests 统一为 client ABI v13，
   同步根版本说明、当前 docs、`openspec/config.yaml` 和受影响 main specs；保留 main UI JSON
   surface、MRW1 24/32 字节与 4 MiB/4096、原子 cache、无 fallback 和 engine ABI v8。测试必须
-  分别锁定：v13 动态库的每个 versioned export 收 ABI 12 时返回 `ABI_VERSION`；main v12
+  分别锁定：无参数 `mornlea_client_abi_version()` 始终报告 13；v13 动态库的每个
+  versioned export 收 ABI 12 时返回 `ABI_VERSION`；main v12
   动态库的共有 versioned exports 收 ABI 13 时返回 `ABI_VERSION`；v13-only MRW1 symbol 在
   main v12 动态库中缺失时于 link/load/bind 阶段硬失败，不进入 FFI、不返回 client status、
   不改变状态或 fallback。MRW1 input-only `u8` 入口只按 ABI、bounded nonzero length、non-null

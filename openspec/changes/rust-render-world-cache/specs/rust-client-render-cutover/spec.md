@@ -67,7 +67,7 @@ section upsert MUST 按 `ContainerSnapshot` 三态接收紧凑数据：single �
 
 ### Requirement: client ABI v13 统一 surface 并早期拒绝混装
 
-client C header、Rust 导出与 Go bridge 的 ABI 版本常数 MUST 同步为 13，ABI identity export MUST 报告 13；集成 v13 动态库中每个接受 ABI version 的 export MUST 拒绝包括 12 在内的每一个其他版本。每个此类 v13 export MUST 在其其他适用 validation 或状态改变前检查 ABI version；现有 all-export ABI checks MUST 保留。版本错误 MUST 在 handle、pointer、UI/MRW1 内容或 renderer/RenderWorld 状态改变前返回 `ABI_VERSION`。v13 surface MUST 保留 main v12 的 `ui_push_state` 与版本化 JSON UI event drain，MUST NOT 恢复已退役的 `render_upload_ui_font`、frame TLV tag 9 或 UI layout v1–v4；系统 MUST NOT 提供 v12 兼容入口或 Go fallback。engine ABI MUST 保持 v8。
+client C header、Rust 导出与 Go bridge 的 ABI 版本常数 MUST 同步为 13；无参数 identity export `mornlea_client_abi_version()` MUST 始终报告 13。集成 v13 动态库中每个接受 ABI version 参数的 export MUST 拒绝包括 12 在内的每一个其他版本。每个此类 v13 export MUST 在其其他适用 validation 或状态改变前检查 ABI version；现有 all-versioned-export ABI checks MUST 保留。版本错误 MUST 在 handle、pointer、UI/MRW1 内容或 renderer/RenderWorld 状态改变前返回 `ABI_VERSION`。v13 surface MUST 保留 main v12 的 `ui_push_state` 与版本化 JSON UI event drain，MUST NOT 恢复已退役的 `render_upload_ui_font`、frame TLV tag 9 或 UI layout v1–v4；系统 MUST NOT 提供 v12 兼容入口或 Go fallback。engine ABI MUST 保持 v8。
 
 反向混装时，main v12 动态库与 v13 bridge 共有且接受 ABI version 的 exports MUST 在收到 13 时返回 `ABI_VERSION`，并且不得读取其他输入或改变状态。v13-only 的 `mornlea_client_render_apply_world_updates` symbol 在 main v12 动态库中不存在；尝试把要求该 symbol 的 v13 bridge 与 main v12 动态库组合 MUST 在 link、load 或 bind 阶段硬失败，MUST NOT 被描述为一次会返回 client status 的调用，MUST NOT 进入任何 FFI body、改变任何状态或使用兼容入口/fallback。
 
@@ -95,9 +95,10 @@ client C header、Rust 导出与 Go bridge 的 ABI 版本常数 MUST 同步为 1
 #### Scenario: 错误 ABI 优先于输入内容检查
 
 - GIVEN ABI version 不为 13 且 handle、pointer、UI JSON 或 MRW1 bytes 也无效的调用
-- WHEN 调用任一 client ABI 入口
+- WHEN 调用任一接受 ABI version 参数的 client export
 - THEN 调用返回 ABI_VERSION
 - AND 不读取无效输入或改变 renderer 状态
+- AND 无参数 `mornlea_client_abi_version()` 不接收该错误版本并始终报告 13
 
 #### Scenario: v13 保留 main UI surface 且不复活旧 TLV
 

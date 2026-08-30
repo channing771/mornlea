@@ -70,16 +70,18 @@
   为 256 个 packed `u64`、8-bit 为 512 个，且未明确拒绝 payload 尾随 bytes。已在
   proposal、delta spec、design 与 Task 2 中补充 exact word count、exact consumption 及
   boundary/rejection/atomicity 测试。
-- Reviewer finding（spec ❌，quality needs fixes）：ABI 安全契约未完整覆盖 all-export
-  version-first 行为和新输入入口的 validation 次序。已明确保留全部既有 export 的 ABI
-  matrix；新入口按 ABI、length、pointer、address range、handle、MRW1 顺序校验，只有
+- Reviewer finding（spec ❌，quality needs fixes）：ABI 安全契约未完整覆盖 all-versioned-export
+  version-first 行为和新输入入口的 validation 次序。已明确保留全部接受 ABI version 参数的
+  既有 exports ABI matrix；新入口按 ABI、length、pointer、address range、handle、MRW1
+  顺序校验，只有
   output-bearing entries 适用 output-capacity/overlap，panic 映射为 `PANIC` 且不留下部分
   状态。Task 4 现要求 matrix 测试与审计。
 - `openspec validate --all --strict --no-interactive`：退出 0，78 passed、0 failed。
 - `git diff --check -- openspec/changes/rust-render-world-cache`：退出 0 且无输出。
 - 自审：proposal、delta spec、design、tasks 与 ledger 一致要求 4-bit=256、8-bit=512、
-  exact payload consumption；所有 client export 的 version-first 契约与既有 ABI matrix
-  保留，新 input-only entry 的 ordered validation、output-only 例外和 panic isolation
+  exact payload consumption；无参数 identity export 的当前版本身份与所有接受 ABI version
+  参数的 client exports version-first 契约及既有 ABI matrix 保留，新 input-only entry 的
+  ordered validation、output-only 例外和 panic isolation
   均已覆盖；cache-only 与 fluid-excluded 边界不变。
 
 ## Task 1 Independent Review Record
@@ -88,7 +90,7 @@
 - Independent reviewer：`01a0507c-5bcb-7c03-9bc3-f8dfee30d6a4`。
 - Initial review range：`2344ca8..d6c39ca`。spec verdict：❌；quality verdict：Needs fixes。
   两项 Important finding 为 indexed payload 未固定 4-bit=256 / 8-bit=512 packed `u64`
-  并拒绝 trailing bytes，以及 all-export version-first / 新 update entry validation
+  并拒绝 trailing bytes，以及 all-versioned-export version-first / 新 update entry validation
   matrix 未完整；详见本 ledger 的 Task 1 Fix Round 1。
 - Fix round 1 commit：`7c913f44`
   `docs(openspec): tighten render world cache contracts`。
@@ -532,9 +534,8 @@ base 起零 diff；其 ready/spawn warmup 循环按 transport 收包时机决定
 - Tasks 2–5 保持已勾选，作为 pre-main-integration feature 基线的历史完成事实；新增 Task 6
   重新打开 change，依次要求 non-rewriting main merge、v13 current-fact/spec/test 同步、同一
   merged baseline 的 release/race/visual/OpenSpec 验证，以及独立 integration review。
-- Planning implementer：`<pending-controller-fill>`。
-- Independent planning reviewer：`01a0514d...`（controller 提供的 abbreviated identity；完整
-  agent id 待 controller 回填）。
+- Planning implementer：`01a05146-946a-7e92-8a83-ff8d0a219468`。
+- Independent planning reviewer：`01a0514d-8eda-7091-9cfb-6ae2fa4881b7`。
 - 当前只完成 integration planning artifact 修订；没有运行或声称任何 merged-baseline
   implementation/ABI/race/visual 验证。archive 与 merge into main 仍未获授权，change 保持
   active；只有 Task 6 实现、验证和独立评审全部完成后才能重新申请 archive/merge 裁决。
@@ -542,7 +543,8 @@ base 起零 diff；其 ready/spawn warmup 循环按 transport 收包时机决定
 ### Planning independent review：Fix round 1/5
 
 - Reviewed planning commit：`bd698ae213cef7a8a8cf2ece865b85829bf512a6`。Independent
-  reviewer `01a0514d...` 的 initial verdict 为 spec ❌、quality Needs fixes；无 Critical，
+  reviewer `01a0514d-8eda-7091-9cfb-6ae2fa4881b7` 的 initial verdict 为 spec ❌、
+  quality Needs fixes；无 Critical，
   两项 Important。
 - Important 1：原 delta/design/Task 6.2 把 main v12 动态库与 v13 bridge 的全部反向混装都
   描述成可进入 export 并返回 `ABI_VERSION`，但 v13-only
@@ -558,3 +560,17 @@ base 起零 diff；其 ready/spawn warmup 循环按 transport 收包时机决定
 - 本 fix 只修改 existing delta spec、`design.md`、`tasks.md` 的 6.2 与本 ledger；proposal
   已保持正确的通用“早期硬拒绝”表述，无需修改。没有代码、main specs、merge、archive、
   current docs/config 或任何 Task 6 implementation/validation 改动；Tasks 仍为 15/19。
+
+### Planning independent review：Fix round 2/5
+
+- Reviewer `01a0514d-8eda-7091-9cfb-6ae2fa4881b7` 确认 fix round 1 的两项 Important
+  findings 均 addressed；scoped re-review 新增 1 项 Important 与 1 项 Minor。
+- Important：delta 的“调用任一 client ABI 入口”错误包含无参数 identity export。Fix round 2
+  把 version-first/status 契约限定为所有接受 ABI version 参数的 client exports，并把
+  `mornlea_client_abi_version()` 单独固定为始终报告 13；proposal、design、Tasks 4/6 与本
+  ledger 的同类 all-export 简写同步收窄为 identity + all-versioned-export 两部分。
+- Minor：ignored planning report 仍保留 reviewer placeholder 和“等待初次评审”的过期状态；
+  本轮使用真实 implementer/reviewer identity，并把报告状态推进到 fix round 2 scoped
+  re-review pending。
+- 本轮只修改既有 proposal、delta spec、design、tasks、ledger 与 ignored report；没有代码、
+  main specs、merge、archive 或 Task 6 implementation 改动，任务进度保持 15/19。
