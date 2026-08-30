@@ -8,7 +8,7 @@
 
 ## Task 3: Python namespace leases and compact memory
 
-- [ ] 3.1 先写 namespace 15s lease/5s heartbeat fencing、global 4/per-companion 1 无队列槽、SQLite compact MemoryState、active↔inactive epoch/tombstone reconcile、revision/operation CAS/溢出/幂等 RED tests，再实现 `mornlea_companion_agent/{harness/leases.py,storage/sqlite_memory.py,domain/memory.py}`；SQLite 不得出现 plan/task/snapshot/messages/persona/line/proposal 或 LangGraph checkpoint，以 `cd services/companion-agent && uv run pytest tests/test_leases.py tests/test_memory_store.py tests/test_memory_no_checkpoint.py -q` 验证。
+- [x] 3.1 先写 namespace 15s lease/5s heartbeat fencing、global 4/per-companion 1 无队列槽、SQLite compact MemoryState、active↔inactive epoch/tombstone reconcile、revision/operation CAS/溢出/幂等 RED tests，再实现 `mornlea_companion_agent/{harness/leases.py,storage/sqlite_memory.py,domain/memory.py}`；SQLite 不得出现 plan/task/snapshot/messages/persona/line/proposal 或 LangGraph checkpoint，以 `cd services/companion-agent && uv run pytest tests/test_leases.py tests/test_memory_store.py tests/test_memory_no_checkpoint.py -q` 验证。
 
 ## Task 4: Python Planner graph and MCP/model adapters
 

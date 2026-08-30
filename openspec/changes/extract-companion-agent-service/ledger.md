@@ -23,7 +23,7 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `task1_contracts_impl` | `af57e420` | RED：缺少 HTTP schema；复审 RED：UTF-8 byte/权威常量、非确定 `oneOf` 与未支持 keyword；GREEN：focused `-count=100`、companion race、diff-check；提交 `36eed9d9`、`7d019d1c`、`a1640211` | `task1_spec_review` round 3 PASS | `task1_quality_review` round 3 PASS | Accepted |
 | 2 | `task2_python_scaffold_impl` | `5d368f8c` | RED：package 缺失；复审 RED：exact const、URL/secret/path、golden path 与 import boundary；GREEN：locked sync、ruff/format、mypy、focused 两轮各 199 passed、diff-check；提交 `91bca693`、`665d609a`、`40c57fce` | `task2_spec_review` round 3 PASS | `task2_quality_review` round 3 PASS | Accepted |
-| 3 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
+| 3 | `task3_memory_impl` | `ea82d028` | RED：缺少 memory module；复审 RED：operation 复用、lease/SQLite 取消窗口、损坏库修补、重复 cancel 与 receipt 篡改；GREEN：focused 61 passed、full 260 passed、locked sync/ruff/mypy/diff-check；提交 `dcb99bc6`、`225fdb09`、`f68a6eca`、`7a1af977` | `memory_design_audit` round 4 PASS | `openspec_artifacts` round 4 PASS | Accepted |
 | 4 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 5 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 6 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
@@ -47,6 +47,14 @@
 - Round 2：exact const、golden path、secret 与 SQLite value 修复通过；两路评审继续拒绝配置文件路径裸异常、手写 IDNA 与 httpx 双向漂移，以及未按 future layer 收口的动态 import/external dependency 门禁。
 - Round 3：SPEC 与 QUALITY 均 PASS；配置 path 全收口，直接 `idna` 依赖与 httpx 兼容，CLI/app 是唯一 dynamic seam，harness/adapters/storage 采用集中 fail-closed allowlist 且 Task 3/4 合法依赖 probes 通过。
 - 控制会话复验：`uv sync --locked`、ruff format/check、mypy exit 0；focused pytest 连续两轮均 199 passed；`git diff --check` exit 0。
+
+### Task 3 评审修复记录
+
+- Round 1：SPEC 与 QUALITY 拒绝仅保留最近 commit receipt、DB fence 已提交后取消旧 run 的窗口、aiosqlite 迟到 `BEGIN IMMEDIATE`、已有库 `CREATE IF NOT EXISTS` 修补损坏以及 close 失败后不可重试。修复引入不含历史摘要正文的 immutable SHA-256 operation receipts、cancellation-safe drain 和 fail-closed canonical schema v1。
+- Round 2：SPEC PASS；QUALITY 拒绝重复 `task.cancel()` 打断 runner 异步清理，以及 readiness 未核对当前 active/tombstone receipt。修复后 cancel 仅在 false→true 边沿触发，当前 receipt 缺失或状态篡改硬失败。
+- Round 3：SPEC PASS；QUALITY 拒绝 current commit `payload_fingerprint` 无法从持久元数据重算。修复持久 canonical `commit_lease_id`，按 lease/epoch/base/current summary 重算 payload，并用 nullable FK 关联永久 lease history，不保存历史 summary。
+- Round 4：SPEC 与 QUALITY 均 PASS；合法 lease rotation/reopen、旧 operation exact replay、active-mirror/tombstone/zero control、transaction double-cancel、run cleanup、schema/FK 与 close retry 对抗探针通过。
+- 控制会话复验：原 lease cancellation 窗口探针已关闭；Task 3 focused `61 passed`；工作树在 ledger 更新前 clean。
 
 ## 整分支终审与门禁
 
