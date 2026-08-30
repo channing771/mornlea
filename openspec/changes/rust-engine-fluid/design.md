@@ -75,10 +75,14 @@ input/scratch/output buffer,`#cgo noescape nocallback`,失败返回状态码,pan
   到期检查、探视守卫、budget 计数)、再一次批量求值、解码后仍经 `strongerWrite`
   并入 `pendingWrites`」与逐个求值逐位等价。7 格邻域编码直接调用现行
   `fluidWorld.BlockAt`(scope 外/未就绪 → Barrier),不写第二份读路径。
-- 盒组装粒度 = 每区块一次:`State.rescanChunkFluids` 入口现场组装(中心区段经
+- 盒组装粒度 = 每 (区块, 平面) 扫描单元一次:`State.rescanChunkFluids` 的平面
+  循环对每个平面以**该平面的被扫区块**为盒中心现场组装(中心区段经
   `IsUniform`/线性 `idAt` 采样,裙边列取就绪邻块数据或 Barrier,元数据 9 区块),
-  平面循环内只改 header 的 x0..x1/z0..z1/start_section/budget 复用同一份盒体;
-  不跨 tick 缓存,语义与现行逐 tick 读世界一致,免去陈旧性论证。
+  每次 `rescanChunkFluids` 调用内每平面至多一次、每区块重扫至多 5 次编码;
+  不跨 tick 缓存,语义与现行逐 tick 读世界一致,免去陈旧性论证。共享一份以
+  重扫目标区块为中心的盒并不可行:边界平面的扫描条带会落在最外裙边列上,
+  五邻不动点的邻格读越出盒外,且区段级不动点会拿中心区块的区段记录描述
+  被扫邻块——engine header 契约钉死「被扫描区块是盒中心区块」。
 
 ### 状态与编排刻意留 Go
 
@@ -132,9 +136,9 @@ vectors(垂直流、水平扩散、多源汇合取最强、作物冲毁、门四
 
 - **邻域盒编码 bug**:裙边 8 区块、双态区段,错一格即行为分叉——逐位差分 + 边界
   地形 golden 兜住;编码器单测覆盖 8 个裙边方向与未就绪邻居。
-- **重扫组装成本**:每区块一次组装、平面循环复用,全展开最坏 ≈244KB,均匀段占
-  绝对多数时实际远小;数值 record-only,若实测超预期,布局已预留 Palette 直通
-  路径。
+- **重扫组装成本**:每 (区块, 平面) 一次组装、每区块重扫至多 5 次编码,单盒
+  全展开最坏 ≈249.6KB(与 ledger 同按十进制 KB 记法),均匀段占绝对多数时实际
+  远小;数值 record-only,若实测超预期,布局已预留 Palette 直通路径。
 - **ABI 混装**:握手拒绝混装测试覆盖;`make rust` 重建纪律防陈旧 dylib 静默挂起。
 - **基线缺失**:`internal/fluid` 现无 micro-bench(见 ledger 基线记录),迁移收益
   对照以首次 oracle 差分 bench 为基线,scenario 数值只记录。

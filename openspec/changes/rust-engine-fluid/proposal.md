@@ -24,8 +24,11 @@
 - engine ABI v8→v9 新增 `mornlea_fluid_eval_batch` 与 `mornlea_fluid_rescan` 两个
   无状态纯函数(调用方持有全部 buffer,失败返回状态码,panic 收敛)。
 - `internal/fluid` 接入 nativeabi:`Queue.Advance` 阶段一改为「先按现行循环弹出
-  ≤budget 项、再一次批量求值」;sim 侧重扫侧由 realm 组装以被扫区块为中心的
-  18×384×18 邻域盒(含 8 邻块裙边列与区段元数据),交 `internal/fluid` 导出的
+  ≤budget 项、再一次批量求值」;sim 侧重扫侧由 realm 按 (区块, 平面) 扫描单元
+  现场组装以该平面被扫区块为中心的 18×384×18 邻域盒(含 8 邻块裙边列与区段
+  元数据;五段平面各自组盒、每区块重扫至多 5 次编码——共享一份以重扫目标
+  区块为中心的盒会把边界平面条带放到最外裙边列上,五邻不动点读越出盒外,
+  区段级不动点也会错拿中心区块记录描述被扫邻块),交 `internal/fluid` 导出的
   扫描包装函数执行,`nativeabi` 边不进 sim。
 - Go 实现转 test-only oracle:`evalCell`/`flowingSurvives` 与重扫扫描/两级不动点
   判据移入测试文件,新增逐位差分、golden vectors 与 fuzz 门禁;现有性质测试、
