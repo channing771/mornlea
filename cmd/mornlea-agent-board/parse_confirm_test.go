@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-// TestParseConfirmRequest 以 E-13-approval.json 的实际字段为准。
+// TestParseConfirmRequest 以确认请求文件的实际字段为准。
 func TestParseConfirmRequest(t *testing.T) {
 	data := []byte(`{
 		"id": "E-13-approval",
@@ -47,7 +47,7 @@ func TestParseConfirmRequestWithSupersededBy(t *testing.T) {
 	}
 }
 
-// TestParseConfirmReply 以 E-13-approval.reply.json 的实际字段为准。
+// TestParseConfirmReply 以确认回复文件的实际字段为准。
 func TestParseConfirmReply(t *testing.T) {
 	data := []byte(`{
 		"id": "E-13-approval",

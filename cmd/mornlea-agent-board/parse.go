@@ -85,7 +85,7 @@ type ChainStatus struct {
 
 // BacklogTask 为 docs/feature-backlog.md 的一行功能规划任务。
 type BacklogTask struct {
-	// ID 为任务编号（如 A-01、F-03）。
+	// ID 为任务编号，格式是字母前缀、连字符和两位数字。
 	ID string `json:"id"`
 	// Feature 为功能名。
 	Feature string `json:"feature"`
@@ -147,7 +147,7 @@ type ChangeStatus struct {
 
 // ConfirmCard 为一张确认卡片。
 type ConfirmCard struct {
-	// ID 为卡片 id（如 E-13-approval）。
+	// ID 为由任务编号与用途后缀组成的卡片 id。
 	ID string `json:"id"`
 	// Kind 为卡片类型（approval|question；请求未提供时默认 approval）。
 	Kind string `json:"kind"`
@@ -169,7 +169,7 @@ type ConfirmCard struct {
 	ReplyText string `json:"replyText,omitempty"`
 	// Status 为请求 JSON 中的原始 status 字段（pending|answered 等）。
 	Status string `json:"status,omitempty"`
-	// SupersededBy 表示该请求已被另一 id 取代（如 E-13-approval1 → E-13-approval2）。
+	// SupersededBy 表示该请求已被另一带递增后缀的 id 取代。
 	SupersededBy string `json:"supersededBy,omitempty"`
 	// CreatedAt 为创建时间（JSON createdAt，RFC3339）。
 	CreatedAt string `json:"createdAt"`
@@ -201,7 +201,7 @@ type psRecord struct {
 }
 
 // confirmRequest 是 ~/.mornlea/confirm/<id>.json 的请求字段
-// （字段名以 E-13-approval.json 等实际文件为准）。
+// （字段名以实际确认请求文件为准）。
 type confirmRequest struct {
 	ID           string `json:"id"`
 	Title        string `json:"title"`
@@ -430,7 +430,7 @@ func countTaskCheckboxes(lines []string) (done, total int) {
 
 // parseConfirmRequest 解析 ~/.mornlea/confirm/<id>.json 的请求内容。
 //
-// 字段名以实测的 E-13-approval.json 等文件为准：id/title/category/kind/question/
+// 字段名以实测的确认请求文件为准：id/title/category/kind/question/
 // design/status/createdAt/repliedAt/supersededBy。请求 JSON 里还可能有
 // options/workerTool 等字段，本解析只保留看板需要的字段，未知字段被忽略。
 func parseConfirmRequest(data []byte) (confirmRequest, error) {
@@ -443,7 +443,7 @@ func parseConfirmRequest(data []byte) (confirmRequest, error) {
 
 // parseConfirmReply 解析 ~/.mornlea/confirm/<id>.reply.json 的回复内容。
 //
-// 字段名以实测的 E-13-approval.reply.json 等文件为准：id/action/text/repliedAt。
+// 字段名以实测的确认回复文件为准：id/action/text/repliedAt。
 // 回复 JSON 还可能有 senderOpenId 等字段，这里只保留看板需要的字段。
 func parseConfirmReply(data []byte) (confirmReply, error) {
 	var r confirmReply

@@ -341,7 +341,7 @@ func (c *liveCollector) collectTasks(errs map[string]string) []BacklogTask {
 	return tasks
 }
 
-// isBacklogTaskPrefix 判断一行是否形似任务表行：首格为编号（如 A-01、F-03）。
+// isBacklogTaskPrefix 判断一行是否形似任务表行：首格为任务编号。
 func isBacklogTaskPrefix(line string) bool {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, "|") {
@@ -354,7 +354,7 @@ func isBacklogTaskPrefix(line string) bool {
 	return isTaskID(strings.TrimSpace(cell))
 }
 
-// isTaskID 判断字符串是否为任务编号（如 A-01、F-03，即 [A-F]-NN 四字符）。
+// isTaskID 判断字符串是否为任务编号，即字母 A 至 F、连字符和两位数字。
 func isTaskID(s string) bool {
 	if len(s) != 4 || s[1] != '-' {
 		return false
@@ -550,7 +550,7 @@ func lastNonEmptyLine(s string) string {
 
 // collectConfirm 扫描 ~/.mornlea/confirm 下的请求/回复对，构建确认卡片。
 //
-// 命名约定：<id>.json 是请求，<id>.reply.json 是回复；roundN（如 E-07.round1）是
+// 命名约定：<id>.json 是请求，<id>.reply.json 是回复；roundN 是
 // 多轮修订的命名，会归并到同一基础 id 判断是否有回复。feishu*.json、*.bak*、
 // resume-*.log 等非卡片文件一律忽略。
 func (c *liveCollector) collectConfirm(errs map[string]string) []ConfirmCard {
