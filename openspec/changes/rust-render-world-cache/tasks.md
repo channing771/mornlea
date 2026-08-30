@@ -188,7 +188,7 @@
   本轮修改的 independent planning reviewer 同时给出 spec-compliance 与 quality verdict；reviewer
   identity、findings、修复轮次与裁决写入 ledger 后，只有两项 verdict 均通过且 0 open findings
   才可勾选。本次 planning-fix implementer 不得自行 review，本提交前保持未勾选。
-- [ ] 6.8 已完成并必须保留 non-rewriting merge
+- [x] 6.8 已完成并必须保留 non-rewriting merge
   `6f622407b1078d264707d8643f7fec41c553a48e`；其双亲精确为 feature
   `9dc22f1b9a8106f71a5f6496ac2bd708c31c5584` 与冻结 selected-main
   `9bb84c6841b59a18b030256d5952ed60acc215da`。本任务不得执行第二次 main merge，不得审计

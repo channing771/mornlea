@@ -1919,3 +1919,69 @@ delta 行为契约、代码、current docs、main specs 或配置，不执行 me
   focused rerun、artifact SHA、clean status 与 concerns 写入 ignored `task-6.8-report.md`。后续
   fresh scoped quality re-review 需确认 1 Important + 1 Minor 均关闭且 0 open，才能进入
   Task 6.8 bookkeeping；本轮不运行 Task 6.9 全 18 门禁，不 archive、push、merge 或 rebase。
+
+## Task 6.8：独立实现评审、fix round 1 复审与完成裁决
+
+### 初始 reviews 与真实 findings
+
+- 初始 implementation HEAD 为
+  `09a732cceae6845531ec52f586d58c120ad4dc47`。Fresh independent spec reviewer
+  `01a0534a-9c16-7582-93e6-01249512c9a5` 在 ignored
+  `.superpowers/sdd/2026-08-30-rust-render-world-main-integration/task-6.8-spec-review.md`
+  给出 spec-compliance **PASS**；0 Critical、0 Important、0 Minor、0 open findings。
+- Fresh independent quality reviewer
+  `01a0534a-9c8b-7ca1-90b1-6eb7ed5e1153` 在 ignored
+  `.superpowers/sdd/2026-08-30-rust-render-world-main-integration/task-6.8-quality-review.md`
+  给出 quality **Needs fixes**；0 Critical、1 Important、1 Minor、2 open findings。
+  Important 是 nullable CoreGraphics create result 可先形成 `AutoRelease`，错误返回时
+  `Drop` 无条件执行 `CFRelease(NULL)` 并可能 crash，破坏 `CaptureUnavailable` 与 app pump
+  错误交付；Minor 是 `copy_rows_top_down` 的末行
+  `last_row_start + width_bytes` 未 checked，违反 overflow 返回 false 且不部分写 `dst` 的契约。
+
+### Fix commit 与 scoped re-reviews
+
+- Fix round 1 commit 为
+  `0bc2249425d877653c6116379c3209ee499589f4`
+  `fix(client): guard nullable capture handles`，唯一父为
+  `09a732cceae6845531ec52f586d58c120ad4dc47`。提交范围恰为
+  `engine/crates/mornlea_client/src/capture.rs` 与本 append-only `ledger.md`，136 insertions /
+  24 deletions；严格 TDD 的两个 RED、最小修复、GREEN 与 focused validation 已在上一节及
+  ignored `task-6.8-report.md` 原样记录。
+- Fresh scoped spec re-review
+  `.superpowers/sdd/2026-08-30-rust-render-world-main-integration/task-6.8-fix-round-1-spec-rereview.md`
+  对 exact `0bc22494` 给出 spec-compliance **PASS**；0 Critical、0 Important、0 Minor、
+  0 open findings，允许 spec gate 维持通过。
+- Fresh scoped quality re-review
+  `.superpowers/sdd/2026-08-30-rust-render-world-main-integration/task-6.8-fix-round-1-quality-rereview.md`
+  确认 Important 与 Minor 均 **ADDRESSED**；0 new findings，quality **Approved**，0 open。
+  两份 scoped re-review 均不替代 Task 6.9 的 immutable-final-HEAD 18 门禁。
+
+### Controller acceptance 与 bookkeeping 边界
+
+- Controller 接受上述 independent spec/quality closure：Task 6.8 implementation reviews 最终为
+  spec **PASS**、quality **Approved**、0 open findings，现可勾选 Task 6.8。Tasks 6.9 与
+  6.10 保持 pending；预期进度推进为 25 total / 23 complete / 2 remaining、`state: ready`。
+- 本次只做 review bookkeeping，不运行产品测试，不开始 Task 6.9，不读取 live main，也不执行
+  merge、rebase、archive、push 或 feature-to-main merge。tracked 修改只允许本 ledger 的
+  append-only 内容与 `tasks.md` 的 Task 6.8 checkbox；Tasks 2–6.7 历史及 6.9/6.10 内容和状态
+  必须保持不变。
+
+### Review bookkeeping validation
+
+- `openspec validate rust-render-world-cache --strict --no-interactive`：exit 0；change valid。
+- `openspec validate --all --strict --no-interactive`：exit 0；80 passed、0 failed。
+- `openspec status --change rust-render-world-cache --json`：exit 0；schema `spec-driven`，
+  proposal/specs/design/tasks 四类 artifacts 全部 `done`，唯一 delta spec 路径正确，
+  `isComplete: true`。
+- `openspec instructions apply --change rust-render-world-cache --json`：exit 0；`state: ready`，
+  25 total、23 complete、2 remaining；Task 6.8 done，Tasks 6.9/6.10 pending。
+- `git diff --check`：exit 0且无输出。精确 scope audit 证明 tracked working diff 恰为本
+  `ledger.md` 与 `tasks.md`，staged scope 为零；修改前 ledger 的 147,027-byte committed prefix
+  保持逐字一致，本节只追加其后；`tasks.md` 唯一 diff 为 Task 6.8 checkbox 从 unchecked 改为
+  checked，25 个 tasks 精确为 23 complete / 2 pending。
+- 首次只读 scope checker 对 `git diff` 行的期望值漏计 Markdown 列表项自身的 `-`，因此在
+  tasks line assertion 处 exit 1；仓库状态未改变。修正期望为实际的 `-- [ ]` / `+- [x]` 后
+  checker exit 0，输出
+  `scope_ok paths=2 ledger_prefix_bytes=147027 tasks=25 complete=23 pending=2 staged=0`。
+- 以上是提交前 working-diff 证据；提交后的 full SHA、exact two-file scope、80/80、25/23/2
+  与 clean status 将写入 ignored `task-6.8-report.md`，避免递归修改 tracked ledger。
