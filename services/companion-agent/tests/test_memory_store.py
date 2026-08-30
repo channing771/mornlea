@@ -421,6 +421,47 @@ def test_immutable_receipts_replay_any_exact_commit_and_fence_operation_reuse(
     run(scenario())
 
 
+def test_historical_exact_commit_replay_survives_a_valid_reopen(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        path = tmp_path / "memory.sqlite3"
+        store, _, lease = await opened_store(path)
+        first = MemoryCommit(
+            namespace_id=NAMESPACE,
+            companion_id=COMPANION,
+            memory_epoch=1,
+            base_revision=0,
+            operation_id=OP_1,
+            summary="first",
+        )
+        second = MemoryCommit(
+            namespace_id=NAMESPACE,
+            companion_id=COMPANION,
+            memory_epoch=1,
+            base_revision=1,
+            operation_id=OP_2,
+            summary="second",
+        )
+        await store.reconcile(lease, active(epoch=1))
+        await store.commit(lease, first)
+        await store.commit(lease, second)
+        await store.close()
+
+        reopened = await SQLiteMemoryStore.open(path, clock_ms=ManualClock())
+        try:
+            replay = await reopened.commit(lease, first)
+            assert replay.committed_revision == 1
+            current = await reopened.reconcile(
+                lease,
+                active(epoch=1, revision=2, operation_id=OP_2, summary="second"),
+            )
+            assert current.memory is not None
+            assert current.memory.revision == 2
+        finally:
+            await reopened.close()
+
+    run(scenario())
+
+
 def test_tombstone_operation_cannot_be_reused_across_epochs_or_states(tmp_path: Path) -> None:
     async def scenario() -> None:
         store, _, lease = await opened_store(tmp_path / "memory.sqlite3")

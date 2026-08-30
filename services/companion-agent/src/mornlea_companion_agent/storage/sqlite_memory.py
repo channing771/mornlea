@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import Self
 
 import aiosqlite
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
-from mornlea_companion_agent.domain.common import UINT64_MAX
+from mornlea_companion_agent.domain.common import UINT64_MAX, UUIDv4
 from mornlea_companion_agent.domain.memory import (
     LEASE_TTL_MS,
     AgentDomainFailure,
@@ -41,6 +41,7 @@ from mornlea_companion_agent.domain.memory import (
 )
 
 _SCHEMA_VERSION = 1
+_UUID_ADAPTER = TypeAdapter(UUIDv4)
 _EXPECTED_COLUMNS = {
     "agent_schema": {"singleton", "schema_version"},
     "namespace_lease_history": {"lease_id"},
@@ -66,6 +67,7 @@ _EXPECTED_COLUMNS = {
         "companion_id",
         "operation_id",
         "operation_kind",
+        "commit_lease_id",
         "payload_fingerprint",
         "state_fingerprint",
         "result_epoch",
@@ -142,6 +144,8 @@ CREATE TABLE memory_operations (
     operation_id TEXT NOT NULL,
     operation_kind TEXT NOT NULL
         CHECK (operation_kind IN ('commit', 'active_mirror', 'tombstone')),
+    commit_lease_id TEXT
+        CHECK (commit_lease_id IS NULL OR length(commit_lease_id) = 36),
     payload_fingerprint BLOB NOT NULL
         CHECK (typeof(payload_fingerprint) = 'blob' AND length(payload_fingerprint) = 32),
     state_fingerprint BLOB NOT NULL
@@ -154,14 +158,22 @@ CREATE TABLE memory_operations (
             OR (typeof(result_revision) = 'blob' AND length(result_revision) = 8)
         ),
     PRIMARY KEY (namespace_id, companion_id, operation_id),
+    FOREIGN KEY (commit_lease_id) REFERENCES namespace_lease_history (lease_id),
     CHECK (
         (
-            operation_kind = 'tombstone'
-            AND result_revision IS NULL
+            operation_kind = 'commit'
+            AND commit_lease_id IS NOT NULL
+            AND result_revision IS NOT NULL
         )
         OR (
-            operation_kind IN ('commit', 'active_mirror')
+            operation_kind = 'active_mirror'
+            AND commit_lease_id IS NULL
             AND result_revision IS NOT NULL
+        )
+        OR (
+            operation_kind = 'tombstone'
+            AND commit_lease_id IS NULL
+            AND result_revision IS NULL
         )
     )
 ) STRICT, WITHOUT ROWID
@@ -249,6 +261,34 @@ def _text_bytes(value: str) -> bytes:
         return value.encode("ascii", errors="strict")
     except UnicodeEncodeError as error:
         raise MemoryConflict from error
+
+
+def _decode_uuid(value: object) -> str:
+    try:
+        return _UUID_ADAPTER.validate_python(value)
+    except ValidationError as error:
+        raise StorageCorruption from error
+
+
+def _commit_payload_fingerprint(
+    namespace_id: str,
+    companion_id: str,
+    operation_id: str,
+    lease_id: str,
+    memory_epoch: int,
+    base_revision: int,
+    summary: bytes,
+) -> bytes:
+    return _fingerprint(
+        b"commit",
+        _text_bytes(namespace_id),
+        _text_bytes(companion_id),
+        _text_bytes(operation_id),
+        _text_bytes(lease_id),
+        _encode_uint64(memory_epoch),
+        _encode_uint64(base_revision),
+        summary,
+    )
 
 
 def _active_state_fingerprint(
@@ -787,7 +827,18 @@ class SQLiteMemoryStore:
                 )
             ],
             "companion_memory": [],
-            "memory_operations": [],
+            "memory_operations": [
+                (
+                    0,
+                    0,
+                    "namespace_lease_history",
+                    "commit_lease_id",
+                    "lease_id",
+                    "NO ACTION",
+                    "NO ACTION",
+                    "NONE",
+                )
+            ],
         }
         for table, foreign_key_rows_expected in expected_foreign_keys.items():
             rows = await self._fetchall(f"PRAGMA foreign_key_list({table})")
@@ -970,8 +1021,8 @@ class SQLiteMemoryStore:
     ) -> sqlite3.Row | None:
         return await self._fetchone(
             """
-            SELECT operation_kind, payload_fingerprint, state_fingerprint,
-                   result_epoch, result_revision
+            SELECT operation_kind, commit_lease_id, payload_fingerprint,
+                   state_fingerprint, result_epoch, result_revision
             FROM memory_operations
             WHERE namespace_id = ? AND companion_id = ? AND operation_id = ?
             """,
@@ -985,6 +1036,7 @@ class SQLiteMemoryStore:
         operation_id: str,
         *,
         kind: str,
+        commit_lease_id: str | None,
         payload_fingerprint: bytes,
         state_fingerprint: bytes,
         result_epoch: int,
@@ -994,14 +1046,16 @@ class SQLiteMemoryStore:
             """
             INSERT INTO memory_operations (
                 namespace_id, companion_id, operation_id, operation_kind,
-                payload_fingerprint, state_fingerprint, result_epoch, result_revision
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                commit_lease_id, payload_fingerprint, state_fingerprint,
+                result_epoch, result_revision
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 namespace_id,
                 companion_id,
                 operation_id,
                 kind,
+                commit_lease_id,
                 payload_fingerprint,
                 state_fingerprint,
                 _encode_uint64(result_epoch),
@@ -1012,23 +1066,34 @@ class SQLiteMemoryStore:
     @staticmethod
     def _receipt_values(
         row: sqlite3.Row,
-    ) -> tuple[str, bytes, bytes, int, int | None]:
+    ) -> tuple[str, str | None, bytes, bytes, int, int | None]:
         try:
             kind = row["operation_kind"]
+            commit_lease_raw = row["commit_lease_id"]
             payload = row["payload_fingerprint"]
             state = row["state_fingerprint"]
             epoch = _decode_uint64(row["result_epoch"])
             revision_raw = row["result_revision"]
             revision = None if revision_raw is None else _decode_uint64(revision_raw)
             if (
-                not isinstance(kind, str)
+                kind not in {"commit", "active_mirror", "tombstone"}
                 or not isinstance(payload, bytes)
                 or len(payload) != 32
                 or not isinstance(state, bytes)
                 or len(state) != 32
             ):
                 raise StorageCorruption
-            return kind, payload, state, epoch, revision
+            if kind == "commit":
+                commit_lease_id = _decode_uuid(commit_lease_raw)
+                if revision is None:
+                    raise StorageCorruption
+            else:
+                if commit_lease_raw is not None:
+                    raise StorageCorruption
+                commit_lease_id = None
+                if (kind == "tombstone") != (revision is None):
+                    raise StorageCorruption
+            return kind, commit_lease_id, payload, state, epoch, revision
         except AgentDomainFailure:
             raise
         except (IndexError, KeyError, TypeError):
@@ -1073,16 +1138,37 @@ class SQLiteMemoryStore:
                 record.companion_id,
                 record.memory.operation_id,
                 kind="active_mirror",
+                commit_lease_id=None,
                 payload_fingerprint=payload,
                 state_fingerprint=state,
                 result_epoch=record.memory_epoch,
                 result_revision=record.memory.revision,
             )
             return
-        kind, stored_payload, stored_state, epoch, revision = self._receipt_values(row)
+        (
+            kind,
+            commit_lease_id,
+            stored_payload,
+            stored_state,
+            epoch,
+            revision,
+        ) = self._receipt_values(row)
+        expected_payload = payload
+        if kind == "commit":
+            if commit_lease_id is None or record.memory.revision == 0:
+                raise StorageCorruption
+            expected_payload = _commit_payload_fingerprint(
+                record.namespace_id,
+                record.companion_id,
+                record.memory.operation_id,
+                commit_lease_id,
+                record.memory_epoch,
+                record.memory.revision - 1,
+                summary,
+            )
         if (
             kind not in {"commit", "active_mirror"}
-            or (kind == "active_mirror" and stored_payload != payload)
+            or stored_payload != expected_payload
             or stored_state != state
             or epoch != record.memory_epoch
             or revision != record.memory.revision
@@ -1155,13 +1241,21 @@ class SQLiteMemoryStore:
                 record.companion_id,
                 record.tombstone_operation_id,
                 kind="tombstone",
+                commit_lease_id=None,
                 payload_fingerprint=payload,
                 state_fingerprint=state,
                 result_epoch=record.memory_epoch,
                 result_revision=None,
             )
             return
-        kind, stored_payload, stored_state, epoch, revision = self._receipt_values(row)
+        (
+            kind,
+            _commit_lease_id,
+            stored_payload,
+            stored_state,
+            epoch,
+            revision,
+        ) = self._receipt_values(row)
         if (
             kind != "tombstone"
             or stored_payload != payload
@@ -1187,14 +1281,13 @@ class SQLiteMemoryStore:
         if command.base_revision == UINT64_MAX:
             raise MemoryConflict
         committed_revision = command.base_revision + 1
-        payload = _fingerprint(
-            b"commit",
-            _text_bytes(command.namespace_id),
-            _text_bytes(command.companion_id),
-            _text_bytes(command.operation_id),
-            _text_bytes(identity.lease_id),
-            _encode_uint64(command.memory_epoch),
-            _encode_uint64(command.base_revision),
+        payload = _commit_payload_fingerprint(
+            command.namespace_id,
+            command.companion_id,
+            command.operation_id,
+            identity.lease_id,
+            command.memory_epoch,
+            command.base_revision,
             summary,
         )
         state = _active_state_fingerprint(
@@ -1205,9 +1298,17 @@ class SQLiteMemoryStore:
             command.operation_id,
             summary,
         )
-        kind, stored_payload, stored_state, epoch, revision = self._receipt_values(row)
+        (
+            kind,
+            commit_lease_id,
+            stored_payload,
+            stored_state,
+            epoch,
+            revision,
+        ) = self._receipt_values(row)
         if (
             kind != "commit"
+            or commit_lease_id != identity.lease_id
             or stored_payload != payload
             or stored_state != state
             or epoch != command.memory_epoch
@@ -1228,14 +1329,14 @@ class SQLiteMemoryStore:
             command.companion_id,
             command.operation_id,
             kind="commit",
-            payload_fingerprint=_fingerprint(
-                b"commit",
-                _text_bytes(command.namespace_id),
-                _text_bytes(command.companion_id),
-                _text_bytes(command.operation_id),
-                _text_bytes(identity.lease_id),
-                _encode_uint64(command.memory_epoch),
-                _encode_uint64(command.base_revision),
+            commit_lease_id=identity.lease_id,
+            payload_fingerprint=_commit_payload_fingerprint(
+                command.namespace_id,
+                command.companion_id,
+                command.operation_id,
+                identity.lease_id,
+                command.memory_epoch,
+                command.base_revision,
                 summary,
             ),
             state_fingerprint=_active_state_fingerprint(

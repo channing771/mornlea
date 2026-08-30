@@ -23,6 +23,7 @@ NAMESPACE = "11111111-1111-4111-8111-111111111111"
 CLIENT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 COMPANION = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 LEASE = "10000000-0000-4000-8000-000000000001"
+LEASE_2 = "10000000-0000-4000-8000-000000000002"
 OPERATION = "20000000-0000-4000-8000-000000000001"
 
 FORBIDDEN_STORAGE_WORDS = {
@@ -140,6 +141,7 @@ def test_sqlite_schema_and_rows_only_hold_lease_and_compact_memory(tmp_path: Pat
                 "companion_id",
                 "operation_id",
                 "operation_kind",
+                "commit_lease_id",
                 "payload_fingerprint",
                 "state_fingerprint",
                 "result_epoch",
@@ -177,7 +179,8 @@ def test_sqlite_schema_and_rows_only_hold_lease_and_compact_memory(tmp_path: Pat
         )
         receipt = connection.execute(
             """
-            SELECT operation_id, operation_kind, length(payload_fingerprint),
+            SELECT operation_id, operation_kind, commit_lease_id,
+                   length(payload_fingerprint),
                    length(state_fingerprint), result_epoch, result_revision
             FROM memory_operations
             """
@@ -185,6 +188,7 @@ def test_sqlite_schema_and_rows_only_hold_lease_and_compact_memory(tmp_path: Pat
         assert receipt == (
             OPERATION,
             "commit",
+            LEASE,
             32,
             32,
             (1).to_bytes(8, "big"),
@@ -258,6 +262,7 @@ def test_existing_schema_damage_fails_closed_without_repair(
                         companion_id TEXT,
                         operation_id TEXT,
                         operation_kind TEXT,
+                        commit_lease_id TEXT,
                         payload_fingerprint BLOB,
                         state_fingerprint BLOB,
                         result_epoch BLOB,
@@ -334,9 +339,78 @@ def test_existing_foreign_key_violation_fails_readiness_without_repair(tmp_path:
     run(scenario())
 
 
+def test_existing_commit_receipt_requires_its_historical_lease(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        path = tmp_path / "missing-commit-lease-history.sqlite3"
+        store = await SQLiteMemoryStore.open(path, clock_ms=ManualClock())
+        manager = NamespaceLeaseManager(store, lease_id_factory=uuid_sequence(LEASE, LEASE_2))
+        first = await manager.acquire(NAMESPACE, CLIENT)
+        identity = LeaseIdentity(
+            namespace_id=NAMESPACE,
+            client_instance_id=CLIENT,
+            lease_id=first.lease_id,
+        )
+        await store.reconcile(
+            identity,
+            MemoryReconcile(
+                namespace_id=NAMESPACE,
+                companion_id=COMPANION,
+                memory_epoch=1,
+                active=True,
+                tombstone_operation_id=None,
+                mirror=MemoryStateZero(revision=0, operation_id=None, summary=""),
+            ),
+        )
+        await store.commit(
+            identity,
+            MemoryCommit(
+                namespace_id=NAMESPACE,
+                companion_id=COMPANION,
+                memory_epoch=1,
+                base_revision=0,
+                operation_id=OPERATION,
+                summary="current",
+            ),
+        )
+        await manager.acquire(NAMESPACE, CLIENT)
+        await store.close()
+
+        connection = sqlite3.connect(path)
+        try:
+            connection.execute("PRAGMA foreign_keys = OFF")
+            connection.execute(
+                "DELETE FROM namespace_lease_history WHERE lease_id = ?",
+                (LEASE,),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        before = path.read_bytes()
+        unexpected: SQLiteMemoryStore | None = None
+        try:
+            with pytest.raises(StorageCorruption):
+                unexpected = await SQLiteMemoryStore.open(path, clock_ms=ManualClock())
+        finally:
+            if unexpected is not None:
+                await unexpected.close()
+        assert path.read_bytes() == before
+
+    run(scenario())
+
+
 @pytest.mark.parametrize(
     "damage",
-    ["missing", "kind", "epoch", "revision", "state_fingerprint"],
+    [
+        "missing",
+        "kind",
+        "epoch",
+        "revision",
+        "payload_fingerprint",
+        "state_fingerprint",
+        "commit_lease",
+        "invalid_commit_lease",
+    ],
 )
 def test_existing_current_active_receipt_damage_fails_closed(
     tmp_path: Path,
@@ -381,7 +455,12 @@ def test_existing_current_active_receipt_damage_fails_closed(
             if damage == "missing":
                 connection.execute("DELETE FROM memory_operations")
             elif damage == "kind":
-                connection.execute("UPDATE memory_operations SET operation_kind = 'active_mirror'")
+                connection.execute(
+                    """
+                    UPDATE memory_operations
+                    SET operation_kind = 'active_mirror', commit_lease_id = NULL
+                    """
+                )
             elif damage == "epoch":
                 connection.execute(
                     "UPDATE memory_operations SET result_epoch = ?",
@@ -392,10 +471,34 @@ def test_existing_current_active_receipt_damage_fails_closed(
                     "UPDATE memory_operations SET result_revision = ?",
                     ((2).to_bytes(8, "big"),),
                 )
-            else:
+            elif damage == "payload_fingerprint":
+                connection.execute(
+                    "UPDATE memory_operations SET payload_fingerprint = ?",
+                    (b"p" * 32,),
+                )
+            elif damage == "state_fingerprint":
                 connection.execute(
                     "UPDATE memory_operations SET state_fingerprint = ?",
                     (b"x" * 32,),
+                )
+            elif damage == "commit_lease":
+                connection.execute(
+                    "INSERT INTO namespace_lease_history (lease_id) VALUES (?)",
+                    (LEASE_2,),
+                )
+                connection.execute(
+                    "UPDATE memory_operations SET commit_lease_id = ?",
+                    (LEASE_2,),
+                )
+            else:
+                invalid_lease = "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA"
+                connection.execute(
+                    "INSERT INTO namespace_lease_history (lease_id) VALUES (?)",
+                    (invalid_lease,),
+                )
+                connection.execute(
+                    "UPDATE memory_operations SET commit_lease_id = ?",
+                    (invalid_lease,),
                 )
             connection.commit()
         finally:
