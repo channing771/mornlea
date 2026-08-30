@@ -14,9 +14,10 @@ import (
 //
 // 字节契约（`mornlea_client` 窗口捕获与离屏 readback 共用，见
 // `internal/client` 的 `Window.Capture` 注释）：每像素 4 字节、32 位小端即
-// B/G/R/A 字节序、sRGB 编码、自上而下、行紧凑无 padding，长度恰为
-// width*height*4。Go 消费侧因此只需交换 B/R 两个字节，行序无需翻转；sRGB
-// 字节本身已是 sRGB 编码，与 PNG 约定一致，不做任何伽马换算。
+// B/G/R/A 字节序、自上而下、行紧凑无 padding，长度恰为 width*height*4；
+// 契约未标注色彩空间。Go 消费侧因此只需交换 B/R 两个字节，行序无需翻转，
+// 通道字节直拷、不做任何伽马换算——与 `cmd/mornlea/capture` 侧 readback
+// 转换同一口径：渲染管线产出的设备 RGB 原样进 PNG。
 //
 // alpha 有意按预乘值透传、不做逐像素除法：窗口合成画面实际不透明
 // （alpha 恒 255），该取值下预乘与非预乘逐字一致；引入除法只会为不出现的

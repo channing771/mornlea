@@ -372,6 +372,35 @@ func TestRecordFrameWaitTimeoutTerminates(t *testing.T) {
 	}
 }
 
+// TestRecordRejectsConcurrentRecording 钉住并发录制互斥的失败路径：录制
+// 标志被占用时，第二个 `/record` 以 503 与稳定中文文案失败，不交叠采样。
+func TestRecordRejectsConcurrentRecording(t *testing.T) {
+	s := newRecordService(newFakeClock())
+	// 直接持有录制标志模拟另一场录制正在进行；结束时由测试自行释放。
+	if !s.tryBeginRecording() {
+		t.Fatal("占位录制标志失败")
+	}
+	defer s.endRecording()
+
+	rr := serveToRecorder(s, "/record?seconds=1&fps=2")
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("状态码 = %d，想要 503（body：%s）", rr.Code, rr.Body.String())
+	}
+	var payload struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("错误响应应为 JSON：%v（body：%s）", err, rr.Body.String())
+	}
+	if !strings.Contains(payload.Error, "已有录制在进行中") {
+		t.Errorf("错误文案缺少稳定要素：%q", payload.Error)
+	}
+	// 被拒绝的请求不得碰通道：帧循环侧不应看到任何采样请求。
+	if _, ok := s.PendingCapture(); ok {
+		t.Error("并发录制被拒时不应产生帧捕获")
+	}
+}
+
 // TestRecordingFlagObservedByPump 钉住录制中状态对观察者可见：泵在交付
 // 第一帧时读到的 recording 标志必须为 true。
 func TestRecordingFlagObservedByPump(t *testing.T) {

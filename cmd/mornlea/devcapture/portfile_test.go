@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -140,14 +141,46 @@ func statusOf(t *testing.T, addr string) statusReport {
 }
 
 // TestStartTwiceFails 钉住重复启动防御：同一 `Service` 二次 Start 必须报错，
-// 而不是泄漏第一个监听。
+// 且失败发生在任何副作用之前——端口发现文件原样保留（仍是首次绑定端口），
+// 不得被顺延重试覆写成指向死端口的条目。
 func TestStartTwiceFails(t *testing.T) {
-	s := New(Options{Addr: "127.0.0.1:0", PortFilePath: filepath.Join(t.TempDir(), "dev-capture.json")})
+	path := filepath.Join(t.TempDir(), "dev-capture.json")
+	s := New(Options{Addr: "127.0.0.1:0", PortFilePath: path})
 	if _, err := s.Start(); err != nil {
 		t.Fatalf("首次 Start 失败：%v", err)
 	}
 	defer s.Stop()
+	before, err := readPortFile(path)
+	if err != nil {
+		t.Fatalf("读取端口发现文件失败：%v", err)
+	}
 	if _, err := s.Start(); err == nil {
 		t.Fatal("二次 Start 应报错")
+	}
+	after, err := readPortFile(path)
+	if err != nil {
+		t.Fatalf("二次 Start 后端口发现文件应原样保留：%v", err)
+	}
+	if after != before {
+		t.Errorf("二次 Start 不得破坏端口发现文件：%+v → %+v", before, after)
+	}
+}
+
+// TestStartRejectsNonLoopbackHost 钉住回环绑定防线：options 层传入的任何
+// 非回环地址都在绑定之前被明确拒绝，且不写端口发现文件——「仅绑定回环」
+// 不能只靠默认值约定。
+func TestStartRejectsNonLoopbackHost(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "dev-capture.json")
+	for _, addr := range []string{"0.0.0.0:17799", ":17799", "192.168.1.5:17799"} {
+		s := New(Options{Addr: addr, PortFilePath: path})
+		if _, err := s.Start(); err == nil {
+			_ = s.Stop()
+			t.Fatalf("非回环地址 %s 应被拒绝", addr)
+		} else if !strings.Contains(err.Error(), "回环") {
+			t.Errorf("非回环拒绝 %s 的文案应点名回环约束：%v", addr, err)
+		}
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("被拒绝的启动不应写端口发现文件：err = %v", err)
 	}
 }

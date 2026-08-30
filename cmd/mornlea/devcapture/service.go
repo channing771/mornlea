@@ -301,11 +301,21 @@ func (s *Service) Port() int {
 
 // Start 绑定监听、写入端口发现文件并在后台开始服务，返回实际监听地址。
 //
+// 幂等防线先行：重复 Start 在任何副作用（顺延绑定、写端口文件）发生之前
+// 失败——否则第二个监听会以顺延后的新端口覆写发现文件，留下指向死端口的
+// 条目且无任何失败信号。
+//
 // 端口策略：自请求端口起逐个 +1 顺延（至多 `maxBindAttempts` 次），既容忍
 // 偶发占用，也让发现文件的消费者拿到的端口始终可预测；仅「地址被占」参与
 // 顺延，其余绑定错误立即失败。请求端口为 0（内核随机分配）时无顺延语义。
 // 发现文件写入失败视为启动失败：发现机制半失效比拒绝启动更难排查。
 func (s *Service) Start() (string, error) {
+	s.mu.Lock()
+	if s.server != nil {
+		s.mu.Unlock()
+		return "", errors.New("devcapture: 服务已启动")
+	}
+	s.mu.Unlock()
 	listener, err := s.listen()
 	if err != nil {
 		return "", err
@@ -329,11 +339,6 @@ func (s *Service) Start() (string, error) {
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 	s.mu.Lock()
-	if s.server != nil {
-		s.mu.Unlock()
-		_ = listener.Close()
-		return "", errors.New("devcapture: 服务已启动")
-	}
 	s.port = port
 	s.resolvedPortFile = path
 	s.server = server
@@ -344,11 +349,18 @@ func (s *Service) Start() (string, error) {
 	return listener.Addr().String(), nil
 }
 
-// listen 按顺延策略绑定回环监听（见 `Start`）。
+// listen 按顺延策略绑定回环监听（见 `Start`）。回环约束是 spec 的 MUST：
+// 默认值只落在 `127.0.0.1`，但 options 层传入的任何地址都过这道防御闸——
+// 非回环主机在绑定之前即以明确错误拒绝，绝不让调试服务暴露到回环之外。
 func (s *Service) listen() (net.Listener, error) {
 	host, portRaw, err := net.SplitHostPort(s.addr)
 	if err != nil {
 		return nil, fmt.Errorf("devcapture: 解析监听地址 %q 失败: %w", s.addr, err)
+	}
+	switch host {
+	case "127.0.0.1", "::1", "localhost":
+	default:
+		return nil, fmt.Errorf("devcapture: 监听地址 %q 的主机 %q 不是回环地址：捕获服务只允许绑定回环（127.0.0.1、::1 或 localhost）", s.addr, host)
 	}
 	base, err := strconv.Atoi(portRaw)
 	if err != nil || base < 0 {
@@ -374,8 +386,8 @@ func (s *Service) listen() (net.Listener, error) {
 }
 
 // Stop 优雅关闭服务并清除端口发现文件。幂等：未启动、重复调用都返回 nil。
-// 关闭带 `shutdownTimeout` 上限，在途请求超限后由连接层强制收口，进程退出
-// 不被拖住。
+// 关闭带 `shutdownTimeout` 上限：超时即返回，未排空的在途连接不会被强制
+// 断开，兜底是进程退出（本地工具的请求都有毫秒级上限，正常到不了这一步）。
 func (s *Service) Stop() error {
 	s.mu.Lock()
 	server, listener, path := s.server, s.listener, s.resolvedPortFile

@@ -39,7 +39,9 @@ func writeJSONError(w http.ResponseWriter, status int, message string) {
 func frameWaitErrorText(err error) string {
 	switch {
 	case errors.Is(err, ErrCaptureBusy):
-		return "已有捕获请求在执行，请稍后重试"
+		// 通道被占既可能来自并发请求，也可能是上一次超时请求仍滞留在通道里
+		// 而帧循环已死——后者下「稍后重试」永不成功，文案必须两种成因都点名。
+		return "已有捕获请求在执行或帧循环已停止，请稍后重试"
 	case errors.Is(err, ErrFrameWaitTimeout):
 		return "等待捕获交付超时（帧循环可能已停止）"
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
@@ -92,9 +94,6 @@ func (s *Service) serveStatus(w http.ResponseWriter, r *http.Request) {
 		if width > 0 && height > 0 {
 			report.Window = &windowDoc{Width: width, Height: height}
 		}
-	}
-	if report.Phase == "" {
-		report.Phase = "unknown"
 	}
 	if summary := s.lastCaptureSnapshot(); !summary.at.IsZero() {
 		report.LastCapture = &lastCaptureDoc{
