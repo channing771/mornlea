@@ -151,8 +151,10 @@ func runSwordCombatWireScript(t *testing.T, transport string) swordCombatTranscr
 	ready := false
 	spawnSeen := false
 	for i := 0; i < 100 && !(ready && spawnSeen); i++ {
-		_ = host.world.StepForTest()
-		msgs := drainAllWithTimeout(t, endpoint, 20*time.Millisecond)
+		tick := host.world.StepForTest().Tick
+		// 每次只在当前权威 tick 的尾消息到达后再决定是否继续推进，避免
+		// transport 到达延迟把 readiness 等待变成额外的模拟 tick。
+		msgs := drainAllForSwordCombatTick(t, endpoint, tick)
 		for _, msg := range msgs {
 			switch m := msg.(type) {
 			case network.PlayerState:
@@ -168,8 +170,8 @@ func runSwordCombatWireScript(t *testing.T, transport string) swordCombatTranscr
 		t.Fatalf("%s sword combat 未就绪 ready=%v spawnSeen=%v", transport, ready, spawnSeen)
 	}
 	for i := 0; i < 5; i++ {
-		_ = host.world.StepForTest()
-		drainAllWithTimeout(t, endpoint, 5*time.Millisecond)
+		tick := host.world.StepForTest().Tick
+		drainAllForSwordCombatTick(t, endpoint, tick)
 	}
 
 	sendIntegration(t, endpoint, network.PlayerInput{Sequence: 1, Yaw: 0, Pitch: 0, Mining: true})
