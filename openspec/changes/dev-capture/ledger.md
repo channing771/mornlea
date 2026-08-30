@@ -77,3 +77,37 @@
 - 评审（独立评审子代理）：规格合规 PASS + 代码质量 PASS，零返修。评审提示
   下游必查项：4.1 需钉「`Done` 满时帧循环不被阻塞」（任务 3.1 只以泵内无
   channel 操作间接钉住非阻塞语义）。
+
+## Task 4: devcapture 服务包
+
+- 实现：新包 `cmd/mornlea/devcapture`（全文件 `//go:build darwin`，与 app 包
+  门禁一致）——`Service` 实现 `app.CaptureCoordinator`（容量 1 Done +
+  select/default 满丢弃计数，nil `Done` 同防御路径）；`/status`、
+  `/screenshot`（10s 上限）、`/record`（单帧推进编排、假时钟注入、越界 400、
+  zip manifest、GIF 可选、并发录制 503 互斥）；`bgra.go` 转换与
+  `mornlea_client` 字节契约对齐（未 import capture 包）；端口发现文件
+  `~/.mornlea/dev-capture.json`（TempDir 可注入）；archcheck 登记
+  `devcapture → app` allowed + required 双边与 drift 合成同步。上游必查项
+  （Done 满不阻塞帧循环）以 watchdog 测试闭环。
+- TDD：27→30 测试；首轮 RED 两处为语义错误（超时残留请求自愈语义、截止检查
+  位置），修实现结构后全绿。
+- 验证：`go test ./cmd/mornlea/devcapture -race -count=1` ok、
+  `go test ./internal/archcheck -count=1` ok、`go build ./...` ok。
+- 评审（独立评审子代理）：规格合规 PASS + 代码质量 PASS，1 项 Important
+  （/record 并发互斥 503 分支零测试覆盖）+ 6 项 Minor（重复 Start 覆写端口
+  文件、busy 文案误导、serveStatus 死代码、Stop 注释夸大、回环绑定仅靠约定
+  与 spec MUST 有距、bgra 色彩空间出处强于源）。
+- 修复轮 1：`4afda845` `fix(devcapture): harden record mutex and start
+  idempotence`——7 项全落地：补 `TestRecordRejectsConcurrentRecording`；Start
+  幂等检查提前至 listen 前（失败零副作用，端口文件逐字段断言）；busy 文案补
+  「或帧循环已停止」；删死代码；Stop 注释改为进程退出兜底；`listen()` 增加
+  回环防御闸（host ∉ {127.0.0.1, ::1, localhost} 绑定前拒绝，三例拒绝测试 +
+  拒绝路径不写发现文件），spec「MUST 仅绑定回环地址」由默认值 + 防御闸双保险
+  闭合；bgra 色彩空间表述改为与 `cmd/mornlea/capture` 同口径的准确版本。验证：
+  devcapture -race 30 测试全绿、archcheck 绿、build 绿。控制会话核对 diff
+  逐项对应评审清单，闭环。双裁决终局：规格合规 PASS、代码质量 PASS。
+- Commits: `8646c313` `feat(devcapture): add local capture http service`、
+  `4afda845` `fix(devcapture): harden record mutex and start idempotence`。
+- 勘定（控制会话记入 tasks.md 5.1）：app 现无 phase 访问器，
+  `devcapture.StatusSource` 的 phase 契约需 app 补一个最小并发安全访问器，
+  归 5.1 交付（Files 增 `cmd/mornlea/app/{dev_capture.go,accessors.go}`）。

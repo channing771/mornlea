@@ -33,7 +33,7 @@
 
 ## 4. devcapture 服务包
 
-- [ ] 4.1 新建 `cmd/mornlea/devcapture`：`Service`（实现
+- [x] 4.1 新建 `cmd/mornlea/devcapture`：`Service`（实现
       `app.CaptureCoordinator`，单 outstanding 请求通道）、HTTP mux
       （`/status`、`/screenshot`、`/record`）、录制采样编排（单帧推进 +
       帧间隔等待 + 丢帧计数）、zip/manifest/GIF 组装、BGRA8→NRGBA 转换、
@@ -51,9 +51,14 @@
 - [ ] 5.1 `--dev-capture`（默认关）与 `--dev-capture-addr`（默认
       `127.0.0.1:17790`）接入 `cmd/mornlea/options.go`（互斥矩阵追加
       `--benchmark`/`--capture`，options 测试先行），`main.go` 启动服务、
-      注册优雅关闭与端口文件清理，与 `--connect` 组合可用；
-      Files：`cmd/mornlea/{options.go,options_test.go,main.go}`；
-      验证：`go test ./cmd/mornlea -race -count=1`、`go build ./...`。
+      注册优雅关闭与端口文件清理，与 `--connect` 组合可用；app 侧补最小
+      并发安全状态访问器（phase + 窗口尺寸）供 `devcapture.StatusSource`
+      适配（勘定：4.1 实现发现 app 现无 phase 访问器，`/status` 的 phase
+      契约需要这一次最小 app 面补充）；
+      Files：`cmd/mornlea/{options.go,options_test.go,main.go}`、
+      `cmd/mornlea/app/{dev_capture.go,accessors.go}`；
+      验证：`go test ./cmd/mornlea ./cmd/mornlea/app ./cmd/mornlea/devcapture
+      -race -count=1`、`go build ./...`。
 
 ## 6. 文档同步
 
