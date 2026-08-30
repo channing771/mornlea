@@ -63,6 +63,9 @@ func RunInteractive(app *Application) error {
 func runMenuPhase(app *Application) error {
 	for !app.window.ShouldClose() {
 		app.window.Poll()
+		// 捕获泵：待办检查放在 Poll 之后、渲染之前——像素取自当前帧的窗口
+		// 合成图（与 `Poll` 同线程），编码全部留在协调器侧的帧循环之外。
+		app.pumpDevCapture()
 		events := app.renderer.DrainUIEvents()
 		for _, event := range events {
 			quit, disposition := app.handleMenuUIEvent(event)
@@ -137,6 +140,10 @@ func runGamePhase(app *Application) error {
 
 	for !app.window.ShouldClose() {
 		app.window.Poll()
+
+		// 捕获泵：与菜单相位同位——`Poll` 之后、渲染之前每帧一次非阻塞待办
+		// 检查；暂停覆盖层不是独立循环，同一调用点已覆盖暂停帧。
+		app.pumpDevCapture()
 
 		now := time.Now()
 		dt := min(now.Sub(lastFrame), 100*time.Millisecond)
