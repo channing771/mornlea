@@ -3,6 +3,14 @@
  * 裸字号与裸时长。几何信息不依赖颜色（选中/焦点另有文字与几何标记）。
  */
 
+/* Tailwind 指令入口：preflight 已在 tailwind.config.js 关闭，base 只注入
+ * `--tw-*` 回退变量，置于文件头保证既有规则可覆盖其回退值；工具类供
+ * pixel-retroui 组件类与像素组件消费。 */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
 html,
 body,
 #root {
