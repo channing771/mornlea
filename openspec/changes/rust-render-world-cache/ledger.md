@@ -1090,3 +1090,121 @@ delta 行为契约、代码、current docs、main specs 或配置，不执行 me
 - Controller 接受该 clean verdict；Task 6.5 现完成并勾选，change 预期进度推进为 20/22、
   2 remaining、`ready`。Tasks 6.6 与 6.7 保持未勾选；本 bookkeeping 不运行 full gates，
   不 archive、push、rebase，也不把 feature merge into main。
+
+## Task 6.6：replacement final-HEAD 完整验证与独立评审完成裁决
+
+### 排除会话、执行身份与冻结基线
+
+- 首次 validation 会话 `01a0522d-4b7f-74b3-bebc-7c20cab98897` 在后段执行期间没有形成
+  `task-6.6-report.md`，也没有保存逐命令 exact command、exit、wall time 与 counts；controller
+  已结束该会话，其全部观察从 Task 6.6 PASS 证据中排除，且不判作产品失败。Task 6.4 的旧
+  `10f8e8ab` PASS 同样未复用。
+- Replacement fresh validation implementer：`01a05243-db78-7f61-80c0-0619f8eb500c`。它从
+  Gate 1 严格串行重跑全部 18 项，并把每项原始证据即时写入 ignored
+  `.superpowers/sdd/2026-08-30-rust-render-world-main-integration/task-6.6-report.md`；未 dispatch
+  agent、未修改 tracked file/task/ledger，也未 commit、push、archive、rebase 或 merge。
+- Exact execution HEAD 为 `768a0ea79e02dde00aaa8e212fa86c710308e960`；new selected-main-parent
+  与当时/current local `main` 均为 `e1e2e287cb3454e6bbca6bf5bcd7cf9e92482efc`。Gate 1 前与
+  Gate 18 均证明 tracked、staged、untracked 为零，report 被 ignore，Task 6.6 临时文件为零。
+
+### Gates 1–18 核心计数、耗时与裁决
+
+- Gate 1 `make rust`：exit 0，`real 0.47s`；release dylib build/sign 2，失败/Skip 0。
+- Gate 2 `make rust-check`：exit 0，`real 3.01s`；fmt/clippy clean；client 124/124、engine
+  218/218，共 342 passed，failed/ignored/Skip 0。
+- Gates 3–5：七文件 `gofmt -w` exit 0、`real 0.01s`；随后 zero diff exit 0、
+  `real 0.02s`、diff 0；`go vet ./...` exit 0、`real 1.02s`、diagnostic 0。
+- Gates 6–8：client race exit 0、`real 5.90s`、1/1 package；mesh race exit 0、
+  `real 18.77s`、1/1 package；archcheck exit 0、`real 6.26s`、1/1 package；均 0 failed/Skip。
+- Gate 9 `make test-race-changed`：exit 0，`real 206.72s`；reverse closure 23 = 22 tested
+  PASS + 1 `[no test files]`，failed/Skip 0。
+- Gates 10–11：`go clean -testcache` exit 0、`real 0.00s`；cache-cleared full race exit 0、
+  `real 213.18s`，46 = 43 tested PASS + 3 `[no test files]`，failed/Skip 0。
+- Gate 12 `make visual-check`：exit 0，`real 57.25s`；25/25 scenes、5,760,000 pixels，
+  differing pixels 0、max delta 0、adapter/scene Skip 0、golden update 0。
+- Gate 13 OpenSpec strict：exit 0，`real 1.69s`；79 passed、0 failed。
+- Gates 14–15：相对 exact selected main 的五组 protected paths zero diff exit 0、
+  `real 0.02s`；visual golden zero diff exit 0、`real 0.04s`；两者 diff/failure/Skip 均为零。
+- Gate 16 focused audits：所有产品断言 PASS，产品 failure/Skip/state change/fallback 为零。
+  Current release client/engine identity 13/9；current v13 header/source/dynamic 为
+  28/28 versioned ABI-first rejection（corrected dynamic/static audit `real 0.06s`）；required
+  client symbols 4 + engine identity 1、retired font 0（`real 0.07s`），runtime identity 13/9
+  （`real 0.03s`）。Exact selected-main v12 build `real 0.48s`，reverse mix identity 12、
+  dynamic/source 27/27、retained UI 2、v13-only MRW1 bind failure、fallback 0（`real 0.81s`）。
+  JSON 3/3（`real 0.03s`），production MRW1 callers 0（`real 0.14s`），Go ownership 9/9
+  （`real 0.03s`），code-comment guard top-level 2/2 + scanner 3/3、finding 0
+  （`real 1.04s`），corrected comments 6/6 且 29 = 1 identity + 28 versioned exports
+  （`real 0.03s`）。Client race test binary compile `real 1.32s`，RPATH inspect
+  `real 0.06s`：依赖 `@rpath/libmornlea_client.dylib`，2 个 LC_RPATH 均来自 feature
+  worktree，wrong-worktree count 0。SHA audit `real 0.07s`。
+- Gate 16 原始 audit harness 共 6 个 false negative（16a 两次 literal-matrix、16c 一次
+  combined symbol/runtime quote、16e 两次 literal JSON、16h 首次 `otool`/`awk` parser）；均保留
+  exact invocation、exit、wall/relevant output 与独立 corrected proof，不计作产品失败。其后
+  report-only completeness checker 的自匹配错误另列，不改变该 6 项口径。
+- Gates 17–18：`git diff --check` exit 0、`real 0.01s`、whitespace error 0；final identity /
+  clean assertion exit 0、`real 0.18s`，exact execution HEAD/main 保持，tracked/staged/untracked
+  entries 0、ignored report 1、temporary file 0。
+- Final release SHA-256：client
+  `45f581c9eb520767303bee15647010f94977236c06ba18b8e7125f92b6e0177c`；engine
+  `8ad9ed6d4121fe105742863f5abc872591ca916fbdffcce91e5135a92a868e45`。Gate 1、9、12 的
+  same-baseline rebuild chain 与 Gate 16 RPATH audit 证明 race/visual/SHA 使用该 feature
+  worktree exact execution HEAD 的 release artifacts。
+
+### 外部并发边界与 quiet scoped replacement
+
+- Gate 12 前的首次 scan 发现 controller 外部 PID 62366 `/usr/bin/time -p go test
+  ./internal/archcheck -count=1`、child 62377 与 test binary 62414，parent cwd 为 repository
+  root；implementer 等其自然退出并取得 zero-process 后才开始 Gate 12，因此没有目标 gate
+  overlap。
+- Gates 12–15 完成后、Gate 16 early 期间，controller 观察到 PID 62782
+  `/usr/bin/time -p go test ./... -race -count=1` 与 child PID 62784，cwd 为
+  `/Users/chen/work/mornlea/.worktrees/sim-ownership-convergence`。它可能重叠 16a–16c 与至多
+  16d preflight，故这些原始 subaudit wall times 明确视为 contended；该进程在 16d selected-
+  main build 前已退出并由 zero-process scan 确认，16d build/reverse mix 与 Gates 16e–18 未重叠。
+- Reviewer 在 quiet zero-process 条件下重做所有可能受影响的 read-only scoped proofs：baseline
+  1/1（`real 1.50s`）；identity docs 5、full matrix docs 4、missing 0（`real 0.19s`）；current
+  v13 identity 13 且 dynamic/source ABI-first 28/28（`real 0.06s`）；required symbols/runtime
+  identities 13/9（`real 0.09s`）；selected-main v12 identity 12、dynamic/source 27/27、MRW1 bind
+  failure、retained UI 2（`real 0.05s`）。这些 replacement 维持产品断言，无需重跑 changed /
+  full race、visual 或其他 product gate。
+
+### 独立评审、两轮 report-only 修复与最终裁决
+
+- Fresh independent reviewer：`01a0525c-b799-7432-9d71-7a62e6535a9f`；reviewed exact execution
+  HEAD `768a0ea79e02dde00aaa8e212fa86c710308e960` 与 selected main
+  `e1e2e287cb3454e6bbca6bf5bcd7cf9e92482efc`。Initial verdict 为 spec ❌、quality Needs fixes，
+  2 Important、0 Critical/Minor：一项是漏记 PIDs 62782/62784 与 cwd、并错误概括 external
+  concurrency；另一项是上述 6 个 Gate 16 harness false negative 缺少完整 raw exact evidence。
+- Report-only fix round 1 只修改 ignored report、未重跑 product gates：补齐并发区间、contended
+  定性、quiet replacement times/counts，以及六项 exact command/exit/wall/relevant output。
+  Reviewer 关闭 2 Important，同时新增 1 Minor：嵌入的 completeness checker 以 forbidden literal
+  自匹配，reviewer 重跑 exit 1、`real 0.14s`；这是 scoped report-checker false negative，不是
+  Gate 16 或产品失败。
+- Report-only fix round 2 同样只修改 ignored report：以运行期不连续 fragments 拼接 negative
+  needle，保持 Gate 16 `harness_false_negatives=6` 口径。Reviewer 对最终 1,410-line report 重跑
+  corrected checker exit 0、`real 0.10s`，输出
+  `report_gate_headings=18 gate16_harness_false_negatives=6 round2_sections=1 positive_needles=11 old_claim=0 scoped_checker_errors_excluded=1`；
+  clean/exact checker exit 0、`real 0.18s`，exact HEAD/main、tracked/staged/untracked zero、report
+  ignored、temporary file absent。
+- Final reviewer verdict：spec ✅ Approved；quality ✅ Approved；0 Critical、0 Important、
+  0 Minor、0 new、0 open。Initial 2 Important 与 round-1 Minor 全部关闭；reviewer 明确 Task 6.6
+  可进入 bookkeeping，无需任何 product-gate rerun。
+- Controller 接受 final clean verdict。Task 6.6 现完成并勾选；Task 6.7 仍未勾选，必须由符合
+  独立性要求的 fresh whole-integration reviewer 完成后方可宣告 implementation complete。本
+  bookkeeping 只允许修改本 change 的 `tasks.md` 与 `ledger.md`，不 archive、push、rebase，
+  也不把 feature merge into main。
+
+### Task 6.6 review bookkeeping validation
+
+- `openspec validate --all --strict --no-interactive`：退出 0；79 passed、0 failed。
+- `openspec instructions apply --change rust-render-world-cache --json`：退出 0；schema
+  `spec-driven`，22 tasks、21 complete、1 remaining、`state: ready`；Task 6.6 done，唯一 pending
+  为 Task 6.7。
+- 相对 selected main `e1e2e287cb3454e6bbca6bf5bcd7cf9e92482efc` 的五组 protected
+  committed diff 与 worktree diff 均为零；visual golden committed diff 与 worktree diff
+  均为零。
+- `git diff --check`：退出 0且无输出；tracked scope 恰为本 change 的 existing `ledger.md`
+  与 `tasks.md`，staged scope 为零。Task 6.6 checkbox 恰为 1 个 checked，Task 6.7 checkbox
+  恰为 1 个 pending；bookkeeping 前 execution HEAD 仍为 `768a0ea79e02dde00aaa8e212fa86c710308e960`，
+  local main 仍为 `e1e2e287cb3454e6bbca6bf5bcd7cf9e92482efc`。没有其他 tracked、代码、
+  current docs、main specs、配置、protected path 或 golden 改动，也没有重跑 product gate。

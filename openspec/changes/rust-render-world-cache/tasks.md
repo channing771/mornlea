@@ -144,7 +144,7 @@
   `go test ./internal/client -race -count=1`、`go test ./internal/archcheck -count=1`、
   `openspec validate --all --strict --no-interactive`、上述 protected/golden diff 与
   `git diff --check`。
-- [ ] 6.6 由 fresh validation implementer 在 Task 6.5 review 通过后的 immutable final HEAD
+- [x] 6.6 由 fresh validation implementer 在 Task 6.5 review 通过后的 immutable final HEAD
   完整重跑并逐项记录 Task 6.4 的 18 门禁：`make rust`、`make rust-check`、指定七个 Go 文件的
   `gofmt -w` 及零 diff、`go vet ./...`、client race、mesh race、archcheck、
   `make test-race-changed`、`go clean -testcache`、`go test ./... -race -count=1`、
