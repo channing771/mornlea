@@ -58,3 +58,11 @@
 - SPEC PASS（红线/确定性/隔离/delta 逐条；BuildChunkSnapshot 纯函数性核验）；QUALITY PASS（隔离边界/生命周期/性能画像）。双审共同指出 pump 缺 `BeginFrame()`（4MiB 预算成一次性总额的未来脆弱点）→ R1 修复 + 补 `TestFlushUploadsOrdersUploadsByDistanceThenXYZ` 排序契约钉值测试（带突变验证：去 tiebreak 第 0 轮即红）。
 - 冒烟受限（控制台锁屏）由 golden+vitest 承担视觉验证，解锁后补验交互全景穿透（T2 KVC 已实证写入成功）。
 - 遗留：app 套件一次未复现失败（133s vs 基线 87s，疑似环境负载 flake，4 连跑未复现，关注）；菜单相位 Poll 模式 ~96% CPU 为既有行为。
+
+### T6 基线文档同步 + 全量门禁 — PASS；整分支终审 FINAL(RE): PASS（R1 一轮文档修复）
+
+- 文档：architecture.md（§6 WebView 菜单层+桥语义+ABI v12、§10 目录树、§5 engine ABI v7→v8 范围外顺手修正一处事实性陈旧）、mornlea_client/AGENTS.md（WKWebView 表述+相位路由纪律）、frontend/AGENTS.md 三处 T4 后失效引用修正（copy.ts/tokens.css 唯一权威）、progress.md chronicle、compatibility.md client ABI v12 节、README×2（v12 + WebView 特性句）、limitations（菜单 chrome 不进像素 golden）。
+- 全量门禁（T6 implementer + 终审者分别复跑全绿）：`make rust`、`make frontend-check`（81 vitest + dist 一致）、`make dev-check`（首轮 server FluidDam 并行负载 flake 单包复跑绿；archcheck 反引号门禁 HEAD 即红——T5 引入的 stdlib `` `slices.SortFunc` `` 注释，一行修正后绿）、`make test-race-changed`（12 包含 server 225s）、archcheck、`openspec validate --strict`（78/78）、`make visual-check`（24/24 零差）、gofmt。
+- 终审 R0 FAIL（三必修全文档级）→ 控制会话直接修复并提交 483cb0ab：engine/AGENTS.md egui→WKWebView 一行、frontend 13 处指向已删 ui.rs/ui/style.rs 的注释改 copy.ts/tokens.css 权威口径（残留 grep 归零）、连同 T6 文档一并提交；FINAL(RE) PASS。
+- 终审确认：D10 五护栏全过（版本唯一动量 v12、21 张 golden+HUD 契约不动、行为平移、零网络、注释纪律）；回归面 120 文件全部归属；delta 一致性（REMOVED 15 条全覆盖 / ADDED 14 条映射完整 / MODIFIED 与 visual-check 实序一致）。
+- 归档期遗留清单：configuration.md :15/:48 与 gameplay.md :187 的 egui 陈旧提及（玩家文档、行为描述其余准确）；frontend/AGENTS.md openspec delta 链接归档后改指主规格；lan-server.md 历史快照不修；backlog D-12 完成态回填。
