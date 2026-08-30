@@ -1,6 +1,7 @@
 package client_test
 
 import (
+	"bytes"
 	"encoding/binary"
 	"testing"
 
@@ -138,6 +139,74 @@ func TestEncodeRenderWorldBatchEncodesCompactStorage(t *testing.T) {
 	}
 	if got := binary.LittleEndian.Uint64(records[3].payload[8:16]); got != direct.Packed[0] {
 		t.Fatalf("direct first packed word=%#x, want %#x", got, direct.Packed[0])
+	}
+}
+
+func TestEncodeRenderWorldBatchMatchesLiteralMRW1Bytes(t *testing.T) {
+	encoded, err := client.EncodeRenderWorldBatch(client.RenderWorldBatch{
+		Epoch: 0x1122334455667788,
+		Updates: []client.RenderWorldUpdate{
+			{Kind: client.RenderWorldReset},
+			{
+				Kind: client.RenderWorldSectionUpsert,
+				Key: core.SectionKey{
+					Dimension: -2,
+					Pos:       core.SectionPos{X: 0x01020304, Y: 3, Z: -4},
+				},
+				Revision: 0x0102030405060708,
+				Snapshot: world.ContainerSnapshot{
+					Kind:   world.StorageSingle,
+					Single: core.StoneID,
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []byte{
+		'M', 'R', 'W', '1', 0x01, 0x00, 0x00, 0x00,
+		0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11,
+		0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+
+		0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+
+		0x01, 0x00, 0x00, 0x00, 0xfe, 0xff, 0xff, 0xff,
+		0x04, 0x03, 0x02, 0x01, 0x03, 0x00, 0x00, 0x00,
+		0xfc, 0xff, 0xff, 0xff, 0x08, 0x07, 0x06, 0x05,
+		0x04, 0x03, 0x02, 0x01, 0x08, 0x00, 0x00, 0x00,
+
+		0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	}
+	if !bytes.Equal(encoded, want) {
+		t.Fatalf("encoded=% x, want % x", encoded, want)
+	}
+}
+
+func TestEncodeRenderWorldBatchRejectsOtherwiseValidOversizeBatch(t *testing.T) {
+	const recordCount = 510
+	direct := snapshotForStorage(t, world.StorageDirect)
+	updates := make([]client.RenderWorldUpdate, recordCount)
+	for index := range updates {
+		updates[index] = client.RenderWorldUpdate{
+			Kind:     client.RenderWorldSectionUpsert,
+			Key:      core.SectionKey{Pos: core.SectionPos{Y: int32(index % core.SectionsPerChunk)}},
+			Revision: uint64(index + 1),
+			Snapshot: direct,
+		}
+	}
+	encoded, err := client.EncodeRenderWorldBatch(client.RenderWorldBatch{
+		Epoch:   1,
+		Updates: updates,
+	})
+	if err == nil {
+		t.Fatal("want 4 MiB validation error")
+	}
+	if encoded != nil {
+		t.Fatalf("oversize batch returned %d bytes", len(encoded))
 	}
 }
 
