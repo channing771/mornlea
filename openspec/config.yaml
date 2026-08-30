@@ -2,7 +2,7 @@ schema: spec-driven
 
 context: |
   项目：Mornlea 是使用 Go 1.26 编写的独立体素游戏，Go module 为 `github.com/channing771/mornlea`；不兼容官方 Minecraft 协议、存档或版权资源。
-  当前版本矩阵：协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`companions.ai` schema v4、`hostile_mobs` schema v1、engine ABI v8、client ABI v12、benchmark scenario v20。
+  当前版本矩阵：协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`companions.ai` schema v4、`hostile_mobs` schema v1、engine ABI v9、client ABI v13、benchmark scenario v20。
   权威边界：服务端是世界与玩家状态的唯一权威；客户端只持有镜像、预测和呈现状态。普通本地 Memory 与远程 TCP 受同一 packet/codec 契约约束，并复用同一登录、会话和权威模拟路径。
   语言职责：Go 持有 app、world、sim、network、storage 与 render 的 CPU 半部；Rust `mornlea_engine` 持有生产数值计算，Rust `mornlea_client` 持有 Darwin 窗口、事件与全部 GPU 渲染。生产路径没有 Go fallback。
   ABI 边界：只有 `internal/nativeabi` 接触 engine ABI，只有 `internal/client` 接触 client ABI；领域包通过既有 bridge 调用 Rust。

@@ -281,7 +281,7 @@ pub unsafe extern "C" fn mornlea_client_window_ns_window(
     })
 }
 
-/// 下行菜单状态推送(client ABI v12):把 Go 组装的 UI 状态 JSON 转发给
+/// 下行菜单状态推送(client ABI v12 引入、v13 保留):把 Go 组装的 UI 状态 JSON 转发给
 /// 挂在本窗口上的 WebView(`window.mornlea.onState` 求值)。首次调用惰性
 /// 挂载 WebView;从未调用的进程(基准/capture)不创建任何 WebView,零参与。
 ///
@@ -921,13 +921,14 @@ mod render_ffi_tests {
     use super::*;
 
     #[test]
-    fn all_versioned_exports_reject_wrong_abi_first() {
+    fn all_versioned_exports_reject_v12_before_other_validation() {
         macro_rules! assert_bad_abi {
             ($call:expr) => {
                 assert_eq!($call, MORNLEA_CLIENT_STATUS_ABI_VERSION)
             };
         }
-        let bad = CLIENT_ABI_VERSION + 1;
+        let bad = 12;
+        assert_eq!(CLIENT_ABI_VERSION, bad + 1, "被测版本必须是 v13 的直接前代");
 
         assert_bad_abi!(unsafe {
             mornlea_client_window_create(bad, 0, 0, std::ptr::null(), 0, std::ptr::null_mut())
@@ -2198,7 +2199,7 @@ pub extern "C" fn mornlea_client_render_resize(
         })
     })
 }
-/// 排空 client ABI v12 版本化 JSON UI 事件信封:只有完整信封能装入 `out`
+/// 排空 client ABI v12 引入、v13 保留的版本化 JSON UI 事件信封:只有完整信封能装入 `out`
 /// 时才写入并清空队列，把实际字节数写入 `*out_written`。容量不足返回
 /// `MORNLEA_CLIENT_STATUS_CAPACITY`，三个对象均保持不变。
 ///
@@ -2249,7 +2250,7 @@ fn finish_ui_event_drain(
 mod ui_ffi_tests {
     use super::*;
 
-    // 菜单桥出口(client ABI v12)的无头校验:错误 ABI、非法参数先于句柄查找。
+    // 菜单桥出口(v12 引入、v13 保留)的无头校验:错误 ABI、非法参数先于句柄查找。
 
     #[test]
     fn ui_push_state_rejects_bad_arguments_before_handle_lookup() {

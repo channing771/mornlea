@@ -289,7 +289,7 @@ func (w *Window) SetCursorCaptured(captured bool) {
 // CursorCaptured 报告当前捕获状态。
 func (w *Window) CursorCaptured() bool { return w.captured }
 
-// PushUIState 把菜单层 UI 状态 JSON 推给挂在窗口上的 WebView(client ABI v12
+// PushUIState 把菜单层 UI 状态 JSON 推给挂在窗口上的 WebView(client ABI v12 引入、v13 保留
 // 下行出口):Rust 侧缓存、按相位路由显隐并经 evaluateJavaScript 注入页面。
 // 仅在状态变化时由 app 层调用;从未调用的进程(基准/capture)不创建 WebView。
 // 首次调用惰性挂载;空 JSON 是调用方编程错误,panic(与既有窗口操作口径一致)。

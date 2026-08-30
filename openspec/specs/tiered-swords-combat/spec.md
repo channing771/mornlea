@@ -105,17 +105,18 @@
 
 ### Requirement: 版本与存档兼容矩阵明确
 
-变更后的版本矩阵 MUST 为：协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`companions.ai` schema v4、`hostile_mobs` schema v1、engine ABI v8、client ABI v12、benchmark scenario v20。player attack/hurt cooldown MUST 是重连清零的运行态；hostile MUST 复用 schema v1 既有 attack/hurt cooldown 字段且上限保持 20。当前程序 MUST 在玩家、区块容器/掉落和伙伴背包路径无损保存新增 ItemID；不知道新增 ItemID 的旧程序 MUST 安全拒绝，项目 MUST NOT 提供向后降级写入。
+剑战变更交付时的版本矩阵 MUST 保留为历史引入事实：协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`companions.ai` schema v4、`hostile_mobs` schema v1、engine ABI v8、client ABI v12、benchmark scenario v20。后续独立的 fluid engine 与 RenderWorld client surface 演进后，当前程序 MUST 报告 engine ABI v9、client ABI v13，其他矩阵项保持上述值。player attack/hurt cooldown MUST 是重连清零的运行态；hostile MUST 复用 schema v1 既有 attack/hurt cooldown 字段且上限保持 20。当前程序 MUST 在玩家、区块容器/掉落和伙伴背包路径无损保存新增 ItemID；不知道新增 ItemID 的旧程序 MUST 安全拒绝，项目 MUST NOT 提供向后降级写入。
 
 #### Scenario: v31 对端在 Play 前被拒绝
 - **GIVEN** 客户端或服务端声明协议 v31
 - **WHEN** 它连接到协议 v32 对端
 - **THEN** 对端 MUST 按既有版本不匹配规则在进入 Play 前拒绝连接
 
-#### Scenario: 非协议版本保持不变
+#### Scenario: 后续 ABI 演进不改变战斗持久化版本
 - **GIVEN** 变更已完整实现并通过验证
 - **WHEN** 检查持久化 schema、ABI 与 benchmark 版本
-- **THEN** player/chunk/world/companions/hostile MUST 保持 8/9/3/4/1，engine/client ABI MUST 保持 8/12，benchmark scenario MUST 保持 20
+- **THEN** player/chunk/world/companions/hostile MUST 保持 8/9/3/4/1，engine/client ABI MUST 为 9/13，benchmark scenario MUST 保持 20
+- **AND** engine/client ABI 8/12 MUST 只表示该剑战变更交付时的历史基线
 
 #### Scenario: 含新剑的存档不能降级解释
 - **GIVEN** 当前程序已保存含任一新剑 ItemID 的玩家或世界记录

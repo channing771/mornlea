@@ -151,7 +151,7 @@ uint32_t mornlea_client_render_set_lod_fog(
     float start,
     float full);
 
-/* 菜单状态下行(client ABI v12):把 Go 组装的 UI 状态 JSON 推给挂在该
+/* 菜单状态下行(client ABI v12 引入、v13 保留):把 Go 组装的 UI 状态 JSON 推给挂在该
  * 窗口上的 WebView(经 evaluateJavaScript 调 window.mornlea.onState)。
  * json 非空且 json_len>0,内容须为可解析 JSON 对象且含 phase 字符串字段;
  * 违约返回 INVALID_ARGUMENT。首次调用惰性挂载 WebView;同状态重复推送
@@ -162,7 +162,7 @@ uint32_t mornlea_client_ui_push_state(
     const uint8_t *json,
     size_t json_len);
 
-/* 排空版本化 JSON UI 事件信封(client ABI v12):只有完整信封可装入 out 时
+/* 排空版本化 JSON UI 事件信封(client ABI v12 引入、v13 保留):只有完整信封可装入 out 时
  * 才写入、排空并把字节数写进 *out_written；容量不足返回 CAPACITY，三个对象
  * 均不变。空队列写 0 字节;信封形如 {"v":1,"events":[...]},事件按页面产生
  * 顺序出现,深层校验由调用方(Go)执行。 */

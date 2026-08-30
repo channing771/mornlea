@@ -79,7 +79,7 @@ type Renderer struct {
 	benchmarkBatchCalls int
 	// uploadCalls 统计 section 上传 FFI 次数,供"无变化不上传"断言。
 	uploadCalls int
-	// uiEventScratch 是 client ABI v12 版本化 JSON 事件信封的固定复用缓冲。
+	// uiEventScratch 是 client ABI v12 引入、v13 保留的版本化 JSON 事件信封固定复用缓冲。
 	uiEventScratch []byte
 }
 
@@ -115,7 +115,7 @@ type RenderFrame struct {
 	HUDSegment     []byte
 	// DebugSegment 已废弃：程序化调试面板渲染路径已删除，本字段恒为空。
 	// 为保持既有帧编码路径（layout v2 判定与 tag 4 TLV）与 ABI 兼容而保留;
-	// 调试面板现经 WebView 桥呈现(client ABI v12)。
+	// 调试面板经 client ABI v12 引入、v13 保留的 WebView 桥呈现。
 	DebugSegment []byte
 }
 
@@ -294,7 +294,7 @@ func (r *Renderer) SetLodFog(start, full float32) {
 	)))
 }
 
-// DrainUIEvents 排空并返回 client ABI v12 的版本化 JSON 桥事件。Rust 只有在
+// DrainUIEvents 排空并返回 client ABI v12 引入、v13 保留的版本化 JSON 桥事件。Rust 只有在
 // 完整信封能放入固定 scratch 时才写入并清空队列;空队列返回 0 字节与空切片,
 // Go 随后逐事件做深层校验(未知动作/字段越界拒绝)。
 func (r *Renderer) DrainUIEvents() []UIEvent {
