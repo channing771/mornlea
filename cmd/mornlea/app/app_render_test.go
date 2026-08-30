@@ -611,6 +611,8 @@ func (w *zeroFramebufferWindow) KeyDown(client.Key) bool              { return f
 func (w *zeroFramebufferWindow) PrimaryButtonDown() bool              { return false }
 func (w *zeroFramebufferWindow) SecondaryButtonDown() bool            { return false }
 func (w *zeroFramebufferWindow) CursorCaptured() bool                 { return false }
+func (w *zeroFramebufferWindow) Focus()                               {}
+func (w *zeroFramebufferWindow) PushUIState([]byte)                   {}
 func (w *zeroFramebufferWindow) FramebufferSize() (int, int)          { return 0, 0 }
 func (w *zeroFramebufferWindow) ContentSize() (int, int)              { return 0, 0 }
 func (w *zeroFramebufferWindow) SetContentSize(int, int)              {}
