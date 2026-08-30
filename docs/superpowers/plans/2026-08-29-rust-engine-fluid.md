@@ -357,9 +357,10 @@ git commit -m "feat: add rust engine fluid rescan kernel"
 
 **Files:**
 - Create: `internal/fluid/rescan_native.go`(`RescanRegion`/`RescanScratch` 类型 + `ScanRescanRegion` 包装:拼 header、调 `FluidRescan`、OUTPUT_OVERFLOW 扩容重试、解码 positions/spent/done;非 OK(除 overflow)panic 稳定中文文案)
-- Modify: sim 侧重扫驱动(执行时 `git grep -l rescanChunkFluids` 定位, realm 合并后约 `internal/sim/realm/` 下):(a) 新增 `encodeRescanBox`(组装 MFL1 三段:中心区块 24 区段经 `IsUniform`/线性 `idAt` 采样,裙边 68 列经就绪邻块 `BlockAt` 或 Barrier 填充,元数据 9 区块×24 段);(b) `rescanChunkFluids` 的平面循环改为:组装盒 → `fluid.ScanRescanRegion` → 对返回坐标 `queue.Enqueue`(dueTick 同现行 `now+delay`);邻块未就绪平面跳过且不记额度不变
-- Create: `internal/fluid/rescan_differential_test.go`、`internal/fluid/rescan_bench_test.go`
-- Modify: sim 侧 `enqueueChunkFluids`/`fluidSourceIsFixedPoint`/`fluidSectionIsFixedPoint`/`fluidRescanBlockAt` → 移入 oracle 测试文件(`*_oracle_test.go`,package sim/realm 测试专用)
+- Modify: `internal/sim/realm/environment.go`(**生产重扫路径**,2026-08-30 勘定:权威 tick 经 `internal/sim/runtime/engine_step.go:536` 直调 `realm.State.AdvanceFluids`,重扫链 = `State.runFluidRescans` → `State.rescanChunkFluids`(:525)→ `State.enqueueChunkFluids`;realm 自持 `fluidWorld` 适配器(:410,含 `settleFloodedCrop` 与 mutation 记录)):(a) 新增 `encodeRescanBox`(组装 MFL1 三段:中心区块 24 区段经 `IsUniform`/线性 `idAt` 采样,裙边 68 列经就绪邻块 `BlockAt` 或 Barrier 填充,元数据 9 区块×24 段);(b) `State.rescanChunkFluids` 的平面循环改为:组装盒 → `fluid.ScanRescanRegion` → 对返回坐标 `queue.Enqueue`(dueTick 同现行 `now+delay`);邻块未就绪平面跳过且不记额度不变
+- Note: `internal/sim/runtime/fluid.go` 存有同名重扫拷贝(`Engine.rescanChunkFluids`/`enqueueChunkFluids` 等),非测试代码零调用(仅 `fluid_test.go` 引用)——**不属本次迁移范围,保持不动**,ledger 记录该勘定
+- Create: `internal/sim/realm/rescan_differential_test.go`、`internal/sim/realm/rescan_bench_test.go`
+- Modify: `internal/sim/realm/environment.go` 的 `State.enqueueChunkFluids`/`fluidSourceIsFixedPoint`/`fluidSectionIsFixedPoint`/`fluidRescanBlockAt` → 移入 oracle 测试文件(`environment_oracle_test.go`,package realm 测试专用)
 
 **Interfaces:**
 - Consumes: `nativeabi.FluidRescan`(Task 4)、Task 4 的 MFL1 布局。
@@ -367,7 +368,7 @@ git commit -m "feat: add rust engine fluid rescan kernel"
 
 - [ ] **Step 1: 写差分测试(先失败)**
 
-`rescan_differential_test.go`(package fluid,构造最小 Dimension 假件或由 sim 侧差分,以能直接构造区块数据的一侧为准——执行时按 realm 包结构定,倾向放 sim 侧差分):同一地形分别跑 Go oracle `enqueueChunkFluids` 与 `encodeRescanBox`+`ScanRescanRegion`,断言入队集合、`spent`、`done` 逐位一致。地形覆盖:全均匀海洋段(捷径命中)、混杂地表段、跨区段/跨区块邻格、邻块未就绪、budget 中途用尽(游标续扫)、y 上下界。
+`rescan_differential_test.go`(**package realm**,差分放 sim 侧:realm 能直接构造 `Dimension`/区块数据,`internal/fluid` 不能):同一地形分别跑 Go oracle `State.enqueueChunkFluids`(oracle 文件内)与 `encodeRescanBox`+`ScanRescanRegion`,断言入队集合、`spent`、`done` 逐位一致。地形覆盖:全均匀海洋段(捷径命中)、混杂地表段、跨区段/跨区块邻格、邻块未就绪、budget 中途用尽(游标续扫)、y 上下界。
 
 - [ ] **Step 2: 实现 encodeRescanBox 与接线**
 
