@@ -256,6 +256,51 @@ func TestDiskStoreSaveBatchRejectsMaxRevisionConflictBeforeFilesystemEffects(t *
 	}
 }
 
+// TestValidateAndNormalizeSavesHashesEachChunkOncePerBatch 用计数钩子钉住
+// 去重比对的内容哈希纪律：同批次内同一区块指针至多计算一次哈希并复用；
+// 单候选键没有任何比对需求，不应产生哈希计算。
+func TestValidateAndNormalizeSavesHashesEachChunkOncePerBatch(t *testing.T) {
+	sharedKey := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: 2, Z: -3}}
+	shared := world.NewChunk(sharedKey.Pos)
+	shared.SetBlock(4, 0, 5, core.StoneID)
+	clone := shared.Clone() // 内容相同的独立指针：等价候选，各自哈希一次
+	soloKey := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: -9, Z: 11}}
+	solo := world.NewChunk(soloKey.Pos)
+
+	calls := make(map[*world.Chunk]int)
+	normalized, err := validateAndNormalizeSavesWithHash([]ChunkSave{
+		{Key: sharedKey, Revision: 5, Chunk: shared},
+		{Key: sharedKey, Revision: 5, Chunk: shared},
+		{Key: sharedKey, Revision: 5, Chunk: clone},
+		{Key: soloKey, Revision: 3, Chunk: solo},
+	}, func(c *world.Chunk) [32]byte {
+		calls[c]++
+		return c.Hash()
+	})
+	if err != nil {
+		t.Fatalf("normalize duplicate pointers: %v", err)
+	}
+	if len(normalized) != 2 {
+		t.Fatalf("normalized %d 条，想要 2 条", len(normalized))
+	}
+	selected := map[*world.Chunk]struct{}{normalized[0].Chunk: {}, normalized[1].Chunk: {}}
+	if _, ok := selected[shared]; !ok {
+		t.Fatalf("normalized = %+v，缺少共享指针候选", normalized)
+	}
+	if _, ok := selected[solo]; !ok {
+		t.Fatalf("normalized = %+v，缺少单候选键", normalized)
+	}
+	if calls[shared] != 1 {
+		t.Fatalf("共享指针区块被哈希 %d 次，应整批复用一次", calls[shared])
+	}
+	if calls[clone] != 1 {
+		t.Fatalf("克隆区块被哈希 %d 次，应只哈希一次", calls[clone])
+	}
+	if _, ok := calls[solo]; ok {
+		t.Fatal("单候选键没有比对需求，不应计算内容哈希")
+	}
+}
+
 func TestValidateAndNormalizeSavesReturnsDeterministicChunkKeyOrder(t *testing.T) {
 	keys := []core.ChunkKey{
 		{Dimension: 1, Pos: core.ChunkPos{X: 0, Z: 0}},
