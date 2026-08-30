@@ -85,7 +85,7 @@ func TestCommonBlockMaterialMiningRules(t *testing.T) {
 func TestMiningProgressPublishesAndIncrementsExactlyOnce(t *testing.T) {
 	engine, sessions, targets := readyMiningPlayers(t, 1)
 	session := sessions[0]
-	result := engine.Step()
+	result := finishWorldTick(engine)
 
 	if len(result.Players) != 1 {
 		t.Fatalf("Players=%+v，想要一个", result.Players)
@@ -98,7 +98,7 @@ func TestMiningProgressPublishesAndIncrementsExactlyOnce(t *testing.T) {
 		t.Fatalf("首 tick Mining=%+v，想要 %+v", got, want)
 	}
 
-	engine.Step()
+	finishWorldTick(engine)
 	if got := engine.sessions[session].player.mining.update(); got.ProgressTicks != 2 {
 		t.Fatalf("连续命中进度=%+v，想要恰好 2", got)
 	}
@@ -122,13 +122,18 @@ func TestCombatHitClearsMiningOnlyForThatTick(t *testing.T) {
 	player := engine.sessions[sessions[0]].player
 	player.mining = miningState{progressTicks: 3, requiredTicks: 5}
 	engine.RegisterSession(SessionID(2), core.Overworld, core.ChunkPos{})
-	engine.Step()
+	advanceActorsTick(engine)
 	setMeleePlayer(engine, sessions[0], mgl32.Vec3{0.5, 1, 8.5}, 0)
 	setMeleePlayer(engine, SessionID(2), mgl32.Vec3{0.5, 1, 7}, 0)
 	player.pitch = miningTestPitch
 	player.miningHeld = true
 
-	engine.Step()
+	tick := engine.beginTick()
+	tick.context.AdvanceActors()
+	tick.context.AdvanceHostiles(nil, &tick.result)
+	tick.context.FinishWorld(&tick.result)
+	commitMutation(tick.mutation, &tick.result)
+	publishFixture(engine, &tick)
 	if player.mining != (miningState{}) {
 		t.Fatalf("命中玩家后 mining=%+v，想要零值", player.mining)
 	}
@@ -137,7 +142,11 @@ func TestCombatHitClearsMiningOnlyForThatTick(t *testing.T) {
 	}
 
 	setMeleePlayer(engine, SessionID(2), mgl32.Vec3{4.5, 1, 7}, 0)
-	engine.Step()
+	next := engine.beginTick()
+	next.context.AdvanceHostiles(nil, &next.result)
+	next.context.FinishWorld(&next.result)
+	commitMutation(next.mutation, &next.result)
+	publishFixture(engine, &next)
 	if player.mining.progressTicks != 1 {
 		t.Fatalf("目标移出射线后的下一 tick mining=%+v，想要 progress=1", player.mining)
 	}
@@ -149,11 +158,11 @@ func TestCombatMissKeepsMiningProgress(t *testing.T) {
 	engine, sessions, _ := readyMiningPlayers(t, 1)
 	player := engine.sessions[sessions[0]].player
 
-	engine.Step()
+	finishWorldTick(engine)
 	if player.mining.progressTicks != 1 {
 		t.Fatalf("无玩家目标首 tick mining=%+v，想要 progress=1", player.mining)
 	}
-	engine.Step()
+	finishWorldTick(engine)
 	if player.mining.progressTicks != 2 {
 		t.Fatalf("无玩家目标次 tick mining=%+v，想要 progress=2", player.mining)
 	}
@@ -231,9 +240,11 @@ func TestMiningInvalidTargetsClearWithoutRejection(t *testing.T) {
 		{
 			name: "视野丢失",
 			mutate: func(engine *Engine, session *sessionState, _ core.BlockPos) {
-				view := engine.views[session.id]
-				view.Ready = false
-				engine.views[session.id] = view
+				engine.setSessionViewForTest(
+					session.id,
+					SessionView{Ready: false, Center: core.ChunkPos{}},
+					false,
+				)
 			},
 		},
 		{
@@ -294,11 +305,10 @@ func TestMiningLifecyclePathsClearIntentAndProgress(t *testing.T) {
 		engine, sessions, _ := readyMiningPlayers(t, 1)
 		advanceMiningOnce(engine)
 		session := sessions[0]
-		engine.Enqueue(Command{
+		result := applyPlayerCommandsTick(engine, []Command{{
 			Session: session, Sequence: 101, Kind: CommandPlayerInput,
 			Yaw: float32(math.NaN()), Mining: true,
-		})
-		result := engine.Step()
+		}})
 		player := engine.sessions[session].player
 		if player.miningHeld || player.mining != (miningState{}) {
 			t.Fatalf("非法输入后 held=%v mining=%+v", player.miningHeld, player.mining)
@@ -314,10 +324,9 @@ func TestMiningLifecyclePathsClearIntentAndProgress(t *testing.T) {
 		session := sessions[0]
 		player := engine.sessions[session].player
 		player.lifecycle = PlayerPendingSpawn
-		engine.Enqueue(Command{
+		result := applyPlayerCommandsTick(engine, []Command{{
 			Session: session, Sequence: 102, Kind: CommandPlayerInput, Mining: true,
-		})
-		result := engine.Step()
+		}})
 		if player.miningHeld || player.mining != (miningState{}) {
 			t.Fatalf("未就绪输入后 held=%v mining=%+v", player.miningHeld, player.mining)
 		}
@@ -1152,12 +1161,10 @@ func BenchmarkAuthoritativeMiningEightPlayers(b *testing.B) {
 }
 
 func advanceMiningOnce(engine *Engine) TickResult {
-	engine.engineContext.views = engine.viewSnapshot()
-	result := TickResult{}
-	pending := engine.newMutation()
-	engine.advanceMining(pending, &result)
-	engine.finishChanges(pending, &result)
-	return result
+	tick := engine.beginTick()
+	tick.context.FinishWorld(&tick.result)
+	commitMutation(tick.mutation, &tick.result)
+	return tick.result
 }
 
 func setMiningHeldItem(player *playerState, item core.ItemID) {
@@ -1247,7 +1254,7 @@ func readyMiningPlayers(
 		engine.RegisterSession(SessionID(id), core.Overworld, core.ChunkPos{})
 	}
 	if count > 1 {
-		engine.Step()
+		advanceActorsTick(engine)
 	}
 	sessions := make([]SessionID, count)
 	targets := make([]core.BlockPos, count)
@@ -1432,6 +1439,9 @@ func TestPoisonousPotato2Percent(t *testing.T) {
 	session := SessionID(1)
 	tickBefore := engine.tick.Load()
 	seed := engine.SeedForTest()
+	// 候选坐标会改写采掘夹具预置的石头目标；先清理它，避免它
+	// 恰好落在玩家与作物之间时遮挡权威射线。
+	engine.SetBlockForTest(targets[0], core.AirID)
 	var truePos, falsePos *core.BlockPos
 	for x := int32(0); x < 16; x++ {
 		for z := int32(0); z < 16; z++ {
@@ -1486,6 +1496,7 @@ func TestPoisonousPotato2Percent(t *testing.T) {
 	// 调整 tick 到与第一个引擎相同的 tickBefore（readyMiningPlayers 每次 tick 可能相同，但显式对齐）
 	engine2.tick.Store(tickBefore)
 	seed2 := engine2.SeedForTest()
+	engine2.SetBlockForTest(targets2[0], core.AirID)
 	target2 := *falsePos
 	if target2.Chunk() != targets2[0].Chunk() {
 		t.Fatalf("falsePos chunk mismatch")

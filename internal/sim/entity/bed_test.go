@@ -179,8 +179,10 @@ func TestBedPlacementViaCommand(t *testing.T) {
 	eye := torchEye(engine, session)
 	// 瞄准草地顶面，落点为床尾 (6,1,6)；yaw=0 派生南向，床头落在 (6,1,7)。
 	yaw, pitch := lookAtPoint(eye, mgl32.Vec3{6.5, 1, 6.5})
-	engine.Enqueue(Command{Session: session, Sequence: 2, Kind: CommandPlaceBlock, Slot: 0, Yaw: yaw, Pitch: pitch})
-	result := engine.Step()
+	result := settlePlayerInteractionsTick(engine, []Command{{
+		Session: session, Sequence: 2, Kind: CommandPlaceBlock,
+		Slot: 0, Yaw: yaw, Pitch: pitch,
+	}})
 	if len(result.Rejected) != 0 {
 		t.Fatalf("合法床放置被拒绝: %+v", result.Rejected)
 	}
@@ -213,8 +215,10 @@ func TestBedPlacementViaCommandCrossChunkKeepsItem(t *testing.T) {
 	// 瞄准 (15,0,4) 顶面，落点床尾 (15,1,4)；朝 +X 的 yaw 派生东向，床头
 	// (16,1,4) 落在未加载区块。
 	yaw, pitch := lookAtPoint(eye, mgl32.Vec3{15.5, 1, 4.5})
-	engine.Enqueue(Command{Session: session, Sequence: 2, Kind: CommandPlaceBlock, Slot: 0, Yaw: yaw, Pitch: pitch})
-	result := engine.Step()
+	result := settlePlayerInteractionsTick(engine, []Command{{
+		Session: session, Sequence: 2, Kind: CommandPlaceBlock,
+		Slot: 0, Yaw: yaw, Pitch: pitch,
+	}})
 	if len(result.Rejected) != 1 || result.Rejected[0].Reason != RejectChunkNotReady {
 		t.Fatalf("跨区块放置应拒绝 ChunkNotReady: %+v", result.Rejected)
 	}
@@ -338,7 +342,7 @@ func TestBedMiningViaPlayerPath(t *testing.T) {
 	player.miningHeld = true
 	var result TickResult
 	for range 15 {
-		result = engine.Step()
+		result = finishWorldTick(engine)
 	}
 	if len(result.Rejected) != 0 {
 		t.Fatalf("采掘被拒绝: %+v", result.Rejected)
@@ -386,9 +390,14 @@ func TestBedSupportFailureClearsWholeBedAndDrops(t *testing.T) {
 	player.pitch = pitch
 	player.miningHeld = true
 	var result TickResult
-	for range 5 {
-		result = engine.Step()
+	for range 4 {
+		finishWorldTick(engine)
 	}
+	tick := engine.beginTick()
+	tick.context.FinishWorld(&tick.result)
+	engine.realm.SweepUnsupportedBeds(tick.mutation)
+	commitMutation(tick.mutation, &tick.result)
+	result = publishFixture(engine, &tick)
 	if len(result.Rejected) != 0 {
 		t.Fatalf("采掘被拒绝: %+v", result.Rejected)
 	}

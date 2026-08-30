@@ -8,7 +8,6 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -43,119 +42,6 @@ func TestSpawnCandidatesOrderByDistanceThenXZ(t *testing.T) {
 	}
 }
 
-func TestSpawnWaitsForEarlierUnknownCandidate(t *testing.T) {
-	engine := NewEngine(0, 0, 0)
-	engine.RegisterSession(1, core.Overworld, core.ChunkPos{})
-	requested := engine.Step()
-	for _, key := range requested.Acquire {
-		engine.SubmitAcquired(AcquiredChunk{Key: key, Missing: true})
-	}
-	engine.Step()
-
-	laterChunk := world.NewChunk(core.ChunkPos{X: -1})
-	laterChunk.SetBlock(15, 0, 0, core.GrassID)
-	loadSpawnTestChunk(t, engine.dimension(core.Overworld), laterChunk)
-	if player := onlyInternalPlayer(t, engine.Step()); player.Ready {
-		t.Fatalf("较早候选仍 unknown 时跳到了较晚 surface: %+v", player)
-	}
-
-	engine.SubmitGenerated(GeneratedChunk{
-		Dimension: core.Overworld,
-		Pos:       core.ChunkPos{},
-		Chunk:     spawnTestChunk(core.ChunkPos{}, core.BlockPos{}),
-	})
-	player := onlyInternalPlayer(t, engine.Step())
-	if !player.Ready || player.State.Position != (mgl32.Vec3{0.5, 1, 0.5}) {
-		t.Fatalf("较早候选 Ready 后 spawn=%+v", player)
-	}
-}
-
-func TestPendingSpawnGenerateRetainActivateAndForget(t *testing.T) {
-	engine := NewEngine(0, 0, 0)
-	const sessionID = SessionID(1)
-	anchor := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{}}
-	target := core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: -1}}
-	engine.RegisterSession(sessionID, core.Overworld, anchor.Pos)
-
-	acquiredAnchor := engine.Step()
-	if player := onlyInternalPlayer(t, acquiredAnchor); player.Ready {
-		t.Fatalf("生成 anchor 前 player=%+v，想要 PendingSpawn", player)
-	}
-	if !reflect.DeepEqual(acquiredAnchor.Acquire, []core.ChunkKey{anchor}) {
-		t.Fatalf("首次 Acquire=%+v，想要 [%+v]", acquiredAnchor.Acquire, anchor)
-	}
-	engine.SubmitAcquired(AcquiredChunk{Key: anchor, Missing: true})
-	generatedAnchor := engine.Step()
-	if !reflect.DeepEqual(generatedAnchor.Generate, []core.ChunkKey{anchor}) {
-		t.Fatalf("首次 Generate=%+v，想要 [%+v]", generatedAnchor.Generate, anchor)
-	}
-
-	engine.SubmitGenerated(GeneratedChunk{
-		Dimension: core.Overworld,
-		Pos:       anchor.Pos,
-		Chunk:     world.NewChunk(anchor.Pos),
-	})
-	retained := engine.Step()
-	if player := onlyInternalPlayer(t, retained); player.Ready {
-		t.Fatalf("空 anchor 后 player=%+v，想要继续 PendingSpawn", player)
-	}
-	if !reflect.DeepEqual(retained.Ready, []core.ChunkKey{anchor}) ||
-		!reflect.DeepEqual(retained.Acquire, []core.ChunkKey{target}) {
-		t.Fatalf("retain tick Ready=%+v Acquire=%+v", retained.Ready, retained.Acquire)
-	}
-	session := engine.sessions[sessionID]
-	wanted := engine.views[sessionID].Wanted
-	if _, ok := wanted[anchor]; !ok {
-		t.Fatalf("PendingSpawn 未保留 anchor: wanted=%+v", wanted)
-	}
-	if _, ok := wanted[target]; !ok {
-		t.Fatalf("PendingSpawn 未保留 target: wanted=%+v", wanted)
-	}
-	if _, ok := session.player.spawnWanted[anchor.Pos]; !ok {
-		t.Fatalf("spawnWanted 未记录 anchor: %+v", session.player.spawnWanted)
-	}
-	if _, ok := session.player.spawnWanted[target.Pos]; !ok {
-		t.Fatalf("spawnWanted 未记录 target: %+v", session.player.spawnWanted)
-	}
-
-	engine.SubmitAcquired(AcquiredChunk{Key: target, Missing: true})
-	generatedTarget := engine.Step()
-	if !reflect.DeepEqual(generatedTarget.Generate, []core.ChunkKey{target}) {
-		t.Fatalf("target Generate=%+v", generatedTarget.Generate)
-	}
-	engine.SubmitGenerated(GeneratedChunk{
-		Dimension: core.Overworld,
-		Pos:       target.Pos,
-		Chunk: spawnTestChunk(target.Pos, core.BlockPos{
-			X: -1,
-			Y: 0,
-			Z: 0,
-		}),
-	})
-	activated := engine.Step()
-	player := onlyInternalPlayer(t, activated)
-	if !player.Ready || !player.Reset ||
-		player.State.Position != (mgl32.Vec3{-0.5, 1, 0.5}) {
-		t.Fatalf("target Ready 后 player=%+v，想要 Active reset", player)
-	}
-	if !reflect.DeepEqual(activated.Ready, []core.ChunkKey{target}) ||
-		!reflect.DeepEqual(activated.Forget[sessionID], []core.ChunkKey{anchor}) {
-		t.Fatalf("activate tick Ready=%+v Forget=%+v", activated.Ready, activated.Forget)
-	}
-	wanted = engine.views[sessionID].Wanted
-	if !reflect.DeepEqual(wanted, map[core.ChunkKey]struct{}{target: {}}) {
-		t.Fatalf("Active subscription wanted=%+v，想要仅 target", wanted)
-	}
-	if !reflect.DeepEqual(engine.wanted, map[core.ChunkKey]struct{}{target: {}}) {
-		t.Fatalf("Active union wanted=%+v，想要仅 target", engine.wanted)
-	}
-	info := requireChunkInfo(t, engine.dimension(core.Overworld), anchor.Pos)
-	if info.State != realm.ChunkUnloading || info.Chunk == nil ||
-		!info.UnloadRequested || !info.Dirty {
-		t.Fatalf("activate forget 后未保留待持久 anchor: %+v", info)
-	}
-}
-
 func TestExhaustedSpawnRetriesOnlyAfterRevisionChange(t *testing.T) {
 	engine := NewEngine(0, 0, 0)
 	engine.RegisterSession(1, core.Overworld, core.ChunkPos{})
@@ -166,18 +52,18 @@ func TestExhaustedSpawnRetriesOnlyAfterRevisionChange(t *testing.T) {
 		}
 	}
 
-	if player := onlyInternalPlayer(t, engine.Step()); player.Ready {
+	if player := onlyInternalPlayer(t, advanceActorsTick(engine)); player.Ready {
 		t.Fatalf("全空气候选不应 Ready: %+v", player)
 	}
 	dimension.UpdateReadyChunk(core.ChunkPos{}, func(chunk *world.Chunk) {
 		chunk.SetBlock(0, 0, 0, core.GrassID)
 	})
-	if player := onlyInternalPlayer(t, engine.Step()); player.Ready {
+	if player := onlyInternalPlayer(t, advanceActorsTick(engine)); player.Ready {
 		t.Fatalf("revision 未变却重新扫描: %+v", player)
 	}
 
 	dimension.Touch(core.ChunkPos{})
-	player := onlyInternalPlayer(t, engine.Step())
+	player := onlyInternalPlayer(t, advanceActorsTick(engine))
 	if !player.Ready || player.State.Position != (mgl32.Vec3{0.5, 1, 0.5}) {
 		t.Fatalf("revision 改变后未从首候选重试: %+v", player)
 	}
@@ -232,7 +118,7 @@ func TestSpawnSkipsSubmergedColumn(t *testing.T) {
 	negative.SetBlock(15, 0, 0, core.GrassID)
 	loadSpawnTestChunk(t, dimension, negative)
 
-	player := onlyInternalPlayer(t, engine.Step())
+	player := onlyInternalPlayer(t, advanceActorsTick(engine))
 	if !player.Ready {
 		t.Fatalf("玩家未 Ready: %+v", player)
 	}
@@ -309,7 +195,7 @@ func spawnLadderEngine(
 	for _, pos := range engine.sessions[1].player.candidateChunks {
 		loadSpawnTestChunk(t, dimension, chunks[pos])
 	}
-	return engine, onlyInternalPlayer(t, engine.Step())
+	return engine, onlyInternalPlayer(t, advanceActorsTick(engine))
 }
 
 // spawnTierAt 复算某个落脚点的档位，供夹具承重守卫使用。
@@ -399,7 +285,7 @@ func TestSpawnLadderPrefersDryThenShallow(t *testing.T) {
 // 站在柱顶（position.Y = top+1）时身体只碰到一格水、眼睛在水面之上，因此该列
 // 是第 2 档；周围没有柱子的列全是第 3 档。用抬高地面而不是降低水位来制造档位
 // 差，水面在整个候选范围内保持齐平，全水源盆地因此仍是流动规则的不动点，
-// Step() 不会把夹具冲掉。
+// actor 阶段不推进流体，因此不会把夹具冲掉。
 func spawnLadderPillar(chunk *world.Chunk, column core.BlockPos, top int32) {
 	x, _, z := column.Local()
 	for y := int32(1); y <= top; y++ {
@@ -427,22 +313,25 @@ func TestSpawnFallbackSurvivesChunkReadinessGap(t *testing.T) {
 	pillar := core.BlockPos{X: 0, Z: 0}
 
 	var withheld *world.Chunk
-	for _, pos := range engine.sessions[1].player.candidateChunks {
-		chunk := spawnLadderChunk(pos, 4)
-		if pos == pillar.Chunk() {
-			spawnLadderPillar(chunk, pillar, 3)
+	for x := int32(-1); x <= 1; x++ {
+		for z := int32(-1); z <= 1; z++ {
+			pos := core.ChunkPos{X: x, Z: z}
+			chunk := spawnLadderChunk(pos, 4)
+			if pos == pillar.Chunk() {
+				spawnLadderPillar(chunk, pillar, 3)
+			}
+			if pos == gap {
+				withheld = chunk
+				continue
+			}
+			loadSpawnTestChunk(t, dimension, chunk)
 		}
-		if pos == gap {
-			withheld = chunk
-			continue
-		}
-		loadSpawnTestChunk(t, dimension, chunk)
 	}
 	if withheld == nil {
 		t.Fatalf("夹具失效：候选区块里没有 %+v，扫描不会在预期处中断", gap)
 	}
 
-	first := engine.Step()
+	first := advanceActorsTick(engine)
 	if player := onlyInternalPlayer(t, first); player.Ready {
 		t.Fatalf("缺口区块未就绪时不应出生: %+v", player)
 	}
@@ -453,28 +342,10 @@ func TestSpawnFallbackSurvivesChunkReadinessGap(t *testing.T) {
 		t.Fatalf("夹具失效：第一 tick 一列都没扫完，nextCandidate=%d", breakpoint)
 	}
 
-	// 缺口区块走正常的 acquire/generate 管线补齐；期间断点不动，缺口之前的列
-	// 不会被重新扫描——这正是跨 tick 记录必须自己活下来的原因。
-	var player PlayerUpdate
-	result := first
-	for range 8 {
-		for _, key := range result.Acquire {
-			engine.SubmitAcquired(AcquiredChunk{Key: key, Missing: true})
-		}
-		for _, key := range result.Generate {
-			if key.Pos != gap {
-				t.Fatalf("夹具失效：意外生成非缺口区块 %+v", key.Pos)
-			}
-			engine.SubmitGenerated(GeneratedChunk{
-				Dimension: key.Dimension, Pos: key.Pos, Chunk: withheld,
-			})
-		}
-		result = engine.Step()
-		player = onlyInternalPlayer(t, result)
-		if player.Ready {
-			break
-		}
-	}
+	// 直接让 owner 的 realm 夹具补齐缺口；断点之前的列不会被重新扫描，
+	// 跨 tick 降级候选必须由 entity 自己保留。
+	loadSpawnTestChunk(t, dimension, withheld)
+	player := onlyInternalPlayer(t, advanceActorsTick(engine))
 	if !player.Ready {
 		t.Fatalf("补齐缺口区块后仍未出生: %+v", player)
 	}

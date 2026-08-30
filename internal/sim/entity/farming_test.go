@@ -7,6 +7,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -75,10 +76,19 @@ func readyTillPlayer(
 
 // till 发一条翻地命令并推进一个权威 tick。
 func till(engine *Engine, session SessionID, yaw, pitch float32) TickResult {
-	engine.Enqueue(Command{
+	tick := engine.beginTick()
+	tick.context.ApplyPlayerCommands([]Command{{
 		Session: session, Sequence: 2, Kind: CommandTillSoil, Yaw: yaw, Pitch: pitch,
-	})
-	return engine.Step()
+	}}, &tick.result)
+	tick.context.SettleGameplay(&tick.result)
+	environment := engine.realm.NewEnvironmentMutation(
+		tick.mutation,
+		engine.tick.Load(),
+		realm.EnvironmentConfig{},
+	)
+	engine.realm.AdvanceFarmlandMoisture(engine.activeInterestKeys(), environment)
+	commitMutation(tick.mutation, &tick.result)
+	return publishFixture(engine, &tick)
 }
 
 func tillBlockAt(t *testing.T, engine *Engine, position core.BlockPos) core.BlockID {
@@ -390,11 +400,10 @@ func blockLabel(id core.BlockID) string {
 
 // plantSeeds 发一条放置命令（选中第 0 格的种子）并推进一个权威 tick。
 func plantSeeds(engine *Engine, session SessionID, yaw, pitch float32) TickResult {
-	engine.Enqueue(Command{
+	return settlePlayerInteractionsTick(engine, []Command{{
 		Session: session, Sequence: 2, Kind: CommandPlaceBlock, Slot: 0,
 		Yaw: yaw, Pitch: pitch,
-	})
-	return engine.Step()
+	}})
 }
 
 // TestPlantSeedsOnFarmland 覆盖 Scenario「在耕地上种下种子」：耕地正上方出现
@@ -528,12 +537,10 @@ func TestPlaceNonSeedItemsIgnoreFarmlandPrecondition(t *testing.T) {
 	player.inventory.Hotbar.Slots[1] = core.ItemStack{
 		Item: core.ItemStone, Count: core.MaxStackCount,
 	}
-	engine.Enqueue(Command{
+	result := settlePlayerInteractionsTick(engine, []Command{{
 		Session: session, Sequence: 2, Kind: CommandPlaceBlock, Slot: 1,
 		Yaw: yaw, Pitch: pitch,
-	})
-
-	result := engine.Step()
+	}})
 
 	if len(result.Rejected) != 0 {
 		t.Fatalf("泥土之上放置石头被拒绝: %+v", result.Rejected)

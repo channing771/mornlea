@@ -8,13 +8,57 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/world"
 )
 
 // torch_test.go：可放置火把在 sim 层的行为——五向放置与拒绝、支撑失效的
-// 六邻居有界复核与掉落、火把配方的合成验收。全部经真实命令与 Step 推进，
-// 不直接调用放置内部函数。
+// 六邻居有界复核与掉落、火把配方的合成验收。全部经真实命令与所需
+// production stage 推进，不直接调用放置内部函数。
+
+func prepareTorchRealmTick(engine *Engine) {
+	engine.realm.SetEnvironmentTick(
+		engine.tick.Load(),
+		engine.seed,
+		realm.EnvironmentConfig{DropPickupDelayTicks: engine.tunables.DropPickupDelayTicks},
+	)
+}
+
+func finishPlayerWorldAndSweepTorchesTick(engine *Engine, commands []Command) TickResult {
+	tick := engine.beginTick()
+	prepareTorchRealmTick(engine)
+	tick.context.ApplyPlayerCommands(commands, &tick.result)
+	tick.context.FinishWorld(&tick.result)
+	engine.realm.SweepUnsupportedTorches(tick.mutation)
+	commitMutation(tick.mutation, &tick.result)
+	return publishFixture(engine, &tick)
+}
+
+func finishWorldAndSweepTorchesTick(engine *Engine) TickResult {
+	return finishPlayerWorldAndSweepTorchesTick(engine, nil)
+}
+
+func holdCompanionMineAndSweepTorchesTick(
+	t *testing.T,
+	fixture companionMiningFixture,
+) TickResult {
+	t.Helper()
+	action := CompanionAction{
+		ID: fixture.id, Kind: CompanionActionMineHold, Target: fixture.target,
+	}
+	if !validCompanionAction(action) {
+		t.Fatal("MineHold action 不是合法 owner 输入")
+	}
+	tick := fixture.engine.beginTick()
+	prepareTorchRealmTick(fixture.engine)
+	tick.context.ApplyCompanionActions([]CompanionAction{action})
+	tick.context.AdvanceActors()
+	tick.context.FinishWorld(&tick.result)
+	fixture.engine.realm.SweepUnsupportedTorches(tick.mutation)
+	commitMutation(tick.mutation, &tick.result)
+	return publishFixture(fixture.engine, &tick)
+}
 
 // —— 火把用例共享的夹具与观察助手 ——
 
@@ -57,15 +101,14 @@ func torchPlace(
 	slot uint8,
 	yaw, pitch float32,
 ) TickResult {
-	engine.Enqueue(Command{
+	return settlePlayerInteractionsTick(engine, []Command{{
 		Session:  session,
 		Sequence: sequence,
 		Kind:     CommandPlaceBlock,
 		Slot:     slot,
 		Yaw:      yaw,
 		Pitch:    pitch,
-	})
-	return engine.Step()
+	}})
 }
 
 // torchChunkDrops 收集中心区块的全部活动掉落物。
@@ -284,13 +327,14 @@ func TestMiningSupportRemovesStandingTorchAndDropsSameTick(t *testing.T) {
 
 	// 裸手挖泥土 5 tick：第 5 个 tick 完成采掘，火把必须在同一 tick 被移除。
 	mineYaw, minePitch := lookAtBlockCenter(eye, support)
-	engine.Enqueue(Command{
+	command := Command{
 		Session: session, Sequence: 3, Kind: CommandPlayerInput,
 		Yaw: mineYaw, Pitch: minePitch, Mining: true,
-	})
+	}
 	var result TickResult
-	for range 5 {
-		result = engine.Step()
+	result = finishPlayerWorldAndSweepTorchesTick(engine, []Command{command})
+	for range 4 {
+		result = finishWorldAndSweepTorchesTick(engine)
 	}
 	if len(result.Rejected) != 0 {
 		t.Fatalf("采掘被拒绝: %+v", result.Rejected)
@@ -358,7 +402,7 @@ func TestCompanionMiningSupportRemovesWallTorchesAndDrops(t *testing.T) {
 
 	var result TickResult
 	for range 5 {
-		result = holdCompanionMineAction(t, fixture)
+		result = holdCompanionMineAndSweepTorchesTick(t, fixture)
 	}
 	if got := companionMiningBlockAt(t, fixture); got != core.AirID {
 		t.Fatalf("支撑格 = %d，想要空气", got)
@@ -480,13 +524,14 @@ func TestSupportRemovalKeepsTorchWhenDropCapacityFull(t *testing.T) {
 
 	// 采掘支撑格：泥土掉落占用最后一个槽，容量全满，火把必须保留原位。
 	mineYaw, minePitch := lookAtBlockCenter(eye, support)
-	engine.Enqueue(Command{
+	command := Command{
 		Session: session, Sequence: 2, Kind: CommandPlayerInput,
 		Yaw: mineYaw, Pitch: minePitch, Mining: true,
-	})
+	}
 	var mined TickResult
-	for range 5 {
-		mined = engine.Step()
+	mined = finishPlayerWorldAndSweepTorchesTick(engine, []Command{command})
+	for range 4 {
+		mined = finishWorldAndSweepTorchesTick(engine)
 	}
 	if len(mined.Rejected) != 0 {
 		t.Fatalf("采掘被拒绝: %+v", mined.Rejected)
@@ -522,13 +567,14 @@ func TestSupportRemovalKeepsTorchWhenDropCapacityFull(t *testing.T) {
 		t.Fatalf("放回实心支撑却移除了火把: %d", got)
 	}
 
-	engine.Enqueue(Command{
+	command = Command{
 		Session: session, Sequence: 4, Kind: CommandPlayerInput,
 		Yaw: mineYaw, Pitch: minePitch, Mining: true,
-	})
+	}
 	var remined TickResult
-	for range 5 {
-		remined = engine.Step()
+	remined = finishPlayerWorldAndSweepTorchesTick(engine, []Command{command})
+	for range 4 {
+		remined = finishWorldAndSweepTorchesTick(engine)
 	}
 	if got := tillBlockAt(t, engine, support); got != core.AirID {
 		t.Fatalf("支撑格 = %d，想要空气", got)
@@ -575,18 +621,10 @@ func readyTorchCraftingPlayer(t *testing.T) (*Engine, SessionID) {
 		SpawnAnchor:    core.ChunkPos{},
 		Inventory:      inventory,
 	})
-	requested := engine.Step()
-	for _, key := range requested.Acquire {
-		engine.SubmitAcquired(AcquiredChunk{Key: key, Missing: true})
-	}
-	engine.Step()
-	engine.SubmitGenerated(GeneratedChunk{
-		Dimension: core.Overworld,
-		Chunk:     movementFlatChunk(core.ChunkPos{}),
-	})
-	ready := engine.Step()
-	if len(ready.Ready) != 1 {
-		t.Fatalf("平坦区块未就绪: %+v", ready.Ready)
+	loadMovementChunk(t, engine.dimension(core.Overworld), movementFlatChunk(core.ChunkPos{}))
+	ready := advanceActorsTick(engine)
+	if len(ready.Players) != 1 || !ready.Players[0].Ready {
+		t.Fatalf("平坦区块未激活玩家: %+v", ready.Players)
 	}
 	return engine, session
 }
@@ -598,13 +636,11 @@ func TestTorchCraftedInPersonalGridYieldsFour(t *testing.T) {
 	engine, session := readyTorchCraftingPlayer(t)
 	// 统一视图格：网格 0..3、背包 9..44（快捷栏栏位 i → 视图格 9+i）。
 	// 煤炭进网格 0（上行），木棍进网格 2（下行）——煤炭位于木棍正上方。
-	engine.Enqueue(Command{
+	moved := applyPlayerCommandsTick(engine, []Command{{
 		Session: session, Sequence: 1, Kind: CommandMoveCraftingStack, Slot: 9, ToSlot: 0,
-	})
-	engine.Enqueue(Command{
+	}, {
 		Session: session, Sequence: 2, Kind: CommandMoveCraftingStack, Slot: 10, ToSlot: 2,
-	})
-	moved := engine.Step()
+	}})
 	if len(moved.Rejected) != 0 {
 		t.Fatalf("网格移动被拒绝: %+v", moved.Rejected)
 	}
@@ -616,10 +652,9 @@ func TestTorchCraftedInPersonalGridYieldsFour(t *testing.T) {
 		t.Fatalf("派生产物 = %+v，想要 4 个火把", output)
 	}
 
-	engine.Enqueue(Command{
+	taken := applyPlayerCommandsTick(engine, []Command{{
 		Session: session, Sequence: 3, Kind: CommandTakeCraftingOutput,
-	})
-	taken := engine.Step()
+	}})
 	if len(taken.Rejected) != 0 {
 		t.Fatalf("产物取出被拒绝: %+v", taken.Rejected)
 	}

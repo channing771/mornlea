@@ -2,7 +2,6 @@ package entity
 
 import (
 	"math"
-	"reflect"
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
@@ -23,18 +22,6 @@ func doorTestReadyEngine(t *testing.T, hotbar core.Hotbar) (*Engine, SessionID, 
 		SpawnAnchor:    chunkPos,
 		Inventory:      core.Inventory{Hotbar: hotbar},
 	})
-	requested := engine.Step()
-	wantKey := core.ChunkKey{Dimension: core.Overworld, Pos: chunkPos}
-	if !reflect.DeepEqual(requested.Acquire, []core.ChunkKey{wantKey}) {
-		t.Fatalf("Acquire = %+v want %v", requested.Acquire, wantKey)
-	}
-	for _, key := range requested.Acquire {
-		engine.SubmitAcquired(AcquiredChunk{Key: key, Missing: true})
-	}
-	generated := engine.Step()
-	if !reflect.DeepEqual(generated.Generate, []core.ChunkKey{wantKey}) {
-		t.Fatalf("Generate = %+v want %v", generated.Generate, wantKey)
-	}
 	chunk := world.NewChunk(chunkPos)
 	for z := 0; z < core.SectionSize; z++ {
 		for x := 0; x < core.SectionSize; x++ {
@@ -57,10 +44,10 @@ func doorTestReadyEngine(t *testing.T, hotbar core.Hotbar) (*Engine, SessionID, 
 	}
 	chunk.SetBlock(0, 2, 5, core.StoneID)
 	chunk.Compact()
-	engine.SubmitGenerated(GeneratedChunk{Dimension: core.Overworld, Pos: chunkPos, Chunk: chunk})
-	ready := engine.Step()
-	if !reflect.DeepEqual(ready.Ready, []core.ChunkKey{wantKey}) {
-		t.Fatalf("Ready = %+v want %v", ready.Ready, wantKey)
+	loadMovementChunk(t, engine.dimension(core.Overworld), chunk)
+	ready := advanceActorsTick(engine)
+	if len(ready.Players) != 1 || !ready.Players[0].Ready {
+		t.Fatalf("玩家未在门夹具中激活：%+v", ready.Players)
 	}
 	return engine, session, chunkPos
 }
@@ -324,8 +311,9 @@ func TestDoorInteractViaRaycast(t *testing.T) {
 	pitch := float32(math.Asin(float64(dir[1])))
 	player.yaw = yaw
 	player.pitch = pitch
-	engine.Enqueue(Command{Session: session, Sequence: 100, Kind: CommandInteractDoor, Yaw: yaw, Pitch: pitch})
-	result := engine.Step()
+	result := settlePlayerInteractionsTick(engine, []Command{{
+		Session: session, Sequence: 100, Kind: CommandInteractDoor, Yaw: yaw, Pitch: pitch,
+	}})
 	if len(result.Rejected) != 0 {
 		t.Fatalf("interact via ray rejected %+v", result.Rejected)
 	}

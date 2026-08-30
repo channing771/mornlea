@@ -1,8 +1,6 @@
 package entity
 
 import (
-	"errors"
-	"reflect"
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
@@ -38,8 +36,8 @@ func TestCompanionsAreSeparateSortedIdleActors(t *testing.T) {
 		})
 	}
 
-	first := engine.Step().Companions
-	second := engine.Step().Companions
+	first := advanceActorsTick(engine).Companions
+	second := advanceActorsTick(engine).Companions
 	if len(first) != len(ids) || len(second) != len(ids) {
 		t.Fatalf("Companions=%d/%d，想要 %d/%d", len(first), len(second), len(ids), len(ids))
 	}
@@ -82,133 +80,15 @@ func TestCompanionRestoreWaitsForAllCollisionChunksBeforeFallback(t *testing.T) 
 	})
 	setRestoreBlock(t, engine, core.BlockPos{X: 15, Y: 1, Z: 0}, core.StoneID)
 
-	waiting := engine.Step()
+	waiting := advanceActorsTick(engine)
 	if len(waiting.Companions) != 0 || engine.companions[id].nextRestore != 0 {
 		t.Fatalf("碰撞邻区未就绪时越过 restore: updates=%+v nextRestore=%d",
 			waiting.Companions, engine.companions[id].nextRestore)
 	}
 	loadCompanionFlatChunk(t, engine, core.ChunkPos{X: 1})
-	restored := engine.Step().Companions
+	restored := advanceActorsTick(engine).Companions
 	if len(restored) != 1 || restored[0].State.Position != (mgl32.Vec3{32.5, 1, 0.5}) {
 		t.Fatalf("碰撞 restore 未回退出生点: %+v", restored)
-	}
-}
-
-func TestCompanionRestoreChunkInitiallyMissingThenRestores(t *testing.T) {
-	engine := NewEngine(0, 0, 0)
-	id := companionTestID(1)
-	position := mgl32.Vec3{0.5, 1, 0.5}
-	key := core.ChunkKey{Dimension: core.Overworld}
-	engine.RegisterCompanion(CompanionRestore{
-		ID: id,
-		Body: &companion.Body{
-			ID: id, Dimension: core.Overworld, Position: position,
-		},
-		SpawnDimension: core.Overworld,
-	})
-
-	requested := engine.Step()
-	if !reflect.DeepEqual(requested.Acquire, []core.ChunkKey{key}) || len(requested.Companions) != 0 {
-		t.Fatalf("首次请求=%+v updates=%+v", requested.Acquire, requested.Companions)
-	}
-	engine.SubmitAcquired(AcquiredChunk{Key: key, Missing: true})
-	missing := engine.Step()
-	if !reflect.DeepEqual(missing.Generate, []core.ChunkKey{key}) || len(missing.Companions) != 0 {
-		t.Fatalf("missing 处理=%+v updates=%+v", missing.Generate, missing.Companions)
-	}
-	engine.SubmitGenerated(GeneratedChunk{
-		Dimension: core.Overworld,
-		Chunk:     companionFlatChunk(core.ChunkPos{}),
-	})
-	restored := engine.Step().Companions
-	if len(restored) != 1 || restored[0].ID != id || restored[0].State.Position != position {
-		t.Fatalf("区块就绪后未恢复原位置: %+v", restored)
-	}
-}
-
-func TestCompanionRestoreRetriesRetainedChunkFailures(t *testing.T) {
-	tests := []struct {
-		name         string
-		reachFailure func(*testing.T, *Engine, core.ChunkKey) TickResult
-	}{
-		{
-			name: "load error",
-			reachFailure: func(t *testing.T, engine *Engine, key core.ChunkKey) TickResult {
-				engine.SubmitAcquired(AcquiredChunk{Key: key, Err: errors.New("temporary load failure")})
-				return engine.Step()
-			},
-		},
-		{
-			name: "loaded chunk apply error",
-			reachFailure: func(t *testing.T, engine *Engine, key core.ChunkKey) TickResult {
-				engine.SubmitAcquired(AcquiredChunk{Key: key})
-				return engine.Step()
-			},
-		},
-		{
-			name: "generation error",
-			reachFailure: func(t *testing.T, engine *Engine, key core.ChunkKey) TickResult {
-				advanceCompanionRestoreToGenerating(t, engine, key)
-				engine.SubmitGenerated(GeneratedChunk{
-					Dimension: key.Dimension,
-					Pos:       key.Pos,
-					Err:       errors.New("temporary generation failure"),
-				})
-				return engine.Step()
-			},
-		},
-		{
-			name: "generated chunk apply error",
-			reachFailure: func(t *testing.T, engine *Engine, key core.ChunkKey) TickResult {
-				advanceCompanionRestoreToGenerating(t, engine, key)
-				engine.SubmitGenerated(GeneratedChunk{Dimension: key.Dimension, Pos: key.Pos})
-				return engine.Step()
-			},
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			engine := NewEngine(0, 0, 0)
-			id := companionTestID(1)
-			key := core.ChunkKey{Dimension: core.Overworld}
-			engine.RegisterCompanion(CompanionRestore{
-				ID: id,
-				Body: &companion.Body{
-					ID: id, Dimension: core.Overworld, Position: [3]float32{0.5, 1, 0.5},
-				},
-				SpawnDimension: core.Overworld,
-			})
-			first := engine.Step()
-			if !reflect.DeepEqual(first.Acquire, []core.ChunkKey{key}) {
-				t.Fatalf("首次 Acquire=%+v，想要 [%+v]", first.Acquire, key)
-			}
-
-			failed := test.reachFailure(t, engine, key)
-			if !reflect.DeepEqual(failed.Acquire, []core.ChunkKey{key}) || len(failed.Companions) != 0 {
-				t.Fatalf("失败后 Acquire=%+v Companions=%+v，想要重试且不激活",
-					failed.Acquire, failed.Companions)
-			}
-			advanceCompanionRestoreToGenerating(t, engine, key)
-			engine.SubmitGenerated(GeneratedChunk{
-				Dimension: key.Dimension,
-				Pos:       key.Pos,
-				Chunk:     companionFlatChunk(key.Pos),
-			})
-			restored := engine.Step().Companions
-			if len(restored) != 1 || restored[0].ID != id ||
-				restored[0].State.Position != (mgl32.Vec3{0.5, 1, 0.5}) {
-				t.Fatalf("重试成功后未恢复: %+v", restored)
-			}
-		})
-	}
-}
-
-func advanceCompanionRestoreToGenerating(t *testing.T, engine *Engine, key core.ChunkKey) {
-	t.Helper()
-	engine.SubmitAcquired(AcquiredChunk{Key: key, Missing: true})
-	result := engine.Step()
-	if !reflect.DeepEqual(result.Generate, []core.ChunkKey{key}) || len(result.Companions) != 0 {
-		t.Fatalf("Generate=%+v Companions=%+v，想要生成且不激活", result.Generate, result.Companions)
 	}
 }
 
@@ -220,7 +100,7 @@ func TestCompanionSpawnRetriesAfterFailedChunkRevisionChanges(t *testing.T) {
 		ID: id, SpawnDimension: core.Overworld, SpawnAnchor: core.ChunkPos{},
 	})
 
-	if updates := engine.Step().Companions; len(updates) != 0 || !engine.companions[id].exhausted {
+	if updates := advanceActorsTick(engine).Companions; len(updates) != 0 || !engine.companions[id].exhausted {
 		t.Fatalf("全空气出生扫描=%+v exhausted=%v", updates, engine.companions[id].exhausted)
 	}
 	chunk, ready := engine.dimension(core.Overworld).ReadyChunk(core.ChunkPos{})
@@ -228,11 +108,11 @@ func TestCompanionSpawnRetriesAfterFailedChunkRevisionChanges(t *testing.T) {
 		t.Fatal("origin chunk is not ready")
 	}
 	chunk.SetBlock(0, 0, 0, core.GrassID)
-	if updates := engine.Step().Companions; len(updates) != 0 {
+	if updates := advanceActorsTick(engine).Companions; len(updates) != 0 {
 		t.Fatalf("revision 未变却重试出生: %+v", updates)
 	}
 	engine.TouchChunkForTest(core.ChunkKey{Dimension: core.Overworld})
-	updates := engine.Step().Companions
+	updates := advanceActorsTick(engine).Companions
 	if len(updates) != 1 || updates[0].State.Position != (mgl32.Vec3{0.5, 1, 0.5}) {
 		t.Fatalf("revision 改变后未重试: %+v", updates)
 	}
@@ -246,13 +126,15 @@ func TestCompanionSpawnSearchRetainsOnlyThreeByThreeCandidateChunks(t *testing.T
 	engine.RegisterCompanion(CompanionRestore{
 		ID: id, SpawnDimension: core.Overworld, SpawnAnchor: anchor,
 	})
-	engine.Step()
+	advanceActorsTick(engine)
 
 	state := engine.companions[id]
+	wanted := make(map[core.ChunkKey]struct{})
+	engine.State.AddCompanionWanted(wanted)
 	if len(state.spawnCandidates) != 33*33 || len(state.spawnChunks) != 9 ||
-		len(state.spawnWanted) != 9 || len(engine.wanted) != 9 {
+		len(state.spawnWanted) != 9 || len(wanted) != 9 {
 		t.Fatalf("出生候选/兴趣/wanted/union=%d/%d/%d/%d，想要 1089/9/9/9",
-			len(state.spawnCandidates), len(state.spawnChunks), len(state.spawnWanted), len(engine.wanted))
+			len(state.spawnCandidates), len(state.spawnChunks), len(state.spawnWanted), len(wanted))
 	}
 	for dz := int32(-1); dz <= 1; dz++ {
 		for dx := int32(-1); dx <= 1; dx++ {
@@ -260,54 +142,16 @@ func TestCompanionSpawnSearchRetainsOnlyThreeByThreeCandidateChunks(t *testing.T
 				Dimension: core.Overworld,
 				Pos:       core.ChunkPos{X: anchor.X + dx, Z: anchor.Z + dz},
 			}
-			if !engine.WantsChunk(key) {
+			if _, ok := wanted[key]; !ok {
 				t.Fatalf("缺少出生候选区块 %+v", key)
 			}
 		}
 	}
-	if engine.WantsChunk(core.ChunkKey{
+	if _, ok := wanted[core.ChunkKey{
 		Dimension: core.Overworld,
 		Pos:       core.ChunkPos{X: anchor.X + 2, Z: anchor.Z},
-	}) {
+	}]; ok {
 		t.Fatal("出生兴趣越过 3x3")
-	}
-}
-
-func TestCompanionInterestIsThreeByThreeAndDoesNotConsumeSessions(t *testing.T) {
-	engine := NewEngine(0, 0, 0)
-	loadCompanionFlatChunk(t, engine, core.ChunkPos{})
-	id := companionTestID(1)
-	position := mgl32.Vec3{8.5, 1, 8.5}
-	engine.RegisterCompanion(CompanionRestore{
-		ID: id,
-		Body: &companion.Body{
-			ID: id, Dimension: core.Overworld, Position: position,
-		},
-		SpawnDimension: core.Overworld,
-	})
-	result := engine.Step()
-
-	if len(engine.sessions) != 0 || len(result.Forget) != 0 {
-		t.Fatalf("伙伴污染玩家 session: sessions=%d forget=%+v", len(engine.sessions), result.Forget)
-	}
-	if len(result.Companions) != 1 || len(engine.wanted) != 9 {
-		t.Fatalf("active updates/interest=%d/%d，想要 1/9", len(result.Companions), len(engine.wanted))
-	}
-	if len(result.Acquire) != 8 || result.Acquire[0].Pos != (core.ChunkPos{X: -1}) {
-		t.Fatalf("伙伴独占区块未按伙伴距离排序: %+v", result.Acquire)
-	}
-	for dz := int32(-1); dz <= 1; dz++ {
-		for dx := int32(-1); dx <= 1; dx++ {
-			if !engine.WantsChunk(core.ChunkKey{
-				Dimension: core.Overworld,
-				Pos:       core.ChunkPos{X: dx, Z: dz},
-			}) {
-				t.Fatalf("active 兴趣缺少 (%d,%d)", dx, dz)
-			}
-		}
-	}
-	if engine.WantsChunk(core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: 2}}) {
-		t.Fatal("active 兴趣越过 3x3")
 	}
 }
 
@@ -327,7 +171,7 @@ func TestEightPlayersAndFourCompanionsRemainIndependentInEngine(t *testing.T) {
 			SpawnDimension: core.Overworld,
 		})
 	}
-	result := engine.Step()
+	result := advanceActorsTick(engine)
 	if len(result.Players) != 8 || len(result.Companions) != companion.MaxActive ||
 		len(engine.sessions) != 8 || len(engine.companions) != companion.MaxActive {
 		t.Fatalf("players/companions/sessions/state=%d/%d/%d/%d",

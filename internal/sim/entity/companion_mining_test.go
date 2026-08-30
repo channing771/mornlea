@@ -15,7 +15,7 @@ import (
 // （hotbar 栏位 0 选中）。场景本身不写入采掘意图：直写路径由
 // readyCompanionMining 在场景上补 miningHeld/miningTarget（与既有玩家采掘
 // 测试直接写 player.miningHeld 完全对称），action 载荷分派由
-// readyCompanionMiningViaActions 经完整 action 链路与发布用例经 Step 覆盖。
+// readyCompanionMiningViaActions 经 production action/actor/mining 阶段与发布覆盖。
 type companionMiningFixture struct {
 	engine *Engine
 	id     companion.ID
@@ -63,7 +63,7 @@ func fillCompanionInventory(entry *companionState, item core.ItemID) {
 // 一个已激活的伙伴站在 (4.5, 1, 8.5)，目标方块固定在 (4, 1, 5)，两者水平距离
 // 约 3 格、视线无遮挡，位于默认 InteractionReach 之内。伙伴手握指定工具
 // （hotbar 栏位 0 选中）。采掘意图不在场景内建立，差异留给两个入口补齐：
-// 直接写共享 actorState 字段的 readyCompanionMining 与经完整 Step/MineHold
+// 直接写共享 actorState 字段的 readyCompanionMining 与经 production stage/MineHold
 // action 建立意图的 readyCompanionMiningViaActions。
 func newCompanionMiningScene(
 	t *testing.T,
@@ -106,7 +106,7 @@ func readyCompanionMining(
 }
 
 // readyCompanionMiningViaActions 返回不带采掘意图的公共场景，采掘意图由测试
-// 经完整 Step 与 MineHold action 建立，用于验证 action 载荷分派与
+// 经 production action/actor/mining 阶段与 MineHold action 建立，用于验证 action 载荷分派与
 // CompanionUpdate 发布（见 holdCompanionMineAction）。
 func readyCompanionMiningViaActions(
 	t *testing.T,
@@ -117,15 +117,22 @@ func readyCompanionMiningViaActions(
 	return newCompanionMiningScene(t, block, tool)
 }
 
-// holdCompanionMineAction 提交一个 MineHold action 并步进一个完整 tick。
+// holdCompanionMineAction 把一个 MineHold action 依次送入 production
+// action、actor 与 mining 阶段，并发布该 entity tick。
 func holdCompanionMineAction(t *testing.T, fixture companionMiningFixture) TickResult {
 	t.Helper()
-	if !fixture.engine.EnqueueCompanionAction(CompanionAction{
+	action := CompanionAction{
 		ID: fixture.id, Kind: CompanionActionMineHold, Target: fixture.target,
-	}) {
-		t.Fatal("MineHold action 未入队")
 	}
-	return fixture.engine.Step()
+	if !validCompanionAction(action) {
+		t.Fatal("MineHold action 不是合法 owner 输入")
+	}
+	tick := fixture.engine.beginTick()
+	tick.context.ApplyCompanionActions([]CompanionAction{action})
+	tick.context.AdvanceActors()
+	tick.context.FinishWorld(&tick.result)
+	commitMutation(tick.mutation, &tick.result)
+	return publishFixture(fixture.engine, &tick)
 }
 
 // TestCompanionMiningMatchesPlayerRuleAndTiming 是"伙伴与玩家共用同一采掘规则"
@@ -385,28 +392,43 @@ func TestCompanionActionMiningPayloadsSetAndClearIntent(t *testing.T) {
 	}
 
 	// 无 action 的 tick：中性输入，但按住意图保持，进度继续累积。
-	idle := fixture.engine.Step()
+	idleTick := fixture.engine.beginTick()
+	idleTick.context.ApplyCompanionActions(nil)
+	idleTick.context.AdvanceActors()
+	idleTick.context.FinishWorld(&idleTick.result)
+	commitMutation(idleTick.mutation, &idleTick.result)
+	idle := publishFixture(fixture.engine, &idleTick)
 	if len(idle.Companions) != 1 || idle.Companions[0].Mining.ProgressTicks != 2 {
 		t.Fatalf("无 action tick 进度=%+v，想要保持按住并推进到 2", idle.Companions)
 	}
 
 	// 越界目标与零值 Kind：确定性丢弃，不触碰既有意图之外的任何状态。
-	fixture.engine.EnqueueCompanionAction(CompanionAction{
-		ID: fixture.id, Kind: CompanionActionMineHold, Target: core.BlockPos{Y: core.MaxY + 1},
+	invalidTick := fixture.engine.beginTick()
+	invalidTick.context.ApplyCompanionActions([]CompanionAction{
+		{ID: fixture.id, Kind: CompanionActionMineHold, Target: core.BlockPos{Y: core.MaxY + 1}},
+		{ID: fixture.id},
 	})
-	fixture.engine.EnqueueCompanionAction(CompanionAction{ID: fixture.id})
-	fixture.engine.Step()
+	invalidTick.context.AdvanceActors()
+	invalidTick.context.FinishWorld(&invalidTick.result)
+	commitMutation(invalidTick.mutation, &invalidTick.result)
+	publishFixture(fixture.engine, &invalidTick)
 	if got := entry.mining.progressTicks; got != 3 {
 		t.Fatalf("非法 action 影响了进度: %+v", entry.mining)
 	}
 
 	// MineRelease：同 tick 清空意图与进度，对齐玩家松键语义。
-	if !fixture.engine.EnqueueCompanionAction(CompanionAction{
+	release := CompanionAction{
 		ID: fixture.id, Kind: CompanionActionMineRelease,
-	}) {
-		t.Fatal("MineRelease action 未入队")
 	}
-	released := fixture.engine.Step()
+	if !validCompanionAction(release) {
+		t.Fatal("MineRelease action 不是合法 owner 输入")
+	}
+	releaseTick := fixture.engine.beginTick()
+	releaseTick.context.ApplyCompanionActions([]CompanionAction{release})
+	releaseTick.context.AdvanceActors()
+	releaseTick.context.FinishWorld(&releaseTick.result)
+	commitMutation(releaseTick.mutation, &releaseTick.result)
+	released := publishFixture(fixture.engine, &releaseTick)
 	if entry.miningHeld || entry.mining != (miningState{}) {
 		t.Fatalf("MineRelease 后 held=%v mining=%+v，想要同 tick 清零", entry.miningHeld, entry.mining)
 	}
@@ -432,10 +454,12 @@ func TestCompanionActionPlacePayloadDefensiveBoundary(t *testing.T) {
 		{ID: fixture.id, Kind: CompanionActionPlace, Target: fixture.target, Block: core.AirID},
 		{ID: fixture.id, Kind: CompanionActionPlace, Target: fixture.target, Block: core.BlockID(9999)},
 	}
-	for _, action := range invalid {
-		fixture.engine.EnqueueCompanionAction(action)
-	}
-	result := fixture.engine.Step()
+	tick := fixture.engine.beginTick()
+	tick.context.ApplyCompanionActions(invalid)
+	tick.context.AdvanceActors()
+	tick.context.SettleGameplay(&tick.result)
+	commitMutation(tick.mutation, &tick.result)
+	result := publishFixture(fixture.engine, &tick)
 	if got := companionMiningBlockAt(t, fixture); got != core.StoneID {
 		t.Fatalf("非法 Place 改变了世界=%d", got)
 	}

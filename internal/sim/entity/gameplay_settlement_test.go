@@ -173,9 +173,7 @@ func TestGameplaySettlementViaMutation(t *testing.T) {
 			t.Skip("未激活，跳过拾取")
 		}
 		eng.sessions[1].player.state.Position = mgl32.Vec3{0.5, 1, 0.5}
-		eng.views[1] = testSessionView{
-			SessionView: SessionView{Ready: true, Center: core.ChunkPos{}},
-		}
+		eng.setSessionViewForTest(1, SessionView{Ready: true, Center: core.ChunkPos{}}, true)
 		mut := rs.NewMutation()
 		// 在脚下放掉落物
 		ch2, _ := rs.Dimension(core.Overworld).ReadyChunk(pos)

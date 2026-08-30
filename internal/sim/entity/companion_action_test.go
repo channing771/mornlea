@@ -21,9 +21,9 @@ func TestCompanionActionAppliesInIDOrderAfterPlayers(t *testing.T) {
 		sessionA, sessionB := SessionID(1), SessionID(2)
 		engine.RegisterSession(sessionA, core.Overworld, core.ChunkPos{})
 		engine.RegisterSession(sessionB, core.Overworld, core.ChunkPos{})
+		loadMovementChunk(t, engine.dimension(core.Overworld), movementFlatChunk(core.ChunkPos{}))
 		for range 16 {
-			result := engine.Step()
-			feedCompanionActionRequests(t, engine, result)
+			advanceActorsTick(engine)
 			if engine.sessions[sessionA].player.lifecycle == PlayerActive &&
 				engine.sessions[sessionB].player.lifecycle == PlayerActive {
 				break
@@ -37,20 +37,25 @@ func TestCompanionActionAppliesInIDOrderAfterPlayers(t *testing.T) {
 		activateCompanionAt(t, engine, companionA, mgl32.Vec3{0.5, 1, 4.5})
 		activateCompanionAt(t, engine, companionB, mgl32.Vec3{2.5, 1, 4.5})
 
-		engine.Enqueue(Command{Session: sessionA, Sequence: 2, Kind: CommandPlayerInput, MoveX: 1})
-		engine.Enqueue(Command{Session: sessionB, Sequence: 2, Kind: CommandPlayerInput, MoveZ: -1})
-		// 故意按逆 ID 序入队：处理顺序必须由 ID 字节序决定，而不是入队顺序。
-		if !engine.EnqueueCompanionAction(CompanionAction{
+		// 故意按逆 ID 序提供：处理顺序必须由 ID 字节序决定，而不是 slice 顺序。
+		actions := []CompanionAction{{
 			ID: companionB, Kind: CompanionActionMove, Input: physics.Input{MoveZ: 1},
-		}) {
-			t.Fatal("伙伴 B 的 action 未入队")
-		}
-		if !engine.EnqueueCompanionAction(CompanionAction{
+		}, {
 			ID: companionA, Kind: CompanionActionMove, Input: physics.Input{MoveX: 1},
-		}) {
-			t.Fatal("伙伴 A 的 action 未入队")
+		}}
+		for index, action := range actions {
+			if !validCompanionAction(action) {
+				t.Fatalf("伙伴 action %d 不是合法 owner 输入", index)
+			}
 		}
-		result := engine.Step()
+		tick := engine.beginTick()
+		tick.context.ApplyPlayerCommands([]Command{
+			{Session: sessionA, Sequence: 2, Kind: CommandPlayerInput, MoveX: 1},
+			{Session: sessionB, Sequence: 2, Kind: CommandPlayerInput, MoveZ: -1},
+		}, &tick.result)
+		tick.context.ApplyCompanionActions(actions)
+		tick.context.AdvanceActors()
+		result := publishFixture(engine, &tick)
 
 		if len(result.Players) != 2 || len(result.Companions) != 2 {
 			t.Fatalf("Players=%d Companions=%d，想要 2/2", len(result.Players), len(result.Companions))
@@ -103,16 +108,21 @@ func TestCompanionActionSharesPlayerPhysicsExit(t *testing.T) {
 
 	sequence := uint64(2)
 	for tick := 0; tick < 20; tick++ {
-		engine.Enqueue(Command{
+		command := Command{
 			Session: session, Sequence: sequence, Kind: CommandPlayerInput, MoveX: 1,
-		})
-		if !engine.EnqueueCompanionAction(CompanionAction{
+		}
+		action := CompanionAction{
 			ID: id, Kind: CompanionActionMove, Input: physics.Input{MoveX: 1},
-		}) {
-			t.Fatalf("tick %d action 未入队", tick)
+		}
+		if !validCompanionAction(action) {
+			t.Fatalf("tick %d action 不是合法 owner 输入", tick)
 		}
 		sequence++
-		result := engine.Step()
+		fixtureTick := engine.beginTick()
+		fixtureTick.context.ApplyPlayerCommands([]Command{command}, &fixtureTick.result)
+		fixtureTick.context.ApplyCompanionActions([]CompanionAction{action})
+		fixtureTick.context.AdvanceActors()
+		result := publishFixture(engine, &fixtureTick)
 		player := onlyMovementPlayer(t, result)
 		if len(result.Companions) != 1 || result.Companions[0].ID != id {
 			t.Fatalf("tick %d Companions=%+v", tick, result.Companions)
@@ -141,22 +151,6 @@ func TestCompanionActionInboxBoundedAndSessionless(t *testing.T) {
 		}
 	})
 
-	t.Run("inbox 有界且满员即丢弃", func(t *testing.T) {
-		engine := NewEngine(0, 0, 0)
-		for suffix := byte(1); suffix <= companion.MaxActive; suffix++ {
-			if !engine.EnqueueCompanionAction(CompanionAction{ID: companionTestID(suffix)}) {
-				t.Fatalf("第 %d 个 action 未入队", suffix)
-			}
-		}
-		if engine.EnqueueCompanionAction(CompanionAction{ID: companionTestID(9)}) {
-			t.Fatal("超出容量的 action 未被拒绝")
-		}
-		engine.Step()
-		if !engine.EnqueueCompanionAction(CompanionAction{ID: companionTestID(9)}) {
-			t.Fatal("tick 边界排空后 inbox 仍拒绝新 action")
-		}
-	})
-
 	t.Run("未知 ID 丢弃且无会话副作用", func(t *testing.T) {
 		engine := NewEngine(0, 0, 0)
 		loadCompanionFlatChunks(t, engine, core.ChunkPos{}, 1)
@@ -164,13 +158,12 @@ func TestCompanionActionInboxBoundedAndSessionless(t *testing.T) {
 		activateCompanionAt(t, engine, id, mgl32.Vec3{8.5, 1, 8.5})
 		before := engine.companions[id].state.Position
 
-		engine.EnqueueCompanionAction(CompanionAction{
+		result := applyCompanionActionsTick(engine, []CompanionAction{{
 			ID: companionTestID(7), Kind: CompanionActionMove, Input: physics.Input{MoveX: 1},
-		})
-		result := engine.Step()
-		if len(engine.sessions) != 0 || len(result.Forget) != 0 || len(result.Rejected) != 0 {
-			t.Fatalf("未知 ID action 产生会话副作用: sessions=%d forget=%+v rejected=%+v",
-				len(engine.sessions), result.Forget, result.Rejected)
+		}})
+		if len(engine.sessions) != 0 || len(result.Rejected) != 0 {
+			t.Fatalf("未知 ID action 产生 entity 副作用: sessions=%d rejected=%+v",
+				len(engine.sessions), result.Rejected)
 		}
 		if after := engine.companions[id].state.Position; after != before {
 			t.Fatalf("未知 ID action 影响了已注册伙伴: before=%v after=%v", before, after)
@@ -188,22 +181,27 @@ func TestCompanionActionInboxBoundedAndSessionless(t *testing.T) {
 			},
 			SpawnDimension: core.Overworld,
 		})
-		// 注册后立即入队：伙伴尚处待恢复状态，action 必须在本 tick 被丢弃且
-		// 不滞留到激活之后。首个 Step 只产生订阅请求，不会激活。
-		engine.EnqueueCompanionAction(CompanionAction{
+		// 注册后立即提供：伙伴尚处待恢复状态，action 必须在本 tick 被丢弃且
+		// 不滞留到激活之后。首个 actor 阶段因区块未就绪而不会激活。
+		action := CompanionAction{
 			ID: id, Kind: CompanionActionMove, Input: physics.Input{MoveX: 1},
-		})
-		result := engine.Step()
+		}
+		tick := engine.beginTick()
+		tick.context.ApplyCompanionActions([]CompanionAction{action})
+		tick.context.AdvanceActors()
+		publishFixture(engine, &tick)
 		if engine.companions[id].active {
 			t.Fatal("首个未喂区块的 tick 即激活，用例前提不成立")
 		}
-		feedCompanionActionRequests(t, engine, result)
 		activateCompanionAt(t, engine, id, position)
 		after := engine.companions[id].state.Position
 		if after != position {
 			t.Fatalf("未激活期间的 action 泄漏到激活后: want=%v got=%v", position, after)
 		}
-		idle := engine.Step()
+		idleTick := engine.beginTick()
+		idleTick.context.ApplyCompanionActions(nil)
+		idleTick.context.AdvanceActors()
+		idle := publishFixture(engine, &idleTick)
 		if len(idle.Companions) != 1 || idle.Companions[0].State.Position != after {
 			t.Fatalf("无 action 的激活伙伴没有保持静止: %+v", idle.Companions)
 		}
@@ -214,10 +212,13 @@ func TestCompanionActionInboxBoundedAndSessionless(t *testing.T) {
 		loadCompanionFlatChunks(t, engine, core.ChunkPos{}, 1)
 		id := companionTestID(1)
 		activateCompanionAt(t, engine, id, mgl32.Vec3{0.5, 1, 0.5})
-		engine.EnqueueCompanionAction(CompanionAction{ID: id, Kind: CompanionActionMove, Input: physics.Input{MoveX: 1}})
-		engine.EnqueueCompanionAction(CompanionAction{ID: id, Kind: CompanionActionMove, Input: physics.Input{MoveX: -1}})
-
-		engine.Step()
+		tick := engine.beginTick()
+		tick.context.ApplyCompanionActions([]CompanionAction{
+			{ID: id, Kind: CompanionActionMove, Input: physics.Input{MoveX: 1}},
+			{ID: id, Kind: CompanionActionMove, Input: physics.Input{MoveX: -1}},
+		})
+		tick.context.AdvanceActors()
+		publishFixture(engine, &tick)
 		if applied := engine.companions[id].input.MoveX; applied != 1 {
 			t.Fatalf("重复 action 未保留最早入队者: applied=%d", applied)
 		}
@@ -231,72 +232,6 @@ func TestCompanionActionInboxBoundedAndSessionless(t *testing.T) {
 // 区块的同一 tick，兴趣必须滑动到新脚下区块为中心的 3×3，新区块经既有
 // acquire/generate 流程就绪，离开的旧区块按既有规则释放，且任一时刻单伙伴兴趣
 // 区块数不超过 9。
-func TestCompanionInterestSlidesWithBody(t *testing.T) {
-	engine := NewEngine(0, 0, 0)
-	id := companionTestID(1)
-	engine.RegisterCompanion(CompanionRestore{
-		ID: id,
-		Body: &companion.Body{
-			ID: id, Dimension: core.Overworld, Position: [3]float32{8.5, 1, 8.5},
-		},
-		SpawnDimension: core.Overworld,
-	})
-	activateCompanionAt(t, engine, id, mgl32.Vec3{8.5, 1, 8.5})
-
-	if len(engine.wanted) != 9 || !engine.WantsChunk(core.ChunkKey{
-		Dimension: core.Overworld, Pos: core.ChunkPos{X: -1},
-	}) {
-		t.Fatalf("激活后兴趣不是脚下 3x3: wanted=%+v", engine.wanted)
-	}
-
-	var final CompanionUpdate
-	for tick := 0; tick < 200; tick++ {
-		if !engine.EnqueueCompanionAction(CompanionAction{
-			ID: id, Kind: CompanionActionMove, Input: physics.Input{MoveX: 1},
-		}) {
-			t.Fatalf("tick %d action 未入队", tick)
-		}
-		result := engine.Step()
-		feedCompanionActionRequests(t, engine, result)
-		if len(engine.wanted) > 9 {
-			t.Fatalf("tick %d 兴趣超过 9 个区块: %d", tick, len(engine.wanted))
-		}
-		if len(result.Companions) != 1 {
-			t.Fatalf("tick %d Companions=%+v", tick, result.Companions)
-		}
-		final = result.Companions[0]
-		if final.State.Position.X() >= 16 {
-			break
-		}
-	}
-	if final.State.Position.X() < 16 {
-		t.Fatalf("伙伴未在预算内跨入相邻区块: %+v", final)
-	}
-
-	for dz := int32(-1); dz <= 1; dz++ {
-		for dx := int32(0); dx <= 2; dx++ {
-			key := core.ChunkKey{
-				Dimension: core.Overworld,
-				Pos:       core.ChunkPos{X: dx, Z: dz},
-			}
-			if !engine.WantsChunk(key) {
-				t.Fatalf("滑动后的兴趣缺少新区块 %+v", key)
-			}
-		}
-	}
-	if len(engine.wanted) != 9 {
-		t.Fatalf("滑动后兴趣=%d，想要 9", len(engine.wanted))
-	}
-	if engine.WantsChunk(core.ChunkKey{Dimension: core.Overworld, Pos: core.ChunkPos{X: -1}}) {
-		t.Fatal("滑动后旧边缘区块仍在兴趣内")
-	}
-	// 离开的干净区块必须按既有规则释放：RequestUnload 对无未落盘修改的区块
-	// 直接删除记录。
-	if _, exists := engine.dimension(core.Overworld).Info(core.ChunkPos{X: -1}); exists {
-		t.Fatal("离开兴趣的干净区块未被释放")
-	}
-}
-
 // TestActorStateExtractionKeepsPlayerBehavior 锁定 actorState 提取契约：玩家与
 // 伙伴的运动/朝向/背包/采掘字段必须经同一个内嵌 actorState 提升（不得在子结构
 // 体重复声明遮蔽），且扩展后玩家的移动/采掘/放置/背包序列重放逐 tick 产生完全
@@ -378,10 +313,13 @@ func TestActorStateExtractionKeepsPlayerBehavior(t *testing.T) {
 			var updates []PlayerUpdate
 			var rejections []Rejection
 			for _, commands := range script {
-				for _, command := range commands {
-					engine.Enqueue(command)
-				}
-				result := engine.Step()
+				tick := engine.beginTick()
+				tick.context.ApplyPlayerCommands(commands, &tick.result)
+				tick.context.AdvanceActors()
+				tick.context.SettleGameplay(&tick.result)
+				tick.context.FinishWorld(&tick.result)
+				commitMutation(tick.mutation, &tick.result)
+				result := publishFixture(engine, &tick)
 				updates = append(updates, onlyMovementPlayer(t, result))
 				rejections = append(rejections, result.Rejected...)
 			}
@@ -406,10 +344,9 @@ func TestActorStateExtractionKeepsPlayerBehavior(t *testing.T) {
 			for dx := int32(0); dx < 4; dx++ {
 				engine.SetBlockForTest(core.BlockPos{X: dx, Y: 2, Z: 3}, core.StoneID)
 			}
-			engine.Enqueue(Command{
+			result := settlePlayerInteractionsTick(engine, []Command{{
 				Session: session, Sequence: 2, Kind: CommandPlaceBlock, Slot: 2, Yaw: math.Pi, Pitch: 0,
-			})
-			result := engine.Step()
+			}})
 			return len(result.Changes) == 1 && len(result.Changes[0].Changes) == 1
 		}()
 		if !placed {
@@ -432,30 +369,16 @@ func activateCompanionAt(t *testing.T, engine *Engine, id companion.ID, position
 			SpawnDimension: core.Overworld,
 		})
 	}
+	center := companionChunk(position)
+	loadFlatChunks(t, engine.dimension(core.Overworld),
+		center.X-1, center.X+1, center.Z-1, center.Z+1)
 	for range 16 {
 		if entry := engine.companions[id]; entry != nil && entry.active {
 			return
 		}
-		result := engine.Step()
-		feedCompanionActionRequests(t, engine, result)
+		advanceActorsTick(engine)
 	}
 	if entry := engine.companions[id]; entry == nil || !entry.active {
 		t.Fatalf("伙伴 %v 未在预算内激活", id)
-	}
-}
-
-// feedCompanionActionRequests 把本 tick 订阅请求的区块按"干净磁盘读回"供给：
-// Revision == PersistedRevision 的 AcquiredChunk 不会带未落盘修改，离开兴趣
-// 并集时被 RequestUnload 立即删除（对齐 death_test.go 的 walkToCleanChunk
-// 惯例）；滑动释放断言依赖这一性质。
-func feedCompanionActionRequests(t *testing.T, engine *Engine, result TickResult) {
-	t.Helper()
-	for _, key := range result.Acquire {
-		engine.SubmitAcquired(AcquiredChunk{
-			Key:               key,
-			Chunk:             movementFlatChunk(key.Pos),
-			Revision:          1,
-			PersistedRevision: 1,
-		})
 	}
 }

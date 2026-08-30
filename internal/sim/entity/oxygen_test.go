@@ -155,7 +155,11 @@ func TestDrowningKillsAndRunsExistingDeathSettlement(t *testing.T) {
 	drownTicks := int(core.MaxOxygenTicks) + interval*(int(core.MaxHealth)+1)
 	died := false
 	for range drownTicks {
-		result := engine.Step()
+		tick := engine.beginTick()
+		tick.context.AdvanceActors()
+		tick.context.AdvanceHostiles(nil, &tick.result)
+		commitMutation(tick.mutation, &tick.result)
+		result := publishFixture(engine, &tick)
 		// 死亡结算与扣血同在一个权威 tick 里跑完，因此发布出去的生命值绝不能是 0。
 		for _, update := range result.Players {
 			if update.Session == id && update.Health == 0 {
@@ -186,7 +190,7 @@ func TestDrowningKillsAndRunsExistingDeathSettlement(t *testing.T) {
 	const dryID = SessionID(23)
 	dryEngine := readyRegenPlayer(t, dryID, 2)
 	for range drownTicks {
-		dryEngine.Step()
+		advanceActorsTick(dryEngine)
 	}
 	dry := dryEngine.sessions[dryID].player
 	if dry.lifecycle != PlayerActive {
@@ -253,7 +257,7 @@ func TestOxygenAfterReconnectUnderwaterCountsDownFromFull(t *testing.T) {
 
 	activated := false
 	for range 16 {
-		engine.Step()
+		advanceActorsTick(engine)
 		if player.lifecycle == PlayerActive {
 			activated = true
 			break
@@ -276,7 +280,7 @@ func TestOxygenAfterReconnectUnderwaterCountsDownFromFull(t *testing.T) {
 	// 再泡三个 tick：必须继续按每 tick −1 递减，而不是被「出水回满」反复填满。
 	const extra = 3
 	for range extra {
-		engine.Step()
+		advanceActorsTick(engine)
 	}
 	if want := start - extra; player.oxygen != want {
 		t.Fatalf("再浸没 %d 个 tick 后 oxygen=%d，想要 %d", extra, player.oxygen, want)

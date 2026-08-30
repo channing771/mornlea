@@ -20,7 +20,7 @@ func readyMeleePlayers(t *testing.T, count int) (*Engine, []SessionID) {
 		engine.RegisterSession(SessionID(id), core.Overworld, core.ChunkPos{})
 	}
 	if count > 1 {
-		engine.Step()
+		advanceActorsTick(engine)
 	}
 	sessions := make([]SessionID, count)
 	for index := range count {

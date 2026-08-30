@@ -34,11 +34,12 @@ var trampleParitySamples = []core.BlockPos{
 // 采掘一致」：对每个样本坐标，引擎 A 踩踏结算、引擎 B 采掘结算，两者必须读
 // 到同一个 tick 值并产出逐件相同的掉落。
 //
-// tick 对齐的依据是 `Step` 的计数形状：步内一切读取发生在 `engine.tick.Add(1)`
-// 之前，因此落地步（返回 `Tick = T`）内的读取值是 T−1；采掘侧空转到
-// `tick.Load() == T−1` 后用 `advanceMiningOnce`（不推进 tick）结算，读取值
-// 恰好同为 T−1。两侧先各自断言「确实产出了两类产物」，再比较——否则两条
-// 路径双双静默失败时两边都是空 map，相等断言会假绿。
+// tick 对齐的依据是 owner 夹具的计数形状：阶段内一切读取发生在
+// `engine.tick.Add(1)` 之前，因此落地步（返回 `Tick = T`）内的读取值是 T−1；
+// 采掘侧仅用 `FinishWorld` 阶段空转到 `tick.Load() == T−1`，再用
+// `advanceMiningOnce`（不推进 tick）结算，读取值恰好同为 T−1。两侧先各自断言
+// 「确实产出了两类产物」，再比较——否则两条路径双双静默失败时两边都是空 map，
+// 相等断言会假绿。
 func TestPropertyTrampleYieldMatchesMining(t *testing.T) {
 	for _, cropPos := range trampleParitySamples {
 		t.Run(fmt.Sprintf("crop%+v", cropPos), func(t *testing.T) {
@@ -59,7 +60,7 @@ func TestPropertyTrampleYieldMatchesMining(t *testing.T) {
 			miningEngine.SetBlockForTest(cropPos, core.WheatStage7ID)
 			settleTick := landing.Tick - 1
 			for miningEngine.tick.Load() < settleTick {
-				miningEngine.Step()
+				finishWorldTick(miningEngine)
 			}
 			if got := miningEngine.tick.Load(); got != settleTick {
 				t.Fatalf("采掘侧 tick 对齐失败: %d，想要 %d", got, settleTick)

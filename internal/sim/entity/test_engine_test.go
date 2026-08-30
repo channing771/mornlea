@@ -1,10 +1,8 @@
 package entity
 
 import (
-	"math"
 	"sort"
 
-	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim/realm"
@@ -12,31 +10,61 @@ import (
 	"github.com/channing771/mornlea/internal/world"
 )
 
-// Engine 是迁入 entity 的白盒玩法测试夹具，不参与生产构建。
+// Engine 是 entity 白盒测试的状态与 realm 夹具，不包含 runtime inbox、
+// 订阅协调或 tick 阶段编排。
 type Engine struct {
 	*engineContext
-	viewRadius         int
-	views              map[SessionID]testSessionView
-	wanted             map[core.ChunkKey]struct{}
-	observers          map[SessionID]*testObserver
-	lastSequences      map[SessionID]uint64
-	commands           []Command
-	companionActions   []CompanionAction
-	hostileActions     []HostileAction
-	acquired           []AcquiredChunk
-	generated          []GeneratedChunk
-	subscriptionsDirty bool
-	viewEntries        []TickSessionView
+	viewEntries   []TickSessionView
+	viewOverrides []TickSessionView
 }
 
-func (engine *engineContext) newMutation() *pendingChunkChanges {
-	return engine.realm.NewMutation()
+// fixtureTick 只把一次 `BeginTick` 的三个值放在一起；它不选择或
+// 调用任何 production stage。
+type fixtureTick struct {
+	context  TickContext
+	mutation *realm.Mutation
+	result   TickResult
 }
 
-func (engine *engineContext) finishChanges(
-	pending *pendingChunkChanges,
-	result *TickResult,
-) {
+func NewEngine(_ int, worldTime uint64, seed int64) *Engine {
+	state := NewState(seed)
+	context := state.context(
+		realm.NewState(core.Overworld),
+		0,
+		worldTime,
+		0,
+		tuning.ActiveTunables(),
+		physics.ActiveTunables(),
+		ViewSnapshot{},
+	)
+	return &Engine{engineContext: context}
+}
+
+// beginTick 只创建 realm mutation 并调用 production `State.BeginTick`。
+// 每个测试必须在调用点显式选择所需阶段。
+func (engine *Engine) beginTick() fixtureTick {
+	engine.tunables = tuning.ActiveTunables()
+	engine.physicsTunables = physics.ActiveTunables()
+	views := engine.viewSnapshot()
+	engine.engineContext.views = views
+	mutation := engine.realm.NewMutation()
+	return fixtureTick{
+		context: engine.State.BeginTick(TickInput{
+			Realm:           engine.realm,
+			Tick:            engine.tick.Load(),
+			WorldTime:       engine.worldTime.Load(),
+			DayPhaseOffset:  engine.DayPhaseOffset(),
+			Tunables:        engine.tunables,
+			PhysicsTunables: engine.physicsTunables,
+			Views:           views,
+		}, mutation),
+		mutation: mutation,
+		result:   TickResult{},
+	}
+}
+
+// commitMutation 只把 owner mutation 提交结果转为既有 contract DTO。
+func commitMutation(pending *realm.Mutation, result *TickResult) {
 	for _, batch := range pending.Commit() {
 		changes := make([]BlockChange, len(batch.Changes))
 		for index, change := range batch.Changes {
@@ -50,122 +78,82 @@ func (engine *engineContext) finishChanges(
 	}
 }
 
-type testObserver struct {
-	lastSequence uint64
-	view         testSessionView
-}
-
-type testSessionView struct {
-	SessionView
-	Wanted map[core.ChunkKey]struct{}
-}
-
-func NewEngine(viewRadius int, worldTime uint64, seed int64) *Engine {
-	context := NewState(seed).context(
-		realm.NewState(core.Overworld),
-		0,
-		worldTime,
-		0,
-		tuning.ActiveTunables(),
-		physics.ActiveTunables(),
-		ViewSnapshot{},
-	)
-	engine := &Engine{
-		engineContext: context,
-		viewRadius:    viewRadius,
-		views:         make(map[SessionID]testSessionView),
-		wanted:        make(map[core.ChunkKey]struct{}),
-		observers:     make(map[SessionID]*testObserver),
-		lastSequences: make(map[SessionID]uint64),
-	}
-	return engine
+// advanceFixtureClock 只推进测试值时钟，不发布状态或调用任何阶段。
+func (engine *Engine) advanceFixtureClock() {
+	engine.tick.Add(1)
+	engine.worldTime.Add(1)
 }
 
 func (engine *Engine) viewSnapshot() ViewSnapshot {
 	entries := engine.viewEntries[:0]
-	for id, view := range engine.views {
-		session := engine.sessions[id]
-		if session == nil {
+	for id := range engine.sessions {
+		subscription, ok := engine.State.SessionSubscription(id)
+		if !ok {
 			continue
 		}
-		origin := core.ChunkKey{Dimension: session.dimension, Pos: view.Center}
-		_, wanted := view.Wanted[origin]
-		entries = append(entries, TickSessionView{
-			Session: id, View: view.SessionView,
-			Origin: origin, OriginWanted: wanted,
-		})
+		origin := core.ChunkKey{
+			Dimension: subscription.Dimension,
+			Pos:       subscription.Center,
+		}
+		entry := TickSessionView{
+			Session: id,
+			View: SessionView{
+				Ready:  true,
+				Center: subscription.Center,
+			},
+			Origin:       origin,
+			OriginWanted: true,
+		}
+		for _, override := range engine.viewOverrides {
+			if override.Session == id {
+				entry = override
+				break
+			}
+		}
+		entries = append(entries, entry)
 	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Session < entries[j].Session })
 	engine.viewEntries = entries
 	return NewViewSnapshot(entries)
 }
 
-func (engine *Engine) EntitySessionView(id SessionID) SessionView {
-	return engine.views[id].SessionView
-}
-
-func (engine *Engine) EntitySessionWantsChunk(
+// setSessionViewForTest 只覆盖测试传给 production stage 的只读订阅快照。
+func (engine *Engine) setSessionViewForTest(
 	id SessionID,
-	key core.ChunkKey,
-) bool {
-	_, wanted := engine.views[id].Wanted[key]
-	return wanted
-}
-
-func (engine *Engine) Enqueue(command Command) {
-	engine.commands = append(engine.commands, command)
-}
-
-func (engine *Engine) SubmitAcquired(chunk AcquiredChunk) {
-	engine.acquired = append(engine.acquired, chunk)
-}
-
-func (engine *Engine) SubmitGenerated(chunk GeneratedChunk) {
-	engine.generated = append(engine.generated, chunk)
-}
-
-func (engine *Engine) EnqueueCompanionAction(action CompanionAction) bool {
-	if len(engine.companionActions) >= companion.MaxActive {
-		return false
+	view SessionView,
+	originWanted bool,
+) {
+	subscription, _ := engine.State.SessionSubscription(id)
+	entry := TickSessionView{
+		Session: id,
+		View:    view,
+		Origin: core.ChunkKey{
+			Dimension: subscription.Dimension,
+			Pos:       subscription.Center,
+		},
+		OriginWanted: originWanted,
 	}
-	engine.companionActions = append(engine.companionActions, action)
-	return true
-}
-
-func (engine *Engine) EnqueueHostileAction(action HostileAction) bool {
-	if len(engine.hostileActions) >= maxHostiles {
-		return false
+	for index := range engine.viewOverrides {
+		if engine.viewOverrides[index].Session == id {
+			engine.viewOverrides[index] = entry
+			engine.engineContext.views = engine.viewSnapshot()
+			return
+		}
 	}
-	engine.hostileActions = append(engine.hostileActions, action)
-	return true
+	engine.viewOverrides = append(engine.viewOverrides, entry)
+	engine.engineContext.views = engine.viewSnapshot()
 }
 
-func (engine *Engine) WantsChunk(key core.ChunkKey) bool {
-	_, ok := engine.wanted[key]
-	return ok
+func (engine *engineContext) newMutation() *pendingChunkChanges {
+	return engine.realm.NewMutation()
 }
 
-func (engine *Engine) RegisterObserverSession(id SessionID) {
-	if engine.sessions[id] != nil || engine.observers[id] != nil {
-		panic("sim: duplicate registered session")
-	}
-	engine.observers[id] = &testObserver{}
+func (engine *engineContext) finishChanges(
+	pending *pendingChunkChanges,
+	result *TickResult,
+) {
+	commitMutation(pending, result)
 }
-
-func (engine *Engine) UnregisterSession(id SessionID) (PlayerSnapshot, bool) {
-	if engine.observers[id] != nil {
-		delete(engine.observers, id)
-		delete(engine.lastSequences, id)
-		engine.subscriptionsDirty = true
-		return PlayerSnapshot{}, false
-	}
-	snapshot, ok := engine.engineContext.UnregisterSession(id)
-	delete(engine.views, id)
-	delete(engine.lastSequences, id)
-	engine.subscriptionsDirty = true
-	return snapshot, ok
-}
-
-func (engine *Engine) TickCount() uint64 { return engine.tick.Load() }
 
 func (engine *Engine) SeedForTest() int64 { return engine.seed }
 
@@ -173,116 +161,8 @@ func (engine *Engine) SetWorldTimeForTest(value uint64) {
 	engine.worldTime.Store(value)
 }
 
-func (engine *Engine) SetDayPhaseOffsetForTest(value uint16) {
-	engine.dayPhaseOffset.Store(uint64(value))
-}
-
 func (engine *Engine) RestoreDayPhaseOffset(value uint16) {
 	engine.dayPhaseOffset.Store(uint64(value))
-}
-
-func (engine *Engine) Step() TickResult {
-	engine.tunables = tuning.ActiveTunables()
-	engine.physicsTunables = physics.ActiveTunables()
-	commands := engine.commands
-	companionActions := engine.companionActions
-	hostileActions := engine.hostileActions
-	acquired := engine.acquired
-	generated := engine.generated
-	engine.commands = engine.commands[:0]
-	engine.companionActions = engine.companionActions[:0]
-	engine.hostileActions = engine.hostileActions[:0]
-	engine.acquired = engine.acquired[:0]
-	engine.generated = engine.generated[:0]
-	sort.SliceStable(commands, func(i, j int) bool {
-		if commands[i].Session != commands[j].Session {
-			return commands[i].Session < commands[j].Session
-		}
-		return commands[i].Sequence < commands[j].Sequence
-	})
-	entityCommands := make([]Command, 0, len(commands))
-	observerChanged := false
-	for _, command := range commands {
-		if observer := engine.observers[command.Session]; observer != nil {
-			if command.Kind != CommandTrustedObserverCenter ||
-				command.Sequence <= observer.lastSequence {
-				continue
-			}
-			observer.lastSequence = command.Sequence
-			observer.view.Ready = true
-			observer.view.Center = command.Center
-			observer.view.Wanted = make(map[core.ChunkKey]struct{})
-			for dz := -engine.viewRadius; dz <= engine.viewRadius; dz++ {
-				for dx := -engine.viewRadius; dx <= engine.viewRadius; dx++ {
-					observer.view.Wanted[core.ChunkKey{
-						Dimension: command.Dimension,
-						Pos: core.ChunkPos{
-							X: command.Center.X + int32(dx),
-							Z: command.Center.Z + int32(dz),
-						},
-					}] = struct{}{}
-				}
-			}
-			observerChanged = true
-			continue
-		}
-		if engine.sessions[command.Session] == nil ||
-			command.Sequence <= engine.lastSequences[command.Session] {
-			continue
-		}
-		engine.lastSequences[command.Session] = command.Sequence
-		entityCommands = append(entityCommands, command)
-	}
-
-	config := realm.EnvironmentConfig{
-		FluidFlowDelayTicks:     engine.tunables.FluidFlowDelayTicks,
-		FluidUpdatesPerTick:     engine.tunables.FluidUpdatesPerTick,
-		FluidRescanCellsPerTick: engine.tunables.FluidRescanCellsPerTick,
-		DropPickupDelayTicks:    engine.tunables.DropPickupDelayTicks,
-		RandomTicksPerSection:   engine.tunables.RandomTicksPerSection,
-		CropGrowthChancePercent: engine.tunables.CropGrowthChancePercent,
-	}
-	engine.realm.SetEnvironmentTick(engine.tick.Load(), engine.seed, config)
-	result := TickResult{Forget: make(map[SessionID][]core.ChunkKey)}
-	pending := engine.realm.NewMutation()
-	views := engine.viewSnapshot()
-	tick := engine.State.BeginTick(TickInput{
-		Realm: engine.realm, Tick: engine.tick.Load(), WorldTime: engine.worldTime.Load(),
-		DayPhaseOffset: engine.DayPhaseOffset(), Tunables: engine.tunables,
-		PhysicsTunables: engine.physicsTunables, Views: views,
-	}, pending)
-	tick.ApplyPlayerCommands(entityCommands, &result)
-	tick.ApplyCompanionActions(companionActions)
-	engine.applyTestAcquired(acquired, &result)
-	engine.applyTestGenerated(generated, &result)
-	changed := tick.AdvanceActors()
-	if changed || observerChanged || engine.subscriptionsDirty || len(engine.views) != len(engine.sessions) {
-		engine.reconcileTestSubscriptions(&result)
-		engine.subscriptionsDirty = false
-		views = engine.viewSnapshot()
-		tick.SetViews(views)
-	}
-	engine.engineContext.views = views
-	tick.AdvanceHostiles(hostileActions, &result)
-	tick.SettleGameplay(&result)
-	active := tick.AppendActiveInterestKeys(nil)
-	engine.realm.AdvanceFluids(active, pending)
-	engine.realm.AdvanceFarmlandMoisture(
-		active, engine.realm.NewEnvironmentMutation(pending, engine.tick.Load(), config),
-	)
-	tick.SettleTramples()
-	engine.realm.AdvanceCrops(active, pending)
-	tick.FinishWorld(&result)
-	engine.realm.SweepUnsupportedTorches(pending)
-	engine.realm.SweepUnsupportedBeds(pending)
-	engine.finishChanges(pending, &result)
-	sortChunkKeys(result.Ready)
-	result.Tick = engine.tick.Load() + 1
-	result.WorldTimeTicks = engine.worldTime.Load() + 1
-	engine.dayPhaseOffset.Store(uint64(tick.Publish(&result)))
-	engine.tick.Add(1)
-	engine.worldTime.Add(1)
-	return result
 }
 
 func (engine *Engine) TouchChunkForTest(key core.ChunkKey) {
@@ -329,203 +209,4 @@ func (engine *Engine) ChunkInfo(key core.ChunkKey) (ChunkInfo, bool) {
 		SaveInFlightRevision: info.SaveInFlightRevision,
 		Err:                  info.Err,
 	}, ok
-}
-
-func (engine *Engine) reconcileTestSubscriptions(result *TickResult) {
-	union := make(map[core.ChunkKey]struct{})
-	for id := range engine.sessions {
-		subscription, ok := engine.State.SessionSubscription(id)
-		if !ok {
-			continue
-		}
-		previous := engine.views[id]
-		view := testSessionView{
-			SessionView: SessionView{
-				Ready:  true,
-				Center: subscription.Center,
-			},
-			Wanted: make(map[core.ChunkKey]struct{}),
-		}
-		if engine.dimension(subscription.Dimension) != nil {
-			for dz := -engine.viewRadius; dz <= engine.viewRadius; dz++ {
-				for dx := -engine.viewRadius; dx <= engine.viewRadius; dx++ {
-					key := core.ChunkKey{
-						Dimension: subscription.Dimension,
-						Pos: core.ChunkPos{
-							X: subscription.Center.X + int32(dx),
-							Z: subscription.Center.Z + int32(dz),
-						},
-					}
-					view.Wanted[key] = struct{}{}
-					union[key] = struct{}{}
-				}
-			}
-		}
-		for _, key := range subscription.Pending {
-			view.Wanted[key] = struct{}{}
-			union[key] = struct{}{}
-		}
-		for key := range previous.Wanted {
-			if _, retained := view.Wanted[key]; !retained {
-				result.Forget[id] = append(result.Forget[id], key)
-			}
-		}
-		sortChunkKeys(result.Forget[id])
-		engine.views[id] = view
-	}
-	for _, observer := range engine.observers {
-		for key := range observer.view.Wanted {
-			union[key] = struct{}{}
-		}
-	}
-	engine.State.AddCompanionWanted(union)
-	keys := make([]core.ChunkKey, 0, len(union))
-	for key := range union {
-		_, retained := engine.wanted[key]
-		dimension := engine.dimension(key.Dimension)
-		info, exists := dimension.Info(key.Pos)
-		if !retained || exists && info.State == realm.ChunkFailed {
-			keys = append(keys, key)
-		}
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		leftDistance := engine.testSubscriptionDistanceSquared(keys[i])
-		rightDistance := engine.testSubscriptionDistanceSquared(keys[j])
-		if leftDistance != rightDistance {
-			return leftDistance < rightDistance
-		}
-		return chunkKeyLess(keys[i], keys[j])
-	})
-	for _, key := range keys {
-		dimension := engine.dimension(key.Dimension)
-		if dimension == nil {
-			continue
-		}
-		if dimension.CancelUnload(key.Pos) {
-			result.Ready = append(result.Ready, key)
-			continue
-		}
-		if dimension.BeginLoading(key.Pos) {
-			result.Acquire = append(result.Acquire, key)
-		}
-	}
-	for key := range engine.wanted {
-		if _, retained := union[key]; retained {
-			continue
-		}
-		if dimension := engine.dimension(key.Dimension); dimension != nil {
-			dimension.RequestUnload(key.Pos)
-		}
-	}
-	engine.wanted = union
-}
-
-func (engine *Engine) testSubscriptionDistanceSquared(key core.ChunkKey) int64 {
-	distance := int64(math.MaxInt64)
-	for _, view := range engine.views {
-		if _, wanted := view.Wanted[key]; !wanted {
-			continue
-		}
-		dx := int64(key.Pos.X - view.Center.X)
-		dz := int64(key.Pos.Z - view.Center.Z)
-		distance = min(distance, dx*dx+dz*dz)
-	}
-	for _, observer := range engine.observers {
-		if _, wanted := observer.view.Wanted[key]; !wanted {
-			continue
-		}
-		dx := int64(key.Pos.X - observer.view.Center.X)
-		dz := int64(key.Pos.Z - observer.view.Center.Z)
-		distance = min(distance, dx*dx+dz*dz)
-	}
-	if candidate, relevant := engine.State.CompanionSubscriptionDistanceSquared(key); relevant {
-		distance = min(distance, candidate)
-	}
-	return distance
-}
-
-func (engine *Engine) applyTestAcquired(
-	chunks []AcquiredChunk,
-	result *TickResult,
-) {
-	sort.SliceStable(chunks, func(i, j int) bool {
-		return chunkKeyLess(chunks[i].Key, chunks[j].Key)
-	})
-	for _, acquired := range chunks {
-		key := acquired.Key
-		dimension := engine.dimension(key.Dimension)
-		if dimension == nil {
-			continue
-		}
-		info, ok := dimension.Info(key.Pos)
-		if !ok || info.State != realm.ChunkLoading {
-			continue
-		}
-		switch {
-		case acquired.Err != nil:
-			dimension.MarkLoadFailed(key.Pos, acquired.Err)
-			if engine.State.CompanionWantsChunk(key) {
-				engine.subscriptionsDirty = true
-			}
-		case acquired.Missing:
-			if _, retained := engine.wanted[key]; !retained {
-				dimension.DropLoading(key.Pos)
-			} else if dimension.MarkGenerating(key.Pos) {
-				result.Generate = append(result.Generate, key)
-			}
-		default:
-			if err := dimension.ApplyLoaded(
-				key.Pos,
-				acquired.Chunk,
-				acquired.Revision,
-				acquired.PersistedRevision,
-				acquired.NeedsRewrite,
-				acquired.Recovered,
-			); err != nil {
-				dimension.MarkLoadFailed(key.Pos, err)
-				if engine.State.CompanionWantsChunk(key) {
-					engine.subscriptionsDirty = true
-				}
-				continue
-			}
-			result.Ready = append(result.Ready, key)
-		}
-	}
-}
-
-func (engine *Engine) applyTestGenerated(
-	chunks []GeneratedChunk,
-	result *TickResult,
-) {
-	sort.SliceStable(chunks, func(i, j int) bool {
-		left := core.ChunkKey{Dimension: chunks[i].Dimension, Pos: chunks[i].Pos}
-		right := core.ChunkKey{Dimension: chunks[j].Dimension, Pos: chunks[j].Pos}
-		return chunkKeyLess(left, right)
-	})
-	for _, generated := range chunks {
-		key := core.ChunkKey{Dimension: generated.Dimension, Pos: generated.Pos}
-		dimension := engine.dimension(key.Dimension)
-		if dimension == nil {
-			continue
-		}
-		info, ok := dimension.Info(key.Pos)
-		if !ok || info.State != realm.ChunkGenerating {
-			continue
-		}
-		if generated.Err != nil {
-			dimension.MarkFailed(key.Pos, generated.Err)
-			if engine.State.CompanionWantsChunk(key) {
-				engine.subscriptionsDirty = true
-			}
-			continue
-		}
-		if err := dimension.ApplyGenerated(key.Pos, generated.Chunk); err != nil {
-			dimension.MarkFailed(key.Pos, err)
-			if engine.State.CompanionWantsChunk(key) {
-				engine.subscriptionsDirty = true
-			}
-			continue
-		}
-		result.Ready = append(result.Ready, key)
-	}
 }

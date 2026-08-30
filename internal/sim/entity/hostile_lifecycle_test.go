@@ -207,7 +207,7 @@ func TestHostileBurnDeathPrecedesDistantDespawn(t *testing.T) {
 	}
 	engine.worldTime.Store(testDayTick)
 
-	engine.Step()
+	advanceHostilesTick(engine, nil)
 	if len(engine.hostiles.entries) != 0 {
 		t.Fatalf("灼烧死亡后夜行者仍在（数量=%d）", len(engine.hostiles.entries))
 	}

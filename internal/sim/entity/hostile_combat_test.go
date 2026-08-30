@@ -40,10 +40,11 @@ func TestHostileActionSteersMovementAlongWorldAxis(t *testing.T) {
 
 	// 世界轴意图 (-1, 0)（朝 -X）必须转化为朝向前进而非平移：夜行者 yaw 旋到
 	// 该方向并以既有 per-actor 物理前进。
-	if !engine.EnqueueHostileAction(HostileAction{ID: 11, MoveX: -1}) {
-		t.Fatal("移动意图被有界 inbox 拒绝")
+	action := HostileAction{ID: 11, MoveX: -1}
+	if !validHostileAction(action) {
+		t.Fatal("移动意图不是合法 owner 输入")
 	}
-	engine.Step()
+	advanceHostilesTick(engine, []HostileAction{action})
 	mob := engine.hostiles.entries[0]
 	if mob.state.Position.X() >= 5.5 {
 		t.Fatalf("朝 -X 的意图未产生 -X 位移：位置=%v", mob.state.Position)
@@ -54,25 +55,10 @@ func TestHostileActionSteersMovementAlongWorldAxis(t *testing.T) {
 	}
 	// 下一 tick 无 action：输入回中性（保 yaw、无前进），夜行者停住。
 	before := mob.state.Position
-	engine.Step()
+	advanceHostilesTick(engine, nil)
 	if engine.hostiles.entries[0].state.Position != before {
 		t.Fatalf("无意图 tick 夜行者仍位移：%v -> %v",
 			before, engine.hostiles.entries[0].state.Position)
-	}
-}
-
-func TestHostileActionInboxIsBoundedAndDropsOverflow(t *testing.T) {
-	engine, _ := hostileCombatEngine(t)
-	for id := uint64(1); id <= maxHostiles; id++ {
-		restoreCombatHostile(t, engine, id, mgl32.Vec3{2.5, 1, 2.5})
-	}
-	for id := uint64(1); id <= maxHostiles; id++ {
-		if !engine.EnqueueHostileAction(HostileAction{ID: id}) {
-			t.Fatalf("第 %d 条意图被拒绝，想要 inbox 容量覆盖全集合", id)
-		}
-	}
-	if engine.EnqueueHostileAction(HostileAction{ID: maxHostiles}) {
-		t.Fatal("超容意图被接受，想要非阻塞丢弃")
 	}
 }
 
@@ -85,8 +71,7 @@ func TestHostileActionDropsInvalidPayloadDeterministically(t *testing.T) {
 		"攻击意图缺会话": {ID: 11, AttackTarget: true},
 	}
 	for name, action := range cases {
-		engine.EnqueueHostileAction(action)
-		engine.Step()
+		advanceHostilesTick(engine, []HostileAction{action})
 		if got := engine.hostiles.entries[0].state.Position.X(); got != 5.5 {
 			t.Fatalf("%s：非法载荷产生了位移（X=%v）", name, got)
 		}
@@ -99,12 +84,13 @@ func TestHostileMeleeDealsExactlyThreeDamageAndEntersCooldown(t *testing.T) {
 	restoreCombatHostile(t, engine, 21, mgl32.Vec3{2.0, 1, 0.5})
 	engine.SetPlayerPositionForTest(session, mgl32.Vec3{0.5, 1, 0.5})
 
-	if !engine.EnqueueHostileAction(HostileAction{
+	action := HostileAction{
 		ID: 21, AttackTarget: true, TargetSession: session,
-	}) {
-		t.Fatal("攻击意图被拒绝")
 	}
-	engine.Step()
+	if !validHostileAction(action) {
+		t.Fatal("攻击意图不是合法 owner 输入")
+	}
+	advanceHostilesTick(engine, []HostileAction{action})
 
 	if got := engine.sessions[session].player.health; got != core.MaxHealth-3 {
 		t.Fatalf("玩家生命=%d，想要 %d（恰好 3 点伤害）", got, core.MaxHealth-3)
@@ -121,22 +107,20 @@ func TestHostileMeleeCooldownBlocksRepeatedDamage(t *testing.T) {
 	engine, session := hostileCombatEngine(t)
 	restoreCombatHostile(t, engine, 21, mgl32.Vec3{2.0, 1, 0.5})
 	engine.SetPlayerPositionForTest(session, mgl32.Vec3{0.5, 1, 0.5})
-	engine.EnqueueHostileAction(HostileAction{ID: 21, AttackTarget: true, TargetSession: session})
-	engine.Step()
+	action := HostileAction{ID: 21, AttackTarget: true, TargetSession: session}
+	advanceHostilesTick(engine, []HostileAction{action})
 	if got := engine.sessions[session].player.health; got != core.MaxHealth-3 {
 		t.Fatalf("首次攻击生命=%d，想要 %d", got, core.MaxHealth-3)
 	}
 	// 冷却期内逐 tick 重冻结意图：19 tick 内绝不重复扣血。
 	for tick := 1; tick < 20; tick++ {
-		engine.EnqueueHostileAction(HostileAction{ID: 21, AttackTarget: true, TargetSession: session})
-		engine.Step()
+		advanceHostilesTick(engine, []HostileAction{action})
 		if got := engine.sessions[session].player.health; got != core.MaxHealth-3 {
 			t.Fatalf("冷却期第 %d tick 生命=%d，想要保持 %d", tick, got, core.MaxHealth-3)
 		}
 	}
 	// 第 20 tick 冷却走完：同位再冻结一次意图可再次命中。
-	engine.EnqueueHostileAction(HostileAction{ID: 21, AttackTarget: true, TargetSession: session})
-	engine.Step()
+	advanceHostilesTick(engine, []HostileAction{action})
 	if got := engine.sessions[session].player.health; got != core.MaxHealth-6 {
 		t.Fatalf("冷却结束后生命=%d，想要 %d", got, core.MaxHealth-6)
 	}
@@ -146,8 +130,9 @@ func TestHostileMeleeOutOfRangeDoesNoDamage(t *testing.T) {
 	engine, session := hostileCombatEngine(t)
 	restoreCombatHostile(t, engine, 21, mgl32.Vec3{3.0, 1, 0.5}) // 水平 2.5 > 1.8
 	engine.SetPlayerPositionForTest(session, mgl32.Vec3{0.5, 1, 0.5})
-	engine.EnqueueHostileAction(HostileAction{ID: 21, AttackTarget: true, TargetSession: session})
-	engine.Step()
+	advanceHostilesTick(engine, []HostileAction{{
+		ID: 21, AttackTarget: true, TargetSession: session,
+	}})
 	if got := engine.sessions[session].player.health; got != core.MaxHealth {
 		t.Fatalf("超距攻击扣血到 %d，想要保持 %d", got, core.MaxHealth)
 	}
@@ -163,9 +148,10 @@ func TestHostileMeleeSettlesFrozenIntentsByIDWithProtection(t *testing.T) {
 	restoreCombatHostile(t, engine, 3, mgl32.Vec3{2.0, 1, 0.5})
 	restoreCombatHostile(t, engine, 7, mgl32.Vec3{0.5, 1, 2.0})
 	engine.SetPlayerPositionForTest(session, mgl32.Vec3{0.5, 1, 0.5})
-	engine.EnqueueHostileAction(HostileAction{ID: 7, AttackTarget: true, TargetSession: session})
-	engine.EnqueueHostileAction(HostileAction{ID: 3, AttackTarget: true, TargetSession: session})
-	engine.Step()
+	advanceHostilesTick(engine, []HostileAction{
+		{ID: 7, AttackTarget: true, TargetSession: session},
+		{ID: 3, AttackTarget: true, TargetSession: session},
+	})
 	if got := engine.sessions[session].player.health; got != core.MaxHealth-3 {
 		t.Fatalf("同 tick 双重意图生命=%d，想要按保护期合并为 %d", got, core.MaxHealth-3)
 	}
@@ -182,8 +168,9 @@ func TestHostileMeleeIgnoresStaleOrForeignTargets(t *testing.T) {
 	restoreCombatHostile(t, engine, 21, mgl32.Vec3{2.0, 1, 0.5})
 	engine.SetPlayerPositionForTest(session, mgl32.Vec3{0.5, 1, 0.5})
 	// 未知会话的攻击意图必须确定性丢弃。
-	engine.EnqueueHostileAction(HostileAction{ID: 21, AttackTarget: true, TargetSession: 99})
-	engine.Step()
+	advanceHostilesTick(engine, []HostileAction{{
+		ID: 21, AttackTarget: true, TargetSession: 99,
+	}})
 	if got := engine.sessions[session].player.health; got != core.MaxHealth {
 		t.Fatalf("未知会话意图扣血到 %d，想要保持 %d", got, core.MaxHealth)
 	}
@@ -195,8 +182,9 @@ func TestHostileMeleeDeathUsesExistingSettlement(t *testing.T) {
 	engine.SetPlayerPositionForTest(session, mgl32.Vec3{0.5, 1, 0.5})
 	player := engine.sessions[session].player
 	player.health = 2
-	engine.EnqueueHostileAction(HostileAction{ID: 21, AttackTarget: true, TargetSession: session})
-	engine.Step()
+	advanceHostilesTick(engine, []HostileAction{{
+		ID: 21, AttackTarget: true, TargetSession: session,
+	}})
 	// 既有死亡结算在同一 tick 完成：满血复活并转入待重生的位置跳变路径，
 	// 外部观察不到生命值为 0 的中间状态。
 	if got := player.health; got != core.MaxHealth {

@@ -73,7 +73,7 @@ func TestEatingSettlesExactlyAtEatingTicksWithFixedValues(t *testing.T) {
 			player.eatingHeld = true
 
 			for range tuning.DefaultTunables().EatingTicks - 1 {
-				engine.Step()
+				advanceActorsTick(engine)
 			}
 			if got := hotbarCount(player, 0); got != 2 {
 				t.Fatalf("第 %d tick 面包数=%d，想要精确保持 2", tuning.DefaultTunables().EatingTicks-1, got)
@@ -88,7 +88,7 @@ func TestEatingSettlesExactlyAtEatingTicksWithFixedValues(t *testing.T) {
 					tuning.DefaultTunables().EatingTicks-1, player.eating.progressTicks, tuning.DefaultTunables().EatingTicks-1)
 			}
 
-			engine.Step()
+			advanceActorsTick(engine)
 			if got := hotbarCount(player, 0); got != 1 {
 				t.Fatalf("第 %d tick 面包数=%d，想要 1", tuning.DefaultTunables().EatingTicks, got)
 			}
@@ -117,7 +117,7 @@ func TestEatingReleaseKeepsFoodAndRestartsFromZero(t *testing.T) {
 
 	const releasedAt = 17
 	for range releasedAt {
-		engine.Step()
+		advanceActorsTick(engine)
 	}
 	// 夹具自证：中断必须发生在 (0, `EatingTicks`) 的开区间内，否则测的是
 	// "没开始"或"已结算"，不是中断。
@@ -126,7 +126,7 @@ func TestEatingReleaseKeepsFoodAndRestartsFromZero(t *testing.T) {
 	}
 
 	player.eatingHeld = false
-	engine.Step()
+	advanceActorsTick(engine)
 	if player.eating != (eatingState{}) {
 		t.Fatalf("松手后进食状态=%+v，想要清空", player.eating)
 	}
@@ -140,13 +140,13 @@ func TestEatingReleaseKeepsFoodAndRestartsFromZero(t *testing.T) {
 
 	player.eatingHeld = true
 	for range tuning.DefaultTunables().EatingTicks - 1 {
-		engine.Step()
+		advanceActorsTick(engine)
 	}
 	if got := hotbarCount(player, 0); got != 2 {
 		t.Fatalf("重按第 %d tick 面包数=%d，想要精确保持 2（重按必须从 0 重新计时）",
 			tuning.DefaultTunables().EatingTicks-1, got)
 	}
-	engine.Step()
+	advanceActorsTick(engine)
 	if got := hotbarCount(player, 0); got != 1 {
 		t.Fatalf("重按第 %d tick 面包数=%d，想要 1", tuning.DefaultTunables().EatingTicks, got)
 	}
@@ -174,7 +174,7 @@ func TestEatingSlotSwitchRestartsAndConsumesNeitherSlot(t *testing.T) {
 
 	const switchedAt = 17
 	for range switchedAt {
-		engine.Step()
+		advanceActorsTick(engine)
 	}
 	if player.eating.progressTicks != switchedAt {
 		t.Fatalf("切格前进度=%d，想要 %d", player.eating.progressTicks, switchedAt)
@@ -182,7 +182,7 @@ func TestEatingSlotSwitchRestartsAndConsumesNeitherSlot(t *testing.T) {
 
 	player.inventory.Hotbar.Selected = 1
 	for range tuning.DefaultTunables().EatingTicks - switchedAt {
-		engine.Step()
+		advanceActorsTick(engine)
 	}
 	if got := hotbarCount(player, 0); got != 2 {
 		t.Fatalf("切格后原栏位面包数=%d，想要精确保持 2", got)
@@ -225,7 +225,7 @@ func TestEatingSameSlotItemSwapRestartsAndConsumesNeither(t *testing.T) {
 		setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
 		player.eatingHeld = true
 		for range swappedAt {
-			engine.Step()
+			advanceActorsTick(engine)
 		}
 		if player.eating.progressTicks != swappedAt {
 			t.Fatalf("换物品前进度=%d，想要 %d", player.eating.progressTicks, swappedAt)
@@ -235,7 +235,7 @@ func TestEatingSameSlotItemSwapRestartsAndConsumesNeither(t *testing.T) {
 		wheat := core.ItemStack{Item: core.ItemWheat, Count: 3}
 		player.inventory.Hotbar.Slots[0] = wheat
 		for range tuning.DefaultTunables().EatingTicks - swappedAt {
-			engine.Step()
+			advanceActorsTick(engine)
 		}
 		if got := player.inventory.Hotbar.Slots[0]; got != wheat {
 			t.Fatalf("换物品后 0 号格=%+v，想要精确保持 %+v", got, wheat)
@@ -253,7 +253,7 @@ func TestEatingSameSlotItemSwapRestartsAndConsumesNeither(t *testing.T) {
 		// `EatingTicks - 1` tick 仍不许结算。
 		player.inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemBread, Count: 2}
 		for range tuning.DefaultTunables().EatingTicks - 1 {
-			engine.Step()
+			advanceActorsTick(engine)
 		}
 		if got := hotbarCount(player, 0); got != 2 {
 			t.Fatalf("换回面包第 %d tick 面包数=%d，想要精确保持 2（换物品必须从 0 重新计时）",
@@ -302,7 +302,7 @@ func TestEatingDoesNotStartWhenHungerIsFull(t *testing.T) {
 	player.eatingHeld = true
 
 	for tick := 1; tick <= 64; tick++ {
-		engine.Step()
+		advanceActorsTick(engine)
 		if player.eating != (eatingState{}) {
 			t.Fatalf("饥饿已满时第 %d tick 进食状态=%+v，想要恒为空", tick, player.eating)
 		}
@@ -329,7 +329,7 @@ func TestNonFoodNeverAdvancesEating(t *testing.T) {
 	}
 
 	for tick := 1; tick <= 64; tick++ {
-		engine.Step()
+		advanceActorsTick(engine)
 		if player.eating != (eatingState{}) {
 			t.Fatalf("手持小麦第 %d tick 进食状态=%+v，想要恒为空", tick, player.eating)
 		}
@@ -358,7 +358,7 @@ func TestDamageInterruptsEatingOnlyWhenHealthActuallyDrops(t *testing.T) {
 		setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
 		player.eatingHeld = true
 		for range interruptedAt {
-			engine.Step()
+			advanceActorsTick(engine)
 		}
 		if player.eating.progressTicks != interruptedAt {
 			t.Fatalf("受伤前进度=%d，想要 %d", player.eating.progressTicks, interruptedAt)
@@ -387,7 +387,7 @@ func TestDamageInterruptsEatingOnlyWhenHealthActuallyDrops(t *testing.T) {
 		setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
 		player.eatingHeld = true
 		for range interruptedAt {
-			engine.Step()
+			advanceActorsTick(engine)
 		}
 
 		healthBefore := player.health
@@ -420,7 +420,7 @@ func TestEatingContainerOpenInterruptsAndRestartsAfterClose(t *testing.T) {
 
 	const openedAt = 7
 	for range openedAt {
-		engine.Step()
+		advanceActorsTick(engine)
 	}
 	// 夹具自证：中断必须发生在进行中，否则测的是"没开始"或"已结算"。
 	if player.eating.progressTicks != openedAt {
@@ -430,7 +430,7 @@ func TestEatingContainerOpenInterruptsAndRestartsAfterClose(t *testing.T) {
 	// 容器界面打开（夹具直写权威结构体，与 mining_test.go 的「打开熔炉」中断
 	// 夹具同形）：进食输入保持按住，权威 tick 照常推进。
 	engine.sessions[eatingTestSession].viewContainer = true
-	engine.Step()
+	advanceActorsTick(engine)
 	if player.eating != (eatingState{}) {
 		t.Fatalf("开箱后进食状态=%+v，想要清空", player.eating)
 	}
@@ -447,13 +447,13 @@ func TestEatingContainerOpenInterruptsAndRestartsAfterClose(t *testing.T) {
 	// 标志因何变 false。进食输入始终没松。
 	engine.sessions[eatingTestSession].viewContainer = false
 	for range tuning.DefaultTunables().EatingTicks - 1 {
-		engine.Step()
+		advanceActorsTick(engine)
 	}
 	if got := hotbarCount(player, 0); got != 2 {
 		t.Fatalf("关箱重按第 %d tick 面包数=%d，想要精确保持 2（关箱必须从 0 重新计时）",
 			tuning.DefaultTunables().EatingTicks-1, got)
 	}
-	engine.Step()
+	advanceActorsTick(engine)
 	if got := hotbarCount(player, 0); got != 1 {
 		t.Fatalf("关箱重按第 %d tick 面包数=%d，想要 1", tuning.DefaultTunables().EatingTicks, got)
 	}
@@ -478,7 +478,7 @@ func TestEatingContainerOpenOnSettlementTickDoesNotSettle(t *testing.T) {
 	player.eatingHeld = true
 
 	for range tuning.DefaultTunables().EatingTicks - 1 {
-		engine.Step()
+		advanceActorsTick(engine)
 	}
 	// 夹具自证：下一 tick 就是结算 tick，本用例测的正是这一 tick 的优先序。
 	if player.eating.progressTicks != tuning.DefaultTunables().EatingTicks-1 {
@@ -489,7 +489,7 @@ func TestEatingContainerOpenOnSettlementTickDoesNotSettle(t *testing.T) {
 	}
 
 	engine.sessions[eatingTestSession].viewContainer = true
-	engine.Step()
+	advanceActorsTick(engine)
 	if got := hotbarCount(player, 0); got != 2 {
 		t.Fatalf("结算 tick 开箱后面包数=%d，想要精确保持 2（中断必须优先于结算）", got)
 	}
@@ -522,7 +522,7 @@ func TestEatingHoldsAtZeroWhileContainerOpenOrViewNotReady(t *testing.T) {
 			// 界面一直开着」；进食中断发生在 tick 内更早的 `advanceEating`，
 			// 不受这次清除影响。
 			engine.sessions[eatingTestSession].viewContainer = true
-			engine.Step()
+			advanceActorsTick(engine)
 			if player.eating != (eatingState{}) {
 				t.Fatalf("容器打开第 %d tick 进食状态=%+v，想要恒为空", tick, player.eating)
 			}
@@ -541,14 +541,14 @@ func TestEatingHoldsAtZeroWhileContainerOpenOrViewNotReady(t *testing.T) {
 		setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
 		player.eatingHeld = true
 		// 普通玩家的 `hasView` 在注册时即为 true、之后没有别的置位点，夹具
-		// 直接置 false 可以跨 tick 稳定存续，与 mining_test.go 的「视野丢失」
-		// 中断夹具同形。
-		view := engine.views[eatingTestSession]
-		view.Ready = false
-		engine.views[eatingTestSession] = view
+		// 每 tick 向 production `TickContext` 注入空视图快照，与 mining_test.go
+		// 的「视野丢失」中断夹具同形。
 
 		for tick := 1; tick <= 64; tick++ {
-			engine.Step()
+			fixture := engine.beginTick()
+			fixture.context.SetViews(ViewSnapshot{})
+			fixture.context.AdvanceActors()
+			publishFixture(engine, &fixture)
 			if player.eating != (eatingState{}) {
 				t.Fatalf("视野未就绪第 %d tick 进食状态=%+v，想要恒为空", tick, player.eating)
 			}
@@ -573,14 +573,18 @@ func TestDeathClearsEatingProgressAndResetsHunger(t *testing.T) {
 	setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
 	player.eatingHeld = true
 	for range 17 {
-		engine.Step()
+		advanceActorsTick(engine)
 	}
 	if player.eating.progressTicks != 17 {
 		t.Fatalf("死亡前进度=%d，想要 17", player.eating.progressTicks)
 	}
 
 	player.health = 0
-	engine.Step()
+	tick := engine.beginTick()
+	tick.context.AdvanceActors()
+	tick.context.AdvanceHostiles(nil, &tick.result)
+	commitMutation(tick.mutation, &tick.result)
+	publishFixture(engine, &tick)
 	if player.eating != (eatingState{}) {
 		t.Fatalf("死亡结算后进食状态=%+v，想要清空", player.eating)
 	}
@@ -647,7 +651,7 @@ func TestCompanionsNeverEat(t *testing.T) {
 	entry.miningTarget = companionTarget
 	entry.miningHeld = true
 	for range 64 {
-		engine.Step()
+		advanceMiningOnce(engine)
 	}
 
 	// 伙伴移动：另起 64 tick，同样远超一次进食。移动必须逐 tick 经
@@ -656,18 +660,21 @@ func TestCompanionsNeverEat(t *testing.T) {
 	// `entry.input` 的夹具会被这一步抹掉，伙伴一步不动，这半边就是空转的。
 	//
 	// 移动前松开采掘：伙伴会走出触及距离，继续按住只会让采掘每 tick 被距离校验
-	// 拒绝，把上面那段已经跑通的采掘路径换成一条拒绝路径。位移跨区块，因此逐
-	// tick 按既有 `feedCompanionActionRequests` 惯例供给新订阅的区块。
+	// 拒绝，把上面那段已经跑通的采掘路径换成一条拒绝路径。夹具已直接装入
+	// 伙伴脚下 3×3 Ready 区块，本用例的有界位移不需要 runtime 订阅协调。
 	entry.miningHeld = false
 	start := entry.state.Position
 	for tick := range 64 {
-		if !engine.EnqueueCompanionAction(CompanionAction{
+		fixture := engine.beginTick()
+		fixture.context.ApplyCompanionActions([]CompanionAction{{
 			ID: id, Kind: CompanionActionMove,
 			Input: physics.Input{MoveX: 1, Jump: true},
-		}) {
-			t.Fatalf("tick %d 移动 action 未入队", tick)
+		}})
+		fixture.context.AdvanceActors()
+		publishFixture(engine, &fixture)
+		if entry.state.Position == start && tick == 63 {
+			t.Fatalf("tick %d 后伙伴仍未响应移动 action", tick)
 		}
-		feedCompanionActionRequests(t, engine, engine.Step())
 	}
 	// 夹具自证：伙伴确实位移了。移动这半边一旦被输入覆盖打回原地，本条断言先红，
 	// 而不是让"伙伴不进食"在一个根本没动过的伙伴身上空绿。

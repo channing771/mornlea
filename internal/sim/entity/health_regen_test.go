@@ -25,7 +25,7 @@ func readyRegenPlayer(t *testing.T, id SessionID, health uint8) *Engine {
 		SpawnDimension: core.Overworld,
 	})
 	makeRestoreWorldReady(t, engine, current, safe)
-	update := onlyPlayerUpdate(t, engine.Step(), id)
+	update := onlyPlayerUpdate(t, advanceActorsTick(engine), id)
 	if !update.Ready {
 		t.Fatalf("玩家未激活: %+v", update)
 	}
@@ -42,7 +42,7 @@ func readyRegenPlayer(t *testing.T, id SessionID, health uint8) *Engine {
 func stepRegen(t *testing.T, engine *Engine, id SessionID, ticks int) {
 	t.Helper()
 	for range ticks {
-		update := onlyPlayerUpdate(t, engine.Step(), id)
+		update := onlyPlayerUpdate(t, advanceActorsTick(engine), id)
 		if !update.Ready {
 			t.Fatalf("玩家在推进过程中失去 Ready: %+v", update)
 		}

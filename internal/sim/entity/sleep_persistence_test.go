@@ -50,7 +50,7 @@ func TestRespawnPointFlowsThroughSnapshotAndRestore(t *testing.T) {
 		RespawnDimension: snapshot.RespawnDimension,
 	})
 	for range 8 {
-		restarted.Step()
+		advanceActorsTick(restarted)
 	}
 	if player, ok := restarted.Player(restoredSession); !ok || !player.Ready {
 		t.Fatalf("重启后玩家未激活: %+v", player)
@@ -79,7 +79,7 @@ func TestRestoreDayPhaseOffsetFeedsDisplayPhase(t *testing.T) {
 		t.Fatalf("恢复后的显示相位 = %d，想要 0", phase)
 	}
 	// 绝对时间不受恢复的偏移影响：从恢复值继续每 tick 恰好 +1。
-	if result := engine.Step(); result.WorldTimeTicks != 18001 {
+	if result := advanceActorsTick(engine); result.WorldTimeTicks != 18001 {
 		t.Fatalf("恢复偏移后首个 tick 世界时间 = %d，想要 18001", result.WorldTimeTicks)
 	}
 }

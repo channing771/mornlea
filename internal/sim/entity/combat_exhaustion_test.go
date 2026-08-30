@@ -33,7 +33,7 @@ func TestCombatHitChargesAttackerExhaustionExactlyOnce(t *testing.T) {
 	}
 	attacker.miningHeld = true
 
-	engine.Step()
+	advanceHostilesTick(engine, nil)
 	if target.health != 18 {
 		t.Fatalf("首 tick 目标 health=%d，想要 18（夹具必须真的命中一次）", target.health)
 	}
@@ -63,7 +63,7 @@ func TestCombatExhaustionThresholdCrossSettlesSaturationThenHunger(t *testing.T)
 		attacker.exhaustionMilli = 3950
 		attacker.miningHeld = true
 
-		engine.Step()
+		advanceHostilesTick(engine, nil)
 		if target.health != 18 {
 			t.Fatalf("目标 health=%d，想要 18（夹具必须真的命中一次）", target.health)
 		}
@@ -88,7 +88,7 @@ func TestCombatExhaustionThresholdCrossSettlesSaturationThenHunger(t *testing.T)
 		attacker.saturationMilli = 0
 		attacker.miningHeld = true
 
-		engine.Step()
+		advanceHostilesTick(engine, nil)
 		if target.health != 18 {
 			t.Fatalf("目标 health=%d，想要 18（夹具必须真的命中一次）", target.health)
 		}
@@ -126,7 +126,7 @@ func TestCombatMissPathsAccumulateNoExhaustion(t *testing.T) {
 		attacker.miningHeld = true
 
 		for range 9 {
-			engine.Step()
+			advanceHostilesTick(engine, nil)
 		}
 		if target.health != 20 {
 			t.Fatalf("背后目标 health=%d，想要 20（夹具必须一次未命中）", target.health)
@@ -146,7 +146,7 @@ func TestCombatMissPathsAccumulateNoExhaustion(t *testing.T) {
 		attacker.miningHeld = true
 
 		for range 9 {
-			engine.Step()
+			advanceHostilesTick(engine, nil)
 		}
 		if target.health != 20 {
 			t.Fatalf("被遮挡目标 health=%d，想要 20（夹具必须一次未命中）", target.health)
@@ -168,7 +168,7 @@ func TestCombatMissPathsAccumulateNoExhaustion(t *testing.T) {
 		attacker.miningHeld = true
 
 		for range 9 {
-			engine.Step()
+			advanceHostilesTick(engine, nil)
 		}
 		if target.health != 20 {
 			t.Fatalf("冷却中的目标 health=%d，想要 20（夹具必须一次未命中）", target.health)

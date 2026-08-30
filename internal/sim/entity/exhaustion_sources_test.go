@@ -71,7 +71,7 @@ func TestJumpAccumulatesExhaustionExactlyOncePerTakeoff(t *testing.T) {
 	}
 
 	player.input.Jump = true
-	engine.Step()
+	advanceActorsTick(engine)
 	if player.state.OnGround {
 		t.Fatal("按下跳跃后玩家仍在地面上，夹具没能起跳")
 	}
@@ -81,7 +81,7 @@ func TestJumpAccumulatesExhaustionExactlyOncePerTakeoff(t *testing.T) {
 
 	// 滞空期间继续按住跳跃：不在地面上就不可能再起跳一次。
 	for range 5 {
-		engine.Step()
+		advanceActorsTick(engine)
 		if player.exhaustionMilli != exhaustionJumpMilli {
 			t.Fatalf("滞空 tick 疲劳=%d，想要保持 %d（一次起跳只算一次）",
 				player.exhaustionMilli, exhaustionJumpMilli)
@@ -127,7 +127,7 @@ func TestJumpDisplacementWithinGroundProbeToleranceDoesNotAccumulateExhaustion(t
 
 		player.input.Jump = true
 		for tick := range 20 {
-			engine.Step()
+			advanceActorsTick(engine)
 			if !player.state.OnGround {
 				t.Fatalf("tick %d: 玩家离地，夹具没能把跳跃位移压进地面探测容差内: %+v",
 					tick, player.state)
@@ -150,7 +150,7 @@ func TestJumpDisplacementWithinGroundProbeToleranceDoesNotAccumulateExhaustion(t
 
 		player.input.Jump = true
 		for range 20 {
-			engine.Step()
+			advanceActorsTick(engine)
 		}
 		if player.exhaustionMilli != 2*exhaustionJumpMilli {
 			t.Fatalf("默认参数下持续按跳 20 tick 后疲劳=%d，想要 %d（20 tick 内落地并重新起跳恰好两次）",
@@ -172,7 +172,7 @@ func TestWalkingOnFlatGroundAccumulatesNoExhaustion(t *testing.T) {
 
 	player.input.MoveZ = -1
 	for range 60 {
-		engine.Step()
+		advanceActorsTick(engine)
 	}
 	// 夹具自证：玩家确实走动了。原地不动的夹具在"行走累积疲劳"的错误实现下
 	// 也会读出零疲劳，那样这条用例就成了空转。
@@ -233,7 +233,7 @@ func TestSwimmingAccumulatesExhaustionAndStandingStillDoesNot(t *testing.T) {
 			player.input.MoveZ = tc.moveZ
 			player.input.Jump = tc.jump
 			for range 20 {
-				engine.Step()
+				advanceActorsTick(engine)
 			}
 			if tc.wantMoved {
 				if player.exhaustionMilli == 0 {
@@ -420,18 +420,21 @@ func TestCompanionPathsNeverTouchHungerState(t *testing.T) {
 	// 经 `CompanionActionMove` 意图管线提交——`applyCompanionActions` 对没有
 	// action 的伙伴每 tick 用 `physics.Input{Yaw: entry.yaw}` 覆盖 `entry.input`，
 	// 直接写 `entry.input` 的夹具会被这一步抹掉，伙伴一步不动，这半边就是空转的。
-	// 位移跨区块，因此逐 tick 按既有 `feedCompanionActionRequests` 惯例供给新
-	// 订阅的区块。
+	// 夹具已直接装入伙伴脚下 3×3 Ready 区块，本用例的有界位移不
+	// 需要 runtime 订阅协调。
 	entry.miningHeld = false
 	start := entry.state.Position
 	for tick := range 40 {
-		if !engine.EnqueueCompanionAction(CompanionAction{
+		fixture := engine.beginTick()
+		fixture.context.ApplyCompanionActions([]CompanionAction{{
 			ID: id, Kind: CompanionActionMove,
 			Input: physics.Input{MoveX: 1, Jump: true},
-		}) {
-			t.Fatalf("tick %d 移动 action 未入队", tick)
+		}})
+		fixture.context.AdvanceActors()
+		publishFixture(engine, &fixture)
+		if entry.state.Position == start && tick == 39 {
+			t.Fatalf("tick %d 后伙伴仍未响应移动 action", tick)
 		}
-		feedCompanionActionRequests(t, engine, engine.Step())
 	}
 	// 夹具自证：伙伴确实位移了。移动这半边一旦被中性输入打回原地，本条断言先红，
 	// 而不是让"伙伴不改玩家三层状态"在一个根本没动过的伙伴身上空绿。

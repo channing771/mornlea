@@ -210,7 +210,7 @@ func TestStarvationStopsAtOneHealth(t *testing.T) {
 	// t.Fatalf 了，「饿死」这个违规会红在 helper 里，诊断信息指向「失去 Ready」
 	// 而不是「止于 1」。这里直接推进，把红点留给下面两条显式断言。
 	for range 80 {
-		engine.Step()
+		advanceActorsTick(engine)
 	}
 	if player.health != 1 || player.lifecycle != PlayerActive {
 		t.Fatalf("第二个间隔后 (health,lifecycle)=(%d,%d)，想要 (1,Active)："+
@@ -273,7 +273,11 @@ func TestRespawnRestoresHungerToInitialValues(t *testing.T) {
 		t.Fatalf("致命伤后 health=%d，想要 0", player.health)
 	}
 
-	engine.Step()
+	tick := engine.beginTick()
+	tick.context.AdvanceActors()
+	tick.context.AdvanceHostiles(nil, &tick.result)
+	commitMutation(tick.mutation, &tick.result)
+	publishFixture(engine, &tick)
 	if player.hunger != core.MaxHunger {
 		t.Fatalf("重生后饥饿=%d，想要 %d", player.hunger, core.MaxHunger)
 	}
@@ -296,10 +300,10 @@ func hungerReplayFingerprint(t *testing.T, id SessionID) [4]uint32 {
 
 	// 第一段：平地起跳并落地。
 	player.input.Jump = true
-	engine.Step()
+	advanceActorsTick(engine)
 	player.input.Jump = false
 	for range 20 {
-		engine.Step()
+		advanceActorsTick(engine)
 	}
 
 	// 第二段：泡进水里持续游动，走浮点位移换算。
@@ -307,7 +311,7 @@ func hungerReplayFingerprint(t *testing.T, id SessionID) [4]uint32 {
 	player.input.MoveX = 1
 	player.input.MoveZ = -1
 	for range 60 {
-		engine.Step()
+		advanceActorsTick(engine)
 	}
 	player.input.MoveX = 0
 	player.input.MoveZ = 0
@@ -318,7 +322,7 @@ func hungerReplayFingerprint(t *testing.T, id SessionID) [4]uint32 {
 	player.saturationMilli = 0
 	player.health = 10
 	for range 200 {
-		engine.Step()
+		advanceActorsTick(engine)
 	}
 
 	return [4]uint32{
@@ -362,7 +366,7 @@ func TestPlayerUpdatePublishesAuthoritativeHunger(t *testing.T) {
 	player := engine.sessions[id].player
 	for _, want := range []uint8{12, 3} {
 		player.hunger = want
-		update := onlyPlayerUpdate(t, engine.Step(), id)
+		update := onlyPlayerUpdate(t, advanceActorsTick(engine), id)
 		if update.Hunger != want {
 			t.Fatalf("PlayerUpdate.Hunger=%d，想要 %d", update.Hunger, want)
 		}
@@ -380,29 +384,35 @@ func TestPlayerInputEatingIsRecordedAndCleared(t *testing.T) {
 	engine, session := readyMovementPlayer(t)
 	player := engine.sessions[session].player
 
-	engine.Enqueue(Command{
+	tick := engine.beginTick()
+	tick.context.ApplyPlayerCommands([]Command{{
 		Session: session, Sequence: 2, Kind: CommandPlayerInput, Eating: true,
-	})
-	onlyMovementPlayer(t, engine.Step())
+	}}, &tick.result)
+	tick.context.AdvanceActors()
+	onlyMovementPlayer(t, publishFixture(engine, &tick))
 	if !player.eatingHeld || player.miningHeld {
 		t.Fatalf("有效进食输入后 (eatingHeld,miningHeld)=(%v,%v)，想要 (true,false)",
 			player.eatingHeld, player.miningHeld)
 	}
 
-	engine.Enqueue(Command{
+	tick = engine.beginTick()
+	tick.context.ApplyPlayerCommands([]Command{{
 		Session: session, Sequence: 3, Kind: CommandPlayerInput, Mining: true,
-	})
-	onlyMovementPlayer(t, engine.Step())
+	}}, &tick.result)
+	tick.context.AdvanceActors()
+	onlyMovementPlayer(t, publishFixture(engine, &tick))
 	if player.eatingHeld || !player.miningHeld {
 		t.Fatalf("只按采掘后 (eatingHeld,miningHeld)=(%v,%v)，想要 (false,true)",
 			player.eatingHeld, player.miningHeld)
 	}
 
-	engine.Enqueue(Command{
+	tick = engine.beginTick()
+	tick.context.ApplyPlayerCommands([]Command{{
 		Session: session, Sequence: 4, Kind: CommandPlayerInput,
 		Eating: true, Yaw: float32(math.NaN()),
-	})
-	result := engine.Step()
+	}}, &tick.result)
+	tick.context.AdvanceActors()
+	result := publishFixture(engine, &tick)
 	if len(result.Rejected) != 1 ||
 		result.Rejected[0] != (Rejection{Session: session, Sequence: 4, Reason: RejectInvalidInput}) {
 		t.Fatalf("非法输入未被拒绝: %+v", result.Rejected)

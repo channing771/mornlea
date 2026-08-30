@@ -11,8 +11,8 @@ import (
 
 // companionPlacementFixture 是一组伙伴放置用例的公共场景：平地 3x3 区块上一个
 // 已激活的伙伴站在 (4.5, 1, 8.5)，放置目标固定在 (4, 1, 5)（空气、视线无遮挡）。
-// 伙伴背包按用例自行填充；放置经完整 Step 与 Place action 建立，覆盖 action
-// 分派到结算的整条链路。
+// 伙伴背包按用例自行填充；放置经 production action、actor 与 gameplay stage
+// 建立，覆盖 action 分派到结算的整条链路。
 type companionPlacementFixture struct {
 	engine *Engine
 	id     companion.ID
@@ -33,7 +33,8 @@ func readyCompanionPlacement(t *testing.T) companionPlacementFixture {
 	}
 }
 
-// placeCompanionAction 提交一个 Place action 并步进一个完整 tick。
+// placeCompanionAction 把一个 Place action 依次送入 production action、actor 与
+// gameplay stage，并提交、发布该 entity tick。
 func placeCompanionAction(
 	t *testing.T,
 	fixture companionPlacementFixture,
@@ -41,12 +42,18 @@ func placeCompanionAction(
 	target core.BlockPos,
 ) TickResult {
 	t.Helper()
-	if !fixture.engine.EnqueueCompanionAction(CompanionAction{
+	action := CompanionAction{
 		ID: fixture.id, Kind: CompanionActionPlace, Target: target, Block: block,
-	}) {
-		t.Fatal("Place action 未入队")
 	}
-	return fixture.engine.Step()
+	if !validCompanionAction(action) {
+		t.Fatal("Place action 不是合法 owner 输入")
+	}
+	tick := fixture.engine.beginTick()
+	tick.context.ApplyCompanionActions([]CompanionAction{action})
+	tick.context.AdvanceActors()
+	tick.context.SettleGameplay(&tick.result)
+	commitMutation(tick.mutation, &tick.result)
+	return publishFixture(fixture.engine, &tick)
 }
 
 // companionPlaceBlockAt 读取目标方块的当前值，区块未就绪时直接失败。

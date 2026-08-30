@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"os"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -260,11 +261,89 @@ func TestRuntimeComposesRealmAndEntity(t *testing.T) {
 			}
 			return true
 		})
+
+		testPackages, err := parser.ParseDir(
+			token.NewFileSet(),
+			"../entity",
+			func(info os.FileInfo) bool { return strings.HasSuffix(info.Name(), "_test.go") },
+			0,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		forbiddenFields := map[string]struct{}{
+			"commands": {}, "companionActions": {}, "hostileActions": {},
+			"acquired": {}, "generated": {},
+		}
+		for _, testPackage := range testPackages {
+			for filename, testParsed := range testPackage.Files {
+				ast.Inspect(testParsed, func(node ast.Node) bool {
+					switch value := node.(type) {
+					case *ast.TypeSpec:
+						if fixture, ok := value.Type.(*ast.StructType); ok {
+							for _, field := range fixture.Fields.List {
+								for _, name := range field.Names {
+									if _, forbidden := forbiddenFields[name.Name]; forbidden {
+										t.Errorf(
+											"entity 测试夹具 %s 仍保留 runtime inbox %q",
+											filename,
+											name.Name,
+										)
+									}
+								}
+							}
+						}
+					case *ast.FuncDecl:
+						if value.Name.Name == "Step" {
+							t.Errorf("entity 测试夹具 %s 仍复制 runtime 的通用 Step", filename)
+						}
+						stages := make(map[string]struct{})
+						ast.Inspect(value.Body, func(inner ast.Node) bool {
+							selector, ok := inner.(*ast.SelectorExpr)
+							if ok {
+								stages[selector.Sel.Name] = struct{}{}
+							}
+							return true
+						})
+						complete := true
+						for _, stage := range []string{
+							"ApplyPlayerCommands", "ApplyCompanionActions", "AdvanceActors",
+							"AdvanceHostiles", "AdvanceFluids", "AdvanceFarmlandMoisture",
+							"AdvanceCrops", "FinishWorld", "Publish",
+						} {
+							if _, present := stages[stage]; !present {
+								complete = false
+								break
+							}
+						}
+						if complete {
+							t.Errorf(
+								"entity 测试夹具 %s 的 %s 仍复制完整 runtime 阶段",
+								filename,
+								value.Name.Name,
+							)
+						}
+					}
+					return true
+				})
+			}
+		}
 	})
 }
 
 func TestHostileActionsQueuedAtPhaseBoundaryRunInCurrentTick(t *testing.T) {
-	engine := NewEngine(0, 0, 0)
+	engine, _ := readyMovementPlayer(t)
+	const hostileID = uint64(77)
+	mob := HostileMob{
+		ID: hostileID, Dimension: core.Overworld,
+		State: physics.State{
+			Position: [3]float32{5.5, 1, 5.5}, OnGround: true,
+		},
+		Health: core.MaxHealth, BurnCooldown: 20,
+	}
+	if err := engine.RestoreHostile(mob); err != nil {
+		t.Fatalf("恢复可观测夜行者：%v", err)
+	}
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	engine.stepPhaseObserver = func(phase stepPhase) {
@@ -278,13 +357,21 @@ func TestHostileActionsQueuedAtPhaseBoundaryRunInCurrentTick(t *testing.T) {
 	done := make(chan TickResult, 1)
 	go func() { done <- engine.Step() }()
 	<-entered
-	if !engine.EnqueueHostileAction(HostileAction{ID: 1, MoveZ: 1}) {
+	if !engine.EnqueueHostileAction(HostileAction{ID: hostileID, MoveX: -1}) {
 		t.Fatal("hostile action inbox 意外满员")
 	}
 	close(release)
 	<-done
+	engine.stepPhaseObserver = nil
 
-	if remaining := engine.takeHostileActions(); len(remaining) != 0 {
-		t.Fatalf("hostile phase 边界前入队的 action 留到下一 tick：%+v", remaining)
+	first := engine.HostileMobs()
+	if len(first) != 1 || first[0].ID != hostileID || first[0].State.Position.X() >= 5.5 {
+		t.Fatalf("hostile phase 边界 action 未在本 tick 改变位移：%+v", first)
+	}
+	positionAfterFirst := first[0].State.Position
+	engine.Step()
+	second := engine.HostileMobs()
+	if len(second) != 1 || second[0].State.Position != positionAfterFirst {
+		t.Fatalf("action 延迟到下一空闲 tick 才结算：first=%+v second=%+v", first, second)
 	}
 }

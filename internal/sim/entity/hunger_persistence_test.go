@@ -36,7 +36,7 @@ func readyHungerPlayer(t *testing.T, id SessionID, restore PlayerRestore) *Engin
 	restore.SpawnDimension = core.Overworld
 	engine.RegisterPlayer(id, restore)
 	makeRestoreWorldReady(t, engine, current, safe)
-	if update := onlyPlayerUpdate(t, engine.Step(), id); !update.Ready {
+	if update := onlyPlayerUpdate(t, advanceActorsTick(engine), id); !update.Ready {
 		t.Fatalf("玩家未激活: %+v", update)
 	}
 	return engine
@@ -127,7 +127,7 @@ func TestRespawnHungerResetReachesSnapshot(t *testing.T) {
 	assertSnapshotHunger(t, "死亡前", before, 3, 0, 3000)
 
 	player.applyDamage(int32(player.health))
-	engine.Step()
+	advanceHostilesTick(engine, nil)
 
 	after, ok := engine.PlayerSnapshot(id)
 	if !ok {

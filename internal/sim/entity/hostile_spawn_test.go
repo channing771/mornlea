@@ -21,16 +21,8 @@ func spawnTestEngine(t *testing.T, seed int64) (*Engine, SessionID) {
 	engine := NewEngine(0, 0, seed)
 	session := SessionID(1)
 	engine.RegisterSession(session, core.Overworld, core.ChunkPos{})
-	engine.Step()
-	engine.SubmitAcquired(AcquiredChunk{Key: core.ChunkKey{Dimension: core.Overworld}, Missing: true})
-	result := engine.Step()
-	for _, key := range result.Generate {
-		engine.SubmitGenerated(GeneratedChunk{
-			Dimension: core.Overworld,
-			Chunk:     movementFlatChunk(key.Pos),
-		})
-	}
-	spawned := engine.Step()
+	loadMovementChunk(t, engine.dimension(core.Overworld), movementFlatChunk(core.ChunkPos{}))
+	spawned := advanceActorsTick(engine)
 	if !spawned.Players[0].Ready {
 		t.Fatal("锚点玩家未在预算内激活")
 	}

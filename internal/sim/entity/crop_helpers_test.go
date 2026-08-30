@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -114,20 +115,9 @@ func readyCropWorldAt(t *testing.T, anchors ...core.ChunkPos) (*Engine, []Sessio
 		session := SessionID(index + 1)
 		sessions = append(sessions, session)
 		engine.RegisterSession(session, core.Overworld, anchor)
+		loadMovementChunk(t, engine.dimension(core.Overworld), cropFlatChunk(anchor))
 	}
-	for range 8 {
-		result := engine.Step()
-		for _, key := range result.Acquire {
-			engine.SubmitAcquired(AcquiredChunk{Key: key, Missing: true})
-		}
-		for _, key := range result.Generate {
-			engine.SubmitGenerated(GeneratedChunk{
-				Dimension: key.Dimension,
-				Pos:       key.Pos,
-				Chunk:     cropFlatChunk(key.Pos),
-			})
-		}
-	}
+	advanceActorsTick(engine)
 	for _, session := range sessions {
 		if player, ok := engine.Player(session); !ok || !player.Ready {
 			t.Fatalf("会话 %d 的玩家未 Ready: %+v", session, player)
@@ -170,6 +160,35 @@ func newCropWorld(t *testing.T, fixture cropFixture) *Engine {
 	return engine
 }
 
+// advanceRealmEnvironmentTick 只推进 realm owner 的流体、湿度与作物环境阶段。
+// 它不收集 entity 命令，不推进 actor/hostile，也不做实体发布。
+func advanceRealmEnvironmentTick(engine *Engine) TickResult {
+	engine.tunables = tuning.ActiveTunables()
+	config := realm.EnvironmentConfig{
+		FluidFlowDelayTicks:     engine.tunables.FluidFlowDelayTicks,
+		FluidUpdatesPerTick:     engine.tunables.FluidUpdatesPerTick,
+		FluidRescanCellsPerTick: engine.tunables.FluidRescanCellsPerTick,
+		DropPickupDelayTicks:    engine.tunables.DropPickupDelayTicks,
+		RandomTicksPerSection:   engine.tunables.RandomTicksPerSection,
+		CropGrowthChancePercent: engine.tunables.CropGrowthChancePercent,
+	}
+	currentTick := engine.tick.Load()
+	engine.realm.SetEnvironmentTick(currentTick, engine.seed, config)
+	active := engine.State.AppendActiveInterestKeys(
+		nil, engine.realm, engine.viewSnapshot(),
+	)
+	mutation := engine.realm.NewMutation()
+	engine.realm.AdvanceFluids(active, mutation)
+	engine.realm.AdvanceFarmlandMoisture(
+		active, engine.realm.NewEnvironmentMutation(mutation, currentTick, config),
+	)
+	engine.realm.AdvanceCrops(active, mutation)
+	result := TickResult{}
+	commitMutation(mutation, &result)
+	engine.advanceFixtureClock()
+	return result
+}
+
 // cropBlockAt 读取主世界某格的权威方块，区块未就绪时直接失败。
 func cropBlockAt(t *testing.T, engine *Engine, position core.BlockPos) core.BlockID {
 	t.Helper()
@@ -186,7 +205,7 @@ func stepUntilBlock(
 	engine *Engine, position core.BlockPos, want core.BlockID,
 ) (ticks int, ok bool) {
 	for tick := 1; tick <= cropFixtureTicks; tick++ {
-		engine.Step()
+		advanceRealmEnvironmentTick(engine)
 		block, ready := engine.dimension(core.Overworld).BlockAt(position)
 		if ready && block == want {
 			return tick, true
@@ -198,7 +217,7 @@ func stepUntilBlock(
 // stepCropTicks 推进固定 tick 数。
 func stepCropTicks(engine *Engine) {
 	for range cropFixtureTicks {
-		engine.Step()
+		advanceRealmEnvironmentTick(engine)
 	}
 }
 

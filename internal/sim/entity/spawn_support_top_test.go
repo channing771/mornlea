@@ -27,7 +27,7 @@ func TestSpawnFarmlandSupportTop(t *testing.T) {
 			loadSpawnTestChunk(t, dimension, chunk)
 		}
 	}
-	update := onlyInternalPlayer(t, engine.Step())
+	update := onlyInternalPlayer(t, advanceActorsTick(engine))
 	if !update.Ready || update.State.Position != (mgl32.Vec3{0.5, 0.9375, 0.5}) {
 		t.Fatalf("spawn=%+v, want farmland top", update)
 	}
@@ -41,7 +41,7 @@ func TestPlayerRestoreFarmlandSupportTop(t *testing.T) {
 	engine.RegisterPlayer(id, PlayerRestore{Current: &current, Safe: &safe, SpawnDimension: core.Overworld})
 	makeRestoreWorldReady(t, engine, current, safe)
 	setRestoreBlock(t, engine, core.BlockPos{X: 2, Y: 0, Z: 0}, core.FarmlandDryID)
-	update := onlyPlayerUpdate(t, engine.Step(), id)
+	update := onlyPlayerUpdate(t, advanceActorsTick(engine), id)
 	if !update.Ready || update.State.Position != current.Position || !update.State.OnGround {
 		t.Fatalf("restore=%+v, want exact farmland top", update)
 	}
@@ -55,12 +55,12 @@ func TestSafeFarmlandSupportTop(t *testing.T) {
 	engine.RegisterPlayer(id, PlayerRestore{Current: &current, Safe: &safe, SpawnDimension: core.Overworld})
 	makeRestoreWorldReady(t, engine, current, safe)
 	setRestoreBlock(t, engine, core.BlockPos{X: 2, Y: 0, Z: 0}, core.FarmlandDryID)
-	if update := onlyPlayerUpdate(t, engine.Step(), id); !update.Ready {
+	if update := onlyPlayerUpdate(t, advanceActorsTick(engine), id); !update.Ready {
 		t.Fatalf("initial restore=%+v", update)
 	}
 	engine.sessions[id].player.state.Position = mgl32.Vec3{2.5, 0.9375, 0.5}
 	engine.sessions[id].player.state.OnGround = true
-	engine.Step()
+	advanceActorsTick(engine)
 	if engine.sessions[id].player.state.Position != (mgl32.Vec3{2.5, 0.9375, 0.5}) {
 		t.Fatalf("player position=%v, want farmland top", engine.sessions[id].player.state.Position)
 	}

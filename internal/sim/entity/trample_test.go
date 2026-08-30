@@ -30,6 +30,15 @@ var (
 	trampleCrop = core.BlockPos{X: 0, Y: 1, Z: 0}
 )
 
+// advanceTrampleTick 只推进 production actor 与踩踏结算阶段，并提交该阶段写入。
+func advanceTrampleTick(engine *Engine) TickResult {
+	tick := engine.beginTick()
+	tick.context.AdvanceActors()
+	tick.context.SettleTramples()
+	commitMutation(tick.mutation, &tick.result)
+	return publishFixture(engine, &tick)
+}
+
 // landPlayerFromAbove 把玩家瞬移到 foot 列中心上方 3 格处并推进 tick 直到落地，
 // 返回落地那一步的 TickResult。高度 3 保证摔落伤害为零（安全高度内），测试只
 // 观察踩踏，不与死亡/伤害路径耦合。
@@ -56,7 +65,7 @@ func landPlayerAt(
 	t.Helper()
 	engine.SetPlayerPositionForTest(session, position)
 	for range 400 {
-		result := engine.Step()
+		result := advanceTrampleTick(engine)
 		if onlyMovementPlayer(t, result).State.OnGround {
 			return result
 		}
@@ -84,7 +93,7 @@ func landBothPlayersFromAbove(
 	engine.SetPlayerPositionForTest(first, start)
 	engine.SetPlayerPositionForTest(second, start)
 	for range 400 {
-		result := engine.Step()
+		result := advanceTrampleTick(engine)
 		firstGrounded := engine.sessions[first].player.state.OnGround
 		secondGrounded := engine.sessions[second].player.state.OnGround
 		if !firstGrounded && !secondGrounded {
@@ -221,7 +230,7 @@ func TestTrampleEdgeSemantics(t *testing.T) {
 	}
 
 	for range 20 {
-		engine.Step()
+		advanceTrampleTick(engine)
 	}
 	if got := tillBlockAt(t, engine, trampleFoot); got != core.FarmlandDryID {
 		t.Fatalf("持续站立期间踩踏再次触发: %d，想要耕地保持", got)
@@ -231,10 +240,21 @@ func TestTrampleEdgeSemantics(t *testing.T) {
 	}
 
 	// 跳起再落：新边沿必须重新结算（容量已可用，本笔必然成功）。
-	engine.Enqueue(Command{Session: session, Sequence: 1, Kind: CommandPlayerInput, Jump: true})
 	landed := false
-	for range 100 {
-		result := engine.Step()
+	for step := range 100 {
+		var result TickResult
+		if step == 0 {
+			tick := engine.beginTick()
+			tick.context.ApplyPlayerCommands([]Command{{
+				Session: session, Sequence: 1, Kind: CommandPlayerInput, Jump: true,
+			}}, &tick.result)
+			tick.context.AdvanceActors()
+			tick.context.SettleTramples()
+			commitMutation(tick.mutation, &tick.result)
+			result = publishFixture(engine, &tick)
+		} else {
+			result = advanceTrampleTick(engine)
+		}
 		if onlyMovementPlayer(t, result).State.OnGround {
 			landed = true
 			break
@@ -282,7 +302,7 @@ func TestTrampleDualPlayerLandingSameCellIsIdempotent(t *testing.T) {
 	warmup := 0
 	for engine.sessions[second].player.lifecycle != PlayerActive ||
 		!engine.sessions[second].player.state.OnGround {
-		engine.Step()
+		advanceTrampleTick(engine)
 		warmup++
 		if warmup > 32 {
 			t.Fatal("第二名玩家在 32 tick 内未激活站稳")
@@ -291,7 +311,7 @@ func TestTrampleDualPlayerLandingSameCellIsIdempotent(t *testing.T) {
 
 	controlEngine, controlSession := readyMovementPlayer(t)
 	for range warmup {
-		controlEngine.Step()
+		advanceTrampleTick(controlEngine)
 	}
 
 	engine.SetBlockForTest(trampleFoot, core.FarmlandWetID)

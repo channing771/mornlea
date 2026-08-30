@@ -45,22 +45,22 @@ func TestPlayerMeleeHeldResolvesDamageCooldownAndRelease(t *testing.T) {
 	target := engine.sessions[sessions[1]].player
 	attacker.miningHeld = true
 
-	engine.Step()
+	advanceHostilesTick(engine, nil)
 	if got := target.health; got != 18 {
 		t.Fatalf("首 tick health=%d，想要 18", got)
 	}
 	for range 9 {
-		engine.Step()
+		advanceHostilesTick(engine, nil)
 	}
 	if got := target.health; got != 18 {
 		t.Fatalf("冷却内 health=%d，想要 18", got)
 	}
-	engine.Step()
+	advanceHostilesTick(engine, nil)
 	if got := target.health; got != 16 {
 		t.Fatalf("第十个间隔 tick health=%d，想要 16", got)
 	}
 	attacker.miningHeld = false
-	engine.Step()
+	advanceHostilesTick(engine, nil)
 	if got := target.health; got != 16 {
 		t.Fatalf("松手后 health=%d，想要保持 16", got)
 	}
@@ -78,7 +78,7 @@ func TestPlayerMeleeSimultaneousLethalIntents(t *testing.T) {
 		player.miningHeld = true
 	}
 
-	result := engine.Step()
+	result := advanceHostilesTick(engine, nil)
 	for _, id := range sessions {
 		player := engine.sessions[id].player
 		if player.health != core.MaxHealth || player.lifecycle != PlayerPendingSpawn {
@@ -101,7 +101,7 @@ func TestPlayerMeleeCooldownBelongsToTarget(t *testing.T) {
 	setMeleePlayer(engine, sessions[2], mgl32.Vec3{10.5, 1, 4.5}, 0)
 	engine.sessions[sessions[0]].player.miningHeld = true
 
-	engine.Step()
+	advanceHostilesTick(engine, nil)
 	target := engine.sessions[sessions[1]].player
 	if target.health != 18 {
 		t.Fatalf("首次命中 health=%d，想要 18", target.health)
@@ -111,7 +111,7 @@ func TestPlayerMeleeCooldownBelongsToTarget(t *testing.T) {
 	engine.sessions[sessions[0]].player.miningHeld = false
 	engine.sessions[sessions[2]].player.miningHeld = true
 
-	engine.Step()
+	advanceHostilesTick(engine, nil)
 	if target.health != 18 {
 		t.Fatalf("换攻击者穿透目标冷却 health=%d，想要 18", target.health)
 	}
@@ -129,7 +129,7 @@ func TestPlayerMeleeEightPlayersResolveOneIntentEach(t *testing.T) {
 		engine.sessions[sessions[pair*2+1]].player.miningHeld = true
 	}
 
-	engine.Step()
+	advanceHostilesTick(engine, nil)
 	for _, id := range sessions {
 		if got := engine.sessions[id].player.health; got != 18 {
 			t.Fatalf("session %d health=%d，想要每人只受一次 2 点伤害后的 18", id, got)
@@ -333,7 +333,7 @@ func TestCombatHitsAreSortedAndLimitedPerSession(t *testing.T) {
 	engine.sessions[sessions[0]].player.miningHeld = true
 	engine.sessions[sessions[1]].player.miningHeld = true
 
-	result := engine.Step()
+	result := advanceHostilesTick(engine, nil)
 	want := []CombatHit{
 		{Session: sessions[0], Damage: 2, TargetKind: core.CombatTargetPlayer},
 		{Session: sessions[1], Damage: 2, TargetKind: core.CombatTargetPlayer},
@@ -352,13 +352,14 @@ func TestCombatHitsExcludeHostileAttacks(t *testing.T) {
 	engine, session := hostileCombatEngine(t)
 	engine.SetPlayerPositionForTest(session, mgl32.Vec3{0.5, 1, 0.5})
 	restoreCombatHostile(t, engine, 3, mgl32.Vec3{2.0, 1, 0.5})
-	if !engine.EnqueueHostileAction(HostileAction{
+	action := HostileAction{
 		ID: 3, AttackTarget: true, TargetSession: session,
-	}) {
-		t.Fatal("hostile attack intent 入队失败")
+	}
+	if !validHostileAction(action) {
+		t.Fatal("hostile attack intent 不是合法 owner 输入")
 	}
 
-	result := engine.Step()
+	result := advanceHostilesTick(engine, []HostileAction{action})
 	if len(result.CombatHits) != 0 {
 		t.Fatalf("hostile attack 产生 CombatHits=%+v", result.CombatHits)
 	}

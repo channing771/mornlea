@@ -40,7 +40,7 @@ func TestPlayerRestoreCarriesExplicitHealthThroughSnapshot(t *testing.T) {
 	})
 	makeRestoreWorldReady(t, engine, current, safe)
 
-	update := onlyPlayerUpdate(t, engine.Step(), id)
+	update := onlyPlayerUpdate(t, advanceActorsTick(engine), id)
 	if !update.Ready {
 		t.Fatalf("restore 未激活: %+v", update)
 	}
@@ -70,7 +70,7 @@ func TestPlayerRestoreMissingHealthDefaultsToFullThroughSnapshot(t *testing.T) {
 	})
 	makeRestoreWorldReady(t, engine, current, safe)
 
-	onlyPlayerUpdate(t, engine.Step(), id)
+	onlyPlayerUpdate(t, advanceActorsTick(engine), id)
 	snapshot, ok := engine.PlayerSnapshot(id)
 	if !ok || snapshot.Health != core.MaxHealth {
 		t.Fatalf("PlayerSnapshot health=%d ok=%v，想要 %d", snapshot.Health, ok, core.MaxHealth)
@@ -92,7 +92,11 @@ func TestPlayerMeleeUsesDamageEntryPoint(t *testing.T) {
 	target.hunger = 10
 	target.inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemBread, Count: 1}
 
-	engine.Step()
+	tick := engine.beginTick()
+	tick.context.AdvanceActors()
+	tick.context.AdvanceHostiles(nil, &tick.result)
+	commitMutation(tick.mutation, &tick.result)
+	publishFixture(engine, &tick)
 	if target.ticksSinceDamage != 0 {
 		t.Fatalf("近战后回血计时=%d，想要 0", target.ticksSinceDamage)
 	}

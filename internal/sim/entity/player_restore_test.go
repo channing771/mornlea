@@ -33,7 +33,7 @@ func TestPlayerRestoreUsesValidCurrentBeforeSafe(t *testing.T) {
 	})
 	makeRestoreWorldReady(t, engine, current, safe)
 
-	update := onlyPlayerUpdate(t, engine.Step(), id)
+	update := onlyPlayerUpdate(t, advanceActorsTick(engine), id)
 	if !update.Ready || !update.Reset ||
 		update.Dimension != core.Overworld ||
 		update.State.Position != current.Position ||
@@ -62,7 +62,7 @@ func TestPlayerRestoreKeepsAirborneCurrentExact(t *testing.T) {
 	})
 	makeRestoreWorldReady(t, engine, current, safe)
 
-	update := onlyPlayerUpdate(t, engine.Step(), id)
+	update := onlyPlayerUpdate(t, advanceActorsTick(engine), id)
 	if !update.Ready || update.State.Position != (mgl32.Vec3{2.5, 5, 0.5}) ||
 		update.State.Velocity != (mgl32.Vec3{}) || update.State.OnGround {
 		t.Fatalf("airborne current restore update=%+v", update)
@@ -98,7 +98,7 @@ func TestPlayerRestoreRejectsCurrentOutsideWorldHeight(t *testing.T) {
 			})
 			makeRestoreWorldReady(t, engine, current, safe)
 
-			update := onlyPlayerUpdate(t, engine.Step(), id)
+			update := onlyPlayerUpdate(t, advanceActorsTick(engine), id)
 			if !update.Ready || update.State.Position != safe.Position {
 				t.Fatalf("out-of-height current restored: update=%+v, want safe %+v", update, safe.Position)
 			}
@@ -125,7 +125,7 @@ func TestPlayerRestoreRejectsOutOfHeightSafeBeforeSpawnFallback(t *testing.T) {
 	makeRestoreWorldReady(t, engine, current, safe)
 	setRestoreBlock(t, engine, core.BlockPos{X: 2, Y: 1, Z: 0}, core.StoneID)
 
-	update := onlyPlayerUpdate(t, engine.Step(), id)
+	update := onlyPlayerUpdate(t, advanceActorsTick(engine), id)
 	if !update.Ready || update.State.Position != (mgl32.Vec3{0.5, 1, 0.5}) {
 		t.Fatalf("out-of-height safe restored: update=%+v, want spawn fallback", update)
 	}
@@ -152,7 +152,7 @@ func TestPlayerRestoreFallsBackFromBlockedCurrentToSafe(t *testing.T) {
 	makeRestoreWorldReady(t, engine, current, safe)
 	setRestoreBlock(t, engine, core.BlockPos{X: 2, Y: 1, Z: 0}, core.StoneID)
 
-	update := onlyPlayerUpdate(t, engine.Step(), id)
+	update := onlyPlayerUpdate(t, advanceActorsTick(engine), id)
 	if !update.Ready || !update.Reset ||
 		update.State.Position != safe.Position ||
 		update.State.Velocity != (mgl32.Vec3{}) ||
@@ -182,7 +182,7 @@ func TestPlayerRestoreFallsBackFromUnsupportedSafeToSpawn(t *testing.T) {
 	makeRestoreWorldReady(t, engine, current, safe)
 	setRestoreBlock(t, engine, core.BlockPos{X: 2, Y: 1, Z: 0}, core.StoneID)
 
-	update := onlyPlayerUpdate(t, engine.Step(), id)
+	update := onlyPlayerUpdate(t, advanceActorsTick(engine), id)
 	if !update.Ready || !update.Reset ||
 		update.State.Position != (mgl32.Vec3{0.5, 1, 0.5}) ||
 		!update.State.OnGround {
@@ -210,7 +210,7 @@ func TestPlayerRestoreRejectsPartiallySupportedSafe(t *testing.T) {
 	setRestoreBlock(t, engine, core.BlockPos{X: 2, Y: 1, Z: 0}, core.StoneID)
 	setRestoreBlock(t, engine, core.BlockPos{X: 16, Y: 0, Z: 0}, core.AirID)
 
-	update := onlyPlayerUpdate(t, engine.Step(), id)
+	update := onlyPlayerUpdate(t, advanceActorsTick(engine), id)
 	if !update.Ready ||
 		update.State.Position != (mgl32.Vec3{0.5, 1, 0.5}) {
 		t.Fatalf("partially supported safe was accepted: %+v", update)
@@ -252,7 +252,7 @@ func TestPlayerRestoreCurrentOnGroundMatchesPhysicsContact(t *testing.T) {
 	makeRestoreWorldReady(t, engine, current, safe)
 	setRestoreBlock(t, engine, core.BlockPos{X: 1, Y: 0, Z: 0}, core.AirID)
 
-	update := onlyPlayerUpdate(t, engine.Step(), id)
+	update := onlyPlayerUpdate(t, advanceActorsTick(engine), id)
 	if !update.Ready || update.State.Position != current.Position ||
 		!update.State.OnGround {
 		t.Fatalf("partially supported current restore=%+v", update)
@@ -279,14 +279,14 @@ func TestPlayerRestoreWaitsForEveryCandidateChunkBeforeFallingBack(t *testing.T)
 	loadRestoreFlatChunk(t, engine, core.ChunkPos{X: 2})
 	setRestoreBlock(t, engine, core.BlockPos{X: 15, Y: 1, Z: 0}, core.StoneID)
 
-	waiting := onlyPlayerUpdate(t, engine.Step(), id)
+	waiting := onlyPlayerUpdate(t, advanceActorsTick(engine), id)
 	if waiting.Ready || engine.sessions[id].player.nextRestore != 0 {
 		t.Fatalf("candidate crossed unknown neighbor: update=%+v nextRestore=%d",
 			waiting, engine.sessions[id].player.nextRestore)
 	}
 
 	loadRestoreFlatChunk(t, engine, core.ChunkPos{X: 1})
-	restored := onlyPlayerUpdate(t, engine.Step(), id)
+	restored := onlyPlayerUpdate(t, advanceActorsTick(engine), id)
 	if !restored.Ready || restored.State.Position != safe.Position {
 		t.Fatalf("restore after neighbor Ready=%+v", restored)
 	}
@@ -317,12 +317,14 @@ func TestPlayerRestoreReplayProducesIdenticalPlayerAndWorldHashes(t *testing.T) 
 			SpawnDimension: core.Overworld,
 		})
 		makeRestoreWorldReady(t, engine, current, safe)
-		engine.Step()
-		engine.Enqueue(Command{
+		advanceActorsTick(engine)
+		fixture := engine.beginTick()
+		fixture.context.ApplyPlayerCommands([]Command{{
 			Session: id, Sequence: 1, Kind: CommandPlayerInput,
 			MoveX: 1, Yaw: 0.5, Pitch: 0.125,
-		})
-		engine.Step()
+		}}, &fixture.result)
+		fixture.context.AdvanceActors()
+		publishFixture(engine, &fixture)
 		playerHash, ok := engine.PlayerHash(id)
 		if !ok {
 			t.Fatal("restored player hash unavailable")
@@ -344,62 +346,6 @@ func TestPlayerRestoreReplayProducesIdenticalPlayerAndWorldHashes(t *testing.T) 
 	first, second := run(), run()
 	if first != second {
 		t.Fatalf("restore replay differs: first=%+v second=%+v", first, second)
-	}
-}
-
-func TestRuntimeResetDoesNotReplayLoginRestoreCandidates(t *testing.T) {
-	engine := NewEngine(0, 0, 0)
-	id := SessionID(15)
-	current := PlayerLocation{
-		Dimension: core.Overworld,
-		Position:  mgl32.Vec3{31.9, 1, 0.5},
-	}
-	safe := PlayerLocation{
-		Dimension: core.Overworld,
-		Position:  mgl32.Vec3{64.5, 1, 0.5},
-	}
-	engine.RegisterPlayer(id, PlayerRestore{
-		Current:        &current,
-		Safe:           &safe,
-		SpawnDimension: core.Overworld,
-		SpawnAnchor:    core.ChunkPos{},
-	})
-	loadRestoreFlatChunk(t, engine, core.ChunkPos{})
-	loadRestoreFlatChunk(t, engine, core.ChunkPos{X: 1})
-
-	waiting := onlyPlayerUpdate(t, engine.Step(), id)
-	if waiting.Ready {
-		t.Fatalf("restore crossed unknown chunk: %+v", waiting)
-	}
-	loadRestoreFlatChunk(t, engine, core.ChunkPos{X: 2})
-	activatedResult := engine.Step()
-	activated := onlyPlayerUpdate(t, activatedResult, id)
-	if !activated.Ready || activated.State.Position != current.Position {
-		t.Fatalf("login restore=%+v", activated)
-	}
-	wantForget := []core.ChunkKey{
-		{Dimension: core.Overworld, Pos: core.ChunkPos{}},
-		{Dimension: core.Overworld, Pos: core.ChunkPos{X: 2}},
-	}
-	gotForget := activatedResult.Forget[id]
-	if len(gotForget) != len(wantForget) ||
-		gotForget[0] != wantForget[0] || gotForget[1] != wantForget[1] {
-		t.Fatalf("restore subscription shrink=%+v, want %+v", gotForget, wantForget)
-	}
-
-	engine.sessions[id].player.state.Position[1] = float32(core.MinY - 17)
-	resetting := onlyPlayerUpdate(t, engine.Step(), id)
-	if resetting.Ready {
-		t.Fatalf("invalid state did not enter PendingSpawn: %+v", resetting)
-	}
-	respawned := onlyPlayerUpdate(t, engine.Step(), id)
-	player := engine.sessions[id].player
-	if !respawned.Ready ||
-		respawned.State.Position != (mgl32.Vec3{0.5, 1, 0.5}) ||
-		len(player.restoreCandidates) != 0 ||
-		len(player.restoreWanted) != 0 {
-		t.Fatalf("runtime reset replayed login restore: update=%+v candidates=%+v wanted=%+v",
-			respawned, player.restoreCandidates, player.restoreWanted)
 	}
 }
 

@@ -29,10 +29,9 @@ func readyBoneMealPlayer(
 }
 
 func boneMeal(engine *Engine, session SessionID, yaw, pitch float32) TickResult {
-	engine.Enqueue(Command{
+	return settlePlayerInteractionsTick(engine, []Command{{
 		Session: session, Sequence: 2, Kind: CommandBoneMeal, Yaw: yaw, Pitch: pitch,
-	})
-	return engine.Step()
+	}})
 }
 
 func TestBoneMealAdvancesWheatOneStageAndSpendsOne(t *testing.T) {
@@ -172,8 +171,9 @@ func TestBoneMealChunkNotReadyRejected(t *testing.T) {
 	far := core.BlockPos{X: 16, Y: 1, Z: 0}
 	eye := player.state.Position.Add(mgl32.Vec3{0, engine.physicsTunables.EyeHeight, 0})
 	yaw, pitch := lookAtBlockCenter(eye, far)
-	engine.Enqueue(Command{Session: session, Sequence: 2, Kind: CommandBoneMeal, Yaw: yaw, Pitch: pitch})
-	result := engine.Step()
+	result := settlePlayerInteractionsTick(engine, []Command{{
+		Session: session, Sequence: 2, Kind: CommandBoneMeal, Yaw: yaw, Pitch: pitch,
+	}})
 	if len(result.Rejected) != 1 || result.Rejected[0].Reason != RejectChunkNotReady {
 		t.Fatalf("未就绪区块 Rejected=%+v，想要 RejectChunkNotReady", result.Rejected)
 	}
