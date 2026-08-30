@@ -101,13 +101,26 @@ exists only in `entity.State`. Runtime-facing lifecycle methods may remain on
 `runtime.Engine` as narrow orchestration entry points, but they delegate to the entity
 owner and must not mirror or dual-write entity collections.
 
-At the start of each authoritative tick, runtime obtains one immutable
-`tuning.Tunables` snapshot and passes that value through every entity and realm stage.
-Production entity physics, collision-prism, and submersion calls use an explicit
-per-step physics tunables value derived from that same snapshot; they do not read a
-second global active snapshot during the tick. Compatibility wrappers may remain for
-non-authoritative callers, but the server tick path has one observable parameter
-snapshot.
+Simulation and physics tunables are orthogonal value types with independent atomic
+active snapshots. `tuning` remains a leaf package and does not import `physics`; no
+conversion, shared schema, or cross-group atomic transaction is introduced. Runtime
+defines a value-shaped `TickTunables` bundle containing one `tuning.Tunables` value and
+one `physics.Tunables` value. Capturing the bundle performs exactly one active-snapshot
+read per group; it guarantees consistent reuse within one tick, not atomic pairing
+between independent configuration groups.
+
+For a server-owned tick, `Server.Step` captures `TickTunables` after pause/early-return
+checks and before chat or companion-manager work, then passes that same value through
+manager interaction checks and `runtime.Engine.StepWithTunables`. Shutdown's final
+manager/runtime pass reuses one bundle in the same way. The compatibility
+`runtime.Engine.Step` entry captures a bundle for direct non-server callers.
+
+Runtime projects the bundle's simulation value once into the realm environment config
+and passes both values explicitly through entity stages. Production entity physics,
+collision-prism, and submersion calls use physics APIs that accept an explicit
+`physics.Tunables` value; authoritative code does not call compatibility wrappers or
+reload either global active snapshot during the tick. Existing wrappers remain for
+non-authoritative callers and preserve their current next-call update behavior.
 
 The repair preserves the existing public runtime API, tick phase order, actor ordering,
 bounded queues, persistence bytes, wire bytes, test-entry inventory, and all version

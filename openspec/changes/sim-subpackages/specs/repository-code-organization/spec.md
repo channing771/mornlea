@@ -29,7 +29,11 @@
 子包整理 MUST 保持服务端为世界与玩家状态的唯一权威。每个权威 tick 的区块写入
 MUST 经同一个 realm-owned 事务收敛，并在一次提交中维持既有 revision、持久化、流体
 入队与发布批次语义。`runtime` MUST 保持既有串行 tick 阶段顺序、goroutine 所有权、
-有界工作和快照边界。
+有界工作和快照边界。每个实际推进模拟的 server tick MUST 在处理聊天、伙伴任务与
+runtime 阶段前捕获一个不可变参数束；该参数束 MUST 分别包含一次读取所得的 simulation
+tunables 与 physics tunables，并在当前 tick 的 server manager、runtime、entity、realm
+和 physics 路径中按值复用，不得在阶段中再次读取任一全局活动快照。两组独立活动快照的
+捕获不构成跨参数组事务，也不得为此引入 `tuning` 对 `physics` 的依赖。
 
 #### Scenario: 同一权威输入保留结算与发布结果
 - **GIVEN** 固定世界、权威输入、异步区块结果与 tunable 快照
@@ -41,6 +45,14 @@ MUST 经同一个 realm-owned 事务收敛，并在一次提交中维持既有 r
 - **GIVEN** 子包整理前后的相同世界与玩家数据
 - **WHEN** 它们经 Memory 或 TCP 登录并执行既有模拟路径
 - **THEN** wire bytes、协议状态机、存档编码、schema、engine ABI、client ABI、benchmark scenario 与视觉 golden MUST 保持不变
+
+#### Scenario: 单个权威 tick 复用同一参数束
+- **GIVEN** server tick 入口已经分别捕获 simulation tunables 与 physics tunables
+- **AND** 任一全局活动快照在该 tick 的后续阶段中发生更新
+- **WHEN** server manager、runtime、entity、realm 与 physics 完成当前 tick
+- **THEN** 当前 tick 的交互距离、眼高、实体运动、浸没和环境推进 MUST 全部使用入口捕获值
+- **AND** 下一次实际推进模拟的 tick MAY 观察更新后的活动快照
+- **AND** 暂停早退不得无意义地捕获参数，shutdown 的最终模拟 tick MUST 对其 manager 与 runtime 阶段复用同一参数束
 
 ### Requirement: 子包迁移保持测试入口
 
