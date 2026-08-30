@@ -17,8 +17,8 @@ Fusion Pixel，OFL-1.1）。
   `pixel-retroui` 产物，**关闭 preflight** 防全局 reset 冲掉既有 CSS；
   逐依赖核验零 postinstall 脚本（`allowBuilds` 纪律）。
 - 引入缝合像素字体 woff2 单文件 + OFL-1.1 许可文本入库：`@font-face` 后
-  `tokens.css` 字体栈改为「像素字体优先、系统 CJK 兜底」；`webview.rs`
-  内嵌资产表扩展字体条目；`index.html`/`tokens.css`/`frontend/AGENTS.md`
+  `ui.css` 字体栈改为「像素字体优先、系统 CJK 兜底」（经 @font-face）；`webview.rs`
+  内嵌资产表扩展字体条目；`index.html`/`ui.css`/`frontend/AGENTS.md`
   的「零二进制资产」表述更新为「仅限 OFL 字体」白名单口径。
 - 新建 `src/ui/pixel.tsx` 主题桥接层（PixelButton/PixelCard/PixelInput/
   PixelDropdown）：颜色与几何全部经 `tokens.css` 令牌传给 retroui，

@@ -53,3 +53,26 @@
   （`var(--button-custom-bg, var(--bg-button, #f0f0f0))`）——桥接层只需在
   tokens.css 定义 `--bg-button`/`--border-button`/`--shadow-button` 等变量
   映射既有令牌，并显式引入该样式表。
+## Task 3: 缝合像素字体入库 + webview.rs 资产表扩展
+
+- Commits: `342e8e27` `feat(frontend): embed fusion pixel cjk font asset`。
+- 字体溯源：TakWolf/fusion-pixel-font release `2026.08.11`（tag 无 v 前缀），
+  12px proportional zh_hans woff2，914,144 B，SHA256
+  `4e2e29830c8b4e0f19bf7b6f01f1fa7347c48dab9418824a2a289919d4a8c748`；
+  OFL.txt（4,418 B）随库入库；评审经 GitHub API 独立重下载比对，字体与
+  许可均与上游逐字节一致；内部家族名 `Fusion Pixel 12px Prop zh_hans`
+  （fontTools 读 name 表），cmap 36,521 码点覆盖全部 UI 汉字。
+- dist 体积：字体 914,144 B + index.css 11,001 B（+183 B 的 @font-face），
+  index.js 204,227 B 不变；两次构建字节一致；增量编译面：字体文件变更会
+  重编 webview.rs 所在编译单元（include_bytes!）。
+- 实现：@font-face（font-display: swap）与像素优先字体栈落 `ui.css`
+  （偏差已核实：tokens.css 从无字体栈与「零二进制」表述，tasks.md/proposal
+  措辞随本节一并订正）；webview.rs 资产表 +1 条目（EMBEDDED_PIXEL_FONT，
+  路径与产物逐字一致），无 ABI 变化；index.html/AGENTS.md「零二进制」
+  口径改「仅限 OFL 字体白名单」。
+- 验证：make frontend-check 绿、cargo test -p mornlea_client 98 passed、
+  go test ./internal/archcheck ok。
+- 评审（独立评审子代理）：规格合规 PASS + 代码质量 PASS。字体级呈现留
+  任务 5.1 人工验收（实现未伪造自动断言）；评审提示：WKWebView 对
+  mornlea:// scheme 的字体请求走 CORS 判同源应放行，若被拒则按回退链
+  优雅降级，5.1 目检时专门确认。

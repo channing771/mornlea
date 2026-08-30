@@ -24,13 +24,13 @@
 
 ## 3. 缝合像素字体入库 + webview.rs 资产表扩展
 
-- [ ] 3.1 下载缝合像素字体（Fusion Pixel，OFL-1.1）woff2 单文件（版本与
+- [x] 3.1 下载缝合像素字体（Fusion Pixel，OFL-1.1）woff2 单文件（版本与
       SHA 记 ledger）+ OFL 许可文本入库；`@font-face` + `tokens.css`
-      字体栈改「像素字体优先、系统 CJK 兜底」；dist 新增字体资产 →
+      字体栈改「像素字体优先、系统 CJK 兜底」（落地在 ui.css，见 ledger Task 3 偏差）；dist 新增字体资产 →
       `webview.rs` 资产表扩展条目（include_bytes + 表项）；`index.html`/
       `tokens.css`/`frontend/AGENTS.md` 的「零二进制资产」表述更新为
       「仅限 OFL 字体」白名单口径；
-      Files：`frontend/src/`（字体与许可）、`frontend/src/tokens.css`、
+      Files：`frontend/src/`（字体与许可）、`frontend/src/ui/ui.css`、
       `frontend/index.html`、`frontend/dist/`（重建）、
       `engine/crates/mornlea_client/src/webview.rs`、
       `frontend/AGENTS.md`；
