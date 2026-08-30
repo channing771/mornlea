@@ -314,3 +314,51 @@ base 起零 diff；其 ready/spawn warmup 循环按 transport 收包时机决定
   `tiered-swords-combat` 所有者修正测试前置状态；本任务没有绕过或削弱任何 gate。
 - 5.1–5.3 已完成事实同步、spec sync、命令执行与证据记录；5.4 **保持未勾选**，明确等待
   controller 派发的独立 task review。本 change 保持 active。
+
+## Task 5 Fix Round 1/5：阶段 gate 修复后的验收证据
+
+### 原始 findings 与 reviewed fixes
+
+- Task 5 implementation commit `a4f6dbf5 docs: record render world cache migration` 在
+  execution HEAD `e4843642` 记录了两个真实失败：`make rust-check` 因 Task 2
+  `world.rs` 的两个 `large_enum_variant` clippy finding 失败；`go test ./... -race` 因既有
+  `TestSwordCombatParity` 使用 transport-dependent warmup tick 失败。Task 5 independent
+  reviewer 对 `e484364..a4f6dbf` 的 verdict 为 spec ❌、quality Needs fixes，两项均为
+  Important。
+- Task 2 fix round 2 commit `8b0243c8 fix(client): reduce render world enum size` 以 boxed
+  fixed arrays 消除两个 clippy finding，没有使用 `allow` 或改变 MRW1/cache 行为；reviewer
+  `01a050d0-a776-7ce3-ad06-5a30d4557f04` 判定 spec ✅、quality Needs fixes，唯一 Important
+  finding 是 staged `self.clone()` 会深拷贝并重新分配每个 live column payload。
+- Task 2 fix round 3 commit `d170e198 perf(client): share render world column payloads` 改用不可变
+  `Arc<[i16; 256]>` 并增加 shallow-staging pointer identity/release 回归测试。相同 reviewer 的
+  scoped re-review 判定 spec ✅、quality Approved；前述 allocation finding 已解决，0 open。
+  该修复链保持 24/32-byte MRW1、4 MiB/4096、原子 staged commit、epoch/revision/tombstone、
+  v12/v8 与 cache-only 边界不变。
+- parity gate commit `2e833ff6 test(server): stabilize sword combat parity` 只修改
+  `internal/server/sword_combat_parity_test.go`，让 readiness 与固定 warmup 的每个
+  `StepForTest` 都等待同 tick `PlayerState` barrier；没有 retry、没有放宽断言，也没有生产
+  combat/network 改动。reviewer `01a050d9-ef20-7ce3-98c0-eaac06ea9eac` 对
+  `d170e19..2e833ff` 判定 spec ✅、quality Approved，无 findings。
+
+### 当前 HEAD 重验
+
+以下命令均在 clean execution HEAD
+`2e833ff603f88923229dcbe7ed9724937ba6611c` 单独运行；无 Skip：
+
+| 命令 | 结果与关键计数/时长 |
+| --- | --- |
+| `make rust-check` | PASS，退出 0；workspace fmt 与 all-target clippy `-D warnings` 通过；`mornlea_client` 220 passed、0 failed（1.27s），`mornlea_engine` 175 passed、0 failed（0.50s），两 crate doc-tests 均 0 failed。 |
+| `go test ./... -race` | PASS，退出 0；42 个 package 输出中 39 PASS、3 `[no test files]`，无失败；当前命令多数 package 命中同源码 Go test cache，`internal/archcheck` 实跑 34.338s。 |
+| `go test ./internal/archcheck -count=1` | PASS，退出 0；fresh package 5.830s，client ABI v12 / engine ABI v8 与长期版本事实一致。 |
+| `openspec validate --all --strict --no-interactive` | PASS，退出 0；78 passed、0 failed，约 1.27s。 |
+| `git diff --check` | PASS，退出 0，<0.1s，无输出；验证前 worktree clean。 |
+
+### Fix-round 裁决与范围
+
+- 原 Task 5 的两个 Important findings 现均有 reviewed fix 与当前 HEAD PASS gate 证据；原失败
+  记录保留，不被覆盖或改写成历史 PASS。
+- 本 fix round implementer 只更新 validation/evidence 文档；不修改 production Rust/Go、测试、
+  proposal/design、tasks、delta/main specs、app、fluid、protocol/schema/benchmark、golden、hook
+  或 `openspec/config.yaml`。
+- OpenSpec 5.1–5.3 保持已勾选；5.4 **仍保持未勾选**。本记录不预先宣称 Task 5 scoped
+  re-review verdict，change 保持 active，等待 controller 派发本 round 独立复审。
