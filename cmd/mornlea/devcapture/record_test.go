@@ -327,21 +327,20 @@ func TestRecordCountsBusyTicksAsDropped(t *testing.T) {
 }
 
 // TestRecordDeadlineScalesWithFrames 钉住总截止公式：名义时长 + 固定余量 +
-// 逐帧预算×帧数。逐帧预算随帧数线性扩展是 2s×8fps 到 20s×12fps 全参数域
-// 可完成的前提，固定余量（不管多少帧）的旧口径在任何 >125ms/帧 的编码成本
-// 下都会被最坏参数击穿。
+// 逐帧预算×帧数。逐帧预算随帧数线性扩展且取最慢可选路径（GIF 量化约
+// 2.2s/帧实测）放大，是 2s×8fps 到 20s×12fps 全参数域、全格式可完成的前提。
 func TestRecordDeadlineScalesWithFrames(t *testing.T) {
 	s := newRecordService(newFakeClock())
 	rec := s.newRecording(recordParams{Seconds: 2, FPS: 8})
 	want := time.Unix(0, 0).Add(2*time.Second + recordDeadlineMargin + 16*recordPerFrameBudget)
 	if !rec.deadline.Equal(want) {
-		t.Errorf("2s×8fps 的截止 = %v，想要 %v（2s 名义 + 30s 余量 + 16 帧×1s 预算）",
+		t.Errorf("2s×8fps 的截止 = %v，想要 %v（2s 名义 + 30s 余量 + 16 帧×2.5s 预算 = 72s）",
 			rec.deadline, want)
 	}
 	worst := s.newRecording(recordParams{Seconds: 20, FPS: 12})
 	wantWorst := time.Unix(0, 0).Add(20*time.Second + recordDeadlineMargin + 240*recordPerFrameBudget)
 	if !worst.deadline.Equal(wantWorst) {
-		t.Errorf("20s×12fps 的截止 = %v，想要 %v（20s 名义 + 30s 余量 + 240 帧×1s 预算）",
+		t.Errorf("20s×12fps 的截止 = %v，想要 %v（20s 名义 + 30s 余量 + 240 帧×2.5s 预算 = 650s）",
 			worst.deadline, wantWorst)
 	}
 }

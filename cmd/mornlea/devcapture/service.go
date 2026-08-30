@@ -43,13 +43,12 @@ const (
 	// 成本由 `recordPerFrameBudget` 覆盖，二者相加构成可判定的总上限。
 	recordDeadlineMargin = 30 * time.Second
 
-	// recordPerFrameBudget 是录制总截止为每帧预留的预算（捕获 + BestSpeed
-	// PNG 编码 + GIF 量化全链路）。按实测反推：Retina 全分辨率（2784×1728，
-	// CGWindowListCreateImage 含窗口阴影包围盒的真实产出）下默认压缩单帧
-	// 编码即秒级，固定余量被 16 帧（2s×8fps）必然击穿；换 png.BestSpeed
-	// 后单帧全链路收敛到 1s 内，取 1s/帧容纳慢分位，并让最坏 240 帧的截止
-	// 仍是有界常量（240s + 30s + 名义时长）。
-	recordPerFrameBudget = 1 * time.Second
+	// recordPerFrameBudget 是录制总截止为每帧预留的预算（捕获 + 编码 +
+	// 量化全链路）。按两组真实窗口实测反推（Retina 全分辨率 2784×1728）：
+	// PNG 路径 BestSpeed 编码后约 0.42s/帧，GIF 路径经 Floyd-Steinberg
+	// 调色板量化后约 2.2s/帧——预算取最慢可选路径放大到 2.5s/帧，覆盖
+	// GIF 慢分位；最坏 240 帧的截止（600s + 30s + 名义时长）仍是有界常量。
+	recordPerFrameBudget = 2500 * time.Millisecond
 
 	// maxBindAttempts 是默认端口被占时的顺延尝试次数：顺延足够越过偶发
 	// 占用，又保证地址耗尽时快速失败。
