@@ -362,7 +362,7 @@ func TestFlushUploadsKeepsPlantQuadsInTheTerrainStream(t *testing.T) {
 // 严格按 (dist2, X, Y, Z) 全序,等距区段之间的先后也不例外。
 //
 // 这是 golden 双阈值契约的前提:上传顺序决定各段进入渲染器的写入时序,顶点
-// 池布局随之而定;而 pending 是 map、`slices.SortFunc` 不稳定,等距区段的
+// 池布局随之而定;而 pending 是 map、slices.SortFunc 排序不稳定,等距区段的
 // tiebreak 一旦缺失,顺序就随 map 迭代逐轮漂移,渲染输出失去逐进程可复现性。
 // 夹具因此刻意在同一 dist2 组内放齐三种并列(同 X 同 Z 异 Y、同 X 同 Y 异 Z、
 // 纯 X 并列),并以打乱的入队顺序重复多轮「排队+冲刷」——map 迭代起点逐轮

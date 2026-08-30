@@ -1,6 +1,6 @@
 // 设置页屏：三字段（总音量/材质包目录/窗口大小）草稿编辑经 settings-change
 // 上行回传，保存/取消/返回经 action 上行。草稿语义（脏判定、原子保存、生效
-// 时机）由 Go 裁决，前端不比较持久化值；控件文案与 ui.rs 常量一致（copy.ts）。
+// 时机）由 Go 裁决，前端不比较持久化值；控件文案与退役 egui 菜单一致（copy.ts 为唯一权威）。
 import type { SettingsState, UplinkEvent } from "../bridge/client";
 import {
   SETTINGS_AUDIO_LABEL,

@@ -1,6 +1,6 @@
 // App 相位切换冒烟测试：四屏组件按下行 phase 切换（game 相位零 chrome），
 // F3 调试面板按 debug.visible 叠加于任意相位；点击/输入经 onEvent 上行，
-// 语义对齐 ui.rs 既有动作清单。不接真 WKWebView，事件由注入的 spy 捕获。
+// 语义对齐 `internal/client` 的 UIAction* 动作清单。不接真 WKWebView，事件由注入的 spy 捕获。
 import "@testing-library/jest-dom/vitest";
 import { fireEvent } from "@testing-library/dom";
 import { act, cleanup, render, screen } from "@testing-library/react";

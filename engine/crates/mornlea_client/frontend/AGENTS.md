@@ -18,9 +18,9 @@ Rust 侧只消费本目录的构建产物 `dist/`（经 `mornlea://` scheme 内�
   `oneOf`/`additionalProperties: false` 拒绝。强制点：
   `src/bridge/schema.test.ts`（ajv 合法/非法夹具，含未知事件类型用例）与
   `src/bridge/client.test.ts`（纯函数拒绝用例）。
-- 动作 id 语义与 Go `cmd/mornlea/app` 的 `menuAction*` 常量、Rust 既有
-  `UI_ACTION_*` 清单逐值互钉，映射写在 schema 的 `menuAction` 描述里；任何
-  一侧不得单方面改动数字。
+- 动作 id 语义与 Go `internal/client` 的 `UIAction*` 字符串常量、
+  `cmd/mornlea/app` 的 `menuAction*` 别名逐值互钉，映射写在 schema 的
+  `menuAction` 描述里；任何一侧不得单方面改动映射。
 - `src/` 内禁止出现 `localStorage`/`sessionStorage`/`indexedDB` 与
   `fetch`/`XMLHttpRequest`/`WebSocket`：前端不持久化任何配置、零网络
   （资产全部经 `mornlea://` 内嵌供给）。强制点：评审 grep 兜底
@@ -30,19 +30,19 @@ Rust 侧只消费本目录的构建产物 `dist/`（经 `mornlea://` scheme 内�
 
 - 颜色、字号、圆角、几何与动效时长只允许以 `src/tokens.css` 的 CSS 自定义
   属性定义；`src/ui/ui.css` 消费令牌，不得出现裸色值、裸字号、裸时长。
-  换算口径与取值来源见 `src/tokens.css` 头注（与
-  `internal/render/hud/style.go` 及 `engine/crates/mornlea_client/src/ui/style.rs`
-  同族并排）。强制点：评审兜底（无自动 lint）。
+  换算口径与取值来源见 `src/tokens.css` 头注（HUD 族取自
+  `internal/render/hud/style.go`；egui 退役后，原 egui 皮肤族的次级取值
+  以 `src/tokens.css` 为唯一权威）。强制点：评审兜底（无自动 lint）。
 - 琥珀是唯一强调色相，只用于选中、进度、焦点/编辑态；错误行专用危险红。
   `prefers-reduced-motion` 下动效时长令牌归零，组件样式不得绕开令牌另设
   transition。
 
 ## 固定文案（`src/ui/copy.ts`）
 
-- 设置页控件、暂停层标题/按钮/注明行的文案与 Rust
-  `engine/crates/mornlea_client/src/ui.rs` 的绘制常量逐字对齐；主菜单标题、
-  版本行、错误行与按钮表由 Go 下行驱动，前端不得内置。改文案必须同步
-  `ui.rs` 对应常量。强制点：`src/ui/App.test.tsx` 的呈现断言 + 评审。
+- 设置页控件、暂停层标题/按钮/注明行的文案由 `src/ui/copy.ts` 单源固定
+  （egui 退役后原 Rust 绘制常量已删除，本文件是这批文案的唯一权威）；
+  主菜单标题、版本行、错误行与按钮表由 Go 下行驱动，前端不得内置。
+  强制点：`src/ui/App.test.tsx` 的呈现断言 + 评审。
 
 ## 构建链与 dist 入库（`package.json`、`pnpm-workspace.yaml`、`vite.config.ts`、`dist/`）
 

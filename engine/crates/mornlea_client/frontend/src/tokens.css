@@ -3,7 +3,7 @@
  * internal/render/hud/style.go 面板族同语义。色值换算口径为
  * 「linear RGBA 分量 × 255 四舍五入」转 sRGB：
  *   - 标注「style.go」的行直接换算自该文件的令牌表；
- *   - 标注「ui/style.rs」的行取自 egui 菜单皮肤令牌表（同族并排、数值各自
+ *   - 标注「egui 皮肤令牌」的行取自已退役 egui 菜单皮肤的令牌数值（历史出处，
  *     精修的第二份权威），供 style.go 未定义的次级文字/危险/相位底色沿用。
  * 强调色纪律：琥珀是唯一强调色相，只用于选中、进度与焦点/编辑态；错误行走
  * 危险红；不得引入第二种强调色相。
@@ -26,19 +26,19 @@
   /* ---- 强调（唯一琥珀色相） ---- */
   /* accentAmber 1,0.72,0.24,0.98：sRGB (255,184,61)。 */
   --accent-amber: rgba(255, 184, 61, 0.98);
-  /* 焦点/悬停描边用不透明形态（ui/style.rs ACCENT_STROKE）。 */
+  /* 焦点/悬停描边用不透明形态（egui 皮肤令牌 ACCENT_STROKE 沿用值）。 */
   --accent-amber-solid: rgb(255, 184, 61);
-  /* 强调色 25% 透明变体：进度填充与选中底衬（ui/style.rs ACCENT_WASH）。 */
+  /* 强调色 25% 透明变体：进度填充与选中底衬（egui 皮肤令牌 ACCENT_WASH 沿用值）。 */
   --accent-wash: rgba(255, 184, 61, 0.25);
 
   /* ---- 文字 ---- */
   /* textPrimaryFg 0.96,0.96,0.97,1（style.go）。 */
   --text-primary: rgb(245, 245, 247);
-  /* 次级文字：行标签、版本行、注明行、提示（ui/style.rs TEXT_SECONDARY）。 */
+  /* 次级文字：行标签、版本行、注明行、提示（egui 皮肤令牌 TEXT_SECONDARY 沿用值）。 */
   --text-secondary: rgb(158, 166, 179);
   /* textPrimaryShadow 0,0,0,0.85（style.go）：文字投影双层规范。 */
   --text-shadow: rgba(0, 0, 0, 0.85);
-  /* 错误行告警红（ui/style.rs DANGER）。 */
+  /* 错误行告警红（egui 皮肤令牌 DANGER 沿用值）。 */
   --danger: rgb(240, 89, 89);
 
   /* ---- 相位底色 ---- */
@@ -51,10 +51,10 @@
     rgba(11, 13, 16, 0.08) 42%,
     rgba(11, 13, 16, 0.5) 100%
   );
-  /* 暂停遮罩：面板族同色 0.82 透明变体（ui/style.rs PAUSE_OVERLAY）。 */
+  /* 暂停遮罩：面板族同色 0.82 透明变体（egui 皮肤令牌 PAUSE_OVERLAY 沿用值）。 */
   --pause-overlay: rgba(11, 13, 16, 0.82);
 
-  /* ---- 几何（ui.rs 菜单/设置/调试布局常量） ---- */
+  /* ---- 几何（退役 egui 菜单的布局常量沿用值） ---- */
   --radius-panel: 8px;
   --radius-control: 2px;
   --hairline: 1px;
@@ -70,7 +70,7 @@
   --debug-selected-mark: 3px;
   --debug-value-column: 260px;
 
-  /* ---- 字号（ui.rs MENU_*_FONT_SIZE 等） ---- */
+  /* ---- 字号（退役 egui 菜单的 MENU_*_FONT_SIZE 沿用值） ---- */
   --font-title: 40px;
   --font-heading: 28px;
   --font-button: 18px;
