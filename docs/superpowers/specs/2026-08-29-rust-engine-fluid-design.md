@@ -65,7 +65,7 @@
 
 **Oracle 策略**
 
-`evalCell`/`Replaceable`/`flowingSurvives`/`enqueueChunkFluids`/两级不动点判据转为 test-only oracle;新增逐位差分测试与 golden vectors;现有全部性质测试(`property_converge`/`property_order`/`property_budget`/`property_rescan`、`e2e`、`queue_bounded`)原样保留——它们走 `internal/fluid` 公共 API,公共 API 已路由 Rust,自动成为行为回归网。oracle 删除按 `drop-go-test-oracles` 先例留给后续独立 change。
+`evalCell`/`flowingSurvives`/`enqueueChunkFluids`/两级不动点判据转为 test-only oracle;`Replaceable` 判定表保留在 `internal/fluid/rules.go` 作为冻结判定面,生产路径零调用;新增逐位差分测试与 golden vectors;现有全部性质测试(`property_converge`/`property_order`/`property_budget`/`property_rescan`、`e2e`、`queue_bounded`)原样保留——它们走 `internal/fluid` 公共 API,公共 API 已路由 Rust,自动成为行为回归网。oracle 删除按 `drop-go-test-oracles` 先例留给后续独立 change。
 
 ## 验证门禁
 
