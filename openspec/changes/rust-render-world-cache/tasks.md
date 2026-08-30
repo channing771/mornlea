@@ -102,7 +102,7 @@
   `go test ./internal/archcheck -count=1`、
   `git diff --exit-code <selected-main-parent>..HEAD -- engine/crates/mornlea_engine engine/include/mornlea_engine.h internal/fluid internal/nativeabi internal/sim/realm`、
   `openspec validate --all --strict --no-interactive`、`git diff --check`。
-- [ ] 6.3 将 `engine/include/mornlea_client.h`、`engine/crates/mornlea_client/src/`、
+- [x] 6.3 将 `engine/include/mornlea_client.h`、`engine/crates/mornlea_client/src/`、
   `internal/client/` 的 header/Rust exports/Go bridge、identity test 与 all-versioned-export
   tests 统一为 client ABI v13，并同步根版本说明、当前 docs、`openspec/config.yaml` 和受影响
   main specs 为 client ABI v13 / engine ABI v9；engine v9 与 fluid 只继承 selected main，

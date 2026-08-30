@@ -783,3 +783,82 @@ base 起零 diff；其 ready/spawn warmup 循环按 transport 收包时机决定
   保持未完成。
 - `git diff --check`：退出 0且无输出；tracked scope 恰为本 change 的 `tasks.md` 与
   `ledger.md`，ignored `task-6.2-report.md` / `progress.md` 只同步 review 与状态事实。
+
+## Task 6.3：集成 ABI 当前事实同步与独立评审完成裁决
+
+### 实现、版本事实与范围
+
+- Fresh implementer：`01a0519f-21ff-7e92-bd1f-9dc4ec5dc725`。
+- Implementer 从 clean HEAD `9cb36a2846cd6e0650ee9f01a072eba1cac16657` 完成实现提交
+  `62ff4befce902ba0091689e1f06c648d2d6b3830`
+  `docs: sync integrated ABI identities`。该提交同步 C header、Rust exports/comments、Go bridge
+  与 identity/all-versioned-export tests，并把 root/current docs、`openspec/config.yaml` 及
+  受影响 main specs 统一为当前 client ABI v13 / engine ABI v9；没有修改 change 的 proposal、
+  delta、design、tasks 或 ledger。
+- 当前事实明确区分无参数 identity、双方共有的 versioned exports 与 v13-only MRW1：
+  `mornlea_client_abi_version()` 只报告实际动态库身份 13；v12/v13 双方共有且接受 ABI 参数的
+  exports 对错误版本返回 `ABI_VERSION`；v12 缺少
+  `mornlea_client_render_apply_world_updates` 时只能在 link/load/bind 阶段硬失败，不进入 FFI、
+  不返回 status、不改变状态且无 fallback。
+- 历史事实未改写：client ABI v12 仍表示 WKWebView/JSON UI surface 的引入版本，engine ABI v8
+  仍表示 20 字节 mesh registry 的引入版本；剑战原交付 commit `90188fbc` 的 headers 则明确为
+  engine/client ABI 8/11，不能与后续 v12 或当前 v13 混淆。协议 v32、玩家/区块/世界/伙伴/
+  hostile schema 8/9/3/4/1 与 benchmark scenario v20 均未改变。
+- v13 保留 `ui_push_state` 与版本化 JSON UI events；`render_upload_ui_font`、frame TLV tag 9
+  和 UI layout v1–v4 保持退役。MRW1 仍只更新派生 RenderWorld cache，没有 production app、
+  mesh、visibility、upload 或 draw 接线。
+
+### 实现验证、exports 与保护范围证明
+
+- Implementer 在直接 focused Go 命令前及修改后均执行 `make rust` 并通过；修改后 release
+  client dylib 已重建。`cd engine && cargo test -p mornlea_client --locked` 为 124 passed、
+  0 failed、0 ignored；`go test ./internal/client -race -count=1` 与
+  `go test ./internal/archcheck -count=1` 均通过；`openspec validate --all --strict
+  --no-interactive` 为 79 passed、0 failed；Rust/Go formatting 与 `git diff --check` 通过。
+- 当前 v13 header 恰有 28 个接受 ABI 参数的 exports；Rust explicit-predecessor test 覆盖同一
+  28/28 集合，结构审计确认每个 export 都先拒绝 ABI 12。selected main `a23833f9` 的 v12
+  source 恰有 27 个双方共有的 versioned exports，27/27 均先拒绝 ABI 13；从该 commit 单独
+  重建的 v12 dylib 保留 identity/UI push/event drain symbols，但缺少 v13-only MRW1 与已退役
+  font symbol。
+- MRW1 input-only `u8` 入口保持 ABI、bounded nonzero length、non-null pointer、address
+  overflow、handle、MRW1 的校验顺序，不新增 alignment、output capacity 或 overlap 检查；
+  test-only driver 证明 cache update 前后 frame encoding/readback 字节与 frame/upload 计数不变。
+- 相对 selected main `a23833f92a80abb808b2b629c4dc043d2043f90a`，五组 protected paths
+  `engine/crates/mornlea_engine/`、`engine/include/mornlea_engine.h`、`internal/fluid/`、
+  `internal/nativeabi/`、`internal/sim/realm/` 均为零 feature-side diff；
+  `cmd/mornlea/capture/testdata/golden/` 同样零 diff。完整实现证据见 ignored
+  `task-6.3-report.md`。
+
+### 独立 review 与 fix round 1/5
+
+- Independent reviewer：`01a051aa-2533-7e43-96f6-e2e1015eecf4`。Initial verdict：spec ❌；
+  quality Needs fixes；2 Important、1 Minor。
+- Important 1：新增 engine ABI requirement 把 ABI 森严顺序写得强于 selected-main 实现；真实
+  fluid FFI 允许先验证 output metadata pointer，并在 metadata 合法时先清零长度/计数，ABI
+  只必须先于语义输入解引用、payload 发布与 engine/fluid 状态语义。
+- Important 2：tiered-swords main spec 把剑战原交付历史矩阵写成 engine/client 8/12；
+  `git show 90188fbc:engine/include/mornlea_{engine,client}.h` 证明正确值是 8/11。
+- Minor：兼容性说明混合了无参数 identity、双方共有 versioned exports 的 ABI status，以及
+  v13-only MRW1 在 v12 缺失时的 link/load/bind failure，三类结果必须拆开。
+- Fix round 1 commit：`deef31ddb92d3ee777fbe98ea2a7de62eb4e92ea`
+  `docs: correct integrated ABI contracts`。修复只改 `docs/notes/compatibility.md`、
+  `openspec/specs/rust-engine-fluid/spec.md` 与
+  `openspec/specs/tiered-swords-combat/spec.md`，没有代码行为或 protected-path 改动。静态回对
+  证明 `fluid_eval_batch_with` 与 `fluid_rescan_with` 的真实顺序均为 metadata validation、
+  metadata zero、ABI rejection、semantic input dereference、payload publication；历史 headers
+  为 8/11，当前 headers 为 9/13。
+- Reviewer 对 fix commit 做 scoped final re-review：spec ✅；quality Approved；initial 2
+  Important + 1 Minor 全部 addressed，0 new、0 open。Controller 接受该 clean verdict，
+  Task 6.3 现完成并勾选；change 进度推进为 18/20、`ready`，Tasks 6.4–6.5 保持未完成。
+
+### Bookkeeping validation
+
+- 在 reviewed fix HEAD `deef31ddb92d3ee777fbe98ea2a7de62eb4e92ea` 与本次纯 bookkeeping
+  working diff 上执行 `openspec validate --all --strict --no-interactive`：退出 0；79 passed、
+  0 failed。
+- `openspec instructions apply --change rust-render-world-cache --json`：退出 0；20 tasks、
+  18 complete、2 remaining、`state: ready`；Task 6.3 已完成，Tasks 6.4–6.5 保持未完成。
+- `git diff --check`：退出 0且无输出；`git diff --name-only` 的 tracked scope 恰为本 change 的
+  `tasks.md` 与 `ledger.md`。相对 selected main 的五组 protected paths 与
+  `cmd/mornlea/capture/testdata/golden/` 再次确认零 diff；ignored `task-6.3-report.md` /
+  `progress.md` 只同步 review、bookkeeping 与临时审计目录处置事实，不形成 tracked diff。
