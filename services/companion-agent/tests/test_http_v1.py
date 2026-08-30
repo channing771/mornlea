@@ -1529,6 +1529,63 @@ def test_startup_cancellation_after_factory_return_closes_transferred_components
     run(scenario())
 
 
+@pytest.mark.parametrize("repeat_cancellation", [False, True])
+def test_startup_cancellation_reaches_blocked_factory_and_drains_its_cleanup(
+    tmp_path: Path,
+    *,
+    repeat_cancellation: bool,
+) -> None:
+    async def scenario() -> None:
+        factory_started = asyncio.Event()
+        factory_cancelled = asyncio.Event()
+        factory_release = asyncio.Event()
+        cleanup_release = asyncio.Event()
+        cleanup_completed = asyncio.Event()
+
+        async def factory(
+            agent_config: AgentConfig,
+            provider_api_key: SecretStr,
+        ) -> AppComponents:
+            del agent_config, provider_api_key
+            factory_started.set()
+            try:
+                await factory_release.wait()
+            except asyncio.CancelledError:
+                factory_cancelled.set()
+                await cleanup_release.wait()
+                cleanup_completed.set()
+                raise
+            raise RuntimeError("factory escaped cancellation")
+
+        app = create_app(config(tmp_path), secrets(), component_factory=factory)
+        lifespan = app.router.lifespan_context(app)
+        startup = asyncio.create_task(lifespan.__aenter__())
+        try:
+            await asyncio.wait_for(factory_started.wait(), timeout=1)
+            startup.cancel()
+            await asyncio.wait_for(factory_cancelled.wait(), timeout=1)
+            if repeat_cancellation:
+                startup.cancel()
+                await asyncio.sleep(0)
+
+            assert not startup.done()
+            assert not cleanup_completed.is_set()
+            cleanup_release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(startup, timeout=1)
+            assert cleanup_completed.is_set()
+            assert app.state.agent_runtime.components is None
+            assert app.state.agent_runtime.leases is None
+        finally:
+            factory_release.set()
+            cleanup_release.set()
+            if not startup.done():
+                startup.cancel()
+            await asyncio.gather(startup, return_exceptions=True)
+
+    run(scenario())
+
+
 def test_start_failure_closes_untransferred_components_after_model_close_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

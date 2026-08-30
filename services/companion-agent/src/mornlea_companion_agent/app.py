@@ -517,7 +517,11 @@ class _StrictHTTPGate:
             await _send_json(send, _ERROR_STATUSES[code], _error_payload(code, request_id))
 
 
-async def _drain_cleanup(awaitable: Awaitable[object]) -> BaseException | None:
+async def _finish_awaitable(
+    awaitable: Awaitable[object],
+    *,
+    cancel_on_caller_cancellation: bool,
+) -> BaseException | None:
     task = asyncio.ensure_future(awaitable)
     cancellation: asyncio.CancelledError | None = None
     while not task.done():
@@ -526,6 +530,8 @@ async def _drain_cleanup(awaitable: Awaitable[object]) -> BaseException | None:
         except asyncio.CancelledError as error:
             if cancellation is None:
                 cancellation = error
+                if cancel_on_caller_cancellation and not task.done():
+                    task.cancel()
         except BaseException:
             break
     try:
@@ -533,6 +539,20 @@ async def _drain_cleanup(awaitable: Awaitable[object]) -> BaseException | None:
     except BaseException as error:
         return cancellation or error
     return cancellation
+
+
+async def _drain_cleanup(awaitable: Awaitable[object]) -> BaseException | None:
+    return await _finish_awaitable(
+        awaitable,
+        cancel_on_caller_cancellation=False,
+    )
+
+
+async def _cancel_and_drain(awaitable: Awaitable[object]) -> BaseException | None:
+    return await _finish_awaitable(
+        awaitable,
+        cancel_on_caller_cancellation=True,
+    )
 
 
 async def _cancel_tasks(
@@ -891,7 +911,7 @@ def create_app(
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         try:
             try:
-                startup_error = await _drain_cleanup(bootstrap_runtime())
+                startup_error = await _cancel_and_drain(bootstrap_runtime())
                 if startup_error is not None:
                     raise startup_error
             except asyncio.CancelledError:
