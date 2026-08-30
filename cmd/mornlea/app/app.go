@@ -56,8 +56,8 @@ type Options struct {
 	Render config.Render
 	// `AudioVolume` 是本地确认提示音的总音量，只在图形客户端创建播放器时读取。
 	AudioVolume float32
-	// ConfigPath 是设置页（D-01）的配置保存目标；调试面板不落盘配置（D-03 移除了
-	// 面板 F5 保存）。benchmark/capture 不使用。
+	// ConfigPath 是设置页的配置保存目标；调试面板不落盘配置（面板 F5 保存已移除）。
+	// benchmark/capture 不使用。
 	ConfigPath string
 	// TexturePackPath 是配置文件中的材质包目录原文，设置页必须无损回显与保存。
 	TexturePackPath string

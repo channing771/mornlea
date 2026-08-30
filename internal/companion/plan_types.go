@@ -456,7 +456,7 @@ var planPlaceItems = map[string]core.ItemID{
 	"clay":              core.ItemClay,
 	"snow_block":        core.ItemSnowBlock,
 	"mossy_cobblestone": core.ItemMossyCobblestone,
-	// 工作台（A-01）：普通可放置方块，采掘掉回一个工作台物品，往返校验成立，
+	// 工作台是普通可放置方块，采掘掉回一个工作台物品，往返校验成立，
 	// 不属于农业防御清单（`companionPlaceableBlock` 只拒作物与耕地），登记
 	// 与 sim 侧放行语义一致。
 	"workbench": core.ItemWorkbench,

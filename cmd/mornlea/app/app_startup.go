@@ -715,7 +715,7 @@ func fitFramebuffer(window Window, targetWidth, targetHeight int) {
 	if wantWidth >= contentWidth || wantHeight >= contentHeight {
 		return
 	}
-	// D-01 的交互窗口只允许 16:9 预设。高缩放显示器上的独立四舍五入可能
+	// 交互窗口只允许 16:9 预设。高缩放显示器上的独立四舍五入可能
 	// 产生 853×480 一类一像素漂移，因此向下吸附到最大的 16×9 整数倍；
 	// 只会再缩小，不会突破上面的物理像素上限或把窗口推出工作区。
 	units := min(wantWidth/16, wantHeight/9)

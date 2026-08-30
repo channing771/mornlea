@@ -229,5 +229,3 @@ func poisonRoll(seed int64, tick uint64, dim core.DimensionID, pos core.BlockPos
 	hash = splitmix64(hash ^ uint64(uint32(pos.Z)))
 	return hash%50 == 0
 }
-
-// growCrop 是生长规则本身：给定方块与它所处的环境，返回下一个方块编号与是否
