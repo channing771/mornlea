@@ -476,3 +476,22 @@ base 起零 diff；其 ready/spawn warmup 循环按 transport 收包时机决定
 - Whole-branch final review 仍**不得写成 clean**：change active、tasks 15/15、未 archive，等待
   reviewer `01a050ea-070a-7932-b0aa-bef57a3353bf` 对包含 `f8d51683`、`1d458865`、
   `93879482` 与本 validation/docs evidence 的 fix wave 做 scoped final re-review。
+
+## Whole-branch Scoped Final Re-review 完成裁决
+
+- Whole-branch reviewer：`01a050ea-070a-7932-b0aa-bef57a3353bf`；scoped final re-review
+  range：`f8d4f871..ea2d8c97`。
+- Final verdict：Overall ready ✅、spec ✅、quality Approved。初始 whole-branch review 的
+  2 个 Important findings（section payload staging deep-copy；最终实现基线缺少 release dylib、
+  Go ABI 与 visual 闭环）和 1 个 Minor finding（active OpenSpec context 仍写 client ABI v11）
+  均已 addressed；0 open。
+- Reviewer 接受 `f8d51683` 的 immutable section payload sharing、active config 的 client ABI
+  v12、`1d458865` / `93879482` 的 reviewed parity round 2，以及 `ea2d8c97` 记录的 final Rust
+  baseline 与 final-HEAD changed-race/full-race/OpenSpec/diff evidence。此前真实 parity FAIL、
+  根因与修复链继续作为历史证据保留。
+- 分支实现与整分支终审现已完成，可交付；OpenSpec tasks 保持 15/15，change 保持 active，
+  等待 archive。本 verdict 不构成 archive 或 merge 授权，本 bookkeeping 也不执行二者。
+- Final bookkeeping validation 在 pre-commit HEAD `ea2d8c97` 执行且均退出 0：
+  `openspec validate --all --strict --no-interactive` 为 78 passed、0 failed（real 1.49s）；
+  `openspec instructions apply --change rust-render-world-cache --json` 为 15/15、remaining 0、
+  `state: all_done`（real 1.48s）；`git diff --check` 无输出（real 0.02s）。
