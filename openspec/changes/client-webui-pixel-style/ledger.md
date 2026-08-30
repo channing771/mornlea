@@ -99,3 +99,42 @@
   `.pixelContainer` 硬编码 16px 穿透链 + 16px 高内容框裁切风险）。Minor
   记录：PixelDropdown 上游残留面（未渲染路径，首个消费方前须补映射与
   reduced-motion）、孤儿令牌保留、格式 nit。
+## Task 5: 视觉验收与文档同步
+
+- Commits: `91296c84` `docs(frontend): add pixel component bridging
+  discipline`。
+- 视觉验收方式（环境适应）：验收时本机无可用显示器（`list_displays` 为
+  空），游戏窗口无处合成、dev-capture 截图恒为空背板（三连哈希一致
+  `00e678fe`，帧循环存活、dylib 为 worktree 新鲜构建，排除 UI 缺陷）；改走
+  浏览器 harness——本地静态服务分发 worktree `dist/`，按 schema 构造四相位
+  fixture 经 `window.mornlea.onState` 驱动，逐屏截图目检：
+  - 主菜单：像素字体（标题/中文按钮/版本行全覆盖）、retroui 硬描边 + 硬
+    阴影按钮、禁用态置灰、纵排几何符合规格；
+  - 设置：像素滑块（方形琥珀拇指 25%）、PixelInput、窗口三预设按钮组
+    （选中项琥珀高亮）、Card 面板描边；
+  - 暂停：像素标题「已暂停」+ 双按钮；
+  - 调试面板：模式头/readout/分组线/参数行，选中行琥珀左缘标记。
+- 截图归档：IAB 会话产物（会话工件目录）；主菜单另有浏览器截图
+  `build/devcapture-check/pixel-menu*.png`（主树 build，gitignored）。
+- 遗留（记录不阻塞）：WKWebView 真机内嵌路径（mornlea:// scheme 同源字体
+  加载）待显示器恢复后以 `--dev-capture` 复核一次；IAB 大视口截图管线在
+  无显示环境下不稳定（与 UI 无关）。
+- 文档：AGENTS.md 增补四条可判定像素组件纪律（桥接层强制、样式表引入与
+  升级注意、DropdownMenu/16px 穿透两条已核实约束、通用类名前缀隔离）。
+
+## Task 6: 收尾门禁
+
+- 终局门禁（最终 HEAD `91296c84`，全部真实捕获）：
+  - `make frontend-check`：冻结安装 + typecheck + 82 vitest + 构建 +
+    dist 字节一致，EXIT=0；
+  - `make rust-check`：mornlea_client 98 passed / mornlea_engine
+    218 passed（webview.rs 资产表扩展后完整复验）；
+  - `go test ./internal/archcheck -count=1`：ok；
+  - `openspec validate --all --strict --no-interactive`：Totals: 80 passed,
+    0 failed；
+  - `go test ./... -race` 未跑：本 change 零 Go 行为改动（archcheck 为
+    准，按 tasks.md 6.1 口径）。
+- 分支终局：`feat/client-webui-pixel-style`，main 本地 HEAD（`c86b9c5a`，
+  含未推送 dev-capture 18 提交）之上 14 笔提交，工作树干净，未 push。
+- 遗留：合并/推送方式待用户指令；PixelDropdown 上游残留面首个消费方前须
+  补映射；孤儿令牌（--radius-control/--slot-well-edge）后续顺手清理。

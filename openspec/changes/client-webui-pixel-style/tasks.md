@@ -52,7 +52,7 @@
 
 ## 5. 视觉验收与文档同步
 
-- [ ] 5.1 `--dev-capture` 启动游戏：主菜单自动截图目检；设置/暂停/调试
+- [x] 5.1 `--dev-capture` 启动游戏：主菜单自动截图目检；设置/暂停/调试
       三屏人工导航逐屏截图核对（像素风格统一、中文渲染、无布局破损），
       结论与截图路径记 ledger；`frontend/AGENTS.md` 补像素组件桥接与
       字体资产纪律；
@@ -62,7 +62,7 @@
 
 ## 6. 收尾门禁
 
-- [ ] 6.1 全量门禁与 ledger 终局：`make rust && make rust-check`、
+- [x] 6.1 全量门禁与 ledger 终局：`make rust && make rust-check`、
       `go test ./internal/archcheck -count=1`、`go test ./... -race`
       （前端改动不进 Go 闭包时以 archcheck 为准，race 按需）、
       `openspec validate --all --strict --no-interactive`，摘要入 ledger；
