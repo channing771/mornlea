@@ -1,5 +1,7 @@
 mod collision;
 mod ffi;
+mod fluid_eval;
+mod fluid_rescan;
 mod greedy;
 mod light;
 mod lod;

@@ -1,7 +1,8 @@
 // Package fluid 提供与权威模拟解耦的纯流体推进算法：单格流动规则求值与
-// 待更新队列调度。本包只依赖 internal/core，不依赖 internal/world 与
-// internal/sim/network/render/storage——流动延迟与每 tick 预算这两个 tunable 归
-// internal/sim 所有，一律由调用方在调用时以参数传入，本包不定义、不读取任何
+// 待更新队列调度。单格求值经 internal/nativeabi 批量送入 Rust engine kernel
+// （见 eval_native.go），除此之外本包只依赖 internal/core，不依赖 internal/world
+// 与 internal/sim/network/render/storage——流动延迟与每 tick 预算这两个 tunable
+// 归 internal/sim 所有，一律由调用方在调用时以参数传入，本包不定义、不读取任何
 // 隐藏默认值。
 //
 // 本包不持有世界，也不知道“权威 tick”“活动兴趣区块”这些概念；把流体接入
