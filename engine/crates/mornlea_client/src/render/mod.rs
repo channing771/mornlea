@@ -8,16 +8,13 @@
 //! 金字塔遮挡。uniform 布局、clear 值与 pass 顺序保持一致,保证同输入
 //! 同图像。远环 LOD 壳 pass(v6)绘制在天空与近环 terrain 之间:世界
 //! 坐标大 quad + 距离雾 + tile 级 CPU 视锥剔除,不进 HiZ/GPU culling。
-//! egui 菜单 pass(client ABI v9)排在整个帧的**最上层**(HUD/debug 之后),
-//! 纯 screen-space、无深度测试;只在帧 UI 段非空且字体已安装时提交,无 UI
-//! 段的帧零 GPU 工作(既有场景图像逐字节不变)。
+//! 菜单层已迁进程内 WKWebView(client ABI v12):本模块不含任何菜单 pass。
 //!
 //! 约束:
 //! - color `Bgra8UnormSrgb`(Go capture 同格式),depth `Depth32Float`;
 //! - mesh packed face 字节只在 section 变脏时过境一次;
 //! - 每帧一次 [`OffscreenRenderer::render_frame`],帧内无逐 pass FFI。
 
-pub mod egui;
 pub mod entity;
 #[cfg(test)]
 mod farmland_tests;
@@ -30,8 +27,6 @@ pub mod shaders;
 #[cfg(test)]
 mod side_tests;
 #[cfg(test)]
-mod ui_replay_tests;
-#[cfg(test)]
 mod water_tests;
 mod world;
 #[cfg(test)]
@@ -39,9 +34,7 @@ mod world_tests;
 
 use std::collections::HashMap;
 
-use self::egui::{EguiError, EguiPass};
 use self::world::RenderWorld;
-use crate::ui::{UiFrame, decode_ui_frame, take_ui_events};
 use entity::{EntityPass, EntityPipelineKind};
 use lod::{Frustum, LodPass};
 use pool::{Alloc, Pool};
@@ -107,11 +100,11 @@ enum TargetMode {
         color_view: wgpu::TextureView,
     },
     /// 窗口:每帧 acquire surface 纹理并 present;不支持 readback。
+    /// surface 自身持有窗口共享所有权(wgpu `create_surface` 的 'static
+    /// 约束),窗口存活期由它保证。
     Windowed {
         surface: wgpu::Surface<'static>,
         config: wgpu::SurfaceConfiguration,
-        /// 持有窗口共享所有权,保证 surface 生命周期内窗口存活。
-        window: std::sync::Arc<winit::window::Window>,
     },
 }
 
@@ -168,11 +161,6 @@ pub struct FrameInput {
     pub hud_vertices: Vec<u8>,
     /// 调试面板顶点流;空表示本帧无面板。
     pub debug_vertices: Vec<u8>,
-    /// egui 菜单段(ABI 帧 TLV tag 9 的原样字节);空表示本帧无 UI。
-    ///
-    /// 语义合法性由 [`decode_ui_frame`] 在 parse_frame 层校验(违约即拒绝并
-    /// 转 `INVALID_ARGUMENT`),此处原样携带供渲染器解码后驱动 egui pass。
-    pub ui_segment: Vec<u8>,
 }
 
 type QuadSegment<'a> = (&'a [u8], &'a [u8], &'a [u8]);
@@ -181,7 +169,6 @@ struct ValidatedFrame<'a> {
     name_tag_segment: Option<QuadSegment<'a>>,
     hud_segment: Option<QuadSegment<'a>>,
     debug_segment: Option<QuadSegment<'a>>,
-    ui_frame: Option<UiFrame>,
 }
 
 impl FrameInput {
@@ -482,7 +469,6 @@ fn sort_water_draws(draws: &mut [(f32, Alloc, u32)]) {
 /// command buffer 保留 renderer GPU 资源的引用；提交前不得改写这些资源。
 struct PreparedBenchmarkBatch {
     main: wgpu::CommandBuffer,
-    callbacks: Vec<wgpu::CommandBuffer>,
 }
 
 /// 离屏世界渲染器。
@@ -557,9 +543,6 @@ pub struct OffscreenRenderer {
     hud_pass: QuadPass,
     /// 调试面板 pass。
     debug_pass: QuadPass,
-    /// egui 菜单 pass(client ABI v9);创建即 Some,离屏与窗口模式都构造。
-    /// 无 UI 段的帧其 run_and_record 返回零工作,不产生任何 GPU 提交。
-    egui_pass: Option<EguiPass>,
 
     /// 字形图集(R8,增量矩形上传);内容全部来自 Go 光栅化 worker。
     glyph_atlas: wgpu::Texture,
@@ -628,16 +611,9 @@ impl OffscreenRenderer {
         }))
         .map_err(|_| RenderCreateError::Device)?;
 
-        // egui 菜单 pass 的初始像素密度:窗口模式取窗口 scale factor,
-        // 离屏固定 1.0(在 mode match 之前读取,因为 match 会 move windowed)。
-        let pixels_per_point = windowed
-            .as_ref()
-            .map(|(_, window)| window.scale_factor() as f32)
-            .unwrap_or(1.0);
-
         // 目标模式:窗口 surface(FIFO/BGRA sRGB,镜像 Go 配置)或离屏纹理。
         let mode = match windowed {
-            Some((surface, window)) => {
+            Some((surface, _window)) => {
                 let config = wgpu::SurfaceConfiguration {
                     usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
                     format: COLOR_FORMAT,
@@ -649,11 +625,7 @@ impl OffscreenRenderer {
                     view_formats: vec![],
                 };
                 surface.configure(&device, &config);
-                TargetMode::Windowed {
-                    surface,
-                    config,
-                    window,
-                }
+                TargetMode::Windowed { surface, config }
             }
             None => {
                 let color = device.create_texture(&wgpu::TextureDescriptor {
@@ -1145,16 +1117,6 @@ impl OffscreenRenderer {
             &dummy_hiz_view,
         );
 
-        // 先建 egui pass(借用 device/queue),再整体 move 进 Self;否则
-        // device 在 Ok(Self{..}) 中被 move 后就无法再借用构造 EguiPass。
-        let egui_pass = Some(EguiPass::new(
-            &device,
-            COLOR_FORMAT,
-            width,
-            height,
-            pixels_per_point,
-        ));
-
         Ok(Self {
             device,
             queue,
@@ -1196,7 +1158,6 @@ impl OffscreenRenderer {
             name_tag_pass,
             hud_pass,
             debug_pass,
-            egui_pass,
             overlay_uniform,
             water_tint_uniform,
             overlay_pipeline,
@@ -1643,23 +1604,11 @@ impl OffscreenRenderer {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("frame"),
             });
-        let mut callback_buffers = Vec::new();
-        let result = self.record_frame(
-            input,
-            &validated,
-            &frame_view,
-            &mut encoder,
-            &mut callback_buffers,
-        );
+        let result = self.record_frame(input, &validated, &frame_view, &mut encoder);
         if result != FrameResult::Rendered {
             return result;
         }
-        if callback_buffers.is_empty() {
-            self.queue.submit([encoder.finish()]);
-        } else {
-            callback_buffers.push(encoder.finish());
-            self.queue.submit(callback_buffers);
-        }
+        self.queue.submit([encoder.finish()]);
         if let Some(frame) = acquired {
             frame.present();
         }
@@ -1686,34 +1635,24 @@ impl OffscreenRenderer {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("benchmark batch"),
             });
-        let mut callback_buffers = Vec::new();
         for _ in 0..repeat {
-            let result = self.record_frame(
-                input,
-                &validated,
-                &frame_view,
-                &mut encoder,
-                &mut callback_buffers,
-            );
+            let result = self.record_frame(input, &validated, &frame_view, &mut encoder);
             if result != FrameResult::Rendered {
                 return result;
             }
         }
         self.prepared_benchmark_batch = Some(PreparedBenchmarkBatch {
             main: encoder.finish(),
-            callbacks: callback_buffers,
         });
         FrameResult::Rendered
     }
 
     /// 提交已录制的 benchmark 批次并等待 GPU 完成；提交前即转移 buffer 所有权。
     pub fn submit_benchmark_batch(&mut self) -> FrameResult {
-        let Some(PreparedBenchmarkBatch { main, callbacks }) = self.prepared_benchmark_batch.take()
-        else {
+        let Some(PreparedBenchmarkBatch { main }) = self.prepared_benchmark_batch.take() else {
             return FrameResult::Invalid;
         };
-        self.queue
-            .submit(callbacks.into_iter().chain(std::iter::once(main)));
+        self.queue.submit([main]);
         let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
         FrameResult::Rendered
     }
@@ -1752,30 +1691,10 @@ impl OffscreenRenderer {
                 .ok_or(FrameResult::Invalid)
                 .map(Some)?
         };
-        let ui_frame = if input.ui_segment.is_empty() {
-            None
-        } else {
-            let frame = decode_ui_frame(&input.ui_segment).map_err(|_| FrameResult::Invalid)?;
-            let has_font = self
-                .egui_pass
-                .as_ref()
-                .map(|pass| pass.has_font())
-                .unwrap_or(false);
-            if frame.visible() && !has_font {
-                return Err(FrameResult::Invalid);
-            }
-            if let Some(egui_pass) = self.egui_pass.as_ref()
-                && !egui_pass.has_frame_capacity(&frame)
-            {
-                return Err(FrameResult::Capacity);
-            }
-            Some(frame)
-        };
         Ok(ValidatedFrame {
             name_tag_segment,
             hud_segment,
             debug_segment,
-            ui_frame,
         })
     }
 
@@ -1785,7 +1704,6 @@ impl OffscreenRenderer {
         validated: &ValidatedFrame<'_>,
         frame_view: &wgpu::TextureView,
         encoder: &mut wgpu::CommandEncoder,
-        callback_buffers: &mut Vec<wgpu::CommandBuffer>,
     ) -> FrameResult {
         // 构建候选 record(编码镜像 Go sectionRecords)。
         let mut records: Vec<u8> = Vec::with_capacity(input.visible.len() * SECTION_RECORD_BYTES);
@@ -2185,75 +2103,21 @@ impl OffscreenRenderer {
                 glyphs,
             );
         }
-        // egui 菜单 pass(最上层,screen-space 无深度):校验已在录制前完成，
-        // 空段仍 take 并丢弃以防游戏期积压。
-        if let Some(frame) = validated.ui_frame.as_ref() {
-            let ui_events = take_ui_events();
-            if let Some(egui_pass) = self.egui_pass.as_mut() {
-                match egui_pass.run_and_record(
-                    &self.device,
-                    &self.queue,
-                    encoder,
-                    frame_view,
-                    frame,
-                    ui_events,
-                ) {
-                    Ok((_, buffers)) => callback_buffers.extend(buffers),
-                    Err(EguiError::OutputCapacity) => return FrameResult::Capacity,
-                    Err(EguiError::FontInvalid | EguiError::OutputInvalid) => {
-                        return FrameResult::Invalid;
-                    }
-                }
-            }
-        } else {
-            let _ = take_ui_events();
-        }
+        // 菜单层由进程内 WebView 承担,不在本渲染帧内;上行事件由桥队列
+        // 直供 drain 出口,与渲染帧解耦。
         self.last_pos = input.pos;
         self.last_view_proj = input.view_proj;
         self.have_last_camera = true;
         FrameResult::Rendered
     }
 
-    /// 上传 egui 菜单字体(client ABI v9 保留出口)。
+    /// 把 client ABI v12 版本化 JSON UI 事件信封完整排空到 `out`。
     ///
-    /// 空/超上限字节由 [`EguiPass::upload_font`] 拒绝并返回 Err;成功则安装
-    /// 到 [`crate::ui::UiState`](proportional + monospace 同族)。
-    pub fn upload_ui_font(&mut self, bytes: &[u8]) -> Result<(), EguiError> {
-        if self.prepared_benchmark_batch.is_some() {
-            return Err(EguiError::FontInvalid);
-        }
-        self.egui_pass
-            .as_mut()
-            .expect("egui_pass 应已创建")
-            .upload_font(bytes)
-    }
-
-    /// 把 client ABI v9 结构化 UI 事件完整排空到 `out`。
-    pub fn drain_ui_events(&mut self, out: &mut [u8]) -> Result<usize, crate::ui::UiOutputError> {
-        self.egui_pass
-            .as_mut()
-            .expect("egui_pass 应已创建")
-            .drain_events(out)
-    }
-
-    /// 测试专用：填充 UI 输出队列以覆盖 renderer 外层输入重试边界。
-    #[cfg(test)]
-    pub(crate) fn test_fill_ui_actions(&mut self, count: usize) {
-        self.egui_pass
-            .as_mut()
-            .expect("egui_pass 应已创建")
-            .test_fill_actions(count);
-    }
-
-    /// 测试专用：让下一帧 egui 返回独立 callback command buffer。
-    #[cfg(test)]
-    pub(crate) fn test_emit_egui_callback_buffer(
-        &mut self,
-    ) -> std::sync::Arc<std::sync::atomic::AtomicUsize> {
-        self.egui_pass
-            .as_mut()
-            .expect("egui_pass 应已创建")
-            .test_emit_callback_buffer()
+    /// 事件源自 WebView 桥(进程级共享队列):benchmark/capture 等从不创建
+    /// WebView 的进程队列为空,排空返回 0 字节——零参与语义在渲染器侧的
+    /// 体现。容量不足时队列与 `out` 均保持不变。
+    pub fn drain_ui_events(&mut self, out: &mut [u8]) -> Result<usize, crate::bridge::DrainError> {
+        crate::bridge::shared_queue().drain_into(out)
     }
 
     /// 调整输出尺寸:重建 depth 与 HiZ,离屏重建 color,窗口重配 surface;
@@ -2267,11 +2131,6 @@ impl OffscreenRenderer {
         }
         self.width = width;
         self.height = height;
-        // egui 像素密度:窗口模式取窗口 scale factor,离屏固定 1.0(与创建时一致)。
-        let pixels_per_point = match &self.mode {
-            TargetMode::Windowed { window, .. } => window.scale_factor() as f32,
-            _ => 1.0,
-        };
         let make_target = |device: &wgpu::Device, format, usage, label: &str| {
             device.create_texture(&wgpu::TextureDescriptor {
                 label: Some(label),
@@ -2305,9 +2164,7 @@ impl OffscreenRenderer {
                 );
                 *color_view = color.create_view(&wgpu::TextureViewDescriptor::default());
             }
-            TargetMode::Windowed {
-                surface, config, ..
-            } => {
+            TargetMode::Windowed { surface, config } => {
                 config.width = width;
                 config.height = height;
                 surface.configure(&self.device, config);
@@ -2326,10 +2183,6 @@ impl OffscreenRenderer {
         );
         self.cull_uses_hiz = false;
         self.have_last_camera = false;
-        // egui 菜单 pass 同步新尺寸与像素密度(离屏/离屏窗口共用一条路径)。
-        if let Some(egui_pass) = self.egui_pass.as_mut() {
-            egui_pass.set_size(width, height, pixels_per_point);
-        }
         true
     }
 

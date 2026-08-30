@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -45,7 +45,7 @@ func TestHostAllowsEightPlayers(t *testing.T) {
 	for index, login := range logins {
 		waitReady(t, host, login)
 		entry := activeLoginForPlayer(t, host, login.Identity.PlayerID)
-		if want := sim.SessionID(index + 1); entry.Session != want {
+		if want := contract.SessionID(index + 1); entry.Session != want {
 			t.Fatalf("player %d session = %d, want %d", index+1, entry.Session, want)
 		}
 	}
@@ -336,14 +336,14 @@ func TestHostReservesSlotBeforeSinglePlayerLoad(t *testing.T) {
 
 func TestHostRejectsSessionIDOverflowWithoutWrapping(t *testing.T) {
 	host := newTestHost(t)
-	host.nextSession = sim.SessionID(math.MaxUint64)
+	host.nextSession = contract.SessionID(math.MaxUint64)
 	_, err := attemptMemoryLogin(host, playerIdentity(4))
 	var remote *network.RemoteError
 	if !errors.As(err, &remote) || remote.State != network.StateLogin ||
 		network.LoginRejectCode(remote.Code) != network.LoginInternalError {
 		t.Fatalf("overflow LoginClient error = %v", err)
 	}
-	if host.nextSession != sim.SessionID(math.MaxUint64) {
+	if host.nextSession != contract.SessionID(math.MaxUint64) {
 		t.Fatalf("nextSession wrapped to %d", host.nextSession)
 	}
 }

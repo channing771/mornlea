@@ -20,7 +20,7 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -232,7 +232,7 @@ func runCompanionInteractionParity(t *testing.T, transport string) interactionPa
 
 	// stepParityTick 推进一个权威 tick 并按客户端顺序排空全部消息，把
 	// ChatEvent 追加进 transcript（保持流同步：每 tick 每客户端必被排空）。
-	stepParityTick := func() sim.TickResult {
+	stepParityTick := func() contract.TickResult {
 		tickResult := host.world.StepForTest()
 		for recipient, endpoint := range clients {
 			for _, event := range companionChatEvents(receiveCompanionChatTick(t, endpoint, tickResult.Tick)) {
@@ -377,7 +377,7 @@ func warmInteractionParityPathWindow(
 	t *testing.T,
 	host *Host,
 	id companion.ID,
-	step func() sim.TickResult,
+	step func() contract.TickResult,
 ) {
 	t.Helper()
 	for range 600 {

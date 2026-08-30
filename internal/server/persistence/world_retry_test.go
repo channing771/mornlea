@@ -9,7 +9,8 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -96,7 +97,7 @@ func TestSaveFailureIntegrationBackoffCapsAtFourTicks(t *testing.T) {
 	for _, wantDelay := range []uint64{1, 2, 4, 4} {
 		waitSaveReturned(t, store)
 		waitCompletionQueued(t, running)
-		var dispatched sim.TickResult
+		var dispatched contract.TickResult
 		for elapsed := uint64(1); elapsed <= wantDelay; elapsed++ {
 			dispatched = running.StepForTest()
 			if elapsed < wantDelay {
@@ -187,7 +188,7 @@ func TestSaveNilErrorOmissionRetainsSubmittedSnapshot(t *testing.T) {
 func TestFlushFrozenFailureReleasesUnsentPendingJobsForLaterRetry(t *testing.T) {
 	keys := []core.ChunkKey{chunkKey(0, 0), chunkKey(32, 0), chunkKey(64, 0)}
 	engine := dirtyReadyEngine(t, keys)
-	first := engine.PersistenceSnapshots(1, 1<<20, sim.SaveAll)
+	first := engine.PersistenceSnapshots(1, 1<<20, contract.SaveAll)
 	if len(first) != 1 || first[0].Key != keys[0] {
 		t.Fatalf("initial snapshot=%+v, want %v", first, keys[0])
 	}
@@ -250,7 +251,7 @@ func TestFlushFrozenFailureReleasesUnsentPendingJobsForLaterRetry(t *testing.T) 
 			if !containsChunkKey(saved, keys[1]) || !containsChunkKey(saved, keys[2]) {
 				t.Fatalf("retry flush did not persist released jobs: %v", saved)
 			}
-			if got := engine.PersistenceStats(); got != (sim.PersistenceStats{}) {
+			if got := engine.PersistenceStats(); got != (contract.PersistenceStats{}) {
 				t.Fatalf("retry flush persistence=%+v, want drained", got)
 			}
 			return
@@ -299,7 +300,7 @@ func TestDueRetryQueueFullKeepsAttemptAndSnapshot(t *testing.T) {
 	key := chunkKey(2, 3)
 	region, _ := storage.RegionFor(key)
 	retained := retrySave{
-		Job: saveJob{Region: region, Snapshots: []sim.ChunkSaveSnapshot{{
+		Job: saveJob{Region: region, Snapshots: []contract.ChunkSaveSnapshot{{
 			Key: key, Revision: 7, Chunk: world.NewChunk(key.Pos),
 		}}, Retry: true, RetryID: 1},
 		Attempts: 2,
@@ -324,7 +325,7 @@ func TestDueRetryQueueFullKeepsAttemptAndSnapshot(t *testing.T) {
 func TestDueRetryIsQueuedBeforeFreshAutosaveSnapshot(t *testing.T) {
 	oldKey, freshKey := chunkKey(0, 0), chunkKey(64, 0)
 	engine := dirtyReadyEngine(t, []core.ChunkKey{oldKey, freshKey})
-	oldSnapshot := engine.PersistenceSnapshots(1, 1<<20, sim.SaveAll)
+	oldSnapshot := engine.PersistenceSnapshots(1, 1<<20, contract.SaveAll)
 	if len(oldSnapshot) != 1 || oldSnapshot[0].Key != oldKey {
 		t.Fatalf("old snapshot=%+v, want first region key", oldSnapshot)
 	}
@@ -381,8 +382,8 @@ func TestMutationDuringRetrySelectsNewRevisionOnceAfterOldCommit(t *testing.T) {
 	}
 	waitSaveReturned(t, store)
 	waitCompletionQueued(t, running)
-	running.engine.Enqueue(sim.Command{
-		Session: testSessionID, Sequence: 1, Kind: sim.CommandPlayerInput,
+	running.engine.Enqueue(contract.Command{
+		Session: testSessionID, Sequence: 1, Kind: contract.CommandPlayerInput,
 		Pitch: -1.5, Mining: true,
 	})
 	for range 4 {
@@ -425,11 +426,11 @@ func TestSameRegionRetryCoalescingSortsAndKeepsOneClonePerKey(t *testing.T) {
 	firstKey2 := world.NewChunk(key2.Pos)
 	replacementKey1 := world.NewChunk(key1.Pos)
 	merged := mergeRetrySnapshots(
-		[]sim.ChunkSaveSnapshot{
+		[]contract.ChunkSaveSnapshot{
 			{Key: key2, Revision: 7, Chunk: firstKey2},
 			{Key: key1, Revision: 7, Chunk: world.NewChunk(key1.Pos)},
 		},
-		[]sim.ChunkSaveSnapshot{
+		[]contract.ChunkSaveSnapshot{
 			{Key: key0, Revision: 7, Chunk: world.NewChunk(key0.Pos)},
 			{Key: key2, Revision: 7, Chunk: world.NewChunk(key2.Pos)},
 			{Key: key1, Revision: 8, Chunk: replacementKey1},
@@ -447,7 +448,7 @@ func TestSameRegionRetryCoalescingSortsAndKeepsOneClonePerKey(t *testing.T) {
 func TestSameRegionFreshFailureDoesNotInheritInflightRetryAttempts(t *testing.T) {
 	keyA, keyB := chunkKey(0, 0), chunkKey(1, 0)
 	engine := dirtyReadyEngine(t, []core.ChunkKey{keyA, keyB})
-	snapshots := engine.PersistenceSnapshots(2, 1<<20, sim.SaveAll)
+	snapshots := engine.PersistenceSnapshots(2, 1<<20, contract.SaveAll)
 	if got := snapshotKeys(snapshots); !reflect.DeepEqual(got, []core.ChunkKey{keyA, keyB}) {
 		t.Fatalf("snapshots=%+v, want A then B", got)
 	}
@@ -493,7 +494,7 @@ func TestSameRegionFreshFailureDoesNotInheritInflightRetryAttempts(t *testing.T)
 func TestSameRegionFreshFailureDoesNotAdvanceOlderRetryDeadline(t *testing.T) {
 	keyA, keyB := chunkKey(0, 0), chunkKey(1, 0)
 	engine := dirtyReadyEngine(t, []core.ChunkKey{keyA, keyB})
-	snapshots := engine.PersistenceSnapshots(2, 1<<20, sim.SaveAll)
+	snapshots := engine.PersistenceSnapshots(2, 1<<20, contract.SaveAll)
 	region, _ := storage.RegionFor(keyA)
 	config := persistenceTestOptions()
 	config.RetryBaseTicks = 1
@@ -537,7 +538,7 @@ func TestOldestDueRetryPreventsFixedRegionStarvation(t *testing.T) {
 	config := persistenceTestOptions()
 	config.RetryBaseTicks = 1
 	config.RetryMaxTicks = 1
-	engine := sim.NewEngine(0, 0, 0)
+	engine := runtime.NewEngine(0, 0, 0)
 	running := &World{
 		options:         config,
 		engine:          engine,
@@ -551,10 +552,10 @@ func TestOldestDueRetryPreventsFixedRegionStarvation(t *testing.T) {
 	}
 	for _, key := range keys {
 		region, _ := storage.RegionFor(key)
-		snapshot := sim.ChunkSaveSnapshot{Key: key, Revision: 1, Chunk: world.NewChunk(key.Pos)}
+		snapshot := contract.ChunkSaveSnapshot{Key: key, Revision: 1, Chunk: world.NewChunk(key.Pos)}
 		running.retainFailedSaveLocked(
-			saveJob{Region: region, Snapshots: []sim.ChunkSaveSnapshot{snapshot}, Attempt: 1},
-			[]sim.ChunkSaveSnapshot{snapshot},
+			saveJob{Region: region, Snapshots: []contract.ChunkSaveSnapshot{snapshot}, Attempt: 1},
+			[]contract.ChunkSaveSnapshot{snapshot},
 			errors.New("initial failure"),
 		)
 	}

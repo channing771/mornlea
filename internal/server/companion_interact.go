@@ -12,7 +12,9 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/pathfind"
 	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -120,7 +122,7 @@ func (m *companionManager) advanceInteractionRunner(
 //     TaskFailWorldChanged 失败，新方块 MUST NOT 被破坏；
 //   - 背包无容量：sim 的容量前验拒绝结算时进度保持满格（稳定可观察状态），
 //     Runner 观察到满格饱和且 tick 边界背包无法容纳产物（与 sim 同一预演判定：
-//     容器经 `sim.CompanionMineContainerStaging` 批量预演，其余方块单件
+//     容器经 `runtime.CompanionMineContainerStaging` 批量预演，其余方块单件
 //     `AddStack` 预演）即以 TaskFailInventoryFull 失败，方块不变；
 //   - 完成：sim 在结算 tick 清零采掘状态，Runner 观察到「未激活 + 方块已
 //     空 + 进度证据恰好差一格达标」判定为本方完成（完成 tick 三方原子由
@@ -186,7 +188,7 @@ func (m *companionManager) holdCompanionMining(
 
 // companionMineCapacityExceeded 报告满格饱和的 tick 边界背包是否无法容纳采掘
 // 产物——判定与 sim 完成分叉同源，「没有第二套规则」从单件推广到批量（change
-// companion-mine-containers 的 D3）：容器（箱子/熔炉）走 `sim.CompanionMineContainerStaging`
+// companion-mine-containers 的 D3）：容器（箱子/熔炉）走 `runtime.CompanionMineContainerStaging`
 // 的同一产物集合与固定序批量预演（产物中的容器内容物经 `containerContentsAt`
 // 从与 `blockAt` 同源的区块 record 读取）；其余方块维持既有的单件 `AddStack`
 // 预演，普通方块的饱和判定逐字节不变。
@@ -210,7 +212,7 @@ func (m *companionManager) companionMineCapacityExceeded(
 			// 失败，deadline 兜底（与上方目标区块未 ready 的处理同则）。
 			return false
 		}
-		_, _, stagedOK := sim.CompanionMineContainerStaging(block, harvestable, contents, body.Inventory)
+		_, _, stagedOK := runtime.CompanionMineContainerStaging(block, harvestable, contents, body.Inventory)
 		return !stagedOK
 	default:
 		if !harvestable {
@@ -277,8 +279,8 @@ func (m *companionManager) holdMining(
 	target core.BlockPos,
 ) {
 	slot.miningHeld = true
-	m.engine.EnqueueCompanionAction(sim.CompanionAction{
-		ID: id, Kind: sim.CompanionActionMineHold, Target: target,
+	m.engine.EnqueueCompanionAction(contract.CompanionAction{
+		ID: id, Kind: contract.CompanionActionMineHold, Target: target,
 	})
 }
 
@@ -333,8 +335,8 @@ func (m *companionManager) submitCompanionPlacement(
 		// deadline 兜底。sim 不校验放置距离，这道门是唯一关卡。
 		return
 	}
-	m.engine.EnqueueCompanionAction(sim.CompanionAction{
-		ID: id, Kind: sim.CompanionActionPlace, Target: target, Block: step.Block,
+	m.engine.EnqueueCompanionAction(contract.CompanionAction{
+		ID: id, Kind: contract.CompanionActionPlace, Target: target, Block: step.Block,
 	})
 }
 
@@ -365,8 +367,8 @@ func (m *companionManager) releaseFinishedMining() {
 			continue
 		}
 		slot.miningHeld = false
-		m.engine.EnqueueCompanionAction(sim.CompanionAction{
-			ID: id, Kind: sim.CompanionActionMineRelease,
+		m.engine.EnqueueCompanionAction(contract.CompanionAction{
+			ID: id, Kind: contract.CompanionActionMineRelease,
 		})
 	}
 }
@@ -386,7 +388,7 @@ func (m *companionManager) releaseFinishedMining() {
 // 后残留，而那正是 gate 拦截的情形（当前引擎的 activate 单向、没有去激活
 // 路径，残留仅是面向未来语义的结构余量）；条目总数又受注册伙伴上限封顶，
 // 逐 tick 清理换不来任何可观察正确性。
-func (m *companionManager) observeTickResult(result sim.TickResult) {
+func (m *companionManager) observeTickResult(result contract.TickResult) {
 	for _, update := range result.Companions {
 		m.mining[update.ID] = update.Mining
 	}
@@ -417,7 +419,7 @@ func withinInteractionReach(body companion.Body, target core.BlockPos) bool {
 	dx := body.Position[0] - (float32(target.X) + 0.5)
 	dy := eyeY - (float32(target.Y) + 0.5)
 	dz := body.Position[2] - (float32(target.Z) + 0.5)
-	reach := sim.ActiveTunables().InteractionReach
+	reach := tuning.ActiveTunables().InteractionReach
 	return dx*dx+dy*dy+dz*dz <= reach*reach
 }
 

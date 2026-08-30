@@ -6,10 +6,10 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
-func (server *Server) queueReadyAndResync(current *session, result sim.TickResult) {
+func (server *Server) queueReadyAndResync(current *session, result contract.TickResult) {
 	for _, key := range result.Ready {
 		if server.engine.SessionWantsChunk(current.id, key) {
 			current.queueSnapshot(key, false)
@@ -117,7 +117,7 @@ func (server *Server) publishSnapshots(current *session) bool {
 			}
 			continue
 		}
-		message, err := buildChunkSnapshot(key.Dimension, chunk, revision)
+		message, err := BuildChunkSnapshot(key.Dimension, chunk, revision)
 		if err != nil {
 			slog.Error(
 				"构造区块快照失败",

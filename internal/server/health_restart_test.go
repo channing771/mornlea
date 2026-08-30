@@ -7,7 +7,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 // healthRestartFallHeight 是重启测试用的落差：伤害 = floor(16) − 3 = 13，
@@ -24,8 +24,8 @@ const healthRestartFallHeight = float32(16)
 func TestHealthSevenSurvivesDiskRestart(t *testing.T) {
 	root := t.TempDir()
 	identity := integrationIdentity(0x97, "Survivor")
-	loc := sim.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
-	seedIntegrationPlayer(t, root, identity, sim.PlayerSnapshot{Current: loc})
+	loc := contract.PlayerLocation{Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 1.001, 0.5}}
+	seedIntegrationPlayer(t, root, identity, contract.PlayerSnapshot{Current: loc})
 
 	first := startDiskHost(t, root, "127.0.0.1:0", changedGenerator{})
 	connected := dialIntegrationClient(t, first.Addr, identity)

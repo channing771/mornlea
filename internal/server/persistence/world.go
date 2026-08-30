@@ -10,7 +10,8 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -53,7 +54,7 @@ const (
 type saveJob struct {
 	Kind      saveKind
 	Region    storage.RegionKey
-	Snapshots []sim.ChunkSaveSnapshot
+	Snapshots []contract.ChunkSaveSnapshot
 	Attempt   uint32
 	Retry     bool
 	RetryID   uint64
@@ -90,7 +91,7 @@ type retrySave struct {
 // World 持有世界区块和 metadata 的异步存档生命周期。
 type World struct {
 	store   storage.Store
-	engine  *sim.Engine
+	engine  *runtime.Engine
 	options Options
 
 	engineLocker sync.Locker
@@ -116,7 +117,7 @@ type World struct {
 }
 
 // NewWorld 构造并启动固定数量的世界存档 worker。
-func NewWorld(store storage.Store, engine *sim.Engine, options Options) *World {
+func NewWorld(store storage.Store, engine *runtime.Engine, options Options) *World {
 	saveCtx, cancelSaves := context.WithCancel(context.Background())
 	world := &World{
 		store:           store,
@@ -264,7 +265,7 @@ func (world *World) applySaveCompletionLocked(completion saveCompletion) error {
 	if completion.Job.Kind == saveKindMetadata {
 		return world.applyMetadataCompletionLocked(completion)
 	}
-	uncommitted := make([]sim.ChunkSaveSnapshot, 0, len(completion.Job.Snapshots))
+	uncommitted := make([]contract.ChunkSaveSnapshot, 0, len(completion.Job.Snapshots))
 	for _, snapshot := range completion.Job.Snapshots {
 		if revision, ok := completion.Result.Committed[snapshot.Key]; ok {
 			world.applyCommittedSnapshot(snapshot, revision)
@@ -288,22 +289,22 @@ func (world *World) applySaveCompletionLocked(completion saveCompletion) error {
 }
 
 func (world *World) applyCommittedSnapshot(
-	snapshot sim.ChunkSaveSnapshot,
+	snapshot contract.ChunkSaveSnapshot,
 	committedRevision uint64,
 ) {
 	info, exists := world.engine.ChunkInfo(snapshot.Key)
 	if !exists || committedRevision < snapshot.Revision ||
 		committedRevision > info.Revision {
-		world.engine.FailPersistence([]sim.ChunkSaveSnapshot{snapshot})
+		world.engine.FailPersistence([]contract.ChunkSaveSnapshot{snapshot})
 		return
 	}
 	if committedRevision > snapshot.Revision {
-		world.engine.FailPersistence([]sim.ChunkSaveSnapshot{snapshot})
+		world.engine.FailPersistence([]contract.ChunkSaveSnapshot{snapshot})
 		if committedRevision >= info.Revision {
 			return
 		}
 	}
-	world.engine.ApplyPersisted([]sim.PersistedChunk{{
+	world.engine.ApplyPersisted([]contract.PersistedChunk{{
 		Key: snapshot.Key, Revision: committedRevision,
 	}})
 }
@@ -313,7 +314,7 @@ func (world *World) schedulePersistenceLocked(tick uint64) {
 	world.dispatchPersistenceLocked(world.engine.PersistenceSnapshots(
 		world.options.SaveChunks,
 		world.options.SaveBytes,
-		sim.SaveUrgent,
+		contract.SaveUrgent,
 	))
 	if tick%world.options.AutosaveTicks == 0 {
 		world.autosaveActive = true
@@ -324,7 +325,7 @@ func (world *World) schedulePersistenceLocked(tick uint64) {
 	world.dispatchPersistenceLocked(world.engine.PersistenceSnapshots(
 		world.options.SaveChunks,
 		world.options.SaveBytes,
-		sim.SaveAll,
+		contract.SaveAll,
 	))
 	stats := world.engine.PersistenceStats()
 	if stats.DirtyChunks == 0 && stats.InFlightChunks == 0 {
@@ -332,7 +333,7 @@ func (world *World) schedulePersistenceLocked(tick uint64) {
 	}
 }
 
-func (world *World) dispatchPersistenceLocked(snapshots []sim.ChunkSaveSnapshot) {
+func (world *World) dispatchPersistenceLocked(snapshots []contract.ChunkSaveSnapshot) {
 	for _, job := range groupSaveJobs(snapshots) {
 		job.Attempt = 1
 		select {
@@ -343,8 +344,8 @@ func (world *World) dispatchPersistenceLocked(snapshots []sim.ChunkSaveSnapshot)
 	}
 }
 
-func groupSaveJobs(snapshots []sim.ChunkSaveSnapshot) []saveJob {
-	grouped := make(map[storage.RegionKey][]sim.ChunkSaveSnapshot)
+func groupSaveJobs(snapshots []contract.ChunkSaveSnapshot) []saveJob {
+	grouped := make(map[storage.RegionKey][]contract.ChunkSaveSnapshot)
 	for _, snapshot := range snapshots {
 		region, _ := storage.RegionFor(snapshot.Key)
 		grouped[region] = append(grouped[region], snapshot)
@@ -389,7 +390,7 @@ func chunkKeyLessForSave(left, right core.ChunkKey) bool {
 
 func (world *World) retainFailedSaveLocked(
 	job saveJob,
-	uncommitted []sim.ChunkSaveSnapshot,
+	uncommitted []contract.ChunkSaveSnapshot,
 	err error,
 ) {
 	if job.Retry {
@@ -460,7 +461,7 @@ func (world *World) allocateRetryIDLocked() uint64 {
 }
 
 func (world *World) enqueueRetryCohortLocked(incoming retrySave) {
-	unique := make([]sim.ChunkSaveSnapshot, 0, len(incoming.Job.Snapshots))
+	unique := make([]contract.ChunkSaveSnapshot, 0, len(incoming.Job.Snapshots))
 	for _, snapshot := range incoming.Job.Snapshots {
 		if !world.ownsRetrySnapshotLocked(snapshot) {
 			unique = append(unique, snapshot)
@@ -487,7 +488,7 @@ func (world *World) enqueueRetryCohortLocked(incoming retrySave) {
 	world.retry[incoming.Job.Region] = append(cohorts, incoming)
 }
 
-func (world *World) ownsRetrySnapshotLocked(snapshot sim.ChunkSaveSnapshot) bool {
+func (world *World) ownsRetrySnapshotLocked(snapshot contract.ChunkSaveSnapshot) bool {
 	for _, cohorts := range world.retry {
 		for _, cohort := range cohorts {
 			for _, owned := range cohort.Job.Snapshots {
@@ -544,7 +545,7 @@ func (world *World) dispatchDueRetriesLocked(tick uint64) {
 		}
 		job := saveJob{
 			Region:    candidate.region,
-			Snapshots: append([]sim.ChunkSaveSnapshot(nil), retained.Job.Snapshots...),
+			Snapshots: append([]contract.ChunkSaveSnapshot(nil), retained.Job.Snapshots...),
 			Attempt:   attempt,
 			Retry:     true,
 			RetryID:   retained.Job.RetryID,
@@ -588,10 +589,10 @@ func (world *World) removePendingRetryCohortLocked(region storage.RegionKey, ret
 }
 
 func mergeRetrySnapshots(
-	existing []sim.ChunkSaveSnapshot,
-	incoming []sim.ChunkSaveSnapshot,
-) []sim.ChunkSaveSnapshot {
-	byKey := make(map[core.ChunkKey]sim.ChunkSaveSnapshot, len(existing)+len(incoming))
+	existing []contract.ChunkSaveSnapshot,
+	incoming []contract.ChunkSaveSnapshot,
+) []contract.ChunkSaveSnapshot {
+	byKey := make(map[core.ChunkKey]contract.ChunkSaveSnapshot, len(existing)+len(incoming))
 	for _, snapshot := range existing {
 		byKey[snapshot.Key] = snapshot
 	}
@@ -601,7 +602,7 @@ func mergeRetrySnapshots(
 			byKey[snapshot.Key] = snapshot
 		}
 	}
-	merged := make([]sim.ChunkSaveSnapshot, 0, len(byKey))
+	merged := make([]contract.ChunkSaveSnapshot, 0, len(byKey))
 	for _, snapshot := range byKey {
 		merged = append(merged, snapshot)
 	}
@@ -753,7 +754,7 @@ func (world *World) flushFrozen(ctx context.Context) error {
 			snapshots := world.engine.PersistenceSnapshots(
 				world.options.SaveChunks,
 				world.options.SaveBytes,
-				sim.SaveAll,
+				contract.SaveAll,
 			)
 			if len(snapshots) != 0 {
 				pending = groupSaveJobs(snapshots)
@@ -925,7 +926,7 @@ func (world *World) dispatchShutdownRetryLocked() bool {
 	}
 	job := saveJob{
 		Region:    selected.region,
-		Snapshots: append([]sim.ChunkSaveSnapshot(nil), selected.retry.Job.Snapshots...),
+		Snapshots: append([]contract.ChunkSaveSnapshot(nil), selected.retry.Job.Snapshots...),
 		Attempt:   attempt,
 		Retry:     true,
 		RetryID:   selected.retry.Job.RetryID,

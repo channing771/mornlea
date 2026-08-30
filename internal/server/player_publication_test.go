@@ -10,7 +10,8 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -76,7 +77,7 @@ func TestRemotePlayerInterestMatrix(t *testing.T) {
 			}
 			observer := h.playerUpdate(1, test.observerReady, core.Overworld, mgl32.Vec3{0.5, 2, 0.5})
 			target := h.playerUpdate(2, test.targetReady, test.targetDimension, test.targetPosition)
-			h.publish(sim.TickResult{Tick: 10, Players: []sim.PlayerUpdate{observer, target}})
+			h.publish(contract.TickResult{Tick: 10, Players: []contract.PlayerUpdate{observer, target}})
 
 			messages := onlyRemotePlayerMessages(h.drain(1))
 			if test.wantSpawn {
@@ -98,7 +99,7 @@ func TestRemotePlayerInterestMatrix(t *testing.T) {
 	t.Run("自己永不进入远端 roster", func(t *testing.T) {
 		h := newRemotePublicationHarness(t, 1)
 		h.markSnapshotSent(1, core.ChunkPos{})
-		h.publish(sim.TickResult{Tick: 1, Players: []sim.PlayerUpdate{
+		h.publish(contract.TickResult{Tick: 1, Players: []contract.PlayerUpdate{
 			h.playerUpdate(1, true, core.Overworld, mgl32.Vec3{0.5, 2, 0.5}),
 		}})
 		if messages := onlyRemotePlayerMessages(h.drain(1)); len(messages) != 0 {
@@ -112,9 +113,9 @@ func TestRemotePlayerOutsideInterestJoinAndLeaveAreSilent(t *testing.T) {
 	h.markSnapshotSent(1, core.ChunkPos{})
 	observer := h.playerUpdate(1, true, core.Overworld, mgl32.Vec3{0.5, 2, 0.5})
 	target := h.playerUpdate(2, true, core.Overworld, mgl32.Vec3{16.1, 2, 0.5})
-	h.publish(sim.TickResult{Tick: 1, Players: []sim.PlayerUpdate{observer, target}})
+	h.publish(contract.TickResult{Tick: 1, Players: []contract.PlayerUpdate{observer, target}})
 	delete(h.running.sessions, 2)
-	h.publish(sim.TickResult{Tick: 2, Players: []sim.PlayerUpdate{observer}})
+	h.publish(contract.TickResult{Tick: 2, Players: []contract.PlayerUpdate{observer}})
 	if messages := onlyRemotePlayerMessages(h.drain(1)); len(messages) != 0 {
 		t.Fatalf("兴趣外 join/leave 产生 remote messages: %#v", messages)
 	}
@@ -124,7 +125,7 @@ func TestRemotePlayerNegativeFootChunkUsesFloor(t *testing.T) {
 	h := newRemotePublicationHarness(t, 1, 2)
 	h.moveInterest(1, core.ChunkPos{X: -1})
 	h.markSnapshotSent(1, core.ChunkPos{X: -1})
-	h.publish(sim.TickResult{Tick: 3, Players: []sim.PlayerUpdate{
+	h.publish(contract.TickResult{Tick: 3, Players: []contract.PlayerUpdate{
 		h.playerUpdate(1, true, core.Overworld, mgl32.Vec3{-0.1, 2, 0.5}),
 		h.playerUpdate(2, true, core.Overworld, mgl32.Vec3{-0.1, 2, 0.5}),
 	}})
@@ -142,16 +143,16 @@ func TestRemotePlayerPublicationOrder(t *testing.T) {
 	h.markSnapshotSent(1, core.ChunkPos{})
 	oldObserver := h.playerUpdate(1, true, core.Overworld, mgl32.Vec3{0.5, 2, 0.5})
 	oldTarget := h.playerUpdate(2, true, core.Overworld, mgl32.Vec3{0.5, 2, 0.5})
-	h.publish(sim.TickResult{Tick: 1, Players: []sim.PlayerUpdate{oldObserver, oldTarget}})
+	h.publish(contract.TickResult{Tick: 1, Players: []contract.PlayerUpdate{oldObserver, oldTarget}})
 	h.drain(1)
 
 	moved := h.moveInterest(1, core.ChunkPos{X: 1})
 	for _, key := range moved.Acquire {
-		h.running.engine.SubmitAcquired(sim.AcquiredChunk{Key: key, Missing: true})
+		h.running.engine.SubmitAcquired(contract.AcquiredChunk{Key: key, Missing: true})
 	}
 	generated := h.running.engine.Step()
 	for _, key := range generated.Generate {
-		h.running.engine.SubmitGenerated(sim.GeneratedChunk{
+		h.running.engine.SubmitGenerated(contract.GeneratedChunk{
 			Dimension: key.Dimension,
 			Pos:       key.Pos,
 			Chunk:     world.NewChunk(key.Pos),
@@ -160,11 +161,11 @@ func TestRemotePlayerPublicationOrder(t *testing.T) {
 	ready := h.running.engine.Step()
 	newObserver := h.playerUpdate(1, true, core.Overworld, mgl32.Vec3{16.5, 2, 0.5})
 	newTarget := h.playerUpdate(2, true, core.Overworld, mgl32.Vec3{16.5, 2, 0.5})
-	h.publish(sim.TickResult{
+	h.publish(contract.TickResult{
 		Tick:    ready.Tick,
 		Forget:  moved.Forget,
 		Ready:   ready.Ready,
-		Players: []sim.PlayerUpdate{newObserver, newTarget},
+		Players: []contract.PlayerUpdate{newObserver, newTarget},
 	})
 	assertRemoteOrder(t, h.drain(1), []reflect.Type{
 		reflect.TypeOf(network.RemotePlayerDespawn{}),
@@ -178,16 +179,16 @@ func TestRemotePlayerPublicationOrder(t *testing.T) {
 func TestRemotePlayerGenerationReplacementDespawnsBeforeSpawn(t *testing.T) {
 	h := newRemotePublicationHarness(t, 1, 2)
 	h.markSnapshotSent(1, core.ChunkPos{})
-	players := []sim.PlayerUpdate{
+	players := []contract.PlayerUpdate{
 		h.playerUpdate(1, true, core.Overworld, mgl32.Vec3{0.5, 2, 0.5}),
 		h.playerUpdate(2, true, core.Overworld, mgl32.Vec3{0.5, 2, 0.5}),
 	}
-	h.publish(sim.TickResult{Tick: 1, Players: players})
+	h.publish(contract.TickResult{Tick: 1, Players: players})
 	h.drain(1)
 
 	old := h.running.sessions[2]
 	h.running.sessions[2] = h.newSession(2, 2, old.playerID, old.displayName, 32)
-	h.publish(sim.TickResult{Tick: 2, Players: players})
+	h.publish(contract.TickResult{Tick: 2, Players: players})
 	assertRemoteOrder(t, h.drain(1), []reflect.Type{
 		reflect.TypeOf(network.RemotePlayerDespawn{}),
 		reflect.TypeOf(network.RemotePlayerSpawn{}),
@@ -203,7 +204,7 @@ func TestRemotePlayerStatesAreSortedAndNewSpawnsSkipCurrentTick(t *testing.T) {
 	h.markSnapshotSent(1, core.ChunkPos{})
 	players := h.readyPlayers(1, 2, 3, 4)
 
-	h.publish(sim.TickResult{Tick: 7, Players: players})
+	h.publish(contract.TickResult{Tick: 7, Players: players})
 	first := onlyRemotePlayerMessages(h.drain(1))
 	if len(first) != 3 {
 		t.Fatalf("spawn tick remote messages = %#v", first)
@@ -216,7 +217,7 @@ func TestRemotePlayerStatesAreSortedAndNewSpawnsSkipCurrentTick(t *testing.T) {
 		}
 	}
 
-	h.publish(sim.TickResult{Tick: 8, Players: players})
+	h.publish(contract.TickResult{Tick: 8, Players: players})
 	second := onlyRemotePlayerMessages(h.drain(1))
 	if len(second) != 1 {
 		t.Fatalf("stable tick remote messages = %#v", second)
@@ -233,13 +234,13 @@ func TestRemotePlayerStatesAreSortedAndNewSpawnsSkipCurrentTick(t *testing.T) {
 }
 
 func TestRemotePlayerEightSessionsPublishSevenStatesWith296BytePayload(t *testing.T) {
-	ids := []sim.SessionID{1, 2, 3, 4, 5, 6, 7, 8}
+	ids := []contract.SessionID{1, 2, 3, 4, 5, 6, 7, 8}
 	h := newRemotePublicationHarness(t, ids...)
 	for _, observer := range ids {
 		h.markSnapshotSent(observer, core.ChunkPos{})
 	}
 	players := h.readyPlayers(ids...)
-	h.publish(sim.TickResult{Tick: 20, Players: players})
+	h.publish(contract.TickResult{Tick: 20, Players: players})
 	for _, observer := range ids {
 		for _, message := range onlyRemotePlayerMessages(h.drain(observer)) {
 			if _, states := message.(network.RemotePlayerStates); states {
@@ -248,7 +249,7 @@ func TestRemotePlayerEightSessionsPublishSevenStatesWith296BytePayload(t *testin
 		}
 	}
 
-	h.publish(sim.TickResult{Tick: 21, Players: players})
+	h.publish(contract.TickResult{Tick: 21, Players: players})
 	codec, err := network.NewCodec()
 	if err != nil {
 		t.Fatal(err)
@@ -277,7 +278,7 @@ func TestRemotePlayerEightSessionsPublishSevenStatesWith296BytePayload(t *testin
 }
 
 func TestSessionRegistrySlowSessionRemotePublicationDoesNotCloseHealthySessions(t *testing.T) {
-	ids := []sim.SessionID{1, 2, 3, 4, 5, 6, 7, 8}
+	ids := []contract.SessionID{1, 2, 3, 4, 5, 6, 7, 8}
 	h := newRemotePublicationHarness(t, ids...)
 	for _, observer := range ids {
 		h.markSnapshotSent(observer, core.ChunkPos{})
@@ -285,7 +286,7 @@ func TestSessionRegistrySlowSessionRemotePublicationDoesNotCloseHealthySessions(
 	slow := h.running.sessions[1]
 	slow.outbox = make(chan network.ServerMessage, 1)
 
-	h.publish(sim.TickResult{Tick: 30, Players: h.readyPlayers(ids...)})
+	h.publish(contract.TickResult{Tick: 30, Players: h.readyPlayers(ids...)})
 	if h.running.sessions[1] != nil {
 		t.Fatal("满 outbox 的 slow observer 未 detach")
 	}
@@ -322,10 +323,10 @@ func assertRemoteOrder(t *testing.T, messages []network.ServerMessage, want []re
 type remotePublicationHarness struct {
 	t       *testing.T
 	running *Server
-	seq     map[sim.SessionID]uint64
+	seq     map[contract.SessionID]uint64
 }
 
-func newRemotePublicationHarness(t *testing.T, ids ...sim.SessionID) *remotePublicationHarness {
+func newRemotePublicationHarness(t *testing.T, ids ...contract.SessionID) *remotePublicationHarness {
 	t.Helper()
 	config := DefaultConfig(1)
 	config.ViewRadius = 0
@@ -334,12 +335,12 @@ func newRemotePublicationHarness(t *testing.T, ids ...sim.SessionID) *remotePubl
 	config.OutboxCapacity = 32
 	running := &Server{
 		config:         config,
-		engine:         sim.NewEngine(0, 0, 0),
-		sessions:       make(map[sim.SessionID]*session),
-		playerSessions: make(map[core.PlayerID]sim.SessionID),
+		engine:         runtime.NewEngine(0, 0, 0),
+		sessions:       make(map[contract.SessionID]*session),
+		playerSessions: make(map[core.PlayerID]contract.SessionID),
 		lifecycle:      serverRunning,
 	}
-	h := &remotePublicationHarness{t: t, running: running, seq: make(map[sim.SessionID]uint64)}
+	h := &remotePublicationHarness{t: t, running: running, seq: make(map[contract.SessionID]uint64)}
 	for _, id := range ids {
 		playerID := publicationPlayerID(byte(id))
 		running.engine.RegisterObserverSession(id)
@@ -357,7 +358,7 @@ func newRemotePublicationHarness(t *testing.T, ids ...sim.SessionID) *remotePubl
 }
 
 func (h *remotePublicationHarness) newSession(
-	id sim.SessionID,
+	id contract.SessionID,
 	generation uint64,
 	playerID core.PlayerID,
 	displayName string,
@@ -379,32 +380,32 @@ func (h *remotePublicationHarness) newSession(
 	}
 }
 
-func (h *remotePublicationHarness) enqueueCenter(id sim.SessionID, center core.ChunkPos) {
+func (h *remotePublicationHarness) enqueueCenter(id contract.SessionID, center core.ChunkPos) {
 	h.seq[id]++
-	h.running.engine.Enqueue(sim.Command{
-		Session: id, Sequence: h.seq[id], Kind: sim.CommandTrustedObserverCenter,
+	h.running.engine.Enqueue(contract.Command{
+		Session: id, Sequence: h.seq[id], Kind: contract.CommandTrustedObserverCenter,
 		Dimension: core.Overworld, Center: center,
 	})
 }
 
-func (h *remotePublicationHarness) moveInterest(id sim.SessionID, center core.ChunkPos) sim.TickResult {
+func (h *remotePublicationHarness) moveInterest(id contract.SessionID, center core.ChunkPos) contract.TickResult {
 	h.t.Helper()
 	h.enqueueCenter(id, center)
 	return h.running.engine.Step()
 }
 
-func (h *remotePublicationHarness) markSnapshotSent(id sim.SessionID, pos core.ChunkPos) {
+func (h *remotePublicationHarness) markSnapshotSent(id contract.SessionID, pos core.ChunkPos) {
 	h.t.Helper()
 	h.running.sessions[id].publications[overworldChunk(pos)] = &publication{snapshotSent: true}
 }
 
 func (h *remotePublicationHarness) playerUpdate(
-	id sim.SessionID,
+	id contract.SessionID,
 	ready bool,
 	dimension core.DimensionID,
 	position mgl32.Vec3,
-) sim.PlayerUpdate {
-	update := sim.PlayerUpdate{
+) contract.PlayerUpdate {
+	update := contract.PlayerUpdate{
 		Session:    id,
 		Dimension:  dimension,
 		ViewCenter: core.ChunkPos{},
@@ -416,8 +417,8 @@ func (h *remotePublicationHarness) playerUpdate(
 	return update
 }
 
-func (h *remotePublicationHarness) readyPlayers(ids ...sim.SessionID) []sim.PlayerUpdate {
-	players := make([]sim.PlayerUpdate, 0, len(ids))
+func (h *remotePublicationHarness) readyPlayers(ids ...contract.SessionID) []contract.PlayerUpdate {
+	players := make([]contract.PlayerUpdate, 0, len(ids))
 	for _, id := range ids {
 		players = append(players, h.playerUpdate(
 			id, true, core.Overworld,
@@ -427,11 +428,11 @@ func (h *remotePublicationHarness) readyPlayers(ids ...sim.SessionID) []sim.Play
 	return players
 }
 
-func (h *remotePublicationHarness) publish(result sim.TickResult) {
+func (h *remotePublicationHarness) publish(result contract.TickResult) {
 	h.running.publish(result)
 }
 
-func (h *remotePublicationHarness) drain(id sim.SessionID) []network.ServerMessage {
+func (h *remotePublicationHarness) drain(id contract.SessionID) []network.ServerMessage {
 	h.t.Helper()
 	current := h.running.sessions[id]
 	if current == nil {
@@ -444,7 +445,7 @@ func (h *remotePublicationHarness) drain(id sim.SessionID) []network.ServerMessa
 	return messages
 }
 
-func (h *remotePublicationHarness) playerID(id sim.SessionID) core.PlayerID {
+func (h *remotePublicationHarness) playerID(id contract.SessionID) core.PlayerID {
 	current := h.running.sessions[id]
 	if current == nil {
 		return core.PlayerID{}

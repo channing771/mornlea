@@ -16,7 +16,7 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -230,10 +230,10 @@ func waitInteractionMining(
 	client network.ClientEndpoint,
 	id companion.ID,
 	maxTicks int,
-	want func(mining sim.MiningUpdate) bool,
-) (sim.MiningUpdate, []network.ChatEvent) {
+	want func(mining contract.MiningUpdate) bool,
+) (contract.MiningUpdate, []network.ChatEvent) {
 	t.Helper()
-	last := sim.MiningUpdate{}
+	last := contract.MiningUpdate{}
 	var events []network.ChatEvent
 	for range maxTicks {
 		result := host.world.StepForTest()
@@ -351,7 +351,7 @@ func TestCompanionManagerMineTargetReplacedFailsWorldChanged(t *testing.T) {
 	sendIntegration(t, client, network.ChatCommand{Text: "@阿木 挖那块石头"})
 	waitForIncomingChatDepth(t, host.world, 1)
 	// 等待采掘真正累积（进度 ≥ 2）再替换：保证 Manager 已记录进度事实。
-	_, waitEvents := waitInteractionMining(t, host, client, id, 600, func(mining sim.MiningUpdate) bool {
+	_, waitEvents := waitInteractionMining(t, host, client, id, 600, func(mining contract.MiningUpdate) bool {
 		return mining.Active && mining.ProgressTicks >= 2
 	})
 	setInteractionBlock(t, host, target, core.DirtID)

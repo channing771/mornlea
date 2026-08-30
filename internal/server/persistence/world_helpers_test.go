@@ -8,7 +8,8 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -16,7 +17,7 @@ import (
 const (
 	waitDeadline            = 2 * time.Second
 	integrationPollInterval = time.Millisecond
-	testSessionID           = sim.SessionID(1)
+	testSessionID           = contract.SessionID(1)
 )
 
 // emptyChunkEstimateBytes 是全空区块的存档估算：512 信封 + 32 个固定掉落物槽 +
@@ -130,7 +131,7 @@ func (store *persistenceTestStore) Close() error {
 }
 
 type persistenceTestWorld struct {
-	engine *sim.Engine
+	engine *runtime.Engine
 	config Options
 	world  *World
 }
@@ -172,7 +173,7 @@ func newPersistenceServerWithoutCleanup(
 	options Options,
 ) *persistenceTestWorld {
 	t.Helper()
-	engine := sim.NewEngine(0, 0, 42)
+	engine := runtime.NewEngine(0, 0, 42)
 	return &persistenceTestWorld{
 		engine: engine,
 		config: options,
@@ -204,7 +205,7 @@ func (running *persistenceTestWorld) syncWorldForTest() {
 	running.world.options.UnsavedBytes = running.config.UnsavedBytes
 }
 
-func (running *persistenceTestWorld) StepForTest() sim.TickResult {
+func (running *persistenceTestWorld) StepForTest() contract.TickResult {
 	running.syncWorldForTest()
 	_ = running.world.Drain()
 	result := running.engine.Step()
@@ -217,26 +218,26 @@ func (running *persistenceTestWorld) PersistenceStatus() Status {
 	return running.world.Status()
 }
 
-func dirtyReadyEngine(t *testing.T, keys []core.ChunkKey) *sim.Engine {
+func dirtyReadyEngine(t *testing.T, keys []core.ChunkKey) *runtime.Engine {
 	t.Helper()
-	engine := sim.NewEngine(0, 0, 0)
+	engine := runtime.NewEngine(0, 0, 0)
 	for index, key := range keys {
-		session := sim.SessionID(index + 1)
+		session := contract.SessionID(index + 1)
 		engine.RegisterObserverSession(session)
-		engine.Enqueue(sim.Command{
+		engine.Enqueue(contract.Command{
 			Session: session, Sequence: 1,
-			Kind: sim.CommandTrustedObserverCenter, Dimension: key.Dimension, Center: key.Pos,
+			Kind: contract.CommandTrustedObserverCenter, Dimension: key.Dimension, Center: key.Pos,
 		})
 		requested := engine.Step()
 		if !reflect.DeepEqual(requested.Acquire, []core.ChunkKey{key}) {
 			t.Fatalf("Acquire=%+v, want %+v", requested.Acquire, []core.ChunkKey{key})
 		}
-		engine.SubmitAcquired(sim.AcquiredChunk{Key: key, Missing: true})
+		engine.SubmitAcquired(contract.AcquiredChunk{Key: key, Missing: true})
 		generated := engine.Step()
 		if !reflect.DeepEqual(generated.Generate, []core.ChunkKey{key}) {
 			t.Fatalf("Generate=%+v, want %+v", generated.Generate, []core.ChunkKey{key})
 		}
-		engine.SubmitGenerated(sim.GeneratedChunk{
+		engine.SubmitGenerated(contract.GeneratedChunk{
 			Dimension: key.Dimension,
 			Pos:       key.Pos,
 			Chunk:     world.NewChunk(key.Pos),
@@ -249,36 +250,36 @@ func dirtyReadyEngine(t *testing.T, keys []core.ChunkKey) *sim.Engine {
 	return engine
 }
 
-func dirtyUnloadingEngine(t *testing.T, key core.ChunkKey) *sim.Engine {
+func dirtyUnloadingEngine(t *testing.T, key core.ChunkKey) *runtime.Engine {
 	t.Helper()
 	engine := dirtyReadyEngine(t, []core.ChunkKey{key})
-	engine.Enqueue(sim.Command{
+	engine.Enqueue(contract.Command{
 		Session: 1, Sequence: 2,
-		Kind: sim.CommandTrustedObserverCenter, Dimension: key.Dimension,
+		Kind: contract.CommandTrustedObserverCenter, Dimension: key.Dimension,
 		Center: core.ChunkPos{X: key.Pos.X + 100, Z: key.Pos.Z + 100},
 	})
 	engine.Step()
 	info, ok := engine.ChunkInfo(key)
-	if !ok || info.State != sim.ChunkUnloading {
+	if !ok || info.State != contract.ChunkUnloading {
 		t.Fatalf("chunk state=%+v, want Unloading", info)
 	}
 	return engine
 }
 
-func dirtyPlayerEngine(t *testing.T, key core.ChunkKey) *sim.Engine {
+func dirtyPlayerEngine(t *testing.T, key core.ChunkKey) *runtime.Engine {
 	t.Helper()
-	engine := sim.NewEngine(0, 0, 0)
+	engine := runtime.NewEngine(0, 0, 0)
 	engine.RegisterSession(testSessionID, key.Dimension, key.Pos)
 	requested := engine.Step()
 	if !reflect.DeepEqual(requested.Acquire, []core.ChunkKey{key}) {
 		t.Fatalf("Acquire=%+v, want %+v", requested.Acquire, []core.ChunkKey{key})
 	}
-	engine.SubmitAcquired(sim.AcquiredChunk{Key: key, Missing: true})
+	engine.SubmitAcquired(contract.AcquiredChunk{Key: key, Missing: true})
 	generated := engine.Step()
 	if !reflect.DeepEqual(generated.Generate, []core.ChunkKey{key}) {
 		t.Fatalf("Generate=%+v, want %+v", generated.Generate, []core.ChunkKey{key})
 	}
-	engine.SubmitGenerated(sim.GeneratedChunk{
+	engine.SubmitGenerated(contract.GeneratedChunk{
 		Dimension: key.Dimension,
 		Pos:       key.Pos,
 		Chunk:     flatTestChunk(key.Pos),
@@ -316,7 +317,7 @@ type persistenceRevisions struct {
 
 func persistenceRevisionsForTest(
 	t *testing.T,
-	engine *sim.Engine,
+	engine *runtime.Engine,
 	key core.ChunkKey,
 ) persistenceRevisions {
 	t.Helper()
@@ -423,7 +424,7 @@ func containsChunkKey(keys []core.ChunkKey, want core.ChunkKey) bool {
 	return false
 }
 
-func snapshotKeys(snapshots []sim.ChunkSaveSnapshot) []core.ChunkKey {
+func snapshotKeys(snapshots []contract.ChunkSaveSnapshot) []core.ChunkKey {
 	keys := make([]core.ChunkKey, len(snapshots))
 	for index, snapshot := range snapshots {
 		keys[index] = snapshot.Key

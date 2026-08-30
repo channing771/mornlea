@@ -298,4 +298,3 @@ benchmark SHALL 在预热与 still、still 与 flying、flying 与 GPU 采样之
 - **GIVEN** 某个配置常量同时被诊断路径与其他行为使用
 - **WHEN** 需要验证诊断路径
 - **THEN** MUST NOT 通过临时改动该常量来触发，因为那会连带改变其他行为，使验证结果不可信
-

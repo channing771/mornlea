@@ -4,7 +4,7 @@ package client
 
 // 本文件是 `mornlea_client` render ABI 族的 Go 绑定(v2 引入,v6 增补
 // 远环 tile 上传/丢弃入口,v7 增补雾参数化 SetLodFog——变基重编后
-// v5 归 main 的 water pass,远环两项出口顺延为 v6/v7；v12 增补
+// v5 归 main 的 water pass,远环两项出口顺延为 v6/v7；v13 增补
 // render world update 入口):R2a 的离屏
 // Rust 渲染器只被双后端对照测试与后续期使用,生产渲染仍是 Go 路径。
 // 链接与 include 标志在 window.go 的 cgo 序言中声明,此处只补 render
@@ -29,8 +29,6 @@ package client
 #cgo nocallback mornlea_client_render_drop_lod_tile
 #cgo noescape mornlea_client_render_set_lod_fog
 #cgo nocallback mornlea_client_render_set_lod_fog
-#cgo noescape mornlea_client_render_upload_ui_font
-#cgo nocallback mornlea_client_render_upload_ui_font
 #cgo noescape mornlea_client_render_drain_ui_events
 #cgo nocallback mornlea_client_render_drain_ui_events
 #cgo noescape mornlea_client_render_frame
@@ -57,7 +55,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"math"
-	"unicode/utf8"
 	"unsafe"
 )
 
@@ -82,7 +79,7 @@ type Renderer struct {
 	benchmarkBatchCalls int
 	// uploadCalls 统计 section 上传 FFI 次数,供"无变化不上传"断言。
 	uploadCalls int
-	// uiEventScratch 是 client ABI v9 结构化事件 batch 的固定复用缓冲。
+	// uiEventScratch 是 client ABI v12 版本化 JSON 事件信封的固定复用缓冲。
 	uiEventScratch []byte
 }
 
@@ -116,13 +113,10 @@ type RenderFrame struct {
 	// 段字节(EncodeQuadSegment 产物)。
 	NameTagSegment []byte
 	HUDSegment     []byte
-	// DebugSegment 已废弃：程序化调试面板渲染路径已于 D-03 删除，调试面板改经
-	// UISegment layout v3 呈现，本字段恒为空。为保持既有帧编码路径
-	// （layout v2 判定与 tag 4 TLV）与 ABI 兼容而保留。
+	// DebugSegment 已废弃：程序化调试面板渲染路径已删除，本字段恒为空。
+	// 为保持既有帧编码路径（layout v2 判定与 tag 4 TLV）与 ABI 兼容而保留;
+	// 调试面板现经 WebView 桥呈现(client ABI v12)。
 	DebugSegment []byte
-	// UISegment 是 egui 主菜单段(`EncodeUIMenu` 产物),非空时本帧叠加菜单。
-	// 菜单只在 Go 菜单相位产生;为空时本帧不提交任何 UI 工作。
-	UISegment []byte
 }
 
 // EncodeQuadSegment 组装文本类 pass 段:[uniform][aCount u32][bCount u32]
@@ -152,7 +146,7 @@ func NewRenderer(width, height int) (*Renderer, error) {
 			handle:         uint64(handle),
 			width:          width,
 			height:         height,
-			uiEventScratch: make([]byte, maxUIEventBatchBytes),
+			uiEventScratch: make([]byte, maxUIEnvelopeBytes),
 		}, nil
 	case C.MORNLEA_CLIENT_STATUS_ADAPTER:
 		return nil, ErrNoGPUAdapter
@@ -178,7 +172,7 @@ func NewWindowedRenderer(window *Window) (*Renderer, error) {
 			width:          width,
 			height:         height,
 			windowed:       true,
-			uiEventScratch: make([]byte, maxUIEventBatchBytes),
+			uiEventScratch: make([]byte, maxUIEnvelopeBytes),
 		}, nil
 	case C.MORNLEA_CLIENT_STATUS_ADAPTER:
 		return nil, ErrNoGPUAdapter
@@ -300,22 +294,11 @@ func (r *Renderer) SetLodFog(start, full float32) {
 	)))
 }
 
-// UploadUIFont 一次性上传 egui 菜单字体(client ABI v9 保留出口):字节须非空且
-// <= 32 MiB,违反在 Rust 入口被拒并使本方法 panic(编程错误)。设计上每次
-// 渲染器只应上传一次;字体字节由 `render.EmbeddedCJKFont()` 提供。
-func (r *Renderer) UploadUIFont(font []byte) {
-	r.check("upload ui font", uint32(C.mornlea_client_render_upload_ui_font(
-		C.MORNLEA_CLIENT_ABI_VERSION,
-		C.uint64_t(r.handle),
-		(*C.uint8_t)(unsafe.Pointer(unsafe.SliceData(font))),
-		C.size_t(len(font)),
-	)))
-}
-
-// DrainUIEvents 排空并返回 client ABI v9 的结构化 UI 事件。Rust 只有在完整
-// batch 能放入固定 scratch 时才写入并清空队列；Go 随后再次校验整批线格式。
+// DrainUIEvents 排空并返回 client ABI v12 的版本化 JSON 桥事件。Rust 只有在
+// 完整信封能放入固定 scratch 时才写入并清空队列;空队列返回 0 字节与空切片,
+// Go 随后逐事件做深层校验(未知动作/字段越界拒绝)。
 func (r *Renderer) DrainUIEvents() []UIEvent {
-	if len(r.uiEventScratch) != maxUIEventBatchBytes {
+	if len(r.uiEventScratch) != maxUIEnvelopeBytes {
 		panic("client: UI 事件 scratch 未初始化")
 	}
 	var written C.size_t
@@ -329,6 +312,9 @@ func (r *Renderer) DrainUIEvents() []UIEvent {
 	n := int(written)
 	if n < 0 || n > len(r.uiEventScratch) {
 		panic("client: drain ui events 返回字节数越界")
+	}
+	if n == 0 {
+		return nil
 	}
 	events, err := DecodeUIEventBatch(r.uiEventScratch[:n])
 	if err != nil {
@@ -347,31 +333,9 @@ const (
 	frameTagHUD     = 6
 	frameTagDebug   = 7
 	// frameTagWater 是水下水色叠加段(4 个 f32:RGBA),client ABI v5 内的追加
-	// TLV tag,不升 ABI 版本。
+	// TLV tag,不升 ABI 版本。tag 9(旧菜单 UI 段)已在 client ABI v12 退役:
+	// 不再编码,下发即被 Rust 侧拒绝。
 	frameTagWater = 8
-	// frameTagUI 是 egui UI 段(client ABI v8 新增、v9 扩展 layout v2),TLV
-	// tag 与 Rust `FRAME_TAG_UI` 一致。
-	frameTagUI = 9
-)
-
-// UI 段编码常量,与 Rust decode_ui_frame 的 MAX_UI_* 与上界逐字一致(见
-// engine/crates/mornlea_client/src/ui.rs)。越界在 `EncodeUIMenu` 里视为编程
-// 错误 panic。
-const (
-	// uiLayoutVersion 是 UI 段的 ABI 布局版本。
-	uiLayoutVersion = 1
-	// uiFlagVisible 是 flags 中表示「菜单可见」的位(bit0)。
-	uiFlagVisible = 1
-	// maxUIButtons 是一帧菜单允许的最大按钮数。
-	maxUIButtons = 8
-	// maxUILabelBytes 是单个按钮 label 的字节上界。
-	maxUILabelBytes = 64
-	// maxUITitleBytes 是标题字节上界。
-	maxUITitleBytes = 128
-	// maxUIVersionBytes 是版本行字节上界。
-	maxUIVersionBytes = 64
-	// maxUIErrorBytes 是错误行字节上界。
-	maxUIErrorBytes = 256
 )
 
 // hasPassSegments 报告本帧是否携带任一 pass 段(决定 layout 版本)。
@@ -379,7 +343,7 @@ func (frame RenderFrame) hasPassSegments() bool {
 	return len(frame.AvatarInstances) > 0 || len(frame.DropInstances) > 0 ||
 		len(frame.OutlineInstances) > 0 || frame.OverlayStrength > 0 || frame.WaterTint[3] > 0 ||
 		len(frame.NameTagSegment) > 0 || len(frame.HUDSegment) > 0 ||
-		len(frame.DebugSegment) > 0 || len(frame.UISegment) > 0
+		len(frame.DebugSegment) > 0
 }
 
 // EncodeRenderFrame 把帧输入编码为 render_frame 的 ABI 字节:无 pass 段时
@@ -442,84 +406,7 @@ func EncodeRenderFrame(frame RenderFrame) []byte {
 		}
 		appendTLV(frameTagWater, tint[:])
 	}
-	// UI 段追加在 water 之后(段序 = layout 2 的尾部),空段由 appendTLV 自动缺席。
-	appendTLV(frameTagUI, frame.UISegment)
 	return out
-}
-
-// UIButton 是主菜单的一个按钮:唯一 id、显示文本与是否可点击。
-// 禁用按钮虽被 Rust 渲染但点击不产生事件(wire 语义见 `EncodeUIMenu`)。
-type UIButton struct {
-	ID      uint32
-	Label   string
-	Enabled bool
-}
-
-// UIMenu 是一帧主菜单的完整语义:可见性、标题、版本行、错误行与按钮表。
-// Rust 侧由 decode_ui_frame 恢复成同构的 UiFrame。
-type UIMenu struct {
-	Visible bool
-	Title   string
-	Version string
-	Error   string
-	Buttons []UIButton
-}
-
-// EncodeUIMenu 把菜单编码为 client ABI v9 保留的 layout v1 UI 段字节(小端),与 Rust
-// decode_ui_frame 逐字节对应:u32 layout=1、u32 flags(bit0=visible)、
-// u32 按钮数、每按钮 [u32 id + u32 label_len + UTF-8 label + u32 enabled(0/1)],
-// 随后 title/version/error 依次 [u32 len + bytes]。
-//
-// 越界是编程错误故 panic(与既有段落编码口径一致):按钮数 >8、单个 label >
-// 64 字节、title >128 字节、version >64 字节、error >256 字节;各上界与 Rust
-// MAX_UI_* 常量逐字一致。返回字节数可变,最小(无按钮、空串字段)为 24 字节
-// (layout+flags+button_count+三个长度字段共六个 u32)。
-func EncodeUIMenu(menu UIMenu) []byte {
-	if len(menu.Buttons) > maxUIButtons {
-		panic("client: UI 菜单按钮数越界")
-	}
-	out := make([]byte, 0, uiSegmentCapacity(menu))
-	out = binary.LittleEndian.AppendUint32(out, uiLayoutVersion)
-	var flags uint32
-	if menu.Visible {
-		flags |= uiFlagVisible
-	}
-	out = binary.LittleEndian.AppendUint32(out, flags)
-	out = binary.LittleEndian.AppendUint32(out, uint32(len(menu.Buttons)))
-	for _, button := range menu.Buttons {
-		label := []byte(button.Label)
-		if !utf8.ValidString(button.Label) || len(label) > maxUILabelBytes {
-			panic("client: UI 菜单按钮 label 越界")
-		}
-		out = binary.LittleEndian.AppendUint32(out, button.ID)
-		out = binary.LittleEndian.AppendUint32(out, uint32(len(label)))
-		out = append(out, label...)
-		enabled := uint32(0)
-		if button.Enabled {
-			enabled = 1
-		}
-		out = binary.LittleEndian.AppendUint32(out, enabled)
-	}
-	out = appendUIString(out, menu.Title, maxUITitleBytes, "title")
-	out = appendUIString(out, menu.Version, maxUIVersionBytes, "version")
-	out = appendUIString(out, menu.Error, maxUIErrorBytes, "error")
-	return out
-}
-
-// appendUIString 追加一个 [u32 len + bytes] 字符串字段;超过 field 的字节上界
-// 视为编程错误 panic。
-func appendUIString(out []byte, value string, maxBytes int, field string) []byte {
-	data := []byte(value)
-	if !utf8.ValidString(value) || len(data) > maxBytes {
-		panic("client: UI 菜单 " + field + " 越界")
-	}
-	out = binary.LittleEndian.AppendUint32(out, uint32(len(data)))
-	return append(out, data...)
-}
-
-// uiSegmentCapacity 估算编码缓冲容量(非精确,足够容纳即可)。
-func uiSegmentCapacity(menu UIMenu) int {
-	return 24 + len(menu.Buttons)*24 + len(menu.Title) + len(menu.Version) + len(menu.Error)
 }
 
 // FrameCalls 返回累计的 RenderFrame FFI 调用次数。

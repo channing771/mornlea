@@ -11,7 +11,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/server"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 	"github.com/channing771/mornlea/internal/world"
 )
@@ -294,7 +294,7 @@ func TestDropDiffStaysWithSessionOwner(t *testing.T) {
 	running := newMemoryAttachedWorldForExternalTest(
 		hotbarTestConfig(2), firstServer, server.FlatTestGenerator{},
 	)
-	if _, err := running.AttachSession(externalSessionSpec(2, 1, secondServer, sim.PlayerRestore{
+	if _, err := running.AttachSession(externalSessionSpec(2, 1, secondServer, contract.PlayerRestore{
 		SpawnDimension: core.Overworld,
 	})); err != nil {
 		t.Fatalf("附加第二个会话: %v", err)
@@ -352,7 +352,7 @@ func TestDropSurvivesShutdownAndRestart(t *testing.T) {
 	}
 	flushDropWorld(t, first, firstStore)
 
-	second, secondStore, _ := newDropDiskWorld(t, root)
+	second, secondStore, secondClient := newDropDiskWorld(t, root)
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
 		defer cancel()
@@ -366,11 +366,13 @@ func TestDropSurvivesShutdownAndRestart(t *testing.T) {
 
 	key := core.ChunkKey{Dimension: created.ID.Dimension, Pos: created.ID.Chunk}
 	deadline = time.Now().Add(waitDeadline)
+	secondReady := false
 	for {
 		if time.Now().After(deadline) {
 			t.Fatal("等待重启后区块 Ready 超时")
 		}
-		second.StepForTest()
+		result := second.StepForTest()
+		dropDrainTick(t, secondClient, result.Tick, &secondReady)
 		chunk, _, ok := second.CloneReadyChunkForTest(key)
 		if !ok {
 			continue
@@ -467,7 +469,7 @@ func TestDropSelectedItemTwoMemorySessionsConverge(t *testing.T) {
 	running := newMemoryAttachedWorldWithHotbar(
 		hotbarTestConfig(2), firstServer, server.FlatTestGenerator{}, stockedTestHotbar(core.ItemCoal),
 	)
-	if _, err := running.AttachSession(externalSessionSpec(2, 1, secondServer, sim.PlayerRestore{
+	if _, err := running.AttachSession(externalSessionSpec(2, 1, secondServer, contract.PlayerRestore{
 		SpawnDimension: core.Overworld,
 	})); err != nil {
 		t.Fatalf("附加第二个会话: %v", err)
@@ -549,7 +551,7 @@ func TestDropSelectedItemCapacityFailureIsolatedBetweenMemorySessions(t *testing
 	running := newMemoryAttachedWorldWithHotbar(
 		hotbarTestConfig(2), firstServer, server.FlatTestGenerator{}, stockedTestHotbar(core.ItemCoal),
 	)
-	if _, err := running.AttachSession(externalSessionSpec(2, 1, secondServer, sim.PlayerRestore{
+	if _, err := running.AttachSession(externalSessionSpec(2, 1, secondServer, contract.PlayerRestore{
 		SpawnDimension: core.Overworld,
 	})); err != nil {
 		t.Fatalf("附加第二个会话: %v", err)

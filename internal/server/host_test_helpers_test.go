@@ -13,7 +13,7 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -102,13 +102,13 @@ func testMetadata() storage.Metadata {
 	}
 }
 
-func testPlayerSnapshot(position float32) sim.PlayerSnapshot {
-	safe := sim.PlayerLocation{
+func testPlayerSnapshot(position float32) contract.PlayerSnapshot {
+	safe := contract.PlayerLocation{
 		Dimension: core.Overworld,
 		Position:  mgl32.Vec3{position - 1, 64, -position},
 	}
-	return sim.PlayerSnapshot{
-		Current: sim.PlayerLocation{
+	return contract.PlayerSnapshot{
+		Current: contract.PlayerLocation{
 			Dimension: core.Overworld,
 			Position:  mgl32.Vec3{position, 70, -position},
 		},

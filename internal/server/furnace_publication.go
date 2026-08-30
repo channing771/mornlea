@@ -4,7 +4,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/world"
 )
 
@@ -49,7 +49,7 @@ func (server *Server) TouchChunkForTest(key core.ChunkKey) {
 // SetPlayerPositionForTest 直接写入某个会话玩家的权威位置，仅供纵向测试构造固定场景，
 // 例如把玩家抬到致死高度触发一次真实的摔落。
 func (server *Server) SetPlayerPositionForTest(
-	session sim.SessionID,
+	session contract.SessionID,
 	position mgl32.Vec3,
 ) {
 	server.stepMu.Lock()
@@ -59,7 +59,7 @@ func (server *Server) SetPlayerPositionForTest(
 
 // SetPlayerInventoryForTest 用给定函数改写某个会话的权威物品状态，仅供纵向测试使用。
 func (server *Server) SetPlayerInventoryForTest(
-	session sim.SessionID,
+	session contract.SessionID,
 	mutate func(core.Inventory) core.Inventory,
 ) {
 	server.stepMu.Lock()

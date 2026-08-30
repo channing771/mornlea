@@ -13,7 +13,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -106,7 +106,7 @@ func runSwordCombatWireScript(t *testing.T, transport string) swordCombatTranscr
 	config.ViewRadius = 1
 	config.AutosaveTicks = 1000
 	host := mustNewHost(t, config, flatGenerator{}, store)
-	mob := sim.HostileMob{
+	mob := runtime.HostileMob{
 		ID:              swordCombatHostileID,
 		Dimension:       core.Overworld,
 		State:           physics.State{Position: mgl32.Vec3{0.5, 1, 2.5}, Velocity: mgl32.Vec3{0, 0, 0}, OnGround: true},

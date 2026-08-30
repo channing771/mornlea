@@ -9,7 +9,6 @@ package app
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
 	"sync/atomic"
 	"testing"
@@ -77,21 +76,18 @@ func TestPauseTransitionMatrixEscapeOpensReleasesCursorAndPauses(t *testing.T) {
 	if got := hosts()[0].pauseCalls.Load(); got != 1 {
 		t.Fatalf("本地形态打开应恰调用一次暂停门，实际 %d", got)
 	}
-	segment := app.uiSegment()
-	if len(segment) != 12 {
-		t.Fatalf("暂停相位 UI 段长度 = %d，want 12（版本+两布尔）", len(segment))
+	// 下行状态断言:暂停相位携带 pause 分节,remote 位为假(本地形态)。
+	state := app.buildUIState()
+	if state.Phase != "paused" || state.Pause == nil {
+		t.Fatalf("暂停相位应携带 pause 分节: phase=%q pause=%+v", state.Phase, state.Pause)
 	}
-	// 版本字正向断言：跨语言互钉数字 4 的 Go 半边显式化（Rust
-	// UI_PAUSE_LAYOUT_VERSION 同值，任何一侧不得单方面改动）。
-	if got := binary.LittleEndian.Uint32(segment[:4]); got != 4 {
-		t.Fatalf("暂停段布局版本 = %d，want 4", got)
+	if state.Pause.Remote {
+		t.Fatal("本地形态 remote 位应为假")
 	}
-	// 动作编号钉值断言：跨语言互钉数字 8/9 的 Go 半边显式化（Rust
-	// UI_ACTION_PAUSE_BACK / UI_ACTION_PAUSE_QUIT_TO_MENU 同值，任何一侧
-	// 不得单方面改动）。
-	if menuActionPauseBack != 8 || menuActionPauseQuitToMenu != 9 {
-		t.Fatalf("暂停动作编号 = %d/%d，want 8/9",
-			menuActionPauseBack, menuActionPauseQuitToMenu)
+	// 动作 id 钉值断言:字符串 id 与单源 schema menuAction 枚举逐值互钉,
+	// 任何一侧不得单方面改动。
+	if menuActionPauseBack != "pause-back" || menuActionPauseQuitToMenu != "pause-quit-to-menu" {
+		t.Fatalf("暂停动作 id = %q/%q", menuActionPauseBack, menuActionPauseQuitToMenu)
 	}
 }
 
@@ -135,12 +131,12 @@ func TestPauseUnknownActionIgnored(t *testing.T) {
 		window:    &fakeInteractiveWindow{},
 		itemDrops: client.NewItemDrops(),
 	}
-	for _, id := range []uint32{menuActionPauseBack, menuActionPauseQuitToMenu, 99} {
+	for _, id := range []string{menuActionPauseBack, menuActionPauseQuitToMenu, "unknown-action"} {
 		if quit := app.handleMenuEvent(id); quit {
-			t.Fatalf("菜单相位的暂停 id %d 不应请求退出", id)
+			t.Fatalf("菜单相位的暂停动作 %q 不应请求退出", id)
 		}
 		if app.menu.phase != MenuPhaseMenu {
-			t.Fatalf("菜单相位收到 %d 改变了相位: %v", id, app.menu.phase)
+			t.Fatalf("菜单相位收到 %q 改变了相位: %v", id, app.menu.phase)
 		}
 	}
 
@@ -149,8 +145,8 @@ func TestPauseUnknownActionIgnored(t *testing.T) {
 	t.Cleanup(func() { _ = paused.Close() })
 	_ = paused.handleMenuEvent(menuActionStart)
 	paused.openPauseOverlay()
-	if quit := paused.handleMenuEvent(99); quit || paused.menu.phase != menuPhasePaused {
-		t.Fatalf("暂停相位未知 id: quit=%v phase=%v", quit, paused.menu.phase)
+	if quit := paused.handleMenuEvent("unknown-action"); quit || paused.menu.phase != menuPhasePaused {
+		t.Fatalf("暂停相位未知动作: quit=%v phase=%v", quit, paused.menu.phase)
 	}
 }
 
@@ -233,16 +229,18 @@ func TestPauseRemoteFormSkipsGateAndMarksSegment(t *testing.T) {
 	if remoteApp.menu.phase != menuPhasePaused {
 		t.Fatalf("远程形态也应呈现暂停相位，got %v", remoteApp.menu.phase)
 	}
-	if got := binary.LittleEndian.Uint32(remoteApp.uiSegment()[8:]); got != 1 {
-		t.Fatalf("远程形态 remote 位 = %d，want 1", got)
+	remoteState := remoteApp.buildUIState()
+	if remoteState.Pause == nil || !remoteState.Pause.Remote {
+		t.Fatalf("远程形态 remote 位应为真: %+v", remoteState.Pause)
 	}
 
 	localApp, _ := newPausedGameTestApp(t)
 	if localApp.remote() {
 		t.Fatal("本地夹具不应判为远程形态")
 	}
-	if got := binary.LittleEndian.Uint32(localApp.uiSegment()[8:]); got != 0 {
-		t.Fatalf("本地形态 remote 位 = %d，want 0", got)
+	localState := localApp.buildUIState()
+	if localState.Pause == nil || localState.Pause.Remote {
+		t.Fatalf("本地形态 remote 位应为假: %+v", localState.Pause)
 	}
 }
 
@@ -271,24 +269,23 @@ func TestStartWorldRejectsRemoteConnectForm(t *testing.T) {
 	}
 }
 
-// TestPauseSegmentAbsentOutsidePausedPhase 锁定下行契约的另一半：非暂停相位
-// 绝不下发暂停段，capture 注入与设置/主菜单既有输出字节不变。
-func TestPauseSegmentAbsentOutsidePausedPhase(t *testing.T) {
-	// 设置相位的段编码要求合法窗口预设，夹具按构造期默认值填齐。
+// TestPauseSectionAbsentOutsidePausedPhase 锁定下行契约的另一半:非暂停相位
+// 绝不携带 pause 分节。
+func TestPauseSectionAbsentOutsidePausedPhase(t *testing.T) {
+	// 设置相位的组装要求合法窗口预设，夹具按构造期默认值填齐。
 	preset := SettingsValues{WindowSize: config.WindowSize1280x720}
 	blank := &Application{
 		settings: SettingsState{Committed: preset, Draft: preset},
 	}
 	for _, phase := range []MenuPhase{MenuPhaseGame, MenuPhaseMenu, MenuPhaseSettings, MenuPhaseStarting} {
 		blank.menu.phase = phase
-		segment := blank.uiSegment()
-		if len(segment) == 12 && binary.LittleEndian.Uint32(segment[:4]) == uint32(uiPauseLayoutVersion) {
-			t.Fatalf("相位 %v 不应下发暂停段", phase)
+		if state := blank.buildUIState(); state.Pause != nil {
+			t.Fatalf("相位 %v 不应携带 pause 分节: %+v", phase, state.Pause)
 		}
 	}
 	game := &Application{menu: menuState{phase: MenuPhaseGame}}
-	if segment := game.uiSegment(); segment != nil {
-		t.Fatalf("裸游戏相位应保持无 UI 段契约，got %d 字节", len(segment))
+	if state := game.buildUIState(); state.Menu != nil || state.Pause != nil || state.Settings != nil {
+		t.Fatalf("裸游戏相位应保持零 chrome 契约: %+v", state)
 	}
 }
 

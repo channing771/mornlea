@@ -11,7 +11,7 @@ import (
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -128,7 +128,7 @@ func TestHungerLoopEndToEndMemory(t *testing.T) {
 	// 三个节律常量全部读默认 tunable 而不是写字面量：它们在 sim 里是不导出的
 	// 常量（archcheck 的禁导出清单），字面量在这里只会变成第二份数值来源。
 	// 默认值本身由组 1、组 4 的 sim 用例钉住。
-	tunables := sim.DefaultTunables()
+	tunables := tuning.DefaultTunables()
 	regenDelay := uint64(tunables.RegenDelayTicks)
 	regenInterval := uint64(tunables.RegenIntervalTicks)
 	eatingTicks := int(tunables.EatingTicks)

@@ -8,7 +8,7 @@ import (
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -84,7 +84,7 @@ const (
 func TestFarmingLoopEndToEndMemory(t *testing.T) {
 	// 生长需要把 sim 的全局 tunable 调到端点值；用完必须还原，否则会污染
 	// 同包内后续用例。
-	t.Cleanup(func() { sim.SetTunables(sim.DefaultTunables()) })
+	t.Cleanup(func() { tuning.SetTunables(tuning.DefaultTunables()) })
 
 	identity := integrationIdentity(0x9e, "Farmer")
 	// 刻意**不**预存玩家：只有 LoadPlayer 返回 ErrPlayerNotFound 的路径才会
@@ -366,10 +366,10 @@ func TestFarmingLoopEndToEndMemory(t *testing.T) {
 	//
 	// 只调概率与抽样率两个 tunable，生长规则本身一行没动：脚本从不写入
 	// WheatStage1..7 中的任何一个，成熟完全是 advanceCrops 跑出来的。
-	tunables := sim.DefaultTunables()
+	tunables := tuning.DefaultTunables()
 	tunables.RandomTicksPerSection = 64
 	tunables.CropGrowthChancePercent = 100
-	sim.SetTunables(tunables)
+	tuning.SetTunables(tunables)
 	growthTicks := 0
 	for ; mirrorBlock(farmingCrop) != core.WheatStage7ID; growthTicks++ {
 		if growthTicks > farmingGrowthBudget {

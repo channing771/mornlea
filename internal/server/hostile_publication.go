@@ -9,7 +9,7 @@ import (
 	"slices"
 
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 // publishHostiles 是 publishSession 的夜行者段。hostiles 是 tick 末的全量
@@ -21,7 +21,7 @@ import (
 func (server *Server) publishHostiles(
 	current *session,
 	tick uint64,
-	hostiles []sim.HostileMob,
+	hostiles []contract.HostileMob,
 ) bool {
 	if len(hostiles) == 0 && len(current.visibleHostiles) == 0 {
 		return true
@@ -33,7 +33,7 @@ func (server *Server) publishHostiles(
 	}
 	// 可见性截面：保持快照的 ID 升序（Engine 秩序），despawn/spawn/state
 	// 三个批次的排序因此免于再排。
-	visible := make([]sim.HostileMob, 0, len(hostiles))
+	visible := make([]contract.HostileMob, 0, len(hostiles))
 	for _, mob := range hostiles {
 		if server.hostileCandidateVisible(current, mob) {
 			visible = append(visible, mob)
@@ -119,7 +119,7 @@ func (server *Server) publishHostiles(
 // hostileCandidateVisible 是夜行者的会话可见性判定：脚底 chunk 必须仍在会
 // 话订阅集合内，且该会话已收到过这份快照（客户端先有世界再有实体，与伙伴
 // 的判定逐语义一致）。
-func (server *Server) hostileCandidateVisible(current *session, mob sim.HostileMob) bool {
+func (server *Server) hostileCandidateVisible(current *session, mob contract.HostileMob) bool {
 	foot := publicationFootChunk(mob.Dimension, [3]float32(mob.State.Position))
 	if !server.engine.SessionWantsChunk(current.id, foot) {
 		return false
@@ -130,7 +130,7 @@ func (server *Server) hostileCandidateVisible(current *session, mob sim.HostileM
 
 // hostileIndexOf 返回 ID 在升序截面中的下标；未命中返回 -1。线性扫描即可：
 // 截面至多 64 个个体，二分开销不值得。
-func hostileIndexOf(mobs []sim.HostileMob, id uint64) int {
+func hostileIndexOf(mobs []contract.HostileMob, id uint64) int {
 	for index := range mobs {
 		if mobs[index].ID == id {
 			return index

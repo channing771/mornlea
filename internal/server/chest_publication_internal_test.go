@@ -6,7 +6,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 // TestChestPublicationOutboxFullClosesOnlySlowSession 证明箱子状态与关闭通知
@@ -33,7 +33,7 @@ func TestChestPublicationOutboxFullClosesOnlySlowSession(t *testing.T) {
 	publishChest := func() {
 		running.stepMu.Lock()
 		defer running.stepMu.Unlock()
-		running.publish(sim.TickResult{Chests: []sim.ChestUpdate{
+		running.publish(contract.TickResult{Chests: []contract.ChestUpdate{
 			{Session: 7, Chest: chestRef},
 			{Session: 8, Chest: chestRef},
 		}})
@@ -51,7 +51,7 @@ func TestChestPublicationOutboxFullClosesOnlySlowSession(t *testing.T) {
 	publishClose := func() {
 		running.stepMu.Lock()
 		defer running.stepMu.Unlock()
-		running.publish(sim.TickResult{FurnaceEnds: []sim.FurnaceEnd{
+		running.publish(contract.TickResult{FurnaceEnds: []contract.FurnaceEnd{
 			{Session: 7, Furnace: chestRef},
 			{Session: 8, Furnace: chestRef},
 		}})

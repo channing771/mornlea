@@ -3,15 +3,11 @@
 package app
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
-	"math"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
-	"unicode/utf8"
 
 	"github.com/go-gl/mathgl/mgl32"
 
@@ -21,7 +17,7 @@ import (
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/render"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
 // selectFieldForTest 按 Group+"."+Name 定位字段并设置 selected，找不到时 Fatal。
@@ -204,7 +200,7 @@ func TestPanelToggleClearsEditing(t *testing.T) {
 	state := newPanelState(config.Defaults())
 	state.visible = true
 	state.selectFieldForTest(t, "physics.gravity")
-	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionEnterEdit}}, false)
+	state.applyPanelEvents([]debugPanelEvent{{op: client.DebugPanelActionEnterEdit}}, false)
 	if !state.editing {
 		t.Fatal("应处于编辑态")
 	}
@@ -220,10 +216,10 @@ func TestPanelToggleClearsEditing(t *testing.T) {
 // 遗漏，必须有测试锁住。
 func TestApplyPanelChangeWritesCameraFovY(t *testing.T) {
 	originalPhysics := physics.ActiveTunables()
-	originalSim := sim.ActiveTunables()
+	originalSim := tuning.ActiveTunables()
 	t.Cleanup(func() {
 		physics.SetTunables(originalPhysics)
-		sim.SetTunables(originalSim)
+		tuning.SetTunables(originalSim)
 	})
 
 	app := &Application{panel: newPanelState(config.Defaults())}
@@ -244,190 +240,175 @@ func TestPanelRemoteRejectsAuthoritativeEnterEdit(t *testing.T) {
 	state.visible = true
 	state.selectFieldForTest(t, "physics.gravity")
 	state.applyPanelEvents([]debugPanelEvent{{
-		action: client.DebugPanelActionEnterEdit,
+		op: client.DebugPanelActionEnterEdit,
 	}}, true)
 	if state.editing {
 		t.Fatal("联机时不得进入编辑态")
 	}
 	state.applyPanelEvents([]debugPanelEvent{{
-		action: client.DebugPanelActionConfirm, value: "99",
+		op: client.DebugPanelActionConfirm, value: "99",
 	}}, false)
 	if state.effective.Physics.Gravity == 99 {
 		t.Fatalf("未进入编辑态的 confirm 不得改值：%v", state.effective.Physics.Gravity)
 	}
 }
 
-// encodeDebugPanelSegmentGolden 按 Rust debug_abi_tests 的 valid_frame() 夹具
-// 手工拼出期望字节，逐字节锁定 layout v3 的字段序与定宽记录布局。
-func TestEncodeDebugPanelSegmentCrossLanguageGolden(t *testing.T) {
+// TestDebugUIStateRowsShape 锁定调试分节的行形状:读数行恒只读、段头行值
+// 恒空、param 行唯一选中,editing 只落在选中可编辑行上——与旧 layout v3 的
+// 单编辑态不变量与 Rust flags 语义逐条对应。
+func TestDebugUIStateRowsShape(t *testing.T) {
 	readout := render.PanelReadout{
-		FrameMillis:  12.5,
-		Position:     mgl32.Vec3{10, 64, -3},
-		Yaw:          45,
-		Pitch:        -12,
-		Tick:         1234,
-		WorldTime:    42,
-		LoadedChunks: 137,
-		Mode:         "单机",
+		FrameMillis: 12.5, Position: mgl32.Vec3{10, 64, -3}, Yaw: 45, Pitch: -12,
+		Tick: 1234, WorldTime: 42, LoadedChunks: 137, Mode: "单机",
 	}
 	rows := []render.PanelRow{
 		{Label: "── physics ──", ReadOnly: true},
 		{Label: "gravity", Value: "9.8", Selected: true},
 		{Label: "fovDegrees", Value: "70"},
 	}
-	got := encodeDebugPanelSegment(true, true, readout, rows)
-
-	fixed24 := func(value string) []byte {
-		out := make([]byte, 24)
-		copy(out, value)
-		return out
+	state := debugUIState(true, readout, rows)
+	if !state.Visible || state.Mode != "单机" {
+		t.Fatalf("分节头不符: %+v", state)
 	}
-	u32 := func(value uint32) []byte { return binary.LittleEndian.AppendUint32(nil, value) }
-	f32 := func(value float32) []byte {
-		return binary.LittleEndian.AppendUint32(nil, math.Float32bits(value))
-	}
-	f64 := func(value float64) []byte {
-		return binary.LittleEndian.AppendUint64(nil, math.Float64bits(value))
-	}
-	appendRow := func(out []byte, label, value string, flags uint32, edit []byte) []byte {
-		out = append(out, fixed24(label)...)
-		out = append(out, fixed24(value)...)
-		out = append(out, u32(flags)...)
-		return append(out, edit...)
-	}
-	want := u32(3)                    // layout
-	want = append(want, u32(1)...)    // flags: visible
-	want = append(want, f64(12.5)...) // frame_millis
-	want = append(want, f32(10)...)
-	want = append(want, f32(64)...)
-	want = append(want, f32(-3)...)
-	want = append(want, f32(45)...)                                     // yaw
-	want = append(want, f32(-12)...)                                    // pitch
-	want = append(want, binary.LittleEndian.AppendUint64(nil, 1234)...) // tick
-	want = append(want, binary.LittleEndian.AppendUint64(nil, 42)...)   // world_time
-	want = append(want, u32(137)...)                                    // loaded_chunks
-	want = append(want, u32(6)...)
-	want = append(want, "单机"...)
-	want = append(want, u32(3)...) // row_count
-	want = appendRow(want, "── physics ──", "", 1, nil)
-	edit := u32(3)
-	edit = append(edit, "9.8"...)
-	edit = append(edit, u32(3)...)
-	want = appendRow(want, "gravity", "9.8", 2+4+8, edit)
-	want = appendRow(want, "fovDegrees", "70", 4, nil)
-	if !bytes.Equal(got, want) {
-		t.Fatalf("layout v3 段字节不一致:\n got=%x\nwant=%x", got, want)
-	}
-}
-
-// rowsOffset 返回段头之后第一条行记录的字节偏移：常数部分 56 字节
-// （layout 4 + flags 4 + frame_millis 8 + position 3×f32 12 + yaw 4 +
-// pitch 4 + tick 8 + world_time 8 + loaded_chunks 4），加 mode
-// （4 字节长度 + 文本）与 row_count 4。
-func rowsOffset(mode string) int { return 56 + 4 + len(mode) + 4 }
-
-func TestEncodeDebugPanelSegmentUTF8Truncation(t *testing.T) {
-	label := "一二三四五六七八九十" // 10 个 CJK = 30 字节 > 24
-	value := "一二三四五六七八九"  // 9 个 CJK = 27 字节 > 24
-	got := encodeDebugPanelSegment(true, false, render.PanelReadout{Mode: "单机"}, []render.PanelRow{
-		{Label: label, Value: value},
-	})
-	offset := rowsOffset("单机")
-	label24 := got[offset : offset+24]
-	labelEnd := bytes.IndexByte(label24, 0)
-	if labelEnd < 0 {
-		labelEnd = 24
-	}
-	wantLabel := "一二三四五六七八" // 8 个 CJK，恰好 24 字节
-	if string(label24[:labelEnd]) != wantLabel {
-		t.Fatalf("标签截断=%q, want %q", string(label24[:labelEnd]), wantLabel)
-	}
-	value24 := got[offset+24 : offset+48]
-	valueEnd := bytes.IndexByte(value24, 0)
-	if valueEnd < 0 {
-		valueEnd = 24
-	}
-	if !utf8.Valid(value24[:valueEnd]) {
-		t.Fatalf("值字段截断后不是合法 UTF-8: %x", value24[:valueEnd])
-	}
-	// 零填充：首个 NUL 之后必须全零。
-	if !allZero(value24[valueEnd:]) || !allZero(label24[labelEnd:]) {
-		t.Fatal("定宽字段首个 NUL 之后必须全零")
-	}
-}
-
-func allZero(bytes []byte) bool {
-	for _, b := range bytes {
-		if b != 0 {
-			return false
+	// 前 6 行是读数行(模式走顶部字段,不重复),随后 3 行是参数区。
+	readouts := state.Rows[:6]
+	for _, row := range readouts {
+		if row.Kind != "readout" || !row.ReadOnly || row.Selected || row.Editing {
+			t.Fatalf("读数行必须只读且不可选中: %+v", row)
 		}
 	}
-	return true
-}
-
-// TestEncodeDebugPanelSegmentEditState 锁住编辑态：行置 editing 位、edit_value 是
-// 原值的截断播种、edit_cursor 是末位字节偏移（=len）。
-func TestEncodeDebugPanelSegmentEditState(t *testing.T) {
-	got := encodeDebugPanelSegment(true, true, render.PanelReadout{Mode: "单机"}, []render.PanelRow{
-		{Label: "gravity", Value: "9.8", Selected: true},
-	})
-	offset := rowsOffset("单机")
-	flags := binary.LittleEndian.Uint32(got[offset+48 : offset+52])
-	if flags&8 == 0 {
-		t.Fatalf("编辑行必须置 editing 位: flags=%#x", flags)
+	section := state.Rows[6]
+	if section.Kind != "section" || section.Value != "" || !section.ReadOnly {
+		t.Fatalf("段头行必须为 section 且值恒空: %+v", section)
 	}
-	if flags&4 == 0 {
-		t.Fatalf("编辑行必须同时置 editable 位: flags=%#x", flags)
+	gravity := state.Rows[7]
+	if gravity.Kind != "param" || !gravity.Selected || !gravity.Editing || gravity.ReadOnly {
+		t.Fatalf("选中参数行必须同时处于编辑态: %+v", gravity)
 	}
-	editLen := binary.LittleEndian.Uint32(got[offset+52 : offset+56])
-	if editLen != 3 {
-		t.Fatalf("edit_value 长度=%d, want 3", editLen)
+	fov := state.Rows[8]
+	if fov.Kind != "param" || fov.Selected || fov.Editing {
+		t.Fatalf("未选中行不得置位 selected/editing: %+v", fov)
 	}
-	if value := string(got[offset+56 : offset+56+int(editLen)]); value != "9.8" {
-		t.Fatalf("edit_value=%q, want 9.8", value)
+	if gravity.Label != "gravity" || gravity.Value != "9.8" {
+		t.Fatalf("param 行内容不符: %+v", gravity)
 	}
-	cursor := binary.LittleEndian.Uint32(got[offset+56+int(editLen) : offset+60+int(editLen)])
-	if cursor != editLen {
-		t.Fatalf("edit_cursor=%d, want 末位 %d", cursor, editLen)
+	if got := readouts[0].Value; got != "12.5" {
+		t.Fatalf("帧时读数 = %q, want 12.5", got)
 	}
 }
 
-// TestEncodeDebugPanelSegmentSelectedReadOnlyNotFlagged 锁住"selected→!readonly"：
-// 联机时 physics 行被 rows() 标为只读，编码器绝不能在同一个行上同时置选中位
-// （Rust 拒绝该行 flag 组合，整个段会被丢）。
-func TestEncodeDebugPanelSegmentSelectedReadOnlyNotFlagged(t *testing.T) {
+// TestDebugUIStateReadOnlyRowNeverSelectedOrEditing 锁住 readonly 行不变量:
+// 联机时 physics/sim 行只读,组装绝不给同一行同时置 selected/editing(前端
+// 解析层会拒绝该组合,整份状态被丢)。
+func TestDebugUIStateReadOnlyRowNeverSelectedOrEditing(t *testing.T) {
 	state := newPanelState(config.Defaults())
+	state.visible = true
 	state.selectFieldForTest(t, "physics.eyeHeight")
 	rows := state.rows(true)
-	got := encodeDebugPanelSegment(true, false, render.PanelReadout{Mode: "联机"}, rows)
-	offset := rowsOffset("联机")
-	for i := range rows {
-		flags := binary.LittleEndian.Uint32(got[offset+i*52+48 : offset+i*52+52])
-		if flags&2 != 0 && flags&1 != 0 {
-			t.Fatalf("row[%d] 同时置 selected 与 readonly: flags=%#x", i, flags)
+	got := debugUIState(true, render.PanelReadout{Mode: "联机"}, rows)
+	for _, row := range got.Rows {
+		if row.ReadOnly && (row.Selected || row.Editing) {
+			t.Fatalf("readonly 行不得置位 selected/editing: %+v", row)
+		}
+		if !row.ReadOnly && row.Selected && row.Editing {
+			t.Fatalf("唯一编辑态必须落在选中可编辑行: %+v", row)
 		}
 	}
 }
 
-// TestEncodeDebugPanelSegmentHiddenIsNil 锁住"面板关闭时不产出段"（Rust 渲染
-// 零工作，与 design §6.1 的整 pass 跳过同一条要求）。
-func TestEncodeDebugPanelSegmentHiddenIsNil(t *testing.T) {
-	if segment := encodeDebugPanelSegment(false, false, render.PanelReadout{Mode: "单机"},
-		[]render.PanelRow{{Label: "x", Value: "1"}}); segment != nil {
-		t.Fatalf("隐藏面板不得产出段: %x", segment)
+// TestDebugUIStateEditSeedCarriesPreciseValue 锁住编辑播种的下行契约:可编辑
+// param 行携带全精度 editValue 播种文本,前端输入框以它播种,「不改文本直接
+// 确认」写回的原文才不会把有效值悄悄写成 4 位有效数字的展示形式;只读行与
+// 读数行不携带播种(前端拒绝只读行携带 editValue 的状态)。
+func TestDebugUIStateEditSeedCarriesPreciseValue(t *testing.T) {
+	state := newPanelState(config.Defaults())
+	state.visible = true
+	state.effective.Physics.Gravity = 9.80665
+	state.selectFieldForTest(t, "physics.gravity")
+	rows := state.rows(false)
+	var seedRow render.PanelRow
+	for _, row := range rows {
+		if row.Label == "gravity" {
+			seedRow = row
+			break
+		}
+	}
+	if seedRow.EditValue == "" || seedRow.Value == seedRow.EditValue {
+		t.Fatalf("面板行应携带全精度播种与展示双值: %+v", seedRow)
+	}
+	got := debugUIState(false, render.PanelReadout{Mode: "单机"}, rows)
+	var gotGravity *uiDebugRowJSON
+	for i := range got.Rows {
+		if got.Rows[i].Label == "gravity" {
+			gotGravity = &got.Rows[i]
+			break
+		}
+	}
+	if gotGravity == nil {
+		t.Fatal("下行应包含 gravity 行")
+	}
+	// 下行 editValue 必须逐字等于面板行的全精度播种原文(float32 最短往返
+	// 表示),展示值(4 位有效数字)不得顶替它。
+	if gotGravity.EditValue != seedRow.EditValue {
+		t.Fatalf("下行 editValue = %q, want 全精度播种原文 %q", gotGravity.EditValue, seedRow.EditValue)
+	}
+	for i := range got.Rows {
+		if got.Rows[i].ReadOnly && got.Rows[i].EditValue != "" {
+			t.Fatalf("只读行不得携带 editValue: %+v", got.Rows[i])
+		}
 	}
 }
 
-// TestEncodeDebugPanelSegmentWithinBudget 锁住段长上界：64 行参数（含段头）
-// 与一个编辑行也不超过 MAX_UI_SEGMENT_BYTES。
-func TestEncodeDebugPanelSegmentWithinBudget(t *testing.T) {
+// TestDebugUIStateAbsentWhenPanelHidden 锁住「面板关闭时零参与」:面板不可见
+// 的组装不产出 debug 分节。
+func TestDebugUIStateAbsentWhenPanelHidden(t *testing.T) {
+	app := &Application{panel: newPanelState(config.Defaults())}
+	if state := app.buildUIState(); state.Debug != nil {
+		t.Fatalf("面板关闭不得产出 debug 分节: %+v", state.Debug)
+	}
+}
+
+// TestDebugUIStateRowsCappedAtLimit 锁住行数上限:64 行参数(含段头)加上
+// 读数行也不会超过 schema debug.rows maxItems。
+func TestDebugUIStateRowsCappedAtLimit(t *testing.T) {
 	rows := make([]render.PanelRow, 64)
 	for i := range rows {
 		rows[i] = render.PanelRow{Label: fmt.Sprintf("field %02d", i), Value: "123.456", Selected: i == 0}
 	}
-	segment := encodeDebugPanelSegment(true, true, render.PanelReadout{Mode: "benchmark"}, rows)
-	if len(segment) > maxUISegmentBytes {
-		t.Fatalf("段长=%d, 上界 %d", len(segment), maxUISegmentBytes)
+	got := debugUIState(true, render.PanelReadout{Mode: "benchmark"}, rows)
+	if len(got.Rows) > debugPanelRowsMax {
+		t.Fatalf("行数=%d, 上界 %d", len(got.Rows), debugPanelRowsMax)
+	}
+}
+
+// TestTruncateDebugRunesKeepsRuneBoundary 锁住行文本的码点截断语义:超出
+// 24 码点的 CJK 标签在 rune 边界截断,绝不切半(与旧定宽字段的截断同一语义)。
+func TestTruncateDebugRunesKeepsRuneBoundary(t *testing.T) {
+	label := strings.Repeat("一", 30) // 30 个 CJK > 24
+	if got := truncateDebugRunes(label, debugRowMaxRunes); len([]rune(got)) != 24 {
+		t.Fatalf("CJK 标签截断 = %d 码点, want 24", len([]rune(got)))
+	}
+	if got := truncateDebugRunes("short", debugRowMaxRunes); got != "short" {
+		t.Fatalf("短文本不得截断: %q", got)
+	}
+	if got := truncateDebugRunes("starvationDamageIntervalTicks", debugRowMaxRunes); len([]rune(got)) != 24 {
+		t.Fatalf("长字段名应截断到 24 码点: %q", got)
+	}
+}
+
+// TestPanelConfirmFullPrecisionKeepsValue 锁住写回侧的全精度不变量:确认
+// 事件携带的精确文本(编辑播种语义由前端呈现层承担)写回后不得漂移有效值。
+func TestPanelConfirmFullPrecisionKeepsValue(t *testing.T) {
+	state := newPanelState(config.Defaults())
+	state.visible = true
+	state.selectFieldForTest(t, "physics.gravity")
+	state.effective.Physics.Gravity = 9.80665
+	state.applyPanelEvents([]debugPanelEvent{{op: client.DebugPanelActionEnterEdit}}, false)
+	state.applyPanelEvents([]debugPanelEvent{{
+		op: client.DebugPanelActionConfirm, value: "9.80665",
+	}}, false)
+	if state.effective.Physics.Gravity != 9.80665 {
+		t.Fatalf("精确值写回不得漂移: got %v, want 9.80665", state.effective.Physics.Gravity)
 	}
 }
 
@@ -435,11 +416,11 @@ func TestPanelApplyEventsSelectMovesSelection(t *testing.T) {
 	state := newPanelState(config.Defaults())
 	state.visible = true
 	state.selectFieldForTest(t, "physics.eyeHeight")
-	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionSelectNext}}, false)
+	state.applyPanelEvents([]debugPanelEvent{{op: client.DebugPanelActionSelectNext}}, false)
 	if state.selected != 1 {
 		t.Fatalf("SELECT_NEXT 后 selected=%d, want 1", state.selected)
 	}
-	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionSelectPrev}}, false)
+	state.applyPanelEvents([]debugPanelEvent{{op: client.DebugPanelActionSelectPrev}}, false)
 	if state.selected != 0 {
 		t.Fatalf("SELECT_PREV 后 selected=%d, want 0", state.selected)
 	}
@@ -452,7 +433,7 @@ func TestPanelApplyEventsNavigationSkipsReadOnlyRows(t *testing.T) {
 	state.visible = true
 	state.selected = 0
 	for i := 0; i < 200; i++ {
-		state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionSelectNext}}, true)
+		state.applyPanelEvents([]debugPanelEvent{{op: client.DebugPanelActionSelectNext}}, true)
 		rows := dataRowsForTest(t, state.rows(true))
 		if rows[state.selected].ReadOnly {
 			t.Fatal("导航必须跳过只读行")
@@ -466,12 +447,12 @@ func TestPanelApplyEventsEnterEditConfirmWritesBack(t *testing.T) {
 	state.selectFieldForTest(t, "physics.gravity")
 	initial := state.effective.Physics.Gravity
 
-	changed := state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionEnterEdit}}, false)
+	changed := state.applyPanelEvents([]debugPanelEvent{{op: client.DebugPanelActionEnterEdit}}, false)
 	if changed || !state.editing {
 		t.Fatalf("进入编辑不算配置变更: changed=%v editing=%v", changed, state.editing)
 	}
 	changed = state.applyPanelEvents([]debugPanelEvent{{
-		action: client.DebugPanelActionConfirm, value: "12.5",
+		op: client.DebugPanelActionConfirm, value: "12.5",
 	}}, false)
 	if !changed {
 		t.Fatal("确认合法值必须报告变更")
@@ -491,9 +472,9 @@ func TestPanelApplyEventsConfirmClampsOutOfRange(t *testing.T) {
 	state := newPanelState(config.Defaults())
 	state.visible = true
 	state.selectFieldForTest(t, "sim.spawnRadius")
-	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionEnterEdit}}, false)
+	state.applyPanelEvents([]debugPanelEvent{{op: client.DebugPanelActionEnterEdit}}, false)
 	changed := state.applyPanelEvents([]debugPanelEvent{{
-		action: client.DebugPanelActionConfirm, value: "99999",
+		op: client.DebugPanelActionConfirm, value: "99999",
 	}}, false)
 	if !changed {
 		t.Fatal("越界但可解析的值应钳制并报告变更")
@@ -511,9 +492,9 @@ func TestPanelApplyEventsInvalidValueRejected(t *testing.T) {
 	state.visible = true
 	state.selectFieldForTest(t, "physics.gravity")
 	before := state.effective.Physics.Gravity
-	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionEnterEdit}}, false)
+	state.applyPanelEvents([]debugPanelEvent{{op: client.DebugPanelActionEnterEdit}}, false)
 	changed := state.applyPanelEvents([]debugPanelEvent{{
-		action: client.DebugPanelActionConfirm, value: "not a number",
+		op: client.DebugPanelActionConfirm, value: "not a number",
 	}}, false)
 	if changed {
 		t.Fatal("非法值不得报告变更")
@@ -531,8 +512,8 @@ func TestPanelApplyEventsCancelKeepsValueAndExitsEdit(t *testing.T) {
 	state.visible = true
 	state.selectFieldForTest(t, "render.fovDegrees")
 	before := state.effective.Render.FovDegrees
-	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionEnterEdit}}, false)
-	changed := state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionCancel}}, false)
+	state.applyPanelEvents([]debugPanelEvent{{op: client.DebugPanelActionEnterEdit}}, false)
+	changed := state.applyPanelEvents([]debugPanelEvent{{op: client.DebugPanelActionCancel}}, false)
 	if changed {
 		t.Fatal("取消不得报告变更")
 	}
@@ -548,9 +529,9 @@ func TestPanelApplyEventsEditValueIsNoop(t *testing.T) {
 	state := newPanelState(config.Defaults())
 	state.visible = true
 	state.selectFieldForTest(t, "physics.gravity")
-	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionEnterEdit}}, false)
+	state.applyPanelEvents([]debugPanelEvent{{op: client.DebugPanelActionEnterEdit}}, false)
 	changed := state.applyPanelEvents([]debugPanelEvent{{
-		action: client.DebugPanelActionEditValue, value: "99",
+		op: client.DebugPanelActionEditValue, value: "99",
 	}}, false)
 	if changed || !state.editing {
 		t.Fatalf("EDIT_VALUE 是 Rust 草稿通知, Go 无动作: changed=%v editing=%v", changed, state.editing)
@@ -560,7 +541,7 @@ func TestPanelApplyEventsEditValueIsNoop(t *testing.T) {
 func TestPanelApplyEventsCloseHidesPanel(t *testing.T) {
 	state := newPanelState(config.Defaults())
 	state.visible = true
-	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionClose}}, false)
+	state.applyPanelEvents([]debugPanelEvent{{op: client.DebugPanelActionClose}}, false)
 	if state.visible {
 		t.Fatal("CLOSE 必须隐藏面板")
 	}
@@ -570,8 +551,8 @@ func TestPanelApplyEventsIgnoredWhileEditing(t *testing.T) {
 	state := newPanelState(config.Defaults())
 	state.visible = true
 	state.selectFieldForTest(t, "physics.gravity")
-	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionEnterEdit}}, false)
-	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionSelectNext}}, false)
+	state.applyPanelEvents([]debugPanelEvent{{op: client.DebugPanelActionEnterEdit}}, false)
+	state.applyPanelEvents([]debugPanelEvent{{op: client.DebugPanelActionSelectNext}}, false)
 	if state.selected != 7 {
 		t.Fatalf("编辑期间不得移动选中行: selected=%d, want 7(gravity)", state.selected)
 	}
@@ -579,72 +560,19 @@ func TestPanelApplyEventsIgnoredWhileEditing(t *testing.T) {
 
 func TestDecodeDebugPanelEventsFiltersAndPreservesOrder(t *testing.T) {
 	got := decodeDebugPanelEvents([]client.UIEvent{
-		{Kind: client.UIEventAction, ActionID: 7},
+		{Kind: client.UIEventAction, ActionID: client.UIActionQuit},
 		{Kind: client.UIEventDebugAction, PanelAction: client.DebugPanelActionSelectNext},
 		{Kind: client.UIEventDebugAction, PanelAction: client.DebugPanelActionConfirm, PanelValue: "12"},
 	})
 	want := []debugPanelEvent{
-		{action: client.DebugPanelActionSelectNext},
-		{action: client.DebugPanelActionConfirm, value: "12"},
+		{op: client.DebugPanelActionSelectNext},
+		{op: client.DebugPanelActionConfirm, value: "12"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("筛选结果=%+v, want %+v", got, want)
 	}
 }
 
-// editSeedForTest 从段字节里提取编辑行的 edit_value。定位 rows 被标记
-// Selected 的行（rows() 不变量：恒有且仅有一个），其记录在 rowsOffset 之后
-// 每行定长 52 字节（label 24 + value 24 + flags 4），编辑载荷紧随 flags：
-// u32 len + value + u32 cursor。
-func editSeedForTest(t *testing.T, segment []byte, rows []render.PanelRow) string {
-	t.Helper()
-	for i, row := range rows {
-		if !row.Selected {
-			continue
-		}
-		base := rowsOffset("单机") + i*52
-		editLen := int(binary.LittleEndian.Uint32(segment[base+52 : base+56]))
-		end := base + 56 + editLen
-		if end > len(segment) {
-			t.Fatalf("edit_value 越界: len=%d end=%d", len(segment), end)
-		}
-		return string(segment[base+56 : end])
-	}
-	t.Fatal("段中没有 Selected 行")
-	return ""
-}
-
-// TestPanelEditSeedFullPrecisionDoesNotDrift 锁住 M-2 修法：编辑器向 Rust
-// 播种的 edit_value 必须来自字段的全精度原始值，而不是 4 位有效数字的展示值
-// ——用户不改文本直接 CONFIRM 时，确认事件原样回传播种文本，两者写回结果
-// 必须一致。展示值 9.807 回写会令 9.80665 悄悄漂移为显示形式。测试走
-// rows()→编码器→种子提取→applyPanelEvents 全链路，直击真实输入路径。
-func TestPanelEditSeedFullPrecisionDoesNotDrift(t *testing.T) {
-	state := newPanelState(config.Defaults())
-	state.visible = true
-	state.selectFieldForTest(t, "physics.gravity")
-	state.effective.Physics.Gravity = 9.80665
-	state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionEnterEdit}}, false)
-	rows := state.rows(false)
-	seed := editSeedForTest(t, encodeDebugPanelSegment(true, true, render.PanelReadout{Mode: "单机"}, rows), rows)
-	state.applyPanelEvents([]debugPanelEvent{{
-		action: client.DebugPanelActionConfirm, value: seed,
-	}}, false)
-	if state.effective.Physics.Gravity != 9.80665 {
-		t.Fatalf("确认播种值不得漂移有效值: got %v, want 9.80665", state.effective.Physics.Gravity)
-	}
-	if state.editing {
-		t.Fatal("确认后必须退出编辑态")
-	}
-}
-
-// TestPanelVisibleCapturesGameKeysAtFrameLoopLevel 锁住 spec 2.3 的核心断言
-// 「面板可见时游戏键 MUST NOT 产生上行，位置与朝向不变」在帧循环层的落实：
-// panelVisible() 的四条接线分支（Esc 不释放光标、相机旋转冻结、动作抑制、
-// 移动归零）只有走 runGamePhase 才会被真实执行，unit 级 panelState 测试
-// 覆盖不到。帧 0 面板可见时按 W+左键+E 并把光标移到 (200,150)：上行必须
-// 全为中性输入，相机必须纹丝不动；帧 1 Esc 必须保持光标捕获；帧 2 F3
-// 隐藏面板；帧 3 W 必须恢复移动上行。
 func TestPanelVisibleCapturesGameKeysAtFrameLoopLevel(t *testing.T) {
 	if testing.Short() {
 		t.Skip("短模式:重型测试由 CI 全量门禁运行")
@@ -863,11 +791,11 @@ func TestPanelRemoteAllowsRenderEdit(t *testing.T) {
 	state := newPanelState(config.Defaults())
 	state.visible = true
 	state.selectFieldForTest(t, "render.fovDegrees")
-	if state.applyPanelEvents([]debugPanelEvent{{action: client.DebugPanelActionEnterEdit}}, true); !state.editing {
+	if state.applyPanelEvents([]debugPanelEvent{{op: client.DebugPanelActionEnterEdit}}, true); !state.editing {
 		t.Fatal("联机时 render 行必须可进入编辑态")
 	}
 	changed := state.applyPanelEvents([]debugPanelEvent{{
-		action: client.DebugPanelActionConfirm, value: "42",
+		op: client.DebugPanelActionConfirm, value: "42",
 	}}, true)
 	if !changed {
 		t.Fatal("联机时 render 分组确认合法值必须报告变更")
@@ -878,44 +806,4 @@ func TestPanelRemoteAllowsRenderEdit(t *testing.T) {
 	if state.editing {
 		t.Fatal("确认后必须退出编辑态")
 	}
-}
-
-// TestEncodeDebugPanelSegmentRejectsInvalidInput 锁住编码器侧的非法值拒绝：
-// Rust 解码器对 NaN/Inf、非法 mode 逐项拒绝（整个段被丢），Go 编码器必须在
-// 出口处 panic（这些输入只能来自编程错误，绝不允许产出 Rust 会拒绝的失败段）。
-func TestEncodeDebugPanelSegmentRejectsInvalidInput(t *testing.T) {
-	readout := render.PanelReadout{Mode: "单机"}
-	run := func(name string, fn func()) {
-		t.Run(name, func(t *testing.T) {
-			defer func() {
-				if recover() == nil {
-					t.Fatal("非法输入必须 panic")
-				}
-			}()
-			fn()
-		})
-	}
-	run("负帧时", func() {
-		invalid := readout
-		invalid.FrameMillis = -1
-		encodeDebugPanelSegment(true, false, invalid, nil)
-	})
-	run("NaN 帧时", func() {
-		invalid := readout
-		invalid.FrameMillis = math.NaN()
-		encodeDebugPanelSegment(true, false, invalid, nil)
-	})
-	run("Inf 朝向", func() {
-		invalid := readout
-		invalid.Yaw = float32(math.Inf(1))
-		encodeDebugPanelSegment(true, false, invalid, nil)
-	})
-	run("空模式名", func() {
-		encodeDebugPanelSegment(true, false, render.PanelReadout{}, nil)
-	})
-	run("多行模式名", func() {
-		invalid := readout
-		invalid.Mode = "单机\n机"
-		encodeDebugPanelSegment(true, false, invalid, nil)
-	})
 }

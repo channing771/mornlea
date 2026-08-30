@@ -8,7 +8,7 @@ package client
 // 同帧内的按键/鼠标/光标/尺寸读取全部来自缓存,不产生额外窗口 FFI 调用。
 
 /*
-// client ABI v12: C header 常量与 Rust 动态库必须同批重建。
+// client ABI v13: C header 常量与 Rust 动态库必须同批重建。
 #cgo CFLAGS: -I${SRCDIR}/../../engine/include
 #cgo LDFLAGS: -L${SRCDIR}/../../engine/target/release -lmornlea_client -Wl,-rpath,${SRCDIR}/../../engine/target/release
 #cgo noescape mornlea_client_abi_version
@@ -29,8 +29,8 @@ package client
 #cgo nocallback mornlea_client_window_focus
 #cgo noescape mornlea_client_window_cancel_close
 #cgo nocallback mornlea_client_window_cancel_close
-#cgo noescape mornlea_client_render_upload_ui_font
-#cgo nocallback mornlea_client_render_upload_ui_font
+#cgo noescape mornlea_client_ui_push_state
+#cgo nocallback mornlea_client_ui_push_state
 #cgo noescape mornlea_client_render_drain_ui_events
 #cgo nocallback mornlea_client_render_drain_ui_events
 #include "mornlea_client.h"
@@ -288,6 +288,22 @@ func (w *Window) SetCursorCaptured(captured bool) {
 
 // CursorCaptured 报告当前捕获状态。
 func (w *Window) CursorCaptured() bool { return w.captured }
+
+// PushUIState 把菜单层 UI 状态 JSON 推给挂在窗口上的 WebView(client ABI v12
+// 下行出口):Rust 侧缓存、按相位路由显隐并经 evaluateJavaScript 注入页面。
+// 仅在状态变化时由 app 层调用;从未调用的进程(基准/capture)不创建 WebView。
+// 首次调用惰性挂载;空 JSON 是调用方编程错误,panic(与既有窗口操作口径一致)。
+func (w *Window) PushUIState(json []byte) {
+	if len(json) == 0 {
+		panic("client: push ui state 空 JSON")
+	}
+	w.call("push ui state", uint32(C.mornlea_client_ui_push_state(
+		C.MORNLEA_CLIENT_ABI_VERSION,
+		C.uint64_t(w.handle),
+		(*C.uint8_t)(unsafe.Pointer(unsafe.SliceData(json))),
+		C.size_t(len(json)),
+	)))
+}
 
 // Close 销毁窗口;重复调用安全。
 func (w *Window) Close() {

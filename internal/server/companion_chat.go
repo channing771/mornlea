@@ -8,11 +8,11 @@ import (
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 type incomingChat struct {
-	sessionID  sim.SessionID
+	sessionID  contract.SessionID
 	generation uint64
 	command    network.ChatCommand
 }
@@ -25,7 +25,7 @@ const companionStopCommand = "停止"
 
 type chatDelivery struct {
 	event     network.ChatEvent
-	recipient sim.SessionID
+	recipient contract.SessionID
 }
 
 func parseCompanionAddress(text string) (string, string, network.ChatRejectReason) {

@@ -8,18 +8,18 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
 )
 
 type companionVisibleCandidate struct {
 	Definition companion.Definition
-	Update     sim.CompanionUpdate
+	Update     contract.CompanionUpdate
 	Foot       core.ChunkKey
 }
 
 func (server *Server) companionPublicationCandidates(
 	current *session,
-	updates []sim.CompanionUpdate,
+	updates []contract.CompanionUpdate,
 	definitions map[companion.ID]companion.Definition,
 ) (map[companion.ID]companionVisibleCandidate, bool) {
 	if len(updates) == 0 {
@@ -80,7 +80,7 @@ func (server *Server) queueCompanionSnapshots(
 			continue
 		}
 		info, ready := server.engine.ChunkInfo(candidate.Foot)
-		if !ready || info.State != sim.ChunkReady {
+		if !ready || info.State != contract.ChunkReady {
 			continue
 		}
 		// 伙伴兴趣可能早于当前 session 把区块保持为 Ready，此时不会再有全局

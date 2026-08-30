@@ -11,7 +11,8 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/server"
 	"github.com/channing771/mornlea/internal/server/persistence"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -25,12 +26,12 @@ type worldLifecycle interface {
 }
 
 type playersLifecycle interface {
-	Prepare(context.Context, core.PlayerID, string, storage.Metadata) (sim.PlayerRestore, error)
+	Prepare(context.Context, core.PlayerID, string, storage.Metadata) (contract.PlayerRestore, error)
 	Activate(core.PlayerID, string) error
 	Confirm(core.PlayerID)
 	Abort(core.PlayerID)
 	Deactivate(core.PlayerID)
-	Observe(core.PlayerID, string, sim.PlayerSnapshot, uint64, bool) error
+	Observe(core.PlayerID, string, contract.PlayerSnapshot, uint64, bool) error
 	Poll(uint64) error
 	Flush(context.Context) error
 	Close()
@@ -46,8 +47,8 @@ type companionsLifecycle interface {
 }
 
 type hostilesLifecycle interface {
-	Restore() []sim.HostileMob
-	Observe([]sim.HostileMob)
+	Restore() []contract.HostileMob
+	Observe([]contract.HostileMob)
 	Poll(uint64) error
 	Flush(context.Context) error
 	Close()
@@ -82,7 +83,7 @@ var (
 	_ bool      = persistence.Status{}.MetadataInFlight
 	_ string    = persistence.Status{}.MetadataLastError
 
-	_ func(storage.Store, *sim.Engine, persistence.Options) *persistence.World                            = persistence.NewWorld
+	_ func(storage.Store, *runtime.Engine, persistence.Options) *persistence.World                        = persistence.NewWorld
 	_ func(storage.PlayerStore, persistence.Options) *persistence.Players                                 = persistence.NewPlayers
 	_ func(storage.CompanionStore, storage.StoredCompanions, persistence.Options) *persistence.Companions = persistence.NewCompanions
 	_ func(storage.HostileMobStore, storage.StoredHostileMobs, persistence.Options) *persistence.Hostiles = persistence.NewHostiles

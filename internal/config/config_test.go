@@ -15,7 +15,7 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/sim"
+	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
 // 注意：config.Config 内嵌的 logging.Config 含 map 字段，因此 Config 整体
@@ -64,7 +64,7 @@ func TestMissingFieldsFallBackToDefaults(t *testing.T) {
 	if loaded.Physics.JumpSpeed != physics.DefaultTunables().JumpSpeed {
 		t.Fatal("未出现的字段必须保持默认值")
 	}
-	if loaded.Sim != sim.DefaultTunables() {
+	if loaded.Sim != tuning.DefaultTunables() {
 		t.Fatal("未出现的分组必须整组保持默认值")
 	}
 }
@@ -670,7 +670,7 @@ func TestFieldsCoverEveryTunable(t *testing.T) {
 	// sim.Tunables 加字段或者把 Fields() 里的 Name 敲错一个字母，那个字段就
 	// 永久漏过钳制，而这个测试原本会一直是绿的。
 	assertFieldsMatchStruct(t, "physics", reflect.TypeOf(physics.Tunables{}), byGroup["physics"], nil)
-	assertFieldsMatchStruct(t, "sim", reflect.TypeOf(sim.Tunables{}), byGroup["sim"], nil)
+	assertFieldsMatchStruct(t, "sim", reflect.TypeOf(tuning.Tunables{}), byGroup["sim"], nil)
 	// render 的三个 LOD 字段是配置文件键但不进 Fields()：布尔与离散合法集
 	// {2,4,8} 表达不了连续 min/max 的钳制语义（Fields 同时驱动调试面板的
 	// 数值行与 Load 的钳制）。它们的合法域由 Render.NormalizeLOD /
@@ -757,7 +757,7 @@ func TestApplySetsActiveTunables(t *testing.T) {
 	if physics.ActiveTunables().Gravity != 24 {
 		t.Fatal("Apply 必须写入 physics 生效参数")
 	}
-	if sim.ActiveTunables().InteractionReach != 4 {
+	if tuning.ActiveTunables().InteractionReach != 4 {
 		t.Fatal("Apply 必须写入 sim 生效参数")
 	}
 }
