@@ -1,4 +1,5 @@
 use super::world::{RenderWorld, RenderWorldError, SectionData, SectionKey};
+use std::sync::Arc;
 
 const MAX_BATCH_BYTES: usize = 4 * 1024 * 1024;
 const KEY: SectionKey = SectionKey::new(0, 1, 2, 3);
@@ -455,6 +456,21 @@ fn column_round_trips_and_tombstone_revision_is_retained() {
         .apply_update_batch(&batch(1, &[Record::column(10, vec![0; 512])]))
         .unwrap();
     assert_eq!(world.column_for_test(0, 1, 3), Some(&[0; 256]));
+}
+
+#[test]
+fn staged_snapshot_shares_immutable_column_payload() {
+    let world = world_from_reset(&[constant_column(1, 42)]);
+    let live = world.column_payload_arc_for_test(0, 1, 3).unwrap();
+    assert_eq!(Arc::strong_count(live), 1);
+
+    let staged = world.snapshot_for_test();
+    let staged_payload = staged.column_payload_arc_for_test(0, 1, 3).unwrap();
+    assert!(Arc::ptr_eq(live, staged_payload));
+    assert_eq!(Arc::strong_count(live), 2);
+
+    drop(staged);
+    assert_eq!(Arc::strong_count(live), 1);
 }
 
 #[test]

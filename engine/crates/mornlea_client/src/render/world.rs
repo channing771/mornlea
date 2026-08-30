@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 const BATCH_HEADER_BYTES: usize = 24;
 const RECORD_HEADER_BYTES: usize = 32;
@@ -88,7 +89,7 @@ struct SectionEntry {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum ColumnState {
-    Live(Box<[i16; COLUMN_HEIGHTS]>),
+    Live(Arc<[i16; COLUMN_HEIGHTS]>),
     Tombstone,
 }
 
@@ -124,7 +125,7 @@ enum ParsedRecord {
     ColumnUpsert {
         key: ColumnKey,
         revision: u64,
-        heights: Box<[i16; COLUMN_HEIGHTS]>,
+        heights: Arc<[i16; COLUMN_HEIGHTS]>,
     },
     SectionTombstone {
         key: SectionKey,
@@ -269,11 +270,22 @@ impl RenderWorld {
         x: i32,
         z: i32,
     ) -> Option<&[i16; COLUMN_HEIGHTS]> {
+        self.column_payload_arc_for_test(dimension, x, z)
+            .map(AsRef::as_ref)
+    }
+
+    #[cfg(test)]
+    pub(super) fn column_payload_arc_for_test(
+        &self,
+        dimension: i32,
+        x: i32,
+        z: i32,
+    ) -> Option<&Arc<[i16; COLUMN_HEIGHTS]>> {
         match self.columns.get(&ColumnKey { dimension, x, z }) {
             Some(ColumnEntry {
                 state: ColumnState::Live(heights),
                 ..
-            }) => Some(heights.as_ref()),
+            }) => Some(heights),
             _ => None,
         }
     }
@@ -476,7 +488,7 @@ fn parse_section(
     }
 }
 
-fn parse_column(payload: &[u8]) -> Result<Box<[i16; COLUMN_HEIGHTS]>, RenderWorldError> {
+fn parse_column(payload: &[u8]) -> Result<Arc<[i16; COLUMN_HEIGHTS]>, RenderWorldError> {
     if payload.len() != COLUMN_PAYLOAD_BYTES {
         return Err(RenderWorldError::Invalid);
     }
@@ -488,7 +500,7 @@ fn parse_column(payload: &[u8]) -> Result<Box<[i16; COLUMN_HEIGHTS]>, RenderWorl
     if !reader.is_finished() {
         return Err(RenderWorldError::Invalid);
     }
-    Ok(Box::new(heights))
+    Ok(Arc::new(heights))
 }
 
 fn read_u16_values(reader: &mut Reader<'_>, count: usize) -> Result<Vec<u16>, RenderWorldError> {
