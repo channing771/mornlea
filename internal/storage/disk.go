@@ -460,6 +460,8 @@ func (store *DiskStore) SaveHostileMobs(ctx context.Context, save HostileMobsSav
 
 // hashChunkFunc 是批量保存去重比对的内容哈希入口。生产路径固定为
 // `world.Chunk.Hash`；探针测试注入计数包装，钉住「同批次同区块只哈希一次」。
+// 返回值 `[32]byte` 即 `sha256.Size` 字节的 SHA-256 摘要（与 memory.go 的
+// revision 记账同形），不为此引入 crypto/sha256 import。
 type hashChunkFunc func(*world.Chunk) [32]byte
 
 func validateAndNormalizeSaves(saves []ChunkSave) ([]ChunkSave, error) {
