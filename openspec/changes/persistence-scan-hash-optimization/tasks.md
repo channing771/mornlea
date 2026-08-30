@@ -18,7 +18,7 @@
 
 ## 3. 收尾门禁与整分支终审
 
-- [ ] 3.1 `gofmt`（仓库范围无差异）、`go vet ./...`、受影响包全量竞态（`go test ./internal/world ./internal/sim/... ./internal/server/... ./internal/storage/... -race -count=1`）、`go test ./internal/archcheck -count=1`。
-- [ ] 3.2 `openspec validate persistence-scan-hash-optimization --strict --no-interactive`，随后 `openspec validate --all --strict --no-interactive`。
-- [ ] 3.3 空闲窗口跑一次无窗口 producer record-only 前后对比（`./bin/mornlea --benchmark --benchmark-transport memory --perf-output /tmp/...json`，数值只记录，不覆盖基线），把方向性结论写入 ledger。
-- [ ] 3.4 `docs/notes/progress.md` 追加本 change 编年段；整分支终审（规格一致性 + 质量双维度）后走 PR。
+- [x] 3.1 `gofmt`（仓库范围无差异）、`go vet ./...`、受影响包全量竞态（`go test ./internal/world ./internal/sim/... ./internal/server/... ./internal/storage/... -race -count=1`）、`go test ./internal/archcheck -count=1`。
+- [x] 3.2 `openspec validate persistence-scan-hash-optimization --strict --no-interactive`，随后 `openspec validate --all --strict --no-interactive`。
+- [x] 3.3 空闲窗口跑一次无窗口 producer record-only 前后对比（`./bin/mornlea --benchmark --benchmark-transport memory --perf-output /tmp/...json`，数值只记录，不覆盖基线），把方向性结论写入 ledger。
+- [x] 3.4 `docs/notes/progress.md` 追加本 change 编年段；整分支终审（规格一致性 + 质量双维度）后走 PR。

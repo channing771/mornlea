@@ -6,7 +6,7 @@
 - **卡点裁决（用户）**：mesh 管线（~60% CPU）、每帧可见性剔除（still 32.8%）与客户端快照校验被在途会话认领，排除；八会话探针 CPU 近零不动。可选目标呈报后用户选定「#3+#4 合并」：`PersistenceStats` 每 tick ×3 次 O(N) 扫描（15s/12.5% 单核）与 `Chunk.Hash` 逐体素 SHA-256（11.6s/9.6% 单核、persistence p99 55.4ms 主因）。
 - **设计裁决（用户）**：Part A 采用增量计数器路线（A2，否决每 tick 记忆化 A1——O(N) 迭代随规模回归）；change 定名 `persistence-scan-hash-optimization`；backlog 行 F-07。
 - **事实核验（控制会话）**：`EstimatedBytes` 双计入「脏且在途」为现行行为，逐位保持；方块内容变更必经 `Mutation`/`EnvironmentMutation` 事务推进 revision，非方块槽位在 `PayloadBytes` 中为常量——`(revision, chunk 指针)` 估算缓存键精确；`Chunk.Hash` 调用方全集 7 处（memory×1、disk×2、region×2、runtime/entity ChunkHash×2）全部自动受益；`Dimension` 单写者纪律免锁。
-- 产物：proposal/design/tasks/delta spec（`chunk-persistence` 能力，4 Requirements、8 Scenarios）就绪，worktree `feat/F-07-persistence-scan-hash` 自 main `8fa1fc74` 建立。
+- 产物：proposal/design/tasks/delta spec（`chunk-persistence` 能力，4 Requirements、7 Scenarios）就绪，worktree `feat/F-07-persistence-scan-hash` 自 main `8fa1fc74` 建立。
 
 ## 任务执行记录
 
@@ -28,3 +28,10 @@
 - SPEC 评审（独立子代理）：**PASS-with-notes**，零阻塞。6 项裁决全 PASS：14 类挂接点逐一核对落地（错误路径零半记账）；oracle 与旧实现逐行一致且从生产移除、操作池覆盖 16 类迁移操作（超出 spec 的 9 类）+SetDimension 专测、双计入显式断言、假想改错必红（5 类故意改错形态推演均会红）；O(1) 探针旧实现真红（2 vs 2000）；候选收集过滤/排序/预算与父提交逐字相同；非目标遵守（导出面不变、双计入未修正、无锁）。记录性发现 A：估算缓存键精确性实际依赖表示级不变量（palette 只增不减），「写后无事务回滚」路径当前被守卫排除不可达，已按裁决写入 design D1 不变量警示。
 - QUALITY 评审（独立子代理）：**PASS-with-notes**，仅 3 Nit 无 Critical/Important。diff 顺序修复核验完整（先存 previousEstimate）；33 处 refresh/settle 调用点穷尽配对无双记；缓存键失效覆盖同 revision 换 chunk；环境不变量逐路径核验属实；并发边界零新增锁；性能反噬评估惰性重算正确（PayloadBytes 是纯元数据求和无逐方块遍历）；oracle/属性测试有牙齿。Nit：SetDimension 悬空在途的未来结算责任、`recordStats.dirty` 命名语义、派发处可复用缓存估算（收益微小）。
 - **控制会话裁决**：①接受聚合放 `Dimension` 级（design D1 已同步修订并记录理由）；③重分类为 design 一致（`SetDimension` 生产零调用方，不可达态差异已在测试注释说明）；②④记录在案不构成偏离；发现 A 写入 design D1 不变量警示。三条 Nit 记录不修（SetDimension 无生产调用方、命名语义已有注释、微优化收益不足）。Task 2 无修复轮，双评审结论闭合。
+
+### Task 3：收尾门禁与整分支终审（2026-08-30）
+
+- **3.1 门禁（控制会话串行执行）**：`gofmt -l`（engine/ 外零输出）、`go vet ./...` 干净、受影响四组包 `go test ./internal/world ./internal/storage/... ./internal/sim/... ./internal/server/... -race -count=1` 14 包全绿（唯一非 ok 行是 storagedef 无测试文件的提示）、`go test ./internal/archcheck -count=1` ok。
+- **3.2 OpenSpec**：`openspec validate persistence-scan-hash-optimization --strict` 通过；`openspec validate --all --strict --no-interactive` 79 passed / 0 failed。
+- **3.3 record-only 前后对比（数值只记录，方向性参考）**：前=main `3e2d07c1` 无优化（负载 14–21，带 CPU 画像插桩），后=本分支（负载 4.7–6，无插桩）。persistence：p50 8.43→3.87ms（−54%）、p95 29.58→12.66（−57%）、**p99 55.43→24.48ms（−56%）**、max 113.4→70.8（−38%），快照数 5002→4867——该组是与负载最不敏感的保存路径直测，为最干净信号。still p99 48.1→13.7ms、flying p99 36.0→30.9ms（受负载差混杂，只作方向参考）。ticks p50 0.242→0.396ms / p99 0.444→0.744ms：小幅上升，单次 200 样本无统计力且远低于 10ms 门禁；不排除记账在 Touch/Commit 的每变更成本，归档后如复现可另行核查。两份报告存 `/tmp/mornlea-perf-spike-main.json` 与 `/tmp/mornlea-f07-after.json`；不覆盖任何基线 JSON。
+- **3.4 整分支终审（独立子代理，只读）**：**PASS**。五维度全过：产物-代码一致（14 挂接点/D2 三分支/裁决同步逐项核对）、Task1×Task2 交叉无未处理影响（`Compact()` 生产调用点穷尽核验）、分支 diff 14 文件全在声明范围、契约足迹干净（无协议/schema/ABI/scenario/golden，导出面零变化，perf-baseline* 未触碰）、遗留清单五项均已在 design/ledger 记录。新发现仅一处文档计数笔误（本节已修正：delta spec 实为 7 个 Scenario）。前置条件（补跑门禁/进度文档）由本节与 progress.md 落地。
