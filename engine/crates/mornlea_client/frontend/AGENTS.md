@@ -97,10 +97,40 @@ Rust 侧只消费本目录的构建产物 `dist/`（经 `mornlea://` scheme 内�
 - 新增行为先写失败断言再实现（vitest + @testing-library/react）；组件新增
   交互时同步补上行事件断言。
 
+## UI 部件视觉基线（`visual/`、`visual-dist/`、`build/visual-ui/`）
+
+- 管线构成：`visual/fixtures.tsx` 注册表（每个 UI 部件一个命名 fixture，经
+  `?fixture=<name>` 选择渲染；四整屏直接以 fixture props 渲染生产面板组件，
+  上行事件接空收集器，不挂 App/桥桩）+ `visual/visual.vite.config.ts` 独立
+  构建到 `frontend/visual-dist/`（gitignored，绝不写 `dist/`、不碰其字节门禁；
+  tailwind/postcss 与生产同配置，字体随 ui.css 进 harness 产物）+
+  `visual/visual.mjs` 自包含脚本：自起 127.0.0.1 随机端口静态服务、逐 fixture
+  调 Chrome headless 截图（1280x720、1x、sRGB）、pngjs 双阈值比对。
+- 比对口径与世界 golden 管线对齐（`cmd/mornlea/capture/visual_compare.go`）：
+  任一像素任一通道差上限 2，且差异像素（任一通道差 ≥ 1）占比上限 0.0001，
+  超限即判漂移；漂移时把红标差异图写入 `build/visual-ui/<fixture>-diff.png`
+  并以非零退出指认部件。
+- 两个入口：`corepack pnpm visual-check` / `make frontend-visual-check`
+  （比对；缺基线只报错列出、绝不自动创建）；`corepack pnpm visual-update` /
+  `make frontend-visual-update`（截图覆盖 `visual/golden/*.png`）。实测 Chrome
+  151（macOS）截完图不退出，脚本按「截图文件连续多次轮询尺寸稳定 → 结束
+  进程组」处理，截图完整性另经 pngjs 解码校验。
+- 本机开发工具：不进 CI 门禁、零网络（只访问本机临时静态服务）；Chrome 路径
+  解析为 env `CHROME_BIN` > macOS 默认安装路径，缺失即报中文错误。
+- 基线更新纪律：`visual/golden/*.png` 只允许在人工目检确认呈现正确后经显式
+  update 入口覆盖；漂移先看差异图定位，再决定修代码还是更新基线。该基线是
+  测试夹具二进制（与世界 golden PNG 同一入库先例），不属于 `dist/`「零二进制
+  Web 资产」白名单约束范畴——那只约束生产 dist 资产。
+- fixture 名称清单在 `visual/fixture-names.json` 单源（`fixtures.tsx` 与
+  `visual.mjs` 共读，注册表在模块加载时与清单互钉）；新增部件先加清单与
+  注册表，再跑 update 入库基线。harness 的 TS 自检用 `visual/tsconfig.json`
+  （`tsc --noEmit -p visual/tsconfig.json`），不并入生产 `tsconfig.json`。
+
 ## Focused Verification
 
 ```bash
 make frontend-check          # 冻结安装 + typecheck + vitest + 构建 + dist 一致性
+make frontend-visual-check   # UI 部件视觉基线比对(本机工具,不进 CI)
 ```
 
 定点命令（在 `engine/crates/mornlea_client/frontend/` 内执行）：
