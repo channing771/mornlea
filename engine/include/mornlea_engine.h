@@ -4,7 +4,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* ABI v8:mesh `MGM1` 输入的单条 registry 条目由 19 字节扩到 20 字节,末尾追加
+/* ABI v9:新增流体双内核 mornlea_fluid_eval_batch(批量单格流体规则求值,
+ * 输入布局 v1 = 8 字节头 + 每项 14 字节 7×u16,输出每项定长 12 字节 4 条
+ * 候选写入;输出尺寸是输入的确定函数,容量不足按参数违约拒绝,无两段式
+ * 探测)与 mornlea_fluid_rescan(流体重扫扫描;其声明随后续重扫任务追加,
+ * 本版本先完成版本号记账)——rust-engine-fluid 变更。既有入口签名与语义
+ * 不变。engine 与 Go 侧是同一不可跨版本混装的 release unit。
+ * ABI v8:mesh `MGM1` 输入的单条 registry 条目由 19 字节扩到 20 字节,末尾追加
  * `model`(有限模型 tag 的封闭集合:0=默认、1..=5=火把五形态[1=落地、2..=5=墙面
  * +X/−X/+Z/−Z,与火把方块编号 71..75 同序]、6=床[床尾/床头 × 四向八形态共用
  * 半高板几何,朝向差异由逐形态床面材质层表达]、7 起未知拒绝),由
@@ -30,7 +36,7 @@
  * release unit。
  * ABI v4:worldgen `MGW1` header 的材料表由 13 项扩到 14 项(末项 water,
  * 占用 v3 的 reserved 槽,header 总长仍为 564 字节)。 */
-#define MORNLEA_ENGINE_ABI_VERSION 8u
+#define MORNLEA_ENGINE_ABI_VERSION 9u
 
 #define MORNLEA_STATUS_OK 0u
 #define MORNLEA_STATUS_ABI_VERSION 1u
@@ -119,6 +125,31 @@ uint32_t mornlea_worldgen_probe(
  * *output_len 恒为 0 且输出缓冲原样。
  */
 uint32_t mornlea_lod_shell(
+    uint32_t abi_version,
+    const uint8_t *input,
+    size_t input_len,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *output_len);
+
+/*
+ * mornlea_fluid_eval_batch:流体单格规则批量求值(无状态纯函数)。
+ *
+ * 输入 = u32 layout_version(当前 1,LE)+ u32 item_count + 每项 14 字节
+ * (7 个 u16 LE 方块编号,槽位序:0=自格、1=上、2=下、3=+x、4=−x、5=+z、
+ * 6=−z,与 Go internal/fluid 的 sixNeighbors 同序)。方块编号是协议稳定值,
+ * 与 Go internal/core/block.go 的 iota 逐一对应。
+ *
+ * 输出 = 每项 12 字节:4 条候选写入 ×(目标槽位 u8(0..6;0xFF=无写入)+
+ * BlockID u16 LE)。同一项内至多 4 条(垂直优先 1 条或水平传播 4 条或
+ * 自格消亡 1 条),多余槽位为无写入哨兵。
+ *
+ * input_len 必须等于 8 + item_count*14,output 容量不足返回
+ * MORNLEA_STATUS_INVALID_ARGUMENT(输出尺寸是输入的确定函数,无需两段式
+ * 探测);layout_version 或 item_count 违约返回 MORNLEA_STATUS_INPUT;
+ * 其余状态语义与既有导出一致。
+ */
+uint32_t mornlea_fluid_eval_batch(
     uint32_t abi_version,
     const uint8_t *input,
     size_t input_len,

@@ -22,12 +22,13 @@ const (
 )
 
 func TestABIValuesMatchEngineContract(t *testing.T) {
-	// 显式钉住 v8：上面的相等断言在 header 与 dylib 同源时恒真（二者一起停在
+	// 显式钉住 v9：上面的相等断言在 header 与 dylib 同源时恒真（二者一起停在
 	// 旧版本不会被发现），本条把「本次布局扩容确实升了版」变成可执行契约。
-	// v8 承载 mesh registry 条目 19→20 字节的布局扩展（末尾追加 model，有限
-	// 模型 tag 的封闭集合），条目上限 64→80 已在 v7 期内提前完成。
-	if ABIVersion != 8 {
-		t.Fatalf("engine ABI=%d，想要 8", ABIVersion)
+	// v9 承载流体双内核 mornlea_fluid_eval_batch（批量单格规则求值）与
+	// mornlea_fluid_rescan（重扫扫描，声明随后续任务追加）——rust-engine-fluid
+	// 变更；既有入口签名与语义不变。
+	if ABIVersion != 9 {
+		t.Fatalf("engine ABI=%d，想要 9", ABIVersion)
 	}
 	if got := EngineABIVersion(); got != ABIVersion {
 		t.Fatalf("engine ABI version=%d，想要 %d", got, ABIVersion)
@@ -103,6 +104,8 @@ func TestEngineCgoDirectivesArePresent(t *testing.T) {
 		"#cgo nocallback mornlea_worldgen_probe",
 		"#cgo noescape mornlea_lod_shell",
 		"#cgo nocallback mornlea_lod_shell",
+		"#cgo noescape mornlea_fluid_eval_batch",
+		"#cgo nocallback mornlea_fluid_eval_batch",
 	} {
 		if !strings.Contains(string(contents), directive) {
 			t.Errorf("缺少 %s", directive)
@@ -855,7 +858,91 @@ func TestLodShellStatusPanicTextIsStable(t *testing.T) {
 		{StatusScratch, "nativeabi: lod shell 未知状态"},
 	} {
 		if got := lodShellStatusPanicText(test.status); got != test.want {
-			t.Fatalf("status %d 文案=%q，想要 %q", test.status, got, test.want)
+			t.Fatalf("status %d panic=%q，想要 %q", test.status, got, test.want)
+		}
+	}
+}
+
+// testFluidEvalInput 手编 2 项 fluid eval 输入(方块编号是协议稳定值,与
+// internal/core/block.go 的 iota 实测一致:水 27、流动水 1..7 = 28..34、
+// 石头 2、空气 0),刻意不复用绑定侧任何算式:
+//
+//	item 0 = [27, 2, 0, 2, 2, 2, 2]:源格,下方空气 → 垂直优先写下方 1 条
+//	  等级 1(28)。
+//	item 1 = [34, 27, 2, 0, 0, 0, 0]:等级 7 流动格,上方源保活、下方石头
+//	  不可写 → nextLevel=8 > 7,水平也不再传播 → 空写。
+func testFluidEvalInput() []byte {
+	input := make([]byte, 0, 8+2*14)
+	input = binary.LittleEndian.AppendUint32(input, 1) // layout_version
+	input = binary.LittleEndian.AppendUint32(input, 2) // item_count
+	for _, item := range [][]uint16{
+		{27, 2, 0, 2, 2, 2, 2},
+		{34, 27, 2, 0, 0, 0, 0},
+	} {
+		for _, id := range item {
+			input = binary.LittleEndian.AppendUint16(input, id)
+		}
+	}
+	return input
+}
+
+func TestFluidEvalBatchBinding(t *testing.T) {
+	output := make([]byte, 2*12)
+	FluidEvalBatch(testFluidEvalInput(), output)
+
+	// 逐字节断言:项 0 恰有一条下方写入(槽位 2,BlockID 28 = 0x001C),
+	// 其余 3 槽与项 1 的全部 4 槽都是无写哨兵 FF 00 00。
+	want := []byte{
+		0x02, 0x1C, 0x00,
+		0xFF, 0x00, 0x00,
+		0xFF, 0x00, 0x00,
+		0xFF, 0x00, 0x00,
+		0xFF, 0x00, 0x00,
+		0xFF, 0x00, 0x00,
+		0xFF, 0x00, 0x00,
+		0xFF, 0x00, 0x00,
+	}
+	if !slices.Equal(output, want) {
+		t.Fatalf("fluid eval 输出=% X，想要 % X", output, want)
+	}
+
+	// layout_version=2 按 INPUT 拒绝,panic 文案钉住 StatusInput 的稳定文本。
+	badVersion := slices.Clone(testFluidEvalInput())
+	binary.LittleEndian.PutUint32(badVersion[0:4], 2)
+	assertFluidEvalPanics(t, badVersion, "nativeabi: fluid eval 输入非法")
+
+	// 输出容量不足按参数违约拒绝(输出尺寸是输入的确定函数,不走两段式)。
+	assertFluidEvalPanics(t, testFluidEvalInput(), "nativeabi: fluid eval 参数非法")
+}
+
+// assertFluidEvalPanics 断言给定输入以 12 字节输出调用触发期望的稳定
+// panic 文案(对 2 项输入即「容量不足」形状,对坏输入则更早被解析层拒绝)。
+func assertFluidEvalPanics(t *testing.T, input []byte, wantText string) {
+	t.Helper()
+	defer func() {
+		got := recover()
+		text, ok := got.(string)
+		if !ok || text != wantText {
+			t.Fatalf("panic=%v，想要稳定文案 %q", got, wantText)
+		}
+	}()
+	FluidEvalBatch(input, make([]byte, 12))
+}
+
+func TestFluidEvalStatusPanicTextIsStable(t *testing.T) {
+	for _, test := range []struct {
+		status Status
+		want   string
+	}{
+		{StatusABIVersion, "nativeabi: fluid eval ABI 版本不匹配"},
+		{StatusInvalidArgument, "nativeabi: fluid eval 参数非法"},
+		{StatusInput, "nativeabi: fluid eval 输入非法"},
+		{StatusOutputOverflow, "nativeabi: fluid eval output 过短"},
+		{StatusPanic, "nativeabi: fluid eval Rust panic"},
+		{StatusScratch, "nativeabi: fluid eval 未知状态"},
+	} {
+		if got := fluidEvalStatusPanicText(test.status); got != test.want {
+			t.Fatalf("status %d panic=%q，想要 %q", test.status, got, test.want)
 		}
 	}
 }

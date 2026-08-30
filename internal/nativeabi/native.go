@@ -22,6 +22,8 @@ package nativeabi
 #cgo nocallback mornlea_worldgen_probe
 #cgo noescape mornlea_lod_shell
 #cgo nocallback mornlea_lod_shell
+#cgo noescape mornlea_fluid_eval_batch
+#cgo nocallback mornlea_fluid_eval_batch
 #include "mornlea_engine.h"
 */
 import "C"
@@ -356,5 +358,47 @@ func raycastStatusPanicText(status Status) string {
 		return "nativeabi: raycast Rust panic"
 	default:
 		return "nativeabi: raycast 未知状态"
+	}
+}
+
+// FluidEvalBatch 把调用方拥有的 fluid eval input 与 output 传给 engine。
+//
+// input 与 output 的布局契约见 engine/include/mornlea_engine.h 的
+// mornlea_fluid_eval_batch 注释:input 长度 = 8 + N×14、output 长度 = N×12
+// 均由调用方在编码时确定,容量不足按参数违约拒绝(engine 不做两段式探测);
+// 任何非 OK 状态都以稳定中文文案 panic,且 engine 保证失败时不触碰 output。
+func FluidEvalBatch(input, output []byte) {
+	status := fluidEvalBatchVersion(ABIVersion, input, output)
+	if status != StatusOK {
+		panic(fluidEvalStatusPanicText(status))
+	}
+}
+
+func fluidEvalBatchVersion(version uint32, input, output []byte) Status {
+	var outputLen C.size_t
+	return Status(C.mornlea_fluid_eval_batch(
+		C.uint32_t(version),
+		(*C.uint8_t)(unsafe.Pointer(unsafe.SliceData(input))),
+		C.size_t(len(input)),
+		(*C.uint8_t)(unsafe.Pointer(unsafe.SliceData(output))),
+		C.size_t(len(output)),
+		&outputLen,
+	))
+}
+
+func fluidEvalStatusPanicText(status Status) string {
+	switch status {
+	case StatusABIVersion:
+		return "nativeabi: fluid eval ABI 版本不匹配"
+	case StatusInvalidArgument:
+		return "nativeabi: fluid eval 参数非法"
+	case StatusInput:
+		return "nativeabi: fluid eval 输入非法"
+	case StatusOutputOverflow:
+		return "nativeabi: fluid eval output 过短"
+	case StatusPanic:
+		return "nativeabi: fluid eval Rust panic"
+	default:
+		return "nativeabi: fluid eval 未知状态"
 	}
 }
