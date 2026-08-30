@@ -326,8 +326,29 @@ func TestRecordCountsBusyTicksAsDropped(t *testing.T) {
 	}
 }
 
+// TestRecordDeadlineScalesWithFrames 钉住总截止公式：名义时长 + 固定余量 +
+// 逐帧预算×帧数。逐帧预算随帧数线性扩展是 2s×8fps 到 20s×12fps 全参数域
+// 可完成的前提，固定余量（不管多少帧）的旧口径在任何 >125ms/帧 的编码成本
+// 下都会被最坏参数击穿。
+func TestRecordDeadlineScalesWithFrames(t *testing.T) {
+	s := newRecordService(newFakeClock())
+	rec := s.newRecording(recordParams{Seconds: 2, FPS: 8})
+	want := time.Unix(0, 0).Add(2*time.Second + recordDeadlineMargin + 16*recordPerFrameBudget)
+	if !rec.deadline.Equal(want) {
+		t.Errorf("2s×8fps 的截止 = %v，想要 %v（2s 名义 + 30s 余量 + 16 帧×1s 预算）",
+			rec.deadline, want)
+	}
+	worst := s.newRecording(recordParams{Seconds: 20, FPS: 12})
+	wantWorst := time.Unix(0, 0).Add(20*time.Second + recordDeadlineMargin + 240*recordPerFrameBudget)
+	if !worst.deadline.Equal(wantWorst) {
+		t.Errorf("20s×12fps 的截止 = %v，想要 %v（20s 名义 + 30s 余量 + 240 帧×1s 预算）",
+			worst.deadline, wantWorst)
+	}
+}
+
 // TestRecordAbortsBeyondDeadline 钉住总时长上限：把每次节奏等待放大到越过
-// 截止，下一帧前的截止检查必须以 503 放弃整次录制并停止采样。
+// 截止，下一帧前的截止检查必须以 503 放弃整次录制并停止采样，文案回显
+// 公式数值供观察者对账。
 func TestRecordAbortsBeyondDeadline(t *testing.T) {
 	clock := newFakeClock()
 	s := newRecordService(clock)
@@ -343,6 +364,11 @@ func TestRecordAbortsBeyondDeadline(t *testing.T) {
 	rr := serveToRecorder(s, "/record?seconds=1&fps=4")
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("状态码 = %d，想要 503（body：%s）", rr.Code, rr.Body.String())
+	}
+	for _, fragment := range []string{"总时长上限", "预算"} {
+		if !strings.Contains(rr.Body.String(), fragment) {
+			t.Errorf("503 文案缺少数值口径要素 %q：%s", fragment, rr.Body.String())
+		}
 	}
 	if got := pump.servedCount(); got != 1 {
 		t.Errorf("截止放弃应停止继续采样，served = %d，想要 1", got)

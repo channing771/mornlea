@@ -3,12 +3,10 @@
 package devcapture
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image/png"
 	"net/http"
 	"os"
 	"strconv"
@@ -126,12 +124,12 @@ func (s *Service) serveScreenshot(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
+	framePNG, err := encodePNG(img)
+	if err != nil {
 		writeJSONError(w, http.StatusServiceUnavailable, fmt.Sprintf("编码 PNG 失败：%v", err))
 		return
 	}
 	w.Header().Set("Content-Type", "image/png")
-	w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
-	_, _ = w.Write(buf.Bytes())
+	w.Header().Set("Content-Length", strconv.Itoa(len(framePNG)))
+	_, _ = w.Write(framePNG)
 }

@@ -12,7 +12,6 @@ import (
 	"image/color/palette"
 	"image/draw"
 	"image/gif"
-	"image/png"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -120,14 +119,18 @@ type recording struct {
 	terminalErr    string
 }
 
-// newRecording 按参数与当前时钟建立录制会话：总截止是名义时长加固定余量
-// （`recordDeadlineMargin`），覆盖帧捕获的慢分位与调度抖动。
+// newRecording 按参数与当前时钟建立录制会话。总截止随帧数扩展：名义时长 +
+// 固定余量（`recordDeadlineMargin`）+ 逐帧预算（`recordPerFrameBudget`×
+// 总帧数）——捕获与编码成本随帧数线性增长，固定余量在最坏参数下数学上
+// 不可能容纳它们。
 func (s *Service) newRecording(params recordParams) *recording {
 	start := s.now()
+	totalFrames := params.Seconds * params.FPS
 	return &recording{
-		params:         params,
-		interval:       time.Duration(int64(time.Second) / int64(params.FPS)),
-		deadline:       start.Add(time.Duration(params.Seconds)*time.Second + recordDeadlineMargin),
+		params:   params,
+		interval: time.Duration(int64(time.Second) / int64(params.FPS)),
+		deadline: start.Add(time.Duration(params.Seconds)*time.Second +
+			recordDeadlineMargin + time.Duration(totalFrames)*recordPerFrameBudget),
 		start:          start,
 		manifestFrames: []manifestFrame{},
 	}
@@ -140,12 +143,12 @@ func (rec *recording) addFrame(at time.Time, outcome app.CaptureOutcome) error {
 	if err != nil {
 		return err
 	}
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
+	framePNG, err := encodePNG(img)
+	if err != nil {
 		return fmt.Errorf("编码 PNG 失败: %w", err)
 	}
 	index := len(rec.pngFrames) + 1
-	rec.pngFrames = append(rec.pngFrames, append([]byte(nil), buf.Bytes()...))
+	rec.pngFrames = append(rec.pngFrames, framePNG)
 	rec.manifestFrames = append(rec.manifestFrames, manifestFrame{
 		Index:       index,
 		File:        fmt.Sprintf("frames/frame-%04d.png", index),
@@ -191,11 +194,12 @@ func (s *Service) serveRecord(w http.ResponseWriter, r *http.Request) {
 			s.sleep(wait)
 		}
 		// 截止检查紧贴采样动作：节奏等待本身也消耗预算，等待越界（帧循环
-		// 停滞或不可用）时不发起下一帧，整次录制以 503 放弃。
+		// 停滞或不可用）时不发起下一帧，整次录制以 503 放弃。文案回显公式
+		// 的三段数值，观察者可直接对账哪一段不匹配。
 		if s.now().After(rec.deadline) {
 			writeJSONError(w, http.StatusServiceUnavailable,
-				fmt.Sprintf("录制超出总时长上限（%ds+%ds 余量），放弃本次录制",
-					params.Seconds, int(recordDeadlineMargin.Seconds())))
+				fmt.Sprintf("录制超出总时长上限（名义 %ds + 余量 %ds + %d 帧×%ds 预算），放弃本次录制",
+					params.Seconds, int(recordDeadlineMargin.Seconds()), totalFrames, int(recordPerFrameBudget.Seconds())))
 			return
 		}
 		outcome, err := s.requestFrame(r.Context(), s.frameWait)

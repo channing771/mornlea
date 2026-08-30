@@ -51,7 +51,7 @@ go run ./cmd/mornlea --dev-capture --dev-capture-addr 127.0.0.1:17790
   - `frames/frame-NNNN.png`——逐帧窗口合成图，自 1 起四位编号；
   - `manifest.json`——`seconds`/`fps`/`format` 回显请求参数；`requested_frames` 为请求帧数，`frame_count` 为实际入包帧数；`frames[]` 逐帧给出 `index`、`file`、`timestamp_ms`（相对录制开始的毫秒数，单调不减）、`width`、`height`；`dropped_frames` 为采样拍被并发请求占道而跳过的帧数；`gif` 标记有无预览动图；
   - `format=gif` 时附加 `preview.gif`（调色板量化的预览动图，方便快速回看）。
-- 失败语义分两层：单帧捕获失败或单帧交付超时只终止采样，已收到的帧连同终止原因（`manifest.error`）仍以 200 zip 交付——局部证据好于全盘丢弃；整段录制超过名义时长加 30s 余量仍完不成（帧循环不可用）才以 503 放弃整次录制。
+- 失败语义分两层：单帧捕获失败或单帧交付超时只终止采样，已收到的帧连同终止原因（`manifest.error`）仍以 200 zip 交付——局部证据好于全盘丢弃；整段录制超过总时长上限（名义时长 + 30s 固定余量 + 每帧 1s 捕获/编码预算 × 总帧数）仍完不成（帧循环不可用）才以 503 放弃整次录制，错误 JSON 回显公式三段数值。
 
 ## 语义与边界
 

@@ -3,8 +3,10 @@
 package devcapture
 
 import (
+	"bytes"
 	"errors"
 	"image"
+	"image/png"
 
 	"github.com/channing771/mornlea/cmd/mornlea/app"
 )
@@ -42,6 +44,25 @@ func bgraToNRGBA(pixels []byte, width, height int) *image.NRGBA {
 		}
 	}
 	return img
+}
+
+// fastPNG 是全包共用的 PNG 编码器：压缩级别取 png.BestSpeed。调试帧的
+// 取舍是编码速度优先——默认压缩对 Retina 全分辨率（约 2784×1728，
+// CGWindowListCreateImage 含窗口阴影包围盒的真实产出）单帧编码是秒级，
+// BestSpeed 快数倍、产物约大 1.5-2 倍；localhost 调试图不进 golden 存档，
+// 用体积换速度是录制约束（16-240 帧必须全部在总截止内完成）的前提。
+// png.Encoder 在编码期只读自身字段、可变状态均为调用局部，/screenshot 与
+// 录制两条路径并发调用安全。
+var fastPNG = &png.Encoder{CompressionLevel: png.BestSpeed}
+
+// encodePNG 编码一帧为 PNG 字节。/screenshot 与录制逐帧共用同一编码器，
+// 两条路径的耗时特征与产物形态保持一致。
+func encodePNG(img *image.NRGBA) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := fastPNG.Encode(&buf, img); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // outcomeNRGBA 校验交付像素与尺寸一致后转为 `*image.NRGBA`。捕获桥契约
