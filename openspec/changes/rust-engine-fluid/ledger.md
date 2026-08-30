@@ -80,6 +80,85 @@
 
 ## Task 4: Pending.
 
-## Task 5: Pending.
+## Task 5: rescan kernel Go 接线 —— 邻域盒编码器 + 差分 + bench
+
+- Commits: 单笔 `feat: route fluid rescan through nativeabi scan kernel`(SHA 见
+  git log 与 task-5-report.md;提交含本 ledger 更新,故不在此回写自引用 SHA)。
+- 实现:
+  - `internal/fluid/rescan_native.go`(new):`RescanRegion`/`RescanScratch` 类型 +
+    `ScanRescanRegion(box, meta []byte, region RescanRegion, scratch *RescanScratch)
+    (positions []core.BlockPos, spent int, done bool, resume int)` 包装——拼 26B
+    header、调 `nativeabi.FluidRescan`、OUTPUT_OVERFLOW 两段式扩容重试(输出缓冲
+    按 `budget-1+区段满额` 上界预分配并经 2^20 条封顶)、解码坐标流(u32 补码
+    int32 重读)+summary;非 OK(除 overflow)以稳定中文文案 panic。盒体字节对该
+    文件不透明——判定全部留在 kernel。
+  - **续扫游标(勘定 a)**:kernel 无显式游标,`done=false` 时由 Go 侧重放记账推出
+    续扫区段:从 start 起累加每区段记账,第一个「入口前累计 ≥ spent」的区段即
+    续扫起点(`>=` 入口语义与 Go oracle 逐字一致)。每区段记账额**不是在 Go 里
+    重新推导**(那需要第二份 `Replaceable` 判定表),而是以 budget=1 对同一输入
+    盒探测 kernel 本身(入口检查 `0 >= 1` 恒假,必进入并完整计账该段,返回的
+    spent 即该段记账)——计账事实源只有 kernel 一份,Go 侧重放不可能与计账分叉;
+    生产 Go 代码对 `Replaceable` 零依赖(强于 change design 的字面要求)。
+  - `internal/sim/realm/environment.go`:`State.rescanChunkFluids` 重构为平面循环
+    → `fluidRescanState.scanPlane`(编码盒 → `ScanRescanRegion` → 逐坐标
+    `queue.Enqueue(pos, now, delay)`);新增 `encodeRescanBox`/`encodeRescanSkirtColumn`
+    (均匀段 kind=0、密集段 kind=1 按 `blockIndex` 序展开;裙边 68 列就绪取真实
+    数据/未就绪整列 Barrier;元数据未就绪区块记均匀 Barrier)。oracle 四函数
+    (`enqueueChunkFluids`/`fluidSourceIsFixedPoint`/`fluidSectionIsFixedPoint`/
+    `fluidRescanBlockAt` 及其私有依赖)逐字移入 `environment_oracle_test.go`。
+  - **盒组装粒度(勘定 b)**:change design 写「每区块一次组装、平面循环复用同一
+    份盒体」,与 Task 4 kernel 契约冲突——engine header 钉死「被扫描区块是盒
+    中心区块」,Rust 模块注释明言「Go 侧五段平面各自的『当前 chunk』」;若五段
+    复用同一份以 pos 为中心的盒,边界平面将扫描裙边列(五邻不动点越盒读在
+    kernel `skirt_column` 触发 unreachable panic)且区段级不动点会误用中心区块
+    记录。实际实现为**每 (区块, 平面) 扫描单元组装一次**(每次 `rescanChunkFluids`
+    调用内每平面至多一次、不跨 tick 缓存,与旧实现逐 tick 读世界语义一致),
+    代价是每区块 5 次盒编码(数值 record-only,见下)。
+  - `internal/sim/runtime/fluid.go` 测试专用镜像保持不动(其内 `fluid.Replaceable`
+    调用与重扫拷贝仅被自身测试引用)。
+- TDD 证据:
+  - RED(差分测试先行,新符号未实现):
+    `go test ./internal/sim/realm -run TestRescanDifferential -count=1` →
+    `undefined: encodeRescanBox / fluid.RescanScratch / fluid.ScanRescanRegion /
+    fluid.RescanRegion` build failed。
+  - GREEN:`go test ./internal/sim/realm -run TestRescanDifferential -count=1 -v` →
+    3 个差分测试全绿(海洋均匀/混杂地表/整块预算续扫)。实现中差分抓到一处真实
+    编码 bug:裙边四组列被逐 index 交错写入而非四组各 16 列连续排列(kernel 读到
+    错列,边缘源格密封性误判)——修正列序后逐位一致。
+- 差分覆盖(`rescan_differential_test.go`,package realm):入队集合相等以
+  「双向 Enqueue 并入 + Len 基数」只经公共 API 证明;`spent`/`done`/续扫区段与
+  oracle 游标逐位比较;预算矩阵含区段记账前缀 ±1(精确边界钉死 kernel 入口
+  `>=` 语义)、固定档位、0/负值;起点 0/5/17 三档;地形覆盖全均匀海洋段(捷径
+  命中,含邻块均匀空气破坏区段级不动点)、混杂地表(池缘作物破坏五邻不动点、
+  流动水直接产出、耕地密封、y 上下界、跨区段/跨区块邻读)、邻块未就绪(平面
+  跳过不记额度 + Barrier 约定)、整块小预算多步续扫(1/2/23/24/25/119/120/121)。
+- Bench(`rescan_bench_test.go`,`BenchmarkRescanChunk`,Apple M2,record-only):
+  ```
+  $ go test ./internal/sim/realm -bench . -benchtime 1x -run '^$'
+  BenchmarkRescanChunk/ocean-8          1   1749750 ns/op
+  BenchmarkRescanChunk/surface-8        1    985625 ns/op
+  $ go test ./internal/sim/realm -bench . -benchtime 50x -run '^$'
+  BenchmarkRescanChunk/ocean-8         50   271228 ns/op
+  BenchmarkRescanChunk/surface-8       50   523290 ns/op
+  ```
+  单次 `rescanChunkFluids` 整块重扫(5 平面 = 5 次盒编码 + 5 次 kernel + 入队):
+  海洋型 271µs、地表型 523µs(50x 均值);对照 Task 1 基线(当时无 bench,首次
+  记录)与 Task 3 eval bench(`BenchmarkAdvanceEval`)构成后续对照起点。数值只
+  记录,不改变退出状态。
+- 验证(全部真实捕获):
+  ```
+  $ go test ./internal/fluid ./internal/sim/... -race -count=1
+  ok  internal/fluid  8.766s / ok  contract 1.815s / ok  entity 1.579s
+  ok  realm 7.333s / ok  runtime 65.818s / ok  tuning 2.141s
+  $ go test ./internal/server -run 'TestTCPPlayerAndWorld|TestMemoryTCPParity' -count=1
+  ok  internal/server 5.560s
+  $ go test ./internal/archcheck -count=1
+  ok  internal/archcheck 7.985s
+  ```
+  生产代码 `fluid.Replaceable` 调用清零(grep:仅 `internal/sim/runtime/fluid.go`
+  测试镜像与 oracle/性质测试文件命中)。
+- Repair rounds: 2——(1) 裙边列序交错 bug(差分抓出,见上);(2) archcheck
+  `TestCommentBacktickIdentifiersExist` 对注释中不存在的标识符
+  (`Positions`/`resume`/`math.MaxUint32`)报错,改写注释措辞后全绿。
 
 ## Task 6: Pending.

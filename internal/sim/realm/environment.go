@@ -2,6 +2,7 @@
 package realm
 
 import (
+	"encoding/binary"
 	"slices"
 	"sort"
 
@@ -61,6 +62,12 @@ type fluidRescanState struct {
 	queued  map[core.ChunkKey]struct{}
 	plane   int
 	section int
+	// scratch 是 native 重扫调用的复用缓冲（输入拼装/输出解码/坐标切片），
+	// box/meta 是盒体与元数据表的编码复用缓冲；三者按需增长、跨 tick 复用，
+	// 不跨 tick 缓存编码内容（每次调用现场重组，语义与逐 tick 读世界一致）。
+	scratch fluid.RescanScratch
+	box     []byte
+	meta    []byte
 }
 
 type environmentState struct {
@@ -522,6 +529,14 @@ var fluidBoundaryPlanes = [4]fluidBoundaryPlane{
 	{dz: -1, x0: 0, x1: core.SectionMask, z0: core.SectionMask, z1: core.SectionMask},
 }
 
+// rescanChunkFluids 对一个刚进入流体推进范围的区块执行边界重扫入队，扫描核心
+// 经 `fluid.ScanRescanRegion` 送入 Rust engine kernel。
+//
+// 平面编排与游标语义和旧 Go 实现逐字一致：plane 0 是本区块整块，plane 1..4
+// 依次是四个水平邻块贴着本区块的边界平面；邻块未就绪的平面跳过、不调 kernel、
+// 不记额度（该邻块自己进入范围时会做对称的一次重扫）。重扫可中断：游标
+// （第几个平面、第几个区段）跨 tick 保留，最多花掉 budget 格的检查额度。
+// 逐位等价性由 `rescan_differential_test.go` 对冻结 oracle 的差分门禁钉死。
 func (state *State) rescanChunkFluids(
 	queue *fluid.Queue,
 	dimension *Dimension,
@@ -529,8 +544,7 @@ func (state *State) rescanChunkFluids(
 	now, delay uint64,
 	budget int,
 ) (spent int, done bool) {
-	chunk, ready := dimension.ReadyChunk(pos)
-	if !ready {
+	if _, ready := dimension.ReadyChunk(pos); !ready {
 		state.environment.fluidRescan.resetCursor()
 		return 0, true
 	}
@@ -541,19 +555,14 @@ func (state *State) rescanChunkFluids(
 		if rs.plane > 0 {
 			plane := fluidBoundaryPlanes[rs.plane-1]
 			chunkPos = core.ChunkPos{X: pos.X + plane.dx, Z: pos.Z + plane.dz}
-			neighbor, ready := dimension.ReadyChunk(chunkPos)
-			if !ready {
+			if _, ready := dimension.ReadyChunk(chunkPos); !ready {
 				rs.plane++
 				rs.section = 0
 				continue
 			}
-			chunk = neighbor
 			x0, x1, z0, z1 = plane.x0, plane.x1, plane.z0, plane.z1
 		}
-		used, finished := state.enqueueChunkFluids(
-			queue, dimension, chunk, chunkPos,
-			x0, x1, z0, z1, now, delay, budget-spent, &rs.section,
-		)
+		used, finished := rs.scanPlane(queue, dimension, chunkPos, x0, x1, z0, z1, now, delay, budget-spent)
 		spent += used
 		if !finished {
 			return spent, false
@@ -565,130 +574,158 @@ func (state *State) rescanChunkFluids(
 	return spent, true
 }
 
-func fluidRescanBlockAt(dimension *Dimension, position core.BlockPos) core.BlockID {
-	if position.Y < core.MinY || position.Y >= core.MaxY {
-		return core.BarrierID
-	}
-	chunk, ready := dimension.ReadyChunk(position.Chunk())
-	if !ready {
-		return core.BarrierID
-	}
-	x, _, z := position.Local()
-	return chunk.BlockAt(x, position.Y, z)
-}
-
-var fluidSealedSourceOffsets = [5][3]int32{
-	{0, -1, 0},
-	{1, 0, 0},
-	{-1, 0, 0},
-	{0, 0, 1},
-	{0, 0, -1},
-}
-
-func fluidSourceIsFixedPoint(
-	dimension *Dimension,
-	section *world.Section,
-	localX, localY, localZ int,
-	position core.BlockPos,
-) bool {
-	for _, offset := range fluidSealedSourceOffsets {
-		nx, ny, nz := localX+int(offset[0]), localY+int(offset[1]), localZ+int(offset[2])
-		var neighbor core.BlockID
-		if uint(nx) < core.SectionSize && uint(ny) < core.SectionSize && uint(nz) < core.SectionSize {
-			neighbor = section.Blocks.Get(nx, ny, nz)
-		} else {
-			neighbor = fluidRescanBlockAt(dimension, core.BlockPos{
-				X: position.X + offset[0],
-				Y: position.Y + offset[1],
-				Z: position.Z + offset[2],
-			})
-		}
-		if fluid.Replaceable(neighbor, 1) {
-			return false
-		}
-	}
-	return true
-}
-
-func fluidSectionUnreplaceable(dimension *Dimension, pos core.ChunkPos, sectionIndex int) bool {
-	if sectionIndex < 0 || sectionIndex >= core.SectionsPerChunk {
-		return true
-	}
-	chunk, ready := dimension.ReadyChunk(pos)
-	if !ready {
-		return true
-	}
-	id, uniform := chunk.Section(sectionIndex).Blocks.IsUniform()
-	return uniform && !fluid.Replaceable(id, 1)
-}
-
-func fluidSectionIsFixedPoint(dimension *Dimension, pos core.ChunkPos, sectionIndex int) bool {
-	if !fluidSectionUnreplaceable(dimension, pos, sectionIndex-1) {
-		return false
-	}
-	for _, plane := range fluidBoundaryPlanes {
-		neighborPos := core.ChunkPos{X: pos.X + plane.dx, Z: pos.Z + plane.dz}
-		if !fluidSectionUnreplaceable(dimension, neighborPos, sectionIndex) {
-			return false
-		}
-	}
-	return true
-}
-
-func (state *State) enqueueChunkFluids(
+// scanPlane 执行单个 (区块, 平面) 扫描单元：现场编码以 chunkPos 为中心的
+// MFL1 盒，交 kernel 扫描，把产出坐标按现行 `now+delay` 入队。盒组装不跨
+// tick 缓存——每次调用现场重组，与旧实现逐 tick 读世界语义一致；同一调用
+// 内每个平面至多进入一次，编码即每平面一次。
+//
+// 盒中心必须是被扫描区块（engine header 契约「被扫描区块是盒中心区块」）：
+// 五段平面各有自己的「当前区块」，边界平面的盒中心是邻块，扫描条带落在该
+// 盒的中心列 1..16（chunkPos 的局部 x0..x1/z0..z1 加 1 映射为盒内局部列）。
+// 剩余额度可为 0 或负（前序平面整段超支后）：kernel 以 budget=0 语义零进度
+// 返回未完成，与旧 Go 实现的 `spent >= budget` 入口检查对非正预算的行为一致。
+func (rs *fluidRescanState) scanPlane(
 	queue *fluid.Queue,
 	dimension *Dimension,
-	chunk *world.Chunk,
-	pos core.ChunkPos,
+	chunkPos core.ChunkPos,
 	x0, x1, z0, z1 int,
 	now, delay uint64,
 	budget int,
-	section_ *int,
 ) (spent int, done bool) {
-	baseX := pos.X << core.SectionShift
-	baseZ := pos.Z << core.SectionShift
-	for ; *section_ < core.SectionsPerChunk; *section_++ {
-		if spent >= budget {
-			return spent, false
-		}
-		sectionIndex := *section_
+	rs.box, rs.meta = encodeRescanBox(rs.box, rs.meta, dimension, chunkPos)
+	positions, spent, done, resume := fluid.ScanRescanRegion(rs.box, rs.meta, fluid.RescanRegion{
+		Center:       chunkPos,
+		X0:           x0 + 1,
+		X1:           x1 + 1,
+		Z0:           z0 + 1,
+		Z1:           z1 + 1,
+		StartSection: rs.section,
+		Budget:       budget,
+	}, &rs.scratch)
+	for _, position := range positions {
+		queue.Enqueue(position, now, delay)
+	}
+	rs.section = resume
+	return spent, done
+}
+
+// MFL1 盒体编码常量，与 engine `fluid_rescan.rs` 逐字一致（header 由
+// `internal/fluid` 的包装拼装，此处只编码 header 之后的盒体与元数据表）。
+const (
+	// rescanBoxSectionUniform 是均匀区段记录的 kind 标记。
+	rescanBoxSectionUniform uint8 = 0
+	// rescanBoxSectionDense 是密集区段记录的 kind 标记。
+	rescanBoxSectionDense uint8 = 1
+	// rescanBoxSkirtColumns 是裙边列数：四边各 16 列 + 四角 4 列。
+	rescanBoxSkirtColumns = 4*core.SectionSize + 4
+	// rescanBoxMetadataBytes 是元数据表字节数：9 区块 × 24 区段 × 3B。
+	rescanBoxMetadataBytes = 9 * core.SectionsPerChunk * 3
+)
+
+// rescanMetadataChunkOrder 是元数据表的区块序：(0,0)、(-1,-1)、(0,-1)、
+// (1,-1)、(-1,0)、(1,0)、(-1,1)、(0,1)、(1,1)。
+var rescanMetadataChunkOrder = [9][2]int32{
+	{0, 0}, {-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1},
+}
+
+// encodeRescanBox 组装以 center 为盒中心的 MFL1 盒体与元数据表，追加进复用
+// 缓冲并返回。三段编码与 engine 布局逐字节对应：
+//
+//   - 中心区块 24 条区段记录：`IsUniform` 命中走 kind=0 均匀记录；否则 kind=1
+//     按 `blockIndex` 同序（x + z*16 + y16*256）线性展开 4096×u16；
+//   - 裙边 `rescanBoxSkirtColumns` 列 × 384 u16：就绪邻块取真实列数据，未就绪
+//     邻块整列填 Barrier（镜像旧 `fluidRescanBlockAt` 对未就绪读 Barrier，
+//     Barrier 的「实心不可替换」语义由此进入区段级与五邻不动点判定）；
+//   - 元数据 `rescanBoxMetadataBytes` 字节：就绪区块均匀段记 (1, id)、非均匀
+//     记 (0,0,0)，未就绪区块整块记均匀 Barrier（镜像旧
+//     `fluidSectionUnreplaceable` 对未就绪返回不可替换）。
+//
+// center 必须就绪（调用方 `rescanChunkFluids` 已保证）；世界高度外的读在
+// kernel 侧按 Barrier 处理，编码侧列数据本身只覆盖 `[core.MinY, core.MaxY)`。
+func encodeRescanBox(box, meta []byte, dimension *Dimension, center core.ChunkPos) ([]byte, []byte) {
+	chunk, ready := dimension.ReadyChunk(center)
+	if !ready {
+		panic("realm: 重扫盒中心区块未就绪")
+	}
+	box = box[:0]
+	for sectionIndex := range core.SectionsPerChunk {
 		section := chunk.Section(sectionIndex)
 		if id, uniform := section.Blocks.IsUniform(); uniform {
-			if !core.IsFluid(id) {
-				spent++
-				continue
-			}
-			if id == core.WaterSourceID && fluidSectionIsFixedPoint(dimension, pos, sectionIndex) {
-				spent++
-				continue
-			}
+			box = append(box, rescanBoxSectionUniform, 0)
+			box = binary.LittleEndian.AppendUint16(box, uint16(id))
+			continue
 		}
-		baseY := int32(sectionIndex<<core.SectionShift) + core.MinY
+		box = append(box, rescanBoxSectionDense, 0)
 		for localY := range core.SectionSize {
-			for localZ := z0; localZ <= z1; localZ++ {
-				for localX := x0; localX <= x1; localX++ {
-					spent++
-					id := section.Blocks.Get(localX, localY, localZ)
-					if !core.IsFluid(id) {
-						continue
-					}
-					position := core.BlockPos{
-						X: baseX + int32(localX),
-						Y: baseY + int32(localY),
-						Z: baseZ + int32(localZ),
-					}
-					if id == core.WaterSourceID && fluidSourceIsFixedPoint(
-						dimension, section, localX, localY, localZ, position,
-					) {
-						continue
-					}
-					queue.Enqueue(position, now, delay)
+			for localZ := range core.SectionSize {
+				for localX := range core.SectionSize {
+					box = binary.LittleEndian.AppendUint16(box, uint16(section.Blocks.Get(localX, localY, localZ)))
 				}
 			}
 		}
 	}
-	*section_ = 0
-	return spent, true
+	// 裙边列序固定：四组各 16 列连续排列——(x=-1,z=0..15)、(x=16,z=0..15)、
+	// (z=-1,x=0..15)、(z=16,x=0..15)，随后四角；盒内局部列 0/17 即中心区块
+	// 局部的 -1/16。角列不参与五邻判定（偏移无对角），仍按同一就绪规则如实编码。
+	for index := range core.SectionSize {
+		box = encodeRescanSkirtColumn(box, dimension, center, 0, index+1)
+	}
+	for index := range core.SectionSize {
+		box = encodeRescanSkirtColumn(box, dimension, center, core.SectionSize+1, index+1)
+	}
+	for index := range core.SectionSize {
+		box = encodeRescanSkirtColumn(box, dimension, center, index+1, 0)
+	}
+	for index := range core.SectionSize {
+		box = encodeRescanSkirtColumn(box, dimension, center, index+1, core.SectionSize+1)
+	}
+	for _, corner := range [4][2]int{{0, 0}, {core.SectionSize + 1, 0}, {0, core.SectionSize + 1}, {core.SectionSize + 1, core.SectionSize + 1}} {
+		box = encodeRescanSkirtColumn(box, dimension, center, corner[0], corner[1])
+	}
+	meta = meta[:0]
+	for _, offset := range rescanMetadataChunkOrder {
+		neighbor, ready := dimension.ReadyChunk(core.ChunkPos{X: center.X + offset[0], Z: center.Z + offset[1]})
+		for sectionIndex := range core.SectionsPerChunk {
+			switch {
+			case !ready:
+				meta = append(meta, 1, byte(core.BarrierID), 0)
+			default:
+				if id, uniform := neighbor.Section(sectionIndex).Blocks.IsUniform(); uniform {
+					meta = append(meta, 1)
+					meta = binary.LittleEndian.AppendUint16(meta, uint16(id))
+				} else {
+					meta = append(meta, 0, 0, 0)
+				}
+			}
+		}
+	}
+	return box, meta
+}
+
+// encodeRescanSkirtColumn 把盒内局部列 (boxX, boxZ)（取值 0 或 17，即中心
+// 区块局部的 -1/16）的世界整列 384 格追加进 box：就绪邻块取真实数据，未就绪
+// 整列填 Barrier。
+func encodeRescanSkirtColumn(
+	box []byte,
+	dimension *Dimension,
+	center core.ChunkPos,
+	boxX, boxZ int,
+) []byte {
+	worldX := center.X<<core.SectionShift + int32(boxX) - 1
+	worldZ := center.Z<<core.SectionShift + int32(boxZ) - 1
+	chunk, ready := dimension.ReadyChunk(core.ChunkPos{X: worldX >> core.SectionShift, Z: worldZ >> core.SectionShift})
+	if !ready {
+		for range core.SectionsPerChunk * core.SectionSize {
+			box = binary.LittleEndian.AppendUint16(box, uint16(core.BarrierID))
+		}
+		return box
+	}
+	localX := int(worldX & core.SectionMask)
+	localZ := int(worldZ & core.SectionMask)
+	for y := int32(core.MinY); y < core.MaxY; y++ {
+		box = binary.LittleEndian.AppendUint16(box, uint16(chunk.BlockAt(localX, y, localZ)))
+	}
+	return box
 }
 
 func (state *fluidRescanState) resetCursor() {
