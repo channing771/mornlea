@@ -574,3 +574,23 @@ base 起零 diff；其 ready/spawn warmup 循环按 transport 收包时机决定
   re-review pending。
 - 本轮只修改既有 proposal、delta spec、design、tasks、ledger 与 ignored report；没有代码、
   main specs、merge、archive 或 Task 6 implementation 改动，任务进度保持 15/19。
+
+### Planning independent review：最终 clean verdict
+
+- Independent reviewer：`01a0514d-8eda-7091-9cfb-6ae2fa4881b7`。
+- Initial review range：`0f91b626623af9c8de1c4e60a2e810ff7edd52a7..bd698ae213cef7a8a8cf2ece865b85829bf512a6`；
+  planning commit `bd698ae2 docs(openspec): plan client ABI v13 integration`。Verdict 为
+  spec ❌、quality Needs fixes；2 Important，0 Critical。
+- Fix round 1 scoped range：`bd698ae213cef7a8a8cf2ece865b85829bf512a6..bf514af54cdfc28b6635ff033c392d441bf8bed2`；
+  fix commit `bf514af5 docs(openspec): correct ABI v13 integration contract`。Reviewer 确认
+  initial 2 Important addressed，并新增 identity-export 1 Important 与 stale-report 1 Minor。
+- Fix round 2 scoped range：`bf514af54cdfc28b6635ff033c392d441bf8bed2..be7c3a1c546c8cce44b46b01a6dd313160e92f0c`；
+  fix commit `be7c3a1c docs(openspec): clarify ABI v13 identity contract`。Final verdict：
+  spec ✅、quality Approved；全部 findings addressed，0 new/open。
+- Controller 接受该 clean planning verdict。client ABI v13 integration planning 已完成并可交给
+  Task 6 apply 流程；OpenSpec tasks 仍为 15/19，6.1–6.4 保持未勾选。该 planning verdict
+  不代表 main 已合并、集成实现/验证已完成，也不构成 archive 或 merge into main 授权。
+- Final planning bookkeeping validation 在 pre-commit HEAD `be7c3a1c` 执行：
+  `openspec validate --all --strict --no-interactive` 为 78 passed、0 failed；
+  `openspec instructions apply --change rust-render-world-cache --json` 为 15/19、remaining 4、
+  `state: ready`；`git diff --check` 无输出，tracked diff 仅本 ledger。
