@@ -1729,3 +1729,116 @@ delta 行为契约、代码、current docs、main specs 或配置，不执行 me
   其他 tracked file；19 个 paused implementation paths 必须保持 byte-identical、dirty、unstaged，
   staged scope 必须为零。验证只运行 OpenSpec strict/status/apply 与 diff/scope checks，不运行
   产品测试、build、race、GPU、visual、release 或 merge 命令。
+
+## Task 6.8：冻结父上的 combined client ABI v14 实现交接
+
+### Implementer、恢复基线与用户裁决
+
+- Fresh implementer：Codex（GPT-5，Task 6.8 fresh implementer；本执行环境未暴露可记录的
+  agent UUID）。用户明确禁止派发子代理，本 implementer 未派发任何子代理，也不承担后续
+  independent spec-compliance 或 quality review。
+- Task 6.8 起始 feature HEAD 为
+  `9dc22f1b9a8106f71a5f6496ac2bd708c31c5584`；已完成并保留的 non-rewriting merge 为
+  `6f622407b1078d264707d8643f7fec41c553a48e`，双亲依次为 feature `9dc22f1b...` 与冻结
+  selected-main `9bb84c6841b59a18b030256d5952ed60acc215da`。实际冲突恰为 4 个路径：
+  `engine/crates/mornlea_client/src/ffi.rs`、`engine/crates/mornlea_client/src/lib.rs`、
+  `engine/include/mornlea_client.h` 与 `internal/client/window_test.go`。
+- 四项冲突均以 exact `9bb84c68` 的 v13 capture/WKWebView/UI surface 为 predecessor，保留
+  capture export/status/两段式 BGRA8/SDK option fix/Go tests，并叠加 feature MRW1 export、
+  cache 与测试；merge commit 暂时保持 v13 作为 TDD pre-v14 baseline。四个 app pump paths
+  automatic merge 且未人工改写，最终相对 second parent 零差异。
+- 用户中途裁决“不用管main，把自己的实现”后，planning commit
+  `6614510211692fcfc320fd08f65dee8b1abf3b29` 冻结上述 selected-main；independent planning
+  review bookkeeping commit `68cb944ec314a53ac9b2c5e641983b365d3a02a7` 记录 PASS / Approved、
+  0 findings 并允许恢复。本实现不读取、比较、审计 adoption 或合入 `8646c313` 及任何
+  later-main，没有第二次 main merge。
+- 恢复时 exact HEAD 为 `68cb944e...`；19 个 paused implementation paths 全部 unstaged、
+  staged/untracked 为零，ordered per-file hash aggregate 仍为 planning review 记录的
+  `8a7f508595376b35396d1e11a29f6d48935b9c0df7ae48ee15b3bf7d1b0a5436`。本轮只在该现场上
+  把唯一 main spec 的 live-main 文句同步为 frozen-parent delta；没有回退暂停实现。
+
+### RED / GREEN 与最小实现
+
+- Rust RED：先把 identity test 改为 v14，并把 all-versioned matrix 改为精确枚举 final 29 个
+  exports（显式加入 capture 与 MRW1），再运行
+  `cd engine && cargo test -p mornlea_client --locked ffi`。退出 101；23 个匹配测试中
+  21 passed、2 failed，`abi_version_is_fourteen` 与
+  `all_versioned_exports_reject_v13_before_other_validation` 均因生产常数仍为 13 而得到预期
+  13/14 差异。
+- Go RED：在 pre-v14 merged dylib 上运行 `make rust` 后执行
+  `go test ./internal/client -run '^TestClientABIVersionMatchesHeader$' -count=1`；退出 1，动态库
+  identity 为 13、测试期望 14，符合 combined-v14 尚未实现的预期。
+- 最小生产改动只把 Rust `CLIENT_ABI_VERSION` 与 C
+  `MORNLEA_CLIENT_ABI_VERSION` 同步为 14；Go bridge 继续直接使用 header macro，没有增加
+  literal version、动态 loader、兼容入口或 fallback。current comments/docs 只把 MRW1 的引入
+  版本移到 v14，并保留 capture 的 v13 引入历史。
+- Rust GREEN：同一 focused FFI 命令退出 0，23/23 passed。`make rust` 退出 0。首次普通 Go
+  GREEN 尝试因 Go build cache 未追踪外部 C header 单独变化而仍读到缓存的 13；只读诊断证明
+  source header 已为 14，`go test -a` 退出 0。随后同步本来就必须更新的 Go bridge v14 注释，
+  触发 cgo source 正常失效；原样普通 focused Go 命令退出 0。本次没有清理全局 cache、绕过
+  测试或增加行为性 workaround。
+
+### Current identity、main specs 与实现范围
+
+- 最终 current identity 同步为 protocol 32、player 8、chunk 9、world metadata 3、companions
+  4、hostile 1、engine ABI 9、client ABI 14、benchmark scenario 20；根 `AGENTS.md`、双语
+  README、architecture、compatibility、LAN 说明、progress、active `openspec/config.yaml` 与
+  受影响 main specs 已同步。历史 v11/v12/v13 引入事实保留。
+- `openspec-sync-specs` 只使用 status 返回的唯一 delta
+  `openspec/changes/rust-render-world-cache/specs/rust-client-render-cutover/spec.md`；写入前取得
+  有效 specs instructions。`openspec/specs/rust-client-render-cutover/spec.md` 保留原 Purpose 与
+  既有 requirement，并把本 change 的四条 requirement 智能合入；从首条 RenderWorld
+  requirement 到文件末尾与 fixed-parent delta 对应块逐字一致，无 delta operation header。
+  `webview-menu-ui` 与 `tiered-swords-combat` 主规格只同步当前 v14/v13 predecessor 与身份矩阵。
+- 实现/当前事实路径为 19 个：`AGENTS.md`、`README.md`、`README.en.md`、
+  `docs/architecture.md`、`docs/notes/compatibility.md`、`docs/notes/lan-server.md`、
+  `docs/notes/progress.md`、client `ffi.rs`/`lib.rs`/`render/mod.rs`、C header、Go
+  `render.go`/`ui_bridge.go`/`window.go`/`window_test.go`、`openspec/config.yaml` 与三个 main
+  specs。加上本 append-only ledger 后，本任务 tracked implementation commit 范围为 20 个路径；
+  `tasks.md` 保持零 diff，Task 6.8 checkbox 保持 unchecked。
+
+### Focused 验证与 ABI/export 证据
+
+- `cargo fmt --manifest-path engine/Cargo.toml --all` 与指定 4 个 changed Go files 加 4 个 app
+  files 的 `gofmt -w` 均成功；`gofmt -l` 空，四个 app paths 相对 exact `9bb84c68` 仍零差异。
+- `make rust`：exit 0；release build 完成并重签两个 dylib。
+- `cd engine && cargo test -p mornlea_client --locked`：exit 0；133 passed、0 failed、0 ignored；
+  覆盖 identity 14、29/29 ABI-first、capture SDK option/BGRA8、MRW1 原子/容量/frame 不变测试。
+- `go test ./internal/client -race -count=1`：exit 0；package PASS。
+- `go test ./cmd/mornlea/app -race -run
+  'Test(PumpDevCapture|RunInteractive(Game|Menu)LoopPumpsPendingCaptureOnce)' -count=1`：exit 0；
+  package PASS；source audit 确认 7 个 focused tests、两处 poll→pump→render 调用。
+- `go test ./internal/archcheck -count=1`：exit 0；package PASS，当前身份矩阵与代码注释纪律通过。
+- `openspec validate rust-render-world-cache --strict --no-interactive`：exit 0；change valid。
+  `openspec validate --all --strict --no-interactive`：exit 0；80 passed、0 failed。
+- Final v14 release audit：header 与 dynamic symbols 精确一致，29 个 versioned exports + 1 个
+  identity，总计 30；runtime identity=14，全部 29 个 versioned exports 只传 ABI 13 时均先返回
+  status 1 `ABI_VERSION`。本次 focused build client dylib SHA-256 为
+  `0d477052595ea2a15cc0971c60d14222bbe8806cd196c6778c4b5750fd889250`。
+- Exact predecessor audit 从 Git object `9bb84c68` 解包到自动清理的临时目录并独立 `make rust`；
+  header/dynamic 精确为 28 versioned + 1 identity、runtime identity=13，28/28 对 ABI 14 返回
+  status 1。capture symbol/status 8/9、CoreGraphics `u32` 参数、IncludingWindow/BestResolution
+  `1<<3`/`1<<3` 与 top-down BGRA8 test 均存在；MRW1 symbol 缺失，`ctypes getattr` 在 bind
+  阶段产生 `AttributeError`，未进入 FFI body。predecessor dylib SHA-256 为
+  `56e2f8ab331a60b14560116a35476e9dd8fef4a485aaee04a4a883c71673c679`。
+- 首个 predecessor 临时目录 harness 因含 shell `rm` 清理而在进程创建前被安全策略拒绝；没有
+  命令执行或状态变化。改用 Python `TemporaryDirectory` 后完整 PASS；这是一项 harness 事件，
+  不是产品 failure。
+
+### App、MRW1、protected/golden 与交接裁决
+
+- `6f622407` 是本实现 HEAD 的祖先且双亲保持 exact；其后 merge 数为 0。四个 app paths 的
+  committed 与 worktree diff、五组 protected engine/fluid paths 的 committed 与 worktree
+  diff、visual golden 的 three-dot 与 worktree diff 相对 exact `9bb84c68` 全部为零。
+- app pump 因路径逐字相同而完整保留 coordinator 注入、菜单/游戏 poll 后 render 前调用、
+  nil/idle 非阻塞、single outstanding、pixels ownership 与 raw error delivery；本任务未实现
+  或接管其余 dev-capture service、HTTP、options、recording 或 docs。
+- MRW1 仍固定 24/32-byte header、4 MiB/4096；生产 Go 中只有
+  `Renderer.ApplyRenderWorldUpdates` bridge 声明，调用方为 0，三个 app/capture/benchmark 包
+  MRW1 引用为 0。动态 loader / compatibility lookup / Go fallback 为 0；retired font symbol
+  缺失，WKWebView/JSON bridge 保留。`git diff --check` 无输出。
+- 本记录是 implementer handoff，不是 independent review。Task 6.8 必须继续 unchecked，等待
+  fresh spec-compliance review 与 fresh quality review 均通过且 0 open findings 后才能
+  bookkeeping；Task 6.9 的 immutable-HEAD 18 门禁与 Task 6.10 whole-integration review 均未
+  在本任务执行。implementation commit SHA、final-HEAD 复验与 clean status 写入 ignored
+  `task-6.8-report.md`，避免递归改写 tracked ledger。

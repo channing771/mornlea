@@ -2112,7 +2112,7 @@ impl OffscreenRenderer {
         FrameResult::Rendered
     }
 
-    /// 把 client ABI v12 引入、v13 保留的版本化 JSON UI 事件信封完整排空到 `out`。
+    /// 把 client ABI v12 引入、v14 保留的版本化 JSON UI 事件信封完整排空到 `out`。
     ///
     /// 事件源自 WebView 桥(进程级共享队列):benchmark/capture 等从不创建
     /// WebView 的进程队列为空,排空返回 0 字节——零参与语义在渲染器侧的

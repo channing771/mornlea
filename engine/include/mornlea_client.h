@@ -4,10 +4,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* v13:新增窗口合成捕获出口 mornlea_client_window_capture(NSWindow
+/* v14:在 v13 窗口合成捕获表面上新增 render world update 入口。
+ * v13:新增窗口合成捕获出口 mornlea_client_window_capture(NSWindow
  * windowNumber → CGWindowListCreateImage → CGBitmapContext,输出紧凑
- * BGRA8 原始字节,两段式容量协议;新增溢出与捕获不可用两个状态码)，
- * 并在 v12 WKWebView 菜单桥表面上新增 render world update 入口。
+ * BGRA8 原始字节,两段式容量协议;新增溢出与捕获不可用两个状态码)。
  * v12:菜单层迁进程内 WKWebView——退役 render_upload_ui_font 出口与帧
  * TLV tag 9 UI 段(layout v1–v4 编解码随之作废,下发即 INVALID_ARGUMENT);
  * 新增 ui_push_state 状态下行出口(窗口句柄域,JSON 字符串);
@@ -22,7 +22,7 @@
  * 契约);v6:新增远环 LOD tile 出口(render_upload_lod_tile/drop_lod_tile)。
  * 变基重编:远环两项出口在旧基线上原编号 v5/v6,main 的 water pass
  * (按 material 分流 + 半透明 water pass)占用 v5 后整体顺延一格。 */
-#define MORNLEA_CLIENT_ABI_VERSION 13u
+#define MORNLEA_CLIENT_ABI_VERSION 14u
 
 #define MORNLEA_CLIENT_STATUS_OK 0u
 #define MORNLEA_CLIENT_STATUS_ABI_VERSION 1u
@@ -118,7 +118,7 @@ uint32_t mornlea_client_render_drop_section(
     int32_t section_y,
     int32_t section_z);
 
-/* 更新尚未接管绘制的 MRW1 派生缓存(client ABI v13)。updates_len 必须在
+/* 更新尚未接管绘制的 MRW1 派生缓存(client ABI v14)。updates_len 必须在
  * 1..=4 MiB，updates 非空且地址范围不得溢出；通过这些表示层检查后，
  * 调用方保证 updates_len 字节可读。Rust 只在本次同步调用内借用输入，
  * 不保存 updates pointer。 */
@@ -160,7 +160,7 @@ uint32_t mornlea_client_render_set_lod_fog(
     float start,
     float full);
 
-/* 菜单状态下行(client ABI v12 引入、v13 保留):把 Go 组装的 UI 状态 JSON 推给挂在该
+/* 菜单状态下行(client ABI v12 引入、v14 保留):把 Go 组装的 UI 状态 JSON 推给挂在该
  * 窗口上的 WebView(经 evaluateJavaScript 调 window.mornlea.onState)。
  * json 非空且 json_len>0,内容须为可解析 JSON 对象且含 phase 字符串字段;
  * 违约返回 INVALID_ARGUMENT。首次调用惰性挂载 WebView;同状态重复推送
@@ -189,7 +189,7 @@ uint32_t mornlea_client_window_capture(
     uint32_t *out_width,
     uint32_t *out_height);
 
-/* 排空版本化 JSON UI 事件信封(client ABI v12 引入、v13 保留):只有完整信封可装入 out 时
+/* 排空版本化 JSON UI 事件信封(client ABI v12 引入、v14 保留):只有完整信封可装入 out 时
  * 才写入、排空并把字节数写进 *out_written；容量不足返回 CAPACITY，三个对象
  * 均不变。空队列写 0 字节;信封形如 {"v":1,"events":[...]},事件按页面产生
  * 顺序出现,深层校验由调用方(Go)执行。 */

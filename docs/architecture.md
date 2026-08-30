@@ -38,11 +38,11 @@ Mornlea 由 Go 应用与两个 Rust `cdylib` 组成。Go 持有应用装配、�
 
 engine C ABI 当前为 v9。Go 侧只有 `internal/nativeabi` 可以接触该 ABI；领域包构造语义输入并解码结果。header、Rust FFI、Go bridge、ABI 版本和跨语言一致性检查必须成套演进，调用结束后任一侧都不得保留对方指针。
 
-## 6. `mornlea_client` / client ABI v13
+## 6. `mornlea_client` / client ABI v14
 
 `mornlea_client` 持有 Darwin 窗口与事件采集、进程内 WKWebView 菜单层、GPU 资源、shader、render pass、窗口 surface 和离屏渲染。窗口型 UI（主菜单/设置/暂停/F3）由内嵌的 Vite + TypeScript + React 前端经 WKWebView 呈现，资产经 `mornlea://` scheme handler 从 Rust 内嵌字节供给；生存 HUD 与容器等固定界面仍走既有 GPU quad 管线。Go 不导入 WebGPU 绑定，只通过 `internal/client` 提供的 client ABI bridge 使用窗口和 renderer 领域接口。
 
-client C ABI 当前为 v13，并与 engine ABI 独立演进。菜单状态权威在 Go：下行 `ui_push_state` 在状态变化时向 WebView 推送 JSON 状态，上行 `drain_ui_events` 读出版本化 JSON 事件信封；桥协议形状由前端 `schema.json` 单源钉值。header、Rust FFI、`internal/client` bridge、版本和跨语言检查必须同步更新；失败或容量不足不能发布部分输出。
+client C ABI 当前为 v14，并与 engine ABI 独立演进。它完整保留 v13 引入的 window composite capture、两段式容量查询与紧凑 top-down BGRA8 输出；菜单状态权威在 Go：下行 `ui_push_state` 在状态变化时向 WebView 推送 JSON 状态，上行 `drain_ui_events` 读出版本化 JSON 事件信封；桥协议形状由前端 `schema.json` 单源钉值。header、Rust FFI、`internal/client` bridge、版本和跨语言检查必须同步更新；失败或容量不足不能发布部分输出。
 
 renderer 已拥有由 MRW1 原子更新的紧凑 `RenderWorld` 派生缓存，Go Mirror 仍是客户端逻辑状态的真相来源。该缓存入口目前只由 Rust/Go 测试驱动，尚未接入 `cmd/mornlea/app`；Go 仍持有生产 mesh 调度、connectivity/visibility、逐 section upload 与 draw 输入，迁移这些职责属于后续 change。
 

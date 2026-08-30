@@ -197,17 +197,18 @@
 - **WHEN** 客户端启动并显示主菜单
 - **THEN** 菜单功能完整可用，无任何网络依赖
 
-### Requirement: client ABI v12 引入菜单桥并由 v13 保留
+### Requirement: client ABI v12 引入菜单桥并由 v14 保留
 
-进程内 WKWebView 菜单桥 SHALL 在 client ABI v12 引入：新增菜单状态推送出口（JSON 字符串下行）并保留版本化事件批排空出口（信封格式更新）；`upload_ui_font` 出口与帧 TLV tag 9 UI 段及其 layout 编解码 MUST 退役。当前 client ABI v13 MUST 保留该 v12 菜单 surface 与退役状态，并在其上增加独立的 MRW1 入口；版本不匹配 MUST 在全部接受 ABI version 的出口优先拒绝，v12 与 v13 二进制不可混装。菜单桥引入本身 MUST NOT 改变协议、存档、engine ABI 或 benchmark scenario；当前 engine ABI v9 的独立演进不改变菜单桥行为。
+进程内 WKWebView 菜单桥 SHALL 在 client ABI v12 引入：新增菜单状态推送出口（JSON 字符串下行）并保留版本化事件批排空出口（信封格式更新）；`upload_ui_font` 出口与帧 TLV tag 9 UI 段及其 layout 编解码 MUST 退役。client ABI v13 在该 surface 上增加 window composite capture；当前 client ABI v14 MUST 保留 v12 菜单 surface、v13 capture surface 与退役状态，并增加独立的 MRW1 入口。版本不匹配 MUST 在全部接受 ABI version 的出口优先拒绝，v13 与 v14 二进制不可混装。菜单桥引入本身 MUST NOT 改变协议、存档、engine ABI 或 benchmark scenario；当前 engine ABI v9 的独立演进不改变菜单桥行为。
 
 #### Scenario: 当前版本号三处一致且保留 v12 菜单 surface
 
 - **GIVEN** 当前 Rust client、C header 与 Go 绑定
 - **WHEN** 检查 ABI 版本常量、查询出口和菜单桥 exports
-- **THEN** 三处 client ABI MUST 均为 `13`
-- **AND** ABI 查询出口 MUST 返回 `13`
+- **THEN** 三处 client ABI MUST 均为 `14`
+- **AND** ABI 查询出口 MUST 返回 `14`
 - **AND** v12 引入的 `ui_push_state` 与版本化 JSON event drain MUST 保持可用
+- **AND** v13 引入的 window composite capture MUST 保持可用
 
 #### Scenario: v12 引入事实保持可追溯
 
@@ -218,7 +219,7 @@
 
 #### Scenario: 退役出口被拒绝
 
-- **GIVEN** 当前 v13 二进制
+- **GIVEN** 当前 v14 二进制
 - **WHEN** 调用已退役的字体上传出口或下发旧 tag 9 UI 段
 - **THEN** MUST 返回版本/参数错误且不触碰渲染器状态
 
