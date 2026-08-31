@@ -20,6 +20,10 @@
 - Go 是 task/world/lifecycle/epoch 权威，Python 是运行期 compact memory 权威；没有 direct-model fallback、remote MCP 或 Docker。
 - Task 7 terrain ruling：以 `floor(companion.Position)` 为中心冻结固定 33×17×33（水平 ±16/垂直 ±8）dense projection；ready bitmap、1,089 个 height 与 18,513 个 `BlockID` 的 data plane 每份 ≤40 KiB、四槽 ≤160 KiB。`query_terrain` 只读请求体素并全有或全无，未 ready/越界为 `out_of_bounds`；mine 对精确 frozen block 复用既有 validator，不依赖 `ExposedBlocks<=256`，因此 Chest/Furnace 继续接受、农业/火把/无掉落/未交付多掉落继续拒绝。规划 ±8 与寻路 ±4 明确解耦；若裁决错误，成本是 Task 7 snapshot/validator 重做，不影响 Task 1 machine-readable contract、游戏 wire、存档或 ABI。
 - Task 7 naming ruling：`internal/core` 作为 `BlockID`/`ItemID` 所有者新增唯一 canonical English `snake_case` registry；UI 中文 display name 不复用，Planner place 白名单只保留语义 ID 集并从 core 派生拼写。未知 ID/name fail closed，不生成数值/中文 fallback；Task 1 schema/golden 保持不变并由 consistency tests 交叉锁定。
+- Task 8 wire ruling：v5 保持 32-byte envelope；payload 是 namespace[16] 加按 `CompanionID` 排序的 record，record 固定 body[221]+flags(active/task/FIFO 为 bit0/1/2)+epoch u64，active 总带 revision/operation/summary-length+bytes 后接 task/FIFO，inactive只带 tombstone且 flags=0。合法可达上限固定 `MaxFileLength=393,904`；v1..v4 只读，encoder只写v5。若裁决错误，成本是 v5 golden/codec/磁盘上限与迁移重做，不影响游戏 wire 或 ABI。
+- Task 8 migration ruling：legacy 是隐式 epoch0并统一落epoch1；v4 active 非空 summary 迁为 rev1+fresh operation，active 空 summary 使用 canonical-zero且不存在第二个 active migration operation，inactive使用 fresh tombstone。新 ID 先以 metadata `SpawnDimension`、`SpawnAnchor*16+0.5`、`core.MaxY+1`、零朝向/空背包 provisional body 同步原子写v5，entropy/Save失败则 persistence/world/Agent/MCP均不构造；模拟 ready 后 Observe 覆盖位置。
+- Task 8 staging ruling：Task 8 persistence只 deep-clone/carry-through namespace/lifecycle/mirror/tombstone并checked推进aggregate revision；body/task autosave绝不从旧direct Dialogue裸 Summary改写mirror，也不实现Agent memory mutation。Task 9 Planner不改memory；Task 10删除/替换裸写路径，只在Agent commit/reconcile成功结果回tick且通过epoch/operation关联后整体更新mirror并mark dirty。
+- Task 8 empty-config ruling：`WorldStore`必须提供Memory/Disk同语义的metadata-only existence probe；missing+empty只probe且0 Load/Save/create，existing+empty才Load并迁移/退休，already all-inactive v5不推进revision/epoch/tombstone且0 Save。pre-rename失败保持旧正式字节；parent-directory sync在rename后失败仍令启动失败但正式文件是完整v5；overflow返回`ErrCorrupt`语义且在entropy/mutation/Save之前失败。
 
 ## 任务记录
 
@@ -81,6 +85,13 @@
 - proposal/design、`companion-agent-mcp-tools` 与 `companion-planner` delta spec、Task 7 文案已同步 fixed dense projection、完整垂直 ±8、ready/missing、全有或全无 terrain、精确 mine validator 与 core canonical name 裁决；Task 1 manifest/schema/golden 未改，Task 7 保持未勾选。
 - 版本矩阵保持 protocol v32、player v8、chunk v9、metadata v3、companions v4→v5、hostile v1、engine ABI v9、client ABI v13、scenario v20；该裁决不触发 wire、存档或 ABI 升版。
 - 规划产物验证：`openspec validate --all --strict --no-interactive` exit 0，80 passed/0 failed；`git diff --check` exit 0。
+
+### Task 8 实施前设计裁决
+
+- 预检基线 `3a713a78` 证实现有 v4 隐式 active/summary 值模型、`WorldStore` 无 existence probe、启动晚于模拟出生才能取得新 body，以及 persistence 直接 `revision+1`/裸 Summary 写回，无法独立满足 v5 identity-first、canonical-zero 与无损 autosave。
+- proposal/design、`companion-persistence`、`companion-agent-memory`、`companion-identity-configuration` delta spec 与 Task 8 文案已同步 32-byte envelope、393,904-byte 精确上限、legacy epoch/operation、provisional body、mandatory metadata-only probe、persistence carry-through 及 Task 8→10 staging；Task 8 保持未勾选，未修改 Task 1 contracts。
+- 版本矩阵保持 protocol v32、player v8、chunk v9、metadata v3、companions v4→v5、hostile v1、engine ABI v9、client ABI v13、scenario v20；本裁决不查看或吸收后续 `main` 前进，不触发游戏 wire 或 ABI 升版。
+- 规划产物验证：`openspec validate --all --strict --no-interactive` exit 0，80 passed/0 failed；`git diff --check -- openspec/changes/extract-companion-agent-service` exit 0。
 
 ## 整分支终审与门禁
 

@@ -292,22 +292,110 @@ readiness 只有在配置、SQLite 和 model adapter 可接受请求后成功。
 
 ### 9. `companions.ai` v5 迁移
 
-v5 新增稳定 namespace、每记录非零 memory epoch、active/inactive、恢复镜像和 delete tombstone。
-active 可保存 summary/revision/operation；inactive 不保存 summary 或 active operation。
+#### 9.1 固定 wire、结构不变量与物理上限
 
-v1..v4 只读迁移：
+v5 保持既有 32-byte envelope 不变：magic、envelope version、schema、aggregate revision、record count、payload length 与 CRC32C 的 offset 都不移动。payload 使用唯一 layout，所有整数继续按既有 little-endian 纪律写入：
 
-- 先完整验证旧文件；
-- 生成 canonical UUIDv4 namespace、epoch 与迁移 operation；
-- v4 非空摘要成为初始非零 revision；
-- 通过既有临时文件、sync、rename、目录 sync 原子写 v5；
-- 成功后才 acquire、启动 MCP 或联系 Agent。
+```text
+payload:
+  agent_namespace_id[16]
+  record[count], strict CompanionID byte order:
+    body[221]
+    flags u8:
+      bit0 active
+      bit1 has_task
+      bit2 has_fifo
+      bit3..7 reserved zero
+    memory_epoch u64
+    if active:
+      memory_revision u64
+      memory_operation_id[16]
+      summary_length u16
+      summary[summary_length]
+      task section if has_task
+      FIFO section if has_fifo
+    else:
+      tombstone_operation_id[16]
+```
 
-全停用也必须处理已有 v1..v4/v5：只把 active 记录推进一次 epoch 并写 tombstone；已 inactive 记录幂等保持，原子保存 v5 后保持 Agent/MCP 关闭。
-空配置且文件不存在时不读取、创建或保存 `companions.ai`；允许判定存在性的 metadata probe。
+active 记录总是写 revision、operation 与 summary length，空摘要也写零长度；v5 不再有 `has_summary` 位。inactive 的 flags 必须精确为零，记录在 tombstone 后结束，禁止 mirror、task 和 FIFO。namespace、非零 memory operation 与 tombstone 均为 binary canonical UUIDv4；aggregate revision 与 epoch 均非零。记录严格排序且唯一，总数最多 64，active 最多 4。active 的规范零 memory 是且仅是 `revision=0 + operation=16-byte zero + summary empty`；revision 非零时 operation 必须是 UUIDv4，summary 必须是无 NUL 的有效 UTF-8 且不超过 2,048 bytes，允许合法空摘要。inactive 必须清零 revision/operation/summary，并携带非零 UUIDv4 tombstone。
 
-v5 不降级写 v4。
-回滚必须恢复部署前 v4 备份与旧配置，不能让新程序代写旧格式。
+encoder 只写 v5；decoder 对字面 schema v1、v2、v3、v4、v5 只读，不能用 `schema <= CurrentSchema` 放宽 whitelist。精确最大长度按合法结构而不是不可达的保守预算计算：
+
+```text
+header + namespace = 32 + 16 = 48
+max task = (2 + 1024 + 2 + 4 + 1 + 1 + 8 + 8)
+         + 4,999 * 15 + 1 * 17
+         = 76,052
+max FIFO = 2 + 16 * (2 + 1024) = 16,418
+max active record = 221 + 1 + 8 + 8 + 16 + 2 + 2,048
+                  + 76,052 + 16,418
+                  = 94,774
+max inactive record = 221 + 1 + 8 + 16 = 246
+MaxFileLength = 48 + 4 * 94,774 + 60 * 246 = 393,904 bytes
+```
+
+5,000 个步骤中 `follow` 只能位于末尾，故 4,999 个 15-byte `place` 加一个 17-byte `follow` 是可达的 task 最大值。拒绝沿用 v4 的 438,280 或采用不可达的 433,896 余量：唯一 393,904-byte 上限使 Disk bounded read、codec、golden 和 allocation-before-parse 测试共享同一审计公式。
+
+#### 9.2 legacy epoch、operation 与配置合并
+
+v1..v4 都视为隐式 epoch 0，本次迁移的每条记录固定落 epoch 1；迁移只把当前配置中的 ID 视为 active，其余记录成为 inactive。missing aggregate 的隐式 revision 是 0并在首次保存时固定落 1；legacy 和任何发生 mutation 的 v5 aggregate 都做一次 checked increment，整个配置合并无论改变多少条记录也只推进一次 aggregate revision。即使 legacy 文件含零记录，schema/namespace 迁移本身仍令 `changed=true` 并同步保存 v5：
+
+- v4 active 非空 summary 原字节成为 revision 1 mirror，并生成 fresh memory operation；
+- v1..v3 以及 v4 active 空 summary 成为 canonical-zero mirror，不另存 active migration operation；
+- legacy inactive 清除 task/FIFO/summary，生成 fresh tombstone；
+- v5 active 保持 active 时逐字段保留 body、task/FIFO、epoch 与 mirror；active→inactive 时 checked epoch+1、清 task/FIFO/mirror并生成 fresh tombstone；
+- v5 inactive 保持缺席时逐字段 no-op；inactive→active 时 checked epoch+1、清 tombstone、使用 canonical-zero mirror，且旧 task/FIFO 不复活；
+- 新配置 ID 使用 epoch 1、canonical-zero mirror、无 task/FIFO 和第 9.3 节的 provisional body。
+
+这消除了“每个 legacy 都必须保存 migration operation”与 canonical-zero 的冲突：active migration operation 只属于由 v4 非空摘要形成的 revision 1 mirror；inactive migration operation 就是 tombstone。不存在另一个可藏在 revision 0 mirror 中的 active operation。
+
+merge 是纯计算：先 clone 并完整校验输入、active≤4、union≤64 与所有 checked increment，再按 `CompanionID` 顺序从可注入且可失败的 entropy source 生成 namespace/operation/tombstone，最后一次返回新 aggregate。capacity、epoch overflow、aggregate revision overflow 或任一 entropy failure 都不修改输入、不消费后续身份、不调用 Save。
+
+#### 9.3 identity-first provisional body 与启动 barrier
+
+missing 文件新增伙伴时，地形尚未 ready，不能等待异步 spawn 才保存身份。bootstrap 使用与 `runtime.RegisterCompanion` 当前 provisional state 完全相同的规范 body：
+
+- `Dimension = metadata.SpawnDimension`；
+- `X = float32(metadata.SpawnAnchor.X) * core.SectionSize + 0.5`；
+- `Y = core.MaxY + 1`；
+- `Z = float32(metadata.SpawnAnchor.Z) * core.SectionSize + 0.5`；
+- yaw/pitch 为 0，inventory 是合法空值。
+
+bootstrap 把 provisional body、namespace、epoch 1 与 canonical-zero mirror 同步原子保存后，才可依次构造 persistence worker、world/simulation、Agent client 或 MCP。simulation 完成 ready/restore scan 后，首次 `Observe` 用权威激活身体整体覆盖 provisional position。identity entropy 或同步 Save 失败时启动失败，后续 worker、world、Agent 和 MCP 构造计数必须全部为零；进程内临时身份绝不越过 barrier。
+
+空配置同样由 bootstrap 处理，但 `WorldStore` 必须提供 mandatory metadata-only existence probe，Memory 与 Disk 语义一致：
+
+```text
+validate config
+exists = CompanionsExist(ctx)   // 不读取或解码正文
+if !exists:
+    0 Load, 0 Save, 0 file create; AI off
+else:
+    loaded = LoadCompanions(ctx)
+    merged = MergeV5(loaded, activeIDs=empty)
+    if merged.changed: synchronous SaveCompanions(merged)
+    0 persistence worker, 0 world companion, 0 Agent/MCP; AI off
+```
+
+missing 只 probe；existing legacy 或包含 active 的 v5 完成迁移/retirement。已经全 inactive 的合法 v5 仍 Load 一次以验证正文，但 merge 必须 `changed=false`，epoch、revision、tombstone 不推进且 Save 次数为零。probe 自身只看固定 companion metadata 是否存在：Disk 使用固定路径 metadata，Memory 只看 encoded value presence；它不得借 Load 读取、分配或解码正文，取消与 closed store 仍返回错误而非假装 missing。
+
+#### 9.4 persistence carry-through 与 Task 8→10 staging
+
+Task 8 的 persistence coordinator 必须把 namespace、每 ID lifecycle、epoch、完整 mirror 或 tombstone 当作不可变 metadata 深拷贝，并在身体/任务 autosave 与 Flush 中无损携带。inactive body 保留但永不生成 task/FIFO；active 可没有 task/FIFO。每次真实 dirty 保存对 aggregate revision 做 checked increment；达到 `MaxUint64` 时 `Poll`/`Flush` 返回 `ErrCorrupt` 语义的 overflow 错误，不 dispatch、不 Save、不回绕，也不改变已持久化 metadata。Task 8 只负责 carry-through，不调用 Agent memory API，也不决定 Python/Go memory 胜负。
+
+现有 direct Dialogue 每 tick提供的裸 `Summary string` 不包含 epoch、revision 或 operation，不能转换成合法 CAS mirror。Task 8 到 Task 10 的中间基线允许 direct Dialogue 继续 transient 运行，但 body/task autosave 必须忽略该裸 summary 对 v5 mirror 的改写，既有 migration mirror逐字段保持，不生成 operation。Task 10 删除或替换这条裸写路径；只有 Agent commit/reconcile 成功结果回到权威 tick 边界并通过 operation+epoch 关联后，才整体替换 `{epoch, revision, operation, summary}` 并 mark dirty。Task 9 Planner cutover不修改 mirror。
+
+#### 9.5 error、原子替换与任务边界
+
+- envelope future 或 schema >5 返回 `ErrFutureVersion`；schema 0、字面 v1..v5 之外的旧值、CRC/长度/trailing、非法 body/task/UUID/epoch/memory/tombstone/耦合以及 checked epoch/revision overflow 返回或 wrap `ErrCorrupt`；
+- 物理长度大于 393,904 在 CRC、payload copy、record/lifecycle/task slice 分配之前返回 `ErrCorrupt`，Disk 最多读取 `MaxFileLength+1`；
+- 保存 lower revision 或 same revision different canonical bytes 返回 `ErrRevisionConflict`；same revision same canonical bytes 幂等成功；
+- 正式文件 corrupt/future 时 Save 返回对应错误且不覆盖；
+- temp create/write/sync/close 或 rename 的 pre-rename failure 保留旧正式字节且不泄漏 temp；parent directory sync 在 rename 后失败时调用仍返回错误并让启动失败，rename 已发布的新正式文件必须是完整可解码 v5，绝不允许半文件，也不得误断言旧文件仍在；
+- entropy、overflow 或 Save 失败都禁止后续 persistence/world/Agent/MCP 构造。v5 不降级写 v4；回滚必须恢复部署前 v4 备份与旧配置。
+
+Task 8 到此为止：交付 codec/merge/probe/bootstrap/carry-through，不 acquire lease、不启动 MCP bridge、不发 memory reconcile/commit/delete、不切换 Planner/Dialogue，也不重排 Task 10 的完整 shutdown。Task 9 消费已落盘 namespace/lifecycle做 Planner cutover但不改 memory；Task 10 才接线 Dialogue、memory mutation、delete/reconcile 与最终 shutdown 顺序。
 
 ### 10. 并发与关服顺序
 

@@ -11,7 +11,7 @@
 - Planner 改为 LangGraph 有界工作流：固定读取上下文、允许受预算约束的只读工具循环、固定调用 Go 校验器，并最多执行一次修复；Go 在 tick 边界仍会重新严格解码、校验并经既有 Task Runner 执行。
 - Dialogue 改由 Agent 服务运行，并把终态摘要改为 revision/operation 驱动的两阶段 CAS：只有 Go 在 tick 边界确认节点仍有效且 commit 成功后才广播台词和更新恢复镜像。
 - **BREAKING**：配置从 Go 直接模型 `ai.endpoint/model/apiKeyEnv` 硬切换到 `ai.agentService.endpoint/apiKeyEnv`；旧字段只产生可操作的迁移错误，不保留 direct-model fallback。
-- **BREAKING**：`companions.ai` 从 schema v4 升为 v5，增加稳定 Agent namespace、每伙伴 memory epoch、幂等恢复镜像与停用 tombstone；v1..v4 只读迁移，v5 不向旧程序降级写回。
+- **BREAKING**：`companions.ai` 从 schema v4 升为 v5，在既有 32-byte envelope 内增加稳定 Agent namespace、每伙伴 memory epoch、幂等恢复镜像与停用 tombstone，并钉住 393,904-byte 物理上限；v1..v4 只读迁移，encoder 只写 v5，v5 不向旧程序降级写回。
 - Python 服务是运行期摘要权威，Go v5 镜像只用于恢复；服务不可用时世界继续运行，Planner 任务以稳定原因失败，Dialogue 跳过，权威 tick 不等待网络、磁盘或模型。
 - 保持协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`hostile_mobs` schema v1、engine ABI v9、client ABI v13 与 benchmark scenario v20 不变。
 
@@ -51,7 +51,7 @@
 
 - Go：`internal/companion`、`internal/server`、`internal/storage/companion`、配置加载、架构检查与服务端装配；删除生产 direct-model clients，增加 Agent HTTP client、冻结快照 registry 与 MCP handler。
 - Python：新增 `services/companion-agent` 及锁定依赖、测试、静态检查、运行配置和本地服务安装/启动文档。
-- 存储：仅 `companions.ai` v4→v5；需要迁移、future/corrupt、最大长度、golden/fixture、备份与回滚验证。
+- 存储：仅 `companions.ai` v4→v5；需要迁移、future/corrupt、精确最大长度、golden/fixture、备份与回滚验证。新伙伴先以与模拟一致的规范出生身体同步保存稳定身份，再构造 persistence/simulation/Agent/MCP；空配置只通过 metadata probe 区分 missing 与已有文件，并对已有 active 记录完成一次 retirement。
 - 并发与性能：tick 只构造/发布有界不可变值；terrain 固定扫描 33×17×33=18,513 个体素，单投影 compact data plane 不超过 40 KiB，registry 四槽 terrain data plane 合计不超过 160 KiB；所有 HTTP、MCP、模型、SQLite 与编码在 worker/service 上执行。Agent 全局并发最多 4、每伙伴最多 1、无等待队列，模型、工具与总时长均有硬预算。
 - 依赖：Go 使用官方 MCP Go SDK；Python 使用 Python 3.12、FastAPI、LangChain/LangGraph、`mcp>=1.28.1,<2`、`langchain-mcp-adapters`、Pydantic、Uvicorn 与 SQLite adapter，并由 `uv.lock` 精确冻结。
 - 文档与门禁：更新架构、配置、开发/验证入口与 CI；不加入版权美术资源，不改变现有 wire、ABI 或性能退出纪律。

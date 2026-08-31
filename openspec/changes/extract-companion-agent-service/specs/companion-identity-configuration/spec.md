@@ -2,13 +2,13 @@
 
 ### Requirement: AI 伙伴配置可选且数量有界
 
-配置 schema SHALL 保持 v1，并 MAY 包含可选的 `ai` 组与 `ai.companions`。缺少 `ai`、`ai` 为 `null`、缺少 `companions` 或伙伴列表为空时，AI MUST 关闭，且当不存在已有 `companions.ai` 时 MUST 不要求 Agent endpoint、key 或 timeout；非空列表 MUST 包含 `1..4` 个有效定义。非空伙伴配置 MUST 包含 `ai.agentService.endpoint` 与 `ai.agentService.apiKeyEnv`，且环境变量值非空；缺少任一项时内置与专用服务端 MUST 启动失败。`taskTimeoutMinutes` MUST 是 `1..60` 的整数，缺省为 10。`ai.companions[]` SHALL 继续识别可选 `persona`；尚未交付的其他字段 MUST 按既有未知字段纪律告警后忽略。空配置但已有 `companions.ai` 的 retirement 行为由 `companion-persistence` 定义，完成后 MUST 保持 AI 关闭。
+配置 schema SHALL 保持 v1，并 MAY 包含可选的 `ai` 组与 `ai.companions`。缺少 `ai`、`ai` 为 `null`、缺少 `companions` 或伙伴列表为空时，AI MUST 关闭，并 MUST 只通过不读取或解码正文的 metadata-only existence probe 判断是否已有 `companions.ai`；不存在文件时 MUST 不要求 Agent endpoint、key 或 timeout，也不得 Load/Save/create companion 存档。非空列表 MUST 包含 `1..4` 个有效定义。非空伙伴配置 MUST 包含 `ai.agentService.endpoint` 与 `ai.agentService.apiKeyEnv`，且环境变量值非空；缺少任一项时内置与专用服务端 MUST 启动失败。`taskTimeoutMinutes` MUST 是 `1..60` 的整数，缺省为 10。`ai.companions[]` SHALL 继续识别可选 `persona`；尚未交付的其他字段 MUST 按既有未知字段纪律告警后忽略。空配置但已有 `companions.ai` 的 retirement 行为由 `companion-persistence` 定义，完成后 MUST 保持 AI 关闭。
 
 #### Scenario: 空配置且无存档保持 AI 关闭
 
 - **GIVEN** 一份有效 config v1 没有伙伴，且世界目录没有 `companions.ai`
 - **WHEN** 内置或专用服务端读取配置
-- **THEN** 服务端 MUST 保持 AI 关闭，不创建伙伴、不读取/创建/保存 `companions.ai`（允许存在性 metadata probe）、不启动 MCP或联系 Python，也不得要求 Agent endpoint、key、timeout 或 persona
+- **THEN** 服务端 MUST 只执行 metadata-only existence probe 并保持 AI 关闭，不创建伙伴，Load/Save 次数均为零且不创建 `companions.ai`，不启动 MCP或联系 Python，也不得要求 Agent endpoint、key、timeout 或 persona
 
 #### Scenario: 超过四个定义被拒绝
 
