@@ -654,23 +654,6 @@ func applyAI(cfg *Config, raw json.RawMessage, configPath string) error {
 			legacy = append(legacy, "ai."+key)
 		}
 	}
-	var settings companion.AgentServiceSettings
-	if value, exists := lookupCaseInsensitive(fields, "agentService"); exists {
-		if err := applyAgentService(&settings, value); err != nil {
-			return err
-		}
-	}
-	var timeout int
-	if value, exists := lookupCaseInsensitive(fields, "taskTimeoutMinutes"); exists {
-		if err := json.Unmarshal(value, &timeout); err != nil {
-			return fmt.Errorf("解析 ai.taskTimeoutMinutes: %w", err)
-		}
-		// 显式 0 也拒绝："0=未设置"只对字段缺席成立。显式写 0 几乎必然是想
-		// 表达别的意思（单位搞错、漏填数字），按错误暴露而不是悄悄落回默认。
-		if err := companion.ValidateTaskTimeoutMinutes(timeout); err != nil {
-			return fmt.Errorf("ai.taskTimeoutMinutes: %w", err)
-		}
-	}
 	rawCompanions, ok := lookupCaseInsensitive(fields, "companions")
 	if !ok || string(rawCompanions) == "null" {
 		for _, field := range legacy {
@@ -687,6 +670,23 @@ func applyAI(cfg *Config, raw json.RawMessage, configPath string) error {
 			slog.Warn("已退役的 direct-model 配置已忽略", "field", field)
 		}
 		return nil
+	}
+	var settings companion.AgentServiceSettings
+	if value, exists := lookupCaseInsensitive(fields, "agentService"); exists {
+		if err := applyAgentService(&settings, value); err != nil {
+			return err
+		}
+	}
+	var timeout int
+	if value, exists := lookupCaseInsensitive(fields, "taskTimeoutMinutes"); exists {
+		if err := json.Unmarshal(value, &timeout); err != nil {
+			return fmt.Errorf("解析 ai.taskTimeoutMinutes: %w", err)
+		}
+		// 显式 0 也拒绝："0=未设置"只对字段缺席成立。显式写 0 几乎必然是想
+		// 表达别的意思（单位搞错、漏填数字），按错误暴露而不是悄悄落回默认。
+		if err := companion.ValidateTaskTimeoutMinutes(timeout); err != nil {
+			return fmt.Errorf("ai.taskTimeoutMinutes: %w", err)
+		}
 	}
 	definitions := make([]companion.Definition, len(entries))
 	for index, entry := range entries {

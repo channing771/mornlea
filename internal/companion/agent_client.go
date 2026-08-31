@@ -10,8 +10,11 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -306,10 +309,15 @@ func NewAgentClient(settings AgentServiceSettings, credential string, client *ht
 	// idle connection 生命周期穿透 loopback/credential 边界。保留参数仅为已有
 	// 构造调用的源码兼容，不能把不受控 transport 注入生产 client。
 	_ = client
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = nil
-	transport.DisableCompression = true
-	transport.MaxResponseHeaderBytes = AgentMaxHeaderBytes
+	dialer := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+	transport := &http.Transport{
+		DialContext:            dialer.DialContext,
+		DisableCompression:     true,
+		DisableKeepAlives:      true,
+		MaxResponseHeaderBytes: AgentMaxHeaderBytes,
+		TLSHandshakeTimeout:    10 * time.Second,
+		ExpectContinueTimeout:  time.Second,
+	}
 	client = &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	lifetime, cancel := context.WithCancel(context.Background())
 	return &AgentClient{endpoint: trimTrailingSlash(settings.Endpoint), credential: credential, http: client, lifetime: lifetime, cancel: cancel}, nil
@@ -317,10 +325,21 @@ func NewAgentClient(settings AgentServiceSettings, credential string, client *ht
 
 func (c *AgentClient) Close() { c.closeOnce.Do(func() { c.cancel(); c.http.CloseIdleConnections() }) }
 
+func (c *AgentClient) String() string {
+	if c == nil {
+		return "AgentClient<nil>"
+	}
+	return fmt.Sprintf("AgentClient{endpoint:%q}", c.endpoint)
+}
+
+func (c *AgentClient) GoString() string { return c.String() }
+
 func (c *AgentClient) Live(ctx context.Context) (LiveResponse, error) {
 	var out LiveResponse
-	err := c.get(ctx, "/livez", false, &out)
-	return out, err
+	if err := c.get(ctx, "/livez", false, &out); err != nil {
+		return LiveResponse{}, err
+	}
+	return out, nil
 }
 func (c *AgentClient) Ready(ctx context.Context) (ReadyResponse, error) {
 	var out ReadyResponse
@@ -328,83 +347,111 @@ func (c *AgentClient) Ready(ctx context.Context) (ReadyResponse, error) {
 	if err == errAgentNotReady {
 		return out, nil
 	}
-	return out, err
+	if err != nil {
+		return ReadyResponse{}, err
+	}
+	return out, nil
 }
 func (c *AgentClient) Acquire(ctx context.Context, in AcquireRequest) (AcquireResponse, error) {
 	var out AcquireResponse
-	err := c.post(ctx, "/v1/namespaces/acquire", in, &out)
-	if err == nil && (out.RequestID != in.RequestID || out.ClientInstanceID != in.ClientInstanceID || out.NamespaceID != in.NamespaceID) {
-		err = ErrAgentUnavailable
+	if err := c.post(ctx, "/v1/namespaces/acquire", in, &out); err != nil {
+		return AcquireResponse{}, err
 	}
-	return out, err
+	if out.ContractVersion != in.ContractVersion || out.RequestID != in.RequestID || out.ClientInstanceID != in.ClientInstanceID || out.NamespaceID != in.NamespaceID {
+		return AcquireResponse{}, ErrAgentUnavailable
+	}
+	return out, nil
 }
 func (c *AgentClient) Heartbeat(ctx context.Context, in LeaseRequest) (HeartbeatResponse, error) {
 	var out HeartbeatResponse
-	err := c.post(ctx, "/v1/namespaces/heartbeat", in, &out)
-	if err == nil && !sameLeaseIdentity(in, out.ContractVersion, out.RequestID, out.ClientInstanceID, out.NamespaceID, out.LeaseID) {
+	if err := c.post(ctx, "/v1/namespaces/heartbeat", in, &out); err != nil {
+		return HeartbeatResponse{}, err
+	}
+	if !sameLeaseIdentity(in, out.ContractVersion, out.RequestID, out.ClientInstanceID, out.NamespaceID, out.LeaseID) {
 		return HeartbeatResponse{}, ErrAgentUnavailable
 	}
-	return out, err
+	return out, nil
 }
 func (c *AgentClient) Release(ctx context.Context, in LeaseRequest) (ReleaseResponse, error) {
 	var out ReleaseResponse
-	err := c.post(ctx, "/v1/namespaces/release", in, &out)
-	if err == nil && !sameLeaseIdentity(in, out.ContractVersion, out.RequestID, out.ClientInstanceID, out.NamespaceID, out.LeaseID) {
+	if err := c.post(ctx, "/v1/namespaces/release", in, &out); err != nil {
+		return ReleaseResponse{}, err
+	}
+	if !sameLeaseIdentity(in, out.ContractVersion, out.RequestID, out.ClientInstanceID, out.NamespaceID, out.LeaseID) {
 		return ReleaseResponse{}, ErrAgentUnavailable
 	}
-	return out, err
+	return out, nil
 }
 func (c *AgentClient) Plan(ctx context.Context, in PlanRequest) (PlanResponse, error) {
 	var out PlanResponse
-	err := c.post(ctx, "/v1/plan", in, &out)
-	if err == nil && !(sameLeaseIdentity(LeaseRequest{in.ContractVersion, in.RequestID, in.ClientInstanceID, in.NamespaceID, in.LeaseID}, out.ContractVersion, out.RequestID, out.ClientInstanceID, out.NamespaceID, out.LeaseID) && out.RunID == in.RunID && out.CompanionID == in.CompanionID && out.Generation == in.Generation && out.SnapshotID == in.SnapshotID && out.SnapshotDigest == in.SnapshotDigest) {
+	if err := c.post(ctx, "/v1/plan", in, &out); err != nil {
+		return PlanResponse{}, err
+	}
+	if !(sameLeaseIdentity(LeaseRequest{in.ContractVersion, in.RequestID, in.ClientInstanceID, in.NamespaceID, in.LeaseID}, out.ContractVersion, out.RequestID, out.ClientInstanceID, out.NamespaceID, out.LeaseID) && out.RunID == in.RunID && out.CompanionID == in.CompanionID && out.Generation == in.Generation && out.SnapshotID == in.SnapshotID && out.SnapshotDigest == in.SnapshotDigest) {
 		return PlanResponse{}, ErrAgentUnavailable
 	}
-	return out, err
+	return out, nil
 }
 func (c *AgentClient) Dialogue(ctx context.Context, in AgentDialogueRequest) (AgentDialogueResponse, error) {
 	var out AgentDialogueResponse
-	err := c.post(ctx, "/v1/dialogue", in, &out)
-	if err == nil && !(sameLeaseIdentity(LeaseRequest{in.ContractVersion, in.RequestID, in.ClientInstanceID, in.NamespaceID, in.LeaseID}, out.ContractVersion, out.RequestID, out.ClientInstanceID, out.NamespaceID, out.LeaseID) && out.RunID == in.RunID && out.CompanionID == in.CompanionID && out.Generation == in.Generation && out.MemoryEpoch == in.MemoryEpoch && ((in.Terminal && out.MemoryProposal != nil) || (!in.Terminal && out.MemoryProposal == nil))) {
+	if err := c.post(ctx, "/v1/dialogue", in, &out); err != nil {
+		return AgentDialogueResponse{}, err
+	}
+	if !(sameLeaseIdentity(LeaseRequest{in.ContractVersion, in.RequestID, in.ClientInstanceID, in.NamespaceID, in.LeaseID}, out.ContractVersion, out.RequestID, out.ClientInstanceID, out.NamespaceID, out.LeaseID) && out.RunID == in.RunID && out.CompanionID == in.CompanionID && out.Generation == in.Generation && out.MemoryEpoch == in.MemoryEpoch && ((in.Terminal && out.MemoryProposal != nil) || (!in.Terminal && out.MemoryProposal == nil))) {
 		return AgentDialogueResponse{}, ErrAgentUnavailable
 	}
-	return out, err
+	return out, nil
 }
 func (c *AgentClient) ReconcileMemory(ctx context.Context, in MemoryReconcileRequest) (MemoryReconcileResponse, error) {
 	var out MemoryReconcileResponse
-	err := c.post(ctx, "/v1/memory/reconcile", in, &out)
-	if err == nil && !(sameLeaseIdentity(LeaseRequest{in.ContractVersion, in.RequestID, in.ClientInstanceID, in.NamespaceID, in.LeaseID}, out.ContractVersion, out.RequestID, out.ClientInstanceID, out.NamespaceID, out.LeaseID) && out.CompanionID == in.CompanionID && out.MemoryEpoch == in.MemoryEpoch && out.Active == in.Active) {
+	if err := c.post(ctx, "/v1/memory/reconcile", in, &out); err != nil {
+		return MemoryReconcileResponse{}, err
+	}
+	if !(sameLeaseIdentity(LeaseRequest{in.ContractVersion, in.RequestID, in.ClientInstanceID, in.NamespaceID, in.LeaseID}, out.ContractVersion, out.RequestID, out.ClientInstanceID, out.NamespaceID, out.LeaseID) && out.CompanionID == in.CompanionID && out.MemoryEpoch == in.MemoryEpoch && out.Active == in.Active && sameOptionalAgentID(out.TombstoneOperationID, in.TombstoneOperationID)) {
 		return MemoryReconcileResponse{}, ErrAgentUnavailable
 	}
-	return out, err
+	return out, nil
 }
 func (c *AgentClient) CommitMemory(ctx context.Context, in MemoryCommitRequest) (MemoryCommitResponse, error) {
 	var out MemoryCommitResponse
-	err := c.post(ctx, "/v1/memory/commit", in, &out)
-	if err == nil && !(sameLeaseIdentity(LeaseRequest{in.ContractVersion, in.RequestID, in.ClientInstanceID, in.NamespaceID, in.LeaseID}, out.ContractVersion, out.RequestID, out.ClientInstanceID, out.NamespaceID, out.LeaseID) && out.CompanionID == in.CompanionID && out.MemoryEpoch == in.MemoryEpoch && out.OperationID == in.OperationID) {
+	if err := c.post(ctx, "/v1/memory/commit", in, &out); err != nil {
+		return MemoryCommitResponse{}, err
+	}
+	if !(sameLeaseIdentity(LeaseRequest{in.ContractVersion, in.RequestID, in.ClientInstanceID, in.NamespaceID, in.LeaseID}, out.ContractVersion, out.RequestID, out.ClientInstanceID, out.NamespaceID, out.LeaseID) && out.CompanionID == in.CompanionID && out.MemoryEpoch == in.MemoryEpoch && out.OperationID == in.OperationID) {
 		return MemoryCommitResponse{}, ErrAgentUnavailable
 	}
-	return out, err
+	return out, nil
 }
 func (c *AgentClient) DeleteMemory(ctx context.Context, in MemoryDeleteRequest) (MemoryDeleteResponse, error) {
 	var out MemoryDeleteResponse
-	err := c.post(ctx, "/v1/memory/delete", in, &out)
-	if err == nil && !(sameLeaseIdentity(LeaseRequest{in.ContractVersion, in.RequestID, in.ClientInstanceID, in.NamespaceID, in.LeaseID}, out.ContractVersion, out.RequestID, out.ClientInstanceID, out.NamespaceID, out.LeaseID) && out.CompanionID == in.CompanionID && out.MemoryEpoch == in.NewMemoryEpoch && out.TombstoneOperationID == in.TombstoneOperationID) {
+	if err := c.post(ctx, "/v1/memory/delete", in, &out); err != nil {
+		return MemoryDeleteResponse{}, err
+	}
+	if !(sameLeaseIdentity(LeaseRequest{in.ContractVersion, in.RequestID, in.ClientInstanceID, in.NamespaceID, in.LeaseID}, out.ContractVersion, out.RequestID, out.ClientInstanceID, out.NamespaceID, out.LeaseID) && out.CompanionID == in.CompanionID && out.MemoryEpoch == in.NewMemoryEpoch && out.TombstoneOperationID == in.TombstoneOperationID) {
 		return MemoryDeleteResponse{}, ErrAgentUnavailable
 	}
-	return out, err
+	return out, nil
 }
 func (c *AgentClient) CancelRun(ctx context.Context, in CancelRequest) (CancelResponse, error) {
 	var out CancelResponse
-	err := c.post(ctx, "/v1/runs/cancel", in, &out)
-	if err == nil && !(sameLeaseIdentity(LeaseRequest{in.ContractVersion, in.RequestID, in.ClientInstanceID, in.NamespaceID, in.LeaseID}, out.ContractVersion, out.RequestID, out.ClientInstanceID, out.NamespaceID, out.LeaseID) && out.RunID == in.RunID) {
+	if err := c.post(ctx, "/v1/runs/cancel", in, &out); err != nil {
+		return CancelResponse{}, err
+	}
+	if !(sameLeaseIdentity(LeaseRequest{in.ContractVersion, in.RequestID, in.ClientInstanceID, in.NamespaceID, in.LeaseID}, out.ContractVersion, out.RequestID, out.ClientInstanceID, out.NamespaceID, out.LeaseID) && out.RunID == in.RunID) {
 		return CancelResponse{}, ErrAgentUnavailable
 	}
-	return out, err
+	return out, nil
 }
 
 func sameLeaseIdentity(in LeaseRequest, version, requestID, clientID, namespaceID, leaseID string) bool {
 	return in.ContractVersion == version && in.RequestID == requestID && in.ClientInstanceID == clientID && in.NamespaceID == namespaceID && in.LeaseID == leaseID
+}
+
+func sameOptionalAgentID(left, right *string) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
 }
 
 func (c *AgentClient) get(ctx context.Context, path string, authenticated bool, out interface{}) error {
@@ -428,7 +475,7 @@ func (c *AgentClient) post(ctx context.Context, path string, value interface{}, 
 		return ErrAgentUnavailable
 	}
 	body, err := json.Marshal(value)
-	if err != nil || len(body) > AgentMaxRequestBodyBytes {
+	if err != nil || !agentBodyWithinLimit(body, AgentMaxRequestBodyBytes) {
 		return fmt.Errorf("%w: invalid request", ErrAgentUnavailable)
 	}
 	requestContext, stop := c.context(ctx)
@@ -447,7 +494,8 @@ func (c *AgentClient) post(ctx context.Context, path string, value interface{}, 
 }
 
 func requestHeaderBytes(headers http.Header) int {
-	total := 0
+	// 最后的空 CRLF 也属于 HTTP header section，边界按真实 wire 字节计数。
+	total := 2
 	for name, values := range headers {
 		for _, value := range values {
 			total += len(name) + len(value) + 4
@@ -469,6 +517,9 @@ func (c *AgentClient) send(request *http.Request, out interface{}, expectedReque
 		return fmt.Errorf("%w: request failed", ErrAgentUnavailable)
 	}
 	defer response.Body.Close()
+	if requestHeaderBytes(response.Header) > AgentMaxHeaderBytes {
+		return ErrAgentUnavailable
+	}
 	if response.StatusCode >= 300 && response.StatusCode < 400 {
 		return ErrAgentUnavailable
 	}
@@ -479,7 +530,7 @@ func (c *AgentClient) send(request *http.Request, out interface{}, expectedReque
 		return ErrAgentUnavailable
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, AgentMaxResponseBodyBytes+1))
-	if err != nil || len(body) > AgentMaxResponseBodyBytes {
+	if err != nil || !agentBodyWithinLimit(body, AgentMaxResponseBodyBytes) {
 		return ErrAgentUnavailable
 	}
 	if response.StatusCode == http.StatusServiceUnavailable && request.URL.Path == "/readyz" {
@@ -492,7 +543,10 @@ func (c *AgentClient) send(request *http.Request, out interface{}, expectedReque
 		}
 		return errAgentNotReady
 	}
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
+	if !routeAllowsAgentSuccess(request.URL.Path, response.StatusCode) {
+		if response.StatusCode >= 200 && response.StatusCode < 300 {
+			return ErrAgentUnavailable
+		}
 		return decodeAgentError(body, request.URL.Path, response.StatusCode, expectedRequestID)
 	}
 	if err := strictDecodeJSON(body, out); err != nil {
@@ -501,17 +555,34 @@ func (c *AgentClient) send(request *http.Request, out interface{}, expectedReque
 	if !validAgentResponse(out) {
 		return ErrAgentUnavailable
 	}
+	if request.URL.Path == "/readyz" {
+		ready, ok := out.(*ReadyResponse)
+		if !ok || ready.Status != "ready" {
+			return ErrAgentUnavailable
+		}
+	}
 	return nil
 }
 
-func decodeAgentError(body []byte, path string, status int, expectedRequestID string) error {
-	var response struct {
-		ContractVersion string  `json:"contract_version"`
-		RequestID       *string `json:"request_id"`
-		Error           struct {
-			Code string `json:"code"`
-		} `json:"error"`
+func agentBodyWithinLimit(body []byte, maximum int) bool {
+	return len(body) <= maximum
+}
+
+func routeAllowsAgentSuccess(path string, status int) bool {
+	if status != http.StatusOK {
+		return false
 	}
+	switch path {
+	case "/livez", "/readyz", "/v1/namespaces/acquire", "/v1/namespaces/heartbeat", "/v1/namespaces/release",
+		"/v1/plan", "/v1/dialogue", "/v1/memory/reconcile", "/v1/memory/commit", "/v1/memory/delete", "/v1/runs/cancel":
+		return true
+	default:
+		return false
+	}
+}
+
+func decodeAgentError(body []byte, path string, status int, expectedRequestID string) error {
+	var response agentErrorResponse
 	if !validAgentErrorEnvelope(body, &response) || !routeAllowsAgentError(path, status, response.Error.Code) || (response.RequestID != nil && (expectedRequestID == "" || *response.RequestID != expectedRequestID)) {
 		return ErrAgentUnavailable
 	}
@@ -520,13 +591,7 @@ func decodeAgentError(body []byte, path string, status int, expectedRequestID st
 	}
 	return &AgentError{Code: response.Error.Code}
 }
-func validAgentErrorEnvelope(body []byte, response *struct {
-	ContractVersion string  `json:"contract_version"`
-	RequestID       *string `json:"request_id"`
-	Error           struct {
-		Code string `json:"code"`
-	} `json:"error"`
-}) bool {
+func validAgentErrorEnvelope(body []byte, response *agentErrorResponse) bool {
 	return strictDecodeJSON(body, response) == nil && response.ContractVersion == AgentContractVersion && (response.RequestID == nil || validCanonicalAgentID(*response.RequestID)) && stableAgentError(response.Error.Code)
 }
 func requestIDOf(value interface{}) string {
@@ -638,11 +703,11 @@ func validAgentRequest(value interface{}) bool {
 	case LeaseRequest:
 		return validBase(request.ContractVersion, request.RequestID, request.ClientInstanceID, request.NamespaceID) && validID(request.LeaseID)
 	case PlanRequest:
-		return validBase(request.ContractVersion, request.RequestID, request.ClientInstanceID, request.NamespaceID) && validID(request.LeaseID) && validID(request.RunID) && validID(request.CompanionID) && validID(request.SnapshotID) && request.Generation > 0 && request.DeadlineUnixMS > 0 && validSHA256(request.SnapshotDigest) && validMCPEndpoint(request.MCPEndpoint) && validAgentText(request.MCPCapability, 512, true) && validAgentText(request.Instruction, 1024, true)
+		return validBase(request.ContractVersion, request.RequestID, request.ClientInstanceID, request.NamespaceID) && validID(request.LeaseID) && validID(request.RunID) && validID(request.CompanionID) && validID(request.SnapshotID) && request.Generation > 0 && request.DeadlineUnixMS > 0 && validSHA256(request.SnapshotDigest) && validMCPEndpoint(request.MCPEndpoint) && validAgentText(request.MCPCapability, 512, true) && validAgentNonBlankText(request.Instruction, 1024)
 	case AgentDialogueRequest:
-		return validBase(request.ContractVersion, request.RequestID, request.ClientInstanceID, request.NamespaceID) && validID(request.LeaseID) && validID(request.RunID) && validID(request.CompanionID) && request.Generation > 0 && request.MemoryEpoch > 0 && request.DeadlineUnixMS > 0 && validAgentText(request.Persona, 4096, false) && validDialogueFact(request.FactNode, request.Terminal) && validDialogueEnvironment(request.Environment)
+		return validBase(request.ContractVersion, request.RequestID, request.ClientInstanceID, request.NamespaceID) && validID(request.LeaseID) && validID(request.RunID) && validID(request.CompanionID) && request.Generation > 0 && request.MemoryEpoch > 0 && request.DeadlineUnixMS > 0 && validAgentMemoryText(request.Persona, 4096) && validDialogueFact(request.FactNode, request.Terminal) && validDialogueEnvironment(request.Environment)
 	case MemoryCommitRequest:
-		return validBase(request.ContractVersion, request.RequestID, request.ClientInstanceID, request.NamespaceID) && validID(request.LeaseID) && validID(request.CompanionID) && validID(request.OperationID) && request.MemoryEpoch > 0 && len(request.Summary) <= 2048
+		return validBase(request.ContractVersion, request.RequestID, request.ClientInstanceID, request.NamespaceID) && validID(request.LeaseID) && validID(request.CompanionID) && validID(request.OperationID) && request.MemoryEpoch > 0 && validAgentMemoryText(request.Summary, 2048)
 	case MemoryDeleteRequest:
 		return validBase(request.ContractVersion, request.RequestID, request.ClientInstanceID, request.NamespaceID) && validID(request.LeaseID) && validID(request.CompanionID) && validID(request.TombstoneOperationID) && request.OldMemoryEpoch > 0 && request.NewMemoryEpoch > 0
 	case CancelRequest:
@@ -666,8 +731,15 @@ func validSHA256(value string) bool {
 	return true
 }
 func validMCPEndpoint(value string) bool {
+	if !validAgentText(value, 256, true) {
+		return false
+	}
 	parsed, err := url.Parse(value)
-	if err != nil || parsed.Scheme != "http" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != "/mcp" {
+	if err != nil || parsed.Scheme != "http" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != "/mcp" || parsed.EscapedPath() != "/mcp" || parsed.Port() == "" {
+		return false
+	}
+	port, err := strconv.ParseUint(parsed.Port(), 10, 16)
+	if err != nil || port == 0 {
 		return false
 	}
 	ip := net.ParseIP(parsed.Hostname())
@@ -679,11 +751,19 @@ func validAgentText(value string, maximum int, required bool) bool {
 		return false
 	}
 	for _, r := range value {
-		if r < 0x20 || r == 0x7F {
+		if unicode.IsControl(r) {
 			return false
 		}
 	}
 	return utf8.ValidString(value)
+}
+
+func validAgentNonBlankText(value string, maximum int) bool {
+	return validAgentText(value, maximum, true) && strings.TrimFunc(value, unicode.IsSpace) != ""
+}
+
+func validAgentMemoryText(value string, maximum int) bool {
+	return utf8.ValidString(value) && len(value) <= maximum && !strings.ContainsRune(value, 0)
 }
 func validDialogueFact(fact AgentDialogueFact, terminal bool) bool {
 	if terminal {
@@ -711,7 +791,7 @@ func validDialogueFact(fact AgentDialogueFact, terminal bool) bool {
 	return false
 }
 func validDialogueEnvironment(environment AgentDialogueEnvironment) bool {
-	if len(environment.ExposedBlocks) > 256 || len(environment.Heights) > 1089 {
+	if environment.ExposedBlocks == nil || environment.Heights == nil || len(environment.ExposedBlocks) > 256 || len(environment.Heights) > 1089 {
 		return false
 	}
 	for _, block := range environment.ExposedBlocks {
@@ -730,13 +810,13 @@ func validMemoryState(state AgentMemoryState) bool {
 	if state.Revision == 0 {
 		return state.OperationID == nil && state.Summary == ""
 	}
-	return state.OperationID != nil && validCanonicalAgentID(*state.OperationID) && validAgentText(state.Summary, 2048, false)
+	return state.OperationID != nil && validCanonicalAgentID(*state.OperationID) && validAgentMemoryText(state.Summary, 2048)
 }
 func validMemoryProposal(proposal AgentMemoryProposal) bool {
-	return validCanonicalAgentID(proposal.OperationID) && validAgentText(proposal.Summary, 2048, false)
+	return validCanonicalAgentID(proposal.OperationID) && validAgentMemoryText(proposal.Summary, 2048)
 }
 func validAgentPlan(plan AgentPlan) bool {
-	if !validAgentText(plan.Summary, MaxPlanSummaryBytes, true) || len(plan.Steps) == 0 || len(plan.Steps) > 5000 {
+	if !validAgentNonBlankText(plan.Summary, MaxPlanSummaryBytes) || len(plan.Steps) == 0 || len(plan.Steps) > 5000 {
 		return false
 	}
 	for index, step := range plan.Steps {
@@ -746,7 +826,10 @@ func validAgentPlan(plan AgentPlan) bool {
 				return false
 			}
 		case "place":
-			if step.Y < -64 || step.Y > 319 || step.Block == "" || step.PlayerID != "" {
+			if step.Y < -64 || step.Y > 319 || step.PlayerID != "" {
+				return false
+			}
+			if _, ok := planPlaceItems[step.Block]; !ok {
 				return false
 			}
 		case "follow":
@@ -775,7 +858,7 @@ func validAgentResponse(value interface{}) bool {
 	case *ReleaseResponse:
 		return validBase(response.ContractVersion, response.RequestID, response.ClientInstanceID, response.NamespaceID) && validCanonicalAgentID(response.LeaseID) && response.Released
 	case *PlanResponse:
-		return validBase(response.ContractVersion, response.RequestID, response.ClientInstanceID, response.NamespaceID) && validCanonicalAgentID(response.LeaseID) && validCanonicalAgentID(response.RunID) && validCanonicalAgentID(response.CompanionID) && validCanonicalAgentID(response.SnapshotID) && response.Generation > 0 && len(response.SnapshotDigest) == 64 && validAgentPlan(response.Plan)
+		return validBase(response.ContractVersion, response.RequestID, response.ClientInstanceID, response.NamespaceID) && validCanonicalAgentID(response.LeaseID) && validCanonicalAgentID(response.RunID) && validCanonicalAgentID(response.CompanionID) && validCanonicalAgentID(response.SnapshotID) && response.Generation > 0 && validSHA256(response.SnapshotDigest) && validAgentPlan(response.Plan)
 	case *AgentDialogueResponse:
 		return validBase(response.ContractVersion, response.RequestID, response.ClientInstanceID, response.NamespaceID) && validCanonicalAgentID(response.LeaseID) && validCanonicalAgentID(response.RunID) && validCanonicalAgentID(response.CompanionID) && response.Generation > 0 && response.MemoryEpoch > 0 && validDialogueLine(response.Line) && (response.MemoryProposal == nil || validMemoryProposal(*response.MemoryProposal))
 	case *MemoryReconcileResponse:
@@ -785,7 +868,7 @@ func validAgentResponse(value interface{}) bool {
 	case *MemoryDeleteResponse:
 		return validBase(response.ContractVersion, response.RequestID, response.ClientInstanceID, response.NamespaceID) && validCanonicalAgentID(response.LeaseID) && validCanonicalAgentID(response.CompanionID) && validCanonicalAgentID(response.TombstoneOperationID) && response.MemoryEpoch > 0
 	case *CancelResponse:
-		return validBase(response.ContractVersion, response.RequestID, response.ClientInstanceID, response.NamespaceID) && validCanonicalAgentID(response.LeaseID) && validCanonicalAgentID(response.RunID) && response.Cancelled
+		return validBase(response.ContractVersion, response.RequestID, response.ClientInstanceID, response.NamespaceID) && validCanonicalAgentID(response.LeaseID) && validCanonicalAgentID(response.RunID)
 	}
 	return false
 }
@@ -794,29 +877,56 @@ func validCanonicalAgentID(value string) bool {
 	return err == nil && len(value) == 36 && value == strings.ToLower(value)
 }
 func validDialogueLine(value string) bool {
-	return validAgentText(value, 256, true) && strings.TrimSpace(value) == value
+	if !validAgentText(value, 256, true) {
+		return false
+	}
+	first, _ := utf8.DecodeRuneInString(value)
+	last, _ := utf8.DecodeLastRuneInString(value)
+	return !unicode.IsSpace(first) && !unicode.IsSpace(last)
 }
 
 func invalidJSONSurrogate(body []byte) bool {
-	for index := 0; index+5 < len(body); index++ {
-		if body[index] != '\\' || body[index+1] != 'u' {
+	inString := false
+	for index := 0; index < len(body); index++ {
+		if !inString {
+			if body[index] == '"' {
+				inString = true
+			}
 			continue
 		}
-		value, ok := hex4(body[index+2 : index+6])
-		if !ok {
-			return true
-		}
-		if value >= 0xD800 && value <= 0xDBFF {
-			if index+11 >= len(body) || body[index+6] != '\\' || body[index+7] != 'u' {
+		switch body[index] {
+		case '"':
+			inString = false
+		case '\\':
+			if index+1 >= len(body) {
+				continue
+			}
+			if body[index+1] != 'u' {
+				index++
+				continue
+			}
+			if index+5 >= len(body) {
 				return true
 			}
-			low, ok := hex4(body[index+8 : index+12])
-			if !ok || low < 0xDC00 || low > 0xDFFF {
+			value, ok := hex4(body[index+2 : index+6])
+			if !ok {
 				return true
 			}
-			index += 11
-		} else if value >= 0xDC00 && value <= 0xDFFF {
-			return true
+			if value >= 0xD800 && value <= 0xDBFF {
+				if index+11 >= len(body) || body[index+6] != '\\' || body[index+7] != 'u' {
+					return true
+				}
+				low, ok := hex4(body[index+8 : index+12])
+				if !ok || low < 0xDC00 || low > 0xDFFF {
+					return true
+				}
+				index += 11
+				continue
+			}
+			if value >= 0xDC00 && value <= 0xDFFF {
+				return true
+			}
+			index += 5
 		}
 	}
 	return false

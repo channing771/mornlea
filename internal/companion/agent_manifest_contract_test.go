@@ -2,6 +2,7 @@ package companion
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,7 +30,7 @@ func TestAgentContractGoldenDrivesActualDTOCodecs(t *testing.T) {
 		}
 		for _, item := range fixture.Cases {
 			t.Run(fixtureName+"/"+item.Name, func(t *testing.T) {
-				valid := agentGoldenCodecValid(item.Schema, item.Name, item.Value)
+				valid := agentGoldenCodecValid(item.Schema, item.Value)
 				if fixtureName == "valid.json" && !valid {
 					t.Fatal("checked-in valid fixture rejected by actual DTO codec")
 				}
@@ -41,7 +42,7 @@ func TestAgentContractGoldenDrivesActualDTOCodecs(t *testing.T) {
 	}
 }
 
-func agentGoldenCodecValid(schema, name string, value []byte) bool {
+func agentGoldenCodecValid(schema string, value []byte) bool {
 	switch schema {
 	case "live_response":
 		var v LiveResponse
@@ -78,7 +79,13 @@ func agentGoldenCodecValid(schema, name string, value []byte) bool {
 		if strictDecodeJSON(value, &v) != nil || !validAgentResponse(&v) {
 			return false
 		}
-		return (name != "nonterminal response forbids memory proposal" || v.MemoryProposal == nil) && (name != "terminal response requires memory proposal" || v.MemoryProposal != nil)
+		if schema == "dialogue_nonterminal_response" {
+			return v.MemoryProposal == nil
+		}
+		if schema == "dialogue_terminal_response" {
+			return v.MemoryProposal != nil
+		}
+		return true
 	case "memory_reconcile_request", "memory_reconcile_active_request", "memory_reconcile_inactive_request":
 		var v MemoryReconcileRequest
 		return strictDecodeJSON(value, &v) == nil && validAgentRequest(v)
@@ -103,7 +110,7 @@ func agentGoldenCodecValid(schema, name string, value []byte) bool {
 	case "cancel_response":
 		var v CancelResponse
 		return strictDecodeJSON(value, &v) == nil && validAgentResponse(&v)
-	case "dialogue_terminal_fact_node":
+	case "dialogue_terminal_fact_node", "dialogue_terminal_failed_fact_node", "dialogue_terminal_nonfailed_fact_node":
 		var v AgentDialogueFact
 		return strictDecodeJSON(value, &v) == nil && validDialogueFact(v, true)
 	case "dialogue_nonterminal_fact_node":
@@ -114,22 +121,22 @@ func agentGoldenCodecValid(schema, name string, value []byte) bool {
 		return strictDecodeJSON(value, &v) == nil && validDialogueLine(v)
 	case "persona_text":
 		var v string
-		return strictDecodeJSON(value, &v) == nil && validAgentText(v, 4096, false)
+		return strictDecodeJSON(value, &v) == nil && validAgentMemoryText(v, 4096)
 	case "memory_summary":
 		var v string
-		return strictDecodeJSON(value, &v) == nil && validAgentText(v, 2048, false)
+		return strictDecodeJSON(value, &v) == nil && validAgentMemoryText(v, 2048)
 	case "mcp_endpoint":
 		var v string
 		return strictDecodeJSON(value, &v) == nil && validMCPEndpoint(v)
+	case "instruction_text":
+		var v string
+		return strictDecodeJSON(value, &v) == nil && validAgentNonBlankText(v, 1024)
+	case "memory_state_zero":
+		var v AgentMemoryState
+		return strictDecodeJSON(value, &v) == nil && validMemoryState(v)
 	case "error_response":
-		var v struct {
-			ContractVersion string  `json:"contract_version"`
-			RequestID       *string `json:"request_id"`
-			Error           struct {
-				Code string `json:"code"`
-			} `json:"error"`
-		}
+		var v agentErrorResponse
 		return validAgentErrorEnvelope(value, &v)
 	}
-	return false
+	panic(fmt.Sprintf("未处理的 Agent golden schema %q", schema))
 }

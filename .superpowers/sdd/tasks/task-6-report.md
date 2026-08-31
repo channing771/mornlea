@@ -99,3 +99,48 @@ RED 后恢复 fixture 的明确 `release` channel：handler 可由请求 context
 ### 剩余风险
 
 需要继续补完整 manifest 11-route `httptest` dispatch matrix 和由 manifest 解析出的 method/status/identity assertions；当前 golden test 已覆盖每个 checked-in schema fixture 的实际 DTO codec，但尚不是所有 route 的端到端 transport case。
+
+## Round 2 manifest matrix repair
+
+### RED
+
+`go test ./internal/companion -run 'AgentManifest|AgentClientStrict' -race -count=1` 首轮暴露未声明 `201` 被接受并返回已填充 DTO，Acquire contract version、reconcile tombstone、memory delete epoch 等关联不匹配也会留下部分值；strict nested required/variant、非法 request 与 error envelope 仍有漏网。
+
+`go test ./internal/companion -run TestAgentStrictJSONAllowsEscapedLiteralSurrogateText -count=1` 失败为 `invalid strict JSON`，证明原 surrogate scanner 把转义后的字面 `\\ud800` 误判为孤立 surrogate。
+
+`go test ./internal/companion -run TestAgentContractGoldenDrivesActualDTOCodecs -count=1` 在 `memory_state_zero` panic，证明旧 golden harness 对未识别 invalid schema 直接返回 false 而伪绿。
+
+`go test ./internal/companion -run 'TestAgentClientStrictNestedRequiredAndVariantFields/nonterminal_proposal_explicit_null' -count=1` 返回已填充 Dialogue DTO，证明显式 `memory_proposal:null` 被错误等同为字段缺席。
+
+`go test ./internal/companion -run 'TestAgentClientRejectsInvalidRequestsBeforeDispatch/MCP_(encoded_path|invalid_port)' -count=1` 的两个 case 都到达 `httptest` handler，证明 encoded `/mcp` 与越界端口未在触网前拒绝。
+
+`go test ./internal/config -run TestAIConfigDisabledFormsIgnoreAgentAndLegacySettings -count=1` 因 disabled 配置的数值 `agentService` 解析失败，证明空伙伴仍提前要求 service/timeout 形状。
+
+### GREEN 与 manifest 覆盖
+
+- `manifest.json` 直接驱动 11 条公开 route 的实际 `AgentClient` 方法、method/path、Bearer/匿名、精确 Content-Type、identity profile、success status 与 error allowlist；全部 request 均由 production DTO marshal 后进入真实 `httptest` transport，全部 response/error 均经过 production strict decoder 与 correlation。
+- success 共 14 个实际 dispatch：12 个 manifest response，加上 Dialogue terminal/nonterminal 与 reconcile active/inactive 展开；包含 `/readyz` 503 `not_ready`。59 个 route/error 声明组合逐一验证，并为每条 route 验证错误 status/code 错配、未声明 code 与未声明 success status 均返回 typed 零值。
+- 由 manifest identity profile 驱动 79 个 response correlation mutation；覆盖 contract/request/client/namespace/lease/run/companion/generation/snapshot/epoch/operation，以及 reconcile tombstone 和 delete new-epoch 映射。golden 本身若不满足同名关联会直接失败，不再静默跳过。
+- production contract boundary 无 `json.RawMessage`。所有顶层及 nested DTO 使用 closed typed object/union decoder，required/unknown/null 与 variant presence 精确区分；duplicate、非法 UTF-8、孤立高低 surrogate、错误 surrogate pair、NaN、trailing、null、type、missing、unknown 均失败且丢弃部分值，合法 surrogate pair 与转义字面量正常接受。
+- request 在触网前校验 v1、canonical UUID、range/deadline、text byte/控制字符、非空数组、variant、loopback MCP URL 的 256-byte/exact raw path/有效端口，以及 256 KiB body；response 校验精确 status/常量/enum/variant、64 KiB body 与 16 KiB header。
+- request/response body 的 exact 与 `+1` byte、chunked overflow、声明 Content-Length overflow、request/response header 的 exact 与 `+1` byte、Content-Type 变体都有独立边界测试。
+- client 使用独立构造的 transport，不继承外部 client 或可变全局默认 transport；proxy nil、identity encoding、compression/keep-alive/redirect 禁用，断连 GET 仅一次请求。caller cancel/deadline 与并发幂等 `Close` 都取消 in-flight 并返回零值；正常调用无 goroutine 累积，`%v`/`%+v`/`%#v` 不泄漏 credential。
+- disabled/missing/null/empty companions 不解析 Agent service、timeout 或 secret；active 配置覆盖 legacy 单字段迁移、IPv4/IPv6 loopback、case-fold collision、nested unknown 精确路径，以及 timeout 0/1/60/61。
+
+### 最终验证
+
+`go test ./internal/config ./internal/companion -run 'Agent|AIConfig|Contract' -race -count=1 -timeout=120s` 连续两遍：PASS。
+
+`go test ./internal/config -race -count=1`：PASS。
+
+`go test ./internal/companion -race -count=1`：PASS。
+
+`go vet ./internal/config ./internal/companion`：PASS。
+
+`go test ./internal/archcheck -count=1`：PASS。
+
+`gofmt` 与 `git diff --check`：PASS。
+
+### 剩余风险
+
+consolidated findings 1–7 在本轮范围内均已闭环。Planner/Dialogue wiring、persistence 与 Task 7 之后的实现仍按后续任务推进，本轮未触碰。

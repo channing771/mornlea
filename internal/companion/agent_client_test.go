@@ -74,12 +74,22 @@ func TestAgentClientRejectsCorrelationMismatchAndCancellation(t *testing.T) {
 	}
 	client.endpoint += "/wait"
 	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() { _, err := client.Acquire(ctx, request); done <- err }()
+	done := make(chan struct {
+		response AcquireResponse
+		err      error
+	}, 1)
+	go func() {
+		response, err := client.Acquire(ctx, request)
+		done <- struct {
+			response AcquireResponse
+			err      error
+		}{response: response, err: err}
+	}()
 	<-started
 	cancel()
-	if err := <-done; !errors.Is(err, context.Canceled) {
-		t.Fatalf("cancelled acquire = %v", err)
+	result := <-done
+	if result.response != (AcquireResponse{}) || !errors.Is(result.err, context.Canceled) {
+		t.Fatalf("cancelled acquire = %+v, %v", result.response, result.err)
 	}
 	close(release)
 }
