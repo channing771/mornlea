@@ -111,13 +111,13 @@ func TestSkyLightDimsWithDepthUnderOpenWater(t *testing.T) {
 
 // TestBlockLightIsBlockedByWaterAndGlassAlike 是 static-block-light 的回归守卫。
 //
-// 主规格写死「光在六个轴向上仅向 AirID 相邻格传播并每格衰减 1，任何其他方块即使未来
-// 被标记为透明也阻断方块光」。本变更只放宽天空光，**方块光模型不动**：水阻断方块光
-// 与玻璃的既有行为同构，是已裁决的边界，不是缺陷。
+// 主规格写死「光在六个轴向上仅向 AirID 或植物相邻格传播并每格衰减 1，任何其他方块
+// 即使未来被标记为透明也阻断方块光」。水阻断方块光与玻璃的既有行为同构，是已裁决
+// 的边界，不是缺陷。
 //
-// 这条守卫防的是「改天空光时顺手把方块光也放开」——放开之后既有的方块光用例大概率
-// 仍然全绿，因为它们的夹具里既没有水也没有玻璃。两种阻断物跑同一套断言，正是为了
-// 把「水和玻璃一视同仁」这件事本身钉住。
+// 这条守卫防的是「把天空光的透明判据直接复用到方块光」——发生后既有的方块光用例
+// 大概率仍然全绿，因为它们的夹具里既没有水也没有玻璃。两种阻断物跑同一套断言，
+// 正是为了把「水和玻璃一视同仁」这件事本身钉住。
 func TestBlockLightIsBlockedByWaterAndGlassAlike(t *testing.T) {
 	const floorY int32 = 64
 	registry := assets.NewRegistry()
@@ -139,7 +139,7 @@ func TestBlockLightIsBlockedByWaterAndGlassAlike(t *testing.T) {
 				t.Fatalf("阻断物前方方块光=%d，想要 9", got)
 			}
 			if got := blockLight(topFaceLightAt(t, quads, 8, localY, 8)); got != 0 {
-				t.Fatalf("%s 后方方块光=%d，想要 0：方块光 MUST 仅经 AirID 传播", tt.name, got)
+				t.Fatalf("%s 后方方块光=%d，想要 0：方块光 MUST 仅经 AirID 或植物传播", tt.name, got)
 			}
 		})
 	}

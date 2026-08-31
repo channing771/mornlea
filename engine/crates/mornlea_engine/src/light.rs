@@ -1,4 +1,5 @@
 use crate::input::{MeshInput, RegistryView};
+use crate::quad::{Face, plant_material};
 
 pub(crate) const LIGHT_MIN: i32 = -16;
 pub(crate) const LIGHT_SIDE: usize = 48;
@@ -246,8 +247,9 @@ fn build_block(
                 continue;
             }
             let next = light_index(nx, ny, nz);
+            let id = input.block(nx, ny, nz);
             if scratch.levels[next] & BLOCK_MASK >= candidate
-                || input.block(nx, ny, nz) != input.air_id
+                || !block_light_destination(registry, id, input.air_id)
             {
                 continue;
             }
@@ -256,6 +258,14 @@ fn build_block(
         }
     }
     Ok(())
+}
+
+// block_light_destination 只放行空气与离散植物材质；未登记编号因无材质而关闭。
+fn block_light_destination(registry: &RegistryView<'_>, id: u16, air_id: u16) -> bool {
+    id == air_id
+        || registry
+            .material(id, Face::NegX as usize)
+            .is_some_and(plant_material)
 }
 
 fn inside(x: i32, y: i32, z: i32) -> bool {
@@ -429,7 +439,7 @@ mod tests {
     }
 
     #[test]
-    fn non_air_non_opaque_block_stops_block_light() {
+    fn non_plant_non_air_non_opaque_block_stops_block_light() {
         let mut bytes = base_input(15);
         for block in bytes[BLOCKS_OFFSET..BLOCKS_OFFSET + BLOCKS_BYTES].chunks_exact_mut(2) {
             block.copy_from_slice(&1_u16.to_le_bytes());
@@ -444,6 +454,73 @@ mod tests {
 
         assert_eq!(storage.light.at(9, 8, 8) & 0x0f, 0);
         assert_eq!(storage.light.at(10, 8, 8) & 0x0f, 0);
+    }
+
+    #[test]
+    fn crop_and_short_grass_plant_block_light_steps_down_normally() {
+        for material in [31_u16, 68] {
+            let mut bytes = base_input(15);
+            for block in bytes[BLOCKS_OFFSET..BLOCKS_OFFSET + BLOCKS_BYTES].chunks_exact_mut(2) {
+                block.copy_from_slice(&1_u16.to_le_bytes());
+            }
+            let plant = REGISTRY_OFFSET + ENTRY_BYTES;
+            bytes[plant + 2] = 0;
+            for face in 0..6 {
+                bytes[plant + 4 + face * 2..plant + 6 + face * 2]
+                    .copy_from_slice(&material.to_le_bytes());
+            }
+            set_block(&mut bytes, 8, 8, 8, LIGHT_ID);
+            set_block(&mut bytes, 10, 8, 8, 0);
+            let input = parse_fixture(bytes);
+            let mut storage = ScratchFixture::new();
+
+            build_light(&input.mesh, &input.mesh.registry, &mut storage.light).unwrap();
+
+            assert_eq!(
+                storage.light.at(9, 8, 8) & 0x0f,
+                14,
+                "植物材质层 {material} 未让方块光进入相邻格"
+            );
+            assert_eq!(
+                storage.light.at(10, 8, 8) & 0x0f,
+                13,
+                "植物材质层 {material} 后方空气未继续传播"
+            );
+        }
+    }
+
+    #[test]
+    fn crop_and_short_grass_plant_direct_sky_stays_fifteen() {
+        for material in [31_u16, 68] {
+            let mut bytes = base_input(0);
+            for x in -16..32 {
+                for z in -16..32 {
+                    set_height(&mut bytes, x, z, Some(-17));
+                }
+            }
+            let plant = REGISTRY_OFFSET + ENTRY_BYTES;
+            bytes[plant + 2] = 0;
+            for face in 0..6 {
+                bytes[plant + 4 + face * 2..plant + 6 + face * 2]
+                    .copy_from_slice(&material.to_le_bytes());
+            }
+            set_block(&mut bytes, 8, 8, 8, 1);
+            let input = parse_fixture(bytes);
+            let mut storage = ScratchFixture::new();
+
+            build_light(&input.mesh, &input.mesh.registry, &mut storage.light).unwrap();
+
+            assert_eq!(
+                storage.light.at(8, 8, 8) >> 4,
+                15,
+                "植物材质层 {material} 的直射天空光不是 15"
+            );
+            assert_eq!(
+                storage.light.at(8, 7, 8) >> 4,
+                15,
+                "植物材质层 {material} 正下方的直射天空光不是 15"
+            );
+        }
     }
 
     /// 天空光穿过流体时每格额外衰减：固定的 1 加上查表得到的 `light_attenuation`。

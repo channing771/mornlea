@@ -3,6 +3,7 @@ package mesh_test
 import (
 	"testing"
 
+	"github.com/channing771/mornlea/internal/assets"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/mesh"
 	"github.com/channing771/mornlea/internal/world"
@@ -184,7 +185,8 @@ func (s *goLightScratch) buildBlock(n *world.Neighborhood, reg mesh.Registry) {
 				continue
 			}
 			next := lightIndex(nx, ny, nz)
-			if s.levels[next]&blockMask >= candidate || n.At(nx, ny, nz) != world.AirID {
+			id := n.At(nx, ny, nz)
+			if s.levels[next]&blockMask >= candidate || id != world.AirID && !core.IsPlant(id) {
 				continue
 			}
 			s.levels[next] = s.levels[next]&skyMask | candidate
@@ -335,4 +337,195 @@ func TestGoLightOracleRejectsEmissionAboveFifteen(t *testing.T) {
 		}
 	}()
 	newGoLightScratch().build(n, oracleOverbrightRegistry{})
+}
+
+func TestMeshSectionPlantBlockLightMatchesGoOracle(t *testing.T) {
+	const floorY int32 = 64
+	registry := assets.NewRegistry()
+	for _, tt := range []struct {
+		name  string
+		plant world.BlockID
+	}{
+		{"既有作物", core.WheatStage0ID},
+		{"短草", core.ShortGrassID},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			n, localY := blockLightCorridor(t, floorY, map[core.BlockPos]world.BlockID{
+				{X: 0, Y: floorY + 1, Z: 8}: core.LightBlockID,
+				{X: 1, Y: floorY + 1, Z: 8}: tt.plant,
+			})
+			quads, oracle := meshSectionLightMatchesGoOracle(t, n, registry)
+			if got := oracle.at(1, localY+1, 8) & blockMask; got != 14 {
+				t.Fatalf("Go oracle 植物格方块光=%d，想要 14", got)
+			}
+			if got := oracle.at(2, localY+1, 8) & blockMask; got != 13 {
+				t.Fatalf("Go oracle 植物后空气方块光=%d，想要 13", got)
+			}
+
+			if got := blockLight(topFaceLightAt(t, quads, 1, localY, 8)); got != 14 {
+				t.Fatalf("Rust packed 植物格方块光=%d，Go oracle=14", got)
+			}
+			if got := blockLight(topFaceLightAt(t, quads, 2, localY, 8)); got != 13 {
+				t.Fatalf("Rust packed 植物后空气方块光=%d，Go oracle=13", got)
+			}
+		})
+	}
+}
+
+func TestMeshSectionBlockLightBlockersMatchGoOracle(t *testing.T) {
+	const floorY int32 = 64
+	registry := assets.NewRegistry()
+	for _, tt := range []struct {
+		name    string
+		blocker world.BlockID
+	}{
+		{"玻璃", core.GlassID},
+		{"水", core.WaterSourceID},
+		{"石头", core.StoneID},
+		{"未知方块", world.BlockID(60000)},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			n, localY := blockLightCorridor(t, floorY, map[core.BlockPos]world.BlockID{
+				{X: 0, Y: floorY + 1, Z: 8}: core.LightBlockID,
+				{X: 1, Y: floorY + 1, Z: 8}: tt.blocker,
+			})
+			quads, oracle := meshSectionLightMatchesGoOracle(t, n, registry)
+			if got := oracle.at(1, localY+1, 8) & blockMask; got != 0 {
+				t.Fatalf("Go oracle 让方块光进入%s格：%d", tt.name, got)
+			}
+			if got := oracle.at(2, localY+1, 8) & blockMask; got != 0 {
+				t.Fatalf("Go oracle 让方块光穿过%s：%d", tt.name, got)
+			}
+			if got := blockLight(topFaceLightAt(t, quads, 2, localY, 8)); got != 0 {
+				t.Fatalf("Rust packed 让方块光穿过%s：%d", tt.name, got)
+			}
+		})
+	}
+}
+
+func TestMeshSectionMissingNeighborBlockLightMatchesGoOracle(t *testing.T) {
+	const floorY int32 = 64
+	registry := assets.NewRegistry()
+	n, localY := blockLightCorridor(t, floorY, map[core.BlockPos]world.BlockID{
+		{X: -1, Y: floorY + 1, Z: 8}: core.LightBlockID,
+	})
+	loaded, loadedOracle := meshSectionLightMatchesGoOracle(t, n, registry)
+	if got := loadedOracle.at(0, localY+1, 8) & blockMask; got != 14 {
+		t.Fatalf("已加载邻区的 Go oracle 边界方块光=%d，想要 14", got)
+	}
+	if got := blockLight(topFaceLightAt(t, loaded, 0, localY, 8)); got != 14 {
+		t.Fatalf("已加载邻区的 Rust packed 边界方块光=%d，想要 14", got)
+	}
+
+	n.Around[0][1][1] = nil
+	missing, missingOracle := meshSectionLightMatchesGoOracle(t, n, registry)
+	if got := missingOracle.at(0, localY+1, 8) & blockMask; got != 0 {
+		t.Fatalf("缺失邻区后的 Go oracle 边界方块光=%d，想要 0", got)
+	}
+	if got := blockLight(topFaceLightAt(t, missing, 0, localY, 8)); got != 0 {
+		t.Fatalf("缺失邻区后的 Rust packed 边界方块光=%d，想要 0", got)
+	}
+}
+
+func TestMeshSectionPlantDirectSkyLightMatchesGoOracle(t *testing.T) {
+	registry := assets.NewRegistry()
+	for _, tt := range []struct {
+		name  string
+		plant world.BlockID
+	}{
+		{"既有作物", core.WheatStage0ID},
+		{"短草", core.ShortGrassID},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			n := fullyLoadedAirNeighborhoodOracle()
+			n.Center.Blocks.Set(8, 1, 8, core.StoneID)
+			n.Center.Blocks.Set(8, 2, 8, tt.plant)
+			n.Center.Blocks.Set(10, 0, 8, core.StoneID)
+			n.Center.Blocks.Set(10, 2, 8, tt.plant)
+
+			quads, oracle := meshSectionLightMatchesGoOracle(t, n, registry)
+			if got := oracle.at(8, 2, 8) >> 4; got != 15 {
+				t.Fatalf("Go oracle 植物格直射天空光=%d，想要 15", got)
+			}
+			if got := oracle.at(10, 1, 8) >> 4; got != 15 {
+				t.Fatalf("Go oracle 植物正下方天空光=%d，想要 15", got)
+			}
+			if got := skyLight(topFaceLightAt(t, quads, 8, 1, 8)); got != 15 {
+				t.Fatalf("Rust packed 植物格直射天空光=%d，想要 15", got)
+			}
+			if got := skyLight(topFaceLightAt(t, quads, 10, 0, 8)); got != 15 {
+				t.Fatalf("Rust packed 植物正下方天空光=%d，想要 15", got)
+			}
+		})
+	}
+}
+
+func TestMeshSectionPlantPropagatedSkyLightMatchesGoOracle(t *testing.T) {
+	registry := assets.NewRegistry()
+	for _, tt := range []struct {
+		name  string
+		plant world.BlockID
+	}{
+		{"既有作物", core.WheatStage0ID},
+		{"短草", core.ShortGrassID},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			n, localY := propagatedSkyWorld(t, 0, nil)
+			n.Center.Blocks.Set(1, localY+1, 8, tt.plant)
+			quads, oracle := meshSectionLightMatchesGoOracle(t, n, registry)
+			if got := oracle.at(1, localY+1, 8) >> 4; got != 14 {
+				t.Fatalf("Go oracle 植物格派生天空光=%d，想要 14", got)
+			}
+			if got := oracle.at(2, localY+1, 8) >> 4; got != 13 {
+				t.Fatalf("Go oracle 植物后空气天空光=%d，想要 13", got)
+			}
+			if got := skyLight(topFaceLightAt(t, quads, 1, localY, 8)); got != 14 {
+				t.Fatalf("Rust packed 植物格派生天空光=%d，想要 14", got)
+			}
+			if got := skyLight(topFaceLightAt(t, quads, 2, localY, 8)); got != 13 {
+				t.Fatalf("Rust packed 植物后空气天空光=%d，想要 13", got)
+			}
+		})
+	}
+}
+
+// meshSectionLightMatchesGoOracle 逐条 quad、逐个被覆盖单元对照 native packed
+// 光照与 Go oracle。轴向面采样相邻格，植物交叉斜面采样正上方格。
+func meshSectionLightMatchesGoOracle(
+	t *testing.T,
+	n *world.Neighborhood,
+	registry mesh.Registry,
+) ([]mesh.Quad, *goLightScratch) {
+	t.Helper()
+	oracle := newGoLightScratch()
+	oracle.build(n, registry)
+	quads := mesh.MeshSection(n, registry, mesh.NewLightScratch())
+	for index, quad := range quads {
+		if quad.Face.Plant() {
+			want := oracle.at(int(quad.X), int(quad.Y)+1, int(quad.Z))
+			if quad.Light != want {
+				t.Fatalf("quad[%d] 植物面 packed light=%#x，Go oracle=%#x", index, quad.Light, want)
+			}
+			continue
+		}
+		axis := quad.Face.Axis()
+		u, v := (axis+1)%3, (axis+2)%3
+		step := -1
+		if quad.Face.Positive() {
+			step = 1
+		}
+		for dv := 0; dv < int(quad.H); dv++ {
+			for du := 0; du < int(quad.W); du++ {
+				cell := [3]int{int(quad.X), int(quad.Y), int(quad.Z)}
+				cell[u] += du
+				cell[v] += dv
+				cell[axis] += step
+				want := oracle.at(cell[0], cell[1], cell[2])
+				if quad.Light != want {
+					t.Fatalf("quad[%d] face=%d cell=(%d,%d,%d) packed light=%#x，Go oracle=%#x", index, quad.Face, cell[0], cell[1], cell[2], quad.Light, want)
+				}
+			}
+		}
+	}
+	return quads, oracle
 }

@@ -82,8 +82,8 @@ fn torch_material(mat: u32) -> bool {
 // 8、底缘为 0），bit 12..19/55..62 是角高度而不是 w/h 尺寸，与耕地/火把共用
 // 同一条角高度解码路径——判别同样走 material：床是轴向面（face 0..5），与
 // 植物（face 6/7）按 face 天然互斥。数值真值源是 Go internal/assets 的
-// `LayerBedFootSouth`..`LayerBedHeadEast`（60..67，层枚举末位追加），Rust 侧
-// 复述见 src/render/shaders.rs 的 `BED_MATERIAL_FIRST`/`BED_MATERIAL_LAST`，
+// `LayerBedFootSouth`..`LayerBedHeadEast`（冻结区间 60..67，后接短草层 68），
+// Rust 侧复述见 src/render/shaders.rs 的 `BED_MATERIAL_FIRST`/`BED_MATERIAL_LAST`，
 // 三方由 render/farmland_tests.rs 的源码扫描与床渲染回归钉在一起——在这里
 // 改数字必须同步另外两处。
 fn bed_material(mat: u32) -> bool {

@@ -33,15 +33,15 @@ pub const FARMLAND_MATERIAL_LAST: u16 = 30;
 /// 枚举的火把之前插层会平移这个编号,那处守卫就是仅有的报警点之一。
 pub const TORCH_MATERIAL: u16 = 59;
 
-/// 床材质层的闭区间：床尾/床头 × 南西北东八层（60..67，火把层之后枚举末位
-/// 追加）。床是 registry `block_top_raw`=8 的短方块（9/16 半高板），五条
-/// quad 全部携带角高度原值（侧板顶缘与平顶为 8、底缘为 0），terrain.wgsl
+/// 床材质层的闭区间：床尾/床头 × 南西北东八层（60..67，火把层之后的冻结
+/// 区间，后接短草层 68）。床是 registry `block_top_raw`=8 的短方块（9/16
+/// 半高板），五条 quad 全部携带角高度原值（侧板顶缘与平顶为 8、底缘为 0），terrain.wgsl
 /// 据此把 bit 12..19/55..62 解码成顶点抬升而不是 `w/h` 尺寸——与耕地/火把
 /// 共用同一条角高度解码路径，判别同样走 material（床是轴向面 face 0..5，与
 /// 植物的 face 6/7 按 face 天然互斥）。
 ///
-/// 数值的真值源是 Go 侧 `internal/assets` 层枚举末位追加的
-/// `LayerBedFootSouth`..`LayerBedHeadEast`（iota，当前 60..67）。三处没有
+/// 数值的真值源是 Go 侧 `internal/assets` 层枚举中的冻结区间
+/// `LayerBedFootSouth`..`LayerBedHeadEast`（iota，当前 60..67，后接 68）。三处没有
 /// 共享定义也没有生成步骤，只能人手同步——Go 枚举、本常量、terrain.wgsl 里
 /// `bed_material` 的硬编码字面量，由 render/farmland_tests.rs 的源码扫描与
 /// 床渲染回归钉在一起。在 Go 层枚举的床之前插层会整体平移这段区间，那两处

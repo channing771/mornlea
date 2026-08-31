@@ -304,7 +304,7 @@ impl RegistryView<'_> {
     /// light_attenuation 返回天空光穿过该方块时的额外衰减。
     ///
     /// 天空光 BFS（`light::build_sky`）消费它：每格扣减 = 固定的 1 + 本值。
-    /// 方块光**不**读它——方块光只经 `AirID` 传播，任何非空气方块一律阻断。
+    /// 方块光**不**读它——方块光只经 `AirID` 或植物传播，其他非空气方块一律阻断。
     pub(crate) fn light_attenuation(&self, id: u16) -> u8 {
         self.index(id)
             .map_or(0, |index| self.entries[index * REGISTRY_ENTRY_BYTES + 17])
