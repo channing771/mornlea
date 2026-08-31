@@ -891,9 +891,15 @@ const FRAME_TAG_HUD: u32 = 6;
 const FRAME_TAG_DEBUG: u32 = 7;
 /// 水下水色叠加段(4 个 f32:RGBA)。client ABI v5 内的追加 tag,不升 ABI 版本。
 const FRAME_TAG_WATER: u32 = 8;
+/// 采掘裂纹实例段(80 字节/实例:mat4 + atlas 层号 f32 + 零填充)。沿
+/// client ABI v5 内追加 tag 8 的先例在帧内追加、不升 ABI 版本;tag 9 的
+/// 退役语义(v8–v11 菜单 UI 段)被占用故跳过,取下一个空闲值 10。段按
+/// 条件追加:流为空时帧字节与引入前逐位一致。
+const FRAME_TAG_CRACK: u32 = 10;
 /// 白名单内的最高 TLV tag。client ABI v12 退役了 v8–v11 的 tag 9 UI 段:
-/// 携带该段的帧按未知 tag 同一路径拒绝,不触碰渲染器状态。
-const FRAME_TAG_MAX: u32 = 8;
+/// 白名单区间虽覆盖到 tag 10,携带 tag 9 段的帧仍由 match 分支与未知 tag
+/// 同一路径拒绝,不触碰渲染器状态。
+const FRAME_TAG_MAX: u32 = 10;
 
 /// 解析 render_frame 输入;违约返回 None。
 ///
@@ -941,9 +947,11 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
     let mut name_tag_vertices = Vec::new();
     let mut hud_vertices = Vec::new();
     let mut debug_vertices = Vec::new();
+    let mut crack_instances = Vec::new();
     if layout == 2 {
         let mut cursor = sections_end;
-        let mut seen = [false; 9];
+        // seen 以 tag 为下标,长度覆盖白名单 1..=10(tag 0 不存在,浪费一格)。
+        let mut seen = [false; 11];
         while cursor < bytes.len() {
             if bytes.len() - cursor < 8 {
                 return None;
@@ -952,7 +960,7 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
             let length = read_u32(cursor + 4) as usize;
             cursor += 8;
             // 各 pass 段均为定长实例数组(长度天然 4 对齐),对齐检查统一;
-            // tag 白名单 1..=8,已退役的 tag 9 与未知 tag 同路径拒绝。
+            // tag 白名单 1..=10,已退役的 tag 9 与未知 tag 同路径拒绝。
             if !length.is_multiple_of(4) || bytes.len() - cursor < length {
                 return None;
             }
@@ -986,6 +994,7 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
                         );
                     }
                 }
+                FRAME_TAG_CRACK => crack_instances = payload.to_vec(),
                 _ => return None,
             }
         }
@@ -1009,6 +1018,7 @@ fn parse_frame(bytes: &[u8]) -> Option<FrameInput> {
         name_tag_vertices,
         hud_vertices,
         debug_vertices,
+        crack_instances,
     })
 }
 
@@ -1896,9 +1906,9 @@ mod frame_v2_tests {
         // 空 pass 段序列同样合法(v2 允许零段)。
         assert_eq!(parse_status(&v2_frame(&[])), MORNLEA_CLIENT_STATUS_WINDOW);
 
-        // 未知 tag(10 超出白名单 1..=8)。
+        // 未知 tag(11 超出白名单 1..=10)。
         assert_eq!(
-            parse_status(&v2_frame(&tlv(10, &[0u8; 4]))),
+            parse_status(&v2_frame(&tlv(11, &[0u8; 4]))),
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
         // 已退役 tag 9(v8–v11 的菜单 UI 段):与未知 tag 同路径拒绝,
@@ -1961,6 +1971,45 @@ mod frame_v2_tests {
         v1_trailing[188] = 0;
         assert_eq!(
             parse_status(&v1_trailing),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+    }
+
+    /// tag 10(采掘裂纹实例段)的解析矩阵:合法段、与其他 pass 段共存、
+    /// 重复段拒绝、长度非 4 对齐拒绝。tag 10 是 client ABI v14 内追加的
+    /// 段(不升 ABI):payload 为 80 字节/实例的定长数组,与其他实例段
+    /// 共用同一套 TLV 结构约束。
+    #[test]
+    fn crack_segment_parse_matrix() {
+        // 合法:恰 1 个 80 字节实例(当前呈现容量上限)。
+        assert_eq!(
+            parse_status(&v2_frame(&tlv(FRAME_TAG_CRACK, &[0u8; 80]))),
+            MORNLEA_CLIENT_STATUS_WINDOW,
+            "合法 crack 段应通过解析并因句柄未知被拒"
+        );
+
+        // 与既有段共存:avatar、outline 与 crack 三段同帧逐一解析。
+        let mut passes = Vec::new();
+        passes.extend(tlv(FRAME_TAG_AVATAR, &[0u8; 8]));
+        passes.extend(tlv(FRAME_TAG_OUTLINE, &[0u8; 16]));
+        passes.extend(tlv(FRAME_TAG_CRACK, &[0u8; 80]));
+        assert_eq!(
+            parse_status(&v2_frame(&passes)),
+            MORNLEA_CLIENT_STATUS_WINDOW,
+            "crack 段应能与既有段共存解析"
+        );
+
+        // 重复 tag 10 段拒绝(每类段至多出现一次)。
+        let mut dup = tlv(FRAME_TAG_CRACK, &[0u8; 80]);
+        dup.extend(tlv(FRAME_TAG_CRACK, &[0u8; 80]));
+        assert_eq!(
+            parse_status(&v2_frame(&dup)),
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+
+        // 长度非 4 对齐拒绝(统一对齐约束同样约束新段)。
+        assert_eq!(
+            parse_status(&v2_frame(&tlv(FRAME_TAG_CRACK, &[0u8; 6]))),
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
     }

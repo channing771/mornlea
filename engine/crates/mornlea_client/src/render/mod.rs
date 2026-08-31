@@ -149,6 +149,9 @@ pub struct FrameInput {
     pub drop_instances: Vec<u8>,
     /// 目标方块轮廓参数字节;空表示本帧无轮廓。
     pub outline: Vec<u8>,
+    /// 采掘裂纹 overlay 实例流(80 字节/实例:mat4 + atlas 层号 f32 + 零
+    /// 填充,布局与 Go `EncodeBlockCrackInstances` 一致);空表示本帧无裂纹。
+    pub crack_instances: Vec<u8>,
     /// 伤害红边强度(0 表示不绘制)。
     pub overlay_strength: f32,
     /// 相机浸没时的全屏水色叠加 RGBA(A <= 0 表示不绘制)。
@@ -178,6 +181,7 @@ impl FrameInput {
         self.avatar_instances.is_empty()
             && self.drop_instances.is_empty()
             && self.outline.is_empty()
+            && self.crack_instances.is_empty()
             && self.overlay_strength == 0.0
             && self.water_tint[3] == 0.0
             && self.name_tag_vertices.is_empty()
@@ -2483,6 +2487,21 @@ mod tests {
             u64::from(WATER_POOL_INSTANCES) * BYTES_PER_VISIBLE_FACE <= 128 * 1024 * 1024,
             "水面实例缓冲超出 128 MiB 绑定上限"
         );
+    }
+
+    /// 纯地形帧(v1 语义)判定不受裂纹字段引入的影响:全部 pass 段为空
+    /// (含空裂纹流)时 [`FrameInput::empty_passes`] 仍为真,非空裂纹流
+    /// 则构成 pass 段。
+    #[test]
+    fn pure_terrain_frame_stays_empty_passes_with_crack_field() {
+        let frame = empty_frame();
+        assert!(frame.empty_passes(), "纯地形帧必须是 empty_passes");
+        let mut with_empty_crack = empty_frame();
+        with_empty_crack.crack_instances = Vec::new();
+        assert!(with_empty_crack.empty_passes(), "空裂纹流不构成 pass 段");
+        let mut with_crack = empty_frame();
+        with_crack.crack_instances = vec![0u8; 80];
+        assert!(!with_crack.empty_passes(), "非空裂纹流构成 pass 段");
     }
 
     #[test]
