@@ -631,7 +631,7 @@ fn sorting_granularity_is_the_section() {
 /// 既有方块材质 atlas 的裂纹层（无独立纹理上传入口）、无每帧动态资源
 /// 创建、不写深度附件、不引入任何透明排序。
 #[test]
-fn water_is_the_only_added_render_pass() {
+fn translucent_render_passes_stay_within_water_and_crack() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/render");
     let mut sources: Vec<(String, String)> = std::fs::read_dir(&dir)
         .expect("读取 src/render 目录")

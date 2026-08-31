@@ -159,7 +159,9 @@ impl CrackPass {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    // 仅 vertex 阶段读取实例(镜像 EntityPass 先例):shader
+                    // 的 fs_main 只消费 vs_main 传出的 uv/layer/daylight。
+                    visibility: wgpu::ShaderStages::VERTEX,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: true },
                         has_dynamic_offset: false,
