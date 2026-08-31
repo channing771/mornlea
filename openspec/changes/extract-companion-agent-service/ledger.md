@@ -38,7 +38,7 @@
 | 4 | `openspec_artifacts` | `69f6e6ec` | RED：缺少 Planner/adapters；复审 RED：schema 漂移、transport/envelope 上限、validator wrapper 与 JSON 类型混淆；GREEN：focused 77 passed、full 337 passed、import boundary 48 passed、locked sync/ruff/mypy/wheel/diff-check；提交 `06473b29`、`e4b5dc8f`、`0e773804` | `task4_graph_spec_audit` round 3 PASS | `task4_quality_review` round 3 PASS | Accepted |
 | 5 | `task5_http_research`、`task5_startup_cancel_fix` | `f4009ec0` | RED：缺少 Dialogue/FastAPI；复审 RED：HTTP disconnect、重复取消、响应 fence、关闭与 startup 所有权；GREEN：focused `56 passed`、full Python `393 passed`、import boundary `48 passed`、locked/ruff/mypy/diff-check；提交 `fb569bdd`、`ff7b5be9`、`962e361e`、`2d9042bf` | `task4_fix_quality` round 4 PASS | `task5_quality_review` round 4 PASS | Accepted |
 | 6 | `task6_go_agent_client`、`task6_strict_lifecycle_fix` | `c871b1ec` | RED：配置/client 缺失，Round 1/2 复审继续拒绝 codec、manifest、边界与生命周期缺口；GREEN：隔离 focused race 两遍、config/companion full race、vet、archcheck、gofmt/diff-check；提交 `0fd248d1`、`f56b42bf`、`5ee80a7c`、`6b1deb59`、`f7585788`、`0ea46c31` | `task6_spec_review` round 1/2 FAIL，round 3 PASS | `task6_quality_review` round 1/2 FAIL，round 3 PASS | Accepted |
-| 7 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
+| 7 | `task7_contract_prereq`（Task 7A） | `148b935c` | contract/Python 前置 RED→GREEN；提交 `5812be64`、repair `038c4b86` | 初次 PASS；repair PASS | 初次 FAIL；repair PASS | Task 7A Accepted；Task 7 整体仍 Pending，下一阶段 Task 7B |
 | 8 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 9 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 10 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
@@ -89,6 +89,16 @@
 - Round 3：`0ea46c31` 以 closed DTO null allowlist、真实 16 KiB wire-header gate、唯一 Content-Type、同步 closed/admission 与 active cancel registry、安全 formatter/log value、端口范围和 public typed request preflight 闭环上述问题；独立 SPEC 与 QUALITY 均 PASS，裁决 Accepted。
 - 隔离验证：只将 Task 6 文件的 staged binary diff 应用到 detached `148b935c` 临时 worktree；首次 Go 链接只因 clean worktree 缺少 `libmornlea_engine` 失败，随后按仓库规则运行 `make rust` PASS，并从头执行 `go test ./internal/config ./internal/companion -run 'Agent|AIConfig|Contract' -race -count=1 -timeout=120s` 连续两遍 PASS、`go test ./internal/config -race -count=1 -timeout=120s` PASS、`go test ./internal/companion -race -count=1 -timeout=120s` PASS、`go vet ./internal/config ./internal/companion` PASS、`go test ./internal/archcheck -count=1 -timeout=120s` PASS；Task 6 文件 `gofmt -l` 无输出，`git diff --check` PASS，且删除临时 worktree 前无残留 `go test` 进程。
 - 裁决边界：共享 worktree 当时由 Task 7A machine-contract fixtures 与 Task 8 storage v5 的并发预期 RED 阻断；这些文件未被修改或暂存，也未纳入 Task 6 的通过证据或裁决。
+
+### Task 7A machine-contract 前置实施与评审记录
+
+- 起始工作基线为 `148b935c`；Task 6 独立提交整合后，Task 7A 以 `5812be64` 交付 MCP v1 `domain_result_codes`、find/query strict success/failure `oneOf`、合法/非法 golden、Go fixture consistency、Python closed union 与 normal domain-result Planner 路径。该提交不实现 Go canonical registry、frozen projection、snapshot registry 或 MCP runtime。
+- 初次独立裁决为 SPEC PASS、QUALITY FAIL。QUALITY 发现 discovery 的 `output_schema` 漂移仍访问旧的顶层 `outputSchema.properties`；实际 callback `KeyError` 被 adapter 统一映射成预期 `PlannerUnavailable`，而参数矩阵又没有 mutation-completion sentinel，导致 mock crash 可伪装为 schema rejection。QUALITY 同时拒绝 `domain.common` 的宽松公开 `ValidatorHint` 与 `domain.mcp_v1` 的严格同名定义并存。
+- repair `038c4b86` 先用 delivered-response sentinel 复现 `output_schema` 单例失败（`1 failed, 7 passed`），再改为 `outputSchema.oneOf[0].properties.terrain.maxItems` 并断言 SDK 发出恰好一次 `tools/list`、收到的 payload 确实携带 mutation；同文件其余 transport fault injection 也补充 intended-response/invocation sentinel，避免内部异常被 `PlannerUnavailable` 掩盖。另以 runtime identity RED 证明两份 `ValidatorHint` 分叉，再把唯一严格定义收敛到 `domain.common`（strict string、UTF-8 1..256 bytes、无 NUL/control/edge whitespace），由 MCP v1 直接复用。
+- repair 后独立 SPEC 与 QUALITY 均 PASS，Task 7A 裁决 Accepted；Task 7 的 checkbox 仍保持未勾选，下一阶段 Task 7B 才实现 Go canonical registry、frozen projection/snapshot registry 与 MCP v1 runtime。
+- 初次验证：`go test ./internal/companion -run 'ContractFixture' -count=1` PASS；`cd services/companion-agent && uv run pytest tests/test_contracts.py tests/test_mcp_adapter.py tests/test_planner.py -q` 为 `118 passed`；`uv run ruff format --check . && uv run ruff check . && uv run mypy src` PASS；完整 `uv run pytest -q` 为 `401 passed`；`git diff --check` PASS。
+- repair 验证：相同 Go fixture command PASS；相同 focused Python command 为 `119 passed`；ruff format/check 与 mypy PASS；完整 Python 从 `401` 增至 `402 passed`；`git diff --check` PASS。Task 8 的并发 `internal/server`/`internal/storage` 工作树改动未被修改、暂存或纳入本裁决。
+- ledger 收尾验证：`openspec validate --all --strict --no-interactive` 为 `80 passed, 0 failed`；`git diff --check` PASS。
 
 ### Task 7 实施前设计裁决
 
