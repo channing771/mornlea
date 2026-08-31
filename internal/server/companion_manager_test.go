@@ -780,7 +780,7 @@ func (store *companionManagerOrderStore) SaveCompanions(
 	save storage.CompanionSave,
 ) error {
 	store.order.record("companion-save")
-	return store.hostTestStore.MemoryStore.SaveCompanions(ctx, save)
+	return store.hostTestStore.MemoryStore.SaveCompanions(ctx, fixtureServerCompanionV5Save(save))
 }
 
 func (store *companionManagerOrderStore) Sync(ctx context.Context) error {

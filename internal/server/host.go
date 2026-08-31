@@ -151,41 +151,9 @@ func NewHost(
 	if generator == nil {
 		panic("server: nil generator")
 	}
-	var companions *persistence.Companions
-	if len(config.Companions) != 0 {
-		// 伙伴启用即要求模型运行时就绪。config.Load 已在配置层守住静态完整性，
-		// 这里是第二道边界：直接构造 server.Config 的入口（测试、未来的嵌入方）
-		// 也不能带着残缺模型设置启动。校验放在 LoadCompanions 之前，失败时
-		// 不触碰任何存档。错误只引用字段名与环境变量名，绝不回显密钥值。
-		if err := config.AIModel.Validate(); err != nil {
-			return nil, fmt.Errorf("server: 伙伴配置缺少可用的 AI 模型设置: %w", err)
-		}
-		if isHTTPSEndpoint(config.AIModel.Endpoint) && config.AIAPIKey == "" {
-			return nil, fmt.Errorf(
-				"server: AI endpoint 为 https 但未解析到 API 密钥（AIAPIKey 为空，检查环境变量 %q）",
-				config.AIModel.APIKeyEnv,
-			)
-		}
-		loaded, err := store.LoadCompanions(ctx)
-		if errors.Is(err, storage.ErrCompanionsNotFound) {
-			loaded = storage.StoredCompanions{}
-		} else if err != nil {
-			return nil, fmt.Errorf("load companions: %w", err)
-		}
-		ids := make(map[companion.ID]struct{}, len(loaded.Records)+len(config.Companions))
-		for _, body := range loaded.Records {
-			ids[body.ID] = struct{}{}
-		}
-		for _, definition := range config.Companions {
-			ids[definition.ID] = struct{}{}
-		}
-		if len(ids) > companion.MaxStored {
-			return nil, fmt.Errorf(
-				"server: companion active+inactive count %d exceeds %d",
-				len(ids), companion.MaxStored,
-			)
-		}
-		companions = persistence.NewCompanions(store, loaded, persistenceOptions(config, nil))
+	companions, err := bootstrapCompanionPersistence(ctx, config, store)
+	if err != nil {
+		return nil, err
 	}
 	// 夜行者聚合存档与伙伴配置解耦，凡世界存储都参与启动矩阵：missing 视同
 	// 空集合；损坏/未来版本/读取失败在此整体拒绝（tick 与路径 worker 都不会
@@ -197,6 +165,9 @@ func NewHost(
 	if errors.Is(err, storage.ErrHostileMobsNotFound) {
 		loadedHostiles = storage.StoredHostileMobs{}
 	} else if err != nil {
+		if companions != nil {
+			companions.Close()
+		}
 		return nil, fmt.Errorf("load hostiles: %w", err)
 	}
 	hostiles := persistence.NewHostiles(store, loadedHostiles, persistenceOptions(config, nil))
@@ -223,6 +194,95 @@ func NewHost(
 		runtimeDone:     make(chan error, 1),
 		shutdownGate:    gate,
 	}, nil
+}
+
+func bootstrapCompanionPersistence(
+	ctx context.Context,
+	config Config,
+	store storage.WorldStore,
+) (*persistence.Companions, error) {
+	generate := config.companionIdentityGenerator
+	if generate == nil {
+		generate = storage.GenerateCompanionIdentity
+	}
+
+	if len(config.Companions) == 0 {
+		exists, err := store.CompanionsExist(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("probe companions: %w", err)
+		}
+		if !exists {
+			return nil, nil
+		}
+		loaded, err := store.LoadCompanions(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("load companions: %w", err)
+		}
+		merged, changed, err := storage.MergeCompanionsV5(loaded, nil, generate)
+		if err != nil {
+			return nil, fmt.Errorf("merge companions: %w", err)
+		}
+		if changed {
+			if err := store.SaveCompanions(ctx, companionSaveFromStored(merged)); err != nil {
+				return nil, fmt.Errorf("save companion bootstrap: %w", err)
+			}
+		}
+		return nil, nil
+	}
+
+	// 伙伴启用即要求模型运行时就绪。config.Load 已在配置层守住静态完整性，
+	// 这里是第二道边界；校验必须先于任何 companion 存档读取。
+	if len(config.Companions) != 0 {
+		if err := config.AIModel.Validate(); err != nil {
+			return nil, fmt.Errorf("server: 伙伴配置缺少可用的 AI 模型设置: %w", err)
+		}
+		if isHTTPSEndpoint(config.AIModel.Endpoint) && config.AIAPIKey == "" {
+			return nil, fmt.Errorf(
+				"server: AI endpoint 为 https 但未解析到 API 密钥（AIAPIKey 为空，检查环境变量 %q）",
+				config.AIModel.APIKeyEnv,
+			)
+		}
+	}
+
+	loaded, err := store.LoadCompanions(ctx)
+	if errors.Is(err, storage.ErrCompanionsNotFound) {
+		loaded = storage.StoredCompanions{}
+	} else if err != nil {
+		return nil, fmt.Errorf("load companions: %w", err)
+	}
+	metadata := store.Metadata()
+	active := make([]companion.Body, len(config.Companions))
+	for index, definition := range config.Companions {
+		active[index] = companion.Body{
+			ID:        definition.ID,
+			Dimension: metadata.SpawnDimension,
+			Position: [3]float32{
+				float32(metadata.SpawnAnchor.X*core.SectionSize) + 0.5,
+				core.MaxY + 1,
+				float32(metadata.SpawnAnchor.Z*core.SectionSize) + 0.5,
+			},
+		}
+	}
+	merged, changed, err := storage.MergeCompanionsV5(loaded, active, generate)
+	if err != nil {
+		return nil, fmt.Errorf("merge companions: %w", err)
+	}
+	if changed {
+		if err := store.SaveCompanions(ctx, companionSaveFromStored(merged)); err != nil {
+			return nil, fmt.Errorf("save companion bootstrap: %w", err)
+		}
+	}
+	return persistence.NewCompanions(store, merged, persistenceOptions(config, nil)), nil
+}
+
+func companionSaveFromStored(stored storage.StoredCompanions) storage.CompanionSave {
+	return storage.CompanionSave{
+		Revision:         stored.Revision,
+		AgentNamespaceID: stored.AgentNamespaceID,
+		Records:          stored.Records,
+		Lifecycles:       stored.Lifecycles,
+		Queues:           stored.Queues,
+	}
 }
 
 // isHTTPSEndpoint 报告 endpoint 是否使用 https scheme。只服务于 NewHost 的

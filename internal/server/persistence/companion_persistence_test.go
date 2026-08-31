@@ -3,6 +3,7 @@ package persistence
 import (
 	"context"
 	"errors"
+	"math"
 	"reflect"
 	"sync"
 	"testing"
@@ -12,6 +13,118 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage"
 )
+
+func persistenceIdentity(last byte) storage.CompanionIdentity {
+	return storage.CompanionIdentity{
+		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x46, 0x17,
+		0x88, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, last,
+	}
+}
+
+func persistenceV5Loaded(revision uint64) storage.StoredCompanions {
+	active := companionBody(1, 10)
+	inactive := companionBody(2, 20)
+	return storage.StoredCompanions{
+		SourceSchema:     5,
+		Revision:         revision,
+		AgentNamespaceID: persistenceIdentity(0x70),
+		Records:          []companion.Body{active, inactive},
+		Lifecycles: []storage.StoredCompanionLifecycle{
+			{
+				ID: active.ID, Active: true, MemoryEpoch: 7,
+				MemoryRevision: 11, MemoryOperationID: persistenceIdentity(0x71),
+				Summary: "已确认的 Agent mirror",
+			},
+			{
+				ID: inactive.ID, Active: false, MemoryEpoch: 9,
+				TombstoneOperationID: persistenceIdentity(0x72),
+			},
+		},
+	}
+}
+
+func TestCompanionPersistenceCarriesV5MetadataAcrossBodyAndTaskSave(t *testing.T) {
+	store := newControllableCompanionStore()
+	loaded := persistenceV5Loaded(41)
+	p := NewCompanions(store, loaded, companionPersistenceTestOptions())
+	t.Cleanup(p.Close)
+	active := companionBody(1, 33)
+	p.Observe(
+		[]companion.Body{active},
+		[]companion.TaskQueueState{{ID: active.ID, Pending: []companion.TaskCommand{"排队"}}},
+		[]CompanionSummary{{ID: active.ID, Summary: "旧 direct Dialogue 裸摘要"}},
+	)
+	if err := p.Poll(10); err != nil {
+		t.Fatal(err)
+	}
+	got := receiveCompanionSave(t, store)
+	if got.Revision != 42 || got.AgentNamespaceID != loaded.AgentNamespaceID ||
+		!reflect.DeepEqual(got.Lifecycles, loaded.Lifecycles) {
+		t.Fatalf("v5 metadata drift: save=%+v loaded=%+v", got, loaded)
+	}
+	if len(got.Queues) != 1 || got.Queues[0].ID != active.ID ||
+		got.Queues[0].Summary != "" || len(got.Queues[0].Pending) != 1 {
+		t.Fatalf("task save queues=%+v", got.Queues)
+	}
+	store.complete(nil)
+}
+
+func TestCompanionPersistenceKeepsActiveZeroMemoryWithoutQueue(t *testing.T) {
+	store := newControllableCompanionStore()
+	loaded := persistenceV5Loaded(5)
+	loaded.Records = loaded.Records[:1]
+	loaded.Lifecycles = loaded.Lifecycles[:1]
+	loaded.Lifecycles[0].MemoryRevision = 0
+	loaded.Lifecycles[0].MemoryOperationID = storage.CompanionIdentity{}
+	loaded.Lifecycles[0].Summary = ""
+	p := NewCompanions(store, loaded, companionPersistenceTestOptions())
+	t.Cleanup(p.Close)
+	p.Observe([]companion.Body{companionBody(1, 11)}, nil, nil)
+	if err := p.Poll(10); err != nil {
+		t.Fatal(err)
+	}
+	got := receiveCompanionSave(t, store)
+	if len(got.Lifecycles) != 1 || got.Lifecycles[0] != loaded.Lifecycles[0] || len(got.Queues) != 0 {
+		t.Fatalf("canonical-zero save=%+v", got)
+	}
+	store.complete(nil)
+}
+
+func TestCompanionPersistenceNeverSavesQueueForInactive(t *testing.T) {
+	store := newControllableCompanionStore()
+	loaded := persistenceV5Loaded(7)
+	p := NewCompanions(store, loaded, companionPersistenceTestOptions())
+	t.Cleanup(p.Close)
+	p.Observe(
+		[]companion.Body{companionBody(1, 12)},
+		[]companion.TaskQueueState{{ID: loaded.Records[1].ID, Pending: []companion.TaskCommand{"非法排队"}}},
+		nil,
+	)
+	if err := p.Poll(10); err != nil {
+		t.Fatal(err)
+	}
+	got := receiveCompanionSave(t, store)
+	if len(got.Queues) != 0 || !reflect.DeepEqual(got.Lifecycles, loaded.Lifecycles) {
+		t.Fatalf("inactive payload save=%+v", got)
+	}
+	store.complete(nil)
+}
+
+func TestCompanionPersistenceRevisionOverflowDoesNotDispatchSave(t *testing.T) {
+	store := newControllableCompanionStore()
+	loaded := persistenceV5Loaded(math.MaxUint64)
+	p := NewCompanions(store, loaded, companionPersistenceTestOptions())
+	t.Cleanup(p.Close)
+	p.Observe([]companion.Body{companionBody(1, 44)}, nil, nil)
+	if err := p.Poll(10); !errors.Is(err, storage.ErrCorrupt) {
+		t.Fatalf("Poll overflow error=%v，想要 ErrCorrupt", err)
+	}
+	assertNoCompanionSave(t, store)
+	if err := p.Flush(context.Background()); !errors.Is(err, storage.ErrCorrupt) {
+		t.Fatalf("Flush overflow error=%v，想要 ErrCorrupt", err)
+	}
+	assertNoCompanionSave(t, store)
+}
 
 func TestCompanionPersistenceCoalescesToOneInflightAggregate(t *testing.T) {
 	store := newControllableCompanionStore()
@@ -363,7 +476,13 @@ func TestCompanionPersistenceFIFOOnlyQueueSurvivesRealStoreRoundTrip(t *testing.
 	// 排队指令）：必须能通过真实存档（MemoryStore 走完整 v2 编码）落盘并
 	// 精确恢复，不经任何假存档。
 	store := storage.NewMemory(storage.Metadata{FormatVersion: 3, Seed: 42})
-	p := NewCompanions(store, storage.StoredCompanions{}, companionPersistenceTestOptions())
+	loadedV5 := persistenceV5Loaded(1)
+	loadedV5.Records = loadedV5.Records[:1]
+	loadedV5.Lifecycles = loadedV5.Lifecycles[:1]
+	loadedV5.Lifecycles[0].MemoryRevision = 0
+	loadedV5.Lifecycles[0].MemoryOperationID = storage.CompanionIdentity{}
+	loadedV5.Lifecycles[0].Summary = ""
+	p := NewCompanions(store, loadedV5, companionPersistenceTestOptions())
 	t.Cleanup(p.Close)
 	pending := companion.TaskQueueState{
 		ID:      companionBody(1, 10).ID,
@@ -381,7 +500,7 @@ func TestCompanionPersistenceFIFOOnlyQueueSurvivesRealStoreRoundTrip(t *testing.
 		ID:      companionBody(1, 10).ID,
 		Pending: []string{"仅排队甲", "仅排队乙"},
 	}}
-	if loaded.Revision != 1 || !reflect.DeepEqual(loaded.Queues, want) {
+	if loaded.Revision != 2 || !reflect.DeepEqual(loaded.Queues, want) {
 		t.Fatalf("FIFO-only 真实存档 round-trip queues=%+v，想要 %+v", loaded.Queues, want)
 	}
 }
@@ -465,6 +584,7 @@ func companionBody(id, position byte) companion.Body {
 func cloneCompanionSaveForTest(save storage.CompanionSave) storage.CompanionSave {
 	copy := save
 	copy.Records = append([]companion.Body(nil), save.Records...)
+	copy.Lifecycles = append([]storage.StoredCompanionLifecycle(nil), save.Lifecycles...)
 	copy.Queues = cloneStoredQueues(save.Queues)
 	return copy
 }

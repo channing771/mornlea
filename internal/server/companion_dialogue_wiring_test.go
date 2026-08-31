@@ -1,14 +1,15 @@
 // D6 触发节点接线、CompanionSpeech 广播与摘要生命周期的测试：进入 Running、
 // 选中步骤完成与四种终态的节点评估、每任务预算、follow 恰好三节点（开始/
 // 首次到达/终止，长跟随不产生 progress）、台词广播给全部在线玩家且 EventID
-// 严格递增、终态后到达的过时结果不广播、终态摘要「写入→dirty→落盘→重启
-// 恢复→进入下一次 Dialogue 请求输入」、summary-only 队列不被保存侧判 clean，
+// 严格递增、终态后到达的过时结果不广播、终态裸摘要在 Task 8 staging 仅保留
+// 于 transient manager 状态且不伪造 v5 mirror，
 // 以及 Memory/TCP 同序同种类事件（含 Speech）。全部使用 httptest 假模型，
 // 绝不打开前台窗口或访问真实模型服务。
 package server
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -515,10 +516,9 @@ func TestCompanionDialogueStaleAfterTerminalNotBroadcast(t *testing.T) {
 	}
 }
 
-// TestCompanionDialogueSummaryLifecycle 验证终态摘要的完整生命周期：terminal
-// 响应写入 manager 摘要→标记存档 dirty→关服 Flush 落盘（summary-only 队列，
-// 无任务无 FIFO）→重启恢复→进入下一次 Dialogue 请求输入（假模型断言请求体
-// 含旧摘要）。
+// TestCompanionDialogueSummaryLifecycle 锁定 Task 8 staging：terminal 的裸摘要
+// 只进入 direct manager transient 状态，不伪造 v5 memory operation；重启后
+// manager 与下一次 Dialogue 请求均使用空摘要。
 func TestCompanionDialogueSummaryLifecycle(t *testing.T) {
 	id := chatTestCompanionID(1)
 	definitions := []companion.Definition{{ID: id, Name: "阿木"}}
@@ -584,20 +584,21 @@ func TestCompanionDialogueSummaryLifecycle(t *testing.T) {
 	}
 	closeFirst()
 
-	// 落盘检查：summary-only 队列（无任务无 FIFO）必须保留摘要。
+	// 落盘检查：v5 mirror 保持 canonical zero，queue 不承载摘要。
 	loaded, err := store.LoadCompanions(context.Background())
 	if err != nil {
 		t.Fatalf("LoadCompanions: %v", err)
 	}
-	if len(loaded.Queues) != 1 || loaded.Queues[0].ID != id ||
-		loaded.Queues[0].Summary != "最近完成了任务" {
-		t.Fatalf("落盘队列=%+v，想要 summary-only 载荷保留摘要", loaded.Queues)
+	if len(loaded.Lifecycles) != 1 || loaded.Lifecycles[0].MemoryRevision != 0 ||
+		loaded.Lifecycles[0].MemoryOperationID != (storage.CompanionIdentity{}) ||
+		loaded.Lifecycles[0].Summary != "" || len(loaded.Queues) != 0 {
+		t.Fatalf("v5 staging 落盘=%+v，想要 canonical-zero mirror", loaded)
 	}
 
-	// 第二段：重启恢复摘要，并进入下一次 Dialogue 请求输入。
+	// 第二段：重启后 direct 摘要为空，并进入下一次 Dialogue 请求输入。
 	second, secondDialogue, secondClient, _ := newHost()
-	if summary := companionDialogueSlotSummary(t, second, id); summary != "最近完成了任务" {
-		t.Fatalf("重启后摘要未恢复：summary=%q", summary)
+	if summary := companionDialogueSlotSummary(t, second, id); summary != "" {
+		t.Fatalf("重启后 direct 摘要=%q，想要空", summary)
 	}
 	sendIntegration(t, secondClient, network.ChatCommand{Text: "@阿木 再走一步"})
 	waitForIncomingChatDepth(t, second.world, 1)
@@ -609,46 +610,41 @@ func TestCompanionDialogueSummaryLifecycle(t *testing.T) {
 	}
 	waitDialogueRequests(t, secondDialogue, 1)
 	records := secondDialogue.snapshotDialogueRequests()
-	if len(records) == 0 || records[0].Summary != "最近完成了任务" {
-		t.Fatalf("重启后的台词请求未携带恢复摘要：%+v", records)
+	if len(records) == 0 || records[0].Summary != "" {
+		t.Fatalf("重启后的台词请求摘要=%+v，想要 staging 空摘要", records)
 	}
 }
 
-// TestCompanionDialogueSummaryOnlyQueuePersistence 验证 summary-only 队列的
-// 保存侧接线：无任务无 FIFO 但有摘要的 active 伙伴不被守卫丢弃、
-// equalStoredQueues 把摘要差异判为 dirty、未激活伙伴的摘要按 dropped 报告。
+// TestCompanionDialogueSummaryOnlyQueuePersistence 验证裸摘要不会形成 v5 queue、
+// 不标记持久化 dirty，也不推进 aggregate revision。
 func TestCompanionDialogueSummaryOnlyQueuePersistence(t *testing.T) {
 	body := companionDialogueWiringBody(1, 10)
 	summaries := []persistence.CompanionSummary{{ID: body.ID, Summary: "最近完成了任务"}}
 
 	queues, dropped := persistence.CompanionQueuesForSaveForTest(nil, []companion.Body{body}, summaries)
-	if dropped || len(queues) != 1 || queues[0].ID != body.ID ||
-		queues[0].Summary != "最近完成了任务" || queues[0].HasCurrent || len(queues[0].Pending) != 0 {
-		t.Fatalf("summary-only 载荷=%+v dropped=%v，想要仅含摘要的队列条目", queues, dropped)
+	if dropped || len(queues) != 0 {
+		t.Fatalf("summary-only 载荷=%+v dropped=%v，想要忽略 transient 摘要", queues, dropped)
+	}
+	if queues, dropped := persistence.CompanionQueuesForSaveForTest(nil, nil, summaries); dropped || len(queues) != 0 {
+		t.Fatalf("无记录 transient 摘要 queues/dropped=%+v/%v", queues, dropped)
 	}
 
-	// 摘要差异不得被判 clean：否则摘要变化后保存被跳过。
-	if persistence.EqualStoredQueuesForTest(
-		[]storage.StoredCompanionQueue{{ID: body.ID, Summary: "旧摘要"}},
-		[]storage.StoredCompanionQueue{{ID: body.ID, Summary: "新摘要"}},
-	) {
-		t.Fatal("equalStoredQueues 忽略了摘要差异，summary-only 变更会被判 clean")
-	}
-
-	// 身体尚未激活（records 缺席）的摘要按 dropped 报告，保持 dirty 等激活。
-	if _, dropped := persistence.CompanionQueuesForSaveForTest(nil, nil, summaries); !dropped {
-		t.Fatal("无记录伙伴的摘要未按 dropped 报告")
-	}
-
-	// 持久化观察：摘要变化触发保存，载荷携带 summary-only 条目。
+	// 持久化观察：摘要变化不触发保存，既有 v5 archive 保持不变。
 	store := storage.NewMemory(storage.Metadata{FormatVersion: 3, Seed: 42})
-	compStore := persistence.NewCompanions(store, storage.StoredCompanions{}, persistence.Options{AutosaveTicks: 10, RetryBaseTicks: 2, RetryMaxTicks: 8})
+	seed := fixtureServerCompanionV5Save(storage.CompanionSave{Revision: 1, Records: []companion.Body{body}})
+	if err := store.SaveCompanions(context.Background(), seed); err != nil {
+		t.Fatal(err)
+	}
+	loadedSeed, err := store.LoadCompanions(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	compStore := persistence.NewCompanions(store, loadedSeed, persistence.Options{AutosaveTicks: 10, RetryBaseTicks: 2, RetryMaxTicks: 8})
 	t.Cleanup(compStore.Close)
 	compStore.Observe([]companion.Body{body}, nil, summaries)
 	if err := compStore.Poll(10); err != nil {
 		t.Fatal(err)
 	}
-	// 使用 Flush 确保落盘并验证 summary-only 队列可通过真实存档 round-trip。
 	if err := compStore.Flush(context.Background()); err != nil {
 		t.Fatalf("Flush: %v", err)
 	}
@@ -656,8 +652,8 @@ func TestCompanionDialogueSummaryOnlyQueuePersistence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadCompanions: %v", err)
 	}
-	if len(loaded.Queues) != 1 || loaded.Queues[0].ID != body.ID || loaded.Queues[0].Summary != "最近完成了任务" {
-		t.Fatalf("保存载荷=%+v，想要 summary-only 队列", loaded.Queues)
+	if loaded.Revision != 1 || len(loaded.Queues) != 0 || !reflect.DeepEqual(loaded.Lifecycles, loadedSeed.Lifecycles) {
+		t.Fatalf("transient 摘要改写了 v5 archive：%+v", loaded)
 	}
 }
 

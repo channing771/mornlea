@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"hash/crc32"
 	"math"
-	"slices"
 	"unicode/utf8"
 
 	"github.com/channing771/mornlea/internal/companion"
@@ -28,31 +27,24 @@ const (
 	// 写（摘要为空）；v3 字节永不再生。
 	companionSchemaV3 uint32 = 3
 	// companionSchemaV4 是 M5D 引入摘要区的最低 schema：v4 及以上版本的
-	// 记录 flags 才允许 summary 位。独立于 CurrentSchema 存在，
-	// 未来 v5 成为 current 时 v4 迁移文件的摘要位仍按合法解析，而不是被
-	// 误判为保留位损坏。
+	// legacy 记录 flags 才允许 summary 位。独立于 CurrentSchema 存在，
+	// v5 成为 current 后 v4 迁移文件仍按原布局解析。
 	companionSchemaV4 uint32 = 4
-	// CurrentSchema 是当前写出的 schema：记录 = 身体 + 可选任务
-	// 区与 FIFO 区（仅 active 记录携带）+ 可选摘要区（仅 active 且有摘要
-	// 时写入），任务区步骤按 kind 变长（见 companionPlanStepWireLength）。
-	// 编码端只写当前版本。留根的根包 store 测试以它构造未来 schema 故障
-	// 注入（跟随权威常量而非字面量），故导出。
-	CurrentSchema         uint32 = companionSchemaV4
+	// companionSchemaV5 引入 namespace、显式 lifecycle、memory mirror 与
+	// tombstone；encoder 只写该版本，v1..v4 继续只读。
+	companionSchemaV5 uint32 = 5
+	// CurrentSchema 是当前唯一写出的 schema。
+	CurrentSchema         uint32 = companionSchemaV5
 	companionHeaderLength        = 32
 	companionRecordLength        = 221
-	// MaxFileLength 是物理文件字节上界（spec：438,280）。根包编排读取
-	// companions.ai 时按同一上界截断读取，故导出。推导：
-	// v3 上界 430,080（单条 active 记录 ≤ 221 身体 + 1 flags + 任务区
-	// 86,050 + FIFO 区 16,418 共 102,690；4 条 active ≈ 410,760；60 条
-	// inactive 记录各 222 共 13,320；+ envelope 32 ≈ 424,112，取整上界
-	// 430,080）之上，v4 为 4 条 active 记录各追加一个摘要区（u16 前缀
-	// 2 + 2,048 摘要文本 = 2,050）：430,080 + 4×2,050 = 438,280。解码在
-	// 任何解析与分配之前按本常量拒绝超长。
-	MaxFileLength = 438280
+	// MaxFileLength 是 v5 可达结构的精确物理上界：32-byte envelope、16-byte
+	// namespace、四条 94,774-byte 最大 active 记录与六十条 246-byte
+	// inactive 记录。解码在 CRC、payload copy 与任何记录分配前拒绝超长。
+	MaxFileLength = 393904
 	// companionTaskCommandPrefixLength 是任务区指令的 u16 长度前缀。
 	companionTaskCommandPrefixLength = 2
-	// companionSummaryPrefixLength 是摘要区的 u16 长度前缀：摘要区只在
-	// 有摘要时写入（空摘要不写区），前缀值因此恒为 1..2,048。
+	// companionSummaryPrefixLength 是摘要区的 u16 长度前缀。v4 只在有
+	// 摘要时写；v5 active mirror 总是写，canonical zero 使用零长度。
 	companionSummaryPrefixLength = 2
 	// companionPlanStepLength 是 go_to/mine 步骤的编码长度（kind 1 +
 	// 坐标 3×int32）。v2 时代全部步骤固定为本长度；v3 起 place 在其上追加
@@ -61,14 +53,16 @@ const (
 	companionPlanStepLength = 13
 )
 
-// v2 起记录尾部的 flags 位：bit0 携带任务区、bit1 携带 FIFO 区；其余位在
-// 对应 schema 中保留且必须为零——保留位非零一律按损坏拒绝，为未来 schema
-// 演进留出空间。bit2（摘要区）只在 v4 及之后合法：v3/v2 文件的 bit2 仍是
-// 保留位（其布局没有摘要字节可读）。
+// v5 flags 固定为 active/task/FIFO 的 bit0/1/2。legacy v2..v4 使用另一组
+// 位定义，不能把 v5 lifecycle 位误当成旧 task 位。
 const (
-	companionFlagHasTask    uint8 = 1 << 0
-	companionFlagHasFIFO    uint8 = 1 << 1
-	companionFlagHasSummary uint8 = 1 << 2
+	companionFlagActive  uint8 = 1 << 0
+	companionFlagHasTask uint8 = 1 << 1
+	companionFlagHasFIFO uint8 = 1 << 2
+
+	companionLegacyFlagHasTask    uint8 = 1 << 0
+	companionLegacyFlagHasFIFO    uint8 = 1 << 1
+	companionLegacyFlagHasSummary uint8 = 1 << 2
 )
 
 var (
@@ -76,49 +70,37 @@ var (
 	companionCRCTable      = crc32.MakeTable(crc32.Castagnoli)
 )
 
-// Encode 把一份伙伴聚合保存请求编码为规范磁盘形态：记录按 ID 升序写出，
-// 任务载荷只读不改。零 revision、记录或载荷越界都拒绝编码——编码端产出的
-// 字节必须能被 Decode 原样接受，绝不写出不可读文件。
+// Encode 把伙伴聚合保存请求编码为规范 v5 磁盘形态。记录按 ID 升序写出，
+// 所有输入切片只读；缺 namespace/lifecycle 或任何非法耦合都会被拒绝。
 func Encode(save CompanionSave) ([]byte, error) {
-	if save.Revision == 0 {
-		return nil, fmt.Errorf("%w: zero companion revision", storagedef.ErrCorrupt)
-	}
-	if len(save.Records) > companion.MaxStored {
-		return nil, fmt.Errorf("%w: companion count %d exceeds limit", storagedef.ErrCorrupt, len(save.Records))
-	}
-	records := slices.Clone(save.Records)
-	slices.SortFunc(records, func(a, b companion.Body) int {
-		return bytes.Compare(a.ID[:], b.ID[:])
-	})
-	for index, body := range records {
-		if err := validateCompanionBody(body); err != nil {
-			return nil, fmt.Errorf("companion record %d: %w", index, err)
-		}
-		if index > 0 && records[index-1].ID == body.ID {
-			return nil, fmt.Errorf("%w: duplicate companion ID", storagedef.ErrCorrupt)
-		}
-	}
-	if err := validateStoredCompanionQueues(save.Queues, records, CurrentSchema); err != nil {
+	records, lifecycles, queues, err := canonicalV5Parts(save)
+	if err != nil {
 		return nil, err
 	}
 	queuesByID := make(map[companion.ID]StoredCompanionQueue, len(save.Queues))
-	for _, queue := range save.Queues {
+	for _, queue := range queues {
 		queuesByID[queue.ID] = queue
 	}
+	lifecycleByID := make(map[companion.ID]StoredCompanionLifecycle, len(lifecycles))
+	for _, lifecycle := range lifecycles {
+		lifecycleByID[lifecycle.ID] = lifecycle
+	}
 
-	payloadLength := 0
+	payloadLength := len(Identity{})
 	for _, body := range records {
-		payloadLength += companionRecordLength + 1
-		if queue, exists := queuesByID[body.ID]; exists {
-			if queue.HasCurrent {
-				payloadLength += companionTaskEncodedLength(queue.Current)
-			}
-			if len(queue.Pending) != 0 {
-				payloadLength += companionFIFOEncodedLength(queue.Pending)
-			}
-			if queue.Summary != "" {
-				payloadLength += companionSummaryPrefixLength + len(queue.Summary)
-			}
+		lifecycle := lifecycleByID[body.ID]
+		payloadLength += companionRecordLength + 1 + 8
+		if !lifecycle.Active {
+			payloadLength += len(Identity{})
+			continue
+		}
+		payloadLength += 8 + len(Identity{}) + companionSummaryPrefixLength + len(lifecycle.Summary)
+		queue, exists := queuesByID[body.ID]
+		if exists && queue.HasCurrent {
+			payloadLength += companionTaskEncodedLength(queue.Current)
+		}
+		if exists && len(queue.Pending) != 0 {
+			payloadLength += companionFIFOEncodedLength(queue.Pending)
 		}
 	}
 	encoded := make([]byte, 0, companionHeaderLength+payloadLength)
@@ -129,36 +111,39 @@ func Encode(save CompanionSave) ([]byte, error) {
 	encoded = appendU32(encoded, uint32(len(records)))
 	encoded = appendU32(encoded, uint32(payloadLength))
 	encoded = appendU32(encoded, 0)
+	encoded = append(encoded, save.AgentNamespaceID[:]...)
 	for _, body := range records {
 		encoded = appendCompanionBody(encoded, body)
+		lifecycle := lifecycleByID[body.ID]
 		var flags uint8
 		queue, exists := queuesByID[body.ID]
-		if exists && queue.HasCurrent {
+		if lifecycle.Active {
+			flags |= companionFlagActive
+		}
+		if lifecycle.Active && exists && queue.HasCurrent {
 			flags |= companionFlagHasTask
 		}
-		if exists && len(queue.Pending) != 0 {
+		if lifecycle.Active && exists && len(queue.Pending) != 0 {
 			flags |= companionFlagHasFIFO
 		}
-		if exists && queue.Summary != "" {
-			flags |= companionFlagHasSummary
-		}
 		encoded = append(encoded, flags)
+		encoded = appendU64(encoded, lifecycle.MemoryEpoch)
+		if !lifecycle.Active {
+			encoded = append(encoded, lifecycle.TombstoneOperationID[:]...)
+			continue
+		}
+		encoded = appendU64(encoded, lifecycle.MemoryRevision)
+		encoded = append(encoded, lifecycle.MemoryOperationID[:]...)
+		encoded = binary.LittleEndian.AppendUint16(encoded, uint16(len(lifecycle.Summary)))
+		encoded = append(encoded, lifecycle.Summary...)
 		if flags&companionFlagHasTask != 0 {
 			encoded = appendCompanionTask(encoded, queue.Current)
 		}
 		if flags&companionFlagHasFIFO != 0 {
 			encoded = appendCompanionFIFO(encoded, queue.Pending)
 		}
-		// 摘要区追加在记录尾部：active 且有摘要才写；无摘要的 active 记录
-		// 与 inactive 记录都不写——记录字节位形与 v3 完全对齐，便于审读
-		// 与 v3 golden 对照。
-		if flags&companionFlagHasSummary != 0 {
-			encoded = appendCompanionSummary(encoded, queue.Summary)
-		}
 	}
-	// 长度门禁的编码侧镜像：产出必须能被解码端接受，超上界（输入违反
-	// active 记录假设时的防御路径）立即拒绝而不是写出不可读文件。
-	if len(encoded) > companionHeaderLength+payloadLength || len(encoded) > MaxFileLength {
+	if len(encoded) != companionHeaderLength+payloadLength || len(encoded) > MaxFileLength {
 		return nil, fmt.Errorf(
 			"%w: companion file length %d exceeds limit", storagedef.ErrCorrupt, len(encoded),
 		)
@@ -204,20 +189,16 @@ func companionFIFOEncodedLength(pending []string) int {
 }
 
 // companionSchemaReadable 判断存档 schema 是否在解码入口白名单内。成员
-// 显式列出 v1/v2/v3/v4 的字面常量，绝不退化成 CurrentSchema
-// 引用：未来 v5 成为 current 时，schema=4 的合法迁移文件仍必须在入口被
-// 放行，才能到达 decodeCompanionQueueSections 的 `schema >=
-// companionSchemaV4` 摘要位前瞻检查——若用 current 引用，v4 文件会在入口
-// 被误判 storagedef.ErrCorrupt，永远到不了前瞻检查，companionSchemaV4 独立常量的
-// 设计意图随之落空。新增 schema 版本时在此显式追加成员，并同步白名单
-// 锁测试（TestCompanionDecodeSchemaWhitelistListsLiteralV4）。
+// 显式列出 v1..v5 字面常量，不使用范围判断或 `CurrentSchema` 代替历史版本，
+// 避免未来升级 current 时意外放行中间版本或拒绝合法迁移文件。
 func companionSchemaReadable(schema uint32) bool {
 	return schema == companionSchemaV1 || schema == companionSchemaV2 ||
-		schema == companionSchemaV3 || schema == companionSchemaV4
+		schema == companionSchemaV3 || schema == companionSchemaV4 ||
+		schema == companionSchemaV5
 }
 
-// Decode 校验 MCAI 信封并重建伙伴聚合快照，v1..v3 历史文件只读迁移、
-// 摘要语义按 schema 前瞻解析；超长输入在任何解析与分配之前拒绝。
+// Decode 校验 MCAI 信封并重建伙伴聚合快照，v1..v4 历史文件只读迁移；
+// 超长输入在任何解析与分配之前拒绝。
 func Decode(data []byte) (StoredCompanions, error) {
 	// 分配前门禁：任何超过物理上界的输入在解析前拒绝。
 	if len(data) > MaxFileLength {
@@ -283,10 +264,22 @@ func Decode(data []byte) (StoredCompanions, error) {
 		return StoredCompanions{}, fmt.Errorf("%w: companion CRC32C", storagedef.ErrCorrupt)
 	}
 
-	records := make([]companion.Body, int(count))
+	if schema == companionSchemaV5 {
+		return decodeCompanionV5Payload(&header, int(count), revision)
+	}
+	return decodeCompanionLegacyPayload(&header, schema, int(count), revision)
+}
+
+func decodeCompanionLegacyPayload(
+	decoder *byteDecoder,
+	schema uint32,
+	count int,
+	revision uint64,
+) (StoredCompanions, error) {
+	records := make([]companion.Body, count)
 	var queues []StoredCompanionQueue
 	for index := range records {
-		body, err := decodeCompanionBody(&header)
+		body, err := decodeCompanionBody(decoder)
 		if err != nil {
 			return StoredCompanions{}, fmt.Errorf("companion record %d: %w", index, err)
 		}
@@ -297,7 +290,7 @@ func Decode(data []byte) (StoredCompanions, error) {
 		if schema == companionSchemaV1 {
 			continue
 		}
-		queue, err := decodeCompanionQueueSections(&header, schema)
+		queue, err := decodeCompanionQueueSections(decoder, schema)
 		if err != nil {
 			return StoredCompanions{}, fmt.Errorf("companion record %d: %w", index, err)
 		}
@@ -306,16 +299,155 @@ func Decode(data []byte) (StoredCompanions, error) {
 			queues = append(queues, queue)
 		}
 	}
-	// 全部记录消费完毕后 payload 必须恰好读空：头部声明的 payload 长度已
-	// 与文件长度核对，这里的检查封死「变长区长度被改小后残留字节」的错位
-	// 形态——任何区段（指令、步骤、FIFO 条目、摘要）的前缀被缩短都会留下
-	// 未消费字节，静默接受它们等于接受非规范文件（重编码字节必然不同）。
-	if header.remaining() != 0 {
+	if decoder.remaining() != 0 {
 		return StoredCompanions{}, fmt.Errorf(
-			"%w: companion payload has %d trailing bytes", storagedef.ErrCorrupt, header.remaining(),
+			"%w: companion payload has %d trailing bytes", storagedef.ErrCorrupt, decoder.remaining(),
 		)
 	}
-	return StoredCompanions{Revision: revision, Records: records, Queues: queues}, nil
+	return StoredCompanions{
+		SourceSchema: schema,
+		Revision:     revision,
+		Records:      records,
+		Queues:       queues,
+	}, nil
+}
+
+func decodeCompanionV5Payload(
+	decoder *byteDecoder,
+	count int,
+	revision uint64,
+) (StoredCompanions, error) {
+	namespaceBytes, err := decoder.take(len(Identity{}))
+	if err != nil {
+		return StoredCompanions{}, corrupt("companion agent namespace", err)
+	}
+	var namespace Identity
+	copy(namespace[:], namespaceBytes)
+	if !namespace.Valid() {
+		return StoredCompanions{}, fmt.Errorf("%w: invalid companion agent namespace", storagedef.ErrCorrupt)
+	}
+
+	records := make([]companion.Body, count)
+	lifecycles := make([]StoredCompanionLifecycle, count)
+	var queues []StoredCompanionQueue
+	activeCount := 0
+	for index := range records {
+		body, err := decodeCompanionBody(decoder)
+		if err != nil {
+			return StoredCompanions{}, fmt.Errorf("companion record %d: %w", index, err)
+		}
+		if index > 0 && bytes.Compare(records[index-1].ID[:], body.ID[:]) >= 0 {
+			return StoredCompanions{}, fmt.Errorf("%w: companion IDs are not strictly sorted", storagedef.ErrCorrupt)
+		}
+		records[index] = body
+		flags, err := decoder.u8()
+		if err != nil {
+			return StoredCompanions{}, fmt.Errorf("companion record %d: %w", index, corrupt("flags", err))
+		}
+		if flags&^(companionFlagActive|companionFlagHasTask|companionFlagHasFIFO) != 0 {
+			return StoredCompanions{}, fmt.Errorf("%w: companion record flags %#x reserved", storagedef.ErrCorrupt, flags)
+		}
+		epoch, err := decoder.u64()
+		if err != nil {
+			return StoredCompanions{}, fmt.Errorf("companion record %d: %w", index, corrupt("memory epoch", err))
+		}
+		lifecycle := StoredCompanionLifecycle{
+			ID: body.ID, Active: flags&companionFlagActive != 0, MemoryEpoch: epoch,
+		}
+		if lifecycle.Active {
+			activeCount++
+			if activeCount > companion.MaxActive {
+				return StoredCompanions{}, fmt.Errorf(
+					"%w: active companion count %d exceeds limit", storagedef.ErrCorrupt, activeCount,
+				)
+			}
+		}
+		if !lifecycle.Active {
+			if flags != 0 {
+				return StoredCompanions{}, fmt.Errorf("%w: inactive companion flags %#x", storagedef.ErrCorrupt, flags)
+			}
+			identity, err := decodeCompanionIdentity(decoder, "tombstone operation")
+			if err != nil {
+				return StoredCompanions{}, fmt.Errorf("companion record %d: %w", index, err)
+			}
+			lifecycle.TombstoneOperationID = identity
+		} else {
+			if lifecycle.MemoryRevision, err = decoder.u64(); err != nil {
+				return StoredCompanions{}, fmt.Errorf("companion record %d: %w", index, corrupt("memory revision", err))
+			}
+			operationBytes, err := decoder.take(len(Identity{}))
+			if err != nil {
+				return StoredCompanions{}, fmt.Errorf("companion record %d: %w", index, corrupt("memory operation", err))
+			}
+			copy(lifecycle.MemoryOperationID[:], operationBytes)
+			summaryLength, err := decoder.u16()
+			if err != nil {
+				return StoredCompanions{}, fmt.Errorf("companion record %d: %w", index, corrupt("memory summary length", err))
+			}
+			if summaryLength > MaxCompanionSummaryBytes {
+				return StoredCompanions{}, fmt.Errorf(
+					"%w: companion summary length %d exceeds limit", storagedef.ErrCorrupt, summaryLength,
+				)
+			}
+			summary, err := decoder.take(int(summaryLength))
+			if err != nil {
+				return StoredCompanions{}, fmt.Errorf("companion record %d: %w", index, corrupt("memory summary", err))
+			}
+			lifecycle.Summary = string(summary)
+			var queue StoredCompanionQueue
+			if flags&companionFlagHasTask != 0 {
+				queue.Current, err = decodeCompanionTask(decoder, companionSchemaV5)
+				if err != nil {
+					return StoredCompanions{}, fmt.Errorf("companion record %d: %w", index, err)
+				}
+				queue.HasCurrent = true
+			}
+			if flags&companionFlagHasFIFO != 0 {
+				queue.Pending, err = decodeCompanionFIFO(decoder)
+				if err != nil {
+					return StoredCompanions{}, fmt.Errorf("companion record %d: %w", index, err)
+				}
+			}
+			if queue.HasCurrent || len(queue.Pending) != 0 {
+				queue.ID = body.ID
+				queues = append(queues, queue)
+			}
+		}
+		if err := validateV5Lifecycle(lifecycle); err != nil {
+			return StoredCompanions{}, fmt.Errorf("companion record %d: %w", index, err)
+		}
+		lifecycles[index] = lifecycle
+	}
+	if decoder.remaining() != 0 {
+		return StoredCompanions{}, fmt.Errorf(
+			"%w: companion payload has %d trailing bytes", storagedef.ErrCorrupt, decoder.remaining(),
+		)
+	}
+	stored := StoredCompanions{
+		SourceSchema: companionSchemaV5, Revision: revision,
+		AgentNamespaceID: namespace,
+		Records:          records, Lifecycles: lifecycles, Queues: queues,
+	}
+	if _, _, _, err := canonicalV5Parts(CompanionSave{
+		Revision: revision, AgentNamespaceID: namespace,
+		Records: records, Lifecycles: lifecycles, Queues: queues,
+	}); err != nil {
+		return StoredCompanions{}, err
+	}
+	return stored, nil
+}
+
+func decodeCompanionIdentity(decoder *byteDecoder, field string) (Identity, error) {
+	encoded, err := decoder.take(len(Identity{}))
+	if err != nil {
+		return Identity{}, corrupt("companion "+field, err)
+	}
+	var identity Identity
+	copy(identity[:], encoded)
+	if !identity.Valid() {
+		return Identity{}, fmt.Errorf("%w: invalid companion %s", storagedef.ErrCorrupt, field)
+	}
+	return identity, nil
 }
 
 // decodeCompanionQueueSections 解码 v2 起记录尾部的 flags 与可选任务区、
@@ -327,43 +459,34 @@ func decodeCompanionQueueSections(decoder *byteDecoder, schema uint32) (StoredCo
 	if err != nil {
 		return StoredCompanionQueue{}, corrupt("companion record flags", err)
 	}
-	allowed := companionFlagHasTask | companionFlagHasFIFO
+	allowed := companionLegacyFlagHasTask | companionLegacyFlagHasFIFO
 	if schema >= companionSchemaV4 {
-		allowed |= companionFlagHasSummary
+		allowed |= companionLegacyFlagHasSummary
 	}
 	if flags&^allowed != 0 {
 		return StoredCompanionQueue{}, fmt.Errorf("%w: companion record flags %#x reserved", storagedef.ErrCorrupt, flags)
 	}
 	var queue StoredCompanionQueue
-	if flags&companionFlagHasTask != 0 {
+	if flags&companionLegacyFlagHasTask != 0 {
 		queue.Current, err = decodeCompanionTask(decoder, schema)
 		if err != nil {
 			return StoredCompanionQueue{}, err
 		}
 		queue.HasCurrent = true
 	}
-	if flags&companionFlagHasFIFO != 0 {
+	if flags&companionLegacyFlagHasFIFO != 0 {
 		pending, err := decodeCompanionFIFO(decoder)
 		if err != nil {
 			return StoredCompanionQueue{}, err
 		}
 		queue.Pending = pending
 	}
-	if flags&companionFlagHasSummary != 0 {
+	if flags&companionLegacyFlagHasSummary != 0 {
 		if queue.Summary, err = decodeCompanionSummary(decoder); err != nil {
 			return StoredCompanionQueue{}, err
 		}
 	}
 	return queue, nil
-}
-
-// appendCompanionSummary 追加 v4 记录尾部的摘要区：u16 长度前缀 + 文本
-// 字节。调用前必须已通过 validateStoredCompanionSummary（长度、UTF-8 与
-// 无 NUL），且摘要非空——空摘要不写区（flags 不置位），保证磁盘上不存在
-// 零长摘要区这一非规范位形。
-func appendCompanionSummary(dst []byte, summary string) []byte {
-	dst = binary.LittleEndian.AppendUint16(dst, uint16(len(summary)))
-	return append(dst, summary...)
 }
 
 // decodeCompanionSummary 解码 v4 摘要区：u16 长度前缀 + 文本字节。长度

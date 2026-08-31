@@ -1,5 +1,5 @@
 // Package companion 承载 companion 存档域：companions.ai 聚合文件（MCAI
-// 信封、schema v1..v4）的编解码、任务区/FIFO/摘要载荷校验与伙伴存档值类型。
+// 信封、schema v1..v5）的编解码、任务区/FIFO/memory 载荷校验与伙伴存档值类型。
 //
 // 本包是纯 codec 域：依赖 internal/companion 领域模型与 core 值类型，哨兵经
 // storagedef 取用；不感知根包编排（DiskStore/MemoryStore 的 companions.ai
@@ -21,6 +21,10 @@ import (
 // ErrCompanionsNotFound 表示世界尚无伙伴聚合存档。根包以 var 绑定同一错误值
 // 再导出，保持既有 storage.ErrCompanionsNotFound 引用与 errors.Is 身份不变。
 var ErrCompanionsNotFound = errors.New("storage: companions not found")
+
+// Body 是伙伴领域身体值的存档边界别名。根 storage 门面借此转发迁移入口，
+// 无需越过 codec 子包直接依赖领域包。
+type Body = companion.Body
 
 // 任务区与 FIFO 的持久化上界。全部在编码/解码边界强制：磁盘文件与内存
 // 占用都不随世界规模无界增长（推导见 `companion_codec.go` 的
@@ -44,21 +48,50 @@ const (
 	MaxCompanionSummaryBytes = companion.MaxDialogueSummaryBytes
 )
 
-// StoredCompanions 是从聚合存档恢复的伙伴身体快照与任务域载荷。Queues
-// 只包含有任务事实的记录（v1 文件迁移后恒为 nil）；每条载荷与记录经 ID
-// 关联，记录本体按 ID 严格升序排列。
-type StoredCompanions struct {
-	Revision uint64
-	Records  []companion.Body
-	Queues   []StoredCompanionQueue
+// Identity 是 namespace、memory operation 与 tombstone 共用的二进制 UUIDv4
+// 值。零值只允许表示 active canonical-zero memory 没有 operation；其余身份
+// 必须通过 `Valid` 校验 version 与 RFC variant 位。
+type Identity [16]byte
+
+// Valid 报告 identity 是否是非零 canonical UUIDv4 二进制值。
+func (identity Identity) Valid() bool {
+	return identity != (Identity{}) && identity[6]&0xf0 == 0x40 && identity[8]&0xc0 == 0x80
 }
 
-// CompanionSave 是一次伙伴身体与任务域聚合保存请求。Queues 的每条载荷
-// 必须关联一条 Records 中的记录；编码只读取载荷，绝不修改调用方切片。
+// StoredCompanionLifecycle 是 v5 中与身体记录同 ID 关联的 lifecycle/memory
+// 元数据。active 保存完整恢复 mirror，inactive 只保存 tombstone；两种形态
+// 由严格 codec 校验为互斥集合。
+type StoredCompanionLifecycle struct {
+	ID                   companion.ID
+	Active               bool
+	MemoryEpoch          uint64
+	MemoryRevision       uint64
+	MemoryOperationID    Identity
+	Summary              string
+	TombstoneOperationID Identity
+}
+
+// StoredCompanions 是从聚合存档恢复的伙伴身体、lifecycle 与任务域载荷。
+// `SourceSchema` 由 Decode 精确填入，供 bootstrap 区分 v5 no-op 与必须同步
+// 重写的 legacy；纯新世界用零值表示尚无聚合存档。
+type StoredCompanions struct {
+	SourceSchema     uint32
+	Revision         uint64
+	AgentNamespaceID Identity
+	Records          []companion.Body
+	Lifecycles       []StoredCompanionLifecycle
+	Queues           []StoredCompanionQueue
+}
+
+// CompanionSave 是一次 v5 伙伴身体、lifecycle 与任务域聚合保存请求。
+// Lifecycles 必须与 Records 是同一 ID 集合；Queues 只允许关联 active 记录。
+// 编码只读取载荷，绝不修改调用方切片。
 type CompanionSave struct {
-	Revision uint64
-	Records  []companion.Body
-	Queues   []StoredCompanionQueue
+	Revision         uint64
+	AgentNamespaceID Identity
+	Records          []companion.Body
+	Lifecycles       []StoredCompanionLifecycle
+	Queues           []StoredCompanionQueue
 }
 
 // StoredCompanionTask 是存档中一条当前任务的持久化载荷。任务计划自带的
@@ -87,20 +120,16 @@ type StoredCompanionTask struct {
 }
 
 // StoredCompanionQueue 是一个伙伴任务域的持久化载荷：当前任务（若有）、
-// 按接收顺序排列的 FIFO 指令与最近对话摘要（v4 起）。空载荷（无当前任务、
-// FIFO 为空且摘要为空）不可保存。队列载荷同时是记录的 active 信号：调用方
-// 只为当前配置的 active 伙伴提供队列——inactive 记录不提供队列（含摘要），
-// 编码即无摘要区，去激活由此天然丢弃摘要（spec：inactive 记录 MUST NOT
-// 保存摘要）。
+// 按接收顺序排列的 FIFO 指令，以及仅供 v4 Decode 迁移使用的裸摘要。v5
+// Encode 要求 Summary 为空，恢复 mirror 只来自对应 lifecycle，避免旧 direct
+// Dialogue 裸字符串伪造 revision/operation。
 type StoredCompanionQueue struct {
 	ID         companion.ID
 	HasCurrent bool
 	Current    StoredCompanionTask
 	Pending    []string
-	// Summary 是该伙伴的最近对话摘要（Dialogue 终态响应捎带写入）：
-	// ≤MaxCompanionSummaryBytes 字节、有效 UTF-8、不含 NUL；空串等价于
-	// 「无摘要」——编码不写摘要区，解码读到的 v3/v2/v1 迁移记录恒为空。
-	// 摘要只喂后续 Dialogue 请求，绝不进入 Planner 输入。
+	// Summary 只承接 schema v4 的 legacy 摘要。MergeV5 将其迁入 lifecycle
+	// mirror 后清空；任何 v5 保存请求携带非空值都会被拒绝。
 	Summary string
 }
 

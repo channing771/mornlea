@@ -130,8 +130,8 @@ func newInteractionParityHost(
 		Inventory: inventory,
 	}
 	if err := store.MemoryStore.SaveCompanions(
-		context.Background(), storage.CompanionSave{Revision: 1, Records: []companion.Body{seed}},
-	); err != nil {
+		context.Background(), fixtureServerCompanionV5Save(
+			storage.CompanionSave{Revision: 1, Records: []companion.Body{seed}})); err != nil {
 		t.Fatalf("种子伙伴身体: %v", err)
 	}
 	config := hostTestConfig()

@@ -77,7 +77,9 @@ func TestHostileRestartRestoresFullAuthorityAcrossLifetimes(t *testing.T) {
 		{
 			name: "memory",
 			makeWorld: func(t *testing.T) string {
-				store := &hostTestStore{MemoryStore: storage.NewMemory(hostileRestartMetadata())}
+				store := &reusableHostileMemoryStore{hostTestStore: &hostTestStore{
+					MemoryStore: storage.NewMemory(hostileRestartMetadata()),
+				}}
 				seedHostileMobsForRestart(t, store)
 				memoryStore = store
 				return ""
@@ -174,6 +176,14 @@ func TestHostileRestartRestoresFullAuthorityAcrossLifetimes(t *testing.T) {
 		})
 	}
 }
+
+// reusableHostileMemoryStore 模拟两段生命周期共享同一内存 archive；宿主的
+// Close 屏障不销毁该测试夹具，Disk 变体仍以真实重开覆盖关闭语义。
+type reusableHostileMemoryStore struct {
+	*hostTestStore
+}
+
+func (*reusableHostileMemoryStore) Close() error { return nil }
 
 // seedHostileMobsForRestart 把种子夜行者写入指定世界存档。
 func seedHostileMobsForRestart(t *testing.T, store storage.WorldStore) {

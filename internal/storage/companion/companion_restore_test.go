@@ -1,8 +1,8 @@
 // companions.ai schema v3 的任务区/FIFO 持久化与恢复测试：v3 变长步骤
 // round-trip 与冻结 golden 迁移（四 kind 覆盖）、v2/v1 只读迁移且首次保存
-// 写 v4、入口 schema 白名单前瞻锁（字面 v1..v4 成员、v5 假想文件拒绝）、
+// 写 v5、入口 schema 白名单前瞻锁（字面 v1..v5 成员、v6 假想文件拒绝）、
 // 任务与 FIFO 跨重启精确恢复、损坏矩阵（CRC/future/截断/超
-// 438,280 bytes/非法任务状态/变长步长错位/follow 携带 deadline）与
+// 393,904 bytes/非法任务状态/变长步长错位/follow 携带 deadline）与
 // 5,000 步骤、16 条 FIFO 边界。全部用例经 companionFileFixture 在临时
 // 目录内读写（域包测试不回接根包 DiskStore 编排），失败注入均为字节级
 // 或载荷级构造。
@@ -47,7 +47,7 @@ func (f companionFileFixture) LoadCompanions(context.Context) (StoredCompanions,
 }
 
 func (f companionFileFixture) SaveCompanions(_ context.Context, save CompanionSave) error {
-	encoded, err := Encode(save)
+	encoded, err := Encode(fixtureV5SaveForTest(save))
 	if err != nil {
 		return err
 	}
@@ -134,28 +134,28 @@ func fixtureCompanionV3Queues() []StoredCompanionQueue {
 // TestCompanionCodecV3RoundTripAndGolden 锁定 v3 载荷经当前编码器的 round-trip
 // 与冻结 v3 golden 的只读迁移：四 kind 步骤按 13/13/15/17 落盘（follow 只携带
 // 玩家 ID、place 追加 block uint16）、round-trip 精确保留、golden 字节零改动，
-// 以及文件上界常量 438,280。v4 时代编码端只写 v4（无摘要载荷与 v3 位形同形），
+// 以及当前文件上界常量。编码端只写 v5，v3 golden 保持冻结。
 // v3 golden 自此是冻结的历史字节（同 v1/v2 纪律），不再由本测试重生成。
 func TestCompanionCodecV3RoundTripAndGolden(t *testing.T) {
-	if MaxFileLength != 438280 {
-		t.Fatalf("max companion file length=%d，想要 438280", MaxFileLength)
+	if MaxFileLength != 393904 {
+		t.Fatalf("max companion file length=%d，想要 393904", MaxFileLength)
 	}
 	input := fixtureCompanionBodies()
 	queues := fixtureCompanionV3Queues()
 	bodiesSnapshot := append([]companion.Body(nil), input...)
 	queuesSnapshot := cloneStoredQueuesForTest(queues)
-	encoded, err := Encode(CompanionSave{Revision: 43, Records: input, Queues: queues})
+	encoded, err := Encode(fixtureV5SaveForTest(CompanionSave{Revision: 43, Records: input, Queues: queues}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(input, bodiesSnapshot) || !reflect.DeepEqual(queues, queuesSnapshot) {
 		t.Fatalf("编码修改调用者载荷：records=%+v queues=%+v", input, queues)
 	}
-	if CurrentSchema != 4 {
-		t.Fatalf("current companion schema=%d，想要 4", CurrentSchema)
+	if CurrentSchema != 5 {
+		t.Fatalf("current companion schema=%d，想要 5", CurrentSchema)
 	}
-	if schema := binary.LittleEndian.Uint32(encoded[8:12]); schema != 4 {
-		t.Fatalf("schema=%d，想要 4", schema)
+	if schema := binary.LittleEndian.Uint32(encoded[8:12]); schema != 5 {
+		t.Fatalf("schema=%d，想要 5", schema)
 	}
 
 	// 文件总长按第一性原理核算：envelope 32 + active 记录（221 身体 + 1
@@ -170,7 +170,8 @@ func TestCompanionCodecV3RoundTripAndGolden(t *testing.T) {
 	for index := range queuesSnapshot[0].Pending {
 		fifoArea += 2 + len(queuesSnapshot[0].Pending[index])
 	}
-	wantLength := 32 + (companionRecordLength + 1 + taskArea + fifoArea) + (companionRecordLength + 1)
+	wantLength := 32 + 16 + (companionRecordLength + 1 + 8 + 8 + 16 + 2 + taskArea + fifoArea) +
+		(companionRecordLength + 1 + 8 + 8 + 16 + 2)
 	if len(encoded) != wantLength {
 		t.Fatalf("v3 载荷文件长度=%d，想要 %d", len(encoded), wantLength)
 	}
@@ -194,7 +195,7 @@ func TestCompanionCodecV3RoundTripAndGolden(t *testing.T) {
 	}
 
 	// 冻结 v3 golden 的只读迁移：schema 字节恒为 3，无损读入且摘要为空
-	//（v3 布局没有摘要区）。编码端只写 v4，golden 字节永不再生。
+	//（v3 布局没有摘要区）。编码端只写 v5，golden 字节永不再生。
 	path := filepath.Join("testdata", "companions-v3.bin")
 	want, err := os.ReadFile(path)
 	if err != nil {
@@ -237,11 +238,12 @@ func TestCompanionRestoreV2ReadOnlyMigrationAndV4Rewrite(t *testing.T) {
 		t.Fatalf("v2 迁移 decode=%+v，想要 revision=41 无损载荷 %+v", got, wantQueues)
 	}
 	// 规范重编码只写 v4：go_to 步骤 13B 布局在 v4 中原样保留。
-	encoded, err := Encode(CompanionSave{
+	encoded, err := Encode(fixtureV5SaveForTest(CompanionSave{
 		Revision: got.Revision,
 		Records:  got.Records,
 		Queues:   got.Queues,
-	})
+	}))
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,7 +303,7 @@ func TestCompanionCodecV2RoundTripAndGolden(t *testing.T) {
 	queues := fixtureCompanionQueues()
 	bodiesSnapshot := append([]companion.Body(nil), input...)
 	queuesSnapshot := cloneStoredQueuesForTest(queues)
-	encoded, err := Encode(CompanionSave{Revision: 41, Records: input, Queues: queues})
+	encoded, err := Encode(fixtureV5SaveForTest(CompanionSave{Revision: 41, Records: input, Queues: queues}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -357,57 +359,40 @@ func TestCompanionCodecV2RoundTripAndGolden(t *testing.T) {
 	}
 }
 
-// TestCompanionDecodeSchemaWhitelistListsLiteralV4 锁定解码入口 schema 白
-// 名单的前瞻口径：成员显式为 v1/v2/v3/v4 字面常量而非 CurrentSchema
-// 引用——未来 v5 成为 current 时，schema=4 的合法迁移文件仍必须在入口被
-// 放行，才能到达摘要位的 `schema >= companionSchemaV4` 前瞻检查
-// （decodeCompanionQueueSections），这正是 companionSchemaV4 独立常量存在的
-// 意图。分层断言：白盒成员锁（恰为 {1,2,3,4}，0 与假想 v5/v6 不在内——
-// 断言 0 不在白名单今日即封死「惰性写成 <= current」的退化形态，上调
-// current 而忘记显式扩白名单也会在此变红）；v5 假想文件（合法 v4 编码
-// 只改 schema 字节为字面 5，其余字节按 v4 语义原样保留）今天必须被明确拒
-// 绝为 storagedef.ErrFutureVersion，本测试不引入任何 v5 解码支持；对照同一 v4 编码
-// 原样解码成功，证明拒绝来自白名单判定而非文件本身。schema 检查先于
-// CRC 校验，假想文件无需修复校验和。
-func TestCompanionDecodeSchemaWhitelistListsLiteralV4(t *testing.T) {
+// TestCompanionDecodeSchemaWhitelistListsLiteralV5 锁定解码入口只接受字面
+// v1..v5；未来 schema 不能因为 `CurrentSchema` 比较而被意外放行。
+func TestCompanionDecodeSchemaWhitelistListsLiteralV5(t *testing.T) {
 	for _, schema := range []uint32{
-		companionSchemaV1, companionSchemaV2, companionSchemaV3, companionSchemaV4,
+		companionSchemaV1, companionSchemaV2, companionSchemaV3, companionSchemaV4, companionSchemaV5,
 	} {
 		if !companionSchemaReadable(schema) {
 			t.Fatalf("schema=%d 必须在解码白名单内", schema)
 		}
 	}
-	for _, schema := range []uint32{0, 5, 6} {
+	for _, schema := range []uint32{0, 6} {
 		if companionSchemaReadable(schema) {
-			t.Fatalf("schema=%d 必须不在解码白名单内（今天未交付）", schema)
+			t.Fatalf("schema=%d 必须不在解码白名单内", schema)
 		}
 	}
 
-	// v5 假想文件：带摘要的合法 v4 编码（摘要区是 v4 起才可能的载荷）只改
-	// schema 字节，其余字节按 v4 语义原样保留。
-	queues := fixtureCompanionV4Queues()
-	queuesSnapshot := cloneStoredQueuesForTest(queues)
-	encoded, err := Encode(CompanionSave{
+	encoded, err := Encode(fixtureV5SaveForTest(CompanionSave{
 		Revision: 9,
 		Records:  fixtureCompanionBodies(),
-		Queues:   queues,
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	hypothetical := bytes.Clone(encoded)
-	binary.LittleEndian.PutUint32(hypothetical[8:], 5)
+	binary.LittleEndian.PutUint32(hypothetical[8:], 6)
 	if _, err := Decode(hypothetical); !errors.Is(err, storagedef.ErrFutureVersion) {
-		t.Fatalf("schema=5 decode error=%v，想要 storagedef.ErrFutureVersion（v5 今天被明确拒绝）", err)
+		t.Fatalf("schema=6 decode error=%v，想要 storagedef.ErrFutureVersion", err)
 	}
-	// 对照：同一 v4 编码原样通过，摘要精确保留——拒绝 v5 是白名单判定，
-	// 不是文件本身的问题。
 	got, err := Decode(encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Revision != 9 || !reflect.DeepEqual(got.Queues, queuesSnapshot) {
-		t.Fatalf("schema=4 合法文件 decode=%+v，想要原样通过 %+v", got, queuesSnapshot)
+	if got.SourceSchema != 5 || got.Revision != 9 {
+		t.Fatalf("schema=5 合法文件 decode=%+v", got)
 	}
 }
 
@@ -568,11 +553,12 @@ func TestCompanionRestoreFIFOOnlyQueueRoundTrip(t *testing.T) {
 		ID:      fixtureCompanionID(1),
 		Pending: []string{"仅排队甲", "仅排队乙"},
 	}
-	encoded, err := Encode(CompanionSave{
+	encoded, err := Encode(fixtureV5SaveForTest(CompanionSave{
 		Revision: 3,
 		Records:  fixtureCompanionBodies(),
 		Queues:   []StoredCompanionQueue{queue},
-	})
+	}))
+
 	if err != nil {
 		t.Fatalf("FIFO-only encode error=%v，想要成功", err)
 	}
@@ -603,11 +589,12 @@ func TestCompanionRestoreFIFOOnlyQueueRoundTrip(t *testing.T) {
 }
 
 func TestCompanionRestoreRejectsCorruptTaskPayloads(t *testing.T) {
-	valid, err := Encode(CompanionSave{
+	valid, err := Encode(fixtureV5SaveForTest(CompanionSave{
 		Revision: 7,
 		Records:  fixtureCompanionBodies(),
 		Queues:   fixtureCompanionQueues(),
-	})
+	}))
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -739,11 +726,12 @@ func TestCompanionRestoreRejectsCorruptTaskPayloads(t *testing.T) {
 	for _, tc := range mutations {
 		t.Run(tc.name, func(t *testing.T) {
 			queues := tc.mutate(cloneStoredQueuesForTest(tc.base()))
-			_, err := Encode(CompanionSave{
+			_, err := Encode(fixtureV5SaveForTest(CompanionSave{
 				Revision: 7,
 				Records:  fixtureCompanionBodies(),
 				Queues:   queues,
-			})
+			}))
+
 			if !errors.Is(err, storagedef.ErrCorrupt) {
 				t.Fatalf("encode error=%v，想要 storagedef.ErrCorrupt", err)
 			}
@@ -754,11 +742,12 @@ func TestCompanionRestoreRejectsCorruptTaskPayloads(t *testing.T) {
 	// 起点为 32+221+1，指令前缀 2 + 指令字节 + 步骤数 2 后进入步骤区；
 	// go_to/mine 各 13、place 15、follow 17。follow 的玩家 ID 在其 kind 字节
 	// 之后，deadline 在步骤区之后的 4+1+1+8 偏移处。
-	v3Valid, err := Encode(CompanionSave{
+	v3Valid, err := Encode(fixtureV5SaveForTest(CompanionSave{
 		Revision: 7,
 		Records:  fixtureCompanionBodies(),
 		Queues:   fixtureCompanionV3Queues(),
-	})
+	}))
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -874,11 +863,12 @@ func TestCompanionRestorePlanAndFIFOBounds(t *testing.T) {
 	for index := range queue.Pending {
 		queue.Pending[index] = "排队"
 	}
-	encoded, err := Encode(CompanionSave{
+	encoded, err := Encode(fixtureV5SaveForTest(CompanionSave{
 		Revision: 2,
 		Records:  fixtureCompanionBodies()[:1],
 		Queues:   []StoredCompanionQueue{queue},
-	})
+	}))
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -898,11 +888,11 @@ func TestCompanionRestorePlanAndFIFOBounds(t *testing.T) {
 		over[0].Current.PlanSteps,
 		companion.PlanStep{Kind: companion.PlanStepGoTo, X: 1, Y: 64, Z: 1},
 	)
-	if _, err := Encode(CompanionSave{
+	if _, err := Encode(fixtureV5SaveForTest(CompanionSave{
 		Revision: 3,
 		Records:  fixtureCompanionBodies()[:1],
 		Queues:   over,
-	}); !errors.Is(err, storagedef.ErrCorrupt) {
+	})); !errors.Is(err, storagedef.ErrCorrupt) {
 		t.Fatalf("5,001 步 encode error=%v，想要 storagedef.ErrCorrupt", err)
 	}
 
@@ -911,11 +901,11 @@ func TestCompanionRestorePlanAndFIFOBounds(t *testing.T) {
 	overFIFO[0].Current.PlanSteps = overFIFO[0].Current.PlanSteps[:1]
 	overFIFO[0].Current.StepIndex = 0
 	overFIFO[0].Pending = append(overFIFO[0].Pending, "第十七条")
-	if _, err := Encode(CompanionSave{
+	if _, err := Encode(fixtureV5SaveForTest(CompanionSave{
 		Revision: 4,
 		Records:  fixtureCompanionBodies()[:1],
 		Queues:   overFIFO,
-	}); !errors.Is(err, storagedef.ErrCorrupt) {
+	})); !errors.Is(err, storagedef.ErrCorrupt) {
 		t.Fatalf("17 条 FIFO encode error=%v，想要 storagedef.ErrCorrupt", err)
 	}
 }
@@ -940,11 +930,12 @@ func TestCompanionRestoreV3MaxVariableStepBudget(t *testing.T) {
 			StartTick: 9,
 		},
 	}
-	encoded, err := Encode(CompanionSave{
+	encoded, err := Encode(fixtureV5SaveForTest(CompanionSave{
 		Revision: 5,
 		Records:  fixtureCompanionBodies()[:1],
 		Queues:   []StoredCompanionQueue{queue},
-	})
+	}))
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -968,11 +959,11 @@ func TestCompanionRestoreV3MaxVariableStepBudget(t *testing.T) {
 		companion.PlanStep{Kind: companion.PlanStepGoTo, X: 1, Y: 64, Z: 1},
 		companion.PlanStep{Kind: companion.PlanStepFollow, PlayerID: fixtureFollowPlayerID()},
 	)
-	if _, err := Encode(CompanionSave{
+	if _, err := Encode(fixtureV5SaveForTest(CompanionSave{
 		Revision: 6,
 		Records:  fixtureCompanionBodies()[:1],
 		Queues:   over,
-	}); !errors.Is(err, storagedef.ErrCorrupt) {
+	})); !errors.Is(err, storagedef.ErrCorrupt) {
 		t.Fatalf("5,001 步 encode error=%v，想要 storagedef.ErrCorrupt", err)
 	}
 }

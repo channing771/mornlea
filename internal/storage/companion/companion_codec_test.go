@@ -45,7 +45,7 @@ func fixtureCompanionBodies() []companion.Body {
 }
 
 func TestCompanionCodecV1RoundTripAndGolden(t *testing.T) {
-	// v1 golden 字节零改动：编码端只写当前 schema（v4），v1 路径由冻结的
+	// v1 golden 字节零改动：编码端只写当前 schema（v5），v1 路径由冻结的
 	// golden 驱动只读迁移验证。
 	path := filepath.Join("testdata", "companions-v1.bin")
 	golden, err := os.ReadFile(path)
@@ -70,15 +70,16 @@ func TestCompanionCodecV1RoundTripAndGolden(t *testing.T) {
 		t.Fatalf("v1 golden 携带任务域=%+v，想要空", got.Queues)
 	}
 
-	// 同一载荷的首次保存必须写出当前 schema（v4）：记录 = v1 身体 + flags 字节。
+	// 同一载荷的首次保存必须写出当前 schema（v5），并携带 namespace 与
+	// lifecycle metadata。
 	input := fixtureCompanionBodies()
 	before := append([]companion.Body(nil), input...)
-	encoded, err := Encode(CompanionSave{Revision: 19, Records: input})
+	encoded, err := Encode(fixtureV5SaveForTest(CompanionSave{Revision: 19, Records: input}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(encoded) != 32+2*(companionRecordLength+1) {
-		t.Fatalf("无任务双记录长度=%d，想要 %d", len(encoded), 32+2*(companionRecordLength+1))
+	if len(encoded) != 560 {
+		t.Fatalf("无任务双记录长度=%d，想要 560", len(encoded))
 	}
 	if !reflect.DeepEqual(input, before) {
 		t.Fatalf("编码修改调用者 records：got=%+v want=%+v", input, before)
@@ -92,7 +93,7 @@ func TestCompanionCodecV1RoundTripAndGolden(t *testing.T) {
 	}
 	if migrated.Revision != 19 || !reflect.DeepEqual(migrated.Records, wantRecords) ||
 		migrated.Queues != nil {
-		t.Fatalf("迁移写 v4 后 decode=%+v", migrated)
+		t.Fatalf("迁移写 v5 后 decode=%+v", migrated)
 	}
 }
 
@@ -108,7 +109,7 @@ func TestCompanionCodecCurrentSchemaRoundTripsSwordItems(t *testing.T) {
 	}
 	copy(want.Inventory.Hotbar.Slots[:], stacks[:])
 
-	encoded, err := Encode(CompanionSave{Revision: 29, Records: []companion.Body{want}})
+	encoded, err := Encode(fixtureV5SaveForTest(CompanionSave{Revision: 29, Records: []companion.Body{want}}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,14 +127,14 @@ func TestCompanionCodecAcceptsMaximumStoredRecords(t *testing.T) {
 	for index := range records {
 		records[index].ID = fixtureCompanionID(byte(index))
 	}
-	encoded, err := Encode(CompanionSave{Revision: 23, Records: records})
+	encoded, err := Encode(fixtureV5SaveForTest(CompanionSave{Revision: 23, Records: records}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(encoded) != 32+companion.MaxStored*(companionRecordLength+1) {
+	if len(encoded) != 32+16+companion.MaxActive*256+(companion.MaxStored-companion.MaxActive)*246 {
 		t.Fatalf(
 			"64 条无任务记录长度=%d，想要 %d",
-			len(encoded), 32+companion.MaxStored*(companionRecordLength+1),
+			len(encoded), 32+16+companion.MaxActive*256+(companion.MaxStored-companion.MaxActive)*246,
 		)
 	}
 	got, err := Decode(encoded)
@@ -149,7 +150,7 @@ func TestCompanionCodecAcceptsMaximumStoredRecords(t *testing.T) {
 }
 
 func TestCompanionCodecRejectsCRCTruncationFutureVersionAndOversizedRecords(t *testing.T) {
-	valid, err := Encode(CompanionSave{Revision: 7, Records: fixtureCompanionBodies()})
+	valid, err := Encode(fixtureV5SaveForTest(CompanionSave{Revision: 7, Records: fixtureCompanionBodies()}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,34 +179,34 @@ func TestCompanionCodecRejectsCRCTruncationFutureVersionAndOversizedRecords(t *t
 		{"CRC", func() []byte { p := bytes.Clone(valid); p[28] ^= 1; return p }, storagedef.ErrCorrupt},
 		{"truncation", func() []byte { return bytes.Clone(valid[:len(valid)-1]) }, storagedef.ErrCorrupt},
 		{"trailing byte", func() []byte { return append(bytes.Clone(valid), 0) }, storagedef.ErrCorrupt},
-		{"invalid ID", func() []byte { p := bytes.Clone(valid); clear(p[32:48]); repairCompanionCRC(p); return p }, storagedef.ErrCorrupt},
+		{"invalid ID", func() []byte { p := bytes.Clone(valid); clear(p[48:64]); repairCompanionCRC(p); return p }, storagedef.ErrCorrupt},
 		{"invalid dimension", func() []byte {
 			p := bytes.Clone(valid)
-			binary.LittleEndian.PutUint32(p[48:], 1)
+			binary.LittleEndian.PutUint32(p[64:], 1)
 			repairCompanionCRC(p)
 			return p
 		}, storagedef.ErrCorrupt},
-		{"position", func() []byte { return badFloat(52) }, storagedef.ErrCorrupt},
-		{"yaw", func() []byte { return badFloat(64) }, storagedef.ErrCorrupt},
-		{"pitch", func() []byte { return badFloat(68) }, storagedef.ErrCorrupt},
+		{"position", func() []byte { return badFloat(68) }, storagedef.ErrCorrupt},
+		{"yaw", func() []byte { return badFloat(80) }, storagedef.ErrCorrupt},
+		{"pitch", func() []byte { return badFloat(84) }, storagedef.ErrCorrupt},
 		{"pitch outside range", func() []byte {
 			p := bytes.Clone(valid)
-			binary.LittleEndian.PutUint32(p[68:], math.Float32bits(2))
+			binary.LittleEndian.PutUint32(p[84:], math.Float32bits(2))
 			repairCompanionCRC(p)
 			return p
 		}, storagedef.ErrCorrupt},
-		{"selected slot", func() []byte { p := bytes.Clone(valid); p[72] = core.HotbarSlots; repairCompanionCRC(p); return p }, storagedef.ErrCorrupt},
+		{"selected slot", func() []byte { p := bytes.Clone(valid); p[88] = core.HotbarSlots; repairCompanionCRC(p); return p }, storagedef.ErrCorrupt},
 		{"invalid inventory", func() []byte {
 			p := bytes.Clone(valid)
-			binary.LittleEndian.PutUint16(p[73:], 4242)
-			p[75] = 1
+			binary.LittleEndian.PutUint16(p[89:], 4242)
+			p[91] = 1
 			repairCompanionCRC(p)
 			return p
 		}, storagedef.ErrCorrupt},
 		{"item sentinel", func() []byte {
 			p := bytes.Clone(valid)
-			binary.LittleEndian.PutUint16(p[73:], uint16(core.ItemIDMax))
-			p[75] = 1
+			binary.LittleEndian.PutUint16(p[89:], uint16(core.ItemIDMax))
+			p[91] = 1
 			repairCompanionCRC(p)
 			return p
 		}, storagedef.ErrCorrupt},
@@ -235,31 +236,34 @@ func TestCompanionCodecRejectsCRCTruncationFutureVersionAndOversizedRecords(t *t
 	for i := range tooMany {
 		tooMany[i] = fixtureCompanionBodies()[0]
 	}
-	if _, err := Encode(CompanionSave{Revision: 1, Records: tooMany}); !errors.Is(err, storagedef.ErrCorrupt) {
+	if _, err := Encode(fixtureV5SaveForTest(CompanionSave{Revision: 1, Records: tooMany})); !errors.Is(err, storagedef.ErrCorrupt) {
 		t.Fatalf("encode 65 records error=%v，想要 storagedef.ErrCorrupt", err)
 	}
-	if _, err := Encode(CompanionSave{Records: fixtureCompanionBodies()[:1]}); !errors.Is(err, storagedef.ErrCorrupt) {
+	if _, err := Encode(fixtureV5SaveForTest(CompanionSave{Records: fixtureCompanionBodies()[:1]})); !errors.Is(err, storagedef.ErrCorrupt) {
 		t.Fatalf("encode zero revision error=%v，想要 storagedef.ErrCorrupt", err)
 	}
 	invalidBody := fixtureCompanionBodies()[0]
 	invalidBody.Position[0] = float32(math.Inf(1))
-	if _, err := Encode(CompanionSave{Revision: 1, Records: []companion.Body{invalidBody}}); !errors.Is(err, storagedef.ErrCorrupt) {
+	if _, err := Encode(fixtureV5SaveForTest(CompanionSave{Revision: 1, Records: []companion.Body{invalidBody}})); !errors.Is(err, storagedef.ErrCorrupt) {
 		t.Fatalf("encode invalid body error=%v，想要 storagedef.ErrCorrupt", err)
 	}
 }
 
 func TestCompanionCodecRejectsDuplicateOrUnsortedIDs(t *testing.T) {
-	valid, err := Encode(CompanionSave{Revision: 3, Records: fixtureCompanionBodies()})
+	valid, err := Encode(fixtureV5SaveForTest(CompanionSave{Revision: 3, Records: fixtureCompanionBodies()}))
 	if err != nil {
 		t.Fatal(err)
 	}
+	const firstRecordOffset = companionHeaderLength + 16
+	const activeRecordLength = companionRecordLength + 1 + 8 + 8 + 16 + 2
+	const secondRecordOffset = firstRecordOffset + activeRecordLength
 	duplicate := bytes.Clone(valid)
-	copy(duplicate[32+221:32+221+16], duplicate[32:48])
+	copy(duplicate[secondRecordOffset:secondRecordOffset+16], duplicate[firstRecordOffset:firstRecordOffset+16])
 	repairCompanionCRC(duplicate)
 	unsorted := bytes.Clone(valid)
-	first := bytes.Clone(unsorted[32:48])
-	copy(unsorted[32:48], unsorted[32+221:32+221+16])
-	copy(unsorted[32+221:32+221+16], first)
+	first := bytes.Clone(unsorted[firstRecordOffset : firstRecordOffset+16])
+	copy(unsorted[firstRecordOffset:firstRecordOffset+16], unsorted[secondRecordOffset:secondRecordOffset+16])
+	copy(unsorted[secondRecordOffset:secondRecordOffset+16], first)
 	repairCompanionCRC(unsorted)
 	for name, payload := range map[string][]byte{"duplicate": duplicate, "unsorted": unsorted} {
 		t.Run(name, func(t *testing.T) {
@@ -271,22 +275,22 @@ func TestCompanionCodecRejectsDuplicateOrUnsortedIDs(t *testing.T) {
 
 	input := fixtureCompanionBodies()
 	input[1].ID = input[0].ID
-	if _, err := Encode(CompanionSave{Revision: 1, Records: input}); !errors.Is(err, storagedef.ErrCorrupt) {
+	if _, err := Encode(fixtureV5SaveForTest(CompanionSave{Revision: 1, Records: input})); !errors.Is(err, storagedef.ErrCorrupt) {
 		t.Fatalf("encode duplicate error=%v，想要 storagedef.ErrCorrupt", err)
 	}
 }
 
 func TestCompanionCodecDoesNotPersistNameTaskOrPersona(t *testing.T) {
-	encoded, err := Encode(CompanionSave{Revision: 5, Records: fixtureCompanionBodies()[:1]})
+	encoded, err := Encode(fixtureV5SaveForTest(CompanionSave{Revision: 5, Records: fixtureCompanionBodies()[:1]}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(encoded) != 32+companionRecordLength+1 {
-		t.Fatalf("单记录文件长度=%d，想要固定 %d；任务区缺席时只追加 flags 字节", len(encoded), 32+companionRecordLength+1)
+	if len(encoded) != 304 {
+		t.Fatalf("单记录文件长度=%d，想要固定 304", len(encoded))
 	}
 	for _, forbidden := range [][]byte{[]byte("阿木"), []byte("挖石头"), []byte("persona")} {
 		if bytes.Contains(encoded, forbidden) {
-			t.Fatalf("v1 存档包含禁止字段 %q", forbidden)
+			t.Fatalf("v5 存档包含禁止字段 %q", forbidden)
 		}
 	}
 }
@@ -295,7 +299,7 @@ func TestCompanionCodecV1PreservesWornToolDurability(t *testing.T) {
 	body := fixtureCompanionBodies()[0]
 	body.Inventory.Hotbar.Slots[4].Durability = 73
 	body.Inventory.Backpack[3] = core.ItemStack{Item: core.ItemIronPickaxe, Count: 1, Durability: 149}
-	encoded, err := Encode(CompanionSave{Revision: 9, Records: []companion.Body{body}})
+	encoded, err := Encode(fixtureV5SaveForTest(CompanionSave{Revision: 9, Records: []companion.Body{body}}))
 	if err != nil {
 		t.Fatal(err)
 	}

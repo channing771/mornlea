@@ -313,6 +313,34 @@ func (store *DiskStore) LoadCompanions(ctx context.Context) (StoredCompanions, e
 	return stored, nil
 }
 
+// CompanionsExist 只对固定 `companions.ai` 路径执行 metadata stat，不读取或
+// 解码正文。
+func (store *DiskStore) CompanionsExist(ctx context.Context) (bool, error) {
+	if store.closing.Load() {
+		return false, os.ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.closing.Load() || store.closed {
+		return false, os.ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	_, err := os.Stat(store.companionPath())
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, os.ErrNotExist):
+		return false, nil
+	default:
+		return false, fmt.Errorf("stat companions: %w", err)
+	}
+}
+
 func (store *DiskStore) SaveCompanions(ctx context.Context, save CompanionSave) error {
 	if store.closing.Load() {
 		return os.ErrClosed

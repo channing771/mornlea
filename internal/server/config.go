@@ -7,6 +7,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage"
 )
 
 type Config struct {
@@ -45,6 +46,9 @@ type Config struct {
 	HeartbeatTimeout      time.Duration
 
 	heartbeatClock heartbeatClock
+	// companionIdentityGenerator 只用于启动期 v5 身份生成；测试注入失败与
+	// 确定性序列，生产缺省使用系统随机源。
+	companionIdentityGenerator storage.CompanionIdentityGenerator
 }
 
 func DefaultConfig(seed int64) Config {

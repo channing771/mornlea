@@ -108,7 +108,7 @@ func restoredCompanionSeed(
 ) *hostTestStore {
 	t.Helper()
 	store := newHostTestStore()
-	if err := store.SaveCompanions(context.Background(), storage.CompanionSave{
+	if err := store.SaveCompanions(context.Background(), fixtureServerCompanionV5Save(storage.CompanionSave{
 		Revision: 1,
 		Records: []companion.Body{{
 			ID:        id,
@@ -116,7 +116,7 @@ func restoredCompanionSeed(
 			Dimension: core.Overworld,
 		}},
 		Queues: []storage.StoredCompanionQueue{queue},
-	}); err != nil {
+	})); err != nil {
 		t.Fatalf("seed SaveCompanions: %v", err)
 	}
 	return store
