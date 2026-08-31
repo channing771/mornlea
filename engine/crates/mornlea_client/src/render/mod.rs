@@ -1,8 +1,9 @@
-//! 离屏 wgpu 世界渲染器(R2a)。
+//! Rust client 的 wgpu 世界渲染器。
 //!
-//! 本模块是 Go `internal/render` 世界地形路径的平行 Rust 实现:纯离屏、
-//! 不接窗口 surface,生产客户端仍由 Go 渲染;双后端图像对照门禁在 Go 侧
-//! 测试中执行。GPU 数据流逐一镜像 Go 版:全局 face 池(packed u64 face)、
+//! 本模块同时承载交互 windowed surface 与 offscreen capture/benchmark 的生产
+//! GPU 后端；全部 GPU pass 由 Rust client 持有。Go `internal/render` 保留 CPU
+//! mesh、visibility 与 frame input 准备，不是生产 GPU renderer；offscreen 路径
+//! 仍由 Go 侧现有逐字节图像对照测试验证。GPU 数据流逐一镜像 Go 版:全局 face 池(packed u64 face)、
 //! origin 槽位、32 字节 section record、cull compute 写 visible instances
 //! 与 indirect args、单次 indexed indirect draw、sky 全屏三角与 HiZ
 //! 金字塔遮挡。uniform 布局、clear 值与 pass 顺序保持一致,保证同输入
@@ -28,9 +29,13 @@ pub mod shaders;
 mod side_tests;
 #[cfg(test)]
 mod water_tests;
+mod world;
+#[cfg(test)]
+mod world_tests;
 
 use std::collections::HashMap;
 
+use self::world::RenderWorld;
 use entity::{EntityPass, EntityPipelineKind};
 use lod::{Frustum, LodPass};
 use pool::{Alloc, Pool};
@@ -476,6 +481,9 @@ pub struct OffscreenRenderer {
     mode: TargetMode,
     /// 已录制但尚未提交的离屏 benchmark 批次；同一 renderer 最多保留一个。
     prepared_benchmark_batch: Option<PreparedBenchmarkBatch>,
+    /// 尚未接管绘制的 renderer 派生世界缓存。
+    #[allow(dead_code)]
+    render_world: RenderWorld,
     depth_view: wgpu::TextureView,
 
     faces: wgpu::Buffer,
@@ -1117,6 +1125,7 @@ impl OffscreenRenderer {
             height,
             mode,
             prepared_benchmark_batch: None,
+            render_world: RenderWorld::default(),
             depth_view,
             faces,
             instances,
@@ -1169,6 +1178,11 @@ impl OffscreenRenderer {
             last_pos: [0.0; 3],
             last_view_proj: [0.0; 16],
         })
+    }
+
+    /// 只更新尚未接管绘制的派生世界缓存。
+    pub(crate) fn apply_render_world_updates(&mut self, bytes: &[u8]) -> bool {
+        self.render_world.apply_update_batch(bytes).is_ok()
     }
 
     /// 上传材质 atlas:`pixels` 为逐 layer、逐 mip 拼接的 RGBA 字节
@@ -2098,7 +2112,7 @@ impl OffscreenRenderer {
         FrameResult::Rendered
     }
 
-    /// 把 client ABI v12 版本化 JSON UI 事件信封完整排空到 `out`。
+    /// 把 client ABI v12 引入、v14 保留的版本化 JSON UI 事件信封完整排空到 `out`。
     ///
     /// 事件源自 WebView 桥(进程级共享队列):benchmark/capture 等从不创建
     /// WebView 的进程队列为空,排空返回 0 字节——零参与语义在渲染器侧的
