@@ -1,6 +1,7 @@
 package mesh_test
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/channing771/mornlea/internal/assets"
@@ -27,7 +28,6 @@ var lightDirections = [...]struct{ x, y, z int }{
 type goLightScratch struct {
 	levels [lightVolume]uint8
 	queue  [lightVolume]uint32
-	head   int
 	tail   int
 }
 
@@ -57,17 +57,31 @@ func (s *goLightScratch) enqueue(index int) {
 
 func (s *goLightScratch) build(n *world.Neighborhood, reg mesh.Registry) {
 	clear(s.levels[:])
-	s.head, s.tail = 0, 0
-	s.buildSky(n, reg)
-	s.head, s.tail = 0, 0
+	s.tail = 0
+	s.buildSky(n, reg, reg.MeshSnapshot())
+	s.tail = 0
 	s.buildBlock(n, reg)
 }
 
-func (s *goLightScratch) buildSky(n *world.Neighborhood, reg mesh.Registry) {
+func (s *goLightScratch) buildSky(
+	n *world.Neighborhood,
+	reg mesh.Registry,
+	snapshot mesh.RegistrySnapshot,
+) {
 	for x := lightMin; x < lightMin+lightSide; x++ {
-		for y := lightMin; y < lightMin+lightSide; y++ {
-			for z := lightMin; z < lightMin+lightSide; z++ {
-				if n.SkyLight(x, y, z) != 15 || reg.Opaque(n.At(x, y, z)) {
+		for z := lightMin; z < lightMin+lightSide; z++ {
+			direct := false
+			for y := lightMin + lightSide - 1; y >= lightMin; y-- {
+				if n.SkyLight(x, y, z) == 15 {
+					direct = true
+				}
+				if !direct {
+					continue
+				}
+				id := n.At(x, y, z)
+				if !oracleRegistryContains(snapshot, id) || reg.Opaque(id) ||
+					id != world.AirID && !core.IsPlant(id) {
+					direct = false
 					continue
 				}
 				index := lightIndex(x, y, z)
@@ -81,10 +95,10 @@ func (s *goLightScratch) buildSky(n *world.Neighborhood, reg mesh.Registry) {
 	// 这是「每格至多入队一次」的来源，容量恰好 lightVolume 才够用；推导见 light.rs。
 	start, end := 0, s.tail
 	for start < s.tail {
-		deferred := s.spreadSky(n, reg, start, end, false)
+		deferred := s.spreadSky(n, reg, snapshot, start, end, false)
 		nextEnd := s.tail
 		if deferred {
-			s.spreadSky(n, reg, start, end, true)
+			s.spreadSky(n, reg, snapshot, start, end, true)
 		}
 		start, end = end, nextEnd
 	}
@@ -95,6 +109,7 @@ func (s *goLightScratch) buildSky(n *world.Neighborhood, reg mesh.Registry) {
 func (s *goLightScratch) spreadSky(
 	n *world.Neighborhood,
 	reg mesh.Registry,
+	snapshot mesh.RegistrySnapshot,
 	start, end int,
 	attenuating bool,
 ) bool {
@@ -123,7 +138,7 @@ func (s *goLightScratch) spreadSky(
 				continue
 			}
 			id := n.At(nx, ny, nz)
-			if reg.Opaque(id) {
+			if !oracleRegistryContains(snapshot, id) || reg.Opaque(id) {
 				continue
 			}
 			attenuation := reg.LightAttenuation(id)
@@ -147,7 +162,15 @@ func (s *goLightScratch) spreadSky(
 	return deferred
 }
 
+func oracleRegistryContains(snapshot mesh.RegistrySnapshot, id world.BlockID) bool {
+	index := sort.Search(len(snapshot.Blocks), func(index int) bool {
+		return snapshot.Blocks[index].ID >= id
+	})
+	return index < len(snapshot.Blocks) && snapshot.Blocks[index].ID == id
+}
+
 func (s *goLightScratch) buildBlock(n *world.Neighborhood, reg mesh.Registry) {
+	var sourceCounts [16]int
 	for x := lightMin; x < lightMin+lightSide; x++ {
 		for y := lightMin; y < lightMin+lightSide; y++ {
 			for z := lightMin; z < lightMin+lightSide; z++ {
@@ -158,40 +181,64 @@ func (s *goLightScratch) buildBlock(n *world.Neighborhood, reg mesh.Registry) {
 				if level > 15 {
 					panic("mesh: 方块发光等级超过 15")
 				}
-				index := lightIndex(x, y, z)
-				s.levels[index] = s.levels[index]&skyMask | level
-				s.enqueue(index)
+				sourceCounts[level]++
 			}
 		}
 	}
 
-	for s.head < s.tail {
-		index := int(s.queue[s.head])
-		s.head++
-		z := index%lightSide + lightMin
-		index /= lightSide
-		y := index%lightSide + lightMin
-		x := index/lightSide + lightMin
-		current := s.at(x, y, z) & blockMask
-		if current <= 1 {
-			continue
+	// 与 Rust 一样按最终亮度降序推进：先前桶已经穷尽所有更高候选，同一格第一次
+	// 入队就是最终值。sourceCounts 是固定 16 档，queue 仍只有精确的 lightVolume。
+	start := 0
+	for level := uint8(15); level > 0; level-- {
+		if sourceCounts[level] != 0 {
+			for x := lightMin; x < lightMin+lightSide; x++ {
+				for y := lightMin; y < lightMin+lightSide; y++ {
+					for z := lightMin; z < lightMin+lightSide; z++ {
+						if reg.Emission(n.At(x, y, z)) != level {
+							continue
+						}
+						index := lightIndex(x, y, z)
+						if s.levels[index]&blockMask >= level {
+							continue
+						}
+						s.levels[index] = s.levels[index]&skyMask | level
+						s.enqueue(index)
+					}
+				}
+			}
 		}
-		candidate := current - 1
-		for _, direction := range lightDirections {
-			nx, ny, nz := x+direction.x, y+direction.y, z+direction.z
-			if nx < lightMin || nx >= lightMin+lightSide ||
-				ny < lightMin || ny >= lightMin+lightSide ||
-				nz < lightMin || nz >= lightMin+lightSide {
+
+		end := s.tail
+		for slot := start; slot < end; slot++ {
+			index := int(s.queue[slot])
+			z := index%lightSide + lightMin
+			index /= lightSide
+			y := index%lightSide + lightMin
+			x := index/lightSide + lightMin
+			if got := s.at(x, y, z) & blockMask; got != level {
+				panic("mesh: 方块光分桶亮度不一致")
+			}
+			if level <= 1 {
 				continue
 			}
-			next := lightIndex(nx, ny, nz)
-			id := n.At(nx, ny, nz)
-			if s.levels[next]&blockMask >= candidate || id != world.AirID && !core.IsPlant(id) {
-				continue
+			candidate := level - 1
+			for _, direction := range lightDirections {
+				nx, ny, nz := x+direction.x, y+direction.y, z+direction.z
+				if nx < lightMin || nx >= lightMin+lightSide ||
+					ny < lightMin || ny >= lightMin+lightSide ||
+					nz < lightMin || nz >= lightMin+lightSide {
+					continue
+				}
+				next := lightIndex(nx, ny, nz)
+				id := n.At(nx, ny, nz)
+				if s.levels[next]&blockMask >= candidate || id != world.AirID && !core.IsPlant(id) {
+					continue
+				}
+				s.levels[next] = s.levels[next]&skyMask | candidate
+				s.enqueue(next)
 			}
-			s.levels[next] = s.levels[next]&skyMask | candidate
-			s.enqueue(next)
 		}
+		start = end
 	}
 }
 
@@ -216,7 +263,11 @@ func (*oracleCountingRegistry) LightAttenuation(world.BlockID) uint8 { return 0 
 func (*oracleCountingRegistry) BlockTopRaw(world.BlockID) uint8      { return 0 }
 
 func (*oracleCountingRegistry) MeshSnapshot() mesh.RegistrySnapshot {
-	panic("oracleCountingRegistry.MeshSnapshot 不应被调用")
+	return oracleCountingMeshSnapshot
+}
+
+var oracleCountingMeshSnapshot = mesh.RegistrySnapshot{
+	Blocks: []mesh.BlockProperties{{ID: core.AirID}, {ID: core.BarrierID, Opaque: true}},
 }
 
 type oracleOverbrightRegistry struct{ testRegistry }
@@ -263,9 +314,10 @@ func TestGoLightOracleExactCapacityAndStableBuildDoesNotAllocate(t *testing.T) {
 		t.Fatalf("queue=%d，想要 %d", got, want)
 	}
 	n := fullyLoadedAirNeighborhoodOracle()
+	registry := assets.NewRegistry()
 	scratch := newGoLightScratch()
-	scratch.build(n, testRegistry{})
-	if got := testing.AllocsPerRun(100, func() { scratch.build(n, testRegistry{}) }); got != 0 {
+	scratch.build(n, registry)
+	if got := testing.AllocsPerRun(100, func() { scratch.build(n, registry) }); got != 0 {
 		t.Fatalf("稳定传播分配=%v，想要 0", got)
 	}
 }
@@ -437,27 +489,138 @@ func TestMeshSectionPlantDirectSkyLightMatchesGoOracle(t *testing.T) {
 		{"短草", core.ShortGrassID},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			n := fullyLoadedAirNeighborhoodOracle()
-			n.Center.Blocks.Set(8, 1, 8, core.StoneID)
-			n.Center.Blocks.Set(8, 2, 8, tt.plant)
-			n.Center.Blocks.Set(10, 0, 8, core.StoneID)
-			n.Center.Blocks.Set(10, 2, 8, tt.plant)
+			n, localY := realHeightPlantSkyNeighborhood(t, tt.plant)
 
 			quads, oracle := meshSectionLightMatchesGoOracle(t, n, registry)
-			if got := oracle.at(8, 2, 8) >> 4; got != 15 {
+			if got := oracle.at(8, localY+1, 8) >> 4; got != 15 {
 				t.Fatalf("Go oracle 植物格直射天空光=%d，想要 15", got)
 			}
-			if got := oracle.at(10, 1, 8) >> 4; got != 15 {
+			if got := oracle.at(10, localY+1, 8) >> 4; got != 15 {
 				t.Fatalf("Go oracle 植物正下方天空光=%d，想要 15", got)
 			}
-			if got := skyLight(topFaceLightAt(t, quads, 8, 1, 8)); got != 15 {
+			if got := skyLight(topFaceLightAt(t, quads, 8, localY, 8)); got != 15 {
 				t.Fatalf("Rust packed 植物格直射天空光=%d，想要 15", got)
 			}
-			if got := skyLight(topFaceLightAt(t, quads, 10, 0, 8)); got != 15 {
+			if got := skyLight(topFaceLightAt(t, quads, 10, localY, 8)); got != 15 {
 				t.Fatalf("Rust packed 植物正下方天空光=%d，想要 15", got)
 			}
 		})
 	}
+}
+
+func realHeightPlantSkyNeighborhood(t *testing.T, plant world.BlockID) (*world.Neighborhood, int) {
+	t.Helper()
+	chunks := make(map[core.ChunkPos]*world.Chunk, 9)
+	for cx := int32(-1); cx <= 1; cx++ {
+		for cz := int32(-1); cz <= 1; cz++ {
+			pos := core.ChunkPos{X: cx, Z: cz}
+			chunks[pos] = world.NewChunk(pos)
+		}
+	}
+	const floorY int32 = 64
+	center := chunks[core.ChunkPos{}]
+	center.SetBlock(8, floorY, 8, core.StoneID)
+	center.SetBlock(8, floorY+1, 8, plant)
+	center.SetBlock(10, floorY, 8, core.StoneID)
+	center.SetBlock(10, floorY+2, 8, plant)
+	n := world.NeighborhoodAt(
+		func(pos core.ChunkPos) *world.Chunk { return chunks[pos] },
+		core.ChunkPos{},
+		core.BlockPos{Y: floorY}.SectionIndex(),
+	)
+	if n == nil {
+		t.Fatal("NeighborhoodAt 返回 nil")
+	}
+	return n, int(floorY-core.MinY) & core.SectionMask
+}
+
+func TestMeshSectionUnknownBlockStopsSkyLightMatchesGoOracle(t *testing.T) {
+	n, localY := realHeightUnknownSkyCorridor(t)
+	quads, oracle := meshSectionLightMatchesGoOracle(t, n, assets.NewRegistry())
+	if got := oracle.at(0, localY+1, 8) >> 4; got != 0 {
+		t.Fatalf("Go oracle 让天空光穿过未知方块：%d", got)
+	}
+	if got := skyLight(topFaceLightAt(t, quads, 0, localY, 8)); got != 0 {
+		t.Fatalf("Rust packed 让天空光穿过未知方块：%d", got)
+	}
+}
+
+func realHeightUnknownSkyCorridor(t *testing.T) (*world.Neighborhood, int) {
+	t.Helper()
+	chunks := make(map[core.ChunkPos]*world.Chunk, 9)
+	for cx := int32(-1); cx <= 1; cx++ {
+		for cz := int32(-1); cz <= 1; cz++ {
+			pos := core.ChunkPos{X: cx, Z: cz}
+			chunk := world.NewChunk(pos)
+			for lz := 0; lz < core.SectionSize; lz++ {
+				worldZ := int(cz)*core.SectionSize + lz
+				for lx := 0; lx < core.SectionSize; lx++ {
+					worldX := int(cx)*core.SectionSize + lx
+					chunk.SetBlock(lx, 64, lz, core.StoneID)
+					if worldZ != 8 {
+						chunk.SetBlock(lx, 65, lz, core.StoneID)
+					}
+					if worldX != 0 || worldZ != 8 {
+						chunk.SetBlock(lx, 66, lz, core.StoneID)
+					}
+				}
+			}
+			chunks[pos] = chunk
+		}
+	}
+	chunks[core.ChunkPos{}].SetBlock(0, 66, 8, core.BlockIDMax)
+	n := world.NeighborhoodAt(
+		func(pos core.ChunkPos) *world.Chunk { return chunks[pos] },
+		core.ChunkPos{},
+		core.BlockPos{Y: 64}.SectionIndex(),
+	)
+	if n == nil {
+		t.Fatal("NeighborhoodAt 返回 nil")
+	}
+	return n, int(64-core.MinY) & core.SectionMask
+}
+
+func TestMeshSectionPlantBlockLightMixedSourcesFitFixedQueue(t *testing.T) {
+	registry := assets.NewRegistry()
+	for _, tt := range []struct {
+		name  string
+		plant world.BlockID
+	}{
+		{"既有作物", core.WheatStage0ID},
+		{"短草", core.ShortGrassID},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			n := fullMixedSourceNeighborhood(tt.plant)
+			quads, oracle := meshSectionLightMatchesGoOracle(t, n, registry)
+			if got := oracle.tail; got != lightVolume {
+				t.Fatalf("混合光源入队=%d，想要固定容量 %d", got, lightVolume)
+			}
+			if got := oracle.at(lightMin, lightMin, lightMin) & blockMask; got != 14 {
+				t.Fatalf("植物格方块光=%d，想要 14", got)
+			}
+			if len(quads) != 0 {
+				t.Fatalf("全包围中心区段生成 %d 条 quad，想要 0", len(quads))
+			}
+		})
+	}
+}
+
+func fullMixedSourceNeighborhood(plant world.BlockID) *world.Neighborhood {
+	n := &world.Neighborhood{Center: world.NewSection(), SectionY: 8}
+	fillOracleSection(n.Center, core.LightBlockID)
+	for dx := range n.Around {
+		for dy := range n.Around[dx] {
+			for dz := range n.Around[dx][dy] {
+				section := world.NewSection()
+				fillOracleSection(section, core.LightBlockID)
+				n.Around[dx][dy][dz] = section
+			}
+		}
+	}
+	corner := n.Around[0][0][0]
+	corner.Blocks.Set(0, 0, 0, plant)
+	corner.Blocks.Set(0, 0, 1, core.TorchStandingID)
+	return n
 }
 
 func TestMeshSectionPlantPropagatedSkyLightMatchesGoOracle(t *testing.T) {
