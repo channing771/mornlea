@@ -43,7 +43,7 @@
 | 9 | `task9_planner_cutover` | `6c5c4011` | Agent Planner cutover RED→GREEN；提交 `84c03161`、repair `edfb1574`、`b2c75a6c` | initial FAIL、repair 1 FAIL、repair 2 PASS | initial FAIL、repair 1 PASS、repair 2 PASS | Accepted |
 | 10 | `task10_dialogue_memory` | `012a4b86` | Dialogue/memory/shutdown RED→GREEN；提交 `1f6006f6`、repair `6ef874b1`、`7283b746`、`c2cebeb9`、`6bdf2b7e` | initial FAIL、repair 1–4 后 PASS | initial FAIL、repair 1 FAIL、repair 2–4 后 PASS | Accepted |
 | 11 | `task11_cross_language` | `e1bf9e52` | 真实 MCP/HTTP 进程合同 RED→GREEN；提交 `efa85718`、`a6b4d059`、`3635b6a1`、`356fe396`、`41add71e`、证据 `2f6ab0ba` | PASS | PASS | Accepted |
-| 12 | `task12_ci_docs_gates` | `9423f067` | archcheck/Make/CI/version RED→GREEN；提交 `9dfdbc69`、`49fbc7f9`、证据 `ee642a05`；首轮 full race FAIL 后由 `3394fc19` 修复；Repair 1 `3ce58189`、证据 `8dac0e4c` | Round 1 FAIL；Repair 1 scoped FAIL；Repair 2 pending | Round 1 FAIL；Repair 1 scoped FAIL；Repair 2 pending | Repair 2 pending |
+| 12 | `task12_ci_docs_gates` | `9423f067` | archcheck/Make/CI/version RED→GREEN；提交 `9dfdbc69`、`49fbc7f9`、证据 `ee642a05`；首轮 full race FAIL 后由 `3394fc19` 修复；Repair 1 `3ce58189`、证据 `8dac0e4c`；Repair 2 `72ef5580` full gates PASS | Round 1 FAIL；Repair 1 scoped FAIL；Repair 2 re-review pending | Round 1 FAIL；Repair 1 scoped FAIL；Repair 2 re-review pending | Repair 2 re-review pending |
 
 ### Task 1 评审修复记录
 
@@ -265,7 +265,7 @@
   brief 集合 117 passed；Go 真进程 race server 8.822s；archcheck 5.645s；affected vet/tidy、
   diff-check 与 OpenSpec strict 80/80 均 PASS。
 
-### Task 12 CI、文档、版本与全量门禁实施记录（Repair 2 pending）
+### Task 12 CI、文档、版本与全量门禁实施记录（Repair 2 re-review pending）
 
 - `task12_ci_docs_gates` 从 Task 11 closeout `9423f067` 开始。RED archcheck 证明
   `openspec/config.yaml` 仍为 companions v4，Make 缺少 locked Python check，CI 缺少 Python
@@ -297,21 +297,24 @@
   strict loader 拒绝的数字 `1`；CI gate 没有锁定 engine/client 两个 `validate_artifact` 调用、函数内
   size 校验及最终 summary 的 `if: ${{ always() }}`；本 ledger 未记录上述评审；配置示例也没有直接
   联动真实 strict loader 的 sentinel。
-- Repair 2 已恢复 string `config_version: v1`，以真实 `load_config` 直接消费文档 fenced YAML；
+- Repair 2 `72ef5580` 已恢复 string `config_version: v1`，以真实 `load_config` 直接消费文档 fenced YAML；
   `tests/test_config.py` 111 passed。typed CI gate 已承重 engine/client 两次 validator 调用、函数内
   size/digest 与 summary 精确 `always()`；20 项 mutation+真实 workflow PASS（package 0.766s），
-  完整 archcheck 5.307s、tidy/Ruff/diff/OpenSpec 80/80 均 PASS。最终实现 SHA 的 mandatory gates
-  与重新独立双评审仍 pending。Task 12 实施阶段未修改 `tasks.md`；只有双评审通过后才允许由
-  控制会话完成 closeout。
+  完整 archcheck 5.307s、tidy/Ruff/diff/OpenSpec 80/80 均 PASS。
+- clean `72ef5580` 的 mandatory gates 全部 PASS：Python locked/Ruff/mypy/403 tests、gofmt、full
+  vet、full Go race（archcheck 37.162s，real 38.87s）、Rust 1.97.1 locked release、Make check、
+  真实 integration（companion 2.941s、server 9.825s，real 11.29s）、diff-check 与 OpenSpec 80/80。
+  无 provider/DNS/外网业务访问，也无游戏窗口。重新独立双评审仍 pending；Task 12 实施阶段未
+  修改 `tasks.md`，只有双评审通过后才允许由控制会话完成 closeout。
 
 ## 整分支终审与门禁
 
 - 整分支 SPEC review：Task 12 Round 1 FAIL、Repair 1 scoped FAIL；Repair 2 与最终整分支 review pending。
 - 整分支 QUALITY review：Task 12 Round 1 FAIL、Repair 1 scoped FAIL；Repair 2 与最终整分支 review pending。
-- Python locked/lint/type/test：clean `3ce58189` PASS；locked sync、Ruff format/check、mypy 23 files、pytest 403 passed；Repair 2 配置文档 sentinel focused rerun pending。
-- Go focused/race/archcheck/vet/gofmt：首轮 full race 真实暴露测试 seam 缺口并由 `3394fc19` 修复；clean `3ce58189` 的最终 full race、vet、archcheck 与 gofmt PASS；Repair 2 focused/full rerun pending。
-- Rust baseline/build：clean `3ce58189` preflight 与 mandatory `make rust` 均 PASS；Rust 1.97.1 locked release，engine ABI v9/client ABI v13 未改；Repair 2 final-SHA rerun pending。
-- 真实跨语言合同测试：clean `3ce58189` 的 `make companion-agent-integration` PASS；companion 2.736s、server 9.853s，real 11.00s；Repair 2 final-SHA rerun pending。
-- OpenSpec strict：clean `3ce58189` PASS，80 passed/0 failed，real 1.46s；Repair 2 rerun pending。
-- 规划产物门禁：clean `3ce58189` 的 `git diff --check` 与版本/CI/Make/service archcheck PASS；Repair 2 rerun pending。
+- Python locked/lint/type/test：clean `72ef5580` PASS；locked sync、Ruff format/check、mypy 23 files、pytest 403 passed；`make companion-agent-check` 同样 403 passed。
+- Go focused/race/archcheck/vet/gofmt：首轮 full race 真实暴露测试 seam 缺口并由 `3394fc19` 修复；clean `72ef5580` 的 full race、vet、archcheck 与 gofmt 全部 PASS，archcheck 37.162s、real 38.87s。
+- Rust baseline/build：clean `72ef5580` preflight 与 mandatory `make rust` 均 PASS；Rust 1.97.1 locked release，engine ABI v9/client ABI v13 未改。
+- 真实跨语言合同测试：clean `72ef5580` 的 `make companion-agent-integration` PASS；companion 2.941s、server 9.825s，real 11.29s。
+- OpenSpec strict：clean `72ef5580` PASS，80 passed/0 failed，real 1.44s。
+- 规划产物门禁：clean `72ef5580` 的 `git diff --check`、版本/CI/Make/service archcheck 与 20 项 CI mutation PASS。
 - 回滚/备份人工文档检查：PASS；LAN 文档同时说明 world+SQLite 联合备份、v1..v4→v5 迁移和旧程序不得写 v5 的回滚边界。

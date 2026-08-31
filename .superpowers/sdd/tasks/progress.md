@@ -15,8 +15,8 @@
 - Task 9: complete (implementer `task9_planner_cutover`, commits `84c03161`、`edfb1574`、`b2c75a6c`; initial SPEC/QUALITY FAIL，Repair 1 SPEC FAIL/QUALITY PASS，Repair 2 final SPEC/QUALITY PASS；Accepted)。
 - Task 10: complete (implementer `task10_dialogue_memory`, commits `1f6006f6`、`6ef874b1`、`7283b746`、`c2cebeb9`、`6bdf2b7e`; initial SPEC/QUALITY FAIL，四轮 repair 后 final SPEC/QUALITY PASS；Accepted)。
 - Task 11: complete (implementer `task11_cross_language`, commits `efa85718`、`a6b4d059`、`3635b6a1`、`356fe396`、`41add71e`、`2f6ab0ba`; final SPEC/QUALITY PASS；Accepted)。
-- Task 12: Round 1 与 Repair 1 scoped SPEC/QUALITY 均 FAIL，Repair 2 pending (implementer `task12_ci_docs_gates`, base `9423f067`, commits `9dfdbc69`、`49fbc7f9`、`ee642a05`、`3394fc19`、Repair 1 `3ce58189`/`8dac0e4c`; 双 PASS 前不关闭)。
-- 下一任务：完成 Task 12 Repair 2、最终实现 SHA 全量门禁与重新独立 SPEC/QUALITY 评审；双 PASS 前不勾选 `tasks.md`。
+- Task 12: Round 1 与 Repair 1 scoped SPEC/QUALITY 均 FAIL，Repair 2 implementation/full gates complete、re-review pending (implementer `task12_ci_docs_gates`, base `9423f067`, commits `9dfdbc69`、`49fbc7f9`、`ee642a05`、`3394fc19`、Repair 1 `3ce58189`/`8dac0e4c`、Repair 2 `72ef5580`; 双 PASS 前不关闭)。
+- 下一任务：重新独立执行 Task 12 Repair 2 SPEC/QUALITY 评审；双 PASS 前不勾选 `tasks.md`。
 
 ## 执行前接口冲突扫描
 
@@ -91,7 +91,7 @@
 - 最终独立 SPEC reviewer 与 QUALITY reviewer 均为 PASS，Task 11 Accepted。canonical gates：`make companion-agent-integration` PASS；Python ruff/mypy PASS、focused contract/adapter `81 passed`、brief Python 集合 `117 passed`；Go 真进程 focused race PASS（server 8.822s）、archcheck PASS（5.645s）、affected vet 与 `go mod tidy -diff` PASS；OpenSpec strict `80 passed, 0 failed`、diff/scope scan PASS。未运行或启动游戏窗口，未访问 provider/DNS/外网。
 - Task 11 closeout 后 change 进度为 11/12；下一任务为 Task 12 CI、文档、版本矩阵与整分支全量门禁。
 
-## Task 12 实施恢复点（Repair 2 pending）
+## Task 12 实施恢复点（Repair 2 re-review pending）
 
 - `task12_ci_docs_gates` 从 Task 11 closeout `9423f067` 开始；没有查看、比较或合并 main，版本裁决保持 protocol v32、player v8、chunk v9、metadata v3、hostile v1、engine ABI v9、client ABI v13、scenario v20，只把 `companions.ai` v4 升为 v5。
 - RED archcheck 同时复现三项缺口：`openspec/config.yaml` 的 companions 仍为 v4；Make 缺少 locked Python check；CI 缺少 Python 3.12、固定 uv/cache 与 check/integration 调用。`9dfdbc69` 完成 Make/CI/archcheck/版本矩阵与 service 局部指南，focused archcheck PASS（5.532s），`make companion-agent-check` PASS（403 passed）。
@@ -102,4 +102,5 @@
 - Repair 1 `3ce58189` 把 CI 改为 typed YAML 结构检查并加入 15 项 mutation，把 no-bypass 改为五个生产入口的仓内传递依赖闭包检查并加入 `os/exec`、`C`、`runtime/cgo` helper mutations；quickstart 正则哨兵从真实 server 顶层测试名证明精确选中 3 条且旧 escaped-pipe 选中 0 条。focused mutations、完整 archcheck 与真实三条 integration 命令均 PASS。
 - clean `3ce58189` 从头重跑 mandatory 全量清单全部 PASS：Python locked/Ruff/mypy/403 tests、gofmt、full vet、full Go race（archcheck 37.396s，real 39.35s）、Rust locked release、Make check、真实 integration（server 9.853s）、diff-check 与 OpenSpec strict 80/80。没有 provider/DNS/外网业务访问，也没有游戏窗口。Task 12 保持 Repair 1 re-review pending，`tasks.md` 未改。
 - Repair 1 evidence commit 为 `8dac0e4c`。其 scoped re-review 的 SPEC/QUALITY 仍均 FAIL：Repair 1 反向把权威 string `config_version: v1` 改成被 strict loader 拒绝的数字 `1`；CI gate 未锁定 engine/client 两个 manifest validator 调用、函数内 size 校验和最终 summary 的 `if: ${{ always() }}`；正式 change ledger 仍停在旧 Review pending；配置示例没有直接联动 strict loader 的 sentinel。Repair 2 正在关闭这些明确项，尚未宣称 PASS，`tasks.md` 仍未改。
-- Repair 2 已恢复 string `config_version: v1`，以真实 `load_config` 直接消费文档 fenced YAML；`tests/test_config.py` 111 passed。typed CI gate 已承重 engine/client 两次 validator 调用、函数内 size/digest 与 summary 精确 `always()`；20 项 mutation+真实 workflow PASS（package 0.766s），完整 archcheck 5.307s、tidy/Ruff/diff/OpenSpec 80/80 均 PASS。最终实现 SHA full gates 与重新独立双评审仍 pending。
+- Repair 2 `72ef5580` 已恢复 string `config_version: v1`，以真实 `load_config` 直接消费文档 fenced YAML；`tests/test_config.py` 111 passed。typed CI gate 已承重 engine/client 两次 validator 调用、函数内 size/digest 与 summary 精确 `always()`；20 项 mutation+真实 workflow PASS（package 0.766s），完整 archcheck 5.307s、tidy/Ruff/diff/OpenSpec 80/80 均 PASS。
+- clean `72ef5580` 从头重跑 mandatory 全量清单全部 PASS：Python locked/Ruff/mypy/403 tests、gofmt、full vet、full Go race（archcheck 37.162s，real 38.87s）、Rust locked release、Make check、真实 integration（server 9.825s）、diff-check 与 OpenSpec strict 80/80。没有 provider/DNS/外网业务访问，也没有游戏窗口。Task 12 保持 Repair 2 re-review pending，`tasks.md` 未改。

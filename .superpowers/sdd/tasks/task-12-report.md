@@ -20,8 +20,10 @@ main，没有访问 provider/DNS/外网业务服务，也没有启动或聚焦�
 - `3394fc19` `test(server): restore planner seams for task fixtures`
 - `3ce58189` `fix(ci): harden companion agent release gates`
 - `8dac0e4c` `docs(openspec): record task 12 repair evidence`
+- `72ef5580` `fix(ci): complete companion release sentinels`
 
-本报告的最终 evidence commit 不自引用其 SHA。Task 12 当前仍为 Repair 2 pending；未修改
+本报告的最终 evidence commit 不自引用其 SHA。Task 12 当前为 Repair 2 implementation/full
+gates complete、re-review pending；未修改
 `openspec/changes/extract-companion-agent-service/tasks.md`，只有独立 SPEC/QUALITY 双评审
 通过后才允许 closeout。
 
@@ -114,8 +116,8 @@ fenced YAML 后调用真实 `load_config`；`tests/test_config.py` 111 passed。
 `if: ${{ always() }}`；20 项 mutation 与真实 workflow gate 全部 PASS（package 0.766s，real
 1.56s），完整 archcheck PASS（package 5.307s，real 5.61s）。正式 change ledger 已补齐两轮
 FAIL 与历史 full-gate 证据。`go mod tidy -diff`、Ruff focused、diff-check 与 OpenSpec strict
-80/80 均 PASS。Repair 2 final implementation SHA 的 mandatory full gates 与重新独立双评审仍
-pending，以下 Repair 1 full gates 只作历史证据。
+80/80 均 PASS。Repair 2 实现提交为 `72ef5580`；其 mandatory full gates 见下文，重新独立双评审
+仍 pending。
 
 ## 全量门禁
 
@@ -174,10 +176,34 @@ Repair 1 提交后先确认 clean `3ce58189`，按 clean-checkout Rust 纪律执
 没有 provider、DNS 或外网业务访问，也没有启动/聚焦游戏窗口。运行结束时 `git status --short`
 无输出；本 evidence-only 更新后只需复跑受影响的 archcheck、OpenSpec、diff/status。
 
+### Repair 2 最终实现 SHA 全量门禁
+
+Repair 2 提交后确认 clean `72ef5580`，按 clean-checkout Rust 纪律执行 preflight `make rust`，
+再逐项运行 brief 的 mandatory 清单：
+
+- clean preflight `make rust`：PASS，Rust 1.97.1 locked release，real 0.44s。
+- `cd services/companion-agent && uv sync --locked`：PASS，80 packages resolved、77 checked，real 0.02s。
+- `uv run ruff format --check .`：PASS，38 files already formatted，real 0.03s。
+- `uv run ruff check .`：PASS，real 0.03s。
+- `uv run mypy src`：PASS，23 source files，real 0.58s。
+- `uv run pytest -q`：PASS，403 passed in 18.08s，real 18.78s。
+- `gofmt -l .`：PASS，无文件输出。
+- `go vet ./...`：PASS，无输出，real 0.68s。
+- `go test ./... -race`：PASS；repair 影响的 archcheck 37.162s，总 real 38.87s；其余未改包由 Go 标准 test cache 复核。
+- mandatory `make rust`：PASS，Rust 1.97.1 locked release，real 0.44s。
+- `make companion-agent-check`：PASS，403 passed in 17.94s，real 19.33s。
+- `make companion-agent-integration`：PASS；companion 2.941s（该 package 无匹配测试）、server 9.825s，real 11.29s。
+- `git diff --check`：PASS，无输出；`git status --short` 同样无输出。
+- `openspec validate --all --strict --no-interactive`：PASS，80 passed/0 failed，real 1.44s。
+
+所有命令 exit 0。运行期间只使用 deterministic fake/check-in fixtures 与 loopback 真进程，
+没有 provider、DNS 或外网业务访问，也没有启动/聚焦游戏窗口。版本矩阵仍保持 engine ABI v9、
+client ABI v13，只有 `companions.ai` 为 v5。
+
 ## 范围与风险
 
 - Python unit/integration 都使用 deterministic fake model 或 checked-in fixtures；没有 provider 调用。
 - CI 仍消费既有 native artifacts，没有新建平行 native build 或改变 required-job 语义。
 - 不升 engine/client ABI，不改变游戏 wire、HTTP application contract v1 或 MCP tool contract v1。
-- Round 1 与 Repair 1 scoped SPEC/QUALITY 均 FAIL；Repair 2 尚待实现、完整门禁与重新独立双评审，
-  因此 ledger 必须保持 Repair 2 pending。
+- Round 1 与 Repair 1 scoped SPEC/QUALITY 均 FAIL；Repair 2 implementation/full gates 已完成，但
+  重新独立双评审尚未执行，因此 ledger 必须保持 re-review pending。
