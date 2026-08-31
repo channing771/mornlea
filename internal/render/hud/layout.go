@@ -305,8 +305,13 @@ func appendDurabilityBarScaled(
 }
 
 // MiningOverlay 是最后确认的权威采掘状态；渲染器不会自行推进它。
+// Target/HasTarget 不被 HUD 进度条布局消费：它们是世界空间裂纹呈现
+// （`internal/render.BlockCrack`）的定位来源，HasTarget 恒随权威
+// MiningActive 置位；capture 既有 fixture 不设置时裂纹天然缺席。
 type MiningOverlay struct {
 	Active        bool
+	Target        core.BlockPos
+	HasTarget     bool
 	ProgressTicks uint16
 	RequiredTicks uint16
 	Harvestable   bool

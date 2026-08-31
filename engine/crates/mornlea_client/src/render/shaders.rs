@@ -70,6 +70,8 @@ pub const AVATAR: &str = include_str!("../../shaders/avatar.wgsl");
 pub const DAMAGE_OVERLAY: &str = include_str!("../../shaders/damage_overlay.wgsl");
 /// 名牌 billboard pass。
 pub const NAME_TAG: &str = include_str!("../../shaders/name_tag.wgsl");
+/// 采掘裂纹 overlay pass(目标方块六面的透明 cutout 裂纹层)。
+pub const CRACK: &str = include_str!("../../shaders/crack.wgsl");
 /// 调试面板 pass。
 pub const DEBUG_PANEL: &str = include_str!("../../shaders/debug_panel.wgsl");
 /// HUD(hotbar 家族)pass。
@@ -93,6 +95,7 @@ mod tests {
             ("avatar", AVATAR),
             ("damage_overlay", DAMAGE_OVERLAY),
             ("name_tag", NAME_TAG),
+            ("crack", CRACK),
             ("debug_panel", DEBUG_PANEL),
             ("hud_hotbar", HUD_HOTBAR),
         ] {

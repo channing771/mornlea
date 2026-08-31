@@ -90,6 +90,57 @@ func TestCutoutMipChainKeepsOpaqueCoverage(t *testing.T) {
 	}
 }
 
+// TestAtlasPixelsScalesWithLayerCount 钉住 atlas 导出与层枚举的同步：层数必须
+// 等于 layerCount（追加裂纹层后即 78），总字节数必须等于层数 × 每层完整 mip
+// 链字节数（逐 mip 尺寸从 atlasMips/texSize 推导，不复制魔法数）。两侧任何
+// 一方脱钩（导出漏层、层枚举与上传长度不一致）都会让 Rust 侧 upload_atlas
+// 的长度校验或纹理内容直接出错。
+func TestAtlasPixelsScalesWithLayerCount(t *testing.T) {
+	r := NewRegistry()
+	layers, pixels := r.AtlasPixels()
+	if layers != int(layerCount) {
+		t.Fatalf("AtlasPixels 层数 = %d，想要 layerCount = %d", layers, int(layerCount))
+	}
+	perLayer := 0
+	for mip := 0; mip < atlasMips; mip++ {
+		size := texSize >> mip
+		perLayer += size * size * 4
+	}
+	if got, want := len(pixels), layers*perLayer; got != want {
+		t.Fatalf("AtlasPixels 字节数 = %d，想要 %d（%d 层 × 每层 mip 链 %d 字节）", got, want, layers, perLayer)
+	}
+}
+
+// TestCrackLayersTakeTheCutoutMipPath 镜像 TestWheatLayersTakeTheCutoutMipPath
+// 的**位置性**断言：裂纹 10 层必须真的走 downsampleCutout 那条分支。裂纹像素
+// 比麦秆更稀疏，普通平均降采样会把 alpha 一路稀释，远处整条裂纹从 mip 链上
+// 消失。对照组用不透明的石头层钉住另一条分支：固体层必须仍走平均降采样，
+// 裂纹的 cutout 判据不得越界把固体层拖进来。
+func TestCrackLayersTakeTheCutoutMipPath(t *testing.T) {
+	r := NewRegistry()
+	for layer := LayerCrack0; layer <= LayerCrack9; layer++ {
+		chain := r.layerMipChain(int(layer))
+		if len(chain) != atlasMips {
+			t.Fatalf("裂纹层 %d 的 mip 链长度 = %d，想要 %d", layer, len(chain), atlasMips)
+		}
+		src := r.LayerRGBA(int(layer))
+		wantCutout := downsampleCutout(src, texSize)
+		wantPlain := downsample(src, texSize)
+		if string(chain[1]) != string(wantCutout) {
+			t.Fatalf("裂纹层 %d 的 mip 1 不是 downsampleCutout 的产物", layer)
+		}
+		// 夹具承重守卫排在真实断言之后：两条分支必须真的不同，否则上面那条
+		// 断言在"随便哪条分支"下都成立。
+		if string(wantCutout) == string(wantPlain) {
+			t.Fatalf("裂纹层 %d 的两条降采样分支产物相同，位置性断言退化为恒真", layer)
+		}
+	}
+	// 对照组：石头层（不透明固体层）的 mip 1 必须是普通平均降采样的产物。
+	if got, want := r.layerMipChain(int(LayerStone))[1], downsample(r.LayerRGBA(int(LayerStone)), texSize); string(got) != string(want) {
+		t.Fatal("石头层的 mip 1 不是普通平均降采样的产物：cutout 判据越过了裂纹区间")
+	}
+}
+
 func TestDownsampleMipChainEndsAtOnePixel(t *testing.T) {
 	px := make([]byte, 16*16*4)
 	size := 16

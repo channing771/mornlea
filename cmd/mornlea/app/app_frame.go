@@ -140,6 +140,7 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	if !blockTargetReset && !a.clientSessionClosed {
 		a.remoteNameTags, blockOutline = a.appendCurrentBlockTarget(a.remoteNameTags)
 	}
+	crack := a.deriveBlockCrack(blockOutline)
 	avatars, tags := a.remoteAvatars, a.remoteNameTags
 	if err := validateEntityPresentationCounts(avatars, tags); err != nil {
 		return false, fmt.Errorf("准备实体呈现: %w", err)
@@ -344,6 +345,7 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	)
 	a.dropStream = a.entityEncoder.EncodeItemDropInstances(a.dropStream, a.serverTick, a.itemDropInstances)
 	a.outlineStream = a.entityEncoder.EncodeBlockOutlineInstances(a.outlineStream, blockOutline)
+	a.crackStream = a.entityEncoder.EncodeBlockCrackInstances(a.crackStream, crack)
 
 	right := mgl32.Vec3{
 		float32(math.Cos(float64(cam.Yaw))),
@@ -382,6 +384,7 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		AvatarInstances:  a.avatarStream,
 		DropInstances:    a.dropStream,
 		OutlineInstances: a.outlineStream,
+		CrackInstances:   a.crackStream,
 		OverlayStrength:  a.damageStrength,
 		WaterTint:        underwater.Tint,
 		NameTagSegment:   nameTagSegment,
