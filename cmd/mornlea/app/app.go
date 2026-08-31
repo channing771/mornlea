@@ -101,6 +101,7 @@ type Application struct {
 	avatarStream    []byte
 	dropStream      []byte
 	outlineStream   []byte
+	crackStream     []byte
 	billboardBytes  []byte
 	entityEncoder   render.InstanceEncoder
 	lastFrameStats  render.FrameStats
