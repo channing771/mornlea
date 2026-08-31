@@ -2,8 +2,8 @@
 // worker goroutine 上执行、结果只在 tick 边界应用。与 Planner worker 同一
 // 扇入模式，但并发策略刻意不同——台词是尽力而为的表达平面输出：
 //   - 共享模型槽：复用既有 m.semaphore（cap=MaxActive=4，与 Planner 共用）；
-//     Planner 在 tick 边界 try-acquire 失败则下一 tick 重试（既有语义，本文件
-//     不改动），Dialogue try-acquire 失败立即跳过该节点——不排队、不重试，
+//     Planner 在 tick 边界 try-acquire 失败则同 tick 以 PlannerUnavailable 终结，
+//     Dialogue try-acquire 失败立即跳过该节点——不排队、不重试，
 //     迟到台词在错误语境出现比少一句台词更糟（design.md 否决「排队等槽」）；
 //   - 每伙伴最多一个在途请求：slot.dialogueInFlight 在 tick 边界置位/清除，
 //     在途期间新节点直接跳过，绝不取消或替换在途请求；
@@ -65,13 +65,16 @@ func (m *companionManager) requestDialogue(id companion.ID, node companion.Dialo
 		slog.Error("台词派发找不到伙伴槽位", "companion", id)
 		return
 	}
+	if m.dialogue == nil {
+		return
+	}
 	taskNode := node.Kind != companion.DialogueNodeIdle
 	if taskNode && slot.dialogueRequests >= companion.MaxDialogueRequestsPerTask {
 		// 每任务预算（本进程计数，不持久化——design.md 裁决）：结构上
 		// 1+≤6+1 封顶，计数只防御未来接线缺陷，不参与正常路径。
 		return
 	}
-	if slot.dialogueInFlight {
+	if slot.planningInFlight || slot.dialogueInFlight {
 		// 每伙伴最多一个在途台词请求：新节点到来时仍有在途即跳过，不取消、
 		// 不替换在途请求（spec：「在途请求存在时新节点被跳过」）。跳过即
 		// 放弃该节点，绝不补发。
@@ -85,8 +88,8 @@ func (m *companionManager) requestDialogue(id companion.ID, node companion.Dialo
 	select {
 	case m.semaphore <- struct{}{}:
 	default:
-		// 全服四个共享模型槽已满：立即跳过该节点。与 Planner 的差异是刻意
-		// 的——任务规划必须最终发生（下一 tick 重试），台词错过即错过。
+		// 全服四个共享模型槽已满：立即跳过该节点；Planner 在相同条件下会
+		// 先进入 Planning，再于同 tick 以 PlannerUnavailable 终结。
 		return
 	}
 	// 人设来自配置解析的生效值（ResolvedPersona，D2）；摘要是 manager 持有的

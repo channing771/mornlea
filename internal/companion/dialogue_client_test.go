@@ -1,6 +1,6 @@
-// DialogueClient 的 HTTP 半部测试：与 planner_test.go 同一纪律——httptest 假
-// 模型、不开前台窗口。覆盖：请求正文只含四类有界数据 + 固定提示（与 Planner
-// 提示隔离、不含密钥）、非终态/终态成功路径、5xx/超时/超 64 KiB/畸形正文错误
+// DialogueClient 的 HTTP 半部测试使用 httptest 假模型且不开前台窗口。覆盖：
+// 请求正文只含四类有界数据 + 固定提示（不含密钥）、非终态/终态成功路径、
+// 5xx/超时/超 64 KiB/畸形正文错误
 // 路径、错误不含密钥与正文原文、越界请求在发起前被拒、默认客户端 30 秒超时。
 package companion
 
@@ -19,6 +19,28 @@ import (
 
 // dialogueLeakMarker 是嵌进恶意响应正文的唯一标记，用于断言错误文本不回显正文。
 const dialogueLeakMarker = "DIALOGUE-LEAK-0123456789"
+
+// chatCompletionsBody 构造 Dialogue 测试使用的 OpenAI-compatible 响应正文。
+func chatCompletionsBody(t *testing.T, content string) string {
+	t.Helper()
+	encoded, err := json.Marshal(map[string]any{
+		"choices": []any{map[string]any{
+			"message": map[string]any{"role": "assistant", "content": content},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("构造响应正文失败: %v", err)
+	}
+	return string(encoded)
+}
+
+// countingHandler 返回记录 Dialogue HTTP 请求数的测试处理函数。
+func countingHandler(count *int32, respond func(w http.ResponseWriter)) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(count, 1)
+		respond(w)
+	}
+}
 
 // newTestDialogueClient 起一个由 handler 提供响应的假模型并构造指向它的
 // DialogueClient。apiKey 是已解析的密钥值；client 为 nil 时使用默认受控客户端。
@@ -94,7 +116,7 @@ func decodeDialogueRequestBody(t *testing.T, body []byte) (messages []chatMessag
 }
 
 // TestDialogueClientRoundTripAndIsolation 验证成功路径的请求形状：POST
-// /chat/completions、恰好两条消息、系统提示是与 Planner 完全隔离的固定模板、
+// /chat/completions、恰好两条消息、系统提示是固定的 Dialogue 模板、
 // 用户消息只含 persona/summary/node/env 四类有界数据、密钥只出现在
 // Authorization 头、同一请求两次发送字节级一致（确定性）。
 func TestDialogueClientRoundTripAndIsolation(t *testing.T) {
@@ -147,11 +169,10 @@ func TestDialogueClientRoundTripAndIsolation(t *testing.T) {
 	if messages[0].Role != "system" || messages[0].Content != dialogueSystemPrompt {
 		t.Fatalf("系统提示被改动或角色错误: role=%s", messages[0].Role)
 	}
-	// 与 Planner 提示完全隔离：不携带规划格式、注册表词表或规划措辞。
-	if strings.Contains(messages[0].Content, plannerSystemPromptHead) ||
-		strings.Contains(messages[0].Content, "行动规划器") ||
+	// Dialogue 提示不携带规划格式或规划措辞。
+	if strings.Contains(messages[0].Content, "行动规划器") ||
 		strings.Contains(messages[0].Content, `"kind":"go_to"`) {
-		t.Fatalf("Dialogue 系统提示泄漏 Planner 提示内容: %s", messages[0].Content)
+		t.Fatalf("Dialogue 系统提示携带规划内容: %s", messages[0].Content)
 	}
 	if messages[1].Role != "user" {
 		t.Fatalf("第二条消息角色 = %s，want user", messages[1].Role)
@@ -474,16 +495,11 @@ func TestDialogueClientRejectsInvalidRequest(t *testing.T) {
 	}
 }
 
-// TestDialogueClientDefaultClientBounded 断言默认 HTTP 客户端带 30 秒固定超时
-// （DialogueRequestTimeout 与 PlannerRequestTimeout 同源且保持 30 秒）并安装
-// 受控 transport（响应头上限、禁用保活）。
+// TestDialogueClientDefaultClientBounded 断言默认 HTTP 客户端带 30 秒固定超时并
+// 安装受控 transport（响应头上限、禁用保活）。
 func TestDialogueClientDefaultClientBounded(t *testing.T) {
 	if DialogueRequestTimeout != 30*time.Second {
 		t.Fatalf("DialogueRequestTimeout = %v，want 30s", DialogueRequestTimeout)
-	}
-	if DialogueRequestTimeout != PlannerRequestTimeout {
-		t.Fatalf("Dialogue 与 Planner 超时配置漂移: %v vs %v",
-			DialogueRequestTimeout, PlannerRequestTimeout)
 	}
 	dialogue, _ := newTestDialogueClient(t, "", nil, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, chatCompletionsBody(t, `{"line":"等待"}`))
@@ -497,7 +513,7 @@ func TestDialogueClientDefaultClientBounded(t *testing.T) {
 }
 
 // TestDialogueClientRejectsInvalidSettings 验证构造器拒绝非法模型设置、接受
-// 合法设置（与 PlannerClient 同一设置边界）。
+// 合法设置。
 func TestDialogueClientRejectsInvalidSettings(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	t.Cleanup(server.Close)

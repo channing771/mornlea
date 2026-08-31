@@ -252,7 +252,7 @@ func TestCompanionManagerFollowExemptFromDeadline(t *testing.T) {
 	definitions := []companion.Definition{{ID: chatTestCompanionID(1), Name: "阿木"}}
 	model := newFakeCompanionModel(t)
 	host := newCompanionManagerHost(t, definitions, model, func(config *Config) {
-		config.AIModel.TaskTimeoutMinutes = 1
+		config.TaskTimeoutMinutes = 1
 	})
 	identity := integrationIdentity(0x95, "发令者")
 	client := openCompanionChatClient(t, host, "memory", identity)

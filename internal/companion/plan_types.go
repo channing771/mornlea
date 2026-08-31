@@ -89,9 +89,8 @@ type PlanCompanion struct {
 // PlanSnapshot 是一次规划的不可变观察快照值类型。
 //
 // 快照在权威 tick 边界一次性构造，发送给 worker 后视为不可变；全部字段有界
-// （见各 Max* 常量），且绝不包含 API key、其他玩家聊天或存档路径——key 只在
-// PlannerClient 内部使用，聊天快照之外的内容不进入规划输入。json tag 供
-// PlannerClient 做确定性序列化，字段顺序由结构体声明顺序固定。
+// （见各 Max* 常量），且绝不包含 API key、其他玩家聊天或存档路径。json tag
+// 供 Agent snapshot digest 与 MCP DTO 做确定性序列化，字段顺序由结构体声明顺序固定。
 type PlanSnapshot struct {
 	// Command 是玩家的原始指令文本（不含 @伙伴名 寻址前缀）。
 	Command string `json:"command"`
@@ -123,7 +122,7 @@ type PlanSnapshot struct {
 // 的数量/顺序/去重/取值范围与背包规范性。
 //
 // 非法快照是 server 侧构造缺陷而不是模型失败，因此这里返回的错误不携带
-// Planner 哨兵类别；PlannerClient.Plan 在发起任何请求前调用本方法。
+// Planner 哨兵类别；Agent planner bridge 在注册快照前调用本方法。
 func (s PlanSnapshot) Validate() error {
 	return s.validateWithCheckpoint(nil)
 }

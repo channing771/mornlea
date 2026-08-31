@@ -373,6 +373,62 @@ func TestCompanionDialogueOneInFlightPerCompanion(t *testing.T) {
 	dialogue.releaseRequests()
 }
 
+func TestCompanionAgentSharedPerCompanionGate(t *testing.T) {
+	t.Run("planning skips dialogue", func(t *testing.T) {
+		definition := companion.Definition{ID: chatTestCompanionID(1), Name: "阿木"}
+		host, client, _ := companionManagerHostReady(t, []companion.Definition{definition}, nil)
+		dialogue := newFakeDialogueModel(t)
+		host.world.companionManager.replaceDialogueForTest(t, dialogue)
+		warmup := host.world.StepForTest()
+		receiveCompanionChatTick(t, client, warmup.Tick)
+
+		host.world.stepMu.Lock()
+		manager := host.world.companionManager
+		slot := manager.slots[definition.ID]
+		slot.planningInFlight = true
+		manager.requestDialogue(definition.ID, companion.DialogueNode{Kind: companion.DialogueNodeStart})
+		inFlight := slot.dialogueInFlight
+		host.world.stepMu.Unlock()
+		if inFlight {
+			t.Fatal("Planner 在途时 Dialogue 仍占用了伙伴 gate")
+		}
+		if requests, _, _ := dialogue.snapshotCounts(); requests != 0 {
+			t.Fatalf("Planner 在途时 Dialogue requests=%d，want 0", requests)
+		}
+	})
+
+	t.Run("dialogue fails planner immediately", func(t *testing.T) {
+		definition := companion.Definition{ID: chatTestCompanionID(1), Name: "阿木"}
+		host, client, _ := companionManagerHostReady(t, []companion.Definition{definition}, nil)
+		warmup := host.world.StepForTest()
+		receiveCompanionChatTick(t, client, warmup.Tick)
+		issuer := stopTestIssuer(integrationIdentity(0x72, "发令者"))
+
+		host.world.stepMu.Lock()
+		manager := host.world.companionManager
+		manager.refreshBodies()
+		slot := manager.slots[definition.ID]
+		slot.dialogueInFlight = true
+		if !manager.enqueueCommand(definition, companion.TaskCommand("向前走"), issuer) {
+			host.world.stepMu.Unlock()
+			t.Fatal("Enqueue=false")
+		}
+		manager.dispatchPlanning()
+		_, hasCurrent := slot.queue.Current()
+		planningInFlight := slot.planningInFlight
+		facts := manager.takeEventFacts()
+		host.world.stepMu.Unlock()
+		if hasCurrent || planningInFlight {
+			t.Fatalf("Dialogue 在途后的 Planner current=%v planningInFlight=%v，want false/false",
+				hasCurrent, planningInFlight)
+		}
+		if len(facts) != 1 || facts[0].event.Kind != companion.TaskEventFailed ||
+			facts[0].event.Reason != companion.TaskFailPlannerUnavailable {
+			t.Fatalf("Planner denial facts=%+v", facts)
+		}
+	})
+}
+
 // TestCompanionDialogueStaleOutcomeDiscarded 验证任务终态后到达的开始节点
 // 结果被第二级过时判定丢弃：不进入 applyDialogueEffect（哨兵计数为 0）、
 // 在途标记照常清除、不触发新请求。D6 起构造方式改为「任务终态但不提升

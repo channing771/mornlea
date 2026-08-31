@@ -1,12 +1,9 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -32,31 +29,8 @@ func TestPlannerRequestExcludesPersonaAndSummary(t *testing.T) {
 	}}
 	host, client, _ := companionManagerHostReady(t, definitions, nil)
 
-	// 捕获规划请求正文的假模型：记录原始 body 后返回合法 envelope（计划
-	// 本身无关紧要——非法计划令任务失败即可，正文已在失败前被捕获）。
-	var mu sync.Mutex
-	var bodies []string
-	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		raw, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-		mu.Lock()
-		bodies = append(bodies, string(raw))
-		mu.Unlock()
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"choices": []map[string]any{
-				{"message": map[string]string{"role": "assistant", "content": `{"summary":"s","steps":[]}`}},
-			},
-		})
-	}))
-	t.Cleanup(model.Close)
-	plannerClient, err := companion.NewPlannerClient(companion.ModelSettings{
-		Endpoint: model.URL + "/v1",
-		Model:    "test-model",
-	}, "", nil)
-	if err != nil {
-		t.Fatalf("构造测试 planner: %v", err)
-	}
-	host.world.companionManager.planner = plannerClient
+	requests := make(chan companionPlanningRequest, 1)
+	host.world.companionManager.planner = capturingPlannerTestSeam{requests: requests}
 
 	// 摘要属于伙伴而非任务：直接写入 manager 状态模拟「已有对话历史」。
 	host.world.stepMu.Lock()
@@ -65,28 +39,46 @@ func TestPlannerRequestExcludesPersonaAndSummary(t *testing.T) {
 
 	sendIntegration(t, client, network.ChatCommand{Text: "@阿木 随便走走"})
 	deadline := time.Now().Add(waitDeadline)
+	var captured companionPlanningRequest
+	gotRequest := false
 	for time.Now().Before(deadline) {
 		result := host.world.StepForTest()
 		receiveCompanionChatTick(t, client, result.Tick)
-		mu.Lock()
-		count := len(bodies)
-		mu.Unlock()
-		if count >= 1 {
+		select {
+		case captured = <-requests:
+			gotRequest = true
+		default:
+		}
+		if gotRequest {
 			break
 		}
 	}
-	mu.Lock()
-	captured := append([]string(nil), bodies...)
-	mu.Unlock()
-	if len(captured) == 0 {
+	if !gotRequest {
 		t.Fatal("规划请求未在窗口内到达假模型")
 	}
-	for index, raw := range captured {
-		if strings.Contains(raw, secretPersona) {
-			t.Fatalf("规划请求 %d 泄漏人设文本：%s", index, raw)
-		}
-		if strings.Contains(raw, secretSummary) {
-			t.Fatalf("规划请求 %d 泄漏最近摘要文本：%s", index, raw)
-		}
+	raw, err := json.Marshal(struct {
+		Instruction string                 `json:"instruction"`
+		Snapshot    companion.PlanSnapshot `json:"snapshot"`
+	}{Instruction: captured.Instruction, Snapshot: captured.Snapshot})
+	if err != nil {
+		t.Fatal(err)
 	}
+	if strings.Contains(string(raw), secretPersona) {
+		t.Fatalf("规划请求泄漏人设文本：%s", raw)
+	}
+	if strings.Contains(string(raw), secretSummary) {
+		t.Fatalf("规划请求泄漏最近摘要文本：%s", raw)
+	}
+}
+
+type capturingPlannerTestSeam struct {
+	requests chan<- companionPlanningRequest
+}
+
+func (p capturingPlannerTestSeam) Plan(ctx context.Context, request companionPlanningRequest) (companionPlanningOutcome, error) {
+	select {
+	case p.requests <- request:
+	case <-ctx.Done():
+	}
+	return companionPlanningOutcome{}, companion.ErrPlannerInvalidPlan
 }

@@ -1,17 +1,14 @@
 // Companion Manager 的 tick 边界编排测试：端到端任务事件序列、FIFO 顺序、
-// QueueFull 同步拒绝不调模型、慢 HTTP 不阻塞权威 tick、每伙伴单在途与全服
+// QueueFull 同步拒绝不调 planner、慢 planner 不阻塞权威 tick、每伙伴单在途与全服
 // 四并发、过时结果丢弃、路径不可达与世界时间超时、关服顺序与 Memory/TCP
-// parity。全部使用 httptest 假模型，绝不访问真实模型服务。
+// parity。全部使用显式 typed planner seam，绝不访问模型服务。
 package server
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
-	"net/http/httptest"
 	"reflect"
 	"slices"
 	"sync"
@@ -26,7 +23,7 @@ import (
 	"github.com/channing771/mornlea/internal/storage"
 )
 
-// fakeCompanionModel 是 httptest 假模型：按配置返回固定 go_to 计划，可整体
+// fakeCompanionModel 是 typed planner seam 的受控状态：按配置返回固定 go_to 计划，可整体
 // 阻塞全部在途请求，并统计请求数、峰值并发与 context 取消次数。配置了
 // planScript 时改为逐请求返回脚本条目（耗尽后重复最后一条），供 follow 等
 // 需要按请求区分计划形态的测试使用。
@@ -41,16 +38,12 @@ type fakeCompanionModel struct {
 	script      []string
 	served      int
 	status      int
-	server      *httptest.Server
 	cancelOrder *shutdownOrderLog
 }
 
 func newFakeCompanionModel(t *testing.T, steps ...[3]int32) *fakeCompanionModel {
 	t.Helper()
-	model := &fakeCompanionModel{steps: steps}
-	model.server = httptest.NewServer(http.HandlerFunc(model.handle))
-	t.Cleanup(model.server.Close)
-	return model
+	return &fakeCompanionModel{steps: steps}
 }
 
 // setPlanScript 配置逐请求计划脚本：第 N 次请求返回 script[N]（完整的计划
@@ -63,62 +56,7 @@ func (model *fakeCompanionModel) setPlanScript(script ...string) {
 	model.mu.Unlock()
 }
 
-func (model *fakeCompanionModel) handle(w http.ResponseWriter, r *http.Request) {
-	_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, 1<<20))
-	model.mu.Lock()
-	model.requests++
-	model.inFlight++
-	if model.inFlight > model.peak {
-		model.peak = model.inFlight
-	}
-	block := model.block
-	status := model.status
-	steps := model.steps
-	content := ""
-	if script := model.script; len(script) > 0 {
-		index := model.served
-		if index >= len(script) {
-			index = len(script) - 1
-		}
-		model.served++
-		content = script[index]
-	}
-	model.mu.Unlock()
-	defer func() {
-		model.mu.Lock()
-		model.inFlight--
-		model.mu.Unlock()
-	}()
-	if block != nil {
-		select {
-		case <-block:
-		case <-r.Context().Done():
-			model.mu.Lock()
-			model.cancels++
-			cancels := model.cancels
-			model.mu.Unlock()
-			if model.cancelOrder != nil && cancels == 1 {
-				model.cancelOrder.record("model-cancel")
-			}
-			return
-		}
-	}
-	if status != 0 {
-		w.WriteHeader(status)
-		return
-	}
-	if content == "" {
-		content = planContentJSON(steps)
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"choices": []map[string]any{
-			{"message": map[string]string{"role": "assistant", "content": content}},
-		},
-	})
-}
-
-// planContentJSON 构造嵌套在 chat envelope 里的受限计划 JSON 文本。
+// planContentJSON 构造 Agent typed plan seam 使用的候选计划 JSON 文本。
 func planContentJSON(steps [][3]int32) string {
 	type wireStep struct {
 		Kind string `json:"kind"`
@@ -178,8 +116,8 @@ func (log *shutdownOrderLog) snapshot() []string {
 	return slices.Clone(log.events)
 }
 
-// newCompanionManagerHost 构造启用了任务编排的 Host；model 非 nil 时把模型
-// endpoint 指向假模型，否则保持 hostTestConfig 的 loopback 缺省。
+// newCompanionManagerHost 构造启用了任务编排的 Host；model 非 nil 时显式替换
+// typed planner seam，否则保持生产 Agent planner 缺省。
 func newCompanionManagerHost(
 	t *testing.T,
 	definitions []companion.Definition,
@@ -193,13 +131,13 @@ func newCompanionManagerHost(
 	config.OutboxCapacity = 4096
 	config.HeartbeatInterval = time.Hour
 	config.HeartbeatTimeout = time.Hour
-	if model != nil {
-		config.AIModel.Endpoint = model.server.URL + "/v1"
-	}
 	if modify != nil {
 		modify(&config)
 	}
 	host := mustNewHost(t, config, flatTestGenerator{}, newHostTestStore())
+	if model != nil {
+		host.world.companionManager.replacePlannerForTest(t, model)
+	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), longWaitDeadline)
 		defer cancel()
@@ -210,18 +148,80 @@ func newCompanionManagerHost(
 	return host
 }
 
-// replacePlannerForTest 把 manager 的 planner 换成指向假模型的真 PlannerClient。
-// 测试需要在世界就绪后按伙伴出生位置构造计划目标，因此模型服务晚于 Host 创建。
+// replacePlannerForTest 通过显式 seam 注入受控 planner；生产不保留 direct-model
+// client 或 fallback。
 func (m *companionManager) replacePlannerForTest(t *testing.T, model *fakeCompanionModel) {
 	t.Helper()
-	client, err := companion.NewPlannerClient(companion.ModelSettings{
-		Endpoint: model.server.URL + "/v1",
-		Model:    "test-model",
-	}, "", nil)
-	if err != nil {
-		t.Fatalf("构造测试 planner: %v", err)
+	m.planner = fakeCompanionPlanner{model: model}
+}
+
+type fakeCompanionPlanner struct {
+	model *fakeCompanionModel
+}
+
+func (p fakeCompanionPlanner) Plan(ctx context.Context, request companionPlanningRequest) (companionPlanningOutcome, error) {
+	model := p.model
+	model.mu.Lock()
+	model.requests++
+	model.inFlight++
+	if model.inFlight > model.peak {
+		model.peak = model.inFlight
 	}
-	m.planner = client
+	block := model.block
+	status := model.status
+	steps := slices.Clone(model.steps)
+	content := ""
+	if len(model.script) > 0 {
+		index := model.served
+		if index >= len(model.script) {
+			index = len(model.script) - 1
+		}
+		model.served++
+		content = model.script[index]
+	}
+	model.mu.Unlock()
+	defer func() {
+		model.mu.Lock()
+		model.inFlight--
+		model.mu.Unlock()
+	}()
+	if block != nil {
+		select {
+		case <-block:
+		case <-ctx.Done():
+			model.mu.Lock()
+			model.cancels++
+			cancels := model.cancels
+			model.mu.Unlock()
+			if model.cancelOrder != nil && cancels == 1 {
+				model.cancelOrder.record("model-cancel")
+			}
+			return companionPlanningOutcome{}, companion.ErrPlannerUnavailable
+		}
+	}
+	if status != 0 {
+		return companionPlanningOutcome{}, companion.ErrPlannerUnavailable
+	}
+	var plan companion.Plan
+	if content != "" {
+		var candidate companion.AgentPlan
+		if err := json.Unmarshal([]byte(content), &candidate); err != nil {
+			return companionPlanningOutcome{}, companion.ErrPlannerInvalidPlan
+		}
+		decoded, err := companion.DecodeAgentPlan(candidate, request.Snapshot)
+		if err != nil {
+			return companionPlanningOutcome{}, err
+		}
+		plan = decoded
+	} else {
+		plan = companion.Plan{Summary: "按指令移动", Steps: make([]companion.PlanStep, 0, len(steps))}
+		for _, step := range steps {
+			plan.Steps = append(plan.Steps, companion.PlanStep{
+				Kind: companion.PlanStepGoTo, X: step[0], Y: step[1], Z: step[2],
+			})
+		}
+	}
+	return companionPlanningOutcome{Plan: plan, Generation: request.Generation, Correlated: true}, nil
 }
 
 // stepCollectingChatEvents 逐 tick 推进并收集客户端收到的 ChatEvent，直到
@@ -666,7 +666,7 @@ func TestCompanionManagerDistantGoalFailsPathUnreachable(t *testing.T) {
 func TestCompanionManagerTaskTimesOutAtWorldTimeDeadline(t *testing.T) {
 	definitions := []companion.Definition{{ID: chatTestCompanionID(1), Name: "阿木"}}
 	host := newCompanionManagerHost(t, definitions, nil, func(config *Config) {
-		config.AIModel.TaskTimeoutMinutes = 1
+		config.TaskTimeoutMinutes = 1
 	})
 	client := openCompanionChatClient(t, host, "memory", integrationIdentity(0x75, "发令者"))
 	body := stepUntilCompanionManagerReady(
@@ -722,7 +722,7 @@ func TestCompanionShutdownCancelsPlannerBeforeFinalSaveAndStore(t *testing.T) {
 	config.OutboxCapacity = 4096
 	config.HeartbeatInterval = time.Hour
 	config.HeartbeatTimeout = time.Hour
-	config.AIModel.Endpoint = model.server.URL + "/v1"
+	config.companionPlanner = fakeCompanionPlanner{model: model}
 	store := newCompanionManagerOrderStore(order)
 	host, err := NewHost(context.Background(), config, flatTestGenerator{}, store)
 	if err != nil {

@@ -136,7 +136,6 @@ func restoredCompanionHost(
 	config.HeartbeatInterval = time.Hour
 	config.HeartbeatTimeout = time.Hour
 	if model != nil {
-		config.AIModel.Endpoint = model.server.URL + "/v1"
 	}
 	host := mustNewHost(t, config, flatTestGenerator{}, store)
 	t.Cleanup(func() {

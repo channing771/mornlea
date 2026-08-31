@@ -62,15 +62,13 @@ func openApplicationStore(
 
 // buildApplicationServerConfig 依据 Options 构建本地权威服务端的
 // server.Config。供 NewWithDependencies（非菜单路径）与 startWorld
-// （StartAtMenu 延迟装配）共用，保证两条路径产出同一份服务端配置（伙伴、
-// 模型运行时、视距半径、性能观察器）。
+// （StartAtMenu 延迟装配）共用，保证两条路径产出同一份服务端配置。
 func buildApplicationServerConfig(options Options, ticks *TickRecorder, saves *SaveRecorder) server.Config {
 	config := server.DefaultConfig(options.Seed)
 	config.Companions = slices.Clone(options.Companions)
-	// 模型运行时与已解析密钥原样转发：均为值拷贝，不与 options 共享引用；
-	// NewHost 会在打开存档前对非空伙伴列表做完整性校验。
-	config.AIModel = options.AIModel
-	config.AIAPIKey = options.AIAPIKey
+	config.AgentService = options.AgentService
+	config.AgentCredential = options.AgentCredential
+	config.TaskTimeoutMinutes = options.TaskTimeoutMinutes
 	config.ViewRadius = options.Render.ViewDistance + 1
 	config.TrustedObserver = options.Benchmark
 	config.TickObserver = ticks.Add

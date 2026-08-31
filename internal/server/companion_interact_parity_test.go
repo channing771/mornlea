@@ -140,7 +140,6 @@ func newInteractionParityHost(
 	config.OutboxCapacity = 4096
 	config.HeartbeatInterval = time.Hour
 	config.HeartbeatTimeout = time.Hour
-	config.AIModel.Endpoint = model.server.URL + "/v1"
 	host := mustNewHost(t, config, flatTestGenerator{}, store)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), longWaitDeadline)

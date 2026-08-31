@@ -87,6 +87,14 @@ func (p *Companions) Restore() ([]companion.Body, []storage.StoredCompanionQueue
 	return slices.Clone(p.records), cloneStoredQueues(p.loadedQueues)
 }
 
+// AgentNamespaceID 返回启动期已完成迁移并持久化的 namespace 身份副本。
+// 返回值是固定数组，不暴露协调器内部可变状态。
+func (p *Companions) AgentNamespaceID() storage.CompanionIdentity {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.namespace
+}
+
 // Observe 合并权威身体与任务域观察输入。旧 direct Dialogue 的裸摘要只可
 // transient 使用，不能推导或改写 v5 memory mirror，因此不参与 dirty 判定。
 func (p *Companions) Observe(

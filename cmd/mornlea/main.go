@@ -79,12 +79,12 @@ func runWithDependencies(args []string, dependencies runDependencies) error {
 		// 交互本地客户端启动停留在主菜单，世界装配延迟到「进入游戏」之后。
 		options.Application.StartAtMenu = true
 		options.Application.Companions = slices.Clone(effective.CompanionDefinitions())
-		// 模型设置与已解析密钥只注入普通本地模式，与伙伴注入共用同一分支：
-		// 远程、benchmark、capture 三条路径永远不携带半套 AI 运行时。配置层
-		// （config.Load）已保证非空伙伴时模型字段完整，这里只做转发与密钥解析。
+		// Agent 设置与已解析 credential 只注入普通本地模式；远程、benchmark、
+		// capture 三条路径不携带本地 Agent 运行时。
 		if effective.AI != nil {
-			options.Application.AIModel = effective.AI.ModelSettings
-			options.Application.AIAPIKey = resolveAIAPIKey(effective.AI.ModelSettings)
+			options.Application.AgentService = effective.AI.AgentService
+			options.Application.AgentCredential = resolveAgentCredential(effective.AI.AgentService)
+			options.Application.TaskTimeoutMinutes = effective.AI.TaskTimeout()
 		}
 	}
 	if remoteTuningDiverges(options, effective) {
@@ -195,13 +195,11 @@ func loadApplicationIdentity(requestedName *string) (network.Identity, error) {
 	return network.Identity{PlayerID: loaded.PlayerID, DisplayName: loaded.DisplayName}, nil
 }
 
-// resolveAIAPIKey 按 settings.APIKeyEnv 指向的环境变量名解析密钥值。
+// resolveAgentCredential 按 settings.APIKeyEnv 指向的环境变量名解析密钥值。
 //
-// 环境变量名为空（loopback http 免密钥的本地联调形态）返回空串；变量未设置
-// 或值为空同样返回空串——是否构成启动错误由 server.NewHost 的密钥边界统一
-// 裁决，这里不做二次判断。密钥值只流入内存中的 application.Options，绝不写
-// 日志或配置文件。
-func resolveAIAPIKey(settings companion.ModelSettings) string {
+// 环境变量名缺失、变量未设置或值为空均返回空串，并由 server.NewHost 的
+// credential 边界拒绝启动。密钥值只流入内存中的 application.Options。
+func resolveAgentCredential(settings companion.AgentServiceSettings) string {
 	if settings.APIKeyEnv == "" {
 		return ""
 	}

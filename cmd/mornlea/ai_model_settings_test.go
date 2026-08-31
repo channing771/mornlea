@@ -14,9 +14,9 @@ import (
 	"github.com/channing771/mornlea/internal/storage"
 )
 
-// TestRunLocalAIModelSettingsReachServerConfig 验证普通本地模式把模型设置与已解析
-// 密钥从配置一路送进 server.Config，且不与 options 共享底层引用。
-func TestRunLocalAIModelSettingsReachServerConfig(t *testing.T) {
+// TestRunLocalAgentSettingsReachServerConfig 验证普通本地模式只把 Agent 服务
+// 设置、credential 与任务超时送进 server.Config。
+func TestRunLocalAgentSettingsReachServerConfig(t *testing.T) {
 	id, err := companion.ParseID("00112233-4455-4677-8899-aabbccddeeff")
 	if err != nil {
 		t.Fatal(err)
@@ -24,22 +24,21 @@ func TestRunLocalAIModelSettingsReachServerConfig(t *testing.T) {
 	definitions := []companion.Definition{{ID: id, Name: "阿木"}}
 	options := application.LocalConnectionTestOptions()
 	options.Companions = definitions
-	options.AIModel = companion.ModelSettings{
-		Endpoint:           "https://example.invalid/v1",
-		Model:              "test-model",
-		APIKeyEnv:          "MORNLEA_TEST_AI_KEY",
-		TaskTimeoutMinutes: 20,
+	options.AgentService = companion.AgentServiceSettings{
+		Endpoint: "http://127.0.0.1:8123", APIKeyEnv: "MORNLEA_TEST_AGENT_KEY",
 	}
-	options.AIAPIKey = "secret-value"
+	options.AgentCredential = "secret-value"
+	options.TaskTimeoutMinutes = 20
 	want := errors.New("stop after server config")
 	dependencies := application.NewConnectionTestDependencies(t)
 	dependencies.OpenStore = func(context.Context, application.Options) (storage.WorldStore, error) {
 		return application.NewConnectionTestStore(42), nil
 	}
 	dependencies.NewHost = func(_ context.Context, config server.Config, _ server.Generator, _ storage.WorldStore) (application.Host, error) {
-		if config.AIModel != options.AIModel || config.AIAPIKey != "secret-value" {
-			t.Fatalf("server AIModel=%+v AIAPIKey=%q，want %+v/secret-value",
-				config.AIModel, config.AIAPIKey, options.AIModel)
+		if config.AgentService != options.AgentService || config.AgentCredential != "secret-value" ||
+			config.TaskTimeoutMinutes != 20 {
+			t.Fatalf("server AgentService=%+v credential=%q timeout=%d",
+				config.AgentService, config.AgentCredential, config.TaskTimeoutMinutes)
 		}
 		return nil, want
 	}
@@ -49,9 +48,9 @@ func TestRunLocalAIModelSettingsReachServerConfig(t *testing.T) {
 	}
 }
 
-// TestRunResolvesAIModelKeyFromEnvironment 验证 --config 路径把 apiKeyEnv 指向的
-// 环境变量解析进 server.Config；config 文件本体不含密钥。
-func TestRunResolvesAIModelKeyFromEnvironment(t *testing.T) {
+// TestRunResolvesAgentCredentialFromEnvironment 验证 --config 路径把 APIKeyEnv
+// 指向的环境变量解析进 Options；config 文件本体不含密钥。
+func TestRunResolvesAgentCredentialFromEnvironment(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	id, err := companion.ParseID("00112233-4455-4677-8899-aabbccddeeff")
 	if err != nil {
@@ -59,27 +58,27 @@ func TestRunResolvesAIModelKeyFromEnvironment(t *testing.T) {
 	}
 	cfg := config.Defaults()
 	cfg.AI = &config.AI{
-		ModelSettings: companion.ModelSettings{
-			Endpoint:           "https://example.invalid/v1",
-			Model:              "test-model",
-			APIKeyEnv:          "MORNLEA_TEST_AI_KEY",
-			TaskTimeoutMinutes: 15,
+		AgentService: companion.AgentServiceSettings{
+			Endpoint: "http://127.0.0.1:8123", APIKeyEnv: "MORNLEA_TEST_AGENT_KEY",
 		},
-		Companions: []companion.Definition{{ID: id, Name: "阿木"}},
+		TaskTimeoutMinutes: 15,
+		Companions:         []companion.Definition{{ID: id, Name: "阿木"}},
 	}
 	if err := cfg.Save(path); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("MORNLEA_TEST_AI_KEY", "env-secret-value")
+	t.Setenv("MORNLEA_TEST_AGENT_KEY", "env-secret-value")
 
 	var gotKey string
-	var gotModel companion.ModelSettings
+	var gotService companion.AgentServiceSettings
+	var gotTimeout int
 	stop := errors.New("stop after config capture")
 	err = runWithDependencies([]string{"--config", path}, runDependencies{
 		loadIdentity: func(*string) (network.Identity, error) { return network.Identity{}, nil },
 		newApplication: func(options application.Options) (*application.Application, error) {
-			gotKey = options.AIAPIKey
-			gotModel = options.AIModel
+			gotKey = options.AgentCredential
+			gotService = options.AgentService
+			gotTimeout = options.TaskTimeoutMinutes
 			return nil, stop
 		},
 	})
@@ -87,9 +86,9 @@ func TestRunResolvesAIModelKeyFromEnvironment(t *testing.T) {
 		t.Fatalf("run error = %v，want %v", err, stop)
 	}
 	if gotKey != "env-secret-value" {
-		t.Fatalf("AIAPIKey = %q，want 从环境变量解析", gotKey)
+		t.Fatalf("AgentCredential = %q，want 从环境变量解析", gotKey)
 	}
-	if gotModel != cfg.AI.ModelSettings {
-		t.Fatalf("AIModel = %+v，want %+v", gotModel, cfg.AI.ModelSettings)
+	if gotService != cfg.AI.AgentService || gotTimeout != 15 {
+		t.Fatalf("AgentService=%+v timeout=%d，want %+v/15", gotService, gotTimeout, cfg.AI.AgentService)
 	}
 }

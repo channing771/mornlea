@@ -24,7 +24,7 @@ const (
 // 它同时服务于三条链路：配置文件 ai 组（json tag 与文件键逐字对应，字段随
 // config.AI 的嵌入参与 Save/Load 往返）、server.Config 的启动校验，以及密钥
 // 解析——APIKeyEnv 只保存环境变量名，密钥值永远不落盘，由入口进程在启动时
-// 从环境变量读进内存（server.Config.AIAPIKey）。
+// 从环境变量读进内存；该类型现仅供待迁移的 Dialogue HTTP client 使用。
 //
 // TaskTimeoutMinutes 为 0 表示未设置，由 TaskTimeout() 归一为缺省值；显式
 // 写入 0 由配置解析层拒绝（"未设置"只对字段缺席成立）。

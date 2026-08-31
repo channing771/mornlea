@@ -963,7 +963,7 @@ func validAgentPlan(plan AgentPlan) bool {
 				return false
 			}
 		case "follow":
-			if !validCanonicalAgentID(step.PlayerID) || index != len(plan.Steps)-1 || step.Block != "" {
+			if !validCanonicalAgentID(step.PlayerID) || index != len(plan.Steps)-1 || step.Block != "" || step.X != 0 || step.Y != 0 || step.Z != 0 {
 				return false
 			}
 		default:

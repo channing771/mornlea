@@ -51,6 +51,12 @@ func (h *Host) Shutdown(ctx context.Context) error {
 	closed := h.world.lifecycle == serverClosed
 	h.world.stepMu.Unlock()
 	if closed {
+		if h.companionLease != nil {
+			h.companionLease.Close()
+		}
+		if h.companionAgent != nil {
+			h.companionAgent.Close()
+		}
 		if h.companionMCP != nil {
 			h.companionMCP.Close()
 		}
@@ -92,6 +98,12 @@ func (h *Host) Shutdown(ctx context.Context) error {
 	}
 	if err := h.world.Shutdown(ctx); err != nil {
 		return errors.Join(listenerErr, err)
+	}
+	if h.companionLease != nil {
+		h.companionLease.Close()
+	}
+	if h.companionAgent != nil {
+		h.companionAgent.Close()
 	}
 	if h.companionMCP != nil {
 		h.companionMCP.Close()

@@ -41,10 +41,10 @@ import (
 	"github.com/channing771/mornlea/internal/storage"
 )
 
-// companionPlanner 是规划器依赖面：生产实现是 companion.PlannerClient，
-// 测试可注入假模型端点构造的真客户端。
+// companionPlanner 是规划器依赖面：生产实现只接受冻结快照与任务身份，
+// 测试通过显式 seam 注入受控实现。
 type companionPlanner interface {
-	Plan(ctx context.Context, snapshot companion.PlanSnapshot) (companion.Plan, error)
+	Plan(ctx context.Context, request companionPlanningRequest) (companionPlanningOutcome, error)
 }
 
 // companionTaskIssuer 是入队时刻冻结的发令者事实。指令的规划输入不随发令者
@@ -148,7 +148,8 @@ type companionTaskSlot struct {
 type plannerOutcome struct {
 	id         companion.ID
 	generation uint64
-	plan       companion.Plan
+	result     companionPlanningOutcome
+	snapshot   companion.PlanSnapshot
 	err        error
 }
 
@@ -223,8 +224,7 @@ type companionManager struct {
 }
 
 // newCompanionManager 构造 Companion Manager。config 必须已含校验过的
-// AIModel 与伙伴定义（NewHost 的第二道边界保证）；dialogue 是台词模型依赖
-// 面，与 planner 共用同一 AIModel 设置构造。
+// Agent 任务超时与伙伴定义；外部调用依赖由 Host 显式装配。
 func newCompanionManager(
 	engine *runtime.Engine,
 	config Config,
@@ -236,7 +236,7 @@ func newCompanionManager(
 		engine:          engine,
 		planner:         planner,
 		dialogue:        dialogue,
-		timeoutMinutes:  config.AIModel.TaskTimeout(),
+		timeoutMinutes:  config.TaskTimeoutMinutes,
 		table:           pathfind.NewPathBlockTable(productionCompanionPassableBlocks()),
 		slots:           make(map[companion.ID]*companionTaskSlot, len(config.Companions)),
 		orderedIDs:      make([]companion.ID, 0, len(config.Companions)),
@@ -524,7 +524,15 @@ func (m *companionManager) applyPlannerOutcome(outcome plannerOutcome) {
 	}
 	switch {
 	case outcome.err == nil:
-		m.applyQueueEvents(slot, slot.queue.AcceptPlan(outcome.plan))
+		if !outcome.result.Correlated || outcome.result.Generation != outcome.generation {
+			m.applyQueueEvents(slot, slot.queue.FailPlanning(companion.TaskFailPlannerUnavailable))
+			return
+		}
+		if !m.plannerOutcomeMatchesCurrentAuthority(slot, current.Command, outcome) {
+			m.applyQueueEvents(slot, slot.queue.FailPlanning(companion.TaskFailWorldChanged))
+			return
+		}
+		m.applyQueueEvents(slot, slot.queue.AcceptPlan(outcome.result.Plan))
 		// 结构校验是纯值操作，同一 tick 完成校验并进入 Running；失败即
 		// 以 InvalidPlan 终止，绝不改写或降级模型计划。
 		m.applyQueueEvents(slot, slot.queue.FinishValidation(
@@ -543,6 +551,39 @@ func (m *companionManager) applyPlannerOutcome(outcome plannerOutcome) {
 	default:
 		m.applyQueueEvents(slot, slot.queue.FailPlanning(companion.TaskFailPlannerUnavailable))
 	}
+}
+
+// plannerOutcomeMatchesCurrentAuthority 在 Agent 返回后的权威 tick 边界重建必要
+// 世界事实。冻结快照只用于约束候选生成；提交前目标方块、place 背包与 follow
+// 在线性必须仍成立，且 mine 的 dense projection 精确槽不得发生替换。
+func (m *companionManager) plannerOutcomeMatchesCurrentAuthority(
+	slot *companionTaskSlot,
+	command companion.TaskCommand,
+	outcome plannerOutcome,
+) bool {
+	body, active := m.body(outcome.id)
+	if !active {
+		return false
+	}
+	currentSnapshot, err := m.buildPlanSnapshot(slot.definition, command, slot.currentIssuer, body)
+	if err != nil {
+		return false
+	}
+	if err := companion.ValidatePlanAgainstSnapshot(outcome.result.Plan, currentSnapshot); err != nil {
+		return false
+	}
+	for _, step := range outcome.result.Plan.Steps {
+		if step.Kind != companion.PlanStepMine {
+			continue
+		}
+		target := core.BlockPos{X: step.X, Y: step.Y, Z: step.Z}
+		frozenBlock, _, frozenOK := outcome.snapshot.Terrain.Lookup(target)
+		currentBlock, _, currentOK := currentSnapshot.Terrain.Lookup(target)
+		if !frozenOK || !currentOK || frozenBlock != currentBlock {
+			return false
+		}
+	}
+	return true
 }
 
 // applyPathOutcomes 在 tick 边界非阻塞排空寻路结果并应用。
@@ -819,10 +860,10 @@ func standingCellOf(position [3]float32) pathfind.PathCell {
 	}
 }
 
-// dispatchPlanning 为每个空闲槽位派发规划：取队首、获取并发名额、迁移
-// Planning 后构造快照，再由 worker 发起模型请求。信号量满或伙伴未激活时
-// 任务保持 Queued 顺延；快照构造失败时任务以 PlannerUnavailable 真实终
-// 结（见函数内注释），FIFO 在下一 tick 推进。
+// dispatchPlanning 为每个空闲槽位派发规划：取队首、迁移到 Planning、获取
+// 共享并发名额、构造快照，再由 worker 发起请求。共享名额不可用时任务在同
+// tick 以 PlannerUnavailable 终结；伙伴未激活时仍保持 Queued。快照构造失败
+// 同样以 PlannerUnavailable 真实终结，FIFO 在下一 tick 推进。
 func (m *companionManager) dispatchPlanning() {
 	for _, id := range m.orderedIDs {
 		slot := m.slots[id]
@@ -876,14 +917,19 @@ func (m *companionManager) dispatchPlanning() {
 			// 伙伴尚未激活（出生扫描在途）：任务保持 Queued，等下一 tick。
 			continue
 		}
+		if !slot.queue.BeginPlanning() {
+			continue
+		}
+		if slot.dialogueInFlight {
+			m.applyQueueEvents(slot, slot.queue.FailPlanning(companion.TaskFailPlannerUnavailable))
+			continue
+		}
 		select {
 		case m.semaphore <- struct{}{}:
 		default:
-			// 全服四个并发名额已满：任务保持 Queued，下一 tick 重试。
-			continue
-		}
-		if !slot.queue.BeginPlanning() {
-			<-m.semaphore
+			// 全服并发名额不可用时，任务已真实进入 Planning，并在同一 tick
+			// 以 PlannerUnavailable 终结；权威路径从不排队等待容量。
+			m.applyQueueEvents(slot, slot.queue.FailPlanning(companion.TaskFailPlannerUnavailable))
 			continue
 		}
 		// 快照构造放在 BeginPlanning 成功之后：构造失败时任务已真实处于
@@ -915,7 +961,9 @@ func (m *companionManager) plannerWorker(
 	snapshot companion.PlanSnapshot,
 ) {
 	defer m.waitGroup.Done()
-	plan, err := m.planner.Plan(m.ctx, snapshot)
+	result, err := m.planner.Plan(m.ctx, companionPlanningRequest{
+		CompanionID: id, Generation: generation, Snapshot: snapshot, Instruction: snapshot.Command,
+	})
 	// 释放先于发送：`m.semaphore` 约束的是在途模型调用数，`Plan` 返回即调用
 	// 结束、名额自此可复用，结果投递只是队列簿记。若先发送再经 defer 释放，
 	// 两者之间没有屏障，tick 线程 try-acquire 的成败便依赖 goroutine 调度
@@ -923,7 +971,7 @@ func (m *companionManager) plannerWorker(
 	// 之前名额已归还」成为严格事实，ctx 取消路径行为不变（取消时同样先
 	// 释放、发送走 `<-m.ctx.Done()` 分支放弃结果）。
 	<-m.semaphore
-	outcome := plannerOutcome{id: id, generation: generation, plan: plan, err: err}
+	outcome := plannerOutcome{id: id, generation: generation, result: result, snapshot: snapshot, err: err}
 	select {
 	case m.plannerResults <- outcome:
 	case <-m.ctx.Done():

@@ -158,12 +158,12 @@ func run(ctx context.Context, args []string, injected dependencies) error {
 	metadata := store.Metadata()
 	config := server.DefaultConfig(metadata.Seed)
 	config.Companions = slices.Clone(effective.CompanionDefinitions())
-	// 伙伴注入的同时转发模型设置与按 apiKeyEnv 解析的密钥：配置文件只保存
-	// 环境变量名，密钥值仅进入内存中的 server.Config，不写日志与存档；
-	// NewHost 会在伙伴列表非空时校验完整性并拒绝残缺启动。
+	// 配置文件只保存 Agent credential 环境变量名，密钥值仅进入内存中的
+	// server.Config，不写日志与存档。
 	if effective.AI != nil {
-		config.AIModel = effective.AI.ModelSettings
-		config.AIAPIKey = resolveAIAPIKey(config.AIModel)
+		config.AgentService = effective.AI.AgentService
+		config.AgentCredential = resolveAgentCredential(config.AgentService)
+		config.TaskTimeoutMinutes = effective.AI.TaskTimeout()
 	}
 	config.MaxPlayers = options.MaxPlayers
 	host, err := dependencies.newHost(ctx, config, worldgen.New(metadata.Seed, effective.FluidEnabled), store)
@@ -181,12 +181,11 @@ func run(ctx context.Context, args []string, injected dependencies) error {
 	return host.Run(ctx, listener)
 }
 
-// resolveAIAPIKey 按 settings.APIKeyEnv 指向的环境变量名解析密钥值。
+// resolveAgentCredential 按 settings.APIKeyEnv 指向的环境变量名解析密钥值。
 //
-// 环境变量名为空（loopback http 免密钥的本地联调形态）返回空串；变量未设置
-// 或值为空同样返回空串——是否构成启动错误由 server.NewHost 的密钥边界统一
-// 裁决。密钥值只进入内存中的 server.Config，绝不写日志或存档。
-func resolveAIAPIKey(settings companion.ModelSettings) string {
+// 环境变量名缺失、变量未设置或值为空均返回空串，并由 server.NewHost 的
+// credential 边界拒绝启动。密钥值只进入内存中的 server.Config。
+func resolveAgentCredential(settings companion.AgentServiceSettings) string {
 	if settings.APIKeyEnv == "" {
 		return ""
 	}

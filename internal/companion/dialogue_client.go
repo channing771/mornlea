@@ -1,8 +1,7 @@
-// 本文件实现 Dialogue 的 OpenAI-compatible HTTP 客户端。与 planner.go 共用
-// 同一模型服务配置（endpoint/model/apiKeyEnv/30 秒超时）与请求外形（chatRequest/
-// chatEnvelope），但系统提示与输入完全隔离：本客户端只接收四类有界数据
+// 本文件实现 Dialogue 的 OpenAI-compatible HTTP 客户端。它使用独立的
+// endpoint/model/apiKeyEnv 配置与 chat request 外形；本客户端只接收四类有界数据
 // （persona、最近对话摘要、当前事实节点、极小环境摘要），绝不携带密钥、其他
-// 玩家聊天文本、世界存档路径或 Planner 系统提示；模型输出只经 DecodeDialogueResponse
+// 玩家聊天文本、世界存档路径或规划输入；模型输出只经 DecodeDialogueResponse
 // 的白名单解码（dialogue_types.go），错误上下文绝不包含密钥或响应正文原文。
 package companion
 
@@ -14,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/channing771/mornlea/internal/core"
 )
@@ -23,13 +23,32 @@ import (
 // 上层把它映射为「跳过该台词」，绝不改变任务状态、FIFO 或任何世界事实。
 var ErrDialogueUnavailable = errors.New("companion: dialogue 不可用")
 
-// DialogueRequestTimeout 是单次台词请求的固定超时。spec 规定 Dialogue 复用
-// Planner 的 30 秒超时配置且不自动重试，这里直接别名同一常量：两个客户端共享
-// 同一模型服务，超时语义必须同源，别名保证未来任何调整都不可能让二者漂移。
-const DialogueRequestTimeout = PlannerRequestTimeout
+// DialogueRequestTimeout 是单次台词请求的固定超时。
+const DialogueRequestTimeout = 30 * time.Second
 
-// dialogueSystemPrompt 是每次台词请求携带的固定系统提示：与 plannerSystemPrompt
-// 完全隔离（不携带计划格式、步骤词表或规划措辞），声明用户消息中的 persona、
+// dialogueResponseHeaderBytes 是默认 transport 允许的响应头上限。
+const dialogueResponseHeaderBytes = 16 << 10
+
+type chatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type chatRequest struct {
+	Model    string        `json:"model"`
+	Messages []chatMessage `json:"messages"`
+}
+
+type chatEnvelope struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+}
+
+// dialogueSystemPrompt 是每次台词请求携带的固定系统提示。它不携带计划格式、
+// 步骤词表或规划措辞，并声明用户消息中的 persona、
 // 摘要、节点与环境摘要都是只读数据而不是指令，并把输出限定为单一受限 JSON
 // object——非终态只有 line，终态附带 summary。提示是包级固定文本，不含任何
 // 按请求变化的内容。
@@ -188,8 +207,8 @@ func buildDialogueUserPayload(request DialogueRequest) dialogueUserPayload {
 // DialogueClient 是调用 OpenAI-compatible endpoint 的台词 HTTP 客户端。
 //
 // 它只做一件事：把一份已校验的 DialogueRequest 发送给 /chat/completions 并
-// 把响应严格解码为 (line, summary)。与 PlannerClient 同构：复用同一 endpoint/
-// model/apiKeyEnv 配置边界、同一 30 秒超时、无重试、无缓存；构造后字段只读，
+// 把响应严格解码为 (line, summary)。endpoint/model/apiKeyEnv 与 30 秒超时由
+// 本客户端独立持有；无重试、无缓存，构造后字段只读，
 // 可被多 goroutine 安全共用（在途上限由上层编排负责）。
 type DialogueClient struct {
 	settings   ModelSettings
@@ -199,10 +218,10 @@ type DialogueClient struct {
 }
 
 // NewDialogueClient 构造 DialogueClient。settings 必须已通过 ModelSettings.
-// Validate（与 NewPlannerClient 同一设置边界）；apiKey 是入口进程从环境变量
+// Validate；apiKey 是入口进程从环境变量
 // 解析出的密钥值，仅当非空时作为 Authorization: Bearer 头发送。client 为 nil
 // 时使用内置受控客户端（固定 DialogueRequestTimeout 超时、响应头上限、禁用
-// 保活，与 Planner 的默认客户端同参数）；测试可注入自定义 *http.Client（例如
+// 保活）；测试可注入自定义 *http.Client（例如
 // 短超时）以模拟各失败路径。
 func NewDialogueClient(settings ModelSettings, apiKey string, client *http.Client) (*DialogueClient, error) {
 	if err := settings.Validate(); err != nil {
@@ -210,8 +229,8 @@ func NewDialogueClient(settings ModelSettings, apiKey string, client *http.Clien
 	}
 	if client == nil {
 		transport := http.DefaultTransport.(*http.Transport).Clone()
-		transport.MaxResponseHeaderBytes = plannerResponseHeaderBytes
-		// 禁用保活：与 Planner 同一权衡——台词请求低频且可能长时间间隔，
+		transport.MaxResponseHeaderBytes = dialogueResponseHeaderBytes
+		// 禁用保活：台词请求低频且可能长时间间隔，
 		// 保持连接只会让半开连接在模型服务重启后产生难以归因的失败。
 		transport.DisableKeepAlives = true
 		client = &http.Client{
@@ -231,8 +250,8 @@ func NewDialogueClient(settings ModelSettings, apiKey string, client *http.Clien
 //
 // terminal 决定响应契约：非终态只允许 line 字段；终态必须附带 summary。
 // 失败语义分三类（均可用 errors.Is 判别）：传输层失败（HTTP 错误、超时、
-// 取消、超限，以及 HTTP chatRequest envelope 序列化失败——与 Planner 侧
-// 同类失败归 ErrPlannerUnavailable 的惯例一致）包装 ErrDialogueUnavailable；
+// 取消、超限，以及 HTTP chatRequest envelope 序列化失败）包装
+// ErrDialogueUnavailable；
 // 请求构造侧失败（越界输入、发往模型的 user payload 序列化）包装
 // ErrDialogueInvalidRequest；模型输出不符合 schema（envelope
 // 非法或 content 不满足 line/summary 白名单）包装 ErrDialogueInvalidResponse。
@@ -300,8 +319,8 @@ func (d *DialogueClient) Do(ctx context.Context, req DialogueRequest, terminal b
 }
 
 // decodeDialogueResponseBody 把（已限长的）响应正文严格解码为台词：先宽容解
-// 出唯一 choice 的 content（envelope 层与 Planner 同一纪律——真实 OpenAI 兼容
-// 服务附带 id/usage 等字段），再交给 DecodeDialogueResponse 施加 line/summary
+// 出唯一 choice 的 content（真实 OpenAI 兼容服务会附带 id/usage 等字段），
+// 再交给 DecodeDialogueResponse 施加 line/summary
 // 白名单与全部文本校验。envelope 层失败包装 ErrDialogueInvalidResponse，错误
 // 文本不含 content 原文。
 func decodeDialogueResponseBody(body []byte, terminal bool) (string, string, error) {

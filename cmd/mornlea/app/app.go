@@ -35,12 +35,11 @@ const BenchmarkSeed = 20260726
 
 type Options struct {
 	Companions []companion.Definition
-	// AIModel 是从配置 ai 组解析出的模型运行时设置；AI 关闭（无伙伴）时为
-	// 零值，本地权威服务端据此保持 M5B 的启动边界（见 server.NewHost）。
-	AIModel companion.ModelSettings
-	// AIAPIKey 是按 AIModel.APIKeyEnv 从环境变量解析出的密钥值。它只在
-	// 进程内存中向本地 server.Config 传递，不写日志、不落配置文件与存档。
-	AIAPIKey           string
+	// AgentService 与 AgentCredential 只进入本地权威服务端；credential 是按
+	// `APIKeyEnv` 解析的内存值，不写日志、配置或存档。
+	AgentService       companion.AgentServiceSettings
+	AgentCredential    string
+	TaskTimeoutMinutes int
 	Seed               int64
 	Benchmark          bool
 	BenchmarkTransport string
