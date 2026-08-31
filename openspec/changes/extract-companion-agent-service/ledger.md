@@ -6,7 +6,7 @@
 - 执行模型：每个 Task 使用 fresh implementer；每项完成后由独立 SPEC reviewer 与 QUALITY reviewer 双裁决；控制会话不直接实现生产代码。
 - 修复循环：单任务最多 5 轮；未通过双评审不得勾选 `tasks.md`。
 - 验证复用：只有相同基线 SHA、命令与范围的完整输出可复用；所有结果记录实际 exit code，不把未完成命令写成通过。
-- 当前版本事实：protocol v32、player v8、chunk v9、metadata v3、companions v4、hostile v1、engine ABI v9、client ABI v13、scenario v20。
+- 当前版本事实：protocol v32、player v8、chunk v9、metadata v3、companions v5、hostile v1、engine ABI v9、client ABI v13、scenario v20。
 - 计划目标：仅 companions 升 v5；Agent HTTP application contract v1；MCP tool contract v1；MCP wire `2025-11-25`。
 - Ruling: 以执行时 `main` 的 engine ABI v9/client ABI v13 为不变基线，本 change 不认领 native ABI 升版 — 代码与用户更新的项目指南高于旧规划中的 v8/v11/v12 文档事实 — 若裁决错误，成本是收尾版本文档与钉死测试需重做，不改变 Agent HTTP/MCP 合同。
 - Ruling: Task 6 只移除 Go config 的 provider/direct-model 生产语义并新增强类型 Agent HTTP client；现有 Planner/Dialogue direct-model 实现保留为未接线的编译过渡，由 Task 9/10 在权威编排切换时删除 — 这避免 Task 6 提前改变运行路径，也不引入 fallback、隐式映射或 backend 开关 — 若裁决错误，成本是 Task 9/10 的删除面扩大，不影响 Task 6 合同。
@@ -40,10 +40,10 @@
 | 6 | `task6_go_agent_client`、`task6_strict_lifecycle_fix` | `c871b1ec` | RED：配置/client 缺失，Round 1/2 复审继续拒绝 codec、manifest、边界与生命周期缺口；GREEN：隔离 focused race 两遍、config/companion full race、vet、archcheck、gofmt/diff-check；提交 `0fd248d1`、`f56b42bf`、`5ee80a7c`、`6b1deb59`、`f7585788`、`0ea46c31` | `task6_spec_review` round 1/2 FAIL，round 3 PASS | `task6_quality_review` round 1/2 FAIL，round 3 PASS | Accepted |
 | 7 | `task7_contract_prereq`（Task 7A）、`task7_mcp_main`（Task 7B） | `148b935c`、`22991a82` | Task 7A 提交 `5812be64`、repair `038c4b86`；Task 7B initial `b00481e0`、repair 1 `79b5965f`、repair 2 `92f80e4f` | Task 7A 初次/repair PASS；Task 7B formal round 1 FAIL、repair 1 scoped FAIL、repair 2 final PASS | Task 7A 初次 FAIL/repair PASS；Task 7B formal round 1 FAIL、repair 1 scoped PASS、repair 2 final PASS | Accepted |
 | 8 | `task8_storage_v5` | `148b935c` | codec/merge/probe/bootstrap/carry RED→GREEN；提交 `11f897c7`、repair `660c02a1`、memory reuse repair `0dc592c8` | 初次独立 PASS；两轮 repair scoped PASS | 初次独立 FAIL；repair 1 scoped PASS；repair 2 scoped PASS | Accepted |
-| 9 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
-| 10 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
-| 11 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
-| 12 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
+| 9 | `task9_planner_cutover` | `6c5c4011` | Agent Planner cutover RED→GREEN；提交 `84c03161`、repair `edfb1574`、`b2c75a6c` | initial FAIL、repair 1 FAIL、repair 2 PASS | initial FAIL、repair 1 PASS、repair 2 PASS | Accepted |
+| 10 | `task10_dialogue_memory` | `012a4b86` | Dialogue/memory/shutdown RED→GREEN；提交 `1f6006f6`、repair `6ef874b1`、`7283b746`、`c2cebeb9`、`6bdf2b7e` | initial FAIL、repair 1–4 后 PASS | initial FAIL、repair 1 FAIL、repair 2–4 后 PASS | Accepted |
+| 11 | `task11_cross_language` | `e1bf9e52` | 真实 MCP/HTTP 进程合同 RED→GREEN；提交 `efa85718`、`a6b4d059`、`3635b6a1`、`356fe396`、`41add71e`、证据 `2f6ab0ba` | PASS | PASS | Accepted |
+| 12 | `task12_ci_docs_gates` | `9423f067` | archcheck/Make/CI/version RED→GREEN；提交 `9dfdbc69`、文档 `49fbc7f9`；全量门禁待记录 | Review pending | Review pending | Pending |
 
 ### Task 1 评审修复记录
 
@@ -222,6 +222,63 @@
   OpenSpec strict 80/80、gofmt 与 diff-check 均 PASS。
 - Task 7 closeout 后 change 进度为 8/12；下一任务为 Task 9。Task 8 的完整实施、
   repair 与 Accepted 记录保持原样，未查看、比较或吸收 main。
+
+### Task 9 Planner cutover 实施与评审记录
+
+- `task9_planner_cutover` 从 `6c5c4011` 开始，以 `84c03161` 把生产规划切到 Agent HTTP v1
+  与 frozen snapshot MCP；持久 namespace lease、global 4/per-companion 1 gate、bounded worker、
+  当前 tick 重验和既有 Task Runner 保持 Go 权威，旧 direct-model Planner 从生产路径删除。
+- initial SPEC/QUALITY 均 FAIL。repair `edfb1574` 关闭 strict step presence/type、独立
+  acquire/heartbeat deadline 与 fencing、tick-owned attempt/correlation/gate 释放、target/chunk
+  当前世界重验；其后 SPEC 仍 FAIL、QUALITY PASS。repair `b2c75a6c` 将成功 status 下的
+  overflow、unknown field 与 trailing JSON 精确归为 invalid plan，同时保持 transport 与 identity
+  mismatch 的 unavailable 分类；最终独立 SPEC/QUALITY 均 PASS，Task 9 Accepted。
+- canonical gates：Planner/Task/AgentUnavailable/Snapshot race PASS（companion 2.518s、server
+  11.704s）；Agent race 4.139s；config race 1.578s；archcheck 5.404s；三个 cmd package、
+  affected vet、tidy、gofmt/diff-check 与 OpenSpec strict 80/80 均 PASS。
+
+### Task 10 Dialogue、memory 与 shutdown 实施与评审记录
+
+- `task10_dialogue_memory` 从 `012a4b86` 开始，以 `1f6006f6` 完成 Dialogue cutover、shared
+  gate/tick correlation、terminal accepted reservation、memory commit/reconcile/epoch/tombstone、
+  v5 mirror dirty 与单次广播，并实现 save/flush→Release→close 的可重试 shutdown。
+- initial SPEC/QUALITY 均 FAIL。四轮 repair `6ef874b1`、`7283b746`、`c2cebeb9`、`6bdf2b7e`
+  依次关闭 in-flight persistence revision、unknown/stale reconcile、inactive lifecycle、run 与
+  finalization context 所有权、重试 re-arm、旧 outcome drain 后 exactly-once re-arm/no-spin；最终
+  独立 SPEC/QUALITY 均 PASS，Task 10 Accepted。
+- canonical gates：shutdown 三测试 race count 20 PASS（4.612s）；MemoryReconcile/UnknownCommit/
+  Shutdown/Release race PASS（5.078s）；broader companion/server race PASS（4.558s/95.791s）；
+  persistence race 2.813s；archcheck 5.319s；三个 cmd package、affected vet、tidy、gofmt/
+  diff-check 与 OpenSpec strict 80/80 均 PASS。
+
+### Task 11 真实跨语言合同实施与评审记录
+
+- `task11_cross_language` 从 `e1bf9e52` 开始，以 `efa85718`、`a6b4d059`、`3635b6a1`、
+  `356fe396`、`41add71e` 实现真实 Python MCP SDK↔Go MCP 与真实 FastAPI/Uvicorn↔Go
+  `AgentClient` 进程合同；`2f6ab0ba` 记录实施证据。测试只使用 loopback、临时 SQLite 与
+  deterministic model port fake，不访问 provider/DNS/外网，也不启动游戏窗口。
+- MCP 覆盖 `2025-11-25` initialize→initialized、Tools-only discovery/call、outer gate、materialized
+  view cancellation；HTTP 覆盖 lease/plan/dialogue/memory/cancel、proposal precommit 与 CAS/replay。
+  shared fixture 真实暴露并修复 `list_affordances` 坐标排序漂移。最终独立 SPEC/QUALITY 均 PASS，
+  Task 11 Accepted。
+- canonical gates：`make companion-agent-integration` PASS；Python ruff/mypy、focused 81 passed、
+  brief 集合 117 passed；Go 真进程 race server 8.822s；archcheck 5.645s；affected vet/tidy、
+  diff-check 与 OpenSpec strict 80/80 均 PASS。
+
+### Task 12 CI、文档、版本与全量门禁实施记录（Review pending）
+
+- `task12_ci_docs_gates` 从 Task 11 closeout `9423f067` 开始。RED archcheck 证明
+  `openspec/config.yaml` 仍为 companions v4，Make 缺少 locked Python check，CI 缺少 Python
+  3.12、固定 uv/cache 与 check/integration 调用；engine ABI v9/client ABI v13 无歧义且保持不变。
+- `9dfdbc69` 增加 `make companion-agent-check`，在既有 macOS integration job 复用同 SHA native
+  artifacts 后运行 locked Python check 与真实 integration，并新增 service/shared-contract/CI/Make/
+  no-shell-FFI-embed archcheck；只把 `companions.ai` v4 升为 v5。focused archcheck PASS（5.532s），
+  `make companion-agent-check` PASS（403 passed）。
+- `49fbc7f9` 更新双语 README、architecture、configuration、LAN、test quickstart 与 progress：明确
+  Go 世界权威、Python 独立 Agent 服务、loopback-only、启动/关闭/失败语义、严格 v1 配置、v5
+  migration/backup/rollback 以及完整版本矩阵；文档后 archcheck 与 OpenSpec strict 80/80 PASS。
+- Task 12 实施阶段未修改 `tasks.md`。完整门禁与独立 SPEC/QUALITY 评审尚未记录；本行保持
+  Review pending，只有双评审通过后才允许由控制会话完成 Task 12 closeout。
 
 ## 整分支终审与门禁
 
