@@ -170,6 +170,75 @@ RED→GREEN，没有修改 `tasks.md` 或 progress ledger。
   `tasks.md`/ledger 扫描
   - PASS，无输出或违规。
 
+## Repair 2
+
+质量复审继续指出两个 lifecycle 缺口。本轮在 `6ef874b1` clean 基线上分组执行
+RED→GREEN，没有查看 main，也没有修改 `tasks.md` 或 progress ledger。
+
+1. inactive lifecycle 参与 acquire/reacquire reconcile
+   - RED：mixed active A（epoch 3）与 inactive B（epoch 4+tombstone）在两个 lease
+     fence 上实际 reconcile calls 只有 `[A,A]`，B 从未发送；根因是 pending 从
+     active manager slots 而非完整持久 lifecycle 播种。
+   - GREEN：每个新 fence 与 full reconcile request 都从
+     `MemoryLifecycles()` 的 current-only 完整快照播种 pending；只有存在 active
+     slot 的 ID 才会修改 `memoryReady`。测试证明 acquire/reacquire 各发送 A active
+     canonical-zero 与 B inactive delete state，B unavailable 不暂停 A；既有 stale
+     fence、error backoff、conflict/remote-higher 与 FIFO/tick 隔离继续通过。
+   - RED/GREEN 命令：
+     `go test ./internal/server -run '^TestMemoryReconcileAcquireIncludesInactiveTombstoneWithoutPausingActive$' -race -count=1 -timeout=30s`
+     最初 FAIL（calls=`[A,A]`）；
+     `go test ./internal/server -run '^TestMemoryReconcile(AcquireIncludesInactiveTombstoneWithoutPausingActive|UnavailableDoesNotStopLaterCompanion|RejectsStaleFenceBeforeMutation|ErrorRetriesWithBoundedBackoff|ConflictIsolatesRemoteHigherAndPreservesFIFO)$' -race -count=1 -timeout=60s`
+     PASS（2.221s）。
+
+2. shutdown memory finalization context 与 retry
+   - RED：把 CommitMemory fake 改为遵守 `ctx.Done()` 并观测 context 后，queued
+     terminal outcome 派生的 commit 收到 `context canceled`；原实现错误复用了已由
+     run freeze 取消的 manager context。
+   - GREEN：run cancellation 与 memory context 分离；每轮 `Shutdown` 建立 caller
+     deadline 与固定 30 秒上界的 finalization context。冻结后不接受新 run，但 drain
+     可派生 commit，并在 unknown 时派发同 fence reconcile，再按
+     wait→drain→wait 收敛。未确认 reservation 会阻止 Release；commit 确认、mirror
+     save 和 flush 后才 Release/close。
+   - caller timeout 测试证明首轮 commit 入场时 context 未取消且有 deadline；50ms
+     timeout 后 worker 已退出，Release/Agent/store 均保持可重试。第二轮使用新
+     finalization context，经 old-mirror reconcile 后以原 operation 重提 commit，最终
+     mirror 落盘并只 Release/close 一次。
+   - GREEN 过程中 race detector 发现旧 context-aware Wait helper 在 caller timeout
+     后遗留 Wait goroutine，并与第二轮派生 worker 的 `WaitGroup.Add` 竞态。manager
+     finalization 改为依赖有界 worker context 的同步 Wait，消除 goroutine 泄漏与
+     WaitGroup 重用竞态；无调用的 `companionManager.close()` 及矛盾注释同时删除。
+   - RED/GREEN 命令：
+     `go test ./internal/server -run '^TestHostShutdownWaitsForCommitDerivedFromQueuedDialogueOutcome$' -race -count=1 -timeout=30s`
+     最初 FAIL（commit context=`context canceled`），最终 PASS（2.040s）；
+     `go test ./internal/server -run '^(TestMemoryReconcile(AcquireIncludesInactiveTombstoneWithoutPausingActive|UnavailableDoesNotStopLaterCompanion|RejectsStaleFenceBeforeMutation|ErrorRetriesWithBoundedBackoff|ConflictIsolatesRemoteHigherAndPreservesFIFO)|TestHostShutdown(WaitsForCommitDerivedFromQueuedDialogueOutcome|RetriesMemoryFinalizationAfterCallerTimeout|RetriesFailedReleaseWithSameFrozenLease|RetriesPersistenceBeforeReleaseAndClose))$' -race -count=1 -timeout=90s`
+     PASS（2.122s）。
+
+### Repair 2 验证
+
+- `go test ./internal/server -run 'MemoryReconcile|UnknownCommit|Shutdown|Release' -race -count=1 -timeout=120s`
+  - PASS（修复旧 scripted fake cleanup 后）：5.494s。
+- `go test ./internal/server/persistence -run 'Companion|Memory' -race -count=1 -timeout=120s`
+  - PASS：2.202s。
+- `go test ./internal/companion ./internal/server -run 'Dialogue|Memory|Shutdown|CompanionSpeech' -race -count=1 -timeout=240s`
+  - PASS：companion 1.529s，server 91.620s。
+- `go test ./internal/companion ./internal/server -run 'Agent|Lease|Planner|Dialogue|Memory|Shutdown|CompanionSpeech' -race -count=1 -timeout=240s`
+  - PASS：companion 3.079s，server 101.397s。
+- `go test ./internal/archcheck -count=1`
+  - PASS：6.649s。
+- `go test ./internal/config -run 'Agent|AIConfig' -race -count=1`
+  - PASS：1.565s。
+- `go test ./cmd/mornlea ./cmd/mornlea/app ./cmd/mornlea-server -count=1`
+  - PASS：0.899s / 21.231s / 2.407s；未启动游戏窗口。
+- `go vet ./internal/companion ./internal/server ./internal/server/persistence ./internal/config`
+  - PASS，无输出。
+- `go mod tidy -diff`
+  - PASS，无 diff。
+- `openspec validate --all --strict --no-interactive`
+  - PASS：80 passed，0 failed。
+- `git diff --check`、production `CompanionSummary`、新增代码注释任务编号、敏感日志、
+  `tasks.md`/ledger 扫描
+  - PASS，无输出或违规。
+
 ## 验证
 
 - `go test ./internal/companion ./internal/server -run 'Dialogue|Memory|Shutdown|CompanionSpeech' -race -count=1 -timeout=150s`

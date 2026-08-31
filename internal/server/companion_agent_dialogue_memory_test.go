@@ -14,6 +14,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/internal/server/persistence"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -153,6 +154,9 @@ func TestTerminalDialogueReservationSurvivesLaterGeneration(t *testing.T) {
 		host.world.stepMu.Unlock()
 		t.Fatal("later generation revoked accepted reservation")
 	}
+	// 本测试只锁定 generation 独立性；白盒 reservation 在断言后清理，避免
+	// cleanup 关服把未确认 memory 正确识别为不可 Release。
+	slot.dialogueReservation = nil
 	host.world.stepMu.Unlock()
 
 	result := host.world.StepForTest()
@@ -385,6 +389,9 @@ func (r *scriptedMemoryReconciler) ReconcileMemory(
 	lifecycle storage.StoredCompanionLifecycle,
 ) (companionMemoryReconcileResult, error) {
 	r.calls.Add(1)
+	if r.reconcile == nil {
+		return companionMemoryReconcileResult{Lifecycle: lifecycle}, nil
+	}
 	result, err := r.reconcile(lifecycle)
 	return companionMemoryReconcileResult{Lifecycle: result}, err
 }
@@ -430,6 +437,73 @@ func TestMemoryReconcileUnavailableDoesNotStopLaterCompanion(t *testing.T) {
 	if firstReady || !secondReady || second.MemoryRevision != 1 ||
 		second.MemoryOperationID != operation || second.Summary != "远端较新的 mirror" {
 		t.Fatalf("firstReady=%v secondReady=%v second=%+v", firstReady, secondReady, second)
+	}
+}
+
+func TestMemoryReconcileAcquireIncludesInactiveTombstoneWithoutPausingActive(t *testing.T) {
+	activeID := chatTestCompanionID(1)
+	inactiveID := chatTestCompanionID(2)
+	tombstone := companionBootstrapIdentity(0x7a)
+	store := storage.NewMemory(storage.Metadata{FormatVersion: 3, Seed: 42})
+	companions := persistence.NewCompanions(store, storage.StoredCompanions{
+		Revision:         7,
+		AgentNamespaceID: companionBootstrapIdentity(0x70),
+		Records: []companion.Body{
+			companionDialogueWiringBody(1, 10),
+			companionDialogueWiringBody(2, 20),
+		},
+		Lifecycles: []storage.StoredCompanionLifecycle{
+			{ID: activeID, Active: true, MemoryEpoch: 3},
+			{ID: inactiveID, Active: false, MemoryEpoch: 4, TombstoneOperationID: tombstone},
+		},
+	}, persistence.Options{AutosaveTicks: 10, RetryBaseTicks: 2, RetryMaxTicks: 8})
+	t.Cleanup(companions.Close)
+
+	var callsMu sync.Mutex
+	var calls []storage.StoredCompanionLifecycle
+	reconciler := &scriptedMemoryReconciler{}
+	reconciler.fence.Store(1)
+	reconciler.reconcile = func(lifecycle storage.StoredCompanionLifecycle) (storage.StoredCompanionLifecycle, error) {
+		callsMu.Lock()
+		calls = append(calls, lifecycle)
+		callsMu.Unlock()
+		if !lifecycle.Active {
+			return storage.StoredCompanionLifecycle{}, companion.ErrAgentUnavailable
+		}
+		return lifecycle, nil
+	}
+	manager := newCompanionManager(nil, Config{
+		Companions:         []companion.Definition{{ID: activeID, Name: "阿木"}},
+		TaskTimeoutMinutes: 10,
+	}, unavailablePlannerTestSeam{}, reconciler, companions)
+	t.Cleanup(manager.beginShutdown)
+
+	for _, fence := range []uint64{1, 2} {
+		reconciler.fence.Store(fence)
+		manager.dispatchMemoryReconcile()
+		waitMemoryReconcileResult(t, manager)
+		manager.applyMemoryReconcileOutcomes()
+		if !manager.slots[activeID].memoryReady {
+			t.Fatalf("fence %d 的 inactive 故障暂停了 active 伙伴", fence)
+		}
+	}
+
+	callsMu.Lock()
+	defer callsMu.Unlock()
+	if len(calls) != 4 {
+		t.Fatalf("reconcile calls=%+v，想要 acquire/reacquire 均发送 active 与 inactive", calls)
+	}
+	for index, lifecycle := range calls {
+		if index%2 == 0 {
+			if lifecycle.ID != activeID || !lifecycle.Active || lifecycle.MemoryEpoch != 3 {
+				t.Fatalf("active call[%d]=%+v", index, lifecycle)
+			}
+			continue
+		}
+		if lifecycle.ID != inactiveID || lifecycle.Active || lifecycle.MemoryEpoch != 4 ||
+			lifecycle.TombstoneOperationID != tombstone {
+			t.Fatalf("inactive call[%d]=%+v", index, lifecycle)
+		}
 	}
 }
 
@@ -764,12 +838,20 @@ type shutdownAgentRuntime struct {
 	acquired      chan struct{}
 	commitStarted chan struct{}
 	commitRelease chan struct{}
+	commitContext chan shutdownCommitContext
 	commitOnce    sync.Once
 	mu            sync.Mutex
 	releaseErrors []error
 	releaseLeases []string
+	commits       atomic.Int32
 	releases      atomic.Int32
 	closed        atomic.Bool
+}
+
+type shutdownCommitContext struct {
+	err         error
+	deadline    time.Time
+	hasDeadline bool
 }
 
 func (f *shutdownAgentRuntime) Acquire(_ context.Context, request companion.AcquireRequest) (companion.AcquireResponse, error) {
@@ -803,14 +885,25 @@ func (*shutdownAgentRuntime) Dialogue(context.Context, companion.AgentDialogueRe
 }
 
 func (f *shutdownAgentRuntime) CommitMemory(
-	_ context.Context,
+	ctx context.Context,
 	request companion.MemoryCommitRequest,
 ) (companion.MemoryCommitResponse, error) {
 	if f.commitStarted == nil || f.commitRelease == nil {
 		return companion.MemoryCommitResponse{}, companion.ErrAgentUnavailable
 	}
+	f.commits.Add(1)
+	deadline, hasDeadline := ctx.Deadline()
+	if f.commitContext != nil {
+		f.commitContext <- shutdownCommitContext{
+			err: ctx.Err(), deadline: deadline, hasDeadline: hasDeadline,
+		}
+	}
 	f.commitOnce.Do(func() { close(f.commitStarted) })
-	<-f.commitRelease
+	select {
+	case <-f.commitRelease:
+	case <-ctx.Done():
+		return companion.MemoryCommitResponse{}, ctx.Err()
+	}
 	return companion.MemoryCommitResponse{
 		ContractVersion: request.ContractVersion, RequestID: request.RequestID,
 		ClientInstanceID: request.ClientInstanceID, NamespaceID: request.NamespaceID,
@@ -884,6 +977,7 @@ func TestHostShutdownWaitsForCommitDerivedFromQueuedDialogueOutcome(t *testing.T
 	fake := &shutdownAgentRuntime{
 		store: store, acquired: make(chan struct{}),
 		commitStarted: make(chan struct{}), commitRelease: make(chan struct{}),
+		commitContext: make(chan shutdownCommitContext, 1),
 	}
 	var releaseCommit sync.Once
 	unblockCommit := func() { releaseCommit.Do(func() { close(fake.commitRelease) }) }
@@ -934,6 +1028,12 @@ func TestHostShutdownWaitsForCommitDerivedFromQueuedDialogueOutcome(t *testing.T
 	case <-time.After(waitDeadline):
 		t.Fatal("Shutdown did not derive queued terminal commit")
 	}
+	commitContext := <-fake.commitContext
+	if commitContext.err != nil || !commitContext.hasDeadline ||
+		time.Until(commitContext.deadline) > companionAgentDialogueTimeout+time.Second {
+		t.Fatalf("derived commit context err=%v deadline=%v hasDeadline=%v",
+			commitContext.err, commitContext.deadline, commitContext.hasDeadline)
+	}
 	time.Sleep(50 * time.Millisecond)
 	premature := fake.releases.Load() != 0 || fake.closed.Load() || store.hostTestStore.closeCount() != 0
 	unblockCommit()
@@ -950,6 +1050,99 @@ func TestHostShutdownWaitsForCommitDerivedFromQueuedDialogueOutcome(t *testing.T
 	if len(latest.Lifecycles) != 1 || latest.Lifecycles[0].MemoryRevision != 1 ||
 		latest.Lifecycles[0].Summary != "关服前确认的 mirror" || fake.releases.Load() != 1 {
 		t.Fatalf("latest=%+v releases=%d", latest, fake.releases.Load())
+	}
+}
+
+func TestHostShutdownRetriesMemoryFinalizationAfterCallerTimeout(t *testing.T) {
+	id := companionBootstrapID(1)
+	store := newCompanionBootstrapStore()
+	config := hostTestConfig()
+	config.Companions = []companion.Definition{{ID: id, Name: "阿木"}}
+	config.companionPlanner = nil
+	fake := &shutdownAgentRuntime{
+		store: store, acquired: make(chan struct{}),
+		commitStarted: make(chan struct{}), commitRelease: make(chan struct{}),
+		commitContext: make(chan shutdownCommitContext, 4),
+	}
+	var releaseCommit sync.Once
+	unblockCommit := func() { releaseCommit.Do(func() { close(fake.commitRelease) }) }
+	defer unblockCommit()
+	config.companionAgentClientFactory = func(companion.AgentServiceSettings, string) (companionAgentRuntimeClient, error) {
+		return fake, nil
+	}
+	host, err := NewHost(context.Background(), config, flatTestGenerator{}, store)
+	if err != nil {
+		t.Fatalf("NewHost: %v", err)
+	}
+	select {
+	case <-fake.acquired:
+	case <-time.After(waitDeadline):
+		t.Fatal("timed out waiting for namespace acquire")
+	}
+
+	issuer := stopTestIssuer(integrationIdentity(0x74, "发令者"))
+	manager := host.world.companionManager
+	host.world.stepMu.Lock()
+	manager.onlinePlayers = nil
+	slot := manager.slots[id]
+	slot.currentIssuer = issuer
+	slot.dialogueInFlight = true
+	slot.dialogueAttempt = 10
+	manager.dialogueResults <- dialogueOutcome{
+		id: id, generation: slot.queue.Generation(), attempt: 10,
+		node:   companion.DialogueNode{Kind: companion.DialogueNodeTerminal, State: companion.TaskCompleted},
+		issuer: issuer, memoryEpoch: 1,
+		result: companionDialogueResult{
+			Generation: slot.queue.Generation(), MemoryEpoch: 1, Line: "超时后完成。",
+			Proposal: &companion.AgentMemoryProposal{
+				OperationID:  "77777777-7777-4777-8777-777777777777",
+				BaseRevision: 0, Summary: "第二次关服确认的 mirror",
+			},
+		},
+	}
+	host.world.stepMu.Unlock()
+
+	firstCtx, firstCancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	err = host.Shutdown(firstCtx)
+	firstCancel()
+	if !errors.Is(err, context.DeadlineExceeded) || fake.releases.Load() != 0 ||
+		fake.closed.Load() || store.hostTestStore.closeCount() != 0 {
+		t.Fatalf("first Shutdown err=%v releases=%d agentClosed=%v storeCloses=%d",
+			err, fake.releases.Load(), fake.closed.Load(), store.hostTestStore.closeCount())
+	}
+	firstCommitContext := <-fake.commitContext
+	if firstCommitContext.err != nil || !firstCommitContext.hasDeadline {
+		t.Fatalf("first commit context=%+v", firstCommitContext)
+	}
+	workerDone := make(chan struct{})
+	go func() {
+		manager.waitGroup.Wait()
+		close(workerDone)
+	}()
+	select {
+	case <-workerDone:
+	case <-time.After(waitDeadline):
+		t.Fatal("finalization worker leaked after caller timeout")
+	}
+
+	unblockCommit()
+	secondCtx, secondCancel := context.WithTimeout(context.Background(), waitDeadline)
+	err = host.Shutdown(secondCtx)
+	secondCancel()
+	if err != nil {
+		t.Fatalf("retry Shutdown: %v", err)
+	}
+	if fake.commits.Load() < 2 || fake.releases.Load() != 1 || !fake.closed.Load() ||
+		store.hostTestStore.closeCount() != 1 {
+		t.Fatalf("commits=%d releases=%d agentClosed=%v storeCloses=%d",
+			fake.commits.Load(), fake.releases.Load(), fake.closed.Load(),
+			store.hostTestStore.closeCount())
+	}
+	saves := store.companionSaveSnapshot()
+	latest := saves[len(saves)-1]
+	if len(latest.Lifecycles) != 1 || latest.Lifecycles[0].MemoryRevision != 1 ||
+		latest.Lifecycles[0].Summary != "第二次关服确认的 mirror" {
+		t.Fatalf("latest=%+v", latest)
 	}
 }
 

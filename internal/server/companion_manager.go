@@ -240,9 +240,11 @@ type companionManager struct {
 	// 边界（持有 stepMu）读写。
 	dialogueEffects int
 
-	ctx       context.Context
-	cancel    context.CancelFunc
-	waitGroup sync.WaitGroup
+	ctx          context.Context
+	cancel       context.CancelFunc
+	memoryCtx    context.Context
+	cancelMemory context.CancelFunc
+	waitGroup    sync.WaitGroup
 
 	// events 是本 tick 累积的事件事实，takeEventFacts 排空后归 Server 发布。
 	events []taskEventFact
@@ -258,6 +260,7 @@ func newCompanionManager(
 	companions *persistence.Companions,
 ) *companionManager {
 	ctx, cancel := context.WithCancel(context.Background())
+	memoryCtx, cancelMemory := context.WithCancel(context.Background())
 	manager := &companionManager{
 		engine:                   engine,
 		planner:                  planner,
@@ -279,6 +282,8 @@ func newCompanionManager(
 		memoryReconcilePending:   make(map[companion.ID]struct{}, companion.MaxActive),
 		ctx:                      ctx,
 		cancel:                   cancel,
+		memoryCtx:                memoryCtx,
+		cancelMemory:             cancelMemory,
 	}
 	for _, definition := range config.Companions {
 		_, needsReconcile := dialogue.(companionMemoryReconciler)
@@ -1305,13 +1310,12 @@ func (m *companionManager) beginShutdown() {
 	m.cancel()
 }
 
-// close 等待全部 worker 退出。结果 channel 中未被 drain 的结果直接放弃——
-// 冻结后的任务状态已由 Observe 捕获并随最终 AI 保存落盘，重启后由
-// restoreQueues 从存档恢复任务域（含 Planning/Validating→Queued 归一），
-// 被放弃的在途结果无需也无法补救。
-func (m *companionManager) close() {
-	m.cancel()
-	m.waitGroup.Wait()
+// beginMemoryFinalization 把 memory worker 切到独立的关服 context。它不复用
+// 已取消的 run context，并始终受 caller 与固定上界共同约束；重试关服会先
+// 取消上一轮 context，再建立新一轮可用窗口。
+func (m *companionManager) beginMemoryFinalization(ctx context.Context) {
+	m.cancelMemory()
+	m.memoryCtx, m.cancelMemory = context.WithTimeout(ctx, companionMemoryFinalizationTimeout)
 }
 
 // companionManagerTaskStates 是 Observe 调用的空值安全包装。

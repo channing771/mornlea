@@ -14,14 +14,15 @@ import (
 )
 
 const (
-	companionAgentLeaseTTL           = 15 * time.Second
-	companionAgentHeartbeatEvery     = 5 * time.Second
-	companionAgentPlanTimeout        = 30 * time.Second
-	companionAgentPlanTimeoutMax     = 60 * time.Second
-	companionAgentDialogueTimeout    = 30 * time.Second
-	companionAgentDialogueTimeoutMax = 60 * time.Second
-	companionAgentCancelTimeout      = 100 * time.Millisecond
-	companionAgentReleaseTimeout     = 5 * time.Second
+	companionAgentLeaseTTL             = 15 * time.Second
+	companionAgentHeartbeatEvery       = 5 * time.Second
+	companionAgentPlanTimeout          = 30 * time.Second
+	companionAgentPlanTimeoutMax       = 60 * time.Second
+	companionAgentDialogueTimeout      = 30 * time.Second
+	companionAgentDialogueTimeoutMax   = 60 * time.Second
+	companionMemoryFinalizationTimeout = 30 * time.Second
+	companionAgentCancelTimeout        = 100 * time.Millisecond
+	companionAgentReleaseTimeout       = 5 * time.Second
 )
 
 type companionAgentControlClient interface {

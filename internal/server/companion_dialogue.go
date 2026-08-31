@@ -409,11 +409,12 @@ func (m *companionManager) taskDialogueAudience(
 }
 
 func (m *companionManager) memoryCommitWorker(
+	ctx context.Context,
 	id companion.ID,
 	reservation companionDialogueReservation,
 ) {
 	defer m.waitGroup.Done()
-	result, err := m.dialogue.CommitMemory(m.ctx, companionMemoryCommitRequest{
+	result, err := m.dialogue.CommitMemory(ctx, companionMemoryCommitRequest{
 		CompanionID: id, MemoryEpoch: reservation.memoryEpoch,
 		BaseRevision: reservation.baseRevision, OperationID: reservation.operationID,
 		Summary: reservation.summary,
@@ -439,8 +440,9 @@ func (m *companionManager) dispatchMemoryCommit(id companion.ID) {
 	}
 	slot.dialogueReservation.commitInFlight = true
 	reservation := *slot.dialogueReservation
+	ctx := m.memoryCtx
 	m.waitGroup.Add(1)
-	go m.memoryCommitWorker(id, reservation)
+	go m.memoryCommitWorker(ctx, id, reservation)
 }
 
 func (m *companionManager) applyMemoryCommitOutcomes() {
@@ -503,11 +505,14 @@ func (m *companionManager) dispatchMemoryReconcile() {
 		}
 		return
 	}
+	lifecycles := m.companions.MemoryLifecycles()
 	if fence != m.memoryReconcileTarget {
 		m.memoryReconcileTarget = fence
 		clear(m.memoryReconcilePending)
-		for id, slot := range m.slots {
-			m.memoryReconcilePending[id] = struct{}{}
+		for _, lifecycle := range lifecycles {
+			m.memoryReconcilePending[lifecycle.ID] = struct{}{}
+		}
+		for _, slot := range m.slots {
 			slot.memoryReady = false
 		}
 		m.memoryReconcileRetryWait = 0
@@ -517,8 +522,8 @@ func (m *companionManager) dispatchMemoryReconcile() {
 	}
 	if m.memoryReconcileRequested {
 		if len(m.memoryReconcileRequestID) == 0 {
-			for id := range m.slots {
-				m.memoryReconcilePending[id] = struct{}{}
+			for _, lifecycle := range lifecycles {
+				m.memoryReconcilePending[lifecycle.ID] = struct{}{}
 			}
 		} else {
 			for id := range m.memoryReconcileRequestID {
@@ -540,18 +545,19 @@ func (m *companionManager) dispatchMemoryReconcile() {
 		return
 	}
 	m.memoryReconcileInFlight = true
-	lifecycles := m.companions.MemoryLifecycles()
 	pending := lifecycles[:0]
 	for _, lifecycle := range lifecycles {
 		if _, ok := m.memoryReconcilePending[lifecycle.ID]; ok {
 			pending = append(pending, lifecycle)
 		}
 	}
+	ctx := m.memoryCtx
 	m.waitGroup.Add(1)
-	go m.memoryReconcileWorker(reconciler, fence, pending)
+	go m.memoryReconcileWorker(ctx, reconciler, fence, pending)
 }
 
 func (m *companionManager) memoryReconcileWorker(
+	ctx context.Context,
 	reconciler companionMemoryReconciler,
 	fence uint64,
 	lifecycles []storage.StoredCompanionLifecycle,
@@ -559,14 +565,16 @@ func (m *companionManager) memoryReconcileWorker(
 	defer m.waitGroup.Done()
 	results := make([]memoryReconcileCompanionOutcome, 0, len(lifecycles))
 	for _, lifecycle := range lifecycles {
-		result, err := reconciler.ReconcileMemory(m.ctx, lifecycle)
+		result, err := reconciler.ReconcileMemory(ctx, lifecycle)
 		results = append(results, memoryReconcileCompanionOutcome{
 			id: lifecycle.ID, lifecycle: result.Lifecycle, err: err,
 		})
 	}
 	select {
 	case m.memoryReconcileResults <- memoryReconcileOutcome{fence: fence, results: results}:
-	case <-m.ctx.Done():
+	default:
+		// 同一时刻最多一个 reconcile batch 在途，容量一的结果通道必能接收；
+		// default 仅防御不变量破坏时 worker 永久阻塞。
 	}
 }
 
@@ -627,10 +635,28 @@ func (m *companionManager) drainShutdownOutcomes() bool {
 		default:
 		}
 		if !progressed {
+			if m.memoryReconcileRequested && !m.memoryReconcileInFlight {
+				m.memoryReconcileRetryWait = 0
+				m.dispatchMemoryReconcile()
+				if m.memoryReconcileInFlight {
+					return true
+				}
+			}
 			return drained
 		}
 		drained = true
 	}
+}
+
+// hasUnresolvedMemoryReservation 报告是否仍有已经接受但尚未确认的终态
+// memory proposal。关服不能越过这类 reservation 去 Release namespace。
+func (m *companionManager) hasUnresolvedMemoryReservation() bool {
+	for _, slot := range m.slots {
+		if slot.dialogueReservation != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *companionManager) applyMemoryReconcileOutcome(outcome memoryReconcileOutcome) {

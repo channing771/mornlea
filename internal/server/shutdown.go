@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/channing771/mornlea/internal/companion"
 )
 
 func waitForHostWorkers(ctx context.Context, workers *sync.WaitGroup) error {
@@ -100,6 +102,10 @@ func (server *Server) Shutdown(ctx context.Context) error {
 		}
 		server.cancel()
 	}
+	if server.companionManager != nil {
+		server.companionManager.beginMemoryFinalization(ctx)
+		defer server.companionManager.cancelMemory()
+	}
 	server.stepMu.Unlock()
 
 	if err := waitForServerWorkers(ctx, server.runtimeDone); err != nil {
@@ -110,13 +116,21 @@ func (server *Server) Shutdown(ctx context.Context) error {
 	}
 	if server.companionManager != nil {
 		for {
-			if err := waitForHostWorkers(ctx, &server.companionManager.waitGroup); err != nil {
+			// run 与 memory finalization context 都受当前关服 caller 约束；同步
+			// Wait 避免 caller 超时时遗留一个 Wait goroutine，并允许下一次
+			// Shutdown 在 Wait 完成后安全派生新的 memory worker。
+			server.companionManager.waitGroup.Wait()
+			if err := ctx.Err(); err != nil {
 				return server.world.ShutdownContextError(err, nil)
 			}
 			server.stepMu.Lock()
 			drained := server.companionManager.drainShutdownOutcomes()
+			unresolved := server.companionManager.hasUnresolvedMemoryReservation()
 			server.stepMu.Unlock()
 			if !drained {
+				if unresolved {
+					return companion.ErrAgentUnavailable
+				}
 				break
 			}
 		}
