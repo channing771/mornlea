@@ -43,7 +43,7 @@
 | 9 | `task9_planner_cutover` | `6c5c4011` | Agent Planner cutover RED→GREEN；提交 `84c03161`、repair `edfb1574`、`b2c75a6c` | initial FAIL、repair 1 FAIL、repair 2 PASS | initial FAIL、repair 1 PASS、repair 2 PASS | Accepted |
 | 10 | `task10_dialogue_memory` | `012a4b86` | Dialogue/memory/shutdown RED→GREEN；提交 `1f6006f6`、repair `6ef874b1`、`7283b746`、`c2cebeb9`、`6bdf2b7e` | initial FAIL、repair 1–4 后 PASS | initial FAIL、repair 1 FAIL、repair 2–4 后 PASS | Accepted |
 | 11 | `task11_cross_language` | `e1bf9e52` | 真实 MCP/HTTP 进程合同 RED→GREEN；提交 `efa85718`、`a6b4d059`、`3635b6a1`、`356fe396`、`41add71e`、证据 `2f6ab0ba` | PASS | PASS | Accepted |
-| 12 | `task12_ci_docs_gates` | `9423f067` | archcheck/Make/CI/version RED→GREEN；提交 `9dfdbc69`、`49fbc7f9`、证据 `ee642a05`、全量门禁 repair `3394fc19`；最终全绿 | Review pending | Review pending | Pending |
+| 12 | `task12_ci_docs_gates` | `9423f067` | archcheck/Make/CI/version RED→GREEN；提交 `9dfdbc69`、`49fbc7f9`、证据 `ee642a05`；首轮 full race FAIL 后由 `3394fc19` 修复；Repair 1 `3ce58189`、证据 `8dac0e4c` | Round 1 FAIL；Repair 1 scoped FAIL；Repair 2 pending | Round 1 FAIL；Repair 1 scoped FAIL；Repair 2 pending | Repair 2 pending |
 
 ### Task 1 评审修复记录
 
@@ -265,7 +265,7 @@
   brief 集合 117 passed；Go 真进程 race server 8.822s；archcheck 5.645s；affected vet/tidy、
   diff-check 与 OpenSpec strict 80/80 均 PASS。
 
-### Task 12 CI、文档、版本与全量门禁实施记录（Review pending）
+### Task 12 CI、文档、版本与全量门禁实施记录（Repair 2 pending）
 
 - `task12_ci_docs_gates` 从 Task 11 closeout `9423f067` 开始。RED archcheck 证明
   `openspec/config.yaml` 仍为 companions v4，Make 缺少 locked Python check，CI 缺少 Python
@@ -284,17 +284,34 @@
 - clean `3394fc19` 从头重跑 mandatory gates：Python locked/Ruff/mypy/403 tests、gofmt、full vet、
   full Go race（server 247.013s，real 248.75s）、Rust locked release、Make check、真实 integration
   （server 9.332s）、diff-check 与 OpenSpec strict 80/80 全部 PASS；无 provider/外网/游戏窗口。
-- Task 12 实施阶段未修改 `tasks.md`。独立 SPEC/QUALITY 评审尚未记录；本行保持 Review pending，
-  只有双评审通过后才允许由控制会话完成 Task 12 closeout。
+- Round 1 独立 SPEC/QUALITY 均 FAIL：quickstart regexp 实际 no-tests；CI archcheck 依赖 substring
+  和 job 顺序；Go no-bypass 未覆盖生产装配依赖闭包；report 必须准确写 strict string
+  `config_version: v1`，且对 `gates.sh` 已含 `make rust`、不含两条 companion Make target 的事实
+  记录错误；configuration 的 egui/WKWebView 事实与不存在的 `ui.rs` 链接错误；缺少承重
+  mutation/sentinel。Round 1 没有要求把 Python 配置改成 YAML 数字。
+- Repair 1 `3ce58189` 引入 typed YAML CI gate、15 项 CI mutation、五个生产入口的仓内传递依赖
+  闭包 no-bypass gate 及 helper mutations，并修复 quickstart 与文档事实；`8dac0e4c` 记录 evidence。
+  clean `3ce58189` 从头重跑 mandatory gates 全部 PASS：Python 403 tests、full Go race
+  （archcheck 37.396s，real 39.35s）、Rust、两条 Make target、diff-check 与 OpenSpec 80/80。
+- Repair 1 scoped re-review 的 SPEC/QUALITY 仍均 FAIL：把权威 string `config_version: v1` 反向改成
+  strict loader 拒绝的数字 `1`；CI gate 没有锁定 engine/client 两个 `validate_artifact` 调用、函数内
+  size 校验及最终 summary 的 `if: ${{ always() }}`；本 ledger 未记录上述评审；配置示例也没有直接
+  联动真实 strict loader 的 sentinel。
+- Repair 2 已恢复 string `config_version: v1`，以真实 `load_config` 直接消费文档 fenced YAML；
+  `tests/test_config.py` 111 passed。typed CI gate 已承重 engine/client 两次 validator 调用、函数内
+  size/digest 与 summary 精确 `always()`；20 项 mutation+真实 workflow PASS（package 0.766s），
+  完整 archcheck 5.307s、tidy/Ruff/diff/OpenSpec 80/80 均 PASS。最终实现 SHA 的 mandatory gates
+  与重新独立双评审仍 pending。Task 12 实施阶段未修改 `tasks.md`；只有双评审通过后才允许由
+  控制会话完成 closeout。
 
 ## 整分支终审与门禁
 
-- 整分支 SPEC review：待记录。
-- 整分支 QUALITY review：待记录。
-- Python locked/lint/type/test：clean `3394fc19` PASS；locked sync、Ruff format/check、mypy 23 files、pytest 403 passed；`make companion-agent-check` 同样 PASS。
-- Go focused/race/archcheck/vet/gofmt：首轮 full race 真实暴露测试 seam 缺口并由 `3394fc19` 修复；原失败 11 tests PASS；最终 `go test ./... -race`、full vet、archcheck 与 gofmt 全部 PASS。
-- Rust baseline/build：clean `3394fc19` preflight 与 mandatory `make rust` 均 PASS；Rust 1.97.1 locked release，engine ABI v9/client ABI v13 未改。
-- 真实跨语言合同测试：`make companion-agent-integration` PASS；companion 2.745s、server 9.332s，real 10.73s。
-- OpenSpec strict：clean `3394fc19` PASS，80 passed/0 failed，real 1.57s。
-- 规划产物门禁：`git diff --check` PASS；版本/CI/Make/service archcheck PASS。
+- 整分支 SPEC review：Task 12 Round 1 FAIL、Repair 1 scoped FAIL；Repair 2 与最终整分支 review pending。
+- 整分支 QUALITY review：Task 12 Round 1 FAIL、Repair 1 scoped FAIL；Repair 2 与最终整分支 review pending。
+- Python locked/lint/type/test：clean `3ce58189` PASS；locked sync、Ruff format/check、mypy 23 files、pytest 403 passed；Repair 2 配置文档 sentinel focused rerun pending。
+- Go focused/race/archcheck/vet/gofmt：首轮 full race 真实暴露测试 seam 缺口并由 `3394fc19` 修复；clean `3ce58189` 的最终 full race、vet、archcheck 与 gofmt PASS；Repair 2 focused/full rerun pending。
+- Rust baseline/build：clean `3ce58189` preflight 与 mandatory `make rust` 均 PASS；Rust 1.97.1 locked release，engine ABI v9/client ABI v13 未改；Repair 2 final-SHA rerun pending。
+- 真实跨语言合同测试：clean `3ce58189` 的 `make companion-agent-integration` PASS；companion 2.736s、server 9.853s，real 11.00s；Repair 2 final-SHA rerun pending。
+- OpenSpec strict：clean `3ce58189` PASS，80 passed/0 failed，real 1.46s；Repair 2 rerun pending。
+- 规划产物门禁：clean `3ce58189` 的 `git diff --check` 与版本/CI/Make/service archcheck PASS；Repair 2 rerun pending。
 - 回滚/备份人工文档检查：PASS；LAN 文档同时说明 world+SQLite 联合备份、v1..v4→v5 迁移和旧程序不得写 v5 的回滚边界。

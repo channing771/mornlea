@@ -70,7 +70,7 @@
 Python 服务读取另一份 strict v1 YAML，未知字段、重复 key、多 worker、非持久 SQLite 路径或非法 limit 都会拒绝启动。相对 `sqlite_path` 按该 YAML 所在目录解析；`workers` 固定为 1。`model_calls`、`tool_calls`、`timeout_seconds` 默认分别为 3、4、30，硬上限分别为 5、8、60：
 
 ```yaml
-config_version: 1
+config_version: v1
 http:
   bind: 127.0.0.1
   port: 8080

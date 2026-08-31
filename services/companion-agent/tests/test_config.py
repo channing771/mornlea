@@ -44,21 +44,35 @@ provider:
     return path
 
 
+def _write_documented_config(path: Path) -> Path:
+    repository_root = Path(__file__).resolve().parents[3]
+    documentation = (repository_root / "docs/notes/configuration.md").read_text(encoding="utf-8")
+    section_marker = "Python 服务读取另一份 strict v1 YAML"
+    _, marker, section = documentation.partition(section_marker)
+    assert marker == section_marker
+    _, fence, fenced = section.partition("```yaml\n")
+    assert fence == "```yaml\n"
+    example, closing_fence, _ = fenced.partition("```\n")
+    assert closing_fence == "```\n"
+    path.write_text(example, encoding="utf-8")
+    return path
+
+
 def _replace(path: Path, old: str, new: str) -> Path:
     path.write_text(path.read_text(encoding="utf-8").replace(old, new), encoding="utf-8")
     return path
 
 
 def test_load_config_is_strict_frozen_and_resolves_sqlite_path(tmp_path: Path) -> None:
-    config_path = _write_config(tmp_path / "agent.yaml")
+    config_path = _write_documented_config(tmp_path / "agent.yaml")
 
     config = load_config(config_path)
 
     assert config.config_version == "v1"
     assert str(config.http.bind) == "127.0.0.1"
-    assert config.http.port == 8765
+    assert config.http.port == 8080
     assert config.http.workers == 1
-    assert config.storage.sqlite_path == (tmp_path / "state/companion.sqlite3").resolve()
+    assert config.storage.sqlite_path == (tmp_path / "companion-agent.sqlite3").resolve()
     assert not config.storage.sqlite_path.exists()
     assert config.limits.model_calls == 3
     assert config.limits.tool_calls == 4

@@ -19,8 +19,9 @@ main，没有访问 provider/DNS/外网业务服务，也没有启动或聚焦�
 - `ee642a05` `docs(openspec): record task 12 implementation`
 - `3394fc19` `test(server): restore planner seams for task fixtures`
 - `3ce58189` `fix(ci): harden companion agent release gates`
+- `8dac0e4c` `docs(openspec): record task 12 repair evidence`
 
-本报告的最终 evidence commit 不自引用其 SHA。Task 12 当前仍为 Repair 1 re-review pending；未修改
+本报告的最终 evidence commit 不自引用其 SHA。Task 12 当前仍为 Repair 2 pending；未修改
 `openspec/changes/extract-companion-agent-service/tasks.md`，只有独立 SPEC/QUALITY 双评审
 通过后才允许 closeout。
 
@@ -55,7 +56,7 @@ CI 沿用现有 macOS `integration` job 和同 SHA native artifact 校验；只�
 - Python Agent 是 LangChain/LangGraph/FastAPI/SQLite 独立进程，Go 仍是世界、task 与 lifecycle 权威；
 - Agent HTTP 与 MCP 只绑定 loopback，不允许远程暴露、反向代理或端口转发；
 - 服务启动顺序、ready/auth、PlannerUnavailable/Dialogue skip、并发/timeout/cancel 与可重试关服；
-- 严格 `config_version: 1` Python YAML、Go `ai.agentService`、env secret 与无自动拉起语义；
+- 严格 string `config_version: v1` Python YAML、Go `ai.agentService`、env secret 与无自动拉起语义；
 - companions v1..v4 只读迁移到 encoder-only v5、SQLite compact memory mirror、联合备份与回滚限制；
 - `gates.sh` 已包含 `make rust`，但不包含 Python check 或真实 integration，触碰伙伴 Agent 时仍须显式运行后两者。
 
@@ -65,9 +66,10 @@ CI 沿用现有 macOS `integration` job 和同 SHA native artifact 校验；只�
 
 Round 1 SPEC 与 QUALITY 均为 FAIL，未覆盖成 PASS。评审指出六类问题：test quickstart 的
 escaped pipe 实际 no-tests；CI archcheck 依赖 substring 和下一个 job 的文本位置；Go
-no-bypass 只扫两个目录而不扫生产装配的传递依赖闭包；`gates.sh` 事实记录错误；configuration
-仍把当前 WKWebView 说成 egui、链接不存在的 `ui.rs` 且 YAML 写成 `config_version: v1`；上述
-门禁缺少 mutation/sentinel 承重证明。
+no-bypass 只扫两个目录而不扫生产装配的传递依赖闭包；report 必须准确写 strict string
+`config_version: v1` 且 `gates.sh` 事实记录错误；configuration 仍把当前 WKWebView 说成 egui
+并链接不存在的 `ui.rs`；上述门禁缺少 mutation/sentinel 承重证明。Round 1 没有要求把
+Python 配置从 string `v1` 改为 YAML 数字 `1`。
 
 RED 先真实复现：旧命令
 `go test ./internal/server -run 'CrossLanguage\|CompanionAgent.*Integration' -count=1 -v`
@@ -87,11 +89,33 @@ RED 先真实复现：旧命令
   顶层测试源码证明它精确选中 3 条，旧 escaped-pipe mutation 选中 0 条；实际 `-list` 和 `-v`
   命令也只运行并通过三条目标测试（package 6.332s，real 6.90s）；
 - configuration 改为真实的 Rust-hosted WKWebView、Go typed state/transaction 与 React rendering
-  文件链接，并把 YAML 改为 `config_version: 1`；report/progress 更正 `gates.sh` 事实。
+  文件链接；但 Repair 1 错误地把权威 string `config_version: v1` 改成数字 `1`。report/progress
+  的 `gates.sh` 事实已正确更正。
 
 focused mutation/CI/closure/quickstart 集合 PASS（package 0.901s，real 1.62s），完整 archcheck
 PASS（package 4.979s，real 5.20s）。Repair 1 仍是 re-review pending；最终实现 SHA `3ce58189`
 的完整 mandatory gate 结果见下文。
+
+### Repair 1 scoped re-review 与 Repair 2 RED
+
+Repair 1 scoped SPEC 与 QUALITY 仍均为 FAIL，未覆盖成 PASS。明确剩余项是：数字
+`config_version: 1` 被生产 `Literal["v1"]` 与 `tests/test_config.py` 拒绝；CI gate 未证明
+`validate_artifact` 实际分别调用 engine/client dylib、未锁定函数内 size 校验，也未锁定最终
+summary 的 `if: ${{ always() }}`；正式 change ledger 仍停在旧 Review pending；配置文档
+没有直接联动 strict loader 的 sentinel。
+
+Repair 2 RED 已复现：把文档 YAML 示例直接交给真实 `load_config` 时以
+`invalid configuration fields: config_version` 失败；新增 CI mutations 删除 size 校验、engine/
+client validator 调用或删除/改写 summary `always()` 时，旧 validator 全部返回零违规而失败。
+
+Repair 2 已把 configuration 示例恢复为 string `v1`，并让既有 strict config 测试直接抽取该
+fenced YAML 后调用真实 `load_config`；`tests/test_config.py` 111 passed。typed CI gate 现在同时锁定
+`validate_artifact` 函数内 size/digest 校验、engine/client 两次实际调用，以及 summary 精确
+`if: ${{ always() }}`；20 项 mutation 与真实 workflow gate 全部 PASS（package 0.766s，real
+1.56s），完整 archcheck PASS（package 5.307s，real 5.61s）。正式 change ledger 已补齐两轮
+FAIL 与历史 full-gate 证据。`go mod tidy -diff`、Ruff focused、diff-check 与 OpenSpec strict
+80/80 均 PASS。Repair 2 final implementation SHA 的 mandatory full gates 与重新独立双评审仍
+pending，以下 Repair 1 full gates 只作历史证据。
 
 ## 全量门禁
 
@@ -155,5 +179,5 @@ Repair 1 提交后先确认 clean `3ce58189`，按 clean-checkout Rust 纪律执
 - Python unit/integration 都使用 deterministic fake model 或 checked-in fixtures；没有 provider 调用。
 - CI 仍消费既有 native artifacts，没有新建平行 native build 或改变 required-job 语义。
 - 不升 engine/client ABI，不改变游戏 wire、HTTP application contract v1 或 MCP tool contract v1。
-- Round 1 独立 SPEC/QUALITY 均 FAIL；Repair 1 完整门禁已 PASS，但重新独立双评审尚未执行，
-  因此 ledger 必须保持 re-review pending。
+- Round 1 与 Repair 1 scoped SPEC/QUALITY 均 FAIL；Repair 2 尚待实现、完整门禁与重新独立双评审，
+  因此 ledger 必须保持 Repair 2 pending。

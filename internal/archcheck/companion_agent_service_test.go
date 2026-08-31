@@ -122,6 +122,7 @@ type companionWorkflow struct {
 }
 
 type companionWorkflowJob struct {
+	If     companionYAMLString     `yaml:"if"`
 	Needs  companionWorkflowNeeds  `yaml:"needs"`
 	RunsOn companionYAMLString     `yaml:"runs-on"`
 	Steps  []companionWorkflowStep `yaml:"steps"`
@@ -253,9 +254,44 @@ func companionAgentWorkflowViolations(source []byte) []string {
 		statements := workflowShellStatements(step.Run)
 		if slices.Contains(statements, `test "$(cat engine/target/release/native-source-sha.txt)" = "$GITHUB_SHA"`) {
 			verifyIndexes = append(verifyIndexes, index)
-			if !slices.Contains(statements, `test "$(wc -l < engine/target/release/native-artifact-manifest.txt | tr -d ' ')" = 3`) ||
-				!slices.Contains(statements, `test "$digest" = "$(shasum -a 256 "$path" | awk '{print $1}')"`) {
-				violations = append(violations, "native artifact manifest 必须校验条目数与 SHA-256 digest")
+			for _, required := range []string{
+				`test "$(wc -l < engine/target/release/native-artifact-manifest.txt | tr -d ' ')" = 3`,
+				`IFS=' ' read -r kind sha extra`,
+				`test "$kind" = sha`,
+				`test "$sha" = "$GITHUB_SHA"`,
+				`test -z "$extra"`,
+				`} < engine/target/release/native-artifact-manifest.txt`,
+			} {
+				if !slices.Contains(statements, required) {
+					violations = append(violations, "native artifact manifest 验证缺少 "+required)
+				}
+			}
+			functionBody, functionEnd, err := workflowShellFunctionBody(step.Run, "validate_artifact")
+			if err != nil {
+				violations = append(violations, "native artifact manifest 验证函数非法: "+err.Error())
+			} else {
+				for _, required := range []string{
+					`expected_path=$1`,
+					`IFS=' ' read -r path size digest extra`,
+					`test "$path" = "$expected_path"`,
+					`test -z "$extra"`,
+					`case "$size" in ''|*[!0-9]*) exit 1 ;; esac`,
+					`test "$size" = "$(stat -f '%z' "$path")"`,
+					`test "$digest" = "$(shasum -a 256 "$path" | awk '{print $1}')"`,
+				} {
+					if !slices.Contains(functionBody, required) {
+						violations = append(violations, "validate_artifact 函数缺少 "+required)
+					}
+				}
+				for _, artifact := range []string{
+					"engine/target/release/libmornlea_engine.dylib",
+					"engine/target/release/libmornlea_client.dylib",
+				} {
+					call := "validate_artifact " + artifact
+					if strings.Count(strings.Join(statements, "\n"), call) != 1 || slices.Index(statements, call) <= functionEnd {
+						violations = append(violations, "native artifact manifest 必须实际调用 "+call)
+					}
+				}
 			}
 		}
 	}
@@ -276,6 +312,9 @@ func companionAgentWorkflowViolations(source []byte) []string {
 	if !ok {
 		violations = append(violations, "CI 缺少最终 test job")
 	} else {
+		if summary.If.Value != "${{ always() }}" {
+			violations = append(violations, "最终 test job if 必须精确为 ${{ always() }}")
+		}
 		if !slices.Contains([]string(summary.Needs), "integration") {
 			violations = append(violations, "最终 test job needs integration")
 		}
@@ -327,6 +366,21 @@ func workflowShellStatements(script string) []string {
 		}
 	}
 	return statements
+}
+
+func workflowShellFunctionBody(script, name string) ([]string, int, error) {
+	statements := workflowShellStatements(script)
+	declaration := name + "() {"
+	if strings.Count(strings.Join(statements, "\n"), declaration) != 1 {
+		return nil, -1, fmt.Errorf("%s 声明数不为 1", declaration)
+	}
+	start := slices.Index(statements, declaration)
+	for index := start + 1; index < len(statements); index++ {
+		if statements[index] == "}" {
+			return statements[start+1 : index], index, nil
+		}
+	}
+	return nil, -1, fmt.Errorf("%s 缺少闭合大括号", declaration)
 }
 
 func workflowStringWith(step companionWorkflowStep, name string) (string, error) {

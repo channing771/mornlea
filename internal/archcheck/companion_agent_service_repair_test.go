@@ -15,6 +15,7 @@ import (
 const companionAgentWorkflowFixture = `name: fixture
 jobs:
   test:
+    if: ${{ always() }}
     needs: [native-macos, integration]
     runs-on: ubuntu-latest
     steps:
@@ -49,7 +50,23 @@ jobs:
         run: |
           test "$(cat engine/target/release/native-source-sha.txt)" = "$GITHUB_SHA"
           test "$(wc -l < engine/target/release/native-artifact-manifest.txt | tr -d ' ')" = 3
-          test "$digest" = "$(shasum -a 256 "$path" | awk '{print $1}')"
+          {
+            IFS=' ' read -r kind sha extra
+            test "$kind" = sha
+            test "$sha" = "$GITHUB_SHA"
+            test -z "$extra"
+            validate_artifact() {
+              expected_path=$1
+              IFS=' ' read -r path size digest extra
+              test "$path" = "$expected_path"
+              test -z "$extra"
+              case "$size" in ''|*[!0-9]*) exit 1 ;; esac
+              test "$size" = "$(stat -f '%z' "$path")"
+              test "$digest" = "$(shasum -a 256 "$path" | awk '{print $1}')"
+            }
+            validate_artifact engine/target/release/libmornlea_engine.dylib
+            validate_artifact engine/target/release/libmornlea_client.dylib
+          } < engine/target/release/native-artifact-manifest.txt
       - name: check
         run: make companion-agent-check
       - name: integration
@@ -77,9 +94,14 @@ func TestCompanionAgentCIGateMutations(t *testing.T) {
 		{"lock cache dependency", "            services/companion-agent/uv.lock\n", "", "uv.lock"},
 		{"same sha artifact", "name: native-macos-${{ github.sha }}", "name: native-macos-latest", "same-SHA"},
 		{"source sha verification", "          test \"$(cat engine/target/release/native-source-sha.txt)\" = \"$GITHUB_SHA\"\n", "", "source SHA"},
-		{"artifact manifest verification", "          test \"$digest\" = \"$(shasum -a 256 \"$path\" | awk '{print $1}')\"\n", "", "manifest"},
+		{"artifact size verification", "              test \"$size\" = \"$(stat -f '%z' \"$path\")\"\n", "", "size"},
+		{"artifact digest verification", "              test \"$digest\" = \"$(shasum -a 256 \"$path\" | awk '{print $1}')\"\n", "", "digest"},
+		{"engine artifact validation call", "            validate_artifact engine/target/release/libmornlea_engine.dylib\n", "", "libmornlea_engine.dylib"},
+		{"client artifact validation call", "            validate_artifact engine/target/release/libmornlea_client.dylib\n", "", "libmornlea_client.dylib"},
 		{"python check", "        run: make companion-agent-check", "        run: make companion-agent-check-disabled", "companion-agent-check"},
 		{"process integration", "        run: make companion-agent-integration", "        run: make companion-agent-integration-disabled", "companion-agent-integration"},
+		{"summary always condition missing", "    if: ${{ always() }}\n", "", "always"},
+		{"summary always condition changed", "    if: ${{ always() }}", "    if: ${{ success() }}", "always"},
 		{"summary dependency", "needs: [native-macos, integration]", "needs: [native-macos]", "test job needs integration"},
 		{"summary assertion", "test \"${{ needs.integration.result }}\" = success", "test \"${{ needs.quality.result }}\" = success", "integration result"},
 	}
@@ -94,7 +116,23 @@ func TestCompanionAgentCIGateMutations(t *testing.T) {
         run: |
           test "$(cat engine/target/release/native-source-sha.txt)" = "$GITHUB_SHA"
           test "$(wc -l < engine/target/release/native-artifact-manifest.txt | tr -d ' ')" = 3
-          test "$digest" = "$(shasum -a 256 "$path" | awk '{print $1}')"
+          {
+            IFS=' ' read -r kind sha extra
+            test "$kind" = sha
+            test "$sha" = "$GITHUB_SHA"
+            test -z "$extra"
+            validate_artifact() {
+              expected_path=$1
+              IFS=' ' read -r path size digest extra
+              test "$path" = "$expected_path"
+              test -z "$extra"
+              case "$size" in ''|*[!0-9]*) exit 1 ;; esac
+              test "$size" = "$(stat -f '%z' "$path")"
+              test "$digest" = "$(shasum -a 256 "$path" | awk '{print $1}')"
+            }
+            validate_artifact engine/target/release/libmornlea_engine.dylib
+            validate_artifact engine/target/release/libmornlea_client.dylib
+          } < engine/target/release/native-artifact-manifest.txt
 `
 	check := `      - name: check
         run: make companion-agent-check
