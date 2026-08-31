@@ -190,7 +190,7 @@
 
 `materials-showcase` MUST 保持既有固定正午、固定相机和确定性夹具，并经与交互客户端相同的完整呈现链路收敛后无窗口抓取，不得创建或聚焦前台游戏窗口。夹具 MUST 同时覆盖 14 种新材料、八格连续草地、相邻玻璃、相邻树叶、原木顶面年轮与侧面树皮，以及干耕地与湿耕地各至少一个可见列（含下沉顶面的完整几何）。既有双阈值 MUST 保持不变。
 
-抓帧场景清单 MUST 按以下完整顺序运行（25 景）：`terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`hud-item-name-popup`、`avatar-nametag`、`inventory-crafting`、`workbench-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`torch-night`、`bed-night`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`sword-combat`、`hostile-mob`、`water-surface-slope`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`。清单 MUST 保留 `target-block-feedback`、`oak-grove` 与 `ai-companion` 的既有名称及相对顺序，`ai-companion` MUST 继续紧随 `oak-grove`，并 MUST 保持 `sword-combat`、`hostile-mob`、`water-surface-slope` 的相邻顺序，`settings-menu` MUST 紧随 `main-menu`，`far-horizon` MUST 为倒数第二，`water-underwater` MUST 为唯一末场景。所有场景 MUST 使用与交互客户端相同的完整呈现链路收敛后无窗口抓取，且不得创建或聚焦前台游戏窗口。
+抓帧场景清单 MUST 按以下完整顺序运行（27 景）：`terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`hud-item-name-popup`、`avatar-nametag`、`inventory-crafting`、`workbench-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`torch-night`、`bed-night`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`sword-combat`、`hostile-mob`、`water-surface-slope`、`mining-crack-early`、`mining-crack-heavy`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`。清单 MUST 保留 `target-block-feedback`、`oak-grove` 与 `ai-companion` 的既有名称及相对顺序，`ai-companion` MUST 继续紧随 `oak-grove`，并 MUST 保持 `sword-combat`、`hostile-mob`、`water-surface-slope` 的相邻顺序，`mining-crack-early` 与 `mining-crack-heavy` MUST 依次紧随 `water-surface-slope` 且先于 `main-menu`，`settings-menu` MUST 紧随 `main-menu`，`far-horizon` MUST 为倒数第二，`water-underwater` MUST 为唯一末场景。所有场景 MUST 使用与交互客户端相同的完整呈现链路收敛后无窗口抓取，且不得创建或聚焦前台游戏窗口。
 
 #### Scenario: 地形与 HUD 风格变化产生可审查基线
 
@@ -207,7 +207,7 @@
 
 - **GIVEN** 完整无窗口 capture 场景清单
 - **WHEN** 检查全部场景名称与顺序
-- **THEN** 清单 MUST 依次为 `terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`water-surface-slope`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`
+- **THEN** 清单 MUST 依次为 `terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`hud-item-name-popup`、`avatar-nametag`、`inventory-crafting`、`workbench-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`torch-night`、`bed-night`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`sword-combat`、`hostile-mob`、`water-surface-slope`、`mining-crack-early`、`mining-crack-heavy`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`
 - **AND** `far-horizon` MUST 是倒数第二个场景，`water-underwater` MUST 是唯一末场景
 
 #### Scenario: 生存反馈场景固定且不污染后续场景
@@ -249,8 +249,8 @@
 
 - **GIVEN** 当前分支的 Pixel Perfection HUD 与 main 的 authoritative hunger 已语义合并
 - **WHEN** 显式更新视觉基线
-- **THEN** 系统 MUST 按既有完整顺序重新生成全部 25 张正式 golden
-- **AND** 调用方 MUST 逐张人工复核全部 25 张图像后才能接受更新，且既有双阈值 MUST 保持不变
+- **THEN** 系统 MUST 按既有完整顺序重新生成全部 27 张正式 golden
+- **AND** 调用方 MUST 逐张人工复核全部 27 张图像后才能接受更新，且既有双阈值 MUST 保持不变
 
 #### Scenario: 伙伴场景与当前末尾顺序并存
 
@@ -297,18 +297,19 @@
 
 ### Requirement: 视觉基线覆盖三类容器像素界面
 
-系统 SHALL 具有恰好 25 个正式无窗口场景，`workbench-crafting` MUST 紧随 `inventory-crafting`，`chest-container` 与 `furnace-container` MUST 依次紧随 `workbench-crafting`，`torch-night` MUST 紧随 `block-light-room` 且先于 `bed-night`，`sword-combat` MUST 紧随 `ai-companion` 且先于 `hostile-mob`。完整顺序 MUST 与当前 `captureScenes` 表一致，`far-horizon` MUST 为倒数第二且 `water-underwater` MUST 为唯一末场景。既有显式更新、无窗口完整渲染链路和双阈值 MUST 保持不变；两张 far-horizon diagnostic controls MUST 继续不计入正式场景或 golden。golden 基线 SHALL 为 25 张，本变更只新增 `sword-combat.png`；本变更 MUST NOT 借机放宽任何阈值。
+系统 SHALL 具有恰好 27 个正式无窗口场景，`workbench-crafting` MUST 紧随 `inventory-crafting`，`chest-container` 与 `furnace-container` MUST 依次紧随 `workbench-crafting`，`torch-night` MUST 紧随 `block-light-room` 且先于 `bed-night`，`sword-combat` MUST 紧随 `ai-companion` 且先于 `hostile-mob`。完整顺序 MUST 与当前 `captureScenes` 表一致，`far-horizon` MUST 为倒数第二且 `water-underwater` MUST 为唯一末场景。既有显式更新、无窗口完整渲染链路和双阈值 MUST 保持不变；两张 far-horizon diagnostic controls MUST 继续不计入正式场景或 golden。golden 基线 SHALL 为 27 张；本变更 MUST NOT 借机放宽任何阈值。
 
 #### Scenario: 完整场景顺序固定为 19 项
 
-> 标题沿用历史名（openspec 1.7 的 MODIFIED 漂移守卫不支持 Scenario 改名）；当前正式清单为 25 项，语义以下述断言为准。
+> 标题沿用历史名（openspec 1.7 的 MODIFIED 漂移守卫不支持 Scenario 改名）；当前正式清单为 27 项，语义以下述断言为准。
 
 - **GIVEN** 完整正式 capture 场景清单
 - **WHEN** 检查场景数量、名称与顺序
-- **THEN** 清单 MUST 恰好包含上述 25 项
+- **THEN** 清单 MUST 恰好包含上述 27 项
 - **AND** `workbench-crafting` MUST 紧随 `inventory-crafting` 且在 `chest-container` 之前
 - **AND** `torch-night` MUST 紧随 `block-light-room` 且在 `bed-night` 之前
 - **AND** `sword-combat` MUST 紧随 `ai-companion` 且在 `hostile-mob` 之前
+- **AND** `mining-crack-early` 与 `mining-crack-heavy` MUST 依次紧随 `water-surface-slope` 且在 `main-menu` 之前
 - **AND** `far-horizon` MUST 保持倒数第二，`water-underwater` MUST 保持唯一末项
 
 #### Scenario: 背包与合成场景覆盖普通容器皮肤
@@ -343,8 +344,8 @@
 
 - **GIVEN** 容器 atlas、火把纹理层与全部 overlay 的最终实现已经通过聚焦测试
 - **WHEN** 显式更新视觉基线
-- **THEN** 系统 MUST 重新生成全部 25 张正式 golden，并只提交实际场景文件
-- **AND** 调用方 MUST 逐张人工复核 25 张图像后才能接受，且 MUST NOT 通过放宽双阈值接受差异
+- **THEN** 系统 MUST 重新生成全部 27 张正式 golden，并只提交实际场景文件
+- **AND** 调用方 MUST 逐张人工复核 27 张图像后才能接受，且 MUST NOT 通过放宽双阈值接受差异
 - **AND** 抓帧 MUST NOT 创建或聚焦前台游戏窗口，MUST NOT 导入、临摹或复制 Mojang 像素
 
 #### Scenario: torch-night 纳入 golden 比对
@@ -352,14 +353,14 @@
 - **GIVEN** 非更新模式运行 capture
 - **WHEN** 执行到 `torch-night`
 - **THEN** 该场景 MUST 与对应 golden 按既有双阈值比对，差异图规则与其它场景一致
-- **AND** golden 目录 MUST 存在 `torch-night.png`，正式 golden 总数 MUST 为 25 张
+- **AND** golden 目录 MUST 存在 `torch-night.png`，正式 golden 总数 MUST 为 27 张
 
 #### Scenario: 未受影响场景 golden 逐字节不变
 
-- **GIVEN** 本变更的显式基线更新只新增 `sword-combat.png`（集成期既有 golden 以 main 的 F-05 再生版本为基线）
+- **GIVEN** 一次显式基线更新只新增当次变更引入的场景基线
 - **WHEN** 运行 capture 并与本变更合入前的 golden 比对
-- **THEN** 除新增 `sword-combat.png` 外，本变更 MUST NOT 改动任何既有 golden 的内容
-- **AND** 集成后全部 25 张 golden 在 compare 模式下 MUST 全部通过既有双阈值
+- **THEN** 除新增的场景基线外，MUST NOT 改动任何既有 golden 的内容
+- **AND** 集成后全部 27 张 golden 在 compare 模式下 MUST 全部通过既有双阈值
 
 ### Requirement: 视觉基线覆盖调试面板
 
@@ -436,6 +437,7 @@
 - **THEN** 两张 PNG MUST 分别与对应 golden 逐像素比对
 - **AND** MUST 继续使用既有阈值与差异图产出规则
 - **AND** 比对对象 MUST 为纯 wgpu 全景底图，无头路径 MUST NOT 初始化 WebView、产生任何菜单 chrome 像素或网络请求
+
 ### Requirement: 未受影响场景 golden 逐字节不变
 
 本变更 MAY 只更新因「设置」启用而改变的 `main-menu.png` 并新增 `settings-menu.png`；所有不携带设置 UI 的既有正式场景 golden SHALL 保持逐字节不变。
@@ -567,3 +569,4 @@
 - **WHEN** 场景完成预热、网格收敛与上传并抓帧
 - **THEN** 图像 MUST 同时显示居中的物品名弹条（阴影加前景双层）与屏幕中心准星，并 MUST 与既有双阈值保持一致
 - **AND** 场景结束后临时选中、tick 与世界时间夹具 MUST 一并恢复，使后续场景不继承任何夹具值
+
