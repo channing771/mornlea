@@ -16,6 +16,12 @@ import (
 // walkFrameTLVs 解析 layout 2 帧的 TLV 段序列，返回按出现顺序的 (tag, len)。
 func walkFrameTLVs(t *testing.T, out []byte) [][2]uint32 {
 	t.Helper()
+	// 前置守卫：地形可见列表非空时，header 之后紧跟的是逐 section 12 字节的
+	// 可见列表而不是 TLV 段，从 header 尾开始解析会把地形数据误读成段序列。
+	// 现有用例全部使用零可见列表的纯地形帧；带可见列表的帧须先裁掉列表。
+	if visible := binary.LittleEndian.Uint32(out[184:]); visible != 0 {
+		t.Fatalf("walkFrameTLVs 只支持无地形可见列表的帧：Visible=%d", visible)
+	}
 	var segments [][2]uint32
 	cursor := renderFrameHeaderBytes
 	for cursor < len(out) {
