@@ -26,9 +26,24 @@ func TestCrackLayerNumbersAreFrozen(t *testing.T) {
 	if LayerCrack0 != LayerBedHeadEast+1 {
 		t.Fatalf("LayerCrack0=%d 不紧贴床区间上界 %d，插层检测失效", LayerCrack0, LayerBedHeadEast+1)
 	}
-	for stage := 0; stage < crackStageCount; stage++ {
-		if got := int(LayerCrack0) + stage; got != 68+stage {
-			t.Fatalf("裂纹层 %d 的层号=%d，想要连续冻结值 %d", stage, got, 68+stage)
+	// 每个命名常量都逐条钉在字面量上：只断言首尾两个端点时，中间常量被
+	// 误挪（插入/删除一个层）不会让端点断言变红。
+	for _, tt := range []struct {
+		name  string
+		layer uint16
+		want  int
+	}{
+		{"LayerCrack1", LayerCrack1, 69},
+		{"LayerCrack2", LayerCrack2, 70},
+		{"LayerCrack3", LayerCrack3, 71},
+		{"LayerCrack4", LayerCrack4, 72},
+		{"LayerCrack5", LayerCrack5, 73},
+		{"LayerCrack6", LayerCrack6, 74},
+		{"LayerCrack7", LayerCrack7, 75},
+		{"LayerCrack8", LayerCrack8, 76},
+	} {
+		if got := int(tt.layer); got != tt.want {
+			t.Fatalf("%s=%d，想要冻结值 %d", tt.name, got, tt.want)
 		}
 	}
 }
