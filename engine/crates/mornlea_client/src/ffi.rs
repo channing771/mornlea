@@ -1,10 +1,12 @@
 //! mornlea_client 的 C ABI 出口。
 //!
 //! 契约:
-//! - 所有入口第一个参数是调用方期望的 ABI 版本,不匹配立即返回
+//! - 无参数 `mornlea_client_abi_version()` 只报告当前动态库 identity。
+//! - 其余 29 个接受 `abi_version` 的入口首先拒绝非当前版本并返回
 //!   `MORNLEA_CLIENT_STATUS_ABI_VERSION`;当前版本见 [`CLIENT_ABI_VERSION`]
 //!   (v6 起远环 tile 出口加入,v7 起雾 setter 出口加入,v9 起结构化 UI 事件,
-//!   v11 起离屏 benchmark batch,v12 起菜单桥出口,v13 起窗口合成捕获出口)。
+//!   v11 起离屏 benchmark batch,v12 起菜单桥出口,v13 起窗口合成捕获,
+//!   v14 起 render world update 出口)。
 //! - 窗口句柄存放在 thread-local 表中:句柄只在创建线程有效,跨线程调用
 //!   查不到句柄而返回 `MORNLEA_CLIENT_STATUS_WINDOW`——这同时兜住了 winit
 //!   macOS 的主线程约束(Go 侧已 `LockOSThread`)。
@@ -19,6 +21,7 @@ use crate::window::ClientWindow;
 
 /// 当前 client ABI 版本。
 ///
+/// v14:在 v13 窗口合成捕获表面上新增 render world update 入口。
 /// v13:新增窗口合成捕获出口 `mornlea_client_window_capture`(窗口句柄域,
 /// 两段式 BGRA8 输出,新增溢出与「捕获不可用」两个状态码)。捕获原语
 /// 集中在 [`crate::capture`] 模块,弃用的 `CGWindowListCreateImage` 链路
@@ -42,7 +45,7 @@ use crate::window::ClientWindow;
 /// 逐版本一致。
 /// v11:新增离屏 benchmark batch prepare/submit 入口。
 /// v10:avatar 通道容量扩至 75 具身体(450 实例)并新增敌怪身份域。
-pub const CLIENT_ABI_VERSION: u32 = 13;
+pub const CLIENT_ABI_VERSION: u32 = 14;
 
 /// 调用成功。
 pub const MORNLEA_CLIENT_STATUS_OK: u32 = 0;
@@ -292,7 +295,7 @@ pub unsafe extern "C" fn mornlea_client_window_ns_window(
     })
 }
 
-/// 下行菜单状态推送(client ABI v12):把 Go 组装的 UI 状态 JSON 转发给
+/// 下行菜单状态推送(client ABI v12 引入、v14 保留):把 Go 组装的 UI 状态 JSON 转发给
 /// 挂在本窗口上的 WebView(`window.mornlea.onState` 求值)。首次调用惰性
 /// 挂载 WebView;从未调用的进程(基准/capture)不创建任何 WebView,零参与。
 ///
@@ -407,12 +410,10 @@ mod tests {
     // 校验拒绝路径:ABI 版本、参数校验与无效句柄。
 
     #[test]
-    fn abi_version_is_thirteen() {
-        // v13 新增窗口合成捕获出口 `mornlea_client_window_capture`(两段式
-        // BGRA8,溢出与不可用独立状态);v12 退役菜单字体上传出口与帧
-        // tag 9 UI 段,新增 `ui_push_state` 状态下行出口,v11 新增离屏
-        // benchmark batch prepare/submit 入口。
-        assert_eq!(mornlea_client_abi_version(), 13);
+    fn abi_version_is_fourteen() {
+        // v14 在 selected-main v13 窗口合成捕获表面上叠加 render world
+        // update；identity 必须与完整 29 个 versioned exports 同步切换。
+        assert_eq!(mornlea_client_abi_version(), 14);
     }
 
     #[test]
@@ -654,6 +655,8 @@ pub const MORNLEA_CLIENT_STATUS_SKIPPED: u32 = 7;
 
 /// render_frame 输入的固定头部字节数;其后是 visible_count×12 的 section 列表。
 const FRAME_HEADER_BYTES: usize = 192;
+/// MRW1 单批输入的最大字节数。
+const RENDER_WORLD_MAX_BATCH_BYTES: usize = 4 * 1024 * 1024;
 
 /// 全局渲染器表:与窗口不同,wgpu 对象 Send+Sync,渲染器不受 winit 的
 /// 主线程约束;Go 调用方 goroutine 会在 OS 线程间迁移,thread-local 会把
@@ -832,6 +835,44 @@ pub extern "C" fn mornlea_client_render_drop_section(
     catch(|| {
         with_renderer(handle, |renderer| {
             if renderer.drop_section((section_x, section_y, section_z)) {
+                MORNLEA_CLIENT_STATUS_OK
+            } else {
+                MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+            }
+        })
+    })
+}
+
+/// 更新尚未接管绘制的 MRW1 派生缓存。
+///
+/// 校验顺序固定为 ABI、非零且不超过 4 MiB 的长度、非空 pointer、无溢出
+/// 地址范围、已有 renderer handle，最后才解析 MRW1。通过表示层检查后，
+/// 调用方必须保证 `updates_len` 字节可读；Rust 只在同步调用期间借用该内存，
+/// 不保存 pointer。失败不改变缓存，panic 映射为稳定状态码。
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn mornlea_client_render_apply_world_updates(
+    abi_version: u32,
+    handle: u64,
+    updates: *const u8,
+    updates_len: usize,
+) -> u32 {
+    if abi_version != CLIENT_ABI_VERSION {
+        return MORNLEA_CLIENT_STATUS_ABI_VERSION;
+    }
+    if updates_len == 0 || updates_len > RENDER_WORLD_MAX_BATCH_BYTES {
+        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+    }
+    if updates.is_null() {
+        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+    }
+    if updates.addr().checked_add(updates_len).is_none() {
+        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+    }
+    catch(|| {
+        with_renderer(handle, |renderer| {
+            // SAFETY:表示层范围已校验，调用方保证这段输入可读；slice 不逸出闭包。
+            let bytes = unsafe { std::slice::from_raw_parts(updates, updates_len) };
+            if renderer.apply_render_world_updates(bytes) {
                 MORNLEA_CLIENT_STATUS_OK
             } else {
                 MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
@@ -1083,6 +1124,246 @@ pub unsafe extern "C" fn mornlea_client_render_readback(
 #[cfg(test)]
 mod render_ffi_tests {
     use super::*;
+
+    #[test]
+    fn all_versioned_exports_reject_v13_before_other_validation() {
+        let mut checked = 0;
+        macro_rules! assert_bad_abi {
+            ($call:expr) => {{
+                checked += 1;
+                assert_eq!($call, MORNLEA_CLIENT_STATUS_ABI_VERSION)
+            }};
+        }
+        let bad = 13;
+        assert_eq!(CLIENT_ABI_VERSION, bad + 1, "被测版本必须是 v14 的直接前代");
+
+        assert_bad_abi!(unsafe {
+            mornlea_client_window_create(bad, 0, 0, std::ptr::null(), 0, std::ptr::null_mut())
+        });
+        assert_bad_abi!(mornlea_client_window_destroy(bad, 0));
+        assert_bad_abi!(unsafe { mornlea_client_window_poll(bad, 0, std::ptr::null_mut(), 0) });
+        assert_bad_abi!(mornlea_client_window_set_cursor_captured(bad, 0, 2));
+        assert_bad_abi!(mornlea_client_window_set_content_size(bad, 0, 0, 0));
+        assert_bad_abi!(mornlea_client_window_set_floating(bad, 0, 2));
+        assert_bad_abi!(mornlea_client_window_focus(bad, 0));
+        assert_bad_abi!(mornlea_client_window_cancel_close(bad, 0));
+        assert_bad_abi!(unsafe { mornlea_client_window_ns_window(bad, 0, std::ptr::null_mut()) });
+        assert_bad_abi!(unsafe {
+            mornlea_client_window_capture(
+                bad,
+                0,
+                std::ptr::null_mut(),
+                u64::MAX,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        });
+
+        assert_bad_abi!(unsafe { mornlea_client_render_create(bad, 0, 0, std::ptr::null_mut()) });
+        assert_bad_abi!(mornlea_client_render_destroy(bad, 0));
+        assert_bad_abi!(unsafe {
+            mornlea_client_render_upload_atlas(bad, 0, 0, std::ptr::null(), 0)
+        });
+        assert_bad_abi!(unsafe {
+            mornlea_client_render_upload_section(
+                bad,
+                0,
+                0,
+                0,
+                0,
+                std::ptr::null(),
+                1,
+                std::ptr::null(),
+                1,
+            )
+        });
+        assert_bad_abi!(mornlea_client_render_drop_section(bad, 0, 0, 0, 0));
+        assert_bad_abi!(unsafe {
+            mornlea_client_render_apply_world_updates(bad, 0, std::ptr::null(), 0)
+        });
+        assert_bad_abi!(unsafe {
+            mornlea_client_render_upload_lod_tile(bad, 0, 0, 0, std::ptr::null(), 1)
+        });
+        assert_bad_abi!(mornlea_client_render_drop_lod_tile(bad, 0, 0, 0));
+        assert_bad_abi!(mornlea_client_render_set_lod_fog(
+            bad,
+            0,
+            f32::NAN,
+            f32::NAN
+        ));
+        assert_bad_abi!(unsafe { mornlea_client_ui_push_state(bad, 0, std::ptr::null(), 0) });
+        assert_bad_abi!(unsafe {
+            mornlea_client_render_drain_ui_events(
+                bad,
+                0,
+                std::ptr::null_mut(),
+                0,
+                std::ptr::null_mut(),
+            )
+        });
+        assert_bad_abi!(unsafe { mornlea_client_render_frame(bad, 0, std::ptr::null(), 0) });
+        assert_bad_abi!(unsafe {
+            mornlea_client_render_prepare_benchmark_batch(bad, 0, std::ptr::null(), 0, 0)
+        });
+        assert_bad_abi!(mornlea_client_render_submit_benchmark_batch(bad, 0));
+        assert_bad_abi!(unsafe {
+            mornlea_client_render_upload_glyph_rect(bad, 0, 0, 0, 0, 0, std::ptr::null(), 0)
+        });
+        assert_bad_abi!(unsafe {
+            mornlea_client_render_upload_hud_atlas(bad, 0, 0, 0, std::ptr::null(), 0)
+        });
+        assert_bad_abi!(unsafe {
+            mornlea_client_render_create_windowed(bad, 0, std::ptr::null_mut())
+        });
+        assert_bad_abi!(mornlea_client_render_resize(bad, 0, 0, 0));
+        assert_bad_abi!(unsafe { mornlea_client_render_readback(bad, 0, std::ptr::null_mut(), 0) });
+        assert_eq!(checked, 29, "必须逐一覆盖全部 versioned exports");
+    }
+
+    fn reset_and_single_section_batch() -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(96);
+        bytes.extend_from_slice(b"MRW1");
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.extend_from_slice(&0u16.to_le_bytes());
+        bytes.extend_from_slice(&1u64.to_le_bytes());
+        bytes.extend_from_slice(&2u32.to_le_bytes());
+        bytes.extend_from_slice(&0u32.to_le_bytes());
+
+        bytes.push(5);
+        bytes.extend_from_slice(&[0; 3]);
+        bytes.extend_from_slice(&[0; 28]);
+
+        bytes.push(1);
+        bytes.extend_from_slice(&[0; 3]);
+        bytes.extend_from_slice(&0i32.to_le_bytes());
+        bytes.extend_from_slice(&0i32.to_le_bytes());
+        bytes.extend_from_slice(&0i32.to_le_bytes());
+        bytes.extend_from_slice(&0i32.to_le_bytes());
+        bytes.extend_from_slice(&1u64.to_le_bytes());
+        bytes.extend_from_slice(&8u32.to_le_bytes());
+        bytes.extend_from_slice(&2u16.to_le_bytes());
+        bytes.extend_from_slice(&0u16.to_le_bytes());
+        bytes.extend_from_slice(&0u16.to_le_bytes());
+        bytes.extend_from_slice(&0u16.to_le_bytes());
+        bytes
+    }
+
+    #[test]
+    fn apply_world_updates_rejects_wrong_abi_and_invalid_bytes() {
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_apply_world_updates(
+                    CLIENT_ABI_VERSION + 1,
+                    1,
+                    std::ptr::null(),
+                    0,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_ABI_VERSION,
+        );
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_apply_world_updates(
+                    CLIENT_ABI_VERSION,
+                    1,
+                    std::ptr::null(),
+                    0,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT,
+        );
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_apply_world_updates(
+                    CLIENT_ABI_VERSION,
+                    1,
+                    std::ptr::null(),
+                    4 * 1024 * 1024 + 1,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT,
+        );
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_apply_world_updates(
+                    CLIENT_ABI_VERSION,
+                    1,
+                    std::ptr::null(),
+                    1,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT,
+        );
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_apply_world_updates(
+                    CLIENT_ABI_VERSION,
+                    1,
+                    std::ptr::without_provenance(usize::MAX),
+                    1,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT,
+        );
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_apply_world_updates(
+                    CLIENT_ABI_VERSION,
+                    0xF00D,
+                    std::ptr::without_provenance(1),
+                    1,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_WINDOW,
+            "未知句柄路径不得解引用 input",
+        );
+
+        let mut handle = 0u64;
+        let create =
+            unsafe { mornlea_client_render_create(CLIENT_ABI_VERSION, 16, 16, &mut handle) };
+        if create == MORNLEA_CLIENT_STATUS_ADAPTER {
+            return;
+        }
+        assert_eq!(create, MORNLEA_CLIENT_STATUS_OK);
+
+        let invalid = b"not-mrw1";
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_apply_world_updates(
+                    CLIENT_ABI_VERSION,
+                    handle,
+                    invalid.as_ptr(),
+                    invalid.len(),
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT,
+        );
+        let valid = reset_and_single_section_batch();
+        assert_eq!(
+            unsafe {
+                mornlea_client_render_apply_world_updates(
+                    CLIENT_ABI_VERSION,
+                    handle,
+                    valid.as_ptr(),
+                    valid.len(),
+                )
+            },
+            MORNLEA_CLIENT_STATUS_OK,
+        );
+        assert_eq!(
+            mornlea_client_render_destroy(CLIENT_ABI_VERSION, handle),
+            MORNLEA_CLIENT_STATUS_OK,
+        );
+    }
+
+    #[test]
+    fn catch_maps_panic_to_status() {
+        assert_eq!(
+            catch(|| panic!("验证 client FFI panic catcher")),
+            MORNLEA_CLIENT_STATUS_PANIC,
+        );
+    }
 
     #[test]
     fn render_entries_reject_bad_abi_and_arguments() {
@@ -2137,7 +2418,7 @@ pub extern "C" fn mornlea_client_render_resize(
         })
     })
 }
-/// 排空 client ABI v12 版本化 JSON UI 事件信封:只有完整信封能装入 `out`
+/// 排空 client ABI v12 引入、v14 保留的版本化 JSON UI 事件信封:只有完整信封能装入 `out`
 /// 时才写入并清空队列，把实际字节数写入 `*out_written`。容量不足返回
 /// `MORNLEA_CLIENT_STATUS_CAPACITY`，三个对象均保持不变。
 ///
@@ -2188,7 +2469,7 @@ fn finish_ui_event_drain(
 mod ui_ffi_tests {
     use super::*;
 
-    // 菜单桥出口(client ABI v12)的无头校验:错误 ABI、非法参数先于句柄查找。
+    // 菜单桥出口(v12 引入、v14 保留)的无头校验:错误 ABI、非法参数先于句柄查找。
 
     #[test]
     fn ui_push_state_rejects_bad_arguments_before_handle_lookup() {

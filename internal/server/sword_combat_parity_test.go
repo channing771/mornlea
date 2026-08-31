@@ -25,41 +25,28 @@ type swordCombatTranscript struct {
 	HealthByTick      []uint64
 }
 
-const swordCombatVelocityTolerance = float32(1e-5)
+const (
+	swordCombatVelocityTolerance = float32(1e-5)
+	swordCombatHostileID         = uint64(7)
+	swordCombatDeferredRepath    = ^uint64(0)
+)
 
 func TestSwordCombatParity(t *testing.T) {
 	memory := runSwordCombatWireScript(t, "memory")
 	tcp := runSwordCombatWireScript(t, "tcp")
-	normalize := func(tr swordCombatTranscript) swordCombatTranscript {
-		if len(tr.Hits) > 0 {
-			base := tr.Hits[0].ServerTick
-			norm := make([]network.CombatHit, len(tr.Hits))
-			for i, hit := range tr.Hits {
-				norm[i] = network.CombatHit{ServerTick: hit.ServerTick - base, Damage: hit.Damage, TargetKind: hit.TargetKind}
-			}
-			tr.Hits = norm
-		}
-		if len(tr.HealthByTick) > 0 {
-			base := tr.HealthByTick[0]
-			for i := range tr.HealthByTick {
-				tr.HealthByTick[i] -= base
-			}
-		}
-		return tr
-	}
-	normalizedMemory := normalize(memory)
-	normalizedTCP := normalize(tcp)
-	memoryVelocities := normalizedMemory.HostileVelocities
-	tcpVelocities := normalizedTCP.HostileVelocities
-	normalizedMemory.HostileVelocities = nil
-	normalizedTCP.HostileVelocities = nil
-	if !reflect.DeepEqual(normalizedMemory, normalizedTCP) {
+	comparableMemory := memory
+	comparableTCP := tcp
+	memoryVelocities := comparableMemory.HostileVelocities
+	tcpVelocities := comparableTCP.HostileVelocities
+	comparableMemory.HostileVelocities = nil
+	comparableTCP.HostileVelocities = nil
+	if !reflect.DeepEqual(comparableMemory, comparableTCP) {
 		t.Fatalf("剑-夜行者 Memory/TCP transcript 不一致\nmemory=%+v\ntcp=%+v", memory, tcp)
 	}
 	if len(memoryVelocities) != len(tcpVelocities) {
 		t.Fatalf("剑-夜行者 velocity 样本数不一致: memory=%d tcp=%d", len(memoryVelocities), len(tcpVelocities))
 	}
-	// 两种传输的 tick 与业务状态必须一致；追逐物理中的浮点运算受 goroutine
+	// 两种传输的 tick 与业务状态必须一致；击退/受击物理中的浮点运算受 goroutine
 	// 调度顺序影响，速度只允许吸收远小于一个物理 tick 的数值误差。
 	for sample := range memoryVelocities {
 		for axis := range 3 {
@@ -119,17 +106,14 @@ func runSwordCombatWireScript(t *testing.T, transport string) swordCombatTranscr
 	config.ViewRadius = 1
 	config.AutosaveTicks = 1000
 	host := mustNewHost(t, config, flatGenerator{}, store)
-	// 让夜行者从首个 tick 起处于攻击距离内，避免异步寻路完成时机污染战斗
-	// parity 的速度快照；追逐调度由 hostile manager 测试覆盖。
 	mob := runtime.HostileMob{
-		ID:        7,
-		Dimension: core.Overworld,
-		State:     physics.State{Position: mgl32.Vec3{0.5, 1, 4}, Velocity: mgl32.Vec3{0, 0, 0}, OnGround: true},
-		Yaw:       0,
-		Health:    20,
-	}
-	if err := host.world.engine.RestoreHostile(mob); err != nil {
-		t.Fatalf("RestoreHostile: %v", err)
+		ID:              swordCombatHostileID,
+		Dimension:       core.Overworld,
+		State:           physics.State{Position: mgl32.Vec3{0.5, 1, 2.5}, Velocity: mgl32.Vec3{0, 0, 0}, OnGround: true},
+		Yaw:             0,
+		Health:          20,
+		BurnCooldown:    20,
+		NextRepathTicks: swordCombatDeferredRepath,
 	}
 	endpoint, done, closeTransport := openParityTransport(t, host, transport, attacker)
 	t.Cleanup(func() {
@@ -151,31 +135,74 @@ func runSwordCombatWireScript(t *testing.T, transport string) swordCombatTranscr
 	})
 
 	ready := false
-	spawnSeen := false
-	for i := 0; i < 100 && !(ready && spawnSeen); i++ {
-		_ = host.world.StepForTest()
-		msgs := drainAllWithTimeout(t, endpoint, 20*time.Millisecond)
+	for i := 0; i < 100 && !ready; i++ {
+		tick := host.world.StepForTest().Tick
+		msgs := drainAllForSwordCombatTick(t, endpoint, tick)
 		for _, msg := range msgs {
-			switch m := msg.(type) {
-			case network.PlayerState:
-				if m.Ready {
-					ready = true
-				}
-			case network.HostileSpawn:
-				spawnSeen = true
+			if state, ok := msg.(network.PlayerState); ok && state.Ready {
+				ready = true
 			}
 		}
 	}
-	if !ready || !spawnSeen {
-		t.Fatalf("%s sword combat 未就绪 ready=%v spawnSeen=%v", transport, ready, spawnSeen)
+	if !ready {
+		t.Fatalf("%s sword combat 未就绪", transport)
+	}
+	if got := host.world.engine.HostileMobs(); len(got) != 0 {
+		t.Fatalf("%s sword combat 安装 fixture 前已有 hostile: %+v", transport, got)
+	}
+	// 登录阶段不放置 hostile，避免异步 A* 完成时机在 fixture 安装前产生
+	// transport 相关的追逐积分；最大重规划 tick 让本用例只验证剑战斗、
+	// 受击物理与 wire。
+	if err := host.world.engine.RestoreHostile(mob); err != nil {
+		t.Fatalf("RestoreHostile: %v", err)
+	}
+	spawnSeen := false
+	for i := 0; i < 100 && !spawnSeen; i++ {
+		tick := host.world.StepForTest().Tick
+		for _, msg := range drainAllForSwordCombatTick(t, endpoint, tick) {
+			spawn, ok := msg.(network.HostileSpawn)
+			if !ok || spawn.ServerTick != tick {
+				continue
+			}
+			for _, record := range spawn.Spawns {
+				if record.ID == swordCombatHostileID {
+					spawnSeen = true
+				}
+			}
+		}
+	}
+	if !spawnSeen {
+		t.Fatalf("%s sword combat 未收到 fixture spawn", transport)
 	}
 	for i := 0; i < 5; i++ {
-		_ = host.world.StepForTest()
-		drainAllWithTimeout(t, endpoint, 5*time.Millisecond)
+		tick := host.world.StepForTest().Tick
+		drainAllForSwordCombatTick(t, endpoint, tick)
+	}
+	mobs := host.world.engine.HostileMobs()
+	if len(mobs) != 1 {
+		t.Fatalf("%s sword combat hostile fixture count=%d", transport, len(mobs))
+	}
+	gotMob := mobs[0]
+	if gotMob.ID != mob.ID || gotMob.Dimension != mob.Dimension || gotMob.State != mob.State ||
+		gotMob.Health != mob.Health || gotMob.HasTarget ||
+		gotMob.PlayerID != (core.PlayerID{}) || gotMob.NextRepathTicks != swordCombatDeferredRepath {
+		t.Fatalf("%s sword combat authority fixture 漂移: got=%+v want=%+v", transport, gotMob, mob)
+	}
+	slot := host.world.hostileManager.slots[mob.ID]
+	if slot == nil || slot.pathInFlight || slot.path != nil {
+		t.Fatalf("%s sword combat authority fixture 含异步路径状态: %+v", transport, slot)
 	}
 
-	sendIntegration(t, endpoint, network.PlayerInput{Sequence: 1, Yaw: 0, Pitch: 0, Mining: true})
-	waitIntegrationCondition(t, transport+" sword input queued", func() bool { return len(host.world.incoming) > 0 })
+	input := network.PlayerInput{Sequence: 1, Yaw: 0, Pitch: 0, Mining: true}
+	inputCtx, cancelInput := context.WithTimeout(context.Background(), waitDeadline)
+	err := host.RunAtInputBoundary(inputCtx, input.Sequence, 1, func() error {
+		return endpoint.Send(inputCtx, input)
+	})
+	cancelInput()
+	if err != nil {
+		t.Fatalf("%s sword combat input boundary: %v", transport, err)
+	}
+	sampleBaseTick := host.world.TickCount()
 
 	result := swordCombatTranscript{
 		Hits:              make([]network.CombatHit, 0, 10),
@@ -189,6 +216,10 @@ func runSwordCombatWireScript(t *testing.T, transport string) swordCombatTranscr
 	var lastHealth uint8 = 20
 	for range 120 {
 		tick := host.world.StepForTest().Tick
+		if tick <= sampleBaseTick {
+			t.Fatalf("%s sword combat sample tick=%d base=%d", transport, tick, sampleBaseTick)
+		}
+		relativeTick := tick - sampleBaseTick
 		msgs := drainAllForSwordCombatTick(t, endpoint, tick)
 		var hit *network.CombatHit
 		var inv *network.InventoryState
@@ -199,14 +230,18 @@ func runSwordCombatWireScript(t *testing.T, transport string) swordCombatTranscr
 			case network.CombatHit:
 				if m.TargetKind == core.CombatTargetHostile && m.ServerTick == tick {
 					copy := m
+					copy.ServerTick = relativeTick
 					hit = &copy
 				}
 			case network.InventoryState:
 				copy := m
 				inv = &copy
 			case network.HostileState:
+				if m.ServerTick != tick {
+					t.Fatalf("%s sword combat hostile state tick=%d want %d", transport, m.ServerTick, tick)
+				}
 				for _, rec := range m.States {
-					if rec.ID == 7 {
+					if rec.ID == swordCombatHostileID {
 						h := rec.Health
 						hostileHealth = &h
 						v := rec.Velocity
@@ -222,7 +257,7 @@ func runSwordCombatWireScript(t *testing.T, transport string) swordCombatTranscr
 		result.SwordStates = append(result.SwordStates, lastSword)
 		if hostileHealth != nil && *hostileHealth != lastHealth {
 			result.HostileHealths = append(result.HostileHealths, *hostileHealth)
-			result.HealthByTick = append(result.HealthByTick, tick)
+			result.HealthByTick = append(result.HealthByTick, relativeTick)
 			lastHealth = *hostileHealth
 			if hostileVel != nil {
 				result.HostileVelocities = append(result.HostileVelocities, [3]uint32{math.Float32bits((*hostileVel)[0]), math.Float32bits((*hostileVel)[1]), math.Float32bits((*hostileVel)[2])})
@@ -241,25 +276,6 @@ func runSwordCombatWireScript(t *testing.T, transport string) swordCombatTranscr
 		}
 	}
 	return result
-}
-
-func drainAllWithTimeout(t *testing.T, endpoint network.ClientEndpoint, timeout time.Duration) []network.ServerMessage {
-	t.Helper()
-	msgs := make([]network.ServerMessage, 0, 8)
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	for {
-		msg, err := endpoint.Recv(ctx)
-		if err != nil {
-			return msgs
-		}
-		msgs = append(msgs, msg)
-	}
-}
-
-func drainAllForSwordCombat(t *testing.T, endpoint network.ClientEndpoint) {
-	t.Helper()
-	_ = drainAllWithTimeout(t, endpoint, 5*time.Millisecond)
 }
 
 func drainAllForSwordCombatTick(t *testing.T, endpoint network.ClientEndpoint, tick uint64) []network.ServerMessage {

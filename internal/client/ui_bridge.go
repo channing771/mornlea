@@ -2,7 +2,7 @@
 
 package client
 
-// 本文件是菜单层桥上行事件(client ABI v12)的 Go 解码与拒绝语义。
+// 本文件是菜单层桥上行事件(client ABI v12 引入、v14 保留)的 Go 解码与拒绝语义。
 //
 // 协议形状以单源 schema
 // `engine/crates/mornlea_client/frontend/src/bridge/schema.json` 为权威
@@ -147,7 +147,7 @@ type UIEvent struct {
 	PanelValue string
 }
 
-// DecodeUIEventBatch 解码并防御性校验 client ABI v12 的版本化 JSON 事件信封。
+// DecodeUIEventBatch 解码并防御性校验 client ABI v12 引入、v14 保留的版本化 JSON 事件信封。
 // 未知版本/事件类型、未知动作或 op、字段越界、非法 UTF-8、结构不符(未知键、
 // 尾随语义)一律返回错误;错误路径不产出部分事件。
 func DecodeUIEventBatch(envelope []byte) ([]UIEvent, error) {
