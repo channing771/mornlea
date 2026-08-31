@@ -1,5 +1,11 @@
 # visual-verification Delta
 
+## Purpose
+
+把两个采掘裂纹固定场景（`mining-crack-early`、`mining-crack-heavy`）纳入无窗口
+视觉基线网：正式场景清单与 golden 张数随裂纹场景扩容，插入位置以顺序 MUST 条款
+钉死；裂纹像素的可判读性由场景内像素断言与既有双阈值共同兜底，不放宽任何阈值。
+
 ## MODIFIED Requirements
 
 ### Requirement: 视觉基线覆盖统一方块与 HUD 风格

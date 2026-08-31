@@ -169,7 +169,9 @@ func captureSettled(stats client.MesherStats, pending, lodBusy, vistaPending int
 // 生成所有受影响场景的基线，并逐张人眼确认。
 // 例外：`main-menu` 与紧随其后的 `settings-menu` 因 spec 排序约束（MUST 排在
 // `far-horizon` 之前）共同插入表中部（water-surface-slope 与 far-horizon
-// 之间），属 spec/brief 硬性例外。
+// 之间），属 spec/brief 硬性例外；`mining-crack-early` 与 `mining-crack-heavy`
+// 同为表中部插入（紧随 water-surface-slope），顺序由 visual-verification
+// delta 的顺序 MUST 条款固定。
 var captureScenes = []captureScene{
 	{
 		Name:         "terrain-noon",
@@ -749,12 +751,12 @@ var captureScenes = []captureScene{
 	},
 	{
 		// mining-crack-early 是采掘裂纹浅阶段的无窗口 capture 场景：复用
-		// target-block-feedback 的固定世界（空气邻域中相机正前方 5.5 格的
-		// 单块砖），权威采掘镜像钉在 6/30——按 BlockCrackStage 公式映射为
-		// 阶段 2 的浅裂纹，与 HUD 进度条同帧呈现。裂纹夹具经 HUD 夹具装入，
-		// 场景结束后恢复（与 hud-survival-feedback 同一 defer 语义）；场景
-		// 不含随机器速度变化的读数，位姿在 Apply 钉死，收敛帧内不再 drain，
-		// 输出无需 PinVolatile 即确定。
+		// target-block-feedback 的固定世界（空气邻域中相机正前方 4.5..5.5 格、
+		// 命中面 4.5 格的单块砖），权威采掘镜像钉在 6/30——按 BlockCrackStage
+		// 公式映射为阶段 2 的浅裂纹，与 HUD 进度条同帧呈现。裂纹夹具经 HUD
+		// 夹具装入，场景结束后恢复（与 hud-survival-feedback 同一 defer 语义）；
+		// 场景不含随机器速度变化的读数，位姿在 Apply 钉死，收敛帧内不再
+		// drain，输出无需 PinVolatile 即确定。
 		//
 		// 排序约束：紧随 water-surface-slope、先于 main-menu（后者 Apply 自带
 		// resetCapturePresentation，不继承本场景的呈现状态），由

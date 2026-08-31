@@ -189,6 +189,6 @@ func TestMiningCrackCaptureScenePixelEvidence(t *testing.T) {
 		t.Fatalf("重复抓取无目标帧: %v", err)
 	}
 	if diff := regionDiff(plainAgain, plain); diff.DiffPixels != 0 {
-		t.Fatalf("无目标帧重复抓帧在目标区域漂移：%s", diff)
+		t.Fatalf("无目标帧重复抓帧在目标区域漂移：%s，区域=%v", diff, captureCrackTargetRegion)
 	}
 }
