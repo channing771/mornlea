@@ -9,6 +9,8 @@ from typing import Any
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+import mornlea_companion_agent.domain.common as common_domain
+import mornlea_companion_agent.domain.mcp_v1 as mcp_domain
 from mornlea_companion_agent.domain import CONTRACT_ADAPTERS, adapter_for
 from mornlea_companion_agent.domain.http_v1 import PlanResponse
 from mornlea_companion_agent.domain.mcp_v1 import (
@@ -86,6 +88,10 @@ def test_mcp_manifest_declares_the_only_normal_domain_result_codes() -> None:
         "validate_plan": manifest["validator_codes"],
     }
     assert {tool["name"]: tool["domain_result_codes"] for tool in manifest["tools"]} == expected
+
+
+def test_validator_hint_uses_one_shared_runtime_definition() -> None:
+    assert mcp_domain.ValidatorHint is common_domain.ValidatorHint
 
 
 @pytest.mark.parametrize("contract", ["http-v1", "mcp-v1"])

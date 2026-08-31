@@ -6,11 +6,9 @@ from collections.abc import Mapping
 from typing import Annotated, Any, ClassVar, Literal, Self
 
 from pydantic import (
-    AfterValidator,
     BeforeValidator,
     Field,
     StrictInt,
-    StrictStr,
     TypeAdapter,
     ValidationInfo,
     field_validator,
@@ -32,10 +30,10 @@ from mornlea_companion_agent.domain.common import (
     TerrainHeight,
     UInt64,
     UUIDv4,
+    ValidatorHint,
     WorldY,
     json_tuple,
     require_canonical_size,
-    text_validator,
 )
 
 ACCEPTED_MINE_SEMANTICS = ("single_drop", "container_batch")
@@ -86,18 +84,6 @@ ValidatorCode = Literal[
     "unknown_block",
     "missing_item",
     "snapshot_mismatch",
-]
-ValidatorHint = Annotated[
-    StrictStr,
-    AfterValidator(
-        text_validator(
-            minimum_bytes=1,
-            maximum_bytes=256,
-            no_nul=True,
-            no_control=True,
-            no_edge_whitespace=True,
-        )
-    ),
 ]
 
 

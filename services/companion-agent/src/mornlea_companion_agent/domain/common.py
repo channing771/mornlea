@@ -173,7 +173,15 @@ BoundedName = Annotated[
 ]
 ValidatorHint = Annotated[
     StrictStr,
-    AfterValidator(text_validator(maximum_bytes=256)),
+    AfterValidator(
+        text_validator(
+            minimum_bytes=1,
+            maximum_bytes=256,
+            no_nul=True,
+            no_control=True,
+            no_edge_whitespace=True,
+        )
+    ),
 ]
 
 

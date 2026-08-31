@@ -178,6 +178,7 @@ class DomainFailureMock(MCPMock):
         self.tool_name = tool_name
         self.case_name = case_name
         self.is_error = is_error
+        self.mutated_responses = 0
 
     async def __call__(self, raw: httpx.Request) -> httpx.Response:
         response = await super().__call__(raw)
@@ -197,12 +198,14 @@ class DomainFailureMock(MCPMock):
         ]
         result["structuredContent"] = value
         result["isError"] = self.is_error
-        return httpx.Response(
+        mutated_response = httpx.Response(
             200,
             headers={"content-type": "application/json"},
             json=payload,
             request=raw,
         )
+        self.mutated_responses += 1
+        return mutated_response
 
 
 class TrackingStream(httpx.AsyncByteStream):
@@ -226,6 +229,7 @@ class OversizedPhaseMock(MCPMock):
         self.phase = phase
         self.mode = mode
         self.stream: TrackingStream | None = None
+        self.mutated_responses = 0
 
     async def __call__(self, raw: httpx.Request) -> httpx.Response:
         response = await super().__call__(raw)
@@ -234,7 +238,7 @@ class OversizedPhaseMock(MCPMock):
             return response
         if self.mode == "content_length":
             self.stream = TrackingStream((response.content,))
-            return httpx.Response(
+            mutated_response = httpx.Response(
                 response.status_code,
                 headers={
                     "content-type": response.headers.get("content-type", "application/json"),
@@ -243,14 +247,18 @@ class OversizedPhaseMock(MCPMock):
                 stream=self.stream,
                 request=raw,
             )
+            self.mutated_responses += 1
+            return mutated_response
         padding = b" " * (MCP_WIRE_LIMIT + 1 - len(response.content))
         self.stream = TrackingStream((response.content, padding))
-        return httpx.Response(
+        mutated_response = httpx.Response(
             response.status_code,
             headers={"content-type": response.headers.get("content-type", "application/json")},
             stream=self.stream,
             request=raw,
         )
+        self.mutated_responses += 1
+        return mutated_response
 
 
 def test_real_sdk_session_uses_exact_wire_sequence_headers_and_one_session() -> None:
@@ -339,6 +347,7 @@ def test_is_error_false_domain_failure_is_returned_without_retry(
         ) as session:
             result = await session.call_model_tool(tool_name, arguments)
         assert isinstance(result, result_type)
+        assert mock.mutated_responses == 1
         assert [body["method"] for _, _, body in mock.requests].count("tools/call") == 1
 
     run(scenario())
@@ -359,6 +368,7 @@ def test_is_error_true_domain_failure_remains_unavailable_without_retry() -> Non
                     "find_visible_blocks",
                     {"block_names": ["unknown_name"], "limit": 1},
                 )
+        assert mock.mutated_responses == 1
         assert [body["method"] for _, _, body in mock.requests].count("tools/call") == 1
 
     run(scenario())
@@ -380,12 +390,13 @@ def test_mcp_transport_rejects_oversized_response_before_sdk_buffers(
                         "inspect_inventory",
                         golden("mcp-v1", "valid", "inventory query is paged")["value"],
                     )
-        if mock.stream is not None:
-            assert mock.stream.closed
-            if mode == "content_length":
-                assert mock.stream.bytes_yielded == 0
-            else:
-                assert mock.stream.bytes_yielded <= MCP_WIRE_LIMIT + 1
+        assert mock.mutated_responses == 1
+        assert mock.stream is not None
+        assert mock.stream.closed
+        if mode == "content_length":
+            assert mock.stream.bytes_yielded == 0
+        else:
+            assert mock.stream.bytes_yielded <= MCP_WIRE_LIMIT + 1
 
     run(scenario())
 
@@ -438,18 +449,24 @@ def test_server_must_advertise_only_stable_tools_capability(
     capabilities: dict[str, object],
 ) -> None:
     class CapabilityMock(MCPMock):
+        def __init__(self) -> None:
+            super().__init__()
+            self.mutated_responses = 0
+
         async def __call__(self, raw: httpx.Request) -> httpx.Response:
             response = await super().__call__(raw)
             body = json.loads(raw.content)
             if body["method"] == "initialize":
                 payload = json.loads(response.content)
                 payload["result"]["capabilities"] = capabilities
-                return httpx.Response(
+                mutated_response = httpx.Response(
                     200,
                     headers={"content-type": "application/json"},
                     json=payload,
                     request=raw,
                 )
+                self.mutated_responses += 1
+                return mutated_response
             return response
 
     async def scenario() -> None:
@@ -458,6 +475,7 @@ def test_server_must_advertise_only_stable_tools_capability(
         with pytest.raises(PlannerUnavailable):
             async with factory.open(request(), timeout_seconds=5):
                 pass
+        assert mock.mutated_responses == 1
 
     run(scenario())
 
@@ -471,6 +489,10 @@ def test_server_must_advertise_only_stable_tools_capability(
 )
 def test_initialize_pins_wire_and_application_versions(field: str, value: str) -> None:
     class InitializeMock(MCPMock):
+        def __init__(self) -> None:
+            super().__init__()
+            self.mutated_responses = 0
+
         async def __call__(self, raw: httpx.Request) -> httpx.Response:
             response = await super().__call__(raw)
             body = json.loads(raw.content)
@@ -480,12 +502,14 @@ def test_initialize_pins_wire_and_application_versions(field: str, value: str) -
                     payload["result"]["protocolVersion"] = value
                 else:
                     payload["result"]["serverInfo"]["version"] = value
-                return httpx.Response(
+                mutated_response = httpx.Response(
                     200,
                     headers={"content-type": "application/json"},
                     json=payload,
                     request=raw,
                 )
+                self.mutated_responses += 1
+                return mutated_response
             return response
 
     async def scenario() -> None:
@@ -495,6 +519,7 @@ def test_initialize_pins_wire_and_application_versions(field: str, value: str) -
                 request(), timeout_seconds=5
             ):
                 pass
+        assert mock.mutated_responses == 1
 
     run(scenario())
 
@@ -513,6 +538,8 @@ def test_initialize_pins_wire_and_application_versions(field: str, value: str) -
     ],
 )
 def test_tool_discovery_requires_exact_unique_six_without_pagination(mutation: str) -> None:
+    delivered_payloads: list[dict[str, Any]] = []
+
     class ToolListMock(MCPMock):
         async def __call__(self, raw: httpx.Request) -> httpx.Response:
             response = await super().__call__(raw)
@@ -531,17 +558,19 @@ def test_tool_discovery_requires_exact_unique_six_without_pagination(mutation: s
                 elif mutation == "input_schema":
                     tools[2]["inputSchema"]["properties"]["limit"]["maximum"] = 37
                 elif mutation == "output_schema":
-                    tools[4]["outputSchema"]["properties"]["terrain"]["maxItems"] = 65
+                    tools[4]["outputSchema"]["oneOf"][0]["properties"]["terrain"]["maxItems"] = 65
                 elif mutation == "input_schema_bool_int":
                     tools[2]["inputSchema"]["properties"]["limit"]["minimum"] = True
                 else:
                     tools[2]["inputSchema"]["properties"]["limit"]["minimum"] = 1.0
-                return httpx.Response(
+                mutated_response = httpx.Response(
                     200,
                     headers={"content-type": "application/json"},
                     json=payload,
                     request=raw,
                 )
+                delivered_payloads.append(payload)
+                return mutated_response
             return response
 
     async def scenario() -> None:
@@ -551,6 +580,15 @@ def test_tool_discovery_requires_exact_unique_six_without_pagination(mutation: s
                 request(), timeout_seconds=5
             ):
                 pass
+        assert len(delivered_payloads) == 1
+        assert [body["method"] for _, _, body in mock.requests].count("tools/list") == 1
+        if mutation == "output_schema":
+            assert (
+                delivered_payloads[0]["result"]["tools"][4]["outputSchema"]["oneOf"][0][
+                    "properties"
+                ]["terrain"]["maxItems"]
+                == 65
+            )
 
     run(scenario())
 
@@ -558,7 +596,11 @@ def test_tool_discovery_requires_exact_unique_six_without_pagination(mutation: s
 def test_tool_schema_serialization_failure_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    serialization_attempts = 0
+
     def fail_serialization(_: object) -> bytes:
+        nonlocal serialization_attempts
+        serialization_attempts += 1
         raise TypeError("unserializable schema")
 
     async def scenario() -> None:
@@ -569,6 +611,7 @@ def test_tool_schema_serialization_failure_fails_closed(
                 request(), timeout_seconds=5
             ):
                 pass
+        assert serialization_attempts == 1
 
     run(scenario())
 
@@ -614,6 +657,7 @@ def test_session_header_and_sse_response_are_rejected() -> None:
         def __init__(self, kind: str) -> None:
             super().__init__()
             self.kind = kind
+            self.mutated_responses = 0
 
         async def __call__(self, raw: httpx.Request) -> httpx.Response:
             response = await super().__call__(raw)
@@ -621,7 +665,7 @@ def test_session_header_and_sse_response_are_rejected() -> None:
             if body["method"] != "initialize":
                 return response
             if self.kind == "session":
-                return httpx.Response(
+                mutated_response = httpx.Response(
                     200,
                     headers={
                         "content-type": "application/json",
@@ -630,12 +674,15 @@ def test_session_header_and_sse_response_are_rejected() -> None:
                     content=response.content,
                     request=raw,
                 )
-            return httpx.Response(
-                200,
-                headers={"content-type": "text/event-stream"},
-                content=b"event: message\ndata: {}\n\n",
-                request=raw,
-            )
+            else:
+                mutated_response = httpx.Response(
+                    200,
+                    headers={"content-type": "text/event-stream"},
+                    content=b"event: message\ndata: {}\n\n",
+                    request=raw,
+                )
+            self.mutated_responses += 1
+            return mutated_response
 
     async def scenario(kind: str) -> None:
         mock = ForbiddenResponseMock(kind)
@@ -644,6 +691,7 @@ def test_session_header_and_sse_response_are_rejected() -> None:
                 request(), timeout_seconds=1
             ):
                 pass
+        assert mock.mutated_responses == 1
 
     for kind in ("session", "sse"):
         run(scenario(kind))
@@ -651,14 +699,17 @@ def test_session_header_and_sse_response_are_rejected() -> None:
 
 def test_redirect_is_not_followed() -> None:
     requests: list[httpx.Request] = []
+    responses: list[httpx.Response] = []
 
     async def redirect(raw: httpx.Request) -> httpx.Response:
         requests.append(raw)
-        return httpx.Response(
+        response = httpx.Response(
             307,
             headers={"location": "http://127.0.0.1:9/steal"},
             request=raw,
         )
+        responses.append(response)
+        return response
 
     async def scenario() -> None:
         with pytest.raises(PlannerUnavailable):
@@ -667,6 +718,7 @@ def test_redirect_is_not_followed() -> None:
             ):
                 pass
         assert len(requests) == 1
+        assert len(responses) == 1
         assert requests[0].url == request().mcp_endpoint
 
     run(scenario())
@@ -695,6 +747,10 @@ def test_http_client_disables_environment_and_redirects(monkeypatch: pytest.Monk
 
 def test_text_fallback_is_strict_json_and_never_retries_tool_call() -> None:
     class InvalidTextMock(MCPMock):
+        def __init__(self) -> None:
+            super().__init__(text_only={"inspect_inventory"})
+            self.mutated_responses = 0
+
         async def __call__(self, raw: httpx.Request) -> httpx.Response:
             response = await super().__call__(raw)
             body = json.loads(raw.content)
@@ -704,16 +760,18 @@ def test_text_fallback_is_strict_json_and_never_retries_tool_call() -> None:
                 payload["result"]["content"] = [
                     {"type": "text", "text": '{"slots":[],"slots":[]}'},
                 ]
-                return httpx.Response(
+                mutated_response = httpx.Response(
                     200,
                     headers={"content-type": "application/json"},
                     json=payload,
                     request=raw,
                 )
+                self.mutated_responses += 1
+                return mutated_response
             return response
 
     async def scenario() -> None:
-        mock = InvalidTextMock(text_only={"inspect_inventory"})
+        mock = InvalidTextMock()
         factory = MCPToolSessionFactory(transport=httpx.MockTransport(mock))
         async with factory.open(request(), timeout_seconds=5) as session:
             with pytest.raises(PlannerUnavailable):
@@ -721,6 +779,7 @@ def test_text_fallback_is_strict_json_and_never_retries_tool_call() -> None:
                     "inspect_inventory",
                     golden("mcp-v1", "valid", "inventory query is paged")["value"],
                 )
+        assert mock.mutated_responses == 1
         assert [body["method"] for _, _, body in mock.requests].count("tools/call") == 1
 
     run(scenario())
@@ -796,6 +855,10 @@ def test_oversized_structured_content_stops_before_text_comparison(
 @pytest.mark.parametrize("mutation", ["mismatch", "multiple", "is_error"])
 def test_tool_result_shape_fails_closed_without_retry(mutation: str) -> None:
     class ResultMutationMock(MCPMock):
+        def __init__(self) -> None:
+            super().__init__()
+            self.mutated_responses = 0
+
         async def __call__(self, raw: httpx.Request) -> httpx.Response:
             response = await super().__call__(raw)
             body = json.loads(raw.content)
@@ -809,12 +872,14 @@ def test_tool_result_shape_fails_closed_without_retry(mutation: str) -> None:
                 result["content"].append({"type": "text", "text": "{}"})
             else:
                 result["isError"] = True
-            return httpx.Response(
+            mutated_response = httpx.Response(
                 200,
                 headers={"content-type": "application/json"},
                 json=payload,
                 request=raw,
             )
+            self.mutated_responses += 1
+            return mutated_response
 
     async def scenario() -> None:
         mock = ResultMutationMock()
@@ -825,6 +890,7 @@ def test_tool_result_shape_fails_closed_without_retry(mutation: str) -> None:
                     "inspect_inventory",
                     golden("mcp-v1", "valid", "inventory query is paged")["value"],
                 )
+        assert mock.mutated_responses == 1
         assert [body["method"] for _, _, body in mock.requests].count("tools/call") == 1
 
     run(scenario())
