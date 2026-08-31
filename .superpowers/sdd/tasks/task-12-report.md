@@ -19,6 +19,8 @@ main，没有访问 provider/DNS/外网业务服务，也没有启动或聚焦�
 - `ee642a05` `docs(openspec): record task 12 implementation`
 - `3394fc19` `test(server): restore planner seams for task fixtures`
 
+Round 1 repair 提交会在完成实现后追加；本段在提交前保持 repair pending，不预写未知 SHA。
+
 本报告的最终 evidence commit 不自引用其 SHA。Task 12 当前仍为 Review pending；未修改
 `openspec/changes/extract-companion-agent-service/tasks.md`，只有独立 SPEC/QUALITY 双评审
 通过后才允许 closeout。
@@ -56,9 +58,41 @@ CI 沿用现有 macOS `integration` job 和同 SHA native artifact 校验；只�
 - 服务启动顺序、ready/auth、PlannerUnavailable/Dialogue skip、并发/timeout/cancel 与可重试关服；
 - 严格 `config_version: 1` Python YAML、Go `ai.agentService`、env secret 与无自动拉起语义；
 - companions v1..v4 只读迁移到 encoder-only v5、SQLite compact memory mirror、联合备份与回滚限制；
-- `gates.sh` 不隐含 `make rust`、Python check 或真实 integration，收尾必须显式运行。
+- `gates.sh` 已包含 `make rust`，但不包含 Python check 或真实 integration，触碰伙伴 Agent 时仍须显式运行后两者。
 
 文档后 `git diff --check`、archcheck 与 OpenSpec strict 80/80 均 PASS。
+
+### Round 1 独立评审 repair
+
+Round 1 SPEC 与 QUALITY 均为 FAIL，未覆盖成 PASS。评审指出六类问题：test quickstart 的
+escaped pipe 实际 no-tests；CI archcheck 依赖 substring 和下一个 job 的文本位置；Go
+no-bypass 只扫两个目录而不扫生产装配的传递依赖闭包；`gates.sh` 事实记录错误；configuration
+仍把当前 WKWebView 说成 egui、链接不存在的 `ui.rs` 且 YAML 写成 `config_version: v1`；上述
+门禁缺少 mutation/sentinel 承重证明。
+
+RED 先真实复现：旧命令
+`go test ./internal/server -run 'CrossLanguage\|CompanionAgent.*Integration' -count=1 -v`
+打印 `testing: warning: no tests to run`；新增 mutation test 在实现 helper 前以 undefined symbol
+编译失败。repair 后：
+
+- `TestCompanionAgentCIGates` 用 `yaml.v3` typed scalar/map 解码，不依赖 job 文本顺序，结构化锁定
+  `integration` 的 `native-macos`、macOS runner、Python 3.12、uv 0.12.5/cache、同 SHA artifact
+  下载和 manifest 校验顺序、两条 Make 门禁，以及最终 `test` 的 dependency/result assertion；
+- 15 项 CI mutation 逐项破坏 dependency、runner、类型、版本、cache、artifact、顺序、Make 和
+  summary，合法 job 重排 fixture 保持 GREEN；
+- no-bypass 从 `cmd/mornlea`、`cmd/mornlea/app`、`cmd/mornlea-server`、`internal/server`、
+  `internal/companion` 构造 production import closure，只对实际 benchmark 和既有 native bridge
+  做 exact package/import 窄豁免；三项 helper mutation 均能抓住间接 `os/exec`、`C`、
+  `runtime/cgo`，闭包外 agent-board 不误杀；
+- quickstart 命令改为单引号内 `CrossLanguage|CompanionAgent.*Integration`。永久哨兵从 server
+  顶层测试源码证明它精确选中 3 条，旧 escaped-pipe mutation 选中 0 条；实际 `-list` 和 `-v`
+  命令也只运行并通过三条目标测试（package 6.332s，real 6.90s）；
+- configuration 改为真实的 Rust-hosted WKWebView、Go typed state/transaction 与 React rendering
+  文件链接，并把 YAML 改为 `config_version: 1`；report/progress 更正 `gates.sh` 事实。
+
+focused mutation/CI/closure/quickstart 集合 PASS（package 0.901s，real 1.62s），完整 archcheck
+PASS（package 4.979s，real 5.20s）。Round 1 repair 仍是 review pending；最终实现 SHA 的完整
+mandatory gate 清单必须在 repair commit 后重跑，不能复用下方旧实现 SHA 的结果作为最终证据。
 
 ## 全量门禁
 
@@ -75,8 +109,9 @@ focused 复现确认不是全仓并发 flaky：两个交互用例立即以 `[1 6
 typed `replacePlannerForTest` seam，不改生产路径。原失败的 11 个用例全部 GREEN：package
 12.281s，real 16.29s。
 
-没有使用 skip、豁免变量、timeout 放宽或测试删减。修复提交后在 clean `3394fc19` 从头重跑
-brief 的完整 mandatory gate 清单：
+没有使用 skip、豁免变量、timeout 放宽或测试删减。以下是在 clean `3394fc19` 从头重跑的
+历史 mandatory gate 清单；Round 1 repair 已改变实现树，最终证据必须由 repair commit SHA
+重新运行并追加：
 
 - `cd services/companion-agent && uv sync --locked`：PASS，80 packages resolved、77 checked，real 0.10s。
 - `uv run ruff format --check .`：PASS，38 files already formatted，real 0.06s。
@@ -101,4 +136,5 @@ OpenSpec、diff/status，完整 runtime 门禁可复用同一实现树 `3394fc19
 - Python unit/integration 都使用 deterministic fake model 或 checked-in fixtures；没有 provider 调用。
 - CI 仍消费既有 native artifacts，没有新建平行 native build 或改变 required-job 语义。
 - 不升 engine/client ABI，不改变游戏 wire、HTTP application contract v1 或 MCP tool contract v1。
-- 独立 SPEC/QUALITY 尚未执行，因此 ledger 必须保持 Review pending。
+- Round 1 独立 SPEC/QUALITY 均 FAIL；repair 尚待完整门禁和重新独立双评审，因此 ledger 必须
+  保持 repair pending。

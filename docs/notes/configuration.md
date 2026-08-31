@@ -12,7 +12,7 @@
 
 ## 客户端设置
 
-普通本地客户端从 egui 主菜单进入「设置」页；进入设置页时世界存储、内置权威服务端与登录均不装配，设置页期间的游戏输入不生效。设置页只提供三项：总音量、材质包目录和窗口大小。窗口大小是固定的 16:9 预设，只能选择 `640x360`、`960x540` 或 `1280x720`；`windowSize` 缺失时默认使用 `1280x720`。对应的最小配置示例如下：
+普通本地客户端从进程内 WKWebView 主菜单进入「设置」页；Rust [webview.rs](../../engine/crates/mornlea_client/src/webview.rs) 承载菜单层，Go [app_settings.go](../../cmd/mornlea/app/app_settings.go) 持有设置事务，React [SettingsPanel.tsx](../../engine/crates/mornlea_client/frontend/src/ui/SettingsPanel.tsx) 只负责呈现和上行 typed 事件。进入设置页时世界存储、内置权威服务端与登录均不装配，设置页期间的游戏输入不生效。设置页只提供三项：总音量、材质包目录和窗口大小。窗口大小是固定的 16:9 预设，只能选择 `640x360`、`960x540` 或 `1280x720`；`windowSize` 缺失时默认使用 `1280x720`。对应的最小配置示例如下：
 
 ```json
 {
@@ -70,7 +70,7 @@
 Python 服务读取另一份 strict v1 YAML，未知字段、重复 key、多 worker、非持久 SQLite 路径或非法 limit 都会拒绝启动。相对 `sqlite_path` 按该 YAML 所在目录解析；`workers` 固定为 1。`model_calls`、`tool_calls`、`timeout_seconds` 默认分别为 3、4、30，硬上限分别为 5、8、60：
 
 ```yaml
-config_version: v1
+config_version: 1
 http:
   bind: 127.0.0.1
   port: 8080
@@ -104,7 +104,7 @@ uv run mornlea-companion-agent serve --config /absolute/path/to/agent.yaml
 
 `--dev` 只控制游戏内调试面板是否可用，**不控制配置文件是否生效**：配置文件里调过的值无论是否加 `--dev` 都会生效；不加 `--dev` 时只是看不到、也改不了面板。
 
-加 `--dev` 后按 `F3` 切换面板显隐。面板由 Rust `mornlea_client` 的 egui 绘制（`engine/crates/mornlea_client/src/ui.rs`），顶部是只读读数区（帧时、坐标、朝向、权威 tick、世界时刻、已加载区块数与连接模式），参数行按 `physics`/`sim`/`render` 分组展示：每组一个段头行（如 `── physics ──`），数据行使用裸字段名（如 `gravity`，而非 `physics.gravity`）。
+加 `--dev` 后按 `F3` 切换面板显隐。Go [debug_panel.go](../../cmd/mornlea/app/debug_panel.go) 与 [app_ui_state.go](../../cmd/mornlea/app/app_ui_state.go) 持有面板状态并组装 typed UI state，React [DebugPanel.tsx](../../engine/crates/mornlea_client/frontend/src/ui/DebugPanel.tsx) 在 Rust `mornlea_client` 承载的 WKWebView 中呈现并回传 typed 事件。顶部是只读读数区（帧时、坐标、朝向、权威 tick、世界时刻、已加载区块数与连接模式），参数行按 `physics`/`sim`/`render` 分组展示：每组一个段头行（如 `── physics ──`），数据行使用裸字段名（如 `gravity`，而非 `physics.gravity`）。
 
 参数行交互：方向键在可编辑行之间移动选中，自动跳过只读行；`Enter` 进入文本编辑，再次 `Enter` 确认写回，`Esc` 取消编辑并恢复原值；非法新值被拒绝并保持原值，写回值按字段合法区间钳制。非编辑态按 `Esc` 关闭面板。面板可见期间游戏键盘输入被整体捕获，不产生游戏上行。面板改动只作用于当前进程，不写回配置文件，也不产生任何网络消息。
 
