@@ -39,7 +39,7 @@
 | 5 | `task5_http_research`、`task5_startup_cancel_fix` | `f4009ec0` | RED：缺少 Dialogue/FastAPI；复审 RED：HTTP disconnect、重复取消、响应 fence、关闭与 startup 所有权；GREEN：focused `56 passed`、full Python `393 passed`、import boundary `48 passed`、locked/ruff/mypy/diff-check；提交 `fb569bdd`、`ff7b5be9`、`962e361e`、`2d9042bf` | `task4_fix_quality` round 4 PASS | `task5_quality_review` round 4 PASS | Accepted |
 | 6 | `task6_go_agent_client`、`task6_strict_lifecycle_fix` | `c871b1ec` | RED：配置/client 缺失，Round 1/2 复审继续拒绝 codec、manifest、边界与生命周期缺口；GREEN：隔离 focused race 两遍、config/companion full race、vet、archcheck、gofmt/diff-check；提交 `0fd248d1`、`f56b42bf`、`5ee80a7c`、`6b1deb59`、`f7585788`、`0ea46c31` | `task6_spec_review` round 1/2 FAIL，round 3 PASS | `task6_quality_review` round 1/2 FAIL，round 3 PASS | Accepted |
 | 7 | `task7_contract_prereq`（Task 7A） | `148b935c` | contract/Python 前置 RED→GREEN；提交 `5812be64`、repair `038c4b86` | 初次 PASS；repair PASS | 初次 FAIL；repair PASS | Task 7A Accepted；Task 7 整体仍 Pending，下一阶段 Task 7B |
-| 8 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
+| 8 | `task8_storage_v5` | `148b935c` | codec/merge/probe/bootstrap/carry RED→GREEN；提交 `11f897c7`、repair `660c02a1` | 初次独立 PASS；repair scoped PASS | 初次独立 FAIL；repair scoped PASS | Accepted |
 | 9 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 10 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 11 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
@@ -117,6 +117,48 @@
 - 本轮 repair 基于 feature HEAD `1cdfba94`，proposal 的目标/范围无变化故保持原文；design、`companion-agent-memory`、`companion-persistence`、Task 8/10 与本 ledger 同步 higher-epoch active-zero fence/replay、pre/post-rename原子语义、完整server gate和精确entropy顺序。Task 8保持未勾选，不修改v5或HTTP layout。
 - 版本矩阵保持 protocol v32、player v8、chunk v9、metadata v3、companions v4→v5、hostile v1、engine ABI v9、client ABI v13、scenario v20；本裁决不查看或吸收后续 `main` 前进，不触发游戏 wire 或 ABI 升版。
 - 规划产物验证：`openspec validate --all --strict --no-interactive` exit 0，80 passed/0 failed；`git diff --check -- openspec/changes/extract-companion-agent-service` exit 0。
+
+### Task 8 实施、修复与评审记录
+
+- `task8_storage_v5` 从 `148b935c` 开始，以 `11f897c7` 交付 schema v5 strict
+  codec/merge、v1..v4 decode-only、committed v5 golden/fuzz、Memory/Disk
+  metadata-only probe、原子替换、persistence metadata carry-through，以及
+  identity-first synchronous bootstrap；未实现 Task 9/10 的 lease、MCP、Planner/
+  Dialogue cutover 或 Agent memory mutation。
+- 初次实现保留旧 v1..v4 fixture 字节与 digest，新
+  `testdata/companions-v5.bin` 为 1,252 bytes、SHA-256
+  `9f267e9d1fbcb7f4a83d38c699595d1d5ab4c02d13cab54cc0db8d7b16c89391`。
+  完整 focused GREEN 包含 storage/companion race、root storage Companion race、
+  persistence Companion race、完整 server race、两个受 staging 影响的指定 server
+  tests、archcheck、full affected vet 与 diff-check；完整 server gate 确实执行
+  `TestM5StageAcceptancePersonaDialogueEndToEnd` 和
+  `TestCompanionDialogueSummaryLifecycle`。
+- 对 `11f897c7` 的初次独立 SPEC 评审为 PASS；初次独立 QUALITY 评审为 FAIL，
+  发现三项：`companion_restore_test.go` 用 current v5 `Encode` 却沿用 legacy v3
+  offsets，reserved flags 未跨 namespace 且 kind/follow/deadline 未跨 lifecycle/
+  mirror，形成假绿；最近 `internal/storage/companion/AGENTS.md` 仍把 v4 写成
+  current 且缺少 v5 identity/lifecycle/mirror/tombstone 与现存 strict/golden
+  事实；Memory `LoadCompanions`/`SaveCompanions` 在 `Close` 后未与 probe/Disk
+  一致返回 `os.ErrClosed`，root contract 又跳过 Memory。
+- repair `660c02a1` 以真实 RED 证明错误基线为 schema 5、旧 flags offset 读到
+  `0x0` 而非 `0x7`、Memory close 返回 not-found 而非 closed；随后让 legacy v3
+  直接读取 committed v3 fixture，current v5 offset 完整跨过 namespace、flags、
+  epoch、revision、operation 与 summary prefix/bytes，并在每次 patch 前断言原
+  字段。repair 同步最近 AGENTS，且只让 companion probe/Load/Save 统一 Memory
+  Close 语义，不扩改其他既有 Memory API。
+- repair staged binary diff 单独应用到 detached `11f897c7` 临时 worktree；首次
+  clean checkout 链接仅因缺少未跟踪 Rust artifact 失败并清理，随后按指南先跑
+  `make rust` PASS，再从头通过 `go test ./internal/storage/companion -race -count=1`
+  （package 2.297s）、`go test ./internal/storage -run 'Companion' -race -count=1`
+  （package 1.881s）、`go test ./internal/archcheck -count=1`（package 5.613s）、
+  full affected `go vet` 与 `git diff --check`；临时 worktree 已清理。
+- `11f897c7` + `660c02a1` 的最终独立 scoped SPEC 与 QUALITY 评审均 PASS，Task 8
+  裁决 Accepted。Task 7 checkbox 保持未勾选，下一实施阶段仍是 Task 7B；不得
+  因 Task 8 完成而提前进入 Task 9。
+- Task 8 收尾后 change 进度为 7/12；
+  `openspec validate --all --strict --no-interactive` 为 80 passed/0 failed，
+  `git diff --check -- openspec/changes/extract-companion-agent-service/{tasks.md,ledger.md}`
+  PASS。
 
 ## 整分支终审与门禁
 
