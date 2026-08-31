@@ -56,7 +56,7 @@ Agent 服务 SHALL 为每个 `AgentNamespaceID + CompanionID + MemoryEpoch` 维�
 
 ### Requirement: Python 是运行期权威而 Go 镜像只用于恢复
 
-Agent 服务可用时，Dialogue SHALL 只读取 Python MemoryState；Go `companions.ai` v5 镜像 MUST NOT 作为正常提示来源。namespace acquire 后双方 MUST reconcile 每个 active 伙伴：Python 缺失或 revision 较低时 MUST 从 Go 镜像恢复；Python revision 较高时 MUST 把其状态返回给 Go 更新镜像；双方相等时 MUST no-op。同 epoch、同 revision 但 operation 或摘要字节不同 MUST 报告 `memory_conflict`，MUST NOT last-write-wins。Go 的身体、任务或 FIFO autosave MUST 把已有镜像当作不可分割的 opaque metadata 原样携带，MUST NOT 从旧 direct Dialogue 的裸 summary 推导 revision/operation 或改写镜像；只有 Agent commit/reconcile 成功结果回到权威 tick 边界并通过 epoch/operation 关联后，Go 才可整体更新镜像并 mark dirty。
+Agent 服务可用时，Dialogue SHALL 只读取 Python MemoryState；Go `companions.ai` v5 镜像 MUST NOT 作为正常提示来源。namespace acquire 后双方 MUST reconcile 每个 active 伙伴：Python 缺失或 revision 较低时 MUST 从 Go 镜像恢复；Python revision 较高时 MUST 把其状态返回给 Go 更新镜像；双方相等时 MUST no-op。同 epoch、同 revision 但 operation 或摘要字节不同 MUST 报告 `memory_conflict`，MUST NOT last-write-wins。Go 的身体、任务或 FIFO autosave MUST 把已有镜像当作不可分割的 opaque metadata 原样携带，MUST NOT 从旧 direct Dialogue 的裸 summary 推导 revision/operation 或改写镜像；只有 Agent commit/reconcile 成功结果回到权威 tick 边界并通过 epoch 以及该状态适用的 replay identity 关联后，Go 才可整体更新镜像并 mark dirty。active canonical-zero 的 replay identity 是 namespace、companion、epoch、active 与 canonical-zero 五元状态而不是 operation；active nonzero 使用 mirror operation，inactive 使用 tombstone operation。
 
 #### Scenario: Agent SQLite 丢失后由镜像恢复
 
@@ -74,19 +74,25 @@ Agent 服务可用时，Dialogue SHALL 只读取 Python MemoryState；Go `compan
 
 - **GIVEN** Go v5 镜像保存 revision 7、operation 与摘要，随后只有身体、任务、FIFO 或旧 direct Dialogue 裸 summary 发生变化
 - **WHEN** 伙伴 persistence autosave 或 Flush
-- **THEN** 既有 epoch、revision、operation 与摘要 MUST 逐字段保持，MUST NOT 从裸 summary 生成 operation；只有后续 Agent commit/reconcile 成功回到 tick 边界才可整体替换镜像
+- **THEN** 既有 epoch、revision、operation 与摘要 MUST 逐字段保持，MUST NOT 从裸 summary 生成 operation；只有后续 Agent commit/reconcile 成功回到 tick 边界并匹配该状态适用的 replay identity 才可整体替换镜像
 
 ### Requirement: MemoryEpoch 与 tombstone 阻止旧记忆复活
 
 Go SHALL 是伙伴 lifecycle 与 `MemoryEpoch` 的唯一权威；active↔inactive 每次转换都 MUST 推进 epoch，推进将溢出 `uint64` 时 MUST 硬失败并保留旧状态。伙伴变为 inactive 时 MUST 持久化幂等 delete tombstone，inactive 记录 MUST 不保存摘要；重新 active 时 MUST 使用再次推进的新 epoch 与空摘要。Agent delete 可在服务恢复后重放，即使旧 thread 仍存在，旧 epoch 的 proposal、commit 或 reconcile MUST 被拒绝。当本次配置没有伙伴时，Go MUST 先执行不读取或解码正文的 metadata-only existence probe；已有 `companions.ai` 时 MUST 加载文件、把原 active 记录转为带新 epoch/tombstone 的 inactive 记录并同步写回，随后 MUST 不启动 MCP 或联系 Agent；文件不存在时 MUST 除该 probe 外不读取、创建或保存 `companions.ai`。
 
-reconcile SHALL 按 epoch、active/tombstone、revision 的顺序裁决。Go epoch 高于 Python 时，Agent MUST 在同一事务中先用 Go transition/tombstone operation fencing 旧 epoch，再按 Go v5 镜像恢复当前 active 或 inactive 状态；Python epoch 高于 Go，或同 epoch 的 active/tombstone 状态不同，MUST 返回 `memory_conflict`。同 epoch active 才比较 revision、operation 与 summary；同 epoch inactive 只按 tombstone operation 幂等重放。相同 operation 与载荷的重放 MUST no-op 成功，相同 operation 不同载荷 MUST conflict；合法新 tombstone MUST 优先于任何旧 epoch commit/reconcile，不同 epoch 的 revision MUST NOT 相互比较。
+reconcile SHALL 按 epoch、active/tombstone、revision 的顺序裁决。Go `memory_epoch` 高于 Python 时，该 higher epoch 本身 MUST 在同一事务中 fence 全部旧 epoch 并原子恢复 Go 当前状态，不要求 HTTP 或 v5 layout 之外的 transition operation：higher active canonical-zero 以精确 `{namespace, companion, epoch, active=true, revision=0, operation=null, summary=""}` 状态作为 replay key；higher active nonzero 以 mirror operation 和完整 mirror 作为 replay identity；higher inactive 以 tombstone operation 和 inactive state 作为 replay identity。Agent 离线期间 Go 连续推进多个合法 lifecycle epoch 时，reconcile MAY 从 Agent 的旧 epoch 直接跳到 Go 当前 higher epoch，无需先重放已被后续 active 状态取代的中间 tombstone。Python epoch 高于 Go，或同 epoch 的 active/tombstone 状态不同，MUST 返回 `memory_conflict`。同 epoch active 才比较 revision、operation 与 summary；同 epoch inactive 只按 tombstone operation 幂等重放。相同 nonzero mirror/tombstone operation 与载荷的重放，以及相同 active canonical-zero replay key 的重放，MUST no-op 成功；相同 operation 不同载荷 MUST conflict。合法 higher epoch 或新 tombstone MUST 优先于任何旧 epoch commit/reconcile，不同 epoch 的 revision MUST NOT 相互比较。
 
 #### Scenario: 离线停用后重新启用
 
 - **GIVEN** Agent 服务离线时一个带摘要的伙伴被停用，随后以同一 CompanionID 重新启用
 - **WHEN** Agent 服务恢复并执行 reconcile/delete
 - **THEN** 新 active 伙伴 MUST 使用推进后的 epoch 与空摘要，旧摘要 MUST 不进入 Dialogue，旧 epoch thread MAY 被物理清理但 MUST 永远不可重新绑定
+
+#### Scenario: 离线跨两次 lifecycle 后以 active canonical-zero fence 旧 epoch
+
+- **GIVEN** Agent 离线时仍保存伙伴 active epoch N，Go 已依次持久化 inactive epoch N+1 与 tombstone、再持久化 active epoch N+2 的 canonical-zero memory
+- **WHEN** Agent 恢复后 Go 只 reconcile 当前 active epoch N+2，并重放一次完全相同的请求
+- **THEN** epoch N+2 MUST 自身 fence 旧 epoch N 并原子建立 active canonical-zero，第二次请求 MUST 按 `{namespace, companion, epoch N+2, active, canonical-zero}` no-op 成功，MUST NOT 要求伪造 operation 或先重放已被取代的 N+1 tombstone；任何迟到 epoch N commit/reconcile MUST 被拒绝
 
 #### Scenario: 迟到旧 epoch commit 被拒绝
 
@@ -102,7 +108,7 @@ reconcile SHALL 按 epoch、active/tombstone、revision 的顺序裁决。Go epo
 
 ### Requirement: Memory 持久化故障不改变事实平面
 
-Memory reconcile、commit、delete 或 SQLite I/O 失败 MUST 不改变任务状态、FIFO、事实事件或世界状态。非终态与空闲 Dialogue MUST 不更新 memory；终态 commit 未确认时 MUST 不广播对应模型台词，并 MUST 暂停该伙伴后续 Dialogue 直到 reconcile 成功。失败 MUST 可由 operation identity 安全重试，但模型生成 MUST NOT 自动重试。
+Memory reconcile、commit、delete 或 SQLite I/O 失败 MUST 不改变任务状态、FIFO、事实事件或世界状态。非终态与空闲 Dialogue MUST 不更新 memory；终态 commit 未确认时 MUST 不广播对应模型台词，并 MUST 暂停该伙伴后续 Dialogue 直到 reconcile 成功。commit 与 active nonzero reconcile MUST 由 mirror operation 安全重试，delete/inactive reconcile MUST 由 tombstone operation 安全重试，active canonical-zero reconcile MUST 由精确 `{namespace, companion, epoch, active, canonical-zero}` replay key 安全重试；模型生成 MUST NOT 自动重试。
 
 #### Scenario: commit 失败保留任务结果
 

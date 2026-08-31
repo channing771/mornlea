@@ -60,7 +60,7 @@
 
 ### Requirement: schema v5 保存 Agent namespace 与 memory 恢复元数据
 
-companion schema SHALL 升级到 v5。聚合 MUST 保存稳定 canonical UUIDv4 `AgentNamespaceID`；每条记录 MUST 保存非零 `MemoryEpoch` 与 active/inactive 状态，active↔inactive 每次转换 MUST checked 推进 epoch，达到 `uint64` 最大值时 MUST 返回损坏语义的 overflow 错误而不回绕。active 记录 MUST 保存恢复镜像 `{revision, operation_id, summary}`；规范零 memory MUST 且只能使用零 revision、全零 operation 与空摘要，非零 revision MUST 携带 canonical UUIDv4 operation，summary 必须是无 NUL 的有效 UTF-8 且不超过 2,048 bytes。inactive 记录 MUST 清空 revision、operation 与摘要，MUST 不保存 task/FIFO，且 MUST 保存幂等 delete tombstone。v1..v4 MUST 被视为隐式 epoch 0并在迁移时固定落 epoch 1：v4 active 非空摘要 MUST 原字节成为 revision 1 mirror并生成 fresh memory operation；v1..v3 与 v4 active 空摘要 MUST 使用 canonical-zero memory且不得伪造另一个 active migration operation；legacy inactive MUST 生成 fresh tombstone。名称、persona、模型消息、credential、MCP capability 与完整聊天 MUST 不写入文件。
+companion schema SHALL 升级到 v5。聚合 MUST 保存稳定 canonical UUIDv4 `AgentNamespaceID`；每条记录 MUST 保存非零 `MemoryEpoch` 与 active/inactive 状态，active↔inactive 每次转换 MUST checked 推进 epoch，达到 `uint64` 最大值时 MUST 返回损坏语义的 overflow 错误而不回绕。active 记录 MUST 保存恢复镜像 `{revision, operation_id, summary}`；规范零 memory MUST 且只能使用零 revision、全零 operation 与空摘要，非零 revision MUST 携带 canonical UUIDv4 operation，summary 必须是无 NUL 的有效 UTF-8 且不超过 2,048 bytes。inactive 记录 MUST 清空 revision、operation 与摘要，MUST 不保存 task/FIFO，且 MUST 保存幂等 delete tombstone。v1..v4 MUST 被视为隐式 epoch 0并在迁移时固定落 epoch 1：v4 active 非空摘要 MUST 原字节成为 revision 1 mirror并生成 fresh memory operation；v1..v3 与 v4 active 空摘要 MUST 使用 canonical-zero memory且不得伪造另一个 active migration operation；legacy inactive MUST 生成 fresh tombstone。identity entropy 消费顺序 MUST 唯一：缺失 namespace 时先且只生成一个 namespace，随后按 `CompanionID` 严格升序遍历，每个本次需要生成的 nonzero mirror operation 或 tombstone 各恰好消费一个 UUID，canonical-zero active 与无需新身份的 unchanged v5 记录 MUST 不消费 entropy。名称、persona、模型消息、credential、MCP capability 与完整聊天 MUST 不写入文件。
 
 #### Scenario: v4 摘要迁移为初始 memory
 
@@ -80,6 +80,12 @@ companion schema SHALL 升级到 v5。聚合 MUST 保存稳定 canonical UUIDv4 
 - **WHEN** 服务端迁移到 v5
 - **THEN** 该记录 MUST 从隐式 epoch 0 落为 inactive epoch 1，清除 task/FIFO/summary并生成 fresh tombstone，MUST NOT 保存 active mirror operation
 
+#### Scenario: identity entropy 按规范顺序精确消费
+
+- **GIVEN** 一个缺失 namespace 的 legacy aggregate，按 ID 排序后同时含需要 nonzero mirror operation 的 active、canonical-zero active 与需要 tombstone 的 inactive 记录
+- **WHEN** bootstrap 使用可观测 entropy source 迁移到 v5
+- **THEN** 第一个 UUID MUST 是 namespace，随后 MUST 只按记录 ID 升序为每个 nonzero mirror operation 或 tombstone 各消费一个 UUID，canonical-zero active MUST 消费零个且整个迁移 MUST 不多消费任何身份
+
 #### Scenario: namespace 在重启后稳定
 
 - **GIVEN** 一个 v5 世界已生成 AgentNamespaceID 并安全保存
@@ -88,13 +94,19 @@ companion schema SHALL 升级到 v5。聚合 MUST 保存稳定 canonical UUIDv4 
 
 ### Requirement: v5 身份在首次 Agent 使用前原子落盘
 
-加载任一 v1..v4 文件时，无论当前配置是否含 active 伙伴，服务端 MUST 生成缺失的 namespace、epoch 以及按上一要求合法存在的 memory operation 或 retirement tombstone，并以既有原子替换纪律同步保存 v5；零伙伴配置完成 retirement 后不联系 Agent。新世界或新伙伴没有既有 v5 identity 时，也 MUST 把规范 provisional body、稳定 namespace、epoch 与 canonical-zero memory同步原子保存，再构造 persistence worker、world/simulation、Agent 或 MCP。identity entropy、capacity、epoch/aggregate revision overflow 或同步保存失败 MUST 令启动失败，输入值和旧正式文件 MUST 保持未被部分修改，且后续构造次数 MUST 全部为零。pre-rename 的 create/write/sync/close/rename 失败 MUST 保留旧正式字节；rename 后 parent directory sync 失败 MUST 仍返回错误并停止启动，rename 已发布的新正式文件 MUST 是完整可解码 v5，MUST NOT 是半文件。v5 不提供向 v4 的降级写回；回滚旧程序必须同时恢复事先备份的 v4 文件和旧配置。
+加载任一 v1..v4 文件时，无论当前配置是否含 active 伙伴，服务端 MUST 生成缺失的 namespace、epoch 以及按上一要求合法存在的 memory operation 或 retirement tombstone，并以既有原子替换纪律同步保存 v5；零伙伴配置完成 retirement 后不联系 Agent。新世界或新伙伴没有既有 v5 identity 时，也 MUST 把规范 provisional body、稳定 namespace、epoch 与 canonical-zero memory同步原子保存，再构造 persistence worker、world/simulation、Agent 或 MCP。identity entropy、capacity 或 epoch/aggregate revision overflow MUST 在 Save 前令启动失败，输入值与旧正式字节保持不变；任一同步 Save 错误也 MUST 令启动失败，且所有这些失败的后续 persistence/world/Agent/MCP 构造次数 MUST 为零。仅 pre-rename 的 temp create/write/sync/close 或 rename 失败 MUST 保证旧正式 v4 字节不变；rename 成功后的 parent directory sync 失败 MUST 仍返回错误并停止启动，此时 official path MUST 是完整可解码 v5 而非半文件，MUST NOT 再要求旧 v4 保持。v5 不提供向 v4 的降级写回；回滚旧程序必须同时恢复事先备份的 v4 文件和旧配置。
 
-#### Scenario: 迁移保存失败不联系 Agent
+#### Scenario: pre-rename 迁移失败保留旧 v4 且不联系 Agent
 
-- **GIVEN** 一个合法 v4 文件与 active 配置，但 v5 原子替换被注入 I/O 失败
+- **GIVEN** 一个合法 v4 文件与 active 配置，但 v5 原子替换在 temp create/write/sync/close 或 rename 阶段失败
 - **WHEN** 服务端启动
 - **THEN** 启动 MUST 失败，正式 v4 文件 MUST 保持原样，MCP 与 Agent HTTP MUST 未启动或未调用
+
+#### Scenario: parent directory sync 失败只留下完整 v5
+
+- **GIVEN** 一个合法 v4 文件已成功 rename 为完整 v5，但随后 parent directory sync 失败
+- **WHEN** 同步 bootstrap Save 返回
+- **THEN** 启动 MUST 失败且 persistence/world/Agent/MCP MUST 未构造，official path MUST 只包含完整可 decode 的 v5，MUST NOT 包含半文件或被要求恢复为旧 v4
 
 #### Scenario: 零伙伴旧文件也完成 v5 retirement
 
@@ -122,7 +134,7 @@ companion schema SHALL 升级到 v5。聚合 MUST 保存稳定 canonical UUIDv4 
 
 ### Requirement: v5 元数据跨身体与任务保存无损携带
 
-伙伴 persistence SHALL 在身体、任务、FIFO 的 autosave、retry 与 Flush 中深拷贝并逐字段携带 namespace、lifecycle、epoch、active mirror 或 inactive tombstone。身体或任务观察 MUST NOT 从旧 direct Dialogue 的裸 `Summary string` 推导或改写 v5 mirror，也 MUST NOT 伪造 revision/operation；该裸 summary 只可 transient 使用。系统 MUST 只在 Agent memory commit/reconcile 成功结果回到权威 tick 边界并通过 epoch/operation 关联后，整体替换 `{epoch, revision, operation, summary}` 并 mark dirty。aggregate revision 的每次持久 mutation MUST checked 增加一次；达到 `uint64` 最大值时 MUST 返回损坏语义的 overflow 错误，不 dispatch Save、不回绕且不丢失既有 metadata。
+伙伴 persistence SHALL 在身体、任务、FIFO 的 autosave、retry 与 Flush 中深拷贝并逐字段携带 namespace、lifecycle、epoch、active mirror 或 inactive tombstone。身体或任务观察 MUST NOT 从旧 direct Dialogue 的裸 `Summary string` 推导或改写 v5 mirror，也 MUST NOT 伪造 revision/operation；该裸 summary 只可 transient 使用。系统 MUST 只在 Agent memory commit/reconcile 成功结果回到权威 tick 边界并通过 epoch 与该状态适用的 replay identity 关联后，整体替换 `{epoch, revision, operation, summary}` 并 mark dirty。aggregate revision 的每次持久 mutation MUST checked 增加一次；达到 `uint64` 最大值时 MUST 返回损坏语义的 overflow 错误，不 dispatch Save、不回绕且不丢失既有 metadata。
 
 #### Scenario: 身体与任务 autosave 保持 mirror
 

@@ -298,8 +298,8 @@ SQLite schema 只保存：
 不得保存 plan、task、FIFO、snapshot、prompt、messages、persona、line 或 proposal。
 
 Go 是 epoch/lifecycle 权威；active↔inactive 每次转换推进 epoch，溢出硬失败。
-reconcile 中 Go epoch 较高时先 fencing Python 旧 epoch 再恢复 Go 当前状态；Python epoch 较高或同 epoch active/tombstone 不同则 conflict。
-只有同 epoch active 比较 revision/operation/summary；同 epoch inactive 只幂等重放 tombstone operation，合法 tombstone 优先于旧 epoch commit。
+reconcile 中 Go `memory_epoch` 较高时，higher epoch 本身就是旧 epoch 的 fence，并在同一 SQLite transaction 中原子替换为 Go 当前状态；不新增 HTTP 字段，也不在 v5 canonical-zero 中伪造 transition operation。active canonical-zero 的精确 replay key 是 `{namespace, companion, epoch, active=true, revision=0, operation=null, summary=""}`；active nonzero 用 mirror operation+完整 mirror，inactive 用 tombstone operation+inactive state。Agent 离线期间若 Go 已从 active N 经 inactive N+1 推进到 active canonical-zero N+2，恢复时只 reconcile N+2 即可 fence N，不要求先交付已被取代的 N+1 tombstone。
+Python epoch 较高或同 epoch active/tombstone 不同则 conflict。只有同 epoch active 比较 revision/operation/summary；同 epoch inactive 只幂等重放 tombstone operation。相同 active-zero replay key、相同 nonzero mirror operation+载荷或相同 tombstone operation+载荷 no-op 成功；同 operation 不同载荷 conflict，合法 higher epoch 或 tombstone 优先于旧 epoch commit/reconcile。
 
 单进程 lifespan 中创建唯一连接/adapter，并串行化 writer transaction。
 readiness 只有在配置、SQLite 和 model adapter 可接受请求后成功。
@@ -364,7 +364,7 @@ v1..v4 都视为隐式 epoch 0，本次迁移的每条记录固定落 epoch 1；
 
 这消除了“每个 legacy 都必须保存 migration operation”与 canonical-zero 的冲突：active migration operation 只属于由 v4 非空摘要形成的 revision 1 mirror；inactive migration operation 就是 tombstone。不存在另一个可藏在 revision 0 mirror 中的 active operation。
 
-merge 是纯计算：先 clone 并完整校验输入、active≤4、union≤64 与所有 checked increment，再按 `CompanionID` 顺序从可注入且可失败的 entropy source 生成 namespace/operation/tombstone，最后一次返回新 aggregate。capacity、epoch overflow、aggregate revision overflow 或任一 entropy failure 都不修改输入、不消费后续身份、不调用 Save。
+merge 是纯计算：先 clone 并完整校验输入、active≤4、union≤64 与所有 checked increment，再从可注入且可失败的 entropy source 按唯一顺序生成身份。namespace 缺失时必须先且只生成一个 namespace；随后按 `CompanionID` 升序遍历，每条本次需要 nonzero mirror operation 的 active 记录恰好生成一个 operation，每条本次需要新 tombstone 的 inactive 记录恰好生成一个 tombstone，canonical-zero active 不消费 entropy；不需要新身份的 unchanged v5 记录也不消费。最后一次返回新 aggregate。capacity、epoch overflow、aggregate revision overflow 或任一 entropy failure 都不修改输入、不继续消费后续身份、不调用 Save。
 
 #### 9.3 identity-first provisional body 与启动 barrier
 
@@ -398,7 +398,7 @@ missing 只 probe；existing legacy 或包含 active 的 v5 完成迁移/retirem
 
 Task 8 的 persistence coordinator 必须把 namespace、每 ID lifecycle、epoch、完整 mirror 或 tombstone 当作不可变 metadata 深拷贝，并在身体/任务 autosave 与 Flush 中无损携带。inactive body 保留但永不生成 task/FIFO；active 可没有 task/FIFO。每次真实 dirty 保存对 aggregate revision 做 checked increment；达到 `MaxUint64` 时 `Poll`/`Flush` 返回 `ErrCorrupt` 语义的 overflow 错误，不 dispatch、不 Save、不回绕，也不改变已持久化 metadata。Task 8 只负责 carry-through，不调用 Agent memory API，也不决定 Python/Go memory 胜负。
 
-现有 direct Dialogue 每 tick提供的裸 `Summary string` 不包含 epoch、revision 或 operation，不能转换成合法 CAS mirror。Task 8 到 Task 10 的中间基线允许 direct Dialogue 继续 transient 运行，但 body/task autosave 必须忽略该裸 summary 对 v5 mirror 的改写，既有 migration mirror逐字段保持，不生成 operation。Task 10 删除或替换这条裸写路径；只有 Agent commit/reconcile 成功结果回到权威 tick 边界并通过 operation+epoch 关联后，才整体替换 `{epoch, revision, operation, summary}` 并 mark dirty。Task 9 Planner cutover不修改 mirror。
+现有 direct Dialogue 每 tick提供的裸 `Summary string` 不包含 epoch、revision 或 operation，不能转换成合法 CAS mirror。Task 8 到 Task 10 的中间基线允许 direct Dialogue 继续 transient 运行，但 body/task autosave 必须忽略该裸 summary 对 v5 mirror 的改写，既有 migration mirror逐字段保持，不生成 operation。Task 10 删除或替换这条裸写路径；只有 Agent commit/reconcile 成功结果回到权威 tick 边界并通过 epoch 与该状态适用的 replay identity 关联后，才整体替换 `{epoch, revision, operation, summary}` 并 mark dirty。Task 9 Planner cutover不修改 mirror。
 
 #### 9.5 error、原子替换与任务边界
 
@@ -409,7 +409,7 @@ Task 8 的 persistence coordinator 必须把 namespace、每 ID lifecycle、epoc
 - temp create/write/sync/close 或 rename 的 pre-rename failure 保留旧正式字节且不泄漏 temp；parent directory sync 在 rename 后失败时调用仍返回错误并让启动失败，rename 已发布的新正式文件必须是完整可解码 v5，绝不允许半文件，也不得误断言旧文件仍在；
 - entropy、overflow 或 Save 失败都禁止后续 persistence/world/Agent/MCP 构造。v5 不降级写 v4；回滚必须恢复部署前 v4 备份与旧配置。
 
-Task 8 到此为止：交付 codec/merge/probe/bootstrap/carry-through，不 acquire lease、不启动 MCP bridge、不发 memory reconcile/commit/delete、不切换 Planner/Dialogue，也不重排 Task 10 的完整 shutdown。Task 9 消费已落盘 namespace/lifecycle做 Planner cutover但不改 memory；Task 10 才接线 Dialogue、memory mutation、delete/reconcile 与最终 shutdown 顺序。
+Task 8 到此为止：交付 codec/merge/probe/bootstrap/carry-through，不 acquire lease、不启动 MCP bridge、不发 memory reconcile/commit/delete、不切换 Planner/Dialogue，也不重排 Task 10 的完整 shutdown。Task 9 消费已落盘 namespace/lifecycle做 Planner cutover但不改 memory；Task 10 才接线 Dialogue、memory mutation、delete/reconcile 与最终 shutdown 顺序，并以 RED 覆盖 Agent 离线时 Go 从 active N→inactive N+1→active canonical-zero N+2 后，仅凭 higher epoch/current state fence N、相同 active-zero replay key 幂等且旧 N 迟到结果被拒绝。
 
 ### 10. 并发与关服顺序
 
@@ -432,7 +432,7 @@ Python shutdown 停止接收请求、取消 run、完成/回滚 SQLite transacti
 
 ### 11. 验证结构
 
-Go 单测覆盖 strict codec、config、v5 migration、33×17×33 frozen projection、±8 端点与未 ready 列、以 counting fake 钉死最多 18,513 次 world `blockAt` 且 exposed 零追加读取、projection 边界邻居语义、terrain wire exact bytes/BE/Base64/unused bits/deterministic digest/53 KiB 与 96 KiB 边界、canonical block/item names、被 exposed cap 遗漏的 mine 目标、snapshot registry cancellation、MCP outer handler、Task/Dialogue stale result 和关服顺序。
+Go 单测覆盖 strict codec、config、v5 migration、33×17×33 frozen projection、±8 端点与未 ready 列、以 counting fake 钉死最多 18,513 次 world `blockAt` 且 exposed 零追加读取、projection 边界邻居语义、terrain wire exact bytes/BE/Base64/unused bits/deterministic digest/53 KiB 与 96 KiB 边界、canonical block/item names、被 exposed cap 遗漏的 mine 目标、snapshot registry cancellation、MCP outer handler、Task/Dialogue stale result 和关服顺序。Task 8 改写 v5/staging 后必须显式更新并运行 `TestM5StageAcceptancePersonaDialogueEndToEnd` 与 `TestCompanionDialogueSummaryLifecycle`，且执行完整 `go test ./internal/server -race -count=1`，不能用只匹配 bootstrap/shutdown 的 regex 代替。
 Python 单测覆盖 Pydantic strict models、`find_visible_blocks`/`query_terrain` success/failure `oneOf` 的合法与非法 variants、normal domain result 作为 tool message 且 `isError` 仍 unavailable、graph budgets、SQLite CAS、lease fencing、app auth/body/error 与无 checkpoint 落盘。
 
 必须有真实跨语言测试：
