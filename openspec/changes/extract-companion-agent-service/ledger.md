@@ -18,6 +18,8 @@
 - 当前共同 MCP wire 下跨语言 request cancellation 不可靠；snapshot registry 用自己的 deadline/cancel/TTL 收口，并由真实跨语言测试覆盖。
 - accepted Dialogue reservation 通过首次 tick 重验后不再由后续 generation 变化撤销；commit 只按 operation/epoch 关联。
 - Go 是 task/world/lifecycle/epoch 权威，Python 是运行期 compact memory 权威；没有 direct-model fallback、remote MCP 或 Docker。
+- Task 7 terrain ruling：以 `floor(companion.Position)` 为中心冻结固定 33×17×33（水平 ±16/垂直 ±8）dense projection；ready bitmap、1,089 个 height 与 18,513 个 `BlockID` 的 data plane 每份 ≤40 KiB、四槽 ≤160 KiB。`query_terrain` 只读请求体素并全有或全无，未 ready/越界为 `out_of_bounds`；mine 对精确 frozen block 复用既有 validator，不依赖 `ExposedBlocks<=256`，因此 Chest/Furnace 继续接受、农业/火把/无掉落/未交付多掉落继续拒绝。规划 ±8 与寻路 ±4 明确解耦；若裁决错误，成本是 Task 7 snapshot/validator 重做，不影响 Task 1 machine-readable contract、游戏 wire、存档或 ABI。
+- Task 7 naming ruling：`internal/core` 作为 `BlockID`/`ItemID` 所有者新增唯一 canonical English `snake_case` registry；UI 中文 display name 不复用，Planner place 白名单只保留语义 ID 集并从 core 派生拼写。未知 ID/name fail closed，不生成数值/中文 fallback；Task 1 schema/golden 保持不变并由 consistency tests 交叉锁定。
 
 ## 任务记录
 
@@ -72,6 +74,13 @@
 - Round 3：SPEC 与 QUALITY 共同拒绝用 `_drain_cleanup` shield 整个 bootstrap；阻塞 factory 在外部取消后不收到 `CancelledError`，使 startup/关服可无界等待。修复改为主动取消 owned bootstrap task，再 cancellation-safe drain 其资源清理。
 - Round 4：SPEC 与 QUALITY 均 PASS；阻塞 factory 单次/重复取消、慢清理、close 异常、完成/取消同 tick 竞态、disconnect、lease/correlation、no checkpoint 与 terminal no-precommit 对抗通过；32 次重复取消与 200 次所有权竞态无死锁、泄漏或双关。
 - 控制会话复验：Task 5 focused `56 passed`；完整 Python `393 passed`；asyncio debug + warnings-as-errors HTTP `36 passed`；工作树在 ledger 更新前 clean。
+
+### Task 7 实施前设计裁决
+
+- 预检基线 `f56b42bf` 证实现有 1,089 条 height + `ExposedBlocks<=256` 不能回答任意 `query_terrain` 体素，也会让未进入 exposed cap 的 mine 目标跳过方块语义；禁止由 MCP handler 回读 live world 填洞。
+- proposal/design、`companion-agent-mcp-tools` 与 `companion-planner` delta spec、Task 7 文案已同步 fixed dense projection、完整垂直 ±8、ready/missing、全有或全无 terrain、精确 mine validator 与 core canonical name 裁决；Task 1 manifest/schema/golden 未改，Task 7 保持未勾选。
+- 版本矩阵保持 protocol v32、player v8、chunk v9、metadata v3、companions v4→v5、hostile v1、engine ABI v9、client ABI v13、scenario v20；该裁决不触发 wire、存档或 ABI 升版。
+- 规划产物验证：`openspec validate --all --strict --no-interactive` exit 0，80 passed/0 failed；`git diff --check` exit 0。
 
 ## 整分支终审与门禁
 

@@ -24,7 +24,7 @@
 
 ## Task 7: Go frozen snapshot registry and MCP v1
 
-- [ ] 7.1 先写 registry 4 容量、deadline+5s TTL、自有 cancel/清理、冻结观察，以及直接消费 Task 1 MCP fixtures 的六工具 canonical/wire size/stable-code、raw POST single-object/version/auth/Origin（缺失合法、存在时 loopback）RED tests，再用官方 Go MCP SDK 实现 `/mcp`；显式只广告 Tools/listChanged=false，SDK 前拒 GET/batch/ping/subscriptions/其他，Stateless+JSON、wire≤160KiB、无 SSE/session且不依赖 raw request cancellation，以 `go test ./internal/companion ./internal/server -run 'MCP|Snapshot|PlanningTool' -race -count=1 && go test ./internal/archcheck -count=1` 验证。
+- [ ] 7.1 先在 `internal/core`、`internal/companion`、`internal/server` 写 canonical English block/item registry 穷举与 unknown fail-closed、以伙伴 floor 格为中心的 33×17×33（水平 ±16/垂直 ±8）frozen terrain projection、ready/空列区分、18,513 格与单份 ≤40 KiB 上限、±8 端点、`query_terrain` 输入序/重复/全有或全无、被 exposed 256 cap 遗漏的 Chest/Furnace/农业 mine 精确 validator、registry 4 容量/deadline+5s TTL/深拷贝/自有 cancel/清理，以及直接消费 Task 1 MCP fixtures 的六工具 canonical/wire size/stable-code、raw POST single-object/version/auth/Origin（缺失合法、存在时 loopback）RED tests；再用官方 Go MCP SDK v1.7.0 实现 `/mcp`，规划投影不得复用寻路垂直 ±4 或回读 live world，显式只广告 Tools/listChanged=false，SDK 前拒 GET/batch/ping/subscriptions/其他，Stateless+JSON、wire≤160KiB、无 SSE/session且不依赖 raw request cancellation，以 `go test ./internal/core ./internal/companion ./internal/server -run 'CanonicalName|MCP|Snapshot|Terrain|PlanningTool' -race -count=1 && go test ./internal/archcheck -count=1` 验证。
 
 ## Task 8: `companions.ai` v5 codec and bootstrap migration
 

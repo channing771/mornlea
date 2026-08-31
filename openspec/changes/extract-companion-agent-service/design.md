@@ -176,7 +176,7 @@ snapshot/namespace/companion/capability 由 runtime 注入，模型不能选择�
 | `list_affordances` | `{}` | step kinds、最多 8 online player、最多 256 visible block；canonical 24 KiB |
 | `inspect_inventory` | `offset: 0..35`、`limit: 1..36` | 最多 36 个 slot/item/count；8 KiB |
 | `find_visible_blocks` | `block_names: 1..16`、`limit: 1..64` | 坐标序最多 64 个 position/block/drop；16 KiB |
-| `query_terrain` | `positions: 1..64` 个整数世界坐标 | 输入序最多 64 个 position/height/block；16 KiB |
+| `query_terrain` | `positions: 1..64` 个整数世界坐标 | 全部位置位于 frozen terrain projection 且列已 ready 时，按输入序逐项返回 position/冻结列高/该位置方块名；任一位置越界或列未 ready 时整次失败为 `out_of_bounds`；16 KiB |
 | `validate_plan` | ≤64 KiB strict Plan object | accepted 时 digest+canonical plan，canonical 72 KiB；失败时 code+不超过 256 bytes hint |
 
 runtime 对六者注入 snapshot identity。
@@ -184,10 +184,33 @@ validator code 固定为 `invalid_schema`、`out_of_bounds`、`unknown_player`�
 Go SDK 同时生成 StructuredContent 与 JSON TextContent fallback；双份后的 MCP wire response 独立限制为 160 KiB，并在发送前硬失败。该限制不改变 Agent HTTP response 的 64 KiB 上限。
 MCP Origin 缺失对 Python httpx 合法；若存在，则必须匹配 listener 的 loopback origin。
 
-### 5. Snapshot registry 自行收口 deadline/cancel
+`internal/core` 持有方块与物品稳定枚举，因此也必须持有 machine-facing canonical English name 的唯一 Go 注册表：
 
-tick 边界只复制有界、不可变 snapshot 数据。
-worker 完成规范 JSON 编码、SHA-256 digest 和随机 snapshot ID 后注册。
+- `CanonicalBlockName(BlockID)` 覆盖全部 `0 <= id < BlockIDMax`，空气固定为 `air`；
+- `CanonicalItemName(ItemID)` 覆盖全部 `0 < id < ItemIDMax`，完整方块物品复用对应 block canonical name，非方块物品只有一份显式 canonical name；
+- 名称必须是唯一、非空、至多 64 bytes 的小写 ASCII `snake_case`；中文 `BlockDisplayName`/`ItemDisplayName` 只供 UI，不能进入 MCP machine field；
+- 未注册 ID、`ItemNone` 或未知输入 name 不得用数值、中文或 `unknown_*` 临时格式化。非法 ID 令 snapshot 注册失败；`find_visible_blocks` 的未知 name 整次返回 `unknown_block` 且无部分结果；`validate_plan` 继续用 `unknown_block`；schema 允许为空的 `drop_item` 才可返回 null。
+
+现有 place 交付白名单仍决定哪些方块可用于 `place`，但白名单只保存允许的 `ItemID`/`BlockID`，字符串 key 从 core canonical registry 派生；这样交付集合与英文拼写各有且只有一个真相来源。Task 1 的 checked-in schema/golden 继续是跨语言 wire 真相，Go consistency test 必须把其中 place enum 与 core/Planner 派生集合逐项锁定，不修改既有 fixture。
+
+### 5. Frozen terrain projection 与 snapshot registry 自行收口 deadline/cancel
+
+当前 `PlanSnapshot.Heights` 只覆盖 ready 列，`ExposedBlocks` 又最多 256 条；两者不能回答任意 `(x,y,z)` 的冻结方块，也不能证明被暴露方块裁剪遗漏的 mine 目标是否存在。Task 7 因此增加固定 dense terrain projection，而不是让 MCP handler 回读 live world。
+
+投影以 `floor(companion.Position)` 得到整数中心 `(cx,cy,cz)`，origin 固定为 `(cx-16,cy-8,cz-16)`，dimension 固定为 `33×17×33`，可寻址坐标是闭区间 `x∈[cx-16,cx+16]`、`y∈[cy-8,cy+8]`、`z∈[cz-16,cz+16]` 与世界 Y 边界的交集。该垂直 ±8 是 Planner 观察契约，独立于寻路的 `pathfind.PathWindowVerticalRadius=4`；Task 7 必须让规划构造扫描完整 17 层，不得再借用寻路半径。
+
+`internal/companion` 中的投影采用固定 compact data plane：
+
+- 1,089-bit ready-column bitmap，按 `(x,z)` 字典序索引；
+- 1,089 个 signed 16-bit height，使用同一列顺序；ready 空列为 `core.MinY-1`，未 ready 列的 height 值规范化为该零语义但必须由 bitmap 区分，绝不能被解释成空气列；
+- 18,513 个 `uint16` `BlockID`，按 `(x,y,z)` 字典序索引；ready 列的世界内格保存精确冻结值，未 ready 列和世界 Y 外的槽位规范化为 `AirID`，但只有 ready 且世界内的格可观察；
+- origin 与固定 dimension 是 O(1) metadata。三个 data plane 合计 39,341 bytes，连同 metadata 每投影硬上限 40 KiB；registry 四槽的 terrain data plane 合计硬上限 160 KiB。
+
+权威 tick 使用当时的 `companionChunkView` 构造投影，最多读取 18,513 个格；同一次 planning scan 修正 `PlanSnapshot.ExposedBlocks` 到垂直 ±8 并保持按 `(x,y,z)` 排序后最多 256 条，`Heights` 保持 ready 列 `(x,z)` 排序摘要。当前共享 helper 若会把 Dialogue 环境摘要一并扩大，Task 7 必须拆出 planning radius/构造路径；本裁决不改变 Dialogue 输入，也不改变寻路 ±4。`find_visible_blocks` 只查冻结的 `ExposedBlocks`；`query_terrain` 与 mine validator 查 dense projection。投影内但未进入 256 条 exposed cap 的 mine 目标必须按精确 frozen `BlockID` 调用既有 `planMineableBlock`；空气、农业、火把、无掉落和未交付多掉落返回 `unmineable_target`，Chest/Furnace 与普通单掉落保持接受。投影外或列未 ready 返回 `out_of_bounds`。任一多位置 terrain 查询失败时不返回任何部分 `terrain`；成功时保留输入数量、顺序和重复项，height 是冻结 `(x,z)` 列高，block name 是请求 `(x,y,z)` 的精确冻结方块。
+
+tick 边界只复制上述有界、不可变 snapshot 数据。worker 使用专用 snake_case wire DTO 完成规范 JSON 编码、SHA-256 digest 和随机 snapshot ID；digest 覆盖所有工具可观察事实，包括 projection origin、ready bitmap、height 与 block planes，但 projection 不作为一个整体进入 Agent HTTP、模型输入或 MCP tool result。terrain DTO 固定写 `origin{x,y,z}`、`dimensions:[33,17,33]`、`ready_columns_b64`、`heights_be_i16_b64` 与 `blocks_be_u16_b64`：列/体素索引沿用上述字典序，ready bit `i` 放在 byte `i/8` 的 `1<<(i%8)`，末 byte 未用 bit 为零；height 用二进制补码 big-endian int16，block 用 big-endian uint16，三段都用 RFC 4648 padded standard Base64。terrain canonical JSON 小于 53 KiB，完整 snapshot digest input MUST 不超过 96 KiB。不能直接依赖现有 camelCase `json.Marshal(PlanSnapshot)`、Go map 顺序或平台字节序。
+
+registry 注册时对 snapshot 的所有 slice 和 projection data plane 深拷贝，之后只向 handler 提供不可变 view。完成、取消、TTL 或 `Close` 删除记录并取消 registry-owned context；删除后即使旧 handler 仍持有调用 context，也必须在入口、每个有界循环及编码前后检查 guard，不能继续读取投影。
 
 registry 容量 4，TTL 为 run 有效 deadline 加 5 秒。
 完成、显式取消、Host shutdown 或 TTL 到期都删除记录。
@@ -199,6 +222,8 @@ registry 容量 4，TTL 为 run 有效 deadline 加 5 秒。
 过期记录即使底层请求仍到达也只返回不可用，不再访问快照。
 
 否决把 raw request cancellation 当唯一清理机制：它在当前共同 wire 版本下不可靠。
+
+同时否决三种替代方案：只允许查询 `ExposedBlocks` 会让合法 query/mine 取决于 256 条裁剪；把 `block_name` 改成列顶方块会违背已交付 schema 对请求位置的对应关系；handler 回读 `runtime.Engine` 会混入实时世界并取得错误的并发所有权。固定 dense projection 用约 2 倍于现有 ±4 扫描的常数工作换取完整冻结语义，且不改变游戏 wire、存档或 Rust ABI。
 
 ### 6. Planner LangGraph
 
@@ -305,7 +330,7 @@ Python shutdown 停止接收请求、取消 run、完成/回滚 SQLite transacti
 
 ### 11. 验证结构
 
-Go 单测覆盖 strict codec、config、v5 migration、snapshot registry、MCP outer handler、Task/Dialogue stale result 和关服顺序。
+Go 单测覆盖 strict codec、config、v5 migration、33×17×33 frozen projection、±8 端点与未 ready 列、canonical block/item names、被 exposed cap 遗漏的 mine 目标、snapshot registry、MCP outer handler、Task/Dialogue stale result 和关服顺序。
 Python 单测覆盖 Pydantic strict models、graph budgets、SQLite CAS、lease fencing、app auth/body/error 与无 checkpoint 落盘。
 
 必须有真实跨语言测试：
@@ -330,6 +355,8 @@ Python 单测覆盖 Pydantic strict models、graph budgets、SQLite CAS、lease 
 - [独立进程增加运维步骤] → live/ready、清晰启动诊断与本地运行文档。
 - [Python 依赖漂移] → Python 3.12、`mcp<2`、提交 `uv.lock`、CI `uv sync --locked`。
 - [Agent latency 消耗槽位] → 无队列、4 全局/1 每伙伴、30/60 秒预算。
+- [规划 tick 扫描由 9 层增至 17 层] → 固定 18,513 次体素读取、单投影 ≤40 KiB、四槽 ≤160 KiB，并用 focused benchmark/单测钉住常数尺寸；不得把 JSON/digest 编码移回 tick。
+- [英文 machine name 与枚举漂移] → `internal/core` 单一 exhaustive registry，穷举 `BlockIDMax`/`ItemIDMax` 与 Task 1 fixture consistency tests；未知值 fail closed，不生成回退名字。
 
 ## Migration Plan
 

@@ -40,7 +40,7 @@ Go SHALL 为启用 Agent 的 Host 提供独立的 loopback `/mcp` endpoint，应
 
 ### Requirement: 每次规划只观察冻结快照
 
-Go SHALL 在 Planner worker 发起 Agent 请求前注册一个不可变规划快照，赋予不可猜测的 snapshot identity、规范 JSON SHA-256 digest、任务 generation 和固定到期时间。registry MUST 最多容纳 4 个在途快照；snapshot TTL MUST 是该 Agent run 的有效 deadline 加 5 秒，完成、取消或到期后 MUST 释放。工具调用 MUST 只读取该 snapshot 副本，MUST NOT 读取实时 sim、取得 tick 锁或在 tick goroutine 编码 JSON、执行网络或磁盘 I/O。
+Go SHALL 在 Planner worker 发起 Agent 请求前注册一个不可变规划快照，赋予不可猜测的 snapshot identity、规范 JSON SHA-256 digest、任务 generation 和固定到期时间。快照 MUST 以伙伴位置各分量向下取整后的格为中心，冻结水平 ±16、垂直 ±8 的 33×17×33 terrain projection；投影 MUST 区分 ready 与未加载列，为每个 ready `(x,z)` 列保存冻结地表高度，并为范围内每个 world-valid `(x,y,z)` 保存精确冻结方块。单个 terrain projection data plane MUST 不超过 40 KiB，registry 中四份合计 MUST 不超过 160 KiB。registry MUST 最多容纳 4 个在途快照；snapshot TTL MUST 是该 Agent run 的有效 deadline 加 5 秒，完成、取消或到期后 MUST 释放。工具调用 MUST 只读取该 snapshot 深拷贝，MUST NOT 读取实时 sim、取得 tick 锁或在 tick goroutine 编码 JSON、执行网络或磁盘 I/O；寻路垂直半径 ±4 MUST NOT 收窄 Planner 投影的垂直 ±8 契约。
 
 #### Scenario: 世界变化不改变工具观察
 
@@ -54,9 +54,17 @@ Go SHALL 在 Planner worker 发起 Agent 请求前注册一个不可变规划快
 - **WHEN** 第五个规划请求尝试注册
 - **THEN** 注册 MUST 立即失败且不等待，任务 MUST 映射为 `PlannerUnavailable`，权威 tick MUST 不受阻塞
 
+#### Scenario: 垂直端点与未加载列保持可判定
+
+- **GIVEN** 一个冻结快照在伙伴整数格上下各八格都包含 ready 方块，且同一水平窗口另有一列在构造时未加载
+- **WHEN** 工具分别查询两个垂直端点与未加载列中的 world-valid 坐标
+- **THEN** 两个端点 MUST 返回各自冻结方块，未加载列 MUST 作为不可用失败而不得伪装成空气；任一调用都 MUST NOT 回读随后加载的 live chunk
+
 ### Requirement: MCP v1 工具全集固定且无副作用
 
-MCP v1 SHALL 只暴露固定图调用的 `get_planning_context`、`validate_plan`，以及模型可见的 `list_affordances`、`inspect_inventory`、`find_visible_blocks`、`query_terrain`。六者 MUST 使用 checked-in JSON Schema/golden 作为跨语言单一真相，object MUST 拒绝未知字段。canonical tool payload 上限分别为：`get_planning_context{}` 24 KiB；`list_affordances{}` 至多 8 个玩家、256 个可见方块且 24 KiB；`inspect_inventory{offset:0..35,limit:1..36}` 至多 36 格且 8 KiB；`find_visible_blocks{block_names:1..16,limit:1..64}` 按坐标至多 64 项且 16 KiB；`query_terrain{positions:1..64}` 按输入序至多 64 项且 16 KiB；`validate_plan{plan}` 接受不超过 64 KiB 的规范 plan，成功 payload（digest+plan）不超过 72 KiB，失败只含单一稳定 code 与不超过 256 bytes hint。Go SDK 同时编码 StructuredContent 与 JSON TextContent fallback 后的 MCP wire response MUST 在发送前受 160 KiB 上限约束。validator code MUST 只为 `invalid_schema`、`out_of_bounds`、`unknown_player`、`unmineable_target`、`unknown_block`、`missing_item`、`snapshot_mismatch`。所有工具 MUST 仅返回冻结快照的有界投影或针对该快照的纯校验结果；snapshot、world、namespace、companion 与 capability 标识 MUST 由 Agent runtime 注入，MUST NOT 暴露给模型选择或改写。
+MCP v1 SHALL 只暴露固定图调用的 `get_planning_context`、`validate_plan`，以及模型可见的 `list_affordances`、`inspect_inventory`、`find_visible_blocks`、`query_terrain`。六者 MUST 使用 checked-in JSON Schema/golden 作为跨语言单一真相，object MUST 拒绝未知字段。canonical tool payload 上限分别为：`get_planning_context{}` 24 KiB；`list_affordances{}` 至多 8 个玩家、256 个可见方块且 24 KiB；`inspect_inventory{offset:0..35,limit:1..36}` 至多 36 格且 8 KiB；`find_visible_blocks{block_names:1..16,limit:1..64}` 按坐标至多 64 项且 16 KiB；`query_terrain{positions:1..64}` 成功时 MUST 按输入数量与顺序（包括重复位置）返回每个位置的冻结列高和该精确体素方块，任一位置超出 33×17×33/world Y 范围或落在未 ready 列时 MUST 整次失败为 `out_of_bounds` 且不返回部分 terrain，成功 payload 不超过 16 KiB；`validate_plan{plan}` 接受不超过 64 KiB 的规范 plan，成功 payload（digest+plan）不超过 72 KiB，失败只含单一稳定 code 与不超过 256 bytes hint。Go SDK 同时编码 StructuredContent 与 JSON TextContent fallback 后的 MCP wire response MUST 在发送前受 160 KiB 上限约束。validator code MUST 只为 `invalid_schema`、`out_of_bounds`、`unknown_player`、`unmineable_target`、`unknown_block`、`missing_item`、`snapshot_mismatch`。所有工具 MUST 仅返回冻结快照的有界投影或针对该快照的纯校验结果；snapshot、world、namespace、companion 与 capability 标识 MUST 由 Agent runtime 注入，MUST NOT 暴露给模型选择或改写。
+
+所有 `block_name`、`item` 与非空 `drop_item` SHALL 使用 Go core 对稳定 `BlockID`/`ItemID` 提供的唯一 canonical English name：小写 ASCII `snake_case`、非空且不超过 64 bytes，空气固定为 `air`。中文显示名、数值拼接和临时 `unknown_*` 名称 MUST NOT 进入 MCP。全部已注册方块与非空物品 MUST 有且只有一个 canonical name；snapshot 中出现未注册/缺名 ID MUST 在注册前 fail closed，`find_visible_blocks` 输入含未知 name MUST 整次失败为 `unknown_block`，不得把未知 name 当作零匹配或返回部分结果。`place` 交付白名单的名称 MUST 从同一注册表派生，并继续与 checked-in enum 一致。
 
 #### Scenario: 模型只能看到有界工具参数
 
@@ -76,9 +84,21 @@ MCP v1 SHALL 只暴露固定图调用的 `get_planning_context`、`validate_plan
 - **WHEN** Agent runtime 或 Go MCP handler 按 contract golden 校验
 - **THEN** 调用 MUST 在返回部分数据前失败，MUST NOT 自动截断、扩大 snapshot 范围或执行其他工具
 
+#### Scenario: terrain 查询逐体素读取且全有或全无
+
+- **GIVEN** 一次 `query_terrain` 依次包含投影内的空气格、非空气格、重复的第一个位置和一个投影外位置
+- **WHEN** Go MCP handler 对冻结投影执行查询
+- **THEN** 因最后一个位置越界，整次调用 MUST 只失败为 `out_of_bounds` 且不返回前三项；移除越界位置后结果 MUST 按原顺序和数量返回，重复位置 MUST 得到相同冻结 height/block_name
+
+#### Scenario: 未知 machine name 不产生回退
+
+- **GIVEN** `find_visible_blocks` 请求一个不在 canonical block registry 的合法有界字符串
+- **WHEN** MCP handler 解析查询
+- **THEN** 调用 MUST 失败为 `unknown_block` 且无部分 matches，MUST NOT 返回中文显示名、数值 ID 拼接名或空字符串
+
 ### Requirement: 计划校验工具只产生候选结论
 
-`validate_plan` SHALL 对 snapshot 中的同一计划 schema、字段排他、坐标边界、online player、既有可采掘目标（包含 Chest/Furnace，拒绝农业/火把/无掉落/未交付多掉落）、方块注册表与背包条件执行纯校验。成功结果 MUST 回显 snapshot digest 与规范候选 Plan；失败结果 MUST 只返回稳定校验 code 与可供一次修复的有界说明。校验成功 MUST NOT 预留资源、改变任务、提交路径或动作；Agent 返回后 Go MUST 在 tick 边界再次严格解码、核对 generation/snapshot 并按当前权威世界规则重验。
+`validate_plan` SHALL 对 snapshot 中的同一计划 schema、字段排他、坐标边界、online player、既有可采掘目标（包含 Chest/Furnace，拒绝空气、农业、火把、无掉落/未交付多掉落）、方块注册表与背包条件执行纯校验。mine 目标 MUST 位于 frozen terrain projection 的 ready 列并按该精确坐标的 `BlockID` 执行既有 mine validator；MUST NOT 以最多 256 条 `ExposedBlocks` 的成员资格替代或跳过判断。投影外或未 ready 目标 MUST 返回 `out_of_bounds`，投影内但不可采掘目标 MUST 返回 `unmineable_target`。成功结果 MUST 回显 snapshot digest 与规范候选 Plan；失败结果 MUST 只返回稳定校验 code 与可供一次修复的有界说明。校验成功 MUST NOT 预留资源、改变任务、提交路径或动作；Agent 返回后 Go MUST 在 tick 边界再次严格解码、核对 generation/snapshot 并按当前权威世界规则重验。
 
 #### Scenario: MCP 校验成功后世界再次变化
 
@@ -91,6 +111,12 @@ MCP v1 SHALL 只暴露固定图调用的 `get_planning_context`、`validate_plan
 - **GIVEN** 候选计划第二步违反字段排他或 snapshot affordance
 - **WHEN** `validate_plan` 校验整个计划
 - **THEN** 工具 MUST 返回稳定失败且不得接受第一步，任务、路径、背包与世界 MUST 保持不变
+
+#### Scenario: 暴露方块裁剪之外的 mine 仍精确校验
+
+- **GIVEN** frozen terrain projection 内有超过 256 个暴露方块，排序裁剪之外分别存在一个 Chest 和一个农业方块
+- **WHEN** 两个候选计划分别 mine 这两个未列入 `ExposedBlocks` 的坐标
+- **THEN** validator MUST 从 dense projection 读取精确冻结方块并接受 Chest、以 `unmineable_target` 拒绝农业方块，MUST NOT 因二者都不在暴露列表而共同接受或共同拒绝
 
 ### Requirement: Agent 工具循环有确定预算
 

@@ -2,13 +2,19 @@
 
 ### Requirement: Planner 输入是有界不可变快照
 
-服务端 SHALL 只在权威 tick 边界为一次规划构造不可变观察快照，Planner worker、Agent HTTP 与 MCP 工具 MUST 只读取该副本。快照 MUST 包含：发令玩家的稳定 ID、位置、朝向与视线命中方块；伙伴 ID、位置、朝向、36 格背包与当前任务状态；伙伴周围水平 16 格、垂直 8 格范围的确定性环境摘要（高度信息与最多 256 个按坐标排序的暴露/特殊方块）；相关区块 revision；当前世界时间；有界的在线玩家集合（每名玩家的稳定 ID 与位置，至多八名）。快照 MUST NOT 包含 API key、Agent credential、MCP capability、其他玩家聊天、世界存档路径、persona 或最近对话摘要；这些排除项 MUST NOT 通过 HTTP、MCP、提示或工具结果进入 Planner 模型输入。
+服务端 SHALL 只在权威 tick 边界为一次规划构造不可变观察快照，Planner worker、Agent HTTP 与 MCP 工具 MUST 只读取该副本。快照 MUST 包含：发令玩家的稳定 ID、位置、朝向与视线命中方块；伙伴 ID、位置、朝向、36 格背包与当前任务状态；以伙伴位置向下取整后的方块格为中心、水平 ±16/垂直 ±8 的 33×17×33 frozen terrain projection，其中 ready 列保存冻结地表高度、每个 world-valid 位置保存精确冻结方块且未加载列与空气列可区分；同一投影派生的最多 256 个按坐标排序的暴露/特殊方块；相关区块 revision；当前世界时间；有界的在线玩家集合（每名玩家的稳定 ID 与位置，至多八名）。terrain projection data plane MUST 不超过 40 KiB，构造 MUST 最多扫描 18,513 个体素；寻路的垂直 ±4 窗口 MUST NOT 收窄规划投影的垂直 ±8。快照 MUST NOT 包含 API key、Agent credential、MCP capability、其他玩家聊天、世界存档路径、persona 或最近对话摘要；这些排除项 MUST NOT 通过 HTTP、MCP、提示或工具结果进入 Planner 模型输入。
 
 #### Scenario: 快照字段有界且按坐标排序
 
 - **GIVEN** 伙伴周围水平 16 格、垂直 8 格范围内存在超过 256 个暴露或特殊方块
 - **WHEN** 服务端在 tick 边界构造观察快照
-- **THEN** 快照 MUST 只保留 256 个按坐标确定性排序的方块条目，且构造 MUST 在不随范围方块总数无界增长的工作内完成
+- **THEN** 暴露摘要 MUST 只保留 256 个按坐标确定性排序的方块条目，但 dense terrain projection MUST 仍保留范围内 ready 位置的全部 18,513 槽冻结值；构造 MUST 在不随范围方块总数无界增长的工作内完成
+
+#### Scenario: Planner 投影覆盖完整垂直 ±8
+
+- **GIVEN** 伙伴整数中心上下第八格各有一个方块，而上下第九格也各有一个方块
+- **WHEN** 服务端在 tick 边界构造规划快照
+- **THEN** 上下第八格 MUST 进入 frozen terrain projection，上下第九格 MUST 位于投影外；结果 MUST 不受寻路垂直半径 ±4 影响
 
 #### Scenario: 在线玩家集合有界且随快照一致
 
@@ -64,7 +70,7 @@ Planner SHALL 通过 Agent HTTP v1 执行一个有界 Agent run，MUST NOT 由 G
 
 ### Requirement: 计划是严格 JSON 且步骤限定交付全集
 
-Agent 最终响应与 Go 接收值 MUST 严格表示单一 Plan JSON object：MUST 拒绝未知字段、尾随数据与超过 64 KiB 的正文。计划 MUST 包含非空有界 `summary` 与非空 `steps` 数组；step kind MUST 限定为 `go_to`/`follow`/`mine`/`place`。每种 step kind 的字段排他 MUST 严格成立：专属外字段无论携带显式 JSON null 还是非法值，MUST 一律令当前任务以非法计划失败。`go_to(x,y,z)` 坐标 MUST 是有限整数值且在世界边界内。`follow(player_id)` 的目标 MUST 来自 snapshot 在线玩家集合，且 `follow` MUST 是最后一步。`mine(x,y,z)` 目标 MUST 在 snapshot 观察范围内，并 MUST 是既有权威语义允许的普通单一 `BlockDrop` 方块或 Chest/Furnace 容器；农业方块、火把、无掉落与尚未交付的多掉落方块 MUST 被拒绝。`place(x,y,z,block)` 的 block 名 MUST 来自固定注册表，且 snapshot 背包显示伙伴持有对应物品。
+Agent 最终响应与 Go 接收值 MUST 严格表示单一 Plan JSON object：MUST 拒绝未知字段、尾随数据与超过 64 KiB 的正文。计划 MUST 包含非空有界 `summary` 与非空 `steps` 数组；step kind MUST 限定为 `go_to`/`follow`/`mine`/`place`。每种 step kind 的字段排他 MUST 严格成立：专属外字段无论携带显式 JSON null 还是非法值，MUST 一律令当前任务以非法计划失败。`go_to(x,y,z)` 坐标 MUST 是有限整数值且在世界边界内。`follow(player_id)` 的目标 MUST 来自 snapshot 在线玩家集合，且 `follow` MUST 是最后一步。`mine(x,y,z)` 目标 MUST 位于 snapshot frozen terrain projection 的 ready 列，并 MUST 按该精确坐标的冻结 `BlockID` 判定为既有权威语义允许的普通单一 `BlockDrop` 方块或 Chest/Furnace 容器；空气、农业方块、火把、无掉落与尚未交付的多掉落方块 MUST 被拒绝，判断 MUST NOT 依赖目标是否进入最多 256 条暴露方块列表。`place(x,y,z,block)` 的 block 名 MUST 来自固定注册表，且 snapshot 背包显示伙伴持有对应物品。所有 machine-facing block/item 名 MUST 来自 Go core 的唯一小写 ASCII `snake_case` canonical registry；未知 ID/name MUST fail closed，MUST NOT 回退中文显示名或数值拼接名。
 
 Agent MUST 先用冻结 snapshot 的 MCP validator 验证候选；Go 收到结果后 MUST 再次严格解码、核对 request/generation/snapshot identity，并按当前权威世界重验后才可进入 Task Runner。空计划、未知 kind、非法数值、不规范文本、非法字段组合、失效目标或当前世界变化 MUST 令任务按既有非法计划或世界变化语义失败，MUST NOT 自动降级猜测、改写计划或直接执行模型返回的代码、URL、工具名或函数调用。
 
@@ -109,6 +115,12 @@ Agent MUST 先用冻结 snapshot 的 MCP validator 验证候选；Go 收到结�
 - **GIVEN** 模型返回的 `mine` 目标不在 snapshot 范围内，或是农业方块、火把、无掉落或尚未交付的多掉落方块
 - **WHEN** Agent 或 Go 验证计划
 - **THEN** 当前任务 MUST 以非法计划失败，MUST NOT 破坏任何方块
+
+#### Scenario: mine 不受暴露摘要裁剪影响
+
+- **GIVEN** 一个冻结投影内的 mine 目标未进入按坐标截断后的 256 条暴露方块列表，但 dense projection 精确记录它是 Chest；同位置在另一快照中记录为农业方块
+- **WHEN** Agent MCP validator 对两份快照分别验证该 mine step
+- **THEN** Chest 快照 MUST 接受，农业快照 MUST 拒绝；两者 MUST 只依据该坐标的 frozen `BlockID`，不得因暴露摘要缺项跳过校验
 
 #### Scenario: 容器保持既有可采掘语义
 
