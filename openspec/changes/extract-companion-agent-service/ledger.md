@@ -43,7 +43,7 @@
 | 9 | `task9_planner_cutover` | `6c5c4011` | Agent Planner cutover RED→GREEN；提交 `84c03161`、repair `edfb1574`、`b2c75a6c` | initial FAIL、repair 1 FAIL、repair 2 PASS | initial FAIL、repair 1 PASS、repair 2 PASS | Accepted |
 | 10 | `task10_dialogue_memory` | `012a4b86` | Dialogue/memory/shutdown RED→GREEN；提交 `1f6006f6`、repair `6ef874b1`、`7283b746`、`c2cebeb9`、`6bdf2b7e` | initial FAIL、repair 1–4 后 PASS | initial FAIL、repair 1 FAIL、repair 2–4 后 PASS | Accepted |
 | 11 | `task11_cross_language` | `e1bf9e52` | 真实 MCP/HTTP 进程合同 RED→GREEN；提交 `efa85718`、`a6b4d059`、`3635b6a1`、`356fe396`、`41add71e`、证据 `2f6ab0ba` | PASS | PASS | Accepted |
-| 12 | `task12_ci_docs_gates` | `9423f067` | archcheck/Make/CI/version RED→GREEN；提交 `9dfdbc69`、`49fbc7f9`、证据 `ee642a05`；首轮 full race FAIL 后由 `3394fc19` 修复；Repair 1 `3ce58189`、证据 `8dac0e4c`；Repair 2 `72ef5580` full gates PASS | Round 1 FAIL；Repair 1 scoped FAIL；Repair 2 re-review pending | Round 1 FAIL；Repair 1 scoped FAIL；Repair 2 re-review pending | Repair 2 re-review pending |
+| 12 | `task12_ci_docs_gates` | `9423f067` | archcheck/Make/CI/version RED→GREEN；提交 `9dfdbc69`、`49fbc7f9`、证据 `ee642a05`；首轮 full race FAIL 后由 `3394fc19` 修复并以 `c094441d` 记录证据；Repair 1 `3ce58189`、证据 `8dac0e4c`；Repair 2 `72ef5580`、证据 `5ba294f5`，mandatory full gates PASS | Round 1 FAIL；Repair 1 scoped FAIL；Repair 2 final PASS | Round 1 FAIL；Repair 1 scoped FAIL；Repair 2 final PASS | Accepted |
 
 ### Task 1 评审修复记录
 
@@ -265,7 +265,7 @@
   brief 集合 117 passed；Go 真进程 race server 8.822s；archcheck 5.645s；affected vet/tidy、
   diff-check 与 OpenSpec strict 80/80 均 PASS。
 
-### Task 12 CI、文档、版本与全量门禁实施记录（Repair 2 re-review pending）
+### Task 12 CI、文档、版本与全量门禁实施及评审记录（Accepted）
 
 - `task12_ci_docs_gates` 从 Task 11 closeout `9423f067` 开始。RED archcheck 证明
   `openspec/config.yaml` 仍为 companions v4，Make 缺少 locked Python check，CI 缺少 Python
@@ -283,7 +283,8 @@
   planner test seam，生产路径不变，原失败 11 tests 全绿（package 12.281s，real 16.29s）。
 - clean `3394fc19` 从头重跑 mandatory gates：Python locked/Ruff/mypy/403 tests、gofmt、full vet、
   full Go race（server 247.013s，real 248.75s）、Rust locked release、Make check、真实 integration
-  （server 9.332s）、diff-check 与 OpenSpec strict 80/80 全部 PASS；无 provider/外网/游戏窗口。
+  （server 9.332s）、diff-check 与 OpenSpec strict 80/80 全部 PASS；`c094441d` 记录 gate evidence；
+  无 provider/外网/游戏窗口。
 - Round 1 独立 SPEC/QUALITY 均 FAIL：quickstart regexp 实际 no-tests；CI archcheck 依赖 substring
   和 job 顺序；Go no-bypass 未覆盖生产装配依赖闭包；report 必须准确写 strict string
   `config_version: v1`，且对 `gates.sh` 已含 `make rust`、不含两条 companion Make target 的事实
@@ -304,13 +305,15 @@
 - clean `72ef5580` 的 mandatory gates 全部 PASS：Python locked/Ruff/mypy/403 tests、gofmt、full
   vet、full Go race（archcheck 37.162s，real 38.87s）、Rust 1.97.1 locked release、Make check、
   真实 integration（companion 2.941s、server 9.825s，real 11.29s）、diff-check 与 OpenSpec 80/80。
-  无 provider/DNS/外网业务访问，也无游戏窗口。重新独立双评审仍 pending；Task 12 实施阶段未
-  修改 `tasks.md`，只有双评审通过后才允许由控制会话完成 closeout。
+  无 provider/DNS/外网业务访问，也无游戏窗口。`5ba294f5` 记录 Repair 2 evidence；提交后完整
+  archcheck 4.998s、strict config 文档 sentinel 111 passed、OpenSpec 80/80、diff/status/scope 均 PASS。
+- Repair 2 最终独立 SPEC 与 QUALITY 评审均 PASS，Task 12 裁决 Accepted；本次规划收尾勾选
+  `tasks.md` 12.1。该 scoped 裁决不替代尚待执行的整分支最终 SPEC/QUALITY 评审。
 
 ## 整分支终审与门禁
 
-- 整分支 SPEC review：Task 12 Round 1 FAIL、Repair 1 scoped FAIL；Repair 2 与最终整分支 review pending。
-- 整分支 QUALITY review：Task 12 Round 1 FAIL、Repair 1 scoped FAIL；Repair 2 与最终整分支 review pending。
+- 整分支 SPEC review：待执行；Task 12 Repair 2 final SPEC PASS 仅为任务级证据，不提前裁决整分支 PASS。
+- 整分支 QUALITY review：待执行；Task 12 Repair 2 final QUALITY PASS 仅为任务级证据，不提前裁决整分支 PASS。
 - Python locked/lint/type/test：clean `72ef5580` PASS；locked sync、Ruff format/check、mypy 23 files、pytest 403 passed；`make companion-agent-check` 同样 403 passed。
 - Go focused/race/archcheck/vet/gofmt：首轮 full race 真实暴露测试 seam 缺口并由 `3394fc19` 修复；clean `72ef5580` 的 full race、vet、archcheck 与 gofmt 全部 PASS，archcheck 37.162s、real 38.87s。
 - Rust baseline/build：clean `72ef5580` preflight 与 mandatory `make rust` 均 PASS；Rust 1.97.1 locked release，engine ABI v9/client ABI v13 未改。
