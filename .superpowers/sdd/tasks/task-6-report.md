@@ -76,3 +76,26 @@ RED 后恢复 fixture 的明确 `release` channel：handler 可由请求 context
 ### Concerns
 
 复核仍需要继续完成全部 HTTP schema 的 nested DTO 替换与每条 manifest route 的 status/error/correlation matrix；本次变更只处理了本轮新增 RED 覆盖的 transport/config 问题。
+
+## Round 1 continuation
+
+### RED
+
+`go test ./internal/companion -run AgentContractGolden -count=1` 在新的 checked-in golden DTO harness 下失败：IPv6 loopback MCP endpoint、terminal fact variants、strict nullable dialogue line 和 error envelope 尚未由实际 DTO validator 表达。这些失败证明此前字符串/map fixture helper 不能覆盖 production codec。
+
+### GREEN
+
+- 生产 Agent DTO 不再持有 `json.RawMessage`：Plan、fact node、environment、memory state/proposal 和 reconcile nullable members 都改为 closed structural DTO；Dialogue wire 字段为 `fact_node`，reconcile 总是输出 `mirror` 与 `tombstone_operation_id`。
+- strict decoder 检查 duplicate key、非法 UTF-8 与孤立 surrogate；DTO validators 对 text/identity/variant、plan/memory 状态、常量和 correlation 进行拒绝并返回零值。
+- 每条当前 client route 的 success correlation 加入 request/client/namespace/lease/run/companion/generation/snapshot/epoch/operation 核对；稳定 errors 加入 manifest status/path allowlist。
+- `TestAgentContractGoldenDrivesActualDTOCodecs` 读取 checked-in valid/invalid golden，并直接执行 production strict decoder 和 typed DTO validators。
+
+### GREEN/验证
+
+`go test ./internal/config ./internal/companion -run 'Agent|AIConfig|Contract' -race -count=1` 连续两遍：PASS。
+
+`go test ./internal/config -race -count=1`、`go test ./internal/companion -race -count=1`、`go vet ./internal/config ./internal/companion`、`go test ./internal/archcheck -count=1`、`gofmt`、`git diff --check`：PASS。
+
+### 剩余风险
+
+需要继续补完整 manifest 11-route `httptest` dispatch matrix 和由 manifest 解析出的 method/status/identity assertions；当前 golden test 已覆盖每个 checked-in schema fixture 的实际 DTO codec，但尚不是所有 route 的端到端 transport case。
