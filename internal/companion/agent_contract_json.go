@@ -8,6 +8,10 @@ import (
 )
 
 func decodeAgentObject(data []byte, out any, required []string, optional ...string) error {
+	return decodeAgentObjectNullable(data, out, required, nil, optional...)
+}
+
+func decodeAgentObjectNullable(data []byte, out any, required, nullable []string, optional ...string) error {
 	var fields map[string]agentJSONField
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
@@ -16,10 +20,20 @@ func decodeAgentObject(data []byte, out any, required []string, optional ...stri
 		return errors.New("agent contract 要求 JSON object")
 	}
 	allowed := make(map[string]struct{}, len(required)+len(optional))
+	nullableFields := make(map[string]struct{}, len(nullable))
+	for _, field := range nullable {
+		nullableFields[field] = struct{}{}
+	}
 	for _, field := range required {
 		allowed[field] = struct{}{}
-		if _, ok := fields[field]; !ok {
+		value, ok := fields[field]
+		if !ok {
 			return fmt.Errorf("agent contract 缺少字段 %q", field)
+		}
+		if value.Null {
+			if _, ok := nullableFields[field]; !ok {
+				return fmt.Errorf("agent contract 字段 %q 不得为 null", field)
+			}
 		}
 	}
 	for _, field := range optional {
@@ -28,6 +42,11 @@ func decodeAgentObject(data []byte, out any, required []string, optional ...stri
 	for field := range fields {
 		if _, ok := allowed[field]; !ok {
 			return fmt.Errorf("agent contract 未知字段 %q", field)
+		}
+		if fields[field].Null {
+			if _, ok := nullableFields[field]; !ok {
+				return fmt.Errorf("agent contract 字段 %q 不得为 null", field)
+			}
 		}
 	}
 	return json.Unmarshal(data, out)
@@ -251,7 +270,7 @@ func (fact AgentDialogueFact) MarshalJSON() ([]byte, error) {
 type agentMemoryStateJSON AgentMemoryState
 
 func (state *AgentMemoryState) UnmarshalJSON(data []byte) error {
-	return decodeAgentObject(data, (*agentMemoryStateJSON)(state), []string{"revision", "operation_id", "summary"})
+	return decodeAgentObjectNullable(data, (*agentMemoryStateJSON)(state), []string{"revision", "operation_id", "summary"}, []string{"operation_id"})
 }
 
 type agentMemoryProposalJSON AgentMemoryProposal
@@ -292,19 +311,19 @@ func (response *AgentDialogueResponse) UnmarshalJSON(data []byte) error {
 type memoryReconcileRequestJSON MemoryReconcileRequest
 
 func (request *MemoryReconcileRequest) UnmarshalJSON(data []byte) error {
-	return decodeAgentObject(data, (*memoryReconcileRequestJSON)(request), []string{
+	return decodeAgentObjectNullable(data, (*memoryReconcileRequestJSON)(request), []string{
 		"contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "companion_id",
 		"memory_epoch", "active", "tombstone_operation_id", "mirror",
-	})
+	}, []string{"tombstone_operation_id", "mirror"})
 }
 
 type memoryReconcileResponseJSON MemoryReconcileResponse
 
 func (response *MemoryReconcileResponse) UnmarshalJSON(data []byte) error {
-	return decodeAgentObject(data, (*memoryReconcileResponseJSON)(response), []string{
+	return decodeAgentObjectNullable(data, (*memoryReconcileResponseJSON)(response), []string{
 		"contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "companion_id",
 		"memory_epoch", "active", "tombstone_operation_id", "memory",
-	})
+	}, []string{"tombstone_operation_id", "memory"})
 }
 
 type memoryCommitRequestJSON MemoryCommitRequest
@@ -378,5 +397,5 @@ func (detail *agentErrorDetail) UnmarshalJSON(data []byte) error {
 type agentErrorResponseJSON agentErrorResponse
 
 func (response *agentErrorResponse) UnmarshalJSON(data []byte) error {
-	return decodeAgentObject(data, (*agentErrorResponseJSON)(response), []string{"contract_version", "request_id", "error"})
+	return decodeAgentObjectNullable(data, (*agentErrorResponseJSON)(response), []string{"contract_version", "request_id", "error"}, []string{"request_id"})
 }

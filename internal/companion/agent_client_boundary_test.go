@@ -80,47 +80,6 @@ func TestAgentClientRejectsDeclaredResponseLengthBeforeDecode(t *testing.T) {
 	}
 }
 
-func TestAgentClientRequestHeaderExactByteBoundary(t *testing.T) {
-	request := validAgentAcquireRequest()
-	response := validAgentAcquireResponseJSON()
-	for _, size := range []int{AgentMaxHeaderBytes, AgentMaxHeaderBytes + 1} {
-		size := size
-		t.Run(strconv.Itoa(size), func(t *testing.T) {
-			headers := make(http.Header)
-			headers.Set("Authorization", "Bearer ")
-			headers.Set("Content-Type", "application/json")
-			headers.Set("Accept-Encoding", "identity")
-			credentialBytes := size - requestHeaderBytes(headers)
-			if credentialBytes < 1 {
-				t.Fatal("header fixture cannot fit credential")
-			}
-			credential := strings.Repeat("s", credentialBytes)
-			called := false
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				called = true
-				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write(response)
-			}))
-			defer server.Close()
-			client, err := NewAgentClient(AgentServiceSettings{Endpoint: server.URL, APIKeyEnv: "BOUNDARY_KEY"}, credential, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer client.Close()
-			got, err := client.Acquire(context.Background(), request)
-			if size == AgentMaxHeaderBytes {
-				if err != nil || !called || got.LeaseID != agentLeaseID {
-					t.Fatalf("exact header = %+v, %v, called=%t", got, err, called)
-				}
-				return
-			}
-			if got != (AcquireResponse{}) || !errors.Is(err, ErrAgentUnavailable) || called {
-				t.Fatalf("oversized header = %+v, %v, called=%t", got, err, called)
-			}
-		})
-	}
-}
-
 func TestAgentClientResponseHeaderExactByteBoundary(t *testing.T) {
 	for _, size := range []int{AgentMaxHeaderBytes, AgentMaxHeaderBytes + 1} {
 		size := size
@@ -131,7 +90,7 @@ func TestAgentClientResponseHeaderExactByteBoundary(t *testing.T) {
 			headers.Set("Content-Length", strconv.Itoa(len(body)))
 			headers.Set("Date", "Mon, 02 Jan 2006 15:04:05 GMT")
 			headers.Set("X-Pad", "")
-			padding := size - requestHeaderBytes(headers) - len("HTTP/1.1 200 OK\r\n") - len("Connection: close\r\n")
+			padding := size - requestHeaderBytes(headers) - len("HTTP/1.1 200 OK\r\n") - len("Connection: close\r\n") - len("\r\n")
 			if padding < 0 {
 				t.Fatal("header fixture exceeds target before padding")
 			}

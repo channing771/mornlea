@@ -103,8 +103,12 @@ func TestAIConfigAgentServiceRejectsCaseFoldCollisionsAndWarnsNestedUnknown(t *t
 func TestAIConfigAgentServiceEndpointMatrix(t *testing.T) {
 	t.Setenv("MORNLEA_AGENT_TEST_KEY", "agent-secret")
 	for _, endpoint := range []string{
+		"http://127.0.0.1:1",
 		"http://127.0.0.1:8080",
+		"http://127.0.0.1:65535",
+		"http://[::1]:1",
 		"http://[::1]:8080",
+		"http://[::1]:65535",
 	} {
 		body := `{"agentService":{"endpoint":` + strconv.Quote(endpoint) + `,"apiKeyEnv":"MORNLEA_AGENT_TEST_KEY"},"companions":[` + aiCompanionEntry + `]}`
 		if _, err := Load(writeAIConfig(t, body)); err != nil {
@@ -115,6 +119,10 @@ func TestAIConfigAgentServiceEndpointMatrix(t *testing.T) {
 		"http://user@127.0.0.1:8080",
 		"http://127.0.0.1:8080?query=1",
 		"http://127.0.0.1:8080#fragment",
+		"http://127.0.0.1:0",
+		"http://127.0.0.1:70000",
+		"http://[::1]:0",
+		"http://[::1]:70000",
 		"http://localhost:8080",
 		"http://203.0.113.1:8080",
 		"https://127.0.0.1:8080",

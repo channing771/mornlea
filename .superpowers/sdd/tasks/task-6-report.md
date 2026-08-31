@@ -144,3 +144,41 @@ RED 后恢复 fixture 的明确 `release` channel：handler 可由请求 context
 ### 剩余风险
 
 consolidated findings 1–7 在本轮范围内均已闭环。Planner/Dialogue wiring、persistence 与 Task 7 之后的实现仍按后续任务推进，本轮未触碰。
+
+## Round 3 strict/lifecycle repair
+
+### RED
+
+新增 `agent_client_round3_test.go` 后运行：
+
+`go test ./internal/companion ./internal/config -run 'ExplicitNull|NullableFields|OutboundHeader|DuplicateJSONContentType|AfterResponseHeaders|LinearizesAdmission|FormattingAndLogging|LargestValidTypedRequest|AgentServiceEndpointMatrix' -count=1 -timeout=30s`
+
+真实失败包括：Plan `x/y/z:null`、Dialogue `base_revision:null`、memory `summary:null` 与 cancel `cancelled:null` 被解成零值并作为部分成功返回；raw TCP listener 观察到 outbound header 实际为 16,371 bytes 而测试要求的 Python 同 scope 预算是 16,384 bytes；重复两条 `Content-Type: application/json` 被接受；解引用后的 `AgentClient` `%v` 泄漏 credential；`http://127.0.0.1:0` 被配置接受。
+
+共享 worktree 的整包命令同时被并行任务的预期 RED 阻断：Task 7A 正在修订的 MCP fixture 令三个 `ContractFixture` case 暂时失败，Task 8 正在新增的 storage v5 test 因尚未实现 `companionFlagActive` 令 archcheck 暂时编译失败。本轮没有修改、暂存或借豁免绕过这些并行文件。
+
+### GREEN
+
+- closed DTO 解码在 typed unmarshal 前拒绝所有 non-nullable required/optional field 的显式 `null`；nullable allowlist 只含 error `request_id`、memory state `operation_id` 及 reconcile `mirror`/`memory`/`tombstone_operation_id`，variant validator 继续裁决合法组合。public client matrix 覆盖 identity/nested/string/bool/number、`x/y/z`、`base_revision`、`revision`、`summary`、`active`、`cancelled`，失败全部返回 typed 零值。
+- outbound header 固定 `Host`、`User-Agent`、`Content-Length`、`Connection: close` 与显式 headers，并按 `len(name)+2+len(value)+2` 对每条真实 line 计数。独立 raw listener 证明 16,384 bytes 可触网成功、16,385 bytes 在触网前拒绝；response `Content-Type` 使用 `Header.Values`，只接受唯一一条精确 `application/json`。inbound transport/header 边界仍覆盖 exact 与 `+1`。
+- client lifecycle 改为 mutex 保护的 closed admission 与 active cancel registry；`Close` 同步标记 closed、取消全部 active request、等待并发 `Close` 的首个关闭过程，之后的新公开调用不触网。caller cancel/deadline 与 `Close` 在 response headers 已 flush、body 阻塞时都返回对应 context error 与 typed 零值；正常调用不创建 lifetime goroutine。
+- credential 使用 redacted wrapper，并为 `AgentClient` 的 pointer/value method set 提供安全 `fmt.Formatter` 与 `slog.LogValuer` 表示；pointer 与 dereferenced value 的 `%v`、`%+v`、`%#v`、`%q` 及 structured log 均不泄漏。
+- Agent service endpoint 的显式 port 只接受 `1..65535`；IPv4/IPv6 loopback 的 1、8080、65535 通过，0 与 70000 拒绝。
+- 生产 public preflight 发送最大维度合法 Dialogue request：4,096-byte 最坏 JSON expansion persona、256 exposed blocks、1,089 heights、最大整数 identity fields，真实 wire 为 94,799/262,144 bytes；更大的 public typed request 在触网前拒绝。由此证明合法 DTO 的理论最大值远低于 request cap，而 cap 不可被 public path 绕过。
+
+### 隔离验证
+
+为隔离并行 Task 7A/8 的预期 RED，只显式暂存六个 Task 6 文件，在 detached `148b935c` 临时 worktree 通过 pipe 应用 `git diff --cached --binary`；首次 Go 命令只因 clean worktree 尚无 `libmornlea_engine` 链接失败，按仓库规则运行 `make rust` 后从头验证：
+
+- `make rust`：PASS。
+- `go test ./internal/config ./internal/companion -run 'Agent|AIConfig|Contract' -race -count=1 -timeout=120s` 连续两遍：PASS。
+- `go test ./internal/config -race -count=1 -timeout=120s`：PASS。
+- `go test ./internal/companion -race -count=1 -timeout=120s`：PASS。
+- `go vet ./internal/config ./internal/companion`：PASS。
+- `go test ./internal/archcheck -count=1 -timeout=120s`：PASS。
+- Task 6 文件 `gofmt -l` 无输出，`git diff --check`：PASS。
+- 隔离 worktree 删除前确认无相关 `go test` 残留进程，随后只移除该明确临时 worktree。
+
+### 结果
+
+Round 3 指定的 strict null、真实 header scope、body-read cancellation、Close admission、secret representation、endpoint port 与 256 KiB preflight 证据均已闭环；未触碰 Task 7+ 生产实现、contracts、OpenSpec 或 storage 文件。

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strconv"
 )
 
 // AgentServiceSettings 是独立伙伴 Agent 服务的静态连接配置。密钥只在调用方
@@ -29,6 +30,12 @@ func (s AgentServiceSettings) Validate() error {
 	}
 	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return errors.New("companion: agentService endpoint 不得携带 userinfo、query 或 fragment")
+	}
+	if port := parsed.Port(); port != "" {
+		value, parseErr := strconv.ParseUint(port, 10, 16)
+		if parseErr != nil || value == 0 {
+			return errors.New("companion: agentService endpoint port 必须位于 1..65535")
+		}
 	}
 	ip := net.ParseIP(parsed.Hostname())
 	if ip == nil || !ip.IsLoopback() {

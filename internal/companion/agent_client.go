@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -25,8 +26,10 @@ const (
 	AgentMaxRequestBodyBytes = 256 << 10
 	// AgentMaxResponseBodyBytes 限制从 Agent 读取的 JSON body。
 	AgentMaxResponseBodyBytes = 64 << 10
-	// AgentMaxHeaderBytes 限制 HTTP response header。
+	// AgentMaxHeaderBytes 限制 HTTP request/response header line 总量。
 	AgentMaxHeaderBytes = 16 << 10
+	// agentHTTPUserAgent 固定 wire 上的 User-Agent，避免标准库默认值变化影响 header 预算。
+	agentHTTPUserAgent = "mornlea-companion-agent-http-v1"
 )
 
 var (
@@ -291,11 +294,34 @@ type CancelResponse struct {
 // AgentClient 是有界、无重试的 Agent HTTP v1 调用方。
 type AgentClient struct {
 	endpoint   string
-	credential string
+	credential agentCredential
 	http       *http.Client
-	lifetime   context.Context
-	cancel     context.CancelFunc
-	closeOnce  sync.Once
+	lifecycle  *agentClientLifecycle
+}
+
+type agentCredential struct {
+	value string
+}
+
+func (agentCredential) String() string   { return "<redacted>" }
+func (agentCredential) GoString() string { return "<redacted>" }
+func (agentCredential) LogValue() slog.Value {
+	return slog.StringValue("<redacted>")
+}
+func (agentCredential) Format(state fmt.State, verb rune) {
+	if verb == 'q' {
+		_, _ = io.WriteString(state, strconv.Quote("<redacted>"))
+		return
+	}
+	_, _ = io.WriteString(state, "<redacted>")
+}
+
+type agentClientLifecycle struct {
+	mu        sync.Mutex
+	closed    bool
+	closeDone chan struct{}
+	next      uint64
+	active    map[uint64]context.CancelFunc
 }
 
 func NewAgentClient(settings AgentServiceSettings, credential string, client *http.Client) (*AgentClient, error) {
@@ -319,11 +345,41 @@ func NewAgentClient(settings AgentServiceSettings, credential string, client *ht
 		ExpectContinueTimeout:  time.Second,
 	}
 	client = &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	lifetime, cancel := context.WithCancel(context.Background())
-	return &AgentClient{endpoint: trimTrailingSlash(settings.Endpoint), credential: credential, http: client, lifetime: lifetime, cancel: cancel}, nil
+	return &AgentClient{
+		endpoint:   trimTrailingSlash(settings.Endpoint),
+		credential: agentCredential{value: credential},
+		http:       client,
+		lifecycle:  &agentClientLifecycle{active: make(map[uint64]context.CancelFunc)},
+	}, nil
 }
 
-func (c *AgentClient) Close() { c.closeOnce.Do(func() { c.cancel(); c.http.CloseIdleConnections() }) }
+func (c *AgentClient) Close() {
+	if c == nil || c.lifecycle == nil {
+		return
+	}
+	c.lifecycle.mu.Lock()
+	if c.lifecycle.closeDone == nil {
+		c.lifecycle.closeDone = make(chan struct{})
+	}
+	closeDone := c.lifecycle.closeDone
+	if c.lifecycle.closed {
+		c.lifecycle.mu.Unlock()
+		<-closeDone
+		return
+	}
+	c.lifecycle.closed = true
+	cancellations := make([]context.CancelFunc, 0, len(c.lifecycle.active))
+	for _, cancel := range c.lifecycle.active {
+		cancellations = append(cancellations, cancel)
+	}
+	c.lifecycle.active = make(map[uint64]context.CancelFunc)
+	c.lifecycle.mu.Unlock()
+	for _, cancel := range cancellations {
+		cancel()
+	}
+	c.http.CloseIdleConnections()
+	close(closeDone)
+}
 
 func (c *AgentClient) String() string {
 	if c == nil {
@@ -333,6 +389,19 @@ func (c *AgentClient) String() string {
 }
 
 func (c *AgentClient) GoString() string { return c.String() }
+
+func (c AgentClient) Format(state fmt.State, verb rune) {
+	formatted := "AgentClient{endpoint:" + strconv.Quote(c.endpoint) + "}"
+	if verb == 'q' {
+		_, _ = io.WriteString(state, strconv.Quote(formatted))
+		return
+	}
+	_, _ = io.WriteString(state, formatted)
+}
+
+func (c AgentClient) LogValue() slog.Value {
+	return slog.GroupValue(slog.String("endpoint", c.endpoint))
+}
 
 func (c *AgentClient) Live(ctx context.Context) (LiveResponse, error) {
 	var out LiveResponse
@@ -455,17 +524,21 @@ func sameOptionalAgentID(left, right *string) bool {
 }
 
 func (c *AgentClient) get(ctx context.Context, path string, authenticated bool, out interface{}) error {
-	requestContext, stop := c.context(ctx)
+	requestContext, stop, err := c.context(ctx)
+	if err != nil {
+		return err
+	}
 	defer stop()
 	request, err := http.NewRequestWithContext(requestContext, http.MethodGet, c.endpoint+path, nil)
 	if err != nil {
 		return fmt.Errorf("%w: construct request", ErrAgentUnavailable)
 	}
 	if authenticated {
-		request.Header.Set("Authorization", "Bearer "+c.credential)
+		request.Header.Set("Authorization", "Bearer "+c.credential.value)
 	}
+	prepareAgentRequestHeaders(request)
 	request.Header.Set("Accept-Encoding", "identity")
-	if requestHeaderBytes(request.Header) > AgentMaxHeaderBytes {
+	if outboundAgentHeaderBytes(request) > AgentMaxHeaderBytes {
 		return ErrAgentUnavailable
 	}
 	return c.send(request, out, "")
@@ -478,24 +551,27 @@ func (c *AgentClient) post(ctx context.Context, path string, value interface{}, 
 	if err != nil || !agentBodyWithinLimit(body, AgentMaxRequestBodyBytes) {
 		return fmt.Errorf("%w: invalid request", ErrAgentUnavailable)
 	}
-	requestContext, stop := c.context(ctx)
+	requestContext, stop, err := c.context(ctx)
+	if err != nil {
+		return err
+	}
 	defer stop()
 	request, err := http.NewRequestWithContext(requestContext, http.MethodPost, c.endpoint+path, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("%w: construct request", ErrAgentUnavailable)
 	}
-	request.Header.Set("Authorization", "Bearer "+c.credential)
+	request.Header.Set("Authorization", "Bearer "+c.credential.value)
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept-Encoding", "identity")
-	if requestHeaderBytes(request.Header) > AgentMaxHeaderBytes {
+	prepareAgentRequestHeaders(request)
+	if outboundAgentHeaderBytes(request) > AgentMaxHeaderBytes {
 		return ErrAgentUnavailable
 	}
 	return c.send(request, out, requestIDOf(value))
 }
 
 func requestHeaderBytes(headers http.Header) int {
-	// 最后的空 CRLF 也属于 HTTP header section，边界按真实 wire 字节计数。
-	total := 2
+	total := 0
 	for name, values := range headers {
 		for _, value := range values {
 			total += len(name) + len(value) + 4
@@ -503,10 +579,54 @@ func requestHeaderBytes(headers http.Header) int {
 	}
 	return total
 }
-func (c *AgentClient) context(ctx context.Context) (context.Context, func()) {
+
+func prepareAgentRequestHeaders(request *http.Request) {
+	request.Close = true
+	request.Header.Set("User-Agent", agentHTTPUserAgent)
+	request.Header.Set("Connection", "close")
+}
+
+func outboundAgentHeaderBytes(request *http.Request) int {
+	total := requestHeaderBytes(request.Header)
+	host := request.Host
+	if host == "" && request.URL != nil {
+		host = request.URL.Host
+	}
+	if host != "" {
+		total += len("Host") + len(host) + 4
+	}
+	if request.Body != nil && request.ContentLength >= 0 {
+		value := strconv.FormatInt(request.ContentLength, 10)
+		total += len("Content-Length") + len(value) + 4
+	}
+	return total
+}
+
+func (c *AgentClient) context(ctx context.Context) (context.Context, func(), error) {
+	if c == nil || c.lifecycle == nil {
+		return nil, nil, context.Canceled
+	}
 	merged, cancel := context.WithCancel(ctx)
-	stop := context.AfterFunc(c.lifetime, cancel)
-	return merged, func() { stop(); cancel() }
+	c.lifecycle.mu.Lock()
+	if c.lifecycle.closed {
+		c.lifecycle.mu.Unlock()
+		cancel()
+		return nil, nil, context.Canceled
+	}
+	c.lifecycle.next++
+	callID := c.lifecycle.next
+	c.lifecycle.active[callID] = cancel
+	c.lifecycle.mu.Unlock()
+	var once sync.Once
+	cleanup := func() {
+		once.Do(func() {
+			c.lifecycle.mu.Lock()
+			delete(c.lifecycle.active, callID)
+			c.lifecycle.mu.Unlock()
+			cancel()
+		})
+	}
+	return merged, cleanup, nil
 }
 func (c *AgentClient) send(request *http.Request, out interface{}, expectedRequestID string) error {
 	response, err := c.http.Do(request)
@@ -523,14 +643,24 @@ func (c *AgentClient) send(request *http.Request, out interface{}, expectedReque
 	if response.StatusCode >= 300 && response.StatusCode < 400 {
 		return ErrAgentUnavailable
 	}
-	if response.Header.Get("Content-Type") != "application/json" {
+	contentTypes := response.Header.Values("Content-Type")
+	if len(contentTypes) != 1 || contentTypes[0] != "application/json" {
 		return ErrAgentUnavailable
 	}
 	if response.ContentLength > AgentMaxResponseBodyBytes {
 		return ErrAgentUnavailable
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, AgentMaxResponseBodyBytes+1))
-	if err != nil || !agentBodyWithinLimit(body, AgentMaxResponseBodyBytes) {
+	if err != nil {
+		if request.Context().Err() != nil {
+			return request.Context().Err()
+		}
+		return ErrAgentUnavailable
+	}
+	if request.Context().Err() != nil {
+		return request.Context().Err()
+	}
+	if !agentBodyWithinLimit(body, AgentMaxResponseBodyBytes) {
 		return ErrAgentUnavailable
 	}
 	if response.StatusCode == http.StatusServiceUnavailable && request.URL.Path == "/readyz" {
