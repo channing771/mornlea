@@ -21,6 +21,8 @@ Ruling: B-04 不修改 F-04 独占的 `docs/notes/lan-server.md`，由 F-04 独�
 
 Ruling: candidate `734d8ae8974d8645c1ea6003b8b95c61e2ee081c` 的独立 SPEC reviewer `/root/b04_t1_spec_review` 与 QUALITY reviewer `/root/b04_t1_quality_review` 因 static block light 缺口与主规格冲突均裁决 `FAIL`；用户确认光照规则为 sky 仅由完整不透明方块阻断，static 仅向 `AirID` 或植物格传播、任何其他非空气且非植物方块均阻断；planning commits `ed158474bc8e3c654e0cb5d368bd83c1947a606e`、`df283c41ceaf2061fb601a75545a44807747f47d` 与 `410e0bc6bbf15a3e42124d28c014cdfacf6a6847` 必须先于 R1，修复后重新执行 focused verification 与独立双评审 — 保留主规格冲突会使候选实现“假绿”，撤回植物透光规则则会违背本 change 的 plant 契约与 Minecraft 手感。
 
+Ruling: planning candidate `ab8292569393edfb6748a82f6303c50b0c7654e9` 的独立 PLAN SPEC reviewer `/root/b04_light_plan_spec_review` 裁决 `FAIL`（delta 计数未完整收敛，且 Task 1.1 漏列 `engine/crates/mornlea_engine/src/input.rs` 的 comment-only scope）；独立 PLAN QUALITY reviewer `/root/b04_light_plan_quality_review` 也因同样的 delta 计数与 `input.rs` scope 两项裁决 `FAIL`。规划修复 commits 为 `4314d025ac0f6b4ea600105de6e89b8f8dcd725e` 与 `e8dc416fa4bcbef0eb6b69b43d155782263c89f4`；本 ledger 补齐 Task 1.1 的 comment/旧文案 ownership 后，planning re-review 仍为 `PENDING`，不得将该 planning candidate 或本轮修复写成最终 `PASS`、`I` 或 `L`。
+
 ## Task 1.1 Stable Block, Plant Presentation, And Passability
 
 - Status: `PENDING`.
@@ -28,14 +30,14 @@ Ruling: candidate `734d8ae8974d8645c1ea6003b8b95c61e2ee081c` 的独立 SPEC revi
 - Implementer: `PENDING`（fresh）。
 - RED evidence: `PENDING`（命令、失败测试名、失败原因与发生在生产实现前的时序；覆盖稳定编号、无 Item/`BlockDrop`、植物谓词、原创程序化纹理、Go/Rust 真 mesher、碰撞/遮光/射线和伙伴通行；还必须包含真实天空光/静态方块光走廊，以生产 `assets.Registry`、真实 neighborhood 编码与 `mesh.MeshSection` native FFI 取得 Rust packed light，并与 Go light oracle 对同一输入逐格/逐面对照）。
 - Code/test commit C: `PENDING`（完整 SHA + 单行英文 subject；不得包含 `tasks.md`/`ledger.md`）。
-- Files changed: `PENDING`（本任务独占 block/assets/mesh/physics/passability 目标、`engine/crates/mornlea_engine/src/light.rs` 与同主题 light tests、`internal/mesh` Go light oracle/真实 native FFI 光照测试、`docs/texture-packs.md` 的短草材质入口说明，以及 Rust client 三处过期注释 `engine/crates/mornlea_client/src/render/shaders.rs`、`engine/crates/mornlea_client/shaders/terrain.wgsl`、`engine/crates/mornlea_client/src/render/farmland_tests.rs`；三处只修正床 layer `60..67` 为“枚举末位”的 stale comments，不改常量、层号或 ABI）。
+- Files changed: `PENDING`（本任务独占 block/assets/mesh/physics/passability 目标、`engine/crates/mornlea_engine/src/light.rs` 与同主题 light tests、`internal/mesh` Go light oracle/真实 native FFI 光照测试、`docs/texture-packs.md` 的短草材质入口说明，以及 Rust client 三处过期注释 `engine/crates/mornlea_client/src/render/shaders.rs`、`engine/crates/mornlea_client/shaders/terrain.wgsl`、`engine/crates/mornlea_client/src/render/farmland_tests.rs`；还包含 `engine/crates/mornlea_engine/src/input.rs` 中与 registry record 布局相关的过期注释（comment-only）和 `internal/mesh/fluid_light_test.go` 的旧光照文案。这五处只修正 comments/测试文案，不改 registry record layout、常量、atlas layer、packed light 或任何 ABI）。
 - Presentation/provenance evidence: `PENDING`（`ShortGrassID=84`、`BlockIDMax=85`、`LayerShortGrass=68`、`[31..54] ∪ {68}`、`55..67` 不动、registry `85<=96`、`4×8` 字节实例、alpha 仅 `0/255`、无 PNG/外部或 Mojang 资源；光照证据要明确植物格在 sky 中无材料额外衰减、在 static block light 中可按每格 `1` 传播，同时证明玻璃、水、普通方块、未知方块与缺失邻区均阻断 static block light；`levels`、`queue` 与复用 scratch 均保持固定 `48³` 容量，packed light、registry、native mesh/light ABI 与 client ABI v13 不变）。
 - Final verified implementation SHA I: `PENDING`（`C` 加本任务全部 repair 后的完整 SHA）。
 - Focused verification bound to I: `PENDING`（`make rust`；`cd engine && cargo test -p mornlea_engine --locked plant`；`cd engine && cargo test -p mornlea_engine --locked plant_block_light`；`go test ./internal/core ./internal/assets ./internal/mesh ./internal/physics -race -count=1`（必须包含 Go light oracle 与真实 native FFI 天空光/静态方块光测试）；server path-table、archcheck、race-changed 与 `git diff --check` 的命令、耗时和摘要）。
 - Initial failed candidate review: candidate `734d8ae8974d8645c1ea6003b8b95c61e2ee081c`；SPEC `/root/b04_t1_spec_review` = `FAIL`，QUALITY `/root/b04_t1_quality_review` = `FAIL`；两份独立评审均指出 static block light 未实现/未验证，且 sky/static 口径与当时主规格冲突，因此该 SHA 不是 final `I`。
 - SPEC reviewer / verdict / findings at I: `PENDING`（fresh，独立于 implementer/QUALITY）。
 - QUALITY reviewer / verdict / findings at I: `PENDING`（fresh，独立于 implementer/SPEC）。
-- Repair rounds and commits: `R1 PENDING`（规划修订经独立双评审 `PASS` 后，回派原 implementer `/root/b04_t1_impl_retry`；修复 static block light、补齐真实天空光/静态方块光证据与三处 stale comments，然后产生 repair SHA、重跑 focused verification 并接受 scoped 独立双评审）。
+- Repair rounds and commits: `R1 PENDING`（本 ledger 修复后的 planning re-review 尚未执行；规划修订经独立双评审 `PASS` 后，才回派原 implementer `/root/b04_t1_impl_retry`。R1 由该 implementer 修复 static block light，补齐真实天空光/静态方块光证据、Rust client 三处 stale comments、`engine/crates/mornlea_engine/src/input.rs` comment-only 修正与 `internal/mesh/fluid_light_test.go` 旧文案修正；不得改动 registry record layout、packed light、registry/native mesh/light 或 client ABI。随后产生 repair SHA、重跑 focused verification 并接受 scoped 独立双评审）。
 - Tasks/ledger-only evidence commit L: `PENDING`（只含本任务 checkbox 与 ledger 证据，不改变 `I` 的实现树）。
 - Ruling: `PENDING`.
 
