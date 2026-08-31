@@ -120,6 +120,9 @@ func (server *Server) Shutdown(ctx context.Context) error {
 			// Wait 避免 caller 超时时遗留一个 Wait goroutine，并允许下一次
 			// Shutdown 在 Wait 完成后安全派生新的 memory worker。
 			server.companionManager.waitGroup.Wait()
+			if err := server.companionManager.memoryFinalizationError(); err != nil {
+				return server.world.ShutdownContextError(err, nil)
+			}
 			if err := ctx.Err(); err != nil {
 				return server.world.ShutdownContextError(err, nil)
 			}

@@ -834,18 +834,22 @@ func TestAgentMemoryDeleteCarriesTombstoneEpochFence(t *testing.T) {
 }
 
 type shutdownAgentRuntime struct {
-	store         *companionBootstrapStore
-	acquired      chan struct{}
-	commitStarted chan struct{}
-	commitRelease chan struct{}
-	commitContext chan shutdownCommitContext
-	commitOnce    sync.Once
-	mu            sync.Mutex
-	releaseErrors []error
-	releaseLeases []string
-	commits       atomic.Int32
-	releases      atomic.Int32
-	closed        atomic.Bool
+	store            *companionBootstrapStore
+	acquired         chan struct{}
+	commitStarted    chan struct{}
+	commitRelease    chan struct{}
+	commitContext    chan shutdownCommitContext
+	reconcileContext chan shutdownCommitContext
+	commitOnce       sync.Once
+	mu               sync.Mutex
+	releaseErrors    []error
+	releaseLeases    []string
+	reconcileErrors  []error
+	commits          atomic.Int32
+	reconciles       atomic.Int32
+	dialogues        atomic.Int32
+	releases         atomic.Int32
+	closed           atomic.Bool
 }
 
 type shutdownCommitContext struct {
@@ -880,7 +884,8 @@ func (*shutdownAgentRuntime) Plan(context.Context, companion.PlanRequest) (compa
 	return companion.PlanResponse{}, companion.ErrAgentUnavailable
 }
 
-func (*shutdownAgentRuntime) Dialogue(context.Context, companion.AgentDialogueRequest) (companion.AgentDialogueResponse, error) {
+func (f *shutdownAgentRuntime) Dialogue(context.Context, companion.AgentDialogueRequest) (companion.AgentDialogueResponse, error) {
+	f.dialogues.Add(1)
 	return companion.AgentDialogueResponse{}, companion.ErrAgentUnavailable
 }
 
@@ -914,7 +919,27 @@ func (f *shutdownAgentRuntime) CommitMemory(
 	}, nil
 }
 
-func (*shutdownAgentRuntime) ReconcileMemory(_ context.Context, request companion.MemoryReconcileRequest) (companion.MemoryReconcileResponse, error) {
+func (f *shutdownAgentRuntime) ReconcileMemory(ctx context.Context, request companion.MemoryReconcileRequest) (companion.MemoryReconcileResponse, error) {
+	f.reconciles.Add(1)
+	deadline, hasDeadline := ctx.Deadline()
+	if f.reconcileContext != nil {
+		f.reconcileContext <- shutdownCommitContext{
+			err: ctx.Err(), deadline: deadline, hasDeadline: hasDeadline,
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return companion.MemoryReconcileResponse{}, err
+	}
+	f.mu.Lock()
+	var reconcileErr error
+	if len(f.reconcileErrors) != 0 {
+		reconcileErr = f.reconcileErrors[0]
+		f.reconcileErrors = f.reconcileErrors[1:]
+	}
+	f.mu.Unlock()
+	if reconcileErr != nil {
+		return companion.MemoryReconcileResponse{}, reconcileErr
+	}
 	return companion.MemoryReconcileResponse{
 		ContractVersion: request.ContractVersion, RequestID: request.RequestID,
 		ClientInstanceID: request.ClientInstanceID, NamespaceID: request.NamespaceID,
@@ -1062,7 +1087,8 @@ func TestHostShutdownRetriesMemoryFinalizationAfterCallerTimeout(t *testing.T) {
 	fake := &shutdownAgentRuntime{
 		store: store, acquired: make(chan struct{}),
 		commitStarted: make(chan struct{}), commitRelease: make(chan struct{}),
-		commitContext: make(chan shutdownCommitContext, 4),
+		commitContext:    make(chan shutdownCommitContext, 4),
+		reconcileContext: make(chan shutdownCommitContext, 2),
 	}
 	var releaseCommit sync.Once
 	unblockCommit := func() { releaseCommit.Do(func() { close(fake.commitRelease) }) }
@@ -1124,6 +1150,9 @@ func TestHostShutdownRetriesMemoryFinalizationAfterCallerTimeout(t *testing.T) {
 	case <-time.After(waitDeadline):
 		t.Fatal("finalization worker leaked after caller timeout")
 	}
+	if fake.reconciles.Load() != 0 || len(fake.reconcileContext) != 0 {
+		t.Fatalf("reconcile ran before retry: calls=%d contexts=%d", fake.reconciles.Load(), len(fake.reconcileContext))
+	}
 
 	unblockCommit()
 	secondCtx, secondCancel := context.WithTimeout(context.Background(), waitDeadline)
@@ -1142,6 +1171,115 @@ func TestHostShutdownRetriesMemoryFinalizationAfterCallerTimeout(t *testing.T) {
 	latest := saves[len(saves)-1]
 	if len(latest.Lifecycles) != 1 || latest.Lifecycles[0].MemoryRevision != 1 ||
 		latest.Lifecycles[0].Summary != "第二次关服确认的 mirror" {
+		t.Fatalf("latest=%+v", latest)
+	}
+}
+
+func TestHostShutdownRetriesPendingMemoryReconcileAcrossAttempts(t *testing.T) {
+	id := companionBootstrapID(1)
+	store := newCompanionBootstrapStore()
+	config := hostTestConfig()
+	config.Companions = []companion.Definition{{ID: id, Name: "阿木"}}
+	config.companionPlanner = nil
+	commitRelease := make(chan struct{})
+	close(commitRelease)
+	fake := &shutdownAgentRuntime{
+		store: store, acquired: make(chan struct{}),
+		commitStarted: make(chan struct{}), commitRelease: commitRelease,
+		commitContext:    make(chan shutdownCommitContext, 1),
+		reconcileContext: make(chan shutdownCommitContext, 2),
+	}
+	config.companionAgentClientFactory = func(companion.AgentServiceSettings, string) (companionAgentRuntimeClient, error) {
+		return fake, nil
+	}
+	host, err := NewHost(context.Background(), config, flatTestGenerator{}, store)
+	if err != nil {
+		t.Fatalf("NewHost: %v", err)
+	}
+	select {
+	case <-fake.acquired:
+	case <-time.After(waitDeadline):
+		t.Fatal("timed out waiting for namespace acquire")
+	}
+	manager := host.world.companionManager
+	host.world.stepMu.Lock()
+	manager.dispatchMemoryReconcile()
+	host.world.stepMu.Unlock()
+	waitMemoryReconcileResult(t, manager)
+	host.world.stepMu.Lock()
+	manager.applyMemoryReconcileOutcomes()
+	initialReady := manager.slots[id].memoryReady
+	host.world.stepMu.Unlock()
+	if !initialReady {
+		t.Fatal("initial memory reconcile did not become ready")
+	}
+	fake.reconciles.Store(0)
+	for len(fake.reconcileContext) != 0 {
+		<-fake.reconcileContext
+	}
+	transientErr := errors.New("transient reconcile failure")
+	fake.mu.Lock()
+	fake.reconcileErrors = []error{transientErr}
+	fake.mu.Unlock()
+
+	operationID := "88888888-8888-4888-8888-888888888888"
+	host.world.stepMu.Lock()
+	slot := manager.slots[id]
+	slot.dialogueReservation = &companionDialogueReservation{
+		operationID: operationID, memoryEpoch: 1, baseRevision: 0,
+		summary: "跨关服重试的 mirror", line: "已经完成了。",
+		issuer: stopTestIssuer(integrationIdentity(0x75, "发令者")),
+	}
+	manager.applyMemoryCommitOutcome(memoryCommitOutcome{
+		id: id, memoryEpoch: 1, operationID: operationID, err: context.DeadlineExceeded,
+	})
+	host.world.stepMu.Unlock()
+
+	firstCtx, firstCancel := context.WithTimeout(context.Background(), waitDeadline)
+	err = host.Shutdown(firstCtx)
+	firstCancel()
+	if !errors.Is(err, companion.ErrAgentUnavailable) || fake.releases.Load() != 0 ||
+		fake.closed.Load() || store.hostTestStore.closeCount() != 0 {
+		t.Fatalf("first Shutdown err=%v releases=%d agentClosed=%v storeCloses=%d",
+			err, fake.releases.Load(), fake.closed.Load(), store.hostTestStore.closeCount())
+	}
+	firstReconcileContext := <-fake.reconcileContext
+	if firstReconcileContext.err != nil || !firstReconcileContext.hasDeadline {
+		t.Fatalf("first reconcile context=%+v", firstReconcileContext)
+	}
+	host.world.stepMu.Lock()
+	_, pending := manager.memoryReconcilePending[id]
+	reservationKept := slot.dialogueReservation != nil
+	requested := manager.memoryReconcileRequested
+	inFlight := manager.memoryReconcileInFlight
+	host.world.stepMu.Unlock()
+	if !pending || !reservationKept || requested || inFlight {
+		t.Fatalf("after first Shutdown pending=%v reservation=%v requested=%v inFlight=%v",
+			pending, reservationKept, requested, inFlight)
+	}
+
+	secondCtx, secondCancel := context.WithTimeout(context.Background(), waitDeadline)
+	err = host.Shutdown(secondCtx)
+	secondCancel()
+	if err != nil {
+		t.Fatalf("retry Shutdown: %v", err)
+	}
+	secondReconcileContext := <-fake.reconcileContext
+	commitContext := <-fake.commitContext
+	if secondReconcileContext.err != nil || !secondReconcileContext.hasDeadline ||
+		commitContext.err != nil || !commitContext.hasDeadline {
+		t.Fatalf("second reconcile=%+v commit=%+v", secondReconcileContext, commitContext)
+	}
+	if fake.reconciles.Load() != 2 || fake.commits.Load() != 1 || fake.dialogues.Load() != 0 ||
+		fake.releases.Load() != 1 || !fake.closed.Load() || store.hostTestStore.closeCount() != 1 {
+		t.Fatalf("reconciles=%d commits=%d dialogues=%d releases=%d agentClosed=%v storeCloses=%d",
+			fake.reconciles.Load(), fake.commits.Load(), fake.dialogues.Load(), fake.releases.Load(),
+			fake.closed.Load(), store.hostTestStore.closeCount())
+	}
+	saves := store.companionSaveSnapshot()
+	latest := saves[len(saves)-1]
+	if len(latest.Lifecycles) != 1 || latest.Lifecycles[0].MemoryRevision != 1 ||
+		latest.Lifecycles[0].Summary != "跨关服重试的 mirror" {
 		t.Fatalf("latest=%+v", latest)
 	}
 }

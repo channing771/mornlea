@@ -239,6 +239,68 @@ RED→GREEN，没有查看 main，也没有修改 `tasks.md` 或 progress ledger
   `tasks.md`/ledger 扫描
   - PASS，无输出或违规。
 
+## Repair 3
+
+质量复审发现 retry-safe shutdown 仍有一个跨 attempt 缺口。本轮在 `7283b746`
+clean 基线上执行真实 RED→GREEN，没有查看 main，也没有修改 `tasks.md` 或 progress
+ledger。
+
+1. unresolved reservation 在下一次 Shutdown 重新派发
+   - RED：accepted commit 进入 unknown 状态后，第一次 Shutdown 的 reconcile 注入
+     transient error，调用正确返回 `companion.ErrAgentUnavailable` 且保留 reservation/
+     pending、Release/Agent/store close 均为 0；第二次 Shutdown 却因为上一轮已清除
+     `memoryReconcileRequested` 而直接再次返回 unavailable。
+   - GREEN：每次 memory finalization attempt 开始时，仅为「仍有 reservation、仍在
+     pending、且没有 reconcile worker 在途」的伙伴重新 arm request，并清零本 attempt
+     的 retry wait/attempt。单次 attempt 的 error 仍保留 requested=false，避免无界自旋；
+     下一次 Shutdown 才重新派发。old mirror reconcile 成功后以原 operation 幂等重提
+     commit，不重跑 Dialogue，最终只保存一次 mirror/speech，并在其后只 Release/close
+     一次。
+   - RED 命令：
+     `go test ./internal/server -run '^TestHostShutdownRetriesPendingMemoryReconcileAcrossAttempts$' -race -count=1 -timeout=60s`
+     最初 FAIL（`retry Shutdown: companion: agent 不可用`）。
+   - GREEN 命令：同命令 PASS（1.990s）。
+
+2. finalization deadline 与派生 worker 的竞态
+   - broader 回归暴露旧 caller-timeout 测试偶发在第二次 Shutdown 返回 unavailable。
+     状态为 pending=true、reservation 保留、requested=false、in-flight=false、commit
+     results/reconcile results 均为 0，且 reconcile 收到上一轮已经 deadline exceeded 的
+     context。
+   - 根因是 caller、manager finalization 与 Agent RPC context 共享截止时刻，但最内层
+     RPC timer 可以先触发；worker 结束时外层两个 context 的 `Err()` 仍可能短暂为 nil，
+     旧实现因而会 drain commit error 并用即将过期的旧 context 派生 reconcile。
+   - GREEN：每轮 worker Wait 后、任何 outcome drain 或派生前，同时检查 finalization
+     context 的 `Err()` 与绝对 deadline；截止已到即结束本 attempt。测试额外断言第一轮
+     timeout 返回且 worker 静止后 reconcile 调用数仍为 0。
+   - 稳定性命令：
+     `go test ./internal/server -run '^(TestHostShutdownRetriesMemoryFinalizationAfterCallerTimeout|TestHostShutdownRetriesPendingMemoryReconcileAcrossAttempts)$' -race -count=20 -timeout=120s`
+     PASS（3.734s）。
+
+### Repair 3 验证
+
+- Repair 2/3 focused shutdown/reconcile 集合：PASS（2.693s）。
+- `go test ./internal/server -run 'MemoryReconcile|UnknownCommit|Shutdown|Release' -race -count=1 -timeout=120s`
+  - PASS：6.605s。
+- `go test ./internal/server/persistence -run 'Companion|Memory' -race -count=1 -timeout=120s`
+  - PASS：3.381s。
+- `go test ./internal/companion ./internal/server -run 'Agent|Lease|Planner|Dialogue|Memory|Shutdown|CompanionSpeech' -race -count=1 -timeout=240s`
+  - PASS：companion 4.214s，server 94.410s。
+- `go test ./internal/archcheck -count=1`
+  - PASS：6.168s。
+- `go test ./internal/config -run 'Agent|AIConfig' -race -count=1`
+  - PASS：2.378s。
+- `go test ./cmd/mornlea ./cmd/mornlea/app ./cmd/mornlea-server -count=1 -timeout=120s`
+  - PASS：1.191s / 22.503s / 1.678s；未启动游戏窗口。
+- `go vet ./internal/companion ./internal/server ./internal/server/persistence ./internal/config`
+  - PASS，无输出。
+- `go mod tidy -diff`
+  - PASS，无 diff。
+- `openspec validate --all --strict --no-interactive`
+  - PASS：80 passed，0 failed。
+- `git diff --check`、dead production `CompanionSummary` type、代码注释任务编号、敏感
+  日志与 `tasks.md`/ledger 扫描
+  - PASS，无新增违规；legacy storage codec 的只读字段与 fixtures 保持兼容。
+
 ## 验证
 
 - `go test ./internal/companion ./internal/server -run 'Dialogue|Memory|Shutdown|CompanionSpeech' -race -count=1 -timeout=150s`

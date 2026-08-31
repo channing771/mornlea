@@ -26,6 +26,7 @@ import (
 	"math"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/go-gl/mathgl/mgl32"
 
@@ -1316,6 +1317,34 @@ func (m *companionManager) beginShutdown() {
 func (m *companionManager) beginMemoryFinalization(ctx context.Context) {
 	m.cancelMemory()
 	m.memoryCtx, m.cancelMemory = context.WithTimeout(ctx, companionMemoryFinalizationTimeout)
+	if m.memoryReconcileInFlight {
+		return
+	}
+	for id, slot := range m.slots {
+		if slot.dialogueReservation == nil {
+			continue
+		}
+		if _, pending := m.memoryReconcilePending[id]; !pending {
+			continue
+		}
+		m.memoryReconcileRequested = true
+		m.memoryReconcileRequestID[id] = struct{}{}
+		m.memoryReconcileRetryWait = 0
+		m.memoryReconcileAttempts = 0
+	}
+}
+
+// memoryFinalizationError 在派生下一批关服 worker 前检查当前 finalization
+// 窗口。caller 与子 context 截止相同时，子 timer 可能稍早触发；此时不能仅
+// 检查 caller，否则会用已经取消的 context 派发新的 reconcile。
+func (m *companionManager) memoryFinalizationError() error {
+	if err := m.memoryCtx.Err(); err != nil {
+		return err
+	}
+	if deadline, ok := m.memoryCtx.Deadline(); ok && !time.Now().Before(deadline) {
+		return context.DeadlineExceeded
+	}
+	return nil
 }
 
 // companionManagerTaskStates 是 Observe 调用的空值安全包装。
