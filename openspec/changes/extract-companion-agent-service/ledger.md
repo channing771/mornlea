@@ -38,7 +38,7 @@
 | 4 | `openspec_artifacts` | `69f6e6ec` | RED：缺少 Planner/adapters；复审 RED：schema 漂移、transport/envelope 上限、validator wrapper 与 JSON 类型混淆；GREEN：focused 77 passed、full 337 passed、import boundary 48 passed、locked sync/ruff/mypy/wheel/diff-check；提交 `06473b29`、`e4b5dc8f`、`0e773804` | `task4_graph_spec_audit` round 3 PASS | `task4_quality_review` round 3 PASS | Accepted |
 | 5 | `task5_http_research`、`task5_startup_cancel_fix` | `f4009ec0` | RED：缺少 Dialogue/FastAPI；复审 RED：HTTP disconnect、重复取消、响应 fence、关闭与 startup 所有权；GREEN：focused `56 passed`、full Python `393 passed`、import boundary `48 passed`、locked/ruff/mypy/diff-check；提交 `fb569bdd`、`ff7b5be9`、`962e361e`、`2d9042bf` | `task4_fix_quality` round 4 PASS | `task5_quality_review` round 4 PASS | Accepted |
 | 6 | `task6_go_agent_client`、`task6_strict_lifecycle_fix` | `c871b1ec` | RED：配置/client 缺失，Round 1/2 复审继续拒绝 codec、manifest、边界与生命周期缺口；GREEN：隔离 focused race 两遍、config/companion full race、vet、archcheck、gofmt/diff-check；提交 `0fd248d1`、`f56b42bf`、`5ee80a7c`、`6b1deb59`、`f7585788`、`0ea46c31` | `task6_spec_review` round 1/2 FAIL，round 3 PASS | `task6_quality_review` round 1/2 FAIL，round 3 PASS | Accepted |
-| 7 | `task7_contract_prereq`（Task 7A） | `148b935c` | contract/Python 前置 RED→GREEN；提交 `5812be64`、repair `038c4b86` | 初次 PASS；repair PASS | 初次 FAIL；repair PASS | Task 7A Accepted；Task 7 整体仍 Pending，下一阶段 Task 7B |
+| 7 | `task7_contract_prereq`（Task 7A）、`task7_mcp_main`（Task 7B） | `148b935c`、`22991a82` | Task 7A 提交 `5812be64`、repair `038c4b86`；Task 7B initial `b00481e0`、repair 1 `79b5965f`、repair 2 `92f80e4f` | Task 7A 初次/repair PASS；Task 7B formal round 1 FAIL、repair 1 scoped FAIL、repair 2 final PASS | Task 7A 初次 FAIL/repair PASS；Task 7B formal round 1 FAIL、repair 1 scoped PASS、repair 2 final PASS | Accepted |
 | 8 | `task8_storage_v5` | `148b935c` | codec/merge/probe/bootstrap/carry RED→GREEN；提交 `11f897c7`、repair `660c02a1`、memory reuse repair `0dc592c8` | 初次独立 PASS；两轮 repair scoped PASS | 初次独立 FAIL；repair 1 scoped PASS；repair 2 scoped PASS | Accepted |
 | 9 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 10 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
@@ -181,6 +181,47 @@
 - `0dc592c8` 最终独立 scoped SPEC 与 QUALITY 评审均 PASS，Task 8 继续裁决
   Accepted；change 进度仍为 7/12，Task 7 整体仍 Pending，下一阶段仍是 Task 7B，
   不提前进入 Task 9。
+
+### Task 7B Go frozen snapshot/MCP 实施、修复与评审记录
+
+- Task 7A 已由 `5812be64` 与 repair `038c4b86` 完成 machine-contract/Python
+  前置并裁决 Accepted；其初次 SPEC PASS/QUALITY FAIL 与 repair 后双 PASS 历史
+  保持见上文，不因 Task 7B 收尾改写。
+- `task7_mcp_main` 从 `22991a82` 开始，以 initial `b00481e0` 交付 Go canonical
+  registry、33×17×33 frozen terrain/digest、四槽 snapshot registry、六个纯工具、
+  loopback MCP v1 outer/SDK service 与 Host component lifecycle；未接入 Task 9 的
+  Planner run wiring，也未实现 Task 10 的 Dialogue/memory/release 关服顺序。
+- initial formal SPEC 评审为 FAIL：raw gate 在 Content-Type/body/UTF-8/envelope/
+  version/pre-cancel 前已完整物化 snapshot，`Host.Shutdown` 在 world persistence
+  失败时不可重试地关闭 MCP/registry，且 `bounded_name` 没有完整执行 strict
+  schema。initial formal QUALITY 评审同为 FAIL，并额外拒绝普通 256-entry
+  `list_affordances` 超过 24 KiB、`NewHost` MCP/world 构造失败回滚泄漏，以及
+  validate-plan digest/terrain 循环缺少 cancellation checkpoint 等质量缺口。
+- repair 1 `79b5965f` 拆分 non-copying capability authorization 与一次 snapshot
+  materialization，定义 24 KiB 内坐标有序的最长完整 affordance 前缀，前置 strict
+  bounded-name 校验，使 persistence 失败后的 shutdown 保留 MCP 可重试，补齐
+  constructor reverse cleanup、digest/terrain inner-loop checkpoint 与陈旧注释清理。
+- repair 1 后独立 scoped QUALITY 评审 PASS；scoped SPEC 仍 FAIL：
+  `find_visible_blocks.block_names` 中合法但未知名称位于前项时，会抢先返回 normal
+  `unknown_block`，掩盖后项 Unicode blank/control/NUL/超 64 UTF-8 bytes 的
+  schema-invalid。repair 2 `92f80e4f` 改为第一遍完整 bounded-name/去重校验、
+  第二遍 canonical lookup；direct 与真实 SDK 四组混合顺序 RED 均转绿。
+- repair 2 后最终独立 SPEC 与 QUALITY 评审均 PASS，Task 7 裁决 Accepted。
+- 同 feature lineage 的完整 `go test ./internal/server -race -count=1` 已在 Task 8
+  memory reuse repair `0dc592c8` 进入后执行并 PASS（214.301s）；repair 1/2 复用
+  该证据，没有谎报为重新执行的 full server gate。
+- repair 1 focused gates：三包
+  `CanonicalName|MCP|Snapshot|Terrain|PlanningTool|Shutdown|NewHost` race PASS
+  （core 1.198s、companion 4.988s、server 8.031s）；完整 companion race PASS
+  （13.718s）；server `MCP|Shutdown|NewHost` race PASS（5.142s）；archcheck PASS
+  （5.519s）；affected vet、`go mod tidy -diff`、OpenSpec strict 80/80、gofmt 与
+  diff-check 均 PASS。
+- repair 2 focused gates：direct mixed-order race PASS（1.862s）、真实 SDK
+  mixed-order race PASS（1.804s）；companion `PlanningTool|PlanningFindBlocks`
+  race PASS（3.911s）；server MCP race PASS（2.367s）；archcheck PASS（5.156s）；
+  OpenSpec strict 80/80、gofmt 与 diff-check 均 PASS。
+- Task 7 closeout 后 change 进度为 8/12；下一任务为 Task 9。Task 8 的完整实施、
+  repair 与 Accepted 记录保持原样，未查看、比较或吸收 main。
 
 ## 整分支终审与门禁
 
