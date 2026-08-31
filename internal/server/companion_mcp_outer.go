@@ -184,7 +184,7 @@ func parseCompanionMCPEnvelope(body []byte, protocolHeaders []string) (companion
 		return companionMCPEnvelope{}, fmt.Errorf("MCP request id 非法")
 	}
 	params, hasParams := fields["params"]
-	if method != "tools/list" && !hasParams {
+	if (method == "initialize" || method == "tools/call") && !hasParams {
 		return companionMCPEnvelope{}, fmt.Errorf("MCP params 缺失")
 	}
 	if hasParams {

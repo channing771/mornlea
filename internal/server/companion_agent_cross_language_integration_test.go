@@ -4,11 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,9 +32,73 @@ type crossLanguageMCPProbeResult struct {
 	Calls                 []string `json:"calls"`
 }
 
+type crossLanguageMCPTranscript struct {
+	mu      sync.Mutex
+	entries []string
+}
+
+type crossLanguageMCPStatusWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (writer *crossLanguageMCPStatusWriter) WriteHeader(status int) {
+	writer.status = status
+	writer.ResponseWriter.WriteHeader(status)
+}
+
+func (writer *crossLanguageMCPStatusWriter) Write(body []byte) (int, error) {
+	if writer.status == 0 {
+		writer.status = http.StatusOK
+	}
+	return writer.ResponseWriter.Write(body)
+}
+
+func (transcript *crossLanguageMCPTranscript) wrap(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			http.Error(writer, "invalid request", http.StatusBadRequest)
+			return
+		}
+		request.Body = io.NopCloser(bytes.NewReader(body))
+		method := request.Method
+		if request.Method == http.MethodPost {
+			var envelope struct {
+				Method string `json:"method"`
+			}
+			if json.Unmarshal(body, &envelope) == nil && envelope.Method != "" {
+				method = envelope.Method
+			}
+		}
+		tracked := &crossLanguageMCPStatusWriter{ResponseWriter: writer}
+		next.ServeHTTP(tracked, request)
+		transcript.mu.Lock()
+		transcript.entries = append(transcript.entries, fmt.Sprintf("%s:%d:%s", method, tracked.status, writer.Header().Get("Content-Type")))
+		transcript.mu.Unlock()
+	})
+}
+
+func (transcript *crossLanguageMCPTranscript) String() string {
+	transcript.mu.Lock()
+	defer transcript.mu.Unlock()
+	return strings.Join(transcript.entries, ",")
+}
+
 func TestMCPAgentCrossLanguageIntegration(t *testing.T) {
 	registry, registration := testMCPRegistry(t)
-	service, err := newCompanionMCPService(registry)
+	transcript := &crossLanguageMCPTranscript{}
+	service, err := newCompanionMCPServiceWithDependencies(
+		registry,
+		net.Listen,
+		func(authority string, current *companion.SnapshotRegistry) (http.Handler, error) {
+			handler, err := newCompanionMCPHandler(authority, current)
+			if err != nil {
+				return nil, err
+			}
+			return transcript.wrap(handler), nil
+		},
+	)
 	if err != nil {
 		t.Fatalf("start real MCP service: %v", err)
 	}
@@ -72,7 +142,8 @@ func TestMCPAgentCrossLanguageIntegration(t *testing.T) {
 	command.Stdout = &stdout
 	command.Stderr = &stderr
 	if err := command.Run(); err != nil {
-		t.Fatalf("real Python MCP probe failed: %v (stderr bytes=%d)", err, stderr.Len())
+		t.Fatalf("real Python MCP probe failed: %v (stderr bytes=%d, status=%q, transcript=%s)",
+			err, stderr.Len(), stdout.String(), transcript.String())
 	}
 	if ctx.Err() != nil {
 		t.Fatalf("real Python MCP probe timeout: %v", ctx.Err())
@@ -93,6 +164,17 @@ func TestMCPAgentCrossLanguageIntegration(t *testing.T) {
 	wantCalls := []string{"get_planning_context", "query_terrain", "validate_plan"}
 	if !reflect.DeepEqual(result.Calls, wantCalls) {
 		t.Fatalf("tool calls=%v，want %v", result.Calls, wantCalls)
+	}
+	wantTranscript := strings.Join([]string{
+		"initialize:200:application/json",
+		"notifications/initialized:202:",
+		"tools/list:200:application/json",
+		"tools/call:200:application/json",
+		"tools/call:200:application/json",
+		"tools/call:200:application/json",
+	}, ",")
+	if got := transcript.String(); got != wantTranscript || strings.Contains(got, "ping") {
+		t.Fatalf("MCP transcript=%q，want %q", got, wantTranscript)
 	}
 }
 
