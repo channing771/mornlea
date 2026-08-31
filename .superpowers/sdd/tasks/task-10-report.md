@@ -301,6 +301,59 @@ ledger。
   日志与 `tasks.md`/ledger 扫描
   - PASS，无新增违规；legacy storage codec 的只读字段与 fixtures 保持兼容。
 
+## Repair 4
+
+质量复审继续发现上一轮跨 attempt re-arm 没有覆盖「旧 reconcile worker 到首轮
+finalization deadline 才退出、结果尚未 drain」的状态。本轮在 `c2cebeb9` clean
+基线上执行真实 RED→GREEN，没有查看 main，也没有修改 `tasks.md` 或 progress ledger。
+
+1. drain 上一轮 reconcile 后只 re-arm 一次
+   - RED：accepted reservation 的 commit 结果不明后，fake reconcile 真正阻塞到首轮
+     finalization context 的 `Done()` 并返回。首轮 Shutdown 正确 deadline，reservation/
+     pending 保留、outcome 留在 channel、logical in-flight 仍为 true，Release/Agent/store
+     close 均为 0；第二轮 Shutdown drain 旧失败后却没有重新派发，直接返回
+     `companion.ErrAgentUnavailable`。
+   - GREEN：每个新 finalization attempt 若接手上一轮 logical in-flight，只记录一个
+     attempt-local post-drain arm。第二轮应用该唯一旧 reconcile outcome 后立即清除标志，
+     再扫描仍存在的 reservation+pending 并 re-arm；新 worker 使用第二轮未取消且有界的
+     context。新派发结果不会再次设置标志，因此同轮再次失败只保留 pending 并返回，
+     不会无界自旋。old mirror 成功后仍以原 operation commit，mirror save 完成后才
+     Release/close，且各一次。
+   - RED 命令：
+     `go test ./internal/server -run '^TestHostShutdownRearmsDrainedMemoryReconcileUnderNewContext$' -race -count=1 -timeout=60s`
+     最初 FAIL（2.051s，`retry Shutdown: companion: agent 不可用`）。
+   - GREEN 命令：同命令 PASS（2.055s）。
+   - 稳定性命令：
+     `go test ./internal/server -run '^(TestHostShutdown(RearmsDrainedMemoryReconcileUnderNewContext|RetriesMemoryFinalizationAfterCallerTimeout|RetriesPendingMemoryReconcileAcrossAttempts))$' -race -count=20 -timeout=180s`
+     PASS（4.612s）。
+
+### Repair 4 验证
+
+- `go test ./internal/server -run 'MemoryReconcile|UnknownCommit|Shutdown|Release' -race -count=1 -timeout=120s`
+  - PASS（顺序重跑）：5.078s。
+- `go test ./internal/server/persistence -run 'Companion|Memory' -race -count=1 -timeout=120s`
+  - PASS：2.813s。
+- `go test ./internal/companion ./internal/server -run 'Agent|Lease|Planner|Dialogue|Memory|Shutdown|CompanionSpeech' -race -count=1 -timeout=240s`
+  - PASS：companion 4.558s，server 95.791s。
+- `go test ./internal/archcheck -count=1`
+  - PASS：5.319s。
+- `go test ./internal/config -run 'Agent|AIConfig' -race -count=1`
+  - PASS：1.800s。
+- `go test ./cmd/mornlea ./cmd/mornlea/app ./cmd/mornlea-server -count=1 -timeout=120s`
+  - PASS：1.199s / 22.091s / 4.312s；未启动游戏窗口。
+- `go vet ./internal/companion ./internal/server ./internal/server/persistence ./internal/config`
+  - PASS，无输出。
+- `go mod tidy -diff`
+  - PASS，无 diff。
+- `openspec validate --all --strict --no-interactive`
+  - PASS：80 passed，0 failed。
+- 首次把 shutdown、persistence、archcheck、config 四个 race/compile gate 并行执行时，
+  既有 `TestShutdownJoinsBufferedPersistenceFailureWithCanceledCaller` 单次未观测到已缓冲
+  persistence root；该测试随后定点 `-race -count=20` 全绿，shutdown gate 顺序重跑
+  全绿，未放宽测试或修改无关生产代码。
+- `git diff --check`、代码注释任务编号、敏感日志与 `tasks.md`/ledger 扫描
+  - PASS，无新增违规。
+
 ## 验证
 
 - `go test ./internal/companion ./internal/server -run 'Dialogue|Memory|Shutdown|CompanionSpeech' -race -count=1 -timeout=150s`

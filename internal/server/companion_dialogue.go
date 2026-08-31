@@ -591,6 +591,11 @@ func (m *companionManager) applyMemoryReconcileOutcomes() {
 
 func (m *companionManager) applyMemoryReconcileBatch(outcome memoryReconcileOutcome) {
 	m.memoryReconcileInFlight = false
+	armAfterDrain := m.memoryReconcileArmAfterDrain
+	m.memoryReconcileArmAfterDrain = false
+	if armAfterDrain {
+		defer m.armPendingMemoryReconcileReservations()
+	}
 	reconciler, ok := m.dialogue.(companionMemoryReconciler)
 	if !ok {
 		return

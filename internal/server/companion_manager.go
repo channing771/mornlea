@@ -229,6 +229,10 @@ type companionManager struct {
 	memoryReconcilePending   map[companion.ID]struct{}
 	memoryReconcileRetryWait uint8
 	memoryReconcileAttempts  uint8
+	// memoryReconcileArmAfterDrain 只属于当前关服 attempt。新 attempt 接手
+	// 上一轮尚未应用的 reconcile 时，在消费该唯一旧结果后补一次
+	// re-arm；本轮新派发的失败不会再次设置它，避免同轮无界自旋。
+	memoryReconcileArmAfterDrain bool
 	// dialogue 是台词模型依赖面（D5 机制；触发节点接线属 D6）。nil 不会出现
 	// 于生产构造（server.go 与 Planner 同源构造），防御缺省下 requestDialogue
 	// 不应被调用——D6 接线前没有任何生产调用方。
@@ -1317,9 +1321,15 @@ func (m *companionManager) beginShutdown() {
 func (m *companionManager) beginMemoryFinalization(ctx context.Context) {
 	m.cancelMemory()
 	m.memoryCtx, m.cancelMemory = context.WithTimeout(ctx, companionMemoryFinalizationTimeout)
+	m.memoryReconcileArmAfterDrain = m.memoryReconcileInFlight
 	if m.memoryReconcileInFlight {
 		return
 	}
+	m.armPendingMemoryReconcileReservations()
+}
+
+func (m *companionManager) armPendingMemoryReconcileReservations() {
+	armed := false
 	for id, slot := range m.slots {
 		if slot.dialogueReservation == nil {
 			continue
@@ -1327,8 +1337,11 @@ func (m *companionManager) beginMemoryFinalization(ctx context.Context) {
 		if _, pending := m.memoryReconcilePending[id]; !pending {
 			continue
 		}
-		m.memoryReconcileRequested = true
 		m.memoryReconcileRequestID[id] = struct{}{}
+		armed = true
+	}
+	if armed {
+		m.memoryReconcileRequested = true
 		m.memoryReconcileRetryWait = 0
 		m.memoryReconcileAttempts = 0
 	}
