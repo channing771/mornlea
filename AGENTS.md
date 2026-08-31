@@ -18,6 +18,7 @@ Mornlea 是使用 Go 1.26 编写的独立体素游戏，Go module 为 `github.co
 - 图形客户端与其 app/capture/benchmark 子包：`cmd/mornlea/AGENTS.md`（子包目录各有局部指南，依赖方向由 `internal/archcheck` 强制）
 - 文档结构、长期说明和测试组织文档：`docs/AGENTS.md`
 - 脚本、发布与自动化：`scripts/AGENTS.md`
+- Python 伙伴 Agent 服务：`services/companion-agent/AGENTS.md`
 - OpenSpec 项目上下文与产物规则：`openspec/config.yaml`
 
 ## 开始工作前
@@ -33,6 +34,7 @@ Mornlea 是使用 Go 1.26 编写的独立体素游戏，Go module 为 `github.co
 - 单机 Memory 与远程 TCP 必须复用同一套登录、模拟和校验路径。
 - 任何 Go 包都不得导入 WebGPU 绑定；GPU 渲染由 Rust client 独占。
 - Go 只能经仓库既定的 ABI bridge 调用 Rust，不得增加生产 fallback 或旁路。
+- Go 服务端只通过 loopback Agent HTTP 与 MCP 合同连接独立 Python 服务，不得 shell-out、FFI 或嵌入 Python；Python 只编排 Planner、Dialogue 与 compact memory，不得提交世界动作。
 - 跨 goroutine 发送成功后的消息及其切片视为不可变。
 - 权威 tick、渲染与网络热路径不得执行无界工作或阻塞 CPU、磁盘和网络操作。
 - 仓库不得加入 Mojang 版权材质或其他未经授权的二进制美术资源。
@@ -59,6 +61,8 @@ Mornlea 是使用 Go 1.26 编写的独立体素游戏，Go module 为 `github.co
 
 ```bash
 make rust
+make companion-agent-check
+make companion-agent-integration
 go test ./path/to/affected/package -race -count=1
 go test ./internal/archcheck -count=1
 make dev-check

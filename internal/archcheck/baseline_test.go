@@ -36,7 +36,7 @@ type baselineVersionMapping struct {
 var baselineVersionMappings = []baselineVersionMapping{
 	{
 		name:        "协议版本",
-		docPattern:  `已经包含协议 v(\d+)`,
+		docPattern:  `协议 v(\d+)`,
 		sourcePath:  filepath.Join("internal", "network", "protocol", "packet.go"),
 		codePattern: `const\s+ProtocolVersion\s+uint32\s*=\s*(\w+)`,
 		why:         "ProtocolVersion 是握手与全部 packet 编解码唯一支持的版本号，wire 兼容性以它为准。",
@@ -57,7 +57,7 @@ var baselineVersionMappings = []baselineVersionMapping{
 	},
 	{
 		name:        "companions.ai schema",
-		docPattern:  "独立 `companions\\.ai` schema v(\\d+)",
+		docPattern:  "`companions\\.ai` schema v(\\d+)",
 		sourcePath:  filepath.Join("internal", "storage", "companion", "companion_codec.go"),
 		codePattern: `CurrentSchema\s+uint32\s*=\s*(\w+)`,
 		why:         "CurrentSchema 是 companions.ai 写出时落盘的 schema 号（companion 包导出的权威常量）；它以 companionSchemaVN 间接定义，需解析到最终数值。",
@@ -85,14 +85,14 @@ var baselineVersionMappings = []baselineVersionMapping{
 	},
 	{
 		name:        "hostile_mobs schema",
-		docPattern:  "独立 `hostile_mobs` schema v(\\d+)",
+		docPattern:  "`hostile_mobs` schema v(\\d+)",
 		sourcePath:  filepath.Join("internal", "storage", "hostile", "hostile_codec.go"),
 		codePattern: `CurrentSchema\s+uint32\s*=\s*(\w+)`,
 		why:         "CurrentSchema 是 hostile_mobs.bin 写出时落盘的 schema 号（hostile 包导出的权威常量）；它以 hostileSchemaV1 间接定义，需解析到最终数值。",
 	},
 	{
 		name:        "benchmark scenario",
-		docPattern:  `benchmark scenario 为 v(\d+)`,
+		docPattern:  `benchmark scenario (?:为 )?v(\d+)`,
 		sourcePath:  filepath.Join("cmd", "mornlea", "benchmark", "benchmark.go"),
 		codePattern: `scenarioVersion\s*=\s*(\w+)`,
 		why:         "scenarioVersion 是 benchmark 报告写出的场景版本，场景迁移链以它为终点。",
@@ -109,6 +109,7 @@ var baselineVersionMappings = []baselineVersionMapping{
 //     把下一个人引向错误方向。
 func TestBaselineVersionsMatchCode(t *testing.T) {
 	assertBaselineVersions(t, moduleRoot(t), baselineDocName)
+	assertBaselineVersions(t, moduleRoot(t), filepath.Join("openspec", "config.yaml"))
 }
 
 const baselineDocName = "AGENTS.md"

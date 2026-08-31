@@ -258,6 +258,16 @@ jobs:
             go.sum
             engine/include/mornlea_engine.h
             engine/include/mornlea_client.h
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.5'
+          enable-cache: true
+          cache-dependency-glob: |
+            services/companion-agent/pyproject.toml
+            services/companion-agent/uv.lock
       - uses: actions/download-artifact@v4
         with:
           name: native-macos-${{ github.sha }}
@@ -288,6 +298,10 @@ jobs:
           mkdir -p engine/target/release/deps
           cp engine/target/release/libmornlea_engine.dylib engine/target/release/deps/
           cp engine/target/release/libmornlea_client.dylib engine/target/release/deps/
+      - name: 伙伴 Agent Python 门禁
+        run: make companion-agent-check
+      - name: 伙伴 Agent 真进程合同
+        run: make companion-agent-integration
       - name: 50ms 服务端探针门禁
         run: go test ./cmd/mornlea/benchmark -run '^TestScenarioV7EightSessionServerProbeIsRealAndBounded$' -count=1
       - name: TCP 重启与 Memory/TCP parity 重复门禁
