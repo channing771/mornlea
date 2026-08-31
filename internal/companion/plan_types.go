@@ -105,6 +105,9 @@ type PlanSnapshot struct {
 	ExposedBlocks []PlanBlock `json:"exposedBlocks"`
 	// Heights 是按 (X,Z) 严格升序的地表高度样本，至多 MaxPlanHeightSamples 条。
 	Heights []PlanHeight `json:"heights"`
+	// Terrain 是完整的 33×17×33 冻结投影。旧 direct-model 过渡路径与 Agent
+	// HTTP 都不得把整份 plane 放进模型输入；MCP 与专用 digest DTO 才读取它。
+	Terrain TerrainProjection `json:"-"`
 	// ChunkRevisions 是按 (X,Z) 严格升序的相关区块 revision，至多
 	// pathfind.MaxPlanChunkRevisions 条。
 	ChunkRevisions []pathfind.ChunkRevision `json:"chunkRevisions"`
@@ -167,6 +170,27 @@ func (s PlanSnapshot) Validate() error {
 	if len(s.Heights) > MaxPlanHeightSamples {
 		return fmt.Errorf("companion: 快照高度样本数 %d 超过上限 %d",
 			len(s.Heights), MaxPlanHeightSamples)
+	}
+	if err := s.Terrain.Validate(); err != nil {
+		return err
+	}
+	centerX := math.Floor(float64(s.Companion.Position[0]))
+	centerY := math.Floor(float64(s.Companion.Position[1]))
+	centerZ := math.Floor(float64(s.Companion.Position[2]))
+	const minInt32 = -1 << 31
+	const maxInt32 = 1<<31 - 1
+	if centerX < minInt32+TerrainHorizontalRadius || centerX > maxInt32-TerrainHorizontalRadius ||
+		centerY < minInt32+TerrainVerticalRadius || centerY > maxInt32-TerrainVerticalRadius ||
+		centerZ < minInt32+TerrainHorizontalRadius || centerZ > maxInt32-TerrainHorizontalRadius {
+		return fmt.Errorf("companion: 快照伙伴位置无法形成 terrain projection")
+	}
+	wantOrigin := core.BlockPos{
+		X: int32(centerX) - TerrainHorizontalRadius,
+		Y: int32(centerY) - TerrainVerticalRadius,
+		Z: int32(centerZ) - TerrainHorizontalRadius,
+	}
+	if s.Terrain.Origin() != wantOrigin {
+		return fmt.Errorf("companion: terrain projection origin=%+v 与伙伴 floor 格不匹配", s.Terrain.Origin())
 	}
 	for index, height := range s.Heights {
 		// core.MinY-1 是空列哨兵，其余取值必须是 [MinY, MaxY) 内的真实方块 Y。
@@ -398,10 +422,19 @@ func (p Plan) Validate() error {
 // 服务持久化恢复路径（RestoreCurrent），那里没有快照可对照；恢复路径与解码
 // 路径共享同一套结构校验，防止两套规则漂移。
 func validPlanSteps(steps []PlanStep) error {
+	return validPlanStepsWithCheckpoint(steps, nil)
+}
+
+func validPlanStepsWithCheckpoint(steps []PlanStep, checkpoint func() error) error {
 	if len(steps) == 0 {
 		return fmt.Errorf("companion: 计划 steps 为空")
 	}
 	for index, step := range steps {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return err
+			}
+		}
 		switch step.Kind {
 		case PlanStepGoTo, PlanStepMine:
 			if !validPlanBlockY(step.Y) {
@@ -428,38 +461,50 @@ func validPlanSteps(steps []PlanStep) error {
 	return nil
 }
 
-// planPlaceItems 是 place 步骤方块名的固定注册表：名字 → 可放置出该方块的
-// 物品。core 没有方块名字注册表（只有数值 ID 与 ItemPlacement 物品→方块映
-// 射），因此本表就是 planner 契约的唯一命名权威：名字经表得到物品，再经
-// core.ItemPlacement 归一为方块，注册表值域被测试双向锁定为 ItemPlacement
-// 的真值域（名字 ↔ 可放置方块双射），两张表不可能漂移。
-var planPlaceItems = map[string]core.ItemID{
-	"stone":             core.ItemStone,
-	"dirt":              core.ItemDirt,
-	"grass":             core.ItemGrass,
-	"stone_brick":       core.ItemStoneBrick,
-	"furnace":           core.ItemFurnace,
-	"iron_block":        core.ItemIronBlock,
-	"chest":             core.ItemChest,
-	"light_block":       core.ItemLightBlock,
-	"cobblestone":       core.ItemCobblestone,
-	"smooth_stone":      core.ItemSmoothStone,
-	"sand":              core.ItemSand,
-	"gravel":            core.ItemGravel,
-	"oak_log":           core.ItemOakLog,
-	"oak_planks":        core.ItemOakPlanks,
-	"leaves":            core.ItemLeaves,
-	"glass":             core.ItemGlass,
-	"brick":             core.ItemBrick,
-	"white_wool":        core.ItemWhiteWool,
-	"roof_tile":         core.ItemRoofTile,
-	"clay":              core.ItemClay,
-	"snow_block":        core.ItemSnowBlock,
-	"mossy_cobblestone": core.ItemMossyCobblestone,
+// planPlaceItemIDs 是伙伴 place 交付集合的唯一白名单，只保存稳定 ItemID。
+// machine name 从 core canonical registry 派生，避免在 planner 再维护拼写表。
+var planPlaceItemIDs = [...]core.ItemID{
+	core.ItemStone,
+	core.ItemDirt,
+	core.ItemGrass,
+	core.ItemStoneBrick,
+	core.ItemFurnace,
+	core.ItemIronBlock,
+	core.ItemChest,
+	core.ItemLightBlock,
+	core.ItemCobblestone,
+	core.ItemSmoothStone,
+	core.ItemSand,
+	core.ItemGravel,
+	core.ItemOakLog,
+	core.ItemOakPlanks,
+	core.ItemLeaves,
+	core.ItemGlass,
+	core.ItemBrick,
+	core.ItemWhiteWool,
+	core.ItemRoofTile,
+	core.ItemClay,
+	core.ItemSnowBlock,
+	core.ItemMossyCobblestone,
 	// 工作台是普通可放置方块，采掘掉回一个工作台物品，往返校验成立，
 	// 不属于农业防御清单（`companionPlaceableBlock` 只拒作物与耕地），登记
 	// 与 sim 侧放行语义一致。
-	"workbench": core.ItemWorkbench,
+	core.ItemWorkbench,
+}
+
+// planPlaceItems 是由 ID 白名单与 core canonical registry 派生的名字索引。
+var planPlaceItems = buildPlanPlaceItems()
+
+func buildPlanPlaceItems() map[string]core.ItemID {
+	items := make(map[string]core.ItemID, len(planPlaceItemIDs))
+	for _, item := range planPlaceItemIDs {
+		name, ok := core.CanonicalItemName(item)
+		if !ok {
+			continue
+		}
+		items[name] = item
+	}
+	return items
 }
 
 // planPlaceBlocks 是固定注册表的反向索引：可放置方块 → 对应物品。place 步骤
@@ -524,14 +569,24 @@ func planInObservationWindow(companionPos [3]float32, pos core.BlockPos) bool {
 // 持有至少一个 item。place 契约只要求快照背包显示持有——执行侧扣料在同一
 // tick 原子完成，数量不足由 action 语义拒绝，这里不做数量核对。
 func planInventoryHolds(inventory core.Inventory, item core.ItemID) bool {
+	holds, _ := planInventoryHoldsWithCheckpoint(inventory, item, nil)
+	return holds
+}
+
+func planInventoryHoldsWithCheckpoint(inventory core.Inventory, item core.ItemID, checkpoint func() error) (bool, error) {
 	if item == core.ItemNone {
-		return false
+		return false, nil
 	}
 	for slot := uint8(0); slot < core.InventorySlots; slot++ {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return false, err
+			}
+		}
 		stack, _ := inventory.Slot(slot)
 		if stack.Item == item && stack.Count >= 1 {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }

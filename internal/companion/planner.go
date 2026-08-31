@@ -99,6 +99,10 @@ func planPlaceItemNames() []string {
 	return names
 }
 
+// PlanningPlaceBlockNames 返回 place 交付集合的 canonical 名称独立副本，供
+// MCP checked-in schema consistency 门禁使用。
+func PlanningPlaceBlockNames() []string { return planPlaceItemNames() }
+
 // chatMessage 是 OpenAI chat/completions 请求中的单条消息。
 type chatMessage struct {
 	Role    string `json:"role"`
@@ -444,19 +448,13 @@ func decodePlanStep(index int, step planWireStep) (PlanStep, error) {
 }
 
 // validatePlanStepsAgainstSnapshot 校验依赖规划快照的步骤契约：follow 目标必须
-// 来自快照在线玩家集合；mine 目标必须落在伙伴观察窗口内，且目标恰好列入
-// ExposedBlocks 时方块必须满足 `planMineableBlock` 判据——非农业且具单一
-// `core.BlockDrop`，箱子与熔炉作为容器目标放行；place 方块必须能在快照背包
-// 中找到对应物品。「follow 必须是最后一步」是结构约束，已由 validPlanSteps
-// 校验，这里不重复。
+// 来自快照在线玩家集合；mine 目标必须能在 dense frozen projection 中精确
+// lookup 且满足 `planMineableBlock`，不依赖最多 256 条 ExposedBlocks；place
+// 方块必须能在快照背包中找到对应物品。
 func validatePlanStepsAgainstSnapshot(steps []PlanStep, snapshot PlanSnapshot) error {
 	online := make(map[core.PlayerID]struct{}, len(snapshot.OnlinePlayers))
 	for _, player := range snapshot.OnlinePlayers {
 		online[player.ID] = struct{}{}
-	}
-	exposed := make(map[core.BlockPos]core.BlockID, len(snapshot.ExposedBlocks))
-	for _, block := range snapshot.ExposedBlocks {
-		exposed[block.Pos] = block.Block
 	}
 	for index, step := range steps {
 		switch step.Kind {
@@ -466,14 +464,12 @@ func validatePlanStepsAgainstSnapshot(steps []PlanStep, snapshot PlanSnapshot) e
 			}
 		case PlanStepMine:
 			target := core.BlockPos{X: step.X, Y: step.Y, Z: step.Z}
-			// 范围判定基准是观察窗口数值界（控制器裁决，详见
-			// planInObservationWindow 的注释）；ExposedBlocks 成员资格只用于
-			// 加强方块类型校验，不是必要条件。
-			if !planInObservationWindow(snapshot.Companion.Position, target) {
-				return fmt.Errorf("计划 steps[%d] mine 目标超出伙伴观察窗口", index)
+			block, _, ok := snapshot.Terrain.Lookup(target)
+			if !ok {
+				return fmt.Errorf("计划 steps[%d] mine 目标超出冻结投影或列未 ready", index)
 			}
-			if block, listed := exposed[target]; listed && !planMineableBlock(block) {
-				return fmt.Errorf("计划 steps[%d] mine 目标方块不可采掘（农业方块或无单一掉落）", index)
+			if !planMineableBlock(block) {
+				return fmt.Errorf("计划 steps[%d] mine 目标方块不可采掘", index)
 			}
 		case PlanStepPlace:
 			item, ok := planPlaceBlocks[step.Block]

@@ -268,6 +268,9 @@ func runCompanionInteractionParity(t *testing.T, transport string) interactionPa
 			if hit {
 				return true
 			}
+			// 模型与寻路 worker 在独立 goroutine 上推进；有界退避避免测试用
+			// 紧循环耗尽 tick 预算却不给 worker 获得调度的 wall-clock 窗口。
+			time.Sleep(time.Millisecond)
 		}
 		return false
 	}

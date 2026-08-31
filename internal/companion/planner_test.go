@@ -58,6 +58,18 @@ func testSnapshot() PlanSnapshot {
 		LookHit:    core.BlockPos{X: 9, Y: 64, Z: -1},
 		HasLookHit: true,
 	}
+	terrain := NewTerrainProjection(core.BlockPos{X: -10, Y: 57, Z: -16})
+	for x := int32(-10); x <= 22; x++ {
+		for z := int32(-16); z <= 16; z++ {
+			if !terrain.SetReadyColumn(x, z, 64) {
+				panic("test terrain column outside projection")
+			}
+		}
+	}
+	if !terrain.SetBlock(core.BlockPos{X: 8, Y: 63, Z: -2}, core.GrassID) ||
+		!terrain.SetBlock(core.BlockPos{X: 6, Y: 64, Z: 0}, core.StoneID) {
+		panic("test terrain block outside projection")
+	}
 	return PlanSnapshot{
 		Command: "去那棵橡树旁边",
 		Issuer:  issuerPlayer,
@@ -81,6 +93,7 @@ func testSnapshot() PlanSnapshot {
 			{Pos: core.BlockPos{X: 9, Y: 64, Z: -1}, Block: core.OakLogID},
 		},
 		Heights:        []PlanHeight{{X: 8, Z: -2, Height: 63}, {X: 9, Z: -1, Height: 64}},
+		Terrain:        terrain,
 		ChunkRevisions: []pathfind.ChunkRevision{{Chunk: core.ChunkPos{X: 0, Z: -1}, Revision: 7}},
 		WorldTimeTicks: 6000,
 	}
@@ -758,18 +771,24 @@ func TestPlanDecodeKindMatrix(t *testing.T) {
 		// 容器目标自 change companion-mine-containers 起合法（与 sim 侧
 		// `companionMineableBlock` 同步放开，D2 两侧清单必须一致）。
 		{
-			name:   "合法 mine 容器目标（箱子）",
-			steps:  validMineListed,
-			mutate: func(s *PlanSnapshot) { s.ExposedBlocks[0].Block = core.ChestID },
-			valid:  true,
-			want:   []PlanStep{{Kind: PlanStepMine, X: 8, Y: 63, Z: -2}},
+			name:  "合法 mine 容器目标（箱子）",
+			steps: validMineListed,
+			mutate: func(s *PlanSnapshot) {
+				s.ExposedBlocks[0].Block = core.ChestID
+				s.Terrain.SetBlock(s.ExposedBlocks[0].Pos, core.ChestID)
+			},
+			valid: true,
+			want:  []PlanStep{{Kind: PlanStepMine, X: 8, Y: 63, Z: -2}},
 		},
 		{
-			name:   "合法 mine 容器目标（熔炉）",
-			steps:  validMineListed,
-			mutate: func(s *PlanSnapshot) { s.ExposedBlocks[0].Block = core.FurnaceID },
-			valid:  true,
-			want:   []PlanStep{{Kind: PlanStepMine, X: 8, Y: 63, Z: -2}},
+			name:  "合法 mine 容器目标（熔炉）",
+			steps: validMineListed,
+			mutate: func(s *PlanSnapshot) {
+				s.ExposedBlocks[0].Block = core.FurnaceID
+				s.Terrain.SetBlock(s.ExposedBlocks[0].Pos, core.FurnaceID)
+			},
+			valid: true,
+			want:  []PlanStep{{Kind: PlanStepMine, X: 8, Y: 63, Z: -2}},
 		},
 		{
 			name: "合法 place 归一为 BlockID", steps: validPlace, valid: true,
@@ -809,9 +828,12 @@ func TestPlanDecodeKindMatrix(t *testing.T) {
 		{name: "mine 水平越界", steps: `{"kind":"mine","x":40,"y":64,"z":0}`},
 		{name: "mine 垂直越界", steps: `{"kind":"mine","x":6,"y":80,"z":0}`},
 		{
-			name:   "mine 目标无单一掉落",
-			steps:  validMineListed,
-			mutate: func(s *PlanSnapshot) { s.ExposedBlocks[0].Block = core.BedrockID },
+			name:  "mine 目标无单一掉落",
+			steps: validMineListed,
+			mutate: func(s *PlanSnapshot) {
+				s.ExposedBlocks[0].Block = core.BedrockID
+				s.Terrain.SetBlock(s.ExposedBlocks[0].Pos, core.BedrockID)
+			},
 		},
 		{name: "mine 缺 z", steps: `{"kind":"mine","x":8,"y":63}`},
 		{

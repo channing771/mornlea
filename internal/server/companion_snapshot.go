@@ -5,6 +5,7 @@
 package server
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/channing771/mornlea/internal/companion"
@@ -84,6 +85,16 @@ func (v companionChunkView) blockAt(x, y, z int32) (core.BlockID, bool) {
 		return 0, false
 	}
 	return chunk.BlockAt(int(x&core.SectionMask), y, int(z&core.SectionMask)), true
+}
+
+// heightAt 返回 ready 列的冻结地表高度；未 ready 或超出 3×3 视图返回 false。
+func (v companionChunkView) heightAt(x, z int32) (int32, bool) {
+	chunk := v.chunkFor(x, z)
+	if chunk == nil {
+		return 0, false
+	}
+	heights := chunk.Heights()
+	return heights.Highest(int(x&core.SectionMask), int(z&core.SectionMask)), true
 }
 
 // readyRevisions 返回视图中已 ready 区块的 (X,Z) 字典序升序 revision 列表，
@@ -230,6 +241,70 @@ func (m *companionManager) scanEnvObservation(
 	return view, exposed, heights
 }
 
+// planningTerrainSource 是 tick 边界 frozen view 的最小读取面。构造阶段先读列
+// readiness/height，再做至多固定槽数的 primary `blockAt`；派生阶段不再持有它。
+type planningTerrainSource interface {
+	heightAt(x, z int32) (int32, bool)
+	blockAt(x, y, z int32) (core.BlockID, bool)
+}
+
+// buildPlanningObservation 构造完整 33×17×33 planning projection，再完全从
+// cache 派生 exposed 与 legacy height 摘要。Dialogue 仍使用原有 ±4 扫描路径。
+func buildPlanningObservation(
+	source planningTerrainSource,
+	position [3]float32,
+) (companion.TerrainProjection, []companion.PlanBlock, []companion.PlanHeight, error) {
+	centerX := math.Floor(float64(position[0]))
+	centerY := math.Floor(float64(position[1]))
+	centerZ := math.Floor(float64(position[2]))
+	const minInt32 = -1 << 31
+	const maxInt32 = 1<<31 - 1
+	if centerX < minInt32+companion.TerrainHorizontalRadius ||
+		centerX > maxInt32-companion.TerrainHorizontalRadius ||
+		centerY < minInt32+companion.TerrainVerticalRadius ||
+		centerY > maxInt32-companion.TerrainVerticalRadius ||
+		centerZ < minInt32+companion.TerrainHorizontalRadius ||
+		centerZ > maxInt32-companion.TerrainHorizontalRadius {
+		return companion.TerrainProjection{}, nil, nil, fmt.Errorf("server: 伙伴位置无法形成 planning terrain projection")
+	}
+	origin := core.BlockPos{
+		X: int32(centerX) - companion.TerrainHorizontalRadius,
+		Y: int32(centerY) - companion.TerrainVerticalRadius,
+		Z: int32(centerZ) - companion.TerrainHorizontalRadius,
+	}
+	projection := companion.NewTerrainProjection(origin)
+	for xOffset := 0; xOffset < companion.TerrainWidth; xOffset++ {
+		x := origin.X + int32(xOffset)
+		for zOffset := 0; zOffset < companion.TerrainDepth; zOffset++ {
+			z := origin.Z + int32(zOffset)
+			height, ready := source.heightAt(x, z)
+			if !ready {
+				continue
+			}
+			if !projection.SetReadyColumn(x, z, height) {
+				return companion.TerrainProjection{}, nil, nil, fmt.Errorf("server: planning terrain 列 (%d,%d) height=%d 非法", x, z, height)
+			}
+			for yOffset := 0; yOffset < companion.TerrainHeight; yOffset++ {
+				y := origin.Y + int32(yOffset)
+				if y < core.MinY || y >= core.MaxY {
+					continue
+				}
+				block, ok := source.blockAt(x, y, z)
+				if !ok {
+					return companion.TerrainProjection{}, nil, nil, fmt.Errorf("server: ready planning terrain 列 (%d,%d) 在 y=%d 读取失败", x, z, y)
+				}
+				if !projection.SetBlock(core.BlockPos{X: x, Y: y, Z: z}, block) {
+					return companion.TerrainProjection{}, nil, nil, fmt.Errorf("server: planning terrain 方块 (%d,%d,%d) 编号 %d 非法", x, y, z, block)
+				}
+			}
+		}
+	}
+	if err := projection.Validate(); err != nil {
+		return companion.TerrainProjection{}, nil, nil, err
+	}
+	return projection, projection.ExposedBlocks(), projection.Heights(), nil
+}
+
 // buildPlanSnapshot 在 tick 边界构造一次规划的不可变观察快照：
 //   - 发令者事实在入队时刻冻结（captureIssuer），同一指令的规划输入不随
 //     发令者后续移动而漂移；
@@ -244,7 +319,11 @@ func (m *companionManager) buildPlanSnapshot(
 	issuer companionTaskIssuer,
 	body companion.Body,
 ) (companion.PlanSnapshot, error) {
-	view, exposed, heights := m.scanEnvObservation(body)
+	view := m.chunkViewAt(body.Dimension, body.Position)
+	terrain, exposed, heights, err := buildPlanningObservation(view, body.Position)
+	if err != nil {
+		return companion.PlanSnapshot{}, err
+	}
 
 	snapshot := companion.PlanSnapshot{
 		Command: string(command),
@@ -266,6 +345,7 @@ func (m *companionManager) buildPlanSnapshot(
 		},
 		ExposedBlocks:  companion.BoundExposedBlocks(exposed),
 		Heights:        heights,
+		Terrain:        terrain,
 		ChunkRevisions: view.readyRevisions(),
 		OnlinePlayers:  m.onlinePlanPlayers(),
 		WorldTimeTicks: m.engine.WorldTime(),
