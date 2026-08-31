@@ -90,11 +90,11 @@ func (h *Host) Shutdown(ctx context.Context) error {
 	if runtimeCancel != nil {
 		runtimeCancel()
 	}
-	if h.companionMCP != nil {
-		h.companionMCP.Close()
-	}
 	if err := h.world.Shutdown(ctx); err != nil {
 		return errors.Join(listenerErr, err)
+	}
+	if h.companionMCP != nil {
+		h.companionMCP.Close()
 	}
 	h.players.CloseWorker()
 	return listenerErr

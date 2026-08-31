@@ -82,16 +82,31 @@ type companionMCPService struct {
 	closeOnce sync.Once
 }
 
+type companionMCPServiceFactory func(*companion.SnapshotRegistry) (*companionMCPService, error)
+type companionMCPListenFunc func(string, string) (net.Listener, error)
+type companionMCPHandlerFactory func(string, *companion.SnapshotRegistry) (http.Handler, error)
+
 func newCompanionMCPService(registry *companion.SnapshotRegistry) (*companionMCPService, error) {
+	return newCompanionMCPServiceWithDependencies(registry, net.Listen, newCompanionMCPHandler)
+}
+
+func newCompanionMCPServiceWithDependencies(
+	registry *companion.SnapshotRegistry,
+	listen companionMCPListenFunc,
+	newHandler companionMCPHandlerFactory,
+) (*companionMCPService, error) {
 	if registry == nil {
 		return nil, errors.New("server: nil companion MCP registry")
 	}
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if listen == nil || newHandler == nil {
+		return nil, errors.New("server: nil companion MCP dependency")
+	}
+	listener, err := listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		return nil, err
 	}
 	authority := listener.Addr().String()
-	handler, err := newCompanionMCPHandler(authority, registry)
+	handler, err := newHandler(authority, registry)
 	if err != nil {
 		_ = listener.Close()
 		return nil, err

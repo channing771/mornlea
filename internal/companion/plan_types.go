@@ -35,9 +35,8 @@ const (
 	// Planner 观察快照是同级范围，两处半径必须一起变化，由单一常量定义保证
 	// 不漂移（耦合语义见 pathfind.go 的常量注释）。
 	planEnvRadiusBlocks = pathfind.PathWindowHorizontalRadius
-	// planEnvVerticalBlocks 是环境摘要的垂直半径（spec：伙伴周围垂直 8 格）。
-	// 它同时是 mine 步骤观察窗口判定的垂直 ±8 数值界（见
-	// planInObservationWindow）。
+	// planEnvVerticalBlocks 是规划 dense projection 的垂直半径（伙伴周围 ±8 格）。
+	// Planner 提示与 dense terrain projection 共用该数值界。
 	planEnvVerticalBlocks = 8
 	// MaxPlanOnlinePlayers 是快照在线玩家集合的上限，与服务器八名玩家的会话
 	// 上限对齐；校验拒绝超界构造，BoundOnlinePlayers 的截断只是防御性内存界。
@@ -126,6 +125,15 @@ type PlanSnapshot struct {
 // 非法快照是 server 侧构造缺陷而不是模型失败，因此这里返回的错误不携带
 // Planner 哨兵类别；PlannerClient.Plan 在发起任何请求前调用本方法。
 func (s PlanSnapshot) Validate() error {
+	return s.validateWithCheckpoint(nil)
+}
+
+func (s PlanSnapshot) validateWithCheckpoint(checkpoint func() error) error {
+	if checkpoint != nil {
+		if err := checkpoint(); err != nil {
+			return err
+		}
+	}
 	if err := validatePlanText("快照指令", s.Command, MaxPlanCommandBytes, true); err != nil {
 		return err
 	}
@@ -149,6 +157,11 @@ func (s PlanSnapshot) Validate() error {
 	if !s.Companion.Inventory.Valid() {
 		return fmt.Errorf("companion: 快照伙伴背包非法")
 	}
+	if checkpoint != nil {
+		if err := checkpoint(); err != nil {
+			return err
+		}
+	}
 	if err := validatePlanText("快照任务状态摘要", s.Companion.TaskStatus, MaxPlanTaskStatusBytes, false); err != nil {
 		return err
 	}
@@ -157,6 +170,11 @@ func (s PlanSnapshot) Validate() error {
 			len(s.ExposedBlocks), MaxPlanExposedBlocks)
 	}
 	for index, block := range s.ExposedBlocks {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return err
+			}
+		}
 		if block.Block == core.AirID || !core.RegisteredBlock(block.Block) {
 			return fmt.Errorf("companion: 快照环境方块[%d] 编号 %d 非法（空气或未注册）", index, block.Block)
 		}
@@ -171,7 +189,7 @@ func (s PlanSnapshot) Validate() error {
 		return fmt.Errorf("companion: 快照高度样本数 %d 超过上限 %d",
 			len(s.Heights), MaxPlanHeightSamples)
 	}
-	if err := s.Terrain.Validate(); err != nil {
+	if err := s.Terrain.validateWithCheckpoint(checkpoint); err != nil {
 		return err
 	}
 	centerX := math.Floor(float64(s.Companion.Position[0]))
@@ -193,6 +211,11 @@ func (s PlanSnapshot) Validate() error {
 		return fmt.Errorf("companion: terrain projection origin=%+v 与伙伴 floor 格不匹配", s.Terrain.Origin())
 	}
 	for index, height := range s.Heights {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return err
+			}
+		}
 		// core.MinY-1 是空列哨兵，其余取值必须是 [MinY, MaxY) 内的真实方块 Y。
 		if height.Height != core.MinY-1 && !validPlanBlockY(height.Height) {
 			return fmt.Errorf("companion: 快照高度样本[%d] Height=%d 越界", index, height.Height)
@@ -209,6 +232,11 @@ func (s PlanSnapshot) Validate() error {
 			len(s.ChunkRevisions), pathfind.MaxPlanChunkRevisions)
 	}
 	for index, revision := range s.ChunkRevisions {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return err
+			}
+		}
 		if index > 0 {
 			previous := s.ChunkRevisions[index-1]
 			if (previous.Chunk.X > revision.Chunk.X) ||
@@ -222,6 +250,11 @@ func (s PlanSnapshot) Validate() error {
 			len(s.OnlinePlayers), MaxPlanOnlinePlayers)
 	}
 	for index, player := range s.OnlinePlayers {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return err
+			}
+		}
 		// 在线玩家条目复用 PlanPlayer 值类型：全部字段的不变量与发令玩家一致，
 		// 额外要求按 ID 严格升序（同一玩家只在集合出现一次）。
 		if !player.ID.Valid() {
@@ -238,6 +271,9 @@ func (s PlanSnapshot) Validate() error {
 		if index > 0 && bytes.Compare(s.OnlinePlayers[index-1].ID[:], player.ID[:]) >= 0 {
 			return fmt.Errorf("companion: 快照在线玩家[%d] 未按 ID 严格升序或重复", index)
 		}
+	}
+	if checkpoint != nil {
+		return checkpoint()
 	}
 	return nil
 }
@@ -408,7 +444,7 @@ type Plan struct {
 // Validate 校验计划不变量：summary 是规范有界文本、steps 非空且每步都属于
 // 交付全集四 kind 并满足结构约束（坐标步骤的 Y 在世界竖直边界内、place 的
 // 方块在固定注册表值域、follow 的目标 ID 是有效 UUIDv4 且 follow 是最后一
-// 步）。依赖规划快照的约束（follow 目标在线、mine 观察窗口、place 背包持有）
+// 步）。依赖规划快照的约束（follow 目标在线、mine dense projection、place 背包持有）
 // 由解码路径对照快照另行校验。任何违例都意味着模型输出了不可执行的非法计划。
 func (p Plan) Validate() error {
 	if err := validatePlanText("计划 summary", p.Summary, MaxPlanSummaryBytes, true); err != nil {
@@ -548,21 +584,6 @@ func planMineableBlock(block core.BlockID) bool {
 	}
 	_, ok := core.BlockDrop(block)
 	return ok
-}
-
-// planInObservationWindow 报告 pos 是否落在伙伴的观察窗口内：水平
-// planEnvRadiusBlocks 格、垂直 planEnvVerticalBlocks 格，与快照环境摘要的采集
-// 窗口共用同一组数值界。
-//
-// 判定基准（控制器裁决）是窗口的数值界而不是 ExposedBlocks 的成员资格：
-// ExposedBlocks 是被裁剪到 256 条的子集，窗口之内但未列入的方块仍应能被
-// mine 指令表达，把成员资格当必要条件会让模型因快照裁剪而被误拒。目标是否
-// 真的可采掘由执行侧的交互距离与方块校验兜底；方块类型契约只在目标恰好列入
-// ExposedBlocks 时加强校验（见解码路径）。
-func planInObservationWindow(companionPos [3]float32, pos core.BlockPos) bool {
-	return math.Abs(float64(pos.X)-float64(companionPos[0])) <= planEnvRadiusBlocks &&
-		math.Abs(float64(pos.Z)-float64(companionPos[2])) <= planEnvRadiusBlocks &&
-		math.Abs(float64(pos.Y)-float64(companionPos[1])) <= planEnvVerticalBlocks
 }
 
 // planInventoryHolds 报告 36 格完整物品状态（快捷栏 + 背包的值快照）中是否

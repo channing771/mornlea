@@ -315,7 +315,16 @@
             }
           }
         }
-      }
+      },
+      "x-mornlea-rules": [
+        {
+          "name": "sorted_positions",
+          "array_property": "visible_blocks",
+          "position_property": "position",
+          "axes": ["x", "y", "z"],
+          "strict": true
+        }
+      ]
     },
     "inspect_inventory_input": {
       "type": "object",

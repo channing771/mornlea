@@ -49,6 +49,9 @@ type Config struct {
 	// companionIdentityGenerator 只用于启动期 v5 身份生成；测试注入失败与
 	// 确定性序列，生产缺省使用系统随机源。
 	companionIdentityGenerator storage.CompanionIdentityGenerator
+	// companionMCPFactory 只用于构造失败与所有权回滚测试；生产缺省使用实际
+	// loopback listener 与 MCP handler。
+	companionMCPFactory companionMCPServiceFactory
 }
 
 func DefaultConfig(seed int64) Config {

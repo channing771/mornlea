@@ -64,7 +64,7 @@ const plannerSystemPromptHeadIntro = "你是体素游戏 Mornlea 里伙伴的行
 
 // plannerSystemPromptHead 是固定系统提示头段（intro + 窗口格数句 + 方块名
 // 引导句）。「水平/垂直格数」引用 `planEnvRadiusBlocks`/`planEnvVerticalBlocks`
-// （与快照环境摘要同源，M5E 递延 7 的清偿），沿用 `plannerSystemPromptTail`
+// （与规划快照的 dense terrain projection 同源），沿用 `plannerSystemPromptTail`
 // 的包级 var 先例：初始化期一次求值，运行期与常量同样不可变；完整字节由
 // `TestPlannerSystemPromptHeadBytesStable` 锁定，插值常数变化必须连带更新。
 var plannerSystemPromptHead = plannerSystemPromptHeadIntro +

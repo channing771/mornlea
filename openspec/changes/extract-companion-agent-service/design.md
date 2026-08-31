@@ -173,7 +173,7 @@ snapshot/namespace/companion/capability 由 runtime 注入，模型不能选择�
 | 工具 | 模型可见输入 | 结果与稳定上限 |
 | --- | --- | --- |
 | `get_planning_context` | `{}` | digest、instruction、issuer、companion、world time、chunk revisions；canonical 24 KiB |
-| `list_affordances` | `{}` | step kinds、最多 8 online player、最多 256 visible block；canonical 24 KiB |
+| `list_affordances` | `{}` | step kinds、最多 8 online player；visible block 为冻结坐标序中使完整 payload ≤24 KiB 的最长完整前缀（schema 仍允许最多 256 项），不切断 JSON/item；空来源返回空数组，非空来源连首项都容不下时硬失败 |
 | `inspect_inventory` | `offset: 0..35`、`limit: 1..36` | 最多 36 个 slot/item/count；8 KiB |
 | `find_visible_blocks` | `block_names: 1..16`、`limit: 1..64` | 成功对象保持坐标序最多 64 个 position/block/drop；未知 canonical block name 时正常失败对象精确为 `{code:"unknown_block",hint:<strict UTF-8 <=256 bytes>}`，无部分 `matches`；16 KiB |
 | `query_terrain` | `positions: 1..64` 个整数世界坐标 | 成功对象保持按输入序逐项返回 position/冻结列高/该位置方块名；任一位置越界、超出 world Y 或列未 ready 时正常失败对象精确为 `{code:"out_of_bounds",hint:<strict UTF-8 <=256 bytes>}`，无部分 `terrain`；16 KiB |

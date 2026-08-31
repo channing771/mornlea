@@ -26,18 +26,23 @@ type companionMCPEnvelope struct {
 	Method string
 }
 
+type companionMCPSnapshotAccess interface {
+	Authorize(string) (companion.SnapshotAuthorization, error)
+	Materialize(companion.SnapshotAuthorization) (companion.SnapshotLease, error)
+}
+
 type companionMCPOuterHandler struct {
 	authority string
 	origin    string
-	registry  *companion.SnapshotRegistry
+	snapshots companionMCPSnapshotAccess
 	next      http.Handler
 }
 
-func newCompanionMCPOuterHandler(authority string, registry *companion.SnapshotRegistry, next http.Handler) http.Handler {
+func newCompanionMCPOuterHandler(authority string, snapshots companionMCPSnapshotAccess, next http.Handler) http.Handler {
 	return &companionMCPOuterHandler{
 		authority: authority,
 		origin:    "http://" + authority,
-		registry:  registry,
+		snapshots: snapshots,
 		next:      next,
 	}
 }
@@ -71,7 +76,7 @@ func (h *companionMCPOuterHandler) ServeHTTP(writer http.ResponseWriter, request
 		writeCompanionMCPError(writer, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	lease, err := h.registry.Lookup(capability)
+	authorization, err := h.snapshots.Authorize(capability)
 	if err != nil {
 		writeCompanionMCPError(writer, http.StatusUnauthorized, "unauthorized")
 		return
@@ -104,7 +109,12 @@ func (h *companionMCPOuterHandler) ServeHTTP(writer http.ResponseWriter, request
 		writeCompanionMCPError(writer, http.StatusBadRequest, "invalid_request")
 		return
 	}
-	if !companionMCPRequestAlive(request.Context(), lease) {
+	if request.Context().Err() != nil {
+		writeCompanionMCPError(writer, http.StatusServiceUnavailable, "unavailable")
+		return
+	}
+	lease, err := h.snapshots.Materialize(authorization)
+	if err != nil || !companionMCPRequestAlive(request.Context(), lease) {
 		writeCompanionMCPError(writer, http.StatusServiceUnavailable, "unavailable")
 		return
 	}

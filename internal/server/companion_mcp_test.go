@@ -3,14 +3,20 @@ package server
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -19,6 +25,7 @@ import (
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/pathfind"
+	"github.com/channing771/mornlea/internal/storage"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -26,6 +33,24 @@ const (
 	testMCPAuthority = "127.0.0.1:43127"
 	testMCPNamespace = "4d5e6f70-8192-4aa3-8b4f-3a4b5c6d7e8f"
 )
+
+type countingMCPSnapshotAccess struct {
+	registry         *companion.SnapshotRegistry
+	authorizations   atomic.Int32
+	materializations atomic.Int32
+}
+
+func (access *countingMCPSnapshotAccess) Authorize(capability string) (companion.SnapshotAuthorization, error) {
+	access.authorizations.Add(1)
+	return access.registry.Authorize(capability)
+}
+
+func (access *countingMCPSnapshotAccess) Materialize(
+	authorization companion.SnapshotAuthorization,
+) (companion.SnapshotLease, error) {
+	access.materializations.Add(1)
+	return access.registry.Materialize(authorization)
+}
 
 func TestMCPContractLoadsEmbeddedManifestSchemasInOrder(t *testing.T) {
 	contract, err := loadCompanionMCPContract()
@@ -73,13 +98,14 @@ func TestMCPContractDecoderRejectsDuplicateAndMalformedTrailingJSON(t *testing.T
 
 func TestMCPOuterRejectsRawProtocolMatrixBeforeSDK(t *testing.T) {
 	registry, registration := testMCPRegistry(t)
+	access := &countingMCPSnapshotAccess{registry: registry}
 	var calls atomic.Int32
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		calls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{}}`)
 	})
-	handler := newCompanionMCPOuterHandler(testMCPAuthority, registry, next)
+	handler := newCompanionMCPOuterHandler(testMCPAuthority, access, next)
 	validInitialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`
 	validList := `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`
 
@@ -123,9 +149,20 @@ func TestMCPOuterRejectsRawProtocolMatrixBeforeSDK(t *testing.T) {
 		{"post-init wrong header", http.MethodPost, "/mcp", validList, func(r *http.Request) { r.Header.Set("Mcp-Protocol-Version", "2025-06-18") }},
 		{"oversize", http.MethodPost, "/mcp", strings.Repeat("x", (256<<10)+1), nil},
 	}
+	authorizes := map[string]bool{
+		"wrong bearer":         true,
+		"missing content type": true, "wrong content type": true, "duplicate content type": true,
+		"invalid utf8": true, "empty": true, "trailing": true, "array batch": true,
+		"ping": true, "subscription": true, "unknown method": true, "bad jsonrpc": true,
+		"missing request id": true, "notification has id": true,
+		"initialize wrong version": true, "initialize wrong header": true,
+		"post-init missing header": true, "post-init wrong header": true, "oversize": true,
+	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			before := calls.Load()
+			beforeAuthorizations := access.authorizations.Load()
+			beforeMaterializations := access.materializations.Load()
 			request := testMCPRequest(testCase.method, testCase.path, testCase.body, registration.Capability)
 			if testCase.mutate != nil {
 				testCase.mutate(request)
@@ -139,13 +176,51 @@ func TestMCPOuterRejectsRawProtocolMatrixBeforeSDK(t *testing.T) {
 			if calls.Load() != before {
 				t.Fatalf("invalid request reached SDK: calls=%d/%d", before, calls.Load())
 			}
+			wantAuthorizations := int32(0)
+			if authorizes[testCase.name] {
+				wantAuthorizations = 1
+			}
+			if got := access.authorizations.Load() - beforeAuthorizations; got != wantAuthorizations {
+				t.Fatalf("authorization delta=%d，want %d", got, wantAuthorizations)
+			}
+			if access.materializations.Load() != beforeMaterializations {
+				t.Fatalf("invalid request materialized snapshot: before=%d after=%d",
+					beforeMaterializations, access.materializations.Load())
+			}
 			if strings.Contains(recorder.Body.String(), registration.Capability) || strings.Contains(recorder.Body.String(), "LEAK-ME-NOT") {
 				t.Fatalf("error body 泄露输入: %s", recorder.Body.String())
 			}
 		})
 	}
 
+	var wrongCapabilityWire string
+	for _, body := range []string{validInitialize, `{"not":"an MCP envelope"}`} {
+		beforeAuthorizations := access.authorizations.Load()
+		beforeMaterializations := access.materializations.Load()
+		beforeCalls := calls.Load()
+		request := testMCPRequest(http.MethodPost, "/mcp", body, "wrong-capability")
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusUnauthorized || recorder.Body.String() != `{"error":{"code":"unauthorized"}}` {
+			t.Fatalf("wrong capability error priority status/body=%d/%s", recorder.Code, recorder.Body.String())
+		}
+		if wrongCapabilityWire == "" {
+			wrongCapabilityWire = recorder.Body.String()
+		} else if recorder.Body.String() != wrongCapabilityWire {
+			t.Fatalf("wrong capability leaked envelope validity: %q/%q", wrongCapabilityWire, recorder.Body.String())
+		}
+		if access.authorizations.Load()-beforeAuthorizations != 1 ||
+			access.materializations.Load() != beforeMaterializations || calls.Load() != beforeCalls {
+			t.Fatalf("wrong capability work auth/materialize/SDK=%d/%d/%d",
+				access.authorizations.Load()-beforeAuthorizations,
+				access.materializations.Load()-beforeMaterializations,
+				calls.Load()-beforeCalls)
+		}
+	}
+
 	for _, origin := range []string{"", "http://" + testMCPAuthority} {
+		beforeAuthorizations := access.authorizations.Load()
+		beforeMaterializations := access.materializations.Load()
 		request := testMCPRequest(http.MethodPost, "/mcp", validInitialize, registration.Capability)
 		if origin != "" {
 			request.Header.Set("Origin", origin)
@@ -154,6 +229,12 @@ func TestMCPOuterRejectsRawProtocolMatrixBeforeSDK(t *testing.T) {
 		handler.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusOK {
 			t.Fatalf("valid origin %q status=%d body=%s", origin, recorder.Code, recorder.Body.String())
+		}
+		if got := access.authorizations.Load() - beforeAuthorizations; got != 1 {
+			t.Fatalf("valid origin %q authorization delta=%d，want 1", origin, got)
+		}
+		if got := access.materializations.Load() - beforeMaterializations; got != 1 {
+			t.Fatalf("valid origin %q materialization delta=%d，want 1", origin, got)
 		}
 	}
 	if calls.Load() != 2 {
@@ -216,6 +297,83 @@ func TestMCPSDKCapabilitiesSchemasToolsAndDomainResult(t *testing.T) {
 	handler.ServeHTTP(recorder, request)
 	if recorder.Code < 400 {
 		t.Fatalf("SDK 接受了缺 text/event-stream 的 Accept: %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestMCPSDKListAffordancesLargestSnapshotUsesCompleteBoundedPrefix(t *testing.T) {
+	registry := companion.NewSnapshotRegistry()
+	t.Cleanup(registry.Close)
+	snapshot := testMCPLargestAffordanceSnapshot(t)
+	registration, err := registry.Register(testMCPNamespace, snapshot.Companion.ID, 1, snapshot, time.Now().Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease, err := registry.Lookup(registration.Capability)
+	if err != nil {
+		t.Fatal(err)
+	}
+	direct, err := companion.ExecutePlanningTool(context.Background(), lease, companion.ToolListAffordances, json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatalf("direct list_affordances: %v", err)
+	}
+	handler, err := newCompanionMCPHandler(testMCPAuthority, registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := testMCPRoundTrip(t, handler, registration.Capability, "2025-11-25",
+		`{"jsonrpc":"2.0","id":31,"method":"tools/call","params":{"name":"list_affordances","arguments":{}}}`)
+	result := mcpResultObject(t, call)
+	if isError, _ := result["isError"].(bool); isError {
+		t.Fatalf("largest list_affordances returned tool error: %s", call.Body.String())
+	}
+	content := result["content"].([]any)
+	textValue := content[0].(map[string]any)["text"].(string)
+	if textValue != string(direct.Canonical) || !json.Valid([]byte(textValue)) ||
+		len(textValue) > companion.PlanningToolCanonicalLimit(companion.ToolListAffordances) {
+		t.Fatalf("SDK text len/valid/equal=%d/%v/%v", len(textValue), json.Valid([]byte(textValue)), textValue == string(direct.Canonical))
+	}
+	structured := result["structuredContent"].(map[string]any)
+	players := structured["online_players"].([]any)
+	blocks := structured["visible_blocks"].([]any)
+	if len(players) != companion.MaxPlanOnlinePlayers || len(blocks) == 0 || len(blocks) >= companion.MaxPlanExposedBlocks {
+		t.Fatalf("SDK players/blocks=%d/%d", len(players), len(blocks))
+	}
+	assertMCPStructuredAndTextEqual(t, call, false, "")
+}
+
+func TestMCPSDKFindBlocksRejectsStandaloneBoundedNameGoldens(t *testing.T) {
+	registry, registration := testMCPRegistry(t)
+	handler, err := newCompanionMCPHandler(testMCPAuthority, registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	goldens := loadMCPBoundedNameInvalidGoldens(t)
+	if len(goldens) < 6 {
+		t.Fatalf("bounded_name invalid goldens=%d，want >=6", len(goldens))
+	}
+	for _, testCase := range goldens {
+		t.Run(testCase.Name, func(t *testing.T) {
+			if testCase.ValueUTF8Hex != "" {
+				raw, err := hex.DecodeString(testCase.ValueUTF8Hex)
+				if err != nil {
+					t.Fatal(err)
+				}
+				body := append([]byte(`{"jsonrpc":"2.0","id":42,"method":"tools/call","params":{"name":"find_visible_blocks","arguments":{"block_names":["`), raw...)
+				body = append(body, []byte(`"],"limit":1}}}`)...)
+				request := testMCPRequest(http.MethodPost, "/mcp", string(body), registration.Capability)
+				recorder := httptest.NewRecorder()
+				handler.ServeHTTP(recorder, request)
+				if recorder.Code != http.StatusBadRequest {
+					t.Fatalf("invalid UTF-8 status=%d body=%s", recorder.Code, recorder.Body.String())
+				}
+				assertMCPOuterErrorJSON(t, recorder)
+				return
+			}
+			body := `{"jsonrpc":"2.0","id":41,"method":"tools/call","params":{"name":"find_visible_blocks","arguments":{"block_names":[` +
+				string(testCase.Value) + `],"limit":1}}}`
+			call := testMCPRoundTrip(t, handler, registration.Capability, "2025-11-25", body)
+			assertMCPStructuredAndTextEqual(t, call, true, "")
+		})
 	}
 }
 
@@ -303,6 +461,7 @@ func TestMCPOuterBuffersResponseAndChecksCancellation(t *testing.T) {
 
 func TestMCPOuterChecksRequestCancellationBeforeAndAfterSDK(t *testing.T) {
 	registry, registration := testMCPRegistry(t)
+	access := &countingMCPSnapshotAccess{registry: registry}
 	valid := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`
 
 	var calls atomic.Int32
@@ -311,7 +470,8 @@ func TestMCPOuterChecksRequestCancellationBeforeAndAfterSDK(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"LEAK-ME-NOT":true}}`)
 	})
-	handler := newCompanionMCPOuterHandler(testMCPAuthority, registry, next)
+	handler := newCompanionMCPOuterHandler(testMCPAuthority, access, next)
+	beforeAuthorizations := access.authorizations.Load()
 	beforeContext, cancelBefore := context.WithCancel(context.Background())
 	cancelBefore()
 	before := testMCPRequest(http.MethodPost, "/mcp", valid, registration.Capability).WithContext(beforeContext)
@@ -319,6 +479,12 @@ func TestMCPOuterChecksRequestCancellationBeforeAndAfterSDK(t *testing.T) {
 	handler.ServeHTTP(beforeRecorder, before)
 	if calls.Load() != 0 || beforeRecorder.Code < 400 {
 		t.Fatalf("pre-canceled request calls/status=%d/%d", calls.Load(), beforeRecorder.Code)
+	}
+	if got := access.materializations.Load(); got != 0 {
+		t.Fatalf("pre-canceled request materializations=%d，want 0", got)
+	}
+	if got := access.authorizations.Load() - beforeAuthorizations; got != 1 {
+		t.Fatalf("pre-canceled request authorization delta=%d，want 1", got)
 	}
 	assertMCPOuterErrorJSON(t, beforeRecorder)
 
@@ -330,11 +496,18 @@ func TestMCPOuterChecksRequestCancellationBeforeAndAfterSDK(t *testing.T) {
 	})
 	after := testMCPRequest(http.MethodPost, "/mcp", valid, registration.Capability).WithContext(afterContext)
 	afterRecorder := httptest.NewRecorder()
-	newCompanionMCPOuterHandler(testMCPAuthority, registry, afterNext).ServeHTTP(afterRecorder, after)
+	beforeAuthorizations = access.authorizations.Load()
+	newCompanionMCPOuterHandler(testMCPAuthority, access, afterNext).ServeHTTP(afterRecorder, after)
 	if afterRecorder.Code < 400 || strings.Contains(afterRecorder.Body.String(), "LEAK-ME-NOT") {
 		t.Fatalf("mid-request cancellation committed: %d %s", afterRecorder.Code, afterRecorder.Body.String())
 	}
 	assertMCPOuterErrorJSON(t, afterRecorder)
+	if got := access.materializations.Load(); got != 1 {
+		t.Fatalf("accepted request materializations=%d，want 1", got)
+	}
+	if got := access.authorizations.Load() - beforeAuthorizations; got != 1 {
+		t.Fatalf("accepted request authorization delta=%d，want 1", got)
+	}
 }
 
 func TestMCPOuterAcceptsExactRequestAndResponseByteLimits(t *testing.T) {
@@ -461,6 +634,191 @@ func TestHostMCPAssemblyOnlyWhenCompanionsEnabled(t *testing.T) {
 	}
 }
 
+func TestHostShutdownKeepsMCPAndRegistryUntilRetrySucceeds(t *testing.T) {
+	store := newStrictShutdownStore()
+	config := hostTestConfig()
+	config.Companions = []companion.Definition{{ID: companionBootstrapID(1), Name: "阿木"}}
+	host := mustNewHost(t, config, flatTestGenerator{}, store)
+	wantErr := errors.New("world sync fails once")
+	store.setSyncError(wantErr)
+	t.Cleanup(func() {
+		store.setSyncError(nil)
+		ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
+		_ = host.Shutdown(ctx)
+		cancel()
+	})
+	snapshot := testMCPPlanSnapshot(t)
+	registration, err := host.companionSnapshots.Register(
+		testMCPNamespace, snapshot.Companion.ID, 1, snapshot, time.Now().Add(time.Minute),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint := host.companionMCP.Endpoint()
+	done := host.companionMCP.Done()
+
+	ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
+	err = host.Shutdown(ctx)
+	cancel()
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("first Shutdown=%v，want %v", err, wantErr)
+	}
+	select {
+	case serveErr := <-done:
+		t.Fatalf("failed Shutdown closed MCP listener: %v", serveErr)
+	default:
+	}
+	if _, err := host.companionSnapshots.Lookup(registration.Capability); err != nil {
+		t.Fatalf("failed Shutdown closed snapshot registry: %v", err)
+	}
+	status, body, err := callCompanionMCPService(endpoint, registration.Capability,
+		`{"jsonrpc":"2.0","id":71,"method":"tools/list","params":{}}`)
+	if err != nil || status != http.StatusOK || !json.Valid(body) {
+		t.Fatalf("MCP after failed Shutdown status/body/err=%d/%s/%v", status, body, err)
+	}
+
+	store.setSyncError(nil)
+	ctx, cancel = context.WithTimeout(context.Background(), waitDeadline)
+	if err := host.Shutdown(ctx); err != nil {
+		cancel()
+		t.Fatalf("retry Shutdown: %v", err)
+	}
+	cancel()
+	select {
+	case serveErr := <-done:
+		if serveErr != nil {
+			t.Fatalf("MCP close result=%v", serveErr)
+		}
+	case <-time.After(waitDeadline):
+		t.Fatal("successful retry did not close MCP")
+	}
+	if _, err := host.companionSnapshots.Lookup(registration.Capability); !errors.Is(err, companion.ErrSnapshotUnavailable) {
+		t.Fatalf("successful retry registry Lookup=%v", err)
+	}
+	if _, _, err := callCompanionMCPService(endpoint, registration.Capability,
+		`{"jsonrpc":"2.0","id":72,"method":"tools/list","params":{}}`); err == nil {
+		t.Fatal("successful retry left MCP listener reachable")
+	}
+}
+
+func TestNewHostMCPConstructionFailureRollsBackOwnedResources(t *testing.T) {
+	for _, mode := range []string{"listener", "handler"} {
+		t.Run(mode, func(t *testing.T) {
+			baseline := runtime.NumGoroutine()
+			wantErr := errors.New(mode + " construction failure")
+			config := hostTestConfig()
+			config.Companions = []companion.Definition{{ID: companionBootstrapID(1), Name: "阿木"}}
+			var registry *companion.SnapshotRegistry
+			var listener *trackingMCPListener
+			var handlerCalls atomic.Int32
+			config.companionMCPFactory = func(current *companion.SnapshotRegistry) (*companionMCPService, error) {
+				registry = current
+				listen := func(network, address string) (net.Listener, error) {
+					if mode == "listener" {
+						return nil, wantErr
+					}
+					acquired, err := net.Listen(network, address)
+					if err != nil {
+						return nil, err
+					}
+					listener = &trackingMCPListener{Listener: acquired}
+					return listener, nil
+				}
+				handler := func(string, *companion.SnapshotRegistry) (http.Handler, error) {
+					handlerCalls.Add(1)
+					return nil, wantErr
+				}
+				return newCompanionMCPServiceWithDependencies(current, listen, handler)
+			}
+			host, err := NewHost(context.Background(), config, flatTestGenerator{}, newCompanionBootstrapStore())
+			if host != nil || !errors.Is(err, wantErr) {
+				t.Fatalf("NewHost=%v/%v，want %v", host, err, wantErr)
+			}
+			if registry == nil {
+				t.Fatal("MCP factory 未取得 registry")
+			}
+			if _, err := registry.Register(testMCPNamespace, testMCPPlanSnapshot(t).Companion.ID, 1,
+				testMCPPlanSnapshot(t), time.Now().Add(time.Minute)); !errors.Is(err, companion.ErrSnapshotRegistryClosed) {
+				t.Fatalf("rollback registry Register=%v", err)
+			}
+			if mode == "listener" {
+				if handlerCalls.Load() != 0 {
+					t.Fatalf("listener failure reached handler factory %d times", handlerCalls.Load())
+				}
+			} else if listener == nil || !listener.closed.Load() || handlerCalls.Load() != 1 {
+				t.Fatalf("handler rollback listener/calls=%v/%d", listener, handlerCalls.Load())
+			}
+			waitForGoroutineCeiling(t, baseline)
+		})
+	}
+}
+
+func TestNewHostWorldConstructionFailureClosesEarlierMCPResources(t *testing.T) {
+	baseline := runtime.NumGoroutine()
+	store := &hostileLoadOverrideStore{hostTestStore: newHostTestStore()}
+	store.loaded = storage.StoredHostileMobs{Revision: 1, Records: []storage.StoredHostileMob{
+		hostileRestoreFixture()[0], hostileRestoreFixture()[0],
+	}}
+	config := hostTestConfig()
+	config.Companions = []companion.Definition{{ID: companionBootstrapID(1), Name: "阿木"}}
+	var registry *companion.SnapshotRegistry
+	var service *companionMCPService
+	config.companionMCPFactory = func(current *companion.SnapshotRegistry) (*companionMCPService, error) {
+		registry = current
+		var err error
+		service, err = newCompanionMCPService(current)
+		return service, err
+	}
+	host, err := NewHost(context.Background(), config, flatTestGenerator{}, store)
+	if host != nil || err == nil {
+		t.Fatalf("NewHost=%v/%v，want world construction failure", host, err)
+	}
+	if registry == nil || service == nil {
+		t.Fatal("world failure 未发生在 MCP 构造之后")
+	}
+	select {
+	case serveErr := <-service.Done():
+		if serveErr != nil {
+			t.Fatalf("rollback MCP result=%v", serveErr)
+		}
+	case <-time.After(waitDeadline):
+		t.Fatal("world construction rollback 未关闭 MCP listener")
+	}
+	if _, err := registry.Register(testMCPNamespace, testMCPPlanSnapshot(t).Companion.ID, 1,
+		testMCPPlanSnapshot(t), time.Now().Add(time.Minute)); !errors.Is(err, companion.ErrSnapshotRegistryClosed) {
+		t.Fatalf("world rollback registry Register=%v", err)
+	}
+	waitForGoroutineCeiling(t, baseline)
+}
+
+func TestNewHostEmptyCompanionConfigSkipsInjectedMCPFactory(t *testing.T) {
+	config := hostTestConfig()
+	var calls atomic.Int32
+	config.companionMCPFactory = func(*companion.SnapshotRegistry) (*companionMCPService, error) {
+		calls.Add(1)
+		return nil, errors.New("must not construct MCP")
+	}
+	host := mustNewHost(t, config, flatTestGenerator{}, newHostTestStore())
+	if calls.Load() != 0 {
+		t.Fatalf("empty config MCP factory calls=%d", calls.Load())
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
+	defer cancel()
+	if err := host.Shutdown(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type trackingMCPListener struct {
+	net.Listener
+	closed atomic.Bool
+}
+
+func (listener *trackingMCPListener) Close() error {
+	listener.closed.Store(true)
+	return listener.Listener.Close()
+}
+
 func testMCPRegistry(t *testing.T) (*companion.SnapshotRegistry, companion.SnapshotRegistration) {
 	t.Helper()
 	registry := companion.NewSnapshotRegistry()
@@ -518,6 +876,65 @@ func testMCPPlanSnapshot(t *testing.T) companion.PlanSnapshot {
 	return snapshot
 }
 
+func testMCPLargestAffordanceSnapshot(t *testing.T) companion.PlanSnapshot {
+	t.Helper()
+	snapshot := testMCPPlanSnapshot(t)
+	snapshot.ExposedBlocks = make([]companion.PlanBlock, 0, companion.MaxPlanExposedBlocks)
+	for index := range companion.MaxPlanExposedBlocks {
+		pos := core.BlockPos{X: -11 + int32(index/33), Y: 63, Z: -18 + int32(index%33)}
+		if !snapshot.Terrain.SetBlock(pos, core.StoneID) {
+			t.Fatalf("SetBlock(%+v)=false", pos)
+		}
+		snapshot.ExposedBlocks = append(snapshot.ExposedBlocks, companion.PlanBlock{Pos: pos, Block: core.StoneID})
+	}
+	snapshot.OnlinePlayers = make([]companion.PlanPlayer, 0, companion.MaxPlanOnlinePlayers)
+	for index := range companion.MaxPlanOnlinePlayers {
+		id, err := core.ParsePlayerID(fmt.Sprintf("10000000-0000-4000-8000-%012d", index+1))
+		if err != nil {
+			t.Fatal(err)
+		}
+		snapshot.OnlinePlayers = append(snapshot.OnlinePlayers, companion.PlanPlayer{
+			ID: id, Position: [3]float32{math.MaxFloat32, -math.MaxFloat32, float32(index)},
+		})
+	}
+	if err := snapshot.Validate(); err != nil {
+		t.Fatalf("largest affordance snapshot: %v", err)
+	}
+	return snapshot
+}
+
+type mcpBoundedNameGolden struct {
+	Name         string          `json:"name"`
+	Schema       string          `json:"schema"`
+	Value        json.RawMessage `json:"value"`
+	ValueUTF8Hex string          `json:"value_utf8_hex"`
+}
+
+func loadMCPBoundedNameInvalidGoldens(t *testing.T) []mcpBoundedNameGolden {
+	t.Helper()
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("无法定位 MCP 测试文件")
+	}
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(filename), "..", "..", "contracts", "companion-agent", "mcp-v1", "golden", "invalid.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var golden struct {
+		Cases []mcpBoundedNameGolden `json:"cases"`
+	}
+	if err := json.Unmarshal(data, &golden); err != nil {
+		t.Fatal(err)
+	}
+	result := make([]mcpBoundedNameGolden, 0)
+	for _, testCase := range golden.Cases {
+		if testCase.Schema == "bounded_name" {
+			result = append(result, testCase)
+		}
+	}
+	return result
+}
+
 func testMCPRequest(method, path, body, capability string) *http.Request {
 	request := httptest.NewRequest(method, "http://"+testMCPAuthority+path, strings.NewReader(body))
 	request.Host = testMCPAuthority
@@ -528,6 +945,27 @@ func testMCPRequest(method, path, body, capability string) *http.Request {
 		request.Header.Set("Mcp-Protocol-Version", "2025-11-25")
 	}
 	return request
+}
+
+func callCompanionMCPService(endpoint, capability, body string) (int, []byte, error) {
+	request, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(body))
+	if err != nil {
+		return 0, nil, err
+	}
+	request.Header.Set("Authorization", "Bearer "+capability)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json, text/event-stream")
+	request.Header.Set("Mcp-Protocol-Version", "2025-11-25")
+	transport := &http.Transport{DisableKeepAlives: true}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: time.Second}
+	response, err := client.Do(request)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer response.Body.Close()
+	payload, err := io.ReadAll(response.Body)
+	return response.StatusCode, payload, err
 }
 
 func testMCPRoundTrip(t *testing.T, handler http.Handler, capability, protocol, body string) *httptest.ResponseRecorder {

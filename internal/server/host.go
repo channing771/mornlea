@@ -172,33 +172,46 @@ func NewHost(
 		}
 		return nil, fmt.Errorf("load hostiles: %w", err)
 	}
+	var companionSnapshots *companion.SnapshotRegistry
+	var companionMCP *companionMCPService
+	if len(config.Companions) != 0 {
+		companionSnapshots = companion.NewSnapshotRegistry()
+		factory := config.companionMCPFactory
+		if factory == nil {
+			factory = newCompanionMCPService
+		}
+		companionMCP, err = factory(companionSnapshots)
+		if err == nil && companionMCP == nil {
+			err = errors.New("nil companion MCP service")
+		}
+		if err != nil {
+			if companionMCP != nil {
+				companionMCP.Close()
+			} else {
+				companionSnapshots.Close()
+			}
+			if companions != nil {
+				companions.Close()
+			}
+			return nil, fmt.Errorf("server: 启动 companion MCP: %w", err)
+		}
+	}
 	hostiles := persistence.NewHostiles(store, loadedHostiles, persistenceOptions(config, nil))
 	world, err := newWorld(config, generator, store, companions, hostiles)
 	if err != nil {
 		// 持久化 worker 已随构造启动；恢复/装配阶段的任何失败都必须先停掉
 		// worker 再返回，否则每次启动失败都泄漏一个永不退出的 goroutine。
+		hostiles.Close()
+		if companionMCP != nil {
+			companionMCP.Close()
+		}
 		if companions != nil {
 			companions.Close()
 		}
-		hostiles.Close()
 		return nil, err
 	}
 	gate := make(chan struct{}, 1)
 	gate <- struct{}{}
-	var companionSnapshots *companion.SnapshotRegistry
-	var companionMCP *companionMCPService
-	if len(config.Companions) != 0 {
-		companionSnapshots = companion.NewSnapshotRegistry()
-		companionMCP, err = newCompanionMCPService(companionSnapshots)
-		if err != nil {
-			companionSnapshots.Close()
-			if companions != nil {
-				companions.Close()
-			}
-			hostiles.Close()
-			return nil, fmt.Errorf("server: 启动 companion MCP: %w", err)
-		}
-	}
 	return &Host{
 		config:             config,
 		world:              world,

@@ -237,6 +237,64 @@ func planningAffordancesTool(ctx context.Context, lease SnapshotLease, input jso
 			MineSemantics: semantics, Position: digestPosition(block.Pos),
 		})
 	}
+	return boundPlanningAffordanceBlocks(ctx, lease, result, PlanningToolCanonicalLimit(ToolListAffordances))
+}
+
+// boundPlanningAffordanceBlocks 选择坐标有序的最长完整前缀，使完整 canonical
+// payload 不超过工具上限。空来源保留空数组；非空来源若连首项都放不下则硬失败。
+func boundPlanningAffordanceBlocks(
+	ctx context.Context,
+	lease SnapshotLease,
+	result planningAffordancesResult,
+	limit int,
+) (planningAffordancesResult, error) {
+	blocks := result.VisibleBlocks
+	fits := func(count int) (bool, error) {
+		if err := planningToolCheckpoint(ctx, lease); err != nil {
+			return false, err
+		}
+		candidate := result
+		candidate.VisibleBlocks = blocks[:count]
+		canonical, err := canonicalJSON(candidate)
+		if err != nil {
+			return false, ErrSnapshotUnavailable
+		}
+		if err := planningToolCheckpoint(ctx, lease); err != nil {
+			return false, err
+		}
+		return len(canonical) <= limit, nil
+	}
+	if len(blocks) == 0 {
+		ok, err := fits(0)
+		if err != nil {
+			return planningAffordancesResult{}, err
+		}
+		if !ok {
+			return planningAffordancesResult{}, ErrPlanningToolResultTooLarge
+		}
+		return result, nil
+	}
+	firstFits, err := fits(1)
+	if err != nil {
+		return planningAffordancesResult{}, err
+	}
+	if !firstFits {
+		return planningAffordancesResult{}, ErrPlanningToolResultTooLarge
+	}
+	low, high := 1, len(blocks)+1
+	for low < high {
+		middle := low + (high-low)/2
+		ok, err := fits(middle)
+		if err != nil {
+			return planningAffordancesResult{}, err
+		}
+		if ok {
+			low = middle + 1
+		} else {
+			high = middle
+		}
+	}
+	result.VisibleBlocks = blocks[:low-1]
 	return result, nil
 }
 
@@ -312,7 +370,10 @@ func planningFindBlocksTool(ctx context.Context, lease SnapshotLease, input json
 		if err := planningToolCheckpoint(ctx, lease); err != nil {
 			return nil, false, err
 		}
-		if _, duplicate := seenNames[name]; duplicate || len(name) == 0 || len(name) > 64 {
+		if _, duplicate := seenNames[name]; duplicate {
+			return nil, false, ErrPlanningToolInvalidInput
+		}
+		if err := validatePlanText("方块 machine name", name, 64, true); err != nil {
 			return nil, false, ErrPlanningToolInvalidInput
 		}
 		seenNames[name] = struct{}{}
@@ -432,7 +493,13 @@ func planningValidatePlanTool(ctx context.Context, lease SnapshotLease, input js
 	if err := planningToolCheckpoint(ctx, lease); err != nil {
 		return nil, err
 	}
-	_, digest, err := CanonicalSnapshotDigest(lease.Snapshot)
+	_, digest, err := canonicalSnapshotDigestWithCheckpoint(
+		lease.Snapshot,
+		func() error { return planningToolCheckpoint(ctx, lease) },
+	)
+	if errors.Is(err, ErrSnapshotUnavailable) {
+		return nil, err
+	}
 	if err != nil || subtle.ConstantTimeCompare([]byte(digest), []byte(lease.Digest)) != 1 {
 		return planningValidatorFailure(ValidatorSnapshotMismatch), nil
 	}

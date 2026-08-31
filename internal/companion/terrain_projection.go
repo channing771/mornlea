@@ -146,6 +146,15 @@ func (p TerrainProjection) ExposedBlocks() []PlanBlock {
 
 // Validate 校验 data plane 的规范化、范围、编号与 unused-bit 不变量。
 func (p TerrainProjection) Validate() error {
+	return p.validateWithCheckpoint(nil)
+}
+
+func (p TerrainProjection) validateWithCheckpoint(checkpoint func() error) error {
+	if checkpoint != nil {
+		if err := checkpoint(); err != nil {
+			return err
+		}
+	}
 	if !projectionCoordinateRangeValid(p.origin) {
 		return fmt.Errorf("companion: terrain projection 原点会导致坐标溢出")
 	}
@@ -153,6 +162,11 @@ func (p TerrainProjection) Validate() error {
 		return fmt.Errorf("companion: terrain projection ready bitmap unused bits 非零")
 	}
 	for column := 0; column < TerrainColumnCount; column++ {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return err
+			}
+		}
 		height := int32(p.heights[column])
 		ready := p.readyAt(column)
 		if !ready && height != core.MinY-1 {
@@ -163,6 +177,11 @@ func (p TerrainProjection) Validate() error {
 		}
 	}
 	for index, block := range p.blocks {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return err
+			}
+		}
 		xOffset, yOffset, zOffset := terrainOffsets(index)
 		column := xOffset*TerrainDepth + zOffset
 		y := p.origin.Y + int32(yOffset)
@@ -173,6 +192,9 @@ func (p TerrainProjection) Validate() error {
 		if observable && !core.RegisteredBlock(block) {
 			return fmt.Errorf("companion: terrain projection 槽 %d 方块 %d 未注册", index, block)
 		}
+	}
+	if checkpoint != nil {
+		return checkpoint()
 	}
 	return nil
 }

@@ -47,6 +47,20 @@
       }
     },
     {
+      "name": "affordance visible summary rejects coordinate disorder",
+      "schema": "list_affordances_result",
+      "reason": "coordinate_order",
+      "expected_error": {"path": "$.visible_blocks[1].position", "keyword": "x-mornlea-rules", "rule": "sorted_positions"},
+      "value": {
+        "step_kinds": ["go_to", "follow", "mine", "place"],
+        "online_players": [],
+        "visible_blocks": [
+          {"position": {"x": 9, "y": 63, "z": -2}, "block_id": 11, "block_name": "chest", "drop_item": "chest", "mine_semantics": "container_batch"},
+          {"position": {"x": 8, "y": 63, "z": -2}, "block_id": 2, "block_name": "stone", "drop_item": "stone", "mine_semantics": "single_drop"}
+        ]
+      }
+    },
+    {
       "name": "inventory offset is bounded",
       "schema": "inspect_inventory_input",
       "reason": "out_of_bounds",
@@ -367,6 +381,41 @@
       "reason": "name_utf8_bytes",
       "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.max_utf8_bytes"},
       "value": "界界界界界界界界界界界界界界界界界界界界界界"
+    },
+    {
+      "name": "bounded tool name rejects empty string",
+      "schema": "bounded_name",
+      "reason": "name_too_short",
+      "expected_error": {"path": "$", "keyword": "minLength"},
+      "value": ""
+    },
+    {
+      "name": "bounded tool name rejects blank Unicode whitespace",
+      "schema": "bounded_name",
+      "reason": "name_blank",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.non_blank"},
+      "value": "　"
+    },
+    {
+      "name": "bounded tool name rejects Unicode control",
+      "schema": "bounded_name",
+      "reason": "name_control",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.no_unicode_control"},
+      "value": "invalid\u0001name"
+    },
+    {
+      "name": "bounded tool name rejects escaped NUL",
+      "schema": "bounded_name",
+      "reason": "name_nul",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.no_unicode_control"},
+      "value": "invalid\u0000name"
+    },
+    {
+      "name": "bounded tool name rejects invalid UTF-8 bytes",
+      "schema": "bounded_name",
+      "reason": "name_invalid_utf8",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.valid_utf8"},
+      "value_utf8_hex": "ff"
     },
     {
       "name": "validator hint uses UTF-8 byte limit",

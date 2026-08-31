@@ -730,10 +730,10 @@ func TestPlannerRejectsInvalidSnapshot(t *testing.T) {
 // 按 InvalidPlan 失败且不重试。
 func TestPlanDecodeKindMatrix(t *testing.T) {
 	const validGoTo = `{"kind":"go_to","x":10,"y":64,"z":-5}`
-	// mine(8,63,-2) 命中快照 ExposedBlocks 中的 grass：窗口内且已列出。
+	// mine(8,63,-2) 命中 dense projection 与 ExposedBlocks 中的 grass。
 	const validMineListed = `{"kind":"mine","x":8,"y":63,"z":-2}`
-	// (6,64,0) 在伙伴观察窗口内但不在 ExposedBlocks：窗口数值界是唯一判定基准，
-	// 裁剪子集的成员资格不是必要条件（避免模型因快照裁剪被误拒）。
+	// (6,64,0) 在 dense projection 内但不在 ExposedBlocks；校验读取冻结体素，
+	// 不把裁剪摘要的成员资格当作必要条件。
 	const validMineUnlisted = `{"kind":"mine","x":6,"y":64,"z":0}`
 	// 快照快捷栏持有 oak_planks×3。
 	const validPlace = `{"kind":"place","x":7,"y":65,"z":1,"block":"oak_planks"}`

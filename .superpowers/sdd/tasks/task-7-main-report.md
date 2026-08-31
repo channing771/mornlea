@@ -142,3 +142,88 @@ repair，Task 7 未修改 storage；repair commit `0dc592c8` 进入当前 HEAD �
 - 未查看、比较或合并 main，未修改版本文档或 OpenSpec tasks/ledger。
 - 所有门禁与最终 status/staging 核对完成后仍不自行提交；commit 等待控制会话
   明确授权。
+
+## Repair round 1（2026-08-31）
+
+### 评审问题闭环
+
+- raw outer gate 将 capability 鉴别与冻结快照物化拆为不透明
+  `SnapshotAuthorization`：path/method/Host/Origin/Bearer 语法拒绝为 0 次鉴权，
+  语法合法后的 capability 及 Content-Type/body/envelope/version/pre-cancel 路径为
+  1 次鉴权；所有拒绝均为 0 次 materialization、0 SDK/tool，成功请求为 1 次鉴权
+  和 1 次深拷贝。错误 capability 在合法与非法 envelope 上都得到完全相同的
+  unauthorized wire，不泄露快照身份或 body 校验优先级。
+- `list_affordances` 先构造有界语义值，再按完整 canonical payload
+  `<=24576` 选择冻结坐标序的最长完整 `visible_blocks` 前缀；不截断 JSON bytes
+  或 item。空来源稳定返回空数组，非空来源若首项都无法完整容纳则沿用硬失败。
+  schema/manifest/golden 与 change spec/design 同步增加坐标序及最长前缀契约。
+  256 个 flat stone、8 名玩家和极端有限 float32 位置在 direct tool 与真实 SDK
+  round-trip 均成功，StructuredContent 与 TextContent 相同且 wire 合法。
+- `find_visible_blocks.block_names` 在 canonical lookup 前复用 `validatePlanText`，
+  完整执行 `bounded_name` 的 valid UTF-8、1..64 bytes、no Unicode control 与
+  non-blank 规则。invalid golden 已覆盖 66-byte UTF-8、empty、Unicode blank、
+  control、escaped NUL 与非法 UTF-8；可表达的 JSON string 在真实 SDK 中均为
+  `isError=true` unavailable，非法 UTF-8 wire 由 outer UTF-8 gate 拒绝。
+- `Host.Shutdown` 仅在 `world.Shutdown` 成功后关闭 MCP/registry。fail-once world
+  Sync 的首次调用保留 listener、registry 与真实 tools/list 可用，第二次成功才
+  关闭两者；既有 player/world retry 测试保持通过。
+- `NewHost` 保持 identity-first companion bootstrap 后，在 hostile persistence 与
+  `newWorld` 前取得 MCP；listener/handler 注入失败会关闭已取得 listener、registry
+  与 companion persistence，后续 world 构造失败按反向所有权关闭 hostile
+  persistence、MCP/registry 与 companion persistence。空伙伴配置仍为 0 次 MCP
+  factory 调用。
+- snapshot/terrain 校验与 digest plane 构造增加内部 checkpoint-aware variant，
+  public 无 context API 保持不变。1,089 个 height 与 18,513 个 block 校验/BE 编码
+  循环都检查同一个 context+registry checkpoint；25,000 次确定性探针分别在
+  context 与 registry 取消后返回 `ErrSnapshotUnavailable` 且丢弃全部 validator
+  result。
+- `scanEnvObservation` 注释已限定为 Dialogue 的 33×33×9 路径；规划注释改为
+  dense 33×17×33/18,513 槽。删除无人调用且描述旧窗口判定的
+  `planInObservationWindow`，同步修正 Planner 相关注释。
+
+### Repair TDD RED → GREEN
+
+- raw gate RED：server 测试因缺少 `SnapshotAuthorization`、`Authorize`、
+  `Materialize` 以及 outer 非抽象 registry 而编译失败；最小授权/物化 seam 后，
+  `TestMCPOuterRejectsRawProtocolMatrixBeforeSDK` 与取消测试 race PASS。
+- affordance RED：最大合法快照 direct 与 SDK 都返回
+  `companion: planning tool 结果超限`；语义前缀实现后 direct/SDK race PASS，并由
+  “再加入下一完整 item 必超 24 KiB”断言证明是最长前缀。
+- bounded-name RED：Unicode blank/control/NUL 三组 standalone golden 在 direct
+  与 SDK 都错误返回 `isError=false unknown_block`；严格 validator 前置后全部返回
+  schema-invalid/unavailable，64-byte 边界仍作为正常 unknown name。
+- shutdown RED：fail-once world Sync 后 `Done` 已返回 nil，证明 MCP 被提前关闭；
+  调整所有权提交点后 retry lifecycle race PASS。
+- constructor RED：测试首先因不存在 MCP factory/listener/handler 注入 seam 而编译
+  失败；加入最小依赖注入和构造顺序调整后，listener failure、handler failure、
+  later world failure 与 empty-config 四组 race PASS，goroutine ceiling 恢复基线。
+- digest RED：context/registry 两组取消探针都只观察到 12 次 checkpoint 并错误
+  成功；循环内 checkpoint 后两组均在第 25,000 次触发并返回零结果。
+
+### Repair 最终 GREEN
+
+- `go test ./internal/core ./internal/companion ./internal/server -run 'CanonicalName|MCP|Snapshot|Terrain|PlanningTool|Shutdown|NewHost' -race -count=1`：PASS
+  （core 1.198s；companion 4.988s；server 8.031s）。
+- `go test ./internal/companion -race -count=1`：PASS（13.718s）。
+- `go test ./internal/server -run 'MCP|Shutdown|NewHost' -race -count=1`：PASS
+  （5.142s）。
+- `go test ./internal/archcheck -count=1`：PASS（5.519s）。
+- `go vet ./internal/core ./internal/companion ./internal/server`：PASS。
+- `go mod tidy -diff`：PASS（无输出）。
+- `openspec validate --all --strict --no-interactive`：PASS（80/80）。
+- modified Go files `gofmt -d`、`git diff --check`：PASS（无输出）。
+- repair brief 允许引用本报告上一轮同 feature lineage 的 214.301s full server race；
+  本轮未重复该昂贵门禁，所有新 Host/MCP/shutdown 路径已由要求的 focused server
+  race 覆盖。
+
+### Repair 文件、fixture 与风险
+
+- machine/change contract：MCP manifest/schema/invalid golden、change design 与
+  `companion-agent-mcp-tools` delta spec；invalid golden 从 44 增至 50（另有 20
+  valid、8 mine）。未修改 tasks/ledger。
+- companion：`snapshot_registry.go`、`planning_tools.go`、`snapshot_digest.go`、
+  `terrain_projection.go`、`plan_types.go`、`planner.go` 及对应测试/contract test。
+- server：`companion_mcp_outer.go`、`companion_mcp.go`、`companion_mcp_test.go`、
+  `config.go`、`host.go`、`host_shutdown.go`、`companion_snapshot.go`。
+- Task 9 的 run wiring 与 Task 10 的完整 Dialogue/memory/release shutdown 顺序仍是
+  原有后续边界；本轮没有扩张到这些路径。未查看、比较或吸收 main。

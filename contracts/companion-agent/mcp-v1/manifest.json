@@ -68,6 +68,15 @@
       "result_schema": "list_affordances_result",
       "domain_result_codes": [],
       "canonical_result_bytes": 24576,
+      "semantic_rules": [
+        {
+          "name": "sorted_positions",
+          "array_property": "visible_blocks",
+          "position_property": "position",
+          "axes": ["x", "y", "z"],
+          "strict": true
+        }
+      ],
       "result_item_limits": {"online_players": 8, "visible_blocks": 256}
     },
     {

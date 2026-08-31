@@ -84,10 +84,22 @@ type digestSnapshot struct {
 // CanonicalTerrainDigest 把紧凑投影编码为 digest 专用 snake_case DTO。二进制
 // plane 固定使用 big-endian 与 RFC 4648 padded standard Base64。
 func CanonicalTerrainDigest(projection TerrainProjection) ([]byte, error) {
-	if err := projection.Validate(); err != nil {
+	return canonicalTerrainDigestWithCheckpoint(projection, nil)
+}
+
+func canonicalTerrainDigestWithCheckpoint(projection TerrainProjection, checkpoint func() error) ([]byte, error) {
+	if err := projection.validateWithCheckpoint(checkpoint); err != nil {
 		return nil, err
 	}
-	dto := buildDigestTerrain(projection)
+	dto, err := buildDigestTerrainWithCheckpoint(projection, checkpoint)
+	if err != nil {
+		return nil, err
+	}
+	if checkpoint != nil {
+		if err := checkpoint(); err != nil {
+			return nil, err
+		}
+	}
 	canonical, err := canonicalJSON(dto)
 	if err != nil {
 		return nil, fmt.Errorf("companion: 编码 terrain digest: %w", err)
@@ -95,16 +107,33 @@ func CanonicalTerrainDigest(projection TerrainProjection) ([]byte, error) {
 	if len(canonical) >= MaxTerrainDigestBytes {
 		return nil, fmt.Errorf("companion: terrain digest %d bytes 达到上限 %d", len(canonical), MaxTerrainDigestBytes)
 	}
+	if checkpoint != nil {
+		if err := checkpoint(); err != nil {
+			return nil, err
+		}
+	}
 	return canonical, nil
 }
 
 // CanonicalSnapshotDigest 返回快照专用 canonical JSON 与其小写 SHA-256。
 // legacy `Heights` 不进入 DTO，dense height plane 是唯一高度表达。
 func CanonicalSnapshotDigest(snapshot PlanSnapshot) ([]byte, string, error) {
-	if err := snapshot.Validate(); err != nil {
+	return canonicalSnapshotDigestWithCheckpoint(snapshot, nil)
+}
+
+func canonicalSnapshotDigestWithCheckpoint(snapshot PlanSnapshot, checkpoint func() error) ([]byte, string, error) {
+	if err := snapshot.validateWithCheckpoint(checkpoint); err != nil {
 		return nil, "", err
 	}
-	dto := buildDigestSnapshot(snapshot)
+	dto, err := buildDigestSnapshotWithCheckpoint(snapshot, checkpoint)
+	if err != nil {
+		return nil, "", err
+	}
+	if checkpoint != nil {
+		if err := checkpoint(); err != nil {
+			return nil, "", err
+		}
+	}
 	canonical, err := canonicalJSON(dto)
 	if err != nil {
 		return nil, "", fmt.Errorf("companion: 编码 snapshot digest: %w", err)
@@ -112,30 +141,65 @@ func CanonicalSnapshotDigest(snapshot PlanSnapshot) ([]byte, string, error) {
 	if len(canonical) > MaxSnapshotDigestBytes {
 		return nil, "", fmt.Errorf("companion: snapshot digest %d bytes 超过上限 %d", len(canonical), MaxSnapshotDigestBytes)
 	}
+	if checkpoint != nil {
+		if err := checkpoint(); err != nil {
+			return nil, "", err
+		}
+	}
 	sum := sha256.Sum256(canonical)
+	if checkpoint != nil {
+		if err := checkpoint(); err != nil {
+			return nil, "", err
+		}
+	}
 	return canonical, hex.EncodeToString(sum[:]), nil
 }
 
-func buildDigestTerrain(projection TerrainProjection) digestTerrain {
+func buildDigestTerrainWithCheckpoint(projection TerrainProjection, checkpoint func() error) (digestTerrain, error) {
 	heights := make([]byte, TerrainColumnCount*2)
 	for index, height := range projection.heights {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return digestTerrain{}, err
+			}
+		}
 		binary.BigEndian.PutUint16(heights[index*2:], uint16(height))
 	}
 	blocks := make([]byte, TerrainBlockCount*2)
 	for index, block := range projection.blocks {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return digestTerrain{}, err
+			}
+		}
 		binary.BigEndian.PutUint16(blocks[index*2:], uint16(block))
 	}
+	if checkpoint != nil {
+		if err := checkpoint(); err != nil {
+			return digestTerrain{}, err
+		}
+	}
 	origin := projection.Origin()
-	return digestTerrain{
+	result := digestTerrain{
 		BlocksBEU16B64:  base64.StdEncoding.EncodeToString(blocks),
 		Dimensions:      [3]int{TerrainWidth, TerrainHeight, TerrainDepth},
 		HeightsBEI16B64: base64.StdEncoding.EncodeToString(heights),
 		Origin:          digestPosition(origin),
 		ReadyColumnsB64: base64.StdEncoding.EncodeToString(projection.readyColumns[:]),
 	}
+	if checkpoint != nil {
+		if err := checkpoint(); err != nil {
+			return digestTerrain{}, err
+		}
+	}
+	return result, nil
 }
 
-func buildDigestSnapshot(snapshot PlanSnapshot) digestSnapshot {
+func buildDigestSnapshotWithCheckpoint(snapshot PlanSnapshot, checkpoint func() error) (digestSnapshot, error) {
+	terrain, err := buildDigestTerrainWithCheckpoint(snapshot.Terrain, checkpoint)
+	if err != nil {
+		return digestSnapshot{}, err
+	}
 	dto := digestSnapshot{
 		ChunkRevisions: make([]digestChunkRevision, len(snapshot.ChunkRevisions)),
 		Companion: digestCompanion{
@@ -150,10 +214,15 @@ func buildDigestSnapshot(snapshot PlanSnapshot) digestSnapshot {
 		Instruction:    snapshot.Command,
 		Issuer:         digestPlanPlayer(snapshot.Issuer),
 		OnlinePlayers:  make([]digestPlayer, len(snapshot.OnlinePlayers)),
-		Terrain:        buildDigestTerrain(snapshot.Terrain),
+		Terrain:        terrain,
 		WorldTimeTicks: snapshot.WorldTimeTicks,
 	}
 	for slot := uint8(0); slot < core.InventorySlots; slot++ {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return digestSnapshot{}, err
+			}
+		}
 		stack, _ := snapshot.Companion.Inventory.Slot(slot)
 		if stack.Item == core.ItemNone {
 			continue
@@ -163,6 +232,11 @@ func buildDigestSnapshot(snapshot PlanSnapshot) digestSnapshot {
 		})
 	}
 	for index, revision := range snapshot.ChunkRevisions {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return digestSnapshot{}, err
+			}
+		}
 		dto.ChunkRevisions[index] = digestChunkRevision{
 			Revision: revision.Revision,
 			X:        revision.Chunk.X,
@@ -170,14 +244,29 @@ func buildDigestSnapshot(snapshot PlanSnapshot) digestSnapshot {
 		}
 	}
 	for index, block := range snapshot.ExposedBlocks {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return digestSnapshot{}, err
+			}
+		}
 		dto.ExposedBlocks[index] = digestVisibleBlock{
 			BlockID: block.Block, Position: digestPosition(block.Pos),
 		}
 	}
 	for index, player := range snapshot.OnlinePlayers {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return digestSnapshot{}, err
+			}
+		}
 		dto.OnlinePlayers[index] = digestPlanPlayer(player)
 	}
-	return dto
+	if checkpoint != nil {
+		if err := checkpoint(); err != nil {
+			return digestSnapshot{}, err
+		}
+	}
+	return dto, nil
 }
 
 func digestPlanPlayer(player PlanPlayer) digestPlayer {

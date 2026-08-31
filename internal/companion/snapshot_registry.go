@@ -58,6 +58,13 @@ type SnapshotRegistration struct {
 	ExpiresAt  time.Time
 }
 
+// SnapshotAuthorization 是 capability 通过恒定错误面校验后的不透明凭据。
+// 它只引用 registry 内的不可变记录，不复制冻结快照。
+type SnapshotAuthorization struct {
+	registry *SnapshotRegistry
+	record   *snapshotRecord
+}
+
 // SnapshotLease 是一次 MCP handler 取得的不可变深拷贝视图。Done 只由 registry
 // 生命周期关闭；handler 必须在入口、bounded loop 与编码边界调用 Checkpoint。
 type SnapshotLease struct {
@@ -222,17 +229,40 @@ func snapshotTimerDelayRepresentable(now, deadline, expiresAt time.Time) bool {
 	return delay > 0 && now.Add(delay).Equal(expiresAt)
 }
 
-// Lookup 只按 capability 定位 record，并返回与 registry 存储分离的深拷贝。
+// Authorize 只鉴别 capability 并返回不透明凭据，不复制冻结快照。
 // 所有无效身份统一返回 ErrSnapshotUnavailable，避免泄露 existence。
-func (r *SnapshotRegistry) Lookup(capability string) (SnapshotLease, error) {
+func (r *SnapshotRegistry) Authorize(capability string) (SnapshotAuthorization, error) {
 	now := r.clock.Now()
 	r.mu.Lock()
 	if r.closed {
 		r.mu.Unlock()
-		return SnapshotLease{}, ErrSnapshotUnavailable
+		return SnapshotAuthorization{}, ErrSnapshotUnavailable
 	}
 	record, ok := r.byCapability[capability]
 	if !ok || subtle.ConstantTimeCompare([]byte(record.capability), []byte(capability)) != 1 {
+		r.mu.Unlock()
+		return SnapshotAuthorization{}, ErrSnapshotUnavailable
+	}
+	if !now.Before(record.expiresAt) {
+		r.removeLocked(record)
+		r.mu.Unlock()
+		record.cancel()
+		return SnapshotAuthorization{}, ErrSnapshotUnavailable
+	}
+	r.mu.Unlock()
+	return SnapshotAuthorization{registry: r, record: record}, nil
+}
+
+// Materialize 将仍然有效的鉴权凭据转换为一次深拷贝租约。
+func (r *SnapshotRegistry) Materialize(authorization SnapshotAuthorization) (SnapshotLease, error) {
+	record := authorization.record
+	if authorization.registry != r || record == nil {
+		return SnapshotLease{}, ErrSnapshotUnavailable
+	}
+	now := r.clock.Now()
+	r.mu.Lock()
+	current, ok := r.byID[record.id]
+	if r.closed || !ok || current != record {
 		r.mu.Unlock()
 		return SnapshotLease{}, ErrSnapshotUnavailable
 	}
@@ -258,6 +288,15 @@ func (r *SnapshotRegistry) Lookup(capability string) (SnapshotLease, error) {
 		return SnapshotLease{}, ErrSnapshotUnavailable
 	}
 	return lease, nil
+}
+
+// Lookup 兼容直接调用方，并将鉴权与快照物化按顺序组合。
+func (r *SnapshotRegistry) Lookup(capability string) (SnapshotLease, error) {
+	authorization, err := r.Authorize(capability)
+	if err != nil {
+		return SnapshotLease{}, err
+	}
+	return r.Materialize(authorization)
 }
 
 // Complete 删除正常完成的快照并发出取消信号。

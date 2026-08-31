@@ -568,6 +568,12 @@ func TestContractFixtureMCPManifestConsistency(t *testing.T) {
 			t.Errorf("MCP tool %s fixed_graph_call = %v，want %v", name, got, want.fixed)
 		}
 		contractAssertStringList(t, tool["domain_result_codes"], want.codes, "MCP tool "+name+" domain result codes")
+		if name == "list_affordances" {
+			resultSchema := contractObject(t, schemas.definition(t, "mcp-v1/schema.json", result), name+" result schema")
+			if !contractJSONEqual(tool["semantic_rules"], resultSchema["x-mornlea-rules"]) {
+				t.Errorf("MCP tool %s semantic_rules 未与 result schema 单源一致", name)
+			}
+		}
 		if name == "find_visible_blocks" || name == "query_terrain" {
 			resultSchema := contractObject(t, schemas.definition(t, "mcp-v1/schema.json", result), name+" public result schema")
 			contractAssertExactKeys(t, resultSchema, []string{"oneOf"}, "MCP tool "+name+" public result schema")

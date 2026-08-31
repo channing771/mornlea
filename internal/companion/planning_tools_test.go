@@ -1,9 +1,13 @@
 package companion
 
 import (
+	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -157,6 +161,118 @@ func TestPlanningToolsDomainFailuresAndOrdering(t *testing.T) {
 		json.RawMessage(`{"offset":3,"limit":3}`))
 	if err != nil || !strings.Contains(string(inventory.Canonical), `"slot":4`) || strings.Contains(string(inventory.Canonical), `"slot":0`) {
 		t.Fatalf("inventory paging=%s err=%v", inventory.Canonical, err)
+	}
+}
+
+func TestPlanningAffordancesBoundsLargestSnapshotByCompleteCoordinatePrefix(t *testing.T) {
+	lease, cleanup := planningToolLease(t)
+	defer cleanup()
+	lease.Snapshot = planningToolLargestAffordanceSnapshot(t)
+
+	first, err := ExecutePlanningTool(context.Background(), lease, ToolListAffordances, json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatalf("list_affordances 最大合法快照: %v", err)
+	}
+	second, err := ExecutePlanningTool(context.Background(), lease, ToolListAffordances, json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatalf("list_affordances 重复执行: %v", err)
+	}
+	if !json.Valid(first.Canonical) || len(first.Canonical) > PlanningToolCanonicalLimit(ToolListAffordances) ||
+		!bytes.Equal(first.Canonical, second.Canonical) {
+		t.Fatalf("bounded affordances len/valid/stable=%d/%v/%v", len(first.Canonical), json.Valid(first.Canonical), bytes.Equal(first.Canonical, second.Canonical))
+	}
+	var decoded planningAffordancesResult
+	if err := json.Unmarshal(first.Canonical, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.OnlinePlayers) != MaxPlanOnlinePlayers || len(decoded.VisibleBlocks) == 0 ||
+		len(decoded.VisibleBlocks) >= MaxPlanExposedBlocks {
+		t.Fatalf("bounded affordances players/blocks=%d/%d", len(decoded.OnlinePlayers), len(decoded.VisibleBlocks))
+	}
+	for index, block := range decoded.VisibleBlocks {
+		want := lease.Snapshot.ExposedBlocks[index]
+		if block.Position != digestPosition(want.Pos) || block.BlockID != want.Block {
+			t.Fatalf("visible_blocks[%d]=%+v，不是快照坐标前缀 %+v", index, block, want)
+		}
+	}
+	next := lease.Snapshot.ExposedBlocks[len(decoded.VisibleBlocks)]
+	drop := "stone"
+	withNext := decoded
+	withNext.VisibleBlocks = append(append([]planningVisibleBlock(nil), decoded.VisibleBlocks...), planningVisibleBlock{
+		BlockID: next.Block, BlockName: "stone", DropItem: &drop,
+		MineSemantics: "single_drop", Position: digestPosition(next.Pos),
+	})
+	encodedNext, err := canonicalJSON(withNext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(encodedNext) <= PlanningToolCanonicalLimit(ToolListAffordances) {
+		t.Fatalf("visible_blocks=%d 不是最长完整前缀: next len=%d", len(decoded.VisibleBlocks), len(encodedNext))
+	}
+}
+
+func TestPlanningAffordancesByteBoundEmptyAndFirstItemSemantics(t *testing.T) {
+	lease, cleanup := planningToolLease(t)
+	defer cleanup()
+	emptyLease := lease
+	emptyLease.Snapshot.ExposedBlocks = nil
+	empty, err := ExecutePlanningTool(context.Background(), emptyLease, ToolListAffordances, json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatalf("empty list_affordances: %v", err)
+	}
+	var emptyResult planningAffordancesResult
+	if err := json.Unmarshal(empty.Canonical, &emptyResult); err != nil || emptyResult.VisibleBlocks == nil || len(emptyResult.VisibleBlocks) != 0 {
+		t.Fatalf("empty visible_blocks=%v err=%v wire=%s", emptyResult.VisibleBlocks, err, empty.Canonical)
+	}
+	oneLease := lease
+	oneLease.Snapshot.ExposedBlocks = oneLease.Snapshot.ExposedBlocks[:1]
+	one, err := ExecutePlanningTool(context.Background(), oneLease, ToolListAffordances, json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatalf("one list_affordances: %v", err)
+	}
+	var oneResult planningAffordancesResult
+	if err := json.Unmarshal(one.Canonical, &oneResult); err != nil || len(oneResult.VisibleBlocks) != 1 {
+		t.Fatalf("one visible_blocks=%v err=%v wire=%s", oneResult.VisibleBlocks, err, one.Canonical)
+	}
+}
+
+func TestPlanningFindBlocksRejectsStandaloneBoundedNameGoldens(t *testing.T) {
+	lease, cleanup := planningToolLease(t)
+	defer cleanup()
+	invalid := contractLoadGolden(t, "contracts/companion-agent/mcp-v1/golden/invalid.json")
+	seen := 0
+	for _, testCase := range invalid.Cases {
+		if testCase.Schema != "bounded_name" {
+			continue
+		}
+		seen++
+		t.Run(testCase.Name, func(t *testing.T) {
+			var nameJSON []byte
+			if testCase.ValueUTF8Hex != "" {
+				raw, err := hex.DecodeString(testCase.ValueUTF8Hex)
+				if err != nil {
+					t.Fatal(err)
+				}
+				nameJSON = append(append([]byte{'"'}, raw...), '"')
+			} else {
+				nameJSON = append([]byte(nil), testCase.Value...)
+			}
+			input := append([]byte(`{"block_names":[`), nameJSON...)
+			input = append(input, []byte(`],"limit":1}`)...)
+			result, err := ExecutePlanningTool(context.Background(), lease, ToolFindVisibleBlocks, input)
+			if !errors.Is(err, ErrPlanningToolInvalidInput) || result.Structured != nil || len(result.Canonical) != 0 || result.DomainFailure {
+				t.Fatalf("bounded_name fixture result=%+v err=%v", result, err)
+			}
+		})
+	}
+	if seen < 6 {
+		t.Fatalf("bounded_name invalid goldens=%d，want >=6", seen)
+	}
+
+	validBoundary, err := ExecutePlanningTool(context.Background(), lease, ToolFindVisibleBlocks,
+		json.RawMessage(`{"block_names":["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],"limit":1}`))
+	if err != nil || !validBoundary.DomainFailure || planningResultCode(t, validBoundary.Canonical) != ValidatorUnknownBlock {
+		t.Fatalf("64-byte unknown name result=%s domain=%v err=%v", validBoundary.Canonical, validBoundary.DomainFailure, err)
 	}
 }
 
@@ -349,6 +465,39 @@ func TestPlanningToolsCheckpointEveryBoundedLoop(t *testing.T) {
 	}
 }
 
+func TestPlanningValidatePlanDiscardsResultWhenCanceledInsideDigestPlane(t *testing.T) {
+	for _, mode := range []string{"context", "registry"} {
+		t.Run(mode, func(t *testing.T) {
+			clock := newSnapshotFakeClock(time.Unix(1_800_000_350, 0))
+			registry := newSnapshotRegistry(clock, snapshotTestEntropy())
+			t.Cleanup(registry.Close)
+			snapshot := planningToolSnapshot(t)
+			registration, err := registry.Register(
+				testNamespaceUUID, snapshot.Companion.ID, 1, snapshot, clock.Now().Add(time.Minute),
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			lease, err := registry.Lookup(registration.Capability)
+			if err != nil {
+				t.Fatal(err)
+			}
+			probe := &planningCancelProbeContext{trigger: 25_000, cancelContext: mode == "context"}
+			if mode == "registry" {
+				probe.onTrigger = func() { registry.Cancel(registration.SnapshotID) }
+			}
+			result, err := ExecutePlanningTool(probe, lease, ToolValidatePlan,
+				json.RawMessage(`{"plan":{"summary":"x","steps":[{"kind":"mine","x":8,"y":63,"z":-2}]}}`))
+			if !probe.triggered.Load() {
+				t.Fatalf("digest plane 未观察 %s 取消，checkpoints=%d", mode, probe.Count())
+			}
+			if !errors.Is(err, ErrSnapshotUnavailable) || result.Structured != nil || len(result.Canonical) != 0 || result.DomainFailure {
+				t.Fatalf("canceled validate_plan result=%+v err=%v", result, err)
+			}
+		})
+	}
+}
+
 type planningCheckpointContext struct {
 	context.Context
 	checks atomic.Int32
@@ -362,6 +511,33 @@ func (c *planningCheckpointContext) Err() error {
 }
 func (c *planningCheckpointContext) Value(key any) any { return nil }
 func (c *planningCheckpointContext) Count() int32      { return c.checks.Load() }
+
+type planningCancelProbeContext struct {
+	context.Context
+	checks        atomic.Int32
+	trigger       int32
+	triggered     atomic.Bool
+	cancelContext bool
+	onTrigger     func()
+}
+
+func (c *planningCancelProbeContext) Deadline() (time.Time, bool) { return time.Time{}, false }
+func (c *planningCancelProbeContext) Done() <-chan struct{}       { return nil }
+func (c *planningCancelProbeContext) Err() error {
+	count := c.checks.Add(1)
+	if count == c.trigger {
+		c.triggered.Store(true)
+		if c.onTrigger != nil {
+			c.onTrigger()
+		}
+	}
+	if c.cancelContext && count >= c.trigger {
+		return context.Canceled
+	}
+	return nil
+}
+func (c *planningCancelProbeContext) Value(any) any { return nil }
+func (c *planningCancelProbeContext) Count() int32  { return c.checks.Load() }
 
 func planningToolLease(t *testing.T) (SnapshotLease, func()) {
 	t.Helper()
@@ -435,6 +611,38 @@ func planningToolSnapshot(t *testing.T) PlanSnapshot {
 	}
 	if err := snapshot.Validate(); err != nil {
 		t.Fatalf("planning tool snapshot: %v", err)
+	}
+	return snapshot
+}
+
+func planningToolLargestAffordanceSnapshot(t *testing.T) PlanSnapshot {
+	t.Helper()
+	snapshot := planningToolSnapshot(t)
+	snapshot.ExposedBlocks = make([]PlanBlock, 0, MaxPlanExposedBlocks)
+	for index := range MaxPlanExposedBlocks {
+		pos := core.BlockPos{
+			X: -11 + int32(index/33),
+			Y: 63,
+			Z: -18 + int32(index%33),
+		}
+		if !snapshot.Terrain.SetBlock(pos, core.StoneID) {
+			t.Fatalf("SetBlock(%+v)=false", pos)
+		}
+		snapshot.ExposedBlocks = append(snapshot.ExposedBlocks, PlanBlock{Pos: pos, Block: core.StoneID})
+	}
+	snapshot.OnlinePlayers = make([]PlanPlayer, 0, MaxPlanOnlinePlayers)
+	for index := range MaxPlanOnlinePlayers {
+		id, err := core.ParsePlayerID(fmt.Sprintf("10000000-0000-4000-8000-%012d", index+1))
+		if err != nil {
+			t.Fatal(err)
+		}
+		snapshot.OnlinePlayers = append(snapshot.OnlinePlayers, PlanPlayer{
+			ID:       id,
+			Position: [3]float32{math.MaxFloat32, -math.MaxFloat32, float32(index)},
+		})
+	}
+	if err := snapshot.Validate(); err != nil {
+		t.Fatalf("largest affordance snapshot: %v", err)
 	}
 	return snapshot
 }
