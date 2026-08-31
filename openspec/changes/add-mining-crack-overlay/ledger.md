@@ -68,3 +68,30 @@
   `ratio<0` 分支对 uint16 不可达系公式字面忠实、Go tag 10 先于 Rust 白名单
   落地为既定任务切分顺序）。nit 不触发修复循环，记录在案随 Task 4 收尾
   抽查。Task 2 关闭。
+
+### Task 3：Rust crack pass 与帧解析
+
+- 实现：commits `a71d28d8` + `57c29a20`（fresh implementer）。ffi tag 10
+  白名单 + `FrameInput.crack_instances` + `empty_passes` 纳入；新模块
+  `render/crack.rs`（带 UV 立方体、`OutlineTranslucent` 同族管线、
+  `Option<BindGroup>` 惰性绑定早退、容量 1、关联函数 `instances_valid`）；
+  `shaders/crack.wgsl`（`mat4x4f + vec4f` 承载层号规避 vec3f 对齐陷阱、
+  `alpha < 0.5` discard 与 terrain 同阈值、daylight 经 VsOut 插值入
+  fragment）；mod.rs 集成（outline→crack→名牌）；water 门禁 5→6。
+- 偏差裁决（控制会话）：bind 传递采用 LodPass 先例的第三方案（pass 自持
+  `Option<BindGroup>`，record 早退）— 与库内既有跳过语义同构且省一次
+  attachment load — 接受。
+- 验证证据 @ `57c29a20`：`make rust` 成功；`cargo test -p mornlea_client
+  --locked` 141 passed（新增 7）；`cargo test -p mornlea_engine --locked`
+  218 passed；`go build ./...` ok；`go test ./cmd/mornlea/app -race
+  -count=1` ok（新 dylib 下 Task 2 测试仍绿）；clippy/fmt 干净。
+- SPEC 评审：**pass**（8/8 PASS；无新增 extern "C"，client ABI 仍 v14；
+  80B 跨语言布局逐字段核对一致；GPU 集成测试为确定性三对照设计）。
+  QUALITY 评审：**pass**（5 项满分、测试 4/5；两条非阻塞：门禁测试函数名
+  过时、storage visibility 过度声明）。
+- Ruling: R1 修复两处（门禁函数改名
+  `translucent_render_passes_stay_within_water_and_crack`、storage
+  visibility 收窄 VERTEX-only）— 函数名按名索骥会得到错误契约，必修；
+  visibility 收窄与先例对齐 — 均非行为变更。
+- R1 落地：commit `1bd12f2b`。`cargo test -p mornlea_client --locked`
+  141 passed；clippy 干净；`make rust` 重建回拷。Task 3 关闭。
