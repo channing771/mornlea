@@ -30,8 +30,8 @@ func TestAgentClientRejectsExplicitNullForEveryNonNullableShape(t *testing.T) {
 		want      error
 	}{
 		{name: "identity string", operation: "namespace_acquire", variant: "success", mutate: func(object map[string]any) { object["request_id"] = nil }},
-		{name: "nested object", operation: "plan", variant: "success", mutate: func(object map[string]any) { object["plan"] = nil }},
-		{name: "number", operation: "plan", variant: "success", mutate: func(object map[string]any) { object["generation"] = nil }},
+		{name: "nested object", operation: "plan", variant: "success", mutate: func(object map[string]any) { object["plan"] = nil }, want: ErrAgentInvalidModelOutput},
+		{name: "number", operation: "plan", variant: "success", mutate: func(object map[string]any) { object["generation"] = nil }, want: ErrAgentInvalidModelOutput},
 		{name: "position x", operation: "plan", variant: "success", mutate: func(object map[string]any) { firstAgentPlanStep(t, object)["x"] = nil }, want: ErrAgentInvalidModelOutput},
 		{name: "position y", operation: "plan", variant: "success", mutate: func(object map[string]any) { firstAgentPlanStep(t, object)["y"] = nil }, want: ErrAgentInvalidModelOutput},
 		{name: "position z", operation: "plan", variant: "success", mutate: func(object map[string]any) { firstAgentPlanStep(t, object)["z"] = nil }, want: ErrAgentInvalidModelOutput},

@@ -670,7 +670,7 @@ func (c *AgentClient) send(request *http.Request, out interface{}, expectedReque
 		return ErrAgentUnavailable
 	}
 	if response.ContentLength > AgentMaxResponseBodyBytes {
-		return ErrAgentUnavailable
+		return agentSuccessBodyError(request.URL.Path, response.StatusCode)
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, AgentMaxResponseBodyBytes+1))
 	if err != nil {
@@ -683,7 +683,7 @@ func (c *AgentClient) send(request *http.Request, out interface{}, expectedReque
 		return request.Context().Err()
 	}
 	if !agentBodyWithinLimit(body, AgentMaxResponseBodyBytes) {
-		return ErrAgentUnavailable
+		return agentSuccessBodyError(request.URL.Path, response.StatusCode)
 	}
 	if response.StatusCode == http.StatusServiceUnavailable && request.URL.Path == "/readyz" {
 		if err := strictDecodeJSON(body, out); err != nil {
@@ -702,7 +702,7 @@ func (c *AgentClient) send(request *http.Request, out interface{}, expectedReque
 		return decodeAgentError(body, request.URL.Path, response.StatusCode, expectedRequestID)
 	}
 	if err := strictDecodeJSON(body, out); err != nil {
-		return ErrAgentUnavailable
+		return agentSuccessBodyError(request.URL.Path, response.StatusCode)
 	}
 	if !validAgentResponse(out) {
 		return ErrAgentUnavailable
@@ -714,6 +714,15 @@ func (c *AgentClient) send(request *http.Request, out interface{}, expectedReque
 		}
 	}
 	return nil
+}
+
+// agentSuccessBodyError 只把 `/v1/plan` 已接受成功状态后的正文超限或严格解码
+// 失败归为模型计划非法；其他 route/status 仍属于 Agent 协议不可用。
+func agentSuccessBodyError(path string, status int) error {
+	if path == "/v1/plan" && routeAllowsAgentSuccess(path, status) {
+		return ErrAgentInvalidModelOutput
+	}
+	return ErrAgentUnavailable
 }
 
 func agentBodyWithinLimit(body []byte, maximum int) bool {

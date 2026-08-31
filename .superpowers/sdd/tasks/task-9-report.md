@@ -118,6 +118,23 @@ Task 9 初次实现的独立规格评审与代码质量评审均裁决为 FAIL�
      未变化的 dense Chest/Furnace 仍通过，投影内无关 chunk/block 变化不扩大为整份
      snapshot 失效。
 
+## Repair 2：2xx 非法 Plan response 分类
+
+规格复审发现 Agent client 对 `/v1/plan` 的成功响应正文超限、顶层 unknown field
+和 JSON object 后尾随数据都返回 `ErrAgentUnavailable`，bridge 因而把明确的非法
+计划错误映射为 `PlannerUnavailable`，不符合 Planner delta spec 的稳定失败语义。
+
+- RED：真实 `AgentClient` → `companionAgentPlanner` HTTP round trip 的三个子案例
+  均得到 `ErrPlannerUnavailable`，期望 `ErrPlannerInvalidPlan`；同一错误进入 tick
+  后也会产生错误的任务原因。可成功解码但 `snapshot_digest` 不匹配的对照仍正确
+  返回 unavailable。
+- GREEN：Agent client 在 `send` 已确认 path 是 `/v1/plan` 且 status 是允许的成功
+  状态后，才把 response body overflow 或 strict JSON shape decode 失败归为
+  `ErrAgentInvalidModelOutput`。bridge 继续唯一映射为 `ErrPlannerInvalidPlan`，tick
+  继续映射为 `TaskFailInvalidPlan`。transport、header、Content-Type、非成功 status、
+  body I/O 和成功解码后的 request/run/snapshot identity mismatch 仍归 unavailable；
+  correlation-first 的可解码 candidate 校验路径没有改变。
+
 ## 生产装配与边界
 
 - `cmd/mornlea`、`cmd/mornlea/app`、`cmd/mornlea-server` 只传递
@@ -143,13 +160,20 @@ accepted Dialogue reservation。旧 Dialogue client 仅作为 Task 10 过渡代�
 ## 验证
 
 - `go test ./internal/companion ./internal/server -run 'Planner|CompanionTask|AgentUnavailable|Snapshot' -race -count=1`
-  - PASS（最终工作树重跑）：companion 2.599s，server 10.685s。
+  - PASS（Repair 2 最终工作树重跑）：companion 2.518s，server 11.704s。
+- `go test ./internal/server -run '^TestAgentPlannerClassifiesMalformedPlanSuccessResponseAsInvalidPlan$' -count=1 -timeout=30s`
+  - RED：overflow、unknown top-level、trailing JSON 均为 `ErrPlannerUnavailable`；
+    GREEN：PASS 1.813s，三者均为 InvalidPlan，identity mismatch 对照为 unavailable。
+- `go test ./internal/companion -run 'Agent' -race -count=1 -timeout=90s`
+  - PASS：4.139s；plan strict-shape null 期望已与同一路由分类收敛。
 - `go test ./internal/config -run 'Agent|AIConfig' -race -count=1`
   - PASS：1.578s。
 - `go test ./internal/archcheck -count=1`
-  - PASS：5.655s。
+  - PASS（Repair 2 重跑）：5.404s。
 - `go test ./cmd/mornlea ./cmd/mornlea/app ./cmd/mornlea-server -count=1`
   - PASS：1.077s / 22.818s / 3.965s；未启动游戏窗口。
+- `go vet ./internal/companion ./internal/server`
+  - PASS（Repair 2 重跑），无输出。
 - `go vet ./internal/companion ./internal/server ./internal/config`
   - PASS，无输出。
 - `go mod tidy -diff`
