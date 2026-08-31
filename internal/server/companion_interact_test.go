@@ -50,9 +50,10 @@ func newInteractionHost(
 	config.Companions = []companion.Definition{{ID: id, Name: "阿木"}}
 	config.MaxPlayers = 2
 	config.OutboxCapacity = 4096
-	if model != nil {
-	}
 	host := mustNewHost(t, config, flatTestGenerator{}, store)
+	if model != nil {
+		host.world.companionManager.replacePlannerForTest(t, model)
+	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), longWaitDeadline)
 		defer cancel()

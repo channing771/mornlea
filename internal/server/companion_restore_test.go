@@ -135,9 +135,10 @@ func restoredCompanionHost(
 	config.OutboxCapacity = 4096
 	config.HeartbeatInterval = time.Hour
 	config.HeartbeatTimeout = time.Hour
-	if model != nil {
-	}
 	host := mustNewHost(t, config, flatTestGenerator{}, store)
+	if model != nil {
+		host.world.companionManager.replacePlannerForTest(t, model)
+	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), longWaitDeadline)
 		defer cancel()
