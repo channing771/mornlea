@@ -16,6 +16,14 @@ import (
 )
 
 func newCompanionMCPHandler(authority string, registry *companion.SnapshotRegistry) (http.Handler, error) {
+	sdkHandler, err := newCompanionMCPSDKHandler()
+	if err != nil {
+		return nil, err
+	}
+	return newCompanionMCPOuterHandler(authority, registry, sdkHandler), nil
+}
+
+func newCompanionMCPSDKHandler() (http.Handler, error) {
 	contract, err := loadCompanionMCPContract()
 	if err != nil {
 		return nil, err
@@ -60,7 +68,7 @@ func newCompanionMCPHandler(authority string, registry *companion.SnapshotRegist
 			PropagateRequestCancellation: true,
 		},
 	)
-	return newCompanionMCPOuterHandler(authority, registry, sdkHandler), nil
+	return sdkHandler, nil
 }
 
 func companionMCPToolError() *mcp.CallToolResult {

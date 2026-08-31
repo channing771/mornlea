@@ -229,6 +229,16 @@ class ListAffordancesResult(StrictModel):
     online_players: OnlinePlayers
     visible_blocks: VisibleBlocks
 
+    @field_validator("visible_blocks")
+    @classmethod
+    def validate_visible_block_coordinate_sort(
+        cls, value: tuple[VisibleBlock, ...]
+    ) -> tuple[VisibleBlock, ...]:
+        coordinates = [(item.position.x, item.position.y, item.position.z) for item in value]
+        if any(left >= right for left, right in zip(coordinates, coordinates[1:], strict=False)):
+            raise ValueError("visible_blocks must use strictly increasing x/y/z coordinate order")
+        return value
+
     @model_validator(mode="after")
     def validate_payload_size(self) -> Self:
         require_canonical_size(self, 24576, "list_affordances result")

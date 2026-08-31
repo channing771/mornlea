@@ -307,6 +307,17 @@ def test_find_visible_blocks_output_is_strictly_coordinate_sorted() -> None:
         )
 
 
+def test_list_affordances_output_is_strictly_coordinate_sorted() -> None:
+    fixture = _load(CONTRACT_ROOT / "mcp-v1/golden/invalid.json")
+    case = next(
+        item
+        for item in fixture["cases"]
+        if item["name"] == "affordance visible summary rejects coordinate disorder"
+    )
+    with pytest.raises(ValidationError):
+        adapter_for("mcp-v1", case["schema"]).validate_python(case["value"])
+
+
 def test_dialogue_terminal_matrix_and_memory_union_are_strict() -> None:
     terminal = adapter_for("http-v1", "dialogue_terminal_request")
     nonterminal_response = adapter_for("http-v1", "dialogue_nonterminal_response")

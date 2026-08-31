@@ -17,7 +17,7 @@ PIXEL_PERFECTION_NOTICE_DIR := internal/assets/packs/pixel_perfection
 PIXEL_PERFECTION_NOTICE_DEST := bin/third-party/pixel-perfection
 ARGS ?=
 
-.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check frontend-check dev-check agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev
+.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check frontend-check dev-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev
 
 run test test-multiplayer bench-multiplayer visual-check visual-update: rust
 build: rust
@@ -40,6 +40,7 @@ help:
 		'  make rust             构建固定版本的 Rust cdylib' \
 		'  make rust-check       运行 Rust 格式、clippy 与单测' \
 		'  make frontend-check   菜单 WebView 前端门禁(冻结安装+typecheck+vitest+构建+dist 一致)' \
+		'  make companion-agent-integration 运行无外网 Go/Python 伙伴 Agent 真进程合同' \
 		'  make fmt              格式化全部 Rust 与 Go 源码' \
 		'  make visual-check     跑视觉场景并与 golden 基线比对' \
 		'  make visual-update    重新生成 golden 基线（VISUAL_OUT 覆盖输出目录）' \
@@ -145,6 +146,16 @@ dev-check:
 	cd $(RUST_DIR) && $(CARGO) fmt --check
 	cd $(RUST_DIR) && $(CARGO) clippy --workspace --all-targets -- -D warnings
 	cd $(RUST_DIR) && $(CARGO) test --workspace --locked
+
+COMPANION_AGENT_DIR := services/companion-agent
+COMPANION_AGENT_PYTHON := $(CURDIR)/$(COMPANION_AGENT_DIR)/.venv/bin/python
+
+companion-agent-integration:
+	cd $(COMPANION_AGENT_DIR) && uv sync --locked
+	cd $(COMPANION_AGENT_DIR) && uv run ruff format --check tests/integration && uv run ruff check tests/integration
+	cd $(COMPANION_AGENT_DIR) && uv run mypy src tests/integration
+	MORNLEA_COMPANION_AGENT_PYTHON=$(COMPANION_AGENT_PYTHON) $(GO) test ./internal/companion ./internal/server \
+		-run 'CompanionAgent.*Integration|CrossLanguage|MCP.*Integration' -race -count=1 -timeout=120s
 
 fmt:
 	cd $(RUST_DIR) && $(CARGO) fmt
