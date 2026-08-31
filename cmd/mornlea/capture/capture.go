@@ -748,6 +748,53 @@ var captureScenes = []captureScene{
 		},
 	},
 	{
+		// mining-crack-early 是采掘裂纹浅阶段的无窗口 capture 场景：复用
+		// target-block-feedback 的固定世界（空气邻域中相机正前方 5.5 格的
+		// 单块砖），权威采掘镜像钉在 6/30——按 BlockCrackStage 公式映射为
+		// 阶段 2 的浅裂纹，与 HUD 进度条同帧呈现。裂纹夹具经 HUD 夹具装入，
+		// 场景结束后恢复（与 hud-survival-feedback 同一 defer 语义）；场景
+		// 不含随机器速度变化的读数，位姿在 Apply 钉死，收敛帧内不再 drain，
+		// 输出无需 PinVolatile 即确定。
+		//
+		// 排序约束：紧随 water-surface-slope、先于 main-menu（后者 Apply 自带
+		// resetCapturePresentation，不继承本场景的呈现状态），由
+		// TestCaptureSceneOrderAndAICompanionDeterminism 与裂纹夹具测试兜底。
+		Name:         "mining-crack-early",
+		WarmupFrames: 8,
+		Prepare:      prepareTargetBlockFeedback,
+		Apply:        applyMiningCrackCaptureState,
+		HUD: &captureHUDFixture{
+			Health: core.MaxHealth,
+			Oxygen: core.MaxOxygenTicks,
+			Hunger: core.MaxHunger,
+			Mining: hud.MiningOverlay{
+				Active: true, HasTarget: true,
+				Target:        captureMiningCrackTarget,
+				ProgressTicks: 6, RequiredTicks: 30, Harvestable: true,
+			},
+		},
+	},
+	{
+		// mining-crack-heavy 是采掘裂纹重阶段的无窗口 capture 场景：与
+		// mining-crack-early 同一世界、相机与呈现链路，仅把权威进度钉到
+		// 29/30——阶段 9 的最重裂纹，且刻意只到 required-1，不呈现已破坏
+		// 方块的裂纹。两张基线同框对比即可判读裂纹随权威进度的离散加深。
+		Name:         "mining-crack-heavy",
+		WarmupFrames: 8,
+		Prepare:      prepareTargetBlockFeedback,
+		Apply:        applyMiningCrackCaptureState,
+		HUD: &captureHUDFixture{
+			Health: core.MaxHealth,
+			Oxygen: core.MaxOxygenTicks,
+			Hunger: core.MaxHunger,
+			Mining: hud.MiningOverlay{
+				Active: true, HasTarget: true,
+				Target:        captureMiningCrackTarget,
+				ProgressTicks: 29, RequiredTicks: 30, Harvestable: true,
+			},
+		},
+	},
+	{
 		// main-menu 是主菜单相位的无窗口 capture 场景：底图由 menu-vista
 		// 全景路径产出（与交互主菜单同一渲染路径——固定种子 worldgen 区块、
 		// 专属镜像/mesher/远环带、正午固定世界时间与整数 tick 自转相机），
