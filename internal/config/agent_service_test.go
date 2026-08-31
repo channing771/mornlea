@@ -81,3 +81,15 @@ func TestAIConfigAgentTimeoutDefaultsAndBounds(t *testing.T) {
 		t.Fatal("test credential unexpectedly missing")
 	}
 }
+
+func TestAIConfigAgentServiceRejectsCaseFoldCollisionsAndWarnsNestedUnknown(t *testing.T) {
+	t.Setenv("MORNLEA_AGENT_TEST_KEY", "agent-secret")
+	for _, body := range []string{
+		`{"agentService":{"endpoint":"http://127.0.0.1:8080","ENDPOINT":"http://127.0.0.1:8081","apiKeyEnv":"MORNLEA_AGENT_TEST_KEY"},"companions":[` + aiCompanionEntry + `]}`,
+		`{"companions":[],"Companions":[` + aiCompanionEntry + `]}`,
+	} {
+		if _, err := Load(writeAIConfig(t, body)); err == nil {
+			t.Fatalf("Load accepted case-fold collision: %s", body)
+		}
+	}
+}

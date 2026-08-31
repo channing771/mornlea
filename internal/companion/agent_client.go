@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
+	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 const (
@@ -250,13 +251,15 @@ func NewAgentClient(settings AgentServiceSettings, credential string, client *ht
 	if credential == "" {
 		return nil, errors.New("companion: agent credential 为空")
 	}
-	if client == nil {
-		transport := http.DefaultTransport.(*http.Transport).Clone()
-		transport.Proxy = nil
-		transport.DisableCompression = true
-		transport.MaxResponseHeaderBytes = AgentMaxHeaderBytes
-		client = &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	}
+	// Agent transport 由 client 专有，避免外部 client 的 proxy、redirect、retry 或
+	// idle connection 生命周期穿透 loopback/credential 边界。保留参数仅为已有
+	// 构造调用的源码兼容，不能把不受控 transport 注入生产 client。
+	_ = client
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	transport.DisableCompression = true
+	transport.MaxResponseHeaderBytes = AgentMaxHeaderBytes
+	client = &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	lifetime, cancel := context.WithCancel(context.Background())
 	return &AgentClient{endpoint: trimTrailingSlash(settings.Endpoint), credential: credential, http: client, lifetime: lifetime, cancel: cancel}, nil
 }
@@ -271,6 +274,9 @@ func (c *AgentClient) Live(ctx context.Context) (LiveResponse, error) {
 func (c *AgentClient) Ready(ctx context.Context) (ReadyResponse, error) {
 	var out ReadyResponse
 	err := c.get(ctx, "/readyz", true, &out)
+	if err == errAgentNotReady {
+		return out, nil
+	}
 	return out, err
 }
 func (c *AgentClient) Acquire(ctx context.Context, in AcquireRequest) (AcquireResponse, error) {
@@ -323,7 +329,9 @@ func (c *AgentClient) CancelRun(ctx context.Context, in CancelRequest) (CancelRe
 }
 
 func (c *AgentClient) get(ctx context.Context, path string, authenticated bool, out interface{}) error {
-	request, err := http.NewRequestWithContext(c.context(ctx), http.MethodGet, c.endpoint+path, nil)
+	requestContext, stop := c.context(ctx)
+	defer stop()
+	request, err := http.NewRequestWithContext(requestContext, http.MethodGet, c.endpoint+path, nil)
 	if err != nil {
 		return fmt.Errorf("%w: construct request", ErrAgentUnavailable)
 	}
@@ -331,32 +339,47 @@ func (c *AgentClient) get(ctx context.Context, path string, authenticated bool, 
 		request.Header.Set("Authorization", "Bearer "+c.credential)
 	}
 	request.Header.Set("Accept-Encoding", "identity")
+	if requestHeaderBytes(request.Header) > AgentMaxHeaderBytes {
+		return ErrAgentUnavailable
+	}
 	return c.send(request, out)
 }
 func (c *AgentClient) post(ctx context.Context, path string, value interface{}, out interface{}) error {
+	if !validAgentRequest(value) {
+		return ErrAgentUnavailable
+	}
 	body, err := json.Marshal(value)
 	if err != nil || len(body) > AgentMaxRequestBodyBytes {
 		return fmt.Errorf("%w: invalid request", ErrAgentUnavailable)
 	}
-	request, err := http.NewRequestWithContext(c.context(ctx), http.MethodPost, c.endpoint+path, bytes.NewReader(body))
+	requestContext, stop := c.context(ctx)
+	defer stop()
+	request, err := http.NewRequestWithContext(requestContext, http.MethodPost, c.endpoint+path, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("%w: construct request", ErrAgentUnavailable)
 	}
 	request.Header.Set("Authorization", "Bearer "+c.credential)
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept-Encoding", "identity")
+	if requestHeaderBytes(request.Header) > AgentMaxHeaderBytes {
+		return ErrAgentUnavailable
+	}
 	return c.send(request, out)
 }
-func (c *AgentClient) context(ctx context.Context) context.Context {
-	merged, cancel := context.WithCancel(ctx)
-	go func() {
-		select {
-		case <-c.lifetime.Done():
-			cancel()
-		case <-merged.Done():
+
+func requestHeaderBytes(headers http.Header) int {
+	total := 0
+	for name, values := range headers {
+		for _, value := range values {
+			total += len(name) + len(value) + 4
 		}
-	}()
-	return merged
+	}
+	return total
+}
+func (c *AgentClient) context(ctx context.Context) (context.Context, func()) {
+	merged, cancel := context.WithCancel(ctx)
+	stop := context.AfterFunc(c.lifetime, cancel)
+	return merged, func() { stop(); cancel() }
 }
 func (c *AgentClient) send(request *http.Request, out interface{}) error {
 	response, err := c.http.Do(request)
@@ -379,6 +402,16 @@ func (c *AgentClient) send(request *http.Request, out interface{}) error {
 	body, err := io.ReadAll(io.LimitReader(response.Body, AgentMaxResponseBodyBytes+1))
 	if err != nil || len(body) > AgentMaxResponseBodyBytes {
 		return ErrAgentUnavailable
+	}
+	if response.StatusCode == http.StatusServiceUnavailable && request.URL.Path == "/readyz" {
+		if err := strictDecodeJSON(body, out); err != nil {
+			return ErrAgentUnavailable
+		}
+		ready, ok := out.(*ReadyResponse)
+		if !ok || ready.Status != "not_ready" {
+			return ErrAgentUnavailable
+		}
+		return errAgentNotReady
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return decodeAgentError(body)
@@ -414,6 +447,9 @@ func stableAgentError(code string) bool {
 }
 
 func strictDecodeJSON(body []byte, out interface{}) error {
+	if !utf8.Valid(body) || invalidJSONSurrogate(body) || hasDuplicateJSONKeys(body) {
+		return errors.New("invalid strict JSON")
+	}
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(out); err != nil {
@@ -428,4 +464,124 @@ func strictDecodeJSON(body []byte, out interface{}) error {
 	}
 	return nil
 }
-func agentURL(endpoint string) (*url.URL, error) { return url.Parse(endpoint) }
+
+var errAgentNotReady = errors.New("companion: agent not ready")
+
+func validAgentRequest(value interface{}) bool {
+	validID := func(value string) bool {
+		_, err := ParseID(value)
+		return err == nil && len(value) == 36 && value == strings.ToLower(value)
+	}
+	validBase := func(version, requestID, clientID, namespace string) bool {
+		return version == AgentContractVersion && validID(requestID) && validID(clientID) && validID(namespace)
+	}
+	switch request := value.(type) {
+	case AcquireRequest:
+		return validBase(request.ContractVersion, request.RequestID, request.ClientInstanceID, request.NamespaceID)
+	case LeaseRequest:
+		return validBase(request.ContractVersion, request.RequestID, request.ClientInstanceID, request.NamespaceID) && validID(request.LeaseID)
+	case PlanRequest:
+		return validBase(request.ContractVersion, request.RequestID, request.ClientInstanceID, request.NamespaceID) && validID(request.LeaseID) && validID(request.RunID) && validID(request.CompanionID) && validID(request.SnapshotID) && request.Generation > 0 && request.DeadlineUnixMS > 0 && len(request.Instruction) <= 1024
+	case AgentDialogueRequest:
+		return validBase(request.ContractVersion, request.RequestID, request.ClientInstanceID, request.NamespaceID) && validID(request.LeaseID) && validID(request.RunID) && validID(request.CompanionID) && request.Generation > 0 && request.MemoryEpoch > 0 && request.DeadlineUnixMS > 0 && len(request.Persona) <= 4096
+	case MemoryCommitRequest:
+		return validBase(request.ContractVersion, request.RequestID, request.ClientInstanceID, request.NamespaceID) && validID(request.LeaseID) && validID(request.CompanionID) && validID(request.OperationID) && request.MemoryEpoch > 0 && len(request.Summary) <= 2048
+	case MemoryDeleteRequest:
+		return validBase(request.ContractVersion, request.RequestID, request.ClientInstanceID, request.NamespaceID) && validID(request.LeaseID) && validID(request.CompanionID) && validID(request.TombstoneOperationID) && request.OldMemoryEpoch > 0 && request.NewMemoryEpoch > 0
+	case CancelRequest:
+		return validBase(request.ContractVersion, request.RequestID, request.ClientInstanceID, request.NamespaceID) && validID(request.LeaseID) && validID(request.RunID)
+	case MemoryReconcileRequest:
+		return validBase(request.ContractVersion, request.RequestID, request.ClientInstanceID, request.NamespaceID) && validID(request.LeaseID) && validID(request.CompanionID) && request.MemoryEpoch > 0
+	default:
+		return false
+	}
+}
+
+func invalidJSONSurrogate(body []byte) bool {
+	for index := 0; index+5 < len(body); index++ {
+		if body[index] != '\\' || body[index+1] != 'u' {
+			continue
+		}
+		value, ok := hex4(body[index+2 : index+6])
+		if !ok {
+			return true
+		}
+		if value >= 0xD800 && value <= 0xDBFF {
+			if index+11 >= len(body) || body[index+6] != '\\' || body[index+7] != 'u' {
+				return true
+			}
+			low, ok := hex4(body[index+8 : index+12])
+			if !ok || low < 0xDC00 || low > 0xDFFF {
+				return true
+			}
+			index += 11
+		} else if value >= 0xDC00 && value <= 0xDFFF {
+			return true
+		}
+	}
+	return false
+}
+
+func hex4(value []byte) (int, bool) {
+	result := 0
+	for _, digit := range value {
+		result <<= 4
+		switch {
+		case digit >= '0' && digit <= '9':
+			result += int(digit - '0')
+		case digit >= 'a' && digit <= 'f':
+			result += int(digit-'a') + 10
+		case digit >= 'A' && digit <= 'F':
+			result += int(digit-'A') + 10
+		default:
+			return 0, false
+		}
+	}
+	return result, true
+}
+
+func hasDuplicateJSONKeys(body []byte) bool {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	return duplicateJSONValue(decoder)
+}
+
+func duplicateJSONValue(decoder *json.Decoder) bool {
+	token, err := decoder.Token()
+	if err != nil {
+		return true
+	}
+	if delimiter, ok := token.(json.Delim); ok {
+		switch delimiter {
+		case '{':
+			keys := make(map[string]struct{})
+			for decoder.More() {
+				key, err := decoder.Token()
+				if err != nil {
+					return true
+				}
+				name, ok := key.(string)
+				if !ok {
+					return true
+				}
+				if _, exists := keys[name]; exists {
+					return true
+				}
+				keys[name] = struct{}{}
+				if duplicateJSONValue(decoder) {
+					return true
+				}
+			}
+			_, err = decoder.Token()
+			return err != nil
+		case '[':
+			for decoder.More() {
+				if duplicateJSONValue(decoder) {
+					return true
+				}
+			}
+			_, err = decoder.Token()
+			return err != nil
+		}
+	}
+	return false
+}

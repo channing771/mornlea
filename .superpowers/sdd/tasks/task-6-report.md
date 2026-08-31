@@ -50,3 +50,29 @@
 独立核对发现早期 focused client tests 遗留进程。以 `go test ./internal/companion -run TestAgentClientRejectsCorrelationMismatchAndCancellation -count=1 -timeout=3s -v` 重现：测试超时，堆栈显示 `httptest.Server.Close` 等待 handler，而 handler 无界等待 `r.Context().Done()`。客户端已向调用方返回 `context.Canceled`，但该 server-side context 在 keep-alive connection 上不保证在测试清理前结束；这是 fixture lifecycle leak，不是 Agent client 生命周期泄漏。
 
 RED 后恢复 fixture 的明确 `release` channel：handler 可由请求 context 或测试完成后的 release 退出，避免 `Server.Close` 无界等待。遗留 PID 已 SIGQUIT 取证后 TERM 清理；随后 focused 命令连续运行两遍均自行退出。
+
+## Round 1 review repair
+
+### RED
+
+`go test ./internal/companion -run 'AgentClientRound1' -count=1` 最初失败：duplicate `status` 被 `encoding/json` 覆盖后接受；`contract_version=v2` 的 Acquire 已到达 `httptest` handler；`/readyz` 503 `not_ready` 被当作 unavailable。
+
+`go test ./internal/config -run 'AIConfigAgentServiceRejectsCaseFold' -count=1` 最初失败：`endpoint` 与 `ENDPOINT` 同时出现时 `map` 遍历顺序决定生效值。
+
+### GREEN
+
+- `strictDecodeJSON` 先拒绝非法 UTF-8、孤立 surrogate 与任意 object depth 的 duplicate key，再执行 strict typed decode。
+- 所有已暴露的 route request 在 marshal 前检查 v1、canonical UUID 与 route identity/range；不合法 request 返回 `ErrAgentUnavailable` 且不触网。
+- `/readyz` 的 manifest 503 `not_ready` 作为 typed 成功值处理；每次 request 的 lifetime merge 使用可停止 `context.AfterFunc`，避免正常调用残留 goroutine。
+- Agent transport 由 client 专有创建，外部 `http.Client` 不能带入 proxy/redirect/compression/header 策略；发送前也检查 header 字节边界。
+- 配置 parser 检测大小写 collision，`agentService` 逐字段解析并对 nested unknown 精确告警。
+
+### 验证
+
+`go test ./internal/companion -run 'Agent(Client|Contract)' -count=1 -timeout=30s`：PASS。
+
+`go test ./internal/config -run 'Agent|AIConfig' -count=1`：PASS。
+
+### Concerns
+
+复核仍需要继续完成全部 HTTP schema 的 nested DTO 替换与每条 manifest route 的 status/error/correlation matrix；本次变更只处理了本轮新增 RED 覆盖的 transport/config 问题。

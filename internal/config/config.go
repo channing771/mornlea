@@ -628,22 +628,19 @@ func knownAIField(key string) bool {
 	return false
 }
 
-// applyAI 解析 ai 分组：M5A 的 companions[].id/name、M5B 的四个模型运行时
-// 字段（endpoint/model/apiKeyEnv/taskTimeoutMinutes）与 M5D 的可选
-// companions[].persona（均大小写不敏感）。
-//
-// 模型字段只要出现就立即校验语法（endpoint 形态、超时区间），错误带
-// ai.endpoint 等精确路径，让配置问题在读文件时暴露而不是等到启动；而
-// endpoint/model/apiKeyEnv 的完整性（非空伙伴时必须齐全、https 必须配
-// apiKeyEnv）在确认伙伴列表非空后才检查——AI 关闭时孤立的模型字段只做语法
-// 校验、不启用 AI，也不要求任何模型字段。密钥值永远不进配置文件，这里只
-// 处理环境变量名。
+// applyAI 解析 ai 分组：伙伴、Agent service 和任务超时均按大小写不敏感键
+// 读取，但大小写冲突直接拒绝以避免 map 遍历顺序改变生效配置。已退役 direct
+// model 字段只用于迁移诊断：AI 关闭时告警忽略，伙伴启用时拒绝启动。密钥值
+// 永远不进配置文件；启用时只验证 agent service 的环境变量名指向非空值。
 //
 // persona 只做 JSON 形状解析，内容校验与外部文件优先级在 resolvePersonas
 // 中按宽松纪律完成（告警降级，不阻止启动）。
 func applyAI(cfg *Config, raw json.RawMessage, configPath string) error {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil {
+		return err
+	}
+	if err := rejectCaseFoldCollisions(fields, "ai"); err != nil {
 		return err
 	}
 	for key := range fields {
@@ -659,8 +656,8 @@ func applyAI(cfg *Config, raw json.RawMessage, configPath string) error {
 	}
 	var settings companion.AgentServiceSettings
 	if value, exists := lookupCaseInsensitive(fields, "agentService"); exists {
-		if err := json.Unmarshal(value, &settings); err != nil {
-			return fmt.Errorf("解析 ai.agentService: %w", err)
+		if err := applyAgentService(&settings, value); err != nil {
+			return err
 		}
 	}
 	var timeout int
@@ -696,6 +693,9 @@ func applyAI(cfg *Config, raw json.RawMessage, configPath string) error {
 		var definitionFields map[string]json.RawMessage
 		if err := json.Unmarshal(entry, &definitionFields); err != nil {
 			return fmt.Errorf("解析 ai.companions[%d]: %w", index, err)
+		}
+		if err := rejectCaseFoldCollisions(definitionFields, fmt.Sprintf("ai.companions[%d]", index)); err != nil {
+			return err
 		}
 		for key := range definitionFields {
 			if !strings.EqualFold(key, "id") && !strings.EqualFold(key, "name") &&
@@ -738,6 +738,44 @@ func applyAI(cfg *Config, raw json.RawMessage, configPath string) error {
 	}
 	resolvePersonas(configPath, definitions)
 	cfg.AI = &AI{AgentService: settings, TaskTimeoutMinutes: timeout, Companions: definitions}
+	return nil
+}
+
+func applyAgentService(settings *companion.AgentServiceSettings, raw json.RawMessage) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return fmt.Errorf("解析 ai.agentService: %w", err)
+	}
+	if err := rejectCaseFoldCollisions(fields, "ai.agentService"); err != nil {
+		return err
+	}
+	for key := range fields {
+		if !strings.EqualFold(key, "endpoint") && !strings.EqualFold(key, "apiKeyEnv") {
+			slog.Warn("配置项未知字段已忽略", "field", "ai.agentService."+key)
+		}
+	}
+	if value, ok := lookupCaseInsensitive(fields, "endpoint"); ok {
+		if err := json.Unmarshal(value, &settings.Endpoint); err != nil {
+			return fmt.Errorf("解析 ai.agentService.endpoint: %w", err)
+		}
+	}
+	if value, ok := lookupCaseInsensitive(fields, "apiKeyEnv"); ok {
+		if err := json.Unmarshal(value, &settings.APIKeyEnv); err != nil {
+			return fmt.Errorf("解析 ai.agentService.apiKeyEnv: %w", err)
+		}
+	}
+	return nil
+}
+
+func rejectCaseFoldCollisions(fields map[string]json.RawMessage, path string) error {
+	seen := make(map[string]string, len(fields))
+	for key := range fields {
+		normalized := strings.ToLower(key)
+		if existing, exists := seen[normalized]; exists {
+			return fmt.Errorf("%s 字段大小写冲突：%s 与 %s", path, existing, key)
+		}
+		seen[normalized] = key
+	}
 	return nil
 }
 
