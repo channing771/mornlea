@@ -1,22 +1,19 @@
-// D6 触发节点接线、CompanionSpeech 广播与摘要生命周期的测试：进入 Running、
+// 触发节点接线、CompanionSpeech 广播与 memory 生命周期的测试：进入 Running、
 // 选中步骤完成与四种终态的节点评估、每任务预算、follow 恰好三节点（开始/
 // 首次到达/终止，长跟随不产生 progress）、台词广播给全部在线玩家且 EventID
-// 严格递增、终态后到达的过时结果不广播、终态裸摘要在 Task 8 staging 仅保留
-// 于 transient manager 状态且不伪造 v5 mirror，
-// 以及 Memory/TCP 同序同种类事件（含 Speech）。全部使用 httptest 假模型，
+// 严格递增、终态后到达的过时结果不广播，以及 Memory/TCP 同序同种类事件
+// （含 Speech）。全部使用 httptest 假模型，
 // 绝不打开前台窗口或访问真实模型服务。
 package server
 
 import (
 	"context"
-	"reflect"
 	"testing"
 	"time"
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/server/persistence"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -608,48 +605,6 @@ func TestCompanionDialogueSummaryLifecycle(t *testing.T) {
 	records := secondDialogue.snapshotDialogueRequests()
 	if len(records) == 0 || records[0].Summary != "" {
 		t.Fatalf("重启后的台词请求摘要=%+v，想要 staging 空摘要", records)
-	}
-}
-
-// TestCompanionDialogueSummaryOnlyQueuePersistence 验证裸摘要不会形成 v5 queue、
-// 不标记持久化 dirty，也不推进 aggregate revision。
-func TestCompanionDialogueSummaryOnlyQueuePersistence(t *testing.T) {
-	body := companionDialogueWiringBody(1, 10)
-	summaries := []persistence.CompanionSummary{{ID: body.ID, Summary: "最近完成了任务"}}
-
-	queues, dropped := persistence.CompanionQueuesForSaveForTest(nil, []companion.Body{body}, summaries)
-	if dropped || len(queues) != 0 {
-		t.Fatalf("summary-only 载荷=%+v dropped=%v，想要忽略 transient 摘要", queues, dropped)
-	}
-	if queues, dropped := persistence.CompanionQueuesForSaveForTest(nil, nil, summaries); dropped || len(queues) != 0 {
-		t.Fatalf("无记录 transient 摘要 queues/dropped=%+v/%v", queues, dropped)
-	}
-
-	// 持久化观察：摘要变化不触发保存，既有 v5 archive 保持不变。
-	store := storage.NewMemory(storage.Metadata{FormatVersion: 3, Seed: 42})
-	seed := fixtureServerCompanionV5Save(storage.CompanionSave{Revision: 1, Records: []companion.Body{body}})
-	if err := store.SaveCompanions(context.Background(), seed); err != nil {
-		t.Fatal(err)
-	}
-	loadedSeed, err := store.LoadCompanions(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	compStore := persistence.NewCompanions(store, loadedSeed, persistence.Options{AutosaveTicks: 10, RetryBaseTicks: 2, RetryMaxTicks: 8})
-	t.Cleanup(compStore.Close)
-	compStore.Observe([]companion.Body{body}, nil, summaries)
-	if err := compStore.Poll(10); err != nil {
-		t.Fatal(err)
-	}
-	if err := compStore.Flush(context.Background()); err != nil {
-		t.Fatalf("Flush: %v", err)
-	}
-	loaded, err := store.LoadCompanions(context.Background())
-	if err != nil {
-		t.Fatalf("LoadCompanions: %v", err)
-	}
-	if loaded.Revision != 1 || len(loaded.Queues) != 0 || !reflect.DeepEqual(loaded.Lifecycles, loadedSeed.Lifecycles) {
-		t.Fatalf("transient 摘要改写了 v5 archive：%+v", loaded)
 	}
 }
 

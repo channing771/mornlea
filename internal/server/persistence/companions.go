@@ -133,8 +133,8 @@ func (p *Companions) ReplaceActiveMemory(
 	if p.closed {
 		return context.Canceled
 	}
-	if p.persisted == math.MaxUint64 {
-		return fmt.Errorf("%w: companion aggregate revision overflow", storage.ErrCorrupt)
+	if _, err := p.nextAggregateRevisionLocked(); err != nil {
+		return err
 	}
 	if epoch == 0 || nextRevision == 0 || nextRevision <= expectedRevision ||
 		!operationID.Valid() || len(summary) > companion.MaxDialogueSummaryBytes ||
@@ -166,12 +166,11 @@ func (p *Companions) ReplaceActiveMemory(
 	return fmt.Errorf("companion memory lifecycle not found")
 }
 
-// Observe 合并权威身体与任务域观察输入。旧 direct Dialogue 的裸摘要只可
-// transient 使用，不能推导或改写 v5 memory mirror，因此不参与 dirty 判定。
+// Observe 合并权威身体与任务域观察输入。Agent memory 只经 lifecycle CAS
+// 更新，任务观察不能推导或改写 mirror。
 func (p *Companions) Observe(
 	active []companion.Body,
 	tasks []companion.TaskQueueState,
-	_ []CompanionSummary,
 ) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -471,24 +470,27 @@ func (p *Companions) applyCompletionLocked(
 	// 无法落盘（编码要求队列关联 active 记录），保持 dirty 让激活后的首次
 	// 保存补上完整任务载荷。
 	currentQueues, droppedPending := companionQueuesForSave(
-		p.tasks, activeCompanionBodies(p.records, p.lifecycles), nil,
+		p.tasks, activeCompanionBodies(p.records, p.lifecycles),
 	)
 	p.dirty = !slices.Equal(p.records, completion.Job.Save.Records) ||
+		p.namespace != completion.Job.Save.AgentNamespaceID ||
+		!slices.Equal(p.lifecycles, completion.Job.Save.Lifecycles) ||
 		droppedPending ||
 		!equalStoredQueues(currentQueues, completion.Job.Save.Queues)
 	return nil
 }
 
 func (p *Companions) latestJobLocked() (companionSaveJob, error) {
-	if p.persisted == math.MaxUint64 {
-		return companionSaveJob{}, fmt.Errorf("%w: companion aggregate revision overflow", storage.ErrCorrupt)
+	nextRevision, err := p.nextAggregateRevisionLocked()
+	if err != nil {
+		return companionSaveJob{}, err
 	}
 	queues, _ := companionQueuesForSave(
-		p.tasks, activeCompanionBodies(p.records, p.lifecycles), nil,
+		p.tasks, activeCompanionBodies(p.records, p.lifecycles),
 	)
 	return companionSaveJob{
 		Save: storage.CompanionSave{
-			Revision:         p.persisted + 1,
+			Revision:         nextRevision,
 			AgentNamespaceID: p.namespace,
 			Records:          slices.Clone(p.records),
 			Lifecycles:       slices.Clone(p.lifecycles),
@@ -496,6 +498,20 @@ func (p *Companions) latestJobLocked() (companionSaveJob, error) {
 		},
 		Attempt: 1,
 	}, nil
+}
+
+func (p *Companions) nextAggregateRevisionLocked() (uint64, error) {
+	highest := p.persisted
+	if p.inFlight && p.inFlightJob.Save.Revision > highest {
+		highest = p.inFlightJob.Save.Revision
+	}
+	if p.retry != nil && p.retry.Save.Revision > highest {
+		highest = p.retry.Save.Revision
+	}
+	if highest == math.MaxUint64 {
+		return 0, fmt.Errorf("%w: companion aggregate revision overflow", storage.ErrCorrupt)
+	}
+	return highest + 1, nil
 }
 
 func cloneCompanionSaveJob(job companionSaveJob) companionSaveJob {
@@ -531,12 +547,10 @@ func cloneStoredQueues(queues []storage.StoredCompanionQueue) []storage.StoredCo
 // deadline；终态快照（防御路径，正常快照不会出现）不落当前任务。records
 // 是当前已知身体记录：队列必须关联记录才能编码，身体尚未激活（出生扫描
 // 在途）的伙伴的队列被丢弃并经 dropped 报告——调用方保持 dirty，激活后的
-// 首次保存补上完整载荷。旧 direct Dialogue 摘要不进入 v5 queue，也不能
-// 改写 lifecycle mirror。返回值深拷贝自输入，与调用方切片完全独立。
+// 首次保存补上完整载荷。返回值深拷贝自输入，与调用方切片完全独立。
 func companionQueuesForSave(
 	states []companion.TaskQueueState,
 	records []companion.Body,
-	_ []CompanionSummary,
 ) (queues []storage.StoredCompanionQueue, dropped bool) {
 	known := make(map[companion.ID]struct{}, len(records))
 	for _, body := range records {
@@ -652,11 +666,6 @@ func sortCompanionBodies(records []companion.Body) {
 	slices.SortFunc(records, func(left, right companion.Body) int {
 		return bytes.Compare(left.ID[:], right.ID[:])
 	})
-}
-
-// CompanionQueuesForSaveForTest 暴露保存侧归一逻辑供跨包白盒测试复用。
-func CompanionQueuesForSaveForTest(states []companion.TaskQueueState, records []companion.Body, summaries []CompanionSummary) ([]storage.StoredCompanionQueue, bool) {
-	return companionQueuesForSave(states, records, summaries)
 }
 
 // RecordsAndRevision 返回当前记录与持久化版本的深拷贝快照，供根包集成测试观测。

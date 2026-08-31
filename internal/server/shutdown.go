@@ -73,7 +73,6 @@ func (server *Server) Shutdown(ctx context.Context) error {
 			server.companions.Observe(
 				server.engine.CompanionBodies(),
 				server.companionManagerTaskStates(),
-				nil,
 			)
 		}
 		if server.hostiles != nil {
@@ -110,12 +109,17 @@ func (server *Server) Shutdown(ctx context.Context) error {
 		return server.persistenceErrorWithContext(freezeErr, ctx)
 	}
 	if server.companionManager != nil {
-		server.companionManager.close()
-		server.stepMu.Lock()
-		server.companionManager.applyDialogueOutcomes()
-		server.companionManager.applyMemoryCommitOutcomes()
-		server.companionManager.applyMemoryReconcileOutcomes()
-		server.stepMu.Unlock()
+		for {
+			if err := waitForHostWorkers(ctx, &server.companionManager.waitGroup); err != nil {
+				return server.world.ShutdownContextError(err, nil)
+			}
+			server.stepMu.Lock()
+			drained := server.companionManager.drainShutdownOutcomes()
+			server.stepMu.Unlock()
+			if !drained {
+				break
+			}
+		}
 	}
 	if server.hostileManager != nil {
 		server.hostileManager.close()
@@ -148,9 +152,10 @@ func (server *Server) Shutdown(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return server.world.ShutdownContextError(err, nil)
 	}
-	var externalCloseErr error
 	if server.beforeStoreClose != nil {
-		externalCloseErr = server.beforeStoreClose(ctx)
+		if err := server.beforeStoreClose(ctx); err != nil {
+			return err
+		}
 	}
 	if server.storePhase == storeShutdownNeedsClose {
 		if err := server.store.Close(); err != nil {
@@ -170,7 +175,7 @@ func (server *Server) Shutdown(ctx context.Context) error {
 	server.lifecycle = serverClosed
 	close(server.closedDone)
 	server.stepMu.Unlock()
-	return externalCloseErr
+	return nil
 }
 
 func (server *Server) persistenceErrorWithContext(err error, ctx context.Context) error {

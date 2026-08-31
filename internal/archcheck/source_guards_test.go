@@ -338,6 +338,7 @@ func TestCompanionPlannerProductionUsesAgentServiceOnly(t *testing.T) {
 	for _, forbidden := range []string{
 		"companion.NewPlannerClient(",
 		"companion.NewDialogueClient(",
+		"CompanionSummary",
 		"slot.summary",
 		"companionManagerSummaries(",
 	} {

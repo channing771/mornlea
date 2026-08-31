@@ -221,8 +221,13 @@ type companionManager struct {
 	memoryCommitResults      chan memoryCommitOutcome
 	memoryReconcileResults   chan memoryReconcileOutcome
 	memoryReconcileFence     uint64
+	memoryReconcileTarget    uint64
 	memoryReconcileInFlight  bool
 	memoryReconcileRequested bool
+	memoryReconcileRequestID map[companion.ID]struct{}
+	memoryReconcilePending   map[companion.ID]struct{}
+	memoryReconcileRetryWait uint8
+	memoryReconcileAttempts  uint8
 	// dialogue 是台词模型依赖面（D5 机制；触发节点接线属 D6）。nil 不会出现
 	// 于生产构造（server.go 与 Planner 同源构造），防御缺省下 requestDialogue
 	// 不应被调用——D6 接线前没有任何生产调用方。
@@ -254,24 +259,26 @@ func newCompanionManager(
 ) *companionManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	manager := &companionManager{
-		engine:                 engine,
-		planner:                planner,
-		dialogue:               dialogue,
-		companions:             companions,
-		timeoutMinutes:         config.TaskTimeoutMinutes,
-		table:                  pathfind.NewPathBlockTable(productionCompanionPassableBlocks()),
-		slots:                  make(map[companion.ID]*companionTaskSlot, len(config.Companions)),
-		orderedIDs:             make([]companion.ID, 0, len(config.Companions)),
-		bodies:                 make(map[companion.ID]companion.Body, companion.MaxActive),
-		mining:                 make(map[companion.ID]contract.MiningUpdate, companion.MaxActive),
-		semaphore:              make(chan struct{}, companion.MaxActive),
-		plannerResults:         make(chan plannerOutcome, companion.MaxActive),
-		pathResults:            make(chan pathOutcome, companion.MaxActive),
-		dialogueResults:        make(chan dialogueOutcome, companion.MaxActive),
-		memoryCommitResults:    make(chan memoryCommitOutcome, companion.MaxActive),
-		memoryReconcileResults: make(chan memoryReconcileOutcome, 1),
-		ctx:                    ctx,
-		cancel:                 cancel,
+		engine:                   engine,
+		planner:                  planner,
+		dialogue:                 dialogue,
+		companions:               companions,
+		timeoutMinutes:           config.TaskTimeoutMinutes,
+		table:                    pathfind.NewPathBlockTable(productionCompanionPassableBlocks()),
+		slots:                    make(map[companion.ID]*companionTaskSlot, len(config.Companions)),
+		orderedIDs:               make([]companion.ID, 0, len(config.Companions)),
+		bodies:                   make(map[companion.ID]companion.Body, companion.MaxActive),
+		mining:                   make(map[companion.ID]contract.MiningUpdate, companion.MaxActive),
+		semaphore:                make(chan struct{}, companion.MaxActive),
+		plannerResults:           make(chan plannerOutcome, companion.MaxActive),
+		pathResults:              make(chan pathOutcome, companion.MaxActive),
+		dialogueResults:          make(chan dialogueOutcome, companion.MaxActive),
+		memoryCommitResults:      make(chan memoryCommitOutcome, companion.MaxActive),
+		memoryReconcileResults:   make(chan memoryReconcileOutcome, 1),
+		memoryReconcileRequestID: make(map[companion.ID]struct{}, companion.MaxActive),
+		memoryReconcilePending:   make(map[companion.ID]struct{}, companion.MaxActive),
+		ctx:                      ctx,
+		cancel:                   cancel,
 	}
 	for _, definition := range config.Companions {
 		_, needsReconcile := dialogue.(companionMemoryReconciler)

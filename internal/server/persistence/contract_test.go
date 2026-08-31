@@ -40,7 +40,7 @@ type playersLifecycle interface {
 
 type companionsLifecycle interface {
 	Restore() ([]companion.Body, []storage.StoredCompanionQueue)
-	Observe([]companion.Body, []companion.TaskQueueState, []persistence.CompanionSummary)
+	Observe([]companion.Body, []companion.TaskQueueState)
 	Poll(uint64) error
 	Flush(context.Context) error
 	Close()
@@ -69,8 +69,6 @@ var (
 		MetadataInFlight:  false,
 		MetadataLastError: "",
 	}
-	_ = persistence.CompanionSummary{ID: companion.ID{}, Summary: ""}
-
 	_ int       = persistence.Status{}.DirtyChunks
 	_ int64     = persistence.Status{}.EstimatedBytes
 	_ int       = persistence.Status{}.InFlightChunks

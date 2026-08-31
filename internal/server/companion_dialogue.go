@@ -32,12 +32,13 @@ type companionMemoryReconciler interface {
 }
 
 type companionDialogueReservation struct {
-	operationID  string
-	memoryEpoch  uint64
-	baseRevision uint64
-	summary      string
-	line         string
-	issuer       companionTaskIssuer
+	operationID    string
+	memoryEpoch    uint64
+	baseRevision   uint64
+	summary        string
+	line           string
+	issuer         companionTaskIssuer
+	commitInFlight bool
 }
 
 // dialogueOutcome 是一次台词请求的结果，携带伙伴 ID、任务世代、节点身份、
@@ -66,9 +67,14 @@ type memoryCommitOutcome struct {
 }
 
 type memoryReconcileOutcome struct {
-	fence      uint64
-	lifecycles []storage.StoredCompanionLifecycle
-	err        error
+	fence   uint64
+	results []memoryReconcileCompanionOutcome
+}
+
+type memoryReconcileCompanionOutcome struct {
+	id        companion.ID
+	lifecycle storage.StoredCompanionLifecycle
+	err       error
 }
 
 // requestDialogue 是台词派发在 tick 边界的唯一入口（调用方必须持有 stepMu）。
@@ -374,10 +380,7 @@ func (m *companionManager) applyDialogueOutcome(outcome dialogueOutcome) {
 			baseRevision: proposal.BaseRevision, summary: proposal.Summary,
 			line: outcome.result.Line, issuer: outcome.issuer,
 		}
-		if m.dialogue != nil {
-			m.waitGroup.Add(1)
-			go m.memoryCommitWorker(outcome.id, *slot.dialogueReservation)
-		}
+		m.dispatchMemoryCommit(outcome.id)
 		return
 	}
 	if outcome.result.Proposal != nil {
@@ -421,8 +424,23 @@ func (m *companionManager) memoryCommitWorker(
 	}
 	select {
 	case m.memoryCommitResults <- outcome:
-	case <-m.ctx.Done():
+	default:
+		// 每伙伴最多一条 accepted reservation，结果通道容量覆盖全部伙伴；
+		// 关服取消后仍须发布已经结束的 commit，供静止点 drain 决定是否更新
+		// mirror。default 只防御不变量被破坏时阻塞 worker。
 	}
+}
+
+func (m *companionManager) dispatchMemoryCommit(id companion.ID) {
+	slot := m.slots[id]
+	if slot == nil || slot.dialogueReservation == nil ||
+		slot.dialogueReservation.commitInFlight || m.dialogue == nil {
+		return
+	}
+	slot.dialogueReservation.commitInFlight = true
+	reservation := *slot.dialogueReservation
+	m.waitGroup.Add(1)
+	go m.memoryCommitWorker(id, reservation)
 }
 
 func (m *companionManager) applyMemoryCommitOutcomes() {
@@ -441,8 +459,9 @@ func (m *companionManager) applyMemoryCommitOutcome(outcome memoryCommitOutcome)
 	if slot == nil || slot.dialogueReservation == nil {
 		return
 	}
+	slot.dialogueReservation.commitInFlight = false
 	if outcome.err != nil {
-		m.memoryReconcileRequested = true
+		m.requestMemoryReconcile(outcome.id)
 		return
 	}
 	reservation := slot.dialogueReservation
@@ -460,15 +479,21 @@ func (m *companionManager) applyMemoryCommitOutcome(outcome memoryCommitOutcome)
 		outcome.id, reservation.memoryEpoch, reservation.baseRevision,
 		outcome.committedRevision, storage.CompanionIdentity(operation), reservation.summary,
 	); err != nil {
+		m.requestMemoryReconcile(outcome.id)
 		return
 	}
 	m.applyDialogueEffect(outcome.id, reservation.issuer, reservation.line)
 	slot.dialogueReservation = nil
 }
 
+func (m *companionManager) requestMemoryReconcile(id companion.ID) {
+	m.memoryReconcileRequested = true
+	m.memoryReconcileRequestID[id] = struct{}{}
+}
+
 func (m *companionManager) dispatchMemoryReconcile() {
 	reconciler, ok := m.dialogue.(companionMemoryReconciler)
-	if !ok || m.memoryReconcileInFlight {
+	if !ok {
 		return
 	}
 	fence, current := reconciler.currentMemoryFence()
@@ -478,17 +503,52 @@ func (m *companionManager) dispatchMemoryReconcile() {
 		}
 		return
 	}
-	if fence == m.memoryReconcileFence && !m.memoryReconcileRequested {
+	if fence != m.memoryReconcileTarget {
+		m.memoryReconcileTarget = fence
+		clear(m.memoryReconcilePending)
+		for id, slot := range m.slots {
+			m.memoryReconcilePending[id] = struct{}{}
+			slot.memoryReady = false
+		}
+		m.memoryReconcileRetryWait = 0
+		m.memoryReconcileAttempts = 0
+		clear(m.memoryReconcileRequestID)
+		m.memoryReconcileRequested = false
+	}
+	if m.memoryReconcileRequested {
+		if len(m.memoryReconcileRequestID) == 0 {
+			for id := range m.slots {
+				m.memoryReconcilePending[id] = struct{}{}
+			}
+		} else {
+			for id := range m.memoryReconcileRequestID {
+				m.memoryReconcilePending[id] = struct{}{}
+			}
+		}
+		m.memoryReconcileRequested = false
+		clear(m.memoryReconcileRequestID)
+	}
+	if m.memoryReconcileInFlight {
 		return
 	}
-	m.memoryReconcileRequested = false
-	m.memoryReconcileInFlight = true
-	for _, slot := range m.slots {
-		slot.memoryReady = false
+	if len(m.memoryReconcilePending) == 0 {
+		m.memoryReconcileFence = fence
+		return
 	}
+	if m.memoryReconcileRetryWait != 0 {
+		m.memoryReconcileRetryWait--
+		return
+	}
+	m.memoryReconcileInFlight = true
 	lifecycles := m.companions.MemoryLifecycles()
+	pending := lifecycles[:0]
+	for _, lifecycle := range lifecycles {
+		if _, ok := m.memoryReconcilePending[lifecycle.ID]; ok {
+			pending = append(pending, lifecycle)
+		}
+	}
 	m.waitGroup.Add(1)
-	go m.memoryReconcileWorker(reconciler, fence, lifecycles)
+	go m.memoryReconcileWorker(reconciler, fence, pending)
 }
 
 func (m *companionManager) memoryReconcileWorker(
@@ -497,20 +557,15 @@ func (m *companionManager) memoryReconcileWorker(
 	lifecycles []storage.StoredCompanionLifecycle,
 ) {
 	defer m.waitGroup.Done()
-	results := make([]storage.StoredCompanionLifecycle, 0, len(lifecycles))
+	results := make([]memoryReconcileCompanionOutcome, 0, len(lifecycles))
 	for _, lifecycle := range lifecycles {
 		result, err := reconciler.ReconcileMemory(m.ctx, lifecycle)
-		if err != nil {
-			select {
-			case m.memoryReconcileResults <- memoryReconcileOutcome{fence: fence, err: err}:
-			case <-m.ctx.Done():
-			}
-			return
-		}
-		results = append(results, result.Lifecycle)
+		results = append(results, memoryReconcileCompanionOutcome{
+			id: lifecycle.ID, lifecycle: result.Lifecycle, err: err,
+		})
 	}
 	select {
-	case m.memoryReconcileResults <- memoryReconcileOutcome{fence: fence, lifecycles: results}:
+	case m.memoryReconcileResults <- memoryReconcileOutcome{fence: fence, results: results}:
 	case <-m.ctx.Done():
 	}
 }
@@ -519,21 +574,85 @@ func (m *companionManager) applyMemoryReconcileOutcomes() {
 	for {
 		select {
 		case outcome := <-m.memoryReconcileResults:
-			m.memoryReconcileInFlight = false
-			m.memoryReconcileFence = outcome.fence
-			if outcome.err == nil {
-				m.applyMemoryReconcileOutcome(outcome)
-			}
+			m.applyMemoryReconcileBatch(outcome)
 		default:
 			return
 		}
 	}
 }
 
+func (m *companionManager) applyMemoryReconcileBatch(outcome memoryReconcileOutcome) {
+	m.memoryReconcileInFlight = false
+	reconciler, ok := m.dialogue.(companionMemoryReconciler)
+	if !ok {
+		return
+	}
+	fence, current := reconciler.currentMemoryFence()
+	if !current || fence != outcome.fence || m.memoryReconcileTarget != outcome.fence {
+		m.memoryReconcileTarget = 0
+		clear(m.memoryReconcilePending)
+		clear(m.memoryReconcileRequestID)
+		m.memoryReconcileRequested = true
+		for _, slot := range m.slots {
+			slot.memoryReady = false
+		}
+		return
+	}
+	m.applyMemoryReconcileOutcome(outcome)
+}
+
+// drainShutdownOutcomes 在 worker 静止点排空所有已发布结果。返回 true 表示
+// 本轮消费过结果；应用终态 Dialogue 可能派生 memory commit，调用方必须再次
+// 等待 worker 并重复排空，直到一整轮没有结果。
+func (m *companionManager) drainShutdownOutcomes() bool {
+	drained := false
+	for {
+		progressed := false
+		select {
+		case outcome := <-m.dialogueResults:
+			m.applyDialogueOutcome(outcome)
+			progressed = true
+		default:
+		}
+		select {
+		case outcome := <-m.memoryCommitResults:
+			m.applyMemoryCommitOutcome(outcome)
+			progressed = true
+		default:
+		}
+		select {
+		case outcome := <-m.memoryReconcileResults:
+			m.applyMemoryReconcileBatch(outcome)
+			progressed = true
+		default:
+		}
+		if !progressed {
+			return drained
+		}
+		drained = true
+	}
+}
+
 func (m *companionManager) applyMemoryReconcileOutcome(outcome memoryReconcileOutcome) {
-	for _, remote := range outcome.lifecycles {
-		slot := m.slots[remote.ID]
-		local, ok := m.companions.MemoryLifecycle(remote.ID)
+	hadError := false
+	for _, result := range outcome.results {
+		slot := m.slots[result.id]
+		if result.err != nil {
+			hadError = true
+			if slot != nil {
+				slot.memoryReady = false
+			}
+			continue
+		}
+		delete(m.memoryReconcilePending, result.id)
+		remote := result.lifecycle
+		local, ok := m.companions.MemoryLifecycle(result.id)
+		if remote.ID != result.id {
+			if slot != nil {
+				slot.memoryReady = false
+			}
+			continue
+		}
 		if slot == nil || !ok || local.Active != remote.Active ||
 			local.MemoryEpoch != remote.MemoryEpoch {
 			if slot != nil {
@@ -552,6 +671,9 @@ func (m *companionManager) applyMemoryReconcileOutcome(outcome memoryReconcileOu
 		if remote.MemoryRevision == local.MemoryRevision {
 			slot.memoryReady = remote.MemoryOperationID == local.MemoryOperationID &&
 				remote.Summary == local.Summary
+			if slot.memoryReady {
+				m.resolveMemoryReservationAfterReconcile(remote)
+			}
 			continue
 		}
 		if err := m.companions.ReplaceActiveMemory(
@@ -562,20 +684,44 @@ func (m *companionManager) applyMemoryReconcileOutcome(outcome memoryReconcileOu
 			continue
 		}
 		slot.memoryReady = true
-		reservation := slot.dialogueReservation
-		var operation companion.ID
-		var parseErr error
-		if reservation != nil {
-			operation, parseErr = companion.ParseID(reservation.operationID)
+		m.resolveMemoryReservationAfterReconcile(remote)
+	}
+	if hadError {
+		if m.memoryReconcileAttempts < 6 {
+			m.memoryReconcileAttempts++
 		}
-		if reservation != nil && parseErr == nil && reservation.memoryEpoch == remote.MemoryEpoch &&
-			reservation.baseRevision != ^uint64(0) &&
-			remote.MemoryRevision == reservation.baseRevision+1 &&
-			remote.MemoryOperationID == storage.CompanionIdentity(operation) &&
-			remote.Summary == reservation.summary {
-			m.applyDialogueEffect(remote.ID, reservation.issuer, reservation.line)
-			slot.dialogueReservation = nil
-		}
+		m.memoryReconcileRetryWait = uint8(1) << (m.memoryReconcileAttempts - 1)
+		return
+	}
+	if len(m.memoryReconcilePending) == 0 {
+		m.memoryReconcileFence = outcome.fence
+		m.memoryReconcileAttempts = 0
+		m.memoryReconcileRetryWait = 0
+	}
+}
+
+func (m *companionManager) resolveMemoryReservationAfterReconcile(
+	remote storage.StoredCompanionLifecycle,
+) {
+	slot := m.slots[remote.ID]
+	if slot == nil || slot.dialogueReservation == nil {
+		return
+	}
+	reservation := slot.dialogueReservation
+	operation, err := companion.ParseID(reservation.operationID)
+	if err != nil || reservation.memoryEpoch != remote.MemoryEpoch ||
+		reservation.baseRevision == ^uint64(0) {
+		return
+	}
+	if remote.MemoryRevision == reservation.baseRevision+1 &&
+		remote.MemoryOperationID == storage.CompanionIdentity(operation) &&
+		remote.Summary == reservation.summary {
+		m.applyDialogueEffect(remote.ID, reservation.issuer, reservation.line)
+		slot.dialogueReservation = nil
+		return
+	}
+	if remote.MemoryRevision == reservation.baseRevision {
+		m.dispatchMemoryCommit(remote.ID)
 	}
 }
 

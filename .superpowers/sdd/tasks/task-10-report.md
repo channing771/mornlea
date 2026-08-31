@@ -83,6 +83,93 @@ FIFO 或世界动作。Host shutdown 在最终 companion save 与 world flush �
   unavailable seam；显式注入 fake Planner，并在这些非 Dialogue 测试中关闭测试
   Dialogue seam，事实 parity 定点 race 回归通过。
 
+## Repair 1
+
+独立规格与质量复审指出 persistence interleaving、reconcile 隔离、shutdown
+静止点与 Release 重试仍缺少严格闭环。本轮在 `1f6006f6` 上按五组重新执行真实
+RED→GREEN，没有修改 `tasks.md` 或 progress ledger。
+
+1. persistence interleaving 与 revision reserve
+   - RED：`TestCompanionPersistenceMemoryReplacementDuringInflightSaveRemainsDirty`
+     在旧 save 完成后两秒内没有派发新 mirror save；
+     `TestCompanionPersistenceMemoryReplacementRejectsOccupiedMaxRevision` 的
+     in-flight/retry 两个子测都错误返回 nil。
+   - GREEN：完成后的 dirty 重判精确比较 namespace 与完整 lifecycles；下一
+     aggregate revision 以 persisted、in-flight、retry 三者最高已占值 checked
+     reserve。最高值为 `MaxUint64` 时 mutation 返回 `storage.ErrCorrupt`，lifecycle
+     不变且不增加 save。
+   - 命令：`go test ./internal/server/persistence -run '^TestCompanionPersistenceMemoryReplacement(DuringInflightSaveRemainsDirty|RejectsOccupiedMaxRevision)$' -race -count=1`
+     PASS（1.826s）。
+
+2. reconcile 隔离、stale fence、退避与 unknown commit
+   - RED：首个 unavailable 后第二伙伴 reconcile 调用数只有 1；lease fence 改变后
+     旧结果仍把 local revision 改为 1 并置 ready；unknown commit 返回旧 mirror 后
+     两秒内没有以原 operation 重提 commit。
+   - GREEN：outcome 按伙伴携带 result/error，单个 unavailable/conflict 不终止批；
+     apply 前重新读取并精确匹配 current fence，stale 结果丢弃并请求新 fence。
+     error 保留 pending 且使用 1/2/4/8/16/32 tick 有界退避，不提前完成 fence；
+     conflict 只暂停对应伙伴，remote-higher 更新另一伙伴并置 dirty，FIFO 与 tick
+     继续推进。unknown 的 same-operation `base+1` 只确认一次；旧 mirror 则保留
+     reservation，以原 operation 幂等重提 commit，不重跑 Dialogue，最终只落一次
+     mirror/speech。
+   - 命令：`go test ./internal/server -run '^TestMemoryReconcile(UnavailableDoesNotStopLaterCompanion|RejectsStaleFenceBeforeMutation|ErrorRetriesWithBoundedBackoff|ConflictIsolatesRemoteHigherAndPreservesFIFO)$' -race -count=1 -timeout=60s`
+     PASS；`go test ./internal/server -run '^TestUnknownCommitOldMirrorRetriesSameOperationWithoutDialogue$' -race -count=1 -timeout=20s`
+     PASS（2.689s）。
+
+3. shutdown quiescence
+   - RED：terminal Dialogue outcome 已排队且 CommitMemory 被阻塞时，Release、Agent
+     close 与 store close 都已提前发生。
+   - GREEN：关闭态按「wait workers→drain outcomes」迭代到一整轮静止；drain
+     Dialogue 派生的 commit 会进入下一轮 wait，已结束 commit 在取消后仍投递到
+     有界结果 channel。阻塞 commit 解除并应用 mirror、完成 saves/flush 后才进入
+     Release/close。
+   - 命令：`go test ./internal/server -run '^TestHostShutdownWaitsForCommitDerivedFromQueuedDialogueOutcome$' -race -count=1 -timeout=30s`
+     PASS（1.414s）。
+
+4. Release 失败可重试
+   - RED：首次 Release 失败后 Agent/store 已关闭且 runtime 被永久标 closed。
+   - GREEN：freeze、release-complete、resource-close 分离；Release 失败保留同一冻结
+     lease 与 Agent/MCP/store，第二次 `Shutdown` 用同一 lease 重试成功后才依次关闭。
+   - 命令：`go test ./internal/server -run '^TestHostShutdownRetriesFailedReleaseWithSameFrozenLease$' -race -count=1 -timeout=30s`
+     PASS（1.992s）。
+
+5. dead `CompanionSummary` surface
+   - RED：production source guard 报告 `internal/server` 仍保留
+     `CompanionSummary`。
+   - GREEN：删除生产类型、`Observe`/save helper 参数与跨包测试 helper，并删除只为
+     旧裸 summary 存在的测试；storage codec 的 legacy 只读 queue summary 与 fixtures
+     保持兼容。生产 source guard 明确禁止该符号回流。
+   - 命令：`go test ./internal/archcheck -run '^TestCompanionPlannerProductionUsesAgentServiceOnly$' -count=1`
+     PASS（0.310s）。
+
+### Repair 1 验证
+
+- `go test ./internal/server/persistence -run 'Companion|Memory' -race -count=1 -timeout=120s`
+  - PASS：4.823s。
+- `go test ./internal/server -run 'MemoryReconcile|UnknownCommit|Dialogue|CompanionSpeech' -race -count=1 -timeout=120s`
+  - PASS：27.731s。
+- `go test ./internal/server -run 'Shutdown|Release' -race -count=1 -timeout=120s`
+  - PASS：8.257s。
+- `go test ./internal/companion ./internal/server -run 'Dialogue|Memory|Shutdown|CompanionSpeech' -race -count=1 -timeout=180s`
+  - PASS：companion 3.959s，server 88.433s。
+- `go test ./internal/companion ./internal/server -run 'Agent|Lease|Planner|Dialogue|Memory|Shutdown|CompanionSpeech' -race -count=1 -timeout=240s`
+  - PASS：companion 4.342s，server 95.343s。
+- `go test ./internal/archcheck -count=1`
+  - PASS：8.827s。
+- `go test ./internal/config -run 'Agent|AIConfig' -race -count=1`
+  - PASS：3.836s。
+- `go test ./cmd/mornlea ./cmd/mornlea/app ./cmd/mornlea-server -count=1`
+  - PASS：0.508s / 20.858s / 0.683s；未启动游戏窗口。
+- `go vet ./internal/companion ./internal/server ./internal/server/persistence ./internal/config`
+  - PASS，无输出。
+- `go mod tidy -diff`
+  - PASS，无 diff。
+- `openspec validate --all --strict --no-interactive`
+  - PASS：80 passed，0 failed。
+- `git diff --check`、production `CompanionSummary`、新增代码注释任务编号、敏感日志、
+  `tasks.md`/ledger 扫描
+  - PASS，无输出或违规。
+
 ## 验证
 
 - `go test ./internal/companion ./internal/server -run 'Dialogue|Memory|Shutdown|CompanionSpeech' -race -count=1 -timeout=150s`

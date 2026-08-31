@@ -23,27 +23,28 @@ type Host struct {
 	world   *Server
 	players *persistence.Players
 
-	preLogin               chan struct{}
-	mu                     sync.Mutex
-	activeByPlayer         map[core.PlayerID]*activeLogin
-	activeBySession        map[contract.SessionID]*activeLogin
-	preLoginStreams        map[uint64]*pendingLoginStream
-	nextPreLogin           uint64
-	nextSession            contract.SessionID
-	nextGeneration         uint64
-	listener               network.Listener
-	companionSnapshots     *companion.SnapshotRegistry
-	companionMCP           *companionMCPService
-	companionAgent         companionAgentRuntimeClient
-	companionLease         *companionAgentLeaseController
-	companionRuntimeClosed bool
-	runtimeCancel          context.CancelFunc
-	runtimeDone            chan error
-	acceptWG               sync.WaitGroup
-	pendingWG              sync.WaitGroup
-	sessionWG              sync.WaitGroup
-	shutdownGate           chan struct{}
-	closing                bool
+	preLogin                 chan struct{}
+	mu                       sync.Mutex
+	activeByPlayer           map[core.PlayerID]*activeLogin
+	activeBySession          map[contract.SessionID]*activeLogin
+	preLoginStreams          map[uint64]*pendingLoginStream
+	nextPreLogin             uint64
+	nextSession              contract.SessionID
+	nextGeneration           uint64
+	listener                 network.Listener
+	companionSnapshots       *companion.SnapshotRegistry
+	companionMCP             *companionMCPService
+	companionAgent           companionAgentRuntimeClient
+	companionLease           *companionAgentLeaseController
+	companionRuntimeReleased bool
+	companionRuntimeClosed   bool
+	runtimeCancel            context.CancelFunc
+	runtimeDone              chan error
+	acceptWG                 sync.WaitGroup
+	pendingWG                sync.WaitGroup
+	sessionWG                sync.WaitGroup
+	shutdownGate             chan struct{}
+	closing                  bool
 }
 
 // HostStats 是不暴露内部 map/channel 的瞬时有界队列快照。

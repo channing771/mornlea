@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/channing771/mornlea/internal/companion"
+	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -302,9 +304,12 @@ func TestReconcileConfirmsUnknownCommitExactlyOnce(t *testing.T) {
 		host.world.stepMu.Unlock()
 		t.Fatal("unknown commit did not preserve reservation for reconcile")
 	}
-	outcome := memoryReconcileOutcome{lifecycles: []storage.StoredCompanionLifecycle{{
-		ID: definition.ID, Active: true, MemoryEpoch: 1, MemoryRevision: 1,
-		MemoryOperationID: storage.CompanionIdentity(operation), Summary: "提交结果不明",
+	outcome := memoryReconcileOutcome{results: []memoryReconcileCompanionOutcome{{
+		id: definition.ID,
+		lifecycle: storage.StoredCompanionLifecycle{
+			ID: definition.ID, Active: true, MemoryEpoch: 1, MemoryRevision: 1,
+			MemoryOperationID: storage.CompanionIdentity(operation), Summary: "提交结果不明",
+		},
 	}}}
 	manager.applyMemoryReconcileOutcome(outcome)
 	manager.applyMemoryReconcileOutcome(outcome)
@@ -341,6 +346,317 @@ func (r *recordingMemoryReconciler) ReconcileMemory(
 ) (companionMemoryReconcileResult, error) {
 	r.requests <- lifecycle
 	return companionMemoryReconcileResult{Lifecycle: lifecycle}, nil
+}
+
+type scriptedMemoryReconciler struct {
+	fence          atomic.Uint64
+	calls          atomic.Int32
+	dialogueCalls  atomic.Int32
+	commitRequests chan companionMemoryCommitRequest
+	reconcile      func(storage.StoredCompanionLifecycle) (storage.StoredCompanionLifecycle, error)
+}
+
+func (r *scriptedMemoryReconciler) Dialogue(context.Context, companionDialogueRequest) (companionDialogueResult, error) {
+	r.dialogueCalls.Add(1)
+	return companionDialogueResult{}, companion.ErrAgentUnavailable
+}
+
+func (r *scriptedMemoryReconciler) CommitMemory(
+	_ context.Context,
+	request companionMemoryCommitRequest,
+) (companionMemoryCommitResult, error) {
+	if r.commitRequests == nil {
+		return companionMemoryCommitResult{}, companion.ErrAgentUnavailable
+	}
+	r.commitRequests <- request
+	return companionMemoryCommitResult{
+		MemoryEpoch:       request.MemoryEpoch,
+		OperationID:       request.OperationID,
+		CommittedRevision: request.BaseRevision + 1,
+	}, nil
+}
+
+func (r *scriptedMemoryReconciler) currentMemoryFence() (uint64, bool) {
+	return r.fence.Load(), true
+}
+
+func (r *scriptedMemoryReconciler) ReconcileMemory(
+	_ context.Context,
+	lifecycle storage.StoredCompanionLifecycle,
+) (companionMemoryReconcileResult, error) {
+	r.calls.Add(1)
+	result, err := r.reconcile(lifecycle)
+	return companionMemoryReconcileResult{Lifecycle: result}, err
+}
+
+func TestMemoryReconcileUnavailableDoesNotStopLaterCompanion(t *testing.T) {
+	definitions := []companion.Definition{
+		{ID: chatTestCompanionID(1), Name: "阿木"},
+		{ID: chatTestCompanionID(2), Name: "阿石"},
+	}
+	host, _, _ := companionManagerHostReady(t, definitions, nil)
+	operation := companionBootstrapIdentity(0x79)
+	reconciler := &scriptedMemoryReconciler{}
+	reconciler.fence.Store(1)
+	reconciler.reconcile = func(lifecycle storage.StoredCompanionLifecycle) (storage.StoredCompanionLifecycle, error) {
+		if lifecycle.ID == definitions[0].ID {
+			return storage.StoredCompanionLifecycle{}, companion.ErrAgentUnavailable
+		}
+		lifecycle.MemoryRevision = 1
+		lifecycle.MemoryOperationID = operation
+		lifecycle.Summary = "远端较新的 mirror"
+		return lifecycle, nil
+	}
+
+	manager := host.world.companionManager
+	host.world.stepMu.Lock()
+	manager.dialogue = reconciler
+	for _, definition := range definitions {
+		manager.slots[definition.ID].memoryReady = false
+	}
+	manager.dispatchMemoryReconcile()
+	host.world.stepMu.Unlock()
+	waitMemoryReconcileResult(t, manager)
+	host.world.stepMu.Lock()
+	manager.applyMemoryReconcileOutcomes()
+	firstReady := manager.slots[definitions[0].ID].memoryReady
+	secondReady := manager.slots[definitions[1].ID].memoryReady
+	second, _ := manager.companions.MemoryLifecycle(definitions[1].ID)
+	host.world.stepMu.Unlock()
+
+	if got := reconciler.calls.Load(); got != 2 {
+		t.Fatalf("reconcile calls=%d, want both companions", got)
+	}
+	if firstReady || !secondReady || second.MemoryRevision != 1 ||
+		second.MemoryOperationID != operation || second.Summary != "远端较新的 mirror" {
+		t.Fatalf("firstReady=%v secondReady=%v second=%+v", firstReady, secondReady, second)
+	}
+}
+
+func TestMemoryReconcileRejectsStaleFenceBeforeMutation(t *testing.T) {
+	definition := companion.Definition{ID: chatTestCompanionID(1), Name: "阿木"}
+	host, _, _ := companionManagerHostReady(t, []companion.Definition{definition}, nil)
+	reconciler := &recordingMemoryReconciler{requests: make(chan storage.StoredCompanionLifecycle, 1)}
+	reconciler.fence.Store(2)
+	manager := host.world.companionManager
+	remote := storage.StoredCompanionLifecycle{
+		ID: definition.ID, Active: true, MemoryEpoch: 1, MemoryRevision: 1,
+		MemoryOperationID: companionBootstrapIdentity(0x79), Summary: "旧 lease 的远端 mirror",
+	}
+
+	host.world.stepMu.Lock()
+	manager.dialogue = reconciler
+	manager.memoryReconcileInFlight = true
+	manager.memoryReconcileResults <- memoryReconcileOutcome{
+		fence: 1, results: []memoryReconcileCompanionOutcome{{
+			id: definition.ID, lifecycle: remote,
+		}},
+	}
+	manager.applyMemoryReconcileOutcomes()
+	local, _ := manager.companions.MemoryLifecycle(definition.ID)
+	ready := manager.slots[definition.ID].memoryReady
+	manager.dispatchMemoryReconcile()
+	host.world.stepMu.Unlock()
+
+	if local.MemoryRevision != 0 || local.MemoryOperationID != (storage.CompanionIdentity{}) ||
+		local.Summary != "" || ready {
+		t.Fatalf("stale fence mutated state: lifecycle=%+v ready=%v", local, ready)
+	}
+	request := receiveMemoryLifecycle(t, reconciler.requests)
+	if request.MemoryRevision != 0 || request.MemoryOperationID != (storage.CompanionIdentity{}) ||
+		request.Summary != "" {
+		t.Fatalf("fresh fence replayed stale state: %+v", request)
+	}
+}
+
+func TestMemoryReconcileErrorRetriesWithBoundedBackoff(t *testing.T) {
+	definition := companion.Definition{ID: chatTestCompanionID(1), Name: "阿木"}
+	host, _, _ := companionManagerHostReady(t, []companion.Definition{definition}, nil)
+	var failures atomic.Int32
+	reconciler := &scriptedMemoryReconciler{}
+	reconciler.fence.Store(1)
+	reconciler.reconcile = func(lifecycle storage.StoredCompanionLifecycle) (storage.StoredCompanionLifecycle, error) {
+		if failures.Add(1) == 1 {
+			return storage.StoredCompanionLifecycle{}, companion.ErrAgentUnavailable
+		}
+		return lifecycle, nil
+	}
+	manager := host.world.companionManager
+	host.world.stepMu.Lock()
+	manager.dialogue = reconciler
+	manager.slots[definition.ID].memoryReady = false
+	manager.dispatchMemoryReconcile()
+	host.world.stepMu.Unlock()
+	waitMemoryReconcileResult(t, manager)
+	host.world.stepMu.Lock()
+	manager.applyMemoryReconcileOutcomes()
+	if manager.memoryReconcileFence == 1 || manager.memoryReconcileRetryWait != 1 {
+		host.world.stepMu.Unlock()
+		t.Fatalf("failed reconcile completed fence or lost backoff: fence=%d wait=%d",
+			manager.memoryReconcileFence, manager.memoryReconcileRetryWait)
+	}
+	manager.dispatchMemoryReconcile()
+	if got := reconciler.calls.Load(); got != 1 {
+		host.world.stepMu.Unlock()
+		t.Fatalf("retry ignored first backoff tick: calls=%d", got)
+	}
+	manager.dispatchMemoryReconcile()
+	host.world.stepMu.Unlock()
+	waitMemoryReconcileResult(t, manager)
+	host.world.stepMu.Lock()
+	manager.applyMemoryReconcileOutcomes()
+	ready := manager.slots[definition.ID].memoryReady
+	fence := manager.memoryReconcileFence
+	host.world.stepMu.Unlock()
+	if !ready || fence != 1 || reconciler.calls.Load() != 2 {
+		t.Fatalf("retry did not recover: ready=%v fence=%d calls=%d",
+			ready, fence, reconciler.calls.Load())
+	}
+}
+
+func TestMemoryReconcileConflictIsolatesRemoteHigherAndPreservesFIFO(t *testing.T) {
+	definitions := []companion.Definition{
+		{ID: chatTestCompanionID(1), Name: "阿木"},
+		{ID: chatTestCompanionID(2), Name: "阿石"},
+	}
+	store := newHostTestStore()
+	config := hostTestConfig()
+	config.Companions = definitions
+	config.MaxPlayers = 2
+	config.HeartbeatInterval = time.Hour
+	config.HeartbeatTimeout = time.Hour
+	host := mustNewHost(t, config, flatTestGenerator{}, store)
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), longWaitDeadline)
+		defer cancel()
+		if err := host.Shutdown(ctx); err != nil {
+			t.Errorf("Host.Shutdown: %v", err)
+		}
+	})
+	client := openCompanionChatClient(t, host, "memory", integrationIdentity(0x71, "发令者"))
+	_ = stepUntilCompanionManagerReady(t, host, []network.ClientEndpoint{client}, definitions[0].ID)
+	manager := host.world.companionManager
+	localOperation := companionBootstrapIdentity(0x77)
+	conflictOperation := companionBootstrapIdentity(0x78)
+	higherOperation := companionBootstrapIdentity(0x79)
+	if err := manager.companions.ReplaceActiveMemory(
+		definitions[0].ID, 1, 0, 1, localOperation, "本地 mirror",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	host.world.stepMu.Lock()
+	for _, definition := range definitions {
+		if !manager.slots[definition.ID].queue.Enqueue(companion.TaskCommand("保持 FIFO")) {
+			host.world.stepMu.Unlock()
+			t.Fatal("failed to seed FIFO")
+		}
+	}
+	beforeFirst := manager.slots[definitions[0].ID].queue.Len()
+	beforeSecond := manager.slots[definitions[1].ID].queue.Len()
+	manager.applyMemoryReconcileOutcome(memoryReconcileOutcome{
+		fence: 1,
+		results: []memoryReconcileCompanionOutcome{
+			{id: definitions[0].ID, lifecycle: storage.StoredCompanionLifecycle{
+				ID: definitions[0].ID, Active: true, MemoryEpoch: 1, MemoryRevision: 1,
+				MemoryOperationID: conflictOperation, Summary: "分叉 mirror",
+			}},
+			{id: definitions[1].ID, lifecycle: storage.StoredCompanionLifecycle{
+				ID: definitions[1].ID, Active: true, MemoryEpoch: 1, MemoryRevision: 1,
+				MemoryOperationID: higherOperation, Summary: "远端较新的 mirror",
+			}},
+		},
+	})
+	first := manager.slots[definitions[0].ID]
+	second := manager.slots[definitions[1].ID]
+	firstLifecycle, _ := manager.companions.MemoryLifecycle(definitions[0].ID)
+	secondLifecycle, _ := manager.companions.MemoryLifecycle(definitions[1].ID)
+	fifoUnchanged := first.queue.Len() == beforeFirst && second.queue.Len() == beforeSecond
+	host.world.stepMu.Unlock()
+	if first.memoryReady || !second.memoryReady || !fifoUnchanged ||
+		firstLifecycle.MemoryOperationID != localOperation ||
+		secondLifecycle.MemoryOperationID != higherOperation ||
+		secondLifecycle.Summary != "远端较新的 mirror" {
+		t.Fatalf("firstReady=%v secondReady=%v fifo=%v first=%+v second=%+v",
+			first.memoryReady, second.memoryReady, fifoUnchanged, firstLifecycle, secondLifecycle)
+	}
+	if err := manager.companions.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := store.LoadCompanions(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Lifecycles) != 2 || loaded.Lifecycles[0].MemoryOperationID != localOperation ||
+		loaded.Lifecycles[1].MemoryOperationID != higherOperation {
+		t.Fatalf("persisted lifecycles=%+v", loaded.Lifecycles)
+	}
+	beforeTick := host.world.TickCount()
+	result := host.world.StepForTest()
+	_ = receiveCompanionChatTick(t, client, result.Tick)
+	if result.Tick <= beforeTick {
+		t.Fatalf("reconcile conflict stopped tick: before=%d after=%d", beforeTick, result.Tick)
+	}
+}
+
+func TestUnknownCommitOldMirrorRetriesSameOperationWithoutDialogue(t *testing.T) {
+	definition := companion.Definition{ID: chatTestCompanionID(1), Name: "阿木"}
+	host, _, _ := companionManagerHostReady(t, []companion.Definition{definition}, nil)
+	reconciler := &scriptedMemoryReconciler{
+		commitRequests: make(chan companionMemoryCommitRequest, 1),
+	}
+	reconciler.fence.Store(1)
+	manager := host.world.companionManager
+	operationText := "66666666-6666-4666-8666-666666666666"
+
+	host.world.stepMu.Lock()
+	manager.dialogue = reconciler
+	slot := manager.slots[definition.ID]
+	slot.dialogueReservation = &companionDialogueReservation{
+		operationID: operationText, memoryEpoch: 1, baseRevision: 0,
+		summary: "结果不明后幂等重提", line: "已经完成了。",
+		issuer: stopTestIssuer(integrationIdentity(0x73, "发令者")),
+	}
+	manager.applyMemoryCommitOutcome(memoryCommitOutcome{
+		id: definition.ID, err: context.DeadlineExceeded,
+	})
+	manager.applyMemoryReconcileOutcome(memoryReconcileOutcome{
+		fence: 1,
+		results: []memoryReconcileCompanionOutcome{{
+			id: definition.ID,
+			lifecycle: storage.StoredCompanionLifecycle{
+				ID: definition.ID, Active: true, MemoryEpoch: 1,
+			},
+		}},
+	})
+	host.world.stepMu.Unlock()
+
+	var retried companionMemoryCommitRequest
+	select {
+	case retried = <-reconciler.commitRequests:
+	case <-time.After(2 * time.Second):
+		t.Fatal("old remote mirror did not retry the accepted operation")
+	}
+	if retried.CompanionID != definition.ID || retried.MemoryEpoch != 1 ||
+		retried.BaseRevision != 0 || retried.OperationID != operationText ||
+		retried.Summary != "结果不明后幂等重提" {
+		t.Fatalf("retried commit=%+v", retried)
+	}
+	waitIntegrationCondition(t, "幂等 commit 结果", func() bool {
+		return len(manager.memoryCommitResults) != 0
+	})
+	host.world.stepMu.Lock()
+	manager.applyMemoryCommitOutcomes()
+	manager.applyMemoryCommitOutcomes()
+	lifecycle, _ := manager.companions.MemoryLifecycle(definition.ID)
+	reservation := slot.dialogueReservation
+	effects := manager.dialogueEffects
+	host.world.stepMu.Unlock()
+	if lifecycle.MemoryRevision != 1 || lifecycle.Summary != "结果不明后幂等重提" ||
+		reservation != nil || effects != 1 || reconciler.dialogueCalls.Load() != 0 {
+		t.Fatalf("lifecycle=%+v reservation=%+v effects=%d dialogueCalls=%d",
+			lifecycle, reservation, effects, reconciler.dialogueCalls.Load())
+	}
 }
 
 func TestManagerReconcilesCurrentMirrorOnAcquireAndReacquire(t *testing.T) {
@@ -444,10 +760,16 @@ func TestAgentMemoryDeleteCarriesTombstoneEpochFence(t *testing.T) {
 }
 
 type shutdownAgentRuntime struct {
-	store    *companionBootstrapStore
-	acquired chan struct{}
-	releases atomic.Int32
-	closed   atomic.Bool
+	store         *companionBootstrapStore
+	acquired      chan struct{}
+	commitStarted chan struct{}
+	commitRelease chan struct{}
+	commitOnce    sync.Once
+	mu            sync.Mutex
+	releaseErrors []error
+	releaseLeases []string
+	releases      atomic.Int32
+	closed        atomic.Bool
 }
 
 func (f *shutdownAgentRuntime) Acquire(_ context.Context, request companion.AcquireRequest) (companion.AcquireResponse, error) {
@@ -480,8 +802,23 @@ func (*shutdownAgentRuntime) Dialogue(context.Context, companion.AgentDialogueRe
 	return companion.AgentDialogueResponse{}, companion.ErrAgentUnavailable
 }
 
-func (*shutdownAgentRuntime) CommitMemory(context.Context, companion.MemoryCommitRequest) (companion.MemoryCommitResponse, error) {
-	return companion.MemoryCommitResponse{}, companion.ErrAgentUnavailable
+func (f *shutdownAgentRuntime) CommitMemory(
+	_ context.Context,
+	request companion.MemoryCommitRequest,
+) (companion.MemoryCommitResponse, error) {
+	if f.commitStarted == nil || f.commitRelease == nil {
+		return companion.MemoryCommitResponse{}, companion.ErrAgentUnavailable
+	}
+	f.commitOnce.Do(func() { close(f.commitStarted) })
+	<-f.commitRelease
+	return companion.MemoryCommitResponse{
+		ContractVersion: request.ContractVersion, RequestID: request.RequestID,
+		ClientInstanceID: request.ClientInstanceID, NamespaceID: request.NamespaceID,
+		LeaseID: request.LeaseID, CompanionID: request.CompanionID,
+		MemoryEpoch:       request.MemoryEpoch,
+		OperationID:       request.OperationID,
+		CommittedRevision: request.BaseRevision + 1,
+	}, nil
 }
 
 func (*shutdownAgentRuntime) ReconcileMemory(_ context.Context, request companion.MemoryReconcileRequest) (companion.MemoryReconcileResponse, error) {
@@ -504,9 +841,20 @@ func (*shutdownAgentRuntime) CancelRun(context.Context, companion.CancelRequest)
 
 func (f *shutdownAgentRuntime) Release(_ context.Context, request companion.LeaseRequest) (companion.ReleaseResponse, error) {
 	f.releases.Add(1)
+	f.mu.Lock()
+	f.releaseLeases = append(f.releaseLeases, request.LeaseID)
+	var releaseErr error
+	if len(f.releaseErrors) != 0 {
+		releaseErr = f.releaseErrors[0]
+		f.releaseErrors = f.releaseErrors[1:]
+	}
+	f.mu.Unlock()
 	f.store.hostTestStore.mu.Lock()
 	f.store.hostTestStore.events = append(f.store.hostTestStore.events, "release")
 	f.store.hostTestStore.mu.Unlock()
+	if releaseErr != nil {
+		return companion.ReleaseResponse{}, releaseErr
+	}
 	return companion.ReleaseResponse{
 		ContractVersion: request.ContractVersion, RequestID: request.RequestID,
 		ClientInstanceID: request.ClientInstanceID, NamespaceID: request.NamespaceID,
@@ -514,11 +862,143 @@ func (f *shutdownAgentRuntime) Release(_ context.Context, request companion.Leas
 	}, nil
 }
 
+func (f *shutdownAgentRuntime) releaseLeaseSnapshot() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.releaseLeases)
+}
+
 func (f *shutdownAgentRuntime) Close() {
 	f.closed.Store(true)
 	f.store.hostTestStore.mu.Lock()
 	f.store.hostTestStore.events = append(f.store.hostTestStore.events, "agent-close")
 	f.store.hostTestStore.mu.Unlock()
+}
+
+func TestHostShutdownWaitsForCommitDerivedFromQueuedDialogueOutcome(t *testing.T) {
+	id := companionBootstrapID(1)
+	store := newCompanionBootstrapStore()
+	config := hostTestConfig()
+	config.Companions = []companion.Definition{{ID: id, Name: "阿木"}}
+	config.companionPlanner = nil
+	fake := &shutdownAgentRuntime{
+		store: store, acquired: make(chan struct{}),
+		commitStarted: make(chan struct{}), commitRelease: make(chan struct{}),
+	}
+	var releaseCommit sync.Once
+	unblockCommit := func() { releaseCommit.Do(func() { close(fake.commitRelease) }) }
+	defer unblockCommit()
+	config.companionAgentClientFactory = func(companion.AgentServiceSettings, string) (companionAgentRuntimeClient, error) {
+		return fake, nil
+	}
+	host, err := NewHost(context.Background(), config, flatTestGenerator{}, store)
+	if err != nil {
+		t.Fatalf("NewHost: %v", err)
+	}
+	select {
+	case <-fake.acquired:
+	case <-time.After(waitDeadline):
+		t.Fatal("timed out waiting for namespace acquire")
+	}
+	issuerIdentity := integrationIdentity(0x73, "发令者")
+	issuer := stopTestIssuer(issuerIdentity)
+	manager := host.world.companionManager
+	host.world.stepMu.Lock()
+	manager.onlinePlayers = nil
+	slot := manager.slots[id]
+	slot.currentIssuer = issuer
+	slot.dialogueInFlight = true
+	slot.dialogueAttempt = 9
+	manager.dialogueResults <- dialogueOutcome{
+		id: id, generation: slot.queue.Generation(), attempt: 9,
+		node:   companion.DialogueNode{Kind: companion.DialogueNodeTerminal, State: companion.TaskCompleted},
+		issuer: issuer, memoryEpoch: 1,
+		result: companionDialogueResult{
+			Generation: slot.queue.Generation(), MemoryEpoch: 1, Line: "已经完成了。",
+			Proposal: &companion.AgentMemoryProposal{
+				OperationID:  "66666666-6666-4666-8666-666666666666",
+				BaseRevision: 0, Summary: "关服前确认的 mirror",
+			},
+		},
+	}
+	host.world.stepMu.Unlock()
+
+	shutdownDone := make(chan error, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
+	defer cancel()
+	go func() { shutdownDone <- host.Shutdown(ctx) }()
+	select {
+	case <-fake.commitStarted:
+	case err := <-shutdownDone:
+		t.Fatalf("Shutdown returned before derived commit started: %v", err)
+	case <-time.After(waitDeadline):
+		t.Fatal("Shutdown did not derive queued terminal commit")
+	}
+	time.Sleep(50 * time.Millisecond)
+	premature := fake.releases.Load() != 0 || fake.closed.Load() || store.hostTestStore.closeCount() != 0
+	unblockCommit()
+	shutdownErr := <-shutdownDone
+	if premature {
+		t.Fatalf("Release/close ran while derived commit was blocked: releases=%d agentClosed=%v storeCloses=%d",
+			fake.releases.Load(), fake.closed.Load(), store.hostTestStore.closeCount())
+	}
+	if shutdownErr != nil {
+		t.Fatalf("Shutdown: %v", shutdownErr)
+	}
+	saves := store.companionSaveSnapshot()
+	latest := saves[len(saves)-1]
+	if len(latest.Lifecycles) != 1 || latest.Lifecycles[0].MemoryRevision != 1 ||
+		latest.Lifecycles[0].Summary != "关服前确认的 mirror" || fake.releases.Load() != 1 {
+		t.Fatalf("latest=%+v releases=%d", latest, fake.releases.Load())
+	}
+}
+
+func TestHostShutdownRetriesFailedReleaseWithSameFrozenLease(t *testing.T) {
+	id := companionBootstrapID(1)
+	store := newCompanionBootstrapStore()
+	config := hostTestConfig()
+	config.Companions = []companion.Definition{{ID: id, Name: "阿木"}}
+	config.companionPlanner = nil
+	releaseErr := errors.New("release unavailable")
+	fake := &shutdownAgentRuntime{
+		store: store, acquired: make(chan struct{}), releaseErrors: []error{releaseErr},
+	}
+	config.companionAgentClientFactory = func(companion.AgentServiceSettings, string) (companionAgentRuntimeClient, error) {
+		return fake, nil
+	}
+	host, err := NewHost(context.Background(), config, flatTestGenerator{}, store)
+	if err != nil {
+		t.Fatalf("NewHost: %v", err)
+	}
+	select {
+	case <-fake.acquired:
+	case <-time.After(waitDeadline):
+		t.Fatal("timed out waiting for namespace acquire")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
+	err = host.Shutdown(ctx)
+	cancel()
+	if !errors.Is(err, companion.ErrAgentUnavailable) || fake.releases.Load() != 1 ||
+		fake.closed.Load() || store.hostTestStore.closeCount() != 0 || host.companionRuntimeClosed {
+		t.Fatalf("first shutdown err=%v releases=%d agentClosed=%v storeCloses=%d runtimeClosed=%v",
+			err, fake.releases.Load(), fake.closed.Load(), store.hostTestStore.closeCount(),
+			host.companionRuntimeClosed)
+	}
+
+	ctx, cancel = context.WithTimeout(context.Background(), waitDeadline)
+	err = host.Shutdown(ctx)
+	cancel()
+	if err != nil {
+		t.Fatalf("retry Shutdown: %v", err)
+	}
+	leases := fake.releaseLeaseSnapshot()
+	if fake.releases.Load() != 2 || len(leases) != 2 || leases[0] == "" || leases[0] != leases[1] ||
+		!fake.closed.Load() || store.hostTestStore.closeCount() != 1 || !host.companionRuntimeClosed {
+		t.Fatalf("leases=%v releases=%d agentClosed=%v storeCloses=%d runtimeClosed=%v",
+			leases, fake.releases.Load(), fake.closed.Load(), store.hostTestStore.closeCount(),
+			host.companionRuntimeClosed)
+	}
 }
 
 func TestHostShutdownRetriesPersistenceBeforeReleaseAndClose(t *testing.T) {
