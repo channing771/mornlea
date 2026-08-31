@@ -1232,6 +1232,13 @@ func TestCompanionManagerPathBlockTableMatchesCollisionOracle(t *testing.T) {
 	if !table.PassableForTest(core.AirID) {
 		t.Fatal("空气必须可通过")
 	}
+	const shortGrassID core.BlockID = 84
+	if !table.PassableForTest(shortGrassID) {
+		t.Fatal("短草必须按零碰撞 oracle 对伙伴寻路可通过")
+	}
+	if boxes := physics.BlockCollisionBoxes(shortGrassID, true); boxes.Count != 0 {
+		t.Fatalf("短草碰撞体数=%d，想要 0", boxes.Count)
+	}
 	for id := core.BlockID(1); id < core.BlockIDMax; id++ {
 		if core.IsFluid(id) {
 			// 流体的显式豁免：流体在 oracle 下是零碰撞体（实体可自由穿行），

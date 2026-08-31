@@ -17,8 +17,14 @@ const PLANT_ENTRIES: usize = 3;
 const WHEAT_ID: u16 = 20;
 /// 夹具里小麦用的材质层，取植物区间的第一层。
 const WHEAT_MATERIAL: u16 = PLANT_MATERIAL_FIRST;
+/// 短草追加在既有非植物层之后，形成植物材质集合的离散单点。
+const SHORT_GRASS_MATERIAL: u16 = 68;
 
 fn plant_input() -> Vec<u8> {
+    plant_input_with_material(WHEAT_MATERIAL)
+}
+
+fn plant_input_with_material(material: u16) -> Vec<u8> {
     let mut bytes = vec![0; REGISTRY_OFFSET + PLANT_ENTRIES * ENTRY_BYTES + PLANT_ENTRIES * 8];
     bytes[0..4].copy_from_slice(b"MGM1");
     bytes[8..10].copy_from_slice(&(PLANT_ENTRIES as u16).to_le_bytes());
@@ -37,7 +43,7 @@ fn plant_input() -> Vec<u8> {
     };
     write_entry(0, 0, false, 0);
     write_entry(1, 1, true, 1);
-    write_entry(2, WHEAT_ID, false, WHEAT_MATERIAL);
+    write_entry(2, WHEAT_ID, false, material);
 
     // 石头 = 对空气(列 0)与小麦(列 2)出面；空气与小麦整行为 0。
     for (index, row) in [0_u64, 1 | 1 << 2, 0].into_iter().enumerate() {
@@ -108,6 +114,29 @@ fn isolated_plant_emits_four_cross_quads_and_no_axial_face() {
             .iter()
             .any(|quad| quad.face == Face::PosX && quad.x == 7 && quad.material == 1),
         "夹具无效：作物旁的石头没有画出朝向作物的面，"
+    );
+}
+
+/// 离散的短草材质层复用同一条真实 mesher 路径，每格仍是四条 `u64` 实例。
+#[test]
+fn short_grass_material_emits_four_eight_byte_instances() {
+    let mut bytes = plant_input_with_material(SHORT_GRASS_MATERIAL);
+    set_block(&mut bytes, 8, 8, 8, WHEAT_ID);
+    let plant: Vec<Quad> = mesh_plant_fixture(bytes)
+        .into_iter()
+        .filter(|quad| quad.material == SHORT_GRASS_MATERIAL)
+        .collect();
+    assert_eq!(plant.len(), PLANT_QUADS_PER_CELL);
+    assert!(
+        plant
+            .iter()
+            .all(|quad| quad.face.plant() && quad.w == 1 && quad.h == 1)
+    );
+    assert_eq!(std::mem::size_of::<u64>(), 8);
+    assert!(
+        plant
+            .iter()
+            .all(|quad| quad.pack().to_le_bytes().len() == 8)
     );
 }
 

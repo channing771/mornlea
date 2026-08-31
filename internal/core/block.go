@@ -150,6 +150,9 @@ const (
 	BedHeadWestID
 	BedHeadNorthID
 	BedHeadEastID
+	// ShortGrassID 是原创短草的稳定方块编号，只追加在既有床形态之后。短草是
+	// 零碰撞、非完整遮光的野生植物，没有对应物品或通用掉落。
+	ShortGrassID
 	// BlockIDMax 是合法方块编号的独占上界（最后一个合法 BlockID + 1），本身不是
 	// 方块枚举成员，与物品侧的 ItemIDMax 同形。它供哨兵与穷举测试以
 	// 「id < BlockIDMax」表达「全部已注册方块」，替代「某个具体编号恰为枚举末项」

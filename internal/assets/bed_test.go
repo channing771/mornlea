@@ -50,8 +50,8 @@ func TestBedFormsUseDedicatedTopLayers(t *testing.T) {
 			}
 		}
 	}
-	if got := registry.LayerCount(); got != int(assets.LayerBedHeadEast)+1 {
-		t.Fatalf("LayerCount = %d，想要恰好容纳床八层的 %d", got, int(assets.LayerBedHeadEast)+1)
+	if got := registry.LayerCount(); got != int(assets.LayerShortGrass)+1 {
+		t.Fatalf("LayerCount = %d，想要容纳床八层与追加短草层的 %d", got, int(assets.LayerShortGrass)+1)
 	}
 	// 八张床面层都必须是完整尺寸的程序化像素（内嵌默认包不含床，程序化层
 	// 即最终呈现）。
@@ -268,13 +268,16 @@ func TestBedLayerNumbersMatchClientShaderContract(t *testing.T) {
 	if want := uint16(67); assets.LayerBedHeadEast != want {
 		t.Fatalf("客户端床区间上界应为 %d（Rust 客户端 BED_MATERIAL_LAST），实测 LayerBedHeadEast=%d", want, assets.LayerBedHeadEast)
 	}
-	// 区间与两侧邻居紧贴：火把层在前、枚举末位在后，插层必然撞上断言。
+	// 区间与两侧邻居紧贴：火把层在前、短草作为单一新层紧随床区间追加。
 	if assets.LayerTorch != assets.LayerBedFootSouth-1 {
 		t.Fatalf("LayerTorch=%d 不紧贴床区间下界，插层检测失效", assets.LayerTorch)
 	}
+	if assets.LayerShortGrass != assets.LayerBedHeadEast+1 {
+		t.Fatalf("LayerShortGrass=%d 未紧随床区间上界 %d", assets.LayerShortGrass, assets.LayerBedHeadEast)
+	}
 	registry := assets.NewRegistry()
-	if got := int(assets.LayerBedHeadEast) + 1; registry.LayerCount() != got {
-		t.Fatalf("LayerCount=%d 不紧贴床区间上界，插层检测失效", registry.LayerCount())
+	if got := int(assets.LayerShortGrass) + 1; registry.LayerCount() != got {
+		t.Fatalf("LayerCount=%d 未紧随追加短草层，插层检测失效", registry.LayerCount())
 	}
 
 	// 游戏编号 → 材质层的映射是客户端判别的实际输入：八个床形态的顶面

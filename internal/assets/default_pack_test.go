@@ -62,6 +62,7 @@ var pixelPerfectionLayers = map[string]uint16{
 
 var proceduralFallbackLayers = []uint16{
 	LayerCoalOre, LayerIronOre, LayerLightBlock, LayerRoofTile, LayerWater, LayerSmoothStone, LayerChest,
+	LayerShortGrass,
 }
 
 type pixelPerfectionProvenance struct {

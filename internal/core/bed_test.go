@@ -51,12 +51,12 @@ func TestBedBlockIDsAppendAfterTorches(t *testing.T) {
 			t.Fatalf("方向 %d 的床头编号 = %d，想要床尾编号 + 4 = %d", dir, got, want)
 		}
 	}
-	if core.BlockIDMax != core.BedHeadEastID+1 {
-		t.Fatalf("BlockIDMax = %d，必须紧随 BedHeadEastID(%d)",
-			core.BlockIDMax, core.BedHeadEastID)
+	if core.ShortGrassID != core.BedHeadEastID+1 {
+		t.Fatalf("ShortGrassID = %d，必须紧随 BedHeadEastID(%d)",
+			core.ShortGrassID, core.BedHeadEastID)
 	}
-	if core.BlockIDMax != 84 {
-		t.Fatalf("BlockIDMax = %d，必须后移到 84", core.BlockIDMax)
+	if core.BlockIDMax != 85 {
+		t.Fatalf("BlockIDMax = %d，必须后移到 85", core.BlockIDMax)
 	}
 	// 形态编号两两不同：八个形态必须解析为八个不同的方块。
 	seen := map[core.BlockID]bool{}

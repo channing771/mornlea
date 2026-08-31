@@ -389,6 +389,9 @@ func TestPlantMaterialLayersMatchMeshContract(t *testing.T) {
 	if assets.LayerCarrot7 != mesh.PlantMaterialLast {
 		t.Fatalf("LayerCarrot7=%d，mesh.PlantMaterialLast=%d", assets.LayerCarrot7, mesh.PlantMaterialLast)
 	}
+	if assets.LayerShortGrass != mesh.PlantMaterialShortGrass {
+		t.Fatalf("LayerShortGrass=%d，mesh.PlantMaterialShortGrass=%d", assets.LayerShortGrass, mesh.PlantMaterialShortGrass)
+	}
 	// 区间必须恰好覆盖 24 个作物层（小麦 8 + 马铃薯 8 + 胡萝卜 8），一个不多一个不少：区间放宽会把相邻的耕地层
 	// 也当成植物，那两层会被渲染成交叉斜面。
 	if got := int(mesh.PlantMaterialLast - mesh.PlantMaterialFirst + 1); got != 24 {

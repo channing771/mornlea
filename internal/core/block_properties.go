@@ -39,7 +39,7 @@ func BlockLightAttenuation(id BlockID) uint8 {
 }
 
 // BlockOpaque 返回方块是否完全不透明（遮挡邻面、阻断光照传播）：已注册的普通
-// 实心立方体 true；空气、玻璃、树叶、八个流体、全部作物、九个门形态、五种
+// 实心立方体 true；空气、玻璃、树叶、八个流体、全部植物、九个门形态、五种
 // 火把形态与八个床形态 false；未注册与越界编号一律 false。
 //
 // 判据逐值承接自 internal/assets 的 Registry.Opaque 迁移前的实际实现（迁移前
@@ -57,7 +57,7 @@ func BlockLightAttenuation(id BlockID) uint8 {
 // 判定分支。
 func BlockOpaque(id BlockID) bool {
 	return RegisteredBlock(id) && id != AirID && id != GlassID &&
-		id != LeavesID && !IsFluid(id) && !IsCrop(id) && !IsDoor(id) &&
+		id != LeavesID && !IsFluid(id) && !IsPlant(id) && !IsDoor(id) &&
 		!IsTorch(id) && !IsBed(id)
 }
 

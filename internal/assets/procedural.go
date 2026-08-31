@@ -272,6 +272,40 @@ func torchTexture() []byte {
 	return px
 }
 
+// shortGrassTexture 生成短草的原创 cutout 材质：多束深浅不同的细叶从底边向上
+// 分叉，其余像素保持透明。`paint` 只写入 alpha=255，因此整张图的 alpha 严格
+// 为 0/255，适合交叉斜面的保覆盖率 mip 路径。
+func shortGrassTexture() []byte {
+	px := make([]byte, texSize*texSize*4)
+	type blade struct {
+		x, top, lean int
+		color        rgb
+	}
+	blades := [...]blade{
+		{x: 1, top: 9, lean: 1, color: rgb{R: 54, G: 128, B: 42}},
+		{x: 3, top: 6, lean: -1, color: rgb{R: 72, G: 154, B: 50}},
+		{x: 5, top: 10, lean: 1, color: rgb{R: 47, G: 116, B: 38}},
+		{x: 7, top: 4, lean: 0, color: rgb{R: 82, G: 166, B: 55}},
+		{x: 9, top: 7, lean: -1, color: rgb{R: 61, G: 139, B: 45}},
+		{x: 11, top: 5, lean: 1, color: rgb{R: 76, G: 158, B: 51}},
+		{x: 13, top: 9, lean: -1, color: rgb{R: 49, G: 121, B: 39}},
+		{x: 15, top: 8, lean: -1, color: rgb{R: 67, G: 146, B: 47}},
+	}
+	for _, blade := range blades {
+		height := texSize - blade.top
+		for y := blade.top; y < texSize; y++ {
+			x := blade.x + blade.lean*(y-blade.top)/(height/2+1)
+			paint(px, x, y, blade.color)
+		}
+	}
+	for x := 1; x < texSize-1; x++ {
+		if hash2(uint32(x), 15, 0x68A5)%3 != 0 {
+			paint(px, x, 15, rgb{R: 45, G: 110, B: 36})
+		}
+	}
+	return px
+}
+
 func cobblestoneTexture() []byte {
 	px := noisyTexture(rgb{R: 116, G: 118, B: 120}, 10, 0xC0B1)
 	seam := rgb{R: 70, G: 72, B: 74}

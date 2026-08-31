@@ -1,12 +1,18 @@
 package mesh_test
 
 import (
+	"encoding/binary"
 	"testing"
 
 	"github.com/channing771/mornlea/internal/assets"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/mesh"
 	"github.com/channing771/mornlea/internal/world"
+)
+
+const (
+	expectedShortGrassBlock    core.BlockID = 84
+	expectedShortGrassMaterial uint16       = 68
 )
 
 // plantSampleX / plantSampleZ 是被观察格在中心区块里的局部水平坐标。
@@ -141,6 +147,44 @@ func TestNativeOracleParityWheatCrossPlanes(t *testing.T) {
 	// 不透明，这一条会连同上面的天空光断言一起红。
 	if !hasFaceToward(wheat, plantSampleX-1, plantLocalY(plantSampleY), plantSampleZ, mesh.FacePosX) {
 		t.Fatal("石头墙朝向作物的面消失了：作物不该遮挡邻居出面")
+	}
+}
+
+func TestNativeOracleParityShortGrassCrossPlanes(t *testing.T) {
+	registry := assets.NewRegistry()
+	quads := assertNativeOracleParity(t, plantWorld(t, expectedShortGrassBlock, false), registry)
+	plant := plantQuads(quads)
+	if len(plant) != 4 {
+		t.Fatalf("短草产生了 %d 条交叉斜面，想要 4", len(plant))
+	}
+	if !mesh.PlantMaterial(expectedShortGrassMaterial) {
+		t.Fatalf("短草材质层 %d 未进入 Go 植物谓词", expectedShortGrassMaterial)
+	}
+	for material := uint16(55); material <= 67; material++ {
+		if mesh.PlantMaterial(material) {
+			t.Fatalf("既有非植物材质层 %d 被误判为植物", material)
+		}
+	}
+	for _, quad := range plant {
+		if quad.Mat != expectedShortGrassMaterial || quad.W != 1 || quad.H != 1 ||
+			!quad.Face.Plant() || quad.Corners != ([4]uint8{}) {
+			t.Fatalf("短草 quad 形状错误: %+v", quad)
+		}
+		if got := binary.Size(quad.Pack()); got != 8 {
+			t.Fatalf("短草 quad 实例 = %d 字节，想要 8", got)
+		}
+	}
+}
+
+func TestPlantMaterialSetIsCropRangePlusShortGrass(t *testing.T) {
+	for material := uint16(0); material <= 69; material++ {
+		want := material >= 31 && material <= 54 || material == expectedShortGrassMaterial
+		if got := mesh.PlantMaterial(material); got != want {
+			t.Fatalf("PlantMaterial(%d) = %v，想要 %v", material, got, want)
+		}
+	}
+	if mesh.PlantMaterial(^uint16(0)) {
+		t.Fatal("最大 uint16 材质编号不得进入植物集合")
 	}
 }
 

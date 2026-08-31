@@ -42,24 +42,27 @@ const SHIFT_PLANT_BACK: u32 = SHIFT_W;
 #[cfg(test)]
 const PLANT_RESERVED_MASK: u64 = (0xff << SHIFT_W) ^ (1 << SHIFT_PLANT_BACK);
 
-/// 植物材质层的闭区间：`material ∈ [FIRST, LAST]` 即判定该格是植物。
+/// 植物材质层集合：`material ∈ [FIRST, LAST] ∪ {SHORT_GRASS}` 即判定该格是植物。
 ///
 /// 「一格是不是植物」以 **material 为准**（design D8）：判别不占任何 quad 位，
 /// 而 quad 布局只剩 bit 63 一个空闲位且必须留空。registry 条目布局同样一字不改
-/// （engine ABI 仍是 v5），没有新增「是不是植物」的属性字节。
+/// 不改变当前 engine ABI，也没有新增「是不是植物」的属性字节。
 ///
-/// 数值的真值源在 Go 侧 `internal/assets` 的 `LayerWheat0..LayerCarrot7`（小麦 8 + 马铃薯 8 + 胡萝卜 8 = 24 层），并由
-/// `internal/mesh` 的 `PlantMaterialFirst/PlantMaterialLast` 复述一份。三处没有
+/// 数值的真值源在 Go 侧 `internal/assets` 的 `LayerWheat0..LayerCarrot7`（小麦 8 +
+/// 马铃薯 8 + 胡萝卜 8 = 24 层）与 `LayerShortGrass`，并由 `internal/mesh` 的
+/// 植物材质常量复述一份。三处没有
 /// 共享常量也没有生成步骤，只能人手同步——Go 两处相等由
-/// `TestPlantMaterialLayersMatchMeshContract` 钉住，跨语言一致由真的把植物（小麦/马铃薯/胡萝卜）喂进
-/// mesher 的 `TestNativeOracleParityWheatCrossPlanes` 兜底。在 Go 的层枚举里
+/// `TestPlantMaterialLayersMatchMeshContract` 钉住，跨语言一致由真的把作物与短草喂进
+/// mesher 的 parity 测试兜底。在 Go 的层枚举里
 /// 往小麦**之前**插层会整体平移这段区间，那两条守卫就是唯一会报警的地方。
 pub(crate) const PLANT_MATERIAL_FIRST: u16 = 31;
 pub(crate) const PLANT_MATERIAL_LAST: u16 = 54;
+pub(crate) const PLANT_MATERIAL_SHORT_GRASS: u16 = 68;
 
 /// plant_material 报告某个材质层是否属于植物集合。
 pub(crate) fn plant_material(material: u16) -> bool {
     (PLANT_MATERIAL_FIRST..=PLANT_MATERIAL_LAST).contains(&material)
+        || material == PLANT_MATERIAL_SHORT_GRASS
 }
 
 /// 水柱内部（上方也是流体）使用的满格高度原值，实际高度 (15+1)/16 = 1。
@@ -249,7 +252,15 @@ impl Quad {
 
 #[cfg(test)]
 mod tests {
-    use super::{Face, Quad};
+    use super::{Face, Quad, plant_material};
+
+    #[test]
+    fn plant_material_set_is_discontinuous() {
+        assert!((31..=54).all(plant_material));
+        assert!((55..=67).all(|material| !plant_material(material)));
+        assert!(plant_material(68), "短草材质层 68 必须属于植物集合");
+        assert!(!plant_material(69));
+    }
 
     #[test]
     fn pack_matches_go_layout() {

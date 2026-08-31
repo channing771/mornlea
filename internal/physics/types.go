@@ -145,7 +145,7 @@ func PlayerBounds(position mgl32.Vec3) core.AABB {
 }
 
 // BlockCollisionBoxes 返回当前方块的局部碰撞体。
-// 流体（core.IsFluid）、作物（core.IsCrop）、火把（core.IsTorch 五形态）与空气
+// 流体（core.IsFluid）、植物（core.IsPlant）、火把（core.IsTorch 五形态）与空气
 // 同形状——已加载但零碰撞体：spec Requirement「流体方块编码」要求流体 MUST NOT
 // 提供碰撞体，Requirement「作物不提供碰撞体，耕地略低于满方块」对作物提出同一
 // 要求，可放置火把的需求同样写死五形态零碰撞，实体必须能自由穿行。零碰撞不
@@ -168,7 +168,7 @@ func BlockCollisionBoxes(id core.BlockID, loaded bool) CollisionBoxSet {
 	if !loaded {
 		return CollisionBoxSet{}
 	}
-	if id == core.AirID || core.IsFluid(id) || core.IsCrop(id) || core.IsTorch(id) {
+	if id == core.AirID || core.IsFluid(id) || core.IsPlant(id) || core.IsTorch(id) {
 		return CollisionBoxSet{Loaded: true}
 	}
 	// 床碰撞：床尾/床头同形，单盒半高、水平占满。

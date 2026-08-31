@@ -241,7 +241,7 @@ func meshSectionGoOracle(n *world.Neighborhood, reg mesh.Registry, light *goLigh
 //
 // 判据必须与 engine 的 `is_plant` 逐字对应：读的是**快照里烘焙好的** face 0
 // material（未登记的编号在 Rust 侧查表落空、一律不是植物），再看它是否落在
-// mesh.PlantMaterialFirst..PlantMaterialLast 这段闭区间里。
+// mesh.PlantMaterial 定义的离散植物材质集合里。
 func oraclePlantMaterial(snapshot mesh.RegistrySnapshot, id world.BlockID) (uint16, bool) {
 	for _, block := range snapshot.Blocks {
 		if block.ID != id {
