@@ -120,3 +120,19 @@
   Fatalf 补区域矩形、场景表头注释例外清单补漏）。
 - Ruling: R1 修复四处注释/文档级 minor — 均不触行为与 golden — 记录于
   R1 落地条目。
+- R1 落地：commit `dff3ee5a`（场景注释 4.5..5.5 格口径、delta 补 Purpose、
+  Fatalf 补区域矩形、场景表头注释例外清单补漏）。`go test
+  ./cmd/mornlea/capture -race -count=1` ok；`openspec validate --all
+  --strict` 80/80；gofmt 干净。Task 4 关闭。
+
+## 阶段 3 末：整分支终审（fresh reviewer @ `26f53165`）
+
+- **pass**，无 block 项。跨语言 80B/tag10 契约逐字段一致；规格↔实现映射表
+  全部 Scenario 有着落（Scenario 8 六面 / 9 遮挡不穿透为结构性覆盖：单实例
+  整包围盒 + 只读深度 LessEqual 管线配置，无直接像素断言，备案接受——
+  capture 场景无遮挡物，遮挡语义与 outline 共享同一机制先例）；提交序列
+  卫生、遗留扫描、门禁证据完备性（终审者在 HEAD 复跑 gofmt/vet 与两侧
+  focused 测试全绿）均通过。
+- mainly-cosmetic 备案：ledger R1 落地条目与 tasks.md 勾选两条簿记已由
+  控制会话补齐；`dff3ee5a` 纯注释改动提交类型 `docs(capture)` 偏宽（历史
+  提交不重写）。
