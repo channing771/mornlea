@@ -10,14 +10,18 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/companion"
+	"github.com/channing771/mornlea/internal/storage"
 )
 
 const (
-	companionAgentLeaseTTL       = 15 * time.Second
-	companionAgentHeartbeatEvery = 5 * time.Second
-	companionAgentPlanTimeout    = 30 * time.Second
-	companionAgentPlanTimeoutMax = 60 * time.Second
-	companionAgentCancelTimeout  = 100 * time.Millisecond
+	companionAgentLeaseTTL           = 15 * time.Second
+	companionAgentHeartbeatEvery     = 5 * time.Second
+	companionAgentPlanTimeout        = 30 * time.Second
+	companionAgentPlanTimeoutMax     = 60 * time.Second
+	companionAgentDialogueTimeout    = 30 * time.Second
+	companionAgentDialogueTimeoutMax = 60 * time.Second
+	companionAgentCancelTimeout      = 100 * time.Millisecond
+	companionAgentReleaseTimeout     = 5 * time.Second
 )
 
 type companionAgentControlClient interface {
@@ -29,7 +33,18 @@ type companionAgentControlClient interface {
 
 type companionAgentRuntimeClient interface {
 	companionAgentControlClient
+	companionAgentDialogueClient
+	Release(context.Context, companion.LeaseRequest) (companion.ReleaseResponse, error)
+	ReconcileMemory(context.Context, companion.MemoryReconcileRequest) (companion.MemoryReconcileResponse, error)
+	DeleteMemory(context.Context, companion.MemoryDeleteRequest) (companion.MemoryDeleteResponse, error)
 	Close()
+}
+
+type companionAgentDialogueClient interface {
+	Dialogue(context.Context, companion.AgentDialogueRequest) (companion.AgentDialogueResponse, error)
+	CommitMemory(context.Context, companion.MemoryCommitRequest) (companion.MemoryCommitResponse, error)
+	ReconcileMemory(context.Context, companion.MemoryReconcileRequest) (companion.MemoryReconcileResponse, error)
+	DeleteMemory(context.Context, companion.MemoryDeleteRequest) (companion.MemoryDeleteResponse, error)
 }
 
 type companionAgentClientFactory func(
@@ -212,16 +227,27 @@ func (c *companionAgentLeaseController) stillCurrent(lease companionAgentLease) 
 }
 
 func (c *companionAgentLeaseController) Close() {
+	_, _ = c.Freeze()
+	c.mu.Lock()
+	c.lease = companionAgentLease{}
+	c.mu.Unlock()
+}
+
+// Freeze 停止 acquire/heartbeat 并保留冻结时仍有效的 lease，供持久化成功后的
+// namespace Release 使用。closed/fence 围栏保证迟到控制结果不能复活状态。
+func (c *companionAgentLeaseController) Freeze() (companionAgentLease, bool) {
 	if c == nil {
-		return
+		return companionAgentLease{}, false
 	}
 	c.mu.Lock()
 	if c.closed {
+		lease := c.lease
 		c.mu.Unlock()
-		return
+		return lease, lease.ID != "" && time.Now().Before(lease.Expires)
 	}
 	c.closed = true
-	c.lease = companionAgentLease{}
+	c.fence++
+	lease := c.lease
 	c.mu.Unlock()
 	if c.cancel != nil {
 		c.cancel()
@@ -229,6 +255,7 @@ func (c *companionAgentLeaseController) Close() {
 	if c.done != nil {
 		<-c.done
 	}
+	return lease, lease.ID != "" && time.Now().Before(lease.Expires)
 }
 
 type agentPlannerOptions struct {
@@ -275,6 +302,289 @@ type companionAgentPlanner struct {
 	namespaceID      string
 	timeout          time.Duration
 	newID            func() (string, error)
+}
+
+type agentDialogueOptions struct {
+	Client           companionAgentDialogueClient
+	Lease            *companionAgentLeaseController
+	ClientInstanceID string
+	NamespaceID      string
+	Timeout          time.Duration
+	NewID            func() (string, error)
+}
+
+type companionDialogueRequest struct {
+	CompanionID companion.ID
+	Generation  uint64
+	MemoryEpoch uint64
+	Persona     string
+	Fact        companion.AgentDialogueFact
+	Environment companion.AgentDialogueEnvironment
+	Terminal    bool
+}
+
+type companionDialogueResult struct {
+	RunID       string
+	Generation  uint64
+	MemoryEpoch uint64
+	Line        string
+	Proposal    *companion.AgentMemoryProposal
+}
+
+type companionMemoryCommitRequest struct {
+	CompanionID  companion.ID
+	MemoryEpoch  uint64
+	BaseRevision uint64
+	OperationID  string
+	Summary      string
+}
+
+type companionMemoryCommitResult struct {
+	MemoryEpoch       uint64
+	OperationID       string
+	CommittedRevision uint64
+}
+
+type companionMemoryReconcileResult struct {
+	Lifecycle storage.StoredCompanionLifecycle
+}
+
+type companionMemoryDeleteRequest struct {
+	CompanionID          companion.ID
+	OldMemoryEpoch       uint64
+	NewMemoryEpoch       uint64
+	TombstoneOperationID string
+}
+
+type companionMemoryDeleteResult struct {
+	MemoryEpoch          uint64
+	TombstoneOperationID string
+}
+
+// companionAgentDialogue 只把 Go 权威事实映射到 Agent HTTP v1。最近摘要由
+// Python MemoryState 自行读取，Go 恢复镜像不属于这条请求的输入。
+type companionAgentDialogue struct {
+	client           companionAgentDialogueClient
+	lease            *companionAgentLeaseController
+	clientInstanceID string
+	namespaceID      string
+	timeout          time.Duration
+	newID            func() (string, error)
+}
+
+func newCompanionAgentDialogue(options agentDialogueOptions) *companionAgentDialogue {
+	timeout := options.Timeout
+	if timeout <= 0 || timeout > companionAgentDialogueTimeoutMax {
+		timeout = companionAgentDialogueTimeout
+	}
+	newID := options.NewID
+	if newID == nil {
+		newID = newAgentRequestID
+	}
+	return &companionAgentDialogue{
+		client: options.Client, lease: options.Lease,
+		clientInstanceID: options.ClientInstanceID, namespaceID: options.NamespaceID,
+		timeout: timeout, newID: newID,
+	}
+}
+
+func (d *companionAgentDialogue) CommitMemory(
+	ctx context.Context,
+	request companionMemoryCommitRequest,
+) (companionMemoryCommitResult, error) {
+	if d == nil || d.client == nil || d.lease == nil || request.BaseRevision == ^uint64(0) {
+		return companionMemoryCommitResult{}, companion.ErrAgentUnavailable
+	}
+	lease, ok := d.lease.current()
+	if !ok {
+		return companionMemoryCommitResult{}, companion.ErrAgentUnavailable
+	}
+	requestID, err := d.newID()
+	if err != nil {
+		return companionMemoryCommitResult{}, companion.ErrAgentUnavailable
+	}
+	deadline := time.Now().Add(d.timeout)
+	if callerDeadline, hasDeadline := ctx.Deadline(); hasDeadline && callerDeadline.Before(deadline) {
+		deadline = callerDeadline
+	}
+	rpcContext, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+	response, err := d.client.CommitMemory(rpcContext, companion.MemoryCommitRequest{
+		ContractVersion: companion.AgentContractVersion,
+		RequestID:       requestID, ClientInstanceID: d.clientInstanceID,
+		NamespaceID: d.namespaceID, LeaseID: lease.ID,
+		CompanionID: request.CompanionID.String(), MemoryEpoch: request.MemoryEpoch,
+		BaseRevision: request.BaseRevision, OperationID: request.OperationID,
+		Summary: request.Summary,
+	})
+	if err != nil || !d.lease.stillCurrent(lease) ||
+		response.CommittedRevision != request.BaseRevision+1 {
+		return companionMemoryCommitResult{}, companion.ErrAgentUnavailable
+	}
+	return companionMemoryCommitResult{
+		MemoryEpoch: response.MemoryEpoch, OperationID: response.OperationID,
+		CommittedRevision: response.CommittedRevision,
+	}, nil
+}
+
+func (d *companionAgentDialogue) currentMemoryFence() (uint64, bool) {
+	if d == nil || d.lease == nil {
+		return 0, false
+	}
+	lease, ok := d.lease.current()
+	return lease.Fence, ok
+}
+
+func (d *companionAgentDialogue) ReconcileMemory(
+	ctx context.Context,
+	lifecycle storage.StoredCompanionLifecycle,
+) (companionMemoryReconcileResult, error) {
+	if d == nil || d.client == nil || d.lease == nil {
+		return companionMemoryReconcileResult{}, companion.ErrAgentUnavailable
+	}
+	lease, ok := d.lease.current()
+	if !ok {
+		return companionMemoryReconcileResult{}, companion.ErrAgentUnavailable
+	}
+	requestID, err := d.newID()
+	if err != nil {
+		return companionMemoryReconcileResult{}, companion.ErrAgentUnavailable
+	}
+	request := companion.MemoryReconcileRequest{
+		ContractVersion: companion.AgentContractVersion,
+		RequestID:       requestID, ClientInstanceID: d.clientInstanceID,
+		NamespaceID: d.namespaceID, LeaseID: lease.ID,
+		CompanionID: lifecycle.ID.String(), MemoryEpoch: lifecycle.MemoryEpoch,
+		Active: lifecycle.Active,
+	}
+	if lifecycle.Active {
+		request.Mirror = &companion.AgentMemoryState{
+			Revision: lifecycle.MemoryRevision, Summary: lifecycle.Summary,
+		}
+		if lifecycle.MemoryRevision != 0 {
+			operation := companion.ID(lifecycle.MemoryOperationID).String()
+			request.Mirror.OperationID = &operation
+		}
+	} else {
+		tombstone := companion.ID(lifecycle.TombstoneOperationID).String()
+		request.TombstoneOperationID = &tombstone
+	}
+	deadline := time.Now().Add(d.timeout)
+	if callerDeadline, hasDeadline := ctx.Deadline(); hasDeadline && callerDeadline.Before(deadline) {
+		deadline = callerDeadline
+	}
+	rpcContext, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+	response, err := d.client.ReconcileMemory(rpcContext, request)
+	if err != nil || !d.lease.stillCurrent(lease) {
+		return companionMemoryReconcileResult{}, companion.ErrAgentUnavailable
+	}
+	result := storage.StoredCompanionLifecycle{
+		ID: lifecycle.ID, Active: response.Active, MemoryEpoch: response.MemoryEpoch,
+	}
+	if response.Active {
+		if response.Memory == nil {
+			return companionMemoryReconcileResult{}, companion.ErrAgentUnavailable
+		}
+		result.MemoryRevision = response.Memory.Revision
+		result.Summary = response.Memory.Summary
+		if response.Memory.OperationID != nil {
+			operation, parseErr := companion.ParseID(*response.Memory.OperationID)
+			if parseErr != nil {
+				return companionMemoryReconcileResult{}, companion.ErrAgentUnavailable
+			}
+			result.MemoryOperationID = storage.CompanionIdentity(operation)
+		}
+	} else {
+		if response.TombstoneOperationID == nil {
+			return companionMemoryReconcileResult{}, companion.ErrAgentUnavailable
+		}
+		tombstone, parseErr := companion.ParseID(*response.TombstoneOperationID)
+		if parseErr != nil {
+			return companionMemoryReconcileResult{}, companion.ErrAgentUnavailable
+		}
+		result.TombstoneOperationID = storage.CompanionIdentity(tombstone)
+	}
+	return companionMemoryReconcileResult{Lifecycle: result}, nil
+}
+
+func (d *companionAgentDialogue) DeleteMemory(
+	ctx context.Context,
+	request companionMemoryDeleteRequest,
+) (companionMemoryDeleteResult, error) {
+	if d == nil || d.client == nil || d.lease == nil ||
+		request.OldMemoryEpoch == ^uint64(0) || request.NewMemoryEpoch != request.OldMemoryEpoch+1 {
+		return companionMemoryDeleteResult{}, companion.ErrAgentUnavailable
+	}
+	lease, ok := d.lease.current()
+	if !ok {
+		return companionMemoryDeleteResult{}, companion.ErrAgentUnavailable
+	}
+	requestID, err := d.newID()
+	if err != nil {
+		return companionMemoryDeleteResult{}, companion.ErrAgentUnavailable
+	}
+	deadline := time.Now().Add(d.timeout)
+	if callerDeadline, hasDeadline := ctx.Deadline(); hasDeadline && callerDeadline.Before(deadline) {
+		deadline = callerDeadline
+	}
+	rpcContext, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+	response, err := d.client.DeleteMemory(rpcContext, companion.MemoryDeleteRequest{
+		ContractVersion: companion.AgentContractVersion,
+		RequestID:       requestID, ClientInstanceID: d.clientInstanceID,
+		NamespaceID: d.namespaceID, LeaseID: lease.ID,
+		CompanionID: request.CompanionID.String(), OldMemoryEpoch: request.OldMemoryEpoch,
+		NewMemoryEpoch:       request.NewMemoryEpoch,
+		TombstoneOperationID: request.TombstoneOperationID,
+	})
+	if err != nil || !d.lease.stillCurrent(lease) {
+		return companionMemoryDeleteResult{}, companion.ErrAgentUnavailable
+	}
+	return companionMemoryDeleteResult{
+		MemoryEpoch:          response.MemoryEpoch,
+		TombstoneOperationID: response.TombstoneOperationID,
+	}, nil
+}
+
+func (d *companionAgentDialogue) Dialogue(
+	ctx context.Context,
+	request companionDialogueRequest,
+) (companionDialogueResult, error) {
+	lease, ok := d.lease.current()
+	if !ok || d.client == nil {
+		return companionDialogueResult{}, companion.ErrAgentUnavailable
+	}
+	deadline := time.Now().Add(d.timeout)
+	if callerDeadline, hasDeadline := ctx.Deadline(); hasDeadline && callerDeadline.Before(deadline) {
+		deadline = callerDeadline
+	}
+	requestID, err := d.newID()
+	if err != nil {
+		return companionDialogueResult{}, companion.ErrAgentUnavailable
+	}
+	runID, err := d.newID()
+	if err != nil {
+		return companionDialogueResult{}, companion.ErrAgentUnavailable
+	}
+	runContext, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+	response, err := d.client.Dialogue(runContext, companion.AgentDialogueRequest{
+		ContractVersion: companion.AgentContractVersion, RequestID: requestID,
+		ClientInstanceID: d.clientInstanceID, NamespaceID: d.namespaceID,
+		LeaseID: lease.ID, RunID: runID, CompanionID: request.CompanionID.String(),
+		Generation: request.Generation, MemoryEpoch: request.MemoryEpoch,
+		DeadlineUnixMS: deadline.UnixMilli(), Persona: request.Persona,
+		FactNode: request.Fact, Environment: request.Environment, Terminal: request.Terminal,
+	})
+	if err != nil || !d.lease.stillCurrent(lease) {
+		return companionDialogueResult{}, companion.ErrAgentUnavailable
+	}
+	return companionDialogueResult{
+		RunID: response.RunID, Generation: response.Generation,
+		MemoryEpoch: response.MemoryEpoch, Line: response.Line,
+		Proposal: response.MemoryProposal,
+	}, nil
 }
 
 func newCompanionAgentPlanner(options agentPlannerOptions) *companionAgentPlanner {

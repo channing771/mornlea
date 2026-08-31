@@ -66,16 +66,14 @@ func collectDialogueEvents(
 	return collected
 }
 
-// companionDialogueSlotSummary 在 stepMu 下读取槽位持有的最近对话摘要。
-func companionDialogueSlotSummary(t *testing.T, host *Host, id companion.ID) string {
+// companionDialogueMirror 在 tick 测试中读取持久化协调器的当前 v5 mirror。
+func companionDialogueMirror(t *testing.T, host *Host, id companion.ID) storage.StoredCompanionLifecycle {
 	t.Helper()
-	host.world.stepMu.Lock()
-	defer host.world.stepMu.Unlock()
-	slot := host.world.companionManager.slots[id]
-	if slot == nil {
-		t.Fatalf("伙伴 %s 没有任务槽位", id)
+	lifecycle, ok := host.world.companions.MemoryLifecycle(id)
+	if !ok {
+		t.Fatalf("伙伴 %s 没有 v5 lifecycle", id)
 	}
-	return slot.summary
+	return lifecycle
 }
 
 // countDialogueTerminalRequests 统计请求记录中终止节点的个数。
@@ -562,7 +560,7 @@ func TestCompanionDialogueSummaryLifecycle(t *testing.T) {
 		return host, dialogue, client, closeHost
 	}
 
-	// 第一段：任务完成，terminal 响应捎带的摘要写入 manager 状态。目标在
+	// 第一段：任务完成，terminal proposal 经 commit 写入 v5 mirror。目标在
 	// 两格外——每 tick 2ms 的往返窗口保证终止节点先于开始台词应用后发起。
 	first, _, firstClient, closeFirst := newHost()
 	sendIntegration(t, firstClient, network.ChatCommand{Text: "@阿木 走一步"})
@@ -573,33 +571,31 @@ func TestCompanionDialogueSummaryLifecycle(t *testing.T) {
 	if countKind(events, network.ChatEventTaskCompleted) != 1 {
 		t.Fatalf("第一段任务未完成：事件=%v", chatEventKinds(events))
 	}
-	// 摘要应用在结果回到 tick 边界之后：推进至观察到 manager 摘要非空。
+	// commit 应用在结果回到 tick 边界之后：推进至观察到 mirror revision。
 	deadline := time.Now().Add(waitDeadline)
 	for time.Now().Before(deadline) &&
-		companionDialogueSlotSummary(t, first, id) != "最近完成了任务" {
+		companionDialogueMirror(t, first, id).MemoryRevision == 0 {
 		stepDialogueTick(t, first, []network.ClientEndpoint{firstClient})
 	}
-	if summary := companionDialogueSlotSummary(t, first, id); summary != "最近完成了任务" {
-		t.Fatalf("终态摘要未写入 manager：summary=%q", summary)
+	if mirror := companionDialogueMirror(t, first, id); mirror.MemoryRevision != 1 ||
+		mirror.Summary != "最近完成了任务" || !mirror.MemoryOperationID.Valid() {
+		t.Fatalf("终态 proposal 未提交到 v5 mirror：%+v", mirror)
 	}
 	closeFirst()
 
-	// 落盘检查：v5 mirror 保持 canonical zero，queue 不承载摘要。
+	// 落盘检查：v5 mirror 携带已提交 memory，queue 不承载摘要。
 	loaded, err := store.LoadCompanions(context.Background())
 	if err != nil {
 		t.Fatalf("LoadCompanions: %v", err)
 	}
-	if len(loaded.Lifecycles) != 1 || loaded.Lifecycles[0].MemoryRevision != 0 ||
-		loaded.Lifecycles[0].MemoryOperationID != (storage.CompanionIdentity{}) ||
-		loaded.Lifecycles[0].Summary != "" || len(loaded.Queues) != 0 {
-		t.Fatalf("v5 staging 落盘=%+v，想要 canonical-zero mirror", loaded)
+	if len(loaded.Lifecycles) != 1 || loaded.Lifecycles[0].MemoryRevision != 1 ||
+		!loaded.Lifecycles[0].MemoryOperationID.Valid() ||
+		loaded.Lifecycles[0].Summary != "最近完成了任务" || len(loaded.Queues) != 0 {
+		t.Fatalf("v5 memory 落盘=%+v", loaded)
 	}
 
-	// 第二段：重启后 direct 摘要为空，并进入下一次 Dialogue 请求输入。
+	// 第二段：重启后 Go mirror 不进入下一次 Dialogue 请求输入。
 	second, secondDialogue, secondClient, _ := newHost()
-	if summary := companionDialogueSlotSummary(t, second, id); summary != "" {
-		t.Fatalf("重启后 direct 摘要=%q，想要空", summary)
-	}
 	sendIntegration(t, secondClient, network.ChatCommand{Text: "@阿木 再走一步"})
 	waitForIncomingChatDepth(t, second.world, 1)
 	secondEvents := collectDialogueEvents(t, second, secondClient, 600, func(events []network.ChatEvent) bool {

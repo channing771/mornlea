@@ -71,8 +71,8 @@ func TestNewHostWiresPersistedNamespaceIntoAgentRuntime(t *testing.T) {
 	if _, ok := host.world.companionManager.planner.(*companionAgentPlanner); !ok {
 		t.Fatalf("production planner=%T，want *companionAgentPlanner", host.world.companionManager.planner)
 	}
-	if host.world.companionManager.dialogue != nil {
-		t.Fatalf("production dialogue=%T，Task 9 不得构造 direct-model Dialogue", host.world.companionManager.dialogue)
+	if _, ok := host.world.companionManager.dialogue.(*companionAgentDialogue); !ok {
+		t.Fatalf("production dialogue=%T，want Agent Dialogue bridge", host.world.companionManager.dialogue)
 	}
 	shutdownContext, cancel := context.WithTimeout(context.Background(), waitDeadline)
 	defer cancel()
@@ -128,6 +128,26 @@ func (*hostAgentRuntimeFake) Heartbeat(context.Context, companion.LeaseRequest) 
 
 func (*hostAgentRuntimeFake) Plan(context.Context, companion.PlanRequest) (companion.PlanResponse, error) {
 	return companion.PlanResponse{}, companion.ErrAgentUnavailable
+}
+
+func (*hostAgentRuntimeFake) Dialogue(context.Context, companion.AgentDialogueRequest) (companion.AgentDialogueResponse, error) {
+	return companion.AgentDialogueResponse{}, companion.ErrAgentUnavailable
+}
+
+func (*hostAgentRuntimeFake) CommitMemory(context.Context, companion.MemoryCommitRequest) (companion.MemoryCommitResponse, error) {
+	return companion.MemoryCommitResponse{}, companion.ErrAgentUnavailable
+}
+
+func (*hostAgentRuntimeFake) ReconcileMemory(context.Context, companion.MemoryReconcileRequest) (companion.MemoryReconcileResponse, error) {
+	return companion.MemoryReconcileResponse{}, companion.ErrAgentUnavailable
+}
+
+func (*hostAgentRuntimeFake) DeleteMemory(context.Context, companion.MemoryDeleteRequest) (companion.MemoryDeleteResponse, error) {
+	return companion.MemoryDeleteResponse{}, companion.ErrAgentUnavailable
+}
+
+func (*hostAgentRuntimeFake) Release(context.Context, companion.LeaseRequest) (companion.ReleaseResponse, error) {
+	return companion.ReleaseResponse{}, companion.ErrAgentUnavailable
 }
 
 func (*hostAgentRuntimeFake) CancelRun(context.Context, companion.CancelRequest) (companion.CancelResponse, error) {

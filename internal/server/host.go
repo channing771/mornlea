@@ -23,26 +23,27 @@ type Host struct {
 	world   *Server
 	players *persistence.Players
 
-	preLogin           chan struct{}
-	mu                 sync.Mutex
-	activeByPlayer     map[core.PlayerID]*activeLogin
-	activeBySession    map[contract.SessionID]*activeLogin
-	preLoginStreams    map[uint64]*pendingLoginStream
-	nextPreLogin       uint64
-	nextSession        contract.SessionID
-	nextGeneration     uint64
-	listener           network.Listener
-	companionSnapshots *companion.SnapshotRegistry
-	companionMCP       *companionMCPService
-	companionAgent     companionAgentRuntimeClient
-	companionLease     *companionAgentLeaseController
-	runtimeCancel      context.CancelFunc
-	runtimeDone        chan error
-	acceptWG           sync.WaitGroup
-	pendingWG          sync.WaitGroup
-	sessionWG          sync.WaitGroup
-	shutdownGate       chan struct{}
-	closing            bool
+	preLogin               chan struct{}
+	mu                     sync.Mutex
+	activeByPlayer         map[core.PlayerID]*activeLogin
+	activeBySession        map[contract.SessionID]*activeLogin
+	preLoginStreams        map[uint64]*pendingLoginStream
+	nextPreLogin           uint64
+	nextSession            contract.SessionID
+	nextGeneration         uint64
+	listener               network.Listener
+	companionSnapshots     *companion.SnapshotRegistry
+	companionMCP           *companionMCPService
+	companionAgent         companionAgentRuntimeClient
+	companionLease         *companionAgentLeaseController
+	companionRuntimeClosed bool
+	runtimeCancel          context.CancelFunc
+	runtimeDone            chan error
+	acceptWG               sync.WaitGroup
+	pendingWG              sync.WaitGroup
+	sessionWG              sync.WaitGroup
+	shutdownGate           chan struct{}
+	closing                bool
 }
 
 // HostStats 是不暴露内部 map/channel 的瞬时有界队列快照。
@@ -248,6 +249,13 @@ func NewHost(
 				MCPEndpoint: companionMCP.Endpoint(), ClientInstanceID: clientInstanceID,
 				NamespaceID: namespaceID, NewID: companionLease.newID,
 			})
+			if dialogue == nil {
+				dialogue = newCompanionAgentDialogue(agentDialogueOptions{
+					Client: companionAgent, Lease: companionLease,
+					ClientInstanceID: clientInstanceID, NamespaceID: namespaceID,
+					NewID: companionLease.newID,
+				})
+			}
 		}
 	}
 	hostiles := persistence.NewHostiles(store, loadedHostiles, persistenceOptions(config, nil))
@@ -272,7 +280,7 @@ func NewHost(
 	}
 	gate := make(chan struct{}, 1)
 	gate <- struct{}{}
-	return &Host{
+	host := &Host{
 		config:             config,
 		world:              world,
 		players:            persistence.NewPlayers(store, persistenceOptions(config, nil)),
@@ -286,7 +294,9 @@ func NewHost(
 		companionLease:     companionLease,
 		runtimeDone:        make(chan error, 1),
 		shutdownGate:       gate,
-	}, nil
+	}
+	world.beforeStoreClose = host.closeCompanionRuntime
+	return host, nil
 }
 
 func bootstrapCompanionPersistence(

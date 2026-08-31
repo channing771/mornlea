@@ -237,12 +237,9 @@ func runContainerMineParity(t *testing.T, transport string) containerMineParityR
 	id := chatTestCompanionID(1)
 	model := newFakeCompanionModel(t)
 	host := newInteractionParityHost(t, id, model, containerTightInventory())
-	// 台词平面在本 parity 场景保持静默：为 dialogue 客户端接入持续 5xx 的独立
-	// 假台词模型，成功台词的 CompanionSpeech 事件到达 tick 取决于 HTTP 时序，
-	// 会破坏 transcript 的跨传输可比性（沿用 interaction parity 的先例）。
-	silentDialogue := newFakeDialogueModel(t)
-	silentDialogue.setStatus(500)
-	host.world.companionManager.replaceDialogueForTest(t, silentDialogue)
+	// 本用例只比较容器事实，显式关闭测试 Dialogue seam，避免异步表达事件
+	// 进入跨传输 transcript 或短暂占用共享 Agent run gate。
+	host.world.companionManager.dialogue = nil
 	client := openCompanionChatClient(t, host, transport, integrationIdentity(0xc1, "指挥者"))
 	clients := []network.ClientEndpoint{client}
 	body := stepUntilCompanionManagerReady(t, host, clients, id)

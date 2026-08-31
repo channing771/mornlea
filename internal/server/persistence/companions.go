@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/storage"
@@ -93,6 +95,75 @@ func (p *Companions) AgentNamespaceID() storage.CompanionIdentity {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.namespace
+}
+
+// MemoryLifecycle 返回指定伙伴当前 v5 lifecycle/memory 元数据的值副本。
+// 调用方只能把它用于 Agent reconcile/commit 的权威关联，不能原地修改。
+func (p *Companions) MemoryLifecycle(id companion.ID) (storage.StoredCompanionLifecycle, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, lifecycle := range p.lifecycles {
+		if lifecycle.ID == id {
+			return lifecycle, true
+		}
+	}
+	return storage.StoredCompanionLifecycle{}, false
+}
+
+// MemoryLifecycles 返回全部当前 v5 lifecycle/memory 元数据的深拷贝。
+func (p *Companions) MemoryLifecycles() []storage.StoredCompanionLifecycle {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.lifecycles)
+}
+
+// ReplaceActiveMemory 以 epoch 与旧 revision 作为 CAS 围栏，整份替换当前
+// Agent memory mirror。成功只标记聚合存档为 dirty，磁盘 I/O 仍由 Poll 或
+// Flush 在既有单 worker 通道执行。
+func (p *Companions) ReplaceActiveMemory(
+	id companion.ID,
+	epoch uint64,
+	expectedRevision uint64,
+	nextRevision uint64,
+	operationID storage.CompanionIdentity,
+	summary string,
+) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return context.Canceled
+	}
+	if p.persisted == math.MaxUint64 {
+		return fmt.Errorf("%w: companion aggregate revision overflow", storage.ErrCorrupt)
+	}
+	if epoch == 0 || nextRevision == 0 || nextRevision <= expectedRevision ||
+		!operationID.Valid() || len(summary) > companion.MaxDialogueSummaryBytes ||
+		!utf8.ValidString(summary) || strings.ContainsRune(summary, '\x00') {
+		return fmt.Errorf("%w: invalid active companion memory replacement", storage.ErrCorrupt)
+	}
+	for index, lifecycle := range p.lifecycles {
+		if lifecycle.ID != id {
+			continue
+		}
+		if lifecycle.Active && lifecycle.MemoryEpoch == epoch &&
+			lifecycle.MemoryRevision == nextRevision &&
+			lifecycle.MemoryOperationID == operationID && lifecycle.Summary == summary {
+			return nil
+		}
+		if !lifecycle.Active || lifecycle.MemoryEpoch != epoch ||
+			lifecycle.MemoryRevision != expectedRevision {
+			return fmt.Errorf("companion memory CAS conflict")
+		}
+		next := slices.Clone(p.lifecycles)
+		next[index].MemoryRevision = nextRevision
+		next[index].MemoryOperationID = operationID
+		next[index].Summary = summary
+		next[index].TombstoneOperationID = storage.CompanionIdentity{}
+		p.lifecycles = next
+		p.dirty = true
+		return nil
+	}
+	return fmt.Errorf("companion memory lifecycle not found")
 }
 
 // Observe 合并权威身体与任务域观察输入。旧 direct Dialogue 的裸摘要只可

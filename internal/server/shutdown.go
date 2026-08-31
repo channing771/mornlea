@@ -73,7 +73,7 @@ func (server *Server) Shutdown(ctx context.Context) error {
 			server.companions.Observe(
 				server.engine.CompanionBodies(),
 				server.companionManagerTaskStates(),
-				server.companionManagerSummaries(),
+				nil,
 			)
 		}
 		if server.hostiles != nil {
@@ -109,8 +109,16 @@ func (server *Server) Shutdown(ctx context.Context) error {
 	if freezeErr != nil {
 		return server.persistenceErrorWithContext(freezeErr, ctx)
 	}
-	if err := server.world.Flush(ctx); err != nil {
-		return err
+	if server.companionManager != nil {
+		server.companionManager.close()
+		server.stepMu.Lock()
+		server.companionManager.applyDialogueOutcomes()
+		server.companionManager.applyMemoryCommitOutcomes()
+		server.companionManager.applyMemoryReconcileOutcomes()
+		server.stepMu.Unlock()
+	}
+	if server.hostileManager != nil {
+		server.hostileManager.close()
 	}
 	if server.companions != nil {
 		if err := server.companions.Flush(ctx); err != nil {
@@ -128,6 +136,9 @@ func (server *Server) Shutdown(ctx context.Context) error {
 			)
 		}
 	}
+	if err := server.world.Flush(ctx); err != nil {
+		return err
+	}
 	if server.storePhase == storeShutdownNeedsSync {
 		if err := server.store.Sync(ctx); err != nil {
 			return server.persistenceErrorWithContext(fmt.Errorf("sync world: %w", err), ctx)
@@ -136,6 +147,10 @@ func (server *Server) Shutdown(ctx context.Context) error {
 	}
 	if err := ctx.Err(); err != nil {
 		return server.world.ShutdownContextError(err, nil)
+	}
+	var externalCloseErr error
+	if server.beforeStoreClose != nil {
+		externalCloseErr = server.beforeStoreClose(ctx)
 	}
 	if server.storePhase == storeShutdownNeedsClose {
 		if err := server.store.Close(); err != nil {
@@ -149,19 +164,13 @@ func (server *Server) Shutdown(ctx context.Context) error {
 	if server.hostiles != nil {
 		server.hostiles.Close()
 	}
-	if server.companionManager != nil {
-		server.companionManager.close()
-	}
-	if server.hostileManager != nil {
-		server.hostileManager.close()
-	}
 	server.world.Close()
 
 	server.stepMu.Lock()
 	server.lifecycle = serverClosed
 	close(server.closedDone)
 	server.stepMu.Unlock()
-	return nil
+	return externalCloseErr
 }
 
 func (server *Server) persistenceErrorWithContext(err error, ctx context.Context) error {

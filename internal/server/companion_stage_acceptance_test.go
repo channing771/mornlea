@@ -358,20 +358,20 @@ func TestM5StageAcceptancePersonaDialogueEndToEnd(t *testing.T) {
 			}
 		}
 
-		// 终态摘要仍写入 direct manager 的 transient 状态；Task 8 staging 不把
-		// 这份裸字符串伪造成 v5 memory operation。
+		// 终态 proposal 经 commit 整体写入 v5 mirror。
 		deadline := time.Now().Add(waitDeadline)
 		for time.Now().Before(deadline) &&
-			companionDialogueSlotSummary(t, host, id) != stageAcceptanceSummary {
+			companionDialogueMirror(t, host, id).MemoryRevision == 0 {
 			stepDialogueTick(t, host, []network.ClientEndpoint{client})
 		}
-		if summary := companionDialogueSlotSummary(t, host, id); summary != stageAcceptanceSummary {
-			t.Fatalf("[%s] 终态摘要未写入 manager：summary=%q", transport, summary)
+		if mirror := companionDialogueMirror(t, host, id); mirror.MemoryRevision != 1 ||
+			mirror.Summary != stageAcceptanceSummary || !mirror.MemoryOperationID.Valid() {
+			t.Fatalf("[%s] 终态 proposal 未提交：%+v", transport, mirror)
 		}
 		// 结束生命周期 1（幂等，t.Cleanup 兜底）。
 		closeHost()
 
-		// ---------- 磁盘断言：schema v5 + canonical-zero mirror ----------
+		// ---------- 磁盘断言：schema v5 + committed mirror ----------
 		// companions.ai 头部 32 字节：magic[0:4] "MCAI" + envelope 版本 u32
 		// [4:8] + schema u32 [8:12]（companion_codec.go encodeCompanions）。
 		// 直接读原始字节断言 schema=v5：解码 API 只回显数据，无法证明「落盘
@@ -395,10 +395,10 @@ func TestM5StageAcceptancePersonaDialogueEndToEnd(t *testing.T) {
 			t.Fatalf("[%s] LoadCompanions: %v", transport, err)
 		}
 		if loaded.SourceSchema != 5 || !loaded.AgentNamespaceID.Valid() ||
-			len(loaded.Lifecycles) != 1 || loaded.Lifecycles[0].MemoryRevision != 0 ||
-			loaded.Lifecycles[0].MemoryOperationID != (storage.CompanionIdentity{}) ||
-			loaded.Lifecycles[0].Summary != "" || len(loaded.Queues) != 0 {
-			t.Fatalf("[%s] v5 staging archive=%+v，想要 canonical-zero mirror", transport, loaded)
+			len(loaded.Lifecycles) != 1 || loaded.Lifecycles[0].MemoryRevision != 1 ||
+			!loaded.Lifecycles[0].MemoryOperationID.Valid() ||
+			loaded.Lifecycles[0].Summary != stageAcceptanceSummary || len(loaded.Queues) != 0 {
+			t.Fatalf("[%s] v5 committed archive=%+v", transport, loaded)
 		}
 
 		// ---------- 生命周期 2：同一磁盘存档重启恢复 + 摘要复用 ----------
@@ -420,8 +420,9 @@ func TestM5StageAcceptancePersonaDialogueEndToEnd(t *testing.T) {
 		t.Cleanup(closeHost2)
 		client2 := openCompanionChatClient(t, host2, transport, issuer)
 		body2 := stepUntilCompanionManagerReady(t, host2, []network.ClientEndpoint{client2}, id)
-		if summary := companionDialogueSlotSummary(t, host2, id); summary != "" {
-			t.Fatalf("[%s] Task 8 staging 重启后 direct 摘要=%q，想要空", transport, summary)
+		if mirror := companionDialogueMirror(t, host2, id); mirror.MemoryRevision != 1 ||
+			mirror.Summary != stageAcceptanceSummary {
+			t.Fatalf("[%s] 重启后 v5 mirror=%+v", transport, mirror)
 		}
 
 		// 新任务：两步 go_to（目标取重启后身体当前位置，沿 +Z 拉开以避开
@@ -464,7 +465,7 @@ func TestM5StageAcceptancePersonaDialogueEndToEnd(t *testing.T) {
 			secondSpeechTexts = append(secondSpeechTexts, event.Speech)
 		}
 
-		// Task 8 staging 不恢复裸 direct 摘要；生效人设仍继续透传。
+		// Go v5 mirror 不进入 Agent Dialogue prompt；生效人设仍继续透传。
 		waitDialogueRequests(t, dialogue2, 3)
 		secondRecords := dialogue2.snapshotDialogueRequests()
 		if len(secondRecords) != 3 {

@@ -37,20 +37,23 @@ type dialogueRequestRecord struct {
 // （companion 包的稳定 wire 枚举 "terminal"）；每次请求的输入事实按到达顺序
 // 记录进 records（snapshotDialogueRequests 读取）。
 type fakeDialogueModel struct {
-	mu             sync.Mutex
-	requests       int
-	inFlight       int
-	cancels        int
-	block          chan struct{}
-	cancelObserved chan struct{}
-	status         int
-	records        []dialogueRequestRecord
-	server         *httptest.Server
+	mu              sync.Mutex
+	requests        int
+	inFlight        int
+	cancels         int
+	block           chan struct{}
+	cancelObserved  chan struct{}
+	status          int
+	records         []dialogueRequestRecord
+	memoryRevisions map[companion.ID]uint64
+	server          *httptest.Server
 }
 
 func newFakeDialogueModel(t *testing.T) *fakeDialogueModel {
 	t.Helper()
-	model := &fakeDialogueModel{cancelObserved: make(chan struct{})}
+	model := &fakeDialogueModel{
+		cancelObserved: make(chan struct{}), memoryRevisions: make(map[companion.ID]uint64),
+	}
 	model.server = httptest.NewServer(http.HandlerFunc(model.handle))
 	t.Cleanup(model.server.Close)
 	return model
@@ -206,18 +209,97 @@ func waitForDialogueOutcomeQueued(t *testing.T, host *Host) {
 	})
 }
 
-// replaceDialogueForTest 把 manager 的台词客户端换成指向假台词模型的真
-// DialogueClient（对齐 replacePlannerForTest 的测试模式）。
+// replaceDialogueForTest 把 manager 的 Agent 台词 seam 换成受控测试实现。
 func (m *companionManager) replaceDialogueForTest(t *testing.T, model *fakeDialogueModel) {
 	t.Helper()
-	client, err := companion.NewDialogueClient(companion.ModelSettings{
-		Endpoint: model.server.URL + "/v1",
-		Model:    "test-model",
-	}, "", nil)
-	if err != nil {
-		t.Fatalf("构造测试 dialogue 客户端: %v", err)
+	model.mu.Lock()
+	for _, lifecycle := range m.companions.MemoryLifecycles() {
+		model.memoryRevisions[lifecycle.ID] = lifecycle.MemoryRevision
 	}
-	m.dialogue = client
+	model.mu.Unlock()
+	m.dialogue = legacyDialogueTestAdapter{model: model}
+}
+
+type legacyDialogueTestAdapter struct {
+	model *fakeDialogueModel
+}
+
+func (adapter legacyDialogueTestAdapter) Dialogue(
+	ctx context.Context,
+	request companionDialogueRequest,
+) (companionDialogueResult, error) {
+	model := adapter.model
+	model.mu.Lock()
+	model.requests++
+	model.inFlight++
+	model.records = append(model.records, dialogueRequestRecord{
+		NodeKind: request.Fact.Kind, StepKind: request.Fact.StepKind,
+		Persona: request.Persona,
+	})
+	block := model.block
+	status := model.status
+	baseRevision := model.memoryRevisions[request.CompanionID]
+	model.mu.Unlock()
+	defer func() {
+		model.mu.Lock()
+		model.inFlight--
+		model.mu.Unlock()
+	}()
+	if block != nil {
+		select {
+		case <-block:
+		case <-ctx.Done():
+			model.mu.Lock()
+			model.cancels++
+			if model.cancels == 1 {
+				close(model.cancelObserved)
+			}
+			model.mu.Unlock()
+			return companionDialogueResult{}, ctx.Err()
+		}
+	}
+	if status != 0 {
+		return companionDialogueResult{}, companion.ErrAgentUnavailable
+	}
+	line := "我出发了"
+	summary := ""
+	if request.Terminal {
+		line = "完成了"
+		summary = "最近完成了任务"
+	}
+	result := companionDialogueResult{
+		Generation: request.Generation, MemoryEpoch: request.MemoryEpoch, Line: line,
+	}
+	if request.Terminal {
+		operationID, operationErr := newAgentRequestID()
+		if operationErr != nil {
+			return companionDialogueResult{}, operationErr
+		}
+		result.Proposal = &companion.AgentMemoryProposal{
+			OperationID: operationID, BaseRevision: baseRevision, Summary: summary,
+		}
+	}
+	return result, nil
+}
+
+func (adapter legacyDialogueTestAdapter) CommitMemory(
+	_ context.Context,
+	request companionMemoryCommitRequest,
+) (companionMemoryCommitResult, error) {
+	if request.BaseRevision == ^uint64(0) {
+		return companionMemoryCommitResult{}, companion.ErrAgentUnavailable
+	}
+	adapter.model.mu.Lock()
+	if adapter.model.memoryRevisions[request.CompanionID] != request.BaseRevision {
+		adapter.model.mu.Unlock()
+		return companionMemoryCommitResult{}, companion.ErrAgentUnavailable
+	}
+	adapter.model.memoryRevisions[request.CompanionID] = request.BaseRevision + 1
+	adapter.model.mu.Unlock()
+	return companionMemoryCommitResult{
+		MemoryEpoch: request.MemoryEpoch, OperationID: request.OperationID,
+		CommittedRevision: request.BaseRevision + 1,
+	}, nil
 }
 
 // dialogueEffectCount 在 stepMu 下读取有效台词结果进入 applyDialogueEffect 的

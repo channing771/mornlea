@@ -72,6 +72,9 @@ type Server struct {
 	runtimeDone chan struct{}
 	closedDone  chan struct{}
 	storePhase  storeShutdownPhase
+	// beforeStoreClose 由 Host 注入，用于在全部持久化成功后、Store Close 前
+	// 释放并关闭外部 Agent/MCP 资源。失败的持久化不会触发该钩子。
+	beforeStoreClose func(context.Context) error
 }
 
 func NewWorld(config Config, generator Generator, store storage.Store) *Server {
@@ -171,7 +174,7 @@ func newWorld(
 			}
 			server.engine.RegisterCompanion(restore)
 		}
-		server.companionManager = newCompanionManager(server.engine, config, planner, dialogue)
+		server.companionManager = newCompanionManager(server.engine, config, planner, dialogue, companions)
 		// 注入在线玩家权威源：规划快照的 OnlinePlayers 填充与 follow 目标
 		// 的在线性/位置解析共用同一会话注册表读取路径。
 		server.companionManager.onlinePlayers = server.onlinePlanPlayersSnapshot
@@ -339,7 +342,7 @@ func (server *Server) step(scheduled time.Time) contract.TickResult {
 		server.companions.Observe(
 			server.engine.CompanionBodies(),
 			server.companionManagerTaskStates(),
-			server.companionManagerSummaries(),
+			nil,
 		)
 		if err := server.companions.Poll(result.Tick); err != nil {
 			slog.Warn("伙伴自动保存失败，保留重试", "error", err)

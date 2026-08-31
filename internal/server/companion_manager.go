@@ -83,6 +83,16 @@ type companionTaskSlot struct {
 	// 单在途纪律。标记只在 tick 边界（requestDialogue 置位、
 	// applyDialogueOutcome 清除）读写。
 	dialogueInFlight bool
+	// dialogueAttempt 是 tick 为台词请求分配的本地单调身份；过时结果不能
+	// 清除后来请求持有的每伙伴 gate。
+	dialogueAttempt uint64
+	// dialogueReservation 保存首次权威重验已接受的终态 proposal。它不再
+	// 依赖后续任务 generation，只由 operation/epoch 的 commit 或 reconcile
+	// 确认解除。
+	dialogueReservation *companionDialogueReservation
+	// memoryReady 只在当前 lease 已按 v5 current lifecycle reconcile 且无冲突时
+	// 为真；冲突仅暂停本伙伴 Dialogue，不影响任务、Planner 与 FIFO。
+	memoryReady bool
 
 	// 以下三个字段是台词触发节点的任务域状态（D6）。全部属于「当前任务」
 	// 而非槽位：dispatchPlanning 的 BeginHead 分支与 restoreQueue 都按任务
@@ -102,11 +112,6 @@ type companionTaskSlot struct {
 	// companion.MaxDialogueRequestsPerTask；结构上 1+≤6+1 恒不越界，计数是
 	// 对未来接线缺陷的防御性封顶。
 	dialogueRequests int
-
-	// summary 是该伙伴的最近对话摘要（终态 Dialogue 响应写入，≤2,048 bytes）。
-	// 与上面三个任务域字段不同，摘要属于伙伴而非任务：任务边界不重置，
-	// 重启经 restoreQueue 恢复，落盘走 StoredCompanionQueue.Summary。
-	summary string
 
 	// 路径执行状态（仅 Running 有效）。三连失败预算属于单个任务而非槽位：
 	// dispatchPlanning 消费新队首与 restoreQueue 成功恢复时都会把 policy
@@ -185,6 +190,7 @@ type taskEventFact struct {
 type companionManager struct {
 	engine         *runtime.Engine
 	planner        companionPlanner
+	companions     *persistence.Companions
 	timeoutMinutes int
 	table          pathfind.PathBlockTable
 
@@ -210,6 +216,13 @@ type companionManager struct {
 	// 在途台词 ≤ 每伙伴 1 × 伙伴数 ≤ MaxActive，结果每 tick 全量排空，
 	// 容量恰好覆盖峰值；关服 cancel 后 worker 经 ctx.Done 放弃结果退出。
 	dialogueResults chan dialogueOutcome
+	// memoryCommitResults 把已接受 reservation 的 commit 结果送回权威 tick。
+	// 容量按每伙伴最多一个 reservation 封顶，网络 worker 不触碰镜像或广播。
+	memoryCommitResults      chan memoryCommitOutcome
+	memoryReconcileResults   chan memoryReconcileOutcome
+	memoryReconcileFence     uint64
+	memoryReconcileInFlight  bool
+	memoryReconcileRequested bool
 	// dialogue 是台词模型依赖面（D5 机制；触发节点接线属 D6）。nil 不会出现
 	// 于生产构造（server.go 与 Planner 同源构造），防御缺省下 requestDialogue
 	// 不应被调用——D6 接线前没有任何生产调用方。
@@ -237,27 +250,34 @@ func newCompanionManager(
 	config Config,
 	planner companionPlanner,
 	dialogue companionDialogue,
+	companions *persistence.Companions,
 ) *companionManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	manager := &companionManager{
-		engine:          engine,
-		planner:         planner,
-		dialogue:        dialogue,
-		timeoutMinutes:  config.TaskTimeoutMinutes,
-		table:           pathfind.NewPathBlockTable(productionCompanionPassableBlocks()),
-		slots:           make(map[companion.ID]*companionTaskSlot, len(config.Companions)),
-		orderedIDs:      make([]companion.ID, 0, len(config.Companions)),
-		bodies:          make(map[companion.ID]companion.Body, companion.MaxActive),
-		mining:          make(map[companion.ID]contract.MiningUpdate, companion.MaxActive),
-		semaphore:       make(chan struct{}, companion.MaxActive),
-		plannerResults:  make(chan plannerOutcome, companion.MaxActive),
-		pathResults:     make(chan pathOutcome, companion.MaxActive),
-		dialogueResults: make(chan dialogueOutcome, companion.MaxActive),
-		ctx:             ctx,
-		cancel:          cancel,
+		engine:                 engine,
+		planner:                planner,
+		dialogue:               dialogue,
+		companions:             companions,
+		timeoutMinutes:         config.TaskTimeoutMinutes,
+		table:                  pathfind.NewPathBlockTable(productionCompanionPassableBlocks()),
+		slots:                  make(map[companion.ID]*companionTaskSlot, len(config.Companions)),
+		orderedIDs:             make([]companion.ID, 0, len(config.Companions)),
+		bodies:                 make(map[companion.ID]companion.Body, companion.MaxActive),
+		mining:                 make(map[companion.ID]contract.MiningUpdate, companion.MaxActive),
+		semaphore:              make(chan struct{}, companion.MaxActive),
+		plannerResults:         make(chan plannerOutcome, companion.MaxActive),
+		pathResults:            make(chan pathOutcome, companion.MaxActive),
+		dialogueResults:        make(chan dialogueOutcome, companion.MaxActive),
+		memoryCommitResults:    make(chan memoryCommitOutcome, companion.MaxActive),
+		memoryReconcileResults: make(chan memoryReconcileOutcome, 1),
+		ctx:                    ctx,
+		cancel:                 cancel,
 	}
 	for _, definition := range config.Companions {
-		manager.slots[definition.ID] = &companionTaskSlot{definition: definition}
+		_, needsReconcile := dialogue.(companionMemoryReconciler)
+		manager.slots[definition.ID] = &companionTaskSlot{
+			definition: definition, memoryReady: !needsReconcile,
+		}
 		manager.orderedIDs = append(manager.orderedIDs, definition.ID)
 	}
 	// orderedIDs 按字节序排序：每 tick 的事件产生顺序因此确定，EventID 分配
@@ -382,11 +402,14 @@ func (server *Server) advanceCompanionTasks() []chatDelivery {
 		return nil
 	}
 	manager.refreshBodies()
+	manager.applyMemoryReconcileOutcomes()
 	manager.applyPlannerOutcomes()
 	manager.applyPathOutcomes()
 	manager.applyDialogueOutcomes()
+	manager.applyMemoryCommitOutcomes()
 	manager.expireTasks()
 	manager.advanceRunners()
+	manager.dispatchMemoryReconcile()
 	manager.dispatchPlanning()
 	manager.dispatchIdleDialogues()
 	manager.dispatchPathRequests()
@@ -1214,9 +1237,8 @@ func (m *companionManager) restoreQueues(queues []storage.StoredCompanionQueue) 
 	}
 }
 
-// restoreQueue 恢复单个槽位的任务域：当前任务与 FIFO 指令按存档顺序回填，
-// 最近对话摘要进入 manager 状态（属于伙伴而非任务，无队列载荷时同样恢复
-// summary-only 存档）。归一纪律（恢复侧）：Planning/Validating 按 Queued
+// restoreQueue 恢复单个槽位的任务域：当前任务与 FIFO 指令按存档顺序回填。
+// 归一纪律（恢复侧）：Planning/Validating 按 Queued
 // 恢复并保留原始指令，重启后重新发起规划；Running 保留步骤索引与 deadline，
 // 但路径绝不落盘，恢复后 slot.path 为 nil——首个动作前必须经
 // dispatchPathRequests 按当前权威世界重算，天然满足「恢复任务在下一动作前
@@ -1224,7 +1246,6 @@ func (m *companionManager) restoreQueues(queues []storage.StoredCompanionQueue) 
 // 集合在这里按「计划校验成功后一次性预计算」的同一规则重导出；台词预算从
 // 零开始（不持久化，重启松弛 ≤8 次属可接受上界——design.md 裁决）。
 func (m *companionManager) restoreQueue(slot *companionTaskSlot, queue storage.StoredCompanionQueue) {
-	slot.summary = queue.Summary
 	if queue.HasCurrent {
 		task := companion.Task{
 			Command:       companion.TaskCommand(queue.Current.Command),
@@ -1292,29 +1313,6 @@ func (server *Server) companionManagerTaskStates() []companion.TaskQueueState {
 		return nil
 	}
 	return server.companionManager.taskStates()
-}
-
-// companionSummaries 返回全部持有非空摘要的 active 伙伴的观察输入，按
-// orderedIDs（ID 字节序）排列，供 Observe 参与 dirty 判定并随保存载荷落盘
-// （调用方必须持有 stepMu，与 taskStates 同一单写者边界）。inactive 伙伴没有
-// 槽位，天然不出现——「inactive 记录不保存摘要」由队列载荷只覆盖 active
-// 伙伴结构性保证。
-func (m *companionManager) companionSummaries() []persistence.CompanionSummary {
-	summaries := make([]persistence.CompanionSummary, 0, len(m.orderedIDs))
-	for _, id := range m.orderedIDs {
-		if summary := m.slots[id].summary; summary != "" {
-			summaries = append(summaries, persistence.CompanionSummary{ID: id, Summary: summary})
-		}
-	}
-	return summaries
-}
-
-// companionManagerSummaries 是 Observe 调用的空值安全包装。
-func (server *Server) companionManagerSummaries() []persistence.CompanionSummary {
-	if server.companionManager == nil {
-		return nil
-	}
-	return server.companionManager.companionSummaries()
 }
 
 // taskEventDeliveries 把事件事实转成可发布的 ChatEvent 投递。任务事件与

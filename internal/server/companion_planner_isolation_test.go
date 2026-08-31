@@ -9,6 +9,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/internal/storage"
 )
 
 // TestPlannerRequestExcludesPersonaAndSummary 是「表达平面绝不进入规划输入」
@@ -17,7 +18,7 @@ import (
 // cmd/mornlea-server 的 persona 全链测试锁定）与非空最近对话摘要进入 Planning
 // 时，Planner 请求正文 MUST 同时不含二者文本。这补上了既有 planner_test 包级
 // 纯函数测试覆盖不到的 server 接线链路，并以「值」而非「字段名」为断言口径
-// ——未来任何把 slot.summary 或 ResolvedPersona 塞进快照字符串字段的改动
+// ——未来任何把 v5 mirror summary 或 ResolvedPersona 塞进快照字符串字段的改动
 // 都会被捕获。
 func TestPlannerRequestExcludesPersonaAndSummary(t *testing.T) {
 	const secretPersona = "内联人设绝密文本乐观但怕黑"
@@ -32,10 +33,15 @@ func TestPlannerRequestExcludesPersonaAndSummary(t *testing.T) {
 	requests := make(chan companionPlanningRequest, 1)
 	host.world.companionManager.planner = capturingPlannerTestSeam{requests: requests}
 
-	// 摘要属于伙伴而非任务：直接写入 manager 状态模拟「已有对话历史」。
-	host.world.stepMu.Lock()
-	host.world.companionManager.slots[id].summary = secretSummary
-	host.world.stepMu.Unlock()
+	operation, err := companion.ParseID("66666666-6666-4666-8666-666666666666")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := host.world.companions.ReplaceActiveMemory(
+		id, 1, 0, 1, storage.CompanionIdentity(operation), secretSummary,
+	); err != nil {
+		t.Fatalf("seed v5 mirror: %v", err)
+	}
 
 	sendIntegration(t, client, network.ChatCommand{Text: "@阿木 随便走走"})
 	deadline := time.Now().Add(waitDeadline)

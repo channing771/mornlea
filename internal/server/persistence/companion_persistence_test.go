@@ -69,6 +69,59 @@ func TestCompanionPersistenceCarriesV5MetadataAcrossBodyAndTaskSave(t *testing.T
 	store.complete(nil)
 }
 
+func TestCompanionPersistenceReplacesCommittedMemoryAtomically(t *testing.T) {
+	store := newControllableCompanionStore()
+	loaded := persistenceV5Loaded(41)
+	p := NewCompanions(store, loaded, companionPersistenceTestOptions())
+	t.Cleanup(p.Close)
+	nextOperation := persistenceIdentity(0x79)
+	if err := p.ReplaceActiveMemory(
+		loaded.Lifecycles[0].ID,
+		loaded.Lifecycles[0].MemoryEpoch,
+		loaded.Lifecycles[0].MemoryRevision,
+		12,
+		nextOperation,
+		"新的 Agent mirror",
+	); err != nil {
+		t.Fatalf("ReplaceActiveMemory: %v", err)
+	}
+	gotLifecycle, ok := p.MemoryLifecycle(loaded.Lifecycles[0].ID)
+	if !ok || gotLifecycle.MemoryEpoch != loaded.Lifecycles[0].MemoryEpoch ||
+		gotLifecycle.MemoryRevision != 12 || gotLifecycle.MemoryOperationID != nextOperation ||
+		gotLifecycle.Summary != "新的 Agent mirror" {
+		t.Fatalf("lifecycle=%+v ok=%v", gotLifecycle, ok)
+	}
+	if err := p.Poll(10); err != nil {
+		t.Fatalf("Poll: %v", err)
+	}
+	save := receiveCompanionSave(t, store)
+	if save.Revision != 42 || len(save.Lifecycles) != len(loaded.Lifecycles) ||
+		save.Lifecycles[0] != gotLifecycle || save.Lifecycles[1] != loaded.Lifecycles[1] {
+		t.Fatalf("save=%+v", save)
+	}
+	store.complete(nil)
+}
+
+func TestCompanionPersistenceMemoryOverflowDoesNotMutateOrDispatch(t *testing.T) {
+	store := newControllableCompanionStore()
+	loaded := persistenceV5Loaded(math.MaxUint64)
+	p := NewCompanions(store, loaded, companionPersistenceTestOptions())
+	t.Cleanup(p.Close)
+	before, _ := p.MemoryLifecycle(loaded.Lifecycles[0].ID)
+	err := p.ReplaceActiveMemory(
+		before.ID, before.MemoryEpoch, before.MemoryRevision,
+		before.MemoryRevision+1, persistenceIdentity(0x7a), "不得写入",
+	)
+	if !errors.Is(err, storage.ErrCorrupt) {
+		t.Fatalf("ReplaceActiveMemory overflow err=%v", err)
+	}
+	after, _ := p.MemoryLifecycle(before.ID)
+	if after != before {
+		t.Fatalf("overflow mutated lifecycle: before=%+v after=%+v", before, after)
+	}
+	assertNoCompanionSave(t, store)
+}
+
 func TestCompanionPersistenceKeepsActiveZeroMemoryWithoutQueue(t *testing.T) {
 	store := newControllableCompanionStore()
 	loaded := persistenceV5Loaded(5)

@@ -16,12 +16,28 @@ import (
 	"log/slog"
 
 	"github.com/channing771/mornlea/internal/companion"
+	"github.com/channing771/mornlea/internal/storage"
 )
 
-// companionDialogue 是台词模型依赖面：生产实现是 companion.DialogueClient，
-// 测试可注入假模型端点构造的真客户端（replaceDialogueForTest）。
+// companionDialogue 是 Agent Dialogue 的最小依赖面。生产实现只调用 Agent
+// HTTP v1；测试可注入不接触生产 direct-model 配置的受控 adapter。
 type companionDialogue interface {
-	Do(ctx context.Context, req companion.DialogueRequest, terminal bool) (line, summary string, err error)
+	Dialogue(context.Context, companionDialogueRequest) (companionDialogueResult, error)
+	CommitMemory(context.Context, companionMemoryCommitRequest) (companionMemoryCommitResult, error)
+}
+
+type companionMemoryReconciler interface {
+	currentMemoryFence() (uint64, bool)
+	ReconcileMemory(context.Context, storage.StoredCompanionLifecycle) (companionMemoryReconcileResult, error)
+}
+
+type companionDialogueReservation struct {
+	operationID  string
+	memoryEpoch  uint64
+	baseRevision uint64
+	summary      string
+	line         string
+	issuer       companionTaskIssuer
 }
 
 // dialogueOutcome 是一次台词请求的结果，携带伙伴 ID、任务世代、节点身份、
@@ -30,12 +46,28 @@ type companionDialogue interface {
 // 在派发时冻结——结果应用时槽位的 currentIssuer 理论上仍属同一任务纪元
 // （世代一致未被 BeginHead 提升），快照消除对槽位残留状态的任何依赖。
 type dialogueOutcome struct {
-	id         companion.ID
-	generation uint64
-	node       companion.DialogueNode
-	issuer     companionTaskIssuer
-	line       string
-	summary    string
+	id            companion.ID
+	generation    uint64
+	attempt       uint64
+	taskStepIndex int
+	node          companion.DialogueNode
+	issuer        companionTaskIssuer
+	memoryEpoch   uint64
+	result        companionDialogueResult
+	err           error
+}
+
+type memoryCommitOutcome struct {
+	id                companion.ID
+	memoryEpoch       uint64
+	operationID       string
+	committedRevision uint64
+	err               error
+}
+
+type memoryReconcileOutcome struct {
+	fence      uint64
+	lifecycles []storage.StoredCompanionLifecycle
 	err        error
 }
 
@@ -68,13 +100,16 @@ func (m *companionManager) requestDialogue(id companion.ID, node companion.Dialo
 	if m.dialogue == nil {
 		return
 	}
+	if !slot.memoryReady {
+		return
+	}
 	taskNode := node.Kind != companion.DialogueNodeIdle
 	if taskNode && slot.dialogueRequests >= companion.MaxDialogueRequestsPerTask {
 		// 每任务预算（本进程计数，不持久化——design.md 裁决）：结构上
 		// 1+≤6+1 封顶，计数只防御未来接线缺陷，不参与正常路径。
 		return
 	}
-	if slot.planningInFlight || slot.dialogueInFlight {
+	if slot.planningInFlight || slot.dialogueInFlight || slot.dialogueReservation != nil {
 		// 每伙伴最多一个在途台词请求：新节点到来时仍有在途即跳过，不取消、
 		// 不替换在途请求（spec：「在途请求存在时新节点被跳过」）。跳过即
 		// 放弃该节点，绝不补发。
@@ -92,24 +127,125 @@ func (m *companionManager) requestDialogue(id companion.ID, node companion.Dialo
 		// 先进入 Planning，再于同 tick 以 PlannerUnavailable 终结。
 		return
 	}
-	// 人设来自配置解析的生效值（ResolvedPersona，D2）；摘要是 manager 持有的
-	// 最近对话摘要（终态响应写入、重启经 restoreQueue 恢复），只进 Dialogue
-	// 请求、绝不进入 Planner 输入。
-	request, err := companion.NewDialogueRequest(
-		slot.definition.ResolvedPersona, slot.summary, node, m.buildDialogueEnvDigest(body))
-	if err != nil {
-		// 防御路径：环境扫描与配置人设都已在各自边界校验，这里失败只可能是
-		// 服务端缺陷。归还刚占用的槽位并跳过该台词，绝不影响任务平面。
+	lifecycle, ok := m.companions.MemoryLifecycle(id)
+	if !ok || !lifecycle.Active || lifecycle.MemoryEpoch == 0 {
 		<-m.semaphore
-		slog.Error("构造台词请求失败", "companion", id, "error", err)
 		return
 	}
+	fact, ok := agentDialogueFact(node)
+	if !ok {
+		<-m.semaphore
+		return
+	}
+	digest := m.buildDialogueEnvDigest(body)
+	environment := companion.AgentDialogueEnvironment{
+		ExposedBlocks: make([]companion.AgentVisibleBlock, len(digest.ExposedBlocks)),
+		Heights:       make([]companion.AgentHeight, len(digest.Heights)),
+	}
+	for index, block := range digest.ExposedBlocks {
+		environment.ExposedBlocks[index] = companion.AgentVisibleBlock{
+			Position: companion.AgentBlockPosition{X: block.Pos.X, Y: block.Pos.Y, Z: block.Pos.Z},
+			BlockID:  uint16(block.Block),
+		}
+	}
+	for index, height := range digest.Heights {
+		environment.Heights[index] = companion.AgentHeight{X: height.X, Z: height.Z, Height: int16(height.Height)}
+	}
+	request := companionDialogueRequest{
+		CompanionID: id, Generation: slot.queue.Generation(), MemoryEpoch: lifecycle.MemoryEpoch,
+		Persona: slot.definition.ResolvedPersona, Fact: fact, Environment: environment,
+		Terminal: node.Kind == companion.DialogueNodeTerminal,
+	}
+	if slot.dialogueAttempt == ^uint64(0) {
+		<-m.semaphore
+		return
+	}
+	slot.dialogueAttempt++
 	slot.dialogueInFlight = true
 	if taskNode {
 		slot.dialogueRequests++
 	}
+	taskStepIndex := -1
+	if current, hasCurrent := slot.queue.Current(); hasCurrent {
+		taskStepIndex = current.StepIndex
+	}
 	m.waitGroup.Add(1)
-	go m.dialogueWorker(id, slot.queue.Generation(), node, slot.currentIssuer, request)
+	go m.dialogueWorker(
+		id, slot.queue.Generation(), slot.dialogueAttempt, taskStepIndex,
+		node, slot.currentIssuer, request,
+	)
+}
+
+func agentDialogueFact(node companion.DialogueNode) (companion.AgentDialogueFact, bool) {
+	switch node.Kind {
+	case companion.DialogueNodeStart:
+		return companion.AgentDialogueFact{Kind: "start"}, true
+	case companion.DialogueNodeProgress:
+		stepKind, ok := agentDialogueStepKind(node.StepKind)
+		if !ok {
+			return companion.AgentDialogueFact{}, false
+		}
+		return companion.AgentDialogueFact{Kind: "progress", StepKind: stepKind}, true
+	case companion.DialogueNodeFirstArrival:
+		return companion.AgentDialogueFact{Kind: "first_arrival"}, true
+	case companion.DialogueNodeIdle:
+		return companion.AgentDialogueFact{Kind: "idle"}, true
+	case companion.DialogueNodeTerminal:
+		state, reason, ok := agentDialogueTerminalFact(node.State, node.Reason)
+		if !ok {
+			return companion.AgentDialogueFact{}, false
+		}
+		return companion.AgentDialogueFact{Kind: "terminal", State: state, Reason: reason}, true
+	default:
+		return companion.AgentDialogueFact{}, false
+	}
+}
+
+func agentDialogueStepKind(kind companion.PlanStepKind) (string, bool) {
+	switch kind {
+	case companion.PlanStepGoTo:
+		return "go_to", true
+	case companion.PlanStepMine:
+		return "mine", true
+	case companion.PlanStepPlace:
+		return "place", true
+	default:
+		return "", false
+	}
+}
+
+func agentDialogueTerminalFact(state companion.TaskState, reason companion.TaskFailReason) (string, string, bool) {
+	stateText := ""
+	switch state {
+	case companion.TaskCompleted:
+		stateText = "completed"
+	case companion.TaskFailed:
+		stateText = "failed"
+	case companion.TaskTimedOut:
+		stateText = "timed_out"
+	case companion.TaskStopped:
+		stateText = "stopped"
+	default:
+		return "", "", false
+	}
+	reasonText := "none"
+	if state == companion.TaskFailed {
+		switch reason {
+		case companion.TaskFailPlannerUnavailable:
+			reasonText = "planner_unavailable"
+		case companion.TaskFailInvalidPlan:
+			reasonText = "invalid_plan"
+		case companion.TaskFailPathUnreachable:
+			reasonText = "path_unreachable"
+		case companion.TaskFailWorldChanged:
+			reasonText = "world_changed"
+		case companion.TaskFailInventoryFull:
+			reasonText = "inventory_full"
+		default:
+			return "", "", false
+		}
+	}
+	return stateText, reasonText, true
 }
 
 // dialogueWorker 在 worker goroutine 上调用模型：只读不可变请求值，结果经
@@ -120,13 +256,14 @@ func (m *companionManager) requestDialogue(id companion.ID, node companion.Dialo
 func (m *companionManager) dialogueWorker(
 	id companion.ID,
 	generation uint64,
+	attempt uint64,
+	taskStepIndex int,
 	node companion.DialogueNode,
 	issuer companionTaskIssuer,
-	request companion.DialogueRequest,
+	request companionDialogueRequest,
 ) {
 	defer m.waitGroup.Done()
-	terminal := node.Kind == companion.DialogueNodeTerminal
-	line, summary, err := m.dialogue.Do(m.ctx, request, terminal)
+	result, err := m.dialogue.Dialogue(m.ctx, request)
 	// 释放先于发送：`m.semaphore` 约束的是在途模型调用数，`m.dialogue.Do` 返回
 	// 即调用结束、名额自此可复用，结果投递只是队列簿记。若先发送再经 defer
 	// 释放，两者之间没有屏障，tick 线程 try-acquire 的成败便依赖 goroutine
@@ -135,8 +272,9 @@ func (m *companionManager) dialogueWorker(
 	// 先释放、发送走 `<-m.ctx.Done()` 分支放弃结果）。
 	<-m.semaphore
 	outcome := dialogueOutcome{
-		id: id, generation: generation, node: node, issuer: issuer,
-		line: line, summary: summary, err: err,
+		id: id, generation: generation, attempt: attempt, taskStepIndex: taskStepIndex,
+		node: node, issuer: issuer,
+		memoryEpoch: request.MemoryEpoch, result: result, err: err,
 	}
 	select {
 	case m.dialogueResults <- outcome:
@@ -167,7 +305,7 @@ func (m *companionManager) applyDialogueOutcomes() {
 // 结构化日志并跳过该台词。
 func (m *companionManager) applyDialogueOutcome(outcome dialogueOutcome) {
 	slot := m.slots[outcome.id]
-	if slot == nil || !slot.dialogueInFlight {
+	if slot == nil || !slot.dialogueInFlight || slot.dialogueAttempt != outcome.attempt {
 		return
 	}
 	slot.dialogueInFlight = false
@@ -184,10 +322,14 @@ func (m *companionManager) applyDialogueOutcome(outcome dialogueOutcome) {
 	switch outcome.node.Kind {
 	case companion.DialogueNodeStart, companion.DialogueNodeProgress, companion.DialogueNodeFirstArrival:
 		current, ok := slot.queue.Current()
-		if !ok || current.State != companion.TaskRunning {
+		if !ok || current.State != companion.TaskRunning || current.StepIndex != outcome.taskStepIndex ||
+			!m.taskDialogueAudience(slot, outcome.issuer) {
 			return
 		}
 	case companion.DialogueNodeTerminal:
+		if !m.taskDialogueAudience(slot, outcome.issuer) {
+			return
+		}
 	case companion.DialogueNodeIdle:
 		// idle 结果的专用重验（D7）：请求在途期间世界事实可能已变化，只有
 		// 队列仍完全空、发令者仍是发起请求的同一真实玩家（非恢复合成身份）、
@@ -211,30 +353,246 @@ func (m *companionManager) applyDialogueOutcome(outcome dialogueOutcome) {
 	}
 	if outcome.err != nil {
 		// 失败只跳过台词：错误来自客户端的三类哨兵（传输层/请求构造/输出
-		// 解码，F-3 拆分后请求与输出各有独立哨兵），客户端已保证错误文本
+		// 解码，请求与输出各有独立哨兵），客户端已保证错误文本
 		// 不含密钥与响应正文原文。
 		slog.Debug("台词请求失败，跳过该台词",
 			"companion", outcome.id, "node", uint8(outcome.node.Kind), "error", outcome.err)
 		return
 	}
-	m.applyDialogueEffect(outcome.id, outcome.node, outcome.issuer, outcome.line, outcome.summary)
+	if outcome.result.Generation != outcome.generation || outcome.result.MemoryEpoch != outcome.memoryEpoch {
+		return
+	}
+	if outcome.node.Kind == companion.DialogueNodeTerminal {
+		proposal := outcome.result.Proposal
+		lifecycle, ok := m.companions.MemoryLifecycle(outcome.id)
+		if proposal == nil || !ok || !lifecycle.Active || lifecycle.MemoryEpoch != outcome.memoryEpoch ||
+			proposal.BaseRevision != lifecycle.MemoryRevision {
+			return
+		}
+		slot.dialogueReservation = &companionDialogueReservation{
+			operationID: proposal.OperationID, memoryEpoch: outcome.memoryEpoch,
+			baseRevision: proposal.BaseRevision, summary: proposal.Summary,
+			line: outcome.result.Line, issuer: outcome.issuer,
+		}
+		if m.dialogue != nil {
+			m.waitGroup.Add(1)
+			go m.memoryCommitWorker(outcome.id, *slot.dialogueReservation)
+		}
+		return
+	}
+	if outcome.result.Proposal != nil {
+		return
+	}
+	m.applyDialogueEffect(outcome.id, outcome.issuer, outcome.result.Line)
+}
+
+func (m *companionManager) taskDialogueAudience(
+	slot *companionTaskSlot,
+	issuer companionTaskIssuer,
+) bool {
+	if issuer.restored || slot.currentIssuer.restored ||
+		slot.currentIssuer.playerID != issuer.playerID || slot.currentIssuer.name != issuer.name {
+		return false
+	}
+	if m.onlinePlayers == nil {
+		return true
+	}
+	for _, player := range m.onlinePlayers() {
+		if player.ID == issuer.playerID {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *companionManager) memoryCommitWorker(
+	id companion.ID,
+	reservation companionDialogueReservation,
+) {
+	defer m.waitGroup.Done()
+	result, err := m.dialogue.CommitMemory(m.ctx, companionMemoryCommitRequest{
+		CompanionID: id, MemoryEpoch: reservation.memoryEpoch,
+		BaseRevision: reservation.baseRevision, OperationID: reservation.operationID,
+		Summary: reservation.summary,
+	})
+	outcome := memoryCommitOutcome{
+		id: id, memoryEpoch: result.MemoryEpoch, operationID: result.OperationID,
+		committedRevision: result.CommittedRevision, err: err,
+	}
+	select {
+	case m.memoryCommitResults <- outcome:
+	case <-m.ctx.Done():
+	}
+}
+
+func (m *companionManager) applyMemoryCommitOutcomes() {
+	for {
+		select {
+		case outcome := <-m.memoryCommitResults:
+			m.applyMemoryCommitOutcome(outcome)
+		default:
+			return
+		}
+	}
+}
+
+func (m *companionManager) applyMemoryCommitOutcome(outcome memoryCommitOutcome) {
+	slot := m.slots[outcome.id]
+	if slot == nil || slot.dialogueReservation == nil {
+		return
+	}
+	if outcome.err != nil {
+		m.memoryReconcileRequested = true
+		return
+	}
+	reservation := slot.dialogueReservation
+	if outcome.memoryEpoch != reservation.memoryEpoch ||
+		outcome.operationID != reservation.operationID ||
+		reservation.baseRevision == ^uint64(0) ||
+		outcome.committedRevision != reservation.baseRevision+1 {
+		return
+	}
+	operation, err := companion.ParseID(outcome.operationID)
+	if err != nil {
+		return
+	}
+	if err := m.companions.ReplaceActiveMemory(
+		outcome.id, reservation.memoryEpoch, reservation.baseRevision,
+		outcome.committedRevision, storage.CompanionIdentity(operation), reservation.summary,
+	); err != nil {
+		return
+	}
+	m.applyDialogueEffect(outcome.id, reservation.issuer, reservation.line)
+	slot.dialogueReservation = nil
+}
+
+func (m *companionManager) dispatchMemoryReconcile() {
+	reconciler, ok := m.dialogue.(companionMemoryReconciler)
+	if !ok || m.memoryReconcileInFlight {
+		return
+	}
+	fence, current := reconciler.currentMemoryFence()
+	if !current {
+		for _, slot := range m.slots {
+			slot.memoryReady = false
+		}
+		return
+	}
+	if fence == m.memoryReconcileFence && !m.memoryReconcileRequested {
+		return
+	}
+	m.memoryReconcileRequested = false
+	m.memoryReconcileInFlight = true
+	for _, slot := range m.slots {
+		slot.memoryReady = false
+	}
+	lifecycles := m.companions.MemoryLifecycles()
+	m.waitGroup.Add(1)
+	go m.memoryReconcileWorker(reconciler, fence, lifecycles)
+}
+
+func (m *companionManager) memoryReconcileWorker(
+	reconciler companionMemoryReconciler,
+	fence uint64,
+	lifecycles []storage.StoredCompanionLifecycle,
+) {
+	defer m.waitGroup.Done()
+	results := make([]storage.StoredCompanionLifecycle, 0, len(lifecycles))
+	for _, lifecycle := range lifecycles {
+		result, err := reconciler.ReconcileMemory(m.ctx, lifecycle)
+		if err != nil {
+			select {
+			case m.memoryReconcileResults <- memoryReconcileOutcome{fence: fence, err: err}:
+			case <-m.ctx.Done():
+			}
+			return
+		}
+		results = append(results, result.Lifecycle)
+	}
+	select {
+	case m.memoryReconcileResults <- memoryReconcileOutcome{fence: fence, lifecycles: results}:
+	case <-m.ctx.Done():
+	}
+}
+
+func (m *companionManager) applyMemoryReconcileOutcomes() {
+	for {
+		select {
+		case outcome := <-m.memoryReconcileResults:
+			m.memoryReconcileInFlight = false
+			m.memoryReconcileFence = outcome.fence
+			if outcome.err == nil {
+				m.applyMemoryReconcileOutcome(outcome)
+			}
+		default:
+			return
+		}
+	}
+}
+
+func (m *companionManager) applyMemoryReconcileOutcome(outcome memoryReconcileOutcome) {
+	for _, remote := range outcome.lifecycles {
+		slot := m.slots[remote.ID]
+		local, ok := m.companions.MemoryLifecycle(remote.ID)
+		if slot == nil || !ok || local.Active != remote.Active ||
+			local.MemoryEpoch != remote.MemoryEpoch {
+			if slot != nil {
+				slot.memoryReady = false
+			}
+			continue
+		}
+		if !local.Active {
+			slot.memoryReady = local.TombstoneOperationID == remote.TombstoneOperationID
+			continue
+		}
+		if remote.MemoryRevision < local.MemoryRevision {
+			slot.memoryReady = false
+			continue
+		}
+		if remote.MemoryRevision == local.MemoryRevision {
+			slot.memoryReady = remote.MemoryOperationID == local.MemoryOperationID &&
+				remote.Summary == local.Summary
+			continue
+		}
+		if err := m.companions.ReplaceActiveMemory(
+			remote.ID, remote.MemoryEpoch, local.MemoryRevision,
+			remote.MemoryRevision, remote.MemoryOperationID, remote.Summary,
+		); err != nil {
+			slot.memoryReady = false
+			continue
+		}
+		slot.memoryReady = true
+		reservation := slot.dialogueReservation
+		var operation companion.ID
+		var parseErr error
+		if reservation != nil {
+			operation, parseErr = companion.ParseID(reservation.operationID)
+		}
+		if reservation != nil && parseErr == nil && reservation.memoryEpoch == remote.MemoryEpoch &&
+			reservation.baseRevision != ^uint64(0) &&
+			remote.MemoryRevision == reservation.baseRevision+1 &&
+			remote.MemoryOperationID == storage.CompanionIdentity(operation) &&
+			remote.Summary == reservation.summary {
+			m.applyDialogueEffect(remote.ID, reservation.issuer, reservation.line)
+			slot.dialogueReservation = nil
+		}
+	}
 }
 
 // applyDialogueEffect 把一条有效台词结果落到可观察行为（D6 真身）：
 //   - 构造 CompanionSpeech 广播事实（kind ChatEventCompanionSpeech、伙伴身份
 //     与台词、reason None），经本 tick 的 takeEventFacts → taskEventDeliveries
 //     管道广播给全部在线玩家，EventID 沿全服聊天计数器严格递增；
-//   - 终态节点的 summary 写入 manager 持有的每伙伴摘要状态
-//     （slot.summary），随下一次 Observe 标记 AI 存档 dirty 落盘。
+//   - 终态 memory 只由 commit/reconcile 成功路径整体替换 v5 mirror；普通台词
+//     与本方法都不持有或改写裸摘要。
 //
 // 表达平面纪律：本方法绝不改变任务状态、FIFO、路径或任何世界事实；摘要只
 // 作为后续 Dialogue 请求输入，绝不进入 Planner（dialogueEffects 计数是 D5
 // 遗留的测试观察哨兵，保留供既有测试断言）。
 func (m *companionManager) applyDialogueEffect(
 	id companion.ID,
-	node companion.DialogueNode,
 	issuer companionTaskIssuer,
-	line, summary string,
+	line string,
 ) {
 	m.dialogueEffects++
 	slot := m.slots[id]
@@ -248,11 +606,6 @@ func (m *companionManager) applyDialogueEffect(
 		definition: slot.definition,
 		speech:     line,
 	})
-	if node.Kind == companion.DialogueNodeTerminal {
-		// 摘要只在终态更新（spec：「最近对话摘要 SHALL 只由终态 Dialogue
-		// 响应的 summary 字段更新」）；空串等价于清空记忆，同样落状态。
-		slot.summary = summary
-	}
 }
 
 // buildDialogueEnvDigest 在 tick 边界构造一次台词请求的环境摘要：复用规划
