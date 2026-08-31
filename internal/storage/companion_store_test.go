@@ -165,9 +165,8 @@ func TestCompanionStoreExistenceProbeDoesNotDecodeBody(t *testing.T) {
 
 func TestCompanionStoreContract(t *testing.T) {
 	implementations := []struct {
-		name            string
-		open            func(*testing.T) closeableCompanionStore
-		closedAPIErrors bool
+		name string
+		open func(*testing.T) closeableCompanionStore
 	}{
 		{
 			name: "memory",
@@ -186,13 +185,12 @@ func TestCompanionStoreContract(t *testing.T) {
 				}
 				return store
 			},
-			closedAPIErrors: true,
 		},
 	}
 
 	for _, implementation := range implementations {
 		t.Run(implementation.name, func(t *testing.T) {
-			testCompanionStoreContract(t, implementation.open, implementation.closedAPIErrors)
+			testCompanionStoreContract(t, implementation.open)
 		})
 	}
 }
@@ -200,7 +198,6 @@ func TestCompanionStoreContract(t *testing.T) {
 func testCompanionStoreContract(
 	t *testing.T,
 	open func(*testing.T) closeableCompanionStore,
-	closedAPIErrors bool,
 ) {
 	t.Helper()
 
@@ -330,9 +327,6 @@ func testCompanionStoreContract(
 		}
 		if err := store.Close(); err != nil {
 			t.Fatalf("second Close=%v", err)
-		}
-		if !closedAPIErrors {
-			return
 		}
 		if _, err := store.LoadCompanions(context.Background()); !errors.Is(err, os.ErrClosed) {
 			t.Fatalf("LoadCompanions after Close error=%v，想要 os.ErrClosed", err)

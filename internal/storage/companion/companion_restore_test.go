@@ -738,78 +738,156 @@ func TestCompanionRestoreRejectsCorruptTaskPayloads(t *testing.T) {
 		})
 	}
 
-	// v3 变长布局的解码侧字节补丁：偏移按第一性原理推导——首记录任务区
-	// 起点为 32+221+1，指令前缀 2 + 指令字节 + 步骤数 2 后进入步骤区；
-	// go_to/mine 各 13、place 15、follow 17。follow 的玩家 ID 在其 kind 字节
-	// 之后，deadline 在步骤区之后的 4+1+1+8 偏移处。
-	v3Valid, err := Encode(fixtureV5SaveForTest(CompanionSave{
+	// legacy v3 变长布局的解码侧补丁必须从冻结 fixture 出发，避免当前
+	// encoder 升级后以 v5 字节误冒充历史载荷。
+	v3Valid, err := os.ReadFile(filepath.Join("testdata", "companions-v3.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if schema := binary.LittleEndian.Uint32(v3Valid[8:12]); schema != companionSchemaV3 {
+		t.Fatalf("v3 字节补丁基线 schema=%d，想要 3", schema)
+	}
+	commandBytes := len("去橡树旁挖一格垫一块再跟着我")
+	v3TaskOffset := companionHeaderLength + companionRecordLength + 1
+	v3StepsBase := v3TaskOffset + companionTaskCommandPrefixLength + commandBytes + 2
+	v3FollowKindOffset := v3StepsBase + 13 + 13 + 15
+	v3DeadlineOffset := v3FollowKindOffset + 17 + 4 + 1 + 1 + 8
+
+	// current v5 在首记录之前新增 namespace，并在 body 后固定写 flags、epoch、
+	// active mirror 与 summary 长度前缀；任务偏移必须完整跨过这些字段。
+	v5VariableValid, err := Encode(fixtureV5SaveForTest(CompanionSave{
 		Revision: 7,
 		Records:  fixtureCompanionBodies(),
 		Queues:   fixtureCompanionV3Queues(),
 	}))
-
 	if err != nil {
 		t.Fatal(err)
 	}
-	commandBytes := len("去橡树旁挖一格垫一块再跟着我")
-	v3StepsBase := companionHeaderLength + companionRecordLength + 1 + 2 + commandBytes + 2
-	v3FollowKindOffset := v3StepsBase + 13 + 13 + 15
-	v3DeadlineOffset := v3FollowKindOffset + 17 + 4 + 1 + 1 + 8
+	if schema := binary.LittleEndian.Uint32(v5VariableValid[8:12]); schema != companionSchemaV5 {
+		t.Fatalf("v5 字节补丁基线 schema=%d，想要 5", schema)
+	}
+	v5FlagsOffset := companionHeaderLength + len(Identity{}) + companionRecordLength
+	v5SummaryLengthOffset := v5FlagsOffset + 1 + 8 + 8 + len(Identity{})
+	v5SummaryLength := int(binary.LittleEndian.Uint16(v5VariableValid[v5SummaryLengthOffset:]))
+	v5TaskOffset := v5SummaryLengthOffset + companionSummaryPrefixLength + v5SummaryLength
+	v5StepsBase := v5TaskOffset + companionTaskCommandPrefixLength + commandBytes + 2
+	v5FollowKindOffset := v5StepsBase + 13 + 13 + 15
+	v5DeadlineOffset := v5FollowKindOffset + 17 + 4 + 1 + 1 + 8
+
+	assertByte := func(t *testing.T, payload []byte, offset int, want byte, field string) {
+		t.Helper()
+		if offset < 0 || offset >= len(payload) {
+			t.Fatalf("%s offset=%d 超出载荷长度 %d", field, offset, len(payload))
+		}
+		if got := payload[offset]; got != want {
+			t.Fatalf("%s patch 原值=%#x，想要 %#x", field, got, want)
+		}
+	}
+	assertBytes := func(t *testing.T, payload []byte, offset int, want []byte, field string) {
+		t.Helper()
+		if offset < 0 || offset+len(want) > len(payload) {
+			t.Fatalf("%s offset=%d 长度=%d 超出载荷长度 %d", field, offset, len(want), len(payload))
+		}
+		if got := payload[offset : offset+len(want)]; !bytes.Equal(got, want) {
+			t.Fatalf("%s patch 原值=%x，想要 %x", field, got, want)
+		}
+	}
+	assertU64 := func(t *testing.T, payload []byte, offset int, want uint64, field string) {
+		t.Helper()
+		if offset < 0 || offset+8 > len(payload) {
+			t.Fatalf("%s offset=%d 超出载荷长度 %d", field, offset, len(payload))
+		}
+		if got := binary.LittleEndian.Uint64(payload[offset:]); got != want {
+			t.Fatalf("%s patch 原值=%d，想要 %d", field, got, want)
+		}
+	}
 
 	byteTests := []struct {
 		name    string
-		payload func() []byte
+		payload func(*testing.T) []byte
 		want    error
 	}{
-		{"CRC", func() []byte {
+		{"CRC", func(t *testing.T) []byte {
 			payload := bytes.Clone(valid)
+			if got, want := binary.LittleEndian.Uint32(payload[28:]), companionChecksum(payload); got != want {
+				t.Fatalf("CRC patch 原值=%#x，想要有效 checksum %#x", got, want)
+			}
 			payload[len(payload)-1] ^= 0xff
 			return payload
 		}, storagedef.ErrCorrupt},
-		{"truncation", func() []byte { return bytes.Clone(valid[:len(valid)-1]) }, storagedef.ErrCorrupt},
-		{"trailing byte", func() []byte { return append(bytes.Clone(valid), 0) }, storagedef.ErrCorrupt},
-		{"future schema", func() []byte {
+		{"truncation", func(*testing.T) []byte { return bytes.Clone(valid[:len(valid)-1]) }, storagedef.ErrCorrupt},
+		{"trailing byte", func(*testing.T) []byte { return append(bytes.Clone(valid), 0) }, storagedef.ErrCorrupt},
+		{"future schema", func(t *testing.T) []byte {
 			payload := bytes.Clone(valid)
+			if got := binary.LittleEndian.Uint32(payload[8:]); got != CurrentSchema {
+				t.Fatalf("schema patch 原值=%d，想要 %d", got, CurrentSchema)
+			}
 			binary.LittleEndian.PutUint32(payload[8:], CurrentSchema+1)
 			return payload
 		}, storagedef.ErrFutureVersion},
-		{"future envelope", func() []byte {
+		{"future envelope", func(t *testing.T) []byte {
 			payload := bytes.Clone(valid)
+			if got := binary.LittleEndian.Uint32(payload[4:]); got != companionEnvelopeVersion {
+				t.Fatalf("envelope patch 原值=%d，想要 %d", got, companionEnvelopeVersion)
+			}
 			binary.LittleEndian.PutUint32(payload[4:], companionEnvelopeVersion+1)
 			return payload
 		}, storagedef.ErrFutureVersion},
-		{"reserved flags", func() []byte {
+		{"v5 reserved flags", func(t *testing.T) []byte {
 			payload := bytes.Clone(valid)
-			payload[companionHeaderLength+companionRecordLength] |= 0x04
+			assertByte(t, payload, v5FlagsOffset, companionFlagActive|companionFlagHasTask|companionFlagHasFIFO, "v5 flags")
+			payload[v5FlagsOffset] |= 0x08
 			repairCompanionCRC(payload)
 			return payload
 		}, storagedef.ErrCorrupt},
-		// v3 非法 kind：解码在步骤处立即拒绝，绝不按猜测步长继续（错位会
-		// 把后续字段整体读错）。
-		{"v3 illegal step kind", func() []byte {
+		{"v3 illegal step kind", func(t *testing.T) []byte {
 			payload := bytes.Clone(v3Valid)
+			assertByte(t, payload, v3FollowKindOffset, byte(companion.PlanStepFollow), "v3 follow kind")
 			payload[v3FollowKindOffset] = 0x09
 			repairCompanionCRC(payload)
 			return payload
 		}, storagedef.ErrCorrupt},
-		// v3 follow 目标玩家 ID 非法（全零）。
-		{"v3 follow player ID invalid", func() []byte {
+		{"v3 follow player ID invalid", func(t *testing.T) []byte {
 			payload := bytes.Clone(v3Valid)
+			playerID := fixtureFollowPlayerID()
+			assertBytes(t, payload, v3FollowKindOffset+1, playerID[:], "v3 follow player ID")
 			clear(payload[v3FollowKindOffset+1 : v3FollowKindOffset+17])
 			repairCompanionCRC(payload)
 			return payload
 		}, storagedef.ErrCorrupt},
-		// v3 follow 任务携带非零 deadline：解码侧与编码侧同一道门。
-		{"v3 follow deadline set", func() []byte {
+		{"v3 follow deadline set", func(t *testing.T) []byte {
 			payload := bytes.Clone(v3Valid)
+			assertU64(t, payload, v3DeadlineOffset, 0, "v3 follow deadline")
 			binary.LittleEndian.PutUint64(payload[v3DeadlineOffset:], 3600)
+			repairCompanionCRC(payload)
+			return payload
+		}, storagedef.ErrCorrupt},
+		{"v5 illegal step kind", func(t *testing.T) []byte {
+			payload := bytes.Clone(v5VariableValid)
+			assertByte(t, payload, v5FollowKindOffset, byte(companion.PlanStepFollow), "v5 follow kind")
+			payload[v5FollowKindOffset] = 0x09
+			repairCompanionCRC(payload)
+			return payload
+		}, storagedef.ErrCorrupt},
+		{"v5 follow player ID invalid", func(t *testing.T) []byte {
+			payload := bytes.Clone(v5VariableValid)
+			playerID := fixtureFollowPlayerID()
+			assertBytes(t, payload, v5FollowKindOffset+1, playerID[:], "v5 follow player ID")
+			clear(payload[v5FollowKindOffset+1 : v5FollowKindOffset+17])
+			repairCompanionCRC(payload)
+			return payload
+		}, storagedef.ErrCorrupt},
+		{"v5 follow deadline set", func(t *testing.T) []byte {
+			payload := bytes.Clone(v5VariableValid)
+			assertU64(t, payload, v5DeadlineOffset, 0, "v5 follow deadline")
+			binary.LittleEndian.PutUint64(payload[v5DeadlineOffset:], 3600)
 			repairCompanionCRC(payload)
 			return payload
 		}, storagedef.ErrCorrupt},
 	}
 	for _, tc := range byteTests {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := Decode(tc.payload()); !errors.Is(err, tc.want) {
+			if _, err := Decode(tc.payload(t)); !errors.Is(err, tc.want) {
 				t.Fatalf("decode error=%v，想要 %v", err, tc.want)
 			}
 		})
@@ -823,6 +901,7 @@ func TestCompanionRestoreRejectsCorruptTaskPayloads(t *testing.T) {
 	}
 	v2StepKind := companionHeaderLength + companionRecordLength + 1 + 2 + len("先去那棵橡树再看一眼") + 2
 	v2IllegalKind := bytes.Clone(v2Golden)
+	assertByte(t, v2IllegalKind, v2StepKind, byte(companion.PlanStepGoTo), "v2 step kind")
 	v2IllegalKind[v2StepKind] = byte(companion.PlanStepFollow)
 	repairCompanionCRC(v2IllegalKind)
 	if _, err := Decode(v2IllegalKind); !errors.Is(err, storagedef.ErrCorrupt) {

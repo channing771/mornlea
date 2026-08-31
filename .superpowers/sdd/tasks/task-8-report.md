@@ -112,3 +112,64 @@ lease、MCP、HTTP cutover 或 memory mutation。
 ## 提交状态
 
 实现与报告将按 Task 8 文件清单显式暂存并核对；commit 等待控制会话明确授权。
+
+## Quality repair round 1
+
+### 真实 RED
+
+- `go test ./internal/storage/companion -run '^TestCompanionRestoreRejectsCorruptTaskPayloads$' -count=1`
+  失败：所谓 v3 字节补丁基线实际由当前 encoder 生成，断言得到
+  `schema=5`、期望 `3`（wall 1.9s）。
+- 把 legacy 基线切到 committed `companions-v3.bin` 后，
+  `go test ./internal/storage/companion -run '^TestCompanionRestoreRejectsCorruptTaskPayloads$/reserved_flags$' -count=1`
+  再次失败：旧 offset 读到 `0x0`、期望 v5 flags `0x7`（wall 1.2s），证明
+  原测试没有跨过 16-byte namespace。
+- `go test ./internal/storage -run '^TestCompanionStoreContract/memory/close_is_idempotent$' -count=1`
+  失败：Memory `LoadCompanions` 在 `Close` 后返回
+  `ErrCompanionsNotFound`，期望 `os.ErrClosed`（wall 1.8s）。
+
+### 修复
+
+- legacy v3 corruption 直接读取冻结的 `testdata/companions-v3.bin`；current
+  v5 corruption 单独由 v5 encoder 生成。v5 task offset 明确跨过 namespace、
+  flags、epoch、memory revision、operation、summary length prefix 与 summary
+  bytes；v3/v5 kind、follow player ID、deadline 及 reserved flags 在写补丁前均
+  断言原字段精确值，reserved bit 使用真正未分配的 bit3。
+- 最近的 `internal/storage/companion/AGENTS.md` 已同步 current v5 wire、
+  identity/lifecycle/mirror/tombstone、v1..v4 decode-only、精确
+  `MaxFileLength`、committed v1..v5 golden、strict tests 与现存文件名。
+- Memory `LoadCompanions`/`SaveCompanions` 与既有 metadata-only probe 一致，
+  在持锁后先检查 `closed` 并返回 `os.ErrClosed`；根 companion store contract
+  不再跳过 Memory。其他 Memory API 的既有 Close 差异不在本轮范围内，未扩改。
+
+### 当前 GREEN 与并发隔离
+
+- 修复后定点 codec 用例：PASS（package 0.498s；wall 1.4s）。
+- 修复后 Memory/Disk close 子契约：PASS（package 0.852s；wall 1.6s）。
+- `go test ./internal/storage/companion -race -count=1`：PASS
+  （package 2.081s；real 3.70s）。
+- `go test ./internal/storage -run 'Companion' -race -count=1`：PASS
+  （package 2.345s；real 4.22s）。
+- `go vet ./internal/storage/companion ./internal/storage ./internal/server/persistence ./internal/server`：
+  PASS（real 2.83s）。
+- `git diff --check`：PASS（real 0.02s）。
+- 共享 worktree 的首次 `go test ./internal/archcheck -count=1` 仅因并发 Task 7B
+  未完成文件 `internal/companion/planning_tools_test.go` 引用尚不存在的
+  `ToolGetPlanningContext` 失败；本轮没有修改该文件。首次 detached 复验也在
+  测试执行前因 clean worktree 尚无 `libmornlea_engine` 构建产物链接失败，临时
+  worktree 已立即清理；第二次按根指南先执行 `make rust` 后进入真实门禁。
+- commit `11f897c7` 的 detached 临时 worktree 通过 cached binary diff 管道只
+  应用本轮五个 staged repair 文件；`make rust` PASS（real 66.25s），随后：
+  - `go test ./internal/storage/companion -race -count=1`：PASS
+    （package 2.297s；real 5.06s）。
+  - `go test ./internal/storage -run 'Companion' -race -count=1`：PASS
+    （package 1.881s；real 3.62s）。
+  - `go test ./internal/archcheck -count=1`：PASS
+    （package 5.613s；real 6.20s）。
+  - `go vet ./internal/storage/companion ./internal/storage ./internal/server/persistence ./internal/server`：
+    PASS（real 3.60s）。
+  - `git diff --check`：PASS（real 0.28s）。
+  detached 临时 worktree 在门禁结束后已清理。
+- 本轮未修改任何 fixture；上文 v1..v5 size/digest 继续适用，v1..v4 的
+  `git diff --name-only` 仍为空。
+- 本轮五个 repair 文件已显式暂存并核对；commit 等待控制会话授权。
