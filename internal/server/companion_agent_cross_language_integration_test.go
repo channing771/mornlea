@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -23,6 +24,14 @@ import (
 
 type crossLanguageMCPProbeRequest struct {
 	Request companion.PlanRequest `json:"request"`
+}
+
+type crossLanguageAgentProcess struct {
+	endpoint string
+	cancel   context.CancelFunc
+	command  *exec.Cmd
+	done     chan error
+	stderr   *bytes.Buffer
 }
 
 type crossLanguageMCPProbeResult struct {
@@ -176,6 +185,201 @@ func TestMCPAgentCrossLanguageIntegration(t *testing.T) {
 	if got := transcript.String(); got != wantTranscript || strings.Contains(got, "ping") {
 		t.Fatalf("MCP transcript=%q，want %q", got, wantTranscript)
 	}
+}
+
+func TestCompanionAgentHTTPProcessIntegration(t *testing.T) {
+	registry, registration := testMCPRegistry(t)
+	mcpService, err := newCompanionMCPService(registry)
+	if err != nil {
+		t.Fatalf("start real MCP service: %v", err)
+	}
+	t.Cleanup(mcpService.Close)
+
+	repositoryRoot := crossLanguageRepositoryRoot(t)
+	const credential = "integration-http-token-do-not-log"
+	agentProcess := startCrossLanguageAgentProcess(t, repositoryRoot, credential)
+	t.Cleanup(agentProcess.close)
+
+	client, err := companion.NewAgentClient(companion.AgentServiceSettings{
+		Endpoint: agentProcess.endpoint, APIKeyEnv: "INTEGRATION_UNUSED",
+	}, credential, nil)
+	if err != nil {
+		t.Fatalf("NewAgentClient: %v", err)
+	}
+	t.Cleanup(client.Close)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if live, err := client.Live(ctx); err != nil || live.Status != "live" {
+		t.Fatalf("live=%+v err=%v", live, err)
+	}
+	if ready, err := client.Ready(ctx); err != nil || ready.Status != "ready" {
+		t.Fatalf("ready=%+v err=%v", ready, err)
+	}
+
+	var acquire companion.AcquireRequest
+	loadCrossLanguageHTTPGolden(t, "namespace acquire omits lease", &acquire)
+	acquire.NamespaceID = testMCPNamespace
+	grant, err := client.Acquire(ctx, acquire)
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	if grant.LeaseExpiresInMS != 15_000 || grant.LeaseID == "" {
+		t.Fatalf("lease=%+v", grant)
+	}
+
+	var plan companion.PlanRequest
+	loadCrossLanguageHTTPGolden(t, "planner run carries snapshot identity", &plan)
+	plan.NamespaceID = acquire.NamespaceID
+	plan.ClientInstanceID = acquire.ClientInstanceID
+	plan.LeaseID = grant.LeaseID
+	plan.Generation = 1
+	plan.SnapshotID = registration.SnapshotID
+	plan.SnapshotDigest = registration.Digest
+	plan.DeadlineUnixMS = time.Now().Add(15 * time.Second).UnixMilli()
+	plan.MCPEndpoint = mcpService.Endpoint()
+	plan.MCPCapability = registration.Capability
+	plan.Instruction = "采一块石头"
+	planned, err := client.Plan(ctx, plan)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if planned.SnapshotID != plan.SnapshotID || planned.SnapshotDigest != plan.SnapshotDigest ||
+		len(planned.Plan.Steps) != 1 || planned.Plan.Steps[0].Kind != "mine" {
+		t.Fatalf("unexpected plan correlation or candidate: %+v", planned)
+	}
+
+	release := companion.LeaseRequest{
+		ContractVersion: plan.ContractVersion, RequestID: plan.RequestID,
+		ClientInstanceID: plan.ClientInstanceID, NamespaceID: plan.NamespaceID, LeaseID: plan.LeaseID,
+	}
+	released, err := client.Release(ctx, release)
+	if err != nil || !released.Released {
+		t.Fatalf("release=%+v err=%v", released, err)
+	}
+}
+
+func startCrossLanguageAgentProcess(t *testing.T, repositoryRoot, credential string) *crossLanguageAgentProcess {
+	t.Helper()
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tcpListener, ok := listener.(*net.TCPListener)
+	if !ok {
+		_ = listener.Close()
+		t.Fatal("integration listener is not TCP")
+	}
+	listenerFile, err := tcpListener.File()
+	if err != nil {
+		_ = listener.Close()
+		t.Fatal(err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	control, err := json.Marshal(map[string]any{
+		"http_bearer_token": credential,
+		"port":              port,
+		"sqlite_path":       filepath.Join(t.TempDir(), "memory.sqlite3"),
+	})
+	if err != nil {
+		_ = listenerFile.Close()
+		_ = listener.Close()
+		t.Fatal(err)
+	}
+	python := os.Getenv("MORNLEA_COMPANION_AGENT_PYTHON")
+	if python == "" {
+		python = filepath.Join(repositoryRoot, "services", "companion-agent", ".venv", "bin", "python")
+	}
+	helper := filepath.Join(repositoryRoot, "services", "companion-agent", "tests", "integration", "process.py")
+	processContext, cancel := context.WithCancel(context.Background())
+	command := exec.CommandContext(processContext, python, helper, "http-server")
+	command.Dir = filepath.Join(repositoryRoot, "services", "companion-agent")
+	command.Stdin = bytes.NewReader(control)
+	command.ExtraFiles = []*os.File{listenerFile}
+	command.Env = append(os.Environ(), "PYTHONUNBUFFERED=1", "HTTP_PROXY=", "HTTPS_PROXY=", "ALL_PROXY=", "NO_PROXY=*")
+	stdout, err := command.StdoutPipe()
+	if err != nil {
+		cancel()
+		_ = listenerFile.Close()
+		_ = listener.Close()
+		t.Fatal(err)
+	}
+	stderr := &bytes.Buffer{}
+	command.Stderr = stderr
+	if err := command.Start(); err != nil {
+		cancel()
+		_ = listenerFile.Close()
+		_ = listener.Close()
+		t.Fatalf("start real Python Agent process: %v", err)
+	}
+	_ = listenerFile.Close()
+	_ = listener.Close()
+	done := make(chan error, 1)
+	go func() { done <- command.Wait() }()
+	ready := make(chan string, 1)
+	go func() {
+		scanner := bufio.NewScanner(stdout)
+		if scanner.Scan() {
+			ready <- scanner.Text()
+			return
+		}
+		ready <- ""
+	}()
+	select {
+	case line := <-ready:
+		if line != `{"status":"ready"}` {
+			cancel()
+			<-done
+			t.Fatalf("real Python Agent readiness failed (stderr bytes=%d, status=%q)", stderr.Len(), line)
+		}
+	case <-time.After(15 * time.Second):
+		cancel()
+		<-done
+		t.Fatalf("real Python Agent readiness timeout (stderr bytes=%d)", stderr.Len())
+	}
+	return &crossLanguageAgentProcess{
+		endpoint: fmt.Sprintf("http://127.0.0.1:%d", port),
+		cancel:   cancel, command: command, done: done, stderr: stderr,
+	}
+}
+
+func (process *crossLanguageAgentProcess) close() {
+	if process == nil {
+		return
+	}
+	process.cancel()
+	select {
+	case <-process.done:
+	case <-time.After(5 * time.Second):
+		_ = process.command.Process.Kill()
+		<-process.done
+	}
+}
+
+func loadCrossLanguageHTTPGolden(t *testing.T, name string, target any) {
+	t.Helper()
+	root := crossLanguageRepositoryRoot(t)
+	data, err := os.ReadFile(filepath.Join(root, "contracts", "companion-agent", "http-v1", "golden", "valid.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document struct {
+		Cases []struct {
+			Name  string          `json:"name"`
+			Value json.RawMessage `json:"value"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(data, &document); err != nil {
+		t.Fatal(err)
+	}
+	for _, testCase := range document.Cases {
+		if testCase.Name == name {
+			if err := json.Unmarshal(testCase.Value, target); err != nil {
+				t.Fatal(err)
+			}
+			return
+		}
+	}
+	t.Fatalf("HTTP golden %q not found", name)
 }
 
 func crossLanguageRepositoryRoot(t *testing.T) string {
