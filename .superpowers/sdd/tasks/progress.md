@@ -15,8 +15,8 @@
 - Task 9: complete (implementer `task9_planner_cutover`, commits `84c03161`、`edfb1574`、`b2c75a6c`; initial SPEC/QUALITY FAIL，Repair 1 SPEC FAIL/QUALITY PASS，Repair 2 final SPEC/QUALITY PASS；Accepted)。
 - Task 10: complete (implementer `task10_dialogue_memory`, commits `1f6006f6`、`6ef874b1`、`7283b746`、`c2cebeb9`、`6bdf2b7e`; initial SPEC/QUALITY FAIL，四轮 repair 后 final SPEC/QUALITY PASS；Accepted)。
 - Task 11: complete (implementer `task11_cross_language`, commits `efa85718`、`a6b4d059`、`3635b6a1`、`356fe396`、`41add71e`、`2f6ab0ba`; final SPEC/QUALITY PASS；Accepted)。
-- Task 12: implementation complete, review pending (implementer `task12_ci_docs_gates`, base `9423f067`, commits `9dfdbc69`、`49fbc7f9`; full gates 与独立 SPEC/QUALITY 待记录)。
-- 下一任务：完成 Task 12 全量门禁与独立 SPEC/QUALITY 评审；评审前不勾选 `tasks.md`。
+- Task 12: implementation and full gates complete, review pending (implementer `task12_ci_docs_gates`, base `9423f067`, commits `9dfdbc69`、`49fbc7f9`、`ee642a05`、repair `3394fc19`; 独立 SPEC/QUALITY 待记录)。
+- 下一任务：完成 Task 12 独立 SPEC/QUALITY 评审；评审前不勾选 `tasks.md`。
 
 ## 执行前接口冲突扫描
 
@@ -96,4 +96,6 @@
 - `task12_ci_docs_gates` 从 Task 11 closeout `9423f067` 开始；没有查看、比较或合并 main，版本裁决保持 protocol v32、player v8、chunk v9、metadata v3、hostile v1、engine ABI v9、client ABI v13、scenario v20，只把 `companions.ai` v4 升为 v5。
 - RED archcheck 同时复现三项缺口：`openspec/config.yaml` 的 companions 仍为 v4；Make 缺少 locked Python check；CI 缺少 Python 3.12、固定 uv/cache 与 check/integration 调用。`9dfdbc69` 完成 Make/CI/archcheck/版本矩阵与 service 局部指南，focused archcheck PASS（5.532s），`make companion-agent-check` PASS（403 passed）。
 - `49fbc7f9` 更新双语 README、architecture、configuration、LAN、test quickstart 与长期 progress，明确 Python 独立进程、Go 世界权威、loopback-only、严格 v1 配置、失败/关闭语义、v5 migration/backup/rollback，以及 `gates.sh` 不隐含 `make rust`、Python check 或真实 integration。文档后 archcheck 与 OpenSpec strict 80/80 PASS。
-- 全量门禁和独立 SPEC/QUALITY 尚待执行/记录；Task 12 仍是 Review pending，`tasks.md` 未改。
+- 第一轮 `go test ./... -race` 在 392.59s 后唯一由 `internal/server` FAIL；focused 复现证明 Task 9 删除 direct-model endpoint 后两个旧测试 Host helper 留下空 model block，fake planner 没有通过 typed seam 注入。`3394fc19` 复用已有 `replacePlannerForTest`，生产路径不变，原失败 11 tests 全绿（package 12.281s，real 16.29s）。
+- clean `3394fc19` 从头重跑 brief 全量清单并全部 PASS：Python locked/Ruff/mypy/403 tests、gofmt、full vet、full Go race（server 247.013s，real 248.75s）、Rust locked release、Make check、真实 integration（server 9.332s）、diff-check、OpenSpec strict 80/80。未访问 provider/外网，未启动游戏窗口。
+- Task 12 仍是 Review pending，`tasks.md` 未改；下一步只做独立 SPEC/QUALITY 评审与相应 repair/closeout。

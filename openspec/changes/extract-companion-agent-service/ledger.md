@@ -43,7 +43,7 @@
 | 9 | `task9_planner_cutover` | `6c5c4011` | Agent Planner cutover RED→GREEN；提交 `84c03161`、repair `edfb1574`、`b2c75a6c` | initial FAIL、repair 1 FAIL、repair 2 PASS | initial FAIL、repair 1 PASS、repair 2 PASS | Accepted |
 | 10 | `task10_dialogue_memory` | `012a4b86` | Dialogue/memory/shutdown RED→GREEN；提交 `1f6006f6`、repair `6ef874b1`、`7283b746`、`c2cebeb9`、`6bdf2b7e` | initial FAIL、repair 1–4 后 PASS | initial FAIL、repair 1 FAIL、repair 2–4 后 PASS | Accepted |
 | 11 | `task11_cross_language` | `e1bf9e52` | 真实 MCP/HTTP 进程合同 RED→GREEN；提交 `efa85718`、`a6b4d059`、`3635b6a1`、`356fe396`、`41add71e`、证据 `2f6ab0ba` | PASS | PASS | Accepted |
-| 12 | `task12_ci_docs_gates` | `9423f067` | archcheck/Make/CI/version RED→GREEN；提交 `9dfdbc69`、文档 `49fbc7f9`；全量门禁待记录 | Review pending | Review pending | Pending |
+| 12 | `task12_ci_docs_gates` | `9423f067` | archcheck/Make/CI/version RED→GREEN；提交 `9dfdbc69`、`49fbc7f9`、证据 `ee642a05`、全量门禁 repair `3394fc19`；最终全绿 | Review pending | Review pending | Pending |
 
 ### Task 1 评审修复记录
 
@@ -277,17 +277,24 @@
 - `49fbc7f9` 更新双语 README、architecture、configuration、LAN、test quickstart 与 progress：明确
   Go 世界权威、Python 独立 Agent 服务、loopback-only、启动/关闭/失败语义、严格 v1 配置、v5
   migration/backup/rollback 以及完整版本矩阵；文档后 archcheck 与 OpenSpec strict 80/80 PASS。
-- Task 12 实施阶段未修改 `tasks.md`。完整门禁与独立 SPEC/QUALITY 评审尚未记录；本行保持
-  Review pending，只有双评审通过后才允许由控制会话完成 Task 12 closeout。
+- 第一轮完整 race 真实运行 392.59s 后唯一在 `internal/server` FAIL：九个旧 mine/place tests
+  直接 unavailable、两条 restore tests 各 60s timeout。focused 复现排除并发 flaky 后确认 Task 9
+  删除 direct-model endpoint 时两个测试 Host helper 留下空 model block；`3394fc19` 改用已有 typed
+  planner test seam，生产路径不变，原失败 11 tests 全绿（package 12.281s，real 16.29s）。
+- clean `3394fc19` 从头重跑 mandatory gates：Python locked/Ruff/mypy/403 tests、gofmt、full vet、
+  full Go race（server 247.013s，real 248.75s）、Rust locked release、Make check、真实 integration
+  （server 9.332s）、diff-check 与 OpenSpec strict 80/80 全部 PASS；无 provider/外网/游戏窗口。
+- Task 12 实施阶段未修改 `tasks.md`。独立 SPEC/QUALITY 评审尚未记录；本行保持 Review pending，
+  只有双评审通过后才允许由控制会话完成 Task 12 closeout。
 
 ## 整分支终审与门禁
 
 - 整分支 SPEC review：待记录。
 - 整分支 QUALITY review：待记录。
-- Python locked/lint/type/test：待记录。
-- Go focused/race/archcheck/vet/gofmt：待记录。
-- Rust baseline/build：规划前 `make rust` 已由控制会话记录为通过；实现后须在新 SHA 重跑。
-- 真实跨语言合同测试：待记录。
-- OpenSpec strict：规划产物完成后记录；实现后须重跑。
-- 规划产物门禁：`openspec validate --all --strict --no-interactive` exit 0，80 passed/0 failed；`git diff --check` exit 0。
-- 回滚/备份人工文档检查：待记录。
+- Python locked/lint/type/test：clean `3394fc19` PASS；locked sync、Ruff format/check、mypy 23 files、pytest 403 passed；`make companion-agent-check` 同样 PASS。
+- Go focused/race/archcheck/vet/gofmt：首轮 full race 真实暴露测试 seam 缺口并由 `3394fc19` 修复；原失败 11 tests PASS；最终 `go test ./... -race`、full vet、archcheck 与 gofmt 全部 PASS。
+- Rust baseline/build：clean `3394fc19` preflight 与 mandatory `make rust` 均 PASS；Rust 1.97.1 locked release，engine ABI v9/client ABI v13 未改。
+- 真实跨语言合同测试：`make companion-agent-integration` PASS；companion 2.745s、server 9.332s，real 10.73s。
+- OpenSpec strict：clean `3394fc19` PASS，80 passed/0 failed，real 1.57s。
+- 规划产物门禁：`git diff --check` PASS；版本/CI/Make/service archcheck PASS。
+- 回滚/备份人工文档检查：PASS；LAN 文档同时说明 world+SQLite 联合备份、v1..v4→v5 迁移和旧程序不得写 v5 的回滚边界。

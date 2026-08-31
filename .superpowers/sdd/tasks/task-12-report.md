@@ -16,10 +16,12 @@ main，没有访问 provider/DNS/外网业务服务，也没有启动或聚焦�
 
 - `9dfdbc69` `ci(companion): enforce agent service gates`
 - `49fbc7f9` `docs(companion): document standalone agent service`
+- `ee642a05` `docs(openspec): record task 12 implementation`
+- `3394fc19` `test(server): restore planner seams for task fixtures`
 
-本报告与 ledger/progress 证据提交会在门禁完成后补入最终提交列表。Task 12 当前仍为
-Review pending；未修改 `openspec/changes/extract-companion-agent-service/tasks.md`，只有独立
-SPEC/QUALITY 双评审通过后才允许 closeout。
+本报告的最终 evidence commit 不自引用其 SHA。Task 12 当前仍为 Review pending；未修改
+`openspec/changes/extract-companion-agent-service/tasks.md`，只有独立 SPEC/QUALITY 双评审
+通过后才允许 closeout。
 
 ## RED / GREEN
 
@@ -60,9 +62,39 @@ CI 沿用现有 macOS `integration` job 和同 SHA native artifact 校验；只�
 
 ## 全量门禁
 
-待在 evidence baseline commit 上逐项真实运行并记录 brief 指定命令；任何失败必须修复根因，
-不使用 skip、豁免变量或降级。门禁结果写入本节后，仅追加 evidence commit，并在该最终提交上
-复跑文档/架构/OpenSpec/diff 门禁。
+### 首轮失败与根因修复
+
+evidence baseline `ee642a05` 的第一轮 `go test ./... -race` 真实运行 392.59s 后 FAIL；唯一
+失败包为 `internal/server`（371.169s），其余包全部 PASS。九个旧 mine/place tests 从预期
+Accepted→Started→terminal 变为 Accepted→Failed，两条 restore tests 各在 60s timeout。
+
+focused 复现确认不是全仓并发 flaky：两个交互用例立即以 `[1 6]` 失败，两条 restore 用例继续
+60s timeout（real 122.72s）。根因是 Task 9 删除 direct-model endpoint 时，
+`newInteractionHost` 与 `restoredCompanionHost` 的 `if model != nil` 留成空块；fake planner
+从未注入，生产缺省 Agent planner 正确返回 unavailable。`3394fc19` 让两个 helper 复用已有
+typed `replacePlannerForTest` seam，不改生产路径。原失败的 11 个用例全部 GREEN：package
+12.281s，real 16.29s。
+
+没有使用 skip、豁免变量、timeout 放宽或测试删减。修复提交后在 clean `3394fc19` 从头重跑
+brief 的完整 mandatory gate 清单：
+
+- `cd services/companion-agent && uv sync --locked`：PASS，80 packages resolved、77 checked，real 0.10s。
+- `uv run ruff format --check .`：PASS，38 files already formatted，real 0.06s。
+- `uv run ruff check .`：PASS，real 0.03s。
+- `uv run mypy src`：PASS，23 source files，real 0.53s。
+- `uv run pytest -q`：PASS，403 passed in 17.97s，real 18.65s。
+- `gofmt -l .`：PASS，无输出，real 0.21s。
+- `go vet ./...`：PASS，无输出，real 1.98s。
+- `go test ./... -race`：PASS；改动相关 server 247.013s、整组 real 248.75s；其余未变包由 Go 标准 test cache 验证。
+- `make rust`：PASS，Rust 1.97.1 locked release，real 0.42s；同 SHA clean preflight 亦 PASS（0.41s）。
+- `make companion-agent-check`：PASS，403 passed in 18.01s，real 19.43s。
+- `make companion-agent-integration`：PASS；companion 2.745s、server 9.332s，real 10.73s。
+- `git diff --check`：PASS，无输出，real 0.01s。
+- `openspec validate --all --strict --no-interactive`：PASS，80 passed/0 failed，real 1.57s。
+
+全程只运行 deterministic fake/check-in fixtures 与 loopback 真进程合同，没有 provider、DNS、
+外网业务访问，也没有启动或聚焦游戏窗口。evidence-only commit 后须复跑受影响的 archcheck、
+OpenSpec、diff/status，完整 runtime 门禁可复用同一实现树 `3394fc19` 的以上结果。
 
 ## 范围与风险
 
