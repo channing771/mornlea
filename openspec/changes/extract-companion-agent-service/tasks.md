@@ -40,7 +40,7 @@
 
 ## Task 11: Real Go/Python cross-language contracts
 
-- [ ] 11.1 增加无外网、fake model 的真实 Go server↔Python process integration harness，先让 `2025-11-25` initialize+initialized/no ping、JSON tools、fixed capabilities、batch/GET/subscription/version/auth/body 拒绝、Origin 缺失、Python timeout 后 registry 自有 cancellation，以及 Go HTTP lease/plan/dialogue/memory/cancel cases RED，再使 Task 1 fixtures 双端全通过；提供固定 `make companion-agent-integration`，以 `make companion-agent-integration` 验证且不得启动游戏窗口。
+- [x] 11.1 增加无外网、fake model 的真实 Go server↔Python process integration harness，先让 `2025-11-25` initialize+initialized/no ping、JSON tools、fixed capabilities、batch/GET/subscription/version/auth/body 拒绝、Origin 缺失、Python timeout 后 registry 自有 cancellation，以及 Go HTTP lease/plan/dialogue/memory/cancel cases RED，再使 Task 1 fixtures 双端全通过；提供固定 `make companion-agent-integration`，以 `make companion-agent-integration` 验证且不得启动游戏窗口。
 
 ## Task 12: CI, documentation, versions and full gates
 

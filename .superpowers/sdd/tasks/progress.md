@@ -14,7 +14,8 @@
 - Task 8: complete (implementer `task8_storage_v5`, commits `11f897c7`..`22991a82`; initial SPEC PASS/QUALITY FAIL，Repair 1 scoped SPEC/QUALITY PASS 后由完整 server race 暴露 Memory post-Close reuse 回归，Repair 2 撤回错误 Minor 并最终 SPEC/QUALITY PASS；Accepted)。
 - Task 9: complete (implementer `task9_planner_cutover`, commits `84c03161`、`edfb1574`、`b2c75a6c`; initial SPEC/QUALITY FAIL，Repair 1 SPEC FAIL/QUALITY PASS，Repair 2 final SPEC/QUALITY PASS；Accepted)。
 - Task 10: complete (implementer `task10_dialogue_memory`, commits `1f6006f6`、`6ef874b1`、`7283b746`、`c2cebeb9`、`6bdf2b7e`; initial SPEC/QUALITY FAIL，四轮 repair 后 final SPEC/QUALITY PASS；Accepted)。
-- 下一任务：Task 11 真实 Go/Python 跨进程合同与固定无外网 integration target。
+- Task 11: complete (implementer `task11_cross_language`, commits `efa85718`、`a6b4d059`、`3635b6a1`、`356fe396`、`41add71e`、`2f6ab0ba`; final SPEC/QUALITY PASS；Accepted)。
+- 下一任务：Task 12 CI、文档、版本矩阵与整分支全量门禁。
 
 ## 执行前接口冲突扫描
 
@@ -47,7 +48,7 @@
 | 8 | v1..v4→v5 RED 与 codec/bootstrap | 一致，已完成；metadata-only probe、retirement、identity-first save barrier、mirror/tombstone carry-through 与 Memory reuse 回归均已关闭。 |
 | 9 | Planner orchestration RED 与 cutover | 一致，已完成；Agent HTTP/MCP cutover、共享 gate、严格计划分类、attempt/correlation 与当前世界重验均已关闭，Task Runner 仍是唯一动作入口。 |
 | 10 | Dialogue/memory/shutdown RED 与 lifecycle | 一致，已完成；accepted reservation、memory fencing/reconcile 与可重试 shutdown 已经四轮 repair 和独立双评审关闭。 |
-| 11 | 真进程 integration RED 与 Make target | 一致；fake model 不得隐性访网。 |
+| 11 | 真进程 integration RED 与 Make target | 一致，已完成；真实 Python MCP SDK/Go MCP、真实 FastAPI/Uvicorn/Go AgentClient、registry cancellation 与 shared fixtures 已由独立双评审关闭，全程无外网/provider/游戏窗口。 |
 | 12 | docs/CI/version/full gates | Ruling: 将旧 v8/v11/v12 规划漂移更正为主线 v9/v13，本 change 不升 native ABI — 若错误，需重做版本文档和钉死测试，Agent 合同不变。 |
 
 ## Task 7 完成恢复点
@@ -80,3 +81,11 @@
 - Repair 4 `6bdf2b7e` 处理上一轮 reconcile worker 到 deadline 才退出、outcome 尚未 drain 的边界：新 attempt 消费唯一旧结果后只 re-arm 一次，新派发失败不在同轮自旋；最终独立 SPEC/QUALITY 均 PASS，Task 10 Accepted。
 - 最终稳定性与 canonical gates：Repair 3/4 shutdown 三测试 `-race -count=20` PASS（4.612s）；`MemoryReconcile|UnknownCommit|Shutdown|Release` race PASS（5.078s）；broader `Agent|Lease|Planner|Dialogue|Memory|Shutdown|CompanionSpeech` race PASS（companion 4.558s、server 95.791s）；persistence race PASS（2.813s）；archcheck PASS（5.319s）；三个 cmd package、affected vet、`go mod tidy -diff`、gofmt/diff-check 与 OpenSpec strict 80/80 全绿。
 - Task 10 closeout 后 change 进度为 10/12；下一任务为 Task 11。
+
+## Task 11 完成恢复点
+
+- `task11_cross_language` 从 Task 10 closeout `e1bf9e52` 开始，以 `efa85718` 提交真实 Python MCP 子进程 RED；`a6b4d059` 关闭官方 Python SDK 的 `notifications/initialized` 可省略空 `params` 的跨语言兼容差异；`3635b6a1` 提交真实 Python Agent HTTP process RED；`356fe396` 完成真进程 harness、固定 Make target、materialized-view cancellation 与 shared `list_affordances` 坐标序合同修复；`41add71e` 补齐 HTTP 错误 request identity correlation；`2f6ab0ba` 记录完整实施证据。
+- MCP 真进程由 Go test 持有真实 loopback listener/registry 与 Python 官方 SDK 子进程：精确验证 `2025-11-25` initialize→initialized→tools/list→tools/call、仅 Tools/`listChanged=false`、六工具 manifest/schema、StructuredContent 与 canonical TextContent、Origin 缺失/精确匹配，以及 GET/batch/ping/subscription/version/content-type/Host/Origin/Bearer/body outer gate 拒绝。materialized view 后的确定性 barrier 证明 Python timeout、registry 立即拒绝新 lookup、service Close 不等待 handler且迟到结果最终收敛。
+- HTTP 真进程由 Go 预绑定 OS loopback listener 并传 inherited fd，Python 运行真实 `create_app`、Strict gate、lease manager、Planner/Dialogue harness 与临时 SQLite，仅 model port 使用 deterministic fake；生产 Go `AgentClient` 覆盖 live/ready、15 秒 lease acquire/heartbeat/release、namespace conflict/stale lease、真实 Plan→Python MCP client→Go MCP、nonterminal/terminal Dialogue、proposal 未预提交、commit/幂等重放/reconcile、active canonical-zero、inactive delete、显式 cancel 与 caller disconnect 后同伙伴立即新 run。HTTP/MCP fixtures 直接消费 Task 1 checked-in manifest/golden，错误面保持有界且不泄漏敏感正文。
+- 最终独立 SPEC reviewer 与 QUALITY reviewer 均为 PASS，Task 11 Accepted。canonical gates：`make companion-agent-integration` PASS；Python ruff/mypy PASS、focused contract/adapter `81 passed`、brief Python 集合 `117 passed`；Go 真进程 focused race PASS（server 8.822s）、archcheck PASS（5.645s）、affected vet 与 `go mod tidy -diff` PASS；OpenSpec strict `80 passed, 0 failed`、diff/scope scan PASS。未运行或启动游戏窗口，未访问 provider/DNS/外网。
+- Task 11 closeout 后 change 进度为 11/12；下一任务为 Task 12 CI、文档、版本矩阵与整分支全量门禁。
