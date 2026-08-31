@@ -39,7 +39,7 @@
 | 5 | `task5_http_research`、`task5_startup_cancel_fix` | `f4009ec0` | RED：缺少 Dialogue/FastAPI；复审 RED：HTTP disconnect、重复取消、响应 fence、关闭与 startup 所有权；GREEN：focused `56 passed`、full Python `393 passed`、import boundary `48 passed`、locked/ruff/mypy/diff-check；提交 `fb569bdd`、`ff7b5be9`、`962e361e`、`2d9042bf` | `task4_fix_quality` round 4 PASS | `task5_quality_review` round 4 PASS | Accepted |
 | 6 | `task6_go_agent_client`、`task6_strict_lifecycle_fix` | `c871b1ec` | RED：配置/client 缺失，Round 1/2 复审继续拒绝 codec、manifest、边界与生命周期缺口；GREEN：隔离 focused race 两遍、config/companion full race、vet、archcheck、gofmt/diff-check；提交 `0fd248d1`、`f56b42bf`、`5ee80a7c`、`6b1deb59`、`f7585788`、`0ea46c31` | `task6_spec_review` round 1/2 FAIL，round 3 PASS | `task6_quality_review` round 1/2 FAIL，round 3 PASS | Accepted |
 | 7 | `task7_contract_prereq`（Task 7A） | `148b935c` | contract/Python 前置 RED→GREEN；提交 `5812be64`、repair `038c4b86` | 初次 PASS；repair PASS | 初次 FAIL；repair PASS | Task 7A Accepted；Task 7 整体仍 Pending，下一阶段 Task 7B |
-| 8 | `task8_storage_v5` | `148b935c` | codec/merge/probe/bootstrap/carry RED→GREEN；提交 `11f897c7`、repair `660c02a1` | 初次独立 PASS；repair scoped PASS | 初次独立 FAIL；repair scoped PASS | Accepted |
+| 8 | `task8_storage_v5` | `148b935c` | codec/merge/probe/bootstrap/carry RED→GREEN；提交 `11f897c7`、repair `660c02a1`、memory reuse repair `0dc592c8` | 初次独立 PASS；两轮 repair scoped PASS | 初次独立 FAIL；repair 1 scoped PASS；repair 2 scoped PASS | Accepted |
 | 9 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 10 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 11 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
@@ -159,6 +159,28 @@
   `openspec validate --all --strict --no-interactive` 为 80 passed/0 failed，
   `git diff --check -- openspec/changes/extract-companion-agent-service/{tasks.md,ledger.md}`
   PASS。
+- 收尾后的完整 server race 在 `136efc0c` 基线上暴露 repair 1 回归：
+  `TestNewHostRetiresExistingCompanionsWhenConfigEmpty`、
+  `TestNewHostDoesNotRepeatInactiveRetirement` 与
+  `TestCompanionDialogueSummaryLifecycle` 均因 `file already closed` 失败。clean
+  detached 复现证明三条用例都刻意在 `Host.Shutdown` 后检查同一个
+  MemoryStore，其中 dialogue lifecycle 还会用同一 store 启动第二个 Host，
+  以验证真实落库与跨重启恢复；不能通过改写测试/helper 绕过该断言。
+- 契约裁决：repair 1 要求 Memory companion Load/Save 在 Close 后与 Disk 一致
+  返回 `os.ErrClosed` 的原 QUALITY Minor 与既有 Memory post-Close 可观测、可复用
+  语义冲突，因此有意识地撤回该 Minor。Disk Load/Save 的 closed 拒绝与 Memory/
+  Disk `CompanionsExist` probe 的 `os.ErrClosed` 语义保持不变；repair 1 对 committed
+  v3 fixture、完整 v5 offsets/patch 前断言及最近 AGENTS 的 Important 修复全部保留。
+- repair 2 `0dc592c8` 只移除 Memory companion Load/Save 的 closed 拒绝，并在根
+  store contract 正向证明 Memory 连续 Close 后仍可 Save+Load、Disk 继续拒绝；
+  最近 companion AGENTS 与 Task 8 report 同步该局部事实，三条 server 测试未修改。
+  detached `136efc0c` 隔离门禁通过 targeted 三回归、storage/companion race、root
+  storage Companion race、persistence Companion race、完整 server race
+  （package 188.862s）、两条指定 staging tests、archcheck、full affected vet 与
+  diff-check；fixture 未修改。
+- `0dc592c8` 最终独立 scoped SPEC 与 QUALITY 评审均 PASS，Task 8 继续裁决
+  Accepted；change 进度仍为 7/12，Task 7 整体仍 Pending，下一阶段仍是 Task 7B，
+  不提前进入 Task 9。
 
 ## 整分支终审与门禁
 
