@@ -2,6 +2,13 @@
 
 package render
 
+import (
+	"encoding/binary"
+	"math"
+
+	"github.com/channing771/mornlea/internal/assets"
+)
+
 // 本文件为 rust-client-render-entities 提供最小导出面:把各 pass 已有的
 // CPU 编码结果(80B avatar 实例、64B 名牌实例等)以只读字节流暴露给
 // 平行 Rust 渲染器的帧装配。所有函数只是既有内部逻辑的复用出口,
@@ -41,6 +48,27 @@ func (e *InstanceEncoder) EncodeBlockOutlineInstances(dst []byte, outline BlockO
 	e.parts = buildBlockOutlineParts(e.parts[:0], outline.Position)
 	dst = growEncodeBuffer(dst, len(e.parts)*avatarInstanceBytes)
 	encodeAvatarPartsInto(dst, e.parts)
+	return dst
+}
+
+// EncodeBlockCrackInstances 把采掘裂纹 overlay 编码为恰 1 个 80 字节实例的
+// 字节流；不可见或阶段无效时返回空。字节布局是与 Rust 侧 crack pass 的
+// 跨语言契约：0..63 mat4、64..68 atlas 层号 f32（LayerCrack0+stage）、
+// 68..80 零填充。dst 会被重置复用；注意 `growEncodeBuffer` 不清零旧内容，
+// 零填充区必须显式写零，否则复用缓冲会把上一帧的陈旧字节漏进实例流。
+func (e *InstanceEncoder) EncodeBlockCrackInstances(dst []byte, crack BlockCrack) []byte {
+	if !crack.valid() {
+		return dst[:0]
+	}
+	dst = growEncodeBuffer(dst, blockCrackInstanceBytes)
+	part := buildBlockCrackPart(crack.Position)
+	for index, value := range part.transform {
+		binary.LittleEndian.PutUint32(dst[index*4:], math.Float32bits(value))
+	}
+	binary.LittleEndian.PutUint32(
+		dst[64:], math.Float32bits(float32(int(assets.LayerCrack0)+crack.Stage)),
+	)
+	clear(dst[68:blockCrackInstanceBytes])
 	return dst
 }
 
