@@ -36,7 +36,7 @@
 
 ## Task 10: Go Dialogue, memory lifecycle and shutdown
 
-- [ ] 10.1 先在 `internal/companion`、`internal/server` 写 Dialogue single-run/skip、首次 stale proposal、accepted reservation 后 generation 不撤销、operation+epoch commit、内存镜像 mark-dirty 后一次广播、commit 不明 reconcile、epoch/tombstone、Agent/MCP 故障与停止聊天→取消等待→冻结→v5 save→world flush→release→关闭顺序 RED tests；memory lifecycle RED 必须覆盖 Agent 离线仍持有 active epoch N 时，Go 已持久化 inactive N+1 再 active canonical-zero N+2，恢复后只 reconcile 当前 N+2 即以 higher epoch fence N、完全相同 `{namespace,companion,epoch,active,canonical-zero}` 重放 no-op、无需伪造 operation或先发N+1 tombstone且迟到N结果被拒绝。再接入 Dialogue/memory lifecycle；任务/FIFO/事实不受台词失败影响，以 `go test ./internal/companion ./internal/server -run 'Dialogue|Memory|Shutdown|CompanionSpeech' -race -count=1 && go test ./internal/archcheck -count=1` 验证。
+- [x] 10.1 先在 `internal/companion`、`internal/server` 写 Dialogue single-run/skip、首次 stale proposal、accepted reservation 后 generation 不撤销、operation+epoch commit、内存镜像 mark-dirty 后一次广播、commit 不明 reconcile、epoch/tombstone、Agent/MCP 故障与停止聊天→取消等待→冻结→v5 save→world flush→release→关闭顺序 RED tests；memory lifecycle RED 必须覆盖 Agent 离线仍持有 active epoch N 时，Go 已持久化 inactive N+1 再 active canonical-zero N+2，恢复后只 reconcile 当前 N+2 即以 higher epoch fence N、完全相同 `{namespace,companion,epoch,active,canonical-zero}` 重放 no-op、无需伪造 operation或先发N+1 tombstone且迟到N结果被拒绝。再接入 Dialogue/memory lifecycle；任务/FIFO/事实不受台词失败影响，以 `go test ./internal/companion ./internal/server -run 'Dialogue|Memory|Shutdown|CompanionSpeech' -race -count=1 && go test ./internal/archcheck -count=1` 验证。
 
 ## Task 11: Real Go/Python cross-language contracts
 

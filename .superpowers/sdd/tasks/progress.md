@@ -13,7 +13,8 @@
 - Task 7: complete (implementer `task7_mcp_main`, commits `b00481e0`..`6c5c4011`; initial SPEC/QUALITY FAIL，Repair 1 SPEC FAIL/QUALITY PASS，Repair 2 SPEC/QUALITY PASS；Task 7A 与 7B 均 Accepted)。
 - Task 8: complete (implementer `task8_storage_v5`, commits `11f897c7`..`22991a82`; initial SPEC PASS/QUALITY FAIL，Repair 1 scoped SPEC/QUALITY PASS 后由完整 server race 暴露 Memory post-Close reuse 回归，Repair 2 撤回错误 Minor 并最终 SPEC/QUALITY PASS；Accepted)。
 - Task 9: complete (implementer `task9_planner_cutover`, commits `84c03161`、`edfb1574`、`b2c75a6c`; initial SPEC/QUALITY FAIL，Repair 1 SPEC FAIL/QUALITY PASS，Repair 2 final SPEC/QUALITY PASS；Accepted)。
-- 下一任务：Task 10 Go Dialogue、memory lifecycle 与完整 shutdown 顺序。
+- Task 10: complete (implementer `task10_dialogue_memory`, commits `1f6006f6`、`6ef874b1`、`7283b746`、`c2cebeb9`、`6bdf2b7e`; initial SPEC/QUALITY FAIL，四轮 repair 后 final SPEC/QUALITY PASS；Accepted)。
+- 下一任务：Task 11 真实 Go/Python 跨进程合同与固定无外网 integration target。
 
 ## 执行前接口冲突扫描
 
@@ -45,7 +46,7 @@
 | 7 | Task 7A contract/Python 前置；Task 7B registry/MCP RED 与 companion/server | 一致，已完成；官方 SDK、strict outer gate、冻结投影/digest、registry cancellation 与 Host lifecycle 均经两轮 repair 和独立双评审关闭。 |
 | 8 | v1..v4→v5 RED 与 codec/bootstrap | 一致，已完成；metadata-only probe、retirement、identity-first save barrier、mirror/tombstone carry-through 与 Memory reuse 回归均已关闭。 |
 | 9 | Planner orchestration RED 与 cutover | 一致，已完成；Agent HTTP/MCP cutover、共享 gate、严格计划分类、attempt/correlation 与当前世界重验均已关闭，Task Runner 仍是唯一动作入口。 |
-| 10 | Dialogue/memory/shutdown RED 与 lifecycle | 一致；持久化失败保留可重试资源。 |
+| 10 | Dialogue/memory/shutdown RED 与 lifecycle | 一致，已完成；accepted reservation、memory fencing/reconcile 与可重试 shutdown 已经四轮 repair 和独立双评审关闭。 |
 | 11 | 真进程 integration RED 与 Make target | 一致；fake model 不得隐性访网。 |
 | 12 | docs/CI/version/full gates | Ruling: 将旧 v8/v11/v12 规划漂移更正为主线 v9/v13，本 change 不升 native ABI — 若错误，需重做版本文档和钉死测试，Agent 合同不变。 |
 
@@ -69,3 +70,13 @@
 - Repair 2 `b2c75a6c` 关闭 malformed 2xx Plan response 分类：已确认 `/v1/plan` 成功 status 后，response overflow、顶层 unknown field 与 trailing JSON 归 `ErrAgentInvalidModelOutput`→`ErrPlannerInvalidPlan`→`TaskFailInvalidPlan`；transport/header/content-type/status/body I/O 及解码后 identity mismatch 仍为 unavailable。最终独立 SPEC/QUALITY 均 PASS，Task 9 Accepted。
 - 最终 canonical gates：`go test ./internal/companion ./internal/server -run 'Planner|CompanionTask|AgentUnavailable|Snapshot' -race -count=1` PASS（2.518s/11.704s）；`go test ./internal/companion -run 'Agent' -race -count=1 -timeout=90s` PASS（4.139s）；config race PASS（1.578s）；archcheck PASS（5.404s）；三个 cmd package PASS（1.077s/22.818s/3.965s）；affected vet、`go mod tidy -diff`、gofmt/diff-check PASS；`openspec validate --all --strict --no-interactive` PASS（80/80）。
 - Task 9 closeout 后 change 进度应为 9/12；下一任务为 Task 10。
+
+## Task 10 完成恢复点
+
+- `task10_dialogue_memory` 以 `1f6006f6` 完成 Agent Dialogue cutover、shared gate/tick correlation、terminal accepted reservation、memory commit/reconcile/epoch/tombstone、v5 mirror dirty 与单次广播、direct Dialogue/裸 summary 删除，以及 save/flush→Release→close 的可重试 shutdown；initial SPEC/QUALITY 均 FAIL。
+- Repair 1 `6ef874b1` 关闭 persistence in-flight replacement dirty 重判与 checked revision reserve、reconcile per-companion 隔离/stale fence/unknown same-operation retry、shutdown quiescence、Release 失败重试和 dead `CompanionSummary` surface；独立 SPEC PASS、QUALITY FAIL。
+- Repair 2 `7283b746` 让 acquire/reacquire 从完整 lifecycle 集合 reconcile inactive tombstone，并把 run cancellation 与有界 memory-finalization context 分离；caller timeout 后保留 lease/resources，下一次 Shutdown 可继续收敛。
+- Repair 3 `c2cebeb9` 让每次新 Shutdown attempt 重新派发已有 unresolved reservation+pending，并修复共享 deadline 下旧 finalization context 继续派生 worker 的 timer 竞态。
+- Repair 4 `6bdf2b7e` 处理上一轮 reconcile worker 到 deadline 才退出、outcome 尚未 drain 的边界：新 attempt 消费唯一旧结果后只 re-arm 一次，新派发失败不在同轮自旋；最终独立 SPEC/QUALITY 均 PASS，Task 10 Accepted。
+- 最终稳定性与 canonical gates：Repair 3/4 shutdown 三测试 `-race -count=20` PASS（4.612s）；`MemoryReconcile|UnknownCommit|Shutdown|Release` race PASS（5.078s）；broader `Agent|Lease|Planner|Dialogue|Memory|Shutdown|CompanionSpeech` race PASS（companion 4.558s、server 95.791s）；persistence race PASS（2.813s）；archcheck PASS（5.319s）；三个 cmd package、affected vet、`go mod tidy -diff`、gofmt/diff-check 与 OpenSpec strict 80/80 全绿。
+- Task 10 closeout 后 change 进度为 10/12；下一任务为 Task 11。
