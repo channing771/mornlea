@@ -132,38 +132,94 @@ func (response *PlanResponse) UnmarshalJSON(data []byte) error {
 	})
 }
 
-type agentPlanJSON AgentPlan
-
 func (plan *AgentPlan) UnmarshalJSON(data []byte) error {
-	return decodeAgentObject(data, (*agentPlanJSON)(plan), []string{"summary", "steps"})
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil || fields == nil {
+		*plan = AgentPlan{wireInvalid: true}
+		return nil
+	}
+	*plan = AgentPlan{}
+	for name, raw := range fields {
+		if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			plan.wireInvalid = true
+			continue
+		}
+		var err error
+		switch name {
+		case "summary":
+			err = json.Unmarshal(raw, &plan.Summary)
+		case "steps":
+			err = json.Unmarshal(raw, &plan.Steps)
+		default:
+			plan.wireInvalid = true
+			continue
+		}
+		if err != nil {
+			plan.wireInvalid = true
+		}
+	}
+	if _, ok := fields["summary"]; !ok {
+		plan.wireInvalid = true
+	}
+	if _, ok := fields["steps"]; !ok {
+		plan.wireInvalid = true
+	}
+	return nil
 }
 
 type agentPlanStepJSON AgentPlanStep
 
 func (step *AgentPlanStep) UnmarshalJSON(data []byte) error {
-	var discriminator struct {
-		Kind string `json:"kind"`
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil || fields == nil {
+		*step = AgentPlanStep{wireInvalid: true}
+		return nil
 	}
-	if err := json.Unmarshal(data, &discriminator); err != nil {
-		return err
+	*step = AgentPlanStep{}
+	for name, raw := range fields {
+		var bit agentPlanStepFields
+		switch name {
+		case "kind":
+			bit = agentPlanFieldKind
+		case "x":
+			bit = agentPlanFieldX
+		case "y":
+			bit = agentPlanFieldY
+		case "z":
+			bit = agentPlanFieldZ
+		case "block":
+			bit = agentPlanFieldBlock
+		case "player_id":
+			bit = agentPlanFieldPlayerID
+		default:
+			step.wireInvalid = true
+			continue
+		}
+		step.wirePresent |= bit
+		if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			step.wireNull |= bit
+			continue
+		}
+		var err error
+		switch name {
+		case "kind":
+			err = json.Unmarshal(raw, &step.Kind)
+		case "x":
+			err = json.Unmarshal(raw, &step.X)
+		case "y":
+			err = json.Unmarshal(raw, &step.Y)
+		case "z":
+			err = json.Unmarshal(raw, &step.Z)
+		case "block":
+			err = json.Unmarshal(raw, &step.Block)
+		case "player_id":
+			err = json.Unmarshal(raw, &step.PlayerID)
+		}
+		if err != nil {
+			step.wireInvalid = true
+		}
 	}
-	var fields map[string]agentJSONField
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
-	}
-	if _, ok := fields["kind"]; !ok || discriminator.Kind == "" {
-		return errors.New("agent plan step 缺少合法 kind")
-	}
-	switch discriminator.Kind {
-	case "go_to", "mine":
-		return decodeAgentObject(data, (*agentPlanStepJSON)(step), []string{"kind", "x", "y", "z"})
-	case "place":
-		return decodeAgentObject(data, (*agentPlanStepJSON)(step), []string{"kind", "x", "y", "z", "block"})
-	case "follow":
-		return decodeAgentObject(data, (*agentPlanStepJSON)(step), []string{"kind", "player_id"})
-	default:
-		return fmt.Errorf("agent plan step kind %q 不受支持", discriminator.Kind)
-	}
+	return nil
 }
 
 func (step AgentPlanStep) MarshalJSON() ([]byte, error) {

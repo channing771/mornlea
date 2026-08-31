@@ -129,27 +129,51 @@ func (c *companionAgentLeaseController) refresh() {
 		c.clear(fence)
 		return
 	}
+	rpcContext, rpcDeadline, cancelRPC, ok := c.controlRPCContext(lease)
+	if !ok {
+		c.clear(fence)
+		return
+	}
+	defer cancelRPC()
 	if lease.ID == "" {
-		response, acquireErr := c.client.Acquire(c.ctx, companion.AcquireRequest{
+		response, acquireErr := c.client.Acquire(rpcContext, companion.AcquireRequest{
 			ContractVersion: companion.AgentContractVersion, RequestID: requestID,
 			ClientInstanceID: c.clientInstanceID, NamespaceID: c.namespaceID,
 		})
-		if acquireErr != nil {
+		if acquireErr != nil || rpcContext.Err() != nil || !time.Now().Before(rpcDeadline) {
 			c.clear(fence)
 			return
 		}
 		c.install(fence, response.LeaseID, response.LeaseExpiresInMS, fence)
 		return
 	}
-	response, heartbeatErr := c.client.Heartbeat(c.ctx, companion.LeaseRequest{
+	response, heartbeatErr := c.client.Heartbeat(rpcContext, companion.LeaseRequest{
 		ContractVersion: companion.AgentContractVersion, RequestID: requestID,
 		ClientInstanceID: c.clientInstanceID, NamespaceID: c.namespaceID, LeaseID: lease.ID,
 	})
-	if heartbeatErr != nil {
+	if heartbeatErr != nil || rpcContext.Err() != nil || !time.Now().Before(rpcDeadline) {
 		c.clear(fence)
 		return
 	}
 	c.install(fence, response.LeaseID, response.LeaseExpiresInMS, lease.Fence)
+}
+
+// controlRPCContext 为单次 acquire/heartbeat 建立独立硬 deadline。上界是
+// heartbeat interval；已有 lease 时还必须早于当前 lease 失效时刻，防止迟到
+// heartbeat 把已经失效的租约重新延长。
+func (c *companionAgentLeaseController) controlRPCContext(
+	lease companionAgentLease,
+) (context.Context, time.Time, context.CancelFunc, bool) {
+	now := time.Now()
+	deadline := now.Add(c.heartbeatEvery)
+	if lease.ID != "" && lease.Expires.Before(deadline) {
+		deadline = lease.Expires
+	}
+	if !deadline.After(now) {
+		return nil, time.Time{}, func() {}, false
+	}
+	ctx, cancel := context.WithDeadline(c.ctx, deadline)
+	return ctx, deadline, cancel, true
 }
 
 func (c *companionAgentLeaseController) install(fence uint64, leaseID string, expiresInMS int, leaseFence uint64) {
@@ -221,17 +245,25 @@ type agentPlannerOptions struct {
 type companionPlanningRequest struct {
 	CompanionID companion.ID
 	Generation  uint64
+	Attempt     uint64
 	Snapshot    companion.PlanSnapshot
 	Instruction string
 }
 
 type companionPlanningOutcome struct {
-	Plan           companion.Plan
+	Plan            companion.Plan
+	RunID           string
+	SnapshotID      string
+	SnapshotDigest  string
+	Generation      uint64
+	Attempt         uint64
+	requestIdentity companionPlanningIdentity
+}
+
+type companionPlanningIdentity struct {
 	RunID          string
 	SnapshotID     string
 	SnapshotDigest string
-	Generation     uint64
-	Correlated     bool
 }
 
 type companionAgentPlanner struct {
@@ -329,7 +361,11 @@ func (p *companionAgentPlanner) Plan(ctx context.Context, request companionPlann
 	return companionPlanningOutcome{
 		Plan: plan, RunID: response.RunID, SnapshotID: response.SnapshotID,
 		SnapshotDigest: response.SnapshotDigest, Generation: response.Generation,
-		Correlated: true,
+		Attempt: request.Attempt,
+		requestIdentity: companionPlanningIdentity{
+			RunID: planRequest.RunID, SnapshotID: planRequest.SnapshotID,
+			SnapshotDigest: planRequest.SnapshotDigest,
+		},
 	}, nil
 }
 

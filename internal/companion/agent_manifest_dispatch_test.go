@@ -391,6 +391,7 @@ func TestAgentClientStrictNestedRequiredAndVariantFields(t *testing.T) {
 		operation string
 		request   json.RawMessage
 		response  json.RawMessage
+		want      error
 	}{
 		{
 			name: "plan step missing zero-capable x", operation: "plan",
@@ -399,6 +400,7 @@ func TestAgentClientStrictNestedRequiredAndVariantFields(t *testing.T) {
 				step := object["plan"].(map[string]any)["steps"].([]any)[0].(map[string]any)
 				delete(step, "x")
 			}),
+			want: ErrAgentInvalidModelOutput,
 		},
 		{
 			name: "plan step explicit null known foreign field", operation: "plan",
@@ -407,6 +409,7 @@ func TestAgentClientStrictNestedRequiredAndVariantFields(t *testing.T) {
 				step := object["plan"].(map[string]any)["steps"].([]any)[0].(map[string]any)
 				step["player_id"] = nil
 			}),
+			want: ErrAgentInvalidModelOutput,
 		},
 		{
 			name: "plan digest uppercase", operation: "plan",
@@ -452,7 +455,11 @@ func TestAgentClientStrictNestedRequiredAndVariantFields(t *testing.T) {
 			client := newManifestAgentClient(t, fixedAgentResponseHandler(http.StatusOK, testCase.response))
 			got, err := callAgentOperation(t, client, testCase.operation, testCase.request)
 			assertZeroAgentResult(t, got)
-			if !errors.Is(err, ErrAgentUnavailable) {
+			want := testCase.want
+			if want == nil {
+				want = ErrAgentUnavailable
+			}
+			if !errors.Is(err, want) {
 				t.Fatalf("error = %v", err)
 			}
 		})

@@ -221,7 +221,21 @@ func (p fakeCompanionPlanner) Plan(ctx context.Context, request companionPlannin
 			})
 		}
 	}
-	return companionPlanningOutcome{Plan: plan, Generation: request.Generation, Correlated: true}, nil
+	_, digest, err := companion.CanonicalSnapshotDigest(request.Snapshot)
+	if err != nil {
+		return companionPlanningOutcome{}, companion.ErrPlannerUnavailable
+	}
+	return companionPlanningOutcome{
+		Plan: plan, Generation: request.Generation, Attempt: request.Attempt,
+		RunID:          "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+		SnapshotID:     "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+		SnapshotDigest: digest,
+		requestIdentity: companionPlanningIdentity{
+			RunID:          "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+			SnapshotID:     "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+			SnapshotDigest: digest,
+		},
+	}, nil
 }
 
 // stepCollectingChatEvents 逐 tick 推进并收集客户端收到的 ChatEvent，直到

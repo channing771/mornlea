@@ -74,6 +74,9 @@ type companionTaskSlot struct {
 
 	// planningInFlight 表示该伙伴有一个规划请求在途；在途期间绝不发起第二个。
 	planningInFlight bool
+	// planningAttempt 是 tick 为规划请求分配的本地单调身份；只有完整匹配
+	// 当前 attempt 的 worker 结果才有权释放 gate。
+	planningAttempt uint64
 
 	// dialogueInFlight 表示该伙伴有一个台词请求在途；在途期间新台词节点
 	// 直接跳过（不取消、不替换在途请求），对齐 planningInFlight 的每伙伴
@@ -148,9 +151,13 @@ type companionTaskSlot struct {
 type plannerOutcome struct {
 	id         companion.ID
 	generation uint64
-	result     companionPlanningOutcome
-	snapshot   companion.PlanSnapshot
-	err        error
+	attempt    uint64
+	// snapshotDigest 由 worker 从不可变冻结快照独立计算，供 tick 核对 bridge
+	// 实际注册并关联的 digest，不能由 Agent 响应自行声明。
+	snapshotDigest string
+	result         companionPlanningOutcome
+	snapshot       companion.PlanSnapshot
+	err            error
 }
 
 // pathOutcome 是一次寻路的结果，同样携带任务身份。
@@ -514,20 +521,19 @@ func (m *companionManager) applyPlannerOutcome(outcome plannerOutcome) {
 	if slot == nil || !slot.planningInFlight {
 		return
 	}
-	slot.planningInFlight = false
-	if slot.queue.Generation() != outcome.generation {
+	if slot.queue.Generation() != outcome.generation || slot.planningAttempt != outcome.attempt {
 		return
 	}
 	current, ok := slot.queue.Current()
 	if !ok || current.State != companion.TaskPlanning {
 		return
 	}
+	if outcome.err == nil && !validCompanionPlanningIdentity(outcome) {
+		return
+	}
+	slot.planningInFlight = false
 	switch {
 	case outcome.err == nil:
-		if !outcome.result.Correlated || outcome.result.Generation != outcome.generation {
-			m.applyQueueEvents(slot, slot.queue.FailPlanning(companion.TaskFailPlannerUnavailable))
-			return
-		}
 		if !m.plannerOutcomeMatchesCurrentAuthority(slot, current.Command, outcome) {
 			m.applyQueueEvents(slot, slot.queue.FailPlanning(companion.TaskFailWorldChanged))
 			return
@@ -553,9 +559,33 @@ func (m *companionManager) applyPlannerOutcome(outcome plannerOutcome) {
 	}
 }
 
+// validCompanionPlanningIdentity 验证桥接结果携带的远端身份，并把它绑定到
+// tick 保存的本地 attempt、generation 与冻结快照 digest。`RunID` 和
+// `SnapshotID` 必须是规范 UUIDv4；单个布尔标记不能替代逐字段核对。
+func validCompanionPlanningIdentity(outcome plannerOutcome) bool {
+	requestIdentity := outcome.result.requestIdentity
+	if outcome.attempt == 0 || outcome.result.Attempt != outcome.attempt ||
+		outcome.result.Generation != outcome.generation ||
+		outcome.result.RunID != requestIdentity.RunID ||
+		outcome.result.SnapshotID != requestIdentity.SnapshotID ||
+		outcome.result.SnapshotDigest != requestIdentity.SnapshotDigest ||
+		requestIdentity.SnapshotDigest == "" ||
+		requestIdentity.SnapshotDigest != outcome.snapshotDigest {
+		return false
+	}
+	if _, err := companion.ParseID(outcome.result.RunID); err != nil {
+		return false
+	}
+	if _, err := companion.ParseID(outcome.result.SnapshotID); err != nil {
+		return false
+	}
+	return true
+}
+
 // plannerOutcomeMatchesCurrentAuthority 在 Agent 返回后的权威 tick 边界重建必要
-// 世界事实。冻结快照只用于约束候选生成；提交前目标方块、place 背包与 follow
-// 在线性必须仍成立，且 mine 的 dense projection 精确槽不得发生替换。
+// 世界事实。冻结快照只用于约束候选生成；提交前计划相关区块 revision、目标
+// 方块、place 背包与 follow 在线位置必须仍成立。方块比较读取 dense projection，
+// 不依赖有损的 exposed 摘要。
 func (m *companionManager) plannerOutcomeMatchesCurrentAuthority(
 	slot *companionTaskSlot,
 	command companion.TaskCommand,
@@ -573,17 +603,53 @@ func (m *companionManager) plannerOutcomeMatchesCurrentAuthority(
 		return false
 	}
 	for _, step := range outcome.result.Plan.Steps {
-		if step.Kind != companion.PlanStepMine {
-			continue
-		}
-		target := core.BlockPos{X: step.X, Y: step.Y, Z: step.Z}
-		frozenBlock, _, frozenOK := outcome.snapshot.Terrain.Lookup(target)
-		currentBlock, _, currentOK := currentSnapshot.Terrain.Lookup(target)
-		if !frozenOK || !currentOK || frozenBlock != currentBlock {
-			return false
+		switch step.Kind {
+		case companion.PlanStepMine, companion.PlanStepPlace:
+			target := core.BlockPos{X: step.X, Y: step.Y, Z: step.Z}
+			frozenBlock, _, frozenReady := outcome.snapshot.Terrain.Lookup(target)
+			currentBlock, _, currentReady := currentSnapshot.Terrain.Lookup(target)
+			if !frozenReady || !currentReady || frozenBlock != currentBlock ||
+				!samePlanChunkRevision(outcome.snapshot, currentSnapshot, target.Chunk()) {
+				return false
+			}
+		case companion.PlanStepFollow:
+			frozenTarget, frozenOnline := planSnapshotPlayer(outcome.snapshot, step.PlayerID)
+			currentTarget, currentOnline := planSnapshotPlayer(currentSnapshot, step.PlayerID)
+			if !frozenOnline || !currentOnline || frozenTarget.Position != currentTarget.Position {
+				return false
+			}
 		}
 	}
 	return true
+}
+
+// samePlanChunkRevision 只比较含计划坐标的区块，不把投影内无关区块漂移扩大为
+// 整份快照失效。缺失 revision 代表无法证明冻结事实仍然成立，按 fail closed 拒绝。
+func samePlanChunkRevision(frozen, current companion.PlanSnapshot, target core.ChunkPos) bool {
+	var frozenRevision, currentRevision uint64
+	var frozenFound, currentFound bool
+	for _, revision := range frozen.ChunkRevisions {
+		if revision.Chunk == target {
+			frozenRevision, frozenFound = revision.Revision, true
+			break
+		}
+	}
+	for _, revision := range current.ChunkRevisions {
+		if revision.Chunk == target {
+			currentRevision, currentFound = revision.Revision, true
+			break
+		}
+	}
+	return frozenFound && currentFound && frozenRevision == currentRevision
+}
+
+func planSnapshotPlayer(snapshot companion.PlanSnapshot, id core.PlayerID) (companion.PlanPlayer, bool) {
+	for _, player := range snapshot.OnlinePlayers {
+		if player.ID == id {
+			return player, true
+		}
+	}
+	return companion.PlanPlayer{}, false
 }
 
 // applyPathOutcomes 在 tick 边界非阻塞排空寻路结果并应用。
@@ -946,9 +1012,19 @@ func (m *companionManager) dispatchPlanning() {
 			<-m.semaphore
 			continue
 		}
+		if slot.planningAttempt == ^uint64(0) {
+			slog.Error("规划 attempt 已耗尽", "companion", id)
+			m.applyQueueEvents(slot, slot.queue.FailPlanning(companion.TaskFailPlannerUnavailable))
+			<-m.semaphore
+			continue
+		}
+		slot.planningAttempt++
+		if slot.planningAttempt == 0 {
+			slot.planningAttempt++
+		}
 		slot.planningInFlight = true
 		m.waitGroup.Add(1)
-		go m.plannerWorker(id, slot.queue.Generation(), snapshot)
+		go m.plannerWorker(id, slot.queue.Generation(), slot.planningAttempt, snapshot)
 	}
 }
 
@@ -958,12 +1034,21 @@ func (m *companionManager) dispatchPlanning() {
 func (m *companionManager) plannerWorker(
 	id companion.ID,
 	generation uint64,
+	attempt uint64,
 	snapshot companion.PlanSnapshot,
 ) {
 	defer m.waitGroup.Done()
-	result, err := m.planner.Plan(m.ctx, companionPlanningRequest{
-		CompanionID: id, Generation: generation, Snapshot: snapshot, Instruction: snapshot.Command,
-	})
+	_, snapshotDigest, digestErr := companion.CanonicalSnapshotDigest(snapshot)
+	var result companionPlanningOutcome
+	var err error
+	if digestErr != nil {
+		err = companion.ErrPlannerUnavailable
+	} else {
+		result, err = m.planner.Plan(m.ctx, companionPlanningRequest{
+			CompanionID: id, Generation: generation, Attempt: attempt,
+			Snapshot: snapshot, Instruction: snapshot.Command,
+		})
+	}
 	// 释放先于发送：`m.semaphore` 约束的是在途模型调用数，`Plan` 返回即调用
 	// 结束、名额自此可复用，结果投递只是队列簿记。若先发送再经 defer 释放，
 	// 两者之间没有屏障，tick 线程 try-acquire 的成败便依赖 goroutine 调度
@@ -971,7 +1056,10 @@ func (m *companionManager) plannerWorker(
 	// 之前名额已归还」成为严格事实，ctx 取消路径行为不变（取消时同样先
 	// 释放、发送走 `<-m.ctx.Done()` 分支放弃结果）。
 	<-m.semaphore
-	outcome := plannerOutcome{id: id, generation: generation, result: result, snapshot: snapshot, err: err}
+	outcome := plannerOutcome{
+		id: id, generation: generation, attempt: attempt,
+		snapshotDigest: snapshotDigest, result: result, snapshot: snapshot, err: err,
+	}
 	select {
 	case m.plannerResults <- outcome:
 	case <-m.ctx.Done():

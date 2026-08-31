@@ -57,11 +57,13 @@ Task 6 的 Agent HTTP v1 client，并通过 Task 7 的 frozen snapshot registry/
 5. tick correlation 与当前世界重验
    - RED：frozen snapshot 后把 dense mine 目标从 Chest 改成 Furnace、移除 place
      inventory、让 follow 目标离线，结果仍产生 `TaskStarted`。
-   - GREEN：result 必须明确 `Correlated=true` 且 generation/snapshot 身份匹配；
-     tick 用当前权威 body、online players、inventory 与重新构造的 dense terrain
-     重验后才 `AcceptPlan`。相关事实变化统一裁决为现有稳定
-     `TaskFailWorldChanged`，没有新增失败枚举；迟到、重复、终态或世代不符结果
-     零应用。
+   - GREEN：tick 为每次规划分配非零、单调 `planningAttempt`；结果必须匹配当前
+     attempt、generation，且任务仍处于 `Planning`。bridge 保存的 request identity
+     与结果中的 canonical UUIDv4 `RunID`/`SnapshotID` 必须逐项匹配，结果 digest
+     还必须同时匹配 request identity 与 worker 从冻结 snapshot 独立计算的 digest；
+     全部身份检查通过后才能清除 planning gate。随后 tick 用当前权威 body、online
+     players、inventory 与重新构造的 dense terrain 重验后才 `AcceptPlan`。相关事实
+     变化统一裁决为现有稳定 `TaskFailWorldChanged`，没有新增失败枚举。
 
 6. direct-model 删除与测试迁移
    - RED：删除 `PlannerClient` 后 focused companion compile 暴露 Dialogue 仍借用
@@ -75,6 +77,46 @@ Task 6 的 Agent HTTP v1 client，并通过 Task 7 的 frozen snapshot registry/
    - 迁移后另一个真实 RED：`TestCompanionShutdownCancelsPlannerBeforeFinalSaveAndStore`
      等待旧隐式 direct 构造 60.18s 超时；改为显式 typed planner seam 后单测
      1.041s 通过，scoped server 组 3.632s 通过。
+
+## Repair 1：独立评审 FAIL 后修复
+
+Task 9 初次实现的独立规格评审与代码质量评审均裁决为 FAIL。修复按以下四组
+重新取得 RED 并关闭为 GREEN：
+
+1. Agent HTTP plan strict `oneOf` 与错误分类
+   - RED：plan step 的字段 presence 被 Go 零值折叠，专属外字段即使是显式
+     `null`、零值或非零值也可能被静默丢弃；缺少可为零的必填坐标、unknown
+     field/kind 与错误字段类型不能稳定区分，且已完成 response correlation 后的
+     candidate shape 失败被误归为 `AgentUnavailable`。
+   - GREEN：HTTP 解码单独保存每个 plan/step 字段的 presence、显式 `null` 与
+     decode-invalid 状态，再按四种 step 的 strict `oneOf` 精确校验；合法零坐标仍被
+     接受，missing/null/foreign/wrong-type 一律在关联身份校验完成后映射为
+     `ErrAgentInvalidModelOutput`，不泄漏为 transport unavailable。
+
+2. acquire/heartbeat deadline 与迟到控制面结果 fencing
+   - RED：hung acquire/heartbeat 只受 Host lifetime context 约束，可能无限占住
+     lease loop；忽略 context 的 client 还能在 deadline 后返回并安装迟到 lease。
+   - GREEN：每次 acquire/heartbeat 使用独立硬 deadline，上界为 heartbeat interval，
+     heartbeat 还不得晚于当前 lease expiry；timeout 清除当前 fence 并允许后续
+     reacquire，Host close 会取消并等待控制 RPC，deadline 后即使 client 迟到返回也
+     不得安装 lease。
+
+3. planning attempt identity 与 gate 所有权
+   - RED：stale generation、terminal task、空 bridge identity、snapshot/run/attempt
+     mismatch 的结果可以先清除 `planningInFlight`，从而让错误结果释放当前请求拥有的
+     per-companion gate，并提前打开 Dialogue。
+   - GREEN：tick-owned monotonic attempt 与当前 generation/`Planning` 状态先匹配；
+     canonical `RunID`/`SnapshotID`、bridge request identity、result identity 和 frozen
+     digest 再全部一致后才清 gate。stale、terminal、empty 或任一 mismatch 结果均
+     零应用并保留当前 gate。
+
+4. 当前世界 revalidation 的目标相关边界
+   - RED：place 目标从空气变为占用、follow 目标移动、计划目标 chunk revision
+     改变仍可能启动任务；测试若只 `SetBlockForTest`，无法证明 revision 路径真实生效。
+   - GREEN：place/mine 比较目标 dense block 与目标 chunk revision，follow 比较当前
+     在线状态和位置；revision RED 使用真实 `TouchChunkForTest` 推进目标 chunk。
+     未变化的 dense Chest/Furnace 仍通过，投影内无关 chunk/block 变化不扩大为整份
+     snapshot 失效。
 
 ## 生产装配与边界
 
@@ -101,23 +143,21 @@ accepted Dialogue reservation。旧 Dialogue client 仅作为 Task 10 过渡代�
 ## 验证
 
 - `go test ./internal/companion ./internal/server -run 'Planner|CompanionTask|AgentUnavailable|Snapshot' -race -count=1`
-  - PASS（最终工作树重跑）：companion 2.915s，server 6.650s。
+  - PASS（最终工作树重跑）：companion 2.599s，server 10.685s。
 - `go test ./internal/config -run 'Agent|AIConfig' -race -count=1`
-  - PASS：1.794s。
+  - PASS：1.578s。
 - `go test ./internal/archcheck -count=1`
-  - PASS：5.679s。
+  - PASS：5.655s。
 - `go test ./cmd/mornlea ./cmd/mornlea/app ./cmd/mornlea-server -count=1`
-  - PASS：0.968s / 22.644s / 0.753s；未启动游戏窗口。
-- `go test ./internal/server -run 'AgentLease|AgentPlannerBridge|AgentShared|NewHost.*Agent|PlannerOutcomeRevalidates' -race -count=1`
-  - PASS：3.832s。
-- `go test ./internal/server -run '^TestAgentPlannerBridgeRoundTripsRealClientAndCapability$' -race -count=1`
-  - PASS：2.104s。
+  - PASS：1.077s / 22.818s / 3.965s；未启动游戏窗口。
 - `go vet ./internal/companion ./internal/server ./internal/config`
   - PASS，无输出。
 - `go mod tidy -diff`
   - PASS，无 diff。
 - `openspec validate --all --strict --no-interactive`
   - PASS：80 passed，0 failed。
+- `git diff --check`
+  - PASS，无输出。
 
-最终工作树还通过 `git diff --check`、生产 direct Planner 扫描与敏感凭据扫描；
-具体扫描命令与干净结果随任务回报。
+最终工作树还通过生产 direct Planner 扫描与敏感凭据扫描；具体扫描命令与干净
+结果随任务回报。

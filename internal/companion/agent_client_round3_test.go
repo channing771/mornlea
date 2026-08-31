@@ -27,13 +27,14 @@ func TestAgentClientRejectsExplicitNullForEveryNonNullableShape(t *testing.T) {
 		operation string
 		variant   string
 		mutate    func(map[string]any)
+		want      error
 	}{
 		{name: "identity string", operation: "namespace_acquire", variant: "success", mutate: func(object map[string]any) { object["request_id"] = nil }},
 		{name: "nested object", operation: "plan", variant: "success", mutate: func(object map[string]any) { object["plan"] = nil }},
 		{name: "number", operation: "plan", variant: "success", mutate: func(object map[string]any) { object["generation"] = nil }},
-		{name: "position x", operation: "plan", variant: "success", mutate: func(object map[string]any) { firstAgentPlanStep(t, object)["x"] = nil }},
-		{name: "position y", operation: "plan", variant: "success", mutate: func(object map[string]any) { firstAgentPlanStep(t, object)["y"] = nil }},
-		{name: "position z", operation: "plan", variant: "success", mutate: func(object map[string]any) { firstAgentPlanStep(t, object)["z"] = nil }},
+		{name: "position x", operation: "plan", variant: "success", mutate: func(object map[string]any) { firstAgentPlanStep(t, object)["x"] = nil }, want: ErrAgentInvalidModelOutput},
+		{name: "position y", operation: "plan", variant: "success", mutate: func(object map[string]any) { firstAgentPlanStep(t, object)["y"] = nil }, want: ErrAgentInvalidModelOutput},
+		{name: "position z", operation: "plan", variant: "success", mutate: func(object map[string]any) { firstAgentPlanStep(t, object)["z"] = nil }, want: ErrAgentInvalidModelOutput},
 		{name: "base revision", operation: "dialogue", variant: "terminal-true", mutate: func(object map[string]any) { agentNestedObject(t, object, "memory_proposal")["base_revision"] = nil }},
 		{name: "line string", operation: "dialogue", variant: "terminal-true", mutate: func(object map[string]any) { object["line"] = nil }},
 		{name: "revision", operation: "memory_reconcile", variant: "active-true", mutate: func(object map[string]any) { agentNestedObject(t, object, "memory")["revision"] = nil }},
@@ -50,7 +51,11 @@ func TestAgentClientRejectsExplicitNullForEveryNonNullableShape(t *testing.T) {
 			client := newManifestAgentClient(t, fixedAgentResponseHandler(success.Status, responseBody))
 			got, err := callAgentOperation(t, client, testCase.operation, success.RequestBody)
 			assertZeroAgentResult(t, got)
-			if !errors.Is(err, ErrAgentUnavailable) {
+			want := testCase.want
+			if want == nil {
+				want = ErrAgentUnavailable
+			}
+			if !errors.Is(err, want) {
 				t.Fatalf("explicit null error = %v", err)
 			}
 		})

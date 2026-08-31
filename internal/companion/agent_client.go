@@ -129,8 +129,9 @@ type PlanResponse struct {
 
 // AgentPlan 是 Agent HTTP contract 的候选计划 wire DTO；它不直接成为权威任务。
 type AgentPlan struct {
-	Summary string          `json:"summary"`
-	Steps   []AgentPlanStep `json:"steps"`
+	Summary     string          `json:"summary"`
+	Steps       []AgentPlanStep `json:"steps"`
+	wireInvalid bool
 }
 type AgentPlanStep struct {
 	Kind     string `json:"kind"`
@@ -139,7 +140,25 @@ type AgentPlanStep struct {
 	Z        int32  `json:"z,omitempty"`
 	Block    string `json:"block,omitempty"`
 	PlayerID string `json:"player_id,omitempty"`
+	// `wirePresent`/`wireNull` 只由 HTTP 严格解码填充，保留 oneOf 判定所需的
+	// 「字段缺席 / 显式 null / 零值」区别；程序内 typed DTO 的零值保持 nil
+	// wire metadata，由 `validAgentPlan` 走强类型 fail-closed 分支。
+	wirePresent agentPlanStepFields
+	wireNull    agentPlanStepFields
+	wireInvalid bool
 }
+
+type agentPlanStepFields uint8
+
+const (
+	agentPlanFieldKind agentPlanStepFields = 1 << iota
+	agentPlanFieldX
+	agentPlanFieldY
+	agentPlanFieldZ
+	agentPlanFieldBlock
+	agentPlanFieldPlayerID
+)
+
 type AgentBlockPosition struct {
 	X int32 `json:"x"`
 	Y int32 `json:"y"`
@@ -458,6 +477,9 @@ func (c *AgentClient) Plan(ctx context.Context, in PlanRequest) (PlanResponse, e
 	}
 	if !(sameLeaseIdentity(LeaseRequest{in.ContractVersion, in.RequestID, in.ClientInstanceID, in.NamespaceID, in.LeaseID}, out.ContractVersion, out.RequestID, out.ClientInstanceID, out.NamespaceID, out.LeaseID) && out.RunID == in.RunID && out.CompanionID == in.CompanionID && out.Generation == in.Generation && out.SnapshotID == in.SnapshotID && out.SnapshotDigest == in.SnapshotDigest) {
 		return PlanResponse{}, ErrAgentUnavailable
+	}
+	if !validAgentPlan(out.Plan) {
+		return PlanResponse{}, ErrAgentInvalidModelOutput
 	}
 	return out, nil
 }
@@ -946,10 +968,16 @@ func validMemoryProposal(proposal AgentMemoryProposal) bool {
 	return validCanonicalAgentID(proposal.OperationID) && validAgentMemoryText(proposal.Summary, 2048)
 }
 func validAgentPlan(plan AgentPlan) bool {
-	if !validAgentNonBlankText(plan.Summary, MaxPlanSummaryBytes) || len(plan.Steps) == 0 || len(plan.Steps) > 5000 {
+	if plan.wireInvalid || !validAgentNonBlankText(plan.Summary, MaxPlanSummaryBytes) || len(plan.Steps) == 0 || len(plan.Steps) > 5000 {
 		return false
 	}
 	for index, step := range plan.Steps {
+		if step.wirePresent != 0 || step.wireNull != 0 {
+			if !validAgentPlanWireStep(step, index == len(plan.Steps)-1) {
+				return false
+			}
+			continue
+		}
 		switch step.Kind {
 		case "go_to", "mine":
 			if step.Y < -64 || step.Y > 319 || step.Block != "" || step.PlayerID != "" {
@@ -972,6 +1000,28 @@ func validAgentPlan(plan AgentPlan) bool {
 	}
 	return true
 }
+
+func validAgentPlanWireStep(step AgentPlanStep, last bool) bool {
+	const position = agentPlanFieldKind | agentPlanFieldX | agentPlanFieldY | agentPlanFieldZ
+	if step.wireInvalid || step.wireNull != 0 {
+		return false
+	}
+	switch step.Kind {
+	case "go_to", "mine":
+		return step.wirePresent == position && step.Y >= -64 && step.Y <= 319
+	case "place":
+		if step.wirePresent != position|agentPlanFieldBlock || step.Y < -64 || step.Y > 319 {
+			return false
+		}
+		_, ok := planPlaceItems[step.Block]
+		return ok
+	case "follow":
+		return last && step.wirePresent == agentPlanFieldKind|agentPlanFieldPlayerID &&
+			validCanonicalAgentID(step.PlayerID)
+	default:
+		return false
+	}
+}
 func validAgentResponse(value interface{}) bool {
 	validBase := func(version, requestID, clientID, namespace string) bool {
 		return version == AgentContractVersion && validCanonicalAgentID(requestID) && validCanonicalAgentID(clientID) && validCanonicalAgentID(namespace)
@@ -988,7 +1038,7 @@ func validAgentResponse(value interface{}) bool {
 	case *ReleaseResponse:
 		return validBase(response.ContractVersion, response.RequestID, response.ClientInstanceID, response.NamespaceID) && validCanonicalAgentID(response.LeaseID) && response.Released
 	case *PlanResponse:
-		return validBase(response.ContractVersion, response.RequestID, response.ClientInstanceID, response.NamespaceID) && validCanonicalAgentID(response.LeaseID) && validCanonicalAgentID(response.RunID) && validCanonicalAgentID(response.CompanionID) && validCanonicalAgentID(response.SnapshotID) && response.Generation > 0 && validSHA256(response.SnapshotDigest) && validAgentPlan(response.Plan)
+		return validBase(response.ContractVersion, response.RequestID, response.ClientInstanceID, response.NamespaceID) && validCanonicalAgentID(response.LeaseID) && validCanonicalAgentID(response.RunID) && validCanonicalAgentID(response.CompanionID) && validCanonicalAgentID(response.SnapshotID) && response.Generation > 0 && validSHA256(response.SnapshotDigest)
 	case *AgentDialogueResponse:
 		return validBase(response.ContractVersion, response.RequestID, response.ClientInstanceID, response.NamespaceID) && validCanonicalAgentID(response.LeaseID) && validCanonicalAgentID(response.RunID) && validCanonicalAgentID(response.CompanionID) && response.Generation > 0 && response.MemoryEpoch > 0 && validDialogueLine(response.Line) && (response.MemoryProposal == nil || validMemoryProposal(*response.MemoryProposal))
 	case *MemoryReconcileResponse:

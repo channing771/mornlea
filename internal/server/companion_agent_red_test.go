@@ -264,13 +264,14 @@ func TestAgentPlannerBridgeRoundTripsRealClientAndCapability(t *testing.T) {
 	})
 	snapshot := testMCPPlanSnapshot(t)
 	outcome, err := bridge.Plan(context.Background(), companionPlanningRequest{
-		CompanionID: snapshot.Companion.ID, Generation: 9, Snapshot: snapshot,
+		CompanionID: snapshot.Companion.ID, Generation: 9, Attempt: 7, Snapshot: snapshot,
 		Instruction: "向前走",
 	})
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
 	}
-	if !delivered.Load() || !outcome.Correlated || outcome.Generation != 9 {
+	if !delivered.Load() || outcome.Attempt != 7 || outcome.Generation != 9 ||
+		outcome.RunID == "" || outcome.SnapshotID == "" || outcome.SnapshotDigest == "" {
 		t.Fatalf("delivered=%v outcome=%+v", delivered.Load(), outcome)
 	}
 	issued, _ := capability.Load().(string)
