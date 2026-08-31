@@ -37,7 +37,7 @@
 | 3 | `task3_memory_impl` | `ea82d028` | RED：缺少 memory module；复审 RED：operation 复用、lease/SQLite 取消窗口、损坏库修补、重复 cancel 与 receipt 篡改；GREEN：focused 61 passed、full 260 passed、locked sync/ruff/mypy/diff-check；提交 `dcb99bc6`、`225fdb09`、`f68a6eca`、`7a1af977` | `memory_design_audit` round 4 PASS | `openspec_artifacts` round 4 PASS | Accepted |
 | 4 | `openspec_artifacts` | `69f6e6ec` | RED：缺少 Planner/adapters；复审 RED：schema 漂移、transport/envelope 上限、validator wrapper 与 JSON 类型混淆；GREEN：focused 77 passed、full 337 passed、import boundary 48 passed、locked sync/ruff/mypy/wheel/diff-check；提交 `06473b29`、`e4b5dc8f`、`0e773804` | `task4_graph_spec_audit` round 3 PASS | `task4_quality_review` round 3 PASS | Accepted |
 | 5 | `task5_http_research`、`task5_startup_cancel_fix` | `f4009ec0` | RED：缺少 Dialogue/FastAPI；复审 RED：HTTP disconnect、重复取消、响应 fence、关闭与 startup 所有权；GREEN：focused `56 passed`、full Python `393 passed`、import boundary `48 passed`、locked/ruff/mypy/diff-check；提交 `fb569bdd`、`ff7b5be9`、`962e361e`、`2d9042bf` | `task4_fix_quality` round 4 PASS | `task5_quality_review` round 4 PASS | Accepted |
-| 6 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
+| 6 | `task6_go_agent_client`、`task6_strict_lifecycle_fix` | `c871b1ec` | RED：配置/client 缺失，Round 1/2 复审继续拒绝 codec、manifest、边界与生命周期缺口；GREEN：隔离 focused race 两遍、config/companion full race、vet、archcheck、gofmt/diff-check；提交 `0fd248d1`、`f56b42bf`、`5ee80a7c`、`6b1deb59`、`f7585788`、`0ea46c31` | `task6_spec_review` round 1/2 FAIL，round 3 PASS | `task6_quality_review` round 1/2 FAIL，round 3 PASS | Accepted |
 | 7 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 8 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
 | 9 | 待派发 | 待记录 | 待记录 | 待记录 | 待记录 | Pending |
@@ -81,6 +81,14 @@
 - Round 3：SPEC 与 QUALITY 共同拒绝用 `_drain_cleanup` shield 整个 bootstrap；阻塞 factory 在外部取消后不收到 `CancelledError`，使 startup/关服可无界等待。修复改为主动取消 owned bootstrap task，再 cancellation-safe drain 其资源清理。
 - Round 4：SPEC 与 QUALITY 均 PASS；阻塞 factory 单次/重复取消、慢清理、close 异常、完成/取消同 tick 竞态、disconnect、lease/correlation、no checkpoint 与 terminal no-precommit 对抗通过；32 次重复取消与 200 次所有权竞态无死锁、泄漏或双关。
 - 控制会话复验：Task 5 focused `56 passed`；完整 Python `393 passed`；asyncio debug + warnings-as-errors HTTP `36 passed`；工作树在 ledger 更新前 clean。
+
+### Task 6 评审修复记录
+
+- Round 1：SPEC 与 QUALITY 均 FAIL；评审拒绝未由 checked-in contract 驱动的 codec、`json.RawMessage`/非强类型 variant、request/response strictness、route/status/error/correlation 漏项、context 生命周期泄漏、transport/secret 所有权与非确定 config parsing。修复逐步落在 `5ee80a7c` 与 `6b1deb59`，但尚未达到接受条件。
+- Round 2：SPEC 与 QUALITY 均 FAIL；`f7585788` 虽关闭 11-route/14-variant/59-error/79-correlation manifest matrix，独立复审仍拒绝 non-nullable explicit `null`、未按 Python scope 统计的真实 outbound header、重复 response Content-Type、body-read cancellation 与 `Close` admission 竞态、解引用 client 的 secret 表示、显式非法 port，以及缺少 production request-cap 证据。
+- Round 3：`0ea46c31` 以 closed DTO null allowlist、真实 16 KiB wire-header gate、唯一 Content-Type、同步 closed/admission 与 active cancel registry、安全 formatter/log value、端口范围和 public typed request preflight 闭环上述问题；独立 SPEC 与 QUALITY 均 PASS，裁决 Accepted。
+- 隔离验证：只将 Task 6 文件的 staged binary diff 应用到 detached `148b935c` 临时 worktree；首次 Go 链接只因 clean worktree 缺少 `libmornlea_engine` 失败，随后按仓库规则运行 `make rust` PASS，并从头执行 `go test ./internal/config ./internal/companion -run 'Agent|AIConfig|Contract' -race -count=1 -timeout=120s` 连续两遍 PASS、`go test ./internal/config -race -count=1 -timeout=120s` PASS、`go test ./internal/companion -race -count=1 -timeout=120s` PASS、`go vet ./internal/config ./internal/companion` PASS、`go test ./internal/archcheck -count=1 -timeout=120s` PASS；Task 6 文件 `gofmt -l` 无输出，`git diff --check` PASS，且删除临时 worktree 前无残留 `go test` 进程。
+- 裁决边界：共享 worktree 当时由 Task 7A machine-contract fixtures 与 Task 8 storage v5 的并发预期 RED 阻断；这些文件未被修改或暂存，也未纳入 Task 6 的通过证据或裁决。
 
 ### Task 7 实施前设计裁决
 

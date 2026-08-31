@@ -20,7 +20,7 @@
 
 ## Task 6: Go configuration and Agent HTTP client
 
-- [ ] 6.1 先在 `internal/config` 与 `internal/companion` 写直接消费 Task 1 HTTP fixtures 的 `ai.agentService` loopback/auth、旧 direct-model 迁移错误、strict codec、request/response/header 上限、redirect/correlation/error/cancel RED tests，再实现 config loader、删除生产 direct-model 语义并新增有界 client；空配置仅允许 `companions.ai` metadata probe，以 `go test ./internal/config ./internal/companion -run 'Agent|AIConfig|Contract' -race -count=1` 验证。
+- [x] 6.1 先在 `internal/config` 与 `internal/companion` 写直接消费 Task 1 HTTP fixtures 的 `ai.agentService` loopback/auth、旧 direct-model 迁移错误、strict codec、request/response/header 上限、redirect/correlation/error/cancel RED tests，再实现 config loader、删除生产 direct-model 语义并新增有界 client；空配置仅允许 `companions.ai` metadata probe，以 `go test ./internal/config ./internal/companion -run 'Agent|AIConfig|Contract' -race -count=1` 验证。
 
 ## Task 7: Go frozen snapshot registry and MCP v1
 
