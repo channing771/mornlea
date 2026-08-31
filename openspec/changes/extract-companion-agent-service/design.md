@@ -175,12 +175,23 @@ snapshot/namespace/companion/capability 由 runtime 注入，模型不能选择�
 | `get_planning_context` | `{}` | digest、instruction、issuer、companion、world time、chunk revisions；canonical 24 KiB |
 | `list_affordances` | `{}` | step kinds、最多 8 online player、最多 256 visible block；canonical 24 KiB |
 | `inspect_inventory` | `offset: 0..35`、`limit: 1..36` | 最多 36 个 slot/item/count；8 KiB |
-| `find_visible_blocks` | `block_names: 1..16`、`limit: 1..64` | 坐标序最多 64 个 position/block/drop；16 KiB |
-| `query_terrain` | `positions: 1..64` 个整数世界坐标 | 全部位置位于 frozen terrain projection 且列已 ready 时，按输入序逐项返回 position/冻结列高/该位置方块名；任一位置越界或列未 ready 时整次失败为 `out_of_bounds`；16 KiB |
+| `find_visible_blocks` | `block_names: 1..16`、`limit: 1..64` | 成功对象保持坐标序最多 64 个 position/block/drop；未知 canonical block name 时正常失败对象精确为 `{code:"unknown_block",hint:<strict UTF-8 <=256 bytes>}`，无部分 `matches`；16 KiB |
+| `query_terrain` | `positions: 1..64` 个整数世界坐标 | 成功对象保持按输入序逐项返回 position/冻结列高/该位置方块名；任一位置越界、超出 world Y 或列未 ready 时正常失败对象精确为 `{code:"out_of_bounds",hint:<strict UTF-8 <=256 bytes>}`，无部分 `terrain`；16 KiB |
 | `validate_plan` | ≤64 KiB strict Plan object | accepted 时 digest+canonical plan，canonical 72 KiB；失败时 code+不超过 256 bytes hint |
 
 runtime 对六者注入 snapshot identity。
 validator code 固定为 `invalid_schema`、`out_of_bounds`、`unknown_player`、`unmineable_target`、`unknown_block`、`missing_item`、`snapshot_mismatch`。
+
+`3a713a78` 的独立评审指出 Task 1 只记录了 `query_terrain`/`find_visible_blocks` 的语义 code，却没有可由两种语言严格解析的 wire variant。Task 7 的实现前置条件因此是以 RED tests 修订仍未发布的 MCP application contract v1，而不是把既有 fixture 当成无需修改：
+
+- manifest 的每个工具都新增必填 `domain_result_codes`；`get_planning_context`、`list_affordances`、`inspect_inventory` 为 `[]`，`find_visible_blocks` 为 `["unknown_block"]`，`query_terrain` 为 `["out_of_bounds"]`，`validate_plan` 为 `["invalid_schema","out_of_bounds","unknown_player","unmineable_target","unknown_block","missing_item","snapshot_mismatch"]`，且 consistency test 必须钉其与既有顶层 `validator_codes` 完全相等，避免两份 validator 真相漂移；
+- 现有 `find_visible_blocks_result` 与 `query_terrain_result` 的 success object 字段和语义原样移入 `find_visible_blocks_success_result`/`query_terrain_success_result`，public result schema 改为对应 success/failure defs 的 `oneOf`；两个 failure def 只允许精确的 `code` const 与复用现有 `#/$defs/validator_hint` 的 `hint`，拒绝未知/缺失字段、错误类型以及 success/failure 字段混合，绝不新增第二套 hint 语义；
+- 现有 manifest `semantic_rules` 与 schema `x-mornlea-rules` 继续只描述 success branch；Task 1 Go contract validator/consistency test 必须先解析 public `oneOf`，只对选中的 success def 应用 sorted/context rule，并把 manifest rule 与该 success def 锁定，合法 failure branch 不得因缺少 `matches`/`terrain` 被误拒；
+- schema/golden 同时加入合法 success、合法 failure 与非法 mixed/unknown/missing/type/过长或非法 UTF-8 variants；失败对象不得携带部分 `matches`/`terrain`；
+- Go 对这两个可恢复 domain failure 返回 `isError=false`，同时提供 StructuredContent 与恰好一条相同对象的 canonical JSON TextContent fallback；Python domain `TypeAdapter` 与 MCP adapter 必须严格解析 union，并把正常 failure result 作为一次普通 tool message 交回模型，照常消耗自主工具预算且不触发自动重试；
+- MCP `isError=true`、transport/JSON-RPC/protocol/envelope/schema mismatch 仍由 Python 映射为 MCP unavailable，再由 Agent/Go 映射为 `PlannerUnavailable`，不得伪装成模型可修复的 domain result。
+
+Task 1 与 Task 4 的历史完成证据保持有效；Task 7 先完成上述 machine contract/Python TDD amendment，并重新执行相关 contract、adapter 与 Planner focused gates，才开始 Go MCP 实现。
 Go SDK 同时生成 StructuredContent 与 JSON TextContent fallback；双份后的 MCP wire response 独立限制为 160 KiB，并在发送前硬失败。该限制不改变 Agent HTTP response 的 64 KiB 上限。
 MCP Origin 缺失对 Python httpx 合法；若存在，则必须匹配 listener 的 loopback origin。
 
@@ -188,10 +199,10 @@ MCP Origin 缺失对 Python httpx 合法；若存在，则必须匹配 listener 
 
 - `CanonicalBlockName(BlockID)` 覆盖全部 `0 <= id < BlockIDMax`，空气固定为 `air`；
 - `CanonicalItemName(ItemID)` 覆盖全部 `0 < id < ItemIDMax`，完整方块物品复用对应 block canonical name，非方块物品只有一份显式 canonical name；
-- 名称必须是唯一、非空、至多 64 bytes 的小写 ASCII `snake_case`；中文 `BlockDisplayName`/`ItemDisplayName` 只供 UI，不能进入 MCP machine field；
+- 名称必须非空、至多 64 bytes 且为小写 ASCII `snake_case`；唯一性分别限定在 `BlockID` 域内和 `ItemID` 域内，完整方块 item 与对应 block 跨域同名是预期行为；中文 `BlockDisplayName`/`ItemDisplayName` 只供 UI，不能进入 MCP machine field；
 - 未注册 ID、`ItemNone` 或未知输入 name 不得用数值、中文或 `unknown_*` 临时格式化。非法 ID 令 snapshot 注册失败；`find_visible_blocks` 的未知 name 整次返回 `unknown_block` 且无部分结果；`validate_plan` 继续用 `unknown_block`；schema 允许为空的 `drop_item` 才可返回 null。
 
-现有 place 交付白名单仍决定哪些方块可用于 `place`，但白名单只保存允许的 `ItemID`/`BlockID`，字符串 key 从 core canonical registry 派生；这样交付集合与英文拼写各有且只有一个真相来源。Task 1 的 checked-in schema/golden 继续是跨语言 wire 真相，Go consistency test 必须把其中 place enum 与 core/Planner 派生集合逐项锁定，不修改既有 fixture。
+现有 place 交付白名单仍决定哪些方块可用于 `place`，但白名单只保存允许的 `ItemID`/`BlockID`，字符串 key 从 core canonical registry 派生；这样交付集合与英文拼写各有且只有一个真相来源。Task 7 修订后的 checked-in schema/golden 是跨语言 wire 真相，Go consistency test 必须把其中 place enum 与 core/Planner 派生集合逐项锁定；除上述 domain-result contract amendment 外，不改动 Task 1 已交付字段。
 
 ### 5. Frozen terrain projection 与 snapshot registry 自行收口 deadline/cancel
 
@@ -206,11 +217,13 @@ MCP Origin 缺失对 Python httpx 合法；若存在，则必须匹配 listener 
 - 18,513 个 `uint16` `BlockID`，按 `(x,y,z)` 字典序索引；ready 列的世界内格保存精确冻结值，未 ready 列和世界 Y 外的槽位规范化为 `AirID`，但只有 ready 且世界内的格可观察；
 - origin 与固定 dimension 是 O(1) metadata。三个 data plane 合计 39,341 bytes，连同 metadata 每投影硬上限 40 KiB；registry 四槽的 terrain data plane 合计硬上限 160 KiB。
 
-权威 tick 使用当时的 `companionChunkView` 构造投影，最多读取 18,513 个格；同一次 planning scan 修正 `PlanSnapshot.ExposedBlocks` 到垂直 ±8 并保持按 `(x,y,z)` 排序后最多 256 条，`Heights` 保持 ready 列 `(x,z)` 排序摘要。当前共享 helper 若会把 Dialogue 环境摘要一并扩大，Task 7 必须拆出 planning radius/构造路径；本裁决不改变 Dialogue 输入，也不改变寻路 ±4。`find_visible_blocks` 只查冻结的 `ExposedBlocks`；`query_terrain` 与 mine validator 查 dense projection。投影内但未进入 256 条 exposed cap 的 mine 目标必须按精确 frozen `BlockID` 调用既有 `planMineableBlock`；空气、农业、火把、无掉落和未交付多掉落返回 `unmineable_target`，Chest/Furnace 与普通单掉落保持接受。投影外或列未 ready 返回 `out_of_bounds`。任一多位置 terrain 查询失败时不返回任何部分 `terrain`；成功时保留输入数量、顺序和重复项，height 是冻结 `(x,z)` 列高，block name 是请求 `(x,y,z)` 的精确冻结方块。
+权威 tick 使用当时的 `companionChunkView` 分两阶段构造规划数据。第一阶段先完整填充 33×17×33 primary projection：全 ready、全在 world Y 内时恰好执行 18,513 次 world `blockAt` 主采样，未 ready 或 world Y 外可少采样，但任何输入都不得超过 18,513 次。第二阶段只能从已经填满的 projection cache 派生 `PlanSnapshot.ExposedBlocks`，不得调用 `hasAirNeighbor`、`blockAt` 或其他 world/view 读取。判断暴露邻居时，primary projection 内 ready 且 world-valid 的槽使用冻结方块；超过 world 垂直边界的邻居视为空气；仍在 world 内但位于 primary projection 外的邻居以及未 ready 列一律视为 unknown/non-air，保守地不形成暴露。因此边缘暴露结果是 projection boundary 语义，不会追加 live-world 读取。暴露条目扩展到垂直 ±8、按 `(x,y,z)` 排序后最多 256 条，`Heights` 保持 ready 列 `(x,z)` 排序摘要。当前共享 helper 若会把 Dialogue 环境摘要一并扩大，Task 7 必须拆出 planning radius/构造路径；本裁决不改变 Dialogue 输入，也不改变寻路 ±4。
 
-tick 边界只复制上述有界、不可变 snapshot 数据。worker 使用专用 snake_case wire DTO 完成规范 JSON 编码、SHA-256 digest 和随机 snapshot ID；digest 覆盖所有工具可观察事实，包括 projection origin、ready bitmap、height 与 block planes，但 projection 不作为一个整体进入 Agent HTTP、模型输入或 MCP tool result。terrain DTO 固定写 `origin{x,y,z}`、`dimensions:[33,17,33]`、`ready_columns_b64`、`heights_be_i16_b64` 与 `blocks_be_u16_b64`：列/体素索引沿用上述字典序，ready bit `i` 放在 byte `i/8` 的 `1<<(i%8)`，末 byte 未用 bit 为零；height 用二进制补码 big-endian int16，block 用 big-endian uint16，三段都用 RFC 4648 padded standard Base64。terrain canonical JSON 小于 53 KiB，完整 snapshot digest input MUST 不超过 96 KiB。不能直接依赖现有 camelCase `json.Marshal(PlanSnapshot)`、Go map 顺序或平台字节序。
+`find_visible_blocks` 只查上述冻结的 `ExposedBlocks`；`query_terrain` 与 mine validator 直接查 dense projection，绝不依赖 exposed 判定或 256 条 cap。投影内但未进入 exposed cap 的 mine 目标必须按精确 frozen `BlockID` 调用既有 `planMineableBlock`；空气、农业、火把、无掉落和未交付多掉落返回 `unmineable_target`，Chest/Furnace 与普通单掉落保持接受。投影外或列未 ready 返回 `out_of_bounds`。任一多位置 terrain 查询失败时不返回任何部分 `terrain`；成功时保留输入数量、顺序和重复项，height 是冻结 `(x,z)` 列高，block name 是请求 `(x,y,z)` 的精确冻结方块。
 
-registry 注册时对 snapshot 的所有 slice 和 projection data plane 深拷贝，之后只向 handler 提供不可变 view。完成、取消、TTL 或 `Close` 删除记录并取消 registry-owned context；删除后即使旧 handler 仍持有调用 context，也必须在入口、每个有界循环及编码前后检查 guard，不能继续读取投影。
+tick 边界只复制上述有界、不可变 snapshot 数据。worker 使用专用 snake_case digest DTO 完成规范 JSON 编码、SHA-256 digest 和随机 snapshot ID；digest 覆盖所有工具可观察事实，包括 projection origin、ready bitmap、height 与 block planes，但 projection 不作为一个整体进入 Agent HTTP、模型输入或 MCP tool result。terrain DTO 固定写 `origin{x,y,z}`、`dimensions:[33,17,33]`、`ready_columns_b64`、`heights_be_i16_b64` 与 `blocks_be_u16_b64`：列/体素索引沿用上述字典序，ready bit `i` 放在 byte `i/8` 的 `1<<(i%8)`；1,089 bits 编码为 137 bytes，末 byte 只有 bit 0 可用且其余 7 个 unused bits MUST 为零；height 用二进制补码 big-endian int16，block 用 big-endian uint16，三段都用 RFC 4648 padded standard Base64。terrain canonical JSON MUST 小于 53 KiB，完整 snapshot digest input MUST 不超过 96 KiB。专用 digest DTO 不得再次编码 legacy `PlanSnapshot.Heights`；dense `heights_be_i16_b64` 是 digest 中唯一的 height 表达，避免同一事实双份编码。RED/golden 必须钉 exact canonical bytes、字典序索引、BE/Base64、unused bits、重复编码拒绝、同值确定性 digest，以及 53 KiB/96 KiB 边界。不能直接依赖现有 camelCase `json.Marshal(PlanSnapshot)`、Go map 顺序或平台字节序。
+
+registry 注册时对 snapshot 的所有 slice 和 projection data plane 深拷贝，之后只向 handler 提供不可变 view 与 registry-owned cancellation signal。完成、取消、TTL 或 `Close` 先阻止新的 lookup、删除记录并发出 cancellation；`Close`/TTL cleanup 不等待 handler。一个已经取得 immutable view 的在途 handler 若尚未观察到 cancellation，可以完成当前一次有界内存读取；契约不要求 cancellation check 与每次 immutable read 线性化。handler 必须在入口、每个有界循环、编码前后以及提交 response 前检查 registry-owned signal；一旦任一检查观察到 cancellation，就丢弃已累积的全部结果，不返回 success 或 domain-result，不产生副作用。过期/关闭最终表现为 MCP unavailable，而不是部分或迟到成功。
 
 registry 容量 4，TTL 为 run 有效 deadline 加 5 秒。
 完成、显式取消、Host shutdown 或 TTL 到期都删除记录。
@@ -218,8 +231,7 @@ registry 容量 4，TTL 为 run 有效 deadline 加 5 秒。
 
 不能依赖跨语言 HTTP cancellation 终止 Go tool context。
 实测 Go SDK 的 `PropagateRequestCancellation` 只对较新协议生效；Python timeout 在 `2025-11-25` 下不会可靠取消 Go tool context。
-因此 registry 自己检查 deadline/cancel 标记，工具入口和有界扫描间也检查 context。
-过期记录即使底层请求仍到达也只返回不可用，不再访问快照。
+因此 handler 按上述入口、循环、编码前后与 response commit 检查 registry-owned deadline/cancel signal。过期后的新 lookup 只返回不可用且不访问快照；已持有 immutable view 的 handler 允许在尚未观察 cancellation 时完成当前一次 bounded read，但观察后必须丢弃全部结果。
 
 否决把 raw request cancellation 当唯一清理机制：它在当前共同 wire 版本下不可靠。
 
@@ -242,6 +254,8 @@ state 只在内存中存在到 run 结束。
 模型调用默认/硬上限 3/5，自主工具 4/8，总时长 30/60 秒。
 固定 context 不计自主预算，validator 最多两次。
 工具串行，相同名字+规范参数重复即失败。
+
+`query_terrain` 的 `out_of_bounds` 与 `find_visible_blocks` 的 `unknown_block` 是 `isError=false` normal domain result。Python 严格解析后把完整 canonical failure object 作为对应 tool message 交给模型，让模型在剩余预算内自行调整；这次调用照常计入自主工具预算，不自动重放。只有 MCP `isError=true`、transport/JSON-RPC/protocol/envelope/schema mismatch 才中断图并映射为 unavailable/`PlannerUnavailable`。
 
 Agent 不做 transport/provider 自动重试。
 Go 收到结果后仍按 request/generation/snapshot 严格关联，并按当前世界重验。
@@ -418,8 +432,8 @@ Python shutdown 停止接收请求、取消 run、完成/回滚 SQLite transacti
 
 ### 11. 验证结构
 
-Go 单测覆盖 strict codec、config、v5 migration、33×17×33 frozen projection、±8 端点与未 ready 列、canonical block/item names、被 exposed cap 遗漏的 mine 目标、snapshot registry、MCP outer handler、Task/Dialogue stale result 和关服顺序。
-Python 单测覆盖 Pydantic strict models、graph budgets、SQLite CAS、lease fencing、app auth/body/error 与无 checkpoint 落盘。
+Go 单测覆盖 strict codec、config、v5 migration、33×17×33 frozen projection、±8 端点与未 ready 列、以 counting fake 钉死最多 18,513 次 world `blockAt` 且 exposed 零追加读取、projection 边界邻居语义、terrain wire exact bytes/BE/Base64/unused bits/deterministic digest/53 KiB 与 96 KiB 边界、canonical block/item names、被 exposed cap 遗漏的 mine 目标、snapshot registry cancellation、MCP outer handler、Task/Dialogue stale result 和关服顺序。
+Python 单测覆盖 Pydantic strict models、`find_visible_blocks`/`query_terrain` success/failure `oneOf` 的合法与非法 variants、normal domain result 作为 tool message 且 `isError` 仍 unavailable、graph budgets、SQLite CAS、lease fencing、app auth/body/error 与无 checkpoint 落盘。
 
 必须有真实跨语言测试：
 
@@ -427,7 +441,7 @@ Python 单测覆盖 Pydantic strict models、graph budgets、SQLite CAS、lease 
 - wire 固定 `2025-11-25`，完成 initialize + initialized，不发送 ping；
 - 证明 tools/list/call 返回 JSON 且只有固定 Tools capability；
 - 证明 GET、batch、ping、subscription、错误版本、超限与未授权在 SDK 前被拒绝；
-- 证明 Python timeout 后 registry deadline/cancel 使迟到工具不可继续读取；
+- 证明 Python timeout 后 registry deadline/cancel 立即阻止新 lookup、`Close`/TTL 不等待 handler，已持有 view 的迟到工具在 bounded checkpoint 观察取消后丢弃全部结果且不返回成功；
 - 启动真实 FastAPI 服务并由 Go HTTP client 验证 envelope、fencing、plan/dialogue 与 cancel。
 
 跨语言测试用 fake model，不访问外网，不启动游戏窗口。
@@ -445,6 +459,7 @@ Python 单测覆盖 Pydantic strict models、graph budgets、SQLite CAS、lease 
 - [Agent latency 消耗槽位] → 无队列、4 全局/1 每伙伴、30/60 秒预算。
 - [规划 tick 扫描由 9 层增至 17 层] → 固定 18,513 次体素读取、单投影 ≤40 KiB、四槽 ≤160 KiB，并用 focused benchmark/单测钉住常数尺寸；不得把 JSON/digest 编码移回 tick。
 - [英文 machine name 与枚举漂移] → `internal/core` 单一 exhaustive registry，穷举 `BlockIDMax`/`ItemIDMax` 与 Task 1 fixture consistency tests；未知值 fail closed，不生成回退名字。
+- [正常 domain failure 被误判为 MCP 故障] → MCP v1 schema 使用 strict success/failure `oneOf`、manifest 逐工具列 code，Go 固定 `isError=false`，Python contract/adapter/Planner tests 证明 failure object 作为普通 tool message；协议或 `isError=true` 仍 fail closed 为 unavailable。
 
 ## Migration Plan
 

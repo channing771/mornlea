@@ -18,8 +18,10 @@
 - 当前共同 MCP wire 下跨语言 request cancellation 不可靠；snapshot registry 用自己的 deadline/cancel/TTL 收口，并由真实跨语言测试覆盖。
 - accepted Dialogue reservation 通过首次 tick 重验后不再由后续 generation 变化撤销；commit 只按 operation/epoch 关联。
 - Go 是 task/world/lifecycle/epoch 权威，Python 是运行期 compact memory 权威；没有 direct-model fallback、remote MCP 或 Docker。
-- Task 7 terrain ruling：以 `floor(companion.Position)` 为中心冻结固定 33×17×33（水平 ±16/垂直 ±8）dense projection；ready bitmap、1,089 个 height 与 18,513 个 `BlockID` 的 data plane 每份 ≤40 KiB、四槽 ≤160 KiB。`query_terrain` 只读请求体素并全有或全无，未 ready/越界为 `out_of_bounds`；mine 对精确 frozen block 复用既有 validator，不依赖 `ExposedBlocks<=256`，因此 Chest/Furnace 继续接受、农业/火把/无掉落/未交付多掉落继续拒绝。规划 ±8 与寻路 ±4 明确解耦；若裁决错误，成本是 Task 7 snapshot/validator 重做，不影响 Task 1 machine-readable contract、游戏 wire、存档或 ABI。
-- Task 7 naming ruling：`internal/core` 作为 `BlockID`/`ItemID` 所有者新增唯一 canonical English `snake_case` registry；UI 中文 display name 不复用，Planner place 白名单只保留语义 ID 集并从 core 派生拼写。未知 ID/name fail closed，不生成数值/中文 fallback；Task 1 schema/golden 保持不变并由 consistency tests 交叉锁定。
+- Task 7 terrain ruling：以 `floor(companion.Position)` 为中心冻结固定 33×17×33（水平 ±16/垂直 ±8）dense projection；ready bitmap、1,089 个 height 与 18,513 个 `BlockID` 的 data plane 每份 ≤40 KiB、四槽 ≤160 KiB。tick 先以最多 18,513 次 world `blockAt` 完整填充 primary projection，再从 cache 派生 exposed 且零追加 world read；world-valid 投影外/未 ready 邻居为 unknown/non-air，world 垂直边界外为空气。`query_terrain` 与 mine 直接读 projection、不依赖 `ExposedBlocks<=256`，因此 Chest/Furnace 继续接受、农业/火把/无掉落/未交付多掉落继续拒绝；规划 ±8 与寻路 ±4 解耦。
+- Task 7 domain-result ruling：`3a713a78` 独立评审发现 find/query stable code 没有 machine-readable wire。Task 7 在 Go MCP 前先以 TDD 修订 MCP v1 manifest/schema/golden 与 Python domain/adapter/Planner：每工具列 `domain_result_codes`，find/query 保持 success object 并新增 strict failure `oneOf`，精确 normal result 分别为 `{code:"unknown_block",hint}` 与 `{code:"out_of_bounds",hint}`、strict UTF-8 hint ≤256 bytes、无部分结果、`isError=false`；Python 把它作为普通 tool message，`isError=true`/transport/protocol/schema 仍 unavailable/`PlannerUnavailable`。这是 active change 内的 contract amendment，不改变 HTTP v1、MCP v1 标识、游戏 wire、存档或 ABI；Task 1/4 历史完成证据保留，但 Task 7 prerequisite 必须重跑相关 Python gates。
+- Task 7 naming ruling：`internal/core` 作为 `BlockID`/`ItemID` 所有者新增 canonical English `snake_case` registry；名称分别在 BlockID 域和 ItemID 域内唯一，完整方块 item 与 block 跨域同名是预期。UI 中文 display name 不复用，Planner place 白名单只保留语义 ID 集并从 core 派生拼写；未知 ID/name fail closed，不生成数值/中文 fallback。
+- Task 7 digest/cancellation ruling：terrain digest DTO 固定 BE/Base64 planes、bitmap 末 7 个 unused bits 为零、terrain <53 KiB、完整 digest input ≤96 KiB，且不重复编码 legacy `PlanSnapshot.Heights`。registry 删除阻止新 lookup 并 signal cancellation，`Close`/TTL 不等待 handler；已取得 immutable view 的一次有界读取可在尚未观察 cancellation 时完成，但入口/循环/编码前后/response commit 一旦观察就丢弃全部结果且不返回成功。
 - Task 8 wire ruling：v5 保持 32-byte envelope；payload 是 namespace[16] 加按 `CompanionID` 排序的 record，record 固定 body[221]+flags(active/task/FIFO 为 bit0/1/2)+epoch u64，active 总带 revision/operation/summary-length+bytes 后接 task/FIFO，inactive只带 tombstone且 flags=0。合法可达上限固定 `MaxFileLength=393,904`；v1..v4 只读，encoder只写v5。若裁决错误，成本是 v5 golden/codec/磁盘上限与迁移重做，不影响游戏 wire 或 ABI。
 - Task 8 migration ruling：legacy 是隐式 epoch0并统一落epoch1；v4 active 非空 summary 迁为 rev1+fresh operation，active 空 summary 使用 canonical-zero且不存在第二个 active migration operation，inactive使用 fresh tombstone。新 ID 先以 metadata `SpawnDimension`、`SpawnAnchor*16+0.5`、`core.MaxY+1`、零朝向/空背包 provisional body 同步原子写v5，entropy/Save失败则 persistence/world/Agent/MCP均不构造；模拟 ready 后 Observe 覆盖位置。
 - Task 8 staging ruling：Task 8 persistence只 deep-clone/carry-through namespace/lifecycle/mirror/tombstone并checked推进aggregate revision；body/task autosave绝不从旧direct Dialogue裸 Summary改写mirror，也不实现Agent memory mutation。Task 9 Planner不改memory；Task 10删除/替换裸写路径，只在Agent commit/reconcile成功结果回tick且通过epoch/operation关联后整体更新mirror并mark dirty。
@@ -82,8 +84,10 @@
 ### Task 7 实施前设计裁决
 
 - 预检基线 `f56b42bf` 证实现有 1,089 条 height + `ExposedBlocks<=256` 不能回答任意 `query_terrain` 体素，也会让未进入 exposed cap 的 mine 目标跳过方块语义；禁止由 MCP handler 回读 live world 填洞。
-- proposal/design、`companion-agent-mcp-tools` 与 `companion-planner` delta spec、Task 7 文案已同步 fixed dense projection、完整垂直 ±8、ready/missing、全有或全无 terrain、精确 mine validator 与 core canonical name 裁决；Task 1 manifest/schema/golden 未改，Task 7 保持未勾选。
-- 版本矩阵保持 protocol v32、player v8、chunk v9、metadata v3、companions v4→v5、hostile v1、engine ABI v9、client ABI v13、scenario v20；该裁决不触发 wire、存档或 ABI 升版。
+- 原规划 commit `3a713a78` 的独立 review 判 FAIL（2 Important + 3 Minor）：缺少 non-validator domain failure 的 strict machine wire；exposed 派生可能在 18,513 次主采样外回读 world；terrain exact wire/digest 边界、名称跨域唯一性和可实现的 cancellation 语义不完整。该 review 触发本轮 contract amendment，不能继续声称 Task 1 fixture 无需修改。
+- 本轮 repair 基于 feature HEAD `9d7b5685`，保留其 Task 8 裁决且未查看/吸收 `main`；本提交只修订 OpenSpec planning artifacts，不提前修改 machine contract 或生产/测试代码，实际 contract/Python amendment 是 Task 7 的首个 RED/GREEN prerequisite。
+- proposal/design、`companion-agent-mcp-tools` 与 `companion-planner` delta spec、Task 7 文案已同步：manifest 每工具 `domain_result_codes`、find/query strict success/failure `oneOf` 与 Python normal tool-message 路径；fixed dense projection、完整垂直 ±8、ready/missing、全有或全无 terrain、最多 18,513 world read 后纯 cache exposed、精确 mine validator；BE/Base64/unused bits/exact deterministic digest/53 KiB 与 96 KiB RED；分别在 BlockID/ItemID 域内唯一的 core canonical name；以及 registry-owned cancellation 的 bounded in-flight 语义。Task 7 保持未勾选，Task 1/4 历史完成记录不回写，但 Task 7 首先修订 machine contract/Python tests/types并重验相关 focused gates。
+- 版本矩阵保持 protocol v32、player v8、chunk v9、metadata v3、companions v4→v5、hostile v1、engine ABI v9、client ABI v13、scenario v20；MCP application contract 仍为 v1，该裁决不触发游戏 wire、存档或 ABI 升版。
 - 规划产物验证：`openspec validate --all --strict --no-interactive` exit 0，80 passed/0 failed；`git diff --check` exit 0。
 
 ### Task 8 实施前设计裁决
@@ -102,5 +106,5 @@
 - Rust baseline/build：规划前 `make rust` 已由控制会话记录为通过；实现后须在新 SHA 重跑。
 - 真实跨语言合同测试：待记录。
 - OpenSpec strict：规划产物完成后记录；实现后须重跑。
-- 规划产物门禁：`openspec validate --all --strict --no-interactive` exit 0，78 passed/0 failed；`git diff --check` exit 0。
+- 规划产物门禁：`openspec validate --all --strict --no-interactive` exit 0，80 passed/0 failed；`git diff --check` exit 0。
 - 回滚/备份人工文档检查：待记录。
