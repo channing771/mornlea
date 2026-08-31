@@ -276,6 +276,40 @@ func TestPlanningFindBlocksRejectsStandaloneBoundedNameGoldens(t *testing.T) {
 	}
 }
 
+func TestPlanningToolFindBlocksValidatesAllNamesBeforeLookup(t *testing.T) {
+	lease, cleanup := planningToolLease(t)
+	defer cleanup()
+	invalid := contractLoadGolden(t, "contracts/companion-agent/mcp-v1/golden/invalid.json")
+	wantReasons := map[string]struct{}{
+		"name_utf8_bytes": {},
+		"name_blank":      {},
+		"name_control":    {},
+		"name_nul":        {},
+	}
+	seen := 0
+	for _, testCase := range invalid.Cases {
+		if testCase.Schema != "bounded_name" {
+			continue
+		}
+		if _, ok := wantReasons[testCase.Reason]; !ok {
+			continue
+		}
+		seen++
+		t.Run(testCase.Name, func(t *testing.T) {
+			input := append([]byte(`{"block_names":["not_a_registered_block",`), testCase.Value...)
+			input = append(input, []byte(`],"limit":1}`)...)
+			result, err := ExecutePlanningTool(context.Background(), lease, ToolFindVisibleBlocks, input)
+			if !errors.Is(err, ErrPlanningToolInvalidInput) || result.Structured != nil ||
+				len(result.Canonical) != 0 || result.DomainFailure {
+				t.Fatalf("ordered bounded_name result=%+v err=%v", result, err)
+			}
+		})
+	}
+	if seen != len(wantReasons) {
+		t.Fatalf("ordered bounded_name invalid goldens=%d，want %d", seen, len(wantReasons))
+	}
+}
+
 func TestPlanningValidatorStableCodesAndDenseMine(t *testing.T) {
 	lease, cleanup := planningToolLease(t)
 	defer cleanup()

@@ -377,6 +377,36 @@ func TestMCPSDKFindBlocksRejectsStandaloneBoundedNameGoldens(t *testing.T) {
 	}
 }
 
+func TestMCPSDKFindBlocksValidatesAllNamesBeforeLookup(t *testing.T) {
+	registry, registration := testMCPRegistry(t)
+	handler, err := newCompanionMCPHandler(testMCPAuthority, registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantReasons := map[string]struct{}{
+		"name_utf8_bytes": {},
+		"name_blank":      {},
+		"name_control":    {},
+		"name_nul":        {},
+	}
+	seen := 0
+	for _, testCase := range loadMCPBoundedNameInvalidGoldens(t) {
+		if _, ok := wantReasons[testCase.Reason]; !ok {
+			continue
+		}
+		seen++
+		t.Run(testCase.Name, func(t *testing.T) {
+			body := `{"jsonrpc":"2.0","id":43,"method":"tools/call","params":{"name":"find_visible_blocks","arguments":{"block_names":["not_a_registered_block",` +
+				string(testCase.Value) + `],"limit":1}}}`
+			call := testMCPRoundTrip(t, handler, registration.Capability, "2025-11-25", body)
+			assertMCPStructuredAndTextEqual(t, call, true, "")
+		})
+	}
+	if seen != len(wantReasons) {
+		t.Fatalf("ordered bounded_name invalid goldens=%d，want %d", seen, len(wantReasons))
+	}
+}
+
 func TestMCPOuterBuffersResponseAndChecksCancellation(t *testing.T) {
 	registry, registration := testMCPRegistry(t)
 	valid := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`
@@ -906,6 +936,7 @@ func testMCPLargestAffordanceSnapshot(t *testing.T) companion.PlanSnapshot {
 type mcpBoundedNameGolden struct {
 	Name         string          `json:"name"`
 	Schema       string          `json:"schema"`
+	Reason       string          `json:"reason"`
 	Value        json.RawMessage `json:"value"`
 	ValueUTF8Hex string          `json:"value_utf8_hex"`
 }

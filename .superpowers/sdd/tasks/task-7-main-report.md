@@ -227,3 +227,43 @@ repair，Task 7 未修改 storage；repair commit `0dc592c8` 进入当前 HEAD �
   `config.go`、`host.go`、`host_shutdown.go`、`companion_snapshot.go`。
 - Task 9 的 run wiring 与 Task 10 的完整 Dialogue/memory/release shutdown 顺序仍是
   原有后续边界；本轮没有扩张到这些路径。未查看、比较或吸收 main。
+
+## Repair round 2（2026-08-31）
+
+### bounded_name 顺序闭环
+
+- `find_visible_blocks` 改为两阶段处理 `block_names`：第一遍完整执行 checkpoint、
+  去重与 `bounded_name` 的 valid UTF-8、1..64 bytes、no Unicode control、
+  non-blank 校验；只有全部元素合法后，第二遍才执行 canonical block lookup。
+- 因此前项是合法但未知名称、后项是 schema 违例时，整次请求稳定归类为
+  schema-invalid/unavailable；不会由前项抢先返回 normal `unknown_block`，也不会
+  扫描快照或返回 partial matches。全部名称合法但任一名称未知时，既有
+  `isError=false unknown_block` domain failure 保持不变。
+- 现有 checked-in `bounded_name` schema/golden 已完整表达该元素约束，无需修改
+  machine contract 或 OpenSpec；本轮未修改 tasks/ledger，也未扩张到 Task 9/10。
+
+### RED → GREEN
+
+- direct RED：
+  `go test ./internal/companion -run '^TestPlanningToolFindBlocksValidatesAllNamesBeforeLookup$' -race -count=1`
+  的 66-byte UTF-8、Unicode blank/control/NUL 四个子例均错误返回
+  `{code:"unknown_block",hint:"unknown canonical block name"}`、
+  `DomainFailure=true`、`err=nil`（FAIL，1.217s）。最小两阶段实现后 PASS
+  （1.862s）。
+- 真实 SDK RED：
+  `go test ./internal/server -run '^TestMCPSDKFindBlocksValidatesAllNamesBeforeLookup$' -race -count=1`
+  的同四个子例均错误返回 `isError=false` 与 canonical `unknown_block`；预期的
+  exact error 是 `isError=true`、无 StructuredContent、唯一 TextContent
+  `{"code":"unavailable"}`（FAIL，0.809s）。实现后 PASS（1.804s）。
+
+### 最终 GREEN 与范围
+
+- `go test ./internal/companion -run 'PlanningTool|PlanningFindBlocks' -race -count=1`：
+  PASS（3.911s）。
+- `go test ./internal/server -run 'MCP' -race -count=1`：PASS（2.367s）。
+- `go test ./internal/archcheck -count=1`：PASS（5.156s）。
+- `openspec validate --all --strict --no-interactive`：PASS（80/80）。
+- modified Go files `gofmt -d`、`git diff --check`：PASS（无输出）。
+- 生产改动仅 `internal/companion/planning_tools.go`；direct 与真实 SDK RED 分别在
+  `internal/companion/planning_tools_test.go`、`internal/server/companion_mcp_test.go`。
+  其余仅更新本报告；未查看、比较或吸收 main，无新增遗留风险。

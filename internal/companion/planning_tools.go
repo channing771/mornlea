@@ -377,6 +377,13 @@ func planningFindBlocksTool(ctx context.Context, lease SnapshotLease, input json
 			return nil, false, ErrPlanningToolInvalidInput
 		}
 		seenNames[name] = struct{}{}
+	}
+	// 先完整校验数组，再解析 canonical name，避免前项的领域失败掩盖后项的
+	// schema 违例；任一阶段失败都不返回部分匹配。
+	for _, name := range decoded.BlockNames {
+		if err := planningToolCheckpoint(ctx, lease); err != nil {
+			return nil, false, err
+		}
 		block, ok := core.BlockIDByCanonicalName(name)
 		if !ok {
 			return planningDomainFailure{Code: ValidatorUnknownBlock, Hint: "unknown canonical block name"}, true, nil
