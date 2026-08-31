@@ -6,9 +6,11 @@ from collections.abc import Mapping
 from typing import Annotated, Any, ClassVar, Literal, Self
 
 from pydantic import (
+    AfterValidator,
     BeforeValidator,
     Field,
     StrictInt,
+    StrictStr,
     TypeAdapter,
     ValidationInfo,
     field_validator,
@@ -30,10 +32,10 @@ from mornlea_companion_agent.domain.common import (
     TerrainHeight,
     UInt64,
     UUIDv4,
-    ValidatorHint,
     WorldY,
     json_tuple,
     require_canonical_size,
+    text_validator,
 )
 
 ACCEPTED_MINE_SEMANTICS = ("single_drop", "container_batch")
@@ -84,6 +86,18 @@ ValidatorCode = Literal[
     "unknown_block",
     "missing_item",
     "snapshot_mismatch",
+]
+ValidatorHint = Annotated[
+    StrictStr,
+    AfterValidator(
+        text_validator(
+            minimum_bytes=1,
+            maximum_bytes=256,
+            no_nul=True,
+            no_control=True,
+            no_edge_whitespace=True,
+        )
+    ),
 ]
 
 
@@ -294,7 +308,7 @@ VisibleBlockMatches = Annotated[
 ]
 
 
-class FindVisibleBlocksResult(StrictModel):
+class FindVisibleBlocksSuccessResult(StrictModel):
     matches: VisibleBlockMatches
 
     @field_validator("matches")
@@ -311,6 +325,15 @@ class FindVisibleBlocksResult(StrictModel):
     def validate_payload_size(self) -> Self:
         require_canonical_size(self, 16384, "find_visible_blocks result")
         return self
+
+
+class FindVisibleBlocksFailureResult(StrictModel):
+    exact_constants: ClassVar[Mapping[str, object]] = {"code": "unknown_block"}
+    code: Literal["unknown_block"]
+    hint: ValidatorHint
+
+
+FindVisibleBlocksResult = FindVisibleBlocksSuccessResult | FindVisibleBlocksFailureResult
 
 
 TerrainPositions = Annotated[
@@ -338,7 +361,7 @@ TerrainItems = Annotated[
 _TERRAIN_CONTEXT_ADAPTER = TypeAdapter(TerrainPositions)
 
 
-class QueryTerrainResult(StrictModel):
+class QueryTerrainSuccessResult(StrictModel):
     terrain: TerrainItems
 
     @field_validator("terrain")
@@ -357,6 +380,15 @@ class QueryTerrainResult(StrictModel):
     def validate_payload_size(self) -> Self:
         require_canonical_size(self, 16384, "query_terrain result")
         return self
+
+
+class QueryTerrainFailureResult(StrictModel):
+    exact_constants: ClassVar[Mapping[str, object]] = {"code": "out_of_bounds"}
+    code: Literal["out_of_bounds"]
+    hint: ValidatorHint
+
+
+QueryTerrainResult = QueryTerrainSuccessResult | QueryTerrainFailureResult
 
 
 class ValidatePlanInput(StrictModel):
@@ -417,8 +449,12 @@ MCP_V1_TYPES: dict[str, Any] = {
     "inspect_inventory_input": InspectInventoryInput,
     "inspect_inventory_result": InspectInventoryResult,
     "find_visible_blocks_input": FindVisibleBlocksInput,
+    "find_visible_blocks_success_result": FindVisibleBlocksSuccessResult,
+    "find_visible_blocks_failure_result": FindVisibleBlocksFailureResult,
     "find_visible_blocks_result": FindVisibleBlocksResult,
     "query_terrain_input": QueryTerrainInput,
+    "query_terrain_success_result": QueryTerrainSuccessResult,
+    "query_terrain_failure_result": QueryTerrainFailureResult,
     "query_terrain_result": QueryTerrainResult,
     "validate_plan_input": ValidatePlanInput,
     "validate_plan_success_result": ValidatePlanSuccessResult,
@@ -429,8 +465,10 @@ MCP_V1_TYPES: dict[str, Any] = {
 
 __all__ = [
     "ACCEPTED_MINE_SEMANTICS",
+    "FindVisibleBlocksFailureResult",
     "FindVisibleBlocksInput",
     "FindVisibleBlocksResult",
+    "FindVisibleBlocksSuccessResult",
     "FollowStep",
     "GetPlanningContextResult",
     "GoToStep",
@@ -441,8 +479,10 @@ __all__ = [
     "MineStep",
     "Plan",
     "PlaceStep",
+    "QueryTerrainFailureResult",
     "QueryTerrainInput",
     "QueryTerrainResult",
+    "QueryTerrainSuccessResult",
     "REJECTED_MINE_SEMANTICS",
     "ValidatePlanFailureResult",
     "ValidatePlanInput",

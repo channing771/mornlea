@@ -2,6 +2,7 @@ package companion
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -99,7 +100,16 @@ func TestContractFixtureSchemasValidateGoldens(t *testing.T) {
 				t.Fatalf("%s case 名称重复: %q", fixture.path, testCase.Name)
 			}
 			seenNames[testCase.Name] = struct{}{}
-			value := contractDecodeRaw(t, testCase.Value, fixture.path+"/"+testCase.Name)
+			var value any
+			if testCase.ValueUTF8Hex != "" {
+				rawValue, err := hex.DecodeString(testCase.ValueUTF8Hex)
+				if err != nil {
+					t.Fatalf("%s/%s 的 value_utf8_hex 非法: %v", fixture.path, testCase.Name, err)
+				}
+				value = string(rawValue)
+			} else {
+				value = contractDecodeRaw(t, testCase.Value, fixture.path+"/"+testCase.Name)
+			}
 			var context any
 			if len(testCase.Context) != 0 {
 				context = contractDecodeRaw(t, testCase.Context, fixture.path+"/"+testCase.Name+"/context")
@@ -511,14 +521,15 @@ func TestContractFixtureMCPManifestConsistency(t *testing.T) {
 		canonical int64
 		model     bool
 		fixed     bool
+		codes     []string
 	}
 	wantTools := map[string]toolExpectation{
-		"get_planning_context": {"get_planning_context_input", "get_planning_context_result", 24576, false, true},
-		"list_affordances":     {"list_affordances_input", "list_affordances_result", 24576, true, false},
-		"inspect_inventory":    {"inspect_inventory_input", "inspect_inventory_result", 8192, true, false},
-		"find_visible_blocks":  {"find_visible_blocks_input", "find_visible_blocks_result", 16384, true, false},
-		"query_terrain":        {"query_terrain_input", "query_terrain_result", 16384, true, false},
-		"validate_plan":        {"validate_plan_input", "validate_plan_result", 73728, false, true},
+		"get_planning_context": {"get_planning_context_input", "get_planning_context_result", 24576, false, true, []string{}},
+		"list_affordances":     {"list_affordances_input", "list_affordances_result", 24576, true, false, []string{}},
+		"inspect_inventory":    {"inspect_inventory_input", "inspect_inventory_result", 8192, true, false, []string{}},
+		"find_visible_blocks":  {"find_visible_blocks_input", "find_visible_blocks_result", 16384, true, false, []string{"unknown_block"}},
+		"query_terrain":        {"query_terrain_input", "query_terrain_result", 16384, true, false, []string{"out_of_bounds"}},
+		"validate_plan":        {"validate_plan_input", "validate_plan_result", 73728, false, true, []string{"invalid_schema", "out_of_bounds", "unknown_player", "unmineable_target", "unknown_block", "missing_item", "snapshot_mismatch"}},
 	}
 	schemas := contractLoadSchemas(t)
 	tools := contractArray(t, manifest["tools"], "mcp tools")
@@ -556,10 +567,38 @@ func TestContractFixtureMCPManifestConsistency(t *testing.T) {
 		if got := contractBool(t, tool["fixed_graph_call"], name+" fixed graph call"); got != want.fixed {
 			t.Errorf("MCP tool %s fixed_graph_call = %v，want %v", name, got, want.fixed)
 		}
+		contractAssertStringList(t, tool["domain_result_codes"], want.codes, "MCP tool "+name+" domain result codes")
 		if name == "find_visible_blocks" || name == "query_terrain" {
-			resultSchema := contractObject(t, schemas.definition(t, "mcp-v1/schema.json", result), name+" result schema")
-			if !contractJSONEqual(tool["semantic_rules"], resultSchema["x-mornlea-rules"]) {
-				t.Errorf("MCP tool %s semantic_rules 未与 result schema 单源一致", name)
+			resultSchema := contractObject(t, schemas.definition(t, "mcp-v1/schema.json", result), name+" public result schema")
+			contractAssertExactKeys(t, resultSchema, []string{"oneOf"}, "MCP tool "+name+" public result schema")
+			branches := contractArray(t, resultSchema["oneOf"], name+" result oneOf")
+			if len(branches) != 2 {
+				t.Fatalf("MCP tool %s result oneOf 分支 = %d，want 2", name, len(branches))
+			}
+			successName := name + "_success_result"
+			failureName := name + "_failure_result"
+			for branchIndex, wantRef := range []string{"#/$defs/" + successName, "#/$defs/" + failureName} {
+				branch := contractObject(t, branches[branchIndex], fmt.Sprintf("%s result oneOf[%d]", name, branchIndex))
+				if got := contractString(t, branch["$ref"], name+" result branch ref"); got != wantRef {
+					t.Errorf("MCP tool %s result oneOf[%d] = %q，want %q", name, branchIndex, got, wantRef)
+				}
+			}
+			successSchema := contractObject(t, schemas.definition(t, "mcp-v1/schema.json", successName), name+" success result schema")
+			if !contractJSONEqual(tool["semantic_rules"], successSchema["x-mornlea-rules"]) {
+				t.Errorf("MCP tool %s semantic_rules 未与 success result schema 单源一致", name)
+			}
+			failureSchema := contractObject(t, schemas.definition(t, "mcp-v1/schema.json", failureName), name+" failure result schema")
+			contractAssertExactKeys(t, failureSchema, []string{"type", "additionalProperties", "required", "properties"}, "MCP tool "+name+" failure result schema")
+			contractAssertStringList(t, failureSchema["required"], []string{"code", "hint"}, name+" failure required")
+			failureProperties := contractObject(t, failureSchema["properties"], name+" failure properties")
+			contractAssertExactKeys(t, failureProperties, []string{"code", "hint"}, "MCP tool "+name+" failure properties")
+			codeSchema := contractObject(t, failureProperties["code"], name+" failure code")
+			if got := contractString(t, codeSchema["const"], name+" failure code const"); got != want.codes[0] {
+				t.Errorf("MCP tool %s failure code = %q，want %q", name, got, want.codes[0])
+			}
+			hintSchema := contractObject(t, failureProperties["hint"], name+" failure hint")
+			if got := contractString(t, hintSchema["$ref"], name+" failure hint ref"); got != "#/$defs/validator_hint" {
+				t.Errorf("MCP tool %s failure hint ref = %q，want validator_hint", name, got)
 			}
 		}
 	}
@@ -580,6 +619,7 @@ func TestContractFixtureMCPManifestConsistency(t *testing.T) {
 
 	wantCodes := []string{"invalid_schema", "out_of_bounds", "unknown_player", "unmineable_target", "unknown_block", "missing_item", "snapshot_mismatch"}
 	contractAssertStringList(t, manifest["validator_codes"], wantCodes, "MCP validator codes")
+	contractAssertStringList(t, validateTool["domain_result_codes"], wantCodes, "validate_plan domain result codes")
 	validatorResult := contractObject(t, schemas.definition(t, "mcp-v1/schema.json", "validate_plan_result"), "validate_plan result")
 	validatorBranches := contractArray(t, validatorResult["oneOf"], "validate_plan result oneOf")
 	if len(validatorBranches) != 2 {
@@ -683,13 +723,18 @@ func TestContractFixtureTextRulesMatchAuthority(t *testing.T) {
 		{"mcp-v1/schema.json", "plan_summary", MaxPlanSummaryBytes, []string{"valid_utf8", "no_unicode_control", "non_blank"}},
 		{"mcp-v1/schema.json", "task_status_text", MaxPlanTaskStatusBytes, []string{"valid_utf8", "no_unicode_control"}},
 		{"mcp-v1/schema.json", "bounded_name", 64, []string{"valid_utf8", "no_unicode_control", "non_blank"}},
-		{"mcp-v1/schema.json", "validator_hint", 256, []string{"valid_utf8"}},
+		{"mcp-v1/schema.json", "validator_hint", 256, []string{"valid_utf8", "no_nul", "no_unicode_control", "no_edge_unicode_whitespace"}},
 	}
 	for _, testCase := range cases {
 		schema := contractObject(t, schemas.definition(t, testCase.document, testCase.definition), testCase.definition)
 		rule := contractFindRule(t, schema, "text", testCase.definition)
 		if got := contractInt64(t, rule["max_utf8_bytes"], testCase.definition+" max UTF-8 bytes"); got != testCase.maximum {
 			t.Errorf("%s max_utf8_bytes = %d，want %d", testCase.definition, got, testCase.maximum)
+		}
+		if testCase.definition == "validator_hint" {
+			if got := contractInt64(t, rule["min_utf8_bytes"], "validator_hint min UTF-8 bytes"); got != 1 {
+				t.Errorf("validator_hint min_utf8_bytes = %d，want 1", got)
+			}
 		}
 		for _, flag := range testCase.flags {
 			if !contractBool(t, rule[flag], testCase.definition+" "+flag) {
@@ -931,6 +976,7 @@ type contractGolden struct {
 		Schema        string                `json:"schema"`
 		Reason        string                `json:"reason,omitempty"`
 		Value         json.RawMessage       `json:"value"`
+		ValueUTF8Hex  string                `json:"value_utf8_hex,omitempty"`
 		Context       json.RawMessage       `json:"context,omitempty"`
 		ExpectedError contractExpectedError `json:"expected_error,omitempty"`
 	} `json:"cases"`
@@ -1605,8 +1651,16 @@ func contractLoadGolden(t *testing.T, relative string) contractGolden {
 		t.Fatalf("golden %s 缺少 contract", relative)
 	}
 	for index, testCase := range golden.Cases {
-		if testCase.Name == "" || testCase.Schema == "" || len(testCase.Value) == 0 {
-			t.Fatalf("golden %s cases[%d] 缺少 name/schema/value", relative, index)
+		hasValue := len(testCase.Value) != 0
+		hasUTF8Hex := testCase.ValueUTF8Hex != ""
+		if testCase.Name == "" || testCase.Schema == "" || hasValue == hasUTF8Hex {
+			t.Fatalf("golden %s cases[%d] 必须包含 name/schema 与且仅一个 value/value_utf8_hex", relative, index)
+		}
+		if hasUTF8Hex {
+			rawValue, err := hex.DecodeString(testCase.ValueUTF8Hex)
+			if err != nil || utf8.Valid(rawValue) {
+				t.Fatalf("golden %s cases[%d] 的 value_utf8_hex 必须是非法 UTF-8 bytes", relative, index)
+			}
 		}
 	}
 	return golden

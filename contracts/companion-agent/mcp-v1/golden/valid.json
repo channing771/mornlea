@@ -92,6 +92,14 @@
       }
     },
     {
+      "name": "unknown visible block is a normal domain failure",
+      "schema": "find_visible_blocks_result",
+      "value": {
+        "code": "unknown_block",
+        "hint": "unknown canonical block name"
+      }
+    },
+    {
       "name": "terrain query preserves input order",
       "schema": "query_terrain_input",
       "value": {
@@ -115,6 +123,14 @@
           {"position": {"x": 4, "y": 64, "z": -1}, "height": 63, "block_name": "air"},
           {"position": {"x": 8, "y": 64, "z": -2}, "height": 63, "block_name": "air"}
         ]
+      }
+    },
+    {
+      "name": "terrain outside projection is a normal domain failure",
+      "schema": "query_terrain_result",
+      "value": {
+        "code": "out_of_bounds",
+        "hint": "position is outside the frozen projection"
       }
     },
     {
@@ -157,6 +173,11 @@
       "name": "plan summary accepts exact 512-byte UTF-8 boundary",
       "schema": "plan_summary",
       "value": "界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界aa"
+    },
+    {
+      "name": "validator hint accepts exact 1-byte boundary",
+      "schema": "validator_hint",
+      "value": "a"
     },
     {
       "name": "validator hint accepts exact 256-byte UTF-8 boundary",

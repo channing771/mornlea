@@ -291,6 +291,86 @@ def test_planner_calls_context_once_and_returns_strict_correlated_plan() -> None
     run(scenario())
 
 
+@pytest.mark.parametrize(
+    ("tool_name", "arguments", "case_name"),
+    [
+        (
+            "find_visible_blocks",
+            {"block_names": ["unknown_name"], "limit": 1},
+            "unknown visible block is a normal domain failure",
+        ),
+        (
+            "query_terrain",
+            {"positions": [{"x": 4, "y": 64, "z": -1}]},
+            "terrain outside projection is a normal domain failure",
+        ),
+    ],
+)
+def test_domain_failure_is_canonical_tool_message_without_automatic_retry(
+    tool_name: str,
+    arguments: dict[str, object],
+    case_name: str,
+) -> None:
+    async def scenario() -> None:
+        failure = golden("mcp-v1", "valid", case_name)["value"]
+        call = ModelToolCall(call_id="domain-failure", name=tool_name, arguments=arguments)
+        model = ScriptedModel(
+            ModelOutput(content=None, tool_calls=(call,)),
+            ModelOutput(content=plan_json(), tool_calls=()),
+        )
+        tools = FakeTools(tool_results={tool_name: failure})
+        response = await PlannerHarness(
+            model,
+            FakeToolFactory(tools),
+            limits=PlannerLimits(model_calls=3, tool_calls=1, timeout_seconds=30),
+            wall_clock=lambda: 1_700_000_000.0,
+        ).run(plan_request())
+
+        assert response.plan == accepted_plan()
+        assert tools.tool_calls == [(tool_name, arguments)]
+        assert len(model.calls) == 2
+        tool_message = model.calls[1][0][-1]
+        assert tool_message == PlannerMessage(
+            role="tool",
+            content=canonical_json_bytes(failure).decode("utf-8"),
+            tool_call_id="domain-failure",
+            tool_name=tool_name,
+        )
+
+    run(scenario())
+
+
+def test_domain_failure_call_is_deduplicated_and_not_replayed() -> None:
+    async def scenario() -> None:
+        arguments = {"block_names": ["unknown_name"], "limit": 1}
+        call = ModelToolCall(
+            call_id="domain-failure-1",
+            name="find_visible_blocks",
+            arguments=arguments,
+        )
+        repeated = ModelToolCall(
+            call_id="domain-failure-2",
+            name="find_visible_blocks",
+            arguments={"limit": 1, "block_names": ["unknown_name"]},
+        )
+        failure = golden("mcp-v1", "valid", "unknown visible block is a normal domain failure")[
+            "value"
+        ]
+        tools = FakeTools(tool_results={"find_visible_blocks": failure})
+        with pytest.raises(InvalidModelOutput):
+            await PlannerHarness(
+                ScriptedModel(
+                    ModelOutput(content=None, tool_calls=(call,)),
+                    ModelOutput(content=None, tool_calls=(repeated,)),
+                ),
+                FakeToolFactory(tools),
+                wall_clock=lambda: 1_700_000_000.0,
+            ).run(plan_request())
+        assert tools.tool_calls == [("find_visible_blocks", arguments)]
+
+    run(scenario())
+
+
 def test_full_plan_response_envelope_must_fit_http_v1_limit() -> None:
     async def scenario() -> None:
         request = plan_request()

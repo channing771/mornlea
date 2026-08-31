@@ -13,8 +13,11 @@ from mornlea_companion_agent.domain import CONTRACT_ADAPTERS, adapter_for
 from mornlea_companion_agent.domain.http_v1 import PlanResponse
 from mornlea_companion_agent.domain.mcp_v1 import (
     ACCEPTED_MINE_SEMANTICS,
+    FindVisibleBlocksFailureResult,
+    FindVisibleBlocksSuccessResult,
     Plan,
-    QueryTerrainResult,
+    QueryTerrainFailureResult,
+    QueryTerrainSuccessResult,
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -40,7 +43,22 @@ def _json_path_tokens(path: str) -> tuple[str | int, ...]:
 def _compatible_error_location(expected_path: str, errors: list[dict[str, Any]]) -> bool:
     expected = _json_path_tokens(expected_path)
     if not expected:
-        return any(not error["loc"] for error in errors)
+        union_branches = {
+            "FindVisibleBlocksFailureResult",
+            "FindVisibleBlocksSuccessResult",
+            "QueryTerrainFailureResult",
+            "QueryTerrainSuccessResult",
+            "ValidatePlanFailureResult",
+            "ValidatePlanSuccessResult",
+        }
+        return bool(errors) and all(
+            not error["loc"]
+            or (
+                isinstance(error["loc"][0], str)
+                and any(branch in error["loc"][0] for branch in union_branches)
+            )
+            for error in errors
+        )
     for error in errors:
         actual = tuple(part for part in error["loc"] if isinstance(part, (str, int)))
         for start in range(len(actual)):
@@ -57,6 +75,19 @@ def test_registry_covers_every_shared_schema_definition(contract: str) -> None:
     assert set(CONTRACT_ADAPTERS[contract]) == set(schema["$defs"])
 
 
+def test_mcp_manifest_declares_the_only_normal_domain_result_codes() -> None:
+    manifest = _load(CONTRACT_ROOT / "mcp-v1/manifest.json")
+    expected = {
+        "get_planning_context": [],
+        "list_affordances": [],
+        "inspect_inventory": [],
+        "find_visible_blocks": ["unknown_block"],
+        "query_terrain": ["out_of_bounds"],
+        "validate_plan": manifest["validator_codes"],
+    }
+    assert {tool["name"]: tool["domain_result_codes"] for tool in manifest["tools"]} == expected
+
+
 @pytest.mark.parametrize("contract", ["http-v1", "mcp-v1"])
 def test_all_shared_valid_goldens_validate_without_copying_payloads(contract: str) -> None:
     fixture = _load(CONTRACT_ROOT / contract / "golden/valid.json")
@@ -70,6 +101,16 @@ def test_all_shared_invalid_goldens_are_rejected(contract: str) -> None:
     fixture = _load(CONTRACT_ROOT / contract / "golden/invalid.json")
     failures: list[str] = []
     for case in fixture["cases"]:
+        if "value_utf8_hex" in case:
+            try:
+                bytes.fromhex(case["value_utf8_hex"]).decode("utf-8", errors="strict")
+            except UnicodeDecodeError:
+                expected = case["expected_error"]
+                if expected.get("rule") != "text.valid_utf8":
+                    failures.append(f"{case['name']}: invalid UTF-8 mapped to wrong rule")
+                continue
+            failures.append(f"{case['name']}: unexpectedly decoded as valid UTF-8")
+            continue
         adapter = adapter_for(contract, case["schema"])
         try:
             adapter.validate_python(case["value"], context=case.get("context"))
@@ -205,12 +246,38 @@ def test_terrain_output_requires_call_input_positions_and_order() -> None:
         "terrain": [{"position": {"x": 1, "y": 64, "z": 2}, "height": 63, "block_name": "air"}]
     }
     context = {"positions": [{"x": 1, "y": 64, "z": 2}]}
-    result = QueryTerrainResult.model_validate(payload, context=context)
+    result = QueryTerrainSuccessResult.model_validate(payload, context=context)
     assert result.terrain[0].position.x == 1
     with pytest.raises(ValidationError):
-        QueryTerrainResult.model_validate(payload, context={"positions": []})
+        QueryTerrainSuccessResult.model_validate(payload, context={"positions": []})
     with pytest.raises(ValidationError):
-        QueryTerrainResult.model_validate(payload)
+        QueryTerrainSuccessResult.model_validate(payload)
+
+
+def test_domain_result_adapters_select_closed_success_and_failure_branches() -> None:
+    find_success = _golden_case("mcp-v1", "visible block result is coordinate ordered")
+    find_failure = _golden_case("mcp-v1", "unknown visible block is a normal domain failure")
+    query_success = _golden_case("mcp-v1", "terrain result preserves input order")
+    query_failure = _golden_case("mcp-v1", "terrain outside projection is a normal domain failure")
+
+    assert isinstance(
+        adapter_for("mcp-v1", "find_visible_blocks_result").validate_python(find_success["value"]),
+        FindVisibleBlocksSuccessResult,
+    )
+    assert isinstance(
+        adapter_for("mcp-v1", "find_visible_blocks_result").validate_python(find_failure["value"]),
+        FindVisibleBlocksFailureResult,
+    )
+    assert isinstance(
+        adapter_for("mcp-v1", "query_terrain_result").validate_python(
+            query_success["value"], context=query_success["context"]
+        ),
+        QueryTerrainSuccessResult,
+    )
+    assert isinstance(
+        adapter_for("mcp-v1", "query_terrain_result").validate_python(query_failure["value"]),
+        QueryTerrainFailureResult,
+    )
 
 
 def test_find_visible_blocks_output_is_strictly_coordinate_sorted() -> None:

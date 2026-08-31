@@ -57,6 +57,7 @@
       "fixed_graph_call": true,
       "input_schema": "get_planning_context_input",
       "result_schema": "get_planning_context_result",
+      "domain_result_codes": [],
       "canonical_result_bytes": 24576
     },
     {
@@ -65,6 +66,7 @@
       "fixed_graph_call": false,
       "input_schema": "list_affordances_input",
       "result_schema": "list_affordances_result",
+      "domain_result_codes": [],
       "canonical_result_bytes": 24576,
       "result_item_limits": {"online_players": 8, "visible_blocks": 256}
     },
@@ -74,6 +76,7 @@
       "fixed_graph_call": false,
       "input_schema": "inspect_inventory_input",
       "result_schema": "inspect_inventory_result",
+      "domain_result_codes": [],
       "canonical_result_bytes": 8192,
       "result_item_limits": {"slots": 36}
     },
@@ -83,6 +86,7 @@
       "fixed_graph_call": false,
       "input_schema": "find_visible_blocks_input",
       "result_schema": "find_visible_blocks_result",
+      "domain_result_codes": ["unknown_block"],
       "canonical_result_bytes": 16384,
       "semantic_rules": [
         {
@@ -101,6 +105,7 @@
       "fixed_graph_call": false,
       "input_schema": "query_terrain_input",
       "result_schema": "query_terrain_result",
+      "domain_result_codes": ["out_of_bounds"],
       "canonical_result_bytes": 16384,
       "semantic_rules": [
         {
@@ -118,6 +123,15 @@
       "fixed_graph_call": true,
       "input_schema": "validate_plan_input",
       "result_schema": "validate_plan_result",
+      "domain_result_codes": [
+        "invalid_schema",
+        "out_of_bounds",
+        "unknown_player",
+        "unmineable_target",
+        "unknown_block",
+        "missing_item",
+        "snapshot_mismatch"
+      ],
       "canonical_input_bytes": 65536,
       "canonical_result_bytes": 73728,
       "maximum_calls_per_run": 2

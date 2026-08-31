@@ -17,8 +17,10 @@ from mornlea_companion_agent.adapters.mcp import (
 )
 from mornlea_companion_agent.domain.http_v1 import PlanRequest
 from mornlea_companion_agent.domain.mcp_v1 import (
+    FindVisibleBlocksFailureResult,
     ListAffordancesResult,
     Plan,
+    QueryTerrainFailureResult,
     QueryTerrainResult,
 )
 from mornlea_companion_agent.domain.planner import PlannerUnavailable
@@ -170,6 +172,39 @@ class MCPMock:
         )
 
 
+class DomainFailureMock(MCPMock):
+    def __init__(self, *, tool_name: str, case_name: str, is_error: bool = False) -> None:
+        super().__init__()
+        self.tool_name = tool_name
+        self.case_name = case_name
+        self.is_error = is_error
+
+    async def __call__(self, raw: httpx.Request) -> httpx.Response:
+        response = await super().__call__(raw)
+        body = json.loads(raw.content)
+        if body["method"] != "tools/call" or body["params"]["name"] != self.tool_name:
+            return response
+        payload = json.loads(response.content)
+        value = golden("mcp-v1", "valid", self.case_name)["value"]
+        result = payload["result"]
+        result["content"] = [
+            {
+                "type": "text",
+                "text": json.dumps(
+                    value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                ),
+            }
+        ]
+        result["structuredContent"] = value
+        result["isError"] = self.is_error
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            json=payload,
+            request=raw,
+        )
+
+
 class TrackingStream(httpx.AsyncByteStream):
     def __init__(self, chunks: tuple[bytes, ...]) -> None:
         self.chunks = chunks
@@ -265,6 +300,66 @@ def test_real_sdk_session_uses_exact_wire_sequence_headers_and_one_session() -> 
                 assert "mcp-protocol-version" not in headers
             else:
                 assert headers["mcp-protocol-version"] == PROTOCOL_VERSION
+
+    run(scenario())
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "case_name", "arguments", "result_type"),
+    [
+        (
+            "find_visible_blocks",
+            "unknown visible block is a normal domain failure",
+            {"block_names": ["unknown_name"], "limit": 1},
+            FindVisibleBlocksFailureResult,
+        ),
+        (
+            "query_terrain",
+            "terrain outside projection is a normal domain failure",
+            {
+                "positions": [
+                    {"x": 4, "y": 64, "z": -1},
+                    {"x": 8, "y": 64, "z": -2},
+                ]
+            },
+            QueryTerrainFailureResult,
+        ),
+    ],
+)
+def test_is_error_false_domain_failure_is_returned_without_retry(
+    tool_name: str,
+    case_name: str,
+    arguments: dict[str, object],
+    result_type: type[object],
+) -> None:
+    async def scenario() -> None:
+        mock = DomainFailureMock(tool_name=tool_name, case_name=case_name)
+        async with MCPToolSessionFactory(transport=httpx.MockTransport(mock)).open(
+            request(), timeout_seconds=5
+        ) as session:
+            result = await session.call_model_tool(tool_name, arguments)
+        assert isinstance(result, result_type)
+        assert [body["method"] for _, _, body in mock.requests].count("tools/call") == 1
+
+    run(scenario())
+
+
+def test_is_error_true_domain_failure_remains_unavailable_without_retry() -> None:
+    async def scenario() -> None:
+        mock = DomainFailureMock(
+            tool_name="find_visible_blocks",
+            case_name="unknown visible block is a normal domain failure",
+            is_error=True,
+        )
+        async with MCPToolSessionFactory(transport=httpx.MockTransport(mock)).open(
+            request(), timeout_seconds=5
+        ) as session:
+            with pytest.raises(PlannerUnavailable):
+                await session.call_model_tool(
+                    "find_visible_blocks",
+                    {"block_names": ["unknown_name"], "limit": 1},
+                )
+        assert [body["method"] for _, _, body in mock.requests].count("tools/call") == 1
 
     run(scenario())
 

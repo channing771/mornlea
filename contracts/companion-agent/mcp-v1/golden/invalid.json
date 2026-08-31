@@ -154,7 +154,7 @@
       "schema": "validate_plan_failure_result",
       "reason": "unknown_code",
       "expected_error": {"path": "$.code", "keyword": "enum"},
-      "value": {"accepted": false, "code": "write_denied", "hint": ""}
+      "value": {"accepted": false, "code": "write_denied", "hint": "unknown validator code"}
     },
     {
       "name": "validator hint is bounded",
@@ -213,7 +213,7 @@
     },
     {
       "name": "visible block result rejects coordinate disorder",
-      "schema": "find_visible_blocks_result",
+      "schema": "find_visible_blocks_success_result",
       "reason": "coordinate_order",
       "expected_error": {"path": "$.matches[1].position", "keyword": "x-mornlea-rules", "rule": "sorted_positions"},
       "value": {
@@ -224,8 +224,54 @@
       }
     },
     {
+      "name": "visible block domain failure rejects success fields",
+      "schema": "find_visible_blocks_result",
+      "reason": "mixed_result_fields",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {
+        "code": "unknown_block",
+        "hint": "unknown canonical block name",
+        "matches": []
+      }
+    },
+    {
+      "name": "visible block domain failure rejects wrong code",
+      "schema": "find_visible_blocks_result",
+      "reason": "unknown_code",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"code": "out_of_bounds", "hint": "wrong code for this tool"}
+    },
+    {
+      "name": "visible block domain failure requires hint",
+      "schema": "find_visible_blocks_result",
+      "reason": "missing_field",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"code": "unknown_block"}
+    },
+    {
+      "name": "visible block domain failure rejects unknown field",
+      "schema": "find_visible_blocks_result",
+      "reason": "unknown_field",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"code": "unknown_block", "hint": "unknown name", "retry": false}
+    },
+    {
+      "name": "visible block domain failure rejects null hint",
+      "schema": "find_visible_blocks_result",
+      "reason": "null_hint",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"code": "unknown_block", "hint": null}
+    },
+    {
+      "name": "visible block domain failure rejects non-string hint",
+      "schema": "find_visible_blocks_result",
+      "reason": "hint_type",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"code": "unknown_block", "hint": 1}
+    },
+    {
       "name": "terrain result must match input positions and order",
-      "schema": "query_terrain_result",
+      "schema": "query_terrain_success_result",
       "reason": "input_position_mismatch",
       "expected_error": {"path": "$.terrain[0].position", "keyword": "x-mornlea-rules", "rule": "positions_match_context"},
       "context": {
@@ -240,6 +286,52 @@
           {"position": {"x": 4, "y": 64, "z": -1}, "height": 63, "block_name": "air"}
         ]
       }
+    },
+    {
+      "name": "terrain domain failure rejects partial success",
+      "schema": "query_terrain_result",
+      "reason": "mixed_result_fields",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {
+        "code": "out_of_bounds",
+        "hint": "position is outside the frozen projection",
+        "terrain": []
+      }
+    },
+    {
+      "name": "terrain domain failure rejects wrong code",
+      "schema": "query_terrain_result",
+      "reason": "unknown_code",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"code": "unknown_block", "hint": "wrong code for this tool"}
+    },
+    {
+      "name": "terrain domain failure requires code",
+      "schema": "query_terrain_result",
+      "reason": "missing_field",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"hint": "position is outside the frozen projection"}
+    },
+    {
+      "name": "terrain domain failure rejects unknown field",
+      "schema": "query_terrain_result",
+      "reason": "unknown_field",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"code": "out_of_bounds", "hint": "outside", "partial": true}
+    },
+    {
+      "name": "terrain success rejects null collection",
+      "schema": "query_terrain_result",
+      "reason": "null_result",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"terrain": null}
+    },
+    {
+      "name": "terrain success rejects non-array collection",
+      "schema": "query_terrain_result",
+      "reason": "result_type",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"terrain": {}}
     },
     {
       "name": "plan summary uses UTF-8 byte limit",
@@ -281,7 +373,42 @@
       "schema": "validator_hint",
       "reason": "hint_utf8_bytes",
       "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.max_utf8_bytes"},
-      "value": "界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界"
+      "value": "界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界aa"
+    },
+    {
+      "name": "validator hint rejects empty string",
+      "schema": "validator_hint",
+      "reason": "hint_too_short",
+      "expected_error": {"path": "$", "keyword": "minLength"},
+      "value": ""
+    },
+    {
+      "name": "validator hint rejects Unicode control",
+      "schema": "validator_hint",
+      "reason": "hint_control",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.no_unicode_control"},
+      "value": "invalid\u0001hint"
+    },
+    {
+      "name": "validator hint rejects NUL",
+      "schema": "validator_hint",
+      "reason": "hint_nul",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.no_nul"},
+      "value": "invalid\u0000hint"
+    },
+    {
+      "name": "validator hint rejects edge whitespace",
+      "schema": "validator_hint",
+      "reason": "hint_edge_whitespace",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.no_edge_unicode_whitespace"},
+      "value": " leading"
+    },
+    {
+      "name": "validator hint rejects invalid UTF-8 bytes",
+      "schema": "validator_hint",
+      "reason": "hint_invalid_utf8",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.valid_utf8"},
+      "value_utf8_hex": "ff"
     }
   ]
 }

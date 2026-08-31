@@ -75,12 +75,17 @@
     },
     "validator_hint": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 256,
       "x-mornlea-rules": [
         {
           "name": "text",
           "valid_utf8": true,
-          "max_utf8_bytes": 256
+          "min_utf8_bytes": 1,
+          "max_utf8_bytes": 256,
+          "no_nul": true,
+          "no_unicode_control": true,
+          "no_edge_unicode_whitespace": true
         }
       ]
     },
@@ -357,7 +362,7 @@
         "limit": {"type": "integer", "minimum": 1, "maximum": 64}
       }
     },
-    "find_visible_blocks_result": {
+    "find_visible_blocks_success_result": {
       "type": "object",
       "additionalProperties": false,
       "x-mornlea-rules": [
@@ -392,6 +397,21 @@
         }
       }
     },
+    "find_visible_blocks_failure_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "hint"],
+      "properties": {
+        "code": {"const": "unknown_block"},
+        "hint": {"$ref": "#/$defs/validator_hint"}
+      }
+    },
+    "find_visible_blocks_result": {
+      "oneOf": [
+        {"$ref": "#/$defs/find_visible_blocks_success_result"},
+        {"$ref": "#/$defs/find_visible_blocks_failure_result"}
+      ]
+    },
     "query_terrain_input": {
       "type": "object",
       "additionalProperties": false,
@@ -405,7 +425,7 @@
         }
       }
     },
-    "query_terrain_result": {
+    "query_terrain_success_result": {
       "type": "object",
       "additionalProperties": false,
       "x-mornlea-rules": [
@@ -433,6 +453,21 @@
           }
         }
       }
+    },
+    "query_terrain_failure_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "hint"],
+      "properties": {
+        "code": {"const": "out_of_bounds"},
+        "hint": {"$ref": "#/$defs/validator_hint"}
+      }
+    },
+    "query_terrain_result": {
+      "oneOf": [
+        {"$ref": "#/$defs/query_terrain_success_result"},
+        {"$ref": "#/$defs/query_terrain_failure_result"}
+      ]
     },
     "validate_plan_input": {
       "type": "object",
