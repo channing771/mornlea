@@ -267,9 +267,6 @@ func (store *MemoryStore) LoadCompanions(ctx context.Context) (StoredCompanions,
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	if store.closed {
-		return StoredCompanions{}, os.ErrClosed
-	}
 	if err := ctx.Err(); err != nil {
 		return StoredCompanions{}, err
 	}
@@ -305,9 +302,6 @@ func (store *MemoryStore) SaveCompanions(ctx context.Context, save CompanionSave
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	if store.closed {
-		return os.ErrClosed
-	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}

@@ -79,7 +79,8 @@ DiskStore/MemoryStore），`CompanionStore` 接口属根包存储契约家族，
   `companion_restore_test.go`）：以本包 `Encode`/`Decode` 直接读写
   companions.ai 文件，替代根包 DiskStore 夹具——域包测试禁止反向导入
   根包。只承载装配不改断言；原子替换由 DiskStore 用例覆盖，revision 冲突
-  与关闭语义由留根的 `companion_store_test.go` 对 Memory/Disk 共同覆盖。
+  由留根的 `companion_store_test.go` 对 Memory/Disk 共同覆盖；关闭后 Disk
+  拒绝数据 API，而 Memory 保留可观测、可复用语义，probe 仍拒绝新工作。
 - `-update-storage-fixtures` flag 语义与 chunk/player 包一致（声明在
   `companion_summary_test.go`）：置位时重写本包 committed fixture，
   普通运行只读比较、漂移一律失败。

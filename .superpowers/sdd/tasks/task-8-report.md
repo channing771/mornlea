@@ -173,3 +173,60 @@ lease、MCP、HTTP cutover 或 memory mutation。
 - 本轮未修改任何 fixture；上文 v1..v5 size/digest 继续适用，v1..v4 的
   `git diff --name-only` 仍为空。
 - 本轮五个 repair 文件已显式暂存并核对；commit 等待控制会话授权。
+
+## Quality repair round 2
+
+### 回归 RED 与契约裁决
+
+- 在 clean detached `136efc0c` 上先执行 `make rust`，随后运行
+  `go test ./internal/server -run '^(TestNewHostRetiresExistingCompanionsWhenConfigEmpty|TestNewHostDoesNotRepeatInactiveRetirement|TestCompanionDialogueSummaryLifecycle)$' -race -count=1`：
+  FAIL（package 2.854s；wall 8.70s）。三条用例都在 `Host.Shutdown` 后读取同一
+  `MemoryStore`，得到 `file already closed`。
+- 逐条核对表明这不是测试 helper 假设：retirement 用例在 shutdown 后验证最终
+  revision、inactive lifecycle 与 tombstone 是否真实落库；dialogue lifecycle
+  用例的注释明确要求先关闭首个 Host、检查持久化结果，再用同一个 MemoryStore
+  启动第二个 Host 验证跨重启行为。改写这些测试会削弱真实 persistence/restart
+  断言，因此三条 server 测试保持不变。
+- MemoryStore 的 chunk/player/hostile 等既有数据 API 与 hostile store contract
+  均保留 post-Close 可观测语义；DiskStore 才在关闭后拒绝数据 API。repair round 1
+  将 companion Memory Load/Save 与 Disk 强行统一的 quality Minor 与该既有契约
+  冲突，本轮有意识地撤回该 Minor，而不是扩大修改其他 Memory API。
+
+### 最小修复
+
+- 只移除 `MemoryStore.LoadCompanions`/`SaveCompanions` 在锁内新增的 `closed`
+  拒绝；`CompanionsExist` 仍在 Close 后返回 `os.ErrClosed`，Disk Load/Save 的
+  Close 契约也保持不变。
+- 根 companion store contract 恢复 Memory/Disk 区分，并正向证明 Memory 连续
+  Close 两次后仍能 Save + Load、Disk 则继续返回 `os.ErrClosed`。最近的
+  `internal/storage/companion/AGENTS.md` 同步这条局部事实。
+- repair round 1 的 v3 committed fixture、完整 v5 offsets、patch 前原字段断言
+  与 v5 wire 文档全部保留；fixture 与 server 测试均未修改。
+
+### 隔离 GREEN
+
+全部命令在只应用本轮三个 code/test/guide 修改的 detached `136efc0c` worktree
+运行；共享 Task 7 文件没有进入隔离树：
+
+- `make rust`：PASS（Cargo release profile 32.01s）。
+- 上述三条回归定点 server race：PASS（package 3.381s；wall 9.929s）。
+- `go test ./internal/storage -run '^(TestCompanionStoreExistenceProbeDoesNotDecodeBody|TestCompanionStoreContract)$' -race -count=1`：
+  PASS（package 2.042s；wall 4.679s）。
+- `go test ./internal/storage/companion -race -count=1`：PASS
+  （package 2.454s；wall 3.338s）。
+- `go test ./internal/storage -run 'Companion' -race -count=1`：PASS
+  （package 2.322s；wall 2.836s）。
+- `go test ./internal/server/persistence -run 'Companion' -race -count=1`：PASS
+  （package 2.790s；wall 4.072s）。
+- `go test ./internal/server -race -count=1`：PASS（package 188.862s）；完整包门禁
+  覆盖本轮三条回归测试及两条既有 staging contract。
+- `go test ./internal/server -run '^(TestM5StageAcceptancePersonaDialogueEndToEnd|TestCompanionDialogueSummaryLifecycle)$' -race -count=1`：
+  PASS（package 6.445s；wall 7.987s），再次显式证明两条 staging contract。
+- `go test ./internal/archcheck -count=1`：PASS（package 4.998s；wall 5.443s）。
+- `go vet ./internal/storage/companion ./internal/storage ./internal/server/persistence ./internal/server`：
+  PASS（wall 3.247s）。
+- `git diff --check`：PASS。
+
+本轮未修改任何 fixture；上文 v1..v5 size/digest 继续适用，v1..v4 digest
+保持不变。最终仅 `memory.go`、`companion_store_test.go`、最近的 companion
+`AGENTS.md` 与本报告属于 repair round 2；commit 继续等待控制会话授权。
