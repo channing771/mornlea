@@ -863,6 +863,10 @@ func assertCrossLanguageHTTPErrorSurface(t *testing.T, endpoint, credential stri
 	if err != nil {
 		t.Fatal(err)
 	}
+	requestID, ok := valid["request_id"].(string)
+	if !ok || requestID == "" {
+		t.Fatal("HTTP golden request identity is missing")
+	}
 	unknown := make(map[string]any, len(valid)+1)
 	for key, value := range valid {
 		unknown[key] = value
@@ -889,10 +893,11 @@ func assertCrossLanguageHTTPErrorSurface(t *testing.T, endpoint, credential stri
 		contentType string
 		status      int
 		code        string
+		echoRequest bool
 	}{
 		{name: "unauthorized", body: validBody, token: "wrong-token", status: http.StatusUnauthorized, code: "unauthorized"},
-		{name: "unsupported version", body: unsupportedBody, token: credential, status: http.StatusUpgradeRequired, code: "unsupported_version"},
-		{name: "unknown field", body: unknownBody, token: credential, status: http.StatusBadRequest, code: "invalid_request"},
+		{name: "unsupported version", body: unsupportedBody, token: credential, status: http.StatusUpgradeRequired, code: "unsupported_version", echoRequest: true},
+		{name: "unknown field", body: unknownBody, token: credential, status: http.StatusBadRequest, code: "invalid_request", echoRequest: true},
 		{name: "trailing body", body: append(append([]byte(nil), validBody...), []byte(" trailing")...), token: credential, status: http.StatusBadRequest, code: "invalid_request"},
 		{name: "oversize", body: bytes.Repeat([]byte(" "), (256<<10)+1), token: credential, status: http.StatusBadRequest, code: "invalid_request"},
 		{name: "wrong content type", body: validBody, token: credential, contentType: "text/plain", status: http.StatusBadRequest, code: "invalid_request"},
@@ -942,12 +947,16 @@ func assertCrossLanguageHTTPErrorSurface(t *testing.T, endpoint, credential stri
 				t.Fatal(err)
 			}
 			var envelope struct {
-				Error struct {
+				RequestID *string `json:"request_id"`
+				Error     struct {
 					Code string `json:"code"`
 				} `json:"error"`
 			}
+			decodeErr := json.Unmarshal(body, &envelope)
+			correlationMatches := (!testCase.echoRequest && envelope.RequestID == nil) ||
+				(testCase.echoRequest && envelope.RequestID != nil && *envelope.RequestID == requestID)
 			if response.StatusCode != testCase.status || len(body) > 64<<10 ||
-				json.Unmarshal(body, &envelope) != nil || envelope.Error.Code != testCase.code {
+				decodeErr != nil || envelope.Error.Code != testCase.code || !correlationMatches {
 				t.Fatalf("status=%d bytes=%d code=%q", response.StatusCode, len(body), envelope.Error.Code)
 			}
 			text := string(body)
