@@ -6,6 +6,7 @@
 
 - 在稳定方块编号末尾追加一种单格 `ShortGrassID`（不追加对应物品）：服务当前 Overworld 新区块的 Rust worldgen 在草地表面按世界种子和世界坐标确定性分布短草，橡树结构保持优先，已保存区块不扫描、不迁移、不补种。
 - 短草复用既有植物交叉斜面、terrain cutout 与植物光照路径，使用本项目原创程序化纹理；短草不提供碰撞、不是完整遮光方块，玩家可穿过。
+- 客户端派生天空光时，只有完整不透明方块阻断，作物与短草等植物透光且不产生额外衰减，流体继续产生额外衰减，缺失或未知邻区继续阻断；静态方块光只向空气或植物格传播并每格衰减 `1`，玻璃、水及任何其他非空气、非植物方块仍阻断。
 - 玩家以任意手持状态采除短草均在 `1` 个权威 tick 完成；结算参考 Minecraft 的普通除草手感，以可重放且重试稳定的确定性 `1/8` 判定掉落恰好 `1` 颗小麦种子，其余情况无掉落。种子进入既有权威世界掉落物系统而非直接写入背包；需要掉落但容量不足时，方块、掉落物与 revision 保持原子不变。
 - **BREAKING（新玩家初始状态）**：只对玩家存档明确不存在的登录取消固定 `64` 颗种子赠送，保留现阶段前 `14` 格材料整栈；已有玩家的全部栏位逐槽保留，不删除、补发或重排已有种子。
 - 伙伴继续显式拒绝采掘短草；本闭环不加入双格高草、短草物品、剪刀、Fortune/附魔、骨粉生草、自然再生或通用植被系统，也不引入 Mojang 版权资源。
@@ -27,11 +28,14 @@
 - `common-block-materials`: 缺失玩家的一次性材料包不再包含起步种子，已有玩家与未确认登录的保护语义保持不变。
 - `rust-engine-worldgen`: Rust 独占的生产世界生成新增短草覆盖层，并更新“既有方块输出不变”要求及 worldgen ABI 输入契约。
 - `bounded-benchmark-workload`: 固定 benchmark 世界纳入自然短草，scenario 升至 v21，并把唯一显式迁移更新为 `20:21`。
+- `authoritative-daylight`: 把直射天空光遮挡规则收敛为仅完整不透明方块阻断，明确植物无额外衰减、其他非完整遮光方块可透过，同时保持流体额外衰减和缺失或未知邻区阻断。
+- `static-block-light`: 把作物与短草加入静态方块光可传播目标，保持每格衰减 `1`，并继续要求玻璃、水及任何其他非空气、非植物方块阻断。
 - `visual-verification`: 固定地形与菜单全景覆盖新的自然短草外观，并要求只重立和复核受影响基线、保持既有阈值及无窗口完整渲染链路。
 
 ## Impact
 
-- 主要影响 `internal/core` 方块注册、`internal/assets` 程序化 layer、`internal/mesh` 与 Rust mesher 的植物材质判定集合（从 `[31..54]` 变为 `[31..54] ∪ {68}`，`55..67` 不移动）、`internal/sim/entity` 玩家采掘与工具耐久结算、伙伴采掘白名单、`internal/server/persistence` 缺失玩家快照，以及 `internal/worldgen`、`internal/nativeabi`、Rust fluid kernel 及其 Go oracle 和 `mornlea_engine` worldgen。
+- 主要影响 `internal/core` 方块注册、`internal/assets` 程序化 layer、`internal/mesh` 与 Rust mesher 的植物材质判定集合（从 `[31..54]` 变为 `[31..54] ∪ {68}`，`55..67` 不移动）、Rust light kernel 及其 Go oracle、`internal/sim/entity` 玩家采掘与工具耐久结算、伙伴采掘白名单、`internal/server/persistence` 缺失玩家快照，以及 `internal/worldgen`、`internal/nativeabi`、Rust fluid kernel 及其 Go oracle 和 `mornlea_engine` worldgen。
 - benchmark producer/comparator、capture 固定世界与受影响 golden、版本矩阵文档和 OpenSpec 主规格需要同步。`plant-visual-presentation` 与 `deterministic-tree-generation` 的既有 Requirement 不改变，只作为第二消费者与树优先回归门禁继续成立。
 - 线上协议保持 v32；player schema v8、chunk schema v9、world metadata v3、`companions.ai` schema v4、`hostile_mobs` schema v1、client ABI v13 均不变，也不改变 packet 或存档字节布局。旧存档可直接加载；新短草只写入之后生成并保存的区块，旧程序不认识新增编号，因此降级需恢复升级前备份，且不支持新旧二进制混用。
-- 权威 tick 仍是每名活动玩家一次有界射线与常数工作；worldgen 只增加每个生成格的固定整数判定，不引入 goroutine、热路径 I/O、无界遍历或进程级随机源。
+- 光照修订继续复用既有固定容量传播工作内存，不扩大无界队列，也不改变 packed light、mesh registry、quad 或 light kernel 的 ABI 输入输出布局；本变更唯一 ABI 动作仍是 worldgen 所需的 engine ABI v9 升至 v10。
+- 权威 tick 仍是每名活动玩家一次有界射线与常数工作；worldgen 只增加每个生成格的固定整数判定，光照传播仍受既有固定容量上限约束，不引入 goroutine、热路径 I/O、无界遍历或进程级随机源。
