@@ -16,6 +16,7 @@
 //! - mesh packed face 字节只在 section 变脏时过境一次;
 //! - 每帧一次 [`OffscreenRenderer::render_frame`],帧内无逐 pass FFI。
 
+pub mod crack;
 pub mod entity;
 #[cfg(test)]
 mod farmland_tests;
@@ -36,6 +37,7 @@ mod world_tests;
 use std::collections::HashMap;
 
 use self::world::RenderWorld;
+use crack::CrackPass;
 use entity::{EntityPass, EntityPipelineKind};
 use lod::{Frustum, LodPass};
 use pool::{Alloc, Pool};
@@ -534,6 +536,9 @@ pub struct OffscreenRenderer {
     drop_pass: EntityPass,
     /// 方块轮廓 pass(12 实例,透明只读深度)。
     outline_pass: EntityPass,
+    /// 采掘裂纹 overlay pass(恰 1 实例容量,透明只读深度,bind 随 atlas
+    /// 上传重建)。
+    crack_pass: CrackPass,
     /// 伤害红边 uniform(16B,strength@0)。
     overlay_uniform: wgpu::Buffer,
     water_tint_uniform: wgpu::Buffer,
@@ -949,6 +954,10 @@ impl OffscreenRenderer {
             DEPTH_FORMAT,
         );
 
+        // 采掘裂纹 overlay pass:恰 1 实例容量的常驻资源,自身解析
+        // `shaders::CRACK`;bind 随 atlas 上传重建,未上传前不绘制。
+        let crack_pass = CrackPass::new(&device, &queue, COLOR_FORMAT, DEPTH_FORMAT);
+
         // 全屏叠加:无深度附件的全屏三角管线,镜像 Go damage_overlay.go。
         // 伤害红边与水下水色共用这一条管线与这一份 layout,各自持有一块 32 字节
         // uniform(vec4 颜色 + edge 位 + 三个 pad):同一帧里两者可能都要画,
@@ -1160,6 +1169,7 @@ impl OffscreenRenderer {
             avatar_pass,
             drop_pass,
             outline_pass,
+            crack_pass,
             name_tag_pass,
             hud_pass,
             debug_pass,
@@ -1255,6 +1265,10 @@ impl OffscreenRenderer {
         });
         // 远环与近环共用同一图集与采样器:世界坐标 UV 才能跨远/近环连续。
         self.lod_pass
+            .rebuild_bind(&self.device, &atlas_view, &self.sampler);
+        // 裂纹 overlay 与 terrain/water/lod 共用同一图集与采样器:atlas
+        // 上传即随之重建绑定,帧内不再创建任何绑定资源。
+        self.crack_pass
             .rebuild_bind(&self.device, &atlas_view, &self.sampler);
         self.terrain_bind = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("terrain resources"),
@@ -1667,6 +1681,7 @@ impl OffscreenRenderer {
         if !self.avatar_pass.instances_valid(&input.avatar_instances)
             || !self.drop_pass.instances_valid(&input.drop_instances)
             || !self.outline_pass.instances_valid(&input.outline)
+            || !CrackPass::instances_valid(&input.crack_instances)
             || input.overlay_strength.is_nan()
             || input.water_tint.iter().any(|value| value.is_nan())
         {
@@ -2003,7 +2018,7 @@ impl OffscreenRenderer {
             self.drop_pass
                 .record(encoder, frame_view, &self.depth_view, "item drop pass");
         }
-        // 轮廓 pass(Go 顺序:drop 之后、名牌之前)。
+        // 轮廓 pass(帧序:drop 之后、裂纹之前)。
         if !input.outline.is_empty() {
             self.outline_pass.upload(
                 &self.queue,
@@ -2014,7 +2029,20 @@ impl OffscreenRenderer {
             self.outline_pass
                 .record(encoder, frame_view, &self.depth_view, "block outline pass");
         }
-        // 名牌(Go 顺序:outline 之后、overlay 之前)。
+        // 裂纹 pass(帧序:轮廓 → 裂纹 → 名牌;世界实体之后、HUD 之前,与
+        // outline 同带)。atlas 未上传时 record 内部整段跳过(与 terrain_bind
+        // 的 Option 跳过同语义),不开始任何 render pass。
+        if !input.crack_instances.is_empty() {
+            self.crack_pass.upload(
+                &self.queue,
+                &input.view_proj,
+                input.daylight,
+                &input.crack_instances,
+            );
+            self.crack_pass
+                .record(encoder, frame_view, &self.depth_view, "crack pass");
+        }
+        // 名牌(帧序:裂纹之后、overlay 之前)。
         if let Some((uniform, backgrounds, glyphs)) = validated.name_tag_segment {
             self.name_tag_pass.upload_and_record(
                 &self.queue,
@@ -2738,6 +2766,70 @@ mod outline_overlay_tests {
             FrameResult::Invalid,
             "NaN 强度必须拒绝"
         );
+    }
+}
+
+#[cfg(test)]
+mod crack_tests {
+    use super::FrameResult;
+    use super::tests_support::*;
+    use super::{ATLAS_MIPS, ATLAS_TEX_SIZE};
+
+    /// 构造一个 80 字节裂纹实例:恒等 mat4(列主序)+ atlas 层号 f32 +
+    /// 零填充,布局与 Go `EncodeBlockCrackInstances` 一致。
+    fn crack_instance(layer: f32) -> Vec<u8> {
+        let mut instance = vec![0u8; 80];
+        for i in 0..4 {
+            instance[i * 20..i * 20 + 4].copy_from_slice(&1.0f32.to_le_bytes());
+        }
+        instance[64..68].copy_from_slice(&layer.to_le_bytes());
+        instance
+    }
+
+    /// 裂纹 pass 的三段行为锁:atlas 未上传时整段跳过(帧正常、图像不变);
+    /// atlas 上传后同一实例必须改变图像(恒等相机下单位立方体覆盖画面
+    /// 中央);非法实例段在渲染前拒绝且不触碰 target。
+    #[test]
+    fn crack_renders_when_bound_skips_unbound_and_rejects_invalid() {
+        let Some(mut renderer) = renderer_or_skip_pub(64, 64) else {
+            return;
+        };
+        let empty = empty_frame_pub();
+        assert_eq!(renderer.render_frame(&empty), FrameResult::Rendered);
+        let mut base = vec![0u8; 64 * 64 * 4];
+        assert!(renderer.readback(&mut base));
+
+        // atlas 未上传:合法裂纹段被跳过,帧正常渲染、图像不变。
+        let mut crack_frame = empty_frame_pub();
+        crack_frame.crack_instances = crack_instance(0.0);
+        assert_eq!(renderer.render_frame(&crack_frame), FrameResult::Rendered);
+        let mut unbound = vec![0u8; 64 * 64 * 4];
+        assert!(renderer.readback(&mut unbound));
+        assert_eq!(base, unbound, "atlas 未上传时裂纹段必须被跳过");
+
+        // 上传不透明 atlas 后,同一裂纹实例必须改变图像。
+        let bytes_per_layer: usize = (0..ATLAS_MIPS)
+            .map(|mip| {
+                let s = (ATLAS_TEX_SIZE >> mip).max(1) as usize;
+                s * s * 4
+            })
+            .sum();
+        assert!(renderer.upload_atlas(1, &vec![220u8; bytes_per_layer]));
+        assert_eq!(renderer.render_frame(&crack_frame), FrameResult::Rendered);
+        let mut with_crack = vec![0u8; 64 * 64 * 4];
+        assert!(renderer.readback(&mut with_crack));
+        assert_ne!(base, with_crack, "裂纹实例必须改变图像");
+
+        // 非 80 倍数与超容量(恰 1 实例)拒绝,且 target 保持上一帧内容。
+        let mut misaligned = empty_frame_pub();
+        misaligned.crack_instances = vec![0u8; 79];
+        assert_eq!(renderer.render_frame(&misaligned), FrameResult::Invalid);
+        let mut oversized = empty_frame_pub();
+        oversized.crack_instances = vec![0u8; 160];
+        assert_eq!(renderer.render_frame(&oversized), FrameResult::Invalid);
+        let mut after_bad = vec![0u8; 64 * 64 * 4];
+        assert!(renderer.readback(&mut after_bad));
+        assert_eq!(with_crack, after_bad, "拒绝帧不得触碰 target");
     }
 }
 

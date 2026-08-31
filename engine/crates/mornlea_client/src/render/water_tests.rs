@@ -606,22 +606,30 @@ fn sorting_granularity_is_the_section() {
     }
 }
 
-/// water pass 是系统里唯一新增的半透明阶段。
+/// water pass 与采掘裂纹 overlay 是系统里仅有的两个新增半透明阶段。
 ///
 /// 两条互补的源码清单，覆盖范围是 `src/render/` 下**全部生产 `.rs`**（排除
-/// `*_tests.rs`）——`render_frame` 会调进 `entity.rs` 与 `quads.rs` 的
-/// `begin_render_pass`，只扫 `mod.rs` 会漏掉在那两个文件里新增透明 pass 的情形：
+/// `*_tests.rs`）——`render_frame` 会调进 `entity.rs`、`quads.rs` 与
+/// `crack.rs` 的 `begin_render_pass`，只扫 `mod.rs` 会漏掉在那几个文件里
+/// 新增透明 pass 的情形：
 ///
 ///  1. 全目录的 `begin_render_pass` 调用点总数固定；
-///  2. `mod.rs` 里以字面量标注的 pass 名单固定（`entity.rs`/`quads.rs` 的标签是
-///     调用方传进来的变量，枚举不到，由第 1 条兜底）。
+///  2. `mod.rs` 里以字面量标注的 pass 名单固定（`entity.rs`/`quads.rs`/
+///     `crack.rs` 的标签是调用方传进来的变量，枚举不到，由第 1 条兜底）。
 ///
 /// 任何人再加一个 pass 都要来改这份清单，从而被迫回答
-/// 「`voxel-visual-presentation` 只放宽了**恰好一个**额外半透明阶段」这件事。
+/// 「`voxel-visual-presentation` 只放行了水面与采掘裂纹这两个额外半透明
+/// 阶段」这件事。
 ///
 /// "screen tint pass" 是历史上的 "damage overlay pass" 改名而来：水下水色与伤害
 /// 红边共用同一条 pass 与同一条全屏三角管线（uniform 的 edge 位区分两者），
 /// 因此 `fluid-presentation-survival` 的水下视觉没有消费这份额度。
+///
+/// "crack pass" 的调用点在 `crack.rs`，是 `voxel-visual-presentation` 的
+/// delta（add-mining-crack-overlay）显式放行的第二个、且仅此一个的额外
+/// 半透明阶段，边界被同一 Requirement 钉死：实例容量恰为 `1`、材质复用
+/// 既有方块材质 atlas 的裂纹层（无独立纹理上传入口）、无每帧动态资源
+/// 创建、不写深度附件、不引入任何透明排序。
 #[test]
 fn water_is_the_only_added_render_pass() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/render");
@@ -652,11 +660,13 @@ fn water_is_the_only_added_render_pass() {
         .iter()
         .map(|(name, text)| format!("{name}={}", text.matches("begin_render_pass").count()))
         .collect();
-    // 固定总数 5:菜单层 pass 已随 client ABI v12 退役整体删除,余下调用点
-    // 为 mod.rs(terrain/water/screen tint)、entity.rs 与 quads.rs。
+    // 固定总数 6:菜单层 pass 已随 client ABI v12 退役整体删除;既有调用点
+    // 为 mod.rs(terrain/water/screen tint)、entity.rs 与 quads.rs;第 6 个
+    // 是 crack.rs 的采掘裂纹 overlay,其边界见上方测试说明(规格 delta
+    // 显式放行,不得据此继续泛化第三个透明阶段)。
     assert_eq!(
         total,
-        5,
+        6,
         "src/render 下的 render pass 调用点总数变了（{}）：新增额外的半透明阶段\
          需要先修订 voxel-visual-presentation 的边界",
         per_file.join(" ")
