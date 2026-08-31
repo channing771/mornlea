@@ -95,3 +95,28 @@
   visibility 收窄与先例对齐 — 均非行为变更。
 - R1 落地：commit `1bd12f2b`。`cargo test -p mornlea_client --locked`
   141 passed；clippy 干净；`make rust` 重建回拷。Task 3 关闭。
+
+### Task 4：视觉场景与收尾门禁
+
+- 实现：commits `8402e9d1`（场景+测试+golden）+ `f6eacceb`（walkFrameTLVs
+  Visible 守卫，Task 2 备案 nit 闭环）+ `7e262973`（capture 文档同步）+
+  `17e0c031`（visual-verification delta）。新场景 `mining-crack-early`
+  （6/30→阶段 2）与 `mining-crack-heavy`（29/30→阶段 9）复用
+  target-block-feedback 固定世界，砖块 target=(0,3,-3)，HasTarget 开/关
+  像素差分对照（early 600/1600px、heavy 1520/1600px，maxΔ=71）。
+- 偏差裁决（控制会话）：主规格 `visual-verification` 钉死"恰好 25 场景/
+  25 golden"，新增场景必须同步 MODIFIED delta——控制会话已逐字比对 delta
+  与主规格 diff，确认改动恰为 25→27 计数、新场景清单/相邻不变量、两处
+  过时 sword-combat 叙事中性化与一段历史 Scenario 清单对齐，无超范围
+  语义漂移，接受。
+- 验证证据 @ `17e0c031`：`go test ./... -race -count=1` 44 包全 ok；
+  `make rust-check` exit 0；`openspec validate --all --strict` 80/80；
+  `make visual-check` 27/27 场景差异 0；既有 golden 逐位未动（更新前
+  25 场景 0 差异 + `git status` 仅 2 个新增 PNG + 复跑全绿）。
+- SPEC 评审：**pass**（8/8 PASS；delta 保真度独立逐字复核通过；golden
+  纪律证据链完整；备注"非 active 支路由单元矩阵钉住、像素层用 HasTarget
+  支路"为合理覆盖拆分）。QUALITY 评审：**pass**（4/5 与 5/5 居多；四条
+  非阻塞 minor：场景注释 5.5/4.5 格口径、delta 缺 Purpose、零漂移断言
+  Fatalf 补区域矩形、场景表头注释例外清单补漏）。
+- Ruling: R1 修复四处注释/文档级 minor — 均不触行为与 golden — 记录于
+  R1 落地条目。
