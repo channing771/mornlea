@@ -8,7 +8,7 @@
 - Branch: `refactor/sim-ownership-convergence`.
 - Implementation dispatch baseline: `PENDING`（控制会话创建 proposal/specs/design/tasks/ledger 的 planning-only commit；派发 Task 1.1 brief 时在外部钉住该 planning commit SHA，并在 Task 1.1 完成后的 tasks/ledger-only evidence commit 中回填；Task 1.1 的实际 baseline SHA 同样在该 evidence commit 中回填）。
 - Version boundary: protocol v32、player schema v8、chunk schema v9、world metadata v3、`companions.ai` schema v4、`hostile_mobs` schema v1 与 client ABI v13 保持不变；本 change 只把 engine ABI v9 升到 v10、benchmark scenario v20 升到 v21。
-- Scope owner: `codex-control`；B-04 的实现范围以 proposal、九份 delta specs、design、tasks 与本 ledger 为准。
+- Scope owner: `codex-control`；B-04 的实现范围以 proposal、十一份 delta specs、design、tasks 与本 ledger 为准。
 - Control-session rule: 控制会话只派发、协调和裁决，不直接修改实现；Task 1.1–8.1 各由 fresh implementer 完成，再由互相独立的 fresh SPEC/QUALITY reviewers 双裁决。
 - Repair rule: R1–R3 续用原 implementer；R4–R5 换 fresh implementer；超过五轮必须停止并逐条记录 `Ruling: <决定> — <原因> — <错判成本>`。
 - SHA lineage: 每项实现任务先记录 code/test commit `C`；完成全部 scoped repair 后冻结 final verified implementation SHA `I`，所有 focused verification 与最终双评审必须绑定 `I`；随后只允许用 tasks/ledger-only evidence commit `L` 勾选任务并固化证据。`L` 不冒充 `I`，下一任务基线必须包含上一任务 `L`。
@@ -19,20 +19,23 @@ Ruling: 追认 B-04 在认领前由排队晋升为就绪 — A-05 已完成且�
 
 Ruling: B-04 不修改 F-04 独占的 `docs/notes/lan-server.md`，由 F-04 独立同步 — 避免并行 backlog 项跨越独占所有权 — 若该边界判断错误，由 F-04 或控制会话在其独占范围内补齐，不扩大 B-04 实现范围
 
+Ruling: candidate `734d8ae8974d8645c1ea6003b8b95c61e2ee081c` 的独立 SPEC reviewer `/root/b04_t1_spec_review` 与 QUALITY reviewer `/root/b04_t1_quality_review` 因 static block light 缺口与主规格冲突均裁决 `FAIL`；用户确认光照规则为 sky 仅由完整不透明方块阻断，static 仅向 `AirID` 或植物格传播、任何其他非空气且非植物方块均阻断；planning commits `ed158474bc8e3c654e0cb5d368bd83c1947a606e`、`df283c41ceaf2061fb601a75545a44807747f47d` 与 `410e0bc6bbf15a3e42124d28c014cdfacf6a6847` 必须先于 R1，修复后重新执行 focused verification 与独立双评审 — 保留主规格冲突会使候选实现“假绿”，撤回植物透光规则则会违背本 change 的 plant 契约与 Minecraft 手感。
+
 ## Task 1.1 Stable Block, Plant Presentation, And Passability
 
 - Status: `PENDING`.
 - Task baseline SHA: `PENDING`.
 - Implementer: `PENDING`（fresh）。
-- RED evidence: `PENDING`（命令、失败测试名、失败原因与发生在生产实现前的时序；覆盖稳定编号、无 Item/`BlockDrop`、植物谓词、原创程序化纹理、Go/Rust 真 mesher、碰撞/遮光/射线和伙伴通行）。
+- RED evidence: `PENDING`（命令、失败测试名、失败原因与发生在生产实现前的时序；覆盖稳定编号、无 Item/`BlockDrop`、植物谓词、原创程序化纹理、Go/Rust 真 mesher、碰撞/遮光/射线和伙伴通行；还必须包含真实天空光/静态方块光走廊，以生产 `assets.Registry`、真实 neighborhood 编码与 `mesh.MeshSection` native FFI 取得 Rust packed light，并与 Go light oracle 对同一输入逐格/逐面对照）。
 - Code/test commit C: `PENDING`（完整 SHA + 单行英文 subject；不得包含 `tasks.md`/`ledger.md`）。
-- Files changed: `PENDING`（本任务独占 block/assets/mesh/physics/passability 目标与 `docs/texture-packs.md` 的短草材质入口说明）。
-- Presentation/provenance evidence: `PENDING`（`ShortGrassID=84`、`BlockIDMax=85`、`LayerShortGrass=68`、`[31..54] ∪ {68}`、`55..67` 不动、registry `85<=96`、`4×8` 字节实例、alpha 仅 `0/255`、无 PNG/外部或 Mojang 资源、client ABI v13 不变）。
+- Files changed: `PENDING`（本任务独占 block/assets/mesh/physics/passability 目标、`engine/crates/mornlea_engine/src/light.rs` 与同主题 light tests、`internal/mesh` Go light oracle/真实 native FFI 光照测试、`docs/texture-packs.md` 的短草材质入口说明，以及 Rust client 三处过期注释 `engine/crates/mornlea_client/src/render/shaders.rs`、`engine/crates/mornlea_client/shaders/terrain.wgsl`、`engine/crates/mornlea_client/src/render/farmland_tests.rs`；三处只修正床 layer `60..67` 为“枚举末位”的 stale comments，不改常量、层号或 ABI）。
+- Presentation/provenance evidence: `PENDING`（`ShortGrassID=84`、`BlockIDMax=85`、`LayerShortGrass=68`、`[31..54] ∪ {68}`、`55..67` 不动、registry `85<=96`、`4×8` 字节实例、alpha 仅 `0/255`、无 PNG/外部或 Mojang 资源；光照证据要明确植物格在 sky 中无材料额外衰减、在 static block light 中可按每格 `1` 传播，同时证明玻璃、水、普通方块、未知方块与缺失邻区均阻断 static block light；`levels`、`queue` 与复用 scratch 均保持固定 `48³` 容量，packed light、registry、native mesh/light ABI 与 client ABI v13 不变）。
 - Final verified implementation SHA I: `PENDING`（`C` 加本任务全部 repair 后的完整 SHA）。
-- Focused verification bound to I: `PENDING`（`make rust`、Rust plant tests、core/assets/mesh/physics/server path-table、archcheck、race-changed 与 `git diff --check` 的命令、耗时和摘要）。
+- Focused verification bound to I: `PENDING`（`make rust`；`cd engine && cargo test -p mornlea_engine --locked plant`；`cd engine && cargo test -p mornlea_engine --locked plant_block_light`；`go test ./internal/core ./internal/assets ./internal/mesh ./internal/physics -race -count=1`（必须包含 Go light oracle 与真实 native FFI 天空光/静态方块光测试）；server path-table、archcheck、race-changed 与 `git diff --check` 的命令、耗时和摘要）。
+- Initial failed candidate review: candidate `734d8ae8974d8645c1ea6003b8b95c61e2ee081c`；SPEC `/root/b04_t1_spec_review` = `FAIL`，QUALITY `/root/b04_t1_quality_review` = `FAIL`；两份独立评审均指出 static block light 未实现/未验证，且 sky/static 口径与当时主规格冲突，因此该 SHA 不是 final `I`。
 - SPEC reviewer / verdict / findings at I: `PENDING`（fresh，独立于 implementer/QUALITY）。
 - QUALITY reviewer / verdict / findings at I: `PENDING`（fresh，独立于 implementer/SPEC）。
-- Repair rounds and commits: `PENDING`（逐轮记录 finding → repair SHA → scoped re-review；零轮也写 `0`）。
+- Repair rounds and commits: `R1 PENDING`（规划修订经独立双评审 `PASS` 后，回派原 implementer `/root/b04_t1_impl_retry`；修复 static block light、补齐真实天空光/静态方块光证据与三处 stale comments，然后产生 repair SHA、重跑 focused verification 并接受 scoped 独立双评审）。
 - Tasks/ledger-only evidence commit L: `PENDING`（只含本任务 checkbox 与 ledger 证据，不改变 `I` 的实现树）。
 - Ruling: `PENDING`.
 
@@ -170,7 +173,7 @@ Ruling: B-04 不修改 F-04 独占的 `docs/notes/lan-server.md`，由 F-04 独�
 - Review baseline/range: `PENDING`（implementation dispatch baseline...Task 8.1 final `I`；并读取各任务 `L` 中的证据，不把 `L` 当实现 SHA）。
 - Whole-change verified implementation SHA before review: `PENDING`.
 - Whole-change SPEC reviewer: `PENDING`（fresh）。
-- SPEC verdict and complete findings: `PENDING`（逐条对照 proposal、九份 delta specs、design、tasks、实现和测试）。
+- SPEC verdict and complete findings: `PENDING`（逐条对照 proposal、十一份 delta specs、design、tasks、实现和测试）。
 - Whole-change QUALITY reviewer: `PENDING`（fresh，独立于 SPEC）。
 - QUALITY verdict and complete findings: `PENDING`（所有权、ABI/版本、TDD 锋利度、原子失败、有界热路径、跨语言 parity、原创资源 provenance、benchmark record-only、25 场景归因与范围漂移）。
 - Repair ownership: `PENDING`（每项 Critical/Important finding 回派最初拥有该文件的 Task/implementer；控制会话不得代修）。
@@ -206,7 +209,7 @@ Ruling: B-04 不修改 F-04 独占的 `docs/notes/lan-server.md`，由 F-04 独�
 
 - Closure evidence state: `PENDING`（Task 9.2 evidence commit 后工作树与预期 documentation-only diff）。
 - Delta-spec synchronization baseline: `PENDING`.
-- Delta-spec synchronization: `PENDING`（控制会话按 `openspec-sync-specs` 审阅并沉淀九份 delta 到主规格；记录提交、reviewer 与裁决）。
+- Delta-spec synchronization: `PENDING`（控制会话按 `openspec-sync-specs` 审阅并沉淀十一份 delta 到主规格；记录提交、reviewer 与裁决）。
 - Post-sync strict validation: `PENDING`（named + all strict、archcheck 与 diff-check）。
 - Archive baseline: `PENDING`.
 - Archive: `PENDING`（控制会话按 `openspec-archive-change` 执行；记录归档提交、归档前后 all-strict 与 change/archive 唯一性）。
