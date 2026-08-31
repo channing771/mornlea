@@ -22,7 +22,7 @@ progressTicks、requiredTicks）作为裂纹呈现的唯一输入：进度比例
 
 - GIVEN 玩家正在采掘一个 requiredTicks 为 30 的方块
 - WHEN 权威状态先后报告 progressTicks 为 1、9、15、30
-- THEN 呈现的裂纹阶段 MUST 依次为第 0、2、4、9 阶段，且同一阶段内裂纹图案
+- THEN 呈现的裂纹阶段 MUST 依次为第 0、3、5、9 阶段，且同一阶段内裂纹图案
   MUST 保持不变（阶段之间离散切换，不做纹理渐变）
 
 #### Scenario: 非 active 或无目标时不呈现裂纹
