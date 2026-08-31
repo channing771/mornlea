@@ -7,7 +7,7 @@
 - Rust `mornlea_engine` 是数值 worldgen 和流体规则的唯一生产实现。Go `internal/worldgen` 只编码 `MGW1`、调用 `internal/nativeabi` 并解码；Go `internal/fluid` 保留流体纯规则 oracle，生产流体求值与重扫由 Rust kernel 执行。当前 `MGW1` layout 2 的公共 header 为 `564` 字节，含 `14` 项材料和偏移 `52` 的 perm 表。
 - 缺失玩家快照目前在前 `14` 个背包格填入材料后，又在第 `15` 格填入 `64` 颗小麦种子。已有玩家走逐槽恢复，不经过该构造路径。玩家采掘、世界掉落物与环境写入分别由 `entity.State`、`world.Chunk` 和 `realm.State` 持有，并在 runtime 的单写者 tick 中汇入同一个 `realm.Mutation`。
 
-本变更同时修改 `natural-grass-generation`、`authoritative-mining`、`authoritative-farming`、`common-block-materials`、`authoritative-fluid`、`tool-durability`、`rust-engine-worldgen`、`bounded-benchmark-workload` 与 `visual-verification` 的契约；`plant-visual-presentation`、`deterministic-tree-generation` 和 `persistent-item-drops` 是必须继续成立的复用门禁。
+本变更同时修改 `natural-grass-generation`、`authoritative-daylight`、`static-block-light`、`authoritative-mining`、`authoritative-farming`、`common-block-materials`、`authoritative-fluid`、`tool-durability`、`rust-engine-worldgen`、`bounded-benchmark-workload` 与 `visual-verification` 的契约；`plant-visual-presentation`、`deterministic-tree-generation` 和 `persistent-item-drops` 是必须继续成立的复用门禁。
 
 ## Goals / Non-Goals
 
@@ -51,6 +51,8 @@
 `LayerShortGrass=68` 追加在 `LayerBedHeadEast=67` 后，`layerCount` 变为 `69`。不得把它插到 `LayerCarrot7` 后：`LayerDoor=55`、`LayerWorkbenchTop..Bottom=56..58`、`LayerTorch=59`、`LayerBedFootSouth..LayerBedHeadEast=60..67` 都保持原值，Rust client 的火把/床 shader 常量无需移动。
 
 Go `mesh.PlantMaterial` 与 Rust `quad::plant_material` 同步改为闭区间 `[31,54]` 与单点 `{68}` 的并集。`DoorMaterial=55` 保持非植物。短草六个 registry face 都映射到 layer 68，`FaceVisible` 对全部 `IsPlant` 关闭轴向面，Rust 既有 plant dispatcher 因材质谓词命中而为每格发射两片双面交叉斜面，即恰好 `4` 条 quad。实例格式仍为 `8` 字节，输出上界、scratch、registry entry 格式都不变，client ABI 保持 v13。
+
+`LayerShortGrass=68` 追加后，床的 `60..67` 仍保持原值，但不再位于层枚举末尾。Task 1 的 R1 必须同步修正 Rust client 的 `src/render/shaders.rs`、`shaders/terrain.wgsl` 与 `src/render/farmland_tests.rs` 中把该床区间称为“枚举末位追加”的过期注释；这里只修正注释所述的相对位置，不移动 `TORCH_MATERIAL=59`、`BED_MATERIAL_FIRST=60`、`BED_MATERIAL_LAST=67`、WGSL 字面量或任何 atlas layer，也不改变 client ABI v13。
 
 默认纹理由新的 `shortGrassTexture()` 生成原创 `16×16` RGBA：形状是数根高度错落、底部相连的绿色叶片，至少含透明和不透明像素，alpha 只能为 `0/255`。`isCutoutLayer` 加入 layer 68，使 mip 使用既有保覆盖率降采样。`textureBindings` 末尾追加逻辑名 `short_grass`；默认/用户材质包可以用 `textures/short_grass.png` 覆盖，但仓库不加入该 PNG 或任何外部/Mojang 资源。
 
@@ -140,9 +142,14 @@ drop = hash & 7 == 0
 - 把种子直接塞背包：会旁路既有 `10` 个活动 tick 拾取延迟、多人竞争、同步和持久化。
 - 让通用 `BlockDrop` 返回种子：无法表达 `7/8` 的无掉落路径，也会错误放行伙伴采掘。
 
-### 5. 环境清除零掉落；Go oracle 与 Rust 流体 kernel 必须同步认识 wild grass
+### 5. 环境清除零掉落；天空光、方块光与流体的跨语言口径保持分离
 
-共有植物消费点按 `IsPlant` 收口：`BlockOpaque`、assets 轴向出面、physics collision、门/床/火把支撑排除和伙伴寻路通行都把短草与作物视为非完整格植物。短草因此不遮满天空光或方块光、无碰撞、可穿过、不能承托门/床/火把；伙伴生产 path table 把它列为 passable，但 planner 和执行器仍显式拒绝 mine。
+共有植物消费点按 `IsPlant` 收口：assets 轴向出面、physics collision、门/床/火把支撑排除和伙伴寻路通行都把短草与作物视为非完整格植物。伙伴生产 path table 把短草列为 passable，但 planner 和执行器仍显式拒绝 mine。`BlockOpaque` 只表达“是否完整不透明”，不能同时充当两类光照的传播判定；天空光与静态方块光必须保持两套明确、不同的规则：
+
+- 天空光的 Rust 生产 `build_sky` 继续组合 registry 的 `opaque` 与 `light_attenuation`。只有完整不透明方块阻断；已知非完整遮光方块允许传播。植物（既有全部作物与短草）的额外衰减为 `0`：非直射路径仍按每个轴向步正常减 `1`，直射 `15` 竖直向下穿过植物则保持 `15`。流体继续使用既有额外衰减，因此竖直向下穿过流体也必须变暗而不能沿用植物的无损特例。未知方块和缺失邻区一律 fail closed，既阻断又保持黑暗。
+- 静态方块光的 Rust 生产 `build_block` 不查询 `BlockOpaque`，也不复用天空光的 attenuation 表。目标格只有在 block ID 等于 `AirID`，或其 registry material 命中离散植物集合 `[31..54] ∪ {68}` 时才可入队；Go `internal/mesh` light oracle 使用完全相同的条件。既有作物与短草因此都可透过方块光，进入每个植物格仍只按普通轴向一步衰减 `1`；玻璃、水、普通方块、未知方块和缺失邻区全部阻断，即使它们现在或未来被标记为非完整遮光也不例外。
+
+两类传播继续共享既有固定 `LightScratch`：光照坐标范围保持 `[-16,32)`、边长保持 `48`、`levels` 与 `queue` 都保持精确 `48³` 容量，天空光 pass 与方块光 pass 之间只重置并复用同一队列。不得扩容、改成动态或无界队列，也不得新增每格 scratch。packed light 仍以高四位保存天空光、低四位保存方块光；mesh registry entry、native mesh 输入输出、light volume/queue/scratch ABI 均不改变，线上协议、player/chunk/metadata 存储也不新增派生光照。engine ABI 的唯一变化仍是 worldgen 所需的 v9→v10，client ABI 仍为 v13。
 
 流体是跨语言双实现面：
 
@@ -193,7 +200,7 @@ capture 不新增第 `26` 个场景，正式清单保持 `25` 项和原顺序。
 
 - `internal/core` 只持有稳定编号和纯谓词；不依赖 assets、physics、sim 或 server。
 - `internal/assets` 持有原创像素与 block→material 映射；Go mesh/Rust mesher只消费 registry snapshot。Go 仍不接触 WebGPU，Rust client 继续独占 GPU atlas 与绘制。
-- `mornlea_engine` 持有数值 worldgen 与流体 kernel；`internal/worldgen`/`internal/fluid` 分别只做请求编码或 oracle，生产调用只能经过 `internal/nativeabi`，不增加 fallback。
+- `mornlea_engine` 持有数值 worldgen、流体与光照 kernel；`internal/worldgen` 只编码请求并经 `internal/nativeabi` 调用，`internal/fluid` 与 `internal/mesh` 的 Go 实现只保留 oracle，各生产路径继续复用既有 Rust bridge，不增加 fallback。
 - `realm.State` 是世界、revision、环境 scratch 与单 tick mutation owner；`entity.State` 是玩家/伙伴/库存与采掘结算 owner；`world.Chunk` 的固定 drop slots 只经 prepare/commit 访问；`runtime` 只串行编排一次 mutation/commit。
 - `internal/server/persistence` 只决定缺失/已有快照的初值与恢复，不读取实时模拟；Memory/TCP 只承载同一 DTO，不决定草的掉落或种植结果。
 
@@ -203,7 +210,7 @@ worldgen 每次调用使用只读预编码 header 和调用私有缓冲，可继
 
 - [自然散布是概率型，出生附近可能没有短草] → 产品语义明确为“探索取得”，不是固定半径保证；固定大样本只证明有草也有空隙，不伪造出生保证。后续若要保底，应独立设计出生区植被或交易入口。
 - [新旧区块边界会出现装饰密度断层] → 只把短草视为非结构装饰；旧 terrain/tree/water 逐格不变，不扫描或回填旧区块，避免不可回退的大规模写入。
-- [Go/Rust 的 ID、material 或流体判定漂移] → 对 `84/85`、`68`、`[31,54]∪{68}`、registry `85<=96`、MGW1 offsets 和 fluid oracle/native 做跨语言真调用测试，不只比较复制常量。
+- [Go/Rust 的 ID、material、光照或流体判定漂移] → 对 `84/85`、`68`、`[31,54]∪{68}`、registry `85<=96`、两类光照正负样本、MGW1 offsets 和 fluid oracle/native 做跨语言真调用测试，不只比较复制常量。
 - [位置固定掉落让同坐标未来再生时结果重复] → 当前没有再生或放置短草，稳定结果正是容量重试所需；若以后引入再生，需新 change 裁决 generation/epoch 是否进入 hash。
 - [短草提高 quad 数和 atlas/registry 输入] → scenario v21 隔离跨 workload 报告，保持 overflow 硬失败和既有容量；性能数值记录但不以放宽阈值掩盖。
 - [支撑 sweep 顺序错误造成悬空草或级联漏检] → 固定为 wild grass→torch→bed→单次 commit，以 mutation 快照和同 tick 组合测试覆盖采掘、翻地、流体与跨区块边缘。
@@ -221,6 +228,7 @@ worldgen 每次调用使用只读预编码 header 和调用私有缓冲，可继
 ## Verification
 
 - 注册与视觉：穷举 `AirID..<BlockIDMax`，验证 `ShortGrassID=84`、`BlockIDMax=85`、无 Item/BlockDrop、`IsPlant`/`IsWildGrass`、透明/碰撞/支撑/路径语义；验证 layer 68、alpha `0/255`、cutout mip、用户 pack 覆盖、旧层号不动，以及 Go/Rust 真 mesher 每格恰好 `4×8` 字节实例。
+- 光照真实走廊：先构建 Rust engine，再以生产 `assets.Registry`、真实 neighborhood 编码和 `mesh.MeshSection` native FFI 路径取得 Rust packed light，同时让 Go light oracle 对同一输入独立求值并逐面/逐格对照，禁止用测试侧复制的 Rust 谓词冒充生产结果。天空光正样本覆盖空气、玻璃、既有作物与短草，并明确验证直射 `15` 竖直穿过植物后仍为 `15`；流体样本验证既透光又额外衰减；完整不透明、未知与缺失样本验证阻断。静态方块光正样本覆盖 `AirID`、`[31..54]` 中既有作物和 layer `68` 短草并验证每格只减 `1`，负样本覆盖玻璃、水、普通方块、未知与缺失邻区并验证全部阻断。两侧还必须断言 `48³` levels/queue、scratch 复用与无 overflow，且 native mesh ABI、packed light 位布局、wire/storage 均未变化。
 - worldgen/ABI：Rust 单测覆盖 layout 3、15 材料唯一性和 `water==air` 唯一豁免、header `566`、chunk input `574`、probe input `570+16×N`/output `8×N`、LOD input `582`，且 chunk/probe/LOD 三入口都拒绝旧 layout 和错误长度、失败输出不写；回归 chunk 固定 `196608` 字节 dense 输出、probe `8×N` 输出和 LOD `20` 字节/quad 两段式变长输出格式不变。Go 黑盒覆盖固定 `1/4` 样本、负坐标/边界、chunk/probe parity、树/水优先、Terrain/Height/LOD 忽略草和“短草归一为空气”的旧 golden 等价。
 - 权威结算：固定 hit/miss 位置覆盖 `1/8`、无 tick 输入、命中容量满全不变、未命中容量满仍清块、伙伴双侧拒绝；`tool-durability` 定点测试覆盖短草作为第三类成功破坏零耐久豁免，并回归作物+锄头、剑、其他方块和翻地的既有耐久规则；流体 Rust kernel 与 Go oracle 差分覆盖短草可替换且零掉落；支撑 sweep 覆盖采掘/翻地/流体后同 revision 清草。
 - 登录闭环：persistence 测试验证 missing player 只有 `14` 叠材料且第 `15` 格空、确认/未确认生命周期、已有玩家逐槽不变；Memory/TCP runner 均用固定 seed 的生产 `worldgen.New`/真实 Rust worldgen，玩家输入前断言 target 自然生成为短草且 drop hash 命中，再验证“零种子登录→除草 drop→前 9 tick 不拾取→第 10 tick 拾取→种植”，禁止 flat generator 或手工布草。
@@ -230,7 +238,8 @@ worldgen 每次调用使用只读预编码 header 和调用私有缓冲，可继
 ## Affected Files
 
 - 编号与公共语义：`internal/core/block.go`、`internal/core/block_name.go`、`internal/core/farming.go`/新增 plant 谓词文件、`internal/core/block_properties.go` 及穷举测试。
-- 材质与网格：`internal/assets/blocks.go`、`internal/assets/procedural.go`、pack/atlas 测试、`internal/mesh/quad.go`、plant/native parity 测试、`engine/crates/mornlea_engine/src/quad.rs` 与 `greedy/plant_tests.rs`、`docs/texture-packs.md`。
+- 材质与网格：`internal/assets/blocks.go`、`internal/assets/procedural.go`、pack/atlas 测试、`internal/mesh/quad.go`、plant/native parity 测试、`engine/crates/mornlea_engine/src/quad.rs` 与 `greedy/plant_tests.rs`、`docs/texture-packs.md`；Task 1 R1 同步修正 `engine/crates/mornlea_client/src/render/shaders.rs`、`engine/crates/mornlea_client/shaders/terrain.wgsl`、`engine/crates/mornlea_client/src/render/farmland_tests.rs` 的床 layer 末位过期注释，不改常量、层号或 client ABI。
+- 派生光照：`engine/crates/mornlea_engine/src/light.rs`、`internal/mesh/*light*` 的 Go oracle、真实 FFI corridor 与固定容量回归测试；不改变 registry/native mesh ABI、packed light、wire 或存储布局。
 - 碰撞、支撑与伙伴：`internal/physics/types.go`、`internal/sim/entity/{mining.go,yield.go,door.go,torch.go}`、`internal/sim/realm/environment.go`、`internal/sim/runtime/engine_step.go` 与 ownership guards、`internal/companion/plan_types.go`、`internal/server/companion_snapshot.go` 及对应测试。
 - 流体双内核：`internal/fluid/rules.go` 与 oracle/fuzz 测试、`engine/crates/mornlea_engine/src/fluid_eval.rs`、`fluid_rescan.rs`、`internal/sim/realm` 的 fluid differential/golden 和零掉落测试。
 - worldgen/ABI/LOD：`internal/worldgen/generator.go` 与 `testdata/golden_seed42.txt`/parity 测试、`internal/lod`、`internal/nativeabi`、`engine/crates/mornlea_engine/src/{worldgen.rs,lod.rs,ffi.rs,lib.rs}`、`engine/include/mornlea_engine.h`。
