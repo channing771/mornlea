@@ -1,0 +1,25 @@
+/*
+ * 视觉基线 harness 舞台样式：只消费 tokens.css 的令牌（无裸色值/字号/时长），
+ * 与生产面板共用同一令牌纪律。组件态 fixture 不引入 Tailwind 工具类
+ * （tailwind content 只扫描 src/**，工具类在此不会被生成，语义 class 才是
+ * 单源）。
+ */
+
+.visual-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 列宽镜像 ui.css `.settings-panel` 的宽度表达式（min(460px, …)，harness 侧
+ * 不进生产令牌）：此字面量与 fixtures.tsx `stage` 的注释互为交叉引用，两处
+ * 改动须同步。 */
+.visual-column {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--menu-button-gap);
+  width: min(460px, calc(100% - 2 * var(--panel-padding)));
+}

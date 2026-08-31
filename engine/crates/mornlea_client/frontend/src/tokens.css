@@ -70,6 +70,20 @@
   --debug-selected-mark: 3px;
   --debug-value-column: 260px;
 
+  /* ---- 像素组件几何（pixel-retroui 桥接层，`src/ui/pixel.tsx` 消费） ---- */
+  /* retroui 组件类的像素描边框宽（border-image 框几何写死在其 dist 产物内，
+   * 这里只登记同值常量供自绘几何推导，不反向覆盖上游组件几何）。 */
+  --pixel-border-width: 5px;
+  /* 琥珀焦点环：宽度与外扩间距（焦点/编辑态的几何标记，不依赖单一色相）。 */
+  --pixel-focus-ring-width: 2px;
+  --pixel-focus-ring-offset: 2px;
+  /* 音量滑块自绘重绘（规格钉死滑块形态，retroui 无滑块组件）：轨道高与
+   * 方形拇指边长取像素网格对齐值。 */
+  --pixel-slider-track-height: 8px;
+  --pixel-slider-thumb-size: 16px;
+  /* 行内编辑输入框（调试面板参数行）的水平内距。 */
+  --pixel-input-inline-pad: 2px;
+
   /* ---- 字号（退役 egui 菜单的 MENU_*_FONT_SIZE 沿用值） ---- */
   --font-title: 40px;
   --font-heading: 28px;
@@ -89,4 +103,45 @@
     --motion-fast: 0ms;
     --motion-base: 0ms;
   }
+}
+
+/*
+ * 像素组件换肤段：pixel-retroui 组件类的取色走 CSS 变量回退链
+ * （var(--button-custom-*, var(--bg-button, #亮色兜底))），本段把链上的
+ * 主题变量映射到上方既有令牌，实现整体换肤——
+ *   - 表面 → `--panel-surface`（半透明面板表面，透出世界画面）；
+ *   - 描边 → `--panel-border`（亮边；retroui 的 border-image 实际着色取
+ *     currentColor，即文字主色，链上变量作为 border-color 兜底保持一致）；
+ *   - 硬偏移阴影（retroui 自带 2px 偏移几何）→ `--panel-shadow`；
+ *   - 输入框凹槽 → `--slot-well`；
+ *   - 强调唯一走琥珀：选中（aria-pressed）/焦点/编辑态由 ui.css 在组件
+ *     作用域内把表面变量切到 `--accent-wash`；错误呈现仍专用 `--danger`，
+ *     retroui 组件不直接消费错误色。
+ * 选择器有意双写 `:root:root` 提升优先级：`ui.css` 顶部 @import 引入的
+ * pixel-retroui 产物自带 :root 亮色兜底（如 `--bg-input: #fff`），且打包
+ * 顺序位于本文件之后，单写 `:root` 会被其覆盖。取值仍全部来自上方令牌，
+ * 令牌单源纪律不变。
+ */
+:root:root {
+  /* Button 组件族（含 retroui DropdownMenuTrigger，同走 --bg-button 链）。 */
+  --bg-button: var(--panel-surface);
+  --border-button: var(--panel-border);
+  --shadow-button: var(--panel-shadow);
+  --text-button: var(--text-primary);
+
+  /* Input 组件族（覆盖 retroui :root 的亮色兜底）。 */
+  --bg-input: var(--slot-well);
+  --border-input: var(--panel-border);
+  --text-input: var(--text-primary);
+
+  /* Card 组件族（覆盖 retroui :root 的亮色兜底）。 */
+  --bg-card: var(--panel-surface);
+  --border-card: var(--panel-border);
+  --text-card: var(--text-primary);
+  --shadow-card: var(--panel-shadow);
+
+  /* DropdownMenu 组件族（菜单壳透明沿用上游语义，文字/描边/阴影换肤）。 */
+  --border-dropdown: var(--panel-border);
+  --text-dropdown: var(--text-primary);
+  --shadow-dropdown: var(--panel-shadow);
 }

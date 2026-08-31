@@ -337,8 +337,7 @@ mod tests {
     use super::{
         AutoRelease, BITMAP_INFO, CG_BITMAP_BYTE_ORDER_32_LITTLE,
         CG_IMAGE_ALPHA_PREMULTIPLIED_FIRST, CG_WINDOW_IMAGE_BEST_RESOLUTION,
-        CG_WINDOW_LIST_OPTION_INCLUDING_WINDOW, MAX_CAPTURE_DIMENSION, align_up,
-        copy_rows,
+        CG_WINDOW_LIST_OPTION_INCLUDING_WINDOW, MAX_CAPTURE_DIMENSION, align_up, copy_rows,
     };
 
     /// CoreGraphics 创建函数返回 NULL 时不得形成会执行 `CFRelease` 的守卫。

@@ -1,6 +1,9 @@
 // 设置页屏：三字段（总音量/材质包目录/窗口大小）草稿编辑经 settings-change
 // 上行回传，保存/取消/返回经 action 上行。草稿语义（脏判定、原子保存、生效
 // 时机）由 Go 裁决，前端不比较持久化值；控件文案与退役 egui 菜单一致（copy.ts 为唯一权威）。
+// 呈现面走 pixel.tsx 桥接组件：材质路径 PixelInput、窗口大小三预设保持
+// PixelButton 按钮组（aria-pressed 语义，焦点顺序与键盘语义零改动）、音量
+// 仍为原生 range 滑块按像素令牌重绘（规格钉死滑块形态且 retroui 无滑块）。
 import type { SettingsState, UplinkEvent } from "../bridge/client";
 import {
   SETTINGS_AUDIO_LABEL,
@@ -15,6 +18,7 @@ import {
   SETTINGS_WINDOW_LABEL,
   WINDOW_SIZE_PRESETS,
 } from "./copy";
+import { PixelButton, PixelInput } from "./pixel";
 
 export interface SettingsPanelProps {
   settings: SettingsState;
@@ -31,6 +35,7 @@ export function SettingsPanel({ settings, onEvent }: SettingsPanelProps) {
           <span className="settings-field-label">{SETTINGS_AUDIO_LABEL}</span>
           <input
             type="range"
+            className="settings-slider"
             min={0}
             max={100}
             step={1}
@@ -47,7 +52,7 @@ export function SettingsPanel({ settings, onEvent }: SettingsPanelProps) {
         </label>
         <label className="settings-field">
           <span className="settings-field-label">{SETTINGS_TEXTURE_LABEL}</span>
-          <input
+          <PixelInput
             type="text"
             className="settings-text-input"
             value={draft.texturePackPath}
@@ -66,7 +71,7 @@ export function SettingsPanel({ settings, onEvent }: SettingsPanelProps) {
         <fieldset className="settings-window">
           <legend>{SETTINGS_WINDOW_LABEL}</legend>
           {WINDOW_SIZE_PRESETS.map((preset) => (
-            <button
+            <PixelButton
               key={preset.value}
               type="button"
               className="settings-window-button"
@@ -80,7 +85,7 @@ export function SettingsPanel({ settings, onEvent }: SettingsPanelProps) {
               }}
             >
               {preset.label}
-            </button>
+            </PixelButton>
           ))}
         </fieldset>
         {dirty && <p className="settings-dirty">{SETTINGS_DIRTY_HINT}</p>}
@@ -91,7 +96,7 @@ export function SettingsPanel({ settings, onEvent }: SettingsPanelProps) {
           </p>
         )}
         <div className="settings-actions">
-          <button
+          <PixelButton
             type="button"
             className="menu-button"
             onClick={() => {
@@ -99,8 +104,8 @@ export function SettingsPanel({ settings, onEvent }: SettingsPanelProps) {
             }}
           >
             {SETTINGS_SAVE_LABEL}
-          </button>
-          <button
+          </PixelButton>
+          <PixelButton
             type="button"
             className="menu-button"
             onClick={() => {
@@ -108,8 +113,8 @@ export function SettingsPanel({ settings, onEvent }: SettingsPanelProps) {
             }}
           >
             {SETTINGS_CANCEL_LABEL}
-          </button>
-          <button
+          </PixelButton>
+          <PixelButton
             type="button"
             className="menu-button"
             onClick={() => {
@@ -117,7 +122,7 @@ export function SettingsPanel({ settings, onEvent }: SettingsPanelProps) {
             }}
           >
             {SETTINGS_BACK_LABEL}
-          </button>
+          </PixelButton>
         </div>
       </div>
     </section>

@@ -46,10 +46,14 @@ use objc2_web_kit::{
 
 use crate::bridge::SharedUiEventQueue;
 
-/// 内嵌菜单前端资产(vite build 产物,dist 入库)。
+/// 内嵌菜单前端资产(vite build 产物,dist 入库)。字体是唯一白名单二进制
+/// 资产(OFL-1.1,见 frontend/src/ui/fonts/),经本表与 html/js/css 一同
+/// 内嵌供给。
 static EMBEDDED_INDEX_HTML: &[u8] = include_bytes!("../frontend/dist/index.html");
 static EMBEDDED_INDEX_JS: &[u8] = include_bytes!("../frontend/dist/assets/index.js");
 static EMBEDDED_INDEX_CSS: &[u8] = include_bytes!("../frontend/dist/assets/index.css");
+static EMBEDDED_PIXEL_FONT: &[u8] =
+    include_bytes!("../frontend/dist/assets/fusion-pixel-12px-proportional-zh_hans.ttf.woff2");
 
 /// 页面入口 URL;host 仅为命名空间,path 才是资产寻址依据。
 const ENTRY_URL: &str = "mornlea://app/index.html";
@@ -63,6 +67,9 @@ fn embedded_asset(path: &str) -> Option<(&'static [u8], &'static str)> {
         "/" | "/index.html" => Some((EMBEDDED_INDEX_HTML, "text/html; charset=utf-8")),
         "/assets/index.js" => Some((EMBEDDED_INDEX_JS, "text/javascript; charset=utf-8")),
         "/assets/index.css" => Some((EMBEDDED_INDEX_CSS, "text/css; charset=utf-8")),
+        "/assets/fusion-pixel-12px-proportional-zh_hans.ttf.woff2" => {
+            Some((EMBEDDED_PIXEL_FONT, "font/woff2"))
+        }
         _ => None,
     }
 }
