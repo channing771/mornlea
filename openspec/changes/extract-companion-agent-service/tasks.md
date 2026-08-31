@@ -32,7 +32,7 @@
 
 ## Task 9: Go authoritative Planner cutover
 
-- [ ] 9.1 先在 `internal/companion`、`internal/server` 写 Agent HTTP/MCP snapshot 编排、global 4/per-companion 1、PlannerUnavailable/invalid plan、stale generation/snapshot、当前世界重验、Chest/Furnace mine 不回归、FIFO 继续、tick 不阻塞和 Task Runner 唯一动作入口 RED tests，再删除 Go direct-model Planner 路径并接入 Task 6/7 client/registry，以 `go test ./internal/companion ./internal/server -run 'Planner|CompanionTask|AgentUnavailable|Snapshot' -race -count=1 && go test ./internal/archcheck -count=1` 验证。
+- [x] 9.1 先在 `internal/companion`、`internal/server` 写 Agent HTTP/MCP snapshot 编排、global 4/per-companion 1、PlannerUnavailable/invalid plan、stale generation/snapshot、当前世界重验、Chest/Furnace mine 不回归、FIFO 继续、tick 不阻塞和 Task Runner 唯一动作入口 RED tests，再删除 Go direct-model Planner 路径并接入 Task 6/7 client/registry，以 `go test ./internal/companion ./internal/server -run 'Planner|CompanionTask|AgentUnavailable|Snapshot' -race -count=1 && go test ./internal/archcheck -count=1` 验证。
 
 ## Task 10: Go Dialogue, memory lifecycle and shutdown
 
