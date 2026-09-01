@@ -68,8 +68,11 @@ func TestCrackTextureIsDeterministic(t *testing.T) {
 
 // TestCrackTextureGrowsIncrementally 锁定裂纹随阶段**增量生长**：阶段 i 的
 // 非透明像素集合必须包含阶段 i-1 的全部像素（裂纹只延伸、不移动、不消失），
-// 每个阶段都非空，且阶段 0（中心初始裂点）的覆盖严格小于阶段 9（大面积
-// 破裂）——同时阶段 9 仍必须保留透明背景，不是整张脏面。
+// 每个阶段都非空；阶段 0（中心初始裂点）保持小簇；阶段 2（早期）的裂纹
+// 必须仍聚在中心邻域——同类体素游戏的可观察节奏是「早阶段只有中心几点
+// 短裂口、随阶段向外生长」，若生成算法退化成早期即有长裂缝贯穿半张纹理，
+// 阶段间的直觉差异就没了；阶段 9（末阶段）的破裂网必须触及纹理四边
+// （裂纹从中心长到边），且保持较大覆盖但保留透明背景。
 func TestCrackTextureGrowsIncrementally(t *testing.T) {
 	previous := map[int]bool{}
 	for stage := 0; stage < crackStageCount; stage++ {
@@ -94,12 +97,36 @@ func TestCrackTextureGrowsIncrementally(t *testing.T) {
 				t.Fatalf("阶段 0 的裂纹像素=%d，初始裂点应当只有中心附近少量几个", len(current))
 			}
 		}
+		if stage == 2 {
+			for point := range current {
+				x, y := point%texSize, point/texSize
+				if dx, dy := x-8, y-8; dx < -6 || dx > 6 || dy < -6 || dy > 6 {
+					t.Fatalf("阶段 2 的像素 (%d,%d) 距中心超过 6：早期裂纹应聚在中心邻域", x, y)
+				}
+			}
+		}
 		if stage == crackStageCount-1 {
 			if len(current) <= len(previous) {
 				t.Fatalf("阶段 9 的裂纹像素=%d 未多于阶段 8 的 %d：末阶段应当大面积破裂", len(current), len(previous))
 			}
-			if len(current) >= texSize*texSize {
-				t.Fatal("阶段 9 铺满整张纹理：裂纹必须保留透明背景")
+			if len(current) < 80 {
+				t.Fatalf("阶段 9 的裂纹像素=%d：末阶段应当是铺开的大面积破裂网", len(current))
+			}
+			if len(current) >= texSize*texSize/2 {
+				t.Fatal("阶段 9 覆盖过半：裂纹必须保留透明背景为主")
+			}
+			for _, edge := range []struct {
+				name  string
+				touch bool
+			}{
+				{"上边", anyEdge(current, func(x, y int) bool { return y == 0 })},
+				{"下边", anyEdge(current, func(x, y int) bool { return y == texSize-1 })},
+				{"左边", anyEdge(current, func(x, y int) bool { return x == 0 })},
+				{"右边", anyEdge(current, func(x, y int) bool { return x == texSize-1 })},
+			} {
+				if !edge.touch {
+					t.Fatalf("阶段 9 未触及%s：破裂网应从中心长到四边", edge.name)
+				}
 			}
 		}
 		previous = current
@@ -109,11 +136,23 @@ func TestCrackTextureGrowsIncrementally(t *testing.T) {
 	}
 }
 
+// anyEdge 报告裂纹像素集合里是否存在满足判据的边缘像素（阶段 9 四边可达
+// 断言的辅助）。
+func anyEdge(points map[int]bool, match func(x, y int) bool) bool {
+	for point := range points {
+		if match(point%texSize, point/texSize) {
+			return true
+		}
+	}
+	return false
+}
+
 // TestCrackTextureUsesBinaryAlphaAndDeepWarmColors 锁定裂纹像素的配色契约：
 // alpha 只取 0/255（terrain 系 cutout 的 `c.a` 阈值 discard 前提，mip 链由
-// downsampleCutout 保住覆盖率）；非透明像素落在 0x2a..0x4a 的暖深灰棕域
-// （R≥G≥B），且至少用满三档明暗做出像素层次——既不能跳出深色域，也不能
-// 退化成单一颜色的平面。
+// downsampleCutout 保住覆盖率）；非透明像素落在 0x10..0x38 的近黑暖棕域
+// （R≥G≥B）——裂纹要读作方块表面上的深色阴影缝，在浅色与深色材质上都可
+// 辨认，配色提亮会丢掉对比；且至少用满三档明暗做出像素层次——既不能
+// 跳出深色域，也不能退化成单一颜色的平面。
 func TestCrackTextureUsesBinaryAlphaAndDeepWarmColors(t *testing.T) {
 	shades := map[[3]byte]bool{}
 	for stage := 0; stage < crackStageCount; stage++ {
@@ -127,8 +166,8 @@ func TestCrackTextureUsesBinaryAlphaAndDeepWarmColors(t *testing.T) {
 				}
 			case 255:
 				for _, channel := range [3]byte{px[i], px[i+1], px[i+2]} {
-					if channel < 0x2a || channel > 0x4a {
-						t.Fatalf("阶段 %d 像素 %d 的颜色 (%d,%d,%d) 跳出 0x2a..0x4a 深色域",
+					if channel < 0x10 || channel > 0x38 {
+						t.Fatalf("阶段 %d 像素 %d 的颜色 (%d,%d,%d) 跳出 0x10..0x38 近黑深色域",
 							stage, i/4, px[i], px[i+1], px[i+2])
 					}
 				}
