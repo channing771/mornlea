@@ -31,7 +31,8 @@ export type PixelButtonProps = ButtonHTMLAttributes<HTMLButtonElement>;
 
 // PixelButton：retroui Button 的像素化按钮。注意 retroui 的像素描边走
 // border-image，border-color 悬停/焦点改色不可见——焦点几何标记由 ui.css
-// 的琥珀外描环（outline）承担，选中面（aria-pressed）经表面变量切换琥珀。
+// 的 sage 外描环（outline）承担，选中面（aria-pressed）经表面变量切换
+// --accent-wash（sage 水洗）。
 export function PixelButton({ className, ...props }: PixelButtonProps) {
   return <RetrouiButton className={joinClass("pixel-button", className)} {...props} />;
 }

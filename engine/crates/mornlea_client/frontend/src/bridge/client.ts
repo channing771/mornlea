@@ -85,12 +85,90 @@ export interface DebugState {
   readonly rows: readonly DebugRow[];
 }
 
+/** framebuffer 像素尺寸：单一比例缩放变量 `--hud-scale` 的唯一窗口输入。 */
+export interface HudViewport {
+  readonly width: number;
+  readonly height: number;
+}
+
+/** 快捷栏单格。空格以 item=0、count=0 表达；durability 只对部分磨损工具携带。 */
+export interface HudSlot {
+  readonly item: number;
+  readonly count: number;
+  readonly durability?: number;
+}
+
+/** 快捷栏镜像：恰九格，格序即栏位序。 */
+export interface HudHotbar {
+  readonly slots: readonly HudSlot[];
+  readonly selectedIndex: number;
+}
+
+export interface HudHealth {
+  readonly value: number;
+}
+
+export interface HudHunger {
+  readonly value: number;
+  readonly saturationZero: boolean;
+}
+
+export interface HudOxygen {
+  readonly value: number;
+}
+
+/** 采掘进度：恒携带，active 表达本 tick 是否在采掘；harvestable 是形状差异的
+ * 唯一来源，active=false 时 progress/harvestable 无呈现意义。 */
+export interface HudMining {
+  readonly active: boolean;
+  readonly progress: number;
+  readonly harvestable: boolean;
+}
+
+/** 进食进度：恒携带，active 表达本 tick 是否在进食；progress 是已钳制的填充比例。 */
+export interface HudEating {
+  readonly active: boolean;
+  readonly progress: number;
+}
+
+/** 物品名弹条：presence 即可见性，40 tick 窗口计时留在 Go 侧。 */
+export interface HudPopup {
+  readonly text: string;
+}
+
+/** 最近聊天行缓冲：行序即呈现序，空串是合法行且占用一个行槽。 */
+export interface HudChat {
+  readonly lines: readonly string[];
+}
+
+/**
+ * 游戏相位常显 HUD 分节。viewport 与两条进度条（mining/eating）恒携带，进度条
+ * 以 active 表达是否呈现；可选分节缺席即「权威镜像尚未确认」或「呈现态不在
+ * 结果窗口内」，组件据此隐藏。全部字段都是语义值（数值/比例/标志），不携带
+ * 任何坐标矩形——布局由 CSS 组件按 design 基准与 viewport 推导。
+ */
+export interface HudState {
+  readonly viewport: HudViewport;
+  readonly hotbar?: HudHotbar;
+  readonly health?: HudHealth;
+  readonly hunger?: HudHunger;
+  readonly oxygen?: HudOxygen;
+  readonly mining: HudMining;
+  readonly eating: HudEating;
+  readonly popup?: HudPopup;
+  readonly chat?: HudChat;
+  readonly marker?: boolean;
+  readonly crosshair?: boolean;
+  readonly containerOpen?: boolean;
+}
+
 export interface UIState {
   readonly phase: Phase;
   readonly menu?: MenuState;
   readonly settings?: SettingsState;
   readonly pause?: PauseState;
   readonly debug?: DebugState;
+  readonly hud?: HudState;
 }
 
 export interface ActionEvent {
@@ -176,8 +254,26 @@ const MAX_DEBUG_SIDE = 24;
 const MAX_MODE = 64;
 /** editValue 播种文本上界，与 schema `debugRow.editValue` maxLength 同值。 */
 const MAX_DEBUG_SEED = 64;
+// 以下为游戏相位 hud 分节的钉值：与 Go 侧镜像域（core.ItemID/MaxStackCount/
+// MaxHealth/MaxHunger/MaxOxygenTicks、HotbarSlots、maxChatLines/maxChatRunes、
+// maxPopupRunes）及 schema 的 integer/maxLength 上界逐值同源。
+const HOTBAR_SLOTS = 9;
+const SELECTED_INDEX_MAX = HOTBAR_SLOTS - 1;
+const MAX_ITEM_ID = 65535;
+const MAX_STACK_COUNT = 64;
+const MAX_HEALTH = 20;
+const MAX_HUNGER = 20;
+const MAX_OXYGEN_TICKS = 300;
+const MAX_CHAT_LINES = 6;
+const MAX_CHAT_RUNES = 32;
+const MAX_POPUP_RUNES = 32;
+/** framebuffer 单边像素上界，与 Go 侧 uint32 域同界。 */
+const MAX_VIEWPORT_SIDE = 4294967295;
 
 type RecordLike = Record<string, unknown>;
+
+/** 解析期中间形态：下行分节的字段按需出现，逐键校验后收口为只读契约。 */
+type Writable<T> = { -readonly [K in keyof T]: T[K] };
 
 function asRecord(value: unknown, context: string): RecordLike {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -197,16 +293,20 @@ function requireKeys(record: RecordLike, allowed: readonly string[], context: st
   }
 }
 
-function requireString(record: RecordLike, key: string, max: number, context: string): string {
-  const value = record[key];
+/** 值形态的有界字符串读取：record 字段与数组元素（聊天行）共用同一码点上界。 */
+function requireBoundedString(value: unknown, max: number, context: string): string {
   if (typeof value !== "string") {
-    throw new BridgeProtocolError(`桥协议 ${context}.${key} 必须是字符串`);
+    throw new BridgeProtocolError(`桥协议 ${context} 必须是字符串`);
   }
   // 长度上界按码点计，与 schema maxLength 同口径；字节精确约束由 Go 组装侧维持。
   if (value.length > max) {
-    throw new BridgeProtocolError(`桥协议 ${context}.${key} 超过 ${max} 码点上界`);
+    throw new BridgeProtocolError(`桥协议 ${context} 超过 ${max} 码点上界`);
   }
   return value;
+}
+
+function requireString(record: RecordLike, key: string, max: number, context: string): string {
+  return requireBoundedString(record[key], max, `${context}.${key}`);
 }
 
 function requireBoolean(record: RecordLike, key: string, context: string): boolean {
@@ -242,6 +342,34 @@ function requireVolume(record: RecordLike, key: string, context: string): number
   const value = record[key];
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) {
     throw new BridgeProtocolError(`桥协议 ${context}.${key} 必须是 [0,1] 内的有限数值`);
+  }
+  return value;
+}
+
+/** 整数值读取：hud 分节的物品编号、数量、生存数值与视口尺寸都按整数钉值，
+ * 非整数（12.5）与越界一样拒绝。 */
+function requireInteger(
+  record: RecordLike,
+  key: string,
+  min: number,
+  max: number,
+  context: string,
+): number {
+  const value = record[key];
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw new BridgeProtocolError(`桥协议 ${context}.${key} 必须是整数`);
+  }
+  if (value < min || value > max) {
+    throw new BridgeProtocolError(`桥协议 ${context}.${key} 超出 ${min}..${max} 区间`);
+  }
+  return value;
+}
+
+/** 0..1 比例读取：进度与耐久比例共用；NaN/Infinity 一并拒绝。 */
+function requireRatio(record: RecordLike, key: string, context: string): number {
+  const value = record[key];
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) {
+    throw new BridgeProtocolError(`桥协议 ${context}.${key} 必须是 [0,1] 内的有限比例`);
   }
   return value;
 }
@@ -352,10 +480,143 @@ function parsePause(record: RecordLike): PauseState {
   return { remote: requireBoolean(record, "remote", "pause") };
 }
 
-/** 校验并收口一行下行状态：违约即抛 `BridgeProtocolError`，不产出部分可信对象。 */
+function parseHudViewport(raw: unknown, context: string): HudViewport {
+  const record = asRecord(raw, context);
+  requireKeys(record, ["width", "height"], context);
+  return {
+    width: requireInteger(record, "width", 0, MAX_VIEWPORT_SIDE, context),
+    height: requireInteger(record, "height", 0, MAX_VIEWPORT_SIDE, context),
+  };
+}
+
+function parseHudSlot(raw: unknown, context: string): HudSlot {
+  const record = asRecord(raw, context);
+  // durability 是可选键：部分磨损工具才携带；未知键仍按 additionalProperties 拒绝。
+  requireKeys(record, ["item", "count"], context, ["durability"]);
+  const slot: Writable<HudSlot> = {
+    item: requireInteger(record, "item", 0, MAX_ITEM_ID, context),
+    count: requireInteger(record, "count", 0, MAX_STACK_COUNT, context),
+  };
+  if ("durability" in record) {
+    slot.durability = requireRatio(record, "durability", context);
+  }
+  return slot;
+}
+
+function parseHudHotbar(raw: unknown, context: string): HudHotbar {
+  const record = asRecord(raw, context);
+  requireKeys(record, ["slots", "selectedIndex"], context);
+  const slots = requireArray(record, "slots", context);
+  if (slots.length !== HOTBAR_SLOTS) {
+    throw new BridgeProtocolError(`桥协议 ${context}.slots 必须恰为 ${HOTBAR_SLOTS} 格`);
+  }
+  return {
+    slots: slots.map((slot, index) => parseHudSlot(slot, `${context}.slots[${index}]`)),
+    selectedIndex: requireInteger(record, "selectedIndex", 0, SELECTED_INDEX_MAX, context),
+  };
+}
+
+/** 采掘进度：progress/harvestable 恒携带，active 只表达是否呈现。 */
+function parseHudMining(raw: unknown, context: string): HudMining {
+  const record = asRecord(raw, context);
+  requireKeys(record, ["active", "progress", "harvestable"], context);
+  return {
+    active: requireBoolean(record, "active", context),
+    progress: requireRatio(record, "progress", context),
+    harvestable: requireBoolean(record, "harvestable", context),
+  };
+}
+
+/** 进食进度：progress 恒携带，active 只表达是否呈现。 */
+function parseHudEating(raw: unknown, context: string): HudEating {
+  const record = asRecord(raw, context);
+  requireKeys(record, ["active", "progress"], context);
+  return {
+    active: requireBoolean(record, "active", context),
+    progress: requireRatio(record, "progress", context),
+  };
+}
+
+/** hud 分节守卫：viewport 与两条进度条（mining/eating）恒携带，其余分节按
+ * presence 表达「镜像未确认」或「不在呈现窗口内」，缺席字段收口为 undefined
+ * 供组件隐藏。 */
+function parseHud(record: RecordLike): HudState {
+  requireKeys(
+    record,
+    ["viewport", "mining", "eating"],
+    "hud",
+    [
+      "hotbar",
+      "health",
+      "hunger",
+      "oxygen",
+      "popup",
+      "chat",
+      "marker",
+      "crosshair",
+      "containerOpen",
+    ],
+  );
+  const hud: Writable<HudState> = {
+    viewport: parseHudViewport(record.viewport, "hud.viewport"),
+    mining: parseHudMining(record.mining, "hud.mining"),
+    eating: parseHudEating(record.eating, "hud.eating"),
+  };
+  if ("hotbar" in record) {
+    hud.hotbar = parseHudHotbar(asRecord(record.hotbar, "hud.hotbar"), "hud.hotbar");
+  }
+  if ("health" in record) {
+    const health = asRecord(record.health, "hud.health");
+    requireKeys(health, ["value"], "hud.health");
+    hud.health = { value: requireInteger(health, "value", 0, MAX_HEALTH, "hud.health") };
+  }
+  if ("hunger" in record) {
+    const hunger = asRecord(record.hunger, "hud.hunger");
+    requireKeys(hunger, ["value", "saturationZero"], "hud.hunger");
+    hud.hunger = {
+      value: requireInteger(hunger, "value", 0, MAX_HUNGER, "hud.hunger"),
+      saturationZero: requireBoolean(hunger, "saturationZero", "hud.hunger"),
+    };
+  }
+  if ("oxygen" in record) {
+    const oxygen = asRecord(record.oxygen, "hud.oxygen");
+    requireKeys(oxygen, ["value"], "hud.oxygen");
+    hud.oxygen = { value: requireInteger(oxygen, "value", 0, MAX_OXYGEN_TICKS, "hud.oxygen") };
+  }
+  if ("popup" in record) {
+    const popup = asRecord(record.popup, "hud.popup");
+    requireKeys(popup, ["text"], "hud.popup");
+    hud.popup = { text: requireString(popup, "text", MAX_POPUP_RUNES, "hud.popup") };
+  }
+  if ("chat" in record) {
+    const chat = asRecord(record.chat, "hud.chat");
+    requireKeys(chat, ["lines"], "hud.chat");
+    const lines = requireArray(chat, "lines", "hud.chat");
+    if (lines.length > MAX_CHAT_LINES) {
+      throw new BridgeProtocolError(`桥协议 hud.chat.lines 超过 ${MAX_CHAT_LINES} 行上界`);
+    }
+    hud.chat = {
+      lines: lines.map((line, index) =>
+        requireBoundedString(line, MAX_CHAT_RUNES, `hud.chat.lines[${index}]`),
+      ),
+    };
+  }
+  if ("marker" in record) {
+    hud.marker = requireBoolean(record, "marker", "hud");
+  }
+  if ("crosshair" in record) {
+    hud.crosshair = requireBoolean(record, "crosshair", "hud");
+  }
+  if ("containerOpen" in record) {
+    hud.containerOpen = requireBoolean(record, "containerOpen", "hud");
+  }
+  return hud;
+}
+
+/** parseState 收口一行下行状态：违约即抛 `BridgeProtocolError`，不产出部分可信对象。 */
 export function parseState(raw: unknown): UIState {
   const state = asRecord(raw, "uiState");
-  requireKeys(state, ["phase", "menu", "settings", "pause", "debug"], "uiState");
+  requireKeys(state, ["phase", "menu", "settings", "pause", "debug", "hud"], "uiState");
   return {
     phase: requireEnum(state, "phase", PHASES, "uiState"),
     menu: state.menu === undefined ? undefined : parseMenu(asRecord(state.menu, "menu")),
@@ -363,6 +624,7 @@ export function parseState(raw: unknown): UIState {
       state.settings === undefined ? undefined : parseSettings(asRecord(state.settings, "settings")),
     pause: state.pause === undefined ? undefined : parsePause(asRecord(state.pause, "pause")),
     debug: state.debug === undefined ? undefined : parseDebug(asRecord(state.debug, "debug")),
+    hud: state.hud === undefined ? undefined : parseHud(asRecord(state.hud, "hud")),
   };
 }
 

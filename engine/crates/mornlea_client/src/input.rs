@@ -69,6 +69,56 @@ pub fn key_bit(code: KeyCode) -> Option<u32> {
     })
 }
 
+/// spike 自驱动档的输入计数探针(由 [`crate::spike_auto`] 读取)。
+///
+/// 字段全部是普通计数与末值:`InputState` 只在创建窗口的 OS 主线程被访问,
+/// 不需要原子量;`recording` 为 false(生产与手工 spike 档)时所有计数点
+/// 直接跳过,生产路径零写入。掩码位序与 [`key_bit`] 一致,因此 spike 侧的
+/// 断言掩码就是 Go `client.Key` 的真实键位。
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub(crate) struct InputTaps {
+    /// 是否记录;由窗口创建时的 spike 档位决定。
+    pub recording: bool,
+    /// 观察到按下事件的键位掩码。
+    pub key_down_mask: u64,
+    /// 观察到抬起事件的键位掩码。
+    pub key_up_mask: u64,
+    /// 键盘事件总数(按下 + 抬起)。
+    pub key_down_events: u64,
+    pub key_up_events: u64,
+    /// 文本字符入队总数(`push_text`,含 IME 提交)。
+    pub chars: u64,
+    /// 鼠标主/副键按下与抬起次数。
+    pub primary_press: u64,
+    pub primary_release: u64,
+    pub secondary_press: u64,
+    pub secondary_release: u64,
+    /// 合成位移事件数与累计量(验证 DeviceEvent 分发路径)。
+    pub mouse_delta_events: u64,
+    pub mouse_delta_x: f64,
+    pub mouse_delta_y: f64,
+}
+
+impl InputTaps {
+    /// 以 `self` 为基准的增量;浮点字段做普通减法(累计量单调递增)。
+    pub(crate) fn delta_since(&self, base: Self) -> Self {
+        let mut delta = *self;
+        delta.key_down_mask &= base.key_down_mask ^ u64::MAX;
+        delta.key_up_mask &= base.key_up_mask ^ u64::MAX;
+        delta.key_down_events -= base.key_down_events;
+        delta.key_up_events -= base.key_up_events;
+        delta.chars -= base.chars;
+        delta.primary_press -= base.primary_press;
+        delta.primary_release -= base.primary_release;
+        delta.secondary_press -= base.secondary_press;
+        delta.secondary_release -= base.secondary_release;
+        delta.mouse_delta_events -= base.mouse_delta_events;
+        delta.mouse_delta_x -= base.mouse_delta_x;
+        delta.mouse_delta_y -= base.mouse_delta_y;
+        delta
+    }
+}
+
 /// 输入状态机:事件在此累积,`encode_snapshot` 输出并排空文本队列。
 ///
 /// 光标语义:未捕获时报告窗口绝对逻辑坐标;捕获期间改由 MouseMotion delta
@@ -92,6 +142,8 @@ pub struct InputState {
     text: [u32; TEXT_CAPACITY],
     text_len: usize,
     text_overflow: bool,
+    /// spike 自驱动档的计数探针;生产路径不记录。
+    pub(crate) taps: InputTaps,
 }
 
 impl Default for InputState {
@@ -103,6 +155,11 @@ impl Default for InputState {
 impl InputState {
     /// 新建空状态;尺寸由窗口创建/Resized 事件填充。
     pub fn new() -> Self {
+        Self::with_taps(InputTaps::default())
+    }
+
+    /// 新建空状态并指定是否记录 spike 计数;由窗口创建按 spike 档位调用。
+    pub(crate) fn with_taps(taps: InputTaps) -> Self {
         Self {
             keys: 0,
             mouse: 0,
@@ -119,6 +176,7 @@ impl InputState {
             text: [0; TEXT_CAPACITY],
             text_len: 0,
             text_overflow: false,
+            taps,
         }
     }
 
@@ -127,8 +185,16 @@ impl InputState {
         if let Some(bit) = key_bit(code) {
             if pressed {
                 self.keys |= 1 << bit;
+                if self.taps.recording {
+                    self.taps.key_down_mask |= 1 << bit;
+                    self.taps.key_down_events += 1;
+                }
             } else {
                 self.keys &= !(1 << bit);
+                if self.taps.recording {
+                    self.taps.key_up_mask |= 1 << bit;
+                    self.taps.key_up_events += 1;
+                }
             }
         }
     }
@@ -140,6 +206,14 @@ impl InputState {
             self.mouse |= 1 << bit;
         } else {
             self.mouse &= !(1 << bit);
+        }
+        if self.taps.recording {
+            match (primary, pressed) {
+                (true, true) => self.taps.primary_press += 1,
+                (true, false) => self.taps.primary_release += 1,
+                (false, true) => self.taps.secondary_press += 1,
+                (false, false) => self.taps.secondary_release += 1,
+            }
         }
     }
 
@@ -156,6 +230,11 @@ impl InputState {
         if self.captured {
             self.virtual_x += dx;
             self.virtual_y += dy;
+        }
+        if self.taps.recording {
+            self.taps.mouse_delta_events += 1;
+            self.taps.mouse_delta_x += dx;
+            self.taps.mouse_delta_y += dy;
         }
     }
 
@@ -188,6 +267,11 @@ impl InputState {
         self.content_height = content_h;
     }
 
+    /// 当前 content 尺寸(逻辑点);spike 自驱动档标注测量口径用。
+    pub(crate) fn content_size(&self) -> (u32, u32) {
+        (self.content_width, self.content_height)
+    }
+
     /// 记录关闭请求(CloseRequested)。
     pub fn request_close(&mut self) {
         self.should_close = true;
@@ -206,6 +290,9 @@ impl InputState {
         }
         self.text[self.text_len] = ch as u32;
         self.text_len += 1;
+        if self.taps.recording {
+            self.taps.chars += 1;
+        }
     }
 
     /// 把当前状态编码进 `out`(必须恰好 [`SNAPSHOT_BYTES`] 字节),

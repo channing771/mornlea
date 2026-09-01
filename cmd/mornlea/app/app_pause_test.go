@@ -9,12 +9,14 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync/atomic"
 	"testing"
 
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/config"
+	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/server"
 	"github.com/channing771/mornlea/internal/storage"
 )
@@ -269,7 +271,69 @@ func TestStartWorldRejectsRemoteConnectForm(t *testing.T) {
 	}
 }
 
-// TestPauseSectionAbsentOutsidePausedPhase 锁定下行契约的另一半:非暂停相位
+// TestPausePhasePushesFullDocumentWithPauseSection 锁定暂停相位的下行路径：
+// 暂停相位不进 hud 分节纪律层的早退形态，必须走整份文档路径下行恰好一份携带
+// pause 分节的 `uiState`（hud 分节经回填继续呈现，不会被清成缺席）；同态重复
+// 驱动零推送，回到游戏相位后再推一份不含 pause 分节的文档。缺这条回归时暂停
+// 菜单会因早退条件过宽而永不下行。
+func TestPausePhasePushesFullDocumentWithPauseSection(t *testing.T) {
+	app, window := newHUDPushTestApplication(t)
+	app.SetMenuPhase(MenuPhaseGame)
+	if err := app.inventory.Apply(network.InventoryState{Inventory: confirmedHotbarState()}); err != nil {
+		t.Fatal(err)
+	}
+	app.hudPush.Mark()
+	app.flushHUDState()
+	app.pushUIStateIfChanged()
+	if got := len(window.pushedUIStates); got != 1 {
+		t.Fatalf("游戏相位首次驱动下行 %d 次，想要 1 份 hud 文档", got)
+	}
+
+	// 暂停相位：恰好一份整份文档，携带 pause 分节且回填 hud 分节。
+	app.SetMenuPhase(menuPhasePaused)
+	app.pushUIStateIfChanged()
+	if got := len(window.pushedUIStates); got != 2 {
+		t.Fatalf("暂停相位下行 %d 次，想要 1 份整份文档", got-1)
+	}
+	var paused struct {
+		Phase string           `json:"phase"`
+		Pause *json.RawMessage `json:"pause"`
+		Hud   json.RawMessage  `json:"hud"`
+	}
+	if err := json.Unmarshal(window.pushedUIStates[1], &paused); err != nil {
+		t.Fatalf("暂停载荷不是合法 JSON: %v", err)
+	}
+	if paused.Phase != "paused" || paused.Pause == nil {
+		t.Fatalf("暂停相位文档=%s，想要 phase=paused 且携带 pause 分节", window.pushedUIStates[1])
+	}
+	if len(paused.Hud) == 0 {
+		t.Fatalf("暂停相位文档丢失回填的 hud 分节: %s", window.pushedUIStates[1])
+	}
+
+	// 同态重复驱动零推送。
+	app.pushUIStateIfChanged()
+	if got := len(window.pushedUIStates); got != 2 {
+		t.Fatalf("暂停同态重复驱动下行 %d 次，想要 0", got-2)
+	}
+
+	// 回到游戏相位：再推一份不含 pause 分节的文档。
+	app.SetMenuPhase(MenuPhaseGame)
+	app.pushUIStateIfChanged()
+	if got := len(window.pushedUIStates); got != 3 {
+		t.Fatalf("恢复游戏相位下行 %d 次，想要 1 份文档", got-2)
+	}
+	var resumed struct {
+		Phase string           `json:"phase"`
+		Pause *json.RawMessage `json:"pause"`
+	}
+	if err := json.Unmarshal(window.pushedUIStates[2], &resumed); err != nil {
+		t.Fatalf("恢复载荷不是合法 JSON: %v", err)
+	}
+	if resumed.Phase != "game" || resumed.Pause != nil {
+		t.Fatalf("恢复后文档=%s，想要 phase=game 且无 pause 分节", window.pushedUIStates[2])
+	}
+}
+
 // 绝不携带 pause 分节。
 func TestPauseSectionAbsentOutsidePausedPhase(t *testing.T) {
 	// 设置相位的组装要求合法窗口预设，夹具按构造期默认值填齐。

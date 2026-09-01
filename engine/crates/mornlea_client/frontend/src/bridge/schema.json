@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "mornlea://bridge/schema.json",
   "title": "Mornlea 菜单层桥协议（单源 schema）",
-  "description": "客户端菜单层的桥协议单源定义。下行 uiState 由 Go 组装、经 Rust evaluateJavaScript 调用 window.mornlea.onState 注入，仅在状态变化时推送；上行 uplinkEnvelope 由前端经 window.webkit.messageHandlers.mornlea.postMessage 发出，由 Rust 排空后交给 Go 依序消费。Go/Rust/TS 三端测试共同引用本文件钉值；未知相位、未知动作、未知事件类型一律拒绝。字符串长度上界为码点数，与 Go 组装侧的字节上界（如调试行两侧各 24 字节）取宽松侧：字节精确约束由 Go 组装时维持。",
+  "description": "菜单层与游戏相位 HUD 的桥协议单源定义。下行 uiState 由 Go 组装、经 Rust evaluateJavaScript 调用 window.mornlea.onState 注入，仅在状态变化时推送；上行 uplinkEnvelope 由前端经 window.webkit.messageHandlers.mornlea.postMessage 发出，由 Rust 排空后交给 Go 依序消费。Go/Rust/TS 三端测试共同引用本文件钉值；未知相位、未知动作、未知事件类型、未知状态分节一律拒绝。字符串长度上界为码点数，与 Go 组装侧的字节上界（如调试行两侧各 24 字节）取宽松侧：字节精确约束由 Go 组装时维持。",
   "oneOf": [
     { "$ref": "#/$defs/uiState" },
     { "$ref": "#/$defs/uplinkEnvelope" }
@@ -10,7 +10,7 @@
   "$defs": {
     "uiState": {
       "type": "object",
-      "description": "下行状态快照。相位决定的分节按需出现：menu 出现在 menu/starting 相位，settings 出现在 settings 相位，pause 出现在 paused 相位，debug 可见于任意相位（F3 调试面板可叠加在游戏之上）。",
+      "description": "下行状态快照。相位决定的分节按需出现：menu 出现在 menu/starting 相位，settings 出现在 settings 相位，pause 出现在 paused 相位，hud 出现在有已装配世界的相位（game/paused），debug 可见于任意相位（F3 调试面板可叠加在游戏之上）。",
       "additionalProperties": false,
       "required": ["phase"],
       "properties": {
@@ -18,7 +18,8 @@
         "menu": { "$ref": "#/$defs/menuState" },
         "settings": { "$ref": "#/$defs/settingsState" },
         "pause": { "$ref": "#/$defs/pauseState" },
-        "debug": { "$ref": "#/$defs/debugState" }
+        "debug": { "$ref": "#/$defs/debugState" },
+        "hud": { "$ref": "#/$defs/hudState" }
       }
     },
     "phase": {
@@ -153,6 +154,142 @@
           }
         }
       ]
+    },
+    "hudState": {
+      "type": "object",
+      "description": "游戏相位常显 HUD 分节：全部字段都是语义值（数值/比例/标志），不下发任何坐标矩形——布局由 CSS 组件按 design 基准与 viewport 推导。仅在有已装配世界的相位出现（game/paused），菜单相位缺席。三类字段的呈现规则：权威镜像（hotbar/health/hunger/oxygen）可选，缺席即该镜像尚未确认，组件据此隐藏、不另设布尔确认位；进度条（mining/eating）恒携带，以 active 表达是否呈现；窗口结果（popup/chat/marker/crosshair/containerOpen）可选，缺席即不在呈现窗口内。viewport 必填，零尺寸或非法尺寸视口由前端安全降级为不呈现。",
+      "additionalProperties": false,
+      "required": ["viewport", "mining", "eating"],
+      "properties": {
+        "viewport": { "$ref": "#/$defs/hudViewport" },
+        "hotbar": { "$ref": "#/$defs/hudHotbar" },
+        "health": { "$ref": "#/$defs/hudHealth" },
+        "hunger": { "$ref": "#/$defs/hudHunger" },
+        "oxygen": { "$ref": "#/$defs/hudOxygen" },
+        "mining": { "$ref": "#/$defs/hudMining" },
+        "eating": { "$ref": "#/$defs/hudEating" },
+        "popup": { "$ref": "#/$defs/hudPopup" },
+        "chat": { "$ref": "#/$defs/hudChat" },
+        "marker": {
+          "type": "boolean",
+          "description": "权威命中标记显隐。呈现帧计数、失败不消耗与生命周期 reset 的窗口计时留在 Go 侧，这里只下行结果布尔；缺席或 false 都不呈现。"
+        },
+        "crosshair": {
+          "type": "boolean",
+          "description": "准星显隐。仅游戏相位呈现；锚定视口几何中心，位置由前端从 viewport 推导，不下发坐标。缺席或 false 不呈现。"
+        },
+        "containerOpen": {
+          "type": "boolean",
+          "description": "容器面板布局态。true 时状态行栈从快捷栏上方翻转到下方、物品名弹条被抑制——面板本体与命中仍由 GPU 保留面呈现，前端只消费这一位做行栈避让。缺席或 false 即关闭态。"
+        }
+      }
+    },
+    "hudViewport": {
+      "type": "object",
+      "description": "framebuffer 像素尺寸：前端单一比例缩放变量 --hud-scale 的唯一窗口输入。上界与 Go 侧 framebuffer 尺寸的 uint32 域同界。",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "height": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+      }
+    },
+    "hudHotbar": {
+      "type": "object",
+      "description": "快捷栏镜像：恰九格且格序即栏位序，selectedIndex 是选中格下标。物品编号与 Go core.ItemID 同值（协议稳定、0 为空格），数量上界与 core.MaxStackCount 同值。",
+      "additionalProperties": false,
+      "required": ["slots", "selectedIndex"],
+      "properties": {
+        "slots": {
+          "type": "array",
+          "minItems": 9,
+          "maxItems": 9,
+          "items": { "$ref": "#/$defs/hudSlot" }
+        },
+        "selectedIndex": { "type": "integer", "minimum": 0, "maximum": 8 }
+      }
+    },
+    "hudSlot": {
+      "type": "object",
+      "description": "快捷栏单格。空格以 item=0、count=0 表达；数量只对多于一件的堆叠呈现，前端不得对 count<=1 绘制数字。durability 是剩余耐久比例：只在存在耐久上限且部分磨损的工具上携带，schema 上界按闭区间 [0,1] 表达、开区间 (0,1) 约束由 Go 组装侧维持（满耐久与无耐久概念一律缺席）。",
+      "additionalProperties": false,
+      "required": ["item", "count"],
+      "properties": {
+        "item": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "count": { "type": "integer", "minimum": 0, "maximum": 64 },
+        "durability": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "hudHealth": {
+      "type": "object",
+      "description": "已确认权威生命值，上界与 core.MaxHealth 同值（满血 20）。前端按钳制值解析空心/半心/满心：每格两点、恰十格，生命起点对齐快捷栏左缘。",
+      "additionalProperties": false,
+      "required": ["value"],
+      "properties": {
+        "value": { "type": "integer", "minimum": 0, "maximum": 20 }
+      }
+    },
+    "hudHunger": {
+      "type": "object",
+      "description": "已确认权威饥饿值，上界与 core.MaxHunger 同值。饥饿条常驻：满值仍呈现（与氧气的「耗损才出现」相反）。saturationZero 置位时前端追加 1 design px 的垂直抖动偏移，属呈现分支、不改数值。",
+      "additionalProperties": false,
+      "required": ["value", "saturationZero"],
+      "properties": {
+        "value": { "type": "integer", "minimum": 0, "maximum": 20 },
+        "saturationZero": { "type": "boolean" }
+      }
+    },
+    "hudOxygen": {
+      "type": "object",
+      "description": "已确认且耗损的权威氧气，上界与 core.MaxOxygenTicks 同值。满氧与未确认值都不携带本分节——氧气是异常态，只在耗损时占用界面；前端因此无需知晓权威上限，按十格等分解析已耗损气泡数并沿饥饿条外缘堆叠。",
+      "additionalProperties": false,
+      "required": ["value"],
+      "properties": {
+        "value": { "type": "integer", "minimum": 0, "maximum": 300 }
+      }
+    },
+    "hudMining": {
+      "type": "object",
+      "description": "采掘进度：恒携带，active 表达本 tick 是否在采掘。Go 侧由权威 progress/required ticks 二元组换算出 progress 比例（已钳制到 0..1），前端零推算；active=false 时 progress 与 harvestable 无呈现意义，组件不得据此绘制。harvestable 是形状语义的唯一来源：可采用末端标记、不可采用固定缺口，颜色差异之外 MUST 保留形状差异。采掘激活时进食条让位，互斥裁决留在 Go 侧。",
+      "additionalProperties": false,
+      "required": ["active", "progress", "harvestable"],
+      "properties": {
+        "active": { "type": "boolean" },
+        "progress": { "type": "number", "minimum": 0, "maximum": 1 },
+        "harvestable": { "type": "boolean" }
+      }
+    },
+    "hudEating": {
+      "type": "object",
+      "description": "进食进度：恒携带，active 表达本 tick 是否在进食。progress 是已钳制到 0..1 的填充比例（权威侧没有进食进度 wire 字段，值来自客户端按帧间时长以权威 tick 周期累积的呈现预测）；active=false 时 progress 无呈现意义，组件不得据此绘制。",
+      "additionalProperties": false,
+      "required": ["active", "progress"],
+      "properties": {
+        "active": { "type": "boolean" },
+        "progress": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "hudPopup": {
+      "type": "object",
+      "description": "物品名弹条。40 tick 可见窗口、「只由已确认选中变化触发」与容器/菜单抑制的判定全部留在 Go，本分节仅在窗口内出现——presence 即可见性，前端零计时。text 是 Go 已截断到 32 rune 的显示名（超长以省略号收尾）。",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": { "type": "string", "maxLength": 32 }
+      }
+    },
+    "hudChat": {
+      "type": "object",
+      "description": "最近聊天行缓冲：至多 6 行、每行至多 32 rune，行序即呈现序（最新在最下）。空串是合法行且仍占用一个行槽，与迁移前同口径。聊天输入与开关不在此列：输入仍走 winit 采集路径，不经桥下行。",
+      "additionalProperties": false,
+      "required": ["lines"],
+      "properties": {
+        "lines": {
+          "type": "array",
+          "maxItems": 6,
+          "items": { "type": "string", "maxLength": 32 }
+        }
+      }
     },
     "uplinkEnvelope": {
       "type": "object",

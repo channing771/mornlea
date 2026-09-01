@@ -14,6 +14,11 @@ import (
 // 「延期与放弃」）。
 const eatingProgressTicks = 32
 
+// EatingProgressTicks 是进食进度条的分母（权威 tick 数）：呈现层以它把连续
+// 填充比例量化回 tick 网格，让下行频率绑定权威 tick 而不是渲染帧率。导出只为
+// 避免消费方复制第二份字面量，不构成第二份语义来源。
+const EatingProgressTicks = eatingProgressTicks
+
 // eatingProgressSpan 是填满进度条所需的连续输入总时长：分母个权威 tick。
 // 累积用它而不是逐帧换算 tick 数，整数毫秒域内无浮点、无舍入顺序问题。
 const eatingProgressSpan = eatingProgressTicks * physics.FixedDelta

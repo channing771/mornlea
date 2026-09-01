@@ -1,71 +1,107 @@
 /*
  * 设计令牌：菜单层的唯一样式数值来源，与 HUD 的
- * internal/render/hud/style.go 面板族同语义。色值换算口径为
- * 「linear RGBA 分量 × 255 四舍五入」转 sRGB：
+ * internal/render/hud/style.go 面板族同语义（Go 侧令牌表按同一份调色板
+ * 定案并行换值，本文件不直接引用其数值，避免跨语言硬耦合）。色值换算
+ * 口径为「linear RGBA 分量 × 255 四舍五入」转 sRGB：
  *   - 标注「style.go」的行直接换算自该文件的令牌表；
- *   - 标注「egui 皮肤令牌」的行取自已退役 egui 菜单皮肤的令牌数值（历史出处，
- *     精修的第二份权威），供 style.go 未定义的次级文字/危险/相位底色沿用。
- * 强调色纪律：琥珀是唯一强调色相，只用于选中、进度与焦点/编辑态；错误行走
- * 危险红；不得引入第二种强调色相。
+ *   - 其余行取自 Cozy Farming 调色板的 sRGB 设计定案（OpenSpec change
+ *     `cozy-farming-ui-theme` 的 D2/D2.1 表），linear 分量按 sRGB 分量
+ *     直除 255 得到，与上行口径互为逆运算。
+ * 强调色纪律：Mornlea 采用双强调体系——`--accent-sage` 系（含
+ * `--accent-sage-solid`/`--accent-wash`）只负责选中、焦点与 hover 等
+ * 交互态；`--accent-wheat` 系（含 `--accent-wheat-solid`）只负责进度、
+ * 来源与重要信息；`--danger` 只用于错误呈现。不得引入第三种强调色相。
  */
 :root {
-  color-scheme: dark;
+  /* 面板为亮色羊皮纸，滚动条与表单控件的原生形态随主题取亮色。 */
+  color-scheme: light;
 
   /* ---- 表面与描边（style.go linear RGBA → sRGB） ---- */
-  /* panelSurface 0.045,0.052,0.062,0.84：半透明面板表面，透出世界画面。 */
-  --panel-surface: rgba(11, 13, 16, 0.84);
-  /* panelShadow 0.008,0.010,0.014,0.90：贴地投影层。 */
-  --panel-shadow: rgba(2, 3, 4, 0.9);
-  /* panelBorderLight 0.92,0.93,0.95,0.16：1px 亮边，把面板从暗背景「切」出来。 */
-  --panel-border: rgba(235, 237, 242, 0.16);
-  /* slotWell 0.020,0.024,0.030,0.92：输入框/滑杆轨道的凹陷底。 */
-  --slot-well: rgba(5, 6, 8, 0.92);
-  /* slotWellEdge 1,1,1,0.07：凹槽上沿内高光。 */
-  --slot-well-edge: rgba(255, 255, 255, 0.07);
+  /* menuSurface 0.941,0.894,0.784,0.97：暖羊皮纸菜单面板，近不透明但仍
+   * 保留少量透明度让世界画面透出（HUD 浮动面板同色相取 α0.94，见
+   * style.go，两者不共用同一令牌）。 */
+  --panel-surface: rgba(240, 228, 200, 0.97);
+  /* panelShadow 0.180,0.129,0.082,0.90：暖深棕投影，替换旧冷黑。 */
+  --panel-shadow: rgba(46, 33, 21, 0.9);
+  /* panelBorderLight 0.541,0.416,0.282,0.80：1px 深暖棕描边。亮表面配深
+   * 描边，与旧暗主题「亮边切暗面板」的方向相反，作用同样是把面板从
+   * 世界画面中切出来。 */
+  --panel-border: rgba(138, 106, 72, 0.8);
+  /* slotWell 0.851,0.776,0.604,0.92：输入框/滑杆轨道与 HUD 物品格凹槽的暖米
+   * 凹陷底（Go 侧 slotWell 同值）。 */
+  --slot-well: rgba(217, 198, 154, 0.92);
+  /* slotWellEdge 0.984,0.961,0.894,0.30：凹槽上沿内高光（暖白），HUD 物品格
+   * 三色斜面的受光缘同源消费。 */
+  --slot-well-edge: rgba(251, 245, 228, 0.3);
 
-  /* ---- 强调（唯一琥珀色相） ---- */
-  /* accentAmber 1,0.72,0.24,0.98：sRGB (255,184,61)。 */
-  --accent-amber: rgba(255, 184, 61, 0.98);
-  /* 焦点/悬停描边用不透明形态（egui 皮肤令牌 ACCENT_STROKE 沿用值）。 */
-  --accent-amber-solid: rgb(255, 184, 61);
-  /* 强调色 25% 透明变体：进度填充与选中底衬（egui 皮肤令牌 ACCENT_WASH 沿用值）。 */
-  --accent-wash: rgba(255, 184, 61, 0.25);
+  /* ---- 强调（双体系：sage 交互态 / wheat 进度与重要信息） ---- */
+  /* accentSelected 0.494,0.612,0.388,0.98：sRGB (126,156,99)，选中内衬、
+   * 焦点环与 hover 面的唯一色相。本文件登记的 Go 侧镜像行，菜单层不直接
+   * 消费；游戏 HUD 的快捷栏选中内衬（style.go accentSelected 同值）经本令
+   * 牌供给。 */
+  --accent-sage: rgba(126, 156, 99, 0.98);
+  /* 焦点/悬停描边用不透明形态（描边在亮底上需要实色才可辨）。 */
+  --accent-sage-solid: rgb(126, 156, 99);
+  /* sage 25% 透明变体：hover 面与 aria-pressed 选中底衬。 */
+  --accent-wash: rgba(126, 156, 99, 0.25);
+  /* accentProgress 0.851,0.663,0.306,0.98：sRGB (217,169,78)，进度、产物、
+   * 来源轮廓与重要信息的唯一色相（接管旧琥珀的那部分分工，与 sage 选中
+   * 色相分离保持颜色无关可辨性）。本文件登记的 Go 侧镜像行，菜单层不
+   * 直接消费。 */
+  --accent-wheat: rgba(217, 169, 78, 0.98);
+  /* 进度/来源描边用不透明形态。 */
+  --accent-wheat-solid: rgb(217, 169, 78);
 
   /* ---- 文字 ---- */
-  /* textPrimaryFg 0.96,0.96,0.97,1（style.go）。 */
-  --text-primary: rgb(245, 245, 247);
-  /* 次级文字：行标签、版本行、注明行、提示（egui 皮肤令牌 TEXT_SECONDARY 沿用值）。 */
-  --text-secondary: rgb(158, 166, 179);
-  /* textPrimaryShadow 0,0,0,0.85（style.go）：文字投影双层规范。 */
-  --text-shadow: rgba(0, 0, 0, 0.85);
-  /* 错误行告警红（egui 皮肤令牌 DANGER 沿用值）。 */
-  --danger: rgb(240, 89, 89);
+  /* textPrimaryFg 0.969,0.941,0.871,1（style.go）：暖白，只用于世界底
+   * 浮层（聊天行、快捷栏数量、物品名弹条）主文字。 */
+  --text-primary: rgb(247, 240, 222);
+  /* 世界底次级文字：版本行、注明行、提示（亮面板内的次级文字必须走
+   * `--text-secondary-on-panel`，两者底色不同不可混用）。 */
+  --text-secondary: rgb(216, 200, 166);
+  /* textOnPanelFg 0.239,0.180,0.125,1（style.go）：深棕，亮羊皮纸面板上
+   * 的主文字；暖白在亮表面上对比不足，面板与浮层的字色必须分开。 */
+  --text-on-panel: rgb(61, 46, 32);
+  /* 面板内次级文字：行标签、注明行、提示。 */
+  --text-secondary-on-panel: rgb(122, 100, 73);
+  /* 禁用文字暖灰棕。 */
+  --text-muted: rgb(165, 146, 114);
+  /* textPrimaryShadow 0.165,0.118,0.071,0.85（style.go）：文字投影双层规范。 */
+  --text-shadow: rgba(42, 30, 18, 0.85);
+  /* 错误行告警红（暖化，语义不变）。 */
+  --danger: rgb(199, 81, 70);
 
   /* ---- 相位底色 ---- */
   /* 主菜单/设置页整屏底：透明化让 wgpu 世界全景从 WebView 下层透出，
-   * 只保留上下深色渐变 scrim（panel 族同色），保证标题、按钮与版本行在
-   * 任何天空/地形亮度下可读；按钮与面板自身的表面不透明度不受影响。 */
+   * 只保留上下暖深棕渐变 scrim（rgb(46,36,25) 同色相三段，三段透明度沿用
+   * 旧黑 scrim 的层次），保证标题、按钮与版本行在任何天空/地形亮度下
+   * 可读；按钮与面板自身的表面不透明度不受影响。 */
   --menu-background: linear-gradient(
     180deg,
-    rgba(11, 13, 16, 0.44) 0%,
-    rgba(11, 13, 16, 0.08) 42%,
-    rgba(11, 13, 16, 0.5) 100%
+    rgba(46, 36, 25, 0.44) 0%,
+    rgba(46, 36, 25, 0.08) 42%,
+    rgba(46, 36, 25, 0.5) 100%
   );
-  /* 暂停遮罩：面板族同色 0.82 透明变体（egui 皮肤令牌 PAUSE_OVERLAY 沿用值）。 */
-  --pause-overlay: rgba(11, 13, 16, 0.82);
+  /* 暂停遮罩：暖深棕 0.82 透明变体。 */
+  --pause-overlay: rgba(46, 36, 25, 0.82);
 
-  /* ---- 几何（退役 egui 菜单的布局常量沿用值） ---- */
+  /* ---- 几何（退役 egui 菜单的布局常量沿用值；主菜单按钮族与标题字号
+   * 改用 clamp()/min() 响应式口径，覆盖全部窗口形态，不引入 breakpoint） ---- */
   --radius-panel: 8px;
   --radius-control: 2px;
   --hairline: 1px;
-  --menu-button-width: 220px;
-  --menu-button-height: 40px;
-  --menu-button-gap: 8px;
-  --title-button-gap: 24px;
+  /* 主菜单纵向按钮列：宽度随视口宽、高度与间距随视口高缩放，上下限
+   * 分别钉住可读下界与松散上界（替换固定值的拥挤问题）。 */
+  --menu-button-width: clamp(200px, 22vw, 300px);
+  --menu-button-height: clamp(44px, 6.5vh, 56px);
+  --menu-button-gap: clamp(12px, 2.2vh, 20px);
+  /* 标题与按钮列的纵向间距：大窗口拉开、小窗口收紧。 */
+  --title-button-gap: clamp(28px, 6vh, 56px);
   --error-button-gap: 16px;
   --panel-padding: 12px;
   --settings-action-height: 36px;
-  --debug-panel-width: 460px;
+  /* 调试面板宽度：460px 封顶，小窗口按视口宽扣去两侧内距收窄，避免溢出。 */
+  --debug-panel-width: min(460px, calc(100vw - 2 * var(--panel-padding)));
   --debug-row-height: 26px;
   --debug-selected-mark: 3px;
   --debug-value-column: 260px;
@@ -74,7 +110,8 @@
   /* retroui 组件类的像素描边框宽（border-image 框几何写死在其 dist 产物内，
    * 这里只登记同值常量供自绘几何推导，不反向覆盖上游组件几何）。 */
   --pixel-border-width: 5px;
-  /* 琥珀焦点环：宽度与外扩间距（焦点/编辑态的几何标记，不依赖单一色相）。 */
+  /* 强调焦点环：宽度与外扩间距（焦点/编辑态的几何标记，颜色由 sage 族
+   * 令牌供给，几何本身不绑定色相）。 */
   --pixel-focus-ring-width: 2px;
   --pixel-focus-ring-offset: 2px;
   /* 音量滑块自绘重绘（规格钉死滑块形态，retroui 无滑块组件）：轨道高与
@@ -85,11 +122,111 @@
   --pixel-input-inline-pad: 2px;
 
   /* ---- 字号（退役 egui 菜单的 MENU_*_FONT_SIZE 沿用值） ---- */
-  --font-title: 40px;
+  /* 标题字号随视口宽缩放，避免小窗口换行、大窗口占比失衡。 */
+  --font-title: clamp(36px, 5vw, 48px);
   --font-heading: 28px;
   --font-button: 18px;
   --font-message: 14px;
   --font-version: 12px;
+
+  /* ---- 游戏 HUD 组件族（`src/hud/` 消费；几何/字号与 `internal/render/hud`
+   * 的 layout.go/health.go/popup.go/chat.go/crosshair.go/combat_marker.go
+   * 逐值同源，色值口径沿用本文件头注：标注「style.go」的行按 linear × 255
+   * 换算，标注「painter」的行取该文件 `[4]byte` 语义色族原值——图标 painter
+   * 调色板在 Go 侧本就是声明内例外，这里只是把它登记成令牌） ---- */
+  /* 单一比例缩放变量：由 `HudRoot` 按 viewport 与 design 基准注入组件根，
+   * 这里只给纯 CSS 预览一个缺省值；全部 HUD 尺寸都以 design px × 本变量表达。 */
+  --hud-scale: 1;
+  /* -- 几何（design px） -- */
+  --hud-hotbar-slot-size: 48px; /* hotbarSlotSize */
+  --hud-hotbar-slot-gap: 4px; /* hotbarSlotGap */
+  --hud-hotbar-padding: 6px; /* hotbarPanelPadding（贴条四向内边距） */
+  --hud-hotbar-bottom-margin: 6px; /* hotbarBottomMargin（贴条下沿内边距） */
+  --hud-hotbar-rim: 2px; /* hotbarPanelInset（贴条投影/表面双层的内缩缘） */
+  --hud-slot-bevel: 2px; /* 凹槽三色斜面边宽（prototype 36px 格的 2px 口径） */
+  --hud-hotbar-row-width: 464px; /* panel.go hotbarRowWidth = 9×48 + 8×4 */
+  --hud-design-width: 476px; /* hudScale 宽度分母 = hotbarRowWidth + 2×padding */
+  --hud-design-height: 160px; /* layout.go closedHUDHeight（缩放高度分母） */
+  --hud-edge-margin: 8px; /* hudEdgeMargin（视口安全边距） */
+  --hud-select-border: 3px; /* hotbarSelectBorder（选中格外扩框） */
+  --hud-select-inset: 3px; /* hotbarSelectInset（选中格 sage 内衬） */
+  --hud-item-tile-inset: 10px; /* hotbarSwatchInset（物品 tile 内缩） */
+  --hud-item-tile-border: 2px; /* hotbarSwatchBorder（物品 tile 暗边） */
+  --hud-digit-margin: 3px; /* hotbarDigitMargin（数量数字的格内边距） */
+  --hud-status-hotbar-gap: 10px; /* statusHotbarGap（主状态行底与贴条外沿净空） */
+  --hud-status-bar-gap: 4px; /* health.go statusBarGap（状态行堆叠行距） */
+  --hud-status-icon-size: 16px; /* healthHeartSize（心/鸡腿/气泡格尺寸） */
+  --hud-status-icon-gap: 1px; /* healthHeartGap（状态格间隙） */
+  --hud-durability-height: 3px; /* durabilityBarHeight */
+  --hud-durability-inset: 4px; /* durabilityBarInset */
+  --hud-progress-track-width: 240px; /* miningBarWidth */
+  --hud-progress-track-height: 12px; /* miningBarHeight */
+  --hud-progress-track-gap: 16px; /* miningBarGap（轨道与状态栈上沿间隙） */
+  --hud-progress-cap-width: 8px; /* miningBarCapWidth（可采末端亮标记宽） */
+  --hud-progress-notch-width: 6px; /* miningNotchWidth（不可采警示缺口宽） */
+  --hud-popup-track-gap: 6px; /* popupTrackGap（弹条行与轨道间隙） */
+  --hud-popup-row-height: 16px; /* popupRowHeight（弹条行 design px 高度） */
+  --hud-saturation-jitter: 1px; /* hunger.go saturationZero 抖动的垂直偏移（1 design px） */
+  --hud-crosshair-arm-length: 11px; /* crosshairArmLength（横臂 11×3/竖臂 3×11） */
+  --hud-crosshair-arm-thickness: 3px; /* crosshairArmThickness */
+  --hud-crosshair-shadow-offset: 1px; /* crosshairShadowOffset */
+  --hud-text-shadow-offset: 1px; /* 文字投影偏移（popup.go 双层规范右下 1 design px） */
+  --hud-marker-length: 8px; /* combat_marker.go 命中标记长臂 8 */
+  --hud-marker-thickness: 2px; /* combat_marker.go 命中标记短边 2 */
+  --hud-marker-offset: 8px; /* combat_marker.go 标记中心距准星中心 (4 + 8/2) */
+  --hud-chat-line-height: 28px; /* chatLineHeight */
+  --hud-chat-padding: 6px; /* chatPadding（聊天背衬内边距） */
+  --hud-chat-clearance: 8px; /* chatHealthClearance（聊天栈与状态栈间隙） */
+  /* -- 字号（design px；缝合像素字体在 48 design px 格内的可读口径，
+   * 弹条/聊天行高由上方 popupRowHeight/chatLineHeight 令牌承担） -- */
+  --hud-count-font-size: 14px;
+  --hud-popup-font-size: 14px;
+  --hud-chat-font-size: 14px;
+  /* 单行文本行距比：数量数字与弹条是单行墨迹，行距收紧到字面高度。 */
+  --hud-text-line-height: 1;
+  /* -- 色（世界底浮层与进度语义，镜像 style.go / 图标 painter 调色板） -- */
+  /* panelSurface 0.941,0.894,0.784,0.94：HUD 浮层背衬（聊天行栈）。与菜单
+   * 面板 --panel-surface 同色相但透明度刻意不同，两者不共用同一令牌。 */
+  --hud-panel-surface: rgba(240, 228, 200, 0.94);
+  --hud-hotbar-strip: rgba(43, 32, 21, 0.96); /* hotbarPanelSurfaceColor 暖深棕贴条 */
+  --hud-hotbar-strip-shadow: rgba(36, 26, 16, 0.94); /* hotbarPanelShadowColor */
+  --hud-hotbar-selected-outer: rgb(240, 223, 178); /* hotbarSelectedOuterColor（α1） */
+  /* 凹槽下右背光缘：Cozy Farming 调色板的深暖棕（与 --slot-well-edge 受光缘
+   * 配对构成三色斜面；Go 侧容器凹槽无背光缘令牌，此处为 HUD 呈现新增）。 */
+  --hud-slot-well-dark: rgb(74, 56, 38);
+  /* 物品 tile 占位：真实材质映射属后续，先以面板内既有棕族给出可辨边界。 */
+  --hud-item-tile: var(--text-secondary-on-panel);
+  --hud-item-tile-edge: var(--text-on-panel);
+  --hud-progress-track: rgba(13, 13, 15, 0.78); /* miningTrackColor */
+  --hud-mining-harvestable: rgba(77, 199, 92, 0.95); /* miningHarvestableColor */
+  --hud-mining-blocked: rgba(242, 140, 38, 0.95); /* miningBlockedColor */
+  --hud-mining-cap: rgb(245, 255, 194); /* miningCapColor（α1） */
+  --hud-mining-notch: rgb(46, 31, 20); /* miningNotchColor（α1） */
+  --hud-eating-fill: rgba(235, 199, 107, 0.95); /* eatingFillColor */
+  --hud-durability-track: rgba(13, 13, 15, 0.85); /* durabilityTrackColor */
+  --hud-durability-healthy: rgba(77, 199, 92, 0.95); /* durabilityHealthyColor */
+  --hud-durability-low: rgba(230, 89, 64, 0.95); /* durabilityLowColor */
+  --hud-crosshair-shadow: rgba(0, 0, 0, 0.55); /* crosshairShadow */
+  --hud-crosshair-fg: rgba(245, 245, 245, 0.92); /* crosshairFg */
+  --hud-marker: rgb(255, 255, 255); /* combat marker 白色不透明 */
+  /* 心形（painter：health.go paintHotbarHeart） */
+  --hud-heart-empty-face: rgb(44, 20, 24);
+  --hud-heart-empty-edge: rgb(96, 28, 36);
+  --hud-heart-face: rgb(226, 42, 52);
+  --hud-heart-edge: rgb(128, 22, 30);
+  --hud-heart-shine: rgb(255, 105, 112);
+  /* 鸡腿（painter：hunger.go paintHotbarDrumstick） */
+  --hud-hunger-empty-face: rgb(30, 22, 16);
+  --hud-hunger-empty-edge: rgb(74, 52, 38);
+  --hud-hunger-face: rgb(176, 96, 46);
+  --hud-hunger-edge: rgb(92, 48, 22);
+  --hud-hunger-bone: rgb(240, 228, 196);
+  --hud-hunger-shine: rgb(214, 138, 74);
+  /* 气泡（painter：health.go paintHotbarBubble） */
+  --hud-oxygen-empty-face: rgb(24, 52, 76);
+  --hud-oxygen-empty-edge: rgb(72, 148, 184);
+  --hud-oxygen-face: rgb(48, 172, 222);
+  --hud-oxygen-shine: rgb(160, 232, 255);
 
   /* ---- 动效时长尺度：所有 transition 只消费这些令牌 ---- */
   --motion-fast: 120ms;
@@ -109,14 +246,17 @@
  * 像素组件换肤段：pixel-retroui 组件类的取色走 CSS 变量回退链
  * （var(--button-custom-*, var(--bg-button, #亮色兜底))），本段把链上的
  * 主题变量映射到上方既有令牌，实现整体换肤——
- *   - 表面 → `--panel-surface`（半透明面板表面，透出世界画面）；
- *   - 描边 → `--panel-border`（亮边；retroui 的 border-image 实际着色取
+ *   - 表面 → `--panel-surface`（暖羊皮纸菜单面板，近不透明）；
+ *   - 描边 → `--panel-border`（深暖棕；retroui 的 border-image 实际着色取
  *     currentColor，即文字主色，链上变量作为 border-color 兜底保持一致）；
  *   - 硬偏移阴影（retroui 自带 2px 偏移几何）→ `--panel-shadow`；
  *   - 输入框凹槽 → `--slot-well`；
- *   - 强调唯一走琥珀：选中（aria-pressed）/焦点/编辑态由 ui.css 在组件
- *     作用域内把表面变量切到 `--accent-wash`；错误呈现仍专用 `--danger`，
- *     retroui 组件不直接消费错误色。
+ *   - 组件文字 → `--text-on-panel`：表面已是亮羊皮纸，必须配深棕字，
+ *     暖白 `--text-primary` 只保留给世界底浮层；
+ *   - 强调双体系：选中（aria-pressed）/焦点/hover 由 ui.css 在组件作用域
+ *     内把表面变量切到 `--accent-wash`（sage）；进度与重要信息走
+ *     `--accent-wheat` 系；错误呈现仍专用 `--danger`，retroui 组件不直接
+ *     消费错误色。
  * 选择器有意双写 `:root:root` 提升优先级：`ui.css` 顶部 @import 引入的
  * pixel-retroui 产物自带 :root 亮色兜底（如 `--bg-input: #fff`），且打包
  * 顺序位于本文件之后，单写 `:root` 会被其覆盖。取值仍全部来自上方令牌，
@@ -127,21 +267,21 @@
   --bg-button: var(--panel-surface);
   --border-button: var(--panel-border);
   --shadow-button: var(--panel-shadow);
-  --text-button: var(--text-primary);
+  --text-button: var(--text-on-panel);
 
   /* Input 组件族（覆盖 retroui :root 的亮色兜底）。 */
   --bg-input: var(--slot-well);
   --border-input: var(--panel-border);
-  --text-input: var(--text-primary);
+  --text-input: var(--text-on-panel);
 
   /* Card 组件族（覆盖 retroui :root 的亮色兜底）。 */
   --bg-card: var(--panel-surface);
   --border-card: var(--panel-border);
-  --text-card: var(--text-primary);
+  --text-card: var(--text-on-panel);
   --shadow-card: var(--panel-shadow);
 
   /* DropdownMenu 组件族（菜单壳透明沿用上游语义，文字/描边/阴影换肤）。 */
   --border-dropdown: var(--panel-border);
-  --text-dropdown: var(--text-primary);
+  --text-dropdown: var(--text-on-panel);
   --shadow-dropdown: var(--panel-shadow);
 }

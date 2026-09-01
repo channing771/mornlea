@@ -19,21 +19,23 @@ const (
 	// benchmarkMessageDrainMax 是每帧服务端消息 drain 预算，单一取值住在
 	// app 包（`MessageDrainMax`），与 capture 共用同一无头帧节奏契约。
 	benchmarkMessageDrainMax = application.MessageDrainMax
-	// scenarioVersion 是 benchmark producer 的场景身份。v19 → v20 的判定与
-	// v18 → v19、v15 → v16 同源：benchmark 的固定输入（七名远端玩家、零伙伴、
+	// scenarioVersion 是 benchmark producer 的场景身份。v20 → v21 的判定与
+	// v19 → v20、v18 → v19 同源：benchmark 的固定输入（七名远端玩家、零伙伴、
 	// 不注入聊天）与被测世界（不注水、同一 seed、不含农业方块）一格未动，但
-	// 客户端 UI 对齐原版布局与风格精修又一次改变了**被测进程本身**——HUD 布
-	// 局对齐并新增准星与物品名弹条，`maxHotbarQuads` 从 267 重钉到 320、
-	// `maxHotbarGlyphs` 从 700 重钉到 768（准星与弹条加入关闭态最坏，容器浮动
-	// 面板与 tooltip 加入打开态最坏），**固定 GPU 上传布局**随之移动：glyph
-	// offset 13312 → 15616、总容量 46912 → 52480 bytes，空聊天帧每帧实际写入
-	// 也从 13312 变成 15616 bytes。
+	// 常显 HUD 层整体迁出 GPU 保留面又一次改变了**被测进程本身**——容器界面
+	// 关闭帧的保留面从 v20 关闭态最坏 100 quad / 548 glyph 预算降到 0 quad /
+	// 0 glyph，打开态最坏从 264 quad / 700 glyph 预算收缩到 218 quad / 268
+	// glyph（tooltip 按 8 rune 截断封顶，注册表实测最长名见证 262）。**固定
+	// GPU 上传布局本身不动**：quad 上限 320、glyph 上限 768、glyph offset
+	// 15616、总容量 52480 bytes 全部保持，缩出的容量全部沉淀为分支最坏与每帧
+	// 实例前缀的缩小。
 	//
-	// 这条正是主规格判定 v15 → v16、v17 → v18 与 v18 → v19 时用的同一条条文
-	// （「改变固定 GPU 上传布局、offset 与每帧写入字节数」），独立成立即可升
-	// 版。权威侧模拟一格未动，tick 工作量与 v19 相同；但每帧上传字节数已移动，
-	// v19 与 v20 的每帧上传数字因此不可直接比较。
-	scenarioVersion = 20
+	// 版本纪律的判据是「每帧写入字节数移动」，不要求固定容量同时扩张：本代
+	// 每帧 HUD 实例前缀确实移动，v20 与 v21 的每帧上传数字因此不可直接比较。
+	// 权威侧模拟一格未动，tick 工作量与 v20 相同；benchmark 无头观察路径仍然
+	// 零 WebView 参与——常显 HUD 经桥下行交给交互客户端的 WebView 组件呈现，
+	// 无头路径既不构造 WebView 也不下行任何桥状态，被测帧的观察面保持不变。
+	scenarioVersion = 21
 )
 
 var (

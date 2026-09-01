@@ -444,12 +444,14 @@ func TestApplicationConstructionCreatesPanelWhenDevOn(t *testing.T) {
 }
 
 // Mutation killed: 未确认权威快捷栏时提交 HUD 段会改变段字节。
-func TestApplicationDrawsHotbarHUDOnlyWhenConfirmed(t *testing.T) {
+func TestApplicationPreparesContainerHUDOnlyWhenConfirmed(t *testing.T) {
 	glyphs := &IntegrationGlyphSource{}
 	app := newRemoteRenderApplication(t, glyphs)
 	if err := app.remotePlayers.Apply(RemoteSpawn(1, "Remote-1", 1, mgl32.Vec3{1, 2, 3})); err != nil {
 		t.Fatal(err)
 	}
+	// 容器界面打开但物品镜像未确认：保留面不准备，零实例。
+	app.inventoryOpen = true
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("未确认快捷栏 RenderFrame=(%v,%v)", rendered, err)
 	}
@@ -465,8 +467,18 @@ func TestApplicationDrawsHotbarHUDOnlyWhenConfirmed(t *testing.T) {
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("已确认快捷栏 RenderFrame=(%v,%v)", rendered, err)
 	}
+	// 常显层已迁 WebView：只有容器界面打开时 GPU 保留面才产生面板实例。
 	if _, quads, _ := app.hotbarRenderer.FrameStreams(); len(quads) == 0 {
-		t.Fatal("已确认快捷栏没有产生 HUD quad")
+		t.Fatal("已确认且容器打开时没有产生容器保留面实例")
+	}
+
+	// 关闭容器界面：保留面回到零实例（快捷栏贴条等常显层不再由 GPU 呈现）。
+	app.inventoryOpen = false
+	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
+		t.Fatalf("关闭容器 RenderFrame=(%v,%v)", rendered, err)
+	}
+	if _, quads, _ := app.hotbarRenderer.FrameStreams(); len(quads) != 0 {
+		t.Fatalf("关闭容器后仍产生 %d 字节 HUD quad", len(quads))
 	}
 }
 

@@ -43,7 +43,7 @@
 
 ## benchmark 报告兼容
 
-- benchmark producer 为 scenario v20，固定输入仍是七名远端玩家、零伙伴、不注入聊天，被测世界不注水且不含农业方块；scenario 版本变化记录的是被测进程本身的改变（HUD 固定上传布局、HUD 图集列数、权威 tick 工作量等），性能数值只在同 scenario 版本内可比；
-- 旧 scenario 版本的报告仍可读取并做同版本比较；跨 scenario 比较只接受显式 `--allow-scenario-upgrade 19:20`，这是当前唯一显式迁移授权（历史的 `18:19` 随 producer 升到 scenario v20 退役，只作归档证据，不再是当前可授权迁移）；
+- benchmark producer 为 scenario v21，固定输入仍是七名远端玩家、零伙伴、不注入聊天，被测世界不注水且不含农业方块；scenario 版本变化记录的是被测进程本身的改变（HUD 固定上传布局与保留面最坏组合、每帧实例前缀字节数、HUD 图集列数、权威 tick 工作量等），性能数值只在同 scenario 版本内可比；
+- 旧 scenario 版本的报告仍可读取并做同版本比较；跨 scenario 比较只接受显式 `--allow-scenario-upgrade 20:21`，这是当前唯一显式迁移授权（历史的 `19:20` 随 producer 升到 scenario v21 退役，只作归档证据，不再是当前可授权迁移）；
 - 跨 transport 比较要求两侧 scenario 版本与 `git_commit` 都一致，否则拒绝；
 - 性能数值只记录，不改变退出状态；报告结构、来源身份、真实 overflow、数据丢失和 I/O 错误仍然硬失败。

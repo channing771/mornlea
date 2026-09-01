@@ -1,6 +1,8 @@
 package hud
 
 import (
+	"unicode/utf8"
+
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/render"
 )
@@ -176,12 +178,14 @@ func appendTooltipOverlay(
 	if scale <= 0 {
 		// 直达调用（测试与未来非布局入口）可能带着零值 layout：补齐缩放，
 		// 保证背景/字形几何与完整布局路径一致。
-		scale = hudScale(true, width, height)
+		scale = hudScale(width, height)
 		dst.scale = scale
 	}
 	// 墨迹测量与绘制共用同一套 advance/kerning 公式：宽度取推进宽度与字形
 	// 墨宽的较大者，高度由 BearingY 与下伸量决定，保证背景完整包住字形。
-	textWidth := popupTextWidth(atlas, text, scale)
+	// 本调用点的文本上界是 `maxTooltipRunes`（8 rune 截断上限），与 WebView
+	// 侧弹条/聊天行只共用「31 rune + 省略号」的截断口径，不共享预算。
+	textWidth := textAdvanceWidth(atlas, text, scale)
 	inkWidth := float32(0)
 	inkAscent, inkDescent := float32(0), float32(0)
 	for _, char := range text {
@@ -218,7 +222,83 @@ func appendTooltipOverlay(
 		hotbarInstance{X: x, Y: y, Width: rectWidth, Height: rectHeight, Color: panelSurface},
 	)
 	// 基线放在「上内边距 + 最大上伸」处：任意字形的墨迹顶都落在上内边距上，
-	// 墨迹底不越过下内边距。
+	// 墨迹底不越过下内边距。前景取 `textOnPanelFg`：背景是 `panelSurface` 暖
+	// 羊皮纸，世界浮层的暖白字对比不足。
 	baseline := y + padding + inkAscent*scale
-	appendAlignedText(dst, atlas, text, x+padding, baseline, scale)
+	appendAlignedText(dst, atlas, text, x+padding, baseline, scale, textOnPanelFg)
+}
+
+// truncateVisibleRunes 把文本截断到 limit 个可见 rune：超长时保留前 limit-1
+// rune 并以省略号收尾。这是容器 tooltip 显示名的截断约定，与 WebView 侧弹条/
+// 聊天行沿用同一「31 rune + 省略号」口径。
+func truncateVisibleRunes(text string, limit int) string {
+	if utf8.RuneCountInString(text) <= limit {
+		return text
+	}
+	visibleEnd := 0
+	runes := 0
+	for index := range text {
+		if runes == limit-1 {
+			visibleEnd = index
+			break
+		}
+		runes++
+	}
+	return text[:visibleEnd] + "…"
+}
+
+// appendAlignedText 以基线锚定、左对齐绘制双层文字：tooltip 悬停名取这套 pen
+// 推进、kerning 与阴影偏移。前景取 `textOnPanelFg`（背景是 `panelSurface` 暖羊
+// 皮纸），阴影层统一走 `textPrimaryShadow` 且向右下偏移 1 design px。
+func appendAlignedText(
+	dst *hotbarLayout,
+	atlas render.GlyphSource,
+	text string,
+	penOriginX, baseline, scale float32,
+	foreground [4]float32,
+) {
+	for pass := range 2 {
+		penX := penOriginX
+		previous := rune(0)
+		index := 0
+		for _, char := range text {
+			if index > 0 {
+				penX += atlas.Kern(previous, char) * scale
+			}
+			glyph := atlas.Glyph(char)
+			offset := float32(0)
+			color := foreground
+			if pass == 0 {
+				offset = scale
+				color = textPrimaryShadow
+			}
+			dst.glyphs = append(dst.glyphs, hotbarInstance{
+				X:     penX + glyph.BearingX*scale + offset,
+				Y:     baseline - glyph.BearingY*scale + offset,
+				Width: glyph.Width * scale, Height: glyph.Height * scale,
+				U0: glyph.U0, V0: glyph.V0, U1: glyph.U1, V1: glyph.V1, Color: color,
+			})
+			penX += glyph.Advance * scale
+			previous = char
+			index++
+		}
+	}
+}
+
+// textAdvanceWidth 按与绘制完全相同的 advance/kerning 公式测量文本推进宽度，
+// 保证 tooltip 背景矩形不因测量与绘制分叉而漂移。调用方负责先按 `maxTooltipRunes`
+// 截断，本函数不设上界。
+func textAdvanceWidth(atlas render.GlyphSource, text string, scale float32) float32 {
+	width := float32(0)
+	previous := rune(0)
+	index := 0
+	for _, char := range text {
+		if index > 0 {
+			width += atlas.Kern(previous, char) * scale
+		}
+		width += atlas.Glyph(char).Advance * scale
+		previous = char
+		index++
+	}
+	return width
 }

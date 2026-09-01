@@ -417,3 +417,8 @@ func boolToU8(value bool) C.uint8_t {
 	}
 	return 0
 }
+
+// 编译期钉住本窗口方法形状与 HUD 推送纪律层的出口接口一致,漂移即构建失败。
+// 这只声明方法签名:纪律层产出的是 hud 分节载荷,生产接线须包 `phase` 信封后再
+// 交本方法,裸 hud 分节不是合法下行(见 `UIHudSink` 注释)。
+var _ UIHudSink = (*Window)(nil)

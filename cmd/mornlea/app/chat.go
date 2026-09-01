@@ -9,7 +9,6 @@ import (
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/render/hud"
 )
 
 // chatInput 的字节上限直接复用 companion.MaxPlanCommandBytes（E7 同源化）：
@@ -70,9 +69,18 @@ func (input *chatInput) Submit() (network.ChatCommand, bool) {
 	return command, true
 }
 
-func (a *Application) ChatOverlay() hud.ChatOverlay {
+// ChatOverlay 是聊天呈现状态的只读快照：行缓冲来自已确认事件环，输入框属于
+// winit 采集路径（不经桥下行）。聊天呈现已迁 WebView HUD 组件，hud 分节只携带
+// 最近行缓冲；本结构保留输入与行缓冲状态机的读出口，供组装与测试复用。
+type ChatOverlay struct {
+	Open  bool
+	Input string
+	Lines []string
+}
+
+func (a *Application) ChatOverlay() ChatOverlay {
 	a.refreshChatLines()
-	return hud.ChatOverlay{
+	return ChatOverlay{
 		Open:  a.chatInput.open,
 		Input: a.chatInput.text,
 		Lines: a.chatLines[:a.chatLineCount],
@@ -193,8 +201,8 @@ func taskFailReasonText(reason network.TaskFailReason) string {
 
 // truncateChatLine 把聊天事实行截断到 HUD 的每行 32 rune 界限。出处：
 // openspec companion-client-presentation 规格「每条最多 32 rune」，与
-// internal/render/hud/chat.go 的 maxChatRunes 同值（HUD 侧对超宽行还有一次
-// 相同的省略号替换兜底，两侧语义一致）。截断语义：超长行的第 32 个 rune
+// internal/client 的 `hudTextMaxRunes`（hud 分节 chat 行的 schema maxLength）
+// 同值，两端各自截断一次、语义一致。截断语义：超长行的第 32 个 rune
 // 替换为省略号「…」，即保留前 31 个原文 rune + 1 个省略号，输出宽度恰为
 // 32 rune；不超过 32 rune 的原文原样返回。整个过程按 rune 进行而非按字节
 // 切割，多字节 UTF-8 序列不会被拦腰截断，返回值始终是有效 UTF-8。

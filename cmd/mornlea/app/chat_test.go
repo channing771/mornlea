@@ -471,13 +471,15 @@ func TestFormatChatEventUnknownKindFallsBackToNeutralLine(t *testing.T) {
 	}
 }
 
-func TestApplicationRendersHealthBeforeInventoryConfirmation(t *testing.T) {
+// TestHUDStateCarriesSurvivalValuesBeforeInventoryConfirmation 锁定「权威生存
+// 值独立于背包确认」：hud 分节在背包镜像未确认时缺席 hotbar，但生命/饥饿/氧气
+// 分节照常携带确认值（呈现由 WebView 组件承担，GPU 保留面不再消费这些值）。
+func TestHUDStateCarriesSurvivalValuesBeforeInventoryConfirmation(t *testing.T) {
 	app := newRemoteRenderApplication(t, &IntegrationGlyphSource{})
 	if err := app.predictor.Begin(network.PlayerState{
 		ServerTick: 1, Dimension: core.Overworld,
-		// 氧气给满值：氧气条只在未满时出现，满值让它不占用 quad 流。饥饿条与之
-		// 相反、满值也常驻，所以饥饿给的是显式满值而不是靠零值蒙混——本用例数的
-		// 是「生命条 + 饥饿条」这个确定的总数。
+		// 氧气给满值：满值不产生分节。饥饿条与之相反、满值也常驻，所以饥饿
+		// 给的是显式满值而不是靠零值蒙混。
 		Position: mgl32.Vec3{0.5, 10, 0.5}, Ready: true, Health: 12,
 		Oxygen: core.MaxOxygenTicks, Hunger: core.MaxHunger,
 	}); err != nil {
@@ -486,15 +488,24 @@ func TestApplicationRendersHealthBeforeInventoryConfirmation(t *testing.T) {
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("RenderFrame=(%v,%v)", rendered, err)
 	}
-	// 未确认背包时 HUD 画准星与生命条、饥饿条（quad 流 = 准星 4 + 两条 bar 的
-	// 实例数之和）。
-	want := 4 + healthQuadInstancesForHUDTest + hungerQuadInstancesForHUDTest
-	if _, quads, _ := app.hotbarRenderer.FrameStreams(); len(quads)/48 != want {
-		t.Fatalf("unconfirmed inventory crosshair+Health+hunger quads=%d want=%d", len(quads)/48, want)
+	state := app.assembleHUDState()
+	if state.Hotbar != nil {
+		t.Fatalf("未确认背包仍下行快捷栏分节: %+v", state.Hotbar)
+	}
+	if state.Health == nil || state.Health.Value != 12 {
+		t.Fatalf("生命分节=%+v，想要 12", state.Health)
+	}
+	if state.Hunger == nil || state.Hunger.Value != core.MaxHunger {
+		t.Fatalf("饥饿分节=%+v，想要满值", state.Hunger)
+	}
+	if state.Oxygen != nil {
+		t.Fatalf("满氧下行了分节: %+v", state.Oxygen)
 	}
 }
 
-func TestApplicationRendersChatBeforeInventoryConfirmation(t *testing.T) {
+// TestHUDStateCarriesChatLinesBeforeInventoryConfirmation 锁定聊天行缓冲独立于
+// 背包确认：输入框开着、事件环有确认事件时，hud 分节照常携带最近行。
+func TestHUDStateCarriesChatLinesBeforeInventoryConfirmation(t *testing.T) {
 	glyphs := &IntegrationGlyphSource{}
 	app := newRemoteRenderApplication(t, glyphs)
 	app.chatEvents = &client.ChatEvents{}
@@ -508,9 +519,9 @@ func TestApplicationRendersChatBeforeInventoryConfirmation(t *testing.T) {
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("RenderFrame=(%v,%v)", rendered, err)
 	}
-	// 背包未确认时聊天字形仍进入 HUD glyph 流。
-	if _, _, hudGlyphs := app.hotbarRenderer.FrameStreams(); len(hudGlyphs) == 0 {
-		t.Fatal("chat glyphs were not laid out before inventory confirmation")
+	state := app.assembleHUDState()
+	if state.Chat == nil || len(state.Chat.Lines) != 1 {
+		t.Fatalf("hud 分节聊天行=%+v，想要恰好一行确认事件", state.Chat)
 	}
 }
 

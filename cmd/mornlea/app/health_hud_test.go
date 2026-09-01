@@ -3,7 +3,6 @@
 package app
 
 import (
-	"slices"
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
@@ -13,64 +12,53 @@ import (
 	"github.com/channing771/mornlea/internal/network"
 )
 
-// 12 点生命解析为十个心形槽：六个满心、四个空心，不包含背景面板。
-const healthQuadInstancesForHUDTest = 10
+// health_hud_test.go：生命/氧气/饥饿的权威镜像语义在 hud 分节组装层的端到端
+// 覆盖。呈现已迁 WebView HUD 组件，GPU 保留面不再消费这些值；「只消费已确认
+// 权威值、未确认完全隐藏、reset 清空」的契约由 `assembleHUDState` 与
+// `internal/client` 的构造器共同承担，这里走 wire → Predictor → 组装 的完整路径。
 
-// 满饥饿值新增十个空鸡腿槽底和十个填充鸡腿。
-//
-// 与生命条分成两个常量而不是合并成一个总数：两条 bar 的 quad 数各有各的来源，
-// `appendHealthBar` 随 `Health` 变、`appendHungerBar` 随 `Hunger` 变，合成一个
-// 数字后哪一侧改了都只表现为同一个常量要调，读的人无从判断该调多少。
-//
-// 饥饿条与氧气条相反：满值时也常驻界面（所以下面的夹具无论给什么值都会有那十个
-// 空槽底），给满值只是让填充部分也是整十、便于口算。
-const hungerQuadInstancesForHUDTest = 20
-
-// 耗损氧气始终解析为十个气泡槽；满氧与未确认氧气为零实例。
-const oxygenQuadInstancesForHUDTest = 10
-
-// Mutation killed: forwarding a predicted/stale Health value, swapping the
-// Confirmed flag computed from Predictor.Health(), or failing to clear Health
-// after an authoritative player-state reset would let the HUD show a Health
-// number the server never confirmed.
-func TestHUDHealthReflectsOnlyConfirmedPredictorState(t *testing.T) {
-	glyphs := &IntegrationGlyphSource{}
-	app := newRemoteRenderApplication(t, glyphs)
-	if err := app.inventory.Apply(network.InventoryState{Inventory: core.Inventory{}}); err != nil {
-		t.Fatal(err)
-	}
-	hudQuadCount := func() int {
-		_, quads, _ := app.hotbarRenderer.FrameStreams()
-		return len(quads) / 48
-	}
-
-	// 收到权威状态之前：Predictor 尚未就绪，HUD 不得画出任何生命值数字。
-	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
-		t.Fatalf("未确认生命值 RenderFrame=(%v,%v)", rendered, err)
-	}
-	baseline := hudQuadCount()
-
-	// 收到生命值为 12 的权威状态：HUD 必须以六个满心和四个空心解析成十个槽。
+// beginConfirmedSurvival 注入一份权威 PlayerState，把 Predictor 的生存镜像设为
+// 给定值，供各用例钉住「确认值是什么、满值/未确认是否缺席」。
+func beginConfirmedSurvival(t *testing.T, app *Application, tick uint64, health uint8, oxygen uint16, hunger uint8) {
+	t.Helper()
 	if err := app.predictor.Begin(network.PlayerState{
-		ServerTick: 1, Dimension: core.Overworld,
+		ServerTick: tick, Dimension: core.Overworld,
 		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true,
-		// 氧气给满值：氧气条只在未满时出现，这里要观察的是生命条的 quad 增量，
-		// 未满氧气会额外追加十个 resolved-slot quad，让下面的生命增量断言失去意义。
-		Ready: true, Health: 12, Oxygen: core.MaxOxygenTicks, Hunger: core.MaxHunger,
+		Ready: true, Health: health, Oxygen: oxygen, Hunger: hunger,
 	}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// Mutation killed: forwarding a predicted/stale Health value, or failing to clear
+// Health after an authoritative player-state reset would let the HUD show a
+// number the server never confirmed.
+func TestHUDStateHealthReflectsOnlyConfirmedPredictorState(t *testing.T) {
+	app := newRemoteRenderApplication(t, &IntegrationGlyphSource{})
+	if err := app.inventory.Apply(network.InventoryState{Inventory: core.Inventory{}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// 收到权威状态之前：Predictor 尚未就绪，hud 分节不得携带任何生命值。
+	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
+		t.Fatalf("未确认生命值 RenderFrame=(%v,%v)", rendered, err)
+	}
+	if state := app.assembleHUDState(); state.Health != nil {
+		t.Fatalf("未确认生命值下行了分节: %+v", state.Health)
+	}
+
+	// 收到生命值为 12 的权威状态：hud 分节携带确认值。
+	beginConfirmedSurvival(t, app, 1, 12, core.MaxOxygenTicks, core.MaxHunger)
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("已确认生命值 RenderFrame=(%v,%v)", rendered, err)
 	}
-	confirmed := hudQuadCount()
-	want := healthQuadInstancesForHUDTest + hungerQuadInstancesForHUDTest
-	if got := confirmed - baseline; got != want {
-		t.Fatalf("确认生命值 12 与满饥饿后 quad 增量=%d，想要 %d（无背景的爱心与鸡腿）", got, want)
+	state := app.assembleHUDState()
+	if state.Health == nil || state.Health.Value != 12 {
+		t.Fatalf("确认生命值 12 的分节=%+v，想要 12", state.Health)
 	}
 
 	// 权威玩家状态 reset（Ready=false）：即使背包镜像仍然确认，生命值也必须
-	// 清空，不能继续显示断线前的陈旧数值。
+	// 清空，不能继续下行断线前的陈旧数值。
 	if _, err := app.predictor.ApplyPlayerState(network.PlayerState{
 		ServerTick: 2, Dimension: core.Overworld, Ready: false,
 	}, client.MirrorCollisionSource{Mirror: app.mirror, Dimension: core.Overworld}); err != nil {
@@ -79,73 +67,56 @@ func TestHUDHealthReflectsOnlyConfirmedPredictorState(t *testing.T) {
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("玩家状态 reset 后 RenderFrame=(%v,%v)", rendered, err)
 	}
-	afterReset := hudQuadCount()
-	if afterReset != baseline {
-		t.Fatalf("玩家状态 reset 后 quad=%d，想要回到未确认基线 %d", afterReset, baseline)
+	if state := app.assembleHUDState(); state.Health != nil {
+		t.Fatalf("玩家状态 reset 后生命分节=%+v，想要缺席", state.Health)
 	}
 }
 
-// Mutation killed: keeping the hotbar pass (and therefore the stale Health
-// number) alive after the client session closes would show a number the
-// current session never confirmed.
-func TestHUDHealthHiddenAfterDisconnect(t *testing.T) {
-	glyphs := &IntegrationGlyphSource{}
-	app := newRemoteRenderApplication(t, glyphs)
+// Mutation killed: keeping the survival sections alive after the client session
+// closes would show values the current session never confirmed.
+func TestHUDStateSurvivalHiddenAfterDisconnect(t *testing.T) {
+	app := newRemoteRenderApplication(t, &IntegrationGlyphSource{})
 	if err := app.inventory.Apply(network.InventoryState{Inventory: core.Inventory{}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := app.predictor.Begin(network.PlayerState{
-		ServerTick: 1, Dimension: core.Overworld,
-		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true,
-		// 氧气给满值：氧气条只在未满时出现，这里要观察的是生命条的 quad 增量，
-		// 未满氧气会额外追加十个 resolved-slot quad，让下面的生命增量断言失去意义。
-		Ready: true, Health: 12, Oxygen: core.MaxOxygenTicks, Hunger: core.MaxHunger,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	beginConfirmedSurvival(t, app, 1, 12, core.MaxOxygenTicks, core.MaxHunger)
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
-		t.Fatalf("已确认生命值 RenderFrame=(%v,%v)", rendered, err)
+		t.Fatalf("已确认状态 RenderFrame=(%v,%v)", rendered, err)
 	}
-	flushesWithHUD := glyphs.flushes
-	if flushesWithHUD < 2 {
-		t.Fatalf("已确认生命值时 flush=%d,想要名牌+HUD 两次 Prepare", flushesWithHUD)
+	if state := app.assembleHUDState(); state.Health == nil || state.Hotbar == nil {
+		t.Fatalf("确认状态的分节缺席: hotbar=%v health=%v", state.Hotbar, state.Health)
 	}
 
 	app.CloseClientSession(nil)
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("断线后 RenderFrame=(%v,%v)", rendered, err)
 	}
-	// 断线帧 hudVisible 为假:只有名牌 Prepare 冲刷一次,HUD 不再准备。
-	if got := glyphs.flushes - flushesWithHUD; got != 1 {
-		t.Fatalf("断线后新增 flush=%d,想要仅名牌 1 次(HUD 不得准备)", got)
+	state := app.assembleHUDState()
+	if state.Hotbar != nil || state.Health != nil || state.Hunger != nil || state.Oxygen != nil {
+		t.Fatalf("断线后仍携带生存分节: hotbar=%v health=%v hunger=%v oxygen=%v",
+			state.Hotbar, state.Health, state.Hunger, state.Oxygen)
+	}
+	// 会话关闭同时退出 hud 分节下行窗口：回到游戏相位后的第一次冲刷必须
+	// 无条件下行完整分节（此处以窗口位表达）。
+	if app.hudPushInWindow {
+		t.Fatal("断线后 hud 分节下行窗口仍开启")
 	}
 }
 
-// TestHUDOxygenBarFollowsAuthoritativePlayerState 是 HUD 氧气条的端到端覆盖：
-// 权威 PlayerState 经真实 Predictor 镜像进 HUD，满氧不占用界面、未满出现，
-// 且两个不同的未满值给出不同的 quad 内容（而不只是"非空"）。
-//
-// 单元层已在 internal/render/hud 覆盖同两条规则；这里额外走一遍 wire→镜像→布局
-// 的完整路径，防止氧气在 Predictor 或 app 装配处被丢掉而单元测试仍然全绿。
-func TestHUDOxygenBarFollowsAuthoritativePlayerState(t *testing.T) {
-	glyphs := &IntegrationGlyphSource{}
-	app := newRemoteRenderApplication(t, glyphs)
+// TestHUDStateOxygenFollowsAuthoritativePlayerState 锁定氧气的异常态语义：
+// 满氧与未确认都不产生分节，耗损时按确认值下行（气泡数由前端按十格等分解析）。
+func TestHUDStateOxygenFollowsAuthoritativePlayerState(t *testing.T) {
+	app := newRemoteRenderApplication(t, &IntegrationGlyphSource{})
 	if err := app.inventory.Apply(network.InventoryState{Inventory: core.Inventory{}}); err != nil {
 		t.Fatal(err)
 	}
-	hudQuads := func() []byte {
-		_, quads, _ := app.hotbarRenderer.FrameStreams()
-		return append([]byte(nil), quads...)
-	}
 	tick := uint64(1)
-	apply := func(oxygen uint16) []byte {
+	apply := func(oxygen uint16) *client.UIHudOxygen {
 		t.Helper()
 		tick++
 		if _, err := app.predictor.ApplyPlayerState(network.PlayerState{
 			ServerTick: tick, Dimension: core.Overworld,
 			Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true,
-			// 饥饿值全程钉死在满值：本用例比较的是两帧之间的 quad 字节差，
-			// 饥饿条一旦在帧之间变化就会把氧气条的增量淹掉。
 			Ready: true, Health: 12, Oxygen: oxygen, Hunger: core.MaxHunger,
 		}, client.MirrorCollisionSource{Mirror: app.mirror, Dimension: core.Overworld}); err != nil {
 			t.Fatal(err)
@@ -153,101 +124,50 @@ func TestHUDOxygenBarFollowsAuthoritativePlayerState(t *testing.T) {
 		if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 			t.Fatalf("氧气 %d RenderFrame=(%v,%v)", oxygen, rendered, err)
 		}
-		return hudQuads()
+		return app.assembleHUDState().Oxygen
 	}
 
-	if err := app.predictor.Begin(network.PlayerState{
-		ServerTick: 1, Dimension: core.Overworld,
-		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true,
-		Ready: true, Health: 12, Oxygen: core.MaxOxygenTicks, Hunger: core.MaxHunger,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	beginConfirmedSurvival(t, app, 1, 12, core.MaxOxygenTicks, core.MaxHunger)
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("满氧 RenderFrame=(%v,%v)", rendered, err)
 	}
-	full := hudQuads()
+	if state := app.assembleHUDState(); state.Oxygen != nil {
+		t.Fatalf("满氧下行了分节: %+v", state.Oxygen)
+	}
 
-	half := apply(core.MaxOxygenTicks / 2)
-	quarter := apply(core.MaxOxygenTicks / 4)
-	restored := apply(core.MaxOxygenTicks)
-
-	const quadBytes = 48
-	if len(half)-len(full) != oxygenQuadInstancesForHUDTest*quadBytes {
-		t.Fatalf("未满氧气新增 %d 字节，想要十个 resolved-slot quad（%d 字节）",
-			len(half)-len(full), oxygenQuadInstancesForHUDTest*quadBytes)
+	if oxygen := apply(core.MaxOxygenTicks / 2); oxygen == nil || oxygen.Value != core.MaxOxygenTicks/2 {
+		t.Fatalf("半氧分节=%+v，想要 %d", oxygen, core.MaxOxygenTicks/2)
 	}
-	if len(quarter) != len(half) {
-		t.Fatalf("两个不同未满值的 quad 数不同：%d vs %d", len(quarter)/quadBytes, len(half)/quadBytes)
+	if oxygen := apply(core.MaxOxygenTicks / 4); oxygen == nil || oxygen.Value != core.MaxOxygenTicks/4 {
+		t.Fatalf("四分之一氧分节=%+v，想要 %d", oxygen, core.MaxOxygenTicks/4)
 	}
-	if string(quarter) == string(half) {
-		t.Fatal("四分之一氧气与半氧渲染出完全相同的 HUD：呈现没有随权威值变化")
-	}
-	if len(restored) != len(full) {
-		t.Fatalf("氧气回满后 quad=%d，想要回到满氧基线 %d", len(restored)/quadBytes, len(full)/quadBytes)
+	if oxygen := apply(core.MaxOxygenTicks); oxygen != nil {
+		t.Fatalf("氧气回满后分节=%+v，想要缺席", oxygen)
 	}
 }
 
-// TestHUDHungerBarFollowsAuthoritativePlayerState 是 HUD 饥饿条的端到端覆盖：
-// 权威 PlayerState 经真实 Predictor 镜像进 HUD，未收到权威状态时一个鸡腿都不画，
-// 收到之后画出来的鸡腿对应 `Hunger` 而不是同一条消息里的 `Health`。
-//
-// 单元层已在 internal/render/hud 覆盖 `appendHungerBar` 的满/半/空布局；这里额外
-// 走一遍 wire→Predictor 镜像→app 装配的完整路径，钉死 `RenderFrame` 里那行
-// `hud.HungerOverlay` 取的是 `Predictor.Hunger()`。两个值故意互不相等且奇偶相反：
-//
-//   - 生命 14（偶数）：十个 resolved-slot 心形 = 10 个 quad，没有半颗；
-//   - 饥饿 9（奇数）：10 个空鸡腿槽底 + 5 个填充 = 15 个 quad，末个是半格。
-//
-// 把饥饿条接成生命值时总数变成 10+17=27 且再没有任何半格 quad，下面两条断言各自
-// 变红——只数「非空」或只数总量都挡不住这个接线错误。
-func TestHUDHungerBarFollowsAuthoritativePlayerState(t *testing.T) {
+// TestHUDStateHungerFollowsAuthoritativePlayerState 锁定饥饿的权威语义：未收到
+// 权威状态时分节缺席；收到之后携带 `Hunger` 而不是同一条消息里的 `Health`。
+func TestHUDStateHungerFollowsAuthoritativePlayerState(t *testing.T) {
 	app := newRemoteRenderApplication(t, &IntegrationGlyphSource{})
-	// 刻意不确认背包：HUD 此时只有生命条与饥饿条，quad 流里没有别的东西可数。
-	hudQuadWidths := func() []float32 {
-		t.Helper()
-		_, quads, _ := app.hotbarRenderer.FrameStreams()
-		widths := make([]float32, 0, len(quads)/48)
-		for offset := 0; offset+48 <= len(quads); offset += 48 {
-			// hotbarInstance 的字段序是 X, Y, Width, Height, …，Width 在第 8 字节。
-			widths = append(widths, readFloat32(quads, offset+8))
-		}
-		return widths
-	}
 
-	// 收到权威状态之前：Predictor 未就绪，饥饿值未确认，鸡腿一个都不许画。
+	// 收到权威状态之前：Predictor 未就绪，饥饿值未确认，分节缺席。
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("未确认权威状态 RenderFrame=(%v,%v)", rendered, err)
 	}
-	if got := len(hudQuadWidths()); got != 0 {
-		t.Fatalf("未收到权威状态时 quad=%d，想要 0（饥饿未确认不得画鸡腿）", got)
+	if state := app.assembleHUDState(); state.Hunger != nil || state.Health != nil {
+		t.Fatalf("未确认权威状态下行了生存分节: hunger=%v health=%v", state.Hunger, state.Health)
 	}
 
-	if err := app.predictor.Begin(network.PlayerState{
-		ServerTick: 1, Dimension: core.Overworld,
-		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true,
-		// 氧气给满值：氧气条只在未满时出现，未满会额外追加 quad 打乱下面的计数。
-		Ready: true, Health: 14, Oxygen: core.MaxOxygenTicks, Hunger: 9,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	beginConfirmedSurvival(t, app, 1, 14, core.MaxOxygenTicks, 9)
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("已确认权威状态 RenderFrame=(%v,%v)", rendered, err)
 	}
-	widths := hudQuadWidths()
-	// 准星在物品镜像未确认但 HUD 可见的帧里也要呈现（游戏相位），共 4 个。
-	if got, want := len(widths), 4+healthQuadInstancesForHUDTest+15; got != want {
-		t.Fatalf("quad=%d，想要 %d（准星 4 个 + 生命 14 的 10 个 + 饥饿 9 的 15 个）", got, want)
+	state := app.assembleHUDState()
+	if state.Hunger == nil || state.Hunger.Value != 9 {
+		t.Fatalf("饥饿分节=%+v，想要 9", state.Hunger)
 	}
-	// 两条 bar 的格尺寸相同，因此整格宽度就是最大值，半格恰为它的一半。
-	fullWidth := slices.Max(widths)
-	halves := 0
-	for _, width := range widths {
-		if width == fullWidth/2 {
-			halves++
-		}
-	}
-	if halves != 1 {
-		t.Fatalf("半格 quad=%d，想要 1（奇数饥饿值 9 的末个鸡腿）", halves)
+	if state.Health == nil || state.Health.Value != 14 {
+		t.Fatalf("生命分节=%+v，想要 14（两条分节各取各的确认值）", state.Health)
 	}
 }

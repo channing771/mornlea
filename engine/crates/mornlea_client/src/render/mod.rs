@@ -1591,7 +1591,31 @@ impl OffscreenRenderer {
     }
 
     /// 渲染一帧并立即提交；每次调用只提交一个主 command buffer。
+    ///
+    /// spike 帧探针(MORNLEA_SPIKE_FPS,见 `overlay_spike`)在 present 边界
+    /// 采样:测量范围覆盖本方法的全部工作(含 surface 获取、录制、提交与
+    /// present 调度),未开启时探针为 `None`,除一次 `OnceLock` 读取外零开销。
     pub fn render_frame(&mut self, input: &FrameInput) -> FrameResult {
+        let probe = crate::overlay_spike::frame_probe();
+        let started = probe.map(crate::overlay_spike::FrameProbe::now);
+        // spike 自驱动档把 HUD 顶点流规模与目标方块轮廓作为玩法层响应的
+        // 观察信号;关闭时一次布尔分支,零额外工作。
+        if crate::spike_auto::enabled() {
+            crate::spike_auto::note_hud(input.hud_vertices.len());
+            crate::spike_auto::note_outline(!input.outline.is_empty());
+        }
+        let result = self.render_and_present(input);
+        if let Some(probe) = probe
+            && let Some(started) = started
+        {
+            probe.record(started);
+        }
+        result
+    }
+
+    /// `render_frame` 的既有实现;spike 帧探针需要包住整个 present 边界,
+    /// 因此把原实现整体下沉到本方法。
+    fn render_and_present(&mut self, input: &FrameInput) -> FrameResult {
         if self.prepared_benchmark_batch.is_some() {
             return FrameResult::Invalid;
         }

@@ -1,0 +1,400 @@
+/*
+ * 游戏 HUD 组件样式：全部数值消费 src/tokens.css 的令牌（`--hud-*` 几何/
+ * 字号/色彩族 + 既有文字与面板令牌），本文件不得出现裸色值、裸字号与裸
+ * 时长。几何只在 design px × `--hud-scale` 下表达（单一比例，变量由
+ * HudRoot 注入组件根，缺省值供纯 CSS 预览）。
+ *
+ * 组件族零 transition/animation：权威 tick 下行即硬切呈现，与迁移前 GPU
+ * 呈现的帧级行为一致，`prefers-reduced-motion` 因此无需额外分支。
+ * 类名统一 `hud-*` 前缀，与 retroui 产物带入的通用工具类名隔离。
+ */
+
+/* ---- 根：全屏透明合成层，不参与命中（GameOverlay 事件穿透的页面侧等价） -- */
+.hud-root {
+  /* 派生变量：把「design px × 单一比例」的常用乘积收敛一次，子层直接消费，
+   * 取值仍全部来自令牌（本文件不出现第二份数值源）。 */
+  --hud-text-shadow-offset-scaled: calc(var(--hud-text-shadow-offset) * var(--hud-scale));
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* ---- 底部栈：整体底部锚定、水平居中，宽度即快捷栏贴条外沿 ----
+ * 子元素的间距按「自身与上方元素之间的设计间隙」用 margin-top 表达，
+ * 因此任一元素缺席（弹条/轨道未激活）时只从栈顶收缩，其余间隙不变。 */
+.hud-stack {
+  position: absolute;
+  bottom: 0;
+  left: calc(50% - (var(--hud-design-width) * var(--hud-scale)) / 2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: calc(var(--hud-design-width) * var(--hud-scale));
+  /* 缩放分母对栈高的上界约束：栈内容（贴条 + 两行状态 + 轨道 + 弹条）在
+   * design 基准内不越界，防御后续新增栈层时悄悄突破「完全位于视口内」。 */
+  max-height: calc(var(--hud-design-height) * var(--hud-scale));
+}
+
+.hud-progress {
+  margin-top: calc(var(--hud-popup-track-gap) * var(--hud-scale));
+}
+
+.hud-status-row--oxygen {
+  margin-top: calc(var(--hud-progress-track-gap) * var(--hud-scale));
+}
+
+.hud-status-row--primary {
+  margin-top: calc(var(--hud-status-bar-gap) * var(--hud-scale));
+}
+
+.hud-hotbar {
+  margin-top: calc(var(--hud-status-hotbar-gap) * var(--hud-scale));
+}
+
+/* 容器打开态避让：贴条让出像素（空间保留），主行贴到贴条外沿之下一个
+ * 「净空 + 行距」（statusHotbarGap + statusBarGap），氧气沿饥饿右缘继续
+ * 向下堆叠；底部预留贴条下沿内边距，状态栈绝对位置不因翻转记账移动。 */
+.hud-root--open .hud-stack {
+  padding-bottom: calc(var(--hud-hotbar-bottom-margin) * var(--hud-scale));
+}
+
+.hud-root--open .hud-hotbar {
+  visibility: hidden;
+}
+
+.hud-root--open .hud-status-row--primary {
+  margin-top: calc(
+    (var(--hud-status-hotbar-gap) + var(--hud-status-bar-gap)) * var(--hud-scale)
+  );
+}
+
+/* 氧气行翻到主行下方后，与主行之间只隔一个状态行堆叠行距。 */
+.hud-root--open .hud-status-row--oxygen {
+  margin-top: calc(var(--hud-status-bar-gap) * var(--hud-scale));
+}
+
+/* ---- 快捷栏贴条：暖深棕「投影 + 表面」双层无边（内缩缘由 inset 阴影充当） -- */
+.hud-hotbar {
+  box-sizing: border-box;
+  display: flex;
+  gap: calc(var(--hud-hotbar-slot-gap) * var(--hud-scale));
+  width: calc(var(--hud-design-width) * var(--hud-scale));
+  padding: calc(var(--hud-hotbar-padding) * var(--hud-scale));
+  background: var(--hud-hotbar-strip);
+  box-shadow: inset 0 0 0 calc(var(--hud-hotbar-rim) * var(--hud-scale)) var(--hud-hotbar-strip-shadow);
+}
+
+/* 镜像未确认或容器打开：占位保留构图空间，不产生任何像素。 */
+.hud-hotbar--unconfirmed {
+  visibility: hidden;
+}
+
+/* 物品格：米棕凹槽三色斜面（上左受光 / 下右背光 / 槽底面色）。 */
+.hud-slot {
+  position: relative;
+  box-sizing: border-box;
+  width: calc(var(--hud-hotbar-slot-size) * var(--hud-scale));
+  height: calc(var(--hud-hotbar-slot-size) * var(--hud-scale));
+  background: var(--slot-well);
+  border-top: calc(var(--hud-slot-bevel) * var(--hud-scale)) solid var(--slot-well-edge);
+  border-left: calc(var(--hud-slot-bevel) * var(--hud-scale)) solid var(--slot-well-edge);
+  border-right: calc(var(--hud-slot-bevel) * var(--hud-scale)) solid var(--hud-slot-well-dark);
+  border-bottom: calc(var(--hud-slot-bevel) * var(--hud-scale)) solid var(--hud-slot-well-dark);
+}
+
+/* 选中格双层轮廓：外扩高对比外框（outline 画在格框之外）+ sage 强调内衬
+ * （::after 铺在格心，物品 tile 与数字再叠其上）。两层都是几何标记，
+ * 忽略颜色后仍可与未选中格区分。 */
+.hud-slot--selected {
+  outline: calc(var(--hud-select-border) * var(--hud-scale)) solid var(--hud-hotbar-selected-outer);
+  outline-offset: 0;
+}
+
+.hud-slot--selected::after {
+  content: "";
+  position: absolute;
+  inset: calc(var(--hud-select-inset) * var(--hud-scale));
+  background: var(--accent-sage);
+}
+
+/* 物品 tile 占位：暗边 + 纯色面色两层小方块，真实材质映射属后续。 */
+.hud-slot-tile {
+  position: absolute;
+  z-index: 1;
+  inset: calc(var(--hud-item-tile-inset) * var(--hud-scale));
+  background: var(--hud-item-tile-edge);
+}
+
+.hud-slot-tile::after {
+  content: "";
+  position: absolute;
+  inset: calc(var(--hud-item-tile-border) * var(--hud-scale));
+  background: var(--hud-item-tile);
+}
+
+/* 耐久条：背景槽 + 剩余比例填充，绿/红两档随比例（低耐久阈值见令牌注释）。 */
+.hud-slot-durability {
+  position: absolute;
+  z-index: 2;
+  right: calc(var(--hud-durability-inset) * var(--hud-scale));
+  bottom: calc(var(--hud-durability-inset) * var(--hud-scale));
+  left: calc(var(--hud-durability-inset) * var(--hud-scale));
+  height: calc(var(--hud-durability-height) * var(--hud-scale));
+  background: var(--hud-durability-track);
+}
+
+.hud-slot-durability-fill {
+  width: calc(var(--hud-fill, 0) * 100%);
+  height: 100%;
+  background: var(--hud-durability-healthy);
+}
+
+.hud-slot-durability-fill--low {
+  background: var(--hud-durability-low);
+}
+
+/* 数量数字：暖白前景 + 右下硬投影双层，右下角对齐，最多两位。 */
+.hud-slot-count {
+  position: absolute;
+  z-index: 2;
+  right: calc(var(--hud-digit-margin) * var(--hud-scale));
+  bottom: calc(var(--hud-digit-margin) * var(--hud-scale));
+  font-size: calc(var(--hud-count-font-size) * var(--hud-scale));
+  line-height: var(--hud-text-line-height);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  text-shadow: var(--hud-text-shadow-offset-scaled) var(--hud-text-shadow-offset-scaled) 0
+    var(--text-shadow);
+}
+
+/* ---- 状态行：生命左缘 / 饥饿右缘 / 氧气沿右缘外堆叠 ----
+ * 行宽取快捷栏内容行宽（槽位行左右沿），行高固定为状态格尺寸——氧气行
+ * 恒在（满值只省略气泡），周边元素不随其显隐跳动。 */
+.hud-status-row {
+  display: flex;
+  width: calc(var(--hud-hotbar-row-width) * var(--hud-scale));
+  height: calc(var(--hud-status-icon-size) * var(--hud-scale));
+}
+
+.hud-status-row--oxygen {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+  gap: calc(var(--hud-status-icon-gap) * var(--hud-scale));
+}
+
+.hud-status-row--primary {
+  justify-content: space-between;
+}
+
+.hud-status-group {
+  display: flex;
+  gap: calc(var(--hud-status-icon-gap) * var(--hud-scale));
+}
+
+/* 饥饿自右向左排列：第一格贴右缘，填充自右向左推进。 */
+.hud-status-group--hunger {
+  flex-direction: row-reverse;
+}
+
+/* 饱和度归零抖动：饥饿行整体下移 1 design px × 比例。这是 `hunger.go`
+ * `SaturationZero` 分支（`y += scale`）的平移——只动饥饿行的呈现原点，不新增
+ * 绘制层、不改格数与尺寸，false 时像素逐项一致；生命行与氧气行不参与。 */
+.hud-status-group--saturation-zero {
+  transform: translateY(calc(var(--hud-saturation-jitter) * var(--hud-scale)));
+}
+
+.hud-cell {
+  position: relative;
+  width: calc(var(--hud-status-icon-size) * var(--hud-scale));
+  height: calc(var(--hud-status-icon-size) * var(--hud-scale));
+}
+
+.hud-icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- 进度轨道：采掘/进食共用几何，形状差异承担颜色无关可辨性 ---- */
+.hud-progress {
+  position: relative;
+  box-sizing: border-box;
+  width: calc(var(--hud-progress-track-width) * var(--hud-scale));
+  height: calc(var(--hud-progress-track-height) * var(--hud-scale));
+  overflow: hidden;
+  background: var(--hud-progress-track);
+}
+
+.hud-progress-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(var(--hud-fill, 0) * 100%);
+}
+
+.hud-progress-fill--mining-harvestable {
+  background: var(--hud-mining-harvestable);
+}
+
+.hud-progress-fill--mining-blocked {
+  background: var(--hud-mining-blocked);
+}
+
+.hud-progress-fill--eating {
+  background: var(--hud-eating-fill);
+}
+
+/* 可采末端亮标记：随填充末端移动，`max` 把它钳在轨道左缘之内，
+ * 右缘由轨道 `overflow: hidden` 收口。 */
+.hud-progress-cap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: calc(var(--hud-progress-cap-width) * var(--hud-scale));
+  left: max(
+    0px,
+    calc(var(--hud-fill, 0) * 100% - var(--hud-progress-cap-width) * var(--hud-scale))
+  );
+  background: var(--hud-mining-cap);
+}
+
+/* 不可采警示缺口：固定三处、固定宽度，几何序列与末端标记不同。 */
+.hud-progress-notch {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: calc(var(--hud-progress-notch-width) * var(--hud-scale));
+  margin-left: calc(var(--hud-progress-notch-width) * var(--hud-scale) / -2);
+  background: var(--hud-mining-notch);
+}
+
+/* ---- 物品名弹条：居中于快捷栏宽度的双层文字 ---- */
+.hud-popup {
+  box-sizing: border-box;
+  width: calc(var(--hud-hotbar-row-width) * var(--hud-scale));
+  height: calc(var(--hud-popup-row-height) * var(--hud-scale));
+  overflow: hidden;
+  font-size: calc(var(--hud-popup-font-size) * var(--hud-scale));
+  line-height: var(--hud-text-line-height);
+  color: var(--text-primary);
+  text-align: center;
+  white-space: nowrap;
+  text-shadow: var(--hud-text-shadow-offset-scaled) var(--hud-text-shadow-offset-scaled) 0
+    var(--text-shadow);
+}
+
+/* ---- 准星：视口几何中心，深色投影 + 亮色前景双层矩形 ---- */
+.hud-crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+}
+
+.hud-crosshair-arm {
+  position: absolute;
+  background: var(--hud-crosshair-fg);
+  box-shadow: calc(var(--hud-crosshair-shadow-offset) * var(--hud-scale))
+    calc(var(--hud-crosshair-shadow-offset) * var(--hud-scale)) 0 0 var(--hud-crosshair-shadow);
+}
+
+.hud-crosshair-arm--horizontal {
+  width: calc(var(--hud-crosshair-arm-length) * var(--hud-scale));
+  height: calc(var(--hud-crosshair-arm-thickness) * var(--hud-scale));
+  left: calc(var(--hud-crosshair-arm-length) * var(--hud-scale) / -2);
+  top: calc(var(--hud-crosshair-arm-thickness) * var(--hud-scale) / -2);
+}
+
+.hud-crosshair-arm--vertical {
+  width: calc(var(--hud-crosshair-arm-thickness) * var(--hud-scale));
+  height: calc(var(--hud-crosshair-arm-length) * var(--hud-scale));
+  left: calc(var(--hud-crosshair-arm-thickness) * var(--hud-scale) / -2);
+  top: calc(var(--hud-crosshair-arm-length) * var(--hud-scale) / -2);
+}
+
+/* ---- 权威命中 marker：准星中心四向白色短标记（比例随 HUD 缩放） ---- */
+.hud-marker {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+}
+
+.hud-marker-arm {
+  position: absolute;
+  background: var(--hud-marker);
+}
+
+/* 标记中心距准星中心 `--hud-marker-offset`，上下为竖臂、左右为横臂。 */
+.hud-marker-arm--up,
+.hud-marker-arm--down {
+  width: calc(var(--hud-marker-thickness) * var(--hud-scale));
+  height: calc(var(--hud-marker-length) * var(--hud-scale));
+  left: calc(var(--hud-marker-thickness) * var(--hud-scale) / -2);
+}
+
+.hud-marker-arm--left,
+.hud-marker-arm--right {
+  width: calc(var(--hud-marker-length) * var(--hud-scale));
+  height: calc(var(--hud-marker-thickness) * var(--hud-scale));
+  top: calc(var(--hud-marker-thickness) * var(--hud-scale) / -2);
+}
+
+.hud-marker-arm--up {
+  top: calc(
+    (var(--hud-marker-offset) + var(--hud-marker-length) / 2) * var(--hud-scale) * -1
+  );
+}
+
+.hud-marker-arm--down {
+  top: calc(
+    (var(--hud-marker-offset) - var(--hud-marker-length) / 2) * var(--hud-scale)
+  );
+}
+
+.hud-marker-arm--left {
+  left: calc(
+    (var(--hud-marker-offset) + var(--hud-marker-length) / 2) * var(--hud-scale) * -1
+  );
+}
+
+.hud-marker-arm--right {
+  left: calc((var(--hud-marker-offset) - var(--hud-marker-length) / 2) * var(--hud-scale));
+}
+
+/* ---- 聊天呈现：视口左缘、完整两行状态栈上沿之上的暖白行栈 ----
+ * 锚点镜像 `appendChatOverlay`：栈底 = 氧气行顶（主行顶再上一个
+ * statusBarGap + 状态格尺寸的行步进）再向上 chatHealthClearance。已知限制：
+ * Go 侧聊天栈会按本帧行数与最宽文本进一步缩水（`chatFitSlack` 两道取界），
+ * 本组件族不逐帧重算行栈尺寸，只在行内 `overflow: hidden` 收口——超高/超宽
+ * 的聊天栈在极窄视口下可能与状态栈相接，属呈现层已知限制，不改缩放口径。 */
+.hud-chat {
+  position: absolute;
+  left: calc(var(--hud-edge-margin) * var(--hud-scale));
+  bottom: calc(
+    (
+        var(--hud-hotbar-bottom-margin) + var(--hud-hotbar-slot-size) +
+          var(--hud-hotbar-padding) + var(--hud-status-hotbar-gap) +
+          var(--hud-status-icon-size) + var(--hud-status-bar-gap) +
+          var(--hud-status-icon-size) + var(--hud-chat-clearance)
+      ) * var(--hud-scale)
+  );
+  box-sizing: border-box;
+  max-width: calc(100% - 2 * var(--hud-edge-margin) * var(--hud-scale));
+  padding: calc(var(--hud-chat-padding) * var(--hud-scale));
+  background: var(--hud-panel-surface);
+}
+
+.hud-chat-line {
+  height: calc(var(--hud-chat-line-height) * var(--hud-scale));
+  overflow: hidden;
+  font-size: calc(var(--hud-chat-font-size) * var(--hud-scale));
+  color: var(--text-primary);
+  white-space: nowrap;
+  text-shadow: var(--hud-text-shadow-offset-scaled) var(--hud-text-shadow-offset-scaled) 0
+    var(--text-shadow);
+}

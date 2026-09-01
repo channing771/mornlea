@@ -7,8 +7,11 @@ import (
 )
 
 const (
-	// HUD 图集前七格是代码生成的固定 survival 图标，随后六格是 container cell，
-	// 其后从 `hotbarBlockColumnOffset` 开始按 `ItemID` 放置真实方块顶面。
+	// HUD 图集前七格是代码生成的固定 survival 图标（心形/气泡/鸡腿），随后六格
+	// 是 container cell，其后从 `hotbarBlockColumnOffset` 开始按 `ItemID` 放置
+	// 真实方块顶面。状态行图标（心形/气泡/鸡腿）的呈现已迁 WebView HUD 组件，
+	// GPU 实例不再采样这些列，但图集列布局是固定上传契约的一部分（`AtlasPixels`
+	// 按本宽度整张上传，UV 由列下标推导），列下标因此保持原位不收缩。
 	hotbarEmptyHeartColumn = iota
 	hotbarHalfHeartColumn
 	hotbarFullHeartColumn
@@ -81,15 +84,21 @@ var (
 // paintContainerSlot 以浅边、面色和深边绘制可复用的 16px 凹槽，不依赖外部美术。
 // 边缘统一为 1 px：上左受光、下右背光，去掉旧版中间调过渡行，凹槽在面板上
 // 更干脆；边缘语义与图标描边保持同一宽度。
+//
+// 三色同属暖色族：面色与上左受光边分别取 `slotWell`/`slotWellEdge` 的 sRGB 值，
+// 下右背光边取深描边 #4A3826。凹槽要在亮羊皮纸面板上读作「凹陷」，靠的是比
+// 面板暗一档的暖米棕加深边，而不是旧冷灰（冷灰落在暖面板上只会读作脏色）。
+// 这里刻意写成 `[4]byte` 而不引用 linear 令牌：图集是 8bit 纹理像素，只能按
+// sRGB 整数落色，两处数值由图集 mask 测试的暖色族断言并行守护。
 func paintContainerSlot(dst []byte, column int) {
 	for y := range hotbarTextureSize {
 		for x := range hotbarTextureSize {
-			color := [4]byte{40, 52, 58, 255}
+			color := [4]byte{217, 198, 154, 255}
 			switch {
 			case x == 0 || y == 0:
-				color = [4]byte{148, 166, 174, 255}
+				color = [4]byte{251, 245, 228, 255}
 			case x == hotbarTextureSize-1 || y == hotbarTextureSize-1:
-				color = [4]byte{16, 24, 30, 255}
+				color = [4]byte{74, 56, 38, 255}
 			}
 			paintContainerPixel(dst, column, x, y, color)
 		}
@@ -97,8 +106,10 @@ func paintContainerSlot(dst []byte, column int) {
 }
 
 // paintContainerTitle 用两枚 7×7 原创掩码生成一个标题 cell，避免标题进入 glyph 流。
+// 字色取 `textOnPanelFg` 的 sRGB 值：面板表面亮化为暖羊皮纸后，旧的浅字在
+// 亮底上读不出来，标题 cell 随面板文字一起反转为深暖棕。
 func paintContainerTitle(dst []byte, column int, masks [2][7]string) {
-	color := [4]byte{232, 238, 222, 255}
+	color := [4]byte{61, 46, 32, 255}
 	paintPixelMask(dst, column, 1, 4, masks[0], color)
 	paintPixelMask(dst, column, 8, 4, masks[1], color)
 }
@@ -202,11 +213,4 @@ func hotbarItemUV(item core.ItemID) ([4]float32, bool) {
 		return [4]float32{}, false
 	}
 	return hotbarTextureUV(hotbarBlockColumnOffset + int(item)), true
-}
-
-func hotbarBubbleUV(full bool) [4]float32 {
-	if full {
-		return hotbarTextureUV(hotbarFullBubbleColumn)
-	}
-	return hotbarTextureUV(hotbarEmptyBubbleColumn)
 }

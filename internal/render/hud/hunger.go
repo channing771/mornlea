@@ -1,94 +1,15 @@
 package hud
 
-import "github.com/channing771/mornlea/internal/core"
-
-// hungerQuads 是饥饿条在固定上传布局里占的 quad 数：十格常驻空鸡腿加最多十格填充。
-//
-// 刻意复用 `healthSegmentCount`（以及下方几何用的 `healthHeartSize`、
-// `healthHeartGap`）而不是另写一套同值常量：饥饿条是生命条的右下镜像，两条 bar
-// 的格数与格尺寸必须严格相等，各写一份迟早会有一侧被改动而另一侧漂移。
-const hungerQuads = healthSegmentCount * 2
-
-// HungerOverlay 是服务端已确认的饥饿值。它是 render 本地值，由 app 从
-// Predictor 的已确认镜像转换；Confirmed 为 false 时表示尚未收到权威状态，
-// 渲染器不画任何饥饿元素——饥饿是权威值，客户端绝不显示预测或陈旧的数值。
-//
-// SaturationZero 为 true 时追加 1×scale 的垂直抖动偏移（仅呈现分支，
-// 不新增绘制管线，false 时像素逐字节一致）。
-type HungerOverlay struct {
-	Confirmed      bool
-	Value          uint8
-	SaturationZero bool
-}
-
-// appendHungerBar 从快捷栏右边缘向左绘制一排鸡腿。
-//
-// 三条契约：
-//
-//   - **满时仍然显示**：饥饿是常态资源，条本身永远在，玩家靠它读「还剩多少」。
-//     这与氧气条「未满才出现」相反——氧气是异常态，只在水下才该占用界面。
-//     因此这里没有「满值提前返回」那一句，写在这里是为了防止后来者照氧气条
-//     补一句「优化」。
-//   - **复用既有绘制阶段**：quad 追加进同一份 `hotbarLayout`，与快捷栏、生命条、
-//     氧气条走同一个 HUD pass、同一份实例缓冲、同一张 HUD 图集（鸡腿只是新占
-//     两列），没有第二条管线。
-//   - **半格粒度**：每格两点，奇数饥饿值末格画半个。因为整条是右下镜像、填充
-//     从右向左推进，半格露出的是鸡腿的**右**半边（U0 取中点、X 右移半格），
-//     与左下生命条的半颗爱心（露左半边）恰好对称。
-func appendHungerBar(
-	dst *hotbarLayout,
-	hunger HungerOverlay,
-	open bool,
-	width, height float32,
-) {
-	if !hunger.Confirmed || width <= 0 || height <= 0 {
-		return
-	}
-	_, right, y, _, scale := statusBarBounds(open, width, height)
-	if hunger.SaturationZero {
-		y += scale
-	}
-	size := healthHeartSize * scale
-	gap := healthHeartGap * scale
-	// segmentX 返回自右向左第 segment 格的左边沿。
-	segmentX := func(segment int) float32 {
-		return right - float32(segment+1)*size - float32(segment)*gap
-	}
-	emptyUV := hotbarTextureUV(hotbarEmptyDrumstickColumn)
-	for segment := range healthSegmentCount {
-		dst.quads = append(dst.quads, hotbarInstance{
-			X: segmentX(segment), Y: y,
-			Width: size, Height: size,
-			U0: emptyUV[0], V0: emptyUV[1], U1: emptyUV[2], V1: emptyUV[3],
-			Color: [4]float32{1, 1, 1, 1},
-		})
-	}
-	value := min(hunger.Value, core.MaxHunger)
-	filled := (int(value) + 1) / 2
-	fullUV := hotbarTextureUV(hotbarFullDrumstickColumn)
-	for segment := range filled {
-		x := segmentX(segment)
-		fillWidth := size
-		fillU0 := fullUV[0]
-		if segment == filled-1 && value%2 != 0 {
-			fillWidth *= 0.5
-			fillU0 = (fullUV[0] + fullUV[2]) * 0.5
-			x += size * 0.5
-		}
-		dst.quads = append(dst.quads, hotbarInstance{
-			X: x, Y: y,
-			Width: fillWidth, Height: size,
-			U0: fillU0, V0: fullUV[1], U1: fullUV[2], V1: fullUV[3],
-			Color: [4]float32{1, 1, 1, 1},
-		})
-	}
-}
+// hunger.go 是 HUD 图集的鸡腿图标 painter：空槽与满格两枚 cell 的程序化像素源。
+// 饥饿行的呈现已迁 WebView HUD 组件，但图集的列布局是固定上传契约的一部分
+// （`AtlasPixels` 把整张贴图交给渲染器），这两枚 cell 因此继续随图集构建并上传，
+// 列下标不得移动。
 
 // paintHotbarDrumstick 把一格鸡腿画进 HUD 图集的指定列，full 区分满格与空槽。
 //
-// 与 `paintHotbarHeart` 同处同法：程序化生成、不进 `internal/assets`。HUD 图集
-// 不在材质包的覆盖范围内（材质包动的是方块 layer），把 HUD 图标放这里既避开了
-// 与它的冲突，也沿用了爱心已经跑了几个里程碑的先例。
+// 程序化生成、不进 `internal/assets`：HUD 图集不在材质包的覆盖范围内（材质包
+// 动的是方块 layer），把 HUD 图标放这里既避开了与它的冲突，也沿用了爱心已经
+// 跑了几个里程碑的先例。
 //
 // 空槽画成同一轮廓的深色剪影而不是留白，这样十格底一直勾勒出满值刻度，玩家
 // 一眼能读出「还差几格」。

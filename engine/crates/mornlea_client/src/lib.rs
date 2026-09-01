@@ -21,7 +21,13 @@ mod capture;
 #[cfg(target_os = "macos")]
 pub mod input;
 #[cfg(target_os = "macos")]
+mod overlay;
+#[cfg(target_os = "macos")]
+mod overlay_spike;
+#[cfg(target_os = "macos")]
 pub mod render;
+#[cfg(target_os = "macos")]
+mod spike_auto;
 #[cfg(target_os = "macos")]
 pub mod webview;
 #[cfg(target_os = "macos")]

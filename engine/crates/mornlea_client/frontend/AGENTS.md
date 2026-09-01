@@ -33,7 +33,11 @@ Rust 侧只消费本目录的构建产物 `dist/`（经 `mornlea://` scheme 内�
   换算口径与取值来源见 `src/tokens.css` 头注（HUD 族取自
   `internal/render/hud/style.go`；egui 退役后，原 egui 皮肤族的次级取值
   以 `src/tokens.css` 为唯一权威）。强制点：评审兜底（无自动 lint）。
-- 琥珀是唯一强调色相，只用于选中、进度、焦点/编辑态；错误行专用危险红。
+- 强调色相采用 Mornlea 双强调体系：鼠尾草绿（sage）负责选中、焦点与 hover
+  等交互态；麦金（wheat）负责进度、来源轮廓与重要信息；错误行专用危险红。
+  不引入第三种强调色相，sage 与 wheat 两族不得互换语义（与 Go 侧
+  `internal/render/hud/style.go` 的 `accentSelected`/`accentProgress`
+  语义同源；hover/焦点环属菜单层，Go 侧不设对应令牌）。
   `prefers-reduced-motion` 下动效时长令牌归零，组件样式不得绕开令牌另设
   transition。
 - 四面板按钮与表单控件必须经 `src/ui/pixel.tsx` 桥接层
@@ -60,7 +64,8 @@ Rust 侧只消费本目录的构建产物 `dist/`（经 `mornlea://` scheme 内�
 - Tailwind `content` 扫描 `node_modules/pixel-retroui/dist/**`，retroui
   产物引用的工具类与其自带样式表会把 `.hidden`/`.shadow`/`.container`
   等通用名带进全局命名空间：前端类名保持既有 `menu-*`/`settings-*`/
-  `pause-*`/`debug-*`/`pixel-*` 前缀隔离，不得裸用通用工具类名。
+  `pause-*`/`debug-*`/`pixel-*`/`hud-*` 前缀隔离，不得裸用通用工具类名
+  （`hud-*` 属 `src/hud/` 的常显 HUD 组件族）。
 
 ## 固定文案（`src/ui/copy.ts`）
 

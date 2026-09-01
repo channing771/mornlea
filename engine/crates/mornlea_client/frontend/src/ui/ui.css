@@ -79,35 +79,39 @@ body {
   /* retroui 组件类把字体写死为 Minecraft 回退栈；桥接层必须拉回 UI 字体栈
    * （继承 body 的像素字体优先栈），中文像素呈现不因组件桥接回退系统字。 */
   font-family: inherit;
-  color: var(--text-primary);
-  text-shadow: 1px 1px 0 var(--text-shadow);
+  /* 按钮表面走 --bg-button（链到亮羊皮纸 --panel-surface），文字必须配深棕，
+   * 暖白 --text-primary 只保留给世界底浮层。 */
+  color: var(--text-on-panel);
+  /* 面板内深棕文字不消费投影双层规范；世界底文字仍保持投影。 */
+  text-shadow: none;
   cursor: pointer;
-  /* 表面变量切换（悬停/焦点换琥珀水洗色）驱动的是计算后背景色，transition
+  /* 表面变量切换（悬停/焦点换 sage 水洗色）驱动的是计算后背景色，transition
    * 消费动效令牌，prefers-reduced-motion 下随令牌归零。 */
   transition: background-color var(--motion-fast) var(--motion-ease);
 }
 
-/* 琥珀唯一强调面：悬停预览与焦点态把 retroui 表面变量切到琥珀水洗色。 */
+/* 交互态 sage 面：悬停预览与焦点态把 retroui 表面变量切到 --accent-wash
+ * （sage 25% 水洗色）。 */
 .pixel-button:hover:not(:disabled),
 .pixel-button:focus-visible {
   --bg-button: var(--accent-wash);
 }
 
 /* retroui 的像素描边走 border-image，border-color 在其下不可见；焦点的
- * 几何标记改用琥珀外描环（outline），位置与色彩都不依赖组件内部实现。 */
+ * 几何标记改用 sage 外描环（outline），位置与色彩都不依赖组件内部实现。 */
 .pixel-button:focus-visible {
-  outline: var(--pixel-focus-ring-width) solid var(--accent-amber-solid);
+  outline: var(--pixel-focus-ring-width) solid var(--accent-sage-solid);
   outline-offset: var(--pixel-focus-ring-offset);
 }
 
 .pixel-button:disabled {
-  color: var(--text-secondary);
+  color: var(--text-muted);
   cursor: default;
 }
 
 /* PixelInput 包装层：retroui Input 是「包装层 + 内部原生 input」结构，
  * className 落在包装层；此处归零演示外距、回字体栈，内部输入框透明地
- * 铺在组件凹槽表面上。焦点/编辑态即琥珀唯一强调面。 */
+ * 铺在组件凹槽表面上。焦点/编辑态即 sage 交互态强调面。 */
 .pixel-input {
   display: block;
   margin: 0;
@@ -119,17 +123,17 @@ body {
 }
 
 .pixel-input:focus-within {
-  outline: var(--pixel-focus-ring-width) solid var(--accent-amber-solid);
+  outline: var(--pixel-focus-ring-width) solid var(--accent-sage-solid);
   outline-offset: var(--pixel-focus-ring-offset);
 }
 
 /* PixelCard / PixelDropdown 包装层：与按钮/输入框同口径——归零演示外距、
- * 回 UI 字体栈、文字用主色；表面取色经 tokens.css 的 --bg-card/
+ * 回 UI 字体栈、文字用面板内深棕；表面取色经 tokens.css 的 --bg-card/
  * --bg-dropdown 变量映射，无需组件级样式。菜单项内的选项按钮铺满菜单项。 */
 .pixel-card {
   margin: 0;
   font-family: inherit;
-  color: var(--text-primary);
+  color: var(--text-on-panel);
 }
 
 .pixel-dropdown {
@@ -214,12 +218,15 @@ body {
   border-radius: var(--radius-panel);
   background: var(--panel-surface);
   box-shadow: 0 8px 24px var(--panel-shadow);
+  /* 面板级声明让全部子元素默认继承面板内深棕：body 的暖白
+   * --text-primary 只服务世界底，在亮羊皮纸上对比不足。 */
+  color: var(--text-on-panel);
 }
 
+/* 标题位于亮面板内，继承面板深棕字色，不消费文字投影。 */
 .settings-title {
   margin: 0;
   font-size: var(--font-heading);
-  text-shadow: 1px 1px 0 var(--text-shadow);
 }
 
 .settings-field {
@@ -251,14 +258,16 @@ body {
 .settings-status {
   margin: 0;
   font-size: var(--font-version);
-  color: var(--text-secondary);
+  /* 面板内次级文字专用令牌，与世界底次级 --text-secondary 不混用。 */
+  color: var(--text-secondary-on-panel);
 }
 
+/* 未保存草稿提示：属「重要信息」，归 wheat 强调（交互态才归 sage）。 */
 .settings-dirty {
   margin: 0;
   font-size: var(--font-message);
   font-weight: 600;
-  color: var(--accent-amber-solid);
+  color: var(--accent-wheat-solid);
 }
 
 .settings-error {
@@ -285,7 +294,7 @@ body {
 
 /* 窗口大小三预设按钮：PixelButton 承载，role/aria-pressed/键盘语义与改造
  * 前逐项一致（保持三按钮组而非菜单件，焦点顺序与 Tab 序不变）；选中面即
- * 琥珀唯一强调面——表面变量切到琥珀水洗色。 */
+ * sage 交互态强调面——表面变量切到 --accent-wash。 */
 .settings-window-button {
   flex: 1;
   box-sizing: border-box;
@@ -310,8 +319,8 @@ body {
 }
 
 /* 音量滑块：规格钉死「以滑块呈现」而 retroui 无滑块组件，按像素令牌自绘
- * 重绘——凹槽轨道硬描边、方形琥珀拇指（进度即琥珀强调面）。控件本体仍是
- * 原生 range 输入，键盘与 ARIA（role=slider、[0,1] 归一）语义零改动；
+ * 重绘——凹槽轨道硬描边、方形 wheat 拇指（进度归 wheat 强调）。控件本体
+ * 仍是原生 range 输入，键盘与 ARIA（role=slider、[0,1] 归一）语义零改动；
  * 伪元素仅 WebKit 前缀即可覆盖唯一目标 WKWebView。 */
 .settings-slider {
   -webkit-appearance: none;
@@ -338,11 +347,12 @@ body {
   margin-top: calc(
     (var(--pixel-slider-track-height) + 2 * var(--hairline) - var(--pixel-slider-thumb-size)) / 2
   );
-  background: var(--accent-amber-solid);
+  background: var(--accent-wheat-solid);
 }
 
+/* 焦点环仍归 sage：thumb 的 wheat 表进度语义，焦点是交互态。 */
 .settings-slider:focus-visible {
-  outline: var(--pixel-focus-ring-width) solid var(--accent-amber-solid);
+  outline: var(--pixel-focus-ring-width) solid var(--accent-sage-solid);
   outline-offset: var(--pixel-focus-ring-offset);
 }
 
@@ -393,6 +403,9 @@ body {
   background: var(--panel-surface);
   box-shadow: 0 8px 24px var(--panel-shadow);
   font-size: var(--font-message);
+  /* 面板级声明让全部子元素默认继承面板内深棕：body 的暖白
+   * --text-primary 只服务世界底，在亮羊皮纸上对比不足。 */
+  color: var(--text-on-panel);
 }
 
 .debug-readout {
@@ -419,7 +432,7 @@ body {
 
 .debug-section {
   min-height: var(--debug-row-height);
-  color: var(--text-secondary);
+  color: var(--text-secondary-on-panel);
   line-height: var(--debug-row-height);
 }
 
@@ -430,20 +443,20 @@ body {
   line-height: var(--debug-row-height);
 }
 
-/* 选中标记：靠左整高琥珀窄条，几何上即选中位置（颜色无关可辨）。 */
+/* 选中标记：靠左整高 sage 窄条，几何上即选中位置（颜色无关可辨）。 */
 .debug-row.is-selected::before {
   content: "";
   position: absolute;
   left: calc(-1 * var(--menu-button-gap));
   width: var(--debug-selected-mark);
   height: 100%;
-  background: var(--accent-amber-solid);
+  background: var(--accent-sage-solid);
 }
 
 .debug-row .debug-label {
   flex: 0 0 auto;
   min-width: var(--debug-value-column);
-  color: var(--text-secondary);
+  color: var(--text-secondary-on-panel);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -458,7 +471,7 @@ body {
 /* 只读参数行：数值随标签同用次级文字色，与 aria-disabled 一同呈现
  * 「不可选中/编辑」的禁用语义（亮度层级，不依赖单一色相）。 */
 .debug-row.is-readonly .debug-value {
-  color: var(--text-secondary);
+  color: var(--text-secondary-on-panel);
 }
 
 /* 调试参数行行内编辑框：PixelInput 包装层在 26px 行高内承载 retroui 像素

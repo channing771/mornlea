@@ -29,15 +29,14 @@ func compareReportsWithScenarioUpgrade(
 	allowScenarioUpgrade string,
 ) ([]string, error) {
 	scenarioUpgrade := baseline.ScenarioVersion != current.ScenarioVersion
-	// 客户端 UI 对齐又一次改变了被测进程（HUD 新增准星、物品名弹条、容器浮动
-	// 面板描边与悬停 tooltip 背景，quad 容量 267→320 使固定 GPU 上传布局、
-	// glyph offset 与每帧写入字节数移动；权威 tick 语义不变），因此当前唯一
-	// 迁移是 v19 到 v20。历史的 18:19 已退役——它只作为归档证据留在 docs/notes，
-	// 不再是授权值。
-	allowedScenarioUpgrade := baseline.ScenarioVersion == 19 && current.ScenarioVersion == 20 &&
-		allowScenarioUpgrade == "19:20"
+	// 常显 HUD 层迁出 GPU 保留面又一次改变了被测进程（关闭容器帧的 HUD 实例
+	// 前缀降为零、打开态最坏收缩到 218 quad/268 glyph，固定上传布局不变），因
+	// 此当前唯一迁移是 v20 到 v21。历史的 19:20 已退役——它只作为归档证据留在
+	// docs/notes，不再是授权值。
+	allowedScenarioUpgrade := baseline.ScenarioVersion == 20 && current.ScenarioVersion == 21 &&
+		allowScenarioUpgrade == "20:21"
 	if allowScenarioUpgrade != "" && !allowedScenarioUpgrade {
-		return nil, fmt.Errorf("场景迁移授权 %q 无效：只允许 v19 到 v20 使用 19:20", allowScenarioUpgrade)
+		return nil, fmt.Errorf("场景迁移授权 %q 无效：只允许 v20 到 v21 使用 20:21", allowScenarioUpgrade)
 	}
 	if scenarioUpgrade && !allowedScenarioUpgrade {
 		return nil, fmt.Errorf(
