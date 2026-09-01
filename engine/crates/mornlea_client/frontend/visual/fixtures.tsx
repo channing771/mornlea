@@ -13,11 +13,15 @@
 import type { ReactElement } from "react";
 import type {
   DebugState,
+  HudSlot,
+  HudState,
   MenuState,
   PauseState,
   SettingsState,
   UplinkEvent,
 } from "../src/bridge/client";
+import { HudRoot } from "../src/hud/HudRoot";
+import { ProgressTrack } from "../src/hud/ProgressTrack";
 import { DebugPanel } from "../src/ui/DebugPanel";
 import { MainMenu } from "../src/ui/MainMenu";
 import { PauseMenu } from "../src/ui/PauseMenu";
@@ -90,6 +94,106 @@ function stage(child: ReactElement): ReactElement {
   );
 }
 
+// ---- 游戏 HUD 部件（`hud-` 前缀）：真实组件 + 合成 HudState 夹具 ----
+
+// 视口夹具：取实拍窗口尺寸（1280x720），单一比例 `--hud-scale` 因此落在 1，
+// 部件按 design 基准原尺寸呈现。
+const hudViewport = { width: 1280, height: 720 };
+
+// hudState 补齐恒携带字段（viewport 与两条进度条的未激活缺省），各 fixture
+// 只写关心分节；进度条仍可按 fixture 覆写（如状态栈内的采掘轨道）。
+function hudState(overrides: Partial<Omit<HudState, "viewport">>): HudState {
+  return {
+    viewport: hudViewport,
+    mining: { active: false, progress: 0, harvestable: false },
+    eating: { active: false, progress: 0 },
+    ...overrides,
+  };
+}
+
+// hudStage 把 HUD 部件放进模拟世界底色的舞台：生产 HUD 的根是全屏透明层、
+// 直接叠在 wgpu 世界画面上，截图没有世界画面，这里以既有暖深棕面板投影令牌
+// 充当背景，暖白前景文字与暗色贴条才可辨（呈现面仍是生产组件与令牌）。
+function hudStage(child: ReactElement): ReactElement {
+  return <div className="visual-hud-stage">{child}</div>;
+}
+
+// hud-hotbar 的九格镜像：覆盖选中格双层轮廓、两位数量、单件不显示数量、
+// 耐久三档（部分磨损/满耐久无条/跌破四分之一的低耐久档）与空格。
+const hudHotbarSlots: readonly HudSlot[] = [
+  { item: 1, count: 1 },
+  { item: 2, count: 64 },
+  { item: 7, count: 12, durability: 0.6 },
+  { item: 0, count: 0 },
+  { item: 4, count: 3 },
+  { item: 9, count: 1, durability: 1 },
+  { item: 11, count: 1, durability: 0.15 },
+  { item: 0, count: 0 },
+  { item: 5, count: 2 },
+];
+
+// 状态栈/弹条/聊天/容器各 fixture 共用的九格镜像：空格与少量物品混合，
+// 状态行两缘按这份镜像的内容行宽对齐。
+const hudInventorySlots: readonly HudSlot[] = [
+  { item: 1, count: 1 },
+  { item: 0, count: 0 },
+  { item: 3, count: 24 },
+  { item: 0, count: 0 },
+  { item: 6, count: 1, durability: 0.8 },
+  { item: 0, count: 0 },
+  { item: 12, count: 5 },
+  { item: 0, count: 0 },
+  { item: 2, count: 1 },
+];
+
+// hud-hotbar：只携带快捷栏镜像，生命/饥饿/氧气缺席顺带见证「镜像未确认
+// 不产生状态格」。
+const hudHotbarFixture: HudState = hudState({
+  hotbar: { slots: hudHotbarSlots, selectedIndex: 2 },
+});
+
+// hud-status：完整状态栈——生命 7（三满一半）、饥饿 5（奇数，末格露右半）、
+// 耗损氧气 90（三个满气泡沿饥饿外缘堆叠）、采掘可采轨道居状态栈上方；
+// 饥饿行携带 `saturationZero`，抖动态（下移 1 design px）随之入基线见证。
+const hudStatusFixture: HudState = hudState({
+  hotbar: { slots: hudInventorySlots, selectedIndex: 0 },
+  health: { value: 7 },
+  hunger: { value: 5, saturationZero: true },
+  oxygen: { value: 90 },
+  mining: { active: true, progress: 0.45, harvestable: true },
+});
+
+// hud-popup-crosshair：物品名弹条 + 十字准星 + 权威命中 marker 同帧共存。
+const hudPopupCrosshairFixture: HudState = hudState({
+  hotbar: { slots: hudInventorySlots, selectedIndex: 0 },
+  health: { value: 7 },
+  hunger: { value: 5, saturationZero: false },
+  oxygen: { value: 90 },
+  popup: { text: "橡木原木" },
+  crosshair: true,
+  marker: true,
+});
+
+// hud-chat：多行聊天（含一个空行占位），锚在视口左缘、状态栈上沿之上。
+const hudChatFixture: HudState = hudState({
+  hotbar: { slots: hudInventorySlots, selectedIndex: 0 },
+  health: { value: 7 },
+  hunger: { value: 5, saturationZero: false },
+  oxygen: { value: 90 },
+  chat: { lines: ["你加入了世界", "矿洞入口在东南方向", "", "小心夜晚的敌对生物"] },
+});
+
+// hud-container-open：容器打开态翻转构图——两条状态行翻到快捷栏下方、贴条
+// 让出像素保留构图空间，弹条被抑制（夹具仍携带弹条以见证抑制）。
+const hudContainerOpenFixture: HudState = hudState({
+  hotbar: { slots: hudInventorySlots, selectedIndex: 0 },
+  health: { value: 4 },
+  hunger: { value: 5, saturationZero: false },
+  oxygen: { value: 90 },
+  popup: { text: "橡木原木" },
+  containerOpen: true,
+});
+
 // 注册表：键集合被 `Record<FixtureName, ReactElement>` 与 fixture-names.ts 的
 // 字面量联合双向钉死（新增部件先加清单条目，否则这里编译不过），随后跑
 // update 入口把基线随部件一并入库。
@@ -150,6 +254,21 @@ const registry: Record<FixtureName, ReactElement> = {
   ),
   "debug-rows": <DebugPanel debug={debugRowsFixture} onEvent={noEvent} />,
   "error-line": stage(<p className="menu-error" role="alert">世界装配失败</p>),
+  // 游戏 HUD 部件：合成 HudState 夹具驱动真实 HudRoot（呈现面与生产一致）。
+  "hud-hotbar": hudStage(<HudRoot hud={hudHotbarFixture} />),
+  "hud-status": hudStage(<HudRoot hud={hudStatusFixture} />),
+  // HudRoot 的采掘/进食轨道互斥、单帧只呈现一条，三档轨道形状差异因此以
+  // 生产 ProgressTrack 组件并排一次看全（轨道几何与标记形状仍逐项同源）。
+  "hud-progress": hudStage(
+    <div className="visual-hud-progress-row">
+      <ProgressTrack kind="mining-harvestable" progress={0.62} />
+      <ProgressTrack kind="mining-blocked" progress={0.45} />
+      <ProgressTrack kind="eating" progress={0.3} />
+    </div>,
+  ),
+  "hud-popup-crosshair": hudStage(<HudRoot hud={hudPopupCrosshairFixture} />),
+  "hud-chat": hudStage(<HudRoot hud={hudChatFixture} />),
+  "hud-container-open": hudStage(<HudRoot hud={hudContainerOpenFixture} />),
 };
 
 // 注册表与清单运行期互钉兜底（编译期已由 Record<FixtureName, …> 钉死注册表

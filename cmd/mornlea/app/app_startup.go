@@ -341,6 +341,11 @@ func NewWithDependencies(
 	}
 	app.nameTagRenderer = render.NewNameTagLayouter(app.glyphAtlas)
 	app.hotbarRenderer = hud.NewHotbarLayout(app.glyphAtlas, reg)
+	// hud 分节纪律层只对有窗口的交互客户端有意义：无头路径（基准/capture）
+	// 保持零值，冲刷随 nil 出口退化为空操作。
+	if window != nil {
+		app.initHUDPush()
+	}
 	hudWidth, hudHeight, hudPixels := app.hotbarRenderer.AtlasPixels()
 	rustRenderer.UploadHUDAtlas(hudWidth, hudHeight, hudPixels)
 	// 菜单层已迁 WebView(client ABI v12):不再上传菜单字体;菜单 chrome 由
@@ -439,6 +444,9 @@ func (a *Application) startWorld() error {
 	a.dayPhaseOffset = 0
 	a.observerFloor = 0
 	a.clientSessionClosed = false
+	// hud 分节随会话一并复位：上一台已析构世界的下行基线不得拦截本会话的
+	// 第一次冲刷。
+	a.resetHUDStatePush()
 	// 全景随装配丢弃：游戏相位渲染真实世界，重进菜单相位时按同种子重建
 	// 出确定性相同的画面（spec webview-menu-ui「全景背景确定性」）。
 	a.discardMenuVista()

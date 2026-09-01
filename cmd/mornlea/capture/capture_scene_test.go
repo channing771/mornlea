@@ -833,8 +833,8 @@ func TestTorchNightCaptureSceneIsRegistered(t *testing.T) {
 	if scene.WarmupFrames != 8 {
 		t.Fatalf("torch-night WarmupFrames=%d，想要 8", scene.WarmupFrames)
 	}
-	if scene.HUD != nil || scene.Menu || scene.Settings != nil || scene.PinVolatile != nil {
-		t.Fatalf("torch-night 不应携带 HUD/菜单/设置/易变钉住夹具: %+v", scene)
+	if scene.Menu || scene.Settings != nil || scene.PinVolatile != nil {
+		t.Fatalf("torch-night 不应携带菜单/设置/易变钉住夹具: %+v", scene)
 	}
 }
 
@@ -1164,8 +1164,35 @@ func TestBedNightCaptureSceneIsRegistered(t *testing.T) {
 	if scene.WarmupFrames != 8 {
 		t.Fatalf("bed-night WarmupFrames=%d，想要 8", scene.WarmupFrames)
 	}
-	if scene.HUD != nil || scene.Menu || scene.Settings != nil || scene.PinVolatile != nil {
-		t.Fatalf("bed-night 不应携带 HUD/菜单/设置/易变钉住夹具: %+v", scene)
+	if scene.Menu || scene.Settings != nil || scene.PinVolatile != nil {
+		t.Fatalf("bed-night 不应携带菜单/设置/易变钉住夹具: %+v", scene)
+	}
+}
+
+// TestDebugPanelAndTerrainNoonShareNoonWorldFixture 钉住 debug-panel 与
+// terrain-noon 的夹具恒等：同一正午 tick、同一相机姿态、都不装世界夹具
+// （无 Prepare，共用登录世界）。debug-panel 的「面板可见不产生无头面板像素」
+// 这条 golden 钉值只有在两景夹具完全一致时才成立——任何一侧单独改夹具都会
+// 让两张 golden 的差异不再只归因于面板状态，该钉值于是静默失效。
+func TestDebugPanelAndTerrainNoonShareNoonWorldFixture(t *testing.T) {
+	terrain := captureSceneByName(t, "terrain-noon")
+	panel := captureSceneByName(t, "debug-panel")
+	if terrain.Prepare != nil || panel.Prepare != nil {
+		t.Fatalf("两景必须共用登录世界夹具：terrain.Prepare=%v panel.Prepare=%v",
+			terrain.Prepare != nil, panel.Prepare != nil)
+	}
+	app := newCaptureAICompanionState()
+	for _, scene := range []captureScene{terrain, panel} {
+		if err := scene.Apply(app); err != nil {
+			t.Fatalf("应用 %s: %v", scene.Name, err)
+		}
+		if app.WorldTimeTicks() != 6000 || app.Camera().Yaw != 0 || app.Camera().Pitch != -0.25 {
+			t.Fatalf("%s 夹具 time=%d yaw=%v pitch=%v，想要 6000/0/-0.25（与 terrain-noon 恒等）",
+				scene.Name, app.WorldTimeTicks(), app.Camera().Yaw, app.Camera().Pitch)
+		}
+	}
+	if !app.Panel().Visible() {
+		t.Fatal("debug-panel 的 Apply 必须装入面板可见态，否则零面板像素钉值没有被驱动")
 	}
 }
 

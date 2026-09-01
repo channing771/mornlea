@@ -152,7 +152,7 @@ func (a *Application) SetItemDropInstances(instances []render.ItemDrop) {
 // Predictor 返回输入预测器（当前方块目标的射线来源）。
 func (a *Application) Predictor() *client.Predictor { return a.predictor }
 
-// SetPredictor 替换输入预测器，仅限 capture HUD 夹具的换装/恢复。
+// SetPredictor 替换输入预测器，仅限测试装配路径使用。
 func (a *Application) SetPredictor(predictor *client.Predictor) { a.predictor = predictor }
 
 // NameTagRenderer 返回名牌批次渲染器。
@@ -228,15 +228,14 @@ func (a *Application) Center() core.ChunkPos { return a.center }
 // SetCenter 写入相机中心区块（远环场景固定相机时同步）。
 func (a *Application) SetCenter(center core.ChunkPos) { a.center = center }
 
-// SetServerTick 固定调试面板读数用的权威 tick（capture 场景钉住读数）。
+// SetServerTick 固定权威 tick（弹条可见窗口与面板读数都以它计时）。
 func (a *Application) SetServerTick(tick uint64) { a.serverTick = tick }
 
 // ResetItemPopupBaseline 把物品名弹条重放回会话起点：清空已记录弹条并丢弃
 // 确认选中基线，之后的第一次确认观察只建基线、不触发。交互客户端在会话开始
 // 时经 `resetSessionOwnedState` 达成同一语义；无头 capture 场景共用同一个
-// application，需要按场景重放该起点，让呈现静态确认状态的场景不把夹具选中
-// 误当成一次选中变化（真实调用方：capture 场景 `hud-hotbar-health`、
-// `hud-survival-feedback` 与弹条夹具恢复闭包）。
+// application，需要按场景重放该起点，让装入静态确认物品栏的场景不把夹具选中
+// 误当成一次选中变化（真实调用方：capture 场景 `sword-combat`）。
 func (a *Application) ResetItemPopupBaseline() {
 	a.itemPopup = hud.PopupOverlay{}
 	a.popupSelection = 0
@@ -323,9 +322,6 @@ func (a *Application) LoadedChunks() map[core.ChunkPos]struct{} { return a.loade
 func (a *Application) SetPanel(panel *panelState) {
 	a.panel = panel
 }
-
-// SetPanelLastFrameAt 复位调试面板读数的采样时刻（capture 场景钉住 PanelReadout）。
-func (a *Application) SetPanelLastFrameAt(at time.Time) { a.panelLastFrameAt = at }
 
 // SetSettings 整体写入设置页状态（capture 设置页场景固定 committed/draft）。
 func (a *Application) SetSettings(settings SettingsState) { a.settings = settings }

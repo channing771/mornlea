@@ -44,3 +44,7 @@ objc2-web-kit = { version = "0.3.2", default-features = false, features = [
 # serde_json:桥信封(上行事件批)的解析与再序列化。Go 下行状态 JSON 只做
 # 相位浅校验,深校验在 Go 侧;序列化输出直接作为 evaluateJavaScript 表达式。
 serde_json = "1.0.145"
+# block2:spike 自驱动档读取 `evaluateJavaScript` 完成回调里的页面回执
+# (主菜单按钮命中与否、按钮矩形)。与 objc2-web-kit 依赖树内的同线版本
+# 统一,不引入新包;只在 `MORNLEA_SPIKE_AUTO` 开启时构造 Block。
+block2 = "0.6"

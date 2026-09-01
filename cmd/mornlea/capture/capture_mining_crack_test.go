@@ -56,15 +56,11 @@ func TestMiningCrackCaptureScenesPinAuthoritativeTarget(t *testing.T) {
 			if scene.WarmupFrames != 8 || scene.Prepare == nil || scene.Apply == nil {
 				t.Fatalf("%s 场景不完整: %+v", tc.name, scene)
 			}
-			if scene.HUD == nil {
-				t.Fatalf("%s 缺少 HUD 夹具", tc.name)
-			}
+			// 采掘镜像由场景 Apply 经 SetMiningOverlay 直装（HUD 夹具随
+			// 常显层退役），这里用旁路夹具记录期望值并在 Apply 后核对。
 			want := hud.MiningOverlay{
 				Active: true, HasTarget: true, Target: captureMiningCrackTarget,
 				ProgressTicks: tc.wantProgress, RequiredTicks: 30, Harvestable: true,
-			}
-			if mining := scene.HUD.Mining; mining != want {
-				t.Fatalf("%s mining=%+v，想要 %+v", tc.name, mining, want)
 			}
 			if got := render.BlockCrackStage(want.ProgressTicks, want.RequiredTicks); got != tc.wantStage {
 				t.Fatalf("%s stage=%d，想要 %d", tc.name, got, tc.wantStage)
@@ -105,6 +101,9 @@ func TestMiningCrackCaptureScenesPinAuthoritativeTarget(t *testing.T) {
 			if !ok || target.Position != captureMiningCrackTarget {
 				t.Fatalf("CurrentBlockTarget=%+v/%v，想要命中 %v", target, ok, captureMiningCrackTarget)
 			}
+			if mining := app.MiningOverlay(); mining != want {
+				t.Fatalf("%s mining=%+v，想要 %+v", tc.name, mining, want)
+			}
 		})
 	}
 }
@@ -131,13 +130,21 @@ func TestMiningCrackCaptureScenePixelEvidence(t *testing.T) {
 	}
 	app.SetPredictor(predictor)
 
-	// suppressed 只关 HasTarget：HUD 进度条、选框与世界内容保持不变，
-	// 目标区域的差异因此只可能来自裂纹本身。
+	// suppressed 在原夹具 Apply 之后把采掘镜像的 HasTarget 关掉：选框与
+	// 世界内容保持不变，目标区域的差异因此只可能来自裂纹本身（HUD 进度条
+	// 已迁 WebView，不参与本对照）。
 	suppressed := func(scene captureScene) captureScene {
 		copied := scene
-		fixture := *scene.HUD
-		fixture.Mining.HasTarget = false
-		copied.HUD = &fixture
+		inner := copied.Apply
+		copied.Apply = func(app SceneApplication) error {
+			if err := inner(app); err != nil {
+				return err
+			}
+			overlay := app.MiningOverlay()
+			overlay.HasTarget = false
+			app.SetMiningOverlay(overlay)
+			return nil
+		}
 		return copied
 	}
 	// cropRegion 抽出零起点坐标的区域副本：compareImages 的 PixOffset 调用

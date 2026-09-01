@@ -15,6 +15,12 @@ export const fixtureNames = [
   "slider",
   "debug-rows",
   "error-line",
+  "hud-hotbar",
+  "hud-status",
+  "hud-progress",
+  "hud-popup-crosshair",
+  "hud-chat",
+  "hud-container-open",
 ] as const;
 
 export type FixtureName = (typeof fixtureNames)[number];

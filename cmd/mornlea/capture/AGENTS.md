@@ -26,9 +26,11 @@
 - 场景清单是表驱动的 `captureScenes`，新增场景即新增一行；全部场景按表序
   共用同一个 application，前一场景留下的呈现状态由后续场景的 `Prepare`/
   `Apply` 负责清场；`resetCapturePresentation` 负责清 `combatFeedback` 与相关呈现，避免污染后续场景。
-- 场景顺序与正式清单以 `captureScenes` 及其顺序测试为准，固定上传容量以布局代码和容量
-  测试为准；不要在指南复制会漂移的清单或数字。
-
+- 场景顺序与 22 项正式清单以 `captureScenes` 及其顺序测试为准，固定上传容量以布局代码和容量
+  测试为准；不要在指南复制会漂移的清单或数字。常显 HUD（快捷栏/状态行/氧气/
+  采掘进食/弹条/准星/聊天/marker）的 GPU 呈现已退役，其像素验收由 WebView HUD
+  组件断言与 `frontend/visual` 部件基线承接，capture 只保留世界、夜景、材质与
+  容器保留面场景。`mining-crack-early` 与 `mining-crack-heavy` 两景呈现世界空间采掘裂纹，依次紧随 `water-surface-slope`。
 ## 消费端接口 (`capture/scene_application.go`)
 
 - `SceneApplication` 是 capture 对宿主应用状态的唯一访问面：场景表的

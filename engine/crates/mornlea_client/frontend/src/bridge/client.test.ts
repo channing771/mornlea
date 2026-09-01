@@ -158,6 +158,190 @@ describe("parseState", () => {
   });
 });
 
+// 游戏相位 hud 分节守卫夹具：字段域与 Go 侧镜像同源（九格、生命 0..20、
+// 氧气 0..300、聊天至多 6 行）。
+const hudSlot = (item: number, count: number, durability?: number) =>
+  durability === undefined ? { item, count } : { item, count, durability };
+
+const hudSlots = [
+  hudSlot(1, 64),
+  hudSlot(2, 7),
+  hudSlot(12, 1, 0.5),
+  ...Array.from({ length: 6 }, () => hudSlot(0, 0)),
+];
+
+const hudState = {
+  viewport: { width: 1280, height: 720 },
+  hotbar: { slots: hudSlots, selectedIndex: 2 },
+  health: { value: 17 },
+  hunger: { value: 18, saturationZero: true },
+  oxygen: { value: 210 },
+  mining: { active: true, progress: 0.25, harvestable: true },
+  eating: { active: false, progress: 0 },
+  popup: { text: "石镐" },
+  chat: { lines: ["系统：格式应为 @伙伴名 指令", ""] },
+  marker: true,
+  crosshair: true,
+  containerOpen: false,
+};
+
+const hudRaw = { phase: "game", hud: hudState };
+
+describe("parseState 的 hud 分节", () => {
+  it("完整 hud 分节原样通过", () => {
+    const state = parseState(hudRaw);
+    expect(state.phase).toBe("game");
+    expect(state.hud).toEqual(hudState);
+  });
+
+  it("可选分节缺席时保持缺席（组件据此隐藏）", () => {
+    const state = parseState({
+      phase: "game",
+      hud: {
+        viewport: hudState.viewport,
+        mining: hudState.mining,
+        eating: hudState.eating,
+      },
+    });
+    expect(state.hud?.viewport).toEqual(hudState.viewport);
+    expect(state.hud?.mining).toEqual(hudState.mining);
+    expect(state.hud?.eating).toEqual(hudState.eating);
+    expect(state.hud?.hotbar).toBeUndefined();
+    expect(state.hud?.health).toBeUndefined();
+    expect(state.hud?.hunger).toBeUndefined();
+    expect(state.hud?.oxygen).toBeUndefined();
+    expect(state.hud?.popup).toBeUndefined();
+    expect(state.hud?.chat).toBeUndefined();
+    expect(state.hud?.marker).toBeUndefined();
+    expect(state.hud?.crosshair).toBeUndefined();
+    expect(state.hud?.containerOpen).toBeUndefined();
+  });
+
+  it("采掘未激活时恒携带的进度与形状标志不触发呈现语义", () => {
+    const state = parseState({
+      phase: "game",
+      hud: {
+        ...hudState,
+        mining: { active: false, progress: 0, harvestable: false },
+        eating: { active: true, progress: 0.5 },
+      },
+    });
+    expect(state.hud?.mining).toEqual({ active: false, progress: 0, harvestable: false });
+    expect(state.hud?.eating).toEqual({ active: true, progress: 0.5 });
+  });
+
+  it("hud 未知属性抛 BridgeProtocolError", () => {
+    expect(() => parseState({ phase: "game", hud: { ...hudState, cheat: true } })).toThrow(
+      BridgeProtocolError,
+    );
+  });
+
+  it("hud 缺必填分节抛 BridgeProtocolError", () => {
+    const { viewport: _viewport, ...noViewport } = hudState;
+    expect(() => parseState({ phase: "game", hud: noViewport })).toThrow(BridgeProtocolError);
+    const { mining: _mining, ...noMining } = hudState;
+    expect(() => parseState({ phase: "game", hud: noMining })).toThrow(BridgeProtocolError);
+    const { eating: _eating, ...noEating } = hudState;
+    expect(() => parseState({ phase: "game", hud: noEating })).toThrow(BridgeProtocolError);
+  });
+
+  it("hud 非对象输入抛 BridgeProtocolError", () => {
+    for (const raw of [5, "hud", [], null]) {
+      expect(() => parseState({ phase: "game", hud: raw })).toThrow(BridgeProtocolError);
+    }
+  });
+
+  it("hotbar 格数与 selectedIndex 越界抛 BridgeProtocolError", () => {
+    const eight = { slots: hudSlots.slice(1), selectedIndex: 0 };
+    expect(() => parseState({ phase: "game", hud: { ...hudState, hotbar: eight } })).toThrow(
+      BridgeProtocolError,
+    );
+    const overflow = { slots: [...hudSlots, hudSlot(0, 0)], selectedIndex: 0 };
+    expect(() => parseState({ phase: "game", hud: { ...hudState, hotbar: overflow } })).toThrow(
+      BridgeProtocolError,
+    );
+    const selected = { slots: hudSlots, selectedIndex: 9 };
+    expect(() => parseState({ phase: "game", hud: { ...hudState, hotbar: selected } })).toThrow(
+      BridgeProtocolError,
+    );
+  });
+
+  it("slot 数值越界或非整数抛 BridgeProtocolError", () => {
+    const cases = [
+      [hudSlot(-1, 1), ...hudSlots.slice(1)],
+      [hudSlot(65536, 1), ...hudSlots.slice(1)],
+      [hudSlot(1, 65), ...hudSlots.slice(1)],
+      [hudSlot(1, 1.5), ...hudSlots.slice(1)],
+      [hudSlot(12, 1, 1.01), ...hudSlots.slice(1)],
+    ];
+    for (const slots of cases) {
+      expect(() =>
+        parseState({ phase: "game", hud: { ...hudState, hotbar: { slots, selectedIndex: 0 } } }),
+      ).toThrow(BridgeProtocolError);
+    }
+  });
+
+  it("生存数值越界抛 BridgeProtocolError", () => {
+    expect(() => parseState({ phase: "game", hud: { ...hudState, health: { value: 21 } } })).toThrow(
+      BridgeProtocolError,
+    );
+    expect(() => parseState({ phase: "game", hud: { ...hudState, hunger: { value: -1 } } })).toThrow(
+      BridgeProtocolError,
+    );
+    expect(() =>
+      parseState({ phase: "game", hud: { ...hudState, oxygen: { value: 301 } } }),
+    ).toThrow(BridgeProtocolError);
+  });
+
+  it("hunger 缺 saturationZero 抛 BridgeProtocolError", () => {
+    expect(() => parseState({ phase: "game", hud: { ...hudState, hunger: { value: 18 } } })).toThrow(
+      BridgeProtocolError,
+    );
+  });
+
+  it("采掘/进食进度缺字段或越界抛 BridgeProtocolError", () => {
+    expect(() =>
+      parseState({ phase: "game", hud: { ...hudState, mining: { progress: 0.5, harvestable: true } } }),
+    ).toThrow(BridgeProtocolError);
+    expect(() =>
+      parseState({ phase: "game", hud: { ...hudState, mining: { active: true } } }),
+    ).toThrow(BridgeProtocolError);
+    expect(() =>
+      parseState({ phase: "game", hud: { ...hudState, eating: { active: true } } }),
+    ).toThrow(BridgeProtocolError);
+    expect(() =>
+      parseState({ phase: "game", hud: { ...hudState, eating: { active: true, progress: 1.5 } } }),
+    ).toThrow(BridgeProtocolError);
+  });
+
+  it("聊天行数与行宽越界抛 BridgeProtocolError", () => {
+    expect(() =>
+      parseState({
+        phase: "game",
+        hud: { ...hudState, chat: { lines: Array.from({ length: 7 }, () => "行") } },
+      }),
+    ).toThrow(BridgeProtocolError);
+    expect(() =>
+      parseState({ phase: "game", hud: { ...hudState, chat: { lines: ["一".repeat(33)] } } }),
+    ).toThrow(BridgeProtocolError);
+  });
+
+  it("弹条文本越界抛 BridgeProtocolError", () => {
+    expect(() =>
+      parseState({ phase: "game", hud: { ...hudState, popup: { text: "一".repeat(33) } } }),
+    ).toThrow(BridgeProtocolError);
+  });
+
+  it("非法 hud 不冲掉既有最新状态", () => {
+    const client = new BridgeClient(null);
+    client.handleState(hudRaw);
+    expect(() => client.handleState({ phase: "game", hud: { ...hudState, cheat: 1 } })).toThrow(
+      BridgeProtocolError,
+    );
+    expect(client.latest).toEqual(hudRaw);
+  });
+});
+
 describe("createEnvelope", () => {
   it("包出版本化信封 {v:1, events:[...]}", () => {
     const event: UplinkEvent = { type: "action", id: "enter-game" };

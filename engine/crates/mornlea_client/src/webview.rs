@@ -14,14 +14,19 @@
 //!   仅在状态文本变化时求值——同一份状态重复推送是幂等空操作。
 //! - **上行**:`WKScriptMessageHandler` 收页面信封,经 `NSJSONSerialization`
 //!   还原为 JSON 字节交 [`crate::bridge`] 校验入队。
-//! - **相位路由**:菜单相位显示并夺取 firstResponder(键盘/指针交给页面,
-//!   winit 不再收到按键,游戏输入天然静默);游戏相位隐藏并把
-//!   firstResponder 归还 winit 内容视图(键盘不双投、不丢)。WebView 隐藏
-//!   时不做任何求值,页面 DOM 状态在隐藏期间保持,重新显示无需重置。
+//! - **相位路由(两态参与模型)**:下行状态的相位字段是参与模式的唯一驱动
+//!   源(`crate::overlay`)。菜单相位(以及叠加可见调试面板的游戏相位)为
+//!   `Menu` 态:视图可见并夺取 firstResponder,键盘/指针交给页面,winit 不
+//!   再收到按键,游戏输入天然静默。无 chrome 的游戏相位为 `GameOverlay`
+//!   态:视图**保持可见**(透明合成于 wgpu 画面之上,承载常显 HUD),
+//!   `hitTest:` 返回 nil 让事件穿透,firstResponder 归还 winit 内容视图
+//!   (键盘不双投、不丢)。视图被隐藏时(Spike 对照臂强制 Menu 态的游戏
+//!   相位)不做任何求值,页面 DOM 状态在隐藏期间保持,重新显示无需重置。
 //! - **页面就绪重推**:WebView 是异步加载的,加载完成前的求值会丢失;
-//!   `didFinishNavigation` 后把缓存的最近状态重推给新文档,保证首屏有状态。
-//!   同一回调也是渲染进程崩溃(`webViewWebContentProcessDidTerminate`)后的
-//!   自愈通道:崩溃即重载页面,重载完成走既有的就绪重推,菜单呈现自行恢复。
+//!   `didFinishNavigation` 后把缓存的最近状态重推给新文档,保证首屏有状态,
+//!   并按当前参与模式重放 GameOverlay 态的页面透明。同一回调也是渲染进程
+//!   崩溃(`webViewWebContentProcessDidTerminate`)后的自愈通道:崩溃即重载
+//!   页面,重载完成走既有的就绪重推,菜单呈现自行恢复。
 //!
 //! 线程约束:全部方法必须在创建窗口的 OS 主线程调用(与 `ClientWindow`
 //! 的 FFI 线程约束一致);WebKit 对象都要求主线程。
@@ -45,6 +50,7 @@ use objc2_web_kit::{
 };
 
 use crate::bridge::SharedUiEventQueue;
+use crate::overlay::{OverlayMode, OverlayRuntime, OverlayWebView, apply_page_phase};
 
 /// 内嵌菜单前端资产(vite build 产物,dist 入库)。字体是唯一白名单二进制
 /// 资产(OFL-1.1,见 frontend/src/ui/fonts/),经本表与 html/js/css 一同
@@ -89,6 +95,10 @@ struct HostShared {
     last_state: Mutex<Option<String>>,
     /// 最近一次实际求值到**当前文档**的状态文本;幂等转发的判定基准。
     last_evaluated: Mutex<Option<String>>,
+    /// 两态参与模式运行态:与子类 ivar 同源。导航完成回调据此重放
+    /// GameOverlay 态的页面透明——页面重载会丢失注入的相位样式,重放必须
+    /// 与相位切换读到同一份模式。
+    overlay: Arc<OverlayRuntime>,
 }
 
 // 桥回调对象:同时实现 `WKScriptMessageHandler`(上行信封)与
@@ -184,16 +194,26 @@ impl BridgeDelegate {
             Ok(data) => data,
             Err(_) => return,
         };
+        let bytes = data.to_vec();
+        // spike 自驱动档把上行事件数作为 GameOverlay 穿透断言的输入;关闭时
+        // 零解析。信封是否被接受由 enqueue 的返回值决定,这里只统计到达数。
+        crate::spike_auto::note_uplink_envelope(&bytes);
         let shared = self.ivars();
         // 容量护栏兜底:页面事件洪泛时整信封拒绝,不阻塞主线程。
-        let _ = shared.queue.enqueue_envelope(&data.to_vec());
+        let _ = shared.queue.enqueue_envelope(&bytes);
     }
 
     /// 页面导航完成:新文档没有任何状态,把缓存的最近状态重推一次。
     /// 重推同时刷新幂等基准(`last_evaluated`),保证缓存真正落到新文档。
-    /// 宿主 WebView 由 delegate 消息参数给出,不经共享状态中转。
+    /// GameOverlay 态下还要重放页面透明注入(新文档不携带任何样式),否则
+    /// 菜单页的不透明背景会盖住 wgpu 画面。宿主 WebView 由 delegate 消息
+    /// 参数给出,不经共享状态中转。
     fn did_finish_navigation(&self, webview: &WKWebView) {
         let shared = self.ivars();
+        if shared.overlay.mode() == OverlayMode::GameOverlay {
+            // SAFETY: 主线程回调;webview 由 WebKit 保证在回调期间存活。
+            unsafe { apply_page_phase(webview, true) };
+        }
         let state = shared.last_state.lock().expect("桥状态缓存锁中毒").clone();
         let Some(state) = state else { return };
         evaluate_state(webview, &state);
@@ -313,6 +333,13 @@ fn respond_not_found(task: &ProtocolObject<dyn WKURLSchemeTask>, path: String) {
     }
 }
 
+/// 构造状态求值脚本(纯函数,便于测试钉值);形态见 [`evaluate_state`]。
+fn evaluate_state_script(state: &str) -> String {
+    format!(
+        "(function(){{var s={state};function d(){{if(window.mornlea&&window.mornlea.onState){{window.mornlea.onState(s);return true;}}return false;}}if(!d()){{var t=setInterval(function(){{if(d())clearInterval(t);}},16);setTimeout(function(){{clearInterval(t);}},10000);}}}})()"
+    )
+}
+
 /// 把状态 JSON 以 `window.mornlea.onState(<json>)` 表达式求值。
 ///
 /// JSON 是合法 JS 表达式(现代 JS 字符串允许 U+2028/U+2029,且 Go
@@ -324,9 +351,7 @@ fn evaluate_state(webview: &WKWebView, state: &str) {
     // 桥全局就绪前每 16ms 重投一次,10 秒后放弃——WebContent 不响应时不给
     // 页面留下常驻定时器。投递是幂等的:同一份状态重复 onState 只会让 React
     // 收敛到同一渲染。
-    let script = NSString::from_str(&format!(
-        "(function(){{var s={state};function d(){{if(window.mornlea&&window.mornlea.onState){{window.mornlea.onState(s);return true;}}return false;}}if(!d()){{var t=setInterval(function(){{if(d())clearInterval(t);}},16);setTimeout(function(){{clearInterval(t);}},10000);}}}})()"
-    ));
+    let script = NSString::from_str(&evaluate_state_script(state));
     // SAFETY: 主线程;完成回调为 None(投递重试在脚本内自愈)。
     unsafe { webview.evaluateJavaScript_completionHandler(&script, None) };
 }
@@ -389,8 +414,9 @@ pub enum StateError {
     Malformed,
 }
 
-/// 浅校验一份状态并报告它是否要求 WebView 可见:非 game 相位恒可见;
-/// game 相位叠加可见的 debug 面板(`debug.visible`)同样要求可见。
+/// 浅校验一份状态并报告它是否要求 WebView 以菜单形态全参与:非 game 相位恒
+/// 要求;game 相位叠加可见的 debug 面板(`debug.visible`)同样要求——面板
+/// 需要键盘与指针。返回 `false` 即游戏相位,参与模式进入 GameOverlay。
 /// 校验失败(非 UTF-8/非对象/缺 phase)返回 [`StateError::Malformed`]。
 pub(crate) fn state_wants_visible(json: &[u8]) -> Result<bool, StateError> {
     let text = std::str::from_utf8(json).map_err(|_| StateError::Malformed)?;
@@ -402,9 +428,10 @@ pub(crate) fn state_wants_visible(json: &[u8]) -> Result<bool, StateError> {
     Ok(state_wants_visible_parsed(phase, &value))
 }
 
-/// 对已解析状态计算可见性意图;与 [`MenuWebview::push_state`] 共用判定。
+/// 对已解析状态计算菜单参与意图;与 [`MenuWebview::push_state`] 共用判定,
+/// 也是参与模式推导([`crate::overlay::mode_for_phase`])的输入。
 fn state_wants_visible_parsed(phase: &str, value: &serde_json::Value) -> bool {
-    // debug.visible 可叠加在任意相位(含 game):面板可见时 WebView 显示。
+    // debug.visible 可叠加在任意相位(含 game):面板可见时 WebView 全参与。
     let debug_visible = value.pointer("/debug/visible").and_then(|v| v.as_bool()) == Some(true);
     phase != "game" || debug_visible
 }
@@ -412,15 +439,37 @@ fn state_wants_visible_parsed(phase: &str, value: &serde_json::Value) -> bool {
 /// 一个挂载在 winit 窗口上的菜单 WebView。生命周期由持有它的渲染器管理:
 /// drop 时解除脚本 handler 注册并把自身移出视图树,不触碰窗口指针。
 pub struct MenuWebview {
+    /// 子类实例(`MornleaOverlayWebView`,见 [`crate::overlay`]):两态参与
+    /// 模型要求 `hitTest:` 可被 GameOverlay 态改写,裸 WKWebView 分支已退役。
+    /// 存储为父类句柄,既有生命周期逻辑(挂载、显隐、求值)不需要分支。
     webview: Retained<WKWebView>,
     /// 建立脚本 handler 注册的控制器;teardown 时据此解除注册。
     content_controller: Retained<WKUserContentController>,
-    /// 共享桥状态(与回调对象同源)。
+    /// 共享桥状态(与回调对象同源);其中的 `overlay` 字段就是两态参与模式
+    /// 运行态,与子类 ivar 同源(见 [`crate::overlay`]),不再单独持有一份,
+    /// 相位切换与导航回调只读同一份 `Arc`。
     shared: Arc<HostShared>,
+    /// spike 遗留强制档位(`MORNLEA_SPIKE_OVERLAY`,spike 验收后移除):
+    /// `Some(mode)` 时参与模式被钉死,不再跟随下行相位;`None`(生产)时
+    /// 模式完全由相位推导。只改「模式来源」,不新增动作语义。
+    spike_forced: Option<OverlayMode>,
     /// winit 内容视图指针(游戏相位归还 firstResponder 的目标)。
     /// 与窗口同生命周期;只在窗口存续的正常运行路径上解引用。
     game_view: *mut AnyObject,
-    visible: bool,
+    /// 菜单参与意图:下行相位是否要求 WebView 全参与。GameOverlay 态下视图
+    /// 仍可见,本字段只表示「以菜单形态参与」,真实显隐由动作表的
+    /// `hide_view` 决定,两者只在强制 Menu 档的游戏相位出现分歧。
+    ///
+    /// 不变式(跨文件,依赖 [`crate::window::should_mount`]):初值 `false`
+    /// 成立的前提是 `attach` 只在 `wants_visible == true` 的推送里发生——
+    /// 因此挂载后对同一份状态的 [`Self::push_state`] 必然触发一次
+    /// `false -> true` 翻转,首套 AppKit 动作(显示 + 夺取焦点 + 页面相位)
+    /// 由此落地。若挂载门被绕开(例如挂载发生在游戏相位推送),首个同值推送
+    /// 不触发任何切换:视图停留在挂载时的隐藏态,参与模式停留在缺省
+    /// `Menu`(穿透关闭),GameOverlay 的可见合成、穿透与页面
+    /// 相位在首个相位周期内静默不生效(视图隐藏时输入仍由 winit 独占,缺省
+    /// 不穿透保证不会吞输入;但 HUD 不呈现,直到下一次相位翻转自愈)。
+    menu_participating: bool,
 }
 
 // 线程模型:全部方法都在创建窗口的 OS 主线程调用(FFI 层 thread-local
@@ -445,10 +494,17 @@ impl MenuWebview {
         if ns_window.is_null() || game_view.is_null() {
             return None;
         }
+        // 参与模式运行态在共享桥状态建立前构造:回调对象与子类 ivar 持有
+        // 同一份 `Arc`,相位切换与页面重放因此读到同一份模式。
+        let overlay_runtime = OverlayRuntime::new();
+        // spike 遗留强制档位只在挂载时读取一次;生产路径(未设环境变量)为
+        // None,参与模式由下行相位逐次推导。
+        let spike_forced = crate::overlay_spike::forced_mode_from_env();
         let shared = Arc::new(HostShared {
             queue: crate::bridge::shared_queue().clone(),
             last_state: Mutex::new(None),
             last_evaluated: Mutex::new(None),
+            overlay: overlay_runtime.clone(),
         });
         // mtm 同时约束本函数只在主线程调用;类与回调对象均为主线程构造。
         let delegate = BridgeDelegate::new(shared.clone(), mtm);
@@ -473,9 +529,15 @@ impl MenuWebview {
         }
 
         let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(0.0, 0.0));
-        let webview = unsafe {
-            WKWebView::initWithFrame_configuration(WKWebView::alloc(mtm), frame, &config)
-        };
+        // 子类是唯一构造路径:两态参与模型要求 `hitTest:` 在 GameOverlay 态
+        // 返回 nil,裸 WKWebView 无法承担;`Menu` 态的命中行为与父类实现
+        // 逐项一致(穿透标志关闭即走 super),子类化因此对菜单相位零副作用。
+        // SAFETY: 主线程(mtm 证明);frame/config 均为本函数栈上或本线程
+        // 存续的有效值。
+        let webview = unsafe { OverlayWebView::new(frame, &config, overlay_runtime.clone(), mtm) }
+            // 上转到父类句柄:后续既有生命周期逻辑(挂载、显隐、求值)对
+            // 子类实例同样成立,不需要分支。
+            .into_super();
         // 透明背景:setDrawsBackground 为半文档属性(首日 spike 实证)。
         // macOS 26 起 WKWebView 公开 drawsBackground 属性;更早系统上经
         // KVC `setValue:forKey:` 写同名的半文档属性。两条路都先经
@@ -512,20 +574,27 @@ impl MenuWebview {
         let request = NSURLRequest::requestWithURL(&entry);
         unsafe { webview.loadRequest(&request) };
 
+        // spike 挂载留痕放在这里:视图已入树、页面已开始加载,与 Drop 侧的
+        // 卸载留痕严格成对;生产路径(未设环境变量)静默。
+        crate::overlay_spike::log_mount(spike_forced);
         Some(Self {
             webview,
             content_controller: controller,
             shared,
+            spike_forced,
             game_view,
-            visible: false,
+            menu_participating: false,
         })
     }
 
-    /// 下行状态推送:浅校验 → 缓存 → 相位路由 → 幂等求值。
+    /// 下行状态推送:浅校验 → 相位推导参与模式 → 缓存 → 相位路由 → 幂等求值。
     ///
-    /// 浅校验只做「可解析 + phase 字段存在」(相位决定可见性,必须认识);
+    /// 浅校验只做「可解析 + phase 字段存在」(相位决定参与模式,必须认识);
     /// schema 深校验(枚举、上界、未知字段)由 Go 组装侧与前端解析侧承担。
-    /// 求值仅在显示相位发生;隐藏相位只更新缓存(零参与:无求值、无消息)。
+    /// 参与模式由相位推导(`crate::overlay::mode_for_phase`),spike 遗留
+    /// 强制档位存在时被钉死。求值只在视图实际可见时发起:GameOverlay 态视图
+    /// 常驻可见,游戏相位的 HUD 状态因此持续下行;视图真被隐藏时只更新缓存
+    /// (零参与:无求值、无消息)。
     pub fn push_state(&mut self, json: &[u8]) -> Result<(), StateError> {
         let text = std::str::from_utf8(json).map_err(|_| StateError::Malformed)?;
         let value: serde_json::Value =
@@ -535,11 +604,16 @@ impl MenuWebview {
             .and_then(|phase| phase.as_str())
             .ok_or(StateError::Malformed)?;
         let wants_visible = state_wants_visible_parsed(phase, &value);
+        let mode = self
+            .spike_forced
+            .unwrap_or_else(|| crate::overlay::mode_for_phase(wants_visible));
+        let transition = crate::overlay::plan_transition(mode, wants_visible);
         *self.shared.last_state.lock().expect("桥状态缓存锁中毒") = Some(text.to_owned());
-        if wants_visible != self.visible {
-            self.set_visible(wants_visible);
+        if wants_visible != self.menu_participating {
+            self.menu_participating = wants_visible;
+            self.apply_transition(mode, transition);
         }
-        if self.visible {
+        if !transition.hide_view {
             self.evaluate_if_changed();
         }
         Ok(())
@@ -568,27 +642,63 @@ impl MenuWebview {
         *self.shared.last_evaluated.lock().expect("桥幂等基准锁中毒") = Some(state);
     }
 
-    /// 切换显示/隐藏与 firstResponder 归属。
-    fn set_visible(&mut self, visible: bool) {
-        if self.visible == visible {
-            return;
-        }
-        self.visible = visible;
-        let _: () = unsafe { msg_send![&self.webview, setHidden: !visible] };
+    /// 向页面求值一段脚本,结果经 `spike_auto` 的完成回调写回收件箱。
+    ///
+    /// 只被 spike 自驱动档调用(自动进入游戏的按钮查找与 `.click()`);
+    /// 生产路径的下行状态推送仍走 [`evaluate_state`],不携带完成回调。
+    ///
+    /// # Safety
+    ///
+    /// 主线程方法(`MenuWebview` 的既有线程约束);完成回调由 WebKit 在主
+    /// 线程投递,`RcBlock` 在调用返回后仍被 WebKit 持有,闭包只触碰进程级
+    /// 单例,不借用本对象。
+    pub(crate) fn spike_evaluate(&self, script: &str) {
+        let js = NSString::from_str(script);
+        let handler = crate::spike_auto::js_completion_block();
+        // SAFETY: 主线程;handler 由 RcBlock 保活到调用结束,WebKit 侧按
+        // Block 语义自行复制持有。
+        unsafe {
+            self.webview
+                .evaluateJavaScript_completionHandler(&js, Some(&*handler))
+        };
+    }
+
+    /// 应用一次参与模式切换:动作表落到 AppKit(视图显隐、`hitTest:` 穿透、
+    /// firstResponder 归属)并把页面切到对应相位呈现。
+    ///
+    /// 动作表由 [`crate::overlay::plan_transition`] 推导,是参与语义的唯一
+    /// 真相:`Menu` 态复现既有行为——隐藏即归还焦点、显示即夺取焦点;
+    /// `GameOverlay` 态在游戏相位改为「保持可见 + `hitTest:` 穿透」,焦点仍
+    /// 归还 winit,合成与响应链参与就此解耦。GameOverlay 态同时注入页面
+    /// 相位透明(菜单页的不透明背景会盖住 wgpu 画面),菜单相位撤除注入。
+    /// 调用点只在相位翻转处,重复推送不重放 AppKit 动作。
+    fn apply_transition(
+        &mut self,
+        mode: OverlayMode,
+        transition: crate::overlay::OverlayTransition,
+    ) {
+        self.shared.overlay.set_mode(mode);
+        self.shared.overlay.apply(transition);
+        crate::overlay_spike::log_phase_transition(mode, self.menu_participating);
+        // SAFETY: 主线程(与全部 FFI 窗口出口一致的线程约束);webview 存续。
+        unsafe { apply_page_phase(&self.webview, mode == OverlayMode::GameOverlay) };
+        let _: () = unsafe { msg_send![&self.webview, setHidden: transition.hide_view] };
         // NSView.window:从自身视图取回宿主窗口,避免跨调用持有窗口指针。
         let window: *mut AnyObject = unsafe { msg_send![&self.webview, window] };
-        if visible {
-            // 菜单相位:WebView 夺取焦点消费键盘/指针,winit 侧静默。
-            let _: () = unsafe { msg_send![window, makeFirstResponder: &*self.webview] };
-        } else {
+        if transition.focus_game_view {
             // 游戏相位:焦点归还 winit 视图,键盘恢复 winit 独占。
             let _: () = unsafe { msg_send![window, makeFirstResponder: self.game_view] };
+        } else {
+            // 菜单相位:WebView 夺取焦点消费键盘/指针,winit 侧静默。
+            let _: () = unsafe { msg_send![window, makeFirstResponder: &*self.webview] };
         }
     }
 }
 
 impl Drop for MenuWebview {
     fn drop(&mut self) {
+        // spike 卸载留痕:与挂载留痕成对,验证臂多记一行,生产路径静默。
+        crate::overlay_spike::log_unmount(self.spike_forced);
         // 解除脚本 handler 注册(userContentController 强持有回调对象,
         // 必须先断开,避免 WebKit 卸载顺序上向失效对象投递)。
         unsafe {
@@ -597,5 +707,166 @@ impl Drop for MenuWebview {
         }
         // 只操作自身视图,不触碰窗口指针:窗口可能已被先行销毁。
         let _: () = unsafe { msg_send![&self.webview, removeFromSuperview] };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        StateError, evaluate_state_script, state_wants_visible, state_wants_visible_parsed,
+    };
+    use crate::overlay::{OverlayMode, mode_for_phase, plan_transition};
+
+    /// 相位枚举全值覆盖:菜单族(menu/starting/settings/paused)与叠加可见
+    /// 调试面板的游戏相位都要求 WebView 全参与,只有无 chrome 的游戏相位
+    /// 进入 GameOverlay。这是参与模式推导的唯一输入,漏一个相位值就会让
+    /// 该相位既没有 chrome 又吞输入。
+    #[test]
+    fn phase_visibility_covers_the_schema_phase_enum() {
+        for phase in ["menu", "starting", "settings", "paused"] {
+            assert!(
+                state_wants_visible_parsed(phase, &serde_json::json!({"phase": phase})),
+                "phase={phase} 必须全参与"
+            );
+        }
+        assert!(!state_wants_visible_parsed(
+            "game",
+            &serde_json::json!({"phase": "game"})
+        ));
+        // debug.visible 叠加在游戏相位:调试面板需要键盘与指针,回到全参与。
+        assert!(state_wants_visible_parsed(
+            "game",
+            &serde_json::json!({"phase": "game", "debug": {"visible": true}})
+        ));
+        // debug.visible 为 false 的游戏相位仍是 GameOverlay。
+        assert!(!state_wants_visible_parsed(
+            "game",
+            &serde_json::json!({"phase": "game", "debug": {"visible": false}})
+        ));
+    }
+
+    /// 浅校验的拒绝面:非 UTF-8、非 JSON、非对象、缺 phase、phase 非字符串
+    /// 一律 `Malformed`,绝不触碰运行态——这是「未知状态类型/非法 UTF-8
+    /// 被拒绝且不触碰呈现状态」契约在 Rust 侧的落点。
+    #[test]
+    fn malformed_state_is_rejected_without_touching_runtime() {
+        assert_eq!(state_wants_visible(b"\xff\xfe"), Err(StateError::Malformed));
+        assert_eq!(
+            state_wants_visible(b"not json at all"),
+            Err(StateError::Malformed)
+        );
+        assert_eq!(state_wants_visible(b"[1,2,3]"), Err(StateError::Malformed));
+        assert_eq!(state_wants_visible(b"{}"), Err(StateError::Malformed));
+        assert_eq!(
+            state_wants_visible(br#"{"phase":7}"#),
+            Err(StateError::Malformed)
+        );
+    }
+
+    /// 未知相位字符串兜底为全参与(Menu):Rust 浅校验只认识「非 game 即
+    /// 菜单族」,schema 相位枚举新增值或大小写漂移时会先落到「WebView 全
+    /// 参与」这一侧——宁可让页面消费键盘,也不让未知相位进入 GameOverlay
+    /// 后既无 chrome 又吞输入。枚举值的合法性由 Go 组装侧与 TS 守卫的深
+    /// 校验承担,非法值在下行前就被拒绝。
+    #[test]
+    fn unknown_phase_falls_back_to_full_participation() {
+        for phase in ["lobby", "GAME", "Game", "", "游戏", "game "] {
+            let state = serde_json::json!({ "phase": phase });
+            assert!(
+                state_wants_visible_parsed(phase, &state),
+                "phase={phase:?} 必须兜底为全参与"
+            );
+            assert_eq!(
+                mode_for_phase(state_wants_visible_parsed(phase, &state)),
+                OverlayMode::Menu,
+                "phase={phase:?} 参与模式必须是 Menu"
+            );
+        }
+    }
+
+    /// hud 状态族的「Rust 半部」是**显式不校验**:下行状态在 Rust 侧只做
+    /// 相位浅校验(`phase` 存在与否 + `debug.visible`),不把 `uiState` 反
+    /// 序列化成类型,因此桥 schema 单源(`frontend/src/bridge/schema.json`)
+    /// 的 hudState 族钉值由 Go 组装侧与 TS 守卫承接,Rust 不另立类型钉值
+    /// ——上行信封那半部(`bridge` 的协议常量对 `$defs.uplinkEnvelope` 钉值)
+    /// 与本条合起来才是三端钉值中 Rust 侧的完整边界。本测试钉住该边界:
+    /// hud 族的字段值不参与参与模式推导,越界/未知 hud 字段也不改变相位判定。
+    #[test]
+    fn hud_family_stays_outside_the_rust_validation_surface() {
+        // 相位判定只由 phase 字段决定,hud 内容(哪怕越界)不改变它。
+        assert!(!state_wants_visible_parsed(
+            "game",
+            &serde_json::json!({"phase": "game", "hud": {"hotbar": {"selected": 99}}})
+        ));
+        assert!(state_wants_visible_parsed(
+            "menu",
+            &serde_json::json!({"phase": "menu", "hud": {"health": -1, "unknown": true}})
+        ));
+        // hud 族缺席与存在等价:字段缺席不构成 Malformed,浅校验面不扩大。
+        assert_eq!(
+            state_wants_visible(br#"{"phase":"game"}"#),
+            state_wants_visible(br#"{"phase":"game","hud":{}}"#),
+            "hud 族存在与否不得改变浅校验结果"
+        );
+    }
+
+    /// 生产路径(无 spike 强制)下,参与模式完全由相位推导:菜单相位 →
+    /// Menu(隐藏动作表与既有行为一致),游戏相位 → GameOverlay(可见 +
+    /// 穿透 + 焦点归还 winit)。GameOverlay 态下状态求值必须继续,游戏相
+    /// 位的 HUD 下行才进得了页面。
+    #[test]
+    fn production_mode_follows_phase_and_keeps_game_phase_wired() {
+        // 游戏相位:GameOverlay,视图不隐藏,状态持续下行(渲染接线的前提)。
+        let mode = mode_for_phase(false);
+        let transition = plan_transition(mode, false);
+        assert_eq!(mode, OverlayMode::GameOverlay);
+        assert!(!transition.hide_view, "GameOverlay 态必须持续合成");
+        assert!(transition.hit_test_passthrough);
+        assert!(transition.focus_game_view);
+
+        // 菜单相位:Menu,既有行为逐项一致。
+        let mode = mode_for_phase(true);
+        let transition = plan_transition(mode, true);
+        assert_eq!(mode, OverlayMode::Menu);
+        assert!(!transition.hide_view);
+        assert!(!transition.hit_test_passthrough);
+        assert!(!transition.focus_game_view);
+    }
+
+    /// spike 遗留强制档位的语义收敛:强制档位只改「模式来源」,不新增动作
+    /// 语义——菜单相位下两态动作逐项一致,菜单 chrome 可点与模式无关。
+    /// 强制 Menu 的游戏相位即旧隐藏语义,已由
+    /// `crate::overlay::tests::menu_mode_reproduces_legacy_semantics` 钉住,
+    /// 这里不重复;强制 GameOverlay 与生产 GameOverlay 是同一个枚举值,共用
+    /// 同一张动作表,不构成独立断言。
+    #[test]
+    fn spike_forced_modes_converge_on_the_production_action_table() {
+        for mode in [OverlayMode::Menu, OverlayMode::GameOverlay] {
+            assert_eq!(
+                plan_transition(mode, true),
+                plan_transition(OverlayMode::Menu, true),
+                "mode={mode:?}: 菜单相位动作必须与 Menu 态逐项一致"
+            );
+        }
+    }
+
+    /// 状态求值脚本必须把状态原文作为 JS 表达式内插(`window.mornlea.onState`
+    /// 的单一下行通道),并自带桥全局就绪重试;脚本形态变化会破坏页面桥约定。
+    #[test]
+    fn state_script_forwards_state_expression() {
+        let script = evaluate_state_script(r#"{"phase":"menu"}"#);
+        assert!(script.contains(r#"var s={"phase":"menu"};"#));
+        assert!(script.contains("window.mornlea.onState(s)"));
+        assert!(script.contains("setInterval"));
+        assert!(script.ends_with("}})()"));
+    }
+
+    /// `evaluate_state` 的脚本是纯函数 [`evaluate_state_script`] 的产物;
+    /// 这里钉住脚本的自我重试边界:10 秒后放弃,不留给页面常驻定时器。
+    #[test]
+    fn state_script_retry_window_is_bounded() {
+        let script = evaluate_state_script("{}");
+        assert!(script.contains("10000"));
+        assert!(script.contains("16"));
     }
 }

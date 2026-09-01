@@ -13,6 +13,7 @@ import {
   type UIState,
   type UplinkEvent,
 } from "../bridge/client";
+import { HudRoot } from "../hud/HudRoot";
 import { DebugPanel } from "./DebugPanel";
 import { MainMenu } from "./MainMenu";
 import { PauseMenu } from "./PauseMenu";
@@ -48,15 +49,20 @@ export function App({ bridge = defaultBridge, onEvent }: AppProps = {}) {
   }
 
   const debugOverlay = state.debug?.visible === true ? <DebugPanel debug={state.debug} onEvent={emit} /> : null;
+  // 常显 HUD 叠加在最底层：菜单相位/装配前的 hud 分节缺席，组件自身渲染
+  // null；游戏/暂停相位有已装配世界时由 Go 下行驱动，菜单面板仍绘制在
+  // HUD 之上（暂停遮罩盖住世界与 HUD 是既有层叠语义）。
+  const hudOverlay = <HudRoot hud={state.hud} />;
 
   switch (state.phase) {
     case "game":
-      // 游戏相位零 chrome：WebView 侧无菜单参与（Rust 侧另有 hidden 语义）。
-      return debugOverlay;
+      // 游戏相位零 chrome：除 HUD 外无菜单参与（Rust 侧另有 hidden 语义）。
+      return <>{hudOverlay}{debugOverlay}</>;
     case "menu":
     case "starting":
       return (
         <>
+          {hudOverlay}
           {debugOverlay}
           {state.menu && <MainMenu menu={state.menu} onEvent={emit} />}
         </>
@@ -64,6 +70,7 @@ export function App({ bridge = defaultBridge, onEvent }: AppProps = {}) {
     case "settings":
       return (
         <>
+          {hudOverlay}
           {debugOverlay}
           {state.settings && <SettingsPanel settings={state.settings} onEvent={emit} />}
         </>
@@ -71,6 +78,7 @@ export function App({ bridge = defaultBridge, onEvent }: AppProps = {}) {
     case "paused":
       return (
         <>
+          {hudOverlay}
           {debugOverlay}
           {state.pause && <PauseMenu pause={state.pause} onEvent={emit} />}
         </>

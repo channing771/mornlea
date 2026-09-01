@@ -64,6 +64,27 @@ cmd/mornlea/app/
   （`TestPumpDevCaptureIdleFrameChecksPendingOnly`、
   `TestPumpDevCaptureDeliversPendingFrameExactlyOnce`）。
 
+## hud 分节下行 (`app/app_ui_state.go`, `app/app_frame.go`)
+
+- 只有「游戏相位 + 会话存活 + 调试面板关闭 + 上次下行文档已是游戏相位」才由
+  `internal/client` 的 `UIHudPushScheduler` 纪律层独占下行：变化源只 `Mark`
+  （权威状态/背包/容器/聊天确认在 `DrainServerMessages`，resize、弹条窗口与
+  进食推进在 `RenderFrame`，marker 到期在 `AfterRender` 返回值），`flushHUDState`
+  绑定权威 tick 边界，出口 `hudStateSink` 把分节载荷包回单份 `uiState` 文档。
+  菜单/设置/暂停相位、调试面板叠加、会话关闭与相位切回都走「整份文档变化才
+  下行」，两条路径共用 `buildUIState`，任意时刻前端拿到的都是一份完整文档
+  （`TestPausePhasePushesFullDocumentWithPauseSection` 钉住暂停相位必须下行
+  pause 分节）。
+- 进食填充比例经 `quantizeEatingProgress` 量化到权威 tick 网格后再比对/置脏，
+  下行频率因此绑定权威 tick 而不是渲染帧率
+  （`TestEatingProgressDownlinkBoundedByTickGrid`）。
+- 生命周期边界（断线/退回主菜单、权威 reset、`startWorld` 新会话）调用
+  `resetHUDStatePush`；相位窗口进入分支（`syncHUDPushWindow`）另做一次
+  Reset+Mark，保证回到游戏相位后的第一次冲刷无条件下行完整分节。
+- 无头路径（基准/capture）纪律层保持零值（nil 出口），冲刷退化为空操作；
+  capture 的场景切换不复位 hud 基线（无可观测出口），它只复位弹条与 marker
+  状态机（`ResetItemPopupBaseline`/`ResetCombatFeedback`）。
+
 ## 帧驱动与加载判据 (`app/app_frame.go`, `app/app_load.go`)
 
 - `Frame` 是无头路径推进帧的唯一入口：drain 服务端消息、推进模拟、绘制一帧。
@@ -96,7 +117,7 @@ cmd/mornlea/app/
 
 ## 战斗反馈 (`app/combat_feedback.go`)
 
-- `combatFeedback` 独立于 `audioFeedback` 与 `serverTick`，仅由严格递增的 `network.CombatHit` 驱动，`Observe` 严格递增、`ArmMarker` 重置 6 帧、`AfterRender(rendered)` 仅在 `rendered==true` 时递减、`Reset` 清零；`Application` 直接持有该值，不复用 animation manager。
+- `combatFeedback` 独立于 `audioFeedback` 与 `serverTick`，仅由严格递增的 `network.CombatHit` 驱动，`Observe` 严格递增、`ArmMarker` 重置 6 帧、`AfterRender(rendered)` 仅在 `rendered==true` 时递减并返回本帧是否到期（到期是 hud 分节变化源）、`Reset` 清零；`Application` 直接持有该值，不复用 animation manager。
 - 仅导出 capture 最小消费面 `ArmCombatMarker`、`ResetCombatFeedback`、`CombatMarkerVisible`；`DrainServerMessages` 在 `PlayerState` 分支后消费 `CombatHit` 且仅在 `Observe` 成功时播放 `CueCombatHit`；`PlayerState.Reset` 清 `audioFeedback` 与 `combatFeedback`，`resetSessionOwnedState` 清 `combatFeedback` 并在非 nil 时 `hostiles.Reset()`，`resetCapturePresentation` 清 `combatFeedback`，不新增重复生命周期调用。
 
 ## 平台与验证

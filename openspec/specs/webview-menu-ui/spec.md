@@ -2,10 +2,8 @@
 
 ## Purpose
 
-
 为窗口型界面（主菜单、设置、暂停、调试面板）建立进程内 WebView（Vite + TypeScript + React）技术基础与世界全景背景：交互客户端启动停留在世界全景之上的主菜单，世界装配延迟到用户点击之后；菜单语义与既有规格逐条平移，`egui` 即时模式栈完全退役。
 ## Requirements
-
 ### Requirement: 交互客户端启动停留在主菜单
 
 交互式图形客户端（非 benchmark/capture，且未指定 `-connect`）SHALL 在窗口与渲染器初始化完成后停留在主菜单界面，MUST NOT 在此之前打开世界存储、启动本地权威服务端或完成登录。主菜单与设置页相位 SHALL 以世界全景为背景：全景由固定种子 worldgen 直供区块经既有网格与天空光照渲染路径产出，由固定脚本相机驱动，MUST NOT 触发世界存储打开、本地权威服务端启动或登录。
@@ -135,7 +133,7 @@
 
 ### Requirement: WebView 集成技术边界
 
-`mornlea_client` SHALL 通过 `objc2-web-kit` 将一个透明 WKWebView 挂载到既有 winit NSWindow 的 contentView 之上，MUST NOT 引入 wry、tao 或第二套窗口栈；webview 资产 MUST 经 `WKURLSchemeHandler` 从二进制内嵌字节以 `mornlea://` 供给，MUST NOT 访问网络、CDN 或磁盘临时文件；`egui` 与 `egui-wgpu` 依赖 MUST 全部移除；`wgpu` 主版本 MUST NOT 单侧升级；任何 Go 包 MUST NOT 引入 GUI 绑定。
+`mornlea_client` SHALL 通过 `objc2-web-kit` 将一个透明 WKWebView 挂载到既有 winit NSWindow 的 contentView 之上，MUST NOT 引入 wry、tao 或第二套窗口栈；webview 资产 MUST 经 `WKURLSchemeHandler` 从二进制内嵌字节以 `mornlea://` 供给，MUST NOT 访问网络、CDN 或磁盘临时文件；`egui` 与 `egui-wgpu` 依赖 MUST 全部移除；`wgpu` 主版本 MUST NOT 单侧升级；任何 Go 包 MUST NOT 引入 GUI 绑定。WebView 参与模式 SHALL 恰有两态——菜单相位 `Menu`（全参与）与游戏相位 `GameOverlay`（可见合成、不参与响应链，见 `game-overlay-webview` capability）：两态 MUST 由同一 WKWebView 实例经命中测试分级（子类化 hitTest）实现，MUST NOT 依赖窗口叠层顺序或第二实例切换；GameOverlay 态的建立 MUST NOT 引入新的 C ABI 出口。
 
 #### Scenario: 透明覆盖与资产离线供给
 
@@ -146,10 +144,10 @@
 
 #### Scenario: 游戏相位零参与
 
-- **GIVEN** 游戏进行中（无菜单相位）
+- **GIVEN** 游戏进行中（GameOverlay 模式）
 - **WHEN** 系统渲染帧
-- **THEN** WebView MUST 处于隐藏态且不参与响应链
-- **AND** GPU 呈现路径与菜单迁移前一致
+- **THEN** GameOverlay WebView MUST 保持可见合成且 MUST NOT 进入响应链（指针、键盘、滚轮事件全部由 winit 采集），wgpu 呈现路径与迁移前一致
+- **AND** 桥事件排空 MUST 为空，游戏输入行为与无 WebView 路径一致
 
 #### Scenario: 依赖版本线替换
 
@@ -160,13 +158,19 @@
 
 ### Requirement: 菜单状态与事件桥
 
-菜单状态权威 SHALL 在 Go：Go 侧在状态变化时经 client ABI 以 JSON 字符串推送菜单/设置/调试状态下行，Rust 侧转发为 WebView 内 `window.mornlea.onState` 调用；上行 SHALL 由 WebView 脚本消息进入 Rust 队列并以版本化 JSON 事件批经既有排空出口交付 Go 依序消费。桥 schema SHALL 以单源 JSON Schema 文件为准，Go/Rust/TS 三端 MUST 各有钉值一致性测试；未知事件类型、schema 越界或非法 UTF-8 MUST 被拒绝且不触碰运行态。
+菜单状态权威 SHALL 在 Go：Go 侧在状态变化时经 client ABI 以 JSON 字符串推送菜单/设置/调试状态下行，Rust 侧转发为 WebView 内 `window.mornlea.onState` 调用；上行 SHALL 由 WebView 脚本消息进入 Rust 队列并以版本化 JSON 事件批经既有排空出口交付 Go 依序消费。桥 schema SHALL 以单源 JSON Schema 文件为准，Go/Rust/TS 三端 MUST 各有钉值一致性测试；未知事件类型、schema 越界或非法 UTF-8 MUST 被拒绝且不触碰运行态。游戏相位 SHALL 经同一 JSON 下行出口推送常显 HUD 状态族（`game-overlay-webview` capability）：状态族按权威 tick 合并推送、禁止每帧重复推送；schema 的游戏相位状态族与既有菜单状态族共用单源文件与三端钉值纪律，client ABI 版本 MUST 保持不变。
 
 #### Scenario: 状态下行事件驱动
 
 - **GIVEN** 菜单相位下 Go 侧菜单/设置/调试状态发生一次变化
 - **WHEN** 系统处理该变化
 - **THEN** MUST 恰好推送一份包含变化后完整状态的 JSON，且 MUST NOT 存在每帧重复推送
+
+#### Scenario: 游戏相位 HUD 状态 tick 合并下行
+
+- **GIVEN** 游戏相位下同一权威 tick 内多类 HUD 状态变化
+- **WHEN** 桥下行运行
+- **THEN** MUST 恰好推送一份合并终态的 JSON；无变化的 tick MUST 零推送
 
 #### Scenario: 上行事件保序
 
@@ -297,9 +301,11 @@
 
 四面板的可交互元素 SHALL 经统一像素呈现层呈现：按钮与表单控件 MUST 使用
 pixel-retroui 组件或按 `tokens.css` 像素令牌重绘的自绘控件；颜色、几何与
-阴影 MUST 经 `tokens.css` 令牌供给（琥珀为唯一强调色、危险红仅用于错误、
-`prefers-reduced-motion` 下动效归零）；文案、上行事件、焦点顺序与键盘
-语义 MUST 与改造前逐项一致；音量控件 MUST 保持滑块形态与 `[0,1]` 映射。
+阴影 MUST 经 `tokens.css` 令牌供给（强调为鼠尾草绿与麦金组成的 Mornlea
+双强调体系——选中与焦点态走鼠尾草绿，进度、来源与重要信息走麦金；危险红
+仅用于错误；`prefers-reduced-motion` 下动效归零）；文案、上行事件、焦点
+顺序与键盘语义 MUST 与改造前逐项一致；音量控件 MUST 保持滑块形态与
+`[0,1]` 映射。
 
 #### Scenario: 主菜单按钮像素化且行为不变
 
@@ -323,6 +329,25 @@ pixel-retroui 组件或按 `tokens.css` 像素令牌重绘的自绘控件；颜�
 - WHEN 系统开启 prefers-reduced-motion 并检查样式来源
 - THEN 动效时长为零且无组件级 transition 绕开令牌
 - AND 面板样式值不出现在组件内的裸色值，全部经 tokens.css 令牌供给
+- AND 强调呈现只使用鼠尾草绿与麦金两个色相，错误行只使用危险红
+
+### Requirement: 菜单尺寸随窗口比例协调
+
+四面板的尺寸几何 SHALL 随窗口尺寸保持协调：主菜单按钮列、设置面板与调试面板的宽度 MUST 以视口宽度为约束上限（比例或 `min()`/`clamp()` 口径的令牌供给），不得在小窗口下溢出视口或在任意大的窗口下无限放大；主菜单的标题、按钮列与版本行 MUST 在合法窗口尺寸范围内保持视觉居中且互不重叠；尺寸令牌 MUST 经 `tokens.css` 供给，面板侧不得绕开令牌硬编码视口相关尺寸。
+
+#### Scenario: 小窗口不溢出
+
+- **GIVEN** 一个小于面板设计宽度的合法窗口尺寸
+- **WHEN** 系统渲染任一面板
+- **THEN** 面板与按钮列 MUST 完整位于视口内，MUST NOT 产生视口溢出或裁切
+- **AND** 面板内部内容 MUST 保持可滚动或完整可见，交互元素不因尺寸收缩而重叠
+
+#### Scenario: 大窗口不无限放大
+
+- **GIVEN** 一个远大于面板设计宽度的窗口尺寸
+- **WHEN** 系统渲染设置面板与主菜单按钮列
+- **THEN** 面板宽度 MUST 停在其令牌上限而不得随视口线性放大
+- **AND** 主菜单标题、按钮列与版本行 MUST 保持居中构图且按钮列不因窗口变大而失去间距层级
 
 ### Requirement: UI 字体资产
 
@@ -372,3 +397,4 @@ MUST 覆盖字体资产。
 - WHEN 在本机运行 check 入口
 - THEN 管线只依赖仓库内产物与本机既有无头浏览器，零网络请求，不修改
   `dist/` 与其字节一致性门禁
+

@@ -31,8 +31,8 @@ func TestMainMenuCaptureScenePosition(t *testing.T) {
 	if scene.PinVolatile == nil {
 		t.Fatal("main-menu 场景必须钉住全景自转 tick")
 	}
-	if scene.Settings != nil || scene.HUD != nil {
-		t.Fatalf("main-menu 场景不应携带设置或 HUD 夹具: %+v", scene)
+	if scene.Settings != nil {
+		t.Fatalf("main-menu 场景不应携带设置夹具: %+v", scene)
 	}
 	indexOf := func(name string) int {
 		for i, s := range captureScenes {
