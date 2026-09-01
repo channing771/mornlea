@@ -212,9 +212,12 @@ impl CrackPass {
                             offset: 0,
                             shader_location: 0,
                         },
+                        // uv 紧跟 pos 之后：offset 12（pos 是 3 个 f32）。
+                        // 曾错写 8 与 pos.z 重叠，退化成常数 UV——整面
+                        // 采样同一个纹素，裂纹呈现为一条实心竖带。
                         wgpu::VertexAttribute {
                             format: wgpu::VertexFormat::Float32x2,
-                            offset: 8,
+                            offset: 12,
                             shader_location: 1,
                         },
                     ],

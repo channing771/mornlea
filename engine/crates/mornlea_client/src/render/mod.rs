@@ -2786,9 +2786,34 @@ mod crack_tests {
         instance
     }
 
-    /// 裂纹 pass 的三段行为锁:atlas 未上传时整段跳过(帧正常、图像不变);
-    /// atlas 上传后同一实例必须改变图像(恒等相机下单位立方体覆盖画面
-    /// 中央);非法实例段在渲染前拒绝且不触碰 target。
+    /// 构造逐 mip 的非对称测试 atlas:每级左半纹素不透明深灰、右半全透明。
+    /// 均匀 atlas 抓不住 UV 退化(常数采样照样命中不透明纹素),非对称
+    /// half 覆盖让「uv 塌缩」直接表现为改动范围错误,被下面的半区断言打红。
+    fn half_opaque_atlas_bytes() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        for mip in 0..ATLAS_MIPS {
+            let s = (ATLAS_TEX_SIZE >> mip).max(1) as usize;
+            for y in 0..s {
+                for x in 0..s {
+                    // 覆盖半区只依赖 x(列),行不限。
+                    let _ = y;
+                    if x < s / 2 {
+                        bytes.extend_from_slice(&[30, 30, 30, 255]);
+                    } else {
+                        bytes.extend_from_slice(&[0, 0, 0, 0]);
+                    }
+                }
+            }
+        }
+        bytes
+    }
+
+    /// 裂纹 pass 的行为锁:atlas 未上传时整段跳过(帧正常、图像不变);
+    /// atlas 上传后同一实例必须改变图像,且**改动只落在投影区域的左半**——
+    /// 恒等相机下单位立方体投影在画面中央,atlas 左半不透明、右半透明,
+    /// 正确的逐面 UV 把不透明半区映到投影左半;uv 一旦退化(属性偏移错位
+    /// 导致常数采样),改动会铺满或错位,半区断言当场打红。非法实例段在
+    /// 渲染前拒绝且不触碰 target。
     #[test]
     fn crack_renders_when_bound_skips_unbound_and_rejects_invalid() {
         let Some(mut renderer) = renderer_or_skip_pub(64, 64) else {
@@ -2807,18 +2832,39 @@ mod crack_tests {
         assert!(renderer.readback(&mut unbound));
         assert_eq!(base, unbound, "atlas 未上传时裂纹段必须被跳过");
 
-        // 上传不透明 atlas 后,同一裂纹实例必须改变图像。
-        let bytes_per_layer: usize = (0..ATLAS_MIPS)
-            .map(|mip| {
-                let s = (ATLAS_TEX_SIZE >> mip).max(1) as usize;
-                s * s * 4
-            })
-            .sum();
-        assert!(renderer.upload_atlas(1, &vec![220u8; bytes_per_layer]));
+        // 上传左半不透明的 atlas 后,裂纹实例必须改变图像,且改动只落在
+        // 投影左半(恒等投影下立方体占屏幕 x 16..48,uv<0.5 的不透明半区
+        // 对应 x 16..32;留出 2px 过渡带容忍线性滤波边界)。
+        assert!(renderer.upload_atlas(1, &half_opaque_atlas_bytes()));
         assert_eq!(renderer.render_frame(&crack_frame), FrameResult::Rendered);
         let mut with_crack = vec![0u8; 64 * 64 * 4];
         assert!(renderer.readback(&mut with_crack));
-        assert_ne!(base, with_crack, "裂纹实例必须改变图像");
+        let mut changed_left = 0;
+        let mut changed_right = 0;
+        for y in 0..64usize {
+            for x in 0..64usize {
+                let i = (y * 64 + x) * 4;
+                if base[i..i + 4] != with_crack[i..i + 4] {
+                    if x < 31 {
+                        changed_left += 1;
+                    } else if x >= 33 {
+                        changed_right += 1;
+                    }
+                }
+            }
+        }
+        // 面向裂缝图案六面镜像不可分辨,不透明半区落在左半还是右半取决于
+        // 逐面 UV 环绕;但必须**恰好落在一个半区**:uv 属性错位会退化成常数
+        // 采样,改动铺满整个投影面,两个半区同时非零。
+        let half = |changed: u32| changed >= 32 * 16 / 2;
+        assert!(
+            (changed_left > 0) != (changed_right > 0),
+            "不透明半区必须只落在投影的一个半区(左 {changed_left} / 右 {changed_right})"
+        );
+        assert!(
+            half(changed_left) || half(changed_right),
+            "不透明半区应覆盖约半个投影面(左 {changed_left} / 右 {changed_right})"
+        );
 
         // 非 80 倍数与超容量(恰 1 实例)拒绝,且 target 保持上一帧内容。
         let mut misaligned = empty_frame_pub();
