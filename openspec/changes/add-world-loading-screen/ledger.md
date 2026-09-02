@@ -128,6 +128,18 @@
   实际可观测窗口为前者且后续同步自愈，良性。移交后续 change 以显式同步原语
   替换锁采样探针；不进本 change 范围。Task 3 关闭。
 
-## 阶段 3 末：整分支终审
+## 阶段 3 末：整分支终审（fresh reviewer @ `ee9b7a4d`）
 
-- 终审：pending。
+- **FINAL PASS**，无 block 项。规格↔实现映射：两个 delta 的全部
+  Requirement/Scenario 逐条有落点（直接断言/结构保证双层）；跨端一致性
+  五处核对（schema.json ↔ client.ts ↔ dist ↔ Go `uiPhase` ↔ Rust 测试
+  清单的相位值与顺序、`loadingState` 三端形状）全部一致；提交序列卫生
+  （10 提交全单行英文格式、实现与 docs 分离）、遗留扫描（TODO/调试残留/
+  任务编号零命中、分支暂态已在 Task 2 消除）、门禁证据完备性（persistence
+  flake 备案闭合）、范围纪律（diff 恰等于声明范围，两处超字面改动均有
+  ledger 裁决）全部通过；抽查复跑（app 包 focused 26 测试、openspec
+  strict 82/82、gofmt）全绿。
+- mainly-cosmetic 备案：`c123561a` 提交类型精度（`test(app)` 携带生产修复，
+  ledger 已披露）；persistence 探针竞态移交缺 backlog 行——已补 F-10；
+  5 秒日志双字面量（已备案）；终审简报口径提交数 8→实际 10（均有记载）。
+- 收尾动作：F-10 跟踪行随分支合入。
