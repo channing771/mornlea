@@ -310,6 +310,25 @@
 - Repair 2 最终独立 SPEC 与 QUALITY 评审均 PASS，Task 12 裁决 Accepted；本次规划收尾勾选
   `tasks.md` 12.1。该 scoped 裁决不替代尚待执行的整分支最终 SPEC/QUALITY 评审。
 
+## main 同步
+
+- 同步范围：`main`（`8a9847a8`）并入 `feat/extract-companion-agent-service`（同步前 HEAD `09e18bdc`），merge commit `b5cd94cd`，未变基、未改写历史、未推送。
+- 8 个 content 冲突的解决要点：`AGENTS.md`/`openspec/config.yaml` 只冲突版本矩阵行，合并为本分支 companions v5 + main 侧 client ABI v14；`Makefile` 只冲突 `.PHONY` 行，取两侧目标并集（main 的 `frontend-visual-check/update` 与本分支的 `companion-agent-check/integration` 都在）；双语 `README` 保留 main 的段落更新（client ABI v14、engine "fluid numeric kernels"）与本分支新增的「伙伴 Agent 服务」章节，伙伴描述统一为本分支的最终形态；`docs/architecture.md` 取 main 的 client ABI v14 内容（含 capture/两段式容量与 RenderWorld 缓存段），章节号按合并后顺序改为 §7；`docs/notes/lan-server.md` 版本矩阵合并 v5/v14，保留本分支的 Agent HTTP/MCP contract 与 SQLite 备份表述；`docs/notes/progress.md` 是文件尾冲突：main 的 11 条近期条目原样保留，本分支的 `extract-companion-agent-service` 条目按时间序追加其后。
+- 自动合并文件复查：`cmd/mornlea/{main.go,options.go,run_test.go,app/app.go,app/app_startup.go}` 与 `internal/archcheck/dependency_test.go` 无重复或矛盾——main 的 devcapture 装配/边规则与分支的 `contracts/companion-agent/mcp-v1` 边规则落在不同区域，语义完整，由 build/vet 与 archcheck 门禁验证。
+- 版本矩阵最终状态：协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`companions.ai` schema v5、`hostile_mobs` schema v1、engine ABI v9、client ABI v14、benchmark scenario **v21**。说明：同步输入按 main 的 `openspec/config.yaml` 读到的 scenario 是 v20，但 `internal/archcheck` 门禁证明代码权威 `scenarioVersion=21`（main 在 `webview-game-ui-unification` 升的版，main 的 AGENTS.md 已是 v21、其 config.yaml 遗留 v20 未被当时的 archcheck 覆盖）；本分支 Task 12 又把基线校验扩展到 `openspec/config.yaml`，因此按「代码为真」把全部当前状态矩阵修为 v21（`AGENTS.md`、`openspec/config.yaml`、双语 README、lan-server 与 progress 分支条目的矩阵行）。提交 `33792871` 同时把 main 带入 `docs/notes/compatibility.md` 的两处当前状态 companions v4 修为 v5 语义。全仓 grep 复查：其余 v4/v13/v20 命中均在历史、迁移（v1..v4→v5）或归档叙述中，按政策保留。main 侧 `openspec/specs/tiered-swords-combat` 的「companions 保持 4」与 change 产物（proposal/design/tasks、`project-identity` delta）中的 client ABI v13/scenario v20 属规划基线表述，本同步未改动，留待整分支终审按最终矩阵复审。
+- 门禁结果（全部在 `<WT>` 内串行执行）：
+  1. `make rust` PASS（real 3.88s；本 worktree 重建了两个 Rust cdylib 并拷回本 worktree 的 `engine/target/release`，共享 `CARGO_TARGET_DIR` 的覆盖语义按预期，主 worktree 后续使用前需重建）。
+  2. `go build ./...` PASS（real 4.13s）；`go vet ./...` PASS（real 3.39s）。
+  3. `go test ./internal/archcheck -count=1` 首次 FAIL（scenario v20 vs 代码 21，两处），按上文修为 v21 后重跑 PASS（6.36s）。
+  4. `make dev-check` **FAIL**：gofmt/vet 与其余包全部通过，唯独 `go test ./... -short` 在 `internal/server` 有 6 个伙伴 manager 测试确定性失败（`TestCompanionManagerFollowTargetOfflineFailsWorldChanged`、`TestCompanionManagerContainerMineMemoryTCPParity`、`TestCompanionManagerFIFOExecutesCommandsInOrder`、`TestCompanionManagerOneInFlightRequestPerCompanion`、`TestCompanionManagerPathFailureBudgetResetsPerTask`、`TestCompanionManagerSnapshotFailureTerminatesTaskAndAdvancesFIFO`，另有 `TestCompanionManagerTaskLifecycleEvents` 时好时坏），均为非 race 模式下的时序问题，定位见下。
+  5. `make companion-agent-check` PASS（403 passed，real 20.2s）。
+  6. `make companion-agent-integration` PASS（server 9.289s，real 11.19s）。
+  7. `git diff --check` PASS。
+  8. `openspec validate --all --strict --no-interactive` PASS（83 passed, 0 failed，real 3.92s）。
+  9. `go test ./internal/companion ./internal/server -race -count=1` PASS（companion 11.464s、server 246.688s，real 247.4s）。
+- dev-check 失败定位（**非合并引入，是分支既有问题**）：同步前在干净临时 worktree（detached `09e18bdc`，fresh `make rust`）上复跑同一测试同样确定性失败；同一集合在 `-race` 下全部通过（本同步的 gate 9 完整 server race 覆盖了全部失败测试）。本分支既往 ledger 记录的所有门禁证据均为 race 模式，dev-check 的 non-race short 套件在本分支从未被验证过。插桩定位显示根因在 planner worker goroutine 与同步 tick 步进的时序耦合：非 race 快速步进下 worker 结果投递出现数百 tick 的调度延迟，部分 run 里结果到达时任务上下文已过时或被关服取消；修复涉及已双评审的测试基础设施或生产 worker 调度，超出本同步范围，转交整分支终审裁决。
+- 同步提交：`b5cd94cd`（merge commit）、`33792871` `docs(companion): reconcile version matrix after main sync`、`9810e937` `docs(companion): align benchmark scenario baseline with code`。
+
 ## 整分支终审与门禁
 
 - 整分支 SPEC review：待执行；Task 12 Repair 2 final SPEC PASS 仅为任务级证据，不提前裁决整分支 PASS。
