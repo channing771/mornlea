@@ -38,8 +38,8 @@ pub(crate) const LOD_TILE_COLUMNS: i32 = 64;
 const LOD_STEPS: [u32; 3] = [2, 4, 8];
 
 /// LOD 壳入口输入字节数:与 `mornlea_worldgen_chunk` 完全一致的 `MGW1`
-/// header(564)+ tile_x i32(564)+ tile_z i32(568)+ columns u32(572,
-/// 必须等于 64)+ lod_step u32(576,合法值 2/4/8)。
+/// header(566)+ tile_x i32(566)+ tile_z i32(570)+ columns u32(574,
+/// 必须等于 64)+ lod_step u32(578,合法值 2/4/8)。
 pub(crate) const LOD_SHELL_INPUT_BYTES: usize = WORLDGEN_HEADER_BYTES + 16;
 /// 输出流中单个壳 quad 的字节数,布局见 [`encode_shell`]。
 pub(crate) const LOD_SHELL_QUAD_BYTES: usize = 20;
@@ -433,8 +433,9 @@ mod tests {
         materials_with_water(13)
     }
 
-    /// 指定 water 编号的测试材料表:恒等表 0..=12 + water;传 0(= air)
-    /// 即 fluidEnabled 关闭的门控编码,用于断言钳制的门控跳过。
+    /// 指定 water 编号的测试材料表:恒等表 0..=12 + water + short_grass(14);
+    /// 传 water=0(= air)即 fluidEnabled 关闭的门控编码,用于断言钳制的
+    /// 门控跳过。short_grass 只影响 worldgen 装饰层,LOD 不得消费它。
     fn materials_with_water(water: u16) -> Materials {
         Materials {
             air: 0,
@@ -451,6 +452,7 @@ mod tests {
             oak_log: 11,
             leaves: 12,
             water,
+            short_grass: 14,
         }
     }
 
@@ -473,26 +475,27 @@ mod tests {
         }
     }
 
-    /// 构造 LOD 壳入口输入字节。
+    /// 构造 LOD 壳入口输入字节。layout 3:材料表 15 项(末项 short_grass,
+    /// 偏移 52;perm 后移到 54),header 566 字节,输入总长 582。
     fn lod_input(seed: i64, tile_x: i32, tile_z: i32, columns: u32, step: u32) -> Vec<u8> {
+        assert_eq!(LOD_SHELL_INPUT_BYTES, 582);
         let mut bytes = vec![0u8; LOD_SHELL_INPUT_BYTES];
         bytes[0..4].copy_from_slice(b"MGW1");
-        // layout 2:材料表 14 项(engine ABI v4 起末项 water 占用旧 reserved 槽)。
-        bytes[4..8].copy_from_slice(&2u32.to_le_bytes());
+        bytes[4..8].copy_from_slice(&3u32.to_le_bytes());
         bytes[8..16].copy_from_slice(&seed.to_le_bytes());
         bytes[16..20].copy_from_slice(&(-64i32).to_le_bytes());
         bytes[20..24].copy_from_slice(&320i32.to_le_bytes());
-        for index in 0..14u16 {
+        for index in 0..15u16 {
             bytes[24 + 2 * index as usize..26 + 2 * index as usize]
                 .copy_from_slice(&index.to_le_bytes());
         }
         for index in 0..512 {
-            bytes[52 + index] = (index & 255) as u8;
+            bytes[54 + index] = (index & 255) as u8;
         }
-        bytes[564..568].copy_from_slice(&tile_x.to_le_bytes());
-        bytes[568..572].copy_from_slice(&tile_z.to_le_bytes());
-        bytes[572..576].copy_from_slice(&columns.to_le_bytes());
-        bytes[576..580].copy_from_slice(&step.to_le_bytes());
+        bytes[566..570].copy_from_slice(&tile_x.to_le_bytes());
+        bytes[570..574].copy_from_slice(&tile_z.to_le_bytes());
+        bytes[574..578].copy_from_slice(&columns.to_le_bytes());
+        bytes[578..582].copy_from_slice(&step.to_le_bytes());
         bytes
     }
 
@@ -935,12 +938,36 @@ mod tests {
         // 快照与 Go 侧 testdata/*.bin 金样同一惯例,以二进制 fixture 承载,
         // 避免在源码内展开上万字节常量;重新生成方式:临时用 fs::write 把
         // encoded 落盘后替换该文件(输入三要素在本测试内逐字钉死)。
+        // 自然短草变更后该快照必须逐字节不变:LOD 只表达地形表面语义,
+        // 装饰短草不改变高度、材质或远环 quad(framing 升 layout 3 不影响
+        // 解析后的 worldgen 参数)。
         let request = parse_lod_input(&lod_input(42, -3, 2, 64, 4)).unwrap();
         let mut encoded = Vec::new();
         encode_shell(&lod_shell(&request), &mut encoded);
         assert_eq!(encoded.len(), GOLDEN_SHELL_BYTES.len());
         assert_eq!(encoded, GOLDEN_SHELL_BYTES);
         assert_eq!(GOLDEN_SHELL_BYTES.len() % LOD_SHELL_QUAD_BYTES, 0);
+    }
+
+    #[test]
+    fn lod_shell_ignores_short_grass_decoration() {
+        // 同一 tile 只改 header 的 short_grass 编号(偏移 52),壳输出必须
+        // 逐字节一致:远环只消费地形高度与表层材质,装饰短草不进入 LOD。
+        let base = lod_input(42, -3, 2, 64, 4);
+        let mut altered = base.clone();
+        altered[52..54].copy_from_slice(&15u16.to_le_bytes());
+        let first = parse_lod_input(&base).unwrap();
+        let second = parse_lod_input(&altered).unwrap();
+        let mut a = Vec::new();
+        let mut b = Vec::new();
+        encode_shell(&lod_shell(&first), &mut a);
+        encode_shell(&lod_shell(&second), &mut b);
+        assert_eq!(a, b, "short_grass 编号不得影响壳输出");
+
+        // 壳流材质只可能是地形表层材质,不得出现装饰短草编号(14)。
+        for quad in lod_shell(&first) {
+            assert_ne!(quad.material, 14, "LOD quad 出现装饰短草材质");
+        }
     }
 
     /// 固定 seed 42、恒等 perm(layout 2 十四项恒等材料表,water=13)、

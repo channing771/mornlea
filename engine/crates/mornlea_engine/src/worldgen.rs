@@ -63,11 +63,18 @@ const IRON_SALT: u64 = 0xC2B2_AE3D_27D4_EB4F;
 const OAK_TREE_CELL_SHIFT: u32 = 3;
 const OAK_TREE_SALT: u64 = 0xA24B_AED4_963E_E407;
 
+/// 自然短草列判定的冻结 salt(natural-grass-seeds design 决策 3)。
+/// 只借用既有 `ore_hash` wrapping 整数哈希,不用全局 RNG、浮点概率或
+/// 区块内坐标;`hash & 3 == 0` 给合格草地列恰 1/4 的独立稀疏命中,与玩家
+/// 除草掉落的 salt 完全独立。
+const SHORT_GRASS_GENERATION_SALT: u64 = 0x5348_4F52_5447_5253;
+
 /// 调用方传入的方块材料表;engine 不硬编码任何 BlockID。
 ///
-/// 14 项必须两两互异,**唯一例外是 `water` 允许等于 `air`**:air 是空判定
-/// 哨兵,其余 ID 在分层/矿石/树逻辑中参与等值比较,重复 ID 会破坏与 Go
-/// 语义的对应关系,由 FFI 层拒绝。
+/// 15 项必须两两互异,**唯一例外是 `water` 允许等于 `air`**:air 是空判定
+/// 哨兵,其余 ID 在分层/矿石/树/短草逻辑中参与等值比较或写入,重复 ID 会
+/// 破坏与 Go 语义的对应关系,由 FFI 层拒绝。`short_grass` 参与装饰写入,
+/// 不在豁免集合内——关闭注水的门控编码只豁免 `water == air` 这一对。
 ///
 /// `water == air` 是 Go 侧 `fluidEnabled` 关闭时的门控编码(design D6):
 /// water 只被写入、从不参与等值比较,填 air 编号即让注水步退化为把空气
@@ -90,11 +97,13 @@ pub(crate) struct Materials {
     pub leaves: u16,
     /// 海平面注水写入的方块;等于 `air` 时注水整体退化为空操作。
     pub water: u16,
+    /// 草地表面装饰的短草方块;树与海水之后仍为空气的命中列才写入。
+    pub short_grass: u16,
 }
 
 impl Materials {
     /// 按 header 编码顺序展开为数组,供互异性校验使用。
-    pub(crate) fn as_array(&self) -> [u16; 14] {
+    pub(crate) fn as_array(&self) -> [u16; 15] {
         [
             self.air,
             self.stone,
@@ -110,6 +119,7 @@ impl Materials {
             self.oak_log,
             self.leaves,
             self.water,
+            self.short_grass,
         ]
     }
 }
@@ -270,11 +280,13 @@ impl WorldgenParams {
         self.generated_block_at(x, y, z, height)
     }
 
-    /// 单点基础方块查询:地形非空优先,空气处叠加橡树,仍为空气时叠加海水。
+    /// 单点基础方块查询:地形非空优先,空气处叠加橡树,仍为空气时叠加海水,
+    /// 最终仍是空气的格才查询自然短草。
     ///
-    /// 注水排在最后一层,与 `generate_chunk` 里"注水在 apply_oak_trees 之后"
-    /// 的顺序对应:只有最终仍是空气的格才注水,因此地表分层、矿石与橡树的
-    /// 结果完全不受影响。
+    /// 层叠顺序与 `generate_chunk` 冻结一致:地形 → 橡树 → 海水 → 短草。
+    /// 树或海水在当前格产生非空气即早返回,只有最终空气才进入短草判定,
+    /// 因此短草绝不可能覆盖既有内容;`TerrainBlockAt` 与 `HeightAt` 不经
+    /// 本函数,天然忽略装饰层。
     pub(crate) fn base_block_at(&self, x: i32, y: i32, z: i32) -> u16 {
         let base = self.terrain_block_at(x, y, z);
         if base != self.materials.air {
@@ -284,7 +296,11 @@ impl WorldgenParams {
         if tree != self.materials.air {
             return tree;
         }
-        self.sea_block_at(y)
+        let sea = self.sea_block_at(y);
+        if sea != self.materials.air {
+            return sea;
+        }
+        self.short_grass_block_at(x, y, z)
     }
 
     /// 海平面注水的单点形式:世界高度范围内且 `y <= SEA_LEVEL_Y` 时为 water,
@@ -295,6 +311,38 @@ impl WorldgenParams {
         } else {
             self.materials.air
         }
+    }
+
+    /// 列 (wx,wz) 的截断地表高度:与 `generate_chunk` 的写入高度一致,
+    /// 高度图越上界时截到 `WORLD_MAX_Y - 1`。
+    fn truncated_surface(&self, wx: i32, wz: i32) -> i32 {
+        let mut height = self.height_at(wx, wz);
+        if height >= WORLD_MAX_Y {
+            height = WORLD_MAX_Y - 1;
+        }
+        height
+    }
+
+    /// 自然短草的单点形式:调用方已确认地形/树/海水层都返回空气。
+    ///
+    /// 判定条件与 `apply_short_grass` 冻结一致:目标格是截断地表的 +1、
+    /// 地表方块是 `grass`、`ore_hash(seed, wx, 0, wz, salt) & 3 == 0`。
+    /// 树结构只写在 surface+1 及以上、海水只改写空气格,因此这里的
+    /// `generated_block_at(surface) == grass` 与整块路径里对 dense 数组
+    /// 的最终值检查逐格等价;传截断高度作 `height` 与 `generate_chunk`
+    /// 的写入参数同源,避免越上界地层的分叉。
+    fn short_grass_block_at(&self, x: i32, y: i32, z: i32) -> u16 {
+        if ore_hash(self.seed, x, 0, z, SHORT_GRASS_GENERATION_SALT) & 3 != 0 {
+            return self.materials.air;
+        }
+        let surface = self.truncated_surface(x, z);
+        if y != surface + 1 || !(WORLD_MIN_Y..WORLD_MAX_Y).contains(&surface) {
+            return self.materials.air;
+        }
+        if self.generated_block_at(x, surface, z, surface) != self.materials.grass {
+            return self.materials.air;
+        }
+        self.materials.short_grass
     }
 
     /// 返回固定候选格中的有效橡树,与 Go `oakTreeForCell` 一致。
@@ -357,6 +405,10 @@ impl WorldgenParams {
 
     /// 生成整区块 dense 数组,布局 `[y−min_y][lz][lx]`,与 Go `GenerateChunk`
     /// 的写入集合逐位一致:地形只写到截断后的地表高度,其余保持 air。
+    ///
+    /// 生成顺序冻结为:terrain/ores → `apply_oak_trees` → `flood_sea_level`
+    /// → `apply_short_grass`。短草层排在最后,只把"树与海水结算后仍是空气"
+    /// 的命中草地列改为 `short_grass`,不触碰任何既有非空气方块。
     pub(crate) fn generate_chunk(&self, chunk_x: i32, chunk_z: i32, dense: &mut [u16]) {
         debug_assert_eq!(dense.len(), CHUNK_VOLUME);
         dense.fill(self.materials.air);
@@ -367,10 +419,7 @@ impl WorldgenParams {
             for lx in 0..SECTION_SIZE {
                 let wx = base_x + lx;
                 let wz = base_z + lz;
-                let mut h = self.height_at(wx, wz);
-                if h >= WORLD_MAX_Y {
-                    h = WORLD_MAX_Y - 1;
-                }
+                let h = self.truncated_surface(wx, wz);
                 for y in WORLD_MIN_Y..=h {
                     dense[dense_index(lx, y, lz)] = self.generated_block_at(wx, y, wz, h);
                 }
@@ -378,6 +427,44 @@ impl WorldgenParams {
         }
         self.apply_oak_trees(chunk_x, chunk_z, dense);
         self.flood_sea_level(dense);
+        self.apply_short_grass(chunk_x, chunk_z, dense);
+    }
+
+    /// 自然短草装饰层:恰好遍历区块 16×16 = 256 个世界列,每列一次常数
+    /// 哈希判定。命中(`hash & 3 == 0`)且地表是最终 `grass`、目标格仍是
+    /// 空气时,在 surface+1 写 `short_grass`。
+    ///
+    /// 判定只依赖世界种子与世界坐标(世界 X/Z、固定 Y=0),不用区块内坐标
+    /// 或邻区块状态,因此负坐标、区块边界与生成顺序下结果恒定;与
+    /// `short_grass_block_at` 的单点路径逐格一致。
+    fn apply_short_grass(&self, chunk_x: i32, chunk_z: i32, dense: &mut [u16]) {
+        let m = self.materials;
+        let base_x = chunk_x << SECTION_SHIFT;
+        let base_z = chunk_z << SECTION_SHIFT;
+        for lz in 0..SECTION_SIZE {
+            for lx in 0..SECTION_SIZE {
+                let wx = base_x + lx;
+                let wz = base_z + lz;
+                let surface = self.truncated_surface(wx, wz);
+                if !(WORLD_MIN_Y..WORLD_MAX_Y).contains(&surface) {
+                    continue;
+                }
+                // 地表最终方块必须是 grass:树只写在 surface+1 及以上、
+                // 海水只改写空气格,该格在树/水之后不可能再变化。
+                if dense[dense_index(lx, surface, lz)] != m.grass {
+                    continue;
+                }
+                let target = surface + 1;
+                if !(WORLD_MIN_Y..WORLD_MAX_Y).contains(&target)
+                    || dense[dense_index(lx, target, lz)] != m.air
+                {
+                    continue;
+                }
+                if ore_hash(self.seed, wx, 0, wz, SHORT_GRASS_GENERATION_SALT) & 3 == 0 {
+                    dense[dense_index(lx, target, lz)] = m.short_grass;
+                }
+            }
+        }
     }
 
     /// 海平面注水:把海平面及以下**仍为空气**的格改写为 `materials.water`。
@@ -504,14 +591,15 @@ pub(crate) fn dense_index(lx: i32, y: i32, lz: i32) -> usize {
 
 // ---- ABI 编码常量与解析 ----
 //
-// 两个 worldgen 入口共用 magic `MGW1` 的 564 字节 header:
+// 两个 worldgen 入口共用 magic `MGW1` 的 566 字节 header:
 // magic(4) + layout version(4) + seed(8) + min_y(4) + max_y(4) +
-// 材料表 14×u16(28) + perm 512×u8(512)。
+// 材料表 15×u16(30) + perm 512×u8(512)。
 //
-// engine ABI v4 把材料表从 13 项扩到 14 项(末项 water),新增的 u16 正当占用
-// v3 预留的 reserved 槽(偏移 50):该偏移的语义由"保留、必须为 0"变成"water
-// 的方块编号",header 总长与 perm 偏移不变,但**布局语义确实变了**,因此
-// layout version 1 → 2——它是独立于 ABI 版本号的带内第二道混装防线。
+// engine ABI v4 把材料表从 13 项扩到 14 项(末项 water),当时新增的 u16
+// 正当占用 v3 预留的 reserved 槽(偏移 50),header 总长不变,但布局语义
+// 确实变了,因此 layout version 1 → 2——它是独立于 ABI 版本号的带内第二道
+// 混装防线。engine ABI v10 再把材料表从 14 项扩到 15 项(末项 short_grass,
+// 位于偏移 52,perm 后移到偏移 54),header 564 → 566 字节,layout 2 → 3。
 //
 // **不再保留空槽是刻意选择,不是漏了**:新增一个 reserved 槽本身就要把 perm
 // 往后挪,而 reserved 的意义是推迟这个代价、不是提前支付;何况下一次扩字段
@@ -521,7 +609,7 @@ pub(crate) fn dense_index(lx: i32, y: i32, lz: i32) -> usize {
 // 每条 16 字节的查询记录(mode + wx/wy/wz)。
 
 /// 共用 header 字节数。
-pub(crate) const WORLDGEN_HEADER_BYTES: usize = 564;
+pub(crate) const WORLDGEN_HEADER_BYTES: usize = 566;
 /// chunk 入口输入总字节数:header + chunk_x/chunk_z。
 pub(crate) const WORLDGEN_CHUNK_INPUT_BYTES: usize = WORLDGEN_HEADER_BYTES + 8;
 /// chunk 入口输出字节数:98304 个 u16 LE。
@@ -554,7 +642,7 @@ fn read_i64(bytes: &[u8], offset: usize) -> i64 {
 /// 解析并校验共用 header;任何违约返回 None(FFI 层转为 StatusInput)。
 ///
 /// 校验项:magic/layout 精确匹配、Y 范围必须与内核常量一致(防止 Go/Rust
-/// 世界高度漂移)、材料表 14 项两两互异(air 是哨兵,重复 ID 会破坏与 Go
+/// 世界高度漂移)、材料表 15 项两两互异(air 是哨兵,重复 ID 会破坏与 Go
 /// 语义的对应关系)。perm 为 u8,取值域即合法域。
 ///
 /// v3 的 `reserved != 0` 校验随字段一起消失:偏移 50 已被 water 正当占用,
@@ -562,12 +650,13 @@ fn read_i64(bytes: &[u8], offset: usize) -> i64 {
 ///
 /// 互异性的**唯一豁免**是 `water == air`:这是 Go 侧 `fluidEnabled` 关闭时
 /// 的门控编码(design D6),water 只被写入、从不参与等值比较,取 air 编号
-/// 即让注水退化为空操作。water 与其余 12 项重复仍然拒绝——那只可能是
-/// Go/Rust 材料表漂移。
+/// 即让注水退化为空操作。water 与其余 13 项重复仍然拒绝——那只可能是
+/// Go/Rust 材料表漂移。`short_grass` 参与装饰写入,与任何材料(含 air 和
+/// water)重复都不豁免。
 pub(crate) fn parse_header(bytes: &[u8]) -> Option<WorldgenParams> {
     if bytes.len() < WORLDGEN_HEADER_BYTES
         || &bytes[0..4] != b"MGW1"
-        || read_u32(bytes, 4) != 2
+        || read_u32(bytes, 4) != 3
         || read_i32(bytes, 16) != WORLD_MIN_Y
         || read_i32(bytes, 20) != WORLD_MAX_Y
     {
@@ -589,9 +678,11 @@ pub(crate) fn parse_header(bytes: &[u8]) -> Option<WorldgenParams> {
         oak_log: read_u16(bytes, 46),
         leaves: read_u16(bytes, 48),
         water: read_u16(bytes, 50),
+        short_grass: read_u16(bytes, 52),
     };
     let ids = materials.as_array();
-    // as_array 的顺序:0 = air,13 = water。(0, 13) 这一对是门控豁免。
+    // as_array 的顺序:0 = air,13 = water,14 = short_grass。
+    // (0, 13) 这一对是门控豁免;short_grass 不参与任何豁免。
     const AIR_INDEX: usize = 0;
     const WATER_INDEX: usize = 13;
     for i in 0..ids.len() {
@@ -602,7 +693,7 @@ pub(crate) fn parse_header(bytes: &[u8]) -> Option<WorldgenParams> {
         }
     }
     let mut perm = [0u8; 512];
-    perm.copy_from_slice(&bytes[52..WORLDGEN_HEADER_BYTES]);
+    perm.copy_from_slice(&bytes[54..WORLDGEN_HEADER_BYTES]);
     Some(WorldgenParams {
         seed,
         materials,
@@ -690,7 +781,7 @@ mod tests {
     use super::*;
 
     /// 测试材料表:取值互异即可,具体数值不影响结构断言。
-    /// water 取 13(与 air 不同)代表门控开启态。
+    /// water 取 13(与 air 不同)代表门控开启态,short_grass 取 14。
     fn materials() -> Materials {
         materials_with_water(13)
     }
@@ -712,6 +803,7 @@ mod tests {
             oak_log: 11,
             leaves: 12,
             water,
+            short_grass: 14,
         }
     }
 
@@ -853,7 +945,10 @@ mod tests {
             for lz in 0..SECTION_SIZE {
                 for lx in 0..SECTION_SIZE {
                     let index = dense_index(lx, y, lz);
-                    let expected = if dry[index] == 0 && y <= SEA_LEVEL_Y {
+                    // 自然短草层的唯一两态分歧:门控关闭时海水步写空气,
+                    // surface == 63 的命中列在 y == 64(海平面)装饰短草;
+                    // 开启态该格先被海水占据,短草让位。其余仍按旧规则。
+                    let expected = if y <= SEA_LEVEL_Y && (dry[index] == 0 || dry[index] == 14) {
                         13
                     } else {
                         dry[index]
@@ -869,10 +964,11 @@ mod tests {
         let (dry, wet, changed) = dry_and_wet(42, 3, -5);
         assert!(changed > 0, "夹具失效:该区块没有可注水的格");
         // 分层(石/土/草/基岩/雪/沙/黏土/砂砾)、矿石与树木的每一格都必须原样保留。
+        // 短草(14)例外:它在关闭态可出现在海平面格,开启态该格属海水。
         let mut seen_ore = false;
         let mut seen_tree = false;
         for (index, &block) in dry.iter().enumerate() {
-            if block == 0 {
+            if block == 0 || block == 14 {
                 continue;
             }
             assert_eq!(wet[index], block, "注水改写了非空气格 index={index}");
@@ -887,11 +983,14 @@ mod tests {
     #[test]
     fn gate_off_leaves_every_floodable_cell_as_air() {
         // 门控关闭(water = air)时,注水必须整体退化为空操作:开启态被注水的
-        // **每一格**在关闭态都必须仍是空气,且输出里不允许出现 13 号方块。
+        // **每一格**在关闭态都必须仍是空气或(海平面格的)自然短草,且输出里
+        // 不允许出现 13 号方块。
         //
         // 这条断言的对象是"内核是否老老实实用 materials.water 写入":一旦
         // flood_sea_level 绕过材料表硬编码水的编号,Go 侧的门控(water 填 air)
-        // 就被架空,关闭态会长出水,本测试立刻变红。
+        // 就被架空,关闭态会长出水,本测试立刻变红。短草例外与
+        // flooding_only_replaces_air_at_or_below_sea_level 同源:关闭态海水步
+        // 写空气,surface == 63 的命中列在海平面装饰短草。
         let (dry, wet, changed) = dry_and_wet(42, 3, -5);
         // 先断言"关闭态没有水",再断言夹具非空:顺序如此是为了让内核硬编码
         // 水编号这类真实故障报出"关闭态出现了水",而不是被后面的夹具守卫
@@ -901,7 +1000,10 @@ mod tests {
         let mut checked = 0;
         for (index, &block) in wet.iter().enumerate() {
             if block == 13 {
-                assert_eq!(dry[index], 0, "门控关闭时 index={index} 本应仍是空气");
+                assert!(
+                    dry[index] == 0 || dry[index] == 14,
+                    "门控关闭时 index={index} 本应仍是空气或短草"
+                );
                 checked += 1;
             }
         }
@@ -934,23 +1036,353 @@ mod tests {
     #[test]
     fn header_allows_water_equal_to_air_but_rejects_other_duplicates() {
         // 门控关闭时 Go 侧把 water 填成 air 编号,header 必须接受。
-        let mut bytes = vec![0u8; WORLDGEN_HEADER_BYTES];
+        assert!(parse_header(&layout_three_header(42, 1, 14)).is_some());
+        // water = 15:门控开启态,必须通过。
+        assert!(parse_header(&layout_three_header(42, 15, 14)).is_some());
+        // water = stone(2):这只可能是材料表漂移,必须拒绝。
+        assert!(parse_header(&layout_three_header(42, 2, 14)).is_none());
+    }
+
+    // ---- 自然短草层(natural-grass-seeds 变更)的契约测试 ----
+    //
+    // 以下测试全部以字节级 header 驱动(不构造 `Materials` 字面量),
+    // 保证在 framing 未实现时以可观察的解析失败(RED)而不是编译失败暴露。
+
+    /// 短草生成判定的冻结 salt,与 design 决策 3 逐字一致。测试侧以字面量
+    /// 钉住:实现侧常量一旦漂移,哈希命中集合随之改变,密度与逐列断言变红。
+    const SHORT_GRASS_SALT_FOR_TEST: u64 = 0x5348_4F52_5447_5253;
+
+    /// 写入 header 材料表第 index 项(15 项布局)。
+    fn put_material(bytes: &mut [u8], index: usize, id: u16) {
+        bytes[24 + index * 2..26 + index * 2].copy_from_slice(&id.to_le_bytes());
+    }
+
+    /// 构造 layout 3 的 566 字节 `MGW1` header:材料表 15 项(0..=12 取
+    /// 1..=13,water/short_grass 由参数给定)、洗牌 perm 从偏移 54 开始。
+    /// 材料 id 刻意避开 0,便于区分"输出缓冲原样"与"生成的空气"。
+    fn layout_three_header(seed: i64, water: u16, short_grass: u16) -> Vec<u8> {
+        let mut bytes = vec![0u8; 566];
         bytes[0..4].copy_from_slice(b"MGW1");
-        bytes[4..8].copy_from_slice(&2u32.to_le_bytes());
+        bytes[4..8].copy_from_slice(&3u32.to_le_bytes());
+        bytes[8..16].copy_from_slice(&seed.to_le_bytes());
         bytes[16..20].copy_from_slice(&WORLD_MIN_Y.to_le_bytes());
         bytes[20..24].copy_from_slice(&WORLD_MAX_Y.to_le_bytes());
         for index in 0..13usize {
-            let id = (index as u16) + 1;
-            bytes[24 + index * 2..26 + index * 2].copy_from_slice(&id.to_le_bytes());
+            put_material(&mut bytes, index, index as u16 + 1);
         }
-        // air = 1,water = 1:门控关闭态,必须通过。
-        bytes[50..52].copy_from_slice(&1u16.to_le_bytes());
-        assert!(parse_header(&bytes).is_some());
-        // water = 14:门控开启态,必须通过。
-        bytes[50..52].copy_from_slice(&14u16.to_le_bytes());
-        assert!(parse_header(&bytes).is_some());
-        // water = stone(2):这只可能是材料表漂移,必须拒绝。
-        bytes[50..52].copy_from_slice(&2u16.to_le_bytes());
-        assert!(parse_header(&bytes).is_none());
+        put_material(&mut bytes, 13, water);
+        put_material(&mut bytes, 14, short_grass);
+        bytes[54..566].copy_from_slice(&shuffled_perm(seed as u64));
+        bytes
+    }
+
+    /// 用 layout 3 header 解析参数;framing 未实现时 `parse_header` 返回
+    /// None,expect 失败即 RED 的直接证据。
+    fn grass_params(seed: i64, water: u16, short_grass: u16) -> WorldgenParams {
+        parse_header(&layout_three_header(seed, water, short_grass))
+            .expect("layout 3 header 必须可解析")
+    }
+
+    #[test]
+    fn mgw1_layout_three_framing_is_frozen() {
+        // layout 3 / header 566 / chunk input 574 / probe input 570+16N 是
+        // 冻结的 ABI 帧契约;layout version 是独立于 ABI 版本号的带内混装防线。
+        assert_eq!(WORLDGEN_HEADER_BYTES, 566);
+        assert_eq!(WORLDGEN_CHUNK_INPUT_BYTES, 574);
+        let header = layout_three_header(42, 15, 14);
+        assert!(parse_header(&header).is_some(), "layout 3 + 15 项互异材料必须被接受");
+
+        // 旧 layout 2 的 564 字节 header 必须整体拒绝。
+        let mut legacy = header[..564].to_vec();
+        legacy[4..8].copy_from_slice(&2u32.to_le_bytes());
+        assert!(parse_header(&legacy).is_none(), "旧 layout 2 header 必须被拒绝");
+
+        // 旧 chunk 入口总长 572 必须拒绝。
+        let mut legacy_chunk = legacy.clone();
+        legacy_chunk.extend_from_slice(&0i32.to_le_bytes());
+        legacy_chunk.extend_from_slice(&0i32.to_le_bytes());
+        assert_eq!(legacy_chunk.len(), 572);
+        assert!(parse_chunk_input(&legacy_chunk).is_none(), "旧 572 字节 chunk 输入必须被拒绝");
+
+        // 新 chunk/probe 帧被精确接受:probe 总长 570 + 16×N。
+        let mut chunk_input = header.clone();
+        chunk_input.extend_from_slice(&0i32.to_le_bytes());
+        chunk_input.extend_from_slice(&0i32.to_le_bytes());
+        assert_eq!(chunk_input.len(), 574);
+        assert!(parse_chunk_input(&chunk_input).is_some());
+
+        let mut probe_input = header;
+        probe_input.extend_from_slice(&1u32.to_le_bytes());
+        probe_input.extend_from_slice(&2u32.to_le_bytes());
+        probe_input.extend_from_slice(&0i32.to_le_bytes());
+        probe_input.extend_from_slice(&0i32.to_le_bytes());
+        probe_input.extend_from_slice(&0i32.to_le_bytes());
+        assert_eq!(probe_input.len(), 586);
+        assert!(parse_probe_input(&probe_input).is_some(), "570+16N probe 帧必须被接受");
+
+        // 旧 probe 帧(564 header + count + 记录)必须拒绝。
+        let mut legacy_probe = legacy;
+        legacy_probe.extend_from_slice(&1u32.to_le_bytes());
+        legacy_probe.extend_from_slice(&[0u8; 16]);
+        assert_eq!(legacy_probe.len(), 584);
+        assert!(parse_probe_input(&legacy_probe).is_none(), "旧 564 帧probe输入必须被拒绝");
+    }
+
+    #[test]
+    fn mgw1_short_grass_is_not_exempt_from_uniqueness() {
+        // 门控关闭态的唯一豁免仍是 water == air;short_grass 与任何材料
+        // (含 air 与 water)重复都必须拒绝——它参与写入,不在豁免集合内。
+        assert!(
+            parse_header(&layout_three_header(42, 1, 14)).is_some(),
+            "water == air 的门控豁免必须保留"
+        );
+        assert!(
+            parse_header(&layout_three_header(42, 15, 1)).is_none(),
+            "short_grass == air 不在豁免内"
+        );
+        assert!(
+            parse_header(&layout_three_header(42, 1, 1)).is_none(),
+            "short_grass 与 water 同为 air 编号仍构成重复"
+        );
+        assert!(
+            parse_header(&layout_three_header(42, 15, 2)).is_none(),
+            "short_grass == stone 是材料表漂移"
+        );
+        assert!(
+            parse_header(&layout_three_header(42, 15, 15)).is_none(),
+            "short_grass == water(门控开启)也必须拒绝"
+        );
+    }
+
+    /// 遍历区块全部 256 列,按冻结规则逐列核对短草判定:
+    /// 装饰格必须满足"草地表面 + hash 命中",未装饰的空气目标格必须未命中。
+    /// short_grass 编号由调用方给定(header 构造时写入),不读 `Materials`
+    /// 字段,保证 framing 未实现时测试以运行期断言失败(RED)暴露。
+    fn audit_short_grass(
+        params: &WorldgenParams,
+        chunk_x: i32,
+        chunk_z: i32,
+        dense: &[u16],
+        short_grass: u16,
+    ) -> (usize, usize) {
+        let air = params.materials.air;
+        let grass = params.materials.grass;
+        let mut grass_columns = 0;
+        let mut decorated = 0;
+        for lz in 0..SECTION_SIZE {
+            for lx in 0..SECTION_SIZE {
+                let wx = (chunk_x << SECTION_SHIFT) + lx;
+                let wz = (chunk_z << SECTION_SHIFT) + lz;
+                let mut surface = params.height_at(wx, wz);
+                if surface >= WORLD_MAX_Y {
+                    surface = WORLD_MAX_Y - 1;
+                }
+                let target = dense[dense_index(lx, surface + 1, lz)];
+                let hash_hit =
+                    ore_hash(params.seed, wx, 0, wz, SHORT_GRASS_SALT_FOR_TEST) & 3 == 0;
+                if target == short_grass {
+                    // 装饰格:正下方必须是草地表面,且该列 hash 必然命中。
+                    assert_eq!(
+                        dense[dense_index(lx, surface, lz)],
+                        grass,
+                        "({wx},{wz}) 短草下方不是草地表面"
+                    );
+                    assert!(hash_hit, "({wx},{wz}) 未命中列出现短草");
+                    decorated += 1;
+                } else if target == air {
+                    if dense[dense_index(lx, surface, lz)] == grass {
+                        grass_columns += 1;
+                        assert!(!hash_hit, "({wx},{wz}) 命中的空草地列未被装饰");
+                    }
+                } else {
+                    // 树/海水等既有内容占据目标格:短草必须让位。
+                    assert_ne!(target, short_grass);
+                }
+            }
+        }
+        (grass_columns, decorated)
+    }
+
+    #[test]
+    fn short_grass_decorates_qualifying_columns_with_gaps() {
+        // 门控关闭(water == air)的湿语义:dry 世界海平面以下没有水,
+        // 表面为草的列照常参与判定。
+        let params = grass_params(42, 1, 14);
+        let mut dense = vec![0u16; CHUNK_VOLUME];
+        params.generate_chunk(3, -5, &mut dense);
+        let (gaps, decorated) = audit_short_grass(&params, 3, -5, &dense, 14);
+        assert!(decorated > 0, "夹具失效:该区块没有任何短草");
+        assert!(gaps > 0, "夹具失效:该区块没有空隙列,无法证明稀疏分布");
+
+        // 材料表驱动的编号:换一个 short_grass 编号重生成,装饰格必须随之改变,
+        // 证明内核使用请求材料表而不是硬编码编号。
+        let other = grass_params(42, 1, 20);
+        let mut dense_other = vec![0u16; CHUNK_VOLUME];
+        other.generate_chunk(3, -5, &mut dense_other);
+        let cells = dense
+            .iter()
+            .zip(&dense_other)
+            .filter(|&(a, b)| a != b)
+            .count();
+        assert_eq!(cells, decorated, "两份输出差异格数必须恰为装饰格数");
+        assert!(dense_other.contains(&20), "装饰格必须使用请求的 short_grass 编号");
+    }
+
+    #[test]
+    fn short_grass_density_is_quarter_over_corpus() {
+        // 多区块(含负坐标)语料上命中比例必须落在 1/4 邻域:过密或过疏
+        // 都意味着判定偏离 hash & 3 == 0 的冻结规则。
+        let params = grass_params(42, 1, 14);
+        let mut grass_columns = 0usize;
+        let mut decorated = 0usize;
+        for (cx, cz) in [(3, -5), (0, 0), (-1, -1), (37, -104)] {
+            let mut dense = vec![0u16; CHUNK_VOLUME];
+            params.generate_chunk(cx, cz, &mut dense);
+            let (gaps, hits) = audit_short_grass(&params, cx, cz, &dense, 14);
+            grass_columns += gaps + hits;
+            decorated += hits;
+        }
+        assert!(decorated > 0, "夹具失效:语料没有任何短草");
+        let ratio = decorated as f64 / grass_columns as f64;
+        assert!(
+            (0.15..0.35).contains(&ratio),
+            "短草密度 {ratio:.3} 偏离 1/4 邻域(装饰={decorated}, 草地列={grass_columns})"
+        );
+    }
+
+    #[test]
+    fn short_grass_yields_to_trees_and_sea() {
+        // 湿世界(注水开启,water=15):海平面及以下的目标格已被水占据,
+        // 短草绝不允许出现在 y <= SEA_LEVEL_Y。
+        let wet = grass_params(42, 15, 14);
+        let corpus = [(3, -5), (0, 0), (1, 1), (-1, -1), (37, -104)];
+        let short_grass = 14u16;
+        let water = wet.materials.water;
+        let mut wet_cells = 0;
+        let mut yielded = 0;
+        for (cx, cz) in corpus {
+            let mut dense = vec![0u16; CHUNK_VOLUME];
+            wet.generate_chunk(cx, cz, &mut dense);
+            for y in WORLD_MIN_Y..=SEA_LEVEL_Y {
+                let layer =
+                    (y - WORLD_MIN_Y) as usize * (SECTION_SIZE as usize) * (SECTION_SIZE as usize);
+                for cell in &dense[layer..layer + (SECTION_SIZE as usize) * (SECTION_SIZE as usize)]
+                {
+                    assert_ne!(*cell, short_grass, "y={y} 出现短草,海水优先被破坏");
+                    if *cell == water {
+                        wet_cells += 1;
+                    }
+                }
+            }
+
+            // 树优先:树干列即使 hash 命中,目标格也必须保持原木/树叶。
+            for lz in 0..SECTION_SIZE {
+                for lx in 0..SECTION_SIZE {
+                    let wx = (cx << SECTION_SHIFT) + lx;
+                    let wz = (cz << SECTION_SHIFT) + lz;
+                    let mut surface = wet.height_at(wx, wz);
+                    if surface >= WORLD_MAX_Y {
+                        surface = WORLD_MAX_Y - 1;
+                    }
+                    let tree = wet.tree_block_at(wx, surface + 1, wz);
+                    if tree == wet.materials.air {
+                        continue;
+                    }
+                    let hash_hit =
+                        ore_hash(wet.seed, wx, 0, wz, SHORT_GRASS_SALT_FOR_TEST) & 3 == 0;
+                    let target = dense[dense_index(lx, surface + 1, lz)];
+                    if hash_hit {
+                        assert_eq!(target, tree, "({wx},{wz}) 命中列的树被短草覆盖");
+                        yielded += 1;
+                    }
+                }
+            }
+        }
+        assert!(wet_cells > 0, "夹具失效:湿语料没有水");
+        assert!(yielded > 0, "夹具失效:语料没有 hash 命中的树列,树优先是空断言");
+    }
+
+    #[test]
+    fn short_grass_chunk_and_pointwise_parity_spans_boundaries() {
+        // 整块与单点两条生产出口必须逐格一致,语料覆盖正/负坐标与区块边界。
+        let params = grass_params(7, 1, 14);
+        let mut total = 0;
+        for (cx, cz) in [(0, 0), (1, 0), (-1, -1), (37, -104)] {
+            let mut dense = vec![0u16; CHUNK_VOLUME];
+            params.generate_chunk(cx, cz, &mut dense);
+            for y in WORLD_MIN_Y..WORLD_MAX_Y {
+                for lz in 0..SECTION_SIZE {
+                    for lx in 0..SECTION_SIZE {
+                        let wx = (cx << SECTION_SHIFT) + lx;
+                        let wz = (cz << SECTION_SHIFT) + lz;
+                        assert_eq!(
+                            dense[dense_index(lx, y, lz)],
+                            params.base_block_at(wx, y, wz),
+                            "({wx},{y},{wz})"
+                        );
+                    }
+                }
+            }
+            total += dense.iter().filter(|&&b| b == 14).count();
+        }
+        assert!(total > 0, "夹具失效:语料没有任何短草");
+    }
+
+    #[test]
+    fn height_and_terrain_queries_ignore_short_grass() {
+        // 短草是纯装饰:HeightAt 仍指草地表面,TerrainBlockAt 在装饰格
+        // 仍是 air,装饰格上方也仍是 air(单格,不向上生长)。
+        let params = grass_params(42, 1, 14);
+        let mut dense = vec![0u16; CHUNK_VOLUME];
+        params.generate_chunk(3, -5, &mut dense);
+        let mut checked = 0;
+        for lz in 0..SECTION_SIZE {
+            for lx in 0..SECTION_SIZE {
+                let wx = (3 << SECTION_SHIFT) + lx;
+                let wz = (-5 << SECTION_SHIFT) + lz;
+                let mut surface = params.height_at(wx, wz);
+                if surface >= WORLD_MAX_Y {
+                    surface = WORLD_MAX_Y - 1;
+                }
+                if dense[dense_index(lx, surface + 1, lz)] != 14 {
+                    continue;
+                }
+                assert_eq!(params.height_at(wx, wz), surface, "短草不得抬高高度图");
+                assert_eq!(
+                    params.terrain_block_at(wx, surface + 1, wz),
+                    params.materials.air,
+                    "TerrainBlockAt 必须忽略装饰短草"
+                );
+                assert_eq!(
+                    params.base_block_at(wx, surface + 2, wz),
+                    params.materials.air,
+                    "短草必须只有单格"
+                );
+                checked += 1;
+            }
+        }
+        assert!(checked > 0, "夹具失效:该区块没有短草");
+    }
+
+    #[test]
+    fn short_grass_is_independent_of_generation_order() {
+        // 短草判定只依赖世界种子与世界坐标:同一批区块按不同顺序生成,
+        // 输出必须逐位一致(无邻区块状态、无进程 RNG)。
+        let params = grass_params(42, 1, 14);
+        let chunks = [(0, 0), (-1, -1), (1, 0), (37, -104)];
+        let mut forward = Vec::new();
+        for (cx, cz) in chunks {
+            let mut dense = vec![0u16; CHUNK_VOLUME];
+            params.generate_chunk(cx, cz, &mut dense);
+            forward.push(dense);
+        }
+        let mut backward = Vec::new();
+        for &(cx, cz) in chunks.iter().rev() {
+            let mut dense = vec![0u16; CHUNK_VOLUME];
+            params.generate_chunk(cx, cz, &mut dense);
+            backward.push(dense);
+        }
+        backward.reverse();
+        assert_eq!(forward, backward);
     }
 }

@@ -19,6 +19,14 @@ use crate::worldgen::{
     parse_chunk_input, parse_probe_input, run_probe,
 };
 
+/// engine ABI v10:v9(流体双内核)之上把 worldgen `MGW1` 请求材料表由
+/// 14 项扩为 15 项(末项 `short_grass`,位于偏移 52,perm 后移到偏移 54):
+/// 带内 layout 2 → 3、公共 header 564 → 566 字节、chunk 输入 572 → 574
+/// 字节、probe 输入 570 + 16×N、LOD 壳输入 580 → 582 字节;自然短草在
+/// 树与海水之后按 `ore_hash(seed, wx, 0, wz, salt) & 3 == 0` 的确定性
+/// 判定写入草地表面——natural-grass-seeds 变更。三个输出格式与长度契约
+/// 均不因新材料改变;既有入口签名不变;旧 dylib 与新二进制混装被版本握手
+/// 拒绝(二者本就是同一不可跨版本混装的 release unit)。
 /// engine ABI v9:v8(mesh registry 条目 20 字节布局)之上新增流体双内核
 /// `mornlea_fluid_eval_batch`(批量单格流体规则求值:输入布局 v1 = 8 字节头 +
 /// 每项 14 字节 7×u16,输出每项定长 12 字节;输出尺寸是输入的确定函数,
@@ -33,7 +41,7 @@ use crate::worldgen::{
 /// 由 greedy 的 model dispatcher 消费。条目上限 64→80 已在 v7 期内提前完成,
 /// 不随本次升版重复记账。既有入口签名与语义不变;旧 dylib 与新二进制混装被
 /// 版本握手拒绝(二者本就是同一不可跨版本混装的 release unit)。
-pub(crate) const ABI_VERSION: u32 = 9;
+pub(crate) const ABI_VERSION: u32 = 10;
 
 // 输入长度校验委托给 step::step_input_is_valid（内部使用 STEP_HEADER_BYTES），此常量保留供 ABI 文档对齐。
 #[allow(dead_code)]
@@ -484,7 +492,7 @@ unsafe fn physics_step_with(
 
 /// 生成整区块的 worldgen 生产入口。
 ///
-/// 输入为 `MGW1` header + chunk 坐标(共 572 字节),输出为 dense
+/// 输入为 `MGW1` header + chunk 坐标(共 574 字节),输出为 dense
 /// `[y−min_y][lz][lx]` 布局的 98304 个 u16 LE(196608 字节)。任何输入
 /// 违约返回错误状态且不修改输出缓冲;结果只在完整成功后一次发布。
 #[unsafe(no_mangle)]
@@ -614,9 +622,9 @@ unsafe fn worldgen_probe_with(
 
 /// 远环 LOD 壳生成生产入口(两段式容量探测)。
 ///
-/// 输入为与 `mornlea_worldgen_chunk` 完全一致的 `MGW1` header(564 字节),
+/// 输入为与 `mornlea_worldgen_chunk` 完全一致的 `MGW1` header(566 字节),
 /// 追加 tile_x i32、tile_z i32、columns u32(必须等于 64)与 lod_step u32
-/// (合法值 2/4/8),共 580 字节;输出为壳 quad 字节流(单 quad 20 字节
+/// (合法值 2/4/8),共 582 字节;输出为壳 quad 字节流(单 quad 20 字节
 /// LE,位布局见 `lod::encode_shell` 与 `engine/include/mornlea_engine.h`
 /// 的同步注释)。
 ///
@@ -1215,19 +1223,15 @@ mod mesh_tests {
     use super::*;
 
     #[test]
-    fn exported_version_is_nine() {
-        // engine ABI v9:v8(mesh registry 条目 20 字节布局)之上新增流体双内核
-        // `mornlea_fluid_eval_batch`(批量单格流体规则求值)与
-        // `mornlea_fluid_rescan`(重扫扫描,输入布局与两段式容量探测见其
-        // FFI doc comment),详见 ABI_VERSION 的 doc comment 与
-        // engine/include/mornlea_engine.h 的版本史注释。mesh registry 条目上限
-        // 不在 engine ABI 版本契约内:Go/Rust 两侧数值是否一致由容量同步测试
-        // TestNativeAcceptsRegistryAtGoCapacity 守护,跨版本混装由 release unit
-        // 纪律兜底。历史记录(仅记账,不代表升级触发条件):v5 时 27 → 35(流体
-        // 进入 registry 快照)且条目 16 → 18 字节,后续变更 35 → 48、18 → 19
-        // 字节(v7)、19 → 20 字节(v8);条目上限 64 → 80 已在 v7 期内提前完成,
-        // 不属 v8 记账。
-        assert_eq!(mornlea_engine_abi_version(), 9);
+    fn exported_version_is_ten() {
+        // engine ABI v10:v9(流体双内核)之上把 worldgen `MGW1` 材料表由
+        // 14 项扩为 15 项(末项 short_grass,位于偏移 52,perm 后移到 54),
+        // 带内 layout 2 → 3、公共 header 564 → 566 字节、chunk 输入 572 →
+        // 574、LOD 壳输入 580 → 582,详见 ABI_VERSION 的 doc comment 与
+        // engine/include/mornlea_engine.h 的版本史注释。既有入口签名与语义
+        // 不变;旧 dylib 与新二进制混装被版本握手拒绝(二者本就是同一不可
+        // 跨版本混装的 release unit)。
+        assert_eq!(mornlea_engine_abi_version(), 10);
     }
 }
 #[cfg(test)]
@@ -2929,19 +2933,20 @@ mod tests {
         WORLDGEN_CHUNK_INPUT_BYTES, WORLDGEN_HEADER_BYTES, WORLDGEN_PROBE_RECORD_BYTES,
     };
 
-    /// 构造一个合法的 worldgen header:seed 42、互异材料表 1..=14(末项 water)、恒等 perm。
+    /// 构造一个合法的 worldgen header:seed 42、互异材料表 1..=15(末两项
+    /// water=14、short_grass=15,layout 3)、恒等 perm(偏移 54 起)。
     fn worldgen_header() -> Vec<u8> {
         let mut bytes = vec![0u8; WORLDGEN_HEADER_BYTES];
         bytes[0..4].copy_from_slice(b"MGW1");
-        bytes[4..8].copy_from_slice(&2u32.to_le_bytes());
+        bytes[4..8].copy_from_slice(&3u32.to_le_bytes());
         bytes[8..16].copy_from_slice(&42i64.to_le_bytes());
         bytes[16..20].copy_from_slice(&(-64i32).to_le_bytes());
         bytes[20..24].copy_from_slice(&320i32.to_le_bytes());
-        for (index, id) in (1u16..=14).enumerate() {
+        for (index, id) in (1u16..=15).enumerate() {
             // 材料表刻意避开 0:air=1 便于区分“输出缓冲原样”与“生成的空气”。
             bytes[24 + index * 2..26 + index * 2].copy_from_slice(&id.to_le_bytes());
         }
-        for (index, entry) in bytes[52..WORLDGEN_HEADER_BYTES].iter_mut().enumerate() {
+        for (index, entry) in bytes[54..WORLDGEN_HEADER_BYTES].iter_mut().enumerate() {
             *entry = (index & 255) as u8;
         }
         bytes
@@ -2996,6 +3001,13 @@ mod tests {
         assert_eq!(first, second);
         // 生成结果必然包含基岩层(材料 5),不可能全零。
         assert!(first.iter().any(|&b| b != 0));
+        // 自然短草:草地表面列里 hash 命中者必须写材料 15(short_grass),
+        // 证明 FFI 出口真实产出装饰层而不是只改 framing。
+        let short_grass_cells = first
+            .chunks_exact(2)
+            .filter(|c| u16::from_le_bytes([c[0], c[1]]) == 15)
+            .count();
+        assert!(short_grass_cells > 0, "chunk (0,0) 未出现任何短草");
 
         // SAFETY: 同上;仅 abi_version 不匹配。
         let status_abi = unsafe {
@@ -3020,11 +3032,30 @@ mod tests {
         let mut duplicate_material = worldgen_chunk_input(0, 0);
         // 把 dirt 改成与 stone 相同的 ID,触发材料表互异性校验。
         duplicate_material[26..28].copy_from_slice(&1u16.to_le_bytes());
+        // short_grass(第 15 项,偏移 52)与 water 相同:不在 water == air
+        // 门控豁免内,必须按材料表漂移拒绝。
+        let mut short_grass_alias = worldgen_chunk_input(0, 0);
+        short_grass_alias[52..54].copy_from_slice(&14u16.to_le_bytes());
         let mut wrong_min_y = worldgen_chunk_input(0, 0);
         wrong_min_y[16..20].copy_from_slice(&(-32i32).to_le_bytes());
         let truncated = worldgen_chunk_input(0, 0)[..WORLDGEN_CHUNK_INPUT_BYTES - 1].to_vec();
 
-        for input in [&bad_magic, &duplicate_material, &wrong_min_y, &truncated] {
+        // 旧 layout 2 的 564 字节 header + chunk 坐标(共 572 字节)必须被
+        // 整体拒绝:layout version 是独立于 ABI 版本号的带内混装防线。
+        let mut legacy_layout = worldgen_header()[..564].to_vec();
+        legacy_layout[4..8].copy_from_slice(&2u32.to_le_bytes());
+        legacy_layout.extend_from_slice(&0i32.to_le_bytes());
+        legacy_layout.extend_from_slice(&0i32.to_le_bytes());
+        assert_eq!(legacy_layout.len(), 572);
+
+        for input in [
+            &bad_magic,
+            &duplicate_material,
+            &short_grass_alias,
+            &wrong_min_y,
+            &truncated,
+            &legacy_layout,
+        ] {
             // SAFETY: 指针来自有效 Vec,长度与缓冲容量一致。
             let status = unsafe {
                 mornlea_worldgen_chunk(
@@ -3152,7 +3183,7 @@ mod tests {
     use super::{lod_shell_with, mornlea_lod_shell};
     use crate::lod::{LOD_SHELL_QUAD_BYTES, encode_shell, lod_shell, parse_lod_input};
 
-    /// 构造 LOD 壳入口输入:复用 worldgen header(564)+ tile 原点/列数/步长(16)。
+    /// 构造 LOD 壳入口输入:复用 worldgen header(566)+ tile 原点/列数/步长(16)。
     fn lod_shell_input(tile_x: i32, tile_z: i32, columns: u32, step: u32) -> Vec<u8> {
         let mut bytes = worldgen_header();
         bytes.extend_from_slice(&tile_x.to_le_bytes());
