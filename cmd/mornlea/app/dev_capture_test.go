@@ -240,6 +240,28 @@ func TestRunInteractiveMenuLoopPumpsPendingCaptureOnce(t *testing.T) {
 	}
 }
 
+// TestRunInteractiveLoadingLoopPumpsPendingCaptureOnce 是循环接线集成断言：世界
+// 加载相位与菜单/游戏相位同位泵检查——每帧恰好一次「待办检查 → 捕获 → 交付」，
+// 加载判据未满时单帧后随窗口关闭退出。
+func TestRunInteractiveLoadingLoopPumpsPendingCaptureOnce(t *testing.T) {
+	application, window, coordinator := newCapturePumpApplication(t, MenuPhaseLoading)
+
+	if err := RunInteractive(application); err != nil {
+		t.Fatalf("RunInteractive: %v", err)
+	}
+	if coordinator.pendingCalls != 1 || window.captureCalls != 1 || coordinator.completeCalls != 1 {
+		t.Fatalf("单帧调用计数 pending=%d capture=%d complete=%d，want 均 1",
+			coordinator.pendingCalls, window.captureCalls, coordinator.completeCalls)
+	}
+	outcome := coordinator.completedOutcome
+	if string(outcome.Pixels) != string(window.pixels) || outcome.Width != 2 || outcome.Height != 1 {
+		t.Fatalf("交付结果 %+v，want 原样像素 2×1", outcome)
+	}
+	if application.menu.phase != MenuPhaseLoading {
+		t.Fatalf("判据未满相位应保持 loading，got %v", application.menu.phase)
+	}
+}
+
 // TestSetCaptureCoordinatorSeedsStatusSnapshot 钉住播种语义：注入发生在服务
 // `Start` 之前，首个 `/status` 读到的必须是注入时刻的相位与窗口尺寸，而不是
 // 构造零值（game / 0×0）。

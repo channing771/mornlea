@@ -83,6 +83,13 @@ func runMenuPhase(app *Application) error {
 		// 捕获泵：待办检查放在 Poll 之后、渲染之前——像素取自当前帧的窗口
 		// 合成图（与 `Poll` 同线程），编码全部留在协调器侧的帧循环之外。
 		app.pumpDevCapture()
+		if app.menu.phase == MenuPhaseGame || app.menu.phase == MenuPhaseLoading {
+			// 帧级交接检查：相位一旦离开菜单族（装配成功置 loading；game 为
+			// 直构形态的兜底）就不再渲染菜单帧，立即返回让外层路由接手加载/
+			// 游戏循环。事件路径由下方事件处理点先行返回，这里兜住任何非事件
+			// 来源的相位迁移，避免菜单循环带着已装配世界空转。
+			return nil
+		}
 		events := app.renderer.DrainUIEvents()
 		for _, event := range events {
 			quit, disposition := app.handleMenuUIEvent(event)

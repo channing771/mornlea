@@ -118,7 +118,7 @@ func (a *Application) publishDevCaptureStatus() {
 }
 
 // Phase 返回快照中的菜单相位字符串，取值与 UI 桥 schema 的 `$defs/phase`
-// 枚举一致（menu/settings/starting/paused/game）。它是 `devcapture.StatusSource`
+// 枚举一致（menu/settings/starting/loading/paused/game）。它是 `devcapture.StatusSource`
 // 的相位注入面：快照仅在注入捕获协调器后由帧循环维护，未注入时读到构造
 // 零值——零值相位即游戏相位（`MenuPhaseGame`），与「非 StartAtMenu 路径
 // 零值直接进游戏循环」的既有约定一致。并发语义：原子读取，可在任意

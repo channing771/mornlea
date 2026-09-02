@@ -7,6 +7,7 @@ package app
 // 装配（排空桥事件需要真实渲染器）与交互测试的内存流对夹具。
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -37,18 +38,22 @@ func newLoadingPhaseTestApp(t *testing.T, window Window, readyChunks int) *Appli
 	app := NewOffscreenRenderApplicationForTest(t, &IntegrationGlyphSource{}, 64, 64, config.Render{})
 	app.window = window
 	app.menu.phase = MenuPhaseLoading
+	seedLoadingChunks(app, readyChunks)
+	return app
+}
+
+// seedLoadingChunks 把已就绪区块列镜像填到 count 个（上界 9，即视距 0 的目标
+// 列数）。`startWorld` 装配成功会整体重建镜像，因此装配之后再播种才能让完成
+// 判据在加载循环内成立。
+func seedLoadingChunks(app *Application, count int) {
 	for x := int32(-1); x <= 1; x++ {
 		for z := int32(-1); z <= 1; z++ {
-			if len(app.loadedChunks) >= readyChunks {
-				return app
+			if len(app.loadedChunks) >= count {
+				return
 			}
 			app.loadedChunks[core.ChunkPos{X: x, Z: z}] = struct{}{}
 		}
 	}
-	if len(app.loadedChunks) < readyChunks {
-		t.Fatalf("填充已就绪区块列越界: want %d", readyChunks)
-	}
-	return app
 }
 
 // TestRunLoadingPhaseConvergesToGameAndCapturesCursor 锁定加载收敛点：完成判据
@@ -129,5 +134,68 @@ func TestRunInteractiveRoutesLoadingPhaseToLoadingLoop(t *testing.T) {
 	}
 	if !window.CursorCaptured() {
 		t.Fatal("加载收敛应捕获光标")
+	}
+}
+
+// menuHandoffWindow 是「菜单循环→加载循环」交接缝测试的窗口替身：首次 Poll
+// 时经注入回调模拟「进入游戏」点击走真实装配路径。桥动作事件无法注入
+// （renderer 为具体类型），Poll 是菜单循环内测试可控的最早注入点。
+type menuHandoffWindow struct {
+	loadingTestWindow
+	onFirstPoll func()
+	firstPolled bool
+}
+
+func (window *menuHandoffWindow) Poll() {
+	window.loadingTestWindow.Poll()
+	if !window.firstPolled {
+		window.firstPolled = true
+		window.onFirstPoll()
+	}
+}
+
+// TestRunInteractiveMenuLoopHandsOffToLoadingOnAssembly 锁定菜单→加载的交接缝：
+// 菜单相位中装配成功（相位切到 loading）后菜单循环必须返回，外层路由把控制权
+// 交给加载循环并在收敛后进入游戏相位。若菜单循环的 loading 返回条件被回退为
+// 只判 game（或缺失），装配成功后客户端会滞留菜单循环空转到窗口关闭，本测试
+// 以「收敛到 game」失败的形式变红。
+func TestRunInteractiveMenuLoopHandsOffToLoadingOnAssembly(t *testing.T) {
+	window := &menuHandoffWindow{loadingTestWindow: loadingTestWindow{closeAfterPolls: 6}}
+	app := NewOffscreenRenderApplicationForTest(t, &IntegrationGlyphSource{}, 64, 64, config.Render{})
+	identity := connectionTestIdentity()
+	ticks, _ := newPerformanceRecorders(false)
+	app.window = window
+	app.menu = menuState{phase: MenuPhaseMenu, title: "Mornlea", version: menuVersion()}
+	// startWorld 的完整装配依赖（内存 store/Host/登录流对），关闭 LOD 使远环
+	// 接线零参与；视距 0 使目标列数为 9，装配后播种镜像即可在加载循环收敛。
+	render := config.Render{}
+	app.startupOptions = Options{
+		Seed: 42, WorldPath: "unused", Identity: &identity,
+		Render: render, StartAtMenu: true,
+	}
+	app.startupDeps = startWorldSuccessDeps(t)
+	app.ticks = ticks
+
+	startRequestedQuit := false
+	window.onFirstPoll = func() {
+		startRequestedQuit = app.handleMenuEvent(menuActionStart)
+		// 装配成功已整体重建镜像：此刻播种，加载循环首帧即满足完成判据。
+		seedLoadingChunks(app, 9)
+	}
+
+	if err := RunInteractive(app); err != nil {
+		t.Fatalf("RunInteractive: %v", err)
+	}
+	if startRequestedQuit {
+		t.Fatal("进入游戏不应请求退出")
+	}
+	if app.menu.phase != MenuPhaseGame {
+		t.Fatalf("交接后 phase = %v，want game（菜单循环应把控制权交给加载循环）", app.menu.phase)
+	}
+	if !window.CursorCaptured() {
+		t.Fatal("加载收敛应捕获光标")
+	}
+	if len(window.pushedUIStates) == 0 || !strings.Contains(string(window.pushedUIStates[0]), `"phase":"loading"`) {
+		t.Fatalf("加载循环应至少呈现一帧 loading 下行文档，首份 = %v", window.pushedUIStates)
 	}
 }
