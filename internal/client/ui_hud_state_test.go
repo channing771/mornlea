@@ -55,7 +55,6 @@ func TestUIHudStateMarshalsPinnedShape(t *testing.T) {
 		Health:        NewUIHudHealth(17),
 		Hunger:        NewUIHudHunger(18, true),
 		Oxygen:        NewUIHudOxygen(210),
-		Mining:        NewUIHudMining(25, 100, true),
 		Eating:        NewUIHudEating(true, 0.5),
 		Popup:         NewUIHudPopup("铁镐"),
 		Chat:          NewUIHudChat([]string{"系统：格式应为 @伙伴名 指令", ""}),
@@ -75,7 +74,6 @@ func TestUIHudStateMarshalsPinnedShape(t *testing.T) {
 		`"health":{"value":17},` +
 		`"hunger":{"value":18,"saturationZero":true},` +
 		`"oxygen":{"value":210},` +
-		`"mining":{"active":true,"progress":0.25,"harvestable":true},` +
 		`"eating":{"active":true,"progress":0.5},` +
 		`"popup":{"text":"铁镐"},` +
 		`"chat":{"lines":["系统：格式应为 @伙伴名 指令",""]},` +
@@ -85,11 +83,10 @@ func TestUIHudStateMarshalsPinnedShape(t *testing.T) {
 	}
 }
 
-// TestUIHudStateZeroValueStaysSchemaValid 锁定零值载体可安全序列化：进度条与
+// TestUIHudStateZeroValueStaysSchemaValid 锁定零值载体可安全序列化：进食进度条与
 // viewport 是值字段，未确认镜像缺席即键缺省，绝不产生 null。
 func TestUIHudStateZeroValueStaysSchemaValid(t *testing.T) {
 	want := `{"viewport":{"width":0,"height":0},` +
-		`"mining":{"active":false,"progress":0,"harvestable":false},` +
 		`"eating":{"active":false,"progress":0}}`
 	if got := marshalUIHud(t, &UIHudState{}); got != want {
 		t.Fatalf("零值 HUD 状态 = %s, want %s", got, want)
@@ -153,16 +150,6 @@ func TestUIHudSurvivalMirrorsClampAndHideUnpresentable(t *testing.T) {
 }
 
 func TestUIHudProgressTracksClampAndDeactivate(t *testing.T) {
-	// 权威 ticks 二元组换算成比例并钳制；required 为 0 视为未激活。
-	if mining := NewUIHudMining(25, 100, true); !mining.Active || mining.Progress != 0.25 || !mining.Harvestable {
-		t.Fatalf("采掘进度换算不符: %+v", mining)
-	}
-	if mining := NewUIHudMining(200, 100, false); mining.Progress != 1 || mining.Harvestable {
-		t.Fatalf("采掘比例应钳制到 1 且不可采: %+v", mining)
-	}
-	if mining := NewUIHudMining(25, 0, true); mining.Active || mining.Progress != 0 || mining.Harvestable {
-		t.Fatalf("未激活采掘应为零值形态: %+v", mining)
-	}
 	// 进食进度钳制到 0..1，非活跃输入进度归零，NaN 不进入下行。
 	if eating := NewUIHudEating(true, 1.5); !eating.Active || eating.Progress != 1 {
 		t.Fatalf("进食比例应钳制到 1: %+v", eating)
@@ -337,15 +324,25 @@ func TestUIHudConstantsPinnedToSchemaFile(t *testing.T) {
 	if text := popup.Props["text"]; text.MaxLength == nil || *text.MaxLength != hudTextMaxRunes {
 		t.Fatal("schema hudPopup.text maxLength 与 hudTextMaxRunes 漂移")
 	}
-	// 进度条与 viewport 是必填分节：缺席即前端无从呈现。
+	// 进食进度条与 viewport 是必填分节：缺席即前端无从呈现（采掘分节已随
+	// 屏幕采掘条退役，schema 不得再要求或定义它）。
 	hud, ok := defs["hudState"]
 	if !ok {
 		t.Fatal("schema 缺少 hudState 分节")
 	}
-	for _, key := range []string{"viewport", "mining", "eating"} {
+	for _, key := range []string{"viewport", "eating"} {
 		if !slicesContains(hud.Required, key) {
 			t.Fatalf("schema hudState 应必填 %s", key)
 		}
+	}
+	if slicesContains(hud.Required, "mining") {
+		t.Fatal("schema hudState 不得再必填已退役的 mining 分节")
+	}
+	if _, exists := hud.Props["mining"]; exists {
+		t.Fatal("schema hudState 不得再定义已退役的 mining 分节")
+	}
+	if _, exists := defs["hudMining"]; exists {
+		t.Fatal("schema 不得再保留已退役的 hudMining 定义")
 	}
 	// 可选分节缺席即「未确认」或「不在窗口内」：不得改为必填。
 	for _, key := range []string{"hotbar", "health", "hunger", "oxygen", "popup", "chat"} {

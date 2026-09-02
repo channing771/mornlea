@@ -3,9 +3,9 @@
 package app
 
 // eating_overlay_test.go：进食进度预测的三处裁决点位定点测试——`app.go` 的
-// tracker 字段、`app_frame.go` 的输入位派生与互斥/置脏接线、`app_lifecycle.go`
+// tracker 字段、`app_frame.go` 的输入位派生与置脏接线、`app_lifecycle.go`
 // 的会话复位行。进度条的呈现已迁 WebView HUD 组件，值经 hud 分节的 eating
-// 分节下行；这里断言组装结果与 tracker 同源。
+// 分节下行；这里断言组装结果与 tracker 同源（采掘互斥已随屏幕采掘条退役）。
 
 import (
 	"testing"
@@ -45,7 +45,8 @@ func beginEatingHunger(t *testing.T, app *Application, tick uint64, hunger uint8
 
 // TestApplicationEatingOverlayTracksPredictedProgress 走完
 // 窗口输入 → 镜像选中格 → tracker → hud 分节 的整条链路：起算帧零时长不激活、
-// 后续帧激活且填充比例与 tracker 同源、松手立即清零、采掘激活时互斥不出现。
+// 后续帧激活且填充比例与 tracker 同源、松手立即清零、采掘镜像激活时进食条
+// 不再让位（互斥随屏幕采掘条退役）。
 func TestApplicationEatingOverlayTracksPredictedProgress(t *testing.T) {
 	app := newRemoteRenderApplication(t, &IntegrationGlyphSource{})
 	window := &eatingTestWindow{secondaryDown: true}
@@ -88,17 +89,16 @@ func TestApplicationEatingOverlayTracksPredictedProgress(t *testing.T) {
 		t.Fatalf("量化值 %v 越过 tracker 连续值 %v", state.Eating.Progress, progress)
 	}
 
-	// 采掘激活时互斥：进食输入仍按住，hud 分节只携带采掘进度，进食分节归零。
-	app.miningOverlay = hud.MiningOverlay{Active: true, ProgressTicks: 6, RequiredTicks: 15, Harvestable: true}
+	// 采掘并发时独立呈现：权威采掘镜像激活（方块表面呈裂纹）不再抑制进食条
+	// ——互斥裁决随屏幕采掘条一并移除（spec delta survival-hud-presentation），
+	// 进食分节与镜像状态互不干扰。
+	app.miningOverlay = hud.MiningOverlay{Active: true, ProgressTicks: 6, RequiredTicks: 15}
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
-		t.Fatalf("互斥帧 RenderFrame=(%v,%v)", rendered, err)
+		t.Fatalf("并发帧 RenderFrame=(%v,%v)", rendered, err)
 	}
 	state = app.assembleHUDState()
-	if !state.Mining.Active || !state.Mining.Harvestable {
-		t.Fatalf("互斥帧采掘分节=%+v，想要激活且可采用", state.Mining)
-	}
-	if state.Eating.Active {
-		t.Fatalf("互斥帧进食分节=%+v，想要让位归零", state.Eating)
+	if !state.Eating.Active || state.Eating.Progress != quantizeEatingProgress(progress) {
+		t.Fatalf("并发帧进食分节=%+v，想要保持激活且比例与 tracker 同源", state.Eating)
 	}
 	app.miningOverlay = hud.MiningOverlay{}
 

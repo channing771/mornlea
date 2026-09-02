@@ -32,16 +32,18 @@ func (overlay PopupOverlay) Visible() bool {
 	return overlay.Valid && overlay.WorldTick-overlay.ShownAtTick < popupDurationTicks
 }
 
-// MiningOverlay 是最后确认的权威采掘状态：进度二元组与可采标志原样下行给
-// WebView 组件，呈现层不自行推进它，也不做任何可采性推算。
+// MiningOverlay 是最后确认的权威采掘状态，是世界空间裂纹呈现
+// （`internal/render.BlockCrack`，经 `deriveBlockCrack` 消费）的定位与进度来源：
+// 呈现层不自行推进它，也不做任何可采性推算。屏幕采掘进度条已退役，本结构
+// 不再服务 hud 分节组装（可采标志随之删除），裂纹只用 Active/Target/
+// HasTarget/ProgressTicks/RequiredTicks。
 type MiningOverlay struct {
 	Active bool
-	// Target/HasTarget 不被 HUD 进度条布局消费：它们是世界空间裂纹呈现
-	// （`internal/render.BlockCrack`）的定位来源，HasTarget 恒随权威
-	// MiningActive 置位；capture 既有 fixture 不设置时裂纹天然缺席。
+	// Target/HasTarget 不被裂纹布局消费：它们是世界空间裂纹呈现的定位来源，
+	// HasTarget 恒随权威 MiningActive 置位；capture 既有 fixture 不设置时
+	// 裂纹天然缺席。
 	Target        core.BlockPos
 	HasTarget     bool
 	ProgressTicks uint16
 	RequiredTicks uint16
-	Harvestable   bool
 }

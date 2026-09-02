@@ -593,9 +593,9 @@ var captureScenes = []captureScene{
 		// mining-crack-early 是采掘裂纹浅阶段的无窗口 capture 场景：复用
 		// target-block-feedback 的固定世界（空气邻域中相机正前方 4.5..5.5 格、
 		// 命中面 4.5 格的单块砖），权威采掘镜像钉在 6/30——按 BlockCrackStage
-		// 公式映射为阶段 2 的浅裂纹，与 HUD 进度条同帧呈现。裂纹夹具经 HUD
-		// 夹具装入，场景结束后恢复（与 hud-survival-feedback 同一 defer 语义）；
-		// 场景不含随机器速度变化的读数，位姿在 Apply 钉死，收敛帧内不再
+		// 公式映射为阶段 2 的浅裂纹。采掘镜像经 SetMiningOverlay 直装，场景
+		// 结束后恢复（与 hud-survival-feedback 同一 defer 语义）；场景不含
+		// 随机器速度变化的读数，位姿在 Apply 钉死，收敛帧内不再
 		// drain，输出无需 PinVolatile 即确定。
 		//
 		// 排序约束：紧随 water-surface-slope、先于 main-menu（后者 Apply 自带
@@ -608,12 +608,12 @@ var captureScenes = []captureScene{
 			if err := applyMiningCrackCaptureState(app); err != nil {
 				return err
 			}
-			// 采掘镜像经 SetMiningOverlay 直装：Target/HasTarget 驱动世界
-			// 裂纹，进度同时进入 hud 分节组装（进度条呈现在 WebView）。
+			// 采掘镜像经 SetMiningOverlay 直装：Target/HasTarget/进度二元组
+			// 驱动世界裂纹（屏幕采掘条已退役，进度不再进入 hud 分节）。
 			app.SetMiningOverlay(hud.MiningOverlay{
 				Active: true, HasTarget: true,
 				Target:        captureMiningCrackTarget,
-				ProgressTicks: 6, RequiredTicks: 30, Harvestable: true,
+				ProgressTicks: 6, RequiredTicks: 30,
 			})
 			return nil
 		},
@@ -633,7 +633,7 @@ var captureScenes = []captureScene{
 			app.SetMiningOverlay(hud.MiningOverlay{
 				Active: true, HasTarget: true,
 				Target:        captureMiningCrackTarget,
-				ProgressTicks: 29, RequiredTicks: 30, Harvestable: true,
+				ProgressTicks: 29, RequiredTicks: 30,
 			})
 			return nil
 		},

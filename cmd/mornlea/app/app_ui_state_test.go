@@ -350,7 +350,6 @@ func hudSchemaFixture(t *testing.T, hotbar core.Hotbar) *client.UIHudState {
 		Health:        client.NewUIHudHealth(17),
 		Hunger:        client.NewUIHudHunger(18, true),
 		Oxygen:        client.NewUIHudOxygen(210),
-		Mining:        client.NewUIHudMining(25, 100, true),
 		Eating:        client.NewUIHudEating(true, 0.5),
 		Popup:         client.NewUIHudPopup("铁镐"),
 		Chat:          client.NewUIHudChat([]string{"系统：格式应为 @伙伴名 指令", ""}),
@@ -424,7 +423,7 @@ func TestUIHudStateConformsToBridgeSchema(t *testing.T) {
 		t.Fatal("HUD 状态未知键应被 schema 拒绝")
 	}
 
-	// 越界值:生命超上限、采掘进度超 1、快捷栏选中下标越界。
+	// 越界值:生命超上限、进食进度超 1、快捷栏选中下标越界。
 	for name, mutate := range map[string]func(*client.UIHudState){
 		"health 越界":   func(state *client.UIHudState) { state.Health = &client.UIHudHealth{Value: core.MaxHealth + 1} },
 		"progress 越界": func(state *client.UIHudState) { state.Eating = client.UIHudEating{Active: true, Progress: 1.5} },
@@ -437,7 +436,7 @@ func TestUIHudStateConformsToBridgeSchema(t *testing.T) {
 		}
 	}
 
-	// 缺必填分节:进度条与 viewport 恒出现,缺席即前端无从呈现。载体用值字段,
+	// 缺必填分节:进食进度条与 viewport 恒出现,缺席即前端无从呈现。载体用值字段,
 	// 所以这条违约只能由载荷被裁剪造成(上游零值形态本身合法)。
 	trimmed := hudSchemaFixture(t, hudSchemaHotbar())
 	trimmedRaw, err := json.Marshal(trimmed)
@@ -448,9 +447,15 @@ func TestUIHudStateConformsToBridgeSchema(t *testing.T) {
 	if err := json.Unmarshal(trimmedRaw, &missing); err != nil {
 		t.Fatalf("夹具回读失败: %v", err)
 	}
-	delete(missing, "mining")
+	delete(missing, "eating")
 	if err := validateHudState(t, schema, missing); err == nil {
-		t.Fatal("缺 mining 分节的 HUD 状态应被 schema 拒绝")
+		t.Fatal("缺 eating 分节的 HUD 状态应被 schema 拒绝")
+	}
+	// 已退役的 mining 分节属未知键:Go 组装侧不再产出,载荷携带即拒绝。
+	delete(missing, "eating")
+	missing["mining"] = map[string]any{"active": true, "progress": 0.25, "harvestable": true}
+	if err := validateHudState(t, schema, missing); err == nil {
+		t.Fatal("携带已退役 mining 分节的 HUD 状态应被 schema 拒绝")
 	}
 }
 
