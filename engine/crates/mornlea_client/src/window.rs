@@ -249,11 +249,22 @@ impl ClientWindow {
                 None => self.webview_attach_failed = true,
             }
         }
-        match &mut self.webview {
-            Some(webview) => webview.push_state(json).is_ok(),
+        let focus_handoff = match &mut self.webview {
+            Some(webview) => match webview.push_state(json) {
+                Ok(handoff) => handoff,
+                Err(_) => return false,
+            },
             // 挂载失败后的降级路径:推送被接受但不产生任何呈现。
-            None => true,
+            None => false,
+        };
+        // 焦点换手时清空 winit 侧键鼠状态:菜单族相位下 WebView 是
+        // firstResponder,期间发生的 keyUp/mouseUp 事件不会到达 winit 视图,
+        // 残留按下态会在交还焦点后被快照持续误报(幽灵 Esc 边沿、粘滞 WASD、
+        // 两次按键才生效等)。清空后物理仍按住的键需重按,与窗口失焦语义一致。
+        if focus_handoff {
+            self.app.input.clear_button_state();
         }
+        true
     }
 
     /// 每帧一次:泵完积压事件并把输入快照编码进 `out`

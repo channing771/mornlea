@@ -595,7 +595,12 @@ impl MenuWebview {
     /// 强制档位存在时被钉死。求值只在视图实际可见时发起:GameOverlay 态视图
     /// 常驻可见,游戏相位的 HUD 状态因此持续下行;视图真被隐藏时只更新缓存
     /// (零参与:无求值、无消息)。
-    pub fn push_state(&mut self, json: &[u8]) -> Result<(), StateError> {
+    ///
+    /// 返回值在 `Ok` 里携带「本次推送是否发生参与模式翻转」:翻转即
+    /// firstResponder 在 WebView 与 winit 视图之间换手,调用方
+    /// ([`crate::window::ClientWindow::push_ui_state`])据此清空 winit 侧
+    /// 键鼠状态——失焦侧收不到后续抬起事件,残留按下态会被快照误报。
+    pub fn push_state(&mut self, json: &[u8]) -> Result<bool, StateError> {
         let text = std::str::from_utf8(json).map_err(|_| StateError::Malformed)?;
         let value: serde_json::Value =
             serde_json::from_str(text).map_err(|_| StateError::Malformed)?;
@@ -609,14 +614,16 @@ impl MenuWebview {
             .unwrap_or_else(|| crate::overlay::mode_for_phase(wants_visible));
         let transition = crate::overlay::plan_transition(mode, wants_visible);
         *self.shared.last_state.lock().expect("桥状态缓存锁中毒") = Some(text.to_owned());
+        let mut handoff = false;
         if wants_visible != self.menu_participating {
             self.menu_participating = wants_visible;
             self.apply_transition(mode, transition);
+            handoff = true;
         }
         if !transition.hide_view {
             self.evaluate_if_changed();
         }
-        Ok(())
+        Ok(handoff)
     }
 
     /// 幂等求值:仅当缓存状态与本文档已求值文本不同时才发起。

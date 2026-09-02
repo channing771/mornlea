@@ -259,6 +259,17 @@ impl InputState {
         self.captured
     }
 
+    /// 焦点换手(WebView 与 winit 视图之间的 firstResponder 迁移)时清空
+    /// 按键与鼠标键状态:失焦侧此后收不到 keyUp/mouseUp 事件,残留的按下态
+    /// 会在重获焦点后被快照持续误报——Go 侧的按键边沿(如 Esc 开暂停)与
+    /// 持续键(WASD 移动)都会随之失真。物理仍按住的键在下次按下事件前报告
+    /// 为抬起,与窗口失焦的常规输入语义一致,代价是换手瞬间按住的键需要
+    /// 重按。光标位置与捕获状态不受影响。
+    pub fn clear_button_state(&mut self) {
+        self.keys = 0;
+        self.mouse = 0;
+    }
+
     /// 记录窗口尺寸(framebuffer 为物理像素,content 为逻辑点)。
     pub fn set_sizes(&mut self, fb_w: u32, fb_h: u32, content_w: u32, content_h: u32) {
         self.framebuffer_width = fb_w;
@@ -471,5 +482,32 @@ mod tests {
         state.cancel_close();
         state.encode_snapshot(&mut out);
         assert_eq!(decode_u32(&out, 4) & 1, 0);
+    }
+
+    #[test]
+    fn clear_button_state_zeroes_keys_and_mouse_only() {
+        // 焦点换手清键鼠:键位与鼠标位归零,光标/捕获/关闭请求保持——清的
+        // 只是「哪些物理键被认为按着」,不是窗口输入语义本身。
+        let mut state = InputState::new();
+        state.key_event(KeyCode::KeyW, true);
+        state.key_event(KeyCode::Escape, true);
+        state.mouse_button(true, true);
+        state.cursor_moved(320.0, 240.0);
+        state.set_captured(true);
+        state.mouse_delta(10.0, 4.0);
+        state.request_close();
+        state.clear_button_state();
+        let mut out = vec![0u8; SNAPSHOT_BYTES];
+        state.encode_snapshot(&mut out);
+        assert_eq!(u64::from_le_bytes(out[8..16].try_into().unwrap()), 0);
+        assert_eq!(decode_u32(&out, 16), 0);
+        // 光标在虚拟坐标上继续累计的值保留,关闭请求不受影响。
+        assert_eq!(decode_f64(&out, 24), 330.0);
+        assert_eq!(decode_f64(&out, 32), 244.0);
+        assert_eq!(decode_u32(&out, 4) & 1, 1);
+        // 清空后新的按下事件照常置位。
+        state.key_event(KeyCode::KeyW, true);
+        state.encode_snapshot(&mut out);
+        assert_eq!(u64::from_le_bytes(out[8..16].try_into().unwrap()), 1 << 0);
     }
 }
