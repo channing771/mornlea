@@ -258,3 +258,16 @@ func shortGrassSeedDropRoll(
 	hash = splitmix64(hash ^ uint64(uint32(position.Z)))
 	return hash&7 == 0
 }
+
+// ShortGrassSeedDropRoll 是 `shortGrassSeedDropRoll` 的导出访问器：服务端的
+// 自然种子端到端夹具需要在发送任何玩家输入前断言冻结位置的 1/8 判定必然命
+// 中，而判定本身保持包私有，防止哈希链被复制成第二份真相后各自漂移。循
+// `CompanionMineContainerStaging` 的导出先例：只做转发，不引入第二份常量、
+// 参数或哈希流。
+func ShortGrassSeedDropRoll(
+	seed int64,
+	dimension core.DimensionID,
+	position core.BlockPos,
+) bool {
+	return shortGrassSeedDropRoll(seed, dimension, position)
+}

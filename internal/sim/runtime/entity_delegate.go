@@ -34,6 +34,17 @@ func CompanionMineContainerStaging(
 	)
 }
 
+// ShortGrassSeedDropRoll 保留 runtime 入口并委托给 entity 的唯一规则：服务端
+// 端到端夹具经本包读 1/8 除草掉落判定，对冻结样本位置做「发送玩家输入前必
+// 然命中」的预断言；判定算法本体仍在 entity 内保持私有。
+func ShortGrassSeedDropRoll(
+	seed int64,
+	dimension core.DimensionID,
+	position core.BlockPos,
+) bool {
+	return entity.ShortGrassSeedDropRoll(seed, dimension, position)
+}
+
 func (engine *Engine) EntitySessionView(id SessionID) entity.SessionView {
 	session := engine.subscriptions[id]
 	if session == nil || session.trustedObserver {
