@@ -343,6 +343,7 @@
   6. `git diff --check` PASS。
 - 生产契约影响：无。未改动任何生产代码、协议、存档 schema、engine/client ABI 或 benchmark scenario；任务 FIFO、规划/寻路 worker 与权威 tick 编排的运行时语义原样。
 - 提交：`0fb2d383` `test(server): bound async planner waits by wall clock in short mode`（三测试文件）与 `docs(openspec): record dev-check repair evidence`（本小节）。
+- 独立 scoped 双评审（范围 `2f2d9b55..HEAD`）均 PASS：SPEC 逐测试比对确认 7 个测试断言零削弱（FIFO 顺序、TaskFailed 恰好终结与原因、单飞请求、`span ≥ 2×PathReplanCooldownTicks` tick 距判定、Memory/TCP transcript 逐字节一致、EventID 严格递增均原样）、静置观察保持 tick 制、墙钟循环以 `longWaitDeadline`（60s）有界且让步模式与既有 `stepUntilCompanionManagerReady` 一致、生产零改动，并独立重跑 `go test ./internal/server -short -count=1` 全绿（76.809s）；QUALITY 确认 diff 最小聚焦、helper 复用既有 `stepUntil*`/`stepCollectingChatEvents` 模式、中文注释无任务编号、无调试残留、gofmt/diff-check 干净、ledger 如实完整、提交规范合规。QUALITY 备注（不构成缺陷）：`runCompanionManagerParity` 的 600-tick 固定窗口仍属潜在脆弱点，留待后续观察。
 
 ## 整分支终审与门禁
 
