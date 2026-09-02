@@ -45,3 +45,11 @@
   `make rust` 重建（新 dist 内嵌进 dylib）、`make visual-check` 24/24
   场景零差异（裂纹 golden 不动，实证不受扰）、`openspec validate
   --all --strict --no-interactive` 82/82。Task 2 关闭，change 就绪。
+
+## 归档期修正（控制会话 @ main `4d0776e5`）
+
+- Ruling: 首次归档被 openspec 1.7 MODIFIED 漂移守卫拒绝 — delta 两处
+  Scenario 改名（「关闭容器时状态与采掘按行堆叠」「与采掘反馈互斥」）被
+  判为主规格场景丢失 — 按 placeable-torches 先例恢复原场景名、正文写
+  新语义并加历史名 blockquote；同理 Requirement 标题沿用历史名已在
+  delta 内声明。修正后 strict 校验通过并重新归档。
