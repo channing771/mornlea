@@ -1,8 +1,9 @@
 // HudRoot 挂载冒烟：菜单相位/装配前渲染 null、零尺寸视口安全降级、九格与
-// 选中格双层轮廓、状态行逐槽解析与构图翻转、采掘形状差异与叠加元素显隐。
-// 规格语义的逐项断言矩阵（权威驱动/未确认隐藏/构图关系/形状差异/缩放协调/
-// 饱和度归零抖动）在 hud.assert.test.tsx，这里只钉住组件树能按桥下行状态
-// 正确挂载。
+// 选中格双层轮廓、状态行逐槽解析与构图翻转、进食轨道呈现与叠加元素显隐。
+// 规格语义的逐项断言矩阵（权威驱动/未确认隐藏/构图关系/缩放协调/饱和度归零
+// 抖动）在 hud.assert.test.tsx，这里只钉住组件树能按桥下行状态正确挂载。
+// 采掘进度条已退役（采掘进度反馈由世界空间裂纹承载），本文件不再出现采掘
+// 轨道断言；旧形态的 mining 分节在桥层即被拒绝（client.test.ts）。
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { HudState, HudSlot } from "../bridge/client";
@@ -21,7 +22,6 @@ const nineSlots: readonly HudSlot[] = Array.from({ length: 9 }, (_, index) =>
 
 const base: HudState = {
   viewport: { width: 1280, height: 720 },
-  mining: { active: false, progress: 0, harvestable: false },
   eating: { active: false, progress: 0 },
   hotbar: { slots: nineSlots, selectedIndex: 2 },
   health: { value: 7 },
@@ -104,43 +104,19 @@ describe("HudRoot 挂载", () => {
     expect(open.querySelector(".hud-crosshair")).toBeNull();
   });
 
-  it("采掘形状差异：可采末端亮标记、不可采固定警示缺口，且采掘优先于进食", () => {
-    const harvestable = renderHud({
-      ...base,
-      mining: { active: true, progress: 0.5, harvestable: true },
-    });
-    expect(harvestable.querySelectorAll(".hud-progress-cap")).toHaveLength(1);
-    expect(harvestable.querySelectorAll(".hud-progress-notch")).toHaveLength(0);
-
-    const blocked = renderHud({
-      ...base,
-      mining: { active: true, progress: 0.5, harvestable: false },
-    });
-    expect(blocked.querySelectorAll(".hud-progress-cap")).toHaveLength(0);
-    expect(blocked.querySelectorAll(".hud-progress-notch")).toHaveLength(3);
-
-    const both = renderHud({
-      ...base,
-      mining: { active: true, progress: 0.5, harvestable: true },
-      eating: { active: true, progress: 0.8 },
-    });
-    expect(both.querySelector(".hud-progress-fill--mining-harvestable")).not.toBeNull();
-    expect(both.querySelector(".hud-progress-fill--eating")).toBeNull();
-
+  it("进食轨道按激活呈现：eating 填充类唯一，不带任何形状标记", () => {
     const eating = renderHud({ ...base, eating: { active: true, progress: 0.8 } });
     expect(eating.querySelector(".hud-progress-fill--eating")).not.toBeNull();
-    expect(eating.querySelectorAll(".hud-progress-cap, .hud-progress-notch")).toHaveLength(0);
+    expect(eating.querySelectorAll(".hud-progress-fill")).toHaveLength(1);
+
+    const inactive = renderHud(base);
+    expect(inactive.querySelector(".hud-progress")).toBeNull();
   });
 
-  it("零进度只呈现轨道：不产生填充、末端标记或警示缺口（Go 分段同口径）", () => {
-    const root = renderHud({
-      ...base,
-      mining: { active: true, progress: 0, harvestable: true },
-      eating: { active: true, progress: 0 },
-    });
+  it("零进度只呈现轨道：不产生填充（Go 分段同口径）", () => {
+    const root = renderHud({ ...base, eating: { active: true, progress: 0 } });
     expect(root.querySelector(".hud-progress")).not.toBeNull();
     expect(root.querySelector(".hud-progress-fill")).toBeNull();
-    expect(root.querySelectorAll(".hud-progress-cap, .hud-progress-notch")).toHaveLength(0);
   });
 
   it("单一比例只由桥下行 viewport 计算（页面不读 window 尺寸参与缩放）", () => {

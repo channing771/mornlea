@@ -157,16 +157,15 @@
     },
     "hudState": {
       "type": "object",
-      "description": "游戏相位常显 HUD 分节：全部字段都是语义值（数值/比例/标志），不下发任何坐标矩形——布局由 CSS 组件按 design 基准与 viewport 推导。仅在有已装配世界的相位出现（game/paused），菜单相位缺席。三类字段的呈现规则：权威镜像（hotbar/health/hunger/oxygen）可选，缺席即该镜像尚未确认，组件据此隐藏、不另设布尔确认位；进度条（mining/eating）恒携带，以 active 表达是否呈现；窗口结果（popup/chat/marker/crosshair/containerOpen）可选，缺席即不在呈现窗口内。viewport 必填，零尺寸或非法尺寸视口由前端安全降级为不呈现。",
+      "description": "游戏相位常显 HUD 分节：全部字段都是语义值（数值/比例/标志），不下发任何坐标矩形——布局由 CSS 组件按 design 基准与 viewport 推导。仅在有已装配世界的相位出现（game/paused），菜单相位缺席。三类字段的呈现规则：权威镜像（hotbar/health/hunger/oxygen）可选，缺席即该镜像尚未确认，组件据此隐藏、不另设布尔确认位；进食进度条（eating）恒携带，以 active 表达是否呈现（采掘进度不再占用屏幕进度条，其反馈由世界空间方块裂纹承载）；窗口结果（popup/chat/marker/crosshair/containerOpen）可选，缺席即不在呈现窗口内。viewport 必填，零尺寸或非法尺寸视口由前端安全降级为不呈现。",
       "additionalProperties": false,
-      "required": ["viewport", "mining", "eating"],
+      "required": ["viewport", "eating"],
       "properties": {
         "viewport": { "$ref": "#/$defs/hudViewport" },
         "hotbar": { "$ref": "#/$defs/hudHotbar" },
         "health": { "$ref": "#/$defs/hudHealth" },
         "hunger": { "$ref": "#/$defs/hudHunger" },
         "oxygen": { "$ref": "#/$defs/hudOxygen" },
-        "mining": { "$ref": "#/$defs/hudMining" },
         "eating": { "$ref": "#/$defs/hudEating" },
         "popup": { "$ref": "#/$defs/hudPopup" },
         "chat": { "$ref": "#/$defs/hudChat" },
@@ -246,17 +245,6 @@
       "required": ["value"],
       "properties": {
         "value": { "type": "integer", "minimum": 0, "maximum": 300 }
-      }
-    },
-    "hudMining": {
-      "type": "object",
-      "description": "采掘进度：恒携带，active 表达本 tick 是否在采掘。Go 侧由权威 progress/required ticks 二元组换算出 progress 比例（已钳制到 0..1），前端零推算；active=false 时 progress 与 harvestable 无呈现意义，组件不得据此绘制。harvestable 是形状语义的唯一来源：可采用末端标记、不可采用固定缺口，颜色差异之外 MUST 保留形状差异。采掘激活时进食条让位，互斥裁决留在 Go 侧。",
-      "additionalProperties": false,
-      "required": ["active", "progress", "harvestable"],
-      "properties": {
-        "active": { "type": "boolean" },
-        "progress": { "type": "number", "minimum": 0, "maximum": 1 },
-        "harvestable": { "type": "boolean" }
       }
     },
     "hudEating": {

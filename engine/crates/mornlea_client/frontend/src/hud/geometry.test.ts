@@ -29,8 +29,6 @@ import {
   MARKER_THICKNESS,
   POPUP_ROW_HEIGHT,
   POPUP_TRACK_GAP,
-  PROGRESS_CAP_WIDTH,
-  PROGRESS_NOTCH_WIDTH,
   PROGRESS_TRACK_GAP,
   PROGRESS_TRACK_HEIGHT,
   PROGRESS_TRACK_WIDTH,
@@ -89,7 +87,7 @@ describe("HUD design 基准镜像", () => {
 
 /** px 令牌与 design 常量的逐值互钉表：每项 `[令牌名, 同值常量]`。覆盖三组——
  * 组件/几何已在消费的常量、只为互钉而保留导出的常量（选中双层轮廓、物品 tile、
- * 轨道标记与耐久条几何、准星与 marker 几何、氧气行间隙）、以及缩放分母。 */
+ * 进食轨道与耐久条几何、准星与 marker 几何、氧气行间隙）、以及缩放分母。 */
 const TOKEN_PINNING: readonly (readonly [string, number])[] = [
   // 快捷栏贴条与物品格。
   ["--hud-hotbar-slot-size", HOTBAR_SLOT_SIZE],
@@ -108,12 +106,10 @@ const TOKEN_PINNING: readonly (readonly [string, number])[] = [
   ["--hud-status-icon-gap", STATUS_ICON_GAP],
   ["--hud-edge-margin", EDGE_MARGIN],
   ["--hud-saturation-jitter", SATURATION_ZERO_JITTER],
-  // 进度轨道、耐久条与弹条。
+  // 进度轨道（进食条仍占同一行，采掘条退役）、耐久条与弹条。
   ["--hud-progress-track-width", PROGRESS_TRACK_WIDTH],
   ["--hud-progress-track-height", PROGRESS_TRACK_HEIGHT],
   ["--hud-progress-track-gap", PROGRESS_TRACK_GAP],
-  ["--hud-progress-cap-width", PROGRESS_CAP_WIDTH],
-  ["--hud-progress-notch-width", PROGRESS_NOTCH_WIDTH],
   ["--hud-durability-height", DURABILITY_BAR_HEIGHT],
   ["--hud-durability-inset", DURABILITY_BAR_INSET],
   ["--hud-popup-track-gap", POPUP_TRACK_GAP],
