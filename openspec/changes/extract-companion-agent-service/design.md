@@ -14,8 +14,8 @@
 - `companions.ai` v4 到 v5；
 - 配置、CI、架构检查与运维文档。
 
-当前代码与头文件确认 engine ABI 已是 v9、client ABI 已是 v13；旧 `openspec/config.yaml` 与长期文档中的 v8/v11/v12 是待收尾修正的文档漂移。
-本 change 只有 `companions.ai` 从 v4 升至 v5，其他游戏协议、schema、ABI 与 benchmark 版本保持不变。
+当前代码与头文件确认 engine ABI 已是 v9、client ABI 已是 v14；旧 `openspec/config.yaml` 与长期文档中的 v8/v11/v12 是待收尾修正的文档漂移。
+本 change 只有 `companions.ai` 从 v4 升至 v5；完成态版本矩阵为协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`hostile_mobs` v1、engine ABI v9、client ABI v14 与 benchmark scenario v21，其中 client ABI 与 scenario 的升版来自 main 同步而非本 change。
 
 实现采用 Python 3.12、单进程 Uvicorn、单 SQLite writer。
 本地验证确认 Python `mcp` 1.28.1 与 Go MCP SDK 1.7 的共同协议上限是 `2025-11-25`。
