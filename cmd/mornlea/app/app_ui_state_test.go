@@ -451,10 +451,20 @@ func TestUIHudStateConformsToBridgeSchema(t *testing.T) {
 	if err := validateHudState(t, schema, missing); err == nil {
 		t.Fatal("缺 eating 分节的 HUD 状态应被 schema 拒绝")
 	}
-	// 已退役的 mining 分节属未知键:Go 组装侧不再产出,载荷携带即拒绝。
-	delete(missing, "eating")
-	missing["mining"] = map[string]any{"active": true, "progress": 0.25, "harvestable": true}
-	if err := validateHudState(t, schema, missing); err == nil {
+	// 已退役的 mining 分节属未知键:Go 组装侧不再产出,载荷携带即拒绝。载荷从
+	// 全字段夹具出发、只注入多余的 mining 键——必填字段完整,拒绝才可能归因于
+	// mining 本身(若 schema 重新收纳该分节,这条断言即红,钉住退役不被静默回退)。
+	retired := hudSchemaFixture(t, hudSchemaHotbar())
+	retiredRaw, err := json.Marshal(retired)
+	if err != nil {
+		t.Fatalf("夹具序列化失败: %v", err)
+	}
+	var withRetired map[string]any
+	if err := json.Unmarshal(retiredRaw, &withRetired); err != nil {
+		t.Fatalf("夹具回读失败: %v", err)
+	}
+	withRetired["mining"] = map[string]any{"active": true, "progress": 0.25, "harvestable": true}
+	if err := validateHudState(t, schema, withRetired); err == nil {
 		t.Fatal("携带已退役 mining 分节的 HUD 状态应被 schema 拒绝")
 	}
 }

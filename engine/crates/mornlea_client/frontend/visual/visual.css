@@ -37,7 +37,7 @@
   background: var(--panel-shadow);
 }
 
-/* hud-progress 的并排轨道行：三档轨道共用一行，间距复用轨道间隙令牌。 */
+/* hud-progress 的轨道行：单条进食轨道（采掘条已退役），间距复用轨道间隙令牌。 */
 .visual-hud-progress-row {
   display: flex;
   align-items: center;
