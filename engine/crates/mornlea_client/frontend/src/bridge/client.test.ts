@@ -162,6 +162,23 @@ describe("parseState", () => {
 // 世界加载屏分节夹具：loaded/total 与 Go 组装（len(loadedChunks) 与
 // LoadedChunkTarget=(2*(ViewDistance+1)+1)^2，默认 4489）同源。
 describe("parseState 的 loading 分节", () => {
+  it("loading 分节携带可选网格字段通过并原样保留", () => {
+    const state = parseState({
+      phase: "loading",
+      loading: { loaded: 4489, total: 4489, meshed: 53868, meshTotal: 107736 },
+    });
+    expect(state.loading).toEqual({ loaded: 4489, total: 4489, meshed: 53868, meshTotal: 107736 });
+  });
+
+  it("loading 分节网格字段越界拒绝（meshTotal=0、meshed 负数）", () => {
+    expect(() =>
+      parseState({ phase: "loading", loading: { loaded: 1, total: 9, meshed: 0, meshTotal: 0 } }),
+    ).toThrow(BridgeProtocolError);
+    expect(() =>
+      parseState({ phase: "loading", loading: { loaded: 1, total: 9, meshed: -1, meshTotal: 9 } }),
+    ).toThrow(BridgeProtocolError);
+  });
+
   it("loading 相位携带 loading 分节原样通过", () => {
     const state = parseState({ phase: "loading", loading: { loaded: 1122, total: 4489 } });
     expect(state.phase).toBe("loading");

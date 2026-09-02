@@ -28,18 +28,25 @@
 
 ### Requirement: 加载进度以权威区块镜像驱动
 
-加载屏 SHALL 呈现标题、进度条与区块计数，下行 `loading` 分节 MUST 仅含两个整数：`loaded`（当前已就绪区块列数，取自客户端区块列镜像的势）与 `total`（目标列数，取无头加载判据同源的 `LoadedChunkTarget` 公式 `(2*(ViewDistance+1)+1)^2`）。前端 MUST 以 `clamp(loaded/total, 0, 1)` 驱动进度条，MUST NOT 自行预测或平滑进度；文案与格式由前端常量呈现。分节 MUST 经既有整份 `uiState` 下行路径推送，`loaded` 未变化的帧零推送。
+加载屏 SHALL 呈现标题、进度条与区块计数。下行 `loading` 分节 MUST 含两个整数：`loaded`（当前已就绪区块列数，取自客户端区块列镜像的势）与 `total`（目标列数，取无头加载判据同源的 `LoadedChunkTarget` 公式 `(2*(ViewDistance+1)+1)^2`），并 MAY 携带可选整数 `meshed`/`meshTotal`（初始网格化的单调完成估计与目标段数 `total × SectionsPerChunk`；mesher 装配且完成计数开始后才携带，重复网格化由 Go 侧钳制到上界）。前端 MUST 以工作量单位 `clamp((loaded+meshed)/(total+meshTotal), 0, 1)` 驱动进度条——网格化是快照到齐后的主要剩余工作量，进度条满格 MUST 与完成判据收敛对齐；网格字段缺席时 MUST 退回 `clamp(loaded/total, 0, 1)`。前端 MUST NOT 自行预测或平滑进度；文案与格式由前端常量呈现。分节 MUST 经既有整份 `uiState` 下行路径推送，分节数值未变化的帧零推送。
 
 #### Scenario: 进度随快照推进
 
 - **GIVEN** 加载相位中服务端按距离顺序持续下发区块快照
 - **WHEN** 已就绪区块列数从 `k` 增至 `k+1`
 - **THEN** 下一次下行 MUST 携带 `loaded = k+1`，进度条呈现比例相应前进
-- **AND** 已就绪列数未变化的帧 MUST 零推送
+- **AND** 分节数值未变化的帧 MUST 零推送
+
+#### Scenario: 快照到齐后进度继续推进至满格
+
+- **GIVEN** 区块快照已全部到齐（`loaded = total`）而初始网格化仍在进行
+- **WHEN** 加载屏呈现进度条
+- **THEN** 进度条 MUST 停留在满格之下并随网格化完成估计继续前进
+- **AND** 进度条首次到满格 MUST 不早于完成判据成立
 
 #### Scenario: 进度比例钳制
 
-- **GIVEN** `loading` 分节携带任意合法 `loaded`/`total` 组合（含 `loaded > total` 或 `total` 大于剩余快照量）
+- **GIVEN** `loading` 分节携带任意合法字段组合（含 `loaded > total`、`meshed > meshTotal` 或 `total` 大于剩余快照量）
 - **WHEN** 前端呈现进度条
 - **THEN** 呈现比例 MUST 钳制在闭区间 `[0, 1]`，不出现越界宽度或除零错误
 

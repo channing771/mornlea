@@ -117,7 +117,7 @@
     },
     "loadingState": {
       "type": "object",
-      "description": "世界加载屏分节：loading 相位携带。loaded 是当前已就绪的区块列数（客户端区块列镜像的势），total 是与无头加载判据同源的目标列数（(2*(ViewDistance+1)+1)^2，恒为正奇数平方，下界 1）；前端只按 clamp(loaded/total, 0, 1) 换算进度条比例，不自行预测或平滑进度。",
+      "description": "世界加载屏分节：loading 相位携带。loaded 是当前已就绪的区块列数（客户端区块列镜像的势），total 是与无头加载判据同源的目标列数（(2*(ViewDistance+1)+1)^2，恒为正奇数平方，下界 1）。可选 meshed/meshTotal 是初始网格化的单调完成估计与目标段数（目标列数×每区块段数；mesher 装配且完成计数开始后才携带，重复网格化会计数多次、由 Go 钳制到上界）；进度条按工作量单位 clamp((loaded+meshed)/(total+meshTotal), 0, 1) 合并两阶段进度，网格字段缺席时退回 clamp(loaded/total, 0, 1)。前端不自行预测或平滑进度。",
       "additionalProperties": false,
       "required": ["loaded", "total"],
       "properties": {
@@ -126,6 +126,14 @@
           "minimum": 0
         },
         "total": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "meshed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "meshTotal": {
           "type": "integer",
           "minimum": 1
         }

@@ -39,6 +39,10 @@ type MesherStats struct {
 	InFlightJobs   int
 	ReadyResults   int
 	ResultCapacity int
+	// CompletedMeshes 是历次被 Drain 接受的网格化结果总数(单调递增,含同区段
+	// 因再次标脏产生的重复计数)。加载屏以其对目标段数钳制后的比值估计
+	// 「初始网格化还剩多少」,不作为区段覆盖的精确度量。
+	CompletedMeshes uint64
 }
 
 type mesherJob struct {
@@ -65,6 +69,7 @@ type Mesher struct {
 	ready          readySectionHeap
 	queued         map[core.SectionKey]uint64
 	inFlight       map[core.SectionKey]uint64
+	completed      uint64
 	panicAt        map[core.SectionKey]bool
 	blockAt        map[core.SectionKey]chan struct{}
 	nextGeneration uint64
@@ -238,6 +243,10 @@ func (mesher *Mesher) Drain(mirror *Mirror, maxResults int) []MeshedSection {
 			if valid && generationMatches {
 				delete(mesher.dirty, result.key)
 				accepted = append(accepted, result.MeshedSection)
+				// 完成计数只增不减:同一区段因邻居更新被再次标脏并重网格化时
+				// 会再次累计——它是「已完成网格化工作量」的单调估计,加载屏
+				// 用它与目标段数钳制后驱动进度,不是精确的区段覆盖数。
+				mesher.completed++
 			} else if !valid {
 				chunkPos := core.ChunkPos{X: result.key.Pos.X, Z: result.key.Pos.Z}
 				if _, present := mirror.Chunk(result.key.Dimension, chunkPos); present {
@@ -261,11 +270,12 @@ func (mesher *Mesher) Stats() MesherStats {
 	mesher.mu.Lock()
 	defer mesher.mu.Unlock()
 	return MesherStats{
-		DirtySections:  len(mesher.dirty),
-		QueuedJobs:     len(mesher.queued),
-		InFlightJobs:   len(mesher.inFlight),
-		ReadyResults:   len(mesher.results),
-		ResultCapacity: cap(mesher.results),
+		DirtySections:   len(mesher.dirty),
+		QueuedJobs:      len(mesher.queued),
+		InFlightJobs:    len(mesher.inFlight),
+		ReadyResults:    len(mesher.results),
+		ResultCapacity:  cap(mesher.results),
+		CompletedMeshes: mesher.completed,
 	}
 }
 

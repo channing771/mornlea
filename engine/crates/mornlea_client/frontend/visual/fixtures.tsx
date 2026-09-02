@@ -62,7 +62,7 @@ const pauseFixture: PauseState = { remote: false };
 // panel-loading：世界加载屏取中间进度（默认视距 4489 列的 1/4 档），标题、
 // 进度轨道与计数行随生产 LoadingScreen 一并入基线；屏自身即全屏不透明遮罩，
 // 无需舞台包裹。
-const loadingFixture: LoadingState = { loaded: 1122, total: 4489 };
+const loadingFixture: LoadingState = { loaded: 1122, total: 4489, meshed: 26934, meshTotal: 107736 };
 
 // panel-debug 用完整行集合（读数/段头/参数/选中/只读），debug-rows 只保留
 // 规格点名的四种行态各一行，两张基线互不冗余。

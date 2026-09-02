@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/client"
+	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/render"
 )
 
@@ -48,11 +49,17 @@ type uiStateJSON struct {
 }
 
 // uiLoadingJSON 对应 schema `$defs/loadingState`:世界加载屏分节只在加载相位
-// 出现。loaded/total 都由 Go 权威推导(镜像势与无头同源目标列数),前端只做
-// 比例换算与格式化,不自行预测或平滑进度。
+// 出现。loaded/total 是区块列流送进度,meshed/meshTotal 是初始网格化的单调
+// 完成估计(对目标段数钳制);两组都由 Go 权威推导,前端按工作量单位合并
+// 换算比例,不自行预测或平滑进度。mesher 缺席(直构测试形态)时网格字段
+// 缺席,前端退回 loaded/total。
 type uiLoadingJSON struct {
 	Loaded int `json:"loaded"`
 	Total  int `json:"total"`
+	// Meshed/MeshTotal 以 omitempty 缺席:mesher 尚未装配或计数未开始时
+	// 不携带,避免把「网格进度 0」与「无网格进度」混为一谈。
+	Meshed    int `json:"meshed,omitempty"`
+	MeshTotal int `json:"meshTotal,omitempty"`
 }
 
 // uiMenuJSON 对应 schema `$defs/menuState`;文案由 Go 权威下发。
@@ -159,10 +166,7 @@ func (a *Application) buildUIState() uiStateJSON {
 	case MenuPhaseSettings:
 		state.Settings = a.settings.uiSettingsJSON()
 	case MenuPhaseLoading:
-		state.Loading = &uiLoadingJSON{
-			Loaded: len(a.loadedChunks),
-			Total:  LoadedChunkTarget(a),
-		}
+		state.Loading = a.buildUILoadingSection()
 	case menuPhasePaused:
 		state.Pause = &uiPauseJSON{Remote: a.remote()}
 	}
@@ -171,6 +175,36 @@ func (a *Application) buildUIState() uiStateJSON {
 		state.Debug = debugUIState(a.panel.editing, readout, rows)
 	}
 	return state
+}
+
+// buildUILoadingSection 组装加载屏分节:区块列进度沿用无头同源的目标准则;
+// 网格进度取 mesher 的单调完成计数,经 `loadingProgressSection` 对「目标列数
+// × 每区块段数」钳制。网格化是初始加载的主要工作量(段数是列数的数量级
+// 倍数,快照到齐后仍要持续数十秒),只报区块进度会让进度条提前停在满格——
+// 网格字段的加入让 100% 恰好对齐完成判据收敛。mesher 缺席(直构测试形态)
+// 或完成计数尚未开始时不携带网格字段,前端退回纯区块比例。
+func (a *Application) buildUILoadingSection() *uiLoadingJSON {
+	var completed uint64
+	if a.mesher != nil {
+		completed = a.mesher.Stats().CompletedMeshes
+	}
+	section := loadingProgressSection(len(a.loadedChunks), LoadedChunkTarget(a), completed)
+	return &section
+}
+
+// loadingProgressSection 是加载屏分节的纯组装:loadedColumns/targetColumns
+// 是区块列流送进度,completedMeshes 是网格化完成计数(单调、含重复网格化)。
+// meshTotal = targetColumns × 每区块段数;完成计数为 0(尚未开始)时网格
+// 字段缺席,非零时钳制到 meshTotal 上界。
+func loadingProgressSection(loadedColumns, targetColumns int, completedMeshes uint64) uiLoadingJSON {
+	section := uiLoadingJSON{Loaded: loadedColumns, Total: targetColumns}
+	meshTotal := targetColumns * core.SectionsPerChunk
+	if meshTotal <= 0 || completedMeshes == 0 {
+		return section
+	}
+	section.Meshed = min(int(completedMeshes), meshTotal)
+	section.MeshTotal = meshTotal
+	return section
 }
 
 // uiSettingsJSON 把设置事务状态转为下行分节:材质路径保持配置原文,

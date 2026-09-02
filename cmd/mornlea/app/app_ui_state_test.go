@@ -305,6 +305,10 @@ func TestUIStateConformsToBridgeSchema(t *testing.T) {
 	if loading.Loading == nil || loading.Loading.Loaded != 2 || loading.Loading.Total != 9 {
 		t.Fatalf("loading 分节不符: %+v", loading.Loading)
 	}
+	// 携带可选网格字段(直构形态经纯组装函数补齐)的 loading 文档同样过 schema。
+	withMesh := loading
+	withMesh.Loading = &uiLoadingJSON{Loaded: 2, Total: 9, Meshed: 40, MeshTotal: 9 * core.SectionsPerChunk}
+	requireValid(t, schema, withMesh, "loading 相位(网格字段)")
 }
 
 // TestBuildUILoadingSectionPhaseWindow 锁定 loading 分节只在加载相位组装，其余
@@ -336,6 +340,31 @@ func TestBuildUILoadingSectionPhaseWindow(t *testing.T) {
 	// 视距 0 的目标列数是 (2*(0+1)+1)^2 = 9，与无头 LoadedChunkTarget 同源。
 	if state.Loading.Total != 9 {
 		t.Fatalf("total = %d，want 9", state.Loading.Total)
+	}
+	// mesher 缺席（直构形态）时网格字段缺席——组件据此退回纯区块比例。
+	if state.Loading.Meshed != 0 || state.Loading.MeshTotal != 0 {
+		t.Fatalf("无 mesher 不应携带网格字段: %+v", state.Loading)
+	}
+}
+
+// TestLoadingProgressSectionMeshFields 锁定加载屏分节的网格进度语义:完成
+// 计数为 0 时网格字段缺席;非零时 meshTotal = 目标列数×每区块段数、meshed
+// 钳制到上界(计数含重复网格化,可超上界)。
+func TestLoadingProgressSectionMeshFields(t *testing.T) {
+	if section := loadingProgressSection(3, 9, 0); section.Meshed != 0 || section.MeshTotal != 0 {
+		t.Fatalf("完成计数为 0 不应携带网格字段: %+v", section)
+	}
+	section := loadingProgressSection(3, 9, 40)
+	if section.MeshTotal != 9*core.SectionsPerChunk {
+		t.Fatalf("meshTotal = %d，want %d", section.MeshTotal, 9*core.SectionsPerChunk)
+	}
+	if section.Meshed != 40 {
+		t.Fatalf("meshed = %d，want 40", section.Meshed)
+	}
+	// 重复网格化使计数越过上界:钳制到 meshTotal,进度条恰在收敛时满格。
+	over := loadingProgressSection(9, 9, 999999)
+	if over.Meshed != over.MeshTotal {
+		t.Fatalf("超界计数应钳制: meshed=%d meshTotal=%d", over.Meshed, over.MeshTotal)
 	}
 }
 

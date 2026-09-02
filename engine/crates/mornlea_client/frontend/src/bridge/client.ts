@@ -73,6 +73,10 @@ export interface PauseState {
 export interface LoadingState {
   readonly loaded: number;
   readonly total: number;
+  /** 初始网格化的单调完成估计；mesher 装配且完成计数开始后才携带。 */
+  readonly meshed?: number;
+  /** 网格化目标段数（目标列数 × 每区块段数）。 */
+  readonly meshTotal?: number;
 }
 
 export interface DebugRow {
@@ -488,12 +492,20 @@ function parsePause(record: RecordLike): PauseState {
 /** loading 分节守卫：loaded/total 都是整数且只钉下界（loaded>=0、total>=1），
  * 与 schema `$defs/loadingState` 同口径；分节缺席与否由 `parseState` 按
  * presence 收口，这里不做跨相位字段约束（schema 未定义，守卫不发明）。 */
+/** loading 分节守卫：meshed/meshTotal 是可选键，出现时才按字段校验。 */
 function parseLoading(record: RecordLike): LoadingState {
-  requireKeys(record, ["loaded", "total"], "loading");
-  return {
+  requireKeys(record, ["loaded", "total"], "loading", ["meshed", "meshTotal"]);
+  const loading: Writable<LoadingState> = {
     loaded: requireInteger(record, "loaded", 0, MAX_LOADING_COUNT, "loading"),
     total: requireInteger(record, "total", 1, MAX_LOADING_COUNT, "loading"),
   };
+  if ("meshed" in record) {
+    loading.meshed = requireInteger(record, "meshed", 0, MAX_LOADING_COUNT, "loading");
+  }
+  if ("meshTotal" in record) {
+    loading.meshTotal = requireInteger(record, "meshTotal", 1, MAX_LOADING_COUNT, "loading");
+  }
+  return loading;
 }
 
 function parseHudViewport(raw: unknown, context: string): HudViewport {

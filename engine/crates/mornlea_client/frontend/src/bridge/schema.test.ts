@@ -115,6 +115,23 @@ describe("schema：下行 uiState 非法用例一律拒绝", () => {
     expect(validateUiState({ phase: "loading", loading: { loaded: -1, total: 4489 } })).toBe(false);
   });
 
+  it("loading 分节携带可选网格字段（meshed/meshTotal）通过校验", () => {
+    expect(
+      validateUiState({
+        phase: "loading",
+        loading: { loaded: 4489, total: 4489, meshed: 53868, meshTotal: 107736 },
+      }),
+    ).toBe(true);
+    // 网格字段可缺席:纯区块形态仍合法。
+    expect(validateUiState({ phase: "loading", loading: { loaded: 1, total: 9 } })).toBe(true);
+  });
+
+  it("loading 分节 meshTotal=0 拒绝", () => {
+    expect(
+      validateUiState({ phase: "loading", loading: { loaded: 1, total: 9, meshed: 0, meshTotal: 0 } }),
+    ).toBe(false);
+  });
+
   it("loading 分节携带未知属性拒绝", () => {
     expect(
       validateUiState({ phase: "loading", loading: { loaded: 1122, total: 4489, eta: 5 } }),
