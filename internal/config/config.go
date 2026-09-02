@@ -115,8 +115,6 @@ type AI struct {
 	AgentService       companion.AgentServiceSettings `json:"agentService"`
 	TaskTimeoutMinutes int                            `json:"taskTimeoutMinutes,omitempty"`
 	Companions         []companion.Definition         `json:"companions,omitempty"`
-	// ModelSettings 仅保留源码兼容，配置 loader 不读取或写出 direct-model 字段。
-	ModelSettings companion.ModelSettings `json:"-"`
 }
 
 // TaskTimeout 返回生效的 Agent 任务超时分钟数。
