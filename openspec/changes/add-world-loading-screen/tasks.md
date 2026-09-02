@@ -50,12 +50,12 @@
 
 ## 3. Rust 相位清单与收尾门禁
 
-- [ ] 3.1 失败测试先行：`mornlea_client/src/webview.rs` 菜单族相位清单测试
+- [x] 3.1 失败测试先行：`mornlea_client/src/webview.rs` 菜单族相位清单测试
   追加 `"loading"`（`state_wants_visible_parsed` 为真、参与模式 `Menu`）；
   `overlay.rs` 模块文档菜单族枚举补 loading（文档级，无行为断言变化）。
-- [ ] 3.2 实现 + 验证：`make rust`；
+- [x] 3.2 实现 + 验证：`make rust`；
   `(cd engine && cargo test -p mornlea_client --locked)`；`go build ./...`。
-- [ ] 3.3 收尾门禁：`gofmt -l .` 无输出；`go vet ./...`；
+- [x] 3.3 收尾门禁：`gofmt -l .` 无输出；`go vet ./...`；
   `go test ./... -race`；`make rust-check`；
   `openspec validate --all --strict --no-interactive`；
   `make visual-check`（世界 golden 零变化）。

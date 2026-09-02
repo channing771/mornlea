@@ -94,4 +94,40 @@
 
 ### Task 3：Rust 相位清单与收尾门禁
 
-- 派发：pending。
+- 实现：commit `bc3698f1`（fresh implementer）。`webview.rs`
+  `phase_visibility_covers_the_schema_phase_enum` 菜单族清单加 `"loading"`
+  （starting 之后，与 schema 枚举同序）+ 测试 doc 注释同步；`overlay.rs`
+  `mode_for_phase` doc 菜单族枚举同步；全 src/ grep 复核无第三处遗漏
+  （`window.rs:717` 为代表性样例载荷非全值枚举）。红阶段 N/A（钉值-only：
+  生产判定 `phase != "game"` 不枚举相位，加值即绿；提交类型 `test(client)`
+  如实表达性质）。
+- 验证证据 @ `bc3698f1`（重型管线串行执行）：gofmt 无输出；`go vet ./...`
+  干净；`make rust` rc=0；`cargo test -p mornlea_client --locked`（对齐
+  `CARGO_TARGET_DIR=engine/target/cargo`，作废一次 debug 目录陈旧读数）174
+  passed；`go test ./... -race` 首轮 231s 出现 1 个预存 persistence flake
+  （见下），`-count=1` 全量重跑 44 包全绿（222s）；`go build ./...` ok；
+  `make rust-check` rc=0（client 174 + engine 218，fmt/clippy 干净）；
+  `openspec validate --all --strict` 82/82；`make visual-check` 24/24 场景
+  零差异（世界 golden 零变化，验收项达成）；`make frontend-check` rc=0
+  （vitest 162/162、dist 逐字节门禁，覆盖 Task 2 评审受限环境）。
+  注：tasks 3.2+3.3 实列 9 条命令，implementer 报告口径 10 项含
+  `go build ./...` 的独立执行，逐项如上。
+- SPEC 评审（fresh reviewer）：**pass**（6/6 PASS；独立复跑 cargo test 174
+  与 visual-check 24/24 与报告一致；`git diff 06809724..bc3698f1 --
+  internal/server/persistence` 零触碰 + `go list -deps` 证实不存在由本
+  change 传入该测试包的代码路径）。
+- QUALITY 评审（fresh reviewer）：**pass**（5/5、5/5、4/5、pass）。非阻塞：
+  ledger 待补记（本条即补）；`mode_for_phase` Menu 态经既有
+  `mode_for_phase_covers_both_states` 传递覆盖（布尔纯函数，循环内重复断言
+  无增量保护，现状接受）。
+- Ruling: persistence 探针竞态为预存纯测试同步缺陷，非本 change 引入，不
+  阻塞合入——根因（评审者精确化）：`waitForPlayerFlushToWait` 以「completionMu
+  被持 + p.mu 空闲」的锁采样推断 Flush 已过 barrier，但该组合既可能是 Flush
+  的 pre-barrier 间隙（players_flush.go:54-59 两把 Lock 之间）也可能是并发
+  Poll 的双 Lock 间隙（players.go:285-287）；当前 6 个调用点无并发 Poll，
+  实际可观测窗口为前者且后续同步自愈，良性。移交后续 change 以显式同步原语
+  替换锁采样探针；不进本 change 范围。Task 3 关闭。
+
+## 阶段 3 末：整分支终审
+
+- 终审：pending。
