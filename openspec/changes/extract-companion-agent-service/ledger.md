@@ -329,6 +329,21 @@
 - dev-check 失败定位（**非合并引入，是分支既有问题**）：同步前在干净临时 worktree（detached `09e18bdc`，fresh `make rust`）上复跑同一测试同样确定性失败；同一集合在 `-race` 下全部通过（本同步的 gate 9 完整 server race 覆盖了全部失败测试）。本分支既往 ledger 记录的所有门禁证据均为 race 模式，dev-check 的 non-race short 套件在本分支从未被验证过。插桩定位显示根因在 planner worker goroutine 与同步 tick 步进的时序耦合：非 race 快速步进下 worker 结果投递出现数百 tick 的调度延迟，部分 run 里结果到达时任务上下文已过时或被关服取消；修复涉及已双评审的测试基础设施或生产 worker 调度，超出本同步范围，转交整分支终审裁决。
 - 同步提交：`b5cd94cd`（merge commit）、`33792871` `docs(companion): reconcile version matrix after main sync`、`9810e937` `docs(companion): align benchmark scenario baseline with code`。
 
+## dev-check non-race 修复
+
+- 起始基线：`2f2d9b55`（main 同步态），工作区干净。dev-check 的 non-race short 套件在 `internal/server` 确定性失败 7 个测试（`TestCompanionManagerFollowTargetOfflineFailsWorldChanged`、`TestCompanionManagerContainerMineMemoryTCPParity`、`TestCompanionManagerFIFOExecutesCommandsInOrder`、`TestCompanionManagerOneInFlightRequestPerCompanion`、`TestCompanionManagerDistantGoalFailsPathUnreachable`、`TestCompanionManagerPathFailureBudgetResetsPerTask`、`TestCompanionManagerSnapshotFailureTerminatesTaskAndAdvancesFIFO`），同一集合在 `-race` 下全部通过。
+- 根因结论（测试基础设施的时序假设缺陷，非生产缺陷；生产代码零改动）：这 7 个测试用固定 tick 上限（200–900 tick）等待异步规划/寻路 worker 的结果在 tick 边界落地，该假设只在每 tick 墙钟接近生产节拍（`RunTicks` 50ms）或 race 模式（每 tick 显著变慢）时成立。non-race 短测下实测每 tick 约 0.27–0.7ms，而一次规划请求的真实墙钟工作量为：tick 路径上 `buildPlanSnapshot` 约 170ms（3×3 区块深拷贝 + 33×17×33 projection，dispatch 与 apply 各一次）、worker 侧 canonical snapshot digest 与假模型各约 15ms；worker 结果只在 tick 边界被非阻塞排空，因此一轮异步规划在快进 tick 下跨越数百 tick 才落地（插桩证据：FIFO 场景第二次模型请求在派发后约 500 tick 才被 worker 触达，首条 TaskStarted 落在 tick 182，而 800 tick 预算只够第一条指令完成）。race 模式每 tick 慢一个数量级，同一墙钟工作量折合的 tick 数远小于预算，因此该缺陷从未在本 change 的既往门禁中暴露（全部历史证据均为 race 模式）。真实服务器以 50ms 节拍运行，worker 延迟落在 1–2 tick 内；权威 tick 热路径与 worker 并发模型未被改动。
+- 修复方案（仅测试基础设施，三个文件）：`companion_manager_test.go` 新增 `stepUntilCompanionEvents` helper——逐 tick 推进并收集全部客户端事件直到 stop 命中，上限由固定 tick 数改为 `longWaitDeadline` 墙钟，每轮 `time.Sleep(time.Millisecond)` 让步（与 `stepUntilCompanionManagerReady` 的既有让步模式一致，同时避免热轮询放大 CPU 争用）。把上述 7 个测试中「等待异步落地」的循环改为墙钟限界：FIFO 三指令、单在途第二条指令、远目标 PathUnreachable、路径失败预算两任务、快照失败推进 FIFO（`companion_manager_test.go`）；目标离线 WorldChanged 的两个等待段（`companion_follow_test.go`）；容器采掘 parity 的 `stepUntilTerminal`（`companion_interact_container_test.go`）。静置观察语义（stop=nil 或固定小窗口）保持固定 tick 不变。全部断言原样保留：FIFO 顺序、TaskFailed 恰好终结与失败原因、每伙伴单在途请求、路径失败预算按任务重置（span ≥ 2×`PathReplanCooldownTicks` 的 tick 距判定）、Memory/TCP transcript 逐字节一致、事件序列与 EventID 严格递增——不因等待方式改变而弱化。
+- 门禁结果（全部在 <WT> 内串行执行）：
+  1. `go test ./internal/server -short -count=1` PASS 两遍（78.370s / 78.783s），确定性复验通过。
+  2. `go test ./internal/companion ./internal/server -race -count=1` PASS（companion 11.457s、server 249.444s）。
+  3. `go test ./internal/archcheck -count=1` PASS（5.763s）。
+  4. `make rust` PASS（cargo 0.26s + 签名替换；本 worktree 重建两个 Rust cdylib 并拷回本 worktree 的 `engine/target/release`，共享 `CARGO_TARGET_DIR` 覆盖语义按预期，主 worktree 后续使用前需重建）。
+  5. `make dev-check` 首次 FAIL（gofmt 未格式化 `companion_manager_test.go`，已 gofmt 修正），重跑 PASS：gofmt/vet、`go test ./... -short`（`internal/server` 78.815s）、cargo fmt/clippy 与 `cargo test --workspace --locked`（175+218 passed）全绿。
+  6. `git diff --check` PASS。
+- 生产契约影响：无。未改动任何生产代码、协议、存档 schema、engine/client ABI 或 benchmark scenario；任务 FIFO、规划/寻路 worker 与权威 tick 编排的运行时语义原样。
+- 提交：`0fb2d383` `test(server): bound async planner waits by wall clock in short mode`（三测试文件）与 `docs(openspec): record dev-check repair evidence`（本小节）。
+
 ## 整分支终审与门禁
 
 - 整分支 SPEC review：待执行；Task 12 Repair 2 final SPEC PASS 仅为任务级证据，不提前裁决整分支 PASS。
