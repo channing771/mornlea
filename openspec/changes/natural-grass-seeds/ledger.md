@@ -43,23 +43,23 @@ Ruling: planning candidate `ab8292569393edfb6748a82f6303c50b0c7654e9` 的独立 
 
 ## Task 2.1 Rust Worldgen, MGW1 Layout, And Engine ABI
 
-- Status: `PENDING`.
-- Task baseline SHA: `PENDING`.
-- Implementer: `PENDING`（fresh；不得复用 Task 1.1 implementer）。
-- RED evidence: `PENDING`（layout/长度/材料唯一性/失败缓冲、整块/单点、负坐标/跨区块、树水优先、密度、旧输出归一化、旧存档不调用 generator）。
-- Code/test commit C: `PENDING`（完整 SHA + 单行英文 subject；不得包含 `tasks.md`/`ledger.md`）。
-- Files changed: `PENDING`（仅 worldgen/nativeabi/LOD/engine ABI、`internal/storage/chunk` 与 `internal/server` 的旧区块加载/重存同主题测试及对应 golden）。
-- ABI/version evidence: `PENDING`（engine ABI v10、MGW1 layout 3、15 材料、header `566`、perm offset `54`、chunk input `574`、probe input `570+16N`、LOD input `582` 三端一致；其他版本尤其 client ABI v13 不变）。
-- Worldgen compatibility evidence: `PENDING`（升级前四份摘要、新完整摘要、把 `ShortGrassID` 归一为空气后的逐字节等价、固定样本有草也有空隙、负坐标/边界 chunk/probe parity、tree/sea priority）。
-- Saved-chunk v9 evidence: `PENDING`（加载升级前已保存的 chunk schema v9 时 generator-not-called；再次保存后全部既有 blocks 逐格不变且 `noShortGrass`）。
-- Full-output compatibility evidence: `PENDING`（chunk 完整输出固定 `196608` 字节、probe 完整输出 `8N` 字节、LOD 每 quad `20B` 且保留 two-pass capacity probe/`output_len` 语义；所有输入错误与 failure 都保持完整输出缓冲 untouched）。
-- Final verified implementation SHA I: `PENDING`（`C` 加本任务全部 repair 后的完整 SHA）。
-- Focused verification bound to I: `PENDING`（clean baseline `make rust`、engine crate、nativeabi/worldgen/lod race、`go test ./internal/storage/chunk ./internal/server -race -count=1`、archcheck、race-changed 与 `git diff --check` 的命令、耗时和摘要；实现者可用 `-run` 收窄当轮定点执行，但最终证据必须包含该可执行命令）。
-- SPEC reviewer / verdict / findings at I: `PENDING`.
-- QUALITY reviewer / verdict / findings at I: `PENDING`.
-- Repair rounds and commits: `PENDING`.
-- Tasks/ledger-only evidence commit L: `PENDING`（只含本任务 checkbox 与 ledger 证据）。
-- Ruling: `PENDING`.
+- Status: `DONE`（2026-09-03 控制会话勾选）。
+- Task baseline SHA: `7115649a040e5907069eec5300fe4272443a90a2`（Task 1.1 `L`）。
+- Implementer: fresh zcode implementer（独立于 Task 1.1）。
+- RED evidence: Rust 基线 20 failed/214 passed,含 `exported_version_is_ten`（ABI=9）、`mgw1_layout_three_framing_is_frozen`（564≠566）、layout-3 解析 panic、`lod` 582 字节被 580 解析器拒绝、`worldgen_chunk_invalid_input_leaves_output_untouched`（legacy layout 2 被 v9 接受且改写输出——真 RED）;Go 侧 `TestABIValuesMatchEngineContract`（=9≠10）、layout-3 被拒/legacy 被收、短草缺席、566≠564 等。兼容性 pin（`TestShortGrassNormalizedOutputMatchesPreUpgradeDigests` 与两个 saved-chunk no-backfill 测试）在改动前按设计空过,其旧摘要在生成器改动前捕获。
+- Code/test commit C: `1d21e8e49f100fd94bb63f04137a26b88da3f157` `feat(worldgen): generate deterministic short grass`（14 文件 +1221/−153,不含 `tasks.md`/`ledger.md`）。
+- Files changed: `engine/crates/mornlea_engine/src/{worldgen.rs,lod.rs,ffi.rs}`、`engine/include/mornlea_engine.h`、`internal/worldgen/{generator.go,grass_test.go(新),fluid_test.go,testdata/golden_seed42.txt}`、`internal/nativeabi/{native.go,native_test.go}`、`internal/lod/lod_test.go`、`internal/storage/chunk/chunk_grass_backfill_test.go`(新)、`internal/server/short_grass_persistence_test.go`(新)、`AGENTS.md`（单 token `engine ABI v9`→`v10`,见 Ruling）。
+- ABI/version evidence: engine ABI **v10**（C header 宏 + Rust `ABI_VERSION` + Go cgo 常量三端同步并由 `exported_version_is_ten`/`TestABIValuesMatchEngineContract` 钉住）、MGW1 layout **3**、15 材料（`short_grass` 追加于偏移 52）、header **566**、perm@**54**、chunk input **574**、probe input **570+16N**（count u32@[566,570)）、probe output **8N**、chunk output **196608**、LOD input **582**;protocol v32/client ABI v13/benchmark v20 等其他版本不动。
+- Worldgen compatibility evidence: `SHORT_GRASS_GENERATION_SALT=0x5348_4f52_5447_5253` 与 design 逐字节一致;顺序 terrain/ores→trees→sea→恰好 256 列短草判定,`BaseBlockAt` 同序,`TerrainBlockAt`/`HeightAt`/LOD 忽略装饰,LOD golden `.bin` 未变;四份升级前摘要 `758c980a…/49a4124a…/52355bb9…/68532f6a…` 逐字保留,`TestShortGrassNormalizedOutputMatchesPreUpgradeDigests` 以新生成器+ShortGrassID→AirID 归一化后 SHA256 逐字节相等;固定 hit(-32,64,-32)/miss(-32,64,-31) 样本、跨区块/负坐标整块与单点 parity、树/水优先与生成顺序无关性均有测试;新 golden 中 chunk(1,0) 摘要不变（无合格命中列,真实）。
+- Saved-chunk v9 evidence: `chunk_grass_backfill_test.go`（schema==9、逐格相等、无 ShortGrassID、codec+Region 往返）;`short_grass_persistence_test.go`（generator 0 次调用、加载逐格相等、重存不变）。
+- Full-output compatibility evidence: chunk 精确 `196608`、probe `8N`、LOD 每 quad `20B` 两段式容量探测/`output_len` 语义保留;全部非法输入（含 legacy layout 2、572 字节 v9 wire frame、非豁免重复、short_grass 别名、错误 Y/长度/魔数）输出缓冲逐字节 untouched（canary 快照断言）。
+- Final verified implementation SHA I: `1d21e8e49f100fd94bb63f04137a26b88da3f157`（无 repair 轮）。
+- Focused verification bound to I: implementer 于 clean commit `1d21e8e4` 执行全绿:`make rust` ok;`cargo test -p mornlea_engine --locked` 234/0（~1.3s）;`go test ./internal/nativeabi ./internal/worldgen ./internal/lod -race -count=1` ok（~12s）;`go test ./internal/storage/chunk ./internal/server -race -count=1` 全命令无 -run 收窄 ok（~3:07）;`go test ./internal/archcheck -count=1` ok;`make test-race-changed RACE_BASE=7115649a` 40 包全 ok（~3:46）;`git diff --check` clean。控制会话另行核验 HEAD SHA、工作树干净与 commit 内容。
+- SPEC reviewer / verdict / findings at I: fresh zcode SPEC reviewer = `SPEC PASS`,0 Critical/0 Important/1 Minor+1 Informational:（Minor）`ffi.rs:3033-3034` 注释把偏移 26 的 stone 槽写成 dirt,断言本身正确;（Info）短输出缓冲返回 `OUTPUT_OVERFLOW` 而非 `INPUT`——与 v9 基线逐字节相同,属既有主规格解读,非本候选新偏差。A–J 十项全部 SATISFIED/JUDGED CONFORMANT,附逐条 file:line 证据;三处 implementer 声明偏差均被判合规（AGENTS.md 单 token 有 `d7590eeb` 先例;fluid fixture 更新在 delta 明确允许范围内且断言 sea 优先;no-stacking 放宽是对过严 RED 的正确修正——邻列树冠叶层可合法位于 surface+2）。
+- QUALITY reviewer / verdict / findings at I: fresh zcode QUALITY reviewer = `QUALITY PASS`,0 Critical/0 Important/2 Minor+2 Informational:（Minor1）`apply_short_grass` 与 `short_grass_block_at` 的世界顶部守卫不对称（latent only,冻结地形常数下不可达,`[−64,320)` parity 测试也无法触及 y=320,建议后续 change 对齐）;（Minor2）`audit_short_grass` else 分支 `assert_ne!` 恒真,死断言无危害;（Info1）AGENTS.md 单 token 由 `TestBaselineVersionsMatchCode` 机械强制,benchmark 保持 v20 正确;（Info2）固定样本 (-32,64,-32) 仅适用于 dry world（surface=63/target=64=海平面）,fluid-on 生产配置的 E2E 必须另选冻结样本——Task 5.1 派发时必须遵守。独立复核:RED 锋利度（legacy v9 wire frame 在旧引擎被接受且写输出）、常量双侧钉住、golden 纪律（旧摘要与 `git show 7115649a` 逐字一致）、`apply_short_grass` 256 次常数判定零分配零递归、`ore_hash` 负坐标 wrapping 安全、无共享可变状态/锁/RNG/IO、注释与提交卫生全部通过。
+- Repair rounds and commits: 无（首轮双 PASS,R1–R5 未触发）。
+- Tasks/ledger-only evidence commit L: 本 evidence commit（只含 `tasks.md` 2.1 checkbox 与本 ledger 证据;不回写自身 SHA,不冒充 `I`）。
+- Ruling: Task 2.1 final `I` = `1d21e8e4`,focused verification 与独立双评审均 PASS,勾选成立 — 双评审零 Critical/Important — Minor/Info 处置:（1）追认 `AGENTS.md` 单 token `engine ABI v9→v10` 提前于 Task 8.1 — `TestBaselineVersionsMatchCode` 把该 token 与 header 宏绑定,是本任务 focused verification 的机械必需,有 `d7590eeb` 先例 — Task 8.1 仍独占其余现行文档段落,benchmark v20 等其余 token 未动。（2）`ffi.rs:3033` 注释措辞（stone 误写 dirt）与 `audit_short_grass` 恒真断言为无害瑕疵 — 不在本任务返工,记录在案;若 9.1 whole-change review 升级其严重度,回派本任务 implementer。（3）顶部世界守卫不对称为 latent-only（冻结地形常数下不可达）— 记录为 deferred,不在本 change 修复;若未来调整地形常数,须先对齐两路径守卫。（4）Task 5.1 派发约束:fluid-on 世界固定样本必须重新冻结,不得复用 (-32,64,-32)。
 
 ## Task 3.1 Fluid Replacement And Bounded Support Cleanup
 
