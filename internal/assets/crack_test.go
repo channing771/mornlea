@@ -151,8 +151,10 @@ func anyEdge(points map[int]bool, match func(x, y int) bool) bool {
 // alpha 只取 0/255（terrain 系 cutout 的 `c.a` 阈值 discard 前提，mip 链由
 // downsampleCutout 保住覆盖率）；非透明像素落在 0x10..0x38 的近黑暖棕域
 // （R≥G≥B）——裂纹要读作方块表面上的深色阴影缝，在浅色与深色材质上都可
-// 辨认，配色提亮会丢掉对比；且至少用满三档明暗做出像素层次——既不能
-// 跳出深色域，也不能退化成单一颜色的平面。
+// 辨认，配色提亮会丢掉对比；且跨阶段累计 MUST 至少用满 3 档密度明暗
+// ——断面深度层次（宽缝内芯最深、细线居中）是硬契约；「孤立碎屑最浅」
+// 的第 4 档依赖真正孤立的像素，在这个网络密度下天然稀少，允许缺席，
+// 不作为硬性要求。
 func TestCrackTextureUsesBinaryAlphaAndDeepWarmColors(t *testing.T) {
 	shades := map[[3]byte]bool{}
 	for stage := 0; stage < crackStageCount; stage++ {
@@ -182,7 +184,7 @@ func TestCrackTextureUsesBinaryAlphaAndDeepWarmColors(t *testing.T) {
 		}
 	}
 	if len(shades) < 3 {
-		t.Fatalf("裂纹只用了 %d 档颜色，想要至少 3 档明暗层次", len(shades))
+		t.Fatalf("裂纹只用了 %d 档颜色，密度分层的断面深度至少要 3 档", len(shades))
 	}
 }
 

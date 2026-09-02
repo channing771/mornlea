@@ -8,15 +8,17 @@ const crackStageCount = 10
 // 因此「出生阶段 ≤ 当前阶段」的比较天然把它排除在裂纹之外。
 const crackNever = 255
 
-// crackShades 是裂纹像素的原创配色：以近黑暖棕为裂缝主色，两档稍浅的暖棕
-// 承担碎屑与次级裂纹的明暗层次（R≥G≥B，全部落在 0x10..0x38 的近黑深色域）。
+// crackShades 是裂纹像素的原创配色：四档近黑暖棕（R≥G≥B，全部落在
+// 0x10..0x38 的深色域内），按「裂纹网络的局部密度」分层取用——宽缝内芯
+// 与孔洞最暗、交汇与加粗段居中、细线主体再次、孤立尖端与碎屑最浅。
 // 参照同类体素游戏「裂纹读作方块表面的黑色阴影缝」的可观察样式：对比度
-// 压足，裂纹在任何方块材质上都可辨认。全部取值是本仓原创像素，不复用也不
-// 引入任何外部美术资源。
-var crackShades = [3]rgb{
-	{R: 22, G: 18, B: 16},
-	{R: 34, G: 28, B: 23},
-	{R: 48, G: 40, B: 32},
+// 压足的同时用密度分层做出断面深度，而不是一片平色。全部取值是本仓原创
+// 像素，不复用也不引入任何外部美术资源。
+var crackShades = [4]rgb{
+	{R: 54, G: 44, B: 35},
+	{R: 42, G: 34, B: 27},
+	{R: 31, G: 25, B: 20},
+	{R: 22, G: 17, B: 16},
 }
 
 // 裂纹生成的噪声盐。与 procedural.go 既有的 hash2 确定性噪声习惯一致：
@@ -28,7 +30,6 @@ const (
 	crackSpeckSalt = 0xC7B3
 	crackPitSalt   = 0xC7B4
 	crackThickSalt = 0xC7B5
-	crackShadeSalt = 0xC7B6
 	crackSpawnSalt = 0xC7B7
 )
 
@@ -54,9 +55,9 @@ const crackMainPaths = 8
 //  2. 阶段 1..9：六条锯齿状主裂缝各自向外延伸，第 step 步的出生阶段按
 //     弧长线性铺满 1..9——早阶段每条只露出靠中心的 1..3 像素短刺，随阶段
 //     推进逐渐伸长、折转、分叉，末段触及纹理边界（出界即断）；
-//  3. 侧枝：每条主裂缝在弧长 1/3 与 2/3 处各折出一根 2..4 像素短枝，枝上
-//     像素沿枝长顺延出生（基点出生 +1、+2…），裂纹网因此「先疏后密」；
-//  4. 剥落碎屑：阶段 5 起沿既有裂缝边缘零星掉落单像素碎点（出生 5..9）；
+//  3. 侧枝：每条主裂缝在弧长 1/2 与约 3/4 处各折出一根 2..3 像素短枝，
+//     枝上像素沿枝长顺延出生（基点出生 +1、+2…），裂纹网因此「先疏后密」；
+//  4. 剥落碎屑：阶段 7 起沿既有裂缝边缘零星掉落单像素碎点（出生 7..9）；
 //  5. 阶段 9：既有裂缝按约四成概率做单侧平行加粗（读作裂缝变宽），并在
 //     中心邻域补三处 2×2 破损孔洞——末阶段是大面积碎裂网，仍保留透明
 //     背景为主。
@@ -95,10 +96,11 @@ func crackBirthMap() [texSize][texSize]uint8 {
 		base := (walker + 8) % 8
 		dir := base
 		length := 12 + int(hash2(uint32(walker), 14, crackPathSalt)%2)
-		// 侧枝落点：弧长 1/3 处必有、2/3 处约半数路径才有（±1 抖动），
-		// 基点出生阶段 +1 起顺延。
-		spawnA := length/3 + int(hash2(uint32(walker), 15, crackSpawnSalt)%2)
-		spawnB := length * 2 / 3
+		// 侧枝落点：弧长 1/2 处必有、约 3/4 处再补一根（±1 抖动）——侧枝
+		// 推迟到中后段出生，早阶段只呈现主裂缝短刺，逐阶段的覆盖增长
+		// 更均匀；基点出生阶段 +1 起顺延。
+		spawnA := length/2 + int(hash2(uint32(walker), 15, crackSpawnSalt)%2)
+		spawnB := length * 3 / 4
 		if hash2(uint32(walker), 16, crackSpawnSalt)%2 != 0 {
 			spawnB = length + 1
 		}
@@ -167,33 +169,6 @@ func crackBirthMap() [texSize][texSize]uint8 {
 			}
 		}
 	}
-	// 剥落碎屑：沿早期裂缝（出生 ≤6 的像素）边缘零星掉落单像素，出生
-	// 6..9 且概率压低（约九分之一）——碎屑只做「表面开始剥落」的点缀，
-	// 密了会把裂缝的折线轮廓糊成噪点团。
-	for y := 0; y < texSize; y++ {
-		for x := 0; x < texSize; x++ {
-			if birth[y][x] > 6 {
-				continue
-			}
-			roll := hash2(uint32(x), uint32(y), crackSpeckSalt)
-			if roll%9 != 0 {
-				continue
-			}
-			offset := crackDirTable[roll%8]
-			sx, sy := x+offset[0], y+offset[1]
-			if sx < 0 || sx >= texSize || sy < 0 || sy >= texSize {
-				continue
-			}
-			if birth[sy][sx] != crackNever {
-				continue
-			}
-			speckBirth := uint8(6 + roll%4)
-			if speckBirth > 9 {
-				speckBirth = 9
-			}
-			birth[sy][sx] = speckBirth
-		}
-	}
 	// 阶段 9：平行加粗。按扫描序对出生 ≤8 的既有像素以约三分之一概率在
 	// 其右/下单侧补一枚相邻像素——加粗只在已裂像素的一侧，读作裂缝变宽
 	// 而非噪点扩散；扫描序保证新标记的像素不会被同轮再处理，加粗不连锁，
@@ -236,6 +211,49 @@ func crackBirthMap() [texSize][texSize]uint8 {
 			pits++
 		}
 	}
+	// 剥落碎屑（生成链最后一步）：在裂缝网之间的空地盐选至多 4 枚单像素
+	// 碎屑，出生 7..9——碎屑读作散落在裂缝间的剥落颗粒。落点要求与任意
+	// 裂纹保持切比雪夫距离 ≥2（5×5 邻域全空）：密度分层的最浅档依赖真正
+	// 孤立的碎屑，而按「从裂缝像素随机偏移」找落点在这个网络密度下几乎
+	// 必然贴网（放射网铺满后没有距裂缝两格以内的空位），全图空隙扫描是
+	// 唯一可靠来源。放在加粗与孔洞**之后**，此后不再有任何落子。
+	specks := 0
+	for y := 0; y < texSize && specks < 4; y++ {
+		for x := 0; x < texSize && specks < 4; x++ {
+			if birth[y][x] != crackNever {
+				continue
+			}
+			roll := hash2(uint32(x), uint32(y), crackSpeckSalt)
+			if roll%9 != 0 {
+				continue
+			}
+			clear := true
+			for dy := -2; dy <= 2 && clear; dy++ {
+				for dx := -2; dx <= 2; dx++ {
+					if dx == 0 && dy == 0 {
+						continue
+					}
+					nx, ny := x+dx, y+dy
+					if nx < 0 || nx >= texSize || ny < 0 || ny >= texSize {
+						continue
+					}
+					if birth[ny][nx] != crackNever {
+						clear = false
+						break
+					}
+				}
+			}
+			if !clear {
+				continue
+			}
+			speckBirth := uint8(7 + roll%3)
+			if speckBirth > 9 {
+				speckBirth = 9
+			}
+			birth[y][x] = speckBirth
+			specks++
+		}
+	}
 	return birth
 }
 
@@ -245,11 +263,22 @@ func crackBirthMap() [texSize][texSize]uint8 {
 // 像素集合由 crackBirthMap 的出生阶段决定（≤ stage 即呈现），因此各阶段
 // 严格增量生长；alpha 二值（0/255）与 isCutoutLayer 的 cutout 分类配套，
 // mip 链由 downsampleCutout 保住稀疏裂纹的覆盖率。渲染侧按 `alpha < 0.5`
-// discard 呈现为原方块材质之上的透明叠加层。配色按「位置 + 出生阶段」在
-// 三档明暗间循环：沿裂缝走向逐像素轮转出细碎的明暗颗粒（读作断面的
-// 粗糙感），新裂开的边缘相位错开、稍浅于裂芯；确定性取值同时保证像素
-// 最少的阶段 0 也用满三档。确定性：全部随机性来自固定种子的 hash2，
-// 同阶段重复调用逐字节一致（守卫见 TestCrackTextureIsDeterministic）。
+// discard 呈现为原方块材质之上的透明叠加层。
+//
+// 着色是「密度分层深度 + 沿走向颗粒」两层合成的确定性函数：
+//   - 密度分层：对裂纹网络的**最终**全量 mask 数 8 邻域密度——宽缝内芯与
+//     孔洞（≥5）最暗、交汇与加粗段（3..4）居中、细线主体（1..2）再次、
+//     孤立尖端与碎屑（0）最浅。读作断面深度：裂缝越宽的地方越深，配齐
+//     像素画的明暗体积感。密度取自最终 mask 而非当前阶段，像素颜色因此
+//     不随阶段漂移（只有集合生长，没有重涂）。
+//   - 颗粒抖动：在密度档上叠加 `(x + y*2 + birth) % 3` 的 0..+2 档微偏移，
+//     超出最深档时折返（4→2、5→1）而不是钳到最深——沿裂缝走向轮转出
+//     细碎明暗颗粒（断面的粗糙感），且任何密度档（含像素最少的阶段 0
+//     的中心撞击簇）都能覆盖多档颜色，每层至少 4 色的通用「材质不平板」
+//     守卫依赖这一点。
+//
+// 确定性：全部随机性来自固定种子的 hash2 与纯整数算术，同阶段重复调用
+// 逐字节一致（守卫见 TestCrackTextureIsDeterministic）。
 func crackTexture(stage int) []byte {
 	if stage < 0 {
 		stage = 0
@@ -259,12 +288,47 @@ func crackTexture(stage int) []byte {
 	}
 	px := make([]byte, texSize*texSize*4)
 	birth := crackBirthMap()
+	// density 先对全量 mask 数一遍：宽缝的「内芯」由周围裂纹像素的数量
+	// 定义，与呈现到哪个阶段无关。
+	var density [texSize][texSize]uint8
+	for y := 0; y < texSize; y++ {
+		for x := 0; x < texSize; x++ {
+			if birth[y][x] == crackNever {
+				continue
+			}
+			count := 0
+			for _, offset := range crackDirTable {
+				nx, ny := x+offset[0], y+offset[1]
+				if nx < 0 || nx >= texSize || ny < 0 || ny >= texSize {
+					continue
+				}
+				if birth[ny][nx] != crackNever {
+					count++
+				}
+			}
+			density[y][x] = uint8(count)
+		}
+	}
 	for y := 0; y < texSize; y++ {
 		for x := 0; x < texSize; x++ {
 			if birth[y][x] > uint8(stage) {
 				continue
 			}
-			shade := (x + y*2 + int(birth[y][x])) % len(crackShades)
+			tier := 0
+			switch {
+			case density[y][x] >= 5:
+				tier = 3
+			case density[y][x] >= 3:
+				tier = 2
+			case density[y][x] >= 1:
+				tier = 1
+			}
+			shade := tier + (x+y*2+int(birth[y][x]))%3
+			if shade > len(crackShades)-1 {
+				// 超出最深档时折返而非钳制：最深缝里也保留亮颗粒的
+				// 可能性，避免高密度区退化成单一平色。
+				shade = 2*(len(crackShades)-1) - shade
+			}
 			paint(px, x, y, crackShades[shade])
 		}
 	}
