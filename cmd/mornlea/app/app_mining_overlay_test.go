@@ -26,7 +26,8 @@ func TestApplicationMiningOverlayUsesOnlyConfirmedPlayerState(t *testing.T) {
 	sendInteractiveServerMessage(t, serverEndpoint, state)
 	app.DrainServerMessages(1)
 	want := hud.MiningOverlay{
-		Active: true, ProgressTicks: 6, RequiredTicks: 15, Harvestable: true,
+		Active: true, Target: core.BlockPos{X: 1, Y: 10, Z: 2}, HasTarget: true,
+		ProgressTicks: 6, RequiredTicks: 15,
 	}
 	if app.miningOverlay != want {
 		t.Fatalf("权威采掘镜像=%+v，想要 %+v", app.miningOverlay, want)
@@ -70,7 +71,8 @@ func TestApplicationMiningOverlayIgnoresStaleAndEqualPlayerState(t *testing.T) {
 	sendInteractiveServerMessage(t, serverEndpoint, active)
 	app.DrainServerMessages(1)
 	want := hud.MiningOverlay{
-		Active: true, ProgressTicks: 6, RequiredTicks: 15, Harvestable: true,
+		Active: true, Target: core.BlockPos{X: 1, Y: 10, Z: 2}, HasTarget: true,
+		ProgressTicks: 6, RequiredTicks: 15,
 	}
 	app.inventoryOpen = true
 	app.inventorySource = 8
@@ -98,6 +100,41 @@ func TestApplicationMiningOverlayIgnoresStaleAndEqualPlayerState(t *testing.T) {
 	app.DrainServerMessages(1)
 	if app.serverTick != 3 || app.miningOverlay.ProgressTicks != 7 {
 		t.Fatalf("更新状态未生效: tick/overlay=%d/%+v", app.serverTick, app.miningOverlay)
+	}
+}
+
+// 杀死变异：镜像丢弃权威目标或 HasTarget 与 MiningActive 脱钩，会让世界
+// 空间裂纹失去定位来源（或在没有权威采掘时凭空出现）。
+func TestApplicationMiningOverlayCarriesAuthoritativeTarget(t *testing.T) {
+	app, serverEndpoint := newInteractiveTestApplication(t)
+	state := network.PlayerState{
+		ServerTick: 1, Dimension: core.Overworld,
+		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true, Ready: true,
+		MiningActive: true, MiningTarget: core.BlockPos{X: 3, Y: 4, Z: 5},
+		MiningProgressTicks: 6, MiningRequiredTicks: 15,
+	}
+	sendInteractiveServerMessage(t, serverEndpoint, state)
+	app.DrainServerMessages(1)
+	want := hud.MiningOverlay{
+		Active: true, Target: core.BlockPos{X: 3, Y: 4, Z: 5}, HasTarget: true,
+		ProgressTicks: 6, RequiredTicks: 15,
+	}
+	if app.miningOverlay != want {
+		t.Fatalf("权威采掘镜像=%+v，想要 %+v", app.miningOverlay, want)
+	}
+
+	// 非 active 清零时目标与 HasTarget 一并归零：不得沿用上一目标的位置。
+	inactive := state
+	inactive.ServerTick = 2
+	inactive.MiningActive = false
+	inactive.MiningTarget = core.BlockPos{}
+	inactive.MiningProgressTicks = 0
+	inactive.MiningRequiredTicks = 0
+	inactive.MiningHarvestable = false
+	sendInteractiveServerMessage(t, serverEndpoint, inactive)
+	app.DrainServerMessages(1)
+	if app.miningOverlay != (hud.MiningOverlay{}) {
+		t.Fatalf("inactive 后采掘镜像=%+v，想要零值", app.miningOverlay)
 	}
 }
 

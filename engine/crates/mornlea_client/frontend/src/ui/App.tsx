@@ -1,6 +1,7 @@
-// App：按下行 phase 切换四屏（menu/starting → 主菜单、settings → 设置页、
-// paused → 暂停层、game → 零 chrome），F3 调试面板按 debug.visible 叠加于
-// 任意相位。前端不持任何菜单语义：相位机、草稿与装配裁决都在 Go。
+// App：按下行 phase 切换五屏（menu/starting → 主菜单、loading → 加载屏、
+// settings → 设置页、paused → 暂停层、game → 零 chrome），F3 调试面板按
+// debug.visible 叠加于任意相位。前端不持任何菜单语义：相位机、草稿与装配
+// 裁决都在 Go。
 //
 // 键盘路由（桥重组）：菜单相位下 WebView 是 firstResponder，winit 收不到
 // 按键，全部面板键在此集中上行。Esc 优先级栈（调试面板 → 暂停层 → 设置页）
@@ -13,7 +14,9 @@ import {
   type UIState,
   type UplinkEvent,
 } from "../bridge/client";
+import { HudRoot } from "../hud/HudRoot";
 import { DebugPanel } from "./DebugPanel";
+import { LoadingScreen } from "./LoadingScreen";
 import { MainMenu } from "./MainMenu";
 import { PauseMenu } from "./PauseMenu";
 import { SettingsPanel } from "./SettingsPanel";
@@ -48,15 +51,20 @@ export function App({ bridge = defaultBridge, onEvent }: AppProps = {}) {
   }
 
   const debugOverlay = state.debug?.visible === true ? <DebugPanel debug={state.debug} onEvent={emit} /> : null;
+  // 常显 HUD 叠加在最底层：菜单相位/装配前的 hud 分节缺席，组件自身渲染
+  // null；游戏/暂停相位有已装配世界时由 Go 下行驱动，菜单面板仍绘制在
+  // HUD 之上（暂停遮罩盖住世界与 HUD 是既有层叠语义）。
+  const hudOverlay = <HudRoot hud={state.hud} />;
 
   switch (state.phase) {
     case "game":
-      // 游戏相位零 chrome：WebView 侧无菜单参与（Rust 侧另有 hidden 语义）。
-      return debugOverlay;
+      // 游戏相位零 chrome：除 HUD 外无菜单参与（Rust 侧另有 hidden 语义）。
+      return <>{hudOverlay}{debugOverlay}</>;
     case "menu":
     case "starting":
       return (
         <>
+          {hudOverlay}
           {debugOverlay}
           {state.menu && <MainMenu menu={state.menu} onEvent={emit} />}
         </>
@@ -64,13 +72,26 @@ export function App({ bridge = defaultBridge, onEvent }: AppProps = {}) {
     case "settings":
       return (
         <>
+          {hudOverlay}
           {debugOverlay}
           {state.settings && <SettingsPanel settings={state.settings} onEvent={emit} />}
+        </>
+      );
+    case "loading":
+      // 加载屏不透明整屏遮罩：无合法上行动作（Enter 不得重复触发装配），
+      // 加载分节数据缺席时组件自身安全降级；hud 分节在 loading 相位缺席，
+      // HudRoot 保持既有层叠位置并自渲染 null。
+      return (
+        <>
+          {hudOverlay}
+          {debugOverlay}
+          <LoadingScreen loading={state.loading} />
         </>
       );
     case "paused":
       return (
         <>
+          {hudOverlay}
           {debugOverlay}
           {state.pause && <PauseMenu pause={state.pause} onEvent={emit} />}
         </>
@@ -91,6 +112,8 @@ export function App({ bridge = defaultBridge, onEvent }: AppProps = {}) {
 // | menu/starting    | Enter     | action enter-game（默认按钮；禁用即忽略，
 // |                  |           | 焦点在按钮上时交还原生激活语义）        |
 // | menu             | Escape    | 无语义，不产生事件                     |
+// | loading          | 任意键    | 无语义，不产生事件（加载期无合法上行，  |
+// |                  |           | Enter 不得重复触发装配）               |
 function routeKeyDown(event: KeyboardEvent, state: UIState, emit: (event: UplinkEvent) => void): void {
   const debug = state.debug;
   if (debug?.visible === true) {
@@ -147,6 +170,10 @@ function routeKeyDown(event: KeyboardEvent, state: UIState, emit: (event: Uplink
           event.preventDefault();
         }
       }
+      return;
+    case "loading":
+      // 加载期无任何合法上行动作：全部按键静默（Go 侧对 loading 相位的动作
+      // 事件另有防御档，这里是前端侧的零上行保证）。
       return;
     case "game":
       // 游戏相位 WebView 隐藏（无 debug 分节时不会进入这里），键盘归 winit。

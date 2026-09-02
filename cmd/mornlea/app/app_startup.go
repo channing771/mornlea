@@ -339,6 +339,11 @@ func NewWithDependencies(
 	}
 	app.nameTagRenderer = render.NewNameTagLayouter(app.glyphAtlas)
 	app.hotbarRenderer = hud.NewHotbarLayout(app.glyphAtlas, reg)
+	// hud 分节纪律层只对有窗口的交互客户端有意义：无头路径（基准/capture）
+	// 保持零值，冲刷随 nil 出口退化为空操作。
+	if window != nil {
+		app.initHUDPush()
+	}
 	hudWidth, hudHeight, hudPixels := app.hotbarRenderer.AtlasPixels()
 	rustRenderer.UploadHUDAtlas(hudWidth, hudHeight, hudPixels)
 	// 菜单层已迁 WebView(client ABI v12):不再上传菜单字体;菜单 chrome 由
@@ -373,9 +378,11 @@ func NewWithDependencies(
 // startWorld 在「进入游戏」点击后执行延迟的世界装配：打开世界存储、启动本地
 // 权威服务端、完成登录并把远环 LOD 播种器接线到登录种子。复用既有
 // openApplicationStore/assembleLocalApplicationConnection/attachLodScheduler 与既有
-// 错误包装；成功设置相位 MenuPhaseGame 与 starting=false，失败返回 error（相位仍
-// 由调用方保持菜单并显示错误文本）。菜单构造阶段已存 startupOptions/startupDeps
-// 快照，此处用同一份配置与注入载体，保证与既有路径产出相同的服务端状态。
+// 错误包装；成功设置相位 MenuPhaseLoading（装配成功进入加载相位而非游戏相位，
+// 光标捕获与游戏输入生效都推迟到加载收敛之后）与 starting=false，失败返回
+// error（相位仍由调用方保持菜单并显示错误文本）。菜单构造阶段已存
+// startupOptions/startupDeps 快照，此处用同一份配置与注入载体，保证与既有路径
+// 产出相同的服务端状态。
 func (a *Application) startWorld() error {
 	options := a.startupOptions
 	// 远程连接形态的世界由远端持有：进程内没有可打开的本地存档，放行会在
@@ -431,17 +438,24 @@ func (a *Application) startWorld() error {
 	a.mirror = client.NewMirror()
 	a.predictor = client.NewPredictor()
 	a.loadedChunks = make(map[core.ChunkPos]struct{})
+	// 网格完成计数跨会话单调,装配点记录基线使加载屏进度从本会话起算。
+	if a.mesher != nil {
+		a.loadingMeshBase = a.mesher.Stats().CompletedMeshes
+	}
 	a.sequence = 0
 	a.serverTick = 0
 	a.worldTimeTicks = 0
 	a.dayPhaseOffset = 0
 	a.observerFloor = 0
 	a.clientSessionClosed = false
+	// hud 分节随会话一并复位：上一台已析构世界的下行基线不得拦截本会话的
+	// 第一次冲刷。
+	a.resetHUDStatePush()
 	// 全景随装配丢弃：游戏相位渲染真实世界，重进菜单相位时按同种子重建
 	// 出确定性相同的画面（spec webview-menu-ui「全景背景确定性」）。
 	a.discardMenuVista()
 
-	a.menu.phase = MenuPhaseGame
+	a.menu.phase = MenuPhaseLoading
 	a.menu.starting = false
 	return nil
 }

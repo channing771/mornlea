@@ -7,9 +7,13 @@
 //! `Bgra8Unorm` 逐字一致)→ `CGContextDrawImage` → 逐行拷出紧凑字节。
 //!
 //! 两个实现要点:
-//! - CG 位图上下文原点在左下(内存第 0 行是画面底行),行尾可能带对齐
-//!   padding;拷贝必须逐行、反序进行,输出与既有 readback 的自上而下行序
-//!   一致,Go 消费侧直接做 BGRA8→NRGBA 字节序交换即可编码,无需再翻转;
+//! - CG 位图上下文的内存缓冲是自上而下布局(第 0 行即画面顶行,与 CGImage
+//!   数据布局一致;y 轴向上只是绘制坐标系语义,`CGContextDrawImage` 绘制时
+//!   已自行处理),行尾可能带对齐 padding;拷贝只需逐行按自然序进行、剥离
+//!   行尾 padding,输出与既有 readback 的自上而下行序一致。陷阱记录:此处
+//!   曾按「上下文原点在左下、内存第 0 行是画面底行」的误解做过行反序,真实
+//!   窗口验收(标题栏/文字整体倒置)证明内存本就是自上而下,翻转是多余的,
+//!   勿再加回;
 //! - `CGWindowListCreateImage` 已被 Apple 标记弃用(后继方案
 //!   ScreenCaptureKit 记录在 dev-capture change 的 design 中),当前 macOS
 //!   仍全量可用。弃用面与 CoreGraphics C 绑定集中封装在本模块,未来替换
@@ -27,7 +31,7 @@
 // 本模块。
 #![allow(deprecated)]
 
-use std::os::raw::c_void;
+use std::{os::raw::c_void, ptr::NonNull};
 
 /// CG 不透明句柄:`CGImageRef`/`CGColorSpaceRef`/`CGContextRef` 的统一形态。
 /// 句柄全部由本模块创建,经 [`AutoRelease`] 成对释放,不跨模块流转。
@@ -145,14 +149,27 @@ unsafe extern "C" {
 }
 
 /// RAII 守卫:Drop 时恰好 `CFRelease` 一次。字段顺序决定释放顺序(逆序
-/// Drop),调用方保证 `raw` 行缓冲声明在 context 守卫之前。
-struct AutoRelease(CGHandle);
+/// Drop),调用方保证 `raw` 行缓冲声明在 context 守卫之前。字段的
+/// `NonNull` 不变量保证系统创建失败的 NULL 永远不会进入 `Drop`。
+struct AutoRelease(NonNull<c_void>);
+
+impl AutoRelease {
+    /// 把 CoreGraphics 创建函数的 nullable 结果收窄为可释放守卫。
+    fn from_nullable(handle: CGHandle) -> Option<Self> {
+        NonNull::new(handle).map(Self)
+    }
+
+    /// 返回只在守卫生命周期内有效的 CoreGraphics 原始句柄。
+    fn as_ptr(&self) -> CGHandle {
+        self.0.as_ptr()
+    }
+}
 
 impl Drop for AutoRelease {
     fn drop(&mut self) {
-        // SAFETY: 句柄由本模块的 CG 创建函数取得,Drop 保证恰好释放一次,
-        // 不存在二次释放或悬垂借用。
-        unsafe { CFRelease(self.0) };
+        // SAFETY: `NonNull` 保证句柄非空,句柄由本模块的 CG 创建函数取得,
+        // Drop 保证恰好释放一次,不存在二次释放或悬垂借用。
+        unsafe { CFRelease(self.0.as_ptr()) };
     }
 }
 
@@ -179,19 +196,23 @@ pub fn capture_window(window_number: i64) -> Result<CapturedFrame, CaptureUnavai
     }
     // SAFETY: 纯查询调用,窗口服务器对无效窗口号返回 NULL 而非未定义行为;
     // 返回的 CGImage 由 AutoRelease 成对释放。
-    let image = AutoRelease(unsafe {
+    let Some(image) = AutoRelease::from_nullable(unsafe {
         CGWindowListCreateImage(
             CG_RECT_NULL,
             CG_WINDOW_LIST_OPTION_INCLUDING_WINDOW,
             window_number as u32,
             CG_WINDOW_IMAGE_BEST_RESOLUTION,
         )
-    });
-    if image.0.is_null() {
+    }) else {
         return Err(CaptureUnavailable);
-    }
+    };
     // SAFETY: image 是上方刚创建并验非空的有效 CGImage。
-    let (width, height) = unsafe { (CGImageGetWidth(image.0), CGImageGetHeight(image.0)) };
+    let (width, height) = unsafe {
+        (
+            CGImageGetWidth(image.as_ptr()),
+            CGImageGetHeight(image.as_ptr()),
+        )
+    };
     if width == 0 || height == 0 || width > MAX_CAPTURE_DIMENSION || height > MAX_CAPTURE_DIMENSION
     {
         return Err(CaptureUnavailable);
@@ -204,10 +225,10 @@ pub fn capture_window(window_number: i64) -> Result<CapturedFrame, CaptureUnavai
     };
     // SAFETY: 设备 RGB 色彩空间为常驻对象,失败返回 NULL;句柄由
     // AutoRelease 成对释放。
-    let color_space = AutoRelease(unsafe { CGColorSpaceCreateDeviceRGB() });
-    if color_space.0.is_null() {
+    let Some(color_space) = AutoRelease::from_nullable(unsafe { CGColorSpaceCreateDeviceRGB() })
+    else {
         return Err(CaptureUnavailable);
-    }
+    };
     let width_bytes = width * BYTES_PER_PIXEL;
     let Some(stride) = align_up(width_bytes, STRIDE_ALIGNMENT) else {
         return Err(CaptureUnavailable);
@@ -221,27 +242,27 @@ pub fn capture_window(window_number: i64) -> Result<CapturedFrame, CaptureUnavai
     // SAFETY: raw 覆盖 stride×height 字节且后于 context 释放;8 bpp +
     // premultiplied first + 32-bit little endian 是文档保证支持的组合,
     // 行距不小于 width_bytes。
-    let context = AutoRelease(unsafe {
+    let Some(context) = AutoRelease::from_nullable(unsafe {
         CGBitmapContextCreate(
             raw.as_mut_ptr().cast::<c_void>(),
             width,
             height,
             8,
             stride,
-            color_space.0,
+            color_space.as_ptr(),
             BITMAP_INFO,
         )
-    });
-    if context.0.is_null() {
+    }) else {
         return Err(CaptureUnavailable);
-    }
+    };
     // SAFETY: image 与 context 均为本函数创建的有效句柄,绘制矩形铺满
     // 整个上下文。
-    unsafe { CGContextDrawImage(context.0, full_rect(width, height), image.0) };
-    // CG 上下文原点在左下,内存第 0 行是画面底行;逐行反序拷出同时剥离
-    // 行距 padding,输出与 readback 的自上而下行序一致。
+    unsafe { CGContextDrawImage(context.as_ptr(), full_rect(width, height), image.as_ptr()) };
+    // CG 位图上下文内存即自上而下(第 0 行是画面顶行),逐行按自然序拷出、
+    // 剥离行距 padding 即可;行序与 readback 一致,勿做翻转(陷阱记录见
+    // 模块文档)。
     let mut pixels = vec![0u8; pixels_len];
-    if !copy_rows_top_down(&raw, stride, width_bytes, height, &mut pixels) {
+    if !copy_rows(&raw, stride, width_bytes, height, &mut pixels) {
         return Err(CaptureUnavailable);
     }
     Ok(CapturedFrame {
@@ -270,18 +291,18 @@ fn align_up(value: usize, align: usize) -> Option<usize> {
         .map(|padded| padded & !(align - 1))
 }
 
-/// 把 CG 位图缓冲(行距 `stride`、原点左下)拷成自上而下、无 padding 的
-/// 紧凑输出:输出第 `row` 行取自源缓冲第 `height-1-row` 行的前
-/// `width_bytes` 字节。校验先行,任一入参不一致(源缓冲覆盖不满、`dst`
-/// 长度不符、行距计算溢出)即返回 false 且不写 `dst`,保证调用方拿到的
-/// 失败不携带部分输出。
-fn copy_rows_top_down(
-    src: &[u8],
-    stride: usize,
-    width_bytes: usize,
-    height: usize,
-    dst: &mut [u8],
-) -> bool {
+/// 把 CG 位图缓冲按内存自然序拷成无 padding 的紧凑输出:输出第 `row` 行
+/// 取自源缓冲第 `row` 行的前 `width_bytes` 字节。
+///
+/// 行序依据:CG 位图上下文的内存缓冲就是自上而下布局(第 0 行是画面顶行,
+/// 与 CGImage 数据布局一致;y 轴向上只是绘制坐标系的语义,
+/// `CGContextDrawImage` 已把画面按此布局写进内存),因此不做任何行翻转。
+/// 陷阱记录:曾误按「原点左下 → 内存第 0 行是底行」做过反序拷贝,真实窗口
+/// 验收显示画面整体倒置,证明该假设错误,翻转已移除,勿再加回。
+///
+/// 校验先行,任一入参不一致(源缓冲覆盖不满、`dst` 长度不符、行距计算
+/// 溢出)即返回 false 且不写 `dst`,保证调用方拿到的失败不携带部分输出。
+fn copy_rows(src: &[u8], stride: usize, width_bytes: usize, height: usize, dst: &mut [u8]) -> bool {
     if stride < width_bytes {
         return false;
     }
@@ -297,11 +318,14 @@ fn copy_rows_top_down(
     let Some(last_row_start) = (height - 1).checked_mul(stride) else {
         return false;
     };
-    if src.len() < last_row_start + width_bytes {
+    let Some(last_row_end) = last_row_start.checked_add(width_bytes) else {
+        return false;
+    };
+    if src.len() < last_row_end {
         return false;
     }
     for row in 0..height {
-        let src_start = (height - 1 - row) * stride;
+        let src_start = row * stride;
         dst[row * width_bytes..(row + 1) * width_bytes]
             .copy_from_slice(&src[src_start..src_start + width_bytes]);
     }
@@ -311,10 +335,16 @@ fn copy_rows_top_down(
 #[cfg(test)]
 mod tests {
     use super::{
-        BITMAP_INFO, CG_BITMAP_BYTE_ORDER_32_LITTLE, CG_IMAGE_ALPHA_PREMULTIPLIED_FIRST,
-        CG_WINDOW_IMAGE_BEST_RESOLUTION, CG_WINDOW_LIST_OPTION_INCLUDING_WINDOW,
-        MAX_CAPTURE_DIMENSION, align_up, copy_rows_top_down,
+        AutoRelease, BITMAP_INFO, CG_BITMAP_BYTE_ORDER_32_LITTLE,
+        CG_IMAGE_ALPHA_PREMULTIPLIED_FIRST, CG_WINDOW_IMAGE_BEST_RESOLUTION,
+        CG_WINDOW_LIST_OPTION_INCLUDING_WINDOW, MAX_CAPTURE_DIMENSION, align_up, copy_rows,
     };
+
+    /// CoreGraphics 创建函数返回 NULL 时不得形成会执行 `CFRelease` 的守卫。
+    #[test]
+    fn auto_release_rejects_null_handle() {
+        assert!(AutoRelease::from_nullable(std::ptr::null_mut()).is_none());
+    }
 
     /// 手抄的 CG 枚举位值必须与本机 SDK 头(`CGWindow.h`/`CGImage.h`)逐位
     /// 一致:窗口列表与图像分辨率两个枚举都是 `CF_OPTIONS(uint32_t, ...)`,
@@ -333,11 +363,13 @@ mod tests {
         assert_eq!(BITMAP_INFO, (1 << 1) | (2 << 12));
     }
 
-    /// 逐行反序拷贝:剥离行尾 padding,同时把左下原点的 CG 行序翻转为
-    /// 自上而下。
+    /// 拷贝钉住内存自然序:CG 位图上下文缓冲自上而下(第 0 行是画面顶行,
+    /// 真实窗口验收证明过;行反序会把输出倒置),拷贝保持行序不变,只剥离
+    /// 行尾 padding。
     #[test]
-    fn copy_rows_top_down_strips_padding_and_flips() {
+    fn copy_rows_keeps_top_down_order_and_strips_padding() {
         // 3 行 × 每行 4 有效字节,行距 8(每行行尾 4 字节 padding)。
+        // 第 0 行编码画面顶行特征值(如标题栏),末行是底行。
         let mut src = vec![0u8; 24];
         for row in 0..3usize {
             for col in 0..4usize {
@@ -345,39 +377,48 @@ mod tests {
             }
         }
         let mut dst = vec![0u8; 12];
-        assert!(copy_rows_top_down(&src, 8, 4, 3, &mut dst));
-        // 输出第 0 行是画面顶行,对应源缓冲最后一行;padding 不进输出。
-        assert_eq!(&dst[0..4], &src[16..20]);
+        assert!(copy_rows(&src, 8, 4, 3, &mut dst));
+        // 输入自上而下 → 输出自上而下,行序逐一对应;padding 不进输出。
+        assert_eq!(&dst[0..4], &src[0..4]);
         assert_eq!(&dst[4..8], &src[8..12]);
-        assert_eq!(&dst[8..12], &src[0..4]);
+        assert_eq!(&dst[8..12], &src[16..20]);
     }
 
     /// 源缓冲覆盖不满(末行被截断)必须整体拒绝,不产生部分输出。
     #[test]
-    fn copy_rows_top_down_rejects_short_source_without_partial_writes() {
+    fn copy_rows_rejects_short_source_without_partial_writes() {
         // 行距 8 × 2 行至少需要 12 字节,刻意短 1 字节。
         let src = vec![0x11u8; 11];
         let mut dst = vec![0xAAu8; 8];
-        assert!(!copy_rows_top_down(&src, 8, 4, 2, &mut dst));
+        assert!(!copy_rows(&src, 8, 4, 2, &mut dst));
         assert!(dst.iter().all(|&byte| byte == 0xAA), "失败不得写 dst");
+    }
+
+    /// 末行结束位置溢出必须整体拒绝,不得 panic 或写入部分输出。
+    #[test]
+    fn copy_rows_rejects_last_row_end_overflow_without_partial_writes() {
+        let src = [0x11u8, 0x22];
+        let mut dst = [0xAAu8; 2];
+        assert!(!copy_rows(&src, usize::MAX, 1, 2, &mut dst));
+        assert_eq!(dst, [0xAA; 2], "失败不得写 dst");
     }
 
     /// 输出缓冲长度与 width_bytes×height 不符必须拒绝。
     #[test]
-    fn copy_rows_top_down_rejects_mismatched_dst() {
+    fn copy_rows_rejects_mismatched_dst() {
         let src = vec![0u8; 16];
         let mut short = [0u8; 7];
         let mut long = [0u8; 9];
-        assert!(!copy_rows_top_down(&src, 8, 4, 2, &mut short));
-        assert!(!copy_rows_top_down(&src, 8, 4, 2, &mut long));
+        assert!(!copy_rows(&src, 8, 4, 2, &mut short));
+        assert!(!copy_rows(&src, 8, 4, 2, &mut long));
     }
 
     /// 行距小于有效宽度是调用方违约,必须拒绝。
     #[test]
-    fn copy_rows_top_down_rejects_stride_below_width_bytes() {
+    fn copy_rows_rejects_stride_below_width_bytes() {
         let src = vec![0u8; 8];
         let mut dst = [0u8; 8];
-        assert!(!copy_rows_top_down(&src, 3, 4, 2, &mut dst));
+        assert!(!copy_rows(&src, 3, 4, 2, &mut dst));
     }
 
     /// 对齐助手:不足则补齐,已对齐原样返回,溢出显式失败。

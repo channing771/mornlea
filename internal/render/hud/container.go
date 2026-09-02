@@ -7,7 +7,7 @@ import (
 
 const (
 	// 合成图式内容：9 个网格格与产物格凹槽、双层物品色块、静态箭头图示与产物
-	// 格琥珀轮廓底衬。个人 2×2 只画其中 4 个网格格，容量按 3×3 最坏组合锁定。
+	// 格麦金轮廓底衬。个人 2×2 只画其中 4 个网格格，容量按 3×3 最坏组合锁定。
 	craftingContentQuads = (core.CraftingGridSlots + 1) + (core.CraftingGridSlots+1)*2 +
 		craftingArrowQuads + craftingOutputOutlineQuads
 	craftingArrowQuads = 1
@@ -90,12 +90,12 @@ func containerSourceOrigin(
 			return 0, 0, false
 		}
 		if source >= core.CraftingGridSlots && source < core.CraftingGridSlots+core.InventorySlots {
-			x, y := inventorySlotOrigin(source-core.CraftingGridSlots, true, width, height)
+			x, y := inventorySlotOrigin(source-core.CraftingGridSlots, width, height)
 			return x, y, true
 		}
 	}
 	if source >= 0 && source < core.InventorySlots {
-		x, y := inventorySlotOrigin(source, true, width, height)
+		x, y := inventorySlotOrigin(source, width, height)
 		return x, y, true
 	}
 	return 0, 0, false
@@ -199,7 +199,7 @@ func FurnaceSlotAt(cursorX, cursorY float64, width, height uint32) (uint8, bool)
 		return 0, false
 	}
 	x, y := float32(cursorX), float32(cursorY)
-	slotSize := hotbarSlotSize * hudScale(true, float32(width), float32(height))
+	slotSize := hotbarSlotSize * hudScale(float32(width), float32(height))
 	for index := range 3 {
 		left, top := furnaceSlotOrigin(index, float32(width), float32(height))
 		if x >= left && x < left+slotSize && y >= top && y < top+slotSize {
@@ -254,7 +254,7 @@ func ChestSlotAt(cursorX, cursorY float64, width, height uint32) (uint8, bool) {
 		return 0, false
 	}
 	x, y := float32(cursorX), float32(cursorY)
-	slotSize := hotbarSlotSize * hudScale(true, float32(width), float32(height))
+	slotSize := hotbarSlotSize * hudScale(float32(width), float32(height))
 	for index := range core.ChestSlots {
 		left, top := chestSlotOrigin(index, float32(width), float32(height))
 		if x >= left && x < left+slotSize && y >= top && y < top+slotSize {
@@ -274,7 +274,7 @@ type CraftingOverlay struct {
 }
 
 // appendCraftingContent 绘制合成图式：尺寸 × 尺寸 的网格格、静态箭头图示与
-// 一个产物格（琥珀轮廓底衬标记产物语义），右侧再加十条固定配方入口。网格格
+// 一个产物格（麦金轮廓底衬标记产物语义），右侧再加十条固定配方入口。网格格
 // 与产物格复用与全部栏位相同的凹槽 cell 与 `appendItemTile` 双层物品色块；
 // 数量走既有数字流。
 func appendCraftingContent(
@@ -299,15 +299,15 @@ func appendCraftingContent(
 		appendItemTile(dst, stack.Item, x, y, frame.scale)
 		appendHotbarCountScaled(dst, atlas, stack.Count, x, y, frame.scale)
 	}
-	// 产物格琥珀轮廓底衬：强调色只标记产物语义，凹槽 cell 盖住中部后读作
-	// 1 design px 轮廓。
+	// 产物格麦金轮廓底衬：`accentProgress` 只标记产物语义，凹槽 cell 盖住中部
+	// 后读作 1 design px 轮廓。
 	outputX, outputY := craftingOutputOrigin(size, width, height)
 	expand := craftingOutputOutlineExpand * frame.scale
 	dst.quads = append(dst.quads, hotbarInstance{
 		X: outputX - expand, Y: outputY - expand,
 		Width:  hotbarSlotSize*frame.scale + 2*expand,
 		Height: hotbarSlotSize*frame.scale + 2*expand,
-		Color:  accentAmber,
+		Color:  accentProgress,
 	})
 	for slot := range size * size {
 		x, y := craftingGridSlotOrigin(slot, size, width, height)
@@ -333,7 +333,7 @@ func RecipeButtonAt(cursorX, cursorY float64, width, height uint32) (core.Recipe
 		return 0, false
 	}
 	x, y := float32(cursorX), float32(cursorY)
-	scale := hudScale(true, float32(width), float32(height))
+	scale := hudScale(float32(width), float32(height))
 	for row, recipe := range inventoryRecipeIDs {
 		left, top := recipeButtonOrigin(row, float32(width), float32(height))
 		if x >= left && x < left+recipeColumnWidth*scale && y >= top && y < top+recipeEntryHeight*scale {
@@ -355,7 +355,7 @@ func CraftingSlotAt(cursorX, cursorY float64, width, height uint32, size int) (u
 	}
 	size = normalizeCraftingGridSize(size)
 	x, y := float32(cursorX), float32(cursorY)
-	slotSize := hotbarSlotSize * hudScale(true, float32(width), float32(height))
+	slotSize := hotbarSlotSize * hudScale(float32(width), float32(height))
 	for slot := range size * size {
 		left, top := craftingGridSlotOrigin(slot, size, float32(width), float32(height))
 		if x >= left && x < left+slotSize && y >= top && y < top+slotSize {
@@ -372,7 +372,7 @@ func CraftingOutputAt(cursorX, cursorY float64, width, height uint32, size int) 
 		return false
 	}
 	x, y := float32(cursorX), float32(cursorY)
-	slotSize := hotbarSlotSize * hudScale(true, float32(width), float32(height))
+	slotSize := hotbarSlotSize * hudScale(float32(width), float32(height))
 	left, top := craftingOutputOrigin(size, float32(width), float32(height))
 	return x >= left && x < left+slotSize && y >= top && y < top+slotSize
 }

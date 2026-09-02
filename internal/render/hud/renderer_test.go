@@ -2,7 +2,6 @@ package hud
 
 import (
 	"math"
-	"strings"
 	"testing"
 
 	"github.com/channing771/mornlea/internal/core"
@@ -32,19 +31,16 @@ func TestHotbarPrepareReusesLayoutAndUploadStorage(t *testing.T) {
 		upload: make([]byte, hotbarUploadBytes),
 	}
 	inventory := fullTestInventory()
-	health := HealthOverlay{Confirmed: true, Value: 7}
-	// 氧气取未满值：只有这样预热路径才会真的走到氧气条，"零每帧分配、零新上传缓冲"
-	// 这条断言才对它成立。传零值（未确认）会让氧气条整条被跳过、断言退化成空转。
-	oxygen := OxygenOverlay{Confirmed: true, Value: 120}
-	// 饥饿取奇数值：预热路径必须走到半格分支，否则「零每帧分配」对它只是空转。
-	hunger := HungerOverlay{Confirmed: true, Value: 13}
 	budget := render.NewUploadBudget(1024)
-	if err := renderer.Prepare(inventory, true, true, 3, nil, nil, nil, MiningOverlay{}, EatingOverlay{}, health, oxygen, hunger, ChatOverlay{}, false, PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 720, budget); err != nil {
+	warm := func() error {
+		return renderer.Prepare(inventory, true, true, 3, nil, nil, nil, TooltipOverlay{}, 1280, 720, budget)
+	}
+	if err := warm(); err != nil {
 		t.Fatalf("warm Prepare: %v", err)
 	}
 	allocations := testing.AllocsPerRun(1000, func() {
 		source.requestCount = 0
-		if err := renderer.Prepare(inventory, true, true, 3, nil, nil, nil, MiningOverlay{}, EatingOverlay{}, health, oxygen, hunger, ChatOverlay{}, false, PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 720, budget); err != nil {
+		if err := warm(); err != nil {
 			panic(err)
 		}
 	})
@@ -53,41 +49,33 @@ func TestHotbarPrepareReusesLayoutAndUploadStorage(t *testing.T) {
 	}
 }
 
-// TestHotbarPrepareClosedMiningEncodesLayeredFeedback 验证 `Prepare` 的关闭态输出
-// 实际包含双层快捷栏与不可采采掘形状；删掉任一层或 warning notch 都会改变实例前缀。
-func TestHotbarPrepareClosedMiningEncodesLayeredFeedback(t *testing.T) {
-	renderer := &HotbarRenderer{
-		atlas: &allocationGlyphSource{},
-		layout: hotbarLayout{
-			quads:  make([]hotbarInstance, 0, maxHotbarQuads),
-			glyphs: make([]hotbarInstance, 0, maxHotbarGlyphs),
-		},
-		upload: make([]byte, hotbarUploadBytes),
-	}
+// TestHotbarPrepareClosedProducesNoInstances 验证 `Prepare` 的关闭态输出恰好
+// 零实例：常显层已迁 WebView，GPU 保留面只在容器界面打开时布局。
+func TestHotbarPrepareClosedProducesNoInstances(t *testing.T) {
+	renderer := newTestHotbarRenderer()
 	if err := renderer.Prepare(
-		core.Inventory{}, true, false, -1, nil, nil, nil,
-		MiningOverlay{Active: true, ProgressTicks: 6, RequiredTicks: 15}, EatingOverlay{},
-		HealthOverlay{}, OxygenOverlay{}, HungerOverlay{}, ChatOverlay{}, false,
-		PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 800, render.NewUploadBudget(1024),
+		maxQuadTestInventory(), true, false, -1, nil, nil, nil, TooltipOverlay{},
+		1280, 800, render.NewUploadBudget(1024),
 	); err != nil {
 		t.Fatalf("关闭态 Prepare: %v", err)
 	}
+	if len(renderer.layout.quads) != 0 || len(renderer.layout.glyphs) != 0 {
+		t.Fatalf("关闭态 quads/glyphs=%d/%d，想要 0/0", len(renderer.layout.quads), len(renderer.layout.glyphs))
+	}
+	_, quads, glyphs := renderer.FrameStreams()
+	if len(quads) != 0 || len(glyphs) != 0 {
+		t.Fatalf("关闭态实际前缀 quads/glyphs=%d/%d，想要 0/0", len(quads), len(glyphs))
+	}
 
-	const wantQuads = crosshairQuads + 2 + 2 + core.HotbarSlots + 2 + 3
-	if got := len(renderer.layout.quads); got != wantQuads {
-		t.Fatalf("关闭态采掘实例=%d，想要准星、双层面板、双层选中、九格、轨道/填充和三个缺口共 %d", got, wantQuads)
+	// 物品镜像未确认时同样零实例：保留面不布局任何内容。
+	if err := renderer.Prepare(
+		core.Inventory{}, false, true, -1, nil, nil, fullChestOverlay(), TooltipOverlay{},
+		1280, 800, render.NewUploadBudget(1024),
+	); err != nil {
+		t.Fatalf("镜像未确认 Prepare: %v", err)
 	}
-	panelCount, notchCount := 0, 0
-	for _, quad := range renderer.layout.quads {
-		if quad.Width > 432 && quad.Height > 48 {
-			panelCount++
-		}
-		if quad.Width == 6 && quad.Height == 12 {
-			notchCount++
-		}
-	}
-	if panelCount != 2 || notchCount != 3 {
-		t.Fatalf("关闭态面板=%d、warning notch=%d，想要 2/3", panelCount, notchCount)
+	if len(renderer.layout.quads) != 0 || len(renderer.layout.glyphs) != 0 {
+		t.Fatalf("镜像未确认 quads/glyphs=%d/%d，想要 0/0", len(renderer.layout.quads), len(renderer.layout.glyphs))
 	}
 }
 
@@ -95,16 +83,9 @@ func TestHotbarPrepareClosedMiningEncodesLayeredFeedback(t *testing.T) {
 // 布局**钉成数值断言。
 //
 // 这四个数不是内部细节：bounded-benchmark-workload 主规格用「固定 GPU 上传
-// 布局、offset 与每帧写入字节数是否移动」来判定 benchmark scenario 要不要升版
-// （v15→v16、v17→v18 与 v18→v19 都是因它而升）。没有这条断言，改动 HUD 布局时无人会
-// 注意到 scenario 身份已经该动了——而那正是 v16 加氧气条那次发生过的事
-// （quad 236→238 恰好没跨过 256 字节对齐边界，offset 与总容量才没变）。
-//
-// 当前钉值是准星与物品名弹条落地后的重钉容量：quad 256→320（quad 区
-// 12800→15616 恰为 glyph offset，256 对齐保持）、glyph 700→768（含弹条双层
-// 与 tooltip 预留）。数值随 HUD 结构增长是正常的；改动本测试的期望值时必须
-// 同时判定 scenario 版本要不要升，并把结论写进变更产物（benchmark 常量与
-// 文档的 v19→v20 同步由 capture/benchmark 任务组落地）。
+// 布局、offset 与每帧写入字节数是否移动」来判定 benchmark scenario 要不要升版。
+// 常显层退役只缩小了各分支的实际实例前缀，固定容量、offset 与对齐必须保持
+// 不变（scenario 版本演进由 capture/benchmark 任务组统一收口）。
 func TestHotbarFixedUploadLayoutMatchesScenarioVersion(t *testing.T) {
 	for _, test := range []struct {
 		name      string
@@ -121,60 +102,43 @@ func TestHotbarFixedUploadLayoutMatchesScenarioVersion(t *testing.T) {
 	}
 }
 
-// TestResponsiveHotbarPrepareKeepsEveryInstanceInFramebuffer 防止联合布局只缩放
-// 快捷栏，遗漏状态行、采掘轨道或打开态最大容器 overlay。
+// TestResponsiveHotbarPrepareKeepsEveryInstanceInFramebuffer 防止打开态布局在
+// 缩放中越界：面板、统一栏位、双层物品 tile、耐久条、箱子内容与 tooltip 背景
+// 都必须留在 framebuffer 内，零尺寸 framebuffer 安全退化为零实例。
 func TestResponsiveHotbarPrepareKeepsEveryInstanceInFramebuffer(t *testing.T) {
-	// 弹条全程可见：关闭态帧必须把弹条字形连同其余 HUD 矩形一起缩放进
-	// framebuffer（打开态由容器抑制不画，夹具保持同值即可）。
-	popup := PopupOverlay{
-		Text: strings.Repeat("界", maxPopupRunes), ShownAtTick: 0, WorldTick: 0, Valid: true,
-	}
 	for _, size := range [][2]uint32{{1280, 720}, {640, 360}, {240, 40}, {17, 800}, {800, 17}, {16, 16}, {1, 1}} {
-		for _, open := range []bool{false, true} {
-			renderer := newTestHotbarRenderer()
-			var chest *ChestOverlay
-			mining := MiningOverlay{Active: true, ProgressTicks: 6, RequiredTicks: 15}
-			tooltip := TooltipOverlay{}
-			if open {
-				chest = fullChestOverlay()
-				// 打开帧携带有效悬停：指针落在箱子 0 号格（满箱非空）中心，tooltip
-				// 的背景 quad 与双层字形随其余 HUD 矩形一起进入逐实例界内断言
-				// （窄窗口场景明文含 tooltip）。格中心在任意缩放下都落在格内；
-				// scale 为 0 的极小窗口没有任何可命中格，tooltip 与其余实例同为
-				// 零尺寸退化。关闭帧由 Prepare 的打开态门控保持 tooltip 零实例。
-				scale := hudScale(true, float32(size[0]), float32(size[1]))
-				hoverX, hoverY := chestSlotOrigin(0, float32(size[0]), float32(size[1]))
-				tooltip = TooltipOverlay{
-					Valid:   true,
-					CursorX: float64(hoverX + hotbarSlotSize*scale*0.5),
-					CursorY: float64(hoverY + hotbarSlotSize*scale*0.5),
-				}
+		renderer := newTestHotbarRenderer()
+		// 打开帧携带有效悬停：指针落在箱子 0 号格（满箱非空）中心，tooltip
+		// 的背景 quad 与双层字形随其余实例一起进入逐实例界内断言。格中心在
+		// 任意缩放下都落在格内；scale 为 0 的极小窗口没有任何可命中格，tooltip
+		// 与其余实例同为零尺寸退化。
+		scale := hudScale(float32(size[0]), float32(size[1]))
+		hoverX, hoverY := chestSlotOrigin(0, float32(size[0]), float32(size[1]))
+		tooltip := TooltipOverlay{
+			Valid:   true,
+			CursorX: float64(hoverX + hotbarSlotSize*scale*0.5),
+			CursorY: float64(hoverY + hotbarSlotSize*scale*0.5),
+		}
+		if err := renderer.Prepare(maxQuadTestInventory(), true, true, 5, nil, nil, fullChestOverlay(),
+			tooltip, size[0], size[1], render.NewUploadBudget(1024)); err != nil {
+			t.Fatalf("framebuffer %v Prepare: %v", size, err)
+		}
+		for index, quad := range renderer.layout.quads {
+			if !finiteRectangle(quad) || quad.X < 0 || quad.Y < 0 || quad.X+quad.Width > float32(size[0]) || quad.Y+quad.Height > float32(size[1]) {
+				t.Fatalf("framebuffer %v quad %d 越界: %+v", size, index, quad)
 			}
-			if err := renderer.Prepare(maxQuadTestInventory(), true, open, 5, nil, nil, chest, mining, EatingOverlay{},
-				HealthOverlay{Confirmed: true, Value: 7},
-				OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1},
-				HungerOverlay{Confirmed: true, Value: core.MaxHunger},
-				ChatOverlay{}, false, popup, CrosshairOverlay{Visible: true}, tooltip, size[0], size[1], render.NewUploadBudget(1024)); err != nil {
-				t.Fatalf("framebuffer %v open=%v Prepare: %v", size, open, err)
-			}
-			for index, quad := range renderer.layout.quads {
-				if !finiteRectangle(quad) || quad.X < 0 || quad.Y < 0 || quad.X+quad.Width > float32(size[0]) || quad.Y+quad.Height > float32(size[1]) {
-					t.Fatalf("framebuffer %v open=%v quad %d 越界: %+v", size, open, index, quad)
-				}
-			}
-			for index, glyph := range renderer.layout.glyphs {
-				if !finiteRectangle(glyph) || glyph.X < 0 || glyph.Y < 0 || glyph.X+glyph.Width > float32(size[0]) || glyph.Y+glyph.Height > float32(size[1]) {
-					t.Fatalf("framebuffer %v open=%v glyph %d 越界: %+v", size, open, index, glyph)
-				}
+		}
+		for index, glyph := range renderer.layout.glyphs {
+			if !finiteRectangle(glyph) || glyph.X < 0 || glyph.Y < 0 || glyph.X+glyph.Width > float32(size[0]) || glyph.Y+glyph.Height > float32(size[1]) {
+				t.Fatalf("framebuffer %v glyph %d 越界: %+v", size, index, glyph)
 			}
 		}
 	}
 
 	for _, size := range [][2]uint32{{0, 720}, {1280, 0}, {0, 0}} {
 		renderer := newTestHotbarRenderer()
-		if err := renderer.Prepare(maxQuadTestInventory(), true, true, 5, nil, nil, fullChestOverlay(), MiningOverlay{}, EatingOverlay{},
-			HealthOverlay{Confirmed: true, Value: 7}, OxygenOverlay{Confirmed: true, Value: 1},
-			HungerOverlay{}, ChatOverlay{}, false, PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, size[0], size[1], render.NewUploadBudget(1024)); err != nil {
+		if err := renderer.Prepare(maxQuadTestInventory(), true, true, 5, nil, nil, fullChestOverlay(),
+			TooltipOverlay{}, size[0], size[1], render.NewUploadBudget(1024)); err != nil {
 			t.Fatalf("framebuffer %v Prepare: %v", size, err)
 		}
 		if len(renderer.layout.quads) != 0 || len(renderer.layout.glyphs) != 0 {
@@ -185,11 +149,11 @@ func TestResponsiveHotbarPrepareKeepsEveryInstanceInFramebuffer(t *testing.T) {
 }
 
 // TestHotbarMaximumBranchesAndEncodingContract 同时见证互斥分支容量、48-byte
-// 编码、256-byte 对齐与 `FrameStreams` 的实际实例前缀。
+// 编码、256-byte 对齐与 `FrameStreams` 的实际实例前缀。常显层退役后关闭态零
+// 实例，打开态由箱子视图见证 218，合成视图低于箱子不是见证分支。
 func TestHotbarMaximumBranchesAndEncodingContract(t *testing.T) {
-	if healthQuads != 10 || oxygenQuads != 10 || hungerQuads != 20 || hotbarInstanceBytes != 48 {
-		t.Fatalf("health/oxygen/hunger/instance=%d/%d/%d/%d，想要 10/10/20/48",
-			healthQuads, oxygenQuads, hungerQuads, hotbarInstanceBytes)
+	if hotbarInstanceBytes != 48 {
+		t.Fatalf("hotbarInstanceBytes=%d，想要 48", hotbarInstanceBytes)
 	}
 	if hotbarViewportOffset%256 != 0 || hotbarQuadOffset%256 != 0 || hotbarGlyphOffset%256 != 0 ||
 		hotbarViewportOffset+hotbarViewportBytes > hotbarQuadOffset ||
@@ -200,62 +164,48 @@ func TestHotbarMaximumBranchesAndEncodingContract(t *testing.T) {
 			hotbarGlyphOffset, hotbarGlyphSize, hotbarUploadBytes)
 	}
 
-	chatLine := strings.Repeat("中", maxChatRunes)
-	chat := ChatOverlay{Open: true, Input: chatLine,
-		Lines: []string{chatLine, chatLine, chatLine, chatLine, chatLine, chatLine}}
 	renderer := newTestHotbarRenderer()
-	if err := renderer.Prepare(maxQuadTestInventory(), true, false, -1, nil, nil, nil,
-		MiningOverlay{Active: true, ProgressTicks: 6, RequiredTicks: 15}, EatingOverlay{},
-		HealthOverlay{Confirmed: true, Value: core.MaxHealth},
-		OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1},
-		HungerOverlay{Confirmed: true, Value: core.MaxHunger}, chat, false,
-		PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 800, render.NewUploadBudget(1024)); err != nil {
-		t.Fatalf("关闭最大分支 Prepare: %v", err)
-	}
-	closedWant := closedHotbarQuads + healthQuads + oxygenQuads + hungerQuads + maxChatQuads
-	if len(renderer.layout.quads) != closedWant || closedWant != 100 || len(renderer.layout.quads) > maxHotbarQuads {
-		t.Fatalf("关闭分支 quads=%d，想要含准星的合法最坏 100 且不超过 %d", len(renderer.layout.quads), maxHotbarQuads)
-	}
-
-	// 打开最大分支改由箱子见证（面板族与箱子 81 内容 quad 是最大 overlay）；
-	// 悬停 tooltip 背景计入合法最坏；合成视图的最坏组合另起一段锁定。
+	// 打开最大分支由箱子见证（面板族与箱子 81 内容 quad 是最大 overlay）；
+	// 悬停 tooltip 背景计入合法最坏。
+	longNameChest := fullChestOverlay()
+	longNameChest.Items[0] = core.ItemStack{Item: core.ItemBrokenStonePickaxe, Count: core.MaxStackCount}
 	hoverX, hoverY := chestSlotOrigin(0, 1280, 800)
-	if err := renderer.Prepare(maxQuadTestInventory(), true, true, 5, nil, nil, fullChestOverlay(), MiningOverlay{}, EatingOverlay{},
-		HealthOverlay{Confirmed: true, Value: core.MaxHealth},
-		OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1},
-		HungerOverlay{Confirmed: true, Value: core.MaxHunger}, chat, false,
-		PopupOverlay{}, CrosshairOverlay{Visible: true},
+	if err := renderer.Prepare(maxQuadTestInventory(), true, true, 5, nil, nil, fullChestOverlay(),
 		TooltipOverlay{Valid: true, CursorX: float64(hoverX) + 1, CursorY: float64(hoverY) + 1},
 		1280, 800, render.NewUploadBudget(1024)); err != nil {
 		t.Fatalf("打开最大分支 Prepare: %v", err)
 	}
-	openWant := openInventoryQuads + healthQuads + oxygenQuads + hungerQuads + maxChatQuads
-	if len(renderer.layout.quads) != openWant || len(renderer.layout.quads) != 264 || len(renderer.layout.quads) > maxHotbarQuads {
-		t.Fatalf("较大打开分支 quads=%d，想要含准星与 tooltip 的 264 且不超过固定上限 %d", len(renderer.layout.quads), maxHotbarQuads)
+	if got := len(renderer.layout.quads); got != 218 || got > maxHotbarQuads {
+		t.Fatalf("打开分支 quads=%d，想要含 tooltip 背景的 218 且不超过固定上限 %d", got, maxHotbarQuads)
 	}
-	if err := renderer.Prepare(maxQuadTestInventory(), true, true, 5, fullCraftingOverlay(), nil, nil, MiningOverlay{}, EatingOverlay{},
-		HealthOverlay{Confirmed: true, Value: core.MaxHealth},
-		OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1},
-		HungerOverlay{Confirmed: true, Value: core.MaxHunger}, chat, false,
-		PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 800, render.NewUploadBudget(1024)); err != nil {
+	// glyph 预算按 tooltip 8 rune 截断上限封顶；注册表实测最长名（5 rune 双层
+	// 10）是更小的实测见证，两者都不得超过固定 768。
+	if got := core.InventorySlots*4 + chestGlyphs + tooltipGlyphs; got != 268 {
+		t.Fatalf("打开态 glyph 预算=%d，想要钉值 268", got)
+	}
+
+	// 合成视图（面板加配方栏与网格内容）低于箱子见证分支，但仍是合法组合：
+	// 固定预算的逐项构成在这里按命名常量复核。
+	if err := renderer.Prepare(maxQuadTestInventory(), true, true, 5, fullCraftingOverlay(), nil, nil,
+		TooltipOverlay{}, 1280, 800, render.NewUploadBudget(1024)); err != nil {
 		t.Fatalf("打开合成最大分支 Prepare: %v", err)
 	}
-	craftingWant := crosshairQuads + containerPanelQuads + 2 + core.InventorySlots + core.InventorySlots*2 +
-		core.HotbarSlots*2 + craftingContentQuads + recipeColumnQuads + healthQuads + oxygenQuads + hungerQuads + maxChatQuads
-	if len(renderer.layout.quads) != craftingWant || craftingWant != 243 || len(renderer.layout.quads) > maxHotbarQuads {
-		t.Fatalf("打开合成分支 quads=%d，想要含准星的 243 且不超过固定上限 %d", len(renderer.layout.quads), maxHotbarQuads)
+	craftingWant := containerPanelQuads + 2 + core.InventorySlots + core.InventorySlots*2 +
+		core.HotbarSlots*2 + craftingContentQuads + recipeColumnQuads
+	if got := len(renderer.layout.quads); got != craftingWant || got != 197 || got > maxHotbarQuads {
+		t.Fatalf("打开合成分支 quads=%d，想要 %d（197）且不超过固定上限 %d", got, craftingWant, maxHotbarQuads)
 	}
 	// maxQuadTestInventory 的九格工具数量为 1 不出数字，只有 27 个背包格贡献
-	// 两位数量（各 4 实例）；配方栏十条入口中三条产物数量为 4（各 1 位双层）。
+	// 两位数量（各 4 实例）；配方栏十条入口中数量大于一的产物各出两位双层。
 	recipeDigitGlyphs := 0
 	for _, recipeID := range inventoryRecipeIDs {
 		if recipe, ok := core.Recipe(recipeID); ok && recipe.Output.Count > 1 {
 			recipeDigitGlyphs += 2
 		}
 	}
-	if len(renderer.layout.glyphs) != (core.InventorySlots-core.HotbarSlots)*4+craftingGlyphs+recipeDigitGlyphs+maxChatGlyphs {
-		t.Fatalf("打开合成分支 glyphs=%d，想要 %d", len(renderer.layout.glyphs),
-			(core.InventorySlots-core.HotbarSlots)*4+craftingGlyphs+recipeDigitGlyphs+maxChatGlyphs)
+	if got := len(renderer.layout.glyphs); got != (core.InventorySlots-core.HotbarSlots)*4+craftingGlyphs+recipeDigitGlyphs {
+		t.Fatalf("打开合成分支 glyphs=%d，想要 %d", got,
+			(core.InventorySlots-core.HotbarSlots)*4+craftingGlyphs+recipeDigitGlyphs)
 	}
 	viewport, quads, glyphs := renderer.FrameStreams()
 	if len(viewport) != hotbarViewportBytes || len(quads) != len(renderer.layout.quads)*hotbarInstanceBytes ||
@@ -264,28 +214,25 @@ func TestHotbarMaximumBranchesAndEncodingContract(t *testing.T) {
 			len(viewport), len(quads), len(glyphs), len(renderer.layout.quads), len(renderer.layout.glyphs), hotbarQuadSize)
 	}
 
-	if err := renderer.Prepare(fullTestInventory(), true, true, 5, nil, nil, fullChestOverlay(), MiningOverlay{}, EatingOverlay{},
-		HealthOverlay{Confirmed: true, Value: core.MaxHealth}, OxygenOverlay{Confirmed: true, Value: 0},
-		HungerOverlay{Confirmed: true, Value: core.MaxHunger}, chat, false,
-		PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 800, render.NewUploadBudget(1024)); err != nil {
+	// glyph 见证分支：满格两位数量 + 满箱两位数量 + 悬停 tooltip，不得超过
+	// 固定 768。
+	if err := renderer.Prepare(fullTestInventory(), true, true, 5, nil, nil, fullChestOverlay(), TooltipOverlay{},
+		1280, 800, render.NewUploadBudget(1024)); err != nil {
 		t.Fatalf("glyph 最大分支 Prepare: %v", err)
 	}
-	openGlyphWant := core.InventorySlots*4 + maxOverlayGlyphs + maxChatGlyphs
-	if len(renderer.layout.glyphs) != openGlyphWant || openGlyphWant > maxHotbarGlyphs ||
-		len(renderer.layout.quads) > maxHotbarQuads {
-		t.Fatalf("glyph 见证 glyphs/quads=%d/%d，分支公式=%d 固定上限=%d/%d", len(renderer.layout.glyphs),
-			len(renderer.layout.quads), openGlyphWant, maxHotbarGlyphs, maxHotbarQuads)
+	if got := len(renderer.layout.glyphs); got > maxHotbarGlyphs || len(renderer.layout.quads) > maxHotbarQuads {
+		t.Fatalf("glyph 见证 glyphs/quads=%d/%d，固定上限=%d/%d", got,
+			len(renderer.layout.quads), maxHotbarGlyphs, maxHotbarQuads)
 	}
 
-	if err := renderer.Prepare(core.Inventory{}, true, false, -1, nil, nil, nil, MiningOverlay{}, EatingOverlay{},
-		HealthOverlay{}, OxygenOverlay{}, HungerOverlay{}, ChatOverlay{}, false,
-		PopupOverlay{}, CrosshairOverlay{Visible: true}, TooltipOverlay{}, 1280, 800, render.NewUploadBudget(1024)); err != nil {
+	// 最小前缀：空镜像（未确认）零实例，quad 前缀必须严格小于固定 quad 区。
+	if err := renderer.Prepare(core.Inventory{}, false, true, -1, nil, nil, nil, TooltipOverlay{},
+		1280, 800, render.NewUploadBudget(1024)); err != nil {
 		t.Fatalf("最小前缀 Prepare: %v", err)
 	}
 	_, quads, glyphs = renderer.FrameStreams()
-	if len(quads) != len(renderer.layout.quads)*hotbarInstanceBytes || len(glyphs) != 0 || len(quads) >= hotbarQuadSize {
-		t.Fatalf("最小实际前缀 quads/glyphs=%d/%d，实例=%d 固定 quad 区=%d",
-			len(quads), len(glyphs), len(renderer.layout.quads), hotbarQuadSize)
+	if len(quads) != 0 || len(glyphs) != 0 || len(quads) >= hotbarQuadSize {
+		t.Fatalf("最小实际前缀 quads/glyphs=%d/%d，固定 quad 区=%d", len(quads), len(glyphs), hotbarQuadSize)
 	}
 }
 

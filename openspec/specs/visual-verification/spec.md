@@ -186,50 +186,49 @@
 
 ### Requirement: 视觉基线覆盖统一方块与 HUD 风格
 
-系统 SHALL 通过既有无窗口固定场景记录并比对当前产品默认方块材质与 HUD 呈现。地形场景 MUST 覆盖内嵌默认 layer 与没有内嵌映射时的程序化回退，HUD 场景 MUST 覆盖居中九格快捷栏、从同一生效 registry 采样的真实方块缩略图、数量阴影、工具耐久、双层选中边框、无背景的十段生命行、耗损氧气、常驻饥饿、具有颜色及形状差异的采掘进度与权威 combat hit marker，并 MUST 以独立场景覆盖打开的背包、工作台、箱子和熔炉；更新基线时 MUST 继续执行既有显式更新与双阈值规则。状态构图 MUST 与 Minecraft 官方生存 HUD 参考中“生命/饥饿分居快捷栏两侧、气泡堆叠在饥饿外侧”的可观察关系比较，官方参考 `https://www.minecraft.net/en-us/article/health-minecraft` 只可作为构图证据。心形、气泡、鸡腿与其他 HUD 像素 MUST 继续由本项目原创程序化绘制或既有授权来源生成，MUST NOT 从 Mojang 或官方参考导入、临摹或复制像素资产。
+系统 SHALL 通过既有无窗口固定场景记录并比对当前产品默认方块材质与世界呈现。地形场景 MUST 覆盖内嵌默认 layer 与没有内嵌映射时的程序化回退。常显 HUD（快捷栏贴条与选中框、状态行图标、氧气气泡、采掘/进食轨道、物品名弹条、准星、聊天呈现与权威命中 marker）的 GPU 呈现已退役，无头抓帧路径 MUST NOT 产生这部分像素；它们的呈现验收 SHALL 由 `game-overlay-webview` capability 的前端组件断言与 `frontend/visual` 部件基线承接（本机 Chrome 截图、既有双阈值），MUST NOT 再由 capture golden 承接。GPU 保留面（容器浮动面板、容器悬停 tooltip 与 HUD atlas）MUST 由 `inventory-crafting`、`workbench-crafting`、`chest-container` 与 `furnace-container` 四景继续做像素验收。世界类场景 golden 中常显 HUD 条带与准星的消失属合法波及，随本 change 经既有显式更新路径重新生成并逐图复核。更新基线时 MUST 继续执行既有显式更新、无窗口完整渲染链路和双阈值规则；不得创建或聚焦前台游戏窗口，不得导入、临摹或复制 Mojang 像素。
 
 `materials-showcase` MUST 保持既有固定正午、固定相机和确定性夹具，并经与交互客户端相同的完整呈现链路收敛后无窗口抓取，不得创建或聚焦前台游戏窗口。夹具 MUST 同时覆盖 14 种新材料、八格连续草地、相邻玻璃、相邻树叶、原木顶面年轮与侧面树皮，以及干耕地与湿耕地各至少一个可见列（含下沉顶面的完整几何）。既有双阈值 MUST 保持不变。
 
-抓帧场景清单 MUST 按以下完整顺序运行（25 景）：`terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`hud-item-name-popup`、`avatar-nametag`、`inventory-crafting`、`workbench-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`torch-night`、`bed-night`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`sword-combat`、`hostile-mob`、`water-surface-slope`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`。清单 MUST 保留 `target-block-feedback`、`oak-grove` 与 `ai-companion` 的既有名称及相对顺序，`ai-companion` MUST 继续紧随 `oak-grove`，并 MUST 保持 `sword-combat`、`hostile-mob`、`water-surface-slope` 的相邻顺序，`settings-menu` MUST 紧随 `main-menu`，`far-horizon` MUST 为倒数第二，`water-underwater` MUST 为唯一末场景。所有场景 MUST 使用与交互客户端相同的完整呈现链路收敛后无窗口抓取，且不得创建或聚焦前台游戏窗口。
+抓帧场景清单 MUST 按以下完整顺序运行（24 景）：`terrain-noon`、`avatar-nametag`、`inventory-crafting`、`workbench-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`torch-night`、`bed-night`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`sword-combat`、`hostile-mob`、`water-surface-slope`、`mining-crack-early`、`mining-crack-heavy`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`。`hud-hotbar-health`、`hud-survival-feedback` 与 `hud-item-name-popup` 三景随常显层 GPU 呈现退役从清单移除，清单 MUST NOT 再包含任何只承载常显 HUD 像素的场景。清单 MUST 保留 `target-block-feedback`、`oak-grove` 与 `ai-companion` 的既有名称及相对顺序，`ai-companion` MUST 继续紧随 `oak-grove`，并 MUST 保持 `sword-combat`、`hostile-mob`、`water-surface-slope` 的相邻顺序，`mining-crack-early` 与 `mining-crack-heavy` MUST 依次紧随 `water-surface-slope` 且先于 `main-menu`，`settings-menu` MUST 紧随 `main-menu`，`far-horizon` MUST 为倒数第二，`water-underwater` MUST 为唯一末场景。所有场景 MUST 使用与交互客户端相同的完整呈现链路收敛后无窗口抓取，且不得创建或聚焦前台游戏窗口。
 
 #### Scenario: 地形与 HUD 风格变化产生可审查基线
 
 - **GIVEN** 既有固定场景与渲染链路可用
 - **WHEN** 显式更新本变更影响的视觉基线
 - **THEN** `terrain-noon` MUST 包含当前内嵌默认材质及没有内嵌映射 layer 的程序化回退
-- **AND** `hud-hotbar-health` MUST 包含正常九格快捷栏、从同一生效 registry 采样的真实方块缩略图、紧凑两位间距的数量数字、工具耐久、双层选中边框、无背景的十个满心与满饥饿；生命起点 MUST 精确对齐快捷栏左边缘，饥饿终点 MUST 精确对齐快捷栏右边缘，满氧 MUST 完全隐藏且不得留下空的水平中栏
-- **AND** `hud-survival-feedback` MUST 在同一固定帧同时包含生命 `5`、氧气 `core.MaxOxygenTicks / 3`、饥饿 `9`、磨损工具和不可采目标 `4/9` 的中段采掘进度；氧气 MUST 沿饥饿右边缘堆叠在饥饿上方，采掘反馈 MUST 位于完整两行状态栈上方，并显示不可采状态的颜色与形状标记
-- **AND** `inventory-crafting` MUST 包含打开的 3×9 背包区、1×9 快捷栏区和十行固定合成区域；生命/饥饿主状态行 MUST 位于快捷栏下方并对齐快捷栏左右边缘，氧气 MUST 沿饥饿右边缘继续向下堆叠，且两行不得覆盖或相交 36 个可交互格与十行配方
-- **AND** 四张图 MUST 由无窗口完整渲染链路产出并继续使用既有双阈值
-- **AND** 三个 HUD 场景 MUST 与官方生存 HUD 参考只比较上述构图关系，并继续使用本项目原创图标，MUST NOT 导入 Mojang 像素
+- **AND** `terrain-noon` 的画面 MUST NOT 出现快捷栏、状态行、氧气、采掘/进食轨道、弹条、准星、聊天或命中 marker 像素
+- **AND** 该图 MUST 由无窗口完整渲染链路产出并继续使用既有双阈值
 
-#### Scenario: 完整场景顺序加入生存反馈
+#### Scenario: 常显 HUD 像素退出无头抓帧
+
+- **GIVEN** 常显 HUD 的 GPU 呈现已退役且容器界面关闭
+- **WHEN** 抓取任一非菜单相位的固定场景
+- **THEN** 画面 MUST NOT 出现任何常显 HUD 像素，与 `survival-hud-presentation`「容器保留面 GPU 资源契约重钉」的关闭态 0 quad/0 glyph 一致
+- **AND** 快捷栏、状态行、氧气、采掘/进食轨道、弹条、准星、聊天与 marker 的呈现验收 MUST 由 `game-overlay-webview` 的前端组件断言与 `frontend/visual` 部件基线承接
+
+#### Scenario: 完整场景顺序收缩为 24 项
 
 - **GIVEN** 完整无窗口 capture 场景清单
 - **WHEN** 检查全部场景名称与顺序
-- **THEN** 清单 MUST 依次为 `terrain-noon`、`hud-hotbar-health`、`hud-survival-feedback`、`avatar-nametag`、`inventory-crafting`、`chest-container`、`furnace-container`、`debug-panel`、`skylight-tunnel`、`block-light-room`、`materials-showcase`、`target-block-feedback`、`oak-grove`、`ai-companion`、`water-surface-slope`、`main-menu`、`settings-menu`、`far-horizon`、`water-underwater`
+- **THEN** 清单 MUST 恰好包含本 requirement 列出的 24 项，且顺序与之逐项一致
+- **AND** 清单 MUST NOT 包含 `hud-hotbar-health`、`hud-survival-feedback` 或 `hud-item-name-popup`
 - **AND** `far-horizon` MUST 是倒数第二个场景，`water-underwater` MUST 是唯一末场景
 
-#### Scenario: 生存反馈场景固定且不污染后续场景
+#### Scenario: 打开背包场景验证容器 GPU 保留面
 
-- **GIVEN** `hud-survival-feedback` 已装入固定正午、固定相机、生命 `5`、氧气 `core.MaxOxygenTicks / 3`、饥饿 `9`、磨损工具和不可采 `4/9` 采掘夹具
-- **WHEN** 场景经与交互客户端相同的完整呈现链路收敛并无窗口抓取
-- **THEN** 输出 MUST 在同一帧显示全部指定生存反馈并继续使用既有双阈值
-- **AND** 场景结束后临时 predictor、生命、氧气、饥饿和采掘状态 MUST 一并恢复，使后续场景不继承任何夹具值
-
-#### Scenario: 打开背包场景复用同一向外状态栈
-
-- **GIVEN** `inventory-crafting` 已打开背包并装入生命 `5`、氧气 `core.MaxOxygenTicks / 3` 与饥饿 `9`
-- **WHEN** 场景经完整无窗口渲染链路抓取
-- **THEN** health / hunger 主状态行 MUST 位于快捷栏下方并分别对齐其左右边缘，depleted oxygen MUST 沿 hunger 右边缘堆叠在其下方，且两行完全可见
-- **AND** 两行状态 MUST 与全部 36 个可交互格和十行配方保持清晰分离
+- **GIVEN** `inventory-crafting` 装入固定背包、个人 2×2 网格中一条已匹配的真实原料形状、非空产物格和一个已选来源格
+- **WHEN** 场景经完整链路收敛并无窗口抓取
+- **THEN** 画面 MUST 同时呈现原创像素框、36 个凹槽、2×2 网格、产物格与背包/合成标题，全部属于容器面板保留面
+- **AND** 画面 MUST NOT 出现生命/饥饿状态行、氧气气泡或快捷栏贴条，容器面板与 tooltip 保留面 MUST NOT 因常显层退役而缺失
+- **AND** 打开态保留面最坏组合 MUST 继续由 `survival-hud-presentation` 的 218 quad/268 glyph 契约钉住
 
 #### Scenario: 远端玩家场景只继承地形背景变化
 
 - **GIVEN** 远端玩家与名牌的渲染逻辑没有变化，但场景共享的当前产品默认地形背景发生变化
 - **WHEN** 更新本变更影响的视觉基线
 - **THEN** `avatar-nametag` MUST 继承当前地形背景
-- **AND** 远端玩家轮廓、颜色与名牌文字 MUST 保持既有可观察语义
+- **AND** 远端玩家轮廓、颜色与名牌文字 MUST 保持既有可观察语义（名牌属世界呈现，不随常显层退役消失）
 
 #### Scenario: 材料展示保持既有验收夹具
 
@@ -245,12 +244,12 @@
 - **THEN** 抓帧 MUST 使用与交互客户端相同的完整呈现链路
 - **AND** MUST NOT 创建或聚焦前台游戏窗口，且 MUST 继续使用现有双阈值
 
-#### Scenario: 合并后的全部正式基线需重新生成并完整复核
+#### Scenario: 全部正式基线需重新生成并完整复核
 
-- **GIVEN** 当前分支的 Pixel Perfection HUD 与 main 的 authoritative hunger 已语义合并
+- **GIVEN** 常显 HUD 的 GPU 呈现退役与 WebView HUD 组件承接已经落地
 - **WHEN** 显式更新视觉基线
-- **THEN** 系统 MUST 按既有完整顺序重新生成全部 25 张正式 golden
-- **AND** 调用方 MUST 逐张人工复核全部 25 张图像后才能接受更新，且既有双阈值 MUST 保持不变
+- **THEN** 系统 MUST 按既有完整顺序重新生成全部 24 张正式 golden
+- **AND** 调用方 MUST 逐张人工复核全部 24 张图像后才能接受更新，且既有双阈值 MUST 保持不变
 
 #### Scenario: 伙伴场景与当前末尾顺序并存
 
@@ -270,7 +269,8 @@
 
 - **GIVEN** `ai-companion` 已重置前一场景的 remote、companion、chat、inventory、panel、container、mining、damage 和 item-drop 状态，并装入固定伙伴和聊天夹具
 - **WHEN** 场景完成预热和上传并抓帧
-- **THEN** 图像 MUST 由统一的人形、名牌与聊天 HUD 呈现链路产出，且 MUST 同时显示伙伴人形、中文名牌“阿木”、accepted 事件与打开的 `@阿木 挖石头` 输入
+- **THEN** 图像 MUST 由统一的人形与名牌呈现链路产出，且 MUST 同时显示伙伴人形与中文名牌“阿木”
+- **AND** accepted 事件与 `@阿木 挖石头` 输入属聊天呈现，已迁 WebView HUD 组件，画面 MUST NOT 出现聊天行或聊天输入框像素；其验收由前端组件断言承接
 - **AND** 抓帧 MUST NOT 创建或聚焦前台游戏窗口，且 MUST 继续使用既有双阈值
 
 #### Scenario: 目标反馈通过正常渲染链路验证遮挡
@@ -285,30 +285,65 @@
 - **GIVEN** `inventory-crafting` 场景打开背包
 - **WHEN** 显式更新所有视觉基线
 - **THEN** `inventory-crafting` MUST 不显示目标轮廓或名称
-- **AND** 背包与合成区域的可观察语义 MUST 保持不变
-- **AND** 只有经逐图复核确认由当前产品默认材质或共享地形背景变化引起时，它的 golden MAY 更新
+- **AND** 背包与合成区域的容器保留面语义 MUST 保持不变
+- **AND** 只有经逐图复核确认由常显层退役、当前产品默认材质或共享地形背景变化引起时，它的 golden MAY 更新
 
-#### Scenario: 合并基线更新不改变阈值或场景尾序
+#### Scenario: 基线更新不改变阈值或场景尾序
 
-- **GIVEN** 调用方在合并后的 Pixel Perfection + hunger 基线上更新全部正式 golden
+- **GIVEN** 调用方在常显层退役后的基线上更新全部正式 golden
 - **WHEN** 检查生成结果和比较配置
 - **THEN** `water-surface-slope`、`main-menu`、`settings-menu`、倒数第二的 `far-horizon` 与唯一末场景 `water-underwater` 的尾序 MUST 保持不变
 - **AND** 既有双阈值 MUST 保持不变，任何差异 MUST 经逐图人工复核而不得通过放宽阈值接受
 
+#### Scenario: 完整场景顺序加入生存反馈
+
+- **GIVEN** 常显 HUD 像素已迁 WebView 组件（本 change 退役 `hud-survival-feedback` 景）
+- **WHEN** 检查 capture 场景清单
+- **THEN** 生存反馈的呈现验收 MUST 由 `game-overlay-webview` 的前端组件断言与 `frontend/visual` 部件基线承接
+- **AND** 场景顺序约束由「完整场景顺序收缩为 24 项」承载
+
+#### Scenario: 生存反馈场景固定且不污染后续场景
+
+- **GIVEN** 退役场景的状态恢复纪律（临时 predictor、生命、氧气、饥饿和采掘状态在场景结束一并恢复）
+- **WHEN** 保留场景依次运行
+- **THEN** 该纪律 MUST 由保留场景与呈现状态机继续遵守，后续场景 MUST NOT 继承任何夹具值
+
+#### Scenario: 打开背包场景复用同一向外状态栈
+
+- **GIVEN** `inventory-crafting` 保留景验证容器 GPU 保留面
+- **WHEN** 场景呈现打开的背包与状态栈构图
+- **THEN** 状态栈（生命/饥饿/氧气）呈现已迁 WebView，GPU 画面 MUST 只包含容器保留面
+- **AND** 保留面与 WebView 状态栈互不相交的构图由前端组件断言承接
+
+#### Scenario: 合并后的全部正式基线需重新生成并完整复核
+
+- **GIVEN** 常显层退役与容器保留面钉值已落地
+- **WHEN** 显式更新视觉基线
+- **THEN** 系统 MUST 按既有完整顺序重新生成全部 24 张正式 golden
+- **AND** 调用方 MUST 逐张人工复核全部 24 张图像后才能接受更新，且既有双阈值 MUST 保持不变
+
+#### Scenario: 合并基线更新不改变阈值或场景尾序
+
+- **GIVEN** 常显层退役后的基线重生成
+- **WHEN** 检查比较配置与场景尾序
+- **THEN** 既有双阈值 MUST 保持不变，任何差异 MUST 经逐图人工复核而不得通过放宽阈值接受
+- **AND** `far-horizon` MUST 保持倒数第二，`water-underwater` MUST 保持唯一末场景
+
 ### Requirement: 视觉基线覆盖三类容器像素界面
 
-系统 SHALL 具有恰好 25 个正式无窗口场景，`workbench-crafting` MUST 紧随 `inventory-crafting`，`chest-container` 与 `furnace-container` MUST 依次紧随 `workbench-crafting`，`torch-night` MUST 紧随 `block-light-room` 且先于 `bed-night`，`sword-combat` MUST 紧随 `ai-companion` 且先于 `hostile-mob`。完整顺序 MUST 与当前 `captureScenes` 表一致，`far-horizon` MUST 为倒数第二且 `water-underwater` MUST 为唯一末场景。既有显式更新、无窗口完整渲染链路和双阈值 MUST 保持不变；两张 far-horizon diagnostic controls MUST 继续不计入正式场景或 golden。golden 基线 SHALL 为 25 张，本变更只新增 `sword-combat.png`；本变更 MUST NOT 借机放宽任何阈值。
+系统 SHALL 具有恰好 24 个正式无窗口场景，`workbench-crafting` MUST 紧随 `inventory-crafting`，`chest-container` 与 `furnace-container` MUST 依次紧随 `workbench-crafting`，`torch-night` MUST 紧随 `block-light-room` 且先于 `bed-night`，`sword-combat` MUST 紧随 `ai-companion` 且先于 `hostile-mob`。完整顺序 MUST 与当前 `captureScenes` 表一致，`far-horizon` MUST 为倒数第二且 `water-underwater` MUST 为唯一末场景。既有显式更新、无窗口完整渲染链路和双阈值 MUST 保持不变；两张 far-horizon diagnostic controls MUST 继续不计入正式场景或 golden。golden 基线 SHALL 恰好为 24 张；四类容器场景验证的是容器面板与 tooltip 的 GPU 保留面，打开态保留面最坏组合 MUST 继续满足 `survival-hud-presentation` 的 218 quad/268 glyph 契约，关闭态 MUST 保持 0 quad/0 glyph。本变更 MUST NOT 借机放宽任何阈值。
 
 #### Scenario: 完整场景顺序固定为 19 项
 
-> 标题沿用历史名（openspec 1.7 的 MODIFIED 漂移守卫不支持 Scenario 改名）；当前正式清单为 25 项，语义以下述断言为准。
+> 标题沿用历史名（openspec 1.7 的 MODIFIED 漂移守卫不支持 Scenario 改名）；当前正式清单为 24 项，语义以下述断言为准。
 
 - **GIVEN** 完整正式 capture 场景清单
 - **WHEN** 检查场景数量、名称与顺序
-- **THEN** 清单 MUST 恰好包含上述 25 项
+- **THEN** 清单 MUST 恰好包含上述 24 项
 - **AND** `workbench-crafting` MUST 紧随 `inventory-crafting` 且在 `chest-container` 之前
 - **AND** `torch-night` MUST 紧随 `block-light-room` 且在 `bed-night` 之前
 - **AND** `sword-combat` MUST 紧随 `ai-companion` 且在 `hostile-mob` 之前
+- **AND** `mining-crack-early` 与 `mining-crack-heavy` MUST 依次紧随 `water-surface-slope` 且在 `main-menu` 之前
 - **AND** `far-horizon` MUST 保持倒数第二，`water-underwater` MUST 保持唯一末项
 
 #### Scenario: 背包与合成场景覆盖普通容器皮肤
@@ -316,7 +351,7 @@
 - **GIVEN** `inventory-crafting` 装入固定背包、个人 2×2 网格中一条已匹配的真实原料形状、非空产物格和一个已选来源格
 - **WHEN** 场景经完整链路收敛并无窗口抓取
 - **THEN** 场景构造 MUST 同时呈现原创像素框、36 个凹槽、2×2 网格、产物格、背包/合成标题与来源轮廓
-- **AND** 既有 health/hunger/oxygen 外向状态栈、命中区域与目标提示隐藏语义 MUST 保持不变
+- **AND** 画面 MUST NOT 出现常显 HUD 的状态行或快捷栏贴条，命中区域与目标提示隐藏语义 MUST 保持不变
 
 #### Scenario: 工作台场景覆盖 3×3 网格与镜像不对称配方
 
@@ -341,10 +376,10 @@
 
 #### Scenario: 全部正式 golden 重新生成并逐图复核
 
-- **GIVEN** 容器 atlas、火把纹理层与全部 overlay 的最终实现已经通过聚焦测试
+- **GIVEN** 容器保留面、火把纹理层与全部 overlay 的最终实现已经通过聚焦测试
 - **WHEN** 显式更新视觉基线
-- **THEN** 系统 MUST 重新生成全部 25 张正式 golden，并只提交实际场景文件
-- **AND** 调用方 MUST 逐张人工复核 25 张图像后才能接受，且 MUST NOT 通过放宽双阈值接受差异
+- **THEN** 系统 MUST 重新生成全部 24 张正式 golden，并只提交实际场景文件
+- **AND** 调用方 MUST 逐张人工复核 24 张图像后才能接受，且 MUST NOT 通过放宽双阈值接受差异
 - **AND** 抓帧 MUST NOT 创建或聚焦前台游戏窗口，MUST NOT 导入、临摹或复制 Mojang 像素
 
 #### Scenario: torch-night 纳入 golden 比对
@@ -352,35 +387,40 @@
 - **GIVEN** 非更新模式运行 capture
 - **WHEN** 执行到 `torch-night`
 - **THEN** 该场景 MUST 与对应 golden 按既有双阈值比对，差异图规则与其它场景一致
-- **AND** golden 目录 MUST 存在 `torch-night.png`，正式 golden 总数 MUST 为 25 张
+- **AND** golden 目录 MUST 存在 `torch-night.png`，正式 golden 总数 MUST 恰好为 24 张
 
 #### Scenario: 未受影响场景 golden 逐字节不变
 
-- **GIVEN** 本变更的显式基线更新只新增 `sword-combat.png`（集成期既有 golden 以 main 的 F-05 再生版本为基线）
+- **GIVEN** 常显层退役的显式基线更新只波及携带常显 HUD 像素或共享世界背景的场景
 - **WHEN** 运行 capture 并与本变更合入前的 golden 比对
-- **THEN** 除新增 `sword-combat.png` 外，本变更 MUST NOT 改动任何既有 golden 的内容
-- **AND** 集成后全部 25 张 golden 在 compare 模式下 MUST 全部通过既有双阈值
+- **THEN** `main-menu.png` 与 `settings-menu.png` 的 PNG 字节 MUST 逐字节不变
+- **AND** 退役的 `hud-hotbar-health.png`、`hud-survival-feedback.png` 与 `hud-item-name-popup.png` MUST 从 golden 目录移除，golden 目录 MUST 恰好有 24 张 PNG
+- **AND** 集成后全部 24 张 golden 在 compare 模式下 MUST 全部通过既有双阈值
 
 ### Requirement: 视觉基线覆盖调试面板
 
-系统 SHALL 以独立的无窗口固定场景记录并比对调试面板的呈现。该场景 MUST 覆盖面板的只读读数区、参数分组段头、可编辑行与只读行的对比，以及当前选中行的高亮。
-
-调试面板是全项目唯一大量绘制拉丁文本的界面，其视觉布局此前没有任何自动化覆盖。
+调试面板的呈现（读数区、参数分组段头、可编辑行与只读行对比、选中行高亮）SHALL 由 WebView 组件承担，其结构、可编辑语义与像素验收由 `game-overlay-webview` 的前端组件断言与 `frontend/visual` 部件基线承接。无头抓帧路径的程序化面板渲染路径 MUST NOT 保留：`debug-panel` 场景 MUST 继续存在并装入面板可见态，用于钉住「面板可见不产生任何无头面板像素」这一边界，其 golden SHALL 为同一相位与相机下的纯世界底图。既有双阈值 MUST 保持不变。
 
 #### Scenario: 面板场景产出可审查基线
 
 - **WHEN** 显式更新视觉基线
-- **THEN** 面板场景 MUST 包含只读读数区与至少一个参数分组
-- **AND** 可编辑行与只读行 MUST 以可区分的颜色呈现
-- **AND** 当前选中行 MUST 带有高亮
+- **THEN** `debug-panel` 的 golden MUST 为固定正午、固定相机的纯世界底图
+- **AND** 画面 MUST NOT 出现读数区、参数分组、可编辑行高亮或任何面板 chrome 像素
 - **AND** 该图 MUST 由无窗口完整渲染链路产出
 
 #### Scenario: 面板默认隐藏不影响其余场景
 
-- **GIVEN** 抓帧路径为该场景构造了面板渲染器
+- **GIVEN** 抓帧路径为该场景装入面板可见态
 - **WHEN** 抓取其余不涉及面板的场景
 - **THEN** 那些场景的画面 MUST NOT 出现面板
-- **AND** 它们的基线 MUST NOT 因面板渲染器的存在而改变
+- **AND** 它们的基线 MUST NOT 因面板状态机的存在而改变
+
+#### Scenario: 面板可见不产生无头像素
+
+- **GIVEN** `debug-panel` 场景已装入面板可见态
+- **WHEN** 该场景与同一相机、同一世界时间的非面板世界帧比较
+- **THEN** 两者 MUST 不存在面板像素差异
+- **AND** 面板读数与参数行的呈现验收 MUST 由前端组件断言承接
 
 ### Requirement: 天空光通道场景只在收敛后无窗口抓取
 
@@ -436,16 +476,17 @@
 - **THEN** 两张 PNG MUST 分别与对应 golden 逐像素比对
 - **AND** MUST 继续使用既有阈值与差异图产出规则
 - **AND** 比对对象 MUST 为纯 wgpu 全景底图，无头路径 MUST NOT 初始化 WebView、产生任何菜单 chrome 像素或网络请求
+
 ### Requirement: 未受影响场景 golden 逐字节不变
 
-本变更 MAY 只更新因「设置」启用而改变的 `main-menu.png` 并新增 `settings-menu.png`；所有不携带设置 UI 的既有正式场景 golden SHALL 保持逐字节不变。
+菜单相位场景 `main-menu` 与紧随其后的 `settings-menu` 的 golden SHALL 为纯 wgpu 全景底图，不携带常显 HUD 像素与菜单 chrome（WebView 层由前端组件断言覆盖）。凡不影响全景渲染路径的呈现层变更（含常显 HUD 的 GPU 呈现退役）MUST NOT 改变这两张 golden 的字节；其余场景的 golden MUST 只经既有显式更新路径变化，且每一处差异 MUST 可归因到已声明的呈现层或共享世界背景变化，不得以放宽双阈值吸收。
 
 #### Scenario: 非设置场景不受变更影响
 
-- **GIVEN** 全部既有正式场景（不含 `main-menu`）
-- **WHEN** 运行 capture 并与变更前 golden 比对
-- **THEN** 每个场景的 PNG 字节 MUST 保持不变
-- **AND** 除更新 `main-menu.png` 与新增 `settings-menu.png` 外 MUST NOT 产生其他 golden 变更
+- **GIVEN** 全部菜单相位场景（`main-menu` 与 `settings-menu`）
+- **WHEN** 常显 HUD 的 GPU 呈现退役后显式更新整套 golden
+- **THEN** 两张菜单 golden 的 PNG 字节 MUST 保持逐字节不变
+- **AND** 其余场景的 golden 变化 MUST 归因于常显 HUD 条带消失或共享世界背景变化，MUST NOT 产生无归因的字节漂移
 
 ### Requirement: 火把获得原创程序化纹理层
 
@@ -506,19 +547,21 @@
 
 ### Requirement: sword-combat 无窗口场景固定呈现权威命中反馈
 
-无窗口 capture SHALL 提供 `sword-combat` 场景，位于 `ai-companion` 之后、`hostile-mob` 之前。场景 MUST 使用固定相机与世界时间，选中 `Durability=125` 的铁剑，通过合法 UUIDv4 远端玩家 spawn/state 镜像呈现一次权威确认后的受击者，并显示 0.35 水平击退后的姿态或位置关系及处于 6 帧窗口内的 4-quad hit marker。场景收敛后、最终帧前，`PinVolatile` MUST 重新武装 marker；场景切换的共享 reset MUST 清除 combat feedback，避免污染后续 `hostile-mob`。场景 MUST 生成并比对 `sword-combat.png`，使用既有双阈值且不得创建或聚焦前台游戏窗口。
+无窗口 capture SHALL 保留 `sword-combat` 场景，位于 `ai-companion` 之后、`hostile-mob` 之前。场景 MUST 使用固定相机与世界时间，选中 `Durability=125` 的铁剑，通过合法 UUIDv4 远端玩家 spawn/state 镜像呈现一次权威确认后的受击者，并显示 0.35 水平击退后的姿态或位置关系。权威命中 marker 的像素呈现已迁 WebView HUD 组件：画面 MUST NOT 出现 marker 像素，但场景 MUST 继续在收敛后、最终帧前经 `PinVolatile` 重新武装 marker 计时状态机，钉住「6 个成功呈现帧窗口」的权威语义；场景切换的共享 reset MUST 清除 combat feedback，避免污染后续 `hostile-mob`。场景 MUST 生成并比对 `sword-combat.png`，使用既有双阈值且不得创建或聚焦前台游戏窗口。
 
 #### Scenario: 场景状态包含非满耐久铁剑、目标和 marker
 
 - **GIVEN** `sword-combat` 固定夹具已装入
 - **WHEN** 场景完成预热与上传并准备最终帧
-- **THEN** MUST 显示选中的 `Durability=125` 铁剑、合法远端玩家、权威 hit marker 和可观察的 0.35 水平击退关系
+- **THEN** MUST 显示选中的 `Durability=125` 铁剑、合法远端玩家与可观察的 0.35 水平击退关系
+- **AND** 画面 MUST NOT 出现 marker、快捷栏或状态行像素；marker 的呈现验收由 WebView HUD 组件断言承接
 
 #### Scenario: PinVolatile 在最终帧前重新武装 marker
 
 - **GIVEN** 场景收敛帧可能已经消耗初次 marker 窗口
 - **WHEN** capture 准备最终抓帧
-- **THEN** `PinVolatile` MUST 把 marker 重置为 6 个成功呈现帧，最终 PNG MUST 包含 marker
+- **THEN** `PinVolatile` MUST 把 marker 重置为 6 个成功呈现帧，权威侧 `CombatMarkerVisible` MUST 为真
+- **AND** 该计时语义 MUST 不因 marker 像素已迁 WebView 而改变
 
 #### Scenario: 场景切换清除 combat feedback
 
@@ -528,9 +571,12 @@
 
 #### Scenario: golden 只新增 sword-combat
 
-- **GIVEN** 24 张既有正式 golden 已作为当前基线
-- **WHEN** 显式生成并逐图审核本变更的 25 项清单
-- **THEN** tracked golden MUST 只新增 `sword-combat.png`；任何既有 PNG 变化 MUST 逐图归因并明确批准，否则不得接受
+> 标题沿用历史名（openspec 1.7 的 MODIFIED 漂移守卫不支持 Scenario 改名）；本变更不新增任何场景，语义以下述断言为准。
+
+- **GIVEN** 24 张正式 golden 是当前清单的全部基线
+- **WHEN** 显式生成并逐图审核本清单
+- **THEN** tracked golden MUST 恰好覆盖 22 个场景名，MUST NOT 包含已退役场景的 PNG
+- **AND** 任何 PNG 变化 MUST 逐图归因并明确批准，否则不得接受
 
 ### Requirement: `bed-night` 无窗口夜景场景
 
@@ -550,20 +596,3 @@
 - **THEN** 比对 MUST 通过，且床的配色与半高轮廓 MUST 可从图像辨认
 - **AND** 场景结束后临时床与时间夹具 MUST 一并恢复，使后续场景不继承任何夹具值
 
-### Requirement: 选中弹条无窗口场景
-
-无窗口 capture 场景表 SHALL 保留 `hud-item-name-popup` 场景，位于 `hud-survival-feedback` 之后、`avatar-nametag` 之前；`far-horizon` MUST 仍为倒数第二、`water-underwater` MUST 仍为唯一末场景。场景 MUST 装入确定性夹具：已确认镜像中选中栏位指向含已知中文名物品的格、确认变化所属 tick 与固定世界时间使弹条处于 40 tick 可见窗口内，且准星常显；场景 MUST 经与交互客户端相同的完整呈现链路无窗口抓取，MUST NOT 创建或聚焦前台游戏窗口，并 MUST 继续使用既有双阈值比对。当前正式清单为 25 项并包含 `hud-item-name-popup` 与 `sword-combat`；本变更同时 MUST 以显式基线更新重新生成受 HUD、容器面板与菜单换肤波及的全部既有 golden 并逐图人工复核，MUST NOT 通过放宽双阈值接受差异。
-
-#### Scenario: 场景表顺序与导出
-
-- **GIVEN** 完整 capture 场景表
-- **WHEN** 检查 `hud-survival-feedback` 之后的场景
-- **THEN** `hud-item-name-popup` MUST 位于 `hud-survival-feedback` 之后、`avatar-nametag` 之前，`far-horizon` MUST 为倒数第二，`water-underwater` MUST 为唯一末场景
-- **AND** 抓帧运行 MUST 产出 `hud-item-name-popup` 图像
-
-#### Scenario: 弹条与准星可审查且不污染后续场景
-
-- **GIVEN** `hud-item-name-popup` 夹具已装入客户端镜像
-- **WHEN** 场景完成预热、网格收敛与上传并抓帧
-- **THEN** 图像 MUST 同时显示居中的物品名弹条（阴影加前景双层）与屏幕中心准星，并 MUST 与既有双阈值保持一致
-- **AND** 场景结束后临时选中、tick 与世界时间夹具 MUST 一并恢复，使后续场景不继承任何夹具值

@@ -8,9 +8,7 @@ package app
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
-	"math"
 	"testing"
 	"time"
 
@@ -157,10 +155,4 @@ func audioPlayerState(tick uint64, health, hunger uint8, reset bool) network.Pla
 		ServerTick: tick, Dimension: core.Overworld, Position: mgl32.Vec3{0.5, 10, 0.5},
 		OnGround: true, Ready: true, Reset: reset, Health: health, Hunger: hunger,
 	}
-}
-
-// readFloat32 按小端序读取渲染 quad 字节流中的 float32，供 HUD/进食 overlay
-// 像素级断言解析 GPU 上传布局。
-func readFloat32(data []byte, offset int) float32 {
-	return math.Float32frombits(binary.LittleEndian.Uint32(data[offset:]))
 }

@@ -58,9 +58,9 @@ func TestApplicationItemPopupRecordsConfirmedSelectionChange(t *testing.T) {
 		t.Fatalf("ShownAtTick=%d，想要当前权威 tick 5", app.itemPopup.ShownAtTick)
 	}
 
-	// 前景层字形确实进入 HUD glyph 流。
-	if _, _, glyphs := app.hotbarRenderer.FrameStreams(); len(glyphs) == 0 {
-		t.Fatal("弹条没有产生任何 HUD 字形")
+	// 弹条文本经 hud 分节下行（呈现由 WebView 组件承担）。
+	if state := app.assembleHUDState(); state.Popup == nil || state.Popup.Text != "石头" {
+		t.Fatalf("hud 分节弹条=%+v，想要「石头」", state.Popup)
 	}
 }
 
@@ -221,27 +221,30 @@ func TestApplicationItemPopupExpiresAfter40Ticks(t *testing.T) {
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("触发帧 RenderFrame=(%v,%v)", rendered, err)
 	}
-	glyphCount := func() int {
-		_, _, glyphs := app.hotbarRenderer.FrameStreams()
-		return len(glyphs) / 48
+	popupText := func() string {
+		t.Helper()
+		if popup := app.assembleHUDState().Popup; popup != nil {
+			return popup.Text
+		}
+		return ""
 	}
-	if glyphCount() == 0 {
-		t.Fatal("窗口内弹条没有字形")
+	if popupText() != "石头" {
+		t.Fatalf("窗口内弹条=%q，想要「石头」", popupText())
 	}
 
 	app.SetServerTick(100 + 39)
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("窗口末帧 RenderFrame=(%v,%v)", rendered, err)
 	}
-	if glyphCount() == 0 {
-		t.Fatal("窗口内最后一 tick 字形消失")
+	if popupText() != "石头" {
+		t.Fatalf("窗口内最后一 tick 弹条=%q，想要「石头」", popupText())
 	}
 	app.SetServerTick(100 + 40)
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("过期帧 RenderFrame=(%v,%v)", rendered, err)
 	}
-	if got := glyphCount(); got != 0 {
-		t.Fatalf("40 tick 过期后 glyphs=%d，想要 0", got)
+	if got := popupText(); got != "" {
+		t.Fatalf("40 tick 过期后弹条=%q，想要空", got)
 	}
 }
 
@@ -274,28 +277,31 @@ func TestApplicationItemPopupPresentationSuppressedByPause(t *testing.T) {
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("触发帧 RenderFrame=(%v,%v)", rendered, err)
 	}
-	glyphCount := func() int {
-		_, _, glyphs := app.hotbarRenderer.FrameStreams()
-		return len(glyphs) / 48
+	popupText := func() string {
+		t.Helper()
+		if popup := app.assembleHUDState().Popup; popup != nil {
+			return popup.Text
+		}
+		return ""
 	}
-	if glyphCount() == 0 {
-		t.Fatal("夹具没有产生弹条字形")
+	if popupText() != "石头" {
+		t.Fatalf("夹具弹条=%q，想要「石头」", popupText())
 	}
 
 	app.SetMenuPhase(menuPhasePaused)
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("暂停帧 RenderFrame=(%v,%v)", rendered, err)
 	}
-	if got := glyphCount(); got != 0 {
-		t.Fatalf("菜单相位弹条字形=%d，想要 0（呈现抑制）", got)
+	if got := popupText(); got != "" {
+		t.Fatalf("菜单相位弹条=%q，想要空（呈现抑制）", got)
 	}
 
 	app.SetMenuPhase(MenuPhaseGame)
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("恢复帧 RenderFrame=(%v,%v)", rendered, err)
 	}
-	if got := glyphCount(); got == 0 {
-		t.Fatal("恢复后窗口内弹条没有恢复字形")
+	if got := popupText(); got != "石头" {
+		t.Fatalf("恢复后窗口内弹条=%q，想要「石头」", got)
 	}
 }
 
@@ -353,7 +359,8 @@ func TestApplicationItemPopupBaselineResetReplaysSessionStart(t *testing.T) {
 }
 
 // TestApplicationCrosshairGatedByMenuPhase 端到端见证准星相位门控：游戏相位
-// 产生 4 个准星 quad，暂停覆盖层可见时不产生任何准星实例。
+// hud 分节携带准星位，暂停覆盖层可见时不携带（准星由 WebView 组件呈现，
+// GPU 保留面不再产生实例）。
 func TestApplicationCrosshairGatedByMenuPhase(t *testing.T) {
 	app := newRemoteRenderApplication(t, &IntegrationGlyphSource{})
 	if err := app.inventory.Apply(network.InventoryState{Inventory: core.Inventory{}}); err != nil {
@@ -362,24 +369,22 @@ func TestApplicationCrosshairGatedByMenuPhase(t *testing.T) {
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("游戏相位 RenderFrame=(%v,%v)", rendered, err)
 	}
-	quadCount := func() int {
-		_, quads, _ := app.hotbarRenderer.FrameStreams()
-		return len(quads) / 48
+	if !app.assembleHUDState().Crosshair {
+		t.Fatal("游戏相位 hud 分节未携带准星位")
 	}
-	gameQuads := quadCount()
 
 	app.SetMenuPhase(menuPhasePaused)
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("暂停相位 RenderFrame=(%v,%v)", rendered, err)
 	}
-	if got := quadCount(); got != gameQuads-4 {
-		t.Fatalf("暂停相位 quads=%d，想要减少恰 4 个准星实例（基线 %d）", got, gameQuads)
+	if app.assembleHUDState().Crosshair {
+		t.Fatal("暂停相位 hud 分节携带准星位")
 	}
 	app.SetMenuPhase(MenuPhaseGame)
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("恢复 RenderFrame=(%v,%v)", rendered, err)
 	}
-	if got := quadCount(); got != gameQuads {
-		t.Fatalf("恢复后 quads=%d，想要回到游戏相位基线 %d", got, gameQuads)
+	if !app.assembleHUDState().Crosshair {
+		t.Fatal("恢复游戏相位后 hud 分节未携带准星位")
 	}
 }

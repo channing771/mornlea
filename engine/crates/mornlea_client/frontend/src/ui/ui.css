@@ -3,6 +3,35 @@
  * 裸字号与裸时长。几何信息不依赖颜色（选中/焦点另有文字与几何标记）。
  */
 
+/* pixel-retroui 组件样式：预编译 CSS Modules，经包 exports 显式引入才能进
+ * 产物；@import 必须先于本文件其他规则。组件主题不经组件 props，而是消费
+ * tokens.css 像素组件段的变量映射（--bg-button/--shadow-button 等）整体换
+ * 肤；retroui 产物自带的亮色 :root 兜底与 Minecraft 字体回退由下方
+ * .pixel-* 公共呈现层统一覆盖。 */
+@import "pixel-retroui/dist/index.css";
+
+/* Tailwind 指令入口：preflight 已在 tailwind.config.js 关闭，base 只注入
+ * `--tw-*` 回退变量，置于文件头保证既有规则可覆盖其回退值；工具类供
+ * pixel-retroui 组件类与像素组件消费。 */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * UI 像素字体：缝合像素字体（Fusion Pixel，OFL-1.1），仓库唯一白名单
+ * 二进制 Web 资产。来源 TakWolf/fusion-pixel-font release 2026.08.11
+ * （12px proportional zh_hans 变体，OFL.txt 同目录随库入库）；经
+ * `mornlea://` 内嵌 scheme 供给，零网络请求。族名与文件内部 name 表一致，
+ * @font-face 只声明来源与格式，不含数值语义（令牌纪律不受影响）。
+ */
+@font-face {
+  font-family: "Fusion Pixel 12px Prop zh_hans";
+  src: url(./fonts/fusion-pixel-12px-proportional-zh_hans.ttf.woff2) format("woff2");
+  /* swap：字体短暂不可用时先用回退栈呈现，加载完成后切换，文本不消失。 */
+  font-display: swap;
+}
+
+
 html,
 body,
 #root {
@@ -13,8 +42,10 @@ body {
   margin: 0;
   background: var(--menu-background);
   color: var(--text-primary);
-  /* 系统字体栈：仓库零二进制字体资产、零网络请求。 */
+  /* 字体栈：像素字体优先（唯一 OFL 白名单二进制资产），系统 CJK 栈兜底；
+   * 字体资产缺失或不受支持时按声明顺序逐级回退，布局不因字体缺失失败。 */
   font-family:
+    "Fusion Pixel 12px Prop zh_hans",
     -apple-system,
     "SF Pro Text",
     "PingFang SC",
@@ -25,10 +56,11 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ---- 主菜单 / 暂停层共用的全屏相位容器 ---- */
+/* ---- 主菜单 / 暂停层 / 加载屏共用的全屏相位容器 ---- */
 
 .menu-screen,
-.pause-screen {
+.pause-screen,
+.loading-screen {
   position: absolute;
   inset: 0;
   display: flex;
@@ -36,6 +68,90 @@ body {
   align-items: center;
   justify-content: center;
   gap: var(--title-button-gap);
+}
+
+/* ---- pixel.tsx 桥接组件的公共呈现层 ----
+ * retroui 组件类自带亮色主题兜底、Minecraft 字体回退与演示用默认外距；
+ * 以下覆盖统一收敛一次，面板侧 class 只补布局几何与排印，不与组件类争夺
+ * 表面/描边/阴影的所有权（那三样由 retroui 组件类经 tokens.css 变量供给）。 */
+
+.pixel-button {
+  margin: 0;
+  /* retroui 组件类把字体写死为 Minecraft 回退栈；桥接层必须拉回 UI 字体栈
+   * （继承 body 的像素字体优先栈），中文像素呈现不因组件桥接回退系统字。 */
+  font-family: inherit;
+  /* 按钮表面走 --bg-button（链到亮羊皮纸 --panel-surface），文字必须配深棕，
+   * 暖白 --text-primary 只保留给世界底浮层。 */
+  color: var(--text-on-panel);
+  /* 面板内深棕文字不消费投影双层规范；世界底文字仍保持投影。 */
+  text-shadow: none;
+  cursor: pointer;
+  /* 表面变量切换（悬停/焦点换 sage 水洗色）驱动的是计算后背景色，transition
+   * 消费动效令牌，prefers-reduced-motion 下随令牌归零。 */
+  transition: background-color var(--motion-fast) var(--motion-ease);
+}
+
+/* 交互态 sage 面：悬停预览与焦点态把 retroui 表面变量切到 --accent-wash
+ * （sage 25% 水洗色）。 */
+.pixel-button:hover:not(:disabled),
+.pixel-button:focus-visible {
+  --bg-button: var(--accent-wash);
+}
+
+/* retroui 的像素描边走 border-image，border-color 在其下不可见；焦点的
+ * 几何标记改用 sage 外描环（outline），位置与色彩都不依赖组件内部实现。 */
+.pixel-button:focus-visible {
+  outline: var(--pixel-focus-ring-width) solid var(--accent-sage-solid);
+  outline-offset: var(--pixel-focus-ring-offset);
+}
+
+.pixel-button:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+/* PixelInput 包装层：retroui Input 是「包装层 + 内部原生 input」结构，
+ * className 落在包装层；此处归零演示外距、回字体栈，内部输入框透明地
+ * 铺在组件凹槽表面上。焦点/编辑态即 sage 交互态强调面。 */
+.pixel-input {
+  display: block;
+  margin: 0;
+}
+
+.pixel-input input {
+  width: 100%;
+  font: inherit;
+}
+
+.pixel-input:focus-within {
+  outline: var(--pixel-focus-ring-width) solid var(--accent-sage-solid);
+  outline-offset: var(--pixel-focus-ring-offset);
+}
+
+/* PixelCard / PixelDropdown 包装层：与按钮/输入框同口径——归零演示外距、
+ * 回 UI 字体栈、文字用面板内深棕；表面取色经 tokens.css 的 --bg-card/
+ * --bg-dropdown 变量映射，无需组件级样式。菜单项内的选项按钮铺满菜单项。 */
+.pixel-card {
+  margin: 0;
+  font-family: inherit;
+  color: var(--text-on-panel);
+}
+
+.pixel-dropdown {
+  display: block;
+  margin: 0;
+  font-family: inherit;
+}
+
+.pixel-dropdown-option {
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 /* ---- 主菜单 ---- */
@@ -54,36 +170,14 @@ body {
   gap: var(--menu-button-gap);
 }
 
+/* 主菜单按钮：纵排几何（宽高）留在本 class，表面/硬描边/偏移阴影的所有权
+ * 在 retroui Button 组件类（取色经 tokens.css 变量映射），悬停/焦点/禁用
+ * 态见 .pixel-button 公共层。 */
 .menu-button {
   box-sizing: border-box;
   width: var(--menu-button-width);
   min-height: var(--menu-button-height);
-  padding: 0;
-  border: var(--hairline) solid var(--panel-border);
-  border-radius: var(--radius-panel);
-  background: var(--panel-surface);
-  color: var(--text-primary);
   font-size: var(--font-button);
-  text-shadow: 1px 1px 0 var(--text-shadow);
-  cursor: pointer;
-  transition:
-    border-color var(--motion-fast) var(--motion-ease),
-    background-color var(--motion-fast) var(--motion-ease);
-}
-
-.menu-button:hover:not(:disabled),
-.menu-button:focus-visible {
-  border-color: var(--accent-amber-solid);
-  outline: none;
-}
-
-.menu-button:focus-visible {
-  background: var(--accent-wash);
-}
-
-.menu-button:disabled {
-  color: var(--text-secondary);
-  cursor: default;
 }
 
 .menu-error {
@@ -125,12 +219,15 @@ body {
   border-radius: var(--radius-panel);
   background: var(--panel-surface);
   box-shadow: 0 8px 24px var(--panel-shadow);
+  /* 面板级声明让全部子元素默认继承面板内深棕：body 的暖白
+   * --text-primary 只服务世界底，在亮羊皮纸上对比不足。 */
+  color: var(--text-on-panel);
 }
 
+/* 标题位于亮面板内，继承面板深棕字色，不消费文字投影。 */
 .settings-title {
   margin: 0;
   font-size: var(--font-heading);
-  text-shadow: 1px 1px 0 var(--text-shadow);
 }
 
 .settings-field {
@@ -144,35 +241,34 @@ body {
   font-weight: 600;
 }
 
+/* 材质路径输入框：PixelInput 包装层（.pixel-input 公共层已归零外距、回字体
+ * 栈），本 class 只定排印与内部输入框几何；凹槽表面与硬描边由 retroui
+ * Input 组件类经 tokens.css 变量供给。 */
 .settings-text-input {
   box-sizing: border-box;
-  height: var(--settings-action-height);
-  padding: 0 var(--menu-button-gap);
-  border: var(--hairline) solid var(--panel-border);
-  border-radius: var(--radius-control);
-  background: var(--slot-well);
-  box-shadow: inset 0 1px 0 var(--slot-well-edge);
-  color: var(--text-primary);
+  width: 100%;
   font-size: var(--font-message);
 }
 
-.settings-text-input:focus-visible {
-  border-color: var(--accent-amber-solid);
-  outline: none;
+.settings-text-input input {
+  height: var(--settings-action-height);
+  padding: 0 var(--menu-button-gap);
 }
 
 .settings-hint,
 .settings-status {
   margin: 0;
   font-size: var(--font-version);
-  color: var(--text-secondary);
+  /* 面板内次级文字专用令牌，与世界底次级 --text-secondary 不混用。 */
+  color: var(--text-secondary-on-panel);
 }
 
+/* 未保存草稿提示：属「重要信息」，归 wheat 强调（交互态才归 sage）。 */
 .settings-dirty {
   margin: 0;
   font-size: var(--font-message);
   font-weight: 600;
-  color: var(--accent-amber-solid);
+  color: var(--accent-wheat-solid);
 }
 
 .settings-error {
@@ -197,28 +293,18 @@ body {
   font-weight: 600;
 }
 
+/* 窗口大小三预设按钮：PixelButton 承载，role/aria-pressed/键盘语义与改造
+ * 前逐项一致（保持三按钮组而非菜单件，焦点顺序与 Tab 序不变）；选中面即
+ * sage 交互态强调面——表面变量切到 --accent-wash。 */
 .settings-window-button {
   flex: 1;
   box-sizing: border-box;
   min-height: var(--settings-action-height);
-  padding: 0;
-  border: var(--hairline) solid var(--panel-border);
-  border-radius: var(--radius-control);
-  background: var(--panel-surface);
-  color: var(--text-primary);
   font-size: var(--font-message);
-  cursor: pointer;
-  transition: border-color var(--motion-fast) var(--motion-ease);
 }
 
 .settings-window-button[aria-pressed="true"] {
-  border-color: var(--accent-amber-solid);
-  background: var(--accent-wash);
-}
-
-.settings-window-button:focus-visible {
-  border-color: var(--accent-amber-solid);
-  outline: none;
+  --bg-button: var(--accent-wash);
 }
 
 .settings-actions {
@@ -231,6 +317,44 @@ body {
   width: auto;
   min-height: var(--settings-action-height);
   font-size: var(--font-message);
+}
+
+/* 音量滑块：规格钉死「以滑块呈现」而 retroui 无滑块组件，按像素令牌自绘
+ * 重绘——凹槽轨道硬描边、方形 wheat 拇指（进度归 wheat 强调）。控件本体
+ * 仍是原生 range 输入，键盘与 ARIA（role=slider、[0,1] 归一）语义零改动；
+ * 伪元素仅 WebKit 前缀即可覆盖唯一目标 WKWebView。 */
+.settings-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--pixel-slider-thumb-size);
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.settings-slider::-webkit-slider-runnable-track {
+  height: var(--pixel-slider-track-height);
+  border: var(--hairline) solid var(--panel-border);
+  background: var(--slot-well);
+}
+
+.settings-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--pixel-slider-thumb-size);
+  height: var(--pixel-slider-thumb-size);
+  /* WebKit 以轨道顶为拇指基准，垂直居中偏移 = (轨道总高 - 拇指边长) / 2。 */
+  margin-top: calc(
+    (var(--pixel-slider-track-height) + 2 * var(--hairline) - var(--pixel-slider-thumb-size)) / 2
+  );
+  background: var(--accent-wheat-solid);
+}
+
+/* 焦点环仍归 sage：thumb 的 wheat 表进度语义，焦点是交互态。 */
+.settings-slider:focus-visible {
+  outline: var(--pixel-focus-ring-width) solid var(--accent-sage-solid);
+  outline-offset: var(--pixel-focus-ring-offset);
 }
 
 /* ---- 暂停层 ---- */
@@ -256,6 +380,52 @@ body {
   margin: var(--error-button-gap) 0 0;
   font-size: var(--font-message);
   color: var(--text-secondary);
+  /* 像素质感微调：与标题/按钮同用文字硬投影规范。 */
+  text-shadow: 1px 1px 0 var(--text-shadow);
+}
+
+/* ---- 世界加载屏 ---- */
+
+/* 不透明整屏底：加载相位必须完全遮住其下渐进装配的 wgpu 世界画面
+ * （透明度只允许出现在暂停遮罩，两令牌不共用）。 */
+.loading-screen {
+  background: var(--loading-bg);
+}
+
+.loading-title {
+  margin: 0;
+  font-size: var(--font-title);
+  text-shadow: 1px 1px 0 var(--text-shadow);
+}
+
+/* 像素风进度轨道：硬描边凹槽 + wheat 实色填充。填充宽度由组件下发的
+ * `--loading-fill`（已钳制比例）驱动、overflow 兜底，零 transition——
+ * 进度硬切下行值，不自行平滑。 */
+.loading-progress {
+  position: relative;
+  box-sizing: border-box;
+  width: var(--loading-track-width);
+  height: var(--loading-track-height);
+  overflow: hidden;
+  border: var(--hairline) solid var(--panel-border);
+  background: var(--hud-progress-track);
+}
+
+.loading-progress-fill {
+  display: block;
+  height: 100%;
+  width: calc(var(--loading-fill, 0) * 100%);
+  background: var(--accent-wheat-solid);
+}
+
+.loading-count {
+  margin: 0;
+  font-size: var(--font-message);
+  color: var(--text-secondary);
+  /* 计数数字逐帧更新，等宽数位防水平抖动（先例：`src/hud/hud.css` 的
+   * `.hud-slot-count`）。 */
+  font-variant-numeric: tabular-nums;
+  text-shadow: 1px 1px 0 var(--text-shadow);
 }
 
 /* ---- F3 调试面板（叠加于任意相位） ---- */
@@ -278,6 +448,9 @@ body {
   background: var(--panel-surface);
   box-shadow: 0 8px 24px var(--panel-shadow);
   font-size: var(--font-message);
+  /* 面板级声明让全部子元素默认继承面板内深棕：body 的暖白
+   * --text-primary 只服务世界底，在亮羊皮纸上对比不足。 */
+  color: var(--text-on-panel);
 }
 
 .debug-readout {
@@ -304,7 +477,7 @@ body {
 
 .debug-section {
   min-height: var(--debug-row-height);
-  color: var(--text-secondary);
+  color: var(--text-secondary-on-panel);
   line-height: var(--debug-row-height);
 }
 
@@ -315,20 +488,20 @@ body {
   line-height: var(--debug-row-height);
 }
 
-/* 选中标记：靠左整高琥珀窄条，几何上即选中位置（颜色无关可辨）。 */
+/* 选中标记：靠左整高 sage 窄条，几何上即选中位置（颜色无关可辨）。 */
 .debug-row.is-selected::before {
   content: "";
   position: absolute;
   left: calc(-1 * var(--menu-button-gap));
   width: var(--debug-selected-mark);
   height: 100%;
-  background: var(--accent-amber-solid);
+  background: var(--accent-sage-solid);
 }
 
 .debug-row .debug-label {
   flex: 0 0 auto;
   min-width: var(--debug-value-column);
-  color: var(--text-secondary);
+  color: var(--text-secondary-on-panel);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -343,22 +516,23 @@ body {
 /* 只读参数行：数值随标签同用次级文字色，与 aria-disabled 一同呈现
  * 「不可选中/编辑」的禁用语义（亮度层级，不依赖单一色相）。 */
 .debug-row.is-readonly .debug-value {
-  color: var(--text-secondary);
+  color: var(--text-secondary-on-panel);
 }
 
+/* 调试参数行行内编辑框：PixelInput 包装层在 26px 行高内承载 retroui 像素
+ * 描边框——内部输入框高度按行高减去上下框宽推导，行布局（flex 撑满、
+ * 溢出裁切）与焦点路由语义零改动；焦点环见 .pixel-input 公共层。字号钉回
+ * 面板令牌：retroui 包装层硬编码 16px 会经 `font: inherit` 穿透到内部
+ * 输入框，既偏离改造前 .debug-panel 的字号，也放大 16px 高输入框的竖向
+ * 裁切风险。 */
 .debug-edit-input {
-  box-sizing: border-box;
   flex: 1;
   min-width: 0;
-  height: calc(var(--debug-row-height) - 2 * var(--hairline));
-  padding: 0 2px;
-  border: var(--hairline) solid var(--accent-amber-solid);
-  border-radius: var(--radius-control);
-  background: var(--slot-well);
-  color: var(--text-primary);
-  font: inherit;
+  margin: 0;
+  font-size: var(--font-message);
 }
 
-.debug-edit-input:focus-visible {
-  outline: none;
+.debug-edit-input input {
+  height: calc(var(--debug-row-height) - 2 * var(--pixel-border-width));
+  padding: 0 var(--pixel-input-inline-pad);
 }

@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/channing771/mornlea/internal/assets"
@@ -99,6 +100,7 @@ type Application struct {
 	avatarStream    []byte
 	dropStream      []byte
 	outlineStream   []byte
+	crackStream     []byte
 	billboardBytes  []byte
 	entityEncoder   render.InstanceEncoder
 	lastFrameStats  render.FrameStats
@@ -111,7 +113,7 @@ type Application struct {
 	// 同源（E9/C9）：事件环最多回放 32 条，缓冲按同一常量分配保证零扩容刷新。
 	chatEventBuffer [client.ChatEventCapacity]network.ChatEvent
 	// chatLines 的 6 是 HUD 聊天显示行数：openspec companion-client-presentation
-	// 规格「HUD 显示最近最多 6 条」，与 internal/render/hud/chat.go 的 maxChatLines 同值。
+	// 规格「HUD 显示最近最多 6 条」，与 frontend hud 组件的行槽数同值。
 	chatLines              [6]string
 	chatLineCount          int
 	formattedChatEventID   uint64
@@ -137,14 +139,16 @@ type Application struct {
 	miningOverlay hud.MiningOverlay
 	// itemPopup 是已记录的物品名弹条：Text/ShownAtTick/Valid 在已确认镜像的
 	// 选中下标变化时记录一次，WorldTick 每帧由 `updateItemPopup` 注入当前权威
-	// tick，可见窗口判定留给 HUD 布局（tick 驱动，golden 确定）。
+	// tick；40 tick 可见窗口判定收口在 `popupPresentationText`，结果经 hud
+	// 分节下行给 WebView 组件（tick 驱动，不读 wall-clock）。
 	itemPopup hud.PopupOverlay
 	// popupSelection 与 popupSelectionSeen 是弹条触发的确认基线：只消费
 	// `InventoryMirror` 的已确认选中下标，本地选择请求不推进基线。
 	popupSelection     uint8
 	popupSelectionSeen bool
-	// eatingTracker 是进食进度的客户端预测状态机：`RenderFrame` 在
-	// `Prepare` 调用处按帧间时长推进；纯呈现，不进入权威或预测物理状态。
+	// eatingTracker 是进食进度的客户端预测状态机：`RenderFrame` 经
+	// `observeEatingProgress` 按帧间时长推进；纯呈现，不进入权威或预测物理
+	// 状态，值经 hud 分节下行。
 	eatingTracker     client.EatingProgressTracker
 	itemDrops         *client.ItemDrops
 	itemDropInstances []render.ItemDrop
@@ -155,22 +159,27 @@ type Application struct {
 	// worldTimeTicks 是最后确认的权威绝对世界时间，只在接受更新状态时前进。
 	// dayPhaseOffset 是同一份状态携带的显示相位偏移（0..23999），与世界时间
 	// 同一接受纪律：偏移只平移昼夜呈现，绝不回写绝对时间。
-	worldTimeTicks          uint64
-	dayPhaseOffset          uint16
-	glyphAtlas              *render.GlyphAtlas
-	clientEndpoint          network.ClientEndpoint
-	receiver                *client.Receiver
-	server                  *server.Server
-	host                    Host
-	serverCancel            context.CancelFunc
-	serverDone              chan error
-	mirror                  *client.Mirror
-	predictor               *client.Predictor
-	mesher                  *client.Mesher
-	camera                  client.Camera
-	center                  core.ChunkPos
-	sequence                uint64
-	loadedChunks            map[core.ChunkPos]struct{}
+	worldTimeTicks uint64
+	dayPhaseOffset uint16
+	glyphAtlas     *render.GlyphAtlas
+	clientEndpoint network.ClientEndpoint
+	receiver       *client.Receiver
+	server         *server.Server
+	host           Host
+	serverCancel   context.CancelFunc
+	serverDone     chan error
+	mirror         *client.Mirror
+	predictor      *client.Predictor
+	mesher         *client.Mesher
+	camera         client.Camera
+	center         core.ChunkPos
+	sequence       uint64
+	loadedChunks   map[core.ChunkPos]struct{}
+	// loadingMeshBase 是本会话装配点记录的网格化完成计数基线：mesher 跨会话
+	// 复用(单调计数不归零),退回主菜单再进入时若不从基线起算,上一世界的完成
+	// 数会让加载屏网格进度起步即饱和——进度条从高位直接跳满格,随后在网格
+	// 尾巴期间停在 100%(看似卡住)。
+	loadingMeshBase         uint64
 	ticks                   *TickRecorder
 	saves                   *SaveRecorder
 	observerFloor           uint64
@@ -213,6 +222,29 @@ type Application struct {
 	// pushedUIState 是上次下行的 UI 状态 JSON 原文,驱动「状态变化才推送」
 	// 的事件驱动语义(见 app_ui_state.go);零值表示尚未推送过任何状态。
 	pushedUIState string
+	// pushedUIDocumentPhase 是上次下行文档所属的菜单相位:游戏相位热路径用它
+	// 判断「前端是否已知道当前相位」,相位切回游戏的当帧必须落到整份文档路径
+	// 补一份新 phase 的文档,之后的帧才交由 hud 分节纪律层独占下行。
+	pushedUIDocumentPhase MenuPhase
+	// hudPush 是游戏相位 hud 分节的推送纪律层。值类型:零值等价于「无出口的
+	// 无头形态」(nil 出口使 Flush 退化为空操作),裸构造的替身因此无需装配;
+	// 交互客户端在构造路径经 `initHUDPush` 装配出口与组装函数。
+	hudPush client.UIHudPushScheduler
+	// pushedHUDSection 是最近一次下行的 hud 分节载荷原文:整份文档路径(调试
+	// 面板叠加、暂停分节)回填它,避免把前端已呈现的 HUD 清成缺席。
+	pushedHUDSection []byte
+	// hudPushInWindow 记录「hud 分节由纪律层下行」的相位窗口,用于识别进入/
+	// 离开边界(进入时无条件下行一份完整 hud 分节)。
+	hudPushInWindow bool
+	// framePopup 是本帧的物品名弹条状态,由 RenderFrame 的 `updateItemPopup`
+	// 组装;40 tick 窗口判定在 `popupPresentationText` 收口,hud 分节只携带结果。
+	framePopup hud.PopupOverlay
+	// hudPopupText/hudEatingActive/hudEatingProgress 是上一帧的弹条文本与进食
+	// 激活位及量化后的填充比例:弹条只能进入/离开窗口、进食比例只能按权威 tick
+	// 网格推进,用帧间比较把置脏收敛到真实变化点,下行频率不随渲染帧率走。
+	hudPopupText      string
+	hudEatingActive   bool
+	hudEatingProgress float32
 	// registry 是会话材质注册表：近环 mesher 与菜单全景的 mesher 共享同一
 	// 份材质映射，全景与游戏画面因此呈现同一套材质。
 	registry *assets.Registry
@@ -222,6 +254,13 @@ type Application struct {
 	// menuVistaPhase 记录全景最近一次推进时的菜单相位，用于把「主菜单 ⇄
 	// 设置页」切换识别为相位重进（自转 tick 归零，确定性同画面）。
 	menuVistaPhase MenuPhase
+	// devCapture{Phase,Width,Height} 是开发捕获服务的 /status 观察快照（发布
+	// 与读取见 dev_capture.go）：仅在注入捕获协调器后由帧循环每帧原子覆写，
+	// HTTP 服务 goroutine 经 `Phase`/`WindowWidth`/`WindowHeight` 读到最近帧
+	// 的值；未启用捕获时零写入，帧循环对快照零参与。
+	devCapturePhase  atomic.Int32
+	devCaptureWidth  atomic.Int32
+	devCaptureHeight atomic.Int32
 }
 
 type Window interface {

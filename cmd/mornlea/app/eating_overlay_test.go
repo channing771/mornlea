@@ -2,10 +2,10 @@
 
 package app
 
-// eating_overlay_test.go：进食覆盖层三处裁决点位的定点测试——
-// `app.go` 的 tracker 字段、`app_frame.go` 在 `Prepare` 调用处的 overlay 构造、
-// `app_lifecycle.go` 的会话复位行。端到端断言走既有 health_hud_test.go 的
-// FrameStreams 范式：从真实 `RenderFrame` 的 quad 字节流里读出进食条。
+// eating_overlay_test.go：进食进度预测的三处裁决点位定点测试——`app.go` 的
+// tracker 字段、`app_frame.go` 的输入位派生与置脏接线、`app_lifecycle.go`
+// 的会话复位行。进度条的呈现已迁 WebView HUD 组件，值经 hud 分节的 eating
+// 分节下行；这里断言组装结果与 tracker 同源（采掘互斥已随屏幕采掘条退役）。
 
 import (
 	"testing"
@@ -31,8 +31,7 @@ func (window *eatingTestWindow) SecondaryButtonDown() bool { return window.secon
 func (window *eatingTestWindow) FramebufferSize() (int, int) { return 64, 64 }
 
 // beginEatingHunger 注入一份权威 PlayerState，把 Predictor 的饥饿镜像设为给定值
-// （生命/氧气取与进食条无关的稳定值：健康画固定 10 心、满氧零气泡，两帧之间
-// 只有饥饿条的满/半格切换且 quad 数不变，不干扰进食条的增量断言）。
+// （生命/氧气取与进食进度无关的稳定值，两帧之间只有进食输入位在变化）。
 func beginEatingHunger(t *testing.T, app *Application, tick uint64, hunger uint8) {
 	t.Helper()
 	if err := app.predictor.Begin(network.PlayerState{
@@ -45,9 +44,9 @@ func beginEatingHunger(t *testing.T, app *Application, tick uint64, hunger uint8
 }
 
 // TestApplicationEatingOverlayTracksPredictedProgress 走完
-// 窗口输入 → 镜像选中格 → tracker → `hud.EatingOverlay` → 布局 的整条链路：
-// 起算帧零时长不激活、后续帧画出轨道+填充、填充比例与 tracker 同源、
-// 松手立即消失、采掘激活时互斥不出现。
+// 窗口输入 → 镜像选中格 → tracker → hud 分节 的整条链路：起算帧零时长不激活、
+// 后续帧激活且填充比例与 tracker 同源、松手立即清零、采掘镜像激活时进食条
+// 不再让位（互斥随屏幕采掘条退役）。
 func TestApplicationEatingOverlayTracksPredictedProgress(t *testing.T) {
 	app := newRemoteRenderApplication(t, &IntegrationGlyphSource{})
 	window := &eatingTestWindow{secondaryDown: true}
@@ -60,22 +59,19 @@ func TestApplicationEatingOverlayTracksPredictedProgress(t *testing.T) {
 	}
 	// 饥饿取未满值 9：饥饿门控（R1 NIT-4）要求权威确认饥饿未满才允许进食输入位。
 	beginEatingHunger(t, app, 1, 9)
-	const quadBytes = 48
-	hudQuadCount := func() int {
-		_, quads, _ := app.hotbarRenderer.FrameStreams()
-		return len(quads) / quadBytes
-	}
 
-	// 起算帧：零时长不激活，HUD 与未进食时逐 quad 同数。
+	// 起算帧：零时长不激活，hud 分节不携带激活位。
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("起算帧 RenderFrame=(%v,%v)", rendered, err)
 	}
-	baseline := hudQuadCount()
 	if active, _ := app.eatingTracker.Snapshot(); active {
 		t.Fatal("起算帧零时长就已激活")
 	}
+	if state := app.assembleHUDState(); state.Eating.Active {
+		t.Fatalf("起算帧 hud 分节携带进食激活位: %+v", state.Eating)
+	}
 
-	// 持续按住：下一帧出现恰好 2 个进食 quad（轨道+填充），填充比例与 tracker 同源。
+	// 持续按住：下一帧激活，填充比例与 tracker 同源。
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("持续帧 RenderFrame=(%v,%v)", rendered, err)
 	}
@@ -83,59 +79,39 @@ func TestApplicationEatingOverlayTracksPredictedProgress(t *testing.T) {
 	if !active || progress <= 0 || progress > 1 {
 		t.Fatalf("持续帧 tracker=%v/%v，想要 (true, 0<p≤1)", active, progress)
 	}
-	if got := hudQuadCount() - baseline; got != 2 {
-		t.Fatalf("持续帧进食 quad=%d，想要轨道+填充 2 个", got)
+	state := app.assembleHUDState()
+	// hud 分节携带的是量化到权威 tick 网格后的比例（下行频率绑定 tick），与
+	// tracker 的连续值同源：量化不越过大、且逐值相等。
+	if !state.Eating.Active || state.Eating.Progress != quantizeEatingProgress(progress) {
+		t.Fatalf("持续帧 hud 分节=%+v，想要激活且比例为 tracker %v 的量化值", state.Eating, progress)
 	}
-	_, quads, _ := app.hotbarRenderer.FrameStreams()
-	// 按固定进食填充色定位（其前一实例必为轨道：`appendEatingBar` 先轨道后
-	// 填充，且是 `layoutInventory` 的最后一步，健康/氧气/饥饿条都在其后追加，
-	// 饥饿半格等状态 quad 会出现在字节流尾部，「取最后两个 quad」不再成立）。
-	eatingFill := [4]float32{0.92, 0.78, 0.42, 0.95}
-	fillAt := -1
-	for offset := 0; offset+quadBytes <= len(quads); offset += quadBytes {
-		match := true
-		for channel, want := range eatingFill {
-			if readFloat32(quads, offset+32+channel*4) != want {
-				match = false
-				break
-			}
-		}
-		if match {
-			fillAt = offset
-			break
-		}
-	}
-	if fillAt < quadBytes {
-		t.Fatal("未按固定进食填充色找到进食条 quad")
-	}
-	fillWidth := readFloat32(quads, fillAt+8)
-	trackWidth := readFloat32(quads, fillAt-quadBytes+8)
-	// 填充宽度必须等于轨道宽 × tracker 比例（容差只吸收 float32 除法的 1 ulp 级舍入）。
-	if ratio := fillWidth / trackWidth; ratio-progress > 1e-5 || progress-ratio > 1e-5 {
-		t.Fatalf("填充比例=%v，想要与 tracker 同源 %v", ratio, progress)
+	if state.Eating.Progress > progress {
+		t.Fatalf("量化值 %v 越过 tracker 连续值 %v", state.Eating.Progress, progress)
 	}
 
-	// 采掘激活时互斥：进食输入仍按住，本帧只允许采掘条出现——采掘形状是
-	// 轨道+填充+三个警示缺口共 5 个 quad；若进食条没有让位，会多出 2 个。
+	// 采掘并发时独立呈现：权威采掘镜像激活（方块表面呈裂纹）不再抑制进食条
+	// ——互斥裁决随屏幕采掘条一并移除（spec delta survival-hud-presentation），
+	// 进食分节与镜像状态互不干扰。
 	app.miningOverlay = hud.MiningOverlay{Active: true, ProgressTicks: 6, RequiredTicks: 15}
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
-		t.Fatalf("互斥帧 RenderFrame=(%v,%v)", rendered, err)
+		t.Fatalf("并发帧 RenderFrame=(%v,%v)", rendered, err)
 	}
-	if got := hudQuadCount() - baseline; got != 5 {
-		t.Fatalf("互斥帧 quad 增量=%d，想要只有采掘形状 5 个（进食条必须让位）", got)
+	state = app.assembleHUDState()
+	if !state.Eating.Active || state.Eating.Progress != quantizeEatingProgress(progress) {
+		t.Fatalf("并发帧进食分节=%+v，想要保持激活且比例与 tracker 同源", state.Eating)
 	}
 	app.miningOverlay = hud.MiningOverlay{}
 
-	// 松手：输入位归零，进度条立即消失并清零。
+	// 松手：输入位归零，进度立即消失并清零。
 	window.secondaryDown = false
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("松手帧 RenderFrame=(%v,%v)", rendered, err)
 	}
-	if got := hudQuadCount(); got != baseline {
-		t.Fatalf("松手后 quad=%d，想要回到基线 %d", got, baseline)
-	}
 	if active, progress := app.eatingTracker.Snapshot(); active || progress != 0 {
 		t.Fatalf("松手后 tracker=%v/%v，想要清零", active, progress)
+	}
+	if state := app.assembleHUDState(); state.Eating.Active {
+		t.Fatalf("松手后 hud 分节=%+v，想要归零", state.Eating)
 	}
 }
 
@@ -172,13 +148,16 @@ func TestApplicationEatingOverlayIgnoresNonFoodAndUncapturedInput(t *testing.T) 
 			if active, progress := app.eatingTracker.Snapshot(); active || progress != 0 {
 				t.Fatalf("%s 后 tracker=%v/%v，想要不激活", test.name, active, progress)
 			}
+			if state := app.assembleHUDState(); state.Eating.Active {
+				t.Fatalf("%s 后 hud 分节=%+v，想要归零", test.name, state.Eating)
+			}
 		})
 	}
 }
 
 // TestApplicationEatingOverlayGatedOnAuthoritativeHunger 是饥饿门控的端到端
 // 覆盖（R1 NIT-4，spec Scenario「饥饿已满不呈现进度条」）：权威确认饥饿满时
-// 输入位恒为假、进度条零实例；权威饥饿降到未满后同一输入立即开始累积。
+// 输入位恒为假、进度不推进；权威饥饿降到未满后同一输入立即开始累积。
 func TestApplicationEatingOverlayGatedOnAuthoritativeHunger(t *testing.T) {
 	app := newRemoteRenderApplication(t, &IntegrationGlyphSource{})
 	window := &eatingTestWindow{secondaryDown: true}
@@ -190,28 +169,22 @@ func TestApplicationEatingOverlayGatedOnAuthoritativeHunger(t *testing.T) {
 		t.Fatal(err)
 	}
 	beginEatingHunger(t, app, 1, core.MaxHunger)
-	const quadBytes = 48
-	hudQuadCount := func() int {
-		_, quads, _ := app.hotbarRenderer.FrameStreams()
-		return len(quads) / quadBytes
-	}
 
-	// 权威饥饿满：输入持续按住两帧，也不得出现任何进食 quad。
+	// 权威饥饿满：输入持续按住两帧，也不得推进。
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("饥饿满起算帧 RenderFrame=(%v,%v)", rendered, err)
 	}
-	fullHunger := hudQuadCount()
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("饥饿满持续帧 RenderFrame=(%v,%v)", rendered, err)
 	}
 	if active, progress := app.eatingTracker.Snapshot(); active || progress != 0 {
 		t.Fatalf("饥饿满时 tracker=%v/%v，想要不激活", active, progress)
 	}
-	if got := hudQuadCount() - fullHunger; got != 0 {
-		t.Fatalf("饥饿满持续帧 quad 增量=%d，想要 0（无进食条）", got)
+	if state := app.assembleHUDState(); state.Eating.Active {
+		t.Fatalf("饥饿满时 hud 分节=%+v，想要归零", state.Eating)
 	}
 
-	// 权威饥饿降到未满（19 与 20 的鸡腿 quad 数同为 20，帧间增量只剩进食条）。
+	// 权威饥饿降到未满后，同一输入立即开始累积。
 	if _, err := app.predictor.ApplyPlayerState(network.PlayerState{
 		ServerTick: 2, Dimension: core.Overworld,
 		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true,
@@ -231,8 +204,8 @@ func TestApplicationEatingOverlayGatedOnAuthoritativeHunger(t *testing.T) {
 	if active, progress := app.eatingTracker.Snapshot(); !active || progress <= 0 || progress > 1 {
 		t.Fatalf("饥饿未满持续帧 tracker=%v/%v，想要 (true, 0<p≤1)", active, progress)
 	}
-	if got := hudQuadCount() - fullHunger; got != 2 {
-		t.Fatalf("饥饿未满持续帧 quad 增量=%d，想要轨道+填充 2 个", got)
+	if state := app.assembleHUDState(); !state.Eating.Active {
+		t.Fatalf("饥饿未满持续帧 hud 分节=%+v，想要激活", state.Eating)
 	}
 }
 

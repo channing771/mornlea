@@ -124,6 +124,9 @@ func (a *Application) resetSessionOwnedState() {
 	a.popupSelectionSeen = false
 	// 进食进度是纯呈现预测，随会话一起清零，不得漏进重连后的第一帧。
 	a.eatingTracker.Reset()
+	// hud 分节随会话一并复位：旧会话的变化不再驱动下行，新会话回到游戏相位
+	// 后的第一次冲刷无条件下行完整分节。
+	a.resetHUDStatePush()
 	a.damageFeedback.Reset()
 	a.damageStrength = 0
 	a.inventoryOpen = false

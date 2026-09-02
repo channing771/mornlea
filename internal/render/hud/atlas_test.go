@@ -14,6 +14,11 @@ import (
 
 // 杀死变异：漏画任一固定 UI 图标、复用同一图标、引入半透明边缘或让构建读取不稳定
 // 状态，都会破坏生存状态行的固定图集契约。
+//
+// 全部 13 个固定 cell（七个生存图标加六个容器 cell）的精确像素摘要都钉在本
+// 测试：生存列之外，容器列（凹槽、三枚标题、火焰、箭头，含随主题暖化的凹槽
+// 与标题调色板）同样需要逐字节回归钉值。容器列的二值 alpha 与内容互异仍由
+// `TestHotbarAtlasContainerCellsKeepExistingPixelsAndStayDistinct` 承担。
 func TestHotbarTextureAtlasUIIconsAreDistinctBinaryAndDeterministic(t *testing.T) {
 	wantColumns := [...]int{
 		0, // empty heart
@@ -43,7 +48,8 @@ func TestHotbarTextureAtlasUIIconsAreDistinctBinaryAndDeterministic(t *testing.T
 	registry := assets.NewRegistry()
 	pixels := buildHotbarTextureAtlas(registry)
 	// 钉值随图标 mask 精修（design D6）更新：精修前的旧基线摘要保留在
-	// atlas_mask_test.go，用于守护「不得回退到旧剪影」。
+	// atlas_mask_test.go，用于守护「不得回退到旧剪影」。容器六列按列序续排，
+	// 精修调色板时随生存列一起换值。
 	wantPixels := [...]string{
 		"5cd8aad2c1fabdc318af4b38bcb467a2382a357abfe475f27ca116d1c0bb7779",
 		"4778bb86c328352b28b59400bb631a0f6ec94c455b354c9708e7a1eb61b6d74f",
@@ -52,11 +58,17 @@ func TestHotbarTextureAtlasUIIconsAreDistinctBinaryAndDeterministic(t *testing.T
 		"0d1a6cd057e2bfa51e9b5b78c21ece3e53abd756af2d0e95917cf9b7ecd90072",
 		"4a9077aeb6129c8ce99ca65422591c6e905876b9a23b738c3ad50e5e0a43c2d0",
 		"21cd4f6f480aecdb7c1071cd908f97d9cce0b2822292897be97798697e55473d",
+		"b7299f97f76a84e9e23bec0806e21090790f578d6071e1709c77f2f1d5e106c7", // 凹槽
+		"4650a480c96d3df206bf038688335985206409095b9d2a0a45172b541dc14f44", // 合成标题
+		"aa6d27c97a2697cfad5ad2e64ccc241bd6750eeee293475111d125683bfc8928", // 箱子标题
+		"15c7ac535d7f11ac2c3e8ae15c6c72c43ef1259f67078475c543cccd54927c4a", // 熔炉标题
+		"9dd7a0dadfd3320364c1f94272871917f2b8547045ddae2cdae6cc88f95bac3b", // 火焰
+		"c37306b80d03c16cd18a5234219e6280462e279e320e404601e986f5ef99e912", // 箭头
 	}
 	for column, want := range wantPixels {
 		got := sha256.Sum256(hotbarTextureCell(pixels, column))
 		if got := hex.EncodeToString(got[:]); got != want {
-			t.Fatalf("生存列 %d 像素摘要=%s，想要 %s", column, got, want)
+			t.Fatalf("固定列 %d 像素摘要=%s，想要 %s", column, got, want)
 		}
 	}
 	if again := buildHotbarTextureAtlas(registry); !bytes.Equal(pixels, again) {
@@ -244,8 +256,8 @@ func TestHotbarColumnUVStaysInsideItsOwnColumn(t *testing.T) {
 	}
 }
 
-// TestHotbarDrumstickColumnsAreDistinctAndSelfContained 覆盖 HUD 图集新增的两列
-// 鸡腿（任务 5.2）。
+// TestHotbarDrumstickColumnsAreDistinctAndSelfContained 覆盖 HUD 图集的空/满
+// 两列鸡腿。
 //
 // 三条断言各杀一种变异：空/满两列若逐像素相同，饥饿条画什么都看不出差别；
 // 画到轮廓之外会污染相邻列（图集是一条 16px 高的长带，越界即串味）；

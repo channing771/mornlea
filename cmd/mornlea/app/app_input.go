@@ -145,9 +145,15 @@ func (a *Application) setInventoryOpen(open bool) {
 		if err := a.send(network.CloseContainer{Sequence: a.nextSequence()}); err != nil {
 			slog.Warn("发送关闭容器请求失败", "error", err)
 		}
+		// 本地翻转也是 hud 分节变化源：containerOpen 布局位不经权威消息就变了，
+		// 必须显式置脏，否则要等下一条权威 PlayerState 才下行（纯静默会话里该位
+		// 永不下行）。会话关闭时置脏无害——下行窗口由 `syncHUDPushWindow` 拦截。
+		a.hudPush.Mark()
 		return
 	}
 	a.inventoryOpen = open
+	// 同上：本地开容器同样即时置脏，不依赖下一次权威状态。
+	a.hudPush.Mark()
 	a.inventorySource = -1
 	if a.window != nil {
 		a.window.SetCursorCaptured(!open)

@@ -1,7 +1,6 @@
 package hud
 
 import (
-	"strings"
 	"testing"
 	"unicode/utf8"
 
@@ -90,16 +89,15 @@ func TestContainerPanelFamilyIsSingleSource(t *testing.T) {
 	const width, height = float32(1280), float32(800)
 	var layout hotbarLayout
 	wantOriginX, wantOriginY := panelOrigin(width, height,
-		containerPanelWidth*hudScale(true, width, height),
-		containerPanelHeight*hudScale(true, width, height),
+		containerPanelWidth*hudScale(width, height),
+		containerPanelHeight*hudScale(width, height),
 		openBottomStackTop(width, height))
 	for _, test := range panelTestCases() {
 		t.Run(test.name, func(t *testing.T) {
 			got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1,
-				test.crafting, test.overlay, test.chest, MiningOverlay{}, EatingOverlay{},
-				CrosshairOverlay{Visible: true}, width, height)
-			// 准星之后的 containerPanelQuads 个实例是面板族：投影、表面与四边亮边。
-			family := got.quads[crosshairQuads : crosshairQuads+containerPanelQuads-1]
+				test.crafting, test.overlay, test.chest, width, height)
+			// 面板族是布局最先追加的 containerPanelQuads 个实例：投影、表面与四边亮边。
+			family := got.quads[:containerPanelQuads-1]
 			expand := panelShadowExpand * got.scale
 			edge := panelBorderWidth * got.scale
 			wantPanelWidth := containerPanelWidth * got.scale
@@ -128,7 +126,7 @@ func TestContainerPanelFamilyIsSingleSource(t *testing.T) {
 				}
 			}
 			// 标题恰一个，位于面板顶部共享内容列的左沿。
-			title := got.quads[crosshairQuads+containerPanelQuads-1]
+			title := got.quads[containerPanelQuads-1]
 			wantUV := hotbarTextureUV(containerTitleColumn(test.view))
 			if gotUV := [4]float32{title.U0, title.V0, title.U1, title.V1}; gotUV != wantUV {
 				t.Fatalf("标题 UV=%v，想要列 cell %v", gotUV, wantUV)
@@ -151,14 +149,14 @@ func TestContainerPanelFamilyIsSingleSource(t *testing.T) {
 // 统一栏位、图示区格、产物格与十条配方入口都必须落在面板矩形内部且互不重叠。
 func TestContainerSlotOriginsStayInsidePanel(t *testing.T) {
 	const width, height = float32(1280), float32(800)
-	scale := hudScale(true, width, height)
+	scale := hudScale(width, height)
 	slotSize := hotbarSlotSize * scale
 	for _, test := range panelTestCases() {
 		t.Run(test.name, func(t *testing.T) {
 			frame := openContainerPanel(test.view, width, height)
 			cells := []hotbarInstance{}
 			for slot := range core.InventorySlots {
-				x, y := inventorySlotOrigin(slot, true, width, height)
+				x, y := inventorySlotOrigin(slot, width, height)
 				cells = append(cells, hotbarInstance{X: x, Y: y, Width: slotSize, Height: slotSize})
 			}
 			for _, hit := range test.extraHits(t, width, height) {
@@ -188,25 +186,20 @@ func TestContainerSlotOriginsStayInsidePanel(t *testing.T) {
 	}
 }
 
-// TestContainerPanelAvoidsBottomStatusStack 钉住状态栈避让：打开态主状态行与
-// 氧气行仍在底部原位，面板（含外扩投影）与两条状态行的全部 quad 互不相交，
-// 面板下段快捷栏行与状态行也保持间距。
-func TestContainerPanelAvoidsBottomStatusStack(t *testing.T) {
+// TestContainerPanelAvoidsBottomReservedStatusSpace 钉住状态栈预留：两行状态行
+// 已迁 WebView 组件，但打开态面板（含外扩投影）仍以下方状态栈上沿为居中下界，
+// 面板矩形必须落在该上沿之上，任何尺寸 framebuffer 内都不得侵入预留区。
+func TestContainerPanelAvoidsBottomReservedStatusSpace(t *testing.T) {
 	atlas := newFakeNameTagAtlas()
 	for _, size := range [][2]float32{{1280, 800}, {640, 360}, {240, 40}, {800, 17}} {
 		width, height := size[0], size[1]
 		var layout hotbarLayout
-		got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, nil, nil, &ChestOverlay{},
-			MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, width, height)
-		var status hotbarLayout
-		appendHealthBar(&status, HealthOverlay{Confirmed: true, Value: core.MaxHealth}, true, width, height)
-		appendOxygenBar(&status, OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1}, true, width, height)
-		appendHungerBar(&status, HungerOverlay{Confirmed: true, Value: core.MaxHunger}, true, width, height)
-		for _, quad := range got.quads[:crosshairQuads+containerPanelQuads] {
-			for _, statusQuad := range status.quads {
-				if rectanglesIntersect(quad, statusQuad) {
-					t.Fatalf("framebuffer %v 面板族与状态栈相交: %+v / %+v", size, quad, statusQuad)
-				}
+		got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, nil, nil, &ChestOverlay{}, width, height)
+		stackTop := openBottomStackTop(width, height)
+		for _, quad := range got.quads[:containerPanelQuads] {
+			if quad.Y+quad.Height > stackTop {
+				t.Fatalf("framebuffer %v 面板族侵入底部状态栈预留区: %+v（上沿 %v）",
+					size, quad, stackTop)
 			}
 		}
 	}
@@ -218,7 +211,7 @@ func TestContainerPanelAvoidsBottomStatusStack(t *testing.T) {
 func TestContainerPanelViewsShareSlotGeometry(t *testing.T) {
 	const width, height = float32(1280), float32(800)
 	for slot := range core.InventorySlots {
-		wantX, wantY := inventorySlotOrigin(slot, true, width, height)
+		wantX, wantY := inventorySlotOrigin(slot, width, height)
 		for _, test := range panelTestCases() {
 			frame := openContainerPanel(test.view, width, height)
 			x := frame.contentLeft + float32(slot%core.HotbarSlots)*(hotbarSlotSize+hotbarSlotGap)*frame.scale
@@ -241,7 +234,7 @@ func TestRecipeButtonAtCoversTenEntries(t *testing.T) {
 	if recipeEntryCount != len(inventoryRecipeIDs) {
 		t.Fatalf("配方入口数=%d，想要与固定配方表一致 %d", recipeEntryCount, len(inventoryRecipeIDs))
 	}
-	scale := hudScale(true, width, height)
+	scale := hudScale(width, height)
 	for row, recipe := range inventoryRecipeIDs {
 		x, y := recipeButtonOrigin(row, width, height)
 		got, ok := RecipeButtonAt(float64(x)+1, float64(y)+1, uint32(width), uint32(height))
@@ -264,35 +257,31 @@ func TestRecipeButtonAtCoversTenEntries(t *testing.T) {
 }
 
 // TestOpenWorstQuadBudgetIsFullyAccounted 是打开最坏固定预算的实算断言：箱子
-// 视图取合法最坏组合（准星、面板族、选中与来源、36 格双层物品、九条耐久、
-// 满 27 格箱子、两行状态栈、七行聊天与悬停 tooltip 背景），精确构成以命名
-// 常量钉住，任何一环增减都必须显式重审本值与固定容量。
+// 视图取合法最坏组合（面板族、选中与来源、36 格双层物品、九条耐久、满 27 格
+// 箱子与悬停 tooltip 背景），精确构成以命名常量钉住，任何一环增减都必须显式
+// 重审本值与固定容量。常显层退役后关闭态零实例，打开态 218 是 GPU 保留面唯一
+// 的最坏分支。
 func TestOpenWorstQuadBudgetIsFullyAccounted(t *testing.T) {
 	atlas := newFakeNameTagAtlas()
 	for _, char := range hotbarDigits {
 		atlas.glyphs[char] = fakeNameTagGlyph(7)
 	}
 	var layout hotbarLayout
-	got := layoutInventory(&layout, atlas, maxQuadTestInventory(), true, 5, nil, nil, fullChestOverlay(),
-		MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
-	appendHealthBar(&got, HealthOverlay{Confirmed: true, Value: core.MaxHealth}, true, 1280, 800)
-	appendOxygenBar(&got, OxygenOverlay{Confirmed: true, Value: core.MaxOxygenTicks - 1}, true, 1280, 800)
-	appendHungerBar(&got, HungerOverlay{Confirmed: true, Value: core.MaxHunger}, true, 1280, 800)
-	appendChatOverlay(&got, atlas, ChatOverlay{Open: true, Input: "界", Lines: []string{"界"}}, 1280, 800)
+	got := layoutInventory(&layout, atlas, maxQuadTestInventory(), true, 5, nil, nil, fullChestOverlay(), 1280, 800)
 	appendTooltipOverlay(&got, atlas, tooltipAtSlot(), fullTestInventory(), nil, nil, fullChestOverlay(), 1280, 800)
 
-	// 实算分解：准星 4 + 面板族 7 + 选中 1 + 来源 1 + 36 格 + 72 色块 + 18 耐久
-	// + 箱子内容 81 + 状态 40 + 聊天 2 + tooltip 背景 2 = 264。
-	const openWorstQuads = crosshairQuads + containerPanelQuads + 2 +
+	// 实算分解：面板族 7 + 选中 1 + 来源 1 + 36 格 + 72 色块 + 18 耐久
+	// + 箱子内容 81 + tooltip 背景 2 = 218。
+	const openWorstQuads = containerPanelQuads + 2 +
 		core.InventorySlots + core.InventorySlots*2 + core.HotbarSlots*2 +
-		chestContentQuads + healthQuads + oxygenQuads + hungerQuads + maxChatQuads + tooltipQuads
+		chestContentQuads + tooltipQuads
 	if len(got.quads) != openWorstQuads {
 		t.Fatalf("打开最坏 quads=%d，想要实算 %d", len(got.quads), openWorstQuads)
 	}
-	if openWorstQuads != 264 {
-		t.Fatalf("打开最坏钉值=%d，想要实算 264", openWorstQuads)
+	if openWorstQuads != 218 {
+		t.Fatalf("打开最坏钉值=%d，想要实算 218", openWorstQuads)
 	}
-	if openInventoryQuads != crosshairQuads+containerPanelQuads+2+core.InventorySlots+
+	if openInventoryQuads != containerPanelQuads+2+core.InventorySlots+
 		core.InventorySlots*2+core.HotbarSlots*2+maxOverlayQuads+tooltipQuads {
 		t.Fatal("openInventoryQuads 公式与实算分解不一致")
 	}
@@ -301,8 +290,9 @@ func TestOpenWorstQuadBudgetIsFullyAccounted(t *testing.T) {
 	}
 }
 
-// TestOpenWorstGlyphBudgetIncludesTooltip 锁定 glyph 最坏：满箱两位数量、36 格
-// 两位数量与七行聊天之上再叠加悬停 tooltip 的双层字形，仍不超过固定 768。
+// TestOpenWorstGlyphBudgetIncludesTooltip 锁定 glyph 最坏：36 格两位数量与满箱
+// 两位数量之上再叠加悬停 tooltip 的双层字形，仍不超过固定 768。聊天与弹条字形
+// 流随常显层退役，分支预算由增长余量吸收，总上限不变。
 func TestOpenWorstGlyphBudgetIncludesTooltip(t *testing.T) {
 	atlas := newFakeNameTagAtlas()
 	for _, char := range hotbarDigits {
@@ -311,14 +301,7 @@ func TestOpenWorstGlyphBudgetIncludesTooltip(t *testing.T) {
 	// 「损坏的石镐」是注册表内最长显示名（5 rune），双层共 10 个字形。
 	name := "损坏的石镐"
 	var layout hotbarLayout
-	got := layoutInventory(&layout, atlas, fullTestInventory(), true, 5, nil, nil, fullChestOverlay(),
-		MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
-	appendHealthBar(&got, HealthOverlay{Confirmed: true, Value: core.MaxHealth}, true, 1280, 800)
-	appendOxygenBar(&got, OxygenOverlay{Confirmed: true, Value: 0}, true, 1280, 800)
-	appendHungerBar(&got, HungerOverlay{Confirmed: true, Value: core.MaxHunger}, true, 1280, 800)
-	chatLine := strings.Repeat("中", maxChatRunes)
-	appendChatOverlay(&got, atlas, ChatOverlay{Open: true, Input: chatLine,
-		Lines: []string{chatLine, chatLine, chatLine, chatLine, chatLine, chatLine}}, 1280, 800)
+	got := layoutInventory(&layout, atlas, fullTestInventory(), true, 5, nil, nil, fullChestOverlay(), 1280, 800)
 	// 悬停箱子 0 号格，格内放注册表最长显示名的物品，见证 tooltip 双层字形最坏。
 	longNameChest := fullChestOverlay()
 	longNameChest.Items[0] = core.ItemStack{Item: core.ItemBrokenStonePickaxe, Count: 1}
@@ -327,13 +310,22 @@ func TestOpenWorstGlyphBudgetIncludesTooltip(t *testing.T) {
 		Valid: true, CursorX: float64(hoverX) + 1, CursorY: float64(hoverY) + 1,
 	}, fullTestInventory(), nil, nil, longNameChest, 1280, 800)
 
-	tooltipGlyphs := utf8.RuneCountInString(name) * 2
-	want := core.InventorySlots*4 + chestGlyphs + maxChatGlyphs + tooltipGlyphs
-	if len(got.glyphs) != want {
-		t.Fatalf("打开最坏 glyphs=%d，想要 %d", len(got.glyphs), want)
+	tooltipWorst := utf8.RuneCountInString(name) * 2
+	if got := len(got.glyphs); got != core.InventorySlots*4+chestGlyphs+tooltipWorst {
+		t.Fatalf("打开最坏 glyphs=%d，想要 %d", got,
+			core.InventorySlots*4+chestGlyphs+tooltipWorst)
+	}
+	// 预算按 8 rune 截断上限封顶（tooltipGlyphs=16），注册表实测见证 262。
+	if want := core.InventorySlots*4 + chestGlyphs + tooltipGlyphs; want != 268 {
+		t.Fatalf("打开态 glyph 预算=%d，想要钉值 268", want)
 	}
 	if len(got.glyphs) > maxHotbarGlyphs {
 		t.Fatalf("glyph 最坏=%d 超出固定容量 %d", len(got.glyphs), maxHotbarGlyphs)
+	}
+	// 固定 glyph 上限 768 与 offset/总容量由 renderer_test.go 钉住；这里只钉
+	// 预算不超上限。
+	if maxHotbarGlyphs != 768 {
+		t.Fatalf("glyph 固定上限=%d，想要 768", maxHotbarGlyphs)
 	}
 }
 

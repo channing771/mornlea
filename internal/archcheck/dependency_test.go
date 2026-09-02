@@ -168,26 +168,33 @@ func TestServerPersistenceDoesNotDependOnServer(t *testing.T) {
 }
 
 // clientCommandAllowedEdges 列出客户端命令子树 `cmd/mornlea` 允许的包间依赖
-// 边（本地 import path）。依赖方向契约为：薄 main 装配三个功能域子包；
-// capture 与 benchmark 各自依赖 app；app 不反向依赖 capture/benchmark，
+// 边（本地 import path）。依赖方向契约为：薄 main 装配全部功能域子包；
+// capture、benchmark 与 devcapture 各自依赖 app；app 不反向依赖任何子包，
 // capture 与 benchmark 互不依赖——否则两侧的重型测试会经由包图重新耦合，
-// `go test` 的单包定点与测试分层同时失效。main 是 `package main`，语言层面
-// 不可被子包导入，但允许边表仍显式留空该方向，让契约可读而非依赖编译器兜底。
+// `go test` 的单包定点与测试分层同时失效。devcapture 实现 app 声明的
+// `CaptureCoordinator`（consumer 侧接口模式）：接口定义住在 app、实现住在
+// devcapture，app MUST NOT 反向 import devcapture。main 是 `package main`，
+// 语言层面不可被子包导入，但允许边表仍显式登记它的装配目标，让契约可读而非
+// 依赖编译器兜底。
 var clientCommandAllowedEdges = map[string][]string{
-	"cmd/mornlea":           {"cmd/mornlea/app", "cmd/mornlea/benchmark", "cmd/mornlea/capture"},
-	"cmd/mornlea/app":       {},
-	"cmd/mornlea/benchmark": {"cmd/mornlea/app"},
-	"cmd/mornlea/capture":   {"cmd/mornlea/app"},
+	"cmd/mornlea":            {"cmd/mornlea/app", "cmd/mornlea/benchmark", "cmd/mornlea/capture", "cmd/mornlea/devcapture"},
+	"cmd/mornlea/app":        {},
+	"cmd/mornlea/benchmark":  {"cmd/mornlea/app"},
+	"cmd/mornlea/capture":    {"cmd/mornlea/app"},
+	"cmd/mornlea/devcapture": {"cmd/mornlea/app"},
 }
 
-// clientCommandRequiredEdges 是必须真实存在的装配边：main 必须装配全部三个
-// 子包，capture 与 benchmark 必须经 app 访问宿主状态。只查「禁止边」守不住
-// 悄悄改走旁路的装配（例如 main 绕过 capture 的公开入口直取其内部符号），
-// 必需边消失同样是方向契约的漂移。
+// clientCommandRequiredEdges 是必须真实存在的装配边：main 必须装配
+// app/benchmark/capture/devcapture 四个子包（devcapture 由 main 拉起监听并
+// 注入 app），capture、benchmark 与 devcapture 必须经 app 访问宿主状态
+// （devcapture 经此实现 `CaptureCoordinator` 并消费 app 状态访问器）。只查
+// 「禁止边」守不住悄悄改走旁路的装配（例如 main 绕过 capture 的公开入口直取
+// 其内部符号），必需边消失同样是方向契约的漂移。
 var clientCommandRequiredEdges = map[string][]string{
-	"cmd/mornlea":           {"cmd/mornlea/app", "cmd/mornlea/benchmark", "cmd/mornlea/capture"},
-	"cmd/mornlea/benchmark": {"cmd/mornlea/app"},
-	"cmd/mornlea/capture":   {"cmd/mornlea/app"},
+	"cmd/mornlea":            {"cmd/mornlea/app", "cmd/mornlea/benchmark", "cmd/mornlea/capture", "cmd/mornlea/devcapture"},
+	"cmd/mornlea/benchmark":  {"cmd/mornlea/app"},
+	"cmd/mornlea/capture":    {"cmd/mornlea/app"},
+	"cmd/mornlea/devcapture": {"cmd/mornlea/app"},
 }
 
 // isClientCommandPackage 报告本地 import path 是否落在客户端命令子树内。
@@ -216,7 +223,7 @@ func clientCommandDependencyViolations(edges map[string][]string) []string {
 				continue
 			}
 			violations = append(violations, fmt.Sprintf(
-				"客户端命令包 %s 不允许依赖 %s：方向必须是 main → app/capture/benchmark、capture/benchmark → app，且 capture 与 benchmark 互不依赖",
+				"客户端命令包 %s 不允许依赖 %s：方向必须是 main → app/benchmark/capture/devcapture、capture/benchmark/devcapture → app，且 capture 与 benchmark 互不依赖",
 				pkg, dependency))
 		}
 	}
@@ -325,10 +332,11 @@ func TestClientCommandDependencyViolationsDetectDrift(t *testing.T) {
 	// contractEdges 是恰好满足契约的最小合成边集。
 	contractEdges := func() map[string][]string {
 		return map[string][]string{
-			"cmd/mornlea":           {"cmd/mornlea/app", "cmd/mornlea/benchmark", "cmd/mornlea/capture"},
-			"cmd/mornlea/app":       {},
-			"cmd/mornlea/benchmark": {"cmd/mornlea/app"},
-			"cmd/mornlea/capture":   {"cmd/mornlea/app"},
+			"cmd/mornlea":            {"cmd/mornlea/app", "cmd/mornlea/benchmark", "cmd/mornlea/capture", "cmd/mornlea/devcapture"},
+			"cmd/mornlea/app":        {},
+			"cmd/mornlea/benchmark":  {"cmd/mornlea/app"},
+			"cmd/mornlea/capture":    {"cmd/mornlea/app"},
+			"cmd/mornlea/devcapture": {"cmd/mornlea/app"},
 		}
 	}
 	if violations := clientCommandDependencyViolations(contractEdges()); len(violations) != 0 {
@@ -359,8 +367,8 @@ func TestClientCommandDependencyViolationsDetectDrift(t *testing.T) {
 		edges := contractEdges()
 		edges["cmd/mornlea"] = nil
 		violations := clientCommandDependencyViolations(edges)
-		if len(violations) != 3 {
-			t.Fatalf("main 卸掉三个子包的装配应报 3 条缺失: %v", violations)
+		if len(violations) != 4 {
+			t.Fatalf("main 卸掉四个子包的装配应报 4 条缺失: %v", violations)
 		}
 	})
 

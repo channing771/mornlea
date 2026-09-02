@@ -91,3 +91,21 @@ Memory/TCP parity 测试 MUST 全绿不改断言;kernel 非 OK 状态码 MUST �
 - THEN 以包含稳定中文文案的 panic 失败,输出缓冲保持调用前内容,不存在静默
   降级或部分输出
 
+### Requirement: engine ABI v9 承载流体批量入口
+
+流体批量求值与重扫 exports SHALL 作为 engine ABI v9 相对 v8 的增量交付；C header、Rust identity 与 `internal/nativeabi` 的当前版本常数 MUST 同步为 9。v9 MUST 原样保留 v8 引入的 20 字节 mesh registry layout 与既有 mesh/light/collision/raycast/physics/worldgen/LOD 行为。接受 ABI version 的当前 engine exports 对错误版本的共同边界 MUST 是先于语义输入解引用、payload 发布以及 engine/fluid 状态语义返回 `ABI_VERSION`，而不是要求 ABI 检查成为函数的第一条指令；为安全建立输出契约所需的非解引用 pointer/range 检查可以先执行，output metadata pointer 可以先校验，合法 metadata 中的长度或计数字段可以先清零。无效 metadata MUST 继续按该 export 的既有参数契约拒绝，不得要求其返回 `ABI_VERSION`。系统 MUST NOT 提供 Go fallback。client ABI 独立演进，不因该 engine 增量改变菜单或渲染 surface。
+
+#### Scenario: engine v9 身份三端一致
+
+- GIVEN 当前 engine C header、Rust 动态库与 Go `internal/nativeabi`
+- WHEN 检查版本常数和 `mornlea_engine_abi_version()`
+- THEN 三端 MUST 均报告 9
+- AND v8 mesh registry layout 与结果 MUST 保持不变
+
+#### Scenario: 合法 output metadata 下 engine v8 调用方不能混装 v9 surface
+
+- GIVEN 当前 engine ABI v9 动态库、传入版本 8 的调用方与该 export 所需的合法 output metadata pointer
+- WHEN 调用任一共有或 v9 流体 export
+- THEN 调用 MUST 返回 ABI version 错误
+- AND 合法 metadata 的长度或计数字段 MAY 已被清零
+- AND 调用 MUST NOT 语义解引用输入、发布任何 payload、进入 engine/fluid 状态语义或转入 fallback

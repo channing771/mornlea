@@ -9,12 +9,14 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync/atomic"
 	"testing"
 
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/config"
+	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/server"
 	"github.com/channing771/mornlea/internal/storage"
 )
@@ -182,12 +184,13 @@ func TestPauseQuitToMenuTearsDownAndAllowsReassembly(t *testing.T) {
 		t.Fatal("拆链后背包状态残留")
 	}
 
-	// 再点「进入游戏」能成功装配出全新会话状态，与首次进入同一构造口径。
+	// 再点「进入游戏」能成功装配出全新会话状态，与首次进入同一构造口径；
+	// 同样停在加载相位（加载收敛后才进入游戏相位）。
 	if quit := app.handleMenuEvent(menuActionStart); quit {
 		t.Fatal("再进入不应请求退出")
 	}
-	if app.menu.phase != MenuPhaseGame {
-		t.Fatalf("二次装配后 phase = %v，want game", app.menu.phase)
+	if app.menu.phase != MenuPhaseLoading {
+		t.Fatalf("二次装配后 phase = %v，want loading", app.menu.phase)
 	}
 	if len(hosts()) != 2 {
 		t.Fatalf("二次装配应新建世界宿主，实际 %d 台", len(hosts()))
@@ -269,7 +272,69 @@ func TestStartWorldRejectsRemoteConnectForm(t *testing.T) {
 	}
 }
 
-// TestPauseSectionAbsentOutsidePausedPhase 锁定下行契约的另一半:非暂停相位
+// TestPausePhasePushesFullDocumentWithPauseSection 锁定暂停相位的下行路径：
+// 暂停相位不进 hud 分节纪律层的早退形态，必须走整份文档路径下行恰好一份携带
+// pause 分节的 `uiState`（hud 分节经回填继续呈现，不会被清成缺席）；同态重复
+// 驱动零推送，回到游戏相位后再推一份不含 pause 分节的文档。缺这条回归时暂停
+// 菜单会因早退条件过宽而永不下行。
+func TestPausePhasePushesFullDocumentWithPauseSection(t *testing.T) {
+	app, window := newHUDPushTestApplication(t)
+	app.SetMenuPhase(MenuPhaseGame)
+	if err := app.inventory.Apply(network.InventoryState{Inventory: confirmedHotbarState()}); err != nil {
+		t.Fatal(err)
+	}
+	app.hudPush.Mark()
+	app.flushHUDState()
+	app.pushUIStateIfChanged()
+	if got := len(window.pushedUIStates); got != 1 {
+		t.Fatalf("游戏相位首次驱动下行 %d 次，想要 1 份 hud 文档", got)
+	}
+
+	// 暂停相位：恰好一份整份文档，携带 pause 分节且回填 hud 分节。
+	app.SetMenuPhase(menuPhasePaused)
+	app.pushUIStateIfChanged()
+	if got := len(window.pushedUIStates); got != 2 {
+		t.Fatalf("暂停相位下行 %d 次，想要 1 份整份文档", got-1)
+	}
+	var paused struct {
+		Phase string           `json:"phase"`
+		Pause *json.RawMessage `json:"pause"`
+		Hud   json.RawMessage  `json:"hud"`
+	}
+	if err := json.Unmarshal(window.pushedUIStates[1], &paused); err != nil {
+		t.Fatalf("暂停载荷不是合法 JSON: %v", err)
+	}
+	if paused.Phase != "paused" || paused.Pause == nil {
+		t.Fatalf("暂停相位文档=%s，想要 phase=paused 且携带 pause 分节", window.pushedUIStates[1])
+	}
+	if len(paused.Hud) == 0 {
+		t.Fatalf("暂停相位文档丢失回填的 hud 分节: %s", window.pushedUIStates[1])
+	}
+
+	// 同态重复驱动零推送。
+	app.pushUIStateIfChanged()
+	if got := len(window.pushedUIStates); got != 2 {
+		t.Fatalf("暂停同态重复驱动下行 %d 次，想要 0", got-2)
+	}
+
+	// 回到游戏相位：再推一份不含 pause 分节的文档。
+	app.SetMenuPhase(MenuPhaseGame)
+	app.pushUIStateIfChanged()
+	if got := len(window.pushedUIStates); got != 3 {
+		t.Fatalf("恢复游戏相位下行 %d 次，想要 1 份文档", got-2)
+	}
+	var resumed struct {
+		Phase string           `json:"phase"`
+		Pause *json.RawMessage `json:"pause"`
+	}
+	if err := json.Unmarshal(window.pushedUIStates[2], &resumed); err != nil {
+		t.Fatalf("恢复载荷不是合法 JSON: %v", err)
+	}
+	if resumed.Phase != "game" || resumed.Pause != nil {
+		t.Fatalf("恢复后文档=%s，想要 phase=game 且无 pause 分节", window.pushedUIStates[2])
+	}
+}
+
 // 绝不携带 pause 分节。
 func TestPauseSectionAbsentOutsidePausedPhase(t *testing.T) {
 	// 设置相位的组装要求合法窗口预设，夹具按构造期默认值填齐。
@@ -329,5 +394,43 @@ func TestPauseMutesPanelToggleUntilResume(t *testing.T) {
 	if !app.panel.visible || app.menu.phase != MenuPhaseGame {
 		t.Fatalf("暂停期 F3 抑制破坏: visible=%v phase=%v",
 			app.panel.visible, app.menu.phase)
+	}
+}
+
+// TestPauseButtonResumeKeepsCameraOrientation 锁定「返回游戏」按钮路径的恢复
+// 不旋转相机：恢复时光标重新捕获，若鼠标基线沿用暂停前的旧值，暂停期间指针
+// 移动过的距离会在恢复帧被当成一次视角旋转（相机猛跳，看似视角被重置）。
+// 捕获边沿必须在 Poll 之前取样才能捕获到恢复迁移。
+func TestPauseButtonResumeKeepsCameraOrientation(t *testing.T) {
+	var app *Application
+	app, _, _ = newChatLoopApplication(t, []chatWindowFrame{
+		{}, // frames[0] 不激活：首个 Poll 直接推进到 1。
+		{keys: map[client.Key]bool{client.KeyEscape: true}}, // 开暂停（释放光标）。
+		{
+			// 暂停期间指针移到远处；「返回游戏」按钮动作在 Poll 回调里触发，
+			// 与生产路径(桥事件批消费)同一恢复函数。闭包经变量 app 延迟绑定。
+			cursorX: 480, cursorY: 320,
+			onPoll: func() { app.handleMenuEvent(menuActionPauseBack) },
+		},
+		// 恢复后的普通帧：指针停在恢复处不动(脚本光标不携带惯性,需显式钉
+		// 在同一位置),否则恢复帧的跳变会被末帧反向位移抵消,断言失效。
+		{cursorX: 480, cursorY: 320},
+	})
+	app.panel = nil
+	// 直构形态的 render 是零值,MouseSensitivity=0 会把一切旋转增量乘成 0,
+	// 视角断言随之失效——显式回到默认灵敏度 1。
+	app.render.MouseSensitivity = 1
+	yaw, pitch := app.camera.Yaw, app.camera.Pitch
+
+	if err := RunInteractive(app); err != nil {
+		t.Fatal(err)
+	}
+	if app.menu.phase != MenuPhaseGame || app.window.CursorCaptured() != true {
+		t.Fatalf("按钮恢复未回到游戏相位: phase=%v captured=%v",
+			app.menu.phase, app.window.CursorCaptured())
+	}
+	if app.camera.Yaw != yaw || app.camera.Pitch != pitch {
+		t.Fatalf("恢复帧视角被旋转: yaw %v→%v pitch %v→%v",
+			yaw, app.camera.Yaw, pitch, app.camera.Pitch)
 	}
 }

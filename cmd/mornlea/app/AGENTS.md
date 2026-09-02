@@ -2,8 +2,8 @@
 
 `cmd/mornlea/app` 承载图形客户端的运行时主体：窗口与无头两种形态的
 `Application`、输入/UI、帧循环、生命周期、音频、LOD 与消息管线。main、
-capture、benchmark 都只经本包导出面驱动它；本包不导入任何客户端兄弟子包
-（方向由 `TestClientCommandSubpackageDependencyDirections` 强制）。
+capture、benchmark、devcapture 都只经本包导出面驱动它；本包不导入任何客户端
+兄弟子包（方向由 `TestClientCommandSubpackageDependencyDirections` 强制）。
 
 ## Directory Map
 
@@ -16,7 +16,8 @@ cmd/mornlea/app/
 ├── app_frame.go               # Frame：每帧消息 drain、模拟推进与绘制的单入口
 ├── app_render.go              # 呈现装配：HUD、名牌、覆盖层绘制
 ├── app_input.go               # 交互输入处理
-├── interactive.go             # RunInteractive：菜单/游戏两相位交互循环
+├── interactive.go             # RunInteractive：菜单/加载/游戏三相位交互循环
+├── dev_capture.go             # 开发捕获泵：CaptureCoordinator 注入面与 /status 原子快照访问器
 ├── app_menu.go、app_pause.go、app_settings.go、debug_panel.go  # UI 状态域
 ├── chat.go、app_messages.go   # 聊天输入与服务端消息呈现
 ├── target_block.go、damage_feedback.go、combat_feedback.go、app_metrics.go、app_audio.go、app_lod.go
@@ -53,6 +54,36 @@ cmd/mornlea/app/
   （`multiplayer_benchmark_scenario.go`，配
   `NewMultiplayerBenchmarkScenario`）。main/capture/benchmark 多方消费它们；
   任何一侧本地复制都会让固定场景互不可比。
+- 开发捕获导出面住 `dev_capture.go`：`CaptureCoordinator` 是 main 注入捕获
+  服务的消费端接口（接口声明在本包、由 `cmd/mornlea/devcapture` 实现），
+  `SetCaptureCoordinator` 供 main 在启动序列注入/清除（循环运行中并发改写是
+  调用方编程错误）；`Phase`/`WindowWidth`/`WindowHeight` 是 `/status` 观察面
+  的原子快照访问器，仅在协调器注入后由帧循环维护。泵 `pumpDevCapture` 由菜单、
+  加载与游戏三处循环每帧各调用一次：空闲零捕获调用、待办时每帧至多捕获一次且
+  非阻塞交付，编码全部离开帧循环
+  （`TestPumpDevCaptureIdleFrameChecksPendingOnly`、
+  `TestPumpDevCaptureDeliversPendingFrameExactlyOnce`）。
+
+## hud 分节下行 (`app/app_ui_state.go`, `app/app_frame.go`)
+
+- 只有「游戏相位 + 会话存活 + 调试面板关闭 + 上次下行文档已是游戏相位」才由
+  `internal/client` 的 `UIHudPushScheduler` 纪律层独占下行：变化源只 `Mark`
+  （权威状态/背包/容器/聊天确认在 `DrainServerMessages`，resize、弹条窗口与
+  进食推进在 `RenderFrame`，marker 到期在 `AfterRender` 返回值），`flushHUDState`
+  绑定权威 tick 边界，出口 `hudStateSink` 把分节载荷包回单份 `uiState` 文档。
+  菜单/设置/暂停相位、调试面板叠加、会话关闭与相位切回都走「整份文档变化才
+  下行」，两条路径共用 `buildUIState`，任意时刻前端拿到的都是一份完整文档
+  （`TestPausePhasePushesFullDocumentWithPauseSection` 钉住暂停相位必须下行
+  pause 分节）。
+- 进食填充比例经 `quantizeEatingProgress` 量化到权威 tick 网格后再比对/置脏，
+  下行频率因此绑定权威 tick 而不是渲染帧率
+  （`TestEatingProgressDownlinkBoundedByTickGrid`）。
+- 生命周期边界（断线/退回主菜单、权威 reset、`startWorld` 新会话）调用
+  `resetHUDStatePush`；相位窗口进入分支（`syncHUDPushWindow`）另做一次
+  Reset+Mark，保证回到游戏相位后的第一次冲刷无条件下行完整分节。
+- 无头路径（基准/capture）纪律层保持零值（nil 出口），冲刷退化为空操作；
+  capture 的场景切换不复位 hud 基线（无可观测出口），它只复位弹条与 marker
+  状态机（`ResetItemPopupBaseline`/`ResetCombatFeedback`）。
 
 ## 帧驱动与加载判据 (`app/app_frame.go`, `app/app_load.go`)
 
@@ -86,7 +117,7 @@ cmd/mornlea/app/
 
 ## 战斗反馈 (`app/combat_feedback.go`)
 
-- `combatFeedback` 独立于 `audioFeedback` 与 `serverTick`，仅由严格递增的 `network.CombatHit` 驱动，`Observe` 严格递增、`ArmMarker` 重置 6 帧、`AfterRender(rendered)` 仅在 `rendered==true` 时递减、`Reset` 清零；`Application` 直接持有该值，不复用 animation manager。
+- `combatFeedback` 独立于 `audioFeedback` 与 `serverTick`，仅由严格递增的 `network.CombatHit` 驱动，`Observe` 严格递增、`ArmMarker` 重置 6 帧、`AfterRender(rendered)` 仅在 `rendered==true` 时递减并返回本帧是否到期（到期是 hud 分节变化源）、`Reset` 清零；`Application` 直接持有该值，不复用 animation manager。
 - 仅导出 capture 最小消费面 `ArmCombatMarker`、`ResetCombatFeedback`、`CombatMarkerVisible`；`DrainServerMessages` 在 `PlayerState` 分支后消费 `CombatHit` 且仅在 `Observe` 成功时播放 `CueCombatHit`；`PlayerState.Reset` 清 `audioFeedback` 与 `combatFeedback`，`resetSessionOwnedState` 清 `combatFeedback` 并在非 nil 时 `hostiles.Reset()`，`resetCapturePresentation` 清 `combatFeedback`，不新增重复生命周期调用。
 
 ## 平台与验证

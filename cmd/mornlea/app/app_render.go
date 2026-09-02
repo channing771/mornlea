@@ -45,6 +45,25 @@ func (a *Application) appendCurrentBlockTarget(
 	return tags, render.BlockOutline{Visible: true, Position: target.Position}
 }
 
+// deriveBlockCrack 从本帧选框与最后确认的权威采掘镜像派生裂纹呈现输入。
+// 与选框同源门控：轮廓不可见（reset 当帧、断线，以及 `appendCurrentBlockTarget`
+// 内部的背包/容器/面板与无命中条件）时裂纹一并隐藏，可见性再要求权威采掘
+// active 且携带有效目标、进度可映射为合法阶段。游戏相位门控兜底同帧隐藏：
+// 暂停相位权威已冻结而采掘镜像尚在；主菜单/设置相位全景接管底图，而全景
+// 相位（`vista != nil`）必然不是游戏相位，同一判定覆盖全部菜单形态，
+// 不另起一套相位口径。
+func (a *Application) deriveBlockCrack(outline render.BlockOutline) render.BlockCrack {
+	if !outline.Visible || !a.miningOverlay.Active || !a.miningOverlay.HasTarget ||
+		a.menu.phase != MenuPhaseGame {
+		return render.BlockCrack{}
+	}
+	stage := render.BlockCrackStage(a.miningOverlay.ProgressTicks, a.miningOverlay.RequiredTicks)
+	if stage == render.BlockCrackStageNone {
+		return render.BlockCrack{}
+	}
+	return render.BlockCrack{Visible: true, Position: a.miningOverlay.Target, Stage: stage}
+}
+
 func RemoteRenderPresentationsSortedInto(
 	avatars []render.Avatar,
 	tags []render.NameTag,

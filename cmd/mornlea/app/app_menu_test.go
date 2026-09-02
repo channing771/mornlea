@@ -222,8 +222,9 @@ func newStartWorldTestApp(t *testing.T, deps Dependencies) *Application {
 	return app
 }
 
-// TestHandleMenuEventStartAssemblesWorld 验证「进入游戏」点击：startWorld 被调用、成功置相位
-// game、starting 复位并捕获光标。
+// TestHandleMenuEventStartAssemblesWorld 验证「进入游戏」点击：startWorld 被调用、
+// 成功置相位 loading（加载收敛后才进入游戏相位）、starting 复位且光标保持未捕获
+// （捕获时机已迁移到加载收敛点）。
 func TestHandleMenuEventStartAssemblesWorld(t *testing.T) {
 	app := newStartWorldTestApp(t, startWorldSuccessDeps(t))
 	t.Cleanup(func() { _ = app.Close() })
@@ -231,8 +232,8 @@ func TestHandleMenuEventStartAssemblesWorld(t *testing.T) {
 	if quit := app.handleMenuEvent(menuActionStart); quit {
 		t.Fatal("进入游戏不应请求退出")
 	}
-	if app.menu.phase != MenuPhaseGame {
-		t.Fatalf("装配成功后 phase = %v，want game", app.menu.phase)
+	if app.menu.phase != MenuPhaseLoading {
+		t.Fatalf("装配成功后 phase = %v，want loading", app.menu.phase)
 	}
 	if app.menu.starting {
 		t.Fatal("装配成功后 starting 应为 false")
@@ -240,8 +241,8 @@ func TestHandleMenuEventStartAssemblesWorld(t *testing.T) {
 	if app.menu.error != "" {
 		t.Fatalf("装配成功不应有错误行: %q", app.menu.error)
 	}
-	if !app.window.CursorCaptured() {
-		t.Fatal("装配成功应捕获光标")
+	if app.window.CursorCaptured() {
+		t.Fatal("装配成功停留在加载相位，不应捕获光标（捕获迁移到加载收敛点）")
 	}
 	if app.host == nil {
 		t.Fatal("装配成功应设置 Host")
@@ -311,8 +312,35 @@ func TestHandleMenuEventStartIgnoredWhileStarting(t *testing.T) {
 	if got := openStoreCalls.Load(); got != 1 {
 		t.Fatalf("正常进入游戏应恰好装配一次，OpenStore 调用 = %d", got)
 	}
-	if app.menu.phase != MenuPhaseGame {
-		t.Fatalf("正常装配后 phase = %v，want game", app.menu.phase)
+	if app.menu.phase != MenuPhaseLoading {
+		t.Fatalf("正常装配后 phase = %v，want loading", app.menu.phase)
+	}
+}
+
+// TestHandleMenuEventLoadingPhaseIgnoresAllActions 锁定加载相位的防御档：加载屏
+// 没有合法上行动作，任何动作 id（含 Enter 默认按钮路径的「进入游戏」）都不得
+// 重新装配世界、改变相位或请求退出。
+func TestHandleMenuEventLoadingPhaseIgnoresAllActions(t *testing.T) {
+	var openStoreCalls atomic.Int32
+	deps := startWorldSuccessDeps(t)
+	deps.OpenStore = func(context.Context, Options) (storage.WorldStore, error) {
+		openStoreCalls.Add(1)
+		return NewConnectionTestStore(42), nil
+	}
+	app := newStartWorldTestApp(t, deps)
+	t.Cleanup(func() { _ = app.Close() })
+	app.menu.phase = MenuPhaseLoading
+
+	for _, id := range []string{menuActionStart, menuActionQuit, menuActionSettings, menuActionPauseBack, "unknown-action"} {
+		if quit := app.handleMenuEvent(id); quit {
+			t.Fatalf("加载相位动作 %q 不应请求退出", id)
+		}
+	}
+	if app.menu.phase != MenuPhaseLoading {
+		t.Fatalf("加载相位收到动作不得改变相位，got %v", app.menu.phase)
+	}
+	if got := openStoreCalls.Load(); got != 0 {
+		t.Fatalf("加载相位不得重新装配世界，OpenStore 调用 = %d", got)
 	}
 }
 

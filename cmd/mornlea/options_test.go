@@ -2,7 +2,12 @@
 
 package main
 
-import "testing"
+import (
+	"testing"
+
+	application "github.com/channing771/mornlea/cmd/mornlea/app"
+	"github.com/channing771/mornlea/cmd/mornlea/devcapture"
+)
 
 func TestParseMainOptionsRejectsRemoteLocalConflicts(t *testing.T) {
 	for _, args := range [][]string{
@@ -141,5 +146,85 @@ func TestParseOptionsAcceptsDevAndConfig(t *testing.T) {
 	}
 	if options.ConfigPath != "/tmp/x.json" {
 		t.Fatalf("ConfigPath = %q", options.ConfigPath)
+	}
+}
+
+func TestParseMainOptionsDevCaptureDefaultsOff(t *testing.T) {
+	opts, err := parseMainOptions(nil)
+	if err != nil {
+		t.Fatalf("解析空参数失败: %v", err)
+	}
+	if opts.DevCapture {
+		t.Fatal("--dev-capture 默认必须关闭：捕获服务只在显式启用时监听端口并写发现文件")
+	}
+	if opts.DevCaptureAddr != devcapture.DefaultAddr {
+		t.Fatalf("DevCaptureAddr = %q，想要默认 %q", opts.DevCaptureAddr, devcapture.DefaultAddr)
+	}
+}
+
+func TestParseMainOptionsDevCaptureEnabled(t *testing.T) {
+	opts, err := parseMainOptions([]string{"--dev-capture"})
+	if err != nil {
+		t.Fatalf("解析 --dev-capture 失败: %v", err)
+	}
+	if !opts.DevCapture {
+		t.Fatal("DevCapture = false，想要 true")
+	}
+	if opts.DevCaptureAddr != devcapture.DefaultAddr {
+		t.Fatalf("DevCaptureAddr = %q，想要默认 %q", opts.DevCaptureAddr, devcapture.DefaultAddr)
+	}
+}
+
+func TestParseMainOptionsDevCaptureRejectsHeadlessPaths(t *testing.T) {
+	// --dev-capture 消费交互窗口的合成画面；benchmark 与 capture 是无头路径，
+	// 没有窗口可捕获，组合语义无法定义，必须在 parse 层直接拒绝而不是让
+	// 某一方静默胜出。
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"与 benchmark 互斥", []string{"--dev-capture", "--benchmark", "--perf-output", "/tmp/p.json"}},
+		{"与 capture 互斥", []string{"--dev-capture", "--capture", "/tmp/shots"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := parseMainOptions(tc.args); err == nil {
+				t.Fatalf("accepted %v", tc.args)
+			}
+		})
+	}
+}
+
+func TestParseMainOptionsDevCaptureAddrPassesThrough(t *testing.T) {
+	opts, err := parseMainOptions([]string{"--dev-capture", "--dev-capture-addr", "127.0.0.1:18790"})
+	if err != nil {
+		t.Fatalf("解析 --dev-capture --dev-capture-addr 失败: %v", err)
+	}
+	if opts.DevCaptureAddr != "127.0.0.1:18790" {
+		t.Fatalf("DevCaptureAddr = %q，想要 127.0.0.1:18790", opts.DevCaptureAddr)
+	}
+}
+
+func TestParseMainOptionsDevCaptureAddrAloneIsInert(t *testing.T) {
+	// 独立 flag 语义（同 --perf-output）：--dev-capture-addr 单独给出不报错
+	// 也不启用捕获服务，仅在 --dev-capture 存在时被消费。
+	opts, err := parseMainOptions([]string{"--dev-capture-addr", "127.0.0.1:18790"})
+	if err != nil {
+		t.Fatalf("解析 --dev-capture-addr 失败: %v", err)
+	}
+	if opts.DevCapture {
+		t.Fatal("--dev-capture-addr 不得单独启用捕获服务")
+	}
+}
+
+func TestDevCaptureStatusSourceDegradesWithoutWindow(t *testing.T) {
+	// 适配器对零值 Application（无窗口、未注入协调器）必须安全降级：不 panic，
+	// 尺寸以非正值报告「未知」（StatusSource 契约），相位返回合法枚举串。
+	source := devCaptureStatusSource{app: &application.Application{}}
+	if width, height := source.WindowWidth(), source.WindowHeight(); width > 0 || height > 0 {
+		t.Fatalf("无窗口时尺寸 (%d,%d)，想要非正值表示未知", width, height)
+	}
+	if phase := source.Phase(); phase == "" {
+		t.Fatal("零值相位应返回合法枚举串（game），想要非空")
 	}
 }

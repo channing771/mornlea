@@ -15,7 +15,7 @@ func TestTooltipShowsItemNameAtPointer(t *testing.T) {
 	const width, height = float32(1280), float32(800)
 	inventory := fullTestInventory()
 	inventory.Backpack[0] = core.ItemStack{Item: core.ItemRawIron, Count: 12}
-	x, y := inventorySlotOrigin(core.HotbarSlots, true, width, height)
+	x, y := inventorySlotOrigin(core.HotbarSlots, width, height)
 	tooltip := TooltipOverlay{Valid: true, CursorX: float64(x) + 1, CursorY: float64(y) + 1}
 
 	var layout hotbarLayout
@@ -36,13 +36,15 @@ func TestTooltipShowsItemNameAtPointer(t *testing.T) {
 	if surface.X < x+gap || surface.Y < y+gap {
 		t.Fatalf("tooltip 未在指针右下侧: surface=(%v,%v) 指针=(%v,%v)", surface.X, surface.Y, x, y)
 	}
-	// 双层字形：阴影加前景，文本与 core.ItemDisplayName 同源。
+	// 双层字形：阴影加前景，文本与 core.ItemDisplayName 同源。前景取面板文字
+	// 令牌 `textOnPanelFg`：背景是 `panelSurface` 暖羊皮纸，暖白世界浮层字对比
+	// 不足；阴影层仍走 `textPrimaryShadow`。
 	wantName, ok := core.ItemDisplayName(core.ItemRawIron)
 	if !ok || len(layout.glyphs) != utf8.RuneCountInString(wantName)*2 {
 		t.Fatalf("tooltip glyphs=%d，想要「%s」双层共 %d", len(layout.glyphs), wantName, utf8.RuneCountInString(wantName)*2)
 	}
 	for index, glyph := range layout.glyphs {
-		wantColor := textPrimaryFg
+		wantColor := textOnPanelFg
 		if index < len(layout.glyphs)/2 {
 			wantColor = textPrimaryShadow
 		}
@@ -69,7 +71,7 @@ func TestTooltipFlipsAtFramebufferEdge(t *testing.T) {
 	atlas := newFakeNameTagAtlas()
 	// 660×800 让宽度约束成为唯一收口项：面板右沿贴近 framebuffer 右缘。
 	const width, height = float32(660), float32(800)
-	scale := hudScale(true, width, height)
+	scale := hudScale(width, height)
 	entryX, entryY := recipeButtonOrigin(recipeEntryCount-1, width, height)
 	// 指针落在最右一条入口的右沿内侧：它右侧只剩栏间隙与内边距。
 	tooltip := TooltipOverlay{
@@ -100,7 +102,7 @@ func TestTooltipZeroInstancesForEmptyOrOutsideOrClosed(t *testing.T) {
 	inventory := fullTestInventory()
 	// 背包 1 号格清空，其余格全满：悬停它不得产生实例。
 	inventory.Backpack[1] = core.ItemStack{}
-	emptyX, emptyY := inventorySlotOrigin(core.HotbarSlots+1, true, width, height)
+	emptyX, emptyY := inventorySlotOrigin(core.HotbarSlots+1, width, height)
 	outside := TooltipOverlay{Valid: true, CursorX: 3, CursorY: 3}
 	closed := TooltipOverlay{Valid: false, CursorX: float64(emptyX) + 1, CursorY: float64(emptyY) + 1}
 	for _, test := range []struct {
@@ -127,40 +129,38 @@ func TestTooltipZeroInstancesForEmptyOrOutsideOrClosed(t *testing.T) {
 	}
 }
 
-// TestTooltipTextMatchesPopupSource 锁定同源性：同一物品在 tooltip 与物品名弹条
-// 中的文本都来自 `core.ItemDisplayName`——两侧字形按书写顺序取自同一批 atlas
-// cell（UV 逐项一致，与各自缩放无关）。
-func TestTooltipTextMatchesPopupSource(t *testing.T) {
+// TestTooltipTextMatchesRegistryDisplayName 锁定同源性：tooltip 的文本与字形
+// 都来自 `core.ItemDisplayName`，按书写顺序逐 rune 取自同一批 atlas cell。
+func TestTooltipTextMatchesRegistryDisplayName(t *testing.T) {
 	atlas := newFakeNameTagAtlas()
 	const width, height = float32(1280), float32(800)
 	inventory := fullTestInventory()
 	// 石镐是带耐久物品：合法栈必须携带 1..max 的耐久值，否则镜像整体失效。
 	fullDurability, _ := core.ItemMaxDurability(core.ItemStonePickaxe)
 	inventory.Backpack[0] = core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: fullDurability}
-	x, y := inventorySlotOrigin(core.HotbarSlots, true, width, height)
+	x, y := inventorySlotOrigin(core.HotbarSlots, width, height)
 	tooltip := TooltipOverlay{Valid: true, CursorX: float64(x) + 1, CursorY: float64(y) + 1}
 
-	var tooltipLayout hotbarLayout
-	appendTooltipOverlay(&tooltipLayout, atlas, tooltip, inventory, nil, nil, nil, width, height)
-	popupName, ok := core.ItemDisplayName(core.ItemStonePickaxe)
+	var layout hotbarLayout
+	appendTooltipOverlay(&layout, atlas, tooltip, inventory, nil, nil, nil, width, height)
+	name, ok := core.ItemDisplayName(core.ItemStonePickaxe)
 	if !ok {
 		t.Fatal("石镐缺显示名")
 	}
-	var popupLayout hotbarLayout
-	appendPopupText(&popupLayout, atlas, popupName, 400, 300, 1)
-
-	foreground := tooltipLayout.glyphs[len(tooltipLayout.glyphs)/2:]
-	popupForeground := popupLayout.glyphs[len(popupLayout.glyphs)/2:]
-	if len(foreground) != len(popupForeground) {
-		t.Fatalf("tooltip 前景字形=%d，弹条前景字形=%d，想要同源同量", len(foreground), len(popupForeground))
+	runes := []rune(name)
+	// 阴影层在前、前景层在后，各 rune 数量与显示名一致。
+	if len(layout.glyphs) != len(runes)*2 {
+		t.Fatalf("tooltip 字形=%d，想要「%s」双层共 %d", len(layout.glyphs), name, len(runes)*2)
 	}
-	for index, glyph := range foreground {
-		popupGlyph := popupForeground[index]
-		if glyph.U0 != popupGlyph.U0 || glyph.V0 != popupGlyph.V0 ||
-			glyph.U1 != popupGlyph.U1 || glyph.V1 != popupGlyph.V1 {
-			t.Fatalf("字形 %d UV=%v，弹条同位置 UV=%v，来源不同源", index,
-				[4]float32{glyph.U0, glyph.V0, glyph.U1, glyph.V1},
-				[4]float32{popupGlyph.U0, popupGlyph.V0, popupGlyph.U1, popupGlyph.V1})
+	for pass := range 2 {
+		for index, char := range runes {
+			glyph := layout.glyphs[pass*len(runes)+index]
+			want := atlas.Glyph(char)
+			if glyph.U0 != want.U0 || glyph.V0 != want.V0 || glyph.U1 != want.U1 || glyph.V1 != want.V1 {
+				t.Fatalf("pass %d rune %d UV=%v，想要注册表显示名 cell %v", pass, index,
+					[4]float32{glyph.U0, glyph.V0, glyph.U1, glyph.V1},
+					[4]float32{want.U0, want.V0, want.U1, want.V1})
+			}
 		}
 	}
 }
