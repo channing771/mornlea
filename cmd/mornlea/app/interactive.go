@@ -212,6 +212,11 @@ func runGamePhase(app *Application) error {
 	var textInputBuffer [companion.MaxPlanCommandBytes]rune
 
 	for !app.window.ShouldClose() {
+		// 光标捕获的帧间边沿在 `Poll` 之前取样:「释放→捕获」迁移可能由
+		// 上一帧末以来的任何来源触发(键位栈、暂停恢复的桥动作、事件回调)，
+		// 在 Poll 之后才取样会漏掉 Poll 期间发生的迁移——陈旧鼠标基线随即
+		// 把迁移期间累计的指针位移当成一次视角旋转(恢复暂停后相机猛跳)。
+		capturedBeforePoll := app.window.CursorCaptured()
 		app.window.Poll()
 
 		// 捕获泵：与菜单相位同位——`Poll` 之后、渲染之前每帧一次非阻塞待办
@@ -221,13 +226,12 @@ func runGamePhase(app *Application) error {
 		now := time.Now()
 		dt := min(now.Sub(lastFrame), 100*time.Millisecond)
 		lastFrame = now
-		capturedBeforeDrain := app.window.CursorCaptured()
 		app.DrainServerMessages(64)
 		if err := app.receiver.Err(); err != nil {
 			app.CloseClientSession(err)
 			return err
 		}
-		justCaptured := !capturedBeforeDrain && app.window.CursorCaptured()
+		justCaptured := !capturedBeforePoll && app.window.CursorCaptured()
 		if justCaptured {
 			lastMouseX, lastMouseY = app.window.CursorPos()
 		}
@@ -302,6 +306,14 @@ func runGamePhase(app *Application) error {
 					// 菜单相位，不再触碰已释放的世界状态。
 					return nil
 				}
+			}
+			if !app.pauseVisible() {
+				// 「返回游戏」按钮路径的恢复：与 Esc 关闭路径同样刷新鼠标基线
+				// 并置 justCaptured——关闭覆盖层时光标重新捕获，若沿用暂停前的
+				// 旧基线，暂停期间指针移动过的距离会在下一帧被当成一次视角
+				// 旋转（相机猛跳，看似视角被重置）。
+				lastMouseX, lastMouseY = app.window.CursorPos()
+				justCaptured = true
 			}
 		}
 		pausedUI := app.pauseVisible()

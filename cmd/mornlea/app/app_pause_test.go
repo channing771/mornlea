@@ -396,3 +396,41 @@ func TestPauseMutesPanelToggleUntilResume(t *testing.T) {
 			app.panel.visible, app.menu.phase)
 	}
 }
+
+// TestPauseButtonResumeKeepsCameraOrientation 锁定「返回游戏」按钮路径的恢复
+// 不旋转相机：恢复时光标重新捕获，若鼠标基线沿用暂停前的旧值，暂停期间指针
+// 移动过的距离会在恢复帧被当成一次视角旋转（相机猛跳，看似视角被重置）。
+// 捕获边沿必须在 Poll 之前取样才能捕获到恢复迁移。
+func TestPauseButtonResumeKeepsCameraOrientation(t *testing.T) {
+	var app *Application
+	app, _, _ = newChatLoopApplication(t, []chatWindowFrame{
+		{}, // frames[0] 不激活：首个 Poll 直接推进到 1。
+		{keys: map[client.Key]bool{client.KeyEscape: true}}, // 开暂停（释放光标）。
+		{
+			// 暂停期间指针移到远处；「返回游戏」按钮动作在 Poll 回调里触发，
+			// 与生产路径(桥事件批消费)同一恢复函数。闭包经变量 app 延迟绑定。
+			cursorX: 480, cursorY: 320,
+			onPoll: func() { app.handleMenuEvent(menuActionPauseBack) },
+		},
+		// 恢复后的普通帧：指针停在恢复处不动(脚本光标不携带惯性,需显式钉
+		// 在同一位置),否则恢复帧的跳变会被末帧反向位移抵消,断言失效。
+		{cursorX: 480, cursorY: 320},
+	})
+	app.panel = nil
+	// 直构形态的 render 是零值,MouseSensitivity=0 会把一切旋转增量乘成 0,
+	// 视角断言随之失效——显式回到默认灵敏度 1。
+	app.render.MouseSensitivity = 1
+	yaw, pitch := app.camera.Yaw, app.camera.Pitch
+
+	if err := RunInteractive(app); err != nil {
+		t.Fatal(err)
+	}
+	if app.menu.phase != MenuPhaseGame || app.window.CursorCaptured() != true {
+		t.Fatalf("按钮恢复未回到游戏相位: phase=%v captured=%v",
+			app.menu.phase, app.window.CursorCaptured())
+	}
+	if app.camera.Yaw != yaw || app.camera.Pitch != pitch {
+		t.Fatalf("恢复帧视角被旋转: yaw %v→%v pitch %v→%v",
+			yaw, app.camera.Yaw, pitch, app.camera.Pitch)
+	}
+}
