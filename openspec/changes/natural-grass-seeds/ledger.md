@@ -80,20 +80,20 @@ Ruling: planning candidate `ab8292569393edfb6748a82f6303c50b0c7654e9` 的独立 
 
 ## Task 4.1 Authoritative Mining, Stable Seed Drops, And Durability
 
-- Status: `PENDING`.
-- Task baseline SHA: `PENDING`.
-- Implementer: `PENDING`（fresh）。
-- RED evidence: `PENDING`（固定 hit/miss、跨 tick/player/tool 重放、容量满两分支、疲劳/耐久、最后一点耐久与伙伴 planner/executor 双拒绝）。
-- Code/test commit C: `PENDING`（完整 SHA + 单行英文 subject；不得包含 `tasks.md`/`ledger.md`）。
-- Files changed: `PENDING`（仅 entity mining/yield/durability、companion 双侧拒绝及必要 parity 测试）。
-- Drop/atomicity evidence: `PENDING`（salt `0x4752_4153_5353_4544`；roll 只含 seed/dimension/坐标位模式；命中容量满时 block/drop/revision/tool/fatigue 全不变且重试结果稳定；miss 容量满仍清块；成功采草累积既有疲劳但所有手持状态零耐久）。
-- Final verified implementation SHA I: `PENDING`（`C` 加本任务全部 repair 后的完整 SHA）。
-- Focused verification bound to I: `PENDING`（entity/companion/runtime/server race、archcheck、race-changed 与 `git diff --check`）。
-- SPEC reviewer / verdict / findings at I: `PENDING`.
-- QUALITY reviewer / verdict / findings at I: `PENDING`.
-- Repair rounds and commits: `PENDING`.
-- Tasks/ledger-only evidence commit L: `PENDING`（只含本任务 checkbox 与 ledger 证据）。
-- Ruling: `PENDING`.
+- Status: `DONE`（2026-09-03 控制会话勾选）。
+- Task baseline SHA: `4ad91fde834a4f9c34599f5c326b89c009e380f7`（Task 3.1 `L`）。
+- Implementer: fresh zcode implementer（独立于 1.1–3.1）。
+- RED evidence: `TestShortGrassMiningRuleOneTickAnyHeld`（`(0,false)`≠`(1,true)`）;hit/miss/容量满/零磨损/重放稳定等行为测试全部因采掘不完成而失败（`采除后方块=84，想要空气`）;`TestCompleteMiningShortGrassNoOpLeavesStateUntouched`（RejectProtectedBlock≠RejectNoTarget）;疲劳测试（0≠5）;双侧 AST guard（`companionMineableBlock`/`planMineableBlock` 未显式点名 `IsWildGrass`）;runtime parity（无区块变更）;roll API 编译 RED（`undefined: shortGrassSeedDropSalt/Roll`）。`TestCompanionMiningNeverSettlesShortGrass` 改动前偶然通过（缺失 `BlockDrop` 巧合拒绝）,作为行为回归保留,AST guard 是"显式拒绝"的承重 RED。
+- Code/test commit C: `012676171de572d71f09271703c2bb5777af5956` `feat(gameplay): drop seeds from short grass`（8 文件 +927/−8,不含 `tasks.md`/`ledger.md`,Go-only 无 Rust/ABI）。
+- Files changed: `internal/sim/entity/mining.go`（`miningRule` 短草分支任意手持 `(1,true)`+harvestable=资格;`completeMining` 专用分支位于 door/bed/furnace/chest 后、作物多产物与 `BlockDrop` 前,三条常数路径;`wildGrassDurabilityExempt` 第三类耐久豁免;`companionMineableBlock` 显式拒绝）、`internal/sim/entity/yield.go`（`shortGrassSeedDropSalt=0x4752_4153_5353_4544`+`shortGrassSeedDropRoll` 复用既有 splitmix64 链）、entity 三个测试文件、`internal/companion/plan_types.go`+新测试、`internal/sim/runtime/short_grass_drop_test.go`(新,真实 input→FinishWorld→commit 管线 parity)。
+- Drop/atomicity evidence: salt 精确 `0x4752_4153_5353_4544` 且与 5 个 entity salt 及 Rust worldgen salt 互异（测试钉住）;hash 链只折 `uint64(worldSeed)^salt`→`uint32(dimension)`→`uint32(x/y/z)`（有符号经位模式）,`hash&7==0`,签名不含 tick/player/held/retry——重放稳定由 3 子测试+冻结判定表（含负坐标 `(−9,1,5)` hit/`(−1,1,5)` miss、dimension=1 翻转样本）钉住,4096 样本比率 0.1208≈1/8;命中+容量满:连续 3 次 `RejectDropCapacity` 全不变（chunk/drops hash、revision、tool、三层疲劳、inventoryDirty）,释放一格后同坐标结算一致（重试不可重掷）;未命中+容量满:仍清块、revision+1、drops hash 不变;零磨损:11 种手持（含耐久 1 工具/损坏形态）逐字段不变、耐久 1 不转损坏形态、无额外 dirty;同锄先草后泥土正常磨损 1;疲劳 hit/miss 各累积既有 5、拒绝路径零。
+- Final verified implementation SHA I: `012676171de572d71f09271703c2bb5777af5956`（无 repair 轮）。
+- Focused verification bound to I: implementer 于 clean commit 全绿:`go test ./internal/sim/entity ./internal/companion ./internal/sim/runtime -race -count=1` ok（19.8s）;`go test ./internal/server -run '(Mining|Drop|TransportParity)' -race -count=1` ok（8.8s）;`go test ./internal/archcheck -count=1` ok;`make test-race-changed RACE_BASE=4ad91fde` 21 包 ok（3:26）;`git diff --check` clean;gofmt/vet clean;无 Rust 改动故无需 `make rust`。
+- SPEC reviewer / verdict / findings at I: fresh zcode SPEC reviewer = `SPEC PASS`,0 Critical/0 Important/2 非阻塞（`wildGrassDurabilityExempt` 单行包装属风格选择且与既有豁免命名平行;runtime parity 用平铺夹具属 4.1 正确范围,自然生成 E2E 归 5.1）。A–G 全部 SATISFIED,附 file:line 证据;独立抽查（ShortGrass/WildGrass/Durability|Exhaustion|Harvest|Wheat|CompanionMine）全绿。
+- QUALITY reviewer / verdict / findings at I: fresh zcode QUALITY reviewer = `QUALITY PASS`,0 Critical/0 Important/1 Minor+2 Info:（Minor,下游）`shortGrassSeedDropRoll` 为包私有且无导出包装,5.1 夹具的"发送输入前断言命中"在 `internal/server` 无法不复制算法地实现 — 建议 5.1 导出访问器（有 `CompanionMineContainerStaging` 先例）或修订 design,记录在案;（Info）4096 样本块的 `hits==0||hits==4096` 为死条件、纯函数 replay 循环意义有限（装饰性）;（Info）AST guard 为真 `go/parser`+`ast.Inspect` 标识符遍历,失败即 `Fatalf`,行为断言闭环当前行为。reviewer 独立以独立程序重实现 design 链逐位复核:3 hit/3 miss 冻结位置、runtime 夹具 (0,1,1)hit/(0,1,4)miss、dim=1 翻转、比率 0.1208 全部一致;`PrepareDrop` 确认为纯预演（by-value 副本,文档钉住）。
+- Repair rounds and commits: 无（首轮双 PASS）。
+- Tasks/ledger-only evidence commit L: 本 evidence commit（不回写自身 SHA,不冒充 `I`）。
+- Ruling: Task 4.1 final `I` = `01267617`,双评审零 Critical/Important,勾选成立 — Task 5.1 派发约束:（1）必须导出 `shortGrassSeedDropRoll` 访问器（entity 侧导出或经共享 helper,循 `CompanionMineContainerStaging` 先例）供 server E2E 夹具预断言命中,禁止复制算法;（2）fluid-on 生产配置世界必须重新冻结命中样本,不得复用 Task 2.1 的 dry-world 样本 `(-32,64,-32)`（其 surface=63/target=64=海平面,fluid-on 下被淹）。Minor 两项（死条件、包装风格）记录不返工。
 
 ## Task 5.1 Missing-player Inventory And Natural-seed Farming E2E
 
