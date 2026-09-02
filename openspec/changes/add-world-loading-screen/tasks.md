@@ -10,7 +10,7 @@
 
 ## 1. Go 相位机、加载循环与桥 schema
 
-- [ ] 1.1 失败测试先行（`cmd/mornlea/app`）：`MenuPhaseLoading` 的
+- [x] 1.1 失败测试先行（`cmd/mornlea/app`）：`MenuPhaseLoading` 的
   `uiPhase()` 映射 `"loading"`；`startWorld` 成功置 `MenuPhaseLoading`
   （既有期望 `MenuPhaseGame` 的测试同步改判）；`handleMenuEvent` 装配成功后
   不再捕获光标（窗口替身断言无 `SetCursorCaptured(true)`），失败路径回菜单
@@ -19,17 +19,17 @@
   `total=LoadedChunkTarget`），其余相位分节缺席；`runLoadingPhase` 收敛即置
   `MenuPhaseGame` 并捕获光标、窗口关闭返回 nil、`receiver.Err` 走
   `CloseClientSession` 返回错误（沿既有 fake/直构测试模式）。
-- [ ] 1.2 实现：`app_menu.go` 加相位与映射并移除装配成功处的光标捕获；
+- [x] 1.2 实现：`app_menu.go` 加相位与映射并移除装配成功处的光标捕获；
   `app_startup.go` `startWorld` 置 loading；`interactive.go` `RunInteractive`
   loading 路由 + `runLoadingPhase`（Poll → pumpDevCapture → drain 桥事件
   （未知告警忽略）→ `Frame(MessageDrainMax, MessageDrainMax, dt)` →
   `ApplicationLoadComplete` 检查；dt 钳制 100ms；每 5s 进度日志）；
   `app_ui_state.go` `uiStateJSON.Loading` 与组装。
-- [ ] 1.3 schema 单源：`frontend/src/bridge/schema.json` `phase` 枚举追加
+- [x] 1.3 schema 单源：`frontend/src/bridge/schema.json` `phase` 枚举追加
   `"loading"`、新增 `$defs/loadingState`（`loaded`≥0、`total`≥1、
   additionalProperties false）、`uiState` 属性与描述同步；`app_ui_state_test.go`
   钉值测试用同一文件校验 loading 文档。
-- [ ] 1.4 验证：`go test ./cmd/mornlea/app -race -count=1`；
+- [x] 1.4 验证：`go test ./cmd/mornlea/app -race -count=1`；
   `go test ./internal/archcheck -count=1`；`gofmt -l` 无输出。
 
 ## 2. 前端加载屏组件
