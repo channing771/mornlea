@@ -6,7 +6,7 @@
 - 执行模型：每个 Task 使用 fresh implementer；每项完成后由独立 SPEC reviewer 与 QUALITY reviewer 双裁决；控制会话不直接实现生产代码。
 - 修复循环：单任务最多 5 轮；未通过双评审不得勾选 `tasks.md`。
 - 验证复用：只有相同基线 SHA、命令与范围的完整输出可复用；所有结果记录实际 exit code，不把未完成命令写成通过。
-- 当前版本事实：protocol v32、player v8、chunk v9、metadata v3、companions v5、hostile v1、engine ABI v9、client ABI v13、scenario v20。
+- 当前版本事实：protocol v32、player v8、chunk v9、metadata v3、companions v5、hostile v1、engine ABI v9、client ABI v13、scenario v20（认领时基线；main 同步后 client ABI v14、scenario v21，见「main 同步」节）。
 - 计划目标：仅 companions 升 v5；Agent HTTP application contract v1；MCP tool contract v1；MCP wire `2025-11-25`。
 - Ruling: 以执行时 `main` 的 engine ABI v9/client ABI v13 为不变基线，本 change 不认领 native ABI 升版 — 代码与用户更新的项目指南高于旧规划中的 v8/v11/v12 文档事实 — 若裁决错误，成本是收尾版本文档与钉死测试需重做，不改变 Agent HTTP/MCP 合同。
 - Ruling: Task 6 只移除 Go config 的 provider/direct-model 生产语义并新增强类型 Agent HTTP client；现有 Planner/Dialogue direct-model 实现保留为未接线的编译过渡，由 Task 9/10 在权威编排切换时删除 — 这避免 Task 6 提前改变运行路径，也不引入 fallback、隐式映射或 backend 开关 — 若裁决错误，成本是 Task 9/10 的删除面扩大，不影响 Task 6 合同。
@@ -352,9 +352,13 @@
 - Round 1 修复轮（fresh implementer，起始 `c1f39af6`，工作区干净）：
   - SPEC 侧以 `d3634d60` 对齐最终矩阵。改动文件：`openspec/changes/extract-companion-agent-service/{proposal.md,design.md,tasks.md,specs/project-identity/spec.md}`、`openspec/specs/tiered-swords-combat/spec.md`。要点：`project-identity` delta 完成态钉 client ABI v14/scenario v21 并保留「本 change 自身只升 companions v4→v5，client ABI/scenario 升版来自 main 同步」意图；`tiered-swords-combat` 主规格当前状态修为 companions v5/scenario v21（保留 `90188fbc` 历史引入矩阵与 ABI 8/11 历史基线表述）；proposal/design/tasks 的 client ABI v13→v14 与端状态表述同步。
   - QUALITY 侧以 `b10df791` 删除过渡残留。改动文件：`internal/companion/{model_config.go,model_config_test.go,task.go,task_queue_test.go}`、`internal/config/config.go`。要点：删除 `ModelSettings` 类型与 `ValidateModelEndpoint`/`Validate`/`TaskTimeout` 方法及只测死代码的 `model_config_test.go`，移除 `config.AI.ModelSettings` 字段，`task.go`/`task_queue_test.go` 注释改为如实描述 `ValidateTaskTimeoutMinutes`/host.go 校验链；保留存活接线的 `TaskTimeoutDefaultMinutes`/`ValidateTaskTimeoutMinutes`；`grep -rn ModelSettings internal cmd` 零命中。
-  - 控制会话裁决：`9dfdbc69` 的 `ci:` 提交 type 按 main 侧同款 `ci:` 先例（裁决计 12 条）豁免，不改写历史——重写会使 ledger 全部 SHA 证据失效。
+  - 控制会话裁决：`9dfdbc69` 的 `ci:` 提交 type 按 main 侧同款 `ci:` 先例（main 11 条，含本提交全域 12 条）豁免，不改写历史——重写会使 ledger 全部 SHA 证据失效。
   - Round 1 修复门禁（全部在 <WT> 串行执行）：`go build ./...` PASS；`go vet ./...` PASS；`go test ./internal/companion ./internal/config -short -count=1` PASS（companion 4.452s、config 1.371s）；`go test ./internal/server -short -count=1` PASS（76.535s）；`go test ./internal/archcheck -count=1` PASS（5.293s）；`openspec validate --all --strict --no-interactive` PASS（83 passed, 0 failed）；改动 Go 文件 gofmt 无输出；`git diff --check` PASS。
-- 终审最终裁决由后续复审给出；本小节只记录 Round 1 评审结论与修复，不构成整分支终审 PASS。
+- Round 1 修复后的 scoped 复审（fresh reviewer 双裁决，范围 `c1f39af6..e70cbb5e`）均 PASS，整分支终审恢复为 PASS：
+  - SPEC 复审 PASS：残留清零——全仓当前状态源（`AGENTS.md`、`openspec/config.yaml`、双语 README、`docs/architecture.md`、change 产物、`openspec/specs/`）与最终矩阵（companions v5 / client ABI v14 / scenario v21）一致，其余 v4/v13/v20 命中全部属历史/迁移/认领基线叙述并逐条裁定豁免；ledger「基线与规则」第 9 行系认领基线快照、可豁免（已补时态括注）；`tiered-swords-combat` 改法正确且 `90188fbc` 历史矩阵与 ABI 8/11 表述完好；Round 1 记录如实未越权；独立复验 `openspec validate --all --strict` 83 passed/0 failed。
+  - QUALITY 复审 PASS：`ModelSettings` 全仓零命中、存活接线（`TaskTimeoutDefaultMinutes`/`ValidateTaskTimeoutMinutes` 与 config.go:685、host.go:345 调用点）完好、`model_config_test.go` 删除必要（只测死代码）、代码 diff 仅死代码删除与注释修正无行为变更、文档 hunk 全部矩阵相关、gofmt/diff-check 干净、三提交规范合规、ledger 记录如实。
+  - 非阻塞观察：`runCompanionManagerParity` 600-tick 固定窗口、`ValidateTaskTimeoutMinutes` 在 `internal/companion` 内直接单测随死代码测试一并移除（存活链路经 `internal/config` 间接覆盖），均留待后续观察，不构成缺陷。
+- 终审最终裁决：整分支 SPEC 与 QUALITY 均 PASS（Round 1 FAIL 项全部关闭，修复门禁与复审证据如上），change 具备合并条件。
 - Python locked/lint/type/test：clean `72ef5580` PASS；locked sync、Ruff format/check、mypy 23 files、pytest 403 passed；`make companion-agent-check` 同样 403 passed。
 - Go focused/race/archcheck/vet/gofmt：首轮 full race 真实暴露测试 seam 缺口并由 `3394fc19` 修复；clean `72ef5580` 的 full race、vet、archcheck 与 gofmt 全部 PASS，archcheck 37.162s、real 38.87s。
 - Rust baseline/build：clean `72ef5580` preflight 与 mandatory `make rust` 均 PASS；Rust 1.97.1 locked release，engine ABI v9/client ABI v13 未改。
