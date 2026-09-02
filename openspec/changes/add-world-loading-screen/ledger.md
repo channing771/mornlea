@@ -62,7 +62,35 @@
 
 ### Task 2：前端加载屏组件
 
-- 派发：pending。
+- 实现：commit `7c1446a7`（fresh implementer）。`client.ts` `Phase`/`PHASES`
+  加 `"loading"` + `LoadingState`/`parseLoading` 守卫（上界
+  `MAX_SAFE_INTEGER` 表达 schema 开放上界的安全整数语义）；新组件
+  `LoadingScreen.tsx`（不透明遮罩 `--loading-bg`（暂停遮罩同色相 alpha=1）、
+  标题/像素轨道/计数行、`clamp(loaded/total,0,1)` 经 `--loading-fill` 驱动、
+  零 transition 天然合规 reduced-motion、缺席/total<=0 降级 0%）；文案入
+  `copy.ts`；`App.tsx` 渲染与键盘路由双档；`panel-loading` fixture（18→19）
+  与基线 PNG；dist 重建入库。既有「未知相位」负例夹具 `{phase:"loading"}`
+  因相位合法化改为 `"bogus"`（必要契约同步）。
+- 验证证据 @ `7c1446a7`：red 阶段 5 例失败（守卫拒绝/App 不渲染/模块缺失）
+  → green vitest 161/161（146→161）；`make frontend-check` exit 0（dist 零
+  漂移）；`make frontend-visual-check` 19/19 全一致；其余 18 张基线逐字节
+  未动。
+- SPEC 评审（fresh reviewer）：**pass**（7/7 PASS；Rust 透明脚本核实只在
+  game 相位注入，loading 菜单族不受影响）。非阻塞：本评审环境无法复跑
+  make 门禁（Task 3 收尾覆盖）；`MAX_SAFE_INTEGER` 上界与 viewport 精确
+  互钉模式不同（收紧方向，备案）；loading 相位 F3 叠加仍可发 debug-edit
+  上行（schema 任意相位叠加的既定语义，Go 防御档兜底，备案）。
+- QUALITY 评审（fresh reviewer）：**pass**（5/5、4/5、5/5、5/5、5/5）。非阻塞
+  nit：`.loading-count` 缺 tabular-nums；copy.ts 头注括号清单不含 loading
+  文案；schema.test 缺 loading 分节未知属性拒绝用例；frontend/AGENTS.md
+  前缀清单未列 `loading-*`。
+- Ruling: R1 修复四条 nit（tabular-nums、头注措辞、ajv 未知属性用例、
+  前缀清单）——均为一行级评审明确缺口。
+- R1 落地：commit `dd8a9183`（新 implementer——原 implementer 会话不可恢复，
+  四项已完全规格化，换人不构成信息损失）。`tabular-nums` 不产生像素差异：
+  19 张基线逐字节零变化（像素字体数字等宽，如实报告无需重入库）；vitest
+  162/162；`make frontend-check` exit 0（dist 含新规则入库）；
+  `make frontend-visual-check` 19/19。Task 2 关闭。
 
 ### Task 3：Rust 相位清单与收尾门禁
 

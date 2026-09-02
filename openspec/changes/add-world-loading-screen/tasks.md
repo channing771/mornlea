@@ -34,19 +34,19 @@
 
 ## 2. 前端加载屏组件
 
-- [ ] 2.1 失败测试先行（`frontend/src`）：`bridge/client.ts` 相位联合与
+- [x] 2.1 失败测试先行（`frontend/src`）：`bridge/client.ts` 相位联合与
   `loading` 分节守卫（合法文档接受、未知相位/越界字段拒绝）；`App` 在
   `phase="loading"` 渲染 LoadingScreen 且不渲染 MainMenu；
   `routeKeyDown` loading 档对 Enter/Esc 零上行；`LoadingScreen` 比例钳制
   `[0,1]`、计数格式 `区块 x / y`、`total<=0` 或缺省安全降级。
-- [ ] 2.2 实现：`bridge/client.ts` 类型与守卫；新组件 `ui/LoadingScreen.tsx`
+- [x] 2.2 实现：`bridge/client.ts` 类型与守卫；新组件 `ui/LoadingScreen.tsx`
   （不透明全屏遮罩 + 标题 + 进度条 + 计数行；文案入 `copy.ts`；颜色/几何走
   `tokens.css` 单源，遵守 `prefers-reduced-motion`）；`App.tsx` 两处 switch
   补 loading 档；`ui/ui.css` 样式。
-- [ ] 2.3 部件基线：`visual/fixture-names.ts` + `visual/fixtures.tsx` 注册
+- [x] 2.3 部件基线：`visual/fixture-names.ts` + `visual/fixtures.tsx` 注册
   `panel-loading`（18→19）；`make frontend-visual-update` 生成基线 PNG 并人工
   确认；`make frontend-visual-check` 通过。
-- [ ] 2.4 验证：`make frontend-check`（含 vitest 与 dist 逐字节门禁）。
+- [x] 2.4 验证：`make frontend-check`（含 vitest 与 dist 逐字节门禁）。
 
 ## 3. Rust 相位清单与收尾门禁
 
