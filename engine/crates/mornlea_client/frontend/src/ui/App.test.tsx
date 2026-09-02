@@ -146,6 +146,23 @@ describe("App 相位切换", () => {
     expect(screen.queryByText("远程世界不会暂停，服务端仍在推进")).toBeNull();
   });
 
+  it("loading 相位渲染加载屏：标题、进度轨道与区块计数，主菜单不呈现", () => {
+    renderWithState({ phase: "loading", loading: { loaded: 1122, total: 4489 } });
+    expect(screen.getByRole("heading", { name: "正在生成世界…" })).toBeTruthy();
+    expect(screen.getByText("区块 1122 / 4489")).toBeTruthy();
+    expect(document.querySelector(".loading-progress")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "进入游戏" })).toBeNull();
+  });
+
+  it("loading 相位 loading 分节缺席时安全降级：标题与空轨仍在、计数行不呈现", () => {
+    renderWithState({ phase: "loading" });
+    expect(screen.getByRole("heading", { name: "正在生成世界…" })).toBeTruthy();
+    const track = document.querySelector<HTMLElement>(".loading-progress");
+    expect(track).toBeTruthy();
+    expect(track?.style.getPropertyValue("--loading-fill")).toBe("0");
+    expect(screen.queryByText(/^区块 /)).toBeNull();
+  });
+
   it("状态推送前的初始渲染为零 chrome（不闪出旧相位）", () => {
     const { container } = render(<App bridge={new BridgeClient(null)} />);
     expect(container.textContent).toBe("");
@@ -279,6 +296,17 @@ describe("App 键盘路由（WebView 是 firstResponder，菜单键经桥上行�
     const { events } = renderWithState({ phase: "paused", pause: { remote: false } }, true);
     fireEvent.keyDown(window, { key: "Escape" });
     expect(events).toEqual([{ type: "action", id: "pause-back" }]);
+  });
+
+  it("loading 相位任意按键（Enter/Esc/W）零上行（Enter 不得重复触发装配）", () => {
+    const { events } = renderWithState(
+      { phase: "loading", loading: { loaded: 1, total: 4489 } },
+      true,
+    );
+    fireEvent.keyDown(window, { key: "Enter" });
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(window, { key: "w" });
+    expect(events).toEqual([]);
   });
 
   const debugState = (rows: readonly DebugRow[]): UIState => ({

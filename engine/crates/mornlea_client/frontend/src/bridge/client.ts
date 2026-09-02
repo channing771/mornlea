@@ -8,7 +8,7 @@
 // 交给 WKScriptMessageHandler，由 Rust 排空后交 Go 依序消费。未知相位、未知动作、
 // 未知事件类型在此一律抛 `BridgeProtocolError`（对应旧 ABI 的拒绝语义）。
 
-export type Phase = "game" | "menu" | "starting" | "settings" | "paused";
+export type Phase = "game" | "menu" | "starting" | "loading" | "settings" | "paused";
 
 /** 菜单动作 id，与 Go `menuAction*` 常量及 Rust 既有 `UI_ACTION_*` 清单逐值互钉。 */
 export type MenuActionId =
@@ -66,6 +66,13 @@ export interface SettingsState {
 
 export interface PauseState {
   readonly remote: boolean;
+}
+
+/** 世界加载屏分节：loaded 是已就绪区块列数，total 是与无头加载判据同源的
+ * 目标列数；语义权威在 Go，前端只做比例换算与格式化。 */
+export interface LoadingState {
+  readonly loaded: number;
+  readonly total: number;
 }
 
 export interface DebugRow {
@@ -160,6 +167,7 @@ export interface UIState {
   readonly menu?: MenuState;
   readonly settings?: SettingsState;
   readonly pause?: PauseState;
+  readonly loading?: LoadingState;
   readonly debug?: DebugState;
   readonly hud?: HudState;
 }
@@ -221,7 +229,7 @@ declare global {
 }
 
 // 以下常量与 schema.json 的 enum/max 逐值对应；schema 变更时同步修改并跑钉值测试。
-const PHASES: readonly Phase[] = ["game", "menu", "starting", "settings", "paused"];
+const PHASES: readonly Phase[] = ["game", "menu", "starting", "loading", "settings", "paused"];
 const MENU_ACTIONS: readonly MenuActionId[] = [
   "enter-game",
   "multiplayer",
@@ -262,6 +270,10 @@ const MAX_CHAT_RUNES = 32;
 const MAX_POPUP_RUNES = 32;
 /** framebuffer 单边像素上界，与 Go 侧 uint32 域同界。 */
 const MAX_VIEWPORT_SIDE = 4294967295;
+/** loading 分节两整数的安全整数上界：schema 对 loaded/total 只钉下界
+ * （0/1），上界以 `Number.MAX_SAFE_INTEGER` 表达「JSON 安全整数」语义，
+ * 与 schema 的开放上界同口径，不另造数值契约。 */
+const MAX_LOADING_COUNT = Number.MAX_SAFE_INTEGER;
 
 type RecordLike = Record<string, unknown>;
 
@@ -473,6 +485,17 @@ function parsePause(record: RecordLike): PauseState {
   return { remote: requireBoolean(record, "remote", "pause") };
 }
 
+/** loading 分节守卫：loaded/total 都是整数且只钉下界（loaded>=0、total>=1），
+ * 与 schema `$defs/loadingState` 同口径；分节缺席与否由 `parseState` 按
+ * presence 收口，这里不做跨相位字段约束（schema 未定义，守卫不发明）。 */
+function parseLoading(record: RecordLike): LoadingState {
+  requireKeys(record, ["loaded", "total"], "loading");
+  return {
+    loaded: requireInteger(record, "loaded", 0, MAX_LOADING_COUNT, "loading"),
+    total: requireInteger(record, "total", 1, MAX_LOADING_COUNT, "loading"),
+  };
+}
+
 function parseHudViewport(raw: unknown, context: string): HudViewport {
   const record = asRecord(raw, context);
   requireKeys(record, ["width", "height"], context);
@@ -597,13 +620,15 @@ function parseHud(record: RecordLike): HudState {
 /** parseState 收口一行下行状态：违约即抛 `BridgeProtocolError`，不产出部分可信对象。 */
 export function parseState(raw: unknown): UIState {
   const state = asRecord(raw, "uiState");
-  requireKeys(state, ["phase", "menu", "settings", "pause", "debug", "hud"], "uiState");
+  requireKeys(state, ["phase", "menu", "settings", "pause", "loading", "debug", "hud"], "uiState");
   return {
     phase: requireEnum(state, "phase", PHASES, "uiState"),
     menu: state.menu === undefined ? undefined : parseMenu(asRecord(state.menu, "menu")),
     settings:
       state.settings === undefined ? undefined : parseSettings(asRecord(state.settings, "settings")),
     pause: state.pause === undefined ? undefined : parsePause(asRecord(state.pause, "pause")),
+    loading:
+      state.loading === undefined ? undefined : parseLoading(asRecord(state.loading, "loading")),
     debug: state.debug === undefined ? undefined : parseDebug(asRecord(state.debug, "debug")),
     hud: state.hud === undefined ? undefined : parseHud(asRecord(state.hud, "hud")),
   };
