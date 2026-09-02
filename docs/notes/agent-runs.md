@@ -43,8 +43,8 @@
   - 校对：`D-11` 备注补前提变化——Phase 1 已把快捷栏等常显层迁 WebView，其快捷栏半边改为前端组件面、容器产物格半边仍属 GPU HUD 保留面，需先重划范围再设计（状态维持 `设计候选`）。其余行状态与 git/worktree 一致：A 组全部已完成/已取消；B-04 维持 `就绪`（串行队首在位、无人认领，本轮不另晋升核心玩法行）；B-11 未登记在途分支头仍 `95f733f0`（2026-08-28 后零活动）；F-04 仍无本机 worktree 可核对。
 - **未落行（判定）**：**待澄清**——漏斗/比较器等容器自动化取放（m4k/m4e 两处非目标，但价值相对「首夜生存+自给家园」边界及与 B-19 红石的关系待确认）；创造飞行/旁观模式（m2b 非目标，依赖游戏模式整体裁决，umbrella 无独立闭环）；「退回主菜单→再次进入游戏」装配两次未在 120s 内完成（spike-checklist 记录为应用装配行为、与 WebView 参与无关，需确认是否为可交互复现的真实缺陷）；水中冲刺（sprint 非目标，属「若要」式细化）；鞘翅互斥（依赖飞行）。**不落行**——cozy 主题 proposal 范围外的「游戏内 UI 统一 WebView」已由 webview-game-ui-unification 本体消解；上轮已对齐 MC 或已清偿项无新增。
 - **提交**：`d477e6ef`（docs: plan B-42..B-44, D-16..D-18）+ 本运行记录提交。
-- **推送**：见下节记录。
-- **讨论同步**：见下节记录。
+- **推送**：**成功**——`git push origin main` 因 HTTPS 凭据不可用失败（`could not read Username for 'https://github.com'`，osxkeychain 在本会话取不到 github.com 条目、gh token 失效）；改用显式 SSH URL `git push ssh://git@github.com/channing771/mornlea.git main:main`（SSH 认证可用，未改 `origin` 配置、未强推），快进 `47b29b7d..66dbc8af`，`git fetch origin` 后 `main` 与 `origin/main` 一致。
+- **讨论同步**：**未执行**——`scripts/agents/refresh-discussion.py --update` 依赖 `gh api graphql`，本轮 `gh` 的 github.com token 失效且未认证 API 撞 5000/hr 共享限流（HTTP 403），正文刷新与状态变更评论（6 条落行 + 1 条 D-11 校对）均未发出。正文已用脚本 dry-run 验证（就绪 1、排队 23、设计候选 36、已认领 1、已完成 42、已取消 4），待凭据恢复后补一次 `--update` 与汇总评论；讨论镜像现落后于仓库表（仍列 A-03 已认领、B-04 排队、缺上轮与本轮共 18 条新行）。
 - **留给下一轮 / 用户**：
   1. `gh` 的 github.com token 仍失效（`gh auth status` 报 invalid），未认证 REST/GraphQL 又撞 5000/hr 共享限流——讨论正文 `--update` 与状态变更评论本轮能否发出取决于凭据，见推送/同步节。
   2. 未并入 `main` 且本机活跃过的分支：`feat/extract-companion-agent-service`（头已推进到 `09e18bdc` 2026-09-01「close task 12」）、`refactor/sim-ownership-convergence`（`b54abb9a`）、`worktree-feat-ui-changes`（`.claude/worktrees/feat-ui-changes` 头推进到 `3328af5f` 2026-09-01，含 crack 场景 regolden）、`feat/B-11-authoritative-difficulty`（`95f733f0`，零活动）；`fix/frame-stutter` worktree 仍有 11 个未提交文件（`internal/client/receiver.go`/`mirror.go` 与 `cmd/mornlea` 多个测试）。登记与处置均属控制会话/用户裁决。
