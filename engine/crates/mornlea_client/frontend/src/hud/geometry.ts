@@ -28,7 +28,7 @@ export const SELECT_BORDER = 3; // hotbarSelectBorder（选中格外扩框）
 export const SELECT_INSET = 3; // hotbarSelectInset（选中格内衬）
 export const ITEM_TILE_INSET = 10; // hotbarSwatchInset（物品 tile 内缩）
 export const ITEM_TILE_BORDER = 2; // hotbarSwatchBorder（物品 tile 暗边）
-/** 贴条内容行宽：状态行与采掘轨道的中轴锚点（panel.go `hotbarRowWidth`）。 */
+/** 贴条内容行宽：状态行与进食轨道的中轴锚点（panel.go `hotbarRowWidth`）。 */
 export const HOTBAR_ROW_WIDTH = HOTBAR_SLOTS * HOTBAR_SLOT_SIZE + (HOTBAR_SLOTS - 1) * HOTBAR_SLOT_GAP;
 
 // ---- 状态栈（layout.go / health.go） ----
@@ -40,12 +40,11 @@ export const STATUS_SEGMENTS = 10; // healthSegmentCount / oxygenSegmentCount
 export const EDGE_MARGIN = 8; // hudEdgeMargin（视口安全边距）
 
 // ---- 进度轨道与弹条（layout.go / popup.go） ----
+// 进食条沿用迁移前采掘轨道的几何常量（Go 布局常量名不变）；采掘条退役后
+// 末端标记与警示缺口的常量已删，轨道仍占 design 基准内的同一行。
 export const PROGRESS_TRACK_WIDTH = 240; // miningBarWidth
 export const PROGRESS_TRACK_HEIGHT = 12; // miningBarHeight
 export const PROGRESS_TRACK_GAP = 16; // miningBarGap
-export const PROGRESS_CAP_WIDTH = 8; // miningBarCapWidth（可采末端亮标记）
-export const PROGRESS_NOTCH_WIDTH = 6; // miningNotchWidth（不可采警示缺口）
-export const PROGRESS_NOTCH_POSITIONS = [0.25, 0.5, 0.75] as const; // appendMiningBar 的固定缺口位
 export const DURABILITY_BAR_HEIGHT = 3; // durabilityBarHeight
 export const DURABILITY_BAR_INSET = 4; // durabilityBarInset
 export const DURABILITY_LOW_RATIO = 0.25; // appendDurabilityBarScaled 的低耐久阈值

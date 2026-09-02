@@ -117,15 +117,8 @@ export interface HudOxygen {
   readonly value: number;
 }
 
-/** 采掘进度：恒携带，active 表达本 tick 是否在采掘；harvestable 是形状差异的
- * 唯一来源，active=false 时 progress/harvestable 无呈现意义。 */
-export interface HudMining {
-  readonly active: boolean;
-  readonly progress: number;
-  readonly harvestable: boolean;
-}
-
-/** 进食进度：恒携带，active 表达本 tick 是否在进食；progress 是已钳制的填充比例。 */
+/** 进食进度：恒携带，active 表达本 tick 是否在进食；progress 是已钳制的填充比例。
+ * 采掘进度条已退役，进食条是唯一的屏幕进度语义。 */
 export interface HudEating {
   readonly active: boolean;
   readonly progress: number;
@@ -142,10 +135,11 @@ export interface HudChat {
 }
 
 /**
- * 游戏相位常显 HUD 分节。viewport 与两条进度条（mining/eating）恒携带，进度条
- * 以 active 表达是否呈现；可选分节缺席即「权威镜像尚未确认」或「呈现态不在
- * 结果窗口内」，组件据此隐藏。全部字段都是语义值（数值/比例/标志），不携带
- * 任何坐标矩形——布局由 CSS 组件按 design 基准与 viewport 推导。
+ * 游戏相位常显 HUD 分节。viewport 与进食进度条恒携带，进度条以 active 表达
+ * 是否呈现（采掘进度不再占用屏幕进度条，其反馈由世界空间裂纹承载）；可选
+ * 分节缺席即「权威镜像尚未确认」或「呈现态不在结果窗口内」，组件据此隐藏。
+ * 全部字段都是语义值（数值/比例/标志），不携带任何坐标矩形——布局由 CSS
+ * 组件按 design 基准与 viewport 推导。
  */
 export interface HudState {
   readonly viewport: HudViewport;
@@ -153,7 +147,6 @@ export interface HudState {
   readonly health?: HudHealth;
   readonly hunger?: HudHunger;
   readonly oxygen?: HudOxygen;
-  readonly mining: HudMining;
   readonly eating: HudEating;
   readonly popup?: HudPopup;
   readonly chat?: HudChat;
@@ -516,17 +509,6 @@ function parseHudHotbar(raw: unknown, context: string): HudHotbar {
   };
 }
 
-/** 采掘进度：progress/harvestable 恒携带，active 只表达是否呈现。 */
-function parseHudMining(raw: unknown, context: string): HudMining {
-  const record = asRecord(raw, context);
-  requireKeys(record, ["active", "progress", "harvestable"], context);
-  return {
-    active: requireBoolean(record, "active", context),
-    progress: requireRatio(record, "progress", context),
-    harvestable: requireBoolean(record, "harvestable", context),
-  };
-}
-
 /** 进食进度：progress 恒携带，active 只表达是否呈现。 */
 function parseHudEating(raw: unknown, context: string): HudEating {
   const record = asRecord(raw, context);
@@ -537,13 +519,13 @@ function parseHudEating(raw: unknown, context: string): HudEating {
   };
 }
 
-/** hud 分节守卫：viewport 与两条进度条（mining/eating）恒携带，其余分节按
- * presence 表达「镜像未确认」或「不在呈现窗口内」，缺席字段收口为 undefined
- * 供组件隐藏。 */
+/** hud 分节守卫：viewport 与进食进度条恒携带，其余分节按 presence 表达
+ * 「镜像未确认」或「不在呈现窗口内」，缺席字段收口为 undefined 供组件隐藏。
+ * 已退役的 mining 分节属未知属性，照 additionalProperties:false 语义拒绝。 */
 function parseHud(record: RecordLike): HudState {
   requireKeys(
     record,
-    ["viewport", "mining", "eating"],
+    ["viewport", "eating"],
     "hud",
     [
       "hotbar",
@@ -559,7 +541,6 @@ function parseHud(record: RecordLike): HudState {
   );
   const hud: Writable<HudState> = {
     viewport: parseHudViewport(record.viewport, "hud.viewport"),
-    mining: parseHudMining(record.mining, "hud.mining"),
     eating: parseHudEating(record.eating, "hud.eating"),
   };
   if ("hotbar" in record) {

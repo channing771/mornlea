@@ -57,10 +57,11 @@ func TestMiningCrackCaptureScenesPinAuthoritativeTarget(t *testing.T) {
 				t.Fatalf("%s 场景不完整: %+v", tc.name, scene)
 			}
 			// 采掘镜像由场景 Apply 经 SetMiningOverlay 直装（HUD 夹具随
-			// 常显层退役），这里用旁路夹具记录期望值并在 Apply 后核对。
+			// 常显层退役），这里用旁路夹具记录期望值并在 Apply 后核对；
+			// 可采标志已随屏幕采掘条退役，镜像只携带裂纹所需字段。
 			want := hud.MiningOverlay{
 				Active: true, HasTarget: true, Target: captureMiningCrackTarget,
-				ProgressTicks: tc.wantProgress, RequiredTicks: 30, Harvestable: true,
+				ProgressTicks: tc.wantProgress, RequiredTicks: 30,
 			}
 			if got := render.BlockCrackStage(want.ProgressTicks, want.RequiredTicks); got != tc.wantStage {
 				t.Fatalf("%s stage=%d，想要 %d", tc.name, got, tc.wantStage)

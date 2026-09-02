@@ -70,7 +70,6 @@ func TestUIHudPushMergesTickChangesIntoSingleTerminalPush(t *testing.T) {
 		`{"item":0,"count":0},{"item":0,"count":0},{"item":0,"count":0},` +
 		`{"item":0,"count":0},{"item":0,"count":0}],"selectedIndex":2},` +
 		`"health":{"value":17},` +
-		`"mining":{"active":false,"progress":0,"harvestable":false},` +
 		`"eating":{"active":false,"progress":0}}`
 	if recorder.payloads[0] != want {
 		t.Fatalf("终态载荷漂移\n got: %s\nwant: %s", recorder.payloads[0], want)

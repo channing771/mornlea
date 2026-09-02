@@ -66,11 +66,12 @@ cmd/mornlea/
 `--capture` 跑的固定场景表住 `capture/capture.go` 的 `captureScenes`（当前 22
 景，完整清单、顺序约束与尾序以 `captureScenes` 与 `capture/AGENTS.md` 为准，
 本总纲不复制会漂移的枚举）。常显 HUD（快捷栏贴条与选中框、状态行、氧气、
-采掘/进食轨道、物品名弹条、准星、聊天呈现与命中 marker）的 GPU 呈现已迁
-WebView 组件，只承载这部分像素的 `hud-hotbar-health`、`hud-survival-feedback`
-与 `hud-item-name-popup` 三景随之退役移出清单，其像素验收由前端 HUD 组件断言
-与 `frontend/visual` 部件基线承接；capture 只保留世界、夜景、材质与容器保留面
-（容器四景）场景。
+进食轨道、物品名弹条、准星、聊天呈现与命中 marker）的 GPU 呈现已迁
+WebView 组件；采掘不再有屏幕进度条，其进度反馈由世界空间方块裂纹承载
+（`remove-mining-hud-bar`）。只承载这部分像素的 `hud-hotbar-health`、
+`hud-survival-feedback`与 `hud-item-name-popup` 三景随之退役移出清单，其像素
+验收由前端 HUD 组件断言与 `frontend/visual` 部件基线承接；capture 只保留
+世界、夜景、材质与容器保留面（容器四景）场景。
 
 ## Documentation Sync Policy
 

@@ -408,18 +408,12 @@ func (a *Application) assembleHUDState() client.UIHudState {
 	if oxygen, ready := a.predictor.Oxygen(); ready {
 		state.Oxygen = client.NewUIHudOxygen(oxygen)
 	}
-	// 采掘进度由权威 PlayerState 派生的 overlay 快照给出;required 为 0 的
-	// 未激活形态由构造器归一,这里不重复判断。
-	state.Mining = client.NewUIHudMining(
-		a.miningOverlay.ProgressTicks, a.miningOverlay.RequiredTicks, a.miningOverlay.Harvestable,
-	)
-	if !a.miningOverlay.Active {
-		// 进食进度与采掘反馈互斥,呈现裁决留在 Go 侧:采掘激活时进食条让位。
-		// 比例先量化到权威 tick 网格,与置脏侧共用同一口径,下行频率因此绑定
-		// 权威 tick 而不是渲染帧率。
-		active, progress := a.eatingTracker.Snapshot()
-		state.Eating = client.NewUIHudEating(active, quantizeEatingProgress(progress))
-	}
+	// 进食进度直接组装：与采掘的互斥裁决已随屏幕采掘条一并移除（spec delta
+	// survival-hud-presentation——采掘进度的唯一反馈是世界空间裂纹），权威采掘
+	// 镜像不再参与 hud 分节组装。比例先量化到权威 tick 网格，与置脏侧共用同一
+	// 口径，下行频率因此绑定权威 tick 而不是渲染帧率。
+	active, progress := a.eatingTracker.Snapshot()
+	state.Eating = client.NewUIHudEating(active, quantizeEatingProgress(progress))
 	if text := a.popupPresentationText(); text != "" {
 		state.Popup = client.NewUIHudPopup(text)
 	}

@@ -176,7 +176,6 @@ const hudState = {
   health: { value: 17 },
   hunger: { value: 18, saturationZero: true },
   oxygen: { value: 210 },
-  mining: { active: true, progress: 0.25, harvestable: true },
   eating: { active: false, progress: 0 },
   popup: { text: "石镐" },
   chat: { lines: ["系统：格式应为 @伙伴名 指令", ""] },
@@ -199,12 +198,10 @@ describe("parseState 的 hud 分节", () => {
       phase: "game",
       hud: {
         viewport: hudState.viewport,
-        mining: hudState.mining,
         eating: hudState.eating,
       },
     });
     expect(state.hud?.viewport).toEqual(hudState.viewport);
-    expect(state.hud?.mining).toEqual(hudState.mining);
     expect(state.hud?.eating).toEqual(hudState.eating);
     expect(state.hud?.hotbar).toBeUndefined();
     expect(state.hud?.health).toBeUndefined();
@@ -217,30 +214,34 @@ describe("parseState 的 hud 分节", () => {
     expect(state.hud?.containerOpen).toBeUndefined();
   });
 
-  it("采掘未激活时恒携带的进度与形状标志不触发呈现语义", () => {
+  it("进食未激活时恒携带的进度不触发呈现语义", () => {
     const state = parseState({
       phase: "game",
       hud: {
         ...hudState,
-        mining: { active: false, progress: 0, harvestable: false },
-        eating: { active: true, progress: 0.5 },
+        eating: { active: false, progress: 0 },
       },
     });
-    expect(state.hud?.mining).toEqual({ active: false, progress: 0, harvestable: false });
-    expect(state.hud?.eating).toEqual({ active: true, progress: 0.5 });
+    expect(state.hud?.eating).toEqual({ active: false, progress: 0 });
   });
 
-  it("hud 未知属性抛 BridgeProtocolError", () => {
+  it("hud 未知属性抛 BridgeProtocolError（含已退役的 mining 分节）", () => {
     expect(() => parseState({ phase: "game", hud: { ...hudState, cheat: true } })).toThrow(
       BridgeProtocolError,
     );
+    // 采掘进度条已退役：旧客户端形态里的 mining 分节按未知属性拒绝，
+    // 解析器不对其新增宽松处理。
+    expect(() =>
+      parseState({
+        phase: "game",
+        hud: { ...hudState, mining: { active: true, progress: 0.25, harvestable: true } },
+      }),
+    ).toThrow(BridgeProtocolError);
   });
 
   it("hud 缺必填分节抛 BridgeProtocolError", () => {
     const { viewport: _viewport, ...noViewport } = hudState;
     expect(() => parseState({ phase: "game", hud: noViewport })).toThrow(BridgeProtocolError);
-    const { mining: _mining, ...noMining } = hudState;
-    expect(() => parseState({ phase: "game", hud: noMining })).toThrow(BridgeProtocolError);
     const { eating: _eating, ...noEating } = hudState;
     expect(() => parseState({ phase: "game", hud: noEating })).toThrow(BridgeProtocolError);
   });
@@ -299,13 +300,7 @@ describe("parseState 的 hud 分节", () => {
     );
   });
 
-  it("采掘/进食进度缺字段或越界抛 BridgeProtocolError", () => {
-    expect(() =>
-      parseState({ phase: "game", hud: { ...hudState, mining: { progress: 0.5, harvestable: true } } }),
-    ).toThrow(BridgeProtocolError);
-    expect(() =>
-      parseState({ phase: "game", hud: { ...hudState, mining: { active: true } } }),
-    ).toThrow(BridgeProtocolError);
+  it("进食进度缺字段或越界抛 BridgeProtocolError", () => {
     expect(() =>
       parseState({ phase: "game", hud: { ...hudState, eating: { active: true } } }),
     ).toThrow(BridgeProtocolError);

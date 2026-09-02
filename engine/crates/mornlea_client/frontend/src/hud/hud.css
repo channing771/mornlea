@@ -216,7 +216,7 @@
   height: 100%;
 }
 
-/* ---- 进度轨道：采掘/进食共用几何，形状差异承担颜色无关可辨性 ---- */
+/* ---- 进度轨道：进食条占据的行（采掘条退役，几何为进食条保留） ---- */
 .hud-progress {
   position: relative;
   box-sizing: border-box;
@@ -234,40 +234,8 @@
   width: calc(var(--hud-fill, 0) * 100%);
 }
 
-.hud-progress-fill--mining-harvestable {
-  background: var(--hud-mining-harvestable);
-}
-
-.hud-progress-fill--mining-blocked {
-  background: var(--hud-mining-blocked);
-}
-
 .hud-progress-fill--eating {
   background: var(--hud-eating-fill);
-}
-
-/* 可采末端亮标记：随填充末端移动，`max` 把它钳在轨道左缘之内，
- * 右缘由轨道 `overflow: hidden` 收口。 */
-.hud-progress-cap {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: calc(var(--hud-progress-cap-width) * var(--hud-scale));
-  left: max(
-    0px,
-    calc(var(--hud-fill, 0) * 100% - var(--hud-progress-cap-width) * var(--hud-scale))
-  );
-  background: var(--hud-mining-cap);
-}
-
-/* 不可采警示缺口：固定三处、固定宽度，几何序列与末端标记不同。 */
-.hud-progress-notch {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: calc(var(--hud-progress-notch-width) * var(--hud-scale));
-  margin-left: calc(var(--hud-progress-notch-width) * var(--hud-scale) / -2);
-  background: var(--hud-mining-notch);
 }
 
 /* ---- 物品名弹条：居中于快捷栏宽度的双层文字 ---- */

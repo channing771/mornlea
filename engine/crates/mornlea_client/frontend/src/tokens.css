@@ -159,11 +159,9 @@
   --hud-status-icon-gap: 1px; /* healthHeartGap（状态格间隙） */
   --hud-durability-height: 3px; /* durabilityBarHeight */
   --hud-durability-inset: 4px; /* durabilityBarInset */
-  --hud-progress-track-width: 240px; /* miningBarWidth */
+  --hud-progress-track-width: 240px; /* miningBarWidth（进食轨道沿用同一几何） */
   --hud-progress-track-height: 12px; /* miningBarHeight */
   --hud-progress-track-gap: 16px; /* miningBarGap（轨道与状态栈上沿间隙） */
-  --hud-progress-cap-width: 8px; /* miningBarCapWidth（可采末端亮标记宽） */
-  --hud-progress-notch-width: 6px; /* miningNotchWidth（不可采警示缺口宽） */
   --hud-popup-track-gap: 6px; /* popupTrackGap（弹条行与轨道间隙） */
   --hud-popup-row-height: 16px; /* popupRowHeight（弹条行 design px 高度） */
   --hud-saturation-jitter: 1px; /* hunger.go saturationZero 抖动的垂直偏移（1 design px） */
@@ -197,11 +195,7 @@
   /* 物品 tile 占位：真实材质映射属后续，先以面板内既有棕族给出可辨边界。 */
   --hud-item-tile: var(--text-secondary-on-panel);
   --hud-item-tile-edge: var(--text-on-panel);
-  --hud-progress-track: rgba(13, 13, 15, 0.78); /* miningTrackColor */
-  --hud-mining-harvestable: rgba(77, 199, 92, 0.95); /* miningHarvestableColor */
-  --hud-mining-blocked: rgba(242, 140, 38, 0.95); /* miningBlockedColor */
-  --hud-mining-cap: rgb(245, 255, 194); /* miningCapColor（α1） */
-  --hud-mining-notch: rgb(46, 31, 20); /* miningNotchColor（α1） */
+  --hud-progress-track: rgba(13, 13, 15, 0.78); /* miningTrackColor（进食轨道底） */
   --hud-eating-fill: rgba(235, 199, 107, 0.95); /* eatingFillColor */
   --hud-durability-track: rgba(13, 13, 15, 0.85); /* durabilityTrackColor */
   --hud-durability-healthy: rgba(77, 199, 92, 0.95); /* durabilityHealthyColor */

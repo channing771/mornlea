@@ -24,11 +24,12 @@ import (
 var crackTestTarget = core.BlockPos{X: 0, Y: 3, Z: -3}
 
 // activeCrackOverlay 返回指向测试目标的权威采掘镜像：6/15 恰落在 4/10
-// 阶段内（第 4 阶段），用于钉住阶段与层号派生。
+// 阶段内（第 4 阶段），用于钉住阶段与层号派生。镜像的可采标志已随屏幕
+// 采掘条退役，裂纹不再区分可采性。
 func activeCrackOverlay() hud.MiningOverlay {
 	return hud.MiningOverlay{
 		Active: true, Target: crackTestTarget, HasTarget: true,
-		ProgressTicks: 6, RequiredTicks: 15, Harvestable: true,
+		ProgressTicks: 6, RequiredTicks: 15,
 	}
 }
 

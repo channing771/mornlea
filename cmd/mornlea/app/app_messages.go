@@ -78,14 +78,14 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			} else {
 				// Target/HasTarget 供世界空间裂纹呈现定位权威目标方块；
 				// HasTarget 恒随 MiningActive 置位，服务端契约保证 active
-				// 时 MiningTarget 有效。
+				// 时 MiningTarget 有效。可采标志的唯一消费方（屏幕采掘条）
+				// 已退役，协议侧 MiningHarvestable 不再进入镜像。
 				a.miningOverlay = hud.MiningOverlay{
 					Active:        true,
 					Target:        state.MiningTarget,
 					HasTarget:     state.MiningActive,
 					ProgressTicks: state.MiningProgressTicks,
 					RequiredTicks: state.MiningRequiredTicks,
-					Harvestable:   state.MiningHarvestable,
 				}
 			}
 			if state.Reset {

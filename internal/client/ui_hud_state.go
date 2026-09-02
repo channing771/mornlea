@@ -157,31 +157,10 @@ func NewUIHudOxygen(oxygen uint16) *UIHudOxygen {
 	return &UIHudOxygen{Value: value}
 }
 
-// UIHudMining 是采掘进度。恒携带：`Active` 表达本 tick 是否在采掘，未激活时
-// `Progress` 与 `Harvestable` 无呈现意义（schema 仍要求三键齐备，呈现与否由
-// `Active` 单点裁决）。
-type UIHudMining struct {
-	Active bool `json:"active"`
-	// Progress 是 Go 侧由权威 progress/required ticks 二元组换算出的 0..1 比例，
-	// 前端零推算。
-	Progress float32 `json:"progress"`
-	// Harvestable 是形状语义的唯一来源：可采用末端标记、不可采用固定缺口，
-	// 颜色差异之外必须保留形状差异。
-	Harvestable bool `json:"harvestable"`
-}
-
-// NewUIHudMining 组装采掘进度分节：required 为 0 视为未激活，比例钳制到 0..1。
-func NewUIHudMining(progressTicks, requiredTicks uint16, harvestable bool) UIHudMining {
-	if requiredTicks == 0 {
-		return UIHudMining{}
-	}
-	fraction := min(float32(progressTicks)/float32(requiredTicks), 1)
-	return UIHudMining{Active: true, Progress: fraction, Harvestable: harvestable}
-}
-
 // UIHudEating 是进食进度：纯客户端呈现预测，`Progress` 是已钳制到 0..1 的填充
 // 比例（权威侧没有进食进度 wire 字段，值来自本包 `EatingProgressTracker` 按帧间
-// 时长以权威 tick 周期累积）。采掘激活时进食条让位，互斥裁决留在 Go 侧。
+// 时长以权威 tick 周期累积）。进食条是唯一的屏幕进度语义——采掘进度条已随
+// 屏幕采掘条退役（采掘进度反馈由世界空间方块裂纹承载），进食不再与采掘互斥。
 type UIHudEating struct {
 	Active   bool    `json:"active"`
 	Progress float32 `json:"progress"`
@@ -236,16 +215,16 @@ func NewUIHudChat(lines []string) *UIHudChat {
 }
 
 // UIHudState 是游戏相位 HUD 分节的下行载体，字段形状与 schema `hudState` 逐键
-// 一致：权威镜像与窗口结果是指针字段，nil 即序列化为键缺省；进度条与 viewport
-// 是值字段，恒出现且零值本身就合法（`{"active":false,"progress":0}`），因此零值
-// `UIHudState` 也总能通过 schema 校验。
+// 一致：权威镜像与窗口结果是指针字段，nil 即序列化为键缺省；进食进度条与
+// viewport 是值字段，恒出现且零值本身就合法（`{"active":false,"progress":0}`），
+// 因此零值 `UIHudState` 也总能通过 schema 校验（采掘进度分节已随屏幕采掘条
+// 退役，采掘进度反馈由世界空间方块裂纹承载）。
 type UIHudState struct {
 	Viewport UIHudViewport `json:"viewport"`
 	Hotbar   *UIHudHotbar  `json:"hotbar,omitempty"`
 	Health   *UIHudHealth  `json:"health,omitempty"`
 	Hunger   *UIHudHunger  `json:"hunger,omitempty"`
 	Oxygen   *UIHudOxygen  `json:"oxygen,omitempty"`
-	Mining   UIHudMining   `json:"mining"`
 	Eating   UIHudEating   `json:"eating"`
 	Popup    *UIHudPopup   `json:"popup,omitempty"`
 	Chat     *UIHudChat    `json:"chat,omitempty"`

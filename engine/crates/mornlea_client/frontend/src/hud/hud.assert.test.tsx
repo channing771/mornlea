@@ -1,7 +1,8 @@
 // HUD 组件断言矩阵：把常显 HUD 的规格语义逐项平移到组件级断言——权威驱动与
 // 未确认隐藏、构图关系（生命左缘/饥饿右缘/氧气外堆叠/容器打开态翻转/净空令牌
-// 消费）、形状差异（可采末端标记 vs 不可采固定警示缺口）、单一比例缩放协调，
-// 以及饱和度归零抖动只落在饥饿行。挂载冒烟在 HudRoot.test.tsx，这里不复述。
+// 消费）、单一比例缩放协调，以及饱和度归零抖动只落在饥饿行。挂载冒烟在
+// HudRoot.test.tsx，这里不复述。采掘进度条已退役（进度反馈由世界空间裂纹
+// 承载），进度轨道只剩进食一种语义，不再有形状差异断言。
 //
 // 断言手段：jsdom 不做布局、样式表也不注入文档，因此构图序用 DOM 序表达
 // （组件把 JSX 顺序刻意保持为视觉序），间距的「类 → 令牌」消费关系在样式表
@@ -26,10 +27,9 @@ const nineSlots: readonly HudSlot[] = Array.from({ length: 9 }, (_, index) =>
 );
 
 // 基准状态：九格已确认镜像 + 生命 7（三满一半）+ 饥饿 5（奇数，末格右半）+
-// 满氧（按契约不呈现）+ 两条进度条未激活；叠加元素由各用例显式置位。
+// 满氧（按契约不呈现）+ 进食进度条未激活；叠加元素由各用例显式置位。
 const base: HudState = {
   viewport: { width: 1280, height: 720 },
-  mining: { active: false, progress: 0, harvestable: false },
   eating: { active: false, progress: 0 },
   hotbar: { slots: nineSlots, selectedIndex: 4 },
   health: { value: 7 },
@@ -268,8 +268,8 @@ describe("构图关系", () => {
   });
 
   it("容器打开态翻转：主行与氧气行移到贴条下方，弹条抑制而贴条占位保留", () => {
-    const mining = { active: true, progress: 0.4, harvestable: true };
-    const closed = renderHud({ ...base, popup: { text: "橡木原木" }, mining });
+    const eating = { active: true, progress: 0.4 };
+    const closed = renderHud({ ...base, popup: { text: "橡木原木" }, eating });
     expect(stackOrder(closed)).toEqual([
       "hud-popup",
       "hud-progress",
@@ -281,7 +281,7 @@ describe("构图关系", () => {
     const open = renderHud({
       ...base,
       popup: { text: "橡木原木" },
-      mining,
+      eating,
       containerOpen: true,
     });
     expect(open.querySelector(".hud-root")?.classList.contains("hud-root--open")).toBe(true);
@@ -330,35 +330,7 @@ describe("构图关系", () => {
   });
 });
 
-describe("形状差异", () => {
-  it("可采与不可采几何序列不同：末端亮标记 vs 固定三处警示缺口", () => {
-    const harvestable = renderHud({
-      ...base,
-      mining: { active: true, progress: 0.5, harvestable: true },
-    });
-    expect(
-      harvestable
-        .querySelector(".hud-progress-fill")
-        ?.classList.contains("hud-progress-fill--mining-harvestable"),
-    ).toBe(true);
-    expect(harvestable.querySelectorAll(".hud-progress-cap")).toHaveLength(1);
-    expect(harvestable.querySelectorAll(".hud-progress-notch")).toHaveLength(0);
-
-    const blocked = renderHud({
-      ...base,
-      mining: { active: true, progress: 0.5, harvestable: false },
-    });
-    expect(
-      blocked
-        .querySelector(".hud-progress-fill")
-        ?.classList.contains("hud-progress-fill--mining-blocked"),
-    ).toBe(true);
-    expect(blocked.querySelectorAll(".hud-progress-cap")).toHaveLength(0);
-    // 固定位置（25%/50%/75%）与固定数量是形状差异的一半，不能只数节点。
-    const notches = [...blocked.querySelectorAll<HTMLElement>(".hud-progress-notch")];
-    expect(notches.map((notch) => notch.style.left)).toEqual(["25%", "50%", "75%"]);
-  });
-
+describe("几何标记与进度轨道", () => {
   it("双层轮廓与双层文字经类消费：选中格外框+内衬、数量与弹条的阴影+前景", () => {
     const css = readHudCss();
     // 选中格的两层都是几何标记：外扩 outline 画在格框之外，sage 内衬铺在格心
@@ -375,35 +347,25 @@ describe("形状差异", () => {
     expect(ruleBodies(css, ".hud-popup")).toContain(shadowLayer);
   });
 
-  it("进食轨道不带任何形状标记，采掘激活时优先呈现", () => {
+  it("进食轨道是唯一的进度语义：暖金填充、不带任何形状标记", () => {
     const eating = renderHud({ ...base, eating: { active: true, progress: 0.3 } });
     expect(eating.querySelector(".hud-progress-fill--eating")).not.toBeNull();
+    // 采掘条退役后轨道不再携带末端标记/警示缺口分支，样式表也不再有对应规则。
     expect(eating.querySelectorAll(".hud-progress-cap, .hud-progress-notch")).toHaveLength(0);
-
-    const both = renderHud({
-      ...base,
-      mining: { active: true, progress: 0.4, harvestable: false },
-      eating: { active: true, progress: 0.3 },
-    });
-    expect(both.querySelector(".hud-progress-fill--mining-blocked")).not.toBeNull();
-    expect(both.querySelector(".hud-progress-fill--eating")).toBeNull();
+    const css = readHudCss();
+    expect(css).not.toContain("hud-progress-cap");
+    expect(css).not.toContain("hud-progress-notch");
+    expect(css).not.toContain("hud-progress-fill--mining-");
   });
 
-  it("进度比例钳制到 0..1：超额钉在满轨，零与负值不产生填充或标记", () => {
-    const over = renderHud({
-      ...base,
-      mining: { active: true, progress: 2.5, harvestable: true },
-    });
+  it("进度比例钳制到 0..1：超额钉在满轨，零与负值不产生填充", () => {
+    const over = renderHud({ ...base, eating: { active: true, progress: 2.5 } });
     const fill = over.querySelector<HTMLElement>(".hud-progress")?.style.getPropertyValue("--hud-fill");
     expect(fill).toBe("1");
 
-    const under = renderHud({
-      ...base,
-      mining: { active: true, progress: -1, harvestable: true },
-    });
+    const under = renderHud({ ...base, eating: { active: true, progress: -1 } });
     expect(under.querySelector(".hud-progress")).not.toBeNull();
     expect(under.querySelector(".hud-progress-fill")).toBeNull();
-    expect(under.querySelectorAll(".hud-progress-cap, .hud-progress-notch")).toHaveLength(0);
   });
 });
 

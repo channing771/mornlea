@@ -269,7 +269,6 @@ const hudState = {
   health: { value: 17 },
   hunger: { value: 18, saturationZero: true },
   oxygen: { value: 210 },
-  mining: { active: true, progress: 0.25, harvestable: true },
   eating: { active: false, progress: 0 },
   popup: { text: "石镐" },
   chat: { lines: ["系统：格式应为 @伙伴名 指令", ""] },
@@ -283,13 +282,12 @@ describe("schema：下行 hud 分节合法夹具", () => {
     expect(validateUiState({ phase: "game", hud: hudState })).toBe(true);
   });
 
-  it("最小 hud 分节（viewport 与两条进度条）通过校验（全部镜像未确认）", () => {
+  it("最小 hud 分节（viewport 与进食进度条）通过校验（全部镜像未确认）", () => {
     expect(
       validateUiState({
         phase: "game",
         hud: {
           viewport: { width: 0, height: 0 },
-          mining: { active: false, progress: 0, harvestable: false },
           eating: { active: false, progress: 0 },
         },
       }),
@@ -300,30 +298,31 @@ describe("schema：下行 hud 分节合法夹具", () => {
     expect(validateUiState({ phase: "paused", hud: hudState })).toBe(true);
   });
 
-  it("采掘未激活而进食激活的组合通过校验", () => {
+  it("进食激活的 hud 分节通过校验（进食条不再与采掘互斥）", () => {
     expect(
       validateUiState({
         phase: "game",
-        hud: {
-          ...hudState,
-          mining: { active: false, progress: 0, harvestable: false },
-          eating: { active: true, progress: 0.5 },
-        },
+        hud: { ...hudState, eating: { active: true, progress: 0.5 } },
       }),
     ).toBe(true);
   });
 });
 
 describe("schema：下行 hud 分节非法用例一律拒绝", () => {
-  it("hud 携带未知属性拒绝", () => {
+  it("hud 携带未知属性拒绝（含已退役的 mining 分节）", () => {
     expect(validateUiState({ phase: "game", hud: { ...hudState, cheat: true } })).toBe(false);
+    // 采掘进度条已退役：旧客户端形态里的 mining 分节按未知属性拒绝。
+    expect(
+      validateUiState({
+        phase: "game",
+        hud: { ...hudState, mining: { active: true, progress: 0.25, harvestable: true } },
+      }),
+    ).toBe(false);
   });
 
-  it("hud 缺必填分节（viewport/mining/eating）拒绝", () => {
+  it("hud 缺必填分节（viewport/eating）拒绝", () => {
     const { viewport: _viewport, ...noViewport } = hudState;
     expect(validateUiState({ phase: "game", hud: noViewport })).toBe(false);
-    const { mining: _mining, ...noMining } = hudState;
-    expect(validateUiState({ phase: "game", hud: noMining })).toBe(false);
     const { eating: _eating, ...noEating } = hudState;
     expect(validateUiState({ phase: "game", hud: noEating })).toBe(false);
   });
@@ -405,16 +404,7 @@ describe("schema：下行 hud 分节非法用例一律拒绝", () => {
     ).toBe(false);
   });
 
-  it("mining/eating 缺 active 或 progress 拒绝", () => {
-    expect(
-      validateUiState({
-        phase: "game",
-        hud: { ...hudState, mining: { progress: 0.5, harvestable: true } },
-      }),
-    ).toBe(false);
-    expect(
-      validateUiState({ phase: "game", hud: { ...hudState, mining: { active: false } } }),
-    ).toBe(false);
+  it("eating 缺 active 或 progress 拒绝", () => {
     expect(
       validateUiState({ phase: "game", hud: { ...hudState, eating: { active: true } } }),
     ).toBe(false);

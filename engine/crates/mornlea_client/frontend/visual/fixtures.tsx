@@ -100,12 +100,11 @@ function stage(child: ReactElement): ReactElement {
 // 部件按 design 基准原尺寸呈现。
 const hudViewport = { width: 1280, height: 720 };
 
-// hudState 补齐恒携带字段（viewport 与两条进度条的未激活缺省），各 fixture
-// 只写关心分节；进度条仍可按 fixture 覆写（如状态栈内的采掘轨道）。
+// hudState 补齐恒携带字段（viewport 与进食进度条的未激活缺省），各 fixture
+// 只写关心分节；进食进度条仍可按 fixture 覆写（如状态栈内的进食轨道）。
 function hudState(overrides: Partial<Omit<HudState, "viewport">>): HudState {
   return {
     viewport: hudViewport,
-    mining: { active: false, progress: 0, harvestable: false },
     eating: { active: false, progress: 0 },
     ...overrides,
   };
@@ -153,14 +152,14 @@ const hudHotbarFixture: HudState = hudState({
 });
 
 // hud-status：完整状态栈——生命 7（三满一半）、饥饿 5（奇数，末格露右半）、
-// 耗损氧气 90（三个满气泡沿饥饿外缘堆叠）、采掘可采轨道居状态栈上方；
-// 饥饿行携带 `saturationZero`，抖动态（下移 1 design px）随之入基线见证。
+// 耗损氧气 90（三个满气泡沿饥饿外缘堆叠）、进食轨道居状态栈上方；饥饿行携带
+// `saturationZero`，抖动态（下移 1 design px）随之入基线见证。
 const hudStatusFixture: HudState = hudState({
   hotbar: { slots: hudInventorySlots, selectedIndex: 0 },
   health: { value: 7 },
   hunger: { value: 5, saturationZero: true },
   oxygen: { value: 90 },
-  mining: { active: true, progress: 0.45, harvestable: true },
+  eating: { active: true, progress: 0.45 },
 });
 
 // hud-popup-crosshair：物品名弹条 + 十字准星 + 权威命中 marker 同帧共存。
@@ -257,13 +256,11 @@ const registry: Record<FixtureName, ReactElement> = {
   // 游戏 HUD 部件：合成 HudState 夹具驱动真实 HudRoot（呈现面与生产一致）。
   "hud-hotbar": hudStage(<HudRoot hud={hudHotbarFixture} />),
   "hud-status": hudStage(<HudRoot hud={hudStatusFixture} />),
-  // HudRoot 的采掘/进食轨道互斥、单帧只呈现一条，三档轨道形状差异因此以
-  // 生产 ProgressTrack 组件并排一次看全（轨道几何与标记形状仍逐项同源）。
+  // 进食条是唯一的屏幕进度语义（采掘条退役），单条轨道以生产 ProgressTrack
+  // 组件按常用填充比例入基线（轨道几何与生产逐项同源）。
   "hud-progress": hudStage(
     <div className="visual-hud-progress-row">
-      <ProgressTrack kind="mining-harvestable" progress={0.62} />
-      <ProgressTrack kind="mining-blocked" progress={0.45} />
-      <ProgressTrack kind="eating" progress={0.3} />
+      <ProgressTrack kind="eating" progress={0.62} />
     </div>,
   ),
   "hud-popup-crosshair": hudStage(<HudRoot hud={hudPopupCrosshairFixture} />),

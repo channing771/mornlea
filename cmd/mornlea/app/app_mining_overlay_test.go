@@ -27,7 +27,7 @@ func TestApplicationMiningOverlayUsesOnlyConfirmedPlayerState(t *testing.T) {
 	app.DrainServerMessages(1)
 	want := hud.MiningOverlay{
 		Active: true, Target: core.BlockPos{X: 1, Y: 10, Z: 2}, HasTarget: true,
-		ProgressTicks: 6, RequiredTicks: 15, Harvestable: true,
+		ProgressTicks: 6, RequiredTicks: 15,
 	}
 	if app.miningOverlay != want {
 		t.Fatalf("权威采掘镜像=%+v，想要 %+v", app.miningOverlay, want)
@@ -72,7 +72,7 @@ func TestApplicationMiningOverlayIgnoresStaleAndEqualPlayerState(t *testing.T) {
 	app.DrainServerMessages(1)
 	want := hud.MiningOverlay{
 		Active: true, Target: core.BlockPos{X: 1, Y: 10, Z: 2}, HasTarget: true,
-		ProgressTicks: 6, RequiredTicks: 15, Harvestable: true,
+		ProgressTicks: 6, RequiredTicks: 15,
 	}
 	app.inventoryOpen = true
 	app.inventorySource = 8
