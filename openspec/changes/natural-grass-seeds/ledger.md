@@ -63,20 +63,20 @@ Ruling: planning candidate `ab8292569393edfb6748a82f6303c50b0c7654e9` 的独立 
 
 ## Task 3.1 Fluid Replacement And Bounded Support Cleanup
 
-- Status: `PENDING`.
-- Task baseline SHA: `PENDING`.
-- Implementer: `PENDING`（fresh）。
-- RED evidence: `PENDING`（Go oracle、Rust eval/rescan、capacity-full zero-drop、crop regression、support mutation 与 runtime phase order）。
-- Code/test commit C: `PENDING`（完整 SHA + 单行英文 subject；不得包含 `tasks.md`/`ledger.md`）。
-- Files changed: `PENDING`（仅 fluid kernel/oracle、realm/runtime support cleanup、door/torch support 与同主题测试）。
-- Boundedness/atomicity evidence: `PENDING`（稳定 `ChangedBlocks()` 快照；每个 change 只查正上方一格；wild grass → torch → bed；无递归、全世界扫描、新 goroutine 或 I/O；短草容量满仍零掉落替换，作物容量语义不变）。
-- Final verified implementation SHA I: `PENDING`（`C` 加本任务全部 repair 后的完整 SHA）。
-- Focused verification bound to I: `PENDING`（`make rust`、Rust fluid tests、Go oracle/differential/golden/fuzz、realm/runtime/entity/server fluid race、archcheck、race-changed 与 `git diff --check`）。
-- SPEC reviewer / verdict / findings at I: `PENDING`.
-- QUALITY reviewer / verdict / findings at I: `PENDING`.
-- Repair rounds and commits: `PENDING`.
-- Tasks/ledger-only evidence commit L: `PENDING`（只含本任务 checkbox 与 ledger 证据）。
-- Ruling: `PENDING`.
+- Status: `DONE`（2026-09-03 控制会话勾选）。
+- Task baseline SHA: `fb01a2c9bf49bef482643a9349ffe6680890cf2f`（Task 2.1 `L`）。
+- Implementer: fresh zcode implementer（独立于 1.1/2.1）。
+- RED evidence: `TestReplaceable_ShortGrassReplaceableAtAllLevels`（7 子测试 false≠true）;golden「短草下方垂直优先/短草水平可替换」旧 dylib 把短草当实心（`ff 00 00…`≠`02 1c 00…`）;Rust `cargo test fluid` 13 个编译错误（`SHORT_GRASS`/`is_plant` 不存在）;`TestWildGrassSweepRunsBeforeTorchSweep/BedSweep`（短草未清）;door/bed 支撑拒绝枚举失败;realm 包构建失败（`SweepUnsupportedWildPlants` 未定义,4 处）。绿起点 pin:entity 火把放置已由 Task 1.1 physics `IsPlant` 零碰撞拒绝,补测试 pin 而无生产改动;differential/fuzz/rescan 夹具更新为双侧一致性网。
+- Code/test commit C: `de7886012949d7a7ef243e492f87bffce12bba9f` `feat(sim): clear environmental short grass`（20 文件 +836/−52,不含 `tasks.md`/`ledger.md`）。
+- Files changed: `internal/fluid/rules.go`（`Replaceable` 植物分支 `IsCrop`→`IsPlant`）+ 4 个测试;`engine/.../fluid_eval.rs`（冻结 `SHORT_GRASS=84`+`is_plant`,`replaceable` 消费）+ `fluid_rescan.rs`（测试钉住 rescan 复用 eval 谓词的 fixed point）;`internal/sim/realm/environment.go`（`SweepUnsupportedWildPlants`+`invalidateWildGrassAbove`;torch/支撑谓词 `IsCrop`→`IsPlant`;`settleFloodedCrop` 保持精确 `IsCrop(old) && IsFluid(new)`）+ 3 个测试;`internal/sim/runtime/engine_step.go`（wild grass→torch→bed 顺序）+ 3 个测试（ownership guard 注册,design affected-files 在案）;`internal/sim/entity/{door.go,torch.go}`（支撑拒绝;torch comment-only）+ 3 个测试。
+- Boundedness/atomicity evidence: 稳定快照（清草循环前物化 `ChangedBlocks()` 副本,`TestSweepUnsupportedWildPlantsDoesNotRescanNewChanges` 证明上方第二株堆叠草存活=无递归）;每变化格只读正上一格,最终值 last-write-wins 重读世界态（`KeepsShortGrassOverGrassSupport`）;runtime 固定 wild grass→torch→bed,两个顺序敏感测试证明 torch/bed sweep 同 tick 观察到清草;工作量只随 changed set 线性增长,无 goroutine/IO/全世界扫描;短草容量满仍零掉落替换（`TestFluidWildGrassFloodWithFullDropSlotsStillReplaces` 全槽位逐位不变）,sweep 满槽零副作用,双源合并恰好一次结算零掉落,`assertNoSeedDrops` 钉住“环境不是种子来源”边界;作物容量语义不变。
+- Final verified implementation SHA I: `de7886012949d7a7ef243e492f87bffce12bba9f`（无 repair 轮）。
+- Focused verification bound to I: implementer 于 clean commit 全绿:`make rust` ok;`cargo test fluid` 49/0;`go test ./internal/fluid ./internal/sim/realm ./internal/sim/runtime ./internal/sim/entity -race -count=1` ok（10.1/7.7/21.0/7.6s）;`go test ./internal/server -run 'Fluid' -race -count=1` ok;`go test ./internal/archcheck -count=1` ok;`make test-race-changed RACE_BASE=fb01a2c9` 12 包 ok（3:33）;`git diff --check` clean。
+- SPEC reviewer / verdict / findings at I: fresh zcode SPEC reviewer = `SPEC PASS`,0 Critical/0 Important/3 Info（rescan_differential_test.go 文件名不在 `*fluid*` glob 但属任务正文“更新差分”与 design D5 要求;ownership guard 测试不在 target-path 但 design affected-files 点名且为机械必需;torch comment-only+pin 为正确最小动作）。A–H 全部 SATISFIED,独立复跑定点抽查全绿。
+- QUALITY reviewer / verdict / findings at I: fresh zcode QUALITY reviewer = `QUALITY PASS`,0 Critical/0 Important/2 Minor+2 Observation:（Minor1）design Verification 措辞的“采掘/翻地/流体后同 revision 清草”三源 E2E 未逐字实例化——采掘有 runtime E2E,机制测试 source-agnostic（直接 `mutation.Record`）,翻地/流体覆盖支撑无专属同 tick E2E,风险低因所有权威写者共用同一 record 路径;（Minor2）同 tick 双写一格（非草再回草）无专属测试——结构上不可能回归（`ChangedBlocks()` 只回位置,sweep 重读活世界态）;（Obs）支撑拒绝为代表性样本非穷举（穷举在 Task 1.1 core 测试）;`environment.go:1166` `!supportReady` 分支防御性不可达。下游核验:区块生成绕过 tick mutation（`ApplyGenerated`),自然短草不会被 sweep 清除（5.1 夹具不变量成立）;4.1 采草记录草格本身,sweep 只查上方空气,种子掉落与疲劳不受影响。
+- Repair rounds and commits: 无（首轮双 PASS）。
+- Tasks/ledger-only evidence commit L: 本 evidence commit（不回写自身 SHA,不冒充 `I`）。
+- Ruling: Task 3.1 final `I` = `de7886012949d7a7ef243e492f87bffce12bba9f`,双评审零 Critical/Important,勾选成立 — 三处偏差（torch comment-only、rescan test-only 复用、ownership guard 注册）均在 design/spec 允许内,追认 — Minor 两项（三源 E2E 逐字实例化、同 tick 双写专属测试）记录在案不返工,机制由 source-agnostic 测试与结构不变量覆盖,若 9.1 升级严重度再回派。
 
 ## Task 4.1 Authoritative Mining, Stable Seed Drops, And Durability
 
