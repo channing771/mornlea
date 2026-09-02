@@ -34,3 +34,20 @@
   5. `F-04`（LAN 专用服务端事实同步）仍为已认领，但本机无对应分支/worktree，可能在其他开发机上，无法核对进度。
   6. 上轮遗留待澄清项（潜行、梯子、水下呼吸装备、回血计时冻结、旧区块注水迁移）继续挂起；本轮新增待澄清见上文「未落行」。上轮第 1 项（`2026-08-23-egui-tool-ui-selection-design.md` 未入库）已随其入库关闭。
   7. Discussion #71 评论流（60 条）中有 30 条更早评论本轮未翻页读取，均为实现者状态变更评论，不影响本轮结论，但下轮若做评论级对账需翻页。
+
+## 2026-09-02（规划者第三轮）
+
+- **读取输入**：`docs/feature-backlog.md`、`docs/notes/agent-runs.md`（上轮 2026-09-01 09:19 CST）、`docs/notes/progress.md`、根 `AGENTS.md`（版本矩阵现为协议 v32、玩家 schema v8、区块 schema v9、metadata v3、`companions.ai` v4、`hostile_mobs` v1、engine ABI v9、client ABI v14、benchmark scenario v21）、Discussion #71（`gh api graphql` 因 token 失效 + 未认证 API 限流不可用，改经公开网页读取正文与可见评论；60 条评论中最末一条为 2026-08-30 F-07，**自上轮以来无新评论**；30 条更早评论仍未翻页）、`origin/main` 近 25 提交（头 `47b29b7d`，即 PR #133 合并点；上轮遗留的两笔 docs 提交 `1dda29dd` + 运行记录提交**已由用户推送成功**）、`git branch -a`/`git worktree list` 与 16 个 worktree 头 SHA 与脏状态、上轮之后新归档的 2 个 change（`archive/2026-08-31-cozy-farming-ui-theme`、`archive/2026-09-01-webview-game-ui-unification`，均随 `ffd27129` 入库）的 `proposal.md`/`design.md`/`spike-checklist.md` 遗留横扫、`git ls-files` 来源入库校验。
+- **变更行**：
+  - 新增 `B-42`（潜行与潜行放置）、`B-43`（楼梯与半砖）、`B-44`（梯子）、`D-16`（容器面板与 tooltip 迁移 WebView，webview 统一 Phase 2）、`D-17`（聊天输入迁移与 Go HUD 全量退役，Phase 3）、`D-18`（滚轮切换快捷栏）。全部有已入库出处：B-42/B-43/B-44 出自 `archive/2026-08-27-sprint/design.md`、`archive/2026-08-06-m4k-authoritative-chests/proposal.md`、`docs/superpowers/specs/2026-07-27-m2b-authoritative-player-movement-design.md` §1.2 的显式非目标，D-16/D-17/D-18 出自 `archive/2026-09-01-webview-game-ui-unification/proposal.md` 的 Phase 2/3「另行立项」与 `spike-checklist.md` 末段的既有客户端能力缺口记录。B-43 为 `设计候选`（形态/光照/选取状态编码需先设计，与 B-16 同类），其余默认 `排队`。
+  - 校对：`D-11` 备注补前提变化——Phase 1 已把快捷栏等常显层迁 WebView，其快捷栏半边改为前端组件面、容器产物格半边仍属 GPU HUD 保留面，需先重划范围再设计（状态维持 `设计候选`）。其余行状态与 git/worktree 一致：A 组全部已完成/已取消；B-04 维持 `就绪`（串行队首在位、无人认领，本轮不另晋升核心玩法行）；B-11 未登记在途分支头仍 `95f733f0`（2026-08-28 后零活动）；F-04 仍无本机 worktree 可核对。
+- **未落行（判定）**：**待澄清**——漏斗/比较器等容器自动化取放（m4k/m4e 两处非目标，但价值相对「首夜生存+自给家园」边界及与 B-19 红石的关系待确认）；创造飞行/旁观模式（m2b 非目标，依赖游戏模式整体裁决，umbrella 无独立闭环）；「退回主菜单→再次进入游戏」装配两次未在 120s 内完成（spike-checklist 记录为应用装配行为、与 WebView 参与无关，需确认是否为可交互复现的真实缺陷）；水中冲刺（sprint 非目标，属「若要」式细化）；鞘翅互斥（依赖飞行）。**不落行**——cozy 主题 proposal 范围外的「游戏内 UI 统一 WebView」已由 webview-game-ui-unification 本体消解；上轮已对齐 MC 或已清偿项无新增。
+- **提交**：`d477e6ef`（docs: plan B-42..B-44, D-16..D-18）+ 本运行记录提交。
+- **推送**：见下节记录。
+- **讨论同步**：见下节记录。
+- **留给下一轮 / 用户**：
+  1. `gh` 的 github.com token 仍失效（`gh auth status` 报 invalid），未认证 REST/GraphQL 又撞 5000/hr 共享限流——讨论正文 `--update` 与状态变更评论本轮能否发出取决于凭据，见推送/同步节。
+  2. 未并入 `main` 且本机活跃过的分支：`feat/extract-companion-agent-service`（头已推进到 `09e18bdc` 2026-09-01「close task 12」）、`refactor/sim-ownership-convergence`（`b54abb9a`）、`worktree-feat-ui-changes`（`.claude/worktrees/feat-ui-changes` 头推进到 `3328af5f` 2026-09-01，含 crack 场景 regolden）、`feat/B-11-authoritative-difficulty`（`95f733f0`，零活动）；`fix/frame-stutter` worktree 仍有 11 个未提交文件（`internal/client/receiver.go`/`mirror.go` 与 `cmd/mornlea` 多个测试）。登记与处置均属控制会话/用户裁决。
+  3. 上轮遗留未动项：疑似重复归档目录 `2026-08-29-tiered-swords-combat` 与 `2026-08-30-tiered-swords-combat`（仅 ledger 不同）、被 PR #124 取代的 `A-03-tiered-swords-combat` worktree（`8c9e7fe3`）、`archive/2026-08-28-placeable-torches/proposal.md` 延期与放弃章节占位符未兑现。
+  4. 待澄清项继续挂起（潜行、梯子两项已随本轮出处入库落行关闭；回血计时冻结、旧区块注水迁移、水下呼吸装备/附魔、漏斗、创造/旁观模式、主菜单重入装配等仍开放）。
+  5. `2026-08-31` 前后交付的 cozy 主题、dev-capture、pixel style、rust-render-world-cache、mining-crack-overlay、webview-game-ui-unification Phase 1 均为控制会话 change、无对应 backlog 行，本表不追溯补行；如需履历入表由用户裁决。
