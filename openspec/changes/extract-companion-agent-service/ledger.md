@@ -366,3 +366,22 @@
 - OpenSpec strict：clean `72ef5580` PASS，80 passed/0 failed，real 1.44s。
 - 规划产物门禁：clean `72ef5580` 的 `git diff --check`、版本/CI/Make/service archcheck 与 20 项 CI mutation PASS。
 - 回滚/备份人工文档检查：PASS；LAN 文档同时说明 world+SQLite 联合备份、v1..v4→v5 迁移和旧程序不得写 v5 的回滚边界。
+
+## PR CI 修复
+
+- 修复轮起点：分支 HEAD `09f6a025`，工作区干净，针对 PR #138 CI run 33672833087 的两个失败。
+- 失败一根因（quality job）：Race 分片全集自检差分缺一行 `github.com/channing771/mornlea/contracts/companion-agent/mcp-v1`——该目录含 `embed.go`，是 `go list ./...` 里的 Go 包，但不在任何 race 分片（cmd / internal-server / internal-rest+scripts）的并集中。
+- 失败二根因（go-race internal-server 分片）：`TestMCPAgentCrossLanguageIntegration`、`TestMCPAgentCrossLanguageCancellationIntegration`、`TestCompanionAgentHTTPProcessIntegration` 三个真实 Go↔Python 进程合同测试在无 Python 环境的 race 分片 0.06s 即败——测试用 `exec.CommandContext` 起 Python 进程，解释器缺省 `services/companion-agent/.venv/bin/python`（或 env `MORNLEA_COMPANION_AGENT_PYTHON`），Start 失败即 `t.Fatal`；integration job 有 setup-python/uv 且 `make companion-agent-integration` 已真实运行这批测试（该 job PASS），race 分片应跳过而非失败。
+- 修复文件与要点：
+  - `.github/workflows/ci.yml`：`go-race` 的 `internal-rest` 分片 `packages` 追加 `$(go list ./contracts/...)`；`quality` 的「Race 分片全集自检」块 sharded-packages 列表同步追加 `go list ./contracts/...`（与分片并集同源覆盖）。
+  - `internal/server/companion_agent_cross_language_integration_test.go`：新增 `crossLanguagePythonPath` helper（解析顺序与现状一致：先 env `MORNLEA_COMPANION_AGENT_PYTHON`，为空则 `.venv/bin/python`；用 `os.Stat` 判定存在且是常规文件，缺失/不可用返回 `(path, false)`）；三处生成点（mcp-probe、mcp-cancel-probe、http-server）改为不可用时 `t.Skipf`，其中 `startCrossLanguageAgentProcess` 的 skip 放在创建 listener 之前避免端口泄漏；环境变量显式设置但路径不存在时同样 skip；MCP service/registry 等其他断言未动。
+  - `internal/archcheck` 复查：`TestCompanionAgentCIGates`/`companionAgentWorkflowViolations` 不解析 race matrix 或分片并集，无需同步预期。
+- 门禁结果（全部在 <WT> 内串行执行）：
+  1. `go test ./internal/archcheck -count=1` PASS（5.986s）。
+  2. skip 双语义：`MORNLEA_COMPANION_AGENT_PYTHON=/nonexistent-python go test ./internal/server -race -count=1 -run 'TestMCPAgentCrossLanguageIntegration|TestMCPAgentCrossLanguageCancellationIntegration|TestCompanionAgentHTTPProcessIntegration'` PASS 且输出 3 个 SKIP（server 2.043s）；不带 env 且 `<WT>/services/companion-agent/.venv` 存在时同一 -run 集合真实执行并 PASS（server 8.305s，含 MCP probe、cancel probe 与 HTTP 进程合同的全部子断言）。
+  3. `make companion-agent-integration` PASS（real 10.091s：uv sync resolved 80、ruff format/check、mypy 24 files、server 7.976s）——真实进程合同仍全绿。
+  4. `go test ./internal/server -race -count=1` PASS（243.813s，real 4:04.48；venv 存在，含真实进程测试）。
+  5. 本地分片自检等价脚本（`go list ./...` 全量 vs cmd+internal/server+internal 其余+contracts+scripts 并集）diff 为空。
+  6. 改动 Go 文件 `gofmt -l` 为空；`git diff --check` 干净。
+- 「跳过不削弱覆盖」论证：三个进程合同的真实执行由 `make companion-agent-integration` 承载，CI 的 integration job（setup-python 3.12 + uv 0.12.5）真实运行同一批测试（run 33672833087 中该 job PASS）；race 分片的 skip 只作用于没有 Python 解释器的分片，不删减任何实际执行的合同断言；venv 存在或显式设置有效 `MORNLEA_COMPANION_AGENT_PYTHON` 时测试仍真实执行（门禁 2 第二遍与门禁 3、4 已证明）。
+- 提交：`fix(ci): include contracts packages in race shard coverage`（ci.yml）、`test(server): skip cross-language process tests without Python env`（测试 gating）、`docs(openspec): record PR CI repair evidence`（本小节）。
