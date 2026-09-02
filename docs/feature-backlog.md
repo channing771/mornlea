@@ -167,6 +167,7 @@
 | D-16 | 容器面板与 tooltip 迁移 WebView | webview 游戏 UI 统一 Phase 2：容器打开时 WebView 进入响应链承接指针、上行事件批新增槽位/配方点击事件族、两次点击整堆移动语义平移、tooltip 与独立配方面板 CSS 化、`RecipeButtonAt` 命中测试与 `containerPanelQuads` 族退役 | client ABI 可能升版（上行事件族追加）；golden 验收链按 Phase 1 三层化口径调整 | 排队 | — | `openspec/changes/archive/2026-09-01-webview-game-ui-unification/proposal.md` Phase 2（显式「另行立项」）；前置 Phase 1（该 change 本体，已合入）与 D-12；容器保留面 GPU 资源契约以 Phase 1 重算值为起点 |
 | D-17 | 聊天输入迁移与 Go HUD 全量退役 | webview 游戏 UI 统一 Phase 3：聊天输入框迁 WebView（响应链随聊天开启态切换）、残余 Go HUD 呈现代码/atlas 容器 cell/固定上传布局退役，`internal/render/hud` 仅存桥状态组装 | benchmark scenario 与 golden 清单按退役面再演进；client ABI 可能升版 | 排队 | — | 同上 proposal.md Phase 3（显式「另行立项」）；依赖 D-16；回退路径沿 Phase 1 先例（恢复对应 GPU 绘制路径与 golden） |
 | D-18 | 滚轮切换快捷栏 | 滚轮事件进入输入快照（Rust 快照现无滚轮字段、Go 侧无消费），客户端复用既有快捷栏选择命令完成九格循环切换 | 输入快照追加字段 → engine ABI 可能升版；无协议结构变更 | 排队 | — | `openspec/changes/archive/2026-09-01-webview-game-ui-unification/spike-checklist.md`「自动化限制与最小人工兜底清单」末段（明示为与本 spike 无关的既有客户端能力缺口）；GameOverlay 态不参与响应链，滚轮仍走 winit 输入路径 |
+| D-19 | 进入世界加载屏 | 菜单「进入游戏」后新增 loading 相位：不透明 WebView 加载屏（标题+进度条+区块计数），加载完成判据复用无头 `LoadedChunkTarget`/`ApplicationLoadComplete` 单一定义，收敛后捕获光标进入世界相位 | 无协议/存档/ABI/scenario/golden 变更（桥 schema 加相位值与 loading 分节，Go/Rust/TS 三端钉值同步） | 已认领 | zcode-control @ feat/world-loading-screen | 2026-09-02 用户直接委托：进入游戏后初始区块渐进浮现期间画面只有天空底色，要求 MC 式加载页（加载时进度条、完成后再进入世界）；方案经用户显式批准；加载相位 drain/mesh 预算与无头 `WaitUntilLoaded` 同源（交互初始加载因此加速收敛）；独占文件集 `cmd/mornlea/app` 相位机/循环、`frontend/src`（schema/桥/UI/visual）、`mornlea_client/src/{webview,overlay}.rs` 注释与测试清单 |
 
 ## E. 工程与基础设施（后续任务候选）
 
