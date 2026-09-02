@@ -78,7 +78,7 @@ func (a *Application) captureCoordinator() CaptureCoordinator {
 	return a.startupDeps.CaptureCoordinator
 }
 
-// pumpDevCapture 是交互帧循环的捕获泵，由菜单与游戏两处循环在
+// pumpDevCapture 是交互帧循环的捕获泵，由菜单、加载与游戏三处循环在
 // `Window.Poll` 之后、渲染之前各调用一次。未注入协调器时早退；注入后每帧
 // 先把相位与窗口尺寸发布进 /status 原子快照，再做一次非阻塞待办检查，
 // 有待办时在当前线程（与 `Window.Poll` 同线程，
@@ -118,7 +118,7 @@ func (a *Application) publishDevCaptureStatus() {
 }
 
 // Phase 返回快照中的菜单相位字符串，取值与 UI 桥 schema 的 `$defs/phase`
-// 枚举一致（menu/settings/starting/paused/game）。它是 `devcapture.StatusSource`
+// 枚举一致（menu/settings/starting/loading/paused/game）。它是 `devcapture.StatusSource`
 // 的相位注入面：快照仅在注入捕获协调器后由帧循环维护，未注入时读到构造
 // 零值——零值相位即游戏相位（`MenuPhaseGame`），与「非 StartAtMenu 路径
 // 零值直接进游戏循环」的既有约定一致。并发语义：原子读取，可在任意

@@ -35,7 +35,8 @@ describe("parseState", () => {
   });
 
   it("未知 phase 抛 BridgeProtocolError", () => {
-    expect(() => parseState({ phase: "loading" })).toThrow(BridgeProtocolError);
+    // loading 相位随世界加载屏 change 合法化，未知相位夹具改用占位值。
+    expect(() => parseState({ phase: "bogus" })).toThrow(BridgeProtocolError);
   });
 
   it("非对象输入（null/数组/标量）抛 BridgeProtocolError", () => {
@@ -155,6 +156,51 @@ describe("parseState", () => {
 
   it("顶层未知属性抛 BridgeProtocolError", () => {
     expect(() => parseState({ phase: "menu", cheat: true })).toThrow(BridgeProtocolError);
+  });
+});
+
+// 世界加载屏分节夹具：loaded/total 与 Go 组装（len(loadedChunks) 与
+// LoadedChunkTarget=(2*(ViewDistance+1)+1)^2，默认 4489）同源。
+describe("parseState 的 loading 分节", () => {
+  it("loading 相位携带 loading 分节原样通过", () => {
+    const state = parseState({ phase: "loading", loading: { loaded: 1122, total: 4489 } });
+    expect(state.phase).toBe("loading");
+    expect(state.loading).toEqual({ loaded: 1122, total: 4489 });
+  });
+
+  it("loading 相位可缺席 loading 分节（schema 只要求 phase，守卫保持单字段校验）", () => {
+    const state = parseState({ phase: "loading" });
+    expect(state.loading).toBeUndefined();
+  });
+
+  it("loading 分节缺 loaded 或 total 抛 BridgeProtocolError", () => {
+    expect(() => parseState({ phase: "loading", loading: { total: 4489 } })).toThrow(
+      BridgeProtocolError,
+    );
+    expect(() => parseState({ phase: "loading", loading: { loaded: 0 } })).toThrow(
+      BridgeProtocolError,
+    );
+  });
+
+  it("loading 分节未知属性抛 BridgeProtocolError", () => {
+    expect(() =>
+      parseState({ phase: "loading", loading: { loaded: 1, total: 4489, eta: "12s" } }),
+    ).toThrow(BridgeProtocolError);
+  });
+
+  it("loading loaded 负数或 total=0 抛 BridgeProtocolError", () => {
+    expect(() => parseState({ phase: "loading", loading: { loaded: -1, total: 4489 } })).toThrow(
+      BridgeProtocolError,
+    );
+    expect(() => parseState({ phase: "loading", loading: { loaded: 0, total: 0 } })).toThrow(
+      BridgeProtocolError,
+    );
+  });
+
+  it("loading 分节非整数字段抛 BridgeProtocolError", () => {
+    expect(() => parseState({ phase: "loading", loading: { loaded: 1.5, total: 4489 } })).toThrow(
+      BridgeProtocolError,
+    );
   });
 });
 

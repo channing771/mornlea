@@ -717,13 +717,13 @@ mod tests {
     };
     use crate::overlay::{OverlayMode, mode_for_phase, plan_transition};
 
-    /// 相位枚举全值覆盖:菜单族(menu/starting/settings/paused)与叠加可见
-    /// 调试面板的游戏相位都要求 WebView 全参与,只有无 chrome 的游戏相位
-    /// 进入 GameOverlay。这是参与模式推导的唯一输入,漏一个相位值就会让
-    /// 该相位既没有 chrome 又吞输入。
+    /// 相位枚举全值覆盖:菜单族(menu/starting/loading/settings/paused)与
+    /// 叠加可见调试面板的游戏相位都要求 WebView 全参与,只有无 chrome 的
+    /// 游戏相位进入 GameOverlay。这是参与模式推导的唯一输入,漏一个相位值
+    /// 就会让该相位既没有 chrome 又吞输入。
     #[test]
     fn phase_visibility_covers_the_schema_phase_enum() {
-        for phase in ["menu", "starting", "settings", "paused"] {
+        for phase in ["menu", "starting", "loading", "settings", "paused"] {
             assert!(
                 state_wants_visible_parsed(phase, &serde_json::json!({"phase": phase})),
                 "phase={phase} 必须全参与"

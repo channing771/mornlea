@@ -6,6 +6,7 @@ export const fixtureNames = [
   "panel-main-menu",
   "panel-settings",
   "panel-pause",
+  "panel-loading",
   "panel-debug",
   "button-default",
   "button-disabled",

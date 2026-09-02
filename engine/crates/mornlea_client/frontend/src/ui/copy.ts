@@ -1,6 +1,7 @@
 // 前端固定文案常量：与退役 egui 菜单的既有文案逐字沿承（设置页控件、暂停层
-// 标题/按钮/注明行）。主菜单标题、版本行、错误行与按钮表由 Go 权威下发，不
-// 在此表内；本表是前端文案唯一权威，改动经桥下行状态与 Go 侧钉值测试守护。
+// 标题/按钮/注明行；加载屏文案为本仓新增）。主菜单标题、版本行、错误行与按
+// 钮表由 Go 权威下发，不在本表内；本表是前端文案唯一权威，改动经桥下行状态
+// 与 Go 侧钉值测试守护。
 export const SETTINGS_TITLE = "设置";
 export const SETTINGS_AUDIO_LABEL = "总音量";
 export const SETTINGS_TEXTURE_LABEL = "材质包目录";
@@ -16,6 +17,11 @@ export const PAUSE_TITLE = "已暂停";
 export const PAUSE_BACK_LABEL = "返回游戏";
 export const PAUSE_QUIT_TO_MENU_LABEL = "退回主菜单";
 export const PAUSE_REMOTE_NOTE = "远程世界不会暂停，服务端仍在推进";
+
+// 世界加载屏文案：进度语义权威在 Go，前端只呈现标题与「区块」计数前缀；
+// 计数数字用下行整数原样拼入（见 LoadingScreen）。
+export const LOADING_TITLE = "正在生成世界…";
+export const LOADING_COUNT_UNIT = "区块";
 
 // 窗口预设值与 Go `UISettingsWindow` 1/2/3 互钉；展示文案沿承退役 egui 菜单。
 export const WINDOW_SIZE_PRESETS: readonly { value: "640x360" | "960x540" | "1280x720"; label: string }[] = [

@@ -184,12 +184,13 @@ func TestPauseQuitToMenuTearsDownAndAllowsReassembly(t *testing.T) {
 		t.Fatal("拆链后背包状态残留")
 	}
 
-	// 再点「进入游戏」能成功装配出全新会话状态，与首次进入同一构造口径。
+	// 再点「进入游戏」能成功装配出全新会话状态，与首次进入同一构造口径；
+	// 同样停在加载相位（加载收敛后才进入游戏相位）。
 	if quit := app.handleMenuEvent(menuActionStart); quit {
 		t.Fatal("再进入不应请求退出")
 	}
-	if app.menu.phase != MenuPhaseGame {
-		t.Fatalf("二次装配后 phase = %v，want game", app.menu.phase)
+	if app.menu.phase != MenuPhaseLoading {
+		t.Fatalf("二次装配后 phase = %v，want loading", app.menu.phase)
 	}
 	if len(hosts()) != 2 {
 		t.Fatalf("二次装配应新建世界宿主，实际 %d 台", len(hosts()))

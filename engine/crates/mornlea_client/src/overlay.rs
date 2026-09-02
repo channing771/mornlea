@@ -46,10 +46,10 @@ pub(crate) enum OverlayMode {
 
 /// 由「下行状态是否要求 WebView 以菜单形态全参与」推导参与模式。
 ///
-/// 下行相位的菜单族(menu/starting/settings/paused,以及叠加可见调试面板的
-/// game 相位——面板需要键盘与指针)都要求全参与;只有无 chrome 的游戏相位
-/// 进入 GameOverlay。可见性与参与度在同一字段上编码,`crate::webview` 侧的
-/// 相位解析是唯一驱动源。
+/// 下行相位的菜单族(menu/starting/loading/settings/paused,以及叠加可见
+/// 调试面板的 game 相位——面板需要键盘与指针)都要求全参与;只有无 chrome
+/// 的游戏相位进入 GameOverlay。可见性与参与度在同一字段上编码,
+/// `crate::webview` 侧的相位解析是唯一驱动源。
 pub(crate) fn mode_for_phase(phase_wants_visible: bool) -> OverlayMode {
     if phase_wants_visible {
         OverlayMode::Menu

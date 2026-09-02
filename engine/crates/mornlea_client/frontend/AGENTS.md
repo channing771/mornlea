@@ -64,8 +64,8 @@ Rust 侧只消费本目录的构建产物 `dist/`（经 `mornlea://` scheme 内�
 - Tailwind `content` 扫描 `node_modules/pixel-retroui/dist/**`，retroui
   产物引用的工具类与其自带样式表会把 `.hidden`/`.shadow`/`.container`
   等通用名带进全局命名空间：前端类名保持既有 `menu-*`/`settings-*`/
-  `pause-*`/`debug-*`/`pixel-*`/`hud-*` 前缀隔离，不得裸用通用工具类名
-  （`hud-*` 属 `src/hud/` 的常显 HUD 组件族）。
+  `pause-*`/`debug-*`/`pixel-*`/`hud-*`/`loading-*` 前缀隔离，不得裸用
+  通用工具类名（`hud-*` 属 `src/hud/` 的常显 HUD 组件族）。
 
 ## 固定文案（`src/ui/copy.ts`）
 

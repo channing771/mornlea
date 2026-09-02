@@ -3,6 +3,7 @@
 package app
 
 import (
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -20,11 +21,16 @@ import (
 // 上传。benchmark 的稳态测量帧沿用同一预算，因此随共享常量下沉到本包。
 const SteadyFrameMeshWorkMax = 64
 
-// RunInteractive 是交互客户端的入口循环，按主菜单相位路由：
-// menu != game（StartAtMenu 或未装配）时先跑菜单相位，装配成功（phase=game）后
-// 走既有游戏循环；否则（-connect/benchmark/capture 或直接构造的 Application）
-// 直接进入游戏循环。暂停页「退回主菜单」把相位送回菜单，外层循环据此在两条
-// 相位循环之间往返；「退出游戏」或窗口关闭返回 nil 正常退出。
+// loadingProgressLogInterval 是加载相位进度摘要日志的最小间隔，与无头
+// `WaitUntilLoaded` 的 5 秒节奏同源；加载不设超时，摘要只用于诊断卡死。
+const loadingProgressLogInterval = 5 * time.Second
+
+// RunInteractive 是交互客户端的入口循环，按主菜单相位路由：菜单族
+// （menu/settings/starting/paused）先跑菜单相位；装配成功（phase=loading）后
+// 走加载循环，收敛（phase=game）后进入既有游戏循环；否则
+// （-connect/benchmark/capture 或直接构造的 Application）直接进入游戏循环。
+// 暂停页「退回主菜单」把相位送回菜单，外层循环据此在相位循环之间往返；
+// 「退出游戏」或窗口关闭返回 nil 正常退出。
 func RunInteractive(app *Application) error {
 	// 交互路径启动即请求窗口前置:后台启动(如被启动脚本或聚焦竞态抢占)时
 	// 窗口偶发不前置,用户面对一个看不见的客户端。benchmark/capture 不走本
@@ -33,39 +39,57 @@ func RunInteractive(app *Application) error {
 		app.window.Focus()
 	}
 	for !app.window.ShouldClose() {
-		if app.menu.phase != MenuPhaseGame {
-			if err := runMenuPhase(app); err != nil {
+		switch app.menu.phase {
+		case MenuPhaseGame:
+			if err := runGamePhase(app); err != nil {
+				return err
+			}
+			if app.menu.phase == MenuPhaseGame {
+				// 游戏循环只随窗口关闭自然耗尽；相位未变即原有正常退出路径。
+				return nil
+			}
+			// 暂停页退回主菜单：会话已拆链，回到菜单相位继续装配循环。
+		case MenuPhaseLoading:
+			if err := runLoadingPhase(app); err != nil {
 				return err
 			}
 			if app.menu.phase != MenuPhaseGame {
+				// 加载期窗口关闭：正常退出，未进入游戏相位。
+				return nil
+			}
+			// 加载收敛：相位已置 game，交给游戏循环。
+		default:
+			if err := runMenuPhase(app); err != nil {
+				return err
+			}
+			if app.menu.phase != MenuPhaseLoading && app.menu.phase != MenuPhaseGame {
 				// 菜单期退出（退出游戏或窗口关闭），未进入游戏相位。
 				return nil
 			}
-			continue
+			// 装配成功：相位切到 loading（game 为直构形态的兜底），外层按
+			// 相位重新路由到加载/游戏循环。
 		}
-		if err := runGamePhase(app); err != nil {
-			return err
-		}
-		if app.menu.phase == MenuPhaseGame {
-			// 游戏循环只随窗口关闭自然耗尽；相位未变即原有正常退出路径。
-			return nil
-		}
-		// 暂停页退回主菜单：会话已拆链，回到菜单相位继续装配循环。
 	}
 	return nil
 }
 
 // runMenuPhase 运行主菜单相位：不捕获光标、不读取 WASD/面板/聊天/快捷栏输入，
 // 每帧 Poll → DrainUIEvents → 桥事件分派 → 渲染（菜单 chrome 由 WebView 呈现，
-// 帧内不再有 UI 段）。「进入游戏」装配成功（startWorld 置 phase=game）后立即
-// SetCursorCaptured(true) 并刷新鼠标基线,返回 nil 交给游戏相位；「退出游戏」
-// 或窗口关闭同样返回 nil。
+// 帧内不再有 UI 段）。「进入游戏」装配成功（startWorld 置 phase=loading）后返回
+// nil，光标捕获交给加载收敛点；「退出游戏」或窗口关闭同样返回 nil。
 func runMenuPhase(app *Application) error {
 	for !app.window.ShouldClose() {
 		app.window.Poll()
 		// 捕获泵：待办检查放在 Poll 之后、渲染之前——像素取自当前帧的窗口
 		// 合成图（与 `Poll` 同线程），编码全部留在协调器侧的帧循环之外。
 		app.pumpDevCapture()
+		if app.menu.phase == MenuPhaseGame || app.menu.phase == MenuPhaseLoading {
+			// 帧级交接检查：相位一旦离开菜单族（装配成功置 loading；game 为
+			// 直构形态的兜底）就不再渲染菜单帧，立即返回让外层路由接手加载/
+			// 游戏循环。事件路径由下方事件处理点先行返回，这里兜住任何非事件
+			// 来源的相位迁移，避免菜单循环带着已装配世界空转。
+			return nil
+		}
 		events := app.renderer.DrainUIEvents()
 		for _, event := range events {
 			quit, disposition := app.handleMenuUIEvent(event)
@@ -76,13 +100,62 @@ func runMenuPhase(app *Application) error {
 			if quit {
 				return nil
 			}
-			if app.menu.phase == MenuPhaseGame {
-				// 装配成功：handleMenuEvent 已捕获光标并刷新基线，交给游戏相位。
+			if app.menu.phase == MenuPhaseGame || app.menu.phase == MenuPhaseLoading {
+				// 装配成功：相位已交给下一阶段（loading；game 为直构形态的
+				// 兜底），外层路由接手后续相位循环。
 				return nil
 			}
 		}
 		if _, err := app.RenderFrame(SteadyFrameMeshWorkMax); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// runLoadingPhase 运行世界加载相位：装配已成功、主菜单已消失，WebView 以菜单族
+// 呈现不透明加载屏覆盖渐进加载中的世界。每帧 Poll → 捕获泵 → 排空桥事件（加载
+// 屏没有合法上行动作，逐条告警忽略——Enter 不得重复触发装配）→ 以与无头
+// `WaitUntilLoaded` 同源的 `MessageDrainMax` 预算驱动 `Frame`（drain 消息、网格化
+// 与接收器错误处理都复用这一入口，不另起第二套帧驱动）→ `ApplicationLoadComplete`
+// 检查。收敛即置游戏相位、捕获光标并刷新鼠标基线（`runGamePhase` 入口的既有捕获
+// 保持为兜底），返回 nil 交给游戏循环；窗口关闭同样返回 nil；接收器错误沿 `Frame`
+// 的既有 `CloseClientSession` 语义上抛。加载期不设超时与取消，每 5 秒记录一次
+// 进度摘要（对齐 `WaitUntilLoaded` 的日志内容）辅助诊断。
+func runLoadingPhase(app *Application) error {
+	wantedChunks := LoadedChunkTarget(app)
+	lastFrame := time.Now()
+	lastLog := time.Time{}
+	for !app.window.ShouldClose() {
+		app.window.Poll()
+		// 捕获泵：与菜单/游戏相位同位——`Poll` 之后、渲染之前每帧一次。
+		app.pumpDevCapture()
+		for _, event := range app.renderer.DrainUIEvents() {
+			slog.Warn("忽略加载相位 UI 事件", "kind", event.Kind)
+		}
+		now := time.Now()
+		// dt 只影响呈现插值语义（与交互循环同一 100ms 钳制），收敛判据不依赖它。
+		dt := min(now.Sub(lastFrame), 100*time.Millisecond)
+		lastFrame = now
+		if _, err := app.Frame(MessageDrainMax, MessageDrainMax, dt); err != nil {
+			return err
+		}
+		if ApplicationLoadComplete(app, wantedChunks) {
+			app.menu.phase = MenuPhaseGame
+			app.window.SetCursorCaptured(true)
+			_, _ = app.window.CursorPos()
+			return nil
+		}
+		if time.Since(lastLog) >= loadingProgressLogInterval {
+			stats := app.mesher.Stats()
+			slog.Info("世界加载中",
+				"chunks", fmt.Sprintf("%d/%d", len(app.loadedChunks), wantedChunks),
+				"queued", stats.QueuedJobs,
+				"active", stats.InFlightJobs,
+				"ready", stats.ReadyResults,
+				"pending", app.scheduler.PendingUploads(),
+			)
+			lastLog = time.Now()
 		}
 	}
 	return nil

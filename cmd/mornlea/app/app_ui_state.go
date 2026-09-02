@@ -12,8 +12,8 @@ package app
 // 权威,钉值测试(`app_ui_state_test.go`)用同一文件校验本组装输出。
 //
 // 两条下行路径在本文档汇合,任意时刻前端拿到的都是一份完整 `uiState`:
-//   - 菜单/设置/暂停相位、调试面板叠加与会话已关闭走「整份文档变化才下行」,
-//     每帧判一次(暂停分节因此总能下行,hud 分节经回填继续呈现);
+//   - 菜单/设置/加载/暂停相位、调试面板叠加与会话已关闭走「整份文档变化才
+//     下行」,每帧判一次(暂停分节因此总能下行,hud 分节经回填继续呈现);
 //   - 游戏相位(会话存活、调试面板关闭)的 hud 分节由 `internal/client` 的推送
 //     纪律层按权威 tick 合并脏标记下行:同一 tick 内的多处变化合并为至多一次
 //     终态载荷,无变化的 tick 零推送且零组装求值,推送点绑定权威 tick 边界而非
@@ -40,10 +40,19 @@ type uiStateJSON struct {
 	Menu     *uiMenuJSON     `json:"menu,omitempty"`
 	Settings *uiSettingsJSON `json:"settings,omitempty"`
 	Pause    *uiPauseJSON    `json:"pause,omitempty"`
+	Loading  *uiLoadingJSON  `json:"loading,omitempty"`
 	Debug    *uiDebugJSON    `json:"debug,omitempty"`
 	// Hud 是游戏相位 hud 分节的下行载荷原文,由推送纪律层 marshal 产出;整份
 	// 文档路径回填最近一次下行的载荷,避免把前端已呈现的 HUD 清成缺席。
 	Hud json.RawMessage `json:"hud,omitempty"`
+}
+
+// uiLoadingJSON 对应 schema `$defs/loadingState`:世界加载屏分节只在加载相位
+// 出现。loaded/total 都由 Go 权威推导(镜像势与无头同源目标列数),前端只做
+// 比例换算与格式化,不自行预测或平滑进度。
+type uiLoadingJSON struct {
+	Loaded int `json:"loaded"`
+	Total  int `json:"total"`
 }
 
 // uiMenuJSON 对应 schema `$defs/menuState`;文案由 Go 权威下发。
@@ -115,6 +124,8 @@ func (phase MenuPhase) uiPhase() string {
 		return "settings"
 	case MenuPhaseStarting:
 		return "starting"
+	case MenuPhaseLoading:
+		return "loading"
 	case menuPhasePaused:
 		return "paused"
 	default:
@@ -122,7 +133,7 @@ func (phase MenuPhase) uiPhase() string {
 	}
 }
 
-// buildUIState 组装当前完整 UI 状态。菜单/设置/暂停分节按相位出现;调试
+// buildUIState 组装当前完整 UI 状态。菜单/设置/加载/暂停分节按相位出现;调试
 // 分节在面板可见时叠加于任意相位(面板不存在或不可见时缺席——缺席即前端
 // 零 chrome,与「面板关闭时零工作」同一语义);游戏与暂停相位回填最近一次
 // 下行的 hud 分节。
@@ -147,6 +158,11 @@ func (a *Application) buildUIState() uiStateJSON {
 		}
 	case MenuPhaseSettings:
 		state.Settings = a.settings.uiSettingsJSON()
+	case MenuPhaseLoading:
+		state.Loading = &uiLoadingJSON{
+			Loaded: len(a.loadedChunks),
+			Total:  LoadedChunkTarget(a),
+		}
 	case menuPhasePaused:
 		state.Pause = &uiPauseJSON{Remote: a.remote()}
 	}
@@ -288,8 +304,10 @@ func (a *Application) initHUDPush() {
 	a.hudPush = *client.NewUIHudPushScheduler(hudStateSink{app: a}, a.assembleHUDState)
 }
 
-// hudPushPhaseWindow 报告当前相位是否呈现游戏 HUD:只有游戏与暂停相位有已装配
-// 的世界,主菜单/设置页/装配中不呈现。暂停相位刻意留在窗口内(hud 分节继续按
+// hudPushPhaseWindow 报告当前相位是否呈现游戏 HUD:只有游戏与暂停相位有 hud
+// 分节,主菜单/设置页/装配中/世界加载期不呈现。加载相位刻意不进窗口(加载屏
+// 无 HUD 分节,进度走 `loading` 分节),进入 game 相位时 `syncHUDPushWindow` 的
+// 进入分支保证首次冲刷整份下行。暂停相位刻意留在窗口内(hud 分节继续按
 // tick 维护,marker 到期等变化照常下行),它与「菜单层是否整份推送」是两个独立
 // 裁决——后者的早退条件只收窄到游戏相位(见 `pushUIStateIfChanged`),暂停相位
 // 因此走整份文档路径携带 pause 分节,hud 分节经 `buildUIState` 回填继续呈现。

@@ -294,6 +294,49 @@ func TestUIStateConformsToBridgeSchema(t *testing.T) {
 	// game 无面板:常量零 chrome 状态本身也必须合法。
 	app.panel.visible = false
 	requireValid(t, schema, uiStateJSON{Phase: "game"}, "game 相位")
+
+	// loading:加载屏分节(loaded 取已就绪区块列镜像的势,total 取与无头判据
+	// 同源的目标列数),菜单与 hud 分节缺席。
+	app.loadedChunks = map[core.ChunkPos]struct{}{{}: {}, {X: 1}: {}}
+	app.render = config.Render{ViewDistance: 0}
+	app.menu.phase = MenuPhaseLoading
+	loading := app.buildUIState()
+	requireValid(t, schema, loading, "loading 相位")
+	if loading.Loading == nil || loading.Loading.Loaded != 2 || loading.Loading.Total != 9 {
+		t.Fatalf("loading 分节不符: %+v", loading.Loading)
+	}
+}
+
+// TestBuildUILoadingSectionPhaseWindow 锁定 loading 分节只在加载相位组装，其余
+// 相位一律缺席；`MenuPhaseLoading` 的桥相位字符串与单源 schema 枚举互钉。
+func TestBuildUILoadingSectionPhaseWindow(t *testing.T) {
+	app := &Application{
+		menu:         menuState{phase: MenuPhaseMenu, title: "Mornlea", version: "dev"},
+		render:       config.Render{ViewDistance: 0},
+		loadedChunks: map[core.ChunkPos]struct{}{{}: {}, {X: 1}: {}, {Z: 1}: {}},
+	}
+	for _, phase := range []MenuPhase{MenuPhaseGame, MenuPhaseMenu, MenuPhaseSettings, MenuPhaseStarting, menuPhasePaused} {
+		app.menu.phase = phase
+		if state := app.buildUIState(); state.Loading != nil {
+			t.Fatalf("相位 %v 不应携带 loading 分节: %+v", phase, state.Loading)
+		}
+	}
+
+	if got := MenuPhaseLoading.uiPhase(); got != "loading" {
+		t.Fatalf("MenuPhaseLoading 桥相位 = %q，want loading", got)
+	}
+	app.menu.phase = MenuPhaseLoading
+	state := app.buildUIState()
+	if state.Phase != "loading" || state.Loading == nil {
+		t.Fatalf("加载相位应携带 loading 分节: phase=%q loading=%+v", state.Phase, state.Loading)
+	}
+	if state.Loading.Loaded != 3 {
+		t.Fatalf("loaded = %d，want 3（已就绪区块列镜像的势）", state.Loading.Loaded)
+	}
+	// 视距 0 的目标列数是 (2*(0+1)+1)^2 = 9，与无头 LoadedChunkTarget 同源。
+	if state.Loading.Total != 9 {
+		t.Fatalf("total = %d，want 9", state.Loading.Total)
+	}
 }
 
 // TestUIStateRejectsSchemaViolations 锁定测试校验器自身不是摆设:对已知违约
@@ -302,8 +345,16 @@ func TestUIStateRejectsSchemaViolations(t *testing.T) {
 	schema := loadBridgeSchema(t)
 
 	// 未知相位。
-	if err := validateAgainstBridgeSchema(t, schema, marshalState(t, uiStateJSON{Phase: "loading"})); err == nil {
+	if err := validateAgainstBridgeSchema(t, schema, marshalState(t, uiStateJSON{Phase: "booting"})); err == nil {
 		t.Fatal("未知相位应被 schema 拒绝")
+	}
+	// 越界 loading 分节:total 下界为 1（目标列数公式恒为正奇数平方）。
+	badLoading := uiStateJSON{
+		Phase:   "loading",
+		Loading: &uiLoadingJSON{Loaded: 0, Total: 0},
+	}
+	if err := validateAgainstBridgeSchema(t, schema, marshalState(t, badLoading)); err == nil {
+		t.Fatal("total=0 的 loading 分节应被 schema 拒绝")
 	}
 	// 未知动作 id 的按钮。
 	badAction := uiStateJSON{

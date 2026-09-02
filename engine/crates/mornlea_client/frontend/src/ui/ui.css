@@ -56,10 +56,11 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ---- 主菜单 / 暂停层共用的全屏相位容器 ---- */
+/* ---- 主菜单 / 暂停层 / 加载屏共用的全屏相位容器 ---- */
 
 .menu-screen,
-.pause-screen {
+.pause-screen,
+.loading-screen {
   position: absolute;
   inset: 0;
   display: flex;
@@ -380,6 +381,50 @@ body {
   font-size: var(--font-message);
   color: var(--text-secondary);
   /* 像素质感微调：与标题/按钮同用文字硬投影规范。 */
+  text-shadow: 1px 1px 0 var(--text-shadow);
+}
+
+/* ---- 世界加载屏 ---- */
+
+/* 不透明整屏底：加载相位必须完全遮住其下渐进装配的 wgpu 世界画面
+ * （透明度只允许出现在暂停遮罩，两令牌不共用）。 */
+.loading-screen {
+  background: var(--loading-bg);
+}
+
+.loading-title {
+  margin: 0;
+  font-size: var(--font-title);
+  text-shadow: 1px 1px 0 var(--text-shadow);
+}
+
+/* 像素风进度轨道：硬描边凹槽 + wheat 实色填充。填充宽度由组件下发的
+ * `--loading-fill`（已钳制比例）驱动、overflow 兜底，零 transition——
+ * 进度硬切下行值，不自行平滑。 */
+.loading-progress {
+  position: relative;
+  box-sizing: border-box;
+  width: var(--loading-track-width);
+  height: var(--loading-track-height);
+  overflow: hidden;
+  border: var(--hairline) solid var(--panel-border);
+  background: var(--hud-progress-track);
+}
+
+.loading-progress-fill {
+  display: block;
+  height: 100%;
+  width: calc(var(--loading-fill, 0) * 100%);
+  background: var(--accent-wheat-solid);
+}
+
+.loading-count {
+  margin: 0;
+  font-size: var(--font-message);
+  color: var(--text-secondary);
+  /* 计数数字逐帧更新，等宽数位防水平抖动（先例：`src/hud/hud.css` 的
+   * `.hud-slot-count`）。 */
+  font-variant-numeric: tabular-nums;
   text-shadow: 1px 1px 0 var(--text-shadow);
 }
 

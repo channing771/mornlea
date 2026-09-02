@@ -96,11 +96,29 @@ describe("schema：下行 uiState 合法夹具", () => {
       }),
     ).toBe(true);
   });
+
+  it("loading 相位携带 loading 分节（loaded/total）通过校验", () => {
+    expect(
+      validateUiState({ phase: "loading", loading: { loaded: 1122, total: 4489 } }),
+    ).toBe(true);
+  });
 });
 
 describe("schema：下行 uiState 非法用例一律拒绝", () => {
   it("未知 phase 拒绝", () => {
-    expect(validateUiState({ phase: "loading" })).toBe(false);
+    // loading 相位随世界加载屏 change 合法化，未知相位夹具改用占位值。
+    expect(validateUiState({ phase: "bogus" })).toBe(false);
+  });
+
+  it("loading 分节 total=0 或 loaded 负数拒绝", () => {
+    expect(validateUiState({ phase: "loading", loading: { loaded: 0, total: 0 } })).toBe(false);
+    expect(validateUiState({ phase: "loading", loading: { loaded: -1, total: 4489 } })).toBe(false);
+  });
+
+  it("loading 分节携带未知属性拒绝", () => {
+    expect(
+      validateUiState({ phase: "loading", loading: { loaded: 1122, total: 4489, eta: 5 } }),
+    ).toBe(false);
   });
 
   it("缺 phase 拒绝", () => {

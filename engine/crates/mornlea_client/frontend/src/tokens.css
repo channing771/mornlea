@@ -84,6 +84,10 @@
   );
   /* 暂停遮罩：暖深棕 0.82 透明变体。 */
   --pause-overlay: rgba(46, 36, 25, 0.82);
+  /* 世界加载屏整屏底：与 --pause-overlay 同一暖深棕色相（46,36,25）但
+   * alpha=1——加载相位必须完全遮住其下 wgpu 半成品世界画面，不保留任何
+   * 透明度。 */
+  --loading-bg: rgb(46, 36, 25);
 
   /* ---- 几何（退役 egui 菜单的布局常量沿用值；主菜单按钮族与标题字号
    * 改用 clamp()/min() 响应式口径，覆盖全部窗口形态，不引入 breakpoint） ---- */
@@ -105,6 +109,11 @@
   --debug-row-height: 26px;
   --debug-selected-mark: 3px;
   --debug-value-column: 260px;
+  /* 世界加载屏进度轨道：菜单族响应式口径（不随 --hud-scale 缩放，那是 HUD
+   * 组件族的唯一缩放输入）；轨道底色与填充复用既有令牌（凹陷轨道
+   * --hud-progress-track、wheat 进度强调），颜色不另立第二来源。 */
+  --loading-track-width: clamp(280px, 40vw, 480px);
+  --loading-track-height: 16px;
 
   /* ---- 像素组件几何（pixel-retroui 桥接层，`src/ui/pixel.tsx` 消费） ---- */
   /* retroui 组件类的像素描边框宽（border-image 框几何写死在其 dist 产物内，
