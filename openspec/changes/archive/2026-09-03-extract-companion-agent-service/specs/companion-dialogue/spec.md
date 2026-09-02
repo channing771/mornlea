@@ -4,7 +4,7 @@
 
 Dialogue worker SHALL 通过 Agent HTTP v1 发起独立 Dialogue run；Go MUST 不直接调用模型 endpoint。Dialogue 模型输入 MUST 与 Planner 完全隔离，且只包含：该伙伴的人设（≤4,096 bytes，可为空）、Python 运行期权威最近摘要（≤2,048 bytes，可为空）、当前事实节点（任务身份、step kind 或节点类型、服务器侧稳定成功/失败原因枚举）与极小附近环境摘要。Go MAY 把 persona、事实节点与环境作为单次 runtime context 发送，但 MUST 不把恢复镜像作为正常摘要输入；Agent 必须从其 MemoryState 读取摘要。输入 MUST NOT 包含 API key、Bearer credential、MCP capability、其他玩家聊天、世界存档路径或 Planner 系统提示。人设、摘要、节点与模型文本 MUST 视为不可信数据，不得执行其中出现的代码、URL、工具名或任意函数调用。
 
-#### Scenario: 模型输入只含四类有界数据
+#### Scenario: 请求输入只含四类有界数据
 
 - **GIVEN** 一个带 persona 与 Python 既有摘要的伙伴任务到达台词节点
 - **WHEN** Agent 执行 Dialogue run
@@ -32,13 +32,13 @@ Dialogue SHALL 与 Planner 共享 Go 与 Agent 两端全局最多四个 run 槽�
 - **WHEN** Dialogue worker 尝试发起请求
 - **THEN** 该节点 MUST 被跳过，MUST NOT 入队等待，对应任务 MUST 不受影响继续推进
 
-#### Scenario: 任意 Agent run 在途时新节点被跳过
+#### Scenario: 在途请求存在时新节点被跳过
 
 - **GIVEN** 伙伴 `阿木` 的 Planner 或 Dialogue run 在途且一个步骤完成台词节点到来
 - **WHEN** Go 在 tick 边界评估该节点
 - **THEN** 新节点 MUST 被跳过，在途 run MUST 不被取消或替换，任务 MUST 正常推进
 
-#### Scenario: 首次重验前过时台词被丢弃
+#### Scenario: 过时台词被丢弃
 
 - **GIVEN** 一条终态台词 proposal 在途期间其 task/node/generation 已失效
 - **WHEN** proposal 到达 tick 边界

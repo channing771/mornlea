@@ -32,13 +32,13 @@
 
 服务端 SHALL 先验证配置再加载已有 `companions.ai`。已存且仍配置的 ID MUST 恢复身体、任务/FIFO 与 v5 memory 元数据；新配置 ID MUST 以世界 metadata 的 `SpawnDimension`、出生锚区块坐标换算的 `X=SpawnAnchor.X×16+0.5` 与 `Z=SpawnAnchor.Z×16+0.5`、`Y=core.MaxY+1`、零 yaw/pitch、合法空背包创建规范 provisional body，并使用 epoch 1、空任务/FIFO和 canonical-zero memory；missing aggregate MUST 以 revision 1 首存。该 provisional body MUST 在模拟 ready/出生扫描前同步保存，之后才由模拟激活结果覆盖位置。已存但不再配置的 ID MUST 转为 inactive，仅保留身体、推进后的 memory epoch 与 delete tombstone，不得注册到模拟或保存摘要。配置为空时，服务端 MUST 通过 Memory 与 Disk 同语义、且不读取或解码正文的 mandatory metadata existence probe 区分 missing 与 existing：missing MUST 只有 probe、零 Load、零 Save、零文件创建；existing MUST Load，且只把 active 记录退休并在确有变化时同步写出 v5。已有 legacy 即使零记录也 MUST 因 schema/namespace 迁移同步保存 v5；已经全 inactive 的合法 v5 MUST 保持 epoch/revision/tombstone 不变且零 Save。退休完成后 MUST 不构造 persistence worker、world companion、MCP 或 Agent client，tombstone 待未来 Agent 可用时幂等处理。
 
-#### Scenario: 暂时移除配置保留身体并退休 memory
+#### Scenario: 暂时移除配置不会删除身体
 
 - **GIVEN** 存档含一个带任务与摘要镜像的伙伴记录，但当前非空配置没有该 ID
 - **WHEN** 服务端启动并保存
 - **THEN** 该记录 MUST 作为 inactive 保留身体、推进 epoch 并带 delete tombstone，不得保存任务、FIFO 或摘要，也不得出现在模拟或客户端
 
-#### Scenario: 清空配置同步退休已有文件
+#### Scenario: 清空配置保持文件原样
 
 - **GIVEN** 世界目录已有包含 active 记录的 `companions.ai` 且当前 `ai.companions` 为空
 - **WHEN** 服务端启动

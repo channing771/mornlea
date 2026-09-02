@@ -20,7 +20,7 @@
 
 人设文本无论内联或文件来源 MUST 只作为单次 Agent Dialogue transient runtime context，并只进入 Dialogue 模型输入。persona MUST NOT 进入 Planner snapshot、Agent Planner HTTP 请求、MCP 参数或结果、持久 graph checkpoint、SQLite memory、`companions.ai`、日志常规输出、性能报告或世界事件。Planner 与 Dialogue graph 均 MUST 不把 runtime context 落盘。persona MUST 视为服主控制的不可信数据；Go 与 Agent 服务都 MUST NOT执行其中的代码、URL、工具名或任意函数调用。
 
-#### Scenario: 人设绝不进入规划与工具
+#### Scenario: 人设绝不进入规划请求
 
 - **GIVEN** 一个带非空 persona 的伙伴进入 Planning
 - **WHEN** Planner worker、Agent 图与 MCP 工具完成一次 run

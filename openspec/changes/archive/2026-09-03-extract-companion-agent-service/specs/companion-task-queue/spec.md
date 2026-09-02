@@ -6,13 +6,13 @@ Companion Manager SHALL 由 Go 服务端在权威 tick 边界驱动：接收聊�
 
 安全关服 SHALL 先停止接受新 `ChatCommand`，取消并等待在途 Agent/Planner/Dialogue/MCP/寻路 worker，冻结队列与 actor 状态，完成最终 `companions.ai` v5 保存，再关闭 MCP 和世界存储。若最终伙伴保存或世界 flush 失败，状态 MUST 保持可重试，MCP MUST 在重试期间保持可用且世界存储不得被不可逆关闭。
 
-#### Scenario: 挂起的 Agent 请求不阻塞权威模拟
+#### Scenario: 挂起的模型请求不阻塞权威模拟
 
 - **GIVEN** 四个伙伴各有任务处于 Planning 且 Agent、MCP 或模型全部挂起
 - **WHEN** 权威模拟连续推进多个 tick
 - **THEN** 每个 tick MUST 按既有节拍完成，玩家命令、Running 伙伴任务与世界模拟 MUST 不因外部等待变化
 
-#### Scenario: 台词和 memory 结果不触碰任务事实
+#### Scenario: 台词结果应用不触碰任务事实
 
 - **GIVEN** 一个任务的终态 Dialogue proposal 或 commit 结果到达 tick 边界
 - **WHEN** Companion Manager 应用结果

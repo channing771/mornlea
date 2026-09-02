@@ -44,7 +44,7 @@
 
 Planner SHALL 通过 Agent HTTP v1 执行一个有界 Agent run，MUST NOT 由 Go 直接调用模型 endpoint。Go 与 Agent 服务 MUST 各自最多允许四个伙伴 Agent run 并发，同一伙伴全部 Agent run 合计 MUST 最多一个在途且 MUST 不排队；一次 Planner run MUST 服从调用方 deadline、30 秒默认总时限、60 秒硬上限及显式取消。模型调用默认/硬上限 MUST 为 3/5，自主只读工具调用默认/硬上限 MUST 为 4/8，Go context/validator 调用按 `companion-agent-mcp-tools` 的固定预算执行。`query_terrain` 的 `out_of_bounds` 与 `find_visible_blocks` 的 `unknown_block` MUST 作为 `isError=false` normal result 被 Python strict parser 接受并以普通 tool message 交回模型，照常消耗自主工具预算且不自动重试；MCP `isError=true`、transport/JSON-RPC/protocol/envelope/schema failure MUST 映射为 unavailable 与 `PlannerUnavailable`。HTTP、MCP unavailable、模型或校验失败 MUST NOT 自动重试；只有首次候选校验失败 MAY 在同一 run 内进行一次受预算约束的模型修复。结果 MUST 经有界 channel 只在权威 tick 边界应用并携带任务、generation 与 snapshot 身份；任务已终态、被替换或身份不匹配时结果 MUST 被丢弃。
 
-#### Scenario: 总时限耗尽且不重试
+#### Scenario: 超时失败且不重试
 
 - **GIVEN** 一个 Agent run 的模型或工具持续挂起直至有效 deadline
 - **WHEN** Planner 等待结果
@@ -68,7 +68,7 @@ Planner SHALL 通过 Agent HTTP v1 执行一个有界 Agent run，MUST NOT 由 G
 - **WHEN** worker 结果到达 tick 边界
 - **THEN** 该结果 MUST 被丢弃，MUST NOT 产生任务状态变化、memory 更新或世界动作
 
-#### Scenario: 慢 Agent 不阻塞权威 tick
+#### Scenario: 慢模型不阻塞权威 tick
 
 - **GIVEN** 四个挂起的 Agent run 与一个持续推进的权威模拟
 - **WHEN** Agent 服务持续不响应多个 tick
@@ -122,7 +122,7 @@ Agent MUST 先用冻结 snapshot 的 MCP validator 验证候选；Go 收到结�
 - **WHEN** Agent 或 Go 验证计划
 - **THEN** 当前任务 MUST 以非法计划失败
 
-#### Scenario: mine 目标须符合既有可采掘语义
+#### Scenario: mine 目标须为快照内可采掘普通方块
 
 - **GIVEN** 模型返回的 `mine` 目标不在 snapshot 范围内，或是农业方块、火把、无掉落或尚未交付的多掉落方块
 - **WHEN** Agent 或 Go 验证计划

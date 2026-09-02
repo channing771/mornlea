@@ -4,7 +4,7 @@
 
 系统 MUST 以 `Mornlea` 作为当前产品名，以 `github.com/channing771/mornlea` 作为 Go module，以 `mornlea`、`mornlea-server` 与 `mornlea-companion-agent` 作为客户端、专用服务端与伙伴 Agent 服务命令。Python distribution、包元数据、日志 module 与帮助文本 MUST 使用 Mornlea 身份，不得恢复旧 `mcgo`/`mcgod` 身份。
 
-#### Scenario: clean checkout 构建当前原生入口
+#### Scenario: clean checkout 构建当前入口
 
 - **WHEN** 在 Apple Silicon/macOS 执行 canonical Go/Rust build
 - **THEN** MUST 生成 `bin/mornlea`、`bin/mornlea-server` 与同目录 `libmornlea_engine.dylib`
