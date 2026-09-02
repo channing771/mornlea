@@ -54,7 +54,7 @@ func TestCompanionPersistenceSavePayloadNormalizesPlanningAndValidating(t *testi
 	states := []companion.TaskQueueState{running, planning, validating}
 	p.Observe([]companion.Body{
 		companionBody(1, 10), companionBody(2, 20), companionBody(3, 30),
-	}, states, nil)
+	}, states)
 	// Observe 之后修改调用方切片：深拷贝必须保护载荷（含 Plan.Steps 与 FIFO）。
 	states[0].Current.Plan.Steps[0].X = 999
 	states[0].Pending[0] = "被篡改"
@@ -108,7 +108,7 @@ func restoredCompanionSeed(
 ) *hostTestStore {
 	t.Helper()
 	store := newHostTestStore()
-	if err := store.SaveCompanions(context.Background(), storage.CompanionSave{
+	if err := store.SaveCompanions(context.Background(), fixtureServerCompanionV5Save(storage.CompanionSave{
 		Revision: 1,
 		Records: []companion.Body{{
 			ID:        id,
@@ -116,7 +116,7 @@ func restoredCompanionSeed(
 			Dimension: core.Overworld,
 		}},
 		Queues: []storage.StoredCompanionQueue{queue},
-	}); err != nil {
+	})); err != nil {
 		t.Fatalf("seed SaveCompanions: %v", err)
 	}
 	return store
@@ -135,10 +135,10 @@ func restoredCompanionHost(
 	config.OutboxCapacity = 4096
 	config.HeartbeatInterval = time.Hour
 	config.HeartbeatTimeout = time.Hour
-	if model != nil {
-		config.AIModel.Endpoint = model.server.URL + "/v1"
-	}
 	host := mustNewHost(t, config, flatTestGenerator{}, store)
+	if model != nil {
+		host.world.companionManager.replacePlannerForTest(t, model)
+	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), longWaitDeadline)
 		defer cancel()

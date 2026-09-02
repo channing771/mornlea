@@ -211,9 +211,9 @@ func TestM5StageAcceptancePersonaDialogueEndToEnd(t *testing.T) {
 			Position:  interactionCompanionPosition,
 			Inventory: stageAcceptanceSeedInventory(t),
 		}
-		if err := seedStore.SaveCompanions(context.Background(), storage.CompanionSave{
+		if err := seedStore.SaveCompanions(context.Background(), fixtureServerCompanionV5Save(storage.CompanionSave{
 			Revision: 1, Records: []companion.Body{seed},
-		}); err != nil {
+		})); err != nil {
 			t.Fatalf("种子伙伴存档: %v", err)
 		}
 		if err := seedStore.Close(); err != nil {
@@ -358,22 +358,23 @@ func TestM5StageAcceptancePersonaDialogueEndToEnd(t *testing.T) {
 			}
 		}
 
-		// 终态摘要写入 manager 状态后再关服（Flush 在 Shutdown 内发生）。
+		// 终态 proposal 经 commit 整体写入 v5 mirror。
 		deadline := time.Now().Add(waitDeadline)
 		for time.Now().Before(deadline) &&
-			companionDialogueSlotSummary(t, host, id) != stageAcceptanceSummary {
+			companionDialogueMirror(t, host, id).MemoryRevision == 0 {
 			stepDialogueTick(t, host, []network.ClientEndpoint{client})
 		}
-		if summary := companionDialogueSlotSummary(t, host, id); summary != stageAcceptanceSummary {
-			t.Fatalf("[%s] 终态摘要未写入 manager：summary=%q", transport, summary)
+		if mirror := companionDialogueMirror(t, host, id); mirror.MemoryRevision != 1 ||
+			mirror.Summary != stageAcceptanceSummary || !mirror.MemoryOperationID.Valid() {
+			t.Fatalf("[%s] 终态 proposal 未提交：%+v", transport, mirror)
 		}
-		// 结束生命周期 1（幂等，t.Cleanup 兜底）：Shutdown 内 Flush 把摘要落盘。
+		// 结束生命周期 1（幂等，t.Cleanup 兜底）。
 		closeHost()
 
-		// ---------- 磁盘断言：schema v4 + summary-only 载荷 ----------
+		// ---------- 磁盘断言：schema v5 + committed mirror ----------
 		// companions.ai 头部 32 字节：magic[0:4] "MCAI" + envelope 版本 u32
 		// [4:8] + schema u32 [8:12]（companion_codec.go encodeCompanions）。
-		// 直接读原始字节断言 schema=v4：解码 API 只回显数据，无法证明「落盘
+		// 直接读原始字节断言 schema=v5：解码 API 只回显数据，无法证明「落盘
 		// 字节确实是当前 schema 而非旧版迁移读入」。
 		raw, err := os.ReadFile(filepath.Join(root, "companions.ai"))
 		if err != nil {
@@ -382,8 +383,8 @@ func TestM5StageAcceptancePersonaDialogueEndToEnd(t *testing.T) {
 		if len(raw) < 32 || string(raw[:4]) != "MCAI" {
 			t.Fatalf("[%s] companions.ai 头部=%v，想要 MCAI envelope", transport, raw[:4])
 		}
-		if schema := binary.LittleEndian.Uint32(raw[8:12]); schema != 4 {
-			t.Fatalf("[%s] companions.ai schema=%d，想要 v4", transport, schema)
+		if schema := binary.LittleEndian.Uint32(raw[8:12]); schema != 5 {
+			t.Fatalf("[%s] companions.ai schema=%d，想要 v5", transport, schema)
 		}
 		reopened, err := storage.OpenDisk(context.Background(), root, storage.OpenOptions{})
 		if err != nil {
@@ -393,10 +394,11 @@ func TestM5StageAcceptancePersonaDialogueEndToEnd(t *testing.T) {
 		if err != nil {
 			t.Fatalf("[%s] LoadCompanions: %v", transport, err)
 		}
-		if len(loaded.Queues) != 1 || loaded.Queues[0].ID != id ||
-			loaded.Queues[0].Summary != stageAcceptanceSummary ||
-			loaded.Queues[0].HasCurrent || len(loaded.Queues[0].Pending) != 0 {
-			t.Fatalf("[%s] 落盘队列=%+v，想要 summary-only 载荷保留摘要", transport, loaded.Queues)
+		if loaded.SourceSchema != 5 || !loaded.AgentNamespaceID.Valid() ||
+			len(loaded.Lifecycles) != 1 || loaded.Lifecycles[0].MemoryRevision != 1 ||
+			!loaded.Lifecycles[0].MemoryOperationID.Valid() ||
+			loaded.Lifecycles[0].Summary != stageAcceptanceSummary || len(loaded.Queues) != 0 {
+			t.Fatalf("[%s] v5 committed archive=%+v", transport, loaded)
 		}
 
 		// ---------- 生命周期 2：同一磁盘存档重启恢复 + 摘要复用 ----------
@@ -418,8 +420,9 @@ func TestM5StageAcceptancePersonaDialogueEndToEnd(t *testing.T) {
 		t.Cleanup(closeHost2)
 		client2 := openCompanionChatClient(t, host2, transport, issuer)
 		body2 := stepUntilCompanionManagerReady(t, host2, []network.ClientEndpoint{client2}, id)
-		if summary := companionDialogueSlotSummary(t, host2, id); summary != stageAcceptanceSummary {
-			t.Fatalf("[%s] 重启后摘要未恢复：summary=%q", transport, summary)
+		if mirror := companionDialogueMirror(t, host2, id); mirror.MemoryRevision != 1 ||
+			mirror.Summary != stageAcceptanceSummary {
+			t.Fatalf("[%s] 重启后 v5 mirror=%+v", transport, mirror)
 		}
 
 		// 新任务：两步 go_to（目标取重启后身体当前位置，沿 +Z 拉开以避开
@@ -462,8 +465,7 @@ func TestM5StageAcceptancePersonaDialogueEndToEnd(t *testing.T) {
 			secondSpeechTexts = append(secondSpeechTexts, event.Speech)
 		}
 
-		// 摘要复用：重启后的每一次台词请求都以恢复摘要为近期记忆输入，
-		// 生效人设继续透传（M5D「重启保留最近对话摘要」的用户可观察结果）。
+		// Go v5 mirror 不进入 Agent Dialogue prompt；生效人设仍继续透传。
 		waitDialogueRequests(t, dialogue2, 3)
 		secondRecords := dialogue2.snapshotDialogueRequests()
 		if len(secondRecords) != 3 {
@@ -476,8 +478,8 @@ func TestM5StageAcceptancePersonaDialogueEndToEnd(t *testing.T) {
 				t.Fatalf("[%s] 第二段请求 %d 节点=%q，想要 %q（序列=%+v）",
 					transport, index, record.NodeKind, wantSecondNodes[index], secondRecords)
 			}
-			if record.Summary != stageAcceptanceSummary {
-				t.Fatalf("[%s] 第二段请求 %d 摘要=%q，想要恢复摘要作为输入",
+			if record.Summary != "" {
+				t.Fatalf("[%s] 第二段请求 %d 摘要=%q，想要 staging 空摘要",
 					transport, index, record.Summary)
 			}
 			if record.Persona != stageAcceptancePersona {

@@ -1,0 +1,196 @@
+{
+  "name": "mornlea-companion-agent-http",
+  "application_contract_version": "v1",
+  "schema": "schema.json",
+  "schema_registry": [
+    {"id": "urn:mornlea:companion-agent:http:v1", "path": "schema.json"},
+    {"id": "urn:mornlea:companion-agent:mcp-tools:v1", "path": "../mcp-v1/schema.json"}
+  ],
+  "content_type": "application/json",
+  "network": {
+    "scheme": "http",
+    "host": "loopback_ip_literal",
+    "redirects": false
+  },
+  "limits": {
+    "request_body_bytes": 262144,
+    "response_body_bytes": 65536,
+    "header_bytes": 16384,
+    "instruction_bytes": 1024,
+    "persona_bytes": 4096,
+    "line_bytes": 256,
+    "summary_bytes": 2048,
+    "plan_bytes": 65536
+  },
+  "lease": {
+    "ttl_ms": 15000,
+    "heartbeat_interval_ms": 5000,
+    "reacquire_reuses_lease_id": false
+  },
+  "run_limits": {
+    "global": 4,
+    "per_namespace_companion": 1,
+    "queue_capacity": 0,
+    "default_timeout_ms": 30000,
+    "hard_timeout_ms": 60000
+  },
+  "identity_profiles": {
+    "health": [],
+    "acquire": ["contract_version", "request_id", "client_instance_id", "namespace_id"],
+    "lease": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id"],
+    "plan_run": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "run_id", "companion_id", "generation", "snapshot_id", "snapshot_digest"],
+    "dialogue_run": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "run_id", "companion_id", "generation", "memory_epoch"],
+    "memory_reconcile": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "companion_id", "memory_epoch"],
+    "memory_commit": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "companion_id", "memory_epoch", "base_revision", "operation_id"],
+    "memory_delete": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "companion_id", "old_memory_epoch", "new_memory_epoch", "tombstone_operation_id"],
+    "cancel": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "run_id"],
+    "error": ["contract_version", "request_id"]
+  },
+  "routes": [
+    {
+      "operation": "live",
+      "method": "GET",
+      "path": "/livez",
+      "authentication": "none",
+      "identity_profile": "health",
+      "request_schema": null,
+      "responses": [{"status": 200, "schema": "live_response"}],
+      "error_codes": []
+    },
+    {
+      "operation": "ready",
+      "method": "GET",
+      "path": "/readyz",
+      "authentication": "bearer",
+      "identity_profile": "health",
+      "request_schema": null,
+      "responses": [
+        {"status": 200, "schema": "ready_response", "status_value": "ready"},
+        {"status": 503, "schema": "ready_response", "status_value": "not_ready"}
+      ],
+      "error_codes": ["unauthorized", "internal_error"]
+    },
+    {
+      "operation": "namespace_acquire",
+      "method": "POST",
+      "path": "/v1/namespaces/acquire",
+      "authentication": "bearer",
+      "identity_profile": "acquire",
+      "request_schema": "acquire_request",
+      "responses": [{"status": 200, "schema": "acquire_response"}],
+      "error_codes": ["invalid_request", "unauthorized", "unsupported_version", "namespace_conflict", "internal_error"]
+    },
+    {
+      "operation": "namespace_heartbeat",
+      "method": "POST",
+      "path": "/v1/namespaces/heartbeat",
+      "authentication": "bearer",
+      "identity_profile": "lease",
+      "request_schema": "lease_request",
+      "responses": [{"status": 200, "schema": "heartbeat_response"}],
+      "error_codes": ["invalid_request", "unauthorized", "unsupported_version", "not_found", "internal_error"]
+    },
+    {
+      "operation": "namespace_release",
+      "method": "POST",
+      "path": "/v1/namespaces/release",
+      "authentication": "bearer",
+      "identity_profile": "lease",
+      "request_schema": "lease_request",
+      "responses": [{"status": 200, "schema": "release_response"}],
+      "error_codes": ["invalid_request", "unauthorized", "unsupported_version", "not_found", "internal_error"]
+    },
+    {
+      "operation": "plan",
+      "method": "POST",
+      "path": "/v1/plan",
+      "authentication": "bearer",
+      "identity_profile": "plan_run",
+      "request_schema": "plan_request",
+      "responses": [{"status": 200, "schema": "plan_response"}],
+      "error_codes": ["invalid_request", "unauthorized", "unsupported_version", "overloaded", "deadline_exceeded", "agent_unavailable", "invalid_model_output", "not_found", "internal_error"]
+    },
+    {
+      "operation": "dialogue",
+      "method": "POST",
+      "path": "/v1/dialogue",
+      "authentication": "bearer",
+      "identity_profile": "dialogue_run",
+      "request_schema": "dialogue_request",
+      "request_response_variants": {
+        "discriminator": "terminal",
+        "variants": [
+          {
+            "value": false,
+            "request_schema": "dialogue_nonterminal_request",
+            "response_schema": "dialogue_nonterminal_response",
+            "memory_proposal": "forbidden"
+          },
+          {
+            "value": true,
+            "request_schema": "dialogue_terminal_request",
+            "response_schema": "dialogue_terminal_response",
+            "memory_proposal": "required"
+          }
+        ]
+      },
+      "responses": [{"status": 200, "schema": "dialogue_response"}],
+      "error_codes": ["invalid_request", "unauthorized", "unsupported_version", "overloaded", "deadline_exceeded", "agent_unavailable", "invalid_model_output", "memory_conflict", "not_found", "internal_error"]
+    },
+    {
+      "operation": "memory_reconcile",
+      "method": "POST",
+      "path": "/v1/memory/reconcile",
+      "authentication": "bearer",
+      "identity_profile": "memory_reconcile",
+      "request_schema": "memory_reconcile_request",
+      "responses": [{"status": 200, "schema": "memory_reconcile_response"}],
+      "error_codes": ["invalid_request", "unauthorized", "unsupported_version", "memory_conflict", "not_found", "internal_error"]
+    },
+    {
+      "operation": "memory_commit",
+      "method": "POST",
+      "path": "/v1/memory/commit",
+      "authentication": "bearer",
+      "identity_profile": "memory_commit",
+      "request_schema": "memory_commit_request",
+      "responses": [{"status": 200, "schema": "memory_commit_response"}],
+      "error_codes": ["invalid_request", "unauthorized", "unsupported_version", "memory_conflict", "not_found", "internal_error"]
+    },
+    {
+      "operation": "memory_delete",
+      "method": "POST",
+      "path": "/v1/memory/delete",
+      "authentication": "bearer",
+      "identity_profile": "memory_delete",
+      "request_schema": "memory_delete_request",
+      "responses": [{"status": 200, "schema": "memory_delete_response"}],
+      "error_codes": ["invalid_request", "unauthorized", "unsupported_version", "memory_conflict", "not_found", "internal_error"]
+    },
+    {
+      "operation": "run_cancel",
+      "method": "POST",
+      "path": "/v1/runs/cancel",
+      "authentication": "bearer",
+      "identity_profile": "cancel",
+      "request_schema": "cancel_request",
+      "responses": [{"status": 200, "schema": "cancel_response"}],
+      "error_codes": ["invalid_request", "unauthorized", "unsupported_version", "not_found", "internal_error"]
+    }
+  ],
+  "errors": [
+    {"code": "invalid_request", "status": 400},
+    {"code": "unauthorized", "status": 401},
+    {"code": "unsupported_version", "status": 426},
+    {"code": "namespace_conflict", "status": 409},
+    {"code": "overloaded", "status": 429},
+    {"code": "deadline_exceeded", "status": 504},
+    {"code": "agent_unavailable", "status": 503},
+    {"code": "invalid_model_output", "status": 422},
+    {"code": "memory_conflict", "status": 409},
+    {"code": "not_found", "status": 404},
+    {"code": "internal_error", "status": 500}
+  ],
+  "error_schema": "error_response",
+  "unauthenticated_request_id": null
+}

@@ -110,15 +110,19 @@ type Render struct {
 	LodStep int `json:"lodStep"`
 }
 
-// AI 是配置文件中的可选 ai 组：模型运行时设置与伙伴定义。
-//
-// 嵌入 companion.ModelSettings 让 endpoint/model/apiKeyEnv/taskTimeoutMinutes
-// 四个字段提升为 ai 组的直接键，随 Save/Load 与调试面板的"只覆盖 physics/sim/
-// render、其余原样保留"保存策略自动往返。APIKeyEnv 只是环境变量名——密钥值
-// 绝不进入配置文件，由各入口进程启动时解析进内存。
+// AI 是配置文件中的可选 ai 组：Agent 服务连接设置与伙伴定义。
 type AI struct {
-	companion.ModelSettings
-	Companions []companion.Definition `json:"companions,omitempty"`
+	AgentService       companion.AgentServiceSettings `json:"agentService"`
+	TaskTimeoutMinutes int                            `json:"taskTimeoutMinutes,omitempty"`
+	Companions         []companion.Definition         `json:"companions,omitempty"`
+}
+
+// TaskTimeout 返回生效的 Agent 任务超时分钟数。
+func (a AI) TaskTimeout() int {
+	if a.TaskTimeoutMinutes == 0 {
+		return companion.TaskTimeoutDefaultMinutes
+	}
+	return a.TaskTimeoutMinutes
 }
 
 // Config 是完整的调参配置文件内容。
@@ -605,6 +609,7 @@ func applyLogging(cfg *Config, raw json.RawMessage) error {
 // applyAI 的条目级检查。
 var knownAIFieldKeys = []string{
 	"companions",
+	"agentService",
 	"endpoint",
 	"model",
 	"apiKeyEnv",
@@ -621,16 +626,10 @@ func knownAIField(key string) bool {
 	return false
 }
 
-// applyAI 解析 ai 分组：M5A 的 companions[].id/name、M5B 的四个模型运行时
-// 字段（endpoint/model/apiKeyEnv/taskTimeoutMinutes）与 M5D 的可选
-// companions[].persona（均大小写不敏感）。
-//
-// 模型字段只要出现就立即校验语法（endpoint 形态、超时区间），错误带
-// ai.endpoint 等精确路径，让配置问题在读文件时暴露而不是等到启动；而
-// endpoint/model/apiKeyEnv 的完整性（非空伙伴时必须齐全、https 必须配
-// apiKeyEnv）在确认伙伴列表非空后才检查——AI 关闭时孤立的模型字段只做语法
-// 校验、不启用 AI，也不要求任何模型字段。密钥值永远不进配置文件，这里只
-// 处理环境变量名。
+// applyAI 解析 ai 分组：伙伴、Agent service 和任务超时均按大小写不敏感键
+// 读取，但大小写冲突直接拒绝以避免 map 遍历顺序改变生效配置。已退役 direct
+// model 字段只用于迁移诊断：AI 关闭时告警忽略，伙伴启用时拒绝启动。密钥值
+// 永远不进配置文件；启用时只验证 agent service 的环境变量名指向非空值。
 //
 // persona 只做 JSON 形状解析，内容校验与外部文件优先级在 resolvePersonas
 // 中按宽松纪律完成（告警降级，不阻止启动）。
@@ -639,44 +638,25 @@ func applyAI(cfg *Config, raw json.RawMessage, configPath string) error {
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return err
 	}
+	if err := rejectCaseFoldCollisions(fields, "ai"); err != nil {
+		return err
+	}
 	for key := range fields {
 		if !knownAIField(key) {
 			slog.Warn("配置项未知字段已忽略", "field", "ai."+key)
 		}
 	}
-	var settings companion.ModelSettings
-	if value, exists := lookupCaseInsensitive(fields, "endpoint"); exists {
-		if err := json.Unmarshal(value, &settings.Endpoint); err != nil {
-			return fmt.Errorf("解析 ai.endpoint: %w", err)
+	legacy := make([]string, 0, 3)
+	for _, key := range []string{"endpoint", "model", "apiKeyEnv"} {
+		if _, exists := lookupCaseInsensitive(fields, key); exists {
+			legacy = append(legacy, "ai."+key)
 		}
-		if err := companion.ValidateModelEndpoint(settings.Endpoint); err != nil {
-			return fmt.Errorf("ai.endpoint: %w", err)
-		}
-	}
-	if value, exists := lookupCaseInsensitive(fields, "model"); exists {
-		if err := json.Unmarshal(value, &settings.Model); err != nil {
-			return fmt.Errorf("解析 ai.model: %w", err)
-		}
-	}
-	if value, exists := lookupCaseInsensitive(fields, "apiKeyEnv"); exists {
-		if err := json.Unmarshal(value, &settings.APIKeyEnv); err != nil {
-			return fmt.Errorf("解析 ai.apiKeyEnv: %w", err)
-		}
-	}
-	if value, exists := lookupCaseInsensitive(fields, "taskTimeoutMinutes"); exists {
-		var minutes int
-		if err := json.Unmarshal(value, &minutes); err != nil {
-			return fmt.Errorf("解析 ai.taskTimeoutMinutes: %w", err)
-		}
-		// 显式 0 也拒绝："0=未设置"只对字段缺席成立。显式写 0 几乎必然是想
-		// 表达别的意思（单位搞错、漏填数字），按错误暴露而不是悄悄落回默认。
-		if err := companion.ValidateTaskTimeoutMinutes(minutes); err != nil {
-			return fmt.Errorf("ai.taskTimeoutMinutes: %w", err)
-		}
-		settings.TaskTimeoutMinutes = minutes
 	}
 	rawCompanions, ok := lookupCaseInsensitive(fields, "companions")
 	if !ok || string(rawCompanions) == "null" {
+		for _, field := range legacy {
+			slog.Warn("已退役的 direct-model 配置已忽略", "field", field)
+		}
 		return nil
 	}
 	var entries []json.RawMessage
@@ -684,13 +664,36 @@ func applyAI(cfg *Config, raw json.RawMessage, configPath string) error {
 		return fmt.Errorf("解析 ai.companions: %w", err)
 	}
 	if len(entries) == 0 {
+		for _, field := range legacy {
+			slog.Warn("已退役的 direct-model 配置已忽略", "field", field)
+		}
 		return nil
+	}
+	var settings companion.AgentServiceSettings
+	if value, exists := lookupCaseInsensitive(fields, "agentService"); exists {
+		if err := applyAgentService(&settings, value); err != nil {
+			return err
+		}
+	}
+	var timeout int
+	if value, exists := lookupCaseInsensitive(fields, "taskTimeoutMinutes"); exists {
+		if err := json.Unmarshal(value, &timeout); err != nil {
+			return fmt.Errorf("解析 ai.taskTimeoutMinutes: %w", err)
+		}
+		// 显式 0 也拒绝："0=未设置"只对字段缺席成立。显式写 0 几乎必然是想
+		// 表达别的意思（单位搞错、漏填数字），按错误暴露而不是悄悄落回默认。
+		if err := companion.ValidateTaskTimeoutMinutes(timeout); err != nil {
+			return fmt.Errorf("ai.taskTimeoutMinutes: %w", err)
+		}
 	}
 	definitions := make([]companion.Definition, len(entries))
 	for index, entry := range entries {
 		var definitionFields map[string]json.RawMessage
 		if err := json.Unmarshal(entry, &definitionFields); err != nil {
 			return fmt.Errorf("解析 ai.companions[%d]: %w", index, err)
+		}
+		if err := rejectCaseFoldCollisions(definitionFields, fmt.Sprintf("ai.companions[%d]", index)); err != nil {
+			return err
 		}
 		for key := range definitionFields {
 			if !strings.EqualFold(key, "id") && !strings.EqualFold(key, "name") &&
@@ -722,11 +725,55 @@ func applyAI(cfg *Config, raw json.RawMessage, configPath string) error {
 	if err := companion.ValidateDefinitions(definitions); err != nil {
 		return err
 	}
+	if len(legacy) != 0 {
+		return fmt.Errorf("%s 已退役；请迁移 Agent 地址和凭据到 ai.agentService，provider/model/key 请迁移到 Python Agent 配置", strings.Join(legacy, ", "))
+	}
 	if err := settings.Validate(); err != nil {
-		return fmt.Errorf("ai: %w", err)
+		return fmt.Errorf("ai.agentService: %w", err)
+	}
+	if os.Getenv(settings.APIKeyEnv) == "" {
+		return fmt.Errorf("ai.agentService.apiKeyEnv 指向的环境变量为空")
 	}
 	resolvePersonas(configPath, definitions)
-	cfg.AI = &AI{ModelSettings: settings, Companions: definitions}
+	cfg.AI = &AI{AgentService: settings, TaskTimeoutMinutes: timeout, Companions: definitions}
+	return nil
+}
+
+func applyAgentService(settings *companion.AgentServiceSettings, raw json.RawMessage) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return fmt.Errorf("解析 ai.agentService: %w", err)
+	}
+	if err := rejectCaseFoldCollisions(fields, "ai.agentService"); err != nil {
+		return err
+	}
+	for key := range fields {
+		if !strings.EqualFold(key, "endpoint") && !strings.EqualFold(key, "apiKeyEnv") {
+			slog.Warn("配置项未知字段已忽略", "field", "ai.agentService."+key)
+		}
+	}
+	if value, ok := lookupCaseInsensitive(fields, "endpoint"); ok {
+		if err := json.Unmarshal(value, &settings.Endpoint); err != nil {
+			return fmt.Errorf("解析 ai.agentService.endpoint: %w", err)
+		}
+	}
+	if value, ok := lookupCaseInsensitive(fields, "apiKeyEnv"); ok {
+		if err := json.Unmarshal(value, &settings.APIKeyEnv); err != nil {
+			return fmt.Errorf("解析 ai.agentService.apiKeyEnv: %w", err)
+		}
+	}
+	return nil
+}
+
+func rejectCaseFoldCollisions(fields map[string]json.RawMessage, path string) error {
+	seen := make(map[string]string, len(fields))
+	for key := range fields {
+		normalized := strings.ToLower(key)
+		if existing, exists := seen[normalized]; exists {
+			return fmt.Errorf("%s 字段大小写冲突：%s 与 %s", path, existing, key)
+		}
+		seen[normalized] = key
+	}
 	return nil
 }
 

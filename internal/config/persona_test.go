@@ -30,7 +30,8 @@ func captureConfigLogs(t *testing.T) *bytes.Buffer {
 // endpoint（免密钥）让配置满足 M5B 起的模型字段完整性要求。
 func writeAICompanionConfig(t *testing.T, companionTail string) string {
 	t.Helper()
-	body := `{"version":1,"ai":{"endpoint":"http://127.0.0.1:8080/v1","model":"test-model",` +
+	t.Setenv("MORNLEA_PERSONA_AGENT_KEY", "test-agent-key")
+	body := `{"version":1,"ai":{"agentService":{"endpoint":"http://127.0.0.1:8080","apiKeyEnv":"MORNLEA_PERSONA_AGENT_KEY"},` +
 		`"companions":[{"id":"00112233-4455-4677-8899-aabbccddeeff","name":"阿木"` + companionTail + `}]}}`
 	return writeConfig(t, body)
 }
@@ -39,7 +40,8 @@ func writeAICompanionConfig(t *testing.T, companionTail string) string {
 // 伙伴名称（路径穿越矩阵需要非常规名称）。
 func writeAICompanionConfigNamed(t *testing.T, name string) string {
 	t.Helper()
-	body := `{"version":1,"ai":{"endpoint":"http://127.0.0.1:8080/v1","model":"test-model",` +
+	t.Setenv("MORNLEA_PERSONA_AGENT_KEY", "test-agent-key")
+	body := `{"version":1,"ai":{"agentService":{"endpoint":"http://127.0.0.1:8080","apiKeyEnv":"MORNLEA_PERSONA_AGENT_KEY"},` +
 		`"companions":[{"id":"00112233-4455-4677-8899-aabbccddeeff","name":` +
 		strconv.Quote(name) + `}]}}`
 	return writeConfig(t, body)

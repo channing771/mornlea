@@ -28,6 +28,8 @@
 | 窗口 / 渲染 / 材质 / WGSL | `cargo test -p mornlea_client --locked` + `go test ./cmd/mornlea/app -run 'TestFitFramebuffer\|TestApplicationConnection'` |
 | 协议 / 网络 / 存档 | `go test ./internal/network/... ./internal/storage/... ./internal/core` |
 | 服务端 tick / 伙伴 / 农业 | `go test ./internal/server ./internal/sim -run '关键词'` |
+| Python 伙伴 Agent | `cd services/companion-agent && uv run pytest tests/test_<主题>.py -q`；首次进入先 `uv sync --locked` |
+| Go/Python Agent 合同 | `go test ./internal/server -run 'CrossLanguage|CompanionAgent.*Integration'`（完整真进程入口见下文） |
 | 流体队列 / 规则求值 / 重扫包装 | `go test ./internal/fluid`（重扫差分门禁在 `./internal/sim/realm`，见 `internal/fluid/AGENTS.md`） |
 | 资产 / 材质包 / provenance | `go test ./internal/assets` |
 | 视觉 golden | 预期不变：`make visual-check`；预期变化：逐图确认后 `make visual-update`，再运行 `make visual-check` |
@@ -48,6 +50,8 @@ scripts/agents/race-changed.sh --diff    # 只打印包集合不运行（核对�
 
 集合 = 改动包（已提交 diff ∪ 暂存 ∪ 未暂存 ∪ 未跟踪的 .go）∪ 生产 import 反向依赖（传递）∪ 测试 import 直接依赖 ∪ `internal/archcheck`。闭包含 cdylib 消费包（nativeabi/core/physics/mesh/client/sim/server/cmd/mornlea 及其 app/capture/benchmark 子包/cmd/mornlea-server）时脚本先按需 `make rust`；纯 Go 叶子改动不构建 Rust。
 
+Python 服务不进入 Go import 闭包：修改 `services/companion-agent` 后，T1 另运行 `make companion-agent-check`，它执行 locked sync、Ruff format/lint、`mypy src` 与全部 pytest。修改 HTTP/MCP wire、进程生命周期或 integration helper 时，再运行 `make companion-agent-integration`；该入口会检查 `tests/integration` 并以 race detector 启动真实 Go/Python loopback 子进程。
+
 ## T2：短模式与一键快检
 
 `cmd/mornlea/app`、`cmd/mornlea/benchmark` 与 `internal/server` 中的重型测试（每个超过数秒的离屏 renderer 场景、benchmark 真实 renderer 场景、长 tick 集成/容量测试）在 `testing.Short()` 时跳过；capture 包没有 `testing.Short()` 守卫，`-short` 对它是空操作，重型 golden 抓帧走 `make visual-check` 的独立门禁而非测试二进制：
@@ -55,6 +59,8 @@ scripts/agents/race-changed.sh --diff    # 只打印包集合不运行（核对�
 ```bash
 make test-race-short   # = go test ./... -race -short，实测比全量快约 5 倍
 make dev-check         # gofmt + go vet + go test ./... -short + Rust fmt/clippy/单测
+make companion-agent-check        # Agent Python 全量质量门禁
+make companion-agent-integration  # 改动跨语言边界时运行真进程合同
 ```
 
 `-short` 只是把「快」与「正确性」分离的迭代工具：CI 与最终门禁**不带** `-short` 全量运行，跳过不放松任何正确性门禁。判断标准：单个测试耗时 ≥ 1.5 秒才值得加；单元级断言永远保留。
@@ -64,8 +70,10 @@ make dev-check         # gofmt + go vet + go test ./... -short + Rust fmt/clippy
 ```bash
 scripts/agents/gates.sh     # gofmt/vet/archcheck/OpenSpec/rust/全量 race
 make rust-check             # 完整提交前单独运行；gates.sh 当前不包含此项
+make companion-agent-check
+make companion-agent-integration
 ```
 
-`scripts/agents/gates.sh` 当前依次执行 gofmt、vet、archcheck、OpenSpec、`make rust`，并在未设置 `GATES_SKIP_RACE=1` 时执行 full race；它不包含 `make rust-check`。预期视觉不变时运行 `make visual-check`；预期视觉变化时先逐图确认，再运行 `make visual-update`，随后重新运行 `make visual-check`。
+`scripts/agents/gates.sh` 当前依次执行 gofmt、vet、archcheck、OpenSpec、`make rust`，并在未设置 `GATES_SKIP_RACE=1` 时执行 full race；它不包含 `make rust-check`、`make companion-agent-check` 或 `make companion-agent-integration`，触碰对应领域时必须显式补跑。伙伴两条入口都使用 deterministic fake model 与临时 SQLite，只绑定 loopback，不访问 provider/DNS/外网，也不会启动或聚焦游戏窗口。预期视觉不变时运行 `make visual-check`；预期视觉变化时先逐图确认，再运行 `make visual-update`，随后重新运行 `make visual-check`。
 
 完整提交前：`make rust-check` → `go test ./... -race` → 对应 benchmark/golden/`perfcheck`（性能数值只记录）。

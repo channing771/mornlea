@@ -534,16 +534,20 @@ func TestIdleDialogueDispatchUsesOrderedIDs(t *testing.T) {
 // 快照取自槽位当下值，供有效/过时结果测试作为唯一受控输入。
 func idleDialogueOutcomeFor(slot *companionTaskSlot, id companion.ID, line string) dialogueOutcome {
 	return dialogueOutcome{
-		id:         id,
-		generation: slot.queue.Generation(),
-		node:       companion.DialogueNode{Kind: companion.DialogueNodeIdle},
-		issuer:     slot.currentIssuer,
-		line:       line,
+		id:          id,
+		generation:  slot.queue.Generation(),
+		attempt:     slot.dialogueAttempt,
+		node:        companion.DialogueNode{Kind: companion.DialogueNodeIdle},
+		issuer:      slot.currentIssuer,
+		memoryEpoch: 1,
+		result: companionDialogueResult{
+			Generation: slot.queue.Generation(), MemoryEpoch: 1, Line: line,
+		},
 	}
 }
 
 // idleDialogueOutcomeRig 构造「有效 idle 结果」的公共现场：真实在线发令者、
-// active 身体、完全空队列、非空旧摘要且在途标记置位。调用方持有 stepMu。
+// active 身体、完全空队列且在途标记置位。调用方持有 stepMu。
 func idleDialogueOutcomeRig(
 	t *testing.T,
 ) (*Host, *companionManager, *companionTaskSlot, companion.ID) {
@@ -554,13 +558,13 @@ func idleDialogueOutcomeRig(
 	defer host.world.stepMu.Unlock()
 	slot := manager.slots[id]
 	slot.currentIssuer = issuer
-	slot.summary = "旧摘要"
 	slot.dialogueInFlight = true
+	slot.dialogueAttempt = 1
 	return host, manager, slot, id
 }
 
 // TestIdleDialogueOutcomeValidBroadcastsWithoutSummary 验证有效 idle 结果在
-// tick 边界应用：清除在途标记、不改写摘要，并恰好产生一条携带原发令者
+// tick 边界应用：清除在途标记，并恰好产生一条携带原发令者
 // envelope 的 CompanionSpeech 事实。
 func TestIdleDialogueOutcomeValidBroadcastsWithoutSummary(t *testing.T) {
 	_, manager, slot, id := idleDialogueOutcomeRig(t)
@@ -570,9 +574,6 @@ func TestIdleDialogueOutcomeValidBroadcastsWithoutSummary(t *testing.T) {
 	if slot.dialogueInFlight {
 		t.Fatal("有效结果后在途标记未清除")
 	}
-	if slot.summary != "旧摘要" {
-		t.Fatalf("idle 改写摘要=%q，want %q", slot.summary, "旧摘要")
-	}
 	facts := manager.takeEventFacts()
 	if len(facts) != 1 || facts[0].speech != "今天天气适合走走" || facts[0].issuer != slot.currentIssuer {
 		t.Fatalf("idle speech facts=%+v", facts)
@@ -581,7 +582,7 @@ func TestIdleDialogueOutcomeValidBroadcastsWithoutSummary(t *testing.T) {
 
 // TestIdleDialogueOutcomeStaleDiscarded 验证七类过时 idle 结果（队列不再空、
 // 世代漂移、发令者替换、恢复身份、离线、超距、身体移除）都只清除在途标记：
-// 不广播、不改摘要、不产生任何台词副作用。每个子用例使用独立 host，从同一
+// 不广播、不产生任何台词副作用。每个子用例使用独立 host，从同一
 // 有效现场出发只改变一个属性。
 func TestIdleDialogueOutcomeStaleDiscarded(t *testing.T) {
 	cases := []struct {
@@ -652,7 +653,6 @@ func TestIdleDialogueOutcomeStaleDiscarded(t *testing.T) {
 			host.world.stepMu.Lock()
 			slot := manager.slots[id]
 			slot.currentIssuer = issuer
-			slot.summary = "旧摘要"
 			slot.dialogueInFlight = true
 			outcome := idleDialogueOutcomeFor(slot, id, "今天天气适合走走")
 			tc.mutate(manager, slot, id, body, &outcome)
@@ -660,10 +660,6 @@ func TestIdleDialogueOutcomeStaleDiscarded(t *testing.T) {
 			if slot.dialogueInFlight {
 				host.world.stepMu.Unlock()
 				t.Fatal("过时结果未清除在途标记")
-			}
-			if slot.summary != "旧摘要" {
-				host.world.stepMu.Unlock()
-				t.Fatalf("过时结果改写摘要=%q，want 旧摘要", slot.summary)
 			}
 			if effects := manager.dialogueEffects; effects != 0 {
 				host.world.stepMu.Unlock()
@@ -688,13 +684,12 @@ func TestIdleDialogueOutcomeModelErrorKeepsDeadline(t *testing.T) {
 	defer host.world.stepMu.Unlock()
 	slot := manager.slots[id]
 	slot.currentIssuer = issuer
-	slot.summary = "旧摘要"
 	slot.dialogueInFlight = true
 	nextDeadline := manager.engine.TickCount() + 7
 	slot.idleDialogueAtTick = nextDeadline
 	slot.hasIdleDialogueAtTick = true
 	outcome := idleDialogueOutcomeFor(slot, id, "")
-	outcome.err = companion.ErrDialogueUnavailable
+	outcome.err = companion.ErrAgentUnavailable
 
 	manager.applyDialogueOutcome(outcome)
 
@@ -704,9 +699,6 @@ func TestIdleDialogueOutcomeModelErrorKeepsDeadline(t *testing.T) {
 	if !slot.hasIdleDialogueAtTick || slot.idleDialogueAtTick != nextDeadline {
 		t.Fatalf("失败结果扰动下一期限=%d/%v，want %d/true",
 			slot.idleDialogueAtTick, slot.hasIdleDialogueAtTick, nextDeadline)
-	}
-	if slot.summary != "旧摘要" {
-		t.Fatalf("失败结果改写摘要=%q，want 旧摘要", slot.summary)
 	}
 	if effects := manager.dialogueEffects; effects != 0 {
 		t.Fatalf("失败结果产生台词副作用：effects=%d", effects)
@@ -757,14 +749,15 @@ func TestIdleDialogueTaskStartDoesNotPreemptIdle(t *testing.T) {
 	}
 	waitForDialogueRequests(t, dialogue, 1)
 
-	// idle 在途时真实任务照常开始。
+	// idle 在途占用该伙伴唯一 Agent run；真实任务的 Planner 按既有 unavailable
+	// 语义失败，不能取消或抢占先到的 Dialogue。
 	sendIntegration(t, client, network.ChatCommand{Text: "@阿木 走六个点"})
 	waitForIncomingChatDepth(t, host.world, 1)
 	started := collectDialogueEvents(t, host, client, 600, func(events []network.ChatEvent) bool {
-		return countKind(events, network.ChatEventTaskStarted) == 1
+		return countKind(events, network.ChatEventTaskFailed) == 1
 	})
-	if countKind(started, network.ChatEventTaskStarted) != 1 {
-		t.Fatalf("idle 在途期间任务未开始：事件=%v", chatEventKinds(started))
+	if countKind(started, network.ChatEventTaskFailed) != 1 {
+		t.Fatalf("idle 在途期间任务未按 Planner unavailable 失败：事件=%v", chatEventKinds(started))
 	}
 	requests, inFlight, cancels := dialogue.snapshotCounts()
 	if requests != 1 || inFlight != 1 || cancels != 0 {
@@ -777,9 +770,6 @@ func TestIdleDialogueTaskStartDoesNotPreemptIdle(t *testing.T) {
 	after := stepDialogueTick(t, host, []network.ClientEndpoint{client})
 	if countKind(after, network.ChatEventCompanionSpeech) != 0 {
 		t.Fatalf("过时 idle 结果被广播：%+v", after)
-	}
-	if summary := companionDialogueSlotSummary(t, host, definitions[0].ID); summary != "" {
-		t.Fatalf("过时 idle 结果改写摘要=%q", summary)
 	}
 	if effects, inFlightSlot := dialogueEffectCount(t, host, definitions[0].ID); effects != 0 || inFlightSlot {
 		t.Fatalf("过时 idle 结果落地：effects=%d inFlight=%v", effects, inFlightSlot)

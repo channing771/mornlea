@@ -75,9 +75,92 @@ func fixtureCompanionQueues() []StoredCompanionQueue {
 	return []StoredCompanionQueue{queue}
 }
 
+func fixtureStorageIdentity(last byte) CompanionIdentity {
+	return CompanionIdentity{
+		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x46, 0x17,
+		0x88, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, last,
+	}
+}
+
+// fixtureCompanionV5Save 为根 store contract 补齐当前 codec 的强制身份元数据。
+func fixtureCompanionV5Save(save CompanionSave) CompanionSave {
+	save.Records = slices.Clone(save.Records)
+	save.Queues = slices.Clone(save.Queues)
+	for index := range save.Queues {
+		save.Queues[index].Current.PlanSteps = slices.Clone(save.Queues[index].Current.PlanSteps)
+		save.Queues[index].Pending = slices.Clone(save.Queues[index].Pending)
+	}
+	if save.AgentNamespaceID == (CompanionIdentity{}) {
+		save.AgentNamespaceID = fixtureStorageIdentity(0x70)
+	}
+	if save.Lifecycles == nil {
+		save.Lifecycles = make([]StoredCompanionLifecycle, len(save.Records))
+		for index, body := range save.Records {
+			save.Lifecycles[index] = StoredCompanionLifecycle{
+				ID: body.ID, Active: true, MemoryEpoch: 1,
+			}
+		}
+	}
+	return save
+}
+
 type closeableCompanionStore interface {
 	CompanionStore
+	CompanionsExist(context.Context) (bool, error)
 	Close() error
+}
+
+func TestCompanionStoreExistenceProbeDoesNotDecodeBody(t *testing.T) {
+	t.Run("memory", func(t *testing.T) {
+		store := NewMemory(Metadata{FormatVersion: currentMetadataVersion, Seed: 42})
+		exists, err := store.CompanionsExist(context.Background())
+		if err != nil || exists {
+			t.Fatalf("missing exists/error=%v/%v，想要 false/nil", exists, err)
+		}
+		store.companions.encoded = []byte("not a companion envelope")
+		exists, err = store.CompanionsExist(context.Background())
+		if err != nil || !exists {
+			t.Fatalf("corrupt body exists/error=%v/%v，想要 true/nil", exists, err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if _, err := store.CompanionsExist(ctx); !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled probe error=%v，想要 context.Canceled", err)
+		}
+		if err := store.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.CompanionsExist(context.Background()); !errors.Is(err, os.ErrClosed) {
+			t.Fatalf("closed probe error=%v，想要 os.ErrClosed", err)
+		}
+	})
+
+	t.Run("disk", func(t *testing.T) {
+		root := t.TempDir()
+		store := openCompanionDisk(t, root)
+		exists, err := store.CompanionsExist(context.Background())
+		if err != nil || exists {
+			t.Fatalf("missing exists/error=%v/%v，想要 false/nil", exists, err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "companions.ai"), []byte("not a companion envelope"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		exists, err = store.CompanionsExist(context.Background())
+		if err != nil || !exists {
+			t.Fatalf("corrupt body exists/error=%v/%v，想要 true/nil", exists, err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if _, err := store.CompanionsExist(ctx); !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled probe error=%v，想要 context.Canceled", err)
+		}
+		if err := store.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.CompanionsExist(context.Background()); !errors.Is(err, os.ErrClosed) {
+			t.Fatalf("closed probe error=%v，想要 os.ErrClosed", err)
+		}
+	})
 }
 
 func TestCompanionStoreContract(t *testing.T) {
@@ -134,9 +217,9 @@ func testCompanionStoreContract(
 		t.Cleanup(func() { _ = store.Close() })
 		input := fixtureCompanionBodies()
 		queues := fixtureCompanionQueues()
-		if err := store.SaveCompanions(context.Background(), CompanionSave{
+		if err := store.SaveCompanions(context.Background(), fixtureCompanionV5Save(CompanionSave{
 			Revision: 7, Records: input, Queues: queues,
-		}); err != nil {
+		})); err != nil {
 			t.Fatal(err)
 		}
 		input[0].Position[0] = 999
@@ -173,21 +256,21 @@ func testCompanionStoreContract(
 		store := open(t)
 		t.Cleanup(func() { _ = store.Close() })
 		first := CompanionSave{Revision: 5, Records: fixtureCompanionBodies()}
-		if err := store.SaveCompanions(context.Background(), first); err != nil {
+		if err := store.SaveCompanions(context.Background(), fixtureCompanionV5Save(first)); err != nil {
 			t.Fatal(err)
 		}
 		idempotent := CompanionSave{Revision: 5, Records: slices.Clone(first.Records)}
 		slices.Reverse(idempotent.Records)
-		if err := store.SaveCompanions(context.Background(), idempotent); err != nil {
+		if err := store.SaveCompanions(context.Background(), fixtureCompanionV5Save(idempotent)); err != nil {
 			t.Fatalf("idempotent SaveCompanions error=%v", err)
 		}
 		conflict := CompanionSave{Revision: 5, Records: slices.Clone(first.Records)}
 		conflict.Records[0].Position[0]++
-		if err := store.SaveCompanions(context.Background(), conflict); !errors.Is(err, ErrRevisionConflict) {
+		if err := store.SaveCompanions(context.Background(), fixtureCompanionV5Save(conflict)); !errors.Is(err, ErrRevisionConflict) {
 			t.Fatalf("same-revision SaveCompanions error=%v，想要 ErrRevisionConflict", err)
 		}
 		lower := CompanionSave{Revision: 4, Records: slices.Clone(first.Records)}
-		if err := store.SaveCompanions(context.Background(), lower); !errors.Is(err, ErrRevisionConflict) {
+		if err := store.SaveCompanions(context.Background(), fixtureCompanionV5Save(lower)); !errors.Is(err, ErrRevisionConflict) {
 			t.Fatalf("lower-revision SaveCompanions error=%v，想要 ErrRevisionConflict", err)
 		}
 		got, err := store.LoadCompanions(context.Background())
@@ -201,7 +284,7 @@ func testCompanionStoreContract(
 		}
 
 		higher := CompanionSave{Revision: 6, Records: fixtureCompanionBodies()[:1]}
-		if err := store.SaveCompanions(context.Background(), higher); err != nil {
+		if err := store.SaveCompanions(context.Background(), fixtureCompanionV5Save(higher)); err != nil {
 			t.Fatal(err)
 		}
 		got, err = store.LoadCompanions(context.Background())
@@ -217,7 +300,7 @@ func testCompanionStoreContract(
 		store := open(t)
 		t.Cleanup(func() { _ = store.Close() })
 		first := CompanionSave{Revision: 1, Records: fixtureCompanionBodies()}
-		if err := store.SaveCompanions(context.Background(), first); err != nil {
+		if err := store.SaveCompanions(context.Background(), fixtureCompanionV5Save(first)); err != nil {
 			t.Fatal(err)
 		}
 		ctx, cancel := context.WithCancel(context.Background())
@@ -226,7 +309,7 @@ func testCompanionStoreContract(
 			t.Fatalf("canceled LoadCompanions error=%v，想要 context.Canceled", err)
 		}
 		higher := CompanionSave{Revision: 2, Records: fixtureCompanionBodies()[:1]}
-		if err := store.SaveCompanions(ctx, higher); !errors.Is(err, context.Canceled) {
+		if err := store.SaveCompanions(ctx, fixtureCompanionV5Save(higher)); !errors.Is(err, context.Canceled) {
 			t.Fatalf("canceled SaveCompanions error=%v，想要 context.Canceled", err)
 		}
 		got, err := store.LoadCompanions(context.Background())
@@ -249,20 +332,35 @@ func testCompanionStoreContract(
 			t.Fatalf("second Close=%v", err)
 		}
 		if !closedAPIErrors {
+			want := fixtureCompanionV5Save(CompanionSave{
+				Revision: 1, Records: fixtureCompanionBodies(),
+			})
+			if err := store.SaveCompanions(context.Background(), want); err != nil {
+				t.Fatalf("Memory SaveCompanions after Close error=%v", err)
+			}
+			got, err := store.LoadCompanions(context.Background())
+			if err != nil {
+				t.Fatalf("Memory LoadCompanions after Close error=%v", err)
+			}
+			wantRecords := slices.Clone(want.Records)
+			slices.Reverse(wantRecords)
+			if got.Revision != want.Revision || !reflect.DeepEqual(got.Records, wantRecords) {
+				t.Fatalf("Memory after Close loaded=%+v，想要 revision=%d records=%+v", got, want.Revision, wantRecords)
+			}
 			return
 		}
 		if _, err := store.LoadCompanions(context.Background()); !errors.Is(err, os.ErrClosed) {
 			t.Fatalf("LoadCompanions after Close error=%v，想要 os.ErrClosed", err)
 		}
-		if err := store.SaveCompanions(context.Background(), CompanionSave{
+		if err := store.SaveCompanions(context.Background(), fixtureCompanionV5Save(CompanionSave{
 			Revision: 1, Records: fixtureCompanionBodies(),
-		}); !errors.Is(err, os.ErrClosed) {
+		})); !errors.Is(err, os.ErrClosed) {
 			t.Fatalf("SaveCompanions after Close error=%v，想要 os.ErrClosed", err)
 		}
 	})
 }
 
-func TestDiskCompanionAtomicReplaceKeepsOldFileOnFailure(t *testing.T) {
+func TestDiskCompanionV5AtomicReplaceKeepsOldLegacyFileOnFailure(t *testing.T) {
 	tests := []struct {
 		name      string
 		configure func(error) atomicReplaceHooks
@@ -297,30 +395,31 @@ func TestDiskCompanionAtomicReplaceKeepsOldFileOnFailure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
 			store := openCompanionDisk(t, root)
-			first := CompanionSave{
-				Revision: 1,
-				Records:  fixtureCompanionBodies(),
-				Queues:   fixtureCompanionQueues(),
+			legacy, err := os.ReadFile(filepath.Join("companion", "testdata", "companions-v4.bin"))
+			if err != nil {
+				t.Fatal(err)
 			}
-			if err := store.SaveCompanions(context.Background(), first); err != nil {
+			path := filepath.Join(root, "companions.ai")
+			if err := os.WriteFile(path, legacy, 0o600); err != nil {
 				t.Fatal(err)
 			}
 			injected := errors.New("injected " + tc.name)
 			store.companionReplaceHooks = tc.configure(injected)
-			if err := store.SaveCompanions(context.Background(), CompanionSave{
-				Revision: 2, Records: fixtureCompanionBodies()[:1],
-			}); !errors.Is(err, injected) {
+			if err := store.SaveCompanions(context.Background(), fixtureCompanionV5Save(CompanionSave{
+				Revision: 48, Records: fixtureCompanionBodies()[:1],
+			})); !errors.Is(err, injected) {
 				t.Fatalf("SaveCompanions error=%v，想要 injected error", err)
 			}
-			got, err := store.LoadCompanions(context.Background())
+			after, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatal(err)
 			}
-			wantRecords := fixtureCompanionBodies()
-			slices.Reverse(wantRecords)
-			if got.Revision != 1 || !reflect.DeepEqual(got.Records, wantRecords) ||
-				!reflect.DeepEqual(got.Queues, fixtureCompanionQueues()) {
-				t.Fatalf("after failed replace loaded=%+v，想要旧值（含任务载荷）", got)
+			if !bytes.Equal(after, legacy) {
+				t.Fatal("pre-rename failure 改写了冻结 v4 正式文件")
+			}
+			got, err := companioncodec.Decode(after)
+			if err != nil || got.SourceSchema != 4 {
+				t.Fatalf("失败后 official path decode/schema=%v/%d", err, got.SourceSchema)
 			}
 			matches, err := filepath.Glob(filepath.Join(root, ".companions.ai.tmp-*"))
 			if err != nil {
@@ -333,12 +432,12 @@ func TestDiskCompanionAtomicReplaceKeepsOldFileOnFailure(t *testing.T) {
 	}
 }
 
-func TestDiskCompanionAtomicReplaceReportsParentSyncFailureAfterPublish(t *testing.T) {
+func TestDiskCompanionV5ParentSyncFailurePublishesOnlyCompleteFile(t *testing.T) {
 	root := t.TempDir()
 	store := openCompanionDisk(t, root)
-	if err := store.SaveCompanions(context.Background(), CompanionSave{
+	if err := store.SaveCompanions(context.Background(), fixtureCompanionV5Save(CompanionSave{
 		Revision: 1, Records: fixtureCompanionBodies(),
-	}); err != nil {
+	})); err != nil {
 		t.Fatal(err)
 	}
 	injected := errors.New("injected directory sync")
@@ -351,16 +450,16 @@ func TestDiskCompanionAtomicReplaceReportsParentSyncFailureAfterPublish(t *testi
 			return &playerFaultDirectory{File: directory, syncErr: injected}, nil
 		},
 	}
-	if err := store.SaveCompanions(context.Background(), CompanionSave{
+	if err := store.SaveCompanions(context.Background(), fixtureCompanionV5Save(CompanionSave{
 		Revision: 2, Records: fixtureCompanionBodies()[:1],
-	}); !errors.Is(err, injected) {
+	})); !errors.Is(err, injected) {
 		t.Fatalf("SaveCompanions error=%v，想要 parent Sync error", err)
 	}
 	got, err := store.LoadCompanions(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Revision != 2 || !reflect.DeepEqual(got.Records, fixtureCompanionBodies()[:1]) {
+	if got.SourceSchema != 5 || got.Revision != 2 || !reflect.DeepEqual(got.Records, fixtureCompanionBodies()[:1]) {
 		t.Fatalf("rename 后正式文件=%+v，想要完整 revision 2", got)
 	}
 }
@@ -389,7 +488,7 @@ func TestDiskCompanionAtomicCancelDuringTempCompletionPreservesOldFile(t *testin
 			root := t.TempDir()
 			store := openCompanionDisk(t, root)
 			first := CompanionSave{Revision: 1, Records: fixtureCompanionBodies()}
-			if err := store.SaveCompanions(context.Background(), first); err != nil {
+			if err := store.SaveCompanions(context.Background(), fixtureCompanionV5Save(first)); err != nil {
 				t.Fatal(err)
 			}
 			path := filepath.Join(root, "companions.ai")
@@ -411,9 +510,9 @@ func TestDiskCompanionAtomicCancelDuringTempCompletionPreservesOldFile(t *testin
 					return wrapped, nil
 				},
 			}
-			if err := store.SaveCompanions(ctx, CompanionSave{
+			if err := store.SaveCompanions(ctx, fixtureCompanionV5Save(CompanionSave{
 				Revision: 2, Records: fixtureCompanionBodies()[:1],
-			}); !errors.Is(err, context.Canceled) {
+			})); !errors.Is(err, context.Canceled) {
 				t.Fatalf("SaveCompanions error=%v，想要 context.Canceled", err)
 			}
 
@@ -458,9 +557,9 @@ func TestDiskCompanionOversizedFileIsCorruptAndSaveDoesNotOverwriteIt(t *testing
 	if _, err := store.LoadCompanions(context.Background()); !errors.Is(err, ErrCorrupt) {
 		t.Fatalf("LoadCompanions error=%v，想要 ErrCorrupt", err)
 	}
-	if err := store.SaveCompanions(context.Background(), CompanionSave{
+	if err := store.SaveCompanions(context.Background(), fixtureCompanionV5Save(CompanionSave{
 		Revision: 2, Records: fixtureCompanionBodies(),
-	}); !errors.Is(err, ErrCorrupt) {
+	})); !errors.Is(err, ErrCorrupt) {
 		t.Fatalf("SaveCompanions error=%v，想要 ErrCorrupt", err)
 	}
 	after, err := os.ReadFile(path)
@@ -496,9 +595,10 @@ func TestDiskCompanionSaveDoesNotOverwriteCorruptOrFutureFile(t *testing.T) {
 			root := t.TempDir()
 			store := openCompanionDisk(t, root)
 			path := filepath.Join(root, "companions.ai")
-			before, err := companioncodec.Encode(CompanionSave{
+			before, err := companioncodec.Encode(fixtureCompanionV5Save(CompanionSave{
 				Revision: 1, Records: fixtureCompanionBodies(),
-			})
+			}))
+
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -506,9 +606,9 @@ func TestDiskCompanionSaveDoesNotOverwriteCorruptOrFutureFile(t *testing.T) {
 			if err := os.WriteFile(path, before, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			if err := store.SaveCompanions(context.Background(), CompanionSave{
+			if err := store.SaveCompanions(context.Background(), fixtureCompanionV5Save(CompanionSave{
 				Revision: 2, Records: fixtureCompanionBodies()[:1],
-			}); !errors.Is(err, tc.wantErr) {
+			})); !errors.Is(err, tc.wantErr) {
 				t.Fatalf("SaveCompanions error=%v，想要 %v", err, tc.wantErr)
 			}
 			after, err := os.ReadFile(path)

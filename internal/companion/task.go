@@ -196,7 +196,9 @@ func (t Task) Expired(worldTimeTicks uint64) bool {
 }
 
 // TaskDeadlineTicks 把进入 Running 时刻的世界时间与超时分钟数换算为 deadline。
-// 分钟数必须已经过 ModelSettings 的 1..60 校验（或使用 TaskTimeout 缺省）。
+// 分钟数必须已经过 1..60 校验：显式配置值由 config 加载（applyAI 经
+// companion.ValidateTaskTimeoutMinutes 拒绝越界）与 server 启动（host.go 的同一
+// 静态校验）共同守住；传入 0（未设置）时本函数落回 TaskTimeoutDefaultMinutes。
 func TaskDeadlineTicks(worldTimeTicks uint64, timeoutMinutes int) uint64 {
 	if timeoutMinutes < 1 {
 		timeoutMinutes = TaskTimeoutDefaultMinutes

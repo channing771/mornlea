@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/channing771/mornlea/internal/companion"
 )
 
 func waitForHostWorkers(ctx context.Context, workers *sync.WaitGroup) error {
@@ -73,7 +75,6 @@ func (server *Server) Shutdown(ctx context.Context) error {
 			server.companions.Observe(
 				server.engine.CompanionBodies(),
 				server.companionManagerTaskStates(),
-				server.companionManagerSummaries(),
 			)
 		}
 		if server.hostiles != nil {
@@ -101,6 +102,10 @@ func (server *Server) Shutdown(ctx context.Context) error {
 		}
 		server.cancel()
 	}
+	if server.companionManager != nil {
+		server.companionManager.beginMemoryFinalization(ctx)
+		defer server.companionManager.cancelMemory()
+	}
 	server.stepMu.Unlock()
 
 	if err := waitForServerWorkers(ctx, server.runtimeDone); err != nil {
@@ -109,8 +114,32 @@ func (server *Server) Shutdown(ctx context.Context) error {
 	if freezeErr != nil {
 		return server.persistenceErrorWithContext(freezeErr, ctx)
 	}
-	if err := server.world.Flush(ctx); err != nil {
-		return err
+	if server.companionManager != nil {
+		for {
+			// run 与 memory finalization context 都受当前关服 caller 约束；同步
+			// Wait 避免 caller 超时时遗留一个 Wait goroutine，并允许下一次
+			// Shutdown 在 Wait 完成后安全派生新的 memory worker。
+			server.companionManager.waitGroup.Wait()
+			if err := server.companionManager.memoryFinalizationError(); err != nil {
+				return server.world.ShutdownContextError(err, nil)
+			}
+			if err := ctx.Err(); err != nil {
+				return server.world.ShutdownContextError(err, nil)
+			}
+			server.stepMu.Lock()
+			drained := server.companionManager.drainShutdownOutcomes()
+			unresolved := server.companionManager.hasUnresolvedMemoryReservation()
+			server.stepMu.Unlock()
+			if !drained {
+				if unresolved {
+					return companion.ErrAgentUnavailable
+				}
+				break
+			}
+		}
+	}
+	if server.hostileManager != nil {
+		server.hostileManager.close()
 	}
 	if server.companions != nil {
 		if err := server.companions.Flush(ctx); err != nil {
@@ -128,6 +157,9 @@ func (server *Server) Shutdown(ctx context.Context) error {
 			)
 		}
 	}
+	if err := server.world.Flush(ctx); err != nil {
+		return err
+	}
 	if server.storePhase == storeShutdownNeedsSync {
 		if err := server.store.Sync(ctx); err != nil {
 			return server.persistenceErrorWithContext(fmt.Errorf("sync world: %w", err), ctx)
@@ -136,6 +168,11 @@ func (server *Server) Shutdown(ctx context.Context) error {
 	}
 	if err := ctx.Err(); err != nil {
 		return server.world.ShutdownContextError(err, nil)
+	}
+	if server.beforeStoreClose != nil {
+		if err := server.beforeStoreClose(ctx); err != nil {
+			return err
+		}
 	}
 	if server.storePhase == storeShutdownNeedsClose {
 		if err := server.store.Close(); err != nil {
@@ -148,12 +185,6 @@ func (server *Server) Shutdown(ctx context.Context) error {
 	}
 	if server.hostiles != nil {
 		server.hostiles.Close()
-	}
-	if server.companionManager != nil {
-		server.companionManager.close()
-	}
-	if server.hostileManager != nil {
-		server.hostileManager.close()
 	}
 	server.world.Close()
 

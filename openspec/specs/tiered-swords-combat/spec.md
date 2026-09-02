@@ -28,7 +28,7 @@
 #### Scenario: 当前存档路径无损往返六种剑
 - **GIVEN** 玩家背包、区块容器、区块掉落物或伙伴背包含六种新增物品以及一把部分磨损的完好剑
 - **WHEN** 当前程序按现有 schema 编码后重新解码
-- **THEN** item ID、数量和耐久 MUST 逐字段保持不变，玩家 schema v8、区块 schema v9、`companions.ai` schema v4 MUST 不升版
+- **THEN** item ID、数量和耐久 MUST 逐字段保持不变，玩家 schema v8、区块 schema v9、`companions.ai` schema v5 MUST 不升版
 
 ### Requirement: 战斗身份和热路径容量固定且溢出整阶段失败
 
@@ -105,7 +105,7 @@
 
 ### Requirement: 版本与存档兼容矩阵明确
 
-剑战变更原交付 commit `90188fbc` 的版本矩阵 MUST 保留为历史引入事实：协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`companions.ai` schema v4、`hostile_mobs` schema v1、engine ABI v8、client ABI v11、benchmark scenario v20。后续独立的 WebView client、fluid engine、window capture 与 RenderWorld client surface 演进后，当前程序 MUST 报告 engine ABI v9、client ABI v14，其他矩阵项保持上述值。player attack/hurt cooldown MUST 是重连清零的运行态；hostile MUST 复用 schema v1 既有 attack/hurt cooldown 字段且上限保持 20。当前程序 MUST 在玩家、区块容器/掉落和伙伴背包路径无损保存新增 ItemID；不知道新增 ItemID 的旧程序 MUST 安全拒绝，项目 MUST NOT 提供向后降级写入。
+剑战变更原交付 commit `90188fbc` 的版本矩阵 MUST 保留为历史引入事实：协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`companions.ai` schema v4、`hostile_mobs` schema v1、engine ABI v8、client ABI v11、benchmark scenario v20。后续独立的 WebView client、fluid engine、window capture、RenderWorld client surface、伙伴 Agent 服务与 main 同步演进后，当前程序 MUST 报告 engine ABI v9、client ABI v14、`companions.ai` schema v5 与 benchmark scenario v21，协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3 与 hostile v1 保持上述值。player attack/hurt cooldown MUST 是重连清零的运行态；hostile MUST 复用 schema v1 既有 attack/hurt cooldown 字段且上限保持 20。当前程序 MUST 在玩家、区块容器/掉落和伙伴背包路径无损保存新增 ItemID；不知道新增 ItemID 的旧程序 MUST 安全拒绝，项目 MUST NOT 提供向后降级写入。
 
 #### Scenario: v31 对端在 Play 前被拒绝
 - **GIVEN** 客户端或服务端声明协议 v31
@@ -115,7 +115,7 @@
 #### Scenario: 后续 ABI 演进不改变战斗持久化版本
 - **GIVEN** 变更已完整实现并通过验证
 - **WHEN** 检查持久化 schema、ABI 与 benchmark 版本
-- **THEN** player/chunk/world/companions/hostile MUST 保持 8/9/3/4/1，engine/client ABI MUST 为 9/14，benchmark scenario MUST 保持 20
+- **THEN** player/chunk/world/companions/hostile MUST 保持 8/9/3/5/1，engine/client ABI MUST 为 9/14，benchmark scenario MUST 为 21
 - **AND** engine/client ABI 8/11 MUST 只表示 commit `90188fbc` 交付剑战变更时的历史基线，MUST NOT 与后续 client ABI v12、v13 或当前 v14 混淆
 
 #### Scenario: 含新剑的存档不能降级解释

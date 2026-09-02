@@ -14,9 +14,8 @@ import (
 // 且单机内存路径（`AcceptStream`）与 TCP 专用服务端路径（`acceptLoop`）走同一
 // 编码：两个传输上的 `LoginSuccess.WorldSeed` 逐位一致。
 func TestHostLoginSuccessCarriesStoreSeedAcrossTransports(t *testing.T) {
-	store := newHostTestStore()
 	const wantSeed = uint64(42)
-	if got := uint64(store.Metadata().Seed); got != wantSeed {
+	if got := uint64(newHostTestStore().Metadata().Seed); got != wantSeed {
 		t.Fatalf("测试存档种子 = %d，想要 %d", got, wantSeed)
 	}
 
@@ -29,6 +28,7 @@ func TestHostLoginSuccessCarriesStoreSeedAcrossTransports(t *testing.T) {
 		{"tcp", loginSeedOverTCP},
 	} {
 		t.Run(transport.name, func(t *testing.T) {
+			store := newHostTestStore()
 			host := mustNewHost(t, hostTestConfig(), flatTestGenerator{}, store)
 			t.Cleanup(func() {
 				ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/channing771/mornlea/internal/core"
@@ -22,6 +23,7 @@ type MemoryStore struct {
 	players    map[core.PlayerID]memoryPlayer
 	companions memoryCompanions
 	hostiles   memoryHostiles
+	closed     bool
 }
 
 type memoryChunk struct {
@@ -274,6 +276,22 @@ func (store *MemoryStore) LoadCompanions(ctx context.Context) (StoredCompanions,
 	return companion.Decode(bytes.Clone(store.companions.encoded))
 }
 
+// CompanionsExist 只检查内存中是否已有编码值，不调用 codec。
+func (store *MemoryStore) CompanionsExist(ctx context.Context) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.closed {
+		return false, os.ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	return len(store.companions.encoded) != 0, nil
+}
+
 func (store *MemoryStore) SaveCompanions(ctx context.Context, save CompanionSave) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -356,6 +374,9 @@ func (store *MemoryStore) Sync(ctx context.Context) error {
 }
 
 func (store *MemoryStore) Close() error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.closed = true
 	return nil
 }
 

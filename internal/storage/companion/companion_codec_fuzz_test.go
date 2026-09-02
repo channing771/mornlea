@@ -16,11 +16,11 @@ import (
 // 布局变化时本表必须同步更新（与 v1 offset 测试同一纪律）。v3 变长种子
 // 的偏移按四 kind 布局另行推导（go_to 13 + mine 13 + place 15 + follow 17）。
 const (
-	fuzzTaskStepsCountOffset = 32 + companionRecordLength + 1 + 2 + 2
+	fuzzTaskStepsCountOffset = 32 + 16 + companionRecordLength + 1 + 8 + 8 + 16 + 2 + 2 + 2
 	fuzzTaskStateOffset      = fuzzTaskStepsCountOffset + 2 + 13 + 4
 	fuzzTaskFIFOCountOffset  = fuzzTaskStateOffset + 1 + 1 + 8 + 8
 	// fuzzV3StepsBase 是 v3 四 kind 种子的步骤区起点（指令 "go" 同上）。
-	fuzzV3StepsBase = 32 + companionRecordLength + 1 + 2 + 2 + 2
+	fuzzV3StepsBase = 32 + 16 + companionRecordLength + 1 + 8 + 8 + 16 + 2 + 2 + 2 + 2
 	// fuzzV3PlaceKindOffset 是 place 步骤 kind 字节（go_to 与 mine 各 13
 	// bytes 之后）。
 	fuzzV3PlaceKindOffset = fuzzV3StepsBase + 13 + 13
@@ -43,8 +43,8 @@ func FuzzDecodeCompanions(f *testing.F) {
 			f.Add(bytes.Clone(fixture[:length]))
 		}
 	}
-	// v3/v4 golden 的前缀截断种子：v3 是冻结的只读迁移 schema（位形与
-	// v4 无摘要记录一致），v4 是当前 schema（canonical 重编码断言全程生效）。
+	// v3/v4 golden 的前缀截断种子是冻结的只读迁移 schema；v5 golden
+	// 额外驱动 canonical 重编码断言。
 	if fixture, err := os.ReadFile(filepath.Join("testdata", "companions-v3.bin")); err == nil {
 		for length := range len(fixture) + 1 {
 			f.Add(bytes.Clone(fixture[:length]))
@@ -55,17 +55,22 @@ func FuzzDecodeCompanions(f *testing.F) {
 			f.Add(bytes.Clone(fixture[:length]))
 		}
 	}
+	if fixture, err := os.ReadFile(filepath.Join("testdata", "companions-v5.bin")); err == nil {
+		for length := range len(fixture) + 1 {
+			f.Add(bytes.Clone(fixture[:length]))
+		}
+	}
 	records := make([]companion.Body, companion.MaxStored)
 	for index := range records {
 		records[index].ID = fixtureCompanionID(byte(index))
 	}
-	maximum, err := Encode(CompanionSave{Revision: 1, Records: records})
+	maximum, err := Encode(fixtureV5SaveForTest(CompanionSave{Revision: 1, Records: records}))
 	if err != nil {
 		f.Fatal(err)
 	}
 	f.Add(maximum)
 	// 单记录 Running 任务 + 两条 FIFO：驱动任务区/FIFO 解码路径。
-	taskBearing, err := Encode(CompanionSave{
+	taskBearing, err := Encode(fixtureV5SaveForTest(CompanionSave{
 		Revision: 5,
 		Records:  fixtureCompanionBodies()[:1],
 		Queues: []StoredCompanionQueue{{
@@ -80,21 +85,23 @@ func FuzzDecodeCompanions(f *testing.F) {
 			},
 			Pending: []string{"go", "go2"},
 		}},
-	})
+	}))
+
 	if err != nil {
 		f.Fatal(err)
 	}
 	f.Add(taskBearing)
 	// FIFO-only 形态（无当前任务、仅排队指令）：flags 仅 bit1，驱动
 	// 「HasCurrent 为假时 Current 零值」的编码/解码对称路径。
-	fifoOnly, err := Encode(CompanionSave{
+	fifoOnly, err := Encode(fixtureV5SaveForTest(CompanionSave{
 		Revision: 6,
 		Records:  fixtureCompanionBodies()[:1],
 		Queues: []StoredCompanionQueue{{
 			ID:      fixtureCompanionID(2),
 			Pending: []string{"仅排队甲", "仅排队乙"},
 		}},
-	})
+	}))
+
 	if err != nil {
 		f.Fatal(err)
 	}
@@ -115,7 +122,7 @@ func FuzzDecodeCompanions(f *testing.F) {
 	// v3 变长种子：四 kind 全覆盖的 Running 任务驱动变长解码路径；非法
 	// kind 步长错位、follow 目标非法与 follow 携带 deadline 三个补丁种子
 	// 深入步骤级校验。
-	v3TaskBearing, err := Encode(CompanionSave{
+	v3TaskBearing, err := Encode(fixtureV5SaveForTest(CompanionSave{
 		Revision: 7,
 		Records:  fixtureCompanionBodies()[:1],
 		Queues: []StoredCompanionQueue{{
@@ -135,7 +142,8 @@ func FuzzDecodeCompanions(f *testing.F) {
 			},
 			Pending: []string{"go", "go2"},
 		}},
-	})
+	}))
+
 	if err != nil {
 		f.Fatal(err)
 	}
@@ -152,32 +160,26 @@ func FuzzDecodeCompanions(f *testing.F) {
 	binary.LittleEndian.PutUint64(followDeadlineSet[fuzzV3DeadlineOffset:], 1200)
 	repairCompanionCRC(followDeadlineSet)
 	f.Add(followDeadlineSet)
-	// v4 摘要种子：summary-only 载荷（flags 仅摘要位）驱动摘要区解码路径；
-	// 非法摘要长度（超 2,048、零长、缩小错位）、摘要含 NUL 与非法 UTF-8
-	// 五个补丁种子深入摘要级校验。缩小错位种子把长度减去整整一个 rune
+	// v5 摘要种子驱动 lifecycle memory mirror 解码路径；非法摘要长度、
+	// 摘要含 NUL 与非法 UTF-8 补丁种子深入摘要级校验。缩小错位种子把长度
+	// 减去整整一个 rune
 	//（3 bytes），剩余文本仍合法——必须由「payload 读空」门禁拒绝残留
 	// 字节，而不是静默接受非规范文件。
-	summaryOnly, err := Encode(CompanionSave{
-		Revision: 8,
-		Records:  fixtureCompanionBodies()[:1],
-		Queues: []StoredCompanionQueue{{
-			ID:      fixtureCompanionID(2),
-			Summary: "阿木的近期记忆",
-		}},
-	})
+	summarySave := fixtureV5Save(8, fixtureCompanionBodies()[:1], nil)
+	summarySave.Lifecycles[0].MemoryRevision = 1
+	summarySave.Lifecycles[0].MemoryOperationID = fixtureAgentIdentity(0xc0)
+	summarySave.Lifecycles[0].Summary = "阿木的近期记忆"
+	summaryOnly, err := Encode(summarySave)
+
 	if err != nil {
 		f.Fatal(err)
 	}
 	f.Add(summaryOnly)
-	summaryPrefixOffset := companionHeaderLength + companionRecordLength + 1
+	summaryPrefixOffset := companionHeaderLength + 16 + companionRecordLength + 1 + 8 + 8 + 16
 	summaryLengthOver := bytes.Clone(summaryOnly)
 	binary.LittleEndian.PutUint16(summaryLengthOver[summaryPrefixOffset:], MaxCompanionSummaryBytes+1)
 	repairCompanionCRC(summaryLengthOver)
 	f.Add(summaryLengthOver)
-	summaryLengthZero := bytes.Clone(summaryOnly)
-	binary.LittleEndian.PutUint16(summaryLengthZero[summaryPrefixOffset:], 0)
-	repairCompanionCRC(summaryLengthZero)
-	f.Add(summaryLengthZero)
 	summaryLengthShrunk := bytes.Clone(summaryOnly)
 	binary.LittleEndian.PutUint16(summaryLengthShrunk[summaryPrefixOffset:], uint16(len("阿木的近期记忆")-3))
 	repairCompanionCRC(summaryLengthShrunk)
@@ -221,16 +223,19 @@ func FuzzDecodeCompanions(f *testing.F) {
 			}
 			seen[queue.ID] = struct{}{}
 		}
-		// v1/v2/v3 是只读迁移 schema：解码成功即可；规范重编码只写 v4，
+		// v1..v4 是只读迁移 schema：解码成功即可；规范重编码只写 v5，
 		// 字节不可比对。
 		if schema := binary.LittleEndian.Uint32(payload[8:12]); schema != CurrentSchema {
 			return
 		}
 		encoded, err := Encode(CompanionSave{
-			Revision: got.Revision,
-			Records:  got.Records,
-			Queues:   got.Queues,
+			Revision:         got.Revision,
+			AgentNamespaceID: got.AgentNamespaceID,
+			Records:          got.Records,
+			Lifecycles:       got.Lifecycles,
+			Queues:           got.Queues,
 		})
+
 		if err != nil || !bytes.Equal(encoded, payload) {
 			t.Fatalf("successful decode is not canonical: encode error=%v", err)
 		}

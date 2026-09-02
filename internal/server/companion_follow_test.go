@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/go-gl/mathgl/mgl32"
 
@@ -180,9 +181,13 @@ func TestCompanionManagerFollowTargetOfflineFailsWorldChanged(t *testing.T) {
 	sendIntegration(t, issuer, network.ChatCommand{Text: "@阿木 再走一步"})
 	waitForIncomingChatDepth(t, host.world, 2)
 
-	// 等待跟随任务真正进入 Running 后再断开目标。
+	// 等待跟随任务真正进入 Running 后再断开目标。等待以墙钟限界而非固定
+	// tick 数：任务进入 Running 依赖一轮异步规划 worker 落地，non-race 快进
+	// tick 下要跨数百 tick（race 模式每 tick 更慢而掩盖了该时序），固定
+	// 上限会过早放弃——理由与 stepUntilCompanionEvents 注释一致。
 	started := false
-	for range 200 {
+	deadline := time.Now().Add(longWaitDeadline)
+	for time.Now().Before(deadline) {
 		result := host.world.StepForTest()
 		for _, endpoint := range clients {
 			messages := receiveCompanionChatTick(t, endpoint, result.Tick)
@@ -195,6 +200,7 @@ func TestCompanionManagerFollowTargetOfflineFailsWorldChanged(t *testing.T) {
 		if started {
 			break
 		}
+		time.Sleep(time.Millisecond)
 	}
 	if !started {
 		t.Fatal("跟随任务始终未进入 Running")
@@ -206,9 +212,12 @@ func TestCompanionManagerFollowTargetOfflineFailsWorldChanged(t *testing.T) {
 	waitForPlayerReleased(t, host, targetIdentity.PlayerID)
 
 	// 目标离线后的推进：跟随任务失败(WorldChanged) 且 FIFO 推进原队首。
+	// 「再走一步」的 TaskStarted 依赖一轮异步规划落地，等待同样以墙钟限界
+	//（理由见上）。
 	var collected []network.ChatEvent
 	failed, nextStarted := false, false
-	for range 200 {
+	deadline = time.Now().Add(longWaitDeadline)
+	for time.Now().Before(deadline) {
 		result := host.world.StepForTest()
 		events := companionChatEvents(receiveCompanionChatTick(t, issuer, result.Tick))
 		collected = append(collected, events...)
@@ -223,6 +232,7 @@ func TestCompanionManagerFollowTargetOfflineFailsWorldChanged(t *testing.T) {
 		if failed && nextStarted {
 			break
 		}
+		time.Sleep(time.Millisecond)
 	}
 	failedEvents := make([]network.ChatEvent, 0, 1)
 	for _, event := range collected {
@@ -252,7 +262,7 @@ func TestCompanionManagerFollowExemptFromDeadline(t *testing.T) {
 	definitions := []companion.Definition{{ID: chatTestCompanionID(1), Name: "阿木"}}
 	model := newFakeCompanionModel(t)
 	host := newCompanionManagerHost(t, definitions, model, func(config *Config) {
-		config.AIModel.TaskTimeoutMinutes = 1
+		config.TaskTimeoutMinutes = 1
 	})
 	identity := integrationIdentity(0x95, "发令者")
 	client := openCompanionChatClient(t, host, "memory", identity)

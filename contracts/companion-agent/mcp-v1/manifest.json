@@ -1,0 +1,167 @@
+{
+  "name": "mornlea-companion-agent-mcp-tools",
+  "application_contract_version": "v1",
+  "mcp_protocol_version": "2025-11-25",
+  "schema": "schema.json",
+  "endpoint_path": "/mcp",
+  "transport": "streamable_http",
+  "network": {
+    "scheme": "http",
+    "bind_host": "loopback_ip_literal",
+    "request_host": "listener_authority",
+    "redirects": false,
+    "origin": {
+      "missing_allowed": true,
+      "present_value": "listener_loopback_origin"
+    }
+  },
+  "authentication": {
+    "scheme": "bearer",
+    "credential": "per_run_capability",
+    "required": true
+  },
+  "protocol_header": {
+    "name": "Mcp-Protocol-Version",
+    "required_after_initialize": true,
+    "value": "2025-11-25"
+  },
+  "stateless": true,
+  "json_response": true,
+  "sse": false,
+  "sessions": false,
+  "capabilities": {
+    "tools": {"listChanged": false},
+    "logging": false,
+    "prompts": false,
+    "resources": false
+  },
+  "methods": {
+    "allowed": ["initialize", "notifications/initialized", "tools/list", "tools/call"],
+    "rejected": ["ping", "subscriptions/listen"],
+    "batch_allowed": false,
+    "http_methods": ["POST"]
+  },
+  "runtime_injected_fields": ["snapshot_id", "namespace_id", "companion_id", "capability"],
+  "limits": {
+    "request_body_bytes": 262144,
+    "wire_response_bytes": 163840,
+    "plan_input_bytes": 65536,
+    "validator_hint_bytes": 256,
+    "structured_content": true,
+    "json_text_content_fallback": true
+  },
+  "tools": [
+    {
+      "name": "get_planning_context",
+      "model_visible": false,
+      "fixed_graph_call": true,
+      "input_schema": "get_planning_context_input",
+      "result_schema": "get_planning_context_result",
+      "domain_result_codes": [],
+      "canonical_result_bytes": 24576
+    },
+    {
+      "name": "list_affordances",
+      "model_visible": true,
+      "fixed_graph_call": false,
+      "input_schema": "list_affordances_input",
+      "result_schema": "list_affordances_result",
+      "domain_result_codes": [],
+      "canonical_result_bytes": 24576,
+      "semantic_rules": [
+        {
+          "name": "sorted_positions",
+          "array_property": "visible_blocks",
+          "position_property": "position",
+          "axes": ["x", "y", "z"],
+          "strict": true
+        }
+      ],
+      "result_item_limits": {"online_players": 8, "visible_blocks": 256}
+    },
+    {
+      "name": "inspect_inventory",
+      "model_visible": true,
+      "fixed_graph_call": false,
+      "input_schema": "inspect_inventory_input",
+      "result_schema": "inspect_inventory_result",
+      "domain_result_codes": [],
+      "canonical_result_bytes": 8192,
+      "result_item_limits": {"slots": 36}
+    },
+    {
+      "name": "find_visible_blocks",
+      "model_visible": true,
+      "fixed_graph_call": false,
+      "input_schema": "find_visible_blocks_input",
+      "result_schema": "find_visible_blocks_result",
+      "domain_result_codes": ["unknown_block"],
+      "canonical_result_bytes": 16384,
+      "semantic_rules": [
+        {
+          "name": "sorted_positions",
+          "array_property": "matches",
+          "position_property": "position",
+          "axes": ["x", "y", "z"],
+          "strict": true
+        }
+      ],
+      "result_item_limits": {"matches": 64}
+    },
+    {
+      "name": "query_terrain",
+      "model_visible": true,
+      "fixed_graph_call": false,
+      "input_schema": "query_terrain_input",
+      "result_schema": "query_terrain_result",
+      "domain_result_codes": ["out_of_bounds"],
+      "canonical_result_bytes": 16384,
+      "semantic_rules": [
+        {
+          "name": "positions_match_context",
+          "context_property": "positions",
+          "result_property": "terrain",
+          "position_property": "position"
+        }
+      ],
+      "result_item_limits": {"terrain": 64}
+    },
+    {
+      "name": "validate_plan",
+      "model_visible": false,
+      "fixed_graph_call": true,
+      "input_schema": "validate_plan_input",
+      "result_schema": "validate_plan_result",
+      "domain_result_codes": [
+        "invalid_schema",
+        "out_of_bounds",
+        "unknown_player",
+        "unmineable_target",
+        "unknown_block",
+        "missing_item",
+        "snapshot_mismatch"
+      ],
+      "canonical_input_bytes": 65536,
+      "canonical_result_bytes": 73728,
+      "maximum_calls_per_run": 2
+    }
+  ],
+  "validator_codes": [
+    "invalid_schema",
+    "out_of_bounds",
+    "unknown_player",
+    "unmineable_target",
+    "unknown_block",
+    "missing_item",
+    "snapshot_mismatch"
+  ],
+  "mine_semantics": {
+    "accepted": ["single_drop", "container_batch"],
+    "rejected": ["forbidden_farming", "forbidden_torch", "no_drop", "undelivered_multi_drop"],
+    "container_blocks": ["chest", "furnace"]
+  },
+  "dependencies": {
+    "go_mcp_sdk": "v1.7.0",
+    "python_mcp": ">=1.28.1,<2"
+  }
+}

@@ -89,9 +89,9 @@ func TestWorldBackupCopiesCompleteWorldAndReusesMatchingBackup(t *testing.T) {
 
 func TestWorldBackupIncludesCompanionFileButSkipsTemporaryFiles(t *testing.T) {
 	store, source, destination := newWorldBackupFixture(t)
-	if err := store.SaveCompanions(context.Background(), CompanionSave{
+	if err := store.SaveCompanions(context.Background(), fixtureCompanionV5Save(CompanionSave{
 		Revision: 1, Records: fixtureCompanionBodies(),
-	}); err != nil {
+	})); err != nil {
 		t.Fatal(err)
 	}
 	temporary := filepath.Join(source, ".companions.ai.tmp-ignore")

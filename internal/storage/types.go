@@ -81,14 +81,34 @@ type (
 	PlayerLocation = player.PlayerLocation
 )
 
-// StoredCompanions/CompanionSave/StoredCompanionTask/StoredCompanionQueue 是
-// companion 存档域的值类型，别名再导出保持类型身份。
+// StoredCompanions/CompanionSave/CompanionIdentity/CompanionIdentityGenerator/
+// CompanionBody/StoredCompanionLifecycle/StoredCompanionTask/StoredCompanionQueue
+// 是 companion 存档域的值类型，别名再导出保持类型身份。
 type (
-	StoredCompanions     = companion.StoredCompanions
-	CompanionSave        = companion.CompanionSave
-	StoredCompanionTask  = companion.StoredCompanionTask
-	StoredCompanionQueue = companion.StoredCompanionQueue
+	StoredCompanions           = companion.StoredCompanions
+	CompanionSave              = companion.CompanionSave
+	CompanionIdentity          = companion.Identity
+	CompanionIdentityGenerator = companion.IdentityGenerator
+	CompanionBody              = companion.Body
+	StoredCompanionLifecycle   = companion.StoredCompanionLifecycle
+	StoredCompanionTask        = companion.StoredCompanionTask
+	StoredCompanionQueue       = companion.StoredCompanionQueue
 )
+
+// GenerateCompanionIdentity 转发伙伴存档域的 UUIDv4 身份生成入口。
+func GenerateCompanionIdentity() (CompanionIdentity, error) {
+	return companion.GenerateIdentity()
+}
+
+// MergeCompanionsV5 转发伙伴存档域的纯配置迁移与生命周期合并入口。服务端
+// 只依赖 `storage` 门面，不直接穿透到 codec 子包。
+func MergeCompanionsV5(
+	loaded StoredCompanions,
+	active []CompanionBody,
+	generate CompanionIdentityGenerator,
+) (StoredCompanions, bool, error) {
+	return companion.MergeV5(loaded, active, generate)
+}
 
 // StoredHostileMob/StoredHostileMobs/HostileMobsSave 是 hostile 存档域的值
 // 类型，别名再导出保持类型身份。
@@ -140,4 +160,6 @@ type WorldStore interface {
 	PlayerStore
 	CompanionStore
 	HostileMobStore
+	// CompanionsExist 只探测固定 companion metadata 是否存在，不读取或解码正文。
+	CompanionsExist(context.Context) (bool, error)
 }

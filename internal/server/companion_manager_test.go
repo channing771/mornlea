@@ -1,17 +1,14 @@
 // Companion Manager 的 tick 边界编排测试：端到端任务事件序列、FIFO 顺序、
-// QueueFull 同步拒绝不调模型、慢 HTTP 不阻塞权威 tick、每伙伴单在途与全服
+// QueueFull 同步拒绝不调 planner、慢 planner 不阻塞权威 tick、每伙伴单在途与全服
 // 四并发、过时结果丢弃、路径不可达与世界时间超时、关服顺序与 Memory/TCP
-// parity。全部使用 httptest 假模型，绝不访问真实模型服务。
+// parity。全部使用显式 typed planner seam，绝不访问模型服务。
 package server
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
-	"net/http/httptest"
 	"reflect"
 	"slices"
 	"sync"
@@ -26,7 +23,7 @@ import (
 	"github.com/channing771/mornlea/internal/storage"
 )
 
-// fakeCompanionModel 是 httptest 假模型：按配置返回固定 go_to 计划，可整体
+// fakeCompanionModel 是 typed planner seam 的受控状态：按配置返回固定 go_to 计划，可整体
 // 阻塞全部在途请求，并统计请求数、峰值并发与 context 取消次数。配置了
 // planScript 时改为逐请求返回脚本条目（耗尽后重复最后一条），供 follow 等
 // 需要按请求区分计划形态的测试使用。
@@ -41,16 +38,12 @@ type fakeCompanionModel struct {
 	script      []string
 	served      int
 	status      int
-	server      *httptest.Server
 	cancelOrder *shutdownOrderLog
 }
 
 func newFakeCompanionModel(t *testing.T, steps ...[3]int32) *fakeCompanionModel {
 	t.Helper()
-	model := &fakeCompanionModel{steps: steps}
-	model.server = httptest.NewServer(http.HandlerFunc(model.handle))
-	t.Cleanup(model.server.Close)
-	return model
+	return &fakeCompanionModel{steps: steps}
 }
 
 // setPlanScript 配置逐请求计划脚本：第 N 次请求返回 script[N]（完整的计划
@@ -63,62 +56,7 @@ func (model *fakeCompanionModel) setPlanScript(script ...string) {
 	model.mu.Unlock()
 }
 
-func (model *fakeCompanionModel) handle(w http.ResponseWriter, r *http.Request) {
-	_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, 1<<20))
-	model.mu.Lock()
-	model.requests++
-	model.inFlight++
-	if model.inFlight > model.peak {
-		model.peak = model.inFlight
-	}
-	block := model.block
-	status := model.status
-	steps := model.steps
-	content := ""
-	if script := model.script; len(script) > 0 {
-		index := model.served
-		if index >= len(script) {
-			index = len(script) - 1
-		}
-		model.served++
-		content = script[index]
-	}
-	model.mu.Unlock()
-	defer func() {
-		model.mu.Lock()
-		model.inFlight--
-		model.mu.Unlock()
-	}()
-	if block != nil {
-		select {
-		case <-block:
-		case <-r.Context().Done():
-			model.mu.Lock()
-			model.cancels++
-			cancels := model.cancels
-			model.mu.Unlock()
-			if model.cancelOrder != nil && cancels == 1 {
-				model.cancelOrder.record("model-cancel")
-			}
-			return
-		}
-	}
-	if status != 0 {
-		w.WriteHeader(status)
-		return
-	}
-	if content == "" {
-		content = planContentJSON(steps)
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"choices": []map[string]any{
-			{"message": map[string]string{"role": "assistant", "content": content}},
-		},
-	})
-}
-
-// planContentJSON 构造嵌套在 chat envelope 里的受限计划 JSON 文本。
+// planContentJSON 构造 Agent typed plan seam 使用的候选计划 JSON 文本。
 func planContentJSON(steps [][3]int32) string {
 	type wireStep struct {
 		Kind string `json:"kind"`
@@ -178,8 +116,8 @@ func (log *shutdownOrderLog) snapshot() []string {
 	return slices.Clone(log.events)
 }
 
-// newCompanionManagerHost 构造启用了任务编排的 Host；model 非 nil 时把模型
-// endpoint 指向假模型，否则保持 hostTestConfig 的 loopback 缺省。
+// newCompanionManagerHost 构造启用了任务编排的 Host；model 非 nil 时显式替换
+// typed planner seam，否则保持生产 Agent planner 缺省。
 func newCompanionManagerHost(
 	t *testing.T,
 	definitions []companion.Definition,
@@ -193,13 +131,13 @@ func newCompanionManagerHost(
 	config.OutboxCapacity = 4096
 	config.HeartbeatInterval = time.Hour
 	config.HeartbeatTimeout = time.Hour
-	if model != nil {
-		config.AIModel.Endpoint = model.server.URL + "/v1"
-	}
 	if modify != nil {
 		modify(&config)
 	}
 	host := mustNewHost(t, config, flatTestGenerator{}, newHostTestStore())
+	if model != nil {
+		host.world.companionManager.replacePlannerForTest(t, model)
+	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), longWaitDeadline)
 		defer cancel()
@@ -210,18 +148,94 @@ func newCompanionManagerHost(
 	return host
 }
 
-// replacePlannerForTest 把 manager 的 planner 换成指向假模型的真 PlannerClient。
-// 测试需要在世界就绪后按伙伴出生位置构造计划目标，因此模型服务晚于 Host 创建。
+// replacePlannerForTest 通过显式 seam 注入受控 planner；生产不保留 direct-model
+// client 或 fallback。
 func (m *companionManager) replacePlannerForTest(t *testing.T, model *fakeCompanionModel) {
 	t.Helper()
-	client, err := companion.NewPlannerClient(companion.ModelSettings{
-		Endpoint: model.server.URL + "/v1",
-		Model:    "test-model",
-	}, "", nil)
-	if err != nil {
-		t.Fatalf("构造测试 planner: %v", err)
+	m.planner = fakeCompanionPlanner{model: model}
+}
+
+type fakeCompanionPlanner struct {
+	model *fakeCompanionModel
+}
+
+func (p fakeCompanionPlanner) Plan(ctx context.Context, request companionPlanningRequest) (companionPlanningOutcome, error) {
+	model := p.model
+	model.mu.Lock()
+	model.requests++
+	model.inFlight++
+	if model.inFlight > model.peak {
+		model.peak = model.inFlight
 	}
-	m.planner = client
+	block := model.block
+	status := model.status
+	steps := slices.Clone(model.steps)
+	content := ""
+	if len(model.script) > 0 {
+		index := model.served
+		if index >= len(model.script) {
+			index = len(model.script) - 1
+		}
+		model.served++
+		content = model.script[index]
+	}
+	model.mu.Unlock()
+	defer func() {
+		model.mu.Lock()
+		model.inFlight--
+		model.mu.Unlock()
+	}()
+	if block != nil {
+		select {
+		case <-block:
+		case <-ctx.Done():
+			model.mu.Lock()
+			model.cancels++
+			cancels := model.cancels
+			model.mu.Unlock()
+			if model.cancelOrder != nil && cancels == 1 {
+				model.cancelOrder.record("model-cancel")
+			}
+			return companionPlanningOutcome{}, companion.ErrPlannerUnavailable
+		}
+	}
+	if status != 0 {
+		return companionPlanningOutcome{}, companion.ErrPlannerUnavailable
+	}
+	var plan companion.Plan
+	if content != "" {
+		var candidate companion.AgentPlan
+		if err := json.Unmarshal([]byte(content), &candidate); err != nil {
+			return companionPlanningOutcome{}, companion.ErrPlannerInvalidPlan
+		}
+		decoded, err := companion.DecodeAgentPlan(candidate, request.Snapshot)
+		if err != nil {
+			return companionPlanningOutcome{}, err
+		}
+		plan = decoded
+	} else {
+		plan = companion.Plan{Summary: "按指令移动", Steps: make([]companion.PlanStep, 0, len(steps))}
+		for _, step := range steps {
+			plan.Steps = append(plan.Steps, companion.PlanStep{
+				Kind: companion.PlanStepGoTo, X: step[0], Y: step[1], Z: step[2],
+			})
+		}
+	}
+	_, digest, err := companion.CanonicalSnapshotDigest(request.Snapshot)
+	if err != nil {
+		return companionPlanningOutcome{}, companion.ErrPlannerUnavailable
+	}
+	return companionPlanningOutcome{
+		Plan: plan, Generation: request.Generation, Attempt: request.Attempt,
+		RunID:          "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+		SnapshotID:     "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+		SnapshotDigest: digest,
+		requestIdentity: companionPlanningIdentity{
+			RunID:          "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+			SnapshotID:     "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+			SnapshotDigest: digest,
+		},
+	}, nil
 }
 
 // stepCollectingChatEvents 逐 tick 推进并收集客户端收到的 ChatEvent，直到
@@ -242,6 +256,40 @@ func stepCollectingChatEvents(
 		if stop != nil && stop(collected) {
 			return collected
 		}
+	}
+	return collected
+}
+
+// stepUntilCompanionEvents 逐 tick 推进并收集全部客户端收到的 ChatEvent，
+// 直到 stop 命中；上限是 longWaitDeadline 的墙钟而非固定 tick 数。规划/寻路
+// worker 的结果只在 tick 边界被应用：non-race 短测里单次 tick 的真实耗时远
+// 小于生产节拍（50ms），一轮异步规划在同步快进 tick 下要跨越数百 tick 才
+// 落地，固定 tick 上限会把「worker 尚未投递」误判成断言失败（race 模式因
+// 每 tick 变慢而掩盖同一时序耦合）。墙钟限界等待的是同一确定性事件流，
+// 两种构建模式下断言语义不变；上限只防御真实回归导致的悬挂。每轮推进后
+// sleep 一毫秒让 worker 与发布 goroutine 获得调度——与
+// stepUntilCompanionManagerReady 的既有让步模式一致，同时避免热轮询放大
+// CPU 争用。stop 为 nil 的调用方请继续用固定窗口的 stepCollectingChatEvents
+// （静置观察语义），不要用本 helper。
+func stepUntilCompanionEvents(
+	t *testing.T,
+	host *Host,
+	clients []network.ClientEndpoint,
+	stop func(events []network.ChatEvent) bool,
+) []network.ChatEvent {
+	t.Helper()
+	var collected []network.ChatEvent
+	deadline := time.Now().Add(longWaitDeadline)
+	for time.Now().Before(deadline) {
+		result := host.world.StepForTest()
+		for _, endpoint := range clients {
+			collected = append(collected,
+				companionChatEvents(receiveCompanionChatTick(t, endpoint, result.Tick))...)
+		}
+		if stop != nil && stop(collected) {
+			return collected
+		}
+		time.Sleep(time.Millisecond)
 	}
 	return collected
 }
@@ -396,7 +444,7 @@ func TestCompanionManagerFIFOExecutesCommandsInOrder(t *testing.T) {
 		sendIntegration(t, client, network.ChatCommand{Text: text})
 	}
 	waitForIncomingChatDepth(t, host.world, 3)
-	events := stepCollectingChatEvents(t, host, client, 800, func(events []network.ChatEvent) bool {
+	events := stepUntilCompanionEvents(t, host, []network.ClientEndpoint{client}, func(events []network.ChatEvent) bool {
 		return countKind(events, network.ChatEventTaskCompleted) == 3
 	})
 
@@ -548,16 +596,21 @@ func TestCompanionManagerOneInFlightRequestPerCompanion(t *testing.T) {
 	}
 
 	// 释放后第一条完成，第二条才发起自己的请求；两条转换都发生在后续
-	// tick 边界，等待期间必须持续推进世界。
+	// tick 边界，等待期间必须持续推进世界。等待以墙钟限界：规划 worker
+	// 的结果只在 tick 边界被应用，non-race 快进 tick 下一轮异步规划要跨
+	// 数百 tick 才能落地，固定 tick 上限会过早放弃（race 模式每 tick 更慢
+	// 而掩盖了这一时序）。
 	model.releaseRequests()
 	dispatchedSecond := false
-	for range 400 {
+	deadline := time.Now().Add(longWaitDeadline)
+	for time.Now().Before(deadline) {
 		result := host.world.StepForTest()
 		receiveCompanionChatTick(t, client, result.Tick)
 		if requests, _, _, _ := model.snapshotCounts(); requests >= 2 {
 			dispatchedSecond = true
 			break
 		}
+		time.Sleep(time.Millisecond)
 	}
 	if !dispatchedSecond {
 		t.Fatal("释放后第二条指令始终未发起规划请求")
@@ -638,7 +691,7 @@ func TestCompanionManagerDistantGoalFailsPathUnreachable(t *testing.T) {
 	host.world.companionManager.replacePlannerForTest(t, model)
 
 	sendIntegration(t, client, network.ChatCommand{Text: "@阿木 去远方"})
-	events := stepCollectingChatEvents(t, host, client, 400, func(events []network.ChatEvent) bool {
+	events := stepUntilCompanionEvents(t, host, []network.ClientEndpoint{client}, func(events []network.ChatEvent) bool {
 		return slices.Contains(chatEventKinds(events), network.ChatEventTaskFailed)
 	})
 	failed := eventsWithKind(events, network.ChatEventTaskFailed)
@@ -666,7 +719,7 @@ func TestCompanionManagerDistantGoalFailsPathUnreachable(t *testing.T) {
 func TestCompanionManagerTaskTimesOutAtWorldTimeDeadline(t *testing.T) {
 	definitions := []companion.Definition{{ID: chatTestCompanionID(1), Name: "阿木"}}
 	host := newCompanionManagerHost(t, definitions, nil, func(config *Config) {
-		config.AIModel.TaskTimeoutMinutes = 1
+		config.TaskTimeoutMinutes = 1
 	})
 	client := openCompanionChatClient(t, host, "memory", integrationIdentity(0x75, "发令者"))
 	body := stepUntilCompanionManagerReady(
@@ -722,7 +775,7 @@ func TestCompanionShutdownCancelsPlannerBeforeFinalSaveAndStore(t *testing.T) {
 	config.OutboxCapacity = 4096
 	config.HeartbeatInterval = time.Hour
 	config.HeartbeatTimeout = time.Hour
-	config.AIModel.Endpoint = model.server.URL + "/v1"
+	config.companionPlanner = fakeCompanionPlanner{model: model}
 	store := newCompanionManagerOrderStore(order)
 	host, err := NewHost(context.Background(), config, flatTestGenerator{}, store)
 	if err != nil {
@@ -780,7 +833,7 @@ func (store *companionManagerOrderStore) SaveCompanions(
 	save storage.CompanionSave,
 ) error {
 	store.order.record("companion-save")
-	return store.hostTestStore.MemoryStore.SaveCompanions(ctx, save)
+	return store.hostTestStore.MemoryStore.SaveCompanions(ctx, fixtureServerCompanionV5Save(save))
 }
 
 func (store *companionManagerOrderStore) Sync(ctx context.Context) error {
@@ -966,10 +1019,13 @@ func TestCompanionManagerPathFailureBudgetResetsPerTask(t *testing.T) {
 	host.world.companionManager.replacePlannerForTest(t, model)
 
 	// stepUntilTaskEvent 推进世界并按 (tick, event) 收集事件，直到 predicate
-	// 命中或步数耗尽（步数耗尽时返回已收集事件，由调用方断言失败）。
-	stepUntilTaskEvent := func(maxTicks int, predicate func(event network.ChatEvent) bool) []taskTickEvent {
+	// 命中；上限是 longWaitDeadline 的墙钟（耗尽时返回已收集事件，由调用方
+	// 断言失败）。固定 tick 上限在 non-race 快进下会因异步规划 worker 尚未
+	// 落地而过早耗尽，墙钟限界的理由见 stepUntilCompanionEvents 的注释。
+	stepUntilTaskEvent := func(predicate func(event network.ChatEvent) bool) []taskTickEvent {
 		collected := make([]taskTickEvent, 0, 8)
-		for range maxTicks {
+		deadline := time.Now().Add(longWaitDeadline)
+		for time.Now().Before(deadline) {
 			result := host.world.StepForTest()
 			for _, event := range companionChatEvents(receiveCompanionChatTick(t, client, result.Tick)) {
 				collected = append(collected, taskTickEvent{tick: result.Tick, event: event})
@@ -977,13 +1033,14 @@ func TestCompanionManagerPathFailureBudgetResetsPerTask(t *testing.T) {
 					return collected
 				}
 			}
+			time.Sleep(time.Millisecond)
 		}
 		return collected
 	}
 
 	// 任务 A：从零预算出发，按既有语义三次失败后以 PathUnreachable 终结。
 	sendIntegration(t, client, network.ChatCommand{Text: "@阿木 第一次去远方"})
-	first := stepUntilTaskEvent(600, func(event network.ChatEvent) bool {
+	first := stepUntilTaskEvent(func(event network.ChatEvent) bool {
 		return event.Kind == network.ChatEventTaskFailed && event.Command == "第一次去远方"
 	})
 	firstFailed := eventsWithKind(
@@ -997,7 +1054,7 @@ func TestCompanionManagerPathFailureBudgetResetsPerTask(t *testing.T) {
 	// 任务 B：前任务已把槽位计数耗到 3，若预算按任务重置，B 仍要完整走
 	// 三次失败；若泄漏，B 会在第一次寻路失败（Started 后数 tick 内）终结。
 	sendIntegration(t, client, network.ChatCommand{Text: "@阿木 第二次去远方"})
-	second := stepUntilTaskEvent(600, func(event network.ChatEvent) bool {
+	second := stepUntilTaskEvent(func(event network.ChatEvent) bool {
 		return event.Kind == network.ChatEventTaskFailed && event.Command == "第二次去远方"
 	})
 	var startedTick, failedTick uint64
@@ -1083,10 +1140,13 @@ func TestCompanionManagerSnapshotFailureTerminatesTaskAndAdvancesFIFO(t *testing
 	})
 	host.world.stepMu.Unlock()
 
-	// 推进直到缺陷任务终结且后继指令真正启动；死循环实现会在步数耗尽时
-	// 因缺少 TaskFailed 而失败。
+	// 推进直到缺陷任务终结且后继指令真正启动；死循环实现会在墙钟上限
+	// 耗尽时因缺少 TaskFailed 而失败。上限按墙钟而非固定 tick 数（理由见
+	// stepUntilCompanionEvents 注释）：「下一条」的 TaskStarted 依赖一轮完整
+	// 异步规划落地，non-race 快进下需要数百 tick。
 	collected := make([]network.ChatEvent, 0, 8)
-	for range 200 {
+	deadline := time.Now().Add(longWaitDeadline)
+	for time.Now().Before(deadline) {
 		result := host.world.StepForTest()
 		collected = append(collected,
 			companionChatEvents(receiveCompanionChatTick(t, client, result.Tick))...)
@@ -1102,6 +1162,7 @@ func TestCompanionManagerSnapshotFailureTerminatesTaskAndAdvancesFIFO(t *testing
 		if sawFailed && sawNextStarted {
 			break
 		}
+		time.Sleep(time.Millisecond)
 	}
 
 	failed := make([]network.ChatEvent, 0, 1)

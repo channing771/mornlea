@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"sync"
 	"time"
 
@@ -24,22 +23,28 @@ type Host struct {
 	world   *Server
 	players *persistence.Players
 
-	preLogin        chan struct{}
-	mu              sync.Mutex
-	activeByPlayer  map[core.PlayerID]*activeLogin
-	activeBySession map[contract.SessionID]*activeLogin
-	preLoginStreams map[uint64]*pendingLoginStream
-	nextPreLogin    uint64
-	nextSession     contract.SessionID
-	nextGeneration  uint64
-	listener        network.Listener
-	runtimeCancel   context.CancelFunc
-	runtimeDone     chan error
-	acceptWG        sync.WaitGroup
-	pendingWG       sync.WaitGroup
-	sessionWG       sync.WaitGroup
-	shutdownGate    chan struct{}
-	closing         bool
+	preLogin                 chan struct{}
+	mu                       sync.Mutex
+	activeByPlayer           map[core.PlayerID]*activeLogin
+	activeBySession          map[contract.SessionID]*activeLogin
+	preLoginStreams          map[uint64]*pendingLoginStream
+	nextPreLogin             uint64
+	nextSession              contract.SessionID
+	nextGeneration           uint64
+	listener                 network.Listener
+	companionSnapshots       *companion.SnapshotRegistry
+	companionMCP             *companionMCPService
+	companionAgent           companionAgentRuntimeClient
+	companionLease           *companionAgentLeaseController
+	companionRuntimeReleased bool
+	companionRuntimeClosed   bool
+	runtimeCancel            context.CancelFunc
+	runtimeDone              chan error
+	acceptWG                 sync.WaitGroup
+	pendingWG                sync.WaitGroup
+	sessionWG                sync.WaitGroup
+	shutdownGate             chan struct{}
+	closing                  bool
 }
 
 // HostStats 是不暴露内部 map/channel 的瞬时有界队列快照。
@@ -151,41 +156,9 @@ func NewHost(
 	if generator == nil {
 		panic("server: nil generator")
 	}
-	var companions *persistence.Companions
-	if len(config.Companions) != 0 {
-		// 伙伴启用即要求模型运行时就绪。config.Load 已在配置层守住静态完整性，
-		// 这里是第二道边界：直接构造 server.Config 的入口（测试、未来的嵌入方）
-		// 也不能带着残缺模型设置启动。校验放在 LoadCompanions 之前，失败时
-		// 不触碰任何存档。错误只引用字段名与环境变量名，绝不回显密钥值。
-		if err := config.AIModel.Validate(); err != nil {
-			return nil, fmt.Errorf("server: 伙伴配置缺少可用的 AI 模型设置: %w", err)
-		}
-		if isHTTPSEndpoint(config.AIModel.Endpoint) && config.AIAPIKey == "" {
-			return nil, fmt.Errorf(
-				"server: AI endpoint 为 https 但未解析到 API 密钥（AIAPIKey 为空，检查环境变量 %q）",
-				config.AIModel.APIKeyEnv,
-			)
-		}
-		loaded, err := store.LoadCompanions(ctx)
-		if errors.Is(err, storage.ErrCompanionsNotFound) {
-			loaded = storage.StoredCompanions{}
-		} else if err != nil {
-			return nil, fmt.Errorf("load companions: %w", err)
-		}
-		ids := make(map[companion.ID]struct{}, len(loaded.Records)+len(config.Companions))
-		for _, body := range loaded.Records {
-			ids[body.ID] = struct{}{}
-		}
-		for _, definition := range config.Companions {
-			ids[definition.ID] = struct{}{}
-		}
-		if len(ids) > companion.MaxStored {
-			return nil, fmt.Errorf(
-				"server: companion active+inactive count %d exceeds %d",
-				len(ids), companion.MaxStored,
-			)
-		}
-		companions = persistence.NewCompanions(store, loaded, persistenceOptions(config, nil))
+	companions, err := bootstrapCompanionPersistence(ctx, config, store)
+	if err != nil {
+		return nil, err
 	}
 	// 夜行者聚合存档与伙伴配置解耦，凡世界存储都参与启动矩阵：missing 视同
 	// 空集合；损坏/未来版本/读取失败在此整体拒绝（tick 与路径 worker 都不会
@@ -197,41 +170,221 @@ func NewHost(
 	if errors.Is(err, storage.ErrHostileMobsNotFound) {
 		loadedHostiles = storage.StoredHostileMobs{}
 	} else if err != nil {
-		return nil, fmt.Errorf("load hostiles: %w", err)
-	}
-	hostiles := persistence.NewHostiles(store, loadedHostiles, persistenceOptions(config, nil))
-	world, err := newWorld(config, generator, store, companions, hostiles)
-	if err != nil {
-		// 持久化 worker 已随构造启动；恢复/装配阶段的任何失败都必须先停掉
-		// worker 再返回，否则每次启动失败都泄漏一个永不退出的 goroutine。
 		if companions != nil {
 			companions.Close()
 		}
+		return nil, fmt.Errorf("load hostiles: %w", err)
+	}
+	var companionSnapshots *companion.SnapshotRegistry
+	var companionMCP *companionMCPService
+	var companionAgent companionAgentRuntimeClient
+	var companionLease *companionAgentLeaseController
+	planner := config.companionPlanner
+	dialogue := config.companionDialogue
+	if len(config.Companions) != 0 {
+		if planner == nil {
+			factory := config.companionAgentClientFactory
+			if factory == nil {
+				factory = func(settings companion.AgentServiceSettings, credential string) (companionAgentRuntimeClient, error) {
+					return companion.NewAgentClient(settings, credential, nil)
+				}
+			}
+			companionAgent, err = factory(config.AgentService, config.AgentCredential)
+			if err == nil && companionAgent == nil {
+				err = errors.New("nil companion Agent client")
+			}
+			if err != nil {
+				if companions != nil {
+					companions.Close()
+				}
+				return nil, fmt.Errorf("server: 启动 companion Agent client: %w", err)
+			}
+			newID := config.companionAgentIDGenerator
+			if newID == nil {
+				newID = newAgentRequestID
+			}
+			clientInstanceID, identityErr := newID()
+			if identityErr != nil {
+				companionAgent.Close()
+				companions.Close()
+				return nil, fmt.Errorf("server: 生成 Agent client instance identity: %w", identityErr)
+			}
+			namespaceID := companion.ID(companions.AgentNamespaceID()).String()
+			companionLease = newCompanionAgentLeaseController(agentLeaseControllerOptions{
+				Client: companionAgent, ClientInstanceID: clientInstanceID,
+				NamespaceID: namespaceID, HeartbeatEvery: companionAgentHeartbeatEvery,
+				LeaseTTL: companionAgentLeaseTTL, NewID: newID,
+			})
+		}
+		companionSnapshots = companion.NewSnapshotRegistry()
+		factory := config.companionMCPFactory
+		if factory == nil {
+			factory = newCompanionMCPService
+		}
+		companionMCP, err = factory(companionSnapshots)
+		if err == nil && companionMCP == nil {
+			err = errors.New("nil companion MCP service")
+		}
+		if err != nil {
+			if companionMCP != nil {
+				companionMCP.Close()
+			} else {
+				companionSnapshots.Close()
+			}
+			if companionLease != nil {
+				companionLease.Close()
+			}
+			if companionAgent != nil {
+				companionAgent.Close()
+			}
+			if companions != nil {
+				companions.Close()
+			}
+			return nil, fmt.Errorf("server: 启动 companion MCP: %w", err)
+		}
+		if planner == nil {
+			clientInstanceID := companionLease.clientInstanceID
+			namespaceID := companionLease.namespaceID
+			planner = newCompanionAgentPlanner(agentPlannerOptions{
+				Client: companionAgent, Lease: companionLease, Registry: companionSnapshots,
+				MCPEndpoint: companionMCP.Endpoint(), ClientInstanceID: clientInstanceID,
+				NamespaceID: namespaceID, NewID: companionLease.newID,
+			})
+			if dialogue == nil {
+				dialogue = newCompanionAgentDialogue(agentDialogueOptions{
+					Client: companionAgent, Lease: companionLease,
+					ClientInstanceID: clientInstanceID, NamespaceID: namespaceID,
+					NewID: companionLease.newID,
+				})
+			}
+		}
+	}
+	hostiles := persistence.NewHostiles(store, loadedHostiles, persistenceOptions(config, nil))
+	world, err := newWorld(config, generator, store, companions, hostiles, planner, dialogue)
+	if err != nil {
+		// 持久化 worker 已随构造启动；恢复/装配阶段的任何失败都必须先停掉
+		// worker 再返回，否则每次启动失败都泄漏一个永不退出的 goroutine。
 		hostiles.Close()
+		if companionMCP != nil {
+			companionMCP.Close()
+		}
+		if companionLease != nil {
+			companionLease.Close()
+		}
+		if companionAgent != nil {
+			companionAgent.Close()
+		}
+		if companions != nil {
+			companions.Close()
+		}
 		return nil, err
 	}
 	gate := make(chan struct{}, 1)
 	gate <- struct{}{}
-	return &Host{
-		config:          config,
-		world:           world,
-		players:         persistence.NewPlayers(store, persistenceOptions(config, nil)),
-		preLogin:        make(chan struct{}, hostPreLoginCapacity),
-		activeByPlayer:  make(map[core.PlayerID]*activeLogin),
-		activeBySession: make(map[contract.SessionID]*activeLogin),
-		preLoginStreams: make(map[uint64]*pendingLoginStream),
-		runtimeDone:     make(chan error, 1),
-		shutdownGate:    gate,
-	}, nil
+	host := &Host{
+		config:             config,
+		world:              world,
+		players:            persistence.NewPlayers(store, persistenceOptions(config, nil)),
+		preLogin:           make(chan struct{}, hostPreLoginCapacity),
+		activeByPlayer:     make(map[core.PlayerID]*activeLogin),
+		activeBySession:    make(map[contract.SessionID]*activeLogin),
+		preLoginStreams:    make(map[uint64]*pendingLoginStream),
+		companionSnapshots: companionSnapshots,
+		companionMCP:       companionMCP,
+		companionAgent:     companionAgent,
+		companionLease:     companionLease,
+		runtimeDone:        make(chan error, 1),
+		shutdownGate:       gate,
+	}
+	world.beforeStoreClose = host.closeCompanionRuntime
+	return host, nil
 }
 
-// isHTTPSEndpoint 报告 endpoint 是否使用 https scheme。只服务于 NewHost 的
-// 密钥边界检查：调用前 endpoint 必已通过 companion.ModelSettings.Validate，
-// 因此这里不重复完整形态校验；解析失败按非 https 处理，让 Validate 的错误
-// 保持唯一的形态权威。
-func isHTTPSEndpoint(endpoint string) bool {
-	parsed, err := url.Parse(endpoint)
-	return err == nil && parsed.Scheme == "https"
+func bootstrapCompanionPersistence(
+	ctx context.Context,
+	config Config,
+	store storage.WorldStore,
+) (*persistence.Companions, error) {
+	generate := config.companionIdentityGenerator
+	if generate == nil {
+		generate = storage.GenerateCompanionIdentity
+	}
+
+	if len(config.Companions) == 0 {
+		exists, err := store.CompanionsExist(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("probe companions: %w", err)
+		}
+		if !exists {
+			return nil, nil
+		}
+		loaded, err := store.LoadCompanions(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("load companions: %w", err)
+		}
+		merged, changed, err := storage.MergeCompanionsV5(loaded, nil, generate)
+		if err != nil {
+			return nil, fmt.Errorf("merge companions: %w", err)
+		}
+		if changed {
+			if err := store.SaveCompanions(ctx, companionSaveFromStored(merged)); err != nil {
+				return nil, fmt.Errorf("save companion bootstrap: %w", err)
+			}
+		}
+		return nil, nil
+	}
+
+	// 伙伴启用即要求 Agent 运行时配置完整。该静态边界必须先于任何伙伴
+	// 存档读取，避免坏配置触发 I/O 或启动后台资源。
+	if err := config.AgentService.Validate(); err != nil {
+		return nil, fmt.Errorf("server: 伙伴配置缺少可用的 agentService: %w", err)
+	}
+	if config.AgentCredential == "" {
+		return nil, errors.New("server: Agent credential 为空")
+	}
+	if err := companion.ValidateTaskTimeoutMinutes(config.TaskTimeoutMinutes); err != nil {
+		return nil, fmt.Errorf("server: taskTimeoutMinutes: %w", err)
+	}
+
+	loaded, err := store.LoadCompanions(ctx)
+	if errors.Is(err, storage.ErrCompanionsNotFound) {
+		loaded = storage.StoredCompanions{}
+	} else if err != nil {
+		return nil, fmt.Errorf("load companions: %w", err)
+	}
+	metadata := store.Metadata()
+	active := make([]companion.Body, len(config.Companions))
+	for index, definition := range config.Companions {
+		active[index] = companion.Body{
+			ID:        definition.ID,
+			Dimension: metadata.SpawnDimension,
+			Position: [3]float32{
+				float32(metadata.SpawnAnchor.X*core.SectionSize) + 0.5,
+				core.MaxY + 1,
+				float32(metadata.SpawnAnchor.Z*core.SectionSize) + 0.5,
+			},
+		}
+	}
+	merged, changed, err := storage.MergeCompanionsV5(loaded, active, generate)
+	if err != nil {
+		return nil, fmt.Errorf("merge companions: %w", err)
+	}
+	if changed {
+		if err := store.SaveCompanions(ctx, companionSaveFromStored(merged)); err != nil {
+			return nil, fmt.Errorf("save companion bootstrap: %w", err)
+		}
+	}
+	return persistence.NewCompanions(store, merged, persistenceOptions(config, nil)), nil
+}
+
+func companionSaveFromStored(stored storage.StoredCompanions) storage.CompanionSave {
+	return storage.CompanionSave{
+		Revision:         stored.Revision,
+		AgentNamespaceID: stored.AgentNamespaceID,
+		Records:          stored.Records,
+		Lifecycles:       stored.Lifecycles,
+		Queues:           stored.Queues,
+	}
 }
 
 func (h *Host) Run(ctx context.Context, listener network.Listener) error {

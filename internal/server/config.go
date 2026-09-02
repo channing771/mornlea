@@ -7,18 +7,17 @@ import (
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/storage"
 )
 
 type Config struct {
 	Companions []companion.Definition
-	// AIModel 是伙伴 AI 的模型运行时设置。伙伴列表非空时 NewHost 会校验它的
-	// 静态完整性（AIModel.Validate），并要求 https endpoint 携带非空 AIAPIKey，
-	// 否则拒绝启动；伙伴列表为空时不做任何要求（AI 关闭）。
-	AIModel companion.ModelSettings
-	// AIAPIKey 是按 AIModel.APIKeyEnv 指向的环境变量解析出的密钥值。
-	// 它只存在于进程内存：不写入配置文件与任何存档，也不进入日志或错误
-	// 文本；需要打印配置的地方必须跳过该字段。
-	AIAPIKey              string
+	// AgentService 是独立伙伴 Agent 的 loopback HTTP 连接设置。
+	AgentService companion.AgentServiceSettings
+	// AgentCredential 是入口进程从 `AgentService.APIKeyEnv` 解析的内存密钥。
+	AgentCredential string
+	// TaskTimeoutMinutes 是权威任务运行超时；它不控制单次 Agent Plan 请求。
+	TaskTimeoutMinutes    int
 	Seed                  int64
 	MaxPlayers            int
 	ViewRadius            int
@@ -45,6 +44,17 @@ type Config struct {
 	HeartbeatTimeout      time.Duration
 
 	heartbeatClock heartbeatClock
+	// companionIdentityGenerator 只用于启动期 v5 身份生成；测试注入失败与
+	// 确定性序列，生产缺省使用系统随机源。
+	companionIdentityGenerator storage.CompanionIdentityGenerator
+	// companionMCPFactory 只用于构造失败与所有权回滚测试；生产缺省使用实际
+	// loopback listener 与 MCP handler。
+	companionMCPFactory companionMCPServiceFactory
+	// 以下 seam 只供 server 包测试显式替换外部依赖；生产入口不设置。
+	companionPlanner            companionPlanner
+	companionDialogue           companionDialogue
+	companionAgentClientFactory companionAgentClientFactory
+	companionAgentIDGenerator   func() (string, error)
 }
 
 func DefaultConfig(seed int64) Config {

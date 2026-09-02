@@ -1,0 +1,682 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mornlea:companion-agent:http:v1",
+  "title": "Mornlea companion Agent HTTP application contract v1",
+  "$defs": {
+    "uuid_v4": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "uint64": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "positive_uint64": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 18446744073709551615
+    },
+    "instruction_text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "x-mornlea-rules": [
+        {
+          "name": "text",
+          "valid_utf8": true,
+          "min_utf8_bytes": 1,
+          "max_utf8_bytes": 1024,
+          "no_unicode_control": true,
+          "non_blank": true
+        }
+      ]
+    },
+    "persona_text": {
+      "type": "string",
+      "maxLength": 4096,
+      "x-mornlea-rules": [
+        {
+          "name": "text",
+          "valid_utf8": true,
+          "max_utf8_bytes": 4096,
+          "no_nul": true
+        }
+      ]
+    },
+    "dialogue_line": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "x-mornlea-rules": [
+        {
+          "name": "text",
+          "valid_utf8": true,
+          "min_utf8_bytes": 1,
+          "max_utf8_bytes": 256,
+          "no_nul": true,
+          "no_unicode_control": true,
+          "no_edge_unicode_whitespace": true
+        }
+      ]
+    },
+    "memory_summary": {
+      "type": "string",
+      "maxLength": 2048,
+      "x-mornlea-rules": [
+        {
+          "name": "text",
+          "valid_utf8": true,
+          "max_utf8_bytes": 2048,
+          "no_nul": true
+        }
+      ]
+    },
+    "mcp_capability": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "x-mornlea-rules": [
+        {
+          "name": "text",
+          "valid_utf8": true,
+          "min_utf8_bytes": 1,
+          "max_utf8_bytes": 512,
+          "no_unicode_control": true
+        }
+      ]
+    },
+    "mcp_endpoint": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "format": "uri",
+      "x-mornlea-rules": [
+        {
+          "name": "text",
+          "valid_utf8": true,
+          "min_utf8_bytes": 1,
+          "max_utf8_bytes": 256,
+          "no_unicode_control": true
+        },
+        {
+          "name": "loopback_mcp_url",
+          "scheme": "http",
+          "path": "/mcp",
+          "port_required": true,
+          "forbid_userinfo": true,
+          "forbid_query": true,
+          "forbid_fragment": true
+        }
+      ]
+    },
+    "position": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "number"
+      }
+    },
+    "block_position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
+        "y": {"type": "integer", "minimum": -64, "maximum": 319},
+        "z": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647}
+      }
+    },
+    "live_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {"const": "live"}
+      }
+    },
+    "ready_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["ready", "not_ready"]}
+      }
+    },
+    "acquire_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"}
+      }
+    },
+    "acquire_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "lease_expires_in_ms"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_expires_in_ms": {"const": 15000}
+      }
+    },
+    "lease_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_id": {"$ref": "#/$defs/uuid_v4"}
+      }
+    },
+    "heartbeat_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "lease_expires_in_ms"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_expires_in_ms": {"const": 15000}
+      }
+    },
+    "release_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "released"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_id": {"$ref": "#/$defs/uuid_v4"},
+        "released": {"const": true}
+      }
+    },
+    "plan_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "run_id", "companion_id", "generation", "snapshot_id", "snapshot_digest", "deadline_unix_ms", "mcp_endpoint", "mcp_capability", "instruction"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_id": {"$ref": "#/$defs/uuid_v4"},
+        "run_id": {"$ref": "#/$defs/uuid_v4"},
+        "companion_id": {"$ref": "#/$defs/uuid_v4"},
+        "generation": {"$ref": "#/$defs/positive_uint64"},
+        "snapshot_id": {"$ref": "#/$defs/uuid_v4"},
+        "snapshot_digest": {"$ref": "#/$defs/sha256"},
+        "deadline_unix_ms": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+        "mcp_endpoint": {"$ref": "#/$defs/mcp_endpoint"},
+        "mcp_capability": {"$ref": "#/$defs/mcp_capability"},
+        "instruction": {"$ref": "#/$defs/instruction_text"}
+      }
+    },
+    "plan_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "run_id", "companion_id", "generation", "snapshot_id", "snapshot_digest", "plan"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_id": {"$ref": "#/$defs/uuid_v4"},
+        "run_id": {"$ref": "#/$defs/uuid_v4"},
+        "companion_id": {"$ref": "#/$defs/uuid_v4"},
+        "generation": {"$ref": "#/$defs/positive_uint64"},
+        "snapshot_id": {"$ref": "#/$defs/uuid_v4"},
+        "snapshot_digest": {"$ref": "#/$defs/sha256"},
+        "plan": {"$ref": "urn:mornlea:companion-agent:mcp-tools:v1#/$defs/plan"}
+      }
+    },
+    "dialogue_nonterminal_fact_node": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {"kind": {"const": "start"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "step_kind"],
+          "properties": {
+            "kind": {"const": "progress"},
+            "step_kind": {"enum": ["go_to", "mine", "place"]}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {"kind": {"const": "first_arrival"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {"kind": {"const": "idle"}}
+        }
+      ]
+    },
+    "dialogue_terminal_nonfailed_fact_node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "state", "reason"],
+      "properties": {
+        "kind": {"const": "terminal"},
+        "state": {"enum": ["completed", "timed_out", "stopped"]},
+        "reason": {"const": "none"}
+      }
+    },
+    "dialogue_terminal_failed_fact_node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "state", "reason"],
+      "properties": {
+        "kind": {"const": "terminal"},
+        "state": {"const": "failed"},
+        "reason": {"enum": ["planner_unavailable", "invalid_plan", "path_unreachable", "world_changed", "inventory_full"]}
+      }
+    },
+    "dialogue_terminal_fact_node": {
+      "oneOf": [
+        {"$ref": "#/$defs/dialogue_terminal_nonfailed_fact_node"},
+        {"$ref": "#/$defs/dialogue_terminal_failed_fact_node"}
+      ]
+    },
+    "dialogue_fact_node": {
+      "oneOf": [
+        {"$ref": "#/$defs/dialogue_nonterminal_fact_node"},
+        {"$ref": "#/$defs/dialogue_terminal_fact_node"}
+      ]
+    },
+    "dialogue_environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exposed_blocks", "heights"],
+      "properties": {
+        "exposed_blocks": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["position", "block_id"],
+            "properties": {
+              "position": {"$ref": "#/$defs/block_position"},
+              "block_id": {"type": "integer", "minimum": 1, "maximum": 65534}
+            }
+          }
+        },
+        "heights": {
+          "type": "array",
+          "maxItems": 1089,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["x", "z", "height"],
+            "properties": {
+              "x": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
+              "z": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
+              "height": {"type": "integer", "minimum": -65, "maximum": 319}
+            }
+          }
+        }
+      }
+    },
+    "dialogue_nonterminal_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "run_id", "companion_id", "generation", "memory_epoch", "deadline_unix_ms", "persona", "fact_node", "environment", "terminal"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_id": {"$ref": "#/$defs/uuid_v4"},
+        "run_id": {"$ref": "#/$defs/uuid_v4"},
+        "companion_id": {"$ref": "#/$defs/uuid_v4"},
+        "generation": {"$ref": "#/$defs/positive_uint64"},
+        "memory_epoch": {"$ref": "#/$defs/positive_uint64"},
+        "deadline_unix_ms": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+        "persona": {"$ref": "#/$defs/persona_text"},
+        "fact_node": {"$ref": "#/$defs/dialogue_nonterminal_fact_node"},
+        "environment": {"$ref": "#/$defs/dialogue_environment"},
+        "terminal": {"const": false}
+      }
+    },
+    "dialogue_terminal_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "run_id", "companion_id", "generation", "memory_epoch", "deadline_unix_ms", "persona", "fact_node", "environment", "terminal"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_id": {"$ref": "#/$defs/uuid_v4"},
+        "run_id": {"$ref": "#/$defs/uuid_v4"},
+        "companion_id": {"$ref": "#/$defs/uuid_v4"},
+        "generation": {"$ref": "#/$defs/positive_uint64"},
+        "memory_epoch": {"$ref": "#/$defs/positive_uint64"},
+        "deadline_unix_ms": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+        "persona": {"$ref": "#/$defs/persona_text"},
+        "fact_node": {"$ref": "#/$defs/dialogue_terminal_fact_node"},
+        "environment": {"$ref": "#/$defs/dialogue_environment"},
+        "terminal": {"const": true}
+      }
+    },
+    "dialogue_request": {
+      "oneOf": [
+        {"$ref": "#/$defs/dialogue_nonterminal_request"},
+        {"$ref": "#/$defs/dialogue_terminal_request"}
+      ]
+    },
+    "memory_proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation_id", "base_revision", "summary"],
+      "properties": {
+        "operation_id": {"$ref": "#/$defs/uuid_v4"},
+        "base_revision": {"$ref": "#/$defs/uint64"},
+        "summary": {"$ref": "#/$defs/memory_summary"}
+      }
+    },
+    "dialogue_nonterminal_response": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "run_id", "companion_id", "generation", "memory_epoch", "line"],
+          "properties": {
+            "contract_version": {"const": "v1"},
+            "request_id": {"$ref": "#/$defs/uuid_v4"},
+            "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+            "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+            "lease_id": {"$ref": "#/$defs/uuid_v4"},
+            "run_id": {"$ref": "#/$defs/uuid_v4"},
+            "companion_id": {"$ref": "#/$defs/uuid_v4"},
+            "generation": {"$ref": "#/$defs/positive_uint64"},
+            "memory_epoch": {"$ref": "#/$defs/positive_uint64"},
+            "line": {"$ref": "#/$defs/dialogue_line"}
+          }
+    },
+    "dialogue_terminal_response": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "run_id", "companion_id", "generation", "memory_epoch", "line", "memory_proposal"],
+          "properties": {
+            "contract_version": {"const": "v1"},
+            "request_id": {"$ref": "#/$defs/uuid_v4"},
+            "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+            "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+            "lease_id": {"$ref": "#/$defs/uuid_v4"},
+            "run_id": {"$ref": "#/$defs/uuid_v4"},
+            "companion_id": {"$ref": "#/$defs/uuid_v4"},
+            "generation": {"$ref": "#/$defs/positive_uint64"},
+            "memory_epoch": {"$ref": "#/$defs/positive_uint64"},
+            "line": {"$ref": "#/$defs/dialogue_line"},
+            "memory_proposal": {"$ref": "#/$defs/memory_proposal"}
+          }
+    },
+    "dialogue_response": {
+      "oneOf": [
+        {"$ref": "#/$defs/dialogue_nonterminal_response"},
+        {"$ref": "#/$defs/dialogue_terminal_response"}
+      ]
+    },
+    "memory_state_zero": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "operation_id", "summary"],
+      "properties": {
+        "revision": {"const": 0},
+        "operation_id": {"type": "null"},
+        "summary": {"const": ""}
+      }
+    },
+    "memory_state_nonzero": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "operation_id", "summary"],
+      "properties": {
+        "revision": {"$ref": "#/$defs/positive_uint64"},
+        "operation_id": {"$ref": "#/$defs/uuid_v4"},
+        "summary": {"$ref": "#/$defs/memory_summary"}
+      }
+    },
+    "memory_state": {
+      "oneOf": [
+        {"$ref": "#/$defs/memory_state_zero"},
+        {"$ref": "#/$defs/memory_state_nonzero"}
+      ]
+    },
+    "memory_reconcile_active_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "companion_id", "memory_epoch", "active", "tombstone_operation_id", "mirror"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_id": {"$ref": "#/$defs/uuid_v4"},
+        "companion_id": {"$ref": "#/$defs/uuid_v4"},
+        "memory_epoch": {"$ref": "#/$defs/positive_uint64"},
+        "active": {"const": true},
+        "tombstone_operation_id": {"type": "null"},
+        "mirror": {"$ref": "#/$defs/memory_state"}
+      }
+    },
+    "memory_reconcile_inactive_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "companion_id", "memory_epoch", "active", "tombstone_operation_id", "mirror"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_id": {"$ref": "#/$defs/uuid_v4"},
+        "companion_id": {"$ref": "#/$defs/uuid_v4"},
+        "memory_epoch": {"$ref": "#/$defs/positive_uint64"},
+        "active": {"const": false},
+        "tombstone_operation_id": {"$ref": "#/$defs/uuid_v4"},
+        "mirror": {"type": "null"}
+      }
+    },
+    "memory_reconcile_request": {
+      "oneOf": [
+        {"$ref": "#/$defs/memory_reconcile_active_request"},
+        {"$ref": "#/$defs/memory_reconcile_inactive_request"}
+      ]
+    },
+    "memory_reconcile_active_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "companion_id", "memory_epoch", "active", "tombstone_operation_id", "memory"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_id": {"$ref": "#/$defs/uuid_v4"},
+        "companion_id": {"$ref": "#/$defs/uuid_v4"},
+        "memory_epoch": {"$ref": "#/$defs/positive_uint64"},
+        "active": {"const": true},
+        "tombstone_operation_id": {"type": "null"},
+        "memory": {"$ref": "#/$defs/memory_state"}
+      }
+    },
+    "memory_reconcile_inactive_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "companion_id", "memory_epoch", "active", "tombstone_operation_id", "memory"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_id": {"$ref": "#/$defs/uuid_v4"},
+        "companion_id": {"$ref": "#/$defs/uuid_v4"},
+        "memory_epoch": {"$ref": "#/$defs/positive_uint64"},
+        "active": {"const": false},
+        "tombstone_operation_id": {"$ref": "#/$defs/uuid_v4"},
+        "memory": {"type": "null"}
+      }
+    },
+    "memory_reconcile_response": {
+      "oneOf": [
+        {"$ref": "#/$defs/memory_reconcile_active_response"},
+        {"$ref": "#/$defs/memory_reconcile_inactive_response"}
+      ]
+    },
+    "memory_commit_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "companion_id", "memory_epoch", "base_revision", "operation_id", "summary"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_id": {"$ref": "#/$defs/uuid_v4"},
+        "companion_id": {"$ref": "#/$defs/uuid_v4"},
+        "memory_epoch": {"$ref": "#/$defs/positive_uint64"},
+        "base_revision": {"$ref": "#/$defs/uint64"},
+        "operation_id": {"$ref": "#/$defs/uuid_v4"},
+        "summary": {"$ref": "#/$defs/memory_summary"}
+      }
+    },
+    "memory_commit_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "companion_id", "memory_epoch", "operation_id", "committed_revision"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_id": {"$ref": "#/$defs/uuid_v4"},
+        "companion_id": {"$ref": "#/$defs/uuid_v4"},
+        "memory_epoch": {"$ref": "#/$defs/positive_uint64"},
+        "operation_id": {"$ref": "#/$defs/uuid_v4"},
+        "committed_revision": {"$ref": "#/$defs/positive_uint64"}
+      }
+    },
+    "memory_delete_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "companion_id", "old_memory_epoch", "new_memory_epoch", "tombstone_operation_id"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_id": {"$ref": "#/$defs/uuid_v4"},
+        "companion_id": {"$ref": "#/$defs/uuid_v4"},
+        "old_memory_epoch": {"$ref": "#/$defs/positive_uint64"},
+        "new_memory_epoch": {"$ref": "#/$defs/positive_uint64"},
+        "tombstone_operation_id": {"$ref": "#/$defs/uuid_v4"}
+      }
+    },
+    "memory_delete_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "companion_id", "memory_epoch", "tombstone_operation_id"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_id": {"$ref": "#/$defs/uuid_v4"},
+        "companion_id": {"$ref": "#/$defs/uuid_v4"},
+        "memory_epoch": {"$ref": "#/$defs/positive_uint64"},
+        "tombstone_operation_id": {"$ref": "#/$defs/uuid_v4"}
+      }
+    },
+    "cancel_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "run_id"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_id": {"$ref": "#/$defs/uuid_v4"},
+        "run_id": {"$ref": "#/$defs/uuid_v4"}
+      }
+    },
+    "cancel_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "client_instance_id", "namespace_id", "lease_id", "run_id", "cancelled"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {"$ref": "#/$defs/uuid_v4"},
+        "client_instance_id": {"$ref": "#/$defs/uuid_v4"},
+        "namespace_id": {"$ref": "#/$defs/uuid_v4"},
+        "lease_id": {"$ref": "#/$defs/uuid_v4"},
+        "run_id": {"$ref": "#/$defs/uuid_v4"},
+        "cancelled": {"type": "boolean"}
+      }
+    },
+    "error_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "request_id", "error"],
+      "properties": {
+        "contract_version": {"const": "v1"},
+        "request_id": {
+          "oneOf": [
+            {"$ref": "#/$defs/uuid_v4"},
+            {"type": "null"}
+          ]
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code"],
+          "properties": {
+            "code": {
+              "enum": [
+                "invalid_request",
+                "unauthorized",
+                "unsupported_version",
+                "namespace_conflict",
+                "overloaded",
+                "deadline_exceeded",
+                "agent_unavailable",
+                "invalid_model_output",
+                "memory_conflict",
+                "not_found",
+                "internal_error"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

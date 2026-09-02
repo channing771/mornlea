@@ -59,15 +59,19 @@ func hostTestConfig() Config {
 	config.SnapshotChunks = 16
 	config.SnapshotBytes = 1 << 20
 	config.OutboxCapacity = 256
-	// M5B 起 NewHost 要求：伙伴列表非空时模型设置必须完整。这里给全部历史
-	// host 测试补一份合法默认——loopback http + 无密钥，不依赖任何环境变量，
-	// 测试自身只关心伙伴注入的用例再按需覆盖 AIModel 字段。
-	config.AIModel = companion.ModelSettings{
-		Endpoint:           "http://127.0.0.1:1/v1",
-		Model:              "test-model",
-		TaskTimeoutMinutes: 10,
+	config.AgentService = companion.AgentServiceSettings{
+		Endpoint: "http://127.0.0.1:1", APIKeyEnv: "MORNLEA_TEST_AGENT_KEY",
 	}
+	config.AgentCredential = "test-agent-secret"
+	config.TaskTimeoutMinutes = 10
+	config.companionPlanner = unavailablePlannerTestSeam{}
 	return config
+}
+
+type unavailablePlannerTestSeam struct{}
+
+func (unavailablePlannerTestSeam) Plan(context.Context, companionPlanningRequest) (companionPlanningOutcome, error) {
+	return companionPlanningOutcome{}, companion.ErrPlannerUnavailable
 }
 
 func startMemoryLogin(t *testing.T, host *Host, identity network.Identity) testLogin {

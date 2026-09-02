@@ -26,6 +26,7 @@ import (
 	"math"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/go-gl/mathgl/mgl32"
 
@@ -41,10 +42,10 @@ import (
 	"github.com/channing771/mornlea/internal/storage"
 )
 
-// companionPlanner 是规划器依赖面：生产实现是 companion.PlannerClient，
-// 测试可注入假模型端点构造的真客户端。
+// companionPlanner 是规划器依赖面：生产实现只接受冻结快照与任务身份，
+// 测试通过显式 seam 注入受控实现。
 type companionPlanner interface {
-	Plan(ctx context.Context, snapshot companion.PlanSnapshot) (companion.Plan, error)
+	Plan(ctx context.Context, request companionPlanningRequest) (companionPlanningOutcome, error)
 }
 
 // companionTaskIssuer 是入队时刻冻结的发令者事实。指令的规划输入不随发令者
@@ -74,12 +75,25 @@ type companionTaskSlot struct {
 
 	// planningInFlight 表示该伙伴有一个规划请求在途；在途期间绝不发起第二个。
 	planningInFlight bool
+	// planningAttempt 是 tick 为规划请求分配的本地单调身份；只有完整匹配
+	// 当前 attempt 的 worker 结果才有权释放 gate。
+	planningAttempt uint64
 
 	// dialogueInFlight 表示该伙伴有一个台词请求在途；在途期间新台词节点
 	// 直接跳过（不取消、不替换在途请求），对齐 planningInFlight 的每伙伴
 	// 单在途纪律。标记只在 tick 边界（requestDialogue 置位、
 	// applyDialogueOutcome 清除）读写。
 	dialogueInFlight bool
+	// dialogueAttempt 是 tick 为台词请求分配的本地单调身份；过时结果不能
+	// 清除后来请求持有的每伙伴 gate。
+	dialogueAttempt uint64
+	// dialogueReservation 保存首次权威重验已接受的终态 proposal。它不再
+	// 依赖后续任务 generation，只由 operation/epoch 的 commit 或 reconcile
+	// 确认解除。
+	dialogueReservation *companionDialogueReservation
+	// memoryReady 只在当前 lease 已按 v5 current lifecycle reconcile 且无冲突时
+	// 为真；冲突仅暂停本伙伴 Dialogue，不影响任务、Planner 与 FIFO。
+	memoryReady bool
 
 	// 以下三个字段是台词触发节点的任务域状态（D6）。全部属于「当前任务」
 	// 而非槽位：dispatchPlanning 的 BeginHead 分支与 restoreQueue 都按任务
@@ -99,11 +113,6 @@ type companionTaskSlot struct {
 	// companion.MaxDialogueRequestsPerTask；结构上 1+≤6+1 恒不越界，计数是
 	// 对未来接线缺陷的防御性封顶。
 	dialogueRequests int
-
-	// summary 是该伙伴的最近对话摘要（终态 Dialogue 响应写入，≤2,048 bytes）。
-	// 与上面三个任务域字段不同，摘要属于伙伴而非任务：任务边界不重置，
-	// 重启经 restoreQueue 恢复，落盘走 StoredCompanionQueue.Summary。
-	summary string
 
 	// 路径执行状态（仅 Running 有效）。三连失败预算属于单个任务而非槽位：
 	// dispatchPlanning 消费新队首与 restoreQueue 成功恢复时都会把 policy
@@ -148,8 +157,13 @@ type companionTaskSlot struct {
 type plannerOutcome struct {
 	id         companion.ID
 	generation uint64
-	plan       companion.Plan
-	err        error
+	attempt    uint64
+	// snapshotDigest 由 worker 从不可变冻结快照独立计算，供 tick 核对 bridge
+	// 实际注册并关联的 digest，不能由 Agent 响应自行声明。
+	snapshotDigest string
+	result         companionPlanningOutcome
+	snapshot       companion.PlanSnapshot
+	err            error
 }
 
 // pathOutcome 是一次寻路的结果，同样携带任务身份。
@@ -177,6 +191,7 @@ type taskEventFact struct {
 type companionManager struct {
 	engine         *runtime.Engine
 	planner        companionPlanner
+	companions     *persistence.Companions
 	timeoutMinutes int
 	table          pathfind.PathBlockTable
 
@@ -202,6 +217,22 @@ type companionManager struct {
 	// 在途台词 ≤ 每伙伴 1 × 伙伴数 ≤ MaxActive，结果每 tick 全量排空，
 	// 容量恰好覆盖峰值；关服 cancel 后 worker 经 ctx.Done 放弃结果退出。
 	dialogueResults chan dialogueOutcome
+	// memoryCommitResults 把已接受 reservation 的 commit 结果送回权威 tick。
+	// 容量按每伙伴最多一个 reservation 封顶，网络 worker 不触碰镜像或广播。
+	memoryCommitResults      chan memoryCommitOutcome
+	memoryReconcileResults   chan memoryReconcileOutcome
+	memoryReconcileFence     uint64
+	memoryReconcileTarget    uint64
+	memoryReconcileInFlight  bool
+	memoryReconcileRequested bool
+	memoryReconcileRequestID map[companion.ID]struct{}
+	memoryReconcilePending   map[companion.ID]struct{}
+	memoryReconcileRetryWait uint8
+	memoryReconcileAttempts  uint8
+	// memoryReconcileArmAfterDrain 只属于当前关服 attempt。新 attempt 接手
+	// 上一轮尚未应用的 reconcile 时，在消费该唯一旧结果后补一次
+	// re-arm；本轮新派发的失败不会再次设置它，避免同轮无界自旋。
+	memoryReconcileArmAfterDrain bool
 	// dialogue 是台词模型依赖面（D5 机制；触发节点接线属 D6）。nil 不会出现
 	// 于生产构造（server.go 与 Planner 同源构造），防御缺省下 requestDialogue
 	// 不应被调用——D6 接线前没有任何生产调用方。
@@ -214,43 +245,56 @@ type companionManager struct {
 	// 边界（持有 stepMu）读写。
 	dialogueEffects int
 
-	ctx       context.Context
-	cancel    context.CancelFunc
-	waitGroup sync.WaitGroup
+	ctx          context.Context
+	cancel       context.CancelFunc
+	memoryCtx    context.Context
+	cancelMemory context.CancelFunc
+	waitGroup    sync.WaitGroup
 
 	// events 是本 tick 累积的事件事实，takeEventFacts 排空后归 Server 发布。
 	events []taskEventFact
 }
 
 // newCompanionManager 构造 Companion Manager。config 必须已含校验过的
-// AIModel 与伙伴定义（NewHost 的第二道边界保证）；dialogue 是台词模型依赖
-// 面，与 planner 共用同一 AIModel 设置构造。
+// Agent 任务超时与伙伴定义；外部调用依赖由 Host 显式装配。
 func newCompanionManager(
 	engine *runtime.Engine,
 	config Config,
 	planner companionPlanner,
 	dialogue companionDialogue,
+	companions *persistence.Companions,
 ) *companionManager {
 	ctx, cancel := context.WithCancel(context.Background())
+	memoryCtx, cancelMemory := context.WithCancel(context.Background())
 	manager := &companionManager{
-		engine:          engine,
-		planner:         planner,
-		dialogue:        dialogue,
-		timeoutMinutes:  config.AIModel.TaskTimeout(),
-		table:           pathfind.NewPathBlockTable(productionCompanionPassableBlocks()),
-		slots:           make(map[companion.ID]*companionTaskSlot, len(config.Companions)),
-		orderedIDs:      make([]companion.ID, 0, len(config.Companions)),
-		bodies:          make(map[companion.ID]companion.Body, companion.MaxActive),
-		mining:          make(map[companion.ID]contract.MiningUpdate, companion.MaxActive),
-		semaphore:       make(chan struct{}, companion.MaxActive),
-		plannerResults:  make(chan plannerOutcome, companion.MaxActive),
-		pathResults:     make(chan pathOutcome, companion.MaxActive),
-		dialogueResults: make(chan dialogueOutcome, companion.MaxActive),
-		ctx:             ctx,
-		cancel:          cancel,
+		engine:                   engine,
+		planner:                  planner,
+		dialogue:                 dialogue,
+		companions:               companions,
+		timeoutMinutes:           config.TaskTimeoutMinutes,
+		table:                    pathfind.NewPathBlockTable(productionCompanionPassableBlocks()),
+		slots:                    make(map[companion.ID]*companionTaskSlot, len(config.Companions)),
+		orderedIDs:               make([]companion.ID, 0, len(config.Companions)),
+		bodies:                   make(map[companion.ID]companion.Body, companion.MaxActive),
+		mining:                   make(map[companion.ID]contract.MiningUpdate, companion.MaxActive),
+		semaphore:                make(chan struct{}, companion.MaxActive),
+		plannerResults:           make(chan plannerOutcome, companion.MaxActive),
+		pathResults:              make(chan pathOutcome, companion.MaxActive),
+		dialogueResults:          make(chan dialogueOutcome, companion.MaxActive),
+		memoryCommitResults:      make(chan memoryCommitOutcome, companion.MaxActive),
+		memoryReconcileResults:   make(chan memoryReconcileOutcome, 1),
+		memoryReconcileRequestID: make(map[companion.ID]struct{}, companion.MaxActive),
+		memoryReconcilePending:   make(map[companion.ID]struct{}, companion.MaxActive),
+		ctx:                      ctx,
+		cancel:                   cancel,
+		memoryCtx:                memoryCtx,
+		cancelMemory:             cancelMemory,
 	}
 	for _, definition := range config.Companions {
-		manager.slots[definition.ID] = &companionTaskSlot{definition: definition}
+		_, needsReconcile := dialogue.(companionMemoryReconciler)
+		manager.slots[definition.ID] = &companionTaskSlot{
+			definition: definition, memoryReady: !needsReconcile,
+		}
 		manager.orderedIDs = append(manager.orderedIDs, definition.ID)
 	}
 	// orderedIDs 按字节序排序：每 tick 的事件产生顺序因此确定，EventID 分配
@@ -375,11 +419,14 @@ func (server *Server) advanceCompanionTasks() []chatDelivery {
 		return nil
 	}
 	manager.refreshBodies()
+	manager.applyMemoryReconcileOutcomes()
 	manager.applyPlannerOutcomes()
 	manager.applyPathOutcomes()
 	manager.applyDialogueOutcomes()
+	manager.applyMemoryCommitOutcomes()
 	manager.expireTasks()
 	manager.advanceRunners()
+	manager.dispatchMemoryReconcile()
 	manager.dispatchPlanning()
 	manager.dispatchIdleDialogues()
 	manager.dispatchPathRequests()
@@ -514,17 +561,24 @@ func (m *companionManager) applyPlannerOutcome(outcome plannerOutcome) {
 	if slot == nil || !slot.planningInFlight {
 		return
 	}
-	slot.planningInFlight = false
-	if slot.queue.Generation() != outcome.generation {
+	if slot.queue.Generation() != outcome.generation || slot.planningAttempt != outcome.attempt {
 		return
 	}
 	current, ok := slot.queue.Current()
 	if !ok || current.State != companion.TaskPlanning {
 		return
 	}
+	if outcome.err == nil && !validCompanionPlanningIdentity(outcome) {
+		return
+	}
+	slot.planningInFlight = false
 	switch {
 	case outcome.err == nil:
-		m.applyQueueEvents(slot, slot.queue.AcceptPlan(outcome.plan))
+		if !m.plannerOutcomeMatchesCurrentAuthority(slot, current.Command, outcome) {
+			m.applyQueueEvents(slot, slot.queue.FailPlanning(companion.TaskFailWorldChanged))
+			return
+		}
+		m.applyQueueEvents(slot, slot.queue.AcceptPlan(outcome.result.Plan))
 		// 结构校验是纯值操作，同一 tick 完成校验并进入 Running；失败即
 		// 以 InvalidPlan 终止，绝不改写或降级模型计划。
 		m.applyQueueEvents(slot, slot.queue.FinishValidation(
@@ -543,6 +597,99 @@ func (m *companionManager) applyPlannerOutcome(outcome plannerOutcome) {
 	default:
 		m.applyQueueEvents(slot, slot.queue.FailPlanning(companion.TaskFailPlannerUnavailable))
 	}
+}
+
+// validCompanionPlanningIdentity 验证桥接结果携带的远端身份，并把它绑定到
+// tick 保存的本地 attempt、generation 与冻结快照 digest。`RunID` 和
+// `SnapshotID` 必须是规范 UUIDv4；单个布尔标记不能替代逐字段核对。
+func validCompanionPlanningIdentity(outcome plannerOutcome) bool {
+	requestIdentity := outcome.result.requestIdentity
+	if outcome.attempt == 0 || outcome.result.Attempt != outcome.attempt ||
+		outcome.result.Generation != outcome.generation ||
+		outcome.result.RunID != requestIdentity.RunID ||
+		outcome.result.SnapshotID != requestIdentity.SnapshotID ||
+		outcome.result.SnapshotDigest != requestIdentity.SnapshotDigest ||
+		requestIdentity.SnapshotDigest == "" ||
+		requestIdentity.SnapshotDigest != outcome.snapshotDigest {
+		return false
+	}
+	if _, err := companion.ParseID(outcome.result.RunID); err != nil {
+		return false
+	}
+	if _, err := companion.ParseID(outcome.result.SnapshotID); err != nil {
+		return false
+	}
+	return true
+}
+
+// plannerOutcomeMatchesCurrentAuthority 在 Agent 返回后的权威 tick 边界重建必要
+// 世界事实。冻结快照只用于约束候选生成；提交前计划相关区块 revision、目标
+// 方块、place 背包与 follow 在线位置必须仍成立。方块比较读取 dense projection，
+// 不依赖有损的 exposed 摘要。
+func (m *companionManager) plannerOutcomeMatchesCurrentAuthority(
+	slot *companionTaskSlot,
+	command companion.TaskCommand,
+	outcome plannerOutcome,
+) bool {
+	body, active := m.body(outcome.id)
+	if !active {
+		return false
+	}
+	currentSnapshot, err := m.buildPlanSnapshot(slot.definition, command, slot.currentIssuer, body)
+	if err != nil {
+		return false
+	}
+	if err := companion.ValidatePlanAgainstSnapshot(outcome.result.Plan, currentSnapshot); err != nil {
+		return false
+	}
+	for _, step := range outcome.result.Plan.Steps {
+		switch step.Kind {
+		case companion.PlanStepMine, companion.PlanStepPlace:
+			target := core.BlockPos{X: step.X, Y: step.Y, Z: step.Z}
+			frozenBlock, _, frozenReady := outcome.snapshot.Terrain.Lookup(target)
+			currentBlock, _, currentReady := currentSnapshot.Terrain.Lookup(target)
+			if !frozenReady || !currentReady || frozenBlock != currentBlock ||
+				!samePlanChunkRevision(outcome.snapshot, currentSnapshot, target.Chunk()) {
+				return false
+			}
+		case companion.PlanStepFollow:
+			frozenTarget, frozenOnline := planSnapshotPlayer(outcome.snapshot, step.PlayerID)
+			currentTarget, currentOnline := planSnapshotPlayer(currentSnapshot, step.PlayerID)
+			if !frozenOnline || !currentOnline || frozenTarget.Position != currentTarget.Position {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// samePlanChunkRevision 只比较含计划坐标的区块，不把投影内无关区块漂移扩大为
+// 整份快照失效。缺失 revision 代表无法证明冻结事实仍然成立，按 fail closed 拒绝。
+func samePlanChunkRevision(frozen, current companion.PlanSnapshot, target core.ChunkPos) bool {
+	var frozenRevision, currentRevision uint64
+	var frozenFound, currentFound bool
+	for _, revision := range frozen.ChunkRevisions {
+		if revision.Chunk == target {
+			frozenRevision, frozenFound = revision.Revision, true
+			break
+		}
+	}
+	for _, revision := range current.ChunkRevisions {
+		if revision.Chunk == target {
+			currentRevision, currentFound = revision.Revision, true
+			break
+		}
+	}
+	return frozenFound && currentFound && frozenRevision == currentRevision
+}
+
+func planSnapshotPlayer(snapshot companion.PlanSnapshot, id core.PlayerID) (companion.PlanPlayer, bool) {
+	for _, player := range snapshot.OnlinePlayers {
+		if player.ID == id {
+			return player, true
+		}
+	}
+	return companion.PlanPlayer{}, false
 }
 
 // applyPathOutcomes 在 tick 边界非阻塞排空寻路结果并应用。
@@ -819,10 +966,10 @@ func standingCellOf(position [3]float32) pathfind.PathCell {
 	}
 }
 
-// dispatchPlanning 为每个空闲槽位派发规划：取队首、获取并发名额、迁移
-// Planning 后构造快照，再由 worker 发起模型请求。信号量满或伙伴未激活时
-// 任务保持 Queued 顺延；快照构造失败时任务以 PlannerUnavailable 真实终
-// 结（见函数内注释），FIFO 在下一 tick 推进。
+// dispatchPlanning 为每个空闲槽位派发规划：取队首、迁移到 Planning、获取
+// 共享并发名额、构造快照，再由 worker 发起请求。共享名额不可用时任务在同
+// tick 以 PlannerUnavailable 终结；伙伴未激活时仍保持 Queued。快照构造失败
+// 同样以 PlannerUnavailable 真实终结，FIFO 在下一 tick 推进。
 func (m *companionManager) dispatchPlanning() {
 	for _, id := range m.orderedIDs {
 		slot := m.slots[id]
@@ -876,14 +1023,19 @@ func (m *companionManager) dispatchPlanning() {
 			// 伙伴尚未激活（出生扫描在途）：任务保持 Queued，等下一 tick。
 			continue
 		}
+		if !slot.queue.BeginPlanning() {
+			continue
+		}
+		if slot.dialogueInFlight {
+			m.applyQueueEvents(slot, slot.queue.FailPlanning(companion.TaskFailPlannerUnavailable))
+			continue
+		}
 		select {
 		case m.semaphore <- struct{}{}:
 		default:
-			// 全服四个并发名额已满：任务保持 Queued，下一 tick 重试。
-			continue
-		}
-		if !slot.queue.BeginPlanning() {
-			<-m.semaphore
+			// 全服并发名额不可用时，任务已真实进入 Planning，并在同一 tick
+			// 以 PlannerUnavailable 终结；权威路径从不排队等待容量。
+			m.applyQueueEvents(slot, slot.queue.FailPlanning(companion.TaskFailPlannerUnavailable))
 			continue
 		}
 		// 快照构造放在 BeginPlanning 成功之后：构造失败时任务已真实处于
@@ -900,9 +1052,19 @@ func (m *companionManager) dispatchPlanning() {
 			<-m.semaphore
 			continue
 		}
+		if slot.planningAttempt == ^uint64(0) {
+			slog.Error("规划 attempt 已耗尽", "companion", id)
+			m.applyQueueEvents(slot, slot.queue.FailPlanning(companion.TaskFailPlannerUnavailable))
+			<-m.semaphore
+			continue
+		}
+		slot.planningAttempt++
+		if slot.planningAttempt == 0 {
+			slot.planningAttempt++
+		}
 		slot.planningInFlight = true
 		m.waitGroup.Add(1)
-		go m.plannerWorker(id, slot.queue.Generation(), snapshot)
+		go m.plannerWorker(id, slot.queue.Generation(), slot.planningAttempt, snapshot)
 	}
 }
 
@@ -912,10 +1074,21 @@ func (m *companionManager) dispatchPlanning() {
 func (m *companionManager) plannerWorker(
 	id companion.ID,
 	generation uint64,
+	attempt uint64,
 	snapshot companion.PlanSnapshot,
 ) {
 	defer m.waitGroup.Done()
-	plan, err := m.planner.Plan(m.ctx, snapshot)
+	_, snapshotDigest, digestErr := companion.CanonicalSnapshotDigest(snapshot)
+	var result companionPlanningOutcome
+	var err error
+	if digestErr != nil {
+		err = companion.ErrPlannerUnavailable
+	} else {
+		result, err = m.planner.Plan(m.ctx, companionPlanningRequest{
+			CompanionID: id, Generation: generation, Attempt: attempt,
+			Snapshot: snapshot, Instruction: snapshot.Command,
+		})
+	}
 	// 释放先于发送：`m.semaphore` 约束的是在途模型调用数，`Plan` 返回即调用
 	// 结束、名额自此可复用，结果投递只是队列簿记。若先发送再经 defer 释放，
 	// 两者之间没有屏障，tick 线程 try-acquire 的成败便依赖 goroutine 调度
@@ -923,7 +1096,10 @@ func (m *companionManager) plannerWorker(
 	// 之前名额已归还」成为严格事实，ctx 取消路径行为不变（取消时同样先
 	// 释放、发送走 `<-m.ctx.Done()` 分支放弃结果）。
 	<-m.semaphore
-	outcome := plannerOutcome{id: id, generation: generation, plan: plan, err: err}
+	outcome := plannerOutcome{
+		id: id, generation: generation, attempt: attempt,
+		snapshotDigest: snapshotDigest, result: result, snapshot: snapshot, err: err,
+	}
 	select {
 	case m.plannerResults <- outcome:
 	case <-m.ctx.Done():
@@ -1078,9 +1254,8 @@ func (m *companionManager) restoreQueues(queues []storage.StoredCompanionQueue) 
 	}
 }
 
-// restoreQueue 恢复单个槽位的任务域：当前任务与 FIFO 指令按存档顺序回填，
-// 最近对话摘要进入 manager 状态（属于伙伴而非任务，无队列载荷时同样恢复
-// summary-only 存档）。归一纪律（恢复侧）：Planning/Validating 按 Queued
+// restoreQueue 恢复单个槽位的任务域：当前任务与 FIFO 指令按存档顺序回填。
+// 归一纪律（恢复侧）：Planning/Validating 按 Queued
 // 恢复并保留原始指令，重启后重新发起规划；Running 保留步骤索引与 deadline，
 // 但路径绝不落盘，恢复后 slot.path 为 nil——首个动作前必须经
 // dispatchPathRequests 按当前权威世界重算，天然满足「恢复任务在下一动作前
@@ -1088,7 +1263,6 @@ func (m *companionManager) restoreQueues(queues []storage.StoredCompanionQueue) 
 // 集合在这里按「计划校验成功后一次性预计算」的同一规则重导出；台词预算从
 // 零开始（不持久化，重启松弛 ≤8 次属可接受上界——design.md 裁决）。
 func (m *companionManager) restoreQueue(slot *companionTaskSlot, queue storage.StoredCompanionQueue) {
-	slot.summary = queue.Summary
 	if queue.HasCurrent {
 		task := companion.Task{
 			Command:       companion.TaskCommand(queue.Current.Command),
@@ -1141,13 +1315,49 @@ func (m *companionManager) beginShutdown() {
 	m.cancel()
 }
 
-// close 等待全部 worker 退出。结果 channel 中未被 drain 的结果直接放弃——
-// 冻结后的任务状态已由 Observe 捕获并随最终 AI 保存落盘，重启后由
-// restoreQueues 从存档恢复任务域（含 Planning/Validating→Queued 归一），
-// 被放弃的在途结果无需也无法补救。
-func (m *companionManager) close() {
-	m.cancel()
-	m.waitGroup.Wait()
+// beginMemoryFinalization 把 memory worker 切到独立的关服 context。它不复用
+// 已取消的 run context，并始终受 caller 与固定上界共同约束；重试关服会先
+// 取消上一轮 context，再建立新一轮可用窗口。
+func (m *companionManager) beginMemoryFinalization(ctx context.Context) {
+	m.cancelMemory()
+	m.memoryCtx, m.cancelMemory = context.WithTimeout(ctx, companionMemoryFinalizationTimeout)
+	m.memoryReconcileArmAfterDrain = m.memoryReconcileInFlight
+	if m.memoryReconcileInFlight {
+		return
+	}
+	m.armPendingMemoryReconcileReservations()
+}
+
+func (m *companionManager) armPendingMemoryReconcileReservations() {
+	armed := false
+	for id, slot := range m.slots {
+		if slot.dialogueReservation == nil {
+			continue
+		}
+		if _, pending := m.memoryReconcilePending[id]; !pending {
+			continue
+		}
+		m.memoryReconcileRequestID[id] = struct{}{}
+		armed = true
+	}
+	if armed {
+		m.memoryReconcileRequested = true
+		m.memoryReconcileRetryWait = 0
+		m.memoryReconcileAttempts = 0
+	}
+}
+
+// memoryFinalizationError 在派生下一批关服 worker 前检查当前 finalization
+// 窗口。caller 与子 context 截止相同时，子 timer 可能稍早触发；此时不能仅
+// 检查 caller，否则会用已经取消的 context 派发新的 reconcile。
+func (m *companionManager) memoryFinalizationError() error {
+	if err := m.memoryCtx.Err(); err != nil {
+		return err
+	}
+	if deadline, ok := m.memoryCtx.Deadline(); ok && !time.Now().Before(deadline) {
+		return context.DeadlineExceeded
+	}
+	return nil
 }
 
 // companionManagerTaskStates 是 Observe 调用的空值安全包装。
@@ -1156,29 +1366,6 @@ func (server *Server) companionManagerTaskStates() []companion.TaskQueueState {
 		return nil
 	}
 	return server.companionManager.taskStates()
-}
-
-// companionSummaries 返回全部持有非空摘要的 active 伙伴的观察输入，按
-// orderedIDs（ID 字节序）排列，供 Observe 参与 dirty 判定并随保存载荷落盘
-// （调用方必须持有 stepMu，与 taskStates 同一单写者边界）。inactive 伙伴没有
-// 槽位，天然不出现——「inactive 记录不保存摘要」由队列载荷只覆盖 active
-// 伙伴结构性保证。
-func (m *companionManager) companionSummaries() []persistence.CompanionSummary {
-	summaries := make([]persistence.CompanionSummary, 0, len(m.orderedIDs))
-	for _, id := range m.orderedIDs {
-		if summary := m.slots[id].summary; summary != "" {
-			summaries = append(summaries, persistence.CompanionSummary{ID: id, Summary: summary})
-		}
-	}
-	return summaries
-}
-
-// companionManagerSummaries 是 Observe 调用的空值安全包装。
-func (server *Server) companionManagerSummaries() []persistence.CompanionSummary {
-	if server.companionManager == nil {
-		return nil
-	}
-	return server.companionManager.companionSummaries()
 }
 
 // taskEventDeliveries 把事件事实转成可发布的 ChatEvent 投递。任务事件与
