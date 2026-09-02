@@ -136,6 +136,10 @@ func (engine *Engine) StepWithTunables(tickTunables TickTunables) TickResult {
 	engine.realm.AdvanceCrops(active, pending)
 
 	tick.FinishWorld(&result)
+	// 支撑复核的固定顺序：wild grass → torch → bed。wild plant sweep 先清
+	// 失去草皮支撑的短草（同 mutation 零掉落），火把与床复核随后在自己的
+	// 稳定快照里看到这些新变更——顺序颠倒会让落在短草上的火把/床悬空残留。
+	engine.realm.SweepUnsupportedWildPlants(pending)
 	engine.realm.SweepUnsupportedTorches(pending)
 	engine.realm.SweepUnsupportedBeds(pending)
 	finishRealmMutation(pending, &result)

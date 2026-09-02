@@ -73,6 +73,7 @@ func TestOwnershipAnalyzerRejectsSyntheticViolations(t *testing.T) {
 					state.AdvanceFluids(nil, nil)
 					state.AdvanceFarmlandMoisture(nil, nil)
 					state.AdvanceCrops(nil, nil)
+					state.SweepUnsupportedWildPlants(nil)
 					state.SweepUnsupportedTorches(nil)
 					state.SweepUnsupportedBeds(nil)
 				}
@@ -112,6 +113,7 @@ func TestOwnershipAnalyzerRejectsSyntheticViolations(t *testing.T) {
 					state.AdvanceFluids(nil, nil)
 					state.AdvanceFarmlandMoisture(nil, nil)
 					state.AdvanceCrops(nil, nil)
+					state.SweepUnsupportedWildPlants(nil)
 					state.SweepUnsupportedTorches(nil)
 					state.SweepUnsupportedBeds(nil)
 				}
@@ -150,6 +152,7 @@ func TestOwnershipAnalyzerRejectsSyntheticViolations(t *testing.T) {
 					state.AdvanceFluids(nil, nil)
 					state.AdvanceFarmlandMoisture(nil, nil)
 					state.AdvanceCrops(nil, nil)
+					state.SweepUnsupportedWildPlants(nil)
 					state.SweepUnsupportedTorches(nil)
 					state.SweepUnsupportedBeds(nil)
 				}
@@ -184,6 +187,7 @@ func TestOwnershipAnalyzerRejectsSyntheticViolations(t *testing.T) {
 						state.AdvanceFluids(nil, nil)
 						state.AdvanceFarmlandMoisture(nil, nil)
 						state.AdvanceCrops(nil, nil)
+						state.SweepUnsupportedWildPlants(nil)
 						state.SweepUnsupportedTorches(nil)
 						state.SweepUnsupportedBeds(nil)
 					}
@@ -221,6 +225,7 @@ func TestOwnershipAnalyzerRejectsSyntheticViolations(t *testing.T) {
 							state.AdvanceFluids(nil, nil)
 							state.AdvanceFarmlandMoisture(nil, nil)
 							state.AdvanceCrops(nil, nil)
+							state.SweepUnsupportedWildPlants(nil)
 							state.SweepUnsupportedTorches(nil)
 							state.SweepUnsupportedBeds(nil)
 						},
@@ -259,6 +264,7 @@ func TestOwnershipAnalyzerRejectsSyntheticViolations(t *testing.T) {
 							state.AdvanceFluids(nil, nil)
 							state.AdvanceFarmlandMoisture(nil, nil)
 							state.AdvanceCrops(nil, nil)
+							state.SweepUnsupportedWildPlants(nil)
 							state.SweepUnsupportedTorches(nil)
 							state.SweepUnsupportedBeds(nil)
 						},

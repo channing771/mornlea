@@ -3,7 +3,8 @@
 //! 逐条镜像 Go `internal/fluid/rules.go` 的三段纯整数规则——`evalCell` 的
 //! 「陈旧项跳过 → 非源存活判定 → 垂直优先即返 → 水平传播等级 +1 且 ≤7」、
 //! `flowingSurvives` 的「上方任意流体或更强水平邻居」、`Replaceable` 的判定表
-//! (空气/作物/门四态/源不可替换/弱水可被强水替换,分支顺序与 Go 侧一致)。
+//! (空气/植物(作物与短草)/门四态/源不可替换/弱水可被强水替换,分支顺序与
+//! Go 侧一致)。
 //! kernel 只回答「本次求值想写哪些格」,队列、预算与写入编排留在 Go 侧。
 //!
 //! 输入布局 v1:`u32 layout_version=1` + `u32 item_count` + 每项 14 字节
@@ -42,7 +43,7 @@ const MAX_FLUID_LEVEL: u8 = 7;
 // Air=0、Barrier=1、Stone=2、WaterSource=27..WaterLevel7=34(流体 8 连号,
 // WaterLevelN == WaterSource+N)、WheatStage0..7=37..44、Workbench=45、
 // PotatoStage0..7=46..53、CarrotStage0..7=54..61、门下半 62..69
-// (南/西/北/东 × 关/开,开态 = 63/65/67/69)、门上半 70。
+// (南/西/北/东 × 关/开,开态 = 63/65/67/69)、门上半 70、ShortGrass=84。
 pub(crate) const AIR: u16 = 0;
 /// Barrier:越界/未就绪世界读的替身,重扫 kernel 与 Go `fluidRescanBlockAt`
 /// 共用同一语义(Barrier 不可替换,视作密封)。
@@ -61,6 +62,9 @@ const DOOR_LOWER_WEST_OPEN: u16 = 65;
 const DOOR_LOWER_NORTH_OPEN: u16 = 67;
 const DOOR_LOWER_EAST_OPEN: u16 = 69;
 const DOOR_UPPER: u16 = 70;
+/// ShortGrass:原创短草的协议稳定编号,被流动水覆盖时零掉落且不受掉落容量
+/// 限制——该结算语义在 Go sim 写入侧,这里只参与可替换判定。
+pub(crate) const SHORT_GRASS: u16 = 84;
 
 /// 镜像 Go `core.IsFluid`:流体 = 源 + 7 档流动水,共 8 个连续编号。
 pub(crate) fn is_fluid(id: u16) -> bool {
@@ -85,6 +89,13 @@ fn is_crop(id: u16) -> bool {
         || (CARROT_STAGE_0..=CARROT_STAGE_7).contains(&id)
 }
 
+/// 镜像 Go `core.IsPlant`:作物 ∪ 短草。植物的「可被流动水替换」共有语义
+/// 收口在这一个谓词,短草不得只在编号上特判——否则后续植物消费者会与作物
+/// 判定面漂移。农业状态机语义仍只认 `is_crop`。
+fn is_plant(id: u16) -> bool {
+    is_crop(id) || id == SHORT_GRASS
+}
+
 /// 镜像 Go `core.IsDoor`:下半 62..69 加上半 70。
 fn is_door(id: u16) -> bool {
     (DOOR_LOWER_SOUTH_CLOSED..=DOOR_UPPER).contains(&id)
@@ -99,11 +110,12 @@ fn is_door_open_lower(id: u16) -> bool {
 }
 
 /// 镜像 Go `fluid.Replaceable` 的判定表,分支顺序与 Go 侧一致:
-/// 空气→真;上半门→假;开启下半门→真;关闭门→假;作物→真;非流体→假;
-/// 源→假;流体按等级比较(更弱的可被更强的新水替换)。
+/// 空气→真;上半门→假;开启下半门→真;关闭门→假;植物(作物与短草)→真;
+/// 非流体→假;源→假;流体按等级比较(更弱的可被更强的新水替换)。
 ///
 /// `new_level` 由调用方按当前传播算出(垂直恒为 1,水平为 N+1),本函数只做
-/// 纯比较;作物冲毁后的掉落结算是权威写入侧(Go sim)的职责,kernel 不感知。
+/// 纯比较;作物冲毁后的掉落结算是权威写入侧(Go sim)的职责,短草覆盖零掉落
+/// 且不预留容量——两者 kernel 都不感知。
 /// 重扫 kernel 以 `replaceable(id, 1)` 复用本表做密封(不动点)判定。
 pub(crate) fn replaceable(target: u16, new_level: u8) -> bool {
     if target == AIR {
@@ -116,11 +128,11 @@ pub(crate) fn replaceable(target: u16, new_level: u8) -> bool {
         }
         return is_door_open_lower(target);
     }
-    if is_crop(target) {
+    if is_plant(target) {
         return true;
     }
     if !is_fluid(target) {
-        // 非空气、非作物、非流体、非可流入开启门:实心方块一律不可替换。
+        // 非空气、非植物、非流体、非可流入开启门:实心方块一律不可替换。
         return false;
     }
     if target == WATER_SOURCE {
@@ -257,9 +269,10 @@ pub(crate) fn encode_eval_input(items: &[[u16; EVAL_SLOTS_PER_ITEM]]) -> Vec<u8>
 mod tests {
     use super::*;
 
-    // 测试专用钉位:生产规则只按区间判定,Stone/Workbench 只在测试里充当
-    // 「非作物实心方块」样本(数值同为 core/block.go 的协议稳定值)。
+    // 测试专用钉位:生产规则只按区间判定,Stone/Grass/Workbench 只在测试里充当
+    // 「非植物实心方块」样本(数值同为 core/block.go 的协议稳定值)。
     const STONE: u16 = 2;
+    const GRASS: u16 = 4;
     const WORKBENCH: u16 = 45;
 
     /// 把一条输出项的 12 字节解码回 (槽位, BlockID) 列表(过滤哨兵)。
@@ -303,8 +316,8 @@ mod tests {
         // 方块编号钉位:这些数值与 Go `internal/core/block.go` 的 iota 实测值
         // 逐一对应(空气 0、Barrier 1、石头 2、源 27、流动水 28..34、麦
         // 37..44、工作台 45、马铃薯 46..53、胡萝卜 54..61、下半门 62..69、
-        // 上半门 70)。重排即破坏协议稳定契约,本断言负责在 Rust 侧被误改
-        // 时报警。
+        // 上半门 70、短草 84)。重排即破坏协议稳定契约,本断言负责在 Rust 侧
+        // 被误改时报警。
         assert_eq!(AIR, 0);
         assert_eq!(BARRIER, 1);
         assert_eq!(WATER_SOURCE, 27);
@@ -317,6 +330,7 @@ mod tests {
         assert_eq!((CARROT_STAGE_0, CARROT_STAGE_7), (54, 61));
         assert_eq!(DOOR_LOWER_SOUTH_CLOSED, 62);
         assert_eq!(DOOR_UPPER, 70);
+        assert_eq!(SHORT_GRASS, 84);
         assert_eq!(STONE, 2);
     }
 
@@ -339,9 +353,16 @@ mod tests {
             CARROT_STAGE_7,
         ] {
             assert!(is_crop(id));
+            assert!(is_plant(id));
         }
         assert!(!is_crop(WORKBENCH));
         assert!(!is_crop(STONE));
+        // 短草是植物但不是作物:植物共有语义(可替换、透光、零碰撞)收口在
+        // `is_plant`,农业状态机仍只认 `is_crop`(镜像 Go `core.IsPlant`)。
+        assert!(is_plant(SHORT_GRASS));
+        assert!(!is_crop(SHORT_GRASS));
+        assert!(!is_plant(WORKBENCH));
+        assert!(!is_plant(STONE));
         // 门区间与四个开启下半门。
         assert!(is_door(DOOR_LOWER_SOUTH_CLOSED));
         assert!(is_door(DOOR_UPPER));
@@ -367,13 +388,20 @@ mod tests {
         assert!(replaceable(WHEAT_STAGE_0, 3));
         assert!(replaceable(POTATO_STAGE_7, 1));
         assert!(replaceable(CARROT_STAGE_0 + 3, 7));
+        // 短草可替换且零掉落:与作物同走植物放行,但 sim 写入侧不为它
+        // 产出任何掉落物,也不预留掉落容量。
+        assert!(replaceable(SHORT_GRASS, 1));
+        assert!(replaceable(SHORT_GRASS, 7));
         // 门:开启下半可流入,关闭下半与上半不可。
         assert!(replaceable(DOOR_LOWER_SOUTH_OPEN, 1));
         assert!(!replaceable(DOOR_LOWER_SOUTH_CLOSED, 1));
         assert!(!replaceable(DOOR_UPPER, 1));
-        // 非作物实心方块不可替换。
+        // 非植物实心方块不可替换;短草脚下的草方块(GRASS=4)是「清草不清
+        // 草皮」的对照,必须继续挡水。
         assert!(!replaceable(STONE, 1));
         assert!(!replaceable(WORKBENCH, 7));
+        assert!(!replaceable(GRASS, 1));
+        assert!(!replaceable(GRASS, 7));
         // 源不可替换(显式分支,不靠等级比较凑对)。
         assert!(!replaceable(WATER_SOURCE, 7));
         // 流体按等级比较:更弱(等级更大)可被替换,相等或更强不可。
@@ -513,6 +541,19 @@ mod tests {
         ));
         let next = WATER_SOURCE + 3;
         assert_writes(&out, &[(3, next), (4, next), (5, next)]);
+    }
+
+    #[test]
+    fn short_grass_is_replaced_vertically_and_horizontally() {
+        // 短草与作物同走植物放行:垂直优先命中下方短草,只写下方一条等级 1,
+        // 不再向任何水平方向传播。
+        let out = eval(&cells(WATER_SOURCE, STONE, SHORT_GRASS, STONE, STONE, STONE, STONE));
+        assert_writes(&out, &[(2, WATER_SOURCE + 1)]);
+        // 水平分支:+x 与 −z 是短草可写入,−x 是短草脚下的草方块必须挡水,
+        // +z 空气照常写入。
+        let out = eval(&cells(WATER_SOURCE, STONE, STONE, SHORT_GRASS, GRASS, AIR, SHORT_GRASS));
+        let next = WATER_SOURCE + 1;
+        assert_writes(&out, &[(3, next), (5, next), (6, next)]);
     }
 
     #[test]

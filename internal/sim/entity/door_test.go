@@ -261,6 +261,7 @@ func TestDoorPlaceSupportEnumerations(t *testing.T) {
 		core.WaterSourceID,
 		core.WaterLevel1ID,
 		core.WheatStage0ID,
+		core.ShortGrassID,
 		core.DoorLowerSouthClosed,
 		core.DoorUpper,
 		core.AirID,

@@ -239,6 +239,16 @@ func TestTorchPlacementRejectsWithoutConsumption(t *testing.T) {
 			wantReason: RejectInvalidBlock,
 		},
 		{
+			name: "非实心支撑拒绝（短草）",
+			arrange: func(t *testing.T, engine *Engine, session SessionID) {
+				engine.SetBlockForTest(core.BlockPos{X: 0, Y: 1, Z: 3}, core.ShortGrassID)
+			},
+			aim: func(t *testing.T, engine *Engine, session SessionID) (float32, float32) {
+				return lookAtBlockCenter(torchEye(engine, session), core.BlockPos{X: 0, Y: 1, Z: 3})
+			},
+			wantReason: RejectInvalidBlock,
+		},
+		{
 			name: "目标格为流体拒绝",
 			arrange: func(t *testing.T, engine *Engine, session SessionID) {
 				engine.SetBlockForTest(core.BlockPos{X: 0, Y: 2, Z: 4}, core.StoneID)

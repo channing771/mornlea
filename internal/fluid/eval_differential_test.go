@@ -18,8 +18,9 @@ import (
 //
 // 用例覆盖面与 kernel 的 Rust 单测分支表一致：垂直优先、水平扩散等级 +1、
 // 等级 7 到界、存活判定（上方流体 / 更强水平邻居）、非源消亡写空气、陈旧项
-// 空写、作物可替换、门四态（开启可流入 / 关闭与上半不可）、源不可替换、
-// 弱水被强水替换，另加 `core.BarrierID` 邻格（sim 侧 scope 外的读语义）。
+// 空写、作物与短草等植物可替换、门四态（开启可流入 / 关闭与上半不可）、源
+// 不可替换、弱水被强水替换，另加 `core.BarrierID` 邻格（sim 侧 scope 外的读
+// 语义）。
 
 // evalDifferentialCase 是一条差分用例：在世界 w 里对 pos 做一次单格求值。
 type evalDifferentialCase struct {
@@ -105,6 +106,13 @@ func evalDifferentialCases() []evalDifferentialCase {
 			w.SetBlock(at(0, 11, 0), core.WaterLevel1ID)
 			w.SetBlock(at(0, 9, 0), core.StoneID)
 			w.SetBlock(at(1, 10, 0), core.WaterLevel3ID)
+		}),
+		newCase("短草邻格可替换-水平写入短草草方块挡水", at(0, 10, 0), func(w *memWorld) {
+			w.SetBlock(at(0, 10, 0), core.WaterSourceID)
+			w.SetBlock(at(0, 9, 0), core.StoneID)
+			w.SetBlock(at(1, 10, 0), core.ShortGrassID)
+			w.SetBlock(at(-1, 10, 0), core.GrassID)
+			w.SetBlock(at(0, 10, -1), core.ShortGrassID)
 		}),
 	}
 }

@@ -82,7 +82,9 @@ func buildOceanChunk(pos core.ChunkPos, divergentSection int) *world.Chunk {
 //   - 段 4 挖一格空气，段 5 底面 (9,·,9) 放水源：其正下方经跨区段读命中该空气
 //     → 未密封必产出（跨区段邻读承重）；
 //   - 段 5 「地表」：石地板上开一片水池（源 + 边缘流动水），池缘一格耕地
-//     （实心不可替换，密封）与一格小麦（作物可替换，密封被破坏必产出）；
+//     （实心不可替换，密封）、一格小麦（作物可替换，密封被破坏必产出）与
+//     一格短草（植物可替换，与作物同一密封破坏语义——native 差分在此覆盖
+//     重扫 kernel 的短草谓词）；
 //   - 段 23 顶部水源：四邻石密封，上方越界不在五邻集合内（y 上界）。
 func buildSurfaceChunk(pos core.ChunkPos) *world.Chunk {
 	chunk := world.NewChunk(pos)
@@ -105,6 +107,7 @@ func buildSurfaceChunk(pos core.ChunkPos) *world.Chunk {
 	chunk.SetBlock(2, baseY+1, 1, core.WaterLevel3ID)
 	chunk.SetBlock(6, baseY+1, 2, core.FarmlandDryID)
 	chunk.SetBlock(6, baseY+1, 3, core.WheatStage3ID)
+	chunk.SetBlock(6, baseY+1, 4, core.ShortGrassID)
 	chunk.SetBlock(9, baseY, 9, core.WaterSourceID)
 	topY := int32(23<<core.SectionShift) + core.MinY + core.SectionMask
 	for _, offset := range [4][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}} {

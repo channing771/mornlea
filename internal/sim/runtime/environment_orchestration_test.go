@@ -127,3 +127,153 @@ func TestFarmlandMoistureRestartRecoversStaleWetFarmland(t *testing.T) {
 	t.Fatalf("重启恢复未在预算内把陈旧耕地改干，当前=%s",
 		blockLabel(cropBlockAt(t, engine, farmland)))
 }
+
+// —— wild plant 支撑 sweep 的阶段顺序 ——
+
+// mineUntilBlockAir 持续挖向 target（玩家输入持久保持 Mining），返回目标格
+// 变成空气那一 tick 的结果；上界内未完成直接失败。
+func mineUntilBlockAir(
+	t *testing.T,
+	engine *Engine,
+	session SessionID,
+	target core.BlockPos,
+	ticks int,
+) TickResult {
+	t.Helper()
+	player, ok := engine.Player(session)
+	if !ok {
+		t.Fatal("玩家不存在")
+	}
+	eye := player.State.Position.Add(mgl32.Vec3{0, engine.physicsTunables.EyeHeight, 0})
+	yaw, pitch := lookAtBlockCenter(eye, target)
+	engine.Enqueue(Command{
+		Session: session, Sequence: 2, Kind: CommandPlayerInput,
+		Yaw: yaw, Pitch: pitch, Mining: true,
+	})
+	var result TickResult
+	for range ticks {
+		result = engine.Step()
+		if got := cropBlockAt(t, engine, target); got == core.AirID {
+			return result
+		}
+	}
+	t.Fatalf("%d tick 内 %+v 仍未被采掘，当前=%s", ticks, target,
+		blockLabel(cropBlockAt(t, engine, target)))
+	return result
+}
+
+// assertNoSeedDrops 断言主区块掉落物里没有任何小麦种子：环境清除短草必须
+// 零掉落，种子只能来自玩家采除（后续任务）。
+func assertNoSeedDrops(t *testing.T, engine *Engine) {
+	t.Helper()
+	chunk, ready := engine.dimension(core.Overworld).ReadyChunk(core.ChunkPos{})
+	if !ready {
+		t.Fatal("中心区块未就绪")
+	}
+	for slot := range core.DropsPerChunk {
+		if drop := chunk.Drop(slot); drop.Active && drop.Stack.Item == core.ItemWheatSeeds {
+			t.Fatalf("环境清除短草产生了种子掉落：槽 %d=%+v", slot, drop)
+		}
+	}
+}
+
+// TestWildGrassSweepRunsBeforeTorchSweep 钉死权威 tick 的支撑复核顺序：
+// FinishWorld 后先 wild grass、再 torch、最后 bed。玩家采掘抬高草块 G 的完成
+// tick 内，wild plant sweep 清掉 G 上方短草 S（同 mutation 零掉落）；torch
+// sweep 随后把 S 的新清空变更纳入自己的稳定快照，移除落在 S 上的落地火把
+// 并按既有通道掉落一枚火把——若顺序颠倒或清草缺席，火把的支撑格 S 不会
+// 出现在 torch sweep 的快照里，火把会悬空残留。
+func TestWildGrassSweepRunsBeforeTorchSweep(t *testing.T) {
+	engine, session := readyMovementPlayer(t)
+	support := core.BlockPos{X: 2, Y: 1, Z: 4}
+	plant := core.BlockPos{X: 2, Y: 2, Z: 4}
+	torch := core.BlockPos{X: 2, Y: 3, Z: 4}
+	engine.SetBlockForTest(support, core.GrassID)
+	engine.SetBlockForTest(plant, core.ShortGrassID)
+	engine.SetBlockForTest(torch, core.TorchStandingID)
+
+	result := mineUntilBlockAir(t, engine, session, support, 40)
+
+	if got := cropBlockAt(t, engine, support); got != core.AirID {
+		t.Fatalf("支撑草块=%s，想要被采掘为空气", blockLabel(got))
+	}
+	if got := cropBlockAt(t, engine, plant); got != core.AirID {
+		t.Fatalf("支撑失效的短草=%s，想要同 tick 清为空气", blockLabel(got))
+	}
+	if got := cropBlockAt(t, engine, torch); got != core.AirID {
+		t.Fatalf("短草清空后其上落地火把=%s，想要被 torch sweep 移除", blockLabel(got))
+	}
+	changed := map[core.BlockPos]core.BlockID{}
+	for _, batch := range result.Changes {
+		for _, change := range batch.Changes {
+			changed[change.Position] = change.Block
+		}
+	}
+	for position, want := range map[core.BlockPos]core.BlockID{
+		support: core.AirID,
+		plant:   core.AirID,
+		torch:   core.AirID,
+	} {
+		if got, ok := changed[position]; !ok || got != want {
+			t.Fatalf("同 tick 变更广播缺项：%+v got (%d,%v)，想要 %d", position, got, ok, want)
+		}
+	}
+	chunk, ready := engine.dimension(core.Overworld).ReadyChunk(core.ChunkPos{})
+	if !ready {
+		t.Fatal("中心区块未就绪")
+	}
+	torchDrops := 0
+	for slot := range core.DropsPerChunk {
+		if drop := chunk.Drop(slot); drop.Active && drop.Stack.Item == core.ItemTorch {
+			torchDrops++
+		}
+	}
+	if torchDrops != 1 {
+		t.Fatalf("火把掉落=%d，想要恰好 1", torchDrops)
+	}
+	assertNoSeedDrops(t, engine)
+}
+
+// TestWildGrassSweepRunsBeforeBedSweep 是床侧的同款顺序钉位：采掘抬高草块
+// 的完成 tick 内，wild plant sweep 清掉其上短草（床尾的唯一支撑格），bed
+// sweep 看到该清空变更后整床双清并掉落恰好 1 个床物品（床头一侧支撑保持
+// 石头，排除另一半的干扰）。
+func TestWildGrassSweepRunsBeforeBedSweep(t *testing.T) {
+	engine, session := readyMovementPlayer(t)
+	engine.SetPlayerPositionForTest(session, mgl32.Vec3{0.5, 1, 6.5})
+	support := core.BlockPos{X: 3, Y: 1, Z: 8}
+	plant := core.BlockPos{X: 3, Y: 2, Z: 8}
+	bedFoot := core.BlockPos{X: 3, Y: 3, Z: 8}
+	bedHead := core.BlockPos{X: 3, Y: 3, Z: 9}
+	engine.SetBlockForTest(support, core.GrassID)
+	engine.SetBlockForTest(plant, core.ShortGrassID)
+	engine.SetBlockForTest(bedFoot, core.BedFootID(0))
+	engine.SetBlockForTest(bedHead, core.BedHeadID(0))
+	engine.SetBlockForTest(core.BlockPos{X: 3, Y: 2, Z: 9}, core.StoneID)
+
+	mineUntilBlockAir(t, engine, session, support, 40)
+
+	if got := cropBlockAt(t, engine, plant); got != core.AirID {
+		t.Fatalf("支撑失效的短草=%s，想要同 tick 清为空气", blockLabel(got))
+	}
+	if got := cropBlockAt(t, engine, bedFoot); got != core.AirID {
+		t.Fatalf("短草清空后其上床尾=%s，想要整床移除", blockLabel(got))
+	}
+	if got := cropBlockAt(t, engine, bedHead); got != core.AirID {
+		t.Fatalf("床头=%s，想要整床移除", blockLabel(got))
+	}
+	chunk, ready := engine.dimension(core.Overworld).ReadyChunk(core.ChunkPos{})
+	if !ready {
+		t.Fatal("中心区块未就绪")
+	}
+	bedDrops := 0
+	for slot := range core.DropsPerChunk {
+		if drop := chunk.Drop(slot); drop.Active && drop.Stack.Item == core.ItemBed {
+			bedDrops++
+		}
+	}
+	if bedDrops != 1 {
+		t.Fatalf("床掉落=%d，想要恰好 1", bedDrops)
+	}
+	assertNoSeedDrops(t, engine)
+}

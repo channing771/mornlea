@@ -61,7 +61,8 @@ func yawToDoorDir(yaw float32) int {
 func isSolidSupport(id core.BlockID) bool {
 	// Farmland 干/湿均为实心支撑（与 assets.Registry.Opaque 一致，Opaque 对耕地为 true）。
 	// sim 不直接依赖 assets 以避免循环，此处显式复用 Opaque 判定式并以 Farmland 正例断言守护。
-	return core.IsFarmland(id) || (core.RegisteredBlock(id) && id != core.AirID && id != core.GlassID && id != core.LeavesID && !core.IsFluid(id) && !core.IsCrop(id) && !core.IsDoor(id))
+	// 植物判据用 `IsPlant`：作物与短草都是零碰撞的非完整格植物，都不能承载门或床。
+	return core.IsFarmland(id) || (core.RegisteredBlock(id) && id != core.AirID && id != core.GlassID && id != core.LeavesID && !core.IsFluid(id) && !core.IsPlant(id) && !core.IsDoor(id))
 }
 
 // tryPlaceDoor 尝试在 lower 放置下半门并在 upper 放置上半。

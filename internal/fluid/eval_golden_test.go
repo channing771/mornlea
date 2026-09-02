@@ -111,6 +111,20 @@ func TestFluidEvalBatchGoldenVectors(t *testing.T) {
 			cells: [7]core.BlockID{core.WaterLevel1ID, core.WaterSourceID, core.StoneID, core.WaterLevel5ID, core.AirID, core.AirID, core.AirID},
 			want:  [fluidEvalItemOutputBytes]byte{0x03, 0x1d, 0x00, 0x04, 0x1d, 0x00, 0x05, 0x1d, 0x00, 0x06, 0x1d, 0x00},
 		},
+		{
+			// 短草可替换（垂直分支）：下方短草触发垂直优先，只写下方一条等级 1；
+			// 掉落侧零产出由 sim 写入侧保证，kernel 只负责放行写入。
+			name:  "短草下方垂直优先",
+			cells: [7]core.BlockID{core.WaterSourceID, core.AirID, core.ShortGrassID, core.StoneID, core.StoneID, core.StoneID, core.StoneID},
+			want:  [fluidEvalItemOutputBytes]byte{0x02, 0x1c, 0x00, 0xff, 0x00, 0x00, 0xff, 0x00, 0x00, 0xff, 0x00, 0x00},
+		},
+		{
+			// 短草可替换（水平分支）：+x 与 −z 是短草、−x 是草方块（挡水对照），
+			// 水平只写空气与短草三个方向，草方块方向跳过。
+			name:  "短草水平可替换草方块挡水",
+			cells: [7]core.BlockID{core.WaterSourceID, core.AirID, core.StoneID, core.ShortGrassID, core.GrassID, core.AirID, core.ShortGrassID},
+			want:  [fluidEvalItemOutputBytes]byte{0x03, 0x1c, 0x00, 0x05, 0x1c, 0x00, 0x06, 0x1c, 0x00, 0xff, 0x00, 0x00},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

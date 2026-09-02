@@ -96,6 +96,13 @@ func TestTryPlaceBedRejectionsWithoutWrites(t *testing.T) {
 			dir: 0,
 		},
 		{
+			name: "床尾下方短草非实心支撑",
+			mutdb: func(t *testing.T, engine *Engine, foot, head core.BlockPos) {
+				engine.SetBlockForTest(core.BlockPos{X: foot.X, Y: foot.Y - 1, Z: foot.Z}, core.ShortGrassID)
+			},
+			dir: 0,
+		},
+		{
 			name: "床头格为流体视作占据",
 			mutdb: func(t *testing.T, engine *Engine, foot, head core.BlockPos) {
 				engine.SetBlockForTest(head, core.WaterSourceID)

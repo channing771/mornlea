@@ -48,8 +48,9 @@ func torchSupport(block core.BlockID, pos core.BlockPos) (core.BlockPos, bool) {
 }
 
 // torchSupportBlockSolid 报告 id 是否能充当火把支撑：必须提供碰撞体（实心）。
-// 空气、流体、作物与火把自身都零碰撞、天然出局——「火把不可能成为另一火把
-// 的支撑源」由同一条判据保证，支撑移除因此严格是六邻居 × 单级，不存在级联。
+// 空气、流体、植物（作物与短草）与火把自身都零碰撞、天然出局——「火把不可
+// 能成为另一火把的支撑源」由同一条判据保证，支撑移除因此严格是六邻居 × 单级，
+// 不存在级联。
 // 借用 physics 的碰撞表而不是另写一份实心清单：零碰撞与不可支撑在这里是
 // 同一个事实，第二份清单只会在两处渐行渐远。
 func torchSupportBlockSolid(id core.BlockID) bool {

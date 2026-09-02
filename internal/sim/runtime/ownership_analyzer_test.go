@@ -66,6 +66,7 @@ const (
 	stageAdvanceFluids
 	stageAdvanceFarmlandMoisture
 	stageAdvanceCrops
+	stageSweepUnsupportedWildPlants
 	stageSweepUnsupportedTorches
 	stageSweepUnsupportedBeds
 	stageMutationCommit
@@ -82,25 +83,27 @@ const completeOwnershipStageMask = stageApplyPlayerCommands |
 	stageAdvanceFluids |
 	stageAdvanceFarmlandMoisture |
 	stageAdvanceCrops |
+	stageSweepUnsupportedWildPlants |
 	stageSweepUnsupportedTorches |
 	stageSweepUnsupportedBeds |
 	stageMutationCommit
 
 var ownershipStageByCall = map[string]uint64{
-	"ApplyPlayerCommands":     stageApplyPlayerCommands,
-	"ApplyCompanionActions":   stageApplyCompanionActions,
-	"AdvanceActors":           stageAdvanceActors,
-	"AdvanceHostiles":         stageAdvanceHostiles,
-	"SettleGameplay":          stageSettleGameplay,
-	"SettleTramples":          stageSettleTramples,
-	"FinishWorld":             stageFinishWorld,
-	"Publish":                 stagePublish,
-	"AdvanceFluids":           stageAdvanceFluids,
-	"AdvanceFarmlandMoisture": stageAdvanceFarmlandMoisture,
-	"AdvanceCrops":            stageAdvanceCrops,
-	"SweepUnsupportedTorches": stageSweepUnsupportedTorches,
-	"SweepUnsupportedBeds":    stageSweepUnsupportedBeds,
-	"Commit":                  stageMutationCommit,
+	"ApplyPlayerCommands":        stageApplyPlayerCommands,
+	"ApplyCompanionActions":      stageApplyCompanionActions,
+	"AdvanceActors":              stageAdvanceActors,
+	"AdvanceHostiles":            stageAdvanceHostiles,
+	"SettleGameplay":             stageSettleGameplay,
+	"SettleTramples":             stageSettleTramples,
+	"FinishWorld":                stageFinishWorld,
+	"Publish":                    stagePublish,
+	"AdvanceFluids":              stageAdvanceFluids,
+	"AdvanceFarmlandMoisture":    stageAdvanceFarmlandMoisture,
+	"AdvanceCrops":               stageAdvanceCrops,
+	"SweepUnsupportedWildPlants": stageSweepUnsupportedWildPlants,
+	"SweepUnsupportedTorches":    stageSweepUnsupportedTorches,
+	"SweepUnsupportedBeds":       stageSweepUnsupportedBeds,
+	"Commit":                     stageMutationCommit,
 }
 
 var forbiddenFixtureInboxTypes = map[string]struct{}{
