@@ -28,7 +28,7 @@
 
 ### Requirement: 加载进度以权威区块镜像驱动
 
-加载屏 SHALL 呈现标题、进度条与区块计数。下行 `loading` 分节 MUST 含两个整数：`loaded`（当前已就绪区块列数，取自客户端区块列镜像的势）与 `total`（目标列数，取无头加载判据同源的 `LoadedChunkTarget` 公式 `(2*(ViewDistance+1)+1)^2`），并 MAY 携带可选整数 `meshed`/`meshTotal`（初始网格化的单调完成估计与目标段数 `total × SectionsPerChunk`；mesher 装配且完成计数开始后才携带，重复网格化由 Go 侧钳制到上界）。前端 MUST 以工作量单位 `clamp((loaded+meshed)/(total+meshTotal), 0, 1)` 驱动进度条——网格化是快照到齐后的主要剩余工作量，进度条满格 MUST 与完成判据收敛对齐；网格字段缺席时 MUST 退回 `clamp(loaded/total, 0, 1)`。前端 MUST NOT 自行预测或平滑进度；文案与格式由前端常量呈现。分节 MUST 经既有整份 `uiState` 下行路径推送，分节数值未变化的帧零推送。
+加载屏 SHALL 呈现标题、进度条与区块计数。下行 `loading` 分节 MUST 含两个整数：`loaded`（当前已就绪区块列数，取自客户端区块列镜像的势）与 `total`（目标列数，取无头加载判据同源的 `LoadedChunkTarget` 公式 `(2*(ViewDistance+1)+1)^2`），并 MAY 携带可选整数 `meshed`/`meshTotal`（本会话初始网格化的单调完成估计——自装配点基线起算，二次装配不得携带上一世界的计数——与目标段数 `total × SectionsPerChunk`；mesher 装配且完成计数开始后才携带，重复网格化由 Go 侧钳制到上界）。前端 MUST 以工作量单位 `clamp((loaded+meshed)/(total+meshTotal), 0, 1)` 驱动进度条——网格化是快照到齐后的主要剩余工作量，进度条满格 MUST 与完成判据收敛对齐；网格字段缺席时 MUST 退回 `clamp(loaded/total, 0, 1)`。前端 MUST NOT 自行预测或平滑进度；文案与格式由前端常量呈现。分节 MUST 经既有整份 `uiState` 下行路径推送，分节数值未变化的帧零推送。
 
 #### Scenario: 进度随快照推进
 

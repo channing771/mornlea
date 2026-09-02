@@ -49,10 +49,11 @@ type uiStateJSON struct {
 }
 
 // uiLoadingJSON 对应 schema `$defs/loadingState`:世界加载屏分节只在加载相位
-// 出现。loaded/total 是区块列流送进度,meshed/meshTotal 是初始网格化的单调
-// 完成估计(对目标段数钳制);两组都由 Go 权威推导,前端按工作量单位合并
-// 换算比例,不自行预测或平滑进度。mesher 缺席(直构测试形态)时网格字段
-// 缺席,前端退回 loaded/total。
+// 出现。loaded/total 是区块列流送进度,meshed/meshTotal 是本会话初始网格化的
+// 单调完成估计(自装配点基线起算,对目标段数钳制——mesher 计数跨会话单调,
+// 不从基线起算会让二次装配的进度起步即饱和);两组都由 Go 权威推导,前端按
+// 工作量单位合并换算比例,不自行预测或平滑进度。mesher 缺席(直构测试形态)
+// 时网格字段缺席,前端退回 loaded/total。
 type uiLoadingJSON struct {
 	Loaded int `json:"loaded"`
 	Total  int `json:"total"`
@@ -186,7 +187,9 @@ func (a *Application) buildUIState() uiStateJSON {
 func (a *Application) buildUILoadingSection() *uiLoadingJSON {
 	var completed uint64
 	if a.mesher != nil {
-		completed = a.mesher.Stats().CompletedMeshes
+		if count := a.mesher.Stats().CompletedMeshes; count > a.loadingMeshBase {
+			completed = count - a.loadingMeshBase
+		}
 	}
 	section := loadingProgressSection(len(a.loadedChunks), LoadedChunkTarget(a), completed)
 	return &section

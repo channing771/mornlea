@@ -160,22 +160,27 @@ type Application struct {
 	// worldTimeTicks 是最后确认的权威绝对世界时间，只在接受更新状态时前进。
 	// dayPhaseOffset 是同一份状态携带的显示相位偏移（0..23999），与世界时间
 	// 同一接受纪律：偏移只平移昼夜呈现，绝不回写绝对时间。
-	worldTimeTicks          uint64
-	dayPhaseOffset          uint16
-	glyphAtlas              *render.GlyphAtlas
-	clientEndpoint          network.ClientEndpoint
-	receiver                *client.Receiver
-	server                  *server.Server
-	host                    Host
-	serverCancel            context.CancelFunc
-	serverDone              chan error
-	mirror                  *client.Mirror
-	predictor               *client.Predictor
-	mesher                  *client.Mesher
-	camera                  client.Camera
-	center                  core.ChunkPos
-	sequence                uint64
-	loadedChunks            map[core.ChunkPos]struct{}
+	worldTimeTicks uint64
+	dayPhaseOffset uint16
+	glyphAtlas     *render.GlyphAtlas
+	clientEndpoint network.ClientEndpoint
+	receiver       *client.Receiver
+	server         *server.Server
+	host           Host
+	serverCancel   context.CancelFunc
+	serverDone     chan error
+	mirror         *client.Mirror
+	predictor      *client.Predictor
+	mesher         *client.Mesher
+	camera         client.Camera
+	center         core.ChunkPos
+	sequence       uint64
+	loadedChunks   map[core.ChunkPos]struct{}
+	// loadingMeshBase 是本会话装配点记录的网格化完成计数基线：mesher 跨会话
+	// 复用(单调计数不归零),退回主菜单再进入时若不从基线起算,上一世界的完成
+	// 数会让加载屏网格进度起步即饱和——进度条从高位直接跳满格,随后在网格
+	// 尾巴期间停在 100%(看似卡住)。
+	loadingMeshBase         uint64
 	ticks                   *TickRecorder
 	saves                   *SaveRecorder
 	observerFloor           uint64

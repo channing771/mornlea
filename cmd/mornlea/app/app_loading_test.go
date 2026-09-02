@@ -7,6 +7,7 @@ package app
 // 装配（排空桥事件需要真实渲染器）与交互测试的内存流对夹具。
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -197,5 +198,73 @@ func TestRunInteractiveMenuLoopHandsOffToLoadingOnAssembly(t *testing.T) {
 	}
 	if len(window.pushedUIStates) == 0 || !strings.Contains(string(window.pushedUIStates[0]), `"phase":"loading"`) {
 		t.Fatalf("加载循环应至少呈现一帧 loading 下行文档，首份 = %v", window.pushedUIStates)
+	}
+}
+
+// TestQuitToMenuReentryLoadingConverges 复现并锁定「暂停退回主菜单后再次进入
+// 世界」的两会话收敛：生产依赖（真实 Host/登录/内存流对）加临时目录存档，第一
+// 会话真实收敛后暂停拆链，第二会话必须再次收敛且加载屏分节不得携带上一会话的
+// 网格完成计数（进度条从高位起步）。视距 2 使目标列数为 25，两会话都在秒级完成。
+func TestQuitToMenuReentryLoadingConverges(t *testing.T) {
+	deps := defaultDependencies()
+	worldPath := filepath.Join(t.TempDir(), "world")
+	identity := connectionTestIdentity()
+	render := config.Defaults().Render
+	render.LodEnabled = false
+	render.ViewDistance = 2
+	ticks, _ := newPerformanceRecorders(false)
+	newSession := func() *Application {
+		app := NewOffscreenRenderApplicationForTest(t, &IntegrationGlyphSource{}, 64, 64, render)
+		app.window = &fakeInteractiveWindow{}
+		app.menu = menuState{phase: MenuPhaseMenu, title: "Mornlea", version: menuVersion()}
+		app.startupOptions = Options{
+			Seed: 42, WorldPath: worldPath, Identity: &identity,
+			Render: render, StartAtMenu: true,
+		}
+		app.startupDeps = deps
+		app.ticks = ticks
+		return app
+	}
+	app := newSession()
+
+	// 会话一：进入并真实收敛。
+	if quit := app.handleMenuEvent(menuActionStart); quit {
+		t.Fatal("会话一进入不应退出")
+	}
+	if _, err := WaitUntilLoaded(app, 60*time.Second); err != nil {
+		t.Fatalf("会话一收敛: %v", err)
+	}
+	firstMeshed := app.mesher.Stats().CompletedMeshes
+	if firstMeshed == 0 {
+		t.Fatal("会话一应发生真实网格化")
+	}
+
+	// 暂停并退回主菜单（拆链）。
+	app.openPauseOverlay()
+	app.quitToMenuFromPause()
+	if app.menu.phase != MenuPhaseMenu {
+		t.Fatalf("拆链后 phase = %v, want menu", app.menu.phase)
+	}
+
+	// 会话二：同一存档再次进入,必须再次收敛;起步分节先取样,收敛后再断言
+	// (先断言会在收敛前早退,掩盖卡住形态)。
+	if quit := app.handleMenuEvent(menuActionStart); quit {
+		t.Fatal("会话二进入不应退出")
+	}
+	entrySection := app.buildUIState().Loading
+	if _, err := WaitUntilLoaded(app, 60*time.Second); err != nil {
+		stats := app.mesher.Stats()
+		t.Fatalf("会话二收敛: %v chunks=%d/%d stats=%+v pending=%d",
+			err, len(app.loadedChunks), LoadedChunkTarget(app),
+			stats, app.scheduler.PendingUploads())
+	}
+	if app.menu.phase != MenuPhaseLoading {
+		t.Fatalf("会话二收敛后 phase = %v, want loading（由交互循环置 game）", app.menu.phase)
+	}
+	if entrySection == nil {
+		t.Fatal("会话二应处于加载相位")
+	}
+	if entrySection.Meshed != 0 || entrySection.MeshTotal != 0 {
+		t.Fatalf("会话二起步不得携带上一会话网格进度: %+v", entrySection)
 	}
 }

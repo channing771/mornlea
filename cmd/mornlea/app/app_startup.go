@@ -440,6 +440,10 @@ func (a *Application) startWorld() error {
 	a.mirror = client.NewMirror()
 	a.predictor = client.NewPredictor()
 	a.loadedChunks = make(map[core.ChunkPos]struct{})
+	// 网格完成计数跨会话单调,装配点记录基线使加载屏进度从本会话起算。
+	if a.mesher != nil {
+		a.loadingMeshBase = a.mesher.Stats().CompletedMeshes
+	}
 	a.sequence = 0
 	a.serverTick = 0
 	a.worldTimeTicks = 0
