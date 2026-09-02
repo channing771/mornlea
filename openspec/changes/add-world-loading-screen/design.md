@@ -17,10 +17,12 @@
 - `RunInteractive` 相位路由扩展：`menu/settings/starting` → `runMenuPhase`；
   `loading` → 新 `runLoadingPhase`；`game` → `runGamePhase`。`runMenuPhase`
   在相位变为 `loading` 时同样返回（与既有 `game` 返回对称）。
-- `runLoadingPhase` 每帧：`Poll → pumpDevCapture → DrainUIEvents（逐条交
-  handleMenuUIEvent，未知事件告警忽略）→ a.Frame(MessageDrainMax,
-  MessageDrainMax, dt) → ApplicationLoadComplete 检查`。收敛即置
-  `MenuPhaseGame`、捕获光标并刷新基线、返回。
+- `runLoadingPhase` 每帧：`Poll → pumpDevCapture → DrainUIEvents（逐条告警
+  忽略——加载屏无合法上行动作，任何桥事件都是异常输入）→ a.Frame(
+  MessageDrainMax, MessageDrainMax, dt) → ApplicationLoadComplete 检查`。
+  收敛即置 `MenuPhaseGame`、捕获光标并刷新基线、返回。`handleMenuEvent`
+  增加 `MenuPhaseLoading` 防御档（直接返回），保证任何错相位动作事件都
+  不能在加载期重新装配世界。
 - 复用 `Application.Frame`（消息 drain + 接收器错误处理 + 呈现推进 + 渲染），
   不另起第二套帧驱动；`receiver.Err()` 走既有 `CloseClientSession` + 返回错误
   语义，与游戏相位一致。窗口关闭（`ShouldClose`）返回 nil 正常退出。
