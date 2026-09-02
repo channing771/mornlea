@@ -1,6 +1,9 @@
 package entity
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
@@ -434,6 +437,91 @@ func TestCompanionActionMiningPayloadsSetAndClearIntent(t *testing.T) {
 	}
 	if len(released.Rejected) != 0 {
 		t.Fatalf("MineRelease 产生拒绝=%+v", released.Rejected)
+	}
+}
+
+// TestCompanionMineableBlockExplicitlyRejectsWildGrass 锁定权威执行器对短草的
+// **显式**拒绝（change natural-grass-seeds design 决策 1）。短草今天没有
+// `core.BlockDrop` 登记，通用「单一掉落」判据碰巧也会拒绝它——但契约要求的是
+// 显式拒绝而不是巧合阻挡：种子的概率掉落只属于玩家采掘，若未来有人给短草补上
+// BlockDrop 登记，只有显式谓词还站着。因此本用例的承重墙是源码守卫：
+// `companionMineableBlock` 的函数体必须点名 `core.IsWildGrass`，与
+// internal/companion 的 `planMineableBlock` 是同一规则的两处实现，双侧必须同时
+// 显式拒绝。
+func TestCompanionMineableBlockExplicitlyRejectsWildGrass(t *testing.T) {
+	if !companionFunctionMentionsIdentifier(t, "mining.go", "companionMineableBlock", "IsWildGrass") {
+		t.Fatal("companionMineableBlock 没有显式点名 core.IsWildGrass；" +
+			"伙伴拒绝短草不得依赖缺失 BlockDrop 的巧合")
+	}
+	if companionMineableBlock(core.ShortGrassID) {
+		t.Fatal("companionMineableBlock(ShortGrassID) = true，短草必须是显式拒绝的伙伴采掘目标")
+	}
+}
+
+// companionFunctionMentionsIdentifier 用 go/parser 检查 file 内名为 functionName
+// 的函数声明是否在其函数体中提到 identifier（如 IsWildGrass）。测试进程的工作
+// 目录就是本包目录，直接按文件名解析。
+func companionFunctionMentionsIdentifier(
+	t *testing.T,
+	file, functionName, identifier string,
+) bool {
+	t.Helper()
+	fileSet := token.NewFileSet()
+	parsed, err := parser.ParseFile(fileSet, file, nil, 0)
+	if err != nil {
+		t.Fatalf("解析 %s: %v", file, err)
+	}
+	for _, declaration := range parsed.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if !ok || function.Name.Name != functionName {
+			continue
+		}
+		mentioned := false
+		ast.Inspect(function.Body, func(node ast.Node) bool {
+			if ident, ok := node.(*ast.Ident); ok && ident.Name == identifier {
+				mentioned = true
+			}
+			return true
+		})
+		return mentioned
+	}
+	t.Fatalf("%s 中没有找到函数 %s，源码守卫会静默失效", file, functionName)
+	return false
+}
+
+// TestCompanionMiningNeverSettlesShortGrass 是拒绝的行为面（spec Scenario「伙伴
+// 拒绝采掘短草」）：持铁镐的伙伴持续对短草保持采掘意图，短草、掉落物与区块
+// revision 必须全部不变，防御清单在进度累积之前就清零采掘状态。
+func TestCompanionMiningNeverSettlesShortGrass(t *testing.T) {
+	fixture := readyCompanionMining(t, core.ShortGrassID, core.ItemIronPickaxe)
+	entry := fixture.entry
+	record := miningTargetRecord(t, fixture.engine, fixture.target)
+	beforeHash := record.Chunk.Hash()
+	beforeDrops := record.Chunk.DropsHash()
+	beforeRevision := record.Revision
+
+	for tick := 0; tick < 10; tick++ {
+		result := advanceMiningOnce(fixture.engine)
+		if got := companionMiningBlockAt(t, fixture); got != core.ShortGrassID {
+			t.Fatalf("tick %d 伙伴破坏了短草=%d", tick, got)
+		}
+		if len(result.Changes) != 0 {
+			t.Fatalf("tick %d 伙伴采草发布了区块变更=%+v", tick, result.Changes)
+		}
+	}
+
+	if got := record.Chunk.Hash(); got != beforeHash || record.Revision != beforeRevision {
+		t.Fatalf("伙伴采草修改了区块或 revision: hash=%x/%x revision=%d/%d",
+			got, beforeHash, record.Revision, beforeRevision)
+	}
+	if got := record.Chunk.DropsHash(); got != beforeDrops {
+		t.Fatalf("伙伴采草修改了掉落槽: %x/%x", got, beforeDrops)
+	}
+	if got := companionItemCount(entry, core.ItemWheatSeeds); got != 0 {
+		t.Fatalf("伙伴采草让种子入包=%d", got)
+	}
+	if entry.mining != (miningState{}) {
+		t.Fatalf("防御清单应清零采掘进度: %+v", entry.mining)
 	}
 }
 

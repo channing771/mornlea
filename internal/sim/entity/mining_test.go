@@ -1589,3 +1589,500 @@ func TestHarvestPotatoUnripeCapacityIsAtomic(t *testing.T) {
 		t.Fatalf("unripe capacity changed hash")
 	}
 }
+
+// 短草采掘的固定判定样本（change natural-grass-seeds）：测试引擎固定
+// world seed=0、Overworld，命中/未命中坐标是按规格冻结的 salt 与折叠链
+// （worldSeed ^ salt → 维度 → x → y → z，全部经 uint32 位模式）事先算出的
+// 常量，不在测试运行时搜索。负坐标样本专门钉住「有符号坐标先转 uint32」的
+// 位模式语义；任何对 salt、折叠顺序或符号转换的改动都会让这些判定翻转。
+var (
+	shortGrassSeedHitPositions = [...]core.BlockPos{
+		{X: 6, Y: 1, Z: 5}, {X: 14, Y: 1, Z: 5}, {X: -9, Y: 1, Z: 5},
+	}
+	shortGrassSeedMissPositions = [...]core.BlockPos{
+		{X: 0, Y: 1, Z: 5}, {X: 1, Y: 1, Z: 5}, {X: -1, Y: 1, Z: 5},
+	}
+)
+
+// shortGrassMiningPlayer 把单人采掘夹具的目标换成一格短草：目标默认在玩家正
+// 前方 3 格（yaw=0 朝 -Z、pitch=miningTestPitch），负坐标目标额外装载所在区块。
+// held 为零值时空手；返回引擎、会话与目标格。
+func shortGrassMiningPlayer(
+	t *testing.T,
+	target core.BlockPos,
+	held core.ItemStack,
+) (*Engine, SessionID, core.BlockPos) {
+	t.Helper()
+	engine, sessions, targets := readyMiningPlayers(t, 1)
+	if target.Chunk() != targets[0].Chunk() {
+		loadFlatChunks(t, engine.dimension(core.Overworld), target.Chunk().X, target.Chunk().X, 0, 0)
+	} else if target != targets[0] {
+		engine.SetBlockForTest(targets[0], core.AirID)
+	}
+	engine.SetBlockForTest(target, core.ShortGrassID)
+	player := engine.sessions[sessions[0]].player
+	player.state.Position = mgl32.Vec3{float32(target.X) + 0.5, 1, float32(target.Z) + 3.5}
+	player.yaw = 0
+	player.pitch = miningTestPitch
+	if held != (core.ItemStack{}) {
+		player.inventory.Hotbar.Slots[0] = held
+	}
+	return engine, sessions[0], target
+}
+
+// requireShortGrassDroppedSeeds 断言目标区块恰好存在一个活动掉落槽，且是
+// 恰好 1 颗小麦种子、锚定在目标格、带既有 mining pickup delay——种子必须进入
+// 世界掉落物系统而不是背包。
+func requireShortGrassDroppedSeeds(t *testing.T, engine *Engine, target core.BlockPos) {
+	t.Helper()
+	record := miningTargetRecord(t, engine, target)
+	blockIndex, ok := world.ChunkBlockIndex(target)
+	if !ok {
+		t.Fatalf("短草目标 %+v 没有区块索引", target)
+	}
+	found := 0
+	for slot := range core.DropsPerChunk {
+		drop := record.Chunk.Drop(slot)
+		if !drop.Active {
+			continue
+		}
+		found++
+		if drop.Stack != (core.ItemStack{Item: core.ItemWheatSeeds, Count: 1}) {
+			t.Fatalf("掉落槽 %d = %+v，想要恰好 1 颗小麦种子", slot, drop.Stack)
+		}
+		if drop.BlockIndex != blockIndex {
+			t.Fatalf("掉落槽 %d 锚定 %d，想要目标格 %d", slot, drop.BlockIndex, blockIndex)
+		}
+		if drop.PickupDelayTicks != engine.tunables.DropPickupDelayTicks {
+			t.Fatalf("掉落槽 %d pickup delay=%d，想要既有 mining 延迟 %d",
+				slot, drop.PickupDelayTicks, engine.tunables.DropPickupDelayTicks)
+		}
+	}
+	if found != 1 {
+		t.Fatalf("活动掉落槽数=%d，想要恰好 1（1/8 命中只掉一颗种子）", found)
+	}
+}
+
+// TestShortGrassSeedDropSaltIsFrozenAndIndependent 钉住掉落判定的 salt 常量：
+// 值按 design 决策 4 冻结，且与 entity 侧其他哈希流（作物生长、小麦/马铃薯/
+// 胡萝卜产量、毒土豆）的 salt 互不相同——同源会让「这格掉种子」与其他判定
+// 出现结构性相关。Rust worldgen 的短草生成 salt 在引擎侧，无法从这里比对，
+// 由 worldgen 的 native parity 测试把守。
+func TestShortGrassSeedDropSaltIsFrozenAndIndependent(t *testing.T) {
+	if shortGrassSeedDropSalt != 0x4752_4153_5353_4544 {
+		t.Fatalf("shortGrassSeedDropSalt = %#x，规格冻结为 0x4752_4153_5353_4544",
+			shortGrassSeedDropSalt)
+	}
+	for name, salt := range map[string]uint64{
+		"cropGrowthRollSalt":  cropGrowthRollSalt,
+		"cropYieldRollSalt":   cropYieldRollSalt,
+		"cropYieldPotatoSalt": cropYieldPotatoSalt,
+		"cropYieldCarrotSalt": cropYieldCarrotSalt,
+		"poisonPotatoSalt":    poisonPotatoSalt,
+	} {
+		if salt == shortGrassSeedDropSalt {
+			t.Fatalf("短草掉落 salt 与 %s 相同，两条哈希流必须互相独立", name)
+		}
+	}
+}
+
+// TestShortGrassSeedDropRollMatchesFrozenVerdicts 钉住判定函数本身：固定命中/
+// 未命中坐标（含负坐标的 uint32 位模式样本）的判定必须与事先算出的常量一致、
+// 纯函数重放恒等、维度折入哈希、连续 4096 个坐标的命中率落在 1/8 附近且两侧
+// 都存在。签名刻意不含 tick、玩家与手持——重试稳定性由类型形状直接保证。
+func TestShortGrassSeedDropRollMatchesFrozenVerdicts(t *testing.T) {
+	for _, pos := range shortGrassSeedHitPositions {
+		for replay := 0; replay < 2; replay++ {
+			if !shortGrassSeedDropRoll(0, core.Overworld, pos) {
+				t.Fatalf("shortGrassSeedDropRoll(0, Overworld, %v) = false，固定命中坐标必须恒命中", pos)
+			}
+		}
+	}
+	for _, pos := range shortGrassSeedMissPositions {
+		if shortGrassSeedDropRoll(0, core.Overworld, pos) {
+			t.Fatalf("shortGrassSeedDropRoll(0, Overworld, %v) = true，固定未命中坐标必须恒未命中", pos)
+		}
+	}
+	// 维度折入：同一坐标在另一维度判定翻转。core 当前只注册 Overworld，这里只
+	// 验证纯整数链确实折叠了维度——漏折会让两个维度的同坐标草永远同判定。
+	if shortGrassSeedDropRoll(0, core.DimensionID(1), shortGrassSeedHitPositions[0]) {
+		t.Fatal("维度未折入哈希链：另一维度的同坐标不应复用 Overworld 的命中判定")
+	}
+	// 分布 sanity：连续 4096 个坐标的命中率接近 1/8（理论 512），两侧都必须出现，
+	// 防 `& 7` 退化成恒真/恒假。
+	hits := 0
+	for x := int32(0); x < 4096; x++ {
+		if shortGrassSeedDropRoll(0, core.Overworld, core.BlockPos{X: x, Y: 1, Z: 5}) {
+			hits++
+		}
+	}
+	if hits < 256 || hits > 768 || hits == 0 || hits == 4096 {
+		t.Fatalf("4096 个坐标命中 %d 次，想要接近 1/8（512）且两侧都存在", hits)
+	}
+}
+
+// TestShortGrassMiningRuleOneTickAnyHeld 覆盖 Scenario「任意手持状态一个 tick
+// 采除短草」的规则半边：短草与手持完全无关，任意状态都是 1 tick 且
+// harvestable=true——HUD 的 harvestable 只表示「具备参与概率掉落的资格」，
+// 不承诺本格命中。
+func TestShortGrassMiningRuleOneTickAnyHeld(t *testing.T) {
+	helds := [...]core.ItemID{
+		core.ItemNone,
+		core.ItemDirt,
+		core.ItemStone,
+		core.ItemStonePickaxe,
+		core.ItemIronPickaxe,
+		core.ItemBrokenStonePickaxe,
+		core.ItemBrokenIronPickaxe,
+		core.ItemStoneHoe,
+		core.ItemIronHoe,
+		core.ItemWoodenSword,
+		core.ItemIronSword,
+	}
+	for _, held := range helds {
+		ticks, harvestable := miningRule(core.ShortGrassID, held)
+		if ticks != 1 || !harvestable {
+			t.Fatalf("miningRule(ShortGrassID, %d) = (%d, %v)，想要 (1, true)", held, ticks, harvestable)
+		}
+	}
+}
+
+// TestMiningShortGrassHitDropsOneSeedIntoWorld 覆盖 Scenario「短草命中判定掉落
+// 一颗种子到世界」：固定命中坐标上，任意手持状态 1 tick 完成采除，世界恰好
+// 出现 1 颗种子掉落物，背包不被直接写入、不掉其他产物。
+func TestMiningShortGrassHitDropsOneSeedIntoWorld(t *testing.T) {
+	helds := [...]core.ItemStack{
+		{},
+		{Item: core.ItemDirt, Count: 1},
+		{Item: core.ItemStonePickaxe, Count: 1},
+		{Item: core.ItemIronSword, Count: 1, Durability: fullToolDurability(core.ItemIronSword)},
+	}
+	for _, held := range helds {
+		engine, session, target := shortGrassMiningPlayer(t, shortGrassSeedHitPositions[0], held)
+		player := engine.sessions[session].player
+		beforeRevision := miningTargetRecord(t, engine, target).Revision
+
+		result := advanceMiningOnce(engine)
+
+		if len(result.Rejected) != 0 {
+			t.Fatalf("采除短草被拒绝=%+v", result.Rejected)
+		}
+		record := miningTargetRecord(t, engine, target)
+		x, _, z := target.Local()
+		if got := record.Chunk.BlockAt(x, target.Y, z); got != core.AirID {
+			t.Fatalf("采除后方块=%d，想要空气", got)
+		}
+		requireShortGrassDroppedSeeds(t, engine, target)
+		if record.Revision != beforeRevision+1 {
+			t.Fatalf("revision=%d，想要恰好推进一次 %d", record.Revision, beforeRevision+1)
+		}
+		// 掉落进世界而非背包：没有任何 inventory 发布需求。
+		if player.inventoryDirty {
+			t.Fatal("采除短草不应触碰背包（种子走世界掉落物）")
+		}
+		if got := miningDropTotals(record.Chunk); len(got) != 1 || got[core.ItemWheatSeeds] != 1 {
+			t.Fatalf("掉落=%+v，想要恰好 1 颗种子", got)
+		}
+	}
+}
+
+// fullToolDurability 返回工具的满耐久，供完好工具与零磨损断言构造栏位。
+func fullToolDurability(item core.ItemID) uint16 {
+	full, _ := core.ItemMaxDurability(item)
+	return full
+}
+
+// TestMiningShortGrassMissClearsBlockWithoutDrop 覆盖 Scenario「短草未命中判定
+// 无掉落」：固定未命中坐标上采除成功、方块变空气、不产生任何掉落物。
+func TestMiningShortGrassMissClearsBlockWithoutDrop(t *testing.T) {
+	for _, target := range shortGrassSeedMissPositions {
+		engine, _, target := shortGrassMiningPlayer(t, target, core.ItemStack{})
+		beforeRevision := miningTargetRecord(t, engine, target).Revision
+
+		result := advanceMiningOnce(engine)
+
+		if len(result.Rejected) != 0 {
+			t.Fatalf("未命中采除被拒绝=%+v", result.Rejected)
+		}
+		record := miningTargetRecord(t, engine, target)
+		x, _, z := target.Local()
+		if got := record.Chunk.BlockAt(x, target.Y, z); got != core.AirID {
+			t.Fatalf("未命中采除后方块=%d，想要空气", got)
+		}
+		if drops := miningDropTotals(record.Chunk); len(drops) != 0 {
+			t.Fatalf("未命中采除掉落=%+v，想要空", drops)
+		}
+		if record.Revision != beforeRevision+1 {
+			t.Fatalf("revision=%d，想要按一次普通方块修改推进到 %d",
+				record.Revision, beforeRevision+1)
+		}
+	}
+}
+
+// TestMiningShortGrassMissSucceedsWithFullDropCapacity 覆盖 Scenario「短草未命中
+// 掉落时容量已满仍可清除」：未命中路径不预留 drop 槽，掉落容量满也必须成功。
+func TestMiningShortGrassMissSucceedsWithFullDropCapacity(t *testing.T) {
+	engine, _, target := shortGrassMiningPlayer(t, shortGrassSeedMissPositions[0], core.ItemStack{})
+	fillMiningDrops(engine, target)
+	record := miningTargetRecord(t, engine, target)
+	beforeDrops := record.Chunk.DropsHash()
+	beforeRevision := record.Revision
+
+	result := advanceMiningOnce(engine)
+
+	if len(result.Rejected) != 0 {
+		t.Fatalf("容量满的未命中采除被拒绝=%+v", result.Rejected)
+	}
+	x, _, z := target.Local()
+	if got := record.Chunk.BlockAt(x, target.Y, z); got != core.AirID {
+		t.Fatalf("容量满的未命中采除后方块=%d，想要空气", got)
+	}
+	if got := record.Chunk.DropsHash(); got != beforeDrops {
+		t.Fatalf("未命中采除修改了掉落槽: %x/%x", got, beforeDrops)
+	}
+	if after := miningTargetRecord(t, engine, target).Revision; after != beforeRevision+1 {
+		t.Fatalf("revision=%d，想要推进一次到 %d", after, beforeRevision+1)
+	}
+}
+
+// TestMiningShortGrassHitCapacityFullRejectsAtomicallyAndRetryStaysHit 覆盖
+// Scenario「短草命中掉落但容量已满时原子拒绝」与「相同短草位置重试结果不变」：
+// 命中 + 容量满 → RejectDropCapacity 且方块、掉落槽、revision、工具与疲劳全部
+// 不变；短草 1 tick 完成，因此持续按住的每个 tick 都是一次完整重试；释放一个
+// 掉落槽后同一坐标立即结算为同一命中——重试不会把「应掉种子」重掷成「不掉」。
+func TestMiningShortGrassHitCapacityFullRejectsAtomicallyAndRetryStaysHit(t *testing.T) {
+	held := core.ItemStack{Item: core.ItemIronPickaxe, Count: 1, Durability: fullToolDurability(core.ItemIronPickaxe)}
+	engine, session, target := shortGrassMiningPlayer(t, shortGrassSeedHitPositions[0], held)
+	player := engine.sessions[session].player
+	fillMiningDrops(engine, target)
+	record := miningTargetRecord(t, engine, target)
+	beforeHash := record.Chunk.Hash()
+	beforeDrops := record.Chunk.DropsHash()
+	beforeRevision := record.Revision
+	beforeExhaustion := exhaustionOf(player)
+
+	for tick := 1; tick <= 3; tick++ {
+		result := advanceMiningOnce(engine)
+		// 短草 1 tick 完成：持续按住时每个 tick 都是一次走到完成分叉的完整重试，
+		// 因此每 tick 恰好新增一条容量拒绝。
+		if len(result.Rejected) != 1 || result.Rejected[0] != (Rejection{
+			Session: session, Sequence: 10, Reason: RejectDropCapacity,
+		}) {
+			t.Fatalf("tick %d 容量拒绝=%+v", tick, result.Rejected)
+		}
+		if got := record.Chunk.Hash(); got != beforeHash || record.Revision != beforeRevision {
+			t.Fatalf("tick %d 容量失败修改了区块或 revision: hash=%x/%x revision=%d/%d",
+				tick, got, beforeHash, record.Revision, beforeRevision)
+		}
+		if got := record.Chunk.DropsHash(); got != beforeDrops {
+			t.Fatalf("tick %d 容量失败修改了掉落槽: %x/%x", tick, got, beforeDrops)
+		}
+		if got := player.inventory.Hotbar.Slots[0]; got != held {
+			t.Fatalf("tick %d 容量拒绝修改了工具: got=%+v want=%+v", tick, got, held)
+		}
+		if got := exhaustionOf(player); got != beforeExhaustion {
+			t.Fatalf("tick %d 容量拒绝累积了疲劳: %v 想要 %v", tick, got, beforeExhaustion)
+		}
+		if player.inventoryDirty {
+			t.Fatalf("tick %d 容量拒绝标记了 inventoryDirty", tick)
+		}
+	}
+
+	// 释放一个掉落槽后重试：同一坐标必须仍然命中并掉种子（判定与重试解耦）。
+	// 其余占位掉落物保持原样，因此这里数种子槽而不是断言「唯一活动槽」。
+	engine.SetChunkDropForTest(
+		core.ChunkKey{Dimension: core.Overworld, Pos: target.Chunk()}, 0, world.DropSlot{},
+	)
+	result := advanceMiningOnce(engine)
+	if len(result.Rejected) != 0 {
+		t.Fatalf("释放容量后的重试被拒绝=%+v", result.Rejected)
+	}
+	blockIndex, indexOK := world.ChunkBlockIndex(target)
+	if !indexOK {
+		t.Fatalf("短草目标 %+v 没有区块索引", target)
+	}
+	seeds := 0
+	for slot := range core.DropsPerChunk {
+		drop := record.Chunk.Drop(slot)
+		if !drop.Active || drop.Stack.Item != core.ItemWheatSeeds {
+			continue
+		}
+		seeds++
+		if drop.Stack.Count != 1 || drop.BlockIndex != blockIndex ||
+			drop.PickupDelayTicks != engine.tunables.DropPickupDelayTicks {
+			t.Fatalf("重试后的种子掉落槽 %d = %+v，想要锚定目标格的 1 颗种子", slot, drop)
+		}
+	}
+	if seeds != 1 {
+		t.Fatalf("重试后种子掉落槽数=%d，想要恰好 1（同一坐标重试仍是命中）", seeds)
+	}
+	x, _, z := target.Local()
+	if got := record.Chunk.BlockAt(x, target.Y, z); got != core.AirID {
+		t.Fatalf("重试完成后方块=%d，想要空气", got)
+	}
+	if got := player.inventory.Hotbar.Slots[0]; got != held {
+		t.Fatalf("重试完成后工具被磨损: got=%+v want=%+v", got, held)
+	}
+}
+
+// TestMiningShortGrassZeroDurabilityWearForAnyTool 覆盖 tool-durability 的第三类
+// 豁免：被移除方块是短草时，任何选中物（空手、普通物品、完好工具、锄头、剑，
+// 含耐久恰好为 1 的工具）都零磨损——耐久 1 的工具不得转为损坏形态，也没有
+// 额外 inventory dirty。
+func TestMiningShortGrassZeroDurabilityWearForAnyTool(t *testing.T) {
+	stoneHoeFull := fullToolDurability(core.ItemStoneHoe)
+	tests := []struct {
+		name string
+		held core.ItemStack
+		hit  bool
+	}{
+		{name: "空手-命中", hit: true},
+		{name: "空手-未命中"},
+		{name: "普通物品", held: core.ItemStack{Item: core.ItemDirt, Count: 3}, hit: true},
+		{name: "完好石镐", held: core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: fullToolDurability(core.ItemStonePickaxe)}, hit: true},
+		{name: "完好铁镐", held: core.ItemStack{Item: core.ItemIronPickaxe, Count: 1, Durability: fullToolDurability(core.ItemIronPickaxe)}},
+		{name: "完好锄头", held: core.ItemStack{Item: core.ItemStoneHoe, Count: 1, Durability: stoneHoeFull}, hit: true},
+		{name: "完好剑", held: core.ItemStack{Item: core.ItemStoneSword, Count: 1, Durability: fullToolDurability(core.ItemStoneSword)}, hit: true},
+		{name: "耐久1的石镐不损坏", held: core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: 1}, hit: true},
+		{name: "耐久1的铁镐不损坏", held: core.ItemStack{Item: core.ItemIronPickaxe, Count: 1, Durability: 1}},
+		{name: "耐久1的锄头不损坏", held: core.ItemStack{Item: core.ItemIronHoe, Count: 1, Durability: 1}, hit: true},
+		{name: "损坏形态工具", held: core.ItemStack{Item: core.ItemBrokenStonePickaxe, Count: 1}, hit: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			target := shortGrassSeedMissPositions[0]
+			if test.hit {
+				target = shortGrassSeedHitPositions[0]
+			}
+			engine, session, target := shortGrassMiningPlayer(t, target, test.held)
+			player := engine.sessions[session].player
+
+			result := advanceMiningOnce(engine)
+
+			if len(result.Rejected) != 0 {
+				t.Fatalf("采除短草被拒绝=%+v", result.Rejected)
+			}
+			record := miningTargetRecord(t, engine, target)
+			x, _, z := target.Local()
+			if got := record.Chunk.BlockAt(x, target.Y, z); got != core.AirID {
+				t.Fatalf("采除后方块=%d，想要空气", got)
+			}
+			if got := player.inventory.Hotbar.Slots[0]; got != test.held {
+				t.Fatalf("采除短草磨损了工具: got=%+v want=%+v", got, test.held)
+			}
+			if player.inventoryDirty {
+				t.Fatal("零磨损豁免不应产生 inventory dirty")
+			}
+		})
+	}
+}
+
+// TestMiningShortGrassExemptionKeepsOtherBlockToolRules 覆盖 Scenario「短草豁免
+// 不改变其他方块与工具规则」：同一把完好锄头先采除短草（零磨损），再破坏一个
+// 非作物普通方块（泥土），后者必须仍按既有规则恰好扣一点耐久；短草也不得被
+// 「作物 × 锄头」豁免分类吞掉——它是独立的第三类。
+func TestMiningShortGrassExemptionKeepsOtherBlockToolRules(t *testing.T) {
+	if hoeHarvestDurabilityExempt(core.ShortGrassID, core.ItemStoneHoe) {
+		t.Fatal("短草不是作物，不得命中「作物 × 锄头」豁免")
+	}
+	full := fullToolDurability(core.ItemStoneHoe)
+	held := core.ItemStack{Item: core.ItemStoneHoe, Count: 1, Durability: full}
+	engine, session, target := shortGrassMiningPlayer(t, shortGrassSeedHitPositions[0], held)
+	player := engine.sessions[session].player
+
+	if result := advanceMiningOnce(engine); len(result.Rejected) != 0 {
+		t.Fatalf("采除短草被拒绝=%+v", result.Rejected)
+	}
+	if got := player.inventory.Hotbar.Slots[0]; got != held {
+		t.Fatalf("采除短草磨损了锄头: got=%+v want=%+v", got, held)
+	}
+
+	// 同一坐标换泥土继续采：锄头破坏非作物仍扣恰好一点耐久。
+	engine.SetBlockForTest(target, core.DirtID)
+	for range 5 {
+		advanceMiningOnce(engine)
+	}
+	record := miningTargetRecord(t, engine, target)
+	x, _, z := target.Local()
+	if got := record.Chunk.BlockAt(x, target.Y, z); got != core.AirID {
+		t.Fatalf("锄头破坏泥土后方块=%d，想要空气", got)
+	}
+	if got := player.inventory.Hotbar.Slots[0].Durability; got != full-1 {
+		t.Fatalf("锄头破坏泥土后耐久=%d，想要 %d", got, full-1)
+	}
+	if !player.inventoryDirty {
+		t.Fatal("破坏泥土扣减耐久没有标记 inventoryDirty")
+	}
+}
+
+// TestCompleteMiningShortGrassNoOpLeavesStateUntouched 锁定命中路径的原子顺序
+// 边缘：目标格已是空气时（同 tick 更早 actor 已移除），预演过的 drop 绝不提交，
+// 方块、掉落槽与 pending 变更全部保持。
+func TestCompleteMiningShortGrassNoOpLeavesStateUntouched(t *testing.T) {
+	engine, _, target := shortGrassMiningPlayer(t, shortGrassSeedHitPositions[0], core.ItemStack{})
+	engine.SetBlockForTest(target, core.AirID)
+	record := miningTargetRecord(t, engine, target)
+	beforeHash := record.Chunk.Hash()
+	beforeDrops := record.Chunk.DropsHash()
+	beforeRevision := record.Revision
+	pending := engine.newMutation()
+
+	reason, rejected := engine.completeMining(core.Overworld, target, core.ShortGrassID, true, pending)
+
+	if !rejected || reason != RejectNoTarget {
+		t.Fatalf("no-op 完成结果 = (%d, %v)，想要 (%d, true)", reason, rejected, RejectNoTarget)
+	}
+	if got := record.Chunk.Hash(); got != beforeHash {
+		t.Fatalf("no-op 完成修改了方块: %x/%x", got, beforeHash)
+	}
+	if got := record.Chunk.DropsHash(); got != beforeDrops {
+		t.Fatalf("no-op 完成修改了掉落槽: %x/%x", got, beforeDrops)
+	}
+	if record.Revision != beforeRevision || pending.Len() != 0 {
+		t.Fatalf("no-op 完成修改了 revision 或 pending: revision=%d/%d pending=%d",
+			record.Revision, beforeRevision, pending.Len())
+	}
+}
+
+// TestShortGrassSeedDropVerdictReplayStableAcrossTickAndTool 覆盖 Scenario「相同
+// 短草位置重试结果不变」的解耦半边：判定只吃 world seed、维度与坐标，同一坐标
+// 在不同权威 tick、不同玩家手持下完成，命中侧都掉恰好 1 颗种子，未命中侧都不掉。
+func TestShortGrassSeedDropVerdictReplayStableAcrossTickAndTool(t *testing.T) {
+	pickaxe := core.ItemStack{Item: core.ItemIronPickaxe, Count: 1, Durability: fullToolDurability(core.ItemIronPickaxe)}
+	for _, replay := range []struct {
+		name   string
+		tick   uint64
+		held   core.ItemStack
+		target core.BlockPos
+	}{
+		{name: "tick999铁镐命中", tick: 999, held: pickaxe, target: shortGrassSeedHitPositions[0]},
+		{name: "tick1空手命中", tick: 1, target: shortGrassSeedHitPositions[1]},
+		{name: "tick999空手未命中", tick: 999, target: shortGrassSeedMissPositions[0]},
+	} {
+		t.Run(replay.name, func(t *testing.T) {
+			engine, _, target := shortGrassMiningPlayer(t, replay.target, replay.held)
+			engine.tick.Store(replay.tick)
+
+			result := advanceMiningOnce(engine)
+
+			if len(result.Rejected) != 0 {
+				t.Fatalf("采除被拒绝=%+v", result.Rejected)
+			}
+			record := miningTargetRecord(t, engine, target)
+			x, _, z := target.Local()
+			if got := record.Chunk.BlockAt(x, target.Y, z); got != core.AirID {
+				t.Fatalf("采除后方块=%d，想要空气", got)
+			}
+			drops := miningDropTotals(record.Chunk)
+			if replay.target == shortGrassSeedMissPositions[0] {
+				if len(drops) != 0 {
+					t.Fatalf("未命中坐标掉落=%+v，想要空", drops)
+				}
+				return
+			}
+			if len(drops) != 1 || drops[core.ItemWheatSeeds] != 1 {
+				t.Fatalf("命中坐标掉落=%+v，想要恰好 1 颗种子", drops)
+			}
+		})
+	}
+}

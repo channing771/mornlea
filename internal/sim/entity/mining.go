@@ -57,6 +57,14 @@ func miningRule(block core.BlockID, held core.ItemID) (uint16, bool) {
 	if core.IsFarmland(block) {
 		return 5, true
 	}
+	// 短草与手持无关：任意状态（空手、普通物品、任一工具）1 tick 采除，同作物
+	// 一样取最小权威量子。harvestable=true 只表示「该手持具备参与概率掉落的
+	// 资格」——本格是否真的掉种子由 `completeMining` 的位置稳定判定给出，HUD
+	// 不得把 true 读成「本格必掉」。判据用 `core.IsWildGrass` 而不是点名编号：
+	// 短草不是作物（`IsCrop` 为假），不进入生长、骨粉与作物掉落的任何消费者。
+	if core.IsWildGrass(block) {
+		return 1, true
+	}
 	switch block {
 	case core.DirtID, core.GrassID, core.SandID, core.GravelID, core.LeavesID,
 		core.GlassID, core.WhiteWoolID, core.ClayID, core.SnowBlockID:
@@ -176,7 +184,12 @@ func companionMineableBlock(block core.BlockID) bool {
 	// 对它们都有单一产物登记（掉回一个火把），通用判据会放行；伙伴不获得火把
 	// 能力是冻结契约——火把的处置语义（采掘、熄灭等）扩给伙伴之前一律拒绝，
 	// 与 internal/companion 的 `planMineableBlock` 保持同一规则。
-	if core.IsCrop(block) || core.IsFarmland(block) || core.IsTorch(block) {
+	// 短草同理必须显式拒绝：种子的 1/8 概率掉落只属于玩家采掘（`completeMining`
+	// 的短草分支），短草今天恰好没有 BlockDrop 登记、通用判据碰巧也会拒绝它，
+	// 但这是巧合不是契约——若未来短草获得 BlockDrop 登记，只有这里的显式谓词
+	// 还站着（change natural-grass-seeds design 决策 1）。
+	if core.IsCrop(block) || core.IsFarmland(block) || core.IsTorch(block) ||
+		core.IsWildGrass(block) {
 		return false
 	}
 	_, ok := core.BlockDrop(block)
@@ -277,9 +290,11 @@ func (engine *engineContext) advanceMining(
 		player.applyExhaustion(exhaustionMiningMilli, engine.tunables.ExhaustionThresholdMilli)
 		// 完成时选中物与 `consumeToolDurability` 读的是同一个栏位（采掘中途换手
 		// 会重置进度，不存在「开始持锄、完成持镐」的窗口），豁免与扣耐久必然
-		// 判定同一件工具。
+		// 判定同一件工具。短草走第三类豁免（`wildGrassDurabilityExempt`）：
+		// `consumeToolDurability` 整体不被调用，耐久 1 的工具也不会转损坏形态。
 		held := player.inventory.Hotbar.Slots[player.inventory.Hotbar.Selected].Item
 		if !hoeHarvestDurabilityExempt(minedBlock, held) &&
+			!wildGrassDurabilityExempt(minedBlock) &&
 			consumeToolDurability(&player.actorState) {
 			player.inventoryDirty = true
 		}
@@ -553,13 +568,27 @@ func (engine *engineContext) completeCompanionContainerMining(
 // hoeHarvestDurabilityExempt 报告一次玩家采掘完成是否豁免扣耐久：被移除的方块
 // 是作物（`core.IsCrop`，小麦八个生长阶段）且完成时选中物是完好锄头
 // （`core.TillingTool`）。这是 authoritative-farming 遗留 16 所说的「作物 × 锄头」
-// 豁免表——当前唯一条目；锄头破坏非作物仍沿用既有扣耐久规则。第二个「方块 × 工具」
-// 条目出现时再考虑表结构。损坏形态被 `core.TillingTool` 显式排除（它只枚举两个完好锄头
-// 编号），因此持损坏锄头收获作物走不进豁免——本就没有耐久可扣。伙伴采掘路径
+// 豁免，tool-durability 三类成功破坏豁免中的第一类（另两类：完好剑在任何破坏
+// 路径上的豁免在 `consumeToolDurability` 内，短草 × 任意工具的豁免在
+// `wildGrassDurabilityExempt`）。锄头破坏非作物仍沿用既有扣耐久规则；损坏形态
+// 被 `core.TillingTool` 显式排除（它只枚举两个完好锄头编号），因此持损坏锄头
+// 收获作物走不进豁免——本就没有耐久可扣。伙伴采掘路径
 // （`completeCompanionMining`）不设本守卫：`companionMineableBlock` 的防御清单
 // 已显式拒绝全部农业方块，豁免在伙伴侧不可达，加守卫是死代码。
 func hoeHarvestDurabilityExempt(block core.BlockID, item core.ItemID) bool {
 	return core.IsCrop(block) && core.TillingTool(item)
+}
+
+// wildGrassDurabilityExempt 报告一次玩家成功采掘是否属于「短草 × 任意工具」
+// 零磨损豁免（tool-durability 的第三类）：被移除方块是短草（`core.IsWildGrass`）
+// 时，无论完成时选中栏是空手、普通物品还是任一完好工具（镐、锄头、剑，含
+// 剩余耐久恰好为 1 的工具），都不扣减耐久，也不把耐久 1 的工具转为损坏形态
+// ——调用方因此整体跳过 `consumeToolDurability`，自然没有耐久侧的 inventory
+// dirty。判定只看被移除方块、与手持无关；短草不是作物（`IsCrop` 为假），本豁免
+// 与「作物 × 锄头」类互不重叠，持锄头破坏短草以外的方块仍按既有规则磨损。
+// 伙伴路径不可达：`companionMineableBlock` 已显式拒绝短草。
+func wildGrassDurabilityExempt(block core.BlockID) bool {
+	return core.IsWildGrass(block)
 }
 
 // consumeToolDurability 在成功方块动作后扣减选中工具的耐久，完好剑除外。
@@ -750,6 +779,53 @@ func (engine *engineContext) completeMining(
 		engine.recordChange(dimensionID, target, core.AirID, pending)
 		chunk.DeactivateChest(chestSlot)
 		chunk.CommitDropBatch(next)
+		return 0, false
+	}
+
+	// 短草的专用概率掉落分支（change natural-grass-seeds design 决策 4）：位于
+	// 容器/结构特殊分支之后、通用 `BlockDrop` 查询之前，且不进入作物多产物分支
+	// ——短草不是作物，种子的掉落语义只存在于这里。掉落与否由
+	// `shortGrassSeedDropRoll` 的位置稳定判定给出，与完成 tick、玩家、手持无关。
+	//
+	// 三条常数路径：
+	//   - 未命中：不调用 `PrepareDrop`、不需要掉落容量，直接清块并记录 mutation
+	//     ——容量已满也必须成功；
+	//   - 命中且容量足够：先 `PrepareDrop(ItemWheatSeeds×1)` 预演（预演不修改
+	//     区块），`SetBlock` 成功后才 `Record` 与 `CommitDrop`，改块与掉落实体
+	//     同属本 tick 的 realm mutation/revision；
+	//   - 命中但容量不足：返回既有 `RejectDropCapacity`，方块、掉落槽与 revision
+	//     全部不变；判定只依赖 seed/维度/坐标，稍后重试必然得到同一命中，
+	//     不能借重掷绕过容量，也不存在「先移块再放 drop」的吞资源窗口。
+	if core.IsWildGrass(block) {
+		if !shortGrassSeedDropRoll(engine.seed, dimensionID, target) {
+			_, changed, err := dimension.SetBlock(target, core.AirID)
+			if err != nil {
+				return mapSetBlockError(err), true
+			}
+			if !changed {
+				return RejectNoTarget, true
+			}
+			engine.recordChange(dimensionID, target, core.AirID, pending)
+			return 0, false
+		}
+		dropSlot, capacityOK := chunk.PrepareDrop(core.ItemWheatSeeds, blockIndex)
+		if !capacityOK {
+			return RejectDropCapacity, true
+		}
+		_, changed, err := dimension.SetBlock(target, core.AirID)
+		if err != nil {
+			return mapSetBlockError(err), true
+		}
+		if !changed {
+			return RejectNoTarget, true
+		}
+		engine.recordChange(dimensionID, target, core.AirID, pending)
+		chunk.CommitDrop(
+			dropSlot,
+			core.ItemStack{Item: core.ItemWheatSeeds, Count: 1},
+			blockIndex,
+			engine.tunables.DropPickupDelayTicks,
+		)
 		return 0, false
 	}
 

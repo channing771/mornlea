@@ -335,6 +335,54 @@ func TestMiningCompletionAccumulatesExhaustionOnlyOnSuccess(t *testing.T) {
 	})
 }
 
+// TestShortGrassMiningExhaustion 覆盖短草采除的疲劳语义：成功移除按普通成功
+// 采掘累积既有固定疲劳（判定点是「成功采掘」，与工具磨损无关——零磨损豁免
+// 不豁免疲劳）；命中但容量被拒的完成与普通采掘一样不累积。
+func TestShortGrassMiningExhaustion(t *testing.T) {
+	t.Run("成功采除累积一次", func(t *testing.T) {
+		// 未命中坐标：掉落判定 miss 也算成功采掘，疲劳与命中侧完全一致。
+		engine, session, _ := shortGrassMiningPlayer(t, shortGrassSeedMissPositions[0], core.ItemStack{})
+		player := engine.sessions[session].player
+		before := exhaustionOf(player)
+
+		advanceMiningOnce(engine)
+
+		if player.exhaustionMilli != uint16(before[2])+exhaustionMiningMilli {
+			t.Fatalf("采除短草后疲劳=%d，想要 %d",
+				player.exhaustionMilli, uint16(before[2])+exhaustionMiningMilli)
+		}
+	})
+
+	t.Run("命中侧成功采除同样累积一次", func(t *testing.T) {
+		engine, session, _ := shortGrassMiningPlayer(t, shortGrassSeedHitPositions[0], core.ItemStack{})
+		player := engine.sessions[session].player
+		before := exhaustionOf(player)
+
+		advanceMiningOnce(engine)
+
+		if player.exhaustionMilli != uint16(before[2])+exhaustionMiningMilli {
+			t.Fatalf("命中采除后疲劳=%d，想要 %d",
+				player.exhaustionMilli, uint16(before[2])+exhaustionMiningMilli)
+		}
+	})
+
+	t.Run("容量拒绝不累积", func(t *testing.T) {
+		engine, session, target := shortGrassMiningPlayer(t, shortGrassSeedHitPositions[0], core.ItemStack{})
+		player := engine.sessions[session].player
+		fillMiningDrops(engine, target)
+		before := exhaustionOf(player)
+
+		result := advanceMiningOnce(engine)
+
+		if len(result.Rejected) != 1 || result.Rejected[0].Reason != RejectDropCapacity {
+			t.Fatalf("容量拒绝=%+v，想要恰好一条 RejectDropCapacity", result.Rejected)
+		}
+		if got := exhaustionOf(player); got != before {
+			t.Fatalf("被拒绝的采草后三层状态=%v，想要保持 %v", got, before)
+		}
+	})
+}
+
 // TestTillCompletionAccumulatesExhaustionOnlyOnSuccess 覆盖疲劳表的翻地项：
 // 成功翻地恰好累积一次，被拒绝的翻地一点都不累积。
 //

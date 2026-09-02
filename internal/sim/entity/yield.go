@@ -229,3 +229,32 @@ func poisonRoll(seed int64, tick uint64, dim core.DimensionID, pos core.BlockPos
 	hash = splitmix64(hash ^ uint64(uint32(pos.Z)))
 	return hash%50 == 0
 }
+
+// shortGrassSeedDropSalt 让短草除草掉落的哈希流与作物产量、作物生长及毒土豆
+// 判定互相独立，也与 Rust worldgen 的短草自然生成 salt 不同：玩家采除短草是
+// 唯一的种子判定入口，「这格掉种子」不得与任何其他随机判定同源出现结构性
+// 相关。值是冻结常量（change natural-grass-seeds design 决策 4），不得改动。
+const shortGrassSeedDropSalt = 0x4752_4153_5353_4544
+
+// shortGrassSeedDropRoll 报告 position 上的短草被玩家采除时是否掉落恰好 1 颗
+// 小麦种子：`hash & 7 == 0` 即确定性 1/8 命中。
+//
+// 折叠形状逐字复用 `cropGrowthRoll` 的 splitmix64 链式模式，但输入刻意**只有**
+// world seed、维度与方块坐标——没有完成 tick、玩家或手持：同一
+// (worldSeed, dimension, position) 的判定永远一致，因此掉落容量被拒后的重试
+// 不可能把「应掉种子」重掷成「不掉种子」（重试稳定性是规格条款，不是实现
+// 巧合）。有符号的维度与坐标先转 uint32 再零扩展，负坐标按补码位模式与正
+// 坐标一一对应，不会因符号扩展撞车。`hash & 7` 取低三位：splitmix64 的低位
+// 雪崩充分，且 2^64 是 8 的整数倍，`& 7` 没有取模偏差，不需要拒绝采样。
+func shortGrassSeedDropRoll(
+	seed int64,
+	dimension core.DimensionID,
+	position core.BlockPos,
+) bool {
+	hash := splitmix64(uint64(seed) ^ shortGrassSeedDropSalt)
+	hash = splitmix64(hash ^ uint64(uint32(dimension)))
+	hash = splitmix64(hash ^ uint64(uint32(position.X)))
+	hash = splitmix64(hash ^ uint64(uint32(position.Y)))
+	hash = splitmix64(hash ^ uint64(uint32(position.Z)))
+	return hash&7 == 0
+}
