@@ -347,8 +347,14 @@
 
 ## 整分支终审与门禁
 
-- 整分支 SPEC review：待执行；Task 12 Repair 2 final SPEC PASS 仅为任务级证据，不提前裁决整分支 PASS。
-- 整分支 QUALITY review：待执行；Task 12 Repair 2 final QUALITY PASS 仅为任务级证据，不提前裁决整分支 PASS。
+- 整分支 SPEC review：Round 1 已执行，结果 FAIL（Task 12 Repair 2 final SPEC PASS 仅为任务级证据，不提前裁决整分支 PASS）。六项证据要点：任务闭环、delta 覆盖、同步可信度、门禁完备性等 PASS；版本矩阵残留 FAIL——`project-identity` delta、`tiered-swords-combat` 主规格、proposal/design/tasks 仍把完成态钉在 client ABI v13 / benchmark scenario v20 等旧基线，与 main 同步后的最终矩阵（client ABI v14、scenario v21）不一致。
+- 整分支 QUALITY review：Round 1 已执行，结果 FAIL（Task 12 Repair 2 final QUALITY PASS 仅为任务级证据，不提前裁决整分支 PASS）。四项证据要点 PASS；两项 Minor：`internal/companion` 的 `ModelSettings`/`ValidateModelEndpoint` 死代码（direct-model 三链路已切断、Dialogue HTTP client 已删后遗留的未接线过渡残留），以及 `9dfdbc69` 使用非规范 `ci:` 提交 type。
+- Round 1 修复轮（fresh implementer，起始 `c1f39af6`，工作区干净）：
+  - SPEC 侧以 `d3634d60` 对齐最终矩阵。改动文件：`openspec/changes/extract-companion-agent-service/{proposal.md,design.md,tasks.md,specs/project-identity/spec.md}`、`openspec/specs/tiered-swords-combat/spec.md`。要点：`project-identity` delta 完成态钉 client ABI v14/scenario v21 并保留「本 change 自身只升 companions v4→v5，client ABI/scenario 升版来自 main 同步」意图；`tiered-swords-combat` 主规格当前状态修为 companions v5/scenario v21（保留 `90188fbc` 历史引入矩阵与 ABI 8/11 历史基线表述）；proposal/design/tasks 的 client ABI v13→v14 与端状态表述同步。
+  - QUALITY 侧以 `b10df791` 删除过渡残留。改动文件：`internal/companion/{model_config.go,model_config_test.go,task.go,task_queue_test.go}`、`internal/config/config.go`。要点：删除 `ModelSettings` 类型与 `ValidateModelEndpoint`/`Validate`/`TaskTimeout` 方法及只测死代码的 `model_config_test.go`，移除 `config.AI.ModelSettings` 字段，`task.go`/`task_queue_test.go` 注释改为如实描述 `ValidateTaskTimeoutMinutes`/host.go 校验链；保留存活接线的 `TaskTimeoutDefaultMinutes`/`ValidateTaskTimeoutMinutes`；`grep -rn ModelSettings internal cmd` 零命中。
+  - 控制会话裁决：`9dfdbc69` 的 `ci:` 提交 type 按 main 侧同款 `ci:` 先例（裁决计 12 条）豁免，不改写历史——重写会使 ledger 全部 SHA 证据失效。
+  - Round 1 修复门禁（全部在 <WT> 串行执行）：`go build ./...` PASS；`go vet ./...` PASS；`go test ./internal/companion ./internal/config -short -count=1` PASS（companion 4.452s、config 1.371s）；`go test ./internal/server -short -count=1` PASS（76.535s）；`go test ./internal/archcheck -count=1` PASS（5.293s）；`openspec validate --all --strict --no-interactive` PASS（83 passed, 0 failed）；改动 Go 文件 gofmt 无输出；`git diff --check` PASS。
+- 终审最终裁决由后续复审给出；本小节只记录 Round 1 评审结论与修复，不构成整分支终审 PASS。
 - Python locked/lint/type/test：clean `72ef5580` PASS；locked sync、Ruff format/check、mypy 23 files、pytest 403 passed；`make companion-agent-check` 同样 403 passed。
 - Go focused/race/archcheck/vet/gofmt：首轮 full race 真实暴露测试 seam 缺口并由 `3394fc19` 修复；clean `72ef5580` 的 full race、vet、archcheck 与 gofmt 全部 PASS，archcheck 37.162s、real 38.87s。
 - Rust baseline/build：clean `72ef5580` preflight 与 mandatory `make rust` 均 PASS；Rust 1.97.1 locked release，engine ABI v9/client ABI v13 未改。
