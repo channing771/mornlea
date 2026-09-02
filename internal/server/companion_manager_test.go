@@ -260,6 +260,40 @@ func stepCollectingChatEvents(
 	return collected
 }
 
+// stepUntilCompanionEvents 逐 tick 推进并收集全部客户端收到的 ChatEvent，
+// 直到 stop 命中；上限是 longWaitDeadline 的墙钟而非固定 tick 数。规划/寻路
+// worker 的结果只在 tick 边界被应用：non-race 短测里单次 tick 的真实耗时远
+// 小于生产节拍（50ms），一轮异步规划在同步快进 tick 下要跨越数百 tick 才
+// 落地，固定 tick 上限会把「worker 尚未投递」误判成断言失败（race 模式因
+// 每 tick 变慢而掩盖同一时序耦合）。墙钟限界等待的是同一确定性事件流，
+// 两种构建模式下断言语义不变；上限只防御真实回归导致的悬挂。每轮推进后
+// sleep 一毫秒让 worker 与发布 goroutine 获得调度——与
+// stepUntilCompanionManagerReady 的既有让步模式一致，同时避免热轮询放大
+// CPU 争用。stop 为 nil 的调用方请继续用固定窗口的 stepCollectingChatEvents
+// （静置观察语义），不要用本 helper。
+func stepUntilCompanionEvents(
+	t *testing.T,
+	host *Host,
+	clients []network.ClientEndpoint,
+	stop func(events []network.ChatEvent) bool,
+) []network.ChatEvent {
+	t.Helper()
+	var collected []network.ChatEvent
+	deadline := time.Now().Add(longWaitDeadline)
+	for time.Now().Before(deadline) {
+		result := host.world.StepForTest()
+		for _, endpoint := range clients {
+			collected = append(collected,
+				companionChatEvents(receiveCompanionChatTick(t, endpoint, result.Tick))...)
+		}
+		if stop != nil && stop(collected) {
+			return collected
+		}
+		time.Sleep(time.Millisecond)
+	}
+	return collected
+}
+
 func chatEventKinds(events []network.ChatEvent) []network.ChatEventKind {
 	kinds := make([]network.ChatEventKind, len(events))
 	for index, event := range events {
@@ -410,7 +444,7 @@ func TestCompanionManagerFIFOExecutesCommandsInOrder(t *testing.T) {
 		sendIntegration(t, client, network.ChatCommand{Text: text})
 	}
 	waitForIncomingChatDepth(t, host.world, 3)
-	events := stepCollectingChatEvents(t, host, client, 800, func(events []network.ChatEvent) bool {
+	events := stepUntilCompanionEvents(t, host, []network.ClientEndpoint{client}, func(events []network.ChatEvent) bool {
 		return countKind(events, network.ChatEventTaskCompleted) == 3
 	})
 
@@ -562,16 +596,21 @@ func TestCompanionManagerOneInFlightRequestPerCompanion(t *testing.T) {
 	}
 
 	// 释放后第一条完成，第二条才发起自己的请求；两条转换都发生在后续
-	// tick 边界，等待期间必须持续推进世界。
+	// tick 边界，等待期间必须持续推进世界。等待以墙钟限界：规划 worker
+	// 的结果只在 tick 边界被应用，non-race 快进 tick 下一轮异步规划要跨
+	// 数百 tick 才能落地，固定 tick 上限会过早放弃（race 模式每 tick 更慢
+	// 而掩盖了这一时序）。
 	model.releaseRequests()
 	dispatchedSecond := false
-	for range 400 {
+	deadline := time.Now().Add(longWaitDeadline)
+	for time.Now().Before(deadline) {
 		result := host.world.StepForTest()
 		receiveCompanionChatTick(t, client, result.Tick)
 		if requests, _, _, _ := model.snapshotCounts(); requests >= 2 {
 			dispatchedSecond = true
 			break
 		}
+		time.Sleep(time.Millisecond)
 	}
 	if !dispatchedSecond {
 		t.Fatal("释放后第二条指令始终未发起规划请求")
@@ -652,7 +691,7 @@ func TestCompanionManagerDistantGoalFailsPathUnreachable(t *testing.T) {
 	host.world.companionManager.replacePlannerForTest(t, model)
 
 	sendIntegration(t, client, network.ChatCommand{Text: "@阿木 去远方"})
-	events := stepCollectingChatEvents(t, host, client, 400, func(events []network.ChatEvent) bool {
+	events := stepUntilCompanionEvents(t, host, []network.ClientEndpoint{client}, func(events []network.ChatEvent) bool {
 		return slices.Contains(chatEventKinds(events), network.ChatEventTaskFailed)
 	})
 	failed := eventsWithKind(events, network.ChatEventTaskFailed)
@@ -980,10 +1019,13 @@ func TestCompanionManagerPathFailureBudgetResetsPerTask(t *testing.T) {
 	host.world.companionManager.replacePlannerForTest(t, model)
 
 	// stepUntilTaskEvent 推进世界并按 (tick, event) 收集事件，直到 predicate
-	// 命中或步数耗尽（步数耗尽时返回已收集事件，由调用方断言失败）。
-	stepUntilTaskEvent := func(maxTicks int, predicate func(event network.ChatEvent) bool) []taskTickEvent {
+	// 命中；上限是 longWaitDeadline 的墙钟（耗尽时返回已收集事件，由调用方
+	// 断言失败）。固定 tick 上限在 non-race 快进下会因异步规划 worker 尚未
+	// 落地而过早耗尽，墙钟限界的理由见 stepUntilCompanionEvents 的注释。
+	stepUntilTaskEvent := func(predicate func(event network.ChatEvent) bool) []taskTickEvent {
 		collected := make([]taskTickEvent, 0, 8)
-		for range maxTicks {
+		deadline := time.Now().Add(longWaitDeadline)
+		for time.Now().Before(deadline) {
 			result := host.world.StepForTest()
 			for _, event := range companionChatEvents(receiveCompanionChatTick(t, client, result.Tick)) {
 				collected = append(collected, taskTickEvent{tick: result.Tick, event: event})
@@ -991,13 +1033,14 @@ func TestCompanionManagerPathFailureBudgetResetsPerTask(t *testing.T) {
 					return collected
 				}
 			}
+			time.Sleep(time.Millisecond)
 		}
 		return collected
 	}
 
 	// 任务 A：从零预算出发，按既有语义三次失败后以 PathUnreachable 终结。
 	sendIntegration(t, client, network.ChatCommand{Text: "@阿木 第一次去远方"})
-	first := stepUntilTaskEvent(600, func(event network.ChatEvent) bool {
+	first := stepUntilTaskEvent(func(event network.ChatEvent) bool {
 		return event.Kind == network.ChatEventTaskFailed && event.Command == "第一次去远方"
 	})
 	firstFailed := eventsWithKind(
@@ -1011,7 +1054,7 @@ func TestCompanionManagerPathFailureBudgetResetsPerTask(t *testing.T) {
 	// 任务 B：前任务已把槽位计数耗到 3，若预算按任务重置，B 仍要完整走
 	// 三次失败；若泄漏，B 会在第一次寻路失败（Started 后数 tick 内）终结。
 	sendIntegration(t, client, network.ChatCommand{Text: "@阿木 第二次去远方"})
-	second := stepUntilTaskEvent(600, func(event network.ChatEvent) bool {
+	second := stepUntilTaskEvent(func(event network.ChatEvent) bool {
 		return event.Kind == network.ChatEventTaskFailed && event.Command == "第二次去远方"
 	})
 	var startedTick, failedTick uint64
@@ -1097,10 +1140,13 @@ func TestCompanionManagerSnapshotFailureTerminatesTaskAndAdvancesFIFO(t *testing
 	})
 	host.world.stepMu.Unlock()
 
-	// 推进直到缺陷任务终结且后继指令真正启动；死循环实现会在步数耗尽时
-	// 因缺少 TaskFailed 而失败。
+	// 推进直到缺陷任务终结且后继指令真正启动；死循环实现会在墙钟上限
+	// 耗尽时因缺少 TaskFailed 而失败。上限按墙钟而非固定 tick 数（理由见
+	// stepUntilCompanionEvents 注释）：「下一条」的 TaskStarted 依赖一轮完整
+	// 异步规划落地，non-race 快进下需要数百 tick。
 	collected := make([]network.ChatEvent, 0, 8)
-	for range 200 {
+	deadline := time.Now().Add(longWaitDeadline)
+	for time.Now().Before(deadline) {
 		result := host.world.StepForTest()
 		collected = append(collected,
 			companionChatEvents(receiveCompanionChatTick(t, client, result.Tick))...)
@@ -1116,6 +1162,7 @@ func TestCompanionManagerSnapshotFailureTerminatesTaskAndAdvancesFIFO(t *testing
 		if sawFailed && sawNextStarted {
 			break
 		}
+		time.Sleep(time.Millisecond)
 	}
 
 	failed := make([]network.ChatEvent, 0, 1)

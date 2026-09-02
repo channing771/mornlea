@@ -9,6 +9,7 @@ package server
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
@@ -267,10 +268,15 @@ func runContainerMineParity(t *testing.T, transport string) containerMineParityR
 			companionChatEvents(receiveCompanionChatTick(t, client, tickResult.Tick))...)
 		return tickResult
 	}
-	// stepUntilTerminal 推进至匹配事件命中或步数耗尽；先排空本 tick 全部事件
-	// 再判定，同一批次里的其余事件绝不丢失。
-	stepUntilTerminal := func(maxTicks int, kind network.ChatEventKind, command string) bool {
-		for range maxTicks {
+	// stepUntilTerminal 推进至匹配事件命中；上限是 longWaitDeadline 的墙钟
+	// 而非固定 tick 数（耗尽返回 false）。每次采掘任务的终态依赖规划与寻路
+	// worker 的结果先后在 tick 边界落地，non-race 快进 tick 下需要数百 tick；
+	// 固定上限会把「worker 尚未投递」误判成任务失败（理由与
+	// stepUntilCompanionEvents 注释一致）。先排空本 tick 全部事件再判定，
+	// 同一批次里的其余事件绝不丢失。
+	stepUntilTerminal := func(kind network.ChatEventKind, command string) bool {
+		deadline := time.Now().Add(longWaitDeadline)
+		for time.Now().Before(deadline) {
 			tickResult := host.world.StepForTest()
 			hit := false
 			for _, event := range companionChatEvents(receiveCompanionChatTick(t, client, tickResult.Tick)) {
@@ -282,6 +288,7 @@ func runContainerMineParity(t *testing.T, transport string) containerMineParityR
 			if hit {
 				return true
 			}
+			time.Sleep(time.Millisecond)
 		}
 		return false
 	}
@@ -291,12 +298,12 @@ func runContainerMineParity(t *testing.T, transport string) containerMineParityR
 
 	sendIntegration(t, client, network.ChatCommand{Text: "@阿木 挖那口箱子"})
 	waitForIncomingChatDepth(t, host.world, 1)
-	if !stepUntilTerminal(900, network.ChatEventTaskCompleted, "挖那口箱子") {
+	if !stepUntilTerminal(network.ChatEventTaskCompleted, "挖那口箱子") {
 		t.Fatalf("箱子采掘任务未完成（事件=%v）", chatEventKinds(transcript))
 	}
 	sendIntegration(t, client, network.ChatCommand{Text: "@阿木 挖那座熔炉"})
 	waitForIncomingChatDepth(t, host.world, 1)
-	if !stepUntilTerminal(900, network.ChatEventTaskFailed, "挖那座熔炉") {
+	if !stepUntilTerminal(network.ChatEventTaskFailed, "挖那座熔炉") {
 		t.Fatalf("熔炉采掘任务未以 TaskFailed 终结（事件=%v）", chatEventKinds(transcript))
 	}
 	for range 3 {
