@@ -10,7 +10,7 @@
   "$defs": {
     "uiState": {
       "type": "object",
-      "description": "下行状态快照。相位决定的分节按需出现：menu 出现在 menu/starting 相位，settings 出现在 settings 相位，pause 出现在 paused 相位，hud 出现在有已装配世界的相位（game/paused），debug 可见于任意相位（F3 调试面板可叠加在游戏之上）。",
+      "description": "下行状态快照。相位决定的分节按需出现：menu 出现在 menu/starting 相位，settings 出现在 settings 相位，loading 出现在 loading 相位，pause 出现在 paused 相位，hud 出现在有已装配世界的相位（game/paused），debug 可见于任意相位（F3 调试面板可叠加在游戏之上）。",
       "additionalProperties": false,
       "required": ["phase"],
       "properties": {
@@ -18,13 +18,14 @@
         "menu": { "$ref": "#/$defs/menuState" },
         "settings": { "$ref": "#/$defs/settingsState" },
         "pause": { "$ref": "#/$defs/pauseState" },
+        "loading": { "$ref": "#/$defs/loadingState" },
         "debug": { "$ref": "#/$defs/debugState" },
         "hud": { "$ref": "#/$defs/hudState" }
       }
     },
     "phase": {
-      "description": "菜单相位机当前相位，语义与 Go 侧 MenuPhase 一一对应：game=世界已装配；menu=主菜单可见；starting=世界装配进行中（主菜单仍可见，重复点击由 Go 忽略）；settings=设置页可见；paused=暂停层可见、权威模拟冻结。",
-      "enum": ["game", "menu", "starting", "settings", "paused"]
+      "description": "菜单相位机当前相位，语义与 Go 侧 MenuPhase 一一对应：game=世界已装配；menu=主菜单可见；starting=世界装配进行中（主菜单仍可见，重复点击由 Go 忽略）；loading=世界装配成功后的初始加载期（不透明加载屏覆盖渐进加载中的世界，无游戏输入，加载收敛后进入 game）；settings=设置页可见；paused=暂停层可见、权威模拟冻结。",
+      "enum": ["game", "menu", "starting", "loading", "settings", "paused"]
     },
     "menuAction": {
       "description": "菜单动作 id，与 Go cmd/mornlea/app 的 menuAction* 常量及 Rust 既有 UI_ACTION_* 清单逐值互钉：enter-game=1 进入游戏、multiplayer=2 多人游戏（禁用态）、open-settings=3 设置、quit=4 退出游戏、settings-save=5 保存、settings-cancel=6 取消更改、settings-back=7 返回或 Esc、pause-back=8 返回游戏、pause-quit-to-menu=9 退回主菜单。两侧任何一方不得单方面改动映射。",
@@ -112,6 +113,22 @@
       "required": ["remote"],
       "properties": {
         "remote": { "type": "boolean" }
+      }
+    },
+    "loadingState": {
+      "type": "object",
+      "description": "世界加载屏分节：loading 相位携带。loaded 是当前已就绪的区块列数（客户端区块列镜像的势），total 是与无头加载判据同源的目标列数（(2*(ViewDistance+1)+1)^2，恒为正奇数平方，下界 1）；前端只按 clamp(loaded/total, 0, 1) 换算进度条比例，不自行预测或平滑进度。",
+      "additionalProperties": false,
+      "required": ["loaded", "total"],
+      "properties": {
+        "loaded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
     "debugState": {

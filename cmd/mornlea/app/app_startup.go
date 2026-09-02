@@ -380,9 +380,11 @@ func NewWithDependencies(
 // startWorld 在「进入游戏」点击后执行延迟的世界装配：打开世界存储、启动本地
 // 权威服务端、完成登录并把远环 LOD 播种器接线到登录种子。复用既有
 // openApplicationStore/assembleLocalApplicationConnection/attachLodScheduler 与既有
-// 错误包装；成功设置相位 MenuPhaseGame 与 starting=false，失败返回 error（相位仍
-// 由调用方保持菜单并显示错误文本）。菜单构造阶段已存 startupOptions/startupDeps
-// 快照，此处用同一份配置与注入载体，保证与既有路径产出相同的服务端状态。
+// 错误包装；成功设置相位 MenuPhaseLoading（装配成功进入加载相位而非游戏相位，
+// 光标捕获与游戏输入生效都推迟到加载收敛之后）与 starting=false，失败返回
+// error（相位仍由调用方保持菜单并显示错误文本）。菜单构造阶段已存
+// startupOptions/startupDeps 快照，此处用同一份配置与注入载体，保证与既有路径
+// 产出相同的服务端状态。
 func (a *Application) startWorld() error {
 	options := a.startupOptions
 	// 远程连接形态的世界由远端持有：进程内没有可打开的本地存档，放行会在
@@ -451,7 +453,7 @@ func (a *Application) startWorld() error {
 	// 出确定性相同的画面（spec webview-menu-ui「全景背景确定性」）。
 	a.discardMenuVista()
 
-	a.menu.phase = MenuPhaseGame
+	a.menu.phase = MenuPhaseLoading
 	a.menu.starting = false
 	return nil
 }

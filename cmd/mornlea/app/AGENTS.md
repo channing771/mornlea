@@ -16,7 +16,7 @@ cmd/mornlea/app/
 ├── app_frame.go               # Frame：每帧消息 drain、模拟推进与绘制的单入口
 ├── app_render.go              # 呈现装配：HUD、名牌、覆盖层绘制
 ├── app_input.go               # 交互输入处理
-├── interactive.go             # RunInteractive：菜单/游戏两相位交互循环
+├── interactive.go             # RunInteractive：菜单/加载/游戏三相位交互循环
 ├── dev_capture.go             # 开发捕获泵：CaptureCoordinator 注入面与 /status 原子快照访问器
 ├── app_menu.go、app_pause.go、app_settings.go、debug_panel.go  # UI 状态域
 ├── chat.go、app_messages.go   # 聊天输入与服务端消息呈现
@@ -58,8 +58,8 @@ cmd/mornlea/app/
   服务的消费端接口（接口声明在本包、由 `cmd/mornlea/devcapture` 实现），
   `SetCaptureCoordinator` 供 main 在启动序列注入/清除（循环运行中并发改写是
   调用方编程错误）；`Phase`/`WindowWidth`/`WindowHeight` 是 `/status` 观察面
-  的原子快照访问器，仅在协调器注入后由帧循环维护。泵 `pumpDevCapture` 由菜单
-  与游戏两处循环每帧各调用一次：空闲零捕获调用、待办时每帧至多捕获一次且
+  的原子快照访问器，仅在协调器注入后由帧循环维护。泵 `pumpDevCapture` 由菜单、
+  加载与游戏三处循环每帧各调用一次：空闲零捕获调用、待办时每帧至多捕获一次且
   非阻塞交付，编码全部离开帧循环
   （`TestPumpDevCaptureIdleFrameChecksPendingOnly`、
   `TestPumpDevCaptureDeliversPendingFrameExactlyOnce`）。

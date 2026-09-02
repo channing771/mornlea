@@ -78,7 +78,7 @@ func (a *Application) captureCoordinator() CaptureCoordinator {
 	return a.startupDeps.CaptureCoordinator
 }
 
-// pumpDevCapture 是交互帧循环的捕获泵，由菜单与游戏两处循环在
+// pumpDevCapture 是交互帧循环的捕获泵，由菜单、加载与游戏三处循环在
 // `Window.Poll` 之后、渲染之前各调用一次。未注入协调器时早退；注入后每帧
 // 先把相位与窗口尺寸发布进 /status 原子快照，再做一次非阻塞待办检查，
 // 有待办时在当前线程（与 `Window.Poll` 同线程，
