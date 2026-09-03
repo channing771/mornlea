@@ -34,7 +34,7 @@ def run(coroutine: Awaitable[object]) -> object:
 
 
 def golden_value(contract: str, name: str) -> dict[str, Any]:
-    path = REPOSITORY_ROOT / f"contracts/companion-agent/{contract}/golden/valid.json"
+    path = REPOSITORY_ROOT / f"packages/contracts/companion-agent/{contract}/golden/valid.json"
     document = json.loads(path.read_text(encoding="utf-8"))
     return next(case["value"] for case in document["cases"] if case["name"] == name)
 

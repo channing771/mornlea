@@ -12,7 +12,7 @@
 
 ## Task 3: 建立 go.work 与 contracts 模块化
 
-- [ ] 3.1 新建根 `go.work`（初始 `use . ./packages/contracts`）；`git mv contracts packages/contracts` 并为 `packages/contracts` 建 `go.mod`（module `github.com/channing771/mornlea/packages/contracts`）；根 `go.mod` 增加 require+replace 指向本地 contracts；`internal/server` 的 contracts import path 改写；pyproject force-include 再改为 `../../../packages/contracts/...`。以 `make companion-agent-check`、`go test ./internal/server -run MCP -short -count=1`、`go vet ./...` 验证。
+- [x] 3.1 新建根 `go.work`（初始 `use . ./packages/contracts`）；`git mv contracts packages/contracts` 并为 `packages/contracts` 建 `go.mod`（module `github.com/channing771/mornlea/packages/contracts`）；根 `go.mod` 增加 require+replace 指向本地 contracts；`internal/server` 的 contracts import path 改写；pyproject force-include 再改为 `../../../packages/contracts/...`。以 `make companion-agent-check`、`go test ./internal/server -run MCP -short -count=1`、`go vet ./...` 验证。
 
 ## Task 4: shared 模块切割
 

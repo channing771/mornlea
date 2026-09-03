@@ -18,10 +18,10 @@ func TestCompanionAgentRepositoryBoundary(t *testing.T) {
 	root := moduleRoot(t)
 	companion := filepath.Join("packages", "agent", "companion")
 	required := []string{
-		filepath.Join("contracts", "companion-agent", "http-v1", "manifest.json"),
-		filepath.Join("contracts", "companion-agent", "http-v1", "schema.json"),
-		filepath.Join("contracts", "companion-agent", "mcp-v1", "manifest.json"),
-		filepath.Join("contracts", "companion-agent", "mcp-v1", "schema.json"),
+		filepath.Join("packages", "contracts", "companion-agent", "http-v1", "manifest.json"),
+		filepath.Join("packages", "contracts", "companion-agent", "http-v1", "schema.json"),
+		filepath.Join("packages", "contracts", "companion-agent", "mcp-v1", "manifest.json"),
+		filepath.Join("packages", "contracts", "companion-agent", "mcp-v1", "schema.json"),
 		filepath.Join(companion, "pyproject.toml"),
 		filepath.Join(companion, "uv.lock"),
 		filepath.Join(companion, "src", "mornlea_companion_agent", "app.py"),
@@ -39,8 +39,8 @@ func TestCompanionAgentRepositoryBoundary(t *testing.T) {
 
 	pyproject := readBaselineDoc(t, root, filepath.Join(companion, "pyproject.toml"))
 	for _, marker := range []string{
-		`"../../../contracts/companion-agent/mcp-v1/manifest.json"`,
-		`"../../../contracts/companion-agent/mcp-v1/schema.json"`,
+		`"../../../packages/contracts/companion-agent/mcp-v1/manifest.json"`,
+		`"../../../packages/contracts/companion-agent/mcp-v1/schema.json"`,
 	} {
 		if !strings.Contains(pyproject, marker) {
 			t.Errorf("Python wheel 未携带共享 MCP contract %s", marker)
@@ -425,7 +425,7 @@ var companionGoForbiddenImportAllowlist = map[string]map[string]string{
 
 func loadCompanionProductionImportGraph(root string) (map[string][]string, error) {
 	graph := make(map[string][]string)
-	for _, top := range []string{"cmd", "contracts", "internal"} {
+	for _, top := range []string{"cmd", "internal", "packages/contracts"} {
 		err := filepath.WalkDir(filepath.Join(root, top), func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr

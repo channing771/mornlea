@@ -14,5 +14,5 @@
 
 ## 合同与数据
 
-- HTTP v1 与 MCP v1 以 `contracts/companion-agent/` 的 manifest、schema 和 golden 为跨语言单一真相，Python 不得复制第二套 wire schema。
+- HTTP v1 与 MCP v1 以 `packages/contracts/companion-agent/` 的 manifest、schema 和 golden 为跨语言单一真相，Python 不得复制第二套 wire schema。
 - HTTP、MCP、model 与 SQLite 操作必须保持既有正文、预算、取消和单 worker 边界。credential 只从环境变量读取，不写配置、日志、错误、SQLite 或测试快照。

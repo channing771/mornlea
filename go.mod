@@ -3,6 +3,7 @@ module github.com/channing771/mornlea
 go 1.26.0
 
 require (
+	github.com/channing771/mornlea/packages/contracts v0.0.0-00010101000000-000000000000
 	github.com/go-gl/mathgl v1.2.0
 	github.com/gofrs/flock v0.13.0
 	github.com/klauspost/compress v1.19.1
@@ -24,3 +25,7 @@ require (
 	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 )
+
+// contracts 是独立最小 Go 模块（go:embed 必须与 JSON 契约同目录）；经本地
+// replace 引用，保证 GOWORK=off 的单模块世界仍可构建。
+replace github.com/channing771/mornlea/packages/contracts => ./packages/contracts

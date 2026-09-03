@@ -7,8 +7,8 @@ import (
 	"io"
 	"slices"
 
-	mcpv1 "github.com/channing771/mornlea/contracts/companion-agent/mcp-v1"
 	"github.com/channing771/mornlea/internal/companion"
+	mcpv1 "github.com/channing771/mornlea/packages/contracts/companion-agent/mcp-v1"
 )
 
 type companionMCPContract struct {

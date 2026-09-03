@@ -32,15 +32,15 @@ func TestContractFixtureFilesExist(t *testing.T) {
 	t.Parallel()
 
 	for _, relative := range []string{
-		"contracts/companion-agent/http-v1/schema.json",
-		"contracts/companion-agent/http-v1/manifest.json",
-		"contracts/companion-agent/http-v1/golden/valid.json",
-		"contracts/companion-agent/http-v1/golden/invalid.json",
-		"contracts/companion-agent/mcp-v1/schema.json",
-		"contracts/companion-agent/mcp-v1/manifest.json",
-		"contracts/companion-agent/mcp-v1/golden/valid.json",
-		"contracts/companion-agent/mcp-v1/golden/invalid.json",
-		"contracts/companion-agent/mcp-v1/golden/mine-validation.json",
+		"packages/contracts/companion-agent/http-v1/schema.json",
+		"packages/contracts/companion-agent/http-v1/manifest.json",
+		"packages/contracts/companion-agent/http-v1/golden/valid.json",
+		"packages/contracts/companion-agent/http-v1/golden/invalid.json",
+		"packages/contracts/companion-agent/mcp-v1/schema.json",
+		"packages/contracts/companion-agent/mcp-v1/manifest.json",
+		"packages/contracts/companion-agent/mcp-v1/golden/valid.json",
+		"packages/contracts/companion-agent/mcp-v1/golden/invalid.json",
+		"packages/contracts/companion-agent/mcp-v1/golden/mine-validation.json",
 	} {
 		data, err := os.ReadFile(contractFixturePath(t, relative))
 		if err != nil {
@@ -85,10 +85,10 @@ func TestContractFixtureSchemasValidateGoldens(t *testing.T) {
 		path     string
 		valid    bool
 	}{
-		{"http-v1/schema.json", "contracts/companion-agent/http-v1/golden/valid.json", true},
-		{"http-v1/schema.json", "contracts/companion-agent/http-v1/golden/invalid.json", false},
-		{"mcp-v1/schema.json", "contracts/companion-agent/mcp-v1/golden/valid.json", true},
-		{"mcp-v1/schema.json", "contracts/companion-agent/mcp-v1/golden/invalid.json", false},
+		{"http-v1/schema.json", "packages/contracts/companion-agent/http-v1/golden/valid.json", true},
+		{"http-v1/schema.json", "packages/contracts/companion-agent/http-v1/golden/invalid.json", false},
+		{"mcp-v1/schema.json", "packages/contracts/companion-agent/mcp-v1/golden/valid.json", true},
+		{"mcp-v1/schema.json", "packages/contracts/companion-agent/mcp-v1/golden/invalid.json", false},
 	} {
 		golden := contractLoadGolden(t, fixture.path)
 		if len(golden.Cases) == 0 {
@@ -162,7 +162,7 @@ func TestContractFixtureSchemasValidateGoldens(t *testing.T) {
 func TestContractFixtureHTTPManifestConsistency(t *testing.T) {
 	t.Parallel()
 
-	manifest := contractReadObject(t, "contracts/companion-agent/http-v1/manifest.json")
+	manifest := contractReadObject(t, "packages/contracts/companion-agent/http-v1/manifest.json")
 	if got := contractString(t, manifest["application_contract_version"], "http version"); got != "v1" {
 		t.Fatalf("HTTP contract version = %q，want v1", got)
 	}
@@ -424,7 +424,7 @@ func TestContractFixtureHTTPManifestConsistency(t *testing.T) {
 func TestContractFixtureMCPManifestConsistency(t *testing.T) {
 	t.Parallel()
 
-	manifest := contractReadObject(t, "contracts/companion-agent/mcp-v1/manifest.json")
+	manifest := contractReadObject(t, "packages/contracts/companion-agent/mcp-v1/manifest.json")
 	if got := contractString(t, manifest["application_contract_version"], "mcp application version"); got != "v1" {
 		t.Fatalf("MCP application version = %q，want v1", got)
 	}
@@ -661,7 +661,7 @@ func TestContractFixtureMCPManifestConsistency(t *testing.T) {
 		}
 	}
 
-	validGolden := contractLoadGolden(t, "contracts/companion-agent/mcp-v1/golden/valid.json")
+	validGolden := contractLoadGolden(t, "packages/contracts/companion-agent/mcp-v1/golden/valid.json")
 	covered := make(map[string]struct{}, len(validGolden.Cases))
 	for _, testCase := range validGolden.Cases {
 		covered[testCase.Schema] = struct{}{}
@@ -904,7 +904,7 @@ func TestContractFixtureSchemaKeywordAuditUnderstandsContainers(t *testing.T) {
 func TestContractFixtureMineValidationMatchesAuthority(t *testing.T) {
 	t.Parallel()
 
-	document := contractReadObject(t, "contracts/companion-agent/mcp-v1/golden/mine-validation.json")
+	document := contractReadObject(t, "packages/contracts/companion-agent/mcp-v1/golden/mine-validation.json")
 	if got := contractString(t, document["failure_code"], "mine failure code"); got != "unmineable_target" {
 		t.Fatalf("mine failure code = %q，want unmineable_target", got)
 	}
@@ -1015,8 +1015,8 @@ type contractSchemaSet struct {
 func contractLoadSchemas(t *testing.T) contractSchemaSet {
 	t.Helper()
 	return contractSchemaSet{documents: map[string]map[string]any{
-		"http-v1/schema.json": contractReadObject(t, "contracts/companion-agent/http-v1/schema.json"),
-		"mcp-v1/schema.json":  contractReadObject(t, "contracts/companion-agent/mcp-v1/schema.json"),
+		"http-v1/schema.json": contractReadObject(t, "packages/contracts/companion-agent/http-v1/schema.json"),
+		"mcp-v1/schema.json":  contractReadObject(t, "packages/contracts/companion-agent/mcp-v1/schema.json"),
 	}}
 }
 

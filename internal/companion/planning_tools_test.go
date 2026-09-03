@@ -21,7 +21,7 @@ import (
 func TestPlanningToolsConsumeValidMachineFixtures(t *testing.T) {
 	lease, cleanup := planningToolLease(t)
 	defer cleanup()
-	valid := contractLoadGolden(t, "contracts/companion-agent/mcp-v1/golden/valid.json")
+	valid := contractLoadGolden(t, "packages/contracts/companion-agent/mcp-v1/golden/valid.json")
 	schemas := contractLoadSchemas(t)
 	toolByInput := map[string]string{
 		"get_planning_context_input": ToolGetPlanningContext,
@@ -83,7 +83,7 @@ func TestPlanningToolsConsumeValidMachineFixtures(t *testing.T) {
 func TestPlanningToolsRejectInvalidInputGoldens(t *testing.T) {
 	lease, cleanup := planningToolLease(t)
 	defer cleanup()
-	invalid := contractLoadGolden(t, "contracts/companion-agent/mcp-v1/golden/invalid.json")
+	invalid := contractLoadGolden(t, "packages/contracts/companion-agent/mcp-v1/golden/invalid.json")
 	toolByInput := map[string]string{
 		"inspect_inventory_input":   ToolInspectInventory,
 		"find_visible_blocks_input": ToolFindVisibleBlocks,
@@ -239,7 +239,7 @@ func TestPlanningAffordancesByteBoundEmptyAndFirstItemSemantics(t *testing.T) {
 func TestPlanningFindBlocksRejectsStandaloneBoundedNameGoldens(t *testing.T) {
 	lease, cleanup := planningToolLease(t)
 	defer cleanup()
-	invalid := contractLoadGolden(t, "contracts/companion-agent/mcp-v1/golden/invalid.json")
+	invalid := contractLoadGolden(t, "packages/contracts/companion-agent/mcp-v1/golden/invalid.json")
 	seen := 0
 	for _, testCase := range invalid.Cases {
 		if testCase.Schema != "bounded_name" {
@@ -279,7 +279,7 @@ func TestPlanningFindBlocksRejectsStandaloneBoundedNameGoldens(t *testing.T) {
 func TestPlanningToolFindBlocksValidatesAllNamesBeforeLookup(t *testing.T) {
 	lease, cleanup := planningToolLease(t)
 	defer cleanup()
-	invalid := contractLoadGolden(t, "contracts/companion-agent/mcp-v1/golden/invalid.json")
+	invalid := contractLoadGolden(t, "packages/contracts/companion-agent/mcp-v1/golden/invalid.json")
 	wantReasons := map[string]struct{}{
 		"name_utf8_bytes": {},
 		"name_blank":      {},
@@ -358,7 +358,7 @@ func TestPlanningValidatorMineSemanticsGolden(t *testing.T) {
 	lease, cleanup := planningToolLease(t)
 	defer cleanup()
 	// `contractGolden` 只描述通用 value case；mine fixture 使用独立形状，直接读取。
-	data := contractReadObject(t, "contracts/companion-agent/mcp-v1/golden/mine-validation.json")
+	data := contractReadObject(t, "packages/contracts/companion-agent/mcp-v1/golden/mine-validation.json")
 	cases := contractArray(t, data["cases"], "mine cases")
 	for _, rawCase := range cases {
 		testCase := contractObject(t, rawCase, "mine case")

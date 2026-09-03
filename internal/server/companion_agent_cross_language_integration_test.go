@@ -1088,7 +1088,7 @@ const registrationLeakSentinel = "sensitive-instruction-must-not-return"
 func loadCrossLanguageHTTPGolden(t *testing.T, name string, target any) {
 	t.Helper()
 	root := crossLanguageRepositoryRoot(t)
-	data, err := os.ReadFile(filepath.Join(root, "contracts", "companion-agent", "http-v1", "golden", "valid.json"))
+	data, err := os.ReadFile(filepath.Join(root, "packages", "contracts", "companion-agent", "http-v1", "golden", "valid.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
