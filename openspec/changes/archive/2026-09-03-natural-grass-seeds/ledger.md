@@ -214,5 +214,5 @@ Ruling: planning candidate `ab8292569393edfb6748a82f6303c50b0c7654e9` 的独立 
 - Archive baseline: 归档操作基于 `d23e434c`。
 - Archive: `2026-09-03` 归档为 `openspec/changes/archive/2026-09-03-natural-grass-seeds`;归档前 all-strict 80/0、归档后 all-strict 80/0;active 列表仅余 `dev-capture`（另一独立 change,非本任务范围）,archive 唯一性成立;归档提交见下。
 - Backlog / current progress closure: `docs/feature-backlog.md` B-04 状态由「开发中」改为「已完成」;`docs/notes/progress.md` 当前条目已由 Task 8.1 写入。
-- PR / CI / merge: `PENDING`（PR 创建后回填;遵循 `.github/PULL_REQUEST_TEMPLATE.md`、单行英文标题与既有 CI 流程;合并前须按 Task 8.1 Ruling 与 whole-change M4 义务重并 main 并重核版本矩阵——main 已有 client ABI v14/companions v5）。
+- PR / CI / merge: PR #139 已创建（`feat(gameplay): seed farming from natural short grass`,遵循 `.github/PULL_REQUEST_TEMPLATE.md`）;分支已推送 origin。合并前义务（PR 正文已写明）:main 领先 253 commit 且 scenario v21 撞号（main=companion 拆分 workload、本分支=自然短草 workload）、client ABI v13↔v14、companions v4↔v5——须以独立 follow-up change 或 PR 内 scoped repair 完成版本矩阵再基线（scenario v22、golden 重归因、client ABI token v14、engine ABI 保持 v10）并重跑全量门禁;由控制会话/用户裁决方式。
 - Final archive ruling: 自然短草闭环（B-04）全 change 完成——8 项实现任务全部双评审 PASS、T3 十二项门禁同一实现树全绿、whole-change 双评审零 Critical/Important、主规格沉淀与归档完成;唯一遗留义务为 PR 合并时的 main 版本矩阵重核,已写入 proposal「延期与放弃」。
