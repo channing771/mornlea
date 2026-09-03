@@ -97,21 +97,21 @@ Ruling: planning candidate `ab8292569393edfb6748a82f6303c50b0c7654e9` 的独立 
 
 ## Task 5.1 Missing-player Inventory And Natural-seed Farming E2E
 
-- Status: `PENDING`.
-- Task baseline SHA: `PENDING`.
-- Implementer: `PENDING`（fresh）。
-- RED evidence: `PENDING`（missing/confirm/disconnect/restore、旧玩家逐槽保留与 Memory/TCP 零种子自然闭环）。
-- Code/test commit C: `PENDING`（完整 SHA + 单行英文 subject；不得包含 `tasks.md`/`ledger.md`）。
-- Files changed: `PENDING`（仅 persistence starter state、server farming/hunger/transport E2E 与共享 helper）。
-- Compatibility evidence: `PENDING`（前 14 个背包格各 64、其余背包和九格快捷栏为空、已有玩家逐槽保留、player schema v8 与 wire/storage 字节布局不变）。
-- E2E evidence: `PENDING`（生产 `worldgen.New`/真实 Rust 自然生成；禁止 `flatGenerator`、手工 `SetBlock` 或测试侧复制分布算法；冻结 seed/dimension/hit position；Memory/真实 TCP；权威 drop；前 9/第 10 active tick；最终翻地和种植 parity）。
-- Final verified implementation SHA I: `PENDING`（`C` 加本任务全部 repair 后的完整 SHA）。
-- Focused verification bound to I: `PENDING`（`make rust`、persistence race、server farming/hunger/transport race、archcheck、race-changed 与 `git diff --check`）。
-- SPEC reviewer / verdict / findings at I: `PENDING`.
-- QUALITY reviewer / verdict / findings at I: `PENDING`.
-- Repair rounds and commits: `PENDING`.
-- Tasks/ledger-only evidence commit L: `PENDING`（只含本任务 checkbox 与 ledger 证据）。
-- Ruling: `PENDING`.
+- Status: `DONE`（2026-09-03 控制会话勾选）。
+- Task baseline SHA: `7f9c4a3fbaf841ed48d75461eeb0afc106d69848`（Task 4.1 `L`）。
+- Implementer: fresh zcode implementer（独立于 1.1–4.1）;R1 修复由接手 agent 完成（原 implementer 会话因平台配额不可恢复,如实记录）。
+- RED evidence: 编译 RED `undefined: runtime.ShortGrassSeedDropRoll`;persistence 5 个行为 RED（材料包/starter 持久化/confirm 一次性/no-starter-seeds 扫描/legacy fixture 校准）;server 行为 RED（`登录时统一索引 23 已持有小麦种子 {34,64}`=旧第 15 格赠送;hunger 登录 64 颗）;开发期夹具校准 RED（拾取在第 9 步出现→定位 release-input `send` 多耗一个未计数 tick,修复为排队不步进,已在代码内注释）。
+- Code/test commit C: `4c290ed40da4fc223ed602244d80df4cc62f73a1` `feat(server): start farming from natural grass`（7 文件 +651/−377,不含 `tasks.md`/`ledger.md`,无 Rust 改动）。
+- Files changed: `internal/server/persistence/players_snapshot.go`（仅删除 `starterSeedSlot` 常量与 64 种子写入,唯一生产改动）、`internal/sim/entity/yield.go`（导出 `ShortGrassSeedDropRoll` 纯转发,循 4.1 Ruling）、`internal/sim/runtime/entity_delegate.go`（archcheck 依赖方向要求的 runtime 委托,紧邻 `CompanionMineContainerStaging` 先例）、`internal/server/farming_loop_e2e_test.go`（全量重写:冻结常量+共享 runner+完整循环）、`internal/server/transport_parity_integration_test.go`（新增 `TestNaturalSeedFarmingMemoryTCPParity`）、`internal/server/hunger_loop_e2e_test.go`（登录契约改零种子,平铺夹具保留）、`internal/server/persistence/player_persistence_lifecycle_test.go`（零种子 36 格扫描+legacy 保留 pin）。
+- Compatibility evidence: 前 14 格材料逐项不变（`Backpack[13]`=64 苔石圆石钉住）;第 15 格及之后与九格快捷栏为空;player schema v8/wire/storage 未动（无 codec/storage 文件入 diff,`cachedPlayerFromStored`/restore/save 不变）;legacy 玩家（第 15 格 64 种子+快捷栏 5 种子）逐槽保留含 Confirm 保存;确认前断开不持久化（force/autosave/flush/abort 子测试）;确认后重登精确恢复首次保存。
+- E2E evidence: 生产 `worldgen.New(42, true)`（fluid-on 生产默认）经真实 Rust MGW1 生成;冻结常量 seed 42/Overworld/target `(32,65,224)`/farmland `(32,64,224)`,离线冻结两阶段转写（列扫描+整块/单点双出口核实+私有生产 roll 白盒探针,scratch 程序已删,无算法复制、无运行时搜索）;输入前三重断言（`BaseBlockAt(target)==ShortGrassID`、已加载 realm 同格、`ShortGrassSeedDropRoll` 命中）;零种子登录 36 格扫描→真实持续 primary 输入 1 tick（恰好一条 BlockChange+一条 ItemDropUpserts）→前 9 步种子 0、第 10 步 1（release-input 不步进防 off-by-one,与引擎 `advanceDrops`/`completeMining` 相位序核对无窗口）→自然海水润湿翻地+种植 `WheatStage0ID`、种子归零;Memory 与真实 TCP listener（`ListenTCP 127.0.0.1:0`）同 runner `reflect.DeepEqual` 全字段收敛（含拒绝、锄头耐久、最终背包）;完整循环经 225 tick 生长、[1,3] 收获、再种植;显式种子集成测试保留未动。
+- Final verified implementation SHA I: `1351b6045759088145db783546ce600167eb32b3`（`C` + R1 `docs(server): refresh starter seed comment`）。
+- Focused verification bound to I: implementer 于 `4c290ed4` 全绿:`make rust` ok;`go test ./internal/server/persistence -race -count=1` ok（7.2s）;`go test ./internal/server -run '(Farming|Hunger|TransportParity|PlayerPersistence)' -race -count=1` ok（4.1s）;`go test ./internal/archcheck -count=1` ok;`make test-race-changed RACE_BASE=7f9c4a3f` 10 包 ok（3:19）;`git diff --check` clean;gofmt/vet clean。R1 后 scoped:`server -run 'Eating' -race` ok、archcheck ok、diff-check clean;R1 仅注释改动,实现树其余与 `4c290ed4` 逐字节一致。
+- SPEC reviewer / verdict / findings at I: fresh zcode SPEC reviewer = `SPEC PASS`,0 Critical/0 Important/2 Minor 观察+1 Info:（观察 1）锄头经 `SetPlayerInventoryForTest` 给予而非脚本内合成——design D6 不约束锄头来源,合成链由 `TestPlantSeedsMemoryTCPParity`/`TestMemoryTCPCraftingGridConvergence` 双传输覆盖,测试头已注明取舍;（观察 2）hunger 回归沿用夹具小麦而非字面自然种子——D6 只要求 Memory farming 循环自然化,hunger 从未跑种植循环且来源注释已链到自然种子循环;（Info）RED 为结构性。A–G 全部 SATISFIED,附 file:line 证据与抽查（3.7s/3.0s）。
+- QUALITY reviewer / verdict / findings at I: fresh zcode QUALITY reviewer = `QUALITY PASS`,0 Critical/0 Important/1 Minor+2 Info:（Minor）`internal/server/eating_parity_test.go:34-35` 过期注释声称材料包给种子——已由 R1 修复;（Info）`PickupDelaySteps` 跨传输 DeepEqual 该字段恒真（语义由 runner 内逐 tick 循环承载,非缺陷）;（Info）legacy 保留 pin 为 green-on-old-and-new 设计,RED 承重由 36 格扫描/hunger 登录契约/两个 E2E 承担。独立核验:拾取计时与引擎相位序核对无 off-by-one 窗口;冻结样本预断言对 Rust worldgen/roll 漂移真正绑定;导出链纯转发无第二 salt;`farming_integration_test.go` 字节不变。
+- Repair rounds and commits: R1 = `1351b6045759088145db783546ce600167eb32b3` `docs(server): refresh starter seed comment`:修复 `eating_parity_test.go` 过期注释为“材料包不含种子/小麦/面包;第一颗种子来自自然短草,种子→小麦链路由自然种子 E2E 覆盖”,comment-only +4/−2。原 implementer 会话因平台配额不可恢复,由接手 agent 按同一修复说明完成——控制会话如实记录此交接。R1 scoped re-review（fresh）:SPEC PASS + QUALITY PASS,注释事实经 `players_snapshot.go`/`farming_loop_e2e_test.go` 独立核实,卫生合规,`server -run 'Eating' -race` ok。R2–R5 未触发。
+- Tasks/ledger-only evidence commit L: 本 evidence commit（不回写自身 SHA,不冒充 `I`）。
+- Ruling: Task 5.1 final `I` = `1351b604`,初始双评审与 R1 scoped 双复评均 PASS,勾选成立 — R1 交接因原 implementer 会话配额中止,由接手 agent 承接同一 scoped 修复并独立复评,协议实质（fresh 修复+独立验证）未破,记录在案 — 两条 Minor 观察（锄头夹具给予、hunger 夹具小麦）均在 design D6 字面范围内且有独立双传输覆盖,不返工。
 
 ## Task 6.1 Benchmark V21 And Record-only Workload
 
