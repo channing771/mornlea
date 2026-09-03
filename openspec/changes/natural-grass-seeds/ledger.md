@@ -150,21 +150,20 @@ Ruling: planning candidate `ab8292569393edfb6748a82f6303c50b0c7654e9` 的独立 
 
 ## Task 8.1 Current Documentation And Version Matrix
 
-- Status: `PENDING`.
-- Task baseline SHA: `PENDING`.
-- Implementer: `PENDING`（fresh）。
-- RED evidence: `PENDING`（实现前记录 current-doc/version guard 的失败项与过期现行表述；不得把历史记录的旧版本当作 RED）。
-- Code/test commit C: `PENDING`（完整 SHA + 单行英文 subject；本任务的实现是 current docs/guides 与相应 guard 更新，不得包含 `tasks.md`/`ledger.md`）。
-- Exclusive documentation ownership: `PENDING`（本任务独占根 `AGENTS.md`、`openspec/config.yaml`、`README*.md`、benchmark/capture 局部 `AGENTS.md`、`docs/architecture.md` 与 `docs/notes/{progress.md,gameplay.md,limitations.md,compatibility.md,perf-baseline.md,perf-baseline-m5.md,visual-verification.md,go-rust-division.md}` 的经核实现行段落；`docs/texture-packs.md` 仍由 Task 1.1 独占；Setup 中的 F-04 边界独立生效）。
-- Current-version evidence: `PENDING`（现行矩阵统一为 engine ABI v10、benchmark scenario v21、client ABI v13，并保持 protocol v32、player v8、chunk v9、metadata v3、companions v4、hostile v1；自然探索种子入口与 Task 7.1 的实际视觉结果同步，历史记录不批量改写）。
-- Scope audit: `PENDING`（逐文件列出更新的现行段落、明确保留的历史段落，以及与 Tasks 1.1–7.1 无路径重叠的证据）。
-- Final verified implementation SHA I: `PENDING`（`C` 加本任务全部 repair 后的完整 SHA）。
-- Focused verification bound to I: `PENDING`（current-doc/version guards、相关文档检查、`go test ./internal/archcheck -count=1`、named/all strict OpenSpec validation、race-changed 如适用与 `git diff --check`）。
-- SPEC reviewer / verdict / findings at I: `PENDING`.
-- QUALITY reviewer / verdict / findings at I: `PENDING`.
-- Repair rounds and commits: `PENDING`.
-- Tasks/ledger-only evidence commit L: `PENDING`（只含本任务 checkbox 与 ledger 证据）。
-- Ruling: `PENDING`.
+- Status: `DONE`（2026-09-03 控制会话勾选）。
+- Task baseline SHA: `ca6968e7410f9638352986795330f8092d2e57a6`（Task 7.1 `L`）。
+- Implementer: fresh zcode implementer（独立于 1.1–7.1）。
+- RED evidence: 无根 `AGENTS.md` 之外的自动 guard（archcheck `TestBaselineVersionsMatchCode` 只绑根 `AGENTS.md`,已由 2.1/6.1 单 token 同步保持绿）;RED 为编辑前逐文件清点的过期现行表述清单:config.yaml（v9/v12/v20）、README×2（v8/v12/v20、无种子入口）、benchmark 局部 `AGENTS.md`（"当前 v20"）、architecture §5/§6（v9/v12）、gameplay（无短草/种子唯一途径/火把光 Air-only/耐久唯一豁免/伙伴拒绝缺短草）、limitations（日期/方块光 Air-only/registry/起步种子/伙伴）、compatibility（v12/无 84 号方块/无降级说明/v20 与 19:20）、perf-baseline×2（v20/19:20）、progress/visual-verification/go-rust-division（缺当前条目）——共 13 处文件级清单 + 根 `AGENTS.md` 核实为已准确。
+- Code/test commit C: `c64df1308175be943a7ee16d37400e548b2473df` `docs: document natural grass baselines`（14 文件 +51/−27,docs-only）。
+- Current-version evidence: 版本矩阵全部从代码常量核实后写入:engine ABI **v10**（ffi.rs:44+header:47）、client ABI **v13**（mornlea_client ffi.rs:45+header:24;v13=窗口合成 capture,来自分支内更早 change,非本 change）、protocol v32、player v8、chunk v9、metadata v3、companions.ai **v4**、hostile v1、scenario **v21**、唯一迁移 `20:21`、MGW1 layout 3/15 材料/header 566。自然探索种子入口（1/8 确定性掉落、材料包无种子、第 10 活动tick拾取）、三类耐久豁免、植物光照口径、采掘表短草行、伙伴双拒绝、兼容性（旧档不回填/新块可含 84/降级需备份/禁混用）、7.1 视觉结果（14/11 拆分、确定性 culling、时间冻结、debug-panel 奇偶性注记）、go-rust-division MGW1 契约、capture/benchmark 局部指南同步。
+- Scope audit: 恰好 14 文件全部在 8.1 独占清单内（根 `AGENTS.md` 经核实已准确零编辑,如实记录）;`docs/texture-packs.md`（1.1 独占）未动;无代码/测试/golden/accepted JSON;历史段落全部保留（progress 里程碑纯追加、perf-baseline v20 理由原文降级为"上一代"、compatibility v26-v31/v12 条目保留为历史）;`docs/notes/lan-server.md` 的陈旧版本按 Setup Ruling 留给 F-04,未动。
+- Final verified implementation SHA I: `c64df1308175be943a7ee16d37400e548b2473df`（无 repair 轮）。
+- Focused verification bound to I: `go test ./internal/archcheck -count=1` ok;`openspec validate natural-grass-seeds --strict --no-interactive` valid;`openspec validate --all --strict --no-interactive` **80 passed/0 failed**;`git diff --check` clean。双评审均独立复跑全绿。
+- SPEC reviewer / verdict / findings at I: fresh zcode SPEC reviewer = `SPEC PASS`,0/0/0 需修复。A–F 全部 SATISFIED:版本矩阵 11 项 token 逐一对照代码常量独立复核全匹配;独占清单精确;历史纪律（progress 纯追加/perf-baseline 原文保留/compatibility 旧条目）;新段落内容逐句对码核验（salt/1/8、三类豁免、光照两口径、伙伴双侧、84/85、14 张名单逐一比对 `286f1c8f..1d7485bb` 实际 golden 变更集、冻结 defer、`&3==0` 密度）;根 `AGENTS.md` 不编辑的决策诚实正确。
+- QUALITY reviewer / verdict / findings at I: fresh zcode QUALITY reviewer = `QUALITY PASS`,0/0/4 Info:（1）README.en 种子句较中文略简（CN 历史上更密,非矛盾）;（2）limitations 重验戳 2026-09-02 vs 提交日 09-03（无跨文件矛盾）;（3）`lan-server.md` 陈旧版本为 F-04 独占,正确未动,提请 F-04/控制会话后续处理;（4）任务编号 regex 仅命中 SHA-256 算法名,无任务 ID。内部一致性 grep 交叉核验零分歧;三处 implementer 偏差（根 `AGENTS.md` verified-not-edited、perf-baseline 不新增 v21 测量节、m5 文件内现行迁移句必要翻转）均判合理。
+- Repair rounds and commits: 无（首轮双 PASS）。
+- Tasks/ledger-only evidence commit L: 本 evidence commit（不回写自身 SHA,不冒充 `I`）。
+- Ruling: Task 8.1 final `I` = `c64df130`,双评审零需修复项,勾选成立 — client ABI **v13** 与 companions **v4** 为本分支代码实况（分支早于 main 后续 v14/v5 bump）,文档如实记录,PR 并 main 时需按 main 最终基线重新核对版本矩阵 — `lan-server.md` 陈旧性转告 F-04 — 4 条 Info 记录在案不返工。
 
 ## Section 9. Whole-change Review And T3
 
