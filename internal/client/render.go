@@ -4,8 +4,11 @@ package client
 
 // 本文件是 `mornlea_client` render ABI 族的 Go 绑定(v2 引入,v6 增补
 // 远环 tile 上传/丢弃入口,v7 增补雾参数化 SetLodFog——变基重编后
-// v5 归 main 的 water pass,远环两项出口顺延为 v6/v7):R2a 的离屏
-// Rust 渲染器只被双后端对照测试与后续期使用,生产渲染仍是 Go 路径。
+// v5 归 main 的 water pass,远环两项出口顺延为 v6/v7；v14 增补
+// render world update 入口):R2a 的离屏
+// Rust client 是生产 GPU 渲染的唯一实现；Go 保留 CPU mesh、visibility
+// 与 frame input 准备。v14 RenderWorld cache 当前只由测试驱动，尚未接入
+// production app 消息路径。
 // 链接与 include 标志在 window.go 的 cgo 序言中声明,此处只补 render
 // 入口的逃逸与回调指令。
 
@@ -20,6 +23,8 @@ package client
 #cgo nocallback mornlea_client_render_upload_section
 #cgo noescape mornlea_client_render_drop_section
 #cgo nocallback mornlea_client_render_drop_section
+#cgo noescape mornlea_client_render_apply_world_updates
+#cgo nocallback mornlea_client_render_apply_world_updates
 #cgo noescape mornlea_client_render_upload_lod_tile
 #cgo nocallback mornlea_client_render_upload_lod_tile
 #cgo noescape mornlea_client_render_drop_lod_tile
@@ -76,7 +81,7 @@ type Renderer struct {
 	benchmarkBatchCalls int
 	// uploadCalls 统计 section 上传 FFI 次数,供"无变化不上传"断言。
 	uploadCalls int
-	// uiEventScratch 是 client ABI v12 版本化 JSON 事件信封的固定复用缓冲。
+	// uiEventScratch 是 client ABI v12 引入、v14 保留的版本化 JSON 事件信封固定复用缓冲。
 	uiEventScratch []byte
 }
 
@@ -100,6 +105,9 @@ type RenderFrame struct {
 	DropInstances []byte
 	// OutlineInstances 是 12×80 字节的目标方块轮廓实例流。
 	OutlineInstances []byte
+	// CrackInstances 是采掘裂纹 overlay 的实例流（恰 1 个 80 字节实例：
+	// mat4 + f32 atlas 层号 + 零填充，render 包编码）；空表示本帧无裂纹。
+	CrackInstances []byte
 	// OverlayStrength 是伤害红边强度(>0 才绘制)。
 	OverlayStrength float32
 	// WaterTint 是相机浸没时的全屏水色叠加(RGBA)。A <= 0 表示本帧不叠加,
@@ -112,7 +120,7 @@ type RenderFrame struct {
 	HUDSegment     []byte
 	// DebugSegment 已废弃：程序化调试面板渲染路径已删除，本字段恒为空。
 	// 为保持既有帧编码路径（layout v2 判定与 tag 4 TLV）与 ABI 兼容而保留;
-	// 调试面板现经 WebView 桥呈现(client ABI v12)。
+	// 调试面板经 client ABI v12 引入、v14 保留的 WebView 桥呈现。
 	DebugSegment []byte
 }
 
@@ -233,6 +241,22 @@ func (r *Renderer) DropSection(x, y, z int32) {
 	)))
 }
 
+// ApplyRenderWorldUpdates 同步更新尚未接管绘制的 Rust 派生缓存。encoded
+// 只在本次 FFI 调用期间借给 Rust；空输入是调用方编程错误。
+func (r *Renderer) ApplyRenderWorldUpdates(encoded []byte) {
+	if len(encoded) == 0 {
+		panic("client: render world update为空")
+	}
+	r.check("apply render world updates", uint32(
+		C.mornlea_client_render_apply_world_updates(
+			C.MORNLEA_CLIENT_ABI_VERSION,
+			C.uint64_t(r.handle),
+			(*C.uint8_t)(unsafe.Pointer(unsafe.SliceData(encoded))),
+			C.size_t(len(encoded)),
+		),
+	))
+}
+
 // UploadLodTile 上传/替换一个远环 tile 的壳 quad 字节流(每 quad 20 字节
 // LE,布局与 engine mornlea_lod_shell 输出逐字一致;空等价 drop)。整 tile
 // 替换语义:重复上传同 tile 即整体替换。tile 坐标为 chunk 坐标,每 tile
@@ -275,7 +299,7 @@ func (r *Renderer) SetLodFog(start, full float32) {
 	)))
 }
 
-// DrainUIEvents 排空并返回 client ABI v12 的版本化 JSON 桥事件。Rust 只有在
+// DrainUIEvents 排空并返回 client ABI v12 引入、v14 保留的版本化 JSON 桥事件。Rust 只有在
 // 完整信封能放入固定 scratch 时才写入并清空队列;空队列返回 0 字节与空切片,
 // Go 随后逐事件做深层校验(未知动作/字段越界拒绝)。
 func (r *Renderer) DrainUIEvents() []UIEvent {
@@ -317,12 +341,17 @@ const (
 	// TLV tag,不升 ABI 版本。tag 9(旧菜单 UI 段)已在 client ABI v12 退役:
 	// 不再编码,下发即被 Rust 侧拒绝。
 	frameTagWater = 8
+	// frameTagCrack 是采掘裂纹实例段(80 字节/实例),沿 v5 内追加 tag 8 的
+	// 先例在帧内追加 TLV tag、不升 client ABI;tag 9 的退役语义被占用故跳过,
+	// 取下一个空闲值 10。段按条件追加:流为空时帧字节与引入前逐位一致。
+	frameTagCrack = 10
 )
 
 // hasPassSegments 报告本帧是否携带任一 pass 段(决定 layout 版本)。
 func (frame RenderFrame) hasPassSegments() bool {
 	return len(frame.AvatarInstances) > 0 || len(frame.DropInstances) > 0 ||
-		len(frame.OutlineInstances) > 0 || frame.OverlayStrength > 0 || frame.WaterTint[3] > 0 ||
+		len(frame.OutlineInstances) > 0 || len(frame.CrackInstances) > 0 ||
+		frame.OverlayStrength > 0 || frame.WaterTint[3] > 0 ||
 		len(frame.NameTagSegment) > 0 || len(frame.HUDSegment) > 0 ||
 		len(frame.DebugSegment) > 0
 }
@@ -387,6 +416,9 @@ func EncodeRenderFrame(frame RenderFrame) []byte {
 		}
 		appendTLV(frameTagWater, tint[:])
 	}
+	// 裂纹段按条件追加并落在既有段之后:流为空时不写任何字节,保证无裂纹
+	// 帧与本字段引入前逐位一致(既有 golden 的根基)。
+	appendTLV(frameTagCrack, frame.CrackInstances)
 	return out
 }
 

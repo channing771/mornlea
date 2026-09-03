@@ -35,6 +35,7 @@ var (
 	currentIdentityRoots = []string{
 		"go.mod",
 		"cmd",
+		"contracts",
 		"internal",
 		"engine/Cargo.toml",
 		"engine/Cargo.lock",

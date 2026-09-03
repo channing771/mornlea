@@ -667,8 +667,9 @@ func resetCapturePresentation(app SceneApplication) error {
 var captureUnderwaterEyePosition = mgl32.Vec3{4.5, 1.2, -4.5}
 
 // captureUnderwaterOxygen 是 water-underwater 场景注入的权威氧气值。
-// 取满值（core.MaxOxygenTicks = 300）的一半上下，氧气条因此以半满出现——
-// 满值时 HUD 按设计不画氧气条，端点画错了看不出来。
+// 取满值（core.MaxOxygenTicks = 300）的一半上下：氧气呈现已迁 WebView HUD
+// 组件，无头画面不再画氧气条，这个值只经 HUD 状态下行验证耗损值可注入，
+// 满值反而测不出「非满氧气」这条路径。
 const captureUnderwaterOxygen = 160
 
 // applyWaterUnderwaterCaptureState 把相机与权威玩家状态一起放进水里。

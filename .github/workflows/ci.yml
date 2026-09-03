@@ -124,6 +124,9 @@ jobs:
             go list ./cmd/...
             printf '%s\n' github.com/channing771/mornlea/internal/server
             go list ./internal/... | grep -v '/internal/server$'
+            # contracts/ 含带 embed.go 的 Go 包（companion-agent/mcp-v1），
+            # go list ./... 会包含它；分片联合集必须同源覆盖。
+            go list ./contracts/...
             # scripts/ 是带 package main 的 Go 包（composite_grass_side.go 材质
             # 合成工具），go list ./... 会包含它；分片联合集必须同源覆盖，否则本
             # 自检在引入该工具后恒红。
@@ -191,7 +194,7 @@ jobs:
             packages: ./internal/server
             extra: ''
           - shard: internal-rest
-            packages: "$(go list ./internal/... | grep -v '/internal/server$') github.com/channing771/mornlea/scripts"
+            packages: "$(go list ./internal/... | grep -v '/internal/server$') $(go list ./contracts/...) github.com/channing771/mornlea/scripts"
             extra: ''
     steps:
       - name: 记录开始时间
@@ -258,6 +261,16 @@ jobs:
             go.sum
             engine/include/mornlea_engine.h
             engine/include/mornlea_client.h
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.5'
+          enable-cache: true
+          cache-dependency-glob: |
+            services/companion-agent/pyproject.toml
+            services/companion-agent/uv.lock
       - uses: actions/download-artifact@v4
         with:
           name: native-macos-${{ github.sha }}
@@ -288,6 +301,10 @@ jobs:
           mkdir -p engine/target/release/deps
           cp engine/target/release/libmornlea_engine.dylib engine/target/release/deps/
           cp engine/target/release/libmornlea_client.dylib engine/target/release/deps/
+      - name: 伙伴 Agent Python 门禁
+        run: make companion-agent-check
+      - name: 伙伴 Agent 真进程合同
+        run: make companion-agent-integration
       - name: 50ms 服务端探针门禁
         run: go test ./cmd/mornlea/benchmark -run '^TestScenarioV7EightSessionServerProbeIsRealAndBounded$' -count=1
       - name: TCP 重启与 Memory/TCP parity 重复门禁

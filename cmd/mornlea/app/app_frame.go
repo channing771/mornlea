@@ -140,6 +140,7 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	if !blockTargetReset && !a.clientSessionClosed {
 		a.remoteNameTags, blockOutline = a.appendCurrentBlockTarget(a.remoteNameTags)
 	}
+	crack := a.deriveBlockCrack(blockOutline)
 	avatars, tags := a.remoteAvatars, a.remoteNameTags
 	if err := validateEntityPresentationCounts(avatars, tags); err != nil {
 		return false, fmt.Errorf("准备实体呈现: %w", err)
@@ -149,6 +150,9 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		a.renderer.Resize(width, height)
 		a.frameWidth, a.frameHeight = width, height
 		a.camera.Aspect = float32(width) / float32(height)
+		// framebuffer 尺寸随 hud 分节的 viewport 下行:resize 属合法变化源,
+		// 置脏等下一个冲刷点下行,绝不逐帧无条件推送。
+		a.hudPush.Mark()
 	}
 
 	// 菜单全景：主菜单/设置页相位返回惰性构建的全景管线（游戏相位 nil，
@@ -212,21 +216,15 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	if chest, opened := a.chest.State(); opened {
 		chestOverlay = &hud.ChestOverlay{Items: chest.Items}
 	}
-	// 生命值、氧气、饥饿值和聊天都独立于背包确认状态；未确认时 renderer 只跳过物品布局。
-	health, healthReady := a.predictor.Health()
-	oxygen, oxygenReady := a.predictor.Oxygen()
-	// 饥饿值同生命值与氧气：只取权威确认镜像，客户端不推算也不预测。
+	// 生命值、氧气与饥饿值由 hud 分节组装路径直接读取权威确认镜像（见
+	// `assembleHUDState`），GPU 保留面不再消费它们。饥饿值例外：进食输入位的
+	// 派生需要权威确认的未满判断。
 	hunger, hungerReady := a.predictor.Hunger()
-	saturationZero, _ := a.predictor.SaturationZero()
-	chatOverlay := a.ChatOverlay()
 	// 弹条检测每帧运行（HUD 隐藏时也要推进确认基线），抑制相位只推进不记录；
-	// 组装结果再注入本帧权威 tick 供 HUD 做 40 tick 窗口判定。
-	popup := a.updateItemPopup()
-	// 准星只在游戏相位（主菜单、设置页、暂停覆盖层与菜单快照覆盖之外）呈现；
-	// HUD 段本身仍由 hudVisible 门控。
-	crosshair := hud.CrosshairOverlay{
-		Visible: a.menu.phase == MenuPhaseGame,
-	}
+	// 组装结果再注入本帧权威 tick 供 40 tick 窗口判定，弹条经 hud 分节下行给
+	// WebView 组件呈现。
+	a.framePopup = a.updateItemPopup()
+	a.markHUDPresentationChanges(hunger, hungerReady)
 	// 容器悬停 tooltip：界面打开时把本帧指针坐标传入渲染层，与点击命中同一
 	// 坐标源（`window.CursorPos`）；无头路径 window 为 nil，恒为无效输入，
 	// 零实例。
@@ -235,45 +233,24 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		cursorX, cursorY := a.window.CursorPos()
 		tooltip = hud.TooltipOverlay{Valid: true, CursorX: cursorX, CursorY: cursorY}
 	}
-	combatMarker := a.combatFeedback.MarkerVisible()
-	hudVisible := a.menuHUDVisible() &&
-		(inventoryConfirmed || (healthReady && !a.clientSessionClosed) ||
-			chatOverlay.Open || len(chatOverlay.Lines) != 0 || combatMarker)
+	// 容器保留面只在「有已装配世界且物品镜像已确认」时准备：常显层已迁
+	// WebView，关闭容器界面时 GPU 保留面零实例。
+	hudVisible := a.menuHUDVisible() && inventoryConfirmed
 	if hudVisible {
-		// 进食进度条：纯客户端预测。输入位在 `RenderFrame` 作用域没有现成的
-		// 当帧 `Control.Eating`，故按 `interactive.go` 置位的同源状态派生（光标
-		// 捕获 + 次键按住 + 已确认手持食物 + 权威确认饥饿未满）：开箱/菜单/聊天
-		// 都会释放光标，天然归零；唯一偏差是刚刚重新捕获的那一帧会超前一个帧
-		// 时长，不可感知。饥饿门控对齐权威侧 `sim/eating.go` 的「饥饿已满不
-		// 推进」——满值时输入位恒为假，进度条不出现（spec Scenario「饥饿已满
-		// 不呈现进度条」）。tracker 以帧间 elapsed 按权威 tick 周期累积，切格/
-		// 换物/数量变化（权威结算吃掉一件）由状态机清零；无头路径（benchmark/
-		// capture）window 为 nil，输入位恒为假，既有场景输出逐字节不变。
-		eatingSample := client.EatingSample{}
-		if hotbar, confirmed := a.inventory.Hotbar(); confirmed {
-			stack := hotbar.Slots[hotbar.Selected]
-			_, _, food := core.FoodValue(stack.Item)
-			eatingSample = client.EatingSample{
-				Eating: food && hungerReady && hunger < core.MaxHunger &&
-					a.window != nil && a.window.CursorCaptured() &&
-					a.window.SecondaryButtonDown(),
-				Slot: hotbar.Selected, Item: stack.Item, Count: stack.Count,
-			}
-		}
-		eatingActive, eatingProgress := a.eatingTracker.Observe(time.Now(), eatingSample)
 		if err := a.hotbarRenderer.Prepare(
 			inventory, inventoryConfirmed, a.inventoryOpen, a.inventorySource, craftingOverlay, overlay, chestOverlay,
-			a.miningOverlay,
-			hud.EatingOverlay{Active: eatingActive, Progress: eatingProgress},
-			hud.HealthOverlay{Confirmed: healthReady, Value: health},
-			hud.OxygenOverlay{Confirmed: oxygenReady, Value: oxygen},
-			hud.HungerOverlay{Confirmed: hungerReady, Value: hunger, SaturationZero: saturationZero}, chatOverlay, combatMarker,
-			popup, crosshair, tooltip,
+			tooltip,
 			uint32(width), uint32(height), a.scheduler.UploadBudget(),
 		); err != nil {
-			return false, fmt.Errorf("准备快捷栏 HUD: %w", err)
+			return false, fmt.Errorf("准备容器保留面 HUD: %w", err)
 		}
 	}
+	// 相位窗口先同步再冲刷：进入游戏相位的当帧就能携带首次 hud 下行（同步是
+	// 幂等的边界检测，`pushUIStateIfChanged` 里会再判一次）。hud 分节在权威
+	// tick 边界冲刷，脏标记由镜像确认、采掘/进食推进、弹条窗口与 marker 武装/
+	// 到期等变化源置位，载荷不变时零下行。
+	a.syncHUDPushWindow()
+	a.flushHUDState()
 	// 菜单层已迁 WebView:每帧一次「状态变化才下行」的 UI 状态推送,替代
 	// 旧的帧内 UI 段组装;无窗口(基准/capture)恒为空操作。
 	a.pushUIStateIfChanged()
@@ -344,6 +321,7 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	)
 	a.dropStream = a.entityEncoder.EncodeItemDropInstances(a.dropStream, a.serverTick, a.itemDropInstances)
 	a.outlineStream = a.entityEncoder.EncodeBlockOutlineInstances(a.outlineStream, blockOutline)
+	a.crackStream = a.entityEncoder.EncodeBlockCrackInstances(a.crackStream, crack)
 
 	right := mgl32.Vec3{
 		float32(math.Cos(float64(cam.Yaw))),
@@ -382,12 +360,17 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		AvatarInstances:  a.avatarStream,
 		DropInstances:    a.dropStream,
 		OutlineInstances: a.outlineStream,
+		CrackInstances:   a.crackStream,
 		OverlayStrength:  a.damageStrength,
 		WaterTint:        underwater.Tint,
 		NameTagSegment:   nameTagSegment,
 		HUDSegment:       hudSegment,
 	})
-	a.combatFeedback.AfterRender(rendered)
+	if a.combatFeedback.AfterRender(rendered) {
+		// marker 到期：显隐由 WebView 组件按 hud 分节下行驱动，置脏等下一个
+		// 冲刷点。
+		a.hudPush.Mark()
+	}
 	if vista != nil {
 		// 自转时钟在渲染之后推进：本帧画面严格是 pose(tick)，capture 钉住
 		// N 的下一帧恰好渲染 pose(N)。
@@ -399,9 +382,61 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	return true, nil
 }
 
-// menuHUDVisible 报告当前相位是否允许绘制生存 HUD 段：只有游戏与暂停相位
-// 有已装配的世界，主菜单/设置页/装配中一律呈现纯全景底图（准星与弹条另有
-// 更细粒度的相位抑制）。
+// menuHUDVisible 报告当前相位是否允许准备容器保留面 HUD 段：只有游戏与暂停相位
+// 有已装配的世界，主菜单/设置页/装配中一律呈现纯全景底图（准星与弹条等常显层
+// 已迁 WebView，由 hud 分节驱动组件呈现）。
 func (a *Application) menuHUDVisible() bool {
 	return a.menu.phase == MenuPhaseGame || a.menu.phase == menuPhasePaused
+}
+
+// markHUDPresentationChanges 对只能在帧内推导的 hud 呈现变化置脏：物品名弹条
+// 进入/离开 40 tick 窗口，以及进食进度的逐 tick 推进。镜像确认类变化（权威
+// 状态、背包、容器、聊天、命中确认）在 `DrainServerMessages` 置脏，不在这里
+// 重复。
+func (a *Application) markHUDPresentationChanges(hunger uint8, hungerReady bool) {
+	a.observeEatingProgress(time.Now(), hunger, hungerReady)
+	if text := a.popupPresentationText(); text != a.hudPopupText {
+		a.hudPush.Mark()
+		a.hudPopupText = text
+	}
+}
+
+// observeEatingProgress 推进食进度的客户端预测并按变化置脏 hud 分节。输入位
+// 按 `interactive.go` 置位的同源状态派生（光标捕获 + 次键按住 + 已确认手持食物
+// + 权威确认饥饿未满）：开箱/菜单/聊天都会释放光标，天然归零；唯一偏差是刚刚
+// 重新捕获的那一帧会超前一个帧时长，不可感知。饥饿门控对齐权威侧
+// `sim/eating.go` 的「饥饿已满不推进」——满值时输入位恒为假。tracker 以帧间
+// elapsed 按权威 tick 周期累积，切格/换物/数量变化（权威结算吃掉一件）由状态机
+// 清零；无头路径（benchmark/capture）window 为 nil，输入位恒为假。
+func (a *Application) observeEatingProgress(now time.Time, hunger uint8, hungerReady bool) {
+	sample := client.EatingSample{}
+	if hotbar, confirmed := a.inventory.Hotbar(); confirmed {
+		stack := hotbar.Slots[hotbar.Selected]
+		_, _, food := core.FoodValue(stack.Item)
+		sample = client.EatingSample{
+			Eating: food && hungerReady && hunger < core.MaxHunger &&
+				a.window != nil && a.window.CursorCaptured() &&
+				a.window.SecondaryButtonDown(),
+			Slot: hotbar.Selected, Item: stack.Item, Count: stack.Count,
+		}
+	}
+	active, progress := a.eatingTracker.Observe(now, sample)
+	quantized := quantizeEatingProgress(progress)
+	// 置脏只看量化到权威 tick 网格之后的值：连续比例在激活期每帧都不同，逐帧
+	// 置脏会让下行频率跟着渲染帧率走，违反「推送绑定权威 tick 边界」；量化后
+	// 同一格内的取值稳定，纪律层的逐字节去重把下行收敛回每 tick 至多一次。退出
+	// 激活（含量化值回到 0）同样置脏，进度条才会在下行中消失。
+	if active != a.hudEatingActive || quantized != a.hudEatingProgress {
+		a.hudPush.Mark()
+	}
+	a.hudEatingActive = active
+	a.hudEatingProgress = quantized
+}
+
+// quantizeEatingProgress 把进食填充比例量化到权威 tick 网格：分母就是 tracker
+// 的累积周期（`client.EatingProgressTicks`），量化对齐前端按 tick 口径推进的
+// 动画，也使「同一 tick 内的多次冲刷」拿到逐字节相同的载荷。
+func quantizeEatingProgress(progress float32) float32 {
+	return float32(math.Round(float64(progress)*client.EatingProgressTicks)) /
+		client.EatingProgressTicks
 }

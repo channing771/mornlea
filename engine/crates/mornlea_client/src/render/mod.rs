@@ -1,8 +1,9 @@
-//! 离屏 wgpu 世界渲染器(R2a)。
+//! Rust client 的 wgpu 世界渲染器。
 //!
-//! 本模块是 Go `internal/render` 世界地形路径的平行 Rust 实现:纯离屏、
-//! 不接窗口 surface,生产客户端仍由 Go 渲染;双后端图像对照门禁在 Go 侧
-//! 测试中执行。GPU 数据流逐一镜像 Go 版:全局 face 池(packed u64 face)、
+//! 本模块同时承载交互 windowed surface 与 offscreen capture/benchmark 的生产
+//! GPU 后端；全部 GPU pass 由 Rust client 持有。Go `internal/render` 保留 CPU
+//! mesh、visibility 与 frame input 准备，不是生产 GPU renderer；offscreen 路径
+//! 仍由 Go 侧现有逐字节图像对照测试验证。GPU 数据流逐一镜像 Go 版:全局 face 池(packed u64 face)、
 //! origin 槽位、32 字节 section record、cull compute 写 visible instances
 //! 与 indirect args、单次 indexed indirect draw、sky 全屏三角与 HiZ
 //! 金字塔遮挡。uniform 布局、clear 值与 pass 顺序保持一致,保证同输入
@@ -15,6 +16,7 @@
 //! - mesh packed face 字节只在 section 变脏时过境一次;
 //! - 每帧一次 [`OffscreenRenderer::render_frame`],帧内无逐 pass FFI。
 
+pub mod crack;
 #[cfg(test)]
 mod cull_tests;
 pub mod entity;
@@ -30,9 +32,14 @@ pub mod shaders;
 mod side_tests;
 #[cfg(test)]
 mod water_tests;
+mod world;
+#[cfg(test)]
+mod world_tests;
 
 use std::collections::HashMap;
 
+use self::world::RenderWorld;
+use crack::CrackPass;
 use entity::{EntityPass, EntityPipelineKind};
 use lod::{Frustum, LodPass};
 use pool::{Alloc, Pool};
@@ -146,6 +153,9 @@ pub struct FrameInput {
     pub drop_instances: Vec<u8>,
     /// 目标方块轮廓参数字节;空表示本帧无轮廓。
     pub outline: Vec<u8>,
+    /// 采掘裂纹 overlay 实例流(80 字节/实例:mat4 + atlas 层号 f32 + 零
+    /// 填充,布局与 Go `EncodeBlockCrackInstances` 一致);空表示本帧无裂纹。
+    pub crack_instances: Vec<u8>,
     /// 伤害红边强度(0 表示不绘制)。
     pub overlay_strength: f32,
     /// 相机浸没时的全屏水色叠加 RGBA(A <= 0 表示不绘制)。
@@ -175,6 +185,7 @@ impl FrameInput {
         self.avatar_instances.is_empty()
             && self.drop_instances.is_empty()
             && self.outline.is_empty()
+            && self.crack_instances.is_empty()
             && self.overlay_strength == 0.0
             && self.water_tint[3] == 0.0
             && self.name_tag_vertices.is_empty()
@@ -488,6 +499,9 @@ pub struct OffscreenRenderer {
     mode: TargetMode,
     /// 已录制但尚未提交的离屏 benchmark 批次；同一 renderer 最多保留一个。
     prepared_benchmark_batch: Option<PreparedBenchmarkBatch>,
+    /// 尚未接管绘制的 renderer 派生世界缓存。
+    #[allow(dead_code)]
+    render_world: RenderWorld,
     depth_view: wgpu::TextureView,
 
     faces: wgpu::Buffer,
@@ -539,6 +553,9 @@ pub struct OffscreenRenderer {
     drop_pass: EntityPass,
     /// 方块轮廓 pass(12 实例,透明只读深度)。
     outline_pass: EntityPass,
+    /// 采掘裂纹 overlay pass(恰 1 实例容量,透明只读深度,bind 随 atlas
+    /// 上传重建)。
+    crack_pass: CrackPass,
     /// 伤害红边 uniform(16B,strength@0)。
     overlay_uniform: wgpu::Buffer,
     water_tint_uniform: wgpu::Buffer,
@@ -987,6 +1004,10 @@ impl OffscreenRenderer {
             DEPTH_FORMAT,
         );
 
+        // 采掘裂纹 overlay pass:恰 1 实例容量的常驻资源,自身解析
+        // `shaders::CRACK`;bind 随 atlas 上传重建,未上传前不绘制。
+        let crack_pass = CrackPass::new(&device, &queue, COLOR_FORMAT, DEPTH_FORMAT);
+
         // 全屏叠加:无深度附件的全屏三角管线,镜像 Go damage_overlay.go。
         // 伤害红边与水下水色共用这一条管线与这一份 layout,各自持有一块 32 字节
         // uniform(vec4 颜色 + edge 位 + 三个 pad):同一帧里两者可能都要画,
@@ -1168,6 +1189,7 @@ impl OffscreenRenderer {
             height,
             mode,
             prepared_benchmark_batch: None,
+            render_world: RenderWorld::default(),
             depth_view,
             faces,
             instances,
@@ -1201,6 +1223,7 @@ impl OffscreenRenderer {
             avatar_pass,
             drop_pass,
             outline_pass,
+            crack_pass,
             name_tag_pass,
             hud_pass,
             debug_pass,
@@ -1223,6 +1246,11 @@ impl OffscreenRenderer {
             last_pos: [0.0; 3],
             last_view_proj: [0.0; 16],
         })
+    }
+
+    /// 只更新尚未接管绘制的派生世界缓存。
+    pub(crate) fn apply_render_world_updates(&mut self, bytes: &[u8]) -> bool {
+        self.render_world.apply_update_batch(bytes).is_ok()
     }
 
     /// 上传材质 atlas:`pixels` 为逐 layer、逐 mip 拼接的 RGBA 字节
@@ -1291,6 +1319,10 @@ impl OffscreenRenderer {
         });
         // 远环与近环共用同一图集与采样器:世界坐标 UV 才能跨远/近环连续。
         self.lod_pass
+            .rebuild_bind(&self.device, &atlas_view, &self.sampler);
+        // 裂纹 overlay 与 terrain/water/lod 共用同一图集与采样器:atlas
+        // 上传即随之重建绑定,帧内不再创建任何绑定资源。
+        self.crack_pass
             .rebuild_bind(&self.device, &atlas_view, &self.sampler);
         self.terrain_bind = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("terrain resources"),
@@ -1613,7 +1645,31 @@ impl OffscreenRenderer {
     }
 
     /// 渲染一帧并立即提交；每次调用只提交一个主 command buffer。
+    ///
+    /// spike 帧探针(MORNLEA_SPIKE_FPS,见 `overlay_spike`)在 present 边界
+    /// 采样:测量范围覆盖本方法的全部工作(含 surface 获取、录制、提交与
+    /// present 调度),未开启时探针为 `None`,除一次 `OnceLock` 读取外零开销。
     pub fn render_frame(&mut self, input: &FrameInput) -> FrameResult {
+        let probe = crate::overlay_spike::frame_probe();
+        let started = probe.map(crate::overlay_spike::FrameProbe::now);
+        // spike 自驱动档把 HUD 顶点流规模与目标方块轮廓作为玩法层响应的
+        // 观察信号;关闭时一次布尔分支,零额外工作。
+        if crate::spike_auto::enabled() {
+            crate::spike_auto::note_hud(input.hud_vertices.len());
+            crate::spike_auto::note_outline(!input.outline.is_empty());
+        }
+        let result = self.render_and_present(input);
+        if let Some(probe) = probe
+            && let Some(started) = started
+        {
+            probe.record(started);
+        }
+        result
+    }
+
+    /// `render_frame` 的既有实现;spike 帧探针需要包住整个 present 边界,
+    /// 因此把原实现整体下沉到本方法。
+    fn render_and_present(&mut self, input: &FrameInput) -> FrameResult {
         if self.prepared_benchmark_batch.is_some() {
             return FrameResult::Invalid;
         }
@@ -1703,6 +1759,7 @@ impl OffscreenRenderer {
         if !self.avatar_pass.instances_valid(&input.avatar_instances)
             || !self.drop_pass.instances_valid(&input.drop_instances)
             || !self.outline_pass.instances_valid(&input.outline)
+            || !CrackPass::instances_valid(&input.crack_instances)
             || input.overlay_strength.is_nan()
             || input.water_tint.iter().any(|value| value.is_nan())
         {
@@ -2061,7 +2118,7 @@ impl OffscreenRenderer {
             self.drop_pass
                 .record(encoder, frame_view, &self.depth_view, "item drop pass");
         }
-        // 轮廓 pass(Go 顺序:drop 之后、名牌之前)。
+        // 轮廓 pass(帧序:drop 之后、裂纹之前)。
         if !input.outline.is_empty() {
             self.outline_pass.upload(
                 &self.queue,
@@ -2072,7 +2129,20 @@ impl OffscreenRenderer {
             self.outline_pass
                 .record(encoder, frame_view, &self.depth_view, "block outline pass");
         }
-        // 名牌(Go 顺序:outline 之后、overlay 之前)。
+        // 裂纹 pass(帧序:轮廓 → 裂纹 → 名牌;世界实体之后、HUD 之前,与
+        // outline 同带)。atlas 未上传时 record 内部整段跳过(与 terrain_bind
+        // 的 Option 跳过同语义),不开始任何 render pass。
+        if !input.crack_instances.is_empty() {
+            self.crack_pass.upload(
+                &self.queue,
+                &input.view_proj,
+                input.daylight,
+                &input.crack_instances,
+            );
+            self.crack_pass
+                .record(encoder, frame_view, &self.depth_view, "crack pass");
+        }
+        // 名牌(帧序:裂纹之后、overlay 之前)。
         if let Some((uniform, backgrounds, glyphs)) = validated.name_tag_segment {
             self.name_tag_pass.upload_and_record(
                 &self.queue,
@@ -2174,7 +2244,7 @@ impl OffscreenRenderer {
         FrameResult::Rendered
     }
 
-    /// 把 client ABI v12 版本化 JSON UI 事件信封完整排空到 `out`。
+    /// 把 client ABI v12 引入、v14 保留的版本化 JSON UI 事件信封完整排空到 `out`。
     ///
     /// 事件源自 WebView 桥(进程级共享队列):benchmark/capture 等从不创建
     /// WebView 的进程队列为空,排空返回 0 字节——零参与语义在渲染器侧的
@@ -2554,6 +2624,21 @@ mod tests {
         );
     }
 
+    /// 纯地形帧(v1 语义)判定不受裂纹字段引入的影响:全部 pass 段为空
+    /// (含空裂纹流)时 [`FrameInput::empty_passes`] 仍为真,非空裂纹流
+    /// 则构成 pass 段。
+    #[test]
+    fn pure_terrain_frame_stays_empty_passes_with_crack_field() {
+        let frame = empty_frame();
+        assert!(frame.empty_passes(), "纯地形帧必须是 empty_passes");
+        let mut with_empty_crack = empty_frame();
+        with_empty_crack.crack_instances = Vec::new();
+        assert!(with_empty_crack.empty_passes(), "空裂纹流不构成 pass 段");
+        let mut with_crack = empty_frame();
+        with_crack.crack_instances = vec![0u8; 80];
+        assert!(!with_crack.empty_passes(), "非空裂纹流构成 pass 段");
+    }
+
     #[test]
     fn offscreen_frame_and_readback_are_deterministic() {
         let Some(mut renderer) = renderer_or_skip(64, 32) else {
@@ -2788,6 +2873,116 @@ mod outline_overlay_tests {
             FrameResult::Invalid,
             "NaN 强度必须拒绝"
         );
+    }
+}
+
+#[cfg(test)]
+mod crack_tests {
+    use super::FrameResult;
+    use super::tests_support::*;
+    use super::{ATLAS_MIPS, ATLAS_TEX_SIZE};
+
+    /// 构造一个 80 字节裂纹实例:恒等 mat4(列主序)+ atlas 层号 f32 +
+    /// 零填充,布局与 Go `EncodeBlockCrackInstances` 一致。
+    fn crack_instance(layer: f32) -> Vec<u8> {
+        let mut instance = vec![0u8; 80];
+        for i in 0..4 {
+            instance[i * 20..i * 20 + 4].copy_from_slice(&1.0f32.to_le_bytes());
+        }
+        instance[64..68].copy_from_slice(&layer.to_le_bytes());
+        instance
+    }
+
+    /// 构造逐 mip 的非对称测试 atlas:每级左半纹素不透明深灰、右半全透明。
+    /// 均匀 atlas 抓不住 UV 退化(常数采样照样命中不透明纹素),非对称
+    /// half 覆盖让「uv 塌缩」直接表现为改动范围错误,被下面的半区断言打红。
+    fn half_opaque_atlas_bytes() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        for mip in 0..ATLAS_MIPS {
+            let s = (ATLAS_TEX_SIZE >> mip).max(1) as usize;
+            for y in 0..s {
+                for x in 0..s {
+                    // 覆盖半区只依赖 x(列),行不限。
+                    let _ = y;
+                    if x < s / 2 {
+                        bytes.extend_from_slice(&[30, 30, 30, 255]);
+                    } else {
+                        bytes.extend_from_slice(&[0, 0, 0, 0]);
+                    }
+                }
+            }
+        }
+        bytes
+    }
+
+    /// 裂纹 pass 的行为锁:atlas 未上传时整段跳过(帧正常、图像不变);
+    /// atlas 上传后同一实例必须改变图像,且**改动只落在投影区域的左半**——
+    /// 恒等相机下单位立方体投影在画面中央,atlas 左半不透明、右半透明,
+    /// 正确的逐面 UV 把不透明半区映到投影左半;uv 一旦退化(属性偏移错位
+    /// 导致常数采样),改动会铺满或错位,半区断言当场打红。非法实例段在
+    /// 渲染前拒绝且不触碰 target。
+    #[test]
+    fn crack_renders_when_bound_skips_unbound_and_rejects_invalid() {
+        let Some(mut renderer) = renderer_or_skip_pub(64, 64) else {
+            return;
+        };
+        let empty = empty_frame_pub();
+        assert_eq!(renderer.render_frame(&empty), FrameResult::Rendered);
+        let mut base = vec![0u8; 64 * 64 * 4];
+        assert!(renderer.readback(&mut base));
+
+        // atlas 未上传:合法裂纹段被跳过,帧正常渲染、图像不变。
+        let mut crack_frame = empty_frame_pub();
+        crack_frame.crack_instances = crack_instance(0.0);
+        assert_eq!(renderer.render_frame(&crack_frame), FrameResult::Rendered);
+        let mut unbound = vec![0u8; 64 * 64 * 4];
+        assert!(renderer.readback(&mut unbound));
+        assert_eq!(base, unbound, "atlas 未上传时裂纹段必须被跳过");
+
+        // 上传左半不透明的 atlas 后,裂纹实例必须改变图像,且改动只落在
+        // 投影左半(恒等投影下立方体占屏幕 x 16..48,uv<0.5 的不透明半区
+        // 对应 x 16..32;留出 2px 过渡带容忍线性滤波边界)。
+        assert!(renderer.upload_atlas(1, &half_opaque_atlas_bytes()));
+        assert_eq!(renderer.render_frame(&crack_frame), FrameResult::Rendered);
+        let mut with_crack = vec![0u8; 64 * 64 * 4];
+        assert!(renderer.readback(&mut with_crack));
+        let mut changed_left = 0;
+        let mut changed_right = 0;
+        for y in 0..64usize {
+            for x in 0..64usize {
+                let i = (y * 64 + x) * 4;
+                if base[i..i + 4] != with_crack[i..i + 4] {
+                    if x < 31 {
+                        changed_left += 1;
+                    } else if x >= 33 {
+                        changed_right += 1;
+                    }
+                }
+            }
+        }
+        // 面向裂缝图案六面镜像不可分辨,不透明半区落在左半还是右半取决于
+        // 逐面 UV 环绕;但必须**恰好落在一个半区**:uv 属性错位会退化成常数
+        // 采样,改动铺满整个投影面,两个半区同时非零。
+        let half = |changed: u32| changed >= 32 * 16 / 2;
+        assert!(
+            (changed_left > 0) != (changed_right > 0),
+            "不透明半区必须只落在投影的一个半区(左 {changed_left} / 右 {changed_right})"
+        );
+        assert!(
+            half(changed_left) || half(changed_right),
+            "不透明半区应覆盖约半个投影面(左 {changed_left} / 右 {changed_right})"
+        );
+
+        // 非 80 倍数与超容量(恰 1 实例)拒绝,且 target 保持上一帧内容。
+        let mut misaligned = empty_frame_pub();
+        misaligned.crack_instances = vec![0u8; 79];
+        assert_eq!(renderer.render_frame(&misaligned), FrameResult::Invalid);
+        let mut oversized = empty_frame_pub();
+        oversized.crack_instances = vec![0u8; 160];
+        assert_eq!(renderer.render_frame(&oversized), FrameResult::Invalid);
+        let mut after_bad = vec![0u8; 64 * 64 * 4];
+        assert!(renderer.readback(&mut after_bad));
+        assert_eq!(with_crack, after_bad, "拒绝帧不得触碰 target");
     }
 }
 

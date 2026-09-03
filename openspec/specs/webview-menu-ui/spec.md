@@ -2,10 +2,8 @@
 
 ## Purpose
 
-
 为窗口型界面（主菜单、设置、暂停、调试面板）建立进程内 WebView（Vite + TypeScript + React）技术基础与世界全景背景：交互客户端启动停留在世界全景之上的主菜单，世界装配延迟到用户点击之后；菜单语义与既有规格逐条平移，`egui` 即时模式栈完全退役。
 ## Requirements
-
 ### Requirement: 交互客户端启动停留在主菜单
 
 交互式图形客户端（非 benchmark/capture，且未指定 `-connect`）SHALL 在窗口与渲染器初始化完成后停留在主菜单界面，MUST NOT 在此之前打开世界存储、启动本地权威服务端或完成登录。主菜单与设置页相位 SHALL 以世界全景为背景：全景由固定种子 worldgen 直供区块经既有网格与天空光照渲染路径产出，由固定脚本相机驱动，MUST NOT 触发世界存储打开、本地权威服务端启动或登录。
@@ -84,14 +82,14 @@
 
 ### Requirement: 进入游戏执行延迟的世界装配
 
-点击「进入游戏」SHALL 一次性执行延迟的世界装配：打开世界存储、启动本地权威服务端、完成登录并把远环 LOD 播种器接线到登录种子；装配期间 MUST 忽略重复点击；装配成功后 MUST 隐藏主菜单并捕获光标，游戏输入自此生效。
+点击「进入游戏」SHALL 一次性执行延迟的世界装配：打开世界存储、启动本地权威服务端、完成登录并把远环 LOD 播种器接线到登录种子；装配期间 MUST 忽略重复点击；装配成功后 MUST 隐藏主菜单并进入世界加载相位（`world-loading-screen` capability：不透明加载屏覆盖渐进加载中的世界），光标捕获与游戏输入生效 MUST 推迟到加载收敛之后。装配失败时 MUST 保持主菜单可见并显示装配错误文本。
 
 #### Scenario: 装配成功进入游戏
 
 - **GIVEN** 主菜单可见且世界未装配
 - **WHEN** 点击「进入游戏」且装配成功
-- **THEN** 主菜单不再显示，光标被捕获，WebView 进入隐藏零参与态
-- **AND** WASD 等输入开始驱动玩家，菜单阶段累积的按键不产生副作用
+- **THEN** 主菜单不再显示，客户端进入加载相位并呈现世界加载屏
+- **AND** 光标尚未捕获，WASD 等游戏输入不生效，菜单阶段累积的按键不产生副作用
 
 #### Scenario: 装配期间重复点击只装配一次
 
@@ -135,7 +133,7 @@
 
 ### Requirement: WebView 集成技术边界
 
-`mornlea_client` SHALL 通过 `objc2-web-kit` 将一个透明 WKWebView 挂载到既有 winit NSWindow 的 contentView 之上，MUST NOT 引入 wry、tao 或第二套窗口栈；webview 资产 MUST 经 `WKURLSchemeHandler` 从二进制内嵌字节以 `mornlea://` 供给，MUST NOT 访问网络、CDN 或磁盘临时文件；`egui` 与 `egui-wgpu` 依赖 MUST 全部移除；`wgpu` 主版本 MUST NOT 单侧升级；任何 Go 包 MUST NOT 引入 GUI 绑定。
+`mornlea_client` SHALL 通过 `objc2-web-kit` 将一个透明 WKWebView 挂载到既有 winit NSWindow 的 contentView 之上，MUST NOT 引入 wry、tao 或第二套窗口栈；webview 资产 MUST 经 `WKURLSchemeHandler` 从二进制内嵌字节以 `mornlea://` 供给，MUST NOT 访问网络、CDN 或磁盘临时文件；`egui` 与 `egui-wgpu` 依赖 MUST 全部移除；`wgpu` 主版本 MUST NOT 单侧升级；任何 Go 包 MUST NOT 引入 GUI 绑定。WebView 参与模式 SHALL 恰有两态——菜单相位 `Menu`（全参与）与游戏相位 `GameOverlay`（可见合成、不参与响应链，见 `game-overlay-webview` capability）：两态 MUST 由同一 WKWebView 实例经命中测试分级（子类化 hitTest）实现，MUST NOT 依赖窗口叠层顺序或第二实例切换；GameOverlay 态的建立 MUST NOT 引入新的 C ABI 出口。
 
 #### Scenario: 透明覆盖与资产离线供给
 
@@ -146,10 +144,10 @@
 
 #### Scenario: 游戏相位零参与
 
-- **GIVEN** 游戏进行中（无菜单相位）
+- **GIVEN** 游戏进行中（GameOverlay 模式）
 - **WHEN** 系统渲染帧
-- **THEN** WebView MUST 处于隐藏态且不参与响应链
-- **AND** GPU 呈现路径与菜单迁移前一致
+- **THEN** GameOverlay WebView MUST 保持可见合成且 MUST NOT 进入响应链（指针、键盘、滚轮事件全部由 winit 采集），wgpu 呈现路径与迁移前一致
+- **AND** 桥事件排空 MUST 为空，游戏输入行为与无 WebView 路径一致
 
 #### Scenario: 依赖版本线替换
 
@@ -160,13 +158,19 @@
 
 ### Requirement: 菜单状态与事件桥
 
-菜单状态权威 SHALL 在 Go：Go 侧在状态变化时经 client ABI 以 JSON 字符串推送菜单/设置/调试状态下行，Rust 侧转发为 WebView 内 `window.mornlea.onState` 调用；上行 SHALL 由 WebView 脚本消息进入 Rust 队列并以版本化 JSON 事件批经既有排空出口交付 Go 依序消费。桥 schema SHALL 以单源 JSON Schema 文件为准，Go/Rust/TS 三端 MUST 各有钉值一致性测试；未知事件类型、schema 越界或非法 UTF-8 MUST 被拒绝且不触碰运行态。
+菜单状态权威 SHALL 在 Go：Go 侧在状态变化时经 client ABI 以 JSON 字符串推送菜单/设置/调试状态下行，Rust 侧转发为 WebView 内 `window.mornlea.onState` 调用；上行 SHALL 由 WebView 脚本消息进入 Rust 队列并以版本化 JSON 事件批经既有排空出口交付 Go 依序消费。桥 schema SHALL 以单源 JSON Schema 文件为准，Go/Rust/TS 三端 MUST 各有钉值一致性测试；未知事件类型、schema 越界或非法 UTF-8 MUST 被拒绝且不触碰运行态。游戏相位 SHALL 经同一 JSON 下行出口推送常显 HUD 状态族（`game-overlay-webview` capability）：状态族按权威 tick 合并推送、禁止每帧重复推送；schema 的游戏相位状态族与既有菜单状态族共用单源文件与三端钉值纪律，client ABI 版本 MUST 保持不变。
 
 #### Scenario: 状态下行事件驱动
 
 - **GIVEN** 菜单相位下 Go 侧菜单/设置/调试状态发生一次变化
 - **WHEN** 系统处理该变化
 - **THEN** MUST 恰好推送一份包含变化后完整状态的 JSON，且 MUST NOT 存在每帧重复推送
+
+#### Scenario: 游戏相位 HUD 状态 tick 合并下行
+
+- **GIVEN** 游戏相位下同一权威 tick 内多类 HUD 状态变化
+- **WHEN** 桥下行运行
+- **THEN** MUST 恰好推送一份合并终态的 JSON；无变化的 tick MUST 零推送
 
 #### Scenario: 上行事件保序
 
@@ -197,20 +201,29 @@
 - **WHEN** 客户端启动并显示主菜单
 - **THEN** 菜单功能完整可用，无任何网络依赖
 
-### Requirement: client ABI v12 菜单桥扩展
+### Requirement: client ABI v12 引入菜单桥并由 v14 保留
 
-`mornlea_client` ABI SHALL 提升到 v12：新增菜单状态推送出口（JSON 字符串下行）并保留版本化事件批排空出口（信封格式更新）；`upload_ui_font` 出口与帧 TLV tag 9 UI 段及其 layout 编解码 MUST 退役。ABI 版本不匹配 MUST 在所有出口被拒绝，v11 与 v12 二进制不可混装。协议、存档、engine ABI、benchmark scenario MUST NOT 变化。
+进程内 WKWebView 菜单桥 SHALL 在 client ABI v12 引入：新增菜单状态推送出口（JSON 字符串下行）并保留版本化事件批排空出口（信封格式更新）；`upload_ui_font` 出口与帧 TLV tag 9 UI 段及其 layout 编解码 MUST 退役。client ABI v13 在该 surface 上增加 window composite capture；当前 client ABI v14 MUST 保留 v12 菜单 surface、v13 capture surface 与退役状态，并增加独立的 MRW1 入口。版本不匹配 MUST 在全部接受 ABI version 的出口优先拒绝，v13 与 v14 二进制不可混装。菜单桥引入本身 MUST NOT 改变协议、存档、engine ABI 或 benchmark scenario；当前 engine ABI v9 的独立演进不改变菜单桥行为。
 
-#### Scenario: 版本号三处一致
+#### Scenario: 当前版本号三处一致且保留 v12 菜单 surface
 
-- **GIVEN** Rust client、C header 与 Go 绑定
-- **WHEN** 检查 ABI 版本常量和查询出口
-- **THEN** 三处 client ABI MUST 均为 `12`
-- **AND** ABI 查询出口 MUST 返回 `12`
+- **GIVEN** 当前 Rust client、C header 与 Go 绑定
+- **WHEN** 检查 ABI 版本常量、查询出口和菜单桥 exports
+- **THEN** 三处 client ABI MUST 均为 `14`
+- **AND** ABI 查询出口 MUST 返回 `14`
+- **AND** v12 引入的 `ui_push_state` 与版本化 JSON event drain MUST 保持可用
+- **AND** v13 引入的 window composite capture MUST 保持可用
+
+#### Scenario: v12 引入事实保持可追溯
+
+- **GIVEN** client ABI v11 的菜单前代 surface
+- **WHEN** 进程内 WKWebView 菜单桥首次交付
+- **THEN** 该次演进 MUST 记为 v11→v12
+- **AND** `upload_ui_font`、frame TLV tag 9 与 UI layout v1–v4 MUST 自 v12 起保持退役
 
 #### Scenario: 退役出口被拒绝
 
-- **GIVEN** v12 二进制
+- **GIVEN** 当前 v14 二进制
 - **WHEN** 调用已退役的字体上传出口或下发旧 tag 9 UI 段
 - **THEN** MUST 返回版本/参数错误且不触碰渲染器状态
 
@@ -283,3 +296,105 @@
 - **WHEN** 点击「退回主菜单」后再次点击「进入游戏」
 - **THEN** 界面停留在主菜单并显示错误行说明远程连接形态不支持本地世界装配
 - **AND** 进程不异常退出、不触发任何本地世界装配
+
+### Requirement: 面板统一像素组件风格
+
+四面板的可交互元素 SHALL 经统一像素呈现层呈现：按钮与表单控件 MUST 使用
+pixel-retroui 组件或按 `tokens.css` 像素令牌重绘的自绘控件；颜色、几何与
+阴影 MUST 经 `tokens.css` 令牌供给（强调为鼠尾草绿与麦金组成的 Mornlea
+双强调体系——选中与焦点态走鼠尾草绿，进度、来源与重要信息走麦金；危险红
+仅用于错误；`prefers-reduced-motion` 下动效归零）；文案、上行事件、焦点
+顺序与键盘语义 MUST 与改造前逐项一致；音量控件 MUST 保持滑块形态与
+`[0,1]` 映射。
+
+#### Scenario: 主菜单按钮像素化且行为不变
+
+- GIVEN 主菜单可见
+- WHEN 检查按钮列并点击任一按钮
+- THEN 按钮以统一像素组件呈现（硬描边与偏移阴影风格）
+- AND 该按钮产生与改造前相同的上行 `action` 事件，标题、按钮文案、
+  纵排几何与版本行不变
+
+#### Scenario: 设置表单像素化且语义不变
+
+- GIVEN 设置页可见
+- WHEN 检查三个控件并编辑后保存
+- THEN 材质路径为单行文本输入、窗口大小为三预设选择、音量仍为滑块并
+  显示百分比
+- AND 编辑草稿、保存、取消与脏草稿返回语义与改造前逐项一致
+
+#### Scenario: 令牌纪律与动效降级保持
+
+- GIVEN 任一面板可见
+- WHEN 系统开启 prefers-reduced-motion 并检查样式来源
+- THEN 动效时长为零且无组件级 transition 绕开令牌
+- AND 面板样式值不出现在组件内的裸色值，全部经 tokens.css 令牌供给
+- AND 强调呈现只使用鼠尾草绿与麦金两个色相，错误行只使用危险红
+
+### Requirement: 菜单尺寸随窗口比例协调
+
+四面板的尺寸几何 SHALL 随窗口尺寸保持协调：主菜单按钮列、设置面板与调试面板的宽度 MUST 以视口宽度为约束上限（比例或 `min()`/`clamp()` 口径的令牌供给），不得在小窗口下溢出视口或在任意大的窗口下无限放大；主菜单的标题、按钮列与版本行 MUST 在合法窗口尺寸范围内保持视觉居中且互不重叠；尺寸令牌 MUST 经 `tokens.css` 供给，面板侧不得绕开令牌硬编码视口相关尺寸。
+
+#### Scenario: 小窗口不溢出
+
+- **GIVEN** 一个小于面板设计宽度的合法窗口尺寸
+- **WHEN** 系统渲染任一面板
+- **THEN** 面板与按钮列 MUST 完整位于视口内，MUST NOT 产生视口溢出或裁切
+- **AND** 面板内部内容 MUST 保持可滚动或完整可见，交互元素不因尺寸收缩而重叠
+
+#### Scenario: 大窗口不无限放大
+
+- **GIVEN** 一个远大于面板设计宽度的窗口尺寸
+- **WHEN** 系统渲染设置面板与主菜单按钮列
+- **THEN** 面板宽度 MUST 停在其令牌上限而不得随视口线性放大
+- **AND** 主菜单标题、按钮列与版本行 MUST 保持居中构图且按钮列不因窗口变大而失去间距层级
+
+### Requirement: UI 字体资产
+
+WebView UI SHALL 以缝合像素字体（Fusion Pixel，OFL-1.1）为首选字体并以
+系统 CJK 栈兜底；字体文件与 OFL 许可文本 MUST 随仓库入库，字体作为唯一
+白名单二进制 Web 资产经 `mornlea://` scheme 内嵌供给（Rust 侧资产表登记），
+MUST NOT 产生任何网络请求或引入许可不明的字体文件；`dist` 字节复现门禁
+MUST 覆盖字体资产。
+
+#### Scenario: 字体内嵌供给零网络
+
+- GIVEN 客户端离线运行
+- WHEN 任一面板渲染
+- THEN 文本以像素字体呈现（CJK 覆盖），资产全部来自内嵌 scheme，无任何
+  网络请求
+
+#### Scenario: 字体加载失败回退系统栈
+
+- GIVEN 像素字体不可用（资产缺失或格式不受支持）
+- WHEN 面板渲染文本
+- THEN 字体栈按声明回退到系统 CJK 栈，UI 功能与布局不因字体缺失失败
+
+#### Scenario: 许可文本随库入库
+
+- WHEN 检查字体文件所在目录
+- THEN OFL-1.1 许可文本与字体文件一同入库，来源与版本记录在案
+
+### Requirement: UI 部件视觉基线
+
+每一个 UI 部件（四整屏面板与各独立控件态）SHALL 拥有入库的视觉基线 PNG：
+基线由仓库内脚本经无头浏览器对前端构建产物截取生成，部件清单 MUST 覆盖
+四整屏面板与 pixel 组件的各呈现态（默认/禁用/选中强调、文本输入、滑块、
+调试面板行态、错误行）；比对 SHALL 采用与世界 golden 管线同口径的双阈值
+（通道差与差异像素占比）判定漂移；基线更新 MUST 经显式的 update 入口人工
+确认；该管线 MUST 为本机开发工具（不进 CI 门禁、不触网、不改 dist 契约）。
+
+#### Scenario: 基线生成与漂移检出
+
+- GIVEN 前端构建产物与部件清单
+- WHEN 运行视觉基线 update 入口
+- THEN 每个部件产出一张基线 PNG 入库；对任一部件人为引入像素级改动后
+  运行 check 入口，该部件以双阈值判定报告漂移并以非零退出失败，其余
+  部件不受影响
+
+#### Scenario: 基线工具自包含
+
+- WHEN 在本机运行 check 入口
+- THEN 管线只依赖仓库内产物与本机既有无头浏览器，零网络请求，不修改
+  `dist/` 与其字节一致性门禁
+

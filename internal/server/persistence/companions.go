@@ -4,8 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"math"
 	"slices"
+	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/storage"
@@ -18,14 +22,12 @@ type Companions struct {
 	mu           sync.Mutex
 	completionMu sync.Mutex
 	records      []companion.Body
+	namespace    storage.CompanionIdentity
+	lifecycles   []storage.StoredCompanionLifecycle
 	// tasks 是最近一次 Observe 的任务域观察输入；任务状态变化即令存档
 	// dirty。latestJobLocked 在投递保存前把它转换为 storage 载荷（含
 	// Planning/Validating→Queued 的保存侧归一）。
 	tasks []companion.TaskQueueState
-	// summaries 是最近一次 Observe 的最近对话摘要观察输入：终态
-	// Dialogue 响应写入 manager 后随 Observe 进入这里，摘要变化即令存档
-	// dirty，落盘时并入 StoredCompanionQueue.Summary（含 summary-only 条目）。
-	summaries []CompanionSummary
 	// loadedQueues 是启动加载时存档携带的任务域载荷，构造后不变；Restore
 	// 在构造后调用一次用于恢复接线。
 	loadedQueues []storage.StoredCompanionQueue
@@ -65,6 +67,8 @@ func NewCompanions(
 		store:        store,
 		options:      options,
 		records:      cloneAndSortCompanionBodies(loaded.Records),
+		namespace:    loaded.AgentNamespaceID,
+		lifecycles:   slices.Clone(loaded.Lifecycles),
 		loadedQueues: cloneStoredQueues(loaded.Queues),
 		persisted:    loaded.Revision,
 		jobs:         make(chan companionSaveJob, 1),
@@ -85,13 +89,88 @@ func (p *Companions) Restore() ([]companion.Body, []storage.StoredCompanionQueue
 	return slices.Clone(p.records), cloneStoredQueues(p.loadedQueues)
 }
 
-// Observe 合并权威身体、任务域与摘要观察输入：任一变化即标记存档 dirty。
-// tasks、summaries 与身体同批观察保证冻结快照（关服最终保存）里身体、任务
-// 状态与摘要属于同一权威 tick。
+// AgentNamespaceID 返回启动期已完成迁移并持久化的 namespace 身份副本。
+// 返回值是固定数组，不暴露协调器内部可变状态。
+func (p *Companions) AgentNamespaceID() storage.CompanionIdentity {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.namespace
+}
+
+// MemoryLifecycle 返回指定伙伴当前 v5 lifecycle/memory 元数据的值副本。
+// 调用方只能把它用于 Agent reconcile/commit 的权威关联，不能原地修改。
+func (p *Companions) MemoryLifecycle(id companion.ID) (storage.StoredCompanionLifecycle, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, lifecycle := range p.lifecycles {
+		if lifecycle.ID == id {
+			return lifecycle, true
+		}
+	}
+	return storage.StoredCompanionLifecycle{}, false
+}
+
+// MemoryLifecycles 返回全部当前 v5 lifecycle/memory 元数据的深拷贝。
+func (p *Companions) MemoryLifecycles() []storage.StoredCompanionLifecycle {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.lifecycles)
+}
+
+// ReplaceActiveMemory 以 epoch 与旧 revision 作为 CAS 围栏，整份替换当前
+// Agent memory mirror。成功只标记聚合存档为 dirty，磁盘 I/O 仍由 Poll 或
+// Flush 在既有单 worker 通道执行。
+func (p *Companions) ReplaceActiveMemory(
+	id companion.ID,
+	epoch uint64,
+	expectedRevision uint64,
+	nextRevision uint64,
+	operationID storage.CompanionIdentity,
+	summary string,
+) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return context.Canceled
+	}
+	if _, err := p.nextAggregateRevisionLocked(); err != nil {
+		return err
+	}
+	if epoch == 0 || nextRevision == 0 || nextRevision <= expectedRevision ||
+		!operationID.Valid() || len(summary) > companion.MaxDialogueSummaryBytes ||
+		!utf8.ValidString(summary) || strings.ContainsRune(summary, '\x00') {
+		return fmt.Errorf("%w: invalid active companion memory replacement", storage.ErrCorrupt)
+	}
+	for index, lifecycle := range p.lifecycles {
+		if lifecycle.ID != id {
+			continue
+		}
+		if lifecycle.Active && lifecycle.MemoryEpoch == epoch &&
+			lifecycle.MemoryRevision == nextRevision &&
+			lifecycle.MemoryOperationID == operationID && lifecycle.Summary == summary {
+			return nil
+		}
+		if !lifecycle.Active || lifecycle.MemoryEpoch != epoch ||
+			lifecycle.MemoryRevision != expectedRevision {
+			return fmt.Errorf("companion memory CAS conflict")
+		}
+		next := slices.Clone(p.lifecycles)
+		next[index].MemoryRevision = nextRevision
+		next[index].MemoryOperationID = operationID
+		next[index].Summary = summary
+		next[index].TombstoneOperationID = storage.CompanionIdentity{}
+		p.lifecycles = next
+		p.dirty = true
+		return nil
+	}
+	return fmt.Errorf("companion memory lifecycle not found")
+}
+
+// Observe 合并权威身体与任务域观察输入。Agent memory 只经 lifecycle CAS
+// 更新，任务观察不能推导或改写 mirror。
 func (p *Companions) Observe(
 	active []companion.Body,
 	tasks []companion.TaskQueueState,
-	summaries []CompanionSummary,
 ) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -111,35 +190,12 @@ func (p *Companions) Observe(
 	}
 	sortCompanionBodies(records)
 	tasksChanged := !equalTaskQueueStates(tasks, p.tasks)
-	summariesChanged := !equalCompanionSummaries(summaries, p.summaries)
-	if slices.Equal(records, p.records) && !tasksChanged && !summariesChanged {
+	if slices.Equal(records, p.records) && !tasksChanged {
 		return
 	}
 	p.records = records
 	p.tasks = cloneTaskQueueStates(tasks)
-	p.summaries = cloneCompanionSummaries(summaries)
 	p.dirty = true
-}
-
-// equalCompanionSummaries 比较两份摘要观察输入是否逐条相等（ID 与文本）。
-func equalCompanionSummaries(left, right []CompanionSummary) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for index := range left {
-		if left[index] != right[index] {
-			return false
-		}
-	}
-	return true
-}
-
-// cloneCompanionSummaries 深拷贝摘要观察输入，Observe 之后的任何调用方修改
-// 都不影响已冻结的快照。
-func cloneCompanionSummaries(summaries []CompanionSummary) []CompanionSummary {
-	cloned := make([]CompanionSummary, len(summaries))
-	copy(cloned, summaries)
-	return cloned
 }
 
 // equalTaskQueueStates 比较两份任务域观察输入是否逐字段相等（含计划步骤）。
@@ -233,7 +289,11 @@ drained:
 		return result
 	}
 	if p.dirty && tick%p.options.AutosaveTicks == 0 {
-		p.dispatchLocked(p.latestJobLocked())
+		job, err := p.latestJobLocked()
+		if err != nil {
+			return errors.Join(result, err)
+		}
+		p.dispatchLocked(job)
 	}
 	return result
 }
@@ -325,7 +385,12 @@ func (p *Companions) dispatchAndWait(ctx context.Context, retry bool) error {
 			p.mu.Unlock()
 			return nil
 		}
-		job = p.latestJobLocked()
+		var err error
+		job, err = p.latestJobLocked()
+		if err != nil {
+			p.mu.Unlock()
+			return err
+		}
 	}
 	if !p.dispatchLocked(job) {
 		p.mu.Unlock()
@@ -401,26 +466,52 @@ func (p *Companions) applyCompletionLocked(
 	}
 	p.persisted = completion.Job.Save.Revision
 	p.retry = nil
-	// 任务域与摘要的 dirty 重判使用「未激活丢弃」口径：身体记录尚未出现的
-	// 队列无法落盘（编码要求队列关联记录），保持 dirty 让激活后的首次保存
-	// 补上完整载荷，窗口内的排队指令与摘要不会静默丢失。
-	currentQueues, droppedPending := companionQueuesForSave(p.tasks, p.records, p.summaries)
+	// 任务域的 dirty 重判使用「未激活丢弃」口径：身体记录尚未出现的队列
+	// 无法落盘（编码要求队列关联 active 记录），保持 dirty 让激活后的首次
+	// 保存补上完整任务载荷。
+	currentQueues, droppedPending := companionQueuesForSave(
+		p.tasks, activeCompanionBodies(p.records, p.lifecycles),
+	)
 	p.dirty = !slices.Equal(p.records, completion.Job.Save.Records) ||
+		p.namespace != completion.Job.Save.AgentNamespaceID ||
+		!slices.Equal(p.lifecycles, completion.Job.Save.Lifecycles) ||
 		droppedPending ||
 		!equalStoredQueues(currentQueues, completion.Job.Save.Queues)
 	return nil
 }
 
-func (p *Companions) latestJobLocked() companionSaveJob {
-	queues, _ := companionQueuesForSave(p.tasks, p.records, p.summaries)
+func (p *Companions) latestJobLocked() (companionSaveJob, error) {
+	nextRevision, err := p.nextAggregateRevisionLocked()
+	if err != nil {
+		return companionSaveJob{}, err
+	}
+	queues, _ := companionQueuesForSave(
+		p.tasks, activeCompanionBodies(p.records, p.lifecycles),
+	)
 	return companionSaveJob{
 		Save: storage.CompanionSave{
-			Revision: p.persisted + 1,
-			Records:  slices.Clone(p.records),
-			Queues:   queues,
+			Revision:         nextRevision,
+			AgentNamespaceID: p.namespace,
+			Records:          slices.Clone(p.records),
+			Lifecycles:       slices.Clone(p.lifecycles),
+			Queues:           queues,
 		},
 		Attempt: 1,
+	}, nil
+}
+
+func (p *Companions) nextAggregateRevisionLocked() (uint64, error) {
+	highest := p.persisted
+	if p.inFlight && p.inFlightJob.Save.Revision > highest {
+		highest = p.inFlightJob.Save.Revision
 	}
+	if p.retry != nil && p.retry.Save.Revision > highest {
+		highest = p.retry.Save.Revision
+	}
+	if highest == math.MaxUint64 {
+		return 0, fmt.Errorf("%w: companion aggregate revision overflow", storage.ErrCorrupt)
+	}
+	return highest + 1, nil
 }
 
 func cloneCompanionSaveJob(job companionSaveJob) companionSaveJob {
@@ -430,6 +521,7 @@ func cloneCompanionSaveJob(job companionSaveJob) companionSaveJob {
 
 func cloneCompanionSave(save storage.CompanionSave) storage.CompanionSave {
 	save.Records = slices.Clone(save.Records)
+	save.Lifecycles = slices.Clone(save.Lifecycles)
 	save.Queues = cloneStoredQueues(save.Queues)
 	return save
 }
@@ -455,33 +547,22 @@ func cloneStoredQueues(queues []storage.StoredCompanionQueue) []storage.StoredCo
 // deadline；终态快照（防御路径，正常快照不会出现）不落当前任务。records
 // 是当前已知身体记录：队列必须关联记录才能编码，身体尚未激活（出生扫描
 // 在途）的伙伴的队列被丢弃并经 dropped 报告——调用方保持 dirty，激活后的
-// 首次保存补上完整载荷。summaries 是 manager 的最近对话摘要观察输入：逐条
-// 并入对应伙伴的队列载荷；只持有摘要而无任务无 FIFO 的 active 伙伴也产出
-// summary-only 条目（守卫不得丢弃摘要），inactive 伙伴不提供队列（含摘要），
-// 去激活由此天然丢弃摘要（D4 语义）。返回值深拷贝自输入，与调用方切片完全
-// 独立。
+// 首次保存补上完整载荷。返回值深拷贝自输入，与调用方切片完全独立。
 func companionQueuesForSave(
 	states []companion.TaskQueueState,
 	records []companion.Body,
-	summaries []CompanionSummary,
 ) (queues []storage.StoredCompanionQueue, dropped bool) {
 	known := make(map[companion.ID]struct{}, len(records))
 	for _, body := range records {
 		known[body.ID] = struct{}{}
 	}
-	summaryByID := make(map[companion.ID]string, len(summaries))
-	for _, summary := range summaries {
-		summaryByID[summary.ID] = summary.Summary
-	}
-	queues = make([]storage.StoredCompanionQueue, 0, len(states)+len(summaries))
-	inStates := make(map[companion.ID]struct{}, len(states))
+	queues = make([]storage.StoredCompanionQueue, 0, len(states))
 	for _, state := range states {
 		if _, exists := known[state.ID]; !exists {
 			dropped = true
 			continue
 		}
-		inStates[state.ID] = struct{}{}
-		queue := storage.StoredCompanionQueue{ID: state.ID, Summary: summaryByID[state.ID]}
+		queue := storage.StoredCompanionQueue{ID: state.ID}
 		if state.HasCurrent {
 			current := state.Current
 			switch {
@@ -513,27 +594,9 @@ func companionQueuesForSave(
 				queue.Pending[index] = string(command)
 			}
 		}
-		// 守卫含非空摘要：无任务无 FIFO 但有摘要的 active 伙伴不能丢摘要
-		//（spec：终态摘要持久，重新激活前不能凭空消失）。
-		if queue.HasCurrent || len(queue.Pending) != 0 || queue.Summary != "" {
+		if queue.HasCurrent || len(queue.Pending) != 0 {
 			queues = append(queues, queue)
 		}
-	}
-	// summary-only 条目：持有摘要但没有任何任务事实（states 不含）的 active
-	// 伙伴。states 与 summaries 各自按 ID 字节序构造，两组拼接不保证全局
-	// 有序（编码器按记录 ID 关联队列，只要求队列 ID 唯一）。
-	for _, summary := range summaries {
-		if _, exists := inStates[summary.ID]; exists {
-			continue
-		}
-		if _, knownBody := known[summary.ID]; !knownBody {
-			dropped = true
-			continue
-		}
-		queues = append(queues, storage.StoredCompanionQueue{
-			ID:      summary.ID,
-			Summary: summary.Summary,
-		})
 	}
 	return queues, dropped
 }
@@ -574,6 +637,28 @@ func cloneAndSortCompanionBodies(records []companion.Body) []companion.Body {
 	return clone
 }
 
+func activeCompanionBodies(
+	records []companion.Body,
+	lifecycles []storage.StoredCompanionLifecycle,
+) []companion.Body {
+	if len(lifecycles) == 0 {
+		return records
+	}
+	active := make(map[companion.ID]struct{}, len(lifecycles))
+	for _, lifecycle := range lifecycles {
+		if lifecycle.Active {
+			active[lifecycle.ID] = struct{}{}
+		}
+	}
+	result := make([]companion.Body, 0, len(active))
+	for _, body := range records {
+		if _, ok := active[body.ID]; ok {
+			result = append(result, body)
+		}
+	}
+	return result
+}
+
 // sortCompanionBodies 就地把身体记录按伙伴 ID 字节序升序排列，与
 // companionManager.orderedIDs 使用同一确定性次序；ID 唯一，无并列元素，
 // 排序稳定性不参与结果。
@@ -581,16 +666,6 @@ func sortCompanionBodies(records []companion.Body) {
 	slices.SortFunc(records, func(left, right companion.Body) int {
 		return bytes.Compare(left.ID[:], right.ID[:])
 	})
-}
-
-// CompanionQueuesForSaveForTest 暴露保存侧归一逻辑供跨包白盒测试复用。
-func CompanionQueuesForSaveForTest(states []companion.TaskQueueState, records []companion.Body, summaries []CompanionSummary) ([]storage.StoredCompanionQueue, bool) {
-	return companionQueuesForSave(states, records, summaries)
-}
-
-// EqualStoredQueuesForTest 暴露存档载荷比较逻辑供跨包测试复用。
-func EqualStoredQueuesForTest(left, right []storage.StoredCompanionQueue) bool {
-	return equalStoredQueues(left, right)
 }
 
 // RecordsAndRevision 返回当前记录与持久化版本的深拷贝快照，供根包集成测试观测。

@@ -42,18 +42,18 @@ func newInteractionHost(
 		Inventory: inventory,
 	}
 	if err := store.MemoryStore.SaveCompanions(
-		context.Background(), storage.CompanionSave{Revision: 1, Records: []companion.Body{seed}},
-	); err != nil {
+		context.Background(), fixtureServerCompanionV5Save(
+			storage.CompanionSave{Revision: 1, Records: []companion.Body{seed}})); err != nil {
 		t.Fatalf("种子伙伴身体: %v", err)
 	}
 	config := hostTestConfig()
 	config.Companions = []companion.Definition{{ID: id, Name: "阿木"}}
 	config.MaxPlayers = 2
 	config.OutboxCapacity = 4096
-	if model != nil {
-		config.AIModel.Endpoint = model.server.URL + "/v1"
-	}
 	host := mustNewHost(t, config, flatTestGenerator{}, store)
+	if model != nil {
+		host.world.companionManager.replacePlannerForTest(t, model)
+	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), longWaitDeadline)
 		defer cancel()

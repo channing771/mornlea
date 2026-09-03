@@ -46,6 +46,9 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			if state.Reset {
 				a.audioFeedback.Reset()
 				a.combatFeedback.Reset()
+				// 权威 reset 是会话边界：hud 分节纪律层丢弃旧基线，回到游戏
+				// 相位后的第一次冲刷无条件下行一份完整分节。
+				a.resetHUDStatePush()
 			} else {
 				// 浸没标志在权威位置上对只读镜像就地求值，与预测共用
 				// `physics.SubmersionFlags` 唯一实现；缺块按干燥（宁可漏响不假响）。
@@ -62,6 +65,10 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 				}
 			}
 			a.serverTick = state.ServerTick
+			// 权威状态确认（生命/饥饿/氧气/采掘进度与世界时间都在同一份消息里）
+			// 是 hud 分节的主要变化源：置脏交纪律层合并，同一 tick 内的多次变化
+			// 至多下行一次。
+			a.hudPush.Mark()
 			// 世界时间与显示相位偏移来自同一份权威状态、同一接受纪律（上面的
 			// ServerTick 守卫已挡掉旧/重复状态）：偏移只平移昼夜呈现相位。
 			// 冻结开关(capture 钉住天空状态)只拦这两个呈现量,其余权威状态
@@ -73,11 +80,16 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			if state.Reset || !state.MiningActive {
 				a.miningOverlay = hud.MiningOverlay{}
 			} else {
+				// Target/HasTarget 供世界空间裂纹呈现定位权威目标方块；
+				// HasTarget 恒随 MiningActive 置位，服务端契约保证 active
+				// 时 MiningTarget 有效。可采标志的唯一消费方（屏幕采掘条）
+				// 已退役，协议侧 MiningHarvestable 不再进入镜像。
 				a.miningOverlay = hud.MiningOverlay{
 					Active:        true,
+					Target:        state.MiningTarget,
+					HasTarget:     state.MiningActive,
 					ProgressTicks: state.MiningProgressTicks,
 					RequiredTicks: state.MiningRequiredTicks,
-					Harvestable:   state.MiningHarvestable,
 				}
 			}
 			if state.Reset {
@@ -97,6 +109,8 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 		if hit, ok := message.(network.CombatHit); ok {
 			if a.combatFeedback.Observe(hit.ServerTick) {
 				a.playLocalCue(audio.CueCombatHit)
+				// marker 武装是 hud 分节变化源：显隐由 WebView 组件按下行驱动。
+				a.hudPush.Mark()
 			}
 			continue
 		}
@@ -105,6 +119,9 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 				a.CloseClientSession(err)
 				return
 			}
+			// 背包镜像确认（栏位物品、数量、耐久与选中下标）驱动快捷栏与容器
+			// 内容的 hud 分节。
+			a.hudPush.Mark()
 			if cue, play := a.audioFeedback.ObserveInventoryState(state); play {
 				a.playLocalCue(cue)
 			}
@@ -122,6 +139,9 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 				a.CloseClientSession(err)
 				return
 			}
+			// 容器开关与内容变化都进入 hud 分节（containerOpen 布局位与熔炉
+			// 保留面内容）。
+			a.hudPush.Mark()
 			// 熔炉与箱子互斥：新熔炉状态到达时丢弃可能过期的箱子镜像，
 			// 否则两个镜像会同时报告 opened，点击分流会用错容器。
 			a.chest.Reset()
@@ -140,6 +160,7 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 				a.CloseClientSession(err)
 				return
 			}
+			a.hudPush.Mark()
 			a.furnace.Reset()
 			if !opened || previous != state.Chest {
 				a.inventorySource = -1
@@ -156,6 +177,7 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 				a.CloseClientSession(err)
 				return
 			}
+			a.hudPush.Mark()
 			switch {
 			case state.Size == 3 && (!confirmed || previous.Size != 3):
 				// 尺寸 3 只能来自工作台交互：与熔炉/箱子到达时一致，打开
@@ -191,6 +213,7 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 				(chestOpened && chestCurrent == closed.Container) {
 				a.clearContainerUI()
 			}
+			a.hudPush.Mark()
 			continue
 		}
 		switch message.(type) {
@@ -253,6 +276,8 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 				a.CloseClientSession(err)
 				return
 			}
+			// 聊天行缓冲是 hud 分节的一部分：新事件确认后行缓冲随之变化。
+			a.hudPush.Mark()
 			continue
 		}
 		changes, isBlockChanges := message.(network.BlockChanges)

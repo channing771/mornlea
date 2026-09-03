@@ -17,7 +17,7 @@ PIXEL_PERFECTION_NOTICE_DIR := internal/assets/packs/pixel_perfection
 PIXEL_PERFECTION_NOTICE_DEST := bin/third-party/pixel-perfection
 ARGS ?=
 
-.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check frontend-check dev-check agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev
+.PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev
 
 run test test-multiplayer bench-multiplayer visual-check visual-update: rust
 build: rust
@@ -40,9 +40,13 @@ help:
 		'  make rust             构建固定版本的 Rust cdylib' \
 		'  make rust-check       运行 Rust 格式、clippy 与单测' \
 		'  make frontend-check   菜单 WebView 前端门禁(冻结安装+typecheck+vitest+构建+dist 一致)' \
+		'  make companion-agent-check 运行伙伴 Agent locked 安装、格式、静态检查、类型检查与 Python 单测' \
+		'  make companion-agent-integration 运行无外网 Go/Python 伙伴 Agent 真进程合同' \
 		'  make fmt              格式化全部 Rust 与 Go 源码' \
 		'  make visual-check     跑视觉场景并与 golden 基线比对' \
 		'  make visual-update    重新生成 golden 基线（VISUAL_OUT 覆盖输出目录）' \
+		'  make frontend-visual-check    UI 部件视觉基线比对（本机 Chrome，不进 CI）' \
+		'  make frontend-visual-update   覆盖 UI 部件视觉基线 PNG（人工确认后使用）' \
 		'  make clean            删除 bin 目录' \
 		'  make agent-planner    手动运行规划者工作者(docs/agents/planner.md)' \
 		'  make agent-gates      运行标准门禁汇总(scripts/agents/gates.sh)' \
@@ -87,6 +91,15 @@ frontend-check:
 	cd $(FRONTEND_DIR) && corepack pnpm install --frozen-lockfile
 	cd $(FRONTEND_DIR) && corepack pnpm typecheck && corepack pnpm test && corepack pnpm build
 	git diff --exit-code -- $(FRONTEND_DIR)/dist
+
+# frontend-visual-*:UI 部件视觉基线（本机开发工具，不进 CI、零网络、不触
+# dist）。管线构成与基线更新纪律见 engine/crates/mornlea_client/frontend/
+# AGENTS.md 的「UI 部件视觉基线」小节。
+frontend-visual-check:
+	cd $(FRONTEND_DIR) && corepack pnpm visual-check
+
+frontend-visual-update:
+	cd $(FRONTEND_DIR) && corepack pnpm visual-update
 
 build:
 	@mkdir -p $(dir $(BINARY))
@@ -145,6 +158,23 @@ dev-check:
 	cd $(RUST_DIR) && $(CARGO) fmt --check
 	cd $(RUST_DIR) && $(CARGO) clippy --workspace --all-targets -- -D warnings
 	cd $(RUST_DIR) && $(CARGO) test --workspace --locked
+
+COMPANION_AGENT_DIR := services/companion-agent
+COMPANION_AGENT_PYTHON := $(CURDIR)/$(COMPANION_AGENT_DIR)/.venv/bin/python
+
+companion-agent-check:
+	cd $(COMPANION_AGENT_DIR) && uv sync --locked
+	cd $(COMPANION_AGENT_DIR) && uv run ruff format --check .
+	cd $(COMPANION_AGENT_DIR) && uv run ruff check .
+	cd $(COMPANION_AGENT_DIR) && uv run mypy src
+	cd $(COMPANION_AGENT_DIR) && uv run pytest -q
+
+companion-agent-integration:
+	cd $(COMPANION_AGENT_DIR) && uv sync --locked
+	cd $(COMPANION_AGENT_DIR) && uv run ruff format --check tests/integration && uv run ruff check tests/integration
+	cd $(COMPANION_AGENT_DIR) && uv run mypy src tests/integration
+	MORNLEA_COMPANION_AGENT_PYTHON=$(COMPANION_AGENT_PYTHON) $(GO) test ./internal/companion ./internal/server \
+		-run 'CompanionAgent.*Integration|CrossLanguage|MCP.*Integration' -race -count=1 -timeout=120s
 
 fmt:
 	cd $(RUST_DIR) && $(CARGO) fmt

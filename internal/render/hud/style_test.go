@@ -11,43 +11,37 @@ import (
 	"github.com/channing771/mornlea/internal/render"
 )
 
-// style.go 是 HUD 呈现色的唯一样式来源（design D1）。本文件从两端钉住这件事：
-// 一端把每个令牌的数值钉成字面量（精修令牌值时必须显式改这里），另一端扫描
-// 包内生产源码，禁止在 style.go 之外出现第二份 float32 呈现色字面量。
+// style.go 是容器保留面呈现色的唯一样式来源（design D1）。本文件从两端钉住
+// 这件事：一端把每个令牌的数值钉成字面量（精修令牌值时必须显式改这里），另一端
+// 扫描包内生产源码，禁止在 style.go 之外出现第二份 float32 呈现色字面量。常显
+// 层（快捷栏贴条、状态行、氧气、采掘/进食轨道、准星、聊天）专属令牌已随其绘制
+// 退役，前端改用 `tokens.css` 的 `--hud-*` 段。
 
 // TestStyleTokensMatchPinnedValues 把令牌表钉成字面量：这里是令牌数值的唯一
-// 变更入口。底部快捷栏贴条保持「投影+表面」双层无边（不接 1px 亮边），其
-// 专属色值因此与 `panelShadow`/`panelSurface` 并存，见各令牌注释。
+// 变更入口。强调色按语义拆成两族分别钉值：`accentSelected`（鼠尾草绿，选中）
+// 与 `accentProgress`（麦金，进度/产物/来源）。
 func TestStyleTokensMatchPinnedValues(t *testing.T) {
 	for _, test := range []struct {
 		name  string
 		token [4]float32
 		want  [4]float32
 	}{
-		{"panelShadow", panelShadow, [4]float32{0.008, 0.010, 0.014, 0.90}},
-		{"panelSurface", panelSurface, [4]float32{0.045, 0.052, 0.062, 0.84}},
-		{"panelBorderLight", panelBorderLight, [4]float32{0.92, 0.93, 0.95, 0.16}},
-		{"slotWell", slotWell, [4]float32{0.020, 0.024, 0.030, 0.92}},
-		{"slotWellEdge", slotWellEdge, [4]float32{1, 1, 1, 0.07}},
-		{"accentAmber", accentAmber, [4]float32{1, 0.72, 0.24, 0.98}},
-		{"textPrimaryFg", textPrimaryFg, [4]float32{0.96, 0.96, 0.97, 1}},
-		{"textPrimaryShadow", textPrimaryShadow, [4]float32{0, 0, 0, 0.85}},
-		{"crosshairShadow", crosshairShadow, [4]float32{0, 0, 0, 0.55}},
-		{"crosshairFg", crosshairFg, [4]float32{0.96, 0.96, 0.96, 0.92}},
-		{"hotbarPanelShadowColor", hotbarPanelShadowColor, [4]float32{0.012, 0.015, 0.02, 0.94}},
-		{"hotbarPanelSurfaceColor", hotbarPanelSurfaceColor, [4]float32{0.045, 0.052, 0.06, 0.96}},
-		{"hotbarSelectedOuterColor", hotbarSelectedOuterColor, [4]float32{0.96, 0.92, 0.72, 1}},
-		{"hotbarSelectedInnerColor", hotbarSelectedInnerColor, accentAmber},
+		{"panelShadow", panelShadow, [4]float32{0.180, 0.129, 0.082, 0.90}},
+		{"panelSurface", panelSurface, [4]float32{0.941, 0.894, 0.784, 0.94}},
+		{"panelBorderLight", panelBorderLight, [4]float32{0.541, 0.416, 0.282, 0.80}},
+		{"slotWell", slotWell, [4]float32{0.851, 0.776, 0.604, 0.92}},
+		{"slotWellEdge", slotWellEdge, [4]float32{0.984, 0.961, 0.894, 0.30}},
+		{"accentSelected", accentSelected, [4]float32{0.494, 0.612, 0.388, 0.98}},
+		{"accentProgress", accentProgress, [4]float32{0.851, 0.663, 0.306, 0.98}},
+		{"textPrimaryFg", textPrimaryFg, [4]float32{0.969, 0.941, 0.871, 1}},
+		{"textPrimaryShadow", textPrimaryShadow, [4]float32{0.165, 0.118, 0.071, 0.85}},
+		{"textOnPanelFg", textOnPanelFg, [4]float32{0.239, 0.180, 0.125, 1}},
+		{"hotbarSelectedInnerColor", hotbarSelectedInnerColor, accentSelected},
 		{"miningTrackColor", miningTrackColor, [4]float32{0.05, 0.05, 0.06, 0.78}},
-		{"miningHarvestableColor", miningHarvestableColor, [4]float32{0.30, 0.78, 0.36, 0.95}},
-		{"miningBlockedColor", miningBlockedColor, [4]float32{0.95, 0.55, 0.15, 0.95}},
-		{"miningCapColor", miningCapColor, [4]float32{0.96, 1, 0.76, 1}},
-		{"miningNotchColor", miningNotchColor, [4]float32{0.18, 0.12, 0.08, 1}},
 		{"durabilityTrackColor", durabilityTrackColor, [4]float32{0.05, 0.05, 0.06, 0.85}},
 		{"durabilityHealthyColor", durabilityHealthyColor, [4]float32{0.30, 0.78, 0.36, 0.95}},
 		{"durabilityLowColor", durabilityLowColor, [4]float32{0.90, 0.35, 0.25, 0.95}},
-		{"eatingFillColor", eatingFillColor, [4]float32{0.92, 0.78, 0.42, 0.95}},
-		{"containerSourceHighlightColor", containerSourceHighlightColor, [4]float32{0.25, 0.72, 1, 0.98}},
+		{"containerSourceHighlightColor", containerSourceHighlightColor, [4]float32{0.851, 0.663, 0.306, 0.98}},
 	} {
 		if test.token != test.want {
 			t.Errorf("令牌 %s=%v，想要钉值 %v", test.name, test.token, test.want)
@@ -108,29 +102,6 @@ func TestStyleTokensAreTheOnlyFloatColorSource(t *testing.T) {
 	}
 }
 
-// TestChatTextUsesTextPrimaryTokens 钉住聊天文字与全部 HUD 文字统一的双层
-// 规范：先阴影后前景，阴影向右下偏移 1 design px，两层的颜色都来自
-// style.go 文字令牌。
-func TestChatTextUsesTextPrimaryTokens(t *testing.T) {
-	atlas := newFakeNameTagAtlas()
-	var layout hotbarLayout
-	appendChatText(&layout, atlas, "界", 100, 200, 1)
-	if len(layout.glyphs) != 2 {
-		t.Fatalf("单 rune 聊天字形=%d，想要阴影加前景共 2", len(layout.glyphs))
-	}
-	shadow, foreground := layout.glyphs[0], layout.glyphs[1]
-	if shadow.Color != textPrimaryShadow {
-		t.Fatalf("聊天阴影色=%v，想要令牌 %v", shadow.Color, textPrimaryShadow)
-	}
-	if foreground.Color != textPrimaryFg {
-		t.Fatalf("聊天前景色=%v，想要令牌 %v", foreground.Color, textPrimaryFg)
-	}
-	if shadow.X != foreground.X+1 || shadow.Y != foreground.Y+1 {
-		t.Fatalf("聊天阴影偏移=(%v,%v)，想要相对前景右下 1 design px",
-			shadow.X-foreground.X, shadow.Y-foreground.Y)
-	}
-}
-
 // TestHotbarDigitsUseTextPrimaryTokens 钉住快捷栏数量数字并入同一套文字双层
 // 规范：颜色取文字令牌，阴影层相对前景层偏移 1 design px。
 func TestHotbarDigitsUseTextPrimaryTokens(t *testing.T) {
@@ -139,7 +110,7 @@ func TestHotbarDigitsUseTextPrimaryTokens(t *testing.T) {
 		atlas.glyphs[char] = fakeNameTagGlyph(7)
 	}
 	var layout hotbarLayout
-	appendHotbarCount(&layout, atlas, 64, 100, 200)
+	appendHotbarCountScaled(&layout, atlas, 64, 100, 200, 1)
 	if len(layout.glyphs) != 4 {
 		t.Fatalf("数量 64 字形=%d，想要两个阴影加两个前景", len(layout.glyphs))
 	}
@@ -162,16 +133,16 @@ func TestHotbarDigitsUseTextPrimaryTokens(t *testing.T) {
 }
 
 // TestOpenPanelsConsumePanelTokens 钉住打开态面板族全部取自面板令牌：外扩
-// 投影取 `panelShadow`，表面取 `panelSurface`，四边亮边取 `panelBorderLight`；
-// 右侧配方栏入口取槽位令牌 `slotWell`/`slotWellEdge`，产物格轮廓取强调色。
-// 三类容器视图的面板同源；聊天栈背衬同语言。
+// 投影取 `panelShadow`，表面取 `panelSurface`，四边描边取 `panelBorderLight`；
+// 右侧配方栏入口取槽位令牌 `slotWell`/`slotWellEdge`，产物格轮廓取麦金
+// `accentProgress`、选中内衬取鼠尾草绿 `accentSelected`，两族强调不同格。
+// 三类容器视图的面板同源。
 func TestOpenPanelsConsumePanelTokens(t *testing.T) {
 	atlas := newFakeNameTagAtlas()
 	var layout hotbarLayout
-	got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, nil, nil, nil,
-		MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
-	// 准星先追加，其后的面板族是投影、表面与四边亮边（标题为纹理 cell 不在此列）。
-	family := got.quads[crosshairQuads:][:containerPanelQuads-1]
+	got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, nil, nil, nil, 1280, 800)
+	// 面板族是投影、表面与四边亮边（标题为纹理 cell 不在此列）。
+	family := got.quads[:containerPanelQuads-1]
 	wantColors := [containerPanelQuads - 1][4]float32{
 		panelShadow, panelSurface,
 		panelBorderLight, panelBorderLight, panelBorderLight, panelBorderLight,
@@ -183,9 +154,8 @@ func TestOpenPanelsConsumePanelTokens(t *testing.T) {
 	}
 
 	var chest hotbarLayout
-	chestGot := layoutInventory(&chest, atlas, core.Inventory{}, true, -1, nil, nil, &ChestOverlay{},
-		MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
-	chestFamily := chestGot.quads[crosshairQuads:][:containerPanelQuads-1]
+	chestGot := layoutInventory(&chest, atlas, core.Inventory{}, true, -1, nil, nil, &ChestOverlay{}, 1280, 800)
+	chestFamily := chestGot.quads[:containerPanelQuads-1]
 	for index, want := range wantColors {
 		if chestFamily[index].Color != want {
 			t.Fatalf("箱子面板层 %d 颜色=%v，想要令牌 %v", index, chestFamily[index].Color, want)
@@ -194,8 +164,7 @@ func TestOpenPanelsConsumePanelTokens(t *testing.T) {
 
 	// 配方栏十条入口：井取 `slotWell`、上沿内高光取 `slotWellEdge`。
 	var crafting hotbarLayout
-	craftingGot := layoutInventory(&crafting, atlas, core.Inventory{}, true, -1, &CraftingOverlay{Size: 2}, nil, nil,
-		MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
+	craftingGot := layoutInventory(&crafting, atlas, core.Inventory{}, true, -1, &CraftingOverlay{Size: 2}, nil, nil, 1280, 800)
 	wells, edges := 0, 0
 	for _, quad := range craftingGot.quads {
 		switch quad.Color {
@@ -203,44 +172,67 @@ func TestOpenPanelsConsumePanelTokens(t *testing.T) {
 			wells++
 		case slotWellEdge:
 			edges++
-		case accentAmber:
-			// 产物格轮廓底衬是唯一强调色 quad。
 		}
 	}
 	if wells != recipeEntryCount || edges != recipeEntryCount {
 		t.Fatalf("配方栏井/高光=%d/%d，想要各 %d", wells, edges, recipeEntryCount)
 	}
-	// 强调色 quad = 产物格轮廓底衬 + 打开态选中格内衬（`accentAmber` 别名）。
-	amberCount := 0
+	// 双强调分工：麦金 quad 只剩产物格轮廓底衬，鼠尾草绿 quad 只剩打开态选中格
+	// 内衬；同帧并存时两族不互占语义。数量之外还把两枚 quad 的矩形分别钉到各自
+	// 的布局推导值：内衬外扩 `hotbarSelectBorder` 包住当前选中格，轮廓底衬外扩
+	// `craftingOutputOutlineExpand` 包住产物格，两族几何不同，颜色互换或错格
+	// 都会在矩形断言上失败。外扩常量的量级由常量断言钉住，矩形断言负责颜色
+	// 互换与错格——矩形期望值与生产代码共享同一常量，常量自身漂移不会变红。
+	if hotbarSelectBorder != 3 {
+		t.Fatalf("选中内衬外扩=%v，想要 3 design px", hotbarSelectBorder)
+	}
+	if craftingOutputOutlineExpand != 1 {
+		t.Fatalf("产物轮廓外扩=%v，想要 1 design px", craftingOutputOutlineExpand)
+	}
+	progressCount, selectedCount := 0, 0
+	var progressQuad, selectedQuad hotbarInstance
 	for _, quad := range craftingGot.quads {
-		if quad.Color == accentAmber {
-			amberCount++
+		switch quad.Color {
+		case accentProgress:
+			progressQuad, progressCount = quad, progressCount+1
+		case accentSelected:
+			selectedQuad, selectedCount = quad, selectedCount+1
 		}
 	}
-	if amberCount != craftingOutputOutlineQuads+1 {
-		t.Fatalf("强调色 quad=%d，想要产物格轮廓 %d 加选中内衬 1", amberCount, craftingOutputOutlineQuads)
+	if progressCount != craftingOutputOutlineQuads {
+		t.Fatalf("麦金 quad=%d，想要产物格轮廓 %d", progressCount, craftingOutputOutlineQuads)
 	}
-
-	// 聊天栈同属浮动面板语言：输入行取更深的投影色作背衬，历史行取表面色。
-	var chat hotbarLayout
-	appendChatOverlay(&chat, atlas, ChatOverlay{Open: true, Input: "界", Lines: []string{"界"}}, 1280, 720)
-	if len(chat.quads) != 2 {
-		t.Fatalf("聊天面板 quad=%d，想要输入加历史共 2", len(chat.quads))
+	if selectedCount != 1 {
+		t.Fatalf("鼠尾草绿 quad=%d，想要选中内衬 1", selectedCount)
 	}
-	if chat.quads[0].Color != panelShadow {
-		t.Fatalf("聊天输入背衬=%v，想要令牌 panelShadow", chat.quads[0].Color)
+	scale := craftingGot.scale
+	expand := craftingOutputOutlineExpand * scale
+	outputX, outputY := craftingOutputOrigin(2, 1280, 800)
+	if progressQuad.X != outputX-expand || progressQuad.Y != outputY-expand ||
+		progressQuad.Width != hotbarSlotSize*scale+2*expand ||
+		progressQuad.Height != hotbarSlotSize*scale+2*expand {
+		t.Fatalf("麦金矩形=%+v，想要包住产物格 (%f,%f) 并外扩 %v",
+			progressQuad, outputX, outputY, craftingOutputOutlineExpand)
 	}
-	if chat.quads[1].Color != panelSurface {
-		t.Fatalf("聊天历史背衬=%v，想要令牌 panelSurface", chat.quads[1].Color)
+	// 夹具零值即选中格 0：`inventorySlotOrigin` 以选中下标推导内衬矩形，
+	// 因此这里的推导值就是打开态首格的内衬。
+	selectBorder := hotbarSelectBorder * scale
+	selectedX, selectedY := inventorySlotOrigin(0, 1280, 800)
+	if selectedQuad.X != selectedX-selectBorder || selectedQuad.Y != selectedY-selectBorder ||
+		selectedQuad.Width != (hotbarSlotSize+2*hotbarSelectBorder)*scale ||
+		selectedQuad.Height != (hotbarSlotSize+2*hotbarSelectBorder)*scale {
+		t.Fatalf("鼠尾草绿矩形=%+v，想要包住选中格 (%f,%f) 并外扩 %v",
+			selectedQuad, selectedX, selectedY, hotbarSelectBorder)
 	}
 }
 
-// TestProgressColorsComeFromTokens 钉住耐久条、进食条与容器来源高亮的颜色
-// 全部来自 style.go 语义令牌：条形几何由既有测试守护，这里只锁颜色来源。
+// TestProgressColorsComeFromTokens 钉住耐久条、熔炉进度轨道与容器来源高亮的
+// 颜色全部来自 style.go 语义令牌：条形几何由既有测试守护，这里只锁颜色来源。
 func TestProgressColorsComeFromTokens(t *testing.T) {
+	scale := hudScale(1920, 1080)
 	full, _ := core.ItemMaxDurability(core.ItemStonePickaxe)
 	var worn hotbarLayout
-	appendDurabilityBar(&worn, 0, core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: full / 2}, 1920, 1080)
+	appendDurabilityBarScaled(&worn, 0, core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: full / 2}, 1920, 1080, scale)
 	if len(worn.quads) != 2 {
 		t.Fatalf("磨损工具耐久 quad=%d，想要底槽加填充共 2", len(worn.quads))
 	}
@@ -251,27 +243,14 @@ func TestProgressColorsComeFromTokens(t *testing.T) {
 		t.Fatalf("耐久健康填充=%v，想要令牌 %v", worn.quads[1].Color, durabilityHealthyColor)
 	}
 	var low hotbarLayout
-	appendDurabilityBar(&low, 0, core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: 1}, 1920, 1080)
+	appendDurabilityBarScaled(&low, 0, core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: 1}, 1920, 1080, scale)
 	if low.quads[1].Color != durabilityLowColor {
 		t.Fatalf("低耐久填充=%v，想要令牌 %v", low.quads[1].Color, durabilityLowColor)
 	}
 
-	var eating hotbarLayout
-	appendEatingBar(&eating, EatingOverlay{Active: true, Progress: 0.5}, MiningOverlay{}, 1280, 720)
-	if len(eating.quads) != 2 {
-		t.Fatalf("进食条 quad=%d，想要轨道加填充共 2", len(eating.quads))
-	}
-	if eating.quads[0].Color != miningTrackColor {
-		t.Fatalf("进食轨道色=%v，想要与采掘共用令牌", eating.quads[0].Color)
-	}
-	if eating.quads[1].Color != eatingFillColor {
-		t.Fatalf("进食填充色=%v，想要令牌 %v", eating.quads[1].Color, eatingFillColor)
-	}
-
 	atlas := newFakeNameTagAtlas()
 	var layout hotbarLayout
-	got := layoutInventory(&layout, atlas, core.Inventory{}, true, core.InventorySlots, nil, nil, fullChestOverlay(),
-		MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: false}, 1280, 800)
+	got := layoutInventory(&layout, atlas, core.Inventory{}, true, core.InventorySlots, nil, nil, fullChestOverlay(), 1280, 800)
 	wantX, wantY := chestSlotOrigin(0, 1280, 800)
 	selectBorder := hotbarSelectBorder * got.scale
 	found := false
@@ -287,45 +266,6 @@ func TestProgressColorsComeFromTokens(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("未找到箱子来源格高亮 quad")
-	}
-}
-
-// TestAppendCrosshairRejectsDegenerateInput 直接命中 `appendCrosshair` 的
-// 门控：隐藏、零宽与零高 framebuffer 都必须零实例，正尺寸恰好产生投影加
-// 前景共 4 个实例。这是对呈现入口最短路径的直达测试，不经过完整布局。
-func TestAppendCrosshairRejectsDegenerateInput(t *testing.T) {
-	for _, test := range []struct {
-		name          string
-		overlay       CrosshairOverlay
-		width, height float32
-		wantQuads     int
-	}{
-		{"隐藏", CrosshairOverlay{Visible: false}, 1280, 800, 0},
-		{"零宽", CrosshairOverlay{Visible: true}, 0, 800, 0},
-		{"零高", CrosshairOverlay{Visible: true}, 1280, 0, 0},
-		{"负宽", CrosshairOverlay{Visible: true}, -1, 800, 0},
-		{"可见", CrosshairOverlay{Visible: true}, 1280, 800, crosshairQuads},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			var layout hotbarLayout
-			layout.scale = hudScale(false, test.width, test.height)
-			appendCrosshair(&layout, test.overlay, test.width, test.height)
-			if len(layout.quads) != test.wantQuads {
-				t.Fatalf("%s quads=%d，想要 %d", test.name, len(layout.quads), test.wantQuads)
-			}
-			if test.wantQuads == 0 {
-				return
-			}
-			for index, quad := range layout.quads {
-				want := crosshairFg
-				if index < 2 {
-					want = crosshairShadow
-				}
-				if quad.Color != want {
-					t.Fatalf("准星臂 %d 颜色=%v，想要 %v", index, quad.Color, want)
-				}
-			}
-		})
 	}
 }
 

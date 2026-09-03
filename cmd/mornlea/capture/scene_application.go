@@ -42,8 +42,6 @@ type SceneApplication interface {
 	// 帧的昼夜参数会随进程启动漂移)。
 	SetWorldTimeFrozen(frozen bool)
 	SetCenter(center core.ChunkPos)
-	SetServerTick(tick uint64)
-	SetPanelLastFrameAt(at time.Time)
 	SetBlockTargetReset(reset bool)
 	// 菜单全景（menu-vista）：PinVolatile 在收敛后钉住自转时刻，收敛判据
 	// 消费未完成工作量；非菜单相位场景两者均为零参与。

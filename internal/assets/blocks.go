@@ -112,6 +112,26 @@ const (
 	// 55..67 层之后；植物材质谓词把 68 作为单点加入，不能把中间的门、工作台、
 	// 火把与床层一并扩进植物集合。
 	LayerShortGrass
+	// LayerCrack0..LayerCrack9 是采掘裂纹 overlay 的 10 个离散阶段层（中心
+	// 初始裂点 → 大面积破裂），由渲染层的 crack pass 按权威采集进度采样其中
+	// 一层，叠加在目标方块六面之上；像素见 crackTexture。层号冻结为 69..78
+	// （LayerShortGrass 追加为 68 后顺延）：裂纹实例以 f32 层号直接索引 atlas，
+	// 呈现层从 LayerCrack0 派生各阶段层号而不复制常量。仍按 LayerWheat0 处
+	// 注释的纪律追加在枚举末位，不扰动植物/耕地/火把/床区间。这些层不参与
+	// 任何方块材质映射（Registry.Material 不返回它们，方块的材质面永远落不到
+	// 裂纹层），只经裂纹实例流被采样；裂纹是透明背景上的原创深棕/深灰系像素
+	// （背景 alpha 0、裂纹像素 alpha 255 的二值 cutout，分类见 isCutoutLayer），
+	// 不替换、不修改原方块材质。
+	LayerCrack0
+	LayerCrack1
+	LayerCrack2
+	LayerCrack3
+	LayerCrack4
+	LayerCrack5
+	LayerCrack6
+	LayerCrack7
+	LayerCrack8
+	LayerCrack9
 	layerCount
 )
 
@@ -195,6 +215,19 @@ var textureBindings = [...]textureBinding{
 	{name: "bed_head_east", layer: LayerBedHeadEast},
 	// 短草层是覆盖槽位：默认包可不含该文件并保留程序化像素，用户包可按路径覆盖。
 	{name: "short_grass", layer: LayerShortGrass},
+	// 裂纹十层的绑定同样只是材质包覆盖的命名槽位：仓库自身不携带任何 crack
+	// png，内嵌默认包与用户包未提供该文件时程序化裂纹像素原样生效（镜像
+	// torch/bed 的仅覆盖槽位语义）。
+	{name: "crack_0", layer: LayerCrack0},
+	{name: "crack_1", layer: LayerCrack1},
+	{name: "crack_2", layer: LayerCrack2},
+	{name: "crack_3", layer: LayerCrack3},
+	{name: "crack_4", layer: LayerCrack4},
+	{name: "crack_5", layer: LayerCrack5},
+	{name: "crack_6", layer: LayerCrack6},
+	{name: "crack_7", layer: LayerCrack7},
+	{name: "crack_8", layer: LayerCrack8},
+	{name: "crack_9", layer: LayerCrack9},
 }
 
 // Registry 是方块属性与材质的注册表。
@@ -256,6 +289,9 @@ func NewRegistry() *Registry {
 		r.layers[LayerBedHeadSouth+uint16(dir)] = bedTopTexture(true, dir)
 	}
 	r.layers[LayerShortGrass] = shortGrassTexture()
+	for stage := 0; stage < crackStageCount; stage++ {
+		r.layers[LayerCrack0+uint16(stage)] = crackTexture(stage)
+	}
 	// ids 覆盖 core 的全部已注册方块编号，上界一律用独占哨兵 core.BlockIDMax
 	// 表达——写死某个具体末位编号（历史上写过 WaterLevel7ID）会在追加新编号时
 	// 静默退化成子集，新方块就永远进不了快照。Rust 侧的
@@ -578,11 +614,14 @@ func (r *Registry) Model(id world.BlockID) uint8 {
 // isCutoutLayer 报告某个材质层是否走 alpha cutout（二值 alpha + 保覆盖率降采样）。
 //
 // 判据必须与 terrain.wgsl 里 `c.a < 0.5` 那条 discard 覆盖的层集合一致：这些层的
-// mip 链要用 downsampleCutout 保住覆盖率，否则远处的细结构会整片消失。
+// mip 链要用 downsampleCutout 保住覆盖率，否则远处的细结构会整片消失。裂纹层
+// 同属此类且更要紧：裂纹像素在 16×16 里本就稀疏，普通平均降采样会把 alpha
+// 一路稀释到 0，整条裂纹在远处无影无踪。
 func isCutoutLayer(layer int) bool {
 	return layer == int(LayerLeaves) || layer == int(LayerGlass) ||
 		(layer >= int(LayerWheat0) && layer <= int(LayerCarrot7)) || layer == int(LayerTorch) ||
-		layer == int(LayerShortGrass)
+		layer == int(LayerShortGrass) ||
+		(layer >= int(LayerCrack0) && layer <= int(LayerCrack9))
 }
 
 func (r *Registry) LayerCount() int { return int(layerCount) }

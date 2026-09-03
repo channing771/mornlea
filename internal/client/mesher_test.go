@@ -281,3 +281,36 @@ func sortedKeys(keys []core.SectionKey) []core.SectionKey {
 	})
 	return keys
 }
+
+func TestMesherCompletedMeshesCountsAcceptedWorkMonotonically(t *testing.T) {
+	mirror := client.NewMirror()
+	loadMirrorSquare(t, mirror, core.Overworld, core.ChunkPos{}, 1, 1)
+	mesher := client.NewMesher(assets.NewRegistry(), 2)
+	defer mesher.Close()
+
+	// 初始网格化:中心区块 24 段全部接受,完成计数 = 24。
+	centerSections := chunkSectionKeys(core.Overworld, core.ChunkPos{})
+	mesher.MarkDirty(centerSections...)
+	mesher.Schedule(mirror, len(centerSections))
+	waitForMesherResults(t, mesher, mirror, len(centerSections), 5*time.Second)
+	if got := mesher.Stats().CompletedMeshes; got != uint64(len(centerSections)) {
+		t.Fatalf("初始完成计数 = %d，想要 %d", got, len(centerSections))
+	}
+
+	// 邻居角落更新把 18 段再次标脏并重网格化:计数继续累加(单调,同段重复
+	// 网格化按工作量再次计入)——加载屏以钳制比值消费,不做覆盖数度量。
+	corner := core.BlockPos{X: 15, Y: core.MinY + 15, Z: 15}
+	update, err := mirror.Apply(blockChanges(
+		core.Overworld, core.ChunkPos{}, 1, corner, core.StoneID,
+	))
+	if err != nil {
+		t.Fatalf("应用角落方块增量: %v", err)
+	}
+	mesher.MarkDirty(update.Dirty...)
+	mesher.Schedule(mirror, len(update.Dirty))
+	waitForMesherResults(t, mesher, mirror, len(update.Dirty), 5*time.Second)
+	want := uint64(len(centerSections) + len(update.Dirty))
+	if got := mesher.Stats().CompletedMeshes; got != want {
+		t.Fatalf("重网格后完成计数 = %d，想要 %d", got, want)
+	}
+}

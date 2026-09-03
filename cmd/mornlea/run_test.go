@@ -271,15 +271,16 @@ func TestRunWithDependenciesDisablesDevForBenchmark(t *testing.T) {
 }
 
 // TestRunWithDependenciesAlwaysEnablesDevForCapture 守住抓帧路径必须构造面板
-// 渲染器这条契约。
+// 状态机这条契约。
 //
 // 该断言与它的前身相反，是有意的：早先抓帧被当作"与 benchmark 同类的基线路径"
-// 而排除了 --dev。但 debug-panel 场景要拍的就是面板本身，而基线重生成与 CI
-// 调用 capture 时都不会带 --dev——沿用旧规则会让那个场景永远拍到空画面。
+// 而排除了 --dev。但 --dev 关闭时 app 不装配调试面板状态，而 debug-panel 场景
+// 的 Apply 要求面板状态存在——沿用旧规则会让那个场景在 Apply 期直接报
+// 「debug-panel 需要面板状态，当前为 nil」，整套基线重生成与 CI 抓帧因此失败。
 //
-// 两条基线路径的待遇本就不该一致：benchmark measures 性能，面板不该占用 GPU；
-// capture 记录画面，面板是被记录的对象之一。面板默认隐藏，只有该场景的 Apply
-// 打开它，因此其余场景的基线不受影响。
+// 两条基线路径的待遇本就不该一致：benchmark measures 性能，面板状态机不该参与；
+// capture 要钉住「面板可见不产生无头面板像素」，就得先把面板可见态装进来。面板
+// 默认隐藏，只有该场景的 Apply 打开它，因此其余场景的基线不受影响。
 func TestRunWithDependenciesAlwaysEnablesDevForCapture(t *testing.T) {
 	for _, test := range []struct {
 		name string
@@ -308,7 +309,7 @@ func TestRunWithDependenciesAlwaysEnablesDevForCapture(t *testing.T) {
 				t.Fatalf("run error=%v sawCall=%v，想要构造期错误且确实调用了 newApplication", err, sawCall)
 			}
 			if !gotDev {
-				t.Fatal("--capture 必须构造面板渲染器：options.Dev = false，debug-panel 场景会拍到空画面")
+				t.Fatal("--capture 必须构造面板状态：options.Dev = false，debug-panel 场景的 Apply 会报「debug-panel 需要面板状态，当前为 nil」")
 			}
 		})
 	}
@@ -679,15 +680,14 @@ func TestRunInjectsAIOnlyIntoOrdinaryLocalGame(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := config.Defaults()
-	// M5B 起非空伙伴必须携带完整模型设置才能通过 config.Load；这里用免密钥的
-	// loopback 形态，保持本测试"伙伴只注入普通本地模式"的主题不变。
 	cfg.AI = &config.AI{
-		ModelSettings: companion.ModelSettings{
-			Endpoint: "http://127.0.0.1:1/v1",
-			Model:    "test-model",
+		AgentService: companion.AgentServiceSettings{
+			Endpoint: "http://127.0.0.1:1", APIKeyEnv: "MORNLEA_TEST_AGENT_KEY",
 		},
-		Companions: []companion.Definition{{ID: id, Name: "阿木"}},
+		TaskTimeoutMinutes: 10,
+		Companions:         []companion.Definition{{ID: id, Name: "阿木"}},
 	}
+	t.Setenv("MORNLEA_TEST_AGENT_KEY", "test-agent-secret")
 	if err := cfg.Save(path); err != nil {
 		t.Fatal(err)
 	}

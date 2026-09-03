@@ -19,8 +19,8 @@ const (
 	// benchmarkMessageDrainMax 是每帧服务端消息 drain 预算，单一取值住在
 	// app 包（`MessageDrainMax`），与 capture 共用同一无头帧节奏契约。
 	benchmarkMessageDrainMax = application.MessageDrainMax
-	// scenarioVersion 是 benchmark producer 的场景身份。v20 → v21 的判定与
-	// v19 → v20、v18 → v19 同源：benchmark 的固定输入（七名远端玩家、零伙伴、
+	// scenarioVersion 是 benchmark producer 的场景身份。v21 → v22 的判定与
+	// v20 → v21、v19 → v20 同源：benchmark 的固定输入（七名远端玩家、零伙伴、
 	// 不注入聊天）与被测世界（不注水、同一 seed、不含农业方块）不变，但自然短
 	// 草又一次改变了**被测进程与被测世界本身**——稳定方块与 mesh registry 追加
 	// `ShortGrassID`（实际烘焙条目 84 → 85，仍低于冻结上限 96），Go/Rust 植物
@@ -29,10 +29,12 @@ const (
 	// 格草地上方空气格确定性新增短草，每个短草格经既有 plant 路径发射 4 条交
 	// 叉斜面实例。
 	//
-	// 分辨率、阶段时长、运动、样本、指标、绝对阈值与 `20%` 相对阈值全部不动；
-	// v20 与 v21 的每帧上传字节数虽未移动，被测 workload 已随短草改变，跨
-	// workload 报告只能经比较器显式 `20:21` 迁移并跳过相对回归判定。
-	scenarioVersion = 21
+	// 本代叠加在 v21（常显 HUD 层整体迁出 GPU 保留面）基线之上：权威侧模拟
+	// 与无头观察路径保持 v21 形态（零 WebView 参与，桥状态不下行），分辨率、
+	// 阶段时长、运动、样本、指标、绝对阈值与 `20%` 相对阈值全部不动；v21 与
+	// v22 的每帧上传字节数虽未随 HUD 迁移移动，被测 workload 已随短草改变，
+	// 跨 workload 报告只能经比较器显式 `21:22` 迁移并跳过相对回归判定。
+	scenarioVersion = 22
 )
 
 var (

@@ -1,0 +1,463 @@
+{
+  "contract": "mornlea-companion-agent-mcp-tools-v1",
+  "cases": [
+    {
+      "name": "runtime snapshot identity is not model-visible input",
+      "schema": "get_planning_context_input",
+      "reason": "runtime_identity_injected",
+      "expected_error": {"path": "$.snapshot_id", "keyword": "additionalProperties"},
+      "value": {"snapshot_id": "77777777-7777-4777-8777-777777777777"}
+    },
+    {
+      "name": "planning context cannot expose persona",
+      "schema": "get_planning_context_result",
+      "reason": "unknown_field",
+      "expected_error": {"path": "$.persona", "keyword": "additionalProperties"},
+      "value": {
+        "snapshot_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "instruction": "向前走",
+        "issuer": {
+          "player_id": "99999999-9999-4999-8999-999999999999",
+          "position": [4.5, 64, -1.5],
+          "yaw": 90,
+          "pitch": 0,
+          "look_hit": null
+        },
+        "companion": {
+          "companion_id": "66666666-6666-4666-8666-666666666666",
+          "position": [5.5, 64, -1.5],
+          "yaw": 0,
+          "pitch": 0,
+          "task_status": "规划中"
+        },
+        "world_time_ticks": 1200,
+        "chunk_revisions": [],
+        "persona": "must-not-enter-planner"
+      }
+    },
+    {
+      "name": "affordance step kinds are fixed and ordered",
+      "schema": "list_affordances_result",
+      "reason": "unfixed_step_set",
+      "expected_error": {"path": "$.step_kinds[1]", "keyword": "const"},
+      "value": {
+        "step_kinds": ["go_to", "mine", "place", "follow"],
+        "online_players": [],
+        "visible_blocks": []
+      }
+    },
+    {
+      "name": "affordance visible summary rejects coordinate disorder",
+      "schema": "list_affordances_result",
+      "reason": "coordinate_order",
+      "expected_error": {"path": "$.visible_blocks[1].position", "keyword": "x-mornlea-rules", "rule": "sorted_positions"},
+      "value": {
+        "step_kinds": ["go_to", "follow", "mine", "place"],
+        "online_players": [],
+        "visible_blocks": [
+          {"position": {"x": 9, "y": 63, "z": -2}, "block_id": 11, "block_name": "chest", "drop_item": "chest", "mine_semantics": "container_batch"},
+          {"position": {"x": 8, "y": 63, "z": -2}, "block_id": 2, "block_name": "stone", "drop_item": "stone", "mine_semantics": "single_drop"}
+        ]
+      }
+    },
+    {
+      "name": "inventory offset is bounded",
+      "schema": "inspect_inventory_input",
+      "reason": "out_of_bounds",
+      "expected_error": {"path": "$.offset", "keyword": "maximum"},
+      "value": {"offset": 36, "limit": 1}
+    },
+    {
+      "name": "inventory limit is bounded",
+      "schema": "inspect_inventory_input",
+      "reason": "out_of_bounds",
+      "expected_error": {"path": "$.limit", "keyword": "maximum"},
+      "value": {"offset": 0, "limit": 37}
+    },
+    {
+      "name": "visible block names must be unique",
+      "schema": "find_visible_blocks_input",
+      "reason": "duplicate_query",
+      "expected_error": {"path": "$.block_names[1]", "keyword": "uniqueItems"},
+      "value": {"block_names": ["chest", "chest"], "limit": 2}
+    },
+    {
+      "name": "visible block query cannot be empty",
+      "schema": "find_visible_blocks_input",
+      "reason": "empty_query",
+      "expected_error": {"path": "$.block_names", "keyword": "minItems"},
+      "value": {"block_names": [], "limit": 1}
+    },
+    {
+      "name": "terrain query cannot be empty",
+      "schema": "query_terrain_input",
+      "reason": "empty_query",
+      "expected_error": {"path": "$.positions", "keyword": "minItems"},
+      "value": {"positions": []}
+    },
+    {
+      "name": "terrain query y is a world block coordinate",
+      "schema": "query_terrain_input",
+      "reason": "out_of_bounds",
+      "expected_error": {"path": "$.positions[0].y", "keyword": "maximum"},
+      "value": {"positions": [{"x": 0, "y": 320, "z": 0}]}
+    },
+    {
+      "name": "plan rejects unknown top-level field",
+      "schema": "validate_plan_input",
+      "reason": "unknown_field",
+      "expected_error": {"path": "$.plan.tool", "keyword": "additionalProperties"},
+      "value": {
+        "plan": {
+          "summary": "向前走",
+          "steps": [{"kind": "go_to", "x": 1, "y": 64, "z": 0}],
+          "tool": "move"
+        }
+      }
+    },
+    {
+      "name": "plan rejects unknown step kind",
+      "schema": "go_to_step",
+      "reason": "undelivered_step",
+      "expected_error": {"path": "$.kind", "keyword": "const"},
+      "value": {"kind": "attack", "x": 1, "y": 64, "z": 0}
+    },
+    {
+      "name": "step rejects explicit null exclusive field",
+      "schema": "follow_step",
+      "reason": "explicit_null",
+      "expected_error": {"path": "$.x", "keyword": "additionalProperties"},
+      "value": {"kind": "follow", "player_id": "99999999-9999-4999-8999-999999999999", "x": null}
+    },
+    {
+      "name": "follow must be the final step",
+      "schema": "validate_plan_input",
+      "reason": "follow_not_last",
+      "expected_error": {"path": "$.plan.steps[0]", "keyword": "x-mornlea-rules", "rule": "follow_must_be_last"},
+      "value": {
+        "plan": {
+          "summary": "先跟随再走动",
+          "steps": [
+            {"kind": "follow", "player_id": "99999999-9999-4999-8999-999999999999"},
+            {"kind": "go_to", "x": 1, "y": 64, "z": 0}
+          ]
+        }
+      }
+    },
+    {
+      "name": "plan steps cannot be empty",
+      "schema": "validate_plan_input",
+      "reason": "empty_plan",
+      "expected_error": {"path": "$.plan.steps", "keyword": "minItems"},
+      "value": {"plan": {"summary": "没有动作", "steps": []}}
+    },
+    {
+      "name": "validator accepted result rejects failure fields",
+      "schema": "validate_plan_success_result",
+      "reason": "exclusive_result_fields",
+      "expected_error": {"path": "$.hint", "keyword": "additionalProperties"},
+      "value": {
+        "accepted": true,
+        "snapshot_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "plan": {"summary": "向前走", "steps": [{"kind": "go_to", "x": 1, "y": 64, "z": 0}]},
+        "hint": "must-not-coexist"
+      }
+    },
+    {
+      "name": "validator failure code is stable",
+      "schema": "validate_plan_failure_result",
+      "reason": "unknown_code",
+      "expected_error": {"path": "$.code", "keyword": "enum"},
+      "value": {"accepted": false, "code": "write_denied", "hint": "unknown validator code"}
+    },
+    {
+      "name": "validator hint is bounded",
+      "schema": "validate_plan_failure_result",
+      "reason": "hint_too_long",
+      "expected_error": {"path": "$.hint", "keyword": "maxLength"},
+      "value": {
+        "accepted": false,
+        "code": "invalid_schema",
+        "hint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "name": "inventory count follows authoritative stack limit",
+      "schema": "inspect_inventory_result",
+      "reason": "stack_count_limit",
+      "expected_error": {"path": "$.slots[0].count", "keyword": "maximum"},
+      "value": {"slots": [{"slot": 0, "item": "stone", "count": 65}]}
+    },
+    {
+      "name": "planning context follows authoritative chunk revision limit",
+      "schema": "get_planning_context_result",
+      "reason": "chunk_revision_limit",
+      "expected_error": {"path": "$.chunk_revisions", "keyword": "maxItems"},
+      "value": {
+        "snapshot_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "instruction": "inspect",
+        "issuer": {
+          "player_id": "99999999-9999-4999-8999-999999999999",
+          "position": [4.5, 64, -1.5],
+          "yaw": 90,
+          "pitch": 0,
+          "look_hit": null
+        },
+        "companion": {
+          "companion_id": "66666666-6666-4666-8666-666666666666",
+          "position": [5.5, 64, -1.5],
+          "yaw": 0,
+          "pitch": 0,
+          "task_status": ""
+        },
+        "world_time_ticks": 1200,
+        "chunk_revisions": [
+          {"x": 0, "z": 0, "revision": 1},
+          {"x": 1, "z": 0, "revision": 2},
+          {"x": 2, "z": 0, "revision": 3},
+          {"x": 3, "z": 0, "revision": 4},
+          {"x": 4, "z": 0, "revision": 5},
+          {"x": 5, "z": 0, "revision": 6},
+          {"x": 6, "z": 0, "revision": 7},
+          {"x": 7, "z": 0, "revision": 8},
+          {"x": 8, "z": 0, "revision": 9},
+          {"x": 9, "z": 0, "revision": 10}
+        ]
+      }
+    },
+    {
+      "name": "visible block result rejects coordinate disorder",
+      "schema": "find_visible_blocks_success_result",
+      "reason": "coordinate_order",
+      "expected_error": {"path": "$.matches[1].position", "keyword": "x-mornlea-rules", "rule": "sorted_positions"},
+      "value": {
+        "matches": [
+          {"position": {"x": 10, "y": 63, "z": -2}, "block_name": "furnace", "drop_item": "furnace"},
+          {"position": {"x": 9, "y": 63, "z": -2}, "block_name": "chest", "drop_item": "chest"}
+        ]
+      }
+    },
+    {
+      "name": "visible block domain failure rejects success fields",
+      "schema": "find_visible_blocks_result",
+      "reason": "mixed_result_fields",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {
+        "code": "unknown_block",
+        "hint": "unknown canonical block name",
+        "matches": []
+      }
+    },
+    {
+      "name": "visible block domain failure rejects wrong code",
+      "schema": "find_visible_blocks_result",
+      "reason": "unknown_code",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"code": "out_of_bounds", "hint": "wrong code for this tool"}
+    },
+    {
+      "name": "visible block domain failure requires hint",
+      "schema": "find_visible_blocks_result",
+      "reason": "missing_field",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"code": "unknown_block"}
+    },
+    {
+      "name": "visible block domain failure rejects unknown field",
+      "schema": "find_visible_blocks_result",
+      "reason": "unknown_field",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"code": "unknown_block", "hint": "unknown name", "retry": false}
+    },
+    {
+      "name": "visible block domain failure rejects null hint",
+      "schema": "find_visible_blocks_result",
+      "reason": "null_hint",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"code": "unknown_block", "hint": null}
+    },
+    {
+      "name": "visible block domain failure rejects non-string hint",
+      "schema": "find_visible_blocks_result",
+      "reason": "hint_type",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"code": "unknown_block", "hint": 1}
+    },
+    {
+      "name": "terrain result must match input positions and order",
+      "schema": "query_terrain_success_result",
+      "reason": "input_position_mismatch",
+      "expected_error": {"path": "$.terrain[0].position", "keyword": "x-mornlea-rules", "rule": "positions_match_context"},
+      "context": {
+        "positions": [
+          {"x": 4, "y": 64, "z": -1},
+          {"x": 8, "y": 64, "z": -2}
+        ]
+      },
+      "value": {
+        "terrain": [
+          {"position": {"x": 8, "y": 64, "z": -2}, "height": 63, "block_name": "air"},
+          {"position": {"x": 4, "y": 64, "z": -1}, "height": 63, "block_name": "air"}
+        ]
+      }
+    },
+    {
+      "name": "terrain domain failure rejects partial success",
+      "schema": "query_terrain_result",
+      "reason": "mixed_result_fields",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {
+        "code": "out_of_bounds",
+        "hint": "position is outside the frozen projection",
+        "terrain": []
+      }
+    },
+    {
+      "name": "terrain domain failure rejects wrong code",
+      "schema": "query_terrain_result",
+      "reason": "unknown_code",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"code": "unknown_block", "hint": "wrong code for this tool"}
+    },
+    {
+      "name": "terrain domain failure requires code",
+      "schema": "query_terrain_result",
+      "reason": "missing_field",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"hint": "position is outside the frozen projection"}
+    },
+    {
+      "name": "terrain domain failure rejects unknown field",
+      "schema": "query_terrain_result",
+      "reason": "unknown_field",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"code": "out_of_bounds", "hint": "outside", "partial": true}
+    },
+    {
+      "name": "terrain success rejects null collection",
+      "schema": "query_terrain_result",
+      "reason": "null_result",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"terrain": null}
+    },
+    {
+      "name": "terrain success rejects non-array collection",
+      "schema": "query_terrain_result",
+      "reason": "result_type",
+      "expected_error": {"path": "$", "keyword": "oneOf"},
+      "value": {"terrain": {}}
+    },
+    {
+      "name": "plan summary uses UTF-8 byte limit",
+      "schema": "plan_summary",
+      "reason": "summary_utf8_bytes",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.max_utf8_bytes"},
+      "value": "界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界"
+    },
+    {
+      "name": "plan summary rejects Unicode control",
+      "schema": "plan_summary",
+      "reason": "summary_control",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.no_unicode_control"},
+      "value": "plan\u0000summary"
+    },
+    {
+      "name": "planning instruction uses UTF-8 byte limit",
+      "schema": "instruction_text",
+      "reason": "instruction_utf8_bytes",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.max_utf8_bytes"},
+      "value": "界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界"
+    },
+    {
+      "name": "task status uses UTF-8 byte limit",
+      "schema": "task_status_text",
+      "reason": "task_status_utf8_bytes",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.max_utf8_bytes"},
+      "value": "界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界"
+    },
+    {
+      "name": "bounded tool name uses UTF-8 byte limit",
+      "schema": "bounded_name",
+      "reason": "name_utf8_bytes",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.max_utf8_bytes"},
+      "value": "界界界界界界界界界界界界界界界界界界界界界界"
+    },
+    {
+      "name": "bounded tool name rejects empty string",
+      "schema": "bounded_name",
+      "reason": "name_too_short",
+      "expected_error": {"path": "$", "keyword": "minLength"},
+      "value": ""
+    },
+    {
+      "name": "bounded tool name rejects blank Unicode whitespace",
+      "schema": "bounded_name",
+      "reason": "name_blank",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.non_blank"},
+      "value": "　"
+    },
+    {
+      "name": "bounded tool name rejects Unicode control",
+      "schema": "bounded_name",
+      "reason": "name_control",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.no_unicode_control"},
+      "value": "invalid\u0001name"
+    },
+    {
+      "name": "bounded tool name rejects escaped NUL",
+      "schema": "bounded_name",
+      "reason": "name_nul",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.no_unicode_control"},
+      "value": "invalid\u0000name"
+    },
+    {
+      "name": "bounded tool name rejects invalid UTF-8 bytes",
+      "schema": "bounded_name",
+      "reason": "name_invalid_utf8",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.valid_utf8"},
+      "value_utf8_hex": "ff"
+    },
+    {
+      "name": "validator hint uses UTF-8 byte limit",
+      "schema": "validator_hint",
+      "reason": "hint_utf8_bytes",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.max_utf8_bytes"},
+      "value": "界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界aa"
+    },
+    {
+      "name": "validator hint rejects empty string",
+      "schema": "validator_hint",
+      "reason": "hint_too_short",
+      "expected_error": {"path": "$", "keyword": "minLength"},
+      "value": ""
+    },
+    {
+      "name": "validator hint rejects Unicode control",
+      "schema": "validator_hint",
+      "reason": "hint_control",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.no_unicode_control"},
+      "value": "invalid\u0001hint"
+    },
+    {
+      "name": "validator hint rejects NUL",
+      "schema": "validator_hint",
+      "reason": "hint_nul",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.no_nul"},
+      "value": "invalid\u0000hint"
+    },
+    {
+      "name": "validator hint rejects edge whitespace",
+      "schema": "validator_hint",
+      "reason": "hint_edge_whitespace",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.no_edge_unicode_whitespace"},
+      "value": " leading"
+    },
+    {
+      "name": "validator hint rejects invalid UTF-8 bytes",
+      "schema": "validator_hint",
+      "reason": "hint_invalid_utf8",
+      "expected_error": {"path": "$", "keyword": "x-mornlea-rules", "rule": "text.valid_utf8"},
+      "value_utf8_hex": "ff"
+    }
+  ]
+}

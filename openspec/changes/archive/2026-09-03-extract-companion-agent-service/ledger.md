@@ -1,0 +1,388 @@
+# extract-companion-agent-service ledger
+
+## 基线与规则
+
+- Change：`extract-companion-agent-service`；认领基线 `8b8891a3`。
+- 执行模型：每个 Task 使用 fresh implementer；每项完成后由独立 SPEC reviewer 与 QUALITY reviewer 双裁决；控制会话不直接实现生产代码。
+- 修复循环：单任务最多 5 轮；未通过双评审不得勾选 `tasks.md`。
+- 验证复用：只有相同基线 SHA、命令与范围的完整输出可复用；所有结果记录实际 exit code，不把未完成命令写成通过。
+- 当前版本事实：protocol v32、player v8、chunk v9、metadata v3、companions v5、hostile v1、engine ABI v9、client ABI v13、scenario v20（认领时基线；main 同步后 client ABI v14、scenario v21，见「main 同步」节）。
+- 计划目标：仅 companions 升 v5；Agent HTTP application contract v1；MCP tool contract v1；MCP wire `2025-11-25`。
+- Ruling: 以执行时 `main` 的 engine ABI v9/client ABI v13 为不变基线，本 change 不认领 native ABI 升版 — 代码与用户更新的项目指南高于旧规划中的 v8/v11/v12 文档事实 — 若裁决错误，成本是收尾版本文档与钉死测试需重做，不改变 Agent HTTP/MCP 合同。
+- Ruling: Task 6 只移除 Go config 的 provider/direct-model 生产语义并新增强类型 Agent HTTP client；现有 Planner/Dialogue direct-model 实现保留为未接线的编译过渡，由 Task 9/10 在权威编排切换时删除 — 这避免 Task 6 提前改变运行路径，也不引入 fallback、隐式映射或 backend 开关 — 若裁决错误，成本是 Task 9/10 的删除面扩大，不影响 Task 6 合同。
+
+## 规划裁决
+
+- Python Planner graph 不配置持久 checkpointer；Dialogue 仅 transient graph state；SQLite 只保存 compact MemoryState/CAS、lease 与 tombstone 元数据。
+- MCP 外层 raw envelope 在 Go SDK 前拒绝 batch/GET/ping/subscription/其他方法；显式 capabilities 只有 Tools 且 `listChanged=false`。
+- 当前共同 MCP wire 下跨语言 request cancellation 不可靠；snapshot registry 用自己的 deadline/cancel/TTL 收口，并由真实跨语言测试覆盖。
+- accepted Dialogue reservation 通过首次 tick 重验后不再由后续 generation 变化撤销；commit 只按 operation/epoch 关联。
+- Go 是 task/world/lifecycle/epoch 权威，Python 是运行期 compact memory 权威；没有 direct-model fallback、remote MCP 或 Docker。
+- Task 7 terrain ruling：以 `floor(companion.Position)` 为中心冻结固定 33×17×33（水平 ±16/垂直 ±8）dense projection；ready bitmap、1,089 个 height 与 18,513 个 `BlockID` 的 data plane 每份 ≤40 KiB、四槽 ≤160 KiB。tick 先以最多 18,513 次 world `blockAt` 完整填充 primary projection，再从 cache 派生 exposed 且零追加 world read；world-valid 投影外/未 ready 邻居为 unknown/non-air，world 垂直边界外为空气。`query_terrain` 与 mine 直接读 projection、不依赖 `ExposedBlocks<=256`，因此 Chest/Furnace 继续接受、农业/火把/无掉落/未交付多掉落继续拒绝；规划 ±8 与寻路 ±4 解耦。
+- Task 7 domain-result ruling：`3a713a78` 独立评审发现 find/query stable code 没有 machine-readable wire。Task 7 在 Go MCP 前先以 TDD 修订 MCP v1 manifest/schema/golden 与 Python domain/adapter/Planner：每工具列 `domain_result_codes`，find/query 保持 success object 并新增 strict failure `oneOf`，精确 normal result 分别为 `{code:"unknown_block",hint}` 与 `{code:"out_of_bounds",hint}`、strict UTF-8 hint ≤256 bytes、无部分结果、`isError=false`；Python 把它作为普通 tool message，`isError=true`/transport/protocol/schema 仍 unavailable/`PlannerUnavailable`。这是 active change 内的 contract amendment，不改变 HTTP v1、MCP v1 标识、游戏 wire、存档或 ABI；Task 1/4 历史完成证据保留，但 Task 7 prerequisite 必须重跑相关 Python gates。
+- Task 7 naming ruling：`internal/core` 作为 `BlockID`/`ItemID` 所有者新增 canonical English `snake_case` registry；名称分别在 BlockID 域和 ItemID 域内唯一，完整方块 item 与 block 跨域同名是预期。UI 中文 display name 不复用，Planner place 白名单只保留语义 ID 集并从 core 派生拼写；未知 ID/name fail closed，不生成数值/中文 fallback。
+- Task 7 digest/cancellation ruling：terrain digest DTO 固定 BE/Base64 planes、bitmap 末 7 个 unused bits 为零、terrain <53 KiB、完整 digest input ≤96 KiB，且不重复编码 legacy `PlanSnapshot.Heights`。registry 删除阻止新 lookup 并 signal cancellation，`Close`/TTL 不等待 handler；已取得 immutable view 的一次有界读取可在尚未观察 cancellation 时完成，但入口/循环/编码前后/response commit 一旦观察就丢弃全部结果且不返回成功。
+- Task 8 wire ruling：v5 保持 32-byte envelope；payload 是 namespace[16] 加按 `CompanionID` 排序的 record，record 固定 body[221]+flags(active/task/FIFO 为 bit0/1/2)+epoch u64，active 总带 revision/operation/summary-length+bytes 后接 task/FIFO，inactive只带 tombstone且 flags=0。合法可达上限固定 `MaxFileLength=393,904`；v1..v4 只读，encoder只写v5。若裁决错误，成本是 v5 golden/codec/磁盘上限与迁移重做，不影响游戏 wire 或 ABI。
+- Task 8 migration ruling：legacy 是隐式 epoch0并统一落epoch1；v4 active 非空 summary 迁为 rev1+fresh operation，active 空 summary 使用 canonical-zero且不存在第二个 active migration operation，inactive使用 fresh tombstone。entropy 顺序固定为缺失 namespace 首先一个 UUID，随后按 `CompanionID` 升序只为每个需要的 nonzero mirror operation或tombstone各一个，canonical-zero active与unchanged v5零消费。新 ID 先以 metadata `SpawnDimension`、`SpawnAnchor*16+0.5`、`core.MaxY+1`、零朝向/空背包 provisional body 同步原子写v5，entropy/Save失败则 persistence/world/Agent/MCP均不构造；模拟 ready 后 Observe 覆盖位置。
+- Task 8 staging ruling：Task 8 persistence只 deep-clone/carry-through namespace/lifecycle/mirror/tombstone并checked推进aggregate revision；body/task autosave绝不从旧direct Dialogue裸 Summary改写mirror，也不实现Agent memory mutation。Task 9 Planner不改memory；Task 10删除/替换裸写路径，只在Agent commit/reconcile成功结果回tick且通过epoch与该状态适用的replay identity关联后整体更新mirror并mark dirty。
+- Task 8/10 active-zero reconcile ruling：higher `memory_epoch` 本身 fence 全部旧 epoch；active canonical-zero不新增HTTP/v5字段也不伪造operation，精确 replay key 是 `{namespace,companion,epoch,active,canonical-zero}`。active nonzero使用mirror operation，inactive使用tombstone operation；Agent离线跨 active N→inactive N+1→active zero N+2 后可只reconcile N+2并拒绝迟到N，Task 10必须先写该RED。
+- Task 8 empty-config/atomic ruling：`WorldStore`必须提供Memory/Disk同语义的metadata-only existence probe；missing+empty只probe且0 Load/Save/create，existing+empty才Load并迁移/退休，already all-inactive v5不推进revision/epoch/tombstone且0 Save。只有pre-rename失败保证旧正式v4字节不变；parent-directory sync在rename后失败仍令启动失败但official path只能是完整可decode v5，不能要求旧v4保持；overflow返回`ErrCorrupt`语义且在entropy/mutation/Save之前失败。
+
+## 任务记录
+
+| Task | Implementer | 起始 SHA | RED/GREEN 与提交 | SPEC 评审 | QUALITY 评审 | 裁决 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | `task1_contracts_impl` | `af57e420` | RED：缺少 HTTP schema；复审 RED：UTF-8 byte/权威常量、非确定 `oneOf` 与未支持 keyword；GREEN：focused `-count=100`、companion race、diff-check；提交 `36eed9d9`、`7d019d1c`、`a1640211` | `task1_spec_review` round 3 PASS | `task1_quality_review` round 3 PASS | Accepted |
+| 2 | `task2_python_scaffold_impl` | `5d368f8c` | RED：package 缺失；复审 RED：exact const、URL/secret/path、golden path 与 import boundary；GREEN：locked sync、ruff/format、mypy、focused 两轮各 199 passed、diff-check；提交 `91bca693`、`665d609a`、`40c57fce` | `task2_spec_review` round 3 PASS | `task2_quality_review` round 3 PASS | Accepted |
+| 3 | `task3_memory_impl` | `ea82d028` | RED：缺少 memory module；复审 RED：operation 复用、lease/SQLite 取消窗口、损坏库修补、重复 cancel 与 receipt 篡改；GREEN：focused 61 passed、full 260 passed、locked sync/ruff/mypy/diff-check；提交 `dcb99bc6`、`225fdb09`、`f68a6eca`、`7a1af977` | `memory_design_audit` round 4 PASS | `openspec_artifacts` round 4 PASS | Accepted |
+| 4 | `openspec_artifacts` | `69f6e6ec` | RED：缺少 Planner/adapters；复审 RED：schema 漂移、transport/envelope 上限、validator wrapper 与 JSON 类型混淆；GREEN：focused 77 passed、full 337 passed、import boundary 48 passed、locked sync/ruff/mypy/wheel/diff-check；提交 `06473b29`、`e4b5dc8f`、`0e773804` | `task4_graph_spec_audit` round 3 PASS | `task4_quality_review` round 3 PASS | Accepted |
+| 5 | `task5_http_research`、`task5_startup_cancel_fix` | `f4009ec0` | RED：缺少 Dialogue/FastAPI；复审 RED：HTTP disconnect、重复取消、响应 fence、关闭与 startup 所有权；GREEN：focused `56 passed`、full Python `393 passed`、import boundary `48 passed`、locked/ruff/mypy/diff-check；提交 `fb569bdd`、`ff7b5be9`、`962e361e`、`2d9042bf` | `task4_fix_quality` round 4 PASS | `task5_quality_review` round 4 PASS | Accepted |
+| 6 | `task6_go_agent_client`、`task6_strict_lifecycle_fix` | `c871b1ec` | RED：配置/client 缺失，Round 1/2 复审继续拒绝 codec、manifest、边界与生命周期缺口；GREEN：隔离 focused race 两遍、config/companion full race、vet、archcheck、gofmt/diff-check；提交 `0fd248d1`、`f56b42bf`、`5ee80a7c`、`6b1deb59`、`f7585788`、`0ea46c31` | `task6_spec_review` round 1/2 FAIL，round 3 PASS | `task6_quality_review` round 1/2 FAIL，round 3 PASS | Accepted |
+| 7 | `task7_contract_prereq`（Task 7A）、`task7_mcp_main`（Task 7B） | `148b935c`、`22991a82` | Task 7A 提交 `5812be64`、repair `038c4b86`；Task 7B initial `b00481e0`、repair 1 `79b5965f`、repair 2 `92f80e4f` | Task 7A 初次/repair PASS；Task 7B formal round 1 FAIL、repair 1 scoped FAIL、repair 2 final PASS | Task 7A 初次 FAIL/repair PASS；Task 7B formal round 1 FAIL、repair 1 scoped PASS、repair 2 final PASS | Accepted |
+| 8 | `task8_storage_v5` | `148b935c` | codec/merge/probe/bootstrap/carry RED→GREEN；提交 `11f897c7`、repair `660c02a1`、memory reuse repair `0dc592c8` | 初次独立 PASS；两轮 repair scoped PASS | 初次独立 FAIL；repair 1 scoped PASS；repair 2 scoped PASS | Accepted |
+| 9 | `task9_planner_cutover` | `6c5c4011` | Agent Planner cutover RED→GREEN；提交 `84c03161`、repair `edfb1574`、`b2c75a6c` | initial FAIL、repair 1 FAIL、repair 2 PASS | initial FAIL、repair 1 PASS、repair 2 PASS | Accepted |
+| 10 | `task10_dialogue_memory` | `012a4b86` | Dialogue/memory/shutdown RED→GREEN；提交 `1f6006f6`、repair `6ef874b1`、`7283b746`、`c2cebeb9`、`6bdf2b7e` | initial FAIL、repair 1–4 后 PASS | initial FAIL、repair 1 FAIL、repair 2–4 后 PASS | Accepted |
+| 11 | `task11_cross_language` | `e1bf9e52` | 真实 MCP/HTTP 进程合同 RED→GREEN；提交 `efa85718`、`a6b4d059`、`3635b6a1`、`356fe396`、`41add71e`、证据 `2f6ab0ba` | PASS | PASS | Accepted |
+| 12 | `task12_ci_docs_gates` | `9423f067` | archcheck/Make/CI/version RED→GREEN；提交 `9dfdbc69`、`49fbc7f9`、证据 `ee642a05`；首轮 full race FAIL 后由 `3394fc19` 修复并以 `c094441d` 记录证据；Repair 1 `3ce58189`、证据 `8dac0e4c`；Repair 2 `72ef5580`、证据 `5ba294f5`，mandatory full gates PASS | Round 1 FAIL；Repair 1 scoped FAIL；Repair 2 final PASS | Round 1 FAIL；Repair 1 scoped FAIL；Repair 2 final PASS | Accepted |
+
+### Task 1 评审修复记录
+
+- Round 1：两路评审拒绝 code-point 代替 UTF-8 byte、未约束 Dialogue 终态矩阵、任意 MCP callback URL、未机器化工具排序/位置对应，以及未交叉校验权威容量常量的初版契约。
+- Round 2：原规格缺口关闭；两路评审共同拒绝依赖 Go map 顺序选择 `oneOf` 子错误，QUALITY 另要求未知标准 JSON Schema validation keyword 硬失败。
+- Round 3：SPEC 与 QUALITY 均 PASS；`oneOf` 使用稳定父级错误，关键叶级规则由 direct fixtures 校验，schema keyword allowlist/audit、私有扩展硬失败与 100 次 focused 重复测试通过。
+- 控制会话复验：`go test ./internal/companion -run 'ContractFixture' -count=100` exit 0；工作树在 ledger 更新前 clean。
+
+### Task 2 评审修复记录
+
+- Round 1：SPEC 与 QUALITY 拒绝 Pydantic `Literal` 的 bool/number 交叉强转；QUALITY 另拒绝任意 invalid error、非 ASCII header secret、不完整 provider authority/IDNA、SQLite symlink 裸异常及可绕过的 import boundary。
+- Round 2：exact const、golden path、secret 与 SQLite value 修复通过；两路评审继续拒绝配置文件路径裸异常、手写 IDNA 与 httpx 双向漂移，以及未按 future layer 收口的动态 import/external dependency 门禁。
+- Round 3：SPEC 与 QUALITY 均 PASS；配置 path 全收口，直接 `idna` 依赖与 httpx 兼容，CLI/app 是唯一 dynamic seam，harness/adapters/storage 采用集中 fail-closed allowlist 且 Task 3/4 合法依赖 probes 通过。
+- 控制会话复验：`uv sync --locked`、ruff format/check、mypy exit 0；focused pytest 连续两轮均 199 passed；`git diff --check` exit 0。
+
+### Task 3 评审修复记录
+
+- Round 1：SPEC 与 QUALITY 拒绝仅保留最近 commit receipt、DB fence 已提交后取消旧 run 的窗口、aiosqlite 迟到 `BEGIN IMMEDIATE`、已有库 `CREATE IF NOT EXISTS` 修补损坏以及 close 失败后不可重试。修复引入不含历史摘要正文的 immutable SHA-256 operation receipts、cancellation-safe drain 和 fail-closed canonical schema v1。
+- Round 2：SPEC PASS；QUALITY 拒绝重复 `task.cancel()` 打断 runner 异步清理，以及 readiness 未核对当前 active/tombstone receipt。修复后 cancel 仅在 false→true 边沿触发，当前 receipt 缺失或状态篡改硬失败。
+- Round 3：SPEC PASS；QUALITY 拒绝 current commit `payload_fingerprint` 无法从持久元数据重算。修复持久 canonical `commit_lease_id`，按 lease/epoch/base/current summary 重算 payload，并用 nullable FK 关联永久 lease history，不保存历史 summary。
+- Round 4：SPEC 与 QUALITY 均 PASS；合法 lease rotation/reopen、旧 operation exact replay、active-mirror/tombstone/zero control、transaction double-cancel、run cleanup、schema/FK 与 close retry 对抗探针通过。
+- 控制会话复验：原 lease cancellation 窗口探针已关闭；Task 3 focused `61 passed`；工作树在 ledger 更新前 clean。
+
+### Task 4 评审修复记录
+
+- Round 1：SPEC 拒绝模型工具与 MCP discovery 未精确使用 checked-in schema、`validate_plan` 绕过 wrapper 上限；QUALITY 拒绝 MCP/provider 在 SDK 缓冲前无正文硬上限，以及完整 `PlanResponse` 可超过 HTTP 64 KiB。修复增加 wheel 内置 contract、type-safe schema pin、MCP 160 KiB/provider 1 MiB bounded transport、validator wrapper 与完整 response envelope 检查。
+- Round 2：原 transport、wrapper、envelope 与 schema 漂移缺口关闭；SPEC 继续拒绝 Python dict equality 把 JSON `true`/`1` 和 `1.0`/`1` 视为相等。修复改用 canonical JSON bytes 做 schema 类型精确比较并 fail closed。
+- Round 3：SPEC 与 QUALITY 均 PASS；bool/int、int/float、序列化失败、Content-Length/chunked/content-encoding、取消与 close、wheel 脱离源码导入、单 session/no retry、fresh graph/no checkpoint 对抗测试通过。
+- 控制会话复验：Task 4 focused `77 passed`；完整 Python `337 passed`；工作树在 ledger 更新前 clean。
+
+### Task 5 评审修复记录
+
+- Round 1：SPEC 拒绝 body 读完后不再监听 ASGI `http.disconnect`；QUALITY 另拒绝重复 cancellation 泄漏 `RunGate`、model close 失败跳过 SQLite、response start 后双发、h11 header 边界及 lifespan credential 强引用。修复增加 run 期 disconnect watcher、response-start fence、cancellation-safe 槽位/关闭 pipeline、h11 余量与 one-shot secret bootstrap。
+- Round 2：SPEC 未发现新违例；QUALITY 拒绝 component factory 成功后、移交 runtime 前取消会泄漏 model/SQLite。修复建立 factory 结果的临时所有权，成功 `runtime.start` 后才原子移交。
+- Round 3：SPEC 与 QUALITY 共同拒绝用 `_drain_cleanup` shield 整个 bootstrap；阻塞 factory 在外部取消后不收到 `CancelledError`，使 startup/关服可无界等待。修复改为主动取消 owned bootstrap task，再 cancellation-safe drain 其资源清理。
+- Round 4：SPEC 与 QUALITY 均 PASS；阻塞 factory 单次/重复取消、慢清理、close 异常、完成/取消同 tick 竞态、disconnect、lease/correlation、no checkpoint 与 terminal no-precommit 对抗通过；32 次重复取消与 200 次所有权竞态无死锁、泄漏或双关。
+- 控制会话复验：Task 5 focused `56 passed`；完整 Python `393 passed`；asyncio debug + warnings-as-errors HTTP `36 passed`；工作树在 ledger 更新前 clean。
+
+### Task 6 评审修复记录
+
+- Round 1：SPEC 与 QUALITY 均 FAIL；评审拒绝未由 checked-in contract 驱动的 codec、`json.RawMessage`/非强类型 variant、request/response strictness、route/status/error/correlation 漏项、context 生命周期泄漏、transport/secret 所有权与非确定 config parsing。修复逐步落在 `5ee80a7c` 与 `6b1deb59`，但尚未达到接受条件。
+- Round 2：SPEC 与 QUALITY 均 FAIL；`f7585788` 虽关闭 11-route/14-variant/59-error/79-correlation manifest matrix，独立复审仍拒绝 non-nullable explicit `null`、未按 Python scope 统计的真实 outbound header、重复 response Content-Type、body-read cancellation 与 `Close` admission 竞态、解引用 client 的 secret 表示、显式非法 port，以及缺少 production request-cap 证据。
+- Round 3：`0ea46c31` 以 closed DTO null allowlist、真实 16 KiB wire-header gate、唯一 Content-Type、同步 closed/admission 与 active cancel registry、安全 formatter/log value、端口范围和 public typed request preflight 闭环上述问题；独立 SPEC 与 QUALITY 均 PASS，裁决 Accepted。
+- 隔离验证：只将 Task 6 文件的 staged binary diff 应用到 detached `148b935c` 临时 worktree；首次 Go 链接只因 clean worktree 缺少 `libmornlea_engine` 失败，随后按仓库规则运行 `make rust` PASS，并从头执行 `go test ./internal/config ./internal/companion -run 'Agent|AIConfig|Contract' -race -count=1 -timeout=120s` 连续两遍 PASS、`go test ./internal/config -race -count=1 -timeout=120s` PASS、`go test ./internal/companion -race -count=1 -timeout=120s` PASS、`go vet ./internal/config ./internal/companion` PASS、`go test ./internal/archcheck -count=1 -timeout=120s` PASS；Task 6 文件 `gofmt -l` 无输出，`git diff --check` PASS，且删除临时 worktree 前无残留 `go test` 进程。
+- 裁决边界：共享 worktree 当时由 Task 7A machine-contract fixtures 与 Task 8 storage v5 的并发预期 RED 阻断；这些文件未被修改或暂存，也未纳入 Task 6 的通过证据或裁决。
+
+### Task 7A machine-contract 前置实施与评审记录
+
+- 起始工作基线为 `148b935c`；Task 6 独立提交整合后，Task 7A 以 `5812be64` 交付 MCP v1 `domain_result_codes`、find/query strict success/failure `oneOf`、合法/非法 golden、Go fixture consistency、Python closed union 与 normal domain-result Planner 路径。该提交不实现 Go canonical registry、frozen projection、snapshot registry 或 MCP runtime。
+- 初次独立裁决为 SPEC PASS、QUALITY FAIL。QUALITY 发现 discovery 的 `output_schema` 漂移仍访问旧的顶层 `outputSchema.properties`；实际 callback `KeyError` 被 adapter 统一映射成预期 `PlannerUnavailable`，而参数矩阵又没有 mutation-completion sentinel，导致 mock crash 可伪装为 schema rejection。QUALITY 同时拒绝 `domain.common` 的宽松公开 `ValidatorHint` 与 `domain.mcp_v1` 的严格同名定义并存。
+- repair `038c4b86` 先用 delivered-response sentinel 复现 `output_schema` 单例失败（`1 failed, 7 passed`），再改为 `outputSchema.oneOf[0].properties.terrain.maxItems` 并断言 SDK 发出恰好一次 `tools/list`、收到的 payload 确实携带 mutation；同文件其余 transport fault injection 也补充 intended-response/invocation sentinel，避免内部异常被 `PlannerUnavailable` 掩盖。另以 runtime identity RED 证明两份 `ValidatorHint` 分叉，再把唯一严格定义收敛到 `domain.common`（strict string、UTF-8 1..256 bytes、无 NUL/control/edge whitespace），由 MCP v1 直接复用。
+- repair 后独立 SPEC 与 QUALITY 均 PASS，Task 7A 裁决 Accepted；Task 7 的 checkbox 仍保持未勾选，下一阶段 Task 7B 才实现 Go canonical registry、frozen projection/snapshot registry 与 MCP v1 runtime。
+- 初次验证：`go test ./internal/companion -run 'ContractFixture' -count=1` PASS；`cd services/companion-agent && uv run pytest tests/test_contracts.py tests/test_mcp_adapter.py tests/test_planner.py -q` 为 `118 passed`；`uv run ruff format --check . && uv run ruff check . && uv run mypy src` PASS；完整 `uv run pytest -q` 为 `401 passed`；`git diff --check` PASS。
+- repair 验证：相同 Go fixture command PASS；相同 focused Python command 为 `119 passed`；ruff format/check 与 mypy PASS；完整 Python 从 `401` 增至 `402 passed`；`git diff --check` PASS。Task 8 的并发 `internal/server`/`internal/storage` 工作树改动未被修改、暂存或纳入本裁决。
+- ledger 收尾验证：`openspec validate --all --strict --no-interactive` 为 `80 passed, 0 failed`；`git diff --check` PASS。
+
+### Task 7 实施前设计裁决
+
+- 预检基线 `f56b42bf` 证实现有 1,089 条 height + `ExposedBlocks<=256` 不能回答任意 `query_terrain` 体素，也会让未进入 exposed cap 的 mine 目标跳过方块语义；禁止由 MCP handler 回读 live world 填洞。
+- 原规划 commit `3a713a78` 的独立 review 判 FAIL（2 Important + 3 Minor）：缺少 non-validator domain failure 的 strict machine wire；exposed 派生可能在 18,513 次主采样外回读 world；terrain exact wire/digest 边界、名称跨域唯一性和可实现的 cancellation 语义不完整。该 review 触发本轮 contract amendment，不能继续声称 Task 1 fixture 无需修改。
+- 本轮 repair 基于 feature HEAD `9d7b5685`，保留其 Task 8 裁决且未查看/吸收 `main`；本提交只修订 OpenSpec planning artifacts，不提前修改 machine contract 或生产/测试代码，实际 contract/Python amendment 是 Task 7 的首个 RED/GREEN prerequisite。
+- proposal/design、`companion-agent-mcp-tools` 与 `companion-planner` delta spec、Task 7 文案已同步：manifest 每工具 `domain_result_codes`、find/query strict success/failure `oneOf` 与 Python normal tool-message 路径；fixed dense projection、完整垂直 ±8、ready/missing、全有或全无 terrain、最多 18,513 world read 后纯 cache exposed、精确 mine validator；BE/Base64/unused bits/exact deterministic digest/53 KiB 与 96 KiB RED；分别在 BlockID/ItemID 域内唯一的 core canonical name；以及 registry-owned cancellation 的 bounded in-flight 语义。Task 7 保持未勾选，Task 1/4 历史完成记录不回写，但 Task 7 首先修订 machine contract/Python tests/types并重验相关 focused gates。
+- 版本矩阵保持 protocol v32、player v8、chunk v9、metadata v3、companions v4→v5、hostile v1、engine ABI v9、client ABI v13、scenario v20；MCP application contract 仍为 v1，该裁决不触发游戏 wire、存档或 ABI 升版。
+- 规划产物验证：`openspec validate --all --strict --no-interactive` exit 0，80 passed/0 failed；`git diff --check` exit 0。
+
+### Task 8 实施前设计裁决
+
+- 预检基线 `3a713a78` 证实现有 v4 隐式 active/summary 值模型、`WorldStore` 无 existence probe、启动晚于模拟出生才能取得新 body，以及 persistence 直接 `revision+1`/裸 Summary 写回，无法独立满足 v5 identity-first、canonical-zero 与无损 autosave。
+- 原规划 commit `9d7b5685` 的独立 review 判 FAIL（1 Critical、2 Important、1 Minor）：active canonical-zero reconcile要求不存在的transition operation；I/O failure scenario把post-rename parent sync也错误要求旧v4不变；Task 8 server regex漏掉两个受v5/staging影响的既有测试；entropy顺序不足以写精确原子RED。
+- proposal/design、`companion-persistence`、`companion-agent-memory`、`companion-identity-configuration` delta spec 与 Task 8 文案已同步 32-byte envelope、393,904-byte 精确上限、legacy epoch/operation、provisional body、mandatory metadata-only probe、persistence carry-through 及 Task 8→10 staging；Task 8 保持未勾选，未修改 Task 1 contracts。
+- 本轮 repair 基于 feature HEAD `1cdfba94`，proposal 的目标/范围无变化故保持原文；design、`companion-agent-memory`、`companion-persistence`、Task 8/10 与本 ledger 同步 higher-epoch active-zero fence/replay、pre/post-rename原子语义、完整server gate和精确entropy顺序。Task 8保持未勾选，不修改v5或HTTP layout。
+- 版本矩阵保持 protocol v32、player v8、chunk v9、metadata v3、companions v4→v5、hostile v1、engine ABI v9、client ABI v13、scenario v20；本裁决不查看或吸收后续 `main` 前进，不触发游戏 wire 或 ABI 升版。
+- 规划产物验证：`openspec validate --all --strict --no-interactive` exit 0，80 passed/0 failed；`git diff --check -- openspec/changes/extract-companion-agent-service` exit 0。
+
+### Task 8 实施、修复与评审记录
+
+- `task8_storage_v5` 从 `148b935c` 开始，以 `11f897c7` 交付 schema v5 strict
+  codec/merge、v1..v4 decode-only、committed v5 golden/fuzz、Memory/Disk
+  metadata-only probe、原子替换、persistence metadata carry-through，以及
+  identity-first synchronous bootstrap；未实现 Task 9/10 的 lease、MCP、Planner/
+  Dialogue cutover 或 Agent memory mutation。
+- 初次实现保留旧 v1..v4 fixture 字节与 digest，新
+  `testdata/companions-v5.bin` 为 1,252 bytes、SHA-256
+  `9f267e9d1fbcb7f4a83d38c699595d1d5ab4c02d13cab54cc0db8d7b16c89391`。
+  完整 focused GREEN 包含 storage/companion race、root storage Companion race、
+  persistence Companion race、完整 server race、两个受 staging 影响的指定 server
+  tests、archcheck、full affected vet 与 diff-check；完整 server gate 确实执行
+  `TestM5StageAcceptancePersonaDialogueEndToEnd` 和
+  `TestCompanionDialogueSummaryLifecycle`。
+- 对 `11f897c7` 的初次独立 SPEC 评审为 PASS；初次独立 QUALITY 评审为 FAIL，
+  发现三项：`companion_restore_test.go` 用 current v5 `Encode` 却沿用 legacy v3
+  offsets，reserved flags 未跨 namespace 且 kind/follow/deadline 未跨 lifecycle/
+  mirror，形成假绿；最近 `internal/storage/companion/AGENTS.md` 仍把 v4 写成
+  current 且缺少 v5 identity/lifecycle/mirror/tombstone 与现存 strict/golden
+  事实；Memory `LoadCompanions`/`SaveCompanions` 在 `Close` 后未与 probe/Disk
+  一致返回 `os.ErrClosed`，root contract 又跳过 Memory。
+- repair `660c02a1` 以真实 RED 证明错误基线为 schema 5、旧 flags offset 读到
+  `0x0` 而非 `0x7`、Memory close 返回 not-found 而非 closed；随后让 legacy v3
+  直接读取 committed v3 fixture，current v5 offset 完整跨过 namespace、flags、
+  epoch、revision、operation 与 summary prefix/bytes，并在每次 patch 前断言原
+  字段。repair 同步最近 AGENTS，且只让 companion probe/Load/Save 统一 Memory
+  Close 语义，不扩改其他既有 Memory API。
+- repair staged binary diff 单独应用到 detached `11f897c7` 临时 worktree；首次
+  clean checkout 链接仅因缺少未跟踪 Rust artifact 失败并清理，随后按指南先跑
+  `make rust` PASS，再从头通过 `go test ./internal/storage/companion -race -count=1`
+  （package 2.297s）、`go test ./internal/storage -run 'Companion' -race -count=1`
+  （package 1.881s）、`go test ./internal/archcheck -count=1`（package 5.613s）、
+  full affected `go vet` 与 `git diff --check`；临时 worktree 已清理。
+- `11f897c7` + `660c02a1` 的最终独立 scoped SPEC 与 QUALITY 评审均 PASS，Task 8
+  裁决 Accepted。Task 7 checkbox 保持未勾选，下一实施阶段仍是 Task 7B；不得
+  因 Task 8 完成而提前进入 Task 9。
+- Task 8 收尾后 change 进度为 7/12；
+  `openspec validate --all --strict --no-interactive` 为 80 passed/0 failed，
+  `git diff --check -- openspec/changes/extract-companion-agent-service/{tasks.md,ledger.md}`
+  PASS。
+- 收尾后的完整 server race 在 `136efc0c` 基线上暴露 repair 1 回归：
+  `TestNewHostRetiresExistingCompanionsWhenConfigEmpty`、
+  `TestNewHostDoesNotRepeatInactiveRetirement` 与
+  `TestCompanionDialogueSummaryLifecycle` 均因 `file already closed` 失败。clean
+  detached 复现证明三条用例都刻意在 `Host.Shutdown` 后检查同一个
+  MemoryStore，其中 dialogue lifecycle 还会用同一 store 启动第二个 Host，
+  以验证真实落库与跨重启恢复；不能通过改写测试/helper 绕过该断言。
+- 契约裁决：repair 1 要求 Memory companion Load/Save 在 Close 后与 Disk 一致
+  返回 `os.ErrClosed` 的原 QUALITY Minor 与既有 Memory post-Close 可观测、可复用
+  语义冲突，因此有意识地撤回该 Minor。Disk Load/Save 的 closed 拒绝与 Memory/
+  Disk `CompanionsExist` probe 的 `os.ErrClosed` 语义保持不变；repair 1 对 committed
+  v3 fixture、完整 v5 offsets/patch 前断言及最近 AGENTS 的 Important 修复全部保留。
+- repair 2 `0dc592c8` 只移除 Memory companion Load/Save 的 closed 拒绝，并在根
+  store contract 正向证明 Memory 连续 Close 后仍可 Save+Load、Disk 继续拒绝；
+  最近 companion AGENTS 与 Task 8 report 同步该局部事实，三条 server 测试未修改。
+  detached `136efc0c` 隔离门禁通过 targeted 三回归、storage/companion race、root
+  storage Companion race、persistence Companion race、完整 server race
+  （package 188.862s）、两条指定 staging tests、archcheck、full affected vet 与
+  diff-check；fixture 未修改。
+- `0dc592c8` 最终独立 scoped SPEC 与 QUALITY 评审均 PASS，Task 8 继续裁决
+  Accepted；change 进度仍为 7/12，Task 7 整体仍 Pending，下一阶段仍是 Task 7B，
+  不提前进入 Task 9。
+
+### Task 7B Go frozen snapshot/MCP 实施、修复与评审记录
+
+- Task 7A 已由 `5812be64` 与 repair `038c4b86` 完成 machine-contract/Python
+  前置并裁决 Accepted；其初次 SPEC PASS/QUALITY FAIL 与 repair 后双 PASS 历史
+  保持见上文，不因 Task 7B 收尾改写。
+- `task7_mcp_main` 从 `22991a82` 开始，以 initial `b00481e0` 交付 Go canonical
+  registry、33×17×33 frozen terrain/digest、四槽 snapshot registry、六个纯工具、
+  loopback MCP v1 outer/SDK service 与 Host component lifecycle；未接入 Task 9 的
+  Planner run wiring，也未实现 Task 10 的 Dialogue/memory/release 关服顺序。
+- initial formal SPEC 评审为 FAIL：raw gate 在 Content-Type/body/UTF-8/envelope/
+  version/pre-cancel 前已完整物化 snapshot，`Host.Shutdown` 在 world persistence
+  失败时不可重试地关闭 MCP/registry，且 `bounded_name` 没有完整执行 strict
+  schema。initial formal QUALITY 评审同为 FAIL，并额外拒绝普通 256-entry
+  `list_affordances` 超过 24 KiB、`NewHost` MCP/world 构造失败回滚泄漏，以及
+  validate-plan digest/terrain 循环缺少 cancellation checkpoint 等质量缺口。
+- repair 1 `79b5965f` 拆分 non-copying capability authorization 与一次 snapshot
+  materialization，定义 24 KiB 内坐标有序的最长完整 affordance 前缀，前置 strict
+  bounded-name 校验，使 persistence 失败后的 shutdown 保留 MCP 可重试，补齐
+  constructor reverse cleanup、digest/terrain inner-loop checkpoint 与陈旧注释清理。
+- repair 1 后独立 scoped QUALITY 评审 PASS；scoped SPEC 仍 FAIL：
+  `find_visible_blocks.block_names` 中合法但未知名称位于前项时，会抢先返回 normal
+  `unknown_block`，掩盖后项 Unicode blank/control/NUL/超 64 UTF-8 bytes 的
+  schema-invalid。repair 2 `92f80e4f` 改为第一遍完整 bounded-name/去重校验、
+  第二遍 canonical lookup；direct 与真实 SDK 四组混合顺序 RED 均转绿。
+- repair 2 后最终独立 SPEC 与 QUALITY 评审均 PASS，Task 7 裁决 Accepted。
+- 同 feature lineage 的完整 `go test ./internal/server -race -count=1` 已在 Task 8
+  memory reuse repair `0dc592c8` 进入后执行并 PASS（214.301s）；repair 1/2 复用
+  该证据，没有谎报为重新执行的 full server gate。
+- repair 1 focused gates：三包
+  `CanonicalName|MCP|Snapshot|Terrain|PlanningTool|Shutdown|NewHost` race PASS
+  （core 1.198s、companion 4.988s、server 8.031s）；完整 companion race PASS
+  （13.718s）；server `MCP|Shutdown|NewHost` race PASS（5.142s）；archcheck PASS
+  （5.519s）；affected vet、`go mod tidy -diff`、OpenSpec strict 80/80、gofmt 与
+  diff-check 均 PASS。
+- repair 2 focused gates：direct mixed-order race PASS（1.862s）、真实 SDK
+  mixed-order race PASS（1.804s）；companion `PlanningTool|PlanningFindBlocks`
+  race PASS（3.911s）；server MCP race PASS（2.367s）；archcheck PASS（5.156s）；
+  OpenSpec strict 80/80、gofmt 与 diff-check 均 PASS。
+- Task 7 closeout 后 change 进度为 8/12；下一任务为 Task 9。Task 8 的完整实施、
+  repair 与 Accepted 记录保持原样，未查看、比较或吸收 main。
+
+### Task 9 Planner cutover 实施与评审记录
+
+- `task9_planner_cutover` 从 `6c5c4011` 开始，以 `84c03161` 把生产规划切到 Agent HTTP v1
+  与 frozen snapshot MCP；持久 namespace lease、global 4/per-companion 1 gate、bounded worker、
+  当前 tick 重验和既有 Task Runner 保持 Go 权威，旧 direct-model Planner 从生产路径删除。
+- initial SPEC/QUALITY 均 FAIL。repair `edfb1574` 关闭 strict step presence/type、独立
+  acquire/heartbeat deadline 与 fencing、tick-owned attempt/correlation/gate 释放、target/chunk
+  当前世界重验；其后 SPEC 仍 FAIL、QUALITY PASS。repair `b2c75a6c` 将成功 status 下的
+  overflow、unknown field 与 trailing JSON 精确归为 invalid plan，同时保持 transport 与 identity
+  mismatch 的 unavailable 分类；最终独立 SPEC/QUALITY 均 PASS，Task 9 Accepted。
+- canonical gates：Planner/Task/AgentUnavailable/Snapshot race PASS（companion 2.518s、server
+  11.704s）；Agent race 4.139s；config race 1.578s；archcheck 5.404s；三个 cmd package、
+  affected vet、tidy、gofmt/diff-check 与 OpenSpec strict 80/80 均 PASS。
+
+### Task 10 Dialogue、memory 与 shutdown 实施与评审记录
+
+- `task10_dialogue_memory` 从 `012a4b86` 开始，以 `1f6006f6` 完成 Dialogue cutover、shared
+  gate/tick correlation、terminal accepted reservation、memory commit/reconcile/epoch/tombstone、
+  v5 mirror dirty 与单次广播，并实现 save/flush→Release→close 的可重试 shutdown。
+- initial SPEC/QUALITY 均 FAIL。四轮 repair `6ef874b1`、`7283b746`、`c2cebeb9`、`6bdf2b7e`
+  依次关闭 in-flight persistence revision、unknown/stale reconcile、inactive lifecycle、run 与
+  finalization context 所有权、重试 re-arm、旧 outcome drain 后 exactly-once re-arm/no-spin；最终
+  独立 SPEC/QUALITY 均 PASS，Task 10 Accepted。
+- canonical gates：shutdown 三测试 race count 20 PASS（4.612s）；MemoryReconcile/UnknownCommit/
+  Shutdown/Release race PASS（5.078s）；broader companion/server race PASS（4.558s/95.791s）；
+  persistence race 2.813s；archcheck 5.319s；三个 cmd package、affected vet、tidy、gofmt/
+  diff-check 与 OpenSpec strict 80/80 均 PASS。
+
+### Task 11 真实跨语言合同实施与评审记录
+
+- `task11_cross_language` 从 `e1bf9e52` 开始，以 `efa85718`、`a6b4d059`、`3635b6a1`、
+  `356fe396`、`41add71e` 实现真实 Python MCP SDK↔Go MCP 与真实 FastAPI/Uvicorn↔Go
+  `AgentClient` 进程合同；`2f6ab0ba` 记录实施证据。测试只使用 loopback、临时 SQLite 与
+  deterministic model port fake，不访问 provider/DNS/外网，也不启动游戏窗口。
+- MCP 覆盖 `2025-11-25` initialize→initialized、Tools-only discovery/call、outer gate、materialized
+  view cancellation；HTTP 覆盖 lease/plan/dialogue/memory/cancel、proposal precommit 与 CAS/replay。
+  shared fixture 真实暴露并修复 `list_affordances` 坐标排序漂移。最终独立 SPEC/QUALITY 均 PASS，
+  Task 11 Accepted。
+- canonical gates：`make companion-agent-integration` PASS；Python ruff/mypy、focused 81 passed、
+  brief 集合 117 passed；Go 真进程 race server 8.822s；archcheck 5.645s；affected vet/tidy、
+  diff-check 与 OpenSpec strict 80/80 均 PASS。
+
+### Task 12 CI、文档、版本与全量门禁实施及评审记录（Accepted）
+
+- `task12_ci_docs_gates` 从 Task 11 closeout `9423f067` 开始。RED archcheck 证明
+  `openspec/config.yaml` 仍为 companions v4，Make 缺少 locked Python check，CI 缺少 Python
+  3.12、固定 uv/cache 与 check/integration 调用；engine ABI v9/client ABI v13 无歧义且保持不变。
+- `9dfdbc69` 增加 `make companion-agent-check`，在既有 macOS integration job 复用同 SHA native
+  artifacts 后运行 locked Python check 与真实 integration，并新增 service/shared-contract/CI/Make/
+  no-shell-FFI-embed archcheck；只把 `companions.ai` v4 升为 v5。focused archcheck PASS（5.532s），
+  `make companion-agent-check` PASS（403 passed）。
+- `49fbc7f9` 更新双语 README、architecture、configuration、LAN、test quickstart 与 progress：明确
+  Go 世界权威、Python 独立 Agent 服务、loopback-only、启动/关闭/失败语义、严格 v1 配置、v5
+  migration/backup/rollback 以及完整版本矩阵；文档后 archcheck 与 OpenSpec strict 80/80 PASS。
+- 第一轮完整 race 真实运行 392.59s 后唯一在 `internal/server` FAIL：九个旧 mine/place tests
+  直接 unavailable、两条 restore tests 各 60s timeout。focused 复现排除并发 flaky 后确认 Task 9
+  删除 direct-model endpoint 时两个测试 Host helper 留下空 model block；`3394fc19` 改用已有 typed
+  planner test seam，生产路径不变，原失败 11 tests 全绿（package 12.281s，real 16.29s）。
+- clean `3394fc19` 从头重跑 mandatory gates：Python locked/Ruff/mypy/403 tests、gofmt、full vet、
+  full Go race（server 247.013s，real 248.75s）、Rust locked release、Make check、真实 integration
+  （server 9.332s）、diff-check 与 OpenSpec strict 80/80 全部 PASS；`c094441d` 记录 gate evidence；
+  无 provider/外网/游戏窗口。
+- Round 1 独立 SPEC/QUALITY 均 FAIL：quickstart regexp 实际 no-tests；CI archcheck 依赖 substring
+  和 job 顺序；Go no-bypass 未覆盖生产装配依赖闭包；report 必须准确写 strict string
+  `config_version: v1`，且对 `gates.sh` 已含 `make rust`、不含两条 companion Make target 的事实
+  记录错误；configuration 的 egui/WKWebView 事实与不存在的 `ui.rs` 链接错误；缺少承重
+  mutation/sentinel。Round 1 没有要求把 Python 配置改成 YAML 数字。
+- Repair 1 `3ce58189` 引入 typed YAML CI gate、15 项 CI mutation、五个生产入口的仓内传递依赖
+  闭包 no-bypass gate 及 helper mutations，并修复 quickstart 与文档事实；`8dac0e4c` 记录 evidence。
+  clean `3ce58189` 从头重跑 mandatory gates 全部 PASS：Python 403 tests、full Go race
+  （archcheck 37.396s，real 39.35s）、Rust、两条 Make target、diff-check 与 OpenSpec 80/80。
+- Repair 1 scoped re-review 的 SPEC/QUALITY 仍均 FAIL：把权威 string `config_version: v1` 反向改成
+  strict loader 拒绝的数字 `1`；CI gate 没有锁定 engine/client 两个 `validate_artifact` 调用、函数内
+  size 校验及最终 summary 的 `if: ${{ always() }}`；本 ledger 未记录上述评审；配置示例也没有直接
+  联动真实 strict loader 的 sentinel。
+- Repair 2 `72ef5580` 已恢复 string `config_version: v1`，以真实 `load_config` 直接消费文档 fenced YAML；
+  `tests/test_config.py` 111 passed。typed CI gate 已承重 engine/client 两次 validator 调用、函数内
+  size/digest 与 summary 精确 `always()`；20 项 mutation+真实 workflow PASS（package 0.766s），
+  完整 archcheck 5.307s、tidy/Ruff/diff/OpenSpec 80/80 均 PASS。
+- clean `72ef5580` 的 mandatory gates 全部 PASS：Python locked/Ruff/mypy/403 tests、gofmt、full
+  vet、full Go race（archcheck 37.162s，real 38.87s）、Rust 1.97.1 locked release、Make check、
+  真实 integration（companion 2.941s、server 9.825s，real 11.29s）、diff-check 与 OpenSpec 80/80。
+  无 provider/DNS/外网业务访问，也无游戏窗口。`5ba294f5` 记录 Repair 2 evidence；提交后完整
+  archcheck 4.998s、strict config 文档 sentinel 111 passed、OpenSpec 80/80、diff/status/scope 均 PASS。
+- Repair 2 最终独立 SPEC 与 QUALITY 评审均 PASS，Task 12 裁决 Accepted；本次规划收尾勾选
+  `tasks.md` 12.1。该 scoped 裁决不替代尚待执行的整分支最终 SPEC/QUALITY 评审。
+
+## main 同步
+
+- 同步范围：`main`（`8a9847a8`）并入 `feat/extract-companion-agent-service`（同步前 HEAD `09e18bdc`），merge commit `b5cd94cd`，未变基、未改写历史、未推送。
+- 8 个 content 冲突的解决要点：`AGENTS.md`/`openspec/config.yaml` 只冲突版本矩阵行，合并为本分支 companions v5 + main 侧 client ABI v14；`Makefile` 只冲突 `.PHONY` 行，取两侧目标并集（main 的 `frontend-visual-check/update` 与本分支的 `companion-agent-check/integration` 都在）；双语 `README` 保留 main 的段落更新（client ABI v14、engine "fluid numeric kernels"）与本分支新增的「伙伴 Agent 服务」章节，伙伴描述统一为本分支的最终形态；`docs/architecture.md` 取 main 的 client ABI v14 内容（含 capture/两段式容量与 RenderWorld 缓存段），章节号按合并后顺序改为 §7；`docs/notes/lan-server.md` 版本矩阵合并 v5/v14，保留本分支的 Agent HTTP/MCP contract 与 SQLite 备份表述；`docs/notes/progress.md` 是文件尾冲突：main 的 11 条近期条目原样保留，本分支的 `extract-companion-agent-service` 条目按时间序追加其后。
+- 自动合并文件复查：`cmd/mornlea/{main.go,options.go,run_test.go,app/app.go,app/app_startup.go}` 与 `internal/archcheck/dependency_test.go` 无重复或矛盾——main 的 devcapture 装配/边规则与分支的 `contracts/companion-agent/mcp-v1` 边规则落在不同区域，语义完整，由 build/vet 与 archcheck 门禁验证。
+- 版本矩阵最终状态：协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`companions.ai` schema v5、`hostile_mobs` schema v1、engine ABI v9、client ABI v14、benchmark scenario **v21**。说明：同步输入按 main 的 `openspec/config.yaml` 读到的 scenario 是 v20，但 `internal/archcheck` 门禁证明代码权威 `scenarioVersion=21`（main 在 `webview-game-ui-unification` 升的版，main 的 AGENTS.md 已是 v21、其 config.yaml 遗留 v20 未被当时的 archcheck 覆盖）；本分支 Task 12 又把基线校验扩展到 `openspec/config.yaml`，因此按「代码为真」把全部当前状态矩阵修为 v21（`AGENTS.md`、`openspec/config.yaml`、双语 README、lan-server 与 progress 分支条目的矩阵行）。提交 `33792871` 同时把 main 带入 `docs/notes/compatibility.md` 的两处当前状态 companions v4 修为 v5 语义。全仓 grep 复查：其余 v4/v13/v20 命中均在历史、迁移（v1..v4→v5）或归档叙述中，按政策保留。main 侧 `openspec/specs/tiered-swords-combat` 的「companions 保持 4」与 change 产物（proposal/design/tasks、`project-identity` delta）中的 client ABI v13/scenario v20 属规划基线表述，本同步未改动，留待整分支终审按最终矩阵复审。
+- 门禁结果（全部在 `<WT>` 内串行执行）：
+  1. `make rust` PASS（real 3.88s；本 worktree 重建了两个 Rust cdylib 并拷回本 worktree 的 `engine/target/release`，共享 `CARGO_TARGET_DIR` 的覆盖语义按预期，主 worktree 后续使用前需重建）。
+  2. `go build ./...` PASS（real 4.13s）；`go vet ./...` PASS（real 3.39s）。
+  3. `go test ./internal/archcheck -count=1` 首次 FAIL（scenario v20 vs 代码 21，两处），按上文修为 v21 后重跑 PASS（6.36s）。
+  4. `make dev-check` **FAIL**：gofmt/vet 与其余包全部通过，唯独 `go test ./... -short` 在 `internal/server` 有 6 个伙伴 manager 测试确定性失败（`TestCompanionManagerFollowTargetOfflineFailsWorldChanged`、`TestCompanionManagerContainerMineMemoryTCPParity`、`TestCompanionManagerFIFOExecutesCommandsInOrder`、`TestCompanionManagerOneInFlightRequestPerCompanion`、`TestCompanionManagerPathFailureBudgetResetsPerTask`、`TestCompanionManagerSnapshotFailureTerminatesTaskAndAdvancesFIFO`，另有 `TestCompanionManagerTaskLifecycleEvents` 时好时坏），均为非 race 模式下的时序问题，定位见下。
+  5. `make companion-agent-check` PASS（403 passed，real 20.2s）。
+  6. `make companion-agent-integration` PASS（server 9.289s，real 11.19s）。
+  7. `git diff --check` PASS。
+  8. `openspec validate --all --strict --no-interactive` PASS（83 passed, 0 failed，real 3.92s）。
+  9. `go test ./internal/companion ./internal/server -race -count=1` PASS（companion 11.464s、server 246.688s，real 247.4s）。
+- dev-check 失败定位（**非合并引入，是分支既有问题**）：同步前在干净临时 worktree（detached `09e18bdc`，fresh `make rust`）上复跑同一测试同样确定性失败；同一集合在 `-race` 下全部通过（本同步的 gate 9 完整 server race 覆盖了全部失败测试）。本分支既往 ledger 记录的所有门禁证据均为 race 模式，dev-check 的 non-race short 套件在本分支从未被验证过。插桩定位显示根因在 planner worker goroutine 与同步 tick 步进的时序耦合：非 race 快速步进下 worker 结果投递出现数百 tick 的调度延迟，部分 run 里结果到达时任务上下文已过时或被关服取消；修复涉及已双评审的测试基础设施或生产 worker 调度，超出本同步范围，转交整分支终审裁决。
+- 同步提交：`b5cd94cd`（merge commit）、`33792871` `docs(companion): reconcile version matrix after main sync`、`9810e937` `docs(companion): align benchmark scenario baseline with code`。
+
+## dev-check non-race 修复
+
+- 起始基线：`2f2d9b55`（main 同步态），工作区干净。dev-check 的 non-race short 套件在 `internal/server` 确定性失败 7 个测试（`TestCompanionManagerFollowTargetOfflineFailsWorldChanged`、`TestCompanionManagerContainerMineMemoryTCPParity`、`TestCompanionManagerFIFOExecutesCommandsInOrder`、`TestCompanionManagerOneInFlightRequestPerCompanion`、`TestCompanionManagerDistantGoalFailsPathUnreachable`、`TestCompanionManagerPathFailureBudgetResetsPerTask`、`TestCompanionManagerSnapshotFailureTerminatesTaskAndAdvancesFIFO`），同一集合在 `-race` 下全部通过。
+- 根因结论（测试基础设施的时序假设缺陷，非生产缺陷；生产代码零改动）：这 7 个测试用固定 tick 上限（200–900 tick）等待异步规划/寻路 worker 的结果在 tick 边界落地，该假设只在每 tick 墙钟接近生产节拍（`RunTicks` 50ms）或 race 模式（每 tick 显著变慢）时成立。non-race 短测下实测每 tick 约 0.27–0.7ms，而一次规划请求的真实墙钟工作量为：tick 路径上 `buildPlanSnapshot` 约 170ms（3×3 区块深拷贝 + 33×17×33 projection，dispatch 与 apply 各一次）、worker 侧 canonical snapshot digest 与假模型各约 15ms；worker 结果只在 tick 边界被非阻塞排空，因此一轮异步规划在快进 tick 下跨越数百 tick 才落地（插桩证据：FIFO 场景第二次模型请求在派发后约 500 tick 才被 worker 触达，首条 TaskStarted 落在 tick 182，而 800 tick 预算只够第一条指令完成）。race 模式每 tick 慢一个数量级，同一墙钟工作量折合的 tick 数远小于预算，因此该缺陷从未在本 change 的既往门禁中暴露（全部历史证据均为 race 模式）。真实服务器以 50ms 节拍运行，worker 延迟落在 1–2 tick 内；权威 tick 热路径与 worker 并发模型未被改动。
+- 修复方案（仅测试基础设施，三个文件）：`companion_manager_test.go` 新增 `stepUntilCompanionEvents` helper——逐 tick 推进并收集全部客户端事件直到 stop 命中，上限由固定 tick 数改为 `longWaitDeadline` 墙钟，每轮 `time.Sleep(time.Millisecond)` 让步（与 `stepUntilCompanionManagerReady` 的既有让步模式一致，同时避免热轮询放大 CPU 争用）。把上述 7 个测试中「等待异步落地」的循环改为墙钟限界：FIFO 三指令、单在途第二条指令、远目标 PathUnreachable、路径失败预算两任务、快照失败推进 FIFO（`companion_manager_test.go`）；目标离线 WorldChanged 的两个等待段（`companion_follow_test.go`）；容器采掘 parity 的 `stepUntilTerminal`（`companion_interact_container_test.go`）。静置观察语义（stop=nil 或固定小窗口）保持固定 tick 不变。全部断言原样保留：FIFO 顺序、TaskFailed 恰好终结与失败原因、每伙伴单在途请求、路径失败预算按任务重置（span ≥ 2×`PathReplanCooldownTicks` 的 tick 距判定）、Memory/TCP transcript 逐字节一致、事件序列与 EventID 严格递增——不因等待方式改变而弱化。
+- 门禁结果（全部在 <WT> 内串行执行）：
+  1. `go test ./internal/server -short -count=1` PASS 两遍（78.370s / 78.783s），确定性复验通过。
+  2. `go test ./internal/companion ./internal/server -race -count=1` PASS（companion 11.457s、server 249.444s）。
+  3. `go test ./internal/archcheck -count=1` PASS（5.763s）。
+  4. `make rust` PASS（cargo 0.26s + 签名替换；本 worktree 重建两个 Rust cdylib 并拷回本 worktree 的 `engine/target/release`，共享 `CARGO_TARGET_DIR` 覆盖语义按预期，主 worktree 后续使用前需重建）。
+  5. `make dev-check` 首次 FAIL（gofmt 未格式化 `companion_manager_test.go`，已 gofmt 修正），重跑 PASS：gofmt/vet、`go test ./... -short`（`internal/server` 78.815s）、cargo fmt/clippy 与 `cargo test --workspace --locked`（175+218 passed）全绿。
+  6. `git diff --check` PASS。
+- 生产契约影响：无。未改动任何生产代码、协议、存档 schema、engine/client ABI 或 benchmark scenario；任务 FIFO、规划/寻路 worker 与权威 tick 编排的运行时语义原样。
+- 提交：`0fb2d383` `test(server): bound async planner waits by wall clock in short mode`（三测试文件）与 `docs(openspec): record dev-check repair evidence`（本小节）。
+- 独立 scoped 双评审（范围 `2f2d9b55..HEAD`）均 PASS：SPEC 逐测试比对确认 7 个测试断言零削弱（FIFO 顺序、TaskFailed 恰好终结与原因、单飞请求、`span ≥ 2×PathReplanCooldownTicks` tick 距判定、Memory/TCP transcript 逐字节一致、EventID 严格递增均原样）、静置观察保持 tick 制、墙钟循环以 `longWaitDeadline`（60s）有界且让步模式与既有 `stepUntilCompanionManagerReady` 一致、生产零改动，并独立重跑 `go test ./internal/server -short -count=1` 全绿（76.809s）；QUALITY 确认 diff 最小聚焦、helper 复用既有 `stepUntil*`/`stepCollectingChatEvents` 模式、中文注释无任务编号、无调试残留、gofmt/diff-check 干净、ledger 如实完整、提交规范合规。QUALITY 备注（不构成缺陷）：`runCompanionManagerParity` 的 600-tick 固定窗口仍属潜在脆弱点，留待后续观察。
+
+## 整分支终审与门禁
+
+- 整分支 SPEC review：Round 1 已执行，结果 FAIL（Task 12 Repair 2 final SPEC PASS 仅为任务级证据，不提前裁决整分支 PASS）。六项证据要点：任务闭环、delta 覆盖、同步可信度、门禁完备性等 PASS；版本矩阵残留 FAIL——`project-identity` delta、`tiered-swords-combat` 主规格、proposal/design/tasks 仍把完成态钉在 client ABI v13 / benchmark scenario v20 等旧基线，与 main 同步后的最终矩阵（client ABI v14、scenario v21）不一致。
+- 整分支 QUALITY review：Round 1 已执行，结果 FAIL（Task 12 Repair 2 final QUALITY PASS 仅为任务级证据，不提前裁决整分支 PASS）。四项证据要点 PASS；两项 Minor：`internal/companion` 的 `ModelSettings`/`ValidateModelEndpoint` 死代码（direct-model 三链路已切断、Dialogue HTTP client 已删后遗留的未接线过渡残留），以及 `9dfdbc69` 使用非规范 `ci:` 提交 type。
+- Round 1 修复轮（fresh implementer，起始 `c1f39af6`，工作区干净）：
+  - SPEC 侧以 `d3634d60` 对齐最终矩阵。改动文件：`openspec/changes/extract-companion-agent-service/{proposal.md,design.md,tasks.md,specs/project-identity/spec.md}`、`openspec/specs/tiered-swords-combat/spec.md`。要点：`project-identity` delta 完成态钉 client ABI v14/scenario v21 并保留「本 change 自身只升 companions v4→v5，client ABI/scenario 升版来自 main 同步」意图；`tiered-swords-combat` 主规格当前状态修为 companions v5/scenario v21（保留 `90188fbc` 历史引入矩阵与 ABI 8/11 历史基线表述）；proposal/design/tasks 的 client ABI v13→v14 与端状态表述同步。
+  - QUALITY 侧以 `b10df791` 删除过渡残留。改动文件：`internal/companion/{model_config.go,model_config_test.go,task.go,task_queue_test.go}`、`internal/config/config.go`。要点：删除 `ModelSettings` 类型与 `ValidateModelEndpoint`/`Validate`/`TaskTimeout` 方法及只测死代码的 `model_config_test.go`，移除 `config.AI.ModelSettings` 字段，`task.go`/`task_queue_test.go` 注释改为如实描述 `ValidateTaskTimeoutMinutes`/host.go 校验链；保留存活接线的 `TaskTimeoutDefaultMinutes`/`ValidateTaskTimeoutMinutes`；`grep -rn ModelSettings internal cmd` 零命中。
+  - 控制会话裁决：`9dfdbc69` 的 `ci:` 提交 type 按 main 侧同款 `ci:` 先例（main 11 条，含本提交全域 12 条）豁免，不改写历史——重写会使 ledger 全部 SHA 证据失效。
+  - Round 1 修复门禁（全部在 <WT> 串行执行）：`go build ./...` PASS；`go vet ./...` PASS；`go test ./internal/companion ./internal/config -short -count=1` PASS（companion 4.452s、config 1.371s）；`go test ./internal/server -short -count=1` PASS（76.535s）；`go test ./internal/archcheck -count=1` PASS（5.293s）；`openspec validate --all --strict --no-interactive` PASS（83 passed, 0 failed）；改动 Go 文件 gofmt 无输出；`git diff --check` PASS。
+- Round 1 修复后的 scoped 复审（fresh reviewer 双裁决，范围 `c1f39af6..e70cbb5e`）均 PASS，整分支终审恢复为 PASS：
+  - SPEC 复审 PASS：残留清零——全仓当前状态源（`AGENTS.md`、`openspec/config.yaml`、双语 README、`docs/architecture.md`、change 产物、`openspec/specs/`）与最终矩阵（companions v5 / client ABI v14 / scenario v21）一致，其余 v4/v13/v20 命中全部属历史/迁移/认领基线叙述并逐条裁定豁免；ledger「基线与规则」第 9 行系认领基线快照、可豁免（已补时态括注）；`tiered-swords-combat` 改法正确且 `90188fbc` 历史矩阵与 ABI 8/11 表述完好；Round 1 记录如实未越权；独立复验 `openspec validate --all --strict` 83 passed/0 failed。
+  - QUALITY 复审 PASS：`ModelSettings` 全仓零命中、存活接线（`TaskTimeoutDefaultMinutes`/`ValidateTaskTimeoutMinutes` 与 config.go:685、host.go:345 调用点）完好、`model_config_test.go` 删除必要（只测死代码）、代码 diff 仅死代码删除与注释修正无行为变更、文档 hunk 全部矩阵相关、gofmt/diff-check 干净、三提交规范合规、ledger 记录如实。
+  - 非阻塞观察：`runCompanionManagerParity` 600-tick 固定窗口、`ValidateTaskTimeoutMinutes` 在 `internal/companion` 内直接单测随死代码测试一并移除（存活链路经 `internal/config` 间接覆盖），均留待后续观察，不构成缺陷。
+- 终审最终裁决：整分支 SPEC 与 QUALITY 均 PASS（Round 1 FAIL 项全部关闭，修复门禁与复审证据如上），change 具备合并条件。
+- Python locked/lint/type/test：clean `72ef5580` PASS；locked sync、Ruff format/check、mypy 23 files、pytest 403 passed；`make companion-agent-check` 同样 403 passed。
+- Go focused/race/archcheck/vet/gofmt：首轮 full race 真实暴露测试 seam 缺口并由 `3394fc19` 修复；clean `72ef5580` 的 full race、vet、archcheck 与 gofmt 全部 PASS，archcheck 37.162s、real 38.87s。
+- Rust baseline/build：clean `72ef5580` preflight 与 mandatory `make rust` 均 PASS；Rust 1.97.1 locked release，engine ABI v9/client ABI v13 未改。
+- 真实跨语言合同测试：clean `72ef5580` 的 `make companion-agent-integration` PASS；companion 2.941s、server 9.825s，real 11.29s。
+- OpenSpec strict：clean `72ef5580` PASS，80 passed/0 failed，real 1.44s。
+- 规划产物门禁：clean `72ef5580` 的 `git diff --check`、版本/CI/Make/service archcheck 与 20 项 CI mutation PASS。
+- 回滚/备份人工文档检查：PASS；LAN 文档同时说明 world+SQLite 联合备份、v1..v4→v5 迁移和旧程序不得写 v5 的回滚边界。
+
+## PR CI 修复
+
+- 修复轮起点：分支 HEAD `09f6a025`，工作区干净，针对 PR #138 CI run 33672833087 的两个失败。
+- 失败一根因（quality job）：Race 分片全集自检差分缺一行 `github.com/channing771/mornlea/contracts/companion-agent/mcp-v1`——该目录含 `embed.go`，是 `go list ./...` 里的 Go 包，但不在任何 race 分片（cmd / internal-server / internal-rest+scripts）的并集中。
+- 失败二根因（go-race internal-server 分片）：`TestMCPAgentCrossLanguageIntegration`、`TestMCPAgentCrossLanguageCancellationIntegration`、`TestCompanionAgentHTTPProcessIntegration` 三个真实 Go↔Python 进程合同测试在无 Python 环境的 race 分片 0.06s 即败——测试用 `exec.CommandContext` 起 Python 进程，解释器缺省 `services/companion-agent/.venv/bin/python`（或 env `MORNLEA_COMPANION_AGENT_PYTHON`），Start 失败即 `t.Fatal`；integration job 有 setup-python/uv 且 `make companion-agent-integration` 已真实运行这批测试（该 job PASS），race 分片应跳过而非失败。
+- 修复文件与要点：
+  - `.github/workflows/ci.yml`：`go-race` 的 `internal-rest` 分片 `packages` 追加 `$(go list ./contracts/...)`；`quality` 的「Race 分片全集自检」块 sharded-packages 列表同步追加 `go list ./contracts/...`（与分片并集同源覆盖）。
+  - `internal/server/companion_agent_cross_language_integration_test.go`：新增 `crossLanguagePythonPath` helper（解析顺序与现状一致：先 env `MORNLEA_COMPANION_AGENT_PYTHON`，为空则 `.venv/bin/python`；用 `os.Stat` 判定存在且是常规文件，缺失/不可用返回 `(path, false)`）；三处生成点（mcp-probe、mcp-cancel-probe、http-server）改为不可用时 `t.Skipf`，其中 `startCrossLanguageAgentProcess` 的 skip 放在创建 listener 之前避免端口泄漏；环境变量显式设置但路径不存在时同样 skip；MCP service/registry 等其他断言未动。
+  - `internal/archcheck` 复查：`TestCompanionAgentCIGates`/`companionAgentWorkflowViolations` 不解析 race matrix 或分片并集，无需同步预期。
+- 门禁结果（全部在 <WT> 内串行执行）：
+  1. `go test ./internal/archcheck -count=1` PASS（5.986s）。
+  2. skip 双语义：`MORNLEA_COMPANION_AGENT_PYTHON=/nonexistent-python go test ./internal/server -race -count=1 -run 'TestMCPAgentCrossLanguageIntegration|TestMCPAgentCrossLanguageCancellationIntegration|TestCompanionAgentHTTPProcessIntegration'` PASS 且输出 3 个 SKIP（server 2.043s）；不带 env 且 `<WT>/services/companion-agent/.venv` 存在时同一 -run 集合真实执行并 PASS（server 8.305s，含 MCP probe、cancel probe 与 HTTP 进程合同的全部子断言）。
+  3. `make companion-agent-integration` PASS（real 10.091s：uv sync resolved 80、ruff format/check、mypy 24 files、server 7.976s）——真实进程合同仍全绿。
+  4. `go test ./internal/server -race -count=1` PASS（243.813s，real 4:04.48；venv 存在，含真实进程测试）。
+  5. 本地分片自检等价脚本（`go list ./...` 全量 vs cmd+internal/server+internal 其余+contracts+scripts 并集）diff 为空。
+  6. 改动 Go 文件 `gofmt -l` 为空；`git diff --check` 干净。
+- 「跳过不削弱覆盖」论证：三个进程合同的真实执行由 `make companion-agent-integration` 承载，CI 的 integration job（setup-python 3.12 + uv 0.12.5）真实运行同一批测试（run 33672833087 中该 job PASS）；race 分片的 skip 只作用于没有 Python 解释器的分片，不删减任何实际执行的合同断言；venv 存在或显式设置有效 `MORNLEA_COMPANION_AGENT_PYTHON` 时测试仍真实执行（门禁 2 第二遍与门禁 3、4 已证明）。
+- 提交：`fix(ci): include contracts packages in race shard coverage`（ci.yml）、`test(server): skip cross-language process tests without Python env`（测试 gating）、`docs(openspec): record PR CI repair evidence`（本小节）。
+- 独立 scoped 双评审（范围 `09f6a025..81c6599e`）均 PASS：SPEC 复核覆盖不削弱论证（integration job 的 setup-python/uv 与 `make companion-agent-integration` 的 `-run` 正则命中三个测试名；`.venv/bin/python` 是 symlink、`os.Stat` 跟随判 regular 故 make 路径不误 skip）、本地重放分片自检等价脚本 diff 为空（48 包并集完备）、三个测试除 skip 外断言零削弱且 http-server skip 在 `net.Listen` 前、`go test ./internal/archcheck` PASS（5.619s）、ledger 如实；QUALITY 确认 diff 最小聚焦、helper 命名/注释/stat 短路处理规范、skip 语义只针对环境缺失且消息可操作、gofmt/diff-check 干净、三提交规范合规、ledger 无夸大。非阻塞观察：修复轮 `mypy 24 files` 与基线 23 files 的差值来源待后续留意。

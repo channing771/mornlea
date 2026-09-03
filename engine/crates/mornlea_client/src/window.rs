@@ -28,6 +28,16 @@ pub enum CreateError {
     Window,
 }
 
+/// WebView 挂载门:本次下行状态推送是否允许创建(或首次挂载)WebView。
+///
+/// 只有「已确认需要菜单参与」的状态才允许挂载;纯游戏相位推送不挂载——
+/// 这是 benchmark/capture/`-connect` 零 WebView 参与的落点,三者的进程只
+/// 收到游戏相位推送,WebView 因此全程不初始化。已挂载或已判失败的进程
+/// 也不再重试(挂载失败不可自愈,重复尝试只会反复拉起 WebContent)。
+fn should_mount(attached: bool, attach_failed: bool, wants_visible: bool) -> bool {
+    !attached && !attach_failed && wants_visible
+}
+
 /// ApplicationHandler 实现:把 winit 事件写入输入状态机。
 struct App {
     window: Option<Arc<Window>>,
@@ -42,9 +52,14 @@ struct App {
 
 impl App {
     fn new(width: u32, height: u32, title: String) -> Self {
+        // spike 自驱动档只在开启时记录输入计数;生产与手工 spike 档零写入。
+        let taps = crate::input::InputTaps {
+            recording: crate::spike_auto::enabled(),
+            ..crate::input::InputTaps::default()
+        };
         Self {
             window: None,
-            input: InputState::new(),
+            input: InputState::with_taps(taps),
             title,
             width,
             height,
@@ -194,21 +209,25 @@ impl ClientWindow {
         })
     }
 
-    /// 下行菜单状态推送:首次「需要可见」的状态推送时把 WebView 挂到本窗口
-    /// 的 contentView 之上(此后生命周期由 WebView 自管);游戏相位的推送在
-    /// WebView 尚未挂载时是纯校验空操作——`-connect` 直进游戏与基准/capture
-    /// 路径因此永不创建 WebView,零参与。挂载失败的环境里按「无 WebView」
-    /// 降级。JSON 非法(非 UTF-8/缺 phase)返回 false,由 FFI 层转参数错误。
+    /// 下行菜单状态推送:首次「需要菜单参与」的状态推送时把 WebView 挂到本
+    /// 窗口的 contentView 之上(此后生命周期由 WebView 自管);游戏相位的
+    /// 推送在 WebView 尚未挂载时是纯校验空操作——`-connect` 直进游戏与基准/
+    /// capture 路径因此永不创建 WebView,零参与。挂载失败的环境里按
+    /// 「无 WebView」降级。JSON 非法(非 UTF-8/缺 phase)返回 false,由 FFI
+    /// 层转参数错误。
     pub fn push_ui_state(&mut self, json: &[u8]) -> bool {
         let wants_visible = match crate::webview::state_wants_visible(json) {
             Ok(wants_visible) => wants_visible,
             Err(_) => return false,
         };
-        if self.webview.is_none() && !self.webview_attach_failed {
-            if !wants_visible {
-                // 状态合法但无需呈现:不挂载、不报错(纯校验空操作)。
-                return true;
-            }
+        // spike 自驱动档把下行相位作为断言信号(世界装配/暂停开合都以
+        // 「是否要求 WebView 全参与」呈现),在任何早退路径之前记录。
+        crate::spike_auto::note_phase(wants_visible);
+        if should_mount(
+            self.webview.is_some(),
+            self.webview_attach_failed,
+            wants_visible,
+        ) {
             let (ns_window, ns_view) = match (self.ns_window(), self.ns_view()) {
                 (Some(ns_window), Some(ns_view)) => (ns_window, ns_view),
                 // 句柄未注册(窗口已销毁或非本线程表)视为无窗口降级:推送
@@ -230,11 +249,22 @@ impl ClientWindow {
                 None => self.webview_attach_failed = true,
             }
         }
-        match &mut self.webview {
-            Some(webview) => webview.push_state(json).is_ok(),
+        let focus_handoff = match &mut self.webview {
+            Some(webview) => match webview.push_state(json) {
+                Ok(handoff) => handoff,
+                Err(_) => return false,
+            },
             // 挂载失败后的降级路径:推送被接受但不产生任何呈现。
-            None => true,
+            None => false,
+        };
+        // 焦点换手时清空 winit 侧键鼠状态:菜单族相位下 WebView 是
+        // firstResponder,期间发生的 keyUp/mouseUp 事件不会到达 winit 视图,
+        // 残留按下态会在交还焦点后被快照持续误报(幽灵 Esc 边沿、粘滞 WASD、
+        // 两次按键才生效等)。清空后物理仍按住的键需重按,与窗口失焦语义一致。
+        if focus_handoff {
+            self.app.input.clear_button_state();
         }
+        true
     }
 
     /// 每帧一次:泵完积压事件并把输入快照编码进 `out`
@@ -243,6 +273,22 @@ impl ClientWindow {
         self.event_loop
             .pump_app_events(Some(Duration::ZERO), &mut self.app);
         self.app.input.encode_snapshot(out);
+        // spike 自驱动档在事件泵之后运行:本帧投递的合成事件要等下一次
+        // pump 才被 AppKit 分发,驱动器按帧间等待推进,不与输入采集竞争。
+        if crate::spike_auto::enabled() {
+            let taps = self.app.input.taps;
+            let (content_width, content_height) = self.app.input.content_size();
+            let (content_width, content_height) =
+                (f64::from(content_width), f64::from(content_height));
+            let context = crate::spike_auto::FrameContext {
+                webview: self.webview.as_ref(),
+                window_number: self.window_number().unwrap_or(0),
+                content_width,
+                content_height,
+                taps,
+            };
+            crate::spike_auto::on_frame(&context);
+        }
     }
 
     /// 切换光标捕获:捕获时隐藏并锁定光标(失败降级 Confined),
@@ -654,9 +700,40 @@ fn greatest_common_divisor(mut left: u32, mut right: u32) -> u32 {
 mod tests {
     use super::{
         LogicalRect, clamp_logical_to_work_area, constrain_outer_frame, fallback_content_size,
-        fallback_work_area_points, fit_content_to_visible_frame,
+        fallback_work_area_points, fit_content_to_visible_frame, should_mount,
     };
+    use crate::webview::state_wants_visible;
     use winit::dpi::{LogicalSize, PhysicalSize};
+
+    /// 挂载门是 benchmark/capture/`-connect` 零 WebView 参与的唯一落点:
+    /// 只有「需要菜单参与」且尚未挂载、也未判失败的状态才允许挂载。
+    /// 纯游戏相位推送(无头路径唯一会收到的状态)永不触发挂载。
+    #[test]
+    fn mount_gate_keeps_headless_paths_free_of_webview() {
+        // 游戏相位推送:不挂载(GameOverlay 态的视图常驻语义不改变这一点,
+        // 因为 WebView 根本没进视图树)。
+        assert!(!should_mount(false, false, false));
+        // 菜单相位推送:首次允许挂载。
+        assert!(should_mount(false, false, true));
+        // 已挂载或已判失败:不再重复挂载,推送只走既有实例或降级路径。
+        assert!(!should_mount(true, false, true));
+        assert!(!should_mount(false, true, true));
+        assert!(!should_mount(true, true, true));
+    }
+
+    /// 挂载门消费的判定必须与无头路径的现实一致:三种真实下行形态里,只有
+    /// 主菜单/暂停层这类菜单相位要求参与;`{"phase":"game"}` 是游戏热路径
+    /// 的常量快照,不要求参与。非法载荷在挂载判定之前就被拒绝。
+    #[test]
+    fn state_visibility_matches_headless_payload_shapes() {
+        assert!(
+            !state_wants_visible(br#"{"phase":"game"}"#).expect("合法载荷"),
+            "游戏相位是纯校验空操作,不触发挂载"
+        );
+        assert!(state_wants_visible(br#"{"phase":"menu"}"#).expect("合法载荷"));
+        assert!(state_wants_visible(br#"{"phase":"paused"}"#).expect("合法载荷"));
+        assert!(state_wants_visible(b"\xff\xfe not utf8").is_err());
+    }
 
     /// 超屏时按最小缩放比缩小,保持宽高比:16:9 请求在 16:9 工作区内两轴同比例。
     #[test]

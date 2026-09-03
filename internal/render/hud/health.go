@@ -1,14 +1,17 @@
 package hud
 
-import "github.com/channing771/mornlea/internal/core"
+// health.go 是 HUD 图集的生命/氧气图标 painter：三枚心形 cell（空/半/满）与两枚
+// 气泡 cell（空/满）的程序化像素源。心形与气泡的呈现已迁 WebView HUD 组件，但
+// 图集的列布局是固定上传契约的一部分（`AtlasPixels` 把整张贴图交给渲染器），
+// 这些 cell 因此继续随图集构建并上传，列下标不得移动。
 
 const (
-	// 生命值 HUD：十个槽位各自直接选择空、半或满心，不绘制背景面板。
-	healthQuads        = healthSegmentCount
-	healthSegmentCount = 10
-	healthHeartSize    = float32(16)
-	healthHeartGap     = float32(1)
-	statusBarGap       = float32(4)
+	// healthHeartSize 是状态行一格的 design px 边长，statusBarGap 是状态行之间
+	// 的行堆叠间隙：两者都随状态行呈现迁往 WebView 组件的镜像常量，但打开态
+	// 面板的垂直居中与高度约束（`openHUDHeight`/`openBottomStackTop`）仍按同一
+	// 份两行状态栈构图预留空间，数值必须与前端逐值一致。
+	healthHeartSize = float32(16)
+	statusBarGap    = float32(4)
 )
 
 // heartFill 标识固定心形 cell 的填充状态。
@@ -19,45 +22,6 @@ const (
 	heartHalf
 	heartFull
 )
-
-// HealthOverlay 是服务端已确认的生命值。它是 render 本地值，由 app 从
-// Predictor 的已确认镜像转换；Confirmed 为 false 时表示尚未收到权威状态，
-// 渲染器不会画出任何生命值——绝不显示预测或陈旧的数值。
-type HealthOverlay struct {
-	Confirmed bool
-	Value     uint8
-}
-
-// appendHealthBar 从快捷栏左边缘向右绘制无背景的服务端确认爱心；关闭容器时
-// 位于快捷栏上方，打开时移入快捷栏下方留白，不读取或推算任何游戏状态。
-func appendHealthBar(dst *hotbarLayout, health HealthOverlay, open bool, width, height float32) {
-	if !health.Confirmed || width <= 0 || height <= 0 {
-		return
-	}
-	x, _, y, _, scale := statusBarBounds(open, width, height)
-	heartSize := healthHeartSize * scale
-	heartGap := healthHeartGap * scale
-	value := min(health.Value, uint8(core.MaxHealth))
-	for segment := range healthSegmentCount {
-		fill := heartEmpty
-		if segment < int(value)/2 {
-			fill = heartFull
-		} else if segment == int(value)/2 && value%2 != 0 {
-			fill = heartHalf
-		}
-		uv := hotbarHeartUV(fill)
-		dst.quads = append(dst.quads, hotbarInstance{
-			X: x + float32(segment)*(heartSize+heartGap), Y: y,
-			Width: heartSize, Height: heartSize,
-			U0: uv[0], V0: uv[1], U1: uv[2], V1: uv[3],
-			Color: [4]float32{1, 1, 1, 1},
-		})
-	}
-}
-
-func hotbarHeartUV(fill heartFill) [4]float32 {
-	return hotbarTextureUV(hotbarEmptyHeartColumn + int(fill))
-}
 
 func paintHotbarHeart(dst []byte, column int, fill heartFill) {
 	for y := range hotbarTextureSize {

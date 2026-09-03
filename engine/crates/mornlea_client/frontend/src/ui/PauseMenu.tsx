@@ -10,6 +10,7 @@ import {
   PAUSE_REMOTE_NOTE,
   PAUSE_TITLE,
 } from "./copy";
+import { PixelButton } from "./pixel";
 
 export interface PauseMenuProps {
   pause: PauseState;
@@ -22,7 +23,7 @@ export function PauseMenu({ pause, onEvent }: PauseMenuProps) {
       <div className="pause-content">
         <h1 className="pause-title">{PAUSE_TITLE}</h1>
         <div className="menu-buttons">
-          <button
+          <PixelButton
             type="button"
             className="menu-button"
             onClick={() => {
@@ -30,8 +31,8 @@ export function PauseMenu({ pause, onEvent }: PauseMenuProps) {
             }}
           >
             {PAUSE_BACK_LABEL}
-          </button>
-          <button
+          </PixelButton>
+          <PixelButton
             type="button"
             className="menu-button"
             onClick={() => {
@@ -39,7 +40,7 @@ export function PauseMenu({ pause, onEvent }: PauseMenuProps) {
             }}
           >
             {PAUSE_QUIT_TO_MENU_LABEL}
-          </button>
+          </PixelButton>
         </div>
         {pause.remote && <p className="pause-remote-note">{PAUSE_REMOTE_NOTE}</p>}
       </div>

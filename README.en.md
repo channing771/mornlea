@@ -14,7 +14,7 @@
 
 Mornlea is an original voxel game written from scratch in Go. It ships its own client, an authoritative server, world storage, and a Rust wgpu rendering pipeline. It does **not** aim for compatibility with Minecraft's protocol, saves, or copyrighted assets.
 
-The current baseline uses protocol v32, player schema v8, chunk schema v9, world metadata v3, `companions.ai` schema v4, `hostile_mobs` schema v1, engine ABI v10, client ABI v13, and benchmark scenario v21. The survival loop covers water, farming (wheat, potatoes, carrots, bone meal — the first wheat seeds come from breaking naturally generated short grass with a deterministic 1/8 drop), hunger with saturation and exhaustion, oxygen, tiered swords with server-authoritative player and nightwalker melee, tool durability, doors, torches, a workbench with server-authoritative 2×2/3×3 crafting grids, sprinting, beds with night sleeping (all-sleep skips to dawn and sets a personal respawn point), and night-time nightwalkers that chase players, burn in daylight, and persist across restarts; up to four named server-authoritative companions plan queued `go_to`/`follow`/`mine`/`place` tasks and speak through a bounded persona/dialogue path. The local client starts at an in-process WebView (React) main menu with a Settings page and an in-game pause overlay (single-player freezes the authoritative tick; remote sessions keep ticking). See [实现进度](docs/notes/progress.md) for the full milestone history.
+The current baseline uses protocol v32, player schema v8, chunk schema v9, world metadata v3, `companions.ai` schema v5, `hostile_mobs` schema v1, engine ABI v9, client ABI v14, and benchmark scenario v21. The survival loop covers water, farming (wheat, potatoes, carrots, bone meal), hunger with saturation and exhaustion, oxygen, tiered swords with server-authoritative player and nightwalker melee, tool durability, doors, torches, a workbench with server-authoritative 2×2/3×3 crafting grids, sprinting, beds with night sleeping (all-sleep skips to dawn and sets a personal respawn point), and night-time nightwalkers that chase players, burn in daylight, and persist across restarts. Up to four named companions execute authoritative queued `go_to`/`follow`/`mine`/`place` tasks in the Go server, while a separate Python companion Agent runs bounded planning, dialogue, and compact memory. The local client starts at an in-process WebView (React) main menu with a Settings page and an in-game pause overlay (single-player freezes the authoritative tick; remote sessions keep ticking). See [实现进度](docs/notes/progress.md) for the full milestone history.
 
 ## Screenshots
 
@@ -37,6 +37,7 @@ The static screenshots below are taken from the headless visual-verification gol
 
 - macOS; the client entry point currently uses Darwin build constraints and is verified primarily on Apple Silicon;
 - Go 1.26;
+- Python 3.12 and `uv` when companion Agents are enabled;
 - Rust 1.97.1 installed via rustup;
 - A working CGO and C toolchain (macOS: Xcode Command Line Tools);
 - Make.
@@ -74,6 +75,8 @@ The first launch generates and loads terrain within the view distance and is not
 | `make dev-check` | gofmt checks and other development gates |
 | `make rust` | Build the two pinned Rust 1.97.1 cdylibs; a prerequisite of `run`/`build`/`test` |
 | `make rust-check` | Run Rust formatting, clippy, and workspace unit tests |
+| `make companion-agent-check` | Perform the locked install, formatting, lint, mypy, and all Python unit tests |
+| `make companion-agent-integration` | Run the real Go/Python process contract with no provider or external network |
 | `make fmt` | Format the Rust and Go sources in the repository |
 | `make clean` | Delete the `bin` directory; world saves are kept |
 
@@ -117,7 +120,18 @@ go run ./cmd/mornlea --connect 127.0.0.1:25565 --name PlayerA
 
 ## Rust / Go Division
 
-The pinned Rust 1.97.1 workspace ships two cdylibs: `mornlea_engine` (the sole production implementation of mesh/light, collision, raycast, physics integration, and worldgen; engine ABI v10) and `mornlea_client` (the Darwin window, event loop, all GPU rendering, and the WebView menu layer; client ABI v13). Go owns the app, world, sim, network, storage, and the CPU half of rendering; it never touches GPU APIs and has no production fallback. Each ABI is a release-unit boundary that must not be mixed across builds. See [当前架构说明 (architecture, in Chinese)](docs/architecture.md) for component ownership and dependency direction, and [docs/notes/go-rust-division.md](docs/notes/go-rust-division.md) for the new-code placement rules.
+The pinned Rust 1.97.1 workspace ships two cdylibs: `mornlea_engine` (the sole production implementation of mesh/light, collision, raycast, physics integration, worldgen, and fluid numeric kernels; engine ABI v9) and `mornlea_client` (the Darwin window, event loop, all GPU rendering, and the WebView menu layer; client ABI v14). Go owns the app, world, sim, network, storage, and the CPU half of rendering; it never touches GPU APIs and has no production fallback. Each ABI is a release-unit boundary that must not be mixed across builds. See [当前架构说明 (architecture, in Chinese)](docs/architecture.md) for component ownership and dependency direction, and [docs/notes/go-rust-division.md](docs/notes/go-rust-division.md) for the new-code placement rules.
+
+## Companion Agent Service
+
+`mornlea-companion-agent` lives in `services/companion-agent` and uses Python 3.12, LangChain/LangGraph, FastAPI, and SQLite. The Go server remains authoritative for the world, task queue, actions, and final plan validation; Python only produces candidate plans, dialogue, and compact-memory CAS results. The processes communicate only over loopback Agent HTTP v1 and read-only MCP v1.
+
+```bash
+make companion-agent-check
+make companion-agent-integration
+```
+
+Production startup additionally requires matching Bearer-credential environment variables on both processes and starts the Agent before the game server. See the [configuration guide (Chinese)](docs/notes/configuration.md) for the shortest YAML/JSON examples and [architecture](docs/architecture.md) for trust and persistence boundaries.
 
 ## Developing with OpenSpec
 

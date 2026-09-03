@@ -1,0 +1,45 @@
+/*
+ * 视觉基线 harness 舞台样式：只消费 tokens.css 的令牌（无裸色值/字号/时长），
+ * 与生产面板共用同一令牌纪律。组件态 fixture 不引入 Tailwind 工具类
+ * （tailwind content 只扫描 src/**，工具类在此不会被生成，语义 class 才是
+ * 单源）。
+ */
+
+.visual-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 列宽镜像 ui.css `.settings-panel` 的宽度表达式（min(460px, …)，harness 侧
+ * 不进生产令牌）：此字面量与 fixtures.tsx `stage` 的注释互为交叉引用，两处
+ * 改动须同步。 */
+.visual-column {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--menu-button-gap);
+  width: min(460px, calc(100% - 2 * var(--panel-padding)));
+}
+
+/* 游戏 HUD 部件的舞台：生产 HUD 的根是全屏透明层、直接叠在 wgpu 世界画面上，
+ * 截图没有世界画面，这里以既有暖深棕面板投影令牌充当背景，暖白前景文字与
+ * 暗色贴条才可辨。HudRoot 自身 `position: absolute; inset: 0`，铺满舞台后
+ * 仍按视口几何中心与底缘锚定构图（背景只是替身，不改 HUD 自身几何）。 */
+.visual-hud-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-shadow);
+}
+
+/* hud-progress 的轨道行：单条进食轨道（采掘条已退役），间距复用轨道间隙令牌。 */
+.visual-hud-progress-row {
+  display: flex;
+  align-items: center;
+  gap: var(--hud-progress-track-gap);
+}

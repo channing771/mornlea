@@ -16,7 +16,7 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/render/hud"
+	hud "github.com/channing771/mornlea/internal/render/hud"
 )
 
 // captureWidth/captureHeight 是视觉场景的固定分辨率。
@@ -44,21 +44,6 @@ const captureGlyphSettleFrames = 32
 
 var captureSettleTimeout = 5 * time.Minute
 
-type captureHUDFixture struct {
-	Health uint8
-	Oxygen uint16
-	Hunger uint8
-	Mining hud.MiningOverlay
-}
-
-// capturePopupFixture 是物品名弹条场景的临时已确认物品栏。弹条由应用层在
-// 渲染帧内检测「已确认选中下标变化」触发，因此夹具选中格必须指向含已注册
-// 中文显示名的物品，且必须与前序场景遗留的确认选中不同——本夹具模拟的是
-// 一次真实的确认变化，而不是又一个静态状态。
-type capturePopupFixture struct {
-	Inventory core.Inventory
-}
-
 // captureScene 是一个视觉场景。三要素缺一不可：确定性的世界状态由固定种子、
 // `WaitUntilLoaded` 与可选 Prepare 保证，固定的相机位姿与其余呈现状态由 Apply
 // 设置，抓帧时机由 WarmupFrames 和收敛判据固定。任何一项随环境变化，产出的图
@@ -78,12 +63,6 @@ type captureScene struct {
 	// Apply 在最后一帧渲染前执行，是场景对呈现状态的全部干预。
 	// 它跑在 drainServerMessages 之后，因此设置的值不会被当帧的服务端消息覆盖。
 	Apply func(SceneApplication) error
-	// HUD 是仅在 capture 收敛与最终帧期间生效的临时生存状态。
-	HUD *captureHUDFixture
-	// Popup 可选，非 nil 时本场景装入物品名弹条触发夹具：快照当前已确认
-	// 物品栏、换上夹具物品栏，场景图回读后恢复快照并重放会话起点基线
-	// （与 HUD 夹具同一 defer 语义），保证触发弹条的临时选中不泄入后续场景。
-	Popup *capturePopupFixture
 	// Menu 可选，为真时本场景以主菜单相位呈现。菜单层已迁 WebView（client
 	// ABI v12）且无头路径零参与，本场景输出无菜单 chrome 的世界底图——
 	// golden 待全景场景落地时重生成。它与 Settings 互斥；每个场景都会
@@ -97,8 +76,8 @@ type captureScene struct {
 	// 随机器速度变化、因而不属于场景三要素的量。
 	//
 	// 存在的理由：Apply 跑在收敛帧之前，而收敛帧会推进帧间隔与权威 tick，
-	// 在 Apply 里设的值到最后一帧已经被覆盖。目前只有调试面板需要它——它的
-	// 读数区直接显示帧时与 tick，这两者在同一台机器上重复抓帧也会变。
+	// 在 Apply 里设的值到最后一帧已经被覆盖。菜单全景用它钉住自转时刻，
+	// 战斗场景用它把权威 marker 重新武装到 6 帧窗口的开头。
 	PinVolatile func(SceneApplication) error
 }
 
@@ -114,35 +93,6 @@ func captureContainerInventory() core.Inventory {
 	inventory.Backpack[2] = core.ItemStack{Item: core.ItemCoal, Count: 12}
 	inventory.Backpack[3] = core.ItemStack{Item: core.ItemRawIron, Count: 8}
 	inventory.Backpack[4] = core.ItemStack{Item: core.ItemIronIngot, Count: 9}
-	return inventory
-}
-
-// captureHUDHotbarInventory 返回两个 HUD 生存场景共用的固定物品栏：选中格 2
-// 携带耐久镐，两个场景以同一份静态确认状态呈现（仅生存数值不同）。它同时是
-// 场景表内「确认选中 2」的定义点——弹条触发夹具依赖它作为变化基线。
-func captureHUDHotbarInventory() core.Inventory {
-	inventory := core.Inventory{}
-	inventory.Hotbar.Selected = 2
-	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 64}
-	inventory.Hotbar.Slots[1] = core.ItemStack{Item: core.ItemStoneBrick, Count: 7}
-	// 耐久 40/131 让磨损条画在偏左位置——满耐久和空耐久都是端点，
-	// 端点画错了不容易看出来。
-	inventory.Hotbar.Slots[2] = core.ItemStack{
-		Item: core.ItemStonePickaxe, Count: 1, Durability: 40,
-	}
-	inventory.Hotbar.Slots[3] = core.ItemStack{
-		Item: core.ItemIronPickaxe, Count: 1, Durability: 250,
-	}
-	inventory.Backpack[0] = core.ItemStack{Item: core.ItemCoal, Count: 12}
-	return inventory
-}
-
-// capturePopupTriggerInventory 返回弹条场景的触发物品栏：物品形态与
-// `captureHUDHotbarInventory` 同源，仅把选中下标切到格 1（石砖）。格 1 与
-// 前序 HUD 场景钉住的确认选中 2 不同，首个收敛帧即检测到确认变化并记录弹条。
-func capturePopupTriggerInventory() core.Inventory {
-	inventory := captureHUDHotbarInventory()
-	inventory.Hotbar.Selected = 1
 	return inventory
 }
 
@@ -169,7 +119,9 @@ func captureSettled(stats client.MesherStats, pending, lodBusy, vistaPending int
 // 生成所有受影响场景的基线，并逐张人眼确认。
 // 例外：`main-menu` 与紧随其后的 `settings-menu` 因 spec 排序约束（MUST 排在
 // `far-horizon` 之前）共同插入表中部（water-surface-slope 与 far-horizon
-// 之间），属 spec/brief 硬性例外。
+// 之间），属 spec/brief 硬性例外；`mining-crack-early` 与 `mining-crack-heavy`
+// 同为表中部插入（紧随 water-surface-slope），顺序由 visual-verification
+// delta 的顺序 MUST 条款固定。
 var captureScenes = []captureScene{
 	{
 		Name:         "terrain-noon",
@@ -187,99 +139,16 @@ var captureScenes = []captureScene{
 		},
 	},
 	{
-		Name:         "hud-hotbar-health",
-		WarmupFrames: 8,
-		Apply: func(app SceneApplication) error {
-			app.SetWorldTimeTicks(6000)
-			// 与 terrain-noon 一样显式钉死相机姿态：登录首条权威 PlayerState 的
-			// ResetView 会把 Yaw/Pitch 覆盖成出生朝向，不显式设置就不是常量。
-			app.Camera().Yaw = 0
-			app.Camera().Pitch = -0.25
-			// 本场景呈现静态确认状态而不是一次选中变化：按会话起点重放弹条
-			// 基线，登录快照式的首次确认不触发弹条，画面不携带物品名。
-			app.ResetItemPopupBaseline()
-			// 走 InventoryMirror.Apply 而不是直接改内部字段：它会执行
-			// Inventory.Valid() 校验，因此这份构造数据同时也是一条格式自检。
-			return app.Inventory().Apply(
-				network.InventoryState{Inventory: captureHUDHotbarInventory()},
-			)
-		},
-		HUD: &captureHUDFixture{
-			Health: core.MaxHealth,
-			Oxygen: core.MaxOxygenTicks,
-			Hunger: core.MaxHunger,
-		},
-	},
-	{
-		Name:         "hud-survival-feedback",
-		WarmupFrames: 8,
-		Apply: func(app SceneApplication) error {
-			app.SetWorldTimeTicks(6000)
-			app.Camera().Yaw = 0
-			app.Camera().Pitch = -0.25
-			// 与 hud-hotbar-health 同一理由：呈现静态确认状态，重放弹条基线，
-			// 不让画面携带前一场景触发或遗留的物品名。
-			app.ResetItemPopupBaseline()
-			return app.Inventory().Apply(
-				network.InventoryState{Inventory: captureHUDHotbarInventory()},
-			)
-		},
-		HUD: &captureHUDFixture{
-			Health: 5,
-			Oxygen: core.MaxOxygenTicks / 3,
-			Hunger: 9,
-			Mining: hud.MiningOverlay{
-				Active: true, ProgressTicks: 4, RequiredTicks: 9, Harvestable: false,
-			},
-		},
-	},
-	{
-		// hud-item-name-popup 是物品名弹条的无窗口 capture 场景：弹条经应用层
-		// `updateItemPopup` 的真实触发路径产生——Popup 夹具把已确认选中从前序
-		// HUD 场景钉住的格 2 切到格 1（石砖），首个收敛帧检测到确认变化即记录
-		// 弹条并注入当时的权威 tick。收敛帧不再 drain 服务端消息，权威 tick
-		// 冻结，WorldTick 与 ShownAtTick 之差恒为 0，弹条确定性地落在 40 tick
-		// 可见窗口的开头；弹条字形的光栅化收敛由既有 32 帧判据兜底。准星在
-		// 游戏相位常显，无需额外夹具。
-		//
-		// 排序约束：本场景 MUST 位于 hud-survival-feedback 之后、avatar-nametag
-		// 之前（spec delta visual-verification「场景表顺序与导出」），触发依赖
-		// 前序场景钉住的确认选中 2，由 TestCaptureSceneOrderAndAICompanionDeterminism
-		// 与 TestItemPopupCaptureScenePosition 兜底。场景结束后 Popup 夹具恢复
-		// 装入前快照并重放会话起点基线，后续场景不继承临时选中或已记录弹条；
-		// 世界时间与权威 tick 不是本场景的持久夹具——前者由每个场景的 Apply
-		// 显式重钉，后者在收敛帧内未被改写。
-		Name:         "hud-item-name-popup",
-		WarmupFrames: 8,
-		Apply: func(app SceneApplication) error {
-			app.SetWorldTimeTicks(6000)
-			app.Camera().Yaw = 0
-			app.Camera().Pitch = -0.25
-			// 弹条只在关闭态呈现：显式钉住关闭态，画面不依赖场景表里
-			// 没有人在本场景之前显式复位过的开合状态。
-			app.SetInventoryOpen(false)
-			return nil
-		},
-		HUD: &captureHUDFixture{
-			Health: core.MaxHealth,
-			Oxygen: core.MaxOxygenTicks,
-			Hunger: core.MaxHunger,
-		},
-		Popup: &capturePopupFixture{
-			Inventory: capturePopupTriggerInventory(),
-		},
-	},
-	{
 		Name:         "avatar-nametag",
 		WarmupFrames: 8,
 		Apply: func(app SceneApplication) error {
 			app.SetWorldTimeTicks(6000)
 			app.Camera().Yaw = 0
 			app.Camera().Pitch = -0.25
-			// 本场景不关心物品栏，但前序 HUD 场景会把石镐、铁镐等物品状态留在
-			// app.Inventory() 里——这些场景共用同一个 application，不显式清空
-			// 就会被悄悄继承。这里显式设成空物品栏，让本场景的画面只由自己的
-			// Apply 决定，不依赖场景表的执行顺序。
+			// 本场景不关心物品栏，但场景表共用同一个 application，前序场景留在
+			// app.Inventory() 里的物品状态不显式清空就会被悄悄继承。这里显式设成
+			// 空物品栏，让本场景的画面只由自己的 Apply 决定，不依赖场景表的执行
+			// 顺序。
 			if err := app.Inventory().Apply(network.InventoryState{Inventory: core.Inventory{}}); err != nil {
 				return fmt.Errorf("重置物品栏: %w", err)
 			}
@@ -345,11 +214,6 @@ var captureScenes = []captureScene{
 			}
 			return app.Crafting().Apply(personal)
 		},
-		HUD: &captureHUDFixture{
-			Health: 5,
-			Oxygen: core.MaxOxygenTicks / 3,
-			Hunger: 9,
-		},
 	},
 	{
 		// workbench-crafting 是格子工作台的无窗口 capture 场景：已打开的 3×3
@@ -404,11 +268,6 @@ var captureScenes = []captureScene{
 			}
 			return app.Crafting().Apply(workbench)
 		},
-		HUD: &captureHUDFixture{
-			Health: 5,
-			Oxygen: core.MaxOxygenTicks / 3,
-			Hunger: 9,
-		},
 	},
 	{
 		Name:         "chest-container",
@@ -440,11 +299,6 @@ var captureScenes = []captureScene{
 				return fmt.Errorf("装入箱子场景镜像: %w", err)
 			}
 			return nil
-		},
-		HUD: &captureHUDFixture{
-			Health: 5,
-			Oxygen: core.MaxOxygenTicks / 3,
-			Hunger: 9,
 		},
 	},
 	{
@@ -478,16 +332,15 @@ var captureScenes = []captureScene{
 			}
 			return nil
 		},
-		HUD: &captureHUDFixture{
-			Health: 5,
-			Oxygen: core.MaxOxygenTicks / 3,
-			Hunger: 9,
-		},
 	},
 	{
-		// 调试面板的视觉布局（行距、标签列宽、段头分组、只读行暗色）此前没有
-		// 任何自动化覆盖，只能靠人眼。字形 UV 缺陷正是在这里被发现的——面板是
-		// 全项目唯一大量绘制拉丁文本的界面，窄字符丢失在它身上最明显。
+		// debug-panel 保留为正午世界视角回归景：调试面板的呈现（读数区、参数
+		// 分组、可编辑行高亮）已整体迁 WebView 组件，无头路径的程序化面板渲染
+		// 路径已删除——本场景的画面因此不含任何面板像素，golden 只覆盖相机所在
+		// 高空的世界底图。面板可见态仍在这里装入，用于驱动面板状态机并验证
+		// 无头路径不因面板可见而产生额外像素；面板自身的像素验收由前端组件断言
+		// 与 frontend/visual 部件基线承接。读数随机器速度变化的量（帧时、权威
+		// tick）不再需要钉住——没有任何像素消费它们。
 		Name:         "debug-panel",
 		WarmupFrames: 8,
 		Apply: func(app SceneApplication) error {
@@ -511,17 +364,6 @@ var captureScenes = []captureScene{
 				return fmt.Errorf("debug-panel 需要面板状态，当前为 nil")
 			}
 			app.Panel().SetVisible(true)
-			return nil
-		},
-		PinVolatile: func(app SceneApplication) error {
-			// 面板读数区直接显示帧时与权威 tick，两者都随机器速度变化：
-			// 同机重复抓帧实测 tick 在 412..416 之间、帧时在 3.3..4.3ms 之间，
-			// 足以让基线比对超出阈值。
-			//
-			// panelLastFrameAt 清零后，下一帧的帧时按 panelFrameInput 的定义
-			// 保持 0，显示为固定的 "0.00 ms"；serverTick 钉成常量。
-			app.SetPanelLastFrameAt(time.Time{})
-			app.SetServerTick(capturePinnedServerTick)
 			return nil
 		},
 	},
@@ -748,6 +590,55 @@ var captureScenes = []captureScene{
 		},
 	},
 	{
+		// mining-crack-early 是采掘裂纹浅阶段的无窗口 capture 场景：复用
+		// target-block-feedback 的固定世界（空气邻域中相机正前方 4.5..5.5 格、
+		// 命中面 4.5 格的单块砖），权威采掘镜像钉在 6/30——按 BlockCrackStage
+		// 公式映射为阶段 2 的浅裂纹。采掘镜像经 SetMiningOverlay 直装，场景
+		// 结束后恢复（与 hud-survival-feedback 同一 defer 语义）；场景不含
+		// 随机器速度变化的读数，位姿在 Apply 钉死，收敛帧内不再
+		// drain，输出无需 PinVolatile 即确定。
+		//
+		// 排序约束：紧随 water-surface-slope、先于 main-menu（后者 Apply 自带
+		// resetCapturePresentation，不继承本场景的呈现状态），由
+		// TestCaptureSceneOrderAndAICompanionDeterminism 与裂纹夹具测试兜底。
+		Name:         "mining-crack-early",
+		WarmupFrames: 8,
+		Prepare:      prepareTargetBlockFeedback,
+		Apply: func(app SceneApplication) error {
+			if err := applyMiningCrackCaptureState(app); err != nil {
+				return err
+			}
+			// 采掘镜像经 SetMiningOverlay 直装：Target/HasTarget/进度二元组
+			// 驱动世界裂纹（屏幕采掘条已退役，进度不再进入 hud 分节）。
+			app.SetMiningOverlay(hud.MiningOverlay{
+				Active: true, HasTarget: true,
+				Target:        captureMiningCrackTarget,
+				ProgressTicks: 6, RequiredTicks: 30,
+			})
+			return nil
+		},
+	},
+	{
+		// mining-crack-heavy 是采掘裂纹重阶段的无窗口 capture 场景：与
+		// mining-crack-early 同一世界、相机与呈现链路，仅把权威进度钉到
+		// 29/30——阶段 9 的最重裂纹，且刻意只到 required-1，不呈现已破坏
+		// 方块的裂纹。两张基线同框对比即可判读裂纹随权威进度的离散加深。
+		Name:         "mining-crack-heavy",
+		WarmupFrames: 8,
+		Prepare:      prepareTargetBlockFeedback,
+		Apply: func(app SceneApplication) error {
+			if err := applyMiningCrackCaptureState(app); err != nil {
+				return err
+			}
+			app.SetMiningOverlay(hud.MiningOverlay{
+				Active: true, HasTarget: true,
+				Target:        captureMiningCrackTarget,
+				ProgressTicks: 29, RequiredTicks: 30,
+			})
+			return nil
+		},
+	},
+	{
 		// main-menu 是主菜单相位的无窗口 capture 场景：底图由 menu-vista
 		// 全景路径产出（与交互主菜单同一渲染路径——固定种子 worldgen 区块、
 		// 专属镜像/mesher/远环带、正午固定世界时间与整数 tick 自转相机），
@@ -849,10 +740,6 @@ var captureScenes = []captureScene{
 		Apply:        applyWaterUnderwaterCaptureState,
 	},
 }
-
-// capturePinnedServerTick 是 debug-panel 场景钉死的权威 tick 值。
-// 取一个与真实加载时长无关的常量即可，数值本身没有语义。
-const capturePinnedServerTick = 400
 
 // 两个菜单场景钉住的全景自转时刻（单位：整数 tick，均在
 // `application.MenuVistaYawPeriodTicks` 一个周期内）：主菜单取 1/8 周期
@@ -1001,20 +888,6 @@ func captureSceneImage(app SceneApplication, scene captureScene) (*image.NRGBA, 
 	default:
 		app.SetMenuPhase(application.MenuPhaseGame)
 	}
-	if scene.HUD != nil {
-		restore, err := applyCaptureHUDFixture(app, scene.HUD)
-		if err != nil {
-			return nil, fmt.Errorf("应用 HUD 场景夹具: %w", err)
-		}
-		defer restore()
-	}
-	if scene.Popup != nil {
-		restore, err := applyCapturePopupFixture(app, scene.Popup)
-		if err != nil {
-			return nil, fmt.Errorf("应用弹条场景夹具: %w", err)
-		}
-		defer restore()
-	}
 	settleDeadline := time.Now().Add(captureSettleTimeout)
 	for i := 0; ; i++ {
 		if _, err := app.RenderFrame(captureDrainMax); err != nil {
@@ -1064,68 +937,6 @@ func captureSceneImage(app SceneApplication, scene captureScene) (*image.NRGBA, 
 	}
 	pixels := app.Renderer().Readback()
 	return bgraToNRGBA(pixels, captureWidth, captureHeight), nil
-}
-
-func applyCaptureHUDFixture(
-	app SceneApplication,
-	fixture *captureHUDFixture,
-) (func(), error) {
-	originalPredictor, originalMining := app.Predictor(), app.MiningOverlay()
-	state, ready := originalPredictor.State()
-	if !ready {
-		return nil, errors.New("capture HUD 夹具需要已就绪 predictor")
-	}
-	predictor := client.NewPredictor()
-	if err := predictor.Begin(network.PlayerState{
-		Dimension: core.Overworld,
-		Position:  state.Position,
-		Velocity:  state.Velocity,
-		OnGround:  state.OnGround,
-		Yaw:       app.Camera().Yaw,
-		Pitch:     app.Camera().Pitch,
-		Ready:     true,
-		Health:    fixture.Health,
-		Oxygen:    fixture.Oxygen,
-		Hunger:    fixture.Hunger,
-	}); err != nil {
-		return nil, fmt.Errorf("构造 capture HUD predictor: %w", err)
-	}
-	app.SetPredictor(predictor)
-	app.SetMiningOverlay(fixture.Mining)
-	restored := false
-	return func() {
-		if restored {
-			return
-		}
-		restored = true
-		app.SetPredictor(originalPredictor)
-		app.SetMiningOverlay(originalMining)
-	}, nil
-}
-
-// applyCapturePopupFixture 装入弹条触发夹具并返回恢复闭包：恢复时先还原
-// 装入前的已确认物品栏快照，再按会话起点重放弹条基线，使后续场景既不继承
-// 临时选中，也不继承本场景触发的弹条。快照来自已确认镜像、必然通过
-// `InventoryState.Validate` 校验，恢复期的 Apply 因此不会失败。
-func applyCapturePopupFixture(
-	app SceneApplication,
-	fixture *capturePopupFixture,
-) (func(), error) {
-	snapshot, confirmed := app.Inventory().State()
-	if err := app.Inventory().Apply(network.InventoryState{Inventory: fixture.Inventory}); err != nil {
-		return nil, fmt.Errorf("装入弹条场景物品栏: %w", err)
-	}
-	restored := false
-	return func() {
-		if restored {
-			return
-		}
-		restored = true
-		if confirmed {
-			_ = app.Inventory().Apply(network.InventoryState{Inventory: snapshot})
-		}
-		app.ResetItemPopupBaseline()
-	}, nil
 }
 
 // `RunGoldenUpdateControl` 在两个 disposable application 上只抓取 far-horizon，

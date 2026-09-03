@@ -1,17 +1,15 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/internal/storage"
 )
 
 // TestPlannerRequestExcludesPersonaAndSummary 是「表达平面绝不进入规划输入」
@@ -20,7 +18,7 @@ import (
 // cmd/mornlea-server 的 persona 全链测试锁定）与非空最近对话摘要进入 Planning
 // 时，Planner 请求正文 MUST 同时不含二者文本。这补上了既有 planner_test 包级
 // 纯函数测试覆盖不到的 server 接线链路，并以「值」而非「字段名」为断言口径
-// ——未来任何把 slot.summary 或 ResolvedPersona 塞进快照字符串字段的改动
+// ——未来任何把 v5 mirror summary 或 ResolvedPersona 塞进快照字符串字段的改动
 // 都会被捕获。
 func TestPlannerRequestExcludesPersonaAndSummary(t *testing.T) {
 	const secretPersona = "内联人设绝密文本乐观但怕黑"
@@ -32,61 +30,61 @@ func TestPlannerRequestExcludesPersonaAndSummary(t *testing.T) {
 	}}
 	host, client, _ := companionManagerHostReady(t, definitions, nil)
 
-	// 捕获规划请求正文的假模型：记录原始 body 后返回合法 envelope（计划
-	// 本身无关紧要——非法计划令任务失败即可，正文已在失败前被捕获）。
-	var mu sync.Mutex
-	var bodies []string
-	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		raw, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-		mu.Lock()
-		bodies = append(bodies, string(raw))
-		mu.Unlock()
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"choices": []map[string]any{
-				{"message": map[string]string{"role": "assistant", "content": `{"summary":"s","steps":[]}`}},
-			},
-		})
-	}))
-	t.Cleanup(model.Close)
-	plannerClient, err := companion.NewPlannerClient(companion.ModelSettings{
-		Endpoint: model.URL + "/v1",
-		Model:    "test-model",
-	}, "", nil)
-	if err != nil {
-		t.Fatalf("构造测试 planner: %v", err)
-	}
-	host.world.companionManager.planner = plannerClient
+	requests := make(chan companionPlanningRequest, 1)
+	host.world.companionManager.planner = capturingPlannerTestSeam{requests: requests}
 
-	// 摘要属于伙伴而非任务：直接写入 manager 状态模拟「已有对话历史」。
-	host.world.stepMu.Lock()
-	host.world.companionManager.slots[id].summary = secretSummary
-	host.world.stepMu.Unlock()
+	operation, err := companion.ParseID("66666666-6666-4666-8666-666666666666")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := host.world.companions.ReplaceActiveMemory(
+		id, 1, 0, 1, storage.CompanionIdentity(operation), secretSummary,
+	); err != nil {
+		t.Fatalf("seed v5 mirror: %v", err)
+	}
 
 	sendIntegration(t, client, network.ChatCommand{Text: "@阿木 随便走走"})
 	deadline := time.Now().Add(waitDeadline)
+	var captured companionPlanningRequest
+	gotRequest := false
 	for time.Now().Before(deadline) {
 		result := host.world.StepForTest()
 		receiveCompanionChatTick(t, client, result.Tick)
-		mu.Lock()
-		count := len(bodies)
-		mu.Unlock()
-		if count >= 1 {
+		select {
+		case captured = <-requests:
+			gotRequest = true
+		default:
+		}
+		if gotRequest {
 			break
 		}
 	}
-	mu.Lock()
-	captured := append([]string(nil), bodies...)
-	mu.Unlock()
-	if len(captured) == 0 {
+	if !gotRequest {
 		t.Fatal("规划请求未在窗口内到达假模型")
 	}
-	for index, raw := range captured {
-		if strings.Contains(raw, secretPersona) {
-			t.Fatalf("规划请求 %d 泄漏人设文本：%s", index, raw)
-		}
-		if strings.Contains(raw, secretSummary) {
-			t.Fatalf("规划请求 %d 泄漏最近摘要文本：%s", index, raw)
-		}
+	raw, err := json.Marshal(struct {
+		Instruction string                 `json:"instruction"`
+		Snapshot    companion.PlanSnapshot `json:"snapshot"`
+	}{Instruction: captured.Instruction, Snapshot: captured.Snapshot})
+	if err != nil {
+		t.Fatal(err)
 	}
+	if strings.Contains(string(raw), secretPersona) {
+		t.Fatalf("规划请求泄漏人设文本：%s", raw)
+	}
+	if strings.Contains(string(raw), secretSummary) {
+		t.Fatalf("规划请求泄漏最近摘要文本：%s", raw)
+	}
+}
+
+type capturingPlannerTestSeam struct {
+	requests chan<- companionPlanningRequest
+}
+
+func (p capturingPlannerTestSeam) Plan(ctx context.Context, request companionPlanningRequest) (companionPlanningOutcome, error) {
+	select {
+	case p.requests <- request:
+	case <-ctx.Done():
+	}
+	return companionPlanningOutcome{}, companion.ErrPlannerInvalidPlan
 }

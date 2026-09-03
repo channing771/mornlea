@@ -96,11 +96,46 @@ describe("schema：下行 uiState 合法夹具", () => {
       }),
     ).toBe(true);
   });
+
+  it("loading 相位携带 loading 分节（loaded/total）通过校验", () => {
+    expect(
+      validateUiState({ phase: "loading", loading: { loaded: 1122, total: 4489 } }),
+    ).toBe(true);
+  });
 });
 
 describe("schema：下行 uiState 非法用例一律拒绝", () => {
   it("未知 phase 拒绝", () => {
-    expect(validateUiState({ phase: "loading" })).toBe(false);
+    // loading 相位随世界加载屏 change 合法化，未知相位夹具改用占位值。
+    expect(validateUiState({ phase: "bogus" })).toBe(false);
+  });
+
+  it("loading 分节 total=0 或 loaded 负数拒绝", () => {
+    expect(validateUiState({ phase: "loading", loading: { loaded: 0, total: 0 } })).toBe(false);
+    expect(validateUiState({ phase: "loading", loading: { loaded: -1, total: 4489 } })).toBe(false);
+  });
+
+  it("loading 分节携带可选网格字段（meshed/meshTotal）通过校验", () => {
+    expect(
+      validateUiState({
+        phase: "loading",
+        loading: { loaded: 4489, total: 4489, meshed: 53868, meshTotal: 107736 },
+      }),
+    ).toBe(true);
+    // 网格字段可缺席:纯区块形态仍合法。
+    expect(validateUiState({ phase: "loading", loading: { loaded: 1, total: 9 } })).toBe(true);
+  });
+
+  it("loading 分节 meshTotal=0 拒绝", () => {
+    expect(
+      validateUiState({ phase: "loading", loading: { loaded: 1, total: 9, meshed: 0, meshTotal: 0 } }),
+    ).toBe(false);
+  });
+
+  it("loading 分节携带未知属性拒绝", () => {
+    expect(
+      validateUiState({ phase: "loading", loading: { loaded: 1122, total: 4489, eta: 5 } }),
+    ).toBe(false);
   });
 
   it("缺 phase 拒绝", () => {
@@ -248,6 +283,199 @@ describe("schema：下行 uiState 非法用例一律拒绝", () => {
 
   it("顶层未知属性拒绝", () => {
     expect(validateUiState({ phase: "menu", cheat: true })).toBe(false);
+  });
+});
+
+// 游戏相位 hud 分节夹具：字段取值与 Go 侧镜像域同源（九格快捷栏、生命 0..20、
+// 氧气 0..300、聊天至多 6 行且每行至多 32 rune）。
+const hudSlot = (item: number, count: number, durability?: number) =>
+  durability === undefined ? { item, count } : { item, count, durability };
+
+const hudSlots = [
+  hudSlot(1, 64),
+  hudSlot(2, 7),
+  hudSlot(12, 1, 0.5),
+  ...Array.from({ length: 6 }, () => hudSlot(0, 0)),
+];
+
+const hudState = {
+  viewport: { width: 1280, height: 720 },
+  hotbar: { slots: hudSlots, selectedIndex: 2 },
+  health: { value: 17 },
+  hunger: { value: 18, saturationZero: true },
+  oxygen: { value: 210 },
+  eating: { active: false, progress: 0 },
+  popup: { text: "石镐" },
+  chat: { lines: ["系统：格式应为 @伙伴名 指令", ""] },
+  marker: true,
+  crosshair: true,
+  containerOpen: false,
+};
+
+describe("schema：下行 hud 分节合法夹具", () => {
+  it("game 相位携带完整 hud 分节通过校验", () => {
+    expect(validateUiState({ phase: "game", hud: hudState })).toBe(true);
+  });
+
+  it("最小 hud 分节（viewport 与进食进度条）通过校验（全部镜像未确认）", () => {
+    expect(
+      validateUiState({
+        phase: "game",
+        hud: {
+          viewport: { width: 0, height: 0 },
+          eating: { active: false, progress: 0 },
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it("paused 相位可携带 hud 分节（有已装配世界的相位）", () => {
+    expect(validateUiState({ phase: "paused", hud: hudState })).toBe(true);
+  });
+
+  it("进食激活的 hud 分节通过校验（进食条不再与采掘互斥）", () => {
+    expect(
+      validateUiState({
+        phase: "game",
+        hud: { ...hudState, eating: { active: true, progress: 0.5 } },
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("schema：下行 hud 分节非法用例一律拒绝", () => {
+  it("hud 携带未知属性拒绝（含已退役的 mining 分节）", () => {
+    expect(validateUiState({ phase: "game", hud: { ...hudState, cheat: true } })).toBe(false);
+    // 采掘进度条已退役：旧客户端形态里的 mining 分节按未知属性拒绝。
+    expect(
+      validateUiState({
+        phase: "game",
+        hud: { ...hudState, mining: { active: true, progress: 0.25, harvestable: true } },
+      }),
+    ).toBe(false);
+  });
+
+  it("hud 缺必填分节（viewport/eating）拒绝", () => {
+    const { viewport: _viewport, ...noViewport } = hudState;
+    expect(validateUiState({ phase: "game", hud: noViewport })).toBe(false);
+    const { eating: _eating, ...noEating } = hudState;
+    expect(validateUiState({ phase: "game", hud: noEating })).toBe(false);
+  });
+
+  it("viewport 负尺寸或非整数拒绝", () => {
+    expect(validateUiState({ phase: "game", hud: { viewport: { width: -1, height: 720 } } })).toBe(
+      false,
+    );
+    expect(
+      validateUiState({ phase: "game", hud: { viewport: { width: 1280.5, height: 720 } } }),
+    ).toBe(false);
+    expect(validateUiState({ phase: "game", hud: { viewport: { width: 1280 } } })).toBe(false);
+  });
+
+  it("hotbar 八格与十格拒绝", () => {
+    expect(
+      validateUiState({
+        phase: "game",
+        hud: { ...hudState, hotbar: { slots: hudSlots.slice(1), selectedIndex: 0 } },
+      }),
+    ).toBe(false);
+    expect(
+      validateUiState({
+        phase: "game",
+        hud: { ...hudState, hotbar: { slots: [...hudSlots, hudSlot(0, 0)], selectedIndex: 0 } },
+      }),
+    ).toBe(false);
+  });
+
+  it("hotbar selectedIndex 越界拒绝", () => {
+    expect(
+      validateUiState({
+        phase: "game",
+        hud: { ...hudState, hotbar: { slots: hudSlots, selectedIndex: 9 } },
+      }),
+    ).toBe(false);
+  });
+
+  it("slot 物品编号越界与数量超堆叠上界拒绝", () => {
+    const slots = [hudSlot(-1, 1), ...hudSlots.slice(1)];
+    expect(
+      validateUiState({ phase: "game", hud: { ...hudState, hotbar: { slots, selectedIndex: 0 } } }),
+    ).toBe(false);
+    const overstack = [hudSlot(1, 65), ...hudSlots.slice(1)];
+    expect(
+      validateUiState({
+        phase: "game",
+        hud: { ...hudState, hotbar: { slots: overstack, selectedIndex: 0 } },
+      }),
+    ).toBe(false);
+  });
+
+  it("slot durability 越界拒绝", () => {
+    // schema 上界按闭区间表达；0/1 的开区间约束是 Go 组装侧不变量（满耐久
+    // 与无耐久概念一律缺席该键），不在 schema 拒绝范围。
+    for (const durability of [1.01, -0.01]) {
+      const slots = [hudSlot(12, 1, durability), ...hudSlots.slice(1)];
+      expect(
+        validateUiState({
+          phase: "game",
+          hud: { ...hudState, hotbar: { slots, selectedIndex: 0 } },
+        }),
+      ).toBe(false);
+    }
+  });
+
+  it("health 与 oxygen 越界拒绝", () => {
+    expect(validateUiState({ phase: "game", hud: { ...hudState, health: { value: 21 } } })).toBe(
+      false,
+    );
+    expect(validateUiState({ phase: "game", hud: { ...hudState, oxygen: { value: 301 } } })).toBe(
+      false,
+    );
+  });
+
+  it("hunger 缺 saturationZero 拒绝", () => {
+    expect(
+      validateUiState({ phase: "game", hud: { ...hudState, hunger: { value: 18 } } }),
+    ).toBe(false);
+  });
+
+  it("eating 缺 active 或 progress 拒绝", () => {
+    expect(
+      validateUiState({ phase: "game", hud: { ...hudState, eating: { active: true } } }),
+    ).toBe(false);
+    expect(
+      validateUiState({ phase: "game", hud: { ...hudState, eating: { progress: 0.5 } } }),
+    ).toBe(false);
+  });
+
+  it("progress 越界拒绝", () => {
+    expect(
+      validateUiState({
+        phase: "game",
+        hud: { ...hudState, eating: { active: true, progress: 1.5 } },
+      }),
+    ).toBe(false);
+  });
+
+  it("聊天第七行与超 32 rune 行拒绝", () => {
+    expect(
+      validateUiState({
+        phase: "game",
+        hud: { ...hudState, chat: { lines: Array.from({ length: 7 }, () => "行") } },
+      }),
+    ).toBe(false);
+    expect(
+      validateUiState({
+        phase: "game",
+        hud: { ...hudState, chat: { lines: ["一".repeat(33)] } },
+      }),
+    ).toBe(false);
+  });
+
+  it("弹条文本超 32 rune 拒绝", () => {
+    expect(
+      validateUiState({ phase: "game", hud: { ...hudState, popup: { text: "一".repeat(33) } } }),
+    ).toBe(false);
   });
 });
 

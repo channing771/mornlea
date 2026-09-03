@@ -26,16 +26,11 @@
 - 场景清单是表驱动的 `captureScenes`，新增场景即新增一行；全部场景按表序
   共用同一个 application，前一场景留下的呈现状态由后续场景的 `Prepare`/
   `Apply` 负责清场；`resetCapturePresentation` 负责清 `combatFeedback` 与相关呈现，避免污染后续场景。
-- 场景顺序与 25 项正式清单以 `captureScenes` 及其顺序测试为准，固定上传容量以布局代码和容量
-  测试为准；不要在指南复制会漂移的清单或数字。
-- 抓帧链路为确定性设计：`RunCapture` 开头置位 `app.SetWorldTimeFrozen(true)`
-  并 defer 复位，只钉住昼夜呈现量的取值时点（权威 tick 与其余状态不受影响，
-  生产路径恒不冻结）；Rust client 的植物剔除经三段确定性 compaction 无原子
-  累加，同一二进制重复抓帧逐字节一致。
-- 自然短草进入正式基线后，`oak-grove` 场景承担树优先与短草可见性双重验收：
-  夹具断言自然短草长在 `GrassID` 上且相机中存在可辨识短草像素（守卫见
-  `capture_oak_grove_grass_test.go`）。
-
+- 场景顺序与 22 项正式清单以 `captureScenes` 及其顺序测试为准，固定上传容量以布局代码和容量
+  测试为准；不要在指南复制会漂移的清单或数字。常显 HUD（快捷栏/状态行/氧气/
+  采掘进食/弹条/准星/聊天/marker）的 GPU 呈现已退役，其像素验收由 WebView HUD
+  组件断言与 `frontend/visual` 部件基线承接，capture 只保留世界、夜景、材质与
+  容器保留面场景。`mining-crack-early` 与 `mining-crack-heavy` 两景呈现世界空间采掘裂纹，依次紧随 `water-surface-slope`。
 ## 消费端接口 (`capture/scene_application.go`)
 
 - `SceneApplication` 是 capture 对宿主应用状态的唯一访问面：场景表的
@@ -55,9 +50,6 @@
     ai-companion 夹具确定性）；
   - `TestTorchNightCaptureScenePosition`（torch-night 紧随 block-light-room）、
     `TestWaterUnderwaterCaptureSceneIsLast`（water-underwater 恒末位）；
-  - `capture_oak_grove_grass_test.go` 的自然短草守卫
-    （`TestOakGroveFixtureGrowsNaturalShortGrass`、
-    `TestOakGroveSceneShowsIdentifiableNaturalShortGrass`）；
   - `visual_compare_test.go` 的比对性质测试（`TestCompareImagesIdentical`、
     `TestDiffPixelRatioGate` 等）；
   - `TestCaptureSettled`（场景抓帧前的 settled 判据）。

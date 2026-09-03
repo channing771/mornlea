@@ -11,7 +11,7 @@ import (
 
 const (
 	// containerPanelQuads 是面板族的固定 quad 数：投影、表面、四边 1 design px
-	// 亮边与一个标题 atlas cell。
+	// 描边与一个标题 atlas cell。
 	containerPanelQuads = 7
 	// hotbarRowWidth 是 9 格行的 design px 宽度：面板内容列、面板下段的快捷栏
 	// 行与两条状态行共用同一中轴。
@@ -51,10 +51,13 @@ const (
 	openHUDWidth = hotbarRowWidth +
 		2*(hotbarPanelPadding+recipeColumnGap+recipeColumnWidth+hudEdgeMargin)
 	// openHUDHeight 是打开态从面板顶到 framebuffer 下沿的设计高度：统一面板
-	// 高度 + 主状态行与氧气行（快捷栏下方既有避让关系）+ 底边距。面板在
-	// 「顶边到状态栈上沿」剩余空间内垂直居中，该约束保证居中后仍有不小于
-	// 屏幕边距的上下余量，面板与状态栈互不相交。
-	openHUDHeight = containerPanelHeight + hotbarBottomMargin + 2*(healthHeartSize+statusBarGap)
+	// 高度 + 主状态行与氧气行（快捷栏下方既有避让关系）+ 面板下段快捷栏行
+	// 外沿到主状态行的 `statusHotbarGap` 可见净空 + 底边距。贴条竖向外沿
+	// `hotbarPanelPadding` 已计入 `containerPanelHeight` 的底部内边距，这里
+	// 不再重复相加。面板在「顶边到状态栈上沿」剩余空间内垂直居中，该约束
+	// 保证居中后仍有不小于屏幕边距的上下余量，面板与状态栈互不相交。
+	openHUDHeight = containerPanelHeight + hotbarBottomMargin +
+		2*(healthHeartSize+statusBarGap) + statusHotbarGap
 
 	// containerTitleSize/Gap 与 containerHeaderHeight（间隙加标题 cell）构成
 	// 面板顶部的标题行；overlayAreaRows 是图示区与背包段的统一行数：3×3 工作
@@ -68,7 +71,7 @@ const (
 
 	// panelShadowExpand 是面板投影层相对表面的外扩（design px）。
 	panelShadowExpand = float32(2)
-	// panelBorderWidth 是面板亮边宽度：1 design px。
+	// panelBorderWidth 是面板描边宽度：1 design px。
 	panelBorderWidth = float32(1)
 
 	// 合成图式的箭头图示与产物格间距（design px）。
@@ -124,11 +127,16 @@ func panelOrigin(viewportW, viewportH, panelW, panelH, bottomStackTop float32) (
 	return x, y
 }
 
-// openBottomStackTop 返回打开态底部状态栈的上沿（主状态行 quad 顶）：主状态行
-// 与氧气行的既有位置不随面板重排移动，面板在它上方的剩余空间内布局。
+// openBottomStackTop 返回打开态底部状态栈的上沿（主状态行顶）：主状态行与氧气
+// 行的既有位置不随面板重排移动，面板在它上方的剩余空间内布局。生命/饥饿与氧气
+// 两行已迁 WebView 组件呈现，GPU 保留面不再产生它们的实例，但这项预留仍是面板
+// 垂直居中的唯一下界；各预留项与 `openHUDHeight` 同序，两处约束因此描述同一份
+// 打开态构图。
 func openBottomStackTop(width, height float32) float32 {
-	_, _, statusTop, _, _ := statusBarBounds(true, width, height)
-	return statusTop
+	scale := hudScale(width, height)
+	bottomMargin := hotbarBottomMargin + 2*(healthHeartSize+statusBarGap) + statusHotbarGap + hotbarPanelPadding
+	hotbarY := height - (bottomMargin+hotbarSlotSize)*scale
+	return hotbarY + (hotbarSlotSize+hotbarPanelPadding+statusHotbarGap+statusBarGap)*scale
 }
 
 // containerPanelFrame 是一次打开态布局共享的面板矩形与关键行锚点：全部四类
@@ -146,7 +154,7 @@ type containerPanelFrame struct {
 // openPanelAnchor 返回视图无关的面板锚点：原点、缩放与各行位置对四类视图
 // 一致，统一栏位命中几何因此不随视图切换漂移。
 func openPanelAnchor(width, height float32) containerPanelFrame {
-	scale := hudScale(true, width, height)
+	scale := hudScale(width, height)
 	x, y := panelOrigin(width, height,
 		containerPanelWidth*scale, containerPanelHeight*scale, openBottomStackTop(width, height))
 	frame := containerPanelFrame{
@@ -175,8 +183,8 @@ func openContainerPanel(view containerView, width, height float32) containerPane
 }
 
 // appendContainerPanel 追加浮动面板族：外扩 2 design px 的投影、半透明表面、
-// 四边 1 design px 亮边与一个标题 atlas cell，共 `containerPanelQuads` 个
-// quad，零 glyph。调用方必须在准星之后、任何栏位之前追加。
+// 四边 1 design px 深暖棕描边与一个标题 atlas cell，共 `containerPanelQuads` 个
+// quad，零 glyph。调用方必须在任何栏位之前追加。
 func appendContainerPanel(dst *hotbarLayout, view containerView, width, height float32) {
 	frame := openContainerPanel(view, width, height)
 	expand := panelShadowExpand * frame.scale

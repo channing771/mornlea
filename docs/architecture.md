@@ -2,7 +2,7 @@
 
 ## 1. 系统总览
 
-Mornlea 由 Go 应用与两个 Rust `cdylib` 组成。Go 持有应用装配、世界与权威模拟、协议与传输、存储、客户端镜像，以及渲染的 CPU 布局和上传编排；Rust `mornlea_engine` 提供无窗口数值内核，Rust `mornlea_client` 提供 Darwin 窗口、事件和 GPU 后端。Go 与 Rust 只经既定 C ABI bridge 协作，不存在可切换的第二套生产实现。
+Mornlea 由 Go 应用、独立 Python 伙伴 Agent 服务与两个 Rust `cdylib` 组成。Go 持有应用装配、世界与权威模拟、协议与传输、存储、客户端镜像，以及渲染的 CPU 布局和上传编排；Python 只运行 Planner、Dialogue 与 compact memory；Rust `mornlea_engine` 提供无窗口数值内核，Rust `mornlea_client` 提供 Darwin 窗口、事件和 GPU 后端。Go 与 Rust 只经既定 C ABI bridge 协作；Go 与 Python 只经 loopback HTTP/MCP 合同协作，不存在可切换的第二套权威实现。
 
 ## 2. 服务端权威与客户端镜像
 
@@ -16,57 +16,79 @@ Mornlea 由 Go 应用与两个 Rust `cdylib` 组成。Go 持有应用装配、�
 
 `internal/network` 负责会话与传输编排：共享 stream 接口、Play endpoint 门面、登录状态机和 Memory transport，并以别名再导出对协议消息子包 `internal/network/protocol`（packet/message/registry/snapshot 协议层）与编解码子包 `internal/network/codec`（packet↔wire 编解码与帧封装）保持既有 `network.X` 消费面；`internal/network/tcp` 负责 TCP listener、dial、stream 实现，且只承担 transport 职责。Host 与模拟层消费相同的已验证命令，因此本地和远程模式共享行为语义。
 
-## 4. Go 包职责与 archcheck 依赖边界
+## 4. 独立伙伴 Agent 服务
+
+伙伴链路的依赖和写权限固定如下：
+
+```text
+Go Host / Agent HTTP client ──loopback HTTP v1──> Python FastAPI / LangGraph
+Python MCP SDK             ──loopback MCP v1───> Go frozen SnapshotRegistry
+Go tick ──strict decode + current-world revalidation──> Task Runner ──> world writes
+Python SQLite <──compact MemoryState CAS──> Go companions.ai v5 recovery mirror
+```
+
+Go 服务端仍唯一拥有伙伴身体、背包、任务/FIFO、generation、snapshot、最终计划校验与全部世界写入。Python 返回候选 Plan、Dialogue proposal 和 memory 结果；MCP 六工具只读 33×17×33 frozen terrain projection 或做纯候选校验，不能提交 `CompanionAction`。Go 不 shell-out、FFI 或嵌入 Python，也不负责启动/监护 Agent 进程。
+
+Agent、MCP 或 provider 不可用时，权威世界、已有 Running 任务与 FIFO 继续推进；新规划以稳定 `PlannerUnavailable` 失败，Dialogue 跳过。任何失败都不引入 direct-model fallback，也不能把恢复镜像当成正常 Dialogue 提示来源。
+
+Python 服务使用 Python 3.12、FastAPI、LangChain/LangGraph、单 Uvicorn worker 和单 SQLite writer。Planner 与 Dialogue 每次创建 transient graph，不保存 checkpoint。SQLite 只保存 namespace lease/fencing、每伙伴 epoch、summary/revision/operation 与 tombstone/CAS 元数据；不保存 plan、task、FIFO、snapshot、prompt、messages、persona、line 或 proposal。Python 是运行期摘要权威，Go `companions.ai` v5 镜像只用于数据库丢失或进程重启后的 reconcile。
+
+Go 与 Python 各自限制全局 4 个 Planner/Dialogue run、同一伙伴 1 个在途且无等待队列；模型调用默认/硬上限 3/5，自主工具 4/8，总时限 30/60 秒。snapshot registry 以 caller deadline 加 5 秒 TTL 持有最多四份 immutable snapshot；取消后立即拒绝新 lookup，已取得 view 的 handler 在有界 loop、编码和 response commit checkpoint 观察取消后丢弃完整结果。权威 tick 只发布/接收有界不可变值，不执行 Agent HTTP、MCP、模型、SQLite 或 JSON 编码 I/O。
+
+终态 Dialogue 先返回未提交 proposal。Go 在 tick 边界重验后建立 accepted reservation，之后 generation 变化不撤销该 reservation；只有 operation/epoch 对应的 CAS commit 确认成功，Go 才更新 v5 镜像并广播一次台词。active↔inactive 每次推进 memory epoch；active canonical-zero、active nonzero mirror 与 inactive tombstone 各有严格 replay identity，higher epoch 会 fence 全部旧结果。安全关服依次停止新聊天、取消并等待 worker、冻结队列/actor、保存最终 v5、flush 世界、release namespace，再关闭 MCP 与世界存储；保存或 flush 失败时保持组件可重试。
+
+## 5. Go 包职责与 archcheck 依赖边界
 
 - `cmd/mornlea` 和 `cmd/mornlea-server` 负责应用入口与资源生命周期装配。
 - `internal/world` 持有区块、section、容器和掉落物等世界数据模型。
-- `internal/sim` 为仅含指导文档的目录，权威模拟由五个子包承载：`contract`（跨边界 DTO）、`tuning`（simulation Tunables 快照）、`realm`（世界维度与单 tick 事务）、`entity`（玩家/伙伴/夜行者以及背包、容器、战斗、掉落和生命周期的唯一 owner）、`runtime`（inbox、订阅、时钟与固定 tick 编排）。`runtime.Engine` 不保存实体镜像，只组合一个 `*realm.State` 与一个 `*entity.State`；其公开实体生命周期/查询方法仅窄委派。依赖方向、owner schema 与单次提交纪律由 `internal/sim/AGENTS.md` 及 `internal/archcheck` 守住。
+- `internal/sim` 为仅含指导文档的目录，权威模拟由五个子包承载：`contract`（跨边界 DTO）、`tuning`（Tunables 快照）、`realm`（世界维度与单 tick 事务）、`entity`（玩家/伙伴/夜行者与玩法结算）、`runtime`（Engine 与 Step 编排）；依赖方向与单次提交纪律见 `internal/sim/AGENTS.md` 与 `internal/archcheck`。
 - `internal/network` 持有会话与传输编排（共享 stream 接口、endpoint 门面、登录状态机与 Memory transport）并以别名再导出对协议消息子包 `internal/network/protocol`（packet/message/registry/snapshot 协议层）与编解码子包 `internal/network/codec`（packet↔wire 编解码与帧封装）保持既有 `network.X` 消费面；`internal/network/tcp` 持有 TCP listener、dial、stream 实现，只依赖 `internal/network` 且保持 transport-only。
 - `internal/storage` 持有世界、玩家、伙伴和夜行者数据的编码、迁移、恢复与磁盘生命周期，并以子包 `internal/storage/chunk`、`internal/storage/player`、`internal/storage/companion`、`internal/storage/hostile`、`internal/storage/region` 等细化实现，顶层保持外部消费面。
 - `internal/server` 装配 Host、Server、登录、会话、权威 tick、发布和关服编排；通过 `internal/server/persistence` 委派存档生命周期，自身不持有保存队列、重试状态或 worker，实现只保留 `PersistenceStatus` 与 `ErrPlayerPersistenceBackpressure` 的兼容 re-export。
-- `internal/server/persistence` 单独持有世界区块与 metadata、玩家、伙伴、夜行者四类存档的加载、观察、异步保存、重试、flush/close 与 worker 生命周期；生产代码仅依赖 `internal/companion`、`internal/core`、`internal/physics`、`internal/sim/contract`、`internal/sim/runtime`、`internal/storage`，不得反向导入 `internal/server` 或访问 Host/Server 私有状态，依赖方向以 `internal/archcheck` 为准。
+- `internal/server/persistence` 单独持有世界区块与 metadata、玩家、伙伴、夜行者四类存档的加载、观察、异步保存、重试、flush/close 与 worker 生命周期；生产代码仅依赖 `internal/companion`、`internal/core`、`internal/physics`、`internal/sim/runtime`、`internal/storage`，不得反向导入 `internal/server` 或访问 Host/Server 私有状态，依赖方向以 `internal/archcheck` 为准。
 - `internal/pathfind` 持有不可变快照上的有界寻路且只依赖 `internal/core`；`internal/companion` 与 `internal/server` 消费它，但寻路不拥有玩法或世界访问。
 - `internal/client` 持有客户端镜像、输入预测、消息接收、client ABI bridge 和渲染侧 CPU 编排。
 - `internal/render`、`internal/mesh`、`internal/assets`、`internal/lod`、`internal/worldgen` 与 `internal/fluid` 持有领域数据描述、CPU 编码和 Rust 调用编排，不拥有 GPU 后端或第二套数值生产实现。
 - `internal/nativeabi` 是 engine ABI 的唯一 Go bridge。
 
-内部包允许的直接依赖以 `internal/archcheck/dependency_test.go` 的 `allowed` 表为准。`internal/archcheck` 同时以 `TestSimAuthorityStateOwnershipStaysExplicit` 扫描 runtime 的包变量与全部 holder，并把唯一 mutation/commit 绑定到 `StepWithTunables` 的真实调用路径；`TestAuthorityTickTunablesStayExplicit` 守住权威 tick 参数捕获和传递。其余门禁守住无 WebGPU Go 依赖、无图形专服闭包及长期版本基线；架构文档不复制会随包演进的依赖白名单。
+内部包允许的直接依赖以 `internal/archcheck/dependency_test.go` 的 `allowed` 表为准。`internal/archcheck` 同时守住无 WebGPU Go 依赖、无图形专服闭包、伙伴 Agent 服务发布边界、Make/CI 门禁和长期版本基线；架构文档不复制会随包演进的依赖白名单。
 
-## 5. `mornlea_engine` / engine ABI v10
+## 6. `mornlea_engine` / engine ABI v9
 
 `mornlea_engine` 是 mesh/light、collision、raycast、physics tick 积分、worldgen、LOD shell 与流体规则求值/重扫扫描的唯一生产实现；流体的队列、预算、游标与冲毁结算编排仍在 Go（`internal/fluid` 与 `internal/sim/realm` 经 `internal/nativeabi` 调用流体 kernel）。该 crate 保持无窗口，不拥有权威世界状态，不执行文件或网络 I/O，也不承载伤害、库存、权限或 tick 编排等业务规则。
 
-engine C ABI 当前为 v10。Go 侧只有 `internal/nativeabi` 可以接触该 ABI；领域包构造语义输入并解码结果。header、Rust FFI、Go bridge、ABI 版本和跨语言一致性检查必须成套演进，调用结束后任一侧都不得保留对方指针。
+engine C ABI 当前为 v9。Go 侧只有 `internal/nativeabi` 可以接触该 ABI；领域包构造语义输入并解码结果。header、Rust FFI、Go bridge、ABI 版本和跨语言一致性检查必须成套演进，调用结束后任一侧都不得保留对方指针。
 
-## 6. `mornlea_client` / client ABI v13
+## 7. `mornlea_client` / client ABI v14
 
 `mornlea_client` 持有 Darwin 窗口与事件采集、进程内 WKWebView 菜单层、GPU 资源、shader、render pass、窗口 surface 和离屏渲染。窗口型 UI（主菜单/设置/暂停/F3）由内嵌的 Vite + TypeScript + React 前端经 WKWebView 呈现，资产经 `mornlea://` scheme handler 从 Rust 内嵌字节供给；生存 HUD 与容器等固定界面仍走既有 GPU quad 管线。Go 不导入 WebGPU 绑定，只通过 `internal/client` 提供的 client ABI bridge 使用窗口和 renderer 领域接口。
 
-client C ABI 当前为 v13，并与 engine ABI 独立演进。菜单状态权威在 Go：下行 `ui_push_state` 在状态变化时向 WebView 推送 JSON 状态，上行 `drain_ui_events` 读出版本化 JSON 事件信封；桥协议形状由前端 `schema.json` 单源钉值。header、Rust FFI、`internal/client` bridge、版本和跨语言检查必须同步更新；失败或容量不足不能发布部分输出。
+client C ABI 当前为 v14，并与 engine ABI 独立演进。它完整保留 v13 引入的 window composite capture、两段式容量查询与紧凑 top-down BGRA8 输出；菜单状态权威在 Go：下行 `ui_push_state` 在状态变化时向 WebView 推送 JSON 状态，上行 `drain_ui_events` 读出版本化 JSON 事件信封；桥协议形状由前端 `schema.json` 单源钉值。header、Rust FFI、`internal/client` bridge、版本和跨语言检查必须同步更新；失败或容量不足不能发布部分输出。
 
-## 7. 图形客户端与无图形专服 release unit
+renderer 已拥有由 MRW1 原子更新的紧凑 `RenderWorld` 派生缓存，Go Mirror 仍是客户端逻辑状态的真相来源。该缓存入口目前只由 Rust/Go 测试驱动，尚未接入 `cmd/mornlea/app`；Go 仍持有生产 mesh 调度、connectivity/visibility、逐 section upload 与 draw 输入，迁移这些职责属于后续 change。
+
+## 8. 图形客户端与无图形专服 release unit
 
 Darwin 图形客户端 `mornlea` 同时依赖同一次构建的 `mornlea_engine` 与 `mornlea_client`，不能跨构建混装 ABI 组件。无图形专服 `mornlea-server` 不依赖 `mornlea_client`、窗口或 GPU 栈，但权威物理和空间查询仍依赖同次构建的 `mornlea_engine`。
 
 Linux 专服发布单元由 `mornlea-server` 与相邻的 `libmornlea_engine.so` 组成，并通过 `$ORIGIN` 加载。二者必须作为一个不可跨版本混装的 release unit 分发。
 
-## 8. 并发、数据和热路径约束
+## 9. 并发、数据和热路径约束
 
 - 跨 goroutine 发送成功后的消息及其 slice 视为不可变；后续修改必须复制。
 - 权威 tick、渲染和网络热路径只执行有界工作，不阻塞磁盘、网络、模型调用或其他重 CPU 工作。
 - 重工作通过有界队列、不可变快照或 worker 离开热路径，并在所有权清晰的边界汇合结果。
-- 权威 tick 参数边界：正常 `Server.step` 在 lifecycle/pause 早退后、聊天和伙伴任务前捕获一个值型 `runtime.TickTunables`，关服最终推进也只捕获一个；其中 simulation 与 physics 来自两组独立活动快照，各读取一次但不构成跨组原子事务。当前 tick 的 server manager、runtime、entity、realm 与 physics 按值复用同一参数束，server 不保存该束，权威路径不在阶段中重读全局值；`Engine.Step` 与隐式 physics API 只保留给非 server 的兼容调用。
 - 持久化并发边界：`internal/server/persistence` 的四类所有者各自以有界 channel 与固定数量 worker 隔离磁盘 I/O——`World` 由 `Options.SaveWorkers` 决定 worker 数（`saveJobs`/`saveCompletions` 容量为 `SaveWorkers*2`），`Players` 固定 2 worker（`playerSaveJobCapacity=16`/`playerSaveDoneCapacity=2`），`Companions` 与 `Hostiles` 各 1 worker（容量各 1）。权威 tick 仅执行有界、非阻塞的 `World.Observe`/`Drain`、`Players.Observe`/`Poll`、`Companions.Observe`/`Poll`、`Hostiles.Observe`/`Poll` 调度，绝不阻塞等待落盘；`SaveObserver` 仅在 `World` worker 的 `SaveBatch` 计时路径中调用，不在 tick 路径执行。`World.Flush` 与 `World.ShutdownContextError` 通过 `Options.EngineLocker`（根 `Server.stepMu`，子包独立构造时回退到私有 `sync.Mutex`）先于 `World.mu` 做短暂的 engine/state 变迁，随后立即释放两者再等待 channel/context；`Drain`/`Status` 仍保持调用方持有 tick 锁的既有契约。
 - 协议、存档和 FFI 入口先校验类型、长度、计数、容量与版本，再分配、遍历或写输出。
 - overflow、数据丢失、报告身份不完整和 I/O 错误必须显式失败，不能静默截断或吞错。
 
-## 9. 行为规格、实现进度和历史设计入口
+## 10. 行为规格、实现进度和历史设计入口
 
 当前可观察行为以代码、测试和 [`openspec/specs/`](../openspec/specs/) 为准。正在实施的变更位于 [`openspec/changes/`](../openspec/changes/)，流程见 [`docs/openspec.md`](openspec.md)。
 
 实现编年史见 [`docs/notes/progress.md`](notes/progress.md)。`docs/superpowers/` 与 [`openspec/changes/archive/`](../openspec/changes/archive/) 保存历史设计和 change 证据，不覆盖当前架构与行为主规格。完整入口见 [`docs/README.md`](README.md)。
 
-## 10. 仓库目录导览
+## 11. 仓库目录导览
 
 ```text
 .
@@ -80,7 +102,11 @@ Linux 专服发布单元由 `mornlea-server` 与相邻的 `libmornlea_engine.so`
 │   └── crates/
 │       ├── mornlea_engine/  固定 Rust 1.97.1 cdylib：mesh/light/collision/raycast/physics/worldgen/lod/fluid
 │       └── mornlea_client/  Darwin 窗口、事件循环、WebView 菜单层（frontend/ React 前端）与全部 GPU 渲染
-├── internal/                包职责见 §4，依赖白名单以 archcheck 为准
+├── contracts/
+│   └── companion-agent/    HTTP v1 与 MCP v1 的共享 manifest/schema/golden
+├── services/
+│   └── companion-agent/    Python 3.12 FastAPI/LangGraph/SQLite 独立服务
+├── internal/                包职责见 §5，依赖白名单以 archcheck 为准
 │   ├── core/                公共领域类型与 native raycast batch 驱动
 │   ├── companion/           独立伙伴身份、静态定义与身体类型
 │   ├── profile/             本机稳定玩家身份与档案
@@ -96,8 +122,8 @@ Linux 专服发布单元由 `mornlea-server` 与相邻的 `libmornlea_engine.so`
 │   │   ├── contract/        跨边界 DTO
 │   │   ├── tuning/          Tunables 快照与校验
 │   │   ├── realm/           世界维度、持久化与环境事务
-│   │   ├── entity/          玩家/伙伴/夜行者与玩法状态的唯一 owner
-│   │   └── runtime/         单 realm/entity 组合、订阅与 tick 编排
+│   │   ├── entity/          玩家/伙伴/夜行者与玩法结算
+│   │   └── runtime/         Engine、订阅与 Step 编排
 │   ├── server/              服务端 Host、Server、登录、会话、权威 tick、发布与关服编排
 │   │   └── persistence/     四类存档（世界/玩家/伙伴/夜行者）加载、观察、异步保存、重试、flush 与 worker
 │   ├── network/             二进制协议、登录状态机与 Memory/TCP 传输
@@ -108,6 +134,6 @@ Linux 专服发布单元由 `mornlea-server` 与相邻的 `libmornlea_engine.so`
 │   ├── render/              渲染 CPU 半部：布局、编码与上传调度
 │   ├── assets/              方块定义与程序化材质
 │   └── archcheck/           内部包依赖方向门禁测试
-├── scripts/agent-hooks/     Claude Code 与 Codex 共用的自动 Hook 守卫
+├── scripts/agent-hooks/     已下线 Hook 的策略实现与 CI 测试
 └── docs/                    设计、实施计划、性能记录与实现进度
 ```

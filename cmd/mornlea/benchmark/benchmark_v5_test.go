@@ -17,8 +17,8 @@ import (
 )
 
 func TestBenchmarkScenarioVersionIncludesNaturalGrassWorkload(t *testing.T) {
-	if scenarioVersion != 21 {
-		t.Fatalf("scenarioVersion=%d，想要自然短草之后的 v21", scenarioVersion)
+	if scenarioVersion != 22 {
+		t.Fatalf("scenarioVersion=%d，想要叠加在 v21（常显 HUD 迁出）之上的自然短草 v22", scenarioVersion)
 	}
 }
 

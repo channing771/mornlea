@@ -1,0 +1,78 @@
+{
+  "contract": "mornlea-companion-agent-mcp-tools-v1",
+  "failure_code": "unmineable_target",
+  "cases": [
+    {
+      "name": "ordinary single drop remains accepted",
+      "block_symbol": "StoneID",
+      "block_id": 2,
+      "mine_semantics": "single_drop",
+      "has_block_drop": true,
+      "accepted": true,
+      "code": null
+    },
+    {
+      "name": "furnace container batch remains accepted",
+      "block_symbol": "FurnaceID",
+      "block_id": 9,
+      "mine_semantics": "container_batch",
+      "has_block_drop": true,
+      "accepted": true,
+      "code": null
+    },
+    {
+      "name": "chest container batch remains accepted",
+      "block_symbol": "ChestID",
+      "block_id": 11,
+      "mine_semantics": "container_batch",
+      "has_block_drop": true,
+      "accepted": true,
+      "code": null
+    },
+    {
+      "name": "farmland remains rejected despite a registered drop",
+      "block_symbol": "FarmlandDryID",
+      "block_id": 35,
+      "mine_semantics": "forbidden_farming",
+      "has_block_drop": true,
+      "accepted": false,
+      "code": "unmineable_target"
+    },
+    {
+      "name": "immature crop remains rejected despite a registered drop",
+      "block_symbol": "WheatStage0ID",
+      "block_id": 37,
+      "mine_semantics": "forbidden_farming",
+      "has_block_drop": true,
+      "accepted": false,
+      "code": "unmineable_target"
+    },
+    {
+      "name": "undelivered multi-drop crop remains rejected",
+      "block_symbol": "WheatStage7ID",
+      "block_id": 44,
+      "mine_semantics": "undelivered_multi_drop",
+      "has_block_drop": true,
+      "accepted": false,
+      "code": "unmineable_target"
+    },
+    {
+      "name": "torch remains rejected despite a registered drop",
+      "block_symbol": "TorchStandingID",
+      "block_id": 71,
+      "mine_semantics": "forbidden_torch",
+      "has_block_drop": true,
+      "accepted": false,
+      "code": "unmineable_target"
+    },
+    {
+      "name": "block without a drop remains rejected",
+      "block_symbol": "BedrockID",
+      "block_id": 5,
+      "mine_semantics": "no_drop",
+      "has_block_drop": false,
+      "accepted": false,
+      "code": "unmineable_target"
+    }
+  ]
+}

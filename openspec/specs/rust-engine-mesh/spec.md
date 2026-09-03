@@ -28,7 +28,7 @@
 - **THEN** 结果 MUST 确定且不得共享可变 native 状态
 
 ### Requirement: ABI 失败不得产生部分网格
-系统 MUST 通过 `mornlea_engine.h` 中的 `MORNLEA_ENGINE_*`、`MORNLEA_STATUS_*`、`mornlea_engine_abi_version` 与 `mornlea_mesh_section` 提供唯一 native ABI，并对版本、结构长度、非空区段使用的 registry、emission、output overflow 与 Rust panic 返回可判定失败。ABI version MUST 保持 `1`，status 数值 MUST 保持 `0..9`。
+系统 MUST 通过 `mornlea_engine.h` 中的 `MORNLEA_ENGINE_*`、`MORNLEA_STATUS_*`、`mornlea_engine_abi_version` 与 `mornlea_mesh_section` 提供唯一 native ABI，并对版本、结构长度、非空区段使用的 registry、emission、output overflow 与 Rust panic 返回可判定失败。该边界最初以 ABI version `1` 建立；当前统一 engine ABI version MUST 为 `9`，status 数值 MUST 保持 `0..9`。
 
 #### Scenario: 非法输入被原子拒绝
 - **WHEN** native 调用收到任一非法输入
@@ -129,19 +129,25 @@ model 值 MUST 是有限的封闭集合：0=默认（无模型覆写，满格、
 - **WHEN** greedy 阶段执行
 - **THEN** 火把 quad MUST 不并入任何 merge 单元，普通方块 MUST 按既有规则保留合并
 
-### Requirement: engine ABI v8
+### Requirement: engine ABI v8 引入 mesh registry 布局并由 v9 保留
 
-registry entry 布局扩为 20 字节时，engine ABI 版本 MUST 从 `7` 升到 `8`：`mornlea_engine_abi_version()` MUST 返回 8，统一 ABI 版本常数、C header 与 Go 侧常量 MUST 同步为 8；低于 8 的调用 MUST 被既有 ABI 校验拒绝。本变更 MUST 只升 engine ABI（client ABI、协议、存档 schema 不变）。
+registry entry 布局扩为 20 字节时，engine ABI 版本 MUST 从 `7` 升到 `8`；这是 mesh registry layout 的历史引入版本。当前 engine ABI v9 MUST 原样保留该 20 字节布局和 mesh 行为，并在同一统一 ABI surface 上增加独立的 fluid exports；统一 ABI 版本常数、C header、Rust identity 与 Go 侧常量 MUST 同步为 9。任一非当前版本的调用 MUST 被既有 ABI 校验拒绝。mesh 布局变更本身 MUST NOT 改变 client ABI、协议或存档 schema。
 
 #### Scenario: 版本协商一致
 
 - **GIVEN** Go 侧 `internal/nativeabi.ABIVersion` 与 Rust `mornlea_engine_abi_version()` 在加载时互检
-- **WHEN** 双方均为 8
+- **WHEN** 双方均为 9
 - **THEN** 调用 MUST 全部成功
 
-#### Scenario: 旧版拒绝
+#### Scenario: v8 布局引入事实保持可追溯
 
-- **GIVEN** 调用方以 7 调起任一导出
+- **GIVEN** registry entry 从旧的 v7 布局扩为 20 字节
+- **WHEN** 检查 mesh ABI 演进历史
+- **THEN** 该布局引入 MUST 记为 engine ABI v8
+- **AND** 当前 v9 MUST 保持相同布局与 mesh 结果
+
+#### Scenario: 当前 v9 拒绝 v8 调用方
+
+- **GIVEN** 调用方以 8 调起当前 v9 的任一导出
 - **WHEN** ABI 校验
-- **THEN** MUST 被拒绝且携带版本错误
-
+- **THEN** MUST 被拒绝且携带版本错误，不发布部分输出

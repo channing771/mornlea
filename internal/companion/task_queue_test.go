@@ -402,8 +402,9 @@ func TestTaskDeadlineUsesWorldTimeTicks(t *testing.T) {
 	if got := TaskDeadlineTicks(0, 10); got != 10*TicksPerMinute {
 		t.Fatalf("10 分钟 deadline=%d，想要 %d", got, 10*TicksPerMinute)
 	}
-	// timeout 归一沿用 ModelSettings.TaskTimeout 的缺省约定：0 分钟不合法，
-	// 由配置层守住；这里锁定 1..60 全区间都能换算。
+	// timeout 归一沿用 TaskTimeoutDefaultMinutes 的缺省约定：0 分钟不合法，
+	// 由配置层（ValidateTaskTimeoutMinutes）与 server 启动校验守住；这里锁定
+	// 1..60 全区间都能换算。
 	for minutes := 1; minutes <= 60; minutes++ {
 		want := uint64(minutes) * TicksPerMinute
 		if got := TaskDeadlineTicks(0, minutes); got != want {

@@ -948,3 +948,39 @@ func TestSessionLifecycleResponsibilitiesStayInSessionFiles(t *testing.T) {
 		}
 	}
 }
+
+// TestCompanionPlannerProductionUsesAgentServiceOnly 锁定生产规划入口只经过 Agent
+// service：旧 direct-model Planner 的类型、构造器与方法不可重新进入生产源码，
+// Host 也不得重新装配 direct Planner 或旧 Dialogue client。
+func TestCompanionPlannerProductionUsesAgentServiceOnly(t *testing.T) {
+	root := moduleRoot(t)
+	companionSource := productionGoSource(t, filepath.Join(root, "internal", "companion"))
+	for _, forbidden := range []string{
+		"type PlannerClient struct",
+		"func NewPlannerClient(",
+		"func (p *PlannerClient) Plan(",
+		"type DialogueClient struct",
+		"func NewDialogueClient(",
+		"func (d *DialogueClient) Do(",
+		"type DialogueRequest struct",
+		"func NewDialogueRequest(",
+		"func DecodeDialogueResponse(",
+	} {
+		if strings.Contains(companionSource, forbidden) {
+			t.Errorf("internal/companion production retains direct planner symbol %q", forbidden)
+		}
+	}
+
+	serverSource := productionGoSource(t, filepath.Join(root, "internal", "server"))
+	for _, forbidden := range []string{
+		"companion.NewPlannerClient(",
+		"companion.NewDialogueClient(",
+		"CompanionSummary",
+		"slot.summary",
+		"companionManagerSummaries(",
+	} {
+		if strings.Contains(serverSource, forbidden) {
+			t.Errorf("internal/server production retains direct model construction %q", forbidden)
+		}
+	}
+}

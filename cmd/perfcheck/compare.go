@@ -31,13 +31,14 @@ func compareReportsWithScenarioUpgrade(
 	scenarioUpgrade := baseline.ScenarioVersion != current.ScenarioVersion
 	// 自然短草又一次改变了被测进程与被测世界（稳定方块与 mesh registry 追加
 	// 短草、植物材质判定集合扩为 `[31..54] ∪ {68}`、worldgen `MGW1` layout 3
-	// 且 engine ABI v10、固定世界出现确定性短草格），因此当前唯一迁移是 v20
-	// 到 v21。历史的 19:20 已退役——它只作为归档证据留在 docs/notes，不再是
-	// 授权值。
-	allowedScenarioUpgrade := baseline.ScenarioVersion == 20 && current.ScenarioVersion == 21 &&
-		allowScenarioUpgrade == "20:21"
+	// 且 engine ABI v10、固定世界出现确定性短草格），叠加在 v21（常显 HUD 迁
+	// 出 GPU 保留面）基线之上，因此当前唯一迁移是 v21 到 v22。历史的 20:21
+	// （HUD 迁移）与更早的 19:20 已退役——它们只作为归档证据留在 docs/notes，
+	// 不再是授权值。
+	allowedScenarioUpgrade := baseline.ScenarioVersion == 21 && current.ScenarioVersion == 22 &&
+		allowScenarioUpgrade == "21:22"
 	if allowScenarioUpgrade != "" && !allowedScenarioUpgrade {
-		return nil, fmt.Errorf("场景迁移授权 %q 无效：只允许 v20 到 v21 使用 20:21", allowScenarioUpgrade)
+		return nil, fmt.Errorf("场景迁移授权 %q 无效：只允许 v21 到 v22 使用 21:22", allowScenarioUpgrade)
 	}
 	if scenarioUpgrade && !allowedScenarioUpgrade {
 		return nil, fmt.Errorf(

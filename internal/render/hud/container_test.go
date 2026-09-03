@@ -45,9 +45,9 @@ func TestContainerPixelCellsUseSharedSlotUV(t *testing.T) {
 		{"箱子", nil, nil, &ChestOverlay{}, 0},
 	} {
 		t.Run(view.name, func(t *testing.T) {
-			got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, view.crafting, view.overlay, view.chest, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, width, height)
+			got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, view.crafting, view.overlay, view.chest, width, height)
 			for slot := range core.InventorySlots {
-				x, y := inventorySlotOrigin(slot, true, width, height)
+				x, y := inventorySlotOrigin(slot, width, height)
 				assertSlot(t, got, x, y)
 			}
 			switch {
@@ -93,7 +93,7 @@ func TestContainerTitlesUseAtlasCells(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var layout hotbarLayout
-			got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, test.crafting, test.overlay, test.chest, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, width, height)
+			got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, test.crafting, test.overlay, test.chest, width, height)
 			wantUV := hotbarTextureUV(test.column)
 			frame := openPanelAnchor(width, height)
 			count := 0
@@ -132,12 +132,12 @@ func TestCraftingOverlayDrawsPersonalAndWorkbenchGrids(t *testing.T) {
 	personal.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 12}
 	personal.Slots[3] = core.ItemStack{Item: core.ItemOakLog, Count: 1}
 	var layout hotbarLayout
-	got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, personal, nil, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, width, height)
-	// 准星、面板族、选中框、36 格，加合成区内容（轮廓、5 个凹槽、2 个双层色块、
+	got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, personal, nil, nil, width, height)
+	// 面板族、选中框、36 格，加合成区内容（轮廓、5 个凹槽、2 个双层色块、
 	// 箭头）与十条配方入口。
-	if len(got.quads) != crosshairQuads+containerPanelQuads+1+core.InventorySlots+11+recipeColumnQuads {
+	if len(got.quads) != containerPanelQuads+1+core.InventorySlots+11+recipeColumnQuads {
 		t.Fatalf("个人网格 quads=%d，想要基础 %d 加合成内容 11 与配方栏 %d",
-			len(got.quads), crosshairQuads+containerPanelQuads+1+core.InventorySlots, recipeColumnQuads)
+			len(got.quads), containerPanelQuads+1+core.InventorySlots, recipeColumnQuads)
 	}
 	for slot := range 4 {
 		x, y := craftingGridSlotOrigin(slot, 2, width, height)
@@ -164,12 +164,12 @@ func TestCraftingOverlayDrawsPersonalAndWorkbenchGrids(t *testing.T) {
 	}
 	// 产物取两位数量：glyph 容量按 10 个格全部两位数字锁定（craftingGlyphs）。
 	workbench.Output = core.ItemStack{Item: core.ItemStoneBrick, Count: 12}
-	got = layoutInventory(&layout, atlas, core.Inventory{}, true, -1, workbench, nil, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, width, height)
-	// 准星 + 面板族 + 选中框 + 36 格，加合成内容 32（轮廓 + 10 凹槽 + 20 色块 +
+	got = layoutInventory(&layout, atlas, core.Inventory{}, true, -1, workbench, nil, nil, width, height)
+	// 面板族 + 选中框 + 36 格，加合成内容 32（轮廓 + 10 凹槽 + 20 色块 +
 	// 箭头）与配方栏 30。
-	if len(got.quads) != crosshairQuads+containerPanelQuads+1+core.InventorySlots+craftingContentQuads+recipeColumnQuads {
+	if len(got.quads) != containerPanelQuads+1+core.InventorySlots+craftingContentQuads+recipeColumnQuads {
 		t.Fatalf("满工作台 quads=%d，想要基础 %d 加合成内容 %d 与配方栏 %d", len(got.quads),
-			crosshairQuads+containerPanelQuads+1+core.InventorySlots, craftingContentQuads, recipeColumnQuads)
+			containerPanelQuads+1+core.InventorySlots, craftingContentQuads, recipeColumnQuads)
 	}
 	if craftingContentQuads != 32 || craftingGlyphs != 40 {
 		t.Fatalf("合成内容容量 quads/glyphs=%d/%d，想要 32/40", craftingContentQuads, craftingGlyphs)
@@ -191,24 +191,24 @@ func TestCraftingOverlayDrawsPersonalAndWorkbenchGrids(t *testing.T) {
 	// 空产物格只画凹槽不画色块：产物格内容由权威镜像决定，客户端不预测。
 	empty := &CraftingOverlay{Size: 2}
 	empty.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 2}
-	got = layoutInventory(&layout, atlas, core.Inventory{}, true, -1, empty, nil, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, width, height)
+	got = layoutInventory(&layout, atlas, core.Inventory{}, true, -1, empty, nil, nil, width, height)
 	outputX, outputY = craftingOutputOrigin(2, width, height)
 	for _, quad := range got.quads {
 		if quad.X == outputX && quad.Y == outputY && quad.Color != ([4]float32{1, 1, 1, 1}) {
 			t.Fatalf("空产物格画出了非凹槽内容: %+v", quad)
 		}
 	}
-	// 产物格轮廓底衬取强调色：产物是强调色四类语义之一。
+	// 产物格轮廓底衬取麦金强调：产物属于 `accentProgress` 语义族。
 	expand := craftingOutputOutlineExpand * got.scale
 	foundOutline := false
 	for _, quad := range got.quads {
-		if quad.X == outputX-expand && quad.Y == outputY-expand && quad.Color == accentAmber {
+		if quad.X == outputX-expand && quad.Y == outputY-expand && quad.Color == accentProgress {
 			foundOutline = true
 			break
 		}
 	}
 	if !foundOutline {
-		t.Fatal("产物格缺少琥珀轮廓底衬")
+		t.Fatal("产物格缺少麦金轮廓底衬")
 	}
 }
 
@@ -255,7 +255,7 @@ func TestCraftingSlotAtCoversUnifiedIndices(t *testing.T) {
 		}
 		// 背包 9..44 与背包命中一致偏移 9。
 		for _, slot := range []int{0, 8, 9, 35} {
-			x, y := inventorySlotOrigin(slot, true, float32(width), float32(height))
+			x, y := inventorySlotOrigin(slot, float32(width), float32(height))
 			got, ok := CraftingSlotAt(float64(x)+1, float64(y)+1, width, height, test.size)
 			if !ok || int(got) != slot+core.CraftingGridSlots {
 				t.Fatalf("尺寸 %d 背包格 %d 命中 = %d, %v，想要 %d", test.size, slot, got, ok, slot+core.CraftingGridSlots)
@@ -321,25 +321,25 @@ func TestCraftingSourceHighlightCoversUnifiedView(t *testing.T) {
 	for _, source := range []int{0, 4, 8, 9, 17, 44} {
 		got := layoutInventory(
 			&layout, atlas, core.Inventory{}, true, source,
-			&CraftingOverlay{Size: 3}, nil, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800,
+			&CraftingOverlay{Size: 3}, nil, nil, 1280, 800,
 		)
-		highlight := got.quads[crosshairQuads+containerPanelQuads+1]
-		wantX, wantY := inventorySlotOrigin(source-core.CraftingGridSlots, true, 1280, 800)
+		highlight := got.quads[containerPanelQuads+1]
+		wantX, wantY := inventorySlotOrigin(source-core.CraftingGridSlots, 1280, 800)
 		if source < core.CraftingGridSlots {
 			wantX, wantY = craftingGridSlotOrigin(source, 3, 1280, 800)
 		}
-		border := hotbarSelectBorder * hudScale(true, 1280, 800)
+		border := hotbarSelectBorder * hudScale(1280, 800)
 		if highlight.X != wantX-border || highlight.Y != wantY-border {
 			t.Fatalf("来源 %d 高亮 = %+v，想要包住 (%f,%f)", source, highlight, wantX, wantY)
 		}
 	}
 	// 越界来源（超出统一视图 0..44）不画高亮；maxQuadTestInventory 的全部物品
 	// 色块与九条耐久条都计入基础计数。
-	baseQuads := crosshairQuads + containerPanelQuads + 1 + core.InventorySlots + core.InventorySlots*2 +
+	baseQuads := containerPanelQuads + 1 + core.InventorySlots + core.InventorySlots*2 +
 		core.HotbarSlots*2 + craftingContentQuads + recipeColumnQuads
 	got := layoutInventory(
 		&layout, atlas, maxQuadTestInventory(), true, 45,
-		fullCraftingOverlay(), nil, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800,
+		fullCraftingOverlay(), nil, nil, 1280, 800,
 	)
 	if len(got.quads) != baseQuads {
 		t.Fatalf("越界来源多画了高亮: quads=%d，想要 %d", len(got.quads), baseQuads)
@@ -358,9 +358,9 @@ func TestInventoryLayoutDrawsCraftingArea(t *testing.T) {
 	}
 	// 空个人网格：面板族、选中框、36 格，与「轮廓 + 5 凹槽 + 箭头」的合成内容
 	// 和十条配方入口。
-	open := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, nil, nil, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
-	if len(open.quads) != crosshairQuads+containerPanelQuads+1+core.InventorySlots+7+recipeColumnQuads {
-		t.Fatalf("空个人网格 quads=%d，想要准星、面板族、选中框、36 格、7 个合成内容与配方栏",
+	open := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, nil, nil, nil, 1280, 800)
+	if len(open.quads) != containerPanelQuads+1+core.InventorySlots+7+recipeColumnQuads {
+		t.Fatalf("空个人网格 quads=%d，想要面板族、选中框、36 格、7 个合成内容与配方栏",
 			len(open.quads))
 	}
 	// 空个人网格没有物品数量；glyph 全部来自配方栏三条数量为 4 的产物。
@@ -375,8 +375,8 @@ func TestInventoryLayoutDrawsCraftingArea(t *testing.T) {
 		workbench.Slots[slot] = core.ItemStack{Item: core.ItemStone, Count: core.MaxStackCount}
 	}
 	workbench.Output = core.ItemStack{Item: core.ItemStoneBrick, Count: 4}
-	got := layoutInventory(&layout, atlas, full, true, 5, workbench, nil, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
-	want := crosshairQuads + containerPanelQuads + 2 + core.InventorySlots + core.InventorySlots*2 +
+	got := layoutInventory(&layout, atlas, full, true, 5, workbench, nil, nil, 1280, 800)
+	want := containerPanelQuads + 2 + core.InventorySlots + core.InventorySlots*2 +
 		core.HotbarSlots*2 + craftingContentQuads + recipeColumnQuads
 	if len(got.quads) != want {
 		t.Fatalf("满工作台 quads=%d，想要 %d", len(got.quads), want)
@@ -392,10 +392,10 @@ func TestContainerOverlaysReplaceCraftingContent(t *testing.T) {
 	atlas := newFakeNameTagAtlas()
 	var layout hotbarLayout
 	// 空背包 + 空叠加视图的基础：面板族、选中框与 36 格。
-	const baseQuads = crosshairQuads + containerPanelQuads + 1 + core.InventorySlots
+	const baseQuads = containerPanelQuads + 1 + core.InventorySlots
 
 	workbench := &CraftingOverlay{Size: 3}
-	crafting := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, workbench, nil, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
+	crafting := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, workbench, nil, nil, 1280, 800)
 	// 空 3×3：轮廓、10 个凹槽、箭头与配方栏。
 	if len(crafting.quads) != baseQuads+12+recipeColumnQuads {
 		t.Fatalf("空工作台视图 quads=%d，想要 %d+12+%d", len(crafting.quads), baseQuads, recipeColumnQuads)
@@ -412,7 +412,7 @@ func TestContainerOverlaysReplaceCraftingContent(t *testing.T) {
 		// 空箱子：27 个凹槽。
 		{"箱子", nil, &ChestOverlay{}, baseQuads + core.ChestSlots},
 	} {
-		got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, workbench, view.overlay, view.chest, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
+		got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, workbench, view.overlay, view.chest, 1280, 800)
 		if len(got.quads) != view.want {
 			t.Fatalf("%s 视图 quads=%d，想要 %d（合成区已被互斥替换）", view.name, len(got.quads), view.want)
 		}
@@ -427,8 +427,7 @@ func TestContainerOverlaysReplaceCraftingContent(t *testing.T) {
 	// 实例数是熔炉组成（含 2 条非零进度填充），而不是合成内容的 12+配方栏。
 	withProgress := layoutInventory(
 		&layout, atlas, core.Inventory{}, true, -1,
-		&CraftingOverlay{Size: 3}, &FurnaceOverlay{ProgressTicks: 7, BurnTicks: 300}, nil,
-		MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800,
+		&CraftingOverlay{Size: 3}, &FurnaceOverlay{ProgressTicks: 7, BurnTicks: 300}, nil, 1280, 800,
 	)
 	if len(withProgress.quads) != baseQuads+5+2 {
 		t.Fatalf("熔炉优先视图 quads=%d，想要 %d+5+2", len(withProgress.quads), baseQuads)
@@ -443,7 +442,7 @@ func TestFurnaceOverlayDrawsThreeSlotsAndTwoBars(t *testing.T) {
 	}
 	var layout hotbarLayout
 
-	empty := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, nil, &FurnaceOverlay{}, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
+	empty := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, nil, &FurnaceOverlay{}, nil, 1280, 800)
 	// 空熔炉：3 个栏位背景与 2 条进度底衬，没有物品色块或填充。
 	emptyQuads := len(empty.quads)
 	if len(empty.glyphs) != 0 {
@@ -451,7 +450,7 @@ func TestFurnaceOverlayDrawsThreeSlotsAndTwoBars(t *testing.T) {
 	}
 
 	full := layoutInventory(
-		&layout, atlas, core.Inventory{}, true, -1, nil, fullFurnaceOverlay(), nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800,
+		&layout, atlas, core.Inventory{}, true, -1, nil, fullFurnaceOverlay(), nil, 1280, 800,
 	)
 	if len(full.quads) != emptyQuads+3*2+2 {
 		t.Fatalf("满熔炉 quads = %d，想要比空熔炉多 3 个双层色块和 2 条填充", len(full.quads))
@@ -471,7 +470,7 @@ func TestFurnaceBarCompositionCropsAtlasIcons(t *testing.T) {
 	got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, nil, &FurnaceOverlay{
 		BurnTicks:     core.FurnaceBurnTicks / 2,
 		ProgressTicks: core.FurnaceSmeltTicks / 2,
-	}, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, width, height)
+	}, nil, width, height)
 	flameX, flameY := furnaceFlameOrigin(width, height)
 	arrowX, arrowY := furnaceArrowOrigin(width, height)
 	flameSize := furnaceFlameSize * got.scale
@@ -547,7 +546,7 @@ func TestFurnaceSlotAtCoversUnifiedIndices(t *testing.T) {
 	width, height := uint32(1280), uint32(800)
 	// 0..35 与背包命中一致。
 	for _, slot := range []int{0, 8, 9, 35} {
-		x, y := inventorySlotOrigin(slot, true, float32(width), float32(height))
+		x, y := inventorySlotOrigin(slot, float32(width), float32(height))
 		got, ok := FurnaceSlotAt(float64(x)+1, float64(y)+1, width, height)
 		if !ok || int(got) != slot {
 			t.Fatalf("统一索引 %d 命中 = %d, %v", slot, got, ok)
@@ -580,15 +579,15 @@ func TestFurnaceSourceHighlightCoversFurnaceSlots(t *testing.T) {
 	for source := range core.FurnaceViewSlots {
 		got := layoutInventory(
 			&layout, atlas, core.Inventory{}, true, source,
-			nil, &FurnaceOverlay{}, nil, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800,
+			nil, &FurnaceOverlay{}, nil, 1280, 800,
 		)
 		// 面板族和当前选中框之后是来源高亮。
-		highlight := got.quads[crosshairQuads+containerPanelQuads+1]
-		wantX, wantY := inventorySlotOrigin(source, true, 1280, 800)
+		highlight := got.quads[containerPanelQuads+1]
+		wantX, wantY := inventorySlotOrigin(source, 1280, 800)
 		if source >= core.InventorySlots {
 			wantX, wantY = furnaceSlotOrigin(source-core.InventorySlots, 1280, 800)
 		}
-		border := hotbarSelectBorder * hudScale(true, 1280, 800)
+		border := hotbarSelectBorder * hudScale(1280, 800)
 		if highlight.X != wantX-border || highlight.Y != wantY-border {
 			t.Fatalf("来源 %d 高亮 = %+v，想要包住 (%f,%f)",
 				source, highlight, wantX, wantY)
@@ -604,7 +603,7 @@ func TestChestOverlayDraws27SlotsWithItemsAndCounts(t *testing.T) {
 	}
 	var layout hotbarLayout
 
-	empty := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, nil, nil, &ChestOverlay{}, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
+	empty := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, nil, nil, &ChestOverlay{}, 1280, 800)
 	// 空箱子：27 个栏位背景，没有色块也没有数字。
 	if len(empty.glyphs) != 0 {
 		t.Fatalf("空箱子数字 = %d，想要 0", len(empty.glyphs))
@@ -615,7 +614,7 @@ func TestChestOverlayDraws27SlotsWithItemsAndCounts(t *testing.T) {
 	sparse.Items[0] = core.ItemStack{Item: core.ItemStone, Count: 64}
 	sparse.Items[13] = core.ItemStack{Item: core.ItemCoal, Count: 5}
 	sparse.Items[26] = core.ItemStack{Item: core.ItemIronIngot, Count: 1}
-	got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, nil, nil, &sparse, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
+	got := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, nil, nil, &sparse, 1280, 800)
 	if len(got.quads) != emptyQuads+3*2 {
 		t.Fatalf("三格占用 quads=%d，想要比空箱子多 3 个双层色块", len(got.quads))
 	}
@@ -630,7 +629,7 @@ func TestChestOverlayDraws27SlotsWithItemsAndCounts(t *testing.T) {
 		assertHotbarItemFace(t, face, item)
 	}
 
-	full := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, nil, nil, fullChestOverlay(), MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800)
+	full := layoutInventory(&layout, atlas, core.Inventory{}, true, -1, nil, nil, fullChestOverlay(), 1280, 800)
 	if len(full.quads) != emptyQuads+core.ChestSlots*2 {
 		t.Fatalf("满箱子 quads=%d，想要比空箱子多 %d 个双层色块", len(full.quads), core.ChestSlots)
 	}
@@ -644,10 +643,10 @@ func TestChestOverlayTakesPriorityOverFurnaceOverlay(t *testing.T) {
 	atlas := newFakeNameTagAtlas()
 	var layout hotbarLayout
 	both := layoutInventory(
-		&layout, atlas, core.Inventory{}, true, -1, &CraftingOverlay{Size: 3}, &FurnaceOverlay{}, &ChestOverlay{}, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800,
+		&layout, atlas, core.Inventory{}, true, -1, &CraftingOverlay{Size: 3}, &FurnaceOverlay{}, &ChestOverlay{}, 1280, 800,
 	)
 	chestOnly := layoutInventory(
-		&layout, atlas, core.Inventory{}, true, -1, nil, nil, &ChestOverlay{}, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800,
+		&layout, atlas, core.Inventory{}, true, -1, nil, nil, &ChestOverlay{}, 1280, 800,
 	)
 	if len(both.quads) != len(chestOnly.quads) {
 		t.Fatalf("两者都非 nil 时 quads=%d，想要与仅箱子相同 %d", len(both.quads), len(chestOnly.quads))
@@ -657,7 +656,7 @@ func TestChestSlotAtCoversUnifiedIndices(t *testing.T) {
 	width, height := uint32(1280), uint32(800)
 	// 0..35 与背包命中一致。
 	for _, slot := range []int{0, 8, 9, 35} {
-		x, y := inventorySlotOrigin(slot, true, float32(width), float32(height))
+		x, y := inventorySlotOrigin(slot, float32(width), float32(height))
 		got, ok := ChestSlotAt(float64(x)+1, float64(y)+1, width, height)
 		if !ok || int(got) != slot {
 			t.Fatalf("统一索引 %d 命中 = %d, %v", slot, got, ok)
@@ -689,15 +688,15 @@ func TestChestSourceHighlightCoversChestSlots(t *testing.T) {
 	for source := range core.ChestViewSlots {
 		got := layoutInventory(
 			&layout, atlas, core.Inventory{}, true, source,
-			nil, nil, &ChestOverlay{}, MiningOverlay{}, EatingOverlay{}, CrosshairOverlay{Visible: true}, 1280, 800,
+			nil, nil, &ChestOverlay{}, 1280, 800,
 		)
 		// 面板族和当前选中框之后是来源高亮。
-		highlight := got.quads[crosshairQuads+containerPanelQuads+1]
-		wantX, wantY := inventorySlotOrigin(source, true, 1280, 800)
+		highlight := got.quads[containerPanelQuads+1]
+		wantX, wantY := inventorySlotOrigin(source, 1280, 800)
 		if source >= core.InventorySlots {
 			wantX, wantY = chestSlotOrigin(source-core.InventorySlots, 1280, 800)
 		}
-		border := hotbarSelectBorder * hudScale(true, 1280, 800)
+		border := hotbarSelectBorder * hudScale(1280, 800)
 		if highlight.X != wantX-border || highlight.Y != wantY-border {
 			t.Fatalf("来源 %d 高亮 = %+v，想要包住 (%f,%f)",
 				source, highlight, wantX, wantY)

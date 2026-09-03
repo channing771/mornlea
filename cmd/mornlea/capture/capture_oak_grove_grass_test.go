@@ -3,8 +3,10 @@ package capture
 // capture_oak_grove_grass_test.go：自然短草视觉 provenance 的钉死回归。规格
 // delta visual-verification 要求 oak-grove 的固定夹具包含至少一株在相机中
 // 可辨识的短草，且必须经既有四 quad alpha-cutout 植物路径呈现（透明边缘与
-// 交叉轮廓，而不是实心立方体或不透明矩形）。正式场景清单恰好 25 项、顺序
-// 不变、既有双阈值与无窗口链路同样是本变更不得放宽的门禁，这里一并钉住。
+// 交叉轮廓，而不是实心立方体或不透明矩形）。正式场景清单在 HUD 三场景退役
+// 与 mining-crack 对加入后恰好 24 项（完整冻结顺序由
+// capture_scene_order_test.go 承担）、既有双阈值与无窗口链路同样是本变更不得
+// 放宽的门禁，这里一并钉住。
 
 import (
 	"image"
@@ -240,23 +242,12 @@ func TestOakGroveSceneShowsIdentifiableNaturalShortGrass(t *testing.T) {
 		identifiable.topDiff, identifiable.bottomDiff)
 }
 
-// TestCaptureOfficialSceneListStaysAtTwentyFive 钉住正式场景清单恰好 25 项且
-// 顺序与冻结清单一致；本变更不得为自然短草新增第 26 个正式场景。
-func TestCaptureOfficialSceneListStaysAtTwentyFive(t *testing.T) {
-	if len(captureScenes) != 25 {
-		t.Fatalf("正式 capture 场景数=%d，想要恰好 25", len(captureScenes))
-	}
-	if len(captureOfficialSceneNames) != 25 {
-		t.Fatalf("冻结清单长度=%d，想要 25", len(captureOfficialSceneNames))
-	}
-	got := make([]string, len(captureScenes))
-	for index, scene := range captureScenes {
-		got[index] = scene.Name
-	}
-	for index, name := range got {
-		if name != captureOfficialSceneNames[index] {
-			t.Fatalf("场景 %d=%q，冻结顺序中为 %q", index, name, captureOfficialSceneNames[index])
-		}
+// TestCaptureOfficialSceneListStaysAtTwentyFour 钉住正式场景清单在 HUD 三场景
+// 退役与 mining-crack 对加入后恰好 24 项；自然短草不得为它新增第 25 个正式
+// 场景，完整数量与冻结顺序断言由 capture_scene_order_test.go 的清单守卫承担。
+func TestCaptureOfficialSceneListStaysAtTwentyFour(t *testing.T) {
+	if len(captureScenes) != 24 {
+		t.Fatalf("正式 capture 场景数=%d，想要恰好 24", len(captureScenes))
 	}
 }
 

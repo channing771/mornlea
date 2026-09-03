@@ -72,6 +72,9 @@ type Server struct {
 	runtimeDone chan struct{}
 	closedDone  chan struct{}
 	storePhase  storeShutdownPhase
+	// beforeStoreClose 由 Host 注入，用于在全部持久化成功后、Store Close 前
+	// 释放并关闭外部 Agent/MCP 资源。失败的持久化不会触发该钩子。
+	beforeStoreClose func(context.Context) error
 }
 
 func NewWorld(config Config, generator Generator, store storage.Store) *Server {
@@ -81,7 +84,7 @@ func NewWorld(config Config, generator Generator, store storage.Store) *Server {
 	// benchmark 形态不接夜行者持久化（世界随进程生存，无跨重启恢复语义）；
 	// newWorld 的错误只可能来自需要持久化装配的路径，这里不可达，防御口径
 	// 与伙伴 planner 构造的 panic 一致。
-	server, err := newWorld(config, generator, store, nil, nil)
+	server, err := newWorld(config, generator, store, nil, nil, nil, nil)
 	if err != nil {
 		panic("server: NewWorld: " + err.Error())
 	}
@@ -94,6 +97,8 @@ func newWorld(
 	store storage.Store,
 	companions *persistence.Companions,
 	hostiles *persistence.Hostiles,
+	planner companionPlanner,
+	dialogue companionDialogue,
 ) (*Server, error) {
 	config.validate()
 	if generator == nil {
@@ -150,6 +155,9 @@ func newWorld(
 	// 包袱。两侧策略不同是刻意的，装配归一后的值随后经 wire 下发时必然合法。
 	server.engine.RestoreDayPhaseOffset(uint16(metadata.DayPhaseOffset % core.DayLengthTicks))
 	if companions != nil {
+		if planner == nil {
+			return nil, errors.New("server: nil companion planner")
+		}
 		records, loadedQueues := companions.Restore()
 		for _, definition := range config.Companions {
 			restore := contract.CompanionRestore{
@@ -166,18 +174,7 @@ func newWorld(
 			}
 			server.engine.RegisterCompanion(restore)
 		}
-		// 伙伴启用即装配任务编排。NewHost 已在存档加载前校验模型设置，
-		// 这里构造失败只可能是不可达的防御路径。Dialogue 客户端与 Planner
-		// 共用同一 AIModel 设置与密钥，独立构造（提示与输入互不共享）。
-		planner, err := companion.NewPlannerClient(config.AIModel, config.AIAPIKey, nil)
-		if err != nil {
-			panic("server: construct companion planner: " + err.Error())
-		}
-		dialogue, err := companion.NewDialogueClient(config.AIModel, config.AIAPIKey, nil)
-		if err != nil {
-			panic("server: construct companion dialogue client: " + err.Error())
-		}
-		server.companionManager = newCompanionManager(server.engine, config, planner, dialogue)
+		server.companionManager = newCompanionManager(server.engine, config, planner, dialogue, companions)
 		// 注入在线玩家权威源：规划快照的 OnlinePlayers 填充与 follow 目标
 		// 的在线性/位置解析共用同一会话注册表读取路径。
 		server.companionManager.onlinePlayers = server.onlinePlanPlayersSnapshot
@@ -346,7 +343,6 @@ func (server *Server) step(scheduled time.Time) contract.TickResult {
 		server.companions.Observe(
 			server.engine.CompanionBodies(),
 			server.companionManagerTaskStates(),
-			server.companionManagerSummaries(),
 		)
 		if err := server.companions.Poll(result.Tick); err != nil {
 			slog.Warn("伙伴自动保存失败，保留重试", "error", err)

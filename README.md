@@ -17,7 +17,7 @@
 <details>
 <summary>English overview</summary>
 
-Mornlea is an original voxel game written from scratch in Go 1.26 — no Mojang assets, protocol, or saves. It ships a custom client, an authoritative server, persistent worlds, physics, and a Rust wgpu renderer. The current baseline uses protocol v32, player schema v8, chunk schema v9, world metadata v3, `companions.ai` schema v4, `hostile_mobs` schema v1, engine ABI v10, client ABI v13, and benchmark scenario v21. The survival loop covers water, farming (wheat, potatoes, carrots, bone meal — the first wheat seeds come from breaking naturally generated short grass with a deterministic 1/8 drop), hunger with saturation and exhaustion, oxygen, tiered swords with server-authoritative player and nightwalker melee, tool durability, doors, torches, a workbench with server-authoritative 2×2/3×3 crafting grids, sprinting, beds with night sleeping (all-sleep skips to dawn and sets a personal respawn point), and night-time nightwalkers that chase players, burn in daylight, and persist across restarts; up to four named server-authoritative companions plan queued `go_to`/`follow`/`mine`/`place` tasks and speak through a bounded persona/dialogue path. The local client starts at an in-process WebView (React) main menu with a Settings page and an in-game pause overlay (single-player freezes the authoritative tick; remote sessions keep ticking). The graphical client is macOS-only; the headless Linux dedicated-server bundle uses CGO and an adjacent `libmornlea_engine.so`. MIT licensed.
+Mornlea is an original voxel game written from scratch in Go 1.26 — no Mojang assets, protocol, or saves. It ships a custom client, an authoritative server, persistent worlds, physics, and a Rust wgpu renderer. The current baseline uses protocol v32, player schema v8, chunk schema v9, world metadata v3, `companions.ai` schema v5, `hostile_mobs` schema v1, engine ABI v9, client ABI v14, and benchmark scenario v21. The survival loop covers water, farming (wheat, potatoes, carrots, bone meal), hunger with saturation and exhaustion, oxygen, tiered swords with server-authoritative player and nightwalker melee, tool durability, doors, torches, a workbench with server-authoritative 2×2/3×3 crafting grids, sprinting, beds with night sleeping (all-sleep skips to dawn and sets a personal respawn point), and night-time nightwalkers that chase players, burn in daylight, and persist across restarts; up to four named server-authoritative companions execute authoritative queued `go_to`/`follow`/`mine`/`place` tasks while the separate Python companion Agent runs bounded planning, dialogue, and compact memory. The local client starts at an in-process WebView (React) main menu with a Settings page and an in-game pause overlay (single-player freezes the authoritative tick; remote sessions keep ticking). The graphical client is macOS-only; the headless Linux dedicated-server bundle uses CGO and an adjacent `libmornlea_engine.so`. MIT licensed.
 
 ```bash
 git clone https://github.com/channing771/mornlea.git
@@ -30,7 +30,7 @@ Milestone history lives in [实现进度](docs/notes/progress.md); the LAN serve
 
 项目仍处于早期开发阶段，已具备程序化地形、GPU 地形渲染、玩家移动与碰撞、客户端预测、方块挖掘与放置、内置权威服务端、世界持久化、有界二进制协议、TCP 直连与无图形专用服务端。已交付里程碑与版本演进见[实现进度](docs/notes/progress.md)。
 
-当前基线使用协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`companions.ai` schema v4、`hostile_mobs` v1、engine ABI v10、client ABI v13 与 benchmark scenario v21。生存循环包含水、农业（小麦/马铃薯/胡萝卜与骨粉催熟；第一颗小麦种子来自采除自然生成的短草，按确定性 `1/8` 判定掉落，新玩家材料包不再附带种子）、饥饿/饱和/疲劳、氧气、三级剑与玩家/夜行者统一权威近战、工具耐久、木门、火把、工作台合成、床与睡眠（夜间入睡、全员跳夜与个人重生点）、夜间夜行者（追逐近战、白昼灼烧、跨重启持久）与疾跑；最多四名具名伙伴由服务端权威执行 `go_to`/`follow`/`mine`/`place` 队列任务并经有界台词路径发言。普通本地客户端从进程内 WebView（React）主菜单进入游戏，提供设置页与游戏内暂停覆盖层（单机暂停会冻结权威 tick，远程会话不宣称暂停）。完整玩法细节见[玩家手册](docs/notes/gameplay.md)。
+当前基线使用协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`companions.ai` schema v5、`hostile_mobs` v1、engine ABI v9、client ABI v14 与 benchmark scenario v21。生存循环包含水、农业（小麦/马铃薯/胡萝卜与骨粉催熟）、饥饿/饱和/疲劳、氧气、三级剑与玩家/夜行者统一权威近战、工具耐久、木门、火把、工作台合成、床与睡眠（夜间入睡、全员跳夜与个人重生点）、夜间夜行者（追逐近战、白昼灼烧、跨重启持久）与疾跑；最多四名具名伙伴由 Go 服务端权威执行 `go_to`/`follow`/`mine`/`place` 队列任务，独立 Python 伙伴 Agent 只运行有界规划、台词与 compact memory。普通本地客户端从进程内 WebView（React）主菜单进入游戏，提供设置页与游戏内暂停覆盖层（单机暂停会冻结权威 tick，远程会话不宣称暂停）。完整玩法细节见[玩家手册](docs/notes/gameplay.md)。
 
 ## 截图
 
@@ -53,6 +53,7 @@ Milestone history lives in [实现进度](docs/notes/progress.md); the LAN serve
 
 - macOS；客户端入口目前使用 Darwin 构建约束，主要在 Apple Silicon 上验证；
 - Go 1.26；
+- 伙伴 Agent 需要 Python 3.12 与 `uv`；不启用伙伴时无需 Python；
 - 通过 rustup 安装的 Rust 1.97.1；
 - 可用的 CGO 与 C 编译工具链，macOS 可通过 Xcode Command Line Tools 提供；
 - Make。
@@ -90,6 +91,8 @@ make run
 | `make dev-check` | gofmt 检查等开发门禁 |
 | `make rust` | 构建固定 Rust 1.97.1 workspace 的两个 cdylib，`run`/`build`/`test` 等目标的前置依赖 |
 | `make rust-check` | 运行 Rust 格式、clippy 与 workspace 单测 |
+| `make companion-agent-check` | locked 安装并运行伙伴 Agent 格式、lint、mypy 与全部 Python 单测 |
+| `make companion-agent-integration` | 运行无 provider、无外网的真实 Go/Python 进程合同测试 |
 | `make fmt` | 格式化仓库内的 Rust 与 Go 源码 |
 | `make clean` | 删除 `bin` 目录，不会删除世界存档 |
 
@@ -131,7 +134,18 @@ go run ./cmd/mornlea --connect 127.0.0.1:25565 --name 玩家甲
 
 ## Rust 与 Go 的职责划分
 
-固定 Rust 1.97.1 workspace 包含 `mornlea_engine`（mesh/light、collision、raycast、physics 积分与 worldgen 的唯一生产实现，engine ABI v10）与 `mornlea_client`（Darwin 窗口、事件循环、全部 GPU 渲染与 WebView 菜单层，client ABI v13）两个 cdylib。Go 拥有 app、world、sim、network、storage 与渲染 CPU 半部，不接触 GPU API，也没有生产 fallback；两条 ABI 各自是不可跨版本混装的 release-unit 边界。组件所有权与依赖方向见[当前架构说明](docs/architecture.md)，新代码归属规矩见 [docs/notes/go-rust-division.md](docs/notes/go-rust-division.md)。
+固定 Rust 1.97.1 workspace 包含 `mornlea_engine`（mesh/light、collision、raycast、physics 积分、worldgen 与流体数值内核的唯一生产实现，engine ABI v9）与 `mornlea_client`（Darwin 窗口、事件循环、全部 GPU 渲染与 WebView 菜单层，client ABI v14）两个 cdylib。Go 拥有 app、world、sim、network、storage 与渲染 CPU 半部，不接触 GPU API，也没有生产 fallback；两条 ABI 各自是不可跨版本混装的 release-unit 边界。组件所有权与依赖方向见[当前架构说明](docs/architecture.md)，新代码归属规矩见 [docs/notes/go-rust-division.md](docs/notes/go-rust-division.md)。
+
+## 伙伴 Agent 服务
+
+`mornlea-companion-agent` 位于 `services/companion-agent`，使用 Python 3.12、LangChain/LangGraph、FastAPI 与 SQLite。Go 服务端仍唯一拥有世界、任务、FIFO、动作和最终计划校验；Python 服务只返回候选计划、台词以及 compact memory CAS 结果。两进程只通过 loopback Agent HTTP v1 与只读 MCP v1 互通。
+
+```bash
+make companion-agent-check        # locked 安装与 Python 全量质量门禁
+make companion-agent-integration  # deterministic fake model 的真实双进程合同
+```
+
+实际启动前还需分别配置同名 Bearer credential 环境变量并先启动 Agent 服务；完整 YAML/JSON 示例见[配置说明](docs/notes/configuration.md)，组件信任与持久化边界见[当前架构说明](docs/architecture.md)。
 
 ## 使用 OpenSpec 开发
 

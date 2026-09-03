@@ -35,9 +35,8 @@ const (
 	// Planner 观察快照是同级范围，两处半径必须一起变化，由单一常量定义保证
 	// 不漂移（耦合语义见 pathfind.go 的常量注释）。
 	planEnvRadiusBlocks = pathfind.PathWindowHorizontalRadius
-	// planEnvVerticalBlocks 是环境摘要的垂直半径（spec：伙伴周围垂直 8 格）。
-	// 它同时是 mine 步骤观察窗口判定的垂直 ±8 数值界（见
-	// planInObservationWindow）。
+	// planEnvVerticalBlocks 是规划 dense projection 的垂直半径（伙伴周围 ±8 格）。
+	// Planner 提示与 dense terrain projection 共用该数值界。
 	planEnvVerticalBlocks = 8
 	// MaxPlanOnlinePlayers 是快照在线玩家集合的上限，与服务器八名玩家的会话
 	// 上限对齐；校验拒绝超界构造，BoundOnlinePlayers 的截断只是防御性内存界。
@@ -90,9 +89,8 @@ type PlanCompanion struct {
 // PlanSnapshot 是一次规划的不可变观察快照值类型。
 //
 // 快照在权威 tick 边界一次性构造，发送给 worker 后视为不可变；全部字段有界
-// （见各 Max* 常量），且绝不包含 API key、其他玩家聊天或存档路径——key 只在
-// PlannerClient 内部使用，聊天快照之外的内容不进入规划输入。json tag 供
-// PlannerClient 做确定性序列化，字段顺序由结构体声明顺序固定。
+// （见各 Max* 常量），且绝不包含 API key、其他玩家聊天或存档路径。json tag
+// 供 Agent snapshot digest 与 MCP DTO 做确定性序列化，字段顺序由结构体声明顺序固定。
 type PlanSnapshot struct {
 	// Command 是玩家的原始指令文本（不含 @伙伴名 寻址前缀）。
 	Command string `json:"command"`
@@ -105,6 +103,9 @@ type PlanSnapshot struct {
 	ExposedBlocks []PlanBlock `json:"exposedBlocks"`
 	// Heights 是按 (X,Z) 严格升序的地表高度样本，至多 MaxPlanHeightSamples 条。
 	Heights []PlanHeight `json:"heights"`
+	// Terrain 是完整的 33×17×33 冻结投影。旧 direct-model 过渡路径与 Agent
+	// HTTP 都不得把整份 plane 放进模型输入；MCP 与专用 digest DTO 才读取它。
+	Terrain TerrainProjection `json:"-"`
 	// ChunkRevisions 是按 (X,Z) 严格升序的相关区块 revision，至多
 	// pathfind.MaxPlanChunkRevisions 条。
 	ChunkRevisions []pathfind.ChunkRevision `json:"chunkRevisions"`
@@ -121,8 +122,17 @@ type PlanSnapshot struct {
 // 的数量/顺序/去重/取值范围与背包规范性。
 //
 // 非法快照是 server 侧构造缺陷而不是模型失败，因此这里返回的错误不携带
-// Planner 哨兵类别；PlannerClient.Plan 在发起任何请求前调用本方法。
+// Planner 哨兵类别；Agent planner bridge 在注册快照前调用本方法。
 func (s PlanSnapshot) Validate() error {
+	return s.validateWithCheckpoint(nil)
+}
+
+func (s PlanSnapshot) validateWithCheckpoint(checkpoint func() error) error {
+	if checkpoint != nil {
+		if err := checkpoint(); err != nil {
+			return err
+		}
+	}
 	if err := validatePlanText("快照指令", s.Command, MaxPlanCommandBytes, true); err != nil {
 		return err
 	}
@@ -146,6 +156,11 @@ func (s PlanSnapshot) Validate() error {
 	if !s.Companion.Inventory.Valid() {
 		return fmt.Errorf("companion: 快照伙伴背包非法")
 	}
+	if checkpoint != nil {
+		if err := checkpoint(); err != nil {
+			return err
+		}
+	}
 	if err := validatePlanText("快照任务状态摘要", s.Companion.TaskStatus, MaxPlanTaskStatusBytes, false); err != nil {
 		return err
 	}
@@ -154,6 +169,11 @@ func (s PlanSnapshot) Validate() error {
 			len(s.ExposedBlocks), MaxPlanExposedBlocks)
 	}
 	for index, block := range s.ExposedBlocks {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return err
+			}
+		}
 		if block.Block == core.AirID || !core.RegisteredBlock(block.Block) {
 			return fmt.Errorf("companion: 快照环境方块[%d] 编号 %d 非法（空气或未注册）", index, block.Block)
 		}
@@ -168,7 +188,33 @@ func (s PlanSnapshot) Validate() error {
 		return fmt.Errorf("companion: 快照高度样本数 %d 超过上限 %d",
 			len(s.Heights), MaxPlanHeightSamples)
 	}
+	if err := s.Terrain.validateWithCheckpoint(checkpoint); err != nil {
+		return err
+	}
+	centerX := math.Floor(float64(s.Companion.Position[0]))
+	centerY := math.Floor(float64(s.Companion.Position[1]))
+	centerZ := math.Floor(float64(s.Companion.Position[2]))
+	const minInt32 = -1 << 31
+	const maxInt32 = 1<<31 - 1
+	if centerX < minInt32+TerrainHorizontalRadius || centerX > maxInt32-TerrainHorizontalRadius ||
+		centerY < minInt32+TerrainVerticalRadius || centerY > maxInt32-TerrainVerticalRadius ||
+		centerZ < minInt32+TerrainHorizontalRadius || centerZ > maxInt32-TerrainHorizontalRadius {
+		return fmt.Errorf("companion: 快照伙伴位置无法形成 terrain projection")
+	}
+	wantOrigin := core.BlockPos{
+		X: int32(centerX) - TerrainHorizontalRadius,
+		Y: int32(centerY) - TerrainVerticalRadius,
+		Z: int32(centerZ) - TerrainHorizontalRadius,
+	}
+	if s.Terrain.Origin() != wantOrigin {
+		return fmt.Errorf("companion: terrain projection origin=%+v 与伙伴 floor 格不匹配", s.Terrain.Origin())
+	}
 	for index, height := range s.Heights {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return err
+			}
+		}
 		// core.MinY-1 是空列哨兵，其余取值必须是 [MinY, MaxY) 内的真实方块 Y。
 		if height.Height != core.MinY-1 && !validPlanBlockY(height.Height) {
 			return fmt.Errorf("companion: 快照高度样本[%d] Height=%d 越界", index, height.Height)
@@ -185,6 +231,11 @@ func (s PlanSnapshot) Validate() error {
 			len(s.ChunkRevisions), pathfind.MaxPlanChunkRevisions)
 	}
 	for index, revision := range s.ChunkRevisions {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return err
+			}
+		}
 		if index > 0 {
 			previous := s.ChunkRevisions[index-1]
 			if (previous.Chunk.X > revision.Chunk.X) ||
@@ -198,6 +249,11 @@ func (s PlanSnapshot) Validate() error {
 			len(s.OnlinePlayers), MaxPlanOnlinePlayers)
 	}
 	for index, player := range s.OnlinePlayers {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return err
+			}
+		}
 		// 在线玩家条目复用 PlanPlayer 值类型：全部字段的不变量与发令玩家一致，
 		// 额外要求按 ID 严格升序（同一玩家只在集合出现一次）。
 		if !player.ID.Valid() {
@@ -214,6 +270,9 @@ func (s PlanSnapshot) Validate() error {
 		if index > 0 && bytes.Compare(s.OnlinePlayers[index-1].ID[:], player.ID[:]) >= 0 {
 			return fmt.Errorf("companion: 快照在线玩家[%d] 未按 ID 严格升序或重复", index)
 		}
+	}
+	if checkpoint != nil {
+		return checkpoint()
 	}
 	return nil
 }
@@ -384,7 +443,7 @@ type Plan struct {
 // Validate 校验计划不变量：summary 是规范有界文本、steps 非空且每步都属于
 // 交付全集四 kind 并满足结构约束（坐标步骤的 Y 在世界竖直边界内、place 的
 // 方块在固定注册表值域、follow 的目标 ID 是有效 UUIDv4 且 follow 是最后一
-// 步）。依赖规划快照的约束（follow 目标在线、mine 观察窗口、place 背包持有）
+// 步）。依赖规划快照的约束（follow 目标在线、mine dense projection、place 背包持有）
 // 由解码路径对照快照另行校验。任何违例都意味着模型输出了不可执行的非法计划。
 func (p Plan) Validate() error {
 	if err := validatePlanText("计划 summary", p.Summary, MaxPlanSummaryBytes, true); err != nil {
@@ -398,10 +457,19 @@ func (p Plan) Validate() error {
 // 服务持久化恢复路径（RestoreCurrent），那里没有快照可对照；恢复路径与解码
 // 路径共享同一套结构校验，防止两套规则漂移。
 func validPlanSteps(steps []PlanStep) error {
+	return validPlanStepsWithCheckpoint(steps, nil)
+}
+
+func validPlanStepsWithCheckpoint(steps []PlanStep, checkpoint func() error) error {
 	if len(steps) == 0 {
 		return fmt.Errorf("companion: 计划 steps 为空")
 	}
 	for index, step := range steps {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return err
+			}
+		}
 		switch step.Kind {
 		case PlanStepGoTo, PlanStepMine:
 			if !validPlanBlockY(step.Y) {
@@ -428,38 +496,50 @@ func validPlanSteps(steps []PlanStep) error {
 	return nil
 }
 
-// planPlaceItems 是 place 步骤方块名的固定注册表：名字 → 可放置出该方块的
-// 物品。core 没有方块名字注册表（只有数值 ID 与 ItemPlacement 物品→方块映
-// 射），因此本表就是 planner 契约的唯一命名权威：名字经表得到物品，再经
-// core.ItemPlacement 归一为方块，注册表值域被测试双向锁定为 ItemPlacement
-// 的真值域（名字 ↔ 可放置方块双射），两张表不可能漂移。
-var planPlaceItems = map[string]core.ItemID{
-	"stone":             core.ItemStone,
-	"dirt":              core.ItemDirt,
-	"grass":             core.ItemGrass,
-	"stone_brick":       core.ItemStoneBrick,
-	"furnace":           core.ItemFurnace,
-	"iron_block":        core.ItemIronBlock,
-	"chest":             core.ItemChest,
-	"light_block":       core.ItemLightBlock,
-	"cobblestone":       core.ItemCobblestone,
-	"smooth_stone":      core.ItemSmoothStone,
-	"sand":              core.ItemSand,
-	"gravel":            core.ItemGravel,
-	"oak_log":           core.ItemOakLog,
-	"oak_planks":        core.ItemOakPlanks,
-	"leaves":            core.ItemLeaves,
-	"glass":             core.ItemGlass,
-	"brick":             core.ItemBrick,
-	"white_wool":        core.ItemWhiteWool,
-	"roof_tile":         core.ItemRoofTile,
-	"clay":              core.ItemClay,
-	"snow_block":        core.ItemSnowBlock,
-	"mossy_cobblestone": core.ItemMossyCobblestone,
+// planPlaceItemIDs 是伙伴 place 交付集合的唯一白名单，只保存稳定 ItemID。
+// machine name 从 core canonical registry 派生，避免在 planner 再维护拼写表。
+var planPlaceItemIDs = [...]core.ItemID{
+	core.ItemStone,
+	core.ItemDirt,
+	core.ItemGrass,
+	core.ItemStoneBrick,
+	core.ItemFurnace,
+	core.ItemIronBlock,
+	core.ItemChest,
+	core.ItemLightBlock,
+	core.ItemCobblestone,
+	core.ItemSmoothStone,
+	core.ItemSand,
+	core.ItemGravel,
+	core.ItemOakLog,
+	core.ItemOakPlanks,
+	core.ItemLeaves,
+	core.ItemGlass,
+	core.ItemBrick,
+	core.ItemWhiteWool,
+	core.ItemRoofTile,
+	core.ItemClay,
+	core.ItemSnowBlock,
+	core.ItemMossyCobblestone,
 	// 工作台是普通可放置方块，采掘掉回一个工作台物品，往返校验成立，
 	// 不属于农业防御清单（`companionPlaceableBlock` 只拒作物与耕地），登记
 	// 与 sim 侧放行语义一致。
-	"workbench": core.ItemWorkbench,
+	core.ItemWorkbench,
+}
+
+// planPlaceItems 是由 ID 白名单与 core canonical registry 派生的名字索引。
+var planPlaceItems = buildPlanPlaceItems()
+
+func buildPlanPlaceItems() map[string]core.ItemID {
+	items := make(map[string]core.ItemID, len(planPlaceItemIDs))
+	for _, item := range planPlaceItemIDs {
+		name, ok := core.CanonicalItemName(item)
+		if !ok {
+			continue
+		}
+		items[name] = item
+	}
+	return items
 }
 
 // planPlaceBlocks 是固定注册表的反向索引：可放置方块 → 对应物品。place 步骤
@@ -510,33 +590,28 @@ func planMineableBlock(block core.BlockID) bool {
 	return ok
 }
 
-// planInObservationWindow 报告 pos 是否落在伙伴的观察窗口内：水平
-// planEnvRadiusBlocks 格、垂直 planEnvVerticalBlocks 格，与快照环境摘要的采集
-// 窗口共用同一组数值界。
-//
-// 判定基准（控制器裁决）是窗口的数值界而不是 ExposedBlocks 的成员资格：
-// ExposedBlocks 是被裁剪到 256 条的子集，窗口之内但未列入的方块仍应能被
-// mine 指令表达，把成员资格当必要条件会让模型因快照裁剪而被误拒。目标是否
-// 真的可采掘由执行侧的交互距离与方块校验兜底；方块类型契约只在目标恰好列入
-// ExposedBlocks 时加强校验（见解码路径）。
-func planInObservationWindow(companionPos [3]float32, pos core.BlockPos) bool {
-	return math.Abs(float64(pos.X)-float64(companionPos[0])) <= planEnvRadiusBlocks &&
-		math.Abs(float64(pos.Z)-float64(companionPos[2])) <= planEnvRadiusBlocks &&
-		math.Abs(float64(pos.Y)-float64(companionPos[1])) <= planEnvVerticalBlocks
-}
-
 // planInventoryHolds 报告 36 格完整物品状态（快捷栏 + 背包的值快照）中是否
 // 持有至少一个 item。place 契约只要求快照背包显示持有——执行侧扣料在同一
 // tick 原子完成，数量不足由 action 语义拒绝，这里不做数量核对。
 func planInventoryHolds(inventory core.Inventory, item core.ItemID) bool {
+	holds, _ := planInventoryHoldsWithCheckpoint(inventory, item, nil)
+	return holds
+}
+
+func planInventoryHoldsWithCheckpoint(inventory core.Inventory, item core.ItemID, checkpoint func() error) (bool, error) {
 	if item == core.ItemNone {
-		return false
+		return false, nil
 	}
 	for slot := uint8(0); slot < core.InventorySlots; slot++ {
+		if checkpoint != nil {
+			if err := checkpoint(); err != nil {
+				return false, err
+			}
+		}
 		stack, _ := inventory.Slot(slot)
 		if stack.Item == item && stack.Count >= 1 {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }

@@ -2,7 +2,7 @@
 
 package client
 
-// ui_bridge_test.go：client ABI v12 桥上行信封解码的拒绝与保序语义测试。
+// ui_bridge_test.go：client ABI v12 引入、v13 保留的桥上行信封解码拒绝与保序测试。
 // 深层校验(未知事件类型/动作/op、取值越界、携带规则)在本包实现,任何一条
 // 违约都必须返回错误且不产出部分事件。常量级钉值(动作 id、op、窗口预设、
 // 单批上界)与单源 schema 的对照由 cmd/mornlea/app 的 schema 校验测试承担,
