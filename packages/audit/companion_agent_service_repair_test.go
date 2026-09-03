@@ -101,9 +101,9 @@ func TestCompanionAgentCIGateMutations(t *testing.T) {
 }
 
 func TestCompanionAgentQuickstartRegexSelectsRealTests(t *testing.T) {
-	quickstart := readBaselineDoc(t, moduleRoot(t), filepath.Join("docs", "notes", "test-quickstart.md"))
+	quickstart := readBaselineDoc(t, repositoryRoot(t), filepath.Join("docs", "notes", "test-quickstart.md"))
 	pattern := companionQuickstartGoTestPattern(t, quickstart)
-	testNames := companionServerTopLevelTestNames(t, moduleRoot(t))
+	testNames := companionServerTopLevelTestNames(t, repositoryRoot(t))
 	want := []string{
 		"TestCompanionAgentHTTPProcessIntegration",
 		"TestMCPAgentCrossLanguageCancellationIntegration",
@@ -134,7 +134,7 @@ func TestCompanionGoProductionBoundaryMutations(t *testing.T) {
 		"packages/server/server":                {},
 		"packages/shared/companion":             {},
 		"packages/client/cmd/mornlea/benchmark": {"os/exec"},
-		"cmd/mornlea-agent-board":               {"os/exec"},
+		"packages/tools/agent-board":            {"os/exec"},
 		"packages/client/audio":                 {"C"},
 		"packages/client/client":                {"C"},
 		"packages/shared/nativeabi":             {"C"},

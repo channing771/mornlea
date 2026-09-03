@@ -5,8 +5,8 @@ context: |
   当前版本矩阵：协议 v32、玩家 schema v8、区块 schema v9、世界 metadata v3、`companions.ai` schema v5、`hostile_mobs` schema v1、engine ABI v10、client ABI v14、benchmark scenario 为 v22。
   权威边界：服务端是世界与玩家状态的唯一权威；客户端只持有镜像、预测和呈现状态。普通本地 Memory 与远程 TCP 受同一 packet/codec 契约约束，并复用同一登录、会话和权威模拟路径。
   语言职责：Go 持有 app、world、sim、network、storage 与 render 的 CPU 半部；Rust `mornlea_engine` 持有生产数值计算，Rust `mornlea_client` 持有 Darwin 窗口、事件与全部 GPU 渲染。生产路径没有 Go fallback。
-  ABI 边界：只有 `packages/shared/nativeabi` 接触 engine ABI，只有 `internal/client` 接触 client ABI；领域包通过既有 bridge 调用 Rust。
-  架构约束：内部包依赖以 `internal/archcheck/dependency_test.go` 为准，任何 Go 包不得导入 WebGPU 绑定。跨 goroutine 发送成功后的消息及其 slice 视为不可变；权威 tick、渲染和网络热路径不得执行无界工作或阻塞 I/O。
+  ABI 边界：只有 `packages/shared/nativeabi` 接触 engine ABI，只有 `packages/client/client` 接触 client ABI；领域包通过既有 bridge 调用 Rust。
+  架构约束：内部包依赖以 `packages/audit/dependency_test.go` 为准，任何 Go 包不得导入 WebGPU 绑定。跨 goroutine 发送成功后的消息及其 slice 视为不可变；权威 tick、渲染和网络热路径不得执行无界工作或阻塞 I/O。
   资源边界：不得加入 Mojang 版权材质或其他未经授权的二进制美术资源；不得放宽真实 overflow、数据丢失、报告身份或 I/O 错误门禁。
   权威入口：当前行为以代码、测试和 `openspec/specs/` 为准；当前架构见 `docs/architecture.md`，文档地图见 `docs/README.md`，实现编年史见 `docs/notes/progress.md`。`docs/superpowers/` 与归档 change 只作历史证据。
 
@@ -39,4 +39,4 @@ operations:
     guidance:
       - 归档前确认任务状态、实现与 delta specs 一致，并运行 openspec validate --all --strict --no-interactive
       - 把可复用的行为契约合入主规格；项目级工作习惯应更新 AGENTS.md 或 openspec/config.yaml
-      - 必要时更新根 AGENTS.md 当前版本矩阵，并更新对应主规格或 docs/notes/progress.md（版本号由 internal/archcheck 的 TestBaselineVersionsMatchCode 兜底）；CLAUDE.md 只保留 shim
+      - 必要时更新根 AGENTS.md 当前版本矩阵，并更新对应主规格或 docs/notes/progress.md（版本号由 packages/audit 的 TestBaselineVersionsMatchCode 兜底）；CLAUDE.md 只保留 shim

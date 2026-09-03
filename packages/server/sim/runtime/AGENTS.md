@@ -13,7 +13,7 @@
 
 - 允许：`packages/shared/core`、`packages/shared/world`、`packages/shared/companion`、`packages/shared/physics`、`packages/server/sim/contract`、`packages/shared/tuning`、`packages/server/sim/realm`、`packages/server/sim/entity`。
 - 禁止：被 `contract`/`tuning`/`realm`/`entity` 反向依赖；禁止依赖 `packages/server/server`/`internal/client` 具体 transport，`runtime` 只消费领域命令并产出权威结果。
-- 方向由 `internal/archcheck` 强制，`simRequiredEdges` 要求 `runtime` 必须同时依赖 `contract`/`tuning`/`realm`/`entity`；缺失任一编排边即为漂移，`TestSimDependencyViolationsDetectDrift` 将报告「缺少必需依赖边」。
+- 方向由 `packages/audit` 强制，`simRequiredEdges` 要求 `runtime` 必须同时依赖 `contract`/`tuning`/`realm`/`entity`；缺失任一编排边即为漂移，`TestSimDependencyViolationsDetectDrift` 将报告「缺少必需依赖边」。
 
 ## 关键文件
 
@@ -37,4 +37,4 @@
 
 - `go test ./packages/server/sim/runtime -race -count=1`
 - 子树全量：`go test ./packages/server/sim/... -race -count=1`
-- 依赖边界：`go test ./internal/archcheck -count=1`
+- 依赖边界：`go test ./packages/audit -count=1`

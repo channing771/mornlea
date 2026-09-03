@@ -244,7 +244,7 @@ func findingsInComment(files *token.FileSet, comment *ast.Comment, declared map[
 // vendor 与 node_modules 是第三方代码。
 func repositoryGoSources(t *testing.T) map[string][]byte {
 	t.Helper()
-	root := moduleRoot(t)
+	root := repositoryRoot(t)
 	sources := make(map[string][]byte)
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -289,7 +289,7 @@ func repositoryGoSources(t *testing.T) map[string][]byte {
 // 路径只钉 frontend/src，不涉 node_modules（在 src 之外），第三方文本不会进语料。
 func repositoryBridgeContractCorpus(t *testing.T) string {
 	t.Helper()
-	root := moduleRoot(t)
+	root := repositoryRoot(t)
 	contractDir := filepath.Join(root, "packages", "engine", "crates", "mornlea_client", "frontend", "src")
 	schema, err := os.ReadFile(filepath.Join(contractDir, "bridge", "schema.json"))
 	if err != nil {

@@ -13,10 +13,11 @@ Mornlea 是使用 Go 1.26 编写的独立体素游戏，Go module 为 `github.co
 
 ## 仓库与局部指南
 
-- Go 内部包（过渡期仅余 archcheck 架构门禁）：`internal/AGENTS.md`
 - 共享域 Go 模块（server/client 双侧共用的领域包）：`packages/shared/`（局部指南随包目录，如 `packages/shared/network/AGENTS.md`）
 - 服务端域 Go 模块（sim/fluid/storage/server 与 `cmd/mornlea-server`）：`packages/server/`（局部指南随包目录）
-- 客户端域 Go 模块（client/render/mesh/lod/audio/assets 与图形客户端命令）：`packages/client/`（局部指南随包目录，依赖方向由 `internal/archcheck` 强制）
+- 客户端域 Go 模块（client/render/mesh/lod/audio/assets 与图形客户端命令）：`packages/client/`（局部指南随包目录，依赖方向由 `packages/audit` 强制）
+- 开发工具模块（perfcheck/agent-board 看板/gfxspike/composite_grass_side）：`packages/tools/`
+- 审计单元（跨模块架构门禁测试集，不导入被审单元）：`packages/audit/AGENTS.md`
 - Rust engine、client 与 C ABI：`packages/engine/AGENTS.md`
 - 文档结构、长期说明和测试组织文档：`docs/AGENTS.md`
 - 脚本、发布与自动化：`scripts/AGENTS.md`
@@ -66,7 +67,7 @@ make rust
 make companion-agent-check
 make companion-agent-integration
 go test ./path/to/affected/package -race -count=1
-go test ./internal/archcheck -count=1
+go test ./packages/audit -count=1
 make dev-check
 make test-race-changed
 make test-race

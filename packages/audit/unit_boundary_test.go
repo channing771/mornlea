@@ -161,12 +161,11 @@ replace github.com/channing771/mornlea/packages/contracts => ../contracts
 }
 
 // TestPackageUnitRequireBoundaries 把真实源码树里 packages/ 下各 go.mod 的
-// require 边喂给 unitRequireViolations，钉住单元间的编译层依赖方向。
-// packages/ 尚未立项时断言空转直接通过（切割分阶段进行，本测试随每个
-// 模块落地自动收紧，全程无中间红）；非 Go 单元（engine、agent 族）没有
+// require 边喂给 unitRequireViolations，钉住单元间的编译层依赖方向。根模块
+// 解散后本测试覆盖全部六个 Go 单元；非 Go 单元（engine、agent 族）没有
 // go.mod，天然不参与 require 边。
 func TestPackageUnitRequireBoundaries(t *testing.T) {
-	root := moduleRoot(t)
+	root := repositoryRoot(t)
 	entries, err := os.ReadDir(filepath.Join(root, "packages"))
 	if errors.Is(err, fs.ErrNotExist) {
 		return
@@ -202,6 +201,33 @@ func TestPackageUnitRequireBoundaries(t *testing.T) {
 		if want := []string{"client", "contracts", "shared"}; !slices.Equal(serverRequires, want) {
 			t.Errorf("server 的兄弟 require 集必须是 %v，实际 %v（client 边是测试专用豁免，生产禁令由源码守卫强制）", want, serverRequires)
 		}
+	}
+}
+
+// TestWorkspaceUseSetMatchesUnitModules 钉住 go.work 与 packages/ 下 go.mod 集
+// 的双向一致：use 列表多一项（例如解散后又冒出根模块的 `.`）或少一项（新单元
+// 立项却忘记 use）都是模块拓扑漂移——枚举类检查以 use 列表为输入，漏 use 的
+// 模块会在不知不觉中退出全部审计。非 Go 单元（engine、agent 族）没有 go.mod，
+// 天然不参与比对。
+func TestWorkspaceUseSetMatchesUnitModules(t *testing.T) {
+	root := repositoryRoot(t)
+	entries, err := os.ReadDir(filepath.Join(root, "packages"))
+	if err != nil {
+		t.Fatalf("读取 packages/: %v", err)
+	}
+	unitModules := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(root, "packages", entry.Name(), "go.mod")); err == nil {
+			unitModules = append(unitModules, "packages/"+entry.Name())
+		}
+	}
+	slices.Sort(unitModules)
+	workspace := workspaceModules(t)
+	if !slices.Equal(workspace, unitModules) {
+		t.Errorf("go.work use 集与 packages/ 下 go.mod 集不一致：use=%v，单元模块=%v（新单元必须同时立项 go.mod 与 go.work use）", workspace, unitModules)
 	}
 }
 

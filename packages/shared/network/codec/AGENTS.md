@@ -4,7 +4,7 @@
 zstd 压缩的 chunk snapshot 编解码、长度前缀帧封装与字节原语。协议语义
 （密封 packet、冻结 ID、`Validate`）住 `packages/shared/network/protocol`，会话
 与传输编排住根包；本包只依赖 `protocol` 与 `packages/shared/core`（依赖方向由
-`internal/archcheck` 的 `TestInternalDependenciesAreOneWay` 强制），wire
+`packages/audit` 的 `TestInternalDependenciesAreOneWay` 强制），wire
 长度上限经 `protocol` 导出常量取值，不 import `packages/shared/companion`。
 全树共享的信任边界与协议演进纪律见上级 `../AGENTS.md`，本文件不重复。
 
@@ -102,4 +102,4 @@ zstd 压缩的 chunk snapshot 编解码、长度前缀帧封装与字节原语�
 - fuzz 冒烟（改动 wire 布局时）：`go test ./packages/shared/network/codec -fuzz
   FuzzSmallPacketCodec -fuzztime 10s`（其余入口同式，性能数值只记录）。
 - 协议演进连带传输与登录：`go test ./packages/shared/network/... -race -count=1`。
-- 依赖方向与文档守卫：`go test ./internal/archcheck -count=1`。
+- 依赖方向与文档守卫：`go test ./packages/audit -count=1`。

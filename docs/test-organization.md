@@ -91,7 +91,7 @@ helper 落位规则与验收清单都在这里。条文是原则，本文件是�
 - [ ] 生产文件、`testdata/`、golden 零改动（`git diff --stat` 只含 `*_test.go`）；
 - [ ] 注释零信息损失（被拆文件头说明的每句话都在某个新文件里有落点）；
 - [ ] `gofmt -l <pkg>` 无输出、`go vet ./<pkg>`、`go test ./<pkg> -race -count=1`；
-- [ ] 改动 Go 文件后 `go test ./internal/archcheck -count=1`。
+- [ ] 改动 Go 文件后 `go test ./packages/audit -count=1`。
 
 ## 范例
 
@@ -110,7 +110,7 @@ helper 落位规则与验收清单都在这里。条文是原则，本文件是�
 一个」落位（见上文 helper 中心规则），跨包白盒装配收敛为
 `packages/client/cmd/mornlea/app/testkit.go` 的导出测试装配入口；golden 资产随 capture 域
 git mv 至 `cmd/mornlea/capture/testdata/golden`，子包依赖方向由
-`internal/archcheck` 的 `TestClientCommandSubpackageDependencyDirections` 强制。
+`packages/audit` 的 `TestClientCommandSubpackageDependencyDirections` 强制。
 
 混装识别范例：`cmd/mornlea` 单包时期的 `app_input_test.go`（约 1300 行、38 个测试，前缀横跨输入
 预测门控、挖掘 overlay、快捷栏放置、熔炉 UI、箱子 UI、合成、丢弃/进食/使用键七个

@@ -15,7 +15,7 @@ import (
 )
 
 func TestCompanionAgentRepositoryBoundary(t *testing.T) {
-	root := moduleRoot(t)
+	root := repositoryRoot(t)
 	companion := filepath.Join("packages", "agent", "companion")
 	required := []string{
 		filepath.Join("packages", "contracts", "companion-agent", "http-v1", "manifest.json"),
@@ -70,7 +70,7 @@ func TestCompanionAgentRepositoryBoundary(t *testing.T) {
 }
 
 func TestCompanionAgentMakeTargets(t *testing.T) {
-	makefile := readBaselineDoc(t, moduleRoot(t), "Makefile")
+	makefile := readBaselineDoc(t, repositoryRoot(t), "Makefile")
 	for _, target := range []string{"companion-agent-check", "companion-agent-integration"} {
 		if !makeTargetIsPhony(makefile, target) {
 			t.Errorf("Makefile .PHONY 缺少 %s", target)
@@ -102,7 +102,7 @@ func TestCompanionAgentMakeTargets(t *testing.T) {
 }
 
 func TestCompanionAgentCIGates(t *testing.T) {
-	workflow := []byte(readBaselineDoc(t, moduleRoot(t), filepath.Join(".github", "workflows", "ci.yml")))
+	workflow := []byte(readBaselineDoc(t, repositoryRoot(t), filepath.Join(".github", "workflows", "ci.yml")))
 	if violations := companionAgentWorkflowViolations(workflow); len(violations) > 0 {
 		t.Errorf("伙伴 Agent CI 合同有 %d 条违规：\n%s", len(violations), strings.Join(violations, "\n"))
 	}
@@ -113,7 +113,7 @@ func TestCompanionAgentCIGates(t *testing.T) {
 // 调用一次且位于 make 门禁之前」的编排位置；脚本本体若被删改（丢掉行数、
 // SHA 或 sha256 任一环）在这里暴露，否则三个 job 共享的信任基准静默变松。
 func TestVerifyNativeArtifactScript(t *testing.T) {
-	script := readBaselineDoc(t, moduleRoot(t), filepath.Join("scripts", "ci", "verify-native-artifact.sh"))
+	script := readBaselineDoc(t, repositoryRoot(t), filepath.Join("scripts", "ci", "verify-native-artifact.sh"))
 	for _, required := range []string{
 		"set -euo pipefail",
 		"ENGINE_DYLIB=packages/engine/target/release/libmornlea_engine.dylib",
@@ -141,7 +141,7 @@ func TestVerifyNativeArtifactScript(t *testing.T) {
 }
 
 func TestCompanionGoProductionDoesNotEmbedPython(t *testing.T) {
-	graph, err := loadCompanionProductionImportGraph(moduleRoot(t))
+	graph, err := loadCompanionProductionImportGraph(repositoryRoot(t))
 	if err != nil {
 		t.Fatalf("加载伙伴生产装配依赖闭包: %v", err)
 	}
@@ -425,10 +425,11 @@ var companionGoForbiddenImportAllowlist = map[string]map[string]string{
 
 func loadCompanionProductionImportGraph(root string) (map[string][]string, error) {
 	graph := make(map[string][]string)
-	// companion 已迁入 packages/shared 模块、服务端域已迁入 packages/server
-	// 模块、客户端域已迁入 packages/client 模块；图必须覆盖全部模块所在子树，
-	// 否则闭包会在跨模块边上断链。
-	for _, top := range []string{"cmd", "internal", "packages/contracts", "packages/shared", "packages/server", "packages/client"} {
+	// companion 位于 packages/shared 模块、服务端域位于 packages/server 模块、
+	// 客户端域位于 packages/client 模块、工具与审计域位于 packages/tools 与
+	// packages/audit 模块；图必须覆盖全部模块所在子树，否则闭包会在跨模块
+	// 边上断链。
+	for _, top := range []string{"packages/contracts", "packages/shared", "packages/server", "packages/client", "packages/tools", "packages/audit"} {
 		err := filepath.WalkDir(filepath.Join(root, top), func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr

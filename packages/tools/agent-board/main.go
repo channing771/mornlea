@@ -31,8 +31,9 @@ func main() {
 	}
 
 	collector := &liveCollector{root: root}
-	// distDir 为前端构建产物目录（web/agent-board/dist）；未构建时 / 会返回指引页。
-	distDir := filepath.Join(root, "web", "agent-board", "dist")
+	// distDir 为前端构建产物目录（packages/tools/agent-board/web/dist）；未构建时
+	// / 会返回指引页。
+	distDir := filepath.Join(root, "packages", "tools", "agent-board", "web", "dist")
 	// ReadHeaderTimeout 限制读取请求头的时间，避免慢速/伪造连接长期占用连接，提升健壮性。
 	server := &http.Server{
 		Addr:              *addr,
@@ -65,14 +66,15 @@ func main() {
 	}
 }
 
-// findRepoRoot 从 startDir 开始逐级向上查找含「module github.com/channing771/mornlea」
-// 的 go.mod 所在目录；找到返回 (目录, true)，否则 (空, false)。可被单测在临时目录验证。
+// findRepoRoot 从 startDir 开始逐级向上查找仓库根：根 go.mod 已随单元化解散，
+// 根目录的唯一 Go 清单是 go.work（内容以 `go ` 版本指令开头，且只出现在仓库根）；
+// 命中返回 (目录, true)，否则 (空, false)。可被单测在临时目录验证。
 func findRepoRoot(startDir string) (string, bool) {
 	dir := startDir
 	for {
-		gomod := filepath.Join(dir, "go.mod")
-		if data, err := os.ReadFile(gomod); err == nil {
-			if strings.Contains(string(data), "module github.com/channing771/mornlea") {
+		workspace := filepath.Join(dir, "go.work")
+		if data, err := os.ReadFile(workspace); err == nil {
+			if strings.HasPrefix(string(data), "go ") {
 				return dir, true
 			}
 		}
@@ -101,7 +103,7 @@ func discoverRoot() (string, error) {
 			return dir, nil
 		}
 		// BOARD_ROOT 已设置但无效：说明具体路径与原因，避免「提示可设置 BOARD_ROOT」与行为矛盾。
-		return "", fmt.Errorf("BOARD_ROOT 已设置但无效：%s（该目录不存在或其中没有含「module github.com/channing771/mornlea」的 go.mod）", env)
+		return "", fmt.Errorf("BOARD_ROOT 已设置但无效：%s（该目录不存在或其中没有含 go 工作区清单的 go.work）", env)
 	}
-	return "", errors.New("无法定位仓库根目录：请在仓库内运行，或用 BOARD_ROOT 指定含「module github.com/channing771/mornlea」的 go.mod 所在目录")
+	return "", errors.New("无法定位仓库根目录：请在仓库内运行，或用 BOARD_ROOT 指定含 go.work 工作区清单的目录")
 }

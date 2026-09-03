@@ -1,5 +1,5 @@
 // 后端 /api/status 契约的类型定义与轮询 hook。
-// 字段逐一对应 cmd/mornlea-agent-board/parse.go 的 Status 及各实体结构，保持稳定。
+// 字段逐一对应 packages/tools/agent-board/parse.go 的 Status 及各实体结构，保持稳定。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 

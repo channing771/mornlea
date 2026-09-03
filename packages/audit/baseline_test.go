@@ -108,8 +108,8 @@ var baselineVersionMappings = []baselineVersionMapping{
 //     版本不匹配若同时让某条正则失配，守卫会先报出"断言未找到"这个误导性诊断，
 //     把下一个人引向错误方向。
 func TestBaselineVersionsMatchCode(t *testing.T) {
-	assertBaselineVersions(t, moduleRoot(t), baselineDocName)
-	assertBaselineVersions(t, moduleRoot(t), filepath.Join("openspec", "config.yaml"))
+	assertBaselineVersions(t, repositoryRoot(t), baselineDocName)
+	assertBaselineVersions(t, repositoryRoot(t), filepath.Join("openspec", "config.yaml"))
 }
 
 const baselineDocName = "AGENTS.md"
@@ -123,13 +123,12 @@ const claudeAgentImport = `# CLAUDE.md
 
 var claudeImportDocs = []string{
 	"CLAUDE.md",
-	filepath.Join("internal", "CLAUDE.md"),
 	filepath.Join("packages", "engine", "CLAUDE.md"),
 	filepath.Join("packages", "client", "cmd", "mornlea", "CLAUDE.md"),
 }
 
 func TestClaudeImportsAgentGuidance(t *testing.T) {
-	root := moduleRoot(t)
+	root := repositoryRoot(t)
 	for _, name := range claudeImportDocs {
 		t.Run(name, func(t *testing.T) {
 			if text := readBaselineDoc(t, root, name); text != claudeAgentImport {

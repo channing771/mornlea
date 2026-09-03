@@ -149,4 +149,4 @@ corepack pnpm build
 ```
 
 无 Rust/Go 代码改动时不需要 `make rust`；本目录改动不进 Go 测试闭包，
-`go test ./internal/archcheck -count=1` 仅在同时触碰 Go 侧时需要。
+`go test ./packages/audit -count=1` 仅在同时触碰 Go 侧时需要。

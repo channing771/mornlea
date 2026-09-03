@@ -75,7 +75,7 @@ test -z "$(gofmt -l .)"          # 无输出
 openspec validate --all --strict --no-interactive
 ```
 
-- 渲染 / tick / 存储 / 协议热路径变化另加：对应 benchmark（**数值只记录，不改变退出状态**）、fuzz/golden 测试、`cmd/perfcheck`。预期视觉不变时运行 `make visual-check`；预期视觉变化时先逐图确认，再运行 `make visual-update`，随后重新运行 `make visual-check`。**禁止放宽阈值**（阈值调整须有实测数据依据）。
+- 渲染 / tick / 存储 / 协议热路径变化另加：对应 benchmark（**数值只记录，不改变退出状态**）、fuzz/golden 测试、`packages/tools/perfcheck`。预期视觉不变时运行 `make visual-check`；预期视觉变化时先逐图确认，再运行 `make visual-update`，随后重新运行 `make visual-check`。**禁止放宽阈值**（阈值调整须有实测数据依据）。
 - 平台专属或性能变更补充相应门禁；报告完整性、身份、真实 overflow、数据丢失和 I/O 错误是硬门禁。
 - `scripts/agents/gates.sh` 当前依次执行 gofmt、vet、archcheck、OpenSpec、`make rust`，并在未跳过时执行 full race；完整提交前的 Rust 门禁 `make rust-check` 仍须单独运行。
 
@@ -83,7 +83,7 @@ openspec validate --all --strict --no-interactive
 
 1. 若拆分过测试文件，确认 `go test -list` 前后集合一致；
 2. `openspec sync` 把 delta 沉淀到主规格 → 逐 change `openspec archive`；
-3. 按作用域更新根 `AGENTS.md` 版本矩阵和相关局部 `AGENTS.md`，并同步 `docs/notes/progress.md` 基线段——只写本行已集成且验证过的事实，不写本行非目标；同级 `CLAUDE.md` 只保留薄导入，由 `internal/archcheck` 的 `TestClaudeImportsAgentGuidance` focused 门禁兜底；
+3. 按作用域更新根 `AGENTS.md` 版本矩阵和相关局部 `AGENTS.md`，并同步 `docs/notes/progress.md` 基线段——只写本行已集成且验证过的事实，不写本行非目标；同级 `CLAUDE.md` 只保留薄导入，由 `packages/audit` 的 `TestClaudeImportsAgentGuidance` focused 门禁兜底；
 4. 回填 `docs/feature-backlog.md`：该行 `状态` → `已完成`（认领人保留履历），并同步 GitHub Discussion #71；
 5. **PR + CI 再合并（默认，`AGENT_MODE=pr`）**：推送分支 → `gh pr create`（标题含行 ID，body 附 change 链接与验证摘要）→ `gh pr checks --watch` 监听 CI，失败则读 `gh run view --log-failed` 定位、本地修复并推送、重新监听，**直到全绿**（上限 10 轮，超限停止并报告）→ `gh pr merge --merge` → 本地 `git checkout main && git pull --ff-only`；仅 `AGENT_MODE=merge` 时才跳过 PR 直接本地合并推送（仍需本地全绿）。
 6. 关闭遗留：未决项誊入「延期与放弃」，不静默丢弃。

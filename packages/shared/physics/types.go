@@ -44,7 +44,7 @@ const (
 	bedCollisionHeight = float32(0.5625)
 
 	// 以下是可调参数的编译期默认值。唯一读取入口是 Tunables 快照，
-	// 不得再以导出常量暴露——见 internal/archcheck 的 TestTunableConstantsAreNotExported。
+	// 不得再以导出常量暴露——见 packages/audit 的 TestTunableConstantsAreNotExported。
 	defaultEyeHeight          = float32(1.62)
 	defaultStepHeight         = float32(0.6)
 	defaultWalkSpeed          = float32(4.3)

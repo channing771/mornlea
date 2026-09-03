@@ -4,7 +4,7 @@
 chunk 值类型与 region 记录层容器（`Region`）。记录层容器随本包而非
 region 包：`Region.Save`/`Region.Load` 直接调用本包信封编解码并经手
 `ChunkSave`/`StoredChunk`。依赖方向：`chunk` → {`region`, `storagedef`,
-`core`, `world`}，禁止依赖根包或其他域子包（方向由 `internal/archcheck`
+`core`, `world`}，禁止依赖根包或其他域子包（方向由 `packages/audit`
 的 `TestInternalDependenciesAreOneWay` 强制）。行为规格见
 `openspec/specs/local-data-migration/spec.md`；全树共享的迁移与数据安全
 纪律见上级 `../AGENTS.md`，本文件不重复。
@@ -91,4 +91,4 @@ region 包：`Region.Save`/`Region.Load` 直接调用本包信封编解码并经
 
 - 定点测试：`go test ./packages/server/storage/chunk -race -count=1`（本子树最大
   的域，含崩溃子进程与压缩用例；快速迭代可加 `-short`）。
-- 依赖方向与文档守卫：`go test ./internal/archcheck -count=1`。
+- 依赖方向与文档守卫：`go test ./packages/audit -count=1`。

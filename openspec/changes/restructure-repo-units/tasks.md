@@ -28,8 +28,8 @@
 
 ## Task 7: tools 模块、根 go.mod 解散与 audit 立顶
 
-- [ ] 7.1 `git mv cmd/perfcheck packages/tools/perfcheck`、`git mv cmd/mornlea-agent-board packages/tools/agent-board`、`git mv web/agent-board packages/tools/agent-board/web`（顶层 `web/` 取消）、`git mv cmd/gfxspike packages/tools/gfxspike`、`git mv scripts/composite_grass_side.go packages/tools/composite_grass_side/main.go`；建 `packages/tools/go.mod`（require+replace shared/server/client）；import path 改写；`.gitignore` 的 `/gfxspike` 条目调整；CI go-race 分片去掉 scripts Go 包特判。以 `go vet ./... && go test ./packages/tools/... -short -count=1` 验证。
-- [ ] 7.2 `git mv internal/archcheck packages/audit`，包名与 `make archcheck` 语义保持；删除根 `go.mod`/`go.sum` 对应内容——根 `go.mod` 解散（`go.work` use 列表移除根并直辖六个模块）；archcheck `moduleRoot`/枚举逻辑改为跨 `go.work` 各模块；单元边界检查（Task 1.1）转为对全部现存模块生效。以 `go clean -cache && make rust && make test-race && make archcheck` 验证。
+- [x] 7.1 `git mv cmd/perfcheck packages/tools/perfcheck`、`git mv cmd/mornlea-agent-board packages/tools/agent-board`、`git mv web/agent-board packages/tools/agent-board/web`（顶层 `web/` 取消）、`git mv cmd/gfxspike packages/tools/gfxspike`、`git mv scripts/composite_grass_side.go packages/tools/composite_grass_side/main.go`；建 `packages/tools/go.mod`（require+replace shared/server/client）；import path 改写；`.gitignore` 的 `/gfxspike` 条目调整；CI go-race 分片去掉 scripts Go 包特判。以 `go vet ./... && go test ./packages/tools/... -short -count=1` 验证。
+- [x] 7.2 `git mv internal/archcheck packages/audit`，包名与 `make archcheck` 语义保持；删除根 `go.mod`/`go.sum` 对应内容——根 `go.mod` 解散（`go.work` use 列表移除根并直辖六个模块）；archcheck `moduleRoot`/枚举逻辑改为跨 `go.work` 各模块；单元边界检查（Task 1.1）转为对全部现存模块生效。以 `go clean -cache && make rust && make test-race && make archcheck` 验证。
 
 ## Task 8: 收尾——前端工具链统一、Makefile per-unit 与文档基线
 

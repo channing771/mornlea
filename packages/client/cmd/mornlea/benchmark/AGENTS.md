@@ -9,7 +9,7 @@ capture（方向由 `TestClientCommandSubpackageDependencyDirections` 强制）�
 
 - 场景身份是 `scenarioVersion`（当前 v22）：场景语义、GPU 完成时间定义与报告
   结构都绑定版本，迁移链以它为终点。根 `AGENTS.md` 的「benchmark scenario
-  vN」基线断言由 `internal/archcheck` 的 `TestBaselineVersionsMatchCode` 直接
+  vN」基线断言由 `packages/audit` 的 `TestBaselineVersionsMatchCode` 直接
   读取本包常量核对——升版时必须同步根文档。v22 记录的是自然短草对被测进程
   与被测世界的改变（稳定方块与 mesh registry 追加 `ShortGrassID`、植物材质
   判定集合扩为 `[31..54] ∪ {68}`、worldgen `MGW1` layout 3 与 engine ABI v10、
@@ -51,7 +51,7 @@ capture（方向由 `TestClientCommandSubpackageDependencyDirections` 强制）�
   「M3C v6 八玩家与性能报告门禁」对本包按 `-run` 选中
   `PerformanceThresholds`/`BenchmarkServerEpoch`/`BenchmarkServerMeasuredWindow`
   分支（其余分支落在 `packages/client/client`、`packages/server/server` 与
-  `cmd/perfcheck`）。
+  `packages/tools/perfcheck`）。
 - `raceEnabled` 常量对：`benchmark_server_race_helpers_test.go` 在 `-race`
   构建下定义为 true，`benchmark_server_norace_helpers_test.go` 在非 `-race`
   构建下定义为 false。同一测试文件据此在 race 构建下追加时序敏感断言、非

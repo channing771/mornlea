@@ -1,4 +1,4 @@
-// scripts/composite_grass_side.go 把内嵌 Pixel Perfection 材质包里的草方块侧面
+// composite_grass_side 把内嵌 Pixel Perfection 材质包里的草方块侧面
 // （textures/grass_side.png）合成成完全不透明的 16×16 图，并原位写回。
 //
 // 背景：Mornlea 图形客户端的内嵌默认材质直接采样自 Minetest 纹理包 Pixel
@@ -24,9 +24,9 @@
 //
 // 可复现性：脚本对同一对输入文件运行两次，输出文件必须逐字节一致（Go 的
 // image/png 编码是确定性的；编码选项固定为默认 png.Encoder，不做任何压缩级别
-// 调整）。运行方式：
+// 调整）。运行方式（在仓库根目录）：
 //
-//	go run scripts/composite_grass_side.go
+//	go run ./packages/tools/composite_grass_side
 //
 // 输入文件路径相对于仓库根目录：packages/client/assets/packs/pixel_perfection/textures/
 // 下的 grass_side.png 与 dirt.png。脚本校验两张图都是 16×16，否则报错退出。

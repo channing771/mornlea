@@ -19,7 +19,7 @@ ARGS ?=
 
 # go.work 下 `go test ./...` 不跨嵌套模块；全部按模块枚举的入口（test 族、
 # dev-check、vet）显式循环该列表，防止新模块成为 ./... 盲区。
-GO_TEST_MODULES := . ./packages/contracts ./packages/server ./packages/shared ./packages/client
+GO_TEST_MODULES := ./packages/contracts ./packages/shared ./packages/server ./packages/client ./packages/tools ./packages/audit
 
 .PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev
 
@@ -127,7 +127,7 @@ test-race-changed:
 	scripts/agents/race-changed.sh $(if $(RACE_BASE),--base $(RACE_BASE),)
 
 test-multiplayer:
-	$(GO) test ./packages/client/client ./packages/server/server ./packages/client/cmd/mornlea/benchmark ./cmd/perfcheck \
+	$(GO) test ./packages/client/client ./packages/server/server ./packages/client/cmd/mornlea/benchmark ./packages/tools/perfcheck \
 		-run 'Test(PerfReportV6|ScenarioV6|PerfcheckV6|PerfcheckV5SameScenario|PerformanceThresholds|InterestObserver|HostStats|BenchmarkServerEpoch|BenchmarkServerMeasuredWindow)' -count=1
 
 bench-multiplayer:
@@ -135,7 +135,7 @@ bench-multiplayer:
 		-bench '(RemotePlayerStateCodec|EightPlayerInterest|RemoteAvatarNameTag)' -benchmem -count=3
 
 archcheck:
-	$(GO) test ./internal/archcheck -count=1
+	$(GO) test ./packages/audit -count=1
 	test -z "$$($(GO) list -deps $(SERVER) | rg 'packages/client/(client|mesh|render)|gfxspike|glfw|webgpu|x/image/font')"
 
 # dev-check:迭代期快检——gofmt 检查、vet、全仓短测试(重型测试经 `-short` 跳过)
@@ -194,9 +194,9 @@ agent-gates:
 	./scripts/agents/gates.sh
 
 agent-dashboard:
-	npm --prefix web/agent-board ci
-	npm --prefix web/agent-board run build
-	go run ./cmd/mornlea-agent-board
+	npm --prefix packages/tools/agent-board/web ci
+	npm --prefix packages/tools/agent-board/web run build
+	go run ./packages/tools/agent-board
 
 agent-ui-dev:
-	npm --prefix web/agent-board run dev
+	npm --prefix packages/tools/agent-board/web run dev

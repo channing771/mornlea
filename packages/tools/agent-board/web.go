@@ -49,7 +49,7 @@ type Collector interface {
 type statusHandler struct {
 	// collector 为注入的数据采集器，不可为 nil（由 newStatusHandler 系列保证）。
 	collector Collector
-	// distDir 为前端构建产物目录（web/agent-board/dist）；为空表示未构建。
+	// distDir 为前端构建产物目录（packages/tools/agent-board/web/dist）；为空表示未构建。
 	distDir string
 }
 
@@ -61,7 +61,7 @@ func newStatusHandler(collector Collector) http.Handler {
 }
 
 // newStatusHandlerWithDist 构造看板处理器，distDir 为前端构建产物目录；
-// main.go 用 <root>/web/agent-board/dist 传入。
+// main.go 用 <root>/packages/tools/agent-board/web/dist 传入。
 func newStatusHandlerWithDist(collector Collector, distDir string) http.Handler {
 	return &statusHandler{collector: collector, distDir: distDir}
 }

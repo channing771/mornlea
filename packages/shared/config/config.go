@@ -2,7 +2,7 @@
 //
 // 本包只应被 cmd 导入。internal 下其他包一律不得依赖它——否则一台机器上的本地
 // 调参会污染性能基线比对与抓帧 golden 比对，让自动化验证的结论取决于开发者本机
-// 的配置文件内容。该约束由 internal/archcheck 守住。
+// 的配置文件内容。该约束由 packages/audit 守住。
 package config
 
 import (

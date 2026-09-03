@@ -23,7 +23,7 @@ packages/client/cmd/mornlea/
 
 ## Dependency Direction
 
-依赖方向单向且由 `internal/archcheck` 强制（契约见 openspec 主规格
+依赖方向单向且由 `packages/audit` 强制（契约见 openspec 主规格
 `repository-code-organization`）：
 
 - 接受：`packages/client/cmd/mornlea`（main）→ `app`、`capture`、`benchmark`、`devcapture`；
@@ -33,7 +33,7 @@ packages/client/cmd/mornlea/
 - 强制点：`TestClientCommandSubpackageDependencyDirections` 源码级扫描子树
   生产 import 边（不用 `go list`，断言不随 GOOS 翻转）；
   `TestClientCommandDependencyViolationsDetectDrift` 以合成边钉住检查器本身。
-  新增子包必须先登记 `internal/archcheck` 的 `clientCommandAllowedEdges`。
+  新增子包必须先登记 `packages/audit` 的 `clientCommandAllowedEdges`。
 - capture/benchmark 对 app 状态的访问一律经各自包内定义的消费端接口
   （`SceneApplication`、`BenchmarkApplication`），app 只导出最小方法集，
   不为 capture/benchmark 暴露内部字段。
@@ -42,7 +42,7 @@ packages/client/cmd/mornlea/
   导入 capture/benchmark。
 - 跨单元边：本子树是 client 模块中唯一允许 import `packages/server` 的位置
   （app/benchmark 在进程内装配本地权威 Host）；client 域库包对 server 的禁令
-  由 `internal/archcheck/server_client_boundary_test.go` 强制。
+  由 `packages/audit/server_client_boundary_test.go` 强制。
 
 ## Entry Modes
 
@@ -98,4 +98,4 @@ WebView 组件；采掘不再有屏幕进度条，其进度反馈由世界空间
 | capture 视觉 | `go test ./packages/client/cmd/mornlea/capture -race -count=1`；无窗口视觉 `make visual-check` |
 | benchmark 性能 | `go test ./packages/client/cmd/mornlea/benchmark -race -count=1`；多人门禁 `make test-multiplayer` |
 | devcapture 捕获服务 | `go test ./packages/client/cmd/mornlea/devcapture -race -count=1` |
-| 依赖方向 / 文档守卫 | `go test ./internal/archcheck -count=1` |
+| 依赖方向 / 文档守卫 | `go test ./packages/audit -count=1` |

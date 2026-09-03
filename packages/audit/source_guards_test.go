@@ -7,7 +7,6 @@ import (
 	"go/token"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -38,7 +37,7 @@ type authorityCall struct {
 // server 不得重读全局物理参数或调用隐式 wrapper，runtime 只能在唯一捕获函数
 // 内各读一次活动快照，server 的正常与关服 tick 必须把同一局部值传到各阶段。
 func TestAuthorityTickTunablesStayExplicit(t *testing.T) {
-	root := moduleRoot(t)
+	root := repositoryRoot(t)
 	assertNoStoredTickTunables(t, filepath.Join(root, "packages", "server", "server"))
 	scopes := []struct {
 		name      string
@@ -684,7 +683,7 @@ func tunableSourceGuardPackages() map[string][]string {
 // 判定的方块就不是同一个，而且不会有任何报错。
 func TestTunableConstantsAreNotExported(t *testing.T) {
 	forbidden := tunableSourceGuardPackages()
-	root := moduleRoot(t)
+	root := repositoryRoot(t)
 	for packageDirectory, names := range forbidden {
 		files, err := filepath.Glob(filepath.Join(root, packageDirectory, "*.go"))
 		if err != nil {
@@ -742,7 +741,7 @@ func TestTunableConstantsAreNotExported(t *testing.T) {
 // 因此这里额外要求：除去常量声明本身与各包的 tunables.go（DefaultTunables 在
 // 那里组装默认快照），任何非测试文件都不得再出现 defaultXxx 标识符。
 func TestTunableDefaultsAreOnlyReadInTunablesFile(t *testing.T) {
-	root := moduleRoot(t)
+	root := repositoryRoot(t)
 	for packageDirectory := range tunableSourceGuardPackages() {
 		files, err := filepath.Glob(filepath.Join(root, packageDirectory, "*.go"))
 		if err != nil {
@@ -792,34 +791,32 @@ func TestTunableDefaultsAreOnlyReadInTunablesFile(t *testing.T) {
 
 // TestOnlyCommandsImportConfig 守住"自动化验证不读用户配置"这条不变量。
 func TestOnlyCommandsImportConfig(t *testing.T) {
-	// config 已迁入 packages/shared 模块、客户端命令已迁入 packages/client
-	// 模块：`./...` 不跨嵌套模块，须显式列出（packages/client/cmd/mornlea 是
-	// config 的合法消费者，列入只为把 client 域库与 shared 的违规消费照出来）。
-	cmd := exec.Command("go", "list", "-f", "{{.ImportPath}}|{{join .Imports \" \"}} {{join .TestImports \" \"}} {{join .XTestImports \" \"}}", "./internal/...", "./packages/shared/...", "./packages/client/...")
-	cmd.Dir = moduleRoot(t)
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("go list: %v", err)
-	}
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	// config 位于 packages/shared 模块、客户端命令位于 packages/client 模块：
+	// 根模块解散后枚举经 `listWorkspacePackages` 逐模块执行，覆盖全部单元
+	// （packages/client/cmd/mornlea 是 config 的合法消费者，跳过逻辑见下）。
+	lines := listWorkspacePackages(t, "{{.ImportPath}}|{{join .Imports \" \"}} {{join .TestImports \" \"}} {{join .XTestImports \" \"}}", nil)
+	for _, line := range lines {
 		parts := strings.SplitN(line, "|", 2)
 		// config 的外部测试包（package config_test）导入自身，需要整体跳过，
 		// 否则会自触发；这条豁免只对 config 包本身生效。命令入口树
-		// （packages/client/cmd/mornlea 族）是 config 的合法消费者，同样跳过。
+		// （packages/client/cmd/mornlea 族与 packages/server/cmd/mornlea-server）
+		// 是 config 的合法消费者，同样跳过——旧枚举未覆盖 server 模块，切到
+		// 全工作区枚举后服务端命令入口按同一命令豁免处理。
 		if len(parts) != 2 || parts[0] == "github.com/channing771/mornlea/packages/shared/config" ||
-			strings.HasPrefix(parts[0], "github.com/channing771/mornlea/packages/client/cmd/mornlea") {
+			strings.HasPrefix(parts[0], "github.com/channing771/mornlea/packages/client/cmd/mornlea") ||
+			strings.HasPrefix(parts[0], "github.com/channing771/mornlea/packages/server/cmd/mornlea-server") {
 			continue
 		}
 		for _, imported := range strings.Fields(parts[1]) {
 			if imported == "github.com/channing771/mornlea/packages/shared/config" {
-				t.Errorf("%s 导入了 packages/shared/config；只有命令入口（cmd/mornlea 族）可以导入它，否则本机配置会污染性能基线与抓帧 golden", parts[0])
+				t.Errorf("%s 导入了 packages/shared/config；只有命令入口（客户端 mornlea 与服务端 mornlea-server）可以导入它，否则本机配置会污染性能基线与抓帧 golden", parts[0])
 			}
 		}
 	}
 }
 
 func TestOnlyTCPImplementationImportsNet(t *testing.T) {
-	root := filepath.Join(moduleRoot(t), "packages", "shared", "network")
+	root := filepath.Join(repositoryRoot(t), "packages", "shared", "network")
 	files, err := filepath.Glob(filepath.Join(root, "*.go"))
 	if err != nil {
 		t.Fatalf("枚举 network Go 文件: %v", err)
@@ -842,18 +839,18 @@ func TestOnlyTCPImplementationImportsNet(t *testing.T) {
 }
 
 func TestLegacyPlayerAuthorityMessagesAreGone(t *testing.T) {
-	root := moduleRoot(t)
+	root := repositoryRoot(t)
 	forbidden := map[string]struct{}{
 		"SetViewCenter": {}, "BreakRay": {}, "PlaceRay": {}, "CommandBreakRay": {}, "CommandPlaceRay": {}, "localSessionID": {},
 	}
 	// packages/shared 与 packages/client 是独立模块，legacy 标识符守卫须与其
-	// 同侧扫描。
-	for _, sourceRoot := range []string{"cmd", "internal", "packages/shared", "packages/client"} {
+	// 同侧扫描；tools 与 audit 是解散根模块后的另两个 Go 单元，一并覆盖。
+	for _, sourceRoot := range []string{"packages/shared", "packages/client", "packages/tools", "packages/audit"} {
 		err := filepath.WalkDir(filepath.Join(root, sourceRoot), func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
 			}
-			if entry.IsDir() || filepath.Ext(path) != ".go" || path == filepath.Join(root, "internal", "archcheck", "source_guards_test.go") {
+			if entry.IsDir() || filepath.Ext(path) != ".go" || path == filepath.Join(root, "packages", "audit", "source_guards_test.go") {
 				return nil
 			}
 			source, err := os.ReadFile(path)
@@ -883,7 +880,7 @@ func TestLegacyPlayerAuthorityMessagesAreGone(t *testing.T) {
 }
 
 func TestMornleaUsesLoginStreamsInsteadOfAttachedServerEndpoints(t *testing.T) {
-	path := filepath.Join(moduleRoot(t), "packages", "client", "cmd", "mornlea")
+	path := filepath.Join(repositoryRoot(t), "packages", "client", "cmd", "mornlea")
 	source := productionGoSource(t, path)
 	for _, legacy := range []string{"server.NewEmbedded(", "server.NewEmbeddedMemory(", "server.New("} {
 		if strings.Contains(source, legacy) {
@@ -896,7 +893,7 @@ func TestMornleaUsesLoginStreamsInsteadOfAttachedServerEndpoints(t *testing.T) {
 }
 
 func TestMornleaBenchmarkTCPPathUsesTheSharedLoginStateMachine(t *testing.T) {
-	path := filepath.Join(moduleRoot(t), "packages", "client", "cmd", "mornlea")
+	path := filepath.Join(repositoryRoot(t), "packages", "client", "cmd", "mornlea")
 	source := productionGoSource(t, path)
 	for _, required := range []string{"networktcp.ListenTCP(", "network.BeginServerLogin(", "network.LoginClient(", "running.AttachTrustedObserver"} {
 		if !strings.Contains(source, required) {
@@ -906,7 +903,7 @@ func TestMornleaBenchmarkTCPPathUsesTheSharedLoginStateMachine(t *testing.T) {
 }
 
 func TestServerProductionDoesNotDeclareLegacyAttachedWorldWrappers(t *testing.T) {
-	root := filepath.Join(moduleRoot(t), "packages", "server", "server")
+	root := filepath.Join(repositoryRoot(t), "packages", "server", "server")
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		t.Fatalf("读取 %s: %v", root, err)
@@ -939,7 +936,7 @@ func TestServerProductionDoesNotDeclareLegacyAttachedWorldWrappers(t *testing.T)
 }
 
 func TestSessionLifecycleResponsibilitiesStayInSessionFiles(t *testing.T) {
-	root := filepath.Join(moduleRoot(t), "packages", "server", "server")
+	root := filepath.Join(repositoryRoot(t), "packages", "server", "server")
 	sessionDeclarations := topLevelDeclarationNamesIn(t, root, "session*.go")
 	serverDeclarations := topLevelDeclarationNamesIn(t, root, "server.go")
 	wantSessionFile := []string{
@@ -961,7 +958,7 @@ func TestSessionLifecycleResponsibilitiesStayInSessionFiles(t *testing.T) {
 // service：旧 direct-model Planner 的类型、构造器与方法不可重新进入生产源码，
 // Host 也不得重新装配 direct Planner 或旧 Dialogue client。
 func TestCompanionPlannerProductionUsesAgentServiceOnly(t *testing.T) {
-	root := moduleRoot(t)
+	root := repositoryRoot(t)
 	companionSource := productionGoSource(t, filepath.Join(root, "packages", "shared", "companion"))
 	for _, forbidden := range []string{
 		"type PlannerClient struct",

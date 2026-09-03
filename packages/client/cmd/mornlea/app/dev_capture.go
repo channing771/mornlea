@@ -9,7 +9,7 @@ import (
 // dev_capture.go 定义开发捕获服务在 app 侧的消费端契约与帧循环捕获泵。协调
 // 器实现住在 `packages/client/cmd/mornlea/devcapture`（consumer 侧接口模式，同
 // `capture.SceneApplication` 先例的反向）：本包只声明接口，不感知也不得
-// import 具体实现，依赖方向由 `internal/archcheck` 强制。
+// import 具体实现，依赖方向由 `packages/audit` 强制。
 
 // captureSource 是捕获泵对像素来源的最小依赖，方法集与 `client.Window` 的
 // 窗口合成捕获桥（client ABI v13）同形。收窄成私有接口让泵可以无头测试

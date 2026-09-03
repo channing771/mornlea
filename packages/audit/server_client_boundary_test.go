@@ -84,7 +84,7 @@ func serverClientImportViolations(sources map[string]string) []string {
 // 禁令。cmd 子树内部的方向契约另由 `clientCommandAllowedEdges` 负责，本测试
 // 不重复其职责，只管跨单元边界。
 func TestServerClientUnitProductionBoundaries(t *testing.T) {
-	root := moduleRoot(t)
+	root := repositoryRoot(t)
 	sources := make(map[string]string)
 	for _, unit := range []string{"packages/server", "packages/client"} {
 		err := filepath.WalkDir(filepath.Join(root, filepath.FromSlash(unit)), func(path string, entry fs.DirEntry, walkErr error) error {

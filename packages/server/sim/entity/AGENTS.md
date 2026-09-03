@@ -13,7 +13,7 @@
 
 - 允许：`packages/shared/core`、`packages/shared/world`、`packages/shared/companion`、`packages/shared/physics`、`packages/server/sim/contract`、`packages/server/sim/realm`、`packages/shared/tuning`。
 - 禁止：依赖 `packages/server/sim/runtime` 或 `packages/server/server`/`internal/client`/`internal/render`；禁止将 `runtime.Engine` 作为参数或返回值。
-- 方向由 `internal/archcheck` 强制，合成测试注入 `entity → runtime` 必须被 `TestSimDependencyViolationsDetectDrift` 拒绝。
+- 方向由 `packages/audit` 强制，合成测试注入 `entity → runtime` 必须被 `TestSimDependencyViolationsDetectDrift` 拒绝。
 
 ## 关键文件
 
@@ -35,4 +35,4 @@
 
 - `go test ./packages/server/sim/entity -race -count=1`
 - 关联：`go test ./packages/shared/companion ./packages/shared/physics -race -count=1`
-- 依赖边界：`go test ./internal/archcheck -count=1`
+- 依赖边界：`go test ./packages/audit -count=1`

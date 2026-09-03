@@ -30,7 +30,7 @@ require (
 // cmd/mornlea 应用入口经 server 传递消费（contracts 的 go:embed 必须与 JSON
 // 契约同目录）——普通本地与 benchmark 模式在进程内装配本地权威 Host（Memory
 // transport 登录边界不变）。client 域库包（client/render/mesh/lod/audio/assets）
-// MUST NOT import server，由 internal/archcheck 源码守卫强制；允许 require 边由
+// MUST NOT import server，由 packages/audit 源码守卫强制；允许 require 边由
 // 单元边界表强制。各兄弟经本地相对路径 replace 引用，保证 GOWORK=off 的单模块
 // 世界仍可构建。
 replace github.com/channing771/mornlea/packages/contracts => ../contracts

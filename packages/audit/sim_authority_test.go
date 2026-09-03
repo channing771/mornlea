@@ -73,7 +73,7 @@ var requiredEntitySessionFields = map[string]string{
 }
 
 func TestSimAuthorityStateOwnershipStaysExplicit(t *testing.T) {
-	root := moduleRoot(t)
+	root := repositoryRoot(t)
 	typeEnvironment, err := newSimAuthorityTypeEnvironment(root)
 	if err != nil {
 		t.Fatal(err)
@@ -88,7 +88,7 @@ func TestSimAuthorityStateOwnershipStaysExplicit(t *testing.T) {
 }
 
 func TestSimAuthorityGuardRejectsSyntheticDrift(t *testing.T) {
-	typeEnvironment, err := newSimAuthorityTypeEnvironment(moduleRoot(t))
+	typeEnvironment, err := newSimAuthorityTypeEnvironment(repositoryRoot(t))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,9 +11,10 @@ func TestFindRepoRoot(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "a", "b"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	gomod := "module github.com/channing771/mornlea\n\ngo 1.26.0\n"
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte(gomod), 0o644); err != nil {
-		t.Fatalf("write go.mod: %v", err)
+	// 根 go.mod 已随单元化解散，仓库根以 go.work 工作区清单标识。
+	workspace := "go 1.26.0\n\nuse (\n\t./packages/tools\n)\n"
+	if err := os.WriteFile(filepath.Join(root, "go.work"), []byte(workspace), 0o644); err != nil {
+		t.Fatalf("write go.work: %v", err)
 	}
 	got, ok := findRepoRoot(filepath.Join(root, "a", "b"))
 	if !ok {
@@ -26,19 +27,19 @@ func TestFindRepoRoot(t *testing.T) {
 	if got, ok := findRepoRoot(root); !ok || got != root {
 		t.Errorf("从仓库根自身查找应命中，got=%q ok=%v", got, ok)
 	}
-	// 无 go.mod 的空目录应当返回 false。
+	// 无 go.work 的空目录应当返回 false。
 	if _, ok := findRepoRoot(t.TempDir()); ok {
-		t.Errorf("无 go.mod 的目录不应命中")
+		t.Errorf("无 go.work 的目录不应命中")
 	}
-	// 含非目标 module 的 go.mod 不应命中。
-	wrong := filepath.Join(t.TempDir(), "wrongrepo")
+	// 只含单元 go.mod（不含 go.work）的目录不应命中：go.work 只出现在仓库根。
+	wrong := filepath.Join(t.TempDir(), "unitrepo")
 	if err := os.MkdirAll(wrong, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(wrong, "go.mod"), []byte("module example.com/other\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(wrong, "go.mod"), []byte("module github.com/channing771/mornlea/packages/tools\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := findRepoRoot(wrong); ok {
-		t.Errorf("非本 module 的 go.mod 不应命中")
+		t.Errorf("单元模块目录不应命中仓库根判定")
 	}
 }

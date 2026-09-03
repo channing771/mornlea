@@ -25,7 +25,7 @@ require (
 
 // contracts、shared 与 client 是兄弟 Go 模块（contracts 的 go:embed 必须与 JSON
 // 契约同目录；shared 承载双侧共享的领域包）；server 是服务端域模块，兄弟 require
-// 集恰为 {contracts, shared, client}，由 internal/archcheck 的单元边界表强制。其中
+// 集恰为 {contracts, shared, client}，由 packages/audit 的单元边界表强制。其中
 // client 是测试专用豁免边：server 的 Memory/TCP 集成测试以客户端镜像驱动会话
 // （Go 的 require 无法按测试限定，只能模块层放行）；生产代码禁 import client 由
 // archcheck 源码守卫强制。各模块经本地相对路径 replace 引用，保证 GOWORK=off

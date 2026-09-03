@@ -1,6 +1,6 @@
 # 权威模拟
 
-本目录仅保留指导文档，不含生产 Go Package；权威模拟由四个子包承载，单向依赖，见下表与 `internal/archcheck`。`Tunables` 快照已上提共享层 `packages/shared/tuning`（纯值对象叶子，见该目录 `AGENTS.md`），不再属于本子树。根 `packages/server/sim` 不得保留生产 Go 文件、类型别名或转发函数，调用方必须直接导入所属子包。
+本目录仅保留指导文档，不含生产 Go Package；权威模拟由四个子包承载，单向依赖，见下表与 `packages/audit`。`Tunables` 快照已上提共享层 `packages/shared/tuning`（纯值对象叶子，见该目录 `AGENTS.md`），不再属于本子树。根 `packages/server/sim` 不得保留生产 Go 文件、类型别名或转发函数，调用方必须直接导入所属子包。
 
 ## Directory Map
 
@@ -66,7 +66,7 @@ packages/server/sim/
 
 ## 依赖方向
 
-子包依赖以 `internal/archcheck/dependency_test.go` 的 `allowed` 表为唯一真相；本包不得依赖 `internal/client`、`internal/render` 或具体 network transport，模拟只消费领域命令并产出权威结果。依赖方向单向且由 `internal/archcheck` 强制（契约见 `openspec/specs/repository-code-organization`）：
+子包依赖以 `packages/audit/dependency_test.go` 的 `allowed` 表为唯一真相；本包不得依赖 `internal/client`、`internal/render` 或具体 network transport，模拟只消费领域命令并产出权威结果。依赖方向单向且由 `packages/audit` 强制（契约见 `openspec/specs/repository-code-organization`）：
 
 - 接受：`runtime` → `contract`/`realm`/`entity` 与 `packages/shared/tuning`；`entity` → `contract`/`realm` 与 `packages/shared/tuning`；`realm` → `core`/`fluid`/`world`；`contract` → `core`/`world`/`companion`/`physics`（`core`/`world`/`companion`/`physics` 均已迁入 `packages/shared`）。
 - 拒绝：`contract` 依赖 `tuning`/`realm`/`entity`/`runtime`；`realm` 依赖 `contract`/`tuning`/`entity`/`runtime`；`entity` 依赖 `runtime`；子树出现未登记的新包；`runtime` 缺少对三个兄弟子包与 `packages/shared/tuning` 的必需编排边。
@@ -84,7 +84,7 @@ packages/server/sim/
 | `realm` 事务与环境 | `go test ./packages/server/sim/realm -race -count=1` |
 | `entity` 结算 | `go test ./packages/server/sim/entity -race -count=1` |
 | `runtime` 编排 | `go test ./packages/server/sim/runtime -race -count=1` |
-| 依赖边界 | `go test ./internal/archcheck -count=1` |
+| 依赖边界 | `go test ./packages/audit -count=1` |
 
 - 当前文档入口：`docs/notes/go-rust-division.md`、`docs/test-organization.md`。
 - 子树根的 `packages/server/sim/AGENTS.md` 是目录地图与边界总纲，子包细节见各自 `AGENTS.md`；修改任一子包的行为、导出面或测试入口必须同步对应指南。

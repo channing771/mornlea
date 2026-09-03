@@ -6,7 +6,7 @@
 编排住根包，本包不依赖二者。本包只依赖 `packages/shared/core` 与
 `packages/shared/companion`（后者服务于常量同源锁定与消息 DTO 的领域类型，见
 下）；依赖方向由
-`internal/archcheck` 的 `TestInternalDependenciesAreOneWay` 强制。行为规格
+`packages/audit` 的 `TestInternalDependenciesAreOneWay` 强制。行为规格
 见 openspec 主规格 `repository-code-organization`（协议版本契约承接
 `docs/notes/compatibility.md`）；
 全树共享的信任边界与协议演进纪律见上级 `../AGENTS.md`，本文件不重复。
@@ -88,4 +88,4 @@
 - 定点测试：`go test ./packages/shared/network/protocol -race -count=1`。
 - 协议演进（ID/Validate/版本变更连带 codec 与传输）：
   `go test ./packages/shared/network/... -race -count=1`。
-- 依赖方向与文档守卫：`go test ./internal/archcheck -count=1`。
+- 依赖方向与文档守卫：`go test ./packages/audit -count=1`。

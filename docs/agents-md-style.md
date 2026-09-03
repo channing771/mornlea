@@ -15,7 +15,7 @@
 - 只在有独立不变量要陈述时才新建指南文件；没有就继承父级，不为对称性
   建文件。
 - 薄导入 `CLAUDE.md` 只出现在仓库根与子树根（如 `cmd/mornlea/CLAUDE.md`），
-  内容逐字节一致并登记进 `internal/archcheck` 的 `claudeImportDocs`
+  内容逐字节一致并登记进 `packages/audit` 的 `claudeImportDocs`
   （`TestClaudeImportsAgentGuidance` 把关）；修改只落在 `AGENTS.md`，不把
   正文写进 `CLAUDE.md`。**子包目录不放 `CLAUDE.md`**：代理沿目录祖先链读到
   子树总纲与父级指南即可，嵌套副本只会制造同步负担。
@@ -88,7 +88,7 @@
 - [ ] 与父级/子级指南无重复条文；跨包约束只在总纲出现一次
 - [ ] `CLAUDE.md` 只存在于仓库根与子树根且逐字节等于模板、已登记
       `claudeImportDocs`；子包目录无 `CLAUDE.md`
-- [ ] `go test ./internal/archcheck -count=1` 全绿（薄导入、反引号、依赖
+- [ ] `go test ./packages/audit -count=1` 全绿（薄导入、反引号、依赖
       方向守卫）
 - [ ] 无任务编号；正文中文、标识符英文
 

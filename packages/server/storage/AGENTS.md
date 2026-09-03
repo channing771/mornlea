@@ -33,7 +33,7 @@ packages/server/storage/
 
 ## Dependency Direction
 
-依赖方向单向，由 `internal/archcheck/dependency_test.go` 的 `allowed` 表
+依赖方向单向，由 `packages/audit/dependency_test.go` 的 `allowed` 表
 登记并以 `TestInternalDependenciesAreOneWay` 强制（`go list` 枚举
 `./internal/...` 生产 import 逐边比对；未登记的新包直接报错）。契约文本见
 openspec 主规格 `repository-code-organization`。
@@ -97,7 +97,7 @@ openspec 主规格 `repository-code-organization`。
   子包细节不回写总纲。
 - 容量上限、阈值、场景清单一律以代码常量与性质测试为准，指南只点名常量
   与测试，不抄数值。
-- 存储子包布局或依赖边变化时，同步 `internal/archcheck/dependency_test.go`
+- 存储子包布局或依赖边变化时，同步 `packages/audit/dependency_test.go`
   的 `allowed` 表与 openspec 主规格 `repository-code-organization`，三者
   不一致即漂移。
 
@@ -114,4 +114,4 @@ openspec 主规格 `repository-code-organization`。
 | companion codec | `go test ./packages/server/storage/companion -race -count=1` |
 | hostile codec | `go test ./packages/server/storage/hostile -race -count=1` |
 | 全子树（跨域改动） | `go test ./packages/server/storage/... -race -count=1` |
-| 依赖方向 / 文档守卫 | `go test ./internal/archcheck -count=1` |
+| 依赖方向 / 文档守卫 | `go test ./packages/audit -count=1` |

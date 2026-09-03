@@ -2,7 +2,7 @@ package main
 
 // 本文件主题：页面服务完整性——从 dist 目录读盘提供前端产物，dist 缺失时返回「前端未构建」指引页。
 //
-// 重构后看板不再内嵌 HTML，而是由新前端包 web/agent-board 的构建产物（dist/）提供。
+// 重构后看板不再内嵌 HTML，而是由本包 web/ 前端的构建产物（dist/）提供。
 // 这里注入 t.TempDir() 的假 dist，分别验证「dist 缺失→指引页」与「dist 就绪→逐文件读盘」两类契约。
 
 import (

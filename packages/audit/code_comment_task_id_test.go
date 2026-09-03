@@ -36,7 +36,7 @@ type codeCommentTaskIDFinding struct {
 // TestCodeCommentsExcludeTaskIDs 守住任务编号只属于规划产物的仓库纪律。
 // 扫描器按语言词法边界提取注释，字符串字面量中的工具数据不属于检查对象。
 func TestCodeCommentsExcludeTaskIDs(t *testing.T) {
-	sources, err := repositoryCodeCommentSources(moduleRoot(t))
+	sources, err := repositoryCodeCommentSources(repositoryRoot(t))
 	if err != nil {
 		t.Fatalf("收集 Go/Rust 源码: %v", err)
 	}
@@ -387,7 +387,7 @@ func requireCodeCommentScanCoverage(t *testing.T, sources []codeCommentSource) {
 		t.Fatalf("源码覆盖异常：Go=%d Rust=%d", counts[".go"], counts[".rs"])
 	}
 	for _, required := range []string{
-		"internal/archcheck/code_comment_task_id_test.go",
+		"packages/audit/code_comment_task_id_test.go",
 		"packages/engine/crates/mornlea_client/src/window.rs",
 	} {
 		if !paths[required] {

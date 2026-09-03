@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -37,7 +36,7 @@ import (
 // NOT 反向依赖 sim/network/render/storage，否则它会退化成 sim 的内部实现，丧失
 // 独立测试的意义。
 var allowed = map[string][]string{
-	"internal/archcheck":                        {},
+	"packages/audit":                            {},
 	"packages/client/audio":                     {},
 	"packages/contracts/companion-agent/mcp-v1": {},
 	"packages/server/cmd/mornlea-server":        {"packages/server/server", "packages/server/storage", "packages/shared/companion", "packages/shared/config", "packages/shared/core", "packages/shared/logging", "packages/shared/network", "packages/shared/network/tcp", "packages/shared/world", "packages/shared/worldgen"},
@@ -81,28 +80,33 @@ var allowed = map[string][]string{
 	"packages/server/server":             {"packages/contracts/companion-agent/mcp-v1", "packages/shared/companion", "packages/shared/core", "packages/shared/network", "packages/shared/pathfind", "packages/shared/physics", "packages/shared/world", "packages/shared/worldgen", "packages/server/sim/contract", "packages/server/sim/runtime", "packages/server/storage", "packages/server/server/persistence"},
 	"packages/server/server/persistence": {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/server/sim/contract", "packages/server/sim/runtime", "packages/server/storage"},
 	"packages/client/client":             {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/network", "packages/shared/world", "packages/client/mesh", "packages/client/assets", "packages/client/render"},
+	// tools 单元的四个 main 包：perfcheck 与 gfxspike 组合消费客户端镜像与渲染
+	// 侧包（跨单元方向由 unit boundary 的 require 表治理，单元内它们互不依赖）。
+	"packages/tools/agent-board":          {},
+	"packages/tools/composite_grass_side": {},
+	"packages/tools/gfxspike":             {"packages/client/assets", "packages/client/client", "packages/client/mesh", "packages/client/render", "packages/shared/core", "packages/shared/world", "packages/shared/worldgen"},
+	"packages/tools/perfcheck":            {"packages/client/client"},
 }
 
 func TestInternalDependenciesAreOneWay(t *testing.T) {
-	// 模块切割后白名单键横跨根模块（`./internal/...` 只剩 archcheck）与
-	// `./packages/{contracts,shared,server}/...` 各 workspace 模块；client 模块
-	// 只列入六个域库子树——`packages/client/cmd/mornlea` 命令子树由下方
-	// `clientCommandAllowedEdges` 单独治理，混入本表会双重登记其跨域边。
-	// go.work 下 `./...` 不跨嵌套模块，必须显式按模块列出，新模块落地时同步
-	// 扩这里。
-	cmd := exec.Command("go", "list", "-f", "{{.ImportPath}}|{{join .Imports \" \"}}",
-		"./internal/...", "./packages/contracts/...", "./packages/shared/...", "./packages/server/...",
-		"./packages/client/client/...", "./packages/client/render/...", "./packages/client/mesh/...",
-		"./packages/client/lod/...", "./packages/client/audio/...", "./packages/client/assets/...")
-	cmd.Dir = moduleRoot(t)
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("枚举 internal 与各 packages 模块包失败: %v", err)
-	}
+	// 根模块已解散：白名单键横跨 go.work 直辖的全部单元模块（audit 本身在
+	// packages/audit）。client 模块只列入六个域库子树——
+	// `packages/client/cmd/mornlea` 命令子树由下方 `clientCommandAllowedEdges`
+	// 单独治理，混入本表会双重登记其跨域边。tools 模块在 wildcard `./...` 之
+	// 外追加非 wildcard 的 `./gfxspike`：gfxspike 整包 `//go:build darwin`，
+	// 模式展开阶段的 wildcard 在 Linux 会静默跳过它，下方「每个白名单键必须
+	// 被枚举到」的反断言必红；只有直接点名目录的模式才吃到 `-e` 的带错列
+	// 出——ImportPath 完好、imports 为空，导入核对此时无边可查、反断言键
+	// 命中，macOS 与 Linux CI 收敛到同一包集。保留 `./...` 让未来新增的
+	// tools 包继续自动进入本检查。新模块 use 进 go.work 后同样自动进入。
+	out := listWorkspacePackages(t, "{{.ImportPath}}|{{join .Imports \" \"}}", map[string][]string{
+		"packages/client": {"./client/...", "./render/...", "./mesh/...", "./lod/...", "./audio/...", "./assets/..."},
+		"packages/tools":  {"./...", "./gfxspike"},
+	})
 
 	actual := make(map[string]bool)
 	imports := make(map[string][]string)
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for _, line := range out {
 		parts := strings.SplitN(line, "|", 2)
 		pkg := localName(parts[0])
 		actual[pkg] = true
@@ -146,7 +150,7 @@ func TestServerPersistenceDoesNotDependOnServer(t *testing.T) {
 	if slices.Contains(allowed["packages/server/server/persistence"], "packages/server/server") {
 		t.Fatalf("packages/server/server/persistence 不允许依赖 packages/server/server：子包不得反向依赖父包")
 	}
-	root := moduleRoot(t)
+	root := repositoryRoot(t)
 	dir := filepath.Join(root, "packages", "server", "server", "persistence")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -277,7 +281,7 @@ func TestClientCommandSubpackageDependencyDirections(t *testing.T) {
 // 未登记的新包目录时由检查器的白名单核对报错，新增子包不可能静默绕过。
 func clientCommandImportEdges(t *testing.T) map[string][]string {
 	t.Helper()
-	root := moduleRoot(t)
+	root := repositoryRoot(t)
 	subtree := filepath.Join(root, "packages", "client", "cmd", "mornlea")
 	edges := make(map[string][]string)
 	err := filepath.WalkDir(subtree, func(path string, entry fs.DirEntry, walkErr error) error {
@@ -494,7 +498,7 @@ func simDependencyViolations(edges map[string][]string) []string {
 // 未登记的新包目录时由检查器的白名单核对报错，新增子包不可能静默绕过。
 func simImportEdges(t *testing.T) map[string][]string {
 	t.Helper()
-	root := moduleRoot(t)
+	root := repositoryRoot(t)
 	subtree := filepath.Join(root, "packages", "server", "sim")
 	edges := make(map[string][]string)
 	err := filepath.WalkDir(subtree, func(path string, entry fs.DirEntry, walkErr error) error {

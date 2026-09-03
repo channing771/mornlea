@@ -3,6 +3,7 @@ package archcheck_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/build"
@@ -33,13 +34,13 @@ var (
 	legacyDataDirectory  = identityToken("minecraft", "-go")
 	legacyBackupIdentity = identityToken(".mc", "go-world-backup-v1.json")
 	currentIdentityRoots = []string{
-		"go.mod",
-		"cmd",
+		"go.work",
 		"packages/contracts",
 		"packages/server",
 		"packages/shared",
 		"packages/client",
-		"internal",
+		"packages/tools",
+		"packages/audit",
 		"packages/engine/Cargo.toml",
 		"packages/engine/Cargo.lock",
 		"packages/engine/crates",
@@ -153,7 +154,7 @@ func newGoIdentityScanner(root string) *goIdentityScanner {
 }
 
 func TestNativeEngineLibraryIdentity(t *testing.T) {
-	root := moduleRoot(t)
+	root := repositoryRoot(t)
 	engineCrate := filepath.Join(root, "packages", "engine", "crates", "mornlea_engine")
 	if info, err := os.Stat(filepath.Join(engineCrate, "Cargo.toml")); err != nil || info.IsDir() {
 		t.Fatalf("Rust engine crate 必须存在: %v", err)
@@ -190,10 +191,11 @@ func TestMornleaCurrentIdentity(t *testing.T) {
 	if root := os.Getenv("MORNLEA_IDENTITY_TEST_ROOT"); root != "" {
 		actual := make([]int, len(legacyIdentityAllowances))
 		goScanner := newGoIdentityScanner(root)
-		// 合成 mutation 各自只建自己需要的目录（cmd、client 或 server 模块
+		// 合成 mutation 各自只建自己需要的目录（tools、client 或 server 模块
 		// 子树）；存在才扫，统一扫描会让只建一侧的 mutation 误报「身份扫描根
-		// 不存在」。
-		for _, relative := range []string{"cmd", "packages/client", "packages/server"} {
+		// 不存在」。cmd/internal 已随根模块解散退役，mutation 的落点改用
+		// packages/tools 子树。
+		for _, relative := range []string{"packages/tools", "packages/client", "packages/server"} {
 			if _, err := os.Lstat(filepath.Join(root, filepath.FromSlash(relative))); err == nil {
 				scanCurrentIdentityRoot(t, root, relative, actual, goScanner)
 			}
@@ -202,14 +204,15 @@ func TestMornleaCurrentIdentity(t *testing.T) {
 		return
 	}
 
-	root := moduleRoot(t)
+	root := repositoryRoot(t)
 	requireLinuxServerBundleIdentity(t, root)
-	goModule, err := os.ReadFile(filepath.Join(root, "go.mod"))
-	if err != nil {
-		t.Fatalf("读取 go.mod: %v", err)
-	}
-	if !strings.HasPrefix(string(goModule), "module "+modulePath+"\n") {
-		t.Errorf("go.mod module 必须是 %s", modulePath)
+	// 根模块已解散：顶层不得再有 go.mod，全部 Go 单元由 go.work 直辖（use 集
+	// 与 packages/ 下 go.mod 的一致性由 unit boundary 检查另守）。此处只钉
+	// 「根目录无模块清单」这一身份事实，旧的单模块前缀断言随 go.mod 一并退役。
+	if _, err := os.Lstat(filepath.Join(root, "go.mod")); err == nil {
+		t.Errorf("仓库根不得保留 go.mod：六个单元模块（shared/server/client/tools/audit/contracts）由 go.work 直辖")
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("检查根 go.mod: %v", err)
 	}
 
 	actual := make([]int, len(legacyIdentityAllowances))
@@ -289,51 +292,51 @@ func testCurrentIdentityMutations(t *testing.T) {
 	}
 	mutations := map[string]func(*testing.T, string){
 		"command path": func(t *testing.T, root string) {
-			writeIdentityMutationFile(t, root, filepath.Join("cmd", identityToken("mc", "go"), "main.go"), "package main\n")
+			writeIdentityMutationFile(t, root, filepath.Join("packages", "tools", identityToken("mc", "go"), "main.go"), "package main\n")
 		},
 		"symlink path": func(t *testing.T, root string) {
-			writeIdentityMutationFile(t, root, filepath.Join("cmd", "target"), "package main\n")
-			if err := os.Symlink("target", filepath.Join(root, "cmd", identityToken("mc", "go-wrapper"))); err != nil {
+			writeIdentityMutationFile(t, root, filepath.Join("packages", "tools", "target"), "package main\n")
+			if err := os.Symlink("target", filepath.Join(root, "packages", "tools", identityToken("mc", "go-wrapper"))); err != nil {
 				t.Fatal(err)
 			}
 		},
 		"escaped literal": func(t *testing.T, root string) {
-			writeIdentityMutationFile(t, root, filepath.Join("cmd", "escaped.go"), `package sample
+			writeIdentityMutationFile(t, root, filepath.Join("packages", "tools", "escaped.go"), `package sample
 const artifact = "\x6d\x63\x67\x6f_mesh"
 `)
 		},
 		"escaped import": func(t *testing.T, root string) {
-			writeIdentityMutationFile(t, root, filepath.Join("cmd", "escaped_import.go"), `package sample
+			writeIdentityMutationFile(t, root, filepath.Join("packages", "tools", "escaped_import.go"), `package sample
 import _ "github.com/channing771/minecraft\x2dgo/internal/core"
 `)
 		},
 		"binary expression": func(t *testing.T, root string) {
-			writeIdentityMutationFile(t, root, filepath.Join("cmd", "binary.go"), `package sample
+			writeIdentityMutationFile(t, root, filepath.Join("packages", "tools", "binary.go"), `package sample
 const artifact = "mc" + "go_mesh"
 `)
 		},
 		"constant identifier chain": func(t *testing.T, root string) {
-			writeIdentityMutationFile(t, root, filepath.Join("cmd", "chain.go"), `package sample
+			writeIdentityMutationFile(t, root, filepath.Join("packages", "tools", "chain.go"), `package sample
 const prefix = "mc"
 const identity = prefix + "go"
 const artifact = identity + "_mesh"
 `)
 		},
 		"cross-file constant identifier chain": func(t *testing.T, root string) {
-			writeIdentityMutationFile(t, root, filepath.Join("cmd", "prefix.go"), `package sample
+			writeIdentityMutationFile(t, root, filepath.Join("packages", "tools", "prefix.go"), `package sample
 const prefix = "mc"
 `)
-			writeIdentityMutationFile(t, root, filepath.Join("cmd", "artifact.go"), `package sample
+			writeIdentityMutationFile(t, root, filepath.Join("packages", "tools", "artifact.go"), `package sample
 const artifact = prefix + "go_mesh"
 `)
 		},
 		"cross-package selector constant chain": func(t *testing.T, root string) {
-			writeIdentityMutationFile(t, root, filepath.Join("cmd", "helper", "pieces.go"), `package helper
+			writeIdentityMutationFile(t, root, filepath.Join("packages", "tools", "helper", "pieces.go"), `package helper
 const Prefix = "mc"
 const Suffix = "go_mesh"
 `)
-			writeIdentityMutationFile(t, root, filepath.Join("cmd", "consumer", "main.go"), `package consumer
-import "github.com/channing771/mornlea/cmd/helper"
+			writeIdentityMutationFile(t, root, filepath.Join("packages", "tools", "consumer", "main.go"), `package consumer
+import "github.com/channing771/mornlea/packages/tools/helper"
 const artifact = helper.Prefix + helper.Suffix
 `)
 		},
@@ -353,12 +356,12 @@ const artifact = platformPrefix + "go_mesh"
 `)
 		},
 		"unresolved import": func(t *testing.T, root string) {
-			writeIdentityMutationFile(t, root, filepath.Join("cmd", "unresolved.go"), `package sample
+			writeIdentityMutationFile(t, root, filepath.Join("packages", "tools", "unresolved.go"), `package sample
 import _ "example.invalid/missing"
 `)
 		},
 		"unresolved identifier": func(t *testing.T, root string) {
-			writeIdentityMutationFile(t, root, filepath.Join("cmd", "unresolved.go"), `package sample
+			writeIdentityMutationFile(t, root, filepath.Join("packages", "tools", "unresolved.go"), `package sample
 const artifact = missingIdentityPiece
 `)
 		},
@@ -368,7 +371,7 @@ func legacyDataPath() string { return "minecraft\x2dgo" }
 `)
 		},
 		"invalid Go source": func(t *testing.T, root string) {
-			writeIdentityMutationFile(t, root, filepath.Join("cmd", "invalid.go"), "package sample\nfunc (")
+			writeIdentityMutationFile(t, root, filepath.Join("packages", "tools", "invalid.go"), "package sample\nfunc (")
 		},
 	}
 	for name, setup := range mutations {
@@ -710,9 +713,9 @@ func (scanner *goIdentityScanner) externalImporter(context *build.Context, direc
 	}
 
 	// 导出数据经 go.work 解析：被类型检查的文件横跨 client/server 等多个
-	// workspace 模块（root go.mod 已不再 require server，单模块视图无法覆盖
-	// 其第三方依赖）；外部依赖版本由各模块 require 汇合出的 workspace 模块图
-	// 唯一决定，与 replace 全本地一样确定。
+	// workspace 模块（根模块已解散，不存在能覆盖全部单元的单模块视图）；外部
+	// 依赖版本由各模块 require 汇合出的 workspace 模块图唯一决定，与 replace
+	// 全本地一样确定。
 	arguments := append([]string{"list", "-e", "-export", "-deps", "-json"}, paths...)
 	command := exec.Command("go", arguments...)
 	command.Dir = scanner.root

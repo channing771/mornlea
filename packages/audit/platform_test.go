@@ -12,19 +12,20 @@ import (
 )
 
 func TestNativeEngineBridgeBoundary(t *testing.T) {
-	root := moduleRoot(t)
+	root := repositoryRoot(t)
 	bridge := filepath.Join(root, "packages", "shared", "nativeabi")
 	if info, err := os.Stat(bridge); err != nil || !info.IsDir() {
 		t.Fatalf("native engine bridge %s 不存在", bridge)
 	}
 	// engine bridge 已迁入 packages/shared 模块、服务端域迁入 packages/server
-	// 模块、客户端域迁入 packages/client 模块，扫描根须与其同侧扩展，否则
-	// C ABI token 守卫对相应模块静默失明。
-	files := goFiles(t, filepath.Join(root, "internal"))
-	files = append(files, goFiles(t, filepath.Join(root, "cmd"))...)
-	files = append(files, goFiles(t, filepath.Join(root, "packages", "shared"))...)
+	// 模块、客户端域迁入 packages/client 模块、工具与审计域迁入 packages/tools
+	// 与 packages/audit 模块，扫描根须覆盖全部 Go 单元，否则 C ABI token 守卫
+	// 对相应模块静默失明。
+	files := goFiles(t, filepath.Join(root, "packages", "shared"))
 	files = append(files, goFiles(t, filepath.Join(root, "packages", "server"))...)
 	files = append(files, goFiles(t, filepath.Join(root, "packages", "client"))...)
+	files = append(files, goFiles(t, filepath.Join(root, "packages", "tools"))...)
+	files = append(files, goFiles(t, filepath.Join(root, "packages", "audit"))...)
 
 	clientBridge := filepath.Join(root, "packages", "client", "client")
 	inDir := func(path, dir string) bool {
@@ -107,17 +108,13 @@ func goFiles(t *testing.T, root string) []string {
 }
 
 func TestNoPackageImportsWebGPU(t *testing.T) {
-	// `-e` 让构建约束排除的包（客户端 app/capture/benchmark 的 darwin 专属
-	// 文件在 Linux 上全被排除）以加载错误形式列出而不是让 go list 非零退出；
-	// 可加载包的 Imports 检查语义不变，darwin 专属包由 macOS CI 的同测试
-	// 原生覆盖。
-	cmd := exec.Command("go", "list", "-e", "-f", "{{.ImportPath}}|{{join .Imports \" \"}}", "./...", "./packages/shared/...", "./packages/contracts/...", "./packages/server/...", "./packages/client/...")
-	cmd.Dir = moduleRoot(t)
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("go list 失败: %v", err)
-	}
-	for _, line := range strings.Split(string(out), "\n") {
+	// `-e`（经 `listWorkspacePackages`）让构建约束排除的包（客户端 app/
+	// capture/benchmark 的 darwin 专属文件在 Linux 上全被排除）以加载错误形式
+	// 列出而不是让 go list 非零退出；可加载包的 Imports 检查语义不变，darwin
+	// 专属包由 macOS CI 的同测试原生覆盖。根模块解散后枚举逐模块执行，覆盖
+	// go.work 直辖的全部单元。
+	lines := listWorkspacePackages(t, "{{.ImportPath}}|{{join .Imports \" \"}}", nil)
+	for _, line := range lines {
 		parts := strings.SplitN(line, "|", 2)
 		if len(parts) != 2 {
 			continue
@@ -131,7 +128,7 @@ func TestNoPackageImportsWebGPU(t *testing.T) {
 }
 
 func TestMornleaServerHasNoGraphicsDependencies(t *testing.T) {
-	root := filepath.Join(moduleRoot(t), "packages", "server", "cmd", "mornlea-server")
+	root := filepath.Join(repositoryRoot(t), "packages", "server", "cmd", "mornlea-server")
 	files, err := filepath.Glob(filepath.Join(root, "*.go"))
 	if err != nil {
 		t.Fatalf("枚举 Mornlea server Go 文件: %v", err)
@@ -154,8 +151,9 @@ func TestMornleaServerHasNoGraphicsDependencies(t *testing.T) {
 		}
 	}
 
-	command := exec.Command("go", "list", "-f", "{{.ImportPath}}", "-deps", "./packages/server/cmd/mornlea-server")
-	command.Dir = moduleRoot(t)
+	// 根模块解散后，server 入口的传递闭包在 server 模块目录内解析。
+	command := exec.Command("go", "list", "-f", "{{.ImportPath}}", "-deps", "./cmd/mornlea-server")
+	command.Dir = filepath.Join(repositoryRoot(t), "packages", "server")
 	output, err := command.Output()
 	if err != nil {
 		t.Fatalf("枚举 Mornlea server 传递依赖: %v", err)
@@ -177,7 +175,7 @@ func TestMornleaServerHasNoGraphicsDependencies(t *testing.T) {
 }
 
 func TestPhysicsStepUsesOnlyNative(t *testing.T) {
-	root := filepath.Join(moduleRoot(t), "packages", "shared", "physics")
+	root := filepath.Join(repositoryRoot(t), "packages", "shared", "physics")
 
 	foundNativeABI := false
 	nativePhysicsStepCalls := 0
@@ -214,7 +212,7 @@ func TestPhysicsStepUsesOnlyNative(t *testing.T) {
 }
 
 func TestCoreUsesOnlyNativeRaycast(t *testing.T) {
-	root := filepath.Join(moduleRoot(t), "packages", "shared", "core")
+	root := filepath.Join(repositoryRoot(t), "packages", "shared", "core")
 	raycastPath := filepath.Join(root, "raycast.go")
 	foundNativeABI := false
 	nativeCalls := 0
