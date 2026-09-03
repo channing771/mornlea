@@ -10,23 +10,23 @@ import (
 )
 
 // testHeader 构造与 engine lod.rs 单测同源的 `MGW1` header:seed 42、
-// 恒等材料表 0..=13(末项 water=13,layout 2——变基后与 main 的注水
-// worldgen 同一布局,水窗因此按 Ruling 22 钳制到海平面)、恒等 perm
-// (与 nativeabi 测试的 `testLodShellHeader` 逐字节一致),保证 oracle
+// 恒等材料表 0..=14(末两项 water=13、short_grass=14,layout 3——水窗
+// 仍按 Ruling 22 钳制到海平面,装饰短草不进入远环)、恒等 perm(偏移 54
+// 起,与 nativeabi 测试的 `testLodShellHeader` 逐字节一致),保证 oracle
 // 测试与 Rust golden fixture 输入严格同源。
 func testHeader() []byte {
-	header := make([]byte, 564)
+	header := make([]byte, 566)
 	copy(header[:4], "MGW1")
-	binary.LittleEndian.PutUint32(header[4:8], 2)
+	binary.LittleEndian.PutUint32(header[4:8], 3)
 	binary.LittleEndian.PutUint64(header[8:16], 42)
 	minY := int32(-64)
 	binary.LittleEndian.PutUint32(header[16:20], uint32(minY))
 	binary.LittleEndian.PutUint32(header[20:24], 320)
-	for index := uint16(0); index < 14; index++ {
+	for index := uint16(0); index < 15; index++ {
 		binary.LittleEndian.PutUint16(header[24+2*int(index):26+2*int(index)], index)
 	}
 	for index := 0; index < 512; index++ {
-		header[52+index] = byte(index & 255)
+		header[54+index] = byte(index & 255)
 	}
 	return header
 }
@@ -39,13 +39,13 @@ func TestAppendShellInputEncodesTailLayout(t *testing.T) {
 	if len(input) != nativeabi.LodShellInputBytes {
 		t.Fatalf("输入长度 %d，想要 %d", len(input), nativeabi.LodShellInputBytes)
 	}
-	if got := input[:564]; !slices.Equal(got, testHeader()) {
+	if got := input[:566]; !slices.Equal(got, testHeader()) {
 		t.Fatal("header 未原样透传")
 	}
-	tileX := int32(binary.LittleEndian.Uint32(input[564:568]))
-	tileZ := int32(binary.LittleEndian.Uint32(input[568:572]))
-	columns := binary.LittleEndian.Uint32(input[572:576])
-	step := binary.LittleEndian.Uint32(input[576:580])
+	tileX := int32(binary.LittleEndian.Uint32(input[566:570]))
+	tileZ := int32(binary.LittleEndian.Uint32(input[570:574]))
+	columns := binary.LittleEndian.Uint32(input[574:578])
+	step := binary.LittleEndian.Uint32(input[578:582])
 	if tileX != -3 || tileZ != 2 || columns != uint32(TileColumns) || step != 4 {
 		t.Fatalf("尾部字段 tile=(%d,%d) columns=%d step=%d，想要 (-3,2)/%d/4", tileX, tileZ, columns, step, TileColumns)
 	}
@@ -64,7 +64,7 @@ func TestAppendShellInputRejectsInvalidArguments(t *testing.T) {
 		header []byte
 		step   uint32
 	}{
-		{"short header", testHeader()[:563], 4},
+		{"short header", testHeader()[:565], 4},
 		{"long header", append(slices.Clone(testHeader()), 0), 4},
 		{"step zero", testHeader(), 0},
 		{"step one", testHeader(), 1},

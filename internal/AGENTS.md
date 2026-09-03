@@ -32,6 +32,6 @@ engine C ABI 只能由 `internal/nativeabi` 接触；client C ABI 只能由 `int
 
 ## 定点验证
 
-- 包级示例：`go test ./internal/sim -race -count=1`；处理其他包时把路径替换为对应真实目录。
+- 模拟包示例：`go test ./internal/sim/... -race -count=1`；处理其他包时把路径替换为对应真实目录。
 - 依赖边界：`go test ./internal/archcheck -count=1`。
 - 当前文档入口：`docs/notes/go-rust-division.md`、`docs/test-organization.md`。

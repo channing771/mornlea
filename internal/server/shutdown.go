@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/channing771/mornlea/internal/companion"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 )
 
 func waitForHostWorkers(ctx context.Context, workers *sync.WaitGroup) error {
@@ -55,10 +56,11 @@ func (server *Server) Shutdown(ctx context.Context) error {
 	var freezeErr error
 	if server.lifecycle == serverRunning {
 		server.lifecycle = serverClosing
+		tickTunables := runtime.ActiveTickTunables()
 		freezeErr = server.world.Drain()
 		trustedCenter, trustedSequence, hasTrustedCenter := server.drainTrustedObserverCenter()
 		server.drainIncoming()
-		_ = server.drainIncomingChats()
+		_ = server.drainIncomingChats(tickTunables)
 		server.drainAcquired()
 		server.drainGenerated()
 		// 关服顺序（spec：companion-task-queue）：聊天接受已随生命周期冻结与
@@ -70,7 +72,7 @@ func (server *Server) Shutdown(ctx context.Context) error {
 		if server.hostileManager != nil {
 			server.hostileManager.beginShutdown()
 		}
-		server.engine.Step()
+		server.engine.StepWithTunables(tickTunables)
 		if server.companions != nil {
 			server.companions.Observe(
 				server.engine.CompanionBodies(),

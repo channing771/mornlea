@@ -1,0 +1,560 @@
+package entity
+
+import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"testing"
+
+	"github.com/go-gl/mathgl/mgl32"
+
+	"github.com/channing771/mornlea/internal/companion"
+	"github.com/channing771/mornlea/internal/core"
+)
+
+// companionMiningFixture 是一组伙伴采掘用例的公共场景：平地 3x3 区块上一个
+// 已激活的伙伴站在 (4.5, 1, 8.5)，目标方块固定在 (4, 1, 5)，两者水平距离约
+// 3 格、视线无遮挡，位于默认 InteractionReach 之内。伙伴手握指定工具
+// （hotbar 栏位 0 选中）。场景本身不写入采掘意图：直写路径由
+// readyCompanionMining 在场景上补 miningHeld/miningTarget（与既有玩家采掘
+// 测试直接写 player.miningHeld 完全对称），action 载荷分派由
+// readyCompanionMiningViaActions 经 production action/actor/mining 阶段与发布覆盖。
+type companionMiningFixture struct {
+	engine *Engine
+	id     companion.ID
+	entry  *companionState
+	target core.BlockPos
+}
+
+// companionItemCount 统计伙伴完整背包中某物品的总数。
+func companionItemCount(entry *companionState, item core.ItemID) uint8 {
+	var total uint8
+	for slot := range entry.inventory.Hotbar.Slots {
+		if entry.inventory.Hotbar.Slots[slot].Item == item {
+			total += entry.inventory.Hotbar.Slots[slot].Count
+		}
+	}
+	for slot := range entry.inventory.Backpack {
+		if entry.inventory.Backpack[slot].Item == item {
+			total += entry.inventory.Backpack[slot].Count
+		}
+	}
+	return total
+}
+
+// companionMiningBlockAt 读取目标方块的当前值，区块未就绪时直接失败。
+func companionMiningBlockAt(t *testing.T, fixture companionMiningFixture) core.BlockID {
+	t.Helper()
+	record := miningTargetRecord(t, fixture.engine, fixture.target)
+	x, _, z := fixture.target.Local()
+	return record.Chunk.BlockAt(x, fixture.target.Y, z)
+}
+
+// fillCompanionInventory 把伙伴背包除工具栏位外的全部格子填满同类物品，
+// 用于构造"无容量"场景。
+func fillCompanionInventory(entry *companionState, item core.ItemID) {
+	stack := core.ItemStack{Item: item, Count: core.MaxStackCount}
+	for slot := 1; slot < core.HotbarSlots; slot++ {
+		entry.inventory.Hotbar.Slots[slot] = stack
+	}
+	for slot := range entry.inventory.Backpack {
+		entry.inventory.Backpack[slot] = stack
+	}
+}
+
+// newCompanionMiningScene 构造两个采掘入口共用的公共场景：平地 3x3 区块上
+// 一个已激活的伙伴站在 (4.5, 1, 8.5)，目标方块固定在 (4, 1, 5)，两者水平距离
+// 约 3 格、视线无遮挡，位于默认 InteractionReach 之内。伙伴手握指定工具
+// （hotbar 栏位 0 选中）。采掘意图不在场景内建立，差异留给两个入口补齐：
+// 直接写共享 actorState 字段的 readyCompanionMining 与经 production stage/MineHold
+// action 建立意图的 readyCompanionMiningViaActions。
+func newCompanionMiningScene(
+	t *testing.T,
+	block core.BlockID,
+	tool core.ItemID,
+) companionMiningFixture {
+	t.Helper()
+	engine := NewEngine(0, 0, 0)
+	loadCompanionFlatChunks(t, engine, core.ChunkPos{}, 1)
+	id := companionTestID(1)
+	activateCompanionAt(t, engine, id, mgl32.Vec3{4.5, 1, 8.5})
+	target := core.BlockPos{X: 4, Y: 1, Z: 5}
+	engine.SetBlockForTest(target, block)
+	entry := engine.companions[id]
+	if tool == core.ItemNone {
+		entry.inventory.Hotbar.Slots[0] = core.ItemStack{}
+	} else {
+		full, _ := core.ItemMaxDurability(tool)
+		entry.inventory.Hotbar.Slots[0] = core.ItemStack{
+			Item: tool, Count: 1, Durability: full,
+		}
+	}
+	entry.inventory.Hotbar.Selected = 0
+	return companionMiningFixture{engine: engine, id: id, entry: entry, target: target}
+}
+
+// readyCompanionMining 在公共场景上直接写入采掘意图（miningHeld/miningTarget），
+// 构造一个已置采掘意图的伙伴采掘场景——与既有玩家采掘测试直接写
+// player.miningHeld 完全对称。
+func readyCompanionMining(
+	t *testing.T,
+	block core.BlockID,
+	tool core.ItemID,
+) companionMiningFixture {
+	t.Helper()
+	fixture := newCompanionMiningScene(t, block, tool)
+	fixture.entry.miningHeld = true
+	fixture.entry.miningTarget = fixture.target
+	return fixture
+}
+
+// readyCompanionMiningViaActions 返回不带采掘意图的公共场景，采掘意图由测试
+// 经 production action/actor/mining 阶段与 MineHold action 建立，用于验证 action 载荷分派与
+// CompanionUpdate 发布（见 holdCompanionMineAction）。
+func readyCompanionMiningViaActions(
+	t *testing.T,
+	block core.BlockID,
+	tool core.ItemID,
+) companionMiningFixture {
+	t.Helper()
+	return newCompanionMiningScene(t, block, tool)
+}
+
+// holdCompanionMineAction 把一个 MineHold action 依次送入 production
+// action、actor 与 mining 阶段，并发布该 entity tick。
+func holdCompanionMineAction(t *testing.T, fixture companionMiningFixture) TickResult {
+	t.Helper()
+	action := CompanionAction{
+		ID: fixture.id, Kind: CompanionActionMineHold, Target: fixture.target,
+	}
+	if !validCompanionAction(action) {
+		t.Fatal("MineHold action 不是合法 owner 输入")
+	}
+	tick := fixture.engine.beginTick()
+	tick.context.ApplyCompanionActions([]CompanionAction{action})
+	tick.context.AdvanceActors()
+	tick.context.FinishWorld(&tick.result)
+	commitMutation(tick.mutation, &tick.result)
+	return publishFixture(fixture.engine, &tick)
+}
+
+// TestCompanionMiningMatchesPlayerRuleAndTiming 是"伙伴与玩家共用同一采掘规则"
+// 的差分证据：同引擎内一名玩家与一个伙伴以相同工具（石镐）对相同方块（煤矿石）
+// 持续采掘，完成时机与耐久扣减必须完全一致，差别仅在产物去向——玩家得到掉落物、
+// 伙伴产物直入背包。
+func TestCompanionMiningMatchesPlayerRuleAndTiming(t *testing.T) {
+	engine, _ := readyMovementPlayer(t)
+	session := SessionID(1)
+
+	id := companionTestID(1)
+	activateCompanionAt(t, engine, id, mgl32.Vec3{4.5, 1, 8.5})
+	playerTarget := core.BlockPos{X: 0, Y: 1, Z: 5}
+	companionTarget := core.BlockPos{X: 4, Y: 1, Z: 5}
+	engine.SetBlockForTest(playerTarget, core.CoalOreID)
+	engine.SetBlockForTest(companionTarget, core.CoalOreID)
+
+	player := engine.sessions[session].player
+	player.state.Position = mgl32.Vec3{0.5, 1, 8.5}
+	player.yaw = 0
+	player.pitch = miningTestPitch
+	player.miningHeld = true
+	player.lastInputSequence = 10
+	player.reset = false
+	setMiningHeldItem(player, core.ItemStonePickaxe)
+
+	entry := engine.companions[id]
+	// 伙伴采掘不看朝向：射线方向由目标方块中心决定（见 mining.go），不像玩家
+	// 那样需要用 pitch 把视线对准目标，这里只装配工具与意图。
+	full, _ := core.ItemMaxDurability(core.ItemStonePickaxe)
+	entry.inventory.Hotbar.Slots[0] = core.ItemStack{
+		Item: core.ItemStonePickaxe, Count: 1, Durability: full,
+	}
+	entry.inventory.Hotbar.Selected = 0
+	entry.miningHeld = true
+	entry.miningTarget = companionTarget
+
+	const requiredTicks = 15
+	for tick := 1; tick < requiredTicks; tick++ {
+		advanceMiningOnce(engine)
+		if got := engine.sessions[session].player.mining.progressTicks; got != uint16(tick) {
+			t.Fatalf("tick %d 玩家进度=%d", tick, got)
+		}
+		if got := entry.mining.progressTicks; got != uint16(tick) {
+			t.Fatalf("tick %d 伙伴进度=%d，想要与玩家一致", tick, got)
+		}
+		if got := player.inventory.Hotbar.Slots[0].Durability; got != full {
+			t.Fatalf("tick %d 玩家耐久提前扣减=%d", tick, got)
+		}
+		if got := entry.inventory.Hotbar.Slots[0].Durability; got != full {
+			t.Fatalf("tick %d 伙伴耐久提前扣减=%d", tick, got)
+		}
+	}
+	advanceMiningOnce(engine)
+
+	if got := player.inventory.Hotbar.Slots[0].Durability; got != full-1 {
+		t.Fatalf("玩家完成耐久=%d，想要 %d", got, full-1)
+	}
+	if got := entry.inventory.Hotbar.Slots[0].Durability; got != full-1 {
+		t.Fatalf("伙伴完成耐久=%d，想要与玩家一致 %d", got, full-1)
+	}
+	// 两个目标同在区块 (0,0)：世界掉落物必须恰好只有玩家那一份——
+	// 伙伴的产物只能出现在背包里，绝不能额外进入世界。
+	drops := miningDropTotals(miningTargetRecord(t, engine, companionTarget).Chunk)
+	if drops[core.ItemCoal] != 1 || len(drops) != 1 {
+		t.Fatalf("世界掉落物=%+v，想要恰好玩家的一份煤矿石", drops)
+	}
+	if got := companionItemCount(entry, core.ItemCoal); got != 1 {
+		t.Fatalf("伙伴产物应直入背包: coal=%d", got)
+	}
+}
+
+// TestCompanionMiningCompletionIsThreeWayAtomic 锁定完成 tick 的三方原子性：
+// 完成前的每个 tick 方块、耐久与背包都必须保持不变；进度的最后一个 tick 内
+// 方块变空气、耐久扣减、产物入包必须同时成立，区块变更发布也在同一批
+// pending 变更中。
+func TestCompanionMiningCompletionIsThreeWayAtomic(t *testing.T) {
+	fixture := readyCompanionMining(t, core.CoalOreID, core.ItemStonePickaxe)
+	entry := fixture.entry
+	full, _ := core.ItemMaxDurability(core.ItemStonePickaxe)
+
+	for tick := 1; tick < 15; tick++ {
+		result := advanceMiningOnce(fixture.engine)
+		if got := companionMiningBlockAt(t, fixture); got != core.CoalOreID {
+			t.Fatalf("tick %d 方块提前破坏=%d", tick, got)
+		}
+		if got := entry.inventory.Hotbar.Slots[0].Durability; got != full {
+			t.Fatalf("tick %d 耐久提前扣减=%d", tick, got)
+		}
+		if got := companionItemCount(entry, core.ItemCoal); got != 0 {
+			t.Fatalf("tick %d 产物提前入包=%d", tick, got)
+		}
+		if len(result.Changes) != 0 {
+			t.Fatalf("tick %d 提前发布区块变更=%+v", tick, result.Changes)
+		}
+	}
+
+	result := advanceMiningOnce(fixture.engine)
+	if got := companionMiningBlockAt(t, fixture); got != core.AirID {
+		t.Fatalf("完成 tick 方块=%d，想要空气", got)
+	}
+	if got := entry.inventory.Hotbar.Slots[0].Durability; got != full-1 {
+		t.Fatalf("完成 tick 耐久=%d，想要 %d", got, full-1)
+	}
+	if got := companionItemCount(entry, core.ItemCoal); got != 1 {
+		t.Fatalf("完成 tick 产物未入包: coal=%d", got)
+	}
+	if len(result.Changes) != 1 || len(result.Changes[0].Changes) != 1 ||
+		result.Changes[0].Changes[0].Position != fixture.target ||
+		result.Changes[0].Changes[0].Block != core.AirID {
+		t.Fatalf("完成 tick 区块变更=%+v，想要单一空气变更", result.Changes)
+	}
+	if !entry.inventoryDirty {
+		t.Fatal("完成 tick 没有标记 inventoryDirty")
+	}
+	if entry.mining != (miningState{}) {
+		t.Fatalf("完成后进度未清零: %+v", entry.mining)
+	}
+}
+
+// TestCompanionMiningInventoryFullKeepsBlockAndSaturatesProgress 锁定容量前验：
+// 伙伴背包无容量时完成 tick 整体不结算——方块不变、耐久不变、背包不变，进度
+// 保持满格（就绪但无容量的稳定可观察状态，"任务失败"判定属 Manager，不在此处）。
+func TestCompanionMiningInventoryFullKeepsBlockAndSaturatesProgress(t *testing.T) {
+	fixture := readyCompanionMining(t, core.CoalOreID, core.ItemStonePickaxe)
+	entry := fixture.entry
+	full, _ := core.ItemMaxDurability(core.ItemStonePickaxe)
+	fillCompanionInventory(entry, core.ItemDirt)
+	before := entry.inventory
+
+	for tick := 0; tick < 25; tick++ {
+		advanceMiningOnce(fixture.engine)
+		if got := companionMiningBlockAt(t, fixture); got != core.CoalOreID {
+			t.Fatalf("tick %d 无容量却破坏了方块=%d", tick, got)
+		}
+		if got := entry.inventory.Hotbar.Slots[0].Durability; got != full {
+			t.Fatalf("tick %d 无容量却扣减耐久=%d", tick, got)
+		}
+	}
+	if entry.inventory != before {
+		t.Fatalf("无容量期间背包被修改: got=%+v want=%+v", entry.inventory, before)
+	}
+	if entry.inventoryDirty {
+		t.Fatal("无容量期间标记了 inventoryDirty")
+	}
+	if entry.mining.requiredTicks != 15 || entry.mining.progressTicks != entry.mining.requiredTicks {
+		t.Fatalf("无容量时进度没有保持满格: %+v", entry.mining)
+	}
+}
+
+// TestCompanionMiningTargetReplacedInvalidatesProgress 锁定目标替换语义：
+// 采掘中目标方块被替换后既有进度失效、从 1 重新计时（对齐玩家的"方块 ID
+// 变化"语义），新方块不得继承进度被提前破坏；替换为不可采掘方块则进度清零。
+func TestCompanionMiningTargetReplacedInvalidatesProgress(t *testing.T) {
+	t.Run("替换为同可采掘方块重新计时", func(t *testing.T) {
+		// 原木任何工具 15 tick；石头配铁镐 8 tick。
+		fixture := readyCompanionMining(t, core.OakLogID, core.ItemIronPickaxe)
+		entry := fixture.entry
+		for range 7 {
+			advanceMiningOnce(fixture.engine)
+		}
+		if got := entry.mining.progressTicks; got != 7 {
+			t.Fatalf("前置进度=%d，想要 7", got)
+		}
+
+		engine := fixture.engine
+		engine.SetBlockForTest(fixture.target, core.StoneID)
+		advanceMiningOnce(engine)
+		if got := entry.mining.progressTicks; got != 1 || entry.mining.block != core.StoneID {
+			t.Fatalf("替换后进度=%+v，想要按新方块从 1 重新开始", entry.mining)
+		}
+
+		for range 6 {
+			advanceMiningOnce(engine)
+		}
+		if got := companionMiningBlockAt(t, fixture); got != core.StoneID {
+			t.Fatalf("新方块被继承的进度提前破坏=%d", got)
+		}
+		advanceMiningOnce(engine)
+		if got := companionMiningBlockAt(t, fixture); got != core.AirID {
+			t.Fatalf("按新方块自身计时完成后=%d，想要空气", got)
+		}
+		if got := companionItemCount(entry, core.ItemStone); got != 1 {
+			t.Fatalf("新方块产物未入包: stone=%d", got)
+		}
+	})
+
+	t.Run("替换为基岩清零且永不破坏", func(t *testing.T) {
+		fixture := readyCompanionMining(t, core.StoneID, core.ItemIronPickaxe)
+		entry := fixture.entry
+		for range 4 {
+			advanceMiningOnce(fixture.engine)
+		}
+		fixture.engine.SetBlockForTest(fixture.target, core.BedrockID)
+		for range 20 {
+			advanceMiningOnce(fixture.engine)
+		}
+		if got := companionMiningBlockAt(t, fixture); got != core.BedrockID {
+			t.Fatalf("基岩被破坏=%d", got)
+		}
+		if entry.mining != (miningState{}) {
+			t.Fatalf("不可采掘目标没有清零进度: %+v", entry.mining)
+		}
+	})
+}
+
+// TestCompanionMiningProgressPublishesInCompanionUpdate 锁定进度发布：伙伴采掘
+// 进度必须进入 CompanionUpdate.Mining（对齐玩家 MiningUpdate 语义），完成 tick
+// 之后回到零值。
+func TestCompanionMiningProgressPublishesInCompanionUpdate(t *testing.T) {
+	fixture := readyCompanionMiningViaActions(t, core.CoalOreID, core.ItemStonePickaxe)
+	entry := fixture.entry
+
+	for tick := 1; tick <= 15; tick++ {
+		result := holdCompanionMineAction(t, fixture)
+		if len(result.Companions) != 1 || result.Companions[0].ID != fixture.id {
+			t.Fatalf("tick %d Companions=%+v", tick, result.Companions)
+		}
+		update := result.Companions[0]
+		if tick < 15 {
+			want := MiningUpdate{
+				Active: true, Target: fixture.target, ProgressTicks: uint16(tick),
+				RequiredTicks: 15, Harvestable: true,
+			}
+			if update.Mining != want {
+				t.Fatalf("tick %d 采掘进度=%+v，想要 %+v", tick, update.Mining, want)
+			}
+		} else if update.Mining != (MiningUpdate{}) {
+			t.Fatalf("完成 tick 后进度未清零: %+v", update.Mining)
+		}
+	}
+	if got := companionItemCount(entry, core.ItemCoal); got != 1 {
+		t.Fatalf("完成后产物未入包: coal=%d", got)
+	}
+	if got := companionMiningBlockAt(t, fixture); got != core.AirID {
+		t.Fatalf("完成后方块=%d，想要空气", got)
+	}
+}
+
+// TestCompanionActionMiningPayloadsSetAndClearIntent 锁定 MineHold/MineRelease
+// 载荷的按住语义：MineHold 置意图、无 action 的 tick 意图保持（与玩家按住
+// 一致）、MineRelease 同 tick 清零；越界目标的 MineHold 与零值 Kind 被确定性
+// 丢弃且不产生任何副作用。
+func TestCompanionActionMiningPayloadsSetAndClearIntent(t *testing.T) {
+	fixture := readyCompanionMiningViaActions(t, core.CoalOreID, core.ItemStonePickaxe)
+	entry := fixture.entry
+
+	result := holdCompanionMineAction(t, fixture)
+	if !entry.miningHeld || entry.miningTarget != fixture.target {
+		t.Fatalf("MineHold 未建立采掘意图: held=%v target=%+v", entry.miningHeld, entry.miningTarget)
+	}
+	if got := entry.mining.progressTicks; got != 1 {
+		t.Fatalf("MineHold 首 tick 进度=%d，想要 1", got)
+	}
+	if len(result.Rejected) != 0 {
+		t.Fatalf("MineHold 产生拒绝=%+v", result.Rejected)
+	}
+
+	// 无 action 的 tick：中性输入，但按住意图保持，进度继续累积。
+	idleTick := fixture.engine.beginTick()
+	idleTick.context.ApplyCompanionActions(nil)
+	idleTick.context.AdvanceActors()
+	idleTick.context.FinishWorld(&idleTick.result)
+	commitMutation(idleTick.mutation, &idleTick.result)
+	idle := publishFixture(fixture.engine, &idleTick)
+	if len(idle.Companions) != 1 || idle.Companions[0].Mining.ProgressTicks != 2 {
+		t.Fatalf("无 action tick 进度=%+v，想要保持按住并推进到 2", idle.Companions)
+	}
+
+	// 越界目标与零值 Kind：确定性丢弃，不触碰既有意图之外的任何状态。
+	invalidTick := fixture.engine.beginTick()
+	invalidTick.context.ApplyCompanionActions([]CompanionAction{
+		{ID: fixture.id, Kind: CompanionActionMineHold, Target: core.BlockPos{Y: core.MaxY + 1}},
+		{ID: fixture.id},
+	})
+	invalidTick.context.AdvanceActors()
+	invalidTick.context.FinishWorld(&invalidTick.result)
+	commitMutation(invalidTick.mutation, &invalidTick.result)
+	publishFixture(fixture.engine, &invalidTick)
+	if got := entry.mining.progressTicks; got != 3 {
+		t.Fatalf("非法 action 影响了进度: %+v", entry.mining)
+	}
+
+	// MineRelease：同 tick 清空意图与进度，对齐玩家松键语义。
+	release := CompanionAction{
+		ID: fixture.id, Kind: CompanionActionMineRelease,
+	}
+	if !validCompanionAction(release) {
+		t.Fatal("MineRelease action 不是合法 owner 输入")
+	}
+	releaseTick := fixture.engine.beginTick()
+	releaseTick.context.ApplyCompanionActions([]CompanionAction{release})
+	releaseTick.context.AdvanceActors()
+	releaseTick.context.FinishWorld(&releaseTick.result)
+	commitMutation(releaseTick.mutation, &releaseTick.result)
+	released := publishFixture(fixture.engine, &releaseTick)
+	if entry.miningHeld || entry.mining != (miningState{}) {
+		t.Fatalf("MineRelease 后 held=%v mining=%+v，想要同 tick 清零", entry.miningHeld, entry.mining)
+	}
+	if len(released.Rejected) != 0 {
+		t.Fatalf("MineRelease 产生拒绝=%+v", released.Rejected)
+	}
+}
+
+// TestCompanionMineableBlockExplicitlyRejectsWildGrass 锁定权威执行器对短草的
+// **显式**拒绝（change natural-grass-seeds design 决策 1）。短草今天没有
+// `core.BlockDrop` 登记，通用「单一掉落」判据碰巧也会拒绝它——但契约要求的是
+// 显式拒绝而不是巧合阻挡：种子的概率掉落只属于玩家采掘，若未来有人给短草补上
+// BlockDrop 登记，只有显式谓词还站着。因此本用例的承重墙是源码守卫：
+// `companionMineableBlock` 的函数体必须点名 `core.IsWildGrass`，与
+// internal/companion 的 `planMineableBlock` 是同一规则的两处实现，双侧必须同时
+// 显式拒绝。
+func TestCompanionMineableBlockExplicitlyRejectsWildGrass(t *testing.T) {
+	if !companionFunctionMentionsIdentifier(t, "mining.go", "companionMineableBlock", "IsWildGrass") {
+		t.Fatal("companionMineableBlock 没有显式点名 core.IsWildGrass；" +
+			"伙伴拒绝短草不得依赖缺失 BlockDrop 的巧合")
+	}
+	if companionMineableBlock(core.ShortGrassID) {
+		t.Fatal("companionMineableBlock(ShortGrassID) = true，短草必须是显式拒绝的伙伴采掘目标")
+	}
+}
+
+// companionFunctionMentionsIdentifier 用 go/parser 检查 file 内名为 functionName
+// 的函数声明是否在其函数体中提到 identifier（如 IsWildGrass）。测试进程的工作
+// 目录就是本包目录，直接按文件名解析。
+func companionFunctionMentionsIdentifier(
+	t *testing.T,
+	file, functionName, identifier string,
+) bool {
+	t.Helper()
+	fileSet := token.NewFileSet()
+	parsed, err := parser.ParseFile(fileSet, file, nil, 0)
+	if err != nil {
+		t.Fatalf("解析 %s: %v", file, err)
+	}
+	for _, declaration := range parsed.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if !ok || function.Name.Name != functionName {
+			continue
+		}
+		mentioned := false
+		ast.Inspect(function.Body, func(node ast.Node) bool {
+			if ident, ok := node.(*ast.Ident); ok && ident.Name == identifier {
+				mentioned = true
+			}
+			return true
+		})
+		return mentioned
+	}
+	t.Fatalf("%s 中没有找到函数 %s，源码守卫会静默失效", file, functionName)
+	return false
+}
+
+// TestCompanionMiningNeverSettlesShortGrass 是拒绝的行为面（spec Scenario「伙伴
+// 拒绝采掘短草」）：持铁镐的伙伴持续对短草保持采掘意图，短草、掉落物与区块
+// revision 必须全部不变，防御清单在进度累积之前就清零采掘状态。
+func TestCompanionMiningNeverSettlesShortGrass(t *testing.T) {
+	fixture := readyCompanionMining(t, core.ShortGrassID, core.ItemIronPickaxe)
+	entry := fixture.entry
+	record := miningTargetRecord(t, fixture.engine, fixture.target)
+	beforeHash := record.Chunk.Hash()
+	beforeDrops := record.Chunk.DropsHash()
+	beforeRevision := record.Revision
+
+	for tick := 0; tick < 10; tick++ {
+		result := advanceMiningOnce(fixture.engine)
+		if got := companionMiningBlockAt(t, fixture); got != core.ShortGrassID {
+			t.Fatalf("tick %d 伙伴破坏了短草=%d", tick, got)
+		}
+		if len(result.Changes) != 0 {
+			t.Fatalf("tick %d 伙伴采草发布了区块变更=%+v", tick, result.Changes)
+		}
+	}
+
+	if got := record.Chunk.Hash(); got != beforeHash || record.Revision != beforeRevision {
+		t.Fatalf("伙伴采草修改了区块或 revision: hash=%x/%x revision=%d/%d",
+			got, beforeHash, record.Revision, beforeRevision)
+	}
+	if got := record.Chunk.DropsHash(); got != beforeDrops {
+		t.Fatalf("伙伴采草修改了掉落槽: %x/%x", got, beforeDrops)
+	}
+	if got := companionItemCount(entry, core.ItemWheatSeeds); got != 0 {
+		t.Fatalf("伙伴采草让种子入包=%d", got)
+	}
+	if entry.mining != (miningState{}) {
+		t.Fatalf("防御清单应清零采掘进度: %+v", entry.mining)
+	}
+}
+
+// TestCompanionActionPlacePayloadDefensiveBoundary 锁定 Place 载荷的防御
+// 边界：目标越界或方块未注册/空气的 Place action 被确定性丢弃，世界与背包都
+// 不变。合法 Place 的结算本体（校验链 + 原子扣料写方块）在同一 tick 的
+// settleCompanionPlacements 完成，其行为由 companion_placement_test.go 锁定，
+// 此处只断言防御边界不产生副作用。
+func TestCompanionActionPlacePayloadDefensiveBoundary(t *testing.T) {
+	fixture := readyCompanionMiningViaActions(t, core.StoneID, core.ItemNone)
+	entry := fixture.entry
+	entry.inventory.Hotbar.Slots[1] = core.ItemStack{Item: core.ItemStone, Count: 4}
+	before := entry.inventory
+
+	invalid := []CompanionAction{
+		{ID: fixture.id, Kind: CompanionActionPlace,
+			Target: core.BlockPos{Y: core.MinY - 1}, Block: core.StoneID},
+		{ID: fixture.id, Kind: CompanionActionPlace, Target: fixture.target, Block: core.AirID},
+		{ID: fixture.id, Kind: CompanionActionPlace, Target: fixture.target, Block: core.BlockID(9999)},
+	}
+	tick := fixture.engine.beginTick()
+	tick.context.ApplyCompanionActions(invalid)
+	tick.context.AdvanceActors()
+	tick.context.SettleGameplay(&tick.result)
+	commitMutation(tick.mutation, &tick.result)
+	result := publishFixture(fixture.engine, &tick)
+	if got := companionMiningBlockAt(t, fixture); got != core.StoneID {
+		t.Fatalf("非法 Place 改变了世界=%d", got)
+	}
+	if entry.inventory != before {
+		t.Fatal("非法 Place 改变了背包")
+	}
+	if len(result.Rejected) != 0 || len(result.Changes) != 0 {
+		t.Fatalf("非法 Place 产生副作用: rejected=%+v changes=%+v", result.Rejected, result.Changes)
+	}
+}

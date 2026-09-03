@@ -5,9 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/fluid"
 	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim/entity"
 	"github.com/channing771/mornlea/internal/sim/realm"
@@ -25,7 +23,7 @@ type Clock interface {
 	Stop()
 }
 
-type sessionState struct {
+type subscriptionState struct {
 	lastSequence                uint64
 	lastTrustedObserverSequence uint64
 	trustedObserver             bool
@@ -33,61 +31,18 @@ type sessionState struct {
 	dimension                   core.DimensionID
 	center                      core.ChunkPos
 	wanted                      map[core.ChunkKey]struct{}
-	player                      *playerState
-	// 每名玩家同时最多查看一个容器（熔炉或箱子）；引用失效时由权威 tick 统一清除。
-	container     core.ContainerRef
-	viewContainer bool
 }
 
 type Engine struct {
 	viewRadius         int
 	seed               int64
-	sessions           map[SessionID]*sessionState
-	companions         map[companion.ID]*companionState
-	hostiles           hostileSet
-	hostileLight       *blockLightScratch
+	subscriptions      map[SessionID]*subscriptionState
 	wanted             map[core.ChunkKey]struct{}
 	realm              *realm.State
+	entities           *entity.State
 	subscriptionsDirty bool
-	// entityState 为过渡期双源中的 entity 侧镜像，当前仅用于建立真实依赖
-	// （archcheck 要求 sim -> entity），后续 runtime 将收敛为单一 entity.State
-	entityState *entity.Engine
-
-	// fluidQueues 是流体待更新队列，**按维度各持一个实例**（原因见
-	// fluidQueue 的注释：internal/fluid 的处理全序不含维度）。队列不持久化，
-	// 重启与区块进入推进范围时由 advanceFluids 的边界重扫恢复（design.md D5）。
-	fluidQueues map[core.DimensionID]*fluid.Queue
-	// fluidScope 是上一 tick 的流体推进范围，fluidScopeNext 是构建本 tick 范围
-	// 用的复用 scratch；两者每 tick 交换，用来识别「本 tick 新进入范围」的区块
-	// 并对其重扫。
-	fluidScope     map[core.ChunkKey]struct{}
-	fluidScopeNext map[core.ChunkKey]struct{}
-	// fluidDimensionScratch 是维度排序的复用缓冲。
-	fluidDimensionScratch []core.DimensionID
-	// fluidRescan 是跨 tick 的边界重扫待办，见 fluidRescanState。
-	fluidRescan fluidRescanState
-	// cropCellScratch 是作物随机 tick 抽样下标的复用缓冲；抽样每 tick 执行
-	// 「活动区块数 × 24 个区段」次，不复用就会在权威 tick 上产生同量级的分配。
-	cropCellScratch []int
-	// cropCellsExamined 是**最近一个 tick** 里被作物随机 tick 考察过的格数。
-	//
-	// 它是 spec「单个 tick 内被考察的格数 MUST NOT 随世界中作物的数量增长」
-	// 这条成本契约的可读计数：该断言无法从方块结果观察（两个世界的作物数不同，
-	// 方块结果本来就不同），只能靠一个显式计数。生产代码只写不读，包内测试读。
-	cropCellsExamined int
-	// cropBlockReads 是最近一个作物阶段为规则判定读取的方块编号数。
-	cropBlockReads int
-
-	// tramplePending 是本权威 tick 内落地边沿收集的踩踏候选格（trample.go）：
-	// 物理阶段收集、区块写入区结算的跨阶段载体。瞬态暂存、不持久化、不进快照
-	// 或哈希，每 tick 由 `settleTramples` 结算后清空，重启无残留语义。
-	tramplePending []tramplePendingCell
-
-	// 掉落物 tick 的复用 scratch，避免每 tick 分配固定上限集合。
-	dropKeySeen            map[core.ChunkKey]struct{}
-	dropKeyScratch         []core.ChunkKey
-	containerViewerScratch []SessionID
-	dropSessionScratch     []SessionID
+	entityViewScratch  []entity.TickSessionView
+	activeChunkScratch []core.ChunkKey
 
 	inboxMu          sync.Mutex
 	commands         []Command
@@ -124,21 +79,19 @@ func NewEngine(viewRadius int, worldTime uint64, seed int64) *Engine {
 	}
 	realmState := realm.NewState(core.Overworld)
 	engine := &Engine{
-		viewRadius:   viewRadius,
-		seed:         seed,
-		realm:        realmState,
-		sessions:     make(map[SessionID]*sessionState),
-		companions:   make(map[companion.ID]*companionState),
-		hostiles:     newHostileSet(),
-		hostileLight: newBlockLightScratch(),
-		wanted:       make(map[core.ChunkKey]struct{}),
-		entityState:  entity.NewEngine(viewRadius, worldTime, seed),
+		viewRadius:    viewRadius,
+		seed:          seed,
+		realm:         realmState,
+		entities:      entity.NewState(seed),
+		subscriptions: make(map[SessionID]*subscriptionState),
+		wanted:        make(map[core.ChunkKey]struct{}),
 	}
 	engine.worldTime.Store(worldTime)
 	// 初始化快照，使未经 Step 就被调用的方法（例如 RegisterPlayer 的出生扫描）
 	// 也有可用的参数快照。
-	engine.tunables = tuning.ActiveTunables()
-	engine.physicsTunables = physics.ActiveTunables()
+	initialTunables := ActiveTickTunables()
+	engine.tunables = initialTunables.Simulation
+	engine.physicsTunables = initialTunables.Physics
 	return engine
 }
 

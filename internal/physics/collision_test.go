@@ -227,6 +227,14 @@ func TestCropBlocksHaveNoCollision(t *testing.T) {
 	}
 }
 
+func TestShortGrassHasNoCollision(t *testing.T) {
+	const shortGrassID core.BlockID = 84
+	boxes := physics.BlockCollisionBoxes(shortGrassID, true)
+	if !boxes.Loaded || boxes.Count != 0 {
+		t.Fatalf("BlockCollisionBoxes(短草) = %+v，想要 (Loaded:true, Count:0)", boxes)
+	}
+}
+
 // farmlandCube 是耕地碰撞体的期望形状：与完整方块只差顶面的 1/16。
 var farmlandCube = core.AABB{Max: mgl32.Vec3{1, 0.9375, 1}}
 

@@ -2,13 +2,14 @@ package entity
 
 import (
 	"errors"
+	"math"
 
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim/realm"
 )
 
+// doorLowerID 返回对应方向与开合态的下半门 ID。
 func doorLowerID(dir int, open bool) core.BlockID {
 	switch dir {
 	case 0:
@@ -36,11 +37,37 @@ func doorLowerID(dir int, open bool) core.BlockID {
 	}
 }
 
-func isSolidSupport(id core.BlockID) bool {
-	return core.IsFarmland(id) || (core.RegisteredBlock(id) && id != core.AirID && id != core.GlassID && id != core.LeavesID && !core.IsFluid(id) && !core.IsCrop(id) && !core.IsDoor(id))
+// yawToDoorDir 把 yaw 映射到门的四向编码：南0、西1、北2、东3。
+func yawToDoorDir(yaw float32) int {
+	normalized := math.Mod(float64(yaw)+math.Pi, 2*math.Pi)
+	if normalized < 0 {
+		normalized += 2 * math.Pi
+	}
+	yawNorm := float32(normalized - math.Pi)
+	// South: [-45°,45°), West: [45°,135°), North: [135°,180°)∪(-180°,-135°], East: [-135°,-45°)
+	if yawNorm >= -math.Pi/4 && yawNorm < math.Pi/4 {
+		return 0
+	}
+	if yawNorm >= math.Pi/4 && yawNorm < 3*math.Pi/4 {
+		return 1
+	}
+	if yawNorm >= 3*math.Pi/4 || yawNorm < -3*math.Pi/4 {
+		return 2
+	}
+	return 3
 }
 
-func (engine *Engine) tryPlaceDoor(dimensionID core.DimensionID, lower core.BlockPos, dir int, mutation *realm.Mutation) (RejectReason, bool) {
+// isSolidSupport 报告方块是否可作为门的下方支撑（复用 Opaque 权威语义）。
+func isSolidSupport(id core.BlockID) bool {
+	// Farmland 干/湿均为实心支撑（与 assets.Registry.Opaque 一致，Opaque 对耕地为 true）。
+	// sim 不直接依赖 assets 以避免循环，此处显式复用 Opaque 判定式并以 Farmland 正例断言守护。
+	// 植物判据用 `IsPlant`：作物与短草都是零碰撞的非完整格植物，都不能承载门或床。
+	return core.IsFarmland(id) || (core.RegisteredBlock(id) && id != core.AirID && id != core.GlassID && id != core.LeavesID && !core.IsFluid(id) && !core.IsPlant(id) && !core.IsDoor(id))
+}
+
+// tryPlaceDoor 尝试在 lower 放置下半门并在 upper 放置上半。
+// 校验 lower/upper 可替换（空气）且下方实心，跨区块未就绪拒绝，原子双格写入。
+func (engine *engineContext) tryPlaceDoor(dimensionID core.DimensionID, lower core.BlockPos, dir int, pending *pendingChunkChanges) (RejectReason, bool) {
 	if dir < 0 || dir > 3 {
 		return RejectInvalidBlock, true
 	}
@@ -60,6 +87,7 @@ func (engine *Engine) tryPlaceDoor(dimensionID core.DimensionID, lower core.Bloc
 	if !upperReady {
 		return RejectChunkNotReady, true
 	}
+	// 可替换：严格要求空气（与 spec 上空语义一致），流体视为占用
 	if lowerBlock != core.AirID || upperBlock != core.AirID {
 		return RejectOccupied, true
 	}
@@ -71,6 +99,7 @@ func (engine *Engine) tryPlaceDoor(dimensionID core.DimensionID, lower core.Bloc
 	if !isSolidSupport(belowBlock) {
 		return RejectInvalidBlock, true
 	}
+	// 原子双格写入
 	lowerID := doorLowerID(dir, false)
 	upperID := core.DoorUpper
 	oldLower, _, errLower := dimension.SetBlock(lower, lowerID)
@@ -79,17 +108,20 @@ func (engine *Engine) tryPlaceDoor(dimensionID core.DimensionID, lower core.Bloc
 	}
 	oldUpper, _, errUpper := dimension.SetBlock(upper, upperID)
 	if errUpper != nil {
+		// 回滚下半
 		_, _, _ = dimension.SetBlock(lower, oldLower)
 		return mapSetBlockError(errUpper), true
 	}
-	engine.recordChange(dimensionID, lower, lowerID, mutation)
-	engine.recordChange(dimensionID, upper, upperID, mutation)
+	// 两个半都可能在同一区块，recordChange 分别汇入 pending（同一 key 会合并）
+	engine.recordChange(dimensionID, lower, lowerID, pending)
+	engine.recordChange(dimensionID, upper, upperID, pending)
 	_ = oldLower
 	_ = oldUpper
 	return 0, false
 }
 
-func handleInteractDoor(engine *Engine, dimensionID core.DimensionID, pos core.BlockPos, mutation *realm.Mutation) bool {
+// handleInteractDoor 处理对门方块的右键交互，上下联动切换 Closed<->Open。
+func handleInteractDoor(engine *engineContext, dimensionID core.DimensionID, pos core.BlockPos, pending *pendingChunkChanges) bool {
 	dimension := engine.dimension(dimensionID)
 	if dimension == nil {
 		return false
@@ -126,18 +158,20 @@ func handleInteractDoor(engine *Engine, dimensionID core.DimensionID, pos core.B
 	if err != nil {
 		return false
 	}
-	engine.recordChange(dimensionID, lowerPos, newLower, mutation)
+	engine.recordChange(dimensionID, lowerPos, newLower, pending)
+	// upper 保持 DoorUpper，不改，但逻辑关联已通过 lower 翻转体现
 	return true
 }
 
-func (engine *Engine) executeInteractDoor(command Command, mutation *realm.Mutation) (RejectReason, bool) {
+// executeInteractDoor 通过权威射线定位目标并分发到 handleInteractDoor。
+func (engine *engineContext) executeInteractDoor(command Command, pending *pendingChunkChanges) (RejectReason, bool) {
 	session := engine.sessions[command.Session]
 	if session == nil || session.player == nil || session.player.lifecycle != PlayerActive {
 		return RejectPlayerNotReady, true
 	}
 	dimensionID := session.dimension
 	dimension := engine.dimension(dimensionID)
-	if dimension == nil || !session.hasView {
+	if dimension == nil || !engine.sessionView(session).Ready {
 		return RejectInvalidRay, true
 	}
 	origin := session.player.state.Position.Add(mgl32.Vec3{0, engine.physicsTunables.EyeHeight, 0})
@@ -159,7 +193,7 @@ func (engine *Engine) executeInteractDoor(command Command, mutation *realm.Mutat
 	if !core.IsDoor(block) {
 		return 0, false
 	}
-	if !handleInteractDoor(engine, dimensionID, hit.Block, mutation) {
+	if !handleInteractDoor(engine, dimensionID, hit.Block, pending) {
 		return RejectNoTarget, true
 	}
 	return 0, false

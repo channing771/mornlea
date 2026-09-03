@@ -87,6 +87,7 @@ var canonicalBlockNames = [...]string{
 	BedHeadWestID:        "bed_head_west",
 	BedHeadNorthID:       "bed_head_north",
 	BedHeadEastID:        "bed_head_east",
+	ShortGrassID:         "short_grass",
 }
 
 // explicitCanonicalItemNames 只登记没有同名完整方块的物品。完整方块物品通过

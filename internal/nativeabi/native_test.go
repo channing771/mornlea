@@ -23,13 +23,13 @@ const (
 )
 
 func TestABIValuesMatchEngineContract(t *testing.T) {
-	// 显式钉住 v9：上面的相等断言在 header 与 dylib 同源时恒真（二者一起停在
+	// 显式钉住 v10：上面的相等断言在 header 与 dylib 同源时恒真（二者一起停在
 	// 旧版本不会被发现），本条把「本次布局扩容确实升了版」变成可执行契约。
-	// v9 承载流体双内核 mornlea_fluid_eval_batch（批量单格规则求值）与
-	// mornlea_fluid_rescan（重扫扫描内核）——rust-engine-fluid 变更；既有
-	// 入口签名与语义不变。
-	if ABIVersion != 9 {
-		t.Fatalf("engine ABI=%d，想要 9", ABIVersion)
+	// v10 承载 worldgen `MGW1` 材料表 14 → 15 项(末项 short_grass)与
+	// layout 2 → 3 的带内帧扩容——natural-grass-seeds 变更；既有入口签名
+	// 与语义不变。
+	if ABIVersion != 10 {
+		t.Fatalf("engine ABI=%d，想要 10", ABIVersion)
 	}
 	if got := EngineABIVersion(); got != ABIVersion {
 		t.Fatalf("engine ABI version=%d，想要 %d", got, ABIVersion)
@@ -482,21 +482,21 @@ func testValidCollisionInput() []byte {
 	return input
 }
 
-// testValidWorldgenHeader 构造合法 `MGW1` header:layout 2、seed 42、
-// 互异材料表 1..=14(engine ABI v4 起末项 water 占用 v3 的 reserved 槽)、恒等 perm。
+// testValidWorldgenHeader 构造合法 `MGW1` header:layout 3、seed 42、
+// 互异材料表 1..=15(末两项 water=14、short_grass=15)、恒等 perm(偏移 54 起)。
 func testValidWorldgenHeader() []byte {
 	header := make([]byte, worldgenHeaderBytes)
 	copy(header[:4], "MGW1")
-	binary.LittleEndian.PutUint32(header[4:8], 2)
+	binary.LittleEndian.PutUint32(header[4:8], 3)
 	binary.LittleEndian.PutUint64(header[8:16], 42)
 	minY := int32(-64)
 	binary.LittleEndian.PutUint32(header[16:20], uint32(minY))
 	binary.LittleEndian.PutUint32(header[20:24], 320)
-	for index := 0; index < 14; index++ {
+	for index := 0; index < 15; index++ {
 		binary.LittleEndian.PutUint16(header[24+index*2:26+index*2], uint16(index+1))
 	}
 	for index := 0; index < 512; index++ {
-		header[52+index] = byte(index & 255)
+		header[54+index] = byte(index & 255)
 	}
 	return header
 }
@@ -517,7 +517,7 @@ func testValidWorldgenProbeInput() []byte {
 
 // worldgenHeaderBytes 是 `MGW1` 公共 header 的字节数,必须与 engine
 // `WORLDGEN_HEADER_BYTES` 和 internal/worldgen 的同名常量一致。
-const worldgenHeaderBytes = 564
+const worldgenHeaderBytes = 566
 
 const worldgenChunkOutputBytes = 16 * 16 * 384 * 2
 
@@ -530,13 +530,22 @@ func TestWorldgenChunkRawFailureAtomicity(t *testing.T) {
 	// 注意不能用 water == air 做这个用例:那一对是 fluidEnabled 关闭时的
 	// 门控编码,engine 侧刻意豁免。
 	binary.LittleEndian.PutUint16(duplicateMaterial[26:28], 1)
+	shortGrassAlias := slices.Clone(validInput)
+	// short_grass(偏移 52)改成与 water 相同:它参与写入,不在 water == air
+	// 门控豁免内,必须按材料表漂移拒绝。
+	binary.LittleEndian.PutUint16(shortGrassAlias[52:54], 14)
 	badLayout := slices.Clone(validInput)
 	// layout version 是独立于 ABI 版本号的带内混装防线:header 布局一变它就要变,
-	// engine 侧对不上必须拒绝。
-	binary.LittleEndian.PutUint32(badLayout[4:8], 1)
+	// engine 侧对不上必须拒绝。旧 layout 2 是 v9 时代的 14 项材料帧。
+	binary.LittleEndian.PutUint32(badLayout[4:8], 2)
 	wrongMinY := slices.Clone(validInput)
 	badMinY := int32(-32)
 	binary.LittleEndian.PutUint32(wrongMinY[16:20], uint32(badMinY))
+	// 旧 layout 2 的完整 572 字节 chunk 输入(564 header + 8)也必须被拒绝:
+	// 旧长度与旧 layout 一起构成 v9 帧的整体否定。
+	legacyChunk := make([]byte, 572)
+	copy(legacyChunk, validInput[:564])
+	legacyChunk[4] = 2
 	for _, test := range []struct {
 		name    string
 		version uint32
@@ -548,7 +557,9 @@ func TestWorldgenChunkRawFailureAtomicity(t *testing.T) {
 		{name: "nil input", version: ABIVersion, output: make([]byte, worldgenChunkOutputBytes), want: StatusInvalidArgument},
 		{name: "bad magic", version: ABIVersion, input: badMagic, output: make([]byte, worldgenChunkOutputBytes), want: StatusInput},
 		{name: "duplicate material", version: ABIVersion, input: duplicateMaterial, output: make([]byte, worldgenChunkOutputBytes), want: StatusInput},
-		{name: "bad layout", version: ABIVersion, input: badLayout, output: make([]byte, worldgenChunkOutputBytes), want: StatusInput},
+		{name: "short grass alias", version: ABIVersion, input: shortGrassAlias, output: make([]byte, worldgenChunkOutputBytes), want: StatusInput},
+		{name: "legacy layout 2", version: ABIVersion, input: badLayout, output: make([]byte, worldgenChunkOutputBytes), want: StatusInput},
+		{name: "legacy 572-byte input", version: ABIVersion, input: legacyChunk, output: make([]byte, worldgenChunkOutputBytes), want: StatusInput},
 		{name: "wrong min y", version: ABIVersion, input: wrongMinY, output: make([]byte, worldgenChunkOutputBytes), want: StatusInput},
 		{name: "short input", version: ABIVersion, input: validInput[:len(validInput)-1], output: make([]byte, worldgenChunkOutputBytes), want: StatusInput},
 		{name: "short output", version: ABIVersion, input: validInput, output: make([]byte, worldgenChunkOutputBytes-1), want: StatusOutputOverflow},
@@ -564,6 +575,23 @@ func TestWorldgenChunkRawFailureAtomicity(t *testing.T) {
 				t.Fatal("失败调用修改了 caller-owned output")
 			}
 		})
+	}
+}
+
+// TestWorldgenWaterAirGateIsOnlyAliasExemption 钉住材料表互异性的唯一豁免:
+// 关闭注水时 water 允许等于 air(门控编码),short_grass 与任何材料重复仍拒绝。
+func TestWorldgenWaterAirGateIsOnlyAliasExemption(t *testing.T) {
+	gated := testValidWorldgenChunkInput()
+	// water(偏移 50)= air(1):门控关闭态,必须成功且输出完整写出。
+	binary.LittleEndian.PutUint16(gated[50:52], 1)
+	output := make([]byte, worldgenChunkOutputBytes)
+	if status := worldgenChunkVersion(ABIVersion, gated, output); status != StatusOK {
+		t.Fatalf("water == air 门控编码 status=%d，想要 OK", status)
+	}
+	// 门控关闭时输出不得含 water 编号(14)。
+	waterBytes := []byte{14, 0}
+	if bytes.Contains(output, waterBytes) {
+		t.Fatal("门控关闭时输出出现了 water 编号")
 	}
 }
 
@@ -670,28 +698,28 @@ func TestWorldgenStatusPanicTextIsStable(t *testing.T) {
 }
 
 // testLodShellHeader 构造与 engine lod.rs 单测 lod_input 逐字节一致的
-// `MGW1` header:seed 42、恒等材料表 0..=13(末项 water=13,layout 2——
-// 变基后与 main 的注水 worldgen 同一布局)、恒等 perm。材料表取恒等
-// (而非 worldgen 测试的 1..=14)是为了与 engine golden fixture
+// `MGW1` header:seed 42、恒等材料表 0..=14(末两项 water=13、
+// short_grass=14,layout 3)、恒等 perm(偏移 54 起)。材料表取恒等
+// (而非 worldgen 测试的 1..=15)是为了与 engine golden fixture
 // `lod-shell-seed42-step4-v2.bin` 的输入严格同源。
 func testLodShellHeader() []byte {
-	header := make([]byte, 564)
+	header := make([]byte, 566)
 	copy(header[:4], "MGW1")
-	binary.LittleEndian.PutUint32(header[4:8], 2)
+	binary.LittleEndian.PutUint32(header[4:8], 3)
 	binary.LittleEndian.PutUint64(header[8:16], 42)
 	minY := int32(-64)
 	binary.LittleEndian.PutUint32(header[16:20], uint32(minY))
 	binary.LittleEndian.PutUint32(header[20:24], 320)
-	for index := uint16(0); index < 14; index++ {
+	for index := uint16(0); index < 15; index++ {
 		binary.LittleEndian.PutUint16(header[24+2*int(index):26+2*int(index)], index)
 	}
 	for index := 0; index < 512; index++ {
-		header[52+index] = byte(index & 255)
+		header[54+index] = byte(index & 255)
 	}
 	return header
 }
 
-// testLodShellInput 构造合法 `mornlea_lod_shell` 输入:header(564)+
+// testLodShellInput 构造合法 `mornlea_lod_shell` 输入:header(566)+
 // tile_x i32 + tile_z i32 + columns u32(必须 64)+ lod_step u32。
 func testLodShellInput(tileX, tileZ int32, columns, step uint32) []byte {
 	input := testLodShellHeader()
@@ -704,14 +732,17 @@ func testLodShellInput(tileX, tileZ int32, columns, step uint32) []byte {
 
 func TestLodShellRawFailureAtomicity(t *testing.T) {
 	validInput := testLodShellInput(-3, 2, 64, 4)
+	if len(validInput) != LodShellInputBytes || LodShellInputBytes != 582 {
+		t.Fatalf("LOD 壳输入长度 %d/LodShellInputBytes=%d，想要 582", len(validInput), LodShellInputBytes)
+	}
 	badMagic := slices.Clone(validInput)
 	badMagic[0] = 'X'
 	badColumns := slices.Clone(validInput)
-	binary.LittleEndian.PutUint32(badColumns[572:576], 63)
+	binary.LittleEndian.PutUint32(badColumns[574:578], 63)
 	badStep := slices.Clone(validInput)
-	binary.LittleEndian.PutUint32(badStep[576:580], 3)
+	binary.LittleEndian.PutUint32(badStep[578:582], 3)
 	tileOverflow := slices.Clone(validInput)
-	binary.LittleEndian.PutUint32(tileOverflow[564:568], uint32(math.MaxInt32))
+	binary.LittleEndian.PutUint32(tileOverflow[566:570], uint32(math.MaxInt32))
 	shortInput := validInput[:len(validInput)-1]
 	longInput := append(slices.Clone(validInput), 0)
 	for _, test := range []struct {
@@ -730,7 +761,7 @@ func TestLodShellRawFailureAtomicity(t *testing.T) {
 		{name: "bad columns", version: ABIVersion, input: badColumns, output: make([]byte, 1), want: StatusInput},
 		{name: "bad step", version: ABIVersion, input: badStep, output: make([]byte, 1), want: StatusInput},
 		{name: "tile overflow", version: ABIVersion, input: tileOverflow, output: make([]byte, 1), want: StatusInput},
-		{name: "input output overlap", version: ABIVersion, input: validInput[:580], output: validInput[560:561], want: StatusInvalidArgument},
+		{name: "input output overlap", version: ABIVersion, input: validInput[:582], output: validInput[562:563], want: StatusInvalidArgument},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			output := slices.Clone(test.output)

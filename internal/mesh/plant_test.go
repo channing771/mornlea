@@ -1,12 +1,18 @@
 package mesh_test
 
 import (
+	"encoding/binary"
 	"testing"
 
 	"github.com/channing771/mornlea/internal/assets"
 	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/mesh"
 	"github.com/channing771/mornlea/internal/world"
+)
+
+const (
+	expectedShortGrassBlock    core.BlockID = 84
+	expectedShortGrassMaterial uint16       = 68
 )
 
 // plantSampleX / plantSampleZ 是被观察格在中心区块里的局部水平坐标。
@@ -144,6 +150,44 @@ func TestNativeOracleParityWheatCrossPlanes(t *testing.T) {
 	}
 }
 
+func TestNativeOracleParityShortGrassCrossPlanes(t *testing.T) {
+	registry := assets.NewRegistry()
+	quads := assertNativeOracleParity(t, plantWorld(t, expectedShortGrassBlock, false), registry)
+	plant := plantQuads(quads)
+	if len(plant) != 4 {
+		t.Fatalf("短草产生了 %d 条交叉斜面，想要 4", len(plant))
+	}
+	if !mesh.PlantMaterial(expectedShortGrassMaterial) {
+		t.Fatalf("短草材质层 %d 未进入 Go 植物谓词", expectedShortGrassMaterial)
+	}
+	for material := uint16(55); material <= 67; material++ {
+		if mesh.PlantMaterial(material) {
+			t.Fatalf("既有非植物材质层 %d 被误判为植物", material)
+		}
+	}
+	for _, quad := range plant {
+		if quad.Mat != expectedShortGrassMaterial || quad.W != 1 || quad.H != 1 ||
+			!quad.Face.Plant() || quad.Corners != ([4]uint8{}) {
+			t.Fatalf("短草 quad 形状错误: %+v", quad)
+		}
+		if got := binary.Size(quad.Pack()); got != 8 {
+			t.Fatalf("短草 quad 实例 = %d 字节，想要 8", got)
+		}
+	}
+}
+
+func TestPlantMaterialSetIsCropRangePlusShortGrass(t *testing.T) {
+	for material := uint16(0); material <= 69; material++ {
+		want := material >= 31 && material <= 54 || material == expectedShortGrassMaterial
+		if got := mesh.PlantMaterial(material); got != want {
+			t.Fatalf("PlantMaterial(%d) = %v，想要 %v", material, got, want)
+		}
+	}
+	if mesh.PlantMaterial(^uint16(0)) {
+		t.Fatal("最大 uint16 材质编号不得进入植物集合")
+	}
+}
+
 // hasFaceToward 报告某格是否产生了指定朝向的面。
 func hasFaceToward(quads []mesh.Quad, x, y, z int, face mesh.Face) bool {
 	for _, quad := range quads {
@@ -161,12 +205,11 @@ func hasFaceToward(quads []mesh.Quad, x, y, z int, face mesh.Face) bool {
 // 而被观察格封成了只朝上开口的死胡同，换材质不会改变上方格的光照（见 plantWorld）。
 // 于是「作物的光照 == 上方格的光照」成了一条可以直接读数的位置性断言。
 //
-// 三个读数必须两两不同，否则断言退化：
+// 露天直射与遮蔽变体共同保证断言不退化：
 //
-//   - 上方格（作物应当采样的）——露天时 15；
-//   - 作物自己那格（写错采样点最可能落到的地方）——恒比上方低一级；
-//   - 遮蔽变体的上方格——必须低于 15，否则「等于该相邻格的值」在露天与遮蔽下
-//     读数相同，取错采样点照样绿。
+//   - 露天时上方格、作物格与其下方都保持直射 15；
+//   - 遮蔽变体的上方格必须低于 15，且作物自身格再低一级，于是「取上方格」与
+//     「取自身格」仍能被区分。
 func TestPlantLightComesFromTheCellAbove(t *testing.T) {
 	registry := assets.NewRegistry()
 	localY := plantLocalY(plantSampleY)
@@ -198,22 +241,24 @@ func TestPlantLightComesFromTheCellAbove(t *testing.T) {
 	if skyLight(openCrop) != 15 {
 		t.Fatalf("露天作物天空光=%d，想要 15", skyLight(openCrop))
 	}
-	// 位置性支点：作物自己那格严格更暗，因此「取上方格」与「取自身格」读数不同。
-	if skyLight(openOwn) >= skyLight(openCrop) {
-		t.Fatalf("作物自身格天空光=%d 未低于上方格 %d，两个采样点无法区分，"+
-			"本用例对采样点写错不敏感", skyLight(openOwn), skyLight(openCrop))
+	if skyLight(openOwn) != 15 {
+		t.Fatalf("作物自身格直射天空光=%d，想要 15", skyLight(openOwn))
 	}
 	// Scenario「作物下方的耕地仍被照亮」：耕地顶面采的就是作物那一格。
 	if skyLight(openOwn) == 0 {
 		t.Fatal("作物下方的耕地顶面天空光=0：作物把光挡死了，它必须与玻璃、树叶同类")
 	}
 
-	shadedCrop, shadedAbove, _ := measure(true)
+	shadedCrop, shadedAbove, shadedOwn := measure(true)
 	if skyLight(shadedAbove) == 0 || skyLight(shadedAbove) >= 15 {
 		t.Fatalf("遮蔽变体上方格天空光=%d，想要 0 < 值 < 15", skyLight(shadedAbove))
 	}
 	if shadedCrop != shadedAbove {
 		t.Fatalf("被遮蔽作物光照=%#02x，上方格=%#02x：必须相等", shadedCrop, shadedAbove)
+	}
+	if skyLight(shadedOwn) >= skyLight(shadedCrop) {
+		t.Fatalf("遮蔽作物自身格天空光=%d 未低于上方格 %d，采样点断言不可观察",
+			skyLight(shadedOwn), skyLight(shadedCrop))
 	}
 }
 

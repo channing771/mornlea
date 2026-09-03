@@ -29,7 +29,17 @@ const (
 //
 // 参数在函数入口取一次快照，全程使用该快照，因此单次固定步内参数不会中途变化。
 func Step(state State, input Input, source CollisionSource) StepResult {
-	tunables := ActiveTunables()
+	return StepWithTunables(state, input, source, ActiveTunables())
+}
+
+// StepWithTunables 使用调用方提供的不可变参数推进一个固定步。权威 tick 用此
+// 入口复用 tick 边界捕获值；`Step` 保留给不跨多个物理步骤的兼容调用方。
+func StepWithTunables(
+	state State,
+	input Input,
+	source CollisionSource,
+	tunables Tunables,
+) StepResult {
 	validate(state, input)
 	yawSin := float32(math.Sin(float64(input.Yaw)))
 	yawCos := float32(math.Cos(float64(input.Yaw)))

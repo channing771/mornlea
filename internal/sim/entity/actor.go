@@ -32,25 +32,3 @@ type actorState struct {
 	miningHeld bool
 	mining     miningState
 }
-
-type miningState struct {
-	target        core.BlockPos
-	block         core.BlockID
-	held          core.ItemID
-	progressTicks uint16
-	requiredTicks uint16
-	harvestable   bool
-}
-
-func (state miningState) update() MiningUpdate {
-	if state.requiredTicks == 0 {
-		return MiningUpdate{}
-	}
-	return MiningUpdate{
-		Active:        true,
-		Target:        state.target,
-		ProgressTicks: state.progressTicks,
-		RequiredTicks: state.requiredTicks,
-		Harvestable:   state.harvestable,
-	}
-}

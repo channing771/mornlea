@@ -992,3 +992,41 @@ func runCraftingGridParityScript(t *testing.T, transport string) craftingGridPar
 	}
 	return result
 }
+
+// TestNaturalSeedFarmingMemoryTCPParity 覆盖 natural-grass-seeds 的传输一致性
+// 要求：同一份自然种子固定脚本（零种子登录 → 原地采除自然短草 → 权威掉落 →
+// 9/10 拾取 → 未翻地拒绝 → 翻地润湿 → 种植归零）在 Memory 与真实 TCP listener
+// 两种传输下必须得到逐字段相同的结果。两次运行都从同一固定 seed 的生产
+// `worldgen.New` 新世界开始（真实 Rust worldgen，流体开启），共用 Host 登录、
+// session、entity/realm tick 与 packet/codec，没有本地捷径。
+//
+// 断言分两层：runner 内部对关键事实就地 Fatal（掉落恰好一颗种子、拾取恰在第
+// 10 步、拒绝语义、湿耕地、stage0 作物、种子归零），两层比较再钉住「两次运行
+// 的全部可观察结果一致」——包括登录背包、锄头耐久与种子格位。
+func TestNaturalSeedFarmingMemoryTCPParity(t *testing.T) {
+	memory := runNaturalSeedFarmingScript(t, "memory", nil)
+	tcp := runNaturalSeedFarmingScript(t, "tcp", nil)
+	if !reflect.DeepEqual(tcp, memory) {
+		t.Fatalf("自然种子闭环 Memory/TCP 未收敛\nmemory=%+v\ntcp=%+v", memory, tcp)
+	}
+	// 夹具自证：比较的确实是「走了完整闭环」的非空结果，而不是两边同空的
+	// 假一致。关键事实在 runner 内已就地断言，这里只复核比较面覆盖了它们。
+	if memory.DropItem != core.ItemWheatSeeds || memory.DropCount != 1 {
+		t.Fatalf("掉落 = %d×%d，想要恰好一颗小麦种子", memory.DropItem, memory.DropCount)
+	}
+	if memory.PickupDelaySteps != naturalFarmingPickupDelaySteps {
+		t.Fatalf("拾取延迟步数 = %d，想要 %d", memory.PickupDelaySteps, naturalFarmingPickupDelaySteps)
+	}
+	if memory.Farmland != core.FarmlandWetID {
+		t.Fatalf("最终耕地 = %d，想要自然海水润湿的 %d", memory.Farmland, core.FarmlandWetID)
+	}
+	if memory.Crop != core.WheatStage0ID || memory.TargetAfterMine != core.AirID {
+		t.Fatalf("作物 = %d / 采除后 = %d，想要 stage0 / 空气", memory.Crop, memory.TargetAfterMine)
+	}
+	if seeds := countItem(memory.Inventory, core.ItemWheatSeeds); seeds != 0 {
+		t.Fatalf("种植后种子 = %d 颗，想要归零", seeds)
+	}
+	if memory.PlantRejection == (network.CommandRejected{}) {
+		t.Fatal("比较结果里缺少「未翻地就种」的拒绝记录")
+	}
+}

@@ -84,25 +84,29 @@ func TestCropTickCostIsIndependentOfCropCount(t *testing.T) {
 	barren.Step()
 	planted.Step()
 
-	if barren.cropCellsExamined == 0 {
+	barrenExamined, barrenReads := barren.realm.CropStats()
+	plantedExamined, plantedReads := planted.realm.CropStats()
+	if barrenExamined == 0 {
 		t.Fatal("空世界一格都没考察，两边相等的断言恒真")
 	}
-	if barren.cropCellsExamined != planted.cropCellsExamined {
+	if barrenExamined != plantedExamined {
 		t.Fatalf("考察量随作物数量变化：0 株世界 %d 格，255 株世界 %d 格",
-			barren.cropCellsExamined, planted.cropCellsExamined)
+			barrenExamined, plantedExamined)
 	}
-	for name, engine := range map[string]*Engine{"空世界": barren, "种植世界": planted} {
-		if engine.cropBlockReads > 2*engine.cropCellsExamined {
-			t.Fatalf("%s 作物读取=%d，超过 2×%d", name, engine.cropBlockReads, engine.cropCellsExamined)
+	for name, stats := range map[string][2]int{
+		"空世界": {barrenExamined, barrenReads}, "种植世界": {plantedExamined, plantedReads},
+	} {
+		if stats[1] > 2*stats[0] {
+			t.Fatalf("%s 作物读取=%d，超过 2×%d", name, stats[1], stats[0])
 		}
 	}
 	// 考察量必须正好是「已就绪区块数 × 区段数 × 每区段抽样数」。这条把
 	// 「相等」升级成「等于一个与作物无关的解析式」，堵住"两边都退化成 0"
 	// 以外的其他共同漂移。
 	want := core.SectionsPerChunk * 64
-	if barren.cropCellsExamined != want {
+	if barrenExamined != want {
 		t.Fatalf("单 tick 考察量 %d，想要 %d（1 个已就绪区块 × %d 区段 × 64 抽样）",
-			barren.cropCellsExamined, want, core.SectionsPerChunk)
+			barrenExamined, want, core.SectionsPerChunk)
 	}
 }
 
@@ -118,13 +122,15 @@ func TestCropAllFarmlandReadsEachSampleOnce(t *testing.T) {
 		}
 	}
 
-	engine.advanceCrops(engine.newMutation())
+	active := engine.activeInterestKeys()
+	engine.realm.AdvanceCrops(active, engine.realm.NewMutation())
 
-	if engine.cropCellsExamined == 0 {
+	examined, reads := engine.realm.CropStats()
+	if examined == 0 {
 		t.Fatal("全耕地世界一格都没考察，读取等式无法证明成本")
 	}
-	if engine.cropBlockReads != 2*engine.cropCellsExamined {
+	if reads != 2*examined {
 		t.Fatalf("全耕地阶段读取=%d，想要每个样本两次（含上方空气判定）、共 %d",
-			engine.cropBlockReads, 2*engine.cropCellsExamined)
+			reads, 2*examined)
 	}
 }

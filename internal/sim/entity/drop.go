@@ -2,19 +2,22 @@ package entity
 
 import (
 	"math"
+	"sort"
 
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/world"
 )
 
 const (
+	// DropInterestRadius 是掉落物 tick 与同步的固定区块半径。
 	DropInterestRadius = core.DropInterestRadius
 )
 
-func (engine *Engine) sessionDropWantedSnapshot(
+// sessionDropWantedSnapshot 返回该会话的固定半径掉落物兴趣区块。
+// 只有已进入 Play 的玩家参与掉落物 tick 与同步。
+func (engine *engineContext) sessionDropWantedSnapshot(
 	session *sessionState,
 ) map[core.ChunkKey]struct{} {
 	wanted := make(map[core.ChunkKey]struct{})
@@ -22,13 +25,14 @@ func (engine *Engine) sessionDropWantedSnapshot(
 		engine.dimension(session.dimension) == nil {
 		return wanted
 	}
+	center := engine.sessionView(session).Center
 	for dz := -DropInterestRadius; dz <= DropInterestRadius; dz++ {
 		for dx := -DropInterestRadius; dx <= DropInterestRadius; dx++ {
 			wanted[core.ChunkKey{
 				Dimension: session.dimension,
 				Pos: core.ChunkPos{
-					X: session.center.X + int32(dx),
-					Z: session.center.Z + int32(dz),
+					X: center.X + int32(dx),
+					Z: center.Z + int32(dz),
 				},
 			}] = struct{}{}
 		}
@@ -36,7 +40,9 @@ func (engine *Engine) sessionDropWantedSnapshot(
 	return wanted
 }
 
-func (engine *Engine) advanceDrops(mutation *realm.Mutation) {
+// advanceDrops 在单写者 tick 中推进兴趣范围内的掉落物寿命并处理拾取。
+// 它按 ChunkKey、SessionID、槽位稳定扫描，最坏为玩家数 × 25 区块 × 32 槽。
+func (engine *engineContext) advanceDrops(pending *pendingChunkChanges) {
 	keys := engine.activeInterestKeys()
 	if len(keys) == 0 {
 		return
@@ -54,18 +60,23 @@ func (engine *Engine) advanceDrops(mutation *realm.Mutation) {
 			continue
 		}
 		if engine.advanceChunkDrops(key, chunk, sessions, lifetimeTicks, pickupRange) {
-			engine.touchChunk(key, mutation)
+			engine.touchChunk(key, pending)
 		}
 	}
 }
 
-func (engine *Engine) advanceChunkDrops(
+// advanceChunkDrops 推进一个区块的全部槽，返回该区块是否发生变化。
+// lifetimeTicks、pickupRange 是调用方在本 tick 入口取的快照值，本函数全程只用它们，
+// 不再重新读取生效参数。
+func (engine *engineContext) advanceChunkDrops(
 	key core.ChunkKey,
 	chunk *world.Chunk,
 	sessions []SessionID,
 	lifetimeTicks uint32,
 	pickupRange float32,
 ) bool {
+	// 只有可观察的变化（过期、拾取）推进区块 revision；
+	// 年龄与拾取延迟是权威内部计数，不产生每 tick 的发布。
 	changed := false
 	for slot := range core.DropsPerChunk {
 		drop := chunk.Drop(slot)
@@ -92,7 +103,8 @@ func (engine *Engine) advanceChunkDrops(
 	return changed
 }
 
-func (engine *Engine) pickUpDrop(
+// pickUpDrop 让范围内的玩家按稳定顺序尽量拾取该堆，返回堆是否发生变化。
+func (engine *engineContext) pickUpDrop(
 	key core.ChunkKey,
 	chunk *world.Chunk,
 	slot int,
@@ -117,11 +129,15 @@ func (engine *Engine) pickUpDrop(
 			continue
 		}
 		player := session.player
+		// 一次整堆装入：先快捷栏后背包，余量留在地面。
 		next, remainder := player.inventory.AddStack(drop.Stack)
 		taken := drop.Stack.Count - remainder.Count
 		if taken == 0 {
 			continue
 		}
+		// 回收不变量（design.md D4）：拾取不得挤占合成网格回收所需的背包
+		// 预算。预演失败时整堆拒绝——部分拾取也不例外，掉落物原样留在世界、
+		// 权威物品状态不变；下一 tick 若玩家腾出空间仍可正常拾取。
 		if !canRepackCrafting(next, player.crafting) {
 			continue
 		}
@@ -138,6 +154,7 @@ func (engine *Engine) pickUpDrop(
 	return changed
 }
 
+// dropCenter 返回掉落物所在方块的中心世界坐标。
 func dropCenter(chunk core.ChunkPos, blockIndex uint32) (mgl32.Vec3, bool) {
 	position, ok := world.BlockPosFromChunkIndex(chunk, blockIndex)
 	if !ok {
@@ -150,11 +167,15 @@ func dropCenter(chunk core.ChunkPos, blockIndex uint32) (mgl32.Vec3, bool) {
 	}, true
 }
 
+// withinPickupRange 报告玩家是否在拾取距离内。pickupRange 由调用方传入本 tick 的
+// 快照值，这个自由函数本身绝不读取 ActiveTunables。
 func withinPickupRange(player, center mgl32.Vec3, pickupRange float32) bool {
 	return center.Sub(player).Len() <= pickupRange
 }
 
-func (engine *Engine) activeInterestKeys() []core.ChunkKey {
+// activeInterestKeys 返回本 tick 需要推进的区块，按稳定顺序排列且不重复。
+// 掉落物与熔炉共用同一集合，并复用引擎 scratch，因此稳定玩家数下不产生每 tick 分配。
+func (engine *engineContext) activeInterestKeys() []core.ChunkKey {
 	if engine.dropKeySeen == nil {
 		engine.dropKeySeen = make(map[core.ChunkKey]struct{}, core.MaxSessionDrops)
 	}
@@ -165,13 +186,14 @@ func (engine *Engine) activeInterestKeys() []core.ChunkKey {
 			engine.dimension(session.dimension) == nil {
 			continue
 		}
+		center := engine.sessionView(session).Center
 		for dx := -DropInterestRadius; dx <= DropInterestRadius; dx++ {
 			for dz := -DropInterestRadius; dz <= DropInterestRadius; dz++ {
 				key := core.ChunkKey{
 					Dimension: session.dimension,
 					Pos: core.ChunkPos{
-						X: session.center.X + int32(dx),
-						Z: session.center.Z + int32(dz),
+						X: center.X + int32(dx),
+						Z: center.Z + int32(dz),
 					},
 				}
 				if _, seen := engine.dropKeySeen[key]; seen {
@@ -187,10 +209,28 @@ func (engine *Engine) activeInterestKeys() []core.ChunkKey {
 	return keys
 }
 
-// sortedActiveSessions 已在 helpers.go 定义，此处不重复；若需独立定义则复用该实现
-// 为避免重复，提供别名包装由 helpers.go 提供，此处不重复定义。
+func (engine *engineContext) sortedActiveSessions() []SessionID {
+	sessions := engine.dropSessionScratch[:0]
+	for id, session := range engine.sessions {
+		if session.player != nil && session.player.lifecycle == PlayerActive {
+			sessions = append(sessions, id)
+		}
+	}
+	sort.Slice(sessions, func(i, j int) bool { return sessions[i] < sessions[j] })
+	engine.dropSessionScratch = sessions
+	return sessions
+}
 
-func (engine *Engine) SetChunkDropForTest(
+// touchChunk 为只有掉落物变化的区块登记一个零方块 revision barrier。
+func (engine *engineContext) touchChunk(
+	key core.ChunkKey,
+	pending *pendingChunkChanges,
+) {
+	pending.Touch(key)
+}
+
+// SetChunkDropForTest 直接写入一个已 Ready 区块的掉落物槽，仅供测试构造固定场景。
+func (engine *engineContext) SetChunkDropForTest(
 	key core.ChunkKey,
 	slot int,
 	value world.DropSlot,
@@ -202,7 +242,8 @@ func (engine *Engine) SetChunkDropForTest(
 	dimension.UpdateReadyChunk(key.Pos, func(chunk *world.Chunk) { chunk.SetDrop(slot, value) })
 }
 
-func (engine *Engine) SetBlockForTest(position core.BlockPos, block core.BlockID) {
+// SetBlockForTest 直接写入一个已 Ready 区块的方块，仅供测试构造固定场景。
+func (engine *engineContext) SetBlockForTest(position core.BlockPos, block core.BlockID) {
 	dimension := engine.dimension(core.Overworld)
 	if dimension == nil {
 		return
@@ -210,7 +251,9 @@ func (engine *Engine) SetBlockForTest(position core.BlockPos, block core.BlockID
 	_, _, _ = dimension.SetBlock(position, block)
 }
 
-func (engine *Engine) AppendSessionDrops(id SessionID, dst []DropSnapshot) []DropSnapshot {
+// AppendSessionDrops 按稳定 ID 顺序把该会话兴趣范围内的当前掉落物追加到 dst。
+// 调用方可复用 dst 底层数组；结果最多 MaxSessionDrops 项。
+func (engine *engineContext) AppendSessionDrops(id SessionID, dst []DropSnapshot) []DropSnapshot {
 	session := engine.sessions[id]
 	if session == nil || session.player == nil ||
 		session.player.lifecycle != PlayerActive {
@@ -220,13 +263,15 @@ func (engine *Engine) AppendSessionDrops(id SessionID, dst []DropSnapshot) []Dro
 	if dimension == nil {
 		return dst
 	}
+	center := engine.sessionView(session).Center
+	// 按 ChunkKey 的排序顺序直接遍历固定半径，避免每次调用分配集合。
 	for dx := -DropInterestRadius; dx <= DropInterestRadius; dx++ {
 		for dz := -DropInterestRadius; dz <= DropInterestRadius; dz++ {
 			key := core.ChunkKey{
 				Dimension: session.dimension,
 				Pos: core.ChunkPos{
-					X: session.center.X + int32(dx),
-					Z: session.center.Z + int32(dz),
+					X: center.X + int32(dx),
+					Z: center.Z + int32(dz),
 				},
 			}
 			chunk, ok := dimension.ReadyChunk(key.Pos)
@@ -265,9 +310,13 @@ func appendChunkDrops(
 	return dst
 }
 
-func (engine *Engine) dropSelectedItem(
+// dropSelectedItem 在单写者 tick 内把权威选中快捷栏中的一个物品原地转移为掉落物。
+//
+// 全部预检在任何写入之前完成：任一失败都不改变背包、掉落物、区块 revision
+// 或 persistence 状态。位置取玩家脚底方块，栏位取权威选中格，两者都不由客户端提供。
+func (engine *engineContext) dropSelectedItem(
 	session *sessionState,
-	mutation *realm.Mutation,
+	pending *pendingChunkChanges,
 ) (RejectReason, bool) {
 	if session.player == nil || session.player.lifecycle != PlayerActive {
 		return RejectPlayerNotReady, true
@@ -306,6 +355,6 @@ func (engine *Engine) dropSelectedItem(
 	chunk.CommitDrop(dropSlot, dropped, blockIndex, engine.tunables.PlayerDropPickupDelayTicks)
 	player.inventory.Hotbar = nextHotbar
 	player.inventoryDirty = true
-	engine.touchChunk(key, mutation)
+	engine.touchChunk(key, pending)
 	return 0, false
 }

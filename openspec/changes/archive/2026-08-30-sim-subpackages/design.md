@@ -88,6 +88,46 @@ The move does not create independently scheduled child ticks. The existing mutex
 inboxes, atomic time/tunable snapshots, stable command ordering, fixed budgets, and
 cross-goroutine immutability rule remain at the same ownership boundary.
 
+### Final ownership convergence after branch review
+
+The initial runtime cutover left `runtime.Engine` with copied player, companion, and
+hostile state while also constructing an unused `entity.State`. That transitional shape
+does not satisfy the approved ownership graph and must be repaired before archive.
+
+`runtime.Engine` owns only runtime concerns: inboxes, subscriptions, clocks, phase
+ordering, and composition of one `realm.State` plus one `entity.State`. Player,
+companion, hostile, inventory, container, combat, drop, and gameplay lifecycle state
+exists only in `entity.State`. Runtime-facing lifecycle methods may remain on
+`runtime.Engine` as narrow orchestration entry points, but they delegate to the entity
+owner and must not mirror or dual-write entity collections.
+
+Simulation and physics tunables are orthogonal value types with independent atomic
+active snapshots. `tuning` remains a leaf package and does not import `physics`; no
+conversion, shared schema, or cross-group atomic transaction is introduced. Runtime
+defines a value-shaped `TickTunables` bundle containing one `tuning.Tunables` value and
+one `physics.Tunables` value. Capturing the bundle performs exactly one active-snapshot
+read per group; it guarantees consistent reuse within one tick, not atomic pairing
+between independent configuration groups.
+
+For a server-owned tick, `Server.Step` captures `TickTunables` after pause/early-return
+checks and before chat or companion-manager work, then passes that same value through
+manager interaction checks and `runtime.Engine.StepWithTunables`. Shutdown's final
+manager/runtime pass reuses one bundle in the same way. The compatibility
+`runtime.Engine.Step` entry captures a bundle for direct non-server callers.
+
+Runtime projects the bundle's simulation value once into the realm environment config
+and passes both values explicitly through entity stages. Production entity physics,
+collision-prism, and submersion calls use physics APIs that accept an explicit
+`physics.Tunables` value; authoritative code does not call compatibility wrappers or
+reload either global active snapshot during the tick. Existing wrappers remain for
+non-authoritative callers and preserve their current next-call update behavior.
+
+The repair preserves the existing public runtime API, tick phase order, actor ordering,
+bounded queues, persistence bytes, wire bytes, test-entry inventory, and all version
+numbers. Tests must prove that state restored or mutated through runtime is the same
+state observed from the composed entity owner, rather than merely asserting that an
+entity pointer is non-nil.
+
 ### Caller and test migration
 
 `internal/server` imports `runtime` for the authority engine and `contract` for commands

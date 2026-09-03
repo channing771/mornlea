@@ -7,6 +7,7 @@
 - `State`/`Dimension` 拥有维度记录、revision、持久化与环境 scratch，由权威 tick 单写者独占。
 - `Mutation` 收集单 tick 内全部 `pendingChunkChanges`，`Record`/`Touch` 汇入变更，`Commit` 一次性推进 revision、压缩 section 并产出有序 `ChunkChangeBatch`。
 - 环境推进（流体、耕地湿度、作物、干耕地退化、火把/床支撑复核）仅通过同一 `*Mutation` 写入，预算、重扫与确定性排序由本包持有，不另设平行通道。
+- 环境配置由 runtime 从当前 tick 的 simulation 值投影后按值传入；realm 不读取全局 tunables，也不感知独立的 physics 快照。
 
 ## 依赖方向
 

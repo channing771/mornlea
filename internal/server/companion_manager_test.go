@@ -20,6 +20,7 @@ import (
 	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/pathfind"
 	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -947,7 +948,7 @@ func TestCompanionManagerPlanSnapshotBoundedAndOrdered(t *testing.T) {
 	host.world.stepMu.Lock()
 	identity := integrationIdentity(0x71, "发令者")
 	issuer := host.world.companionManager.captureIssuer(
-		identity.PlayerID, "发令者", active.Session,
+		identity.PlayerID, "发令者", active.Session, runtime.ActiveTickTunables(),
 	)
 	snapshot, err := host.world.companionManager.buildPlanSnapshot(
 		definitions[0], companion.TaskCommand("环顾四周"), issuer, body,
@@ -1291,6 +1292,13 @@ func TestCompanionManagerPathBlockTableMatchesCollisionOracle(t *testing.T) {
 	table := pathfind.NewPathBlockTable(productionCompanionPassableBlocks())
 	if !table.PassableForTest(core.AirID) {
 		t.Fatal("空气必须可通过")
+	}
+	const shortGrassID core.BlockID = 84
+	if !table.PassableForTest(shortGrassID) {
+		t.Fatal("短草必须按零碰撞 oracle 对伙伴寻路可通过")
+	}
+	if boxes := physics.BlockCollisionBoxes(shortGrassID, true); boxes.Count != 0 {
+		t.Fatalf("短草碰撞体数=%d，想要 0", boxes.Count)
 	}
 	for id := core.BlockID(1); id < core.BlockIDMax; id++ {
 		if core.IsFluid(id) {

@@ -38,7 +38,6 @@ import (
 	"github.com/channing771/mornlea/internal/server/persistence"
 	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/sim/runtime"
-	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/storage"
 )
 
@@ -366,6 +365,7 @@ func (m *companionManager) captureIssuer(
 	playerID core.PlayerID,
 	name string,
 	session contract.SessionID,
+	tickTunables runtime.TickTunables,
 ) companionTaskIssuer {
 	issuer := companionTaskIssuer{
 		playerID: playerID,
@@ -379,23 +379,26 @@ func (m *companionManager) captureIssuer(
 	issuer.position = [3]float32(player.State.Position)
 	issuer.yaw = player.Yaw
 	issuer.pitch = player.Pitch
-	issuer.lookHit, issuer.hasLookHit = m.issuerLookHit(player)
+	issuer.lookHit, issuer.hasLookHit = m.issuerLookHit(player, tickTunables)
 	return issuer
 }
 
 // issuerLookHit 用确定性 DDA 求发令者视线命中的第一个实心方块。射线只穿
 // 发令者 3×3 兴趣内的已 ready 区块；未加载方块按未命中处理（快照只描述
 // 确凿看见的世界）。
-func (m *companionManager) issuerLookHit(player contract.PlayerUpdate) (core.BlockPos, bool) {
+func (m *companionManager) issuerLookHit(
+	player contract.PlayerUpdate,
+	tickTunables runtime.TickTunables,
+) (core.BlockPos, bool) {
 	view := m.chunkViewAt(player.Dimension, [3]float32(player.State.Position))
 	origin := player.State.Position.Add(
-		mgl32.Vec3{0, physics.ActiveTunables().EyeHeight, 0},
+		mgl32.Vec3{0, tickTunables.Physics.EyeHeight, 0},
 	)
 	direction := runtime.LookDirection(player.Yaw, player.Pitch)
 	hit, ok, err := core.RaycastBlocks(
 		origin,
 		direction,
-		tuning.ActiveTunables().InteractionReach,
+		tickTunables.Simulation.InteractionReach,
 		func(position core.BlockPos) (bool, error) {
 			block, ready := view.blockAt(position.X, position.Y, position.Z)
 			if !ready {
@@ -413,7 +416,9 @@ func (m *companionManager) issuerLookHit(player contract.PlayerUpdate) (core.Blo
 // advanceCompanionTasks 是 tick 边界的编排入口，在聊天 drain 之后、
 // engine.Step 之前调用（伙伴 action 必须先入 inbox 才能被本 tick 消费）。
 // 返回本 tick 产生的任务事件投递。
-func (server *Server) advanceCompanionTasks() []chatDelivery {
+func (server *Server) advanceCompanionTasks(
+	tickTunables runtime.TickTunables,
+) []chatDelivery {
 	manager := server.companionManager
 	if manager == nil {
 		return nil
@@ -425,7 +430,7 @@ func (server *Server) advanceCompanionTasks() []chatDelivery {
 	manager.applyDialogueOutcomes()
 	manager.applyMemoryCommitOutcomes()
 	manager.expireTasks()
-	manager.advanceRunners()
+	manager.advanceRunners(tickTunables)
 	manager.dispatchMemoryReconcile()
 	manager.dispatchPlanning()
 	manager.dispatchIdleDialogues()
@@ -763,7 +768,7 @@ func (m *companionManager) expireTasks() {
 // advanceInteractionRunner（走近复用同一移动语义，走尽后转入采掘按住/放置
 // 提交）。全部执行器跑完后由 releaseFinishedMining 兜底释放已离开采掘
 // 步骤但仍按住的采掘意图。
-func (m *companionManager) advanceRunners() {
+func (m *companionManager) advanceRunners(tickTunables runtime.TickTunables) {
 	for _, id := range m.orderedIDs {
 		slot := m.slots[id]
 		current, ok := slot.queue.Current()
@@ -779,7 +784,7 @@ func (m *companionManager) advanceRunners() {
 		// mine/place 步骤：走近与交互的专用执行器，不复用下方 go_to 的
 		// 路径走尽即完成语义。
 		if step := interactionStepOf(current); step != nil {
-			m.advanceInteractionRunner(slot, id, current, *step)
+			m.advanceInteractionRunner(slot, id, current, *step, tickTunables)
 			continue
 		}
 		if slot.path == nil {

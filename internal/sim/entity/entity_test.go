@@ -13,25 +13,89 @@ import (
 )
 
 func TestEntityReceivesMutationAndTunables(t *testing.T) {
-	// 该测试锁定 entity 的世界写入必须经由 concrete *realm.Mutation 与 tuning 快照，
-	// 禁止直接读取全局或 runtime 状态。
 	realmState := realm.NewState(core.Overworld)
-	engine := NewEngine(0, 0, 0)
-	engine.realm = realmState
-	mutation := realmState.NewMutation()
-	tunables := tuning.DefaultTunables()
-	// 使用 entity 的放置意图结算路径，验证其签名已改为接收 *realm.Mutation 与 Tunables
-	// 若签名仍为旧的 *pendingChunkChanges，编译将失败 (RED)
-	_ = tunables
-	_ = mutation
-	// 下面这行在 RED 阶段将编译失败（方法不存在或签名不匹配），GREEN 阶段应可编译
-	// 为保持测试可运行，此处通过接口断言新签名存在性
-	type placementSettler interface {
-		CompleteCompanionPlacement(entry *companionState, target core.BlockPos, blockID core.BlockID, realmState *realm.State, mutation *realm.Mutation, tunables tuning.Tunables) bool
+	dimension := realmState.Dimension(core.Overworld)
+	chunk := movementFlatChunk(core.ChunkPos{})
+	if !dimension.BeginGeneration(chunk.Pos) {
+		t.Fatal("中心区块未开始生成")
 	}
-	var _ placementSettler = engine
-	if engine == nil || realmState == nil {
-		t.Fatal("unexpected nil")
+	if err := dimension.ApplyGenerated(chunk.Pos, chunk); err != nil {
+		t.Fatal(err)
+	}
+
+	const session = SessionID(1)
+	state := NewState(0)
+	tunables := tuning.DefaultTunables()
+	tunables.PlayerDropPickupDelayTicks = 77
+	position := mgl32.Vec3{0.5, 1, 0.5}
+	state.RegisterPlayer(session, PlayerRestore{
+		Current:        &PlayerLocation{Dimension: core.Overworld, Position: position},
+		Safe:           &PlayerLocation{Dimension: core.Overworld, Position: position},
+		SpawnDimension: core.Overworld,
+		Inventory:      core.Inventory{},
+	}, realmState, tunables)
+	view := SessionView{Ready: true, Center: core.ChunkPos{}}
+	views := NewViewSnapshot([]TickSessionView{{
+		Session: session, View: view,
+		Origin: core.ChunkKey{Dimension: core.Overworld}, OriginWanted: true,
+	}})
+
+	activationMutation := realmState.NewMutation()
+	activation := state.BeginTick(TickInput{
+		Realm: realmState, Tunables: tunables,
+		PhysicsTunables: physics.ActiveTunables(), Views: views,
+	}, activationMutation)
+	if !activation.AdvanceActors() {
+		t.Fatal("恢复玩家未改变实体订阅输入")
+	}
+	player, ok := state.Player(session, 0, 0, view)
+	if !ok || !player.Ready {
+		t.Fatalf("恢复玩家未激活：%+v ok=%v", player, ok)
+	}
+
+	state.SetPlayerInventoryForTest(session, func(inventory core.Inventory) core.Inventory {
+		next, valid := inventory.SetSlot(0, core.ItemStack{Item: core.ItemStone, Count: 1})
+		if !valid {
+			t.Fatal("构造背包失败")
+		}
+		return next
+	})
+	mutation := realmState.NewMutation()
+	tick := state.BeginTick(TickInput{
+		Realm: realmState, Tick: 1, WorldTime: 1, Tunables: tunables,
+		PhysicsTunables: physics.ActiveTunables(), Views: views,
+	}, mutation)
+	result := TickResult{Forget: make(map[SessionID][]core.ChunkKey)}
+	tick.ApplyPlayerCommands([]Command{{
+		Session: session, Sequence: 1, Kind: CommandDropSelectedItem,
+	}}, &result)
+	tick.SettleGameplay(&result)
+	if len(result.Rejected) != 0 {
+		t.Fatalf("主动丢弃被拒绝：%+v", result.Rejected)
+	}
+	key := core.ChunkKey{Dimension: core.Overworld}
+	if !mutation.Has(key) {
+		t.Fatal("玩法写入没有汇入 runtime 提供的 realm.Mutation")
+	}
+	ready, ok := dimension.ReadyChunk(key.Pos)
+	if !ok {
+		t.Fatal("中心区块不再 Ready")
+	}
+	found := false
+	for slot := range core.DropsPerChunk {
+		drop := ready.Drop(slot)
+		if !drop.Active {
+			continue
+		}
+		found = true
+		// 创建阶段之后同一玩法阶段还会推进一次掉落计时，因此可观察值比输入少一。
+		wantDelay := tunables.PlayerDropPickupDelayTicks - 1
+		if drop.PickupDelayTicks != wantDelay {
+			t.Fatalf("掉落拾取延迟=%d，想要传入快照结算后的 %d", drop.PickupDelayTicks, wantDelay)
+		}
+	}
+	if !found {
+		t.Fatal("entity production 结算没有创建掉落物")
 	}
 }
 
@@ -118,11 +182,13 @@ func TestTunablesSnapshotAffectsRegister(t *testing.T) {
 	// 验证 RegisterPlayer 使用传入的 tunables 而非全局
 	restore := PlayerRestore{SpawnDimension: core.Overworld, SpawnAnchor: core.ChunkPos{}, Inventory: core.Inventory{}}
 	// 使用小半径注册
-	engineSmall.RegisterPlayer(1, restore, realmState, smallTunables)
+	engineSmall.tunables = smallTunables
+	engineSmall.RegisterPlayer(1, restore)
 	if len(engineSmall.sessions[1].player.candidates) != len(smallCandidates) {
 		t.Fatalf("RegisterPlayer snapshot not used: got %d want %d", len(engineSmall.sessions[1].player.candidates), len(smallCandidates))
 	}
-	engineLarge.RegisterPlayer(2, restore, realmState, largeTunables)
+	engineLarge.tunables = largeTunables
+	engineLarge.RegisterPlayer(2, restore)
 	if len(engineLarge.sessions[2].player.candidates) != len(largeCandidates) {
 		t.Fatalf("RegisterPlayer large snapshot not used")
 	}
@@ -157,12 +223,15 @@ func TestTunablesSnapshotAffectsWorkbench(t *testing.T) {
 	farTunables := tuning.DefaultTunables()
 	farTunables.InteractionReach = 1
 	physicsTunables := physics.ActiveTunables()
-	if !engine.workbenchAnchorValid(session, realmState, nearTunables, physicsTunables) {
+	engine.tunables = nearTunables
+	engine.physicsTunables = physicsTunables
+	if !engine.workbenchAnchorValid(session) {
 		t.Fatalf("near tunables should be valid")
 	}
 	// 将玩家移远，远距离应无效
 	session.player.state.Position = mgl32.Vec3{100, 1, 100}
-	if engine.workbenchAnchorValid(session, realmState, farTunables, physicsTunables) {
+	engine.tunables = farTunables
+	if engine.workbenchAnchorValid(session) {
 		t.Fatalf("far tunables should be invalid when far")
 	}
 }

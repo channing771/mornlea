@@ -217,3 +217,39 @@ func celestialTestEndpoints(t *testing.T, transport string) (network.ClientEndpo
 	})
 	return clientEndpoint, server.endpoint
 }
+
+// TestApplicationFreezeWorldTimeBlocksNewerStateWhileFrozen 锁定世界时间冻结:
+// capture 在场景 Apply 里钉住世界时间后,收敛帧仍会持续接受权威状态——
+// 服务端时间随真实时间前进,最终帧的昼夜参数因此随进程漂移(golden 逐像素
+// 门禁在远景带上整片翻色)。冻结开关只拦 `WorldTimeTicks`/`DayPhaseOffset`
+// 两个呈现量的接受,其余权威状态照常前进;解冻后恢复「只认更新 tick」纪律。
+func TestApplicationFreezeWorldTimeBlocksNewerStateWhileFrozen(t *testing.T) {
+	app, serverEndpoint := newInteractiveTestApplication(t)
+	base := network.PlayerState{
+		ServerTick: 1, WorldTimeTicks: 18000, Dimension: core.Overworld,
+		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true, Ready: true,
+	}
+	sendInteractiveServerMessage(t, serverEndpoint, base)
+	app.DrainServerMessages(1)
+	if app.worldTimeTicks != 18000 {
+		t.Fatalf("基线世界时间 = %d,想要 18000", app.worldTimeTicks)
+	}
+
+	app.SetWorldTimeFrozen(true)
+	newer := base
+	newer.ServerTick, newer.WorldTimeTicks = 2, 6000
+	sendInteractiveServerMessage(t, serverEndpoint, newer)
+	app.DrainServerMessages(1)
+	if app.worldTimeTicks != 18000 {
+		t.Fatalf("冻结期间世界时间被更新状态改为 %d,想要保持 18000", app.worldTimeTicks)
+	}
+
+	app.SetWorldTimeFrozen(false)
+	newest := newer
+	newest.ServerTick, newest.WorldTimeTicks = 3, 12000
+	sendInteractiveServerMessage(t, serverEndpoint, newest)
+	app.DrainServerMessages(1)
+	if app.worldTimeTicks != 12000 {
+		t.Fatalf("解冻后更新的世界状态未被接受: %d,想要 12000", app.worldTimeTicks)
+	}
+}

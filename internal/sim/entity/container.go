@@ -7,12 +7,12 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/world"
 )
 
 // containerChunk 解析一个容器引用所在的区块；区块未加载或未 Ready 都视为失效。
-func (engine *Engine) containerChunk(ref core.ContainerRef) (*world.Chunk, bool) {
+// 熔炉与箱子共用同一份区块解析，只有槽位本身的读取按 Kind 分叉。
+func (engine *engineContext) containerChunk(ref core.ContainerRef) (*world.Chunk, bool) {
 	dimension := engine.dimension(ref.Dimension)
 	if dimension == nil {
 		return nil, false
@@ -21,7 +21,8 @@ func (engine *Engine) containerChunk(ref core.ContainerRef) (*world.Chunk, bool)
 }
 
 // chestView 定位一个箱子引用当前指向的槽；引用失效时返回 false。
-func (engine *Engine) chestView(ref core.ContainerRef) (*world.Chunk, world.ChestSlot, bool) {
+// 失效判定与 furnaceView 完全一致：区块未加载、槽位停用或 generation 不匹配。
+func (engine *engineContext) chestView(ref core.ContainerRef) (*world.Chunk, world.ChestSlot, bool) {
 	chunk, ok := engine.containerChunk(ref)
 	if !ok {
 		return nil, world.ChestSlot{}, false
@@ -34,6 +35,8 @@ func (engine *Engine) chestView(ref core.ContainerRef) (*world.Chunk, world.Ches
 }
 
 // withinContainerReach 报告玩家是否仍在某个容器的交互范围内；
+// 熔炉与箱子共用同一份服务端权威距离判定。reach 由调用方传入本 tick 的快照值，
+// 这个自由函数本身绝不读取 ActiveTunables。
 func withinContainerReach(
 	eye mgl32.Vec3,
 	chunk core.ChunkPos,
@@ -53,7 +56,8 @@ func withinContainerReach(
 }
 
 // openContainer 处理打开请求：用权威射线在六格内命中活动熔炉或箱子才建立查看关系；
-func (engine *Engine) openContainer(id SessionID, command Command) (RejectReason, bool) {
+// 命中箱子会结束原有熔炉查看关系，反之亦然，因为每名玩家同时只能查看一个容器。
+func (engine *engineContext) openContainer(id SessionID, command Command) (RejectReason, bool) {
 	session := engine.sessions[id]
 	if session == nil || session.player == nil || session.player.lifecycle != PlayerActive {
 		return RejectPlayerNotReady, true
@@ -91,6 +95,9 @@ func (engine *Engine) openContainer(id SessionID, command Command) (RejectReason
 	case core.ChestID:
 		kind = core.ContainerKindChest
 	case core.WorkbenchID:
+		// 工作台走同一份权威射线、触及距离与 loaded chunk 校验，但它是普通
+		// 方块而不是容器（design.md D5）：打开只提升该玩家网格尺寸并记录
+		// 命中位置，不占 `world.ContainerRef`、不占区块槽位、无持久化。
 		workbench = true
 	default:
 		return RejectNoTarget, true
@@ -109,6 +116,8 @@ func (engine *Engine) openContainer(id SessionID, command Command) (RejectReason
 		player.crafting.Size = CraftingGridSizeWorkbench
 		player.workbench = hit.Block
 		player.craftingDirty = true
+		// 打开工作台结束既有容器查看关系：每名玩家同时只操作一个界面，
+		// 与熔炉/箱子互斥的既有语义对齐。
 		session.viewContainer = false
 		session.container = core.ContainerRef{}
 		return 0, false
@@ -141,7 +150,9 @@ func (engine *Engine) openContainer(id SessionID, command Command) (RejectReason
 }
 
 // publishContainers 在全部命令与推进之后校验查看关系，
-func (engine *Engine) publishContainers(result *TickResult) {
+// 只向仍然有效的查看者发送完整状态，并对失效引用发送精确一次关闭。
+// 熔炉与箱子共用同一份有效性判定，只有发布的状态形状按 Kind 分叉。
+func (engine *engineContext) publishContainers(result *TickResult) {
 	sessions := engine.containerViewerScratch[:0]
 	for id, session := range engine.sessions {
 		if session.viewContainer {
@@ -191,13 +202,16 @@ func (engine *Engine) publishContainers(result *TickResult) {
 				BurnTicks:     furnace.BurnTicks,
 			})
 		default:
+			// 未知容器类型：按失效处理，结束查看关系并发一次精确关闭。
 			session.viewContainer = false
 			result.FurnaceEnds = append(result.FurnaceEnds, FurnaceEnd{Session: id, Furnace: ref})
 		}
 	}
 }
 
-// mergeStacks 计算把 source 整堆或部分移入 target 后两侧的新值
+// mergeStacks 计算把 source 整堆或部分移入 target 后两侧的新值：目标为空时接收整堆，
+// 同类目标按目标物品的堆叠上限合并并保留来源余量，异类目标交换；
+// 与 core.Inventory.MoveStack 的语义保持一致，供熔炉与箱子的跨容器移动共用。
 func mergeStacks(source, target core.ItemStack) (nextSource, nextTarget core.ItemStack, ok bool) {
 	switch {
 	case target.Item == core.ItemNone:
@@ -215,11 +229,14 @@ func mergeStacks(source, target core.ItemStack) (nextSource, nextTarget core.Ite
 		}
 		return nextSource, nextTarget, true
 	default:
+		// 不同物品交换，交换后两侧约束都必须成立。
 		return target, source, true
 	}
 }
 
 // moveChestStack 在玩家物品与箱子的值副本上计算一次整堆移动，
+// 只有两侧最终槽位都满足约束时才返回新值；任何一步失败都返回原值和 false。
+// 箱子格接受任何已注册物品，因此这里只用 ItemStack.Valid 校验，不引入熔炉那样的物品类型约束。
 func moveChestStack(
 	inventory core.Inventory,
 	chest world.ChestSlot,
@@ -231,6 +248,7 @@ func moveChestStack(
 	if !inventory.Valid() || !chest.Valid() || !chest.Active {
 		return inventory, chest, false
 	}
+	// 两侧都在玩家物品栏内时复用既有整堆移动语义。
 	if from < core.InventorySlots && to < core.InventorySlots {
 		next, ok := inventory.MoveStack(from, to)
 		return next, chest, ok
@@ -267,6 +285,7 @@ func moveChestStack(
 	return nextInventory, nextChest, true
 }
 
+// chestViewSlot 读取统一栏位 0..62 中的一格：0..35 是物品栏，36..62 是箱子的 27 格。
 func chestViewSlot(
 	inventory core.Inventory,
 	chest world.ChestSlot,
@@ -278,6 +297,8 @@ func chestViewSlot(
 	return inventory.Slot(slot)
 }
 
+// setChestViewSlot 写入统一栏位 0..62 中的一格；箱子格没有物品类型约束，
+// 只要求写入值本身是规范空值或已注册物品堆。
 func setChestViewSlot(
 	inventory core.Inventory,
 	chest world.ChestSlot,
@@ -299,10 +320,11 @@ func setChestViewSlot(
 }
 
 // applyContainerMove 处理跨容器移动命令，成功时同时提交玩家物品与区块中的容器；
-func (engine *Engine) applyContainerMove(
+// 按引用的 Kind 分派到熔炉或箱子各自独立的边界与约束检查。
+func (engine *engineContext) applyContainerMove(
 	id SessionID,
 	command Command,
-	mutation *realm.Mutation,
+	pending *pendingChunkChanges,
 ) (RejectReason, bool) {
 	session := engine.sessions[id]
 	if session == nil || session.player == nil || session.player.lifecycle != PlayerActive {
@@ -326,11 +348,15 @@ func (engine *Engine) applyContainerMove(
 		if !ok {
 			return RejectInvalidInput, true
 		}
+		// 回收不变量（design.md D4）：箱子 → 背包的移动是一条真实的背包增量
+		// 入口，同样不得挤占网格回收预算；破坏不变量的移动整体拒绝且
+		// 背包、箱子与网格逐格不变。背包内部移动由 `Inventory.MoveStack`
+		// 的合并/迁移语义保持不变量，这里的预演对它恒过。
 		if !canRepackCrafting(nextInventory, session.player.crafting) {
 			return RejectInvalidInput, true
 		}
 		chunk.SetChest(int(ref.Slot), nextChest)
-		engine.touchChunk(key, mutation)
+		engine.touchChunk(key, pending)
 		session.player.inventory = nextInventory
 		session.player.inventoryDirty = true
 		return 0, false
@@ -345,11 +371,12 @@ func (engine *Engine) applyContainerMove(
 		if !ok {
 			return RejectInvalidInput, true
 		}
+		// 同上：熔炉 → 背包的移动受回收不变量约束。
 		if !canRepackCrafting(nextInventory, session.player.crafting) {
 			return RejectInvalidInput, true
 		}
 		chunk.SetFurnace(int(ref.Slot), nextFurnace)
-		engine.touchChunk(key, mutation)
+		engine.touchChunk(key, pending)
 		session.player.inventory = nextInventory
 		session.player.inventoryDirty = true
 		return 0, false
@@ -359,7 +386,7 @@ func (engine *Engine) applyContainerMove(
 }
 
 // SetChunkChestForTest 直接写入一个已 Ready 区块的箱子槽，仅供测试构造固定场景。
-func (engine *Engine) SetChunkChestForTest(
+func (engine *engineContext) SetChunkChestForTest(
 	key core.ChunkKey,
 	slot int,
 	value world.ChestSlot,

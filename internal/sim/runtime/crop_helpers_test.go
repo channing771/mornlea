@@ -53,7 +53,8 @@ func cropFlatChunk(pos core.ChunkPos) *world.Chunk {
 // 这样这一格水在流体规则下是不动点：源永不自然消失，六个邻格都不可被等级 1
 // 替换，evalCell 对它产出空写入集合。夹具里的水**必须原地不动**——它一旦流走，
 // 「范围内有水」这个前置就在第一个 tick 自己消失，用例会因为前置蒸发而绿。
-// 复用 internal/sim/fluid.go 的 fluidNeighbors，不另写一份邻格表。
+// 复用 `internal/sim/runtime/environment_helpers_test.go` 的 `fluidNeighbors`，
+// 不另写一份邻格表。
 func placeContainedWater(t *testing.T, engine *Engine, position core.BlockPos) {
 	t.Helper()
 	for _, neighbor := range fluidNeighbors(position) {

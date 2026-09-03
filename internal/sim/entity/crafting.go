@@ -6,9 +6,6 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/sim/realm"
-	"github.com/channing771/mornlea/internal/sim/tuning"
 )
 
 // 网格有效尺寸的固定取值：个人 2×2 与工作台 3×3 共用同一份 9 格存储。
@@ -289,7 +286,7 @@ func (player *playerState) repackCraftingAll() bool {
 // （含同 tick 被采掘变空气）或离开触及距离时，按关闭规则先回收格 4..8 再把尺寸
 // 降回 2。会话按 ID 稳定排序遍历，保证确定性。回收不变量保证这里的回收必然
 // 成功；失败 MUST 以 panic 暴露为内部错误（测试断言其不可达），绝不静默丢物。
-func (engine *Engine) advanceWorkbenchLifecycle() {
+func (engine *engineContext) advanceWorkbenchLifecycle() {
 	sessions := make([]SessionID, 0, len(engine.sessions))
 	for id, session := range engine.sessions {
 		if session.player != nil &&
@@ -304,7 +301,7 @@ func (engine *Engine) advanceWorkbenchLifecycle() {
 	for _, id := range sessions {
 		session := engine.sessions[id]
 		player := session.player
-		if player.lifecycle != PlayerActive || !engine.workbenchAnchorValid(session, engine.realm, engine.tunables, engine.physicsTunables) {
+		if player.lifecycle != PlayerActive || !engine.workbenchAnchorValid(session) {
 			if !player.closeWorkbench() {
 				panic("sim: 自动关闭工作台时网格回收失败（回收不变量被破坏）")
 			}
@@ -315,8 +312,8 @@ func (engine *Engine) advanceWorkbenchLifecycle() {
 // workbenchAnchorValid 报告该会话记录的工作台锚点是否仍然成立：所在区块
 // Ready、方块仍是工作台且玩家仍在触及距离内。距离判定与容器查看
 // （`withinContainerReach`）同一来源：眼睛位置到方块中心 ≤ InteractionReach。
-func (engine *Engine) workbenchAnchorValid(session *sessionState, realmState *realm.State, tunables tuning.Tunables, physicsTunables physics.Tunables) bool {
-	dimension := realmState.Dimension(session.dimension)
+func (engine *engineContext) workbenchAnchorValid(session *sessionState) bool {
+	dimension := engine.dimension(session.dimension)
 	if dimension == nil {
 		return false
 	}
@@ -324,20 +321,15 @@ func (engine *Engine) workbenchAnchorValid(session *sessionState, realmState *re
 	if !ready || block != core.WorkbenchID {
 		return false
 	}
-	eye := session.player.state.Position.Add(mgl32.Vec3{0, physicsTunables.EyeHeight, 0})
+	eye := session.player.state.Position.Add(mgl32.Vec3{0, engine.physicsTunables.EyeHeight, 0})
 	center := blockCenterVec3(session.player.workbench)
-	return center.Sub(eye).Len() <= tunables.InteractionReach
-}
-
-// workbenchAnchorValidLegacy 保留旧签名的过渡包装
-func (engine *Engine) workbenchAnchorValidLegacy(session *sessionState) bool {
-	return engine.workbenchAnchorValid(session, engine.realm, engine.tunables, engine.physicsTunables)
+	return center.Sub(eye).Len() <= engine.tunables.InteractionReach
 }
 
 // PlayerCrafting 返回某会话当前的权威合成网格与服务端派生的产物；
 // 会话不存在时返回 false。这是测试与任务组 3 publication 的观察点；
 // 网格永不进入 `PlayerSnapshot`（不落盘）。
-func (engine *Engine) PlayerCrafting(id SessionID) (CraftingGrid, core.ItemStack, bool) {
+func (engine *engineContext) PlayerCrafting(id SessionID) (CraftingGrid, core.ItemStack, bool) {
 	session := engine.sessions[id]
 	if session == nil || session.player == nil {
 		return CraftingGrid{}, core.ItemStack{}, false
@@ -350,7 +342,7 @@ func (engine *Engine) PlayerCrafting(id SessionID) (CraftingGrid, core.ItemStack
 
 // SetPlayerCraftingGridForTest 改写某个会话玩家的权威合成网格，仅供测试构造
 // 用命令无法构造的极端状态（例如回收不变量被破坏的网格）来锁定防御分支。
-func (engine *Engine) SetPlayerCraftingGridForTest(
+func (engine *engineContext) SetPlayerCraftingGridForTest(
 	id SessionID,
 	mutate func(CraftingGrid) CraftingGrid,
 ) {
@@ -364,7 +356,7 @@ func (engine *Engine) SetPlayerCraftingGridForTest(
 
 // publishCraftings 为每名 Active 且 dirty 的玩家产出本 tick 唯一一份完整网格
 // 状态，语义与 `publishInventories` 完全对称：latest-wins、只发所属会话。
-func (engine *Engine) publishCraftings(result *TickResult) {
+func (engine *engineContext) publishCraftings(result *TickResult) {
 	sessions := make([]SessionID, 0, len(engine.sessions))
 	for id, session := range engine.sessions {
 		if session.player != nil && session.player.craftingDirty &&

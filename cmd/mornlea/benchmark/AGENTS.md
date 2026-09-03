@@ -7,13 +7,14 @@ capture（方向由 `TestClientCommandSubpackageDependencyDirections` 强制）�
 
 ## 场景契约 (`benchmark/benchmark.go`)
 
-- 场景身份是 `scenarioVersion`（当前 v21）：场景语义、GPU 完成时间定义与报告
+- 场景身份是 `scenarioVersion`（当前 v22）：场景语义、GPU 完成时间定义与报告
   结构都绑定版本，迁移链以它为终点。根 `AGENTS.md` 的「benchmark scenario
   vN」基线断言由 `internal/archcheck` 的 `TestBaselineVersionsMatchCode` 直接
-  读取本包常量核对——升版时必须同步根文档。v21 记录的是常显 HUD 层迁出 GPU
-  保留面这一被测进程自身的变化（关闭容器帧保留面零实例、打开态最坏收缩到
-  218 quad/268 glyph，固定上传布局 320/768/15616/52480 不变）；无头观察路径
-  仍零 WebView 参与，不构造 WebView、不下行桥状态。
+  读取本包常量核对——升版时必须同步根文档。v22 记录的是自然短草对被测进程
+  与被测世界的改变（稳定方块与 mesh registry 追加 `ShortGrassID`、植物材质
+  判定集合扩为 `[31..54] ∪ {68}`、worldgen `MGW1` layout 3 与 engine ABI v10、
+  固定世界出现确定性短草），叠加在 v21（常显 HUD 层迁出 GPU 保留面）基线
+  之上；无头观察路径仍零 WebView 参与，不构造 WebView、不下行桥状态。
 - 固定工作负载不随环境漂移：世界种子取 app 导出的 `BenchmarkSeed`，注水强制
   关闭（main 装配层与 `multiplayer_benchmark_server.go` 双侧钉死），Dev 面板
   不构造，输入、世界与报告身份不随用户配置漂移（配置强制回落

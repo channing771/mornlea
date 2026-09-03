@@ -161,21 +161,24 @@ type Application struct {
 	// 同一接受纪律：偏移只平移昼夜呈现，绝不回写绝对时间。
 	worldTimeTicks uint64
 	dayPhaseOffset uint16
-	glyphAtlas     *render.GlyphAtlas
-	clientEndpoint network.ClientEndpoint
-	receiver       *client.Receiver
-	server         *server.Server
-	host           Host
-	serverCancel   context.CancelFunc
-	serverDone     chan error
-	mirror         *client.Mirror
-	predictor      *client.Predictor
-	mesher         *client.Mesher
-	camera         client.Camera
-	center         core.ChunkPos
-	sequence       uint64
-	loadedChunks   map[core.ChunkPos]struct{}
-	// loadingMeshBase 是本会话装配点记录的网格化完成计数基线：mesher 跨会话
+	// worldTimeFrozen 冻结权威状态对昼夜呈现量的覆盖(capture 钉住天空状态,
+	// 见 SetWorldTimeFrozen);生产恒为 false。
+	worldTimeFrozen bool
+	glyphAtlas      *render.GlyphAtlas
+	clientEndpoint  network.ClientEndpoint
+	receiver        *client.Receiver
+	server          *server.Server
+	host            Host
+	serverCancel    context.CancelFunc
+	serverDone      chan error
+	mirror          *client.Mirror
+	predictor       *client.Predictor
+	mesher          *client.Mesher
+	camera          client.Camera
+	center          core.ChunkPos
+	sequence        uint64
+	loadedChunks    map[core.ChunkPos]struct{}
+	// loadingMeshBase 是本会话装配点记录的网格化完成计数基线:mesher 跨会话
 	// 复用(单调计数不归零),退回主菜单再进入时若不从基线起算,上一世界的完成
 	// 数会让加载屏网格进度起步即饱和——进度条从高位直接跳满格,随后在网格
 	// 尾巴期间停在 100%(看似卡住)。

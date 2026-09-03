@@ -194,16 +194,33 @@ func (state *State) FluidQueue(dimension core.DimensionID) *fluid.Queue {
 	return state.environment.fluidQueue(dimension)
 }
 
-func (state *State) FluidScope() map[core.ChunkKey]struct{} {
-	return state.environment.scope
+// AppendFluidScopeKeys 把当前流体推进范围追加到调用方 slice，不导出 owner map。
+func (state *State) AppendFluidScopeKeys(dst []core.ChunkKey) []core.ChunkKey {
+	for key := range state.environment.scope {
+		dst = append(dst, key)
+	}
+	slices.SortFunc(dst, func(left, right core.ChunkKey) int {
+		switch {
+		case chunkKeyLess(left, right):
+			return -1
+		case chunkKeyLess(right, left):
+			return 1
+		default:
+			return 0
+		}
+	})
+	return dst
 }
 
-func (state *State) FluidQueuesMap() map[core.DimensionID]*fluid.Queue {
-	return state.environment.fluidQueues
+// FluidScopeContains 报告区块是否属于最近完成的流体推进范围。
+func (state *State) FluidScopeContains(key core.ChunkKey) bool {
+	_, contains := state.environment.scope[key]
+	return contains
 }
 
-func (state *State) FluidRescanPending() []core.ChunkKey {
-	return state.environment.fluidRescan.pending
+// FluidRescanPendingCount 返回尚未完成的边界重扫数量。
+func (state *State) FluidRescanPendingCount() int {
+	return len(state.environment.fluidRescan.pending)
 }
 
 func (state *State) CropCellsExamined() int {
@@ -1093,6 +1110,70 @@ func (state *State) advanceCropCell(
 
 // Torch/Bed support
 
+// wildPlantSweepCell 是 wild plant 复核快照里的一条已变位置：维度加方块坐标
+// 唯一定位一格。
+type wildPlantSweepCell struct {
+	dimension core.DimensionID
+	position  core.BlockPos
+}
+
+// SweepUnsupportedWildPlants 清除失去草皮支撑的短草：取得本 mutation 当前
+// `ChangedBlocks()` 的稳定快照，对每个变化格只检查正上方一格——若上方是
+// `ShortGrassID` 且变化格的最终值不再是 `GrassID`，就把短草写为空气并登记到
+// 同一 mutation，零掉落、不做任何掉落容量预演（环境清除不是种子来源，玩家
+// 采除才是）。
+//
+// 有界性契约：短草清空产生的新登记不递归重扫——单格植物不需要级联，快照
+// 在入口一次取定，工作量严格正比于本 tick 已受预算约束的 changed set 大小，
+// 每个候选只有常数次读取与至多一次写入；不启动 goroutine、不做 I/O 或全
+// 世界扫描。本 sweep 在 runtime 的固定阶段序里先于火把与床支撑复核执行，
+// 后两者因此能看到清草产生的新变更。
+func (state *State) SweepUnsupportedWildPlants(mutation *Mutation) {
+	changes := mutation.ChangedBlocks()
+	if len(changes) == 0 {
+		return
+	}
+	cells := make([]wildPlantSweepCell, len(changes))
+	for index, change := range changes {
+		cells[index] = wildPlantSweepCell{dimension: change.Dimension, position: change.Position}
+	}
+	for _, cell := range cells {
+		state.invalidateWildGrassAbove(cell.dimension, cell.position, mutation)
+	}
+}
+
+// invalidateWildGrassAbove 检查 position 正上方一格：那里是短草且 position 的
+// 最终内容不再是草方块时，短草支撑失效，同 mutation 清为空气。支撑格读取
+// 变化后的最终值——同 tick 内多次写入以最后一次为准，被换回草方块的支撑
+// 不触发清除。上方格未加载（跨区块边界）时跳过：短草所在区块必然已就绪才
+// 会被生成，未就绪意味着整列已随区块卸载，没有可复核的权威状态（火把复核
+// 同款取舍）。世界高度外的上方读作空气，天然不是短草。
+func (state *State) invalidateWildGrassAbove(
+	dimensionID core.DimensionID,
+	position core.BlockPos,
+	mutation *Mutation,
+) {
+	dimension := state.Dimension(dimensionID)
+	if dimension == nil {
+		return
+	}
+	above := core.BlockPos{X: position.X, Y: position.Y + 1, Z: position.Z}
+	block, ready := dimension.BlockAt(above)
+	if !ready || block != core.ShortGrassID {
+		return
+	}
+	supportBlock, supportReady := dimension.BlockAt(position)
+	if !supportReady || supportBlock == core.GrassID {
+		return
+	}
+	// 零掉落清除：短草没有物品身份，不 PrepareDrop、不预留容量——掉落槽
+	// 满载也必须完成（与作物冲毁、火把/床复核的容量语义刻意不同）。
+	if _, changed, err := dimension.SetBlock(above, core.AirID); err != nil || !changed {
+		return
+	}
+	mutation.Record(dimensionID, above, core.AirID)
+}
+
 func torchSupportOffset(block core.BlockID) (core.BlockPos, bool) {
 	switch block {
 	case core.TorchStandingID:
@@ -1124,9 +1205,9 @@ func torchSupport(block core.BlockID, pos core.BlockPos) (core.BlockPos, bool) {
 
 func torchSupportBlockSolid(id core.BlockID) bool {
 	// 火把支撑判定等价于原 `physics.BlockCollisionBoxes(id, true).Count > 0`：
-	// 零碰撞的空气/流体/作物/火把与门上半不计为实心，其余已注册方块（含玻璃、树叶、床、门下半等）均有碰撞体。
+	// 零碰撞的空气/流体/植物（作物与短草）/火把与门上半不计为实心，其余已注册方块（含玻璃、树叶、床、门下半等）均有碰撞体。
 	// 与床的 `isSolidSupport` 区分：床要求不透明实心（排除全部门），火把仅排除上半。
-	if id == core.AirID || core.IsFluid(id) || core.IsCrop(id) || core.IsTorch(id) || core.IsDoorUpper(id) {
+	if id == core.AirID || core.IsFluid(id) || core.IsPlant(id) || core.IsTorch(id) || core.IsDoorUpper(id) {
 		return false
 	}
 	return core.RegisteredBlock(id)
@@ -1241,8 +1322,9 @@ func bedHalfPositions(target core.BlockPos, block core.BlockID) (core.BlockPos, 
 }
 
 func isSolidSupport(id core.BlockID) bool {
-	// 床/门支撑判定：要求不透明实心（耕地特判为实心，全部门形态均不计），与火把的零碰撞判定区分。
-	return core.IsFarmland(id) || (core.RegisteredBlock(id) && id != core.AirID && id != core.GlassID && id != core.LeavesID && !core.IsFluid(id) && !core.IsCrop(id) && !core.IsDoor(id))
+	// 床/门支撑判定：要求不透明实心（耕地特判为实心，全部门形态均不计，植物
+	// ——作物与短草——为零碰撞非完整格也不计），与火把的零碰撞判定区分。
+	return core.IsFarmland(id) || (core.RegisteredBlock(id) && id != core.AirID && id != core.GlassID && id != core.LeavesID && !core.IsFluid(id) && !core.IsPlant(id) && !core.IsDoor(id))
 }
 
 type bedSweepCell struct {

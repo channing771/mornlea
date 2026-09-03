@@ -2,12 +2,13 @@ package entity
 
 import (
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/world"
 )
 
 // advanceFurnaces 在单写者 tick 中推进活动范围内的熔炉。
-func (engine *Engine) advanceFurnaces(mutation *realm.Mutation) {
+// 它复用与掉落物相同的区块兴趣集合，按稳定的区块与槽位顺序处理，
+// 因此多名玩家的重叠观察在同一 tick 内只推进一次。
+func (engine *engineContext) advanceFurnaces(pending *pendingChunkChanges) {
 	keys := engine.activeInterestKeys()
 	burnTicks := engine.tunables.FurnaceBurnTicks
 	smeltTicks := engine.tunables.FurnaceSmeltTicks
@@ -21,11 +22,14 @@ func (engine *Engine) advanceFurnaces(mutation *realm.Mutation) {
 			continue
 		}
 		if advanceChunkFurnaces(chunk, burnTicks, smeltTicks) {
-			engine.touchChunk(key, mutation)
+			engine.touchChunk(key, pending)
 		}
 	}
 }
 
+// advanceChunkFurnaces 推进一个区块的全部熔炉槽，返回该区块是否发生变化。
+// burnTicks、smeltTicks 由调用方传入本 tick 的快照值，本函数本身绝不读取
+// ActiveTunables。
 func advanceChunkFurnaces(chunk *world.Chunk, burnTicks uint16, smeltTicks uint8) bool {
 	changed := false
 	for slot := range core.FurnacesPerChunk {
@@ -43,6 +47,10 @@ func advanceChunkFurnaces(chunk *world.Chunk, burnTicks uint16, smeltTicks uint8
 	return changed
 }
 
+// advanceFurnace 推进一个熔炉一个 tick，返回新值与是否发生变化。
+// 输入无效或输出无容量时状态完全暂停：进度与剩余燃烧 tick 都不减少，
+// 因此燃料不会在空转中静默损失。burnTicks、smeltTicks 由调用方传入本 tick 的
+// 快照值，本函数本身绝不读取 ActiveTunables。
 func advanceFurnace(furnace world.FurnaceSlot, burnTicks uint16, smeltTicks uint8) (world.FurnaceSlot, bool) {
 	output, ok := canSmelt(furnace)
 	if !ok {
@@ -76,6 +84,7 @@ func advanceFurnace(furnace world.FurnaceSlot, burnTicks uint16, smeltTicks uint
 	return furnace, true
 }
 
+// canSmelt 返回当前输入的固定产物，并报告输出格是否仍可接收它。
 func canSmelt(furnace world.FurnaceSlot) (core.ItemID, bool) {
 	output, ok := core.SmeltingOutput(furnace.Input.Item)
 	if !ok || furnace.Input.Count == 0 {
@@ -86,7 +95,7 @@ func canSmelt(furnace world.FurnaceSlot) (core.ItemID, bool) {
 }
 
 // SetChunkFurnaceForTest 直接写入一个已 Ready 区块的熔炉槽，仅供测试构造固定场景。
-func (engine *Engine) SetChunkFurnaceForTest(
+func (engine *engineContext) SetChunkFurnaceForTest(
 	key core.ChunkKey,
 	slot int,
 	value world.FurnaceSlot,
@@ -99,7 +108,8 @@ func (engine *Engine) SetChunkFurnaceForTest(
 }
 
 // AdvanceFurnacesForBenchmark 只在活动区块上推进熔炉本身，
-func (engine *Engine) AdvanceFurnacesForBenchmark() {
+// 不做 revision 记账，供固定工作量基准与热路径分配门禁使用。
+func (engine *engineContext) AdvanceFurnacesForBenchmark() {
 	burnTicks := engine.tunables.FurnaceBurnTicks
 	smeltTicks := engine.tunables.FurnaceSmeltTicks
 	for _, key := range engine.activeInterestKeys() {
@@ -116,12 +126,13 @@ func (engine *Engine) AdvanceFurnacesForBenchmark() {
 }
 
 // ActiveInterestKeysForTest 暴露本 tick 的活动区块集合，仅供测试断言使用。
-func (engine *Engine) ActiveInterestKeysForTest() []core.ChunkKey {
+func (engine *engineContext) ActiveInterestKeysForTest() []core.ChunkKey {
 	return engine.activeInterestKeys()
 }
 
 // furnaceView 定位一个熔炉引用当前指向的槽；引用失效时返回 false。
-func (engine *Engine) furnaceView(ref core.ContainerRef) (*world.Chunk, world.FurnaceSlot, bool) {
+// 区块未加载、槽位停用或 generation 不匹配都视为失效。
+func (engine *engineContext) furnaceView(ref core.FurnaceRef) (*world.Chunk, world.FurnaceSlot, bool) {
 	chunk, ok := engine.containerChunk(ref)
 	if !ok {
 		return nil, world.FurnaceSlot{}, false
@@ -133,6 +144,8 @@ func (engine *Engine) furnaceView(ref core.ContainerRef) (*world.Chunk, world.Fu
 	return chunk, furnace, true
 }
 
+// moveFurnaceStack 在玩家物品与熔炉的值副本上计算一次整堆移动，
+// 只有两侧最终槽位都满足约束时才返回新值；任何一步失败都返回原值和 false。
 func moveFurnaceStack(
 	inventory core.Inventory,
 	furnace world.FurnaceSlot,
@@ -147,6 +160,7 @@ func moveFurnaceStack(
 	if !inventory.Valid() || !furnace.Valid() || !furnace.Active {
 		return inventory, furnace, false
 	}
+	// 两侧都在玩家物品栏内时复用既有整堆移动语义。
 	if from < core.InventorySlots && to < core.InventorySlots {
 		next, ok := inventory.MoveStack(from, to)
 		return next, furnace, ok
@@ -183,6 +197,7 @@ func moveFurnaceStack(
 	return nextInventory, nextFurnace, true
 }
 
+// furnaceViewSlot 读取统一栏位 0..38 中的一格。
 func furnaceViewSlot(
 	inventory core.Inventory,
 	furnace world.FurnaceSlot,
@@ -200,6 +215,7 @@ func furnaceViewSlot(
 	}
 }
 
+// setFurnaceViewSlot 写入统一栏位 0..38 中的一格，并保持熔炉格的物品约束。
 func setFurnaceViewSlot(
 	inventory core.Inventory,
 	furnace world.FurnaceSlot,
@@ -246,6 +262,7 @@ func setFurnaceViewSlot(
 	return inventory, furnace, true
 }
 
+// allowedFurnaceStack 报告某个堆是否可以放进只接受特定物品的熔炉格。
 func allowedFurnaceStack(stack core.ItemStack, allowed core.ItemID) bool {
 	if stack.Item == core.ItemNone {
 		return stack.Count == 0
@@ -254,7 +271,7 @@ func allowedFurnaceStack(stack core.ItemStack, allowed core.ItemID) bool {
 }
 
 // SetPlayerInventoryForTest 改写某个会话的权威物品状态，仅供纵向测试构造固定场景。
-func (engine *Engine) SetPlayerInventoryForTest(
+func (engine *engineContext) SetPlayerInventoryForTest(
 	id SessionID,
 	mutate func(core.Inventory) core.Inventory,
 ) {

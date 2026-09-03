@@ -4,7 +4,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* ABI v9:新增流体双内核 mornlea_fluid_eval_batch(批量单格流体规则求值,
+/* ABI v10:worldgen `MGW1` 请求材料表由 14 项扩为 15 项(末项 short_grass,
+ * 位于偏移 52,perm 后移到偏移 54):带内 layout 2 → 3、公共 header 564 →
+ * 566 字节、chunk 输入 572 → 574 字节、probe 输入 570 + 16×N(输出仍为每条
+ * 8 字节)、LOD 壳输入 580 → 582 字节;自然短草在树与海水之后按确定性整数
+ * 判定写入草地表面——natural-grass-seeds 变更。三个输出格式与长度契约均不
+ * 因新材料改变。既有入口签名与语义不变。engine 与 Go 侧是同一不可跨版本
+ * 混装的 release unit。
+ * ABI v9:新增流体双内核 mornlea_fluid_eval_batch(批量单格流体规则求值,
  * 输入布局 v1 = 8 字节头 + 每项 14 字节 7×u16,输出每项定长 12 字节 4 条
  * 候选写入;输出尺寸是输入的确定函数,容量不足按参数违约拒绝,无两段式
  * 探测)与 mornlea_fluid_rescan(确定性流体重扫扫描:输入 MFL1 布局 v1,
@@ -37,7 +44,7 @@
  * release unit。
  * ABI v4:worldgen `MGW1` header 的材料表由 13 项扩到 14 项(末项 water,
  * 占用 v3 的 reserved 槽,header 总长仍为 564 字节)。 */
-#define MORNLEA_ENGINE_ABI_VERSION 9u
+#define MORNLEA_ENGINE_ABI_VERSION 10u
 
 #define MORNLEA_STATUS_OK 0u
 #define MORNLEA_STATUS_ABI_VERSION 1u
@@ -104,9 +111,9 @@ uint32_t mornlea_worldgen_probe(
 /*
  * mornlea_lod_shell:确定性远环 LOD 壳生成(无状态纯函数)。
  *
- * 输入 580 字节 = 与 mornlea_worldgen_chunk 完全一致的 MGW1 header(564)
- * + tile_x i32(564)+ tile_z i32(568)+ columns u32(572,必须等于 64)
- * + lod_step u32(576,合法值 2/4/8);tile 覆盖 [tile_x*64, tile_x*64+64)
+ * 输入 582 字节 = 与 mornlea_worldgen_chunk 完全一致的 MGW1 header(566)
+ * + tile_x i32(566)+ tile_z i32(570)+ columns u32(574,必须等于 64)
+ * + lod_step u32(578,合法值 2/4/8);tile 覆盖 [tile_x*64, tile_x*64+64)
  * × [tile_z*64, tile_z*64+64) 列。
  *
  * 输出为壳 quad 字节流(LE)。单 quad 20 字节:x i32(0)| z i32(4)|

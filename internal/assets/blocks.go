@@ -44,14 +44,14 @@ const (
 	// 满立方体、仍然不透明，因此它们是普通固体层，不进植物集合。
 	LayerFarmlandDry
 	LayerFarmlandWet
-	// LayerWheat0..LayerCarrot7 是全部作物生长阶段的材质层，**必须连续且是本枚举
-	// 的最后 24 层**（小麦 8 + 马铃薯 8 + 胡萝卜 8）：Rust 侧 `quad.rs` 与
+	// LayerWheat0..LayerCarrot7 是全部作物生长阶段的材质层，**必须连续且保持
+	// 31..54 不变**（小麦 8 + 马铃薯 8 + 胡萝卜 8）：Rust 侧 `quad.rs` 与
 	// `internal/mesh` 的 PlantMaterialFirst/Last 用闭区间
-	// [PLANT_MATERIAL_FIRST, PLANT_MATERIAL_LAST] 判断一格是不是植物，从而决定
-	// 出交叉斜面而非轴向面。两侧没有共享常量也没有生成步骤，只能人手同步——
-	// 数值一侧由 internal/mesh 的 PlantMaterialFirst/PlantMaterialLast 与
+	// [PLANT_MATERIAL_FIRST, PLANT_MATERIAL_LAST] 识别作物，另以
+	// PlantMaterialShortGrass 识别离散短草层，从而决定一格出交叉斜面而非轴向面。
+	// 两侧没有共享常量也没有生成步骤，只能人手同步——数值一侧由 internal/mesh 的植物材质常量与
 	// TestPlantMaterialLayersMatchMeshContract 钉住，跨语言一侧由真的喂一次
-	// Rust mesher 的 TestNativeOracleParityWheatCrossPlanes 兜底。
+	// Rust mesher 的真实作物与短草 parity 测试兜底。
 	//
 	// 在这 24 层**之前**插入任何新层都会整体平移它们，于是 Rust 会把别的方块当成
 	// 植物、把植物当成普通方块——新层一律追加在 LayerCarrot7 之后。
@@ -108,15 +108,20 @@ const (
 	LayerBedHeadWest
 	LayerBedHeadNorth
 	LayerBedHeadEast
+	// LayerShortGrass 是短草独占的原创程序化 cutout 层。它只能追加在既有
+	// 55..67 层之后；植物材质谓词把 68 作为单点加入，不能把中间的门、工作台、
+	// 火把与床层一并扩进植物集合。
+	LayerShortGrass
 	// LayerCrack0..LayerCrack9 是采掘裂纹 overlay 的 10 个离散阶段层（中心
 	// 初始裂点 → 大面积破裂），由渲染层的 crack pass 按权威采集进度采样其中
-	// 一层，叠加在目标方块六面之上；像素见 crackTexture。层号冻结为 68..77：
-	// 裂纹实例以 f32 层号直接索引 atlas，呈现层从 LayerCrack0 派生各阶段层号
-	// 而不复制常量。仍按 LayerWheat0 处注释的纪律追加在枚举末位，不扰动
-	// 植物/耕地/火把/床区间。这些层不参与任何方块材质映射（Registry.Material
-	// 不返回它们，方块的材质面永远落不到裂纹层），只经裂纹实例流被采样；
-	// 裂纹是透明背景上的原创深棕/深灰系像素（背景 alpha 0、裂纹像素 alpha
-	// 255 的二值 cutout，分类见 isCutoutLayer），不替换、不修改原方块材质。
+	// 一层，叠加在目标方块六面之上；像素见 crackTexture。层号冻结为 69..78
+	// （LayerShortGrass 追加为 68 后顺延）：裂纹实例以 f32 层号直接索引 atlas，
+	// 呈现层从 LayerCrack0 派生各阶段层号而不复制常量。仍按 LayerWheat0 处
+	// 注释的纪律追加在枚举末位，不扰动植物/耕地/火把/床区间。这些层不参与
+	// 任何方块材质映射（Registry.Material 不返回它们，方块的材质面永远落不到
+	// 裂纹层），只经裂纹实例流被采样；裂纹是透明背景上的原创深棕/深灰系像素
+	// （背景 alpha 0、裂纹像素 alpha 255 的二值 cutout，分类见 isCutoutLayer），
+	// 不替换、不修改原方块材质。
 	LayerCrack0
 	LayerCrack1
 	LayerCrack2
@@ -208,6 +213,8 @@ var textureBindings = [...]textureBinding{
 	{name: "bed_head_west", layer: LayerBedHeadWest},
 	{name: "bed_head_north", layer: LayerBedHeadNorth},
 	{name: "bed_head_east", layer: LayerBedHeadEast},
+	// 短草层是覆盖槽位：默认包可不含该文件并保留程序化像素，用户包可按路径覆盖。
+	{name: "short_grass", layer: LayerShortGrass},
 	// 裂纹十层的绑定同样只是材质包覆盖的命名槽位：仓库自身不携带任何 crack
 	// png，内嵌默认包与用户包未提供该文件时程序化裂纹像素原样生效（镜像
 	// torch/bed 的仅覆盖槽位语义）。
@@ -281,6 +288,7 @@ func NewRegistry() *Registry {
 		r.layers[LayerBedFootSouth+uint16(dir)] = bedTopTexture(false, dir)
 		r.layers[LayerBedHeadSouth+uint16(dir)] = bedTopTexture(true, dir)
 	}
+	r.layers[LayerShortGrass] = shortGrassTexture()
 	for stage := 0; stage < crackStageCount; stage++ {
 		r.layers[LayerCrack0+uint16(stage)] = crackTexture(stage)
 	}
@@ -290,7 +298,7 @@ func NewRegistry() *Registry {
 	// RegistryView::face_visible 只做位图查表、缺条目一律判不可见，漏掉谁就等于
 	// 谁永远不出面（流体当年正是这样差点画不出水）。
 	// 条目数必须不超过 internal/mesh.nativeMaxRegistryEntries 与 Rust 的
-	// MAX_REGISTRY_ENTRIES（当前已注册 84 个方块，上限 96；上限扩容必须
+	// MAX_REGISTRY_ENTRIES（当前已注册 85 个方块，上限 96；上限扩容必须
 	// Go/Rust 两侧同批同步）。
 	ids := make([]world.BlockID, 0, int(core.BlockIDMax))
 	for id := core.AirID; id < core.BlockIDMax; id++ {
@@ -316,11 +324,11 @@ func NewRegistry() *Registry {
 // 整片水会被当成实心遮挡体，区段面连通性塌成全不可达，进而错误剔除水体后方
 // 的整批区段。守卫见 internal/mesh 的
 // TestConnectivityTreatsFluidAsTransparentOnLiveSectionData。
-// core 表对作物同样判 false：作物与玻璃、树叶同属 cutout 类，几何是方块内部
+// core 表对植物同样判 false：植物与玻璃、树叶同属 cutout 类，几何是方块内部
 // 的两片交叉斜面，既不填满格子也不该挡光。这一条直接决定了「作物下方的耕地
 // 仍被照亮」——Rust 天空光 BFS 的阻断判据就是本函数（light.rs 的 build_sky
-// 只看 opaque），作物一旦不透明，它下方那格的派生天空光会归零、耕地顶面变全黑。
-// 火把与作物同类判 false：零碰撞的窄柱/贴墙形态既不填满格子也不遮挡邻面，且
+// 只看 opaque），植物一旦不透明，它下方那格的派生天空光会归零、耕地顶面变全黑。
+// 火把与植物同类判 false：零碰撞的窄柱/贴墙形态既不填满格子也不遮挡邻面，且
 // 自身是发光体，被判成不透明会同时挡死邻域光照与出面。床同样判 false：9/16
 // 半高方块只占格子的下半，与门同属「不满格即不遮光」的透明分类——判成不透明
 // 会让床上方格的派生天空光归零、床面在夜间反而被错误压暗。
@@ -348,7 +356,7 @@ func (r *Registry) Opaque(id world.BlockID) bool {
 // 成永久不可见、水彻底画不出来，而这件事**不会**让任何既有断言变红——守卫是
 // internal/assets 的 TestFluidFaceVisibilityRules 与 internal/mesh 的
 // TestNativeOracleParityWaterSurface。
-// 作物是本函数唯一「自己一个轴向面都不出」的方块类：它的几何是 Rust mesher 另行
+// 植物是本函数唯一「自己一个轴向面都不出」的方块类：它的几何是 Rust mesher 另行
 // 补出的两片交叉斜面（每格 4 条 quad），六个轴向面一条都不要。规则写在这里而不是
 // Rust 里，是因为 Rust 的 face_visible 只对本函数烘焙出的位图查表、自己不含规则。
 // 反方向不受影响——相邻方块**朝向**作物的面仍然可见，因为作物非不透明，判定落到
@@ -358,7 +366,7 @@ func (r *Registry) FaceVisible(id, adjacent world.BlockID) bool {
 		!core.RegisteredBlock(adjacent) || r.Opaque(adjacent) {
 		return false
 	}
-	if core.IsCrop(id) {
+	if core.IsPlant(id) {
 		return false
 	}
 	// 门是厚度 3/16 的薄板，非不透明。关闭时门面贴合方块边缘，开启时薄边旋转 90°。
@@ -488,6 +496,9 @@ func (r *Registry) Material(id world.BlockID, f mesh.Face) uint16 {
 		if core.IsCrop(id) {
 			return LayerWheat0 + uint16(core.CropStage(id))
 		}
+		if core.IsWildGrass(id) {
+			return LayerShortGrass
+		}
 		// 五种火把形态共用同一张竖直火柄 cutout 层：Rust 的 model dispatcher
 		// 只读 face 0 的 material，几何（交叉斜面/贴面斜板）由 model tag 决定，
 		// 材质六面同层不会串味。
@@ -609,6 +620,7 @@ func (r *Registry) Model(id world.BlockID) uint8 {
 func isCutoutLayer(layer int) bool {
 	return layer == int(LayerLeaves) || layer == int(LayerGlass) ||
 		(layer >= int(LayerWheat0) && layer <= int(LayerCarrot7)) || layer == int(LayerTorch) ||
+		layer == int(LayerShortGrass) ||
 		(layer >= int(LayerCrack0) && layer <= int(LayerCrack9))
 }
 

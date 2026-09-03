@@ -17,6 +17,13 @@ func IsCrop(id BlockID) bool {
 	return (id >= WheatStage0ID && id <= WheatStage7ID) || IsPotato(id) || IsCarrot(id)
 }
 
+// IsWildGrass 报告 id 是否是无需耕作的野生草本植物。
+// 作物仍由 `IsCrop` 精确判定，两者互不重叠。
+func IsWildGrass(id BlockID) bool { return id == ShortGrassID }
+
+// IsPlant 报告 id 是否使用植物的透明、零碰撞与交叉斜面语义。
+func IsPlant(id BlockID) bool { return IsCrop(id) || IsWildGrass(id) }
+
 // CropStage 返回作物方块的生长阶段 0..7。
 //
 // 非作物编号的行为未定义，本实现返回 0——调用方 MUST 先用 IsCrop 判定。

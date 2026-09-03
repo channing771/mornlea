@@ -1,4 +1,5 @@
 use crate::input::{MeshInput, RegistryView};
+use crate::quad::{Face, plant_material};
 
 pub(crate) const LIGHT_MIN: i32 = -16;
 pub(crate) const LIGHT_SIDE: usize = 48;
@@ -23,7 +24,6 @@ pub(crate) enum MeshError {
 pub(crate) struct LightScratch<'a> {
     levels: &'a mut [u8],
     queue: &'a mut [u32],
-    head: usize,
     tail: usize,
 }
 
@@ -32,7 +32,6 @@ impl<'a> LightScratch<'a> {
         Self {
             levels,
             queue,
-            head: 0,
             tail: 0,
         }
     }
@@ -54,7 +53,6 @@ impl<'a> LightScratch<'a> {
     }
 
     fn reset_queue(&mut self) {
-        self.head = 0;
         self.tail = 0;
     }
 
@@ -83,9 +81,21 @@ fn build_sky(
 ) -> Result<(), MeshError> {
     let end = LIGHT_MIN + LIGHT_SIDE as i32;
     for x in LIGHT_MIN..end {
-        for y in LIGHT_MIN..end {
-            for z in LIGHT_MIN..end {
-                if input.sky_light(x, y, z) != 15 || registry.opaque(input.block(x, y, z)) {
+        for z in LIGHT_MIN..end {
+            let mut direct = false;
+            for y in (LIGHT_MIN..end).rev() {
+                if input.sky_light(x, y, z) == 15 {
+                    direct = true;
+                }
+                if !direct {
+                    continue;
+                }
+                let id = input.block(x, y, z);
+                if !registry.contains(id)
+                    || registry.opaque(id)
+                    || (id != input.air_id && !plant_block(registry, id))
+                {
+                    direct = false;
                     continue;
                 }
                 let index = light_index(x, y, z);
@@ -95,7 +105,8 @@ fn build_sky(
         }
     }
 
-    // 按亮度降序分桶推进，每个桶再分两相位。刚扫出的全部满亮格就是 15 号桶。
+    // 按亮度降序分桶推进，每个桶再分两相位。逐列扫描先把露天空气以及它正下方
+    // 连续的空气或植物写成满亮直射种子；其他透明方块会中断直射，只能由 BFS 进入。
     //
     // **为什么不能再用朴素 FIFO**：每步扣减改成按方块查表的 1 或 2 之后，FIFO 里的值
     // 不再单调不增，同一格可以先被 2 代价路径够到、再被 1 代价路径改进并重复入队。
@@ -180,7 +191,7 @@ fn spread(
                 continue;
             }
             let id = input.block(nx, ny, nz);
-            if registry.opaque(id) {
+            if !registry.contains(id) || registry.opaque(id) {
                 continue;
             }
             let attenuation = registry.light_attenuation(id);
@@ -211,6 +222,7 @@ fn build_block(
     scratch: &mut LightScratch<'_>,
 ) -> Result<(), MeshError> {
     let end = LIGHT_MIN + LIGHT_SIDE as i32;
+    let mut source_counts = [0_usize; 16];
     for x in LIGHT_MIN..end {
         for y in LIGHT_MIN..end {
             for z in LIGHT_MIN..end {
@@ -221,41 +233,80 @@ fn build_block(
                 if level > 15 {
                     return Err(MeshError::EmissionOutOfRange);
                 }
-                let index = light_index(x, y, z);
-                scratch.levels[index] = (scratch.levels[index] & SKY_MASK) | level;
-                scratch.enqueue(index)?;
+                source_counts[level as usize] += 1;
             }
         }
     }
 
-    while scratch.head < scratch.tail {
-        let mut index = scratch.queue[scratch.head] as usize;
-        scratch.head += 1;
-        let z = (index % LIGHT_SIDE) as i32 + LIGHT_MIN;
-        index /= LIGHT_SIDE;
-        let y = (index % LIGHT_SIDE) as i32 + LIGHT_MIN;
-        let x = (index / LIGHT_SIDE) as i32 + LIGHT_MIN;
-        let current = scratch.at(x, y, z) & BLOCK_MASK;
-        if current <= 1 {
-            continue;
+    // 光源与传播都按亮度从高到低推进。生产 registry 只有 14/15 两档光源，先扫一遍
+    // 计数后只为实际存在的档位重扫输入；16 个计数器是唯一新增状态，固定 scratch
+    // 仍严格为 48³ levels + 48³ queue。
+    //
+    // 处理亮度 L 时，所有能生成更高候选值的桶都已结束；同一目标第一次写入的 L-1
+    // 因而就是最终值。较低档光源若已被更高路径照亮也不会再次入队。每格最多入队一次，
+    // 所以任意合法光源排列的 tail 都不超过 LIGHT_VOLUME。
+    let mut start = 0;
+    for level in (1_u8..=15).rev() {
+        if source_counts[level as usize] != 0 {
+            for x in LIGHT_MIN..end {
+                for y in LIGHT_MIN..end {
+                    for z in LIGHT_MIN..end {
+                        if registry.emission(input.block(x, y, z)) != level {
+                            continue;
+                        }
+                        let index = light_index(x, y, z);
+                        if scratch.levels[index] & BLOCK_MASK >= level {
+                            continue;
+                        }
+                        scratch.levels[index] = (scratch.levels[index] & SKY_MASK) | level;
+                        scratch.enqueue(index)?;
+                    }
+                }
+            }
         }
-        let candidate = current - 1;
-        for (dx, dy, dz) in DIRECTIONS {
-            let (nx, ny, nz) = (x + dx, y + dy, z + dz);
-            if !inside(nx, ny, nz) {
+
+        let bucket_end = scratch.tail;
+        for slot in start..bucket_end {
+            let mut index = scratch.queue[slot] as usize;
+            let z = (index % LIGHT_SIDE) as i32 + LIGHT_MIN;
+            index /= LIGHT_SIDE;
+            let y = (index % LIGHT_SIDE) as i32 + LIGHT_MIN;
+            let x = (index / LIGHT_SIDE) as i32 + LIGHT_MIN;
+            debug_assert_eq!(scratch.at(x, y, z) & BLOCK_MASK, level);
+            if level <= 1 {
                 continue;
             }
-            let next = light_index(nx, ny, nz);
-            if scratch.levels[next] & BLOCK_MASK >= candidate
-                || input.block(nx, ny, nz) != input.air_id
-            {
-                continue;
+            let candidate = level - 1;
+            for (dx, dy, dz) in DIRECTIONS {
+                let (nx, ny, nz) = (x + dx, y + dy, z + dz);
+                if !inside(nx, ny, nz) {
+                    continue;
+                }
+                let next = light_index(nx, ny, nz);
+                let id = input.block(nx, ny, nz);
+                if scratch.levels[next] & BLOCK_MASK >= candidate
+                    || !block_light_destination(registry, id, input.air_id)
+                {
+                    continue;
+                }
+                scratch.levels[next] = (scratch.levels[next] & SKY_MASK) | candidate;
+                scratch.enqueue(next)?;
             }
-            scratch.levels[next] = (scratch.levels[next] & SKY_MASK) | candidate;
-            scratch.enqueue(next)?;
         }
+        start = bucket_end;
     }
     Ok(())
+}
+
+// block_light_destination 只放行空气与离散植物材质；未登记编号因无材质而关闭。
+fn block_light_destination(registry: &RegistryView<'_>, id: u16, air_id: u16) -> bool {
+    id == air_id || plant_block(registry, id)
+}
+
+fn plant_block(registry: &RegistryView<'_>, id: u16) -> bool {
+    registry
+        .material(id, Face::NegX as usize)
+        .is_some_and(plant_material)
 }
 
 fn inside(x: i32, y: i32, z: i32) -> bool {
@@ -429,7 +480,7 @@ mod tests {
     }
 
     #[test]
-    fn non_air_non_opaque_block_stops_block_light() {
+    fn non_plant_non_air_non_opaque_block_stops_block_light() {
         let mut bytes = base_input(15);
         for block in bytes[BLOCKS_OFFSET..BLOCKS_OFFSET + BLOCKS_BYTES].chunks_exact_mut(2) {
             block.copy_from_slice(&1_u16.to_le_bytes());
@@ -444,6 +495,166 @@ mod tests {
 
         assert_eq!(storage.light.at(9, 8, 8) & 0x0f, 0);
         assert_eq!(storage.light.at(10, 8, 8) & 0x0f, 0);
+    }
+
+    #[test]
+    fn crop_and_short_grass_plant_block_light_steps_down_normally() {
+        for material in [31_u16, 68] {
+            let mut bytes = base_input(15);
+            for block in bytes[BLOCKS_OFFSET..BLOCKS_OFFSET + BLOCKS_BYTES].chunks_exact_mut(2) {
+                block.copy_from_slice(&1_u16.to_le_bytes());
+            }
+            let plant = REGISTRY_OFFSET + ENTRY_BYTES;
+            bytes[plant + 2] = 0;
+            for face in 0..6 {
+                bytes[plant + 4 + face * 2..plant + 6 + face * 2]
+                    .copy_from_slice(&material.to_le_bytes());
+            }
+            set_block(&mut bytes, 8, 8, 8, LIGHT_ID);
+            set_block(&mut bytes, 10, 8, 8, 0);
+            let input = parse_fixture(bytes);
+            let mut storage = ScratchFixture::new();
+
+            build_light(&input.mesh, &input.mesh.registry, &mut storage.light).unwrap();
+
+            assert_eq!(
+                storage.light.at(9, 8, 8) & 0x0f,
+                14,
+                "植物材质层 {material} 未让方块光进入相邻格"
+            );
+            assert_eq!(
+                storage.light.at(10, 8, 8) & 0x0f,
+                13,
+                "植物材质层 {material} 后方空气未继续传播"
+            );
+        }
+    }
+
+    #[test]
+    fn crop_and_short_grass_plant_direct_sky_stays_fifteen() {
+        for material in [31_u16, 68] {
+            let mut bytes = base_input(0);
+            for x in -16..32 {
+                for z in -16..32 {
+                    set_height(&mut bytes, x, z, Some(-17));
+                }
+            }
+            let plant = REGISTRY_OFFSET + ENTRY_BYTES;
+            bytes[plant + 2] = 0;
+            for face in 0..6 {
+                bytes[plant + 4 + face * 2..plant + 6 + face * 2]
+                    .copy_from_slice(&material.to_le_bytes());
+            }
+            set_block(&mut bytes, 8, 8, 8, 1);
+            set_height(&mut bytes, 8, 8, Some(8));
+            let input = parse_fixture(bytes);
+            let mut storage = ScratchFixture::new();
+
+            build_light(&input.mesh, &input.mesh.registry, &mut storage.light).unwrap();
+
+            assert_eq!(
+                storage.light.at(8, 8, 8) >> 4,
+                15,
+                "植物材质层 {material} 的直射天空光不是 15"
+            );
+            assert_eq!(
+                storage.light.at(8, 7, 8) >> 4,
+                15,
+                "植物材质层 {material} 正下方的直射天空光不是 15"
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_block_stops_plant_sky_seed_and_propagation() {
+        let mut bytes = base_input(0);
+        for block in bytes[BLOCKS_OFFSET..BLOCKS_OFFSET + BLOCKS_BYTES].chunks_exact_mut(2) {
+            block.copy_from_slice(&1_u16.to_le_bytes());
+        }
+        for x in -16..32 {
+            for z in -16..32 {
+                set_height(&mut bytes, x, z, Some(31));
+            }
+        }
+        for y in 10..32 {
+            set_block(&mut bytes, 8, y, 8, 0);
+        }
+        set_block(&mut bytes, 8, 9, 8, 60000);
+        set_block(&mut bytes, 8, 8, 8, 0);
+        set_height(&mut bytes, 8, 8, Some(9));
+        let input = parse_fixture(bytes);
+        let mut storage = ScratchFixture::new();
+
+        build_light(&input.mesh, &input.mesh.registry, &mut storage.light).unwrap();
+
+        assert_eq!(storage.light.at(8, 9, 8) >> 4, 0);
+        assert_eq!(storage.light.at(8, 8, 8) >> 4, 0);
+
+        let mut stale = base_input(0);
+        for block in stale[BLOCKS_OFFSET..BLOCKS_OFFSET + BLOCKS_BYTES].chunks_exact_mut(2) {
+            block.copy_from_slice(&1_u16.to_le_bytes());
+        }
+        for x in -16..32 {
+            for z in -16..32 {
+                set_height(&mut stale, x, z, Some(31));
+            }
+        }
+        set_block(&mut stale, 8, 9, 8, 60000);
+        set_block(&mut stale, 8, 8, 8, 0);
+        set_height(&mut stale, 8, 8, Some(8));
+        let stale = parse_fixture(stale);
+        let mut stale_storage = ScratchFixture::new();
+
+        build_light(&stale.mesh, &stale.mesh.registry, &mut stale_storage.light).unwrap();
+
+        assert_eq!(stale_storage.light.at(8, 9, 8) >> 4, 0);
+        assert_eq!(stale_storage.light.at(8, 8, 8) >> 4, 0);
+    }
+
+    #[test]
+    fn unknown_block_stops_plant_block_light() {
+        let mut bytes = base_input(15);
+        for block in bytes[BLOCKS_OFFSET..BLOCKS_OFFSET + BLOCKS_BYTES].chunks_exact_mut(2) {
+            block.copy_from_slice(&1_u16.to_le_bytes());
+        }
+        bytes[REGISTRY_OFFSET + ENTRY_BYTES + 2] = 0;
+        set_block(&mut bytes, 8, 8, 8, LIGHT_ID);
+        set_block(&mut bytes, 9, 8, 8, 60000);
+        set_block(&mut bytes, 10, 8, 8, 0);
+        let input = parse_fixture(bytes);
+        let mut storage = ScratchFixture::new();
+
+        build_light(&input.mesh, &input.mesh.registry, &mut storage.light).unwrap();
+
+        assert_eq!(storage.light.at(9, 8, 8) & 0x0f, 0);
+        assert_eq!(storage.light.at(10, 8, 8) & 0x0f, 0);
+    }
+
+    #[test]
+    fn crop_and_short_grass_plant_block_light_mixed_sources_fit_fixed_queue() {
+        for material in [31_u16, 68] {
+            let mut bytes = base_input(15);
+            for block in bytes[BLOCKS_OFFSET..BLOCKS_OFFSET + BLOCKS_BYTES].chunks_exact_mut(2) {
+                block.copy_from_slice(&LIGHT_ID.to_le_bytes());
+            }
+            let plant = REGISTRY_OFFSET + ENTRY_BYTES;
+            bytes[plant + 2] = 0;
+            for face in 0..6 {
+                bytes[plant + 4 + face * 2..plant + 6 + face * 2]
+                    .copy_from_slice(&material.to_le_bytes());
+            }
+            bytes[REGISTRY_OFFSET + 3] = 14;
+            set_block(&mut bytes, -16, -16, -16, 1);
+            set_block(&mut bytes, -16, -16, -15, 0);
+            let input = parse_fixture(bytes);
+            let mut storage = ScratchFixture::new();
+
+            build_light(&input.mesh, &input.mesh.registry, &mut storage.light)
+                .expect("混合 14/15 光源让固定方块光队列溢出");
+
+            assert_eq!(storage.light.at(-16, -16, -16) & 0x0f, 14);
+            assert_eq!(storage.light.tail(), LIGHT_VOLUME);
+        }
     }
 
     /// 天空光穿过流体时每格额外衰减：固定的 1 加上查表得到的 `light_attenuation`。

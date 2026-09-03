@@ -20,20 +20,20 @@ import (
 
 // `MGW1` ABI 编码常量,必须与 engine `worldgen.rs` 的布局逐字一致:
 // header = magic(4) + layout version(4) + seed(8) + min_y(4) + max_y(4) +
-// 材料表 14×u16(28) + perm 512×u8(512)。
+// 材料表 15×u16(30) + perm 512×u8(512)。
 //
 // engine ABI v4 起材料表末项是 water,它正当占用 v3 预留的 reserved 槽
-// (偏移 50):该偏移的语义由"保留、必须为 0"变成"water 的方块编号",header
-// 总长与 perm 偏移不变,但布局语义确实变了,因此 layout version 1 → 2
-// ——它是独立于 ABI 版本号的带内第二道混装防线。
+// (偏移 50),layout version 1 → 2。engine ABI v10 再在末尾追加第 15 项
+// short_grass(偏移 52,perm 后移到偏移 54),header 564 → 566 字节,
+// layout version 2 → 3——它是独立于 ABI 版本号的带内第二道混装防线。
 //
 // 不再保留空槽是刻意选择,不是漏了:新增一个 reserved 槽本身就要把 perm 往后
 // 挪,而 reserved 的意义是推迟这个代价、不是提前支付;何况下一次扩字段必然
 // 同样改动材料表布局、必然升 ABI 版本,混装在版本号校验那一步就被挡住。
 const (
 	worldgenMagic       = "MGW1"
-	worldgenLayout      = 2
-	worldgenHeaderBytes = 564
+	worldgenLayout      = 3
+	worldgenHeaderBytes = 566
 	// worldgenChunkOutputBytes 是 dense `[y−min_y][lz][lx]` 布局的
 	// 16×16×(MaxY−MinY) 个 u16。
 	worldgenChunkOutputBytes = core.SectionSize * core.SectionSize * (core.MaxY - core.MinY) * 2
@@ -51,7 +51,7 @@ const (
 //
 // New 之后 header 只读共享,每次调用使用独立缓冲,可并发调用。
 type Generator struct {
-	// header 是预编码的 564 字节 `MGW1` 公共 header(seed、材料表、perm)。
+	// header 是预编码的 566 字节 `MGW1` 公共 header(seed、材料表、perm)。
 	header []byte
 }
 
@@ -63,7 +63,8 @@ type Generator struct {
 // 参数 fluidEnabled 是顶层配置同名键的取值,门控海平面注水。门控在 Go 侧
 // 以"材料表 water 字段填什么编号"的形式实现(design D6):关闭时填 core.AirID,
 // engine 的注水步就退化为把空气写回空气,生成结果与未引入流体的基线逐位一致;
-// engine 侧因此没有任何开关分支。
+// engine 侧因此没有任何开关分支。短草无门控:它只在注水结算后仍为空气的
+// 命中草地列写入,编号恒取 core.ShortGrassID。
 func New(seed int64, fluidEnabled bool) *Generator {
 	header := make([]byte, worldgenHeaderBytes)
 	copy(header[:4], worldgenMagic)
@@ -77,19 +78,20 @@ func New(seed int64, fluidEnabled bool) *Generator {
 	if fluidEnabled {
 		water = core.WaterSourceID
 	}
-	// 材料表编码顺序与 engine `Materials` 字段顺序逐字对应。
-	for index, id := range [14]core.BlockID{
+	// 材料表编码顺序与 engine `Materials` 字段顺序逐字对应;末项
+	// short_grass 参与装饰写入,不享受 water == air 的门控豁免。
+	for index, id := range [15]core.BlockID{
 		core.AirID, core.StoneID, core.DirtID, core.GrassID, core.BedrockID,
 		core.SnowBlockID, core.SandID, core.ClayID, core.GravelID,
 		core.IronOreID, core.CoalOreID, core.OakLogID, core.LeavesID,
-		water,
+		water, core.ShortGrassID,
 	} {
 		binary.LittleEndian.PutUint16(header[24+index*2:26+index*2], uint16(id))
 	}
 	perm := permTable(seed)
-	// perm 从偏移 52 开始:24..52 恰好是 14 项材料表,末项 water 占 50..52
-	// (v3 的 reserved 槽)。
-	copy(header[52:], perm[:])
+	// perm 从偏移 54 开始:24..54 恰好是 15 项材料表,末项 short_grass
+	// 占 52..54。
+	copy(header[54:], perm[:])
 	return &Generator{header: header}
 }
 
@@ -111,7 +113,7 @@ func permTable(seed int64) [512]byte {
 	return perm
 }
 
-// Header 返回生成器预编码的 564 字节 `MGW1` 公共 header(seed、材料表、
+// Header 返回生成器预编码的 566 字节 `MGW1` 公共 header(seed、材料表、
 // perm)。返回切片与生成器内部共享，构造后只读——调用方不得修改，否则
 // 会同时污染近环 worldgen 与所有共享方。远环壳生成(internal/lod)用同一
 // 种子构造的 header 与近环逐字节一致，保证同一世界的近环与远环地形来自
@@ -153,9 +155,11 @@ func (g *Generator) TerrainBlockAt(pos core.BlockPos) core.BlockID {
 
 // BaseBlockAt 返回不应用会话修改时指定世界位置的确定性方块。
 //
-// 它是含注水的完整生成语义，与 GenerateChunk 逐格一致：地形 → 橡树 → 海水
-// 三层，fluidEnabled 开启时海平面及其以下最终仍为空气的格返回
-// core.WaterSourceID。需要纯地形结果的调用方用 TerrainBlockAt。
+// 它是含注水与自然短草的完整生成语义，与 GenerateChunk 逐格一致：
+// 地形 → 橡树 → 海水 → 短草 四层，fluidEnabled 开启时海平面及其以下最终
+// 仍为空气的格返回 core.WaterSourceID；树与海水结算后仍为空气、且判定
+// 命中的草地表面正上方格返回 core.ShortGrassID。需要纯地形结果的调用方
+// 用 TerrainBlockAt(地形与高度语义忽略装饰短草)。
 func (g *Generator) BaseBlockAt(pos core.BlockPos) core.BlockID {
 	output := g.probe(probeModeBase, pos.X, pos.Y, pos.Z)
 	return core.BlockID(binary.LittleEndian.Uint16(output[4:6]))

@@ -479,14 +479,28 @@
 
 ### Requirement: 未受影响场景 golden 逐字节不变
 
-菜单相位场景 `main-menu` 与紧随其后的 `settings-menu` 的 golden SHALL 为纯 wgpu 全景底图，不携带常显 HUD 像素与菜单 chrome（WebView 层由前端组件断言覆盖）。凡不影响全景渲染路径的呈现层变更（含常显 HUD 的 GPU 呈现退役）MUST NOT 改变这两张 golden 的字节；其余场景的 golden MUST 只经既有显式更新路径变化，且每一处差异 MUST 可归因到已声明的呈现层或共享世界背景变化，不得以放宽双阈值吸收。
+菜单相位场景 `main-menu` 与紧随其后的 `settings-menu` 的 golden SHALL 为纯 wgpu 全景底图，不携带常显 HUD 像素与菜单 chrome（WebView 层由前端组件断言覆盖）。凡不影响全景渲染路径的呈现层变更（含常显 HUD 的 GPU 呈现退役）MUST NOT 改变这两张 golden 的字节。自然短草改变默认方块 registry 与共享世界背景后，本变更 MAY 只更新经逐图归因确认确由自然短草可见性引起的既有正式 golden；`oak-grove` 的固定夹具 MUST 包含至少一株在相机中可辨识的短草，并 MUST 经既有四 quad alpha-cutout 植物路径呈现。共享相同固定世界全景且实际出现短草的 `main-menu.png` 或 `settings-menu.png` MAY 在逐图归因后更新；所有未受自然短草影响的正式场景 golden SHALL 保持逐字节不变。正式场景清单 MUST 继续恰好为既有 24 项并保持当前顺序（常显 HUD 三场景已退役、`mining-crack` 对已加入），MUST NOT 新增 `natural-grass` 或任何第 25 个正式场景；全部更新与比对 MUST 继续使用既有双阈值，MUST NOT 通过放宽阈值接受差异。其余场景的 golden MUST 只经既有显式更新路径变化，且每一处差异 MUST 可归因到已声明的呈现层或共享世界背景变化，不得以放宽双阈值吸收。
 
 #### Scenario: 非设置场景不受变更影响
 
-- **GIVEN** 全部菜单相位场景（`main-menu` 与 `settings-menu`）
-- **WHEN** 常显 HUD 的 GPU 呈现退役后显式更新整套 golden
-- **THEN** 两张菜单 golden 的 PNG 字节 MUST 保持逐字节不变
-- **AND** 其余场景的 golden 变化 MUST 归因于常显 HUD 条带消失或共享世界背景变化，MUST NOT 产生无归因的字节漂移
+- **GIVEN** 全部既有 24 个正式场景及变更前 golden
+- **WHEN** 运行 capture 并逐图归因自然短草造成的像素差异
+- **THEN** 只有画面中确实出现自然短草或共享自然短草世界背景的既有 PNG MAY 更新
+- **AND** 其余每个场景的 PNG 字节 MUST 保持不变，且不影响全景渲染路径的呈现层差异 MUST NOT 单独改变菜单相位 golden 的字节
+- **AND** MUST NOT 新增任何第 25 个场景或 golden
+
+#### Scenario: oak-grove 明确承重短草外观
+
+- **GIVEN** `oak-grove` 的固定世界种子、区块、正午时间、相机与既有完整渲染链路
+- **WHEN** 场景完成预热、网格收敛与上传并无窗口抓帧
+- **THEN** 图像 MUST 包含至少一株可辨识的自然短草
+- **AND** 短草 MUST 显示透明边缘与交叉植物轮廓，而不是实心立方体或不透明矩形
+
+#### Scenario: 24 项场景顺序与阈值保持不变
+
+- **WHEN** 检查 `captureScenes` 表并比较本变更允许更新的 golden
+- **THEN** 场景数量 MUST 恰好为 `24` 且名称与顺序 MUST 与变更前一致
+- **AND** 每张图 MUST 继续使用既有双阈值与差异图规则
 
 ### Requirement: 火把获得原创程序化纹理层
 

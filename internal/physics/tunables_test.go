@@ -60,6 +60,31 @@ func TestSetTunablesAffectsStep(t *testing.T) {
 	}
 }
 
+func TestExplicitPhysicsTunablesIgnoreConflictingActiveSnapshot(t *testing.T) {
+	t.Cleanup(func() { physics.SetTunables(physics.DefaultTunables()) })
+
+	source := emptySource{}
+	state := physics.State{Position: mgl32.Vec3{0, 64, 0}}
+	explicit := physics.DefaultTunables()
+	explicit.Gravity = 7
+	conflicting := explicit
+	conflicting.Gravity = 63
+	physics.SetTunables(conflicting)
+
+	got := physics.StepWithTunables(state, physics.Input{}, source, explicit)
+	physics.SetTunables(explicit)
+	want := physics.Step(state, physics.Input{}, source)
+	if got != want {
+		t.Fatalf("显式 physics tunables 被活动快照覆盖：got=%+v want=%+v", got, want)
+	}
+
+	physics.SetTunables(conflicting)
+	next := physics.Step(state, physics.Input{}, source)
+	if next == want {
+		t.Fatal("兼容 wrapper 未在下一次调用观察更新后的活动快照")
+	}
+}
+
 // TestStepHeightTunableGatesStepUp 证明 StepHeight 确实经快照送达跨步判定。
 //
 // StepHeight 经 Go collision snapshot header 传给 native resolver；若编码器把传入值

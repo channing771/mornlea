@@ -576,9 +576,14 @@ func planMineableBlock(block core.BlockID) bool {
 	// internal/sim 采掘完成路径的分支里，编号层面读不出来——巧合性安全不成立。
 	// 伙伴的农业语义尚未裁决（design.md 遗留 11），在裁决之前一律不可作为目标。
 	// 火把五形态同理必须显式拒绝（可放置火把的伙伴防御清单）：core.BlockDrop
-	// 对它们都有单一产物登记，通用判据会放行；火把的处置语义扩给伙伴之前
-	// 一律不可作为 mine 目标。
-	if core.IsCrop(block) || core.IsFarmland(block) || core.IsTorch(block) {
+	// 对它们都有单一产物登记（火把掉回一个火把），通用判据会放行；火把的处置
+	// 语义扩给伙伴之前一律不可作为 mine 目标。
+	// 短草同理必须**显式**拒绝（change natural-grass-seeds design 决策 1）：种子
+	// 的 1/8 概率掉落只属于玩家采掘，短草当前没有 BlockDrop 登记、通用判据碰巧
+	// 会拒绝它，但这是巧合不是契约——若未来短草获得 BlockDrop 登记，只有这里
+	// 的显式谓词还站着。
+	if core.IsCrop(block) || core.IsFarmland(block) || core.IsTorch(block) ||
+		core.IsWildGrass(block) {
 		return false
 	}
 	_, ok := core.BlockDrop(block)

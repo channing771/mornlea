@@ -757,6 +757,12 @@ func RunCapture(app SceneApplication, dir string, updateGolden bool) error {
 	if err := prepareCaptureApplication(app); err != nil {
 		return err
 	}
+	// 场景 Apply 用 SetWorldTimeTicks 钉住的昼夜值必须在收敛帧期间保持:
+	// 权威状态里的服务端时间随真实时间前进,不冻结的话最终帧的天空光随
+	// 进程启动漂移,逐像素 golden 门禁在天空光渗入的画面上整片翻色。
+	// 直写不受冻结影响,各场景仍可换钉自己的值。
+	app.SetWorldTimeFrozen(true)
+	defer app.SetWorldTimeFrozen(false)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("创建抓帧输出目录 %s: %w", dir, err)
 	}

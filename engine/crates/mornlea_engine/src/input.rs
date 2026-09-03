@@ -15,9 +15,10 @@ const HEIGHTS_BYTES: usize = 9 * 256 * 2;
 ///   恒在 `7..=14`，`0` 永远不会是合法的流体高度，于是不必再额外花一个标志位。
 ///   Rust 侧只消费这个数，**不知道也不需要知道流体等级**——等级→高度的映射是 Go 的
 ///   单一真值源（`internal/assets.Registry.FluidHeight`）。
-/// - `light_attenuation`：天空光穿过该方块时的额外衰减，由 `light::build_sky` 消费
-///   （每格扣减 = 1 + 本值）。合法域只有 `0..=1`，上界来自 `build_sky` 的分桶证明
-///   而不是天空光值域，见 `RegistryView::validate`。方块光不读它。
+/// - `light_attenuation`：派生天空光穿过该方块时的额外衰减，由 `light::build_sky`
+///   消费（每格扣减 = 1 + 本值）；竖直直射路径上的空气与植物保持 15，不走这条扣减。
+///   合法域只有 `0..=1`，上界来自 `build_sky` 的分桶证明而不是天空光值域，见
+///   `RegistryView::validate`。方块光不读它。
 /// - `block_top_raw`：非满格方块的 4-bit 顶面高度原值（实际高度 `(h_raw+1)/16`），
 ///   由 mesher 的常量角高度路径消费。`0` 是「满格方块」哨兵：绝大多数方块是整格
 ///   立方体，取 0 让既有条目零改动，与 `fluid_height` 的「0=非流体」同构；
@@ -39,8 +40,8 @@ const REGISTRY_ENTRY_BYTES: usize = 20;
 ///
 /// 96 是**上限**而不是当前条目数：Go 侧 `internal/assets.NewRegistry()` 把
 /// `core.AirID..core.BlockIDMax-1` 的全部已注册方块烘焙进 mesh registry snapshot，今天
-/// 是 84 条（27 个 M4 材料 + 8 个流体 + 27 个农业编号含工作台 + 9 个门编号 +
-/// 5 个火把形态 + 8 个床形态）。
+/// 是 85 条（27 个基础材料 + 8 个流体 + 27 个农业编号含工作台 + 9 个门编号 +
+/// 5 个火把形态 + 8 个床形态 + 1 个短草）。
 /// 留出余量是为了避免每次追加方块编号都要做一次跨语言的常量同步。
 ///
 /// 本常量此前是 35，即"恰好等于当时的条目数"；那种写法会在 Go 侧追加编号时
@@ -303,8 +304,9 @@ impl RegistryView<'_> {
 
     /// light_attenuation 返回天空光穿过该方块时的额外衰减。
     ///
-    /// 天空光 BFS（`light::build_sky`）消费它：每格扣减 = 固定的 1 + 本值。
-    /// 方块光**不**读它——方块光只经 `AirID` 传播，任何非空气方块一律阻断。
+    /// 天空光 BFS（`light::build_sky`）消费它：派生传播每格扣减 = 固定的 1 + 本值；
+    /// 竖直直射路径上的空气与植物保持 15。
+    /// 方块光**不**读它——方块光只经 `AirID` 或植物传播，其他非空气方块一律阻断。
     pub(crate) fn light_attenuation(&self, id: u16) -> u8 {
         self.index(id)
             .map_or(0, |index| self.entries[index * REGISTRY_ENTRY_BYTES + 17])
@@ -344,6 +346,11 @@ impl RegistryView<'_> {
             self.entries,
             index * REGISTRY_ENTRY_BYTES + 4 + face * 2,
         ))
+    }
+
+    /// `contains` 报告方块编号是否有显式 registry 条目；光照用它让未知编号关闭。
+    pub(crate) fn contains(&self, id: u16) -> bool {
+        self.index(id).is_some()
     }
 
     pub(crate) fn face_visible(&self, id: u16, adjacent: u16) -> bool {

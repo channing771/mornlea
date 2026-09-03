@@ -16,9 +16,9 @@ import (
 	"github.com/channing771/mornlea/internal/client"
 )
 
-func TestBenchmarkScenarioVersionIncludesStaticBlockLightWorkload(t *testing.T) {
-	if scenarioVersion != 21 {
-		t.Fatalf("scenarioVersion=%d，想要常显 HUD 层退役之后的 v21", scenarioVersion)
+func TestBenchmarkScenarioVersionIncludesNaturalGrassWorkload(t *testing.T) {
+	if scenarioVersion != 22 {
+		t.Fatalf("scenarioVersion=%d，想要叠加在 v21（常显 HUD 迁出）之上的自然短草 v22", scenarioVersion)
 	}
 }
 

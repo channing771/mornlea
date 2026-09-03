@@ -27,7 +27,7 @@
 |---|---|
 | 窗口 / 渲染 / 材质 / WGSL | `cargo test -p mornlea_client --locked` + `go test ./cmd/mornlea/app -run 'TestFitFramebuffer\|TestApplicationConnection'` |
 | 协议 / 网络 / 存档 | `go test ./internal/network/... ./internal/storage/... ./internal/core` |
-| 服务端 tick / 伙伴 / 农业 | `go test ./internal/server ./internal/sim -run '关键词'` |
+| 服务端 tick / 伙伴 / 农业 | `go test ./internal/server ./internal/sim/... -run '关键词'` |
 | Python 伙伴 Agent | `cd services/companion-agent && uv run pytest tests/test_<主题>.py -q`；首次进入先 `uv sync --locked` |
 | Go/Python Agent 合同 | `go test ./internal/server -run 'CrossLanguage|CompanionAgent.*Integration'`（完整真进程入口见下文） |
 | 流体队列 / 规则求值 / 重扫包装 | `go test ./internal/fluid`（重扫差分门禁在 `./internal/sim/realm`，见 `internal/fluid/AGENTS.md`） |

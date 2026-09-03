@@ -450,7 +450,7 @@ fn dry_and_wet_farmland_render_distinguishably() {
 }
 
 /// 床区间常量必须等于 Go `assets.LayerBedFootSouth`..`LayerBedHeadEast` 的
-/// 当前枚举值（60..67，火把层 59 之后末位追加）。
+/// 当前冻结枚举值（60..67，火把层 59 之后、短草层 68 之前）。
 ///
 /// 三处手工同步、无共享定义：Go 层枚举（真值源）、本 crate 常量、
 /// terrain.wgsl 的 `bed_material` 字面量。Go 侧钉子是 internal/assets 的

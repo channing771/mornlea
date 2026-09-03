@@ -20,8 +20,9 @@ import (
 //     （「源永不自然消失」）——源格自身永不被写为任何值，包括空气；
 //   - 上邻（槽位 1）永不被写（规则只有向下与水平两个写入方向）；
 //   - 每条流体写入的等级 ∈ 1..7（永远不会写出源方块本身或越界等级）；
-//   - 写入只落在「可替换」的目标上：空气、作物、开启下半门或更弱的流动水
-//     （经 `Replaceable` 判定，含任意未注册编号一律按实心不可替换）；
+//   - 写入只落在「可替换」的目标上：空气、植物（作物与短草）、开启下半门
+//     或更弱的流动水（经 `Replaceable` 判定，含任意未注册编号一律按实心
+//     不可替换）；
 //   - 垂直写入（槽位 2）恒为等级 1；水平写入（槽位 3..6）恒为自格等级 +1
 //     （源的等级读作 0，故为 1）；
 //   - 自格非流体时（陈旧项）不产生任何写入。
@@ -33,6 +34,7 @@ func FuzzFluidEval(f *testing.F) {
 	f.Add(uint16(30), uint16(0), uint16(0), uint16(0), uint16(0), uint16(0), uint16(0))           // 无支撑消亡
 	f.Add(uint16(0), uint16(0), uint16(0), uint16(0), uint16(0), uint16(0), uint16(0))            // 陈旧项
 	f.Add(uint16(28), uint16(27), uint16(2), uint16(63), uint16(62), uint16(70), uint16(0))       // 门与源邻格
+	f.Add(uint16(27), uint16(0), uint16(84), uint16(0), uint16(84), uint16(33), uint16(3))        // 短草目标
 	f.Add(uint16(9999), uint16(27), uint16(34), uint16(45), uint16(60), uint16(1), uint16(65535)) // 未注册编号
 	f.Fuzz(func(t *testing.T, self, above, below, plusX, minusX, plusZ, minusZ uint16) {
 		cells := [7]uint16{self, above, below, plusX, minusX, plusZ, minusZ}

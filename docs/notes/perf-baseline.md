@@ -2,11 +2,13 @@
 
 ## 当前 producer 与迁移规则
 
-当前 benchmark producer 为 scenario v21：常显 HUD 层迁出 GPU 又一次改变了被测进程本身（GPU 保留面只保留容器浮动面板族与悬停 tooltip——关闭容器界面的帧从 v20 关闭态最坏 100 quad/548 glyph 预算降到 0 quad/0 glyph，打开任一容器界面的最坏从 264 quad/700 glyph 预算收缩到 218 quad/268 glyph 预算，tooltip 按 8 rune 截断上限封顶、注册表实测最长名见证 262；固定 quad 上限 320、glyph 上限 768、glyph offset 15616 bytes、总容量 52480 bytes、48-byte instance 与 256-byte 区间对齐全部保持不变，缩出的容量全部沉淀为分支最坏与每帧实例前缀的缩小，因此每帧写入字节数移动；HUD 图集按整张贴图上传的契约与列布局不变；权威 tick 语义不变；benchmark 无头观察路径零 WebView 参与保持），即便 benchmark 世界内容未变——它仍把 `FluidEnabled` 钉死为 `false`，也不含任何农业方块；固定 benchmark 输入仍为七名远端玩家、零伙伴。当前唯一显式跨 workload 迁移为 `20:21`，v6..v20 历史报告仍可同版本读取。历史的 `19:20`、`18:19`、`17:18`、`16:17` 与更早的 `15:16` 已退役，只作本文的归档证据，工具不再接受它们。
+当前 benchmark producer 为 scenario v22：自然短草又一次改变了被测进程与被测世界本身（稳定方块与 mesh registry 追加 `ShortGrassID`——实际烘焙条目 84 → 85，仍低于冻结上限 96；Go/Rust 植物材质判定集合从 `[31..54]` 扩为 `[31..54] ∪ {68}`，`55..67` 不移动；worldgen `MGW1` 请求扩为 layout 3 且 engine ABI 升为 v10，固定世界在合格草地上方空气格确定性新增短草，每个短草格经既有 plant 路径发射 4 条交叉斜面实例），叠加在 v21（常显 HUD 迁出 GPU 保留面）基线之上；benchmark 仍把 `FluidEnabled` 钉死为 `false`，也不含任何农业方块；固定 benchmark 输入仍为七名远端玩家、零伙伴，无头观察路径零 WebView 参与保持。当前唯一显式跨 workload 迁移为 `21:22`，v6..v21 历史报告仍可同版本读取。历史的 `20:21`、`19:20`、`18:19`、`17:18`、`16:17` 与更早的 `15:16` 已退役，只作本文的归档证据，工具不再接受它们。
 
-上一代（scenario v20）的判定理由：客户端 UI 对齐改变了被测进程本身（Hotbar HUD 新增准星与物品名弹条、容器界面改为原版式浮动面板并新增面板描边与悬停 tooltip 背景，`maxHotbarQuads` 267 → 320、`maxHotbarGlyphs` 700 → 768 使固定上传布局移动——glyph offset 13312 → 15616、总容量 46912 → 52480 bytes、空聊天帧每帧实际写入 13312 → 15616 bytes；HUD 图集既有 cell 程序化重绘但不新增列；权威 tick 语义不变）。
+上一代（scenario v21）的判定理由：常显 HUD 层迁出 GPU 改变了被测进程本身（GPU 保留面只保留容器浮动面板族与悬停 tooltip——关闭容器界面的帧从 v20 关闭态最坏 100 quad/548 glyph 预算降到 0 quad/0 glyph，打开任一容器界面的最坏从 264 quad/700 glyph 预算收缩到 218 quad/268 glyph 预算，tooltip 按 8 rune 截断上限封顶、注册表实测最长名见证 262；固定 quad 上限 320、glyph 上限 768、glyph offset 15616 bytes、总容量 52480 bytes、48-byte instance 与 256-byte 区间对齐全部保持不变，缩出的容量全部沉淀为分支最坏与每帧实例前缀的缩小，因此每帧写入字节数移动；HUD 图集按整张贴图上传的契约与列布局不变；权威 tick 语义不变；benchmark 无头观察路径零 WebView 参与保持），即便 benchmark 世界内容未变——它仍把 `FluidEnabled` 钉死为 `false`，也不含任何农业方块；固定 benchmark 输入仍为七名远端玩家、零伙伴。
 
-上上代（scenario v19）的判定理由：`authoritative-hunger` 改变了被测进程本身（Hotbar HUD 新增右下角饥饿条，`maxHotbarQuads` 247 → 267 使固定上传布局移动——glyph offset 12288 → 13312、总容量 45888 → 46912 bytes、空聊天帧每帧实际写入 12288 → 13312 bytes；HUD 图集在爱心之后新增空/满两列程序化鸡腿；权威 tick 多出饥饿三层状态的推进与结算）。
+上上代（scenario v20）的判定理由：客户端 UI 对齐改变了被测进程本身（Hotbar HUD 新增准星与物品名弹条、容器界面改为原版式浮动面板并新增面板描边与悬停 tooltip 背景，`maxHotbarQuads` 267 → 320、`maxHotbarGlyphs` 700 → 768 使固定上传布局移动——glyph offset 13312 → 15616、总容量 46912 → 52480 bytes、空聊天帧每帧实际写入 13312 → 15616 bytes；HUD 图集既有 cell 程序化重绘但不新增列；权威 tick 语义不变）。
+
+三代前（scenario v19）的判定理由：`authoritative-hunger` 改变了被测进程本身（Hotbar HUD 新增右下角饥饿条，`maxHotbarQuads` 247 → 267 使固定上传布局移动——glyph offset 12288 → 13312、总容量 45888 → 46912 bytes、空聊天帧每帧实际写入 12288 → 13312 bytes；HUD 图集在爱心之后新增空/满两列程序化鸡腿；权威 tick 多出饥饿三层状态的推进与结算）。
 
 ## authoritative-hunger scenario v19 记录（record-only，非新基线）
 
@@ -16,7 +18,7 @@
 ./bin/mornlea --benchmark --benchmark-transport memory --perf-output <tmp>/memory-v19.json
 ```
 
-进程退出码 0，报告完整写出（`scenario_version=19`、`transport=memory`、`Apple M5 / 24GiB`、`macOS 26.5.1`、`go1.26.0 darwin/arm64`、`2560x1440`、`load_seconds=25.50`、`snapshot_seconds=16.90`、`cooldown_seconds=30`），SHA-256 `89e4543b95c1903caec057e984a2e41e0173d08e09026b5eadf129d21b821610`。这是**记录性测量**：不覆盖 `docs/notes/perf-baseline.json` 与 `docs/notes/perf-baseline-m5.json`，不提升任何基线，也不与 v18 报告作相对比较（跨 workload 需显式迁移；本节记录时的 `18:19` 已随 producer 升到 scenario v20 退役，该 `19:20` 又随 producer 升到 scenario v21 退役，当前唯一显式迁移是 `20:21`）。
+进程退出码 0，报告完整写出（`scenario_version=19`、`transport=memory`、`Apple M5 / 24GiB`、`macOS 26.5.1`、`go1.26.0 darwin/arm64`、`2560x1440`、`load_seconds=25.50`、`snapshot_seconds=16.90`、`cooldown_seconds=30`），SHA-256 `89e4543b95c1903caec057e984a2e41e0173d08e09026b5eadf129d21b821610`。这是**记录性测量**：不覆盖 `docs/notes/perf-baseline.json` 与 `docs/notes/perf-baseline-m5.json`，不提升任何基线，也不与 v18 报告作相对比较（跨 workload 需显式迁移；本节记录时的 `18:19` 已随 producer 升到 scenario v20 退役，该 `19:20` 又随 producer 升到 scenario v21 退役、`20:21` 再随 producer 升到 scenario v22 退役，当前唯一显式迁移是 `21:22`）。
 
 | 指标 | 数值 |
 |---|---|

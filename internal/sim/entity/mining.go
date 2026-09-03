@@ -4,28 +4,73 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim/realm"
 	"github.com/channing771/mornlea/internal/world"
 )
 
+// miningState 是玩家与伙伴两类 actor 共有的权威采掘进度状态机（原
+// playerMiningState 整体上移 actorState）：记录目标、命中时的方块、持握工具
+// 与进度计数。同一 target/block/held 连续命中时进度递增，任一变化即从 1
+// 重新开始——这条"目标替换失效"语义由两类 actor 共用。
+type miningState struct {
+	target        core.BlockPos
+	block         core.BlockID
+	held          core.ItemID
+	progressTicks uint16
+	requiredTicks uint16
+	harvestable   bool
+}
+
+func (state miningState) update() MiningUpdate {
+	if state.requiredTicks == 0 {
+		return MiningUpdate{}
+	}
+	return MiningUpdate{
+		Active:        true,
+		Target:        state.target,
+		ProgressTicks: state.progressTicks,
+		RequiredTicks: state.requiredTicks,
+		Harvestable:   state.harvestable,
+	}
+}
+
 func miningRule(block core.BlockID, held core.ItemID) (uint16, bool) {
+	// 门是木质薄板，与木板同价 15 tick，与工具无关。
 	if core.IsDoor(block) {
 		return 15, true
 	}
+	// 床是木质家具，与木板同价 15 tick，任意手持（含徒手）可采掘，与工具无关。
 	if core.IsBed(block) {
 		return 15, true
 	}
+	// 农业方块与手持无关（锄头不是采掘工具，作物与耕地徒手即可收）：作物 1
+	// tick、耕地 5 tick（与泥土同价，翻地这一步撤销得和挖泥土一样费力）。
+	//
+	// 作物是 1 tick 而不是 0：`0` 是本函数「不可采掘」的哨兵（基岩语义），
+	// stepMiningProgress 与两条完成判定都以 requiredTicks == 0 直接跳过，用 0
+	// 会让作物永远挖不动。1 是最小权威量子，玩家感知上仍是"一碰就掉"。
+	//
+	// 两条判据写成 core.IsCrop / core.IsFarmland 而不是穷举十个编号：阶段编号
+	// 连续且只会整体追加，穷举漏一个阶段就是一格永远挖不动的作物。
 	if core.IsCrop(block) {
 		return 1, true
 	}
 	if core.IsFarmland(block) {
 		return 5, true
 	}
+	// 短草与手持无关：任意状态（空手、普通物品、任一工具）1 tick 采除，同作物
+	// 一样取最小权威量子。harvestable=true 只表示「该手持具备参与概率掉落的
+	// 资格」——本格是否真的掉种子由 `completeMining` 的位置稳定判定给出，HUD
+	// 不得把 true 读成「本格必掉」。判据用 `core.IsWildGrass` 而不是点名编号：
+	// 短草不是作物（`IsCrop` 为假），不进入生长、骨粉与作物掉落的任何消费者。
+	if core.IsWildGrass(block) {
+		return 1, true
+	}
 	switch block {
 	case core.DirtID, core.GrassID, core.SandID, core.GravelID, core.LeavesID,
 		core.GlassID, core.WhiteWoolID, core.ClayID, core.SnowBlockID:
 		return 5, true
 	case core.OakLogID, core.OakPlanksID, core.WorkbenchID:
+		// 工作台与橡木木板同价：木质 tier、15 tick、与手持无关。
 		return 15, true
 	case core.StoneID, core.CobblestoneID, core.SmoothStoneID, core.BrickID,
 		core.RoofTileID, core.MossyCobblestoneID:
@@ -63,6 +108,16 @@ func miningRule(block core.BlockID, held core.ItemID) (uint16, bool) {
 	}
 }
 
+// stepMiningProgress 是两类 actor 共用的采掘进度状态机推进器：按 miningRule
+// 重新判定计时与可收获性，同一目标/方块/工具连续命中时递增进度，任一变化从
+// 1 重新开始（目标替换失效语义的唯一实现点）。调用方负责先完成交互距离、
+// Ready 区块与（伙伴侧的）容器防御校验。没有采掘规则的方块（如基岩）会把
+// 状态清零，调用方必须以 requiredTicks == 0 为准直接跳过完成判定——与既有
+// 玩家路径在规则为零时的提前 continue 语义逐字对齐。
+//
+// 递增在进度满格时饱和：唯一能让进度停在满格的是伙伴完成 tick 因背包无容量
+// 不结算——此时进度必须保持满格作为"就绪但无容量"的稳定可观察状态；玩家路径
+// 在完成 tick 总会清零状态，永远观察不到这一钳制，玩家行为逐 tick 不变。
 func stepMiningProgress(actor *actorState, target core.BlockPos, block core.BlockID) {
 	held := actor.inventory.Hotbar.Slots[actor.inventory.Hotbar.Selected].Item
 	required, harvestable := miningRule(block, held)
@@ -87,16 +142,75 @@ func stepMiningProgress(actor *actorState, target core.BlockPos, block core.Bloc
 	}
 }
 
+// blockRaycastSampler 返回权威交互射线共用的采样回调：区块未就绪返回
+// ErrChunkNotReady，命中判定一律走 core.InteractionTarget（空气与流体都不是
+// 目标）。玩家采掘、玩家放置、伙伴采掘的视线遮挡与开启容器四条路径共用它，
+// 同一份交互距离（InteractionReach）加同一份 solid 谓词，保证没有第二套规则
+// 实现——流体豁免只在这一处写，任何调用点都不可能漏掉。
+//
+// 门上半（`DoorUpper`）无方向且单 ID：其固体性由下半 `IsDoorOpen` 决定
+// （`!Open` 实心、`Open` 可穿透），若下半不存在或未就绪则按关闭处理。
+func blockRaycastSampler(dimension *Dimension) func(core.BlockPos) (bool, error) {
+	return func(position core.BlockPos) (bool, error) {
+		block, ready := dimension.BlockAt(position)
+		if !ready {
+			return false, ErrChunkNotReady
+		}
+		if core.IsDoorUpper(block) {
+			below := core.BlockPos{X: position.X, Y: position.Y - 1, Z: position.Z}
+			lower, lowerReady := dimension.BlockAt(below)
+			if !lowerReady || !core.IsDoorLower(lower) {
+				return true, nil
+			}
+			return core.IsDoorOpen(lower) == false, nil
+		}
+		return core.InteractionTarget(block), nil
+	}
+}
+
+// companionMineableBlock 是伙伴采掘目标的防御清单：箱子与熔炉是合法目标——
+// 其产物是「容器本体 + 全部内容物堆」的批量，由 `completeCompanionMining` 的
+// 容器分支在背包副本上逐堆预演、全或无原子结算（任一堆放不下即整体不结算，
+// 进度保持满格），容量安全由结算形状承担而不是由目标清单承担。其余方块仍
+// 要求具有单一 `core.BlockDrop`。Planner 契约之外，权威模拟在这里完成第二重校验。
 func companionMineableBlock(block core.BlockID) bool {
-	if core.IsCrop(block) || core.IsFarmland(block) || core.IsTorch(block) {
+	// 农业方块（八个作物阶段 + 干湿耕地）必须**显式**拒绝，不能指望"单一
+	// BlockDrop"这条判据顺手挡住（design.md D7 / Ruling 5）：core.BlockDrop 对
+	// 十个编号都有单一产物登记，成熟小麦的第二份产物（2 种子）只存在于 `completeMining`
+	// 的分支里，编号层面读不出来——巧合性安全不成立。
+	// 伙伴的农业语义（种什么、何时收、成熟度判断）尚未裁决（design.md 遗留 11），
+	// 在裁决之前十个编号一律不可作为伙伴采掘目标。
+	// 火把五形态同理必须显式拒绝（可放置火把的伙伴防御清单）：core.BlockDrop
+	// 对它们都有单一产物登记（掉回一个火把），通用判据会放行；伙伴不获得火把
+	// 能力是冻结契约——火把的处置语义（采掘、熄灭等）扩给伙伴之前一律拒绝，
+	// 与 internal/companion 的 `planMineableBlock` 保持同一规则。
+	// 短草同理必须显式拒绝：种子的 1/8 概率掉落只属于玩家采掘（`completeMining`
+	// 的短草分支），短草今天恰好没有 BlockDrop 登记、通用判据碰巧也会拒绝它，
+	// 但这是巧合不是契约——若未来短草获得 BlockDrop 登记，只有这里的显式谓词
+	// 还站着（change natural-grass-seeds design 决策 1）。
+	if core.IsCrop(block) || core.IsFarmland(block) || core.IsTorch(block) ||
+		core.IsWildGrass(block) {
 		return false
 	}
 	_, ok := core.BlockDrop(block)
 	return ok
 }
 
-func (engine *Engine) advanceMining(
-	mutation *realm.Mutation,
+// blockCenterVec3 返回方块几何中心，用作伙伴采掘射线的方向锚点。
+func blockCenterVec3(target core.BlockPos) mgl32.Vec3 {
+	return mgl32.Vec3{
+		float32(target.X) + 0.5,
+		float32(target.Y) + 0.5,
+		float32(target.Z) + 0.5,
+	}
+}
+
+// advanceMining 是物理阶段之后的统一采掘推进：先按会话 ID 序处理玩家，再按
+// CompanionID 字节序处理 active 伙伴。两类 actor 共用 stepMiningProgress 的
+// 累积语义与完成判定，玩家与伙伴的差别只在完成 tick 的产物去向（玩家掉落物、
+// 伙伴直入背包）与进度发布载体（MiningUpdate/CompanionUpdate.Mining）。
+func (engine *engineContext) advanceMining(
+	pending *pendingChunkChanges,
 	result *TickResult,
 ) {
 	var sessions [8]SessionID
@@ -106,7 +220,7 @@ func (engine *Engine) advanceMining(
 			continue
 		}
 		if count == len(sessions) {
-			panic("entity: more than eight active player sessions")
+			panic("sim: more than eight active player sessions")
 		}
 		index := count
 		for index > 0 && sessions[index-1] > id {
@@ -120,7 +234,7 @@ func (engine *Engine) advanceMining(
 	for _, id := range sessions[:count] {
 		session := engine.sessions[id]
 		player := session.player
-		if !player.miningHeld || player.meleeSuppressedMining || player.reset || !session.hasView || session.viewContainer {
+		if !player.miningHeld || player.meleeSuppressedMining || player.reset || !engine.sessionView(session).Ready || session.viewContainer {
 			player.mining = miningState{}
 			continue
 		}
@@ -150,13 +264,16 @@ func (engine *Engine) advanceMining(
 			player.mining.progressTicks < player.mining.requiredTicks {
 			continue
 		}
+		// 完成分叉（玩家侧）：产物成为世界掉落物，语义与 M5C 之前逐字相同。
+		// 被移除的方块编号必须在状态重置**之前**留底：下方的耐久豁免判定要用它，
+		// 而 `player.mining` 在结算后立即清零。
 		minedBlock := player.mining.block
 		reason, rejected := engine.completeMining(
 			session.dimension,
 			player.mining.target,
 			player.mining.block,
 			player.mining.harvestable,
-			mutation,
+			pending,
 		)
 		player.mining = miningState{}
 		if rejected {
@@ -165,25 +282,42 @@ func (engine *Engine) advanceMining(
 			})
 			continue
 		}
+		// 疲劳表（见 hunger.go）：采掘完成累积固定疲劳。它压在拒绝分支**之后**、
+		// 与扣耐久同处，理由也相同——被拒绝或中断的采掘不改变任何玩家资源。
+		// 这里只在玩家分叉上：伙伴的完成分叉是 completeCompanionMining，没有
+		// 也不得有这一行。疲劳刻意不进下方的耐久豁免：疲劳的判定点是「玩家的
+		// 成功采掘」，与工具磨损语义无关。
 		player.applyExhaustion(exhaustionMiningMilli, engine.tunables.ExhaustionThresholdMilli)
+		// 完成时选中物与 `consumeToolDurability` 读的是同一个栏位（采掘中途换手
+		// 会重置进度，不存在「开始持锄、完成持镐」的窗口），豁免与扣耐久必然
+		// 判定同一件工具。短草走第三类豁免（`wildGrassDurabilityExempt`）：
+		// `consumeToolDurability` 整体不被调用，耐久 1 的工具也不会转损坏形态。
 		held := player.inventory.Hotbar.Slots[player.inventory.Hotbar.Selected].Item
 		if !hoeHarvestDurabilityExempt(minedBlock, held) &&
+			!wildGrassDurabilityExempt(minedBlock) &&
 			consumeToolDurability(&player.actorState) {
 			player.inventoryDirty = true
 		}
 	}
 
+	// 无伙伴注册时保持既有玩家路径的零分配轮廓，不进入伙伴循环。
 	if len(engine.companions) == 0 {
 		return
 	}
 	for _, id := range engine.activeCompanionIDs() {
-		engine.advanceCompanionMining(engine.companions[id], mutation)
+		engine.advanceCompanionMining(engine.companions[id], pending)
 	}
 }
 
-func (engine *Engine) advanceCompanionMining(
+// advanceCompanionMining 推进一个 active 伙伴的采掘。交互距离、Ready 区块与
+// 视线遮挡复用玩家的 core.RaycastBlocks + InteractionReach + blockRaycastSampler
+// 实现：射线从伙伴眼睛指向目标方块中心，命中必须恰好是目标本身（被遮挡、超距
+// 或区块未就绪都会清空进度，与玩家的无效目标语义一致）。无掉落方块与农业
+// 方块在进度累积之前就被防御清单拒绝；箱子与熔炉是合法目标，完成 tick 经
+// `completeCompanionMining` 的容器分叉批量结算。
+func (engine *engineContext) advanceCompanionMining(
 	entry *companionState,
-	mutation *realm.Mutation,
+	pending *pendingChunkChanges,
 ) {
 	if !entry.miningHeld {
 		entry.mining = miningState{}
@@ -220,9 +354,24 @@ func (engine *Engine) advanceCompanionMining(
 		entry.mining.progressTicks < entry.mining.requiredTicks {
 		return
 	}
-	engine.completeCompanionMining(entry, mutation)
+	// 完成分叉（伙伴侧）：产物直入背包，三方原子。
+	engine.completeCompanionMining(entry, pending)
 }
 
+// CompanionMineContainerStaging 构造容器采掘（箱子/熔炉）的产物堆序列，并在
+// 伙伴背包副本上预演批量结算——方案 A 全或无（change companion-mine-containers
+// 的 D1 裁决）。产物集合与固定序：容器本体 1 堆在前（harvestable 为假时不计，
+// 对齐玩家路径 `completeMining` 的可收获判定），内容物按调用方传入的容器槽位序
+// 在后（箱子为 27 格槽位序、熔炉为输入/燃料/输出三格序）；空堆跳过。预演在
+// 副本上逐堆 `core.Inventory.AddStack`，任一堆余量非空即整体失败（ok=false，
+// staged 为传入背包原值）——调用方必须放弃全部结算，绝不产生部分入包。
+// 固定序使同一世界状态的重放逐字节一致（`AddStack` 的并堆结果与提交顺序相关，
+// 先到堆优先合并），与全仓确定性纪律对齐。
+//
+// sim 的完成分叉 `completeCompanionContainerMining` 与 server 包 Runner 的满格
+// 饱和判定共用本函数：同一产物集合构造、同一固定序、同一预演，「没有第二套
+// 规则」的约束从单件推广到批量即落在此处。block 必须是 `core.ChestID` 或
+// `core.FurnaceID`，其余编号返回 ok=false。
 func CompanionMineContainerStaging(
 	block core.BlockID,
 	harvestable bool,
@@ -259,18 +408,29 @@ func CompanionMineContainerStaging(
 	return yields, staged, true
 }
 
-func (engine *Engine) completeCompanionMining(
+// completeCompanionMining 在进度满格的 tick 结算伙伴采掘，三方必须原子成立：
+// 目标方块改为空气、按既有规则扣除工具耐久（含损坏形态）、可收获产物直入
+// 伙伴背包。普通方块与容器两条完成分叉：普通方块走单件结算；容器（箱子/
+// 熔炉）走 `completeCompanionContainerMining` 的批量全或无结算。容量前验先行
+// ——预演在背包副本上进行，余量非空则该 tick 整体不结算：方块不变、耐久
+// 不变、背包不变、进度保持满格，Manager 由此观察到"就绪但无容量"的稳定状态
+// （"任务失败"的判定属于 Manager，不在这里）。预演通过后 SetBlock 与内存提交
+// 在单写者 tick 内不再有失败路径，三方在同一 tick 内同时成立。
+func (engine *engineContext) completeCompanionMining(
 	entry *companionState,
-	mutation *realm.Mutation,
+	pending *pendingChunkChanges,
 ) {
 	if !companionMineableBlock(entry.mining.block) {
 		entry.mining = miningState{}
 		return
 	}
 	if entry.mining.block == core.ChestID || entry.mining.block == core.FurnaceID {
-		engine.completeCompanionContainerMining(entry, mutation)
+		engine.completeCompanionContainerMining(entry, pending)
 		return
 	}
+	// 床双格语义与玩家采掘同构：任一半完成即双清两格，世界中不得残留半床。
+	// 与玩家的差别只在产物去向——1 个床物品直入伙伴背包；背包副本预演不过
+	// （容量不足）时整体不结算，进度保持满格的「就绪但无容量」状态。
 	if core.IsBed(entry.mining.block) {
 		footPos, headPos, ok := bedHalfPositions(entry.mining.target, entry.mining.block)
 		if !ok {
@@ -285,7 +445,8 @@ func (engine *Engine) completeCompanionMining(
 				return
 			}
 		}
-		if _, rejected := engine.clearBedPair(entry.dimension, footPos, headPos, mutation); rejected {
+		if _, rejected := engine.clearBedPair(entry.dimension, footPos, headPos, pending); rejected {
+			// 区块失效或写入失败：清零进度且不结算，背包副本丢弃。
 			entry.mining = miningState{}
 			return
 		}
@@ -310,10 +471,12 @@ func (engine *Engine) completeCompanionMining(
 	}
 	_, changed, err := engine.dimension(entry.dimension).SetBlock(entry.mining.target, core.AirID)
 	if err != nil || !changed {
+		// 区块失效或方块已被同 tick 更早的 actor 移除：对齐玩家 RejectNoTarget
+		// 语义，清零进度且不结算。
 		entry.mining = miningState{}
 		return
 	}
-	engine.recordChange(entry.dimension, entry.mining.target, core.AirID, mutation)
+	engine.recordChange(entry.dimension, entry.mining.target, core.AirID, pending)
 	if entry.mining.harvestable {
 		entry.inventory = staged
 		entry.inventoryDirty = true
@@ -324,9 +487,23 @@ func (engine *Engine) completeCompanionMining(
 	entry.mining = miningState{}
 }
 
-func (engine *Engine) completeCompanionContainerMining(
+// completeCompanionContainerMining 是容器目标（箱子/熔炉）的完成分叉：产物是
+// 「本体 + 全部内容物」的批量，按方案 A 全或无结算——`CompanionMineContainerStaging`
+// 在伙伴背包副本上按固定序逐堆预演，任一堆放不下即该 tick 整体不结算（方块、
+// 容器内容物、耐久、背包全部不变，进度保持满格）；预演通过后同一权威 tick 内
+// `SetBlock` 空气 + 停用容器槽（`DeactivateChest`/`DeactivateFurnace`，对齐玩家
+// 路径 `completeMining` 的顺序）+ 背包提交副本 + `consumeToolDurability`，随后经
+// `recordChange` 汇入既有 `pendingChunkChanges` 广播，不新增协议消息。
+//
+// 容器记录经 chunk record 读取（`ChestAt`/`Chest`/`FurnaceAt`/`Furnace`），与玩家
+// 路径同源，不存在第二套容器访问。区块失效、容器槽缺失或方块已被同 tick 更早
+// actor 移除时对齐既有 `RejectNoTarget` 语义：清零进度、不结算、无容器槽泄漏。
+// 两条路径刻意不合并为参数化单实现：玩家侧产物是世界掉落物批量预演
+// （`PrepareDropBatch`），伙伴侧是背包副本逐堆 `AddStack`，去向不同（见 proposal
+// 的「延期与放弃」）。
+func (engine *engineContext) completeCompanionContainerMining(
 	entry *companionState,
-	mutation *realm.Mutation,
+	pending *pendingChunkChanges,
 ) {
 	dimension := engine.dimension(entry.dimension)
 	chunk, recordOK := dimension.ReadyChunk(entry.mining.target.Chunk())
@@ -335,6 +512,9 @@ func (engine *Engine) completeCompanionContainerMining(
 		entry.mining = miningState{}
 		return
 	}
+	// 内容物按容器槽位序快照：箱子为 27 格槽位序，熔炉为输入/燃料/输出三格序
+	// （与玩家路径 `completeMining` 装配掉落批次的顺序一致，固定序是重放一致的
+	// 前提，见 `CompanionMineContainerStaging` 的注释）。
 	var contents []core.ItemStack
 	chestSlot, furnaceSlot := 0, 0
 	switch entry.mining.block {
@@ -361,6 +541,8 @@ func (engine *Engine) completeCompanionContainerMining(
 		entry.mining.block, entry.mining.harvestable, contents, entry.inventory,
 	)
 	if !ok {
+		// 全或无：进度保持满格，作为「就绪但无容量」的稳定可观察状态；失败
+		// 判定属于 Manager（Runner 侧用同一 `CompanionMineContainerStaging` 判定）。
 		return
 	}
 	_, changed, err := dimension.SetBlock(entry.mining.target, core.AirID)
@@ -368,7 +550,7 @@ func (engine *Engine) completeCompanionContainerMining(
 		entry.mining = miningState{}
 		return
 	}
-	engine.recordChange(entry.dimension, entry.mining.target, core.AirID, mutation)
+	engine.recordChange(entry.dimension, entry.mining.target, core.AirID, pending)
 	switch entry.mining.block {
 	case core.ChestID:
 		chunk.DeactivateChest(chestSlot)
@@ -383,83 +565,74 @@ func (engine *Engine) completeCompanionContainerMining(
 	entry.mining = miningState{}
 }
 
-const cropYieldRollSalt = 0x5eedfeedfaceface
-const cropYieldPotatoSalt = 0x70a70a515eedface
-const cropYieldCarrotSalt = 0xca7707701ace5eed
-const poisonPotatoSalt = 0xdeadbeefcafe1234
-
-func cropYieldRolls(seed int64, tick uint64, dimension core.DimensionID, position core.BlockPos) (wheat uint8, seeds uint8) {
-	hash := splitmix64(uint64(seed) ^ cropYieldRollSalt)
-	hash = splitmix64(hash ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(dimension)))
-	hash = splitmix64(hash ^ uint64(uint32(position.X)))
-	hash = splitmix64(hash ^ uint64(uint32(position.Y)))
-	hash = splitmix64(hash ^ uint64(uint32(position.Z)))
-	wheat = uint8(hash%3) + 1
-	hash = splitmix64(hash)
-	seeds = uint8(hash%3) + 1
-	return wheat, seeds
-}
-
-func cropYieldRollsPotato(seed int64, tick uint64, dim core.DimensionID, pos core.BlockPos) uint8 {
-	hash := splitmix64(uint64(seed) ^ cropYieldPotatoSalt)
-	hash = splitmix64(hash ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(dim)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.X)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.Y)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.Z)))
-	return uint8(hash%4) + 1
-}
-
-func cropYieldRollsCarrot(seed int64, tick uint64, dim core.DimensionID, pos core.BlockPos) uint8 {
-	hash := splitmix64(uint64(seed) ^ cropYieldCarrotSalt)
-	hash = splitmix64(hash ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(dim)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.X)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.Y)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.Z)))
-	return uint8(hash%4) + 1
-}
-
-func poisonRoll(seed int64, tick uint64, dim core.DimensionID, pos core.BlockPos) bool {
-	hash := splitmix64(uint64(seed) ^ poisonPotatoSalt)
-	hash = splitmix64(hash ^ tick)
-	hash = splitmix64(hash ^ uint64(uint32(dim)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.X)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.Y)))
-	hash = splitmix64(hash ^ uint64(uint32(pos.Z)))
-	return hash%50 == 0
-}
-
+// hoeHarvestDurabilityExempt 报告一次玩家采掘完成是否豁免扣耐久：被移除的方块
+// 是作物（`core.IsCrop`，小麦八个生长阶段）且完成时选中物是完好锄头
+// （`core.TillingTool`）。这是 authoritative-farming 遗留 16 所说的「作物 × 锄头」
+// 豁免，tool-durability 三类成功破坏豁免中的第一类（另两类：完好剑在任何破坏
+// 路径上的豁免在 `consumeToolDurability` 内，短草 × 任意工具的豁免在
+// `wildGrassDurabilityExempt`）。锄头破坏非作物仍沿用既有扣耐久规则；损坏形态
+// 被 `core.TillingTool` 显式排除（它只枚举两个完好锄头编号），因此持损坏锄头
+// 收获作物走不进豁免——本就没有耐久可扣。伙伴采掘路径
+// （`completeCompanionMining`）不设本守卫：`companionMineableBlock` 的防御清单
+// 已显式拒绝全部农业方块，豁免在伙伴侧不可达，加守卫是死代码。
 func hoeHarvestDurabilityExempt(block core.BlockID, item core.ItemID) bool {
 	return core.IsCrop(block) && core.TillingTool(item)
 }
 
+// wildGrassDurabilityExempt 报告一次玩家成功采掘是否属于「短草 × 任意工具」
+// 零磨损豁免（tool-durability 的第三类）：被移除方块是短草（`core.IsWildGrass`）
+// 时，无论完成时选中栏是空手、普通物品还是任一完好工具（镐、锄头、剑，含
+// 剩余耐久恰好为 1 的工具），都不扣减耐久，也不把耐久 1 的工具转为损坏形态
+// ——调用方因此整体跳过 `consumeToolDurability`，自然没有耐久侧的 inventory
+// dirty。判定只看被移除方块、与手持无关；短草不是作物（`IsCrop` 为假），本豁免
+// 与「作物 × 锄头」类互不重叠，持锄头破坏短草以外的方块仍按既有规则磨损。
+// 伙伴路径不可达：`companionMineableBlock` 已显式拒绝短草。
+func wildGrassDurabilityExempt(block core.BlockID) bool {
+	return core.IsWildGrass(block)
+}
+
+// consumeToolDurability 在成功方块动作后扣减选中工具的耐久，完好剑除外。
+// 耐久归零时把栏位整体替换为损坏形态。返回背包是否发生变化。
 func consumeToolDurability(actor *actorState) bool {
 	selected := actor.inventory.Hotbar.Selected
 	stack := actor.inventory.Hotbar.Slots[selected]
+	if core.IsIntactSword(stack.Item) {
+		return false
+	}
+	return consumeToolDurabilityAt(actor, selected, stack.Item)
+}
+
+// consumeToolDurabilityAt 只在栏位与物品身份仍匹配时原子扣减耐久。
+func consumeToolDurabilityAt(actor *actorState, slot uint8, expected core.ItemID) bool {
+	if slot >= core.HotbarSlots {
+		return false
+	}
+	stack := actor.inventory.Hotbar.Slots[slot]
+	if stack.Item != expected || stack.Count != 1 {
+		return false
+	}
 	if _, ok := core.ItemMaxDurability(stack.Item); !ok {
 		return false
 	}
 	if stack.Durability > 1 {
 		stack.Durability--
-		actor.inventory.Hotbar.Slots[selected] = stack
+		actor.inventory.Hotbar.Slots[slot] = stack
 		return true
 	}
 	broken, ok := core.ItemBrokenForm(stack.Item)
 	if !ok {
 		return false
 	}
-	actor.inventory.Hotbar.Slots[selected] = core.ItemStack{Item: broken, Count: 1}
+	actor.inventory.Hotbar.Slots[slot] = core.ItemStack{Item: broken, Count: 1}
 	return true
 }
 
-func (engine *Engine) completeMining(
+func (engine *engineContext) completeMining(
 	dimensionID core.DimensionID,
 	target core.BlockPos,
 	block core.BlockID,
 	harvestable bool,
-	mutation *realm.Mutation,
+	pending *pendingChunkChanges,
 ) (RejectReason, bool) {
 	dimension := engine.dimension(dimensionID)
 	if dimension == nil {
@@ -471,6 +644,7 @@ func (engine *Engine) completeMining(
 		return RejectChunkNotReady, true
 	}
 
+	// 门双格原子破坏：命中任一半均双清，掉落 1 门（DoDrop 为假时仍双清零掉落）
 	if core.IsDoor(block) {
 		var lowerPos, upperPos core.BlockPos
 		if core.IsDoorUpper(block) {
@@ -490,6 +664,7 @@ func (engine *Engine) completeMining(
 		if !lowerIndexed || !upperIndexed {
 			return RejectChunkNotReady, true
 		}
+		// 容量预演：单堆 ItemDoor，使用 lower 位置的区块掉落槽
 		var nextDrops [core.DropsPerChunk]world.DropSlot
 		var hasNext bool
 		if harvestable {
@@ -501,6 +676,7 @@ func (engine *Engine) completeMining(
 			nextDrops = next
 			hasNext = true
 		}
+		// 原子双清：任一半失败回滚已改的另一半
 		oldLower, _ := dimension.BlockAt(lowerPos)
 		oldUpper, _ := dimension.BlockAt(upperPos)
 		_, _, errLower := dimension.SetBlock(lowerPos, core.AirID)
@@ -509,20 +685,24 @@ func (engine *Engine) completeMining(
 		}
 		_, _, errUpper := dimension.SetBlock(upperPos, core.AirID)
 		if errUpper != nil {
+			// 回滚 lower
 			_, _, _ = dimension.SetBlock(lowerPos, oldLower)
 			_, _ = dimension.BlockAt(lowerPos)
 			_ = oldUpper
 			_ = upperIndex
 			return mapSetBlockError(errUpper), true
 		}
-		engine.recordChange(dimensionID, lowerPos, core.AirID, mutation)
-		engine.recordChange(dimensionID, upperPos, core.AirID, mutation)
+		engine.recordChange(dimensionID, lowerPos, core.AirID, pending)
+		engine.recordChange(dimensionID, upperPos, core.AirID, pending)
 		if hasNext {
 			lowerChunk.CommitDropBatch(nextDrops)
 		}
 		return 0, false
 	}
 
+	// 床双格原子破坏：命中任一半均双清，掉落 1 床（DoDrop 为假时仍双清零
+	// 掉落）。两半水平相邻，掉落锚在被采掘的半格；另一半所在区块未就绪时
+	// 整单拒绝（门跨区块先例）。
 	if core.IsBed(block) {
 		footPos, headPos, ok := bedHalfPositions(target, block)
 		if !ok {
@@ -535,7 +715,7 @@ func (engine *Engine) completeMining(
 		if _, otherOK := dimension.ReadyChunk(otherPos.Chunk()); !otherOK {
 			return RejectChunkNotReady, true
 		}
-		return engine.removeBedWithDrop(dimensionID, target, footPos, headPos, harvestable, mutation)
+		return engine.removeBedWithDrop(dimensionID, target, footPos, headPos, harvestable, pending)
 	}
 
 	if block == core.FurnaceID {
@@ -566,7 +746,7 @@ func (engine *Engine) completeMining(
 		if !changed {
 			return RejectNoTarget, true
 		}
-		engine.recordChange(dimensionID, target, core.AirID, mutation)
+		engine.recordChange(dimensionID, target, core.AirID, pending)
 		chunk.DeactivateFurnace(furnaceSlot)
 		chunk.CommitDropBatch(next)
 		return 0, false
@@ -596,12 +776,62 @@ func (engine *Engine) completeMining(
 		if !changed {
 			return RejectNoTarget, true
 		}
-		engine.recordChange(dimensionID, target, core.AirID, mutation)
+		engine.recordChange(dimensionID, target, core.AirID, pending)
 		chunk.DeactivateChest(chestSlot)
 		chunk.CommitDropBatch(next)
 		return 0, false
 	}
 
+	// 短草的专用概率掉落分支（change natural-grass-seeds design 决策 4）：位于
+	// 容器/结构特殊分支之后、通用 `BlockDrop` 查询之前，且不进入作物多产物分支
+	// ——短草不是作物，种子的掉落语义只存在于这里。掉落与否由
+	// `shortGrassSeedDropRoll` 的位置稳定判定给出，与完成 tick、玩家、手持无关。
+	//
+	// 三条常数路径：
+	//   - 未命中：不调用 `PrepareDrop`、不需要掉落容量，直接清块并记录 mutation
+	//     ——容量已满也必须成功；
+	//   - 命中且容量足够：先 `PrepareDrop(ItemWheatSeeds×1)` 预演（预演不修改
+	//     区块），`SetBlock` 成功后才 `Record` 与 `CommitDrop`，改块与掉落实体
+	//     同属本 tick 的 realm mutation/revision；
+	//   - 命中但容量不足：返回既有 `RejectDropCapacity`，方块、掉落槽与 revision
+	//     全部不变；判定只依赖 seed/维度/坐标，稍后重试必然得到同一命中，
+	//     不能借重掷绕过容量，也不存在「先移块再放 drop」的吞资源窗口。
+	if core.IsWildGrass(block) {
+		if !shortGrassSeedDropRoll(engine.seed, dimensionID, target) {
+			_, changed, err := dimension.SetBlock(target, core.AirID)
+			if err != nil {
+				return mapSetBlockError(err), true
+			}
+			if !changed {
+				return RejectNoTarget, true
+			}
+			engine.recordChange(dimensionID, target, core.AirID, pending)
+			return 0, false
+		}
+		dropSlot, capacityOK := chunk.PrepareDrop(core.ItemWheatSeeds, blockIndex)
+		if !capacityOK {
+			return RejectDropCapacity, true
+		}
+		_, changed, err := dimension.SetBlock(target, core.AirID)
+		if err != nil {
+			return mapSetBlockError(err), true
+		}
+		if !changed {
+			return RejectNoTarget, true
+		}
+		engine.recordChange(dimensionID, target, core.AirID, pending)
+		chunk.CommitDrop(
+			dropSlot,
+			core.ItemStack{Item: core.ItemWheatSeeds, Count: 1},
+			blockIndex,
+			engine.tunables.DropPickupDelayTicks,
+		)
+		return 0, false
+	}
+
+	// 马铃薯与胡萝卜的收获分支：成熟产 1..4（独立 salt），马铃薯额外 2% 毒土豆；
+	// 未成熟各产 1 自身。全部经 PrepareDropBatch 原子预演，容量不足整体回滚，与
+	// 熔炉/箱子/小麦同形；harvestable 为假时仅移除方块不产生掉落。
 	if block == core.PotatoStage7ID {
 		if !harvestable {
 			_, changed, err := dimension.SetBlock(target, core.AirID)
@@ -611,7 +841,7 @@ func (engine *Engine) completeMining(
 			if !changed {
 				return RejectNoTarget, true
 			}
-			engine.recordChange(dimensionID, target, core.AirID, mutation)
+			engine.recordChange(dimensionID, target, core.AirID, pending)
 			return 0, false
 		}
 		n := cropYieldRollsPotato(engine.seed, engine.tick.Load(), dimensionID, target)
@@ -633,7 +863,7 @@ func (engine *Engine) completeMining(
 		if !changed {
 			return RejectNoTarget, true
 		}
-		engine.recordChange(dimensionID, target, core.AirID, mutation)
+		engine.recordChange(dimensionID, target, core.AirID, pending)
 		chunk.CommitDropBatch(next)
 		return 0, false
 	}
@@ -646,7 +876,7 @@ func (engine *Engine) completeMining(
 			if !changed {
 				return RejectNoTarget, true
 			}
-			engine.recordChange(dimensionID, target, core.AirID, mutation)
+			engine.recordChange(dimensionID, target, core.AirID, pending)
 			return 0, false
 		}
 		n := cropYieldRollsCarrot(engine.seed, engine.tick.Load(), dimensionID, target)
@@ -662,7 +892,7 @@ func (engine *Engine) completeMining(
 		if !changed {
 			return RejectNoTarget, true
 		}
-		engine.recordChange(dimensionID, target, core.AirID, mutation)
+		engine.recordChange(dimensionID, target, core.AirID, pending)
 		chunk.CommitDropBatch(next)
 		return 0, false
 	}
@@ -675,7 +905,7 @@ func (engine *Engine) completeMining(
 			if !changed {
 				return RejectNoTarget, true
 			}
-			engine.recordChange(dimensionID, target, core.AirID, mutation)
+			engine.recordChange(dimensionID, target, core.AirID, pending)
 			return 0, false
 		}
 		stacks := [1]core.ItemStack{{Item: core.ItemPotato, Count: 1}}
@@ -690,7 +920,7 @@ func (engine *Engine) completeMining(
 		if !changed {
 			return RejectNoTarget, true
 		}
-		engine.recordChange(dimensionID, target, core.AirID, mutation)
+		engine.recordChange(dimensionID, target, core.AirID, pending)
 		chunk.CommitDropBatch(next)
 		return 0, false
 	}
@@ -703,7 +933,7 @@ func (engine *Engine) completeMining(
 			if !changed {
 				return RejectNoTarget, true
 			}
-			engine.recordChange(dimensionID, target, core.AirID, mutation)
+			engine.recordChange(dimensionID, target, core.AirID, pending)
 			return 0, false
 		}
 		stacks := [1]core.ItemStack{{Item: core.ItemCarrot, Count: 1}}
@@ -718,7 +948,7 @@ func (engine *Engine) completeMining(
 		if !changed {
 			return RejectNoTarget, true
 		}
-		engine.recordChange(dimensionID, target, core.AirID, mutation)
+		engine.recordChange(dimensionID, target, core.AirID, pending)
 		chunk.CommitDropBatch(next)
 		return 0, false
 	}
@@ -728,6 +958,22 @@ func (engine *Engine) completeMining(
 		return RejectProtectedBlock, true
 	}
 
+	// 成熟小麦是全仓唯一的多产物方块：1–3 个小麦加 1–3 颗种子，具体数量由
+	// `cropYieldRolls` 对 (worldSeed, 完成本次采掘的权威 tick, 维度, 目标坐标)
+	// 的纯整数哈希给出。tick 取值点就是这一行 `engine.tick.Load()`：tick 在
+	// `Step` 内单调推进且单线程读写，`completeMining` 只在完成 tick 被调用一次，
+	// 因此同一株作物在同一权威 tick 上重新结算必然得到同一串数量，不依赖任何
+	// 进程级随机源或 map 遍历顺序（change crop-random-drop-count design.md D2）。
+	// 该决策接替 authoritative-farming design.md D9 的「掉落数量固定」；种子的
+	// 下限 1 升格为规格条款「始终不亏种子」，耕种循环不会因随机性中断。
+	// 多产物本身**刻意不进 `core.BlockDrop`**——那张表的返回形状是单一产物，改成
+	// 多产物会波及它的全部消费者（伙伴采掘与放置的防御清单、planner 的 place
+	// 注册表交叉校验、客户端镜像），而收益只是这一个方块（Ruling 5）。因此 core
+	// 只登记主产物小麦，种子在这里按方块编号补发，多产物与数量的知识只存在于
+	// 权威结算路径。
+	//
+	// 批量预演复用破坏熔炉/箱子的 PrepareDropBatch：任一堆放不下就整体返回
+	// false，方块与掉落槽逐字节不变，绝不出现"小麦掉了、种子没掉"的半掉落。
 	if block == core.WheatStage7ID && harvestable {
 		wheatCount, seedCount := cropYieldRolls(engine.seed, engine.tick.Load(), dimensionID, target)
 		stacks := [2]core.ItemStack{
@@ -747,7 +993,7 @@ func (engine *Engine) completeMining(
 		if !changed {
 			return RejectNoTarget, true
 		}
-		engine.recordChange(dimensionID, target, core.AirID, mutation)
+		engine.recordChange(dimensionID, target, core.AirID, pending)
 		chunk.CommitDropBatch(next)
 		return 0, false
 	}
@@ -767,7 +1013,7 @@ func (engine *Engine) completeMining(
 	if !changed {
 		return RejectNoTarget, true
 	}
-	engine.recordChange(dimensionID, target, core.AirID, mutation)
+	engine.recordChange(dimensionID, target, core.AirID, pending)
 	if harvestable {
 		chunk.CommitDrop(
 			dropSlot,

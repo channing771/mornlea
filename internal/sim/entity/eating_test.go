@@ -1,0 +1,688 @@
+package entity
+
+import (
+	"testing"
+
+	"github.com/go-gl/mathgl/mgl32"
+
+	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/internal/sim/tuning"
+)
+
+// eatingTestSession 是本文件全部夹具共用的会话号。每条用例各建一个引擎，
+// 号码不会互相干扰。
+const eatingTestSession = SessionID(71)
+
+// readyEatingPlayer 返回一名已激活、站在地面上、生命值满的玩家，并把三层饥饿
+// 状态置到指定夹具值。
+//
+// 生命值取满是**承重条件**而不是随手写的默认值：非满血的玩家会在
+// `advanceHealthRegen` 满足延迟后自然回血，一次回血累积 6000 疲劳（大于阈值
+// 4000），当场把饥饿值扣下去——那样"进食前后饥饿值精确不变/精确 +5"的断言
+// 就会被回血的副作用污染，读数不再归因于进食。
+func readyEatingPlayer(t *testing.T, hunger uint8, saturationMilli uint16) (*Engine, *playerState) {
+	t.Helper()
+	engine := readyRegenPlayer(t, eatingTestSession, core.MaxHealth)
+	player := engine.sessions[eatingTestSession].player
+	player.hunger = hunger
+	player.saturationMilli = saturationMilli
+	player.exhaustionMilli = 0
+	return engine, player
+}
+
+// setEatingSlot 直接写一格快捷栏并选中它。夹具走权威结构体而不是命令：进食
+// 状态机的输入是"选中格里是什么"，命令层的选中路径由既有用例覆盖。
+func setEatingSlot(player *playerState, slot uint8, stack core.ItemStack) {
+	player.inventory.Hotbar.Slots[slot] = stack
+	player.inventory.Hotbar.Selected = slot
+}
+
+// hotbarCount 读出一格快捷栏当前的数量，供"精确不变"类断言使用。
+func hotbarCount(player *playerState, slot uint8) uint8 {
+	return player.inventory.Hotbar.Slots[slot].Count
+}
+
+// TestEatingSettlesExactlyAtEatingTicksWithFixedValues 覆盖 Scenario「持续进食
+// 到时结算」与「饱和度不超过饥饿值」。
+//
+// 三条断言的位置性来自同一个形状：第 `EatingTicks - 1` tick **逐字段精确不变**，
+// 第 `EatingTicks` tick 才结算。只断言"第 32 tick 扣了料"的用例在"第 31 tick
+// 就结算"的实现下同样全绿，那正是本变更规定必须钉死的那一 tick。
+//
+// 三组夹具各自承重一条钳制规则：
+//   - 饥饿 10 / 饱和 0 是 spec Scenario 的直接编码（两条钳制都不触发）；
+//   - 饥饿 12 / 饱和 12000 让"先加饥饿再钳饱和"成为可读数事实：加满 6000 后是
+//     18000，超过更新后饥饿值对应的 17000，**不钳就会读出 18000**；
+//   - 饥饿 17 / 饱和 0 让饥饿值上限承重：17+5=22 必须钳到 20。
+func TestEatingSettlesExactlyAtEatingTicksWithFixedValues(t *testing.T) {
+	for _, testCase := range []struct {
+		name           string
+		hunger         uint8
+		saturation     uint16
+		wantHunger     uint8
+		wantSaturation uint16
+	}{
+		{"spec 场景:饥饿10饱和0", 10, 0, 15, 6000},
+		{"饱和被更新后的饥饿值钳住", 12, 12000, 17, 17000},
+		{"饥饿被上限钳住", 17, 0, 20, 6000},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			engine, player := readyEatingPlayer(t, testCase.hunger, testCase.saturation)
+			setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
+			player.eatingHeld = true
+
+			for range tuning.DefaultTunables().EatingTicks - 1 {
+				advanceActorsTick(engine)
+			}
+			if got := hotbarCount(player, 0); got != 2 {
+				t.Fatalf("第 %d tick 面包数=%d，想要精确保持 2", tuning.DefaultTunables().EatingTicks-1, got)
+			}
+			if player.hunger != testCase.hunger || player.saturationMilli != testCase.saturation {
+				t.Fatalf("第 %d tick (饥饿,饱和)=(%d,%d)，想要精确保持 (%d,%d)",
+					tuning.DefaultTunables().EatingTicks-1, player.hunger, player.saturationMilli,
+					testCase.hunger, testCase.saturation)
+			}
+			if player.eating.progressTicks != tuning.DefaultTunables().EatingTicks-1 {
+				t.Fatalf("第 %d tick 进度=%d，想要 %d（夹具没有连续推进就测不到结算 tick）",
+					tuning.DefaultTunables().EatingTicks-1, player.eating.progressTicks, tuning.DefaultTunables().EatingTicks-1)
+			}
+
+			advanceActorsTick(engine)
+			if got := hotbarCount(player, 0); got != 1 {
+				t.Fatalf("第 %d tick 面包数=%d，想要 1", tuning.DefaultTunables().EatingTicks, got)
+			}
+			if player.hunger != testCase.wantHunger ||
+				player.saturationMilli != testCase.wantSaturation {
+				t.Fatalf("结算后 (饥饿,饱和)=(%d,%d)，想要 (%d,%d)",
+					player.hunger, player.saturationMilli,
+					testCase.wantHunger, testCase.wantSaturation)
+			}
+			if player.eating != (eatingState{}) {
+				t.Fatalf("结算后进食状态=%+v，想要清空", player.eating)
+			}
+		})
+	}
+}
+
+// TestEatingReleaseKeepsFoodAndRestartsFromZero 覆盖 Scenario「中途松手不扣料」。
+//
+// 松手那一 tick 只断言"面包数不变"是不够的：进度若只是停住而没有清零，再按住
+// 一 tick 就会立刻结算。因此这里在松手之后**重新按住整整 `EatingTicks - 1`
+// tick 并断言仍未结算**，最后一 tick 才允许结算——重新计时是从 0 起而不是从 17 起。
+func TestEatingReleaseKeepsFoodAndRestartsFromZero(t *testing.T) {
+	engine, player := readyEatingPlayer(t, 12, 0)
+	setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
+	player.eatingHeld = true
+
+	const releasedAt = 17
+	for range releasedAt {
+		advanceActorsTick(engine)
+	}
+	// 夹具自证：中断必须发生在 (0, `EatingTicks`) 的开区间内，否则测的是
+	// "没开始"或"已结算"，不是中断。
+	if player.eating.progressTicks != releasedAt {
+		t.Fatalf("松手前进度=%d，想要 %d", player.eating.progressTicks, releasedAt)
+	}
+
+	player.eatingHeld = false
+	advanceActorsTick(engine)
+	if player.eating != (eatingState{}) {
+		t.Fatalf("松手后进食状态=%+v，想要清空", player.eating)
+	}
+	if got := hotbarCount(player, 0); got != 2 {
+		t.Fatalf("松手后面包数=%d，想要精确保持 2", got)
+	}
+	if player.hunger != 12 || player.saturationMilli != 0 {
+		t.Fatalf("松手后 (饥饿,饱和)=(%d,%d)，想要精确保持 (12,0)",
+			player.hunger, player.saturationMilli)
+	}
+
+	player.eatingHeld = true
+	for range tuning.DefaultTunables().EatingTicks - 1 {
+		advanceActorsTick(engine)
+	}
+	if got := hotbarCount(player, 0); got != 2 {
+		t.Fatalf("重按第 %d tick 面包数=%d，想要精确保持 2（重按必须从 0 重新计时）",
+			tuning.DefaultTunables().EatingTicks-1, got)
+	}
+	advanceActorsTick(engine)
+	if got := hotbarCount(player, 0); got != 1 {
+		t.Fatalf("重按第 %d tick 面包数=%d，想要 1", tuning.DefaultTunables().EatingTicks, got)
+	}
+	if player.hunger != 17 {
+		t.Fatalf("重按结算后饥饿=%d，想要 17", player.hunger)
+	}
+}
+
+// TestEatingSlotSwitchRestartsAndConsumesNeitherSlot 覆盖 Scenario「中途切换
+// 栏位不扣料」。
+//
+// 目标格里放的是**另一块面包**，不是空格也不是非食物：换成空格或小麦，这条
+// 用例测到的就只是"非食物不可进食"，与"切栏位"毫无关系（那是另一条 Scenario）。
+// 两格都是食物时，唯一能让"两格都不扣"成立的实现就是把 `(slot, item)` 记进
+// 状态并逐 tick 核对。
+//
+// 切换后再推进 `EatingTicks - releasedAt` tick，让**总握持 tick 数恰好等于
+// `EatingTicks`**：不核对 `(slot, item)` 的实现会在这一 tick 从第 17 tick 的
+// 进度上直接结算并扣掉目标格的面包，正确实现则刚重新计到第 15 tick。
+func TestEatingSlotSwitchRestartsAndConsumesNeitherSlot(t *testing.T) {
+	engine, player := readyEatingPlayer(t, 12, 0)
+	setEatingSlot(player, 1, core.ItemStack{Item: core.ItemBread, Count: 3})
+	setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
+	player.eatingHeld = true
+
+	const switchedAt = 17
+	for range switchedAt {
+		advanceActorsTick(engine)
+	}
+	if player.eating.progressTicks != switchedAt {
+		t.Fatalf("切格前进度=%d，想要 %d", player.eating.progressTicks, switchedAt)
+	}
+
+	player.inventory.Hotbar.Selected = 1
+	for range tuning.DefaultTunables().EatingTicks - switchedAt {
+		advanceActorsTick(engine)
+	}
+	if got := hotbarCount(player, 0); got != 2 {
+		t.Fatalf("切格后原栏位面包数=%d，想要精确保持 2", got)
+	}
+	if got := hotbarCount(player, 1); got != 3 {
+		t.Fatalf("切格后新栏位面包数=%d，想要精确保持 3", got)
+	}
+	if player.hunger != 12 || player.saturationMilli != 0 {
+		t.Fatalf("切格后 (饥饿,饱和)=(%d,%d)，想要精确保持 (12,0)",
+			player.hunger, player.saturationMilli)
+	}
+	want := eatingState{
+		slot: 1, item: core.ItemBread,
+		progressTicks: tuning.DefaultTunables().EatingTicks - switchedAt,
+	}
+	if player.eating != want {
+		t.Fatalf("切格后进食状态=%+v，想要 %+v（新栏位必须从 0 重新计时）",
+			player.eating, want)
+	}
+}
+
+// TestEatingSameSlotItemSwapRestartsAndConsumesNeither 覆盖 Scenario「栏位物品
+// 变化即中断」的另一半：**不切格**，只把选中格里的东西换掉。
+//
+// 与 `TestEatingSlotSwitchRestartsAndConsumesNeitherSlot` 成对：那条动的是
+// `Selected`，这条动的是 `Slots[selected].Item`。两条合起来才是
+// `eatingState` 里 `(slot, item)` 这个二元组的完整覆盖——只测切格的话，
+// 「按住不放时手里的东西被换掉」这条路一个 tick 都没跑过。
+//
+// 第二条子用例直接调用 `advanceEating` 而不经引擎，因为**今天的食物表只有
+// 面包**（`core.FoodValue` 只对 `core.ItemBread` 返回 true）：经引擎换物品必然
+// 换成非食物，会先被 `!edible` 那条中断吃掉，`item` 这一项在引擎路径上根本
+// 到不了。它是为「食物表加第二项」准备的前置防御（那一天「吃 A 扣 B」会真的
+// 可达），所以必须由构造出来的状态承重，否则这一项零覆盖、删掉全绿。
+func TestEatingSameSlotItemSwapRestartsAndConsumesNeither(t *testing.T) {
+	const swappedAt = 17
+
+	t.Run("同格换成非食物再换回来必须从 0 重新计时", func(t *testing.T) {
+		engine, player := readyEatingPlayer(t, 12, 0)
+		setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
+		player.eatingHeld = true
+		for range swappedAt {
+			advanceActorsTick(engine)
+		}
+		if player.eating.progressTicks != swappedAt {
+			t.Fatalf("换物品前进度=%d，想要 %d", player.eating.progressTicks, swappedAt)
+		}
+
+		// 只换内容，不动 `Selected`：面包整摞离开这一格，换成 3 小麦。
+		wheat := core.ItemStack{Item: core.ItemWheat, Count: 3}
+		player.inventory.Hotbar.Slots[0] = wheat
+		for range tuning.DefaultTunables().EatingTicks - swappedAt {
+			advanceActorsTick(engine)
+		}
+		if got := player.inventory.Hotbar.Slots[0]; got != wheat {
+			t.Fatalf("换物品后 0 号格=%+v，想要精确保持 %+v", got, wheat)
+		}
+		if player.eating != (eatingState{}) {
+			t.Fatalf("换物品后进食状态=%+v，想要清空", player.eating)
+		}
+		if player.hunger != 12 || player.saturationMilli != 0 {
+			t.Fatalf("换物品后 (饥饿,饱和)=(%d,%d)，想要精确保持 (12,0)",
+				player.hunger, player.saturationMilli)
+		}
+
+		// 换回面包并继续按住：面包数就是"原来那两块一件没少"的记账口——它已经
+		// 离开过这一格，只能这样断言。重新计时必须从 0 起，因此第
+		// `EatingTicks - 1` tick 仍不许结算。
+		player.inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemBread, Count: 2}
+		for range tuning.DefaultTunables().EatingTicks - 1 {
+			advanceActorsTick(engine)
+		}
+		if got := hotbarCount(player, 0); got != 2 {
+			t.Fatalf("换回面包第 %d tick 面包数=%d，想要精确保持 2（换物品必须从 0 重新计时）",
+				tuning.DefaultTunables().EatingTicks-1, got)
+		}
+		if player.hunger != 12 || player.saturationMilli != 0 {
+			t.Fatalf("换回面包第 %d tick (饥饿,饱和)=(%d,%d)，想要精确保持 (12,0)",
+				tuning.DefaultTunables().EatingTicks-1, player.hunger, player.saturationMilli)
+		}
+	})
+
+	t.Run("记录物品与当前物品不一致时重新计时而不结算", func(t *testing.T) {
+		player := &playerState{hunger: 12, eatingHeld: true}
+		player.inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemBread, Count: 2}
+		// 记录的是另一物品、进度差一 tick 就结算：核对 `item` 的实现从 1 重数，
+		// 只核对 `slot` 的实现会在这一 tick 直接吃掉面包。
+		player.eating = eatingState{
+			slot: 0, item: core.ItemWheat, progressTicks: tuning.DefaultTunables().EatingTicks - 1,
+		}
+
+		// 挂起传 false：这条子用例不经引擎、也就没有会话可挂起，容器/视野
+		// 中断由本文件专属用例覆盖。
+		player.advanceEating(tuning.DefaultTunables().EatingTicks, false)
+		want := eatingState{slot: 0, item: core.ItemBread, progressTicks: 1}
+		if player.eating != want {
+			t.Fatalf("进食状态=%+v，想要 %+v", player.eating, want)
+		}
+		if got := player.inventory.Hotbar.Slots[0].Count; got != 2 {
+			t.Fatalf("面包数=%d，想要精确保持 2（记录物品不一致不得结算）", got)
+		}
+		if player.hunger != 12 {
+			t.Fatalf("饥饿=%d，想要精确保持 12", player.hunger)
+		}
+	})
+}
+
+// TestEatingDoesNotStartWhenHungerIsFull 覆盖 Scenario「饥饿已满不推进」：
+// 按住远超一次进食所需的 tick 数，进度必须**逐 tick**恒为零。
+//
+// 逐 tick 检查而不是只看末态：只看末态的话，"推进到 32 结算一次又清空"的实现
+// 会在 64 tick 之后同样读出零进度，只有面包数会露馅——而面包数在
+// `Consume` 之外的错误路径上未必变化。
+func TestEatingDoesNotStartWhenHungerIsFull(t *testing.T) {
+	engine, player := readyEatingPlayer(t, core.MaxHunger, core.InitialSaturationMilli)
+	setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
+	player.eatingHeld = true
+
+	for tick := 1; tick <= 64; tick++ {
+		advanceActorsTick(engine)
+		if player.eating != (eatingState{}) {
+			t.Fatalf("饥饿已满时第 %d tick 进食状态=%+v，想要恒为空", tick, player.eating)
+		}
+	}
+	if got := hotbarCount(player, 0); got != 2 {
+		t.Fatalf("饥饿已满时面包数=%d，想要精确保持 2", got)
+	}
+	if player.hunger != core.MaxHunger || player.saturationMilli != core.InitialSaturationMilli {
+		t.Fatalf("饥饿已满时 (饥饿,饱和)=(%d,%d)，想要精确保持 (%d,%d)",
+			player.hunger, player.saturationMilli, core.MaxHunger, core.InitialSaturationMilli)
+	}
+}
+
+// TestNonFoodNeverAdvancesEating 覆盖 Scenario「非食物不可进食」：手持小麦
+// （农业闭环里最像食物的那个物品——它是面包的原料）按住 64 tick，数量与饥饿
+// 值都必须精确不变，进度逐 tick 恒零。
+func TestNonFoodNeverAdvancesEating(t *testing.T) {
+	engine, player := readyEatingPlayer(t, 12, 0)
+	setEatingSlot(player, 0, core.ItemStack{Item: core.ItemWheat, Count: 3})
+	player.eatingHeld = true
+	// 夹具自证：这格确实不是食物，否则本用例测的是别的东西。
+	if _, _, edible := core.FoodValue(core.ItemWheat); edible {
+		t.Fatal("小麦被判为食物，夹具选错了物品")
+	}
+
+	for tick := 1; tick <= 64; tick++ {
+		advanceActorsTick(engine)
+		if player.eating != (eatingState{}) {
+			t.Fatalf("手持小麦第 %d tick 进食状态=%+v，想要恒为空", tick, player.eating)
+		}
+	}
+	if got := hotbarCount(player, 0); got != 3 {
+		t.Fatalf("手持小麦 64 tick 后数量=%d，想要精确保持 3", got)
+	}
+	if player.hunger != 12 || player.saturationMilli != 0 {
+		t.Fatalf("手持小麦 64 tick 后 (饥饿,饱和)=(%d,%d)，想要精确保持 (12,0)",
+			player.hunger, player.saturationMilli)
+	}
+}
+
+// TestDamageInterruptsEatingOnlyWhenHealthActuallyDrops 覆盖「受伤中断」，
+// 并把中断挂点钉在 `applyDamage` 的**扣血分支**上而不是它的入口。
+//
+// 两条子用例成对：`applyDamage(1)` 必须清空进度，`applyDamage(0)` 必须**不**
+// 清空。只写前者的话，把清空写在 `applyDamage` 的第一行（非正伤害也清）同样
+// 全绿——而摔落曲线在安全高度每次落地都会算出负值，那种实现会让"跳一下就
+// 打断进食"，且没有任何信号。
+func TestDamageInterruptsEatingOnlyWhenHealthActuallyDrops(t *testing.T) {
+	const interruptedAt = 17
+
+	t.Run("真正扣血清空进度且不扣料", func(t *testing.T) {
+		engine, player := readyEatingPlayer(t, 12, 0)
+		setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
+		player.eatingHeld = true
+		for range interruptedAt {
+			advanceActorsTick(engine)
+		}
+		if player.eating.progressTicks != interruptedAt {
+			t.Fatalf("受伤前进度=%d，想要 %d", player.eating.progressTicks, interruptedAt)
+		}
+
+		healthBefore := player.health
+		player.applyDamage(1)
+		if player.health != healthBefore-1 {
+			t.Fatalf("受伤后生命值=%d，想要 %d（夹具必须真的扣血）",
+				player.health, healthBefore-1)
+		}
+		if player.eating != (eatingState{}) {
+			t.Fatalf("受伤后进食状态=%+v，想要清空", player.eating)
+		}
+		if got := hotbarCount(player, 0); got != 2 {
+			t.Fatalf("受伤中断后面包数=%d，想要精确保持 2", got)
+		}
+		if player.hunger != 12 || player.saturationMilli != 0 {
+			t.Fatalf("受伤中断后 (饥饿,饱和)=(%d,%d)，想要精确保持 (12,0)",
+				player.hunger, player.saturationMilli)
+		}
+	})
+
+	t.Run("零伤害不中断", func(t *testing.T) {
+		engine, player := readyEatingPlayer(t, 12, 0)
+		setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
+		player.eatingHeld = true
+		for range interruptedAt {
+			advanceActorsTick(engine)
+		}
+
+		healthBefore := player.health
+		player.applyDamage(0)
+		if player.health != healthBefore {
+			t.Fatalf("零伤害后生命值=%d，想要保持 %d", player.health, healthBefore)
+		}
+		if player.eating.progressTicks != interruptedAt {
+			t.Fatalf("零伤害后进度=%d，想要保持 %d（非正伤害是 no-op，不是中断）",
+				player.eating.progressTicks, interruptedAt)
+		}
+	})
+}
+
+// TestEatingContainerOpenInterruptsAndRestartsAfterClose 覆盖 Scenario「打开容器
+// 中断进食不扣料」与它蕴含的关箱重启语义（「中断」与「根本没开始」是同一件事）。
+//
+// 中断必须发生在 (0, `EatingTicks`) 的开区间内——取 7 tick，与既有松手/切格
+// 用例的 17 tick 错开，避免三条用例共用同一个夹具常数后一起被同一种 off-by-one
+// 骗过。容器打开那一 tick 进食输入**仍然按住**：这对应手持
+// 食物对准容器按「使用」，界面打开的同刻输入还没来得及松。
+//
+// 关箱重启沿用 `TestEatingReleaseKeepsFoodAndRestartsFromZero` 的形状：关箱后
+// 重新按住整整 `EatingTicks - 1` tick 仍不许结算，最后一 tick 才原子结算——
+// 「从第 1 tick 重新计时」由此钉死，而不是只看末态。
+func TestEatingContainerOpenInterruptsAndRestartsAfterClose(t *testing.T) {
+	engine, player := readyEatingPlayer(t, 12, 0)
+	setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
+	player.eatingHeld = true
+
+	const openedAt = 7
+	for range openedAt {
+		advanceActorsTick(engine)
+	}
+	// 夹具自证：中断必须发生在进行中，否则测的是"没开始"或"已结算"。
+	if player.eating.progressTicks != openedAt {
+		t.Fatalf("开箱前进度=%d，想要 %d", player.eating.progressTicks, openedAt)
+	}
+
+	// 容器界面打开（夹具直写权威结构体，与 mining_test.go 的「打开熔炉」中断
+	// 夹具同形）：进食输入保持按住，权威 tick 照常推进。
+	engine.sessions[eatingTestSession].viewContainer = true
+	advanceActorsTick(engine)
+	if player.eating != (eatingState{}) {
+		t.Fatalf("开箱后进食状态=%+v，想要清空", player.eating)
+	}
+	if got := hotbarCount(player, 0); got != 2 {
+		t.Fatalf("开箱后面包数=%d，想要精确保持 2", got)
+	}
+	if player.hunger != 12 || player.saturationMilli != 0 {
+		t.Fatalf("开箱后 (饥饿,饱和)=(%d,%d)，想要精确保持 (12,0)",
+			player.hunger, player.saturationMilli)
+	}
+
+	// 关箱：零值容器引用在开箱那一 tick 末尾已被 `publishContainers` 判失效
+	// 清掉，这里的显式置回 false 表达"玩家主动关箱"的观察，使重启语义不依赖
+	// 标志因何变 false。进食输入始终没松。
+	engine.sessions[eatingTestSession].viewContainer = false
+	for range tuning.DefaultTunables().EatingTicks - 1 {
+		advanceActorsTick(engine)
+	}
+	if got := hotbarCount(player, 0); got != 2 {
+		t.Fatalf("关箱重按第 %d tick 面包数=%d，想要精确保持 2（关箱必须从 0 重新计时）",
+			tuning.DefaultTunables().EatingTicks-1, got)
+	}
+	advanceActorsTick(engine)
+	if got := hotbarCount(player, 0); got != 1 {
+		t.Fatalf("关箱重按第 %d tick 面包数=%d，想要 1", tuning.DefaultTunables().EatingTicks, got)
+	}
+	if player.hunger != 17 || player.saturationMilli != 6000 {
+		t.Fatalf("关箱重按结算后 (饥饿,饱和)=(%d,%d)，想要 (17,6000)",
+			player.hunger, player.saturationMilli)
+	}
+	if player.eating != (eatingState{}) {
+		t.Fatalf("关箱重按结算后进食状态=%+v，想要清空", player.eating)
+	}
+}
+
+// TestEatingContainerOpenOnSettlementTickDoesNotSettle 覆盖 Scenario「恰在结算
+// tick 打开容器不结算」，钉住 design.md D4 的优先序：中断条件与结算条件在同一
+// tick 同时成立时，中断必须先短路。
+//
+// 只断言"状态清零"挡不住先结算后清零的实现——那种实现面包少一个、饥饿 +5，
+// 状态却照样为空；面包数与饥饿/饱和的精确不变是本用例的双重承重读数。
+func TestEatingContainerOpenOnSettlementTickDoesNotSettle(t *testing.T) {
+	engine, player := readyEatingPlayer(t, 12, 0)
+	setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
+	player.eatingHeld = true
+
+	for range tuning.DefaultTunables().EatingTicks - 1 {
+		advanceActorsTick(engine)
+	}
+	// 夹具自证：下一 tick 就是结算 tick，本用例测的正是这一 tick 的优先序。
+	if player.eating.progressTicks != tuning.DefaultTunables().EatingTicks-1 {
+		t.Fatalf("开箱前进度=%d，想要 %d", player.eating.progressTicks, tuning.DefaultTunables().EatingTicks-1)
+	}
+	if got := hotbarCount(player, 0); got != 2 {
+		t.Fatalf("开箱前面包数=%d，想要精确保持 2", got)
+	}
+
+	engine.sessions[eatingTestSession].viewContainer = true
+	advanceActorsTick(engine)
+	if got := hotbarCount(player, 0); got != 2 {
+		t.Fatalf("结算 tick 开箱后面包数=%d，想要精确保持 2（中断必须优先于结算）", got)
+	}
+	if player.hunger != 12 || player.saturationMilli != 0 {
+		t.Fatalf("结算 tick 开箱后 (饥饿,饱和)=(%d,%d)，想要精确保持 (12,0)",
+			player.hunger, player.saturationMilli)
+	}
+	if player.eating != (eatingState{}) {
+		t.Fatalf("结算 tick 开箱后进食状态=%+v，想要清空", player.eating)
+	}
+}
+
+// TestEatingHoldsAtZeroWhileContainerOpenOrViewNotReady 覆盖「挂起持续保持」：
+// 进度逐 tick 恒为零、永不扣料。形状照 `TestEatingDoesNotStartWhenHungerIsFull`
+// ——逐 tick 检查而不是只看末态，否则"推进到 32 结算一次又清空"的实现同样读出
+// 零进度，只有面包数露馅，而面包数未必是最敏感的读数。
+//
+// 两个子用例对应 `suspended` 的两个来源（调用点求值 `session.viewContainer ||
+// !session.hasView`）：容器持续打开，与会话视野尚未就绪。后者是 spec Scenario
+// 「视野未就绪不推进进食」的直接编码。
+func TestEatingHoldsAtZeroWhileContainerOpenOrViewNotReady(t *testing.T) {
+	t.Run("容器持续打开", func(t *testing.T) {
+		engine, player := readyEatingPlayer(t, 12, 0)
+		setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
+		player.eatingHeld = true
+
+		for tick := 1; tick <= 64; tick++ {
+			// `publishContainers` 在每 tick 末尾校验查看关系，夹具的零值容器
+			// 引用会被判失效并把标志清掉，因此逐 tick 重新置位以表达「容器
+			// 界面一直开着」；进食中断发生在 tick 内更早的 `advanceEating`，
+			// 不受这次清除影响。
+			engine.sessions[eatingTestSession].viewContainer = true
+			advanceActorsTick(engine)
+			if player.eating != (eatingState{}) {
+				t.Fatalf("容器打开第 %d tick 进食状态=%+v，想要恒为空", tick, player.eating)
+			}
+		}
+		if got := hotbarCount(player, 0); got != 2 {
+			t.Fatalf("容器打开 64 tick 后面包数=%d，想要精确保持 2", got)
+		}
+		if player.hunger != 12 || player.saturationMilli != 0 {
+			t.Fatalf("容器打开 64 tick 后 (饥饿,饱和)=(%d,%d)，想要精确保持 (12,0)",
+				player.hunger, player.saturationMilli)
+		}
+	})
+
+	t.Run("视野未就绪", func(t *testing.T) {
+		engine, player := readyEatingPlayer(t, 12, 0)
+		setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
+		player.eatingHeld = true
+		// 普通玩家的 `hasView` 在注册时即为 true、之后没有别的置位点，夹具
+		// 每 tick 向 production `TickContext` 注入空视图快照，与 mining_test.go
+		// 的「视野丢失」中断夹具同形。
+
+		for tick := 1; tick <= 64; tick++ {
+			fixture := engine.beginTick()
+			fixture.context.SetViews(ViewSnapshot{})
+			fixture.context.AdvanceActors()
+			publishFixture(engine, &fixture)
+			if player.eating != (eatingState{}) {
+				t.Fatalf("视野未就绪第 %d tick 进食状态=%+v，想要恒为空", tick, player.eating)
+			}
+		}
+		if got := hotbarCount(player, 0); got != 2 {
+			t.Fatalf("视野未就绪 64 tick 后面包数=%d，想要精确保持 2", got)
+		}
+		if player.hunger != 12 || player.saturationMilli != 0 {
+			t.Fatalf("视野未就绪 64 tick 后 (饥饿,饱和)=(%d,%d)，想要精确保持 (12,0)",
+				player.hunger, player.saturationMilli)
+		}
+	})
+}
+
+// TestDeathClearsEatingProgressAndResetsHunger 覆盖「死亡中断」：死亡结算那一
+// tick 之后，进食进度与三层饥饿状态必须一起回到初态。
+//
+// 生命值**直接置零**而不是走 `applyDamage`：走伤害入口的话，清空进食状态的是
+// 伤害路径，死亡路径漏清也照样全绿。这里要钉的是死亡/重生路径自己也清。
+func TestDeathClearsEatingProgressAndResetsHunger(t *testing.T) {
+	engine, player := readyEatingPlayer(t, 12, 0)
+	setEatingSlot(player, 0, core.ItemStack{Item: core.ItemBread, Count: 2})
+	player.eatingHeld = true
+	for range 17 {
+		advanceActorsTick(engine)
+	}
+	if player.eating.progressTicks != 17 {
+		t.Fatalf("死亡前进度=%d，想要 17", player.eating.progressTicks)
+	}
+
+	player.health = 0
+	tick := engine.beginTick()
+	tick.context.AdvanceActors()
+	tick.context.AdvanceHostiles(nil, &tick.result)
+	commitMutation(tick.mutation, &tick.result)
+	publishFixture(engine, &tick)
+	if player.eating != (eatingState{}) {
+		t.Fatalf("死亡结算后进食状态=%+v，想要清空", player.eating)
+	}
+	if player.hunger != core.MaxHunger || player.saturationMilli != core.InitialSaturationMilli {
+		t.Fatalf("死亡结算后 (饥饿,饱和)=(%d,%d)，想要初值 (%d,%d)",
+			player.hunger, player.saturationMilli,
+			core.MaxHunger, core.InitialSaturationMilli)
+	}
+}
+
+// TestEatingTicksComesFromTunableSnapshot 钉住「所需 tick 数来自本 tick 的
+// tunable 快照，不是写死的编译期常量」：同一份夹具在两个不同的 `EatingTicks`
+// 下必须在**各自**的那一 tick 结算。
+//
+// 这条直接调用 `advanceEating`（不经引擎）：引擎级用例只跑得到默认值 32，
+// 把 32 写死的实现在那里全绿。形状照 `TestApplyExhaustionReadsThresholdFromParameter`。
+// 挂起传 false：本用例只钉 tick 数来源，容器/视野挂起不经会话、无从谈起。
+func TestEatingTicksComesFromTunableSnapshot(t *testing.T) {
+	for _, ticks := range []uint16{8, tuning.DefaultTunables().EatingTicks} {
+		player := &playerState{hunger: 12, eatingHeld: true}
+		player.inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemBread, Count: 2}
+		for tick := uint16(1); tick < ticks; tick++ {
+			player.advanceEating(ticks, false)
+			if player.inventory.Hotbar.Slots[0].Count != 2 || player.hunger != 12 {
+				t.Fatalf("EatingTicks=%d 时第 %d tick 已结算，想要未结算", ticks, tick)
+			}
+		}
+		player.advanceEating(ticks, false)
+		if player.inventory.Hotbar.Slots[0].Count != 1 || player.hunger != 17 {
+			t.Fatalf("EatingTicks=%d 时第 %d tick (面包,饥饿)=(%d,%d)，想要 (1,17)",
+				ticks, ticks, player.inventory.Hotbar.Slots[0].Count, player.hunger)
+		}
+	}
+}
+
+// TestCompanionsNeverEat 是「伙伴不接进食」的**运行时**守卫：一名伙伴手持
+// 面包并被驱动完整条移动与采掘路径，远超一次进食所需的 tick 数之后，那两块
+// 面包必须一件不少。
+//
+// 为什么不断言「`companionState` 没有进食字段」：那是存在性断言，编译期就
+// 恒真，在「有人把 `advanceEating` 接进伙伴 tick」的世界里也可能成立（伙伴
+// 完全可以复用 `playerState` 之外的另一份进度）。这里断言的是位置性事实——
+// 伙伴的动作**没有任何途径**吃掉手里的食物。
+//
+// 它与源码守卫 `TestExhaustionTableIsNotWiredIntoCompanionCode`（其禁用清单
+// 已含进食标识符）是互补的两条，**不得只保留其中一条**：源码守卫是名字驱动
+// 的，看不见"换个名字重写一遍"；本用例是夹具驱动的，只覆盖被驱动到的路径。
+func TestCompanionsNeverEat(t *testing.T) {
+	engine, _, _ := readyMiningPlayers(t, 1)
+	id := companionTestID(2)
+	activateCompanionAt(t, engine, id, mgl32.Vec3{4.5, 1, 8.5})
+	entry := engine.companions[id]
+	entry.inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemBread, Count: 2}
+	entry.inventory.Hotbar.Selected = 0
+	// 夹具自证：面包确实是食物，否则本用例在"伙伴其实会吃"的世界里也会绿。
+	if _, _, edible := core.FoodValue(core.ItemBread); !edible {
+		t.Fatal("面包不是食物，夹具选错了物品")
+	}
+
+	// 伙伴采掘：原地走完整条权威采掘出口，tick 数远超一次进食（32）。采掘意图
+	// 是按住语义、跨 tick 保持，直接装配即可。
+	companionTarget := core.BlockPos{X: 4, Y: 1, Z: 5}
+	engine.SetBlockForTest(companionTarget, core.CoalOreID)
+	entry.miningTarget = companionTarget
+	entry.miningHeld = true
+	for range 64 {
+		advanceMiningOnce(engine)
+	}
+
+	// 伙伴移动：另起 64 tick，同样远超一次进食。移动必须逐 tick 经
+	// `CompanionActionMove` 意图管线提交——`applyCompanionActions` 对没有 action
+	// 的伙伴每 tick 用 `physics.Input{Yaw: entry.yaw}` 覆盖 `entry.input`，直接写
+	// `entry.input` 的夹具会被这一步抹掉，伙伴一步不动，这半边就是空转的。
+	//
+	// 移动前松开采掘：伙伴会走出触及距离，继续按住只会让采掘每 tick 被距离校验
+	// 拒绝，把上面那段已经跑通的采掘路径换成一条拒绝路径。夹具已直接装入
+	// 伙伴脚下 3×3 Ready 区块，本用例的有界位移不需要 runtime 订阅协调。
+	entry.miningHeld = false
+	start := entry.state.Position
+	for tick := range 64 {
+		fixture := engine.beginTick()
+		fixture.context.ApplyCompanionActions([]CompanionAction{{
+			ID: id, Kind: CompanionActionMove,
+			Input: physics.Input{MoveX: 1, Jump: true},
+		}})
+		fixture.context.AdvanceActors()
+		publishFixture(engine, &fixture)
+		if entry.state.Position == start && tick == 63 {
+			t.Fatalf("tick %d 后伙伴仍未响应移动 action", tick)
+		}
+	}
+	// 夹具自证：伙伴确实位移了。移动这半边一旦被输入覆盖打回原地，本条断言先红，
+	// 而不是让"伙伴不进食"在一个根本没动过的伙伴身上空绿。
+	if entry.state.Position == start {
+		t.Fatalf("伙伴位置=%+v，与起点相同（移动夹具空转）", entry.state.Position)
+	}
+
+	if got := companionItemCount(entry, core.ItemBread); got != 2 {
+		t.Fatalf("伙伴的面包数=%d，想要精确保持 2（伙伴不进食）", got)
+	}
+}

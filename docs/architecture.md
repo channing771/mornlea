@@ -51,13 +51,13 @@ Go 与 Python 各自限制全局 4 个 Planner/Dialogue run、同一伙伴 1 个
 - `internal/render`、`internal/mesh`、`internal/assets`、`internal/lod`、`internal/worldgen` 与 `internal/fluid` 持有领域数据描述、CPU 编码和 Rust 调用编排，不拥有 GPU 后端或第二套数值生产实现。
 - `internal/nativeabi` 是 engine ABI 的唯一 Go bridge。
 
-内部包允许的直接依赖以 `internal/archcheck/dependency_test.go` 的 `allowed` 表为准。`internal/archcheck` 同时守住无 WebGPU Go 依赖、无图形专服闭包、伙伴 Agent 服务发布边界、Make/CI 门禁和长期版本基线；架构文档不复制会随包演进的依赖白名单。
+内部包允许的直接依赖以 `internal/archcheck/dependency_test.go` 的 `allowed` 表为准。`internal/archcheck` 同时以 `TestSimAuthorityStateOwnershipStaysExplicit` 扫描 runtime 的包变量与全部 holder，把唯一 mutation/commit 绑定到 `StepWithTunables` 的真实调用路径，以 `TestAuthorityTickTunablesStayExplicit` 守住权威 tick 参数捕获和传递；其余门禁守住无 WebGPU Go 依赖、无图形专服闭包、伙伴 Agent 服务发布边界、Make/CI 门禁和长期版本基线；架构文档不复制会随包演进的依赖白名单。
 
-## 6. `mornlea_engine` / engine ABI v9
+## 6. `mornlea_engine` / engine ABI v10
 
 `mornlea_engine` 是 mesh/light、collision、raycast、physics tick 积分、worldgen、LOD shell 与流体规则求值/重扫扫描的唯一生产实现；流体的队列、预算、游标与冲毁结算编排仍在 Go（`internal/fluid` 与 `internal/sim/realm` 经 `internal/nativeabi` 调用流体 kernel）。该 crate 保持无窗口，不拥有权威世界状态，不执行文件或网络 I/O，也不承载伤害、库存、权限或 tick 编排等业务规则。
 
-engine C ABI 当前为 v9。Go 侧只有 `internal/nativeabi` 可以接触该 ABI；领域包构造语义输入并解码结果。header、Rust FFI、Go bridge、ABI 版本和跨语言一致性检查必须成套演进，调用结束后任一侧都不得保留对方指针。
+engine C ABI 当前为 v10（v10 即 `MGW1` layout 3 的 15 材质 worldgen 请求）。Go 侧只有 `internal/nativeabi` 可以接触该 ABI；领域包构造语义输入并解码结果。header、Rust FFI、Go bridge、ABI 版本和跨语言一致性检查必须成套演进，调用结束后任一侧都不得保留对方指针。
 
 ## 7. `mornlea_client` / client ABI v14
 

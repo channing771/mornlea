@@ -1,4 +1,4 @@
-// Package sim 实现与协议和渲染无关的权威世界状态。
+// Package runtime 实现权威模拟的 tick 编排与边界委派。
 package runtime
 
 import "github.com/channing771/mornlea/internal/sim/realm"

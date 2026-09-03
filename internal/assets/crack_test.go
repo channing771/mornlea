@@ -9,22 +9,23 @@ import (
 //
 // 层数值真值源是本文件 blocks.go 的层枚举，但裂纹实例以 f32 层号直接索引
 // atlas，呈现层从 LayerCrack0 派生各阶段层号——层号一旦平移，裂纹会被采样到
-// 别的材质层上。本条钉住 LayerCrack0..LayerCrack9 = 68..77、layerCount = 78，
-// 且裂纹区间紧贴床区间上界：在床与裂纹之间插层必然撞上断言。植物 31..54、
-// 耕地 29/30、火把 59、床 60..67 各区间另有专属守卫（farmland/plant/torch/bed
-// 的既有测试），此处不重复。
+// 别的材质层上。本条钉住 LayerCrack0..LayerCrack9 = 69..78、layerCount = 79
+// （短草层 68 插入床区间之后顺延），且裂纹区间紧贴短草层上界：在短草与裂纹
+// 之间插层必然撞上断言。植物 31..54、耕地 29/30、火把 59、床 60..67、短草 68
+// 各区间另有专属守卫（farmland/plant/torch/bed/short_grass 的既有测试），此处
+// 不重复。
 func TestCrackLayerNumbersAreFrozen(t *testing.T) {
-	if got := int(LayerCrack0); got != 68 {
-		t.Fatalf("LayerCrack0=%d，想要冻结值 68", got)
+	if got := int(LayerCrack0); got != 69 {
+		t.Fatalf("LayerCrack0=%d，想要冻结值 69", got)
 	}
-	if got := int(LayerCrack9); got != 77 {
-		t.Fatalf("LayerCrack9=%d，想要冻结值 77", got)
+	if got := int(LayerCrack9); got != 78 {
+		t.Fatalf("LayerCrack9=%d，想要冻结值 78", got)
 	}
-	if got := int(layerCount); got != 78 {
-		t.Fatalf("layerCount=%d，想要 78", got)
+	if got := int(layerCount); got != 79 {
+		t.Fatalf("layerCount=%d，想要 79", got)
 	}
-	if LayerCrack0 != LayerBedHeadEast+1 {
-		t.Fatalf("LayerCrack0=%d 不紧贴床区间上界 %d，插层检测失效", LayerCrack0, LayerBedHeadEast+1)
+	if LayerCrack0 != LayerShortGrass+1 {
+		t.Fatalf("LayerCrack0=%d 不紧贴短草层上界 %d，插层检测失效", LayerCrack0, LayerShortGrass+1)
 	}
 	// 每个命名常量都逐条钉在字面量上：只断言首尾两个端点时，中间常量被
 	// 误挪（插入/删除一个层）不会让端点断言变红。
@@ -33,14 +34,14 @@ func TestCrackLayerNumbersAreFrozen(t *testing.T) {
 		layer uint16
 		want  int
 	}{
-		{"LayerCrack1", LayerCrack1, 69},
-		{"LayerCrack2", LayerCrack2, 70},
-		{"LayerCrack3", LayerCrack3, 71},
-		{"LayerCrack4", LayerCrack4, 72},
-		{"LayerCrack5", LayerCrack5, 73},
-		{"LayerCrack6", LayerCrack6, 74},
-		{"LayerCrack7", LayerCrack7, 75},
-		{"LayerCrack8", LayerCrack8, 76},
+		{"LayerCrack1", LayerCrack1, 70},
+		{"LayerCrack2", LayerCrack2, 71},
+		{"LayerCrack3", LayerCrack3, 72},
+		{"LayerCrack4", LayerCrack4, 73},
+		{"LayerCrack5", LayerCrack5, 74},
+		{"LayerCrack6", LayerCrack6, 75},
+		{"LayerCrack7", LayerCrack7, 76},
+		{"LayerCrack8", LayerCrack8, 77},
 	} {
 		if got := int(tt.layer); got != tt.want {
 			t.Fatalf("%s=%d，想要冻结值 %d", tt.name, got, tt.want)

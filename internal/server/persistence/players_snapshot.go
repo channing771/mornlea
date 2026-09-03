@@ -120,20 +120,15 @@ var starterMaterialItems = [...]core.ItemID{
 	core.ItemSnowBlock, core.ItemMossyCobblestone,
 }
 
-// starterSeedSlot 是起步种子所在的背包格位：紧随材料清单最后一格。
-// 写成 len(starterMaterialItems) 而不是字面量 14，材料清单增删时种子自动跟随。
-const starterSeedSlot = len(starterMaterialItems)
-
 func starterMaterialInventory() core.Inventory {
 	var inventory core.Inventory
 	for slot, item := range starterMaterialItems {
 		inventory.Backpack[slot] = core.ItemStack{Item: item, Count: core.MaxStackCount}
 	}
-	// 草丛等自然种子来源尚不存在，这一格是玩家取得第一颗种子的唯一途径。
-	// 它和材料一样只在 ErrPlayerNotFound 路径构造，既有玩家不会被补发。
-	inventory.Backpack[starterSeedSlot] = core.ItemStack{
-		Item: core.ItemWheatSeeds, Count: core.MaxStackCount,
-	}
+	// 材料包不再包含起步种子（change natural-grass-seeds）：第一颗种子由玩家
+	// 采除自然生成的短草取得，清单之后的全部栏位保持为空。它只在
+	// ErrPlayerNotFound 路径构造，既有玩家（包括旧材料包留下的种子）逐槽
+	// 恢复，不会被删除、补发或重排。
 	if !inventory.Valid() {
 		panic("server: invalid starter material inventory")
 	}

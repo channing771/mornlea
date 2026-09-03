@@ -206,9 +206,9 @@ func worldgenStatusPanicText(entry string, status Status) string {
 // LOD_SHELL_INPUT_BYTES/LOD_SHELL_QUAD_BYTES/LOD_TILE_COLUMNS 逐字一致。
 const (
 	// LodShellInputBytes 是 `mornlea_lod_shell` 入口输入字节数:与
-	// `mornlea_worldgen_chunk` 完全一致的 MGW1 header(564)+ tile_x i32 +
+	// `mornlea_worldgen_chunk` 完全一致的 MGW1 header(566)+ tile_x i32 +
 	// tile_z i32 + columns u32(固定 64)+ lod_step u32(合法值 2/4/8)。
-	LodShellInputBytes = 580
+	LodShellInputBytes = 582
 	// LodShellQuadBytes 是输出流中单个壳 quad 的字节数:x/z/y i32 +
 	// w/d u16 + face u8 + material u16 + shade u8(LE)。
 	LodShellQuadBytes = 20

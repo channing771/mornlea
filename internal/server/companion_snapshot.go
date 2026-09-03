@@ -140,14 +140,14 @@ func (v companionChunkView) revisionAt(chunkX, chunkZ int32) uint64 {
 	return v.revisions[(chunkZ-v.origin.Z)*3+(chunkX-v.origin.X)]
 }
 
-// productionCompanionPassableBlocks 返回寻路阻挡表的生产映射：空气、作物与
+// productionCompanionPassableBlocks 返回寻路阻挡表的生产映射：空气、植物与
 // 火把五形态可通过，其余一切注册方块阻挡。除流体外，该判定与 collision
 // oracle（physics.BlockCollisionBoxes）逐一对齐——零碰撞体的编号可通过，其余
 // 非空气方块都有碰撞体故阻挡（玻璃、树叶与顶面低 1/16 的耕地都不例外，耕地有
 // 碰撞体正意味着伙伴可以站在农田上）；未注册编号由 NewPathBlockTable 缺省视为
 // 阻挡。
 //
-// 作物与火把都**不是**例外，是照章办事：它们在 oracle 下零碰撞体，这里就如实
+// 植物与火把都**不是**例外，是照章办事：它们在 oracle 下零碰撞体，这里就如实
 // 放行。为什么不像流体那样豁免——流体的豁免防的是「走进去沉底且自己走不出
 // 来」，而穿过一株小麦或一枚火把对伙伴没有任何后续状态（不下沉、不扣氧气、
 // 不受伤），把作物当墙只会让伙伴绕开自家农田，或者在农田中央被自己种的小麦
@@ -177,8 +177,8 @@ func (v companionChunkView) revisionAt(chunkX, chunkZ int32) uint64 {
 // 有碰撞编号误入本表都会在那里红掉。
 func productionCompanionPassableBlocks() map[core.BlockID]bool {
 	passable := map[core.BlockID]bool{core.AirID: true}
-	for id := core.WheatStage0ID; id <= core.CarrotStage7ID; id++ {
-		if core.IsCrop(id) {
+	for id := core.AirID; id < core.BlockIDMax; id++ {
+		if core.IsPlant(id) {
 			passable[id] = true
 		}
 	}

@@ -58,6 +58,8 @@ func TestFluidGateOffProducesNoFluid(t *testing.T) {
 
 // TestFluidGateOnFillsSeaLevel 覆盖 spec 场景「开关开启时海平面以下注水」:
 // 海平面及其以下、原本为空气的格全部为源方块,海平面以上不含流体。
+// 自然短草层的唯一两态分歧:门控关闭时海水步写空气,surface=63 的命中列在
+// 海平面格(y=64)装饰短草;开启态该格先被海水占据——海水优先于短草。
 func TestFluidGateOnFillsSeaLevel(t *testing.T) {
 	filled := 0
 	for _, pos := range fluidTestChunks {
@@ -74,8 +76,15 @@ func TestFluidGateOnFillsSeaLevel(t *testing.T) {
 								pos, x, y, z, after)
 						}
 						filled++
+					case before == core.ShortGrassID && y <= seaLevelY:
+						// 关闭态在海平面装饰的短草,开启态让位给海水。
+						if after != core.WaterSourceID {
+							t.Fatalf("chunk=%+v (%d,%d,%d) 海平面短草未让位给海水: %d",
+								pos, x, y, z, after)
+						}
+						filled++
 					default:
-						// 其余格(含海平面以上的空气)必须原样保留——不只是
+						// 其余格(含海平面以上的空气与短草)必须原样保留——不只是
 						// "不是流体":把它改写成任意别的方块同样是注水越界。
 						if after != before {
 							t.Fatalf("chunk=%+v (%d,%d,%d) 不该注水却被改写: 关闭=%d 开启=%d",
@@ -92,7 +101,8 @@ func TestFluidGateOnFillsSeaLevel(t *testing.T) {
 }
 
 // TestFluidGateKeepsNonFluidCells 覆盖 spec 场景「注水不改变其他生成结果」:
-// 非空气且非流体的格在开关两态下逐格一致。
+// 非空气且非流体的格在开关两态下逐格一致。短草例外:关闭态在海平面格
+// 装饰的短草,开启态让位给海水(海水优先于短草);海平面以上的短草两态一致。
 //
 // 断言同时统计地表分层、矿石与树木三类方块的出现数量并要求非零:注水在
 // 实现上排在橡树写入之后,若这三类里任何一类在语料中缺席,"不受影响"就是
@@ -108,6 +118,14 @@ func TestFluidGateKeepsNonFluidCells(t *testing.T) {
 					before, after := dry.BlockAt(x, y, z), wet.BlockAt(x, y, z)
 					if before == core.AirID || core.IsFluid(before) {
 						continue
+					}
+					if before == core.ShortGrassID {
+						// 海平面及以下:让位给海水;以上:两态逐格一致。
+						if after == before || (y <= seaLevelY && core.IsFluid(after)) {
+							continue
+						}
+						t.Fatalf("chunk=%+v (%d,%d,%d) 短草被非法改写: 关闭=%d 开启=%d",
+							pos, x, y, z, before, after)
 					}
 					if after != before {
 						t.Fatalf("chunk=%+v (%d,%d,%d) 注水改写了非流体格: 关闭=%d 开启=%d",

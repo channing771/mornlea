@@ -53,6 +53,26 @@ func TestSubmersionFlagsFullySubmergedSetsBothFlags(t *testing.T) {
 	}
 }
 
+func TestSubmersionFlagsWithTunablesIgnoresConflictingActiveSnapshot(t *testing.T) {
+	t.Cleanup(func() { physics.SetTunables(physics.DefaultTunables()) })
+
+	position := mgl32.Vec3{0.5, 10, 0.5}
+	world := fluidLayers(11)
+	explicit := physics.DefaultTunables()
+	explicit.EyeHeight = 1.62
+	conflicting := explicit
+	conflicting.EyeHeight = 0.2
+	physics.SetTunables(conflicting)
+
+	body, eye := physics.SubmersionFlagsWithTunables(position, world, explicit)
+	if !body || !eye {
+		t.Fatalf("显式 EyeHeight 未决定浸没标志：body/eye=%v/%v", body, eye)
+	}
+	if _, activeEye := physics.SubmersionFlags(position, world); activeEye {
+		t.Fatal("冲突活动 EyeHeight 的对照夹具未生效")
+	}
+}
+
 // TestSubmersionFlagsDryWorldClearsBothFlags 守住「没有水时两个标志都为假」，
 // 否则上面两条会被一个恒真实现同时骗过。
 func TestSubmersionFlagsDryWorldClearsBothFlags(t *testing.T) {

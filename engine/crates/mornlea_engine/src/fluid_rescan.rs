@@ -802,6 +802,21 @@ mod tests {
     }
 
     #[test]
+    fn uniform_short_grass_neighbor_breaks_section_fixed_point() {
+        // 段 1 均匀水源,元数据 (0,1) 同段是均匀短草:短草可替换,区段级
+        // 不动点不成立 → 档 3 逐格 4096。段内边缘源的 −x 邻格读裙边(石)
+        // 仍密封,五邻不动点全部成立,无产出——本用例钉的是重扫侧与
+        // `fluid_eval::replaceable` 共用同一植物谓词,短草不会让水源区段
+        // 被误判成不动点而漏扫。
+        let mut box_ = RescanBox::new(0, 0);
+        box_.uniform_section(1, WATER_SOURCE);
+        box_.set_meta(0, 1, 1, 1, crate::fluid_eval::SHORT_GRASS);
+        let output = box_.run();
+        assert_eq!(decode_summary(&output), (1 + 4096 + 22, true));
+        assert!(decode_positions(&output).is_empty());
+    }
+
+    #[test]
     fn unsealed_edge_sources_emit_through_skirt_column() {
         // 段 3 均匀水源,元数据 (0,1) 均匀空气破坏区段级不动点;裙边列
         // (bx=0, bz=5) 全高空气 → 中心列 (lx=0, lz=4) 的 16 个源格的 −x

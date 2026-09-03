@@ -7,34 +7,16 @@ import (
 	"github.com/channing771/mornlea/internal/sim/realm"
 )
 
-func (engine *Engine) newMutation() *realm.Mutation {
-	return engine.realm.NewMutation()
-}
+type pendingChunkChanges = realm.Mutation
 
-func (engine *Engine) recordChange(
+func (engine *engineContext) recordChange(
 	dimensionID core.DimensionID,
 	position core.BlockPos,
 	block core.BlockID,
-	mutation *realm.Mutation,
+	pending *pendingChunkChanges,
 ) {
-	mutation.Record(dimensionID, position, block)
+	pending.Record(dimensionID, position, block)
 	engine.realm.EnqueueFluidUpdate(dimensionID, position)
-}
-
-func (engine *Engine) finishChanges(mutation *realm.Mutation, result *TickResult) {
-	for _, batch := range mutation.Commit() {
-		changes := make([]BlockChange, len(batch.Changes))
-		for index, change := range batch.Changes {
-			changes[index] = BlockChange{Position: change.Position, Block: change.Block}
-		}
-		result.Changes = append(result.Changes, ChunkChangeBatch{
-			Dimension:    batch.Dimension,
-			Chunk:        batch.Chunk,
-			BaseRevision: batch.BaseRevision,
-			NewRevision:  batch.NewRevision,
-			Changes:      changes,
-		})
-	}
 }
 
 // sortChunkKeys 用泛型排序避免 sort.Slice 的反射 swapper 分配，

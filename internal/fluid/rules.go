@@ -6,17 +6,19 @@ import "github.com/channing771/mornlea/internal/core"
 // target 所在的格，target 现有的内容是否允许被改写。
 //
 // 判定表（对应 task-2-brief.md 2.1 与 spec.md「流动规则」的多条 Scenario；
-// 作物行为由 flood-destroys-crops 引入，见 design.md D1/D5）：
+// 作物行为由 flood-destroys-crops 引入，短草由 natural-grass-seeds 追加，
+// 见 design.md D1/D5）：
 //
 //	目标格                        可替换？
 //	空气                          是
 //	流体等级更大（更弱）的流动水    是
-//	作物（小麦、马铃薯、胡萝卜任意生长阶段） 是——水淹即冲毁；冲毁后的掉落结算由权威写入侧
-//	                                （sim）在流体写入汇聚点完成，本包不感知物品
+//	植物（作物任意生长阶段与短草）  是——水淹即冲毁/清除；冲毁后的掉落结算由权威写入侧
+//	                                （sim）在流体写入汇聚点完成，本包不感知物品。
+//	                                作物按采掘同表掉落，短草零掉落且不受容量限制
 //	源方块                        否——「源不可被流动方块替换」
 //	流体等级更小或相等的流动水      否——防止弱水倒灌强水，也防止无意义的同值改写
-//	非作物的实心方块                否——「实心方块不可替换」；作物已在上方单独
-//	                                放行，故此行适用范围不含作物
+//	非植物的实心方块                否——「实心方块不可替换」；植物已在上方单独
+//	                                放行，故此行适用范围不含植物
 //
 // newLevel 由调用方按当前正在做的传播（垂直恒为 1，水平为 N+1）算出，本函数
 // 不关心它是如何得来的，只做纯粹的比较。
@@ -36,18 +38,20 @@ func Replaceable(target core.BlockID, newLevel uint8) bool {
 			return false
 		}
 	}
-	if core.IsCrop(target) {
-		// 作物对流动水可替换。放行点必须在本函数而不能在 `evalCell` 里特判：
-		// 垂直优先与水平递减这两处写入判定，加上 sim 重扫侧的两个不动点捷径
-		// （`fluidSourceIsFixedPoint` 与 `fluidSectionIsFixedPoint`），全部经由
-		// 这一个谓词读世界，改一处即全链一致；若捷径另用一套保守判定，
-		// 「邻作物的源」会被误判成不动点跳过入队，水面在农田边永久卡死
-		// （design.md D1 的被否决方案）。本包只回答「能不能写」，作物被冲毁后
-		// 的掉落结算是权威写入侧（sim）的职责，fluid 包不感知物品。
+	if core.IsPlant(target) {
+		// 植物（作物与短草）对流动水可替换。放行点必须在本函数而不能在
+		// `evalCell` 里特判：垂直优先与水平递减这两处写入判定，加上 sim 重扫
+		// 侧的两个不动点捷径（`fluidSourceIsFixedPoint` 与
+		// `fluidSectionIsFixedPoint`），全部经由这一个谓词读世界，改一处即
+		// 全链一致；若捷径另用一套保守判定，「邻植物的源」会被误判成不动点
+		// 跳过入队，水面在农田边永久卡死（design.md D1 的被否决方案）。本包
+		// 只回答「能不能写」：作物被冲毁后的掉落结算是权威写入侧（sim）的
+		// 职责，短草被覆盖则零掉落、不做容量预演——两者的区分同样留在 sim
+		// 写入侧，fluid 包不感知物品。
 		return true
 	}
 	if !core.IsFluid(target) {
-		// 非空气、非作物、非流体、非可流入开启门：非作物的实心方块，一律不可替换。
+		// 非空气、非植物、非流体、非可流入开启门：非植物的实心方块，一律不可替换。
 		return false
 	}
 	if target == core.WaterSourceID {

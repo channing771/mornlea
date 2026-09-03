@@ -27,8 +27,8 @@ const (
 	//
 	// 这里是**上限**而不是当前条目数：internal/assets.NewRegistry() 把
 	// core.AirID..core.BlockIDMax-1 的全部已注册方块烘焙进 mesh snapshot
-	// （见 internal/assets/blocks.go），今天是 84 条（门 9 个、火把五形态与
-	// 床八形态合入后）。
+	// （见 internal/assets/blocks.go），今天是 85 条（门 9 个、火把五形态、
+	// 床八形态与短草合入后）。
 	// 本常量此前写成 `int(core.WaterLevel7ID)+1`，即"恰好等于当前条目数"，
 	// 于是追加方块编号时 Go 侧会自己长大而 Rust 侧不会，两侧静默分叉。改成
 	// 显式上限后，「条目数不得超过上限」由 TestRegistryCapacityCoversEveryRegisteredBlock

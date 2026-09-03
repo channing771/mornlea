@@ -11,6 +11,10 @@ import (
 	"github.com/channing771/mornlea/internal/storage"
 )
 
+// wantStarterMaterialInventory 是缺失玩家一次性材料包的期望值：前 14 格各一
+// 整叠材料、其余全部栏位为空。这里独立写死清单与数量，实现改动必须同步过来。
+// 材料包不再包含小麦种子（change natural-grass-seeds）：第一颗种子改由采除
+// 自然短草取得，第 15 格必须保持空。
 func wantStarterMaterialInventory() core.Inventory {
 	items := [...]core.ItemID{
 		core.ItemCobblestone, core.ItemSmoothStone, core.ItemSand, core.ItemGravel,
@@ -22,8 +26,6 @@ func wantStarterMaterialInventory() core.Inventory {
 	for slot, item := range items {
 		inventory.Backpack[slot] = core.ItemStack{Item: item, Count: core.MaxStackCount}
 	}
-	// 起步种子紧随 14 格材料；这里独立写死格位与数量，实现改动必须同步过来。
-	inventory.Backpack[14] = core.ItemStack{Item: core.ItemWheatSeeds, Count: core.MaxStackCount}
 	return inventory
 }
 
@@ -563,9 +565,10 @@ func TestPlayerPersistenceObserveCopiesCallerSnapshot(t *testing.T) {
 	pollPlayerPersistenceUntilIdle(t, p, 6001)
 }
 
-// 捕获：一次性材料包不再含起步种子。草丛等自然来源尚不存在，这一格是玩家取得
-// 第一颗种子的唯一途径；断言精确到格位、物品与数量，去掉种子或改数量都会红。
-func TestPlayerPersistencePrepareMissingProvidesStarterWheatSeeds(t *testing.T) {
+// 捕获：一次性材料包仍把小麦种子塞进第 15 格。第一颗种子改由采除自然短草取得，
+// 材料包里不得再出现任何种子——断言扫全部 36 格（快捷栏 + 背包），把种子挪到
+// 其他栏位或改数量都会红。
+func TestPlayerPersistencePrepareMissingGrantsNoStarterWheatSeeds(t *testing.T) {
 	store := newControllablePlayerStore()
 	p := NewPlayers(store, playerPersistenceTestConfig())
 	t.Cleanup(p.CloseWorker)
@@ -574,20 +577,66 @@ func TestPlayerPersistencePrepareMissingProvidesStarterWheatSeeds(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	seeds := restored.Inventory.Backpack[starterSeedSlot]
-	if seeds != (core.ItemStack{Item: core.ItemWheatSeeds, Count: core.MaxStackCount}) {
-		t.Fatalf("材料包第 %d 格=%+v，想要 %d 颗小麦种子",
-			starterSeedSlot+1, seeds, core.MaxStackCount)
+	for slot, stack := range restored.Inventory.Backpack {
+		if stack.Item == core.ItemWheatSeeds {
+			t.Fatalf("材料包背包第 %d 格=%+v，缺失玩家不该获得任何起步种子", slot, stack)
+		}
 	}
-	// 种子必须紧随 14 格材料之后，且不得占用快捷栏。
+	for slot, stack := range restored.Inventory.Hotbar.Slots {
+		if stack.Item == core.ItemWheatSeeds {
+			t.Fatalf("材料包快捷栏第 %d 格=%+v，缺失玩家不该获得任何起步种子", slot, stack)
+		}
+	}
+	// 最后一叠材料之后的格必须为空：种子被取消后不得以其他物品顶替这一格。
+	const afterMaterials = 14
+	if got := restored.Inventory.Backpack[afterMaterials]; got != (core.ItemStack{}) {
+		t.Fatalf("材料包第 %d 格=%+v，想要空", afterMaterials+1, got)
+	}
+	if restored.Inventory.Backpack[afterMaterials-1].Item != core.ItemMossyCobblestone {
+		t.Fatalf("第 %d 格=%+v，想要紧随其后仍是最后一种材料",
+			afterMaterials, restored.Inventory.Backpack[afterMaterials-1])
+	}
 	if restored.Inventory.Hotbar != (core.Hotbar{}) {
 		t.Fatalf("材料包快捷栏=%+v，想要空", restored.Inventory.Hotbar)
 	}
-	if restored.Inventory.Backpack[starterSeedSlot-1].Item != core.ItemMossyCobblestone {
-		t.Fatalf("种子格之前=%+v，想要紧随最后一种材料",
-			restored.Inventory.Backpack[starterSeedSlot-1])
+}
+
+// 捕获：已有玩家的旧 64 颗起步种子被删除、补发或重排。升级前的老玩家可能持有
+// 旧材料包含义下的「14 叠材料 + 第 15 格 64 颗种子」背包；这些栏位 MUST 逐槽
+// 保留，取消起步种子只影响「存档明确不存在」的构造路径。
+func TestPlayerPersistenceExistingPlayerKeepsLegacyStarterSeeds(t *testing.T) {
+	store := newControllablePlayerStore()
+	id := playerID(40)
+	legacy := wantStarterMaterialInventory()
+	// 还原升级前材料包：旧实现在第 15 格补了 64 颗种子。
+	legacy.Backpack[14] = core.ItemStack{Item: core.ItemWheatSeeds, Count: core.MaxStackCount}
+	legacy.Hotbar.Slots[3] = core.ItemStack{Item: core.ItemWheatSeeds, Count: 5}
+	stored := storedPlayerForTest(id, 7, "Persisted", testPlayerSnapshot(3))
+	stored.Inventory = legacy
+	store.loaded[id] = stored
+	p := NewPlayers(store, playerPersistenceTestConfig())
+	t.Cleanup(p.CloseWorker)
+
+	restored, err := p.Prepare(context.Background(), id, "Legacy", testMetadata())
+	if err != nil {
+		t.Fatal(err)
 	}
-	if restored.Inventory.Backpack[starterSeedSlot+1] != (core.ItemStack{}) {
-		t.Fatalf("种子格之后=%+v，想要空", restored.Inventory.Backpack[starterSeedSlot+1])
+	if restored.Inventory != legacy {
+		t.Fatalf("已有玩家背包被改动\n得到=%+v\n想要=%+v", restored.Inventory, legacy)
 	}
+	// Confirm 后的保存也必须原样带走这些种子，不删除也不累加；激活用确认昵称，
+	// 与既有「Confirm 持久化暂存昵称」用例同构，保证确有一条保存发生。
+	if err := p.Activate(id, "Legacy"); err != nil {
+		t.Fatal(err)
+	}
+	p.Confirm(id)
+	if err := p.Poll(6000); err != nil {
+		t.Fatal(err)
+	}
+	save := receivePlayerSave(t, store)
+	if save.Inventory != legacy {
+		t.Fatalf("已有玩家落盘背包被改动\n得到=%+v\n想要=%+v", save.Inventory, legacy)
+	}
+	store.complete(nil)
+	pollPlayerPersistenceUntilIdle(t, p, 6001)
 }

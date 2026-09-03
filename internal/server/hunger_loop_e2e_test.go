@@ -15,8 +15,6 @@ import (
 	"github.com/channing771/mornlea/internal/storage"
 )
 
-const hungerLoopStarterSeedSlot = 14
-
 // 端到端饥饿脚本的固定预算与夹具量。预算的**唯一职责**是把挂起变成一条读得懂
 // 的失败而不是 go test 超时，因此它们不是性能断言，宁可宽到几乎不可能误伤。
 const (
@@ -33,7 +31,7 @@ const (
 	// 不能把一叠 3 颗拆开摆放。
 	hungerLoopWheatPerSlot uint8 = 1
 	// hungerLoopLoginBudget 是等登录就绪（Ready + 背包发布 + 九个区块进镜像）
-	// 的 tick 预算，取值理由同 `farmingLoginBudget`：实测卡点是异步区块生成，
+	// 的 tick 预算，取值理由与自然种子闭环一致：实测卡点是异步区块生成，
 	// 并发跑满包时会漂到 300 tick 以上，3000 给到一个数量级余量。
 	hungerLoopLoginBudget = 3000
 	// hungerLoopGroundBudget 是等玩家在出生列站稳的 tick 预算。出生点在地面
@@ -62,7 +60,7 @@ type hungerLoopStage struct {
 // hungerLoopExpected 是整条脚本在 wire 上的 (生命值, 饥饿值) 精确数列。
 //
 // 脚本全程只有一个疲劳来源——自然回血（每回 1 点生命值累积 6000 千分位疲劳，
-// 见 `internal/sim/hunger.go` 的固定表），因此每一行都能由两个常量算死：
+// 见 `internal/sim/entity/hunger.go` 的固定表），因此每一行都能由两个常量算死：
 // 阈值 4000、初始饱和度 5000（= 5 点）。第 k 次回血之后累计疲劳是 6000k，
 // 跨过的阈值数是 `floor(6000k/4000)`；前 5 个阈值吃掉初始饱和度，第 6 个起
 // 才开始扣饥饿值。
@@ -116,10 +114,11 @@ var hungerLoopExpected = []hungerLoopStage{
 // `applyDamage` 入口，因此「受伤重置回血计时」这条前提也是跑出来的而不是假设的。
 //
 // 3 小麦由夹具 `SetPlayerInventoryForTest` 直给并写在这里：小麦可得已由
-// `TestFarmingLoopEndToEndMemory`（种 → 长 → 收，精确数列 63 → 65 → 64）证明，
-// 本脚本不重跑农业闭环——那条路径要跨上千个权威 tick，而且它验的是农业本身。
-// 一次性材料包只发种子（`starterMaterialInventory`），不发小麦更不发面包，
-// 脚本在第 1 步显式钉住这一点。
+// `TestFarmingLoopEndToEndMemory`（自然种子 → 种 → 长 → 收）证明，本脚本不重
+// 跑农业闭环——那条路径要跨上千个权威 tick，而且它验的是农业本身。
+// 一次性材料包不再发种子也不发小麦更不发面包：第一颗种子由采除自然短草取
+// 得（`TestNaturalSeedFarmingMemoryTCPParity`），脚本在第 1 步显式钉住「登录
+// 时没有任何种子与食物」。
 //
 // 全部断言都从 wire 读：生命值与饥饿值读 `network.PlayerState`，背包读已确认的
 // `network.InventoryState`。单机与远程共用同一套模拟这条架构约束，只有在
@@ -185,18 +184,17 @@ func TestHungerLoopEndToEndMemory(t *testing.T) {
 			}
 		},
 	)
-	wantSeeds := core.ItemStack{Item: core.ItemWheatSeeds, Count: core.MaxStackCount}
-	if got := wireInventory.Backpack[hungerLoopStarterSeedSlot]; got != wantSeeds {
-		t.Fatalf("登录后材料包第 %d 格 = %+v，想要 %+v",
-			hungerLoopStarterSeedSlot+1, got, wantSeeds)
+	// 「没有种子与食物」必须扫全部 36 格：材料包若顺手补发种子或面包，后面
+	// 的「小麦由夹具直给」与「饿到门控之下」两步都会失去意义，而只看快捷栏
+	// 的断言抓不住那种材料包。
+	if got := countItem(wireInventory, core.ItemWheatSeeds); got != 0 {
+		t.Fatalf("登录时已持有小麦种子 %d 颗，材料包不再发种子", got)
 	}
-	// 「没有食物」必须扫全部 36 格：材料包若顺手发一块面包，后面的合成与
-	// 「饿到门控之下」两步都会失去意义，而只看快捷栏的断言抓不住那种材料包。
 	if got := countItem(wireInventory, core.ItemBread); got != 0 {
 		t.Fatalf("登录时已持有面包 %d 个，材料包不该发食物", got)
 	}
 	if got := countItem(wireInventory, core.ItemWheat); got != 0 {
-		t.Fatalf("登录时已持有小麦 %d 个，材料包只发种子", got)
+		t.Fatalf("登录时已持有小麦 %d 个，材料包只发建筑材料", got)
 	}
 
 	host.mu.Lock()

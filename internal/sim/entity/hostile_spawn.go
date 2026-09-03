@@ -60,7 +60,7 @@ func hostileCandidateHash(seed int64, tick uint64, x, y, z int32) uint64 {
 // ≤64、候选 chunk 完整加载、双格空气 + 下方 solid + 非流体落点、门槛哈希、
 // 每玩家 48 格内 ≤8、局部区块光 ≤7、非零唯一 ID。整个判定只读世界，绝不
 // 为生成触发同步加载。
-func (engine *Engine) advanceHostileSpawn() {
+func (engine *engineContext) advanceHostileSpawn() {
 	now := engine.worldTime.Load()
 	phase := core.DisplayDayPhase(now, engine.DayPhaseOffset())
 	if phase < hostileSpawnPhaseStart || phase > hostileSpawnPhaseEnd {
@@ -150,7 +150,7 @@ func hostileSpawnColumnSpot(dimension *Dimension, x, z int32) (int32, bool) {
 // hostileNearLimitExceeded 报告「任一 active 玩家水平 48 格内已有 8 只夜行
 // 者，且候选落在该玩家的 48 格半径内」。距离全部在平方域比较，避免开方；
 // 统计范围只含同维个体，成本至多 active 玩家数 × 64。
-func (engine *Engine) hostileNearLimitExceeded(dimensionID core.DimensionID, candidate mgl32.Vec3) bool {
+func (engine *engineContext) hostileNearLimitExceeded(dimensionID core.DimensionID, candidate mgl32.Vec3) bool {
 	nearSq := float32(maxHostilesNearRadius) * float32(maxHostilesNearRadius)
 	for _, id := range engine.sortedActiveSessions() {
 		session := engine.sessions[id]
