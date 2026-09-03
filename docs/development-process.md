@@ -12,7 +12,7 @@
 | `brainstorming` | 阶段 1 内容确认 | 分类 → 澄清 → 短设计 → 显式批准，明确需求 |
 | `using-git-worktrees` | 阶段 2 隔离分支 | 创建/校验隔离工作区 |
 | `openspec-propose` / `openspec-apply-change` / `openspec-sync-specs` / `openspec-archive-change`（仓库技能） | 阶段 2 建 change、阶段 5 归档 | OpenSpec 产物编写与主规格沉淀 |
-| `subagent-driven-development` | 阶段 3 执行 | fresh implementer + 每任务 SPEC/QUALITY 双评审 + 修复循环 + ledger |
+| `subagent-driven-development` | 阶段 3 执行 | 一轮开发一轮审查 + ledger（定义以 skill 为准） |
 | `test-driven-development` | 阶段 3 内每任务 | red → green → refactor |
 | `requesting-code-review` | 阶段 3 末整分支终审、阶段 4 门禁复核 | 代码评审载体 |
 | `verification-before-completion` | 阶段 4 门禁 | 完成前以真实命令输出自查 |
@@ -26,7 +26,7 @@
 |---|---|---|
 | 控制会话 | 派发、协调、裁决（Ruling）；不实现 | 绕过子代理直接实现、代评审 |
 | 规划者 | 每日固定时间扩展/校对规划（见 `docs/agents/planner.md`） | 认领任务、修改功能代码、合并他人分支 |
-| 评审者 | SPEC 合规 / QUALITY 质量双裁决 | 自己实现与评审同一 Task |
+| 评审者 | 按 skill 做一轮任务评审 | 自己实现与评审同一 Task |
 
 ## 阶段 0：认领
 
@@ -54,17 +54,16 @@
 
 ## 阶段 3：subagent-driven-development 执行
 
-严格按 `subagent-driven-development` skill 的任务循环推进。「每 Task 全新 implementer 实现 → 独立任务评审 → 修复循环」是该 skill 的内含模式，不拆为独立阶段：
+严格按 `subagent-driven-development` skill 的任务循环推进。「一轮开发一轮审查」是该 skill 的内含模式，不拆为独立阶段，评审定义以 skill 内任务评审为准：
 
 1. **每 Task 派发全新 implementer 子代理**；任务 brief 是唯一需求来源，必须包含：当前 Task、基线 SHA、对应计划、change 产物（proposal/spec/design/tasks）、全局约束、精确验证命令。implementer 不得自我派生子代理或评审者。
 2. **TDD：red → green → refactor**；先写失败测试再实现。
 3. 测试组织纪律：测试与被测代码同目录；一个测试文件只装一个主题/一条被证性质；共享 helper 每包只设一个中心（`*_helpers_test.go`）；命名不叠加前缀后缀；已有混装文件先做零行为变化拆分。
 4. 跨语言（Rust）改动同步：引擎 crate 内 `#[cfg(test)]` 主题子模块 + helper 中心；两侧手工同步的常量（如 registry 上限）必须在同一 Task 内改齐。
 5. 实现发现规格不成立或范围漂移时，**先更新 OpenSpec 产物**再继续编码；绝不只改代码。
-6. 每 Task 完成后做**双评审**（全新 reviewer）：SPEC 合规（行为契约、可判定场景、门禁覆盖）+ QUALITY（设计取舍、注释、命名、并发/资源边界、测试锋利度）。
-7. 修复循环单任务**最多 5 轮**：R≤3 续用原 implementer，R≥4 换新 implementer（更强模型），超限逐条裁决并记录。
-8. 一切进度、评审结论与裁决写入该 change 的 `ledger.md`，格式：`Ruling: <决定什么> — <为什么> — <错在哪>`。未决项必须全文誊入 `proposal.md` 的「延期与放弃」节。
-9. **验证证据按 SHA 复用**：每 Task 的验证命令与输出摘要记入 `ledger.md` 并标注基线 SHA；同一 SHA 且工作区未再改动时，后续 implementer 与评审者直接引用 ledger 证据，不重跑同等命令。评审者只对该 Task 新增或修改的行为做 focused 抽查复核，不把全量 race 当评审手段——全量门禁保留在阶段 4 与 CI。
+6. 每 Task 完成后做一轮任务评审，评审与修复循环定义以 skill 为准，不在本文件重复。
+7. 一切进度、评审结论与裁决写入该 change 的 `ledger.md`，格式：`Ruling: <决定什么> — <为什么> — <错在哪>`。未决项必须全文誊入 `proposal.md` 的「延期与放弃」节。
+8. **验证证据按 SHA 复用**：每 Task 的验证命令与输出摘要记入 `ledger.md` 并标注基线 SHA；同一 SHA 且工作区未再改动时，后续 implementer 与评审者直接引用 ledger 证据，不重跑同等命令。评审者只对该 Task 新增或修改的行为做 focused 抽查复核，不把全量 race 当评审手段——全量门禁保留在阶段 4 与 CI。
 
 ## 阶段 4：整分支终审与门禁
 
@@ -103,6 +102,6 @@ openspec validate --all --strict --no-interactive
 | 0 认领 | 改 backlog 行 + docs-only 提交 | 状态/认领人 |
 | 1 确认 | `brainstorming` 分类→澄清→短设计→显式批准 | 设计结论（进 proposal/design 与 brief） |
 | 2 契约 | worktree + OpenSpec change + strict validate | proposal/spec/design/tasks/ledger |
-| 3 实现 | SDD 任务循环：fresh implementer + TDD + SPEC/QUALITY 双评审 ≤5 轮 | 提交 + 测试 + ledger 结论与 Ruling |
+| 3 实现 | SDD 任务循环：一轮开发一轮审查 + TDD（定义以 skill 为准） | 提交 + 测试 + ledger 结论与 Ruling |
 | 4 门禁 | gates.sh / 全量验证 + 视觉/基准 | 通过证据（记录数值） |
 | 5 收尾 | sync → archive → 基线同步 → PR → 监听 CI 至全绿 → merge → 回填 | 归档 change + 已合并 PR + backlog 标记 |

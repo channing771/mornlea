@@ -53,7 +53,7 @@ Mornlea 是使用 Go 1.26 编写的独立体素游戏，Go module 为 `github.co
 
 ## 开发流程
 
-复杂功能、新模块、跨包重构、存档、协议或性能契约变更必须走 OpenSpec，代码与计划不一致时先更新 change 产物。OpenSpec change 执行、多步骤修复与重构必须按 subagent-driven-development 执行：每项任务由 fresh implementer 实现并接受独立规格与质量评审，进度和裁决写入 ledger；控制会话不得直接实现。小型拼写修复、纯格式修改和一次性实验可直接修改，但仍须完成相称验证。详细流程见 `docs/development-process.md`、`docs/openspec.md` 和 `docs/test-organization.md`。
+复杂功能、新模块、跨包重构、存档、协议或性能契约变更必须走 OpenSpec，代码与计划不一致时先更新 change 产物。OpenSpec change 执行、多步骤修复与重构必须按 `subagent-driven-development` skill 执行：一轮开发一轮审查，进度和裁决写入 ledger；控制会话不得直接实现，评审定义以 skill 内任务评审为准。小型拼写修复、纯格式修改和一次性实验可直接修改，但仍须完成相称验证。详细流程见 `docs/development-process.md`、`docs/openspec.md` 和 `docs/test-organization.md`。
 
 ## 验证
 

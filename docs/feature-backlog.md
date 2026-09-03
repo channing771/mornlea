@@ -30,7 +30,7 @@
 
 ## 开发流程
 
-完整流程（认领 → OpenSpec change → subagent-driven-development 执行 → SPEC/QUALITY 双评审 → 门禁 → 归档收尾 → 并行冲突规则）在**唯一**的说明文档 [`docs/development-process.md`](development-process.md)；本表与 GitHub Discussion #71 只引用它，不再内嵌重复。
+完整流程（认领 → OpenSpec change → `subagent-driven-development` 一轮开发一轮审查 → 门禁 → 归档收尾 → 并行冲突规则）在**唯一**的说明文档 [`docs/development-process.md`](development-process.md)；本表与 GitHub Discussion #71 只引用它，不再内嵌重复。
 
 日常执行者：每日固定时间扩展规划的**规划者**——角色卡、调度与运行入口见 [`docs/agents/README.md`](agents/README.md)（`make agent-planner`）。收尾前运行 `scripts/agents/gates.sh` 汇总门禁子集，并单独运行 `make rust-check`；两者都通过才是完整提交前门禁。
 
