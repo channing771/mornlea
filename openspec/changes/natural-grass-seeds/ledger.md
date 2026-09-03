@@ -115,21 +115,21 @@ Ruling: planning candidate `ab8292569393edfb6748a82f6303c50b0c7654e9` 的独立 
 
 ## Task 6.1 Benchmark V21 And Record-only Workload
 
-- Status: `PENDING`.
-- Task baseline SHA: `PENDING`.
-- Implementer: `PENDING`（fresh）。
-- RED evidence: `PENDING`（producer scenario v21、比较器唯一 `20:21` 迁移、`19:20` 退役、同版本性能退化仍 record-only、结构/身份/overflow/data-loss/I/O 硬失败）。
-- Code/test commit C: `PENDING`（完整 SHA + 单行英文 subject；不得包含 `tasks.md`/`ledger.md`，也不得包含 capture/golden 或当前文档同步）。
-- Files changed: `PENDING`（仅 `cmd/mornlea/benchmark` 与 `cmd/perfcheck` 的 producer/comparator 代码和测试）。
-- Record-only benchmark evidence: `PENDING`（fresh `mktemp -d` 路径、producer SHA=`I`、JSON SHA/身份/transport/样本完整性、v21 self-compare 原始输出与性能数值摘要；不得提升或覆盖 accepted `docs/notes/perf-baseline*.json`）。
-- Hard-failure evidence: `PENDING`（性能数值不改变退出状态；报告缺失/损坏、身份或 transport/commit 不匹配、真实 overflow、数据丢失与 I/O 继续硬失败）。
-- Final verified implementation SHA I: `PENDING`（`C` 加本任务全部 repair 后的完整 SHA）。
-- Focused verification bound to I: `PENDING`（benchmark/perfcheck race、fresh v21 producer/self-compare、archcheck、race-changed 与 `git diff --check`）。
-- SPEC reviewer / verdict / findings at I: `PENDING`.
-- QUALITY reviewer / verdict / findings at I: `PENDING`.
-- Repair rounds and commits: `PENDING`.
-- Tasks/ledger-only evidence commit L: `PENDING`（只含本任务 checkbox 与 ledger 证据）。
-- Ruling: `PENDING`.
+- Status: `DONE`（2026-09-03 控制会话勾选）。
+- Task baseline SHA: `986e4fc231eef5664f898986a44b96838f423e40`（Task 5.1 `L`）。
+- Implementer: fresh zcode implementer（独立于 1.1–5.1）。
+- RED evidence: producer 3 处（`scenarioVersion=20, want 21` 等）;comparator 8 个顶层失败（`场景迁移授权 "20:21" 无效：只允许 v19 到 v20 使用 19:20`,含 17 子测试 incomplete-v21 与跨传输场景门）;archcheck `TestBaselineVersionsMatchCode` 机制性绑定根 `AGENTS.md` benchmark token（单 token 同步为机械必需）。实现者中途自查纠正一次迁移记录断言反转（`len(records) != 0`）,测试即捕获并恢复原语义（迁移仍产绝对门记录、只跳过相对回归）。
+- Code/test commit C: `081248930c3ef89a1373b270f136682a39ecb80f` `chore(benchmark): advance natural grass workload`（10 文件 +110/−95,不含 `tasks.md`/`ledger.md`/capture/golden/docs-notes）。
+- Files changed: `cmd/mornlea/benchmark/benchmark.go`（仅 `scenarioVersion` 20→21+理由注释:registry 84→85、`[31..54]∪{68}`、MGW1 layout 3/ABI v10、确定性短草、每格 4 交叉 quad;分辨率/阶段/运动/样本/指标/阈值全不动）、`cmd/perfcheck/compare.go`（唯一显式迁移 `20:21`,`19:20` 退役）、`cmd/perfcheck/main.go`（flag 用法）、perfcheck 5 个测试（v21 helper/migration 矩阵含 `{21,21,"20:21"}` 未用授权拒绝、incomplete-v21、v6..v20 历史可读）、benchmark 2 个测试（V20→V21、更名 `...IncludesNaturalGrassWorkload`）、根 `AGENTS.md` 单 token（见 Ruling）。
+- Record-only benchmark evidence: fresh `mktemp -d` producer 绑定 `I`:JSON SHA256 `3979d358f04550c32c6e1b2effcae94a747629fbf8ca1493bdfa9b35ab951fd1`,身份 scenario 21/memory/`git_commit=08124893`/Apple M2 16GiB/macOS 26.6.2/go1.26.0/2560x1440;样本 dropped=0 全组（still 10045/flying 43522/ticks 200/persistence 4938/player 256/interest 1600/remote_gpu 128）;producer 与 self-compare 均 `性能记录: flying p99 20.762 ms >= 12 ms` + exit 0（record-only 活体证明）;`19:20` exit 2、不存在路径 exit 2;accepted `docs/notes/perf-baseline*.json` 未动。SPEC reviewer 另行独立复现（fresh run SHA `0b91763a…`,flying p99 20.198 ms breach 仍 exit 0）。
+- Hard-failure evidence: 报告完整性/身份/transport/commit 一致性（`compare.go:78-98`、`validate.go`）、真实 overflow、数据丢失、I/O 继续 exit 2;性能数值与高水位 record-only（`validate.go:74-82`）。
+- Final verified implementation SHA I: `081248930c3ef89a1373b270f136682a39ecb80f`（无 repair 轮）。
+- Focused verification bound to I: implementer 于 clean commit 全绿:`make rust` ok;`go test ./cmd/mornlea/benchmark ./cmd/perfcheck -race -count=1` ok（8.1s,70 测试）;producer+self-compare 6:08 如上;`go test ./internal/archcheck -count=1` ok;`make test-race-changed RACE_BASE=986e4fc2` 闭包 4 包 ok（41.7s）;`git diff --check` clean。
+- SPEC reviewer / verdict / findings at I: fresh zcode SPEC reviewer = `SPEC PASS`,0 Critical/0 Important。A–E 全部 SATISFIED;独立复现 fresh producer/self-compare（live record-only 证明）;AGENTS.md 恰好单 token;旧测试名仅存于历史归档材料,无门禁引用。信息性:fresh-run 性能数值（still fps 167.6/p99 9.501ms;flying fps 369.9/p99 20.198ms;outbox hwm 1）为 record-only 观测,非门禁失败。
+- QUALITY reviewer / verdict / findings at I: fresh zcode QUALITY reviewer = `QUALITY PASS`,0 Critical/0 Important/1 Minor+2 Info:（Minor）CLI 级 exit-2 路径（缺报告 I/O、非法授权、硬件不匹配）无提交的自动化测试——检测逻辑经真实 validator 单测覆盖,`fail()→os.Exit(2)` 布线 4 行未动,implementer 已用真实 CLI 演练 exit-2,可接受;（Info）incomplete-report 为封闭变异表,新可选字段需扩展 validator——v21 不加字段,本任务无缺口;（Info）根 `AGENTS.md` 单 token 与 2.1/8dcb3b5b 先例一致,8.1 派发时不得重复标记。迁移三重匹配（baseline==20∧current==21∧allow=="20:21"）在 CLI 与程序两路均拒绝其他组合,`{21,21,"20:21"}` 拒绝为真实;`completeV21ComparableReport` 继承 v20 链含 v12 batch 语义;v6..v20 历史循环非空洞。
+- Repair rounds and commits: 无（首轮双 PASS）。
+- Tasks/ledger-only evidence commit L: 本 evidence commit（不回写自身 SHA,不冒充 `I`）。
+- Ruling: Task 6.1 final `I` = `08124893`,双评审零 Critical/Important,勾选成立 — 追认根 `AGENTS.md` benchmark scenario 单 token v20→v21 与 2.1 Ruling 同机制（archcheck 机械强制,先例 `1d21e8e4`/`8dcb3b5b`）,Task 8.1 仍独占其余文档段落（局部 `cmd/mornlea/benchmark/AGENTS.md` 保持 v20 待 8.1 更新,勿重复标记）— 性能数值为 record-only 观测记录在案。
 
 ## Task 7.1 Capture And 25-scene Visual Provenance
 
