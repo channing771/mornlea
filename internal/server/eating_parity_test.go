@@ -31,8 +31,10 @@ const (
 	// 而本脚本要验的是"两种传输下进食结算一致"，不是农业本身——农业闭环由
 	// farming_loop_e2e_test.go 覆盖。
 	//
-	// 也不能指望缺失玩家的一次性材料包：它给的是 core.ItemWheatSeeds
-	// （见 `starterMaterialInventory`），不是小麦，更不是面包。
+	// 也不能指望缺失玩家的一次性材料包（见 `starterMaterialInventory`）：
+	// 它既不含 `core.ItemWheatSeeds`，也不含小麦，更不含面包；第一颗种子
+	// 现在来自采除自然生成的短草，种子 → 小麦的链路由自然种子闭环 E2E
+	// （farming_loop_e2e_test.go）覆盖。
 	eatingParityWheatPerSlot uint8 = 1
 	// eatingParityEatTicks 是脚本按住进食输入推进的 tick 数，必须等于权威
 	// 默认的 `EatingTicks`。sim 的默认值不导出（archcheck 的禁导出清单），
