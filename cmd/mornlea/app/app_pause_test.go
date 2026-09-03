@@ -15,10 +15,10 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/config"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/server"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/config"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // pauseCapableTestHost 在连接测试宿主之上补充暂停门计数：既满足 Host，

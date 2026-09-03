@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // dialogueRequestRecord 是假台词模型观察到的一次请求输入事实：节点类别的

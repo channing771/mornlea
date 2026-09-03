@@ -37,7 +37,7 @@ var baselineVersionMappings = []baselineVersionMapping{
 	{
 		name:        "协议版本",
 		docPattern:  `协议 v(\d+)`,
-		sourcePath:  filepath.Join("internal", "network", "protocol", "packet.go"),
+		sourcePath:  filepath.Join("packages", "shared", "network", "protocol", "packet.go"),
 		codePattern: `const\s+ProtocolVersion\s+uint32\s*=\s*(\w+)`,
 		why:         "ProtocolVersion 是握手与全部 packet 编解码唯一支持的版本号，wire 兼容性以它为准。",
 	},

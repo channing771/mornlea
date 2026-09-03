@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // eval_differential_test.go：Rust eval kernel 与 Go oracle 的逐项差分门禁。

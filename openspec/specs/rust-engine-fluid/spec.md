@@ -93,11 +93,11 @@ Memory/TCP parity 测试 MUST 全绿不改断言;kernel 非 OK 状态码 MUST �
 
 ### Requirement: engine ABI v9 承载流体批量入口
 
-流体批量求值与重扫 exports SHALL 作为 engine ABI v9 相对 v8 的增量交付；C header、Rust identity 与 `internal/nativeabi` 的当前版本常数 MUST 同步为 9。v9 MUST 原样保留 v8 引入的 20 字节 mesh registry layout 与既有 mesh/light/collision/raycast/physics/worldgen/LOD 行为。接受 ABI version 的当前 engine exports 对错误版本的共同边界 MUST 是先于语义输入解引用、payload 发布以及 engine/fluid 状态语义返回 `ABI_VERSION`，而不是要求 ABI 检查成为函数的第一条指令；为安全建立输出契约所需的非解引用 pointer/range 检查可以先执行，output metadata pointer 可以先校验，合法 metadata 中的长度或计数字段可以先清零。无效 metadata MUST 继续按该 export 的既有参数契约拒绝，不得要求其返回 `ABI_VERSION`。系统 MUST NOT 提供 Go fallback。client ABI 独立演进，不因该 engine 增量改变菜单或渲染 surface。
+流体批量求值与重扫 exports SHALL 作为 engine ABI v9 相对 v8 的增量交付；C header、Rust identity 与 `packages/shared/nativeabi` 的当前版本常数 MUST 同步为 9。v9 MUST 原样保留 v8 引入的 20 字节 mesh registry layout 与既有 mesh/light/collision/raycast/physics/worldgen/LOD 行为。接受 ABI version 的当前 engine exports 对错误版本的共同边界 MUST 是先于语义输入解引用、payload 发布以及 engine/fluid 状态语义返回 `ABI_VERSION`，而不是要求 ABI 检查成为函数的第一条指令；为安全建立输出契约所需的非解引用 pointer/range 检查可以先执行，output metadata pointer 可以先校验，合法 metadata 中的长度或计数字段可以先清零。无效 metadata MUST 继续按该 export 的既有参数契约拒绝，不得要求其返回 `ABI_VERSION`。系统 MUST NOT 提供 Go fallback。client ABI 独立演进，不因该 engine 增量改变菜单或渲染 surface。
 
 #### Scenario: engine v9 身份三端一致
 
-- GIVEN 当前 engine C header、Rust 动态库与 Go `internal/nativeabi`
+- GIVEN 当前 engine C header、Rust 动态库与 Go `packages/shared/nativeabi`
 - WHEN 检查版本常数和 `mornlea_engine_abi_version()`
 - THEN 三端 MUST 均报告 9
 - AND v8 mesh registry layout 与结果 MUST 保持不变

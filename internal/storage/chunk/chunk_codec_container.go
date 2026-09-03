@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // validateFurnaceSlots 检查全部熔炉槽的固定约束：

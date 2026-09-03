@@ -3,7 +3,7 @@ package fluid
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // eval_bench_test.go：native 批量求值路径的 Advance 基准（record-only）。

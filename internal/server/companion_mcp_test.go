@@ -22,10 +22,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/pathfind"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/pathfind"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

@@ -14,10 +14,10 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/config"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/packages/shared/config"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
+	"github.com/channing771/mornlea/packages/shared/physics"
 )
 
 // newHUDPushTestApplication 装配带出口的 hud 分节纪律层：离屏渲染替身之上挂

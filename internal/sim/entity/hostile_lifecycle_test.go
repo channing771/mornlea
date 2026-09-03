@@ -5,8 +5,8 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // 本文件锁定夜行者的生命周期契约：白昼露天灼烧每 20 tick 扣 1 且遮顶/夜间

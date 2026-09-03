@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/region"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // TestChunkEncodingIgnoresDerivedHeights 证明派生的列顶高度表不进入区块存档：

@@ -5,12 +5,12 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/nativeabi"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/nativeabi"
 )
 
 // eval_fuzz_test.go：fluid eval kernel 的随机输入不变量门禁，形态沿包外
-// `internal/physics/physics_fuzz_test.go` 的 FuzzStepKeepsFiniteNonOverlappingState。
+// `packages/shared/physics/physics_fuzz_test.go` 的 FuzzStepKeepsFiniteNonOverlappingState。
 //
 // fuzz 不对照 oracle（那是 eval_differential_test.go 的职责），只断言对**任意**
 // 7 格输入——包括未注册的方块编号——kernel 输出永远满足规则集的结构不变量：

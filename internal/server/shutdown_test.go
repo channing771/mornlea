@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 func TestShutdownFailureFreezesAndCanRetry(t *testing.T) {

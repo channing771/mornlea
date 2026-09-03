@@ -5,7 +5,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // sleep_test.go：入睡、跳夜与个人重生点在权威 sim 层的行为。夜间窗 13000..23000

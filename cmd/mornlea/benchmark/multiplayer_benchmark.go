@@ -11,8 +11,8 @@ import (
 
 	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/render"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 const (

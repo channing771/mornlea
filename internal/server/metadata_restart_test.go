@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // openRestartWorld 打开一个磁盘世界并装配一个可 Step 的权威服务端。

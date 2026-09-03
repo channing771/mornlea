@@ -2,7 +2,7 @@
 
 `internal/storage/region` 承载 region 文件的格式原语：superblock/bank
 编解码、扇区空间分配与坐标换算，以及跨根包与 chunk 包共享的 `RegionKey`。
-本包是 storagedef 之上的格式叶子：只依赖 `internal/core` 与
+本包是 storagedef 之上的格式叶子：只依赖 `packages/shared/core` 与
 `internal/storage/storagedef`，不感知 chunk 记录层容器与根包编排（方向由
 `internal/archcheck` 的 `TestInternalDependenciesAreOneWay` 强制）。行为
 规格见 `openspec/specs/local-data-migration/spec.md`。

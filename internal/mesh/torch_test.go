@@ -5,8 +5,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // modelTagRegistry 返回一个除 Model 恒为 tag 外与 internalTestRegistry 完全

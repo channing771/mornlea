@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 func TestMeshSectionRejectsNativeABIMismatch(t *testing.T) {

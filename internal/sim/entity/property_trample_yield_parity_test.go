@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // 本文件锁定踩踏掉落的确定性性质（farmland-trample）：同一株成熟作物在同一

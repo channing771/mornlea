@@ -3,8 +3,8 @@ package runtime
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim/tuning"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/tuning"
 )
 
 // setCropGrowthChance 改写生效中的生长概率。readyCropWorldAt 已经登记了恢复

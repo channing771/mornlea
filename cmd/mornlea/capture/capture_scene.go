@@ -8,12 +8,12 @@ import (
 
 	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/render/hud"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
+	"github.com/channing771/mornlea/packages/shared/physics"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 var captureAICompanionID = companion.ID{0: 0x42, 6: 0x40, 8: 0x80, 15: 0x14}

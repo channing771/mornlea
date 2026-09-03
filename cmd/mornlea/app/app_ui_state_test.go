@@ -22,8 +22,8 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/config"
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/config"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // loadBridgeSchema 读取单源 schema 文件并解析为通用 JSON 值。

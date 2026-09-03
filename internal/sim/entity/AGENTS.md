@@ -11,7 +11,7 @@
 
 ## 依赖方向
 
-- 允许：`internal/core`、`internal/world`、`internal/companion`、`internal/physics`、`internal/sim/contract`、`internal/sim/realm`、`internal/sim/tuning`。
+- 允许：`packages/shared/core`、`packages/shared/world`、`packages/shared/companion`、`packages/shared/physics`、`internal/sim/contract`、`internal/sim/realm`、`packages/shared/tuning`。
 - 禁止：依赖 `internal/sim/runtime` 或 `internal/server`/`internal/client`/`internal/render`；禁止将 `runtime.Engine` 作为参数或返回值。
 - 方向由 `internal/archcheck` 强制，合成测试注入 `entity → runtime` 必须被 `TestSimDependencyViolationsDetectDrift` 拒绝。
 
@@ -34,5 +34,5 @@
 ## 定点验证
 
 - `go test ./internal/sim/entity -race -count=1`
-- 关联：`go test ./internal/companion ./internal/physics -race -count=1`
+- 关联：`go test ./packages/shared/companion ./packages/shared/physics -race -count=1`
 - 依赖边界：`go test ./internal/archcheck -count=1`

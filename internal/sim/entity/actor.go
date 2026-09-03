@@ -1,8 +1,8 @@
 package entity
 
 import (
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/physics"
 )
 
 // actorState 是玩家与伙伴两类 actor 共有的状态：物理体、本 tick 控制输入、

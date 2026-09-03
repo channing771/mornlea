@@ -7,10 +7,10 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/storage"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // damSource 是溃坝夹具里唯一的水源：架在一根两格高的石柱顶上，四周与柱下皆空，

@@ -11,10 +11,10 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/config"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/config"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 func TestChatInputAcceptsChineseAndBackspaceRemovesOneRune(t *testing.T) {

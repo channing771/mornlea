@@ -8,12 +8,12 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
+	"github.com/channing771/mornlea/packages/shared/physics"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // drownedColumn 是被水灌满的出生列。玩家恢复到 {0.5, 1.001, 0.5}，默认眼高 1.62

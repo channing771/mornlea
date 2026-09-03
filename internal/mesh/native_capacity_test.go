@@ -3,8 +3,8 @@ package mesh
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // fullCapacityRegistry 的快照条目数正好等于 nativeMaxRegistryEntries：ID 取

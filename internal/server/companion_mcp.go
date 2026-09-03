@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/channing771/mornlea/internal/companion"
+	"github.com/channing771/mornlea/packages/shared/companion"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

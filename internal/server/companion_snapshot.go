@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/pathfind"
 	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/sim/runtime"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/pathfind"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // companionViewRadiusChunks 是区块视图的半径：3×3。规划快照的水平 ±16 格与

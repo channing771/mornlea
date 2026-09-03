@@ -1,0 +1,256 @@
+package protocol
+
+import (
+	"errors"
+	"fmt"
+	"math"
+
+	"github.com/channing771/mornlea/packages/shared/core"
+)
+
+type SectionStorage uint8
+
+const (
+	SectionSingle SectionStorage = iota
+	SectionIndexed
+	SectionDirect
+)
+
+type SectionData struct {
+	Y       int32
+	Storage SectionStorage
+	Single  core.BlockID
+	Bits    uint8
+	Palette []core.BlockID
+	Packed  []uint64
+}
+
+// Validate 检查压缩区段是否可安全解码。
+func (section SectionData) Validate() error {
+	if section.Y < 0 || section.Y >= core.SectionsPerChunk {
+		return fmt.Errorf("network: section Y %d is outside chunk", section.Y)
+	}
+	switch section.Storage {
+	case SectionSingle:
+		if section.Bits != 0 || len(section.Palette) != 0 || len(section.Packed) != 0 {
+			return errors.New("network: single section has compressed payload")
+		}
+		if !ValidBlockID(section.Single) {
+			return fmt.Errorf("network: single block ID %d is unregistered", section.Single)
+		}
+		return nil
+
+	case SectionIndexed:
+		if section.Bits != 4 && section.Bits != 8 {
+			return fmt.Errorf("network: indexed section has invalid bits %d", section.Bits)
+		}
+		if section.Single != 0 {
+			return errors.New("network: indexed section has single value")
+		}
+		if len(section.Palette) == 0 || len(section.Palette) > 1<<section.Bits {
+			return fmt.Errorf(
+				"network: palette length %d is invalid for %d bits",
+				len(section.Palette),
+				section.Bits,
+			)
+		}
+		if len(section.Packed) != SectionWords(section.Bits) {
+			return fmt.Errorf(
+				"network: indexed packed length %d, want %d",
+				len(section.Packed),
+				SectionWords(section.Bits),
+			)
+		}
+		seen := make(map[core.BlockID]struct{}, len(section.Palette))
+		for _, id := range section.Palette {
+			if !ValidBlockID(id) {
+				return fmt.Errorf("network: palette block ID %d is unregistered", id)
+			}
+			if _, duplicate := seen[id]; duplicate {
+				return fmt.Errorf("network: duplicate palette block ID %d", id)
+			}
+			seen[id] = struct{}{}
+		}
+		for index := 0; index < core.BlocksPerSection; index++ {
+			slot := ReadSectionPacked(section.Packed, section.Bits, index)
+			if slot >= uint32(len(section.Palette)) {
+				return fmt.Errorf(
+					"network: palette slot %d at block %d exceeds palette length %d",
+					slot,
+					index,
+					len(section.Palette),
+				)
+			}
+		}
+		return nil
+
+	case SectionDirect:
+		if section.Bits != 15 {
+			return fmt.Errorf("network: direct section has invalid bits %d", section.Bits)
+		}
+		if section.Single != 0 || len(section.Palette) != 0 {
+			return errors.New("network: direct section has palette or single value")
+		}
+		if len(section.Packed) != SectionWords(15) {
+			return fmt.Errorf(
+				"network: direct packed length %d, want %d",
+				len(section.Packed),
+				SectionWords(15),
+			)
+		}
+		for index, word := range section.Packed {
+			if word>>60 != 0 {
+				return fmt.Errorf("network: direct packed word %d has unused high bits", index)
+			}
+		}
+		for index := 0; index < core.BlocksPerSection; index++ {
+			id := core.BlockID(ReadSectionPacked(section.Packed, section.Bits, index))
+			if !core.RegisteredBlock(id) {
+				return fmt.Errorf("network: direct block ID %d at block %d is unregistered", id, index)
+			}
+		}
+		return nil
+
+	default:
+		return fmt.Errorf("network: unknown section storage %d", section.Storage)
+	}
+}
+
+// PayloadBytes 返回区段压缩 payload 的字节数。
+func (section SectionData) PayloadBytes() int {
+	if section.Storage == SectionSingle {
+		return 2
+	}
+	return len(section.Palette)*2 + len(section.Packed)*8
+}
+
+type ChunkSnapshot struct {
+	Dimension core.DimensionID
+	Chunk     core.ChunkPos
+	Revision  uint64
+	Sections  []SectionData
+}
+
+func (ChunkSnapshot) serverMessage() {}
+func (ChunkSnapshot) serverPacket()  {}
+
+// Validate 检查快照的 revision 与全部 24 个有序区段。
+func (snapshot ChunkSnapshot) Validate() error {
+	if snapshot.Revision == 0 {
+		return errors.New("network: chunk snapshot revision is zero")
+	}
+	if len(snapshot.Sections) != core.SectionsPerChunk {
+		return fmt.Errorf(
+			"network: chunk snapshot has %d sections, want %d",
+			len(snapshot.Sections),
+			core.SectionsPerChunk,
+		)
+	}
+	for index, section := range snapshot.Sections {
+		if section.Y != int32(index) {
+			return fmt.Errorf(
+				"network: section at index %d has Y %d",
+				index,
+				section.Y,
+			)
+		}
+		if err := section.Validate(); err != nil {
+			return fmt.Errorf("network: section %d: %w", index, err)
+		}
+	}
+	return nil
+}
+
+func (snapshot ChunkSnapshot) PayloadBytes() int {
+	total := 0
+	for _, section := range snapshot.Sections {
+		total += section.PayloadBytes()
+	}
+	return total
+}
+
+type BlockChange struct {
+	Position core.BlockPos
+	Block    core.BlockID
+}
+
+type BlockChanges struct {
+	Dimension    core.DimensionID
+	Chunk        core.ChunkPos
+	BaseRevision uint64
+	NewRevision  uint64
+	Changes      []BlockChange
+}
+
+func (BlockChanges) serverMessage() {}
+func (BlockChanges) serverPacket()  {}
+
+// Validate 检查 revision 连续性、区块归属和严格递增的 block index。
+func (changes BlockChanges) Validate() error {
+	if changes.BaseRevision == 0 || changes.BaseRevision == math.MaxUint64 ||
+		changes.NewRevision != changes.BaseRevision+1 {
+		return fmt.Errorf(
+			"network: invalid revision transition %d -> %d",
+			changes.BaseRevision,
+			changes.NewRevision,
+		)
+	}
+	// v4 允许零条方块变化作为纯掉落物变化的 revision barrier。
+	if len(changes.Changes) > 4096 {
+		return errors.New("network: block changes count exceeds 4096")
+	}
+	var previous uint32
+	for index, change := range changes.Changes {
+		if !ValidBlockID(change.Block) {
+			return fmt.Errorf("network: block ID %d is unregistered", change.Block)
+		}
+		if change.Position.Y < core.MinY || change.Position.Y >= core.MaxY {
+			return fmt.Errorf("network: block Y %d is outside world", change.Position.Y)
+		}
+		if change.Position.Chunk() != changes.Chunk {
+			return fmt.Errorf(
+				"network: block %+v is outside chunk %+v",
+				change.Position,
+				changes.Chunk,
+			)
+		}
+		blockIndex := chunkBlockIndex(change.Position)
+		if index > 0 && blockIndex <= previous {
+			return errors.New("network: block changes are not strictly index sorted")
+		}
+		previous = blockIndex
+	}
+	return nil
+}
+
+// ValidBlockID 报告方块 ID 是否已注册；区段与方块变更的校验共用，
+// 编解码层解码调色板时也按同一谓词拒绝未注册 ID。
+func ValidBlockID(id core.BlockID) bool {
+	return core.RegisteredBlock(id)
+}
+
+// SectionWords 返回给定位宽下编码整段方块所需的 uint64 字数；区段校验与
+// 编解码层的逻辑快照编解码共用同一推导。
+func SectionWords(bits uint8) int {
+	perWord := 64 / int(bits)
+	return (core.BlocksPerSection + perWord - 1) / perWord
+}
+
+// ReadSectionPacked 从 packed words 中取出第 index 个方块槽位；区段校验与
+// 编解码层的 fixture 检视共用同一解包实现，避免位布局二次实现漂移。
+func ReadSectionPacked(data []uint64, bits uint8, index int) uint32 {
+	perWord := 64 / int(bits)
+	shift := uint((index % perWord) * int(bits))
+	mask := uint64(1)<<bits - 1
+	return uint32((data[index/perWord] >> shift) & mask)
+}
+
+func chunkBlockIndex(position core.BlockPos) uint32 {
+	x, y, z := position.Local()
+	return uint32(
+		position.SectionIndex()*core.BlocksPerSection +
+			y*core.SectionSize*core.SectionSize +
+			z*core.SectionSize +
+			x,
+	)
+}

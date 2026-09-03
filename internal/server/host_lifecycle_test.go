@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 func TestHostCleanupUsesEntryIdentity(t *testing.T) {

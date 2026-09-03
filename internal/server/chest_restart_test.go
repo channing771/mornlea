@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // TestChestRestartRestoresItemsCountsAndDurability 覆盖 schema v5 箱子的重启闭环：

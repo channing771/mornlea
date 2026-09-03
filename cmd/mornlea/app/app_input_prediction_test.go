@@ -6,9 +6,9 @@ package app
 
 import (
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
+	"github.com/channing771/mornlea/packages/shared/physics"
 	"github.com/go-gl/mathgl/mgl32"
 	"testing"
 )

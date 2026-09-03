@@ -35,6 +35,7 @@
 
 - `repository-code-organization`：新增"packages 单元化布局""Go 模块边界双层强制""单元迁移保持测试入口与产物"三个 Requirement；把钉死 `internal/`、`cmd/`、`services/` 路径的既有 Requirement 系统性改写为 `packages/` 路径（含 `sim/tuning` 上提 shared 的语义调整），语义不变。
 - `project-identity`：Agent 服务 locked sync 场景的目录随 `services/companion-agent → packages/agent/companion` 更新，身份与命令不变。
+- `test-timing-discipline`：go-race 分片 union 的包集基准从根模块 `go test ./...` 改为 go.work 全部模块的 `go list ./...` 之并（单元迁移期间分片组织方式允许过渡），无包丢失/重复的意图不变。
 
 ## Impact
 

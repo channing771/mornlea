@@ -3,7 +3,7 @@
 `internal/storage/companion` 承载 companion 存档域：companions.ai 聚合
 文件（MCAI 信封）的编解码、namespace identity、lifecycle、memory mirror、
 tombstone、任务区/FIFO 载荷校验与伙伴存档值类型。
-本包是纯 codec 域：依赖 `internal/companion` 领域模型与 `internal/core`
+本包是纯 codec 域：依赖 `packages/shared/companion` 领域模型与 `packages/shared/core`
 值类型，哨兵经 `internal/storage/storagedef` 取用；不感知根包编排
 （companions.ai 文件的原子替换与路径编排在根包
 DiskStore/MemoryStore），`CompanionStore` 接口属根包存储契约家族，定义
@@ -38,7 +38,7 @@ DiskStore/MemoryStore），`CompanionStore` 接口属根包存储契约家族，
 
 ## 持久化上界同源 (`companion_types.go`)
 
-- 任务区与 FIFO 的持久化上界常量与 `internal/companion` 的运行期上界
+- 任务区与 FIFO 的持久化上界常量与 `packages/shared/companion` 的运行期上界
   同源（直接引用同一常量，如任务指令上界绑定
   `companion.MaxPlanCommandBytes`、FIFO 条数绑定
   `companion.MaxTaskQueueDepth`、摘要上界绑定

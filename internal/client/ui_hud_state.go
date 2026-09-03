@@ -4,7 +4,7 @@ import (
 	"math"
 	"unicode/utf8"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // 游戏相位常显 HUD 的下行状态族组装（桥 schema 的 hudState 分节）。

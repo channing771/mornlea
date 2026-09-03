@@ -7,8 +7,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // chatInput 的字节上限直接复用 companion.MaxPlanCommandBytes（E7 同源化）：

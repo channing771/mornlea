@@ -1,6 +1,6 @@
 package fluid
 
-import "github.com/channing771/mornlea/internal/core"
+import "github.com/channing771/mornlea/packages/shared/core"
 
 // Replaceable 报告：若把流体等级为 newLevel 的流动水（newLevel 取 1..7）写入
 // target 所在的格，target 现有的内容是否允许被改写。
@@ -67,7 +67,7 @@ func Replaceable(target core.BlockID, newLevel uint8) bool {
 // 的一个：流体候选优先于空气候选；两者都是流体时取流体等级更小（更强）的
 // 一个（spec.md「同 tick 冲突写入取最强者」）。
 //
-// core.FluidLevel 对 core.AirID 也返回 0（见 internal/core/fluid.go），
+// core.FluidLevel 对 core.AirID 也返回 0（见 packages/shared/core/fluid.go），
 // 若不先用 IsFluid 分流，裸比较 FluidLevel 会让空气被误判成「等级 0，最强」
 // 而赢——因此这里显式分两步比较，不能只写一行 FluidLevel 比大小。
 //

@@ -3,7 +3,7 @@ package player
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 var (

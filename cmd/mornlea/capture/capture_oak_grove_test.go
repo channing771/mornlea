@@ -9,8 +9,8 @@ import (
 	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/assets"
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/worldgen"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/worldgen"
 )
 
 // 杀死变异：遗漏场景、改变其顺序、种子/区块/时间/相机或绕过 mirror/mesher

@@ -5,11 +5,11 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/config"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/world"
-	"github.com/channing771/mornlea/internal/worldgen"
+	"github.com/channing771/mornlea/packages/shared/config"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
+	"github.com/channing771/mornlea/packages/shared/world"
+	"github.com/channing771/mornlea/packages/shared/worldgen"
 )
 
 const captureOakGroveSeed int64 = 42

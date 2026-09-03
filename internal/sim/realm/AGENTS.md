@@ -11,7 +11,7 @@
 
 ## 依赖方向
 
-- 允许：`internal/core`、`internal/world`、`internal/fluid`。
+- 允许：`packages/shared/core`、`packages/shared/world`、`internal/fluid`。
 - 禁止：依赖 `internal/sim/contract`/`tuning`/`entity`/`runtime` 或 `internal/server`/`internal/client`；`realm` 不反向依赖上层结算或编排。
 - 方向由 `internal/archcheck` 强制，校验 `TestSimSubpackageDependencyDirections` 的真实树扫描与 `TestSimDependencyViolationsDetectDrift` 的合成 `realm → entity/runtime` 注入。
 

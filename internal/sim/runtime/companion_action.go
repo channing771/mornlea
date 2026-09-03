@@ -1,6 +1,6 @@
 package runtime
 
-import "github.com/channing771/mornlea/internal/companion"
+import "github.com/channing771/mornlea/packages/shared/companion"
 
 // EnqueueCompanionAction 把伙伴意图投递进有界 inbox，满员时立即拒绝。
 func (engine *Engine) EnqueueCompanionAction(action CompanionAction) bool {

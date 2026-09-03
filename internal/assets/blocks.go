@@ -1,9 +1,9 @@
 package assets
 
 import (
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/mesh"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 const (
@@ -569,7 +569,7 @@ func (r *Registry) LightAttenuation(id world.BlockID) uint8 {
 
 // farmlandTopRaw 是干/湿耕地共用的 4-bit 顶面高度原值。
 //
-// 取 14 而非更小的值：实际呈现高度是 (14+1)/16 = 15/16，与 internal/physics
+// 取 14 而非更小的值：实际呈现高度是 (14+1)/16 = 15/16，与 packages/shared/physics
 // 的耕地碰撞体高度（`farmlandCollisionHeight` = 0.9375）完全一致——可见几何与
 // 碰撞边界从此同线，玩家站在耕地上时脚部位置与顶面齐平。14 也是高度域
 // 1..=14 的上界：15 非法（满格必须用哨兵 0 表达），没有再高的选择余地。

@@ -4,11 +4,11 @@ import (
 	"math"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim/runtime"
-	"github.com/channing771/mornlea/internal/sim/tuning"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/physics"
+	"github.com/channing771/mornlea/packages/shared/tuning"
 )
 
 func TestCompanionManagerUsesExplicitTickTunables(t *testing.T) {

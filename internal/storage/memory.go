@@ -7,12 +7,12 @@ import (
 	"os"
 	"sync"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/chunk"
 	"github.com/channing771/mornlea/internal/storage/companion"
 	"github.com/channing771/mornlea/internal/storage/hostile"
 	"github.com/channing771/mornlea/internal/storage/player"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // MemoryStore 是保留存储所有权与 revision 语义的内存 Store。

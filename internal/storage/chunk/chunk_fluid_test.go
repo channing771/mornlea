@@ -3,8 +3,8 @@ package chunk
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // fluidBlockIDs 是全部 8 个流体编号，覆盖源方块与 7 个流动等级。

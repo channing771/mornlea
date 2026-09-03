@@ -7,9 +7,9 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim/realm"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/physics"
 )
 
 type spawnColumn struct {
@@ -20,7 +20,7 @@ type spawnColumn struct {
 // radius 由调用方传入本 tick 的快照值，这个自由函数本身绝不读取 ActiveTunables。
 //
 // 容量安全依赖 radius 已被钳制在 [1, 64]：下面的容量计算随 radius 平方增长，未钳制
-// 的大数会在此处触发一次巨额分配。该钳制由 tuning.SetTunables 兜底（internal/config
+// 的大数会在此处触发一次巨额分配。该钳制由 tuning.SetTunables 兜底（packages/shared/config
 // 加载配置时也会按同一区间钳一遍，但 sim 按
 // 架构约束不得导入 config，不能把不变量托付给隔壁包）。
 func spawnCandidates(anchor core.ChunkPos, radius int32) []spawnColumn {

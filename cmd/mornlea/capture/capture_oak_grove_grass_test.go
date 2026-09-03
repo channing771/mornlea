@@ -17,9 +17,9 @@ import (
 	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/assets"
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/config"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/worldgen"
+	"github.com/channing771/mornlea/packages/shared/config"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/worldgen"
 )
 
 // oakGroveShortGrassCells 枚举 oak-grove 固定夹具（3×3 生成区块）里全部自然

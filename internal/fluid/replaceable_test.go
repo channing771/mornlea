@@ -3,7 +3,7 @@ package fluid
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // TestReplaceable 覆盖 task-2-brief.md 2.1 的可替换判定表：

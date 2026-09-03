@@ -3,7 +3,7 @@ package server
 import (
 	"time"
 
-	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 type heartbeatTimer interface {

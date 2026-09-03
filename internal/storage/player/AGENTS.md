@@ -1,7 +1,7 @@
 # player 包：player 存档域 codec
 
 `internal/storage/player` 承载 player 存档域：MCPL 信封编解码、schema
-迁移链与玩家存档值类型。本包是纯 codec 域：只依赖 `internal/core` 与
+迁移链与玩家存档值类型。本包是纯 codec 域：只依赖 `packages/shared/core` 与
 `internal/storage/storagedef`，不感知根包编排（player 文件的原子替换与
 路径编排在根包 DiskStore/MemoryStore）或其他域子包；`PlayerStore` 接口
 属根包存储契约家族，定义留在根包 `types.go`。依赖方向由

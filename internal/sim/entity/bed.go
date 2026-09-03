@@ -1,14 +1,14 @@
 package entity
 
 import (
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // 床在权威 sim 层的行为：同区块原子放置（门 `tryPlaceDoor` 先例的床版本）、
 // 采掘任一半双清整床恰好掉 1、支撑失效整床清除。床的方向编码沿用门先例
 // （南 0、西 1、北 2、东 3），「方向 ↔ 编号 ↔ 床头邻格」的唯一映射窗口在
-// `internal/core/bed.go`，本文件只消费 `BedFootID`/`BedHeadID`/`BedHeadNeighbor`，
+// `packages/shared/core/bed.go`，本文件只消费 `BedFootID`/`BedHeadID`/`BedHeadNeighbor`，
 // 不得自建第二份算式。
 
 // tryPlaceBed 尝试在 foot 放置床尾并在其朝向侧邻格（`core.BedHeadNeighbor`）

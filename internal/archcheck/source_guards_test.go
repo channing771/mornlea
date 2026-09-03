@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	physicsImportPath = "github.com/channing771/mornlea/internal/physics"
+	physicsImportPath = "github.com/channing771/mornlea/packages/shared/physics"
 	runtimeImportPath = "github.com/channing771/mornlea/internal/sim/runtime"
-	tuningImportPath  = "github.com/channing771/mornlea/internal/sim/tuning"
+	tuningImportPath  = "github.com/channing771/mornlea/packages/shared/tuning"
 )
 
 type authorityFunction struct {
@@ -144,8 +144,8 @@ func TestAuthorityTickTunablesStayExplicit(t *testing.T) {
 func TestAuthorityTickTunablesGuardRejectsIndirectReferences(t *testing.T) {
 	t.Run("imported function values", func(t *testing.T) {
 		bad := authoritySyntheticSource(t, "bad_selectors.go", `package entity
-import p "github.com/channing771/mornlea/internal/physics"
-import s "github.com/channing771/mornlea/internal/sim/tuning"
+import p "github.com/channing771/mornlea/packages/shared/physics"
+import s "github.com/channing771/mornlea/packages/shared/tuning"
 func bad() {
 	step := (p.Step)
 	submersion := p.SubmersionFlags
@@ -158,8 +158,8 @@ func bad() {
 		}
 
 		good := authoritySyntheticSource(t, "good_selectors.go", `package entity
-import p "github.com/channing771/mornlea/internal/physics"
-import s "github.com/channing771/mornlea/internal/sim/tuning"
+import p "github.com/channing771/mornlea/packages/shared/physics"
+import s "github.com/channing771/mornlea/packages/shared/tuning"
 func good() {
 	step := p.StepWithTunables
 	submersion := p.SubmersionFlagsWithTunables
@@ -651,7 +651,7 @@ func assertAuthorityServerTrace(t *testing.T, function *authorityFunction, norma
 }
 
 func TestTunableSourceGuardsCoverTuningPackage(t *testing.T) {
-	packageDirectory := filepath.Join("internal", "sim", "tuning")
+	packageDirectory := filepath.Join("packages", "shared", "tuning")
 	if _, ok := tunableSourceGuardPackages()[packageDirectory]; !ok {
 		t.Fatalf("可调参数源码守卫遗漏 %s", packageDirectory)
 	}
@@ -667,13 +667,13 @@ func tunableSourceGuardPackages() map[string][]string {
 		"RegenHungerThreshold", "EatingTicks",
 	}
 	return map[string][]string{
-		filepath.Join("internal", "physics"): {
+		filepath.Join("packages", "shared", "physics"): {
 			"EyeHeight", "StepHeight", "WalkSpeed", "GroundAcceleration",
 			"GroundDeceleration", "AirAcceleration", "JumpSpeed", "Gravity",
 			"TerminalFallSpeed", "FluidGravity", "FluidSinkSpeed",
 			"FluidAscendSpeed", "FluidHorizontalDrag",
 		},
-		filepath.Join("internal", "sim", "tuning"): simTunables,
+		filepath.Join("packages", "shared", "tuning"): simTunables,
 	}
 }
 
@@ -732,9 +732,10 @@ func TestTunableConstantsAreNotExported(t *testing.T) {
 // Tunables 快照"这条不变量的另一半。
 //
 // TestTunableConstantsAreNotExported 只看声明是否导出，对"某个生产读取点直接
-// 读了未导出的 defaultXxx"完全失明——评审实测过：把 internal/sim 的
-// InteractionReach、DropLifetimeTicks、SpawnRadius、RegenDelay/IntervalTicks
-// 与 internal/physics 的 StepHeight 读取点逐一改回 defaultXxx，既有测试全绿。
+// 读了未导出的 defaultXxx"完全失明——评审实测过：把 sim 调参包（现
+// packages/shared/tuning）的 InteractionReach、DropLifetimeTicks、SpawnRadius、
+// RegenDelay/IntervalTicks 与 packages/shared/physics 的 StepHeight 读取点逐一
+// 改回 defaultXxx，既有测试全绿。
 // 那种状态下配置文件与调试面板改不动这些参数，而且不会有任何报错，正是设计
 // §3.4 要防的静默错位。
 //
@@ -791,7 +792,8 @@ func TestTunableDefaultsAreOnlyReadInTunablesFile(t *testing.T) {
 
 // TestOnlyCommandsImportConfig 守住"自动化验证不读用户配置"这条不变量。
 func TestOnlyCommandsImportConfig(t *testing.T) {
-	cmd := exec.Command("go", "list", "-f", "{{.ImportPath}}|{{join .Imports \" \"}} {{join .TestImports \" \"}} {{join .XTestImports \" \"}}", "./internal/...")
+	// config 已迁入 packages/shared 模块：`./...` 不跨嵌套模块，须显式列出。
+	cmd := exec.Command("go", "list", "-f", "{{.ImportPath}}|{{join .Imports \" \"}} {{join .TestImports \" \"}} {{join .XTestImports \" \"}}", "./internal/...", "./packages/shared/...")
 	cmd.Dir = moduleRoot(t)
 	out, err := cmd.Output()
 	if err != nil {
@@ -799,21 +801,21 @@ func TestOnlyCommandsImportConfig(t *testing.T) {
 	}
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		parts := strings.SplitN(line, "|", 2)
-		// internal/config 的外部测试包（package config_test）导入自身，需要整体跳过，
+		// config 的外部测试包（package config_test）导入自身，需要整体跳过，
 		// 否则会自触发；这条豁免只对 config 包本身生效。
-		if len(parts) != 2 || parts[0] == "github.com/channing771/mornlea/internal/config" {
+		if len(parts) != 2 || parts[0] == "github.com/channing771/mornlea/packages/shared/config" {
 			continue
 		}
 		for _, imported := range strings.Fields(parts[1]) {
-			if imported == "github.com/channing771/mornlea/internal/config" {
-				t.Errorf("%s 导入了 internal/config；只有 cmd 可以导入它，否则本机配置会污染性能基线与抓帧 golden", parts[0])
+			if imported == "github.com/channing771/mornlea/packages/shared/config" {
+				t.Errorf("%s 导入了 packages/shared/config；只有 cmd 可以导入它，否则本机配置会污染性能基线与抓帧 golden", parts[0])
 			}
 		}
 	}
 }
 
 func TestOnlyTCPImplementationImportsNet(t *testing.T) {
-	root := filepath.Join(moduleRoot(t), "internal", "network")
+	root := filepath.Join(moduleRoot(t), "packages", "shared", "network")
 	files, err := filepath.Glob(filepath.Join(root, "*.go"))
 	if err != nil {
 		t.Fatalf("枚举 network Go 文件: %v", err)
@@ -840,7 +842,8 @@ func TestLegacyPlayerAuthorityMessagesAreGone(t *testing.T) {
 	forbidden := map[string]struct{}{
 		"SetViewCenter": {}, "BreakRay": {}, "PlaceRay": {}, "CommandBreakRay": {}, "CommandPlaceRay": {}, "localSessionID": {},
 	}
-	for _, sourceRoot := range []string{"cmd", "internal"} {
+	// packages/shared 是独立模块，legacy 标识符守卫须与其同侧扫描。
+	for _, sourceRoot := range []string{"cmd", "internal", "packages/shared"} {
 		err := filepath.WalkDir(filepath.Join(root, sourceRoot), func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
@@ -954,7 +957,7 @@ func TestSessionLifecycleResponsibilitiesStayInSessionFiles(t *testing.T) {
 // Host 也不得重新装配 direct Planner 或旧 Dialogue client。
 func TestCompanionPlannerProductionUsesAgentServiceOnly(t *testing.T) {
 	root := moduleRoot(t)
-	companionSource := productionGoSource(t, filepath.Join(root, "internal", "companion"))
+	companionSource := productionGoSource(t, filepath.Join(root, "packages", "shared", "companion"))
 	for _, forbidden := range []string{
 		"type PlannerClient struct",
 		"func NewPlannerClient(",
@@ -967,7 +970,7 @@ func TestCompanionPlannerProductionUsesAgentServiceOnly(t *testing.T) {
 		"func DecodeDialogueResponse(",
 	} {
 		if strings.Contains(companionSource, forbidden) {
-			t.Errorf("internal/companion production retains direct planner symbol %q", forbidden)
+			t.Errorf("packages/shared/companion production retains direct planner symbol %q", forbidden)
 		}
 	}
 

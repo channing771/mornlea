@@ -12,10 +12,10 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/config"
-	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/render"
-	"github.com/channing771/mornlea/internal/sim/tuning"
+	"github.com/channing771/mornlea/packages/shared/config"
+	"github.com/channing771/mornlea/packages/shared/physics"
+	"github.com/channing771/mornlea/packages/shared/tuning"
 )
 
 // remote 报告本进程是单纯的联机客户端——既没有内嵌单机 Host，也不是

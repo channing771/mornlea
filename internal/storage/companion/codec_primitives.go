@@ -6,8 +6,8 @@ import (
 	"io"
 	"math"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/storagedef"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // 本文件是 companion 域 codec 的字节原语：与根包（历史）、chunk 与 player 包

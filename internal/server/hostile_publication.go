@@ -8,8 +8,8 @@ package server
 import (
 	"slices"
 
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // publishHostiles 是 publishSession 的夜行者段。hostiles 是 tick 末的全量

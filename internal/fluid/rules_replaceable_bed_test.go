@@ -3,7 +3,7 @@ package fluid
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // TestBedCellsAreOccupiedForFluid 锁定 spec Requirement「床是双格八形态方块且

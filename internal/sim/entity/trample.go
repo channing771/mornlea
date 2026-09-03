@@ -3,9 +3,9 @@ package entity
 import (
 	"math"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/physics"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // 本文件实现玩家落地对耕地的踩踏（farmland-trample）：落地边沿把碰撞盒水平

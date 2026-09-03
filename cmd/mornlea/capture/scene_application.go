@@ -5,12 +5,12 @@ import (
 
 	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/config"
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/lod"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/render"
 	"github.com/channing771/mornlea/internal/render/hud"
+	"github.com/channing771/mornlea/packages/shared/config"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // SceneApplication 是 capture 对宿主应用状态所需能力的消费端接口：场景表的

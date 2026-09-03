@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // plantingParityResult 是种植脚本跑完后的全部可观察结果：权威背包、客户端

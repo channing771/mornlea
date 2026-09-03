@@ -3,8 +3,8 @@ package client
 import (
 	"errors"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // InventoryMirror 是权威物品状态的固定只读镜像。

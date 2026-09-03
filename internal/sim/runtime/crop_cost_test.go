@@ -3,7 +3,7 @@ package runtime
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // —— Scenario：生长推进完全确定且成本与作物数量无关 ——

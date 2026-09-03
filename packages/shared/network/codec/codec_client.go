@@ -1,0 +1,309 @@
+package codec
+
+import (
+	"fmt"
+
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network/protocol"
+)
+
+func encodeClientPacketPayload(state protocol.State, packet protocol.ClientPacket) (packetID uint32, payload []byte, err error) {
+	if err := validateClientWirePacket(state, packet); err != nil {
+		return 0, nil, codecError("encode client", state, 0, err)
+	}
+	packetID, ok := protocol.ClientPacketID(state, packet)
+	if !ok {
+		return 0, nil, codecError("encode client", state, 0, protocol.InvalidClientPacket(state, packet))
+	}
+	var e byteEncoder
+	switch state {
+	case protocol.StateHandshake:
+		message := packet.(protocol.ClientHello)
+		e.uvarint(message.ProtocolVersion)
+	case protocol.StateLogin:
+		message := packet.(protocol.LoginStart)
+		e.data = append(e.data, message.PlayerID[:]...)
+		e.string(message.DisplayName, 128)
+	case protocol.StatePlay:
+		switch message := packet.(type) {
+		case protocol.PlayerInput:
+			e.u64(message.Sequence)
+			e.i8(message.MoveX)
+			e.i8(message.MoveZ)
+			e.bool(message.Jump)
+			e.f32(message.Yaw)
+			e.f32(message.Pitch)
+			e.bool(message.Mining)
+			e.bool(message.Eating)
+			e.bool(message.Sprinting)
+		case protocol.PlaceBlock:
+			e.u64(message.Sequence)
+			e.f32(message.Yaw)
+			e.f32(message.Pitch)
+			e.u8(message.Slot)
+		case protocol.SelectHotbar:
+			e.u64(message.Sequence)
+			e.u8(message.Slot)
+		case protocol.MoveInventoryStack:
+			e.u64(message.Sequence)
+			e.u8(message.From)
+			e.u8(message.To)
+		case protocol.DropSelectedItem:
+			e.u64(message.Sequence)
+		case protocol.OpenContainer:
+			e.u64(message.Sequence)
+			e.f32(message.Yaw)
+			e.f32(message.Pitch)
+		case protocol.MoveContainerStack:
+			e.u64(message.Sequence)
+			encodeContainerRef(&e, message.Container)
+			e.u8(message.From)
+			e.u8(message.To)
+		case protocol.CloseContainer:
+			e.u64(message.Sequence)
+		case protocol.RequestChunkResync:
+			e.u64(message.Sequence)
+			e.i32(int32(message.Dimension))
+			e.i32(message.Chunk.X)
+			e.i32(message.Chunk.Z)
+			e.u64(message.HaveRevision)
+		case protocol.KeepAliveReply:
+			e.u64(message.Token)
+		case protocol.ChatCommand:
+			e.string(message.Text, protocol.ChatCommandTextMaxBytes)
+		case protocol.TillSoil:
+			e.u64(message.Sequence)
+			e.f32(message.Yaw)
+			e.f32(message.Pitch)
+		case protocol.BoneMeal:
+			e.u64(message.Sequence)
+			e.f32(message.Yaw)
+			e.f32(message.Pitch)
+		case protocol.MoveCraftingStack:
+			e.u64(message.Sequence)
+			e.u8(message.From)
+			e.u8(message.To)
+		case protocol.TakeCraftingOutput:
+			e.u64(message.Sequence)
+		default:
+			return 0, nil, codecError("encode client", state, packetID, protocol.InvalidClientPacket(state, packet))
+		}
+	default:
+		return 0, nil, codecError("encode client", state, packetID, protocol.InvalidClientPacket(state, packet))
+	}
+	return finishEncode("encode client", state, packetID, e)
+}
+
+func decodeClientPacketPayload(state protocol.State, packetID uint32, payload []byte) (protocol.ClientPacket, error) {
+	if err := checkSmallPayload(payload); err != nil {
+		return nil, codecError("decode client", state, packetID, err)
+	}
+	if state == protocol.StatePlay && packetID == 12 && len(payload) > protocol.ChatCommandMaxWireBytes {
+		return nil, codecError("decode client", state, packetID,
+			fmt.Errorf("network: chat command payload exceeds %d bytes", protocol.ChatCommandMaxWireBytes))
+	}
+	d := byteDecoder{data: payload}
+	var packet protocol.ClientPacket
+	var err error
+	switch state {
+	case protocol.StateHandshake:
+		if packetID != 0 {
+			return nil, codecError("decode client", state, packetID, errUnknownPacketID)
+		}
+		var version uint32
+		version, err = d.uvarint()
+		packet = protocol.ClientHello{ProtocolVersion: version}
+	case protocol.StateLogin:
+		if packetID != 0 {
+			return nil, codecError("decode client", state, packetID, errUnknownPacketID)
+		}
+		var id core.PlayerID
+		var name string
+		if data, readErr := d.take(len(id)); readErr != nil {
+			err = readErr
+		} else {
+			copy(id[:], data)
+			name, err = d.string(MaxSmallPayload, MaxSmallPayload)
+		}
+		packet = protocol.LoginStart{PlayerID: id, DisplayName: name}
+	case protocol.StatePlay:
+		switch packetID {
+		case 0:
+			var sequence uint64
+			var moveX, moveZ int8
+			var jump bool
+			var yaw, pitch float32
+			var mining, eating, sprinting bool
+			sequence, err = d.u64()
+			if err == nil {
+				moveX, err = d.i8()
+			}
+			if err == nil {
+				moveZ, err = d.i8()
+			}
+			if err == nil {
+				jump, err = d.bool()
+			}
+			if err == nil {
+				yaw, err = d.f32()
+			}
+			if err == nil {
+				pitch, err = d.f32()
+			}
+			if err == nil {
+				mining, err = d.bool()
+			}
+			if err == nil {
+				eating, err = d.bool()
+			}
+			if err == nil {
+				sprinting, err = d.bool()
+			}
+			packet = protocol.PlayerInput{Sequence: sequence, MoveX: moveX, MoveZ: moveZ, Jump: jump, Yaw: yaw, Pitch: pitch, Mining: mining, Eating: eating, Sprinting: sprinting}
+		case 2:
+			var sequence uint64
+			var yaw, pitch float32
+			var slot uint8
+			sequence, err = d.u64()
+			if err == nil {
+				yaw, err = d.f32()
+			}
+			if err == nil {
+				pitch, err = d.f32()
+			}
+			if err == nil {
+				slot, err = d.u8()
+			}
+			packet = protocol.PlaceBlock{Sequence: sequence, Yaw: yaw, Pitch: pitch, Slot: slot}
+		case 3:
+			var sequence, revision uint64
+			var dimension, chunkX, chunkZ int32
+			sequence, err = d.u64()
+			if err == nil {
+				dimension, err = d.i32()
+			}
+			if err == nil {
+				chunkX, err = d.i32()
+			}
+			if err == nil {
+				chunkZ, err = d.i32()
+			}
+			if err == nil {
+				revision, err = d.u64()
+			}
+			packet = protocol.RequestChunkResync{Sequence: sequence, Dimension: core.DimensionID(dimension), Chunk: core.ChunkPos{X: chunkX, Z: chunkZ}, HaveRevision: revision}
+		case 4:
+			var token uint64
+			token, err = d.u64()
+			packet = protocol.KeepAliveReply{Token: token}
+		case 5:
+			var sequence uint64
+			var slot uint8
+			sequence, err = d.u64()
+			if err == nil {
+				slot, err = d.u8()
+			}
+			packet = protocol.SelectHotbar{Sequence: sequence, Slot: slot}
+		case 6:
+			var sequence uint64
+			var from, to uint8
+			sequence, err = d.u64()
+			if err == nil {
+				from, err = d.u8()
+			}
+			if err == nil {
+				to, err = d.u8()
+			}
+			packet = protocol.MoveInventoryStack{Sequence: sequence, From: from, To: to}
+		case 7:
+			var move protocol.MoveCraftingStack
+			move.Sequence, err = d.u64()
+			if err == nil {
+				move.From, err = d.u8()
+			}
+			if err == nil {
+				move.To, err = d.u8()
+			}
+			packet = move
+		case 8:
+			var open protocol.OpenContainer
+			open.Sequence, err = d.u64()
+			if err == nil {
+				open.Yaw, err = d.f32()
+			}
+			if err == nil {
+				open.Pitch, err = d.f32()
+			}
+			packet = open
+		case 9:
+			var move protocol.MoveContainerStack
+			move.Sequence, err = d.u64()
+			if err == nil {
+				move.Container, err = decodeContainerRef(&d)
+			}
+			if err == nil {
+				move.From, err = d.u8()
+			}
+			if err == nil {
+				move.To, err = d.u8()
+			}
+			packet = move
+		case 10:
+			var closeContainer protocol.CloseContainer
+			closeContainer.Sequence, err = d.u64()
+			packet = closeContainer
+		case 11:
+			var drop protocol.DropSelectedItem
+			drop.Sequence, err = d.u64()
+			packet = drop
+		case 12:
+			var command protocol.ChatCommand
+			// `d.string` 的两参分别是字节上限与 rune 上限；此处同值系现状保持，
+			// 并非两个独立上限恰好相等的巧合约束。
+			command.Text, err = d.string(protocol.ChatCommandTextMaxBytes, protocol.ChatCommandTextMaxBytes)
+			packet = command
+		case 13:
+			var till protocol.TillSoil
+			till.Sequence, err = d.u64()
+			if err == nil {
+				till.Yaw, err = d.f32()
+			}
+			if err == nil {
+				till.Pitch, err = d.f32()
+			}
+			packet = till
+		case 14:
+			var meal protocol.BoneMeal
+			meal.Sequence, err = d.u64()
+			if err == nil {
+				meal.Yaw, err = d.f32()
+			}
+			if err == nil {
+				meal.Pitch, err = d.f32()
+			}
+			packet = meal
+		case 15:
+			var take protocol.TakeCraftingOutput
+			take.Sequence, err = d.u64()
+			packet = take
+		default:
+			return nil, codecError("decode client", state, packetID, errUnknownPacketID)
+		}
+	default:
+		return nil, codecError("decode client", state, packetID, errUnknownPacketID)
+	}
+	if err == nil {
+		err = d.done()
+	}
+	if err == nil {
+		err = protocol.ValidateDecodedClientWirePacket(state, packet)
+	}
+	if err != nil {
+		return nil, codecError("decode client", state, packetID, err)
+	}
+	return packet, nil
+}
+
+func validateClientWirePacket(state protocol.State, packet protocol.ClientPacket) error {
+	return protocol.ValidateClientPacket(state, packet)
+}

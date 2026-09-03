@@ -7,11 +7,11 @@ import (
 	"testing"
 
 	application "github.com/channing771/mornlea/cmd/mornlea/app"
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/config"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/server"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/config"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // TestRunLocalAgentSettingsReachServerConfig 验证普通本地模式只把 Agent 服务

@@ -5,8 +5,8 @@ import (
 	"math"
 	"slices"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // settleDeaths 结算本 tick 生命值归零的玩家。它必须在本 tick 发布权威状态之前运行，

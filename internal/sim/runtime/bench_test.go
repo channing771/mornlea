@@ -3,10 +3,10 @@ package runtime_test
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim/runtime"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 func BenchmarkEngineStepIdle(b *testing.B) {

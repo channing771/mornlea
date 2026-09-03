@@ -1,6 +1,6 @@
 package region
 
-import "github.com/channing771/mornlea/internal/core"
+import "github.com/channing771/mornlea/packages/shared/core"
 
 func floorDiv32(value int32) int32 {
 	wide := int64(value)

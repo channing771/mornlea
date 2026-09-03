@@ -9,9 +9,9 @@ import (
 
 	"github.com/channing771/mornlea/internal/audio"
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/render/hud"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // dropSelectedItem 请求把权威选中栏位中的一个物品丢到脚下。

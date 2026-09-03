@@ -3,8 +3,8 @@ package server
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 func TestDropPublicationKeepsDurabilityAndDetectsDurabilityOnlyChange(t *testing.T) {

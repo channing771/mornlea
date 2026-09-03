@@ -5,9 +5,9 @@ package app
 // app_furnace_ui_test.go：熔炉界面镜像生命周期——权威状态开 UI、两次点击一次移动、显式/服务端关闭与 reset 清理。
 
 import (
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/render/hud"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
 	"github.com/go-gl/mathgl/mgl32"
 	"testing"
 )

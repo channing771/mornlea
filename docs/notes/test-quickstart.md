@@ -16,17 +16,17 @@
 要点：
 
 - **禁止把 `go test ./... -race -count=1` 当快检**：`-race -count=1` 强制全量失效缓存，每次都是完整 4.5 分钟起步。`-race -count=1` 是 T1/T2/T3 的专属旗标；T0 恰恰靠省略它们吃测试缓存。
-- **本地与 CI 不双跑全量 race**：CI 的 `go-race` 已按 cmd / internal-server / internal-rest 三分片并行执行全量。默认路径是 T2 绿 → 推送 → 信任 CI；本地 T3 只在 (a) 改动涉及 `internal/sim`/`internal/server`/`internal/network`/`internal/storage`/`internal/physics` 的并发或时序语义，或 (b) CI 红了需要本地复现时执行。`AGENT_MODE=merge`（不经 PR 直推）时 T3 本地必跑。
+- **本地与 CI 不双跑全量 race**：CI 的 `go-race` 已按 cmd / internal-server / internal-rest 三分片并行执行全量。默认路径是 T2 绿 → 推送 → 信任 CI；本地 T3 只在 (a) 改动涉及 `internal/sim`/`internal/server`/`packages/shared/network`/`internal/storage`/`packages/shared/physics` 的并发或时序语义，或 (b) CI 红了需要本地复现时执行。`AGENT_MODE=merge`（不经 PR 直推）时 T3 本地必跑。
 - **flake 分诊协议**：高负载下出现「等待预算/超时」类失败时，先对**失败包单独重跑**（`go test ./该包 -race -count=1`）；单独通过即记录为负载 flake（写进 ledger 或 PR 备注），不进修复循环、不为此改生产代码。同一 flake 一天内重现 ≥2 次才立待修任务（参照 E-11 模式）。
 - **验证证据可继承**：同一基线 SHA 下已记入 change `ledger.md` 的验证输出直接引用，不重跑同等命令；评审复核用 focused 测试抽查（见 `docs/development-process.md` 阶段 3）。
-- **T1 闭包的边界**：`race-changed.sh` 的反向依赖沿生产 import 边传递，测试 import 只算一层直接依赖（否则触碰 `internal/core` 这类底座包时闭包近似全仓）；残余盲区由 T3 与 CI 兜底。迭代验证涉及 `cmd/mornlea/app`、`cmd/mornlea/benchmark` 或 `internal/server` 的重型测试时可对这几个包追加 `-short`（capture 包没有 `testing.Short()` 守卫，`-short` 对它是空操作）；脚本的「集合含重型包」提示识别 `cmd/mornlea/app`、`cmd/mornlea/benchmark` 与 `internal/server`。
+- **T1 闭包的边界**：`race-changed.sh` 的反向依赖沿生产 import 边传递，测试 import 只算一层直接依赖（否则触碰 `packages/shared/core` 这类底座包时闭包近似全仓）；残余盲区由 T3 与 CI 兜底。迭代验证涉及 `cmd/mornlea/app`、`cmd/mornlea/benchmark` 或 `internal/server` 的重型测试时可对这几个包追加 `-short`（capture 包没有 `testing.Short()` 守卫，`-short` 对它是空操作）；脚本的「集合含重型包」提示识别 `cmd/mornlea/app`、`cmd/mornlea/benchmark` 与 `internal/server`。
 
 ## T0：定点测试
 
 | 改动域 | 快检命令 |
 |---|---|
 | 窗口 / 渲染 / 材质 / WGSL | `cargo test -p mornlea_client --locked` + `go test ./cmd/mornlea/app -run 'TestFitFramebuffer\|TestApplicationConnection'` |
-| 协议 / 网络 / 存档 | `go test ./internal/network/... ./internal/storage/... ./internal/core` |
+| 协议 / 网络 / 存档 | `go test ./packages/shared/network/... ./internal/storage/... ./packages/shared/core` |
 | 服务端 tick / 伙伴 / 农业 | `go test ./internal/server ./internal/sim/... -run '关键词'` |
 | Python 伙伴 Agent | `cd packages/agent/companion && uv run pytest tests/test_<主题>.py -q`；首次进入先 `uv sync --locked` |
 | Go/Python Agent 合同 | `go test ./internal/server -run 'CrossLanguage|CompanionAgent.*Integration'`（完整真进程入口见下文） |
@@ -48,7 +48,7 @@ make test-race-changed RACE_BASE=<ref>   # 换比较基线（如批次共享 SHA
 scripts/agents/race-changed.sh --diff    # 只打印包集合不运行（核对闭包用）
 ```
 
-集合 = 改动包（已提交 diff ∪ 暂存 ∪ 未暂存 ∪ 未跟踪的 .go）∪ 生产 import 反向依赖（传递）∪ 测试 import 直接依赖 ∪ `internal/archcheck`。闭包含 cdylib 消费包（nativeabi/core/physics/mesh/client/sim/server/cmd/mornlea 及其 app/capture/benchmark 子包/cmd/mornlea-server）时脚本先按需 `make rust`；纯 Go 叶子改动不构建 Rust。
+集合 = 改动包（已提交 diff ∪ 暂存 ∪ 未暂存 ∪ 未跟踪的 .go）∪ 生产 import 反向依赖（传递）∪ 测试 import 直接依赖 ∪ `internal/archcheck`。闭包含 cdylib 消费包（packages/shared 的 nativeabi/core/physics、根模块的 mesh/client/sim/server/cmd/mornlea 及其 app/capture/benchmark 子包与 cmd/mornlea-server）时脚本先按需 `make rust`；纯 Go 叶子改动不构建 Rust。
 
 Python 服务不进入 Go import 闭包：修改 `packages/agent/companion` 后，T1 另运行 `make companion-agent-check`，它执行 locked sync、Ruff format/lint、`mypy src` 与全部 pytest。修改 HTTP/MCP wire、进程生命周期或 integration helper 时，再运行 `make companion-agent-integration`；该入口会检查 `tests/integration` 并以 race detector 启动真实 Go/Python loopback 子进程。
 

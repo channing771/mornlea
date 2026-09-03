@@ -10,13 +10,13 @@ import (
 	"context"
 	"errors"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/chunk"
 	"github.com/channing771/mornlea/internal/storage/companion"
 	"github.com/channing771/mornlea/internal/storage/hostile"
 	"github.com/channing771/mornlea/internal/storage/player"
 	"github.com/channing771/mornlea/internal/storage/region"
 	"github.com/channing771/mornlea/internal/storage/storagedef"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 var (

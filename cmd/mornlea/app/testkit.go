@@ -19,13 +19,13 @@ import (
 
 	"github.com/channing771/mornlea/internal/assets"
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/config"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/render"
 	"github.com/channing771/mornlea/internal/render/hud"
 	"github.com/channing771/mornlea/internal/server"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/config"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // IntegrationGlyphSource 是渲染测试共用的字形源替身：固定 8×8 字形并统计

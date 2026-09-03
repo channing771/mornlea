@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // 本文件是变更 fluid-presentation-survival 任务组 10「流动前沿性能复测」的测量

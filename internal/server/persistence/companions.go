@@ -11,8 +11,8 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/companion"
 )
 
 // Companions 持有伙伴聚合存档的异步持久化生命周期。

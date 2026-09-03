@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/chunk"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // ChunkKeys 返回磁盘上已有区块键的稳定只读快照。

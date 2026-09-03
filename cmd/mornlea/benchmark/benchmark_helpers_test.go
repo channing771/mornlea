@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 type benchmarkBlockingServerStream struct {

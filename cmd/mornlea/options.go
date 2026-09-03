@@ -10,9 +10,9 @@ import (
 
 	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/cmd/mornlea/devcapture"
-	"github.com/channing771/mornlea/internal/config"
-	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/sim/tuning"
+	"github.com/channing771/mornlea/packages/shared/config"
+	"github.com/channing771/mornlea/packages/shared/physics"
+	"github.com/channing771/mornlea/packages/shared/tuning"
 )
 
 type mainOptions struct {

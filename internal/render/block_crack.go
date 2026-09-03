@@ -3,7 +3,7 @@ package render
 import (
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // blockCrackExpand 是裂纹 overlay 相对单位方块各面向外扩的世界单位数：

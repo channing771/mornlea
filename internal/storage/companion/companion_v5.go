@@ -7,8 +7,8 @@ import (
 	"math"
 	"slices"
 
-	domain "github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/storage/storagedef"
+	domain "github.com/channing771/mornlea/packages/shared/companion"
 )
 
 // IdentityGenerator 为 bootstrap 提供可失败、可注入的 UUIDv4 entropy。

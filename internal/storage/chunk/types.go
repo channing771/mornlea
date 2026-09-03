@@ -13,8 +13,8 @@ import (
 	"io/fs"
 	"os"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // File 是 region 记录层容器对底层文件的抽象（原根包 types.go 的 regionFile），

@@ -3,8 +3,8 @@ package runtime
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/sim/tuning"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/tuning"
 )
 
 // 本文件是变更 authoritative-farming 任务 8.7 的测量夹具，回答一个问题：

@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
-	networktcp "github.com/channing771/mornlea/internal/network/tcp"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
+	networktcp "github.com/channing771/mornlea/packages/shared/network/tcp"
 )
 
 func stockedMirrorInventory() core.Inventory {

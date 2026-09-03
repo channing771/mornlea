@@ -1,6 +1,6 @@
 package entity
 
-import "github.com/channing771/mornlea/internal/core"
+import "github.com/channing771/mornlea/packages/shared/core"
 
 // 本文件实现夜行者生成判定用的**局部区块光查询**：以候选格为中心、半径
 // hostileLightRadius（含）的 29³ 窗口内做一次方块光传播，取中心格的光值。

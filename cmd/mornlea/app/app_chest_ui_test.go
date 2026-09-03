@@ -5,9 +5,9 @@ package app
 // app_chest_ui_test.go：箱子界面镜像生命周期与熔炉/箱子互斥。
 
 import (
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/render/hud"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
 	"github.com/go-gl/mathgl/mgl32"
 	"testing"
 )

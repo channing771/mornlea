@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim/runtime"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 func TestPlayerPlacementSuccessesPreserveEverySequence(t *testing.T) {

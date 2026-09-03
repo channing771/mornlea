@@ -3,8 +3,8 @@ package realm
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // fluid_wild_grass_test.go：natural-grass-seeds 在权威流体侧的短草行为——

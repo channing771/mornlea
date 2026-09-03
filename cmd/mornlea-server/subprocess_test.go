@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/server"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 const mornleaServerProcessStartupDeadline = 30 * time.Second

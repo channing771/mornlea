@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/companion"
+	"github.com/channing771/mornlea/packages/shared/companion"
 )
 
 func hostTestAgentService() companion.AgentServiceSettings {

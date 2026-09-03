@@ -17,7 +17,7 @@ float32 逐位一致契约由冻结的位级 golden 向量把守。
 - THEN 结果 State（Position/Velocity/OnGround）、UsedStep、HitUnknown MUST 与源码固化
   的 float32 bit 字面量逐位一致——13 条向量覆盖地面行走/减速停止、起跳、空中重力与
   终端速度钳制、空中行走速度钳制、水中下沉/上浮/水平阻力、天花板碰撞、半砖 step-up、
-  unknown 格阻挡与负零哨兵（internal/physics/step_golden_vectors_test.go），任何一位
+  unknown 格阻挡与负零哨兵（packages/shared/physics/step_golden_vectors_test.go），任何一位
   漂移都使测试失败
 
 #### Scenario: golden 向量在非 arm64 平台同样逐位成立
@@ -80,5 +80,5 @@ SetTunables 之后的下一次 Step MUST 使用新参数。
 - WHEN 调用 nativeabi.CollisionResolve
 - THEN 输出位置、clipped mask、OnGround、UsedStep 与 HitUnknown MUST 与冻结字面量
   逐位一致；并发调用 MUST 与串行基准一致，常规桥 MUST 保持零 Go heap allocation
-  （见 internal/physics/collision_native_test.go）
+  （见 packages/shared/physics/collision_native_test.go）
 

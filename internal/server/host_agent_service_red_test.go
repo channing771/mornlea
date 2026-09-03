@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/channing771/mornlea/internal/companion"
+	"github.com/channing771/mornlea/packages/shared/companion"
 )
 
 func TestNewHostRequiresAgentServiceRuntimeConfig(t *testing.T) {

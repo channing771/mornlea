@@ -3,8 +3,8 @@ package hud
 import (
 	"unicode/utf8"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/render"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // tooltip.go 实现容器面板的悬停物品名 tooltip：指针悬停非空栏位（含产物格与

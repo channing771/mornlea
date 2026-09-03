@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // 本文件锁定夜行者的移动意图消费与近战伤害结算：`HostileAction` 是有界追逐

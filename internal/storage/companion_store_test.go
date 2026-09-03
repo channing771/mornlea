@@ -12,9 +12,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/core"
-	// companioncodec 别名消解与领域模型包 internal/companion 的标识符冲突；
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/core"
+	// companioncodec 别名消解与领域模型包 packages/shared/companion 的标识符冲突；
 	// 本文件其余根包代码（disk/memory/types）以裸名 companion 指代存储域包。
 	companioncodec "github.com/channing771/mornlea/internal/storage/companion"
 )

@@ -4,9 +4,9 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/assets"
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/mesh"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // allBedForms 列出床的八个稳定形态（床尾/床头 × 南西北东），与方块编号冻结

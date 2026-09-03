@@ -5,8 +5,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/render"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // fullFurnaceOverlay 是熔炉视图的最坏布局：三格都有物品且两条进度条都非空。

@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/physics"
 )
 
 // exhaustionOf 读出一名玩家当前的三层饥饿状态，供「精确不变」类断言整体比对。

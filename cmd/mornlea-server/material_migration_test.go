@@ -11,10 +11,10 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage"
-	"github.com/channing771/mornlea/internal/world"
-	"github.com/channing771/mornlea/internal/worldgen"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
+	"github.com/channing771/mornlea/packages/shared/worldgen"
 )
 
 func TestMigrateNaturalMaterialsDoesNotIntroduceOakTrees(t *testing.T) {

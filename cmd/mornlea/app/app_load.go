@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/config"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/render"
+	"github.com/channing771/mornlea/packages/shared/config"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/physics"
 )
 
 // MessageDrainMax 是无头路径每帧从服务端接收管线处理的消息上限。capture

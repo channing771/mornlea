@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/storagedef"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // updateStorageFixtures 与根包及 chunk 包测试共用同一命令行开关名：按域拆分后

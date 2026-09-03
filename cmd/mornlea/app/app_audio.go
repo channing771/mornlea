@@ -4,8 +4,8 @@ package app
 
 import (
 	"github.com/channing771/mornlea/internal/audio"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // localAudioFeedback 只保存确认消息之间的极小匹配状态，不参与预测或权威状态。

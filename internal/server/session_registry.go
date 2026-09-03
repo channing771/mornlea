@@ -4,9 +4,9 @@ import (
 	"errors"
 	"sort"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 const trustedObserverSessionID = contract.SessionID(^uint64(0))

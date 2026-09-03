@@ -125,19 +125,19 @@ func TestCompanionGoProductionBoundaryMutations(t *testing.T) {
 		"cmd/mornlea/app",
 		"cmd/mornlea-server",
 		"internal/server",
-		"internal/companion",
+		"packages/shared/companion",
 	}
 	contract := map[string][]string{
-		"cmd/mornlea":             {"cmd/mornlea/benchmark", "internal/audio", "internal/client"},
-		"cmd/mornlea/app":         {},
-		"cmd/mornlea-server":      {},
-		"internal/server":         {},
-		"internal/companion":      {},
-		"cmd/mornlea/benchmark":   {"os/exec"},
-		"cmd/mornlea-agent-board": {"os/exec"},
-		"internal/audio":          {"C"},
-		"internal/client":         {"C"},
-		"internal/nativeabi":      {"C"},
+		"cmd/mornlea":               {"cmd/mornlea/benchmark", "internal/audio", "internal/client"},
+		"cmd/mornlea/app":           {},
+		"cmd/mornlea-server":        {},
+		"internal/server":           {},
+		"packages/shared/companion": {},
+		"cmd/mornlea/benchmark":     {"os/exec"},
+		"cmd/mornlea-agent-board":   {"os/exec"},
+		"internal/audio":            {"C"},
+		"internal/client":           {"C"},
+		"packages/shared/nativeabi": {"C"},
 	}
 	if violations := companionGoProductionBoundaryViolations(contract, roots); len(violations) != 0 {
 		t.Fatalf("明确合法的 native bridge、benchmark 与闭包外 agent-board 被误拒绝: %v", violations)
@@ -146,8 +146,8 @@ func TestCompanionGoProductionBoundaryMutations(t *testing.T) {
 	for _, forbidden := range []string{"os/exec", "C", "runtime/cgo"} {
 		t.Run(forbidden, func(t *testing.T) {
 			mutated := cloneCompanionImportGraph(contract)
-			mutated["internal/companion"] = append(mutated["internal/companion"], "internal/companion/pythonhelper")
-			mutated["internal/companion/pythonhelper"] = []string{forbidden}
+			mutated["packages/shared/companion"] = append(mutated["packages/shared/companion"], "packages/shared/companion/pythonhelper")
+			mutated["packages/shared/companion/pythonhelper"] = []string{forbidden}
 			violations := companionGoProductionBoundaryViolations(mutated, roots)
 			assertCompanionViolationContains(t, violations, "pythonhelper")
 			assertCompanionViolationContains(t, violations, forbidden)

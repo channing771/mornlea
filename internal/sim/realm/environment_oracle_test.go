@@ -10,9 +10,9 @@ package realm
 // 的调用清零（本体保留在 `internal/fluid/rules.go`）。
 
 import (
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/fluid"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 func fluidRescanBlockAt(dimension *Dimension, position core.BlockPos) core.BlockID {

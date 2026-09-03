@@ -10,12 +10,12 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
-	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
+	networktcp "github.com/channing771/mornlea/packages/shared/network/tcp"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 var multiplayerRestartTarget = core.BlockPos{X: 8, Y: 1, Z: 2}

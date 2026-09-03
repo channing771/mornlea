@@ -3,7 +3,7 @@ package realm
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // TestFarmlandMoistureReverseWindowOrder 锁定流体变化反向枚举的完整 `y,z,x` 顺序。

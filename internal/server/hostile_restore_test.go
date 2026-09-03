@@ -15,9 +15,9 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // hostileRestoreFixture 返回三条字段各异的合法存档记录（含追逐目标、冷却

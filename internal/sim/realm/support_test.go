@@ -3,8 +3,8 @@ package realm
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // wildPlantFixture 构造一个带草皮表面与指定短草/依附方块的Ready 区块，

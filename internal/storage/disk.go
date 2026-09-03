@@ -13,13 +13,13 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/chunk"
 	"github.com/channing771/mornlea/internal/storage/companion"
 	"github.com/channing771/mornlea/internal/storage/hostile"
 	"github.com/channing771/mornlea/internal/storage/player"
 	"github.com/channing771/mornlea/internal/storage/region"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 const maxPlayerFileLength = int64(player.EnvelopeLength) + int64(player.MaxPayload)

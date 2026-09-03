@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 func FuzzDecodeHostileMobs(f *testing.F) {

@@ -3,7 +3,7 @@ package runtime
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // readyRevertWorld 构造单区块单会话的 revert 夹具世界，抽样拉满以便一次 Step 即命中目标格。

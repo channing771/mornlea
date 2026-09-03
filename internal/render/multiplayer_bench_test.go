@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // BenchmarkRemoteAvatarNameTag 度量多人热路径的 CPU 半部:名牌布局

@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/storagedef"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // hostileWireOffsets 是单条 72-byte 记录内各字段的字节偏移，与

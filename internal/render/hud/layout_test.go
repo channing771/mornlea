@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // TestOpenHeightAndWidthPinVanillaSpacing 锁定打开态的空间契约：统一面板高度

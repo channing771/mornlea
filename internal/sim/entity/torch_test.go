@@ -7,10 +7,10 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim/realm"
-	"github.com/channing771/mornlea/internal/sim/tuning"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/tuning"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // torch_test.go：可放置火把在 sim 层的行为——五向放置与拒绝、支撑失效的

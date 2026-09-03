@@ -1,9 +1,9 @@
 package entity
 
 import (
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // companionPlaceIntent 是 Place action 在伙伴 action 阶段记录、同一权威 tick

@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/channing771/mornlea/internal/nativeabi"
+	"github.com/channing771/mornlea/packages/shared/nativeabi"
 )
 
 // fakeShellBytes 是测试替身壳流的固定字节数(预算按步长静态上界计费,

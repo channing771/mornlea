@@ -11,10 +11,10 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/mesh"
 	"github.com/channing771/mornlea/internal/render"
 	"github.com/channing771/mornlea/internal/render/hud"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // baseVisibleRadius 是相机不在流体时的可见 section 搜索半径（区段），

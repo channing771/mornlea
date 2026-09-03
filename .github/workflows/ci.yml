@@ -92,20 +92,23 @@ jobs:
       - name: Agent Hooks 策略测试
         run: node --test scripts/agent-hooks/guard.test.mjs
       - name: 架构、存储与协议门禁
-        run: go test ./internal/archcheck ./internal/storage/... ./internal/network/... ./internal/physics -v
+        run: go test ./internal/archcheck ./internal/storage/... ./packages/shared/network/... ./packages/shared/physics -v
       - name: Race 分片全集自检
         run: |
           {
             go list ./...
-            # packages/contracts 是独立 workspace 模块：`go list ./...` 不会跨
-            # 模块匹配嵌套模块，需显式按模块列出；分片联合集必须同源覆盖。
+            # packages/contracts 与 packages/shared 是独立 workspace 模块：
+            # `go list ./...` 不会跨模块匹配嵌套模块，需显式按模块列出；
+            # 分片联合集必须同源覆盖。
             go list ./packages/contracts/...
+            go list ./packages/shared/...
           } | sort -u > /tmp/all-packages.txt
           {
             go list ./cmd/...
             printf '%s\n' github.com/channing771/mornlea/internal/server
             go list ./internal/... | grep -v '/internal/server$'
             go list ./packages/contracts/...
+            go list ./packages/shared/...
             # scripts/ 是带 package main 的 Go 包（composite_grass_side.go 材质
             # 合成工具），go list ./... 会包含它；分片联合集必须同源覆盖，否则本
             # 自检在引入该工具后恒红。
@@ -114,7 +117,7 @@ jobs:
           diff -u /tmp/all-packages.txt /tmp/sharded-packages.txt
       - name: 静态检查
         run: |
-          go vet ./... ./packages/contracts/...
+          go vet ./... ./packages/contracts/... ./packages/shared/...
           gofmt -l . | tee /tmp/fmt.txt
           test ! -s /tmp/fmt.txt
       - name: 记录 quality 信息
@@ -172,7 +175,7 @@ jobs:
             packages: ./internal/server
             extra: ''
           - shard: internal-rest
-            packages: "$(go list ./internal/... | grep -v '/internal/server$') $(go list ./packages/contracts/...) github.com/channing771/mornlea/scripts"
+            packages: "$(go list ./internal/... | grep -v '/internal/server$') $(go list ./packages/contracts/...) $(go list ./packages/shared/...) github.com/channing771/mornlea/scripts"
             extra: ''
     steps:
       - name: 记录开始时间
@@ -242,9 +245,9 @@ jobs:
       - name: M3C v6 八玩家与性能报告门禁
         run: go test ./internal/client ./internal/server ./cmd/mornlea/benchmark ./cmd/perfcheck -run 'Test(PerfReportV6|ScenarioV6|PerfcheckV6|PerfcheckV5SameScenario|PerformanceThresholds|InterestObserver|HostStats|BenchmarkServerEpoch|BenchmarkServerMeasuredWindow)' -count=1
       - name: 微基准与平台无关阈值
-        run: go test ./... -bench=. -benchtime=1x -run='^$'
+        run: go test ./... ./packages/contracts/... ./packages/shared/... -bench=. -benchtime=1x -run='^$'
       - name: M3C 多人微基准可执行性
-        run: go test ./internal/network ./internal/server ./internal/render -run '^$' -bench '(RemotePlayerStateCodec|EightPlayerInterest|RemoteAvatarNameTag)' -benchmem -benchtime=100x -count=1
+        run: go test ./packages/shared/network ./internal/server ./internal/render -run '^$' -bench '(RemotePlayerStateCodec|EightPlayerInterest|RemoteAvatarNameTag)' -benchmem -benchtime=100x -count=1
       - name: 记录 integration 信息
         if: ${{ always() }}
         run: |
@@ -262,7 +265,7 @@ jobs:
           go-version: '1.26'
           # Go 的构建缓存不追踪 cgo `#include` 进来的 C 头文件，而 setup-go 默认只用
           # go.sum 做缓存 key。engine ABI 升版只改头文件、不动 go.sum，于是缓存会命中
-          # 上一个 ABI 版本编译出的 internal/nativeabi 目标文件：运行时库报新版本、
+          # 上一个 ABI 版本编译出的 packages/shared/nativeabi 目标文件：运行时库报新版本、
           # 编译进 Go 的常量仍是旧版本，表现为 ABI 版本不匹配，且因缓存命中有竞态而
           # 时红时绿。把头文件纳入 key，ABI 变更即强制冷编译。
           cache-dependency-path: |
@@ -279,7 +282,7 @@ jobs:
       - name: 构建并测试 native collision bundle
         run: |
           make rust
-          go test ./internal/nativeabi ./internal/core ./internal/physics ./internal/mesh -race -count=1
+          go test ./packages/shared/nativeabi ./packages/shared/core ./packages/shared/physics ./internal/mesh -race -count=1
           make build-linux-server
 
       - name: Linux 专服架构与 ELF 门禁

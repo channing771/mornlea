@@ -5,7 +5,7 @@ package app
 import (
 	"errors"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 var errBlockTargetUnknown = errors.New("mornlea: block target path is unknown")

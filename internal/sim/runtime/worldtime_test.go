@@ -3,7 +3,7 @@ package runtime
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // DayLengthTicks 之外的显示周期由呈现层负责，这里只验证绝对时间的推进。

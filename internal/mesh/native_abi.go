@@ -2,7 +2,7 @@
 
 package mesh
 
-import "github.com/channing771/mornlea/internal/nativeabi"
+import "github.com/channing771/mornlea/packages/shared/nativeabi"
 
 const nativeABIVersionCurrent = nativeabi.ABIVersion
 

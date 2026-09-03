@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/config"
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/lod"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/render"
 	"github.com/channing771/mornlea/internal/render/hud"
 	"github.com/channing771/mornlea/internal/server"
+	"github.com/channing771/mornlea/packages/shared/config"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // Camera 返回相机状态的可变指针。capture 场景直接改写偏航/俯仰等单个

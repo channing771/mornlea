@@ -15,8 +15,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/companion"
 )
 
 // companionDialogue 是 Agent Dialogue 的最小依赖面。生产实现只调用 Agent

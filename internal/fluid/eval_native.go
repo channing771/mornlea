@@ -3,8 +3,8 @@ package fluid
 import (
 	"encoding/binary"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/nativeabi"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/nativeabi"
 )
 
 // eval_native.go：`Queue.Advance` 单格求值的 native 批量接线。

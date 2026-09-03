@@ -3,8 +3,8 @@ package player
 import (
 	"fmt"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/storagedef"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 const oldestPlayerSchema uint32 = 1

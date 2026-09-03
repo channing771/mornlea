@@ -4,7 +4,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // TestTooltipShowsItemNameAtPointer 锁定 tooltip 的呈现契约：指针悬停非空栏位

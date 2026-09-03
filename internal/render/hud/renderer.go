@@ -1,8 +1,8 @@
 package hud
 
 import (
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/render"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // HotbarRenderer 以固定容量准备容器保留面（浮动面板/箱子/熔炉/合成/tooltip）

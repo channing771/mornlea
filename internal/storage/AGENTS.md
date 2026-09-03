@@ -38,14 +38,14 @@ internal/storage/
 `./internal/...` 生产 import 逐边比对；未登记的新包直接报错）。契约文本见
 openspec 主规格 `repository-code-organization`。
 
-- 接受：根包 → {`internal/core`, `internal/world`, `region`, `chunk`,
+- 接受：根包 → {`packages/shared/core`, `packages/shared/world`, `region`, `chunk`,
   `player`, `companion`, `hostile`, `storagedef`}；`chunk` → {`region`,
   `storagedef`, `core`, `world`}；`player` → {`core`, `storagedef`}；
-  `companion` → {`internal/companion`, `core`, `storagedef`}（既有伙伴
+  `companion` → {`packages/shared/companion`, `core`, `storagedef`}（既有伙伴
   领域边随迁）；`hostile` → {`core`, `storagedef`}；`region` →
   {`core`, `storagedef`}；`storagedef` → {}（零依赖叶子）。
 - 拒绝：任何子包反向导入根包；子包之间 `chunk` → `region` 之外的相互
-  依赖；存储各包依赖 `internal/network`（线上消息与落盘 DTO 在 server
+  依赖；存储各包依赖 `packages/shared/network`（线上消息与落盘 DTO 在 server
   装配层转换）。
 - 新增子包或新边必须先证明方向合理并登记 `allowed` 表，不许先写代码后补
   登记。

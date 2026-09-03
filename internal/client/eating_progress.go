@@ -3,8 +3,8 @@ package client
 import (
 	"time"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/physics"
 )
 
 // eatingProgressTicks 是进食进度条的分母：连续保持进食输入多少个权威 tick 后

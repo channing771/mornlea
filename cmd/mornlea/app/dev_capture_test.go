@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // fakeDevCaptureCoordinator 是捕获泵测试的计数协调器替身：按接口契约模拟

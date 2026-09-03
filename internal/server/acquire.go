@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 type chunkJobKind uint8

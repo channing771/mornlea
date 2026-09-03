@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // 夜行者跨重启恢复的端到端测试：两段完整宿主生命周期（Memory 与 Disk 两条

@@ -9,8 +9,8 @@ import (
 
 	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/config"
 	"github.com/channing771/mornlea/internal/lod"
+	"github.com/channing771/mornlea/packages/shared/config"
 )
 
 // graySolid 复用既有 `solidNRGBA` 生成一张全部像素同灰度的图,供近处不变

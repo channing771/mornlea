@@ -13,10 +13,10 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/assets"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/render"
 	"github.com/channing771/mornlea/internal/render/hud"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // crackTestTarget 是 configureTargetFeedback 布置的相机准星方块：相机在

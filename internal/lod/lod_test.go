@@ -5,8 +5,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/nativeabi"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/nativeabi"
 )
 
 // testHeader 构造与 engine lod.rs 单测同源的 `MGW1` header:seed 42、

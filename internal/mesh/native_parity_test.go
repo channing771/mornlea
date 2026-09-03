@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/assets"
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/mesh"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 func assertNativeOracleParity(t *testing.T, n *world.Neighborhood, reg mesh.Registry) []mesh.Quad {

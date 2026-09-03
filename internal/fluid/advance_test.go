@@ -4,7 +4,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // TestAdvance_OnlyDueItemsProcessed 覆盖 spec Scenario「到期前不处理」：

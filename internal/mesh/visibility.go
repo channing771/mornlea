@@ -1,8 +1,8 @@
 package mesh
 
 import (
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // Connectivity 记录一个区段的 6 个面之间哪些两两可达，共 15 对，占 15 位。

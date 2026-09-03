@@ -2,7 +2,7 @@
 
 `internal/storage/hostile` 承载 hostile（夜行者）存档域：hostile_mobs.bin
 聚合文件（MHST 信封）的编解码、记录字段校验与夜行者存档值类型。本包是
-纯 codec 域：只依赖 `internal/core` 并经 `internal/storage/storagedef`
+纯 codec 域：只依赖 `packages/shared/core` 并经 `internal/storage/storagedef`
 取哨兵；不感知根包编排（hostile_mobs.bin 文件的原子替换与路径编排在根
 包 DiskStore/MemoryStore），`HostileMobStore` 接口属根包存储契约家族，
 定义留在根包 `types.go`。依赖方向由 `internal/archcheck` 的

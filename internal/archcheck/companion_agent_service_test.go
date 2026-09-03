@@ -405,7 +405,7 @@ var companionGoProductionRoots = []string{
 	"cmd/mornlea/app",
 	"cmd/mornlea-server",
 	"internal/server",
-	"internal/companion",
+	"packages/shared/companion",
 }
 
 var companionGoForbiddenImportAllowlist = map[string]map[string]string{
@@ -418,14 +418,16 @@ var companionGoForbiddenImportAllowlist = map[string]map[string]string{
 	"internal/client": {
 		"C": "Rust client ABI bridge，不用于伙伴 Agent 装配",
 	},
-	"internal/nativeabi": {
+	"packages/shared/nativeabi": {
 		"C": "Rust engine ABI bridge，不用于伙伴 Agent 装配",
 	},
 }
 
 func loadCompanionProductionImportGraph(root string) (map[string][]string, error) {
 	graph := make(map[string][]string)
-	for _, top := range []string{"cmd", "internal", "packages/contracts"} {
+	// companion 已迁入 packages/shared 模块；server 仍在 internal，两处都要
+	// 进图，否则闭包会在跨模块边上断链。
+	for _, top := range []string{"cmd", "internal", "packages/contracts", "packages/shared"} {
 		err := filepath.WalkDir(filepath.Join(root, top), func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr

@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/cmd/mornlea/app"
-	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 func TestMainOptionsDefaultsAndWorldOverride(t *testing.T) {

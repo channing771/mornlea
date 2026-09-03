@@ -3,7 +3,7 @@ package entity
 import (
 	"math"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // SessionSubscription 是 runtime 维护订阅时读取的实体派生值。

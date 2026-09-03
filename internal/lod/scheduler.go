@@ -7,8 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/nativeabi"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/nativeabi"
 )
 
 // TileSink 是远环 tile 的上传与释放出口,形状镜像近环 `render.SectionSink`

@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // BuildChunkSnapshot 把一个权威区块编码为线上快照消息。

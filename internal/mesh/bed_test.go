@@ -4,8 +4,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // bedFixtureMaterial 是床夹具共用的材质层号：与火把夹具同理，刻意取植物区间
