@@ -97,8 +97,11 @@ func TestApplicationEatingOverlayTracksPredictedProgress(t *testing.T) {
 		t.Fatalf("并发帧 RenderFrame=(%v,%v)", rendered, err)
 	}
 	state = app.assembleHUDState()
-	if !state.Eating.Active || state.Eating.Progress != quantizeEatingProgress(progress) {
-		t.Fatalf("并发帧进食分节=%+v，想要保持激活且比例与 tracker 同源", state.Eating)
+	// 并发帧推进了一帧 wall 时间，`progress` 是上一帧的过期快照：同源性必须
+	// 与同一时刻的当前快照比较，否则帧间隔抖动跨过半个量化台阶即误报。
+	concurrentActive, concurrentProgress := app.eatingTracker.Snapshot()
+	if !state.Eating.Active || state.Eating.Progress != quantizeEatingProgress(concurrentProgress) {
+		t.Fatalf("并发帧进食分节=%+v，想要保持激活且比例与当前 tracker %v/%v 同源", state.Eating, concurrentActive, concurrentProgress)
 	}
 	app.miningOverlay = hud.MiningOverlay{}
 
