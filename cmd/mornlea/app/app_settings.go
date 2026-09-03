@@ -14,7 +14,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/audio"
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/config"
+	"github.com/channing771/mornlea/packages/shared/config"
 )
 
 const maxSettingsMessageBytes = 256

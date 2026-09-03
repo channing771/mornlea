@@ -5,8 +5,8 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/nativeabi"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/nativeabi"
 )
 
 // eval_golden_test.go：fluid eval kernel 的位级确定性 golden 向量。
@@ -15,7 +15,7 @@ import (
 // 同一 7 格输入在所有平台上产出**逐字节相同**的候选写入流；oracle 差分只能锁
 // 语义等价，锁不住 kernel 编码本身的位漂移（槽位序、条目排布、哨兵填充），
 // 源码字面向量是唯一廉价的位级回归网——可评审、可 diff、零 I/O，任何一位
-// 翻转都会在此显形。风格与 `internal/physics/step_golden_vectors_test.go` 一致。
+// 翻转都会在此显形。风格与 `packages/shared/physics/step_golden_vectors_test.go` 一致。
 //
 // 向量来源：2026-08 从当前生产路径（Go 编码 → Rust `mornlea_engine` 求值，
 // 即唯一的生产行为）经 `nativeabi.FluidEvalBatch` 一次性采集，人工逐条复核

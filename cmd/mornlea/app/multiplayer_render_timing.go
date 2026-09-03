@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // MultiplayerRenderTiming 是多人 benchmark 观察者的渲染段延迟记录器：avatar

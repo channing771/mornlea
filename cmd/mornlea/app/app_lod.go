@@ -7,10 +7,10 @@ import (
 	"math"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/config"
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/lod"
-	"github.com/channing771/mornlea/internal/worldgen"
+	"github.com/channing771/mornlea/packages/shared/config"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/worldgen"
 )
 
 // lodTileChunks 是每个远环 tile 覆盖的 chunk 数(4×4 chunk = 64×64 列)。

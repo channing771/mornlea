@@ -3,9 +3,9 @@ package runtime_test
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim/runtime"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 func moveCommand(session runtime.SessionID, sequence uint64, from, to uint8) runtime.Command {

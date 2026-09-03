@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // 本文件是 `Replaceable` 谓词里「短草」主题的一支（natural-grass-seeds 引入的

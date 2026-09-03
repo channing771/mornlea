@@ -1,6 +1,6 @@
 package entity
 
-import "github.com/channing771/mornlea/internal/core"
+import "github.com/channing771/mornlea/packages/shared/core"
 
 // advanceOxygen 推进一名玩家一个 tick 的氧气与溺水结算，与 advanceHealthRegen
 // 同形：固定整数运算、不分配、由调用方传入本 tick 的 tunable 快照值。
@@ -28,7 +28,7 @@ func (player *playerState) advanceOxygen(eyeInFluid bool, drownDamageIntervalTic
 		return
 	}
 	player.drownTicks++
-	// 间隔取 max(…, 1)：配置层（internal/config 的 Fields）已把下限钳到 1，
+	// 间隔取 max(…, 1)：配置层（packages/shared/config 的 Fields）已把下限钳到 1，
 	// 但 sim 按架构约束不得导入 config，那道钳制隔着一个包；这里兜底避免
 	// 间隔为 0 时退化成「每 tick 扣血」。
 	if player.drownTicks >= max(drownDamageIntervalTicks, 1) {

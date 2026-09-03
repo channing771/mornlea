@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/storagedef"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 func fixtureCompanionID(last byte) companion.ID {

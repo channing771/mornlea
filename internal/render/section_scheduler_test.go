@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/assets"
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/mesh"
 	"github.com/channing771/mornlea/internal/render"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // recordingSink 记录每次上传的两条字节流,供分流断言使用。

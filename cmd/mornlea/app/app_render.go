@@ -10,8 +10,8 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/render"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 func RemoteRenderPresentations(presentations []client.RemotePresentation) ([]render.Avatar, []render.NameTag) {

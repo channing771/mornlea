@@ -14,6 +14,7 @@ Mornlea 是使用 Go 1.26 编写的独立体素游戏，Go module 为 `github.co
 ## 仓库与局部指南
 
 - Go 内部包、依赖方向和权威模拟：`internal/AGENTS.md`
+- 共享域 Go 模块（server/client 双侧共用的领域包）：`packages/shared/`（局部指南随包目录，如 `packages/shared/network/AGENTS.md`）
 - Rust engine、client 与 C ABI：`packages/engine/AGENTS.md`
 - 图形客户端与其 app/capture/benchmark 子包：`cmd/mornlea/AGENTS.md`（子包目录各有局部指南，依赖方向由 `internal/archcheck` 强制）
 - 文档结构、长期说明和测试组织文档：`docs/AGENTS.md`

@@ -5,8 +5,8 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim/runtime"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // TestFallDamageThreeBlocksNoDamage 覆盖"三格及以内不扣血"场景。

@@ -1,6 +1,6 @@
 package fluid
 
-import "github.com/channing771/mornlea/internal/core"
+import "github.com/channing771/mornlea/packages/shared/core"
 
 // oracle_test.go：迁移期差分门禁的 Go oracle。
 //
@@ -75,7 +75,7 @@ func evalCell(pos core.BlockPos, w FluidWorld) map[core.BlockPos]core.BlockID {
 		// 等级 7 已是传播下界，世界中不得出现等级 > 7 的流体方块。
 		return writes
 	}
-	// 用算式而非 switch/查表算出目标编号，依赖 internal/core/block.go 里
+	// 用算式而非 switch/查表算出目标编号，依赖 packages/shared/core/block.go 里
 	// WaterSourceID..WaterLevel7ID 这 8 个编号连续排布、且 WaterLevelN ==
 	// WaterSourceID+N 这一稳定约定（该文件注释里明确写了这些编号只能追加、
 	// 不能重排，所以这条依赖是安全的）。测试侧（e2e_test.go）刻意不复用

@@ -5,7 +5,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // executeBoneMeal 处理一条骨粉催熟命令：把视线内的未成熟作物推进一阶段，并从

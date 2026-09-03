@@ -4,8 +4,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 func TestIdleDialogueIntervalGoldenAndBounds(t *testing.T) {

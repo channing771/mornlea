@@ -6,8 +6,8 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // TestRayAABBDistance 覆盖近战射线进入玩家包围盒的边界：回退方向、平行轴和

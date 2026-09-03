@@ -1,8 +1,8 @@
 package hud
 
 import (
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/render"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // panel.go 是四类容器浮动面板的几何单源：面板原点、面板族常量、图示区格、

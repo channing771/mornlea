@@ -6,10 +6,10 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim/realm"
-	"github.com/channing771/mornlea/internal/sim/tuning"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/tuning"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // tillTarget 是全部翻地用例共用的目标格：一个悬空的可翻方块，正上方按用例

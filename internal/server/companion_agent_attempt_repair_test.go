@@ -3,7 +3,7 @@ package server
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/companion"
+	"github.com/channing771/mornlea/packages/shared/companion"
 )
 
 func TestCompanionPlannerUnmatchedOutcomeDoesNotClearActiveGate(t *testing.T) {

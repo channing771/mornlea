@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // 本文件是 `Replaceable` 谓词里「作物」主题的一支（flood-destroys-crops 引入

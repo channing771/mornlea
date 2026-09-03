@@ -3,7 +3,7 @@ package entity
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // 本文件锁定成熟小麦收获产量的三条性质（change crop-random-drop-count）：同一

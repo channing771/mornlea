@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // TestPlayerFlushStallReturnsBoundedErrorAndKeepsDirty 捕获：`Flush` 面对恒脏玩家

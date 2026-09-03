@@ -13,11 +13,11 @@ import (
 
 	"github.com/channing771/mornlea/internal/assets"
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/mesh"
 	"github.com/channing771/mornlea/internal/render"
-	"github.com/channing771/mornlea/internal/world"
-	"github.com/channing771/mornlea/internal/worldgen"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
+	"github.com/channing771/mornlea/packages/shared/worldgen"
 )
 
 func init() {

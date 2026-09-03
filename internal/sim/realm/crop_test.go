@@ -3,7 +3,7 @@ package realm
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // TestGrowCropPotatoWetSky 覆盖马铃薯在湿润且露天下推进一阶段。

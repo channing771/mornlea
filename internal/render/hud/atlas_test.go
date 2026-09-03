@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/assets"
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/mesh"
 	"github.com/channing771/mornlea/internal/render"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // 杀死变异：漏画任一固定 UI 图标、复用同一图标、引入半透明边缘或让构建读取不稳定

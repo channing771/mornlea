@@ -10,11 +10,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
-	"github.com/channing771/mornlea/internal/world"
-	"github.com/channing771/mornlea/internal/worldgen"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
+	"github.com/channing771/mornlea/packages/shared/worldgen"
 )
 
 // preUpgradeSavedChunk 构造升级前已保存的区块:生产生成器生成同种子世界后

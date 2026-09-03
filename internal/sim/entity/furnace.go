@@ -1,8 +1,8 @@
 package entity
 
 import (
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // advanceFurnaces 在单写者 tick 中推进活动范围内的熔炉。

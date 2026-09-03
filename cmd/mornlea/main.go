@@ -16,10 +16,10 @@ import (
 	"github.com/channing771/mornlea/cmd/mornlea/benchmark"
 	"github.com/channing771/mornlea/cmd/mornlea/capture"
 	"github.com/channing771/mornlea/cmd/mornlea/devcapture"
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/logging"
-	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/profile"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/logging"
+	"github.com/channing771/mornlea/packages/shared/network"
+	"github.com/channing771/mornlea/packages/shared/profile"
 )
 
 func init() {

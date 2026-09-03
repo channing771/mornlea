@@ -1,8 +1,8 @@
 package client
 
 import (
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/physics"
 )
 
 // MirrorCollisionSource 把指定维度的客户端世界镜像适配为共享物理碰撞查询。

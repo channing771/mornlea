@@ -15,7 +15,7 @@
 
 - GIVEN 黄金文件冻结的种子与区块坐标
 - WHEN 调用 worldgen.GenerateChunk 并对全区块 BlockID 序列取 SHA256 摘要
-- THEN 该摘要 MUST 与包含自然短草结果的当前黄金文件逐字节一致(internal/worldgen/testdata),
+- THEN 该摘要 MUST 与包含自然短草结果的当前黄金文件逐字节一致(packages/shared/worldgen/testdata),
   同种子重复生成 MUST 逐格一致
 
 #### Scenario: 单点查询与整块生成一致
@@ -24,7 +24,7 @@
 - WHEN 分别调用 HeightAt/TerrainBlockAt/BaseBlockAt 与 GenerateChunk
 - THEN BaseBlockAt MUST 与 GenerateChunk 的对应方块逐格一致并包含自然短草,
   HeightAt 与 TerrainBlockAt MUST 保持不含植物的既有地形语义,对照由区块稠密输出与单点查询
-  两条生产公共出口互检(internal/worldgen/generator_test.go、tree_test.go、
+  两条生产公共出口互检(packages/shared/worldgen/generator_test.go、tree_test.go、
   parity_test.go)
 
 #### Scenario: 跨区块橡树一致
@@ -34,7 +34,7 @@
 - THEN 两个区块内该树的原木与树叶方块拼合后与同种子单点查询语义逐格一致,
   根列树高保持冻结区间 4..6,原木优先、树叶仅覆盖空气的规则保持不变,
   自然短草 MUST NOT 覆盖树干或树叶
-  (internal/worldgen/parity_test.go 的跨界树对照与 tree_test.go 的树冠几何性质)
+  (packages/shared/worldgen/parity_test.go 的跨界树对照与 tree_test.go 的树冠几何性质)
 
 ### Requirement: perm 表由 Go 播种并随调用传入
 

@@ -3,10 +3,10 @@ package server
 // world_setup_helpers_test.go：server 包共享的内存世界装配助手。
 
 import (
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
-	"github.com/channing771/mornlea/internal/worldgen"
+	"github.com/channing771/mornlea/packages/shared/network"
+	"github.com/channing771/mornlea/packages/shared/worldgen"
 )
 
 func newAttachedWorldForTest(config Config, endpoint network.ServerEndpoint, generator Generator, store storage.Store) *Server {

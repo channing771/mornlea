@@ -4,7 +4,7 @@ import (
 	"math"
 	"sort"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // item 是待更新队列的一条记录：位置与到期 tick。

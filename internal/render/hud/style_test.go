@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/render"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // style.go 是容器保留面呈现色的唯一样式来源（design D1）。本文件从两端钉住

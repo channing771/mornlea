@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 var errReceiverInboxFull = errors.New("client: server message consumer is too slow")

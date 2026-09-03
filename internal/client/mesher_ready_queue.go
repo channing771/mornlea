@@ -3,7 +3,7 @@ package client
 import (
 	"container/heap"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 type readySectionHeap struct {

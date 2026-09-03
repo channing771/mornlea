@@ -3,8 +3,8 @@ package server
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 func TestPublishLocalResultRoutesPlacementSuccessOnlyToInitiatingSession(t *testing.T) {

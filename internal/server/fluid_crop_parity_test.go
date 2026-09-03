@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/storage"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
+	"github.com/channing771/mornlea/packages/shared/tuning"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // 本文件覆盖变更 flood-destroys-crops 的 Memory/TCP 双传输一致性（tasks.md 2.3）：

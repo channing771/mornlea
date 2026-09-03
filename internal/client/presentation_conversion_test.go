@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // hostileSpawnMessageOf 构造单条记录的合法 spawn 消息。

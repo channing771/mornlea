@@ -7,21 +7,21 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/sim/runtime"
-	"github.com/channing771/mornlea/internal/sim/tuning"
 	"github.com/channing771/mornlea/internal/storage"
-	"github.com/channing771/mornlea/internal/world"
-	"github.com/channing771/mornlea/internal/worldgen"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
+	"github.com/channing771/mornlea/packages/shared/tuning"
+	"github.com/channing771/mornlea/packages/shared/world"
+	"github.com/channing771/mornlea/packages/shared/worldgen"
 )
 
 // 自然种子闭环的冻结样本。这些常量是**事先离线核实后冻结**的固定事实，运行时
 // 不得搜索、不得改写：
 //
 //   - 世界 seed 42、Overworld、流体开启（生产 `config.Defaults().FluidEnabled`
-//     的编译期默认值；本包不依赖 internal/config，按该默认值显式开流体）；
+//     的编译期默认值；本包不依赖 packages/shared/config，按该默认值显式开流体）；
 //   - 出生锚点 {2,14} 使出生列恰为 (32,224)：该列地形高度 64，是海平面草架，
 //     表面为 GrassID、正上方 (32,65,224) 由 Rust worldgen 自然生成 ShortGrassID，
 //     其上直到世界顶部再无任何方块（没有树），玩家原地出生即站在短草格内；

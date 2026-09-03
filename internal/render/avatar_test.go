@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 func TestEntityKeySeparatesEqualPlayerAndCompanionBytes(t *testing.T) {

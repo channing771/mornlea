@@ -1,6 +1,6 @@
 package client
 
-import "github.com/channing771/mornlea/internal/core"
+import "github.com/channing771/mornlea/packages/shared/core"
 
 type Movement struct {
 	MoveX int8

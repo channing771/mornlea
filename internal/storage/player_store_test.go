@@ -11,8 +11,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/player"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // fixturePlayerID/fixturePlayerSave/fixturePlayerInventory 是 player 包

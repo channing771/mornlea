@@ -9,12 +9,12 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
-	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
+	networktcp "github.com/channing771/mornlea/packages/shared/network/tcp"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // integrationPollInterval 是本包测试条件等待循环统一的固定退避间隔。这些

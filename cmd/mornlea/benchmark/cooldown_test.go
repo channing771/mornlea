@@ -4,7 +4,7 @@ import (
 	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/config"
+	"github.com/channing771/mornlea/packages/shared/config"
 	"time"
 )
 

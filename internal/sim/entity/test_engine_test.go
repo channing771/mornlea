@@ -3,11 +3,11 @@ package entity
 import (
 	"sort"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/sim/realm"
-	"github.com/channing771/mornlea/internal/sim/tuning"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/physics"
+	"github.com/channing771/mornlea/packages/shared/tuning"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // Engine 是 entity 白盒测试的状态与 realm 夹具，不包含 runtime inbox、

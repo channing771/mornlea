@@ -30,8 +30,8 @@ import (
 	"time"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/render"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // uiStateJSON 是下行状态快照的组装载体,字段形状与 schema `$defs/uiState`

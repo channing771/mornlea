@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // metadata_dayphase_test.go：显示相位偏移的持久化契约——metadata v3 在 v2 载荷

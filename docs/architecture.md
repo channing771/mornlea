@@ -14,7 +14,7 @@ Mornlea 由 Go 应用、独立 Python 伙伴 Agent 服务与两个 Rust `cdylib`
 
 普通本地游戏使用 Memory transport，远程游戏使用 TCP transport；两者复用同一 packet/codec 契约、登录状态机、会话装配和权威模拟。Memory 只改变传送介质，不提供绕过登录、输入校验或服务端裁决的同进程特权路径。
 
-`internal/network` 负责会话与传输编排：共享 stream 接口、Play endpoint 门面、登录状态机和 Memory transport，并以别名再导出对协议消息子包 `internal/network/protocol`（packet/message/registry/snapshot 协议层）与编解码子包 `internal/network/codec`（packet↔wire 编解码与帧封装）保持既有 `network.X` 消费面；`internal/network/tcp` 负责 TCP listener、dial、stream 实现，且只承担 transport 职责。Host 与模拟层消费相同的已验证命令，因此本地和远程模式共享行为语义。
+`packages/shared/network` 负责会话与传输编排：共享 stream 接口、Play endpoint 门面、登录状态机和 Memory transport，并以别名再导出对协议消息子包 `packages/shared/network/protocol`（packet/message/registry/snapshot 协议层）与编解码子包 `packages/shared/network/codec`（packet↔wire 编解码与帧封装）保持既有 `network.X` 消费面；`packages/shared/network/tcp` 负责 TCP listener、dial、stream 实现，且只承担 transport 职责。Host 与模拟层消费相同的已验证命令，因此本地和远程模式共享行为语义。
 
 ## 4. 独立伙伴 Agent 服务
 
@@ -40,24 +40,22 @@ Go 与 Python 各自限制全局 4 个 Planner/Dialogue run、同一伙伴 1 个
 ## 5. Go 包职责与 archcheck 依赖边界
 
 - `cmd/mornlea` 和 `cmd/mornlea-server` 负责应用入口与资源生命周期装配。
-- `internal/world` 持有区块、section、容器和掉落物等世界数据模型。
-- `internal/sim` 为仅含指导文档的目录，权威模拟由五个子包承载：`contract`（跨边界 DTO）、`tuning`（Tunables 快照）、`realm`（世界维度与单 tick 事务）、`entity`（玩家/伙伴/夜行者与玩法结算）、`runtime`（Engine 与 Step 编排）；依赖方向与单次提交纪律见 `internal/sim/AGENTS.md` 与 `internal/archcheck`。
-- `internal/network` 持有会话与传输编排（共享 stream 接口、endpoint 门面、登录状态机与 Memory transport）并以别名再导出对协议消息子包 `internal/network/protocol`（packet/message/registry/snapshot 协议层）与编解码子包 `internal/network/codec`（packet↔wire 编解码与帧封装）保持既有 `network.X` 消费面；`internal/network/tcp` 持有 TCP listener、dial、stream 实现，只依赖 `internal/network` 且保持 transport-only。
+- `packages/shared` 是共享域 Go 模块（独立 go.mod，go.work 成员），持有 server 与 client 双侧共用的领域包：`core`（公共领域类型与 native raycast）、`world`（区块与世界数据模型）、`physics`（玩家运动与碰撞）、`pathfind`（不可变快照寻路）、`companion`（伙伴身份与领域类型）、`network`（+protocol/codec/tcp，登录状态机与传输）、`worldgen`（seed 播种与区块回写）、`tuning`（Tunables 快照）、`profile`、`config`、`logging` 与 `nativeabi`（engine ABI 的唯一 Go bridge）。
+- `internal/sim` 为仅含指导文档的目录，权威模拟由四个子包承载：`contract`（跨边界 DTO）、`realm`（世界维度与单 tick 事务）、`entity`（玩家/伙伴/夜行者与玩法结算）、`runtime`（Engine 与 Step 编排）；Tunables 快照位于 `packages/shared/tuning`。依赖方向与单次提交纪律见 `internal/sim/AGENTS.md` 与 `internal/archcheck`。
 - `internal/storage` 持有世界、玩家、伙伴和夜行者数据的编码、迁移、恢复与磁盘生命周期，并以子包 `internal/storage/chunk`、`internal/storage/player`、`internal/storage/companion`、`internal/storage/hostile`、`internal/storage/region` 等细化实现，顶层保持外部消费面。
 - `internal/server` 装配 Host、Server、登录、会话、权威 tick、发布和关服编排；通过 `internal/server/persistence` 委派存档生命周期，自身不持有保存队列、重试状态或 worker，实现只保留 `PersistenceStatus` 与 `ErrPlayerPersistenceBackpressure` 的兼容 re-export。
-- `internal/server/persistence` 单独持有世界区块与 metadata、玩家、伙伴、夜行者四类存档的加载、观察、异步保存、重试、flush/close 与 worker 生命周期；生产代码仅依赖 `internal/companion`、`internal/core`、`internal/physics`、`internal/sim/runtime`、`internal/storage`，不得反向导入 `internal/server` 或访问 Host/Server 私有状态，依赖方向以 `internal/archcheck` 为准。
-- `internal/pathfind` 持有不可变快照上的有界寻路且只依赖 `internal/core`；`internal/companion` 与 `internal/server` 消费它，但寻路不拥有玩法或世界访问。
+- `internal/server/persistence` 单独持有世界区块与 metadata、玩家、伙伴、夜行者四类存档的加载、观察、异步保存、重试、flush/close 与 worker 生命周期；生产代码仅依赖 `packages/shared/companion`、`packages/shared/core`、`packages/shared/physics`、`internal/sim/runtime`、`internal/storage`，不得反向导入 `internal/server` 或访问 Host/Server 私有状态，依赖方向以 `internal/archcheck` 为准。
+- `packages/shared/pathfind` 持有不可变快照上的有界寻路且只依赖 `packages/shared/core`；`packages/shared/companion` 与 `internal/server` 消费它，但寻路不拥有玩法或世界访问。
 - `internal/client` 持有客户端镜像、输入预测、消息接收、client ABI bridge 和渲染侧 CPU 编排。
-- `internal/render`、`internal/mesh`、`internal/assets`、`internal/lod`、`internal/worldgen` 与 `internal/fluid` 持有领域数据描述、CPU 编码和 Rust 调用编排，不拥有 GPU 后端或第二套数值生产实现。
-- `internal/nativeabi` 是 engine ABI 的唯一 Go bridge。
+- `internal/render`、`internal/mesh`、`internal/assets`、`internal/lod`、`packages/shared/worldgen` 与 `internal/fluid` 持有领域数据描述、CPU 编码和 Rust 调用编排，不拥有 GPU 后端或第二套数值生产实现。
 
 内部包允许的直接依赖以 `internal/archcheck/dependency_test.go` 的 `allowed` 表为准。`internal/archcheck` 同时以 `TestSimAuthorityStateOwnershipStaysExplicit` 扫描 runtime 的包变量与全部 holder，把唯一 mutation/commit 绑定到 `StepWithTunables` 的真实调用路径，以 `TestAuthorityTickTunablesStayExplicit` 守住权威 tick 参数捕获和传递；其余门禁守住无 WebGPU Go 依赖、无图形专服闭包、伙伴 Agent 服务发布边界、Make/CI 门禁和长期版本基线；架构文档不复制会随包演进的依赖白名单。
 
 ## 6. `mornlea_engine` / engine ABI v10
 
-`mornlea_engine` 是 mesh/light、collision、raycast、physics tick 积分、worldgen、LOD shell 与流体规则求值/重扫扫描的唯一生产实现；流体的队列、预算、游标与冲毁结算编排仍在 Go（`internal/fluid` 与 `internal/sim/realm` 经 `internal/nativeabi` 调用流体 kernel）。该 crate 保持无窗口，不拥有权威世界状态，不执行文件或网络 I/O，也不承载伤害、库存、权限或 tick 编排等业务规则。
+`mornlea_engine` 是 mesh/light、collision、raycast、physics tick 积分、worldgen、LOD shell 与流体规则求值/重扫扫描的唯一生产实现；流体的队列、预算、游标与冲毁结算编排仍在 Go（`internal/fluid` 与 `internal/sim/realm` 经 `packages/shared/nativeabi` 调用流体 kernel）。该 crate 保持无窗口，不拥有权威世界状态，不执行文件或网络 I/O，也不承载伤害、库存、权限或 tick 编排等业务规则。
 
-engine C ABI 当前为 v10（v10 即 `MGW1` layout 3 的 15 材质 worldgen 请求）。Go 侧只有 `internal/nativeabi` 可以接触该 ABI；领域包构造语义输入并解码结果。header、Rust FFI、Go bridge、ABI 版本和跨语言一致性检查必须成套演进，调用结束后任一侧都不得保留对方指针。
+engine C ABI 当前为 v10（v10 即 `MGW1` layout 3 的 15 材质 worldgen 请求）。Go 侧只有 `packages/shared/nativeabi` 可以接触该 ABI；领域包构造语义输入并解码结果。header、Rust FFI、Go bridge、ABI 版本和跨语言一致性检查必须成套演进，调用结束后任一侧都不得保留对方指针。
 
 ## 7. `mornlea_client` / client ABI v14
 
@@ -103,35 +101,37 @@ Linux 专服发布单元由 `mornlea-server` 与相邻的 `libmornlea_engine.so`
 │   │   └── companion/      Python 3.12 FastAPI/LangGraph/SQLite 独立服务
 │   ├── contracts/          独立最小 Go 模块（go.work workspace 成员）
 │   │   └── companion-agent/    HTTP v1 与 MCP v1 的共享 manifest/schema/golden
+│   ├── shared/             共享域 Go 模块（go.work workspace 成员）：server/client 双侧共用领域包
+│   │   ├── core/           公共领域类型与 native raycast batch 驱动
+│   │   ├── nativeabi/      engine C ABI 的唯一 Go bridge
+│   │   ├── logging/        模块化日志
+│   │   ├── physics/        玩家运动与碰撞
+│   │   ├── pathfind/       不可变快照上的有界寻路
+│   │   ├── world/          区块和世界数据模型
+│   │   ├── worldgen/       worldgen seed→perm 播种、Rust 调用与区块回写
+│   │   ├── companion/      独立伙伴身份、静态定义与身体类型
+│   │   ├── network/        二进制协议、登录状态机与 Memory/TCP 传输（protocol/codec/tcp 子包）
+│   │   ├── tuning/         Tunables 快照与校验（原 sim/tuning 上提）
+│   │   ├── profile/        本机稳定玩家身份与档案
+│   │   └── config/         共享 JSON 配置加载与校验
 │   └── engine/
 │       └── crates/
 │           ├── mornlea_engine/  固定 Rust 1.97.1 cdylib：mesh/light/collision/raycast/physics/worldgen/lod/fluid
 │           └── mornlea_client/  Darwin 窗口、事件循环、WebView 菜单层（frontend/ React 前端）与全部 GPU 渲染
 ├── internal/                包职责见 §5，依赖白名单以 archcheck 为准
-│   ├── core/                公共领域类型与 native raycast batch 驱动
-│   ├── companion/           独立伙伴身份、静态定义与身体类型
-│   ├── profile/             本机稳定玩家身份与档案
-│   ├── config/              共享 JSON 配置加载与校验
-│   ├── logging/             模块化日志
 │   ├── audio/               Darwin 本地程序化提示音
 │   ├── fluid/               有界权威流体更新队列与流体 kernel 的 native 包装
 │   ├── lod/                 远环 tile 调度与 CPU 编码
-│   ├── world/               区块和世界数据模型
-│   ├── worldgen/            worldgen seed→perm 播种、Rust 调用与区块回写
-│   ├── physics/             玩家运动与碰撞
-│   ├── sim/                 权威模拟指导目录（生产见 contract/tuning/realm/entity/runtime 子包）
+│   ├── sim/                 权威模拟指导目录（生产见 contract/realm/entity/runtime 子包）
 │   │   ├── contract/        跨边界 DTO
-│   │   ├── tuning/          Tunables 快照与校验
 │   │   ├── realm/           世界维度、持久化与环境事务
 │   │   ├── entity/          玩家/伙伴/夜行者与玩法结算
 │   │   └── runtime/         Engine、订阅与 Step 编排
 │   ├── server/              服务端 Host、Server、登录、会话、权威 tick、发布与关服编排
 │   │   └── persistence/     四类存档（世界/玩家/伙伴/夜行者）加载、观察、异步保存、重试、flush 与 worker
-│   ├── network/             二进制协议、登录状态机与 Memory/TCP 传输
 │   ├── storage/             世界、区域文件与玩家状态持久化
 │   ├── client/              输入、相机、预测、窗口/client ABI 与客户端镜像
 │   ├── mesh/                区块网格生产 API（实现位于 Rust cdylib）
-│   ├── nativeabi/           engine C ABI 的唯一 Go bridge
 │   ├── render/              渲染 CPU 半部：布局、编码与上传调度
 │   ├── assets/              方块定义与程序化材质
 │   └── archcheck/           内部包依赖方向门禁测试

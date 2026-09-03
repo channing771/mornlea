@@ -11,7 +11,7 @@ package hostile
 import (
 	"errors"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // ErrHostileMobsNotFound 表示世界尚无夜行者聚合存档；调用方视同空集合。

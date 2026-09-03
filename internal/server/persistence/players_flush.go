@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 type playerSaveKey struct {

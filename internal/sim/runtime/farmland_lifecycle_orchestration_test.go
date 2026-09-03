@@ -3,8 +3,8 @@ package runtime
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim/realm"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // TestFarmlandMoistureReentryRestartsRescan 覆盖邻块离开后丢弃半截 job，并在恢复

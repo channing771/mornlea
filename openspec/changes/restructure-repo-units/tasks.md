@@ -16,7 +16,7 @@
 
 ## Task 4: shared 模块切割
 
-- [ ] 4.1 `git mv internal/{core,nativeabi,logging,physics,pathfind,world,companion,network,worldgen,profile,config} packages/shared/`，`git mv internal/sim/tuning packages/shared/tuning`；建 `packages/shared/go.mod`（require+replace contracts）；全仓 import path 改写 `internal/(core|nativeabi|logging|physics|pathfind|world|companion|network|worldgen|profile|config|sim/tuning)` → `packages/shared/...`；go.work 增 `use ./packages/shared`；archcheck `allowed` 表与 sim 局部表路径同步、`TestSimAllowedEdgesMatchesGlobalAllowed` 保持绿；`scripts/agents/race-changed.sh` 与 CI go-race 分片路径同步。以 `go clean -cache && make rust && make test-race && go test ./internal/archcheck -count=1` 验证。
+- [x] 4.1 `git mv internal/{core,nativeabi,logging,physics,pathfind,world,companion,network,worldgen,profile,config} packages/shared/`，`git mv internal/sim/tuning packages/shared/tuning`；建 `packages/shared/go.mod`（模块内对 contracts 零 import，tidy 后无 require，边界表 shared→∅ 即为权威约束）；全仓 import path 改写 `internal/(core|nativeabi|logging|physics|pathfind|world|companion|network|worldgen|profile|config|sim/tuning)` → `packages/shared/...`；go.work 增 `use ./packages/shared`；archcheck `allowed` 表与 sim 局部表路径同步、`TestSimAllowedEdgesMatchesGlobalAllowed` 保持绿；`scripts/agents/race-changed.sh` 与 CI go-race 分片路径同步。以 `go clean -cache && make rust && make test-race && go test ./internal/archcheck -count=1` 验证。
 
 ## Task 5: server 模块切割
 

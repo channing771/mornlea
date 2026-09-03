@@ -3,7 +3,7 @@ package entity
 import (
 	"math"
 
-	"github.com/channing771/mornlea/internal/physics"
+	"github.com/channing771/mornlea/packages/shared/physics"
 )
 
 // validHostileAction 按载荷做防御校验：方向量必须有限且落在 [-1,1]（与玩家/

@@ -3,7 +3,7 @@ package fluid
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // eval_alloc_test.go：单格求值 native 批量路径的 0 分配门禁。

@@ -8,12 +8,12 @@
 package server
 
 import (
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/pathfind"
 	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/sim/runtime"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/pathfind"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // interactionStepOf 返回任务当前步骤的 mine/place 形态；其他 kind（go_to、

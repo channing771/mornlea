@@ -1,6 +1,6 @@
 package entity
 
-import "github.com/channing771/mornlea/internal/core"
+import "github.com/channing771/mornlea/packages/shared/core"
 
 // advanceHealthRegen 推进玩家一个 tick 的自动回复计时，与熔炉推进（advanceFurnace）
 // 同形：固定整数运算、不分配、返回是否发生了可观察变化（本 tick 是否回复了 1 点）。
@@ -19,7 +19,7 @@ import "github.com/channing771/mornlea/internal/core"
 //
 // 除零安全依赖 regenIntervalTicks 已被钳制在 >= 1：下面的取模运算以它为除数，
 // 未钳制的 0 会在此处触发权威 tick 内 panic。该钳制由 tuning.SetTunables 兜底
-// （internal/config 加载配置时也会钳一遍，但 sim 按架构约束不得导入 config，
+// （packages/shared/config 加载配置时也会钳一遍，但 sim 按架构约束不得导入 config，
 // 不能把不变量托付给隔壁包）。
 func (player *playerState) advanceHealthRegen(
 	regenDelayTicks, regenIntervalTicks uint32,

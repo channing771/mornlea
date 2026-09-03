@@ -12,9 +12,9 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/region"
 	"github.com/channing771/mornlea/internal/storage/storagedef"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // Region 是单个 region 文件的记录层容器（原根包局部类型 `*region`）：持有

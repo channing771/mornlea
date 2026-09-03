@@ -1,6 +1,6 @@
 package entity
 
-import "github.com/channing771/mornlea/internal/core"
+import "github.com/channing771/mornlea/packages/shared/core"
 
 // eatingState 是玩家进食的权威进度状态机，形状与 `miningState` 同构：记录
 // 开始进食时的快捷栏位、那一格里的物品与已连续推进的 tick 数。

@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/region"
 	"github.com/channing771/mornlea/internal/storage/storagedef"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 func TestFutureSchemaIsRejectedWithoutMutation(t *testing.T) {

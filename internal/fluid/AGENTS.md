@@ -4,8 +4,8 @@
 单格规则求值与区块重扫扫描的 native 包装。行为规格见
 `openspec/specs/authoritative-fluid/spec.md` 与
 `openspec/specs/fluid-survival/spec.md`，Go/Rust 分工纪律见
-`docs/notes/go-rust-division.md`。依赖方向：只允许 `internal/core` 与
-`internal/nativeabi`（`internal/archcheck` 的 `dependency_test.go` allowed 表
+`docs/notes/go-rust-division.md`。依赖方向：只允许 `packages/shared/core` 与
+`packages/shared/nativeabi`（`internal/archcheck` 的 `dependency_test.go` allowed 表
 强制）；tunable 一律由调用方传参，本包不定义、不读取任何隐藏默认值。
 
 ## 生产路径只经 native kernel (`fluid/eval_native.go`, `fluid/rescan_native.go`)

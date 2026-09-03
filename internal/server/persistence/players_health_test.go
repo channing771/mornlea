@@ -3,8 +3,8 @@ package persistence
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim/contract"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // TestPlayerPersistenceDirtyDetectionIncludesHealth 覆盖"只有生命值变化也必须被

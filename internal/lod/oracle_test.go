@@ -16,8 +16,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/nativeabi"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/nativeabi"
 )
 
 // probeBatchLimit 是 engine worldgen probe 单批最大记录数(64)。

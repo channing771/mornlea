@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // 捕获：Shutdown 在 accept-loop 仍可能 Add 时等待共享 WaitGroup，或遗留未读完握手的 stream。

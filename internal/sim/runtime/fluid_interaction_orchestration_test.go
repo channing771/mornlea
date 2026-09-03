@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // fluidChannelSourceZ 与 fluidChannelMinZ 界定放置测试用的一格宽水渠：

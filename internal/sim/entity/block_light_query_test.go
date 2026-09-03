@@ -3,7 +3,7 @@ package entity
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // 本文件锁定夜行者的局部区块光判定：以候选为中心的 29³（半径 14）窗口、

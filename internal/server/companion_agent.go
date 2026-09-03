@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/companion"
 )
 
 const (

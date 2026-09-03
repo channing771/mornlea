@@ -5,7 +5,7 @@ import (
 	"slices"
 	"sort"
 
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // RegistryReader 提供冻结网格 registry 所需的方块属性。

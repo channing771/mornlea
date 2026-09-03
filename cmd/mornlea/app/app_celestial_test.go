@@ -11,10 +11,10 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
-	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 	"github.com/channing771/mornlea/internal/render"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
+	networktcp "github.com/channing771/mornlea/packages/shared/network/tcp"
 )
 
 func TestApplicationCelestialParametersKeepLastAcceptedWorldTime(t *testing.T) {

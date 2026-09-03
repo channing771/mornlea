@@ -15,15 +15,15 @@ import (
 
 	"github.com/channing771/mornlea/internal/audio"
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/config"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
-	networktcp "github.com/channing771/mornlea/internal/network/tcp"
 	"github.com/channing771/mornlea/internal/render"
 	"github.com/channing771/mornlea/internal/render/hud"
 	"github.com/channing771/mornlea/internal/server"
 	"github.com/channing771/mornlea/internal/storage"
-	"github.com/channing771/mornlea/internal/worldgen"
+	"github.com/channing771/mornlea/packages/shared/config"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
+	networktcp "github.com/channing771/mornlea/packages/shared/network/tcp"
+	"github.com/channing771/mornlea/packages/shared/worldgen"
 )
 
 // applicationReceiverCapacity 是客户端接收服务端消息的缓冲上限。登录成功后

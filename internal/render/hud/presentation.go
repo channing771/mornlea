@@ -1,6 +1,6 @@
 package hud
 
-import "github.com/channing771/mornlea/internal/core"
+import "github.com/channing771/mornlea/packages/shared/core"
 
 // presentation.go 是常显层迁往 WebView 之后仍留在 Go 侧的呈现状态载体：物品名
 // 弹条的 40 权威 tick 窗口与权威采掘快照都是 hud 分节组装的输入，窗口计时与

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // 本文件是 OpenSpec change authoritative-fluid 任务组 3「决策验证关口」性质

@@ -10,7 +10,7 @@
 // persona 的「外部文件 → 真实 config.Load → server.Config → 台词请求体」
 // 半链由 cmd/mornlea-server 的阶段验收测试承担：archcheck 的
 // TestOnlyCommandsImportConfig 禁止任何 internal 包（含测试导入）依赖
-// internal/config，本包无法触达真实配置装载路径；本测试以内联生效人设
+// packages/shared/config，本包无法触达真实配置装载路径；本测试以内联生效人设
 // （ResolvedPersona）锁定「生效人设 → 台词请求 → CompanionSpeech 广播」的
 // 服务端半链，与 cmd 侧互补构成完整验收。
 package server
@@ -24,10 +24,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // stageAcceptancePersona 是阶段验收伙伴的生效人设（M5D 用户可观察结果：

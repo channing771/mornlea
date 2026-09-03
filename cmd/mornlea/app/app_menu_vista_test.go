@@ -22,7 +22,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/assets"
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/config"
+	"github.com/channing771/mornlea/packages/shared/config"
 )
 
 // captureSettleTimeoutForVistaTest 与 capture 收敛判据同一量级的墙钟时限：

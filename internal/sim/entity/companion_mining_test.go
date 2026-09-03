@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // companionMiningFixture 是一组伙伴采掘用例的公共场景：平地 3x3 区块上一个
@@ -446,7 +446,7 @@ func TestCompanionActionMiningPayloadsSetAndClearIntent(t *testing.T) {
 // 显式拒绝而不是巧合阻挡：种子的概率掉落只属于玩家采掘，若未来有人给短草补上
 // BlockDrop 登记，只有显式谓词还站着。因此本用例的承重墙是源码守卫：
 // `companionMineableBlock` 的函数体必须点名 `core.IsWildGrass`，与
-// internal/companion 的 `planMineableBlock` 是同一规则的两处实现，双侧必须同时
+// packages/shared/companion 的 `planMineableBlock` 是同一规则的两处实现，双侧必须同时
 // 显式拒绝。
 func TestCompanionMineableBlockExplicitlyRejectsWildGrass(t *testing.T) {
 	if !companionFunctionMentionsIdentifier(t, "mining.go", "companionMineableBlock", "IsWildGrass") {

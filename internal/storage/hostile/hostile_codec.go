@@ -8,8 +8,8 @@ import (
 	"math"
 	"slices"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/storagedef"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // 夜行者存档的 schema 演进常量。当前只写 v1；未来版本在解码入口按

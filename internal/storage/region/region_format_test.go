@@ -8,8 +8,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/storagedef"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 func TestSuperblockExactLayoutAndRoundTrip(t *testing.T) {

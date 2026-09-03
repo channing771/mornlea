@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 func TestExistingMetadataOverridesCreateOptions(t *testing.T) {

@@ -3,7 +3,7 @@ package realm
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // TestFarmlandMoistureRescanPositionOrder 锁定完整高度 halo 的 `y,z,x` 游标还原。

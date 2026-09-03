@@ -12,10 +12,10 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/config"
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/lod"
-	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/packages/shared/config"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // TestLodFogDistancesAnchors 锁住雾距离推导的 0.5/0.75 半径锚点(design
@@ -153,7 +153,7 @@ func TestLodTileFromChunkFloorSemantics(t *testing.T) {
 func TestLodRingDomainWithinCapacityAtMaxLegalConfig(t *testing.T) {
 	// `viewDistance` 的合法上限从 `config.Fields` 读取(单一权威),
 	// lodFarMultiplier 的上限 8 与 config 的钳制区间锚定(见
-	// internal/config 的 `LodFarMultiplierMax`)。
+	// packages/shared/config 的 `LodFarMultiplierMax`)。
 	viewDistanceMax := 0
 	for _, field := range config.Fields() {
 		if field.Group == "render" && field.Name == "viewDistance" {

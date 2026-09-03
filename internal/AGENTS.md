@@ -6,16 +6,15 @@
 
 - `internal/client/AGENTS.md`
 - `internal/fluid/AGENTS.md`
-- `internal/nativeabi/AGENTS.md`
-- `internal/network/AGENTS.md`
 - `internal/sim/AGENTS.md`
 - `internal/storage/AGENTS.md`
+
+双侧共享的领域包（core/network/physics 等）已迁入 `packages/shared` 模块，
+其局部指南随包目录迁移（如 `packages/shared/network/AGENTS.md`）。
 
 ## 包所有权
 
 - `sim` 持有服务端权威 tick、玩法结算和世界变更编排。
-- `world` 持有区块、section、容器与掉落物等世界数据模型，不感知线上协议。
-- `network` 持有 packet、codec、登录状态机以及 Memory/TCP transport，不决定玩法结果。
 - `storage` 持有世界、玩家和伙伴的编码、迁移、恢复与磁盘生命周期。
 - `server` 装配 Host、会话、权威模拟和持久化 worker；重 CPU、磁盘或网络工作不得阻塞权威 tick。
 - `client` 持有只读权威镜像、输入预测、消息接收和渲染侧 CPU 编排，不成为第二个权威模拟器。
@@ -24,7 +23,7 @@
 
 内部包允许的直接依赖以 `internal/archcheck/dependency_test.go` 的 `allowed` 表为唯一真相；不要在指南中复制该表。新增包或依赖边必须先证明方向合理并同步架构门禁。
 
-engine C ABI 只能由 `internal/nativeabi` 接触；client C ABI 只能由 `internal/client` 接触。领域包通过这两个既有 bridge 调用 Rust，不得直接引入 C ABI 或另建生产 fallback。
+engine C ABI 只能由 `packages/shared/nativeabi` 接触；client C ABI 只能由 `internal/client` 接触。领域包通过这两个既有 bridge 调用 Rust，不得直接引入 C ABI 或另建生产 fallback。
 
 ## 测试组织
 

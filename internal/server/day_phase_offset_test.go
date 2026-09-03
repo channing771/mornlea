@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // TestNewWorldRestoresDayPhaseOffsetFromMetadata 覆盖宿主装配的一半：开服时

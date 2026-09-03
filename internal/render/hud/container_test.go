@@ -3,7 +3,7 @@ package hud
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // 杀死变异：任一容器分支若继续使用纯色栏位、采样到错误 cell 或覆盖旧 item tile，

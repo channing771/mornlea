@@ -30,15 +30,15 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/network"
-	"github.com/channing771/mornlea/internal/pathfind"
-	"github.com/channing771/mornlea/internal/physics"
 	"github.com/channing771/mornlea/internal/server/persistence"
 	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/sim/runtime"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
+	"github.com/channing771/mornlea/packages/shared/pathfind"
+	"github.com/channing771/mornlea/packages/shared/physics"
 )
 
 // companionPlanner 是规划器依赖面：生产实现只接受冻结快照与任务身份，

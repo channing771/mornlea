@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // ChatEventCapacity 是客户端事件环保留的最近聊天事件容量。32 的出处：

@@ -8,8 +8,8 @@ import (
 	"log/slog"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/render/hud"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 func (a *Application) Close() error {

@@ -14,8 +14,8 @@ import (
 	"strings"
 	"testing"
 
-	domain "github.com/channing771/mornlea/internal/companion"
 	"github.com/channing771/mornlea/internal/storage/storagedef"
+	domain "github.com/channing771/mornlea/packages/shared/companion"
 )
 
 // updateStorageFixtures 只允许显式重写当前 companion golden；普通测试永不

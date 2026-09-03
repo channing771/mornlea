@@ -1,6 +1,6 @@
 # 权威模拟
 
-本目录仅保留指导文档，不含生产 Go Package；权威模拟由五个子包承载，单向依赖，见下表与 `internal/archcheck`。根 `internal/sim` 不得保留生产 Go 文件、类型别名或转发函数，调用方必须直接导入所属子包。
+本目录仅保留指导文档，不含生产 Go Package；权威模拟由四个子包承载，单向依赖，见下表与 `internal/archcheck`。`Tunables` 快照已上提共享层 `packages/shared/tuning`（纯值对象叶子，见该目录 `AGENTS.md`），不再属于本子树。根 `internal/sim` 不得保留生产 Go 文件、类型别名或转发函数，调用方必须直接导入所属子包。
 
 ## Directory Map
 
@@ -10,9 +10,6 @@ internal/sim/
 ├── contract/                # 跨边界纯值 DTO（指南见 contract/AGENTS.md）
 │   ├── contract.go          # Command/Reject/ChunkChangeBatch/TickResult 等值类型
 │   └── contract_test.go
-├── tuning/                  # Tunables 默认值、钳制与原子活动快照（指南见 tuning/AGENTS.md）
-│   ├── tunables.go
-│   └── tunables_test.go
 ├── realm/                   # 世界维度、区块生命周期与单 tick Mutation 事务（指南见 realm/AGENTS.md）
 │   ├── state.go             # State/Dimension 权威世界状态
 │   ├── mutation.go          # Mutation 单 tick 事务与 Commit
@@ -40,13 +37,12 @@ internal/sim/
 
 | 子包 | 持有状态与职责 |
 | --- | --- |
-| `contract` | 跨边界命令、拒绝、区块 ingress 与 tick 输出等纯值 DTO；`internal/server` 与 `internal/network` 消费该层值类型 |
-| `tuning` | `Tunables`、默认值、钳制与原子活动快照；`internal/config` 与客户端调试直接消费 |
+| `contract` | 跨边界命令、拒绝、区块 ingress 与 tick 输出等纯值 DTO；`internal/server` 与 `packages/shared/network` 消费该层值类型 |
 | `realm` | 世界维度、区块生命周期、持久化 revision、流体/耕地/作物等环境状态与单 tick `realm.Mutation` 事务 |
 | `entity` | 玩家、伙伴、夜行者、背包、容器、合成、战斗、掉落、睡眠与生命周期的唯一 owner；`BeginTick` 经 `TickInput` 按值接收 simulation/physics 参数及同一 `*realm.Mutation` |
 | `runtime` | 只持 inbox、订阅、时钟、阶段探针与编排 scratch，恰好组合一个 `*realm.State` 和一个 `*entity.State`；公开生命周期/查询方法仅窄委派，固定 tick 编排是唯一跨子包权威入口 |
 
-`contract`/`tuning` 不依赖 `realm`/`entity`/`runtime`；`realm` 不依赖 `entity`/`runtime`；`entity` 可依赖 `contract`/`tuning`/`realm`；`runtime` 编排全部四者。`runtime.subscriptionState` 只保存命令序号、观察中心与 wanted 集合，不是实体会话镜像。`internal/sim` 成为仅含指导文档的目录，所有生产状态与行为分属五个子包。
+`contract` 不依赖 `realm`/`entity`/`runtime`；`realm` 不依赖 `entity`/`runtime`；`entity` 可依赖 `contract`/`realm` 与共享层 `packages/shared/tuning`；`runtime` 编排全部三者并装配 tuning 快照。`runtime.subscriptionState` 只保存命令序号、观察中心与 wanted 集合，不是实体会话镜像。`internal/sim` 成为仅含指导文档的目录，所有生产状态与行为分属四个子包。
 
 ## Mutation 与单次提交
 
@@ -72,8 +68,8 @@ internal/sim/
 
 子包依赖以 `internal/archcheck/dependency_test.go` 的 `allowed` 表为唯一真相；本包不得依赖 `internal/client`、`internal/render` 或具体 network transport，模拟只消费领域命令并产出权威结果。依赖方向单向且由 `internal/archcheck` 强制（契约见 `openspec/specs/repository-code-organization`）：
 
-- 接受：`runtime` → `contract`/`tuning`/`realm`/`entity`；`entity` → `contract`/`tuning`/`realm`；`realm` → `core`/`fluid`/`world`；`contract` → `core`/`world`/`companion`/`physics`；`tuning` → `core`。
-- 拒绝：`contract` 依赖 `tuning`/`realm`/`entity`/`runtime`；`tuning` 依赖 `contract`/`realm`/`entity`/`runtime`；`realm` 依赖 `contract`/`tuning`/`entity`/`runtime`；`entity` 依赖 `runtime`；子树出现未登记的新包；`runtime` 缺少对四者的必需编排边。
+- 接受：`runtime` → `contract`/`realm`/`entity` 与 `packages/shared/tuning`；`entity` → `contract`/`realm` 与 `packages/shared/tuning`；`realm` → `core`/`fluid`/`world`；`contract` → `core`/`world`/`companion`/`physics`（`core`/`world`/`companion`/`physics` 均已迁入 `packages/shared`）。
+- 拒绝：`contract` 依赖 `tuning`/`realm`/`entity`/`runtime`；`realm` 依赖 `contract`/`tuning`/`entity`/`runtime`；`entity` 依赖 `runtime`；子树出现未登记的新包；`runtime` 缺少对三个兄弟子包与 `packages/shared/tuning` 的必需编排边。
 - 强制点：`TestInternalDependenciesAreOneWay` 以 `go list` 覆盖全仓内部包完整白名单；`TestSimSubpackageDependencyDirections` 与 `TestSimDependencyViolationsDetectDrift` 守住真实/合成依赖边；`TestSimAuthorityStateOwnershipStaysExplicit` 扫描 runtime 包变量及全部 holder，锁定 runtime/entity owner、窄订阅状态，并把唯一 mutation/commit 绑定到 `StepWithTunables` 的真实调用路径；`TestAuthorityTickTunablesStayExplicit` 守住活动快照捕获与显式传递。新增 owner 字段、子包或依赖边必须同步对应门禁。
 
 ## 定点验证与入口
@@ -84,7 +80,7 @@ internal/sim/
 | --- | --- |
 | 子树全量 | `go test ./internal/sim/... -race -count=1` |
 | `contract` 值类型 | `go test ./internal/sim/contract -race -count=1` |
-| `tuning` 快照 | `go test ./internal/sim/tuning -race -count=1` |
+| `tuning` 快照 | `go test ./packages/shared/tuning -race -count=1` |
 | `realm` 事务与环境 | `go test ./internal/sim/realm -race -count=1` |
 | `entity` 结算 | `go test ./internal/sim/entity -race -count=1` |
 | `runtime` 编排 | `go test ./internal/sim/runtime -race -count=1` |
@@ -96,7 +92,7 @@ internal/sim/
 ## 子包指南
 
 - `contract/AGENTS.md`：值类型所有权与跨边界 DTO 纪律。
-- `tuning/AGENTS.md`：Tunables 校验与快照边界。
+- `packages/shared/tuning/AGENTS.md`：Tunables 校验与快照边界（已随包上提共享层）。
 - `realm/AGENTS.md`：State/Mutation 所有权与单次提交。
 - `entity/AGENTS.md`：唯一实体 owner、`TickInput` 与 `*realm.Mutation` 注入。
 - `runtime/AGENTS.md`：Engine 组合、`StepWithTunables` 顺序与发布边界。

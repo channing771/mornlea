@@ -3,8 +3,8 @@ package entity
 import (
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // miningState 是玩家与伙伴两类 actor 共有的权威采掘进度状态机（原
@@ -183,7 +183,7 @@ func companionMineableBlock(block core.BlockID) bool {
 	// 火把五形态同理必须显式拒绝（可放置火把的伙伴防御清单）：core.BlockDrop
 	// 对它们都有单一产物登记（掉回一个火把），通用判据会放行；伙伴不获得火把
 	// 能力是冻结契约——火把的处置语义（采掘、熄灭等）扩给伙伴之前一律拒绝，
-	// 与 internal/companion 的 `planMineableBlock` 保持同一规则。
+	// 与 packages/shared/companion 的 `planMineableBlock` 保持同一规则。
 	// 短草同理必须显式拒绝：种子的 1/8 概率掉落只属于玩家采掘（`completeMining`
 	// 的短草分支），短草今天恰好没有 BlockDrop 登记、通用判据碰巧也会拒绝它，
 	// 但这是巧合不是契约——若未来短草获得 BlockDrop 登记，只有这里的显式谓词

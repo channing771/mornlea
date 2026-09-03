@@ -11,7 +11,7 @@
 #   2. 文件 → 包：按 `go list` 的包目录前缀映射；不在任何包内的 .go（如 testdata）跳过。
 #   3. 反向依赖闭包：沿 `go list` 的 .Imports 传递扩散；.TestImports/.XTestImports
 #      只作一层直接依赖（测试对被测包的依赖），不沿测试边继续传递——否则触碰
-#      internal/core 这类底座包时闭包近似全仓，工具就失去意义；残余风险由
+#      packages/shared/core 这类底座包时闭包近似全仓，工具就失去意义；残余风险由
 #      T3 全量门禁与 CI 兜底。
 #   4. 恒含 internal/archcheck（依赖边界/基线版本/文档一致守卫，秒级）。
 #   5. 闭包触及 cdylib 消费包（nativeabi/core/physics/mesh/client/sim/server/
@@ -56,8 +56,9 @@ if [ -z "$changed_files" ]; then
   exit 0
 fi
 
-# 文件 → 包：go list 一次给出全部包目录与导入路径。
-pkg_map="$(go list -f '{{.Dir}}|{{.ImportPath}}' ./...)"
+# 文件 → 包：go list 一次给出全部包目录与导入路径。go.work 下 `./...` 不跨
+# 嵌套模块，shared 与 contracts 模块必须显式列出，否则其改动映射不到包。
+pkg_map="$(go list -f '{{.Dir}}|{{.ImportPath}}' ./... ./packages/shared/... ./packages/contracts/...)"
 changed_pkgs="$(printf '%s\n' "$changed_files" | while read -r f; do
   dir="$(dirname "$f")"
   abs="$(pwd)/$dir"
@@ -69,8 +70,9 @@ if [ -z "$changed_pkgs" ]; then
   exit 0
 fi
 
-# 反向依赖闭包：生产导入边传递扩散；测试导入边只作一层直接依赖。
-imports_graph="$(go list -f '{{.ImportPath}}|{{join .Imports " "}}|{{join .TestImports " "}}|{{join .XTestImports " "}}' ./...)"
+# 反向依赖闭包：生产导入边传递扩散；测试导入边只作一层直接依赖。图必须
+# 覆盖全部 workspace 模块，否则跨模块的反向依赖（根模块消费 shared 包）断链。
+imports_graph="$(go list -f '{{.ImportPath}}|{{join .Imports " "}}|{{join .TestImports " "}}|{{join .XTestImports " "}}' ./... ./packages/shared/... ./packages/contracts/...)"
 closure="$(printf '%s\n' "$changed_pkgs")"
 frontier="$(printf '%s\n' "$changed_pkgs")"
 # 生产边可传递：迭代到不动点（包数有限，最多迭代包总数次）。
@@ -119,9 +121,10 @@ if [ -n "$heavy" ]; then
   echo "提示：集合含重型包（${heavy}），预计分钟级；仅迭代验证可改用 --diff 后手动加 -short" >&2
 fi
 
-# 运行期消费 cdylib 的包集合与 scripts/agent-hooks/guard.mjs 的 native 下游清单
-# 保持一致；触及才前置 `make rust`，其余改动直接进 Go race 测试。
-if printf '%s\n' "$closure" | grep -qE '/(internal/nativeabi|internal/core|internal/physics|internal/mesh|internal/client|internal/sim|internal/server|cmd/mornlea|cmd/mornlea/app|cmd/mornlea/capture|cmd/mornlea/benchmark|cmd/mornlea-server)$'; then
+# 运行期消费 cdylib 的包集合（nativeabi/core/physics 已迁入 packages/shared
+# 模块，mesh/client/sim/server 与 cmd 族仍在根模块）；触及才前置 `make rust`，
+# 其余改动直接进 Go race 测试。
+if printf '%s\n' "$closure" | grep -qE '/(packages/shared/nativeabi|packages/shared/core|packages/shared/physics|internal/mesh|internal/client|internal/sim|internal/server|cmd/mornlea|cmd/mornlea/app|cmd/mornlea/capture|cmd/mornlea/benchmark|cmd/mornlea-server)$'; then
   echo "闭包含 cdylib 消费包，先构建 Rust 动态库（make rust）" >&2
   make rust
 fi

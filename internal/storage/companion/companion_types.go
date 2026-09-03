@@ -1,7 +1,7 @@
 // Package companion 承载 companion 存档域：companions.ai 聚合文件（MCAI
 // 信封、schema v1..v5）的编解码、任务区/FIFO/memory 载荷校验与伙伴存档值类型。
 //
-// 本包是纯 codec 域：依赖 internal/companion 领域模型与 core 值类型，哨兵经
+// 本包是纯 codec 域：依赖 packages/shared/companion 领域模型与 core 值类型，哨兵经
 // storagedef 取用；不感知根包编排（DiskStore/MemoryStore 的 companions.ai
 // 文件原子替换与路径编排），CompanionStore 接口属根包存储契约家族，定义
 // 留在根包 types.go。
@@ -13,9 +13,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/storagedef"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // ErrCompanionsNotFound 表示世界尚无伙伴聚合存档。根包以 var 绑定同一错误值

@@ -5,9 +5,9 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim/realm"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // TestGameplaySettlementViaMutation 覆盖任务 7 的全部玩法结算：物品/容器、合成、熔炉、采掘、放置、交互、掉落、战斗、饥饿、进食与睡眠。

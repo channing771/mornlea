@@ -3,7 +3,7 @@ package realm
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 func TestFarmlandRevertRollDeterministic(t *testing.T) {

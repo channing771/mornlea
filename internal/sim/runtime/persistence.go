@@ -1,8 +1,8 @@
 package runtime
 
 import (
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim/realm"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 func (engine *Engine) PersistenceSnapshots(maxChunks int, maxBytes int, mode SaveMode) []ChunkSaveSnapshot {

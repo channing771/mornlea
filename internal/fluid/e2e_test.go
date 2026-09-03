@@ -3,7 +3,7 @@ package fluid
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // TestEndToEnd_SourceSpreadsExactlySevenOnFlatGround 覆盖
@@ -51,7 +51,7 @@ func TestEndToEnd_SourceSpreadsExactlySevenOnFlatGround(t *testing.T) {
 
 	// 按等级 1..7 显式列出具名常量，而不是用 core.WaterSourceID+N 现算：
 	// rules.go 里 evalCell 的水平传播产出恰好也是用同一个算式算出目标编号
-	// 的（依赖「源与 1..7 号连续排布」这一 internal/core/block.go 的稳定
+	// 的（依赖「源与 1..7 号连续排布」这一 packages/shared/core/block.go 的稳定
 	// 约定，见该处注释），若这里也用同一算式，方块编号排布一旦调整，测试
 	// 期望值会跟着实现一起错，测不出问题——用具名常量断开这层同义反复。
 	levels := [7]core.BlockID{

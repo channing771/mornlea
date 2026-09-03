@@ -13,13 +13,13 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/nativeabi"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/nativeabi"
 )
 
 // worldgenHeaderBytes 是与 `mornlea_worldgen_chunk` 完全一致的 `MGW1`
 // header 字节数;由 ABI 输入总长减去 16 字节 tile 尾部推导,避免第二处
-// 魔法数(internal/worldgen 的编码是权威实现,本常量只做长度契约)。
+// 魔法数(packages/shared/worldgen 的编码是权威实现,本常量只做长度契约)。
 const worldgenHeaderBytes = nativeabi.LodShellInputBytes - 16
 
 const (

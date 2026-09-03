@@ -21,9 +21,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/storagedef"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // companionFileFixture 是 companion 域内最小装配：以本包 Encode/Decode 入口

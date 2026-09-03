@@ -5,8 +5,8 @@ import (
 	"slices"
 	"sort"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim/realm"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // sortChunkKeys 使用显式全序整理区块键，避免反射排序在 tick 热路径分配。

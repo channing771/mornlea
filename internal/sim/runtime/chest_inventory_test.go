@@ -3,9 +3,9 @@ package runtime_test
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim/runtime"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // openedChest 构造一个已 Ready 玩家并打开中心区块的箱子，返回其引用。

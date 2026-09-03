@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/storage/region"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 func FuzzDecodeChunkPayload(f *testing.F) {

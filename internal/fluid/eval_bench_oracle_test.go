@@ -6,7 +6,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // eval_bench_oracle_test.go：迁移期一次性 oracle 对照基准。

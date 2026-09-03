@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/network"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // TestPlannerRequestExcludesPersonaAndSummary 是「表达平面绝不进入规划输入」

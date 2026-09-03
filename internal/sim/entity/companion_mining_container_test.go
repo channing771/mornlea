@@ -3,8 +3,8 @@ package entity
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/world"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 // 本文件锁定伙伴采掘容器（箱子/熔炉）的批量全或无结算（change

@@ -3,8 +3,8 @@ package entity
 import (
 	"slices"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim/realm"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 type pendingChunkChanges = realm.Mutation

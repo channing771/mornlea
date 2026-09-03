@@ -9,7 +9,7 @@ import (
 
 	"github.com/channing771/mornlea/internal/assets"
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // TestCaptureSceneOrderAndAICompanionDeterminism 钉住整张场景表的顺序，并覆盖

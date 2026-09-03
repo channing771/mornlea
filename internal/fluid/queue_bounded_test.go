@@ -4,7 +4,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // 本文件是 Queue 在大规模与预算受限场景下的结构性行为测试，全部使用白盒
@@ -177,7 +177,7 @@ func TestAdvanceTakesGloballySmallestDueItemsAtScale(t *testing.T) {
 //
 // 这条测试的历史：10b 初版用惰性删除堆，Enqueue 把已在队的位置改到更早的 dueTick
 // 时只能再压一条，旧那条成为过时条目。评审建的反例是 sim.FluidFlowDelayTicks
-// （internal/config 的实时可编辑项，Min 0 / Max 2000）被调小——delay=100 排入
+// （packages/shared/config 的实时可编辑项，Min 0 / Max 2000）被调小——delay=100 排入
 // 5 万项后下调，堆里积下 5 万条过时条目，单个 Advance 会一口气把它们全弹掉。
 // 修复轮 2 换成索引最小堆后，过时条目在**表示上就不存在**，本测试守这一点。
 //
@@ -245,7 +245,7 @@ func TestAdvanceExaminedBoundedWhenDelayLowered(t *testing.T) {
 //
 // 为什么需要单独一条：既有的 TestOrderIndependence_PerTickChangesMatch 全程用
 // 同一个 delay，任何「同一位置先后以不同 delay 入队」的路径都不会被走到，因此
-// 它对本角落什么也没说。而 sim.FluidFlowDelayTicks 是 internal/config 的实时可
+// 它对本角落什么也没说。而 sim.FluidFlowDelayTicks 是 packages/shared/config 的实时可
 // 编辑项（Min 0 / Max 2000），下调它就会让同一位置以更早的 dueTick 再次入队。
 //
 // 夹具：同一批位置各以 delay=5 与 delay=0 入队一次，两种调用次序**得到完全相同

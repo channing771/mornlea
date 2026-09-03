@@ -17,6 +17,10 @@ PIXEL_PERFECTION_NOTICE_DIR := internal/assets/packs/pixel_perfection
 PIXEL_PERFECTION_NOTICE_DEST := bin/third-party/pixel-perfection
 ARGS ?=
 
+# go.work 下 `go test ./...` 不跨嵌套模块；全部按模块枚举的入口（test 族、
+# dev-check、vet）显式循环该列表，防止新模块成为 ./... 盲区。
+GO_TEST_MODULES := . ./packages/contracts ./packages/shared
+
 .PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev
 
 run test test-multiplayer bench-multiplayer visual-check visual-update: rust
@@ -105,15 +109,15 @@ build-linux-server: rust
 	cp $(RUST_SO) $(MORNLEA_SO)
 
 test:
-	$(GO) test ./...
+	for module in $(GO_TEST_MODULES); do $(GO) test $$module/... || exit 1; done
 
 test-race:
-	$(GO) test ./... -race
+	for module in $(GO_TEST_MODULES); do $(GO) test $$module/... -race || exit 1; done
 
 # test-race-short:迭代期 race 冒烟——跳过与 `-short` 相同的重型测试,
 # 速度比 `test-race` 快一个数量级;提交前仍跑全量 `test-race`。
 test-race-short:
-	$(GO) test ./... -race -short
+	for module in $(GO_TEST_MODULES); do $(GO) test $$module/... -race -short || exit 1; done
 
 # test-race-changed:测试分层纪律的 T1 层——只对「改动包及其反向依赖」跑
 # race(集合由 scripts/agents/race-changed.sh 从 git diff 求,恒含 archcheck),
@@ -127,7 +131,7 @@ test-multiplayer:
 		-run 'Test(PerfReportV6|ScenarioV6|PerfcheckV6|PerfcheckV5SameScenario|PerformanceThresholds|InterestObserver|HostStats|BenchmarkServerEpoch|BenchmarkServerMeasuredWindow)' -count=1
 
 bench-multiplayer:
-	$(GO) test ./internal/network ./internal/server ./internal/render -run '^$$' \
+	$(GO) test ./packages/shared/network ./internal/server ./internal/render -run '^$$' \
 		-bench '(RemotePlayerStateCodec|EightPlayerInterest|RemoteAvatarNameTag)' -benchmem -count=3
 
 archcheck:
@@ -139,8 +143,8 @@ archcheck:
 # 仍留给 CI 与提交前,短模式不做任何正确性放宽。
 dev-check:
 	@unformatted=$$(gofmt -l .); if [ -n "$$unformatted" ]; then echo "gofmt 需要格式化: $$unformatted"; exit 1; fi
-	$(GO) vet ./...
-	$(GO) test ./... -short
+	for module in $(GO_TEST_MODULES); do $(GO) vet $$module/... || exit 1; done
+	for module in $(GO_TEST_MODULES); do $(GO) test $$module/... -short || exit 1; done
 	cd $(RUST_DIR) && $(CARGO) fmt --check
 	cd $(RUST_DIR) && $(CARGO) clippy --workspace --all-targets -- -D warnings
 	cd $(RUST_DIR) && $(CARGO) test --workspace --locked
@@ -159,7 +163,7 @@ companion-agent-integration:
 	cd $(COMPANION_AGENT_DIR) && uv sync --locked
 	cd $(COMPANION_AGENT_DIR) && uv run ruff format --check tests/integration && uv run ruff check tests/integration
 	cd $(COMPANION_AGENT_DIR) && uv run mypy src tests/integration
-	MORNLEA_COMPANION_AGENT_PYTHON=$(COMPANION_AGENT_PYTHON) $(GO) test ./internal/companion ./internal/server \
+	MORNLEA_COMPANION_AGENT_PYTHON=$(COMPANION_AGENT_PYTHON) $(GO) test ./packages/shared/companion ./internal/server \
 		-run 'CompanionAgent.*Integration|CrossLanguage|MCP.*Integration' -race -count=1 -timeout=120s
 
 fmt:

@@ -4,8 +4,8 @@ import (
 	"encoding/binary"
 	"hash/fnv"
 
-	"github.com/channing771/mornlea/internal/companion"
-	"github.com/channing771/mornlea/internal/pathfind"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/pathfind"
 )
 
 const (

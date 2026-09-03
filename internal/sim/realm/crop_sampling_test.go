@@ -3,7 +3,7 @@ package realm
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // cropSampleKey 是抽样测试的基准区块键。取非零坐标是刻意的：坐标全零时

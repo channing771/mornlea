@@ -21,10 +21,10 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/channing771/mornlea/internal/core"
-	"github.com/channing771/mornlea/internal/pathfind"
 	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/sim/runtime"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/pathfind"
 )
 
 // 有界追逐的固定数值契约：每 tick 至多构造 2 份路径快照、在途 A* 恒 ≤2（两

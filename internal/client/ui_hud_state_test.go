@@ -16,7 +16,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // hudTestHotbar 组装一份覆盖空格、堆叠、部分磨损工具与满耐久工具的快捷栏。

@@ -3,7 +3,7 @@ package entity
 import (
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // sleep_persistence_test.go：重生点与显示相位偏移在 sim 与持久化层之间的接线。

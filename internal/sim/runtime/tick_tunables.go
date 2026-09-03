@@ -1,8 +1,8 @@
 package runtime
 
 import (
-	"github.com/channing771/mornlea/internal/physics"
-	"github.com/channing771/mornlea/internal/sim/tuning"
+	"github.com/channing771/mornlea/packages/shared/physics"
+	"github.com/channing771/mornlea/packages/shared/tuning"
 )
 
 // TickTunables 是一次权威 tick 按值复用的不可变参数束。两组参数来自彼此独立

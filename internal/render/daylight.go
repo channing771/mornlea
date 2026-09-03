@@ -3,7 +3,7 @@ package render
 import (
 	"math"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // DayLengthTicks 是一个完整昼夜的权威 tick 数。

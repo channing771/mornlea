@@ -3,9 +3,9 @@ package persistence
 import (
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/core"
 	"github.com/channing771/mornlea/internal/sim/contract"
 	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 func (player *cachedPlayer) restore(metadata storage.Metadata) contract.PlayerRestore {

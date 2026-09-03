@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	application "github.com/channing771/mornlea/cmd/mornlea/app"
-	"github.com/channing771/mornlea/internal/config"
+	"github.com/channing771/mornlea/packages/shared/config"
 )
 
 // TestSettingsMenuCaptureSceneUsesCleanFixture 钉住设置页视觉场景携带完整

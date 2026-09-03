@@ -13,19 +13,22 @@ import (
 
 func TestNativeEngineBridgeBoundary(t *testing.T) {
 	root := moduleRoot(t)
-	bridge := filepath.Join(root, "internal", "nativeabi")
+	bridge := filepath.Join(root, "packages", "shared", "nativeabi")
 	if info, err := os.Stat(bridge); err != nil || !info.IsDir() {
 		t.Fatalf("native engine bridge %s 不存在", bridge)
 	}
+	// engine bridge 已迁入 packages/shared 模块，扫描根须与其同侧扩展，
+	// 否则 C ABI token 守卫对 shared 模块静默失明。
 	files := goFiles(t, filepath.Join(root, "internal"))
 	files = append(files, goFiles(t, filepath.Join(root, "cmd"))...)
+	files = append(files, goFiles(t, filepath.Join(root, "packages", "shared"))...)
 
 	clientBridge := filepath.Join(root, "internal", "client")
 	inDir := func(path, dir string) bool {
 		return strings.HasPrefix(path, dir+string(filepath.Separator))
 	}
 
-	// engine C ABI 只允许 internal/nativeabi 接触。
+	// engine C ABI 只允许 packages/shared/nativeabi 接触。
 	for _, token := range []string{
 		"mornlea_engine.h",
 		"-lmornlea_engine",
@@ -36,7 +39,7 @@ func TestNativeEngineBridgeBoundary(t *testing.T) {
 				t.Fatalf("读取 %s: %v", path, err)
 			}
 			if strings.Contains(string(contents), token) && !inDir(path, bridge) {
-				t.Errorf("%s 只允许 internal/nativeabi 接触，发现于 %s", token, path)
+				t.Errorf("%s 只允许 packages/shared/nativeabi 接触，发现于 %s", token, path)
 			}
 		}
 	}
@@ -105,7 +108,7 @@ func TestNoPackageImportsWebGPU(t *testing.T) {
 	// 文件在 Linux 上全被排除）以加载错误形式列出而不是让 go list 非零退出；
 	// 可加载包的 Imports 检查语义不变，darwin 专属包由 macOS CI 的同测试
 	// 原生覆盖。
-	cmd := exec.Command("go", "list", "-e", "-f", "{{.ImportPath}}|{{join .Imports \" \"}}", "./...")
+	cmd := exec.Command("go", "list", "-e", "-f", "{{.ImportPath}}|{{join .Imports \" \"}}", "./...", "./packages/shared/...", "./packages/contracts/...")
 	cmd.Dir = moduleRoot(t)
 	out, err := cmd.Output()
 	if err != nil {
@@ -156,7 +159,7 @@ func TestMornleaServerHasNoGraphicsDependencies(t *testing.T) {
 	}
 	foundNativeABI := false
 	for _, dependency := range strings.Fields(string(output)) {
-		if dependency == "github.com/channing771/mornlea/internal/nativeabi" {
+		if dependency == "github.com/channing771/mornlea/packages/shared/nativeabi" {
 			foundNativeABI = true
 		}
 		for _, forbidden := range []string{"github.com/channing771/mornlea/internal/client", "github.com/channing771/mornlea/internal/mesh", "github.com/channing771/mornlea/internal/render", "github.com/channing771/mornlea/internal/gfx", "github.com/go-gl/glfw", "github.com/oliverbestmann/webgpu", "golang.org/x/image", "golang.org/x/image/font"} {
@@ -166,12 +169,12 @@ func TestMornleaServerHasNoGraphicsDependencies(t *testing.T) {
 		}
 	}
 	if !foundNativeABI {
-		t.Error("Mornlea server 依赖闭包必须包含 internal/nativeabi")
+		t.Error("Mornlea server 依赖闭包必须包含 packages/shared/nativeabi")
 	}
 }
 
 func TestPhysicsStepUsesOnlyNative(t *testing.T) {
-	root := filepath.Join(moduleRoot(t), "internal", "physics")
+	root := filepath.Join(moduleRoot(t), "packages", "shared", "physics")
 
 	foundNativeABI := false
 	nativePhysicsStepCalls := 0
@@ -181,7 +184,7 @@ func TestPhysicsStepUsesOnlyNative(t *testing.T) {
 			t.Fatalf("解析 %s: %v", path, err)
 		}
 		for _, imported := range parsed.Imports {
-			if strings.Trim(imported.Path.Value, "\"") == "github.com/channing771/mornlea/internal/nativeabi" {
+			if strings.Trim(imported.Path.Value, "\"") == "github.com/channing771/mornlea/packages/shared/nativeabi" {
 				foundNativeABI = true
 			}
 		}
@@ -200,15 +203,15 @@ func TestPhysicsStepUsesOnlyNative(t *testing.T) {
 		})
 	}
 	if !foundNativeABI {
-		t.Error("internal/physics 必须直接依赖 internal/nativeabi")
+		t.Error("packages/shared/physics 必须直接依赖 packages/shared/nativeabi")
 	}
 	if nativePhysicsStepCalls != 1 || !topLevelDeclarationNamesIn(t, root, "*.go")["Step"] {
-		t.Error("internal/physics 必须由 Step 单点编码并调用 native physics_step")
+		t.Error("packages/shared/physics 必须由 Step 单点编码并调用 native physics_step")
 	}
 }
 
 func TestCoreUsesOnlyNativeRaycast(t *testing.T) {
-	root := filepath.Join(moduleRoot(t), "internal", "core")
+	root := filepath.Join(moduleRoot(t), "packages", "shared", "core")
 	raycastPath := filepath.Join(root, "raycast.go")
 	foundNativeABI := false
 	nativeCalls := 0
@@ -219,7 +222,7 @@ func TestCoreUsesOnlyNativeRaycast(t *testing.T) {
 		}
 		if path == raycastPath {
 			for _, imported := range parsed.Imports {
-				if strings.Trim(imported.Path.Value, "\"") == "github.com/channing771/mornlea/internal/nativeabi" {
+				if strings.Trim(imported.Path.Value, "\"") == "github.com/channing771/mornlea/packages/shared/nativeabi" {
 					foundNativeABI = true
 				}
 			}
@@ -242,6 +245,6 @@ func TestCoreUsesOnlyNativeRaycast(t *testing.T) {
 		})
 	}
 	if !foundNativeABI || nativeCalls != 1 {
-		t.Error("internal/core.RaycastBlocks 必须直接调用 internal/nativeabi.RaycastBatch")
+		t.Error("packages/shared/core.RaycastBlocks 必须直接调用 packages/shared/nativeabi.RaycastBatch")
 	}
 }

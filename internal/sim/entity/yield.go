@@ -1,7 +1,7 @@
 package entity
 
 import (
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // 本文件实现作物的**随机 tick 推进**：抽样、生长规则与作物环境判定。

@@ -135,7 +135,7 @@ registry entry 布局扩为 20 字节时，engine ABI 版本 MUST 从 `7` 升到
 
 #### Scenario: 版本协商一致
 
-- **GIVEN** Go 侧 `internal/nativeabi.ABIVersion` 与 Rust `mornlea_engine_abi_version()` 在加载时互检
+- **GIVEN** Go 侧 `packages/shared/nativeabi.ABIVersion` 与 Rust `mornlea_engine_abi_version()` 在加载时互检
 - **WHEN** 双方均为 9
 - **THEN** 调用 MUST 全部成功
 

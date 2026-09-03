@@ -5,7 +5,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/core"
+	"github.com/channing771/mornlea/packages/shared/core"
 )
 
 // 本文件汇集 internal/fluid 的共享测试基建：内存测试替身（`memWorld`）、快照

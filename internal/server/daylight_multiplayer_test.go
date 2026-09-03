@@ -5,7 +5,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/network"
+	"github.com/channing771/mornlea/packages/shared/network"
 )
 
 // worldTimeByTick 从客户端 transcript 中提取每个权威 tick 的绝对世界时间。
