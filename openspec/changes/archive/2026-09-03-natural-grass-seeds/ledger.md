@@ -207,12 +207,12 @@ Ruling: planning candidate `ab8292569393edfb6748a82f6303c50b0c7654e9` 的独立 
 
 ## Post-closure Control Sync And Archive
 
-- Closure evidence state: `PENDING`（Task 9.2 evidence commit 后工作树与预期 documentation-only diff）。
-- Delta-spec synchronization baseline: `PENDING`.
-- Delta-spec synchronization: `PENDING`（控制会话按 `openspec-sync-specs` 审阅并沉淀十一份 delta 到主规格；记录提交、reviewer 与裁决）。
-- Post-sync strict validation: `PENDING`（named + all strict、archcheck 与 diff-check）。
-- Archive baseline: `PENDING`.
-- Archive: `PENDING`（控制会话按 `openspec-archive-change` 执行；记录归档提交、归档前后 all-strict 与 change/archive 唯一性）。
-- Backlog / current progress closure: `PENDING`.
-- PR / CI / merge: `PENDING`（遵循 `.github/PULL_REQUEST_TEMPLATE.md`、单行英文标题与既有 CI 流程）。
-- Final archive ruling: `PENDING`.
+- Closure evidence state: Task 9.2 evidence commit `d23e434c` 后工作树干净;closure validation 全绿（named/all strict、archcheck、diff-check）;之后仅归档流程的 documentation-only 变更。
+- Delta-spec synchronization baseline: `d23e434cd24157b4b589090cceb4033ad17d99b6`（Task 9.2 evidence commit）。
+- Delta-spec synchronization: 控制会话执行 `openspec archive` 的主规格沉淀;首次尝试被 drift guard 拒绝——`authoritative-farming` MODIFIED 块缺主规格既有 scenario「首次进入的玩家持有种子」——控制会话按既有漂移守卫模式补写该 scenario（标题保留+引注+语义反转断言:确认后背包 MUST NOT 含种子,第一颗种子经采除自然短草取得）,`openspec validate natural-grass-seeds --strict` 复核 valid 后重新归档。沉淀结果:新建 `natural-grass-generation` 主规格 +1,修改主规格 10 份（authoritative-daylight/farming/fluid/mining、bounded-benchmark-workload、common-block-materials、rust-engine-worldgen、static-block-light、tool-durability、visual-verification）,合计 +6 ~14;reviewer 为控制会话,裁决:与 Task 1.1–8.1 实现及双评审一致,无偏离。
+- Post-sync strict validation: `openspec validate --all --strict --no-interactive` 归档后 80 passed/0 failed;`go test ./internal/archcheck -count=1` ok;`git diff --check` clean（见归档提交）。
+- Archive baseline: 归档操作基于 `d23e434c`。
+- Archive: `2026-09-03` 归档为 `openspec/changes/archive/2026-09-03-natural-grass-seeds`;归档前 all-strict 80/0、归档后 all-strict 80/0;active 列表仅余 `dev-capture`（另一独立 change,非本任务范围）,archive 唯一性成立;归档提交见下。
+- Backlog / current progress closure: `docs/feature-backlog.md` B-04 状态由「开发中」改为「已完成」;`docs/notes/progress.md` 当前条目已由 Task 8.1 写入。
+- PR / CI / merge: `PENDING`（PR 创建后回填;遵循 `.github/PULL_REQUEST_TEMPLATE.md`、单行英文标题与既有 CI 流程;合并前须按 Task 8.1 Ruling 与 whole-change M4 义务重并 main 并重核版本矩阵——main 已有 client ABI v14/companions v5）。
+- Final archive ruling: 自然短草闭环（B-04）全 change 完成——8 项实现任务全部双评审 PASS、T3 十二项门禁同一实现树全绿、whole-change 双评审零 Critical/Important、主规格沉淀与归档完成;唯一遗留义务为 PR 合并时的 main 版本矩阵重核,已写入 proposal「延期与放弃」。
