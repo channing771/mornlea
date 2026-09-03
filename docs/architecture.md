@@ -98,11 +98,11 @@ Linux 专服发布单元由 `mornlea-server` 与相邻的 `libmornlea_engine.so`
 │   ├── mornlea-agent-board/ AI 工作者执行状态 Web 看板
 │   ├── gfxspike/            Rust renderer 地形渲染验证程序
 │   └── perfcheck/           性能报告比较工具
-├── contracts/
-│   └── companion-agent/    HTTP v1 与 MCP v1 的共享 manifest/schema/golden
 ├── packages/
 │   ├── agent/
 │   │   └── companion/      Python 3.12 FastAPI/LangGraph/SQLite 独立服务
+│   ├── contracts/          独立最小 Go 模块（go.work workspace 成员）
+│   │   └── companion-agent/    HTTP v1 与 MCP v1 的共享 manifest/schema/golden
 │   └── engine/
 │       └── crates/
 │           ├── mornlea_engine/  固定 Rust 1.97.1 cdylib：mesh/light/collision/raycast/physics/worldgen/lod/fluid

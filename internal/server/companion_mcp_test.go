@@ -947,7 +947,7 @@ func loadMCPBoundedNameInvalidGoldens(t *testing.T) []mcpBoundedNameGolden {
 	if !ok {
 		t.Fatal("无法定位 MCP 测试文件")
 	}
-	data, err := os.ReadFile(filepath.Join(filepath.Dir(filename), "..", "..", "contracts", "companion-agent", "mcp-v1", "golden", "invalid.json"))
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(filename), "..", "..", "packages", "contracts", "companion-agent", "mcp-v1", "golden", "invalid.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

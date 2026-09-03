@@ -18,7 +18,7 @@ type agentGoldenCase struct {
 }
 
 func TestAgentContractGoldenDrivesActualDTOCodecs(t *testing.T) {
-	root := filepath.Join("..", "..", "contracts", "companion-agent", "http-v1", "golden")
+	root := filepath.Join("..", "..", "packages", "contracts", "companion-agent", "http-v1", "golden")
 	for _, fixtureName := range []string{"valid.json", "invalid.json"} {
 		contents, err := os.ReadFile(filepath.Join(root, fixtureName))
 		if err != nil {

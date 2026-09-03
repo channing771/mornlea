@@ -10,7 +10,9 @@ from pathlib import Path
 from typing import Any
 
 _RESOURCE_ROOT = Path(__file__).resolve().parents[1] / "_contracts" / "mcp-v1"
-_SOURCE_ROOT = Path(__file__).resolve().parents[6] / "contracts" / "companion-agent" / "mcp-v1"
+_SOURCE_ROOT = (
+    Path(__file__).resolve().parents[6] / "packages" / "contracts" / "companion-agent" / "mcp-v1"
+)
 
 
 @dataclass(frozen=True, slots=True)

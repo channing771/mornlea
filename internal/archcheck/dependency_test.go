@@ -21,8 +21,8 @@ import (
 // runtime.TickTunables 显式消费 physics 值，不在 server 内重读活动快照。该方向是
 // 编排层依赖领域值类型，与 sim→physics 同向，不引入反向耦合。
 //
-// internal/server → contracts/companion-agent/mcp-v1：MCP listener 在组件构造时
-// 直接嵌入并解析跨语言 machine contract，避免另写一份工具 schema；contracts
+// internal/server → packages/contracts/companion-agent/mcp-v1：MCP listener 在组件
+// 构造时直接嵌入并解析跨语言 machine contract，避免另写一份工具 schema；contracts
 // 包只暴露独立字节副本且不反向依赖任何生产包。
 //
 // internal/sim/realm → internal/fluid：流动的调度
@@ -76,7 +76,7 @@ var allowed = map[string][]string{
 	"internal/assets":             {"internal/core", "internal/world", "internal/mesh", "internal/worldgen"},
 	"internal/render":             {"internal/core", "internal/world", "internal/mesh", "internal/assets"},
 	"internal/render/hud":         {"internal/core", "internal/mesh", "internal/assets", "internal/render"},
-	"internal/server":             {"contracts/companion-agent/mcp-v1", "internal/companion", "internal/core", "internal/network", "internal/pathfind", "internal/physics", "internal/world", "internal/worldgen", "internal/sim/contract", "internal/sim/runtime", "internal/storage", "internal/server/persistence"},
+	"internal/server":             {"packages/contracts/companion-agent/mcp-v1", "internal/companion", "internal/core", "internal/network", "internal/pathfind", "internal/physics", "internal/world", "internal/worldgen", "internal/sim/contract", "internal/sim/runtime", "internal/storage", "internal/server/persistence"},
 	"internal/server/persistence": {"internal/companion", "internal/core", "internal/physics", "internal/sim/contract", "internal/sim/runtime", "internal/storage"},
 	"internal/client":             {"internal/companion", "internal/core", "internal/physics", "internal/network", "internal/world", "internal/mesh", "internal/assets", "internal/render"},
 }

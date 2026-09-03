@@ -584,7 +584,7 @@ func TestAgentClientAllowsSchemaTextControlsOutsideRestrictedFields(t *testing.T
 
 func loadAgentHTTPManifest(t *testing.T) agentHTTPManifest {
 	t.Helper()
-	path := filepath.Join("..", "..", "contracts", "companion-agent", "http-v1", "manifest.json")
+	path := filepath.Join("..", "..", "packages", "contracts", "companion-agent", "http-v1", "manifest.json")
 	contents, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -598,7 +598,7 @@ func loadAgentHTTPManifest(t *testing.T) agentHTTPManifest {
 
 func loadAgentValidGoldenValues(t *testing.T) map[string][]json.RawMessage {
 	t.Helper()
-	path := filepath.Join("..", "..", "contracts", "companion-agent", "http-v1", "golden", "valid.json")
+	path := filepath.Join("..", "..", "packages", "contracts", "companion-agent", "http-v1", "golden", "valid.json")
 	contents, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
