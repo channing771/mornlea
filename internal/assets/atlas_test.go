@@ -91,7 +91,7 @@ func TestCutoutMipChainKeepsOpaqueCoverage(t *testing.T) {
 }
 
 // TestAtlasPixelsScalesWithLayerCount 钉住 atlas 导出与层枚举的同步：层数必须
-// 等于 layerCount（追加裂纹层后即 78），总字节数必须等于层数 × 每层完整 mip
+// 等于 layerCount（短草与裂纹层追加后即 79），总字节数必须等于层数 × 每层完整 mip
 // 链字节数（逐 mip 尺寸从 atlasMips/texSize 推导，不复制魔法数）。两侧任何
 // 一方脱钩（导出漏层、层枚举与上传长度不一致）都会让 Rust 侧 upload_atlas
 // 的长度校验或纹理内容直接出错。
