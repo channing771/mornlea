@@ -28,6 +28,13 @@
   `Apply` 负责清场；`resetCapturePresentation` 负责清 `combatFeedback` 与相关呈现，避免污染后续场景。
 - 场景顺序与 25 项正式清单以 `captureScenes` 及其顺序测试为准，固定上传容量以布局代码和容量
   测试为准；不要在指南复制会漂移的清单或数字。
+- 抓帧链路为确定性设计：`RunCapture` 开头置位 `app.SetWorldTimeFrozen(true)`
+  并 defer 复位，只钉住昼夜呈现量的取值时点（权威 tick 与其余状态不受影响，
+  生产路径恒不冻结）；Rust client 的植物剔除经三段确定性 compaction 无原子
+  累加，同一二进制重复抓帧逐字节一致。
+- 自然短草进入正式基线后，`oak-grove` 场景承担树优先与短草可见性双重验收：
+  夹具断言自然短草长在 `GrassID` 上且相机中存在可辨识短草像素（守卫见
+  `capture_oak_grove_grass_test.go`）。
 
 ## 消费端接口 (`capture/scene_application.go`)
 
@@ -48,6 +55,9 @@
     ai-companion 夹具确定性）；
   - `TestTorchNightCaptureScenePosition`（torch-night 紧随 block-light-room）、
     `TestWaterUnderwaterCaptureSceneIsLast`（water-underwater 恒末位）；
+  - `capture_oak_grove_grass_test.go` 的自然短草守卫
+    （`TestOakGroveFixtureGrowsNaturalShortGrass`、
+    `TestOakGroveSceneShowsIdentifiableNaturalShortGrass`）；
   - `visual_compare_test.go` 的比对性质测试（`TestCompareImagesIdentical`、
     `TestDiffPixelRatioGate` 等）；
   - `TestCaptureSettled`（场景抓帧前的 settled 判据）。

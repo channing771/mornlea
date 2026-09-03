@@ -32,17 +32,17 @@ Mornlea 由 Go 应用与两个 Rust `cdylib` 组成。Go 持有应用装配、�
 
 内部包允许的直接依赖以 `internal/archcheck/dependency_test.go` 的 `allowed` 表为准。`internal/archcheck` 同时以 `TestSimAuthorityStateOwnershipStaysExplicit` 扫描 runtime 的包变量与全部 holder，并把唯一 mutation/commit 绑定到 `StepWithTunables` 的真实调用路径；`TestAuthorityTickTunablesStayExplicit` 守住权威 tick 参数捕获和传递。其余门禁守住无 WebGPU Go 依赖、无图形专服闭包及长期版本基线；架构文档不复制会随包演进的依赖白名单。
 
-## 5. `mornlea_engine` / engine ABI v9
+## 5. `mornlea_engine` / engine ABI v10
 
 `mornlea_engine` 是 mesh/light、collision、raycast、physics tick 积分、worldgen、LOD shell 与流体规则求值/重扫扫描的唯一生产实现；流体的队列、预算、游标与冲毁结算编排仍在 Go（`internal/fluid` 与 `internal/sim/realm` 经 `internal/nativeabi` 调用流体 kernel）。该 crate 保持无窗口，不拥有权威世界状态，不执行文件或网络 I/O，也不承载伤害、库存、权限或 tick 编排等业务规则。
 
-engine C ABI 当前为 v9。Go 侧只有 `internal/nativeabi` 可以接触该 ABI；领域包构造语义输入并解码结果。header、Rust FFI、Go bridge、ABI 版本和跨语言一致性检查必须成套演进，调用结束后任一侧都不得保留对方指针。
+engine C ABI 当前为 v10。Go 侧只有 `internal/nativeabi` 可以接触该 ABI；领域包构造语义输入并解码结果。header、Rust FFI、Go bridge、ABI 版本和跨语言一致性检查必须成套演进，调用结束后任一侧都不得保留对方指针。
 
-## 6. `mornlea_client` / client ABI v12
+## 6. `mornlea_client` / client ABI v13
 
 `mornlea_client` 持有 Darwin 窗口与事件采集、进程内 WKWebView 菜单层、GPU 资源、shader、render pass、窗口 surface 和离屏渲染。窗口型 UI（主菜单/设置/暂停/F3）由内嵌的 Vite + TypeScript + React 前端经 WKWebView 呈现，资产经 `mornlea://` scheme handler 从 Rust 内嵌字节供给；生存 HUD 与容器等固定界面仍走既有 GPU quad 管线。Go 不导入 WebGPU 绑定，只通过 `internal/client` 提供的 client ABI bridge 使用窗口和 renderer 领域接口。
 
-client C ABI 当前为 v12，并与 engine ABI 独立演进。菜单状态权威在 Go：下行 `ui_push_state` 在状态变化时向 WebView 推送 JSON 状态，上行 `drain_ui_events` 读出版本化 JSON 事件信封；桥协议形状由前端 `schema.json` 单源钉值。header、Rust FFI、`internal/client` bridge、版本和跨语言检查必须同步更新；失败或容量不足不能发布部分输出。
+client C ABI 当前为 v13，并与 engine ABI 独立演进。菜单状态权威在 Go：下行 `ui_push_state` 在状态变化时向 WebView 推送 JSON 状态，上行 `drain_ui_events` 读出版本化 JSON 事件信封；桥协议形状由前端 `schema.json` 单源钉值。header、Rust FFI、`internal/client` bridge、版本和跨语言检查必须同步更新；失败或容量不足不能发布部分输出。
 
 ## 7. 图形客户端与无图形专服 release unit
 

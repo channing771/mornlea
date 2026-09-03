@@ -7,10 +7,13 @@ capture（方向由 `TestClientCommandSubpackageDependencyDirections` 强制）�
 
 ## 场景契约 (`benchmark/benchmark.go`)
 
-- 场景身份是 `scenarioVersion`（当前 v20）：场景语义、GPU 完成时间定义与报告
+- 场景身份是 `scenarioVersion`（当前 v21）：场景语义、GPU 完成时间定义与报告
   结构都绑定版本，迁移链以它为终点。根 `AGENTS.md` 的「benchmark scenario
   vN」基线断言由 `internal/archcheck` 的 `TestBaselineVersionsMatchCode` 直接
-  读取本包常量核对——升版时必须同步根文档。
+  读取本包常量核对——升版时必须同步根文档。v21 相对 v20 的判定理由（自然短
+  草改变被测进程与被测世界：mesh registry 实际条目、植物材质集合、worldgen
+  layout 3 与每个短草格 4 条交叉斜面实例）以 `benchmark.go` 的
+  `scenarioVersion` 注释为准，不在本指南复制。
 - 固定工作负载不随环境漂移：世界种子取 app 导出的 `BenchmarkSeed`，注水强制
   关闭（main 装配层与 `multiplayer_benchmark_server.go` 双侧钉死），Dev 面板
   不构造，输入、世界与报告身份不随用户配置漂移（配置强制回落

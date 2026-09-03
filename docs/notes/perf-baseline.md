@@ -2,7 +2,9 @@
 
 ## 当前 producer 与迁移规则
 
-当前 benchmark producer 为 scenario v20：客户端 UI 对齐又一次改变了被测进程本身（Hotbar HUD 新增准星与物品名弹条、容器界面改为原版式浮动面板并新增面板描边与悬停 tooltip 背景，`maxHotbarQuads` 267 → 320、`maxHotbarGlyphs` 700 → 768 使固定上传布局移动——glyph offset 13312 → 15616、总容量 46912 → 52480 bytes、空聊天帧每帧实际写入 13312 → 15616 bytes；HUD 图集既有 cell 程序化重绘但不新增列；权威 tick 语义不变），即便 benchmark 世界内容未变——它仍把 `FluidEnabled` 钉死为 `false`，也不含任何农业方块；固定 benchmark 输入仍为七名远端玩家、零伙伴。当前唯一显式跨 workload 迁移为 `19:20`，v6..v19 历史报告仍可同版本读取。历史的 `18:19`、`17:18`、`16:17` 与更早的 `15:16` 已退役，只作本文的归档证据，工具不再接受它们。
+当前 benchmark producer 为 scenario v21：自然短草又一次改变了**被测进程与被测世界本身**——稳定方块与 mesh registry 追加 `ShortGrassID`（实际烘焙条目 84 → 85，仍低于冻结上限 96）、Go/Rust 植物材质判定集合从 `[31..54]` 扩为 `[31..54] ∪ {68}`、worldgen `MGW1` 请求扩为 layout 3 且 engine ABI 升为 v10，固定世界在合格草地上方空气格确定性新增短草，每个短草格经既有 plant 路径发射 4 条交叉斜面实例；固定输入仍为七名远端玩家、零伙伴、不注水、不含农业方块。当前唯一显式跨 workload 迁移为 `20:21`，v6..v20 历史报告仍可同版本读取。历史的 `19:20`、`18:19`、`17:18`、`16:17` 与更早的 `15:16` 已退役，只作本文的归档证据，工具不再接受它们。
+
+上一代（scenario v20）的判定理由：客户端 UI 对齐改变了被测进程本身（Hotbar HUD 新增准星与物品名弹条、容器界面改为原版式浮动面板并新增面板描边与悬停 tooltip 背景，`maxHotbarQuads` 267 → 320、`maxHotbarGlyphs` 700 → 768 使固定上传布局移动——glyph offset 13312 → 15616、总容量 46912 → 52480 bytes、空聊天帧每帧实际写入 13312 → 15616 bytes；HUD 图集既有 cell 程序化重绘但不新增列；权威 tick 语义不变），即便 benchmark 世界内容未变——它仍把 `FluidEnabled` 钉死为 `false`，也不含任何农业方块；固定 benchmark 输入仍为七名远端玩家、零伙伴。
 
 上一代（scenario v19）的判定理由：`authoritative-hunger` 改变了被测进程本身（Hotbar HUD 新增右下角饥饿条，`maxHotbarQuads` 247 → 267 使固定上传布局移动——glyph offset 12288 → 13312、总容量 45888 → 46912 bytes、空聊天帧每帧实际写入 12288 → 13312 bytes；HUD 图集在爱心之后新增空/满两列程序化鸡腿；权威 tick 多出饥饿三层状态的推进与结算）。
 
