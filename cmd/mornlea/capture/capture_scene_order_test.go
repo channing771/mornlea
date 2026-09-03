@@ -12,6 +12,19 @@ import (
 	"github.com/channing771/mornlea/internal/core"
 )
 
+// captureOfficialSceneNames 是正式场景清单的唯一冻结副本：数量与顺序的守卫
+// （本测试与自然短草视觉 provenance 的清单测试）都引用它，不在多处复制会
+// 漂移的清单。
+var captureOfficialSceneNames = []string{
+	"terrain-noon", "hud-hotbar-health", "hud-survival-feedback", "hud-item-name-popup",
+	"avatar-nametag", "inventory-crafting",
+	"workbench-crafting", "chest-container", "furnace-container",
+	"debug-panel", "skylight-tunnel", "block-light-room", "torch-night", "bed-night",
+	"materials-showcase",
+	"target-block-feedback", "oak-grove", "ai-companion", "sword-combat",
+	"hostile-mob", "water-surface-slope", "main-menu", "settings-menu", "far-horizon", "water-underwater",
+}
+
 // TestCaptureSceneOrderAndAICompanionDeterminism 钉住整张场景表的顺序，并覆盖
 // ai-companion 夹具的确定性。
 //
@@ -22,21 +35,12 @@ import (
 // 全部呈现状态,与前一场景互相独立。bed-night 按 spec delta 插在 torch-night
 // 之后、ai-companion 之前（与 materials-showcase 之间）。
 func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
-	wantNames := []string{
-		"terrain-noon", "hud-hotbar-health", "hud-survival-feedback", "hud-item-name-popup",
-		"avatar-nametag", "inventory-crafting",
-		"workbench-crafting", "chest-container", "furnace-container",
-		"debug-panel", "skylight-tunnel", "block-light-room", "torch-night", "bed-night",
-		"materials-showcase",
-		"target-block-feedback", "oak-grove", "ai-companion", "sword-combat",
-		"hostile-mob", "water-surface-slope", "main-menu", "settings-menu", "far-horizon", "water-underwater",
-	}
 	gotNames := make([]string, len(captureScenes))
 	for index, scene := range captureScenes {
 		gotNames[index] = scene.Name
 	}
-	if !slices.Equal(gotNames, wantNames) {
-		t.Fatalf("capture scenes=%v，想要 %v", gotNames, wantNames)
+	if !slices.Equal(gotNames, captureOfficialSceneNames) {
+		t.Fatalf("capture scenes=%v，想要 %v", gotNames, captureOfficialSceneNames)
 	}
 	scene := captureSceneByName(t, "ai-companion")
 	if scene.Prepare == nil || scene.Apply == nil || scene.WarmupFrames != 8 {
