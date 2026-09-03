@@ -547,11 +547,27 @@ mod tests {
     fn short_grass_is_replaced_vertically_and_horizontally() {
         // 短草与作物同走植物放行:垂直优先命中下方短草,只写下方一条等级 1,
         // 不再向任何水平方向传播。
-        let out = eval(&cells(WATER_SOURCE, STONE, SHORT_GRASS, STONE, STONE, STONE, STONE));
+        let out = eval(&cells(
+            WATER_SOURCE,
+            STONE,
+            SHORT_GRASS,
+            STONE,
+            STONE,
+            STONE,
+            STONE,
+        ));
         assert_writes(&out, &[(2, WATER_SOURCE + 1)]);
         // 水平分支:+x 与 −z 是短草可写入,−x 是短草脚下的草方块必须挡水,
         // +z 空气照常写入。
-        let out = eval(&cells(WATER_SOURCE, STONE, STONE, SHORT_GRASS, GRASS, AIR, SHORT_GRASS));
+        let out = eval(&cells(
+            WATER_SOURCE,
+            STONE,
+            STONE,
+            SHORT_GRASS,
+            GRASS,
+            AIR,
+            SHORT_GRASS,
+        ));
         let next = WATER_SOURCE + 1;
         assert_writes(&out, &[(3, next), (5, next), (6, next)]);
     }

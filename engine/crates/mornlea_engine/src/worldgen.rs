@@ -1090,19 +1090,28 @@ mod tests {
         assert_eq!(WORLDGEN_HEADER_BYTES, 566);
         assert_eq!(WORLDGEN_CHUNK_INPUT_BYTES, 574);
         let header = layout_three_header(42, 15, 14);
-        assert!(parse_header(&header).is_some(), "layout 3 + 15 项互异材料必须被接受");
+        assert!(
+            parse_header(&header).is_some(),
+            "layout 3 + 15 项互异材料必须被接受"
+        );
 
         // 旧 layout 2 的 564 字节 header 必须整体拒绝。
         let mut legacy = header[..564].to_vec();
         legacy[4..8].copy_from_slice(&2u32.to_le_bytes());
-        assert!(parse_header(&legacy).is_none(), "旧 layout 2 header 必须被拒绝");
+        assert!(
+            parse_header(&legacy).is_none(),
+            "旧 layout 2 header 必须被拒绝"
+        );
 
         // 旧 chunk 入口总长 572 必须拒绝。
         let mut legacy_chunk = legacy.clone();
         legacy_chunk.extend_from_slice(&0i32.to_le_bytes());
         legacy_chunk.extend_from_slice(&0i32.to_le_bytes());
         assert_eq!(legacy_chunk.len(), 572);
-        assert!(parse_chunk_input(&legacy_chunk).is_none(), "旧 572 字节 chunk 输入必须被拒绝");
+        assert!(
+            parse_chunk_input(&legacy_chunk).is_none(),
+            "旧 572 字节 chunk 输入必须被拒绝"
+        );
 
         // 新 chunk/probe 帧被精确接受:probe 总长 570 + 16×N。
         let mut chunk_input = header.clone();
@@ -1118,14 +1127,20 @@ mod tests {
         probe_input.extend_from_slice(&0i32.to_le_bytes());
         probe_input.extend_from_slice(&0i32.to_le_bytes());
         assert_eq!(probe_input.len(), 586);
-        assert!(parse_probe_input(&probe_input).is_some(), "570+16N probe 帧必须被接受");
+        assert!(
+            parse_probe_input(&probe_input).is_some(),
+            "570+16N probe 帧必须被接受"
+        );
 
         // 旧 probe 帧(564 header + count + 记录)必须拒绝。
         let mut legacy_probe = legacy;
         legacy_probe.extend_from_slice(&1u32.to_le_bytes());
         legacy_probe.extend_from_slice(&[0u8; 16]);
         assert_eq!(legacy_probe.len(), 584);
-        assert!(parse_probe_input(&legacy_probe).is_none(), "旧 564 帧probe输入必须被拒绝");
+        assert!(
+            parse_probe_input(&legacy_probe).is_none(),
+            "旧 564 帧probe输入必须被拒绝"
+        );
     }
 
     #[test]
@@ -1178,8 +1193,7 @@ mod tests {
                     surface = WORLD_MAX_Y - 1;
                 }
                 let target = dense[dense_index(lx, surface + 1, lz)];
-                let hash_hit =
-                    ore_hash(params.seed, wx, 0, wz, SHORT_GRASS_SALT_FOR_TEST) & 3 == 0;
+                let hash_hit = ore_hash(params.seed, wx, 0, wz, SHORT_GRASS_SALT_FOR_TEST) & 3 == 0;
                 if target == short_grass {
                     // 装饰格:正下方必须是草地表面,且该列 hash 必然命中。
                     assert_eq!(
@@ -1225,7 +1239,10 @@ mod tests {
             .filter(|&(a, b)| a != b)
             .count();
         assert_eq!(cells, decorated, "两份输出差异格数必须恰为装饰格数");
-        assert!(dense_other.contains(&20), "装饰格必须使用请求的 short_grass 编号");
+        assert!(
+            dense_other.contains(&20),
+            "装饰格必须使用请求的 short_grass 编号"
+        );
     }
 
     #[test]
@@ -1299,7 +1316,10 @@ mod tests {
             }
         }
         assert!(wet_cells > 0, "夹具失效:湿语料没有水");
-        assert!(yielded > 0, "夹具失效:语料没有 hash 命中的树列,树优先是空断言");
+        assert!(
+            yielded > 0,
+            "夹具失效:语料没有 hash 命中的树列,树优先是空断言"
+        );
     }
 
     #[test]
