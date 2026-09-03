@@ -185,24 +185,24 @@ Ruling: planning candidate `ab8292569393edfb6748a82f6303c50b0c7654e9` 的独立 
 
 ### Task 9.2 T3 Gates And Evidence Closure
 
-- Status: `PENDING`.
-- Verified implementation SHA for T3: `PENDING`（完整 SHA；先冻结该实现 SHA，再运行和记录全部 T3；不得用之后的 evidence commit 替代）。
-- Expected implementation status/diff at verified SHA: `PENDING`.
-- `make rust`: `PENDING`（命令、耗时、输出摘要，绑定 verified implementation SHA）。
-- `make rust-check`: `PENDING`.
-- `test -z "$(gofmt -l .)"`: `PENDING`.
-- `go vet ./...`: `PENDING`.
-- `go test ./... -race -count=1`: `PENDING`.
-- `go test ./internal/archcheck -count=1`: `PENDING`.
-- `make test-multiplayer`: `PENDING`.
-- `make visual-check`: `PENDING`（不得启动或聚焦前台游戏窗口）。
-- Scenario v21 record-only report/perfcheck evidence at the same verified SHA: `PENDING`.
-- `openspec validate natural-grass-seeds --strict --no-interactive`: `PENDING`.
-- `openspec validate --all --strict --no-interactive`: `PENDING`.
-- `git diff --check` and expected status: `PENDING`.
-- T3 final release ruling: `PENDING`.
-- Tasks/ledger-only T3 evidence commit: `PENDING`（T3 完成后才提交 checkbox 与证据；该提交不回写或声称包含自己的 SHA）。
-- Post-evidence closure validation: `PENDING`（只复核 documentation-only scope、named/all strict OpenSpec、`go test ./internal/archcheck -count=1` 与 `git diff --check`；不以 ledger 自引用 SHA 声称 T3 在 evidence commit 上运行，也不因纯证据提交重跑 full T3）。
+- Status: `DONE`（2026-09-03 控制会话勾选）。
+- Verified implementation SHA for T3: `c64df1308175be943a7ee16d37400e548b2473df`（Task 9.1 final `I`;T3 实际运行于 HEAD `6d0168d16c5d8aa18677b10bc8c4fcc8cb8ad017`——9.1 evidence commit,实现树与该 SHA 逐字节一致,由 whole-change SPEC reviewer 与本 T3 的 `git status` 干净共同核实;该 evidence commit 不冒充 T3 verified implementation SHA）。
+- Expected implementation status/diff at verified SHA: 工作树干净（`git status --porcelain` 空）;range 后仅 tasks/ledger/proposal 证据提交。
+- `make rust`: PASS（0.4s,增量,dylib 签名回拷）。
+- `make rust-check`: PASS（4.1s;`cargo fmt --check` + clippy `-D warnings` + workspace 337 测试全绿）。
+- `test -z "$(gofmt -l .)"`: PASS（clean,无输出）。
+- `go vet ./...`: PASS（2.6s,exit 0,零诊断）。
+- `go test ./... -race -count=1`: PASS（43 包 ok/0 fail,3:43 wall）。
+- `go test ./internal/archcheck -count=1`: PASS（5.4s,含 `TestBaselineVersionsMatchCode` 9 断言）。
+- `make test-multiplayer`: PASS（client/server/benchmark/perfcheck 四包,5.5s）。
+- `make visual-check`: PASS（fresh `mktemp -d`,25/25 场景全部 0.0000%/最大通道差 0,exit 0,58.2s,无前台窗口——确定性链路含确定性 culling 与世界时间冻结）。
+- Scenario v21 record-only report/perfcheck evidence at the same verified SHA: fresh `mktemp -d` producer（6:05,exit 0）JSON SHA256 `9ce6d82f47584a709ff0aa7fb534dc26c449d0717c1e75aed6ce78ab02799022`;`性能记录: flying p99 19.996 ms >= 12 ms` 仅记录不改变退出状态;perfcheck self-compare（`--max-regression 0.20`）exit 0 输出 `同场景性能记录完成`。性能数值为 record-only 观测,报告结构/身份校验照常硬失败。
+- `openspec validate natural-grass-seeds --strict --no-interactive`: PASS（valid）。
+- `openspec validate --all --strict --no-interactive`: PASS（80 passed/0 failed）。
+- `git diff --check` and expected status: PASS（exit 0;工作树干净）。
+- T3 final release ruling: 全部 12 项 T3 门禁在同一实现树上全绿;性能数值 record-only 不改变退出状态;报告完整性/身份/真实 overflow/数据丢失/I/O/ABI/视觉 compare 均按既有语义硬失败;自动门禁全程无前台窗口。release 就绪。
+- Tasks/ledger-only T3 evidence commit: 本 evidence commit（T3 完成后提交 checkbox 与证据;不回写自身 SHA,不声称包含自身）。
+- Post-evidence closure validation: `PENDING`（evidence commit 后只复核 documentation-only scope、named/all strict、`go test ./internal/archcheck -count=1` 与 `git diff --check`;不重跑 full T3）。
 - Closure ruling: `PENDING`.
 
 ## Post-closure Control Sync And Archive
