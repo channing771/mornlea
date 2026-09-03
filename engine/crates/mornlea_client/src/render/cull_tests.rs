@@ -264,8 +264,8 @@ fn upload_order_must_not_change_image() {
         // 12×12 网格、每区段 16×16 条 1×1 PosY quad(256 面),材料按
         // (x+z) 奇偶交替,任何槽位错乱都会改变可读出的像素颜色。
         let mut secs: Vec<Vec<u8>> = Vec::new();
-        for gz in 0..12i32 {
-            for gx in 0..12i32 {
+        for _gz in 0..12i32 {
+            for _gx in 0..12i32 {
                 let mut bytes = Vec::new();
                 for z in 0..16u32 {
                     for x in 0..16u32 {

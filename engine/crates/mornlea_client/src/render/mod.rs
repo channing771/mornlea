@@ -2315,7 +2315,6 @@ impl OffscreenRenderer {
         buffer.unmap();
         true
     }
-
 }
 
 /// section 最小角世界坐标,与 Go `SectionPos.MinCorner` 一致:
