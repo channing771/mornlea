@@ -16,8 +16,7 @@ cmd/mornlea/
 ├── storage_test.go            # main 选项默认值与 --world 覆盖
 ├── ai_model_settings_test.go  # 本地模式 AI 模型设置与密钥注入
 ├── app/                       # application 装配主体（指南见 app/AGENTS.md）
-├── capture/                   # 视觉 golden 抓帧与比对（指南见 capture/AGENTS.md）
-│   └── testdata/golden/       # golden 基线 PNG（原 cmd/mornlea/testdata/golden 随包迁移至此）
+├── capture/                   # 视觉 golden 抓帧与比对（基线在仓库根 `testdata/visual-golden/world/`，指南见 capture/AGENTS.md）
 ├── devcapture/                # 运行中交互客户端的本地回环捕获服务（指南见 devcapture/AGENTS.md）
 └── benchmark/                 # 性能场景与多人 benchmark 观察者（指南见 benchmark/AGENTS.md）
 ```

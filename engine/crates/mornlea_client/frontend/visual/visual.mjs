@@ -10,7 +10,7 @@
 //
 // 用法（在 frontend/ 内，或经 Make 目标）：
 //   corepack pnpm visual-check    # 与 golden 比对，漂移/缺基线即非零退出
-//   corepack pnpm visual-update   # 截图覆盖 visual/golden/*.png（人工确认后用）
+//   corepack pnpm visual-update   # 截图覆盖 testdata/visual-golden/ui/*.png（人工确认后用）
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
@@ -25,7 +25,7 @@ const frontendDir = path.resolve(visualDir, "..");
 // frontend 位于 engine/crates/mornlea_client/frontend，向上四级即仓库根。
 const repoRoot = path.resolve(frontendDir, "..", "..", "..", "..");
 const visualDistDir = path.join(frontendDir, "visual-dist");
-const goldenDir = path.join(visualDir, "golden");
+const goldenDir = path.join(repoRoot, "testdata", "visual-golden", "ui");
 // 候选实拍图与差异图统一留在仓库根 build/visual-ui/（根 /build/ 已 gitignored）。
 const outDir = path.join(repoRoot, "build", "visual-ui");
 

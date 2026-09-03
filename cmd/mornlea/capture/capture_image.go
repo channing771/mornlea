@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 )
 
-// captureGoldenDir 是 golden 基线目录，相对仓库根目录。
+// `captureGoldenDir` 是 golden 基线目录，相对仓库根目录。
 // mornlea 的其余相对路径默认值（例如 --world 的 worlds/default）同样假定从仓库根目录运行，
 // 这里延续同一约定，不额外引入 runtime.Caller 之类的自定位逻辑。
-const captureGoldenDir = "cmd/mornlea/capture/testdata/golden"
+const captureGoldenDir = "testdata/visual-golden/world"
 
 // captureThresholds 的数值来自同机重复抓帧 14 次的实测漂移分布
 // （前 12 次用于收集数据并定稿阈值，第 13、14 次在阈值定稿后确认仍全绿），

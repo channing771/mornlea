@@ -117,12 +117,12 @@ Rust 侧只消费本目录的构建产物 `dist/`（经 `mornlea://` scheme 内�
   并以非零退出指认部件。
 - 两个入口：`corepack pnpm visual-check` / `make frontend-visual-check`
   （比对；缺基线只报错列出、绝不自动创建）；`corepack pnpm visual-update` /
-  `make frontend-visual-update`（截图覆盖 `visual/golden/*.png`）。实测 Chrome
+  `make frontend-visual-update`（截图覆盖 `testdata/visual-golden/ui/*.png`）。实测 Chrome
   151（macOS）截完图不退出，脚本按「截图文件连续多次轮询尺寸稳定 → 结束
   进程组」处理，截图完整性另经 pngjs 解码校验。
 - 本机开发工具：不进 CI 门禁、零网络（只访问本机临时静态服务）；Chrome 路径
   解析为 env `CHROME_BIN` > macOS 默认安装路径，缺失即报中文错误。
-- 基线更新纪律：`visual/golden/*.png` 只允许在人工目检确认呈现正确后经显式
+- 基线更新纪律：`testdata/visual-golden/ui/*.png` 只允许在人工目检确认呈现正确后经显式
   update 入口覆盖；漂移先看差异图定位，再决定修代码还是更新基线。该基线是
   测试夹具二进制（与世界 golden PNG 同一入库先例），不属于 `dist/`「零二进制
   Web 资产」白名单约束范畴——那只约束生产 dist 资产。

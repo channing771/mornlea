@@ -11,7 +11,7 @@
 - golden 只在预期视觉变化已逐图人工确认后更新；普通验证只比较，不自动接受
   差异。基线一旦冻错，后续所有比对都在维护错误的基线。
 - golden 目录是仓库根相对路径常量 `captureGoldenDir`
-  （`cmd/mornlea/capture/testdata/golden`）；引用它一律经常量，不在别处复制
+  （`testdata/visual-golden/world`）；引用它一律经常量，不在别处复制
   路径字符串。
 - 比对是双阈值而非逐字节相等：单像素最大通道差与差异像素占比，定义与取值以
   `visual_compare.go` 及其性质测试为准；不要在文档复制会漂移的数字。基线缺失

@@ -68,7 +68,7 @@ func TestWaitUntilLoadedPairContinuesDrainingControlThatFinishedFirst(t *testing
 func TestTextureGoldenUpdateControlRejectsProtectedRowsBeforeGoldenWrite(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
-	goldenDir := filepath.Join("cmd", "mornlea", "capture", "testdata", "golden")
+	goldenDir := filepath.Join("testdata", "visual-golden", "world")
 	if err := os.MkdirAll(goldenDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
