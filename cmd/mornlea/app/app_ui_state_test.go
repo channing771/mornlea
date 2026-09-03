@@ -4,7 +4,7 @@ package app
 
 // app_ui_state_test.go:三端钉值测试的 Go 组装侧半部。把 `buildUIState` 组装
 // 的下行 JSON 对单源 schema
-// `engine/crates/mornlea_client/frontend/src/bridge/schema.json`
+// `packages/engine/crates/mornlea_client/frontend/src/bridge/schema.json`
 // (JSON Schema 草案 2020-12)做**完整校验**:本文件实现 schema 中实际用到的
 // 关键字子集($ref/oneOf/allOf/if-then/type/enum/const/required/properties/
 // additionalProperties/items/maxItems/minItems/maxLength/minimum/maximum/
@@ -29,7 +29,7 @@ import (
 // loadBridgeSchema 读取单源 schema 文件并解析为通用 JSON 值。
 func loadBridgeSchema(t *testing.T) map[string]any {
 	t.Helper()
-	raw, err := os.ReadFile("../../../engine/crates/mornlea_client/frontend/src/bridge/schema.json")
+	raw, err := os.ReadFile("../../../packages/engine/crates/mornlea_client/frontend/src/bridge/schema.json")
 	if err != nil {
 		t.Fatalf("读取单源 schema.json: %v", err)
 	}

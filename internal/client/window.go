@@ -3,14 +3,14 @@
 package client
 
 // 本文件是 `mornlea_client` C ABI 的唯一 Go 调用方:窗口与输入采集的生产
-// 实现位于 Rust winit(见 engine/crates/mornlea_client),Go 侧只保留领域
+// 实现位于 Rust winit(见 packages/engine/crates/mornlea_client),Go 侧只保留领域
 // API、快照解码与帧内缓存。`Poll` 每帧恰好一次 FFI 取回固定布局输入快照,
 // 同帧内的按键/鼠标/光标/尺寸读取全部来自缓存,不产生额外窗口 FFI 调用。
 
 /*
 // client ABI v14: C header 常量与 Rust 动态库必须同批重建。
-#cgo CFLAGS: -I${SRCDIR}/../../engine/include
-#cgo LDFLAGS: -L${SRCDIR}/../../engine/target/release -lmornlea_client -Wl,-rpath,${SRCDIR}/../../engine/target/release
+#cgo CFLAGS: -I${SRCDIR}/../../packages/engine/include
+#cgo LDFLAGS: -L${SRCDIR}/../../packages/engine/target/release -lmornlea_client -Wl,-rpath,${SRCDIR}/../../packages/engine/target/release
 #cgo noescape mornlea_client_abi_version
 #cgo nocallback mornlea_client_abi_version
 #cgo noescape mornlea_client_window_create

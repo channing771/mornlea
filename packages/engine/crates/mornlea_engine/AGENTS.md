@@ -8,10 +8,10 @@
 
 ## Engine ABI
 
-- 出口或布局变化必须同步 `engine/include/mornlea_engine.h`、本 crate FFI、`internal/nativeabi`、ABI 版本和容量/一致性测试。
+- 出口或布局变化必须同步 `packages/engine/include/mornlea_engine.h`、本 crate FFI、`internal/nativeabi`、ABI 版本和容量/一致性测试。
 - 不可信 pointer 与 length 在创建 slice 前校验，panic 转状态码且不得跨 FFI unwind；失败路径不触碰调用方输出。
 
 ## 定点验证与入口
 
-- 测试：`cd engine && cargo test -p mornlea_engine --locked`。
+- 测试：`cd packages/engine && cargo test -p mornlea_engine --locked`。
 - 当前文档入口：`docs/notes/go-rust-division.md`、`openspec/specs/rust-engine-mesh/spec.md`。

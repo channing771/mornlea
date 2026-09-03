@@ -1,4 +1,4 @@
-# AGENTS.md — engine/crates/mornlea_client/frontend
+# AGENTS.md — packages/engine/crates/mornlea_client/frontend
 
 本目录是菜单层 WebView 前端（Vite + TypeScript strict + React）：把 Go 组装的
 菜单状态呈现为四屏组件，并把用户交互回传为上行事件。行为规格住 openspec
@@ -139,7 +139,7 @@ make frontend-check          # 冻结安装 + typecheck + vitest + 构建 + dist
 make frontend-visual-check   # UI 部件视觉基线比对(本机工具,不进 CI)
 ```
 
-定点命令（在 `engine/crates/mornlea_client/frontend/` 内执行）：
+定点命令（在 `packages/engine/crates/mornlea_client/frontend/` 内执行）：
 
 ```bash
 corepack pnpm install --frozen-lockfile

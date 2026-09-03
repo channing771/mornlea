@@ -98,15 +98,15 @@ Linux 专服发布单元由 `mornlea-server` 与相邻的 `libmornlea_engine.so`
 │   ├── mornlea-agent-board/ AI 工作者执行状态 Web 看板
 │   ├── gfxspike/            Rust renderer 地形渲染验证程序
 │   └── perfcheck/           性能报告比较工具
-├── engine/
-│   └── crates/
-│       ├── mornlea_engine/  固定 Rust 1.97.1 cdylib：mesh/light/collision/raycast/physics/worldgen/lod/fluid
-│       └── mornlea_client/  Darwin 窗口、事件循环、WebView 菜单层（frontend/ React 前端）与全部 GPU 渲染
 ├── contracts/
 │   └── companion-agent/    HTTP v1 与 MCP v1 的共享 manifest/schema/golden
 ├── packages/
-│   └── agent/
-│       └── companion/      Python 3.12 FastAPI/LangGraph/SQLite 独立服务
+│   ├── agent/
+│   │   └── companion/      Python 3.12 FastAPI/LangGraph/SQLite 独立服务
+│   └── engine/
+│       └── crates/
+│           ├── mornlea_engine/  固定 Rust 1.97.1 cdylib：mesh/light/collision/raycast/physics/worldgen/lod/fluid
+│           └── mornlea_client/  Darwin 窗口、事件循环、WebView 菜单层（frontend/ React 前端）与全部 GPU 渲染
 ├── internal/                包职责见 §5，依赖白名单以 archcheck 为准
 │   ├── core/                公共领域类型与 native raycast batch 驱动
 │   ├── companion/           独立伙伴身份、静态定义与身体类型

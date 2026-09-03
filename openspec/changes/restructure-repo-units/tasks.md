@@ -7,8 +7,8 @@
 
 ## Task 2: engine 整体迁入 packages/engine 并收敛 dylib 部署
 
-- [ ] 2.1 `git mv engine packages/engine`；Makefile `RUST_DIR`、`CARGO_TARGET_DIR`、`FRONTEND_DIR` 与 dylib 常量改路径；`internal/nativeabi`、`internal/mesh`、`internal/client` 的 `#cgo LDFLAGS` 相对路径同步；`.gitignore` 的 `/engine/target/` 与 frontend node_modules/visual-dist 条目改 `packages/engine/...`；`ci.yml`、根/局部 `AGENTS.md`、`docs/` 中 `engine/` 路径全量更新。以 `go clean -cache && make rust && go vet ./...` 验证。
-- [ ] 2.2 把 Makefile `rust` target 的 dylib 拷贝、`install_name_tool` 与 codesign 逻辑提取为 `scripts/engine/deploy-dylib.sh`（参数：cargo 共享 target dir 与规范 release dir），Makefile 与 CI 共用；`make rust-check` 后接 `make rust` 与定点 `go test ./internal/nativeabi ./internal/mesh ./internal/client -short -count=1` 验证。
+- [x] 2.1 `git mv engine packages/engine`；Makefile `RUST_DIR`、`CARGO_TARGET_DIR`、`FRONTEND_DIR` 与 dylib 常量改路径；`internal/nativeabi`、`internal/mesh`、`internal/client` 的 `#cgo LDFLAGS` 相对路径同步；`.gitignore` 的 `/engine/target/` 与 frontend node_modules/visual-dist 条目改 `packages/engine/...`；`ci.yml`、根/局部 `AGENTS.md`、`docs/` 中 `engine/` 路径全量更新。以 `go clean -cache && make rust && go vet ./...` 验证。
+- [x] 2.2 把 Makefile `rust` target 的 dylib 拷贝、`install_name_tool` 与 codesign 逻辑提取为 `scripts/engine/deploy-dylib.sh`（参数：cargo 共享 target dir 与规范 release dir），Makefile 与 CI 共用；`make rust-check` 后接 `make rust` 与定点 `go test ./internal/nativeabi ./internal/mesh ./internal/client -short -count=1` 验证。
 
 ## Task 3: 建立 go.work 与 contracts 模块化
 

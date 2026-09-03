@@ -20,7 +20,7 @@ import (
 const lodTileChunks = 4
 
 // lodMaxTiles 镜像 Rust client 渲染器的 tile 表容量上界 MAX_LOD_TILES
-// (engine/crates/mornlea_client/src/render/lod.rs;client ABI 没有导出该
+// (packages/engine/crates/mornlea_client/src/render/lod.rs;client ABI 没有导出该
 // 常量,只能镜像)。锚定要求:最大合法配置 `viewDistance`=64 ×
 // lodFarMultiplier=8 → tile 半径 128 → 全方环 (2×128+1)² = 66049,容量
 // 131072(2^17)留约 2 倍余量。同步断言见

@@ -388,7 +388,7 @@ func requireCodeCommentScanCoverage(t *testing.T, sources []codeCommentSource) {
 	}
 	for _, required := range []string{
 		"internal/archcheck/code_comment_task_id_test.go",
-		"engine/crates/mornlea_client/src/window.rs",
+		"packages/engine/crates/mornlea_client/src/window.rs",
 	} {
 		if !paths[required] {
 			t.Fatalf("源码扫描根遗漏 %s", required)

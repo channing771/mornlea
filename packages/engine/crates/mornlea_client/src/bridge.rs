@@ -3,7 +3,7 @@
 //! 本模块刻意不依赖任何 WebKit 类型——WebView 只是信封的搬运工,真正的
 //! 协议逻辑集中在这里,以便在不创建真实窗口/WebView 的单元测试中完整验证
 //! 拒绝语义与保序语义。协议形状以单源
-//! `engine/crates/mornlea_client/frontend/src/bridge/schema.json` 为权威:
+//! `packages/engine/crates/mornlea_client/frontend/src/bridge/schema.json` 为权威:
 //!
 //! - 下行(Go → JS):Go 组装 `uiState` JSON,本 crate 只做相位浅校验后经
 //!   `evaluateJavaScript` 转发(见 [`crate::webview`])。

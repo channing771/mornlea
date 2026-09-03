@@ -15,7 +15,7 @@
 
 ## Client ABI
 
-- ABI 变化同批更新 `engine/include/mornlea_client.h`、本 crate FFI、`internal/client` bridge、版本和跨语言测试。
+- ABI 变化同批更新 `packages/engine/include/mornlea_client.h`、本 crate FFI、`internal/client` bridge、版本和跨语言测试。
 - FFI 先校验 handle、线程、pointer、length、layout 和输出容量，panic 转稳定状态码，失败不写部分结果。
 
 ## 渲染与无头路径
@@ -46,5 +46,5 @@
 
 ## 定点验证与入口
 
-- 测试：`cd engine && cargo test -p mornlea_client --locked`。
+- 测试：`cd packages/engine && cargo test -p mornlea_client --locked`。
 - 当前文档入口：`openspec/specs/rust-client-window/spec.md`、`openspec/specs/rust-client-render-cutover/spec.md`。

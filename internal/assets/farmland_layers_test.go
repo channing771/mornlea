@@ -13,7 +13,7 @@ import (
 // Go 侧的机械守卫（farmland-mesh-top-sink D2a）。
 //
 // 区间的数值真值源是本包 blocks.go 的层枚举，但 Rust 客户端在
-// engine/crates/mornlea_client 的 src/render/shaders.rs
+// packages/engine/crates/mornlea_client 的 src/render/shaders.rs
 // （FARMLAND_MATERIAL_FIRST/FARMLAND_MATERIAL_LAST = 29/30）与其 terrain.wgsl
 // 的 farmland_material 各硬编码了一份——WGSL 没有常量注入机制，三处没有共享
 // 定义也没有生成步骤，只能人手同步。在 `LayerFarmlandDry` **之前**插层会整体

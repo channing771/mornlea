@@ -366,7 +366,7 @@ func assertBinaryAlpha(t *testing.T, pixels []byte, name string) {
 
 // TestOpaqueLayersAreFullyOpaque 锁定"非 cutout 层必须全图不透明、cutout 层 alpha 必须二值"这条契约。
 //
-// 判据来源：engine/crates/mornlea_client/shaders/terrain.wgsl 的片段着色器对
+// 判据来源：packages/engine/crates/mornlea_client/shaders/terrain.wgsl 的片段着色器对
 // alpha<0.5 的片段判 discard。不透明层（不在 `isCutoutLayer` 集合里）一旦带有透明
 // 像素，这一整块面就会被着色器丢弃，方块面出现看穿/破洞（历史上 grass_side.png
 // 就因此把草方块侧面的下半部整段丢弃）。cutout 层（leaves、glass、wheat_0..7）

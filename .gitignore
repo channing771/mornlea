@@ -12,7 +12,7 @@
 
 # 依赖缓存
 /vendor/
-/engine/target/
+/packages/engine/target/
 
 # 编辑器
 .DS_Store
@@ -50,9 +50,9 @@ mem.prof
 # 设备确认通道（scripts/agents/confirm）的 Node 工具链产物
 **/node_modules/
 # 菜单 WebView 前端的 node_modules（dist 不忽略、提交入库）
-engine/crates/mornlea_client/frontend/node_modules/
+packages/engine/crates/mornlea_client/frontend/node_modules/
 # 菜单 WebView 前端视觉基线 harness 的构建产物（visual-check/visual-update
 # 用，绝不写 dist/）
-engine/crates/mornlea_client/frontend/visual-dist/
+packages/engine/crates/mornlea_client/frontend/visual-dist/
 scripts/agents/.npm-cache/
 /web/agent-board/dist/

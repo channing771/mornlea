@@ -625,7 +625,7 @@ unsafe fn worldgen_probe_with(
 /// 输入为与 `mornlea_worldgen_chunk` 完全一致的 `MGW1` header(566 字节),
 /// 追加 tile_x i32、tile_z i32、columns u32(必须等于 64)与 lod_step u32
 /// (合法值 2/4/8),共 582 字节;输出为壳 quad 字节流(单 quad 20 字节
-/// LE,位布局见 `lod::encode_shell` 与 `engine/include/mornlea_engine.h`
+/// LE,位布局见 `lod::encode_shell` 与 `packages/engine/include/mornlea_engine.h`
 /// 的同步注释)。
 ///
 /// 容量语义(两段式探测):生成先在本地缓冲完成,`output_capacity` 不足
@@ -968,7 +968,7 @@ unsafe fn raycast_batch_with(
 /// (7 个 u16 LE 方块编号,槽位序 0=自格、1=上、2=下、3=+x、4=−x、5=+z、
 /// 6=−z);输出为每项 12 字节 = 4 条候选写入 × 3B(目标槽位 u8(0..6;
 /// 0xFF=无写入)+ BlockID u16 LE)。位布局与 `fluid_eval` 模块及
-/// `engine/include/mornlea_engine.h` 的同步注释三方一致。
+/// `packages/engine/include/mornlea_engine.h` 的同步注释三方一致。
 ///
 /// `input_len` 必须等于 8 + item_count×14;输出容量不足返回
 /// `MORNLEA_STATUS_INVALID_ARGUMENT`(输出尺寸是输入的确定函数 N×12,
@@ -1099,7 +1099,7 @@ unsafe fn fluid_eval_batch_with(
 /// 区块 24 区段记录(u8 kind(0=均匀:u16 uniform_id,记录 4B;1=密集:
 /// 4096×u16 LE,区段内序 x + z*16 + y16*256)+ u8 pad=0)+ 裙边 68 列 ×
 /// 384 u16 + 元数据 9 区块 × 24 区段 × 3B;位布局与 `fluid_rescan` 模块
-/// 及 `engine/include/mornlea_engine.h` 的同步注释三方一致。
+/// 及 `packages/engine/include/mornlea_engine.h` 的同步注释三方一致。
 ///
 /// 输出 = 流体格世界坐标流(每条 12 字节:u32 x、u32 y、u32 z LE;世界
 /// 坐标可为负,按二进制补码编码,Go 侧以 int32 重读)+ 尾部 summary
@@ -1228,7 +1228,7 @@ mod mesh_tests {
         // 14 项扩为 15 项(末项 short_grass,位于偏移 52,perm 后移到 54),
         // 带内 layout 2 → 3、公共 header 564 → 566 字节、chunk 输入 572 →
         // 574、LOD 壳输入 580 → 582,详见 ABI_VERSION 的 doc comment 与
-        // engine/include/mornlea_engine.h 的版本史注释。既有入口签名与语义
+        // packages/engine/include/mornlea_engine.h 的版本史注释。既有入口签名与语义
         // 不变;旧 dylib 与新二进制混装被版本握手拒绝(二者本就是同一不可
         // 跨版本混装的 release unit)。
         assert_eq!(mornlea_engine_abi_version(), 10);

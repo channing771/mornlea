@@ -3,8 +3,8 @@
 GO := go
 CARGO ?= rustup run 1.97.1 cargo
 # 默认目标目录隔离到当前 worktree；显式 CARGO_TARGET_DIR 仍可覆盖。
-export CARGO_TARGET_DIR ?= $(CURDIR)/engine/target/cargo
-RUST_DIR := engine
+export CARGO_TARGET_DIR ?= $(CURDIR)/packages/engine/target/cargo
+RUST_DIR := packages/engine
 RUST_DYLIB := $(RUST_DIR)/target/release/libmornlea_engine.dylib
 RUST_SO := $(RUST_DIR)/target/release/libmornlea_engine.so
 APP := ./cmd/mornlea
@@ -59,23 +59,9 @@ run:
 
 rust:
 	cd $(RUST_DIR) && $(CARGO) build --locked --release
-	@mkdir -p $(RUST_DIR)/target/release
-	@test -f $(CARGO_TARGET_DIR)/release/libmornlea_engine.dylib && cp -f $(CARGO_TARGET_DIR)/release/libmornlea_engine.dylib $(RUST_DYLIB) || true
-	@test -f $(CARGO_TARGET_DIR)/release/libmornlea_engine.so && cp -f $(CARGO_TARGET_DIR)/release/libmornlea_engine.so $(RUST_SO) || true
-	@test -f $(CARGO_TARGET_DIR)/release/libmornlea_client.dylib && cp -f $(CARGO_TARGET_DIR)/release/libmornlea_client.dylib $(RUST_DIR)/target/release/libmornlea_client.dylib || true
-	@test -f $(CARGO_TARGET_DIR)/release/libmornlea_client.so && cp -f $(CARGO_TARGET_DIR)/release/libmornlea_client.so $(RUST_DIR)/target/release/libmornlea_client.so || true
-	@# 把 install name 改写为 @rpath：cargo 默认嵌入共享目标目录的绝对路径，
-	@# CI 的 race/integration job 是下载 artifact 到 engine/target/release 后
-	@# 运行，绝对路径对不上会让 dyld 直接拒载（表现为测试包秒挂）。@rpath 由
-	@# cgo 的 -Wl,-rpath 解析到规范路径，dylib 因此与构建位置无关。
-	@if [ "$$(uname)" = "Darwin" ]; then \
-	  for f in libmornlea_engine.dylib libmornlea_client.dylib; do \
-	    if [ -f "$(RUST_DIR)/target/release/$$f" ]; then \
-	      install_name_tool -id @rpath/$$f "$(RUST_DIR)/target/release/$$f"; \
-	      codesign --force --sign - "$(RUST_DIR)/target/release/$$f"; \
-	    fi; \
-	  done; \
-	fi
+	@# dylib 部署与 macOS 的 @rpath 改写、codesign 统一收在
+	@# scripts/engine/deploy-dylib.sh，意图与边界见该脚本注释。
+	scripts/engine/deploy-dylib.sh "$(CARGO_TARGET_DIR)/release" "$(RUST_DIR)/target/release"
 
 rust-check:
 	cd $(RUST_DIR) && $(CARGO) fmt --check
@@ -85,7 +71,7 @@ rust-check:
 # frontend-check:菜单 WebView 前端门禁。pnpm 不全局安装,由 package.json 的
 # packageManager 字段经 corepack 按钉版自动供给,--frozen-lockfile 是唯一安装
 # 姿势;末行校验构建产物与入库 dist 一致,dist 入库后任何漂移都会让门禁变红。
-FRONTEND_DIR := engine/crates/mornlea_client/frontend
+FRONTEND_DIR := packages/engine/crates/mornlea_client/frontend
 
 frontend-check:
 	cd $(FRONTEND_DIR) && corepack pnpm install --frozen-lockfile
@@ -93,8 +79,8 @@ frontend-check:
 	git diff --exit-code -- $(FRONTEND_DIR)/dist
 
 # frontend-visual-*:UI 部件视觉基线（本机开发工具，不进 CI、零网络、不触
-# dist）。管线构成与基线更新纪律见 engine/crates/mornlea_client/frontend/
-# AGENTS.md 的「UI 部件视觉基线」小节。
+# dist）。管线构成与基线更新纪律见 packages/engine/crates/mornlea_client/
+# frontend/AGENTS.md 的「UI 部件视觉基线」小节。
 frontend-visual-check:
 	cd $(FRONTEND_DIR) && corepack pnpm visual-check
 

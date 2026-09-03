@@ -8,7 +8,7 @@ package app
 // 暂停层、调试面板行与游戏相位 hud 分节组装成单份 `uiState` JSON,仅在状态
 // 变化时经 `Window.PushUIState` 下行,由 Rust 转发给 WebView
 // (`window.mornlea.onState`)。协议形状以单源 schema
-// `engine/crates/mornlea_client/frontend/src/bridge/schema.json` 为
+// `packages/engine/crates/mornlea_client/frontend/src/bridge/schema.json` 为
 // 权威,钉值测试(`app_ui_state_test.go`)用同一文件校验本组装输出。
 //
 // 两条下行路径在本文档汇合,任意时刻前端拿到的都是一份完整 `uiState`:

@@ -18,7 +18,7 @@ const (
 	// 的扩容升到 v7（v6 被 lod_shell 出口占用），追加 model 的扩容升到 v8。
 	nativeRegistryEntryBytes = 2 + 1 + 1 + 6*2 + 1 + 1 + 1 + 1
 	// nativeMaxRegistryEntries 必须与 Rust 端硬编码的
-	// engine/crates/mornlea_engine/src/input.rs 的 MAX_REGISTRY_ENTRIES
+	// packages/engine/crates/mornlea_engine/src/input.rs 的 MAX_REGISTRY_ENTRIES
 	// (=96) 保持一致——两侧各自独立定义，没有共享常量或生成步骤，全靠人
 	// 手动同步。条目上限不在 engine ABI 版本契约内，改动上限不需要跟着升
 	// ABI 版本号；Go/Rust 两侧数值是否一致，由容量同步测试
