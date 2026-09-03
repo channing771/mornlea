@@ -19,7 +19,7 @@ jobs:
 
       - name: Rust 工具链身份
         run: |
-          cd engine
+          cd packages/engine
           rustup show active-toolchain
           rustc --version
           cargo --version
@@ -32,18 +32,18 @@ jobs:
 
       - name: 写入构建元数据
         run: |
-          echo "$GITHUB_SHA" > engine/target/release/native-source-sha.txt
+          echo "$GITHUB_SHA" > packages/engine/target/release/native-source-sha.txt
           {
             printf 'sha %s\n' "$GITHUB_SHA"
             for path in \
-              engine/target/release/libmornlea_engine.dylib \
-              engine/target/release/libmornlea_client.dylib; do
+              packages/engine/target/release/libmornlea_engine.dylib \
+              packages/engine/target/release/libmornlea_client.dylib; do
               printf '%s %s %s\n' \
                 "$path" \
                 "$(stat -f '%z' "$path")" \
                 "$(shasum -a 256 "$path" | awk '{print $1}')"
             done
-          } > engine/target/release/native-artifact-manifest.txt
+          } > packages/engine/target/release/native-artifact-manifest.txt
 
       - uses: actions/upload-artifact@v4
         with:
@@ -51,10 +51,10 @@ jobs:
           if-no-files-found: error
           retention-days: 1
           path: |
-            engine/target/release/libmornlea_engine.dylib
-            engine/target/release/libmornlea_client.dylib
-            engine/target/release/native-source-sha.txt
-            engine/target/release/native-artifact-manifest.txt
+            packages/engine/target/release/libmornlea_engine.dylib
+            packages/engine/target/release/libmornlea_client.dylib
+            packages/engine/target/release/native-source-sha.txt
+            packages/engine/target/release/native-artifact-manifest.txt
 
       - name: 记录 native 构建信息
         if: ${{ always() }}
@@ -76,15 +76,15 @@ jobs:
           go-version: '1.26'
           cache-dependency-path: |
             go.sum
-            engine/include/mornlea_engine.h
-            engine/include/mornlea_client.h
+            packages/engine/include/mornlea_engine.h
+            packages/engine/include/mornlea_client.h
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
       - uses: actions/download-artifact@v4
         with:
           name: native-macos-${{ github.sha }}
-          path: engine/target/release
+          path: packages/engine/target/release
       - name: 校验 native artifact
         run: scripts/ci/verify-native-artifact.sh
       - name: OpenSpec 规格门禁
@@ -138,13 +138,13 @@ jobs:
       - name: 启用 corepack pnpm
         run: |
           corepack enable
-          cd engine/crates/mornlea_client/frontend && corepack pnpm --version
+          cd packages/engine/crates/mornlea_client/frontend && corepack pnpm --version
       - uses: actions/setup-node@v4
         with:
           # 与 frontend engines（>=22 <25）一致的大版本。
           node-version: '24'
           cache: pnpm
-          cache-dependency-path: engine/crates/mornlea_client/frontend/pnpm-lock.yaml
+          cache-dependency-path: packages/engine/crates/mornlea_client/frontend/pnpm-lock.yaml
       - name: 前端门禁（冻结安装 + typecheck + vitest + 构建 + dist 一致）
         run: make frontend-check
       - name: 记录 frontend 信息
@@ -180,12 +180,12 @@ jobs:
           go-version: '1.26'
           cache-dependency-path: |
             go.sum
-            engine/include/mornlea_engine.h
-            engine/include/mornlea_client.h
+            packages/engine/include/mornlea_engine.h
+            packages/engine/include/mornlea_client.h
       - uses: actions/download-artifact@v4
         with:
           name: native-macos-${{ github.sha }}
-          path: engine/target/release
+          path: packages/engine/target/release
       - name: 校验 native artifact
         run: scripts/ci/verify-native-artifact.sh
       - name: Race tests
@@ -210,8 +210,8 @@ jobs:
           go-version: '1.26'
           cache-dependency-path: |
             go.sum
-            engine/include/mornlea_engine.h
-            engine/include/mornlea_client.h
+            packages/engine/include/mornlea_engine.h
+            packages/engine/include/mornlea_client.h
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -225,7 +225,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: native-macos-${{ github.sha }}
-          path: engine/target/release
+          path: packages/engine/target/release
       - name: 校验 native artifact
         run: scripts/ci/verify-native-artifact.sh
       - name: 伙伴 Agent Python 门禁
@@ -264,11 +264,11 @@ jobs:
           # 时红时绿。把头文件纳入 key，ABI 变更即强制冷编译。
           cache-dependency-path: |
             go.sum
-            engine/include/mornlea_engine.h
+            packages/engine/include/mornlea_engine.h
 
       - name: Rust 工具链身份
         run: |
-          cd engine
+          cd packages/engine
           rustup show active-toolchain
           rustc --version
           cargo --version
@@ -294,15 +294,15 @@ jobs:
       - name: 脱离 Cargo target 加载相邻 so
         run: |
           native_target_backup="$(mktemp -d)/target"
-          trap 'test -e engine/target || mv "$native_target_backup" engine/target' EXIT
-          mv engine/target "$native_target_backup"
+          trap 'test -e packages/engine/target || mv "$native_target_backup" packages/engine/target' EXIT
+          mv packages/engine/target "$native_target_backup"
           ldd bin/mornlea-server > /tmp/mornlea-server-ldd.txt
           grep -F "$(pwd)/bin/libmornlea_engine.so" /tmp/mornlea-server-ldd.txt
           set +e
           bin/mornlea-server -h >/tmp/mornlea-server-help.txt 2>&1
           native_help_rc=$?
           set -e
-          mv "$native_target_backup" engine/target
+          mv "$native_target_backup" packages/engine/target
           trap - EXIT
           test "$native_help_rc" -eq 1
           grep -F 'flag: help requested' /tmp/mornlea-server-help.txt

@@ -41,7 +41,7 @@ use crate::window::ClientWindow;
 /// 变基重编说明:远环两项出口在旧基线上原编号 v5/v6,main 合并 fluid 系列
 /// 后 v5 已被 water pass(`mornlea_client_render_upload_section` 按 material
 /// 分成不透明与水面两条流,新增半透明 water pass)占用,故整体顺延一格。
-/// 必须与 `engine/include/mornlea_client.h` 的 `MORNLEA_CLIENT_ABI_VERSION`
+/// 必须与 `packages/engine/include/mornlea_client.h` 的 `MORNLEA_CLIENT_ABI_VERSION`
 /// 逐版本一致。
 /// v11:新增离屏 benchmark batch prepare/submit 入口。
 /// v10:avatar 通道容量扩至 75 具身体(450 实例)并新增敌怪身份域。

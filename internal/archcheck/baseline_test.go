@@ -72,14 +72,14 @@ var baselineVersionMappings = []baselineVersionMapping{
 	{
 		name:        "engine ABI",
 		docPattern:  `engine ABI v(\d+)`,
-		sourcePath:  filepath.Join("engine", "include", "mornlea_engine.h"),
+		sourcePath:  filepath.Join("packages", "engine", "include", "mornlea_engine.h"),
 		codePattern: `#define\s+MORNLEA_ENGINE_ABI_VERSION\s+(\d+)u`,
 		why:         "头文件宏是 Go 与 Rust 共同编译进二进制的 engine C ABI 版本，混装检测以它为准。",
 	},
 	{
 		name:        "client ABI",
 		docPattern:  `client ABI v(\d+)`,
-		sourcePath:  filepath.Join("engine", "include", "mornlea_client.h"),
+		sourcePath:  filepath.Join("packages", "engine", "include", "mornlea_client.h"),
 		codePattern: `#define\s+MORNLEA_CLIENT_ABI_VERSION\s+(\d+)u`,
 		why:         "头文件宏是 mornlea_client cdylib 的 C ABI 版本，混装检测以它为准。",
 	},
@@ -124,7 +124,7 @@ const claudeAgentImport = `# CLAUDE.md
 var claudeImportDocs = []string{
 	"CLAUDE.md",
 	filepath.Join("internal", "CLAUDE.md"),
-	filepath.Join("engine", "CLAUDE.md"),
+	filepath.Join("packages", "engine", "CLAUDE.md"),
 	filepath.Join("cmd", "mornlea", "CLAUDE.md"),
 }
 

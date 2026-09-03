@@ -2,7 +2,7 @@ package client
 
 // ui_hud_state_test.go：游戏相位 HUD 下行状态族的组装与序列化钉值。字段形状、
 // 键名与数值边界以单源 schema
-// `engine/crates/mornlea_client/frontend/src/bridge/schema.json` 为权威，本文件
+// `packages/engine/crates/mornlea_client/frontend/src/bridge/schema.json` 为权威，本文件
 // 用「精确 JSON 钉值 + 逐字段映射断言 + 常量对 schema 抽值比对」三路钉住；形状
 // 的完整 schema 校验由 cmd/mornlea/app 的组装侧钉值测试承担（复用其校验器），
 // 前端半部在 vitest（schema.test.ts/client.test.ts）。
@@ -239,7 +239,7 @@ func TestUIHudTextTruncatesToSchemaRuneBudget(t *testing.T) {
 // TestUIHudConstantsPinnedToSchemaFile 抽取单源 schema 中 hud 分节的上界并逐值
 // 比对：Go 侧常量与 schema 的 maximum/maxItems 任一漂移即红。
 func TestUIHudConstantsPinnedToSchemaFile(t *testing.T) {
-	raw, err := os.ReadFile("../../engine/crates/mornlea_client/frontend/src/bridge/schema.json")
+	raw, err := os.ReadFile("../../packages/engine/crates/mornlea_client/frontend/src/bridge/schema.json")
 	if err != nil {
 		t.Fatalf("读取单源 schema.json: %v", err)
 	}

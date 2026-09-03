@@ -4,8 +4,8 @@
 package nativeabi
 
 /*
-#cgo CFLAGS: -I${SRCDIR}/../../engine/include
-#cgo LDFLAGS: -L${SRCDIR}/../../engine/target/release -lmornlea_engine -Wl,-rpath,${SRCDIR}/../../engine/target/release
+#cgo CFLAGS: -I${SRCDIR}/../../packages/engine/include
+#cgo LDFLAGS: -L${SRCDIR}/../../packages/engine/target/release -lmornlea_engine -Wl,-rpath,${SRCDIR}/../../packages/engine/target/release
 #cgo noescape mornlea_engine_abi_version
 #cgo nocallback mornlea_engine_abi_version
 #cgo noescape mornlea_mesh_section
@@ -365,7 +365,7 @@ func raycastStatusPanicText(status Status) string {
 
 // FluidEvalBatch 把调用方拥有的 fluid eval input 与 output 传给 engine。
 //
-// input 与 output 的布局契约见 engine/include/mornlea_engine.h 的
+// input 与 output 的布局契约见 packages/engine/include/mornlea_engine.h 的
 // mornlea_fluid_eval_batch 注释:input 长度 = 8 + N×14、output 长度 = N×12
 // 均由调用方在编码时确定,容量不足按参数违约拒绝(engine 不做两段式探测);
 // 任何非 OK 状态都以稳定中文文案 panic,且 engine 保证失败时不触碰 output。

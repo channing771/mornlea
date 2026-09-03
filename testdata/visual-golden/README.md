@@ -3,7 +3,7 @@
 本目录统一存放两套视觉回归基线 PNG，均为测试夹具二进制，像素与搬迁前逐字节一致。
 
 - `world/`：无窗口世界场景基线 24 张，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
-- `ui/`：前端 UI 部件基线 19 张，对应 `engine/crates/mornlea_client/frontend/visual/fixture-names.ts` 的 `fixtureNames`。
+- `ui/`：前端 UI 部件基线 19 张，对应 `packages/engine/crates/mornlea_client/frontend/visual/fixture-names.ts` 的 `fixtureNames`。
 
 旧目录 `cmd/mornlea/capture/testdata/golden/` 与 `engine/crates/mornlea_client/frontend/visual/golden/` 已清空，仅剩空目录，不再写入。
 

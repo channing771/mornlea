@@ -122,8 +122,8 @@ git mv 至 `cmd/mornlea/capture/testdata/golden`，子包依赖方向由
 
 ## Rust 映射
 
-上文判据、SOP 与验收清单是 Go 侧表述；Rust crate（`engine/crates/mornlea_engine`
-与 `engine/crates/mornlea_client`）按本节映射执行，原则同构：零行为变化、按主题
+上文判据、SOP 与验收清单是 Go 侧表述；Rust crate（`packages/engine/crates/mornlea_engine`
+与 `packages/engine/crates/mornlea_client`）按本节映射执行，原则同构：零行为变化、按主题
 拆分、helper 先 grep 引用集合再落位。
 
 ### 存放与拆分形态
@@ -135,8 +135,8 @@ git mv 至 `cmd/mornlea/capture/testdata/golden`，子包依赖方向由
   `greedy.rs` → `greedy/mod.rs`）后在模块根挂载 `#[cfg(test)] mod
   <主题>_tests;`，测试函数连同其 doc 注释、专属常量逐字搬入，`use` 按主题裁剪
   到最小（clippy `-D warnings` 下 unused_imports 会红）。范例：engine
-  `engine/crates/mornlea_engine/src/greedy/`（2026-08 Rust 首个试点，commit
-  `b2a6edb`）；client `engine/crates/mornlea_client/src/render/water_tests.rs`
+  `packages/engine/crates/mornlea_engine/src/greedy/`（2026-08 Rust 首个试点，commit
+  `b2a6edb`）；client `packages/engine/crates/mornlea_client/src/render/water_tests.rs`
   （既有先例，与 `render/plant_tests.rs` 同式，都在 `render/mod.rs` 以
   `#[cfg(test)] mod …;` 挂载）。
 - 挂载布局惯例：`#[cfg(test)] mod …;` 声明集中为 `mod.rs` 尾部一个块
@@ -171,7 +171,7 @@ git mv 至 `cmd/mornlea/capture/testdata/golden`，子包依赖方向由
       （仓库根 `make rust-check` 三项一并覆盖）；
 - [ ] cdylib 出口不变：仓库根 `make rust`。
 
-裸名排序快照提取（在 `engine/` 下执行，`rust-toolchain.toml` 已钉 1.97.1；
+裸名排序快照提取（在 `packages/engine/` 下执行，`rust-toolchain.toml` 已钉 1.97.1；
 `grep` 滤掉汇总行，`sed` 截 `: test` 后缀，`awk` 取 `::` 末段）：
 
 ```bash

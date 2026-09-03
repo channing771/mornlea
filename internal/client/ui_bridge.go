@@ -5,7 +5,7 @@ package client
 // 本文件是菜单层桥上行事件(client ABI v12 引入、v14 保留)的 Go 解码与拒绝语义。
 //
 // 协议形状以单源 schema
-// `engine/crates/mornlea_client/frontend/src/bridge/schema.json` 为权威
+// `packages/engine/crates/mornlea_client/frontend/src/bridge/schema.json` 为权威
 // (JSON Schema 草案 2020-12):Rust 侧已做最低层校验(JSON 可解析、版本为 1、
 // events 为非空对象数组),本文件做**深层校验**——未知事件类型、未知动作 id、
 // 未知调试 op、字段取值越界一律拒绝,与旧 tag 9 时代「未知 kind/未知 action

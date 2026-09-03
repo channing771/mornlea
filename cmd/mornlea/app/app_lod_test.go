@@ -181,7 +181,7 @@ func TestLodRingDomainWithinCapacityAtMaxLegalConfig(t *testing.T) {
 // `lodMaxTiles` 必须与 Rust client 渲染器的 MAX_LOD_TILES 源字面量一致,
 // 否则容量论证出现双源漂移(一侧改动另一侧不知情)。
 func TestLodMaxTilesMirrorsRustConstant(t *testing.T) {
-	source, err := os.ReadFile("../../../engine/crates/mornlea_client/src/render/lod.rs")
+	source, err := os.ReadFile("../../../packages/engine/crates/mornlea_client/src/render/lod.rs")
 	if err != nil {
 		t.Fatalf("读取 Rust lod.rs: %v", err)
 	}

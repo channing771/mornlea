@@ -116,9 +116,9 @@ func TestVerifyNativeArtifactScript(t *testing.T) {
 	script := readBaselineDoc(t, moduleRoot(t), filepath.Join("scripts", "ci", "verify-native-artifact.sh"))
 	for _, required := range []string{
 		"set -euo pipefail",
-		"ENGINE_DYLIB=engine/target/release/libmornlea_engine.dylib",
-		"CLIENT_DYLIB=engine/target/release/libmornlea_client.dylib",
-		`test "$(cat engine/target/release/native-source-sha.txt)" = "$GITHUB_SHA"`,
+		"ENGINE_DYLIB=packages/engine/target/release/libmornlea_engine.dylib",
+		"CLIENT_DYLIB=packages/engine/target/release/libmornlea_client.dylib",
+		`test "$(cat packages/engine/target/release/native-source-sha.txt)" = "$GITHUB_SHA"`,
 		`test "$(wc -l < "$MANIFEST" | tr -d ' ')" = 3`,
 		`IFS=' ' read -r kind sha extra`,
 		`test "$kind" = sha`,
@@ -277,8 +277,8 @@ func companionAgentWorkflowViolations(source []byte) []string {
 		if value, err := workflowStringWith(step, "name"); err != nil || value != "native-macos-${{ github.sha }}" {
 			violations = append(violations, "native artifact download 必须使用 same-SHA 名称 native-macos-${{ github.sha }}")
 		}
-		if value, err := workflowStringWith(step, "path"); err != nil || value != "engine/target/release" {
-			violations = append(violations, "native artifact download path 必须是 engine/target/release")
+		if value, err := workflowStringWith(step, "path"); err != nil || value != "packages/engine/target/release" {
+			violations = append(violations, "native artifact download path 必须是 packages/engine/target/release")
 		}
 	}
 

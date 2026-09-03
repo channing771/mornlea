@@ -40,7 +40,7 @@ import (
 // 实测全仓当前的反引号提及均可解析，命中数随约定推广而增长；加进参数只会放宽判定。
 //
 // **跨语言扩展（webview 菜单桥契约域）**：菜单层迁 WebView 后，桥协议的单源在
-// `engine/crates/mornlea_client/frontend/src/`——schema.json 的 JSON 键名与前端
+// `packages/engine/crates/mornlea_client/frontend/src/`——schema.json 的 JSON 键名与前端
 // TS 的类型名/注入点名（`menuAction`、`uplinkEnvelope`、`window.mornlea.onState`
 // 一类）是 Go 注释可以合法提到的名字，却不在任何 Go 声明域里。因此判定域并入
 // 一份**桥契约语料**（schema.json + 前端 .ts/.tsx 源码文本）：反引号内容（完整
@@ -64,7 +64,7 @@ import (
 //     解析，成本远超这条门禁的价值，故**有意**保留；
 //     TestShadowedLastSegmentIsAKnownBlindSpot 把该行为钉成了已知且有意的。
 //   - **语义失真**：标识符存在但说明的行为是错的，本检查无能为力。
-//   - **Rust/WGSL 注释**：不在本次范围，是后续扩展点（engine/ 下的 .rs 与 .wgsl
+//   - **Rust/WGSL 注释**：不在本次范围，是后续扩展点（packages/engine/ 下的 .rs 与 .wgsl
 //     可以套用同一套「反引号 + 声明名集合」的做法）。这也是 nonGoNameExemptions
 //     那几条逐条豁免**没有**自失效守卫的原因：它们指向 Rust 侧的名字，而 Rust
 //     源码不在扫描范围内，无从判定这些名字是否还存在。
@@ -290,7 +290,7 @@ func repositoryGoSources(t *testing.T) map[string][]byte {
 func repositoryBridgeContractCorpus(t *testing.T) string {
 	t.Helper()
 	root := moduleRoot(t)
-	contractDir := filepath.Join(root, "engine", "crates", "mornlea_client", "frontend", "src")
+	contractDir := filepath.Join(root, "packages", "engine", "crates", "mornlea_client", "frontend", "src")
 	schema, err := os.ReadFile(filepath.Join(contractDir, "bridge", "schema.json"))
 	if err != nil {
 		t.Fatalf("读取桥契约 schema.json: %v", err)

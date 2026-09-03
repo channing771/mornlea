@@ -45,7 +45,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: native-macos-${{ github.sha }}
-          path: engine/target/release
+          path: packages/engine/target/release
       - name: verify artifact
         run: scripts/ci/verify-native-artifact.sh
       - name: check

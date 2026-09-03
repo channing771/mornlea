@@ -190,7 +190,7 @@ func TestDecodeUIEventBatchRejectsOversizedTextAndBatches(t *testing.T) {
 // 与本包常量逐值对照:任一端漂移即红。完整 schema 校验在 cmd/mornlea/app 的
 // 组装侧测试执行,此处锁「解码层认识的值域 == schema 声明的值域」。
 func TestBridgeConstantsPinnedToSchemaFile(t *testing.T) {
-	raw, err := os.ReadFile("../../engine/crates/mornlea_client/frontend/src/bridge/schema.json")
+	raw, err := os.ReadFile("../../packages/engine/crates/mornlea_client/frontend/src/bridge/schema.json")
 	if err != nil {
 		t.Fatalf("读取单源 schema.json: %v", err)
 	}

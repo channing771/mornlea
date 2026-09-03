@@ -151,7 +151,7 @@
 
 #### Scenario: 依赖版本线替换
 
-- **GIVEN** `engine/crates/mornlea_client/Cargo.toml` 与依赖树
+- **GIVEN** `packages/engine/crates/mornlea_client/Cargo.toml` 与依赖树
 - **WHEN** 检查依赖
 - **THEN** `egui`、`egui-wgpu` 及其传递依赖 MUST 不存在
 - **AND** `objc2`、`objc2-web-kit` MUST 在锁文件中钉版本

@@ -10,7 +10,7 @@ import (
 // 游戏相位常显 HUD 的下行状态族组装（桥 schema 的 hudState 分节）。
 //
 // 协议形状以单源 schema
-// `engine/crates/mornlea_client/frontend/src/bridge/schema.json` 为权威：本文件的
+// `packages/engine/crates/mornlea_client/frontend/src/bridge/schema.json` 为权威：本文件的
 // 结构体形状与数值边界逐值钉在该文件上，演进顺序是先改 schema、再同步本文件与
 // 前端守卫，任一侧漂移即钉值测试红。与 `ui_bridge.go` 的上行解码同一纪律——这
 // 里只承载桥协议，不做任何玩法推算。

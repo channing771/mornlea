@@ -37,10 +37,10 @@ var (
 		"cmd",
 		"contracts",
 		"internal",
-		"engine/Cargo.toml",
-		"engine/Cargo.lock",
-		"engine/crates",
-		"engine/include",
+		"packages/engine/Cargo.toml",
+		"packages/engine/Cargo.lock",
+		"packages/engine/crates",
+		"packages/engine/include",
 		"Makefile",
 		".github/workflows/ci.yml",
 		"scripts/agent-hooks",
@@ -151,11 +151,11 @@ func newGoIdentityScanner(root string) *goIdentityScanner {
 
 func TestNativeEngineLibraryIdentity(t *testing.T) {
 	root := moduleRoot(t)
-	engineCrate := filepath.Join(root, "engine", "crates", "mornlea_engine")
+	engineCrate := filepath.Join(root, "packages", "engine", "crates", "mornlea_engine")
 	if info, err := os.Stat(filepath.Join(engineCrate, "Cargo.toml")); err != nil || info.IsDir() {
 		t.Fatalf("Rust engine crate 必须存在: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "engine", "crates", "mornlea_mesh")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, "packages", "engine", "crates", "mornlea_mesh")); !os.IsNotExist(err) {
 		t.Fatalf("旧 Rust crate 不得存在: %v", err)
 	}
 
@@ -173,9 +173,9 @@ func TestNativeEngineLibraryIdentity(t *testing.T) {
 		}
 	}
 
-	requireIdentity("engine/Cargo.toml", `members = ["crates/mornlea_engine", "crates/mornlea_client"]`, "crates/mornlea_mesh")
-	requireIdentity("engine/crates/mornlea_engine/Cargo.toml", `name = "mornlea_engine"`, `name = "mornlea_mesh"`)
-	requireIdentity("engine/crates/mornlea_engine/build.rs", "@rpath/libmornlea_engine.dylib", "libmornlea_mesh.dylib")
+	requireIdentity("packages/engine/Cargo.toml", `members = ["crates/mornlea_engine", "crates/mornlea_client"]`, "crates/mornlea_mesh")
+	requireIdentity("packages/engine/crates/mornlea_engine/Cargo.toml", `name = "mornlea_engine"`, `name = "mornlea_mesh"`)
+	requireIdentity("packages/engine/crates/mornlea_engine/build.rs", "@rpath/libmornlea_engine.dylib", "libmornlea_mesh.dylib")
 	requireIdentity("Makefile", "libmornlea_engine.dylib", "libmornlea_mesh.dylib")
 	requireIdentity("internal/nativeabi/native.go", "-lmornlea_engine", "-lmornlea_mesh")
 	for _, relative := range []string{"AGENTS.md", "README.md", "README.en.md", "openspec/config.yaml", "docs/notes/progress.md"} {

@@ -93,10 +93,10 @@ function componentFor(path) {
 
 export function rustValidationRequired(paths) {
   const patterns = [
-    /^engine\/.*\.rs$/,
-    /^engine\/(?:Cargo\.toml|Cargo\.lock|rust-toolchain\.toml)$/,
-    /^engine\/crates\/.*\/Cargo\.toml$/,
-    /^engine\/include\/mornlea_engine\.h$/,
+    /^packages\/engine\/.*\.rs$/,
+    /^packages\/engine\/(?:Cargo\.toml|Cargo\.lock|rust-toolchain\.toml)$/,
+    /^packages\/engine\/crates\/.*\/Cargo\.toml$/,
+    /^packages\/engine\/include\/mornlea_engine\.h$/,
     /^internal\/nativeabi\/.*\.go$/,
     /^internal\/core\/raycast[^/]*\.go$/,
     /^internal\/physics\/.*\.go$/,
@@ -113,8 +113,8 @@ function identityValidationRequired(paths) {
     /^go\.mod$/,
     /^cmd(?:\/|$)/,
     /^internal(?:\/|$)/,
-    /^engine\/(?:Cargo\.toml|Cargo\.lock)$/,
-    /^engine\/(?:crates|include)(?:\/|$)/,
+    /^packages\/engine\/(?:Cargo\.toml|Cargo\.lock)$/,
+    /^packages\/engine\/(?:crates|include)(?:\/|$)/,
     /^Makefile$/,
     /^\.github\/workflows\/ci\.yml$/,
     /^\.codex\/hooks\.json$/,

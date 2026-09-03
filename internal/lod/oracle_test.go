@@ -220,7 +220,7 @@ func TestShellMatchesEngineGoldenBytes(t *testing.T) {
 		t.Fatal("无法定位 lod 测试文件")
 	}
 	goldenPath := filepath.Join(filepath.Dir(file), "..", "..",
-		"engine", "crates", "mornlea_engine", "testdata", "lod-shell-seed42-step4-v2.bin")
+		"packages", "engine", "crates", "mornlea_engine", "testdata", "lod-shell-seed42-step4-v2.bin")
 	golden, err := os.ReadFile(goldenPath)
 	if err != nil {
 		t.Fatalf("读取 engine golden fixture 失败: %v", err)
