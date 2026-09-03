@@ -38,7 +38,7 @@ import (
 // 独立测试的意义。
 var allowed = map[string][]string{
 	"internal/archcheck":                        {},
-	"internal/audio":                            {},
+	"packages/client/audio":                     {},
 	"packages/contracts/companion-agent/mcp-v1": {},
 	"packages/server/cmd/mornlea-server":        {"packages/server/server", "packages/server/storage", "packages/shared/companion", "packages/shared/config", "packages/shared/core", "packages/shared/logging", "packages/shared/network", "packages/shared/network/tcp", "packages/shared/world", "packages/shared/worldgen"},
 	"packages/shared/companion":                 {"packages/shared/core", "packages/shared/pathfind"},
@@ -73,22 +73,27 @@ var allowed = map[string][]string{
 	"packages/server/storage/storagedef": {},
 	"packages/shared/world":              {"packages/shared/core"},
 	"packages/shared/worldgen":           {"packages/shared/core", "packages/shared/world", "packages/shared/nativeabi"},
-	"internal/mesh":                      {"packages/shared/core", "packages/shared/world", "packages/shared/nativeabi"},
-	"internal/lod":                       {"packages/shared/core", "packages/shared/nativeabi"},
-	"internal/assets":                    {"packages/shared/core", "packages/shared/world", "internal/mesh", "packages/shared/worldgen"},
-	"internal/render":                    {"packages/shared/core", "packages/shared/world", "internal/mesh", "internal/assets"},
-	"internal/render/hud":                {"packages/shared/core", "internal/mesh", "internal/assets", "internal/render"},
+	"packages/client/mesh":               {"packages/shared/core", "packages/shared/world", "packages/shared/nativeabi"},
+	"packages/client/lod":                {"packages/shared/core", "packages/shared/nativeabi"},
+	"packages/client/assets":             {"packages/shared/core", "packages/shared/world", "packages/client/mesh", "packages/shared/worldgen"},
+	"packages/client/render":             {"packages/shared/core", "packages/shared/world", "packages/client/mesh", "packages/client/assets"},
+	"packages/client/render/hud":         {"packages/shared/core", "packages/client/mesh", "packages/client/assets", "packages/client/render"},
 	"packages/server/server":             {"packages/contracts/companion-agent/mcp-v1", "packages/shared/companion", "packages/shared/core", "packages/shared/network", "packages/shared/pathfind", "packages/shared/physics", "packages/shared/world", "packages/shared/worldgen", "packages/server/sim/contract", "packages/server/sim/runtime", "packages/server/storage", "packages/server/server/persistence"},
 	"packages/server/server/persistence": {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/server/sim/contract", "packages/server/sim/runtime", "packages/server/storage"},
-	"internal/client":                    {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/network", "packages/shared/world", "internal/mesh", "internal/assets", "internal/render"},
+	"packages/client/client":             {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/network", "packages/shared/world", "packages/client/mesh", "packages/client/assets", "packages/client/render"},
 }
 
 func TestInternalDependenciesAreOneWay(t *testing.T) {
-	// 模块切割后白名单键横跨根模块（`./internal/...`）与 `./packages/{contracts,
-	// shared,server}/...` 各 workspace 模块；go.work 下 `./...` 不跨嵌套模块，
-	// 必须显式按模块列出，新模块落地时同步扩这里。
+	// 模块切割后白名单键横跨根模块（`./internal/...` 只剩 archcheck）与
+	// `./packages/{contracts,shared,server}/...` 各 workspace 模块；client 模块
+	// 只列入六个域库子树——`packages/client/cmd/mornlea` 命令子树由下方
+	// `clientCommandAllowedEdges` 单独治理，混入本表会双重登记其跨域边。
+	// go.work 下 `./...` 不跨嵌套模块，必须显式按模块列出，新模块落地时同步
+	// 扩这里。
 	cmd := exec.Command("go", "list", "-f", "{{.ImportPath}}|{{join .Imports \" \"}}",
-		"./internal/...", "./packages/contracts/...", "./packages/shared/...", "./packages/server/...")
+		"./internal/...", "./packages/contracts/...", "./packages/shared/...", "./packages/server/...",
+		"./packages/client/client/...", "./packages/client/render/...", "./packages/client/mesh/...",
+		"./packages/client/lod/...", "./packages/client/audio/...", "./packages/client/assets/...")
 	cmd.Dir = moduleRoot(t)
 	out, err := cmd.Output()
 	if err != nil {
@@ -173,7 +178,7 @@ func TestServerPersistenceDoesNotDependOnServer(t *testing.T) {
 	}
 }
 
-// clientCommandAllowedEdges 列出客户端命令子树 `cmd/mornlea` 允许的包间依赖
+// clientCommandAllowedEdges 列出客户端命令子树 `packages/client/cmd/mornlea` 允许的包间依赖
 // 边（本地 import path）。依赖方向契约为：薄 main 装配全部功能域子包；
 // capture、benchmark 与 devcapture 各自依赖 app；app 不反向依赖任何子包，
 // capture 与 benchmark 互不依赖——否则两侧的重型测试会经由包图重新耦合，
@@ -183,11 +188,11 @@ func TestServerPersistenceDoesNotDependOnServer(t *testing.T) {
 // 语言层面不可被子包导入，但允许边表仍显式登记它的装配目标，让契约可读而非
 // 依赖编译器兜底。
 var clientCommandAllowedEdges = map[string][]string{
-	"cmd/mornlea":            {"cmd/mornlea/app", "cmd/mornlea/benchmark", "cmd/mornlea/capture", "cmd/mornlea/devcapture"},
-	"cmd/mornlea/app":        {},
-	"cmd/mornlea/benchmark":  {"cmd/mornlea/app"},
-	"cmd/mornlea/capture":    {"cmd/mornlea/app"},
-	"cmd/mornlea/devcapture": {"cmd/mornlea/app"},
+	"packages/client/cmd/mornlea":            {"packages/client/cmd/mornlea/app", "packages/client/cmd/mornlea/benchmark", "packages/client/cmd/mornlea/capture", "packages/client/cmd/mornlea/devcapture"},
+	"packages/client/cmd/mornlea/app":        {},
+	"packages/client/cmd/mornlea/benchmark":  {"packages/client/cmd/mornlea/app"},
+	"packages/client/cmd/mornlea/capture":    {"packages/client/cmd/mornlea/app"},
+	"packages/client/cmd/mornlea/devcapture": {"packages/client/cmd/mornlea/app"},
 }
 
 // clientCommandRequiredEdges 是必须真实存在的装配边：main 必须装配
@@ -197,15 +202,15 @@ var clientCommandAllowedEdges = map[string][]string{
 // 「禁止边」守不住悄悄改走旁路的装配（例如 main 绕过 capture 的公开入口直取
 // 其内部符号），必需边消失同样是方向契约的漂移。
 var clientCommandRequiredEdges = map[string][]string{
-	"cmd/mornlea":            {"cmd/mornlea/app", "cmd/mornlea/benchmark", "cmd/mornlea/capture", "cmd/mornlea/devcapture"},
-	"cmd/mornlea/benchmark":  {"cmd/mornlea/app"},
-	"cmd/mornlea/capture":    {"cmd/mornlea/app"},
-	"cmd/mornlea/devcapture": {"cmd/mornlea/app"},
+	"packages/client/cmd/mornlea":            {"packages/client/cmd/mornlea/app", "packages/client/cmd/mornlea/benchmark", "packages/client/cmd/mornlea/capture", "packages/client/cmd/mornlea/devcapture"},
+	"packages/client/cmd/mornlea/benchmark":  {"packages/client/cmd/mornlea/app"},
+	"packages/client/cmd/mornlea/capture":    {"packages/client/cmd/mornlea/app"},
+	"packages/client/cmd/mornlea/devcapture": {"packages/client/cmd/mornlea/app"},
 }
 
 // isClientCommandPackage 报告本地 import path 是否落在客户端命令子树内。
 func isClientCommandPackage(localPath string) bool {
-	return localPath == "cmd/mornlea" || strings.HasPrefix(localPath, "cmd/mornlea/")
+	return localPath == "packages/client/cmd/mornlea" || strings.HasPrefix(localPath, "packages/client/cmd/mornlea/")
 }
 
 // clientCommandDependencyViolations 对照允许边表与必需边表检查给定的包依赖
@@ -267,13 +272,13 @@ func TestClientCommandSubpackageDependencyDirections(t *testing.T) {
 	}
 }
 
-// clientCommandImportEdges 扫描 `cmd/mornlea` 子树内全部含生产 Go 源文件的
+// clientCommandImportEdges 扫描 `packages/client/cmd/mornlea` 子树内全部含生产 Go 源文件的
 // 目录，返回「本地包路径 → 去重排序后的本地生产 import 列表」。子树内出现
 // 未登记的新包目录时由检查器的白名单核对报错，新增子包不可能静默绕过。
 func clientCommandImportEdges(t *testing.T) map[string][]string {
 	t.Helper()
 	root := moduleRoot(t)
-	subtree := filepath.Join(root, "cmd", "mornlea")
+	subtree := filepath.Join(root, "packages", "client", "cmd", "mornlea")
 	edges := make(map[string][]string)
 	err := filepath.WalkDir(subtree, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -338,11 +343,11 @@ func TestClientCommandDependencyViolationsDetectDrift(t *testing.T) {
 	// contractEdges 是恰好满足契约的最小合成边集。
 	contractEdges := func() map[string][]string {
 		return map[string][]string{
-			"cmd/mornlea":            {"cmd/mornlea/app", "cmd/mornlea/benchmark", "cmd/mornlea/capture", "cmd/mornlea/devcapture"},
-			"cmd/mornlea/app":        {},
-			"cmd/mornlea/benchmark":  {"cmd/mornlea/app"},
-			"cmd/mornlea/capture":    {"cmd/mornlea/app"},
-			"cmd/mornlea/devcapture": {"cmd/mornlea/app"},
+			"packages/client/cmd/mornlea":            {"packages/client/cmd/mornlea/app", "packages/client/cmd/mornlea/benchmark", "packages/client/cmd/mornlea/capture", "packages/client/cmd/mornlea/devcapture"},
+			"packages/client/cmd/mornlea/app":        {},
+			"packages/client/cmd/mornlea/benchmark":  {"packages/client/cmd/mornlea/app"},
+			"packages/client/cmd/mornlea/capture":    {"packages/client/cmd/mornlea/app"},
+			"packages/client/cmd/mornlea/devcapture": {"packages/client/cmd/mornlea/app"},
 		}
 	}
 	if violations := clientCommandDependencyViolations(contractEdges()); len(violations) != 0 {
@@ -354,10 +359,10 @@ func TestClientCommandDependencyViolationsDetectDrift(t *testing.T) {
 		from string
 		to   string
 	}{
-		{"app反向依赖capture", "cmd/mornlea/app", "cmd/mornlea/capture"},
-		{"app反向依赖benchmark", "cmd/mornlea/app", "cmd/mornlea/benchmark"},
-		{"capture依赖benchmark", "cmd/mornlea/capture", "cmd/mornlea/benchmark"},
-		{"benchmark依赖capture", "cmd/mornlea/benchmark", "cmd/mornlea/capture"},
+		{"app反向依赖capture", "packages/client/cmd/mornlea/app", "packages/client/cmd/mornlea/capture"},
+		{"app反向依赖benchmark", "packages/client/cmd/mornlea/app", "packages/client/cmd/mornlea/benchmark"},
+		{"capture依赖benchmark", "packages/client/cmd/mornlea/capture", "packages/client/cmd/mornlea/benchmark"},
+		{"benchmark依赖capture", "packages/client/cmd/mornlea/benchmark", "packages/client/cmd/mornlea/capture"},
 	} {
 		t.Run(edge.name, func(t *testing.T) {
 			edges := contractEdges()
@@ -371,7 +376,7 @@ func TestClientCommandDependencyViolationsDetectDrift(t *testing.T) {
 
 	t.Run("必需边缺失", func(t *testing.T) {
 		edges := contractEdges()
-		edges["cmd/mornlea"] = nil
+		edges["packages/client/cmd/mornlea"] = nil
 		violations := clientCommandDependencyViolations(edges)
 		if len(violations) != 4 {
 			t.Fatalf("main 卸掉四个子包的装配应报 4 条缺失: %v", violations)
@@ -380,7 +385,7 @@ func TestClientCommandDependencyViolationsDetectDrift(t *testing.T) {
 
 	t.Run("未登记新包", func(t *testing.T) {
 		edges := contractEdges()
-		edges["cmd/mornlea/widgets"] = []string{"cmd/mornlea/app"}
+		edges["packages/client/cmd/mornlea/widgets"] = []string{"packages/client/cmd/mornlea/app"}
 		violations := clientCommandDependencyViolations(edges)
 		if len(violations) != 1 || !strings.Contains(violations[0], "未登记依赖白名单") {
 			t.Fatalf("未登记子包未被拒绝: %v", violations)

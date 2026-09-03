@@ -18,13 +18,15 @@ func TestNativeEngineBridgeBoundary(t *testing.T) {
 		t.Fatalf("native engine bridge %s 不存在", bridge)
 	}
 	// engine bridge 已迁入 packages/shared 模块、服务端域迁入 packages/server
-	// 模块，扫描根须与其同侧扩展，否则 C ABI token 守卫对相应模块静默失明。
+	// 模块、客户端域迁入 packages/client 模块，扫描根须与其同侧扩展，否则
+	// C ABI token 守卫对相应模块静默失明。
 	files := goFiles(t, filepath.Join(root, "internal"))
 	files = append(files, goFiles(t, filepath.Join(root, "cmd"))...)
 	files = append(files, goFiles(t, filepath.Join(root, "packages", "shared"))...)
 	files = append(files, goFiles(t, filepath.Join(root, "packages", "server"))...)
+	files = append(files, goFiles(t, filepath.Join(root, "packages", "client"))...)
 
-	clientBridge := filepath.Join(root, "internal", "client")
+	clientBridge := filepath.Join(root, "packages", "client", "client")
 	inDir := func(path, dir string) bool {
 		return strings.HasPrefix(path, dir+string(filepath.Separator))
 	}
@@ -45,7 +47,7 @@ func TestNativeEngineBridgeBoundary(t *testing.T) {
 		}
 	}
 
-	// client C ABI 只允许 internal/client 接触(与 nativeabi 之于 engine 同构)。
+	// client C ABI 只允许 packages/client/client 接触(与 nativeabi 之于 engine 同构)。
 	for _, token := range []string{
 		"mornlea_client.h",
 		"-lmornlea_client",
@@ -57,12 +59,12 @@ func TestNativeEngineBridgeBoundary(t *testing.T) {
 				t.Fatalf("读取 %s: %v", path, err)
 			}
 			if strings.Contains(string(contents), token) && !inDir(path, clientBridge) {
-				t.Errorf("%s 只允许 internal/client 接触，发现于 %s", token, path)
+				t.Errorf("%s 只允许 packages/client/client 接触，发现于 %s", token, path)
 			}
 		}
 	}
 
-	// 通用 C.mornlea_ 调用只允许出现在两个 bridge;且 internal/client 内
+	// 通用 C.mornlea_ 调用只允许出现在两个 bridge;且 packages/client/client 内
 	// 每一次 C.mornlea_ 都必须是 C.mornlea_client_,防止 client 绕过
 	// nativeabi 直接触碰 engine ABI。
 	for _, path := range files {
@@ -78,7 +80,7 @@ func TestNativeEngineBridgeBoundary(t *testing.T) {
 		case inDir(path, bridge):
 		case inDir(path, clientBridge):
 			if strings.Count(text, "C.mornlea_") != strings.Count(text, "C.mornlea_client_") {
-				t.Errorf("internal/client 只允许调用 client ABI,发现 engine ABI 调用于 %s", path)
+				t.Errorf("packages/client/client 只允许调用 client ABI,发现 engine ABI 调用于 %s", path)
 			}
 		default:
 			t.Errorf("C.mornlea_ 只允许 bridge 包接触，发现于 %s", path)
@@ -109,7 +111,7 @@ func TestNoPackageImportsWebGPU(t *testing.T) {
 	// 文件在 Linux 上全被排除）以加载错误形式列出而不是让 go list 非零退出；
 	// 可加载包的 Imports 检查语义不变，darwin 专属包由 macOS CI 的同测试
 	// 原生覆盖。
-	cmd := exec.Command("go", "list", "-e", "-f", "{{.ImportPath}}|{{join .Imports \" \"}}", "./...", "./packages/shared/...", "./packages/contracts/...", "./packages/server/...")
+	cmd := exec.Command("go", "list", "-e", "-f", "{{.ImportPath}}|{{join .Imports \" \"}}", "./...", "./packages/shared/...", "./packages/contracts/...", "./packages/server/...", "./packages/client/...")
 	cmd.Dir = moduleRoot(t)
 	out, err := cmd.Output()
 	if err != nil {
@@ -144,7 +146,7 @@ func TestMornleaServerHasNoGraphicsDependencies(t *testing.T) {
 		}
 		for _, imported := range parsed.Imports {
 			path := strings.Trim(imported.Path.Value, "\"")
-			for _, forbidden := range []string{"github.com/channing771/mornlea/internal/client", "github.com/channing771/mornlea/internal/mesh", "github.com/channing771/mornlea/internal/render", "github.com/channing771/mornlea/internal/gfx", "github.com/go-gl/glfw", "github.com/oliverbestmann/webgpu", "golang.org/x/image", "golang.org/x/image/font"} {
+			for _, forbidden := range []string{"github.com/channing771/mornlea/packages/client/client", "github.com/channing771/mornlea/packages/client/mesh", "github.com/channing771/mornlea/packages/client/render", "github.com/channing771/mornlea/packages/client/gfx", "github.com/go-gl/glfw", "github.com/oliverbestmann/webgpu", "golang.org/x/image", "golang.org/x/image/font"} {
 				if strings.HasPrefix(path, forbidden) {
 					t.Errorf("%s imports forbidden graphics dependency %s", path, imported.Path.Value)
 				}
@@ -163,7 +165,7 @@ func TestMornleaServerHasNoGraphicsDependencies(t *testing.T) {
 		if dependency == "github.com/channing771/mornlea/packages/shared/nativeabi" {
 			foundNativeABI = true
 		}
-		for _, forbidden := range []string{"github.com/channing771/mornlea/internal/client", "github.com/channing771/mornlea/internal/mesh", "github.com/channing771/mornlea/internal/render", "github.com/channing771/mornlea/internal/gfx", "github.com/go-gl/glfw", "github.com/oliverbestmann/webgpu", "golang.org/x/image", "golang.org/x/image/font"} {
+		for _, forbidden := range []string{"github.com/channing771/mornlea/packages/client/client", "github.com/channing771/mornlea/packages/client/mesh", "github.com/channing771/mornlea/packages/client/render", "github.com/channing771/mornlea/packages/client/gfx", "github.com/go-gl/glfw", "github.com/oliverbestmann/webgpu", "golang.org/x/image", "golang.org/x/image/font"} {
 			if dependency == forbidden || strings.HasPrefix(dependency, forbidden+"/") {
 				t.Errorf("Mornlea server transitively depends on forbidden graphics package %s", dependency)
 			}

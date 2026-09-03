@@ -97,12 +97,13 @@ jobs:
         run: |
           {
             go list ./...
-            # packages/contracts、packages/shared 与 packages/server 是独立
-            # workspace 模块：`go list ./...` 不会跨模块匹配嵌套模块，需显式
-            # 按模块列出；分片联合集必须同源覆盖。
+            # packages/contracts、packages/shared、packages/server 与
+            # packages/client 是独立 workspace 模块：`go list ./...` 不会跨
+            # 模块匹配嵌套模块，需显式按模块列出；分片联合集必须同源覆盖。
             go list ./packages/contracts/...
             go list ./packages/shared/...
             go list ./packages/server/...
+            go list ./packages/client/...
           } | sort -u > /tmp/all-packages.txt
           {
             go list ./cmd/...
@@ -110,6 +111,7 @@ jobs:
             go list ./packages/contracts/...
             go list ./packages/shared/...
             go list ./packages/server/...
+            go list ./packages/client/...
             # scripts/ 是带 package main 的 Go 包（composite_grass_side.go 材质
             # 合成工具），go list ./... 会包含它；分片联合集必须同源覆盖，否则本
             # 自检在引入该工具后恒红。
@@ -118,7 +120,7 @@ jobs:
           diff -u /tmp/all-packages.txt /tmp/sharded-packages.txt
       - name: 静态检查
         run: |
-          go vet ./... ./packages/contracts/... ./packages/shared/... ./packages/server/...
+          go vet ./... ./packages/contracts/... ./packages/shared/... ./packages/server/... ./packages/client/...
           gofmt -l . | tee /tmp/fmt.txt
           test ! -s /tmp/fmt.txt
       - name: 记录 quality 信息
@@ -170,7 +172,9 @@ jobs:
       matrix:
         include:
           - shard: cmd
-            packages: ./cmd/...
+            # cmd/mornlea 客户端命令已迁入 packages/client 模块，与余下的根
+            # cmd 工具同分片；skip 面向的 benchmark 场景测试随迁。
+            packages: "$(go list ./cmd/...) $(go list ./packages/client/...)"
             extra: -skip '^TestScenarioV7EightSessionServerProbeIsRealAndBounded$'
           - shard: server
             packages: ./packages/server/...
@@ -240,15 +244,15 @@ jobs:
       - name: 伙伴 Agent 真进程合同
         run: make companion-agent-integration
       - name: 50ms 服务端探针门禁
-        run: go test ./cmd/mornlea/benchmark -run '^TestScenarioV7EightSessionServerProbeIsRealAndBounded$' -count=1
+        run: go test ./packages/client/cmd/mornlea/benchmark -run '^TestScenarioV7EightSessionServerProbeIsRealAndBounded$' -count=1
       - name: TCP 重启与 Memory/TCP parity 重复门禁
         run: go test ./packages/server/server -run 'TestTCPPlayerAndWorld|TestMemoryTCPParity' -race -count=10
       - name: M3C v6 八玩家与性能报告门禁
-        run: go test ./internal/client ./packages/server/server ./cmd/mornlea/benchmark ./cmd/perfcheck -run 'Test(PerfReportV6|ScenarioV6|PerfcheckV6|PerfcheckV5SameScenario|PerformanceThresholds|InterestObserver|HostStats|BenchmarkServerEpoch|BenchmarkServerMeasuredWindow)' -count=1
+        run: go test ./packages/client/client ./packages/server/server ./packages/client/cmd/mornlea/benchmark ./cmd/perfcheck -run 'Test(PerfReportV6|ScenarioV6|PerfcheckV6|PerfcheckV5SameScenario|PerformanceThresholds|InterestObserver|HostStats|BenchmarkServerEpoch|BenchmarkServerMeasuredWindow)' -count=1
       - name: 微基准与平台无关阈值
-        run: go test ./... ./packages/contracts/... ./packages/shared/... ./packages/server/... -bench=. -benchtime=1x -run='^$'
+        run: go test ./... ./packages/contracts/... ./packages/shared/... ./packages/server/... ./packages/client/... -bench=. -benchtime=1x -run='^$'
       - name: M3C 多人微基准可执行性
-        run: go test ./packages/shared/network ./packages/server/server ./internal/render -run '^$' -bench '(RemotePlayerStateCodec|EightPlayerInterest|RemoteAvatarNameTag)' -benchmem -benchtime=100x -count=1
+        run: go test ./packages/shared/network ./packages/server/server ./packages/client/render -run '^$' -bench '(RemotePlayerStateCodec|EightPlayerInterest|RemoteAvatarNameTag)' -benchmem -benchtime=100x -count=1
       - name: 记录 integration 信息
         if: ${{ always() }}
         run: |
@@ -283,14 +287,14 @@ jobs:
       - name: 构建并测试 native collision bundle
         run: |
           make rust
-          go test ./packages/shared/nativeabi ./packages/shared/core ./packages/shared/physics ./internal/mesh -race -count=1
+          go test ./packages/shared/nativeabi ./packages/shared/core ./packages/shared/physics ./packages/client/mesh -race -count=1
           make build-linux-server
 
       - name: Linux 专服架构与 ELF 门禁
         run: |
           go test ./internal/archcheck -count=1
           test -z "$(CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go list -deps ./packages/server/cmd/mornlea-server |
-            grep -E '(internal|packages/client)/(client|mesh|render|gfx)|glfw|webgpu|x/image/font')"
+            grep -E 'packages/client/(client|mesh|render)|gfxspike|glfw|webgpu|x/image/font')"
           readelf -d bin/mornlea-server | grep -F 'libmornlea_engine.so'
           readelf -d bin/mornlea-server | grep -F '$ORIGIN'
           nm -D --defined-only bin/libmornlea_engine.so > /tmp/mornlea-engine-symbols.txt

@@ -38,6 +38,7 @@ var (
 		"packages/contracts",
 		"packages/server",
 		"packages/shared",
+		"packages/client",
 		"internal",
 		"packages/engine/Cargo.toml",
 		"packages/engine/Cargo.lock",
@@ -112,7 +113,7 @@ var legacyIdentityAllowances = []legacyIdentityAllowance{
 	{"packages/shared/profile/profile_test.go", legacyDataDirectory, "TestLoadOrCreateDefaultRejectsTargetReplacedAfterPathValidation", 1},
 	{"packages/shared/profile/profile_test.go", legacyDataDirectory, "TestLoadOrCreateDefaultRejectsSameInodeSymlinkInsertedBeforeOpen", 1},
 	{"packages/shared/profile/profile_test.go", legacyDataDirectory, "TestLoadOrCreateDefaultLogsOnlySuccessfulMigrationPublisher", 3},
-	{"cmd/mornlea/run_test.go", legacyDataDirectory, "legacyDataPath", 1},
+	{"packages/client/cmd/mornlea/run_test.go", legacyDataDirectory, "legacyDataPath", 1},
 	{"packages/server/cmd/mornlea-server/main_test.go", legacyDataDirectory, "legacyConfigPath", 1},
 	{"packages/server/storage/backup.go", legacyBackupIdentity, "backupIdentityName", 1},
 	{"packages/server/storage/backup_test.go", legacyBackupIdentity, "TestWorldBackupCopiesCompleteWorldAndReusesMatchingBackup", 1},
@@ -189,9 +190,10 @@ func TestMornleaCurrentIdentity(t *testing.T) {
 	if root := os.Getenv("MORNLEA_IDENTITY_TEST_ROOT"); root != "" {
 		actual := make([]int, len(legacyIdentityAllowances))
 		goScanner := newGoIdentityScanner(root)
-		// 合成 mutation 各自只建自己需要的目录（cmd 或 server 模块子树）；
-		// 存在才扫，统一扫描会让只建一侧的 mutation 误报「身份扫描根不存在」。
-		for _, relative := range []string{"cmd", "packages/server"} {
+		// 合成 mutation 各自只建自己需要的目录（cmd、client 或 server 模块
+		// 子树）；存在才扫，统一扫描会让只建一侧的 mutation 误报「身份扫描根
+		// 不存在」。
+		for _, relative := range []string{"cmd", "packages/client", "packages/server"} {
 			if _, err := os.Lstat(filepath.Join(root, filepath.FromSlash(relative))); err == nil {
 				scanCurrentIdentityRoot(t, root, relative, actual, goScanner)
 			}
@@ -361,7 +363,7 @@ const artifact = missingIdentityPiece
 `)
 		},
 		"escaped allowlisted owner": func(t *testing.T, root string) {
-			writeIdentityMutationFile(t, root, filepath.Join("cmd", "mornlea", "run_test.go"), `package main
+			writeIdentityMutationFile(t, root, filepath.Join("packages", "client", "cmd", "mornlea", "run_test.go"), `package main
 func legacyDataPath() string { return "minecraft\x2dgo" }
 `)
 		},
@@ -707,6 +709,10 @@ func (scanner *goIdentityScanner) externalImporter(context *build.Context, direc
 		}), nil
 	}
 
+	// 导出数据经 go.work 解析：被类型检查的文件横跨 client/server 等多个
+	// workspace 模块（root go.mod 已不再 require server，单模块视图无法覆盖
+	// 其第三方依赖）；外部依赖版本由各模块 require 汇合出的 workspace 模块图
+	// 唯一决定，与 replace 全本地一样确定。
 	arguments := append([]string{"list", "-e", "-export", "-deps", "-json"}, paths...)
 	command := exec.Command("go", arguments...)
 	command.Dir = scanner.root
@@ -720,7 +726,6 @@ func (scanner *goIdentityScanner) externalImporter(context *build.Context, direc
 		"GOOS="+context.GOOS,
 		"GOARCH="+context.GOARCH,
 		fmt.Sprintf("CGO_ENABLED=%d", boolInt(externalCgoEnabled)),
-		"GOWORK=off",
 	)
 	output, err := command.Output()
 	if err != nil {

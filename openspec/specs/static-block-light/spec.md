@@ -104,11 +104,11 @@
 
 ### Requirement: 唯一发光判定表
 
-服务端（含未来夜行者黑暗判定）与客户端注册表 MUST 都消费 `core.BlockEmission`，不得各自维护发光表。五种火把与发光方块的 emission 值 MUST 经同一张表进入 mesh registry 快照送过 ABI 边界；`internal/assets.Registry.Emission` MUST 完全转调 `core.BlockEmission`；任何新增发光方块 MUST 只改 core 一张表。
+服务端（含未来夜行者黑暗判定）与客户端注册表 MUST 都消费 `core.BlockEmission`，不得各自维护发光表。五种火把与发光方块的 emission 值 MUST 经同一张表进入 mesh registry 快照送过 ABI 边界；`packages/client/assets.Registry.Emission` MUST 完全转调 `core.BlockEmission`；任何新增发光方块 MUST 只改 core 一张表。
 
 #### Scenario: assets 转调
 
-- **GIVEN** `internal/assets.Registry.Emission` 被任意方块编号调用
+- **GIVEN** `packages/client/assets.Registry.Emission` 被任意方块编号调用
 - **WHEN** 与 `core.BlockEmission` 对照
 - **THEN** 两个返回值 MUST 恒等
 - **AND** assets 内 MUST 不存在独立的发光判定分支

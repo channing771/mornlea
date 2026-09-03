@@ -24,12 +24,12 @@ The static screenshots below are taken from the headless visual-verification gol
 
 <table>
   <tr>
-    <td><img src="cmd/mornlea/capture/testdata/golden/terrain-noon.png" width="380" alt="terrain-noon"></td>
-    <td><img src="cmd/mornlea/capture/testdata/golden/oak-grove.png" width="380" alt="oak-grove"></td>
+    <td><img src="testdata/visual-golden/world/terrain-noon.png" width="380" alt="terrain-noon"></td>
+    <td><img src="testdata/visual-golden/world/oak-grove.png" width="380" alt="oak-grove"></td>
   </tr>
   <tr>
-    <td><img src="cmd/mornlea/capture/testdata/golden/block-light-room.png" width="380" alt="block-light-room"></td>
-    <td><img src="cmd/mornlea/capture/testdata/golden/materials-showcase.png" width="380" alt="materials-showcase"></td>
+    <td><img src="testdata/visual-golden/world/block-light-room.png" width="380" alt="block-light-room"></td>
+    <td><img src="testdata/visual-golden/world/materials-showcase.png" width="380" alt="materials-showcase"></td>
   </tr>
 </table>
 
@@ -115,7 +115,7 @@ Minimal LAN session:
 
 ```bash
 go run ./packages/server/cmd/mornlea-server --listen :25565 --world worlds/lan --seed 42 --max-players 8
-go run ./cmd/mornlea --connect 127.0.0.1:25565 --name PlayerA
+go run ./packages/client/cmd/mornlea --connect 127.0.0.1:25565 --name PlayerA
 ```
 
 ## Rust / Go Division

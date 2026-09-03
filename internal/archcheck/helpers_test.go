@@ -74,8 +74,9 @@ func TestTopLevelDeclarationNamesInScansSplitFiles(t *testing.T) {
 }
 
 // productionGoSource 拼接 directory 子树内全部生产 Go 源码（递归遍历，跳过
-// `_test.go`）。必须递归：cmd/mornlea 的生产源码已按功能域拆入 app/capture/
-// benchmark 子包，只扫顶层会让字符串级架构守卫静默丢失子包覆盖。
+// `_test.go`）。必须递归：packages/client/cmd/mornlea 的生产源码已按功能域
+// 拆入 app/capture/benchmark 子包，只扫顶层会让字符串级架构守卫静默丢失
+// 子包覆盖。
 func productionGoSource(t *testing.T, directory string) string {
 	t.Helper()
 	var source strings.Builder

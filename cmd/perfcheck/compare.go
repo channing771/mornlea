@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/channing771/mornlea/internal/client"
+	"github.com/channing771/mornlea/packages/client/client"
 )
 
 func comparisonSuccessMessage(baselineVersion, currentVersion int) string {

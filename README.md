@@ -40,12 +40,12 @@ Milestone history lives in [实现进度](docs/notes/progress.md); the LAN serve
 
 <table>
   <tr>
-    <td><img src="cmd/mornlea/capture/testdata/golden/terrain-noon.png" width="380" alt="terrain-noon 正午地形"></td>
-    <td><img src="cmd/mornlea/capture/testdata/golden/oak-grove.png" width="380" alt="oak-grove 橡树林"></td>
+    <td><img src="testdata/visual-golden/world/terrain-noon.png" width="380" alt="terrain-noon 正午地形"></td>
+    <td><img src="testdata/visual-golden/world/oak-grove.png" width="380" alt="oak-grove 橡树林"></td>
   </tr>
   <tr>
-    <td><img src="cmd/mornlea/capture/testdata/golden/block-light-room.png" width="380" alt="block-light-room 方块光房间"></td>
-    <td><img src="cmd/mornlea/capture/testdata/golden/materials-showcase.png" width="380" alt="materials-showcase 材料展示"></td>
+    <td><img src="testdata/visual-golden/world/block-light-room.png" width="380" alt="block-light-room 方块光房间"></td>
+    <td><img src="testdata/visual-golden/world/materials-showcase.png" width="380" alt="materials-showcase 材料展示"></td>
   </tr>
 </table>
 
@@ -129,7 +129,7 @@ make run
 
 ```bash
 go run ./packages/server/cmd/mornlea-server --listen :25565 --world worlds/lan --seed 42 --max-players 8
-go run ./cmd/mornlea --connect 127.0.0.1:25565 --name 玩家甲
+go run ./packages/client/cmd/mornlea --connect 127.0.0.1:25565 --name 玩家甲
 ```
 
 ## Rust 与 Go 的职责划分

@@ -96,7 +96,7 @@ TBD - created by archiving change placeable-torches. Update Purpose after archiv
 
 ### Requirement: 火把属性唯一事实源
 
-`core.BlockEmission(BlockID) uint8` MUST 是全仓唯一「方块发光」判定表：发光方块返回 15、五种火把返回 14、其余返回 0；未知/越界 ID MUST 返回 0。`core.BlockLightAttenuation(BlockID) uint8` MUST 是全仓唯一「天空光额外衰减」判定表：八个流体编号返回 1、其余返回 0。`internal/assets` 的既有 `Emission`/`LightAttenuation` 方法 MUST 只做转调，MUST NOT 保留与 core 重复的判定分支。
+`core.BlockEmission(BlockID) uint8` MUST 是全仓唯一「方块发光」判定表：发光方块返回 15、五种火把返回 14、其余返回 0；未知/越界 ID MUST 返回 0。`core.BlockLightAttenuation(BlockID) uint8` MUST 是全仓唯一「天空光额外衰减」判定表：八个流体编号返回 1、其余返回 0。`packages/client/assets` 的既有 `Emission`/`LightAttenuation` 方法 MUST 只做转调，MUST NOT 保留与 core 重复的判定分支。
 
 #### Scenario: 穷举属性
 

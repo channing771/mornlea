@@ -648,10 +648,12 @@ type simAuthorityTypeEnvironment struct {
 }
 
 func newSimAuthorityTypeEnvironment(root string) (*simAuthorityTypeEnvironment, error) {
-	// GOWORK=off 的单模块世界里目录模式不跨嵌套模块，必须用完整 import path
-	// 经根 go.mod 的 require+replace 解析到 packages/server 模块。
+	// server 已是独立模块且不再被根模块 require：go list 直接落在
+	// packages/server 目录，在 GOWORK=off 的单模块世界里以 server 自身的
+	// require+replace 解析依赖闭包（根模块的 go.sum 不再涵盖 server 的第三方
+	// 依赖）。
 	command := exec.Command("go", "list", "-e", "-export", "-deps", "-json", "github.com/channing771/mornlea/packages/server/sim/runtime")
-	command.Dir = root
+	command.Dir = filepath.Join(root, "packages", "server")
 	command.Env = append(os.Environ(), "GOWORK=off")
 	output, err := command.Output()
 	if err != nil {

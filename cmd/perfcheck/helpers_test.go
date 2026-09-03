@@ -1,6 +1,6 @@
 package main
 
-import "github.com/channing771/mornlea/internal/client"
+import "github.com/channing771/mornlea/packages/client/client"
 
 func completeV6ComparableReport(transport string) client.PerfReport {
 	report := completeV5ComparableReport(transport)

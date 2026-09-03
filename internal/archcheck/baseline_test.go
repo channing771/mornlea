@@ -93,7 +93,7 @@ var baselineVersionMappings = []baselineVersionMapping{
 	{
 		name:        "benchmark scenario",
 		docPattern:  `benchmark scenario (?:为 )?v(\d+)`,
-		sourcePath:  filepath.Join("cmd", "mornlea", "benchmark", "benchmark.go"),
+		sourcePath:  filepath.Join("packages", "client", "cmd", "mornlea", "benchmark", "benchmark.go"),
 		codePattern: `scenarioVersion\s*=\s*(\w+)`,
 		why:         "scenarioVersion 是 benchmark 报告写出的场景版本，场景迁移链以它为终点。",
 	},
@@ -125,7 +125,7 @@ var claudeImportDocs = []string{
 	"CLAUDE.md",
 	filepath.Join("internal", "CLAUDE.md"),
 	filepath.Join("packages", "engine", "CLAUDE.md"),
-	filepath.Join("cmd", "mornlea", "CLAUDE.md"),
+	filepath.Join("packages", "client", "cmd", "mornlea", "CLAUDE.md"),
 }
 
 func TestClaudeImportsAgentGuidance(t *testing.T) {

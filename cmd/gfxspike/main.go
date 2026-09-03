@@ -11,10 +11,10 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/assets"
-	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/mesh"
-	"github.com/channing771/mornlea/internal/render"
+	"github.com/channing771/mornlea/packages/client/assets"
+	"github.com/channing771/mornlea/packages/client/client"
+	"github.com/channing771/mornlea/packages/client/mesh"
+	"github.com/channing771/mornlea/packages/client/render"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/world"
 	"github.com/channing771/mornlea/packages/shared/worldgen"

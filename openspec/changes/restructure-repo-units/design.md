@@ -16,7 +16,7 @@
 | storage(+六子包) | server | 磁盘生命周期归服务端权威 |
 | server(+persistence) | server | 权威装配 |
 | client, render(+hud), mesh, lod, audio, assets | client | 呈现侧；assets→mesh 单元内、assets→worldgen 下沉 shared 均为合法向下边 |
-| cmd/mornlea(+app/capture/benchmark/devcapture) | client | 客户端入口；cmd 子树方向契约原样保留 |
+| cmd/mornlea(+app/capture/benchmark/devcapture) | client | 客户端入口；cmd 子树方向契约原样保留。app/benchmark 生产代码在进程内装配本地权威 Host（S6 实测确认的对 server 生产依赖，经控制会话裁决为 client 单元的组合入口豁免） |
 | cmd/mornlea-server | server | 服务端入口 |
 | perfcheck, agent-board, gfxspike, composite_grass_side | tools | 开发工具；agent-board 吸收顶层 web/agent-board 前端为 agent-board/web |
 | archcheck 全套测试 | audit | 跨模块枚举校验者，不得住进任何被审单元 |
@@ -27,7 +27,9 @@
 ```
 server  → shared, contracts        （生产代码；另 MAY 仅因测试 require client，
                                      生产文件禁 import client 由源码守卫强制）
-client  → shared
+client  → shared, server           （server 边仅由 cmd/mornlea 应用入口消费——
+                                     进程内装配本地权威 Host；client 域库
+                                     （含测试）禁 import server 由源码守卫强制）
 tools   → shared, server, client, contracts   （perfcheck 消费 server/network/render）
 audit   → （不导入被审单元，纯 go list/AST 观察）
 shared  → （标准库与既有三方依赖）
@@ -38,6 +40,15 @@ contracts → （无内部依赖）
 > Memory/TCP 集成测试）经控制会话裁决正式化：模块层允许（Go 的 require 无法
 > 按 test 限定），语义层由 archcheck 源码守卫兜底——与仓库既有的
 > persistence_contract 豁免式守卫同风格。
+>
+> client→server 边是 S6 实现时的实测发现：设计初稿的 `client → shared` 依据
+> 是 `allowed` 表（其 `go list` 枚举从未包含 `./cmd`，app/benchmark 对
+> `internal/server` 的进程内装配边从未进入 DAG 校验）。cmd/mornlea 迁入
+> packages/client 后该生产依赖成为 client 模块的构建必需，经裁决按
+> 「组合入口豁免」正式化：server require 仅由 cmd/mornlea 消费（与 tools
+> 组合两侧同构），client 域库包对 server 的禁令（含测试）由 archcheck
+> 源码守卫强制——与 server→client 同一豁免式守卫风格。delta spec 的
+> 「Go 单元模块边界双层强制」Requirement 已随本裁决修订。
 
 ## 2. 目录与路径映射
 

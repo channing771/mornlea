@@ -19,7 +19,7 @@ go.work 成员）。更具体的边界见各子目录 `AGENTS.md`：
 ## 依赖边界
 
 - 模块生产代码只 require 兄弟单元 `packages/shared` 与 `packages/contracts`（`internal/archcheck/unit_boundary_test.go` 强制）；包级依赖方向以 `internal/archcheck/dependency_test.go` 的 `allowed` 表为唯一真相，不要在指南中复制该表。新增包或依赖边必须先证明方向合理并同步架构门禁。
-- go.mod 对根模块的 require 仅供本模块测试编译（Memory/TCP 集成测试以 client mirror 驱动会话，仅测试导入边）；生产代码不得 import 根模块或客户端侧包，客户端域切割后此边必须随测试重构消除。
+- go.mod 对 `packages/client` 的 require 是测试专用豁免边：server 的 Memory/TCP 集成测试以客户端镜像驱动会话（Go 的 require 无法按测试限定，模块层只能放行）；生产代码不得 import `packages/client` 的任何包，该禁令由 `internal/archcheck/server_client_boundary_test.go` 源码守卫强制，server 的兄弟 require 集恰为 {shared, contracts, client} 亦被精确断言钉住。
 - engine C ABI 只能由 `packages/shared/nativeabi` 接触；领域包经既有 bridge 调用 Rust，不得直接引入 C ABI 或另建生产 fallback。
 
 ## 测试组织

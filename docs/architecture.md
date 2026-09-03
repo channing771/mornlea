@@ -39,15 +39,15 @@ Go 与 Python 各自限制全局 4 个 Planner/Dialogue run、同一伙伴 1 个
 
 ## 5. Go 包职责与 archcheck 依赖边界
 
-- `cmd/mornlea` 与 `packages/server/cmd/mornlea-server` 负责应用入口与资源生命周期装配。
+- `packages/client/cmd/mornlea` 与 `packages/server/cmd/mornlea-server` 负责应用入口与资源生命周期装配。
 - `packages/shared` 是共享域 Go 模块（独立 go.mod，go.work 成员），持有 server 与 client 双侧共用的领域包：`core`（公共领域类型与 native raycast）、`world`（区块与世界数据模型）、`physics`（玩家运动与碰撞）、`pathfind`（不可变快照寻路）、`companion`（伙伴身份与领域类型）、`network`（+protocol/codec/tcp，登录状态机与传输）、`worldgen`（seed 播种与区块回写）、`tuning`（Tunables 快照）、`profile`、`config`、`logging` 与 `nativeabi`（engine ABI 的唯一 Go bridge）。
 - `packages/server/sim` 为仅含指导文档的目录，权威模拟由四个子包承载：`contract`（跨边界 DTO）、`realm`（世界维度与单 tick 事务）、`entity`（玩家/伙伴/夜行者与玩法结算）、`runtime`（Engine 与 Step 编排）；Tunables 快照位于 `packages/shared/tuning`。依赖方向与单次提交纪律见 `packages/server/sim/AGENTS.md` 与 `internal/archcheck`。
 - `packages/server/storage` 持有世界、玩家、伙伴和夜行者数据的编码、迁移、恢复与磁盘生命周期，并以子包 `packages/server/storage/chunk`、`packages/server/storage/player`、`packages/server/storage/companion`、`packages/server/storage/hostile`、`packages/server/storage/region` 等细化实现，顶层保持外部消费面。
 - `packages/server/server` 装配 Host、Server、登录、会话、权威 tick、发布和关服编排；通过 `packages/server/server/persistence` 委派存档生命周期，自身不持有保存队列、重试状态或 worker，实现只保留 `PersistenceStatus` 与 `ErrPlayerPersistenceBackpressure` 的兼容 re-export。
 - `packages/server/server/persistence` 单独持有世界区块与 metadata、玩家、伙伴、夜行者四类存档的加载、观察、异步保存、重试、flush/close 与 worker 生命周期；生产代码仅依赖 `packages/shared/companion`、`packages/shared/core`、`packages/shared/physics`、`packages/server/sim/runtime`、`packages/server/storage`，不得反向导入 `packages/server/server` 或访问 Host/Server 私有状态，依赖方向以 `internal/archcheck` 为准。
 - `packages/shared/pathfind` 持有不可变快照上的有界寻路且只依赖 `packages/shared/core`；`packages/shared/companion` 与 `packages/server/server` 消费它，但寻路不拥有玩法或世界访问。
-- `internal/client` 持有客户端镜像、输入预测、消息接收、client ABI bridge 和渲染侧 CPU 编排。
-- `internal/render`、`internal/mesh`、`internal/assets`、`internal/lod`、`packages/shared/worldgen` 与 `packages/server/fluid` 持有领域数据描述、CPU 编码和 Rust 调用编排，不拥有 GPU 后端或第二套数值生产实现。
+- `packages/client` 是客户端域 Go 模块（独立 go.mod，go.work 成员）：`client` 持有客户端镜像、输入预测、消息接收、client ABI bridge 和渲染侧 CPU 编排；`render`（+hud）、`mesh`、`assets`、`lod`、`audio` 与 `packages/shared/worldgen`、`packages/server/fluid` 同属领域数据描述、CPU 编码和 Rust 调用编排，不拥有 GPU 后端或第二套数值生产实现；`packages/client/cmd/mornlea` 是图形客户端应用入口（app/benchmark 在进程内装配本地权威 Host，是该模块中唯一允许 import `packages/server` 的位置）。
+- server 与 client 两模块间的两条豁免边由 `internal/archcheck` 源码守卫强制：server 生产文件禁 import client（Memory/TCP 集成测试的客户端镜像只出现在 `_test.go`），client 域库文件禁 import server（服务端装配只属于 `packages/client/cmd/mornlea`）。
 
 内部包允许的直接依赖以 `internal/archcheck/dependency_test.go` 的 `allowed` 表为准。`internal/archcheck` 同时以 `TestSimAuthorityStateOwnershipStaysExplicit` 扫描 runtime 的包变量与全部 holder，把唯一 mutation/commit 绑定到 `StepWithTunables` 的真实调用路径，以 `TestAuthorityTickTunablesStayExplicit` 守住权威 tick 参数捕获和传递；其余门禁守住无 WebGPU Go 依赖、无图形专服闭包、伙伴 Agent 服务发布边界、Make/CI 门禁和长期版本基线；架构文档不复制会随包演进的依赖白名单。
 
@@ -59,11 +59,11 @@ engine C ABI 当前为 v10（v10 即 `MGW1` layout 3 的 15 材质 worldgen 请�
 
 ## 7. `mornlea_client` / client ABI v14
 
-`mornlea_client` 持有 Darwin 窗口与事件采集、进程内 WKWebView 菜单层、GPU 资源、shader、render pass、窗口 surface 和离屏渲染。窗口型 UI（主菜单/设置/暂停/F3）由内嵌的 Vite + TypeScript + React 前端经 WKWebView 呈现，资产经 `mornlea://` scheme handler 从 Rust 内嵌字节供给；生存 HUD 与容器等固定界面仍走既有 GPU quad 管线。Go 不导入 WebGPU 绑定，只通过 `internal/client` 提供的 client ABI bridge 使用窗口和 renderer 领域接口。
+`mornlea_client` 持有 Darwin 窗口与事件采集、进程内 WKWebView 菜单层、GPU 资源、shader、render pass、窗口 surface 和离屏渲染。窗口型 UI（主菜单/设置/暂停/F3）由内嵌的 Vite + TypeScript + React 前端经 WKWebView 呈现，资产经 `mornlea://` scheme handler 从 Rust 内嵌字节供给；生存 HUD 与容器等固定界面仍走既有 GPU quad 管线。Go 不导入 WebGPU 绑定，只通过 `packages/client/client` 提供的 client ABI bridge 使用窗口和 renderer 领域接口。
 
-client C ABI 当前为 v14，并与 engine ABI 独立演进。它完整保留 v13 引入的 window composite capture、两段式容量查询与紧凑 top-down BGRA8 输出；菜单状态权威在 Go：下行 `ui_push_state` 在状态变化时向 WebView 推送 JSON 状态，上行 `drain_ui_events` 读出版本化 JSON 事件信封；桥协议形状由前端 `schema.json` 单源钉值。header、Rust FFI、`internal/client` bridge、版本和跨语言检查必须同步更新；失败或容量不足不能发布部分输出。
+client C ABI 当前为 v14，并与 engine ABI 独立演进。它完整保留 v13 引入的 window composite capture、两段式容量查询与紧凑 top-down BGRA8 输出；菜单状态权威在 Go：下行 `ui_push_state` 在状态变化时向 WebView 推送 JSON 状态，上行 `drain_ui_events` 读出版本化 JSON 事件信封；桥协议形状由前端 `schema.json` 单源钉值。header、Rust FFI、`packages/client/client` bridge、版本和跨语言检查必须同步更新；失败或容量不足不能发布部分输出。
 
-renderer 已拥有由 MRW1 原子更新的紧凑 `RenderWorld` 派生缓存，Go Mirror 仍是客户端逻辑状态的真相来源。该缓存入口目前只由 Rust/Go 测试驱动，尚未接入 `cmd/mornlea/app`；Go 仍持有生产 mesh 调度、connectivity/visibility、逐 section upload 与 draw 输入，迁移这些职责属于后续 change。
+renderer 已拥有由 MRW1 原子更新的紧凑 `RenderWorld` 派生缓存，Go Mirror 仍是客户端逻辑状态的真相来源。该缓存入口目前只由 Rust/Go 测试驱动，尚未接入 `packages/client/cmd/mornlea/app`；Go 仍持有生产 mesh 调度、connectivity/visibility、逐 section upload 与 draw 输入，迁移这些职责属于后续 change。
 
 ## 8. 图形客户端与无图形专服 release unit
 
@@ -91,7 +91,6 @@ Linux 专服发布单元由 `mornlea-server` 与相邻的 `libmornlea_engine.so`
 ```text
 .
 ├── cmd/
-│   ├── mornlea/             游戏客户端与内置服务端装配
 │   ├── mornlea-agent-board/ AI 工作者执行状态 Web 看板
 │   ├── gfxspike/            Rust renderer 地形渲染验证程序
 │   └── perfcheck/           性能报告比较工具
@@ -113,6 +112,15 @@ Linux 专服发布单元由 `mornlea-server` 与相邻的 `libmornlea_engine.so`
 │   │   ├── tuning/         Tunables 快照与校验（原 sim/tuning 上提）
 │   │   ├── profile/        本机稳定玩家身份与档案
 │   │   └── config/         共享 JSON 配置加载与校验
+│   ├── client/             客户端域 Go 模块（go.work workspace 成员）
+│   │   ├── client/          输入、相机、预测、窗口/client ABI 与客户端镜像
+│   │   ├── render/          渲染 CPU 半部：布局、编码与上传调度（hud/ 子包）
+│   │   ├── mesh/            区块网格生产 API（实现位于 Rust cdylib）
+│   │   ├── lod/             远环 tile 调度与 CPU 编码
+│   │   ├── audio/           Darwin 本地程序化提示音
+│   │   ├── assets/          方块定义与程序化材质（packs/ 内嵌默认材质包）
+│   │   └── cmd/
+│   │       └── mornlea/     游戏客户端与内置服务端装配（app/capture/benchmark/devcapture 子包）
 │   ├── server/             服务端域 Go 模块（go.work workspace 成员）
 │   │   ├── cmd/
 │   │   │   └── mornlea-server/  无图形 TCP 专用服务端
@@ -129,14 +137,8 @@ Linux 专服发布单元由 `mornlea-server` 与相邻的 `libmornlea_engine.so`
 │       └── crates/
 │           ├── mornlea_engine/  固定 Rust 1.97.1 cdylib：mesh/light/collision/raycast/physics/worldgen/lod/fluid
 │           └── mornlea_client/  Darwin 窗口、事件循环、WebView 菜单层（frontend/ React 前端）与全部 GPU 渲染
-├── internal/                包职责见 §5，依赖白名单以 archcheck 为准
-│   ├── audio/               Darwin 本地程序化提示音
-│   ├── lod/                 远环 tile 调度与 CPU 编码
-│   ├── client/              输入、相机、预测、窗口/client ABI 与客户端镜像
-│   ├── mesh/                区块网格生产 API（实现位于 Rust cdylib）
-│   ├── render/              渲染 CPU 半部：布局、编码与上传调度
-│   ├── assets/              方块定义与程序化材质
-│   └── archcheck/           内部包依赖方向门禁测试
+├── internal/
+│   └── archcheck/           架构门禁测试（依赖方向、单元边界、身份与基线；待迁 packages/audit）
 ├── scripts/agent-hooks/     已下线 Hook 的策略实现与 CI 测试
 └── docs/                    设计、实施计划、性能记录与实现进度
 ```

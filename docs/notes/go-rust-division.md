@@ -47,7 +47,7 @@
 | 高层渲染语义 | pass 编排、剔除策略决策、HUD/UI 逻辑、字体图集、Avatar/NameTag 语义、 daylight 语义 |
 | 编排与生命周期 | app/server/client 主循环、goroutine 调度、worker 划分、优雅关闭 |
 | 测试与工具链 | oracle 差分测试、benchmark、perfcheck、CI 脚本、fuzz/golden 编排 |
-| FFI 绑定 | `internal/nativeabi` 是 engine ABI 的唯一 Go bridge；client ABI bridge 位于 `internal/client` |
+| FFI 绑定 | `packages/shared/nativeabi` 是 engine ABI 的唯一 Go bridge；client ABI bridge 位于 `packages/client/client` |
 
 **方块/实体类新内容的归属细则**：新方块的规则属性（硬度、掉落、配方、交互）写 Go；新方块/实体的呈现几何与光照参数由 Go 定义为**数据描述**，经既有编码路径交给 Rust 消费；新实体的运动一律复用既有 Rust 物理积分出口，**不得新写 Go 积分**。
 
@@ -66,7 +66,7 @@
 **Go 不得出现：**
 - 生产路径上的体素级 O(N) 密集循环（每方块/每 cell/每 quad 的生产计算）。
 - mesh、光照、碰撞、raycast、物理积分、worldgen 的第二套生产实现或新的 Go fallback。
-- 绕过 `internal/nativeabi` 直接调用 engine ABI；绕过 `internal/client` 直接调用 client ABI 或导入 GPU 绑定。
+- 绕过 `packages/shared/nativeabi` 直接调用 engine ABI；绕过 `packages/client/client` 直接调用 client ABI 或导入 GPU 绑定。
 
 **Rust 不得出现：**
 - 文件、网络、音频设备之外的任何 I/O；协议字节格式的决策；schema 版本号的决策。

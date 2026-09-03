@@ -17,7 +17,7 @@ helper 落位规则与验收清单都在这里。条文是原则，本文件是�
 
 - 新测试文件跟随包内既有形态：包内以白盒同包为主就写同包，以 `foo_test` 外部包为
   主就写外部包。既有分布：`internal/core`、`internal/physics`、`internal/world`、
-  `internal/mesh` 偏外部黑盒；`packages/server/server`、`packages/server/sim/...`（`contract`/`realm`/`entity`/`runtime` 四子包）偏白盒——白盒断言与所属私有状态同包。
+  `packages/client/mesh` 偏外部黑盒；`packages/server/server`、`packages/server/sim/...`（`contract`/`realm`/`entity`/`runtime` 四子包）偏白盒——白盒断言与所属私有状态同包。
 - 白盒与外部包不得为了重组而互换——那是行为可见性变化，超出纯重组范围。
 
 ## 测试文件命名
@@ -74,8 +74,8 @@ helper 落位规则与验收清单都在这里。条文是原则，本文件是�
 
 - 每包**最多一个**共享 helper 中心：优先扩展包内既有 `*_helpers_test.go`；没有才
   新建 `helpers_test.go`；不得另立并行中心（如客户端三个子包各有自己的中心：
-  `cmd/mornlea/app` 的 `app_test_helpers_test.go`、`cmd/mornlea/capture` 的
-  `capture_test_helpers_test.go`、`cmd/mornlea/benchmark` 的
+  `packages/client/cmd/mornlea/app` 的 `app_test_helpers_test.go`、`packages/client/cmd/mornlea/capture` 的
+  `capture_test_helpers_test.go`、`packages/client/cmd/mornlea/benchmark` 的
   `benchmark_helpers_test.go`，各自扩展，不要再建）。
 - 纯 helper 文件（不含任何 `Test`/`Benchmark`/`Fuzz` 函数）必须以
   `*_helpers_test.go` 命名，不得顶着普通测试文件名。
@@ -108,7 +108,7 @@ helper 落位规则与验收清单都在这里。条文是原则，本文件是�
 `capture/`、`benchmark/` 三个子包；全程测试函数名与 `t.Run` 标签逐一不变，
 三个子包 `go test -list` 入口并集与迁移前单包集合一致；helper 中心按「每包
 一个」落位（见上文 helper 中心规则），跨包白盒装配收敛为
-`cmd/mornlea/app/testkit.go` 的导出测试装配入口；golden 资产随 capture 域
+`packages/client/cmd/mornlea/app/testkit.go` 的导出测试装配入口；golden 资产随 capture 域
 git mv 至 `cmd/mornlea/capture/testdata/golden`，子包依赖方向由
 `internal/archcheck` 的 `TestClientCommandSubpackageDependencyDirections` 强制。
 

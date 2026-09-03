@@ -24,7 +24,7 @@
 
 ## Task 6: client 模块切割与视觉基线验证
 
-- [ ] 6.1 `git mv internal/{client,render,mesh,lod,audio,assets} packages/client/`，`git mv cmd/mornlea packages/client/cmd/mornlea`；建 `packages/client/go.mod`（require+replace shared）；import path 改写 `internal/(client|render|mesh|lod|audio|assets)` → `packages/client/...` 与 `cmd/mornlea` → `packages/client/cmd/mornlea`；go.work 增 `use ./packages/client`；修复 `packages/client/cmd/mornlea/capture` 的 `captureGoldenDir` 相对深度指向仓库根 `testdata/visual-golden`；Makefile `APP` 常量、archcheck cmd 子树表、CI 分片同步。以 `go clean -cache && make rust && make test-race && make visual-check && go test ./internal/archcheck -count=1` 验证（golden 全过、零 actual/diff 产物）。
+- [x] 6.1 `git mv internal/{client,render,mesh,lod,audio,assets} packages/client/`，`git mv cmd/mornlea packages/client/cmd/mornlea`；建 `packages/client/go.mod`（require+replace 兄弟单元，以 tidy 收敛为准：shared 直接消费，server 与 contracts 经 cmd/mornlea 应用入口传递）；import path 改写 `internal/(client|render|mesh|lod|audio|assets)` → `packages/client/...` 与 `cmd/mornlea` → `packages/client/cmd/mornlea`；go.work 增 `use ./packages/client`；修复 `packages/client/cmd/mornlea/capture` 的 `captureGoldenDir` 相对深度指向仓库根 `testdata/visual-golden`；Makefile `APP` 常量、archcheck cmd 子树表、CI 分片同步。以 `go clean -cache && make rust && make test-race && make visual-check && go test ./internal/archcheck -count=1` 验证（golden 全过、零 actual/diff 产物）。（S6 实测修订：app/benchmark 生产代码进程内装配本地权威 Host，client 模块必须 require server；经控制会话裁决为组合入口豁免——server require 仅由 cmd/mornlea 消费，client 域库禁 import server 由源码守卫强制，delta spec 与 design §1 已随裁修订。）
 
 ## Task 7: tools 模块、根 go.mod 解散与 audit 立顶
 

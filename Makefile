@@ -7,19 +7,19 @@ export CARGO_TARGET_DIR ?= $(CURDIR)/packages/engine/target/cargo
 RUST_DIR := packages/engine
 RUST_DYLIB := $(RUST_DIR)/target/release/libmornlea_engine.dylib
 RUST_SO := $(RUST_DIR)/target/release/libmornlea_engine.so
-APP := ./cmd/mornlea
+APP := ./packages/client/cmd/mornlea
 BINARY := bin/mornlea
 SERVER := ./packages/server/cmd/mornlea-server
 SERVER_BINARY := bin/mornlea-server
 MORNLEA_DYLIB := bin/libmornlea_engine.dylib
 MORNLEA_SO := bin/libmornlea_engine.so
-PIXEL_PERFECTION_NOTICE_DIR := internal/assets/packs/pixel_perfection
+PIXEL_PERFECTION_NOTICE_DIR := packages/client/assets/packs/pixel_perfection
 PIXEL_PERFECTION_NOTICE_DEST := bin/third-party/pixel-perfection
 ARGS ?=
 
 # go.work 下 `go test ./...` 不跨嵌套模块；全部按模块枚举的入口（test 族、
 # dev-check、vet）显式循环该列表，防止新模块成为 ./... 盲区。
-GO_TEST_MODULES := . ./packages/contracts ./packages/server ./packages/shared
+GO_TEST_MODULES := . ./packages/contracts ./packages/server ./packages/shared ./packages/client
 
 .PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev
 
@@ -127,16 +127,16 @@ test-race-changed:
 	scripts/agents/race-changed.sh $(if $(RACE_BASE),--base $(RACE_BASE),)
 
 test-multiplayer:
-	$(GO) test ./internal/client ./packages/server/server ./cmd/mornlea/benchmark ./cmd/perfcheck \
+	$(GO) test ./packages/client/client ./packages/server/server ./packages/client/cmd/mornlea/benchmark ./cmd/perfcheck \
 		-run 'Test(PerfReportV6|ScenarioV6|PerfcheckV6|PerfcheckV5SameScenario|PerformanceThresholds|InterestObserver|HostStats|BenchmarkServerEpoch|BenchmarkServerMeasuredWindow)' -count=1
 
 bench-multiplayer:
-	$(GO) test ./packages/shared/network ./packages/server/server ./internal/render -run '^$$' \
+	$(GO) test ./packages/shared/network ./packages/server/server ./packages/client/render -run '^$$' \
 		-bench '(RemotePlayerStateCodec|EightPlayerInterest|RemoteAvatarNameTag)' -benchmem -count=3
 
 archcheck:
 	$(GO) test ./internal/archcheck -count=1
-	test -z "$$($(GO) list -deps $(SERVER) | rg '(internal|packages/client)/(client|mesh|render|gfx)|glfw|webgpu|x/image/font')"
+	test -z "$$($(GO) list -deps $(SERVER) | rg 'packages/client/(client|mesh|render)|gfxspike|glfw|webgpu|x/image/font')"
 
 # dev-check:迭代期快检——gofmt 检查、vet、全仓短测试(重型测试经 `-short` 跳过)
 # 与 Rust fmt/clippy/单测。完整门禁(test/test-race/visual-check/rust-check)

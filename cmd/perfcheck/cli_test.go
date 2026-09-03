@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/client"
+	"github.com/channing771/mornlea/packages/client/client"
 )
 
 func TestComparisonSuccessMessageDescribesComparisonMode(t *testing.T) {

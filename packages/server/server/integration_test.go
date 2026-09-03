@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/channing771/mornlea/internal/client"
+	"github.com/channing771/mornlea/packages/client/client"
 	"github.com/channing771/mornlea/packages/server/server"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"

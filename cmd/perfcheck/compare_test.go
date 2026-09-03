@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/client"
+	"github.com/channing771/mornlea/packages/client/client"
 )
 
 func TestCompareReportsChecksPersistenceWhenBothHaveSamples(t *testing.T) {

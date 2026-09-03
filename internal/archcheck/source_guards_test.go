@@ -792,8 +792,10 @@ func TestTunableDefaultsAreOnlyReadInTunablesFile(t *testing.T) {
 
 // TestOnlyCommandsImportConfig 守住"自动化验证不读用户配置"这条不变量。
 func TestOnlyCommandsImportConfig(t *testing.T) {
-	// config 已迁入 packages/shared 模块：`./...` 不跨嵌套模块，须显式列出。
-	cmd := exec.Command("go", "list", "-f", "{{.ImportPath}}|{{join .Imports \" \"}} {{join .TestImports \" \"}} {{join .XTestImports \" \"}}", "./internal/...", "./packages/shared/...")
+	// config 已迁入 packages/shared 模块、客户端命令已迁入 packages/client
+	// 模块：`./...` 不跨嵌套模块，须显式列出（packages/client/cmd/mornlea 是
+	// config 的合法消费者，列入只为把 client 域库与 shared 的违规消费照出来）。
+	cmd := exec.Command("go", "list", "-f", "{{.ImportPath}}|{{join .Imports \" \"}} {{join .TestImports \" \"}} {{join .XTestImports \" \"}}", "./internal/...", "./packages/shared/...", "./packages/client/...")
 	cmd.Dir = moduleRoot(t)
 	out, err := cmd.Output()
 	if err != nil {
@@ -802,13 +804,15 @@ func TestOnlyCommandsImportConfig(t *testing.T) {
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		parts := strings.SplitN(line, "|", 2)
 		// config 的外部测试包（package config_test）导入自身，需要整体跳过，
-		// 否则会自触发；这条豁免只对 config 包本身生效。
-		if len(parts) != 2 || parts[0] == "github.com/channing771/mornlea/packages/shared/config" {
+		// 否则会自触发；这条豁免只对 config 包本身生效。命令入口树
+		// （packages/client/cmd/mornlea 族）是 config 的合法消费者，同样跳过。
+		if len(parts) != 2 || parts[0] == "github.com/channing771/mornlea/packages/shared/config" ||
+			strings.HasPrefix(parts[0], "github.com/channing771/mornlea/packages/client/cmd/mornlea") {
 			continue
 		}
 		for _, imported := range strings.Fields(parts[1]) {
 			if imported == "github.com/channing771/mornlea/packages/shared/config" {
-				t.Errorf("%s 导入了 packages/shared/config；只有 cmd 可以导入它，否则本机配置会污染性能基线与抓帧 golden", parts[0])
+				t.Errorf("%s 导入了 packages/shared/config；只有命令入口（cmd/mornlea 族）可以导入它，否则本机配置会污染性能基线与抓帧 golden", parts[0])
 			}
 		}
 	}
@@ -842,8 +846,9 @@ func TestLegacyPlayerAuthorityMessagesAreGone(t *testing.T) {
 	forbidden := map[string]struct{}{
 		"SetViewCenter": {}, "BreakRay": {}, "PlaceRay": {}, "CommandBreakRay": {}, "CommandPlaceRay": {}, "localSessionID": {},
 	}
-	// packages/shared 是独立模块，legacy 标识符守卫须与其同侧扫描。
-	for _, sourceRoot := range []string{"cmd", "internal", "packages/shared"} {
+	// packages/shared 与 packages/client 是独立模块，legacy 标识符守卫须与其
+	// 同侧扫描。
+	for _, sourceRoot := range []string{"cmd", "internal", "packages/shared", "packages/client"} {
 		err := filepath.WalkDir(filepath.Join(root, sourceRoot), func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
@@ -878,7 +883,7 @@ func TestLegacyPlayerAuthorityMessagesAreGone(t *testing.T) {
 }
 
 func TestMornleaUsesLoginStreamsInsteadOfAttachedServerEndpoints(t *testing.T) {
-	path := filepath.Join(moduleRoot(t), "cmd", "mornlea")
+	path := filepath.Join(moduleRoot(t), "packages", "client", "cmd", "mornlea")
 	source := productionGoSource(t, path)
 	for _, legacy := range []string{"server.NewEmbedded(", "server.NewEmbeddedMemory(", "server.New("} {
 		if strings.Contains(source, legacy) {
@@ -891,7 +896,7 @@ func TestMornleaUsesLoginStreamsInsteadOfAttachedServerEndpoints(t *testing.T) {
 }
 
 func TestMornleaBenchmarkTCPPathUsesTheSharedLoginStateMachine(t *testing.T) {
-	path := filepath.Join(moduleRoot(t), "cmd", "mornlea")
+	path := filepath.Join(moduleRoot(t), "packages", "client", "cmd", "mornlea")
 	source := productionGoSource(t, path)
 	for _, required := range []string{"networktcp.ListenTCP(", "network.BeginServerLogin(", "network.LoginClient(", "running.AttachTrustedObserver"} {
 		if !strings.Contains(source, required) {

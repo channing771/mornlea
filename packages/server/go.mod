@@ -3,7 +3,7 @@ module github.com/channing771/mornlea/packages/server
 go 1.26.0
 
 require (
-	github.com/channing771/mornlea v0.1.0-m4q
+	github.com/channing771/mornlea/packages/client v0.0.0-00010101000000-000000000000
 	github.com/channing771/mornlea/packages/contracts v0.0.0-00010101000000-000000000000
 	github.com/channing771/mornlea/packages/shared v0.0.0-00010101000000-000000000000
 	github.com/go-gl/mathgl v1.2.0
@@ -23,14 +23,15 @@ require (
 	golang.org/x/time v0.15.0 // indirect
 )
 
-// contracts 与 shared 是兄弟 Go 模块（contracts 的 go:embed 必须与 JSON 契约
-// 同目录；shared 承载双侧共享的领域包）；server 是服务端域模块，生产代码
-// 只允许 require 这两个兄弟单元，经本地相对路径 replace 引用，保证 GOWORK=off
-// 的单模块世界仍可构建。对根模块的 require 仅供本模块测试编译：server 的
-// Memory/TCP 集成测试以 internal/client mirror 驱动会话（仅测试导入边，无
-// 生产依赖）；客户端域切割后此边必须随测试重构消除。
+// contracts、shared 与 client 是兄弟 Go 模块（contracts 的 go:embed 必须与 JSON
+// 契约同目录；shared 承载双侧共享的领域包）；server 是服务端域模块，兄弟 require
+// 集恰为 {contracts, shared, client}，由 internal/archcheck 的单元边界表强制。其中
+// client 是测试专用豁免边：server 的 Memory/TCP 集成测试以客户端镜像驱动会话
+// （Go 的 require 无法按测试限定，只能模块层放行）；生产代码禁 import client 由
+// archcheck 源码守卫强制。各模块经本地相对路径 replace 引用，保证 GOWORK=off
+// 的单模块世界仍可构建。
 replace github.com/channing771/mornlea/packages/contracts => ../contracts
 
 replace github.com/channing771/mornlea/packages/shared => ../shared
 
-replace github.com/channing771/mornlea => ../..
+replace github.com/channing771/mornlea/packages/client => ../client

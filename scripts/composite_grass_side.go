@@ -7,7 +7,7 @@
 // 的绿色草缘，其余像素 alpha 递减（下半部约 8 行 alpha 为 0）。而 Mornlea 的渲染
 // 路径对每个材质层做直接采样：terrain.wgsl 的片段着色器对 alpha<0.5 的片段判
 // discard，并且 `LayerGrassSide` 是不透明层（不在 `isCutoutLayer` 集合里，
-// internal/assets/blocks.go），`applyPack` 只做像素替换、没有任何合成。于是草方块
+// packages/client/assets/blocks.go），`applyPack` 只做像素替换、没有任何合成。于是草方块
 // 侧面下半部被整段 discard，出现看穿/破洞，mip 降采样后远处整块侧面被丢弃。
 //
 // 修复：用直通 alpha 的 source-over（straight alpha source-over）把草缘 overlay
@@ -28,7 +28,7 @@
 //
 //	go run scripts/composite_grass_side.go
 //
-// 输入文件路径相对于仓库根目录：internal/assets/packs/pixel_perfection/textures/
+// 输入文件路径相对于仓库根目录：packages/client/assets/packs/pixel_perfection/textures/
 // 下的 grass_side.png 与 dirt.png。脚本校验两张图都是 16×16，否则报错退出。
 package main
 
@@ -41,7 +41,7 @@ import (
 )
 
 const (
-	dir     = "internal/assets/packs/pixel_perfection/textures/"
+	dir     = "packages/client/assets/packs/pixel_perfection/textures/"
 	texture = "grass_side.png"
 	base    = "dirt.png"
 	size    = 16

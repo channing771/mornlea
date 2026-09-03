@@ -401,21 +401,21 @@ func nonEmptyTrimmedLines(value string) []string {
 }
 
 var companionGoProductionRoots = []string{
-	"cmd/mornlea",
-	"cmd/mornlea/app",
+	"packages/client/cmd/mornlea",
+	"packages/client/cmd/mornlea/app",
 	"packages/server/cmd/mornlea-server",
 	"packages/server/server",
 	"packages/shared/companion",
 }
 
 var companionGoForbiddenImportAllowlist = map[string]map[string]string{
-	"cmd/mornlea/benchmark": {
+	"packages/client/cmd/mornlea/benchmark": {
 		"os/exec": "benchmark 模式以独立服务端子进程测量真实传输，不用于伙伴 Agent 装配",
 	},
-	"internal/audio": {
+	"packages/client/audio": {
 		"C": "Darwin 音频桥，不用于伙伴 Agent 装配",
 	},
-	"internal/client": {
+	"packages/client/client": {
 		"C": "Rust client ABI bridge，不用于伙伴 Agent 装配",
 	},
 	"packages/shared/nativeabi": {
@@ -426,8 +426,9 @@ var companionGoForbiddenImportAllowlist = map[string]map[string]string{
 func loadCompanionProductionImportGraph(root string) (map[string][]string, error) {
 	graph := make(map[string][]string)
 	// companion 已迁入 packages/shared 模块、服务端域已迁入 packages/server
-	// 模块；图必须覆盖两侧，否则闭包会在跨模块边上断链。
-	for _, top := range []string{"cmd", "internal", "packages/contracts", "packages/shared", "packages/server"} {
+	// 模块、客户端域已迁入 packages/client 模块；图必须覆盖全部模块所在子树，
+	// 否则闭包会在跨模块边上断链。
+	for _, top := range []string{"cmd", "internal", "packages/contracts", "packages/shared", "packages/server", "packages/client"} {
 		err := filepath.WalkDir(filepath.Join(root, top), func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr

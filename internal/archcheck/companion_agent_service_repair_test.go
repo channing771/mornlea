@@ -121,23 +121,23 @@ func TestCompanionAgentQuickstartRegexSelectsRealTests(t *testing.T) {
 
 func TestCompanionGoProductionBoundaryMutations(t *testing.T) {
 	roots := []string{
-		"cmd/mornlea",
-		"cmd/mornlea/app",
+		"packages/client/cmd/mornlea",
+		"packages/client/cmd/mornlea/app",
 		"packages/server/cmd/mornlea-server",
 		"packages/server/server",
 		"packages/shared/companion",
 	}
 	contract := map[string][]string{
-		"cmd/mornlea":                        {"cmd/mornlea/benchmark", "internal/audio", "internal/client"},
-		"cmd/mornlea/app":                    {},
-		"packages/server/cmd/mornlea-server": {},
-		"packages/server/server":             {},
-		"packages/shared/companion":          {},
-		"cmd/mornlea/benchmark":              {"os/exec"},
-		"cmd/mornlea-agent-board":            {"os/exec"},
-		"internal/audio":                     {"C"},
-		"internal/client":                    {"C"},
-		"packages/shared/nativeabi":          {"C"},
+		"packages/client/cmd/mornlea":           {"packages/client/cmd/mornlea/benchmark", "packages/client/audio", "packages/client/client"},
+		"packages/client/cmd/mornlea/app":       {},
+		"packages/server/cmd/mornlea-server":    {},
+		"packages/server/server":                {},
+		"packages/shared/companion":             {},
+		"packages/client/cmd/mornlea/benchmark": {"os/exec"},
+		"cmd/mornlea-agent-board":               {"os/exec"},
+		"packages/client/audio":                 {"C"},
+		"packages/client/client":                {"C"},
+		"packages/shared/nativeabi":             {"C"},
 	}
 	if violations := companionGoProductionBoundaryViolations(contract, roots); len(violations) != 0 {
 		t.Fatalf("明确合法的 native bridge、benchmark 与闭包外 agent-board 被误拒绝: %v", violations)

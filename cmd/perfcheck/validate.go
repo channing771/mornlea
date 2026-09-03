@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/channing771/mornlea/internal/client"
+	"github.com/channing771/mornlea/packages/client/client"
 )
 
 func validateReportProvenance(label string, report client.PerfReport) error {
