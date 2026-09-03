@@ -32,7 +32,7 @@ import (
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/lod"
 	"github.com/channing771/mornlea/internal/render"
-	"github.com/channing771/mornlea/internal/server"
+	"github.com/channing771/mornlea/packages/server/server"
 	"github.com/channing771/mornlea/packages/shared/config"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/worldgen"

@@ -11,7 +11,7 @@ make build-linux-server
 
 ```sh
 make rust
-go run ./cmd/mornlea-server --listen :25565 --world worlds/lan --seed 42 --max-players 8
+go run ./packages/server/cmd/mornlea-server --listen :25565 --world worlds/lan --seed 42 --max-players 8
 ```
 
 命令行默认值为 `--listen :25565`、`--world worlds/default`、`--seed 42` 和 `--max-players 8`。`--max-players` 只接受 `1..8`；`--seed` 只用于创建新世界，已有世界使用其 metadata 中的种子。`--config <path>` 可指定配置文件。停服后可用以下命令离线迁移自然材料，`--backup` 必须是世界目录之外的完整备份目录：
@@ -35,7 +35,7 @@ go run ./cmd/mornlea --connect 192.168.x.x:25565 --name Chen
 若只允许本机连接，请明确监听 loopback：
 
 ```sh
-go run ./cmd/mornlea-server --listen 127.0.0.1:25565 --world worlds/local --max-players 8
+go run ./packages/server/cmd/mornlea-server --listen 127.0.0.1:25565 --world worlds/local --max-players 8
 ```
 
 客户端首次运行会在本机 profile 中创建稳定 UUIDv4。之后改变 `--name` 只更新该 PlayerID 的显示名，不会创建新玩家；同一 PlayerID 同时登录会被拒绝。不同 PlayerID 可以使用相同显示名，因此昵称不是身份凭据，也不保证唯一。Memory 与 TCP 复用同一登录、会话和权威模拟路径。

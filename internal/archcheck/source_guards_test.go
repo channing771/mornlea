@@ -16,7 +16,7 @@ import (
 
 const (
 	physicsImportPath = "github.com/channing771/mornlea/packages/shared/physics"
-	runtimeImportPath = "github.com/channing771/mornlea/internal/sim/runtime"
+	runtimeImportPath = "github.com/channing771/mornlea/packages/server/sim/runtime"
 	tuningImportPath  = "github.com/channing771/mornlea/packages/shared/tuning"
 )
 
@@ -39,14 +39,14 @@ type authorityCall struct {
 // 内各读一次活动快照，server 的正常与关服 tick 必须把同一局部值传到各阶段。
 func TestAuthorityTickTunablesStayExplicit(t *testing.T) {
 	root := moduleRoot(t)
-	assertNoStoredTickTunables(t, filepath.Join(root, "internal", "server"))
+	assertNoStoredTickTunables(t, filepath.Join(root, "packages", "server", "server"))
 	scopes := []struct {
 		name      string
 		directory string
 	}{
-		{name: "entity", directory: filepath.Join(root, "internal", "sim", "entity")},
-		{name: "runtime", directory: filepath.Join(root, "internal", "sim", "runtime")},
-		{name: "server", directory: filepath.Join(root, "internal", "server")},
+		{name: "entity", directory: filepath.Join(root, "packages", "server", "sim", "entity")},
+		{name: "runtime", directory: filepath.Join(root, "packages", "server", "sim", "runtime")},
+		{name: "server", directory: filepath.Join(root, "packages", "server", "server")},
 	}
 	runtimeReads := map[string]int{physicsImportPath: 0, tuningImportPath: 0}
 	serverCaptures := make(map[string]*authorityFunction)
@@ -194,7 +194,7 @@ func (server *Server) good(bundle TickTunables) {
 
 func TestAuthorityTickTunablesStorageGuardExpandsNamedTypes(t *testing.T) {
 	aliases := authoritySyntheticSource(t, "aliases.go", `package server
-import rt "github.com/channing771/mornlea/internal/sim/runtime"
+import rt "github.com/channing771/mornlea/packages/server/sim/runtime"
 type TickAlias = rt.TickTunables
 type TickNamed rt.TickTunables
 var direct rt.TickTunables
@@ -213,7 +213,7 @@ var packageNamed TickNamed
 	}
 
 	good := authoritySyntheticSource(t, "good_storage.go", `package server
-import rt "github.com/channing771/mornlea/internal/sim/runtime"
+import rt "github.com/channing771/mornlea/packages/server/sim/runtime"
 type factory func() rt.TickTunables
 type holder struct { make factory }
 var packageFactory factory
@@ -901,7 +901,7 @@ func TestMornleaBenchmarkTCPPathUsesTheSharedLoginStateMachine(t *testing.T) {
 }
 
 func TestServerProductionDoesNotDeclareLegacyAttachedWorldWrappers(t *testing.T) {
-	root := filepath.Join(moduleRoot(t), "internal", "server")
+	root := filepath.Join(moduleRoot(t), "packages", "server", "server")
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		t.Fatalf("读取 %s: %v", root, err)
@@ -934,7 +934,7 @@ func TestServerProductionDoesNotDeclareLegacyAttachedWorldWrappers(t *testing.T)
 }
 
 func TestSessionLifecycleResponsibilitiesStayInSessionFiles(t *testing.T) {
-	root := filepath.Join(moduleRoot(t), "internal", "server")
+	root := filepath.Join(moduleRoot(t), "packages", "server", "server")
 	sessionDeclarations := topLevelDeclarationNamesIn(t, root, "session*.go")
 	serverDeclarations := topLevelDeclarationNamesIn(t, root, "server.go")
 	wantSessionFile := []string{
@@ -974,7 +974,7 @@ func TestCompanionPlannerProductionUsesAgentServiceOnly(t *testing.T) {
 		}
 	}
 
-	serverSource := productionGoSource(t, filepath.Join(root, "internal", "server"))
+	serverSource := productionGoSource(t, filepath.Join(root, "packages", "server", "server"))
 	for _, forbidden := range []string{
 		"companion.NewPlannerClient(",
 		"companion.NewDialogueClient(",
@@ -983,7 +983,7 @@ func TestCompanionPlannerProductionUsesAgentServiceOnly(t *testing.T) {
 		"companionManagerSummaries(",
 	} {
 		if strings.Contains(serverSource, forbidden) {
-			t.Errorf("internal/server production retains direct model construction %q", forbidden)
+			t.Errorf("packages/server/server production retains direct model construction %q", forbidden)
 		}
 	}
 }

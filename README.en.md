@@ -114,7 +114,7 @@ Most project docs are written in Chinese.
 Minimal LAN session:
 
 ```bash
-go run ./cmd/mornlea-server --listen :25565 --world worlds/lan --seed 42 --max-players 8
+go run ./packages/server/cmd/mornlea-server --listen :25565 --world worlds/lan --seed 42 --max-players 8
 go run ./cmd/mornlea --connect 127.0.0.1:25565 --name PlayerA
 ```
 

@@ -16,20 +16,20 @@ import (
 
 // allowed 列出每个内部包允许直接依赖的内部包。
 //
-// internal/server → packages/shared/physics：伙伴任务编排经 CompanionAction 提交移动输入，
+// packages/server/server → packages/shared/physics：伙伴任务编排经 CompanionAction 提交移动输入，
 // 该 API 的字段类型就是 physics.Input；发令者与伙伴交互几何从 tick 入口捕获的
 // runtime.TickTunables 显式消费 physics 值，不在 server 内重读活动快照。该方向是
 // 编排层依赖领域值类型，与 sim→physics 同向，不引入反向耦合。
 //
-// internal/server → packages/contracts/companion-agent/mcp-v1：MCP listener 在组件
+// packages/server/server → packages/contracts/companion-agent/mcp-v1：MCP listener 在组件
 // 构造时直接嵌入并解析跨语言 machine contract，避免另写一份工具 schema；contracts
 // 包只暴露独立字节副本且不反向依赖任何生产包。
 //
-// internal/sim/realm → internal/fluid：流动的调度
+// packages/server/sim/realm → packages/server/fluid：流动的调度
 // 算法（待更新队列、全序排序、封闭盆地上的不动点收敛）被拆成独立包，使其能脱离权威
 // 引擎被穷举性质测试；流动的数据所有权仍在 realm，fluid 只暴露
 // Advance(now, FluidWorld, budget) 这样的无状态纯函数入口，不持有世界。
-// internal/fluid → packages/shared/nativeabi（变更 rust-engine-fluid）：Advance 的单格
+// packages/server/fluid → packages/shared/nativeabi（变更 rust-engine-fluid）：Advance 的单格
 // 流体规则求值经 FluidEvalBatch 批量送入 Rust engine kernel（eval_native.go 是
 // 包内唯一调用点），Go 侧保留全部编排（调度、预算、冲突合并、排序提交），kernel
 // 只做逐项无状态纯函数求值。fluid 除此之外只允许依赖 packages/shared/core（当前实现未
@@ -37,58 +37,62 @@ import (
 // NOT 反向依赖 sim/network/render/storage，否则它会退化成 sim 的内部实现，丧失
 // 独立测试的意义。
 var allowed = map[string][]string{
-	"internal/archcheck":               {},
-	"internal/audio":                   {},
-	"packages/shared/companion":        {"packages/shared/core", "packages/shared/pathfind"},
-	"packages/shared/core":             {"packages/shared/nativeabi"},
-	"packages/shared/nativeabi":        {},
-	"packages/shared/config":           {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/tuning", "packages/shared/logging"},
-	"internal/fluid":                   {"packages/shared/core", "packages/shared/nativeabi"},
-	"packages/shared/physics":          {"packages/shared/core", "packages/shared/nativeabi"},
-	"packages/shared/pathfind":         {"packages/shared/core"},
-	"packages/shared/logging":          {},
-	"packages/shared/network":          {"packages/shared/core", "packages/shared/network/codec", "packages/shared/network/protocol"},
-	"packages/shared/network/codec":    {"packages/shared/core", "packages/shared/network/protocol"},
-	"packages/shared/network/protocol": {"packages/shared/companion", "packages/shared/core"},
-	"packages/shared/network/tcp":      {"packages/shared/network"},
-	"packages/shared/profile":          {"packages/shared/core"},
-	"internal/sim/contract":            {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world"},
-	"internal/sim/entity":              {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "internal/sim/contract", "internal/sim/realm", "packages/shared/tuning"},
-	"internal/sim/realm":               {"packages/shared/core", "internal/fluid", "packages/shared/world"},
-	"internal/sim/runtime":             {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "packages/shared/tuning"},
-	"packages/shared/tuning":           {"packages/shared/core"},
-	"internal/storage": {
+	"internal/archcheck":                        {},
+	"internal/audio":                            {},
+	"packages/contracts/companion-agent/mcp-v1": {},
+	"packages/server/cmd/mornlea-server":        {"packages/server/server", "packages/server/storage", "packages/shared/companion", "packages/shared/config", "packages/shared/core", "packages/shared/logging", "packages/shared/network", "packages/shared/network/tcp", "packages/shared/world", "packages/shared/worldgen"},
+	"packages/shared/companion":                 {"packages/shared/core", "packages/shared/pathfind"},
+	"packages/shared/core":                      {"packages/shared/nativeabi"},
+	"packages/shared/nativeabi":                 {},
+	"packages/shared/config":                    {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/tuning", "packages/shared/logging"},
+	"packages/server/fluid":                     {"packages/shared/core", "packages/shared/nativeabi"},
+	"packages/shared/physics":                   {"packages/shared/core", "packages/shared/nativeabi"},
+	"packages/shared/pathfind":                  {"packages/shared/core"},
+	"packages/shared/logging":                   {},
+	"packages/shared/network":                   {"packages/shared/core", "packages/shared/network/codec", "packages/shared/network/protocol"},
+	"packages/shared/network/codec":             {"packages/shared/core", "packages/shared/network/protocol"},
+	"packages/shared/network/protocol":          {"packages/shared/companion", "packages/shared/core"},
+	"packages/shared/network/tcp":               {"packages/shared/network"},
+	"packages/shared/profile":                   {"packages/shared/core"},
+	"packages/server/sim/contract":              {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world"},
+	"packages/server/sim/entity":                {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "packages/server/sim/contract", "packages/server/sim/realm", "packages/shared/tuning"},
+	"packages/server/sim/realm":                 {"packages/shared/core", "packages/server/fluid", "packages/shared/world"},
+	"packages/server/sim/runtime":               {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "packages/server/sim/contract", "packages/server/sim/entity", "packages/server/sim/realm", "packages/shared/tuning"},
+	"packages/shared/tuning":                    {"packages/shared/core"},
+	"packages/server/storage": {
 		"packages/shared/core",
-		"internal/storage/chunk", "internal/storage/companion", "internal/storage/hostile",
-		"internal/storage/player", "internal/storage/region",
-		"internal/storage/storagedef", "packages/shared/world",
+		"packages/server/storage/chunk", "packages/server/storage/companion", "packages/server/storage/hostile",
+		"packages/server/storage/player", "packages/server/storage/region",
+		"packages/server/storage/storagedef", "packages/shared/world",
 	},
-	"internal/storage/chunk":      {"packages/shared/core", "internal/storage/region", "internal/storage/storagedef", "packages/shared/world"},
-	"internal/storage/player":     {"packages/shared/core", "internal/storage/storagedef"},
-	"internal/storage/companion":  {"packages/shared/companion", "packages/shared/core", "internal/storage/storagedef"},
-	"internal/storage/hostile":    {"packages/shared/core", "internal/storage/storagedef"},
-	"internal/storage/region":     {"packages/shared/core", "internal/storage/storagedef"},
-	"internal/storage/storagedef": {},
-	"packages/shared/world":       {"packages/shared/core"},
-	"packages/shared/worldgen":    {"packages/shared/core", "packages/shared/world", "packages/shared/nativeabi"},
-	"internal/mesh":               {"packages/shared/core", "packages/shared/world", "packages/shared/nativeabi"},
-	"internal/lod":                {"packages/shared/core", "packages/shared/nativeabi"},
-	"internal/assets":             {"packages/shared/core", "packages/shared/world", "internal/mesh", "packages/shared/worldgen"},
-	"internal/render":             {"packages/shared/core", "packages/shared/world", "internal/mesh", "internal/assets"},
-	"internal/render/hud":         {"packages/shared/core", "internal/mesh", "internal/assets", "internal/render"},
-	"internal/server":             {"packages/contracts/companion-agent/mcp-v1", "packages/shared/companion", "packages/shared/core", "packages/shared/network", "packages/shared/pathfind", "packages/shared/physics", "packages/shared/world", "packages/shared/worldgen", "internal/sim/contract", "internal/sim/runtime", "internal/storage", "internal/server/persistence"},
-	"internal/server/persistence": {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "internal/sim/contract", "internal/sim/runtime", "internal/storage"},
-	"internal/client":             {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/network", "packages/shared/world", "internal/mesh", "internal/assets", "internal/render"},
+	"packages/server/storage/chunk":      {"packages/shared/core", "packages/server/storage/region", "packages/server/storage/storagedef", "packages/shared/world"},
+	"packages/server/storage/player":     {"packages/shared/core", "packages/server/storage/storagedef"},
+	"packages/server/storage/companion":  {"packages/shared/companion", "packages/shared/core", "packages/server/storage/storagedef"},
+	"packages/server/storage/hostile":    {"packages/shared/core", "packages/server/storage/storagedef"},
+	"packages/server/storage/region":     {"packages/shared/core", "packages/server/storage/storagedef"},
+	"packages/server/storage/storagedef": {},
+	"packages/shared/world":              {"packages/shared/core"},
+	"packages/shared/worldgen":           {"packages/shared/core", "packages/shared/world", "packages/shared/nativeabi"},
+	"internal/mesh":                      {"packages/shared/core", "packages/shared/world", "packages/shared/nativeabi"},
+	"internal/lod":                       {"packages/shared/core", "packages/shared/nativeabi"},
+	"internal/assets":                    {"packages/shared/core", "packages/shared/world", "internal/mesh", "packages/shared/worldgen"},
+	"internal/render":                    {"packages/shared/core", "packages/shared/world", "internal/mesh", "internal/assets"},
+	"internal/render/hud":                {"packages/shared/core", "internal/mesh", "internal/assets", "internal/render"},
+	"packages/server/server":             {"packages/contracts/companion-agent/mcp-v1", "packages/shared/companion", "packages/shared/core", "packages/shared/network", "packages/shared/pathfind", "packages/shared/physics", "packages/shared/world", "packages/shared/worldgen", "packages/server/sim/contract", "packages/server/sim/runtime", "packages/server/storage", "packages/server/server/persistence"},
+	"packages/server/server/persistence": {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/server/sim/contract", "packages/server/sim/runtime", "packages/server/storage"},
+	"internal/client":                    {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/network", "packages/shared/world", "internal/mesh", "internal/assets", "internal/render"},
 }
 
 func TestInternalDependenciesAreOneWay(t *testing.T) {
-	// shared 模块切割后白名单键横跨 `./internal/...` 与 `./packages/shared/...`
-	// 两个模块；go.work 下 `./...` 不跨嵌套模块，必须显式按模块列出。
-	cmd := exec.Command("go", "list", "-f", "{{.ImportPath}}|{{join .Imports \" \"}}", "./internal/...", "./packages/shared/...")
+	// 模块切割后白名单键横跨根模块（`./internal/...`）与 `./packages/{contracts,
+	// shared,server}/...` 各 workspace 模块；go.work 下 `./...` 不跨嵌套模块，
+	// 必须显式按模块列出，新模块落地时同步扩这里。
+	cmd := exec.Command("go", "list", "-f", "{{.ImportPath}}|{{join .Imports \" \"}}",
+		"./internal/...", "./packages/contracts/...", "./packages/shared/...", "./packages/server/...")
 	cmd.Dir = moduleRoot(t)
 	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("枚举 internal 与 shared 包失败: %v", err)
+		t.Fatalf("枚举 internal 与各 packages 模块包失败: %v", err)
 	}
 
 	actual := make(map[string]bool)
@@ -130,15 +134,15 @@ func TestInternalDependenciesAreOneWay(t *testing.T) {
 
 // TestServerPersistenceDoesNotDependOnServer 钉住持久化子包到根包的反向依赖禁令。
 //
-// 生产代码（未带 persistence_contract 构建约束的文件）不得导入 `internal/server`；
+// 生产代码（未带 persistence_contract 构建约束的文件）不得导入 `packages/server/server`；
 // 唯一的例外是被 //go:build persistence_contract 门控的契约测试文件，其为校验
-// 根包兼容 re-export 与哨兵恒等而显式依赖 `internal/server`。
+// 根包兼容 re-export 与哨兵恒等而显式依赖 `packages/server/server`。
 func TestServerPersistenceDoesNotDependOnServer(t *testing.T) {
-	if slices.Contains(allowed["internal/server/persistence"], "internal/server") {
-		t.Fatalf("internal/server/persistence 不允许依赖 internal/server：子包不得反向依赖父包")
+	if slices.Contains(allowed["packages/server/server/persistence"], "packages/server/server") {
+		t.Fatalf("packages/server/server/persistence 不允许依赖 packages/server/server：子包不得反向依赖父包")
 	}
 	root := moduleRoot(t)
-	dir := filepath.Join(root, "internal", "server", "persistence")
+	dir := filepath.Join(root, "packages", "server", "server", "persistence")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatalf("读取 %s: %v", dir, err)
@@ -162,8 +166,8 @@ func TestServerPersistenceDoesNotDependOnServer(t *testing.T) {
 		for _, imp := range parsed.Imports {
 			importPath := strings.Trim(imp.Path.Value, `"`)
 
-			if localName(importPath) == "internal/server" {
-				t.Errorf("持久化生产文件 %s 不允许导入 internal/server（仅 //go:build persistence_contract 的契约文件可导入）", entry.Name())
+			if localName(importPath) == "packages/server/server" {
+				t.Errorf("持久化生产文件 %s 不允许导入 packages/server/server（仅 //go:build persistence_contract 的契约文件可导入）", entry.Name())
 			}
 		}
 	}
@@ -384,7 +388,7 @@ func TestClientCommandDependencyViolationsDetectDrift(t *testing.T) {
 	})
 }
 
-// simAllowedEdges 列出权威模拟子树 `internal/sim` 四个子包允许的内部依赖
+// simAllowedEdges 列出权威模拟子树 `packages/server/sim` 四个子包允许的内部依赖
 // 边（本地 import path）。依赖方向契约为：`contract` 为叶子，`realm` 只依赖
 // 环境，`entity` 可依赖 `contract`/`realm` 与共享层的 `packages/shared/tuning`
 // 快照，`runtime` 是唯一允许同时编排其余三者和 tuning 快照的权威入口；任何
@@ -394,17 +398,17 @@ func TestClientCommandDependencyViolationsDetectDrift(t *testing.T) {
 // 一致，重复列出是为了让子树检查器可在不依赖全局表的情况下独立校验方向
 // 与合成反向边。
 var simAllowedEdges = map[string][]string{
-	"internal/sim/contract": {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world"},
-	"internal/sim/realm":    {"packages/shared/core", "internal/fluid", "packages/shared/world"},
-	"internal/sim/entity":   {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "internal/sim/contract", "internal/sim/realm", "packages/shared/tuning"},
-	"internal/sim/runtime":  {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "packages/shared/tuning"},
+	"packages/server/sim/contract": {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world"},
+	"packages/server/sim/realm":    {"packages/shared/core", "packages/server/fluid", "packages/shared/world"},
+	"packages/server/sim/entity":   {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "packages/server/sim/contract", "packages/server/sim/realm", "packages/shared/tuning"},
+	"packages/server/sim/runtime":  {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "packages/server/sim/contract", "packages/server/sim/entity", "packages/server/sim/realm", "packages/shared/tuning"},
 }
 
 // simRequiredEdges 是模拟子树必须真实存在的编排边：`runtime` 必须同时
 // 装配三个下层子包与共享层的 tuning 快照，否则权威 tick 的阶段编排会悄悄
 // 绕过某层状态的所有权边界，单 mutation 提交路径不再覆盖全部写入。
 var simRequiredEdges = map[string][]string{
-	"internal/sim/runtime": {"internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "packages/shared/tuning"},
+	"packages/server/sim/runtime": {"packages/server/sim/contract", "packages/server/sim/entity", "packages/server/sim/realm", "packages/shared/tuning"},
 }
 
 // TestSimAllowedEdgesMatchesGlobalAllowed 校验模拟子树的局部白名单
@@ -434,7 +438,7 @@ func TestSimAllowedEdgesMatchesGlobalAllowed(t *testing.T) {
 
 // isSimPackage 报告本地 import path 是否落在权威模拟子树内。
 func isSimPackage(localPath string) bool {
-	return localPath == "internal/sim" || strings.HasPrefix(localPath, "internal/sim/")
+	return localPath == "packages/server/sim" || strings.HasPrefix(localPath, "packages/server/sim/")
 }
 
 // simDependencyViolations 对照模拟子树的允许边表与必需边表检查给定的
@@ -480,13 +484,13 @@ func simDependencyViolations(edges map[string][]string) []string {
 	return violations
 }
 
-// simImportEdges 扫描 `internal/sim` 子树内全部含生产 Go 源文件的目录，
+// simImportEdges 扫描 `packages/server/sim` 子树内全部含生产 Go 源文件的目录，
 // 返回「本地包路径 → 去重排序后的本地生产 import 列表」。子树内出现
 // 未登记的新包目录时由检查器的白名单核对报错，新增子包不可能静默绕过。
 func simImportEdges(t *testing.T) map[string][]string {
 	t.Helper()
 	root := moduleRoot(t)
-	subtree := filepath.Join(root, "internal", "sim")
+	subtree := filepath.Join(root, "packages", "server", "sim")
 	edges := make(map[string][]string)
 	err := filepath.WalkDir(subtree, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -554,10 +558,10 @@ func TestSimSubpackageDependencyDirections(t *testing.T) {
 func TestSimDependencyViolationsDetectDrift(t *testing.T) {
 	contractEdges := func() map[string][]string {
 		return map[string][]string{
-			"internal/sim/contract": {"packages/shared/core", "packages/shared/world", "packages/shared/companion", "packages/shared/physics"},
-			"internal/sim/realm":    {"packages/shared/core", "internal/fluid", "packages/shared/world"},
-			"internal/sim/entity":   {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "internal/sim/contract", "internal/sim/realm", "packages/shared/tuning"},
-			"internal/sim/runtime":  {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "internal/sim/contract", "internal/sim/entity", "internal/sim/realm", "packages/shared/tuning"},
+			"packages/server/sim/contract": {"packages/shared/core", "packages/shared/world", "packages/shared/companion", "packages/shared/physics"},
+			"packages/server/sim/realm":    {"packages/shared/core", "packages/server/fluid", "packages/shared/world"},
+			"packages/server/sim/entity":   {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "packages/server/sim/contract", "packages/server/sim/realm", "packages/shared/tuning"},
+			"packages/server/sim/runtime":  {"packages/shared/companion", "packages/shared/core", "packages/shared/physics", "packages/shared/world", "packages/server/sim/contract", "packages/server/sim/entity", "packages/server/sim/realm", "packages/shared/tuning"},
 		}
 	}
 	if violations := simDependencyViolations(contractEdges()); len(violations) != 0 {
@@ -569,15 +573,15 @@ func TestSimDependencyViolationsDetectDrift(t *testing.T) {
 		from string
 		to   string
 	}{
-		{"contract反向依赖tuning", "internal/sim/contract", "packages/shared/tuning"},
-		{"contract反向依赖realm", "internal/sim/contract", "internal/sim/realm"},
-		{"contract反向依赖entity", "internal/sim/contract", "internal/sim/entity"},
-		{"contract反向依赖runtime", "internal/sim/contract", "internal/sim/runtime"},
-		{"realm反向依赖contract", "internal/sim/realm", "internal/sim/contract"},
-		{"realm反向依赖tuning", "internal/sim/realm", "packages/shared/tuning"},
-		{"realm反向依赖entity", "internal/sim/realm", "internal/sim/entity"},
-		{"realm反向依赖runtime", "internal/sim/realm", "internal/sim/runtime"},
-		{"entity反向依赖runtime", "internal/sim/entity", "internal/sim/runtime"},
+		{"contract反向依赖tuning", "packages/server/sim/contract", "packages/shared/tuning"},
+		{"contract反向依赖realm", "packages/server/sim/contract", "packages/server/sim/realm"},
+		{"contract反向依赖entity", "packages/server/sim/contract", "packages/server/sim/entity"},
+		{"contract反向依赖runtime", "packages/server/sim/contract", "packages/server/sim/runtime"},
+		{"realm反向依赖contract", "packages/server/sim/realm", "packages/server/sim/contract"},
+		{"realm反向依赖tuning", "packages/server/sim/realm", "packages/shared/tuning"},
+		{"realm反向依赖entity", "packages/server/sim/realm", "packages/server/sim/entity"},
+		{"realm反向依赖runtime", "packages/server/sim/realm", "packages/server/sim/runtime"},
+		{"entity反向依赖runtime", "packages/server/sim/entity", "packages/server/sim/runtime"},
 	} {
 		t.Run(edge.name, func(t *testing.T) {
 			edges := contractEdges()
@@ -591,11 +595,11 @@ func TestSimDependencyViolationsDetectDrift(t *testing.T) {
 
 	t.Run("必需边缺失", func(t *testing.T) {
 		edges := contractEdges()
-		edges["internal/sim/runtime"] = []string{"internal/sim/contract", "internal/sim/realm", "packages/shared/tuning"}
+		edges["packages/server/sim/runtime"] = []string{"packages/server/sim/contract", "packages/server/sim/realm", "packages/shared/tuning"}
 		violations := simDependencyViolations(edges)
 		found := false
 		for _, violation := range violations {
-			if strings.Contains(violation, "缺少必需依赖边") && strings.Contains(violation, "internal/sim/entity") {
+			if strings.Contains(violation, "缺少必需依赖边") && strings.Contains(violation, "packages/server/sim/entity") {
 				found = true
 				break
 			}
@@ -607,7 +611,7 @@ func TestSimDependencyViolationsDetectDrift(t *testing.T) {
 
 	t.Run("未登记新包", func(t *testing.T) {
 		edges := contractEdges()
-		edges["internal/sim/extra"] = []string{"packages/shared/core"}
+		edges["packages/server/sim/extra"] = []string{"packages/shared/core"}
 		violations := simDependencyViolations(edges)
 		if len(violations) != 1 || !strings.Contains(violations[0], "未登记依赖白名单") {
 			t.Fatalf("未登记子包未被拒绝: %v", violations)

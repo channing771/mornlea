@@ -36,6 +36,7 @@ var (
 		"go.mod",
 		"cmd",
 		"packages/contracts",
+		"packages/server",
 		"packages/shared",
 		"internal",
 		"packages/engine/Cargo.toml",
@@ -112,12 +113,12 @@ var legacyIdentityAllowances = []legacyIdentityAllowance{
 	{"packages/shared/profile/profile_test.go", legacyDataDirectory, "TestLoadOrCreateDefaultRejectsSameInodeSymlinkInsertedBeforeOpen", 1},
 	{"packages/shared/profile/profile_test.go", legacyDataDirectory, "TestLoadOrCreateDefaultLogsOnlySuccessfulMigrationPublisher", 3},
 	{"cmd/mornlea/run_test.go", legacyDataDirectory, "legacyDataPath", 1},
-	{"cmd/mornlea-server/main_test.go", legacyDataDirectory, "legacyConfigPath", 1},
-	{"internal/storage/backup.go", legacyBackupIdentity, "backupIdentityName", 1},
-	{"internal/storage/backup_test.go", legacyBackupIdentity, "TestWorldBackupCopiesCompleteWorldAndReusesMatchingBackup", 1},
-	{"internal/storage/backup_test.go", legacyBackupIdentity, "TestWorldBackupRejectsEveryMismatchedIdentityField", 1},
-	{"internal/storage/backup_test.go", legacyBackupIdentity, "TestWorldBackupRejectsOversizedIdentity", 1},
-	{"internal/storage/backup_test.go", legacyBackupIdentity, "readWorldBackupIdentity", 1},
+	{"packages/server/cmd/mornlea-server/main_test.go", legacyDataDirectory, "legacyConfigPath", 1},
+	{"packages/server/storage/backup.go", legacyBackupIdentity, "backupIdentityName", 1},
+	{"packages/server/storage/backup_test.go", legacyBackupIdentity, "TestWorldBackupCopiesCompleteWorldAndReusesMatchingBackup", 1},
+	{"packages/server/storage/backup_test.go", legacyBackupIdentity, "TestWorldBackupRejectsEveryMismatchedIdentityField", 1},
+	{"packages/server/storage/backup_test.go", legacyBackupIdentity, "TestWorldBackupRejectsOversizedIdentity", 1},
+	{"packages/server/storage/backup_test.go", legacyBackupIdentity, "readWorldBackupIdentity", 1},
 }
 
 type sourceStringLiteral struct {
@@ -188,7 +189,13 @@ func TestMornleaCurrentIdentity(t *testing.T) {
 	if root := os.Getenv("MORNLEA_IDENTITY_TEST_ROOT"); root != "" {
 		actual := make([]int, len(legacyIdentityAllowances))
 		goScanner := newGoIdentityScanner(root)
-		scanCurrentIdentityRoot(t, root, "cmd", actual, goScanner)
+		// 合成 mutation 各自只建自己需要的目录（cmd 或 server 模块子树）；
+		// 存在才扫，统一扫描会让只建一侧的 mutation 误报「身份扫描根不存在」。
+		for _, relative := range []string{"cmd", "packages/server"} {
+			if _, err := os.Lstat(filepath.Join(root, filepath.FromSlash(relative))); err == nil {
+				scanCurrentIdentityRoot(t, root, relative, actual, goScanner)
+			}
+		}
 		goScanner.scanConstants(t)
 		return
 	}
@@ -329,17 +336,17 @@ const artifact = helper.Prefix + helper.Suffix
 `)
 		},
 		"build constrained constant chain": func(t *testing.T, root string) {
-			writeIdentityMutationFile(t, root, filepath.Join("cmd", "mornlea-server", "platform_darwin.go"), `//go:build darwin
+			writeIdentityMutationFile(t, root, filepath.Join("packages", "server", "cmd", "mornlea-server", "platform_darwin.go"), `//go:build darwin
 
 package platform
 const platformPrefix = "safe"
 `)
-			writeIdentityMutationFile(t, root, filepath.Join("cmd", "mornlea-server", "platform_linux.go"), `//go:build linux
+			writeIdentityMutationFile(t, root, filepath.Join("packages", "server", "cmd", "mornlea-server", "platform_linux.go"), `//go:build linux
 
 package platform
 const platformPrefix = "mc"
 `)
-			writeIdentityMutationFile(t, root, filepath.Join("cmd", "mornlea-server", "artifact.go"), `package platform
+			writeIdentityMutationFile(t, root, filepath.Join("packages", "server", "cmd", "mornlea-server", "artifact.go"), `package platform
 const artifact = platformPrefix + "go_mesh"
 `)
 		},
@@ -594,7 +601,7 @@ func supportedIdentityBuilds() []identityBuild {
 	linux.GOOS = "linux"
 	linux.GOARCH = "amd64"
 	linux.CgoEnabled = true
-	linuxServer := identityBuild{name: "linux-server", context: linux, root: "cmd/mornlea-server"}
+	linuxServer := identityBuild{name: "linux-server", context: linux, root: "packages/server/cmd/mornlea-server"}
 	if build.Default.GOOS != "darwin" {
 		return []identityBuild{linuxServer}
 	}

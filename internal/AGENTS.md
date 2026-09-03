@@ -2,22 +2,20 @@
 
 ## 作用域
 
-本文件补充仓库根 `AGENTS.md`，适用于 `internal/`。更具体的边界见：
+本文件补充仓库根 `AGENTS.md`，适用于 `internal/`（余下客户端域包与
+`internal/archcheck`）。更具体的边界见：
 
 - `internal/client/AGENTS.md`
-- `internal/fluid/AGENTS.md`
-- `internal/sim/AGENTS.md`
-- `internal/storage/AGENTS.md`
 
-双侧共享的领域包（core/network/physics 等）已迁入 `packages/shared` 模块，
-其局部指南随包目录迁移（如 `packages/shared/network/AGENTS.md`）。
+服务端域包（sim/fluid/storage/server 与 `cmd/mornlea-server`）已迁入
+`packages/server` 模块，指南见 `packages/server/AGENTS.md`；双侧共享的领域包
+（core/network/physics 等）在 `packages/shared`，局部指南随包目录（如
+`packages/shared/network/AGENTS.md`）。
 
 ## 包所有权
 
-- `sim` 持有服务端权威 tick、玩法结算和世界变更编排。
-- `storage` 持有世界、玩家和伙伴的编码、迁移、恢复与磁盘生命周期。
-- `server` 装配 Host、会话、权威模拟和持久化 worker；重 CPU、磁盘或网络工作不得阻塞权威 tick。
 - `client` 持有只读权威镜像、输入预测、消息接收和渲染侧 CPU 编排，不成为第二个权威模拟器。
+- `render`、`mesh`、`lod`、`assets`、`audio` 持有呈现侧数据描述、CPU 编码与平台桥接职责。
 
 ## 依赖边界
 
@@ -31,6 +29,6 @@ engine C ABI 只能由 `packages/shared/nativeabi` 接触；client C ABI 只能�
 
 ## 定点验证
 
-- 模拟包示例：`go test ./internal/sim/... -race -count=1`；处理其他包时把路径替换为对应真实目录。
+- 客户端包示例：`go test ./internal/client -race -count=1`；处理其他包时把路径替换为对应真实目录。
 - 依赖边界：`go test ./internal/archcheck -count=1`。
 - 当前文档入口：`docs/notes/go-rust-division.md`、`docs/test-organization.md`。

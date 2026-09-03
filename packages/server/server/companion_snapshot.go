@@ -1,0 +1,501 @@
+// 本文件实现 Companion Manager 的世界读取辅助：以某位置为中心的 3×3 ready
+// 区块不可变视图、规划观察快照（PlanSnapshot）构造、寻路网格（PathGrid）构造
+// 与生产阻挡表。全部构造只发生在权威 tick 边界（持有 stepMu）：区块经
+// CloneReadyChunk 拷贝后 worker 只读不可变值，绝不回调活世界。
+package server
+
+import (
+	"fmt"
+	"math"
+
+	"github.com/channing771/mornlea/packages/server/sim/contract"
+	"github.com/channing771/mornlea/packages/server/sim/runtime"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/pathfind"
+	"github.com/channing771/mornlea/packages/shared/world"
+)
+
+// companionViewRadiusChunks 是区块视图的半径：3×3。规划快照的水平 ±16 格与
+// 寻路窗口 ±16 格在区块对齐后最多横跨 3×3 区块（33 格宽 ≤ 2×16+1），因此
+// 3×3 恰好同时覆盖两者，也正好是 sim 的伙伴兴趣范围。
+const companionViewRadiusChunks = 1
+
+// companionChunkView 是以某个方块位置为中心的 3×3 ready 区块不可变拷贝。
+// 未 ready（或未加载）的槽位保持 nil，读取返回 ok=false。构造即深拷贝，
+// 之后与权威世界的一切变化隔离。
+type companionChunkView struct {
+	dimension core.DimensionID
+	origin    core.ChunkPos
+	chunks    [9]*world.Chunk
+	revisions [9]uint64
+}
+
+// chunkViewAt 构造以 position 为中心的 3×3 区块视图。只拷贝当前 Ready 的区块；
+// 调用方决定未就绪区块的处理策略（规划快照跳过缺失列，寻路顺延）。
+func (m *companionManager) chunkViewAt(dimension core.DimensionID, position [3]float32) companionChunkView {
+	return companionChunkViewFor(m.engine, dimension, position)
+}
+
+// companionChunkViewFor 是区块视图构造的包级实现：伙伴与夜行者两套编排共用
+// 同一份「深拷贝即隔离」的世界读取纪律（构造只发生在持有 stepMu 的 tick 边
+// 界，拷贝出的区块与权威世界的一切后续变化无关）。
+func companionChunkViewFor(engine *runtime.Engine, dimension core.DimensionID, position [3]float32) companionChunkView {
+	center := (core.BlockPos{
+		X: int32(math.Floor(float64(position[0]))),
+		Z: int32(math.Floor(float64(position[2]))),
+	}).Chunk()
+	view := companionChunkView{
+		dimension: dimension,
+		origin:    core.ChunkPos{X: center.X - companionViewRadiusChunks, Z: center.Z - companionViewRadiusChunks},
+	}
+	for dz := int32(-companionViewRadiusChunks); dz <= companionViewRadiusChunks; dz++ {
+		for dx := int32(-companionViewRadiusChunks); dx <= companionViewRadiusChunks; dx++ {
+			key := core.ChunkKey{
+				Dimension: dimension,
+				Pos:       core.ChunkPos{X: center.X + dx, Z: center.Z + dz},
+			}
+			chunk, revision, ready := engine.CloneReadyChunk(key)
+			if !ready {
+				continue
+			}
+			view.chunks[(dz+1)*3+(dx+1)] = chunk
+			view.revisions[(dz+1)*3+(dx+1)] = revision
+		}
+	}
+	return view
+}
+
+// chunkFor 返回世界方块坐标所属的区块拷贝；不属于视图时返回 nil。
+func (v companionChunkView) chunkFor(x, z int32) *world.Chunk {
+	chunk := (core.BlockPos{X: x, Z: z}).Chunk()
+	dx := chunk.X - v.origin.X
+	dz := chunk.Z - v.origin.Z
+	if dx < 0 || dx > 2 || dz < 0 || dz > 2 {
+		return nil
+	}
+	return v.chunks[dz*3+dx]
+}
+
+// blockAt 读取世界坐标方块。区块在视图内且已 ready 时返回 (方块, true)；
+// 区块缺失返回 (0, false)。世界 Y 越界由 world.Chunk.BlockAt 归一为空气。
+func (v companionChunkView) blockAt(x, y, z int32) (core.BlockID, bool) {
+	chunk := v.chunkFor(x, z)
+	if chunk == nil {
+		return 0, false
+	}
+	return chunk.BlockAt(int(x&core.SectionMask), y, int(z&core.SectionMask)), true
+}
+
+// heightAt 返回 ready 列的冻结地表高度；未 ready 或超出 3×3 视图返回 false。
+func (v companionChunkView) heightAt(x, z int32) (int32, bool) {
+	chunk := v.chunkFor(x, z)
+	if chunk == nil {
+		return 0, false
+	}
+	heights := chunk.Heights()
+	return heights.Highest(int(x&core.SectionMask), int(z&core.SectionMask)), true
+}
+
+// readyRevisions 返回视图中已 ready 区块的 (X,Z) 字典序升序 revision 列表，
+// 供寻路结果失效判定与快照使用。X 是主键：外层必须遍历 X（dx），否则
+// PlanSnapshot.Validate 的严格升序校验会在跨 Z 行时拒绝。
+func (v companionChunkView) readyRevisions() []pathfind.ChunkRevision {
+	ready := make([]pathfind.ChunkRevision, 0, 9)
+	for dx := int32(0); dx < 3; dx++ {
+		for dz := int32(0); dz < 3; dz++ {
+			if v.chunks[dz*3+dx] == nil {
+				continue
+			}
+			ready = append(ready, pathfind.ChunkRevision{
+				Chunk:    core.ChunkPos{X: v.origin.X + dx, Z: v.origin.Z + dz},
+				Revision: v.revisions[dz*3+dx],
+			})
+		}
+	}
+	return ready
+}
+
+// allCoveredReady 报告从 origin 起 sizeX×sizeZ 的区块矩形是否全部 ready，
+// 供寻路在快照完整时才发起。
+func (v companionChunkView) allCoveredReady(origin core.ChunkPos, sizeX, sizeZ int32) bool {
+	for dz := int32(0); dz < sizeZ; dz++ {
+		for dx := int32(0); dx < sizeX; dx++ {
+			if !v.chunkReady(origin.X+dx, origin.Z+dz) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// chunkReady 报告指定区块是否在视图中且已拷贝就绪。
+func (v companionChunkView) chunkReady(chunkX, chunkZ int32) bool {
+	return v.chunkFor(chunkX<<core.SectionShift, chunkZ<<core.SectionShift) != nil
+}
+
+// revisionAt 返回视图中区块的内容 revision；区块缺失时返回 0（调用方必须
+// 先经 allCoveredReady 保证存在）。
+func (v companionChunkView) revisionAt(chunkX, chunkZ int32) uint64 {
+	return v.revisions[(chunkZ-v.origin.Z)*3+(chunkX-v.origin.X)]
+}
+
+// productionCompanionPassableBlocks 返回寻路阻挡表的生产映射：空气、植物与
+// 火把五形态可通过，其余一切注册方块阻挡。除流体外，该判定与 collision
+// oracle（physics.BlockCollisionBoxes）逐一对齐——零碰撞体的编号可通过，其余
+// 非空气方块都有碰撞体故阻挡（玻璃、树叶与顶面低 1/16 的耕地都不例外，耕地有
+// 碰撞体正意味着伙伴可以站在农田上）；未注册编号由 NewPathBlockTable 缺省视为
+// 阻挡。
+//
+// 植物与火把都**不是**例外，是照章办事：它们在 oracle 下零碰撞体，这里就如实
+// 放行。为什么不像流体那样豁免——流体的豁免防的是「走进去沉底且自己走不出
+// 来」，而穿过一株小麦或一枚火把对伙伴没有任何后续状态（不下沉、不扣氧气、
+// 不受伤），把作物当墙只会让伙伴绕开自家农田，或者在农田中央被自己种的小麦
+// 困住；火把与玩家可放置的语义同源（玩家零碰撞可穿行，伙伴寻路同样穿行），
+// 且火把零碰撞即不可支撑，不会出现伙伴踩着悬空火把行走的路径。
+//
+// 流体是刻意的例外：它在 oracle 下是零碰撞体（实体可自由穿行），却仍在本表里
+// 阻挡。原因是伙伴尚无浮力、屏息或溺水处理，把水面纳入路径会让它走进水里沉底
+// 卡死；宁可绕开水域。
+//
+// 退出条件（**两条都成立才可以放开流体**，缺一条就是制造故障）：
+//
+//  1. 伙伴走与玩家同一套水中积分——即 runtime.advanceActiveCompanions 喂给
+//     physics.Step 的 physics.Input 里 BodyInFluid 由 physics.SubmersionFlags
+//     真实算出，而不是像现在这样恒为零值；
+//  2. 伙伴有自己的氧气与溺水结算——即 sim 的 advanceOxygen 对伙伴也成立。
+//
+// 两条**都还不成立**：spec fluid-survival 的主语全是"玩家"。原注释写的是
+// "后续变更交付浸没物理后移除"，而浸没物理本身（physics.SubmersionFlags、
+// 水中积分、玩家溺水）已由变更 fluid-presentation-survival 交付，那句话字面
+// 已经成立——照它放开流体，A* 会规划穿水路径而伙伴仍按空气 + 重力积分，正好
+// 落进本例外当初要防的故障。给伙伴接水中物理属 M5 系列范围。
+//
+// 本表与 TestCompanionManagerPathBlockTableMatchesCollisionOracle 里的豁免
+// 分支是同一条决定的两半，必须同进同出；那里写着同样的两条退出条件。该 oracle
+// 测试逐编号比对「可通过 ⇔ 零碰撞体」，零碰撞编号（作物、火把）漏登本表或
+// 有碰撞编号误入本表都会在那里红掉。
+func productionCompanionPassableBlocks() map[core.BlockID]bool {
+	passable := map[core.BlockID]bool{core.AirID: true}
+	for id := core.AirID; id < core.BlockIDMax; id++ {
+		if core.IsPlant(id) {
+			passable[id] = true
+		}
+	}
+	// 门上半在 `physics.BlockCollisionBoxes` 中按空气处理（零碰撞体，下半已阻挡时上半无需再阻挡，避免双格厚度叠加），寻路阻挡表需与其对齐，否则 `TestCompanionManagerPathBlockTableMatchesCollisionOracle` 逐编号对齐失败。
+	if core.DoorUpper != 0 {
+		passable[core.DoorUpper] = true
+	}
+	for id := core.TorchStandingID; id <= core.TorchWallNegZID; id++ {
+		if core.IsTorch(id) {
+			passable[id] = true
+		}
+	}
+	return passable
+}
+
+// scanEnvObservation 扫描伙伴周围水平 ±16、垂直 ±4 的 Dialogue 环境观察：
+// 每列读取地表高度，并收集非空气且六邻域存在空气的可见表面；邻居落在未加载
+// 区块时不猜测。固定 33×33×9 扫描输出至多 256 个暴露方块和 1089 个高度
+// 样本。规划快照使用独立的 dense 33×17×33 projection，不经过此路径。
+func (m *companionManager) scanEnvObservation(
+	body companion.Body,
+) (view companionChunkView, exposed []companion.PlanBlock, heights []companion.PlanHeight) {
+	view = m.chunkViewAt(body.Dimension, body.Position)
+	centerX := int32(math.Floor(float64(body.Position[0])))
+	centerY := int32(math.Floor(float64(body.Position[1])))
+	centerZ := int32(math.Floor(float64(body.Position[2])))
+	exposed = make([]companion.PlanBlock, 0, companion.MaxPlanExposedBlocks)
+	heights = make([]companion.PlanHeight, 0, companion.MaxPlanHeightSamples)
+	lowY := max(centerY-pathfind.PathWindowVerticalRadius, core.MinY)
+	highY := min(centerY+pathfind.PathWindowVerticalRadius, core.MaxY-1)
+	for x := centerX - 16; x <= centerX+16; x++ {
+		for z := centerZ - 16; z <= centerZ+16; z++ {
+			chunk := view.chunkFor(x, z)
+			if chunk == nil {
+				continue
+			}
+			columnHeights := chunk.Heights()
+			heights = append(heights, companion.PlanHeight{
+				X:      x,
+				Z:      z,
+				Height: columnHeights.Highest(int(x&core.SectionMask), int(z&core.SectionMask)),
+			})
+			for y := lowY; y <= highY; y++ {
+				id, ok := view.blockAt(x, y, z)
+				if !ok || id == core.AirID {
+					continue
+				}
+				if view.hasAirNeighbor(x, y, z) {
+					exposed = append(exposed, companion.PlanBlock{
+						Pos:   core.BlockPos{X: x, Y: y, Z: z},
+						Block: id,
+					})
+				}
+			}
+		}
+	}
+	return view, exposed, heights
+}
+
+// planningTerrainSource 是 tick 边界 frozen view 的最小读取面。构造阶段先读列
+// readiness/height，再做至多固定槽数的 primary `blockAt`；派生阶段不再持有它。
+type planningTerrainSource interface {
+	heightAt(x, z int32) (int32, bool)
+	blockAt(x, y, z int32) (core.BlockID, bool)
+}
+
+// buildPlanningObservation 构造完整 33×17×33 planning projection，再完全从
+// cache 派生 exposed 与 legacy height 摘要。Dialogue 仍使用原有 ±4 扫描路径。
+func buildPlanningObservation(
+	source planningTerrainSource,
+	position [3]float32,
+) (companion.TerrainProjection, []companion.PlanBlock, []companion.PlanHeight, error) {
+	centerX := math.Floor(float64(position[0]))
+	centerY := math.Floor(float64(position[1]))
+	centerZ := math.Floor(float64(position[2]))
+	const minInt32 = -1 << 31
+	const maxInt32 = 1<<31 - 1
+	if centerX < minInt32+companion.TerrainHorizontalRadius ||
+		centerX > maxInt32-companion.TerrainHorizontalRadius ||
+		centerY < minInt32+companion.TerrainVerticalRadius ||
+		centerY > maxInt32-companion.TerrainVerticalRadius ||
+		centerZ < minInt32+companion.TerrainHorizontalRadius ||
+		centerZ > maxInt32-companion.TerrainHorizontalRadius {
+		return companion.TerrainProjection{}, nil, nil, fmt.Errorf("server: 伙伴位置无法形成 planning terrain projection")
+	}
+	origin := core.BlockPos{
+		X: int32(centerX) - companion.TerrainHorizontalRadius,
+		Y: int32(centerY) - companion.TerrainVerticalRadius,
+		Z: int32(centerZ) - companion.TerrainHorizontalRadius,
+	}
+	projection := companion.NewTerrainProjection(origin)
+	for xOffset := 0; xOffset < companion.TerrainWidth; xOffset++ {
+		x := origin.X + int32(xOffset)
+		for zOffset := 0; zOffset < companion.TerrainDepth; zOffset++ {
+			z := origin.Z + int32(zOffset)
+			height, ready := source.heightAt(x, z)
+			if !ready {
+				continue
+			}
+			if !projection.SetReadyColumn(x, z, height) {
+				return companion.TerrainProjection{}, nil, nil, fmt.Errorf("server: planning terrain 列 (%d,%d) height=%d 非法", x, z, height)
+			}
+			for yOffset := 0; yOffset < companion.TerrainHeight; yOffset++ {
+				y := origin.Y + int32(yOffset)
+				if y < core.MinY || y >= core.MaxY {
+					continue
+				}
+				block, ok := source.blockAt(x, y, z)
+				if !ok {
+					return companion.TerrainProjection{}, nil, nil, fmt.Errorf("server: ready planning terrain 列 (%d,%d) 在 y=%d 读取失败", x, z, y)
+				}
+				if !projection.SetBlock(core.BlockPos{X: x, Y: y, Z: z}, block) {
+					return companion.TerrainProjection{}, nil, nil, fmt.Errorf("server: planning terrain 方块 (%d,%d,%d) 编号 %d 非法", x, y, z, block)
+				}
+			}
+		}
+	}
+	if err := projection.Validate(); err != nil {
+		return companion.TerrainProjection{}, nil, nil, err
+	}
+	return projection, projection.ExposedBlocks(), projection.Heights(), nil
+}
+
+// buildPlanSnapshot 在 tick 边界构造一次规划的不可变观察快照：
+//   - 发令者事实在入队时刻冻结（captureIssuer），同一指令的规划输入不随
+//     发令者后续移动而漂移；
+//   - terrain 是伙伴周围水平 ±16、垂直 ±8 的 dense 33×17×33 projection，
+//     暴露方块摘要（≤256）与 1089 列高度都从同一冻结 projection 派生；
+//   - 相关区块 revision 与世界时间取当前权威值。
+//
+// 全部工作由固定 18,513 个体素与 1,089 列约束，不随世界规模增长。
+func (m *companionManager) buildPlanSnapshot(
+	definition companion.Definition,
+	command companion.TaskCommand,
+	issuer companionTaskIssuer,
+	body companion.Body,
+) (companion.PlanSnapshot, error) {
+	view := m.chunkViewAt(body.Dimension, body.Position)
+	terrain, exposed, heights, err := buildPlanningObservation(view, body.Position)
+	if err != nil {
+		return companion.PlanSnapshot{}, err
+	}
+
+	snapshot := companion.PlanSnapshot{
+		Command: string(command),
+		Issuer: companion.PlanPlayer{
+			ID:         issuer.playerID,
+			Position:   issuer.position,
+			Yaw:        issuer.yaw,
+			Pitch:      issuer.pitch,
+			LookHit:    issuer.lookHit,
+			HasLookHit: issuer.hasLookHit,
+		},
+		Companion: companion.PlanCompanion{
+			ID:         definition.ID,
+			Position:   body.Position,
+			Yaw:        body.Yaw,
+			Pitch:      body.Pitch,
+			Inventory:  body.Inventory,
+			TaskStatus: m.taskStatusLabel(definition.ID),
+		},
+		ExposedBlocks:  companion.BoundExposedBlocks(exposed),
+		Heights:        heights,
+		Terrain:        terrain,
+		ChunkRevisions: view.readyRevisions(),
+		OnlinePlayers:  m.onlinePlanPlayers(),
+		WorldTimeTicks: m.engine.WorldTime(),
+	}
+	return snapshot, snapshot.Validate()
+}
+
+// onlinePlanPlayers 返回 tick 边界的在线玩家集合（已按 ID 升序去重、至多
+// MaxPlanOnlinePlayers 名）：经注入的会话注册表读取。注入缺失（防御路径，
+// 生产构造总会注入）时返回 nil——快照因此不含任何在线玩家，follow 计划
+// 会被解码层按「目标不在在线集合」拒绝，绝不凭空编造目标。
+func (m *companionManager) onlinePlanPlayers() []companion.PlanPlayer {
+	if m.onlinePlayers == nil {
+		return nil
+	}
+	return m.onlinePlayers()
+}
+
+// onlinePlanPlayersSnapshot 枚举 tick 边界的全部在线玩家并归一为快照事实：
+// 稳定 ID 来自会话注册表（playerSessions），位置与朝向取权威模拟；经
+// BoundOnlinePlayers 按 ID 升序去重并截断到 MaxPlanOnlinePlayers（会话上限
+// 同为八名，截断只是防御性内存界，正常路径永不触发）。调用方必须持有
+// stepMu——会话表与模拟状态的唯一写者是权威 tick。视线命中方块不在此采集：
+// follow 的目标校验只消费 ID 与位置，逐玩家 DDA 只会加大 tick 热路径成本
+// 而没有任何已交付的消费方。
+func (server *Server) onlinePlanPlayersSnapshot() []companion.PlanPlayer {
+	players := make([]companion.PlanPlayer, 0, len(server.playerSessions))
+	for playerID, sessionID := range server.playerSessions {
+		player, ok := server.engine.Player(sessionID)
+		if !ok {
+			continue
+		}
+		players = append(players, companion.PlanPlayer{
+			ID:       playerID,
+			Position: [3]float32(player.State.Position),
+			Yaw:      player.Yaw,
+			Pitch:    player.Pitch,
+		})
+	}
+	return companion.BoundOnlinePlayers(players)
+}
+
+// hasAirNeighbor 报告 (x,y,z) 的六邻域中是否存在空气。邻居越出世界竖直边界
+// 视为空气（地表/床底面向界外的面是可见的）。
+func (v companionChunkView) hasAirNeighbor(x, y, z int32) bool {
+	neighbors := [6][3]int32{
+		{x - 1, y, z}, {x + 1, y, z},
+		{x, y - 1, z}, {x, y + 1, z},
+		{x, y, z - 1}, {x, y, z + 1},
+	}
+	for _, neighbor := range neighbors {
+		if neighbor[1] < core.MinY || neighbor[1] >= core.MaxY {
+			return true
+		}
+		if id, ok := v.blockAt(neighbor[0], neighbor[1], neighbor[2]); ok && id == core.AirID {
+			return true
+		}
+	}
+	return false
+}
+
+// taskStatusLabel 返回伙伴当前任务状态中文摘要（≤96 字节、无模型自由文本），
+// 进入 PlanCompanion.TaskStatus 供模型理解伙伴正在做什么。
+func (m *companionManager) taskStatusLabel(id companion.ID) string {
+	slot := m.slots[id]
+	if slot == nil {
+		return "空闲"
+	}
+	if current, ok := slot.queue.Current(); ok {
+		return current.State.String()
+	}
+	return "空闲"
+}
+
+// buildPathGrid 在 tick 边界为一次寻路构造不可变网格快照。窗口覆盖的任一
+// 区块未 ready 时返回 false——寻路顺延到下一 tick，不计入失败。
+func (m *companionManager) buildPathGrid(
+	body companion.Body,
+	window pathfind.PathWindow,
+) (pathfind.PathGrid, bool) {
+	view := m.chunkViewAt(body.Dimension, body.Position)
+	origin := window.Origin()
+	sizeX, sizeY, sizeZ := window.Size()
+	// 网格覆盖的区块矩形：窗口 33×33 格最多覆盖 3×3 区块，且必然落在 3×3
+	// 视图内（视图以中心块所在区块为锚，±16 格不会越出视图角）。
+	chunkOrigin := (core.BlockPos{X: origin.X, Z: origin.Z}).Chunk()
+	chunkEnd := (core.BlockPos{X: origin.X + sizeX - 1, Z: origin.Z + sizeZ - 1}).Chunk()
+	spanX := chunkEnd.X - chunkOrigin.X + 1
+	spanZ := chunkEnd.Z - chunkOrigin.Z + 1
+	if !view.allCoveredReady(chunkOrigin, spanX, spanZ) {
+		return pathfind.PathGrid{}, false
+	}
+	revisions := make([]pathfind.ChunkRevision, 0, spanX*spanZ)
+	for dz := chunkOrigin.Z; dz <= chunkEnd.Z; dz++ {
+		for dx := chunkOrigin.X; dx <= chunkEnd.X; dx++ {
+			revisions = append(revisions, pathfind.ChunkRevision{
+				Chunk:    core.ChunkPos{X: dx, Z: dz},
+				Revision: view.revisionAt(dx, dz),
+			})
+		}
+	}
+	grid, err := pathfind.NewPathGrid(
+		core.BlockPos{X: origin.X, Y: origin.Y, Z: origin.Z},
+		sizeX, sizeY, sizeZ,
+		m.table,
+		func(x, y, z int32) (core.BlockID, bool) {
+			// 覆盖矩形已全部 ready，读取必然成功；防御性 ok=false 让
+			// NewPathGrid 显式报错而不是读到半空网格。
+			return view.blockAt(x, y, z)
+		},
+		revisions,
+	)
+	if err != nil {
+		return pathfind.PathGrid{}, false
+	}
+	return grid, true
+}
+
+// windowRevisions 返回伙伴当前 3×3 兴趣区块的权威 revision，供路径点重验。
+// 重验是 Running 任务每 tick 的热路径，只读 ChunkInfo 的 revision 元数据，
+// 不做区块深拷贝；结果按 (X,Z) 字典序升序。
+func (m *companionManager) windowRevisions(body companion.Body) []pathfind.ChunkRevision {
+	return chunkRevisionsAround(m.engine, body.Dimension, body.Position)
+}
+
+// chunkRevisionsAround 是 3×3 兴趣区块 revision 读取的包级实现：伙伴与夜行
+// 者的 waypoint 重验消费同一份「只读 revision 元数据」的廉价路径，缺失或未
+// ready 的区块直接跳过（重验方按「结果 revision 必须全部命中」裁决）。
+func chunkRevisionsAround(
+	engine *runtime.Engine,
+	dimension core.DimensionID,
+	position [3]float32,
+) []pathfind.ChunkRevision {
+	center := (core.BlockPos{
+		X: int32(math.Floor(float64(position[0]))),
+		Z: int32(math.Floor(float64(position[2]))),
+	}).Chunk()
+	revisions := make([]pathfind.ChunkRevision, 0, 9)
+	for dx := int32(-companionViewRadiusChunks); dx <= companionViewRadiusChunks; dx++ {
+		for dz := int32(-companionViewRadiusChunks); dz <= companionViewRadiusChunks; dz++ {
+			key := core.ChunkKey{
+				Dimension: dimension,
+				Pos:       core.ChunkPos{X: center.X + dx, Z: center.Z + dz},
+			}
+			info, ok := engine.ChunkInfo(key)
+			if !ok || info.State != contract.ChunkReady {
+				continue
+			}
+			revisions = append(revisions, pathfind.ChunkRevision{
+				Chunk:    key.Pos,
+				Revision: info.Revision,
+			})
+		}
+	}
+	return revisions
+}

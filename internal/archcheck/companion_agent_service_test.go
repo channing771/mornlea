@@ -403,8 +403,8 @@ func nonEmptyTrimmedLines(value string) []string {
 var companionGoProductionRoots = []string{
 	"cmd/mornlea",
 	"cmd/mornlea/app",
-	"cmd/mornlea-server",
-	"internal/server",
+	"packages/server/cmd/mornlea-server",
+	"packages/server/server",
 	"packages/shared/companion",
 }
 
@@ -425,9 +425,9 @@ var companionGoForbiddenImportAllowlist = map[string]map[string]string{
 
 func loadCompanionProductionImportGraph(root string) (map[string][]string, error) {
 	graph := make(map[string][]string)
-	// companion 已迁入 packages/shared 模块；server 仍在 internal，两处都要
-	// 进图，否则闭包会在跨模块边上断链。
-	for _, top := range []string{"cmd", "internal", "packages/contracts", "packages/shared"} {
+	// companion 已迁入 packages/shared 模块、服务端域已迁入 packages/server
+	// 模块；图必须覆盖两侧，否则闭包会在跨模块边上断链。
+	for _, top := range []string{"cmd", "internal", "packages/contracts", "packages/shared", "packages/server"} {
 		err := filepath.WalkDir(filepath.Join(root, top), func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr

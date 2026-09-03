@@ -20,7 +20,7 @@
 
 ## Task 5: server 模块切割
 
-- [ ] 5.1 `git mv internal/{sim,fluid,storage,server} packages/server/`，`git mv cmd/mornlea-server packages/server/cmd/mornlea-server`；建 `packages/server/go.mod`（require+replace shared/contracts）；import path 改写 `internal/(sim|fluid|storage|server)` → `packages/server/...` 与 `cmd/mornlea-server` → `packages/server/cmd/mornlea-server`；go.work 增 `use ./packages/server`；Makefile `SERVER` 常量、archcheck、race-changed、CI 分片同步。以 `go clean -cache && make rust && make test-race && go test ./internal/archcheck -count=1 && make build-linux-server` 验证。
+- [x] 5.1 `git mv internal/{sim,fluid,storage,server} packages/server/`，`git mv cmd/mornlea-server packages/server/cmd/mornlea-server`；建 `packages/server/go.mod`（require+replace shared/contracts）；import path 改写 `internal/(sim|fluid|storage|server)` → `packages/server/...` 与 `cmd/mornlea-server` → `packages/server/cmd/mornlea-server`；go.work 增 `use ./packages/server`；Makefile `SERVER` 常量、archcheck、race-changed、CI 分片同步。以 `go clean -cache && make rust && make test-race && go test ./internal/archcheck -count=1 && make build-linux-server` 验证。
 
 ## Task 6: client 模块切割与视觉基线验证
 

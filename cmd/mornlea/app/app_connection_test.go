@@ -13,8 +13,8 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/server"
-	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/server/server"
+	"github.com/channing771/mornlea/packages/server/storage"
 	"github.com/channing771/mornlea/packages/shared/companion"
 	"github.com/channing771/mornlea/packages/shared/config"
 	"github.com/channing771/mornlea/packages/shared/core"
