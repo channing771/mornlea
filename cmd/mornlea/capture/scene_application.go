@@ -37,6 +37,10 @@ type SceneApplication interface {
 	// 场景直接改写的呈现状态。
 	Camera() *client.Camera
 	SetWorldTimeTicks(ticks uint64)
+	// 冻结权威状态对昼夜呈现量的覆盖:场景在 Apply 里钉住的世界时间必须
+	// 在收敛帧期间保持不被服务端时间改写(服务端时间随真实时间前进,最终
+	// 帧的昼夜参数会随进程启动漂移)。
+	SetWorldTimeFrozen(frozen bool)
 	SetCenter(center core.ChunkPos)
 	SetServerTick(tick uint64)
 	SetPanelLastFrameAt(at time.Time)

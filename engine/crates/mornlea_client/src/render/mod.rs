@@ -15,6 +15,8 @@
 //! - mesh packed face 字节只在 section 变脏时过境一次;
 //! - 每帧一次 [`OffscreenRenderer::render_frame`],帧内无逐 pass FFI。
 
+#[cfg(test)]
+mod cull_tests;
 pub mod entity;
 #[cfg(test)]
 mod farmland_tests;
@@ -325,8 +327,13 @@ impl HiZ {
                 ),
             ],
         });
-        let copy_pipeline =
-            make_compute_pipeline(device, "hi-z copy depth", shaders::HIZ_COPY, &copy_layout);
+        let copy_pipeline = make_compute_pipeline(
+            device,
+            "hi-z copy depth",
+            shaders::HIZ_COPY,
+            &copy_layout,
+            "cs_main",
+        );
 
         let build_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("hi-z build layout"),
@@ -353,8 +360,13 @@ impl HiZ {
                 },
             ],
         });
-        let build_pipeline =
-            make_compute_pipeline(device, "hi-z reduce", shaders::HIZ_BUILD, &build_layout);
+        let build_pipeline = make_compute_pipeline(
+            device,
+            "hi-z reduce",
+            shaders::HIZ_BUILD,
+            &build_layout,
+            "cs_main",
+        );
         let build_binds: Vec<_> = (1..levels as usize)
             .map(|level| {
                 device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -506,10 +518,15 @@ pub struct OffscreenRenderer {
     /// 帧序位于天空之后、近环 terrain 之前。
     lod_pass: LodPass,
 
-    cull_pipeline: wgpu::ComputePipeline,
+    /// cull 三入口各一管线,共享同一 bind group(`cull_bind`)。
+    cull_count_pipeline: wgpu::ComputePipeline,
+    cull_scan_pipeline: wgpu::ComputePipeline,
+    cull_place_pipeline: wgpu::ComputePipeline,
     cull_layout: wgpu::BindGroupLayout,
     cull_uniforms: wgpu::Buffer,
     cull_sections: wgpu::Buffer,
+    /// 每 section 可见数/排他基址缓冲(见 `cs_count`/`cs_scan`)。
+    cull_counts: wgpu::Buffer,
     cull_bind: wgpu::BindGroup,
     dummy_hiz_view: wgpu::TextureView,
     cull_uses_hiz: bool,
@@ -816,7 +833,9 @@ impl OffscreenRenderer {
         // 远环 pass:世界坐标壳 quad 管线;bind group 随材质 atlas 建立。
         let lod_pass = LodPass::new(&device, COLOR_FORMAT);
 
-        // cull compute,镜像 Go `terrain cull layout`。
+        // cull compute 的三段确定性紧凑(计数 → 前缀和 → 定槽写入),三个入口
+        // 共享同一 layout 与 bind group;binding 6 的 counts 缓冲承载阶段间的
+        // 每 section 可见数/排他基址。
         let cull_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("terrain cull layout"),
             entries: &[
@@ -855,15 +874,46 @@ impl OffscreenRenderer {
                     },
                     count: None,
                 },
+                buffer_layout_entry(
+                    6,
+                    wgpu::ShaderStages::COMPUTE,
+                    wgpu::BufferBindingType::Storage { read_only: false },
+                ),
             ],
         });
-        let cull_pipeline =
-            make_compute_pipeline(&device, "terrain cull", shaders::CULL, &cull_layout);
+        let cull_count_pipeline = make_compute_pipeline(
+            &device,
+            "terrain cull count",
+            shaders::CULL,
+            &cull_layout,
+            "cs_count",
+        );
+        let cull_scan_pipeline = make_compute_pipeline(
+            &device,
+            "terrain cull scan",
+            shaders::CULL,
+            &cull_layout,
+            "cs_scan",
+        );
+        let cull_place_pipeline = make_compute_pipeline(
+            &device,
+            "terrain cull place",
+            shaders::CULL,
+            &cull_layout,
+            "cs_place",
+        );
         let cull_uniforms = make_buffer(128, BU::UNIFORM | BU::COPY_DST, "cull uniforms");
         let cull_sections = make_buffer(
             u64::from(ORIGIN_SLOTS) * SECTION_RECORD_BYTES as u64,
             BU::STORAGE | BU::COPY_DST,
             "cull candidate sections",
+        );
+        // 每 section 可见数(阶段一写入)→ 排他基址(阶段二就地改写),槽位数
+        // 与候选 section 上界一致。只有 GPU 读写,CPU 不写,不需 COPY_DST。
+        let cull_counts = make_buffer(
+            u64::from(ORIGIN_SLOTS) * 4,
+            BU::STORAGE,
+            "cull section counts",
         );
         // 1×1 值为 1.0 的 dummy HiZ,禁用帧绑定它(镜像 Go dummyHiZ)。
         let dummy_hiz = device.create_texture(&wgpu::TextureDescriptor {
@@ -1107,6 +1157,7 @@ impl OffscreenRenderer {
             &faces,
             &instances,
             &indirect,
+            &cull_counts,
             &dummy_hiz_view,
         );
 
@@ -1136,10 +1187,13 @@ impl OffscreenRenderer {
             sky_pipeline,
             sky_bind,
             lod_pass,
-            cull_pipeline,
+            cull_count_pipeline,
+            cull_scan_pipeline,
+            cull_place_pipeline,
             cull_layout,
             cull_uniforms,
             cull_sections,
+            cull_counts,
             cull_bind,
             dummy_hiz_view,
             cull_uses_hiz: false,
@@ -1715,7 +1769,6 @@ impl OffscreenRenderer {
         if !records.is_empty() {
             self.queue.write_buffer(&self.cull_sections, 0, &records);
         }
-
         // camera / sky uniform(布局镜像 writeCameraBytes / writeSkyCameraBytes)。
         let mut camera_data = [0u8; 80];
         write_f32s(&mut camera_data, 0, &input.view_proj);
@@ -1753,7 +1806,8 @@ impl OffscreenRenderer {
             && mat_approx_equal(&input.view_proj, &self.last_view_proj, 1e-5);
         let use_hiz = self.hiz.valid && camera_stable;
 
-        // cull uniform(布局镜像 writeCullUniformBytes)。
+        // cull uniform:布局由 `CullUniforms`(cull.wgsl)定义。flags.x 是 HiZ
+        // 启用位;flags.y 是候选 section 数,`cs_scan` 靠它划前缀和边界。
         let mut cull_data = [0u8; 128];
         write_f32s(&mut cull_data, 0, &input.pos);
         write_f32s(&mut cull_data, 16, &input.view_proj);
@@ -1777,6 +1831,7 @@ impl OffscreenRenderer {
         if use_hiz {
             cull_data[112..116].copy_from_slice(&1u32.to_le_bytes());
         }
+        cull_data[116..120].copy_from_slice(&candidates.to_le_bytes());
         self.queue.write_buffer(&self.cull_uniforms, 0, &cull_data);
 
         // cull bind:启用 HiZ 绑真金字塔,否则绑 dummy(镜像 rebuildBind)。
@@ -1794,6 +1849,7 @@ impl OffscreenRenderer {
                 &self.faces,
                 &self.instances,
                 &self.indirect,
+                &self.cull_counts,
                 hiz_view,
             );
             self.cull_uses_hiz = use_hiz;
@@ -1816,14 +1872,34 @@ impl OffscreenRenderer {
         };
 
         encoder.copy_buffer_to_buffer(&self.zero_args, 0, &self.indirect, 0, 20);
+        // cull 三段确定性紧凑(计数 → 前缀和 → 定槽写入),三段各占一个
+        // compute pass,靠 pass 边界保证上一段的 storage 写对下一段可见。
+        // 实例槽位顺序 MUST NOT 依赖 invocation 完成顺序(曾经的原子追加让
+        // 远处等深度重叠面的胜者随进程启动随机翻转,golden 门禁逐像素比对
+        // 直接拦截);候选为 0 时三段全跳过,`zero_args` 模板已把
+        // instance_count 置 0。
         if candidates > 0 {
-            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("terrain cull pass"),
-                timestamp_writes: None,
-            });
-            pass.set_pipeline(&self.cull_pipeline);
-            pass.set_bind_group(0, &self.cull_bind, &[]);
-            pass.dispatch_workgroups(candidates, 1, 1);
+            for (label, pipeline, groups) in [
+                (
+                    "terrain cull count pass",
+                    &self.cull_count_pipeline,
+                    candidates,
+                ),
+                ("terrain cull scan pass", &self.cull_scan_pipeline, 1),
+                (
+                    "terrain cull place pass",
+                    &self.cull_place_pipeline,
+                    candidates,
+                ),
+            ] {
+                let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some(label),
+                    timestamp_writes: None,
+                });
+                pass.set_pipeline(pipeline);
+                pass.set_bind_group(0, &self.cull_bind, &[]);
+                pass.dispatch_workgroups(groups, 1, 1);
+            }
         }
         // 相机浸没时的背景替换:天空 pass 整个跳过,terrain pass 的 clear 色由
         // 天空色换成水色。water_visible 同时决定后面那层全屏水色叠加是否绘制,
@@ -2166,6 +2242,7 @@ impl OffscreenRenderer {
             &self.faces,
             &self.instances,
             &self.indirect,
+            &self.cull_counts,
             &self.dummy_hiz_view,
         );
         self.cull_uses_hiz = false;
@@ -2238,6 +2315,7 @@ impl OffscreenRenderer {
         buffer.unmap();
         true
     }
+
 }
 
 /// section 最小角世界坐标,与 Go `SectionPos.MinCorner` 一致:
@@ -2326,6 +2404,7 @@ fn make_compute_pipeline(
     label: &str,
     source: &str,
     layout: &wgpu::BindGroupLayout,
+    entry_point: &str,
 ) -> wgpu::ComputePipeline {
     let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some(label),
@@ -2340,7 +2419,7 @@ fn make_compute_pipeline(
         label: Some(label),
         layout: Some(&pipeline_layout),
         module: &module,
-        entry_point: Some("cs_main"),
+        entry_point: Some(entry_point),
         compilation_options: Default::default(),
         cache: None,
     })
@@ -2355,6 +2434,7 @@ fn make_cull_bind(
     faces: &wgpu::Buffer,
     visible: &wgpu::Buffer,
     args: &wgpu::Buffer,
+    counts: &wgpu::Buffer,
     hiz_view: &wgpu::TextureView,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -2384,6 +2464,10 @@ fn make_cull_bind(
             wgpu::BindGroupEntry {
                 binding: 5,
                 resource: wgpu::BindingResource::TextureView(hiz_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 6,
+                resource: counts.as_entire_binding(),
             },
         ],
     })

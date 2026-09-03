@@ -64,8 +64,12 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			a.serverTick = state.ServerTick
 			// 世界时间与显示相位偏移来自同一份权威状态、同一接受纪律（上面的
 			// ServerTick 守卫已挡掉旧/重复状态）：偏移只平移昼夜呈现相位。
-			a.worldTimeTicks = state.WorldTimeTicks
-			a.dayPhaseOffset = state.DayPhaseOffset
+			// 冻结开关(capture 钉住天空状态)只拦这两个呈现量,其余权威状态
+			// 照常前进——冻结不改变接受纪律本身。
+			if !a.worldTimeFrozen {
+				a.worldTimeTicks = state.WorldTimeTicks
+				a.dayPhaseOffset = state.DayPhaseOffset
+			}
 			if state.Reset || !state.MiningActive {
 				a.miningOverlay = hud.MiningOverlay{}
 			} else {

@@ -156,8 +156,11 @@ type Application struct {
 	// worldTimeTicks 是最后确认的权威绝对世界时间，只在接受更新状态时前进。
 	// dayPhaseOffset 是同一份状态携带的显示相位偏移（0..23999），与世界时间
 	// 同一接受纪律：偏移只平移昼夜呈现，绝不回写绝对时间。
-	worldTimeTicks          uint64
-	dayPhaseOffset          uint16
+	worldTimeTicks uint64
+	dayPhaseOffset uint16
+	// worldTimeFrozen 冻结权威状态对昼夜呈现量的覆盖(capture 钉住天空状态,
+	// 见 SetWorldTimeFrozen);生产恒为 false。
+	worldTimeFrozen         bool
 	glyphAtlas              *render.GlyphAtlas
 	clientEndpoint          network.ClientEndpoint
 	receiver                *client.Receiver

@@ -210,6 +210,16 @@ func (a *Application) WorldTimeTicks() uint64 { return a.worldTimeTicks }
 // SetWorldTimeTicks 固定环境光照时间（capture 场景钉住天空状态）。
 func (a *Application) SetWorldTimeTicks(ticks uint64) { a.worldTimeTicks = ticks }
 
+// SetWorldTimeFrozen 切换世界时间的冻结开关:冻结期间权威状态仍被接受
+// (位置、tick、容器等照常前进),只有 `WorldTimeTicks`/`DayPhaseOffset`
+// 两个呈现量不再被后续状态覆盖。
+//
+// 动机:capture 在场景 Apply 里用 SetWorldTimeTicks 钉住昼夜,但收敛帧
+// 期间到达的权威状态会把它改回服务端时间——服务端时间随真实时间前进,
+// 最终帧的昼夜参数因此随进程启动漂移,逐像素 golden 门禁在天空光渗入的
+// 画面上整片翻色。`SetWorldTimeTicks` 直写不受冻结影响,场景仍可换钉值。
+func (a *Application) SetWorldTimeFrozen(frozen bool) { a.worldTimeFrozen = frozen }
+
 // InventoryOpen 读取容器/背包 UI 开合状态。
 func (a *Application) InventoryOpen() bool { return a.inventoryOpen }
 
