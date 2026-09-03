@@ -32,6 +32,18 @@
 - `static-block-light`: 把作物与短草加入静态方块光可传播目标，保持每格衰减 `1`，并继续要求玻璃、水及任何其他非空气、非植物方块阻断。
 - `visual-verification`: 固定地形与菜单全景覆盖新的自然短草外观，并要求只重立和复核受影响基线、保持既有阈值及无窗口完整渲染链路。
 
+## 延期与放弃
+
+以下事项经任务级与 whole-change 双评审确认为 Minor/latent/流程性,不阻塞本 change,逐条誊自 ledger 各 Ruling:
+
+- `worldgen.rs` 中 `apply_short_grass`（约 `:458`）与 `short_grass_block_at`（约 `:339`）对世界顶部 Y 的守卫不对称——仅当 `surface == WORLD_MAX_Y-1` 时可达,冻结地形常数下不可达;未来任何调整地形常数的 change 必须先对齐两路径守卫。（Task 2.1 Ruling deferred,whole-change 复核确认为 latent-only。）
+- Go light oracle 以 `core.IsPlant`、Rust `light.rs` 以 material 离散集合 `[31..54]∪{68}` 表达植物判定——当前生产 registry 下 outcome-equal,由 `internal/core`/`internal/assets` 穷举测试与真实 FFI 走廊绝对值断言把守;未来新增 plant 材质方块必须保持 material⟺`IsPlant` 一致,否则两侧光照实现会静默分叉。（Task 1.1 Ruling deferred。）
+- `engine/crates/mornlea_engine/src/ffi.rs:3033-3034` 注释把偏移 26 的 stone 槽误写为 dirt——断言与语义正确,仅注释措辞;`worldgen.rs` 测试助手 `audit_short_grass` else 分支 `assert_ne!` 恒真——死断言无危害。两项均记录不返工。（Task 2.1 findings。）
+- `light.rs` `build_block` 对每个存在的发射级做一次全 volume 重扫——最坏 16 次、生产 torch=14/light=15 为 3 次,有界、零分配,记录备查不优化。（Task 1.1 Ruling。）
+- `docs/notes/lan-server.md` 的陈旧版本矩阵（engine ABI v8/client ABI v11/scenario v20）为 F-04 独占文件,本 change 按 Setup Ruling 不动,由 F-04 或控制会话在其独占范围内补齐。（Setup Ruling + Task 8.1 Info。）
+- 流程交接记录:Task 5.1 R1 与 Task 7.1 R1/R2 的修复轮由接手 agent 完成（原 implementer 会话分别因平台配额中止、被用户暂停不可恢复）,scoped 修复说明与独立复评完整,协议实质未破。（Task 5.1/7.1 Ruling。）
+- 合并义务:本分支版本矩阵如实记录 client ABI v13 与 `companions.ai` schema v4（分支代码实况,早于 main 后续 v14/v5 bump）;PR 并 main 时必须按 main 最终基线重新核对版本矩阵与版本相关文档段落。（Task 8.1 Ruling + whole-change M4。）
+
 ## Impact
 
 - 主要影响 `internal/core` 方块注册、`internal/assets` 程序化 layer、`internal/mesh` 与 Rust mesher 的植物材质判定集合（从 `[31..54]` 变为 `[31..54] ∪ {68}`，`55..67` 不移动）、Rust light kernel 及其 Go oracle、`internal/sim/entity` 玩家采掘与工具耐久结算、伙伴采掘白名单、`internal/server/persistence` 缺失玩家快照，以及 `internal/worldgen`、`internal/nativeabi`、Rust fluid kernel 及其 Go oracle 和 `mornlea_engine` worldgen。

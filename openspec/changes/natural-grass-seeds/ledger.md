@@ -169,19 +169,19 @@ Ruling: planning candidate `ab8292569393edfb6748a82f6303c50b0c7654e9` 的独立 
 
 ### Task 9.1 Whole-change Review
 
-- Status: `PENDING`.
-- Review baseline/range: `PENDING`（implementation dispatch baseline...Task 8.1 final `I`；并读取各任务 `L` 中的证据，不把 `L` 当实现 SHA）。
-- Whole-change verified implementation SHA before review: `PENDING`.
-- Whole-change SPEC reviewer: `PENDING`（fresh）。
-- SPEC verdict and complete findings: `PENDING`（逐条对照 proposal、十一份 delta specs、design、tasks、实现和测试）。
-- Whole-change QUALITY reviewer: `PENDING`（fresh，独立于 SPEC）。
-- QUALITY verdict and complete findings: `PENDING`（所有权、ABI/版本、TDD 锋利度、原子失败、有界热路径、跨语言 parity、原创资源 provenance、benchmark record-only、25 场景归因与范围漂移）。
-- Repair ownership: `PENDING`（每项 Critical/Important finding 回派最初拥有该文件的 Task/implementer；控制会话不得代修）。
-- Repair rounds and commits: `PENDING`（修复后的 scoped SPEC/QUALITY re-review 必须全部 PASS）。
-- Final verified implementation SHA after whole review: `PENDING`（供 Task 9.2 使用）。
-- OpenSpec/review verification bound to final SHA: `PENDING`（两份独立 PASS、`git diff --check`、named/all strict validation）。
-- Tasks/ledger-only whole-review evidence commit: `PENDING`.
-- Ruling: `PENDING`.
+- Status: `DONE`（2026-09-03 控制会话勾选）。
+- Review baseline/range: `114003bcca63def9c84fb86da2a449a2aad26288`（implementation dispatch baseline）… `c64df1308175be943a7ee16d37400e548b2473df`（Task 8.1 final `I`）;范围内 30 个 commit（21 实现/planning + 9 tasks/ledger-only evidence）,evidence commit 只作证据不作实现 SHA;range 后唯一 commit `7c123cb8` 为 Task 8.1 `L`,实现树与 `c64df130` 逐字节一致（评审核实）。
+- Whole-change verified implementation SHA before review: `c64df1308175be943a7ee16d37400e548b2473df`。
+- Whole-change SPEC reviewer: fresh zcode reviewer（独立于全部任务 implementer/reviewer）。
+- SPEC verdict and complete findings: `WHOLE-CHANGE SPEC PASS`,0 Critical/0 Important/4 Minor:（1）Go oracle `IsPlant` vs Rust material 集合形式差异（latent,1.1 Ruling 已 deferred,穷举守卫建议对未来 plant 方块强制）;（2）worldgen 顶部世界守卫不对称（latent-only,2.1 Ruling deferred,冻结地形常数下不可达）;（3）`ffi.rs:3033` 注释 stone/dirt 措辞（cosmetic）;（4）分支版本矩阵 v13/v4 vs main v14/v5——PR 时重核义务。八条 What Changes、十一份 delta 承重场景、Impact、Non-goals、版本边界、deferred 处置逐项核验 SATISFIED;`openspec validate --all --strict`=80/80、archcheck、gofmt 独立复跑绿。
+- Whole-change QUALITY reviewer: fresh zcode reviewer（独立于 SPEC）。
+- QUALITY verdict and complete findings: `WHOLE-CHANGE QUALITY PASS`,0 Critical/0 Important/4 Minor-Info:（M1,流程）deferred 项须誊入 proposal「延期与放弃」——已照办（见下）;（M2）worldgen 守卫不对称复核确认为 latent-only;（M3,info）`companion_snapshot.go` 通行表由作物子区改全注册区 `IsPlant` 遍历——行为等价、oracle 守卫、更前瞻;（M4）v13/v4 vs main v14/v5 合并时版本矩阵重核义务。十一维（所有权/ABI 同步/TDD 锋利/原子失败/有界热路径/跨语言 parity/资源 provenance/record-only/25 场景归因/无范围漂移/叙事一致）全部 SATISFIED;评审独立 live 复跑 `make rust`+`make visual-check`（fresh mktemp 目录,25/25 场景 0.0000%,exit 0,无前台窗口）。
+- Repair ownership: 无 Critical/Important 发现,无回派。
+- Repair rounds and commits: 无。
+- Final verified implementation SHA after whole review: `c64df1308175be943a7ee16d37400e548b2473df`（供 Task 9.2 使用）。
+- OpenSpec/review verification bound to final SHA: 两份独立 PASS（如上）;`git diff --check` clean;`openspec validate natural-grass-seeds --strict --no-interactive` valid;`openspec validate --all --strict --no-interactive` 80/80。
+- Tasks/ledger-only whole-review evidence commit: 本 evidence commit（含 M1 要求的 proposal「延期与放弃」誊写:七项 deferred/义务逐条入文;不回写自身 SHA）。
+- Ruling: Task 9.1 双评审独立 PASS,零 Critical/Important,勾选成立 — M1 流程要求已履行（proposal 延期与放弃节誊自各 Ruling） — M4 合并义务与 Task 8.1 Ruling 一致,记入收尾清单 — 进入 Task 9.2 T3。
 
 ### Task 9.2 T3 Gates And Evidence Closure
 
