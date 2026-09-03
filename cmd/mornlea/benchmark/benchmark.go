@@ -19,21 +19,20 @@ const (
 	// benchmarkMessageDrainMax 是每帧服务端消息 drain 预算，单一取值住在
 	// app 包（`MessageDrainMax`），与 capture 共用同一无头帧节奏契约。
 	benchmarkMessageDrainMax = application.MessageDrainMax
-	// scenarioVersion 是 benchmark producer 的场景身份。v19 → v20 的判定与
-	// v18 → v19、v15 → v16 同源：benchmark 的固定输入（七名远端玩家、零伙伴、
-	// 不注入聊天）与被测世界（不注水、同一 seed、不含农业方块）一格未动，但
-	// 客户端 UI 对齐原版布局与风格精修又一次改变了**被测进程本身**——HUD 布
-	// 局对齐并新增准星与物品名弹条，`maxHotbarQuads` 从 267 重钉到 320、
-	// `maxHotbarGlyphs` 从 700 重钉到 768（准星与弹条加入关闭态最坏，容器浮动
-	// 面板与 tooltip 加入打开态最坏），**固定 GPU 上传布局**随之移动：glyph
-	// offset 13312 → 15616、总容量 46912 → 52480 bytes，空聊天帧每帧实际写入
-	// 也从 13312 变成 15616 bytes。
+	// scenarioVersion 是 benchmark producer 的场景身份。v20 → v21 的判定与
+	// v19 → v20、v18 → v19 同源：benchmark 的固定输入（七名远端玩家、零伙伴、
+	// 不注入聊天）与被测世界（不注水、同一 seed、不含农业方块）不变，但自然短
+	// 草又一次改变了**被测进程与被测世界本身**——稳定方块与 mesh registry 追加
+	// `ShortGrassID`（实际烘焙条目 84 → 85，仍低于冻结上限 96），Go/Rust 植物
+	// 材质判定集合从 `[31..54]` 扩为 `[31..54] ∪ {68}`（`55..67` 不移动），
+	// worldgen `MGW1` 请求扩为 layout 3 且 engine ABI 升为 v10，固定世界在合
+	// 格草地上方空气格确定性新增短草，每个短草格经既有 plant 路径发射 4 条交
+	// 叉斜面实例。
 	//
-	// 这条正是主规格判定 v15 → v16、v17 → v18 与 v18 → v19 时用的同一条条文
-	// （「改变固定 GPU 上传布局、offset 与每帧写入字节数」），独立成立即可升
-	// 版。权威侧模拟一格未动，tick 工作量与 v19 相同；但每帧上传字节数已移动，
-	// v19 与 v20 的每帧上传数字因此不可直接比较。
-	scenarioVersion = 20
+	// 分辨率、阶段时长、运动、样本、指标、绝对阈值与 `20%` 相对阈值全部不动；
+	// v20 与 v21 的每帧上传字节数虽未移动，被测 workload 已随短草改变，跨
+	// workload 报告只能经比较器显式 `20:21` 迁移并跳过相对回归判定。
+	scenarioVersion = 21
 )
 
 var (

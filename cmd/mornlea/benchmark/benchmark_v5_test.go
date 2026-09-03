@@ -16,9 +16,9 @@ import (
 	"github.com/channing771/mornlea/internal/client"
 )
 
-func TestBenchmarkScenarioVersionIncludesStaticBlockLightWorkload(t *testing.T) {
-	if scenarioVersion != 20 {
-		t.Fatalf("scenarioVersion=%d，想要客户端 UI 对齐之后的 v20", scenarioVersion)
+func TestBenchmarkScenarioVersionIncludesNaturalGrassWorkload(t *testing.T) {
+	if scenarioVersion != 21 {
+		t.Fatalf("scenarioVersion=%d，想要自然短草之后的 v21", scenarioVersion)
 	}
 }
 
