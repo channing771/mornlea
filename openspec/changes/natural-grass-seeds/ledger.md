@@ -133,21 +133,20 @@ Ruling: planning candidate `ab8292569393edfb6748a82f6303c50b0c7654e9` 的独立 
 
 ## Task 7.1 Capture And 25-scene Visual Provenance
 
-- Status: `PENDING`.
-- Task baseline SHA: `PENDING`.
-- Implementer: `PENDING`（fresh）。
-- RED evidence: `PENDING`（正式清单仍恰好 25 项且顺序不变、`oak-grove` 自然短草可辨识、完整无窗口链路和既有双阈值）。
-- Code/test commit C: `PENDING`（完整 SHA + 单行英文 subject；不得包含 `tasks.md`/`ledger.md`、benchmark 代码或当前文档同步）。
-- Files changed: `PENDING`（仅 `cmd/mornlea/capture` 的场景代码/测试与经逐图归因批准的既有 golden；不得新增第 26 场景）。
-- 25-scene visual provenance: `PENDING`（更新前全部 25 张 tracked golden SHA；同一 `I` 生成的全部 25 张 current frame；逐图实际像素 diff 且不预设变化数量；每个差异项的 actual/diff 证据、人工归因与原创短草/树水优先检查；实际更新集合及更新后 SHA；所有未变化或不可归因项逐字节不变；`oak-grove` 可辨识；阈值与顺序不变）。
-- Visual verification evidence: `PENDING`（fresh 输出目录上的无窗口 capture、只在归因完成后执行的 `make visual-update`、最终 `make visual-check` 与无前台窗口确认）。
-- Final verified implementation SHA I: `PENDING`（`C` 加本任务全部 repair 后的完整 SHA）。
-- Focused verification bound to I: `PENDING`（capture race、25 场景 provenance/compare、visual check、archcheck、race-changed 与 `git diff --check`）。
-- SPEC reviewer / verdict / findings at I: `PENDING`.
-- QUALITY reviewer / verdict / findings at I: `PENDING`.
-- Repair rounds and commits: `PENDING`.
-- Tasks/ledger-only evidence commit L: `PENDING`（只含本任务 checkbox 与 ledger 证据）。
-- Ruling: `PENDING`.
+- Status: `DONE`（2026-09-03 控制会话勾选）。
+- Task baseline SHA: `286f1c8f28ea244a614f3bc38e7793b9083f47ea`（Task 6.1 `L`）。
+- Implementer: fresh zcode implementer（初始归因轮）;R1/R2 由接手 agent 完成（首个 R1 agent 被用户暂停且不可恢复,如实记录）。
+- RED evidence: 新增 7 个 guard 测试（fixture 294 株自然短草全在 `GrassID` 上;oak-grove 差分可辨识像素测试;25 场景/顺序 guard;双阈值 `{2,0.0001}` pin;无窗口链路 guard;差分 fixture 奇偶性 guard）;真正 RED 是 golden 门禁本身——旧 golden 在 14 个场景失败（max delta 166-207,3.4%-11.9%,旧基线生成于 pre-change `17144636`）。
+- Code/test commit C: `eb3e812c9fa30ff6b9e7cc3f32a9de19a2161865` `test(capture): attribute natural grass visuals`（16 文件:1 新测试+1 提炼共享场景表+14 张归因 golden）。
+- 25-scene visual provenance: 更新前 25 张 tracked golden SHA 全记录（/tmp/pregolden_sha.txt）;RED 轮 25 张 current+14 对 actual/diff（/tmp/visual-red.aJigJD）;14 张变更逐图归因（terrain-noon/hud×3/avatar/inventory/workbench/chest/furnace/debug-panel/oak-grove/main-menu/settings-menu/far-horizon,全部归因自然短草/seed-42 worldgen,树/水优先、天空、HUD、面板干净）;11 张未变（全部无生产 worldgen 的合成夹具场景）逐字节不变;oak-grove 差分可辨识证明:rect (220,170)-(235,183),83 diff px,top-band 0/bottom-band 38（cutout 交叉斜面非实心块）。
+- Visual verification evidence: 归因后 `make visual-update`（LOD on/off 近带控制通过）;初始轮 `make visual-check` 0/8 稳定失败——R1 根因双层:（a）渲染器既有非确定性（等深度重叠 cutout 的 atomic 追加顺序）,（b）权威 `PlayerState` 在 settle 帧覆盖场景钉住的世界时间;修复后 4 次连续全绿。
+- Final verified implementation SHA I: `1d7485bbf8ba28246583f6b65b6eb09c3bacbc4d`（`C` + R1 `852d8702f3331bcf1e29b0a3cae5a2b242afa32a` + R2 `067b57089264c379e72205c8f2c16a511796b066` + engine fmt 回派 `1d7485bbf8ba28246583f6b65b6eb09c3bacbc4d`）。
+- Repair rounds and commits: R1 = `852d8702` `fix(client): make distant plant culling deterministic`——cull.wgsl 三段确定性 compaction（cs_count→cs_scan→cs_place,无 atomicAdd,槽位=输入纯函数）+ 修复前 agent 自引入的两处缺失 `workgroupBarrier`（scan 入口,8 个屏障位点经复核完整）+ cull_tests.rs 4 个真测试（含 upload-order 竞态复现器,评审以还原屏障负向验证 3/3 失败）+ 世界时间冻结（`SetWorldTimeFrozen` 默认关,唯一生产调用点 `RunCapture` 带 defer 复位,只挡 `worldTimeTicks`/`dayPhaseOffset` 两个呈现量,ServerTick 与其余权威状态不受影响）+ 14 张 golden 重归因（每图 6-26 px,限于此前翻转 sliver 位置;11 张字节不变）;4 次连续 `make visual-check` 全绿（/tmp/r1-pass1..pass4,与提交 golden 逐字节一致）;两次预更新运行逐位相同（确定性证明）。R2 = `067b5708` `fix(client): satisfy rust fmt and clippy gates`（R1 引入的多余空行+未使用 `gz`/`gx`,两处一行修复）。engine fmt 回派 = `1d7485bb` `fix(engine): satisfy rustfmt gates`（Task 2.1/3.1 遗留的 `worldgen.rs`/`fluid_eval.rs` rustfmt 漂移,机械 reflow,`make rust-check` 由红转绿,语义零变化,engine 236/0）。
+- Focused verification bound to I: R1 后 4×visual-check 全绿+cargo mornlea_client 101/0+capture race 9.0s+archcheck+race-changed（RACE_BASE=eb3e812c）5 包 75s+diff-check;R2/engine-fmt 后 `make rust-check` 全绿（fmt+clippy -D warnings+workspace 337 测试）、mornlea_engine 236/0、cull 7/7;SPEC reviewer 独立第 5 次复现 visual-check 25/25 场景 0.0000% exit 0。
+- SPEC reviewer / verdict / findings at I: fresh zcode SPEC reviewer = `SPEC PASS`。A–F 全部 SATISFIED;偏差 E（app/capture 生产代码）裁决 **RATIFY**——冻结机制经失败日志（/tmp/r1-attrib3.log:无冻结时 torch-night 34.19%/bed-night 33.60% 等）证明承重,替代方案（放宽阈值/把夜晚 golden 重烤到墙钟漂移时间）均被 delta 禁止;capture-gated、生产安全、测试钉住。2 LOW（R1 的 fmt 空行与未使用变量,已由 R2 修复）+2 INFO（pass 轮 stdout 未留存,由 write-on-failure 语义+第 5 次独立复现补强;debug-panel 与 terrain-noon 逐字节相同的既有奇偶性——`DebugSegment` 恒空、面板已迁 WebView,建议 8.1 文档带一句）。
+- QUALITY reviewer / verdict / findings at I: fresh zcode QUALITY reviewer 首轮 = `QUALITY FAIL`（窄判:仅 R1 引入的两处机械 CI 门禁破坏,实质工程维度全部通过——屏障纪律 8 位点复核无第三缺口、确定性纯函数、512KiB 一次性 buffer、3 pass 有界成本、4 测试真实（屏障还原负向验证）、冻结 defer-unwind、golden 重归因外科手术式、engine/ABI/benchmark 零改动）。R2+engine-fmt 修复后 scoped re-review（fresh）= `SPEC PASS` + `QUALITY PASS`,全部 Rust 门禁绿、worktree 干净。
+- Tasks/ledger-only evidence commit L: 本 evidence commit（不回写自身 SHA,不冒充 `I`）。
+- Ruling: Task 7.1 final `I` = `1d7485bb`,初始 SPEC PASS（含 RATIFY）+ QUALITY FAIL 两处机械修复后 scoped 双 PASS,勾选成立 — 追认 R1 超出原 target-path 的三块扩展:（1）`mornlea_client` cull 确定性修复——视觉像素门禁暴露的既有渲染器非确定性,不修则 `make visual-check` 不可复现,与本任务“完整无窗口链路”要求同源;（2）`cmd/mornlea/app`+`capture` 世界时间冻结——失败日志证明承重,唯一合规最小机制,默认关闭且 defer 复位;（3）engine fmt 回派修复 Task 2.1/3.1 遗留漂移 — 归因诚实（14 张两轮归因、11 张字节不变、每步 SHA 链可验）、阈值/场景/顺序零放宽 — debug-panel 奇偶性转 Task 8.1 文档注记。R3–R5 未触发。
 
 ## Task 8.1 Current Documentation And Version Matrix
 
