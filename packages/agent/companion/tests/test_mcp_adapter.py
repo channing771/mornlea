@@ -25,7 +25,7 @@ from mornlea_companion_agent.domain.mcp_v1 import (
 )
 from mornlea_companion_agent.domain.planner import PlannerUnavailable
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 CONTRACT_ROOT = REPOSITORY_ROOT / "contracts/companion-agent"
 PROTOCOL_VERSION = "2025-11-25"
 MCP_WIRE_LIMIT = MCP_RESPONSE_BODY_LIMIT

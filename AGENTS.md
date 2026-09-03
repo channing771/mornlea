@@ -18,7 +18,7 @@ Mornlea 是使用 Go 1.26 编写的独立体素游戏，Go module 为 `github.co
 - 图形客户端与其 app/capture/benchmark 子包：`cmd/mornlea/AGENTS.md`（子包目录各有局部指南，依赖方向由 `internal/archcheck` 强制）
 - 文档结构、长期说明和测试组织文档：`docs/AGENTS.md`
 - 脚本、发布与自动化：`scripts/AGENTS.md`
-- Python 伙伴 Agent 服务：`services/companion-agent/AGENTS.md`
+- Python 伙伴 Agent 服务：`packages/agent/companion/AGENTS.md`
 - OpenSpec 项目上下文与产物规则：`openspec/config.yaml`
 
 ## 开始工作前

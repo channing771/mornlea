@@ -124,7 +124,7 @@ The pinned Rust 1.97.1 workspace ships two cdylibs: `mornlea_engine` (the sole p
 
 ## Companion Agent Service
 
-`mornlea-companion-agent` lives in `services/companion-agent` and uses Python 3.12, LangChain/LangGraph, FastAPI, and SQLite. The Go server remains authoritative for the world, task queue, actions, and final plan validation; Python only produces candidate plans, dialogue, and compact-memory CAS results. The processes communicate only over loopback Agent HTTP v1 and read-only MCP v1.
+`mornlea-companion-agent` lives in `packages/agent/companion` and uses Python 3.12, LangChain/LangGraph, FastAPI, and SQLite. The Go server remains authoritative for the world, task queue, actions, and final plan validation; Python only produces candidate plans, dialogue, and compact-memory CAS results. The processes communicate only over loopback Agent HTTP v1 and read-only MCP v1.
 
 ```bash
 make companion-agent-check

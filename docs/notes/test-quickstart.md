@@ -28,7 +28,7 @@
 | 窗口 / 渲染 / 材质 / WGSL | `cargo test -p mornlea_client --locked` + `go test ./cmd/mornlea/app -run 'TestFitFramebuffer\|TestApplicationConnection'` |
 | 协议 / 网络 / 存档 | `go test ./internal/network/... ./internal/storage/... ./internal/core` |
 | 服务端 tick / 伙伴 / 农业 | `go test ./internal/server ./internal/sim/... -run '关键词'` |
-| Python 伙伴 Agent | `cd services/companion-agent && uv run pytest tests/test_<主题>.py -q`；首次进入先 `uv sync --locked` |
+| Python 伙伴 Agent | `cd packages/agent/companion && uv run pytest tests/test_<主题>.py -q`；首次进入先 `uv sync --locked` |
 | Go/Python Agent 合同 | `go test ./internal/server -run 'CrossLanguage|CompanionAgent.*Integration'`（完整真进程入口见下文） |
 | 流体队列 / 规则求值 / 重扫包装 | `go test ./internal/fluid`（重扫差分门禁在 `./internal/sim/realm`，见 `internal/fluid/AGENTS.md`） |
 | 资产 / 材质包 / provenance | `go test ./internal/assets` |
@@ -50,7 +50,7 @@ scripts/agents/race-changed.sh --diff    # 只打印包集合不运行（核对�
 
 集合 = 改动包（已提交 diff ∪ 暂存 ∪ 未暂存 ∪ 未跟踪的 .go）∪ 生产 import 反向依赖（传递）∪ 测试 import 直接依赖 ∪ `internal/archcheck`。闭包含 cdylib 消费包（nativeabi/core/physics/mesh/client/sim/server/cmd/mornlea 及其 app/capture/benchmark 子包/cmd/mornlea-server）时脚本先按需 `make rust`；纯 Go 叶子改动不构建 Rust。
 
-Python 服务不进入 Go import 闭包：修改 `services/companion-agent` 后，T1 另运行 `make companion-agent-check`，它执行 locked sync、Ruff format/lint、`mypy src` 与全部 pytest。修改 HTTP/MCP wire、进程生命周期或 integration helper 时，再运行 `make companion-agent-integration`；该入口会检查 `tests/integration` 并以 race detector 启动真实 Go/Python loopback 子进程。
+Python 服务不进入 Go import 闭包：修改 `packages/agent/companion` 后，T1 另运行 `make companion-agent-check`，它执行 locked sync、Ruff format/lint、`mypy src` 与全部 pytest。修改 HTTP/MCP wire、进程生命周期或 integration helper 时，再运行 `make companion-agent-integration`；该入口会检查 `tests/integration` 并以 race detector 启动真实 Go/Python loopback 子进程。
 
 ## T2：短模式与一键快检
 

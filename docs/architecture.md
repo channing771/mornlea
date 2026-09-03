@@ -104,8 +104,9 @@ Linux 专服发布单元由 `mornlea-server` 与相邻的 `libmornlea_engine.so`
 │       └── mornlea_client/  Darwin 窗口、事件循环、WebView 菜单层（frontend/ React 前端）与全部 GPU 渲染
 ├── contracts/
 │   └── companion-agent/    HTTP v1 与 MCP v1 的共享 manifest/schema/golden
-├── services/
-│   └── companion-agent/    Python 3.12 FastAPI/LangGraph/SQLite 独立服务
+├── packages/
+│   └── agent/
+│       └── companion/      Python 3.12 FastAPI/LangGraph/SQLite 独立服务
 ├── internal/                包职责见 §5，依赖白名单以 archcheck 为准
 │   ├── core/                公共领域类型与 native raycast batch 驱动
 │   ├── companion/           独立伙伴身份、静态定义与身体类型

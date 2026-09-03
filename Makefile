@@ -159,7 +159,7 @@ dev-check:
 	cd $(RUST_DIR) && $(CARGO) clippy --workspace --all-targets -- -D warnings
 	cd $(RUST_DIR) && $(CARGO) test --workspace --locked
 
-COMPANION_AGENT_DIR := services/companion-agent
+COMPANION_AGENT_DIR := packages/agent/companion
 COMPANION_AGENT_PYTHON := $(CURDIR)/$(COMPANION_AGENT_DIR)/.venv/bin/python
 
 companion-agent-check:

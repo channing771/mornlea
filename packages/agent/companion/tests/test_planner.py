@@ -41,7 +41,7 @@ from mornlea_companion_agent.domain.planner import (
 )
 from mornlea_companion_agent.harness.planner import PlannerHarness
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 CONTRACT_ROOT = REPOSITORY_ROOT / "contracts/companion-agent"
 PROVIDER_RESPONSE_LIMIT = PROVIDER_RESPONSE_BODY_LIMIT
 

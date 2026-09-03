@@ -40,33 +40,14 @@ jobs:
           version: '0.12.5'
           enable-cache: true
           cache-dependency-glob: |
-            services/companion-agent/pyproject.toml
-            services/companion-agent/uv.lock
+            packages/agent/companion/pyproject.toml
+            packages/agent/companion/uv.lock
       - uses: actions/download-artifact@v4
         with:
           name: native-macos-${{ github.sha }}
           path: engine/target/release
       - name: verify artifact
-        run: |
-          test "$(cat engine/target/release/native-source-sha.txt)" = "$GITHUB_SHA"
-          test "$(wc -l < engine/target/release/native-artifact-manifest.txt | tr -d ' ')" = 3
-          {
-            IFS=' ' read -r kind sha extra
-            test "$kind" = sha
-            test "$sha" = "$GITHUB_SHA"
-            test -z "$extra"
-            validate_artifact() {
-              expected_path=$1
-              IFS=' ' read -r path size digest extra
-              test "$path" = "$expected_path"
-              test -z "$extra"
-              case "$size" in ''|*[!0-9]*) exit 1 ;; esac
-              test "$size" = "$(stat -f '%z' "$path")"
-              test "$digest" = "$(shasum -a 256 "$path" | awk '{print $1}')"
-            }
-            validate_artifact engine/target/release/libmornlea_engine.dylib
-            validate_artifact engine/target/release/libmornlea_client.dylib
-          } < engine/target/release/native-artifact-manifest.txt
+        run: scripts/ci/verify-native-artifact.sh
       - name: check
         run: make companion-agent-check
       - name: integration
@@ -90,14 +71,11 @@ func TestCompanionAgentCIGateMutations(t *testing.T) {
 		{"python version type", "python-version: '3.12'", "python-version: 3.12", "string"},
 		{"uv version", "version: '0.12.5'", "version: 'latest'", "uv 0.12.5"},
 		{"uv cache type", "enable-cache: true", "enable-cache: 'true'", "bool"},
-		{"pyproject cache dependency", "            services/companion-agent/pyproject.toml\n", "", "pyproject.toml"},
-		{"lock cache dependency", "            services/companion-agent/uv.lock\n", "", "uv.lock"},
+		{"pyproject cache dependency", "            packages/agent/companion/pyproject.toml\n", "", "pyproject.toml"},
+		{"lock cache dependency", "            packages/agent/companion/uv.lock\n", "", "uv.lock"},
 		{"same sha artifact", "name: native-macos-${{ github.sha }}", "name: native-macos-latest", "same-SHA"},
-		{"source sha verification", "          test \"$(cat engine/target/release/native-source-sha.txt)\" = \"$GITHUB_SHA\"\n", "", "source SHA"},
-		{"artifact size verification", "              test \"$size\" = \"$(stat -f '%z' \"$path\")\"\n", "", "size"},
-		{"artifact digest verification", "              test \"$digest\" = \"$(shasum -a 256 \"$path\" | awk '{print $1}')\"\n", "", "digest"},
-		{"engine artifact validation call", "            validate_artifact engine/target/release/libmornlea_engine.dylib\n", "", "libmornlea_engine.dylib"},
-		{"client artifact validation call", "            validate_artifact engine/target/release/libmornlea_client.dylib\n", "", "libmornlea_client.dylib"},
+		{"verify script missing", "      - name: verify artifact\n        run: scripts/ci/verify-native-artifact.sh\n", "", "校验脚本"},
+		{"verify script renamed", "        run: scripts/ci/verify-native-artifact.sh", "        run: scripts/ci/verify-native-artifact-fork.sh", "校验脚本"},
 		{"python check", "        run: make companion-agent-check", "        run: make companion-agent-check-disabled", "companion-agent-check"},
 		{"process integration", "        run: make companion-agent-integration", "        run: make companion-agent-integration-disabled", "companion-agent-integration"},
 		{"summary always condition missing", "    if: ${{ always() }}\n", "", "always"},
@@ -113,26 +91,7 @@ func TestCompanionAgentCIGateMutations(t *testing.T) {
 	}
 
 	verify := `      - name: verify artifact
-        run: |
-          test "$(cat engine/target/release/native-source-sha.txt)" = "$GITHUB_SHA"
-          test "$(wc -l < engine/target/release/native-artifact-manifest.txt | tr -d ' ')" = 3
-          {
-            IFS=' ' read -r kind sha extra
-            test "$kind" = sha
-            test "$sha" = "$GITHUB_SHA"
-            test -z "$extra"
-            validate_artifact() {
-              expected_path=$1
-              IFS=' ' read -r path size digest extra
-              test "$path" = "$expected_path"
-              test -z "$extra"
-              case "$size" in ''|*[!0-9]*) exit 1 ;; esac
-              test "$size" = "$(stat -f '%z' "$path")"
-              test "$digest" = "$(shasum -a 256 "$path" | awk '{print $1}')"
-            }
-            validate_artifact engine/target/release/libmornlea_engine.dylib
-            validate_artifact engine/target/release/libmornlea_client.dylib
-          } < engine/target/release/native-artifact-manifest.txt
+        run: scripts/ci/verify-native-artifact.sh
 `
 	check := `      - name: check
         run: make companion-agent-check

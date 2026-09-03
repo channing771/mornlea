@@ -16,19 +16,20 @@ import (
 
 func TestCompanionAgentRepositoryBoundary(t *testing.T) {
 	root := moduleRoot(t)
+	companion := filepath.Join("packages", "agent", "companion")
 	required := []string{
 		filepath.Join("contracts", "companion-agent", "http-v1", "manifest.json"),
 		filepath.Join("contracts", "companion-agent", "http-v1", "schema.json"),
 		filepath.Join("contracts", "companion-agent", "mcp-v1", "manifest.json"),
 		filepath.Join("contracts", "companion-agent", "mcp-v1", "schema.json"),
-		filepath.Join("services", "companion-agent", "pyproject.toml"),
-		filepath.Join("services", "companion-agent", "uv.lock"),
-		filepath.Join("services", "companion-agent", "src", "mornlea_companion_agent", "app.py"),
-		filepath.Join("services", "companion-agent", "src", "mornlea_companion_agent", "adapters", "mcp.py"),
-		filepath.Join("services", "companion-agent", "src", "mornlea_companion_agent", "harness", "planner.py"),
-		filepath.Join("services", "companion-agent", "src", "mornlea_companion_agent", "domain", "http_v1.py"),
-		filepath.Join("services", "companion-agent", "src", "mornlea_companion_agent", "storage", "sqlite_memory.py"),
-		filepath.Join("services", "companion-agent", "tests", "integration", "process.py"),
+		filepath.Join(companion, "pyproject.toml"),
+		filepath.Join(companion, "uv.lock"),
+		filepath.Join(companion, "src", "mornlea_companion_agent", "app.py"),
+		filepath.Join(companion, "src", "mornlea_companion_agent", "adapters", "mcp.py"),
+		filepath.Join(companion, "src", "mornlea_companion_agent", "harness", "planner.py"),
+		filepath.Join(companion, "src", "mornlea_companion_agent", "domain", "http_v1.py"),
+		filepath.Join(companion, "src", "mornlea_companion_agent", "storage", "sqlite_memory.py"),
+		filepath.Join(companion, "tests", "integration", "process.py"),
 	}
 	for _, relative := range required {
 		if info, err := os.Stat(filepath.Join(root, relative)); err != nil || info.IsDir() {
@@ -36,10 +37,10 @@ func TestCompanionAgentRepositoryBoundary(t *testing.T) {
 		}
 	}
 
-	pyproject := readBaselineDoc(t, root, filepath.Join("services", "companion-agent", "pyproject.toml"))
+	pyproject := readBaselineDoc(t, root, filepath.Join(companion, "pyproject.toml"))
 	for _, marker := range []string{
-		`"../../contracts/companion-agent/mcp-v1/manifest.json"`,
-		`"../../contracts/companion-agent/mcp-v1/schema.json"`,
+		`"../../../contracts/companion-agent/mcp-v1/manifest.json"`,
+		`"../../../contracts/companion-agent/mcp-v1/schema.json"`,
 	} {
 		if !strings.Contains(pyproject, marker) {
 			t.Errorf("Python wheel 未携带共享 MCP contract %s", marker)
@@ -47,7 +48,7 @@ func TestCompanionAgentRepositoryBoundary(t *testing.T) {
 	}
 
 	for _, relative := range []string{
-		filepath.Join("services", "companion-agent", "src", "mornlea_companion_agent"),
+		filepath.Join(companion, "src", "mornlea_companion_agent"),
 	} {
 		err := filepath.WalkDir(filepath.Join(root, relative), func(path string, entry os.DirEntry, err error) error {
 			if err != nil {
@@ -104,6 +105,38 @@ func TestCompanionAgentCIGates(t *testing.T) {
 	workflow := []byte(readBaselineDoc(t, moduleRoot(t), filepath.Join(".github", "workflows", "ci.yml")))
 	if violations := companionAgentWorkflowViolations(workflow); len(violations) > 0 {
 		t.Errorf("伙伴 Agent CI 合同有 %d 条违规：\n%s", len(violations), strings.Join(violations, "\n"))
+	}
+}
+
+// TestVerifyNativeArtifactScript 钉住 scripts/ci/verify-native-artifact.sh 的
+// 承重语句。校验逻辑从 ci.yml 的内联块收敛进脚本后，workflow 侧只钉「恰好
+// 调用一次且位于 make 门禁之前」的编排位置；脚本本体若被删改（丢掉行数、
+// SHA 或 sha256 任一环）在这里暴露，否则三个 job 共享的信任基准静默变松。
+func TestVerifyNativeArtifactScript(t *testing.T) {
+	script := readBaselineDoc(t, moduleRoot(t), filepath.Join("scripts", "ci", "verify-native-artifact.sh"))
+	for _, required := range []string{
+		"set -euo pipefail",
+		"ENGINE_DYLIB=engine/target/release/libmornlea_engine.dylib",
+		"CLIENT_DYLIB=engine/target/release/libmornlea_client.dylib",
+		`test "$(cat engine/target/release/native-source-sha.txt)" = "$GITHUB_SHA"`,
+		`test "$(wc -l < "$MANIFEST" | tr -d ' ')" = 3`,
+		`IFS=' ' read -r kind sha extra`,
+		`test "$kind" = sha`,
+		`test "$sha" = "$GITHUB_SHA"`,
+		`test -z "$extra"`,
+		`expected_path=$1`,
+		`IFS=' ' read -r path size digest extra`,
+		`test "$path" = "$expected_path"`,
+		`test -z "$extra"`,
+		`case "$size" in ''|*[!0-9]*) exit 1 ;; esac`,
+		`test "$size" = "$(stat -f '%z' "$path")"`,
+		`test "$digest" = "$(shasum -a 256 "$path" | awk '{print $1}')"`,
+		`validate_artifact "$ENGINE_DYLIB"`,
+		`validate_artifact "$CLIENT_DYLIB"`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("verify-native-artifact.sh 缺少承重语句 %s", required)
+		}
 	}
 }
 
@@ -227,8 +260,8 @@ func companionAgentWorkflowViolations(source []byte) []string {
 		} else {
 			cachePaths := nonEmptyTrimmedLines(value)
 			for _, required := range []string{
-				"services/companion-agent/pyproject.toml",
-				"services/companion-agent/uv.lock",
+				"packages/agent/companion/pyproject.toml",
+				"packages/agent/companion/uv.lock",
 			} {
 				if !slices.Contains(cachePaths, required) {
 					violations = append(violations, "uv cache 缺少 "+required)
@@ -249,58 +282,13 @@ func companionAgentWorkflowViolations(source []byte) []string {
 		}
 	}
 
-	verifyIndexes := make([]int, 0, 1)
-	for index, step := range integration.Steps {
-		statements := workflowShellStatements(step.Run)
-		if slices.Contains(statements, `test "$(cat engine/target/release/native-source-sha.txt)" = "$GITHUB_SHA"`) {
-			verifyIndexes = append(verifyIndexes, index)
-			for _, required := range []string{
-				`test "$(wc -l < engine/target/release/native-artifact-manifest.txt | tr -d ' ')" = 3`,
-				`IFS=' ' read -r kind sha extra`,
-				`test "$kind" = sha`,
-				`test "$sha" = "$GITHUB_SHA"`,
-				`test -z "$extra"`,
-				`} < engine/target/release/native-artifact-manifest.txt`,
-			} {
-				if !slices.Contains(statements, required) {
-					violations = append(violations, "native artifact manifest 验证缺少 "+required)
-				}
-			}
-			functionBody, functionEnd, err := workflowShellFunctionBody(step.Run, "validate_artifact")
-			if err != nil {
-				violations = append(violations, "native artifact manifest 验证函数非法: "+err.Error())
-			} else {
-				for _, required := range []string{
-					`expected_path=$1`,
-					`IFS=' ' read -r path size digest extra`,
-					`test "$path" = "$expected_path"`,
-					`test -z "$extra"`,
-					`case "$size" in ''|*[!0-9]*) exit 1 ;; esac`,
-					`test "$size" = "$(stat -f '%z' "$path")"`,
-					`test "$digest" = "$(shasum -a 256 "$path" | awk '{print $1}')"`,
-				} {
-					if !slices.Contains(functionBody, required) {
-						violations = append(violations, "validate_artifact 函数缺少 "+required)
-					}
-				}
-				for _, artifact := range []string{
-					"engine/target/release/libmornlea_engine.dylib",
-					"engine/target/release/libmornlea_client.dylib",
-				} {
-					call := "validate_artifact " + artifact
-					if strings.Count(strings.Join(statements, "\n"), call) != 1 || slices.Index(statements, call) <= functionEnd {
-						violations = append(violations, "native artifact manifest 必须实际调用 "+call)
-					}
-				}
-			}
-		}
-	}
-	verifyIndex := uniqueWorkflowStepIndex(&violations, "native source SHA/manifest verification", verifyIndexes)
+	verifyIndex := uniqueWorkflowStepIndex(&violations, "native artifact 校验脚本调用",
+		workflowExactCommandStepIndexes(integration.Steps, "scripts/ci/verify-native-artifact.sh"))
 	checkIndex := uniqueWorkflowStepIndex(&violations, "make companion-agent-check", workflowExactCommandStepIndexes(integration.Steps, "make companion-agent-check"))
 	processIndex := uniqueWorkflowStepIndex(&violations, "make companion-agent-integration", workflowExactCommandStepIndexes(integration.Steps, "make companion-agent-integration"))
 	if downloadIndex >= 0 && verifyIndex >= 0 && checkIndex >= 0 && processIndex >= 0 &&
 		!(downloadIndex < verifyIndex && verifyIndex < checkIndex && verifyIndex < processIndex) {
-		violations = append(violations, "same-SHA artifact download 与 manifest verification 必须在两条 Agent make 门禁 before 执行")
+		violations = append(violations, "same-SHA artifact download 与校验脚本必须在两条 Agent make 门禁 before 执行")
 	}
 	for _, setup := range append(slices.Clone(pythonIndexes), uvIndexes...) {
 		if (checkIndex >= 0 && setup >= checkIndex) || (processIndex >= 0 && setup >= processIndex) {
@@ -366,21 +354,6 @@ func workflowShellStatements(script string) []string {
 		}
 	}
 	return statements
-}
-
-func workflowShellFunctionBody(script, name string) ([]string, int, error) {
-	statements := workflowShellStatements(script)
-	declaration := name + "() {"
-	if strings.Count(strings.Join(statements, "\n"), declaration) != 1 {
-		return nil, -1, fmt.Errorf("%s 声明数不为 1", declaration)
-	}
-	start := slices.Index(statements, declaration)
-	for index := start + 1; index < len(statements); index++ {
-		if statements[index] == "}" {
-			return statements[start+1 : index], index, nil
-		}
-	}
-	return nil, -1, fmt.Errorf("%s 缺少闭合大括号", declaration)
 }
 
 func workflowStringWith(step companionWorkflowStep, name string) (string, error) {

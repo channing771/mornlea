@@ -45,7 +45,7 @@ provider:
 
 
 def _write_documented_config(path: Path) -> Path:
-    repository_root = Path(__file__).resolve().parents[3]
+    repository_root = Path(__file__).resolve().parents[4]
     documentation = (repository_root / "docs/notes/configuration.md").read_text(encoding="utf-8")
     section_marker = "Python 服务读取另一份 strict v1 YAML"
     _, marker, section = documentation.partition(section_marker)
