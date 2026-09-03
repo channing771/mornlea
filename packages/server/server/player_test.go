@@ -1,0 +1,660 @@
+package server
+
+import (
+	"context"
+	"errors"
+	"reflect"
+	"testing"
+	"time"
+
+	"github.com/go-gl/mathgl/mgl32"
+
+	"github.com/channing771/mornlea/packages/server/sim/contract"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
+	"github.com/channing771/mornlea/packages/shared/world"
+)
+
+func TestTrustedObserverIsDisabledByDefault(t *testing.T) {
+	running := newDefaultTestServer(t)
+	err := running.SetTrustedObserverCenter(core.Overworld, core.ChunkPos{X: 99})
+	if !errors.Is(err, ErrTrustedObserverDisabled) {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestTrustedObserverCoalescesCenterAndDrivesGeneration(t *testing.T) {
+	running := newTrustedObserverTestServer(t)
+	for x := int32(1); x <= 3; x++ {
+		if err := running.SetTrustedObserverCenter(
+			core.Overworld,
+			core.ChunkPos{X: x},
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	result := running.StepForTest()
+	if !containsChunk(result.Acquire, core.ChunkPos{X: 3}) ||
+		containsChunk(result.Acquire, core.ChunkPos{X: 1}) || len(result.Generate) != 0 {
+		t.Fatalf("Acquire=%+v Generate=%+v", result.Acquire, result.Generate)
+	}
+}
+
+func TestTrustedObserverDoesNotRegisterPlayer(t *testing.T) {
+	running := newTrustedObserverTestServer(t)
+	if player, ok := running.PlayerStateFor(testSessionID); ok {
+		t.Fatalf("trusted observer 注册了玩家: %+v", player)
+	}
+}
+
+func TestTrustedObserverRejectsNonOverworldCenter(t *testing.T) {
+	running := newTrustedObserverTestServer(t)
+	if err := running.SetTrustedObserverCenter(
+		core.DimensionID(99),
+		core.ChunkPos{X: 7},
+	); err == nil {
+		t.Fatal("非 Overworld trusted center 未被拒绝")
+	}
+	if result := running.StepForTest(); len(result.Acquire) != 0 || len(result.Generate) != 0 {
+		t.Fatalf("非法 center 驱动了 acquisition/generation: %+v", result)
+	}
+}
+
+func TestTrustedObserverSequenceCannotBePoisonedByClientSequence(t *testing.T) {
+	observerClient, observerEndpoint := network.NewMemoryPair(32)
+	playerClient, playerEndpoint := network.NewMemoryPair(32)
+	config := DefaultConfig(42)
+	config.ViewRadius = 0
+	config.Workers = 1
+	config.TrustedObserver = true
+	running := NewWorld(config, playerTestGenerator{}, testStore())
+	if err := running.AttachTrustedObserver(observerEndpoint); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := running.AttachSession(registrySessionSpec(7, 1, playerEndpoint)); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = observerClient.Close()
+		_ = playerClient.Close()
+		shutdownServerForTest(t, running)
+	})
+
+	if err := running.SetTrustedObserverCenter(
+		core.Overworld,
+		core.ChunkPos{X: 1},
+	); err != nil {
+		t.Fatal(err)
+	}
+	sendPlayerClientMessage(t, playerClient, network.RequestChunkResync{
+		Sequence:  1_000,
+		Dimension: core.Overworld,
+		Chunk:     core.ChunkPos{X: 1},
+	})
+	waitForQueuedPlayerCommand(t, running)
+	if first := running.StepForTest(); !containsChunk(first.Acquire, core.ChunkPos{X: 1}) {
+		t.Fatalf("首个 trusted center 未驱动读取: %+v", first.Acquire)
+	}
+
+	if err := running.SetTrustedObserverCenter(
+		core.Overworld,
+		core.ChunkPos{X: 2},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if second := running.StepForTest(); !containsChunk(second.Acquire, core.ChunkPos{X: 2}) {
+		t.Fatalf("客户端 sequence 饿死后续 trusted center: %+v", second.Acquire)
+	}
+}
+
+func TestTrustedObserverAppliedCenterWaitsForStepWithPreloadedTarget(t *testing.T) {
+	client, endpoint := network.NewMemoryPair(32)
+	generator := &gatedGenerator{release: make(chan struct{}), flat: true}
+	config := DefaultConfig(42)
+	config.ViewRadius = 1
+	config.Workers = 1
+	config.TrustedObserver = true
+	running := newMemoryAttachedWorldForTest(config, endpoint, generator)
+	t.Cleanup(func() {
+		close(generator.release)
+		_ = client.Close()
+		shutdownServerForTest(t, running)
+	})
+
+	initial := core.ChunkPos{}
+	target := core.ChunkPos{X: 1}
+	if err := running.SetTrustedObserverCenter(core.Overworld, initial); err != nil {
+		t.Fatal(err)
+	}
+	requested := running.StepForTest()
+	if !containsChunk(requested.Acquire, target) {
+		t.Fatalf("初始订阅未包含预加载目标: %+v", requested.Acquire)
+	}
+	submitServerAcquiredMisses(running, requested.Acquire)
+	running.engine.Step()
+	running.engine.SubmitGenerated(contract.GeneratedChunk{
+		Dimension: core.Overworld,
+		Pos:       target,
+		Chunk:     generator.chunk(target),
+	})
+	ready := running.StepForTest()
+	if !containsChunk(ready.Ready, target) {
+		t.Fatalf("目标 chunk 未预加载: %+v", ready.Ready)
+	}
+	if _, _, ok := running.ChunkHash(core.Overworld, target); !ok {
+		t.Fatal("预加载目标 hash 不可用")
+	}
+
+	dimension, center, sequence, ok := running.AppliedTrustedObserverCenter()
+	if !ok || dimension != core.Overworld || center != initial || sequence != 1 {
+		t.Fatalf("初始 applied center=(%d,%+v,%d,%v)", dimension, center, sequence, ok)
+	}
+	if err := running.SetTrustedObserverCenter(core.Overworld, target); err != nil {
+		t.Fatal(err)
+	}
+	dimension, center, queuedSequence, ok := running.AppliedTrustedObserverCenter()
+	if !ok || dimension != core.Overworld || center != initial || queuedSequence != sequence {
+		t.Fatalf("queue 尚未 drain 就报告 applied=(%d,%+v,%d,%v)", dimension, center, queuedSequence, ok)
+	}
+
+	running.StepForTest()
+	dimension, center, appliedSequence, ok := running.AppliedTrustedObserverCenter()
+	if !ok || dimension != core.Overworld || center != target || appliedSequence <= sequence {
+		t.Fatalf("Step 后 applied center=(%d,%+v,%d,%v)，先前 sequence=%d",
+			dimension, center, appliedSequence, ok, sequence)
+	}
+}
+
+func TestTranslatePlayerMessage(t *testing.T) {
+	tests := []struct {
+		name    string
+		message network.ClientMessage
+		want    contract.Command
+	}{
+		{
+			name:    "drop selected item carries only the sequence",
+			message: network.DropSelectedItem{Sequence: 17},
+			want: contract.Command{
+				Session:  testSessionID,
+				Sequence: 17,
+				Kind:     contract.CommandDropSelectedItem,
+			},
+		},
+		{
+			name: "input",
+			message: network.PlayerInput{
+				Sequence: 11,
+				MoveX:    -1,
+				MoveZ:    1,
+				Jump:     true,
+				Yaw:      0.75,
+				Pitch:    -0.25,
+				Mining:   true,
+			},
+			want: contract.Command{
+				Session:  testSessionID,
+				Sequence: 11,
+				Kind:     contract.CommandPlayerInput,
+				MoveX:    -1,
+				MoveZ:    1,
+				Jump:     true,
+				Yaw:      0.75,
+				Pitch:    -0.25,
+				Mining:   true,
+			},
+		},
+		{
+			name: "place block uses only player look",
+			message: network.PlaceBlock{
+				Sequence: 13,
+				Yaw:      1.5,
+				Pitch:    -0.75,
+				Slot:     4,
+			},
+			want: contract.Command{
+				Session:  testSessionID,
+				Sequence: 13,
+				Kind:     contract.CommandPlaceBlock,
+				Yaw:      1.5,
+				Pitch:    -0.75,
+				Slot:     4,
+			},
+		},
+		{
+			name:    "move crafting stack carries only the view slots",
+			message: network.MoveCraftingStack{Sequence: 16, From: 9, To: 0},
+			want: contract.Command{
+				Session:  testSessionID,
+				Sequence: 16,
+				Kind:     contract.CommandMoveCraftingStack,
+				Slot:     9,
+				ToSlot:   0,
+			},
+		},
+		{
+			name:    "move inventory stack carries only the slots",
+			message: network.MoveInventoryStack{Sequence: 15, From: 2, To: 30},
+			want: contract.Command{
+				Session:  testSessionID,
+				Sequence: 15,
+				Kind:     contract.CommandMoveInventoryStack,
+				Slot:     2,
+				ToSlot:   30,
+			},
+		},
+		{
+			name:    "select hotbar carries only the slot",
+			message: network.SelectHotbar{Sequence: 14, Slot: 7},
+			want: contract.Command{
+				Session:  testSessionID,
+				Sequence: 14,
+				Kind:     contract.CommandSelectHotbar,
+				Slot:     7,
+			},
+		},
+		{
+			// Yaw 必须非零：sim.openContainer 用 LookDirection(Yaw, Pitch) 做权威射线，
+			// translateClientMessage 里漏掉 Yaw 字段不会被现有只给 Pitch 的测试暴露。
+			name: "open container carries yaw and pitch",
+			message: network.OpenContainer{
+				Sequence: 20,
+				Yaw:      2.25,
+				Pitch:    -0.4,
+			},
+			want: contract.Command{
+				Session:  testSessionID,
+				Sequence: 20,
+				Kind:     contract.CommandOpenFurnace,
+				Yaw:      2.25,
+				Pitch:    -0.4,
+			},
+		},
+		{
+			name: "move container stack carries the container ref and both slots",
+			message: network.MoveContainerStack{
+				Sequence: 21,
+				Container: core.ContainerRef{
+					Dimension: core.Overworld, Chunk: core.ChunkPos{X: 3, Z: -2},
+					Kind: core.ContainerKindChest, Slot: 5, Generation: 9,
+				},
+				From: 2, To: 40,
+			},
+			want: contract.Command{
+				Session:  testSessionID,
+				Sequence: 21,
+				Kind:     contract.CommandMoveFurnaceStack,
+				Furnace: core.ContainerRef{
+					Dimension: core.Overworld, Chunk: core.ChunkPos{X: 3, Z: -2},
+					Kind: core.ContainerKindChest, Slot: 5, Generation: 9,
+				},
+				Slot:   2,
+				ToSlot: 40,
+			},
+		},
+		{
+			name:    "close container carries only the sequence",
+			message: network.CloseContainer{Sequence: 22},
+			want: contract.Command{
+				Session:  testSessionID,
+				Sequence: 22,
+				Kind:     contract.CommandCloseFurnace,
+			},
+		},
+		{
+			// Yaw 同样必须非零，理由与 open container 那一行完全一致：
+			// sim.executeTillSoil 也用 LookDirection(Yaw, Pitch) 做权威射线，
+			// 只给 Pitch 的夹具漏不掉 Yaw 字段的翻译缺失。
+			name: "till soil carries yaw and pitch",
+			message: network.TillSoil{
+				Sequence: 23,
+				Yaw:      -1.75,
+				Pitch:    0.3,
+			},
+			want: contract.Command{
+				Session:  testSessionID,
+				Sequence: 23,
+				Kind:     contract.CommandTillSoil,
+				Yaw:      -1.75,
+				Pitch:    0.3,
+			},
+		},
+		{
+			// 网格移动的统一视图格必须逐字段搬运：`From`→`Slot`、`To`→`ToSlot`——
+			// e2e 只能证明「移动生效」，调换两个字段会让网格与背包互换角色。
+			name:    "move crafting stack carries both unified slots",
+			message: network.MoveCraftingStack{Sequence: 24, From: 9, To: 0},
+			want: contract.Command{
+				Session:  testSessionID,
+				Sequence: 24,
+				Kind:     contract.CommandMoveCraftingStack,
+				Slot:     9,
+				ToSlot:   0,
+			},
+		},
+		{
+			name:    "take crafting output carries only the sequence",
+			message: network.TakeCraftingOutput{Sequence: 25},
+			want: contract.Command{
+				Session:  testSessionID,
+				Sequence: 25,
+				Kind:     contract.CommandTakeCraftingOutput,
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, ok := translateClientMessage(testSessionID, test.message)
+			if !ok || !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("translateClientMessage(%#v) = %#v,%v，想要 %#v,true", test.message, got, ok, test.want)
+			}
+		})
+	}
+
+	reasons := []struct {
+		sim     contract.RejectReason
+		network network.RejectReason
+	}{
+		{sim: contract.RejectInvalidInput, network: network.RejectInvalidInput},
+		{sim: contract.RejectPlayerNotReady, network: network.RejectPlayerNotReady},
+	}
+	for _, reason := range reasons {
+		got, ok := networkRejectReason(reason.sim)
+		if !ok || got != reason.network {
+			t.Fatalf("networkRejectReason(%v) = %q,%v，想要 %q,true", reason.sim, got, ok, reason.network)
+		}
+	}
+}
+
+func TestServerPublishesPlayerStateAndInputAck(t *testing.T) {
+	clientEndpoint, serverEndpoint := network.NewMemoryPair(32)
+	config := DefaultConfig(42)
+	config.ViewRadius, config.Workers = 0, 1
+	config.SpawnAnchor = core.ChunkPos{X: 4, Z: -3}
+	running := newMemoryAttachedWorldForTest(config, serverEndpoint, playerTestGenerator{})
+	t.Cleanup(func() {
+		_ = clientEndpoint.Close()
+		shutdownServerForTest(t, running)
+	})
+
+	registered, ok := running.PlayerStateFor(testSessionID)
+	if !ok || registered.Session != testSessionID || registered.Ready ||
+		registered.Dimension != core.Overworld || registered.ViewCenter != config.SpawnAnchor {
+		t.Fatalf("New 后 PlayerState = %+v,%v", registered, ok)
+	}
+	first := running.StepForTest()
+	wantAcquire := []core.ChunkKey{{Dimension: core.Overworld, Pos: config.SpawnAnchor}}
+	if !reflect.DeepEqual(first.Acquire, wantAcquire) || len(first.Generate) != 0 {
+		t.Fatalf("首 tick Acquire = %+v Generate=%+v，想要 %+v", first.Acquire, first.Generate, wantAcquire)
+	}
+	waitForReadyPlayer(t, running, clientEndpoint)
+
+	sendPlayerClientMessage(t, clientEndpoint, network.PlayerInput{
+		Sequence: 1,
+		MoveZ:    1,
+		Yaw:      0,
+		Pitch:    0,
+	})
+	waitForQueuedPlayerCommand(t, running)
+	result := running.StepForTest()
+	state := receivePlayerStateForTick(t, clientEndpoint, result.Tick)
+	if !state.Ready || state.LastInputSequence != 1 || state.ServerTick != result.Tick || state.ServerTick == 0 {
+		t.Fatalf("state=%+v result.Tick=%d", state, result.Tick)
+	}
+}
+
+func TestPlayerStatePublicationOrder(t *testing.T) {
+	running, client, generator := newPublicationServer(t, 0, 8, 1<<20, true)
+
+	requested := running.StepForTest()
+	if len(requested.Acquire) != 1 {
+		t.Fatalf("首 tick Acquire = %+v", requested.Acquire)
+	}
+	firstState := recvServerMessage(t, client)
+	if state, ok := firstState.(network.PlayerState); !ok || state.ServerTick != requested.Tick {
+		t.Fatalf("首 tick message = %#v", firstState)
+	}
+	submitServerAcquiredMisses(running, requested.Acquire)
+	generated := running.engine.Step()
+	if len(generated.Generate) != 1 {
+		t.Fatalf("Generate=%+v", generated.Generate)
+	}
+
+	running.engine.SubmitGenerated(contract.GeneratedChunk{
+		Dimension: core.Overworld,
+		Pos:       core.ChunkPos{},
+		Chunk:     generator.chunk(core.ChunkPos{}),
+	})
+	ready := running.StepForTest()
+	readyMessages := []network.ServerMessage{
+		recvServerMessage(t, client),
+		recvServerMessage(t, client),
+		recvServerMessage(t, client),
+		recvServerMessage(t, client),
+	}
+	if _, ok := readyMessages[0].(network.ChunkSnapshot); !ok {
+		t.Fatalf("Ready tick 首消息 = %T，想要 ChunkSnapshot", readyMessages[0])
+	}
+	// 初始快捷栏必须先于使客户端开始交互的 Ready 玩家状态。
+	if state, ok := readyMessages[1].(network.InventoryState); !ok ||
+		state.Inventory != (core.Inventory{}) {
+		t.Fatalf("Ready tick 次消息 = %#v，想要空物品状态", readyMessages[1])
+	}
+	// 初始合成网格与物品状态同序：注册即 dirty，玩家首个 Active tick 发布
+	// 一次空的个人网格（尺寸 2），客户端因此总有完整初始状态。
+	if grid, ok := readyMessages[2].(network.CraftingState); !ok ||
+		grid.Size != 2 || grid.Slots != ([core.CraftingGridSlots]core.ItemStack{}) ||
+		grid.Output != (core.ItemStack{}) {
+		t.Fatalf("Ready tick 第三消息 = %#v，想要尺寸 2 的空网格", readyMessages[2])
+	}
+	readyState, ok := readyMessages[3].(network.PlayerState)
+	if !ok || readyState.ServerTick != ready.Tick ||
+		readyState.LastInputSequence != 0 ||
+		readyState.Dimension != core.Overworld ||
+		readyState.Position != (mgl32.Vec3{0.5, 1, 0.5}) ||
+		readyState.Velocity != (mgl32.Vec3{}) ||
+		readyState.Yaw != 0 || readyState.Pitch != 0 ||
+		!readyState.OnGround || !readyState.Ready || !readyState.Reset {
+		t.Fatalf("Ready tick 尾消息 = %#v", readyMessages[3])
+	}
+
+	running.engine.Enqueue(contract.Command{
+		Session: testSessionID, Sequence: 1, Kind: contract.CommandPlayerInput,
+		Yaw: 0, Pitch: -1.5, Mining: true,
+	})
+	for range 4 {
+		if primed := running.engine.Step(); len(primed.Changes) != 0 {
+			t.Fatalf("采掘完成前出现变更: %+v", primed.Changes)
+		}
+	}
+	running.incoming <- incomingCommand{
+		Session: testSessionID, Generation: 1,
+		Command: contract.Command{
+			Session:  testSessionID,
+			Sequence: 2,
+			Kind:     contract.CommandSelectHotbar,
+			Slot:     core.HotbarSlots,
+		},
+	}
+	changed := running.StepForTest()
+	changedMessages := []network.ServerMessage{
+		recvServerMessage(t, client),
+		recvServerMessage(t, client),
+		recvServerMessage(t, client),
+		recvServerMessage(t, client),
+	}
+	if _, ok := changedMessages[0].(network.BlockChanges); !ok {
+		t.Fatalf("change tick 首消息 = %T，想要 BlockChanges", changedMessages[0])
+	}
+	// 挖掘只产生掉落物：本 tick 在拒绝之前发布一次掉落物 upsert。
+	upserts, ok := changedMessages[1].(network.ItemDropUpserts)
+	if !ok || len(upserts.Drops) != 1 || upserts.Drops[0].Item != core.ItemGrass {
+		t.Fatalf("change tick 次消息 = %#v", changedMessages[1])
+	}
+	rejection, ok := changedMessages[2].(network.CommandRejected)
+	if !ok || rejection.Sequence != 2 || rejection.Reason != network.RejectInvalidSlot {
+		t.Fatalf("change tick 第三条消息 = %#v", changedMessages[2])
+	}
+	state, ok := changedMessages[3].(network.PlayerState)
+	if !ok || state.ServerTick != changed.Tick || state.LastInputSequence != 1 {
+		t.Fatalf("change tick 尾消息 = %#v", changedMessages[3])
+	}
+
+	forgottenKey := core.ChunkKey{
+		Dimension: core.Overworld,
+		Pos:       core.ChunkPos{},
+	}
+	running.sessions[testSessionID].publications[forgottenKey] = &publication{snapshotSent: true}
+	player, ok := running.engine.Player(testSessionID)
+	if !ok {
+		t.Fatal("本地玩家不存在")
+	}
+	forgetTick := changed.Tick + 1
+	running.publish(contract.TickResult{
+		Tick: forgetTick,
+		Forget: map[contract.SessionID][]core.ChunkKey{
+			testSessionID: {forgottenKey},
+		},
+		Players: []contract.PlayerUpdate{player},
+	})
+	forgetMessage := recvServerMessage(t, client)
+	forget, ok := forgetMessage.(network.ForgetChunks)
+	if !ok || forget.Dimension != core.Overworld ||
+		!reflect.DeepEqual(forget.Chunks, []core.ChunkPos{{}}) {
+		t.Fatalf("forget tick 首消息 = %#v", forgetMessage)
+	}
+	forgetStateMessage := recvServerMessage(t, client)
+	forgetState, ok := forgetStateMessage.(network.PlayerState)
+	if !ok || forgetState.ServerTick != forgetTick {
+		t.Fatalf("forget tick 尾消息 = %#v", forgetStateMessage)
+	}
+}
+
+func TestConfigRejectsUnsupportedSpawnDimension(t *testing.T) {
+	config := DefaultConfig(1)
+	config.SpawnDimension = core.DimensionID(99)
+	defer func() {
+		if recover() == nil {
+			t.Fatal("非 Overworld 出生维度未 panic")
+		}
+	}()
+	config.validate()
+}
+
+func waitForReadyPlayer(
+	t *testing.T,
+	running *Server,
+	client network.ClientEndpoint,
+) {
+	t.Helper()
+	deadline := time.Now().Add(waitDeadline)
+	for time.Now().Before(deadline) {
+		result := running.StepForTest()
+		state := receivePlayerStateForTick(t, client, result.Tick)
+		if state.Ready {
+			return
+		}
+	}
+	t.Fatal("等待 ready PlayerState 超时")
+}
+
+func waitForQueuedPlayerCommand(t *testing.T, running *Server) {
+	t.Helper()
+	deadline := time.Now().Add(waitDeadline)
+	for len(running.incoming) == 0 && time.Now().Before(deadline) {
+		time.Sleep(integrationPollInterval)
+	}
+	if len(running.incoming) == 0 {
+		t.Fatal("endpoint reader 未翻译玩家命令")
+	}
+}
+
+func receivePlayerStateForTick(
+	t *testing.T,
+	client network.ClientEndpoint,
+	tick uint64,
+) network.PlayerState {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
+	defer cancel()
+	for {
+		message, err := client.Recv(ctx)
+		if err != nil {
+			t.Fatalf("接收 PlayerState: %v", err)
+		}
+		if state, ok := message.(network.PlayerState); ok {
+			if state.ServerTick == tick {
+				return state
+			}
+			if state.ServerTick > tick {
+				t.Fatalf("PlayerState tick=%d，跳过目标 tick=%d", state.ServerTick, tick)
+			}
+		}
+	}
+}
+
+func sendPlayerClientMessage(
+	t *testing.T,
+	client network.ClientEndpoint,
+	message network.ClientMessage,
+) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), waitDeadline)
+	defer cancel()
+	if err := client.Send(ctx, message); err != nil {
+		t.Fatalf("发送 %#v: %v", message, err)
+	}
+}
+
+type playerTestGenerator struct{}
+
+func newDefaultTestServer(t *testing.T) *Server {
+	t.Helper()
+	_, endpoint := network.NewMemoryPair(32)
+	config := DefaultConfig(42)
+	config.ViewRadius = 0
+	config.Workers = 1
+	running := newMemoryAttachedWorldForTest(config, endpoint, playerTestGenerator{})
+	t.Cleanup(func() { shutdownServerForTest(t, running) })
+	return running
+}
+
+func newTrustedObserverTestServer(t *testing.T) *Server {
+	t.Helper()
+	_, endpoint := network.NewMemoryPair(32)
+	config := DefaultConfig(42)
+	config.ViewRadius = 0
+	config.Workers = 1
+	config.TrustedObserver = true
+	running := newMemoryAttachedWorldForTest(config, endpoint, playerTestGenerator{})
+	t.Cleanup(func() { shutdownServerForTest(t, running) })
+	return running
+}
+
+func containsChunk(keys []core.ChunkKey, pos core.ChunkPos) bool {
+	for _, key := range keys {
+		if key.Dimension == core.Overworld && key.Pos == pos {
+			return true
+		}
+	}
+	return false
+}
+
+func (playerTestGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+	chunk := world.NewChunk(position)
+	for z := 0; z < core.SectionSize; z++ {
+		for x := 0; x < core.SectionSize; x++ {
+			worldX := position.X<<core.SectionShift + int32(x)
+			worldZ := position.Z<<core.SectionShift + int32(z)
+			chunk.SetBlock(x, 0, z, playerTestGenerator{}.BaseBlockAt(core.BlockPos{X: worldX, Y: 0, Z: worldZ}))
+		}
+	}
+	chunk.Compact()
+	return chunk
+}
+
+func (playerTestGenerator) BaseBlockAt(position core.BlockPos) core.BlockID {
+	if position.Y == 0 {
+		return core.GrassID
+	}
+	return core.AirID
+}

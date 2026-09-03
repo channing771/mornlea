@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/channing771/mornlea/internal/server"
+	"github.com/channing771/mornlea/packages/server/server"
 	"github.com/channing771/mornlea/packages/shared/network"
 )
 

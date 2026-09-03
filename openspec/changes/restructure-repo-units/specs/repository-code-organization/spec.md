@@ -43,13 +43,16 @@
 
 仓库 MUST 以根 `go.work` 直辖六个 Go 模块（shared、server、client、tools、
 audit、contracts），根目录 MUST NOT 保留 `go.mod`。跨单元引用 MUST 经
-go.mod require 声明，且仅允许以下方向：`server → {shared, contracts}`、
-`client → {shared}`、`tools → {shared, server, client, contracts}`、
-`audit` 与 `contracts` MUST NOT require 任何兄弟单元。
+go.mod require 声明，且仅允许以下方向：`server → {shared, contracts}`（生产
+代码）、`client → {shared}`、`tools → {shared, server, client, contracts}`、
+`audit` 与 `contracts` MUST NOT require 任何兄弟单元。唯一例外：`server`
+MAY 仅因测试文件（客户端镜像驱动的 Memory/TCP 集成测试）require `client`，
+其生产代码 MUST NOT import `packages/client` 的任何包，该禁令由架构检查以
+源码级守卫强制。
 `packages/audit` 的架构检查 MUST 枚举各单元真实 import 边并强制同一方向
-契约：`client` MUST NOT 依赖 `server` 或 `tools` 的任何包，`server` MUST
-NOT 依赖 `client` 或 `tools` 的任何包，`shared` MUST NOT 依赖 server、
-client、tools 的任何包。
+契约：`client` 的任何包 MUST NOT 依赖 `server` 或 `tools`，`server` 的生产
+包 MUST NOT 依赖 `client`、`tools`，`shared` MUST NOT 依赖 server、client、
+tools 的任何包。
 
 #### Scenario: 编译器拒绝未声明的跨单元导入
 
@@ -58,6 +61,15 @@ client、tools 的任何包。
 - **THEN** 构建 MUST 因未声明 require 而失败
 - **AND** 即使补上 go.mod require，`packages/audit` 的单元边界检查 MUST
   因 `client → server` 违反方向契约而失败
+
+#### Scenario: server 生产代码不得导入 client
+
+- **GIVEN** `packages/server` 的某个非 `_test.go` 文件导入
+  `packages/client` 的包
+- **WHEN** 架构检查扫描 server 生产源码
+- **THEN** 该导入 MUST 被拒绝
+- **AND** `_test.go` 文件对 `packages/client` 的导入 MUST 被放行（客户端
+  镜像驱动的集成测试）
 
 #### Scenario: 架构检查跨模块枚举真实依赖边
 

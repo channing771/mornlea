@@ -39,21 +39,21 @@ Go 与 Python 各自限制全局 4 个 Planner/Dialogue run、同一伙伴 1 个
 
 ## 5. Go 包职责与 archcheck 依赖边界
 
-- `cmd/mornlea` 和 `cmd/mornlea-server` 负责应用入口与资源生命周期装配。
+- `cmd/mornlea` 与 `packages/server/cmd/mornlea-server` 负责应用入口与资源生命周期装配。
 - `packages/shared` 是共享域 Go 模块（独立 go.mod，go.work 成员），持有 server 与 client 双侧共用的领域包：`core`（公共领域类型与 native raycast）、`world`（区块与世界数据模型）、`physics`（玩家运动与碰撞）、`pathfind`（不可变快照寻路）、`companion`（伙伴身份与领域类型）、`network`（+protocol/codec/tcp，登录状态机与传输）、`worldgen`（seed 播种与区块回写）、`tuning`（Tunables 快照）、`profile`、`config`、`logging` 与 `nativeabi`（engine ABI 的唯一 Go bridge）。
-- `internal/sim` 为仅含指导文档的目录，权威模拟由四个子包承载：`contract`（跨边界 DTO）、`realm`（世界维度与单 tick 事务）、`entity`（玩家/伙伴/夜行者与玩法结算）、`runtime`（Engine 与 Step 编排）；Tunables 快照位于 `packages/shared/tuning`。依赖方向与单次提交纪律见 `internal/sim/AGENTS.md` 与 `internal/archcheck`。
-- `internal/storage` 持有世界、玩家、伙伴和夜行者数据的编码、迁移、恢复与磁盘生命周期，并以子包 `internal/storage/chunk`、`internal/storage/player`、`internal/storage/companion`、`internal/storage/hostile`、`internal/storage/region` 等细化实现，顶层保持外部消费面。
-- `internal/server` 装配 Host、Server、登录、会话、权威 tick、发布和关服编排；通过 `internal/server/persistence` 委派存档生命周期，自身不持有保存队列、重试状态或 worker，实现只保留 `PersistenceStatus` 与 `ErrPlayerPersistenceBackpressure` 的兼容 re-export。
-- `internal/server/persistence` 单独持有世界区块与 metadata、玩家、伙伴、夜行者四类存档的加载、观察、异步保存、重试、flush/close 与 worker 生命周期；生产代码仅依赖 `packages/shared/companion`、`packages/shared/core`、`packages/shared/physics`、`internal/sim/runtime`、`internal/storage`，不得反向导入 `internal/server` 或访问 Host/Server 私有状态，依赖方向以 `internal/archcheck` 为准。
-- `packages/shared/pathfind` 持有不可变快照上的有界寻路且只依赖 `packages/shared/core`；`packages/shared/companion` 与 `internal/server` 消费它，但寻路不拥有玩法或世界访问。
+- `packages/server/sim` 为仅含指导文档的目录，权威模拟由四个子包承载：`contract`（跨边界 DTO）、`realm`（世界维度与单 tick 事务）、`entity`（玩家/伙伴/夜行者与玩法结算）、`runtime`（Engine 与 Step 编排）；Tunables 快照位于 `packages/shared/tuning`。依赖方向与单次提交纪律见 `packages/server/sim/AGENTS.md` 与 `internal/archcheck`。
+- `packages/server/storage` 持有世界、玩家、伙伴和夜行者数据的编码、迁移、恢复与磁盘生命周期，并以子包 `packages/server/storage/chunk`、`packages/server/storage/player`、`packages/server/storage/companion`、`packages/server/storage/hostile`、`packages/server/storage/region` 等细化实现，顶层保持外部消费面。
+- `packages/server/server` 装配 Host、Server、登录、会话、权威 tick、发布和关服编排；通过 `packages/server/server/persistence` 委派存档生命周期，自身不持有保存队列、重试状态或 worker，实现只保留 `PersistenceStatus` 与 `ErrPlayerPersistenceBackpressure` 的兼容 re-export。
+- `packages/server/server/persistence` 单独持有世界区块与 metadata、玩家、伙伴、夜行者四类存档的加载、观察、异步保存、重试、flush/close 与 worker 生命周期；生产代码仅依赖 `packages/shared/companion`、`packages/shared/core`、`packages/shared/physics`、`packages/server/sim/runtime`、`packages/server/storage`，不得反向导入 `packages/server/server` 或访问 Host/Server 私有状态，依赖方向以 `internal/archcheck` 为准。
+- `packages/shared/pathfind` 持有不可变快照上的有界寻路且只依赖 `packages/shared/core`；`packages/shared/companion` 与 `packages/server/server` 消费它，但寻路不拥有玩法或世界访问。
 - `internal/client` 持有客户端镜像、输入预测、消息接收、client ABI bridge 和渲染侧 CPU 编排。
-- `internal/render`、`internal/mesh`、`internal/assets`、`internal/lod`、`packages/shared/worldgen` 与 `internal/fluid` 持有领域数据描述、CPU 编码和 Rust 调用编排，不拥有 GPU 后端或第二套数值生产实现。
+- `internal/render`、`internal/mesh`、`internal/assets`、`internal/lod`、`packages/shared/worldgen` 与 `packages/server/fluid` 持有领域数据描述、CPU 编码和 Rust 调用编排，不拥有 GPU 后端或第二套数值生产实现。
 
 内部包允许的直接依赖以 `internal/archcheck/dependency_test.go` 的 `allowed` 表为准。`internal/archcheck` 同时以 `TestSimAuthorityStateOwnershipStaysExplicit` 扫描 runtime 的包变量与全部 holder，把唯一 mutation/commit 绑定到 `StepWithTunables` 的真实调用路径，以 `TestAuthorityTickTunablesStayExplicit` 守住权威 tick 参数捕获和传递；其余门禁守住无 WebGPU Go 依赖、无图形专服闭包、伙伴 Agent 服务发布边界、Make/CI 门禁和长期版本基线；架构文档不复制会随包演进的依赖白名单。
 
 ## 6. `mornlea_engine` / engine ABI v10
 
-`mornlea_engine` 是 mesh/light、collision、raycast、physics tick 积分、worldgen、LOD shell 与流体规则求值/重扫扫描的唯一生产实现；流体的队列、预算、游标与冲毁结算编排仍在 Go（`internal/fluid` 与 `internal/sim/realm` 经 `packages/shared/nativeabi` 调用流体 kernel）。该 crate 保持无窗口，不拥有权威世界状态，不执行文件或网络 I/O，也不承载伤害、库存、权限或 tick 编排等业务规则。
+`mornlea_engine` 是 mesh/light、collision、raycast、physics tick 积分、worldgen、LOD shell 与流体规则求值/重扫扫描的唯一生产实现；流体的队列、预算、游标与冲毁结算编排仍在 Go（`packages/server/fluid` 与 `packages/server/sim/realm` 经 `packages/shared/nativeabi` 调用流体 kernel）。该 crate 保持无窗口，不拥有权威世界状态，不执行文件或网络 I/O，也不承载伤害、库存、权限或 tick 编排等业务规则。
 
 engine C ABI 当前为 v10（v10 即 `MGW1` layout 3 的 15 材质 worldgen 请求）。Go 侧只有 `packages/shared/nativeabi` 可以接触该 ABI；领域包构造语义输入并解码结果。header、Rust FFI、Go bridge、ABI 版本和跨语言一致性检查必须成套演进，调用结束后任一侧都不得保留对方指针。
 
@@ -76,7 +76,7 @@ Linux 专服发布单元由 `mornlea-server` 与相邻的 `libmornlea_engine.so`
 - 跨 goroutine 发送成功后的消息及其 slice 视为不可变；后续修改必须复制。
 - 权威 tick、渲染和网络热路径只执行有界工作，不阻塞磁盘、网络、模型调用或其他重 CPU 工作。
 - 重工作通过有界队列、不可变快照或 worker 离开热路径，并在所有权清晰的边界汇合结果。
-- 持久化并发边界：`internal/server/persistence` 的四类所有者各自以有界 channel 与固定数量 worker 隔离磁盘 I/O——`World` 由 `Options.SaveWorkers` 决定 worker 数（`saveJobs`/`saveCompletions` 容量为 `SaveWorkers*2`），`Players` 固定 2 worker（`playerSaveJobCapacity=16`/`playerSaveDoneCapacity=2`），`Companions` 与 `Hostiles` 各 1 worker（容量各 1）。权威 tick 仅执行有界、非阻塞的 `World.Observe`/`Drain`、`Players.Observe`/`Poll`、`Companions.Observe`/`Poll`、`Hostiles.Observe`/`Poll` 调度，绝不阻塞等待落盘；`SaveObserver` 仅在 `World` worker 的 `SaveBatch` 计时路径中调用，不在 tick 路径执行。`World.Flush` 与 `World.ShutdownContextError` 通过 `Options.EngineLocker`（根 `Server.stepMu`，子包独立构造时回退到私有 `sync.Mutex`）先于 `World.mu` 做短暂的 engine/state 变迁，随后立即释放两者再等待 channel/context；`Drain`/`Status` 仍保持调用方持有 tick 锁的既有契约。
+- 持久化并发边界：`packages/server/server/persistence` 的四类所有者各自以有界 channel 与固定数量 worker 隔离磁盘 I/O——`World` 由 `Options.SaveWorkers` 决定 worker 数（`saveJobs`/`saveCompletions` 容量为 `SaveWorkers*2`），`Players` 固定 2 worker（`playerSaveJobCapacity=16`/`playerSaveDoneCapacity=2`），`Companions` 与 `Hostiles` 各 1 worker（容量各 1）。权威 tick 仅执行有界、非阻塞的 `World.Observe`/`Drain`、`Players.Observe`/`Poll`、`Companions.Observe`/`Poll`、`Hostiles.Observe`/`Poll` 调度，绝不阻塞等待落盘；`SaveObserver` 仅在 `World` worker 的 `SaveBatch` 计时路径中调用，不在 tick 路径执行。`World.Flush` 与 `World.ShutdownContextError` 通过 `Options.EngineLocker`（根 `Server.stepMu`，子包独立构造时回退到私有 `sync.Mutex`）先于 `World.mu` 做短暂的 engine/state 变迁，随后立即释放两者再等待 channel/context；`Drain`/`Status` 仍保持调用方持有 tick 锁的既有契约。
 - 协议、存档和 FFI 入口先校验类型、长度、计数、容量与版本，再分配、遍历或写输出。
 - overflow、数据丢失、报告身份不完整和 I/O 错误必须显式失败，不能静默截断或吞错。
 
@@ -92,7 +92,6 @@ Linux 专服发布单元由 `mornlea-server` 与相邻的 `libmornlea_engine.so`
 .
 ├── cmd/
 │   ├── mornlea/             游戏客户端与内置服务端装配
-│   ├── mornlea-server/      无图形 TCP 专用服务端
 │   ├── mornlea-agent-board/ AI 工作者执行状态 Web 看板
 │   ├── gfxspike/            Rust renderer 地形渲染验证程序
 │   └── perfcheck/           性能报告比较工具
@@ -114,22 +113,25 @@ Linux 专服发布单元由 `mornlea-server` 与相邻的 `libmornlea_engine.so`
 │   │   ├── tuning/         Tunables 快照与校验（原 sim/tuning 上提）
 │   │   ├── profile/        本机稳定玩家身份与档案
 │   │   └── config/         共享 JSON 配置加载与校验
+│   ├── server/             服务端域 Go 模块（go.work workspace 成员）
+│   │   ├── cmd/
+│   │   │   └── mornlea-server/  无图形 TCP 专用服务端
+│   │   ├── sim/            权威模拟指导目录（生产见 contract/realm/entity/runtime 子包）
+│   │   │   ├── contract/   跨边界 DTO
+│   │   │   ├── realm/      世界维度、持久化与环境事务
+│   │   │   ├── entity/     玩家/伙伴/夜行者与玩法结算
+│   │   │   └── runtime/    Engine、订阅与 Step 编排
+│   │   ├── fluid/          有界权威流体更新队列与流体 kernel 的 native 包装
+│   │   ├── storage/        世界、区域文件与玩家状态持久化
+│   │   └── server/         服务端 Host、Server、登录、会话、权威 tick、发布与关服编排
+│   │       └── persistence/    四类存档（世界/玩家/伙伴/夜行者）加载、观察、异步保存、重试、flush 与 worker
 │   └── engine/
 │       └── crates/
 │           ├── mornlea_engine/  固定 Rust 1.97.1 cdylib：mesh/light/collision/raycast/physics/worldgen/lod/fluid
 │           └── mornlea_client/  Darwin 窗口、事件循环、WebView 菜单层（frontend/ React 前端）与全部 GPU 渲染
 ├── internal/                包职责见 §5，依赖白名单以 archcheck 为准
 │   ├── audio/               Darwin 本地程序化提示音
-│   ├── fluid/               有界权威流体更新队列与流体 kernel 的 native 包装
 │   ├── lod/                 远环 tile 调度与 CPU 编码
-│   ├── sim/                 权威模拟指导目录（生产见 contract/realm/entity/runtime 子包）
-│   │   ├── contract/        跨边界 DTO
-│   │   ├── realm/           世界维度、持久化与环境事务
-│   │   ├── entity/          玩家/伙伴/夜行者与玩法结算
-│   │   └── runtime/         Engine、订阅与 Step 编排
-│   ├── server/              服务端 Host、Server、登录、会话、权威 tick、发布与关服编排
-│   │   └── persistence/     四类存档（世界/玩家/伙伴/夜行者）加载、观察、异步保存、重试、flush 与 worker
-│   ├── storage/             世界、区域文件与玩家状态持久化
 │   ├── client/              输入、相机、预测、窗口/client ABI 与客户端镜像
 │   ├── mesh/                区块网格生产 API（实现位于 Rust cdylib）
 │   ├── render/              渲染 CPU 半部：布局、编码与上传调度

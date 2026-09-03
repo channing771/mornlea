@@ -17,11 +17,12 @@ func TestNativeEngineBridgeBoundary(t *testing.T) {
 	if info, err := os.Stat(bridge); err != nil || !info.IsDir() {
 		t.Fatalf("native engine bridge %s 不存在", bridge)
 	}
-	// engine bridge 已迁入 packages/shared 模块，扫描根须与其同侧扩展，
-	// 否则 C ABI token 守卫对 shared 模块静默失明。
+	// engine bridge 已迁入 packages/shared 模块、服务端域迁入 packages/server
+	// 模块，扫描根须与其同侧扩展，否则 C ABI token 守卫对相应模块静默失明。
 	files := goFiles(t, filepath.Join(root, "internal"))
 	files = append(files, goFiles(t, filepath.Join(root, "cmd"))...)
 	files = append(files, goFiles(t, filepath.Join(root, "packages", "shared"))...)
+	files = append(files, goFiles(t, filepath.Join(root, "packages", "server"))...)
 
 	clientBridge := filepath.Join(root, "internal", "client")
 	inDir := func(path, dir string) bool {
@@ -108,7 +109,7 @@ func TestNoPackageImportsWebGPU(t *testing.T) {
 	// 文件在 Linux 上全被排除）以加载错误形式列出而不是让 go list 非零退出；
 	// 可加载包的 Imports 检查语义不变，darwin 专属包由 macOS CI 的同测试
 	// 原生覆盖。
-	cmd := exec.Command("go", "list", "-e", "-f", "{{.ImportPath}}|{{join .Imports \" \"}}", "./...", "./packages/shared/...", "./packages/contracts/...")
+	cmd := exec.Command("go", "list", "-e", "-f", "{{.ImportPath}}|{{join .Imports \" \"}}", "./...", "./packages/shared/...", "./packages/contracts/...", "./packages/server/...")
 	cmd.Dir = moduleRoot(t)
 	out, err := cmd.Output()
 	if err != nil {
@@ -128,7 +129,7 @@ func TestNoPackageImportsWebGPU(t *testing.T) {
 }
 
 func TestMornleaServerHasNoGraphicsDependencies(t *testing.T) {
-	root := filepath.Join(moduleRoot(t), "cmd", "mornlea-server")
+	root := filepath.Join(moduleRoot(t), "packages", "server", "cmd", "mornlea-server")
 	files, err := filepath.Glob(filepath.Join(root, "*.go"))
 	if err != nil {
 		t.Fatalf("枚举 Mornlea server Go 文件: %v", err)
@@ -151,7 +152,7 @@ func TestMornleaServerHasNoGraphicsDependencies(t *testing.T) {
 		}
 	}
 
-	command := exec.Command("go", "list", "-f", "{{.ImportPath}}", "-deps", "./cmd/mornlea-server")
+	command := exec.Command("go", "list", "-f", "{{.ImportPath}}", "-deps", "./packages/server/cmd/mornlea-server")
 	command.Dir = moduleRoot(t)
 	output, err := command.Output()
 	if err != nil {

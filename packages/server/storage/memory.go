@@ -1,0 +1,404 @@
+package storage
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"os"
+	"sync"
+
+	"github.com/channing771/mornlea/packages/server/storage/chunk"
+	"github.com/channing771/mornlea/packages/server/storage/companion"
+	"github.com/channing771/mornlea/packages/server/storage/hostile"
+	"github.com/channing771/mornlea/packages/server/storage/player"
+	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/world"
+)
+
+// MemoryStore 是保留存储所有权与 revision 语义的内存 Store。
+type MemoryStore struct {
+	mu         sync.Mutex
+	metadata   Metadata
+	chunks     map[core.ChunkKey]memoryChunk
+	players    map[core.PlayerID]memoryPlayer
+	companions memoryCompanions
+	hostiles   memoryHostiles
+	closed     bool
+}
+
+type memoryChunk struct {
+	revision uint64
+	hash     [32]byte
+	encoded  []byte
+}
+
+type pendingChunk struct {
+	revision uint64
+	hash     [32]byte
+	chunk    *world.Chunk
+}
+
+type memoryPlayer struct {
+	revision uint64
+	encoded  []byte
+}
+
+type memoryCompanions struct {
+	revision uint64
+	encoded  []byte
+}
+
+// memoryHostiles 与 memoryCompanions 同构：聚合文件在内存中只保留规范化
+// 编码字节与 revision，加载走与磁盘一致的解码路径，保证双实现同构。
+type memoryHostiles struct {
+	revision uint64
+	encoded  []byte
+}
+
+// NewMemory 创建不执行磁盘 I/O 的内存 Store。
+func NewMemory(metadata Metadata) *MemoryStore {
+	return &MemoryStore{
+		metadata: metadata,
+		chunks:   make(map[core.ChunkKey]memoryChunk),
+		players:  make(map[core.PlayerID]memoryPlayer),
+	}
+}
+
+func (store *MemoryStore) Metadata() Metadata {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	return store.metadata
+}
+
+// SaveMetadata 用值语义替换内存中的 metadata，与 DiskStore 行为一致。
+func (store *MemoryStore) SaveMetadata(ctx context.Context, metadata Metadata) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if _, err := encodeMetadata(metadata); err != nil {
+		return err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.metadata = metadata
+	return nil
+}
+
+func (store *MemoryStore) LoadChunk(
+	ctx context.Context,
+	key core.ChunkKey,
+) (StoredChunk, error) {
+	if err := ctx.Err(); err != nil {
+		return StoredChunk{}, err
+	}
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return StoredChunk{}, err
+	}
+
+	stored, ok := store.chunks[key]
+	if !ok {
+		return StoredChunk{}, fmt.Errorf("%w: %v", ErrChunkNotFound, key)
+	}
+	decoded, err := chunk.Decode(key, stored.revision, stored.encoded)
+	if err != nil {
+		return StoredChunk{}, fmt.Errorf("decode memory chunk %v: %w", key, err)
+	}
+	return StoredChunk{
+		Key:               key,
+		Revision:          stored.revision,
+		PersistedRevision: stored.revision,
+		Chunk:             decoded.Chunk,
+	}, nil
+}
+
+func (store *MemoryStore) SaveBatch(
+	ctx context.Context,
+	saves []ChunkSave,
+) (SaveResult, error) {
+	if err := ctx.Err(); err != nil {
+		return SaveResult{}, err
+	}
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return SaveResult{}, err
+	}
+
+	committed := make(map[core.ChunkKey]uint64, len(saves))
+	pending := make(map[core.ChunkKey]pendingChunk, len(saves))
+	for _, save := range saves {
+		if err := chunk.ValidateChunkSave(save); err != nil {
+			return SaveResult{}, err
+		}
+
+		hash := save.Chunk.Hash()
+		if candidate, ok := pending[save.Key]; ok {
+			if err := compareSave(
+				save.Key, save.Revision, hash, candidate.revision, candidate.hash,
+				committed,
+			); err != nil {
+				return SaveResult{}, err
+			}
+			if save.Revision > candidate.revision {
+				pending[save.Key] = pendingChunk{
+					revision: save.Revision,
+					hash:     hash,
+					chunk:    save.Chunk,
+				}
+			}
+			continue
+		}
+
+		if stored, ok := store.chunks[save.Key]; ok {
+			if err := compareSave(
+				save.Key, save.Revision, hash, stored.revision, stored.hash, committed,
+			); err != nil {
+				return SaveResult{}, err
+			}
+			if save.Revision <= stored.revision {
+				continue
+			}
+		}
+		pending[save.Key] = pendingChunk{
+			revision: save.Revision,
+			hash:     hash,
+			chunk:    save.Chunk,
+		}
+	}
+
+	encoded := make(map[core.ChunkKey][]byte, len(pending))
+	for key, candidate := range pending {
+		if err := ctx.Err(); err != nil {
+			return SaveResult{}, err
+		}
+		payload, err := chunk.Encode(ChunkSave{
+			Key: key, Revision: candidate.revision, Chunk: candidate.chunk,
+		})
+		if err != nil {
+			return SaveResult{}, fmt.Errorf("encode memory chunk %v: %w", key, err)
+		}
+		encoded[key] = payload
+	}
+	if err := ctx.Err(); err != nil {
+		return SaveResult{}, err
+	}
+	for key, candidate := range pending {
+		store.chunks[key] = memoryChunk{
+			revision: candidate.revision,
+			hash:     candidate.hash,
+			encoded:  encoded[key],
+		}
+		committed[key] = candidate.revision
+	}
+	return SaveResult{Committed: committed}, nil
+}
+
+func (store *MemoryStore) LoadPlayer(
+	ctx context.Context,
+	id core.PlayerID,
+) (StoredPlayer, error) {
+	if err := ctx.Err(); err != nil {
+		return StoredPlayer{}, err
+	}
+	if !id.Valid() {
+		return StoredPlayer{}, fmt.Errorf("%w: invalid requested player ID", ErrCorrupt)
+	}
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return StoredPlayer{}, err
+	}
+	stored, ok := store.players[id]
+	if !ok {
+		return StoredPlayer{}, fmt.Errorf("%w: %s", ErrPlayerNotFound, id)
+	}
+	return player.Decode(id, bytes.Clone(stored.encoded))
+}
+
+func (store *MemoryStore) SavePlayer(
+	ctx context.Context,
+	save PlayerSave,
+) (uint64, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	encoded, err := player.Encode(save)
+	if err != nil {
+		return 0, err
+	}
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	if stored, ok := store.players[save.PlayerID]; ok {
+		switch {
+		case save.Revision < stored.revision:
+			return stored.revision, fmt.Errorf(
+				"%w: player %s revision %d is below %d",
+				ErrRevisionConflict, save.PlayerID, save.Revision, stored.revision,
+			)
+		case save.Revision == stored.revision:
+			if !bytes.Equal(encoded, stored.encoded) {
+				return stored.revision, fmt.Errorf(
+					"%w: player %s revision %d",
+					ErrRevisionConflict, save.PlayerID, save.Revision,
+				)
+			}
+			return stored.revision, nil
+		}
+	}
+	store.players[save.PlayerID] = memoryPlayer{
+		revision: save.Revision,
+		encoded:  bytes.Clone(encoded),
+	}
+	return save.Revision, nil
+}
+
+func (store *MemoryStore) LoadCompanions(ctx context.Context) (StoredCompanions, error) {
+	if err := ctx.Err(); err != nil {
+		return StoredCompanions{}, err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return StoredCompanions{}, err
+	}
+	if len(store.companions.encoded) == 0 {
+		return StoredCompanions{}, ErrCompanionsNotFound
+	}
+	return companion.Decode(bytes.Clone(store.companions.encoded))
+}
+
+// CompanionsExist 只检查内存中是否已有编码值，不调用 codec。
+func (store *MemoryStore) CompanionsExist(ctx context.Context) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.closed {
+		return false, os.ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	return len(store.companions.encoded) != 0, nil
+}
+
+func (store *MemoryStore) SaveCompanions(ctx context.Context, save CompanionSave) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	encoded, err := companion.Encode(save)
+	if err != nil {
+		return err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if stored := store.companions; len(stored.encoded) != 0 {
+		switch {
+		case save.Revision < stored.revision:
+			return fmt.Errorf(
+				"%w: companion revision %d is below %d",
+				ErrRevisionConflict, save.Revision, stored.revision,
+			)
+		case save.Revision == stored.revision:
+			if !bytes.Equal(encoded, stored.encoded) {
+				return fmt.Errorf("%w: companion revision %d", ErrRevisionConflict, save.Revision)
+			}
+			return nil
+		}
+	}
+	store.companions = memoryCompanions{revision: save.Revision, encoded: bytes.Clone(encoded)}
+	return nil
+}
+
+func (store *MemoryStore) LoadHostileMobs(ctx context.Context) (StoredHostileMobs, error) {
+	if err := ctx.Err(); err != nil {
+		return StoredHostileMobs{}, err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return StoredHostileMobs{}, err
+	}
+	if len(store.hostiles.encoded) == 0 {
+		return StoredHostileMobs{}, ErrHostileMobsNotFound
+	}
+	return hostile.Decode(bytes.Clone(store.hostiles.encoded))
+}
+
+func (store *MemoryStore) SaveHostileMobs(ctx context.Context, save HostileMobsSave) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	encoded, err := hostile.Encode(save)
+	if err != nil {
+		return err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if stored := store.hostiles; len(stored.encoded) != 0 {
+		switch {
+		case save.Revision < stored.revision:
+			return fmt.Errorf(
+				"%w: hostile revision %d is below %d",
+				ErrRevisionConflict, save.Revision, stored.revision,
+			)
+		case save.Revision == stored.revision:
+			if !bytes.Equal(encoded, stored.encoded) {
+				return fmt.Errorf("%w: hostile revision %d", ErrRevisionConflict, save.Revision)
+			}
+			return nil
+		}
+	}
+	store.hostiles = memoryHostiles{revision: save.Revision, encoded: bytes.Clone(encoded)}
+	return nil
+}
+
+func (store *MemoryStore) Sync(ctx context.Context) error {
+	return ctx.Err()
+}
+
+func (store *MemoryStore) Close() error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.closed = true
+	return nil
+}
+
+func compareSave(
+	key core.ChunkKey,
+	revision uint64,
+	hash [32]byte,
+	storedRevision uint64,
+	storedHash [32]byte,
+	committed map[core.ChunkKey]uint64,
+) error {
+	if revision < storedRevision {
+		committed[key] = storedRevision
+		return nil
+	}
+	if revision == storedRevision {
+		if hash != storedHash {
+			return fmt.Errorf("%w: %v revision %d", ErrRevisionConflict, key, revision)
+		}
+		committed[key] = storedRevision
+	}
+	return nil
+}
+
+var _ WorldStore = (*MemoryStore)(nil)

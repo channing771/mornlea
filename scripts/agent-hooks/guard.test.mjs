@@ -100,11 +100,13 @@ test("stop-gate test runs stay cache-friendly with generous timeouts", () => {
     return { status: 0, stdout: "" };
   };
 
-  assert.deepEqual(stopFailures(["internal/server/host.go"], run, {}), []);
+  // guard.mjs 的 changedGoFiles 按真实存在性过滤，fixture 必须指向现存文件；
+  // 服务端域已迁 packages/server/server。
+  assert.deepEqual(stopFailures(["packages/server/server/host.go"], run, {}), []);
   const affected = calls.find(({ argumentsList }) =>
-    argumentsList.includes("./internal/server"),
+    argumentsList.includes("./packages/server/server"),
   );
-  assert.deepEqual(affected.argumentsList, ["test", "-race", "./internal/server"]);
+  assert.deepEqual(affected.argumentsList, ["test", "-race", "./packages/server/server"]);
   assert.equal(affected.timeout, 600_000);
 });
 
@@ -296,12 +298,12 @@ test("builds Rust before existing Go gates without unrelated cargo checks", () =
     return { status: 0, stdout: "" };
   };
 
-  assert.deepEqual(stopFailures(["internal/server/session_ingress.go"], run, {}), []);
+  assert.deepEqual(stopFailures(["packages/server/server/session_ingress.go"], run, {}), []);
   assert.deepEqual(calls.slice(1, 5), [
-    ["gofmt", ["-l", "internal/server/session_ingress.go"]],
+    ["gofmt", ["-l", "packages/server/server/session_ingress.go"]],
     ["make", ["rust"]],
     ["go", ["test", "./internal/archcheck", "-count=1"]],
-    ["go", ["test", "-race", "./internal/server"]],
+    ["go", ["test", "-race", "./packages/server/server"]],
   ]);
   assert.equal(calls.some(([command]) => command === "cargo"), false);
 });

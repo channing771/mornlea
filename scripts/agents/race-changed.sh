@@ -2,7 +2,7 @@
 # race-changed.sh — 只对「改动包及其反向依赖」跑 race 测试（测试分层纪律的 T1 层）。
 #
 # 背景：全量 `go test ./... -race -count=1` 实测约 4.5 分钟且 82% 耗时集中在
-# cmd/mornlea 与 internal/server 两个包（见 docs/notes/test-quickstart.md）；
+# cmd/mornlea 与 packages/server/server 两个包（见 docs/notes/test-quickstart.md）；
 # 绝大多数改动只触及叶子包，为它们付全量代价是开发时间的主要浪费之一。
 #
 # 包集合的构造规则：
@@ -15,7 +15,9 @@
 #      T3 全量门禁与 CI 兜底。
 #   4. 恒含 internal/archcheck（依赖边界/基线版本/文档一致守卫，秒级）。
 #   5. 闭包触及 cdylib 消费包（nativeabi/core/physics/mesh/client/sim/server/
-#      cmd/mornlea、其 app/capture/benchmark 子包与 cmd/mornlea-server）时
+#      cmd/mornlea、其 app/capture/benchmark 子包与 cmd/mornlea-server；其中
+#      nativeabi/core/physics 已迁 packages/shared，sim/server 与 cmd/mornlea-server
+#      已迁 packages/server，mesh/client 与 cmd/mornlea 仍在根模块）时
 #      先 `make rust`；纯 Go 叶子改动
 #      跳过 Rust 构建，不为无关改动支付构建成本。
 #
@@ -57,8 +59,8 @@ if [ -z "$changed_files" ]; then
 fi
 
 # 文件 → 包：go list 一次给出全部包目录与导入路径。go.work 下 `./...` 不跨
-# 嵌套模块，shared 与 contracts 模块必须显式列出，否则其改动映射不到包。
-pkg_map="$(go list -f '{{.Dir}}|{{.ImportPath}}' ./... ./packages/shared/... ./packages/contracts/...)"
+# 嵌套模块，shared、server 与 contracts 模块必须显式列出，否则其改动映射不到包。
+pkg_map="$(go list -f '{{.Dir}}|{{.ImportPath}}' ./... ./packages/shared/... ./packages/contracts/... ./packages/server/...)"
 changed_pkgs="$(printf '%s\n' "$changed_files" | while read -r f; do
   dir="$(dirname "$f")"
   abs="$(pwd)/$dir"
@@ -72,7 +74,7 @@ fi
 
 # 反向依赖闭包：生产导入边传递扩散；测试导入边只作一层直接依赖。图必须
 # 覆盖全部 workspace 模块，否则跨模块的反向依赖（根模块消费 shared 包）断链。
-imports_graph="$(go list -f '{{.ImportPath}}|{{join .Imports " "}}|{{join .TestImports " "}}|{{join .XTestImports " "}}' ./... ./packages/shared/... ./packages/contracts/...)"
+imports_graph="$(go list -f '{{.ImportPath}}|{{join .Imports " "}}|{{join .TestImports " "}}|{{join .XTestImports " "}}' ./... ./packages/shared/... ./packages/contracts/... ./packages/server/...)"
 closure="$(printf '%s\n' "$changed_pkgs")"
 frontier="$(printf '%s\n' "$changed_pkgs")"
 # 生产边可传递：迭代到不动点（包数有限，最多迭代包总数次）。
@@ -116,15 +118,16 @@ if [ "$DIFF_ONLY" = 1 ]; then
   exit 0
 fi
 
-heavy="$(printf '%s\n' "$closure" | grep -E '/(cmd/mornlea/app|cmd/mornlea/benchmark|internal/server)$' || true)"
+heavy="$(printf '%s\n' "$closure" | grep -E '/(cmd/mornlea/app|cmd/mornlea/benchmark|packages/server/server)$' || true)"
 if [ -n "$heavy" ]; then
   echo "提示：集合含重型包（${heavy}），预计分钟级；仅迭代验证可改用 --diff 后手动加 -short" >&2
 fi
 
 # 运行期消费 cdylib 的包集合（nativeabi/core/physics 已迁入 packages/shared
-# 模块，mesh/client/sim/server 与 cmd 族仍在根模块）；触及才前置 `make rust`，
+# 模块，sim/server 与 cmd/mornlea-server 已迁入 packages/server 模块，mesh/
+# client 与 cmd 族仍在根模块）；触及才前置 `make rust`，
 # 其余改动直接进 Go race 测试。
-if printf '%s\n' "$closure" | grep -qE '/(packages/shared/nativeabi|packages/shared/core|packages/shared/physics|internal/mesh|internal/client|internal/sim|internal/server|cmd/mornlea|cmd/mornlea/app|cmd/mornlea/capture|cmd/mornlea/benchmark|cmd/mornlea-server)$'; then
+if printf '%s\n' "$closure" | grep -qE '/(packages/shared/nativeabi|packages/shared/core|packages/shared/physics|internal/mesh|internal/client|cmd/mornlea|cmd/mornlea/app|cmd/mornlea/capture|cmd/mornlea/benchmark|packages/server/sim|packages/server/server|packages/server/cmd/mornlea-server)$'; then
   echo "闭包含 cdylib 消费包，先构建 Rust 动态库（make rust）" >&2
   make rust
 fi

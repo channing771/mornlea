@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/server/storage"
 )
 
 func TestApplicationStoreInteractiveUsesSelectedDiskWorld(t *testing.T) {

@@ -25,13 +25,19 @@
 单元间合法 require 边（向下单向）：
 
 ```
-server  → shared, contracts
+server  → shared, contracts        （生产代码；另 MAY 仅因测试 require client，
+                                     生产文件禁 import client 由源码守卫强制）
 client  → shared
 tools   → shared, server, client, contracts   （perfcheck 消费 server/network/render）
 audit   → （不导入被审单元，纯 go list/AST 观察）
 shared  → （标准库与既有三方依赖）
 contracts → （无内部依赖）
 ```
+
+> server→client 的测试专用豁免是 S5 落地的既成事实（28 个客户端镜像驱动的
+> Memory/TCP 集成测试）经控制会话裁决正式化：模块层允许（Go 的 require 无法
+> 按 test 限定），语义层由 archcheck 源码守卫兜底——与仓库既有的
+> persistence_contract 豁免式守卫同风格。
 
 ## 2. 目录与路径映射
 

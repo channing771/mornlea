@@ -123,21 +123,21 @@ func TestCompanionGoProductionBoundaryMutations(t *testing.T) {
 	roots := []string{
 		"cmd/mornlea",
 		"cmd/mornlea/app",
-		"cmd/mornlea-server",
-		"internal/server",
+		"packages/server/cmd/mornlea-server",
+		"packages/server/server",
 		"packages/shared/companion",
 	}
 	contract := map[string][]string{
-		"cmd/mornlea":               {"cmd/mornlea/benchmark", "internal/audio", "internal/client"},
-		"cmd/mornlea/app":           {},
-		"cmd/mornlea-server":        {},
-		"internal/server":           {},
-		"packages/shared/companion": {},
-		"cmd/mornlea/benchmark":     {"os/exec"},
-		"cmd/mornlea-agent-board":   {"os/exec"},
-		"internal/audio":            {"C"},
-		"internal/client":           {"C"},
-		"packages/shared/nativeabi": {"C"},
+		"cmd/mornlea":                        {"cmd/mornlea/benchmark", "internal/audio", "internal/client"},
+		"cmd/mornlea/app":                    {},
+		"packages/server/cmd/mornlea-server": {},
+		"packages/server/server":             {},
+		"packages/shared/companion":          {},
+		"cmd/mornlea/benchmark":              {"os/exec"},
+		"cmd/mornlea-agent-board":            {"os/exec"},
+		"internal/audio":                     {"C"},
+		"internal/client":                    {"C"},
+		"packages/shared/nativeabi":          {"C"},
 	}
 	if violations := companionGoProductionBoundaryViolations(contract, roots); len(violations) != 0 {
 		t.Fatalf("明确合法的 native bridge、benchmark 与闭包外 agent-board 被误拒绝: %v", violations)
@@ -182,7 +182,7 @@ func cloneCompanionImportGraph(source map[string][]string) map[string][]string {
 
 func companionQuickstartGoTestPattern(t *testing.T, markdown string) string {
 	t.Helper()
-	const prefix = "`go test ./internal/server -run '"
+	const prefix = "`go test ./packages/server/server -run '"
 	for _, line := range strings.Split(markdown, "\n") {
 		if !strings.Contains(line, "Go/Python Agent 合同") {
 			continue
@@ -204,7 +204,7 @@ func companionQuickstartGoTestPattern(t *testing.T, markdown string) string {
 
 func companionServerTopLevelTestNames(t *testing.T, root string) []string {
 	t.Helper()
-	serverDir := filepath.Join(root, "internal", "server")
+	serverDir := filepath.Join(root, "packages", "server", "server")
 	entries, err := os.ReadDir(serverDir)
 	if err != nil {
 		t.Fatalf("读取 server 测试目录: %v", err)

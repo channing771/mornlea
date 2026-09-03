@@ -1,0 +1,1048 @@
+// companions.ai schema v3 的任务区/FIFO 持久化与恢复测试：v3 变长步骤
+// round-trip 与冻结 golden 迁移（四 kind 覆盖）、v2/v1 只读迁移且首次保存
+// 写 v5、入口 schema 白名单前瞻锁（字面 v1..v5 成员、v6 假想文件拒绝）、
+// 任务与 FIFO 跨重启精确恢复、损坏矩阵（CRC/future/截断/超
+// 393,904 bytes/非法任务状态/变长步长错位/follow 携带 deadline）与
+// 5,000 步骤、16 条 FIFO 边界。全部用例经 companionFileFixture 在临时
+// 目录内读写（域包测试不回接根包 DiskStore 编排），失败注入均为字节级
+// 或载荷级构造。
+package companion
+
+import (
+	"bytes"
+	"context"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"math"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/channing771/mornlea/packages/server/storage/storagedef"
+	"github.com/channing771/mornlea/packages/shared/companion"
+	"github.com/channing771/mornlea/packages/shared/core"
+)
+
+// companionFileFixture 是 companion 域内最小装配：以本包 Encode/Decode 入口
+// 直接读写 companions.ai 文件，替代根包 DiskStore 夹具（域包测试禁止反向
+// 导入根包）。只承载装配，不改断言；原子替换、revision 冲突与关闭语义等
+// store 编排行为仍由留根的根包 companion_store_test.go 以 DiskStore 覆盖。
+type companionFileFixture struct {
+	root string
+}
+
+func newCompanionFileFixture(root string) companionFileFixture {
+	return companionFileFixture{root: root}
+}
+
+func (f companionFileFixture) LoadCompanions(context.Context) (StoredCompanions, error) {
+	encoded, err := os.ReadFile(filepath.Join(f.root, "companions.ai"))
+	if err != nil {
+		return StoredCompanions{}, err
+	}
+	return Decode(encoded)
+}
+
+func (f companionFileFixture) SaveCompanions(_ context.Context, save CompanionSave) error {
+	encoded, err := Encode(fixtureV5SaveForTest(save))
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(f.root, "companions.ai"), encoded, 0o600)
+}
+
+// fixtureCompanionQueues 构造 v2 代表任务载荷：字节序最小的 active 记录
+// （..01）携带三步 Running 任务与满 16 条 FIFO；其余记录保持 inactive。
+func fixtureCompanionQueues() []StoredCompanionQueue {
+	queue := StoredCompanionQueue{
+		ID:         fixtureCompanionID(1),
+		HasCurrent: true,
+		Current: StoredCompanionTask{
+			Command: "先去那棵橡树再看一眼",
+			PlanSteps: []companion.PlanStep{
+				{Kind: companion.PlanStepGoTo, X: -8, Y: 70, Z: 6},
+				{Kind: companion.PlanStepGoTo, X: -4, Y: 70, Z: 9},
+				{Kind: companion.PlanStepGoTo, X: 0, Y: 71, Z: 12},
+			},
+			StepIndex:     1,
+			State:         companion.TaskRunning,
+			StartTick:     1200,
+			DeadlineTicks: 3600,
+		},
+		Pending: make([]string, MaxCompanionFIFOEntries),
+	}
+	for index := range queue.Pending {
+		queue.Pending[index] = fmt.Sprintf("排队指令第%d条", index+1)
+	}
+	return []StoredCompanionQueue{queue}
+}
+
+// cloneStoredQueuesForTest 深拷贝任务载荷（含计划步骤与 FIFO），供编码后
+// 的不变量比对。
+func cloneStoredQueuesForTest(queues []StoredCompanionQueue) []StoredCompanionQueue {
+	cloned := make([]StoredCompanionQueue, len(queues))
+	for index := range queues {
+		cloned[index] = queues[index]
+		cloned[index].Current.PlanSteps = append(
+			[]companion.PlanStep(nil), queues[index].Current.PlanSteps...,
+		)
+		cloned[index].Pending = append([]string(nil), queues[index].Pending...)
+	}
+	return cloned
+}
+
+// fixtureFollowPlayerID 返回合法 UUIDv4 形状的目标玩家 ID（版本/变体位与
+// fixtureCompanionID 同一构造纪律），供 follow 步骤载荷使用。
+func fixtureFollowPlayerID() core.PlayerID {
+	return core.PlayerID{
+		0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x46, 0x77,
+		0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0x05,
+	}
+}
+
+// fixtureCompanionV3Queues 构造 v3 代表任务载荷：字节序最小的 active 记录
+// （..01）携带覆盖全部四种 kind 的 Running 任务（follow 按结构约束居末且
+// deadline 保持零值——持续跟随不保存 deadline）与满 16 条 FIFO；另一条记录
+// 保持 inactive（golden 要求四 kind active 任务 + 满 FIFO + inactive 记录）。
+func fixtureCompanionV3Queues() []StoredCompanionQueue {
+	queue := StoredCompanionQueue{
+		ID:         fixtureCompanionID(1),
+		HasCurrent: true,
+		Current: StoredCompanionTask{
+			Command: "去橡树旁挖一格垫一块再跟着我",
+			PlanSteps: []companion.PlanStep{
+				{Kind: companion.PlanStepGoTo, X: -8, Y: 70, Z: 6},
+				{Kind: companion.PlanStepMine, X: -7, Y: 69, Z: 6},
+				{Kind: companion.PlanStepPlace, X: -6, Y: 69, Z: 6, Block: core.OakPlanksID},
+				{Kind: companion.PlanStepFollow, PlayerID: fixtureFollowPlayerID()},
+			},
+			StepIndex: 2,
+			State:     companion.TaskRunning,
+			StartTick: 2400,
+		},
+		Pending: make([]string, MaxCompanionFIFOEntries),
+	}
+	for index := range queue.Pending {
+		queue.Pending[index] = fmt.Sprintf("v3排队第%d条", index+1)
+	}
+	return []StoredCompanionQueue{queue}
+}
+
+// TestCompanionCodecV3RoundTripAndGolden 锁定 v3 载荷经当前编码器的 round-trip
+// 与冻结 v3 golden 的只读迁移：四 kind 步骤按 13/13/15/17 落盘（follow 只携带
+// 玩家 ID、place 追加 block uint16）、round-trip 精确保留、golden 字节零改动，
+// 以及当前文件上界常量。编码端只写 v5，v3 golden 保持冻结。
+// v3 golden 自此是冻结的历史字节（同 v1/v2 纪律），不再由本测试重生成。
+func TestCompanionCodecV3RoundTripAndGolden(t *testing.T) {
+	if MaxFileLength != 393904 {
+		t.Fatalf("max companion file length=%d，想要 393904", MaxFileLength)
+	}
+	input := fixtureCompanionBodies()
+	queues := fixtureCompanionV3Queues()
+	bodiesSnapshot := append([]companion.Body(nil), input...)
+	queuesSnapshot := cloneStoredQueuesForTest(queues)
+	encoded, err := Encode(fixtureV5SaveForTest(CompanionSave{Revision: 43, Records: input, Queues: queues}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(input, bodiesSnapshot) || !reflect.DeepEqual(queues, queuesSnapshot) {
+		t.Fatalf("编码修改调用者载荷：records=%+v queues=%+v", input, queues)
+	}
+	if CurrentSchema != 5 {
+		t.Fatalf("current companion schema=%d，想要 5", CurrentSchema)
+	}
+	if schema := binary.LittleEndian.Uint32(encoded[8:12]); schema != 5 {
+		t.Fatalf("schema=%d，想要 5", schema)
+	}
+
+	// 文件总长按第一性原理核算：envelope 32 + active 记录（221 身体 + 1
+	// flags + 任务区 + FIFO 区）+ inactive 记录（221 身体 + 1 flags）。任务
+	// 区 = 指令前缀 2 + 指令字节 + 步骤数 2 + (13+13+15+17) + 步骤索引 4 +
+	// 状态 1 + 失败原因 1 + 开始 tick 8 + deadline 8；FIFO 区 = 计数 2 +
+	// 每条（前缀 2 + 字节）。place 相对 go_to 基长 +2、follow 用 kind+16-byte
+	// 玩家 ID 共 17——变长布局由本断言逐字节锁定。载荷无摘要 → 不写摘要区，
+	// 记录字节与 v3 位形完全一致。
+	taskArea := 2 + len("去橡树旁挖一格垫一块再跟着我") + 2 + (13 + 13 + 15 + 17) + 4 + 1 + 1 + 8 + 8
+	fifoArea := 2
+	for index := range queuesSnapshot[0].Pending {
+		fifoArea += 2 + len(queuesSnapshot[0].Pending[index])
+	}
+	wantLength := 32 + 16 + (companionRecordLength + 1 + 8 + 8 + 16 + 2 + taskArea + fifoArea) +
+		(companionRecordLength + 1 + 8 + 8 + 16 + 2)
+	if len(encoded) != wantLength {
+		t.Fatalf("v3 载荷文件长度=%d，想要 %d", len(encoded), wantLength)
+	}
+
+	got, err := Decode(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantRecords := []companion.Body{input[1], input[0]}
+	if got.Revision != 43 || !reflect.DeepEqual(got.Records, wantRecords) {
+		t.Fatalf("decode revision=%d records=%+v，想要 43/%+v", got.Revision, got.Records, wantRecords)
+	}
+	if !reflect.DeepEqual(got.Queues, queuesSnapshot) {
+		t.Fatalf("decode queues=%+v，想要 %+v", got.Queues, queuesSnapshot)
+	}
+	current := got.Queues[0].Current
+	if current.DeadlineTicks != 0 || len(current.PlanSteps) != 4 ||
+		current.PlanSteps[2].Block != core.OakPlanksID ||
+		current.PlanSteps[3].PlayerID != fixtureFollowPlayerID() {
+		t.Fatalf("v3 任务字段=%+v，想要变长载荷精确保留且 follow 零 deadline", current)
+	}
+
+	// 冻结 v3 golden 的只读迁移：schema 字节恒为 3，无损读入且摘要为空
+	//（v3 布局没有摘要区）。编码端只写 v5，golden 字节永不再生。
+	path := filepath.Join("testdata", "companions-v3.bin")
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if schema := binary.LittleEndian.Uint32(want[8:12]); schema != 3 {
+		t.Fatalf("v3 golden schema=%d，想要 3（字节冻结零改动）", schema)
+	}
+	v3Decoded, err := Decode(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v3Decoded.Revision != 43 || !reflect.DeepEqual(v3Decoded.Records, wantRecords) ||
+		!reflect.DeepEqual(v3Decoded.Queues, queuesSnapshot) {
+		t.Fatalf("v3 golden 迁移 decode=%+v，想要与 round-trip 同一载荷", v3Decoded)
+	}
+	clear(encoded)
+	if !reflect.DeepEqual(got.Queues, queuesSnapshot) {
+		t.Fatalf("修改输入 bytes 后 decode 结果=%+v，想要保持 %+v", got.Queues, queuesSnapshot)
+	}
+}
+
+// TestCompanionRestoreV2ReadOnlyMigrationAndV4Rewrite 锁定 v2 只读迁移：既有
+// golden（go_to 固定 13B 布局）无损读入，首次保存只写当前 schema（v4），重写
+// 后载荷不漂移；磁盘路径与内存路径同一套编解码。
+func TestCompanionRestoreV2ReadOnlyMigrationAndV4Rewrite(t *testing.T) {
+	golden, err := os.ReadFile(filepath.Join("testdata", "companions-v2.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if schema := binary.LittleEndian.Uint32(golden[8:12]); schema != 2 {
+		t.Fatalf("v2 golden schema=%d，想要 2（golden 字节冻结）", schema)
+	}
+	got, err := Decode(golden)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantQueues := fixtureCompanionQueues()
+	if got.Revision != 41 || !reflect.DeepEqual(got.Queues, wantQueues) {
+		t.Fatalf("v2 迁移 decode=%+v，想要 revision=41 无损载荷 %+v", got, wantQueues)
+	}
+	// 规范重编码只写 v4：go_to 步骤 13B 布局在 v4 中原样保留。
+	encoded, err := Encode(fixtureV5SaveForTest(CompanionSave{
+		Revision: got.Revision,
+		Records:  got.Records,
+		Queues:   got.Queues,
+	}))
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if schema := binary.LittleEndian.Uint32(encoded[8:12]); schema != CurrentSchema {
+		t.Fatalf("重编码 schema=%d，想要 %d", schema, CurrentSchema)
+	}
+	migrated, err := Decode(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if migrated.Revision != 41 || !reflect.DeepEqual(migrated.Records, got.Records) ||
+		!reflect.DeepEqual(migrated.Queues, wantQueues) {
+		t.Fatalf("v2→v4 重写后载荷漂移：%+v", migrated)
+	}
+
+	root := t.TempDir()
+	store := newCompanionFileFixture(root)
+	path := filepath.Join(root, "companions.ai")
+	if err := os.WriteFile(path, golden, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := store.LoadCompanions(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Revision != 41 || !reflect.DeepEqual(loaded.Queues, wantQueues) {
+		t.Fatalf("v2 磁盘迁移 loaded=%+v，想要无损载荷", loaded)
+	}
+	if err := store.SaveCompanions(context.Background(), CompanionSave{
+		Revision: loaded.Revision + 1,
+		Records:  loaded.Records,
+		Queues:   loaded.Queues,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if schema := binary.LittleEndian.Uint32(after[8:12]); schema != CurrentSchema {
+		t.Fatalf("首次保存 schema=%d，想要写 v4", schema)
+	}
+	reloaded, err := store.LoadCompanions(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Revision != 42 || !reflect.DeepEqual(reloaded.Queues, wantQueues) {
+		t.Fatalf("迁移后再加载=%+v，想要载荷保持", reloaded)
+	}
+}
+
+// TestCompanionCodecV2RoundTripAndGolden 锁定 v2 时代载荷（全部 go_to 步骤）
+// 经当前编码器的 round-trip：v2 golden 文件是冻结的只读迁移输入（字节零
+// 改动），编码端只写 v4；同一 go_to 载荷在 v4 中按相同 13B 布局到达。
+func TestCompanionCodecV2RoundTripAndGolden(t *testing.T) {
+	input := fixtureCompanionBodies()
+	queues := fixtureCompanionQueues()
+	bodiesSnapshot := append([]companion.Body(nil), input...)
+	queuesSnapshot := cloneStoredQueuesForTest(queues)
+	encoded, err := Encode(fixtureV5SaveForTest(CompanionSave{Revision: 41, Records: input, Queues: queues}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(input, bodiesSnapshot) || !reflect.DeepEqual(queues, queuesSnapshot) {
+		t.Fatalf("编码修改调用者载荷：records=%+v queues=%+v", input, queues)
+	}
+	if schema := binary.LittleEndian.Uint32(encoded[8:12]); schema != CurrentSchema {
+		t.Fatalf("schema=%d，想要 %d", schema, CurrentSchema)
+	}
+
+	got, err := Decode(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantRecords := []companion.Body{input[1], input[0]}
+	if got.Revision != 41 || !reflect.DeepEqual(got.Records, wantRecords) {
+		t.Fatalf("decode revision=%d records=%+v，想要 41/%+v", got.Revision, got.Records, wantRecords)
+	}
+	if !reflect.DeepEqual(got.Queues, queuesSnapshot) {
+		t.Fatalf("decode queues=%+v，想要 %+v", got.Queues, queuesSnapshot)
+	}
+	current := got.Queues[0].Current
+	if current.Command != "先去那棵橡树再看一眼" || current.StepIndex != 1 ||
+		current.State != companion.TaskRunning || current.StartTick != 1200 ||
+		current.DeadlineTicks != 3600 || len(current.PlanSteps) != 3 {
+		t.Fatalf("任务区字段=%+v，想要精确保留", current)
+	}
+	for index, command := range got.Queues[0].Pending {
+		if command != queuesSnapshot[0].Pending[index] {
+			t.Fatalf("FIFO[%d]=%q，想要 %q", index, command, queuesSnapshot[0].Pending[index])
+		}
+	}
+
+	// v2 golden 是冻结的历史字节：编码端不再产出 v2，文件只作为迁移输入。
+	path := filepath.Join("testdata", "companions-v2.bin")
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if schema := binary.LittleEndian.Uint32(want[8:12]); schema != 2 {
+		t.Fatalf("v2 golden schema=%d，想要 2（字节冻结零改动）", schema)
+	}
+	v2Decoded, err := Decode(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v2Decoded.Revision != 41 || !reflect.DeepEqual(v2Decoded.Queues, queuesSnapshot) {
+		t.Fatalf("v2 golden 迁移 decode=%+v，想要与 round-trip 同一载荷", v2Decoded)
+	}
+	clear(encoded)
+	if !reflect.DeepEqual(got.Queues, queuesSnapshot) {
+		t.Fatalf("修改输入 bytes 后 decode 结果=%+v，想要保持 %+v", got.Queues, queuesSnapshot)
+	}
+}
+
+// TestCompanionDecodeSchemaWhitelistListsLiteralV5 锁定解码入口只接受字面
+// v1..v5；未来 schema 不能因为 `CurrentSchema` 比较而被意外放行。
+func TestCompanionDecodeSchemaWhitelistListsLiteralV5(t *testing.T) {
+	for _, schema := range []uint32{
+		companionSchemaV1, companionSchemaV2, companionSchemaV3, companionSchemaV4, companionSchemaV5,
+	} {
+		if !companionSchemaReadable(schema) {
+			t.Fatalf("schema=%d 必须在解码白名单内", schema)
+		}
+	}
+	for _, schema := range []uint32{0, 6} {
+		if companionSchemaReadable(schema) {
+			t.Fatalf("schema=%d 必须不在解码白名单内", schema)
+		}
+	}
+
+	encoded, err := Encode(fixtureV5SaveForTest(CompanionSave{
+		Revision: 9,
+		Records:  fixtureCompanionBodies(),
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	hypothetical := bytes.Clone(encoded)
+	binary.LittleEndian.PutUint32(hypothetical[8:], 6)
+	if _, err := Decode(hypothetical); !errors.Is(err, storagedef.ErrFutureVersion) {
+		t.Fatalf("schema=6 decode error=%v，想要 storagedef.ErrFutureVersion", err)
+	}
+	got, err := Decode(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SourceSchema != 5 || got.Revision != 9 {
+		t.Fatalf("schema=5 合法文件 decode=%+v", got)
+	}
+}
+
+// TestCompanionRestoreV1ReadOnlyMigrationAndFirstSaveWritesV4 锁定 v1→v4 迁移：
+// v1 golden（仅身体）无损读入，首次保存直接写当前 schema v4。
+func TestCompanionRestoreV1ReadOnlyMigrationAndFirstSaveWritesV4(t *testing.T) {
+	v1, err := os.ReadFile(filepath.Join("testdata", "companions-v1.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if schema := binary.LittleEndian.Uint32(v1[8:12]); schema != 1 {
+		t.Fatalf("v1 golden schema=%d，想要 1", schema)
+	}
+	got, err := Decode(v1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantRecords := []companion.Body{fixtureCompanionBodies()[1], fixtureCompanionBodies()[0]}
+	if got.Revision != 19 || !reflect.DeepEqual(got.Records, wantRecords) {
+		t.Fatalf("v1 迁移 decode=%+v，想要 revision=19 records=%+v", got, wantRecords)
+	}
+	if got.Queues != nil {
+		t.Fatalf("v1 迁移必须产出空任务域：%+v", got.Queues)
+	}
+
+	root := t.TempDir()
+	store := newCompanionFileFixture(root)
+	path := filepath.Join(root, "companions.ai")
+	if err := os.WriteFile(path, v1, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := store.LoadCompanions(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Revision != 19 || loaded.Queues != nil ||
+		!reflect.DeepEqual(loaded.Records, wantRecords) {
+		t.Fatalf("v1 磁盘迁移 loaded=%+v，想要身体恢复且任务域为空", loaded)
+	}
+	if err := store.SaveCompanions(context.Background(), CompanionSave{
+		Revision: loaded.Revision + 1,
+		Records:  loaded.Records,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if schema := binary.LittleEndian.Uint32(after[8:12]); schema != CurrentSchema {
+		t.Fatalf("首次保存 schema=%d，想要写 v4", schema)
+	}
+	reloaded, err := store.LoadCompanions(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Revision != 20 || reloaded.Queues != nil ||
+		!reflect.DeepEqual(reloaded.Records, wantRecords) {
+		t.Fatalf("迁移后再加载=%+v，想要身体保持且任务域为空", reloaded)
+	}
+}
+
+func TestCompanionRestoreTasksAndFIFOAcrossRestart(t *testing.T) {
+	root := t.TempDir()
+	store := newCompanionFileFixture(root)
+	queues := []StoredCompanionQueue{
+		{
+			ID:         fixtureCompanionID(1),
+			HasCurrent: true,
+			Current: StoredCompanionTask{
+				Command: "去北边橡树",
+				PlanSteps: []companion.PlanStep{
+					{Kind: companion.PlanStepGoTo, X: 4, Y: 64, Z: -2},
+					{Kind: companion.PlanStepGoTo, X: 9, Y: 64, Z: -7},
+				},
+				StepIndex:     1,
+				State:         companion.TaskRunning,
+				StartTick:     77,
+				DeadlineTicks: 1277,
+			},
+			Pending: []string{"第二条指令", "第三条指令"},
+		},
+		{
+			ID:         fixtureCompanionID(2),
+			HasCurrent: true,
+			Current: StoredCompanionTask{
+				Command: "规划中的指令",
+				State:   companion.TaskPlanning,
+			},
+		},
+	}
+	if err := store.SaveCompanions(context.Background(), CompanionSave{
+		Revision: 6,
+		Records:  fixtureCompanionBodies(),
+		Queues:   queues,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// 落盘后修改调用方切片不得影响已保存内容。
+	queues[0].Current.PlanSteps[0].X = 999
+	queues[0].Pending[0] = "被篡改"
+	queues[1].Current.Command = "被篡改"
+
+	loaded, err := store.LoadCompanions(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []StoredCompanionQueue{
+		{
+			ID:         fixtureCompanionID(1),
+			HasCurrent: true,
+			Current: StoredCompanionTask{
+				Command: "去北边橡树",
+				PlanSteps: []companion.PlanStep{
+					{Kind: companion.PlanStepGoTo, X: 4, Y: 64, Z: -2},
+					{Kind: companion.PlanStepGoTo, X: 9, Y: 64, Z: -7},
+				},
+				StepIndex:     1,
+				State:         companion.TaskRunning,
+				StartTick:     77,
+				DeadlineTicks: 1277,
+			},
+			Pending: []string{"第二条指令", "第三条指令"},
+		},
+		{
+			ID:         fixtureCompanionID(2),
+			HasCurrent: true,
+			Current: StoredCompanionTask{
+				Command: "规划中的指令",
+				State:   companion.TaskPlanning,
+			},
+		},
+	}
+	if loaded.Revision != 6 || !reflect.DeepEqual(loaded.Queues, want) {
+		t.Fatalf("跨重启恢复 queues=%+v，想要 %+v", loaded.Queues, want)
+	}
+	if loaded.Queues[0].Pending[0] != "第二条指令" ||
+		loaded.Queues[0].Pending[1] != "第三条指令" {
+		t.Fatalf("FIFO 顺序=%v", loaded.Queues[0].Pending)
+	}
+	// 解码结果与底层字节完全独立。
+	loaded.Queues[0].Pending[0] = "再次篡改"
+	again, err := store.LoadCompanions(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(again.Queues, want) {
+		t.Fatalf("二次加载 queues=%+v，想要保持 %+v", again.Queues, want)
+	}
+}
+
+func TestCompanionRestoreFIFOOnlyQueueRoundTrip(t *testing.T) {
+	// FIFO-only 载荷（无当前任务、仅待执行指令）是服务端的真实形态：
+	// 任务终态清槽后 FIFO 仍有排队指令的瞬间即产出它。编码与解码必须
+	// 对这种记录对称——HasCurrent 为假时 Current 是零值，不得参与任务
+	// 枚举校验。
+	queue := StoredCompanionQueue{
+		ID:      fixtureCompanionID(1),
+		Pending: []string{"仅排队甲", "仅排队乙"},
+	}
+	encoded, err := Encode(fixtureV5SaveForTest(CompanionSave{
+		Revision: 3,
+		Records:  fixtureCompanionBodies(),
+		Queues:   []StoredCompanionQueue{queue},
+	}))
+
+	if err != nil {
+		t.Fatalf("FIFO-only encode error=%v，想要成功", err)
+	}
+	got, err := Decode(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Revision != 3 || !reflect.DeepEqual(got.Queues, []StoredCompanionQueue{queue}) {
+		t.Fatalf("FIFO-only codec round-trip=%+v，想要 %+v", got.Queues, queue)
+	}
+
+	root := t.TempDir()
+	store := newCompanionFileFixture(root)
+	if err := store.SaveCompanions(context.Background(), CompanionSave{
+		Revision: 3,
+		Records:  fixtureCompanionBodies(),
+		Queues:   []StoredCompanionQueue{queue},
+	}); err != nil {
+		t.Fatalf("FIFO-only 真实存档保存 error=%v，想要成功", err)
+	}
+	loaded, err := store.LoadCompanions(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Revision != 3 || !reflect.DeepEqual(loaded.Queues, []StoredCompanionQueue{queue}) {
+		t.Fatalf("FIFO-only 磁盘 round-trip=%+v，想要 %+v", loaded.Queues, queue)
+	}
+}
+
+func TestCompanionRestoreRejectsCorruptTaskPayloads(t *testing.T) {
+	valid, err := Encode(fixtureV5SaveForTest(CompanionSave{
+		Revision: 7,
+		Records:  fixtureCompanionBodies(),
+		Queues:   fixtureCompanionQueues(),
+	}))
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mutations := []struct {
+		name   string
+		base   func() []StoredCompanionQueue
+		mutate func([]StoredCompanionQueue) []StoredCompanionQueue
+	}{
+		{"zero state", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.State = 0
+			return queues
+		}},
+		{"state above enum", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.State = companion.TaskState(9)
+			return queues
+		}},
+		{"running without steps", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.PlanSteps = nil
+			return queues
+		}},
+		{"running step index out of range", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.StepIndex = 3
+			return queues
+		}},
+		{"queued keeps plan", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.State = companion.TaskQueued
+			return queues
+		}},
+		{"non-running keeps ticks", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.State = companion.TaskPlanning
+			queues[0].Current.PlanSteps = nil
+			queues[0].Current.StepIndex = 0
+			return queues
+		}},
+		{"illegal step kind", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.PlanSteps[1].Kind = companion.PlanStepKind(5)
+			return queues
+		}},
+		{"step Y out of world", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.PlanSteps[2].Y = math.MaxInt32
+			return queues
+		}},
+		{"fail reason on running", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.FailReason = companion.TaskFailInvalidPlan
+			return queues
+		}},
+		{"illegal fail reason", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.State = companion.TaskFailed
+			queues[0].Current.PlanSteps = nil
+			queues[0].Current.StepIndex = 0
+			queues[0].Current.StartTick = 0
+			queues[0].Current.DeadlineTicks = 0
+			queues[0].Current.FailReason = companion.TaskFailReason(6)
+			return queues
+		}},
+		{"command exceeds bytes", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.Command = strings.Repeat("走", 342)
+			return queues
+		}},
+		{"command empty", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.Command = ""
+			return queues
+		}},
+		{"command control rune", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.Command = "去\n那边"
+			return queues
+		}},
+		{"fifo over depth", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Pending = append(queues[0].Pending, "第十七条")
+			return queues
+		}},
+		{"fifo entry exceeds bytes", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Pending[0] = strings.Repeat("走", 342)
+			return queues
+		}},
+		{"fifo entry empty", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Pending[0] = ""
+			return queues
+		}},
+		{"current task without has current", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].HasCurrent = false
+			return queues
+		}},
+		{"queue without record", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].ID = fixtureCompanionID(9)
+			return queues
+		}},
+		{"duplicate queue ID", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			return append(queues, queues[0])
+		}},
+		{"empty queue", fixtureCompanionQueues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			return []StoredCompanionQueue{{ID: queues[0].ID}}
+		}},
+		// v3 变长布局的结构拒绝：follow 的零 deadline、位置、目标有效性与
+		// 各 kind 未用字段的零值约束都在编码边界强制。
+		{"v3 follow keeps deadline", fixtureCompanionV3Queues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.DeadlineTicks = 3600
+			return queues
+		}},
+		{"v3 follow not last", fixtureCompanionV3Queues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.PlanSteps = []companion.PlanStep{
+				{Kind: companion.PlanStepFollow, PlayerID: fixtureFollowPlayerID()},
+				{Kind: companion.PlanStepGoTo, X: 1, Y: 64, Z: 1},
+			}
+			return queues
+		}},
+		{"v3 follow invalid player ID", fixtureCompanionV3Queues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.PlanSteps[3].PlayerID = core.PlayerID{}
+			return queues
+		}},
+		{"v3 go_to keeps player payload", fixtureCompanionV3Queues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.PlanSteps[0].PlayerID = fixtureFollowPlayerID()
+			return queues
+		}},
+		{"v3 place keeps player payload", fixtureCompanionV3Queues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.PlanSteps[2].PlayerID = fixtureFollowPlayerID()
+			return queues
+		}},
+		{"v3 follow keeps coordinates", fixtureCompanionV3Queues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.PlanSteps[3].X = 3
+			return queues
+		}},
+		{"v3 go_to keeps block payload", fixtureCompanionV3Queues, func(queues []StoredCompanionQueue) []StoredCompanionQueue {
+			queues[0].Current.PlanSteps[0].Block = core.OakPlanksID
+			return queues
+		}},
+	}
+	for _, tc := range mutations {
+		t.Run(tc.name, func(t *testing.T) {
+			queues := tc.mutate(cloneStoredQueuesForTest(tc.base()))
+			_, err := Encode(fixtureV5SaveForTest(CompanionSave{
+				Revision: 7,
+				Records:  fixtureCompanionBodies(),
+				Queues:   queues,
+			}))
+
+			if !errors.Is(err, storagedef.ErrCorrupt) {
+				t.Fatalf("encode error=%v，想要 storagedef.ErrCorrupt", err)
+			}
+		})
+	}
+
+	// legacy v3 变长布局的解码侧补丁必须从冻结 fixture 出发，避免当前
+	// encoder 升级后以 v5 字节误冒充历史载荷。
+	v3Valid, err := os.ReadFile(filepath.Join("testdata", "companions-v3.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if schema := binary.LittleEndian.Uint32(v3Valid[8:12]); schema != companionSchemaV3 {
+		t.Fatalf("v3 字节补丁基线 schema=%d，想要 3", schema)
+	}
+	commandBytes := len("去橡树旁挖一格垫一块再跟着我")
+	v3TaskOffset := companionHeaderLength + companionRecordLength + 1
+	v3StepsBase := v3TaskOffset + companionTaskCommandPrefixLength + commandBytes + 2
+	v3FollowKindOffset := v3StepsBase + 13 + 13 + 15
+	v3DeadlineOffset := v3FollowKindOffset + 17 + 4 + 1 + 1 + 8
+
+	// current v5 在首记录之前新增 namespace，并在 body 后固定写 flags、epoch、
+	// active mirror 与 summary 长度前缀；任务偏移必须完整跨过这些字段。
+	v5VariableValid, err := Encode(fixtureV5SaveForTest(CompanionSave{
+		Revision: 7,
+		Records:  fixtureCompanionBodies(),
+		Queues:   fixtureCompanionV3Queues(),
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if schema := binary.LittleEndian.Uint32(v5VariableValid[8:12]); schema != companionSchemaV5 {
+		t.Fatalf("v5 字节补丁基线 schema=%d，想要 5", schema)
+	}
+	v5FlagsOffset := companionHeaderLength + len(Identity{}) + companionRecordLength
+	v5SummaryLengthOffset := v5FlagsOffset + 1 + 8 + 8 + len(Identity{})
+	v5SummaryLength := int(binary.LittleEndian.Uint16(v5VariableValid[v5SummaryLengthOffset:]))
+	v5TaskOffset := v5SummaryLengthOffset + companionSummaryPrefixLength + v5SummaryLength
+	v5StepsBase := v5TaskOffset + companionTaskCommandPrefixLength + commandBytes + 2
+	v5FollowKindOffset := v5StepsBase + 13 + 13 + 15
+	v5DeadlineOffset := v5FollowKindOffset + 17 + 4 + 1 + 1 + 8
+
+	assertByte := func(t *testing.T, payload []byte, offset int, want byte, field string) {
+		t.Helper()
+		if offset < 0 || offset >= len(payload) {
+			t.Fatalf("%s offset=%d 超出载荷长度 %d", field, offset, len(payload))
+		}
+		if got := payload[offset]; got != want {
+			t.Fatalf("%s patch 原值=%#x，想要 %#x", field, got, want)
+		}
+	}
+	assertBytes := func(t *testing.T, payload []byte, offset int, want []byte, field string) {
+		t.Helper()
+		if offset < 0 || offset+len(want) > len(payload) {
+			t.Fatalf("%s offset=%d 长度=%d 超出载荷长度 %d", field, offset, len(want), len(payload))
+		}
+		if got := payload[offset : offset+len(want)]; !bytes.Equal(got, want) {
+			t.Fatalf("%s patch 原值=%x，想要 %x", field, got, want)
+		}
+	}
+	assertU64 := func(t *testing.T, payload []byte, offset int, want uint64, field string) {
+		t.Helper()
+		if offset < 0 || offset+8 > len(payload) {
+			t.Fatalf("%s offset=%d 超出载荷长度 %d", field, offset, len(payload))
+		}
+		if got := binary.LittleEndian.Uint64(payload[offset:]); got != want {
+			t.Fatalf("%s patch 原值=%d，想要 %d", field, got, want)
+		}
+	}
+
+	byteTests := []struct {
+		name    string
+		payload func(*testing.T) []byte
+		want    error
+	}{
+		{"CRC", func(t *testing.T) []byte {
+			payload := bytes.Clone(valid)
+			if got, want := binary.LittleEndian.Uint32(payload[28:]), companionChecksum(payload); got != want {
+				t.Fatalf("CRC patch 原值=%#x，想要有效 checksum %#x", got, want)
+			}
+			payload[len(payload)-1] ^= 0xff
+			return payload
+		}, storagedef.ErrCorrupt},
+		{"truncation", func(*testing.T) []byte { return bytes.Clone(valid[:len(valid)-1]) }, storagedef.ErrCorrupt},
+		{"trailing byte", func(*testing.T) []byte { return append(bytes.Clone(valid), 0) }, storagedef.ErrCorrupt},
+		{"future schema", func(t *testing.T) []byte {
+			payload := bytes.Clone(valid)
+			if got := binary.LittleEndian.Uint32(payload[8:]); got != CurrentSchema {
+				t.Fatalf("schema patch 原值=%d，想要 %d", got, CurrentSchema)
+			}
+			binary.LittleEndian.PutUint32(payload[8:], CurrentSchema+1)
+			return payload
+		}, storagedef.ErrFutureVersion},
+		{"future envelope", func(t *testing.T) []byte {
+			payload := bytes.Clone(valid)
+			if got := binary.LittleEndian.Uint32(payload[4:]); got != companionEnvelopeVersion {
+				t.Fatalf("envelope patch 原值=%d，想要 %d", got, companionEnvelopeVersion)
+			}
+			binary.LittleEndian.PutUint32(payload[4:], companionEnvelopeVersion+1)
+			return payload
+		}, storagedef.ErrFutureVersion},
+		{"v5 reserved flags", func(t *testing.T) []byte {
+			payload := bytes.Clone(valid)
+			assertByte(t, payload, v5FlagsOffset, companionFlagActive|companionFlagHasTask|companionFlagHasFIFO, "v5 flags")
+			payload[v5FlagsOffset] |= 0x08
+			repairCompanionCRC(payload)
+			return payload
+		}, storagedef.ErrCorrupt},
+		{"v3 illegal step kind", func(t *testing.T) []byte {
+			payload := bytes.Clone(v3Valid)
+			assertByte(t, payload, v3FollowKindOffset, byte(companion.PlanStepFollow), "v3 follow kind")
+			payload[v3FollowKindOffset] = 0x09
+			repairCompanionCRC(payload)
+			return payload
+		}, storagedef.ErrCorrupt},
+		{"v3 follow player ID invalid", func(t *testing.T) []byte {
+			payload := bytes.Clone(v3Valid)
+			playerID := fixtureFollowPlayerID()
+			assertBytes(t, payload, v3FollowKindOffset+1, playerID[:], "v3 follow player ID")
+			clear(payload[v3FollowKindOffset+1 : v3FollowKindOffset+17])
+			repairCompanionCRC(payload)
+			return payload
+		}, storagedef.ErrCorrupt},
+		{"v3 follow deadline set", func(t *testing.T) []byte {
+			payload := bytes.Clone(v3Valid)
+			assertU64(t, payload, v3DeadlineOffset, 0, "v3 follow deadline")
+			binary.LittleEndian.PutUint64(payload[v3DeadlineOffset:], 3600)
+			repairCompanionCRC(payload)
+			return payload
+		}, storagedef.ErrCorrupt},
+		{"v5 illegal step kind", func(t *testing.T) []byte {
+			payload := bytes.Clone(v5VariableValid)
+			assertByte(t, payload, v5FollowKindOffset, byte(companion.PlanStepFollow), "v5 follow kind")
+			payload[v5FollowKindOffset] = 0x09
+			repairCompanionCRC(payload)
+			return payload
+		}, storagedef.ErrCorrupt},
+		{"v5 follow player ID invalid", func(t *testing.T) []byte {
+			payload := bytes.Clone(v5VariableValid)
+			playerID := fixtureFollowPlayerID()
+			assertBytes(t, payload, v5FollowKindOffset+1, playerID[:], "v5 follow player ID")
+			clear(payload[v5FollowKindOffset+1 : v5FollowKindOffset+17])
+			repairCompanionCRC(payload)
+			return payload
+		}, storagedef.ErrCorrupt},
+		{"v5 follow deadline set", func(t *testing.T) []byte {
+			payload := bytes.Clone(v5VariableValid)
+			assertU64(t, payload, v5DeadlineOffset, 0, "v5 follow deadline")
+			binary.LittleEndian.PutUint64(payload[v5DeadlineOffset:], 3600)
+			repairCompanionCRC(payload)
+			return payload
+		}, storagedef.ErrCorrupt},
+	}
+	for _, tc := range byteTests {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := Decode(tc.payload(t)); !errors.Is(err, tc.want) {
+				t.Fatalf("decode error=%v，想要 %v", err, tc.want)
+			}
+		})
+	}
+
+	// v2 文件中的非 go_to 步骤字节是 v2 时代不可能出现的载荷：只读迁移
+	// 必须按损坏拒绝，绝不猜步长。
+	v2Golden, err := os.ReadFile(filepath.Join("testdata", "companions-v2.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	v2StepKind := companionHeaderLength + companionRecordLength + 1 + 2 + len("先去那棵橡树再看一眼") + 2
+	v2IllegalKind := bytes.Clone(v2Golden)
+	assertByte(t, v2IllegalKind, v2StepKind, byte(companion.PlanStepGoTo), "v2 step kind")
+	v2IllegalKind[v2StepKind] = byte(companion.PlanStepFollow)
+	repairCompanionCRC(v2IllegalKind)
+	if _, err := Decode(v2IllegalKind); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("v2 非 go_to 步骤 decode error=%v，想要 storagedef.ErrCorrupt", err)
+	}
+
+	// 超 438,280 bytes 的文件必须在任何解析与分配之前被拒绝。
+	oversized := bytes.Repeat([]byte{0x5a}, MaxFileLength+1)
+	if _, err := Decode(oversized); !errors.Is(err, storagedef.ErrCorrupt) ||
+		!strings.Contains(err.Error(), "exceeds limit") {
+		t.Fatalf("oversized error=%v，想要分配前长度门禁", err)
+	}
+}
+
+func TestCompanionRestorePlanAndFIFOBounds(t *testing.T) {
+	steps := make([]companion.PlanStep, MaxCompanionPlanSteps)
+	for index := range steps {
+		steps[index] = companion.PlanStep{
+			Kind: companion.PlanStepGoTo,
+			X:    int32(index),
+			Y:    64,
+			Z:    -int32(index),
+		}
+	}
+	queue := StoredCompanionQueue{
+		ID:         fixtureCompanionID(2),
+		HasCurrent: true,
+		Current: StoredCompanionTask{
+			Command:       "长计划",
+			PlanSteps:     steps,
+			StepIndex:     MaxCompanionPlanSteps - 1,
+			State:         companion.TaskRunning,
+			StartTick:     1,
+			DeadlineTicks: 1201,
+		},
+		Pending: make([]string, MaxCompanionFIFOEntries),
+	}
+	for index := range queue.Pending {
+		queue.Pending[index] = "排队"
+	}
+	encoded, err := Encode(fixtureV5SaveForTest(CompanionSave{
+		Revision: 2,
+		Records:  fixtureCompanionBodies()[:1],
+		Queues:   []StoredCompanionQueue{queue},
+	}))
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Decode(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Queues) != 1 || len(got.Queues[0].Current.PlanSteps) != MaxCompanionPlanSteps ||
+		got.Queues[0].Current.StepIndex != MaxCompanionPlanSteps-1 ||
+		len(got.Queues[0].Pending) != MaxCompanionFIFOEntries {
+		t.Fatalf("上界载荷 decode=%+v", got.Queues)
+	}
+
+	// 第 5,001 步必须在编码边界拒绝。
+	over := cloneStoredQueuesForTest([]StoredCompanionQueue{queue})
+	over[0].Current.PlanSteps = append(
+		over[0].Current.PlanSteps,
+		companion.PlanStep{Kind: companion.PlanStepGoTo, X: 1, Y: 64, Z: 1},
+	)
+	if _, err := Encode(fixtureV5SaveForTest(CompanionSave{
+		Revision: 3,
+		Records:  fixtureCompanionBodies()[:1],
+		Queues:   over,
+	})); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("5,001 步 encode error=%v，想要 storagedef.ErrCorrupt", err)
+	}
+
+	// 第 17 条 FIFO 同样在编码边界拒绝。
+	overFIFO := cloneStoredQueuesForTest([]StoredCompanionQueue{queue})
+	overFIFO[0].Current.PlanSteps = overFIFO[0].Current.PlanSteps[:1]
+	overFIFO[0].Current.StepIndex = 0
+	overFIFO[0].Pending = append(overFIFO[0].Pending, "第十七条")
+	if _, err := Encode(fixtureV5SaveForTest(CompanionSave{
+		Revision: 4,
+		Records:  fixtureCompanionBodies()[:1],
+		Queues:   overFIFO,
+	})); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("17 条 FIFO encode error=%v，想要 storagedef.ErrCorrupt", err)
+	}
+}
+
+// TestCompanionRestoreV3MaxVariableStepBudget 锁定变长布局下的步骤预算：按
+// 最大 17-byte 步长（4,999 个 13-byte 坐标步骤 + 收尾 follow）核算的 5,000
+// 步任务区必须完整落盘并 round-trip；第 5,001 步仍在编码边界拒绝。
+func TestCompanionRestoreV3MaxVariableStepBudget(t *testing.T) {
+	steps := make([]companion.PlanStep, MaxCompanionPlanSteps-1)
+	for index := range steps {
+		steps[index] = companion.PlanStep{Kind: companion.PlanStepMine, X: int32(index), Y: 64, Z: 0}
+	}
+	steps = append(steps, companion.PlanStep{Kind: companion.PlanStepFollow, PlayerID: fixtureFollowPlayerID()})
+	queue := StoredCompanionQueue{
+		ID:         fixtureCompanionID(2),
+		HasCurrent: true,
+		Current: StoredCompanionTask{
+			Command:   "最长变长计划",
+			PlanSteps: steps,
+			StepIndex: MaxCompanionPlanSteps - 1,
+			State:     companion.TaskRunning,
+			StartTick: 9,
+		},
+	}
+	encoded, err := Encode(fixtureV5SaveForTest(CompanionSave{
+		Revision: 5,
+		Records:  fixtureCompanionBodies()[:1],
+		Queues:   []StoredCompanionQueue{queue},
+	}))
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(encoded) > MaxFileLength {
+		t.Fatalf("最大变长预算文件长度=%d，超过上界 %d", len(encoded), MaxFileLength)
+	}
+	got, err := Decode(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded := got.Queues[0].Current
+	if len(decoded.PlanSteps) != MaxCompanionPlanSteps ||
+		decoded.PlanSteps[MaxCompanionPlanSteps-1].PlayerID != fixtureFollowPlayerID() ||
+		decoded.DeadlineTicks != 0 {
+		t.Fatalf("变长上界载荷 decode=%+v", decoded)
+	}
+
+	over := cloneStoredQueuesForTest([]StoredCompanionQueue{queue})
+	over[0].Current.PlanSteps = append(
+		over[0].Current.PlanSteps[:MaxCompanionPlanSteps-1],
+		companion.PlanStep{Kind: companion.PlanStepGoTo, X: 1, Y: 64, Z: 1},
+		companion.PlanStep{Kind: companion.PlanStepFollow, PlayerID: fixtureFollowPlayerID()},
+	)
+	if _, err := Encode(fixtureV5SaveForTest(CompanionSave{
+		Revision: 6,
+		Records:  fixtureCompanionBodies()[:1],
+		Queues:   over,
+	})); !errors.Is(err, storagedef.ErrCorrupt) {
+		t.Fatalf("5,001 步 encode error=%v，想要 storagedef.ErrCorrupt", err)
+	}
+}

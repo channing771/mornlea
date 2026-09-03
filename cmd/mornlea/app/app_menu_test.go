@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	"github.com/channing771/mornlea/internal/client"
-	"github.com/channing771/mornlea/internal/server"
-	"github.com/channing771/mornlea/internal/storage"
+	"github.com/channing771/mornlea/packages/server/server"
+	"github.com/channing771/mornlea/packages/server/storage"
 	"github.com/channing771/mornlea/packages/shared/config"
 	"github.com/channing771/mornlea/packages/shared/network"
 )

@@ -99,8 +99,8 @@ import (
 	"sync/atomic"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/physics"
-	"github.com/channing771/mornlea/internal/sim/entity"
-	"github.com/channing771/mornlea/internal/sim/realm"
+	"github.com/channing771/mornlea/packages/server/sim/entity"
+	"github.com/channing771/mornlea/packages/server/sim/realm"
 	"github.com/channing771/mornlea/packages/shared/tuning"
 )
 type SessionID uint64
@@ -327,8 +327,8 @@ type State struct {
 			name: "runtime 用 import alias 增加 owner holder",
 			mutate: func(runtimeSource, entitySource string) (string, string) {
 				runtimeSource = strings.Replace(runtimeSource,
-					"\"github.com/channing771/mornlea/internal/sim/entity\"",
-					"ent \"github.com/channing771/mornlea/internal/sim/entity\"",
+					"\"github.com/channing771/mornlea/packages/server/sim/entity\"",
+					"ent \"github.com/channing771/mornlea/packages/server/sim/entity\"",
 					1,
 				)
 				runtimeSource = strings.ReplaceAll(runtimeSource, "entity.", "ent.")
@@ -648,7 +648,9 @@ type simAuthorityTypeEnvironment struct {
 }
 
 func newSimAuthorityTypeEnvironment(root string) (*simAuthorityTypeEnvironment, error) {
-	command := exec.Command("go", "list", "-e", "-export", "-deps", "-json", "./internal/sim/runtime")
+	// GOWORK=off 的单模块世界里目录模式不跨嵌套模块，必须用完整 import path
+	// 经根 go.mod 的 require+replace 解析到 packages/server 模块。
+	command := exec.Command("go", "list", "-e", "-export", "-deps", "-json", "github.com/channing771/mornlea/packages/server/sim/runtime")
 	command.Dir = root
 	command.Env = append(os.Environ(), "GOWORK=off")
 	output, err := command.Output()
@@ -704,18 +706,18 @@ func newSimAuthorityTypeEnvironment(root string) (*simAuthorityTypeEnvironment, 
 
 func simAuthorityViolationsFromTree(root string, typeEnvironment *simAuthorityTypeEnvironment) ([]string, error) {
 	runtimeShape, err := readSimAuthorityPackage(
-		filepath.Join(root, "internal", "sim", "runtime"),
+		filepath.Join(root, "packages", "server", "sim", "runtime"),
 		"runtime",
-		modulePath+"/internal/sim/runtime",
+		modulePath+"/packages/server/sim/runtime",
 		typeEnvironment,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("读取 runtime 所有权结构：%w", err)
 	}
 	entityShape, err := readSimAuthorityPackage(
-		filepath.Join(root, "internal", "sim", "entity"),
+		filepath.Join(root, "packages", "server", "sim", "entity"),
 		"entity",
-		modulePath+"/internal/sim/entity",
+		modulePath+"/packages/server/sim/entity",
 		typeEnvironment,
 	)
 	if err != nil {
@@ -729,13 +731,13 @@ func simAuthorityViolationsFromSources(
 	runtimeSource, entitySource string,
 ) []string {
 	runtimeShape, err := parseSimAuthoritySource(
-		"runtime.go", runtimeSource, modulePath+"/internal/sim/runtime", typeEnvironment,
+		"runtime.go", runtimeSource, modulePath+"/packages/server/sim/runtime", typeEnvironment,
 	)
 	if err != nil {
 		return []string{"解析 synthetic runtime：" + err.Error()}
 	}
 	entityShape, err := parseSimAuthoritySource(
-		"entity.go", entitySource, modulePath+"/internal/sim/entity", typeEnvironment,
+		"entity.go", entitySource, modulePath+"/packages/server/sim/entity", typeEnvironment,
 	)
 	if err != nil {
 		return []string{"解析 synthetic entity：" + err.Error()}
@@ -870,8 +872,8 @@ type simAuthorityStorageTraits struct {
 }
 
 const (
-	simAuthorityEntityPackage = modulePath + "/internal/sim/entity"
-	simAuthorityRealmPackage  = modulePath + "/internal/sim/realm"
+	simAuthorityEntityPackage = modulePath + "/packages/server/sim/entity"
+	simAuthorityRealmPackage  = modulePath + "/packages/server/sim/realm"
 )
 
 type simAuthorityImportedAlias struct {

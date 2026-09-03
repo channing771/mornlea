@@ -8,7 +8,7 @@ import (
 	application "github.com/channing771/mornlea/cmd/mornlea/app"
 	"github.com/channing771/mornlea/internal/client"
 	"github.com/channing771/mornlea/internal/render"
-	"github.com/channing771/mornlea/internal/server"
+	"github.com/channing771/mornlea/packages/server/server"
 )
 
 // BenchmarkApplication 是 benchmark 对宿主应用状态所需能力的消费端接口：
