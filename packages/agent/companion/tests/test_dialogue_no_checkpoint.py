@@ -18,7 +18,7 @@ from mornlea_companion_agent.domain.memory import (
 from mornlea_companion_agent.harness.dialogue import DialogueHarness
 from mornlea_companion_agent.storage.sqlite_memory import SQLiteMemoryStore
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 HTTP_GOLDEN = REPOSITORY_ROOT / "contracts/companion-agent/http-v1/golden/valid.json"
 
 

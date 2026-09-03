@@ -1,9 +1,9 @@
 ## Task 1: 卫生、单元边界检查器与 companion 迁入 agent 族
 
-- [ ] 1.1 在 `internal/archcheck` 新增 `unit_boundary_test.go`：定义单元允许 require 边表（server→{shared,contracts}、client→{shared}、tools→{shared,server,client,contracts}、audit/contracts→∅）与检查器函数，先写合成 drift 测试证明检查器对每类违规（client→server、server→client、shared→server、audit 导入被审单元）都报错；真实树断言按枚举 `packages/` 下现存 `go.mod` 动态激活（无模块时空转绿）。以 `go test ./internal/archcheck -count=1` 验证。
-- [ ] 1.2 工作区卫生：删除仓库根遗留 `client.test`、`mesh.test` 与两个空 golden 目录（`cmd/mornlea/capture/testdata/golden/`、`engine/crates/mornlea_client/frontend/visual/golden/`，本地残留不入库）；`.gitignore` 增 `/.claude/worktrees/`；修复 `scripts/make_demo_gif.swift` 失效的旧 golden 路径改为 `testdata/visual-golden/world`。以 `git status --short` 仅显示预期改动验证。
-- [ ] 1.3 `git mv services/companion-agent packages/agent/companion`（`packages/` 与 `packages/agent/` 立项）；`pyproject.toml` force-include 路径 `../../contracts/...` → `../../../contracts/...`；同步 Makefile `COMPANION_AGENT_DIR`、`.github/workflows/ci.yml`、根 `AGENTS.md` 与 `docs/` 中 `services/companion-agent` 路径引用。以 `make companion-agent-check` 与 `make companion-agent-integration` 验证。
-- [ ] 1.4 CI 去重：新增 `scripts/ci/verify-native-artifact.sh`（manifest 行数、sha256、双 dylib 校验），`ci.yml` 的 quality/go-race/integration 三个 job 改调该脚本；frontend job 改调 `make frontend-check`（补 corepack 就绪步骤）。以 `bash -n`、`make frontend-check` 与 CI YAML 语法自检验证。
+- [x] 1.1 在 `internal/archcheck` 新增 `unit_boundary_test.go`：定义单元允许 require 边表（server→{shared,contracts}、client→{shared}、tools→{shared,server,client,contracts}、audit/contracts→∅）与检查器函数，先写合成 drift 测试证明检查器对每类违规（client→server、server→client、shared→server、audit 导入被审单元）都报错；真实树断言按枚举 `packages/` 下现存 `go.mod` 动态激活（无模块时空转绿）。以 `go test ./internal/archcheck -count=1` 验证。
+- [x] 1.2 工作区卫生：删除仓库根遗留 `client.test`、`mesh.test` 与两个空 golden 目录（`cmd/mornlea/capture/testdata/golden/`、`engine/crates/mornlea_client/frontend/visual/golden/`，本地残留不入库）；`.gitignore` 增 `/.claude/worktrees/`；修复 `scripts/make_demo_gif.swift` 失效的旧 golden 路径改为 `testdata/visual-golden/world`。以 `git status --short` 仅显示预期改动验证。
+- [x] 1.3 `git mv services/companion-agent packages/agent/companion`（`packages/` 与 `packages/agent/` 立项）；`pyproject.toml` force-include 路径 `../../contracts/...` → `../../../contracts/...`；同步 Makefile `COMPANION_AGENT_DIR`、`.github/workflows/ci.yml`、根 `AGENTS.md` 与 `docs/` 中 `services/companion-agent` 路径引用。以 `make companion-agent-check` 与 `make companion-agent-integration` 验证。
+- [x] 1.4 CI 去重：新增 `scripts/ci/verify-native-artifact.sh`（manifest 行数、sha256、双 dylib 校验），`ci.yml` 的 quality/go-race/integration 三个 job 改调该脚本；frontend job 改调 `make frontend-check`（补 corepack 就绪步骤）。以 `bash -n`、`make frontend-check` 与 CI YAML 语法自检验证。
 
 ## Task 2: engine 整体迁入 packages/engine 并收敛 dylib 部署
 

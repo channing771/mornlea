@@ -93,7 +93,7 @@ limits:
 ```bash
 export MORNLEA_AGENT_TOKEN='replace-with-random-local-token'
 export MORNLEA_PROVIDER_KEY='replace-with-provider-key'
-cd services/companion-agent
+cd packages/agent/companion
 uv sync --locked
 uv run mornlea-companion-agent serve --config /absolute/path/to/agent.yaml
 ```

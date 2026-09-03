@@ -141,11 +141,11 @@ func TestMCPAgentCrossLanguageIntegration(t *testing.T) {
 	if !ok {
 		t.Skipf("companion Agent Python 解释器不可用（%s）；真实进程合同由 make companion-agent-integration 运行", python)
 	}
-	helper := filepath.Join(repositoryRoot, "services", "companion-agent", "tests", "integration", "process.py")
+	helper := filepath.Join(repositoryRoot, "packages", "agent", "companion", "tests", "integration", "process.py")
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	command := exec.CommandContext(ctx, python, helper, "mcp-probe")
-	command.Dir = filepath.Join(repositoryRoot, "services", "companion-agent")
+	command.Dir = filepath.Join(repositoryRoot, "packages", "agent", "companion")
 	command.Stdin = bytes.NewReader(payload)
 	command.Env = append(os.Environ(), "PYTHONUNBUFFERED=1", "HTTP_PROXY=", "HTTPS_PROXY=", "ALL_PROXY=", "NO_PROXY=*")
 	var stdout bytes.Buffer
@@ -257,9 +257,9 @@ func TestMCPAgentCrossLanguageCancellationIntegration(t *testing.T) {
 	processContext, processCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer processCancel()
 	command := exec.CommandContext(processContext, python,
-		filepath.Join(repositoryRoot, "services", "companion-agent", "tests", "integration", "process.py"),
+		filepath.Join(repositoryRoot, "packages", "agent", "companion", "tests", "integration", "process.py"),
 		"mcp-cancel-probe")
-	command.Dir = filepath.Join(repositoryRoot, "services", "companion-agent")
+	command.Dir = filepath.Join(repositoryRoot, "packages", "agent", "companion")
 	command.Stdin = bytes.NewReader(payload)
 	command.Env = append(os.Environ(), "PYTHONUNBUFFERED=1", "HTTP_PROXY=", "HTTPS_PROXY=", "ALL_PROXY=", "NO_PROXY=*")
 	var stdout bytes.Buffer
@@ -767,10 +767,10 @@ func startCrossLanguageAgentProcess(t *testing.T, repositoryRoot, credential str
 		_ = listener.Close()
 		t.Fatal(err)
 	}
-	helper := filepath.Join(repositoryRoot, "services", "companion-agent", "tests", "integration", "process.py")
+	helper := filepath.Join(repositoryRoot, "packages", "agent", "companion", "tests", "integration", "process.py")
 	processContext, cancel := context.WithCancel(context.Background())
 	command := exec.CommandContext(processContext, python, helper, "http-server")
-	command.Dir = filepath.Join(repositoryRoot, "services", "companion-agent")
+	command.Dir = filepath.Join(repositoryRoot, "packages", "agent", "companion")
 	command.Stdin = bytes.NewReader(control)
 	command.ExtraFiles = []*os.File{listenerFile}
 	command.Env = append(os.Environ(), "PYTHONUNBUFFERED=1", "HTTP_PROXY=", "HTTPS_PROXY=", "ALL_PROXY=", "NO_PROXY=*")
@@ -1114,7 +1114,7 @@ func loadCrossLanguageHTTPGolden(t *testing.T, name string, target any) {
 
 // crossLanguagePythonPath 解析伙伴 Agent Python 解释器路径：优先取
 // `MORNLEA_COMPANION_AGENT_PYTHON`，为空则回落到仓库内 uv 管理的
-// `services/companion-agent/.venv/bin/python`。用 `os.Stat` 判定最终路径
+// `packages/agent/companion/.venv/bin/python`。用 `os.Stat` 判定最终路径
 // 存在且是常规文件，缺失或不可用返回 (path, false)。真实进程合同由
 // `make companion-agent-integration`（CI integration job）承载；普通 race
 // 分片没有 Python 环境，此时测试跳过而非失败——跳过不削弱 CI 覆盖，
@@ -1123,7 +1123,7 @@ func crossLanguagePythonPath(t *testing.T, repositoryRoot string) (string, bool)
 	t.Helper()
 	python := os.Getenv("MORNLEA_COMPANION_AGENT_PYTHON")
 	if python == "" {
-		python = filepath.Join(repositoryRoot, "services", "companion-agent", ".venv", "bin", "python")
+		python = filepath.Join(repositoryRoot, "packages", "agent", "companion", ".venv", "bin", "python")
 	}
 	info, err := os.Stat(python)
 	if err != nil || !info.Mode().IsRegular() {

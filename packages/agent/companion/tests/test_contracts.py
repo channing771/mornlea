@@ -22,7 +22,7 @@ from mornlea_companion_agent.domain.mcp_v1 import (
     QueryTerrainSuccessResult,
 )
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 CONTRACT_ROOT = REPOSITORY_ROOT / "contracts/companion-agent"
 
 

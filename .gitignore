@@ -21,6 +21,8 @@
 
 # 仓库内隔离工作区
 /.worktrees/
+# Claude Code 在仓库内开辟的 worktree（同属隔离工作区，不入库）
+/.claude/worktrees/
 
 # GitNexus 本机索引
 /.gitnexus/

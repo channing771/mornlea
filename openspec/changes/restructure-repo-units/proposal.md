@@ -34,6 +34,7 @@
 ### Modified Capabilities
 
 - `repository-code-organization`：新增"packages 单元化布局""Go 模块边界双层强制""单元迁移保持测试入口与产物"三个 Requirement；把钉死 `internal/`、`cmd/`、`services/` 路径的既有 Requirement 系统性改写为 `packages/` 路径（含 `sim/tuning` 上提 shared 的语义调整），语义不变。
+- `project-identity`：Agent 服务 locked sync 场景的目录随 `services/companion-agent → packages/agent/companion` 更新，身份与命令不变。
 
 ## Impact
 

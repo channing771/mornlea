@@ -138,7 +138,7 @@ go run ./cmd/mornlea --connect 127.0.0.1:25565 --name 玩家甲
 
 ## 伙伴 Agent 服务
 
-`mornlea-companion-agent` 位于 `services/companion-agent`，使用 Python 3.12、LangChain/LangGraph、FastAPI 与 SQLite。Go 服务端仍唯一拥有世界、任务、FIFO、动作和最终计划校验；Python 服务只返回候选计划、台词以及 compact memory CAS 结果。两进程只通过 loopback Agent HTTP v1 与只读 MCP v1 互通。
+`mornlea-companion-agent` 位于 `packages/agent/companion`，使用 Python 3.12、LangChain/LangGraph、FastAPI 与 SQLite。Go 服务端仍唯一拥有世界、任务、FIFO、动作和最终计划校验；Python 服务只返回候选计划、台词以及 compact memory CAS 结果。两进程只通过 loopback Agent HTTP v1 与只读 MCP v1 互通。
 
 ```bash
 make companion-agent-check        # locked 安装与 Python 全量质量门禁

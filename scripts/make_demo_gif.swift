@@ -3,7 +3,7 @@ import ImageIO
 import UniformTypeIdentifiers
 import CoreGraphics
 
-let dir = "cmd/mornlea/capture/testdata/golden"
+let dir = "testdata/visual-golden/world"
 // 帧序按「世界 → 生存特性 → 界面」讲一遍当前能力：地形、树林、水下、方块光、工作台合成、伙伴。
 let names = [
     "terrain-noon", "oak-grove", "water-underwater",

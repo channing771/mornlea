@@ -37,8 +37,8 @@ dev = [
 packages = ["src/mornlea_companion_agent"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"../../contracts/companion-agent/mcp-v1/manifest.json" = "mornlea_companion_agent/_contracts/mcp-v1/manifest.json"
-"../../contracts/companion-agent/mcp-v1/schema.json" = "mornlea_companion_agent/_contracts/mcp-v1/schema.json"
+"../../../contracts/companion-agent/mcp-v1/manifest.json" = "mornlea_companion_agent/_contracts/mcp-v1/manifest.json"
+"../../../contracts/companion-agent/mcp-v1/schema.json" = "mornlea_companion_agent/_contracts/mcp-v1/schema.json"
 
 [tool.mypy]
 python_version = "3.12"
