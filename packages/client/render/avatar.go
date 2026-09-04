@@ -206,9 +206,27 @@ func appendHostileAvatarParts(dst []avatarPart, avatar Avatar) []avatarPart {
 	return dst
 }
 
+// passiveGrazeHeadPitch 是放牧低头位姿的牛头固定下压角（弧度）：牛面朝
+// +X（头部相对身体的偏移方向），侧轴即 Z 轴，负角把面朝从 +X 压向前下方
+// （约 −52°），吻部指向身前地面；取值是呈现侧的固定 pose 选择，不进任何
+// 线上契约，数值由放牧位姿测试按弧度锁定。
+const passiveGrazeHeadPitch = float32(-0.9)
+
+// PassiveGrazeHeadPitch 把放牧标志映射为牛头俯仰角：置位返回固定下压角，
+// 清位归零。位姿完全由权威镜像驱动，客户端不做任何推测或随机摆动；调用方
+// （呈现装配）只做直通，不在别处复制该角度。
+func PassiveGrazeHeadPitch(grazing bool) float32 {
+	if grazing {
+		return passiveGrazeHeadPitch
+	}
+	return 0
+}
+
 // appendPassiveAvatarParts 追加一头牛的 6 个 cuboid：横向躯干 + 4 短腿 +
 // 头部的四足体型，与夜行者直立骨架一眼可辨。身体锚定在站位 Y（脚底），
-// 俯仰不作用于牛身（被动呈现无俯仰量）。各面采样材质贴图而非纯色：头部
+// 俯仰只作用于牛头（`Avatar.Pitch` 由放牧位映射而来，复用既有的头部俯仰
+// 通道）：牛面朝 +X，俯仰绕侧轴 Z 把面朝压向前下方；`Pitch` 为零时旋转即
+// 单位阵，头部链与引入放牧位之前逐字节一致。各面采样材质贴图而非纯色：头部
 // 采牛头层，其余五部件采牛皮层；颜色通道被着色器忽略，填中性白。
 func appendPassiveAvatarParts(dst []avatarPart, avatar Avatar) []avatarPart {
 	root := mgl32.Translate3D(avatar.Position[0], avatar.Position[1], avatar.Position[2]).Mul4(
@@ -218,6 +236,7 @@ func appendPassiveAvatarParts(dst []avatarPart, avatar Avatar) []avatarPart {
 	hide := uint32(assets.LayerCowHide)
 	headLayer := uint32(assets.LayerCowHead)
 	head := root.Mul4(mgl32.Translate3D(0.7, 1.0, 0)).
+		Mul4(mgl32.HomogRotate3DZ(avatar.Pitch)).
 		Mul4(mgl32.Scale3D(0.45, 0.45, 0.45))
 	dst = append(dst,
 		avatarPart{transform: head, color: white, material: headLayer},

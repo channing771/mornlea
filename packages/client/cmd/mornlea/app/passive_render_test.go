@@ -64,19 +64,27 @@ func TestApplicationRendersPassivesWithoutNameTags(t *testing.T) {
 }
 
 // TestAppendPassiveRenderPresentationsIntoKeysPositions 锁定被动呈现到
-// avatar 记录的键与位姿映射：键为被动身份域，位置与朝向直通，俯仰归零。
+// avatar 记录的键与位姿映射：键为被动身份域，位置与朝向直通，俯仰由放牧位
+// 经呈现侧映射直通（放牧下压、常态归零），位姿完全由权威镜像驱动。
 func TestAppendPassiveRenderPresentationsIntoKeysPositions(t *testing.T) {
 	presentations := []client.PassivePresentation{
 		{ID: 5, Dimension: core.Overworld, Position: mgl32.Vec3{1, 2, 3}, Yaw: 0.5, Health: 8},
+		{ID: 6, Dimension: core.Overworld, Position: mgl32.Vec3{4, 5, 6}, Yaw: -0.5, Health: 8, Grazing: true},
 	}
 	avatars := AppendPassiveRenderPresentationsInto(nil, presentations)
-	if len(avatars) != 1 {
-		t.Fatalf("avatars=%d，想要 1", len(avatars))
+	if len(avatars) != 2 {
+		t.Fatalf("avatars=%d，想要 2", len(avatars))
 	}
 	if avatars[0].Key != render.PassiveEntityKey(5) {
 		t.Fatalf("avatar 键=%v，想要被动牛 ID 5 的键", avatars[0].Key)
 	}
 	if avatars[0].Position != presentations[0].Position || avatars[0].Yaw != 0.5 || avatars[0].Pitch != 0 {
 		t.Fatalf("avatar 位姿=%+v，想要位置与朝向直通、俯仰归零", avatars[0])
+	}
+	if avatars[1].Key != render.PassiveEntityKey(6) {
+		t.Fatalf("avatar 键=%v，想要被动牛 ID 6 的键", avatars[1].Key)
+	}
+	if avatars[1].Pitch != render.PassiveGrazeHeadPitch(true) {
+		t.Fatalf("放牧 avatar 俯仰=%v，想要呈现侧下压角 %v", avatars[1].Pitch, render.PassiveGrazeHeadPitch(true))
 	}
 }

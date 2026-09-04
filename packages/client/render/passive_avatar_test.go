@@ -96,6 +96,50 @@ func TestPassiveAvatarBodySamplesHideAndHead(t *testing.T) {
 	}
 }
 
+// TestPassiveGrazeHeadPitchMapsGrazingToFixedDownAngle 锁定放牧低头映射：
+// 放牧位置位返回固定的牛头下压弧度，清位归零；位姿完全由权威镜像驱动，
+// 客户端不做任何推测或随机摆动。
+func TestPassiveGrazeHeadPitchMapsGrazingToFixedDownAngle(t *testing.T) {
+	if got := PassiveGrazeHeadPitch(true); got != float32(-0.9) {
+		t.Fatalf("放牧俯仰=%v，想要固定的下压弧度 %v", got, float32(-0.9))
+	}
+	if got := PassiveGrazeHeadPitch(false); got != 0 {
+		t.Fatalf("常态俯仰=%v，想要归零", got)
+	}
+}
+
+// TestPassiveAvatarLowersHeadWhenGrazing 锁定低头几何：牛面朝 +X（头部相对
+// 身体的偏移方向），放牧俯仰绕侧轴（Z）把面朝压向地面——头部局部 +X 在世界
+// 里指向前下方；清位时头部恢复轴对齐，与引入放牧位之前的像素逐字节一致。
+func TestPassiveAvatarLowersHeadWhenGrazing(t *testing.T) {
+	position := mgl32.Vec3{4, 5, 6}
+	grazing := buildAvatarParts(nil, []Avatar{{
+		Key: PassiveEntityKey(7), Position: position, Pitch: PassiveGrazeHeadPitch(true),
+	}})
+	standing := buildAvatarParts(nil, []Avatar{{
+		Key: PassiveEntityKey(7), Position: position,
+	}})
+	assertAxisAligned(t, standing[0].transform)
+	facing := transformedDirection(grazing[0].transform, mgl32.Vec3{1, 0, 0})
+	// 期望是单位面朝 `(cos(−0.9), sin(−0.9), 0)` 经头部统一缩放 0.45 后的值：
+	// 方向提取（含缩放，不归一），缩放是头部几何的一部分，一并锁定。
+	want := mgl32.Vec3{0.2797, -0.3525, 0}
+	if !facing.ApproxEqualThreshold(want, 1e-4) {
+		t.Fatalf("放牧头面朝=%v，想要前下方的 %v", facing, want)
+	}
+	// 下压是头部原位的俯转：头部中心仍在身体前上方，面朝转入前下方。
+	center := func(parts []avatarPart) mgl32.Vec3 {
+		bounds := transformedUnitCubeBounds(parts[0].transform)
+		return bounds.min.Add(bounds.max.Sub(bounds.min).Mul(0.5))
+	}
+	if got, want := center(grazing), center(standing); !got.ApproxEqualThreshold(want, 1e-4) {
+		t.Fatalf("放牧头中心=%v，想要与常态一致的 %v", got, want)
+	}
+	if got, want := center(standing), position.Add(mgl32.Vec3{0.7, 1.0, 0}); !got.ApproxEqualThreshold(want, 1e-4) {
+		t.Fatalf("常态头中心=%v，想要身体前上方的 %v", got, want)
+	}
+}
+
 // TestAvatarSolidBranchesUseSentinelMaterial 锁定纯色分支的哨兵材质：玩家/
 // 伙伴/夜行者各部件传哨兵走原纯色路径，像素逐字节不变的新测试锁。
 func TestAvatarSolidBranchesUseSentinelMaterial(t *testing.T) {

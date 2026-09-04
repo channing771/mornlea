@@ -22,6 +22,14 @@ func passiveStateMessageOf(tick uint64, id uint64, position mgl32.Vec3, health u
 	}}}
 }
 
+// passiveGrazingStateMessageOf 构造携带放牧位的权威 state：放牧字节只取 0/1，
+// 与线上值域一致，非法值由镜像的 `Validate` 入口拒绝而非本夹具覆盖。
+func passiveGrazingStateMessageOf(tick uint64, id uint64, position mgl32.Vec3, health uint8, grazing uint8) network.PassiveState {
+	return network.PassiveState{ServerTick: tick, States: []network.PassiveStateRecord{{
+		ID: id, Position: position, Velocity: mgl32.Vec3{}, Yaw: 0.5, Health: health, Grazing: grazing,
+	}}}
+}
+
 func TestPassivesLatestWinsMirror(t *testing.T) {
 	passives := &Passives{}
 
@@ -158,6 +166,52 @@ func TestPassivesMirrorRejectsInvalidMessages(t *testing.T) {
 		if err := apply(); err == nil {
 			t.Fatalf("%s 非法消息被接受", name)
 		}
+	}
+}
+
+// TestPassivesMirrorCarriesGrazingFlag 锁定放牧位的 latest-wins 镜像：权威
+// state 的放牧字节经镜像直达呈现（置位即低头呈现的唯一事实来源），与生命值
+// 共用同一套新旧语义——过期 tick 与未知 ID 不改既有值，新 tick 清位即恢复；
+// 出生批次不带瞬态，新身体默认非放牧。
+func TestPassivesMirrorCarriesGrazingFlag(t *testing.T) {
+	passives := &Passives{}
+	position := mgl32.Vec3{1, 2, 3}
+	if err := passives.ApplySpawn(passiveSpawnMessageOf(100, 7, position, 9)); err != nil {
+		t.Fatalf("ApplySpawn: %v", err)
+	}
+	if presentations := passives.AppendPresentations(nil); presentations[0].Grazing {
+		t.Fatalf("出生后放牧位=%v，想要默认非放牧", presentations[0].Grazing)
+	}
+
+	if err := passives.ApplyStates(passiveGrazingStateMessageOf(101, 7, position, 9, 1)); err != nil {
+		t.Fatalf("置位 ApplyStates: %v", err)
+	}
+	if presentations := passives.AppendPresentations(nil); !presentations[0].Grazing {
+		t.Fatalf("置位后放牧位=%v，想要 true", presentations[0].Grazing)
+	}
+
+	// 过期 tick 的清位丢弃：镜像保持置位。
+	if err := passives.ApplyStates(passiveGrazingStateMessageOf(100, 7, position, 9, 0)); err != nil {
+		t.Fatalf("过期 ApplyStates: %v", err)
+	}
+	if presentations := passives.AppendPresentations(nil); !presentations[0].Grazing {
+		t.Fatalf("过期清位后放牧位=%v，想要仍为 true", presentations[0].Grazing)
+	}
+
+	// 新 tick 清位恢复常态。
+	if err := passives.ApplyStates(passiveGrazingStateMessageOf(102, 7, position, 9, 0)); err != nil {
+		t.Fatalf("清位 ApplyStates: %v", err)
+	}
+	if presentations := passives.AppendPresentations(nil); presentations[0].Grazing {
+		t.Fatalf("清位后放牧位=%v，想要 false", presentations[0].Grazing)
+	}
+
+	// 未知 ID 的置位丢弃且不隐式造实体。
+	if err := passives.ApplyStates(passiveGrazingStateMessageOf(103, 8, position, 9, 1)); err != nil {
+		t.Fatalf("未知 ID ApplyStates: %v", err)
+	}
+	if got := len(passives.AppendPresentations(nil)); got != 1 {
+		t.Fatalf("未知 ID 置位后镜像=%d，想要仍为 1", got)
 	}
 }
 
