@@ -121,6 +121,8 @@ type Application struct {
 	companionPresentations []client.CompanionPresentation
 	remoteAvatars          []render.Avatar
 	hostilePresentations   []client.HostilePresentation
+	passives               *client.Passives
+	passivePresentations   []client.PassivePresentation
 	remoteNameTags         []render.NameTag
 	nameTagRenderer        *render.NameTagRenderer
 	hotbarRenderer         *hud.HotbarRenderer

@@ -51,7 +51,7 @@ func buildItemDropParts(dst []avatarPart, serverTick uint64, drops []ItemDrop) [
 		transform := mgl32.Translate3D(center.X(), center.Y(), center.Z()).
 			Mul4(mgl32.HomogRotate3DY(phase.spin)).
 			Mul4(mgl32.Scale3D(dropCubeSize, dropCubeSize, dropCubeSize))
-		dst = append(dst, avatarPart{transform: transform, color: color})
+		dst = append(dst, avatarPart{transform: transform, color: color, material: avatarMaterialSolid})
 	}
 	return dst
 }

@@ -10,7 +10,7 @@ import (
 )
 
 // TestAvatarCapacityAcceptsSeventyFiveBodies 锁定 75 体/450 实例的帧容量：
-// 恰好 75 具身体必须全部编码（450 个 80-byte instance），上传缓冲的字节
+// 恰好 75 具身体必须全部编码（450 个 96-byte instance），上传缓冲的字节
 // 布局与 Rust 侧 `AVATAR_MAX_INSTANCES` 同源同步。
 func TestAvatarCapacityAcceptsSeventyFiveBodies(t *testing.T) {
 	avatars := makeTestAvatars(maxAvatars)
@@ -21,8 +21,8 @@ func TestAvatarCapacityAcceptsSeventyFiveBodies(t *testing.T) {
 	if got, want := len(parts), 450; got != want {
 		t.Fatalf("parts=%d want=%d", got, want)
 	}
-	if got := len(parts) * avatarInstanceBytes; got != 36000 {
-		t.Fatalf("实例流=%d bytes，想要 450×80=36000", got)
+	if got := len(parts) * avatarInstanceBytes; got != 43200 {
+		t.Fatalf("实例流=%d bytes，想要 450×96=43200", got)
 	}
 	if got := avatarInstanceSize; got != 450*avatarInstanceBytes {
 		t.Fatalf("avatarInstanceSize=%d，想要 450 实例的字节数", got)

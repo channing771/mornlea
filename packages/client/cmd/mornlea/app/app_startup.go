@@ -300,6 +300,7 @@ func NewWithDependencies(
 		remotePlayers:   client.NewRemotePlayers(),
 		companions:      &client.Companions{},
 		hostiles:        &client.Hostiles{},
+		passives:        &client.Passives{},
 		chatEvents:      &client.ChatEvents{},
 		remoteNameTags:  make([]render.NameTag, 0, MaxFrameNameTags),
 		camera:          camera,
