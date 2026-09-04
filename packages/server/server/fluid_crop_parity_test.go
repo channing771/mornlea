@@ -82,8 +82,13 @@ const (
 	floodCropParityAlignTicks = 256
 )
 
-// floodCropGenerator 生成 y=0 一层草地的世界，并在区块 (3,0) 内种下
-// 「耕地 + 成熟小麦 + 悬空水源」。其余区块就是纯草地。
+// floodCropGenerator 生成 y=0 一层泥土的世界，并在区块 (3,0) 内种下
+// 「耕地 + 成熟小麦 + 悬空水源」。其余区块就是纯泥土。
+//
+// 地表刻意用泥土而不用草（耕地/小麦/水源夹具不动）：被动牛只在草上出生/
+// 吃草，而两侧录像的绝对 tick 窗口本就不同，吃草写入会顶掉所在区块的
+// revision，使其后同区块水流条目的 revision 区间错位；地表材质对水流冲毁
+// 语义不可见。parity 世界按契约保持无背景生物写入。
 type floodCropGenerator struct{}
 
 // GenerateChunk 实现 Generator。
@@ -91,7 +96,7 @@ func (floodCropGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
 	chunk := world.NewChunk(position)
 	for x := range core.SectionSize {
 		for z := range core.SectionSize {
-			chunk.SetBlock(x, 0, z, core.GrassID)
+			chunk.SetBlock(x, 0, z, core.DirtID)
 		}
 	}
 	if position == floodCropCell.Chunk() {
