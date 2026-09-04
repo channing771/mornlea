@@ -134,7 +134,7 @@ func TestCattleProceduralFallbackPixels(t *testing.T) {
 	}
 }
 
-// distinctRGBCount 返回像素中不透明像素的不同 RGB 种数，用于断言程序化
+// `distinctRGBCount` 返回像素中不透明像素的不同 RGB 种数，用于断言程序化
 // 纹理非纯色（透明像素不计，避免镂空图标的背景稀释计数）。
 func distinctRGBCount(px []byte) int {
 	seen := make(map[[3]byte]struct{})
@@ -147,7 +147,7 @@ func distinctRGBCount(px []byte) int {
 	return len(seen)
 }
 
-// opaqueAverage 返回一层材质不透明像素的平均 RGB，用于比较色相。
+// `opaqueAverage` 返回一层材质不透明像素的平均 RGB，用于比较色相。
 func opaqueAverage(px []byte) [3]int {
 	var sum [3]int
 	count := 0

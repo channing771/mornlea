@@ -15,7 +15,7 @@ import (
 // 拒绝语义；v32 在 Play S→C 尾部追加
 // ID 25 的 10-byte 私有 `CombatHit`（`ServerTick` u64 + `Damage` u8 +
 // `TargetKind` u8，little-endian，固定 10 字节，要求 tick>0、damage 1..20、
-// kind 仅 player/hostile，拒绝截断、尾随、unknown kind、wrong state 及 ID 26）；
+// kind 仅 `CombatTargetPlayer`/`CombatTargetHostile`/`CombatTargetPassive`，拒绝截断、尾随、unknown kind、wrong state 及 ID 26）；
 // v31 在 `PlayerState` 尾部追加 `DayPhaseOffset` 显示相位偏移（u16，0..23999，
 // 紧跟 `SaturationZero` 之后、`WorldTimeTicks` 之前，越界拒绝）；v30 新增 Play S→C
 // ID 22/23/24 三类夜行者消息 `HostileSpawn`/`HostileState`/`HostileDespawn`（每类
