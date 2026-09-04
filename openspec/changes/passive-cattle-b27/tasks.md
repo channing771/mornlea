@@ -8,6 +8,8 @@
 - [ ] 2.1 `passiveSet` 定容升序集 + ID 派生 + 32/6 上限 + 昼间草地生成判定（`packages/server/sim/entity`；验证 `go test ./packages/server/sim/entity -race -count=1`）
 - [ ] 2.2 漫游/受击逃跑/死亡掉 1 生牛肉环形尝试（同包；验证同 2.1）
 - [ ] 2.3 `audit allowed` 被动边登记（`packages/audit`；验证 `go test ./packages/audit -count=1`）
+- [ ] 2.4 runtime tick 接线：在 `Engine` 固定阶段顺序中调用被动推进（含生成→移动→死亡结算的时序位置），阶段间顺序与 hostile 侧一致（`packages/server/sim/runtime`；验证 `go test ./packages/server/sim/runtime -race -count=1`）
+- [ ] 2.5 玩家近战命中被动牛接线：近战候选冻结与统一结算覆盖被动牛受害者，经 `DamagePassive` 结算伤害并触发逃跑；目标种类扩展只做 append-only（`packages/server/sim/entity` + `packages/shared/core` 如需；验证 `go test ./packages/server/sim/entity -race -count=1` 与受影响 core 测试）
 
 ## 3. 被动存档域
 
