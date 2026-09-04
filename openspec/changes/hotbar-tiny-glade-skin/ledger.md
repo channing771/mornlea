@@ -28,3 +28,17 @@
 - Ruling: 非阻塞建议一处 — `--hud-select-inset` 令牌与注释（仍写
   sage 内衬）已无 hud.css 消费成孤儿 — 留待后续任务与 `SELECT_INSET`
   常量一并评估退役，不阻塞本 Task。Task 1 关闭。
+
+### Task 2：视觉基线与收尾门禁
+
+- 基线：`make frontend-visual-update` 重拍 19 张，4 张变化
+  （`hud-hotbar` 必变 + `hud-status`/`hud-popup-crosshair`/`hud-chat`
+  共用 Hotbar 受扰），其余 15 张逐字节不变，无预期外漂移。
+- Ruling: 控制会话人工目检（放大两倍）通过 — 九格粉彩底色各异、
+  深色描边、圆角、选中橙框均对；数量字小系沿用 14px 令牌（语义未动）、
+  空槽线稿淡系淡印衬底本意、生命空心暗系既有行为 — 均接受，不返工。
+- 提交 `ffd27b4e`（ledger + 4 张 golden）。
+- 门禁证据 @ `ffd27b4e`：`make frontend-check` 全绿（8 文件 170/170、
+  dist 一致）；`make frontend-visual-check` 19/19 零差异；`gofmt`
+  干净（本 change 无 Go 改动，空跑见证）；`openspec validate --all
+  --strict --no-interactive` 88/88。Task 2 关闭，change 就绪。
