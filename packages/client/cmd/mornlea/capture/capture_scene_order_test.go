@@ -29,12 +29,12 @@ func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 		"workbench-crafting", "chest-container", "furnace-container",
 		"debug-panel", "skylight-tunnel", "block-light-room", "torch-night", "bed-night",
 		"materials-showcase",
-		"target-block-feedback", "oak-grove", "ai-companion", "sword-combat",
+		"target-block-feedback", "grass-closeup", "oak-grove", "ai-companion", "sword-combat",
 		"hostile-mob", "water-surface-slope", "mining-crack-early", "mining-crack-heavy",
 		"main-menu", "settings-menu", "far-horizon", "water-underwater",
 	}
-	if len(captureScenes) != 24 {
-		t.Fatalf("正式场景数=%d，想要 24", len(captureScenes))
+	if len(captureScenes) != 25 {
+		t.Fatalf("正式场景数=%d，想要 25", len(captureScenes))
 	}
 	gotNames := make([]string, len(captureScenes))
 	for index, scene := range captureScenes {

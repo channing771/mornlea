@@ -3,8 +3,8 @@ package capture
 // capture_oak_grove_grass_test.go：自然短草视觉 provenance 的钉死回归。规格
 // delta visual-verification 要求 oak-grove 的固定夹具包含至少一株在相机中
 // 可辨识的短草，且必须经既有四 quad alpha-cutout 植物路径呈现（透明边缘与
-// 交叉轮廓，而不是实心立方体或不透明矩形）。正式场景清单在 HUD 三场景退役
-// 与 mining-crack 对加入后恰好 24 项（完整冻结顺序由
+// 交叉轮廓，而不是实心立方体或不透明矩形）。正式场景清单在 HUD 三场景退役、
+// mining-crack 对与 `grass-closeup` 加入后恰好 25 项（完整冻结顺序由
 // capture_scene_order_test.go 承担）、既有双阈值与无窗口链路同样是本变更不得
 // 放宽的门禁，这里一并钉住。
 
@@ -219,7 +219,11 @@ func TestOakGroveSceneShowsIdentifiableNaturalShortGrass(t *testing.T) {
 		stats := candidates[index]
 		area := stats.rect.Dx() * stats.rect.Dy()
 		topBand := stats.rect.Dy() / 4
-		if stats.diff < 8 || stats.diff*10 >= area*9 {
+		// 可见量门槛按实测足迹取 150px：夹具中最清晰一株的差分实测为 193px，
+		// 150px 留出约两成渲染抖动余量，同时把「画面里真实可见的一株植物」
+		// 与个位数像素的噪声存在性区分开；`area` 侧的 90% 上限守住另一端，
+		// 防止把不透明矩形误判为 cutout 植物。
+		if stats.diff < 150 || stats.diff*10 >= area*9 {
 			continue
 		}
 		if topBand > 0 && stats.topDiff*10 > topBand*stats.rect.Dx() {
@@ -235,19 +239,20 @@ func TestOakGroveSceneShowsIdentifiableNaturalShortGrass(t *testing.T) {
 		for _, stats := range candidates {
 			t.Logf("候选格矩形=%v 差分=%d 顶带=%d 底带=%d", stats.rect, stats.diff, stats.topDiff, stats.bottomDiff)
 		}
-		t.Fatalf("画面内 %d 个短草格没有一个满足可辨识判据（可见 ≥8px、非不透明矩形、上缘透空、贴地叶片）",
+		t.Fatalf("画面内 %d 个短草格没有一个满足可辨识判据（可见 ≥150px、非不透明矩形、上缘透空、贴地叶片）",
 			len(candidates))
 	}
 	t.Logf("可辨识短草格：%v 差分=%d 顶带=%d 底带=%d", identifiable.rect, identifiable.diff,
 		identifiable.topDiff, identifiable.bottomDiff)
 }
 
-// TestCaptureOfficialSceneListStaysAtTwentyFour 钉住正式场景清单在 HUD 三场景
-// 退役与 mining-crack 对加入后恰好 24 项；自然短草不得为它新增第 25 个正式
-// 场景，完整数量与冻结顺序断言由 capture_scene_order_test.go 的清单守卫承担。
-func TestCaptureOfficialSceneListStaysAtTwentyFour(t *testing.T) {
-	if len(captureScenes) != 24 {
-		t.Fatalf("正式 capture 场景数=%d，想要恰好 24", len(captureScenes))
+// TestCaptureOfficialSceneListStaysAtTwentyFive 钉住正式场景清单在 HUD 三场景
+// 退役、mining-crack 对与 `grass-closeup` 加入后恰好 25 项；`grass-closeup`
+// 是短草近景验收场景，完整数量与冻结顺序断言由 capture_scene_order_test.go
+// 的清单守卫承担。
+func TestCaptureOfficialSceneListStaysAtTwentyFive(t *testing.T) {
+	if len(captureScenes) != 25 {
+		t.Fatalf("正式 capture 场景数=%d，想要恰好 25", len(captureScenes))
 	}
 }
 
