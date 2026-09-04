@@ -132,8 +132,10 @@ func TestPassiveMovementReusesPlayerPhysicsStep(t *testing.T) {
 }
 
 func TestPassiveWanderStaysWithinHomeNeighborhood(t *testing.T) {
-	engine, _ := readyMovementPlayer(t)
+	engine, session := readyMovementPlayer(t)
 	loadFlatChunks(t, engine.dimension(core.Overworld), -2, 2, -2, 2)
+	// 闲时看人会让 6 格内的牛原地看人：把玩家摆到 6 格外，漫游才不受干扰。
+	placeSessionPlayer(engine, session, mgl32.Vec3{30.5, 1, 30.5})
 	mob := validTestPassive(12)
 	mob.State = physics.State{Position: mgl32.Vec3{2.5, 1, 2.5}, OnGround: true}
 	if err := engine.RestorePassive(mob); err != nil {

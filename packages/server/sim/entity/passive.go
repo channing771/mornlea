@@ -19,6 +19,13 @@ const (
 	maxPassives = 32
 	// passiveFleeDurationTicks 是单次受击后逃跑的固定时长（`tick`）。
 	passiveFleeDurationTicks uint8 = 60
+	// passiveIdleLookRadius 是闲时看人的水平半径（格）：同维最近 `active`
+	// 玩家进入此半径内（含边界）且逃跑/吃草/引诱均未生效时，牛原地转向该
+	// 玩家；离开半径即恢复漫游朝向派生。
+	passiveIdleLookRadius = 6
+	// passiveIdleLookMaxTurn 是闲时转向每 `tick` 的有界转向角（弧度）：不瞬
+	// 移，多拍收敛。
+	passiveIdleLookMaxTurn = float32(0.2)
 )
 
 // passiveState 是一头被动牛的权威身体事实。字段面与夜行者侧对齐但类型独立：
@@ -267,12 +274,14 @@ func (engine *engineContext) advancePassiveMovement() {
 	}
 }
 
-// passiveStepInput 决定单个个体本 `tick` 的控制意图，优先级逃跑＞引诱＞漫
-// 游：逃跑剩余时长内沿远离伤害来源方向前进（与夜行者追击同款的世界轴到朝向
-// 折算）；吃草事件中只给中性输入（事件个体的位移已由 `advancePassiveMovement`
-// 冻结，这里是输入层的防御性表态，防未来调用方绕过冻结直调本函数）；否则有
-// 引诱目标就转向目标、无目标才以世界种子、`tick` 与 `id` 确定性派生的朝向漫
-// 游。全部输入为纯函数派生，不读全局随机数、不遍历 `map`。
+// passiveStepInput 决定单个个体本 `tick` 的控制意图，优先级逃跑＞引诱＞闲
+// 时看人＞漫游：逃跑剩余时长内沿远离伤害来源方向前进（与夜行者追击同款的
+// 世界轴到朝向折算）；吃草事件中只给中性输入（事件个体的位移已由
+// `advancePassiveMovement` 冻结，这里是输入层的防御性表态，防未来调用方绕
+// 过冻结直调本函数）；否则有引诱目标就转向目标、无目标但有 6 格内闲时目标
+// 就原地转向看人（位置速度不动，多拍有界收敛）、两者皆无才以世界种子、
+// `tick` 与 `id` 确定性派生的朝向漫游。全部输入为纯函数派生，不读全局随机
+// 数、不遍历 `map`。
 func (engine *engineContext) passiveStepInput(entry *passiveState) physics.Input {
 	if entry.fleeTicks > 0 {
 		entry.fleeTicks--
@@ -298,10 +307,59 @@ func (engine *engineContext) passiveStepInput(entry *passiveState) physics.Input
 		}
 		return physics.Input{Yaw: entry.yaw}
 	}
+	if target, ok := engine.passiveIdleLookTarget(entry); ok {
+		dx := target.X() - entry.state.Position.X()
+		dz := target.Z() - entry.state.Position.Z()
+		if dx != 0 || dz != 0 {
+			want := normalizeYaw(float32(math.Atan2(float64(-dx), float64(-dz))))
+			entry.yaw = turnYawToward(entry.yaw, want, passiveIdleLookMaxTurn)
+		}
+		return physics.Input{Yaw: entry.yaw}
+	}
 	base := splitmix64(uint64(engine.seed) ^ engine.tick.Load() ^ entry.id)
 	yaw := normalizeYaw(float32(base&0xFFFFFF) * (2 * math.Pi / 0x1000000))
 	entry.yaw = yaw
 	return physics.Input{MoveZ: 1, Yaw: yaw}
+}
+
+// passiveIdleLookTarget 在同维 `active` 玩家中找 6 格内的最近者（水平平方域
+// 比较，等距并列取会话 `id` 更小者），返回其身体位置。逃跑/吃草/引诱生效时
+// 调用方不走到这里，本规则天然让路。
+func (engine *engineContext) passiveIdleLookTarget(entry *passiveState) (mgl32.Vec3, bool) {
+	radiusSq := float32(passiveIdleLookRadius) * float32(passiveIdleLookRadius)
+	var best mgl32.Vec3
+	bestSq := radiusSq
+	found := false
+	for _, id := range engine.sortedActiveSessions() {
+		session := engine.sessions[id]
+		if session == nil || session.player == nil || session.dimension != entry.dimension {
+			continue
+		}
+		distSq := horizontalDistanceSq(session.player.state.Position, entry.state.Position)
+		if distSq > radiusSq {
+			continue
+		}
+		if found && distSq >= bestSq {
+			continue
+		}
+		bestSq = distSq
+		best = session.player.state.Position
+		found = true
+	}
+	return best, found
+}
+
+// turnYawToward 把当前朝向按最短弧向目标朝向推进一个有界步长：步内可达即
+// 直接落位，不瞬移、不绕远。
+func turnYawToward(current, want, maxStep float32) float32 {
+	delta := normalizeYaw(want - current)
+	if delta > maxStep {
+		return normalizeYaw(current + maxStep)
+	}
+	if delta < -maxStep {
+		return normalizeYaw(current - maxStep)
+	}
+	return want
 }
 
 // outsideHomeNeighborhood 报告位置是否已离开出生区块邻域：邻域是出生区块外

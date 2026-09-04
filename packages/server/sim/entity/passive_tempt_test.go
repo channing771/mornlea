@@ -164,10 +164,12 @@ func TestPassiveTemptSwitchAwayResumesWander(t *testing.T) {
 	if _, ok := engine.passiveTemptTarget(entry); !ok {
 		t.Fatal("对照失效：持麦时未命中目标")
 	}
-	// 切走小麦：目标清空，输入回到确定性漫游派生。
+	// 切走小麦：目标清空；玩家同时退到 6 格外（闲时看人够不着），输入回到
+	// 确定性漫游派生。
 	player := engine.sessions[session].player
 	player.inventory.Hotbar.Slots[1] = core.ItemStack{Item: core.ItemDirt, Count: 1}
 	player.inventory.Hotbar.Selected = 1
+	placeSessionPlayer(engine, session, mgl32.Vec3{10.5, 1, 2.5})
 	if _, ok := engine.passiveTemptTarget(entry); ok {
 		t.Fatal("切走小麦后仍命中目标，想要下一 tick 恢复漫游")
 	}
