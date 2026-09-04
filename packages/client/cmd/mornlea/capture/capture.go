@@ -533,6 +533,17 @@ var captureScenes = []captureScene{
 		},
 	},
 	{
+		// grass-closeup 是短草的无窗口近景 capture 场景：空气邻域基线上的
+		// 一条草地支撑条，条上 3 列手工短草（短草正下方必是草地，与世界
+		// 生成的不变式一致）。固定正午、固定近景机位，短草交叉面片的像素
+		// 覆盖由 golden 双阈值兜底。排序：紧随 target-block-feedback、
+		// 先于 oak-grove。
+		Name:         "grass-closeup",
+		WarmupFrames: 8,
+		Prepare:      prepareGrassCloseup,
+		Apply:        applyGrassCloseupCaptureState,
+	},
+	{
 		Name:         "oak-grove",
 		WarmupFrames: 8,
 		Prepare:      prepareOakGrove,
