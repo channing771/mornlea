@@ -175,21 +175,21 @@ harness 引用。基线 PNG 内容 MUST 逐字节不变，capture 子包 MUST NO
 ### Requirement: 存储世界按域拆分子包
 
 仓库 MUST 将 `packages/server/storage` 组织为编排根包加
-`storagedef`、`region`、`chunk`、`player`、`companion`、`hostile` 六个
+`storagedef`、`region`、`chunk`、`player`、`companion`、`hostile`、`passive` 七个
 子包。根包 MUST 保留 `Store`/`WorldStore` 等接口与 disk/memory/world_files/
 backup/metadata/chunk_keys 编排；`storagedef` MUST 只承载
 `ErrCorrupt`/`ErrFutureVersion` 跨域哨兵；`region` MUST 承载 region 格式
 原语（superblock/bank 编解码、扇区空间分配）与 `RegionKey`/`RegionFor`；
 `chunk` MUST 承载 chunk 信封编解码、迁移、chunk 值类型与 region 记录层
 容器（现 `*region` 及其读写、压缩、崩溃恢复）；`player`/`companion`/
-`hostile` MUST 各自承载对应实体的 codec、迁移、类型、域测试与版本化
+`hostile`/`passive` MUST 各自承载对应实体的 codec、迁移、类型、域测试与版本化
 bin fixture。
 
 #### Scenario: 依赖图接受存储子包布局并拒绝反向边
 
-- **GIVEN** 仓库包含 `packages/server/storage` 的全部六个子包
+- **GIVEN** 仓库包含 `packages/server/storage` 的全部七个子包
 - **WHEN** 架构依赖检查枚举全部内部包
-- **THEN** MUST 接受根包到 storagedef 叶子与五个域子包的依赖边
+- **THEN** MUST 接受根包到 storagedef 叶子与六个域子包的依赖边
 - **AND** MUST 接受 chunk → region、实体域 → storagedef、region → storagedef
   等已登记的消费边
 - **AND** MUST 拒绝任何子包指向根包的反向依赖与子包之间未登记的相互依赖
@@ -210,9 +210,9 @@ bin fixture。
 ### Requirement: 存储子包依赖方向单向
 
 存储子包的依赖方向 MUST 单向且由架构依赖检查登记：根包 →
-region/chunk/player/companion/hostile 五个域子包与 storagedef 叶子（经错误
+region/chunk/player/companion/hostile/passive 六个域子包与 storagedef 叶子（经错误
 别名消费哨兵）；chunk → {region, storagedef, shared/core, shared/world}；
-player/companion/hostile → {storagedef, shared/core, shared/world}；
+player/companion/hostile/passive → {storagedef, shared/core, shared/world}；
 region → {storagedef, shared/core}。companion 存储域 MUST 经既有
 `shared/companion` 边访问伙伴领域类型，不得新增其他子包间依赖。
 
@@ -265,7 +265,7 @@ MUST NOT 视为消费方改动。拆分 MUST NOT 改变 schema 号、迁移表�
 
 ### Requirement: 存储分包保持测试入口集合
 
-拆分 MUST 保持全部既有测试入口可寻址：六个包 `go test -list` 入口并集 MUST
+拆分 MUST 保持全部既有测试入口可寻址：七个包 `go test -list` 入口并集 MUST
 等于拆分前 `packages/server/storage` 单包集合，测试函数名与 `t.Run` 标签
 逐一不变。拆分后 MUST 能对单个域包定点运行测试而不编译执行其他域的测试。
 

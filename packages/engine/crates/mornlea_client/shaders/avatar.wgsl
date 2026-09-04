@@ -8,9 +8,9 @@ struct AvatarInstance {
     transform: mat4x4f,
     color:     vec4f,
     // material 是实例的材质层号：哨兵 0xFFFFFFFFu 走原纯色路径，
-    // 其余值是方块 atlas 的层号（牛皮/牛头）。_pad0..2 承接实例尾部
-    // 12 字节保留零填充（WGSL 的 vec3f 对齐为 16，三个 u32 垫出 96 字节
-    // 步长，与 Go `avatarInstanceBytes` 一致）。
+    // 其余值是方块 atlas 的层号（牛皮/牛头）。_pad0..2 是实例尾部
+    // 12 字节保留填充（编码侧恒写零）：实例用作 storage 数组元素时
+    // 步长须为 16 的倍数，96 字节步长与 Go `avatarInstanceBytes` 一致。
     material: u32,
     _pad0: u32,
     _pad1: u32,
