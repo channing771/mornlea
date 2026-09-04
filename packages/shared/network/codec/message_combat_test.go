@@ -75,7 +75,7 @@ func TestCombatHitValidateRejectsInvalidValues(t *testing.T) {
 		{ServerTick: 1, Damage: 0, TargetKind: core.CombatTargetHostile},
 		{ServerTick: 1, Damage: 21, TargetKind: core.CombatTargetHostile},
 		{ServerTick: 1, Damage: 6, TargetKind: core.CombatTargetKind(0)},
-		{ServerTick: 1, Damage: 6, TargetKind: core.CombatTargetKind(3)},
+		{ServerTick: 1, Damage: 6, TargetKind: core.CombatTargetKind(4)},
 	}
 	for _, hit := range invalid {
 		if err := hit.Validate(); err == nil {
@@ -125,7 +125,7 @@ func TestCombatHitDecodeRejectsInvalidWire(t *testing.T) {
 		{"damage 0", func(p []byte) { p[8] = 0 }},
 		{"damage 21", func(p []byte) { p[8] = 21 }},
 		{"kind 0", func(p []byte) { p[9] = 0 }},
-		{"kind 3", func(p []byte) { p[9] = 3 }},
+		{"kind 4", func(p []byte) { p[9] = 4 }},
 	}
 	for _, m := range mutations {
 		t.Run(m.name, func(t *testing.T) {
