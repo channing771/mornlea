@@ -111,6 +111,39 @@ func TestItemDropColorCoversRegisteredNonPlaceableItems(t *testing.T) {
 	}
 }
 
+func TestBeefItemColorsAreReddishBrownAndDistinct(t *testing.T) {
+	raw := ItemColor(core.ItemRawBeef)
+	cooked := ItemColor(core.ItemCookedBeef)
+	for _, pair := range []struct {
+		name  string
+		item  core.ItemID
+		color [4]float32
+	}{
+		{"生牛肉", core.ItemRawBeef, raw},
+		{"熟牛肉", core.ItemCookedBeef, cooked},
+	} {
+		if pair.color == ([4]float32{}) {
+			t.Fatalf("%s物品 %d 颜色为零值", pair.name, pair.item)
+		}
+		if pair.color[3] != 1 {
+			t.Fatalf("%s物品 %d alpha=%v，想要 1", pair.name, pair.item, pair.color[3])
+		}
+		if _, ok := itemDropColor(pair.item); !ok {
+			t.Fatalf("%s物品 %d 掉落不可见", pair.name, pair.item)
+		}
+	}
+	if raw == cooked {
+		t.Fatalf("生熟牛肉颜色相同 %v：两者必须可辨", raw)
+	}
+	if raw[0] < raw[2]+40.0/255 {
+		t.Fatalf("生牛肉颜色 R=%v B=%v，想要偏红（R-B>=40/255）", raw[0], raw[2])
+	}
+	if cooked[0]-cooked[2] >= raw[0]-raw[2] {
+		t.Fatalf("熟牛肉 R-B=%v 未低于生牛肉 R-B=%v：熟肉应偏棕",
+			cooked[0]-cooked[2], raw[0]-raw[2])
+	}
+}
+
 func TestSwordItemColorsAreVisibleAndDistinct(t *testing.T) {
 	swords := []core.ItemID{
 		core.ItemWoodenSword, core.ItemStoneSword, core.ItemIronSword,
