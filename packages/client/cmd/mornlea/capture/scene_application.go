@@ -84,6 +84,11 @@ type SceneApplication interface {
 	// 被动牛镜像：capture 场景经与权威消息相同的 Apply 入口注入夹具牛群，
 	// 公共清理经 Reset 恢复；未装配时为 nil，调用方需先判空。
 	Passives() *client.Passives
+	// SetCaptureBlock 是 GIF 剧本专用的单格写块口（capture-only）：只允许
+	// 切换剧本触发格一格（如 graze 结算帧的草→泥），经与线上相同的镜像
+	// Apply 入口落地并标记 dirty；生产代码不得消费本方法（依赖方向门禁与调
+	// 用点审计共同守卫，见 GIF 剧本的单格测试）。
+	SetCaptureBlock(position core.BlockPos, block core.BlockID) error
 	ItemDropInstances() []render.ItemDrop
 	SetItemDropInstances(instances []render.ItemDrop)
 	SetChatEventBuffer(buffer [client.ChatEventCapacity]network.ChatEvent)

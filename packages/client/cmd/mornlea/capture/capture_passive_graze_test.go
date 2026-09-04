@@ -5,9 +5,9 @@ package capture
 // 镜像装入 2 头牛（ID 升序：1 头放牧置位低头 + 1 头常态对照，放牧位经与权威
 // 消息相同的 spawn→state 两批入口注入），世界夹具是整片草地里的一格泥土
 // （吃草结算的前后对照）；被动牛只进实体通道、不产生名称标签；低头牛的
-// avatar 俯仰恰为呈现侧下压角，常态牛归零；场景留下的牛必须在后续场景的公共
-// 清理中被一并恢复。本场景不含掉落物与任何随机器速度变化的读数，因此无需
-// PinVolatile。
+// avatar 俯仰恰为呈现侧下压角，常态牛为钉死 tick 的闲时点头相位；场景留下的
+// 牛必须在后续场景的公共清理中被一并恢复。本场景不含掉落物；常态牛的点头相
+// 位经 PinVolatile 钉死为常量。
 
 import (
 	"slices"
@@ -40,10 +40,10 @@ func TestPassiveGrazeCaptureScenePosition(t *testing.T) {
 	if scene.Prepare == nil || scene.Apply == nil || scene.WarmupFrames != 8 {
 		t.Fatalf("passive-graze 场景不完整: %+v", scene)
 	}
-	// 本场景不含掉落物与任何随机器速度变化的读数：位姿在 Apply 里经镜像钉死，
-	// 收敛帧内不再 drain，无需 PinVolatile 即可确定。
-	if scene.PinVolatile != nil {
-		t.Fatalf("passive-graze 不该有 PinVolatile：场景无易变读数")
+	// 常态牛的闲时点头相位随权威 tick 变化（随机器速度漂移），必须经
+	// PinVolatile 钉死为常量后才可比对。
+	if scene.PinVolatile == nil {
+		t.Fatal("passive-graze 缺少 PinVolatile：闲时点头相位必须钉死")
 	}
 	if indexOf("passive-graze") != indexOf("passive-herd")+1 {
 		t.Fatalf("passive-graze=%d 必须紧随 passive-herd=%d",
@@ -168,7 +168,7 @@ func TestCapturePassiveGrazeFixtureIsDeterministicAndTagFree(t *testing.T) {
 	avatars = application.AppendHostileRenderPresentationsInto(
 		avatars, app.Hostiles().AppendPresentations(nil),
 	)
-	avatars = application.AppendPassiveRenderPresentationsInto(avatars, presentations, 2)
+	avatars = application.AppendPassiveRenderPresentationsInto(avatars, presentations, capturePassiveGrazeServerTick)
 	if len(tags) != 0 {
 		t.Fatalf("passive-graze 场景产生了名称标签: %+v", tags)
 	}
@@ -179,13 +179,21 @@ func TestCapturePassiveGrazeFixtureIsDeterministicAndTagFree(t *testing.T) {
 		if avatar.Key.Kind != render.EntityPassive {
 			t.Fatalf("实体通道出现非被动牛身体 %v", avatar.Key)
 		}
-		wantPitch := float32(0)
+		wantPitch := render.PassiveIdleNodPitch(capturePassiveGrazeServerTick, wantPresentations[index].ID)
 		if wantPresentations[index].Grazing {
 			wantPitch = render.PassiveGrazeHeadPitch(true)
 		}
 		if avatar.Pitch != wantPitch {
-			t.Fatalf("身体 %d 俯仰=%v，想要 %v（放牧位驱动）", index, avatar.Pitch, wantPitch)
+			t.Fatalf("身体 %d 俯仰=%v，想要 %v（放牧位/点头相位驱动）", index, avatar.Pitch, wantPitch)
 		}
+	}
+	// 闲时点头相位钉死：PinVolatile 把权威 tick 固定为常量，相位因此是 tick
+	// 的纯函数，与加载耗时等机器速度因素无关。
+	if err := scene.PinVolatile(app); err != nil {
+		t.Fatalf("钉住 passive-graze 易变读数: %v", err)
+	}
+	if app.ServerTick() != capturePassiveGrazeServerTick {
+		t.Fatalf("权威 tick=%d，想要 %d", app.ServerTick(), capturePassiveGrazeServerTick)
 	}
 
 	// 场景表没有 teardown 钩子：后续场景经公共清理恢复全部共享呈现状态，

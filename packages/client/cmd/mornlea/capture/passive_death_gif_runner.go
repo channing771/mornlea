@@ -43,6 +43,16 @@ func recordGIFScript(app SceneApplication, script gifScript) ([]*image.NRGBA, er
 	if err := script.Setup(app); err != nil {
 		return nil, fmt.Errorf("准备 GIF 剧本 %s: %w", script.Name, err)
 	}
+	// GIF 剧本看到的必须是干眼画面：PNG 表末位 water-underwater 把预测器浸
+	// 没标志写成 true，而同一 application 的预测器在 GIF 全程不再被推进——
+	// 不重钉的话水色全屏叠加会渗入全部四条基线（青草地/粉泥土的直接成因：叠
+	// 加色 RGBA(0.12,0.34,0.52,0.45) 正好把草绿推向青色；调色板只解释色带不
+	// 解释色相漂移，渲染器按残留状态叠加并无辜）。经与水下场景相同的 Apply
+	// 入口把预测器钉回牧场空气格，浸没标志按当前镜像重算为 false；本地玩家
+	// 不进任何呈现通道，块目标仍由相机射线决定。
+	if err := pinGIFPredictorAboveWater(app); err != nil {
+		return nil, fmt.Errorf("准备 GIF 剧本 %s 干眼状态: %w", script.Name, err)
+	}
 	app.SetMenuPhase(application.MenuPhaseGame)
 	settleDeadline := time.Now().Add(captureSettleTimeout)
 	for i := 0; ; i++ {
@@ -75,6 +85,57 @@ func recordGIFScript(app SceneApplication, script gifScript) ([]*image.NRGBA, er
 		frames = append(frames, bgraToNRGBA(app.Renderer().Readback(), captureWidth, captureHeight))
 	}
 	return frames, nil
+}
+
+// pinGIFPredictorAboveWater 把预测器钉回牧场空气格并重算浸没标志。tick 取
+// 1<<21：预测器只接受单调递增的状态，必须大于水下场景的 1<<20 钉点。位置取
+// 相机下方牧场空气格（四剧本同机位同牧场 footprint，脚与眼皆为空气）。
+func pinGIFPredictorAboveWater(app SceneApplication) error {
+	if app.Predictor() == nil || app.Mirror() == nil {
+		return fmt.Errorf("gif 干眼重钉需要预测器与世界镜像")
+	}
+	position := mgl32.Vec3{0.5, 2, 6.5}
+	if _, err := app.Predictor().ApplyPlayerState(network.PlayerState{
+		ServerTick:     1 << 21,
+		Dimension:      core.Overworld,
+		Position:       position,
+		Yaw:            0,
+		Pitch:          0,
+		Ready:          true,
+		Health:         core.MaxHealth,
+		Oxygen:         core.MaxOxygenTicks,
+		WorldTimeTicks: 6000,
+	}, client.MirrorCollisionSource{
+		Mirror:    app.Mirror(),
+		Dimension: core.Overworld,
+	}); err != nil {
+		return fmt.Errorf("钉回预测器: %w", err)
+	}
+	if app.Predictor().EyeInFluid() {
+		return fmt.Errorf("gif 干眼重钉后仍在流体中（位置 %v），水色会渗入基线", position)
+	}
+	return nil
+}
+
+// settleGIFMesher 在剧本中途写块后把单格 remesh 泵送落盘：网格化由 worker
+// 异步完成，不泵送的话 remesh 落在哪一捕获帧完全看机器速度，结算帧边界必漂。
+// 泵送只重复渲染当前 tick（不推进权威时间），收敛后交出，后续 `Frame` 回读
+// 的即是落盘后的画面。
+func settleGIFMesher(app SceneApplication) error {
+	for i := 0; i < 120; i++ {
+		if _, err := app.RenderFrame(captureDrainMax); err != nil {
+			return fmt.Errorf("GIF 写块后收敛第 %d 帧: %w", i, err)
+		}
+		stats, pending := app.Mesher().Stats(), app.Scheduler().PendingUploads()
+		lodBusy := 0
+		if app.LODScheduler() != nil {
+			lodBusy = app.LODScheduler().Busy()
+		}
+		if captureSettled(stats, pending, lodBusy, app.MenuVistaPending()) {
+			return nil
+		}
+	}
+	return fmt.Errorf("GIF 写块后 120 帧内未收敛")
 }
 
 // captureGIFOne 录制一条剧本并落盘/比对：实拍 GIF 无条件写进 dir；更新模式

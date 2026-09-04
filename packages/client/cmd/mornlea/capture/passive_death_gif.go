@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"image"
-	"image/color/palette"
+	"image/color"
 	"image/draw"
 	"image/gif"
 	"os"
 	"path/filepath"
+	"sort"
 )
 
 // passiveDeathGoldenDir 是 GIF 动态基线的独立目录（相对仓库根）：与 PNG
@@ -31,15 +32,58 @@ func validateGIFFrames(frames int) error {
 	return nil
 }
 
-// encodeGIF 把逐帧 NRGBA 按标准库 `image/gif` 编码：固定 Plan9 调色板 +
+// gifAdaptivePalette 按基线逐个构建自适应调色板：全部帧的 15 位量化色
+// （每通道高 5 位）直方图取 Top-256，计数降序、同计数按量化色值升序决胜，
+// 5 位回展 8 位。固定调色板是青草地/粉泥土的唯一成因（渲染器无辜），自适应
+// 后 raw→gif 保真；同输入逐字节确定，不引入新依赖。
+func gifAdaptivePalette(frames []*image.NRGBA) color.Palette {
+	counts := make(map[uint32]int)
+	for _, frame := range frames {
+		for offset := 0; offset+4 <= len(frame.Pix); offset += 4 {
+			key := uint32(frame.Pix[offset])>>3<<10 |
+				uint32(frame.Pix[offset+1])>>3<<5 |
+				uint32(frame.Pix[offset+2]>>3)
+			counts[key]++
+		}
+	}
+	keys := make([]uint32, 0, len(counts))
+	for key := range counts {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if counts[keys[i]] != counts[keys[j]] {
+			return counts[keys[i]] > counts[keys[j]]
+		}
+		return keys[i] < keys[j]
+	})
+	if len(keys) > 256 {
+		keys = keys[:256]
+	}
+	palette := make(color.Palette, 0, len(keys))
+	for _, key := range keys {
+		r5 := uint32((key >> 10) & 0x1F)
+		g5 := uint32((key >> 5) & 0x1F)
+		b5 := uint32(key & 0x1F)
+		palette = append(palette, color.RGBA{
+			R: uint8(r5<<3 | r5>>2),
+			G: uint8(g5<<3 | g5>>2),
+			B: uint8(b5<<3 | b5>>2),
+			A: 255,
+		})
+	}
+	return palette
+}
+
+// encodeGIF 把逐帧 NRGBA 按标准库 `image/gif` 编码：逐基线自适应调色板 +
 // Floyd-Steinberg 抖动，同输入逐字节确定；逐帧延迟固定为 `gifFrameDelay`。
 func encodeGIF(frames []*image.NRGBA) ([]byte, error) {
 	if err := validateGIFFrames(len(frames)); err != nil {
 		return nil, err
 	}
+	palette := gifAdaptivePalette(frames)
 	out := &gif.GIF{}
 	for _, frame := range frames {
-		paletted := image.NewPaletted(frame.Bounds(), palette.Plan9)
+		paletted := image.NewPaletted(frame.Bounds(), palette)
 		draw.FloydSteinberg.Draw(paletted, frame.Bounds(), frame, image.Point{})
 		out.Image = append(out.Image, paletted)
 		out.Delay = append(out.Delay, gifFrameDelay)
@@ -111,7 +155,7 @@ func compareGIFAgainstGolden(
 	if err != nil {
 		return imageDiff{}, fmt.Errorf("解码 GIF 基线 %s: %w", name, err)
 	}
-	// 同量化后再比：编码器（固定调色板 + 抖动）是确定函数，同 raw 必得同
+	// 同量化后再比：编码器（自适应调色板 + 抖动）是确定函数，同 raw 必得同
 	// 量化帧；阈值裁的是录制漂移，不是量化损伤。
 	roundTripped, err := decodeGIF(mustEncodeGIFFrames(frames))
 	if err != nil {

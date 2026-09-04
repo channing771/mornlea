@@ -46,6 +46,11 @@ var capturePassiveGrazeStates = []network.PassiveStateRecord{
 // 格仍是草地——结算只写一格，画面里泥土恰为一格。
 var capturePassiveGrazeDirt = core.BlockPos{X: 1, Y: 0, Z: 0}
 
+// capturePassiveGrazeServerTick 是抓帧最终帧钉死的权威 tick：常态牛的闲时点
+// 头相位是该 tick 与牛 ID 的纯函数，取值与加载耗时无关，基线因此可复现（与
+// 牛群场景的掉落相位钉死同纪律）。
+const capturePassiveGrazeServerTick = 64
+
 // preparePassiveGrazeDay 装入吃草场景的世界夹具：与牛群场景同 footprint 的
 // 一层 y=0 草地（上表面 y=1，横向 x=±10、纵向 z=-16..8，近端延伸到相机下方
 // 不露悬空断口），唯独吃草结算格摆成泥土。白昼场景不需要火把：正午日光是唯
@@ -114,5 +119,13 @@ func applyPassiveGrazeCaptureState(app SceneApplication) error {
 	if !presentations[0].Grazing || presentations[1].Grazing {
 		return fmt.Errorf("被动牛放牧位=%v，想要 [true false]", presentations)
 	}
+	return nil
+}
+
+// pinPassiveGrazeVolatile 把闲时点头相位钉死为常量。收敛帧本身会推进权威
+// tick（帧间隔、加载耗时都随机器速度变化），在 Apply 里钉死会被它们重新
+// 覆盖，因此必须在收敛帧之后、最后一帧之前重钉（`PinVolatile` 语义）。
+func pinPassiveGrazeVolatile(app SceneApplication) error {
+	app.SetServerTick(capturePassiveGrazeServerTick)
 	return nil
 }
