@@ -147,11 +147,6 @@
       "sha256": "728610a71c1f87905d364403860477917b3141c3821338c83477cd254c1b55fe"
     },
     {
-      "destination": "textures/grass_top.png",
-      "source": "assets/minecraft/textures/block/grass_block_top.png",
-      "sha256": "ae0ff558242c60b651244382d18dbdb5d8292feb6819675e6bd7d67a021d1f97"
-    },
-    {
       "destination": "textures/gravel.png",
       "source": "assets/minecraft/textures/block/gravel.png",
       "sha256": "ee49a4c80f4d3ff2d6302b1206f497aab7e1ea9d0c21b8e3d4c2011e5f6a0abe"
@@ -165,11 +160,6 @@
       "destination": "textures/iron_ore.png",
       "source": "assets/minecraft/textures/block/iron_ore.png",
       "sha256": "416e84a0007ec6bf69d8fb575a86220359dae1740b8e4113c4cc9f491d40ecfc"
-    },
-    {
-      "destination": "textures/leaves.png",
-      "source": "assets/minecraft/textures/block/oak_leaves.png",
-      "sha256": "92458f7254fae0368c4f6498c43f42fc5f5701dc0259b767187d875750d0681b"
     },
     {
       "destination": "textures/mossy_cobblestone.png",

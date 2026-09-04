@@ -38,11 +38,11 @@ const (
 // `→ 回退` 的槽位不得用别图硬凑，因此不在此表出现。
 var pastelcraftSources = map[string]string{
 	"stone": "stone.png", "dirt": "dirt.png",
-	"grass_top": "grass_block_top.png", "grass_side": "grass_block_side.png",
-	"bedrock": "bedrock.png", "stone_brick": "stone_bricks.png",
+	"grass_side": "grass_block_side.png",
+	"bedrock":    "bedrock.png", "stone_brick": "stone_bricks.png",
 	"coal_ore": "coal_ore.png", "iron_ore": "iron_ore.png",
 	"furnace": "furnace_front.png", "iron_block": "iron_block.png",
-	"leaves": "oak_leaves.png", "glass": "glass.png",
+	"glass":       "glass.png",
 	"cobblestone": "cobblestone.png", "smooth_stone": "smooth_stone.png",
 	"sand": "sand.png", "gravel": "gravel.png",
 	"oak_log_side": "oak_log.png", "oak_log_top": "oak_log_top.png",
@@ -69,11 +69,11 @@ var pastelcraftSources = map[string]string{
 }
 
 var pastelcraftLayers = map[string]uint16{
-	"stone": LayerStone, "dirt": LayerDirt, "grass_top": LayerGrassTop, "grass_side": LayerGrassSide,
+	"stone": LayerStone, "dirt": LayerDirt, "grass_side": LayerGrassSide,
 	"bedrock": LayerBedrock, "stone_brick": LayerStoneBrick,
 	"coal_ore": LayerCoalOre, "iron_ore": LayerIronOre,
 	"furnace": LayerFurnace, "iron_block": LayerIronBlock,
-	"leaves": LayerLeaves, "glass": LayerGlass,
+	"glass":       LayerGlass,
 	"cobblestone": LayerCobblestone, "smooth_stone": LayerSmoothStone,
 	"sand": LayerSand, "gravel": LayerGravel,
 	"oak_log_side": LayerOakLogSide, "oak_log_top": LayerOakLogTop, "oak_planks": LayerOakPlanks,
@@ -92,6 +92,7 @@ var pastelcraftLayers = map[string]uint16{
 }
 
 var proceduralFallbackLayers = []uint16{
+	LayerGrassTop, LayerLeaves,
 	LayerChest, LayerLightBlock, LayerRoofTile, LayerWater,
 	LayerPotato4, LayerPotato5, LayerPotato6, LayerPotato7,
 	LayerCarrot4, LayerCarrot5, LayerCarrot6, LayerCarrot7,
@@ -139,7 +140,7 @@ type pastelcraftProvenanceEntry struct {
 	Source      string `json:"source"`
 	// SourceURL 与 License 只出现在非 Pastelcraft 上游的文件条目上
 	// （牛肉图标的 OpenGameArt 页面与 CC0 协议）：Pastelcraft 子集的
-	// 56 个条目沿用顶层 upstream/license，不逐文件重复。
+	// 54 个条目沿用顶层 upstream/license，不逐文件重复。
 	SourceURL string `json:"source_url,omitempty"`
 	License   *struct {
 		ID  string `json:"id"`
@@ -562,15 +563,17 @@ var oldDefaultPackLayerSHA256 = map[string]string{
 	"clay":         "dbf7f23818019190c1c3b87c3d66e0e0097a7d5fc68f57796914dc0466dc7181",
 }
 
-// pastelcraftDirtLayers 是换肤后必须来自新包的泥土系槽位集合。
+// pastelcraftDirtLayers 是换肤后必须来自新包的泥土系槽位集合（草顶为需
+// 染色灰度图已退回程序化，不在此列）。
 var pastelcraftDirtLayers = map[string]uint16{
-	"dirt": LayerDirt, "grass_top": LayerGrassTop, "grass_side": LayerGrassSide,
+	"dirt": LayerDirt, "grass_side": LayerGrassSide,
 	"farmland_dry": LayerFarmlandDry, "farmland_wet": LayerFarmlandWet,
 	"sand": LayerSand, "gravel": LayerGravel, "clay": LayerClay,
 }
 
 // TestEmbeddedDefaultPackIsPastelcraft 锁定内嵌默认包的产品外观基线：包名已换成
-// 新包、泥土系槽位既不再是程序化像素也不再是旧包字节。
+// 新包、泥土系 7 槽位既不再是程序化像素也不再是旧包字节；草顶是需染色灰度图
+// 已退回程序化，这里反向断言它与程序化逐字节一致。
 func TestEmbeddedDefaultPackIsPastelcraft(t *testing.T) {
 	root, err := fs.Sub(defaultPackFS, "packs/pastelcraft")
 	if err != nil {
@@ -592,6 +595,9 @@ func TestEmbeddedDefaultPackIsPastelcraft(t *testing.T) {
 	}
 	procedural := NewRegistry()
 	embedded := NewDefaultRegistry()
+	if got, want := embedded.LayerRGBA(int(LayerGrassTop)), procedural.LayerRGBA(int(LayerGrassTop)); !bytes.Equal(got, want) {
+		t.Errorf("grass_top 未退回程序化：需染色灰度图不得入库")
+	}
 	for logicalName, layer := range pastelcraftDirtLayers {
 		if got, want := embedded.LayerRGBA(int(layer)), procedural.LayerRGBA(int(layer)); bytes.Equal(got, want) {
 			t.Errorf("%s 仍是程序化像素：换肤后必须来自内嵌新包", logicalName)

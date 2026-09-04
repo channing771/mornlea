@@ -24,7 +24,6 @@ Mornlea selected and renamed a subset without pixel transformations.
 
 - `stone.png` → `stone`
 - `dirt.png` → `dirt`
-- `grass_block_top.png` → `grass_top`
 - `grass_block_side.png` → `grass_side`（源图本身已全不透明，无需合成派生）
 - `bedrock.png` → `bedrock`
 - `stone_bricks.png` → `stone_brick`
@@ -32,7 +31,6 @@ Mornlea selected and renamed a subset without pixel transformations.
 - `iron_ore.png` → `iron_ore`
 - `furnace_front.png` → `furnace`（单层槽位只取正面）
 - `iron_block.png` → `iron_block`
-- `oak_leaves.png` → `leaves`
 - `glass.png` → `glass`
 - `cobblestone.png` → `cobblestone`
 - `smooth_stone.png` → `smooth_stone`
@@ -71,6 +69,8 @@ Mornlea selected and renamed a subset without pixel transformations.
 - `door`（`oak_door_bottom/top.png` 是双格门模型半扇，非单层语义）
 - `workbench_bottom`（上游无 `crafting_table_bottom`）
 - `short_grass`（上游为灰度图，需生物群系染色；Mornlea 无染色路径，直接使用呈近白色难辨，退回程序化绿色）
+- `grass_top`（上游为灰度图，需生物群系染色；Mornlea 无染色路径，直接使用呈灰白色，退回程序化绿色）
+- `leaves`（上游为灰度图，需生物群系染色；Mornlea 无染色路径，直接使用呈灰白色，退回程序化绿色）
 - `bed_foot_south`/`bed_foot_west`/`bed_foot_north`/`bed_foot_east`/
   `bed_head_south`/`bed_head_west`/`bed_head_north`/`bed_head_east`
  （`entity/bed/*.png` 是 64×64 实体 atlas，非 16×16）
