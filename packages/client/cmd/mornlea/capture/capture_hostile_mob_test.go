@@ -49,10 +49,8 @@ func TestHostileMobCaptureScenePosition(t *testing.T) {
 		t.Fatalf("hostile-mob=%d 必须紧随 sword-combat=%d",
 			indexOf("hostile-mob"), indexOf("sword-combat"))
 	}
-	if indexOf("water-surface-slope") != indexOf("passive-herd")+1 {
-		t.Fatalf("water-surface-slope=%d 必须紧随 passive-herd=%d",
-			indexOf("water-surface-slope"), indexOf("passive-herd"))
-	}
+	// 牧场链的后半段（passive-herd→passive-graze→water-surface-slope）由
+	// 牛群与吃草场景各自的位置测试兜底，本测试只锁 hostile-mob 自身的前驱与尾段。
 	if captureScenes[len(captureScenes)-2].Name != "far-horizon" {
 		t.Fatalf("倒数第二场景=%q，想要 far-horizon",
 			captureScenes[len(captureScenes)-2].Name)

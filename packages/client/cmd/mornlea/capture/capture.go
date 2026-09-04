@@ -586,16 +586,36 @@ var captureScenes = []captureScene{
 		// 牛群前方的空位。掉落动画相位经 PinVolatile 钉死为常量，与机器速度
 		// 无关。夹具与注入细节见 capture_passive_herd.go。
 		//
-		// 排序约束：本场景 MUST 紧随 hostile-mob、先于 water-surface-slope
-		//（昼夜两片牧场相邻，完整相邻链为 sword-combat、hostile-mob、
-		// passive-herd、water-surface-slope），由
-		// TestPassiveHerdCaptureScenePosition 兜底；far-horizon 仍为倒数第二、
+		// 排序约束：本场景 MUST 紧随 hostile-mob、先于 passive-graze
+		//（昼夜两片牧场之后紧跟吃草结算对照，完整相邻链为 sword-combat、
+		// hostile-mob、passive-herd、passive-graze、water-surface-slope），由
+		// TestPassiveHerdCaptureScenePosition 与
+		// TestPassiveGrazeCaptureScenePosition 兜底；far-horizon 仍为倒数第二、
 		// water-underwater 仍为唯一末场景。
 		Name:         "passive-herd",
 		WarmupFrames: 8,
 		Prepare:      preparePassiveHerdDay,
 		Apply:        applyPassiveHerdCaptureState,
 		PinVolatile:  pinPassiveHerdVolatile,
+	},
+	{
+		// passive-graze 是放牧吃草的无窗口昼间 capture 场景：固定正午（6000
+		// tick）的开阔草地，2 头牛经客户端被动镜像夹具站在草地上——其中 1 头
+		// 经与权威消息相同的 state 入口置放牧位（低头，牛头俯仰为呈现侧固定
+		// 下压角），另 1 头保持常态作对照；低头牛吻部身前的那格经方块夹具摆
+		// 成泥土（吃草结算把草方块变为泥土的前后对照），周围仍是草地。本场景
+		// 不含掉落物与任何随机器速度变化的读数，无需 PinVolatile。夹具与注入
+		// 细节见 capture_passive_graze.go。
+		//
+		// 排序约束：本场景 MUST 紧随 passive-herd、先于 water-surface-slope
+		//（完整相邻链为 sword-combat、hostile-mob、passive-herd、
+		// passive-graze、water-surface-slope），由
+		// TestPassiveGrazeCaptureScenePosition 兜底；far-horizon 仍为倒数第二、
+		// water-underwater 仍为唯一末场景。
+		Name:         "passive-graze",
+		WarmupFrames: 8,
+		Prepare:      preparePassiveGrazeDay,
+		Apply:        applyPassiveGrazeCaptureState,
 	},
 	{
 		// 水景一：水面之上俯瞰。覆盖「水面斜坡」与「水面之下的地形」——

@@ -21,7 +21,7 @@ import (
 )
 
 // TestPassiveHerdCaptureScenePosition 锁住 passive-herd 的表内位置：夹在
-// `hostile-mob` 与 `water-surface-slope` 之间，同时确认既有尾段不变量未被
+// `hostile-mob` 与 `passive-graze` 之间，同时确认既有尾段不变量未被
 // 本场景移动——`far-horizon` 仍为倒数第二、`water-underwater` 仍为唯一末场景。
 func TestPassiveHerdCaptureScenePosition(t *testing.T) {
 	indexOf := func(name string) int {
@@ -41,9 +41,9 @@ func TestPassiveHerdCaptureScenePosition(t *testing.T) {
 		t.Fatalf("passive-herd=%d 必须紧随 hostile-mob=%d",
 			indexOf("passive-herd"), indexOf("hostile-mob"))
 	}
-	if indexOf("water-surface-slope") != indexOf("passive-herd")+1 {
-		t.Fatalf("water-surface-slope=%d 必须紧随 passive-herd=%d",
-			indexOf("water-surface-slope"), indexOf("passive-herd"))
+	if indexOf("passive-graze") != indexOf("passive-herd")+1 {
+		t.Fatalf("passive-graze=%d 必须紧随 passive-herd=%d",
+			indexOf("passive-graze"), indexOf("passive-herd"))
 	}
 	if captureScenes[len(captureScenes)-2].Name != "far-horizon" {
 		t.Fatalf("倒数第二场景=%q，想要 far-horizon",
