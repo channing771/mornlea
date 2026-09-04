@@ -125,13 +125,19 @@ const TOKEN_PINNING: readonly (readonly [string, number])[] = [
   ["--hud-design-height", DESIGN_HEIGHT],
 ];
 
-/** 有 px 值但刻意不与 geometry 常量互钉的令牌：字号、聊天行高/内距/净空、贴条
- * 投影缘、凹槽斜面与双层文字/准星阴影偏移。它们是 hud.css 的呈现口径（部分在
- * Go 侧有同值常量，由 Go 侧测试自行钉值），不镜像进 geometry.ts，导出面不因
- * 互钉而膨胀。新增 `--hud-*` px 令牌必须归入两张表之一，否则完备性断言即红。 */
+/** 有 px 值但刻意不与 geometry 常量互钉的令牌：字号、聊天行高/内距/净空、
+ * 粉彩方块圆角/描边/内嵌明暗带/投影口径与双层文字/准星阴影偏移。它们是
+ * hud.css 的呈现口径（部分在 Go 侧有同值常量，由 Go 侧测试自行钉值），不镜像
+ * 进 geometry.ts，导出面不因互钉而膨胀。新增 `--hud-*` px 令牌必须归入两张表
+ * 之一，否则完备性断言即红。 */
 const TOKENS_WITHOUT_GEOMETRY_CONSTANT: readonly string[] = [
-  "--hud-hotbar-rim",
-  "--hud-slot-bevel",
+  "--hud-slot-radius",
+  "--hud-slot-border",
+  "--hud-slot-inner-edge",
+  "--hud-slot-shadow-offset",
+  "--hud-slot-shadow-blur",
+  "--hud-slot-lift-offset",
+  "--hud-slot-lift-blur",
   "--hud-digit-margin",
   "--hud-crosshair-shadow-offset",
   "--hud-text-shadow-offset",

@@ -11,6 +11,9 @@
  * `--accent-sage-solid`/`--accent-wash`）只负责选中、焦点与 hover 等
  * 交互态；`--accent-wheat` 系（含 `--accent-wheat-solid`）只负责进度、
  * 来源与重要信息；`--danger` 只用于错误呈现。不得引入第三种强调色相。
+ * 快捷栏九粉彩面色（`--hud-slot-face-*` 九枚）属表面填充、不计入强调色；
+ * 选中暖橙（`--hud-hotbar-selected-warm`）登记为 `--accent-wheat` 系的暖向
+ * 变体（更深更橙），仍属 wheat 语义，不构成第三种强调色相。
  */
 :root {
   /* 面板为亮色羊皮纸，滚动条与表单控件的原生形态随主题取亮色。 */
@@ -35,10 +38,10 @@
   --slot-well-edge: rgba(251, 245, 228, 0.3);
 
   /* ---- 强调（双体系：sage 交互态 / wheat 进度与重要信息） ---- */
-  /* accentSelected 0.494,0.612,0.388,0.98：sRGB (126,156,99)，选中内衬、
-   * 焦点环与 hover 面的唯一色相。本文件登记的 Go 侧镜像行，菜单层不直接
-   * 消费；游戏 HUD 的快捷栏选中内衬（style.go accentSelected 同值）经本令
-   * 牌供给。 */
+  /* accentSelected 0.494,0.612,0.388,0.98：sRGB (126,156,99)，菜单层焦点环
+   * 与 hover 面的唯一色相。本文件登记的 Go 侧镜像行，菜单层不直接
+   * 消费；游戏 HUD 的快捷栏选中态已随 Tiny Glade 换肤改走 wheat 系暖向
+   * 变体（`--hud-hotbar-selected-warm`），不再消费本令牌。 */
   --accent-sage: rgba(126, 156, 99, 0.98);
   /* 焦点/悬停描边用不透明形态（描边在亮底上需要实色才可辨）。 */
   --accent-sage-solid: rgb(126, 156, 99);
@@ -151,8 +154,13 @@
   --hud-hotbar-slot-gap: 4px; /* hotbarSlotGap */
   --hud-hotbar-padding: 6px; /* hotbarPanelPadding（贴条四向内边距） */
   --hud-hotbar-bottom-margin: 6px; /* hotbarBottomMargin（贴条下沿内边距） */
-  --hud-hotbar-rim: 2px; /* hotbarPanelInset（贴条投影/表面双层的内缩缘） */
-  --hud-slot-bevel: 2px; /* 凹槽三色斜面边宽（prototype 36px 格的 2px 口径） */
+  --hud-slot-radius: 10px; /* 手绘粉彩方块 design 圆角（Tiny Glade 贴条换肤口径） */
+  --hud-slot-border: 2px; /* 粉彩方块深可可描边宽 */
+  --hud-slot-inner-edge: 2px; /* 方块顶高光/底沉边的内嵌带宽 */
+  --hud-slot-shadow-offset: 2px; /* 方块柔投影垂直偏移 */
+  --hud-slot-shadow-blur: 6px; /* 方块柔投影模糊半径 */
+  --hud-slot-lift-offset: 4px; /* 选中抬起投影垂直偏移 */
+  --hud-slot-lift-blur: 10px; /* 选中抬起投影模糊半径 */
   --hud-hotbar-row-width: 464px; /* panel.go hotbarRowWidth = 9×48 + 8×4 */
   --hud-design-width: 476px; /* hudScale 宽度分母 = hotbarRowWidth + 2×padding */
   --hud-design-height: 160px; /* layout.go closedHUDHeight（缩放高度分母） */
@@ -195,18 +203,45 @@
   /* panelSurface 0.941,0.894,0.784,0.94：HUD 浮层背衬（聊天行栈）。与菜单
    * 面板 --panel-surface 同色相但透明度刻意不同，两者不共用同一令牌。 */
   --hud-panel-surface: rgba(240, 228, 200, 0.94);
-  --hud-hotbar-strip: rgba(43, 32, 21, 0.96); /* hotbarPanelSurfaceColor 暖深棕贴条 */
-  --hud-hotbar-strip-shadow: rgba(36, 26, 16, 0.94); /* hotbarPanelShadowColor */
-  --hud-hotbar-selected-outer: rgb(240, 223, 178); /* hotbarSelectedOuterColor（α1） */
-  /* 凹槽下右背光缘：Cozy Farming 调色板的深暖棕（与 --slot-well-edge 受光缘
-   * 配对构成三色斜面；Go 侧容器凹槽无背光缘令牌，此处为 HUD 呈现新增）。 */
-  --hud-slot-well-dark: rgb(74, 56, 38);
+  /* Tiny Glade 快捷栏换肤：贴条透明悬浮（无暖深棕底带），每格独立粉彩
+   * 方块。九枚面色是低饱和表面填充（橙赭/豆沙粉/芥黄/奶油/陶土/鼠尾草绿/
+   * 叶绿/灰蓝/天蓝），不计入双强调色相；选中暖橙是 `--accent-wheat` 系的
+   * 暖向变体（wheat (217,169,78) 加深加橙），与 sage 选中无语义交叉。 */
+  --hud-slot-face-0: rgb(232, 190, 150);
+  --hud-slot-face-1: rgb(228, 178, 182);
+  --hud-slot-face-2: rgb(233, 208, 145);
+  --hud-slot-face-3: rgb(241, 229, 196);
+  --hud-slot-face-4: rgb(222, 178, 148);
+  --hud-slot-face-5: rgb(183, 199, 160);
+  --hud-slot-face-6: rgb(164, 199, 158);
+  --hud-slot-face-7: rgb(170, 190, 200);
+  --hud-slot-face-8: rgb(168, 202, 220);
+  /* 粉彩方块描边：深可可（约 #4A3826 系），与数量深棕字同色相、更深一档。 */
+  --hud-slot-edge: rgb(74, 56, 38);
+  /* 方块顶部浅高光（暖白半透）与底部沉边（深棕半透）：同一深可可色相的
+   * 明暗两极，叠在各自格面色之上。 */
+  --hud-slot-highlight: rgba(255, 251, 240, 0.55);
+  --hud-slot-shade: rgba(74, 56, 38, 0.28);
+  /* 方块柔投影与选中抬起投影：同属暖深棕色相，透明度逐级加深。 */
+  --hud-slot-shadow: rgba(74, 56, 38, 0.3);
+  --hud-slot-lift-shadow: rgba(74, 56, 38, 0.45);
+  /* 选中外框：暖橙赭石（wheat 系暖向变体），取 wheat (217,169,78) 加深加橙。 */
+  --hud-hotbar-selected-warm: rgb(196, 120, 58);
+  /* 数量字浅投影：亮底上的深棕投影，与深投影 `--text-shadow` 分工不同。 */
+  --hud-count-shadow: rgba(255, 251, 240, 0.8);
+  /* 空槽淡印线稿：深可可描边色的低透明变体，只做空槽衬底。 */
+  --hud-slot-doodle: rgba(74, 56, 38, 0.35);
+  /* 耐久条在亮底上的轨道/填充：轨道取深可可半透（亮底上仍可辨），填充沿用
+   * 既有健康绿/低耐久红（`--hud-durability-healthy`/`--hud-durability-low`），
+   * 对比由亮底保证，不另立新色。 */
+  --hud-durability-track-light: rgba(74, 56, 38, 0.35);
   /* 物品 tile 占位：真实材质映射属后续，先以面板内既有棕族给出可辨边界。 */
   --hud-item-tile: var(--text-secondary-on-panel);
   --hud-item-tile-edge: var(--text-on-panel);
   --hud-progress-track: rgba(13, 13, 15, 0.78); /* miningTrackColor（进食轨道底） */
   --hud-eating-fill: rgba(235, 199, 107, 0.95); /* eatingFillColor */
-  --hud-durability-track: rgba(13, 13, 15, 0.85); /* durabilityTrackColor */
+  /* durabilityTrackColor 的深色形态已随 Tiny Glade 换肤退役（耐久条改走亮底
+   * `--hud-durability-track-light`）；Go 侧同值常量由 Go 侧测试自行钉值。 */
   --hud-durability-healthy: rgba(77, 199, 92, 0.95); /* durabilityHealthyColor */
   --hud-durability-low: rgba(230, 89, 64, 0.95); /* durabilityLowColor */
   --hud-crosshair-shadow: rgba(0, 0, 0, 0.55); /* crosshairShadow */

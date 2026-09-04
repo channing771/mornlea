@@ -74,15 +74,17 @@
   margin-top: calc(var(--hud-status-bar-gap) * var(--hud-scale));
 }
 
-/* ---- 快捷栏贴条：暖深棕「投影 + 表面」双层无边（内缩缘由 inset 阴影充当） -- */
+/* ---- 快捷栏贴条：透明悬浮、无底带无缘阴影，只保留九格排布 ----
+ * Tiny Glade 换肤后贴条自身不产生任何像素（`background: transparent`、无
+ * `box-shadow`）；每格是独立粉彩方块，面色由 `data-index` 逐格钉到
+ * `--hud-slot-face-*` 九枚表面令牌。 */
 .hud-hotbar {
   box-sizing: border-box;
   display: flex;
   gap: calc(var(--hud-hotbar-slot-gap) * var(--hud-scale));
   width: calc(var(--hud-design-width) * var(--hud-scale));
   padding: calc(var(--hud-hotbar-padding) * var(--hud-scale));
-  background: var(--hud-hotbar-strip);
-  box-shadow: inset 0 0 0 calc(var(--hud-hotbar-rim) * var(--hud-scale)) var(--hud-hotbar-strip-shadow);
+  background: transparent;
 }
 
 /* 镜像未确认或容器打开：占位保留构图空间，不产生任何像素。 */
@@ -90,32 +92,92 @@
   visibility: hidden;
 }
 
-/* 物品格：米棕凹槽三色斜面（上左受光 / 下右背光 / 槽底面色）。 */
+/* 物品格：独立粉彩方块——深可可描边 + design 圆角 + 顶部浅高光/底部沉边
+ * （`::before` 内嵌双带）+ 柔投影。面色由 `Hotbar` 注入的 `data-index`
+ * 逐格供给（九枚 `--hud-slot-face-*` 表面令牌），本规则只给缺省兜底。 */
 .hud-slot {
   position: relative;
   box-sizing: border-box;
   width: calc(var(--hud-hotbar-slot-size) * var(--hud-scale));
   height: calc(var(--hud-hotbar-slot-size) * var(--hud-scale));
-  background: var(--slot-well);
-  border-top: calc(var(--hud-slot-bevel) * var(--hud-scale)) solid var(--slot-well-edge);
-  border-left: calc(var(--hud-slot-bevel) * var(--hud-scale)) solid var(--slot-well-edge);
-  border-right: calc(var(--hud-slot-bevel) * var(--hud-scale)) solid var(--hud-slot-well-dark);
-  border-bottom: calc(var(--hud-slot-bevel) * var(--hud-scale)) solid var(--hud-slot-well-dark);
+  overflow: hidden;
+  background: var(--hud-slot-face-3);
+  border: calc(var(--hud-slot-border) * var(--hud-scale)) solid var(--hud-slot-edge);
+  border-radius: calc(var(--hud-slot-radius) * var(--hud-scale));
+  box-shadow: 0 calc(var(--hud-slot-shadow-offset) * var(--hud-scale))
+    calc(var(--hud-slot-shadow-blur) * var(--hud-scale)) 0 var(--hud-slot-shadow);
 }
 
-/* 选中格双层轮廓：外扩高对比外框（outline 画在格框之外）+ sage 强调内衬
- * （::after 铺在格心，物品 tile 与数字再叠其上）。两层都是几何标记，
- * 忽略颜色后仍可与未选中格区分。 */
-.hud-slot--selected {
-  outline: calc(var(--hud-select-border) * var(--hud-scale)) solid var(--hud-hotbar-selected-outer);
-  outline-offset: 0;
-}
-
-.hud-slot--selected::after {
+/* 方块内嵌明暗带：顶浅高光 + 底沉边（`box-shadow: inset` 双带），叠在格面色
+ * 之上、内容（tile/数字/线稿）之下。 */
+.hud-slot::before {
   content: "";
   position: absolute;
-  inset: calc(var(--hud-select-inset) * var(--hud-scale));
-  background: var(--accent-sage);
+  inset: 0;
+  pointer-events: none;
+  box-shadow:
+    inset 0 calc(var(--hud-slot-inner-edge) * var(--hud-scale)) 0 0 var(--hud-slot-highlight),
+    inset 0 calc(var(--hud-slot-inner-edge) * var(--hud-scale) * -1) 0 0 var(--hud-slot-shade);
+}
+
+/* 逐格面色：九枚低饱和粉彩表面令牌（`--hud-slot-face-0`…`--hud-slot-face-8`），
+ * 顺序为橙赭/豆沙粉/芥黄/奶油/陶土/鼠尾草绿/叶绿/灰蓝/天蓝。 */
+.hud-slot[data-index="0"] {
+  background: var(--hud-slot-face-0);
+}
+.hud-slot[data-index="1"] {
+  background: var(--hud-slot-face-1);
+}
+.hud-slot[data-index="2"] {
+  background: var(--hud-slot-face-2);
+}
+.hud-slot[data-index="3"] {
+  background: var(--hud-slot-face-3);
+}
+.hud-slot[data-index="4"] {
+  background: var(--hud-slot-face-4);
+}
+.hud-slot[data-index="5"] {
+  background: var(--hud-slot-face-5);
+}
+.hud-slot[data-index="6"] {
+  background: var(--hud-slot-face-6);
+}
+.hud-slot[data-index="7"] {
+  background: var(--hud-slot-face-7);
+}
+.hud-slot[data-index="8"] {
+  background: var(--hud-slot-face-8);
+}
+
+/* 选中格：暖橙赭石外扩外框（wheat 系暖向变体，`outline` 画在格框之外）+
+ * 方块抬起阴影。旧 sage 内衬平铺（`::after`）已随换肤删除；外框与抬起都是
+ * 几何标记，忽略颜色后仍可与未选中格区分。 */
+.hud-slot--selected {
+  outline: calc(var(--hud-select-border) * var(--hud-scale)) solid
+    var(--hud-hotbar-selected-warm);
+  outline-offset: 0;
+  box-shadow: 0 calc(var(--hud-slot-lift-offset) * var(--hud-scale))
+    calc(var(--hud-slot-lift-blur) * var(--hud-scale)) 0 var(--hud-slot-lift-shadow);
+}
+
+/* 空槽淡印手绘线稿衬底：只在无物品时呈现（与 tile 互斥由 `Hotbar` 保证），
+ * 描边色经 `color` 取线稿令牌（`slotDoodles.tsx` 内零裸色值，`stroke` 走
+ * `currentColor`）。 */
+.hud-slot-doodle {
+  position: absolute;
+  inset: calc(var(--hud-item-tile-inset) * var(--hud-scale));
+  display: block;
+  width: auto;
+  height: auto;
+  color: var(--hud-slot-doodle);
+  pointer-events: none;
+}
+
+.hud-slot-doodle svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 /* 物品 tile 占位：暗边 + 纯色面色两层小方块，真实材质映射属后续。 */
@@ -133,7 +195,8 @@
   background: var(--hud-item-tile);
 }
 
-/* 耐久条：背景槽 + 剩余比例填充，绿/红两档随比例（低耐久阈值见令牌注释）。 */
+/* 耐久条：亮底轨道 + 剩余比例填充，绿/红两档随比例（低耐久阈值见令牌注释）。
+ * 轨道走亮底专用令牌（深可可半透），填充沿用既有健康绿/低耐久红。 */
 .hud-slot-durability {
   position: absolute;
   z-index: 2;
@@ -141,7 +204,7 @@
   bottom: calc(var(--hud-durability-inset) * var(--hud-scale));
   left: calc(var(--hud-durability-inset) * var(--hud-scale));
   height: calc(var(--hud-durability-height) * var(--hud-scale));
-  background: var(--hud-durability-track);
+  background: var(--hud-durability-track-light);
 }
 
 .hud-slot-durability-fill {
@@ -154,7 +217,8 @@
   background: var(--hud-durability-low);
 }
 
-/* 数量数字：暖白前景 + 右下硬投影双层，右下角对齐，最多两位。 */
+/* 数量数字：亮底深棕前景 + 浅投影，右下角对齐，最多两位。亮底配深棕字
+ * （面板字令牌），投影走浅色令牌，与弹条暖白字深投影分工不同。 */
 .hud-slot-count {
   position: absolute;
   z-index: 2;
@@ -162,10 +226,10 @@
   bottom: calc(var(--hud-digit-margin) * var(--hud-scale));
   font-size: calc(var(--hud-count-font-size) * var(--hud-scale));
   line-height: var(--hud-text-line-height);
-  color: var(--text-primary);
+  color: var(--text-on-panel);
   font-variant-numeric: tabular-nums;
   text-shadow: var(--hud-text-shadow-offset-scaled) var(--hud-text-shadow-offset-scaled) 0
-    var(--text-shadow);
+    var(--hud-count-shadow);
 }
 
 /* ---- 状态行：生命左缘 / 饥饿右缘 / 氧气沿右缘外堆叠 ----

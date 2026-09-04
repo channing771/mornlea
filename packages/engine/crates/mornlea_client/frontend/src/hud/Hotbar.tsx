@@ -1,9 +1,12 @@
-// 快捷栏：固定九格贴条 + 选中格双层轮廓 + 物品 tile 占位/数量/耐久。
+// 快捷栏：Tiny Glade 粉彩手绘风九格贴条 + 选中暖橙外框 + 空槽线稿衬底。
 // 呈现数据只来自已确认的权威镜像（`HudHotbar`），镜像缺席即「尚未确认」，
 // 此时贴条以占位形式保留构图空间（`--unconfirmed`），不产生任何像素。
+// 贴条透明悬浮（无深色底带）；每格面色由 `data-index` 逐格钉到粉彩表面令牌；
+// 空槽（item=0）渲淡印线稿衬底，有物品时隐藏（与 tile 互斥）。
 import type { CSSProperties } from "react";
 import type { HudSlot } from "../bridge/client";
 import { DURABILITY_LOW_RATIO } from "./geometry";
+import { SlotDoodle } from "./slotDoodles";
 
 export interface HotbarProps {
   /** 恰九格的权威镜像；缺席（未确认）时不呈现格内容但保留贴条空间。 */
@@ -17,13 +20,13 @@ export function Hotbar({ slots, selectedIndex }: HotbarProps) {
   return (
     <div className={confirmed ? "hud-hotbar" : "hud-hotbar hud-hotbar--unconfirmed"}>
       {cells.map((slot, index) => (
-        <HotbarCell key={index} slot={slot} selected={index === selectedIndex} />
+        <HotbarCell key={index} index={index} slot={slot} selected={index === selectedIndex} />
       ))}
     </div>
   );
 }
 
-function HotbarCell({ slot, selected }: { slot: HudSlot; selected: boolean }) {
+function HotbarCell({ index, slot, selected }: { index: number; slot: HudSlot; selected: boolean }) {
   const className = selected ? "hud-slot hud-slot--selected" : "hud-slot";
   // 空格以 item=0 表达；数量只对多于一件的堆叠显示，耐久只对存在耐久上限
   // 且 `0 < ratio < 1` 的工具显示（与迁移前 `appendDurabilityBarScaled` 同口径，
@@ -33,8 +36,13 @@ function HotbarCell({ slot, selected }: { slot: HudSlot; selected: boolean }) {
   const durability = slot.durability;
   const showDurability = durability !== undefined && durability > 0 && durability < 1;
   return (
-    <div className={className}>
+    <div className={className} data-index={index}>
       {showTile ? <span className="hud-slot-tile" /> : null}
+      {showTile ? null : (
+        <span className="hud-slot-doodle">
+          <SlotDoodle index={index} />
+        </span>
+      )}
       {showDurability ? (
         <span className="hud-slot-durability">
           <span
