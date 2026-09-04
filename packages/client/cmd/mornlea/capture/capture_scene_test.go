@@ -1158,6 +1158,30 @@ func TestTorchNightScenePixelsShowLightFalloffAndCutout(t *testing.T) {
 	})
 }
 
+// TestTorchNightPatchLumaCatchesGrossLeak 用合成亮斑证明暗室阈值的漏光侧仍
+// 被抓住：同一采样函数 `torchNightPatchLuma`（11×11 均值）在被照亮面量级的
+// 灰斑上返回值远高于阈值 90。干净侧实测 76（阈值 90，裕量 14），漏光侧合成
+// 160（阈值 90，裕量 70），两侧都有明确余量。
+func TestTorchNightPatchLumaCatchesGrossLeak(t *testing.T) {
+	img := image.NewNRGBA(image.Rect(0, 0, captureWidth, captureHeight))
+	center := image.Pt(captureWidth/2, captureHeight/2)
+	const lit = 160
+	for dy := -5; dy <= 5; dy++ {
+		for dx := -5; dx <= 5; dx++ {
+			i := img.PixOffset(center.X+dx, center.Y+dy)
+			img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = lit, lit, lit, 255
+		}
+	}
+	got := torchNightPatchLuma(t, img, center)
+	if got < 150 {
+		t.Fatalf("合成漏光采样=%d，想要至少 150（被照亮面量级）", got)
+	}
+	if got < 90 {
+		t.Fatalf("合成漏光采样=%d，未触发暗室阈值 90", got)
+	}
+	t.Logf("干净侧实测 76 vs 阈值 90（裕量 14），合成漏光 %d vs 阈值 90（裕量 %d）", got, got-90)
+}
+
 // TestBedNightCaptureSceneIsRegistered 锁住 bed-night 场景条目的完整性：
 // 与其余世界场景一样走「Prepare 装夹具 + Apply 定状态 + 8 帧预热」的完整链路。
 func TestBedNightCaptureSceneIsRegistered(t *testing.T) {

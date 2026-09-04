@@ -116,11 +116,12 @@ func prepareGrassCloseupWithoutShortGrass(app SceneApplication) error {
 // TestGrassCloseupSceneShowsIdentifiableShortGrass 是短草近景的场景内像素断言：
 // 经完整无窗口链路（离屏 renderer、预热、装夹具、收敛、回读）抓两次帧——一次
 // 生产夹具、一次仅剔除短草的差分夹具——短草的视觉足迹就是两图差分。可辨识的
-// 判据沿用 oak-grove 的形状（`oakGroveCellDiff` 口径），唯独可见量下限
-// 提到近景量级的 150px，且顶带判据随换肤退役（见下）：
+// 判据沿用 oak-grove 的四判据形状（`oakGroveCellDiff` 口径），唯独可见量下限
+// 提到近景量级的 150px：
 //   - 至少一株短草格的屏幕外接矩形内差分像素足够多（在画面里可见，而不是
 //     远成 1~2 个噪声像素）；
 //   - 该矩形内差分不铺满（alpha cutout 透过背景，不是不透明矩形）；
+//   - 矩形顶部带几乎没有差分（叶片不达纹理顶部，上缘透空，不是实心立方体）；
 //   - 矩形底部带有差分（叶片从贴地一侧长出，交叉斜面真实渲染）。
 func TestGrassCloseupSceneShowsIdentifiableShortGrass(t *testing.T) {
 	app := newCaptureSceneRenderApplication(t)
@@ -168,15 +169,18 @@ func TestGrassCloseupSceneShowsIdentifiableShortGrass(t *testing.T) {
 	if len(candidates) == 0 {
 		t.Fatal("画面内没有任何尺寸可辨识的短草格")
 	}
-	// 规格只要求「至少一株可辨识」：逐格寻找同时满足可见量、cutout 透空与
-	// 贴地叶片三个判据的格子。顶带判据（叶片不达纹理顶部）是旧程序化短草的
-	// 形态属性：Pastelcraft 草丛纹理的叶片直达顶部（第 1 行即有叶片），该形状
-	// 判据随换肤退役；实心立方体混淆仍由「差分不铺满」守住。
+	// 规格只要求「至少一株可辨识」：逐格寻找同时满足可见量、cutout 透空、
+	// 上缘透空与贴地叶片四个判据的格子。顶带判据按带宽的 10% 容忍其他短草
+	// 落入本格矩形上缘的透视重叠。
 	var identifiable *oakGroveCellDiffStats
 	for index := range candidates {
 		stats := candidates[index]
 		area := stats.rect.Dx() * stats.rect.Dy()
+		topBand := stats.rect.Dy() / 4
 		if stats.diff < grassCloseupIdentifiableDiffPixels || stats.diff*10 >= area*9 {
+			continue
+		}
+		if topBand > 0 && stats.topDiff*10 > topBand*stats.rect.Dx() {
 			continue
 		}
 		if stats.bottomDiff < 4 {
@@ -189,7 +193,7 @@ func TestGrassCloseupSceneShowsIdentifiableShortGrass(t *testing.T) {
 		for _, stats := range candidates {
 			t.Logf("候选格矩形=%v 差分=%d 顶带=%d 底带=%d", stats.rect, stats.diff, stats.topDiff, stats.bottomDiff)
 		}
-		t.Fatalf("画面内 %d 个短草格没有一个满足可辨识判据（可见 ≥%dpx、非不透明矩形、贴地叶片）",
+		t.Fatalf("画面内 %d 个短草格没有一个满足可辨识判据（可见 ≥%dpx、非不透明矩形、上缘透空、贴地叶片）",
 			len(candidates), grassCloseupIdentifiableDiffPixels)
 	}
 	t.Logf("可辨识短草格：%v 差分=%d 顶带=%d 底带=%d", identifiable.rect, identifiable.diff,

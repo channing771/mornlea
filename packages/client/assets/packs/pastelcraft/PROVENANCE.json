@@ -227,11 +227,6 @@
       "sha256": "550aceb8e783485b50414c15400d775ed05e32b2ab8bcb254d4165615677bf66"
     },
     {
-      "destination": "textures/short_grass.png",
-      "source": "assets/minecraft/textures/block/short_grass.png",
-      "sha256": "aa575b25b63884f02f738ebb460f3c479ffd1b22c99c52f9dff90d1ce7538d70"
-    },
-    {
       "destination": "textures/smooth_stone.png",
       "source": "assets/minecraft/textures/block/smooth_stone.png",
       "sha256": "4cfbee2faf35e78a5806c589830d3c66e350e71584e9129aeb539f57fbf9453c"

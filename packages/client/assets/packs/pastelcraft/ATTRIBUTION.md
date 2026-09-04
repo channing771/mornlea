@@ -55,7 +55,6 @@ Mornlea selected and renamed a subset without pixel transformations.
 - `crafting_table_top.png` → `workbench_top`
 - `crafting_table_side.png` → `workbench_side`（单层侧面槽位只取 side）
 - `torch.png` → `torch`
-- `short_grass.png` → `short_grass`
 - `destroy_stage_0.png`..`destroy_stage_9.png` → `crack_0`..`crack_9`
   （`-sheet.png` 变体未用）
 
@@ -71,6 +70,7 @@ Mornlea selected and renamed a subset without pixel transformations.
 - `potato_4`..`potato_7`、`carrot_4`..`carrot_7`（上游各仅 4 阶段）
 - `door`（`oak_door_bottom/top.png` 是双格门模型半扇，非单层语义）
 - `workbench_bottom`（上游无 `crafting_table_bottom`）
+- `short_grass`（上游为灰度图，需生物群系染色；Mornlea 无染色路径，直接使用呈近白色难辨，退回程序化绿色）
 - `bed_foot_south`/`bed_foot_west`/`bed_foot_north`/`bed_foot_east`/
   `bed_head_south`/`bed_head_west`/`bed_head_north`/`bed_head_east`
  （`entity/bed/*.png` 是 64×64 实体 atlas，非 16×16）

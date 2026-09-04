@@ -60,7 +60,7 @@ var pastelcraftSources = map[string]string{
 	"carrot_0": "carrots_stage0.png", "carrot_1": "carrots_stage1.png",
 	"carrot_2": "carrots_stage2.png", "carrot_3": "carrots_stage3.png",
 	"workbench_top": "crafting_table_top.png", "workbench_side": "crafting_table_side.png",
-	"torch": "torch.png", "short_grass": "short_grass.png",
+	"torch":   "torch.png",
 	"crack_0": "destroy_stage_0.png", "crack_1": "destroy_stage_1.png",
 	"crack_2": "destroy_stage_2.png", "crack_3": "destroy_stage_3.png",
 	"crack_4": "destroy_stage_4.png", "crack_5": "destroy_stage_5.png",
@@ -85,7 +85,7 @@ var pastelcraftLayers = map[string]uint16{
 	"potato_0": LayerPotato0, "potato_1": LayerPotato1, "potato_2": LayerPotato2, "potato_3": LayerPotato3,
 	"carrot_0": LayerCarrot0, "carrot_1": LayerCarrot1, "carrot_2": LayerCarrot2, "carrot_3": LayerCarrot3,
 	"workbench_top": LayerWorkbenchTop, "workbench_side": LayerWorkbenchSide,
-	"torch": LayerTorch, "short_grass": LayerShortGrass,
+	"torch":   LayerTorch,
 	"crack_0": LayerCrack0, "crack_1": LayerCrack1, "crack_2": LayerCrack2, "crack_3": LayerCrack3,
 	"crack_4": LayerCrack4, "crack_5": LayerCrack5, "crack_6": LayerCrack6, "crack_7": LayerCrack7,
 	"crack_8": LayerCrack8, "crack_9": LayerCrack9,
@@ -95,7 +95,7 @@ var proceduralFallbackLayers = []uint16{
 	LayerChest, LayerLightBlock, LayerRoofTile, LayerWater,
 	LayerPotato4, LayerPotato5, LayerPotato6, LayerPotato7,
 	LayerCarrot4, LayerCarrot5, LayerCarrot6, LayerCarrot7,
-	LayerDoor, LayerWorkbenchBottom,
+	LayerDoor, LayerWorkbenchBottom, LayerShortGrass,
 	LayerBedFootSouth, LayerBedFootWest, LayerBedFootNorth, LayerBedFootEast,
 	LayerBedHeadSouth, LayerBedHeadWest, LayerBedHeadNorth, LayerBedHeadEast,
 	LayerCowHide, LayerCowHead,
@@ -139,7 +139,7 @@ type pastelcraftProvenanceEntry struct {
 	Source      string `json:"source"`
 	// SourceURL 与 License 只出现在非 Pastelcraft 上游的文件条目上
 	// （牛肉图标的 OpenGameArt 页面与 CC0 协议）：Pastelcraft 子集的
-	// 57 个条目沿用顶层 upstream/license，不逐文件重复。
+	// 56 个条目沿用顶层 upstream/license，不逐文件重复。
 	SourceURL string `json:"source_url,omitempty"`
 	License   *struct {
 		ID  string `json:"id"`
