@@ -24,10 +24,11 @@ func passiveSpawnFixture() []protocol.PassiveSpawnRecord {
 }
 
 // passiveStateFixture 返回 2 条 ID 严格升序的合法 state 记录：速度取非零值，
-// 保证速度分量的搬运与丢弃可分辨。
+// 保证速度分量的搬运与丢弃可分辨；放牧标志取 0/1 各一，保证该字节的搬运与
+// 丢弃可分辨。
 func passiveStateFixture() []protocol.PassiveStateRecord {
 	return []protocol.PassiveStateRecord{
-		{ID: 5, Position: mgl32.Vec3{1.5, 2, -1.25}, Velocity: mgl32.Vec3{0.25, -0.5, 0}, Yaw: 0.75, Health: 9},
+		{ID: 5, Position: mgl32.Vec3{1.5, 2, -1.25}, Velocity: mgl32.Vec3{0.25, -0.5, 0}, Yaw: 0.75, Health: 9, Grazing: 1},
 		{ID: 8, Position: mgl32.Vec3{-4.5, 63.5, 6.25}, Velocity: mgl32.Vec3{0, 0.5, 1.5}, Yaw: -1.5, Health: 6},
 	}
 }
@@ -65,11 +66,12 @@ func TestPassiveMessagesWireLayoutIsFrozen(t *testing.T) {
 			"0500000000000000" + "00000000" +
 			"0000c03f000000400000a0bf" + "0000403f" + "0a"},
 		// u64 tick + count 1 + [u64 ID + 3×f32 position + 3×f32 velocity +
-		// f32 yaw + u8 health]。
+		// f32 yaw + u8 health + u8 放牧标志]（首条记录放牧标志为 1，锁死该字节
+		// 确实落在 record 尾部）。
 		{"state", state, 27, "0807060504030201" + "01" +
 			"0500000000000000" +
 			"0000c03f000000400000a0bf" +
-			"0000803e000000bf00000000" + "0000403f" + "09"},
+			"0000803e000000bf00000000" + "0000403f" + "09" + "01"},
 		// u64 tick + count 1 + u64 ID。
 		{"despawn", despawn, 28, "0807060504030201" + "01" + "0500000000000000"},
 	}
@@ -101,9 +103,9 @@ func TestPassiveMessagesDecodeRejectsInvalidWire(t *testing.T) {
 	stateBase := encode(passiveStateMessage())
 	despawnBase := encode(passiveDespawnMessage())
 
-	// recordSize 分别为 spawn 29（8+4+12+4+1）、state 37（8+12+12+4+1）、
+	// recordSize 分别为 spawn 29（8+4+12+4+1）、state 38（8+12+12+4+1+1）、
 	// despawn 8；头部固定 9 字节（u64 tick + u8 count）。
-	spawnRecord, stateRecord, despawnRecord := 29, 37, 8
+	spawnRecord, stateRecord, despawnRecord := 29, 38, 8
 	mutateID := func(payload []byte, recordSize, index int, id uint64) {
 		offset := 9 + index*recordSize
 		for byteIndex := 0; byteIndex < 8; byteIndex++ {
@@ -141,7 +143,11 @@ func TestPassiveMessagesDecodeRejectsInvalidWire(t *testing.T) {
 	// 第一条记录 yaw 的偏移：9 + 8 + 12 + 12 = 41。
 	binary.LittleEndian.PutUint32(stateNaNYaw[41:], math.Float32bits(float32(math.NaN())))
 	stateHealth21 := append([]byte(nil), stateBase...)
-	stateHealth21[9+stateRecord-1] = core.MaxHealth + 1
+	// 第一条记录 health 的偏移：9 + 38 - 2 = 45（末字节是放牧标志）。
+	stateHealth21[9+stateRecord-2] = core.MaxHealth + 1
+	stateGrazing2 := append([]byte(nil), stateBase...)
+	// 第一条记录放牧标志的偏移：9 + 38 - 1 = 46；合法值仅 0/1。
+	stateGrazing2[9+stateRecord-1] = 2
 	despawnCount65 := append([]byte(nil), despawnBase...)
 	mutateCount(despawnCount65, 65)
 	// 尾随字节：在合法 despawn 载荷后多补 1 字节。
@@ -164,6 +170,7 @@ func TestPassiveMessagesDecodeRejectsInvalidWire(t *testing.T) {
 		{"state Inf velocity", 27, stateInfVelocity},
 		{"state NaN yaw", 27, stateNaNYaw},
 		{"state health 超上限", 27, stateHealth21},
+		{"state 放牧标志非 0/1", 27, stateGrazing2},
 		{"state 截断", 27, stateBase[:len(stateBase)-1]},
 		{"despawn 逆序 ID", 28, despawnDescending},
 		{"despawn count 65", 28, despawnCount65},
@@ -192,8 +199,8 @@ func TestPassiveMessagesWireLimitsAreFrozen(t *testing.T) {
 	}{
 		// 8 tick + 1 count + 64×[8 ID + 4 dimension + 12 position + 4 yaw + 1 health] = 1865。
 		{"spawn", 29, 1865},
-		// 8 tick + 1 count + 64×[8 ID + 12 position + 12 velocity + 4 yaw + 1 health] = 2377。
-		{"state", 37, 2377},
+		// 8 tick + 1 count + 64×[8 ID + 12 position + 12 velocity + 4 yaw + 1 health + 1 放牧标志] = 2441。
+		{"state", 38, 2441},
 		// 8 tick + 1 count + 64×8 ID = 521。
 		{"despawn", 8, 521},
 	}
@@ -210,6 +217,13 @@ func TestPassiveMessagesWireLimitsAreFrozen(t *testing.T) {
 	}
 	if len(spawnPayload) != 9+3*29 {
 		t.Fatalf("spawn 载荷=%d 字节，想要 %d", len(spawnPayload), 9+3*29)
+	}
+	_, statePayload, err := encodeServerControlPayload(protocol.StatePlay, passiveStateMessage())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(statePayload) != 9+2*protocol.PassiveStateWireBytes {
+		t.Fatalf("state 载荷=%d 字节，想要 %d", len(statePayload), 9+2*protocol.PassiveStateWireBytes)
 	}
 }
 

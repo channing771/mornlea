@@ -20,10 +20,11 @@ func passiveSpawnFixture() []PassiveSpawnRecord {
 }
 
 // passiveStateFixture 返回 2 条 ID 严格升序的合法 state 记录：速度取非零值，
-// 保证速度分量的搬运与丢弃可分辨。
+// 保证速度分量的搬运与丢弃可分辨；放牧标志取 0/1 各一，保证该字节的搬运与
+// 丢弃可分辨。
 func passiveStateFixture() []PassiveStateRecord {
 	return []PassiveStateRecord{
-		{ID: 5, Position: mgl32.Vec3{1.5, 2, -1.25}, Velocity: mgl32.Vec3{0.25, -0.5, 0}, Yaw: 0.75, Health: 9},
+		{ID: 5, Position: mgl32.Vec3{1.5, 2, -1.25}, Velocity: mgl32.Vec3{0.25, -0.5, 0}, Yaw: 0.75, Health: 9, Grazing: 1},
 		{ID: 8, Position: mgl32.Vec3{-4.5, 63.5, 6.25}, Velocity: mgl32.Vec3{0, 0.5, 1.5}, Yaw: -1.5, Health: 6},
 	}
 }
@@ -117,6 +118,9 @@ func TestPassiveMessagesValidateRejectsInvalidRecords(t *testing.T) {
 		}}}},
 		{"state health 超上限", PassiveState{ServerTick: 1, States: []PassiveStateRecord{{
 			ID: 1, Position: mgl32.Vec3{1, 1, 1}, Velocity: mgl32.Vec3{0, 0, 0}, Health: core.MaxHealth + 1,
+		}}}},
+		{"state 放牧标志非 0/1", PassiveState{ServerTick: 1, States: []PassiveStateRecord{{
+			ID: 1, Position: mgl32.Vec3{1, 1, 1}, Velocity: mgl32.Vec3{0, 0, 0}, Health: 10, Grazing: 2,
 		}}}},
 		{"state count 0", PassiveState{ServerTick: 1}},
 		{"despawn 重复 ID", PassiveDespawn{ServerTick: 1, IDs: []uint64{5, 5}}},

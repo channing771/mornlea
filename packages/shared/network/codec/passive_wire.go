@@ -39,6 +39,7 @@ func encodePassiveState(e *byteEncoder, state protocol.PassiveState) {
 		}
 		e.f32(record.Yaw)
 		e.u8(record.Health)
+		e.u8(record.Grazing)
 	}
 }
 
@@ -128,6 +129,9 @@ func decodePassiveState(d *byteDecoder) (protocol.ServerPacket, error) {
 			return nil, err
 		}
 		if record.Health, err = d.u8(); err != nil {
+			return nil, err
+		}
+		if record.Grazing, err = d.u8(); err != nil {
 			return nil, err
 		}
 	}
