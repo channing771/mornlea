@@ -54,6 +54,14 @@ type hostilesLifecycle interface {
 	Close()
 }
 
+type passivesLifecycle interface {
+	Restore() []contract.PassiveMob
+	Observe([]contract.PassiveMob)
+	Poll(uint64) error
+	Flush(context.Context) error
+	Close()
+}
+
 var (
 	_ = persistence.Options{}
 	_ = persistence.Status{
@@ -85,11 +93,13 @@ var (
 	_ func(storage.PlayerStore, persistence.Options) *persistence.Players                                 = persistence.NewPlayers
 	_ func(storage.CompanionStore, storage.StoredCompanions, persistence.Options) *persistence.Companions = persistence.NewCompanions
 	_ func(storage.HostileMobStore, storage.StoredHostileMobs, persistence.Options) *persistence.Hostiles = persistence.NewHostiles
+	_ func(storage.PassiveMobStore, storage.StoredPassiveMobs, persistence.Options) *persistence.Passives = persistence.NewPassives
 
 	_ worldLifecycle      = (*persistence.World)(nil)
 	_ playersLifecycle    = (*persistence.Players)(nil)
 	_ companionsLifecycle = (*persistence.Companions)(nil)
 	_ hostilesLifecycle   = (*persistence.Hostiles)(nil)
+	_ passivesLifecycle   = (*persistence.Passives)(nil)
 
 	_ persistence.Status = server.PersistenceStatus{}
 	_ error              = persistence.ErrPlayerBackpressure

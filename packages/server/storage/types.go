@@ -2,7 +2,7 @@
 //
 // 根包保留编排与门面：disk/memory 编排、world_files/backup/metadata 与
 // chunk_keys，外加对拆分出的域子包（storagedef/region/chunk/player/
-// companion/hostile）的别名再导出，保证既有 `storage.X` 消费方
+// companion/hostile/passive）的别名再导出，保证既有 `storage.X` 消费方
 // 源码零改动。
 package storage
 
@@ -13,6 +13,7 @@ import (
 	"github.com/channing771/mornlea/packages/server/storage/chunk"
 	"github.com/channing771/mornlea/packages/server/storage/companion"
 	"github.com/channing771/mornlea/packages/server/storage/hostile"
+	"github.com/channing771/mornlea/packages/server/storage/passive"
 	"github.com/channing771/mornlea/packages/server/storage/player"
 	"github.com/channing771/mornlea/packages/server/storage/region"
 	"github.com/channing771/mornlea/packages/server/storage/storagedef"
@@ -25,11 +26,13 @@ var (
 	// 保持既有 `storage.X` 引用与 errors.Is 身份不变。
 	ErrChunkNotFound    = chunk.ErrChunkNotFound
 	ErrRevisionConflict = chunk.ErrRevisionConflict
-	// ErrCompanionsNotFound/ErrHostileMobsNotFound 随实体域分别定义在
-	// companion/hostile 包（「聚合存档缺失」是该域存档契约的一部分），此处
-	// 绑定同一错误值再导出，保持既有引用与 errors.Is 身份不变。
+	// ErrCompanionsNotFound/ErrHostileMobsNotFound/ErrPassiveMobsNotFound
+	// 随实体域分别定义在 companion/hostile/passive 包（「聚合存档缺失」是该域
+	// 存档契约的一部分），此处绑定同一错误值再导出，保持既有引用与 errors.Is
+	// 身份不变。
 	ErrCompanionsNotFound  = companion.ErrCompanionsNotFound
 	ErrHostileMobsNotFound = hostile.ErrHostileMobsNotFound
+	ErrPassiveMobsNotFound = passive.ErrPassiveMobsNotFound
 	// ErrPlayerNotFound/ErrWorldLocked 定义在根包：二者的产生方是根包编排
 	// （DiskStore/MemoryStore 的 LoadPlayer 路径与世界文件锁），player codec
 	// 只产生 storagedef 哨兵，故不随 player 域迁出。
@@ -44,6 +47,10 @@ var (
 // MaxHostileMobs 是 hostile 存档域的记录数上限，随 hostile 包定义，此处常量
 // 再导出保持既有 storage.MaxHostileMobs 引用不变。
 const MaxHostileMobs = hostile.MaxHostileMobs
+
+// MaxPassiveMobs 是 passive 存档域的记录数上限，随 passive 包定义，此处常量
+// 再导出保持 storage.MaxPassiveMobs 引用不变。
+const MaxPassiveMobs = passive.MaxPassiveMobs
 
 type Metadata struct {
 	FormatVersion  uint32
@@ -118,6 +125,14 @@ type (
 	HostileMobsSave   = hostile.HostileMobsSave
 )
 
+// StoredPassiveMob/StoredPassiveMobs/PassiveMobsSave 是 passive 存档域的值
+// 类型，别名再导出保持类型身份。
+type (
+	StoredPassiveMob  = passive.StoredPassiveMob
+	StoredPassiveMobs = passive.StoredPassiveMobs
+	PassiveMobsSave   = passive.PassiveMobsSave
+)
+
 type SaveResult struct {
 	Committed map[core.ChunkKey]uint64
 }
@@ -144,6 +159,14 @@ type HostileMobStore interface {
 	SaveHostileMobs(context.Context, HostileMobsSave) error
 }
 
+// PassiveMobStore 是被动牛聚合存档的根包编排契约：DiskStore/MemoryStore 各自
+// 实现，passive 子包只提供编解码，不感知存储实现。文件缺失以独立的
+// ErrPassiveMobsNotFound 表达，调用方视同空集合。
+type PassiveMobStore interface {
+	LoadPassiveMobs(context.Context) (StoredPassiveMobs, error)
+	SavePassiveMobs(context.Context, PassiveMobsSave) error
+}
+
 type Store interface {
 	Metadata() Metadata
 	// SaveMetadata 原子提交一份世界 metadata 快照，失败时磁盘上必须保留完整旧版。
@@ -154,12 +177,13 @@ type Store interface {
 	Close() error
 }
 
-// WorldStore 组合世界区块、玩家、伙伴与夜行者聚合存档。
+// WorldStore 组合世界区块、玩家、伙伴、夜行者与被动牛聚合存档。
 type WorldStore interface {
 	Store
 	PlayerStore
 	CompanionStore
 	HostileMobStore
+	PassiveMobStore
 	// CompanionsExist 只探测固定 companion metadata 是否存在，不读取或解码正文。
 	CompanionsExist(context.Context) (bool, error)
 }
