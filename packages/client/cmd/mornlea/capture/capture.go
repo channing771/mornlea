@@ -824,6 +824,11 @@ func RunCapture(app SceneApplication, dir string, updateGolden bool) error {
 			errs = append(errs, fmt.Errorf("场景 %s: %w", scene.Name, err))
 		}
 	}
+	// GIF 动态基线与 PNG 场景表共用同一个已预热 application（世界时间仍冻结）：
+	// 新基线只进独立目录，既有 PNG 逐字节不动。
+	if err := RunPassiveDeathGIFs(app, dir, updateGolden); err != nil {
+		errs = append(errs, err)
+	}
 	return errors.Join(errs...)
 }
 
