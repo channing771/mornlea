@@ -49,6 +49,32 @@ describe("HudRoot 挂载", () => {
     expect(root.querySelectorAll(".hud-slot-durability")).toHaveLength(1);
   });
 
+  it("空槽衬底与物品 tile 互斥：空格渲淡印线稿、有物品时隐藏", () => {
+    const root = renderHud({
+      ...base,
+      hotbar: {
+        slots: [
+          { item: 1, count: 1 },
+          ...Array.from({ length: 8 }, () => slot()),
+        ],
+        selectedIndex: 0,
+      },
+    });
+    const slots = [...root.querySelectorAll(".hud-slot")];
+    expect(slots).toHaveLength(9);
+    // 有物品格：tile 呈现、线稿衬底隐藏。
+    expect(slots[0]?.querySelector(".hud-slot-tile")).not.toBeNull();
+    expect(slots[0]?.querySelector(".hud-slot-doodle")).toBeNull();
+    // 空格：线稿衬底呈现、tile 隐藏；每枚线稿携带非空 path。
+    for (const empty of slots.slice(1)) {
+      expect(empty.querySelector(".hud-slot-tile")).toBeNull();
+      expect(empty.querySelector(".hud-slot-doodle")).not.toBeNull();
+    }
+    for (const path of root.querySelectorAll(".hud-slot-doodle path")) {
+      expect((path.getAttribute("d") ?? "").length).toBeGreaterThan(0);
+    }
+  });
+
   it("状态行逐槽解析：生命七点=三满一半六空，饥饿五点=三填充（末格半格）", () => {
     const root = renderHud(base);
     expect(root.querySelectorAll(".hud-cell--heart-full")).toHaveLength(3);

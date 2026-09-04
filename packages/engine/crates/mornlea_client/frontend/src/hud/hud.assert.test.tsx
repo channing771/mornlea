@@ -331,20 +331,36 @@ describe("构图关系", () => {
 });
 
 describe("几何标记与进度轨道", () => {
-  it("双层轮廓与双层文字经类消费：选中格外框+内衬、数量与弹条的阴影+前景", () => {
+  it("Tiny Glade 选中与数量经类消费：暖橙外框+抬起、无 sage 内衬、数量深棕前景", () => {
     const css = readHudCss();
-    // 选中格的两层都是几何标记：外扩 outline 画在格框之外，sage 内衬铺在格心
-    // （::after），忽略颜色后仍可与未选中格区分。
-    expect(ruleBodies(css, ".hud-slot--selected")).toContain("outline:");
-    expect(ruleBodies(css, ".hud-slot--selected::after")).toContain(
-      "background: var(--accent-sage)",
+    // 选中格：暖橙赭石外扩外框（wheat 系暖向变体）+ 方块抬起阴影；
+    // 旧 sage 内衬平铺（::after）已删除。
+    expect(ruleBodies(css, ".hud-slot--selected")).toContain(
+      "var(--hud-hotbar-selected-warm)",
     );
-    // 数量数字与物品名弹条都以「阴影 + 前景」双层呈现。
-    const shadowLayer =
-      "text-shadow: var(--hud-text-shadow-offset-scaled) var(--hud-text-shadow-offset-scaled)" +
-      " 0 var(--text-shadow)";
-    expect(ruleBodies(css, ".hud-slot-count")).toContain(shadowLayer);
-    expect(ruleBodies(css, ".hud-popup")).toContain(shadowLayer);
+    expect(ruleBodies(css, ".hud-slot--selected")).toContain("box-shadow:");
+    expect(css).not.toContain("hud-slot--selected::after");
+    expect(ruleBodies(css, ".hud-slot-count")).toContain("color: var(--text-on-panel)");
+    // 数量数字在亮底上以「浅投影 + 深棕前景」双层呈现。
+    expect(ruleBodies(css, ".hud-slot-count")).toContain("var(--hud-count-shadow)");
+    // 数量与物品名弹条不再共用同一套阴影+前景（弹条仍是暖白字深投影）。
+    const popupBody = ruleBodies(css, ".hud-popup");
+    expect(popupBody).toContain("color: var(--text-primary)");
+    expect(popupBody).toContain("var(--text-shadow)");
+  });
+
+  it("贴条透明悬浮：无深色底带、无 inset 缘阴影，每格粉彩底经 data-index 供给", () => {
+    const css = readHudCss();
+    const stripBody = ruleBodies(css, ".hud-hotbar");
+    expect(stripBody).toContain("background: transparent");
+    expect(stripBody).not.toContain("var(--hud-hotbar-strip)");
+    expect(stripBody).not.toContain("inset");
+    // 九格逐格不同粉彩底：`data-index` 选择器把每格钉到各自面色令牌。
+    for (let index = 0; index < 9; index += 1) {
+      expect(ruleBodies(css, `.hud-slot[data-index="${index}"]`)).toContain(
+        `var(--hud-slot-face-${index})`,
+      );
+    }
   });
 
   it("进食轨道是唯一的进度语义：暖金填充、不带任何形状标记", () => {
