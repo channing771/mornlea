@@ -221,7 +221,7 @@ func TestOakGroveSceneShowsIdentifiableNaturalShortGrass(t *testing.T) {
 		topBand := stats.rect.Dy() / 4
 		// 可见量门槛按实测足迹取 150px：夹具中最清晰一株的差分实测为 193px，
 		// 150px 留出约两成渲染抖动余量，同时把「画面里真实可见的一株植物」
-		// 与个位数像素的噪声存在性区分开；`area` 侧的 90% 上限守住另一端，
+		// 与个位数像素的噪声存在性区分开；面积侧的 90% 上限守住另一端，
 		// 防止把不透明矩形误判为 cutout 植物。
 		if stats.diff < 150 || stats.diff*10 >= area*9 {
 			continue
