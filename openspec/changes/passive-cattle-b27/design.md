@@ -25,7 +25,7 @@
 
 ### D3：Avatar 实例加 1×u32 材质槽，shader 复 terrain atlas 绑定范式
 
-- 选择：实例 80→88 bytes（`transform mat4 + color vec4 + material u32 + 12B 保留对齐` 具体布局实现阶段锁定），`avatar.wgsl` 加 `texture_2d<f32> + sampler`，UV 由 cuboid 面顶点本地坐标派生（0..1），cutout 沿用 `a<0.5 discard`。
+- 选择：实例 80→96 bytes（`transform mat4` 64 + `color vec4` 16 + `material u32` 4 + 12B 保留对齐，96%16==0 满足 uniform 步长；实现阶段由初估 88 按对齐锁定为 96），`avatar.wgsl` 加 `texture_2d<f32> + sampler`，UV 由 cuboid 面顶点本地坐标派生（0..1），cutout 沿用 `a<0.5 discard`。
 - 理由：复用既有 atlas 上传/预热/容量语义，玩家/伙伴/夜行者分支传哨兵材质走原纯色路径，零回归。
 - 否决：另起 entity-textured pass——多一管线、多一容量表、多一 golden 变量；否决 CPU 端逐像素 tint（热路径浪费）。
 - 同步面：`entity.rs AVATAR_MAX_INSTANCES` 不变；`mornlea_client.h` + Go bridge + client ABI v14→v15 + 跨语言布局测试同批。
