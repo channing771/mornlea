@@ -519,6 +519,64 @@ func TestEmbeddedBeefAttribution(t *testing.T) {
 	}
 }
 
+// pastelcraftDefaultPackName 是内嵌默认包在换肤后的产品名，与旧包
+// `Pixel Perfection for Mornlea` 保持同形的命名习惯。
+const pastelcraftDefaultPackName = "Pastelcraft for Mornlea"
+
+// oldDefaultPackLayerSHA256 记录换肤前旧默认包在泥土系槽位的像素哈希：
+// 换肤后这些槽位必须不再等于旧字节，测试据此变绿。
+var oldDefaultPackLayerSHA256 = map[string]string{
+	"dirt":         "eee24a5d59308ddce118f1639ce522cd9ce742f5c2408399d60a2513a65a8025",
+	"grass_top":    "e966bdf4896a46bbcf32d79fb58320d82ed5fce102f8bf58a2a8ea3ceb337e0d",
+	"grass_side":   "4d7db76883c7cfbdb288c79d1e02a5527010f676651eef7a0402f4feb1815124",
+	"farmland_dry": "c9e41957286704e581e4ef9d03f5e5e938ad1e34d2052b2c631fa5f99d66ad09",
+	"farmland_wet": "c68ccbc0205433812fab9c536960addd5aa79bcb3a8ed8eddeac3d30dbab87fe",
+	"sand":         "9f2ac41887cb36914d941c11f9482a3a8109ec2d8fb8db428690d55427be7450",
+	"gravel":       "62ec6c921a393ee1fd9772b7668899bb975953abeab2482493e81714e49374de",
+	"clay":         "dbf7f23818019190c1c3b87c3d66e0e0097a7d5fc68f57796914dc0466dc7181",
+}
+
+// pastelcraftDirtLayers 是换肤后必须来自新包的泥土系槽位集合。
+var pastelcraftDirtLayers = map[string]uint16{
+	"dirt": LayerDirt, "grass_top": LayerGrassTop, "grass_side": LayerGrassSide,
+	"farmland_dry": LayerFarmlandDry, "farmland_wet": LayerFarmlandWet,
+	"sand": LayerSand, "gravel": LayerGravel, "clay": LayerClay,
+}
+
+// TestEmbeddedDefaultPackIsPastelcraft 锁定内嵌默认包的产品外观基线：包名已换成
+// 新包、泥土系槽位既不再是程序化像素也不再是旧包字节。换肤实现落地前保持红色。
+func TestEmbeddedDefaultPackIsPastelcraft(t *testing.T) {
+	root, err := fs.Sub(defaultPackFS, "packs/pastelcraft")
+	if err != nil {
+		t.Fatalf("打开内嵌默认包 packs/pastelcraft: %v", err)
+	}
+	manifestBytes, err := fs.ReadFile(root, "pack.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest struct {
+		Format int    `json:"format"`
+		Name   string `json:"name"`
+	}
+	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
+		t.Fatalf("解析 pack.json: %v", err)
+	}
+	if manifest.Format != 1 || manifest.Name != pastelcraftDefaultPackName {
+		t.Fatalf("pack.json = %+v，想要 format=1 name=%q", manifest, pastelcraftDefaultPackName)
+	}
+	procedural := NewRegistry()
+	embedded := NewDefaultRegistry()
+	for logicalName, layer := range pastelcraftDirtLayers {
+		if got, want := embedded.LayerRGBA(int(layer)), procedural.LayerRGBA(int(layer)); bytes.Equal(got, want) {
+			t.Errorf("%s 仍是程序化像素：换肤后必须来自内嵌新包", logicalName)
+		}
+		sum := sha256.Sum256(embedded.LayerRGBA(int(layer)))
+		if got := hex.EncodeToString(sum[:]); got == oldDefaultPackLayerSHA256[logicalName] {
+			t.Errorf("%s 仍是旧包字节 %s：换肤后必须变化", logicalName, got)
+		}
+	}
+}
+
 // opaqueAverageForTest 返回一层材质不透明像素的平均 RGB，用于比较色相。
 func opaqueAverageForTest(px []byte) [3]int {
 	var sum [3]int
