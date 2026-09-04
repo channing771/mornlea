@@ -23,12 +23,14 @@ const (
 
 // passiveState 是一头被动牛的权威身体事实。字段面与夜行者侧对齐但类型独立：
 // `state` 是与玩家同形的物理体，`id`/`dimension`/`yaw`/`health` 组成持久化身
-// 体事实（经 `PassiveMob` 快照进出，转换由 `server` 装配层以后完成）；另有三
-// 项运行时派生物：`input` 是本 `tick` 的控制意图（漫游或逃跑朝向），`home`
-// 是出生区块（漫游不得离开其邻域，重启后以加载位置重新锚定，不落盘），
-// `fleeTicks`/`fleeFrom` 是受击逃跑的剩余时长与伤害来源（瞬态，不进快照或存
-// 档），`fresh` 标记本 `tick` 刚生成的个体——生成次序在物理之前，但新个体下
-// 一 `tick` 才参与积分。
+// 体事实（经 `PassiveMob` 快照进出，转换由 `server` 装配层以后完成；快照上
+// 的瞬态 `Grazing` 呈现位只读事件态、不参与恢复）；另有三项运行时派生物：
+// `input` 是本 `tick` 的控制意图（漫游或逃跑朝向），`home` 是出生区块（漫
+// 游不得离开其邻域，重启后以加载位置重新锚定，不落盘），`fleeTicks`/
+// `fleeFrom` 是受击逃跑的剩余时长与伤害来源（瞬态，不进快照或存档），
+// `grazeTicks`/`grazePos` 是吃草事件的剩余时长与触发格（瞬态，不进快照或
+// 存档，重启后事件自然消失），`fresh` 标记本 `tick` 刚生成的个体——生成次
+// 序在物理之前，但新个体下一 `tick` 才参与积分。
 //
 // 被动牛没有攻击、目标与灼烧语义：此处刻意不设夜行者侧的冷却与目标字段，任
 // 何还击能力在类型层面即不存在。
@@ -48,7 +50,11 @@ type passiveState struct {
 	home      core.ChunkPos
 	fleeTicks uint8
 	fleeFrom  mgl32.Vec3
-	fresh     bool
+	// grazeTicks 是吃草事件剩余 `tick`（0 表示不在事件中），`grazePos` 是触
+	// 发时记录的草方块坐标：结算只写这一格，瞬态内存字段，不进快照或存档。
+	grazeTicks uint8
+	grazePos   core.BlockPos
+	fresh      bool
 }
 
 // passiveSet 是按 `id` 严格升序维护的被动牛集合。切片容量在构造时按上限
@@ -104,8 +110,9 @@ func (set *passiveSet) removeAt(index int) {
 
 // RestorePassive 把一条身体记录恢复为权威事实。校验判据是夜行者记录矩阵的
 // 子集（`id` 非零且不重复、维度存在、身体状态有限且位置在世界高度内、生命
-// 为正且不超上限）：逃跑与出生区块都是运行时派生物，恢复时分别清零与按加载
-// 位置重新锚定。任何一条不成立都整体拒绝且不改变既有集合。
+// 为正且不超上限）：逃跑、吃草与出生区块都是运行时派生物，恢复时分别清零
+// 与按加载位置重新锚定——记录上的瞬态 `Grazing` 位被忽略，重启后事件恒不
+// 恢复。任何一条不成立都整体拒绝且不改变既有集合。
 func (engine *engineContext) RestorePassive(mob PassiveMob) error {
 	if err := validatePassiveMob(mob); err != nil {
 		return err
@@ -166,6 +173,7 @@ func (engine *engineContext) passiveMobAt(index int) PassiveMob {
 		State:     entry.state,
 		Yaw:       entry.yaw,
 		Health:    entry.health,
+		Grazing:   entry.grazeTicks > 0,
 	}
 }
 
@@ -182,8 +190,10 @@ func (passive *passiveState) applyDamage(damage int32) {
 
 // DamagePassive 结算一次对被动牛的有效伤害并触发逃跑：生命按夜行者同规则扣
 // 减（归零由本 `tick` 稍后的死亡结算统一移除与掉落），同时以固定时长与伤害
-// 来源位置进入逃跑状态。非正伤害对已知个体是无操作受理（生命与漫游不变）；
-// 未知 `id` 整体拒绝并返回 `false`，绝不留下半更新的逃跑事实。
+// 来源位置进入逃跑状态。有效伤害同时终结吃草事件（只清事件态、不写块；抽
+// 选无状态无冷却，无需也不存在可清的“食欲”）。非正伤害对已知个体是无操作
+// 受理（生命与漫游不变，吃草也不受打扰）；未知 `id` 整体拒绝并返回 `false`，
+// 绝不留下半更新的逃跑事实。
 func (engine *engineContext) DamagePassive(id uint64, damage int32, from mgl32.Vec3) bool {
 	index := engine.passives.findIndex(id)
 	if index < 0 {
@@ -196,14 +206,17 @@ func (engine *engineContext) DamagePassive(id uint64, damage int32, from mgl32.V
 	entry.applyDamage(damage)
 	entry.fleeTicks = passiveFleeDurationTicks
 	entry.fleeFrom = from
+	entry.grazeTicks = 0
 	return true
 }
 
-// advancePassives 只推进生成与移动；死亡结算由调用方在被动阶段紧随其后按
-// 固定生命周期顺序编排。
-func (engine *engineContext) advancePassives() {
+// advancePassives 只推进生成、移动与吃草；死亡结算由调用方在被动阶段紧随其
+// 后按固定生命周期顺序编排。吃草排在移动之后：事件结算的写块与移动冻结读
+// 的是同一拍的位置，顺序固定则重放一致。
+func (engine *engineContext) advancePassives(pending *pendingChunkChanges) {
 	engine.advancePassiveSpawn()
 	engine.advancePassiveMovement()
+	engine.advancePassiveGraze(pending)
 }
 
 // advancePassiveMovement 把全部被动牛汇入与玩家/夜行者相同的 `Rust`
@@ -222,6 +235,14 @@ func (engine *engineContext) advancePassiveMovement() {
 		entry := &engine.passives.entries[index]
 		if entry.fresh {
 			entry.fresh = false
+			index++
+			continue
+		}
+		// 吃草事件期间牛静止（与漫游/逃跑输入无仲裁：冻结即中断了位移来
+		// 源，有效伤害则已由 `DamagePassive` 先行终结事件），因此跳过积分、
+		// 朝向更新与邻域回滚，位置逐位冻结。
+		if entry.grazeTicks > 0 {
+			entry.input = physics.Input{Yaw: entry.yaw}
 			index++
 			continue
 		}
