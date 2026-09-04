@@ -317,6 +317,20 @@ type (
 	CombatHit = protocol.CombatHit
 )
 
+// 被动牛消息 DTO 定义在 protocol 包；再导出保持既有 network.X 引用。
+type (
+	// PassiveSpawnRecord 是一头被动牛的出生事实。
+	PassiveSpawnRecord = protocol.PassiveSpawnRecord
+	// PassiveSpawn 是被动牛出生批次通知。
+	PassiveSpawn = protocol.PassiveSpawn
+	// PassiveStateRecord 是一头被动牛在一个权威 tick 的身体状态。
+	PassiveStateRecord = protocol.PassiveStateRecord
+	// PassiveState 是被动牛状态批次。
+	PassiveState = protocol.PassiveState
+	// PassiveDespawn 是被动牛移除批次通知。
+	PassiveDespawn = protocol.PassiveDespawn
+)
+
 // 区块快照值类型定义在 protocol 包（密封接口与 Validate 同包）；再导出保持
 // 既有 network.X 引用与编解码往返的类型身份。
 type (

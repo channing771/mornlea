@@ -607,6 +607,82 @@ func hostileDespawnMessage() network.HostileDespawn {
 	return network.HostileDespawn{ServerTick: 0x0102030405060708, IDs: []uint64{7, 9, 12}}
 }
 
+// passiveSpawnFixture 返回 3 条字段各异、ID 严格升序的合法 spawn 记录：
+// 生命取非零非满的中间值，保证「字段根本没搬运」与默认值不可分辨。
+func passiveSpawnFixture() []network.PassiveSpawnRecord {
+	return []network.PassiveSpawnRecord{
+		{ID: 5, Dimension: core.Overworld, Position: mgl32.Vec3{1.5, 2, -1.25}, Yaw: 0.75, Health: 10},
+		{ID: 8, Dimension: core.Overworld, Position: mgl32.Vec3{-4.5, 63.5, 6.25}, Yaw: -1.5, Health: core.MaxHealth},
+		{ID: 11, Dimension: core.Overworld, Position: mgl32.Vec3{12.5, 68, -6.5}, Yaw: 2, Health: 1},
+	}
+}
+
+// passiveStateFixture 返回 2 条 ID 严格升序的合法 state 记录：速度取非零值，
+// 保证速度分量的搬运与丢弃可分辨。
+func passiveStateFixture() []network.PassiveStateRecord {
+	return []network.PassiveStateRecord{
+		{ID: 5, Position: mgl32.Vec3{1.5, 2, -1.25}, Velocity: mgl32.Vec3{0.25, -0.5, 0}, Yaw: 0.75, Health: 9},
+		{ID: 8, Position: mgl32.Vec3{-4.5, 63.5, 6.25}, Velocity: mgl32.Vec3{0, 0.5, 1.5}, Yaw: -1.5, Health: 6},
+	}
+}
+
+func passiveSpawnMessage() network.PassiveSpawn {
+	return network.PassiveSpawn{ServerTick: 0x0102030405060708, Spawns: passiveSpawnFixture()}
+}
+
+func passiveStateMessage() network.PassiveState {
+	return network.PassiveState{ServerTick: 0x0102030405060708, States: passiveStateFixture()}
+}
+
+func passiveDespawnMessage() network.PassiveDespawn {
+	return network.PassiveDespawn{ServerTick: 0x0102030405060708, IDs: []uint64{5, 8, 11}}
+}
+
+func TestPassiveMessagesRoundTripMemoryAndTCP(t *testing.T) {
+	messages := []network.ServerMessage{passiveSpawnMessage(), passiveStateMessage(), passiveDespawnMessage()}
+	for _, open := range transportOpeners {
+		t.Run(open.name, func(t *testing.T) {
+			clientStream, serverStream := open.open(t)
+			t.Cleanup(func() { _ = clientStream.Close(); _ = serverStream.Close() })
+			serverDone := make(chan error, 1)
+			go func() {
+				pending, err := network.BeginServerLogin(context.Background(), serverStream, 0)
+				if err != nil {
+					serverDone <- err
+					return
+				}
+				var endpoint network.ServerEndpoint
+				err = pending.Accept(context.Background(), func(attached network.ServerEndpoint) error {
+					endpoint = attached
+					return nil
+				})
+				if err == nil {
+					for _, message := range messages {
+						if err = endpoint.Send(context.Background(), message); err != nil {
+							break
+						}
+					}
+				}
+				serverDone <- err
+			}()
+
+			endpoint, err := network.LoginClient(context.Background(), clientStream, testIdentity(23))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for index, want := range messages {
+				got, err := endpoint.Recv(context.Background())
+				if err != nil || !reflect.DeepEqual(got, want) {
+					t.Fatalf("第 %d 条消息 = (%#v, %v)，想要 %#v", index, got, err, want)
+				}
+			}
+			if err := <-serverDone; err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
 func TestHostileMessagesRoundTripMemoryAndTCP(t *testing.T) {
 	messages := []network.ServerMessage{hostileSpawnMessage(), hostileStateMessage(), hostileDespawnMessage()}
 	for _, open := range transportOpeners {

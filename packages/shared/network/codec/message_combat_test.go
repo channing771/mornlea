@@ -51,14 +51,14 @@ func TestCombatHitRegistryIsFrozen(t *testing.T) {
 	if _, ok := registered.(protocol.CombatHit); !ok {
 		t.Fatalf("Play S→C ID 25=%T，想要 CombatHit", registered)
 	}
-	if _, ok := protocol.ServerPacketForID(protocol.StatePlay, 26); ok {
-		t.Fatal("Play S→C ID 26 必须保持未分配")
+	if _, ok := protocol.ServerPacketForID(protocol.StatePlay, 29); ok {
+		t.Fatal("Play S→C ID 29 必须保持未分配")
 	}
-	if _, err := decodeServerControlPayload(protocol.StatePlay, 26, nil); !errors.Is(err, errUnknownPacketID) {
-		t.Fatalf("Play S→C ID 26 解码错误=%v，想要 %v", err, errUnknownPacketID)
+	if _, err := decodeServerControlPayload(protocol.StatePlay, 29, nil); !errors.Is(err, errUnknownPacketID) {
+		t.Fatalf("Play S→C ID 29 解码错误=%v，想要 %v", err, errUnknownPacketID)
 	}
-	if protocol.ProtocolVersion != 32 {
-		t.Fatalf("协议版本 = %d，想要 32", protocol.ProtocolVersion)
+	if protocol.ProtocolVersion != 33 {
+		t.Fatalf("协议版本 = %d，想要 33", protocol.ProtocolVersion)
 	}
 }
 
