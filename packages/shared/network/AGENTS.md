@@ -27,8 +27,8 @@ packages/shared/network/
 ## Dependency Direction
 
 依赖方向单向，由 `packages/audit/dependency_test.go` 的 `allowed` 表
-登记并以 `TestInternalDependenciesAreOneWay` 强制（`go list` 枚举
-`./internal/...` 与 `./packages/shared/...` 的生产 import 逐边比对；未登记的
+登记并以 `TestInternalDependenciesAreOneWay` 强制（`go list` 枚举 go.work
+六模块全部内部包的生产 import 逐边比对；未登记的
 新包直接报错）。契约文本见 openspec 主规格 `repository-code-organization`。
 
 - 接受：根包 → {`packages/shared/core`, `packages/shared/network/protocol`,

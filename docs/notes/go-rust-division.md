@@ -20,7 +20,7 @@
 | 流体 | 流体数值内核的一切演进：单格规则求值（存活判定、垂直优先、水平传播、可替换表）与区块重扫扫描（五邻/区段不动点捷径、邻域盒布局）；队列、预算、游标、冲毁结算等编排留 Go |
 | 批量数据变换 | 任何"对 N ≥ 数千的元素做同一种数值运算"的新需求：批量坐标变换、体数据压缩/过滤、排序/归约 |
 
-现行带内 worldgen 契约为 `MGW1` layout `3`：材料表 `15` 项（含 `water` 与 `short_grass`，两两互异、唯一豁免仍是 `water == air` 的注水门控），公共 header `566` 字节，经 engine ABI v10 三端（C header、Rust FFI、`internal/nativeabi`）成套演进；调整材料表、布局或 header 长度属于 ABI 变更，必须按第 5 节流程先走 OpenSpec change。
+现行带内 worldgen 契约为 `MGW1` layout `3`：材料表 `15` 项（含 `water` 与 `short_grass`，两两互异、唯一豁免仍是 `water == air` 的注水门控），公共 header `566` 字节，经 engine ABI v10 三端（C header、Rust FFI、`packages/shared/nativeabi`）成套演进；调整材料表、布局或 header 长度属于 ABI 变更，必须按第 5 节流程先走 OpenSpec change。
 
 ### 1.2 mornlea_client（窗口与渲染后端，client ABI 出口）
 
@@ -77,4 +77,4 @@
 
 - 新需求看似两侧都能做时，按第 3 节判定，默认归属即最终归属；不重开讨论。
 - 确需把某领域从一侧移到另一侧（含 engine ABI 演进），必须走 OpenSpec change，说明：性能证据（profiler 数据，性能数值只记录不门禁）、ABI 兼容与迁移策略、oracle/golden/fuzz 覆盖的保留方案。
-- 新增 engine 能力的标准落地清单：Rust 实现（含中文 doc comment）→ engine ABI 出口与版本裁决 → `internal/nativeabi` 绑定 → Go 领域调用方 → oracle 差分测试 → `internal/archcheck` 依赖登记 → `make rust` + 受影响包 race 测试 + `go vet` + `gofmt`。
+- 新增 engine 能力的标准落地清单：Rust 实现（含中文 doc comment）→ engine ABI 出口与版本裁决 → `packages/shared/nativeabi` 绑定 → Go 领域调用方 → oracle 差分测试 → `packages/audit` 依赖登记 → `make rust` + 受影响包 race 测试 + `go vet` + `gofmt`。

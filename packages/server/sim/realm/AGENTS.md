@@ -12,7 +12,7 @@
 ## 依赖方向
 
 - 允许：`packages/shared/core`、`packages/shared/world`、`packages/server/fluid`。
-- 禁止：依赖 `packages/server/sim/contract`/`tuning`/`entity`/`runtime` 或 `packages/server/server`/`internal/client`；`realm` 不反向依赖上层结算或编排。
+- 禁止：依赖 `packages/server/sim/contract`/`tuning`/`entity`/`runtime` 或 `packages/server/server`/`packages/client/client`；`realm` 不反向依赖上层结算或编排。
 - 方向由 `packages/audit` 强制，校验 `TestSimSubpackageDependencyDirections` 的真实树扫描与 `TestSimDependencyViolationsDetectDrift` 的合成 `realm → entity/runtime` 注入。
 
 ## 关键文件

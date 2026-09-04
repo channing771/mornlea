@@ -6,13 +6,14 @@ Agent 指南沿目录祖先链叠加生效；离目标文件最近的 `AGENTS.md
 
 ## 项目与契约
 
-Mornlea 是使用 Go 1.26 编写的独立体素游戏，Go module 为 `github.com/channing771/mornlea`，包含自研客户端、权威服务端、世界存储、物理、Rust `mornlea_engine` 数值引擎和 Rust `mornlea_client` wgpu 渲染客户端；项目不兼容官方 Minecraft 协议、存档或版权资源。当前基线已经包含协议 v32；玩家 schema v8、区块 schema v9、世界 metadata v3、独立 `companions.ai` schema v5、独立 `hostile_mobs` schema v1、engine ABI v10、client ABI v14，benchmark scenario 为 v22。
+Mornlea 是使用 Go 1.26 编写的独立体素游戏，Go 源码经根 `go.work` 组织为六个模块（`packages/contracts`、`packages/shared`、`packages/server`、`packages/client`、`packages/tools` 与 `packages/audit`，模块路径前缀均为 `github.com/channing771/mornlea/packages/<unit>`，仓库根无独立模块），包含自研客户端、权威服务端、世界存储、物理、Rust `mornlea_engine` 数值引擎和 Rust `mornlea_client` wgpu 渲染客户端；项目不兼容官方 Minecraft 协议、存档或版权资源。当前基线已经包含协议 v32；玩家 schema v8、区块 schema v9、世界 metadata v3、独立 `companions.ai` schema v5、独立 `hostile_mobs` schema v1、engine ABI v10、client ABI v14，benchmark scenario 为 v22。
 ## 真相优先级
 
 发生冲突时，按以下顺序核实现状：代码与测试 -> `openspec/specs/` -> `docs/architecture.md` -> `docs/notes/progress.md` -> `docs/superpowers/`。历史文档只提供背景，不覆盖已验证的当前行为。
 
 ## 仓库与局部指南
 
+- 契约域 Go 模块（跨语言共享的 JSON 契约与 `go:embed` 出口，Go 与 Python 双消费）：`packages/contracts/`
 - 共享域 Go 模块（server/client 双侧共用的领域包）：`packages/shared/`（局部指南随包目录，如 `packages/shared/network/AGENTS.md`）
 - 服务端域 Go 模块（sim/fluid/storage/server 与 `cmd/mornlea-server`）：`packages/server/`（局部指南随包目录）
 - 客户端域 Go 模块（client/render/mesh/lod/audio/assets 与图形客户端命令）：`packages/client/`（局部指南随包目录，依赖方向由 `packages/audit` 强制）

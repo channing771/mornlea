@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # race-changed.sh — 只对「改动包及其反向依赖」跑 race 测试（测试分层纪律的 T1 层）。
 #
-# 背景：全量 `go test ./... -race -count=1` 实测约 4.5 分钟且 82% 耗时集中在
+# 背景：全量 race（`make test-race`，六模块循环）实测约 4.5 分钟且 82% 耗时集中在
 # packages/client/cmd/mornlea 与 packages/server/server 两个包（见
 # docs/notes/test-quickstart.md）；
 # 绝大多数改动只触及叶子包，为它们付全量代价是开发时间的主要浪费之一。

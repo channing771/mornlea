@@ -58,6 +58,24 @@ make run
 
 The first launch generates and loads terrain within the view distance and is noticeably slower than later runs. The default world is stored in `worlds/default`; pass `make run ARGS="--world worlds/demo"` for a separate save directory. `make build` builds the full Rust workspace and produces `bin/mornlea`, `bin/mornlea-server`, and an adjacent `libmornlea_engine.dylib`; no binary may be mixed with dependency libraries from a different build.
 
+## Repository Layout
+
+Go sources are organized as six unit modules governed by the root `go.work`, alongside the Rust workspace, the Python service, and dev tools under `packages/`:
+
+```text
+packages/
+  contracts/  cross-language JSON contracts (consumed by Go embed and Python)
+  shared/     domain packages shared by server and client (core, physics, network, world, …)
+  server/     authoritative simulation and storage (sim, fluid, storage, server, cmd/mornlea-server)
+  client/     presentation side and the graphical client (client, render, mesh, cmd/mornlea)
+  tools/      development tools (perfcheck, agent-board dashboard, gfxspike, …)
+  audit/      cross-module architecture gate test suite (archcheck)
+  engine/     Rust workspace (mornlea_engine numeric kernel and mornlea_client wgpu renderer)
+  agent/      standalone Python companion Agent service
+```
+
+Per-unit `AGENTS.md` files apply along the directory chain; module boundaries and dependency direction are documented in the [architecture notes (Chinese)](docs/architecture.md).
+
 ## Common Commands
 
 | Command | Description |

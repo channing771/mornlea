@@ -45,7 +45,7 @@ make agent-dashboard
 make agent-ui-dev
 ```
 
-- 前端改动流程：在 `packages/tools/agent-board/web/` 修改 TypeScript/Tailwind/shadcn/ui 源码，运行 `npm --prefix packages/tools/agent-board/web test` 与 `npm --prefix packages/tools/agent-board/web run build`；`package-lock.json` 入库，`node_modules/` 与 `dist/` 不入库。
+- 前端改动流程：在 `packages/tools/agent-board/web/` 修改 TypeScript/Tailwind/shadcn/ui 源码，运行 `corepack pnpm --dir packages/tools/agent-board/web test` 与 `corepack pnpm --dir packages/tools/agent-board/web run build`（pnpm 版本由 package.json 的 `packageManager` 钉住）；`pnpm-lock.yaml` 入库，`node_modules/` 与 `dist/` 不入库。
 - Go 后端从 `packages/tools/agent-board/web/dist/` 读盘提供 `/` 与 `/assets/*`。若前端尚未构建，`/` 返回指引页并提示运行 `make agent-dashboard`，`/api/status` 仍可用。
 - 地址覆盖：`BOARD_ADDR` 提供默认值、flag `--addr` 再覆盖，例如 `BOARD_ADDR=:9000 go run ./packages/tools/agent-board` 或 `go run ./packages/tools/agent-board --addr 127.0.0.1:9000`。
 - 数据范围：全部为本机采集（`ps`/`git`/`gh`/日志文件），无远程依赖；刷新间隔固定 5 秒。

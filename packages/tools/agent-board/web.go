@@ -30,7 +30,7 @@ const guidancePageHTML = `<!DOCTYPE html>
 <body>
 <div class="box">
   <h1>Mornlea Agent 执行看板</h1>
-  <p>前端未构建：请运行 <code>make agent-dashboard</code>（会先 <code>npm ci</code> 与 <code>npm run build</code>）。</p>
+  <p>前端未构建：请运行 <code>make agent-dashboard</code>（会先 <code>corepack pnpm install --frozen-lockfile</code> 与 <code>corepack pnpm run build</code>）。</p>
   <p>也可以只启动前端开发服务器：<code>make agent-ui-dev</code>（Vite 会把 <code>/api</code> 代理到本服务）。</p>
 </div>
 </body>

@@ -69,8 +69,8 @@
 
 ```bash
 make rust                       # 固定 Rust 1.97.1 构建
-go test ./... -race             # 全量 race（迭代期可 make test-race-short）
-go vet ./...
+make test-race                  # 全量 race（go.work 六模块逐一循环；迭代期可 make test-race-short）
+go vet ./packages/contracts/... ./packages/shared/... ./packages/server/... ./packages/client/... ./packages/tools/... ./packages/audit/...
 test -z "$(gofmt -l .)"          # 无输出
 openspec validate --all --strict --no-interactive
 ```

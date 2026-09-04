@@ -54,6 +54,6 @@
 
 ## 性能与验证边界
 
-- 视觉验证需要 GPU，尚未接入 `go test ./...` 或 CI，只作为本地 make target 与人工评审步骤存在；
+- 视觉验证需要 GPU，尚未接入全量 Go 测试（`make test` / `make test-race`）或 CI，只作为本地 make target 与人工评审步骤存在；
 - 菜单层 chrome（WebView 呈现的 React 主菜单/设置/暂停/F3 界面）不进像素 golden：系统 WebKit 版本不可钉死，`main-menu`/`settings-menu` golden 只覆盖纯 wgpu 渲染的全景底图；菜单 chrome 的行为与结构断言由 vitest 组件测试与桥协议三端钉值测试承担；
 - benchmark 与 `perfcheck` 的性能数值只记录，不改变退出状态；报告完整性、真实 overflow、数据丢失和 I/O 错误仍然硬失败。

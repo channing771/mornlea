@@ -1,0 +1,6 @@
+# pnpm 11 的配置文件（依赖构建脚本策略住这里，不放 package.json）。
+# esbuild 的平台二进制经 optionalDependencies 供给，postinstall 仅是兜底校验：
+# 显式声明 false 保证本包不执行任何依赖构建脚本（零 postinstall 供应链纪律），
+# 与菜单前端 packages/engine/crates/mornlea_client/frontend 的姿势一致。
+allowBuilds:
+  esbuild: false

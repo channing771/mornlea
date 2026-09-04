@@ -6,7 +6,7 @@
 
 ## 依赖边界
 
-生产代码只能依赖实际需要的低层领域和存储包；不得导入根 `internal/server`，也不得访问 Host、Server、session 或其私有状态。依赖方向以 `packages/audit` 的规则为准。
+生产代码只能依赖实际需要的低层领域和存储包；不得导入根 `packages/server/server`，也不得访问 Host、Server、session 或其私有状态。依赖方向以 `packages/audit` 的规则为准。
 
 ## 并发与 I/O
 

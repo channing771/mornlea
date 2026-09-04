@@ -4,7 +4,7 @@
 与全树共享的数据安全纪律。五个域子包的包内不变量、精确路径与钉死回归的
 测试名见各自目录的 `AGENTS.md`。本子树任何目录（含子树根）不放
 `CLAUDE.md`：代理沿目录祖先链读到仓库根 `CLAUDE.md`/`AGENTS.md`、
-`internal/AGENTS.md`、本总纲与子包指南即可。
+`packages/server/AGENTS.md`、本总纲与子包指南即可。
 
 ## Directory Map
 
@@ -34,8 +34,8 @@ packages/server/storage/
 ## Dependency Direction
 
 依赖方向单向，由 `packages/audit/dependency_test.go` 的 `allowed` 表
-登记并以 `TestInternalDependenciesAreOneWay` 强制（`go list` 枚举
-`./internal/...` 生产 import 逐边比对；未登记的新包直接报错）。契约文本见
+登记并以 `TestInternalDependenciesAreOneWay` 强制（`go list` 枚举 go.work
+六模块的全部内部包，生产 import 逐边比对；未登记的新包直接报错）。契约文本见
 openspec 主规格 `repository-code-organization`。
 
 - 接受：根包 → {`packages/shared/core`, `packages/shared/world`, `region`, `chunk`,

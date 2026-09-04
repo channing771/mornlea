@@ -66,7 +66,7 @@ packages/server/sim/
 
 ## 依赖方向
 
-子包依赖以 `packages/audit/dependency_test.go` 的 `allowed` 表为唯一真相；本包不得依赖 `internal/client`、`internal/render` 或具体 network transport，模拟只消费领域命令并产出权威结果。依赖方向单向且由 `packages/audit` 强制（契约见 `openspec/specs/repository-code-organization`）：
+子包依赖以 `packages/audit/dependency_test.go` 的 `allowed` 表为唯一真相；本包不得依赖 `packages/client/client`、`packages/client/render` 或具体 network transport，模拟只消费领域命令并产出权威结果。依赖方向单向且由 `packages/audit` 强制（契约见 `openspec/specs/repository-code-organization`）：
 
 - 接受：`runtime` → `contract`/`realm`/`entity` 与 `packages/shared/tuning`；`entity` → `contract`/`realm` 与 `packages/shared/tuning`；`realm` → `core`/`fluid`/`world`；`contract` → `core`/`world`/`companion`/`physics`（`core`/`world`/`companion`/`physics` 均已迁入 `packages/shared`）。
 - 拒绝：`contract` 依赖 `tuning`/`realm`/`entity`/`runtime`；`realm` 依赖 `contract`/`tuning`/`entity`/`runtime`；`entity` 依赖 `runtime`；子树出现未登记的新包；`runtime` 缺少对三个兄弟子包与 `packages/shared/tuning` 的必需编排边。

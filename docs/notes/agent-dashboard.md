@@ -39,10 +39,10 @@
 ## 如何运行
 
 ```bash
-make agent-dashboard                       # 或 go run ./cmd/mornlea-agent-board
+make agent-dashboard                       # 或 go run ./packages/tools/agent-board
 # 默认 http://127.0.0.1:8787；覆盖：
-BOARD_ADDR=:9000 go run ./cmd/mornlea-agent-board
-go run ./cmd/mornlea-agent-board --addr 127.0.0.1:9000
+BOARD_ADDR=:9000 go run ./packages/tools/agent-board
+go run ./packages/tools/agent-board --addr 127.0.0.1:9000
 ```
 
 ## 缺陷修复（2026-08-25）：内嵌 JS 字符串跨行导致整页空白
@@ -66,7 +66,7 @@ go run ./cmd/mornlea-agent-board --addr 127.0.0.1:9000
 - 看板读取的是「运行看板这台机器」的进程/日志/守卫文件；远端或容器环境需相应可达。
 - `gh` 未登录/超时 → PR 区降级为说明；`ps`/`lsof` 权限受限 → 执行中 AI 区降级进 `errors`。
 - guard pid 存的是会话启动 shell pid（已知缺陷），存活性判定仅供参考。
-- 前端运行依赖 Node/npm；`node_modules/` 与 `dist/` 均不入库，首次启动必须经 `make agent-dashboard` 构建。npm 11 会对 esbuild/fsevents 的 install script allowlist 给出提示，但本轮安装与构建不受影响。
+- 前端运行依赖 Node（包管理经 corepack pnpm 钉版，与菜单前端同姿势；esbuild 构建脚本在 `pnpm-workspace.yaml` 显式禁用）；`node_modules/` 与 `dist/` 均不入库，首次启动必须经 `make agent-dashboard` 构建。
 
 ## 界面重设计（2026-08-25，taste 设计技能）
 

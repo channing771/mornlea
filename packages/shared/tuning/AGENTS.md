@@ -12,7 +12,7 @@
 ## 依赖方向
 
 - 允许：`packages/shared/core`。
-- 禁止：依赖 `internal/sim/contract`/`realm`/`entity`/`runtime` 或 `packages/shared/world`/`packages/shared/physics` 等上层状态；禁止反向依赖。
+- 禁止：依赖 `packages/server/sim/contract`/`realm`/`entity`/`runtime` 或 `packages/shared/world`/`packages/shared/physics` 等上层状态；禁止反向依赖。
 - 方向由 `packages/audit` 强制，`tuning` 为叶子，任何对其上层包的依赖均为反向边。
 
 ## 关键文件

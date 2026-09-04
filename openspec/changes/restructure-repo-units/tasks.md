@@ -33,7 +33,7 @@
 
 ## Task 8: 收尾——前端工具链统一、Makefile per-unit 与文档基线
 
-- [ ] 8.1 `packages/tools/agent-board/web` 从 npm 迁 pnpm（`packageManager` 钉版 + pnpm-lock，删 package-lock）；Makefile `agent-dashboard`/`agent-ui-dev` 改 corepack pnpm。以 `make agent-dashboard` 冒烟（构建可启动即停）验证。
-- [ ] 8.2 Makefile 重构：`test`/`test-race`/`test-race-short`/`dev-check` 显式按模块循环（shared/server/client/tools/audit），`vet` 同步；help 文案更新。以 `make dev-check` 验证。
-- [ ] 8.3 文档基线：`docs/architecture.md` 目录树与包路径、根 `AGENTS.md` 目录导览与门禁路径、各单元 `AGENTS.md`（原 internal 各级指南随包迁移并更新路径）、`docs/notes/test-quickstart.md` 定点命令、`README.md`/`README.en.md` 目录说明；`CLAUDE.md` 保持逐字节 shim 导入。以 `go test ./packages/audit -count=1`（含 CLAUDE.md 一致性基线）与 `openspec validate --all --strict` 验证。
-- [ ] 8.4 全量门禁与归档：`gofmt -l` 空、`go vet ./...`、`make rust`、`make test-race`、`make visual-check`、`make frontend-check`、`make companion-agent-check`、`make companion-agent-integration`、`make build-linux-server`、`openspec validate --all --strict`，实际结果与每 Task 的 SPEC+QUALITY 裁决写入 `ledger.md` 后归档。
+- [x] 8.1 `packages/tools/agent-board/web` 从 npm 迁 pnpm（`packageManager` 钉版 + pnpm-lock，删 package-lock）；Makefile `agent-dashboard`/`agent-ui-dev` 改 corepack pnpm。以 `make agent-dashboard` 冒烟（构建可启动即停）验证。
+- [x] 8.2 Makefile 重构：`test`/`test-race`/`test-race-short`/`dev-check` 显式按模块循环（shared/server/client/tools/audit），`vet` 同步；help 文案更新。以 `make dev-check` 验证。
+- [x] 8.3 文档基线：`docs/architecture.md` 目录树与包路径、根 `AGENTS.md` 目录导览与门禁路径、各单元 `AGENTS.md`（原 internal 各级指南随包迁移并更新路径）、`docs/notes/test-quickstart.md` 定点命令、`README.md`/`README.en.md` 目录说明；`CLAUDE.md` 保持逐字节 shim 导入。以 `go test ./packages/audit -count=1`（含 CLAUDE.md 一致性基线）与 `openspec validate --all --strict` 验证。
+- [x] 8.4 全量门禁与归档：`gofmt -l` 空、`go vet ./...`、`make rust`、`make test-race`、`make visual-check`、`make frontend-check`、`make companion-agent-check`、`make companion-agent-integration`、`make build-linux-server`、`openspec validate --all --strict`，实际结果与每 Task 的 SPEC+QUALITY 裁决写入 `ledger.md` 后归档。

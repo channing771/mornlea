@@ -11,7 +11,7 @@
 ## 依赖方向
 
 - 允许：`packages/shared/core`、`packages/shared/world`、`packages/shared/companion`、`packages/shared/physics`。
-- 禁止：依赖 `packages/server/sim/realm`、`packages/server/sim/entity`、`packages/server/sim/runtime`、`packages/shared/tuning` 或其他模拟子包；禁止依赖 `packages/server/server`/`internal/client`/`internal/render`。
+- 禁止：依赖 `packages/server/sim/realm`、`packages/server/sim/entity`、`packages/server/sim/runtime`、`packages/shared/tuning` 或其他模拟子包；禁止依赖 `packages/server/server`/`packages/client/client`/`packages/client/render`。
 - 方向由 `packages/audit` 的 `allowed` 与 `simAllowedEdges` 强制，校验入口 `TestInternalDependenciesAreOneWay`、`TestSimSubpackageDependencyDirections`。
 
 ## 关键文件

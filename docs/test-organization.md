@@ -16,7 +16,7 @@ helper 落位规则与验收清单都在这里。条文是原则，本文件是�
 ## 目录与包形态
 
 - 新测试文件跟随包内既有形态：包内以白盒同包为主就写同包，以 `foo_test` 外部包为
-  主就写外部包。既有分布：`internal/core`、`internal/physics`、`internal/world`、
+  主就写外部包。既有分布：`packages/shared/core`、`packages/shared/physics`、`packages/shared/world`、
   `packages/client/mesh` 偏外部黑盒；`packages/server/server`、`packages/server/sim/...`（`contract`/`realm`/`entity`/`runtime` 四子包）偏白盒——白盒断言与所属私有状态同包。
 - 白盒与外部包不得为了重组而互换——那是行为可见性变化，超出纯重组范围。
 
@@ -109,7 +109,7 @@ helper 落位规则与验收清单都在这里。条文是原则，本文件是�
 三个子包 `go test -list` 入口并集与迁移前单包集合一致；helper 中心按「每包
 一个」落位（见上文 helper 中心规则），跨包白盒装配收敛为
 `packages/client/cmd/mornlea/app/testkit.go` 的导出测试装配入口；golden 资产随 capture 域
-git mv 至 `cmd/mornlea/capture/testdata/golden`，子包依赖方向由
+git mv 至 `cmd/mornlea/capture/testdata/golden`（现居仓库根 `testdata/visual-golden/world`），子包依赖方向由
 `packages/audit` 的 `TestClientCommandSubpackageDependencyDirections` 强制。
 
 混装识别范例：`cmd/mornlea` 单包时期的 `app_input_test.go`（约 1300 行、38 个测试，前缀横跨输入
@@ -117,7 +117,7 @@ git mv 至 `cmd/mornlea/capture/testdata/golden`，子包依赖方向由
 功能域）已于 2026-08 按本文件拆为 `app_input_prediction_test.go`、`app_mining_overlay_test.go`、
 `app_hotbar_placement_test.go`、`app_furnace_ui_test.go`、`app_chest_ui_test.go`、
 `app_inventory_crafting_test.go` 与 `app_use_key_test.go`（客户端分包后均居
-`cmd/mornlea/app/`），共享消息/镜像助手迁入同包的 `app_test_helpers_test.go`
+`cmd/mornlea/app/`，现 `packages/client/cmd/mornlea/app/`），共享消息/镜像助手迁入同包的 `app_test_helpers_test.go`
 （此例为识别示范；新候选以判据为准）。
 
 ## Rust 映射

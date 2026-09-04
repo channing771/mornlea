@@ -3,7 +3,7 @@
 ## 所有权
 
 - 本 crate 持有 Darwin 窗口、事件采集、GPU 资源与 pass、shader、进程内 WKWebView 菜单层和 client ABI 出口。菜单呈现层源码在本 crate 的 `frontend/`（Vite + TypeScript + React），桥协议单源为 `frontend/src/bridge/schema.json`；前端纪律见 `frontend/AGENTS.md`，本 crate 只经桥出口与 WebView 交互，不导入前端源码。
-- Darwin 本地提示音的 `AudioQueue` 实现在 Go `internal/audio`，不属于本 crate；本 crate 只呈现设置 UI 中的音量值。
+- Darwin 本地提示音的 `AudioQueue` 实现在 Go `packages/client/audio`，不属于本 crate；本 crate 只呈现设置 UI 中的音量值。
 - Linux 专用服务端不得依赖本 crate；非 Darwin workspace 构建保持空平台实现，不引入窗口或 GPU 运行时。
 - WebView 参与模式恰有两态，由 Go 经既有桥下行相位驱动，不新增 C ABI 出口：
   `Menu`（菜单相位，挂载并消费输入，菜单 chrome 可交互）与 `GameOverlay`（游戏
@@ -15,7 +15,7 @@
 
 ## Client ABI
 
-- ABI 变化同批更新 `packages/engine/include/mornlea_client.h`、本 crate FFI、`internal/client` bridge、版本和跨语言测试。
+- ABI 变化同批更新 `packages/engine/include/mornlea_client.h`、本 crate FFI、`packages/client/client` bridge、版本和跨语言测试。
 - FFI 先校验 handle、线程、pointer、length、layout 和输出容量，panic 转稳定状态码，失败不写部分结果。
 
 ## 渲染与无头路径

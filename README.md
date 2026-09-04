@@ -74,6 +74,24 @@ make run
 
 首次启动需要生成并加载视距内的地形，耗时会明显长于后续运行。默认世界保存在 `worlds/default`；使用独立存档目录可加 `make run ARGS="--world worlds/demo"`。`make build` 会构建完整 Rust workspace 并产出 `bin/mornlea`、`bin/mornlea-server` 与相邻的 `libmornlea_engine.dylib`；任一 binary 都不能与其他构建的依赖库混装。
 
+## 仓库布局
+
+Go 源码由根 `go.work` 直辖为六个单元模块，Rust、Python 服务与开发工具并列在 `packages/` 下：
+
+```text
+packages/
+  contracts/  跨语言共享 JSON 契约（Go embed 与 Python 双消费）
+  shared/     server/client 共用领域包（core、physics、network、world 等）
+  server/     权威模拟与存储（sim、fluid、storage、server 与 cmd/mornlea-server）
+  client/     呈现侧与图形客户端（client、render、mesh 与 cmd/mornlea）
+  tools/      开发工具（perfcheck、agent-board 看板、gfxspike 等）
+  audit/      跨模块架构门禁测试集（archcheck）
+  engine/     Rust workspace（mornlea_engine 数值内核与 mornlea_client wgpu 渲染）
+  agent/      独立 Python 伙伴 Agent 服务
+```
+
+各单元的局部 `AGENTS.md` 随包目录生效；模块边界与依赖方向见[当前架构说明](docs/architecture.md)。
+
 ## 常用命令
 
 | 命令 | 说明 |
