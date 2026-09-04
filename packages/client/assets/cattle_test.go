@@ -105,6 +105,13 @@ func TestCattleProceduralFallbackPixels(t *testing.T) {
 	if bytes.Equal(hide, head) {
 		t.Fatal("牛皮与牛头逐像素相同：两层必须可辨")
 	}
+	// 牛身两层必须非纯色：不同 RGB 种数下限钉住斑点/噪点纹理（实测约
+	// 50 种），纯色回归即红。
+	for _, layer := range []uint16{LayerCowHide, LayerCowHead} {
+		if got := distinctRGBCount(r.LayerRGBA(int(layer))); got < 10 {
+			t.Fatalf("牛身层 %d 不同 RGB 仅 %d 种，想要 ≥10（斑点/噪点纹理丢失）", layer, got)
+		}
+	}
 	raw := r.LayerRGBA(int(LayerRawBeef))
 	cooked := r.LayerRGBA(int(LayerCookedBeef))
 	if bytes.Equal(raw, cooked) {
@@ -125,6 +132,19 @@ func TestCattleProceduralFallbackPixels(t *testing.T) {
 			}
 		}
 	}
+}
+
+// distinctRGBCount 返回像素中不透明像素的不同 RGB 种数，用于断言程序化
+// 纹理非纯色（透明像素不计，避免镂空图标的背景稀释计数）。
+func distinctRGBCount(px []byte) int {
+	seen := make(map[[3]byte]struct{})
+	for i := 0; i < len(px); i += 4 {
+		if px[i+3] == 0 {
+			continue
+		}
+		seen[[3]byte{px[i], px[i+1], px[i+2]}] = struct{}{}
+	}
+	return len(seen)
 }
 
 // opaqueAverage 返回一层材质不透明像素的平均 RGB，用于比较色相。
