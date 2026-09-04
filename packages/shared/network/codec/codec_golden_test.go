@@ -20,7 +20,7 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		wantID  uint32
 		wantHex string
 	}{
-		{"hello", protocol.StateHandshake, protocol.ClientHello{ProtocolVersion: 32}, 0, "20"},
+		{"hello", protocol.StateHandshake, protocol.ClientHello{ProtocolVersion: 34}, 0, "22"},
 		{"login start", protocol.StateLogin, protocol.LoginStart{PlayerID: id, DisplayName: "Chen"}, 0, "00112233445546778899aabbccddeeff044368656e"},
 		{"input", protocol.StatePlay, protocol.PlayerInput{Sequence: 1, MoveX: -1, MoveZ: 1, Jump: true, Yaw: 1.5, Pitch: -0.5, Mining: true}, 0, "0100000000000000ff01010000c03f000000bf" + "01" + "00" + "00"},
 		// v24 新增：进食位是载荷最末一字节。夹具刻意取 Mining=false、
@@ -65,8 +65,8 @@ func TestProtocolV1SmallPacketGolden(t *testing.T) {
 		wantID  uint32
 		wantHex string
 	}{
-		{"server hello", protocol.StateHandshake, protocol.ServerHello{ProtocolVersion: 32}, 0, "20"},
-		{"handshake reject", protocol.StateHandshake, protocol.HandshakeReject{ServerProtocolVersion: 32, Code: protocol.HandshakeVersionMismatch, Message: "no"}, 1, "2001026e6f"},
+		{"server hello", protocol.StateHandshake, protocol.ServerHello{ProtocolVersion: 34}, 0, "22"},
+		{"handshake reject", protocol.StateHandshake, protocol.HandshakeReject{ServerProtocolVersion: 34, Code: protocol.HandshakeVersionMismatch, Message: "no"}, 1, "2201026e6f"},
 		{"login success", protocol.StateLogin, protocol.LoginSuccess{PlayerID: id, WorldSeed: 0x1122334455667788}, 0, "00112233445546778899aabbccddeeff8877665544332211"},
 		{"login reject", protocol.StateLogin, protocol.LoginReject{Code: protocol.LoginInvalidIdentity, Message: "no"}, 1, "02026e6f"},
 		{"block changes", protocol.StatePlay, protocol.BlockChanges{Dimension: core.Overworld, Chunk: core.ChunkPos{X: 1, Z: -1}, BaseRevision: 1, NewRevision: 2, Changes: []protocol.BlockChange{{Position: core.BlockPos{X: 16, Y: -64, Z: -1}, Block: core.StoneID}}}, 1, "0000000001000000ffffffff010000000000000002000000000000000110000000c0ffffffffffffff0200"},

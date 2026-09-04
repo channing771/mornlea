@@ -5,7 +5,7 @@ package client
 // 本文件是 `mornlea_client` render ABI 族的 Go 绑定(v2 引入,v6 增补
 // 远环 tile 上传/丢弃入口,v7 增补雾参数化 SetLodFog——变基重编后
 // v5 归 main 的 water pass,远环两项出口顺延为 v6/v7；v14 增补
-// render world update 入口):R2a 的离屏
+// render world update 入口；v15 增补 avatar 贴图实例布局(96 字节/实例):R2a 的离屏
 // Rust client 是生产 GPU 渲染的唯一实现；Go 保留 CPU mesh、visibility
 // 与 frame input 准备。v14 RenderWorld cache 当前只由测试驱动，尚未接入
 // production app 消息路径。
@@ -81,7 +81,7 @@ type Renderer struct {
 	benchmarkBatchCalls int
 	// uploadCalls 统计 section 上传 FFI 次数,供"无变化不上传"断言。
 	uploadCalls int
-	// uiEventScratch 是 client ABI v12 引入、v14 保留的版本化 JSON 事件信封固定复用缓冲。
+	// uiEventScratch 是 client ABI v12 引入、v15 保留的版本化 JSON 事件信封固定复用缓冲。
 	uiEventScratch []byte
 }
 
@@ -99,11 +99,11 @@ type RenderFrame struct {
 	// Visible 是 Go BFS+frustum 算出的可见 section 位置(X, Y, Z)。
 	Visible [][3]int32
 	// 以下 pass 段为空表示该 pass 本帧缺席;任一非空时帧按 layout v2 编码。
-	// AvatarInstances 是 80 字节/实例的 avatar 字节流(render 包编码)。
+	// AvatarInstances 是 96 字节/实例的 avatar 字节流(render 包编码)。
 	AvatarInstances []byte
-	// DropInstances 是 80 字节/实例的掉落物字节流。
+	// DropInstances 是 96 字节/实例的掉落物字节流。
 	DropInstances []byte
-	// OutlineInstances 是 12×80 字节的目标方块轮廓实例流。
+	// OutlineInstances 是 12×96 字节的目标方块轮廓实例流。
 	OutlineInstances []byte
 	// CrackInstances 是采掘裂纹 overlay 的实例流（恰 1 个 80 字节实例：
 	// mat4 + f32 atlas 层号 + 零填充，render 包编码）；空表示本帧无裂纹。
@@ -120,7 +120,7 @@ type RenderFrame struct {
 	HUDSegment     []byte
 	// DebugSegment 已废弃：程序化调试面板渲染路径已删除，本字段恒为空。
 	// 为保持既有帧编码路径（layout v2 判定与 tag 4 TLV）与 ABI 兼容而保留;
-	// 调试面板经 client ABI v12 引入、v14 保留的 WebView 桥呈现。
+	// 调试面板经 client ABI v12 引入、v15 保留的 WebView 桥呈现。
 	DebugSegment []byte
 }
 
@@ -299,7 +299,7 @@ func (r *Renderer) SetLodFog(start, full float32) {
 	)))
 }
 
-// DrainUIEvents 排空并返回 client ABI v12 引入、v14 保留的版本化 JSON 桥事件。Rust 只有在
+// DrainUIEvents 排空并返回 client ABI v12 引入、v15 保留的版本化 JSON 桥事件。Rust 只有在
 // 完整信封能放入固定 scratch 时才写入并清空队列;空队列返回 0 字节与空切片,
 // Go 随后逐事件做深层校验(未知动作/字段越界拒绝)。
 func (r *Renderer) DrainUIEvents() []UIEvent {

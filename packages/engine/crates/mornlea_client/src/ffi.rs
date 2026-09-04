@@ -6,7 +6,7 @@
 //!   `MORNLEA_CLIENT_STATUS_ABI_VERSION`;当前版本见 [`CLIENT_ABI_VERSION`]
 //!   (v6 起远环 tile 出口加入,v7 起雾 setter 出口加入,v9 起结构化 UI 事件,
 //!   v11 起离屏 benchmark batch,v12 起菜单桥出口,v13 起窗口合成捕获,
-//!   v14 起 render world update 出口)。
+//!   v14 起 render world update 出口,v15 起 avatar 贴图实例布局)。
 //! - 窗口句柄存放在 thread-local 表中:句柄只在创建线程有效,跨线程调用
 //!   查不到句柄而返回 `MORNLEA_CLIENT_STATUS_WINDOW`——这同时兜住了 winit
 //!   macOS 的主线程约束(Go 侧已 `LockOSThread`)。
@@ -21,6 +21,10 @@ use crate::window::ClientWindow;
 
 /// 当前 client ABI 版本。
 ///
+/// v15:avatar 实例 80→96 字节(`transform mat4` + `color vec4` +
+/// `material u32` + 12B 保留零填充),`avatar.wgsl` 复 terrain atlas 绑定
+/// 范式做贴图采样,纯色分支传哨兵材质像素不变;容量 75 具身体(450 实例)
+/// 不变。
 /// v14:在 v13 窗口合成捕获表面上新增 render world update 入口。
 /// v13:新增窗口合成捕获出口 `mornlea_client_window_capture`(窗口句柄域,
 /// 两段式 BGRA8 输出,新增溢出与「捕获不可用」两个状态码)。捕获原语
@@ -45,7 +49,8 @@ use crate::window::ClientWindow;
 /// 逐版本一致。
 /// v11:新增离屏 benchmark batch prepare/submit 入口。
 /// v10:avatar 通道容量扩至 75 具身体(450 实例)并新增敌怪身份域。
-pub const CLIENT_ABI_VERSION: u32 = 14;
+/// v15:avatar 实例扩至 96 字节并新增材质槽与 atlas 采样(容量不变)。
+pub const CLIENT_ABI_VERSION: u32 = 15;
 
 /// 调用成功。
 pub const MORNLEA_CLIENT_STATUS_OK: u32 = 0;
@@ -410,10 +415,10 @@ mod tests {
     // 校验拒绝路径:ABI 版本、参数校验与无效句柄。
 
     #[test]
-    fn abi_version_is_fourteen() {
-        // v14 在 selected-main v13 窗口合成捕获表面上叠加 render world
-        // update；identity 必须与完整 29 个 versioned exports 同步切换。
-        assert_eq!(mornlea_client_abi_version(), 14);
+    fn abi_version_is_fifteen() {
+        // v15 在 v14 render world update 表面上叠加 avatar 贴图实例布局；
+        // identity 必须与完整 29 个 versioned exports 同步切换。
+        assert_eq!(mornlea_client_abi_version(), 15);
     }
 
     #[test]
@@ -1144,8 +1149,8 @@ mod render_ffi_tests {
                 assert_eq!($call, MORNLEA_CLIENT_STATUS_ABI_VERSION)
             }};
         }
-        let bad = 13;
-        assert_eq!(CLIENT_ABI_VERSION, bad + 1, "被测版本必须是 v14 的直接前代");
+        let bad = 14;
+        assert_eq!(CLIENT_ABI_VERSION, bad + 1, "被测版本必须是 v15 的直接前代");
 
         assert_bad_abi!(unsafe {
             mornlea_client_window_create(bad, 0, 0, std::ptr::null(), 0, std::ptr::null_mut())

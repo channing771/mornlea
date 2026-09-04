@@ -2,7 +2,7 @@
 
 ## 所有权
 
-`persistence` 单独持有世界、玩家、伙伴和夜行者的存档加载、观察、异步保存、重试、flush 与 worker 生命周期。根 `server` 只持有 Host、Server、登录、会话、权威 tick、发布和关服编排。根 `server` 保留 `PersistenceStatus` 和 `ErrPlayerPersistenceBackpressure` 的兼容 re-export 与委派；子包持有其状态计算和背压哨兵实现。
+`persistence` 单独持有世界、玩家、伙伴、夜行者和被动牛的存档加载、观察、异步保存、重试、flush 与 worker 生命周期。根 `server` 只持有 Host、Server、登录、会话、权威 tick、发布和关服编排。根 `server` 保留 `PersistenceStatus` 和 `ErrPlayerPersistenceBackpressure` 的兼容 re-export 与委派；子包持有其状态计算和背压哨兵实现。
 
 ## 依赖边界
 

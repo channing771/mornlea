@@ -20,10 +20,11 @@ import (
 )
 
 // TestHostileMobCaptureScenePosition 锁住 hostile-mob 的表内位置：夹在
-// `sword-combat` 与 `water-surface-slope` 之间（spec visual-verification
+// `sword-combat` 与 `passive-herd` 之间（spec visual-verification
 // delta「场景表顺序与导出」，完整相邻链为 ai-companion、sword-combat、
-// hostile-mob、water-surface-slope），同时确认既有尾段不变量未被本场景移动——
-// `far-horizon` 仍为倒数第二、`water-underwater` 仍为唯一末场景。
+// hostile-mob、passive-herd、water-surface-slope），同时确认既有尾段不变量
+// 未被本场景移动——`far-horizon` 仍为倒数第二、`water-underwater` 仍为唯一
+// 末场景。
 // 断言写「相邻关系」而不是「在表里」：后者是存在性断言，插到别的位置也
 // 照样通过，正是要挡的那种改动。
 func TestHostileMobCaptureScenePosition(t *testing.T) {
@@ -48,10 +49,8 @@ func TestHostileMobCaptureScenePosition(t *testing.T) {
 		t.Fatalf("hostile-mob=%d 必须紧随 sword-combat=%d",
 			indexOf("hostile-mob"), indexOf("sword-combat"))
 	}
-	if indexOf("water-surface-slope") != indexOf("hostile-mob")+1 {
-		t.Fatalf("water-surface-slope=%d 必须紧随 hostile-mob=%d",
-			indexOf("water-surface-slope"), indexOf("hostile-mob"))
-	}
+	// 牧场链的后半段（passive-herd→passive-graze→water-surface-slope）由
+	// 牛群与吃草场景各自的位置测试兜底，本测试只锁 hostile-mob 自身的前驱与尾段。
 	if captureScenes[len(captureScenes)-2].Name != "far-horizon" {
 		t.Fatalf("倒数第二场景=%q，想要 far-horizon",
 			captureScenes[len(captureScenes)-2].Name)

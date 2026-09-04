@@ -96,6 +96,17 @@ const (
 	ItemBrokenWoodenSword
 	ItemBrokenStoneSword
 	ItemBrokenIronSword
+	// `ItemRawBeef` 是生牛肉：牛死亡掉落的可食用战利品，堆叠 64、不可放置、
+	// 没有耐久。食物值 3/1800 登记在 `FoodValue` 唯一一张表里；熔炼 1 生牛肉得
+	// 1 熟牛肉（见 `SmeltingOutput`）。它不出现在 `BlockDrop` 表：世界上没有任何
+	// 方块采掘出生牛肉，唯一来源是权威模拟在牛死亡 chunk 的掉落放置。同样只能
+	// 追加在 `ItemIDMax` 哨兵之前。
+	ItemRawBeef
+	// `ItemCookedBeef` 是熟牛肉：生牛肉经熔炉熔炼的产物，堆叠 64、不可放置、
+	// 没有耐久。食物值 8/12800 严格高于生牛肉，登记在 `FoodValue` 唯一一张表里。
+	// 它不出现在 `BlockDrop` 表：唯一来源是熔炼产物。同样只能追加在 `ItemIDMax`
+	// 哨兵之前。
+	ItemCookedBeef
 	// ItemIDMax 是合法物品编号的独占上界（最后一个合法 ItemID + 1），本身不是
 	// 物品枚举成员。它供测试以「item < ItemIDMax」穷举全部物品，替代依赖
 	//「某个具体物品恰为枚举末项」的脆弱写法；放在 core 是因为物品注册表归属
@@ -305,7 +316,7 @@ func ItemStackLimit(item ItemID) (uint8, bool) {
 		ItemWheatSeeds, ItemWheat, ItemBread,
 		ItemStick, ItemWorkbench, ItemBoneMeal,
 		ItemPotato, ItemCarrot, ItemPoisonousPotato, ItemDoor,
-		ItemTorch, ItemRottenFlesh, ItemBed:
+		ItemTorch, ItemRottenFlesh, ItemBed, ItemRawBeef, ItemCookedBeef:
 		return MaxStackCount, true
 	case ItemStonePickaxe, ItemIronPickaxe,
 		ItemBrokenStonePickaxe, ItemBrokenIronPickaxe,

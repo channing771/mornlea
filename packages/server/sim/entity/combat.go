@@ -13,8 +13,10 @@ const (
 	playerMeleeReach         = float32(3)
 	playerMeleeCooldownTicks = uint8(10)
 	hostileMeleeDamage       = int32(3)
-	maxCombatActors          = 72
-	maxCombatIntents         = 72
+	// maxCombatActors 覆盖三类集合上限之和：8 名玩家加 64 只夜行者加 32 头被
+	// 动牛。被动牛只做受害者不产生意图，快照定容数组随上限一次配足，热路径仍无增长分配。
+	maxCombatActors  = 104
+	maxCombatIntents = 72
 )
 
 var hostileAttackRangeSquared = HostileAttackRange * HostileAttackRange
@@ -129,6 +131,22 @@ func (engine *engineContext) advanceCombatWithLimits(
 			selectedSlot:   selectedSlot,
 			selectedItem:   selectedItem,
 			selectedCount:  selectedCount,
+		}
+		snapshotCount++
+	}
+	// 被动牛只做受害者：快照排在既有种类之后，数量只受被动集合上限约束。
+	// 逃跑即防御，被动牛不设攻击与受击冷却，快照中两项恒零。
+	for index := range engine.passives.entries {
+		if snapshotCount >= actorLimit || snapshotCount == len(snapshots) {
+			return false
+		}
+		passive := &engine.passives.entries[index]
+		snapshots[snapshotCount] = combatActorSnapshot{
+			actor:     combatActor{kind: core.CombatTargetPassive, id: passive.id},
+			dimension: passive.dimension,
+			position:  passive.state.Position,
+			yaw:       passive.yaw,
+			health:    passive.health,
 		}
 		snapshotCount++
 	}
@@ -331,6 +349,7 @@ func (engine *engineContext) settleCombatIntent(result *TickResult, intent comba
 
 	var targetPlayer *playerState
 	var targetHostile *hostileState
+	var targetPassive *passiveState
 	var targetDimension core.DimensionID
 	switch intent.target.kind {
 	case core.CombatTargetPlayer:
@@ -347,6 +366,13 @@ func (engine *engineContext) settleCombatIntent(result *TickResult, intent comba
 		}
 		targetHostile = &engine.hostiles.entries[index]
 		targetDimension = targetHostile.dimension
+	case core.CombatTargetPassive:
+		index := engine.passives.findIndex(intent.target.id)
+		if index < 0 {
+			return false
+		}
+		targetPassive = &engine.passives.entries[index]
+		targetDimension = targetPassive.dimension
 	default:
 		return false
 	}
@@ -359,9 +385,19 @@ func (engine *engineContext) settleCombatIntent(result *TickResult, intent comba
 		targetPlayer.state.Velocity = targetPlayer.state.Velocity.Add(combatKnockback(
 			intent.attackerPosition, intent.targetPosition, intent.attackerYaw,
 		))
-	} else {
+	} else if targetHostile != nil {
 		targetHostile.applyDamage(intent.damage)
 		targetHostile.state.Velocity = targetHostile.state.Velocity.Add(combatKnockback(
+			intent.attackerPosition, intent.targetPosition, intent.attackerYaw,
+		))
+	} else {
+		// 被动牛经受击入口结算：扣血与固定时长逃跑同一次落定，归零个体由本
+		// tick 稍后的被动死亡阶段统一移除与掉落。入口在未知 ID 时整体拒绝，
+		// 此处已解析 live 身份，不可能失败，失败即关闭。
+		if !engine.DamagePassive(intent.target.id, intent.damage, intent.attackerPosition) {
+			return false
+		}
+		targetPassive.state.Velocity = targetPassive.state.Velocity.Add(combatKnockback(
 			intent.attackerPosition, intent.targetPosition, intent.attackerYaw,
 		))
 	}
@@ -370,9 +406,10 @@ func (engine *engineContext) settleCombatIntent(result *TickResult, intent comba
 		attackerPlayer.attackCooldownTicks = playerMeleeCooldownTicks
 		if targetPlayer != nil {
 			targetPlayer.hurtCooldownTicks = playerMeleeCooldownTicks
-		} else {
+		} else if targetHostile != nil {
 			targetHostile.hurtCooldown = playerMeleeCooldownTicks
 		}
+		// 被动牛无受击保护：逃跑即防御，此处不设目标冷却。
 		attackerPlayer.applyExhaustion(exhaustionMeleeMilli, engine.tunables.ExhaustionThresholdMilli)
 		attackerPlayer.meleeSuppressedMining = true
 		if core.IsIntactSword(intent.selectedItem) &&

@@ -76,6 +76,9 @@ func TestFluidChangesBroadcastOverExistingChunkChannel(t *testing.T) {
 		network.ItemDropUpserts{}, network.ItemDropRemoves{},
 		network.ChatEvent{}, network.CompanionSpawn{}, network.CompanionStates{},
 		network.CompanionDespawn{}, network.CraftingState{},
+		// 被动牛三类消息由被动牛同步任务加入，与流体变更无关，登记在此
+		// 保持该 allowlist 与当前线上类型一致（流体仍不得引入新类型）。
+		network.PassiveSpawn{}, network.PassiveState{}, network.PassiveDespawn{},
 	} {
 		preexisting[fmt.Sprintf("%T", message)] = struct{}{}
 	}

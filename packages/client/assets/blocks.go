@@ -132,6 +132,16 @@ const (
 	LayerCrack7
 	LayerCrack8
 	LayerCrack9
+	// LayerCowHide / LayerCowHead 是牛身六面采样的原创程序化皮毛层（奶白底 +
+	// 棕斑 + 噪点），LayerRawBeef / LayerCookedBeef 是掉落物与图标用的生熟
+	// 牛肉层（生偏红、熟偏棕的镂空图标）。四层只能追加在枚举末位；植物
+	// 31..54、火把 59、床 60..67、短草 68、裂纹 69..78 的冻结层号一律不动，
+	// 层号含义见各自守卫。牛肉图标的外网 CC0 文件（若随默认包入库）按槽位
+	// 覆盖程序化回退，牛身两层暂无外网文件、程序化像素即最终呈现。
+	LayerCowHide
+	LayerCowHead
+	LayerRawBeef
+	LayerCookedBeef
 	layerCount
 )
 
@@ -228,6 +238,13 @@ var textureBindings = [...]textureBinding{
 	{name: "crack_7", layer: LayerCrack7},
 	{name: "crack_8", layer: LayerCrack8},
 	{name: "crack_9", layer: LayerCrack9},
+	// 牛四层的绑定同样只是材质包覆盖的命名槽位：牛身两层暂无外网文件、程序
+	// 化像素原样生效（镜像 torch/bed/crack 的仅覆盖槽位语义）；牛肉两层的
+	// 外网 CC0 文件随内嵌默认包入库、用户包可再按槽位覆盖。
+	{name: "cow_hide", layer: LayerCowHide},
+	{name: "cow_head", layer: LayerCowHead},
+	{name: "raw_beef", layer: LayerRawBeef},
+	{name: "cooked_beef", layer: LayerCookedBeef},
 }
 
 // Registry 是方块属性与材质的注册表。
@@ -292,6 +309,10 @@ func NewRegistry() *Registry {
 	for stage := 0; stage < crackStageCount; stage++ {
 		r.layers[LayerCrack0+uint16(stage)] = crackTexture(stage)
 	}
+	r.layers[LayerCowHide] = cowHideTexture()
+	r.layers[LayerCowHead] = cowHeadTexture()
+	r.layers[LayerRawBeef] = rawBeefTexture()
+	r.layers[LayerCookedBeef] = cookedBeefTexture()
 	// ids 覆盖 core 的全部已注册方块编号，上界一律用独占哨兵 core.BlockIDMax
 	// 表达——写死某个具体末位编号（历史上写过 WaterLevel7ID）会在追加新编号时
 	// 静默退化成子集，新方块就永远进不了快照。Rust 侧的
@@ -621,7 +642,8 @@ func isCutoutLayer(layer int) bool {
 	return layer == int(LayerLeaves) || layer == int(LayerGlass) ||
 		(layer >= int(LayerWheat0) && layer <= int(LayerCarrot7)) || layer == int(LayerTorch) ||
 		layer == int(LayerShortGrass) ||
-		(layer >= int(LayerCrack0) && layer <= int(LayerCrack9))
+		(layer >= int(LayerCrack0) && layer <= int(LayerCrack9)) ||
+		layer == int(LayerRawBeef) || layer == int(LayerCookedBeef)
 }
 
 func (r *Registry) LayerCount() int { return int(layerCount) }

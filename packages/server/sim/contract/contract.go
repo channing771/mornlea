@@ -356,3 +356,20 @@ type HostileAction struct {
 	AttackTarget  bool
 	TargetSession SessionID
 }
+
+// PassiveMob 是一头被动牛的权威身体事实：稳定非零身份、所在维度、物理体、
+// 朝向与生命。全部字段为值语义，跨 goroutine 发送成功后视为不可变；逃跑
+// 计时、出生区块等运行时派生物不进本类型（见被动存档域的独立记录），重载后
+// 由恢复入口重新锚定。
+//
+// `Grazing` 是吃草事件的瞬态呈现位：置位表示该牛正在低头，仅供服务端发布
+// 与客户端位姿使用。它永不落盘（存档转换器不得拷贝它），永不进入生成与
+// 恢复入口（恢复时恒为清位，重启后事件自然消失）。
+type PassiveMob struct {
+	ID        uint64
+	Dimension core.DimensionID
+	State     physics.State
+	Yaw       float32
+	Health    uint8
+	Grazing   bool
+}

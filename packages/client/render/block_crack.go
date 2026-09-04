@@ -15,8 +15,9 @@ const blockCrackExpand float32 = 0.001
 // blockCrackInstanceBytes 是裂纹实例的定长字节数，与 Rust 侧 crack pass 的
 // 实例布局跨语言约定一致：0..63 是 mat4（列主序 little-endian f32 × 16），
 // 64..68 是 atlas 层号 f32（`assets.LayerCrack0 + stage`），68..80 零填充。
-// 容量与 avatar/drop/outline 实例共用 80 字节跨语言实例步长。
-const blockCrackInstanceBytes = avatarInstanceBytes
+// 裂纹是独立的单实例 overlay 契约：avatar 实例扩至 96 字节后此处不再与
+// `avatarInstanceBytes` 同源，保持 80 字节不变。
+const blockCrackInstanceBytes = 80
 
 // BlockCrackStageNone 是 BlockCrackStage 的无效阶段哨兵：requiredTicks 为 0
 // 或其他无法构成有效进度的输入时返回，呈现层据此隐藏裂纹而不是猜测阶段。

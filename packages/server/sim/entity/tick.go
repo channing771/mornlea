@@ -396,6 +396,14 @@ func (tick *TickContext) AdvanceHostiles(actions []HostileAction, result *TickRe
 	engine.settleDeaths(pending)
 }
 
+// AdvancePassives 推进被动牛的生成、漫游/逃跑移动、吃草事件和死亡生命周期。
+func (tick *TickContext) AdvancePassives() {
+	engine := &tick.engine
+	pending := tick.mutation
+	engine.advancePassives(pending)
+	engine.settlePassiveDeaths(pending)
+}
+
 // SettleGameplay 结算伙伴放置、玩家世界交互、跳夜、掉落和熔炉。
 func (tick *TickContext) SettleGameplay(result *TickResult) {
 	engine := &tick.engine

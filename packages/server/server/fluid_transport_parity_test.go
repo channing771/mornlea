@@ -21,9 +21,14 @@ var damSource = core.BlockPos{X: 0, Y: 3, Z: -5}
 // 铺满 7 格（含跨区块边界），并在末尾留出一段静默期。
 const damParityTicks = 320
 
-// damGenerator 生成 y=0 一层草地地面、在 damSource 正下方立一根两格石柱、
+// damGenerator 生成 y=0 一层泥土地面、在 damSource 正下方立一根两格石柱、
 // 柱顶放一个水源的世界。水先水平溢出柱顶，再沿柱侧落到地面，最后在地面铺开，
 // 因此单次录制同时覆盖垂直下落与水平铺开两类流体变更。
+//
+// 地面刻意用泥土而不用草：被动牛只在草上出生/吃草，而两侧录像的绝对
+// tick 窗口本就不同（握手 tick 数随传输而异），草地会让录像混入下标错位的
+// 背景泥土写入；地板材质对水流规则不可见（`rules.go` 只分流流体）。
+// parity 世界按契约保持无背景生物写入（背景实体消息同样被比对过滤）。
 type damGenerator struct{}
 
 // GenerateChunk 实现 Generator。
@@ -31,7 +36,7 @@ func (damGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
 	chunk := world.NewChunk(position)
 	for x := range core.SectionSize {
 		for z := range core.SectionSize {
-			chunk.SetBlock(x, 0, z, core.GrassID)
+			chunk.SetBlock(x, 0, z, core.DirtID)
 		}
 	}
 	if position == damSource.Chunk() {

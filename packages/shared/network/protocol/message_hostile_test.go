@@ -53,13 +53,13 @@ func TestHostileMessageIDsAreFrozen(t *testing.T) {
 		{StatePlay, HostileState{}, 23},
 		{StatePlay, HostileDespawn{}, 24},
 	})
-	for _, id := range []uint32{22, 23, 24, 25} {
+	for _, id := range []uint32{22, 23, 24, 25, 26, 27, 28} {
 		if _, ok := ServerPacketForID(StatePlay, id); !ok {
 			t.Fatalf("Play server packet ID %d 未注册", id)
 		}
 	}
-	if _, ok := ServerPacketForID(StatePlay, 25+1); ok {
-		t.Fatal("Play server packet ID 26 必须保持未分配")
+	if _, ok := ServerPacketForID(StatePlay, 28+1); ok {
+		t.Fatal("Play server packet ID 29 必须保持未分配")
 	}
 }
 

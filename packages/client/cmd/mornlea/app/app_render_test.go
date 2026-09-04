@@ -55,7 +55,7 @@ func TestApplicationRendersSevenPlayersAndFourCompanionsInOneAvatarStream(t *tes
 		t.Fatalf("name tags=%d，想要 %d", got, want)
 	}
 	// 11 具身体 × 6 部件在单一实例流中(单 pass 的等价断言)。
-	if got, want := len(app.avatarStream), 11*6*80; got != want {
+	if got, want := len(app.avatarStream), 11*6*96; got != want {
 		t.Fatalf("avatar 实例流=%d 字节，想要 %d", got, want)
 	}
 	avatarKeys := make(map[render.EntityKey]struct{}, len(app.remoteAvatars))
@@ -213,9 +213,9 @@ func TestApplicationRejectsActorOverflowBeforeGPUOrAtlasMutation(t *testing.T) {
 		t.Fatalf("reset 后一帧 RenderFrame=(%v,%v)", rendered, err)
 	}
 	// reset 后一帧恢复:12 实例轮廓 + 目标名牌。
-	if len(app.outlineStream) != 12*80 || len(app.remoteNameTags) != 1 {
+	if len(app.outlineStream) != 12*96 || len(app.remoteNameTags) != 1 {
 		t.Fatalf("reset 后一帧 outline/名牌=%d/%d,想要 %d/1",
-			len(app.outlineStream), len(app.remoteNameTags), 12*80)
+			len(app.outlineStream), len(app.remoteNameTags), 12*96)
 	}
 }
 
@@ -244,7 +244,7 @@ func TestApplicationBlockTargetStreamsAndCapacity(t *testing.T) {
 		t.Fatalf("RenderFrame=(%v,%v)", rendered, err)
 	}
 	// 各 pass 段齐备:avatar/掉落物/轮廓实例流非空。
-	if len(app.avatarStream) == 0 || len(app.dropStream) == 0 || len(app.outlineStream) != 12*80 {
+	if len(app.avatarStream) == 0 || len(app.dropStream) == 0 || len(app.outlineStream) != 12*96 {
 		t.Fatalf("pass 段 avatar/drop/outline=%d/%d/%d",
 			len(app.avatarStream), len(app.dropStream), len(app.outlineStream))
 	}
@@ -332,9 +332,9 @@ func TestApplicationPlayerResetHidesBlockTargetForOneFrame(t *testing.T) {
 	if rendered, err := app.RenderFrame(1); err != nil || !rendered {
 		t.Fatalf("reset 后一帧 RenderFrame=(%v,%v)", rendered, err)
 	}
-	if len(app.outlineStream) != 12*80 || len(app.remoteNameTags) != 1 {
+	if len(app.outlineStream) != 12*96 || len(app.remoteNameTags) != 1 {
 		t.Fatalf("reset 后一帧 outline/名牌=%d/%d,想要 %d/1",
-			len(app.outlineStream), len(app.remoteNameTags), 12*80)
+			len(app.outlineStream), len(app.remoteNameTags), 12*96)
 	}
 }
 
@@ -365,9 +365,9 @@ func TestApplicationBlockTargetStablePathDoesNotAllocate(t *testing.T) {
 	if allocations := testing.AllocsPerRun(100, run); allocations != 0 {
 		t.Fatalf("稳定目标反馈路径分配=%v，想要 0", allocations)
 	}
-	if len(tags) != 8 || !outline.Visible || len(outlineStream) != 12*80 {
+	if len(tags) != 8 || !outline.Visible || len(outlineStream) != 12*96 {
 		t.Fatalf("稳定路径 tags/outline/流=%d/%+v/%d，想要 8/可见/%d",
-			len(tags), outline, len(outlineStream), 12*80)
+			len(tags), outline, len(outlineStream), 12*96)
 	}
 }
 

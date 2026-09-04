@@ -93,6 +93,7 @@ func NewOffscreenRenderApplicationForTest(
 		itemDrops:       client.NewItemDrops(),
 		remotePlayers:   client.NewRemotePlayers(),
 		companions:      &client.Companions{},
+		passives:        &client.Passives{},
 		// 聊天事件环是 capture 共享清理闭包的必查呈现件（空环即关闭态聊天
 		// HUD），离屏装配补齐它，capture 场景闭包才能在本装配上原样运行。
 		chatEvents:     &client.ChatEvents{},

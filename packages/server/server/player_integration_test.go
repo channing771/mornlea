@@ -451,6 +451,8 @@ func (h *delayedPlayerHarness) drainServerTick(throughTick uint64) {
 			}
 		case network.ItemDropUpserts, network.ItemDropRemoves:
 			// 掉落物由独立镜像消费，不进入世界镜像。
+		case network.PassiveSpawn, network.PassiveState, network.PassiveDespawn:
+			// 被动牛由实体镜像消费（随被动牛同步任务装配），不进入世界区块镜像。
 		default:
 			if delta, ok := message.(network.BlockChanges); ok {
 				copied := delta

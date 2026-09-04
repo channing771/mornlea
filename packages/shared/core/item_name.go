@@ -36,6 +36,8 @@ var itemDisplayNames = map[ItemID]string{
 	ItemTorch:              "火把",
 	ItemBed:                "床",
 	ItemRottenFlesh:        "腐肉",
+	ItemRawBeef:            "生牛肉",
+	ItemCookedBeef:         "熟牛肉",
 	ItemWoodenSword:        "木剑",
 	ItemStoneSword:         "石剑",
 	ItemIronSword:          "铁剑",

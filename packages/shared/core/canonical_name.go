@@ -116,6 +116,8 @@ var explicitCanonicalItemNames = map[ItemID]string{
 	ItemTorch:              "torch",
 	ItemRottenFlesh:        "rotten_flesh",
 	ItemBed:                "bed",
+	ItemRawBeef:            "raw_beef",
+	ItemCookedBeef:         "cooked_beef",
 	ItemWoodenSword:        "wooden_sword",
 	ItemStoneSword:         "stone_sword",
 	ItemIronSword:          "iron_sword",

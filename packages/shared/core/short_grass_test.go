@@ -29,7 +29,7 @@ func TestShortGrassStableBlockIdentityHasNoItem(t *testing.T) {
 	if got, ok := core.BlockDrop(expectedShortGrassID); ok || got != core.ItemNone {
 		t.Fatalf("BlockDrop(短草) = (%d,%v)，短草不得登记通用掉落", got, ok)
 	}
-	if got, want := core.ItemIDMax, core.ItemID(53); got != want {
+	if got, want := core.ItemIDMax, core.ItemID(55); got != want {
 		t.Fatalf("ItemIDMax = %d，想要保持 %d：短草不得追加物品编号", got, want)
 	}
 	faces := [...]core.BlockFace{

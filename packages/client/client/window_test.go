@@ -20,13 +20,13 @@ func buildSnapshot(mutate func([]byte)) []byte {
 }
 
 func TestClientABIVersionMatchesHeader(t *testing.T) {
-	// v14 在 selected-main v13 窗口合成捕获表面上叠加 render world
-	// update；动态库 identity 与编译期 header 必须同步切换。
-	if got := ClientABIVersion(); got != 14 {
-		t.Fatalf("client ABI version=%d,想要 14", got)
+	// v15 在 v14 render world update 表面上叠加 avatar 贴图实例布局；
+	// 动态库 identity 与编译期 header 必须同步切换。
+	if got := ClientABIVersion(); got != 15 {
+		t.Fatalf("client ABI version=%d,想要 15", got)
 	}
-	if got := clientABIHeaderVersion(); got != 14 {
-		t.Fatalf("client header ABI version=%d,想要 14", got)
+	if got := clientABIHeaderVersion(); got != 15 {
+		t.Fatalf("client header ABI version=%d,想要 15", got)
 	}
 }
 

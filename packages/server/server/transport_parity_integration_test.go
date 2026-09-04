@@ -37,6 +37,29 @@ func (miningParityGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk 
 	return chunk
 }
 
+// barrenParityGenerator 是业务 transcript parity 专用的无草平坦世界：地表
+// y=0 为泥土而非 `integrationChunk` 的草。被动牛只在草上出生/吃草，而两侧
+// 录像的绝对 tick 窗口本就不同（握手 tick 数随传输而异），草地会让 transcript
+// 混入下标错位的背景泥土写入；地表材质对本脚本（移动/合成/放置/采掘/重同步）
+// 不可见，parity 只要求两侧逐字段相同、不与历史基线比对。
+// parity 世界按契约保持无背景生物写入（背景实体消息同样被比对过滤）。
+type barrenParityGenerator struct{}
+
+func (barrenParityGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+	chunk := world.NewChunk(position)
+	for z := 0; z < core.SectionSize; z++ {
+		for x := 0; x < core.SectionSize; x++ {
+			chunk.SetBlock(x, core.MinY, z, core.BedrockID)
+			for y := int32(core.MinY + 1); y < 0; y++ {
+				chunk.SetBlock(x, y, z, core.StoneID)
+			}
+			chunk.SetBlock(x, 0, z, core.DirtID)
+		}
+	}
+	chunk.Compact()
+	return chunk
+}
+
 func TestMemoryTCPParityBusinessTranscriptAndHashes(t *testing.T) {
 	memory := runParityTranscript(t, "memory")
 	tcp := runParityTranscript(t, "tcp")
@@ -114,6 +137,21 @@ func TestMiningCompletionOraclesRejectOrderDuplicatesAndMirrorDivergence(t *test
 	if err := validateMiningMirrorConvergence(hash, 2, other, 2, true); err == nil {
 		t.Fatal("authority/mirror hash 偏离未被拒绝")
 	}
+}
+
+// withoutPassiveMessages 剔除完成帧里的被动牛背景消息：完成帧契约只含
+// 破坏 delta、掉落、背包与玩家状态四条，被动牛 spawn/state 与采掘正交，
+// 由被动牛专用的发布测试覆盖，此处只保证完成帧断言不受背景消息干扰。
+func withoutPassiveMessages(messages []network.ServerMessage) []network.ServerMessage {
+	kept := messages[:0]
+	for _, message := range messages {
+		switch message.(type) {
+		case network.PassiveSpawn, network.PassiveState, network.PassiveDespawn:
+			continue
+		}
+		kept = append(kept, message)
+	}
+	return kept
 }
 
 func validateMiningCompletionFrame(messages []network.ServerMessage, target core.BlockPos) error {
@@ -327,7 +365,7 @@ func runMiningParityScript(t *testing.T, transport string) miningParityResult {
 			t.Fatalf("%s 铁镐 tick %d = %+v", transport, tick, state)
 		}
 	}
-	if err := validateMiningCompletionFrame(completionMessages, sideTarget); err != nil {
+	if err := validateMiningCompletionFrame(withoutPassiveMessages(completionMessages), sideTarget); err != nil {
 		t.Fatalf("%s 铁镐完成帧: %v", transport, err)
 	}
 	if state.MiningActive || len(drops.Presentations()) != 1 {
@@ -494,7 +532,7 @@ func runParityTranscript(t *testing.T, transport string) parityResult {
 	config := hostTestConfig()
 	config.ViewRadius = 1
 	config.AutosaveTicks = 1000
-	host := mustNewHost(t, config, flatGenerator{}, store)
+	host := mustNewHost(t, config, barrenParityGenerator{}, store)
 	endpoint, acceptDone, closeTransport := openParityTransport(t, host, transport, identity)
 	mirror := client.NewMirror()
 	transcript := make([]string, 0, 64)
@@ -627,7 +665,8 @@ func parityReadinessTranscript(
 			lastState = message
 			hasState = true
 		case network.ChunkSnapshot, network.KeepAlive, network.InventoryState,
-			network.ItemDropUpserts, network.ItemDropRemoves, network.CraftingState:
+			network.ItemDropUpserts, network.ItemDropRemoves, network.CraftingState,
+			network.PassiveSpawn, network.PassiveState, network.PassiveDespawn:
 		default:
 			t.Fatalf("unexpected parity readiness message %T", message)
 		}
@@ -782,6 +821,12 @@ func parityBusinessMessage(
 	case network.CraftingState:
 		return []string{fmt.Sprintf("CraftingState:%+v", message)}
 	case network.KeepAlive, network.Disconnect:
+		return nil
+	case network.PassiveSpawn, network.PassiveState, network.PassiveDespawn:
+		// 被动牛是与本域脚本正交的背景模拟：自发出生 ID 由绝对 tick 派生，
+		// 两条传输登录阶段消耗的 tick 数不同，位置与 ID 天然不可比；发布
+		// 序列的跨传输等价由被动牛专用的 transcript parity 覆盖，这里只保
+		// 证本域脚本不受背景消息干扰（与 KeepAlive/Disconnect 同例）。
 		return nil
 	default:
 		t.Fatalf("unexpected parity business message %T", message)

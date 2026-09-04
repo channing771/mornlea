@@ -51,14 +51,14 @@ func TestCombatHitRegistryIsFrozen(t *testing.T) {
 	if _, ok := registered.(protocol.CombatHit); !ok {
 		t.Fatalf("Play S→C ID 25=%T，想要 CombatHit", registered)
 	}
-	if _, ok := protocol.ServerPacketForID(protocol.StatePlay, 26); ok {
-		t.Fatal("Play S→C ID 26 必须保持未分配")
+	if _, ok := protocol.ServerPacketForID(protocol.StatePlay, 29); ok {
+		t.Fatal("Play S→C ID 29 必须保持未分配")
 	}
-	if _, err := decodeServerControlPayload(protocol.StatePlay, 26, nil); !errors.Is(err, errUnknownPacketID) {
-		t.Fatalf("Play S→C ID 26 解码错误=%v，想要 %v", err, errUnknownPacketID)
+	if _, err := decodeServerControlPayload(protocol.StatePlay, 29, nil); !errors.Is(err, errUnknownPacketID) {
+		t.Fatalf("Play S→C ID 29 解码错误=%v，想要 %v", err, errUnknownPacketID)
 	}
-	if protocol.ProtocolVersion != 32 {
-		t.Fatalf("协议版本 = %d，想要 32", protocol.ProtocolVersion)
+	if protocol.ProtocolVersion != 34 {
+		t.Fatalf("协议版本 = %d，想要 34", protocol.ProtocolVersion)
 	}
 }
 
@@ -75,7 +75,7 @@ func TestCombatHitValidateRejectsInvalidValues(t *testing.T) {
 		{ServerTick: 1, Damage: 0, TargetKind: core.CombatTargetHostile},
 		{ServerTick: 1, Damage: 21, TargetKind: core.CombatTargetHostile},
 		{ServerTick: 1, Damage: 6, TargetKind: core.CombatTargetKind(0)},
-		{ServerTick: 1, Damage: 6, TargetKind: core.CombatTargetKind(3)},
+		{ServerTick: 1, Damage: 6, TargetKind: core.CombatTargetKind(4)},
 	}
 	for _, hit := range invalid {
 		if err := hit.Validate(); err == nil {
@@ -125,7 +125,7 @@ func TestCombatHitDecodeRejectsInvalidWire(t *testing.T) {
 		{"damage 0", func(p []byte) { p[8] = 0 }},
 		{"damage 21", func(p []byte) { p[8] = 21 }},
 		{"kind 0", func(p []byte) { p[9] = 0 }},
-		{"kind 3", func(p []byte) { p[9] = 3 }},
+		{"kind 4", func(p []byte) { p[9] = 4 }},
 	}
 	for _, m := range mutations {
 		t.Run(m.name, func(t *testing.T) {

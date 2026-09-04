@@ -9,6 +9,8 @@ func SmeltingOutput(input ItemID) (ItemID, bool) {
 		return ItemGlass, true
 	case ItemClay:
 		return ItemBrick, true
+	case ItemRawBeef:
+		return ItemCookedBeef, true
 	default:
 		return ItemNone, false
 	}

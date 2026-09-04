@@ -51,7 +51,7 @@ func buildItemDropParts(dst []avatarPart, serverTick uint64, drops []ItemDrop) [
 		transform := mgl32.Translate3D(center.X(), center.Y(), center.Z()).
 			Mul4(mgl32.HomogRotate3DY(phase.spin)).
 			Mul4(mgl32.Scale3D(dropCubeSize, dropCubeSize, dropCubeSize))
-		dst = append(dst, avatarPart{transform: transform, color: color})
+		dst = append(dst, avatarPart{transform: transform, color: color, material: avatarMaterialSolid})
 	}
 	return dst
 }
@@ -116,6 +116,10 @@ func ItemColor(item core.ItemID) [4]float32 {
 		return [4]float32{82.0 / 255, 82.0 / 255, 80.0 / 255, 1}
 	case core.ItemBrokenIronSword:
 		return [4]float32{115.0 / 255, 120.0 / 255, 125.0 / 255, 1}
+	case core.ItemRawBeef:
+		return [4]float32{152.0 / 255, 76.0 / 255, 55.0 / 255, 1}
+	case core.ItemCookedBeef:
+		return [4]float32{78.0 / 255, 55.0 / 255, 33.0 / 255, 1}
 	default:
 		return [4]float32{}
 	}

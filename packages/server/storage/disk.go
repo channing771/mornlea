@@ -16,6 +16,7 @@ import (
 	"github.com/channing771/mornlea/packages/server/storage/chunk"
 	"github.com/channing771/mornlea/packages/server/storage/companion"
 	"github.com/channing771/mornlea/packages/server/storage/hostile"
+	"github.com/channing771/mornlea/packages/server/storage/passive"
 	"github.com/channing771/mornlea/packages/server/storage/player"
 	"github.com/channing771/mornlea/packages/server/storage/region"
 	"github.com/channing771/mornlea/packages/shared/core"
@@ -36,6 +37,7 @@ type DiskStore struct {
 	companionReplaceHooks atomicReplaceHooks
 	metadataReplaceHooks  atomicReplaceHooks
 	hostileReplaceHooks   atomicReplaceHooks
+	passiveReplaceHooks   atomicReplaceHooks
 }
 
 func OpenDisk(ctx context.Context, root string, options OpenOptions) (*DiskStore, error) {
@@ -486,6 +488,94 @@ func (store *DiskStore) SaveHostileMobs(ctx context.Context, save HostileMobsSav
 	return nil
 }
 
+func (store *DiskStore) LoadPassiveMobs(ctx context.Context) (StoredPassiveMobs, error) {
+	if store.closing.Load() {
+		return StoredPassiveMobs{}, os.ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return StoredPassiveMobs{}, err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.closing.Load() || store.closed {
+		return StoredPassiveMobs{}, os.ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return StoredPassiveMobs{}, err
+	}
+	encoded, err := readPassiveFile(store.passivePath())
+	if errors.Is(err, os.ErrNotExist) {
+		return StoredPassiveMobs{}, ErrPassiveMobsNotFound
+	}
+	if err != nil {
+		return StoredPassiveMobs{}, fmt.Errorf("read passive mobs: %w", err)
+	}
+	stored, err := passive.Decode(encoded)
+	if err != nil {
+		return StoredPassiveMobs{}, fmt.Errorf("decode passive mobs: %w", err)
+	}
+	return stored, nil
+}
+
+func (store *DiskStore) SavePassiveMobs(ctx context.Context, save PassiveMobsSave) error {
+	if store.closing.Load() {
+		return os.ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	encoded, err := passive.Encode(save)
+	if err != nil {
+		return err
+	}
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.closing.Load() || store.closed {
+		return os.ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	path := store.passivePath()
+	previous, err := readPassiveFile(path)
+	switch {
+	case err == nil:
+		stored, decodeErr := passive.Decode(previous)
+		if decodeErr != nil {
+			// 正式文件损坏或为未来版本时拒绝保存并保留原文件：覆盖等于把
+			// 「读不回的数据」洗成合法存档，重启会静默清牛。
+			return fmt.Errorf("read existing passive mobs: %w", decodeErr)
+		}
+		switch {
+		case save.Revision < stored.Revision:
+			return fmt.Errorf(
+				"%w: passive revision %d is below %d",
+				ErrRevisionConflict, save.Revision, stored.Revision,
+			)
+		case save.Revision == stored.Revision:
+			if !bytes.Equal(encoded, previous) {
+				return fmt.Errorf("%w: passive revision %d", ErrRevisionConflict, save.Revision)
+			}
+			return nil
+		}
+	case errors.Is(err, os.ErrNotExist):
+	default:
+		return fmt.Errorf("read existing passive mobs: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	hooks := store.passiveReplaceHooks
+	hooks.beforeRename = ctx.Err
+	if err := replaceFileAtomicallyWithPatternAndHooks(
+		path, ".passive_mobs.bin.tmp-*", encoded, 0o600, hooks,
+	); err != nil {
+		return fmt.Errorf("save passive mobs: %w", err)
+	}
+	return nil
+}
+
 // hashChunkFunc 是批量保存去重比对的内容哈希入口。生产路径固定为
 // `world.Chunk.Hash`；探针测试注入计数包装，钉住「同批次同区块只哈希一次」。
 // 返回值 `[32]byte` 即 `sha256.Size` 字节的 SHA-256 摘要（与 memory.go 的
@@ -635,6 +725,12 @@ func (store *DiskStore) hostilePath() string {
 	return filepath.Join(store.files.root, "hostile_mobs.bin")
 }
 
+// passivePath 是被动牛聚合存档的固定路径，与世界根目录平级（与
+// hostile_mobs.bin 同一布局约定，文件独立）。
+func (store *DiskStore) passivePath() string {
+	return filepath.Join(store.files.root, "passive_mobs.bin")
+}
+
 func readPlayerFile(path string) ([]byte, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -684,6 +780,25 @@ func readHostileFile(path string) ([]byte, error) {
 	if len(encoded) > hostile.MaxFileLength {
 		return nil, fmt.Errorf(
 			"%w: hostile file exceeds %d bytes", ErrCorrupt, hostile.MaxFileLength,
+		)
+	}
+	return encoded, nil
+}
+
+// readPassiveFile 读取被动牛存档并守住物理字节上界：先按上界截断读取再
+// 拒绝超限输入，保证超大文件不会在解码前进入内存。
+func readPassiveFile(path string) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	encoded, readErr := io.ReadAll(io.LimitReader(file, int64(passive.MaxFileLength)+1))
+	if err := errors.Join(readErr, file.Close()); err != nil {
+		return nil, err
+	}
+	if len(encoded) > passive.MaxFileLength {
+		return nil, fmt.Errorf(
+			"%w: passive file exceeds %d bytes", ErrCorrupt, passive.MaxFileLength,
 		)
 	}
 	return encoded, nil

@@ -175,6 +175,21 @@ func NewHost(
 		}
 		return nil, fmt.Errorf("load hostiles: %w", err)
 	}
+	// 被动牛聚合存档与夜行者侧解耦，凡世界存储都参与启动矩阵：missing 视同
+	// 空集合；损坏/未来版本/读取失败在此整体拒绝（tick 与路径 worker 都不会
+	// 启动），旧文件由存储层保持原样，重启不可能成为清牛手段。加载后的记录
+	// 由 newWorld 在首 tick 前经 `RestorePassive` 接线（存储校验矩阵覆盖
+	// sim 侧全部不变量，重复/超限集合在加载边界已被拒绝，恢复失败属不可达
+	// 防御路径）。
+	loadedPassives, err := store.LoadPassiveMobs(ctx)
+	if errors.Is(err, storage.ErrPassiveMobsNotFound) {
+		loadedPassives = storage.StoredPassiveMobs{}
+	} else if err != nil {
+		if companions != nil {
+			companions.Close()
+		}
+		return nil, fmt.Errorf("load passives: %w", err)
+	}
 	var companionSnapshots *companion.SnapshotRegistry
 	var companionMCP *companionMCPService
 	var companionAgent companionAgentRuntimeClient
@@ -260,10 +275,12 @@ func NewHost(
 		}
 	}
 	hostiles := persistence.NewHostiles(store, loadedHostiles, persistenceOptions(config, nil))
-	world, err := newWorld(config, generator, store, companions, hostiles, planner, dialogue)
+	passives := persistence.NewPassives(store, loadedPassives, persistenceOptions(config, nil))
+	world, err := newWorld(config, generator, store, companions, hostiles, passives, planner, dialogue)
 	if err != nil {
 		// 持久化 worker 已随构造启动；恢复/装配阶段的任何失败都必须先停掉
 		// worker 再返回，否则每次启动失败都泄漏一个永不退出的 goroutine。
+		passives.Close()
 		hostiles.Close()
 		if companionMCP != nil {
 			companionMCP.Close()

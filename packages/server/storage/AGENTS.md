@@ -1,7 +1,7 @@
 # 世界存储子树
 
 本文件是 `packages/server/storage` 子树的总纲：目录地图、依赖方向、别名再导出政策
-与全树共享的数据安全纪律。五个域子包的包内不变量、精确路径与钉死回归的
+与全树共享的数据安全纪律。六个域子包的包内不变量、精确路径与钉死回归的
 测试名见各自目录的 `AGENTS.md`。本子树任何目录（含子树根）不放
 `CLAUDE.md`：代理沿目录祖先链读到仓库根 `CLAUDE.md`/`AGENTS.md`、
 `packages/server/AGENTS.md`、本总纲与子包指南即可。
@@ -11,7 +11,7 @@
 ```
 packages/server/storage/
 ├── AGENTS.md                # 本总纲
-├── types.go                 # Store/WorldStore/PlayerStore/CompanionStore/HostileMobStore 接口家族、Metadata、域符号别名再导出
+├── types.go                 # Store/WorldStore/PlayerStore/CompanionStore/HostileMobStore/PassiveMobStore 接口家族、Metadata、域符号别名再导出
 ├── disk.go                  # DiskStore：region 容器缓存编排、批量保存排序与聚合文件原子替换
 ├── memory.go                # MemoryStore：无磁盘 I/O 的同构内存 Store（规范化编码字节 + revision 语义）
 ├── world_files.go           # 世界目录装配：metadata 路径编排与 world.lock 文件锁
@@ -27,8 +27,10 @@ packages/server/storage/
 │   └── testdata/            # player 版本化 fixture（golden；清单以目录为准）
 ├── companion/               # companion 存档域 codec（指南见 companion/AGENTS.md）
 │   └── testdata/            # companions 版本化 fixture（golden；清单以目录为准）
-└── hostile/                 # hostile 存档域 codec（指南见 hostile/AGENTS.md）
-    └── testdata/            # hostile-mobs 版本化 fixture（golden；清单以目录为准）
+├── hostile/                 # hostile 存档域 codec（指南见 hostile/AGENTS.md）
+│   └── testdata/            # hostile-mobs 版本化 fixture（golden；清单以目录为准）
+└── passive/                 # passive 存档域 codec（指南见 passive/AGENTS.md）
+    └── testdata/            # passive-mobs 版本化 fixture（golden；清单以目录为准）
 ```
 
 ## Dependency Direction
@@ -39,10 +41,11 @@ packages/server/storage/
 openspec 主规格 `repository-code-organization`。
 
 - 接受：根包 → {`packages/shared/core`, `packages/shared/world`, `region`, `chunk`,
-  `player`, `companion`, `hostile`, `storagedef`}；`chunk` → {`region`,
+  `player`, `companion`, `hostile`, `passive`, `storagedef`}；`chunk` → {`region`,
   `storagedef`, `core`, `world`}；`player` → {`core`, `storagedef`}；
   `companion` → {`packages/shared/companion`, `core`, `storagedef`}（既有伙伴
-  领域边随迁）；`hostile` → {`core`, `storagedef`}；`region` →
+  领域边随迁）；`hostile` → {`core`, `storagedef`}；`passive` → {`core`,
+  `storagedef`}；`region` →
   {`core`, `storagedef`}；`storagedef` → {}（零依赖叶子）。
 - 拒绝：任何子包反向导入根包；子包之间 `chunk` → `region` 之外的相互
   依赖；存储各包依赖 `packages/shared/network`（线上消息与落盘 DTO 在 server
@@ -55,16 +58,17 @@ openspec 主规格 `repository-code-organization`。
 - 迁出符号在根包 `types.go` 以别名/绑定再导出，保证既有 `storage.X` 消费
   面零改动：值类型用 `type X = pkg.X` 形态（`StoredChunk`/`ChunkSave`、
   `StoredPlayer`/`PlayerSave`/`PlayerLocation`、`StoredCompanions` 家族、
-  `StoredHostileMob`/`StoredHostileMobs`/`HostileMobsSave`、`RegionKey`），
+  `StoredHostileMob`/`StoredHostileMobs`/`HostileMobsSave`、
+  `StoredPassiveMob`/`StoredPassiveMobs`/`PassiveMobsSave`、`RegionKey`），
   错误用 `var ErrX = pkg.ErrX` 绑定同一错误值（`ErrCorrupt`/
   `ErrFutureVersion` ← `storagedef`，`ErrChunkNotFound`/
   `ErrRevisionConflict` ← `chunk`，`ErrCompanionsNotFound` ← `companion`，
-  `ErrHostileMobsNotFound` ← `hostile`）；`RegionFor` 是转发函数，
-  `MaxHostileMobs` 是常量再导出。别名不产生运行时转发，`errors.Is` 身份与
+  `ErrHostileMobsNotFound` ← `hostile`，`ErrPassiveMobsNotFound` ← `passive`）；`RegionFor` 是转发函数，
+  `MaxHostileMobs`/`MaxPassiveMobs` 是常量再导出。别名不产生运行时转发，`errors.Is` 身份与
   错误消息逐字节不变。
 - 别名清单是闭集：只覆盖消费方实际引用的迁出符号；未列入的域内导出不加
   别名，根包内部代码直接以 `region.`/`chunk.`/`player.`/`companion.`/
-  `hostile.` 限定名消费。域包新增导出（如 `chunk.Encode`/`chunk.Decode`、
+  `hostile.`/`passive.` 限定名消费。域包新增导出（如 `chunk.Encode`/`chunk.Decode`、
   `player.Encode`/`player.Decode`）只承接既有调用方，不为对称性加导出。
 - `ErrPlayerNotFound`/`ErrWorldLocked` 仍定义在根包：产生方是根包编排
   （player 文件加载路径与世界文件锁），不经子包。
@@ -113,5 +117,6 @@ openspec 主规格 `repository-code-organization`。
 | player codec | `go test ./packages/server/storage/player -race -count=1` |
 | companion codec | `go test ./packages/server/storage/companion -race -count=1` |
 | hostile codec | `go test ./packages/server/storage/hostile -race -count=1` |
+| passive codec | `go test ./packages/server/storage/passive -race -count=1` |
 | 全子树（跨域改动） | `go test ./packages/server/storage/... -race -count=1` |
 | 依赖方向 / 文档守卫 | `go test ./packages/audit -count=1` |

@@ -4,8 +4,8 @@
 
 ## 线上协议
 
-- 线上协议为 v32（定义在 `packages/shared/network/protocol` 的 `ProtocolVersion`，根包 `packages/shared/network` 别名再导出）；所有不匹配版本都会在握手阶段、进入 Play 前被稳定拒绝，不提供版本协商或降级解码；更早版本的逐版语义见 `packages/shared/network/protocol/packet.go` 顶部注释；
-- 近几版协议全部是既有 packet 尾部追加或新增消息，不改变任何既有长度上限，也不新增 `RejectReason`：
+- 线上协议为 v34（定义在 `packages/shared/network/protocol` 的 `ProtocolVersion`，根包 `packages/shared/network` 别名再导出）；所有不匹配版本都会在握手阶段、进入 Play 前被稳定拒绝，不提供版本协商或降级解码；更早版本的逐版语义见 `packages/shared/network/protocol/packet.go` 顶部注释；
+- 近几版协议全部是既有 packet 尾部追加或新增消息，v34 起 `PassiveState` record 步长例外由 37 变为 38，其余既有长度上限不变，也不新增 `RejectReason`：
   - v26 新增 Play S→C ID 20 `PlaceBlockSucceeded(sequence)`，只回发给放置发起会话作为成功放置确认；
   - v27 新增 Play C→S ID 14 `BoneMeal`，与 `TillSoil` 同形（序号 + 朝向），目标格由权威射线决定；
   - v28 在 `PlayerInput` 尾部 `Eating` 之后追加 1 字节 `Sprinting` 疾跑意图位；
@@ -13,6 +13,8 @@
   - v30 新增 Play S→C ID 22/23/24 三类夜行者消息 `HostileSpawn`/`HostileState`/`HostileDespawn`：每类为 `ServerTick` u64 加 count u8 加至多 64 条按 ID 严格升序的记录（spawn 携带 ID/维度/位置/朝向/生命，state 携带 ID/位置/速度/朝向/生命，despawn 只携带 ID），按会话视野订阅发布；
   - v31 在 `PlayerState` 尾部 `SaturationZero` 之后、`WorldTimeTicks` 之前追加 2 字节 `DayPhaseOffset` 显示相位偏移（u16，值域 `0..23999`，越界在校验与编解码处稳定拒绝）；显示相位按 `(WorldTimeTicks + DayPhaseOffset) % 24000` 计算，偏移只平移呈现相位、不回写绝对时间；
 - v32 在 Play S→C registry 尾部追加 ID 25 `CombatHit(ServerTick, Damage, TargetKind)`；固定 10-byte 载荷只私发给成功攻击的玩家会话，受击者、旁观者、trusted observer 与 hostile 攻击目标均不接收；
+- v33 在 Play S→C registry 尾部追加 ID 26/27/28 三类被动牛消息 `PassiveSpawn`/`PassiveState`/`PassiveDespawn`：每类为 `ServerTick` u64 加 count u8 加至多 64 条按 ID 严格升序的记录（spawn 携带 ID/维度/位置/朝向/生命，state 携带 ID/位置/速度/朝向/生命，despawn 只携带 ID），按会话视野订阅发布；
+- v34 在 `PassiveState` record 尾部 `Health` 之后追加 1 字节放牧标志 `Grazing`（u8，仅 0/1 合法，越界在校验与编解码处稳定拒绝；record 步长由 37 变为 38）；放牧态是瞬态呈现位、不入任何存档；
 - 客户端只声明按键意图，权威结算全在服务端；`SaturationZero` 是瞬态提示位、不入任何存档，饱和度与疲劳数值是纯服务端量、不占 wire 字段；`DayPhaseOffset` 只经世界 metadata v3 持久化，不进玩家存档。
 
 ## engine 与 client ABI

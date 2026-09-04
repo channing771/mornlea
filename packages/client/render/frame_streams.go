@@ -10,7 +10,7 @@ import (
 )
 
 // 本文件为 rust-client-render-entities 提供最小导出面:把各 pass 已有的
-// CPU 编码结果(80B avatar 实例、64B 名牌实例等)以只读字节流暴露给
+// CPU 编码结果(96B avatar 实例、64B 名牌实例等)以只读字节流暴露给
 // 平行 Rust 渲染器的帧装配。所有函数只是既有内部逻辑的复用出口,
 // 不改变任何渲染行为。
 
@@ -20,7 +20,7 @@ type InstanceEncoder struct {
 	parts   []avatarPart
 }
 
-// EncodeAvatarInstances 把插值后的 avatars 编码为 80 字节/实例的字节流,
+// EncodeAvatarInstances 把插值后的 avatars 编码为 96 字节/实例的字节流,
 // 与 AvatarRenderer.Render 的内部编码逐字节一致。dst 会被重置复用。
 func (e *InstanceEncoder) EncodeAvatarInstances(dst []byte, avatars []Avatar) []byte {
 	e.ordered = orderedAvatarsInto(e.ordered[:0], avatars)
@@ -30,7 +30,7 @@ func (e *InstanceEncoder) EncodeAvatarInstances(dst []byte, avatars []Avatar) []
 	return dst
 }
 
-// EncodeItemDropInstances 把掉落物编码为 80 字节/实例的字节流,
+// EncodeItemDropInstances 把掉落物编码为 96 字节/实例的字节流,
 // 与 ItemDropRenderer.Render 的内部编码逐字节一致。
 func (e *InstanceEncoder) EncodeItemDropInstances(dst []byte, serverTick uint64, drops []ItemDrop) []byte {
 	e.parts = buildItemDropParts(e.parts[:0], serverTick, drops)
@@ -39,7 +39,7 @@ func (e *InstanceEncoder) EncodeItemDropInstances(dst []byte, serverTick uint64,
 	return dst
 }
 
-// EncodeBlockOutlineInstances 把目标方块轮廓编码为 12×80 字节实例流;
+// EncodeBlockOutlineInstances 把目标方块轮廓编码为 12×96 字节实例流;
 // 不可见时返回空。
 func (e *InstanceEncoder) EncodeBlockOutlineInstances(dst []byte, outline BlockOutline) []byte {
 	if !outline.Visible {

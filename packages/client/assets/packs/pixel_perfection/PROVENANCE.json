@@ -35,6 +35,8 @@
     {"destination":"textures/wheat_5.png","source":"farming/farming_wheat_6.png","sha256":"372565ecae1c9ae58ef8f380567a7bc7f13f8605b9b64fb65147ee87131432da"},
     {"destination":"textures/wheat_6.png","source":"farming/farming_wheat_7.png","sha256":"fe92ab5ac2d5e931200ae511b22396b38af7fc954ebaaf36f414119b7282a986"},
     {"destination":"textures/wheat_7.png","source":"farming/farming_wheat_8.png","sha256":"38cbbdc79c7276a253bed48e765034294608a9ce23ef4a3ccaa03e9d25ffda76"},
-    {"destination":"textures/white_wool.png","source":"wool/wool_white.png","sha256":"9c2f10aa190f7810c867f45027bf2b66b690671cf7910717efe977b5cc74a351"}
+    {"destination":"textures/white_wool.png","source":"wool/wool_white.png","sha256":"9c2f10aa190f7810c867f45027bf2b66b690671cf7910717efe977b5cc74a351"},
+    {"destination":"textures/raw_beef.png","source":"food/steak_raw.png","source_url":"https://opengameart.org/content/16x16-food","license":{"id":"CC0-1.0","url":"https://creativecommons.org/publicdomain/zero/1.0/"},"sha256":"f2b3eba0d7f3b6440badbee5f6a49e664b74795bdf04c55fa3c2b0c307ab6eb2"},
+    {"destination":"textures/cooked_beef.png","source":"food/steak_grilled.png","source_url":"https://opengameart.org/content/16x16-food","license":{"id":"CC0-1.0","url":"https://creativecommons.org/publicdomain/zero/1.0/"},"sha256":"fc3c9f5bf88d196ef2f557b5035bc725462dd7861ed643e73406215d9b758316"}
   ]
 }

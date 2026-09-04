@@ -1324,6 +1324,14 @@ impl OffscreenRenderer {
         // 上传即随之重建绑定,帧内不再创建任何绑定资源。
         self.crack_pass
             .rebuild_bind(&self.device, &atlas_view, &self.sampler);
+        // 实体三 pass(avatar/drop/轮廓)与 terrain 共用同一方块图集:纯色
+        // 分支不采样但绑定必须存在,牛身贴图分支经材质层号采样。
+        self.avatar_pass
+            .rebuild_bind(&self.device, &atlas_view, &self.sampler);
+        self.drop_pass
+            .rebuild_bind(&self.device, &atlas_view, &self.sampler);
+        self.outline_pass
+            .rebuild_bind(&self.device, &atlas_view, &self.sampler);
         self.terrain_bind = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("terrain resources"),
             layout: &self.terrain_layout,
@@ -2783,23 +2791,34 @@ mod entity_tests {
 
     /// 单个红色 avatar 实例(identity 变换)在 identity 相机下必然覆盖
     /// 画面中心:实体 pass 输出必须改变图像,且非法 instance 段被拒绝。
+    /// atlas 预热后纯色分支像素与变更前一致,哨兵材质走原纯色路径。
     #[test]
     fn avatar_instances_render_and_invalid_lengths_reject() {
         let Some(mut renderer) = renderer_or_skip_pub(64, 64) else {
             return;
         };
+        // 实体 pass 与 terrain 同图集:预热上传单层不透明 atlas,纯色分支
+        // 不采样但绑定必须存在。
+        let bytes_per_layer: usize = (0..super::ATLAS_MIPS)
+            .map(|m| {
+                let s = (super::ATLAS_TEX_SIZE >> m).max(1) as usize;
+                s * s * 4
+            })
+            .sum();
+        assert!(renderer.upload_atlas(1, &vec![128u8; bytes_per_layer]));
         let empty = empty_frame_pub();
         assert_eq!(renderer.render_frame(&empty), FrameResult::Rendered);
         let mut base = vec![0u8; 64 * 64 * 4];
         assert!(renderer.readback(&mut base));
 
-        // identity mat4(列主序)+ 红色。
-        let mut instance = [0u8; 80];
+        // identity mat4(列主序)+ 红色 + 哨兵材质 + 保留零填充。
+        let mut instance = [0u8; entity::ENTITY_INSTANCE_BYTES];
         for i in 0..4 {
             instance[(i * 4 + i) * 4..(i * 4 + i) * 4 + 4].copy_from_slice(&1.0f32.to_le_bytes());
         }
         instance[64..68].copy_from_slice(&1.0f32.to_le_bytes());
         instance[76..80].copy_from_slice(&1.0f32.to_le_bytes());
+        instance[80..84].copy_from_slice(&entity::AVATAR_MATERIAL_SOLID.to_le_bytes());
         let mut frame = empty_frame_pub();
         frame.avatar_instances = instance.to_vec();
         assert_eq!(renderer.render_frame(&frame), FrameResult::Rendered);
@@ -2815,15 +2834,28 @@ mod entity_tests {
         assert!(renderer.readback(&mut with_drop));
         assert_ne!(base, with_drop, "掉落物实例必须改变图像");
 
-        // 非 80 倍数与超容量拒绝,且 target 保持上一帧内容。
+        // 贴图分支:同变换、材质层号 0(已上传的不透明 atlas),必须同样
+        // 改变图像且与纯色红输出不同(采样像素非纯色路径)。
+        let mut textured = instance;
+        textured[80..84].copy_from_slice(&0u32.to_le_bytes());
+        let mut tex_frame = empty_frame_pub();
+        tex_frame.avatar_instances = textured.to_vec();
+        assert_eq!(renderer.render_frame(&tex_frame), FrameResult::Rendered);
+        let mut with_tex = vec![0u8; 64 * 64 * 4];
+        assert!(renderer.readback(&mut with_tex));
+        assert_ne!(base, with_tex, "贴图实例必须改变图像");
+        assert_ne!(with_avatar, with_tex, "贴图输出不得与纯色红输出逐字节相同");
+
+        // 非 96 倍数与超容量拒绝,且 target 保持上一帧内容。
         let mut bad = empty_frame_pub();
-        bad.avatar_instances = vec![0u8; 84];
+        bad.avatar_instances = vec![0u8; 100];
         assert_eq!(renderer.render_frame(&bad), FrameResult::Invalid);
         let mut after_bad = vec![0u8; 64 * 64 * 4];
         assert!(renderer.readback(&mut after_bad));
-        assert_eq!(with_drop, after_bad, "拒绝帧不得触碰 target");
+        assert_eq!(with_tex, after_bad, "拒绝帧不得触碰 target");
         let mut oversized = empty_frame_pub();
-        oversized.avatar_instances = vec![0u8; (entity::AVATAR_MAX_INSTANCES + 1) * 80];
+        oversized.avatar_instances =
+            vec![0u8; (entity::AVATAR_MAX_INSTANCES + 1) * entity::ENTITY_INSTANCE_BYTES];
         assert_eq!(renderer.render_frame(&oversized), FrameResult::Invalid);
     }
 }
@@ -2839,19 +2871,27 @@ mod outline_overlay_tests {
         let Some(mut renderer) = renderer_or_skip_pub(64, 64) else {
             return;
         };
+        let bytes_per_layer: usize = (0..super::ATLAS_MIPS)
+            .map(|m| {
+                let s = (super::ATLAS_TEX_SIZE >> m).max(1) as usize;
+                s * s * 4
+            })
+            .sum();
+        assert!(renderer.upload_atlas(1, &vec![128u8; bytes_per_layer]));
         let empty = empty_frame_pub();
         assert_eq!(renderer.render_frame(&empty), FrameResult::Rendered);
         let mut base = vec![0u8; 64 * 64 * 4];
         assert!(renderer.readback(&mut base));
 
-        // identity 变换白色轮廓实例(alpha 0.86)。
-        let mut instance = [0u8; 80];
+        // identity 变换白色轮廓实例(alpha 0.86)+ 哨兵材质。
+        let mut instance = [0u8; super::entity::ENTITY_INSTANCE_BYTES];
         for i in 0..4 {
             instance[(i * 4 + i) * 4..(i * 4 + i) * 4 + 4].copy_from_slice(&1.0f32.to_le_bytes());
         }
         for c in 0..4 {
             instance[64 + c * 4..68 + c * 4].copy_from_slice(&0.86f32.to_le_bytes());
         }
+        instance[80..84].copy_from_slice(&super::entity::AVATAR_MATERIAL_SOLID.to_le_bytes());
         let mut outline_frame = empty_frame_pub();
         outline_frame.outline = instance.to_vec();
         assert_eq!(renderer.render_frame(&outline_frame), FrameResult::Rendered);

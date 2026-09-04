@@ -122,6 +122,9 @@ func (engine *Engine) StepWithTunables(tickTunables TickTunables) TickResult {
 	engine.notifyStepPhase(phaseHostileAdvance)
 	hostileActions := engine.takeHostileActions()
 	tick.AdvanceHostiles(hostileActions, &result)
+	// 被动牛紧随夜行者推进：同属有界实体阶段，`AdvancePassives` 内部已按
+	// 生成→移动→死亡结算的固定时序编排，死亡掉落复用同一 `mutation`。
+	tick.AdvancePassives()
 	tick.SettleGameplay(&result)
 
 	engine.activeChunkScratch = tick.AppendActiveInterestKeys(engine.activeChunkScratch[:0])

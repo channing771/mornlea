@@ -66,10 +66,10 @@ func TestBreadIsRegisteredStackableAndNotPlaceable(t *testing.T) {
 	}
 }
 
-// TestFoodValueCoversExactlyFiveFoods 是食物表的穷举守护：全部合法物品里恰好
-// 只有面包、马铃薯、胡萝卜、毒土豆、腐肉五种食物，且各自的恢复值精确等于
+// TestFoodValueCoversExactlySevenFoods 是食物表的穷举守护：全部合法物品里恰好
+// 只有面包、马铃薯、胡萝卜、毒土豆、腐肉、生牛肉、熟牛肉七种食物，且各自的恢复值精确等于
 // Bread(5,6000)、Potato(1,600)、Carrot(3,3600)、PoisonousPotato(2,1200)、
-// RottenFlesh(4,0)（饱和度为千分位）。
+// RottenFlesh(4,0)、RawBeef(3,1800)、CookedBeef(8,12800)（饱和度为千分位）。
 //
 // 这组数值同时就是进食状态机的取值路径：internal/sim 的 advanceEating 以
 // FoodValue 的 (hungerGain, saturationGain, edible) 做唯一准入与结算依据——
@@ -79,7 +79,7 @@ func TestBreadIsRegisteredStackableAndNotPlaceable(t *testing.T) {
 //
 // 穷举界用 ItemIDMax 独占哨兵而不是「<= 枚举末项」：追加新物品时 core 的枚举
 // 末项守护断言会先变红，迫使开发者回来审视这条穷举是否还表达了预期集合。
-func TestFoodValueCoversExactlyFiveFoods(t *testing.T) {
+func TestFoodValueCoversExactlySevenFoods(t *testing.T) {
 	for item := core.ItemID(0); item < core.ItemIDMax; item++ {
 		hunger, saturation, ok := core.FoodValue(item)
 		switch item {
@@ -102,6 +102,14 @@ func TestFoodValueCoversExactlyFiveFoods(t *testing.T) {
 		case core.ItemRottenFlesh:
 			if !ok || hunger != 4 || saturation != 0 {
 				t.Fatalf("FoodValue(ItemRottenFlesh) = (%d,%d,%v)，想要 (4,0,true)", hunger, saturation, ok)
+			}
+		case core.ItemRawBeef:
+			if !ok || hunger != 3 || saturation != 1800 {
+				t.Fatalf("FoodValue(ItemRawBeef) = (%d,%d,%v)，想要 (3,1800,true)", hunger, saturation, ok)
+			}
+		case core.ItemCookedBeef:
+			if !ok || hunger != 8 || saturation != 12800 {
+				t.Fatalf("FoodValue(ItemCookedBeef) = (%d,%d,%v)，想要 (8,12800,true)", hunger, saturation, ok)
 			}
 		default:
 			if ok || hunger != 0 || saturation != 0 {
@@ -146,6 +154,59 @@ func TestRottenFleshIsRegisteredStackableAndNotPlaceable(t *testing.T) {
 	// 满堆叠的物品栈必须合法：掉落收集与快捷栏合并都依赖这一判定。
 	if stack := (core.ItemStack{Item: core.ItemRottenFlesh, Count: core.MaxStackCount}); !stack.Valid() {
 		t.Fatal("满堆叠腐肉物品栈必须合法")
+	}
+}
+
+// TestBeefIsRegisteredStackableAndNotPlaceable 锁定生/熟牛肉的物品属性：
+// 已注册（堆叠上限 64、没有耐久）、**不可放置**。
+//
+// 「不可放置」与面包、腐肉同一条承重契约：牛肉若意外落进 ItemPlacement，玩家就
+// 能把食物砌成墙。来源上它与二者互补：牛肉不进 BlockDrop 表——世界上没有任何方
+// 块采掘出牛肉，唯一来源是牛死亡掉落（生）与熔炉熔炼（熟），不经任何方块采掘
+// 映射。
+func TestBeefIsRegisteredStackableAndNotPlaceable(t *testing.T) {
+	for _, item := range []core.ItemID{core.ItemRawBeef, core.ItemCookedBeef} {
+		if !core.RegisteredItem(item) {
+			t.Fatalf("物品 %d 未注册", item)
+		}
+		if limit, ok := core.ItemStackLimit(item); !ok || limit != core.MaxStackCount {
+			t.Fatalf("ItemStackLimit(%d) = (%d,%v)，想要 (%d,true)", item, limit, ok, core.MaxStackCount)
+		}
+		if durability, ok := core.ItemMaxDurability(item); ok || durability != 0 {
+			t.Fatalf("ItemMaxDurability(%d) = (%d,%v)，想要 (0,false)", item, durability, ok)
+		}
+		if _, broken := core.ItemBrokenForm(item); broken {
+			t.Fatalf("物品 %d 不应该有损坏形态", item)
+		}
+		if block, ok := core.ItemPlacement(item); ok || block != core.AirID {
+			t.Fatalf("ItemPlacement(%d) = (%d,%v)，想要 (AirID,false)：牛肉不可放置", item, block, ok)
+		}
+		// 牛肉不是任何方块的掉落物：生牛肉只来自牛的死亡掉落，熟牛肉只来自熔炼。
+		for block := core.BlockID(0); block < core.BlockIDMax; block++ {
+			if drop, ok := core.BlockDrop(block); ok && drop == item {
+				t.Fatalf("方块 %d 掉落牛肉 %d，牛肉不得由采掘获得", block, item)
+			}
+		}
+		// 满堆叠的物品栈必须合法：掉落收集与快捷栏合并都依赖这一判定。
+		if stack := (core.ItemStack{Item: item, Count: core.MaxStackCount}); !stack.Valid() {
+			t.Fatalf("满堆叠牛肉物品栈 %d 必须合法", item)
+		}
+	}
+}
+
+// TestCookedBeefRestoresMoreThanRawBeef 锁定食物链的升级语义：熟牛肉的饥饿与饱
+// 和恢复值都严格高于生牛肉，且两者都可进食结算。
+func TestCookedBeefRestoresMoreThanRawBeef(t *testing.T) {
+	rawHunger, rawSaturation, rawOK := core.FoodValue(core.ItemRawBeef)
+	cookedHunger, cookedSaturation, cookedOK := core.FoodValue(core.ItemCookedBeef)
+	if !rawOK || !cookedOK {
+		t.Fatalf("生/熟牛肉必须都是食物：raw=%v cooked=%v", rawOK, cookedOK)
+	}
+	if cookedHunger <= rawHunger {
+		t.Fatalf("熟牛肉饥饿 %d 必须严格高于生牛肉 %d", cookedHunger, rawHunger)
+	}
+	if cookedSaturation <= rawSaturation {
+		t.Fatalf("熟牛肉饱和 %d 必须严格高于生牛肉 %d", cookedSaturation, rawSaturation)
 	}
 }
 
