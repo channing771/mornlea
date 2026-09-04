@@ -144,6 +144,7 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		a.remoteAvatars = AppendPassiveRenderPresentationsInto(
 			a.remoteAvatars,
 			a.passivePresentations,
+			a.serverTick,
 		)
 	}
 	blockOutline := render.BlockOutline{}

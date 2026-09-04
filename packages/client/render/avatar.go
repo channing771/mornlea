@@ -92,12 +92,16 @@ func compareEntityKeys(left, right EntityKey) int {
 	return bytes.Compare(left.ID[:], right.ID[:])
 }
 
-// Avatar 是远端玩家或伙伴渲染所需的插值后姿态。
+// Avatar 是远端玩家或伙伴渲染所需的插值后姿态。`Roll` 与 `Flash` 只服务
+// 被动牛的死亡保留呈现（侧倒滚转角与向红插值系数，由死亡相位函数赋值）；
+// 其余身份域保持零值，零值时牛实例变换与颜色与变更前逐字节一致。
 type Avatar struct {
 	Key      EntityKey
 	Position mgl32.Vec3
 	Yaw      float32
 	Pitch    float32
+	Roll     float32
+	Flash    float32
 }
 
 type avatarPart struct {
@@ -222,17 +226,53 @@ func PassiveGrazeHeadPitch(grazing bool) float32 {
 	return 0
 }
 
+// PassiveDeathTicks 是被动牛死亡保留的权威 tick 数：保留体在 T+19 仍在、
+// T+20 移除。渲染侧拥有该常量的呈现解释权；客户端镜像侧的同值常量与本值
+// 由应用装配包的边界测试钉住一致（见 `app` 的死亡保留边界测试）。
+const PassiveDeathTicks = 20
+
+// PassiveDeathPhase 由 despawn 权威 tick、牛 ID 与当前 tick 派生死亡相位：
+// 返回侧倒滚转角（0→90°）与向红插值系数（0→1）。与掉落物动画相位同形——
+// 纯函数，不读墙钟、帧间隔或本地随机数；同 `(T, ID)` 序列重放逐帧相同；ID
+// 参与红闪错相，避免同 tick 死亡的个体整齐划一。死亡当 tick 返回零值，调用
+// 方零值分支因此与变更前逐字节一致。
+func PassiveDeathPhase(deathTick, id, nowTick uint64) (roll, flash float32) {
+	var elapsed uint64
+	if nowTick > deathTick {
+		elapsed = nowTick - deathTick
+	}
+	if elapsed > PassiveDeathTicks {
+		elapsed = PassiveDeathTicks
+	}
+	progress := float32(elapsed) / PassiveDeathTicks
+	roll = progress * math.Pi / 2
+	offset := float32(id%8) * (math.Pi / 4)
+	shimmer := 0.5 + 0.5*float32(math.Sin(float64(progress*4*math.Pi+offset)))
+	flash = progress * (0.45 + 0.55*shimmer)
+	return roll, flash
+}
+
 // appendPassiveAvatarParts 追加一头牛的 6 个 cuboid：横向躯干 + 4 短腿 +
 // 头部的四足体型，与夜行者直立骨架一眼可辨。身体锚定在站位 Y（脚底），
 // 俯仰只作用于牛头（`Avatar.Pitch` 由放牧位映射而来，复用既有的头部俯仰
 // 通道）：牛面朝 +X，俯仰绕侧轴 Z 把面朝压向前下方；`Pitch` 为零时旋转即
 // 单位阵，头部链与引入放牧位之前逐字节一致。各面采样材质贴图而非纯色：头部
 // 采牛头层，其余五部件采牛皮层；颜色通道被着色器忽略，填中性白。
+// 死亡保留体另由 `Avatar.Roll`（绕面朝轴 X 的整体滚转，0→90° 侧倒）与
+// `Avatar.Flash`（中性白向红插值）修饰：两者零值时分支跳过，变换与颜色与
+// 变更前逐字节一致。
 func appendPassiveAvatarParts(dst []avatarPart, avatar Avatar) []avatarPart {
 	root := mgl32.Translate3D(avatar.Position[0], avatar.Position[1], avatar.Position[2]).Mul4(
 		mgl32.HomogRotate3DY(avatar.Yaw),
 	)
+	if avatar.Roll != 0 {
+		root = root.Mul4(mgl32.HomogRotate3DX(avatar.Roll))
+	}
 	white := [4]float32{1, 1, 1, 1}
+	if avatar.Flash != 0 {
+		blend := min(max(avatar.Flash, 0), 1)
+		white = [4]float32{1, 1 - 0.85*blend, 1 - 0.9*blend, 1}
+	}
 	hide := uint32(assets.LayerCowHide)
 	headLayer := uint32(assets.LayerCowHead)
 	head := root.Mul4(mgl32.Translate3D(0.7, 1.0, 0)).
