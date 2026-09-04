@@ -15,9 +15,12 @@ import (
 // 不改变任何渲染行为。
 
 // InstanceEncoder 持有实例编码的复用缓冲:热路径(每帧编码)零分配。
+// bursts 是破碎 burst 的跨帧跟踪表:调用方每帧以与掉落物同样的输入
+// (serverTick + drops)驱动,状态在编码器内跨帧存续。
 type InstanceEncoder struct {
 	ordered []Avatar
 	parts   []avatarPart
+	bursts  BreakBursts
 }
 
 // EncodeAvatarInstances 把插值后的 avatars 编码为 96 字节/实例的字节流,
@@ -34,6 +37,16 @@ func (e *InstanceEncoder) EncodeAvatarInstances(dst []byte, avatars []Avatar) []
 // 与 ItemDropRenderer.Render 的内部编码逐字节一致。
 func (e *InstanceEncoder) EncodeItemDropInstances(dst []byte, serverTick uint64, drops []ItemDrop) []byte {
 	e.parts = buildItemDropParts(e.parts[:0], serverTick, drops)
+	dst = growEncodeBuffer(dst, len(e.parts)*avatarInstanceBytes)
+	encodeAvatarPartsInto(dst, e.parts)
+	return dst
+}
+
+// EncodeBreakBurstInstances 把破坏 burst 粒子编码为 96 字节/实例的字节流:
+// 与掉落物本体共用同一份 serverTick + drops 输入,跟踪表在编码器内跨帧存续,
+// 输出恒不超过 64 实例,可直接并入 avatar pass 的实例段。
+func (e *InstanceEncoder) EncodeBreakBurstInstances(dst []byte, serverTick uint64, drops []ItemDrop) []byte {
+	e.parts = e.bursts.BuildParts(e.parts[:0], serverTick, drops)
 	dst = growEncodeBuffer(dst, len(e.parts)*avatarInstanceBytes)
 	encodeAvatarPartsInto(dst, e.parts)
 	return dst
