@@ -104,13 +104,14 @@ func (passives *Passives) ApplyStates(states network.PassiveState) error {
 	return nil
 }
 
-// ApplyDespawn 移除一头被动牛的镜像；未知 ID 的 despawn 丢弃。
+// ApplyDespawn 移除一头被动牛的镜像；未知 ID 的 despawn 丢弃。原因位暂不
+// 分流（死亡保留由后续任务实现），此处保持立即移除。
 func (passives *Passives) ApplyDespawn(despawn network.PassiveDespawn) error {
 	if err := despawn.Validate(); err != nil {
 		return passiveProtocolError("PassiveDespawn: %v", err)
 	}
-	for _, id := range despawn.IDs {
-		delete(passives.values, id)
+	for _, record := range despawn.Despawns {
+		delete(passives.values, record.ID)
 	}
 	return nil
 }

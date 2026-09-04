@@ -42,15 +42,25 @@ func (server *Server) publishPassives(
 
 	// 1) despawn：镜像里登记、当前不可见的个体。死亡与远离消失的个体已从
 	// Engine 集合移除，走同一条「镜像有而可见截面无」的判据，不需要单独通道。
-	despawned := make([]uint64, 0, len(current.visiblePassives))
+	// 原因位暂填消失；死亡投影由后续任务接入当 tick 死亡集合。
+	despawned := make([]network.PassiveDespawnRecord, 0, len(current.visiblePassives))
 	for id := range current.visiblePassives {
 		if passiveIndexOf(visible, id) < 0 {
-			despawned = append(despawned, id)
+			despawned = append(despawned, network.PassiveDespawnRecord{ID: id, Reason: network.PassiveDespawnVanished})
 		}
 	}
-	slices.Sort(despawned)
+	slices.SortFunc(despawned, func(left, right network.PassiveDespawnRecord) int {
+		switch {
+		case left.ID < right.ID:
+			return -1
+		case left.ID > right.ID:
+			return 1
+		default:
+			return 0
+		}
+	})
 	if len(despawned) != 0 {
-		despawn := network.PassiveDespawn{ServerTick: tick, IDs: despawned}
+		despawn := network.PassiveDespawn{ServerTick: tick, Despawns: despawned}
 		if err := despawn.Validate(); err != nil {
 			server.closePublicationSessionLocked(current, err)
 			return false
@@ -59,8 +69,8 @@ func (server *Server) publishPassives(
 			server.closePublicationSessionLocked(current, errSessionOutboxFull)
 			return false
 		}
-		for _, id := range despawned {
-			delete(current.visiblePassives, id)
+		for _, record := range despawned {
+			delete(current.visiblePassives, record.ID)
 		}
 	}
 

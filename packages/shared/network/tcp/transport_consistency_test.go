@@ -636,7 +636,11 @@ func passiveStateMessage() network.PassiveState {
 }
 
 func passiveDespawnMessage() network.PassiveDespawn {
-	return network.PassiveDespawn{ServerTick: 0x0102030405060708, IDs: []uint64{5, 8, 11}}
+	return network.PassiveDespawn{ServerTick: 0x0102030405060708, Despawns: []network.PassiveDespawnRecord{
+		{ID: 5, Reason: network.PassiveDespawnVanished},
+		{ID: 8, Reason: network.PassiveDespawnDied},
+		{ID: 11, Reason: network.PassiveDespawnVanished},
+	}}
 }
 
 func TestPassiveMessagesRoundTripMemoryAndTCP(t *testing.T) {

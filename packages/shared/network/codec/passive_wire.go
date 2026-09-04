@@ -45,9 +45,10 @@ func encodePassiveState(e *byteEncoder, state protocol.PassiveState) {
 
 func encodePassiveDespawn(e *byteEncoder, despawn protocol.PassiveDespawn) {
 	e.u64(despawn.ServerTick)
-	e.u8(uint8(len(despawn.IDs)))
-	for _, id := range despawn.IDs {
-		e.u64(id)
+	e.u8(uint8(len(despawn.Despawns)))
+	for _, record := range despawn.Despawns {
+		e.u64(record.ID)
+		e.u8(record.Reason)
 	}
 }
 
@@ -154,9 +155,13 @@ func decodePassiveDespawn(d *byteDecoder) (protocol.ServerPacket, error) {
 	if len(d.data)-d.offset != int(count)*protocol.PassiveDespawnWireBytes {
 		return nil, errors.New("network: passive despawn length does not match count")
 	}
-	despawn.IDs = make([]uint64, int(count))
-	for index := range despawn.IDs {
-		if despawn.IDs[index], err = d.u64(); err != nil {
+	despawn.Despawns = make([]protocol.PassiveDespawnRecord, int(count))
+	for index := range despawn.Despawns {
+		record := &despawn.Despawns[index]
+		if record.ID, err = d.u64(); err != nil {
+			return nil, err
+		}
+		if record.Reason, err = d.u8(); err != nil {
 			return nil, err
 		}
 	}

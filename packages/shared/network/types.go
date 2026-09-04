@@ -327,8 +327,18 @@ type (
 	PassiveStateRecord = protocol.PassiveStateRecord
 	// PassiveState 是被动牛状态批次。
 	PassiveState = protocol.PassiveState
+	// PassiveDespawnRecord 是一头被动牛的移除事实（含原因位）。
+	PassiveDespawnRecord = protocol.PassiveDespawnRecord
 	// PassiveDespawn 是被动牛移除批次通知。
 	PassiveDespawn = protocol.PassiveDespawn
+)
+
+// 被动牛移除原因位定义在 protocol 包，再导出保持既有 network.X 引用。
+const (
+	// PassiveDespawnVanished 表示离开订阅范围等非死亡消失。
+	PassiveDespawnVanished = protocol.PassiveDespawnVanished
+	// PassiveDespawnDied 表示死亡移除。
+	PassiveDespawnDied = protocol.PassiveDespawnDied
 )
 
 // 区块快照值类型定义在 protocol 包（密封接口与 Validate 同包）；再导出保持

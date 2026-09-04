@@ -69,8 +69,8 @@ func TestGridCraftingPacketIDsAreFrozen(t *testing.T) {
 	if _, ok := ServerPacketForID(StatePlay, 28+1); ok {
 		t.Fatal("Play server packet ID 29 必须保持未分配")
 	}
-	if ProtocolVersion != 34 {
-		t.Fatalf("协议版本 = %d，想要 34——夜行者三类消息由 v30 承载、显示相位偏移由 v31 承载、私有战斗命中由 v32 承载、被动牛三类消息由 v33 承载、放牧位由 v34 承载", ProtocolVersion)
+	if ProtocolVersion != 35 {
+		t.Fatalf("协议版本 = %d，想要 35——夜行者三类消息由 v30 承载、显示相位偏移由 v31 承载、私有战斗命中由 v32 承载、被动牛三类消息由 v33 承载、放牧位由 v34 承载、死亡原因位由 v35 承载", ProtocolVersion)
 	}
 }
 
@@ -102,8 +102,8 @@ func TestProtocolV22TillSoilPacketIDIsFrozen(t *testing.T) {
 	} else if _, isTake := packet.(TakeCraftingOutput); !isTake {
 		t.Fatalf("Play client packet ID 15 = %T，想要 TakeCraftingOutput", packet)
 	}
-	if ProtocolVersion != 34 {
-		t.Fatalf("协议版本 = %d，想要 34", ProtocolVersion)
+	if ProtocolVersion != 35 {
+		t.Fatalf("协议版本 = %d，想要 35", ProtocolVersion)
 	}
 }
 

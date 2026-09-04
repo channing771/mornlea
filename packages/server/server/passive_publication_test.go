@@ -196,8 +196,11 @@ func TestPassivePublicationDespawnsOnInterestExit(t *testing.T) {
 	if err := despawn.Validate(); err != nil {
 		t.Fatalf("PassiveDespawn.Validate: %v", err)
 	}
-	if despawn.ServerTick != 2 || len(despawn.IDs) != 1 || despawn.IDs[0] != mob.ID {
+	if despawn.ServerTick != 2 || len(despawn.Despawns) != 1 || despawn.Despawns[0].ID != mob.ID {
 		t.Fatalf("PassiveDespawn=%+v，想要 tick 2 只携带 ID %d", despawn, mob.ID)
+	}
+	if despawn.Despawns[0].Reason != network.PassiveDespawnVanished {
+		t.Fatalf("出视野原因位=%d，想要消失 %d", despawn.Despawns[0].Reason, network.PassiveDespawnVanished)
 	}
 	if _, reused := h.running.sessions[1].visiblePassives[mob.ID]; reused {
 		t.Fatal("despawn 后会话镜像未清除该被动牛")
@@ -241,8 +244,8 @@ func canonicalPassiveEntries(messages []network.ServerMessage) []string {
 					record.ID, record.Health))
 			}
 		case network.PassiveDespawn:
-			for _, id := range message.IDs {
-				entries = append(entries, fmt.Sprintf("despawn id=%d", id))
+			for _, record := range message.Despawns {
+				entries = append(entries, fmt.Sprintf("despawn id=%d reason=%d", record.ID, record.Reason))
 			}
 		}
 	}

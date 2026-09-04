@@ -42,7 +42,11 @@ func passiveStateMessage() protocol.PassiveState {
 }
 
 func passiveDespawnMessage() protocol.PassiveDespawn {
-	return protocol.PassiveDespawn{ServerTick: 0x0102030405060708, IDs: []uint64{5, 8, 11}}
+	return protocol.PassiveDespawn{ServerTick: 0x0102030405060708, Despawns: []protocol.PassiveDespawnRecord{
+		{ID: 5, Reason: protocol.PassiveDespawnVanished},
+		{ID: 8, Reason: protocol.PassiveDespawnDied},
+		{ID: 11, Reason: protocol.PassiveDespawnVanished},
+	}}
 }
 
 // TestPassiveMessagesWireLayoutIsFrozen 用 golden hex 钉死三类消息的 wire
@@ -53,7 +57,7 @@ func TestPassiveMessagesWireLayoutIsFrozen(t *testing.T) {
 	state := passiveStateMessage()
 	state.States = state.States[:1]
 	despawn := passiveDespawnMessage()
-	despawn.IDs = despawn.IDs[:1]
+	despawn.Despawns = despawn.Despawns[:1]
 	tests := []struct {
 		name    string
 		packet  protocol.ServerPacket
@@ -72,8 +76,9 @@ func TestPassiveMessagesWireLayoutIsFrozen(t *testing.T) {
 			"0500000000000000" +
 			"0000c03f000000400000a0bf" +
 			"0000803e000000bf00000000" + "0000403f" + "09" + "01"},
-		// u64 tick + count 1 + u64 ID。
-		{"despawn", despawn, 28, "0807060504030201" + "01" + "0500000000000000"},
+		// u64 tick + count 1 + [u64 ID + u8 原因位]（首条记录原因为消失 0，
+		// 锁死该字节确实落在 record 尾部）。
+		{"despawn", despawn, 28, "0807060504030201" + "01" + "0500000000000000" + "00"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -104,8 +109,8 @@ func TestPassiveMessagesDecodeRejectsInvalidWire(t *testing.T) {
 	despawnBase := encode(passiveDespawnMessage())
 
 	// recordSize 分别为 spawn 29（8+4+12+4+1）、state 38（8+12+12+4+1+1）、
-	// despawn 8；头部固定 9 字节（u64 tick + u8 count）。
-	spawnRecord, stateRecord, despawnRecord := 29, 38, 8
+	// despawn 9（8+1）；头部固定 9 字节（u64 tick + u8 count）。
+	spawnRecord, stateRecord, despawnRecord := 29, 38, 9
 	mutateID := func(payload []byte, recordSize, index int, id uint64) {
 		offset := 9 + index*recordSize
 		for byteIndex := 0; byteIndex < 8; byteIndex++ {
@@ -150,6 +155,9 @@ func TestPassiveMessagesDecodeRejectsInvalidWire(t *testing.T) {
 	stateGrazing2[9+stateRecord-1] = 2
 	despawnCount65 := append([]byte(nil), despawnBase...)
 	mutateCount(despawnCount65, 65)
+	despawnReason2 := append([]byte(nil), despawnBase...)
+	// 第一条记录原因位的偏移：9 + 9 - 1 = 17；合法值仅 0/1。
+	despawnReason2[9+despawnRecord-1] = 2
 	// 尾随字节：在合法 despawn 载荷后多补 1 字节。
 	trailing := append(append([]byte(nil), despawnBase...), 0)
 
@@ -173,6 +181,7 @@ func TestPassiveMessagesDecodeRejectsInvalidWire(t *testing.T) {
 		{"state 放牧标志非 0/1", 27, stateGrazing2},
 		{"state 截断", 27, stateBase[:len(stateBase)-1]},
 		{"despawn 逆序 ID", 28, despawnDescending},
+		{"despawn 原因位非 0/1", 28, despawnReason2},
 		{"despawn count 65", 28, despawnCount65},
 		{"despawn 尾随", 28, trailing},
 		{"despawn 截断", 28, despawnBase[:len(despawnBase)-1]},
@@ -201,8 +210,8 @@ func TestPassiveMessagesWireLimitsAreFrozen(t *testing.T) {
 		{"spawn", 29, 1865},
 		// 8 tick + 1 count + 64×[8 ID + 12 position + 12 velocity + 4 yaw + 1 health + 1 放牧标志] = 2441。
 		{"state", 38, 2441},
-		// 8 tick + 1 count + 64×8 ID = 521。
-		{"despawn", 8, 521},
+		// 8 tick + 1 count + 64×[8 ID + 1 原因位] = 585。
+		{"despawn", 9, 585},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -273,7 +282,7 @@ func FuzzPassiveMessageCodec(f *testing.F) {
 		f.Fatal(err)
 	}
 	f.Add(id, payload)
-	_, minimal, err := encodeServerControlPayload(protocol.StatePlay, protocol.PassiveDespawn{ServerTick: 9, IDs: []uint64{1}})
+	_, minimal, err := encodeServerControlPayload(protocol.StatePlay, protocol.PassiveDespawn{ServerTick: 9, Despawns: []protocol.PassiveDespawnRecord{{ID: 1}}})
 	if err != nil {
 		f.Fatal(err)
 	}
