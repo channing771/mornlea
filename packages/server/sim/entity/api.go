@@ -97,6 +97,18 @@ func (state *State) PlanHostileChase(
 	)
 }
 
+func (state *State) RestorePassive(
+	mob PassiveMob,
+	realmState *realm.State,
+) error {
+	return state.context(realmState, 0, 0, 0, tuning.Tunables{}, physics.Tunables{}, ViewSnapshot{}).
+		RestorePassive(mob)
+}
+
+func (state *State) PassiveMobs() []PassiveMob {
+	return (&engineContext{State: state}).PassiveMobs()
+}
+
 func (state *State) AppendSessionDrops(
 	id SessionID,
 	dst []DropSnapshot,

@@ -65,6 +65,7 @@ var requiredEntityStateFields = map[string]string{
 	"sessions":   "map[SessionID]*sessionState",
 	"companions": "map[companion.ID]*companionState",
 	"hostiles":   "hostileSet",
+	"passives":   "passiveSet",
 }
 
 var requiredEntitySessionFields = map[string]string{
@@ -162,6 +163,7 @@ type SessionID uint64
 type playerState struct{}
 type companionState struct{}
 type hostileSet struct{}
+type passiveSet struct{}
 type sessionState struct {
 	id SessionID
 	dimension core.DimensionID
@@ -173,6 +175,7 @@ type State struct {
 	sessions map[SessionID]*sessionState
 	companions map[companion.ID]*companionState
 	hostiles hostileSet
+	passives passiveSet
 }
 `
 
@@ -384,6 +387,13 @@ type State struct {
 				return runtimeSource, strings.Replace(entitySource, "\thostiles hostileSet\n", "", 1)
 			},
 			wants: []string{"entity.State 缺少字段 hostiles hostileSet"},
+		},
+		{
+			name: "entity 丢失 passive owner",
+			mutate: func(runtimeSource, entitySource string) (string, string) {
+				return runtimeSource, strings.Replace(entitySource, "\tpassives passiveSet\n", "", 1)
+			},
+			wants: []string{"entity.State 缺少字段 passives passiveSet"},
 		},
 		{
 			name: "runtime 重复 mutation commit",

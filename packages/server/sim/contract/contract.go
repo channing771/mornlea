@@ -356,3 +356,15 @@ type HostileAction struct {
 	AttackTarget  bool
 	TargetSession SessionID
 }
+
+// PassiveMob 是一头被动牛的权威身体事实：稳定非零身份、所在维度、物理体、
+// 朝向与生命。全部字段为值语义，跨 goroutine 发送成功后视为不可变；逃跑
+// 计时、出生区块等运行时派生物不进本类型（见被动存档域的独立记录），重载后
+// 由恢复入口重新锚定。
+type PassiveMob struct {
+	ID        uint64
+	Dimension core.DimensionID
+	State     physics.State
+	Yaw       float32
+	Health    uint8
+}

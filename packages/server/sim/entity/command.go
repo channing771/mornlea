@@ -46,6 +46,7 @@ type (
 	ChunkInfo           = contract.ChunkInfo
 	HostileMob          = contract.HostileMob
 	HostileAction       = contract.HostileAction
+	PassiveMob          = contract.PassiveMob
 )
 
 const (
