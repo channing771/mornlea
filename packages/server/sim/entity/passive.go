@@ -267,10 +267,12 @@ func (engine *engineContext) advancePassiveMovement() {
 	}
 }
 
-// passiveStepInput 决定单个个体本 `tick` 的控制意图：逃跑剩余时长内沿远离伤
-// 害来源方向前进（与夜行者追击同款的世界轴到朝向折算），否则以世界种子、
-// `tick` 与 `id` 确定性派生的朝向漫游。全部输入为纯函数派生，不读全局随机
-// 数、不遍历 `map`。
+// passiveStepInput 决定单个个体本 `tick` 的控制意图，优先级逃跑＞引诱＞漫
+// 游：逃跑剩余时长内沿远离伤害来源方向前进（与夜行者追击同款的世界轴到朝向
+// 折算）；吃草事件中只给中性输入（事件个体的位移已由 `advancePassiveMovement`
+// 冻结，这里是输入层的防御性表态，防未来调用方绕过冻结直调本函数）；否则有
+// 引诱目标就转向目标、无目标才以世界种子、`tick` 与 `id` 确定性派生的朝向漫
+// 游。全部输入为纯函数派生，不读全局随机数、不遍历 `map`。
 func (engine *engineContext) passiveStepInput(entry *passiveState) physics.Input {
 	if entry.fleeTicks > 0 {
 		entry.fleeTicks--
@@ -281,6 +283,20 @@ func (engine *engineContext) passiveStepInput(entry *passiveState) physics.Input
 			entry.yaw = yaw
 			return physics.Input{MoveZ: 1, Yaw: yaw}
 		}
+	}
+	if entry.grazeTicks > 0 {
+		return physics.Input{Yaw: entry.yaw}
+	}
+	if target, ok := engine.passiveTemptTarget(entry); ok {
+		dx := target.X() - entry.state.Position.X()
+		dz := target.Z() - entry.state.Position.Z()
+		stopSq := float32(passiveTemptStopDistance) * float32(passiveTemptStopDistance)
+		if dx*dx+dz*dz > stopSq {
+			yaw := normalizeYaw(float32(math.Atan2(float64(-dx), float64(-dz))))
+			entry.yaw = yaw
+			return physics.Input{MoveZ: 1, Yaw: yaw}
+		}
+		return physics.Input{Yaw: entry.yaw}
 	}
 	base := splitmix64(uint64(engine.seed) ^ engine.tick.Load() ^ entry.id)
 	yaw := normalizeYaw(float32(base&0xFFFFFF) * (2 * math.Pi / 0x1000000))
