@@ -105,6 +105,9 @@ func (a *Application) Frame(drainMax, meshWorkMax int, elapsed time.Duration) (b
 	if a.hostiles != nil {
 		a.hostiles.Advance(elapsed)
 	}
+	if a.passives != nil {
+		a.passives.Advance(elapsed)
+	}
 	return a.RenderFrame(meshWorkMax)
 }
 
@@ -134,6 +137,13 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		a.remoteAvatars = AppendHostileRenderPresentationsInto(
 			a.remoteAvatars,
 			a.hostilePresentations,
+		)
+	}
+	if a.passives != nil {
+		a.passivePresentations = a.passives.AppendPresentations(a.passivePresentations[:0])
+		a.remoteAvatars = AppendPassiveRenderPresentationsInto(
+			a.remoteAvatars,
+			a.passivePresentations,
 		)
 	}
 	blockOutline := render.BlockOutline{}

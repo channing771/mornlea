@@ -119,6 +119,22 @@ func AppendHostileRenderPresentationsInto(
 	return avatars
 }
 
+// AppendPassiveRenderPresentationsInto 把被动牛镜像转换为 avatar 记录：
+// 被动牛只进入实体通道，绝不进入名称标签集合（名标容量不随牛群数量变化）。
+func AppendPassiveRenderPresentationsInto(
+	avatars []render.Avatar,
+	presentations []client.PassivePresentation,
+) []render.Avatar {
+	for _, presentation := range presentations {
+		avatars = append(avatars, render.Avatar{
+			Key:      render.PassiveEntityKey(presentation.ID),
+			Position: presentation.Position,
+			Yaw:      presentation.Yaw,
+		})
+	}
+	return avatars
+}
+
 func validateEntityPresentationCounts(avatars []render.Avatar, tags []render.NameTag) error {
 	if len(avatars) > maxFrameAvatars {
 		return fmt.Errorf("avatar count %d exceeds %d", len(avatars), maxFrameAvatars)

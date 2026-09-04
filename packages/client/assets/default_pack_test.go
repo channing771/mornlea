@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"image"
 	"image/color"
 	"image/draw"
@@ -62,7 +63,25 @@ var pixelPerfectionLayers = map[string]uint16{
 
 var proceduralFallbackLayers = []uint16{
 	LayerCoalOre, LayerIronOre, LayerLightBlock, LayerRoofTile, LayerWater, LayerSmoothStone, LayerChest,
-	LayerShortGrass,
+	LayerShortGrass, LayerCowHide, LayerCowHead,
+}
+
+// foodPackPage 是牛肉图标的上游页面：OpenGameArt 的 16x16 Food（作者
+// ARoachIFoundOnMyPillow，CC0）。牛皮与牛头没有上游文件（原创程序化像素），
+// 因此这里只登记生熟牛肉两层。
+const (
+	foodPackPage       = "https://opengameart.org/content/16x16-food"
+	foodPackAuthor     = "ARoachIFoundOnMyPillow"
+	foodPackLicenseID  = "CC0-1.0"
+	foodPackLicenseURL = "https://creativecommons.org/publicdomain/zero/1.0/"
+)
+
+var foodPackSources = map[string]string{
+	"raw_beef": "food/steak_raw.png", "cooked_beef": "food/steak_grilled.png",
+}
+
+var foodPackLayers = map[string]uint16{
+	"raw_beef": LayerRawBeef, "cooked_beef": LayerCookedBeef,
 }
 
 type pixelPerfectionProvenance struct {
@@ -79,7 +98,15 @@ type pixelPerfectionProvenance struct {
 type pixelPerfectionProvenanceEntry struct {
 	Destination string `json:"destination"`
 	Source      string `json:"source"`
-	SHA256      string `json:"sha256"`
+	// SourceURL 与 License 只出现在非 Pixel Perfection 上游的文件条目上
+	// （牛肉图标的 OpenGameArt 页面与 CC0 协议）：Pixel Perfection 子集的
+	// 33 个条目沿用顶层 upstream/license，不逐文件重复。
+	SourceURL string `json:"source_url,omitempty"`
+	License   *struct {
+		ID  string `json:"id"`
+		URL string `json:"url"`
+	} `json:"license,omitempty"`
+	SHA256 string `json:"sha256"`
 	// Derived 记录逐文件的派生合成信息。内嵌默认包中的 grass_side.png 不再是
 	// 上游的原始 overlay，而是把草缘合成到 dirt 之上得到的完全不透明图——
 	// 派生必须被记录，不能假装是上游原样拷贝（TestOpaqueLayersAreFullyOpaque 与
@@ -156,14 +183,18 @@ func TestEmbeddedDefaultPackProvenance(t *testing.T) {
 	if provenance.Modification != "Selected and renamed a subset without pixel transformations." {
 		t.Errorf("modification = %q", provenance.Modification)
 	}
-	if len(provenance.Files) != len(pixelPerfectionSources) {
-		t.Fatalf("provenance 文件数 = %d，想要 %d", len(provenance.Files), len(pixelPerfectionSources))
+	if len(provenance.Files) != len(pixelPerfectionSources)+len(foodPackSources) {
+		t.Fatalf("provenance 文件数 = %d，想要 %d", len(provenance.Files), len(pixelPerfectionSources)+len(foodPackSources))
 	}
 
 	seen := make(map[string]bool, len(provenance.Files))
 	for _, entry := range provenance.Files {
 		logicalName := strings.TrimSuffix(path.Base(entry.Destination), ".png")
 		wantSource, ok := pixelPerfectionSources[logicalName]
+		_, isFood := foodPackSources[logicalName]
+		if isFood {
+			wantSource, ok = foodPackSources[logicalName], true
+		}
 		if !ok || entry.Destination != "textures/"+logicalName+".png" {
 			t.Errorf("未知 destination %q", entry.Destination)
 			continue
@@ -188,6 +219,17 @@ func TestEmbeddedDefaultPackProvenance(t *testing.T) {
 			}
 		} else if entry.Derived != nil {
 			t.Errorf("%s 出现了非预期的 derived 记录", logicalName)
+		}
+		if isFood {
+			// 牛肉条目必须逐文件记清外网来源与协议：缺来源即拒绝入库。
+			if entry.SourceURL != foodPackPage {
+				t.Errorf("%s source_url = %q，想要 %q", logicalName, entry.SourceURL, foodPackPage)
+			}
+			if entry.License == nil || entry.License.ID != foodPackLicenseID || entry.License.URL != foodPackLicenseURL {
+				t.Errorf("%s license = %+v，想要 %s/%s", logicalName, entry.License, foodPackLicenseID, foodPackLicenseURL)
+			}
+		} else if entry.SourceURL != "" || entry.License != nil {
+			t.Errorf("%s 是 Pixel Perfection 子集文件，不得携带逐文件来源/协议", logicalName)
 		}
 
 		file, err := root.Open(entry.Destination)
@@ -231,6 +273,9 @@ func TestEmbeddedDefaultPackProvenance(t *testing.T) {
 	for logicalName := range pixelPerfectionSources {
 		wantPNGFiles = append(wantPNGFiles, "textures/"+logicalName+".png")
 	}
+	for logicalName := range foodPackSources {
+		wantPNGFiles = append(wantPNGFiles, "textures/"+logicalName+".png")
+	}
 	slices.Sort(pngFiles)
 	slices.Sort(wantPNGFiles)
 	if !slices.Equal(pngFiles, wantPNGFiles) {
@@ -246,6 +291,15 @@ func TestEmbeddedDefaultPackLayersAndFallbacks(t *testing.T) {
 		t.Fatalf("打开内嵌默认包: %v", err)
 	}
 	for logicalName, layer := range pixelPerfectionLayers {
+		data, err := fs.ReadFile(root, "textures/"+logicalName+".png")
+		if err != nil {
+			t.Fatalf("读取 %s: %v", logicalName, err)
+		}
+		if got, want := embedded.LayerRGBA(int(layer)), normalizePNGForTest(t, data); !bytes.Equal(got, want) {
+			t.Errorf("%s layer %d 未使用内嵌 PNG", logicalName, layer)
+		}
+	}
+	for logicalName, layer := range foodPackLayers {
 		data, err := fs.ReadFile(root, "textures/"+logicalName+".png")
 		if err != nil {
 			t.Fatalf("读取 %s: %v", logicalName, err)
@@ -406,4 +460,83 @@ func TestOpaqueLayersAreFullyOpaque(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestEmbeddedBeefLayersAreDistinguishable 锁定内嵌牛肉图标的呈现契约：生熟
+// 两层来自 OpenGameArt `16x16 Food` CC0 的不同文件，像素不同且可辨（生偏红、
+// 熟偏棕），不得共用同一层。
+func TestEmbeddedBeefLayersAreDistinguishable(t *testing.T) {
+	embedded := NewDefaultRegistry()
+	raw := embedded.LayerRGBA(int(LayerRawBeef))
+	cooked := embedded.LayerRGBA(int(LayerCookedBeef))
+	if bytes.Equal(raw, cooked) {
+		t.Fatal("内嵌生熟牛肉逐像素相同：两者必须可辨")
+	}
+	rawAvg, cookedAvg := opaqueAverageForTest(raw), opaqueAverageForTest(cooked)
+	if rawAvg[0] < rawAvg[2]+40 {
+		t.Fatalf("内嵌生牛肉平均色 R=%d B=%d，想要偏红（R-B>=40）", rawAvg[0], rawAvg[2])
+	}
+	if cookedAvg[0]-cookedAvg[2] >= rawAvg[0]-rawAvg[2] {
+		t.Fatalf("内嵌熟牛肉 R-B=%d 未低于生牛肉 R-B=%d：熟肉应偏棕",
+			cookedAvg[0]-cookedAvg[2], rawAvg[0]-rawAvg[2])
+	}
+}
+
+// TestEmbeddedCowLayersKeepProceduralFallback 锁定牛身两层的回退语义：默认包
+// 不携带牛皮与牛头文件，程序化像素原样生效；一旦有人往包里塞同名文件，这里
+// 会先于呈现变红。
+func TestEmbeddedCowLayersKeepProceduralFallback(t *testing.T) {
+	procedural := NewRegistry()
+	embedded := NewDefaultRegistry()
+	for _, layer := range []uint16{LayerCowHide, LayerCowHead} {
+		if got, want := embedded.LayerRGBA(int(layer)), procedural.LayerRGBA(int(layer)); !bytes.Equal(got, want) {
+			t.Fatalf("牛身层 %d 被默认包覆盖：牛身纹理必须只来自程序化生成路径", layer)
+		}
+	}
+	root, err := fs.Sub(defaultPackFS, "packs/pixel_perfection")
+	if err != nil {
+		t.Fatalf("打开内嵌默认包: %v", err)
+	}
+	for _, name := range []string{"textures/cow_hide.png", "textures/cow_head.png"} {
+		if _, err := fs.Stat(root, name); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("默认包不得携带 %s，stat error = %v", name, err)
+		}
+	}
+}
+
+// TestEmbeddedBeefAttribution 锁定牛肉图标的署名：作者、上游页面与 CC0 协议
+// 缺一不可。
+func TestEmbeddedBeefAttribution(t *testing.T) {
+	root := os.DirFS("packs/pixel_perfection")
+	attribution, err := fs.ReadFile(root, "ATTRIBUTION.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{foodPackAuthor, foodPackPage, foodPackLicenseURL, "raw_beef", "cooked_beef"} {
+		if !strings.Contains(string(attribution), required) {
+			t.Errorf("ATTRIBUTION.md 缺少 %q", required)
+		}
+	}
+}
+
+// opaqueAverageForTest 返回一层材质不透明像素的平均 RGB，用于比较色相。
+func opaqueAverageForTest(px []byte) [3]int {
+	var sum [3]int
+	count := 0
+	for i := 0; i < len(px); i += 4 {
+		if px[i+3] == 0 {
+			continue
+		}
+		sum[0] += int(px[i])
+		sum[1] += int(px[i+1])
+		sum[2] += int(px[i+2])
+		count++
+	}
+	if count == 0 {
+		return sum
+	}
+	for i := range sum {
+		sum[i] /= count
+	}
+	return sum
 }

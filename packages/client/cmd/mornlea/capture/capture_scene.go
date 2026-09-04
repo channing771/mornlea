@@ -471,6 +471,58 @@ func prepareTargetBlockFeedback(app SceneApplication) error {
 	})
 }
 
+// prepareGrassCloseup 装入短草近景夹具：空气邻域基线上的一条草地支撑条，
+// 条上 3 列手工短草。短草没有自己的碰撞与光照，必须正下方紧贴草地方块
+// （世界生成同款不变式），因此支撑条整片铺草、短草只落在条上。坐标全部
+// 冻结：支撑条 x=-2..2、z=-4..-2（y=0），短草 3 列在 (-1,1,-3)、(0,1,-3)、
+// (1,1,-2)，相机在 (0.5,2.2,1.5) 朝 -Z 俯视，短草列距相机约 4 格，
+// 短草的交叉面片在画面里是数十像素而不是亚像素噪声。
+func prepareGrassCloseup(app SceneApplication) error {
+	if err := prepareCaptureAirNeighborhood(app); err != nil {
+		return err
+	}
+	blocks := make(map[core.ChunkPos]map[core.BlockPos]core.BlockID)
+	setBlock := func(position core.BlockPos, block core.BlockID) {
+		chunk := position.Chunk()
+		if blocks[chunk] == nil {
+			blocks[chunk] = make(map[core.BlockPos]core.BlockID)
+		}
+		blocks[chunk][position] = block
+	}
+	for z := int32(-4); z <= -2; z++ {
+		for x := int32(-2); x <= 2; x++ {
+			setBlock(core.BlockPos{X: x, Y: 0, Z: z}, core.GrassID)
+		}
+	}
+	setBlock(core.BlockPos{X: -1, Y: 1, Z: -3}, core.ShortGrassID)
+	setBlock(core.BlockPos{X: 0, Y: 1, Z: -3}, core.ShortGrassID)
+	setBlock(core.BlockPos{X: 1, Y: 1, Z: -2}, core.ShortGrassID)
+	return applyCaptureBlocks(app, blocks, 1, "短草近景")
+}
+
+// applyGrassCloseupCaptureState 钉死短草近景的全部呈现状态：固定正午、
+// 固定近景机位（相机在 (0.5,2.2,1.5) 朝 -Z 俯视约 4 格外的短草列），
+// 前序场景留下的远端玩家、容器与背包状态显式清空，不依赖场景表顺序。
+func applyGrassCloseupCaptureState(app SceneApplication) error {
+	app.SetWorldTimeTicks(6000)
+	app.Camera().Pos = mgl32.Vec3{0.5, 2.2, 1.5}
+	app.Camera().Yaw = 0
+	app.Camera().Pitch = -0.15
+	app.SetInventoryOpen(false)
+	app.SetInventorySource(-1)
+	if app.RemotePlayers() == nil {
+		return fmt.Errorf("grass-closeup 需要远端玩家追踪器，当前为 nil")
+	}
+	app.RemotePlayers().Reset()
+	app.Furnace().Reset()
+	app.Chest().Reset()
+	app.Crafting().Reset()
+	if app.Panel() != nil {
+		app.Panel().SetVisible(false)
+	}
+	return app.Inventory().Apply(network.InventoryState{Inventory: core.Inventory{}})
+}
+
 func applyCaptureMirror(app SceneApplication, message network.ServerMessage) error {
 	update, err := app.Mirror().Apply(message)
 	if err != nil {
@@ -642,6 +694,12 @@ func resetCapturePresentation(app SceneApplication) error {
 		app.Hostiles().Reset()
 	}
 	app.SetHostilePresentations(app.HostilePresentations()[:0])
+	// 被动牛镜像是场景夹具的一部分：passive-herd 注入的 3 头牛必须在这里
+	// 一并恢复，否则后续场景会带着昼间牛群出图。镜像可能为 nil（最小测试
+	// 装配），nil 时无从谈起夹具残留，跳过即可。
+	if app.Passives() != nil {
+		app.Passives().Reset()
+	}
 	app.SetMiningOverlay(hud.MiningOverlay{})
 	app.SetDamageFeedback(application.DamageFeedback{})
 	app.SetDamageStrength(0)

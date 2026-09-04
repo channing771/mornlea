@@ -126,6 +126,17 @@ func (a *Application) SetHostiles(hostiles *client.Hostiles) {
 	a.hostiles = hostiles
 }
 
+// Passives 返回被动牛镜像的可变指针，供 capture 场景注入与恢复夹具个体；
+// 未装配被动牛镜像时为 nil，调用方需先判空。
+func (a *Application) Passives() *client.Passives {
+	return a.passives
+}
+
+// SetPassives 整体替换被动牛镜像，仅限测试装配路径使用。
+func (a *Application) SetPassives(passives *client.Passives) {
+	a.passives = passives
+}
+
 // HostilePresentations 返回夜行者派生呈现缓存切片。与其余呈现缓存一致：
 // 同帧内复用同一底层数组，消费方只应截断复用，不得持有跨帧引用。
 func (a *Application) HostilePresentations() []client.HostilePresentation {
@@ -240,6 +251,9 @@ func (a *Application) SetCenter(center core.ChunkPos) { a.center = center }
 
 // SetServerTick 固定权威 tick（弹条可见窗口与面板读数都以它计时）。
 func (a *Application) SetServerTick(tick uint64) { a.serverTick = tick }
+
+// ServerTick 读取权威 tick，供 capture 场景钉住掉落动画相位后断言常量。
+func (a *Application) ServerTick() uint64 { return a.serverTick }
 
 // ResetItemPopupBaseline 把物品名弹条重放回会话起点：清空已记录弹条并丢弃
 // 确认选中基线，之后的第一次确认观察只建基线、不触发。交互客户端在会话开始

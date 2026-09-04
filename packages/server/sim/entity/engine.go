@@ -18,12 +18,13 @@ type sessionState struct {
 	viewContainer bool
 }
 
-// State 是玩家、伙伴、夜行者及其玩法结算状态的唯一 owner。
+// State 是玩家、伙伴、夜行者、被动牛及其玩法结算状态的唯一 owner。
 type State struct {
 	seed                   int64
 	sessions               map[SessionID]*sessionState
 	companions             map[companion.ID]*companionState
 	hostiles               hostileSet
+	passives               passiveSet
 	hostileLight           *blockLightScratch
 	subscriptionsDirty     bool
 	tramplePending         []tramplePendingCell
@@ -125,6 +126,7 @@ func NewState(seed int64) *State {
 		sessions:     make(map[SessionID]*sessionState),
 		companions:   make(map[companion.ID]*companionState),
 		hostiles:     newHostileSet(),
+		passives:     newPassiveSet(),
 		hostileLight: newBlockLightScratch(),
 	}
 }

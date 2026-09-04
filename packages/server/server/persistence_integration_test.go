@@ -578,6 +578,11 @@ func (h *persistentHarness) drainTrustedMessages() {
 		if _, ok := message.(network.PlayerState); ok {
 			continue
 		}
+		switch message.(type) {
+		case network.PassiveSpawn, network.PassiveState, network.PassiveDespawn:
+			// 被动牛由实体镜像消费（随被动牛同步任务装配），不进入世界区块镜像。
+			continue
+		}
 		update, err := h.mirror.Apply(message)
 		if err != nil {
 			h.t.Fatalf("trusted Mirror.Apply(%T): %v", message, err)

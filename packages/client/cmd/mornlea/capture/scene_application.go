@@ -36,6 +36,10 @@ type SceneApplication interface {
 
 	// 场景直接改写的呈现状态。
 	Camera() *client.Camera
+	// 权威 tick 只驱动掉落动画相位等呈现量：牛群场景经 PinVolatile 把它钉
+	// 死为常量，掉落旋转/浮动相位因此与机器速度无关。
+	ServerTick() uint64
+	SetServerTick(tick uint64)
 	SetWorldTimeTicks(ticks uint64)
 	// 冻结权威状态对昼夜呈现量的覆盖:场景在 Apply 里钉住的世界时间必须
 	// 在收敛帧期间保持不被服务端时间改写(服务端时间随真实时间前进,最终
@@ -77,6 +81,9 @@ type SceneApplication interface {
 	Hostiles() *client.Hostiles
 	HostilePresentations() []client.HostilePresentation
 	SetHostilePresentations(presentations []client.HostilePresentation)
+	// 被动牛镜像：capture 场景经与权威消息相同的 Apply 入口注入夹具牛群，
+	// 公共清理经 Reset 恢复；未装配时为 nil，调用方需先判空。
+	Passives() *client.Passives
 	ItemDropInstances() []render.ItemDrop
 	SetItemDropInstances(instances []render.ItemDrop)
 	SetChatEventBuffer(buffer [client.ChatEventCapacity]network.ChatEvent)

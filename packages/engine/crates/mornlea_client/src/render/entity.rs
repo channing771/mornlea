@@ -1,14 +1,23 @@
 //! 实体 pass(avatar 与掉落物共用):Go `avatar.go`/`drop.go` 的 GPU 侧
 //! 逐语义移植。
 //!
-//! CPU 准备(排序、部件构建、动画相位)留在 Go,80 字节/实例的字节流经
+//! CPU 准备(排序、部件构建、动画相位)留在 Go,96 字节/实例的字节流经
 //! frame v2 pass 段过境;本模块只负责与 Go 相同的 dynamic 缓冲布局
 //! (camera 80B @0、instances @256、indirect 20B 随后)、立方体几何与
 //! indexed indirect 绘制。两个 pass 仅容量不同:avatar 450 实例(75 具身体
-//! × 6 部件,玩家+伙伴+敌怪合计),掉落物 800 实例。
+//! × 6 部件,玩家+伙伴+敌怪+被动牛合计),掉落物 800 实例。
+//!
+//! 实例布局(与 Go `avatarInstanceBytes` 逐字节一致):mat4(0..64)+
+//! RGBA color(64..80)+ 材质 u32(80..84)+ 12 字节保留零填充(84..96)。
+//! 纯色分支传哨兵材质走原纯色路径,牛身传牛皮/牛头层走贴图路径。
 
-/// 每实例字节数:mat4(64)+ RGBA color(16),与 Go `avatarInstanceBytes` 一致。
-pub const ENTITY_INSTANCE_BYTES: usize = 80;
+/// 每实例字节数:mat4(64)+ RGBA color(16)+ 材质 u32(4)+ 保留零填充(12),
+/// 与 Go `avatarInstanceBytes` 一致。
+pub const ENTITY_INSTANCE_BYTES: usize = 96;
+/// 纯色分支的哨兵材质:与全部有效材质层号不相交,着色器据此走原纯色路径。
+pub const AVATAR_MATERIAL_SOLID: u32 = u32::MAX;
+/// 实例内材质槽的字节偏移(小端 u32)。
+pub const AVATAR_MATERIAL_OFFSET: usize = 80;
 /// avatar 实例容量(75 具身体 × 6 部件),与 Go `render.maxAvatars` 同源。
 pub const AVATAR_MAX_INSTANCES: usize = 450;
 /// 掉落物实例容量(core.MaxSessionDrops)。
@@ -64,7 +73,10 @@ pub struct EntityPass {
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
     pipeline: wgpu::RenderPipeline,
-    bind: wgpu::BindGroup,
+    /// atlas 视图 + sampler 绑定;None 表示 atlas 尚未上传,本帧不绘制
+    /// (与 `terrain_bind == None` 及裂纹 pass 同语义:预热后恒为 Some,
+    /// 帧内不再创建任何绑定资源)。
+    bind: Option<wgpu::BindGroup>,
     instance_size: usize,
     indirect_offset: usize,
 }
@@ -150,6 +162,22 @@ impl EntityPass {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
             ],
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -201,14 +229,34 @@ impl EntityPass {
             multiview_mask: None,
             cache: None,
         });
-        let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        Self {
+            dynamic,
+            vertices,
+            indices,
+            pipeline,
+            bind: None,
+            instance_size,
+            indirect_offset,
+        }
+    }
+
+    /// (重)建 atlas 绑定:直接复用调用方传入的方块 atlas 视图与采样器,
+    /// 与 terrain/water/lod/crack 同一图集。atlas 每次上传都整体替换,bind
+    /// 随之重建;调用方是 `OffscreenRenderer::upload_atlas` 末尾。
+    pub fn rebuild_bind(
+        &mut self,
+        device: &wgpu::Device,
+        atlas_view: &wgpu::TextureView,
+        sampler: &wgpu::Sampler,
+    ) {
+        self.bind = Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("entity resources"),
-            layout: &layout,
+            layout: &self.pipeline.get_bind_group_layout(0),
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &dynamic,
+                        buffer: &self.dynamic,
                         offset: 0,
                         size: Some((CAMERA_BYTES as u64).try_into().unwrap()),
                     }),
@@ -216,25 +264,24 @@ impl EntityPass {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &dynamic,
+                        buffer: &self.dynamic,
                         offset: INSTANCE_OFFSET as u64,
-                        size: Some((instance_size as u64).try_into().unwrap()),
+                        size: Some((self.instance_size as u64).try_into().unwrap()),
                     }),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(atlas_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::Sampler(sampler),
+                },
             ],
-        });
-        Self {
-            dynamic,
-            vertices,
-            indices,
-            pipeline,
-            bind,
-            instance_size,
-            indirect_offset,
-        }
+        }));
     }
 
-    /// 校验 instance 段字节:80 的倍数且不超过容量。
+    /// 校验 instance 段字节:96 的倍数且不超过容量。
     pub fn instances_valid(&self, instances: &[u8]) -> bool {
         instances.len().is_multiple_of(ENTITY_INSTANCE_BYTES)
             && instances.len() <= self.instance_size
@@ -264,7 +311,8 @@ impl EntityPass {
     }
 
     /// 在已有颜色/深度附件之上录制本 pass(LoadOp::Load,镜像 Go
-    /// `LoadClear: false`)。
+    /// `LoadClear: false`)。atlas 未上传时直接返回、不开始 render pass——
+    /// 与 `terrain_bind == None` 及裂纹 pass 同语义:预热后恒有 atlas。
     pub fn record(
         &self,
         encoder: &mut wgpu::CommandEncoder,
@@ -272,6 +320,9 @@ impl EntityPass {
         depth: &wgpu::TextureView,
         label: &str,
     ) {
+        let Some(bind) = &self.bind else {
+            return;
+        };
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some(label),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -296,9 +347,53 @@ impl EntityPass {
             multiview_mask: None,
         });
         pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &self.bind, &[]);
+        pass.set_bind_group(0, bind, &[]);
         pass.set_vertex_buffer(0, self.vertices.slice(..));
         pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
         pass.draw_indexed_indirect(&self.dynamic, self.indirect_offset as u64);
+    }
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+
+    /// 跨语言实例布局锁:96 字节 = mat4(64)+ color(16)+ 材质 u32(4)+
+    /// 保留零填充(12);容量 75 具 × 6 部件 = 450 实例不变;哨兵与有效层号
+    /// 不相交。与 Go `avatarInstanceBytes` 及桥测试同值,漂移即红。
+    #[test]
+    fn instance_layout_matches_go_bridge() {
+        assert_eq!(ENTITY_INSTANCE_BYTES, 96);
+        assert_eq!(AVATAR_MAX_INSTANCES, 450);
+        assert_eq!(AVATAR_MATERIAL_SOLID, u32::MAX);
+        assert_eq!(AVATAR_MATERIAL_OFFSET, 80);
+        assert_eq!(
+            AVATAR_MAX_INSTANCES * ENTITY_INSTANCE_BYTES,
+            43200,
+            "450 实例的字节数"
+        );
+    }
+
+    /// 材质槽编解码锁:偏移 80 处小端 u32,保留区 84..96 全零;哨兵
+    /// 与示例有效层可辨(具体牛层号由 Go 素材包守卫,此处只锁不相交性)。
+    #[test]
+    fn material_slot_codec_roundtrip() {
+        let mut instance = [0u8; ENTITY_INSTANCE_BYTES];
+        instance[AVATAR_MATERIAL_OFFSET..AVATAR_MATERIAL_OFFSET + 4]
+            .copy_from_slice(&AVATAR_MATERIAL_SOLID.to_le_bytes());
+        assert_eq!(
+            u32::from_le_bytes(
+                instance[AVATAR_MATERIAL_OFFSET..AVATAR_MATERIAL_OFFSET + 4]
+                    .try_into()
+                    .unwrap()
+            ),
+            AVATAR_MATERIAL_SOLID
+        );
+        assert!(instance[84..96].iter().all(|&b| b == 0), "保留区必须全零");
+        let example_layer: u32 = 0;
+        assert_ne!(
+            example_layer, AVATAR_MATERIAL_SOLID,
+            "示例层号不得与哨兵重合"
+        );
     }
 }

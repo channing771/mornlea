@@ -170,9 +170,16 @@ func ServerPacketID(state State, packet ServerPacket) (uint32, bool) {
 			return 23, true
 		case HostileDespawn:
 			return 24, true
-		// 私有战斗命中确认：固定 10-byte `CombatHit` 占用 25，下一 ID 26 仍未分配。
+		// 私有战斗命中确认：固定 10-byte `CombatHit` 占用 25。
 		case CombatHit:
 			return 25, true
+		// 被动牛三类 S→C 消息：spawn/state/despawn 依次占用 26/27/28，下一 ID 29 仍未分配。
+		case PassiveSpawn:
+			return 26, true
+		case PassiveState:
+			return 27, true
+		case PassiveDespawn:
+			return 28, true
 		}
 	}
 	return 0, false
@@ -252,6 +259,13 @@ func ServerPacketForID(state State, id uint32) (ServerPacket, bool) {
 		// 私有战斗命中确认：与 `ServerPacketID` 的 25 对称。
 		case 25:
 			return CombatHit{}, true
+		// 被动牛三类 S→C 消息：与 `ServerPacketID` 的 26/27/28 对称。
+		case 26:
+			return PassiveSpawn{}, true
+		case 27:
+			return PassiveState{}, true
+		case 28:
+			return PassiveDespawn{}, true
 		}
 	}
 	return nil, false

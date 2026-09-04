@@ -14,6 +14,8 @@ func TestSmeltingOutput(t *testing.T) {
 		{core.ItemRawIron, core.ItemIronIngot, true},
 		{core.ItemSand, core.ItemGlass, true},
 		{core.ItemClay, core.ItemBrick, true},
+		{core.ItemRawBeef, core.ItemCookedBeef, true},
+		{core.ItemCookedBeef, core.ItemNone, false},
 		{core.ItemNone, core.ItemNone, false},
 		{core.ItemStone, core.ItemNone, false},
 	}

@@ -20,13 +20,16 @@
   `MessageDrainMax`），刻意小于 benchmark 的 2560×1440，不在本包复制数值。
 - 抓帧与 golden 固定使用内嵌默认材质：忽略用户材质覆盖、不创建交互窗口、
   不请求音频设备（main 装配层对 capture 路径强制回落 `config.Defaults()`）。
+- 增删或更名正式场景基线时，必须同步更新仓库根 `testdata/visual-golden/README.md`
+  的索引：`world/` 张数与 `world` 表格行（行数与 PNG 文件数一致、顺序与
+  `captureScenes` 一致）；只改像素不增删场景时索引不动。
 
 ## 场景表 (`capture/capture.go`)
 
 - 场景清单是表驱动的 `captureScenes`，新增场景即新增一行；全部场景按表序
   共用同一个 application，前一场景留下的呈现状态由后续场景的 `Prepare`/
   `Apply` 负责清场；`resetCapturePresentation` 负责清 `combatFeedback` 与相关呈现，避免污染后续场景。
-- 场景顺序与 22 项正式清单以 `captureScenes` 及其顺序测试为准，固定上传容量以布局代码和容量
+- 场景顺序与正式清单以 `captureScenes` 及其顺序测试为准，固定上传容量以布局代码和容量
   测试为准；不要在指南复制会漂移的清单或数字。常显 HUD（快捷栏/状态行/氧气/
   采掘进食/弹条/准星/聊天/marker）的 GPU 呈现已退役，其像素验收由 WebView HUD
   组件断言与 `frontend/visual` 部件基线承接，capture 只保留世界、夜景、材质与

@@ -84,6 +84,11 @@ func (server *Server) Shutdown(ctx context.Context) error {
 			// 拆除之前，目标等权威事实不因拆除而漂移。
 			server.hostiles.Observe(server.engine.HostileMobs())
 		}
+		if server.passives != nil {
+			// 关服最终快照与夜行者同一时点冻结：末次 `engine.Step` 之后、
+			// 会话拆除之前，位置与生命不因拆除而漂移。
+			server.passives.Observe(server.engine.PassiveMobs())
+		}
 		if hasTrustedCenter {
 			server.appliedTrustedObserver = appliedTrustedObserverCenter{
 				dimension: trustedCenter.dimension,
@@ -159,6 +164,14 @@ func (server *Server) Shutdown(ctx context.Context) error {
 			)
 		}
 	}
+	// 被动牛关服屏障与夜行者同一语义：失败整体失败，绝不谎报成功。
+	if server.passives != nil {
+		if err := server.passives.Flush(ctx); err != nil {
+			return server.persistenceErrorWithContext(
+				fmt.Errorf("flush passives: %w", err), ctx,
+			)
+		}
+	}
 	if err := server.world.Flush(ctx); err != nil {
 		return err
 	}
@@ -187,6 +200,9 @@ func (server *Server) Shutdown(ctx context.Context) error {
 	}
 	if server.hostiles != nil {
 		server.hostiles.Close()
+	}
+	if server.passives != nil {
+		server.passives.Close()
 	}
 	server.world.Close()
 

@@ -533,6 +533,17 @@ var captureScenes = []captureScene{
 		},
 	},
 	{
+		// grass-closeup 是短草的无窗口近景 capture 场景：空气邻域基线上的
+		// 一条草地支撑条，条上 3 列手工短草（短草正下方必是草地，与世界
+		// 生成的不变式一致）。固定正午、固定近景机位，短草交叉面片的像素
+		// 覆盖由 golden 双阈值兜底。排序：紧随 target-block-feedback、
+		// 先于 oak-grove。
+		Name:         "grass-closeup",
+		WarmupFrames: 8,
+		Prepare:      prepareGrassCloseup,
+		Apply:        applyGrassCloseupCaptureState,
+	},
+	{
 		Name:         "oak-grove",
 		WarmupFrames: 8,
 		Prepare:      prepareOakGrove,
@@ -567,6 +578,24 @@ var captureScenes = []captureScene{
 		WarmupFrames: 8,
 		Prepare:      prepareHostileMobNight,
 		Apply:        applyHostileMobCaptureState,
+	},
+	{
+		// passive-herd 是被动牛群的无窗口昼间 capture 场景：固定正午（6000
+		// tick）的开阔草地，3 头牛经客户端被动镜像夹具站在草地上（ID 升序、
+		// 朝向各异、屏幕投影互不遮挡），1 个生牛肉掉落经既有掉落物 pass 浮在
+		// 牛群前方的空位。掉落动画相位经 PinVolatile 钉死为常量，与机器速度
+		// 无关。夹具与注入细节见 capture_passive_herd.go。
+		//
+		// 排序约束：本场景 MUST 紧随 hostile-mob、先于 water-surface-slope
+		//（昼夜两片牧场相邻，完整相邻链为 sword-combat、hostile-mob、
+		// passive-herd、water-surface-slope），由
+		// TestPassiveHerdCaptureScenePosition 兜底；far-horizon 仍为倒数第二、
+		// water-underwater 仍为唯一末场景。
+		Name:         "passive-herd",
+		WarmupFrames: 8,
+		Prepare:      preparePassiveHerdDay,
+		Apply:        applyPassiveHerdCaptureState,
+		PinVolatile:  pinPassiveHerdVolatile,
 	},
 	{
 		// 水景一：水面之上俯瞰。覆盖「水面斜坡」与「水面之下的地形」——

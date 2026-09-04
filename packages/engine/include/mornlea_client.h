@@ -4,7 +4,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* v14:在 v13 窗口合成捕获表面上新增 render world update 入口。
+/* v15:avatar 实例 80→96 字节(transform mat4 + color vec4 + material u32 +
+ * 12B 保留零填充),`avatar.wgsl` 复 terrain atlas 绑定范式做贴图采样,
+ * 纯色分支传哨兵材质像素不变;容量 75 具身体(450 实例)不变。
+ * v14:在 v13 窗口合成捕获表面上新增 render world update 入口。
  * v13:新增窗口合成捕获出口 mornlea_client_window_capture(NSWindow
  * windowNumber → CGWindowListCreateImage → CGBitmapContext,输出紧凑
  * BGRA8 原始字节,两段式容量协议;新增溢出与捕获不可用两个状态码)。
@@ -22,7 +25,7 @@
  * 契约);v6:新增远环 LOD tile 出口(render_upload_lod_tile/drop_lod_tile)。
  * 变基重编:远环两项出口在旧基线上原编号 v5/v6,main 的 water pass
  * (按 material 分流 + 半透明 water pass)占用 v5 后整体顺延一格。 */
-#define MORNLEA_CLIENT_ABI_VERSION 14u
+#define MORNLEA_CLIENT_ABI_VERSION 15u
 
 #define MORNLEA_CLIENT_STATUS_OK 0u
 #define MORNLEA_CLIENT_STATUS_ABI_VERSION 1u

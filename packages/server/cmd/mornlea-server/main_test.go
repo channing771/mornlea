@@ -101,10 +101,10 @@ func TestDefaultOptions(t *testing.T) {
 }
 
 func TestServerProtocolV26IsCurrent(t *testing.T) {
-	// 字面量随 `network.ProtocolVersion` 的现行契约同步（v32 私有 `CombatHit`）；
+	// 字面量随 `network.ProtocolVersion` 的现行契约同步（v33 被动牛三类消息）；
 	// 函数名保留历史编号先例，仅钉住「专用服务端跟随当前协议」。
-	if network.ProtocolVersion != 32 {
-		t.Fatalf("专用服务端协议版本 = %d，想要 32", network.ProtocolVersion)
+	if network.ProtocolVersion != 33 {
+		t.Fatalf("专用服务端协议版本 = %d，想要 33", network.ProtocolVersion)
 	}
 }
 
@@ -332,8 +332,8 @@ func TestRunMigrateMaterialsCompletesAndRerunsWithSameArguments(t *testing.T) {
 	if got := reopened.Metadata().FormatVersion; got != 3 {
 		t.Fatalf("迁移后 metadata 版本 = %d，期望 3", got)
 	}
-	// 迁移只动世界 metadata，协议契约必须保持现行值（v32）不变。
-	if network.ProtocolVersion != 32 {
+	// 迁移只动世界 metadata，协议契约必须保持现行值（v33）不变。
+	if network.ProtocolVersion != 33 {
 		t.Fatalf("迁移命令改变了协议版本: %d", network.ProtocolVersion)
 	}
 }
