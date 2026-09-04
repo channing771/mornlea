@@ -5,7 +5,7 @@
 纯 codec 域：只依赖 `packages/shared/core` 并经 `packages/server/storage/storagedef`
 取哨兵；不感知根包编排（hostile_mobs.bin 文件的原子替换与路径编排在根
 包 DiskStore/MemoryStore），`HostileMobStore` 接口属根包存储契约家族，
-定义留在根包 `types.go`。依赖方向由 `internal/archcheck` 的
+定义留在根包 `types.go`。依赖方向由 `packages/audit` 的
 `TestInternalDependenciesAreOneWay` 强制。行为规格见
 `openspec/specs/local-data-migration/spec.md`；全树共享的迁移与数据安全
 纪律见上级 `../AGENTS.md`，本文件不重复。
@@ -56,4 +56,4 @@
 - 定点测试：`go test ./packages/server/storage/hostile -race -count=1`（纯
   codec 域，秒级，不编译执行其他域的测试）。
 - 根包编排：`go test ./packages/server/storage -run 'HostileStore|DiskHostile' -race -count=1`。
-- 依赖方向与文档守卫：`go test ./internal/archcheck -count=1`。
+- 依赖方向与文档守卫：`go test ./packages/audit -count=1`。

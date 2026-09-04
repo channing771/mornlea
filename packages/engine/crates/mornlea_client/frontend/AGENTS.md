@@ -18,8 +18,8 @@ Rust 侧只消费本目录的构建产物 `dist/`（经 `mornlea://` scheme 内�
   `oneOf`/`additionalProperties: false` 拒绝。强制点：
   `src/bridge/schema.test.ts`（ajv 合法/非法夹具，含未知事件类型用例）与
   `src/bridge/client.test.ts`（纯函数拒绝用例）。
-- 动作 id 语义与 Go `internal/client` 的 `UIAction*` 字符串常量、
-  `cmd/mornlea/app` 的 `menuAction*` 别名逐值互钉，映射写在 schema 的
+- 动作 id 语义与 Go `packages/client/client` 的 `UIAction*` 字符串常量、
+  `packages/client/cmd/mornlea/app` 的 `menuAction*` 别名逐值互钉，映射写在 schema 的
   `menuAction` 描述里；任何一侧不得单方面改动映射。
 - `src/` 内禁止出现 `localStorage`/`sessionStorage`/`indexedDB` 与
   `fetch`/`XMLHttpRequest`/`WebSocket`：前端不持久化任何配置、零网络
@@ -31,12 +31,12 @@ Rust 侧只消费本目录的构建产物 `dist/`（经 `mornlea://` scheme 内�
 - 颜色、字号、圆角、几何与动效时长只允许以 `src/tokens.css` 的 CSS 自定义
   属性定义；`src/ui/ui.css` 消费令牌，不得出现裸色值、裸字号、裸时长。
   换算口径与取值来源见 `src/tokens.css` 头注（HUD 族取自
-  `internal/render/hud/style.go`；egui 退役后，原 egui 皮肤族的次级取值
+  `packages/client/render/hud/style.go`；egui 退役后，原 egui 皮肤族的次级取值
   以 `src/tokens.css` 为唯一权威）。强制点：评审兜底（无自动 lint）。
 - 强调色相采用 Mornlea 双强调体系：鼠尾草绿（sage）负责选中、焦点与 hover
   等交互态；麦金（wheat）负责进度、来源轮廓与重要信息；错误行专用危险红。
   不引入第三种强调色相，sage 与 wheat 两族不得互换语义（与 Go 侧
-  `internal/render/hud/style.go` 的 `accentSelected`/`accentProgress`
+  `packages/client/render/hud/style.go` 的 `accentSelected`/`accentProgress`
   语义同源；hover/焦点环属菜单层，Go 侧不设对应令牌）。
   `prefers-reduced-motion` 下动效时长令牌归零，组件样式不得绕开令牌另设
   transition。
@@ -111,7 +111,7 @@ Rust 侧只消费本目录的构建产物 `dist/`（经 `mornlea://` scheme 内�
   tailwind/postcss 与生产同配置，字体随 ui.css 进 harness 产物）+
   `visual/visual.mjs` 自包含脚本：自起 127.0.0.1 随机端口静态服务、逐 fixture
   调 Chrome headless 截图（1280x720、1x、sRGB）、pngjs 双阈值比对。
-- 比对口径与世界 golden 管线对齐（`cmd/mornlea/capture/visual_compare.go`）：
+- 比对口径与世界 golden 管线对齐（`packages/client/cmd/mornlea/capture/visual_compare.go`）：
   任一像素任一通道差上限 2，且差异像素（任一通道差 ≥ 1）占比上限 0.0001，
   超限即判漂移；漂移时把红标差异图写入 `build/visual-ui/<fixture>-diff.png`
   并以非零退出指认部件。
@@ -149,4 +149,4 @@ corepack pnpm build
 ```
 
 无 Rust/Go 代码改动时不需要 `make rust`；本目录改动不进 Go 测试闭包，
-`go test ./internal/archcheck -count=1` 仅在同时触碰 Go 侧时需要。
+`go test ./packages/audit -count=1` 仅在同时触碰 Go 侧时需要。

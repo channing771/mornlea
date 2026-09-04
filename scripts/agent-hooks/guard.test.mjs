@@ -29,37 +29,40 @@ test("allows scoped and read-only commands", () => {
 });
 
 test("requires OpenSpec for contract and architecture changes", () => {
-  assert.deepEqual(openSpecRequirementReasons(["internal/network/packet.go"]), [
+  assert.deepEqual(openSpecRequirementReasons(["packages/shared/network/protocol/packet.go"]), [
     "改动涉及协议、存档格式、性能基线或架构依赖门禁",
   ]);
-  assert.deepEqual(openSpecRequirementReasons(["internal/archcheck/dependency_test.go"]), [
+  assert.deepEqual(openSpecRequirementReasons(["packages/audit/dependency_test.go"]), [
     "改动涉及协议、存档格式、性能基线或架构依赖门禁",
   ]);
 });
 
 test("requires OpenSpec for cross-component implementation changes", () => {
   const reasons = openSpecRequirementReasons([
-    "internal/client/receiver.go",
-    "internal/server/host.go",
+    "packages/client/client/receiver.go",
+    "packages/server/server/host.go",
   ]);
   assert.equal(reasons.length, 1);
-  assert.match(reasons[0], /internal\/client/);
-  assert.match(reasons[0], /internal\/server/);
+  assert.match(reasons[0], /packages\/client/);
+  assert.match(reasons[0], /packages\/server/);
 });
 
 test("does not require OpenSpec for one focused implementation component", () => {
   assert.deepEqual(
-    openSpecRequirementReasons(["internal/client/camera.go", "internal/client/camera_test.go"]),
+    openSpecRequirementReasons([
+      "packages/client/client/camera.go",
+      "packages/client/client/camera_test.go",
+    ]),
     [],
   );
 });
 
 test("requires Rust validation for engine and native consumers", () => {
   assert.equal(rustValidationRequired(["packages/engine/crates/mornlea_engine/src/light.rs"]), true);
-  assert.equal(rustValidationRequired(["internal/mesh/native.go"]), true);
-  assert.equal(rustValidationRequired(["internal/physics/collision.go"]), true);
-  assert.equal(rustValidationRequired(["internal/core/raycast.go"]), true);
-  assert.equal(rustValidationRequired(["internal/server/session_ingress.go"]), false);
+  assert.equal(rustValidationRequired(["packages/client/mesh/native.go"]), true);
+  assert.equal(rustValidationRequired(["packages/shared/physics/collision.go"]), true);
+  assert.equal(rustValidationRequired(["packages/shared/core/raycast.go"]), true);
+  assert.equal(rustValidationRequired(["packages/server/server/session_ingress.go"]), false);
 });
 
 test("runs Rust validation before Go checks for Rust-required changes", () => {
@@ -77,15 +80,15 @@ test("runs Rust validation before Go checks for Rust-required changes", () => {
       "go",
       [
         "test",
-        "./internal/nativeabi",
-        "./internal/core",
-        "./internal/physics",
-        "./internal/mesh",
-        "./internal/client",
-        "./internal/sim",
-        "./internal/server",
-        "./cmd/mornlea",
-        "./cmd/mornlea-server",
+        "./packages/shared/nativeabi",
+        "./packages/shared/core",
+        "./packages/shared/physics",
+        "./packages/client/mesh",
+        "./packages/client/client",
+        "./packages/server/sim/...",
+        "./packages/server/server",
+        "./packages/client/cmd/mornlea",
+        "./packages/server/cmd/mornlea-server",
         "-race",
       ],
     ],
@@ -119,20 +122,20 @@ test("runs the fixed native downstream union for Rust-only bridge changes", () =
 
   assert.deepEqual(stopFailures(["packages/engine/crates/mornlea_engine/src/ffi.rs"], run, {}), []);
   assert.deepEqual(
-    calls.find(([command, argumentsList]) => command === "go" && argumentsList.includes("./internal/nativeabi")),
+    calls.find(([command, argumentsList]) => command === "go" && argumentsList.includes("./packages/shared/nativeabi")),
     [
       "go",
       [
         "test",
-        "./internal/nativeabi",
-        "./internal/core",
-        "./internal/physics",
-        "./internal/mesh",
-        "./internal/client",
-        "./internal/sim",
-        "./internal/server",
-        "./cmd/mornlea",
-        "./cmd/mornlea-server",
+        "./packages/shared/nativeabi",
+        "./packages/shared/core",
+        "./packages/shared/physics",
+        "./packages/client/mesh",
+        "./packages/client/client",
+        "./packages/server/sim/...",
+        "./packages/server/server",
+        "./packages/client/cmd/mornlea",
+        "./packages/server/cmd/mornlea-server",
         "-race",
       ],
     ],
@@ -147,24 +150,28 @@ test("unions the fixed native downstream packages with mixed bridge Go changes",
   };
 
   assert.deepEqual(
-    stopFailures(["packages/engine/crates/mornlea_engine/src/ffi.rs", "internal/nativeabi/native.go"], run, {}),
+    stopFailures(
+      ["packages/engine/crates/mornlea_engine/src/ffi.rs", "packages/shared/nativeabi/native.go"],
+      run,
+      {},
+    ),
     [],
   );
   assert.deepEqual(
-    calls.find(([command, argumentsList]) => command === "go" && argumentsList.includes("./internal/nativeabi")),
+    calls.find(([command, argumentsList]) => command === "go" && argumentsList.includes("./packages/shared/nativeabi")),
     [
       "go",
       [
         "test",
-        "./internal/nativeabi",
-        "./internal/core",
-        "./internal/physics",
-        "./internal/mesh",
-        "./internal/client",
-        "./internal/sim",
-        "./internal/server",
-        "./cmd/mornlea",
-        "./cmd/mornlea-server",
+        "./packages/shared/nativeabi",
+        "./packages/shared/core",
+        "./packages/shared/physics",
+        "./packages/client/mesh",
+        "./packages/client/client",
+        "./packages/server/sim/...",
+        "./packages/server/server",
+        "./packages/client/cmd/mornlea",
+        "./packages/server/cmd/mornlea-server",
         "-race",
       ],
     ],
@@ -173,7 +180,7 @@ test("unions the fixed native downstream packages with mixed bridge Go changes",
 
 test("runs the current identity guard for every identity-only root change", () => {
   for (const path of [
-    "go.mod",
+    "go.work",
     ".gitignore",
     "packages/engine/Cargo.toml",
     "scripts/agent-hooks/guard.mjs",
@@ -190,7 +197,7 @@ test("runs the current identity guard for every identity-only root change", () =
         ([command, argumentsList]) =>
           command === "go" &&
           argumentsList.join(" ") ===
-            "test ./internal/archcheck -run ^TestMornleaCurrentIdentity$ -count=1",
+            "test ./packages/audit -run ^TestMornleaCurrentIdentity$ -count=1",
       ).length,
       1,
       `${path} did not route exactly once through TestMornleaCurrentIdentity`,
@@ -205,12 +212,12 @@ test("does not repeat the focused identity guard after the full Go archcheck", (
     return { status: 0, stdout: "" };
   };
 
-  assert.deepEqual(stopFailures(["internal/archcheck/identity_test.go"], run, {}), []);
+  assert.deepEqual(stopFailures(["packages/audit/identity_test.go"], run, {}), []);
   assert.equal(
     calls.filter(
       ([command, argumentsList]) =>
         command === "go" &&
-        argumentsList.join(" ") === "test ./internal/archcheck -count=1",
+        argumentsList.join(" ") === "test ./packages/audit -count=1",
     ).length,
     1,
   );
@@ -264,7 +271,7 @@ test("routes deleted Rust and native paths through Rust validation", () => {
       assert.ok(argumentsList.includes("--diff-filter=ACMRD"));
       return {
         status: 0,
-        stdout: "packages/engine/crates/mornlea_engine/src/removed.rs\0internal/mesh/native_removed.go\0",
+        stdout: "packages/engine/crates/mornlea_engine/src/removed.rs\0packages/client/mesh/native_removed.go\0",
       };
     }
     return { status: 0, stdout: "" };
@@ -278,7 +285,7 @@ test("routes deleted Rust and native paths through Rust validation", () => {
 
   assert.deepEqual(paths, [
     "packages/engine/crates/mornlea_engine/src/removed.rs",
-    "internal/mesh/native_removed.go",
+    "packages/client/mesh/native_removed.go",
   ]);
   assert.deepEqual(stopFailures(paths, run, {}), []);
   assert.deepEqual(
@@ -302,7 +309,7 @@ test("builds Rust before existing Go gates without unrelated cargo checks", () =
   assert.deepEqual(calls.slice(1, 5), [
     ["gofmt", ["-l", "packages/server/server/session_ingress.go"]],
     ["make", ["rust"]],
-    ["go", ["test", "./internal/archcheck", "-count=1"]],
+    ["go", ["test", "./packages/audit", "-count=1"]],
     ["go", ["test", "-race", "./packages/server/server"]],
   ]);
   assert.equal(calls.some(([command]) => command === "cargo"), false);
@@ -326,18 +333,18 @@ test("finds tools through the login shell when the hook PATH is incomplete", () 
 
   const result = runCommand(
     "gofmt",
-    ["-l", "internal/server/example.go"],
+    ["-l", "packages/server/server/example.go"],
     30_000,
     spawn,
     { SHELL: "/bin/zsh", PATH: "/usr/bin:/bin" },
   );
 
   assert.equal(result.status, 0);
-  assert.deepEqual(calls[0], ["gofmt", ["-l", "internal/server/example.go"]]);
+  assert.deepEqual(calls[0], ["gofmt", ["-l", "packages/server/server/example.go"]]);
   assert.deepEqual(calls.at(-2), ["/bin/zsh", ["-lc", "command -v gofmt"]]);
   assert.deepEqual(calls.at(-1), [
     "/toolchain/bin/gofmt",
-    ["-l", "internal/server/example.go"],
+    ["-l", "packages/server/server/example.go"],
   ]);
 });
 

@@ -6,7 +6,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/channing771/mornlea/internal/client"
+	"github.com/channing771/mornlea/packages/client/client"
 	"github.com/channing771/mornlea/packages/server/sim/contract"
 	"github.com/channing771/mornlea/packages/server/sim/runtime"
 	"github.com/channing771/mornlea/packages/server/storage"

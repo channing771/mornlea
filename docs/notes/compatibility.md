@@ -4,7 +4,7 @@
 
 ## 线上协议
 
-- 线上协议为 v32（定义在 `internal/network/protocol` 的 `ProtocolVersion`，根包 `internal/network` 别名再导出）；所有不匹配版本都会在握手阶段、进入 Play 前被稳定拒绝，不提供版本协商或降级解码；更早版本的逐版语义见 `internal/network/protocol/packet.go` 顶部注释；
+- 线上协议为 v32（定义在 `packages/shared/network/protocol` 的 `ProtocolVersion`，根包 `packages/shared/network` 别名再导出）；所有不匹配版本都会在握手阶段、进入 Play 前被稳定拒绝，不提供版本协商或降级解码；更早版本的逐版语义见 `packages/shared/network/protocol/packet.go` 顶部注释；
 - 近几版协议全部是既有 packet 尾部追加或新增消息，不改变任何既有长度上限，也不新增 `RejectReason`：
   - v26 新增 Play S→C ID 20 `PlaceBlockSucceeded(sequence)`，只回发给放置发起会话作为成功放置确认；
   - v27 新增 Play C→S ID 14 `BoneMeal`，与 `TillSoil` 同形（序号 + 朝向），目标格由权威射线决定；
@@ -17,7 +17,7 @@
 
 ## engine 与 client ABI
 
-- 数值引擎的 engine ABI 为 v9：同一次构建的 Go binary 与 `libmornlea_engine` 是不可跨版本混装的 release unit；v9 在 v8 mesh registry surface 上增加流体批量求值与重扫入口，`internal/nativeabi`、C header 和 Rust 动态库必须同步替换，不提供旧版 fallback；
+- 数值引擎的 engine ABI 为 v10：同一次构建的 Go binary 与 `libmornlea_engine` 是不可跨版本混装的 release unit；v10 相对 v9 的变化是把 worldgen 请求固化为 `MGW1` layout 3 的 15 材质契约（v9 曾在 v8 mesh registry surface 上增加流体批量求值与重扫入口），`packages/shared/nativeabi`、C header 和 Rust 动态库必须同步替换，不提供旧版 fallback；
 - 图形客户端的 client ABI 为 v14：同一次构建的 `mornlea` 与 `libmornlea_client.dylib` 是不可跨版本混装的 release unit；无图形专服不链接 client 库，不受 client ABI 演进影响；
 - 无参数 identity export `mornlea_client_abi_version()` 只报告实际动态库身份 14，不接收期望版本，也不执行协商或返回 client status；
 - selected-main v13 的 28 个 versioned exports 与当前 v14 的 29 个 versioned exports 在版本不匹配时都返回 `ABI_VERSION`，并在读取语义输入或改变 window、renderer、capture、UI/cache 状态前拒绝调用；

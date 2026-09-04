@@ -20,7 +20,7 @@
 | 流体 | 流体数值内核的一切演进：单格规则求值（存活判定、垂直优先、水平传播、可替换表）与区块重扫扫描（五邻/区段不动点捷径、邻域盒布局）；队列、预算、游标、冲毁结算等编排留 Go |
 | 批量数据变换 | 任何"对 N ≥ 数千的元素做同一种数值运算"的新需求：批量坐标变换、体数据压缩/过滤、排序/归约 |
 
-现行带内 worldgen 契约为 `MGW1` layout `3`：材料表 `15` 项（含 `water` 与 `short_grass`，两两互异、唯一豁免仍是 `water == air` 的注水门控），公共 header `566` 字节，经 engine ABI v10 三端（C header、Rust FFI、`internal/nativeabi`）成套演进；调整材料表、布局或 header 长度属于 ABI 变更，必须按第 5 节流程先走 OpenSpec change。
+现行带内 worldgen 契约为 `MGW1` layout `3`：材料表 `15` 项（含 `water` 与 `short_grass`，两两互异、唯一豁免仍是 `water == air` 的注水门控），公共 header `566` 字节，经 engine ABI v10 三端（C header、Rust FFI、`packages/shared/nativeabi`）成套演进；调整材料表、布局或 header 长度属于 ABI 变更，必须按第 5 节流程先走 OpenSpec change。
 
 ### 1.2 mornlea_client（窗口与渲染后端，client ABI 出口）
 
@@ -47,7 +47,7 @@
 | 高层渲染语义 | pass 编排、剔除策略决策、HUD/UI 逻辑、字体图集、Avatar/NameTag 语义、 daylight 语义 |
 | 编排与生命周期 | app/server/client 主循环、goroutine 调度、worker 划分、优雅关闭 |
 | 测试与工具链 | oracle 差分测试、benchmark、perfcheck、CI 脚本、fuzz/golden 编排 |
-| FFI 绑定 | `internal/nativeabi` 是 engine ABI 的唯一 Go bridge；client ABI bridge 位于 `internal/client` |
+| FFI 绑定 | `packages/shared/nativeabi` 是 engine ABI 的唯一 Go bridge；client ABI bridge 位于 `packages/client/client` |
 
 **方块/实体类新内容的归属细则**：新方块的规则属性（硬度、掉落、配方、交互）写 Go；新方块/实体的呈现几何与光照参数由 Go 定义为**数据描述**，经既有编码路径交给 Rust 消费；新实体的运动一律复用既有 Rust 物理积分出口，**不得新写 Go 积分**。
 
@@ -66,7 +66,7 @@
 **Go 不得出现：**
 - 生产路径上的体素级 O(N) 密集循环（每方块/每 cell/每 quad 的生产计算）。
 - mesh、光照、碰撞、raycast、物理积分、worldgen 的第二套生产实现或新的 Go fallback。
-- 绕过 `internal/nativeabi` 直接调用 engine ABI；绕过 `internal/client` 直接调用 client ABI 或导入 GPU 绑定。
+- 绕过 `packages/shared/nativeabi` 直接调用 engine ABI；绕过 `packages/client/client` 直接调用 client ABI 或导入 GPU 绑定。
 
 **Rust 不得出现：**
 - 文件、网络、音频设备之外的任何 I/O；协议字节格式的决策；schema 版本号的决策。
@@ -77,4 +77,4 @@
 
 - 新需求看似两侧都能做时，按第 3 节判定，默认归属即最终归属；不重开讨论。
 - 确需把某领域从一侧移到另一侧（含 engine ABI 演进），必须走 OpenSpec change，说明：性能证据（profiler 数据，性能数值只记录不门禁）、ABI 兼容与迁移策略、oracle/golden/fuzz 覆盖的保留方案。
-- 新增 engine 能力的标准落地清单：Rust 实现（含中文 doc comment）→ engine ABI 出口与版本裁决 → `internal/nativeabi` 绑定 → Go 领域调用方 → oracle 差分测试 → `internal/archcheck` 依赖登记 → `make rust` + 受影响包 race 测试 + `go vet` + `gofmt`。
+- 新增 engine 能力的标准落地清单：Rust 实现（含中文 doc comment）→ engine ABI 出口与版本裁决 → `packages/shared/nativeabi` 绑定 → Go 领域调用方 → oracle 差分测试 → `packages/audit` 依赖登记 → `make rust` + 受影响包 race 测试 + `go vet` + `gofmt`。

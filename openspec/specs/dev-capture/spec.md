@@ -99,7 +99,7 @@ MUST 返回当前窗口合成画面的 PNG（`image/png`），内容 MUST 包含
 窗口合成捕获 MUST 经 client ABI 唯一桥接：`mornlea_client` 新增导出 SHALL
 校验版本、句柄、指针与容量，失败时不触碰输出缓冲、panic 不得跨越 FFI 边界；
 输出容量不足时 SHALL 以溢出状态返回所需字节数（两段式协议），输出为 BGRA8
-原始像素。只有 `internal/client` MAY 接触该导出；头文件宏、Rust 版本常量、
+原始像素。只有 `packages/client/client` MAY 接触该导出；头文件宏、Rust 版本常量、
 Go 侧钉位与根 `AGENTS.md` 基线 MUST 在同一变更批次内同步钉位（捕获出口随
 client ABI v13 引入，现随 v14 钉位）。
 

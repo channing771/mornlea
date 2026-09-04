@@ -1,8 +1,10 @@
 go 1.26.0
 
 use (
-	.
+	./packages/audit
+	./packages/client
 	./packages/contracts
 	./packages/server
 	./packages/shared
+	./packages/tools
 )

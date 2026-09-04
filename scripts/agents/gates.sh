@@ -13,11 +13,11 @@ run() { local desc="$1"; shift; echo "   --> $*"; if bash -c "$*"; then echo "  
 step "gofmt 检查（应无输出）"
 run "gofmt 检查" 'test -z "$(gofmt -l .)"'
 
-step "go vet ./..."
-run "go vet ./..." 'go vet ./...'
+step "go vet（逐 workspace 模块）"
+run "go vet 全部模块" 'for module in ./packages/contracts ./packages/shared ./packages/server ./packages/client ./packages/tools ./packages/audit; do go vet $module/... || exit 1; done'
 
 step "archcheck（依赖边界 + 基线版本 + 文档一致）"
-run "archcheck" 'go test ./internal/archcheck -count=1'
+run "archcheck" 'go test ./packages/audit -count=1'
 
 step "OpenSpec strict 校验"
 run "OpenSpec strict" 'openspec validate --all --strict --no-interactive'
@@ -26,8 +26,8 @@ step "Rust 构建（固定工具链）"
 run "make rust" 'make rust'
 
 if [ "${GATES_SKIP_RACE:-0}" != "1" ]; then
-  step "全量 go test ./... -race"
-  run "go test ./... -race" 'go test ./... -race'
+  step "全量 race（逐 workspace 模块）"
+  run "go test 全部模块 -race" 'for module in ./packages/contracts ./packages/shared ./packages/server ./packages/client ./packages/tools ./packages/audit; do go test $module/... -race || exit 1; done'
 fi
 
 echo

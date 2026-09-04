@@ -5,7 +5,7 @@
 `packages/server/storage/storagedef`，不感知根包编排（player 文件的原子替换与
 路径编排在根包 DiskStore/MemoryStore）或其他域子包；`PlayerStore` 接口
 属根包存储契约家族，定义留在根包 `types.go`。依赖方向由
-`internal/archcheck` 的 `TestInternalDependenciesAreOneWay` 强制。行为
+`packages/audit` 的 `TestInternalDependenciesAreOneWay` 强制。行为
 规格见 `openspec/specs/local-data-migration/spec.md`；全树共享的迁移与
 数据安全纪律见上级 `../AGENTS.md`，本文件不重复。
 
@@ -61,4 +61,4 @@
   域，秒级，不编译执行其他域的测试）。
 - 根包编排（原子替换、损坏/未来文件拒写、revision 复用）：
   `go test ./packages/server/storage -run 'PlayerStore|DiskPlayer' -race -count=1`。
-- 依赖方向与文档守卫：`go test ./internal/archcheck -count=1`。
+- 依赖方向与文档守卫：`go test ./packages/audit -count=1`。

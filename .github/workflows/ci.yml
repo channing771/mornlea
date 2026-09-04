@@ -74,8 +74,14 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26'
+          # 根模块已解散，go.sum 分散在各单元模块；setup-go 的缓存 key 需要覆盖
+          # 全部模块的依赖清单。
           cache-dependency-path: |
-            go.sum
+            packages/shared/go.sum
+            packages/server/go.sum
+            packages/client/go.sum
+            packages/tools/go.sum
+            packages/audit/go.sum
             packages/engine/include/mornlea_engine.h
             packages/engine/include/mornlea_client.h
       - uses: actions/setup-node@v4
@@ -92,33 +98,28 @@ jobs:
       - name: Agent Hooks 策略测试
         run: node --test scripts/agent-hooks/guard.test.mjs
       - name: 架构、存储与协议门禁
-        run: go test ./internal/archcheck ./packages/server/storage/... ./packages/shared/network/... ./packages/shared/physics -v
+        run: go test ./packages/audit ./packages/server/storage/... ./packages/shared/network/... ./packages/shared/physics -v
       - name: Race 分片全集自检
         run: |
+          # 根模块已解散：全部包都在 packages/ 下的六个 workspace 模块里，
+          # `go list ./...` 在仓库根不可用；分片联合集必须与六模块全集同源。
           {
-            go list ./...
-            # packages/contracts、packages/shared 与 packages/server 是独立
-            # workspace 模块：`go list ./...` 不会跨模块匹配嵌套模块，需显式
-            # 按模块列出；分片联合集必须同源覆盖。
             go list ./packages/contracts/...
             go list ./packages/shared/...
             go list ./packages/server/...
+            go list ./packages/client/...
+            go list ./packages/tools/...
+            go list ./packages/audit/...
           } | sort -u > /tmp/all-packages.txt
           {
-            go list ./cmd/...
-            go list ./internal/...
-            go list ./packages/contracts/...
-            go list ./packages/shared/...
+            go list ./packages/client/...
             go list ./packages/server/...
-            # scripts/ 是带 package main 的 Go 包（composite_grass_side.go 材质
-            # 合成工具），go list ./... 会包含它；分片联合集必须同源覆盖，否则本
-            # 自检在引入该工具后恒红。
-            printf '%s\n' github.com/channing771/mornlea/scripts
+            go list ./packages/contracts/... ./packages/shared/... ./packages/tools/... ./packages/audit/...
           } | sort -u > /tmp/sharded-packages.txt
           diff -u /tmp/all-packages.txt /tmp/sharded-packages.txt
       - name: 静态检查
         run: |
-          go vet ./... ./packages/contracts/... ./packages/shared/... ./packages/server/...
+          go vet ./packages/contracts/... ./packages/shared/... ./packages/server/... ./packages/client/... ./packages/tools/... ./packages/audit/...
           gofmt -l . | tee /tmp/fmt.txt
           test ! -s /tmp/fmt.txt
       - name: 记录 quality 信息
@@ -169,14 +170,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - shard: cmd
-            packages: ./cmd/...
+          # 分片=模块（设计 §5）：client 模块含图形客户端命令与 benchmark 场景
+          # 测试（skip 面向的入口随模块迁移）。
+          - shard: client
+            packages: "$(go list ./packages/client/...)"
             extra: -skip '^TestScenarioV7EightSessionServerProbeIsRealAndBounded$'
           - shard: server
             packages: ./packages/server/...
             extra: ''
-          - shard: internal-rest
-            packages: "$(go list ./internal/...) $(go list ./packages/contracts/...) $(go list ./packages/shared/...) github.com/channing771/mornlea/scripts"
+          # rest = 其余四个模块（contracts/shared/tools/audit）；全集自检保证
+          # 三分片联合恰为六模块全包。
+          - shard: rest
+            packages: "$(go list ./packages/contracts/...) $(go list ./packages/shared/...) $(go list ./packages/tools/...) ./packages/audit"
             extra: ''
     steps:
       - name: 记录开始时间
@@ -186,7 +191,11 @@ jobs:
         with:
           go-version: '1.26'
           cache-dependency-path: |
-            go.sum
+            packages/shared/go.sum
+            packages/server/go.sum
+            packages/client/go.sum
+            packages/tools/go.sum
+            packages/audit/go.sum
             packages/engine/include/mornlea_engine.h
             packages/engine/include/mornlea_client.h
       - uses: actions/download-artifact@v4
@@ -216,7 +225,11 @@ jobs:
         with:
           go-version: '1.26'
           cache-dependency-path: |
-            go.sum
+            packages/shared/go.sum
+            packages/server/go.sum
+            packages/client/go.sum
+            packages/tools/go.sum
+            packages/audit/go.sum
             packages/engine/include/mornlea_engine.h
             packages/engine/include/mornlea_client.h
       - uses: actions/setup-python@v5
@@ -240,15 +253,15 @@ jobs:
       - name: 伙伴 Agent 真进程合同
         run: make companion-agent-integration
       - name: 50ms 服务端探针门禁
-        run: go test ./cmd/mornlea/benchmark -run '^TestScenarioV7EightSessionServerProbeIsRealAndBounded$' -count=1
+        run: go test ./packages/client/cmd/mornlea/benchmark -run '^TestScenarioV7EightSessionServerProbeIsRealAndBounded$' -count=1
       - name: TCP 重启与 Memory/TCP parity 重复门禁
         run: go test ./packages/server/server -run 'TestTCPPlayerAndWorld|TestMemoryTCPParity' -race -count=10
       - name: M3C v6 八玩家与性能报告门禁
-        run: go test ./internal/client ./packages/server/server ./cmd/mornlea/benchmark ./cmd/perfcheck -run 'Test(PerfReportV6|ScenarioV6|PerfcheckV6|PerfcheckV5SameScenario|PerformanceThresholds|InterestObserver|HostStats|BenchmarkServerEpoch|BenchmarkServerMeasuredWindow)' -count=1
+        run: go test ./packages/client/client ./packages/server/server ./packages/client/cmd/mornlea/benchmark ./packages/tools/perfcheck -run 'Test(PerfReportV6|ScenarioV6|PerfcheckV6|PerfcheckV5SameScenario|PerformanceThresholds|InterestObserver|HostStats|BenchmarkServerEpoch|BenchmarkServerMeasuredWindow)' -count=1
       - name: 微基准与平台无关阈值
-        run: go test ./... ./packages/contracts/... ./packages/shared/... ./packages/server/... -bench=. -benchtime=1x -run='^$'
+        run: go test ./packages/contracts/... ./packages/shared/... ./packages/server/... ./packages/client/... ./packages/tools/... ./packages/audit/... -bench=. -benchtime=1x -run='^$'
       - name: M3C 多人微基准可执行性
-        run: go test ./packages/shared/network ./packages/server/server ./internal/render -run '^$' -bench '(RemotePlayerStateCodec|EightPlayerInterest|RemoteAvatarNameTag)' -benchmem -benchtime=100x -count=1
+        run: go test ./packages/shared/network ./packages/server/server ./packages/client/render -run '^$' -bench '(RemotePlayerStateCodec|EightPlayerInterest|RemoteAvatarNameTag)' -benchmem -benchtime=100x -count=1
       - name: 记录 integration 信息
         if: ${{ always() }}
         run: |
@@ -270,7 +283,8 @@ jobs:
           # 编译进 Go 的常量仍是旧版本，表现为 ABI 版本不匹配，且因缓存命中有竞态而
           # 时红时绿。把头文件纳入 key，ABI 变更即强制冷编译。
           cache-dependency-path: |
-            go.sum
+            packages/shared/go.sum
+            packages/server/go.sum
             packages/engine/include/mornlea_engine.h
 
       - name: Rust 工具链身份
@@ -283,14 +297,14 @@ jobs:
       - name: 构建并测试 native collision bundle
         run: |
           make rust
-          go test ./packages/shared/nativeabi ./packages/shared/core ./packages/shared/physics ./internal/mesh -race -count=1
+          go test ./packages/shared/nativeabi ./packages/shared/core ./packages/shared/physics ./packages/client/mesh -race -count=1
           make build-linux-server
 
       - name: Linux 专服架构与 ELF 门禁
         run: |
-          go test ./internal/archcheck -count=1
+          go test ./packages/audit -count=1
           test -z "$(CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go list -deps ./packages/server/cmd/mornlea-server |
-            grep -E '(internal|packages/client)/(client|mesh|render|gfx)|glfw|webgpu|x/image/font')"
+            grep -E 'packages/client/(client|mesh|render)|gfxspike|glfw|webgpu|x/image/font')"
           readelf -d bin/mornlea-server | grep -F 'libmornlea_engine.so'
           readelf -d bin/mornlea-server | grep -F '$ORIGIN'
           nm -D --defined-only bin/libmornlea_engine.so > /tmp/mornlea-engine-symbols.txt

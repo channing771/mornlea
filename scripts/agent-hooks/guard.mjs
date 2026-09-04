@@ -84,11 +84,11 @@ export function findBlockedCommand(command) {
 }
 
 function componentFor(path) {
-  const match = path.match(/^(internal|cmd)\/([^/]+)\/.*\.go$/);
+  const match = path.match(/^packages\/([^/]+)\/.*\.go$/);
   if (!match || path.endsWith("_test.go")) {
     return null;
   }
-  return `${match[1]}/${match[2]}`;
+  return `packages/${match[1]}`;
 }
 
 export function rustValidationRequired(paths) {
@@ -97,11 +97,11 @@ export function rustValidationRequired(paths) {
     /^packages\/engine\/(?:Cargo\.toml|Cargo\.lock|rust-toolchain\.toml)$/,
     /^packages\/engine\/crates\/.*\/Cargo\.toml$/,
     /^packages\/engine\/include\/mornlea_engine\.h$/,
-    /^internal\/nativeabi\/.*\.go$/,
-    /^internal\/core\/raycast[^/]*\.go$/,
-    /^internal\/physics\/.*\.go$/,
-    /^internal\/mesh\/native[^/]*\.go$/,
-    /^internal\/mesh\/registry\.go$/,
+    /^packages\/shared\/nativeabi\/.*\.go$/,
+    /^packages\/shared\/core\/raycast[^/]*\.go$/,
+    /^packages\/shared\/physics\/.*\.go$/,
+    /^packages\/client\/mesh\/native[^/]*\.go$/,
+    /^packages\/client\/mesh\/registry\.go$/,
     /^Makefile$/,
     /^\.github\/workflows\/ci\.yml$/,
   ];
@@ -110,9 +110,11 @@ export function rustValidationRequired(paths) {
 
 function identityValidationRequired(paths) {
   const patterns = [
+    // 根 go.mod 已随根模块解散：它若再次出现本身就是身份违例，交给身份门禁
+    // 报红；go.work 与各单元 go.mod 是当前模块布局的身份事实。
     /^go\.mod$/,
-    /^cmd(?:\/|$)/,
-    /^internal(?:\/|$)/,
+    /^go\.work(?:\.sum)?$/,
+    /^packages\/[^/]+\/go\.mod$/,
     /^packages\/engine\/(?:Cargo\.toml|Cargo\.lock)$/,
     /^packages\/engine\/(?:crates|include)(?:\/|$)/,
     /^Makefile$/,
@@ -127,12 +129,17 @@ function identityValidationRequired(paths) {
 export function openSpecRequirementReasons(paths) {
   const reasons = [];
   const highRiskPatterns = [
-    /^internal\/network\/(?:packet|registry|codec|codec_primitives|frame|chunk_codec|login|stream|tcp)\.go$/,
-    /^internal\/storage\/(?:metadata|region_format|chunk_codec|player_codec|player_migration|player_types)\.go$/,
-    /^internal\/network\/testdata\/.*\.bin$/,
-    /^internal\/storage\/testdata\/.*\.bin$/,
+    /^packages\/shared\/network\/protocol\/(?:packet|registry)\.go$/,
+    /^packages\/shared\/network\/codec\/(?:codec|codec_primitives|frame|chunk_codec)\.go$/,
+    /^packages\/shared\/network\/(?:login|stream)\.go$/,
+    /^packages\/server\/storage\/metadata\.go$/,
+    /^packages\/server\/storage\/region\/region_format\.go$/,
+    /^packages\/server\/storage\/chunk\/chunk_codec\.go$/,
+    /^packages\/server\/storage\/player\/(?:player_codec|player_migration|player_types)\.go$/,
+    /^packages\/shared\/network\/codec\/testdata\/.*\.bin$/,
+    /^packages\/server\/storage\/(?:chunk|player)\/testdata\/.*\.bin$/,
     /^docs\/notes\/perf-baseline\.(?:json|md)$/,
-	/^internal\/archcheck\/dependency_test\.go$/,
+    /^packages\/audit\/dependency_test\.go$/,
   ];
 
   if (paths.some((path) => highRiskPatterns.some((pattern) => pattern.test(path)))) {
@@ -364,7 +371,7 @@ export function stopFailures(paths, execute = run, environment = process.env) {
   if (goFiles.length > 0) {
     const architecture = execute(
       "go",
-      ["test", "./internal/archcheck", "-count=1"],
+      ["test", "./packages/audit", "-count=1"],
       120_000,
     );
     const architectureFailure = commandFailure("架构门禁", architecture);
@@ -382,8 +389,8 @@ export function stopFailures(paths, execute = run, environment = process.env) {
     ].sort();
     if (!needsRustValidation && packageArguments.length > 0) {
     // 复检常在无新改动时再次触发；省略 `-count=1` 让未变包命中测试缓存，变更包
-    // 仍真实重跑。超时给足 `cmd/mornlea` 与 `internal/server` 两个分钟级重型包的
-    // 冷跑空间，避免门禁被自身超时打断而进入修复循环。
+    // 仍真实重跑。超时给足 `packages/client/cmd/mornlea` 与 `packages/server/server`
+    // 两个分钟级重型包的冷跑空间，避免门禁被自身超时打断而进入修复循环。
     const tests = execute("go", ["test", "-race", ...packageArguments], 600_000);
     const testFailure = commandFailure("受影响包测试", tests);
     if (testFailure) {
@@ -391,7 +398,21 @@ export function stopFailures(paths, execute = run, environment = process.env) {
     }
     }
 
-    const vet = execute("go", ["vet", "./..."], 180_000);
+    // 根模块已解散、go.work 下 `./...` 不跨嵌套模块：vet 必须按六模块显式
+    // 列出（与 Makefile 的 GO_TEST_MODULES 同序），否则会漏检新模块。
+    const vet = execute(
+      "go",
+      [
+        "vet",
+        "./packages/contracts/...",
+        "./packages/shared/...",
+        "./packages/server/...",
+        "./packages/client/...",
+        "./packages/tools/...",
+        "./packages/audit/...",
+      ],
+      180_000,
+    );
     const vetFailure = commandFailure("go vet", vet);
     if (vetFailure) {
       failures.push(vetFailure);
@@ -400,15 +421,17 @@ export function stopFailures(paths, execute = run, environment = process.env) {
 
   if (needsRustValidation) {
     const packageArguments = [
-      "./internal/nativeabi",
-      "./internal/core",
-      "./internal/physics",
-      "./internal/mesh",
-      "./internal/client",
-      "./internal/sim",
-      "./internal/server",
-      "./cmd/mornlea",
-      "./cmd/mornlea-server",
+      "./packages/shared/nativeabi",
+      "./packages/shared/core",
+      "./packages/shared/physics",
+      "./packages/client/mesh",
+      "./packages/client/client",
+      // sim 顶层无 Go 文件（代码在 contract/entity/realm/runtime 子包），
+      // 裸路径会让 go test 以「no Go files」假红，必须用 `/...` 展开子包。
+      "./packages/server/sim/...",
+      "./packages/server/server",
+      "./packages/client/cmd/mornlea",
+      "./packages/server/cmd/mornlea-server",
       ...new Set(
         goFiles
           .map((path) => dirname(path))
@@ -432,7 +455,7 @@ export function stopFailures(paths, execute = run, environment = process.env) {
   if (needsIdentityValidation && goFiles.length === 0) {
     const identity = execute(
       "go",
-      ["test", "./internal/archcheck", "-run", "^TestMornleaCurrentIdentity$", "-count=1"],
+      ["test", "./packages/audit", "-run", "^TestMornleaCurrentIdentity$", "-count=1"],
       120_000,
     );
     const identityFailure = commandFailure("当前身份门禁", identity);

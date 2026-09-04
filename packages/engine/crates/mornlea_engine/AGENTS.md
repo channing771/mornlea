@@ -8,7 +8,7 @@
 
 ## Engine ABI
 
-- 出口或布局变化必须同步 `packages/engine/include/mornlea_engine.h`、本 crate FFI、`internal/nativeabi`、ABI 版本和容量/一致性测试。
+- 出口或布局变化必须同步 `packages/engine/include/mornlea_engine.h`、本 crate FFI、`packages/shared/nativeabi`、ABI 版本和容量/一致性测试。
 - 不可信 pointer 与 length 在创建 slice 前校验，panic 转状态码且不得跨 FFI unwind；失败路径不触碰调用方输出。
 
 ## 定点验证与入口

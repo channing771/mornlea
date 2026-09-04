@@ -44,23 +44,28 @@
 仓库 MUST 以根 `go.work` 直辖六个 Go 模块（shared、server、client、tools、
 audit、contracts），根目录 MUST NOT 保留 `go.mod`。跨单元引用 MUST 经
 go.mod require 声明，且仅允许以下方向：`server → {shared, contracts}`（生产
-代码）、`client → {shared}`、`tools → {shared, server, client, contracts}`、
-`audit` 与 `contracts` MUST NOT require 任何兄弟单元。唯一例外：`server`
-MAY 仅因测试文件（客户端镜像驱动的 Memory/TCP 集成测试）require `client`，
-其生产代码 MUST NOT import `packages/client` 的任何包，该禁令由架构检查以
-源码级守卫强制。
+代码）、`client → {shared, server}`、`tools → {shared, server, client,
+contracts}`、`audit` 与 `contracts` MUST NOT require 任何兄弟单元。两条经
+裁决的豁免边：`server` MAY 仅因测试文件（客户端镜像驱动的 Memory/TCP 集成
+测试）require `client`，其生产代码 MUST NOT import `packages/client` 的任何
+包，该禁令由架构检查以源码级守卫强制；`client` 对 `server` 的 require 仅由
+`packages/client/cmd/mornlea` 应用入口消费（普通本地与 benchmark 模式在进程
+内装配本地权威 Host，与 tools 组合两侧的入口同构），client 域库包
+（client/render/mesh/lod/audio/assets）的任何文件 MUST NOT import
+`packages/server` 的包，该禁令同样由源码级守卫强制。
 `packages/audit` 的架构检查 MUST 枚举各单元真实 import 边并强制同一方向
-契约：`client` 的任何包 MUST NOT 依赖 `server` 或 `tools`，`server` 的生产
-包 MUST NOT 依赖 `client`、`tools`，`shared` MUST NOT 依赖 server、client、
-tools 的任何包。
+契约：`client` 的域库包 MUST NOT 依赖 `server` 或 `tools`（
+`packages/client/cmd/mornlea` 应用入口除外），`server` 的生产包 MUST NOT
+依赖 `client`、`tools`，`shared` MUST NOT 依赖 server、client、tools 的任何
+包。
 
 #### Scenario: 编译器拒绝未声明的跨单元导入
 
-- **GIVEN** `packages/client` 的某包源码导入 `packages/server` 的包
-- **WHEN** 在 workspace 下构建 `packages/client`
+- **GIVEN** `packages/shared` 的某包源码导入 `packages/server` 的包
+- **WHEN** 在 workspace 下构建 `packages/shared`
 - **THEN** 构建 MUST 因未声明 require 而失败
 - **AND** 即使补上 go.mod require，`packages/audit` 的单元边界检查 MUST
-  因 `client → server` 违反方向契约而失败
+  因 `shared → server` 违反方向契约而失败
 
 #### Scenario: server 生产代码不得导入 client
 
@@ -70,6 +75,24 @@ tools 的任何包。
 - **THEN** 该导入 MUST 被拒绝
 - **AND** `_test.go` 文件对 `packages/client` 的导入 MUST 被放行（客户端
   镜像驱动的集成测试）
+
+#### Scenario: client 域库不得导入 server
+
+- **GIVEN** `packages/client` 域库包（cmd/mornlea 子树之外）的某个文件导入
+  `packages/server` 的包
+- **WHEN** 架构检查扫描 client 域库源码
+- **THEN** 该导入 MUST 被拒绝（含 `_test.go`——镜像驱动方向固定为 server
+  测试消费 client 镜像）
+- **AND** `packages/client/cmd/mornlea` 应用入口（app/benchmark 装配本地
+  权威 Host）对 `packages/server` 的导入 MUST 被放行
+
+#### Scenario: server 的兄弟 require 集被门禁化
+
+- **GIVEN** `packages/server/go.mod` 的兄弟 require 集
+- **WHEN** 架构检查解析各单元 go.mod 的直接 require（间接 require 行不计入）
+- **THEN** server 的兄弟 require 集 MUST 恰为 `{shared, contracts, client}`
+- **AND** 多出的边 MUST 被单元边界检查拒绝，client 豁免边消失 MUST 被该
+  精确集断言拒绝
 
 #### Scenario: 架构检查跨模块枚举真实依赖边
 

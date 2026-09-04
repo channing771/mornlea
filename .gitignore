@@ -4,7 +4,7 @@
 *.test
 *.out
 
-# go build ./cmd/mornlea 的本地产物
+# go build ./packages/client/cmd/mornlea 的本地产物
 /mornlea
 
 # make visual-check / visual-update 默认输出目录（实拍图与差异图，仅调试用）
@@ -44,7 +44,10 @@ mem.prof
 
 # SDD 工作区（子代理驱动开发的账本与评审包）
 /.superpowers/
+# gfxspike 的 `go build` 产物：根路径覆盖仓库根发起的构建，
+# 包内路径覆盖在 packages/tools/gfxspike 目录下发起的构建
 /gfxspike
+/packages/tools/gfxspike/gfxspike
 /midscene_run/
 
 # 设备确认通道（scripts/agents/confirm）的 Node 工具链产物
@@ -55,4 +58,4 @@ packages/engine/crates/mornlea_client/frontend/node_modules/
 # 用，绝不写 dist/）
 packages/engine/crates/mornlea_client/frontend/visual-dist/
 scripts/agents/.npm-cache/
-/web/agent-board/dist/
+/packages/tools/agent-board/web/dist/

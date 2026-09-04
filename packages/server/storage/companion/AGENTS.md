@@ -7,7 +7,7 @@ tombstone、任务区/FIFO 载荷校验与伙伴存档值类型。
 值类型，哨兵经 `packages/server/storage/storagedef` 取用；不感知根包编排
 （companions.ai 文件的原子替换与路径编排在根包
 DiskStore/MemoryStore），`CompanionStore` 接口属根包存储契约家族，定义
-留在根包 `types.go`。依赖方向由 `internal/archcheck` 的
+留在根包 `types.go`。依赖方向由 `packages/audit` 的
 `TestInternalDependenciesAreOneWay` 强制。行为规格见
 `openspec/specs/local-data-migration/spec.md`；全树共享的迁移与数据安全
 纪律见上级 `../AGENTS.md`，本文件不重复。
@@ -99,4 +99,4 @@ DiskStore/MemoryStore），`CompanionStore` 接口属根包存储契约家族，
 - 定点测试：`go test ./packages/server/storage/companion -race -count=1`（纯
   codec 域，秒级，不编译执行其他域的测试）。
 - 根包编排：`go test ./packages/server/storage -run 'CompanionStore|DiskCompanion' -race -count=1`。
-- 依赖方向与文档守卫：`go test ./internal/archcheck -count=1`。
+- 依赖方向与文档守卫：`go test ./packages/audit -count=1`。

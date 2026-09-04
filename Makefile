@@ -7,19 +7,19 @@ export CARGO_TARGET_DIR ?= $(CURDIR)/packages/engine/target/cargo
 RUST_DIR := packages/engine
 RUST_DYLIB := $(RUST_DIR)/target/release/libmornlea_engine.dylib
 RUST_SO := $(RUST_DIR)/target/release/libmornlea_engine.so
-APP := ./cmd/mornlea
+APP := ./packages/client/cmd/mornlea
 BINARY := bin/mornlea
 SERVER := ./packages/server/cmd/mornlea-server
 SERVER_BINARY := bin/mornlea-server
 MORNLEA_DYLIB := bin/libmornlea_engine.dylib
 MORNLEA_SO := bin/libmornlea_engine.so
-PIXEL_PERFECTION_NOTICE_DIR := internal/assets/packs/pixel_perfection
+PIXEL_PERFECTION_NOTICE_DIR := packages/client/assets/packs/pixel_perfection
 PIXEL_PERFECTION_NOTICE_DEST := bin/third-party/pixel-perfection
 ARGS ?=
 
 # go.work 下 `go test ./...` 不跨嵌套模块；全部按模块枚举的入口（test 族、
 # dev-check、vet）显式循环该列表，防止新模块成为 ./... 盲区。
-GO_TEST_MODULES := . ./packages/contracts ./packages/server ./packages/shared
+GO_TEST_MODULES := ./packages/contracts ./packages/shared ./packages/server ./packages/client ./packages/tools ./packages/audit
 
 .PHONY: help run build build-linux-server test test-race test-race-short test-race-changed test-multiplayer bench-multiplayer archcheck fmt clean visual-check visual-update rust rust-check frontend-check frontend-visual-check frontend-visual-update dev-check companion-agent-check companion-agent-integration agent-planner agent-implementer agent-gates agent-dashboard agent-ui-dev
 
@@ -33,11 +33,11 @@ help:
 		'  make run              运行游戏，可通过 ARGS 传递参数' \
 		'  make build            构建 bin/mornlea、bin/mornlea-server 与同目录 Rust dylib' \
 		'  make build-linux-server 构建 Linux amd64 专服与同目录 Rust .so' \
-		'  make test             运行全部测试' \
-		'  make test-race        使用 race detector 运行全部测试' \
-		'  make test-race-short   race detector 快速冒烟(与 `-short` 同跳过重型测试)' \
+		'  make test             运行全部测试(按 go.work 六模块逐一循环)' \
+		'  make test-race        使用 race detector 运行全部测试(六模块循环,语义与单模块仓库一致)' \
+		'  make test-race-short   race detector 快速冒烟(六模块循环 + `-short` 跳过重型测试)' \
 		'  make test-race-changed 只对改动包及其反向依赖跑 race(T1 层;RACE_BASE=ref 换基线)' \
-		'  make dev-check        迭代期快检:gofmt/vet/短测试与 Rust 静态检查' \
+		'  make dev-check        迭代期快检:gofmt/六模块 vet+短测试与 Rust 静态检查' \
 		'  make test-multiplayer 运行 M3C 八玩家与 v6 报告测试' \
 		'  make bench-multiplayer 运行三组 M3C 多人微基准' \
 		'  make archcheck        验证依赖闭包与无图形服务端边界' \
@@ -91,6 +91,10 @@ frontend-visual-check:
 frontend-visual-update:
 	cd $(FRONTEND_DIR) && corepack pnpm visual-update
 
+# agent-board 看板前端：与菜单前端同一 corepack pnpm 钉版姿势（版本读
+# package.json 的 packageManager 字段），冻结安装保证可复现。
+AGENT_BOARD_WEB := packages/tools/agent-board/web
+
 build:
 	@mkdir -p $(dir $(BINARY))
 	$(GO) build -ldflags='-extldflags=-Wl,-rpath,@loader_path' -o $(BINARY) $(APP)
@@ -127,16 +131,16 @@ test-race-changed:
 	scripts/agents/race-changed.sh $(if $(RACE_BASE),--base $(RACE_BASE),)
 
 test-multiplayer:
-	$(GO) test ./internal/client ./packages/server/server ./cmd/mornlea/benchmark ./cmd/perfcheck \
+	$(GO) test ./packages/client/client ./packages/server/server ./packages/client/cmd/mornlea/benchmark ./packages/tools/perfcheck \
 		-run 'Test(PerfReportV6|ScenarioV6|PerfcheckV6|PerfcheckV5SameScenario|PerformanceThresholds|InterestObserver|HostStats|BenchmarkServerEpoch|BenchmarkServerMeasuredWindow)' -count=1
 
 bench-multiplayer:
-	$(GO) test ./packages/shared/network ./packages/server/server ./internal/render -run '^$$' \
+	$(GO) test ./packages/shared/network ./packages/server/server ./packages/client/render -run '^$$' \
 		-bench '(RemotePlayerStateCodec|EightPlayerInterest|RemoteAvatarNameTag)' -benchmem -count=3
 
 archcheck:
-	$(GO) test ./internal/archcheck -count=1
-	test -z "$$($(GO) list -deps $(SERVER) | rg '(internal|packages/client)/(client|mesh|render|gfx)|glfw|webgpu|x/image/font')"
+	$(GO) test ./packages/audit -count=1
+	test -z "$$($(GO) list -deps $(SERVER) | rg 'packages/client/(client|mesh|render)|gfxspike|glfw|webgpu|x/image/font')"
 
 # dev-check:迭代期快检——gofmt 检查、vet、全仓短测试(重型测试经 `-short` 跳过)
 # 与 Rust fmt/clippy/单测。完整门禁(test/test-race/visual-check/rust-check)
@@ -194,9 +198,9 @@ agent-gates:
 	./scripts/agents/gates.sh
 
 agent-dashboard:
-	npm --prefix web/agent-board ci
-	npm --prefix web/agent-board run build
-	go run ./cmd/mornlea-agent-board
+	cd $(AGENT_BOARD_WEB) && corepack pnpm install --frozen-lockfile
+	cd $(AGENT_BOARD_WEB) && corepack pnpm run build
+	$(GO) run ./packages/tools/agent-board
 
 agent-ui-dev:
-	npm --prefix web/agent-board run dev
+	cd $(AGENT_BOARD_WEB) && corepack pnpm run dev

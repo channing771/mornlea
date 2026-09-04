@@ -5,7 +5,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 
-	"github.com/channing771/mornlea/internal/client"
+	"github.com/channing771/mornlea/packages/client/client"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
 	"github.com/channing771/mornlea/packages/shared/physics"
@@ -18,7 +18,7 @@ import (
 //
 // 本用例刻意跨包（`package entity` 的测试引用 `internal/client`）：只有把两个
 // FluidSource 实现放进同一个进程、喂同一份方块数据，才谈得上「逐位相同」。
-// 生产依赖方向未变，internal/archcheck 扫的是生产 import，不受影响。
+// 生产依赖方向未变，packages/audit 扫的是生产 import，不受影响。
 //
 // 需要说明这条断言承重在哪：判定规则本身两侧共用 physics.SubmersionFlags，
 // 规则写错会一起错、差值恒等——所以这条守的不是规则，而是两个

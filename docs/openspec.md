@@ -130,7 +130,7 @@ Claude Code 与 Codex 使用同一个实现：`scripts/agent-hooks/guard.mjs`。
 以下改动在停止前必须存在包含 proposal、delta specs 和 tasks 的 active OpenSpec change：
 
 - 协议、存档格式、golden、性能基线或架构依赖门禁变化
-- 同时跨越两个及以上 `internal/*` 或 `cmd/*` 实现组件的 Go 修改
+- 同时跨越两个及以上 `packages/*` 单元（或其内部包）实现组件的 Go 修改
 
 首次加载项目 Hook：
 

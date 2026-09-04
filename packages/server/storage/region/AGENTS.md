@@ -4,7 +4,7 @@
 编解码、扇区空间分配与坐标换算，以及跨根包与 chunk 包共享的 `RegionKey`。
 本包是 storagedef 之上的格式叶子：只依赖 `packages/shared/core` 与
 `packages/server/storage/storagedef`，不感知 chunk 记录层容器与根包编排（方向由
-`internal/archcheck` 的 `TestInternalDependenciesAreOneWay` 强制）。行为
+`packages/audit` 的 `TestInternalDependenciesAreOneWay` 强制）。行为
 规格见 `openspec/specs/local-data-migration/spec.md`。
 
 ## 双 bank 布局与校验 (`region/region_format.go`)
@@ -53,4 +53,4 @@
 
 - 定点测试：`go test ./packages/server/storage/region -race -count=1`（纯格式
   原语，秒级，不编译执行其他域的测试）。
-- 依赖方向与文档守卫：`go test ./internal/archcheck -count=1`。
+- 依赖方向与文档守卫：`go test ./packages/audit -count=1`。

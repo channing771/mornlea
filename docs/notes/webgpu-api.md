@@ -117,8 +117,10 @@ static void *metalLayerFromNSWindow(uintptr_t nsWindowRef) {
 ```
 
 绑定自带 `wgpuglfw.GetSurfaceDescriptor(*glfw.Window)` 做同样的事，
-**但它 import 了 `go-gl/glfw/v3.4`**，与本工程「gfx 不依赖窗口库」的约束冲突，
-且本工程用的是 glfw v3.3，所以我们在 `internal/gfx/probe.go` 里自己重写了这段。
+**但它 import 了 `go-gl/glfw/v3.4`**，与彼时「gfx 不依赖窗口库」的约束冲突，
+且当时的工程用的是 glfw v3.3。替代实现属于历史：该探针曾位于已删除的
+`internal/gfx`（gfxspike 前身，Go 侧 GPU 探针），`metalLayerFromNSWindow`
+随该包一并移除；如今 `packages/tools/gfxspike` 已不接触任何 GPU 绑定。
 
 ### 配置与取帧
 

@@ -24,12 +24,12 @@ The static screenshots below are taken from the headless visual-verification gol
 
 <table>
   <tr>
-    <td><img src="cmd/mornlea/capture/testdata/golden/terrain-noon.png" width="380" alt="terrain-noon"></td>
-    <td><img src="cmd/mornlea/capture/testdata/golden/oak-grove.png" width="380" alt="oak-grove"></td>
+    <td><img src="testdata/visual-golden/world/terrain-noon.png" width="380" alt="terrain-noon"></td>
+    <td><img src="testdata/visual-golden/world/oak-grove.png" width="380" alt="oak-grove"></td>
   </tr>
   <tr>
-    <td><img src="cmd/mornlea/capture/testdata/golden/block-light-room.png" width="380" alt="block-light-room"></td>
-    <td><img src="cmd/mornlea/capture/testdata/golden/materials-showcase.png" width="380" alt="materials-showcase"></td>
+    <td><img src="testdata/visual-golden/world/block-light-room.png" width="380" alt="block-light-room"></td>
+    <td><img src="testdata/visual-golden/world/materials-showcase.png" width="380" alt="materials-showcase"></td>
   </tr>
 </table>
 
@@ -57,6 +57,24 @@ make run
 ```
 
 The first launch generates and loads terrain within the view distance and is noticeably slower than later runs. The default world is stored in `worlds/default`; pass `make run ARGS="--world worlds/demo"` for a separate save directory. `make build` builds the full Rust workspace and produces `bin/mornlea`, `bin/mornlea-server`, and an adjacent `libmornlea_engine.dylib`; no binary may be mixed with dependency libraries from a different build.
+
+## Repository Layout
+
+Go sources are organized as six unit modules governed by the root `go.work`, alongside the Rust workspace, the Python service, and dev tools under `packages/`:
+
+```text
+packages/
+  contracts/  cross-language JSON contracts (consumed by Go embed and Python)
+  shared/     domain packages shared by server and client (core, physics, network, world, …)
+  server/     authoritative simulation and storage (sim, fluid, storage, server, cmd/mornlea-server)
+  client/     presentation side and the graphical client (client, render, mesh, cmd/mornlea)
+  tools/      development tools (perfcheck, agent-board dashboard, gfxspike, …)
+  audit/      cross-module architecture gate test suite (archcheck)
+  engine/     Rust workspace (mornlea_engine numeric kernel and mornlea_client wgpu renderer)
+  agent/      standalone Python companion Agent service
+```
+
+Per-unit `AGENTS.md` files apply along the directory chain; module boundaries and dependency direction are documented in the [architecture notes (Chinese)](docs/architecture.md).
 
 ## Common Commands
 
@@ -115,7 +133,7 @@ Minimal LAN session:
 
 ```bash
 go run ./packages/server/cmd/mornlea-server --listen :25565 --world worlds/lan --seed 42 --max-players 8
-go run ./cmd/mornlea --connect 127.0.0.1:25565 --name PlayerA
+go run ./packages/client/cmd/mornlea --connect 127.0.0.1:25565 --name PlayerA
 ```
 
 ## Rust / Go Division
