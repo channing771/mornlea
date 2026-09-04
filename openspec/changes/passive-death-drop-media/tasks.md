@@ -24,3 +24,10 @@
 
 - [ ] 5.1 `gofmt` + 六模块 `go vet` + 受影响包全量 race + `go test ./packages/audit -count=1` + `openspec validate --all --strict --no-interactive` + `make visual-check`
 - [ ] 5.2 全量门禁与串行收尾：`make test-race` 全绿后 `git fetch origin && git rebase origin/feat/passive-graze-lure`（有冲突立即停下报 BLOCKED，不强解）
+
+## 6. 用户验收打磨波
+
+- [ ] 6.1 GIF 自适应调色板：逐基线直方图取色 + 确定性并列决胜 + 抖动，stdlib 内实现；四基线重抓，草绿/牛肉红棕保真（`packages/client/cmd/mornlea/capture`；验证 `go test ./packages/client/cmd/mornlea/capture -race -count=1` 与 `make visual-check`，GIF 逐帧复核）
+- [ ] 6.2 低头角重算 + 闲时点头/看人：吻部贴草常量重算并锁定；客户端 tick 驱动 pitch 点头；服务端闲时 6 格朝人规则（`packages/client/render`、`packages/server/sim/entity`；验证两包 `-race` 全绿）
+- [ ] 6.3 死亡掉落关联滞后呈现：邻域+tick 窗关联，50% 前隐藏、后 scale-in + 白闪，拾取不受影响（`packages/client/client`、`packages/client/render`；验证两包 `-race` 全绿）
+- [ ] 6.4 GIF 剧本语义升级：lure 跟随重写、graze 草→泥切换（含 capture-only 写块口）、kill 时机诚实；四基线重抓并逐帧人工确认（`packages/client/cmd/mornlea/capture`；验证 capture 测试 + `make visual-check`）
