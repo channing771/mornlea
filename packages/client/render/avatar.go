@@ -226,6 +226,21 @@ func PassiveGrazeHeadPitch(grazing bool) float32 {
 	return 0
 }
 
+// passiveIdleNodPeriodTicks 是闲时点头的正弦周期（权威 tick）：64 tick 约
+// 3 秒，40 tick 窗内必含极值，起伏肉眼可辨。
+const passiveIdleNodPeriodTicks = 64
+
+// passiveIdleNodAmplitude 是闲时点头的振幅（弧度）：0.09 约 5°，小幅不抢戏。
+const passiveIdleNodAmplitude = float32(0.09)
+
+// PassiveIdleNodPitch 由权威 tick 与牛 ID 派生闲时点头俯仰：慢速小幅正弦纯
+// 函数（掉落旋转同先例，禁用墙钟）；同 `(tick, ID)` 重放逐帧相同，ID 参与错
+// 相。只服务非放牧、非死亡的牛，调用方负责门控，本函数不读任何权威字段。
+func PassiveIdleNodPitch(tick, id uint64) float32 {
+	phase := 2 * math.Pi * float64((tick+id*7)%passiveIdleNodPeriodTicks) / passiveIdleNodPeriodTicks
+	return passiveIdleNodAmplitude * float32(math.Sin(phase))
+}
+
 // PassiveDeathTicks 是被动牛死亡保留的权威 tick 数：保留体在 T+19 仍在、
 // T+20 移除。渲染侧拥有该常量的呈现解释权；客户端镜像侧的同值常量与本值
 // 由应用装配包的边界测试钉住一致（见 `app` 的死亡保留边界测试）。
@@ -275,9 +290,18 @@ func appendPassiveAvatarParts(dst []avatarPart, avatar Avatar) []avatarPart {
 	}
 	hide := uint32(assets.LayerCowHide)
 	headLayer := uint32(assets.LayerCowHead)
+	// 牛头绕颈轴俯转：零俯仰时与旧链逐字节一致（直通分支），非零时头心绕颈
+	// 点摆动下压，吻部（头包围盒最低点）落在站立平面上 0.5 格以内；旧链绕头
+	// 心自转，任何角度都够不到 0.5（头心高 1.0、半对角仅 0.32）。
 	head := root.Mul4(mgl32.Translate3D(0.7, 1.0, 0)).
 		Mul4(mgl32.HomogRotate3DZ(avatar.Pitch)).
 		Mul4(mgl32.Scale3D(0.45, 0.45, 0.45))
+	if avatar.Pitch != 0 {
+		head = root.Mul4(mgl32.Translate3D(0.35, 0.85, 0)).
+			Mul4(mgl32.HomogRotate3DZ(avatar.Pitch)).
+			Mul4(mgl32.Translate3D(0.35, 0.15, 0)).
+			Mul4(mgl32.Scale3D(0.45, 0.45, 0.45))
+	}
 	dst = append(dst,
 		avatarPart{transform: head, color: white, material: headLayer},
 		avatarPart{

@@ -121,20 +121,25 @@ func AppendHostileRenderPresentationsInto(
 
 // AppendPassiveRenderPresentationsInto 把被动牛镜像转换为 avatar 记录：
 // 被动牛只进入实体通道，绝不进入名称标签集合（名标容量不随牛群数量变化）；
-// 牛头俯仰由放牧位经 `render.PassiveGrazeHeadPitch` 直通（置位下压、清位归
-// 零），死亡保留体的侧倒与红闪由 `render.PassiveDeathPhase` 按死亡 tick 与
-// 当前权威 tick 派生；位姿完全由权威镜像驱动，本函数不做任何推测。
+// 牛头俯仰由放牧位经 `render.PassiveGrazeHeadPitch` 直通（置位下压、清位时按
+// 权威 tick 叠闲时点头），死亡保留体的侧倒与红闪由 `render.PassiveDeathPhase`
+// 按死亡 tick 与当前权威 tick 派生；位姿完全由权威镜像驱动，本函数不做任何
+// 墙钟推测，点头相位只读权威 tick 与牛 ID。
 func AppendPassiveRenderPresentationsInto(
 	avatars []render.Avatar,
 	presentations []client.PassivePresentation,
 	nowTick uint64,
 ) []render.Avatar {
 	for _, presentation := range presentations {
+		pitch := render.PassiveGrazeHeadPitch(presentation.Grazing)
+		if !presentation.Grazing && !presentation.Dying {
+			pitch = render.PassiveIdleNodPitch(nowTick, presentation.ID)
+		}
 		avatar := render.Avatar{
 			Key:      render.PassiveEntityKey(presentation.ID),
 			Position: presentation.Position,
 			Yaw:      presentation.Yaw,
-			Pitch:    render.PassiveGrazeHeadPitch(presentation.Grazing),
+			Pitch:    pitch,
 		}
 		if presentation.Dying {
 			avatar.Roll, avatar.Flash = render.PassiveDeathPhase(presentation.DeathTick, presentation.ID, nowTick)
@@ -190,17 +195,81 @@ func CameraChunk(pos mgl32.Vec3) core.ChunkPos {
 	}.Chunk()
 }
 
-// appendItemDropInstances 把只读镜像转换为渲染实例，复用调用方切片。
+// appendItemDropInstances 把只读镜像转换为渲染实例，复用调用方切片。死亡
+// 保留期内的掉落按（死亡牛位置邻域 2 格 + upsert tick 落在 [deathTick,
+// deathTick+20] 窗内）关联死亡：关联只影响呈现（50% 前隐藏、后 scale-in +
+// 白闪，见 `render` 掉落 pass），拾取走权威不受影响。密集击杀下多个死亡同
+// 时命中一格时取最近者、再取小 ID——任取其一亦可接受，测试只锁确定性。
 func appendItemDropInstances(
 	dst []render.ItemDrop,
 	drops []client.ItemDropPresentation,
+	deaths []client.PassivePresentation,
 ) []render.ItemDrop {
 	for _, drop := range drops {
 		block, ok := render.ItemDropBlock(drop.ID.Chunk, drop.BlockIndex)
 		if !ok {
 			continue
 		}
-		dst = append(dst, render.ItemDrop{ID: drop.ID, Block: block, Item: drop.Item})
+		dst = append(dst, render.ItemDrop{
+			ID: drop.ID, Block: block, Item: drop.Item,
+			DeathTick: linkDeathTick(block, drop.UpsertTick, deaths),
+		})
 	}
 	return dst
+}
+
+// linkDeathTick 在死亡保留体中找与掉落关联的死亡 tick：切比雪夫邻域 2 格且
+// upsert tick 落在保留窗内；无命中返回 0（不关联）。
+func linkDeathTick(
+	block core.BlockPos,
+	upsertTick uint64,
+	deaths []client.PassivePresentation,
+) uint64 {
+	var (
+		bestTick uint64
+		bestDist int32 = 3
+		bestID   uint64
+		matched  bool
+	)
+	for _, death := range deaths {
+		if !death.Dying {
+			continue
+		}
+		if upsertTick < death.DeathTick || upsertTick-death.DeathTick > render.PassiveDeathTicks {
+			continue
+		}
+		grave := core.BlockPos{
+			X: int32(math.Floor(float64(death.Position.X()))),
+			Y: int32(math.Floor(float64(death.Position.Y()))),
+			Z: int32(math.Floor(float64(death.Position.Z()))),
+		}
+		dist := chebyshevBlockDistance(block, grave)
+		if dist > 2 {
+			continue
+		}
+		if !matched || dist < bestDist || (dist == bestDist && death.ID < bestID) {
+			bestTick, bestDist, bestID, matched = death.DeathTick, dist, death.ID, true
+		}
+	}
+	if !matched {
+		return 0
+	}
+	return bestTick
+}
+
+// chebyshevBlockDistance 返回两方块的切比雪夫距离（格）。
+func chebyshevBlockDistance(left, right core.BlockPos) int32 {
+	dx := left.X - right.X
+	if dx < 0 {
+		dx = -dx
+	}
+	dy := left.Y - right.Y
+	if dy < 0 {
+		dy = -dy
+	}
+	dz := left.Z - right.Z
+	if dz < 0 {
+		dz = -dz
+	}
+	return max(dx, max(dy, dz))
 }

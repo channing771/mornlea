@@ -26,11 +26,14 @@ const (
 	dropBaseAltitude = float32(0.5)
 )
 
-// ItemDrop 是一个权威掉落物的渲染输入；位置由方块位置决定。
+// ItemDrop 是一个权威掉落物的渲染输入；位置由方块位置决定。`DeathTick` 是
+// 可选的关联死亡 tick（0 表示未关联）：关联掉落在死亡相位 50% 前不渲染，
+// 50% 起 scale-in 渐显并叠一次白色闪光；纯呈现启发式，拾取走权威不受影响。
 type ItemDrop struct {
-	ID    core.DropID
-	Block core.BlockPos
-	Item  core.ItemID
+	ID        core.DropID
+	Block     core.BlockPos
+	Item      core.ItemID
+	DeathTick uint64
 }
 
 func buildItemDropParts(dst []avatarPart, serverTick uint64, drops []ItemDrop) []avatarPart {
@@ -42,6 +45,18 @@ func buildItemDropParts(dst []avatarPart, serverTick uint64, drops []ItemDrop) [
 		if !ok {
 			continue
 		}
+		scale := dropCubeSize
+		color := [4]float32{1, 1, 1, 1}
+		if drop.DeathTick != 0 {
+			visible, linkedScale, flash := deathLinkedDropAppearance(serverTick, drop.DeathTick)
+			if !visible {
+				continue
+			}
+			scale = dropCubeSize * linkedScale
+			if flash {
+				color = [4]float32{2, 2, 2, 1}
+			}
+		}
 		phase := dropAnimationPhase(serverTick, drop.ID)
 		center := mgl32.Vec3{
 			float32(drop.Block.X) + 0.5,
@@ -51,11 +66,31 @@ func buildItemDropParts(dst []avatarPart, serverTick uint64, drops []ItemDrop) [
 		}
 		transform := mgl32.Translate3D(center.X(), center.Y(), center.Z()).
 			Mul4(mgl32.HomogRotate3DY(phase.spin)).
-			Mul4(mgl32.Scale3D(dropCubeSize, dropCubeSize, dropCubeSize))
-		// 贴图分支忽略颜色通道（avatar.wgsl），填中性白保持编码确定。
-		dst = append(dst, avatarPart{transform: transform, color: [4]float32{1, 1, 1, 1}, material: material})
+			Mul4(mgl32.Scale3D(scale, scale, scale))
+		// 贴图分支颜色与漫反射相乘（见 avatar 着色器）：中性白保持原样，
+		// 超白即一次白色闪光；填色保持编码确定。
+		dst = append(dst, avatarPart{transform: transform, color: color, material: material})
 	}
 	return dst
+}
+
+// deathLinkedDropAppearance 计算关联掉落在当前权威 tick 的呈现：相位 50% 前
+// 不可见，50% 起以 scale-in 渐显（首现约一成、保留末长满），首现 3 tick 内叠
+// 一次白色闪光。返回值是（可见、缩放进度 0..1、白闪）。
+func deathLinkedDropAppearance(serverTick, deathTick uint64) (bool, float32, bool) {
+	const half = PassiveDeathTicks / 2
+	var elapsed uint64
+	if serverTick > deathTick {
+		elapsed = serverTick - deathTick
+	}
+	if elapsed < half {
+		return false, 0, false
+	}
+	progress := float32(elapsed-half+1) / float32(half+1)
+	if progress > 1 {
+		progress = 1
+	}
+	return true, progress, elapsed-half < 3
 }
 
 type dropPhase struct {

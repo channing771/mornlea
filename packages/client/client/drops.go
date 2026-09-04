@@ -12,13 +12,15 @@ import (
 // MaxItemDrops 是客户端掉落物镜像的固定容量，与服务端单会话上限一致。
 const MaxItemDrops = core.MaxSessionDrops
 
-// ItemDropPresentation 是一个掉落物的只读呈现值。
+// ItemDropPresentation 是一个掉落物的只读呈现值。`UpsertTick` 是最近一次
+// upsert 批次的权威 tick（死亡关联窗口的时钟，纯呈现事实）。
 type ItemDropPresentation struct {
 	ID         core.DropID
 	BlockIndex uint32
 	Item       core.ItemID
 	Count      uint8
 	Durability uint16
+	UpsertTick uint64
 }
 
 // ItemDrops 是权威掉落物的固定容量只读镜像。
@@ -67,7 +69,7 @@ func (mirror *ItemDrops) applyUpserts(upserts network.ItemDropUpserts) error {
 	for _, drop := range upserts.Drops {
 		mirror.drops[drop.ID] = ItemDropPresentation{
 			ID: drop.ID, BlockIndex: drop.BlockIndex, Item: drop.Item, Count: drop.Count,
-			Durability: drop.Durability,
+			Durability: drop.Durability, UpsertTick: upserts.ServerTick,
 		}
 	}
 	return nil

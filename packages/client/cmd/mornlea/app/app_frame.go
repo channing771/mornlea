@@ -328,7 +328,7 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		started = renderNow()
 	}
 	a.itemDropInstances = appendItemDropInstances(
-		a.itemDropInstances[:0], a.itemDrops.Presentations(),
+		a.itemDropInstances[:0], a.itemDrops.Presentations(), a.passivePresentations,
 	)
 	a.dropStream = a.entityEncoder.EncodeItemDropInstances(a.dropStream, a.serverTick, a.itemDropInstances)
 	a.outlineStream = a.entityEncoder.EncodeBlockOutlineInstances(a.outlineStream, blockOutline)
