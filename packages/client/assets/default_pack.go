@@ -6,13 +6,13 @@ import (
 	"io/fs"
 )
 
-//go:embed packs/pixel_perfection
+//go:embed packs/pastelcraft
 var defaultPackFS embed.FS
 
 // NewDefaultRegistry 构造带 Mornlea 内嵌默认材质的注册表。
 func NewDefaultRegistry() *Registry {
 	registry := NewRegistry()
-	root, err := fs.Sub(defaultPackFS, "packs/pixel_perfection")
+	root, err := fs.Sub(defaultPackFS, "packs/pastelcraft")
 	if err != nil {
 		panic(fmt.Sprintf("assets: 打开内嵌默认材质包: %v", err))
 	}

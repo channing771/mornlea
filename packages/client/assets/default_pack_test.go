@@ -24,46 +24,81 @@ import (
 )
 
 const (
-	pixelPerfectionRepository = "https://github.com/minetest-texture-packs/Pixel-Perfection"
-	pixelPerfectionCommit     = "7935d064fc6f993d1b5038ed5ec17a615600cf0a"
-	pixelPerfectionLicenseURL = "https://creativecommons.org/licenses/by-sa/4.0/legalcode.txt"
+	pastelcraftProjectPage = "https://modrinth.com/resourcepack/pastelcraft"
+	pastelcraftAuthor      = "XradicalD"
+	pastelcraftVersion     = "Pastelcraft 1.21.11 [R21]"
+	pastelcraftVersionID   = "wE5aqTkH"
+	pastelcraftDownloadURL = "https://cdn.modrinth.com/data/NmJMsiNC/versions/wE5aqTkH/Pastelcraft%201.21.11%20R21.zip"
+	pastelcraftZIPSHA256   = "6cb32d1eb30fa7db4e683cda8f9f24de666b09f819badd8a609c66167a58ebcb"
+	pastelcraftLicenseURL  = "https://opensource.org/licenses/MIT"
 )
 
-var pixelPerfectionSources = map[string]string{
-	"stone": "default/default_stone.png", "dirt": "default/default_dirt.png",
-	"grass_top": "default/default_grass.png", "grass_side": "default/default_grass_side.png",
-	"bedrock": "bedrock/bedrock.png", "stone_brick": "default/default_stone_brick.png",
-	"furnace": "default/default_furnace_front.png", "iron_block": "default/default_steel_block.png",
-	"leaves": "default/default_leaves_simple.png", "glass": "default/default_glass.png",
-	"cobblestone": "default/default_cobble.png", "sand": "default/default_sand.png",
-	"gravel": "default/default_gravel.png", "oak_log_side": "default/default_tree.png",
-	"oak_log_top": "default/default_tree_top.png", "oak_planks": "default/default_wood.png",
-	"brick": "default/default_brick.png", "white_wool": "wool/wool_white.png",
-	"clay": "default/default_clay.png", "snow_top": "default/default_snow.png",
-	"snow_side": "default/default_snow.png", "mossy_cobblestone": "default/default_mossycobble.png",
-	"farmland_dry": "farming/farming_soil.png", "farmland_wet": "farming/farming_soil_wet.png",
-	"wheat_0": "farming/farming_wheat_1.png", "wheat_1": "farming/farming_wheat_2.png",
-	"wheat_2": "farming/farming_wheat_3.png", "wheat_3": "farming/farming_wheat_4.png",
-	"wheat_4": "farming/farming_wheat_5.png", "wheat_5": "farming/farming_wheat_6.png",
-	"wheat_6": "farming/farming_wheat_7.png", "wheat_7": "farming/farming_wheat_8.png",
+// pastelcraftSources 把内嵌槽位名映射到 ZIP 内文件名（`assets/minecraft/textures/block/`
+// 前缀此处省略，`PROVENANCE.json` 逐条记录完整路径）。逐槽位照抄换肤映射表；
+// `→ 回退` 的槽位不得用别图硬凑，因此不在此表出现。
+var pastelcraftSources = map[string]string{
+	"stone": "stone.png", "dirt": "dirt.png",
+	"grass_top": "grass_block_top.png", "grass_side": "grass_block_side.png",
+	"bedrock": "bedrock.png", "stone_brick": "stone_bricks.png",
+	"coal_ore": "coal_ore.png", "iron_ore": "iron_ore.png",
+	"furnace": "furnace_front.png", "iron_block": "iron_block.png",
+	"leaves": "oak_leaves.png", "glass": "glass.png",
+	"cobblestone": "cobblestone.png", "smooth_stone": "smooth_stone.png",
+	"sand": "sand.png", "gravel": "gravel.png",
+	"oak_log_side": "oak_log.png", "oak_log_top": "oak_log_top.png",
+	"oak_planks": "oak_planks.png", "brick": "bricks.png",
+	"white_wool": "white_wool.png", "clay": "clay.png",
+	"snow_top": "snow.png", "snow_side": "snow.png",
+	"mossy_cobblestone": "mossy_cobblestone.png",
+	"farmland_dry":      "farmland.png", "farmland_wet": "farmland_moist.png",
+	"wheat_0": "wheat_stage0.png", "wheat_1": "wheat_stage1.png",
+	"wheat_2": "wheat_stage2.png", "wheat_3": "wheat_stage3.png",
+	"wheat_4": "wheat_stage4.png", "wheat_5": "wheat_stage5.png",
+	"wheat_6": "wheat_stage6.png", "wheat_7": "wheat_stage7.png",
+	"potato_0": "potatoes_stage0.png", "potato_1": "potatoes_stage1.png",
+	"potato_2": "potatoes_stage2.png", "potato_3": "potatoes_stage3.png",
+	"carrot_0": "carrots_stage0.png", "carrot_1": "carrots_stage1.png",
+	"carrot_2": "carrots_stage2.png", "carrot_3": "carrots_stage3.png",
+	"workbench_top": "crafting_table_top.png", "workbench_side": "crafting_table_side.png",
+	"torch": "torch.png", "short_grass": "short_grass.png",
+	"crack_0": "destroy_stage_0.png", "crack_1": "destroy_stage_1.png",
+	"crack_2": "destroy_stage_2.png", "crack_3": "destroy_stage_3.png",
+	"crack_4": "destroy_stage_4.png", "crack_5": "destroy_stage_5.png",
+	"crack_6": "destroy_stage_6.png", "crack_7": "destroy_stage_7.png",
+	"crack_8": "destroy_stage_8.png", "crack_9": "destroy_stage_9.png",
 }
 
-var pixelPerfectionLayers = map[string]uint16{
+var pastelcraftLayers = map[string]uint16{
 	"stone": LayerStone, "dirt": LayerDirt, "grass_top": LayerGrassTop, "grass_side": LayerGrassSide,
-	"bedrock": LayerBedrock, "stone_brick": LayerStoneBrick, "furnace": LayerFurnace,
-	"iron_block": LayerIronBlock, "leaves": LayerLeaves, "glass": LayerGlass,
-	"cobblestone": LayerCobblestone, "sand": LayerSand, "gravel": LayerGravel,
+	"bedrock": LayerBedrock, "stone_brick": LayerStoneBrick,
+	"coal_ore": LayerCoalOre, "iron_ore": LayerIronOre,
+	"furnace": LayerFurnace, "iron_block": LayerIronBlock,
+	"leaves": LayerLeaves, "glass": LayerGlass,
+	"cobblestone": LayerCobblestone, "smooth_stone": LayerSmoothStone,
+	"sand": LayerSand, "gravel": LayerGravel,
 	"oak_log_side": LayerOakLogSide, "oak_log_top": LayerOakLogTop, "oak_planks": LayerOakPlanks,
-	"brick": LayerBrick, "white_wool": LayerWhiteWool, "clay": LayerClay, "snow_top": LayerSnowTop,
-	"snow_side": LayerSnowSide, "mossy_cobblestone": LayerMossyCobblestone,
+	"brick": LayerBrick, "white_wool": LayerWhiteWool, "clay": LayerClay,
+	"snow_top": LayerSnowTop, "snow_side": LayerSnowSide, "mossy_cobblestone": LayerMossyCobblestone,
 	"farmland_dry": LayerFarmlandDry, "farmland_wet": LayerFarmlandWet,
 	"wheat_0": LayerWheat0, "wheat_1": LayerWheat1, "wheat_2": LayerWheat2, "wheat_3": LayerWheat3,
 	"wheat_4": LayerWheat4, "wheat_5": LayerWheat5, "wheat_6": LayerWheat6, "wheat_7": LayerWheat7,
+	"potato_0": LayerPotato0, "potato_1": LayerPotato1, "potato_2": LayerPotato2, "potato_3": LayerPotato3,
+	"carrot_0": LayerCarrot0, "carrot_1": LayerCarrot1, "carrot_2": LayerCarrot2, "carrot_3": LayerCarrot3,
+	"workbench_top": LayerWorkbenchTop, "workbench_side": LayerWorkbenchSide,
+	"torch": LayerTorch, "short_grass": LayerShortGrass,
+	"crack_0": LayerCrack0, "crack_1": LayerCrack1, "crack_2": LayerCrack2, "crack_3": LayerCrack3,
+	"crack_4": LayerCrack4, "crack_5": LayerCrack5, "crack_6": LayerCrack6, "crack_7": LayerCrack7,
+	"crack_8": LayerCrack8, "crack_9": LayerCrack9,
 }
 
 var proceduralFallbackLayers = []uint16{
-	LayerCoalOre, LayerIronOre, LayerLightBlock, LayerRoofTile, LayerWater, LayerSmoothStone, LayerChest,
-	LayerShortGrass, LayerCowHide, LayerCowHead,
+	LayerChest, LayerLightBlock, LayerRoofTile, LayerWater,
+	LayerPotato4, LayerPotato5, LayerPotato6, LayerPotato7,
+	LayerCarrot4, LayerCarrot5, LayerCarrot6, LayerCarrot7,
+	LayerDoor, LayerWorkbenchBottom,
+	LayerBedFootSouth, LayerBedFootWest, LayerBedFootNorth, LayerBedFootEast,
+	LayerBedHeadSouth, LayerBedHeadWest, LayerBedHeadNorth, LayerBedHeadEast,
+	LayerCowHide, LayerCowHead,
 }
 
 // foodPackPage 是牛肉图标的上游页面：OpenGameArt 的 16x16 Food（作者
@@ -84,44 +119,37 @@ var foodPackLayers = map[string]uint16{
 	"raw_beef": LayerRawBeef, "cooked_beef": LayerCookedBeef,
 }
 
-type pixelPerfectionProvenance struct {
-	UpstreamRepository string `json:"upstream_repository"`
-	UpstreamCommit     string `json:"upstream_commit"`
-	License            struct {
+type pastelcraftProvenance struct {
+	UpstreamProject   string `json:"upstream_project"`
+	UpstreamAuthor    string `json:"upstream_author"`
+	UpstreamVersion   string `json:"upstream_version"`
+	UpstreamVersionID string `json:"upstream_version_id"`
+	DownloadURL       string `json:"download_url"`
+	ZIPSHA256         string `json:"zip_sha256"`
+	License           struct {
 		ID  string `json:"id"`
 		URL string `json:"url"`
 	} `json:"license"`
-	Modification string                           `json:"modification"`
-	Files        []pixelPerfectionProvenanceEntry `json:"files"`
+	Modification string                       `json:"modification"`
+	Files        []pastelcraftProvenanceEntry `json:"files"`
 }
 
-type pixelPerfectionProvenanceEntry struct {
+type pastelcraftProvenanceEntry struct {
 	Destination string `json:"destination"`
 	Source      string `json:"source"`
-	// SourceURL 与 License 只出现在非 Pixel Perfection 上游的文件条目上
-	// （牛肉图标的 OpenGameArt 页面与 CC0 协议）：Pixel Perfection 子集的
-	// 33 个条目沿用顶层 upstream/license，不逐文件重复。
+	// SourceURL 与 License 只出现在非 Pastelcraft 上游的文件条目上
+	// （牛肉图标的 OpenGameArt 页面与 CC0 协议）：Pastelcraft 子集的
+	// 57 个条目沿用顶层 upstream/license，不逐文件重复。
 	SourceURL string `json:"source_url,omitempty"`
 	License   *struct {
 		ID  string `json:"id"`
 		URL string `json:"url"`
 	} `json:"license,omitempty"`
 	SHA256 string `json:"sha256"`
-	// Derived 记录逐文件的派生合成信息。内嵌默认包中的 grass_side.png 不再是
-	// 上游的原始 overlay，而是把草缘合成到 dirt 之上得到的完全不透明图——
-	// 派生必须被记录，不能假装是上游原样拷贝（TestOpaqueLayersAreFullyOpaque 与
-	// 这里的断言共同锁住这一点）。
-	Derived *pixelPerfectionProvenanceDerived `json:"derived,omitempty"`
-}
-
-// pixelPerfectionProvenanceDerived 描述一个派生材质文件由哪些上游素材如何合成而来。
-type pixelPerfectionProvenanceDerived struct {
-	Sources []string `json:"sources"`
-	Note    string   `json:"note"`
 }
 
 func TestEmbeddedDefaultPackProvenance(t *testing.T) {
-	root := os.DirFS("packs/pixel_perfection")
+	root := os.DirFS("packs/pastelcraft")
 	for _, name := range []string{"pack.json", "ATTRIBUTION.md", "LICENSE.txt", "PROVENANCE.json"} {
 		if _, err := fs.ReadFile(root, name); err != nil {
 			t.Fatalf("读取必需元数据 %s: %v", name, err)
@@ -139,7 +167,7 @@ func TestEmbeddedDefaultPackProvenance(t *testing.T) {
 	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
 		t.Fatalf("解析 pack.json: %v", err)
 	}
-	if manifest.Format != 1 || manifest.Name != "Pixel Perfection for Mornlea" {
+	if manifest.Format != 1 || manifest.Name != pastelcraftDefaultPackName {
 		t.Fatalf("pack.json = %+v", manifest)
 	}
 
@@ -148,7 +176,7 @@ func TestEmbeddedDefaultPackProvenance(t *testing.T) {
 		t.Fatal(err)
 	}
 	licenseSum := sha256.Sum256(license)
-	if got := hex.EncodeToString(licenseSum[:]); got != "091d08965bb70d444daccb62c5bcc4345cd4d6a65267da1f06564c95d25d9abb" {
+	if got := hex.EncodeToString(licenseSum[:]); got != "8bf97eb82f6ae8f62059b8142d77fa8d7911c16eff29ea4c1de087324fb54b67" {
 		t.Fatalf("LICENSE.txt SHA-256 = %s", got)
 	}
 
@@ -157,9 +185,11 @@ func TestEmbeddedDefaultPackProvenance(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, required := range []string{
-		"Hugh “XSSheep” Rutland", "Toby109tt", "tacotexmex", "devurandom",
-		pixelPerfectionRepository, pixelPerfectionCommit, pixelPerfectionLicenseURL,
+		pastelcraftAuthor, "Square Dreams",
+		pastelcraftProjectPage, pastelcraftVersion, pastelcraftVersionID,
+		pastelcraftDownloadURL, pastelcraftZIPSHA256, pastelcraftLicenseURL,
 		"without pixel transformations",
+		"ZIP 内未附许可文本，许可依据 Modrinth 页面/API 的 MIT 声明",
 	} {
 		if !strings.Contains(string(attribution), required) {
 			t.Errorf("ATTRIBUTION.md 缺少 %q", required)
@@ -170,27 +200,32 @@ func TestEmbeddedDefaultPackProvenance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var provenance pixelPerfectionProvenance
+	var provenance pastelcraftProvenance
 	if err := json.Unmarshal(provenanceBytes, &provenance); err != nil {
 		t.Fatalf("解析 PROVENANCE.json: %v", err)
 	}
-	if provenance.UpstreamRepository != pixelPerfectionRepository || provenance.UpstreamCommit != pixelPerfectionCommit {
-		t.Errorf("upstream = %q@%q", provenance.UpstreamRepository, provenance.UpstreamCommit)
+	if provenance.UpstreamProject != pastelcraftProjectPage || provenance.UpstreamAuthor != pastelcraftAuthor ||
+		provenance.UpstreamVersion != pastelcraftVersion || provenance.UpstreamVersionID != pastelcraftVersionID {
+		t.Errorf("upstream = %q %q %q@%q", provenance.UpstreamProject, provenance.UpstreamAuthor,
+			provenance.UpstreamVersion, provenance.UpstreamVersionID)
 	}
-	if provenance.License.ID != "CC-BY-SA-4.0" || provenance.License.URL != pixelPerfectionLicenseURL {
+	if provenance.DownloadURL != pastelcraftDownloadURL || provenance.ZIPSHA256 != pastelcraftZIPSHA256 {
+		t.Errorf("download = %q zip = %q", provenance.DownloadURL, provenance.ZIPSHA256)
+	}
+	if provenance.License.ID != "MIT" || provenance.License.URL != pastelcraftLicenseURL {
 		t.Errorf("license = %+v", provenance.License)
 	}
 	if provenance.Modification != "Selected and renamed a subset without pixel transformations." {
 		t.Errorf("modification = %q", provenance.Modification)
 	}
-	if len(provenance.Files) != len(pixelPerfectionSources)+len(foodPackSources) {
-		t.Fatalf("provenance 文件数 = %d，想要 %d", len(provenance.Files), len(pixelPerfectionSources)+len(foodPackSources))
+	if len(provenance.Files) != len(pastelcraftSources)+len(foodPackSources) {
+		t.Fatalf("provenance 文件数 = %d，想要 %d", len(provenance.Files), len(pastelcraftSources)+len(foodPackSources))
 	}
 
 	seen := make(map[string]bool, len(provenance.Files))
 	for _, entry := range provenance.Files {
 		logicalName := strings.TrimSuffix(path.Base(entry.Destination), ".png")
-		wantSource, ok := pixelPerfectionSources[logicalName]
+		wantSource, ok := pastelcraftSources[logicalName]
 		_, isFood := foodPackSources[logicalName]
 		if isFood {
 			wantSource, ok = foodPackSources[logicalName], true
@@ -204,21 +239,12 @@ func TestEmbeddedDefaultPackProvenance(t *testing.T) {
 			continue
 		}
 		seen[logicalName] = true
+		// Pastelcraft 子集条目记录 ZIP 内完整路径，牛肉条目沿用旧包的相对路径。
+		if !isFood {
+			wantSource = "assets/minecraft/textures/block/" + wantSource
+		}
 		if entry.Source != wantSource {
 			t.Errorf("%s source = %q，想要 %q", logicalName, entry.Source, wantSource)
-		}
-		if logicalName == "grass_side" {
-			if entry.Derived == nil {
-				t.Errorf("grass_side 缺少 derived 派生记录")
-			} else if len(entry.Derived.Sources) != 2 ||
-				entry.Derived.Sources[0] != "default/default_grass_side.png" ||
-				entry.Derived.Sources[1] != "default/default_dirt.png" {
-				t.Errorf("grass_side derived.sources = %v，想要 [default/default_grass_side.png default/default_dirt.png]", entry.Derived.Sources)
-			} else if entry.Derived.Note == "" {
-				t.Errorf("grass_side derived.note 为空")
-			}
-		} else if entry.Derived != nil {
-			t.Errorf("%s 出现了非预期的 derived 记录", logicalName)
 		}
 		if isFood {
 			// 牛肉条目必须逐文件记清外网来源与协议：缺来源即拒绝入库。
@@ -229,7 +255,7 @@ func TestEmbeddedDefaultPackProvenance(t *testing.T) {
 				t.Errorf("%s license = %+v，想要 %s/%s", logicalName, entry.License, foodPackLicenseID, foodPackLicenseURL)
 			}
 		} else if entry.SourceURL != "" || entry.License != nil {
-			t.Errorf("%s 是 Pixel Perfection 子集文件，不得携带逐文件来源/协议", logicalName)
+			t.Errorf("%s 是 Pastelcraft 子集文件，不得携带逐文件来源/协议", logicalName)
 		}
 
 		file, err := root.Open(entry.Destination)
@@ -270,7 +296,7 @@ func TestEmbeddedDefaultPackProvenance(t *testing.T) {
 		t.Fatalf("遍历内嵌 PNG: %v", err)
 	}
 	var wantPNGFiles []string
-	for logicalName := range pixelPerfectionSources {
+	for logicalName := range pastelcraftSources {
 		wantPNGFiles = append(wantPNGFiles, "textures/"+logicalName+".png")
 	}
 	for logicalName := range foodPackSources {
@@ -286,11 +312,11 @@ func TestEmbeddedDefaultPackProvenance(t *testing.T) {
 func TestEmbeddedDefaultPackLayersAndFallbacks(t *testing.T) {
 	procedural := NewRegistry()
 	embedded := NewDefaultRegistry()
-	root, err := fs.Sub(defaultPackFS, "packs/pixel_perfection")
+	root, err := fs.Sub(defaultPackFS, "packs/pastelcraft")
 	if err != nil {
 		t.Fatalf("打开内嵌默认包: %v", err)
 	}
-	for logicalName, layer := range pixelPerfectionLayers {
+	for logicalName, layer := range pastelcraftLayers {
 		data, err := fs.ReadFile(root, "textures/"+logicalName+".png")
 		if err != nil {
 			t.Fatalf("读取 %s: %v", logicalName, err)
@@ -344,7 +370,7 @@ func atlasPixelsForTest(t *testing.T, registry *Registry) (int, []byte) {
 }
 
 func TestEmbeddedDefaultPackMetadata(t *testing.T) {
-	root, err := fs.Sub(defaultPackFS, "packs/pixel_perfection")
+	root, err := fs.Sub(defaultPackFS, "packs/pastelcraft")
 	if err != nil {
 		t.Fatalf("打开内嵌默认包: %v", err)
 	}
@@ -493,7 +519,7 @@ func TestEmbeddedCowLayersKeepProceduralFallback(t *testing.T) {
 			t.Fatalf("牛身层 %d 被默认包覆盖：牛身纹理必须只来自程序化生成路径", layer)
 		}
 	}
-	root, err := fs.Sub(defaultPackFS, "packs/pixel_perfection")
+	root, err := fs.Sub(defaultPackFS, "packs/pastelcraft")
 	if err != nil {
 		t.Fatalf("打开内嵌默认包: %v", err)
 	}
@@ -507,7 +533,7 @@ func TestEmbeddedCowLayersKeepProceduralFallback(t *testing.T) {
 // TestEmbeddedBeefAttribution 锁定牛肉图标的署名：作者、上游页面与 CC0 协议
 // 缺一不可。
 func TestEmbeddedBeefAttribution(t *testing.T) {
-	root := os.DirFS("packs/pixel_perfection")
+	root := os.DirFS("packs/pastelcraft")
 	attribution, err := fs.ReadFile(root, "ATTRIBUTION.md")
 	if err != nil {
 		t.Fatal(err)
@@ -544,7 +570,7 @@ var pastelcraftDirtLayers = map[string]uint16{
 }
 
 // TestEmbeddedDefaultPackIsPastelcraft 锁定内嵌默认包的产品外观基线：包名已换成
-// 新包、泥土系槽位既不再是程序化像素也不再是旧包字节。换肤实现落地前保持红色。
+// 新包、泥土系槽位既不再是程序化像素也不再是旧包字节。
 func TestEmbeddedDefaultPackIsPastelcraft(t *testing.T) {
 	root, err := fs.Sub(defaultPackFS, "packs/pastelcraft")
 	if err != nil {

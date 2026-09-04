@@ -2,7 +2,6 @@ package assets
 
 import (
 	"bytes"
-	"errors"
 	"image/color"
 	"io/fs"
 	"testing"
@@ -80,15 +79,20 @@ func TestShortGrassUsesAppendedProceduralCutoutLayer(t *testing.T) {
 func TestShortGrassPackOverrideAndDefaultFallback(t *testing.T) {
 	procedural := NewRegistry()
 	defaults := NewDefaultRegistry()
-	if got, want := defaults.LayerRGBA(int(expectedShortGrassLayer)), procedural.LayerRGBA(int(expectedShortGrassLayer)); !bytes.Equal(got, want) {
-		t.Fatal("默认包缺少 short_grass.png 时未保留程序化 fallback")
-	}
-	root, err := fs.Sub(defaultPackFS, "packs/pixel_perfection")
+	root, err := fs.Sub(defaultPackFS, "packs/pastelcraft")
 	if err != nil {
 		t.Fatalf("打开默认材质包: %v", err)
 	}
-	if _, err := fs.Stat(root, "textures/short_grass.png"); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("默认包不得携带 textures/short_grass.png，stat error = %v", err)
+	// 内嵌默认包携带短草贴图：默认层即包内像素，不再是程序化 fallback。
+	data, err := fs.ReadFile(root, "textures/short_grass.png")
+	if err != nil {
+		t.Fatalf("读取内嵌 short_grass.png: %v", err)
+	}
+	if got, want := defaults.LayerRGBA(int(expectedShortGrassLayer)), normalizePNGForTest(t, data); !bytes.Equal(got, want) {
+		t.Fatal("默认短草层未使用内嵌 PNG")
+	}
+	if got, want := defaults.LayerRGBA(int(expectedShortGrassLayer)), procedural.LayerRGBA(int(expectedShortGrassLayer)); bytes.Equal(got, want) {
+		t.Fatal("默认短草层仍是程序化像素：换肤后必须来自内嵌新包")
 	}
 
 	want, encoded := solidPNG(t, 16, 16, color.NRGBA{R: 24, G: 180, B: 72, A: 255})

@@ -43,6 +43,18 @@
 - 回退时必须先停服，再恢复升级前的完整备份；不承诺把 metadata v3、schema v9 区块、schema v8 玩家档、`hostile_mobs.bin` v1、`companions.ai` v5 或新物品降级写回，不能让旧程序直接打开已升级目录后继续写入；
 - 异常退出时玩家、伙伴与区块文件各自原子，但它们之间没有跨文件事务。
 
+## 内嵌默认材质包
+
+- 内嵌默认包为 Pastelcraft 子集（MIT，作者 XradicalD，版本 `Pastelcraft 1.21.11 [R21]`；
+  来源、改名映射与逐文件哈希见 `packages/client/assets/packs/pastelcraft/` 的
+  `ATTRIBUTION.md`/`PROVENANCE.json`），替代此前的 Pixel Perfection 子集
+  （CC BY-SA 4.0）；牛肉图标仍沿用 OpenGameArt `16x16 Food`（CC0），牛皮与牛头
+  仍是程序化像素；
+- 槽位名（`textures/<name>.png`）、`pack.json` 契约（`format=1`）、16×16/≤64KiB
+  全包拒绝语义与缺槽位程序化回退均不变，用户目录 override 按同名槽位继续生效；
+- `openspec/specs` 无需为本次换肤变更：`texture-pack-loading` 的行为契约未动，
+  变化的只是默认包内的像素内容（随所属 change 的 delta spec 生效与归档时同步）。
+
 ## benchmark 报告兼容
 
 - benchmark producer 为 scenario v22，固定输入仍是七名远端玩家、零伙伴、不注入聊天，被测世界不注水且不含农业方块（v22 起固定世界在合格草地上方确定性新增自然短草）；scenario 版本变化记录的是被测进程本身的改变（HUD 固定上传布局与保留面最坏组合、每帧实例前缀字节数、HUD 图集列数、稳定方块与 mesh registry、worldgen ABI、权威 tick 工作量等），性能数值只在同 scenario 版本内可比；

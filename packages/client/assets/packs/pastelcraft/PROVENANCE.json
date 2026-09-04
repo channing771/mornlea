@@ -1,0 +1,320 @@
+{
+  "upstream_project": "https://modrinth.com/resourcepack/pastelcraft",
+  "upstream_author": "XradicalD",
+  "upstream_version": "Pastelcraft 1.21.11 [R21]",
+  "upstream_version_id": "wE5aqTkH",
+  "download_url": "https://cdn.modrinth.com/data/NmJMsiNC/versions/wE5aqTkH/Pastelcraft%201.21.11%20R21.zip",
+  "zip_sha256": "6cb32d1eb30fa7db4e683cda8f9f24de666b09f819badd8a609c66167a58ebcb",
+  "license": {
+    "id": "MIT",
+    "url": "https://opensource.org/licenses/MIT"
+  },
+  "modification": "Selected and renamed a subset without pixel transformations.",
+  "files": [
+    {
+      "destination": "textures/bedrock.png",
+      "source": "assets/minecraft/textures/block/bedrock.png",
+      "sha256": "aadde2598058f3ba574fff159721fc2bbe6115c6045ad8101991e9fb2e47f433"
+    },
+    {
+      "destination": "textures/brick.png",
+      "source": "assets/minecraft/textures/block/bricks.png",
+      "sha256": "9f9b65b189af13d13a9c0cfb5676d24c52f153cecbf19e5bd4c2bfa7d5809fd8"
+    },
+    {
+      "destination": "textures/carrot_0.png",
+      "source": "assets/minecraft/textures/block/carrots_stage0.png",
+      "sha256": "d4c9e2b94487fa97457052c3f0f8076b5fd9f340e83b1d134bd426b461270999"
+    },
+    {
+      "destination": "textures/carrot_1.png",
+      "source": "assets/minecraft/textures/block/carrots_stage1.png",
+      "sha256": "a575abbe1401dc7f3d5e6ef8958e4b65206d307e74f45619749769956a2cd304"
+    },
+    {
+      "destination": "textures/carrot_2.png",
+      "source": "assets/minecraft/textures/block/carrots_stage2.png",
+      "sha256": "cb2d4b6c3b1b66b1b8e9d55701a2554ba5d29ce9140daebcd503fdc50058183e"
+    },
+    {
+      "destination": "textures/carrot_3.png",
+      "source": "assets/minecraft/textures/block/carrots_stage3.png",
+      "sha256": "b00af51b52bb46008725632627c7463c78991b986e7e9c9db6b384191d09eee1"
+    },
+    {
+      "destination": "textures/clay.png",
+      "source": "assets/minecraft/textures/block/clay.png",
+      "sha256": "a528dae6c2316693e1044373a76d4abf55c71db515bb5914e465ccf40ec05d28"
+    },
+    {
+      "destination": "textures/coal_ore.png",
+      "source": "assets/minecraft/textures/block/coal_ore.png",
+      "sha256": "c2742cb339e37bb7b22bb6d12eb9dd8b303d534e7fd7bd982ef7d0a3a5af873e"
+    },
+    {
+      "destination": "textures/cobblestone.png",
+      "source": "assets/minecraft/textures/block/cobblestone.png",
+      "sha256": "11b2fd468a59cf62eeeec9479cca836f959ce824156ff120fecd7c469d3fbe4d"
+    },
+    {
+      "destination": "textures/cooked_beef.png",
+      "source": "food/steak_grilled.png",
+      "source_url": "https://opengameart.org/content/16x16-food",
+      "license": {
+        "id": "CC0-1.0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "sha256": "fc3c9f5bf88d196ef2f557b5035bc725462dd7861ed643e73406215d9b758316"
+    },
+    {
+      "destination": "textures/crack_0.png",
+      "source": "assets/minecraft/textures/block/destroy_stage_0.png",
+      "sha256": "b9da7e4ae6fecd3463c77a99c5501bf24200757180ebe8ab636d5231b62b3b76"
+    },
+    {
+      "destination": "textures/crack_1.png",
+      "source": "assets/minecraft/textures/block/destroy_stage_1.png",
+      "sha256": "819e76b5895e03770d444bfdd021806747b8f53a3c4502386441f54754fe26dc"
+    },
+    {
+      "destination": "textures/crack_2.png",
+      "source": "assets/minecraft/textures/block/destroy_stage_2.png",
+      "sha256": "50458cf86550c51bc0687fdce0f7e09f215ab2bc545449db31422206314f3e13"
+    },
+    {
+      "destination": "textures/crack_3.png",
+      "source": "assets/minecraft/textures/block/destroy_stage_3.png",
+      "sha256": "fd6033ca4a80e2b28cef8ac510f76b55b4d80fa8e7991e92e746c15729ba042e"
+    },
+    {
+      "destination": "textures/crack_4.png",
+      "source": "assets/minecraft/textures/block/destroy_stage_4.png",
+      "sha256": "5b99d5ae54def6b9f66a1909d726f13a39b4c6e6b97ae19dd5e8e643d06467be"
+    },
+    {
+      "destination": "textures/crack_5.png",
+      "source": "assets/minecraft/textures/block/destroy_stage_5.png",
+      "sha256": "d0037c8df64990fc05e3b958cf790478443ebb635c6812d6af59637a015ecd8f"
+    },
+    {
+      "destination": "textures/crack_6.png",
+      "source": "assets/minecraft/textures/block/destroy_stage_6.png",
+      "sha256": "fc80401f32523592208324c8f4ee3757fb3022656c3ead05229a9f9eaaaa84e0"
+    },
+    {
+      "destination": "textures/crack_7.png",
+      "source": "assets/minecraft/textures/block/destroy_stage_7.png",
+      "sha256": "63c849b38e8301a4e72e9d63a34f91725faa69e29e8b4589316b52fc00cb4f3d"
+    },
+    {
+      "destination": "textures/crack_8.png",
+      "source": "assets/minecraft/textures/block/destroy_stage_8.png",
+      "sha256": "b209b497047ed9c4f97bfd578f004ccd4ccf4937e9584737367326759d640df5"
+    },
+    {
+      "destination": "textures/crack_9.png",
+      "source": "assets/minecraft/textures/block/destroy_stage_9.png",
+      "sha256": "5d92ccc8531ee2b7a618e8233c78610c0c3a0fb38ea6842fbd68206469274eba"
+    },
+    {
+      "destination": "textures/dirt.png",
+      "source": "assets/minecraft/textures/block/dirt.png",
+      "sha256": "944dbed5c954448daeebeacc99df500a73877e3df38f5af13b512d7040119c9c"
+    },
+    {
+      "destination": "textures/farmland_dry.png",
+      "source": "assets/minecraft/textures/block/farmland.png",
+      "sha256": "86288cb81671f989113ea4cb26dc1a291e54af46d7d134f69c51a5a9e56a0cf8"
+    },
+    {
+      "destination": "textures/farmland_wet.png",
+      "source": "assets/minecraft/textures/block/farmland_moist.png",
+      "sha256": "6cd95314ad2ecad725a7a632a888290ec807672835ab5c1646dd4678dbcda251"
+    },
+    {
+      "destination": "textures/furnace.png",
+      "source": "assets/minecraft/textures/block/furnace_front.png",
+      "sha256": "ab9c9e0edc8e2a182f7343ec2e01d8ae50f7d5c327bd9e20fcd32cbca27645a4"
+    },
+    {
+      "destination": "textures/glass.png",
+      "source": "assets/minecraft/textures/block/glass.png",
+      "sha256": "60a39f15b91ac0d48822583fa50ff965fca8d65349e1708ca72c4a76841b15cb"
+    },
+    {
+      "destination": "textures/grass_side.png",
+      "source": "assets/minecraft/textures/block/grass_block_side.png",
+      "sha256": "728610a71c1f87905d364403860477917b3141c3821338c83477cd254c1b55fe"
+    },
+    {
+      "destination": "textures/grass_top.png",
+      "source": "assets/minecraft/textures/block/grass_block_top.png",
+      "sha256": "ae0ff558242c60b651244382d18dbdb5d8292feb6819675e6bd7d67a021d1f97"
+    },
+    {
+      "destination": "textures/gravel.png",
+      "source": "assets/minecraft/textures/block/gravel.png",
+      "sha256": "ee49a4c80f4d3ff2d6302b1206f497aab7e1ea9d0c21b8e3d4c2011e5f6a0abe"
+    },
+    {
+      "destination": "textures/iron_block.png",
+      "source": "assets/minecraft/textures/block/iron_block.png",
+      "sha256": "7b8b29277b1e9b9a7f032869ae32cef8bd3a88bfef6f5dcbd9d9bee67a9d2631"
+    },
+    {
+      "destination": "textures/iron_ore.png",
+      "source": "assets/minecraft/textures/block/iron_ore.png",
+      "sha256": "416e84a0007ec6bf69d8fb575a86220359dae1740b8e4113c4cc9f491d40ecfc"
+    },
+    {
+      "destination": "textures/leaves.png",
+      "source": "assets/minecraft/textures/block/oak_leaves.png",
+      "sha256": "92458f7254fae0368c4f6498c43f42fc5f5701dc0259b767187d875750d0681b"
+    },
+    {
+      "destination": "textures/mossy_cobblestone.png",
+      "source": "assets/minecraft/textures/block/mossy_cobblestone.png",
+      "sha256": "5f5a32aa9f0ba522722494335950a51ba4a3f097f7d48fa7ab815806ea456206"
+    },
+    {
+      "destination": "textures/oak_log_side.png",
+      "source": "assets/minecraft/textures/block/oak_log.png",
+      "sha256": "5b745fc3276a50370986d92509daa38b543207b5a629a23c1cc29dc1ef54f508"
+    },
+    {
+      "destination": "textures/oak_log_top.png",
+      "source": "assets/minecraft/textures/block/oak_log_top.png",
+      "sha256": "5bf7ea69add7217929e5dfbc66637f5a657c4b1da165022ce5786d5695beb51e"
+    },
+    {
+      "destination": "textures/oak_planks.png",
+      "source": "assets/minecraft/textures/block/oak_planks.png",
+      "sha256": "a0fec8a8d1343627946fd8d13676a2799f5cf3bf5a7f04c403bce1987167512d"
+    },
+    {
+      "destination": "textures/potato_0.png",
+      "source": "assets/minecraft/textures/block/potatoes_stage0.png",
+      "sha256": "0268638661548598c7ea8a8325ed648cf857ea674ba423d21817659bde6e29fb"
+    },
+    {
+      "destination": "textures/potato_1.png",
+      "source": "assets/minecraft/textures/block/potatoes_stage1.png",
+      "sha256": "f91c17368d1b991515684ec150a851d7cd3ea8f55aa4bcc76b68c5ad6bd61727"
+    },
+    {
+      "destination": "textures/potato_2.png",
+      "source": "assets/minecraft/textures/block/potatoes_stage2.png",
+      "sha256": "74344eaa37065e5418798a813ca9e279f92a4182fc1d98b2b246f15d76e14183"
+    },
+    {
+      "destination": "textures/potato_3.png",
+      "source": "assets/minecraft/textures/block/potatoes_stage3.png",
+      "sha256": "5523bee2b068314239ed9f717c79940bc0f300eea047fd86fe4444bfcbeb00d9"
+    },
+    {
+      "destination": "textures/raw_beef.png",
+      "source": "food/steak_raw.png",
+      "source_url": "https://opengameart.org/content/16x16-food",
+      "license": {
+        "id": "CC0-1.0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "sha256": "f2b3eba0d7f3b6440badbee5f6a49e664b74795bdf04c55fa3c2b0c307ab6eb2"
+    },
+    {
+      "destination": "textures/sand.png",
+      "source": "assets/minecraft/textures/block/sand.png",
+      "sha256": "550aceb8e783485b50414c15400d775ed05e32b2ab8bcb254d4165615677bf66"
+    },
+    {
+      "destination": "textures/short_grass.png",
+      "source": "assets/minecraft/textures/block/short_grass.png",
+      "sha256": "aa575b25b63884f02f738ebb460f3c479ffd1b22c99c52f9dff90d1ce7538d70"
+    },
+    {
+      "destination": "textures/smooth_stone.png",
+      "source": "assets/minecraft/textures/block/smooth_stone.png",
+      "sha256": "4cfbee2faf35e78a5806c589830d3c66e350e71584e9129aeb539f57fbf9453c"
+    },
+    {
+      "destination": "textures/snow_side.png",
+      "source": "assets/minecraft/textures/block/snow.png",
+      "sha256": "7915e0201336fe70b1a1217c5fc29d18410b645e764c020d62b58eb235930858"
+    },
+    {
+      "destination": "textures/snow_top.png",
+      "source": "assets/minecraft/textures/block/snow.png",
+      "sha256": "7915e0201336fe70b1a1217c5fc29d18410b645e764c020d62b58eb235930858"
+    },
+    {
+      "destination": "textures/stone.png",
+      "source": "assets/minecraft/textures/block/stone.png",
+      "sha256": "d38bb1e9b2b5d7ee728293d278fe39f4f47e3f1667db6f7cd7c9a91643352097"
+    },
+    {
+      "destination": "textures/stone_brick.png",
+      "source": "assets/minecraft/textures/block/stone_bricks.png",
+      "sha256": "041a556a178bca7c4c82b276b2d4235c0a91a800ea8e6acb0c3ea1d6dd643712"
+    },
+    {
+      "destination": "textures/torch.png",
+      "source": "assets/minecraft/textures/block/torch.png",
+      "sha256": "6eb257fa75759f5f8855477a6d31cf40fdefc7158d8949862a0079af4e627f86"
+    },
+    {
+      "destination": "textures/wheat_0.png",
+      "source": "assets/minecraft/textures/block/wheat_stage0.png",
+      "sha256": "3295899f2e7f386c453b06dd315039070755ea39cb5f4f1f6da4fd2d6ad2905a"
+    },
+    {
+      "destination": "textures/wheat_1.png",
+      "source": "assets/minecraft/textures/block/wheat_stage1.png",
+      "sha256": "549c3fd80e7ce90d97ff6afa6d6ea5ff112584d44b5ce6d577bd9d2bf9acf0ea"
+    },
+    {
+      "destination": "textures/wheat_2.png",
+      "source": "assets/minecraft/textures/block/wheat_stage2.png",
+      "sha256": "1df862099e5940e7f330e774988d761a4b9d8c3cb532ac0968ea62a52b5df3e0"
+    },
+    {
+      "destination": "textures/wheat_3.png",
+      "source": "assets/minecraft/textures/block/wheat_stage3.png",
+      "sha256": "171a6fa07864131c6c6d42e5c733be776c8c88ac215aa3c72354386558790c14"
+    },
+    {
+      "destination": "textures/wheat_4.png",
+      "source": "assets/minecraft/textures/block/wheat_stage4.png",
+      "sha256": "f0a8c1ae347731a3594ccc86e5c8faa57f7328e0a086095ddfa0476703c6df89"
+    },
+    {
+      "destination": "textures/wheat_5.png",
+      "source": "assets/minecraft/textures/block/wheat_stage5.png",
+      "sha256": "93c04ea610e39102e0dd9ba3ae18a81da92337cb98f2fef8a821698a6bb47135"
+    },
+    {
+      "destination": "textures/wheat_6.png",
+      "source": "assets/minecraft/textures/block/wheat_stage6.png",
+      "sha256": "1ea5170a50adf35cacb1794a6d46bee5267e57d470557680b4984f5b7e965de6"
+    },
+    {
+      "destination": "textures/wheat_7.png",
+      "source": "assets/minecraft/textures/block/wheat_stage7.png",
+      "sha256": "9ae74e3e6011fb0771307f1e4aaf2f57ae078d1bd2ea9cf792a6a1820377a261"
+    },
+    {
+      "destination": "textures/white_wool.png",
+      "source": "assets/minecraft/textures/block/white_wool.png",
+      "sha256": "0c909d490dfbcc89e8c1d067292cb8d20bbd5ebffe9734988db4efd55b9c83a2"
+    },
+    {
+      "destination": "textures/workbench_side.png",
+      "source": "assets/minecraft/textures/block/crafting_table_side.png",
+      "sha256": "3d8a23e669bac1918e89fc931cb6347b8269862a885234f180ffb4c5303abbb4"
+    },
+    {
+      "destination": "textures/workbench_top.png",
+      "source": "assets/minecraft/textures/block/crafting_table_top.png",
+      "sha256": "cf4a1bd61cce0be130cdce3566c3bf765ed4cc496dc784b38a3ebe0afb33fbe7"
+    }
+  ]
+}
