@@ -2,12 +2,12 @@
 
 本目录统一存放两套视觉回归基线 PNG，均为测试夹具二进制，像素与搬迁前逐字节一致。
 
-- `world/`：无窗口世界场景基线 24 张，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
+- `world/`：无窗口世界场景基线 25 张，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
 - `ui/`：前端 UI 部件基线 19 张，对应 `packages/engine/crates/mornlea_client/frontend/visual/fixture-names.ts` 的 `fixtureNames`。
 
 旧目录 `cmd/mornlea/capture/testdata/golden/` 与 `engine/crates/mornlea_client/frontend/visual/golden/` 已清空，仅剩空目录，不再写入。
 
-## world（24 张）
+## world（25 张）
 
 文件名即场景名加 `.png` 后缀，场景定义与顺序以 `captureScenes` 为准。
 
@@ -26,6 +26,7 @@
 | `bed-night.png` | `bed-night` | 午夜石室内四朝向完整床的床面亮带与半高轮廓。 |
 | `materials-showcase.png` | `materials-showcase` | 陈列台上全材质方块在正午日光下的质感对照。 |
 | `target-block-feedback.png` | `target-block-feedback` | 相机正前方命中块的高亮描边与定位反馈。 |
+| `grass-closeup.png` | `grass-closeup` | 近景草地条上短草列的交叉面片与贴地形态，短草外观的可辨识基线。 |
 | `oak-grove.png` | `oak-grove` | 橡树群落的树冠、树干与林下地表的组合呈现。 |
 | `ai-companion.png` | `ai-companion` | AI 伙伴在正午世界中的跟随站位与其呈现状态。 |
 | `sword-combat.png` | `sword-combat` | 持剑攻击姿态与权威命中标记同帧的战斗反馈。 |
