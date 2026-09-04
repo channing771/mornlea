@@ -27,6 +27,26 @@ func TestEncodeBreakBurstInstancesMatchesDropEncoding(t *testing.T) {
 	}
 }
 
+// TestAppendBreakBurstInstancesRespectsAvatarBudget 钉住 avatar 段预算：
+// 身体占满时 burst 让路、总段恒不超过 450 实例（超限帧会被 Rust 侧整体拒绝）；
+// 空位不足一个整 burst 时并入零字节，身体实例恒优先保留。
+func TestAppendBreakBurstInstancesRespectsAvatarBudget(t *testing.T) {
+	encoder := &InstanceEncoder{}
+	drops := []ItemDrop{breakTestDrop(3, core.BlockPos{X: 0, Y: 3, Z: 0}, core.ItemDirt)}
+	full := make([]byte, maxAvatarParts*avatarInstanceBytes)
+	if got := encoder.AppendBreakBurstInstances(full, 10, drops); len(got) != len(full) {
+		t.Fatalf("占满段并入后=%d 字节，想要不变 %d", len(got), len(full))
+	}
+	roomForOne := make([]byte, (maxAvatarParts-breakBurstParticlesPerBurst)*avatarInstanceBytes)
+	if got := encoder.AppendBreakBurstInstances(roomForOne, 11, drops); len(got) != maxAvatarParts*avatarInstanceBytes {
+		t.Fatalf("留 8 空位并入后=%d 字节，想要装满 %d", len(got), maxAvatarParts*avatarInstanceBytes)
+	}
+	roomForPartial := make([]byte, (maxAvatarParts-breakBurstParticlesPerBurst+1)*avatarInstanceBytes)
+	if got := encoder.AppendBreakBurstInstances(roomForPartial, 12, drops); len(got) != len(roomForPartial) {
+		t.Fatalf("留 7 空位并入后=%d 字节，想要不变 %d", len(got), len(roomForPartial))
+	}
+}
+
 // TestEncodeBreakBurstInstancesStaysWithinInstanceCap 钉住编码上限:17 个全活
 // burst 只输出 64 实例,不做无界工作。
 func TestEncodeBreakBurstInstancesStaysWithinInstanceCap(t *testing.T) {

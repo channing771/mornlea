@@ -330,6 +330,9 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		a.itemDropInstances[:0], a.itemDrops.Presentations(),
 	)
 	a.dropStream = a.entityEncoder.EncodeItemDropInstances(a.dropStream, a.serverTick, a.itemDropInstances)
+	// 破碎 burst 与掉落物本体共用同一份 serverTick + 掉落物输入,跟踪表在
+	// entityEncoder 内跨帧存续;输出并入 avatar 实例段(段预算不足时 burst 让路)。
+	a.avatarStream = a.entityEncoder.AppendBreakBurstInstances(a.avatarStream, a.serverTick, a.itemDropInstances)
 	a.outlineStream = a.entityEncoder.EncodeBlockOutlineInstances(a.outlineStream, blockOutline)
 	a.crackStream = a.entityEncoder.EncodeBlockCrackInstances(a.crackStream, crack)
 

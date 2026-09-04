@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"slices"
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
@@ -232,7 +233,89 @@ func TestBreakBurstDoesNotRetriggerWhilePresent(t *testing.T) {
 	}
 }
 
-// TestBreakBurstSkipsUnknownItemsAndEmpty 钉住无掉落不产生粒子：空输入与未知
+// TestBreakBurstEvictedDropDoesNotReburstWhilePresent 钉住淘汰抑制：17 个常驻
+// 掉落物每个恰 burst 一次；表满后被挤掉的 ID 即使仍存续也不逐帧重 burst。
+func TestBreakBurstEvictedDropDoesNotReburstWhilePresent(t *testing.T) {
+	tracker := &BreakBursts{}
+	var drops []ItemDrop
+	var origins []mgl32.Vec3
+	for tick := uint64(0); tick < 17; tick++ {
+		block := core.BlockPos{X: int32(tick), Y: 3, Z: 0}
+		drops = append(drops, breakTestDrop(uint8(tick), block, core.ItemDirt))
+		origins = append(origins, breakTestOrigin(block))
+	}
+	originFrames := make([]int, len(origins))
+	countAtOrigin := func(parts []avatarPart, origin mgl32.Vec3) int {
+		count := 0
+		for _, part := range parts {
+			if breakPartCenter(part) == origin {
+				count++
+			}
+		}
+		return count
+	}
+	for tick := uint64(0); tick < 40; tick++ {
+		var frame []ItemDrop
+		if tick < 17 {
+			frame = drops[:tick+1]
+		} else {
+			frame = drops
+		}
+		parts := tracker.BuildParts(nil, tick, frame)
+		for index, origin := range origins {
+			switch got := countAtOrigin(parts, origin); {
+			case tick < 17 && index == int(tick):
+				if got != 8 {
+					t.Fatalf("tick %d 新掉落物起点粒子 = %d，想要 8", tick, got)
+				}
+				originFrames[index]++
+			case got != 0:
+				t.Fatalf("tick %d 起点 %v 粒子 = %d，想要 0（重复 burst）", tick, origin, got)
+			}
+		}
+	}
+	for index, frames := range originFrames {
+		if frames != 1 {
+			t.Fatalf("掉落物 %d 起点帧数 = %d，想要恰好 1", index, frames)
+		}
+	}
+	if got := len(tracker.entries); got != 16 {
+		t.Fatalf("跟踪表 = %d 项，想要 16", got)
+	}
+}
+
+// TestBreakBurstShuffledInputEncodesIdentically 钉住输入规范化：同集合乱序输入
+// 在新跟踪表上逐字节一致，不依赖调用方顺序。
+func TestBreakBurstShuffledInputEncodesIdentically(t *testing.T) {
+	drops := []ItemDrop{
+		breakTestDrop(5, core.BlockPos{X: 9, Y: 3, Z: 1}, core.ItemDirt),
+		breakTestDrop(1, core.BlockPos{X: 0, Y: 3, Z: 0}, core.ItemGrass),
+		breakTestDrop(9, core.BlockPos{X: -4, Y: 6, Z: 2}, core.ItemStone),
+		breakTestDrop(3, core.BlockPos{X: 2, Y: 4, Z: -3}, core.ItemCoal),
+	}
+	shuffled := append([]ItemDrop(nil), drops...)
+	slices.Reverse(shuffled)
+	first := avatarPartBytes((&BreakBursts{}).BuildParts(nil, 7, drops))
+	second := avatarPartBytes((&BreakBursts{}).BuildParts(nil, 7, shuffled))
+	if !bytes.Equal(first, second) {
+		t.Fatal("乱序输入编码字节不一致，想要与输入顺序无关")
+	}
+}
+
+// TestBreakBurstHashMixesDimension 钉住维度进入散列：除维度外完全相同的 ID
+// 初速不同，跨维度同槽位复用的掉落物轨迹不重合。
+func TestBreakBurstHashMixesDimension(t *testing.T) {
+	base := core.DropID{Dimension: core.Overworld, Chunk: core.ChunkPos{X: 1, Z: -2}, Slot: 3, Generation: 1}
+	other := base
+	other.Dimension = core.Overworld + 1
+	if breakBurstHash(base) == breakBurstHash(other) {
+		t.Fatal("仅维度不同的 ID 散列相同，想要维度混入散列")
+	}
+	if breakBurstVelocity(base, 0) == breakBurstVelocity(other, 0) {
+		t.Fatal("仅维度不同的 ID 初速相同，想要轨迹区分")
+	}
+}
+
 // 物品都不编码、不建条目，裂纹 overlay 不受影响（本包无任何裂纹状态改动）。
 func TestBreakBurstSkipsUnknownItemsAndEmpty(t *testing.T) {
 	tracker := &BreakBursts{}
