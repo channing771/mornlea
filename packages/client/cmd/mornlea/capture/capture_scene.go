@@ -516,6 +516,7 @@ func applyGrassCloseupCaptureState(app SceneApplication) error {
 	app.RemotePlayers().Reset()
 	app.Furnace().Reset()
 	app.Chest().Reset()
+	app.Crafting().Reset()
 	if app.Panel() != nil {
 		app.Panel().SetVisible(false)
 	}
