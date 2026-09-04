@@ -694,6 +694,12 @@ func resetCapturePresentation(app SceneApplication) error {
 		app.Hostiles().Reset()
 	}
 	app.SetHostilePresentations(app.HostilePresentations()[:0])
+	// 被动牛镜像是场景夹具的一部分：passive-herd 注入的 3 头牛必须在这里
+	// 一并恢复，否则后续场景会带着昼间牛群出图。镜像可能为 nil（最小测试
+	// 装配），nil 时无从谈起夹具残留，跳过即可。
+	if app.Passives() != nil {
+		app.Passives().Reset()
+	}
 	app.SetMiningOverlay(hud.MiningOverlay{})
 	app.SetDamageFeedback(application.DamageFeedback{})
 	app.SetDamageStrength(0)
