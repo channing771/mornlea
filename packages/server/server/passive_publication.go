@@ -71,12 +71,19 @@ func (server *Server) publishPassives(
 	states := make([]network.PassiveStateRecord, 0, len(visible))
 	for _, mob := range visible {
 		if _, known := current.visiblePassives[mob.ID]; known {
+			// 吃草瞬态只进 state：`Grazing` 是布尔呈现位，wire 上按 0/1 字节
+			// 搬运；spawn 携带的是出生身体，不含任何瞬态。
+			var grazing uint8
+			if mob.Grazing {
+				grazing = 1
+			}
 			states = append(states, network.PassiveStateRecord{
 				ID:       mob.ID,
 				Position: mob.State.Position,
 				Velocity: mob.State.Velocity,
 				Yaw:      mob.Yaw,
 				Health:   mob.Health,
+				Grazing:  grazing,
 			})
 			continue
 		}

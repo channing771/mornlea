@@ -25,8 +25,8 @@ const (
 	// i32 dimension + 3×f32 position + f32 yaw + u8 health = 29。
 	PassiveSpawnWireBytes = 29
 	// PassiveStateWireBytes 是单条 state record 的固定编码长度：u64 ID +
-	// 3×f32 position + 3×f32 velocity + f32 yaw + u8 health = 37。
-	PassiveStateWireBytes = 37
+	// 3×f32 position + 3×f32 velocity + f32 yaw + u8 health + u8 放牧标志 = 38。
+	PassiveStateWireBytes = 38
 	// PassiveDespawnWireBytes 是单条 despawn record 的固定编码长度：只携带
 	// u64 ID = 8。
 	PassiveDespawnWireBytes = 8
@@ -90,13 +90,17 @@ func (spawn PassiveSpawn) Validate() error {
 	return nil
 }
 
-// PassiveStateRecord 是一头被动牛在一个权威 tick 的身体状态。
+// PassiveStateRecord 是一头被动牛在一个权威 tick 的身体状态。`Grazing`
+// 是吃草事件的瞬态呈现位（u8，仅 0/1 合法）：`1` 表示该牛正在低头，由服务端
+// 发布时从权威瞬态投影而来，永不落盘；解码侧把它当作普通值域校验，拒绝即
+// 整包拒绝，不做任何兼容解读。
 type PassiveStateRecord struct {
 	ID       uint64
 	Position mgl32.Vec3
 	Velocity mgl32.Vec3
 	Yaw      float32
 	Health   uint8
+	Grazing  uint8
 }
 
 func (record PassiveStateRecord) validate() error {
@@ -108,6 +112,9 @@ func (record PassiveStateRecord) validate() error {
 	}
 	if record.Health == 0 || record.Health > core.MaxHealth {
 		return fmt.Errorf("network: passive state health %d outside 1..%d", record.Health, core.MaxHealth)
+	}
+	if record.Grazing > 1 {
+		return fmt.Errorf("network: passive state grazing %d is invalid", record.Grazing)
 	}
 	return nil
 }

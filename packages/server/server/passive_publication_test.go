@@ -114,6 +114,42 @@ func TestPassivePublicationSpawnsAfterFootChunkSnapshotThenStates(t *testing.T) 
 	}
 }
 
+// TestPassivePublicationCarriesGrazingFlag 覆盖发布侧的放牧位投影：权威瞬态
+// `Grazing` 经 `publishPassives` 逐头映射为 state record 尾部的 0/1 字节，
+// 首 tick 的 spawn 不携带该位（出生身体无瞬态），次 tick 起的 state 才携带。
+func TestPassivePublicationCarriesGrazingFlag(t *testing.T) {
+	h := newRemotePublicationHarness(t, 1)
+	h.markSnapshotSent(1, core.ChunkPos{})
+	mobs := []contract.PassiveMob{
+		{ID: 5, Dimension: core.Overworld, State: physics.State{Position: mgl32.Vec3{0.5, 1, 0.5}, OnGround: true}, Yaw: 0.5, Health: 9, Grazing: true},
+		{ID: 8, Dimension: core.Overworld, State: physics.State{Position: mgl32.Vec3{2.5, 1, 2.5}, OnGround: true}, Yaw: -0.5, Health: 7},
+	}
+	current := h.running.sessions[1]
+	if !h.running.publishPassives(current, 20, mobs) {
+		t.Fatal("首 tick publishPassives 失败")
+	}
+	if messages := onlyPassiveMessages(h.drain(1)); len(messages) != 1 {
+		t.Fatalf("首 tick 被动牛消息=%#v，想要恰好 1 条 spawn", messages)
+	}
+	if !h.running.publishPassives(current, 21, mobs) {
+		t.Fatal("次 tick publishPassives 失败")
+	}
+	messages := onlyPassiveMessages(h.drain(1))
+	if len(messages) != 1 {
+		t.Fatalf("次 tick 被动牛消息=%#v，想要恰好 1 条 state", messages)
+	}
+	state, ok := messages[0].(network.PassiveState)
+	if !ok {
+		t.Fatalf("次 tick 消息类型=%T，想要 PassiveState", messages[0])
+	}
+	if err := state.Validate(); err != nil {
+		t.Fatalf("PassiveState.Validate: %v", err)
+	}
+	if len(state.States) != 2 || state.States[0].Grazing != 1 || state.States[1].Grazing != 0 {
+		t.Fatalf("state 放牧位=%+v，想要 [1 0]", state.States)
+	}
+}
+
 func TestPassivePublicationUnsubscribedFootChunkNeverSends(t *testing.T) {
 	h := newRemotePublicationHarness(t, 1)
 	h.markSnapshotSent(1, core.ChunkPos{})

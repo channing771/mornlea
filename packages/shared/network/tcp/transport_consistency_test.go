@@ -618,10 +618,11 @@ func passiveSpawnFixture() []network.PassiveSpawnRecord {
 }
 
 // passiveStateFixture 返回 2 条 ID 严格升序的合法 state 记录：速度取非零值，
-// 保证速度分量的搬运与丢弃可分辨。
+// 保证速度分量的搬运与丢弃可分辨；放牧标志取 0/1 各一，保证该字节在两条传输
+// 下逐字段一致。
 func passiveStateFixture() []network.PassiveStateRecord {
 	return []network.PassiveStateRecord{
-		{ID: 5, Position: mgl32.Vec3{1.5, 2, -1.25}, Velocity: mgl32.Vec3{0.25, -0.5, 0}, Yaw: 0.75, Health: 9},
+		{ID: 5, Position: mgl32.Vec3{1.5, 2, -1.25}, Velocity: mgl32.Vec3{0.25, -0.5, 0}, Yaw: 0.75, Health: 9, Grazing: 1},
 		{ID: 8, Position: mgl32.Vec3{-4.5, 63.5, 6.25}, Velocity: mgl32.Vec3{0, 0.5, 1.5}, Yaw: -1.5, Health: 6},
 	}
 }

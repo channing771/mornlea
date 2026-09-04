@@ -396,11 +396,11 @@ func (tick *TickContext) AdvanceHostiles(actions []HostileAction, result *TickRe
 	engine.settleDeaths(pending)
 }
 
-// AdvancePassives 推进被动牛的生成、漫游/逃跑移动和死亡生命周期。
+// AdvancePassives 推进被动牛的生成、漫游/逃跑移动、吃草事件和死亡生命周期。
 func (tick *TickContext) AdvancePassives() {
 	engine := &tick.engine
 	pending := tick.mutation
-	engine.advancePassives()
+	engine.advancePassives(pending)
 	engine.settlePassiveDeaths(pending)
 }
 

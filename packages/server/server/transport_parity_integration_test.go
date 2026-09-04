@@ -37,6 +37,29 @@ func (miningParityGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk 
 	return chunk
 }
 
+// barrenParityGenerator 是业务 transcript parity 专用的无草平坦世界：地表
+// y=0 为泥土而非 `integrationChunk` 的草。被动牛只在草上出生/吃草，而两侧
+// 录像的绝对 tick 窗口本就不同（握手 tick 数随传输而异），草地会让 transcript
+// 混入下标错位的背景泥土写入；地表材质对本脚本（移动/合成/放置/采掘/重同步）
+// 不可见，parity 只要求两侧逐字段相同、不与历史基线比对。
+// parity 世界按契约保持无背景生物写入（背景实体消息同样被比对过滤）。
+type barrenParityGenerator struct{}
+
+func (barrenParityGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+	chunk := world.NewChunk(position)
+	for z := 0; z < core.SectionSize; z++ {
+		for x := 0; x < core.SectionSize; x++ {
+			chunk.SetBlock(x, core.MinY, z, core.BedrockID)
+			for y := int32(core.MinY + 1); y < 0; y++ {
+				chunk.SetBlock(x, y, z, core.StoneID)
+			}
+			chunk.SetBlock(x, 0, z, core.DirtID)
+		}
+	}
+	chunk.Compact()
+	return chunk
+}
+
 func TestMemoryTCPParityBusinessTranscriptAndHashes(t *testing.T) {
 	memory := runParityTranscript(t, "memory")
 	tcp := runParityTranscript(t, "tcp")
@@ -509,7 +532,7 @@ func runParityTranscript(t *testing.T, transport string) parityResult {
 	config := hostTestConfig()
 	config.ViewRadius = 1
 	config.AutosaveTicks = 1000
-	host := mustNewHost(t, config, flatGenerator{}, store)
+	host := mustNewHost(t, config, barrenParityGenerator{}, store)
 	endpoint, acceptDone, closeTransport := openParityTransport(t, host, transport, identity)
 	mirror := client.NewMirror()
 	transcript := make([]string, 0, 64)

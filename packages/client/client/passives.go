@@ -20,20 +20,23 @@ var ErrPassiveProtocol = errors.New("passive protocol error")
 const MaxPassives = 32
 
 // PassivePresentation 是一头被动牛的只读呈现值：位置与朝向已经过与远端
-// 玩家/伙伴/夜行者相同的时间边界插值，生命是最近一次权威 state 的直读值。
+// 玩家/伙伴/夜行者相同的时间边界插值，生命是最近一次权威 state 的直读值，
+// 放牧位是同一批次 state 的吃草瞬态直读（置位即低头呈现的唯一事实来源）。
 type PassivePresentation struct {
 	ID        uint64
 	Dimension core.DimensionID
 	Position  mgl32.Vec3
 	Yaw       float32
 	Health    uint8
+	Grazing   bool
 }
 
 // passivePresentationState 是一头被动牛的客户端镜像：身体事实 latest-wins，
-// 移动呈现复用 `remoteActor` 的既有时间边界（不预测生命、伤害或出生位
-// 置——它们只随权威消息到达）。
+// 移动呈现复用 `remoteActor` 的既有时间边界（不预测生命、伤害、放牧位或出生
+// 位置——它们只随权威消息到达）。
 type passivePresentationState struct {
-	health uint8
+	health  uint8
+	grazing bool
 	remoteActor
 }
 
@@ -75,7 +78,8 @@ func (passives *Passives) ApplySpawn(spawn network.PassiveSpawn) error {
 
 // ApplyStates 只接受 `ServerTick` 更新的状态：未知 ID 的记录丢弃且不隐式
 // 造实体，过期（不比镜像新）的记录丢弃并保持既有值，其余记录按批次 tick
-// 更新身体与生命。
+// 更新身体、生命与放牧位（出生批次不带瞬态，新身体默认非放牧；放牧字节经
+// `Validate` 已限 0/1，这里按置位语义直读）。
 func (passives *Passives) ApplyStates(states network.PassiveState) error {
 	if err := states.Validate(); err != nil {
 		return passiveProtocolError("PassiveState: %v", err)
@@ -89,6 +93,7 @@ func (passives *Passives) ApplyStates(states network.PassiveState) error {
 			continue
 		}
 		state.health = update.Health
+		state.grazing = update.Grazing == 1
 		state.pushSnapshot(remoteSnapshot{
 			tick:      states.ServerTick,
 			dimension: state.dimension,
@@ -127,6 +132,7 @@ func (passives *Passives) AppendPresentations(dst []PassivePresentation) []Passi
 			Position:  state.position,
 			Yaw:       state.yaw,
 			Health:    state.health,
+			Grazing:   state.grazing,
 		})
 	}
 	slices.SortFunc(dst, func(left, right PassivePresentation) int {
