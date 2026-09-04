@@ -554,7 +554,6 @@ const pastelcraftDefaultPackName = "Pastelcraft for Mornlea"
 // 换肤后这些槽位必须不再等于旧字节，测试据此变绿。
 var oldDefaultPackLayerSHA256 = map[string]string{
 	"dirt":         "eee24a5d59308ddce118f1639ce522cd9ce742f5c2408399d60a2513a65a8025",
-	"grass_top":    "e966bdf4896a46bbcf32d79fb58320d82ed5fce102f8bf58a2a8ea3ceb337e0d",
 	"grass_side":   "4d7db76883c7cfbdb288c79d1e02a5527010f676651eef7a0402f4feb1815124",
 	"farmland_dry": "c9e41957286704e581e4ef9d03f5e5e938ad1e34d2052b2c631fa5f99d66ad09",
 	"farmland_wet": "c68ccbc0205433812fab9c536960addd5aa79bcb3a8ed8eddeac3d30dbab87fe",

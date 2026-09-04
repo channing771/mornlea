@@ -316,6 +316,7 @@ func TestBreakBurstHashMixesDimension(t *testing.T) {
 	}
 }
 
+// TestBreakBurstSkipsUnknownItemsAndEmpty 钉住未知物品与空输入直接跳过：未知
 // 物品都不编码、不建条目，裂纹 overlay 不受影响（本包无任何裂纹状态改动）。
 func TestBreakBurstSkipsUnknownItemsAndEmpty(t *testing.T) {
 	tracker := &BreakBursts{}
