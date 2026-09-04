@@ -345,7 +345,7 @@ func cloneAndSortPassiveRecords(records []storage.StoredPassiveMob) []storage.St
 }
 
 // passiveStorageRecord 把权威被动牛值快照转换为存档记录：字段面一一对应，
-// 逃跑计时与出生区块等运行时派生物不在权威值内，天然不落盘。
+// 逃跑计时与出生区块等运行时派生物不在权威值内，天然不落盘；`Grazing` 为瞬态呈现位，永不落盘。
 func passiveStorageRecord(mob contract.PassiveMob) storage.StoredPassiveMob {
 	return storage.StoredPassiveMob{
 		ID:        mob.ID,

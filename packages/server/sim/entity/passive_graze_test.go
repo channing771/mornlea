@@ -208,6 +208,7 @@ func TestPassiveGrazeNeedsStandingGrass(t *testing.T) {
 	}{
 		{"泥土上不触发", core.DirtID},
 		{"石头上不触发", core.StoneID},
+		{"耕地上不触发", core.FarmlandDryID},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			engine := newGrazeEngine(t, 0)

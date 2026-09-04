@@ -5,7 +5,7 @@
 ## 线上协议
 
 - 线上协议为 v34（定义在 `packages/shared/network/protocol` 的 `ProtocolVersion`，根包 `packages/shared/network` 别名再导出）；所有不匹配版本都会在握手阶段、进入 Play 前被稳定拒绝，不提供版本协商或降级解码；更早版本的逐版语义见 `packages/shared/network/protocol/packet.go` 顶部注释；
-- 近几版协议全部是既有 packet 尾部追加或新增消息，不改变任何既有长度上限，也不新增 `RejectReason`：
+- 近几版协议全部是既有 packet 尾部追加或新增消息，v34 起 `PassiveState` record 步长例外由 37 变为 38，其余既有长度上限不变，也不新增 `RejectReason`：
   - v26 新增 Play S→C ID 20 `PlaceBlockSucceeded(sequence)`，只回发给放置发起会话作为成功放置确认；
   - v27 新增 Play C→S ID 14 `BoneMeal`，与 `TillSoil` 同形（序号 + 朝向），目标格由权威射线决定；
   - v28 在 `PlayerInput` 尾部 `Eating` 之后追加 1 字节 `Sprinting` 疾跑意图位；
