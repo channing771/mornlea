@@ -60,6 +60,7 @@ type Server struct {
 	workers      sync.WaitGroup
 	companions   *persistence.Companions
 	hostiles     *persistence.Hostiles
+	passives     *persistence.Passives
 	stepMu       sync.Mutex
 	shutdownGate chan struct{}
 	lifecycle    serverLifecycle
@@ -81,10 +82,10 @@ func NewWorld(config Config, generator Generator, store storage.Store) *Server {
 	if len(config.Companions) != 0 {
 		panic("server: NewWorld does not support companions; use NewHost")
 	}
-	// benchmark 形态不接夜行者持久化（世界随进程生存，无跨重启恢复语义）；
+	// benchmark 形态不接夜行者与被动牛持久化（世界随进程生存，无跨重启恢复语义）；
 	// newWorld 的错误只可能来自需要持久化装配的路径，这里不可达，防御口径
 	// 与伙伴 planner 构造的 panic 一致。
-	server, err := newWorld(config, generator, store, nil, nil, nil, nil)
+	server, err := newWorld(config, generator, store, nil, nil, nil, nil, nil)
 	if err != nil {
 		panic("server: NewWorld: " + err.Error())
 	}
@@ -97,6 +98,7 @@ func newWorld(
 	store storage.Store,
 	companions *persistence.Companions,
 	hostiles *persistence.Hostiles,
+	passives *persistence.Passives,
 	planner companionPlanner,
 	dialogue companionDialogue,
 ) (*Server, error) {
@@ -197,6 +199,17 @@ func newWorld(
 			}
 		}
 		server.hostiles = hostiles
+	}
+	// 被动牛恢复接线：与夜行者侧同形，存档记录在首 tick 前整体回到权威侧。
+	// 存储校验矩阵覆盖 sim 侧全部记录不变量（重复/超限在加载边界已被拒），
+	// 恢复失败属不可达防御路径——绝不允许以「跳过该条」的截断姿态静默继续。
+	if passives != nil {
+		for _, mob := range passives.Restore() {
+			if err := server.engine.RestorePassive(mob); err != nil {
+				return nil, fmt.Errorf("restore passive %d: %w", mob.ID, err)
+			}
+		}
+		server.passives = passives
 	}
 
 	server.workers.Add(config.Workers)
@@ -354,6 +367,14 @@ func (server *Server) step(scheduled time.Time) contract.TickResult {
 		server.hostiles.Observe(server.engine.HostileMobs())
 		if err := server.hostiles.Poll(result.Tick); err != nil {
 			slog.Warn("夜行者自动保存失败，保留重试", "error", err)
+		}
+	}
+	// 被动牛持久化与夜行者同一节奏：同一 tick 边界观察同一权威截面并回收
+	// 保存完成，autosave 到点才派发；保存异步进行，tick 绝不等待落盘。
+	if server.passives != nil {
+		server.passives.Observe(server.engine.PassiveMobs())
+		if err := server.passives.Poll(result.Tick); err != nil {
+			slog.Warn("被动牛自动保存失败，保留重试", "error", err)
 		}
 	}
 	if hasTrustedCenter {

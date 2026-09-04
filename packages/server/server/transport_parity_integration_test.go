@@ -116,6 +116,21 @@ func TestMiningCompletionOraclesRejectOrderDuplicatesAndMirrorDivergence(t *test
 	}
 }
 
+// withoutPassiveMessages 剔除完成帧里的被动牛背景消息：完成帧契约只含
+// 破坏 delta、掉落、背包与玩家状态四条，被动牛 spawn/state 与采掘正交，
+// 由被动牛专用的发布测试覆盖，此处只保证完成帧断言不受背景消息干扰。
+func withoutPassiveMessages(messages []network.ServerMessage) []network.ServerMessage {
+	kept := messages[:0]
+	for _, message := range messages {
+		switch message.(type) {
+		case network.PassiveSpawn, network.PassiveState, network.PassiveDespawn:
+			continue
+		}
+		kept = append(kept, message)
+	}
+	return kept
+}
+
 func validateMiningCompletionFrame(messages []network.ServerMessage, target core.BlockPos) error {
 	if len(messages) != 4 {
 		return fmt.Errorf("采掘完成帧消息数=%d，想要 4: %+v", len(messages), messages)
@@ -327,7 +342,7 @@ func runMiningParityScript(t *testing.T, transport string) miningParityResult {
 			t.Fatalf("%s 铁镐 tick %d = %+v", transport, tick, state)
 		}
 	}
-	if err := validateMiningCompletionFrame(completionMessages, sideTarget); err != nil {
+	if err := validateMiningCompletionFrame(withoutPassiveMessages(completionMessages), sideTarget); err != nil {
 		t.Fatalf("%s 铁镐完成帧: %v", transport, err)
 	}
 	if state.MiningActive || len(drops.Presentations()) != 1 {
@@ -627,7 +642,8 @@ func parityReadinessTranscript(
 			lastState = message
 			hasState = true
 		case network.ChunkSnapshot, network.KeepAlive, network.InventoryState,
-			network.ItemDropUpserts, network.ItemDropRemoves, network.CraftingState:
+			network.ItemDropUpserts, network.ItemDropRemoves, network.CraftingState,
+			network.PassiveSpawn, network.PassiveState, network.PassiveDespawn:
 		default:
 			t.Fatalf("unexpected parity readiness message %T", message)
 		}
@@ -782,6 +798,12 @@ func parityBusinessMessage(
 	case network.CraftingState:
 		return []string{fmt.Sprintf("CraftingState:%+v", message)}
 	case network.KeepAlive, network.Disconnect:
+		return nil
+	case network.PassiveSpawn, network.PassiveState, network.PassiveDespawn:
+		// 被动牛是与本域脚本正交的背景模拟：自发出生 ID 由绝对 tick 派生，
+		// 两条传输登录阶段消耗的 tick 数不同，位置与 ID 天然不可比；发布
+		// 序列的跨传输等价由被动牛专用的 transcript parity 覆盖，这里只保
+		// 证本域脚本不受背景消息干扰（与 KeepAlive/Disconnect 同例）。
 		return nil
 	default:
 		t.Fatalf("unexpected parity business message %T", message)

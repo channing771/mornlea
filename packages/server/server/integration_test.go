@@ -178,6 +178,11 @@ func TestAuthoritativeMiningMemoryLifecycle(t *testing.T) {
 			if _, ok := message.(network.ChunkSnapshot); ok {
 				return
 			}
+			// 被动牛背景消息与完成帧正交（由被动牛发布测试覆盖），同理不计入完成帧。
+			switch message.(type) {
+			case network.PassiveSpawn, network.PassiveState, network.PassiveDespawn:
+				return
+			}
 			tickMessages = append(tickMessages, message)
 		})
 		if state.LastInputSequence < 5 {
@@ -452,6 +457,9 @@ func drainServerMessages(
 			network.ItemDropUpserts, network.ItemDropRemoves,
 			network.PlaceBlockSucceeded:
 			// 快捷栏、合成网格与掉落物由独立的只读镜像消费，不进入世界镜像。
+			continue
+		case network.PassiveSpawn, network.PassiveState, network.PassiveDespawn:
+			// 被动牛由实体镜像消费（随被动牛同步任务装配），不进入世界区块镜像。
 			continue
 		}
 		if state, ok := message.(network.PlayerState); ok {

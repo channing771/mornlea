@@ -83,6 +83,10 @@ type session struct {
 	// visibleHostiles 是该会话已发布 spawn 的夜行者 ID 镜像：夜行者没有
 	// 名称标签等每个体附加域，一个集合足以承载差分发布的全部状态。
 	visibleHostiles map[uint64]struct{}
+	// visiblePassives 是该会话已发布 spawn 的被动牛 ID 镜像：与夜行者侧同
+	// 形，差分发布（进入视野 spawn、逐 tick state、离开或死亡 despawn）的
+	// 全部状态都由这一个集合承载。
+	visiblePassives map[uint64]struct{}
 
 	// 掉落物差分状态：已发布镜像与三块复用 scratch，容量固定为 MaxSessionDrops。
 	publishedDrops    map[core.DropID]contract.DropSnapshot
@@ -124,6 +128,7 @@ func newSession(
 		visiblePlayers:    make(map[core.PlayerID]visiblePlayer),
 		visibleCompanions: make(map[companion.ID]struct{}),
 		visibleHostiles:   make(map[uint64]struct{}),
+		visiblePassives:   make(map[uint64]struct{}),
 		publishedDrops:    make(map[core.DropID]contract.DropSnapshot, contract.MaxSessionDrops),
 		dropScratch:       make([]contract.DropSnapshot, 0, contract.MaxSessionDrops),
 		dropUpsertScratch: make([]network.ItemDrop, 0, contract.MaxSessionDrops),
@@ -163,6 +168,7 @@ func newObserverSession(
 		visiblePlayers:    make(map[core.PlayerID]visiblePlayer),
 		visibleCompanions: make(map[companion.ID]struct{}),
 		visibleHostiles:   make(map[uint64]struct{}),
+		visiblePassives:   make(map[uint64]struct{}),
 		publishedDrops:    make(map[core.DropID]contract.DropSnapshot),
 	}
 	workers.Add(1)
