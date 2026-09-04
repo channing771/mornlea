@@ -185,7 +185,7 @@ benchmark 或 devcapture；capture、benchmark 与 devcapture MUST NOT 相互
   实现
 - **AND** app 包 MUST NOT 为 capture/benchmark 导出全量内部字段
 
-### Requirement: golden 基线统一于仓库根 testdata
+### Requirement: golden 资产随 capture 子包迁移且视觉结果不变
 
 视觉基线 MUST 统一位于仓库根 `testdata/visual-golden/`（`world/` 与
 `ui/` 两个子目录），Go 世界场景基线由
@@ -467,9 +467,10 @@ var 函数别名再导出全部迁出符号，既有 `network.X` 引用 MUST 继
 - **THEN** 对应存档生命周期 MUST 由 `packages/server/server/persistence` 的单一所有者执行
 - **AND** 根包 MUST NOT 保留第二套保存队列、重试状态或 worker 实现
 
-### Requirement: 权威模拟具有单向子包与共享调参值
+### Requirement: 权威模拟具有五个单向子包
 
-仓库 MUST 将权威模拟组织为 `packages/server/sim/contract`、
+（标题沿用拆分时五子包的历史命名；单元化后模拟子包为四个，调参值对象
+上提共享层。）仓库 MUST 将权威模拟组织为 `packages/server/sim/contract`、
 `packages/server/sim/realm`、`packages/server/sim/entity` 与
 `packages/server/sim/runtime` 四个子包，调参值对象 MUST 位于
 `packages/shared/tuning` 供模拟与配置双侧消费。根

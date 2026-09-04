@@ -16,7 +16,7 @@
 #### Scenario: clean checkout 安装 Agent 服务入口
 
 - **GIVEN** Python 3.12 与 uv 可用
-- **WHEN** 在 `services/companion-agent` 执行 locked sync
+- **WHEN** 在 `packages/agent/companion` 执行 locked sync
 - **THEN** `mornlea-companion-agent serve --config` MUST 可寻址并以 Mornlea 包身份报告版本/帮助
 
 #### Scenario: Linux 专服发布为同目录 bundle
