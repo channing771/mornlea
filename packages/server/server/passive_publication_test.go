@@ -125,13 +125,13 @@ func TestPassivePublicationCarriesGrazingFlag(t *testing.T) {
 		{ID: 8, Dimension: core.Overworld, State: physics.State{Position: mgl32.Vec3{2.5, 1, 2.5}, OnGround: true}, Yaw: -0.5, Health: 7},
 	}
 	current := h.running.sessions[1]
-	if !h.running.publishPassives(current, 20, mobs) {
+	if !h.running.publishPassives(current, 20, mobs, nil) {
 		t.Fatal("首 tick publishPassives 失败")
 	}
 	if messages := onlyPassiveMessages(h.drain(1)); len(messages) != 1 {
 		t.Fatalf("首 tick 被动牛消息=%#v，想要恰好 1 条 spawn", messages)
 	}
-	if !h.running.publishPassives(current, 21, mobs) {
+	if !h.running.publishPassives(current, 21, mobs, nil) {
 		t.Fatal("次 tick publishPassives 失败")
 	}
 	messages := onlyPassiveMessages(h.drain(1))
@@ -150,6 +150,48 @@ func TestPassivePublicationCarriesGrazingFlag(t *testing.T) {
 	}
 }
 
+// TestPassivePublicationProjectsDeathReason 覆盖发布侧的原因位投影：同 tick
+// 死亡集合命中的 despawn 原因位置 1，未命中的恒为 0（出视野消失）。
+func TestPassivePublicationProjectsDeathReason(t *testing.T) {
+	h := newRemotePublicationHarness(t, 1)
+	h.markSnapshotSent(1, core.ChunkPos{})
+	mobs := []contract.PassiveMob{
+		passivePublicationMob(5, mgl32.Vec3{0.5, 1, 0.5}),
+		passivePublicationMob(8, mgl32.Vec3{2.5, 1, 2.5}),
+	}
+	current := h.running.sessions[1]
+	if !h.running.publishPassives(current, 20, mobs, nil) {
+		t.Fatal("首 tick publishPassives 失败")
+	}
+	if messages := onlyPassiveMessages(h.drain(1)); len(messages) != 1 {
+		t.Fatalf("首 tick 被动牛消息=%#v，想要恰好 1 条 spawn", messages)
+	}
+	// 死亡 tick：5 号死亡（快照无、死亡集合命中），8 号单纯出视野（快照无、
+	// 死亡集合未命中）。
+	if !h.running.publishPassives(current, 21, nil, []uint64{5}) {
+		t.Fatal("死亡 tick publishPassives 失败")
+	}
+	messages := onlyPassiveMessages(h.drain(1))
+	if len(messages) != 1 {
+		t.Fatalf("死亡 tick 被动牛消息=%#v，想要恰好 1 条 despawn", messages)
+	}
+	despawn, ok := messages[0].(network.PassiveDespawn)
+	if !ok {
+		t.Fatalf("死亡 tick 消息类型=%T，想要 PassiveDespawn", messages[0])
+	}
+	if err := despawn.Validate(); err != nil {
+		t.Fatalf("PassiveDespawn.Validate: %v", err)
+	}
+	if len(despawn.Despawns) != 2 {
+		t.Fatalf("PassiveDespawn=%+v，想要 2 条记录（ID 升序）", despawn)
+	}
+	if despawn.Despawns[0].ID != 5 || despawn.Despawns[0].Reason != network.PassiveDespawnDied {
+		t.Fatalf("5 号原因位=%+v，想要死亡 %d", despawn.Despawns[0], network.PassiveDespawnDied)
+	}
+	if despawn.Despawns[1].ID != 8 || despawn.Despawns[1].Reason != network.PassiveDespawnVanished {
+		t.Fatalf("8 号原因位=%+v，想要消失 %d", despawn.Despawns[1], network.PassiveDespawnVanished)
+	}
+}
 func TestPassivePublicationUnsubscribedFootChunkNeverSends(t *testing.T) {
 	h := newRemotePublicationHarness(t, 1)
 	h.markSnapshotSent(1, core.ChunkPos{})

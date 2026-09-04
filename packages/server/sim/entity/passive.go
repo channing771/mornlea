@@ -319,16 +319,25 @@ func outsideHomeNeighborhood(home core.ChunkPos, position mgl32.Vec3) bool {
 	return dx > 1 || dz > 1
 }
 
+// PassiveDeaths 返回本 tick 死亡结算移除的被动牛 ID（升序）：调用方只读
+// 消费，不得保留到下一次结算之后。
+func (engine *engineContext) PassiveDeaths() []uint64 {
+	return engine.passiveDeaths
+}
+
 // settlePassiveDeaths 结算本 `tick` 生命归零的被动牛：经既有掉落契约在死亡
 // 位置所在 `chunk` 环形尝试放置 1 个生牛肉后同 `tick` 移除，绝不留下半移除
-// 状态。处理顺序即切片顺序（`id` 升序），掉落放置顺序因此可复现。
+// 状态。处理顺序即切片顺序（`id` 升序），掉落放置顺序因此可复现。移除的 ID
+// 同步记入当 tick 死亡集合（先清空再记录），供发布侧投影 despawn 原因位。
 func (engine *engineContext) settlePassiveDeaths(pending *pendingChunkChanges) {
+	engine.passiveDeaths = engine.passiveDeaths[:0]
 	for index := 0; index < len(engine.passives.entries); {
 		entry := &engine.passives.entries[index]
 		if entry.health != 0 {
 			index++
 			continue
 		}
+		engine.passiveDeaths = append(engine.passiveDeaths, entry.id)
 		engine.dropPassiveLoot(entry, pending)
 		engine.passives.removeAt(index)
 	}

@@ -29,9 +29,10 @@ func (server *Server) publishWithChats(result contract.TickResult, chats []chatD
 	}
 	// 夜行者发布走 tick 末的单一值快照（Engine 集合秩序即 ID 升序）：集合
 	// 为空时容量为 0 的 make 不产生分配，无夜行者的世界不为此付出代价。
-	// 被动牛同理：同一份 tick 末快照供全部会话共享。
+	// 被动牛同理：同一份 tick 末快照与同 tick 死亡集合供全部会话共享。
 	hostiles := server.engine.HostileMobs()
 	passives := server.engine.PassiveMobs()
+	deaths := server.engine.PassiveDeaths()
 	for _, id := range server.sortedPublicationIDsLocked() {
 		current := server.publicationSessionLocked(id)
 		if current == nil || current.closed() {
@@ -39,10 +40,10 @@ func (server *Server) publishWithChats(result contract.TickResult, chats []chatD
 		}
 		if observer := server.config.InterestObserver; observer != nil {
 			started := time.Now()
-			server.publishSession(current, result, players, definitions, chats, hostiles, passives)
+			server.publishSession(current, result, players, definitions, chats, hostiles, passives, deaths)
 			observer(time.Since(started))
 		} else {
-			server.publishSession(current, result, players, definitions, chats, hostiles, passives)
+			server.publishSession(current, result, players, definitions, chats, hostiles, passives, deaths)
 		}
 	}
 }
@@ -55,6 +56,7 @@ func (server *Server) publishSession(
 	chats []chatDelivery,
 	hostiles []contract.HostileMob,
 	passives []contract.PassiveMob,
+	passiveDeaths []uint64,
 ) {
 	companions, ok := server.companionPublicationCandidates(current, result.Companions, definitions)
 	if !ok {
@@ -85,7 +87,7 @@ func (server *Server) publishSession(
 	if !server.publishHostiles(current, result.Tick, hostiles) {
 		return
 	}
-	if !server.publishPassives(current, result.Tick, passives) {
+	if !server.publishPassives(current, result.Tick, passives, passiveDeaths) {
 		return
 	}
 	if !server.publishDrops(current, result.Tick) {
