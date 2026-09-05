@@ -7,10 +7,8 @@ from collections.abc import Awaitable, Callable, Iterator
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
-
-from mornlea_companion_agent.domain.common import UINT64_MAX
-from mornlea_companion_agent.domain.memory import (
+from harness.domain.common import UINT64_MAX
+from harness.domain.memory import (
     LeaseIdentity,
     LeaseNotFound,
     MemoryCommit,
@@ -23,8 +21,9 @@ from mornlea_companion_agent.domain.memory import (
     MemoryStorageFailure,
     RevisionOverflow,
 )
-from mornlea_companion_agent.harness.leases import NamespaceLeaseManager
-from mornlea_companion_agent.storage.sqlite_memory import SQLiteMemoryStore
+from harness.runtime.leases import NamespaceLeaseManager
+from harness.store.sqlite_memory import SQLiteMemoryStore
+from pydantic import ValidationError
 
 NAMESPACE = "11111111-1111-4111-8111-111111111111"
 CLIENT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"

@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from collections.abc import Awaitable, Callable, Iterator
 from pathlib import Path
 
 import pytest
 from harness.domain.memory import (
-    ExpiredLease,
-    LeaseGrant,
     LeaseIdentity,
-    LeaseIDReuse,
     LeaseNotFound,
-    LeaseTransition,
     NamespaceConflict,
     RunOverloaded,
 )
@@ -22,6 +19,7 @@ from harness.runtime.leases import (
     RunKind,
 )
 from harness.runtime.run_gate import RunGate
+from harness.store.sqlite_memory import SQLiteMemoryStore
 
 NAMESPACE_A = "11111111-1111-4111-8111-111111111111"
 NAMESPACE_B = "22222222-2222-4222-8222-222222222222"
@@ -108,89 +106,6 @@ def run(coroutine: Awaitable[object]) -> object:
     return asyncio.run(coroutine)
 
 
-class InMemoryLeaseRepository:
-    """与租约表同语义的内存租约仓（时钟由调用方注入，只覆盖租约协议）。"""
-
-    def __init__(self, clock_ms: Callable[[], int] | None = None) -> None:
-        self._clock_ms = clock_ms or (lambda: 0)
-        self._leases: dict[str, tuple[str, str, int]] = {}
-        self._seen_lease_ids: set[str] = set()
-
-    async def close(self) -> None:
-        return None
-
-    async def acquire_namespace(
-        self,
-        namespace_id: str,
-        client_instance_id: str,
-        new_lease_id: str,
-    ) -> LeaseTransition:
-        now = self._clock_ms()
-        current = self._leases.get(namespace_id)
-        if current is not None and current[2] > now and current[0] != client_instance_id:
-            raise NamespaceConflict
-        if new_lease_id in self._seen_lease_ids:
-            raise LeaseIDReuse
-        self._seen_lease_ids.add(new_lease_id)
-        previous_id = None if current is None else current[1]
-        self._leases[namespace_id] = (client_instance_id, new_lease_id, now + LEASE_TTL_MS)
-        return LeaseTransition(
-            grant=LeaseGrant(
-                namespace_id=namespace_id,
-                client_instance_id=client_instance_id,
-                lease_id=new_lease_id,
-                lease_expires_in_ms=LEASE_TTL_MS,
-            ),
-            replaced_lease_id=previous_id,
-        )
-
-    async def heartbeat_namespace(self, identity: LeaseIdentity) -> LeaseGrant:
-        self._assert_current(identity)
-        client_instance_id, lease_id, _ = self._leases[identity.namespace_id]
-        self._leases[identity.namespace_id] = (
-            client_instance_id,
-            lease_id,
-            self._clock_ms() + LEASE_TTL_MS,
-        )
-        return LeaseGrant(**identity.model_dump(), lease_expires_in_ms=LEASE_TTL_MS)
-
-    async def release_namespace(self, identity: LeaseIdentity) -> None:
-        self._assert_current(identity)
-        del self._leases[identity.namespace_id]
-
-    async def assert_current_lease(self, identity: LeaseIdentity) -> None:
-        self._assert_current(identity)
-
-    async def expire_namespaces(self) -> tuple[ExpiredLease, ...]:
-        now = self._clock_ms()
-        expired_namespaces = sorted(
-            namespace_id
-            for namespace_id, (_, _, expires_at) in self._leases.items()
-            if expires_at <= now
-        )
-        expired = tuple(
-            ExpiredLease(
-                namespace_id=namespace_id,
-                client_instance_id=self._leases[namespace_id][0],
-                lease_id=self._leases[namespace_id][1],
-            )
-            for namespace_id in expired_namespaces
-        )
-        for namespace_id in expired_namespaces:
-            del self._leases[namespace_id]
-        return expired
-
-    def _assert_current(self, identity: LeaseIdentity) -> None:
-        current = self._leases.get(identity.namespace_id)
-        if (
-            current is None
-            or current[0] != identity.client_instance_id
-            or current[1] != identity.lease_id
-            or current[2] <= self._clock_ms()
-        ):
-            raise LeaseNotFound
-
-
 def test_lease_constants_match_the_checked_in_http_contract() -> None:
     assert LEASE_TTL_MS == 15_000
     assert HEARTBEAT_INTERVAL_MS == 5_000
@@ -199,7 +114,7 @@ def test_lease_constants_match_the_checked_in_http_contract() -> None:
 def test_acquire_conflict_and_same_owner_reacquire_create_a_new_fence(tmp_path: Path) -> None:
     async def scenario() -> None:
         clock = ManualClock()
-        store = InMemoryLeaseRepository(clock)
+        store = await SQLiteMemoryStore.open(tmp_path / "memory.sqlite3", clock_ms=clock)
         manager = NamespaceLeaseManager(
             store,
             lease_id_factory=uuid_sequence(LEASE_A, LEASE_A, LEASE_B),
@@ -262,7 +177,7 @@ def test_acquire_conflict_and_same_owner_reacquire_create_a_new_fence(tmp_path: 
 def test_heartbeat_release_and_old_lease_operations_are_not_found(tmp_path: Path) -> None:
     async def scenario() -> None:
         clock = ManualClock()
-        store = InMemoryLeaseRepository(clock)
+        store = await SQLiteMemoryStore.open(tmp_path / "memory.sqlite3", clock_ms=clock)
         manager = NamespaceLeaseManager(store, lease_id_factory=uuid_sequence(LEASE_A))
         identity = LeaseIdentity(
             namespace_id=NAMESPACE_A,
@@ -306,7 +221,7 @@ def test_heartbeat_release_and_old_lease_operations_are_not_found(tmp_path: Path
 def test_expired_takeover_directly_cancels_the_replaced_fence(tmp_path: Path) -> None:
     async def scenario() -> None:
         clock = ManualClock()
-        store = InMemoryLeaseRepository(clock)
+        store = await SQLiteMemoryStore.open(tmp_path / "memory.sqlite3", clock_ms=clock)
         manager = NamespaceLeaseManager(
             store,
             lease_id_factory=uuid_sequence(LEASE_A, LEASE_B),
@@ -337,10 +252,41 @@ def test_expired_takeover_directly_cancels_the_replaced_fence(tmp_path: Path) ->
     run(scenario())
 
 
+def test_lease_time_is_sampled_after_waiting_for_the_database_writer(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        path = tmp_path / "memory.sqlite3"
+        clock = ManualClock()
+        store = await SQLiteMemoryStore.open(path, clock_ms=clock)
+        manager = NamespaceLeaseManager(store, lease_id_factory=uuid_sequence(LEASE_A))
+        identity = LeaseIdentity(
+            namespace_id=NAMESPACE_A,
+            client_instance_id=CLIENT_A,
+            lease_id=LEASE_A,
+        )
+        blocker = sqlite3.connect(path)
+        try:
+            await manager.acquire(NAMESPACE_A, CLIENT_A)
+            blocker.execute("BEGIN IMMEDIATE")
+            heartbeat = asyncio.create_task(manager.heartbeat(identity))
+            await asyncio.sleep(0.02)
+            assert not heartbeat.done()
+            clock.advance(LEASE_TTL_MS)
+            blocker.rollback()
+            with pytest.raises(LeaseNotFound):
+                await heartbeat
+        finally:
+            if blocker.in_transaction:
+                blocker.rollback()
+            blocker.close()
+            await store.close()
+
+    run(scenario())
+
+
 def test_expiry_cancels_old_runs_and_takeover_hides_the_new_owner(tmp_path: Path) -> None:
     async def scenario() -> None:
         clock = ManualClock()
-        store = InMemoryLeaseRepository(clock)
+        store = await SQLiteMemoryStore.open(tmp_path / "memory.sqlite3", clock_ms=clock)
         manager = NamespaceLeaseManager(
             store,
             lease_id_factory=uuid_sequence(LEASE_A, LEASE_B),
@@ -383,7 +329,7 @@ def test_persistent_lease_transition_drains_run_cancellation_before_propagating_
 ) -> None:
     async def scenario() -> None:
         clock = ManualClock()
-        store = InMemoryLeaseRepository(clock)
+        store = await SQLiteMemoryStore.open(tmp_path / "memory.sqlite3", clock_ms=clock)
         gate = BlockingCancellationGate()
         manager = NamespaceLeaseManager(
             store,
@@ -446,7 +392,7 @@ def test_acquire_cancellation_after_repository_commit_still_cancels_old_runs(
     tmp_path: Path,
 ) -> None:
     async def scenario() -> None:
-        store = InMemoryLeaseRepository()
+        store = await SQLiteMemoryStore.open(tmp_path / "memory.sqlite3")
         manager = NamespaceLeaseManager(
             store,
             lease_id_factory=uuid_sequence(LEASE_A, LEASE_B),
@@ -515,7 +461,7 @@ def test_cancelled_reserve_after_slot_creation_does_not_orphan_a_handle(
     tmp_path: Path,
 ) -> None:
     async def scenario() -> None:
-        store = InMemoryLeaseRepository()
+        store = await SQLiteMemoryStore.open(tmp_path / "memory.sqlite3")
         gate = BlockingReturnGate()
         manager = NamespaceLeaseManager(
             store,
@@ -755,5 +701,28 @@ def test_repeated_run_cancellation_does_not_interrupt_async_worker_cleanup() -> 
         )
         await successor.finish()
         assert gate.active_count == 0
+
+    run(scenario())
+
+
+def test_concurrent_acquire_is_atomic_across_store_instances(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        path = tmp_path / "memory.sqlite3"
+        clock = ManualClock()
+        store_a = await SQLiteMemoryStore.open(path, clock_ms=clock)
+        store_b = await SQLiteMemoryStore.open(path, clock_ms=clock)
+        manager_a = NamespaceLeaseManager(store_a, lease_id_factory=uuid_sequence(LEASE_A))
+        manager_b = NamespaceLeaseManager(store_b, lease_id_factory=uuid_sequence(LEASE_B))
+        try:
+            results = await asyncio.gather(
+                manager_a.acquire(NAMESPACE_A, CLIENT_A),
+                manager_b.acquire(NAMESPACE_A, CLIENT_B),
+                return_exceptions=True,
+            )
+            assert sum(not isinstance(result, BaseException) for result in results) == 1
+            assert sum(isinstance(result, NamespaceConflict) for result in results) == 1
+        finally:
+            await store_a.close()
+            await store_b.close()
 
     run(scenario())

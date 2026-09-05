@@ -6,8 +6,7 @@ from collections.abc import Awaitable, Callable, Iterator
 from pathlib import Path
 
 import pytest
-
-from mornlea_companion_agent.domain.memory import (
+from harness.domain.memory import (
     LeaseIdentity,
     MemoryCommit,
     MemoryReconcile,
@@ -16,8 +15,8 @@ from mornlea_companion_agent.domain.memory import (
     MemoryStorageFailure,
     StorageCorruption,
 )
-from mornlea_companion_agent.harness.leases import NamespaceLeaseManager
-from mornlea_companion_agent.storage.sqlite_memory import SQLiteMemoryStore
+from harness.runtime.leases import NamespaceLeaseManager
+from harness.store.sqlite_memory import SQLiteMemoryStore
 
 NAMESPACE = "11111111-1111-4111-8111-111111111111"
 CLIENT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"

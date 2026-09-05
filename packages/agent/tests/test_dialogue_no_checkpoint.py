@@ -12,8 +12,11 @@ from harness.domain.http_v1 import DialogueTerminalRequest
 from harness.domain.memory import (
     LeaseIdentity,
     MemoryLookup,
+    MemoryReconcile,
     MemoryStateNonzero,
+    MemoryStateZero,
 )
+from harness.store.sqlite_memory import SQLiteMemoryStore
 from langgraph.graph import StateGraph
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -48,32 +51,38 @@ class StaticModel:
         return '{"line":"UNIQUE_LINE_NOT_PERSISTED","summary":"UNIQUE_PROPOSAL_NOT_COMMITTED"}'
 
 
-class StaticMemoryReader:
-    """返回固定 nonzero 记忆的只读 double（只记录 load 流量，不做任何持久化）。"""
-
-    def __init__(self) -> None:
-        self.loads: list[tuple[LeaseIdentity, MemoryLookup]] = []
-
-    async def load(
-        self,
-        identity: LeaseIdentity,
-        lookup: MemoryLookup,
-    ) -> MemoryStateNonzero:
-        self.loads.append((identity, lookup))
-        return MemoryStateNonzero(
-            revision=3,
-            operation_id="88888888-8888-4888-8888-888888888888",
-            summary="ALLOWED_COMPACT_RUNTIME_SUMMARY",
-        )
-
-
 def test_dialogue_compiles_a_fresh_graph_without_checkpoint(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
     async def scenario() -> None:
         request = terminal_request()
-        reader = StaticMemoryReader()
+        store = await SQLiteMemoryStore.open(tmp_path / "memory.sqlite3")
+        identity = LeaseIdentity(
+            namespace_id=request.namespace_id,
+            client_instance_id=request.client_instance_id,
+            lease_id=request.lease_id,
+        )
+        await store.acquire_namespace(
+            request.namespace_id,
+            request.client_instance_id,
+            request.lease_id,
+        )
+        await store.reconcile(
+            identity,
+            MemoryReconcile(
+                namespace_id=request.namespace_id,
+                companion_id=request.companion_id,
+                memory_epoch=request.memory_epoch,
+                active=True,
+                tombstone_operation_id=None,
+                mirror=MemoryStateNonzero(
+                    revision=3,
+                    operation_id="88888888-8888-4888-8888-888888888888",
+                    summary="ALLOWED_COMPACT_RUNTIME_SUMMARY",
+                ),
+            ),
+        )
         compile_calls: list[object] = []
         original = StateGraph.compile
 
@@ -82,6 +91,16 @@ def test_dialogue_compiles_a_fresh_graph_without_checkpoint(
             return original(self, *args, **kwargs)
 
         monkeypatch.setattr(StateGraph, "compile", spy_compile)
+        loads: list[tuple[LeaseIdentity, MemoryLookup]] = []
+        original_load = store.load
+
+        async def counting_load(
+            identity: LeaseIdentity, lookup: MemoryLookup
+        ) -> MemoryStateZero | MemoryStateNonzero:
+            loads.append((identity, lookup))
+            return await original_load(identity, lookup)
+
+        store.load = counting_load
         operations = iter(
             (
                 "99999999-9999-4999-8999-999999999991",
@@ -90,7 +109,7 @@ def test_dialogue_compiles_a_fresh_graph_without_checkpoint(
         )
         harness = DialogueHarness(
             StaticModel(),
-            reader,
+            store,
             wall_clock=lambda: 1_700_000_000.0,
             operation_id_factory=lambda: next(operations),
         )
@@ -98,7 +117,8 @@ def test_dialogue_compiles_a_fresh_graph_without_checkpoint(
         second = await harness.run(request)
         assert first.memory_proposal.operation_id != second.memory_proposal.operation_id
         assert compile_calls == [None, None]
-        assert len(reader.loads) == 2
+        assert len(loads) == 2
+        await store.close()
 
         persisted = b""
         for suffix in ("", "-wal", "-shm"):
