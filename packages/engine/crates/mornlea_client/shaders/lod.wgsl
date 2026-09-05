@@ -69,6 +69,9 @@ fn fs_main(in: VsOut) -> @location(0) vec4f {
     // 的最外缘带 fog == 1，完全呈现天空色。近环 v1 不雾化，雾只存在于
     // 本 pass。setter 出口已保证 full > start > 0，分母恒正。
     let dist = distance(in.world, camera.cam_pos.xyz);
-    let fog = clamp((dist - camera.fog.x) / (camera.fog.y - camera.fog.x), 0.0, 1.0);
+    let dist_fog = clamp((dist - camera.fog.x) / (camera.fog.y - camera.fog.x), 0.0, 1.0);
+    // 高度衰减：世界 y 越低雾越浓（河谷聚雾），以 y=64 为基准、每低 32 格权重翻倍封顶
+    let height_fog = clamp((64.0 - in.world.y) / 96.0, 0.0, 1.0) * 0.35;
+    let fog = clamp(dist_fog + height_fog * dist_fog, 0.0, 1.0);
     return vec4f(mix(c.rgb * in.shade, camera.fog_color.rgb, fog), 1.0);
 }
