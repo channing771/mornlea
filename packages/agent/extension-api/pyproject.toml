@@ -1,0 +1,15 @@
+[build-system]
+requires = ["hatchling>=1.29,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mornlea-extension-api"
+version = "0.1.0"
+description = "Mornlea extension API contracts"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "pydantic>=2.12.5,<3",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/extension_api"]
