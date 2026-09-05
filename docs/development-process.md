@@ -85,7 +85,7 @@ openspec validate --all --strict --no-interactive
 2. `openspec sync` 把 delta 沉淀到主规格 → 逐 change `openspec archive`；
 3. 按作用域更新根 `AGENTS.md` 版本矩阵和相关局部 `AGENTS.md`，并同步 `docs/notes/progress.md` 基线段——只写本行已集成且验证过的事实，不写本行非目标；同级 `CLAUDE.md` 只保留薄导入，由 `packages/audit` 的 `TestClaudeImportsAgentGuidance` focused 门禁兜底；
 4. 回填 `docs/feature-backlog.md`：该行 `状态` → `已完成`（认领人保留履历），并同步 GitHub Discussion #71；
-5. **PR + CI 再合并（默认，`AGENT_MODE=pr`）**：推送分支 → `gh pr create`（标题含行 ID，body 附 change 链接与验证摘要）→ `gh pr checks --watch` 监听 CI，失败则读 `gh run view --log-failed` 定位、本地修复并推送、重新监听，**直到全绿**（上限 10 轮，超限停止并报告）→ `gh pr merge --merge` → 本地 `git checkout main && git pull --ff-only`；仅 `AGENT_MODE=merge` 时才跳过 PR 直接本地合并推送（仍需本地全绿）。
+5. **合并**：含行为变更的提交默认经 PR（`AGENT_MODE=pr`）：推送分支 → `gh pr create`（标题含行 ID，body 附 change 链接与验证摘要）→ `gh pr checks --watch` 监听 CI，失败则读 `gh run view --log-failed` 定位、本地修复并推送、重新监听，**直到全绿**（上限 10 轮，超限停止并报告）→ `gh pr merge --merge` → 本地 `git checkout main && git pull --ff-only`；**纯归档提交**（仅 `openspec sync/archive` 产物与随附文档同步、无代码行为变更）**不走 PR，直接合入 main**（合入前本地全绿：`openspec validate` 与相称定点测试）；仅 `AGENT_MODE=merge` 时连行为变更也跳过 PR 直接本地合并推送（仍需本地全绿）。
 6. 关闭遗留：未决项誊入「延期与放弃」，不静默丢弃。
 
 ## 并行与冲突规则
@@ -104,4 +104,4 @@ openspec validate --all --strict --no-interactive
 | 2 契约 | worktree + OpenSpec change + strict validate | proposal/spec/design/tasks/ledger |
 | 3 实现 | SDD 任务循环：一轮开发一轮审查 + TDD（定义以 skill 为准） | 提交 + 测试 + ledger 结论与 Ruling |
 | 4 门禁 | gates.sh / 全量验证 + 视觉/基准 | 通过证据（记录数值） |
-| 5 收尾 | sync → archive → 基线同步 → PR → 监听 CI 至全绿 → merge → 回填 | 归档 change + 已合并 PR + backlog 标记 |
+| 5 收尾 | sync → archive → 基线同步 → 合并（行为变更经 PR+CI，纯归档直接合入 main）→ 回填 | 归档 change + 已合入 main + backlog 标记 |
