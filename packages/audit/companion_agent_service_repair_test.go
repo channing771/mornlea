@@ -40,8 +40,8 @@ jobs:
           version: '0.12.5'
           enable-cache: true
           cache-dependency-glob: |
-            packages/agent/companion/pyproject.toml
-            packages/agent/companion/uv.lock
+            packages/agent/pyproject.toml
+            packages/agent/uv.lock
       - uses: actions/download-artifact@v4
         with:
           name: native-macos-${{ github.sha }}
@@ -71,8 +71,8 @@ func TestCompanionAgentCIGateMutations(t *testing.T) {
 		{"python version type", "python-version: '3.12'", "python-version: 3.12", "string"},
 		{"uv version", "version: '0.12.5'", "version: 'latest'", "uv 0.12.5"},
 		{"uv cache type", "enable-cache: true", "enable-cache: 'true'", "bool"},
-		{"pyproject cache dependency", "            packages/agent/companion/pyproject.toml\n", "", "pyproject.toml"},
-		{"lock cache dependency", "            packages/agent/companion/uv.lock\n", "", "uv.lock"},
+		{"pyproject cache dependency", "            packages/agent/pyproject.toml\n", "", "pyproject.toml"},
+		{"lock cache dependency", "            packages/agent/uv.lock\n", "", "uv.lock"},
 		{"same sha artifact", "name: native-macos-${{ github.sha }}", "name: native-macos-latest", "same-SHA"},
 		{"verify script missing", "      - name: verify artifact\n        run: scripts/ci/verify-native-artifact.sh\n", "", "校验脚本"},
 		{"verify script renamed", "        run: scripts/ci/verify-native-artifact.sh", "        run: scripts/ci/verify-native-artifact-fork.sh", "校验脚本"},

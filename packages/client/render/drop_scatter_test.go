@@ -132,7 +132,7 @@ func TestDropScatterUsesFixedSizeAndAuxiliaryLayer(t *testing.T) {
 		drops[index].Item = core.ItemStone
 	}
 	parts := (&DropFalls{}).buildItemDropParts(nil, 0, drops, dropFallTestGravity, dropFallTestTerminal)
-	// 第二层抬升最坏为 `layerStep`=`dropFlakeSize`+2×`dropFloatHeight`+`dropScatterLayerGap`=0.5+2×0.08+0.02=0.68，取 0.6 留裕量。
+	// 第二层抬升最坏为层距 `dropFlakeSize`+2×`dropFloatHeight`+`dropScatterLayerGap`=0.5+2×0.08+0.02=0.68，取 0.6 留裕量。
 	if rise := scatterPartCenter(parts[16])[1] - scatterPartCenter(parts[0])[1]; rise < 0.6 {
 		t.Fatalf("第二层抬升=%v，想要全尺寸薄片全高与两倍浮动净空", rise)
 	}

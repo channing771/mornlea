@@ -61,3 +61,5 @@ scripts/agents/.npm-cache/
 /packages/tools/agent-board/web/dist/
 
 /packages/engine/crates/mornlea_client/frontend/visual/item-catalog.generated.json
+# 伙伴 Agent 本机运行配置（由根 config.example.yaml 复制，不入库）
+/config.yaml
