@@ -95,11 +95,15 @@ const CLOUD_OCTAVES: u32 = 3u; // 钉死为 3，不得参数化
 fn cloud_density(intersection: vec2f) -> f32 {
     // 基准格 16 block（与既有 cell 口径一致），macro 每 64 block 覆盖调制
     let base = (intersection - vec2f(sky.camera_cloud.w, 0.0)) / 16.0;
+    // 细节层相对漂移：高频 octave 在基准频率上多走 0.7 倍 local 偏移，
+    // 低频 macro 首 octave 保持原速，覆盖调制仍用 `base` 派生
+    let detail = base * 2.03 + vec2f(sky.camera_cloud.w * 0.7, 0.0);
     var fbm = 0.0;
     var amp = 0.55;
     var freq = 1.0;
     for (var o = 0u; o < CLOUD_OCTAVES; o++) {
-        fbm += amp * cloud_value_noise(base * freq);
+        let p = select(detail * (freq / 2.03), base * freq, o == 0u);
+        fbm += amp * cloud_value_noise(p);
         amp *= 0.5;
         freq *= 2.03;
     }

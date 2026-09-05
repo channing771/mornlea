@@ -21,6 +21,8 @@ type CloudOffset struct {
 }
 
 // CloudOffsetAt 从权威世界时间计算精确的云层偏移，避免绝对时间转 float32。
+// 双偏移语义不变：`Local` 与 `MacroX` 仍按既有口径拆分，细节层相对漂移由
+// 天空 shader 内部派生，本函数输出口径不因此改变。
 func CloudOffsetAt(worldTime uint64) CloudOffset {
 	blocks := worldTime / cloudTicksPerBlock
 	return CloudOffset{
