@@ -38,13 +38,11 @@ func scatterScale(part avatarPart, item core.ItemID) float32 {
 	return dropPartScale(part) / base
 }
 
-func scatterAxisGap(leftMin, leftMax, rightMin, rightMax float32) float32 {
-	return max(rightMin-leftMax, leftMin-rightMax)
-}
-
-// TestDropScatterMixedGroupsStayInsideAndApart 钉住真实矩阵几何：1/4/16/32
-// 个方块与薄片混合堆在全部自转相位中不越原方块，任意两堆至少沿一个 XZ
-// 轴保持净空；最密组仍保留约 0.012 格的理论余量。
+// TestDropScatterMixedGroupsStayInsideAndApart 钉住全尺寸几何：1/4 堆在全部
+// 自转相位中不越原方块，16/32 堆边缘探出不超过 0.14 格（6×6 档边角 `cell` 中心
+// 0.875 加薄片半宽 0.25 加最大抖动 0.006，得推导上界 0.131，取 0.14 裕量；16 档
+// 4×4 实测约 0.095，同属该上界）；任意两堆中心保持可辨距离，允许保守包围体
+// 轻微交叠。
 func TestDropScatterMixedGroupsStayInsideAndApart(t *testing.T) {
 	cases := []struct {
 		count int
@@ -63,20 +61,36 @@ func TestDropScatterMixedGroupsStayInsideAndApart(t *testing.T) {
 			if len(parts) != tc.count {
 				t.Fatalf("数量 %d tick %d 实例=%d", tc.count, tick, len(parts))
 			}
-			bounds := make([]avatarBounds, len(parts))
 			for index, part := range parts {
-				bounds[index] = transformedUnitCubeBounds(part.transform)
-				if bounds[index].min.X() < float32(tc.block.X)-1e-5 || bounds[index].max.X() > float32(tc.block.X+1)+1e-5 ||
-					bounds[index].min.Z() < float32(tc.block.Z)-1e-5 || bounds[index].max.Z() > float32(tc.block.Z+1)+1e-5 {
-					t.Fatalf("数量 %d tick %d 堆 %d 越界: %+v", tc.count, tick, index, bounds[index])
+				bound := transformedUnitCubeBounds(part.transform)
+				if tc.count <= 4 {
+					if bound.min.X() < float32(tc.block.X)-1e-5 || bound.max.X() > float32(tc.block.X+1)+1e-5 ||
+						bound.min.Z() < float32(tc.block.Z)-1e-5 || bound.max.Z() > float32(tc.block.Z+1)+1e-5 {
+						t.Fatalf("数量 %d tick %d 堆 %d 越界: %+v", tc.count, tick, index, bound)
+					}
+				} else if bound.min.X() < float32(tc.block.X)-0.14-1e-5 || bound.max.X() > float32(tc.block.X+1)+0.14+1e-5 ||
+					bound.min.Z() < float32(tc.block.Z)-0.14-1e-5 || bound.max.Z() > float32(tc.block.Z+1)+0.14+1e-5 {
+					t.Fatalf("数量 %d tick %d 堆 %d 探出超限: %+v", tc.count, tick, index, bound)
 				}
 			}
-			for left := range bounds {
-				for right := left + 1; right < len(bounds); right++ {
-					gapX := scatterAxisGap(bounds[left].min.X(), bounds[left].max.X(), bounds[right].min.X(), bounds[right].max.X())
-					gapZ := scatterAxisGap(bounds[left].min.Z(), bounds[left].max.Z(), bounds[right].min.Z(), bounds[right].max.Z())
-					if max(gapX, gapZ) < 0.0115 {
-						t.Fatalf("数量 %d tick %d 堆 %d/%d XZ 净空=%v/%v", tc.count, tick, left, right, gapX, gapZ)
+		}
+		if tc.count > 1 {
+			centers := make([][3]float32, tc.count)
+			parts := falls.buildItemDropParts(nil, 0, drops, dropFallTestGravity, dropFallTestTerminal)
+			for index, part := range parts {
+				centers[index] = scatterPartCenter(part)
+			}
+			// 最坏中心距为 `cell` 减双倍抖动：4 档 0.45-2×0.018=0.414 取 0.4，32 档 0.15-2×0.006=0.138 取 0.12。
+			want := float32(0.12)
+			if tc.count == 4 {
+				want = 0.4
+			}
+			for left := range centers {
+				for right := left + 1; right < len(centers); right++ {
+					dx := centers[left][0] - centers[right][0]
+					dz := centers[left][2] - centers[right][2]
+					if dist := float32(math.Hypot(float64(dx), float64(dz))); dist < want {
+						t.Fatalf("数量 %d 堆 %d/%d 中心距离=%v，想要至少 %v", tc.count, left, right, dist, want)
 					}
 				}
 			}
@@ -91,17 +105,17 @@ func TestDropScatterMixedGroupsStayInsideAndApart(t *testing.T) {
 	}
 }
 
-// TestDropScatterUsesBoundedDensityScaleAndAuxiliaryLayer 钉住各密度档的缩放，
+// TestDropScatterUsesFixedSizeAndAuxiliaryLayer 钉住各密度档全尺寸为 1，
 // 并确认后 16 堆获得只用于可见性的辅助层而不复用 XZ 位置。
-func TestDropScatterUsesBoundedDensityScaleAndAuxiliaryLayer(t *testing.T) {
+func TestDropScatterUsesFixedSizeAndAuxiliaryLayer(t *testing.T) {
 	for _, tc := range []struct {
 		count int
 		want  float32
 	}{
 		{count: 1, want: 1},
-		{count: 4, want: 0.75298804},
-		{count: 16, want: 0.37649402},
-		{count: 32, want: 0.25099602},
+		{count: 4, want: 1},
+		{count: 16, want: 1},
+		{count: 32, want: 1},
 	} {
 		drops := scatterTestDrops(tc.count, core.Overworld, core.BlockPos{X: 2, Y: 3, Z: -4})
 		parts := (&DropFalls{}).buildItemDropParts(nil, 0, drops, dropFallTestGravity, dropFallTestTerminal)
@@ -118,8 +132,9 @@ func TestDropScatterUsesBoundedDensityScaleAndAuxiliaryLayer(t *testing.T) {
 		drops[index].Item = core.ItemStone
 	}
 	parts := (&DropFalls{}).buildItemDropParts(nil, 0, drops, dropFallTestGravity, dropFallTestTerminal)
-	if rise := scatterPartCenter(parts[16])[1] - scatterPartCenter(parts[0])[1]; rise < 0.13 {
-		t.Fatalf("第二层抬升=%v，想要计入薄片全高与两倍浮动净空", rise)
+	// 第二层抬升最坏为 `layerStep`=`dropFlakeSize`+2×`dropFloatHeight`+`dropScatterLayerGap`=0.5+2×0.08+0.02=0.68，取 0.6 留裕量。
+	if rise := scatterPartCenter(parts[16])[1] - scatterPartCenter(parts[0])[1]; rise < 0.6 {
+		t.Fatalf("第二层抬升=%v，想要全尺寸薄片全高与两倍浮动净空", rise)
 	}
 	seen := make(map[[2]float32]struct{}, len(parts))
 	for index, part := range parts {
@@ -175,8 +190,8 @@ func TestDropScatterReorderIsByteStableAndKeepsCallerInput(t *testing.T) {
 		if index%2 == 1 {
 			item = core.ItemRawBeef
 		}
-		if got := scatterScale(part, item); math.Abs(float64(got-0.75298804)) > 2e-5 {
-			t.Fatalf("维度分组后堆 %d scale=%v，想要四堆档", index, got)
+		if got := scatterScale(part, item); math.Abs(float64(got-1)) > 2e-5 {
+			t.Fatalf("维度分组后堆 %d scale=%v，想要全尺寸四堆档", index, got)
 		}
 	}
 }
@@ -260,14 +275,16 @@ func TestDropScatterBottomAnchorsToSupportDuringScaleIn(t *testing.T) {
 	if len(mixedParts) != len(mixed) {
 		t.Fatalf("渐显混合组实例=%d，想要 %d", len(mixedParts), len(mixed))
 	}
-	for left := range mixedParts {
-		leftBounds := transformedUnitCubeBounds(mixedParts[left].transform)
-		for right := left + 1; right < len(mixedParts); right++ {
-			rightBounds := transformedUnitCubeBounds(mixedParts[right].transform)
-			gapX := scatterAxisGap(leftBounds.min.X(), leftBounds.max.X(), rightBounds.min.X(), rightBounds.max.X())
-			gapZ := scatterAxisGap(leftBounds.min.Z(), leftBounds.max.Z(), rightBounds.min.Z(), rightBounds.max.Z())
-			if max(gapX, gapZ) < 0.0115 {
-				t.Fatalf("渐显混合堆 %d/%d XZ 净空=%v/%v", left, right, gapX, gapZ)
+	centers := make([][3]float32, len(mixedParts))
+	for index, part := range mixedParts {
+		centers[index] = scatterPartCenter(part)
+	}
+	for left := range centers {
+		for right := left + 1; right < len(centers); right++ {
+			dx := centers[left][0] - centers[right][0]
+			dz := centers[left][2] - centers[right][2]
+			if dist := float32(math.Hypot(float64(dx), float64(dz))); dist < 0.12 {
+				t.Fatalf("渐显混合堆 %d/%d 中心距离=%v，想要至少 0.12", left, right, dist)
 			}
 		}
 	}

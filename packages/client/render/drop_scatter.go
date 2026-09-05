@@ -8,14 +8,12 @@ import (
 )
 
 const (
-	dropScatterMargin       = float32(0.05)
-	dropScatterWidth        = float32(0.9)
-	dropScatterJitterRatio  = float32(0.04)
-	dropScatterRadius       = float32(0.251)
-	dropScatterDiameterFill = float32(0.84)
-	dropScatterLayerSize    = 16
-	dropScatterLayerGap     = float32(0.02)
-	dropScatterFloorGap     = float32(0.02)
+	dropScatterMargin      = float32(0.05)
+	dropScatterWidth       = float32(0.9)
+	dropScatterJitterRatio = float32(0.04)
+	dropScatterLayerSize   = 16
+	dropScatterLayerGap    = float32(0.02)
+	dropScatterFloorGap    = float32(0.02)
 )
 
 type dropScatterPlacement struct {
@@ -67,18 +65,16 @@ func dropScatterGridSize(count int) int {
 }
 
 // dropScatterPlacementFor 把稳定排序后的 rank 映射到唯一 XZ cell。抖动每轴
-// 取 `0.25J..J` 的非零幅度并使用独立盐；缩放与层距分别覆盖任意 Y 旋转半径、
-// 完整薄片高度和两倍浮动幅度。
+// 取 `0.25J..J` 的非零幅度并使用独立盐；缩放恒为 1 以保证可辨认，`bob` 取全幅
+// 浮动高度，层距按全尺寸薄片高度与两倍浮动幅度自然变大；XZ 不钳制，密集档允
+// 许边缘探出以保留中心可辨距离。
 func dropScatterPlacementFor(count, rank int, id core.DropID) dropScatterPlacement {
 	grid := dropScatterGridSize(count)
 	cell := dropScatterWidth / float32(grid)
 	jitterLimit := dropScatterJitterRatio * cell
-	scale := dropScatterDiameterFill * cell / (2 * dropScatterRadius)
-	if scale > 1 {
-		scale = 1
-	}
-	bob := dropFloatHeight * scale
-	layerStep := dropFlakeSize*scale + 2*bob + dropScatterLayerGap
+	scale := float32(1)
+	bob := dropFloatHeight
+	layerStep := dropFlakeSize + 2*bob + dropScatterLayerGap
 	column, row := rank%grid, rank/grid
 	return dropScatterPlacement{
 		x:         dropScatterMargin + (float32(column)+0.5)*cell + dropScatterJitter(id, 0x9e3779b9, jitterLimit),
