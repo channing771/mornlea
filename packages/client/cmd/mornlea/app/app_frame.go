@@ -11,6 +11,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 
 	"github.com/channing771/mornlea/packages/client/client"
+	"github.com/channing771/mornlea/packages/client/mesh"
 	"github.com/channing771/mornlea/packages/client/render"
 	"github.com/channing771/mornlea/packages/client/render/hud"
 	"github.com/channing771/mornlea/packages/shared/core"
@@ -260,7 +261,8 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 
 	// 可见列表:BFS 连通性 + frustum,与旧 Go 渲染器同一算法与顺序。
 	// 半径在水下被压低,是"压低远处可见度"的落点。
-	a.visibleSections = client.NativeVisibleSections(
+	a.visibleSections = mesh.VisibleSectionsInto(
+		a.visibleSections[:0], &a.visibleScratch,
 		cameraSectionPos(cam.Pos), underwater.VisibleRadius,
 		frustum, activeScheduler.Connectivity,
 	)

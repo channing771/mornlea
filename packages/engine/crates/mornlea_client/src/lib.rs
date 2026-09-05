@@ -16,8 +16,6 @@
 
 /// 纯数学相机内核（前向／投影／视锥），与平台无关，各目标均可编译。
 pub mod camera;
-/// 可见区段 BFS 内核（Go 可见性遍历的 Rust 转写），与平台无关，各目标均可编译。
-pub mod visibility;
 
 #[cfg(target_os = "macos")]
 pub mod bridge;
