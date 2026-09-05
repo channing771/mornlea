@@ -6,6 +6,8 @@ import (
 	"encoding/binary"
 	"math"
 
+	"github.com/go-gl/mathgl/mgl32"
+
 	"github.com/channing771/mornlea/packages/client/assets"
 )
 
@@ -18,16 +20,68 @@ import (
 type InstanceEncoder struct {
 	ordered []Avatar
 	parts   []avatarPart
+	// tracks 是摆动速度估计的呈现位置差分历史：键为实体键，值为上次编码
+	// 的位置/tick/速度；每帧只保留本帧出现的键，有界于单帧身体数。
+	tracks map[EntityKey]swingTrack
+}
+
+// swingTrack 记录单个实体上次编码时的呈现位置与权威 tick，`speed` 是据此
+// 差分出的上次估计速度（格/tick）。
+type swingTrack struct {
+	pos   [3]float32
+	tick  uint64
+	speed float32
 }
 
 // EncodeAvatarInstances 把插值后的 avatars 编码为 96 字节/实例的字节流,
 // 与 AvatarRenderer.Render 的内部编码逐字节一致。dst 会被重置复用。
-func (e *InstanceEncoder) EncodeAvatarInstances(dst []byte, avatars []Avatar) []byte {
+//
+// `tick` 是最后确认的权威 server tick：编码器据此与实体稳定 ID 派生四肢摆
+// 动相位（见 `AvatarSwingAngle`），速度由呈现位置差分估计——同 tick 重复编
+// 码沿用上次速度，tick 回退（场景切换重钉）时重新锚定。静止实体恒为中性位
+// 姿，因此静态抓帧基线与机器速度无关。
+func (e *InstanceEncoder) EncodeAvatarInstances(dst []byte, tick uint64, avatars []Avatar) []byte {
 	e.ordered = orderedAvatarsInto(e.ordered[:0], avatars)
+	e.applyLocomotionSwing(tick)
 	e.parts = buildOrderedAvatarParts(e.parts[:0], e.ordered)
 	dst = growEncodeBuffer(dst, len(e.parts)*avatarInstanceBytes)
 	encodeAvatarPartsInto(dst, e.parts)
 	return dst
+}
+
+// applyLocomotionSwing 为已排序的本帧身体逐个估计呈现速度并填写 `Swing`：
+// 首见/回退锚定为 0，同 tick 沿用上次速度，前进时按位移差分重估；离场实体
+// 的历史同步清理。死亡/低头让路由装配侧（`appendPassiveAvatarParts` 等）按
+// 位姿门控，本函数只填角。
+func (e *InstanceEncoder) applyLocomotionSwing(tick uint64) {
+	if e.tracks == nil {
+		e.tracks = make(map[EntityKey]swingTrack, len(e.ordered))
+	}
+	for index := range e.ordered {
+		avatar := &e.ordered[index]
+		var speed float32
+		if last, ok := e.tracks[avatar.Key]; ok {
+			switch {
+			case tick > last.tick:
+				speed = mgl32.Vec3(avatar.Position).Sub(mgl32.Vec3(last.pos)).Len() / float32(tick-last.tick)
+			case tick == last.tick:
+				speed = last.speed
+			}
+		}
+		e.tracks[avatar.Key] = swingTrack{pos: [3]float32(avatar.Position), tick: tick, speed: speed}
+		avatar.Swing = AvatarSwingAngle(tick, swingPhaseID(avatar.Key), speed)
+	}
+	if len(e.tracks) > len(e.ordered) {
+		seen := make(map[EntityKey]struct{}, len(e.ordered))
+		for index := range e.ordered {
+			seen[e.ordered[index].Key] = struct{}{}
+		}
+		for key := range e.tracks {
+			if _, ok := seen[key]; !ok {
+				delete(e.tracks, key)
+			}
+		}
+	}
 }
 
 // EncodeItemDropInstances 把掉落物编码为 96 字节/实例的字节流,

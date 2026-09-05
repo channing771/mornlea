@@ -322,7 +322,7 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	if renderTiming != nil {
 		started = renderNow()
 	}
-	a.avatarStream = a.entityEncoder.EncodeAvatarInstances(a.avatarStream, avatars)
+	a.avatarStream = a.entityEncoder.EncodeAvatarInstances(a.avatarStream, a.serverTick, avatars)
 	if renderTiming != nil {
 		renderTiming.recordAvatar(renderNow().Sub(started))
 		started = renderNow()
