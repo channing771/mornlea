@@ -92,7 +92,7 @@ export function validateGameAction(raw: unknown): GameAction {
 }
 export function parseGame(raw: unknown): GameState {
     const r = object(raw, ["token", "kind", "cursorFree", "confirmed", "inventory", "grid", "gridSize", "output", "chest", "furnace", "progress", "burn", "recipes", "recipeIndex"], ["source"]);
-    if (!["none", "inventory", "character", "workbench", "chest", "furnace"].includes(String(r.kind)))
+    if (typeof r.kind !== "string" || !["none", "inventory", "character", "workbench", "chest", "furnace"].includes(r.kind))
         return fail();
     if (!Array.isArray(r.recipes) || r.recipes.length !== 10)
         return fail();
