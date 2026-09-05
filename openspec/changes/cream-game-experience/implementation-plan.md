@@ -90,6 +90,6 @@
 **Capture interfaces:** 现有四个 GPU 容器 world 场景 `inventory-crafting`、`workbench-crafting`、`chest-container`、`furnace-container` 迁到前端 `panel-inventory`、`panel-workbench`、`panel-chest`、`panel-furnace` fixtures；新增 `panel-character`，不能用空世界图更新旧基线。同步 captureScenes/顺序断言与README。现有 `--motion-demo` 仅 hardcoded break-burst，保留兼容，并可添加 `--motion-scene` 显式选择 `break-burst`（默认）、`avatar-walk`、`drop-scatter`、`drop-density`，复用有界 recorder。人物 motion 覆盖静止→慢走→快走同距离→停稳；drop-density 覆盖1→4→9→16→32→移除部分堆的完整过程；出生/破坏只在正式帧注入。材质静态 `avatar-detail` world PNG 应包含正侧背，和行走GIF职责不同，README记录此区别。
 
 **Steps:**
-- [ ] 读 visual-baseline skill 与相关 capture/docs AGENTS。补相称 fixtures，先跑比对，输出差异/预览供控制会话目检，再经显式 update 入口更新认可基线；不得更新无关世界基线或放宽阈值。
-- [ ] 执行 gofmt（改动Go文件）、`make frontend-check`（dist先构建并提交，保证字节门禁）、`make test-race`、`make dev-check`（六模块 vet/short tests 与 Rust fmt/clippy/workspace tests；其 Rust 命令与 rust-check 相同，本基线不再重复独立执行 rust-check）、`openspec validate --all --strict --no-interactive`。每个相同基线只跑一次，失败做具体诊断与必要修复后覆盖复测。
-- [ ] 将命令、退出码、输出文件与环境限制逐项写报告；未经执行不能声称视觉全绿。自审，提交集成/文档更改，等待控制会话整分支独立审查，不推送、不合并。
+- [x] 读 visual-baseline skill 与相关 capture/docs AGENTS。补相称 fixtures，先跑比对，输出差异/预览供控制会话目检，再经显式 update 入口更新认可基线；不得更新无关世界基线或放宽阈值。
+- [x] 执行 gofmt（改动Go文件）、`make frontend-check`（dist先构建并提交，保证字节门禁）、`make test-race`、`make dev-check`（六模块 vet/short tests 与 Rust fmt/clippy/workspace tests；其 Rust 命令与 rust-check 相同，本基线不再重复独立执行 rust-check）、`openspec validate --all --strict --no-interactive`。每个相同基线只跑一次，失败做具体诊断与必要修复后覆盖复测。
+- [x] 将命令、退出码、输出文件与环境限制逐项写报告；未经执行不能声称视觉全绿。自审，提交集成/文档更改，等待控制会话整分支独立审查，不推送、不合并。
