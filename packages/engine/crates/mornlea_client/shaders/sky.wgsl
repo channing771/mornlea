@@ -175,6 +175,8 @@ fn fs_main(in: VsOut) -> @location(0) vec4f {
         * select(0.0, 1.0, moon_direction.y > 0.0);
     color = mix(color, vec3f(0.72, 0.80, 0.95), moon_disc);
     color = mix(color, vec3f(1.0, 0.92, 0.68), sun_disc);
+    let glow = pow(clamp(dot(direction, sun_direction), 0.0, 1.0), 24.0) * select(0.0, 1.0, sun_direction.y > -0.05) * clamp(sky.sun_daylight.w * 2.0, 0.0, 1.0);
+    color += vec3f(1.0, 0.75, 0.5) * glow * 0.35;
     let density = cloud_mask(direction);
     color = mix(color, cloud_light(density), clamp(density, 0.0, 1.0) * 0.9);
     return vec4f(clamp(color, vec3f(0.0), vec3f(1.0)), 1.0);
