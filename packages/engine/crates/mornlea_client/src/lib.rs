@@ -14,6 +14,9 @@
 //! 平台约束:窗口栈只在 `target_os = "macos"` 生产;其他平台本 crate 编译
 //! 为空库,保证 Linux 专服 workspace 构建不引入任何窗口依赖。
 
+/// 纯数学相机内核（前向／投影／视锥），与平台无关，各目标均可编译。
+pub mod camera;
+
 #[cfg(target_os = "macos")]
 pub mod bridge;
 #[cfg(target_os = "macos")]

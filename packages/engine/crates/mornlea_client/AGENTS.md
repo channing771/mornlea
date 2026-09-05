@@ -7,7 +7,7 @@
 - Linux 专用服务端不得依赖本 crate；非 Darwin workspace 构建保持空平台实现，不引入窗口或 GPU 运行时。
 - WebView 的透明合成与输入参与分别由下行相位和 `game.cursorFree` 驱动，不新增 C ABI 出口。菜单、暂停、设置与调试面板消费键鼠；游戏中自由光标或背包/人物/工作台/箱子/熔炉面板也由 WebView 消费输入，保持透明世界背景。捕获态 `GameOverlay` 的 `hitTest:` 返回 `nil`，输入完全穿透至 winit。
 - 交互窗口（包括 `-connect`）首次下行即挂载同一前端；首次挂载必须应用参与状态。每次 WebView/winit 焦点交接清理原生键鼠残留。Tab 释放光标，前端 Tab/世界背景恢复捕获；E/Esc 与数字键通过带视图 token 的严格 `game-action` 回 Go。capture/benchmark 没有交互窗口且从不挂载 WebView。
-- 游戏面板与 tooltip 只在前端绘制，生产帧不提交它们的 GPU quad/glyph。固定 client ABI v15 的兼容布局、容量与编解码保持不变。
+- 游戏面板与 tooltip 只在前端绘制，生产帧不提交它们的 GPU quad/glyph。固定 client ABI v16 的兼容布局、容量与编解码保持不变。
 
 ## Client ABI
 
