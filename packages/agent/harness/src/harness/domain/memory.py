@@ -7,7 +7,7 @@ from typing import ClassVar, Literal
 
 from pydantic import StrictBool, model_validator
 
-from mornlea_companion_agent.domain.common import (
+from harness.domain.common import (
     MemorySummary,
     PositiveUInt64,
     StrictModel,

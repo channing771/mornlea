@@ -7,7 +7,7 @@ from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import BeforeValidator, Field, StrictInt
 
-from mornlea_companion_agent.domain.common import (
+from harness.domain.common import (
     SHA256,
     BlockID,
     BlockPosition,
@@ -25,8 +25,8 @@ from mornlea_companion_agent.domain.common import (
     UUIDv4,
     json_tuple,
 )
-from mornlea_companion_agent.domain.mcp_v1 import Plan
-from mornlea_companion_agent.domain.memory import (
+from harness.domain.mcp_v1 import Plan
+from harness.domain.memory import (
     MemoryState,
     MemoryStateNonzero,
     MemoryStateZero,

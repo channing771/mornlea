@@ -10,9 +10,9 @@ from typing import Any, ClassVar, Protocol
 
 from pydantic import BaseModel, Field, StrictFloat, StrictInt, TypeAdapter, ValidationError
 
-from mornlea_companion_agent.domain.common import StrictModel, canonical_json_bytes
-from mornlea_companion_agent.domain.http_v1 import PlanRequest
-from mornlea_companion_agent.domain.mcp_v1 import (
+from harness.domain.common import StrictModel, canonical_json_bytes
+from harness.domain.http_v1 import PlanRequest
+from harness.domain.mcp_v1 import (
     EmptyInput,
     FindVisibleBlocksInput,
     FindVisibleBlocksResult,

@@ -15,7 +15,7 @@ from pydantic import (
     model_validator,
 )
 
-from mornlea_companion_agent.domain.common import (
+from harness.domain.common import (
     SHA256,
     BlockID,
     BlockPosition,

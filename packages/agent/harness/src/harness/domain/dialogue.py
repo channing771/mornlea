@@ -8,13 +8,13 @@ from typing import ClassVar, Protocol
 
 from pydantic import StrictFloat, StrictInt
 
-from mornlea_companion_agent.domain.common import (
+from harness.domain.common import (
     DialogueLine,
     MemorySummary,
     StrictModel,
     canonical_json_bytes,
 )
-from mornlea_companion_agent.domain.memory import (
+from harness.domain.memory import (
     LeaseIdentity,
     MemoryLookup,
     MemoryStateNonzero,

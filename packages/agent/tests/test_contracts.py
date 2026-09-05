@@ -6,14 +6,12 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+import harness.domain.common as common_domain
+import harness.domain.mcp_v1 as mcp_domain
 import pytest
-from pydantic import TypeAdapter, ValidationError
-
-import mornlea_companion_agent.domain.common as common_domain
-import mornlea_companion_agent.domain.mcp_v1 as mcp_domain
-from mornlea_companion_agent.domain import CONTRACT_ADAPTERS, adapter_for
-from mornlea_companion_agent.domain.http_v1 import PlanResponse
-from mornlea_companion_agent.domain.mcp_v1 import (
+from harness.domain import CONTRACT_ADAPTERS, adapter_for
+from harness.domain.http_v1 import PlanResponse
+from harness.domain.mcp_v1 import (
     ACCEPTED_MINE_SEMANTICS,
     FindVisibleBlocksFailureResult,
     FindVisibleBlocksSuccessResult,
@@ -21,8 +19,9 @@ from mornlea_companion_agent.domain.mcp_v1 import (
     QueryTerrainFailureResult,
     QueryTerrainSuccessResult,
 )
+from pydantic import TypeAdapter, ValidationError
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CONTRACT_ROOT = REPOSITORY_ROOT / "packages/contracts/companion-agent"
 
 
