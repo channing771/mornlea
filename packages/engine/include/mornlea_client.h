@@ -259,4 +259,31 @@ uint32_t mornlea_client_render_readback(
     uint8_t *out,
     size_t out_len);
 
+/* 相机可见区段两段式查询(client ABI v15 同门控，版本号提升另行同步)：
+ * len 以起点区段、半径、视锥 6 平面×4 float 与区段连通表(conn_xyz 每条目
+ * 3 个 int32、conn_mask 每条目 1 个 uint16、共 conn_len 条目，上限
+ * 65×65×24)求解并缓存结果，把可见区段数写进 *out_count；fetch 把缓存按
+ * x,y,z 三元组展开为 int32 流写进 out_xyz。out_cap 以 int32 元素计，必须
+ * 是 3 的倍数且装得下；装不下返回 CAPACITY 且不写任何输出；*out_written
+ * 回填实际写入的 int32 元素数。len→fetch 必须由调用方同一线程顺序配对
+ * 调用；失败的 len 清空缓存。 */
+uint32_t mornlea_client_camera_visible_len(
+    uint32_t abi_version,
+    int32_t origin_x,
+    int32_t origin_y,
+    int32_t origin_z,
+    int32_t radius,
+    const float *frustum,
+    size_t frustum_len,
+    const int32_t *conn_xyz,
+    const uint16_t *conn_mask,
+    size_t conn_len,
+    uint32_t *out_count);
+
+uint32_t mornlea_client_camera_visible_fetch(
+    uint32_t abi_version,
+    int32_t *out_xyz,
+    size_t out_cap,
+    size_t *out_written);
+
 #endif

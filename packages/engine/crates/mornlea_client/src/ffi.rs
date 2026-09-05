@@ -2,11 +2,11 @@
 //!
 //! 契约:
 //! - 无参数 `mornlea_client_abi_version()` 只报告当前动态库 identity。
-//! - 其余 29 个接受 `abi_version` 的入口首先拒绝非当前版本并返回
+//! - 其余 31 个接受 `abi_version` 的入口首先拒绝非当前版本并返回
 //!   `MORNLEA_CLIENT_STATUS_ABI_VERSION`;当前版本见 [`CLIENT_ABI_VERSION`]
 //!   (v6 起远环 tile 出口加入,v7 起雾 setter 出口加入,v9 起结构化 UI 事件,
 //!   v11 起离屏 benchmark batch,v12 起菜单桥出口,v13 起窗口合成捕获,
-//!   v14 起 render world update 出口,v15 起 avatar 贴图实例布局)。
+//!   v14 起 render world update 出口,v15 起 avatar 贴图实例布局与相机可见性两段式出口)。
 //! - 窗口句柄存放在 thread-local 表中:句柄只在创建线程有效,跨线程调用
 //!   查不到句柄而返回 `MORNLEA_CLIENT_STATUS_WINDOW`——这同时兜住了 winit
 //!   macOS 的主线程约束(Go 侧已 `LockOSThread`)。
@@ -50,6 +50,8 @@ use crate::window::ClientWindow;
 /// v11:新增离屏 benchmark batch prepare/submit 入口。
 /// v10:avatar 通道容量扩至 75 具身体(450 实例)并新增敌怪身份域。
 /// v15:avatar 实例扩至 96 字节并新增材质槽与 atlas 采样(容量不变)。
+/// v15 另新增相机可见性两段式出口 `mornlea_client_camera_visible_len`/
+/// `mornlea_client_camera_visible_fetch`(暂与 v15 同门控,版本号提升另行同步)。
 pub const CLIENT_ABI_VERSION: u32 = 15;
 
 /// 调用成功。
@@ -416,8 +418,9 @@ mod tests {
 
     #[test]
     fn abi_version_is_fifteen() {
-        // v15 在 v14 render world update 表面上叠加 avatar 贴图实例布局；
-        // identity 必须与完整 29 个 versioned exports 同步切换。
+        // v15 在 v14 render world update 表面上叠加 avatar 贴图实例布局与
+        // 相机可见性两段式出口；
+        // identity 必须与完整 31 个 versioned exports 同步切换。
         assert_eq!(mornlea_client_abi_version(), 15);
     }
 
@@ -1233,7 +1236,25 @@ mod render_ffi_tests {
         });
         assert_bad_abi!(mornlea_client_render_resize(bad, 0, 0, 0));
         assert_bad_abi!(unsafe { mornlea_client_render_readback(bad, 0, std::ptr::null_mut(), 0) });
-        assert_eq!(checked, 29, "必须逐一覆盖全部 versioned exports");
+        assert_bad_abi!(unsafe {
+            mornlea_client_camera_visible_len(
+                bad,
+                0,
+                0,
+                0,
+                0,
+                std::ptr::null(),
+                0,
+                std::ptr::null(),
+                std::ptr::null(),
+                0,
+                std::ptr::null_mut(),
+            )
+        });
+        assert_bad_abi!(unsafe {
+            mornlea_client_camera_visible_fetch(bad, std::ptr::null_mut(), 0, std::ptr::null_mut())
+        });
+        assert_eq!(checked, 31, "必须逐一覆盖全部 versioned exports");
     }
 
     fn reset_and_single_section_batch() -> Vec<u8> {
@@ -2657,5 +2678,441 @@ mod ui_ffi_tests {
             MORNLEA_CLIENT_STATUS_OK
         );
         assert_eq!(marker, 37);
+    }
+}
+
+// ---- 相机可见性两段式查询(client ABI v15 同门控)----
+//
+// `len` 以起点区段、半径、视锥与连通表求解并把结果缓存在调用线程本地,
+// `fetch` 把缓存按 `x,y,z` 三元组展开为 `i32` 流。配对必须由调用方同一
+// 线程顺序调用(缓存是 thread-local 的);失败的 `len` 调用清空缓存,
+// 后续 `fetch` 得到空结果而非过期数据。
+
+/// 相机可见性两段式查询之计算半段：以起点区段、半径、视锥与连通表求解，
+/// 结果缓存在调用线程本地，把可见区段数写进 `out_count`。
+///
+/// 校验顺序镜像既有 `render_*`(ABI 版本→参数→指针→长度→容量)：`radius`
+/// 只接受 `0..=32`;`frustum` 须为 6 平面×4 `f32`(`frustum_len` 必须恰为
+/// 24);`conn_xyz`(`3×conn_len` 个 `i32`)与 `conn_mask`(`conn_len` 个
+/// `u16`)在 `conn_len>0` 时均须非空、对齐且地址范围不溢出，`conn_len` 不得
+/// 超过半径上限下的全填充格数(`65×65×24`)。`origin` 纵坐标越界按 Go
+/// `VisibleSectionsInto` 语义返回空结果(成功、计数为 0)，不是参数错误。
+/// 失败不写 `out_count`。
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn mornlea_client_camera_visible_len(
+    abi_version: u32,
+    origin_x: i32,
+    origin_y: i32,
+    origin_z: i32,
+    radius: i32,
+    frustum: *const f32,
+    frustum_len: usize,
+    conn_xyz: *const i32,
+    conn_mask: *const u16,
+    conn_len: usize,
+    out_count: *mut u32,
+) -> u32 {
+    if abi_version != CLIENT_ABI_VERSION {
+        return MORNLEA_CLIENT_STATUS_ABI_VERSION;
+    }
+    if !(0..=crate::visibility::MAX_RADIUS).contains(&radius) {
+        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+    }
+    if out_count.is_null() || frustum.is_null() {
+        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+    }
+    if frustum_len != 24 {
+        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+    }
+    if conn_len > crate::visibility::MAX_CONN_ENTRIES {
+        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+    }
+    if conn_len > 0 && (conn_xyz.is_null() || conn_mask.is_null()) {
+        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+    }
+    if !frustum.is_aligned()
+        || frustum.addr().checked_add(frustum_len * 4).is_none()
+        || (!conn_xyz.is_null()
+            && (!conn_xyz.is_aligned() || conn_xyz.addr().checked_add(conn_len * 3 * 4).is_none()))
+        || (!conn_mask.is_null()
+            && (!conn_mask.is_aligned() || conn_mask.addr().checked_add(conn_len * 2).is_none()))
+    {
+        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+    }
+    catch(|| {
+        crate::visibility::clear_last();
+        // SAFETY: frustum 非空、对齐且调用方保证 24 个 f32 可读;只在同步
+        // 调用期间借用,不保存 pointer。
+        let frustum_slice = unsafe { std::slice::from_raw_parts(frustum, 24) };
+        let mut planes = [[0.0f32; 4]; 6];
+        for (index, plane) in planes.iter_mut().enumerate() {
+            plane.copy_from_slice(&frustum_slice[index * 4..index * 4 + 4]);
+        }
+        let (xyz, mask) = if conn_len == 0 {
+            (&[][..], &[][..])
+        } else {
+            // SAFETY: 两指针非空、对齐且地址范围已校验,调用方保证对应长度可读。
+            unsafe {
+                (
+                    std::slice::from_raw_parts(conn_xyz, conn_len * 3),
+                    std::slice::from_raw_parts(conn_mask, conn_len),
+                )
+            }
+        };
+        let count = crate::visibility::compute_cached(
+            [origin_x, origin_y, origin_z],
+            radius,
+            planes,
+            xyz,
+            mask,
+        );
+        // 可见数不超过全填充格数,`u32` 必装得下。
+        // SAFETY: out_count 已判非空,只在完整成功后写一次。
+        unsafe { out_count.write(count as u32) };
+        MORNLEA_CLIENT_STATUS_OK
+    })
+}
+
+/// 相机可见性两段式查询之取数半段：把最近一次成功 `len` 的缓存按
+/// `x,y,z` 三元组展开为 `i32` 流写进 `out_xyz`，`*out_written` 回填实际
+/// 写入的 `i32` 元素数(恒为可见数的 3 倍)。
+///
+/// `out_cap` 以 `i32` 元素计，必须是 3 的倍数；装不下返回 `CAPACITY` 且不
+/// 触碰 `out_xyz` 与 `out_written`(调用方凭 `len` 的计数以足量缓冲重试)。
+/// 空指针配非零容量、`out_written` 为空返回 `INVALID_ARGUMENT`；`NULL`＋
+/// 零容量的查询形态在结果为空时成功(写 0)，结果非空时按 `CAPACITY` 处理。
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn mornlea_client_camera_visible_fetch(
+    abi_version: u32,
+    out_xyz: *mut i32,
+    out_cap: usize,
+    out_written: *mut usize,
+) -> u32 {
+    if abi_version != CLIENT_ABI_VERSION {
+        return MORNLEA_CLIENT_STATUS_ABI_VERSION;
+    }
+    if out_written.is_null() || (out_xyz.is_null() && out_cap != 0) {
+        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+    }
+    if !out_cap.is_multiple_of(3) {
+        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+    }
+    let Some(out_bytes) = out_cap.checked_mul(4) else {
+        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+    };
+    if !out_xyz.is_aligned() || out_xyz.addr().checked_add(out_bytes).is_none() {
+        return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
+    }
+    catch(|| {
+        // 可见数不超过全填充格数,3 倍必不溢出。
+        let required = crate::visibility::last_visible_len() * 3;
+        if required > out_cap {
+            return MORNLEA_CLIENT_STATUS_CAPACITY;
+        }
+        if required == 0 {
+            // SAFETY: out_written 已判非空。
+            unsafe { out_written.write(0) };
+            return MORNLEA_CLIENT_STATUS_OK;
+        }
+        // 走到这里 `out_xyz` 必非空(空指针只允许零容量,而零容量装不下
+        // 非空结果已在上一步返回)。
+        // SAFETY: out_xyz 非空、对齐且调用方保证 out_cap 个 i32 可写;
+        // required <= out_cap,只写前 required 个。
+        let out = unsafe { std::slice::from_raw_parts_mut(out_xyz, out_cap) };
+        let written = crate::visibility::fetch_cached(&mut out[..required]);
+        // SAFETY: out_written 已判非空,只在完整成功后写一次。
+        unsafe { out_written.write(written) };
+        MORNLEA_CLIENT_STATUS_OK
+    })
+}
+
+#[cfg(test)]
+mod camera_visibility_ffi_tests {
+    use super::*;
+
+    // 相机可见性是纯计算出口(无窗口句柄),校验前段(ABI→参数→指针→长度→
+    // 容量)不依赖窗口系统,自动测试可全覆盖;`len→fetch` 配对同线程顺序
+    // 调用,各测试自备配对,互不经过线程局部缓存串扰。
+
+    /// 全通过视锥的 24 个 `f32`(6 平面×4),与 Go `EverythingVisible` 同值。
+    fn everything_frustum() -> [f32; 24] {
+        let mut frustum = [0.0f32; 24];
+        for plane in frustum.chunks_exact_mut(4) {
+            plane[3] = 1.0;
+        }
+        frustum
+    }
+
+    #[test]
+    fn camera_visible_exports_reject_bad_abi_first() {
+        let mut count = 0xA5A5A5A5u32;
+        // SAFETY: 除被测的错误 ABI 外指针刻意全空;ABI 校验优先,不解引用。
+        let len = unsafe {
+            mornlea_client_camera_visible_len(
+                CLIENT_ABI_VERSION + 1,
+                0,
+                5,
+                0,
+                1,
+                std::ptr::null(),
+                0,
+                std::ptr::null(),
+                std::ptr::null(),
+                0,
+                &mut count,
+            )
+        };
+        assert_eq!(len, MORNLEA_CLIENT_STATUS_ABI_VERSION);
+        assert_eq!(count, 0xA5A5A5A5, "失败调用不得写 out_count");
+        let mut written = 0xA5A5A5A5usize;
+        // SAFETY: 同上。
+        let fetch = unsafe {
+            mornlea_client_camera_visible_fetch(
+                CLIENT_ABI_VERSION + 1,
+                std::ptr::null_mut(),
+                0,
+                &mut written,
+            )
+        };
+        assert_eq!(fetch, MORNLEA_CLIENT_STATUS_ABI_VERSION);
+        assert_eq!(written, 0xA5A5A5A5);
+    }
+
+    #[test]
+    fn camera_visible_len_rejects_bad_arguments_without_writes() {
+        let frustum = everything_frustum();
+        let mut count = 0xA5A5A5A5u32;
+        // 半径越界。
+        for radius in [-1, crate::visibility::MAX_RADIUS + 1] {
+            // SAFETY: 指针来自有效局部变量,唯半径违约。
+            let status = unsafe {
+                mornlea_client_camera_visible_len(
+                    CLIENT_ABI_VERSION,
+                    0,
+                    5,
+                    0,
+                    radius,
+                    frustum.as_ptr(),
+                    frustum.len(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    0,
+                    &mut count,
+                )
+            };
+            assert_eq!(status, MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT);
+        }
+        // 空视锥指针、长度不是 6 平面、连通表超限、非空条目配空指针。
+        // SAFETY: 每次仅一个条件违约。
+        assert_eq!(
+            unsafe {
+                mornlea_client_camera_visible_len(
+                    CLIENT_ABI_VERSION,
+                    0,
+                    5,
+                    0,
+                    1,
+                    std::ptr::null(),
+                    24,
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    0,
+                    &mut count,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        for bad_len in [0, 4, 23, 25] {
+            assert_eq!(
+                unsafe {
+                    mornlea_client_camera_visible_len(
+                        CLIENT_ABI_VERSION,
+                        0,
+                        5,
+                        0,
+                        1,
+                        frustum.as_ptr(),
+                        bad_len,
+                        std::ptr::null(),
+                        std::ptr::null(),
+                        0,
+                        &mut count,
+                    )
+                },
+                MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+            );
+        }
+        assert_eq!(
+            unsafe {
+                mornlea_client_camera_visible_len(
+                    CLIENT_ABI_VERSION,
+                    0,
+                    5,
+                    0,
+                    1,
+                    frustum.as_ptr(),
+                    frustum.len(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    crate::visibility::MAX_CONN_ENTRIES + 1,
+                    &mut count,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        let xyz = [0i32; 3];
+        assert_eq!(
+            unsafe {
+                mornlea_client_camera_visible_len(
+                    CLIENT_ABI_VERSION,
+                    0,
+                    5,
+                    0,
+                    1,
+                    frustum.as_ptr(),
+                    frustum.len(),
+                    xyz.as_ptr(),
+                    std::ptr::null(),
+                    1,
+                    &mut count,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(count, 0xA5A5A5A5, "参数违约路径不得写 out_count");
+    }
+
+    #[test]
+    fn camera_visible_origin_out_of_range_yields_empty_ok() {
+        // `origin.Y` 越界是 Go `VisibleSectionsInto` 的空结果语义,不是参数错误。
+        let frustum = everything_frustum();
+        for origin_y in [-1, 24] {
+            let mut count = 0xA5A5A5A5u32;
+            // SAFETY: 指针来自有效局部变量。
+            let status = unsafe {
+                mornlea_client_camera_visible_len(
+                    CLIENT_ABI_VERSION,
+                    0,
+                    origin_y,
+                    0,
+                    1,
+                    frustum.as_ptr(),
+                    frustum.len(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    0,
+                    &mut count,
+                )
+            };
+            assert_eq!(status, MORNLEA_CLIENT_STATUS_OK);
+            assert_eq!(count, 0);
+        }
+    }
+
+    #[test]
+    fn camera_visible_fetch_validates_before_capacity() {
+        let mut written = 0xA5A5A5A5usize;
+        let mut out = [0xCCi32; 3];
+        // out_written 为空、空指针配非零容量、容量不是 3 的倍数,均为参数违约。
+        // SAFETY: 每次仅一个条件违约。
+        assert_eq!(
+            unsafe {
+                mornlea_client_camera_visible_fetch(
+                    CLIENT_ABI_VERSION,
+                    out.as_mut_ptr(),
+                    out.len(),
+                    std::ptr::null_mut(),
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            unsafe {
+                mornlea_client_camera_visible_fetch(
+                    CLIENT_ABI_VERSION,
+                    std::ptr::null_mut(),
+                    3,
+                    &mut written,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(
+            unsafe {
+                mornlea_client_camera_visible_fetch(
+                    CLIENT_ABI_VERSION,
+                    out.as_mut_ptr(),
+                    4,
+                    &mut written,
+                )
+            },
+            MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
+        );
+        assert_eq!(written, 0xA5A5A5A5);
+        assert!(out.iter().all(|&v| v == 0xCC), "参数违约不得写输出");
+    }
+
+    #[test]
+    fn camera_visible_len_fetch_roundtrip_matches_kernel() {
+        // 半径 0＋空连通表：起点未加载也发射，结果恰为起点自身。
+        let frustum = everything_frustum();
+        let mut count = 0u32;
+        // SAFETY: 指针来自有效局部变量。
+        let status = unsafe {
+            mornlea_client_camera_visible_len(
+                CLIENT_ABI_VERSION,
+                0,
+                5,
+                0,
+                0,
+                frustum.as_ptr(),
+                frustum.len(),
+                std::ptr::null(),
+                std::ptr::null(),
+                0,
+                &mut count,
+            )
+        };
+        assert_eq!(status, MORNLEA_CLIENT_STATUS_OK);
+        assert_eq!(count, 1);
+
+        // 容量不足：返回 CAPACITY 且不触碰输出与 out_written。
+        let mut out = [0xCCi32; 3];
+        let mut written = 0xA5A5A5A5usize;
+        // SAFETY: 缓冲只有 0 个 i32，装不下 1 个区段。
+        let short = unsafe {
+            mornlea_client_camera_visible_fetch(
+                CLIENT_ABI_VERSION,
+                out.as_mut_ptr(),
+                0,
+                &mut written,
+            )
+        };
+        assert_eq!(short, MORNLEA_CLIENT_STATUS_CAPACITY);
+        assert!(out.iter().all(|&v| v == 0xCC));
+        assert_eq!(written, 0xA5A5A5A5);
+
+        // 足量缓冲：与内核直调逐项一致，written 以 i32 元素计。
+        // SAFETY: 指针来自有效局部变量，容量恰为所需。
+        let ok = unsafe {
+            mornlea_client_camera_visible_fetch(
+                CLIENT_ABI_VERSION,
+                out.as_mut_ptr(),
+                out.len(),
+                &mut written,
+            )
+        };
+        assert_eq!(ok, MORNLEA_CLIENT_STATUS_OK);
+        assert_eq!(written, 3);
+        assert_eq!(out, [0, 5, 0]);
+        let mut direct = Vec::new();
+        crate::visibility::select_visible(
+            [0, 5, 0],
+            0,
+            [[0.0, 0.0, 0.0, 1.0]; 6],
+            &[],
+            &mut direct,
+        );
+        assert_eq!(direct, vec![[0, 5, 0]]);
     }
 }
