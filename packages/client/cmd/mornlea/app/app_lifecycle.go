@@ -142,4 +142,7 @@ func (a *Application) resetSessionOwnedState() {
 	// 下落（年龄虚大），与首现即从生成高度起落的语义相悖。
 	a.entityEncoder.ResetFalls()
 	a.clientSessionClosed = true
+	// 摆动行进距离是纯呈现累积：随会话一并清零，重连后按新消息流重新累积，
+	// 不把旧会话的相位带进新会话。
+	a.entityEncoder.ResetLocomotion()
 }

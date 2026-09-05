@@ -3,6 +3,7 @@ package render
 import (
 	"testing"
 
+	"github.com/channing771/mornlea/packages/client/assets"
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
@@ -41,16 +42,27 @@ func TestItemDropPartsStayWithinFixedCapacity(t *testing.T) {
 	}
 }
 
-// Mutation killed: swapping item colors would render the wrong swatch.
-func TestItemDropColorsMatchProceduralBlocks(t *testing.T) {
-	for _, item := range []core.ItemID{core.ItemStone, core.ItemDirt, core.ItemGrass} {
-		got, ok := itemDropColor(item)
-		if !ok || got != ItemColor(item) {
-			t.Fatalf("物品 %d 颜色 = %v, %v，想要与 HUD 一致", item, got, ok)
-		}
+// Mutation killed: sampling a solid color instead of the atlas layer would
+// render the wrong swatch.
+func TestItemDropPartsSampleAtlasLayers(t *testing.T) {
+	drops := []ItemDrop{{
+		ID:    core.DropID{Slot: 0, Generation: 1},
+		Block: core.BlockPos{X: 0, Y: 3, Z: 0},
+		Item:  core.ItemStone,
+	}, {
+		ID:    core.DropID{Slot: 1, Generation: 1},
+		Block: core.BlockPos{X: 1, Y: 3, Z: 1},
+		Item:  core.ItemRawBeef,
+	}}
+	parts := (&DropFalls{}).buildItemDropParts(nil, 7, drops, dropFallTestGravity, dropFallTestTerminal)
+	if len(parts) != 2 {
+		t.Fatalf("实例数=%d，想要 2", len(parts))
 	}
-	if _, ok := itemDropColor(core.ItemNone); ok {
-		t.Fatal("空物品得到了颜色")
+	if parts[0].material != uint32(assets.LayerStone) {
+		t.Fatalf("石头材质=%d，想要石头层 %d", parts[0].material, uint32(assets.LayerStone))
+	}
+	if parts[1].material != uint32(assets.LayerRawBeef) {
+		t.Fatalf("生牛肉材质=%d，想要牛肉层 %d", parts[1].material, uint32(assets.LayerRawBeef))
 	}
 }
 
@@ -90,24 +102,32 @@ func TestItemDropPhaseVariesWithStableID(t *testing.T) {
 	}
 }
 
-func TestItemDropColorCoversRegisteredNonPlaceableItems(t *testing.T) {
+func TestItemDropPartsCoverPreviouslyInvisibleItems(t *testing.T) {
+	// 纯色时代 `ItemColor` 缺省的物品（零值色）曾渲染为不可见方块；层采样
+	// 后它们必须各产出恰好 1 个 atlas 实例。
 	for _, item := range []core.ItemID{
-		core.ItemCoal, core.ItemRawIron, core.ItemIronIngot,
-		core.ItemFurnace, core.ItemIronBlock, core.ItemChest,
-		core.ItemBrokenStonePickaxe, core.ItemBrokenIronPickaxe,
+		core.ItemCobblestone, core.ItemTorch, core.ItemWheat, core.ItemWheatSeeds,
+		core.ItemBread, core.ItemRottenFlesh, core.ItemPotato, core.ItemCarrot,
+		core.ItemPoisonousPotato, core.ItemDoor, core.ItemBed, core.ItemWorkbench,
+		core.ItemStick, core.ItemBoneMeal,
 	} {
-		color, ok := itemDropColor(item)
-		if !ok {
-			t.Fatalf("已注册物品 %d 无法绘制掉落物", item)
+		drops := []ItemDrop{{
+			ID:    core.DropID{Slot: 0, Generation: 1},
+			Block: core.BlockPos{X: 0, Y: 3, Z: 0},
+			Item:  item,
+		}}
+		parts := (&DropFalls{}).buildItemDropParts(nil, 7, drops, dropFallTestGravity, dropFallTestTerminal)
+		if len(parts) != 1 {
+			t.Fatalf("物品 %d 实例数=%d，想要 1", item, len(parts))
 		}
-		if color == ([4]float32{}) {
-			t.Fatalf("物品 %d 的掉落物颜色为零值", item)
+		if parts[0].material == avatarMaterialSolid {
+			t.Fatalf("物品 %d 走纯色分支，想要 atlas 采样", item)
 		}
 	}
-	if _, ok := itemDropColor(core.ItemNone); ok {
+	if _, ok := itemDropMaterial(core.ItemNone); ok {
 		t.Fatal("空物品被绘制")
 	}
-	if _, ok := itemDropColor(core.ItemID(4242)); ok {
+	if _, ok := itemDropMaterial(core.ItemID(4242)); ok {
 		t.Fatal("未知物品被绘制")
 	}
 }
@@ -129,7 +149,7 @@ func TestBeefItemColorsAreReddishBrownAndDistinct(t *testing.T) {
 		if pair.color[3] != 1 {
 			t.Fatalf("%s物品 %d alpha=%v，想要 1", pair.name, pair.item, pair.color[3])
 		}
-		if _, ok := itemDropColor(pair.item); !ok {
+		if _, ok := itemDropMaterial(pair.item); !ok {
 			t.Fatalf("%s物品 %d 掉落不可见", pair.name, pair.item)
 		}
 	}
@@ -163,7 +183,7 @@ func TestSwordItemColorsAreVisibleAndDistinct(t *testing.T) {
 			t.Fatalf("剑物品 %d 颜色与其他剑重复 %v", item, color)
 		}
 		seen[color] = struct{}{}
-		if _, ok := itemDropColor(item); !ok {
+		if _, ok := itemDropMaterial(item); !ok {
 			t.Fatalf("剑物品 %d 掉落不可见", item)
 		}
 	}

@@ -687,6 +687,9 @@ func resetCapturePresentation(app SceneApplication) error {
 	app.SetRemoteAvatars(app.RemoteAvatars()[:0])
 	app.SetRemoteNameTags(app.RemoteNameTags()[:0])
 	app.SetItemDropInstances(app.ItemDropInstances()[:0])
+	// 摆动行进距离是场景间共享的呈现累积：与镜像一并清零，后一场景按新夹
+	// 具重新累积，步态相位因此只由本场景夹具决定。
+	app.ResetLocomotion()
 	// 夜行者镜像是场景夹具的一部分：hostile-mob 注入的 8 只个体（含受击与
 	// 追逐状态）必须在这里一并恢复，否则水景会带着夜景敌怪出图。镜像可能
 	// 为 nil（最小测试装配），nil 时无从谈起夹具残留，跳过即可。

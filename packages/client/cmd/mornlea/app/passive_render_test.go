@@ -63,6 +63,74 @@ func TestApplicationRendersPassivesWithoutNameTags(t *testing.T) {
 	}
 }
 
+// TestAppendPassiveRenderPresentationsDyingMapsDeathPhase 锁定死亡呈现装配：
+// 保留体的滚转与红闪由死亡相位函数赋值（权威 tick 派生），活体保持零值。
+func TestAppendPassiveRenderPresentationsDyingMapsDeathPhase(t *testing.T) {
+	presentations := []client.PassivePresentation{
+		{ID: 5, Dimension: core.Overworld, Position: mgl32.Vec3{1, 2, 3}, Yaw: 0.5, Health: 8},
+		{ID: 6, Dimension: core.Overworld, Position: mgl32.Vec3{4, 5, 6}, Yaw: -0.5, Health: 8, Dying: true, DeathTick: 100},
+	}
+	avatars := AppendPassiveRenderPresentationsInto(nil, presentations, 110)
+	if avatars[0].Roll != 0 || avatars[0].Flash != 0 {
+		t.Fatalf("活体死亡通道=%+v，想要零值", avatars[0])
+	}
+	wantRoll, wantFlash := render.PassiveDeathPhase(100, 6, 110)
+	if avatars[1].Roll != wantRoll || avatars[1].Flash != wantFlash {
+		t.Fatalf("保留体死亡通道=(%v,%v)，想要相位 (%v,%v)", avatars[1].Roll, avatars[1].Flash, wantRoll, wantFlash)
+	}
+}
+
+// TestPassiveDeathRetentionMatchesRenderPhase 钉住两处“20”的行为一致：客户
+// 端镜像的死亡保留时长与渲染侧相位函数的保留时长必须同为 20 tick——一侧改
+// 数值不同步另一侧，本测试即红。
+func TestPassiveDeathRetentionMatchesRenderPhase(t *testing.T) {
+	passives := &client.Passives{}
+	position := mgl32.Vec3{1, 2, 3}
+	if err := passives.ApplySpawn(network.PassiveSpawn{ServerTick: 100, Spawns: []network.PassiveSpawnRecord{
+		{ID: 7, Dimension: core.Overworld, Position: position, Yaw: 0.5, Health: 9},
+	}}); err != nil {
+		t.Fatalf("ApplySpawn: %v", err)
+	}
+	if err := passives.ApplySpawn(network.PassiveSpawn{ServerTick: 100, Spawns: []network.PassiveSpawnRecord{
+		{ID: 8, Dimension: core.Overworld, Position: mgl32.Vec3{9, 1, 9}, Yaw: 0, Health: 20},
+	}}); err != nil {
+		t.Fatalf("ApplySpawn 活牛: %v", err)
+	}
+	if err := passives.ApplyDespawn(network.PassiveDespawn{ServerTick: 100, Despawns: []network.PassiveDespawnRecord{
+		{ID: 7, Reason: network.PassiveDespawnDied},
+	}}); err != nil {
+		t.Fatalf("死亡 ApplyDespawn: %v", err)
+	}
+	advanceTo := func(tick uint64) {
+		t.Helper()
+		if err := passives.ApplyStates(network.PassiveState{ServerTick: tick, States: []network.PassiveStateRecord{
+			{ID: 8, Position: mgl32.Vec3{9, 1, 9}, Yaw: 0, Health: 20},
+		}}); err != nil {
+			t.Fatalf("推进 tick=%d: %v", tick, err)
+		}
+	}
+	advanceTo(119)
+	presentations := passives.AppendPresentations(nil)
+	dying := false
+	for _, presentation := range presentations {
+		if presentation.ID == 7 {
+			dying = true
+		}
+	}
+	if !dying {
+		t.Fatal("T+19 保留体已消失，想要仍在")
+	}
+	if roll, _ := render.PassiveDeathPhase(100, 7, 119); roll >= float32(1.5707964) {
+		t.Fatalf("T+19 侧倒=%v，想要未满 90°", roll)
+	}
+	advanceTo(120)
+	for _, presentation := range passives.AppendPresentations(nil) {
+		if presentation.ID == 7 {
+			t.Fatal("T+20 保留体仍在，想要已移除")
+		}
+	}
+}
+
 // TestAppendPassiveRenderPresentationsIntoKeysPositions 锁定被动呈现到
 // avatar 记录的键与位姿映射：键为被动身份域，位置与朝向直通，俯仰由放牧位
 // 经呈现侧映射直通（放牧下压、常态归零），位姿完全由权威镜像驱动。
@@ -71,20 +139,40 @@ func TestAppendPassiveRenderPresentationsIntoKeysPositions(t *testing.T) {
 		{ID: 5, Dimension: core.Overworld, Position: mgl32.Vec3{1, 2, 3}, Yaw: 0.5, Health: 8},
 		{ID: 6, Dimension: core.Overworld, Position: mgl32.Vec3{4, 5, 6}, Yaw: -0.5, Health: 8, Grazing: true},
 	}
-	avatars := AppendPassiveRenderPresentationsInto(nil, presentations)
+	avatars := AppendPassiveRenderPresentationsInto(nil, presentations, 2)
 	if len(avatars) != 2 {
 		t.Fatalf("avatars=%d，想要 2", len(avatars))
 	}
 	if avatars[0].Key != render.PassiveEntityKey(5) {
 		t.Fatalf("avatar 键=%v，想要被动牛 ID 5 的键", avatars[0].Key)
 	}
-	if avatars[0].Position != presentations[0].Position || avatars[0].Yaw != 0.5 || avatars[0].Pitch != 0 {
-		t.Fatalf("avatar 位姿=%+v，想要位置与朝向直通、俯仰归零", avatars[0])
+	if avatars[0].Position != presentations[0].Position || avatars[0].Yaw != 0.5 || avatars[0].Pitch != render.PassiveIdleNodPitch(2, 5) {
+		t.Fatalf("avatar 位姿=%+v，想要位置与朝向直通、俯仰为闲时点头", avatars[0])
 	}
 	if avatars[1].Key != render.PassiveEntityKey(6) {
 		t.Fatalf("avatar 键=%v，想要被动牛 ID 6 的键", avatars[1].Key)
 	}
 	if avatars[1].Pitch != render.PassiveGrazeHeadPitch(true) {
 		t.Fatalf("放牧 avatar 俯仰=%v，想要呈现侧下压角 %v", avatars[1].Pitch, render.PassiveGrazeHeadPitch(true))
+	}
+}
+
+// TestAppendPassiveRenderPresentationsIdleNodGating 锁定点头门控：闲时点头只
+// 叠非常态非死亡体，放牧与死亡体的俯仰不受点头污染。
+func TestAppendPassiveRenderPresentationsIdleNodGating(t *testing.T) {
+	presentations := []client.PassivePresentation{
+		{ID: 5, Dimension: core.Overworld, Position: mgl32.Vec3{1, 2, 3}, Yaw: 0.5, Health: 8},
+		{ID: 6, Dimension: core.Overworld, Position: mgl32.Vec3{4, 5, 6}, Yaw: -0.5, Health: 8, Grazing: true},
+		{ID: 7, Dimension: core.Overworld, Position: mgl32.Vec3{7, 8, 9}, Yaw: 0, Health: 8, Dying: true, DeathTick: 100},
+	}
+	avatars := AppendPassiveRenderPresentationsInto(nil, presentations, 110)
+	if avatars[0].Pitch != render.PassiveIdleNodPitch(110, 5) {
+		t.Fatalf("闲时 avatar 俯仰=%v，想要点头相位 %v", avatars[0].Pitch, render.PassiveIdleNodPitch(110, 5))
+	}
+	if avatars[1].Pitch != render.PassiveGrazeHeadPitch(true) {
+		t.Fatalf("放牧 avatar 俯仰=%v，想要下压角", avatars[1].Pitch)
+	}
+	if want, _ := render.PassiveDeathPhase(100, 7, 110); avatars[2].Roll != want {
+		t.Fatalf("死亡 avatar 滚转=%v，想要相位 %v", avatars[2].Roll, want)
 	}
 }

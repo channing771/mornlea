@@ -145,6 +145,7 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		a.remoteAvatars = AppendPassiveRenderPresentationsInto(
 			a.remoteAvatars,
 			a.passivePresentations,
+			a.serverTick,
 		)
 	}
 	blockOutline := render.BlockOutline{}
@@ -322,13 +323,13 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	if renderTiming != nil {
 		started = renderNow()
 	}
-	a.avatarStream = a.entityEncoder.EncodeAvatarInstances(a.avatarStream, avatars)
+	a.avatarStream = a.entityEncoder.EncodeAvatarInstances(a.avatarStream, a.serverTick, avatars)
 	if renderTiming != nil {
 		renderTiming.recordAvatar(renderNow().Sub(started))
 		started = renderNow()
 	}
 	a.itemDropInstances = appendItemDropInstances(
-		a.itemDropInstances[:0], a.itemDrops.Presentations(), a.mirror,
+		a.itemDropInstances[:0], a.itemDrops.Presentations(), a.mirror, a.passivePresentations,
 	)
 	// 呈现下落与角色共用重力积分形状：`g`/终端取生效 tunables（与照相机
 	// `EyeHeight` 同式），纯函数在 `render` 侧显式传参、不读全局。

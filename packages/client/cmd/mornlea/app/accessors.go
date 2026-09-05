@@ -8,6 +8,7 @@ package app
 // 是被明确禁止的：新增导出前必须先有真实调用方。
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/channing771/mornlea/packages/client/client"
@@ -112,6 +113,10 @@ func (a *Application) RemoteAvatars() []render.Avatar { return a.remoteAvatars }
 // SetRemoteAvatars 写入远端玩家 avatar 批次缓冲。
 func (a *Application) SetRemoteAvatars(avatars []render.Avatar) { a.remoteAvatars = avatars }
 
+// ResetLocomotion 清零摆动行进距离累积：抓帧清场后调用，后续场景按新夹具
+// 重新累积，不把前一场景的相位带进基线。
+func (a *Application) ResetLocomotion() { a.entityEncoder.ResetLocomotion() }
+
 // RemoteNameTags 返回名牌批次缓冲。
 func (a *Application) RemoteNameTags() []render.NameTag { return a.remoteNameTags }
 
@@ -130,6 +135,32 @@ func (a *Application) SetHostiles(hostiles *client.Hostiles) {
 // 未装配被动牛镜像时为 nil，调用方需先判空。
 func (a *Application) Passives() *client.Passives {
 	return a.passives
+}
+
+// SetCaptureBlock 是 GIF 剧本专用的单格写块口（capture-only）：经与线上相同
+// 的镜像 `Apply` 入口落地并标记 dirty，revision 相对当前值单步前进；生产帧
+// 循环与玩法路径不得调用，调用点审计见 capture 包的 GIF 剧本单格测试。
+func (a *Application) SetCaptureBlock(position core.BlockPos, block core.BlockID) error {
+	if a.mirror == nil || a.mesher == nil {
+		return fmt.Errorf("capture 写块 %+v 需要镜像与网格化句柄", position)
+	}
+	chunkPos := position.Chunk()
+	chunk, loaded := a.mirror.Chunk(core.Overworld, chunkPos)
+	if !loaded {
+		return fmt.Errorf("capture 写块 %+v 所在区块未加载", position)
+	}
+	update, err := a.mirror.Apply(network.BlockChanges{
+		Dimension:    core.Overworld,
+		Chunk:        chunkPos,
+		BaseRevision: chunk.Revision,
+		NewRevision:  chunk.Revision + 1,
+		Changes:      []network.BlockChange{{Position: position, Block: block}},
+	})
+	if err != nil {
+		return fmt.Errorf("capture 写块 %+v: %w", position, err)
+	}
+	a.mesher.MarkDirty(update.Dirty...)
+	return nil
 }
 
 // SetPassives 整体替换被动牛镜像，仅限测试装配路径使用。

@@ -176,7 +176,7 @@ func TestCapturePassiveHerdFixtureIsDeterministicAndTagFree(t *testing.T) {
 	avatars = application.AppendHostileRenderPresentationsInto(
 		avatars, app.Hostiles().AppendPresentations(nil),
 	)
-	avatars = application.AppendPassiveRenderPresentationsInto(avatars, presentations)
+	avatars = application.AppendPassiveRenderPresentationsInto(avatars, presentations, capturePassiveHerdServerTick)
 	if len(tags) != 0 {
 		t.Fatalf("passive-herd 场景产生了名称标签: %+v", tags)
 	}

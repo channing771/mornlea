@@ -113,7 +113,11 @@ func TestTCPDropSelectedItemSurvivesRestart(t *testing.T) {
 		if !loaded {
 			continue
 		}
-		if presentations[0] != created || revision != createdRevision {
+		got, want := presentations[0], created
+		// `UpsertTick` 是同进程 tick 纪元的呈现时钟（死亡关联窗口用），重启
+		// 后纪元重置，不参与跨重启等价（与业务 parity 归零 tick 同纪律）。
+		got.UpsertTick, want.UpsertTick = 0, 0
+		if got != want || revision != createdRevision {
 			t.Fatalf("重启后 TCP 掉落镜像 = %+v revision=%d，想要 %+v revision=%d",
 				presentations[0], revision, created, createdRevision)
 		}

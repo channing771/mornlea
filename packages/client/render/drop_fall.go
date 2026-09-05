@@ -95,18 +95,35 @@ func dropFallOffset(age uint64, spawnY, supportTopY float32, hasSupport bool, gr
 	}
 }
 
-// buildItemDropParts 把掉落物编码为实心小立方体：颜色与未知物品规则沿用
-// 既有语义，中心高度 = 生成基准 − 重力积分下落偏移；正弦浮动与自转在着陆后
-// 继续，输出恒不超过固定容量。年龄来自首现表，`gravity`/`terminal` 由调用方
-// 显式传参（生产取生效 tunables），同 tick 重复编码逐字节一致。
+// buildItemDropParts 把掉落物编码为贴图实例：材质采样、薄片分形与死亡关联
+// 外观（滞后隐藏、渐显、白闪）沿用层采样语义，中心高度 = 生成基准 − 重力积分
+// 下落偏移；正弦浮动与自转在着陆后继续，输出恒不超过固定容量。年龄来自首现
+// 表，`gravity`/`terminal` 由调用方显式传参（生产取生效 tunables），同 tick
+// 重复编码逐字节一致。
 func (falls *DropFalls) buildItemDropParts(dst []avatarPart, serverTick uint64, drops []ItemDrop, gravity, terminal float32) []avatarPart {
 	for _, drop := range drops {
 		if len(dst) == maxItemDrops {
 			break
 		}
-		color, ok := itemDropColor(drop.Item)
+		material, ok := itemDropMaterial(drop.Item)
 		if !ok {
 			continue
+		}
+		unit := float32(1)
+		color := [4]float32{1, 1, 1, 1}
+		if drop.DeathTick != 0 {
+			visible, linkedScale, flash := deathLinkedDropAppearance(serverTick, drop.DeathTick)
+			if !visible {
+				continue
+			}
+			unit = linkedScale
+			if flash {
+				color = [4]float32{2, 2, 2, 1}
+			}
+		}
+		sx, sy, sz := dropCubeSize*unit, dropCubeSize*unit, dropCubeSize*unit
+		if itemDropFlake(drop.Item) {
+			sx, sy, sz = dropFlakeSize*unit, dropFlakeSize*unit, dropFlakeThin*unit
 		}
 		phase := dropAnimationPhase(serverTick, drop.ID)
 		spawnBaseY := float32(drop.Block.Y) + dropBaseAltitude
@@ -118,8 +135,10 @@ func (falls *DropFalls) buildItemDropParts(dst []avatarPart, serverTick uint64, 
 		}
 		transform := mgl32.Translate3D(center.X(), center.Y(), center.Z()).
 			Mul4(mgl32.HomogRotate3DY(phase.spin)).
-			Mul4(mgl32.Scale3D(dropCubeSize, dropCubeSize, dropCubeSize))
-		dst = append(dst, avatarPart{transform: transform, color: color, material: avatarMaterialSolid})
+			Mul4(mgl32.Scale3D(sx, sy, sz))
+		// 贴图分支颜色与漫反射相乘（见 avatar 着色器）：中性白保持原样，
+		// 超白即一次白色闪光；填色保持编码确定。
+		dst = append(dst, avatarPart{transform: transform, color: color, material: material})
 	}
 	return dst
 }

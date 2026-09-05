@@ -120,19 +120,58 @@ func TestPassiveTemptStopsExactlyAtTwoAndHalf(t *testing.T) {
 	holdHotbar(engine, session, core.ItemWheat, 1)
 	placeSessionPlayer(engine, session, mgl32.Vec3{5, 1, 2.5})
 	entry := &engine.passives.entries[0]
-	// 恰好 2.5 格仍在引诱半径内，但必须止步：输入中性且朝向不变。
+	// 恰好 2.5 格仍在引诱半径内，但必须止步：输入中性（位移冻结），朝向仍
+	// 每 tick 有界转向持麦玩家。
 	if _, ok := engine.passiveTemptTarget(entry); !ok {
 		t.Fatal("水平 2.5 格持麦未命中目标，想要半径内保持引诱态")
 	}
 	yaw := entry.yaw
 	input := engine.passiveStepInput(entry)
-	if input.MoveZ != 0 || input.Yaw != yaw {
-		t.Fatalf("止步距离内输入=%+v，想要中性输入且朝向不变", input)
+	if input.MoveZ != 0 {
+		t.Fatalf("止步距离内输入=%+v，想要中性输入", input)
+	}
+	want := normalizeYaw(float32(math.Atan2(float64(-(5 - 2.5)), float64(-(2.5 - 2.5)))))
+	if got := turnYawToward(yaw, want, passiveIdleLookMaxTurn); entry.yaw != got {
+		t.Fatalf("止步后朝向=%v，想要有界转向 %v", entry.yaw, got)
+	}
+	if entry.yaw == yaw {
+		t.Fatal("止步后朝向不变，想要原地转向玩家")
 	}
 	before := entry.state.Position
 	engine.advancePassiveMovement()
 	if moved := horizontalDist(before, engine.passives.entries[0].state.Position); moved > 1e-6 {
 		t.Fatalf("止步距离内水平位移=%v，想要原地不动", moved)
+	}
+}
+
+// TestPassiveTemptStoppedCowTurnsToFacePlayer 锁定止步转向收敛：持麦玩家横
+// 移到牛的另一侧，止步牛原地转向玩家、位置不变，朝向约束随漫游恢复解除。
+func TestPassiveTemptStoppedCowTurnsToFacePlayer(t *testing.T) {
+	engine, session := newTemptEngine(t)
+	restoreGrazeCow(t, engine, 26, mgl32.Vec3{2.5, 1, 2.5})
+	holdHotbar(engine, session, core.ItemWheat, 1)
+	placeSessionPlayer(engine, session, mgl32.Vec3{5, 1, 2.5})
+	entry := &engine.passives.entries[0]
+	// 先转向东侧玩家收敛。
+	for range 40 {
+		engine.advancePassiveMovement()
+	}
+	east := normalizeYaw(float32(math.Atan2(float64(-(5 - 2.5)), float64(-(2.5 - 2.5)))))
+	if entry.yaw != east {
+		t.Fatalf("东侧收敛朝向=%v，想要 %v", entry.yaw, east)
+	}
+	// 玩家横移到西侧：牛原地转向，位置不动。
+	placeSessionPlayer(engine, session, mgl32.Vec3{0, 1, 2.5})
+	west := normalizeYaw(float32(math.Atan2(float64(-(0 - 2.5)), float64(-(2.5 - 2.5)))))
+	for range 40 {
+		before := entry.state.Position
+		engine.advancePassiveMovement()
+		if moved := horizontalDist(before, engine.passives.entries[0].state.Position); moved > 1e-6 {
+			t.Fatalf("转向时水平位移=%v，想要原地不动", moved)
+		}
+	}
+	if entry.yaw != west {
+		t.Fatalf("西侧收敛朝向=%v，想要 %v", entry.yaw, west)
 	}
 }
 
@@ -164,10 +203,12 @@ func TestPassiveTemptSwitchAwayResumesWander(t *testing.T) {
 	if _, ok := engine.passiveTemptTarget(entry); !ok {
 		t.Fatal("对照失效：持麦时未命中目标")
 	}
-	// 切走小麦：目标清空，输入回到确定性漫游派生。
+	// 切走小麦：目标清空；玩家同时退到 6 格外（闲时看人够不着），输入回到
+	// 确定性漫游派生。
 	player := engine.sessions[session].player
 	player.inventory.Hotbar.Slots[1] = core.ItemStack{Item: core.ItemDirt, Count: 1}
 	player.inventory.Hotbar.Selected = 1
+	placeSessionPlayer(engine, session, mgl32.Vec3{10.5, 1, 2.5})
 	if _, ok := engine.passiveTemptTarget(entry); ok {
 		t.Fatal("切走小麦后仍命中目标，想要下一 tick 恢复漫游")
 	}

@@ -3,23 +3,58 @@
 // 缺文件时这些像素即最终呈现（见 `TestCattleProceduralFallbackPixels`）。
 package assets
 
-// cowHideTexture 生成牛皮层：奶白底 + 棕色斑块 + 细噪点。
+// 牛皮/牛头两层的奶油风共用取色（对照包内棕色系：泥土 134,96,67、木板
+// 174,124,68、耕地沟 78,52,32；斑块棕 R-B=82 与熟牛肉层 78 同暖）。
+var (
+	cowCream     = rgb{R: 234, G: 224, B: 205}
+	cowBrown     = rgb{R: 130, G: 80, B: 48}
+	cowEdge      = rgb{R: 182, G: 152, B: 126}
+	cowHighlight = rgb{R: 246, G: 236, B: 217}
+	cowHoof      = rgb{R: 76, G: 50, B: 34}
+)
+
+// cowPatchCell 报告 (x,y) 所在的 8×8 规整斑块格是否为棕斑。
+func cowPatchCell(x, y int, salt uint32) bool {
+	return hash2(uint32(x/8), uint32(y/8), salt)%4 == 0
+}
+
+// cowCoatBase 返回奶油风皮毛在 (x,y) 的底色：8×8 规整棕斑（异类邻格交界处
+// 1px 软边混合）+ 非斑格的柔和高光。盐值不同即不同层，用它区分牛皮/牛头。
+func cowCoatBase(x, y int, salt uint32) rgb {
+	patched := cowPatchCell(x, y, salt)
+	if !patched {
+		if hash2(uint32(x/8), uint32(y/8), salt^0xC117)%3 == 0 {
+			return cowHighlight
+		}
+		if cowPatchCell(x-1, y, salt) || cowPatchCell(x+1, y, salt) ||
+			cowPatchCell(x, y-1, salt) || cowPatchCell(x, y+1, salt) {
+			return cowEdge
+		}
+		return cowCream
+	}
+	if !cowPatchCell(x-1, y, salt) || !cowPatchCell(x+1, y, salt) ||
+		!cowPatchCell(x, y-1, salt) || !cowPatchCell(x, y+1, salt) {
+		return cowEdge
+	}
+	return cowBrown
+}
+
+// cowHideTexture 生成牛皮层：奶油底 + 规整棕斑 + 柔和高光 + 深暖蹄棕散点 +
+// 细噪点。
 //
-// 斑块取自 4×4 粗格的固定散列（`hash2` 既定噪声习惯），同格同色保证斑块成
-// 团而非噪点离散；格内再叠逐像素噪点，与既有 `noisyTexture` 的明度起伏同形。
-// 全图不透明：牛身层不进 cutout 集合，透明像素会被 discard 啃出破洞。
+// 蹄色只能以散点表达：单层贴满腿身六面，无法按腿底定位深色蹄块（几何与层映
+// 射冻结），深暖点读作蹄色。全图不透明：牛身层不进 cutout 集合，透明像素会
+// 被 discard 啃出破洞。
 func cowHideTexture() []byte {
 	px := make([]byte, texSize*texSize*4)
-	cream := rgb{R: 228, G: 220, B: 200}
-	brown := rgb{R: 122, G: 84, B: 52}
 	for y := 0; y < texSize; y++ {
 		for x := 0; x < texSize; x++ {
-			cell := hash2(uint32(x/4), uint32(y/4), 0xC07D)
-			base := cream
-			if cell%3 == 0 {
-				base = brown
+			base := cowCoatBase(x, y, 0xC07D)
+			// 蹄色散点先于噪点落定，与皮毛同起伏、读作一体。
+			if hash2(uint32(x), uint32(y), 0xC0F)%37 == 0 {
+				base = cowHoof
 			}
-			n := int32(hash2(uint32(x), uint32(y), 0xC07E)%25) - 12
+			n := int32(hash2(uint32(x), uint32(y), 0xC07E)%21) - 10
 			paint(px, x, y, rgb{
 				R: clamp8(int32(base.R) + n),
 				G: clamp8(int32(base.G) + n),
@@ -30,23 +65,21 @@ func cowHideTexture() []byte {
 	return px
 }
 
-// cowHeadTexture 生成牛头层：同族皮毛底（不同盐，与牛皮层逐像素不同）+ 双眼
-// + 吻部。
+// cowHeadTexture 生成牛头层：同族奶油皮毛底（不同盐，与牛皮层逐像素不
+// 同）+ 双眼 + 吻部 + 嘴线。
 //
-// 双眼是上半区两枚深色像素带浅色高光，吻部是底部四行的粉棕横带配两枚鼻孔——
-// 牛头采样在 Avatar 头部，与牛皮层必须一眼可辨。全图不透明，理由同牛皮层。
+// 双眼是上半区两枚深色像素带浅色高光，吻部是底部四行的粉棕横带配两枚鼻孔，
+// 嘴线是横带底行的深暖收底——牛头采样在 Avatar 头部，与牛皮层必须一眼可辨。
+// 全图不透明，理由同牛皮层。
 func cowHeadTexture() []byte {
 	px := make([]byte, texSize*texSize*4)
-	cream := rgb{R: 224, G: 214, B: 192}
-	brown := rgb{R: 118, G: 80, B: 50}
 	for y := 0; y < texSize; y++ {
 		for x := 0; x < texSize; x++ {
-			cell := hash2(uint32(x/4), uint32(y/4), 0xC0E4)
-			base := cream
-			if cell%3 == 0 {
-				base = brown
+			base := cowCoatBase(x, y, 0xC0E4)
+			if hash2(uint32(x), uint32(y), 0xC0F)%37 == 0 {
+				base = cowHoof
 			}
-			n := int32(hash2(uint32(x), uint32(y), 0xC0E5)%25) - 12
+			n := int32(hash2(uint32(x), uint32(y), 0xC0E5)%21) - 10
 			paint(px, x, y, rgb{
 				R: clamp8(int32(base.R) + n),
 				G: clamp8(int32(base.G) + n),
@@ -57,12 +90,15 @@ func cowHeadTexture() []byte {
 	// 双眼：第 5 行左右各一枚深色眼 + 右下一格高光。
 	for _, x := range [...]int{4, 11} {
 		paint(px, x, 5, rgb{R: 30, G: 22, B: 18})
-		paint(px, x+1, 6, rgb{R: 235, G: 230, B: 220})
+		paint(px, x+1, 6, rgb{R: 245, G: 238, B: 228})
 	}
-	// 吻部：第 12..15 行粉棕横带，两枚鼻孔读作朝向。
-	fill(px, 3, 12, 13, 16, rgb{R: 196, G: 150, B: 132})
+	// 吻部：第 12..15 行粉棕横带，两枚鼻孔读作朝向，底行嘴线收底。
+	fill(px, 2, 12, 14, 16, rgb{R: 198, G: 152, B: 134})
 	paint(px, 5, 13, rgb{R: 110, G: 70, B: 58})
 	paint(px, 10, 13, rgb{R: 110, G: 70, B: 58})
+	for x := 4; x <= 11; x++ {
+		paint(px, x, 15, rgb{R: 96, G: 62, B: 50})
+	}
 	return px
 }
 

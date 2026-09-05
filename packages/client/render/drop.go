@@ -3,6 +3,7 @@ package render
 import (
 	"math"
 
+	"github.com/channing771/mornlea/packages/client/assets"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/world"
 )
@@ -21,10 +22,17 @@ const (
 	dropSpinPeriod   = 80
 	dropFloatPeriod  = 48
 	dropBaseAltitude = float32(0.5)
+	// dropFlakeSize/dropFlakeThin 是非方块掉落薄片的平面边长与厚度：竖立的
+	// 单张贴图牌（约 1/2 缩放），平面竖直（宽与高为边长、厚度沿前后），绕 Y
+	// 旋转；前后大面采样同一层，双面同图；实例仍是立方体图元，零管线变更。
+	dropFlakeSize = float32(0.5)
+	dropFlakeThin = float32(0.02)
 )
 
 // ItemDrop 是一个权威掉落物的渲染输入；位置由方块位置决定，支撑高度由
-// app 层从只读镜像算出后随本结构传入，不另开通道。
+// app 层从只读镜像算出后随本结构传入，不另开通道。`DeathTick` 是可选的关联
+// 死亡 tick（0 表示未关联）：关联掉落在死亡相位 50% 前不渲染，50% 起 scale-in
+// 渐显并叠一次白色闪光；纯呈现启发式，拾取走权威不受影响。
 type ItemDrop struct {
 	ID    core.DropID
 	Block core.BlockPos
@@ -34,6 +42,27 @@ type ItemDrop struct {
 	// 不下落。呈现下落不反馈服务端。
 	SupportY   float32
 	HasSupport bool
+	// DeathTick 为零表示未关联死亡；非零时呈现侧按死亡相位滞后渐显。
+	DeathTick uint64
+}
+
+// deathLinkedDropAppearance 计算关联掉落在当前权威 tick 的呈现：相位 50% 前
+// 不可见，50% 起以 scale-in 渐显（首现约一成、保留末长满），首现 3 tick 内叠
+// 一次白色闪光。返回值是（可见、缩放进度 0..1、白闪）。
+func deathLinkedDropAppearance(serverTick, deathTick uint64) (bool, float32, bool) {
+	const half = PassiveDeathTicks / 2
+	var elapsed uint64
+	if serverTick > deathTick {
+		elapsed = serverTick - deathTick
+	}
+	if elapsed < half {
+		return false, 0, false
+	}
+	progress := float32(elapsed-half+1) / float32(half+1)
+	if progress > 1 {
+		progress = 1
+	}
+	return true, progress, elapsed-half < 3
 }
 
 type dropPhase struct {
@@ -111,6 +140,117 @@ func itemDropColor(item core.ItemID) ([4]float32, bool) {
 		return [4]float32{}, false
 	}
 	return ItemColor(item), true
+}
+
+// itemDropMaterial 把掉落物品映射到材质 atlas 的采样层：可放置物品取注册表
+// 顶面代表层（与世界同格同源，见 `TestItemDropMaterialsMatchRegistryTopFace`
+// 的同源断言）；种子/马铃薯/胡萝卜取成熟层（stage0 仅约 4% 像素覆盖，在小
+// 方块上近乎不可见）；矿石产物取同源方块族层；食物取牛肉/小麦层；木棍/骨粉
+// 取合成与颜色家族层；工具按配方材质族（石→卵石、铁→铁块、木→木板）取层。
+// 未注册物品返回 false（不可见，与变更前一致）。新增可掉落物品必须同步本
+// 表，否则 `TestItemDropMaterialCoversAllRegisteredItems` 即红。
+func itemDropMaterial(item core.ItemID) (uint32, bool) {
+	switch item {
+	case core.ItemStone:
+		return uint32(assets.LayerStone), true
+	case core.ItemDirt:
+		return uint32(assets.LayerDirt), true
+	case core.ItemGrass:
+		return uint32(assets.LayerGrassTop), true
+	case core.ItemStoneBrick:
+		return uint32(assets.LayerStoneBrick), true
+	case core.ItemFurnace:
+		return uint32(assets.LayerFurnace), true
+	case core.ItemIronBlock:
+		return uint32(assets.LayerIronBlock), true
+	case core.ItemChest:
+		return uint32(assets.LayerChest), true
+	case core.ItemLightBlock:
+		return uint32(assets.LayerLightBlock), true
+	case core.ItemCobblestone:
+		return uint32(assets.LayerCobblestone), true
+	case core.ItemSmoothStone:
+		return uint32(assets.LayerSmoothStone), true
+	case core.ItemSand:
+		return uint32(assets.LayerSand), true
+	case core.ItemGravel:
+		return uint32(assets.LayerGravel), true
+	case core.ItemOakLog:
+		return uint32(assets.LayerOakLogTop), true
+	case core.ItemOakPlanks:
+		return uint32(assets.LayerOakPlanks), true
+	case core.ItemLeaves:
+		return uint32(assets.LayerLeaves), true
+	case core.ItemGlass:
+		return uint32(assets.LayerGlass), true
+	case core.ItemBrick:
+		return uint32(assets.LayerBrick), true
+	case core.ItemWhiteWool:
+		return uint32(assets.LayerWhiteWool), true
+	case core.ItemRoofTile:
+		return uint32(assets.LayerRoofTile), true
+	case core.ItemClay:
+		return uint32(assets.LayerClay), true
+	case core.ItemSnowBlock:
+		return uint32(assets.LayerSnowTop), true
+	case core.ItemMossyCobblestone:
+		return uint32(assets.LayerMossyCobblestone), true
+	case core.ItemWorkbench:
+		return uint32(assets.LayerWorkbenchTop), true
+	case core.ItemDoor:
+		return uint32(assets.LayerDoor), true
+	case core.ItemBed:
+		return uint32(assets.LayerBedFootSouth), true
+	case core.ItemTorch:
+		return uint32(assets.LayerTorch), true
+	case core.ItemCoal:
+		return uint32(assets.LayerCoalOre), true
+	case core.ItemRawIron:
+		return uint32(assets.LayerIronOre), true
+	case core.ItemIronIngot:
+		return uint32(assets.LayerIronBlock), true
+	case core.ItemRawBeef:
+		return uint32(assets.LayerRawBeef), true
+	case core.ItemCookedBeef:
+		return uint32(assets.LayerCookedBeef), true
+	case core.ItemWheat, core.ItemWheatSeeds, core.ItemBread:
+		return uint32(assets.LayerWheat7), true
+	case core.ItemPotato, core.ItemPoisonousPotato:
+		return uint32(assets.LayerPotato7), true
+	case core.ItemCarrot:
+		return uint32(assets.LayerCarrot7), true
+	case core.ItemRottenFlesh:
+		return uint32(assets.LayerCookedBeef), true
+	case core.ItemStick:
+		return uint32(assets.LayerOakPlanks), true
+	case core.ItemBoneMeal:
+		return uint32(assets.LayerWhiteWool), true
+	case core.ItemStonePickaxe, core.ItemBrokenStonePickaxe,
+		core.ItemStoneHoe, core.ItemBrokenStoneHoe,
+		core.ItemStoneSword, core.ItemBrokenStoneSword:
+		return uint32(assets.LayerCobblestone), true
+	case core.ItemIronPickaxe, core.ItemBrokenIronPickaxe,
+		core.ItemIronHoe, core.ItemBrokenIronHoe,
+		core.ItemIronSword, core.ItemBrokenIronSword:
+		return uint32(assets.LayerIronBlock), true
+	case core.ItemWoodenSword, core.ItemBrokenWoodenSword:
+		return uint32(assets.LayerOakPlanks), true
+	default:
+		return 0, false
+	}
+}
+
+// itemDropFlake 报告掉落物是否按非方块薄片呈现：不可放置的物品（食物/工
+// 具/火把等）一律薄片；可放置但放置体不是完整立方体的（作物/门/床）同样薄
+// 片，其余方块类保持迷你立方体。火把不在 `ItemPlacement` 表里（形态经
+// `PlaceableBlockAtFace` 按命中面选择），天然落入薄片分支。
+func itemDropFlake(item core.ItemID) bool {
+	switch item {
+	case core.ItemWheatSeeds, core.ItemPotato, core.ItemCarrot, core.ItemDoor, core.ItemBed:
+		return true
+	}
+	_, ok := core.ItemPlacement(item)
+	return !ok
 }
 
 // ItemDropBlock 把掉落物的区块内索引还原为世界方块位置。

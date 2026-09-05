@@ -1,8 +1,9 @@
 # 视觉基线索引
 
-本目录统一存放两套视觉回归基线 PNG，均为测试夹具二进制，像素与搬迁前逐字节一致。
+本目录统一存放视觉回归基线，均为测试夹具二进制。
 
-- `world/`：无窗口世界场景基线 27 张，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
+- `world/`：无窗口世界场景基线 27 张 PNG，对应 `cmd/mornlea/capture/capture.go` 的 `captureScenes`。
+- `passive-death/`：被动牛 GIF 动态基线 4 个，对应 `cmd/mornlea/capture/passive_death_scripts.go` 的 `passiveDeathGIFScripts`（按 tick 步进抓帧，标准库 `image/gif` 编码，逐帧解码沿用双阈值比对）。
 - `ui/`：前端 UI 部件基线 19 张，对应 `packages/engine/crates/mornlea_client/frontend/visual/fixture-names.ts` 的 `fixtureNames`。
 
 旧目录 `cmd/mornlea/capture/testdata/golden/` 与 `engine/crates/mornlea_client/frontend/visual/golden/` 已清空，仅剩空目录，不再写入。
@@ -31,7 +32,7 @@
 | `ai-companion.png` | `ai-companion` | AI 伙伴在正午世界中的跟随站位与其呈现状态。 |
 | `sword-combat.png` | `sword-combat` | 持剑攻击姿态与权威命中标记同帧的战斗反馈。 |
 | `hostile-mob.png` | `hostile-mob` | 午夜草地火把亮池边缘夜行者群的站位与受击追逐态。 |
-| `passive-herd.png` | `passive-herd` | 正午草地上 3 头贴图牛与 1 个生牛肉掉落的站位与掉落相位。 |
+| `passive-herd.png` | `passive-herd` | 正午草地上 3 头贴图牛与 1 个纹理生牛肉掉落的站位与掉落相位。 |
 | `passive-graze.png` | `passive-graze` | 正午草地上低头牛与常态牛的位姿对照，及牛吻部身前由草变泥土的一格。 |
 | `water-surface-slope.png` | `water-surface-slope` | 俯视水池的水面高度斜坡与透水可见的池底材质。 |
 | `mining-crack-early.png` | `mining-crack-early` | 同一目标砖块上的浅阶段世界空间采掘裂纹。 |
@@ -79,9 +80,20 @@ motion 演示产物只验呈现、不进比对：`make visual-check` 与 `--upda
 - 演示场景值住 `packages/client/cmd/mornlea/capture/motion_break_burst.go`，不追加进 `captureScenes`。
 - 编码只用标准库 `image/gif`（固定调色板 + 抖动），固定输入逐字节一致。
 
+## passive-death（4 个）
+
+文件名即剧本名加 `.gif` 后缀，剧本定义以 `passiveDeathGIFScripts` 为准；单基线帧预算 ≤48（8fps×6s），比对时解码逐帧沿用双阈值，全部帧通过方为通过。
+
+| 基线文件 | 剧本名 | 说明 |
+|---|---|---|
+| `graze.gif` | `graze` | 吃草前后：常态站立 6 帧接低头吃草 6 帧，常态牛对照。 |
+| `lure.gif` | `lure` | 持麦靠近：远端玩家逐帧靠近静立牛，小麦掉落置于牛身前。 |
+| `kill.gif` | `kill` | 击杀：第 4 帧死亡 despawn 并刷出生牛肉掉落，随后 20 帧红闪侧倒保留期。 |
+| `beef-drop.gif` | `beef-drop` | 牛肉掉落：单个生牛肉掉落的浮动与旋转（权威 tick 派生）。 |
+
 ## 更新入口与纪律
 
-- 世界基线比对入口为 `make visual-check`，覆盖入口为 `make visual-update`，路径常量为 `capture/capture_image.go` 的 `captureGoldenDir`。
+- 世界基线比对入口为 `make visual-check`（含 GIF 剧本），覆盖入口为 `make visual-update`，路径常量为 `capture/capture_image.go` 的 `captureGoldenDir` 与 `capture/passive_death_gif.go` 的 `passiveDeathGoldenDir`。
 - 部件基线比对入口为 `make frontend-visual-check`（或在 `frontend/` 内执行 `corepack pnpm visual-check`），覆盖入口为 `make frontend-visual-update`（或 `corepack pnpm visual-update`），基线目录由 `visual/visual.mjs` 的 `goldenDir` 经 `repoRoot` 推导。
 - 先目检后覆盖：基线只在预期视觉变化已逐图人工确认后更新，普通验证只比较不自动接受差异；漂移先看实拍图与差异图定位，再决定修代码还是更新基线；基线缺失不静默创建，必须显式请求更新。
 - 比对口径为双阈值，定义与取值以源码为准（`capture/visual_compare.go` 与 `visual/visual.mjs` 的比对函数），本文档不复制具体数值。

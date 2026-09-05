@@ -127,13 +127,14 @@ func TestPassiveAvatarLowersHeadWhenGrazing(t *testing.T) {
 	if !facing.ApproxEqualThreshold(want, 1e-4) {
 		t.Fatalf("放牧头面朝=%v，想要前下方的 %v", facing, want)
 	}
-	// 下压是头部原位的俯转：头部中心仍在身体前上方，面朝转入前下方。
+	// 下压是绕颈轴的俯转：头心摆动下沉、面朝转入前下方（吻部贴草见
+	// `TestPassiveGrazeMuzzleReachesGrass` 的包围盒断言）。
 	center := func(parts []avatarPart) mgl32.Vec3 {
 		bounds := transformedUnitCubeBounds(parts[0].transform)
 		return bounds.min.Add(bounds.max.Sub(bounds.min).Mul(0.5))
 	}
-	if got, want := center(grazing), center(standing); !got.ApproxEqualThreshold(want, 1e-4) {
-		t.Fatalf("放牧头中心=%v，想要与常态一致的 %v", got, want)
+	if got, want := center(grazing), center(standing); got.Y() >= want.Y() {
+		t.Fatalf("放牧头中心高度=%v，想要低于常态 %v（绕颈下压）", got.Y(), want.Y())
 	}
 	if got, want := center(standing), position.Add(mgl32.Vec3{0.7, 1.0, 0}); !got.ApproxEqualThreshold(want, 1e-4) {
 		t.Fatalf("常态头中心=%v，想要身体前上方的 %v", got, want)
