@@ -2697,7 +2697,7 @@ mod ui_ffi_tests {
 /// `u16`)在 `conn_len>0` 时均须非空、对齐且地址范围不溢出，`conn_len` 不得
 /// 超过半径上限下的全填充格数(`65×65×24`)。`origin` 纵坐标越界按 Go
 /// `VisibleSectionsInto` 语义返回空结果(成功、计数为 0)，不是参数错误。
-/// 失败不写 `out_count`。
+/// 失败不写 `out_count`，但先清空线程缓存(后续 `fetch` 得到空结果而非过期数据)。
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn mornlea_client_camera_visible_len(
     abi_version: u32,
@@ -2715,6 +2715,8 @@ pub unsafe extern "C" fn mornlea_client_camera_visible_len(
     if abi_version != CLIENT_ABI_VERSION {
         return MORNLEA_CLIENT_STATUS_ABI_VERSION;
     }
+    // 缓存失效先行：其后任一参数违约都已无过期结果可取，`fetch` 只会看到空。
+    crate::visibility::clear_last();
     if !(0..=crate::visibility::MAX_RADIUS).contains(&radius) {
         return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
     }
@@ -2740,7 +2742,6 @@ pub unsafe extern "C" fn mornlea_client_camera_visible_len(
         return MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT;
     }
     catch(|| {
-        crate::visibility::clear_last();
         // SAFETY: frustum 非空、对齐且调用方保证 24 个 f32 可读;只在同步
         // 调用期间借用,不保存 pointer。
         let frustum_slice = unsafe { std::slice::from_raw_parts(frustum, 24) };
@@ -2980,6 +2981,81 @@ mod camera_visibility_ffi_tests {
             MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT
         );
         assert_eq!(count, 0xA5A5A5A5, "参数违约路径不得写 out_count");
+    }
+
+    #[test]
+    fn camera_visible_failed_len_clears_cache_no_stale_fetch() {
+        // 先一次成功调用“加热”缓存，再对每条参数违约路径断言：失败的 `len`
+        // 必须清空缓存，随后足量 `fetch` 只能看到空结果而非过期区段。
+        let frustum = everything_frustum();
+        // 成功加热后以单违约参数调用 `len`：返回 INVALID、不写输出且清空缓存。
+        // SAFETY: 指针来自有效局部变量；失败调用的参数逐个违约。
+        fn failed_len(radius: i32, frustum_ptr: *const f32, frustum_len: usize) {
+            let mut poisoned = 0xA5A5A5A5u32;
+            // SAFETY: 见外层注释；三组违约（半径越界、空视锥指针、平面数不足）
+            // 均在任何解引用之前被拒绝。
+            let status = unsafe {
+                mornlea_client_camera_visible_len(
+                    CLIENT_ABI_VERSION,
+                    0,
+                    5,
+                    0,
+                    radius,
+                    frustum_ptr,
+                    frustum_len,
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    0,
+                    &mut poisoned,
+                )
+            };
+            assert_eq!(status, MORNLEA_CLIENT_STATUS_INVALID_ARGUMENT);
+            assert_eq!(poisoned, 0xA5A5A5A5, "失败调用不得写 out_count");
+        }
+        let cases: [(i32, *const f32, usize); 3] = [
+            (-1, frustum.as_ptr(), frustum.len()),
+            (1, std::ptr::null(), frustum.len()),
+            (1, frustum.as_ptr(), 23),
+        ];
+        for (radius, frustum_ptr, frustum_len) in cases {
+            // 加热：半径 0＋空连通表缓存 1 个区段。
+            let mut count = 0u32;
+            // SAFETY: 指针来自有效局部变量。
+            let ok = unsafe {
+                mornlea_client_camera_visible_len(
+                    CLIENT_ABI_VERSION,
+                    0,
+                    5,
+                    0,
+                    0,
+                    frustum.as_ptr(),
+                    frustum.len(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    0,
+                    &mut count,
+                )
+            };
+            assert_eq!(ok, MORNLEA_CLIENT_STATUS_OK);
+            assert_eq!(count, 1);
+            // 违约：任一失败都必须清掉上面这 1 个缓存区段。
+            failed_len(radius, frustum_ptr, frustum_len);
+            // 取数：足量缓冲下成功但写 0 个元素，输出缓冲保持调用前内容。
+            let mut out = [0xCCi32; 3];
+            let mut written = 0xA5A5A5A5usize;
+            // SAFETY: 指针来自有效局部变量。
+            let fetch = unsafe {
+                mornlea_client_camera_visible_fetch(
+                    CLIENT_ABI_VERSION,
+                    out.as_mut_ptr(),
+                    out.len(),
+                    &mut written,
+                )
+            };
+            assert_eq!(fetch, MORNLEA_CLIENT_STATUS_OK);
+            assert_eq!(written, 0, "失败 len 之后 fetch 不得吐出过期区段");
+            assert!(out.iter().all(|&v| v == 0xCC));
+        }
     }
 
     #[test]
