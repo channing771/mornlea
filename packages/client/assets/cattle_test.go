@@ -169,6 +169,73 @@ func opaqueAverage(px []byte) [3]int {
 	return sum
 }
 
+// TestCowHideCreamStylePalette 锁定牛皮奶油风：暖序浅色底（R>G>B，与熟牛
+// 肉层同暖）、棕斑占比规整、高光与蹄色像素存在。
+func TestCowHideCreamStylePalette(t *testing.T) {
+	px := NewRegistry().LayerRGBA(int(LayerCowHide))
+	avg := opaqueAverage(px)
+	if !(avg[0] > 185 && avg[1] > 165 && avg[2] > 135) {
+		t.Fatalf("牛皮平均色=%v，想要奶油浅底", avg)
+	}
+	if !(avg[0] > avg[1] && avg[1] > avg[2]) {
+		t.Fatalf("牛皮平均色=%v，想要暖序 R>G>B（与牛肉层同暖）", avg)
+	}
+	patch, highlight, hoof := 0, 0, 0
+	total := texSize * texSize
+	for i := 0; i < len(px); i += 4 {
+		r, g, b := int(px[i]), int(px[i+1]), int(px[i+2])
+		if r < 150 && g < 110 && b < 90 && r > b+30 {
+			patch++
+		}
+		if r >= 240 && g >= 228 && b >= 208 {
+			highlight++
+		}
+		if r < 95 && g < 70 && b < 55 && r > b {
+			hoof++
+		}
+	}
+	if fraction := float64(patch) / float64(total); fraction < 0.1 || fraction > 0.4 {
+		t.Fatalf("牛皮棕斑占比=%v，想要 0.1..0.4 的规整斑块", fraction)
+	}
+	if highlight == 0 {
+		t.Fatal("牛皮无高光像素，想要柔和高光")
+	}
+	if hoof == 0 {
+		t.Fatal("牛皮无蹄色像素，想要深暖蹄棕散点")
+	}
+}
+
+// TestCowHeadFacialFeatures 锁定牛头五官：双眼深色带高光、吻部粉棕横带配双
+// 鼻孔、嘴线收底。
+func TestCowHeadFacialFeatures(t *testing.T) {
+	px := NewRegistry().LayerRGBA(int(LayerCowHead))
+	pixel := func(x, y int) [3]byte {
+		i := (y*texSize + x) * 4
+		return [3]byte{px[i], px[i+1], px[i+2]}
+	}
+	for _, x := range []int{4, 11} {
+		if got := pixel(x, 5); got[0]+got[1]+got[2] > 150 {
+			t.Fatalf("牛眼 (%d,5)=%v，想要深色", x, got)
+		}
+		if got := pixel(x+1, 6); got[0] < 220 || got[1] < 210 || got[2] < 195 {
+			t.Fatalf("眼高光 (%d,6)=%v，想要浅色", x+1, got)
+		}
+	}
+	muzzle := pixel(7, 14)
+	if !(muzzle[0] > 180 && muzzle[0] < 215 && muzzle[1] > 135 && muzzle[1] < 170 && muzzle[2] > 115 && muzzle[2] < 150) {
+		t.Fatalf("吻部 (7,14)=%v，想要粉棕横带", muzzle)
+	}
+	for _, x := range []int{5, 10} {
+		if got := pixel(x, 13); !(got[0] > 90 && got[0] < 130 && got[1] > 55 && got[1] < 90) {
+			t.Fatalf("鼻孔 (%d,13)=%v，想要深暖色", x, got)
+		}
+	}
+	mouth := pixel(7, 15)
+	if !(mouth[0] < 115 && mouth[1] < 80 && mouth[0] > mouth[2]) {
+		t.Fatalf("嘴线 (7,15)=%v，想要深暖收底", mouth)
+	}
+}
+
 // TestCattleBindingsResolveToDedicatedLayers 锁定四个覆盖槽位：材质包可按槽位
 // 覆盖四层（镜像火把与床的仅覆盖槽位语义），名字或层号错位会让覆盖文件静默
 // 落到别的层上。
