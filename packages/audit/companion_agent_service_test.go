@@ -17,7 +17,6 @@ import (
 func TestCompanionAgentRepositoryBoundary(t *testing.T) {
 	root := repositoryRoot(t)
 	agent := filepath.Join("packages", "agent")
-	companion := filepath.Join(agent, "companion")
 	harness := filepath.Join(agent, "harness", "src", "harness")
 	gateway := filepath.Join(agent, "app", "src", "app", "gateway")
 	required := []string{
@@ -34,7 +33,7 @@ func TestCompanionAgentRepositoryBoundary(t *testing.T) {
 		filepath.Join(harness, "store", "sqlite_memory.py"),
 		filepath.Join(harness, "persistence", "sqlite_schema.py"),
 		filepath.Join(harness, "store", "memory_ops.py"),
-		filepath.Join(companion, "tests", "integration", "process.py"),
+		filepath.Join(agent, "tests", "integration", "process.py"),
 	}
 	for _, relative := range required {
 		if info, err := os.Stat(filepath.Join(root, relative)); err != nil || info.IsDir() {
