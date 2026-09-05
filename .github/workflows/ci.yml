@@ -240,8 +240,8 @@ jobs:
           version: '0.12.5'
           enable-cache: true
           cache-dependency-glob: |
-            packages/agent/companion/pyproject.toml
-            packages/agent/companion/uv.lock
+            packages/agent/pyproject.toml
+            packages/agent/uv.lock
       - uses: actions/download-artifact@v4
         with:
           name: native-macos-${{ github.sha }}

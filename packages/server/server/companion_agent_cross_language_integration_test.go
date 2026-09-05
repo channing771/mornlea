@@ -1113,17 +1113,21 @@ func loadCrossLanguageHTTPGolden(t *testing.T, name string, target any) {
 }
 
 // crossLanguagePythonPath 解析伙伴 Agent Python 解释器路径：优先取
-// `MORNLEA_COMPANION_AGENT_PYTHON`，为空则回落到仓库内 uv 管理的
-// `packages/agent/companion/.venv/bin/python`。用 `os.Stat` 判定最终路径
+// `MORNLEA_AGENT_PYTHON`，为空则回落到一期兼容的
+// `MORNLEA_COMPANION_AGENT_PYTHON`，再为空则回落到仓库内 uv 管理的
+// `packages/agent/.venv/bin/python`。用 `os.Stat` 判定最终路径
 // 存在且是常规文件，缺失或不可用返回 (path, false)。真实进程合同由
 // `make companion-agent-integration`（CI integration job）承载；普通 race
 // 分片没有 Python 环境，此时测试跳过而非失败——跳过不削弱 CI 覆盖，
 // 因为 integration job 会真实运行同一批 Go↔Python 进程合同。
 func crossLanguagePythonPath(t *testing.T, repositoryRoot string) (string, bool) {
 	t.Helper()
-	python := os.Getenv("MORNLEA_COMPANION_AGENT_PYTHON")
+	python := os.Getenv("MORNLEA_AGENT_PYTHON")
 	if python == "" {
-		python = filepath.Join(repositoryRoot, "packages", "agent", "companion", ".venv", "bin", "python")
+		python = os.Getenv("MORNLEA_COMPANION_AGENT_PYTHON")
+	}
+	if python == "" {
+		python = filepath.Join(repositoryRoot, "packages", "agent", ".venv", "bin", "python")
 	}
 	info, err := os.Stat(python)
 	if err != nil || !info.Mode().IsRegular() {

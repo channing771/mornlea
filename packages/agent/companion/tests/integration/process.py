@@ -10,20 +10,20 @@ from pathlib import Path
 from typing import Any
 
 import uvicorn
+from harness.agents.companion.dialogue_factory import DialogueHarness
+from harness.agents.companion.planner_factory import PlannerHarness
+from harness.config import AgentConfig, ResolvedSecrets
+from harness.domain.common import canonical_json_bytes
+from harness.domain.dialogue import DialogueMessage
+from harness.domain.http_v1 import PlanRequest
+from harness.domain.mcp_contract import mcp_tool_contracts
+from harness.domain.mcp_v1 import Plan, QueryTerrainSuccessResult
+from harness.domain.planner import ModelOutput, PlannerMessage, PlannerUnavailable
+from harness.store.sqlite_memory import SQLiteMemoryStore
+from harness.tools.mcp_session import MCP_PROTOCOL_VERSION, MCPToolSessionFactory
 from pydantic import BaseModel, ConfigDict, SecretStr
 
-from mornlea_companion_agent.adapters.mcp import MCP_PROTOCOL_VERSION, MCPToolSessionFactory
-from mornlea_companion_agent.app import AppComponents, create_app
-from mornlea_companion_agent.config import AgentConfig, ResolvedSecrets
-from mornlea_companion_agent.domain.common import canonical_json_bytes
-from mornlea_companion_agent.domain.dialogue import DialogueMessage
-from mornlea_companion_agent.domain.http_v1 import PlanRequest
-from mornlea_companion_agent.domain.mcp_contract import mcp_tool_contracts
-from mornlea_companion_agent.domain.mcp_v1 import Plan, QueryTerrainSuccessResult
-from mornlea_companion_agent.domain.planner import ModelOutput, PlannerMessage, PlannerUnavailable
-from mornlea_companion_agent.harness.dialogue import DialogueHarness
-from mornlea_companion_agent.harness.planner import PlannerHarness
-from mornlea_companion_agent.storage.sqlite_memory import SQLiteMemoryStore
+from app.gateway.app import AppComponents, create_app
 
 
 class _ProbeInput(BaseModel):

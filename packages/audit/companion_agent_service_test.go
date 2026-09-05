@@ -16,19 +16,24 @@ import (
 
 func TestCompanionAgentRepositoryBoundary(t *testing.T) {
 	root := repositoryRoot(t)
-	companion := filepath.Join("packages", "agent", "companion")
+	agent := filepath.Join("packages", "agent")
+	companion := filepath.Join(agent, "companion")
+	harness := filepath.Join(agent, "harness", "src", "harness")
+	gateway := filepath.Join(agent, "app", "src", "app", "gateway")
 	required := []string{
 		filepath.Join("packages", "contracts", "companion-agent", "http-v1", "manifest.json"),
 		filepath.Join("packages", "contracts", "companion-agent", "http-v1", "schema.json"),
 		filepath.Join("packages", "contracts", "companion-agent", "mcp-v1", "manifest.json"),
 		filepath.Join("packages", "contracts", "companion-agent", "mcp-v1", "schema.json"),
-		filepath.Join(companion, "pyproject.toml"),
-		filepath.Join(companion, "uv.lock"),
-		filepath.Join(companion, "src", "mornlea_companion_agent", "app.py"),
-		filepath.Join(companion, "src", "mornlea_companion_agent", "adapters", "mcp.py"),
-		filepath.Join(companion, "src", "mornlea_companion_agent", "harness", "planner.py"),
-		filepath.Join(companion, "src", "mornlea_companion_agent", "domain", "http_v1.py"),
-		filepath.Join(companion, "src", "mornlea_companion_agent", "storage", "sqlite_memory.py"),
+		filepath.Join(agent, "pyproject.toml"),
+		filepath.Join(agent, "uv.lock"),
+		filepath.Join(gateway, "app.py"),
+		filepath.Join(harness, "tools", "mcp_session.py"),
+		filepath.Join(harness, "agents", "companion", "planner_factory.py"),
+		filepath.Join(harness, "domain", "http_v1.py"),
+		filepath.Join(harness, "store", "sqlite_memory.py"),
+		filepath.Join(harness, "persistence", "sqlite_schema.py"),
+		filepath.Join(harness, "store", "memory_ops.py"),
 		filepath.Join(companion, "tests", "integration", "process.py"),
 	}
 	for _, relative := range required {
@@ -37,7 +42,7 @@ func TestCompanionAgentRepositoryBoundary(t *testing.T) {
 		}
 	}
 
-	pyproject := readBaselineDoc(t, root, filepath.Join(companion, "pyproject.toml"))
+	pyproject := readBaselineDoc(t, root, filepath.Join(agent, "harness", "pyproject.toml"))
 	for _, marker := range []string{
 		`"../../../packages/contracts/companion-agent/mcp-v1/manifest.json"`,
 		`"../../../packages/contracts/companion-agent/mcp-v1/schema.json"`,
@@ -48,7 +53,8 @@ func TestCompanionAgentRepositoryBoundary(t *testing.T) {
 	}
 
 	for _, relative := range []string{
-		filepath.Join(companion, "src", "mornlea_companion_agent"),
+		filepath.Join(harness),
+		filepath.Join(gateway),
 	} {
 		err := filepath.WalkDir(filepath.Join(root, relative), func(path string, entry os.DirEntry, err error) error {
 			if err != nil {
@@ -85,7 +91,7 @@ func TestCompanionAgentMakeTargets(t *testing.T) {
 		"uv sync --locked",
 		"uv run ruff format --check .",
 		"uv run ruff check .",
-		"uv run mypy src",
+		"uv run mypy",
 		"uv run pytest -q",
 	} {
 		if !strings.Contains(check, command) {
@@ -260,8 +266,8 @@ func companionAgentWorkflowViolations(source []byte) []string {
 		} else {
 			cachePaths := nonEmptyTrimmedLines(value)
 			for _, required := range []string{
-				"packages/agent/companion/pyproject.toml",
-				"packages/agent/companion/uv.lock",
+				"packages/agent/pyproject.toml",
+				"packages/agent/uv.lock",
 			} {
 				if !slices.Contains(cachePaths, required) {
 					violations = append(violations, "uv cache 缺少 "+required)
