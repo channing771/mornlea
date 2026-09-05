@@ -327,7 +327,7 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 		started = renderNow()
 	}
 	a.itemDropInstances = appendItemDropInstances(
-		a.itemDropInstances[:0], a.itemDrops.Presentations(),
+		a.itemDropInstances[:0], a.itemDrops.Presentations(), a.mirror,
 	)
 	a.dropStream = a.entityEncoder.EncodeItemDropInstances(a.dropStream, a.serverTick, a.itemDropInstances)
 	// 破碎 burst 与掉落物本体共用同一份 serverTick + 掉落物输入,跟踪表在

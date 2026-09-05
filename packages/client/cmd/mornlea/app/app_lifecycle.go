@@ -138,5 +138,8 @@ func (a *Application) resetSessionOwnedState() {
 	// burst 跟踪表随会话一并清空:旧会话的首次 tick 在新会话是未来 tick(年龄
 	// 钳制为 0 会误重 burst),旧 ID 的淘汰抑制也不得带入新会话。
 	a.entityEncoder.ResetBursts()
+	// 下落首现表随会话一并清空：旧首次 tick 会让新会话的掉落一露面就直接
+	// 下落（年龄虚大），与首现即从生成高度起落的语义相悖。
+	a.entityEncoder.ResetFalls()
 	a.clientSessionClosed = true
 }

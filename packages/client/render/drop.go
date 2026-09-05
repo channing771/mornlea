@@ -3,8 +3,6 @@ package render
 import (
 	"math"
 
-	"github.com/go-gl/mathgl/mgl32"
-
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/world"
 )
@@ -25,35 +23,17 @@ const (
 	dropBaseAltitude = float32(0.5)
 )
 
-// ItemDrop 是一个权威掉落物的渲染输入；位置由方块位置决定。
+// ItemDrop 是一个权威掉落物的渲染输入；位置由方块位置决定，支撑高度由
+// app 层从只读镜像算出后随本结构传入，不另开通道。
 type ItemDrop struct {
 	ID    core.DropID
 	Block core.BlockPos
 	Item  core.ItemID
-}
-
-func buildItemDropParts(dst []avatarPart, serverTick uint64, drops []ItemDrop) []avatarPart {
-	for _, drop := range drops {
-		if len(dst) == maxItemDrops {
-			break
-		}
-		color, ok := itemDropColor(drop.Item)
-		if !ok {
-			continue
-		}
-		phase := dropAnimationPhase(serverTick, drop.ID)
-		center := mgl32.Vec3{
-			float32(drop.Block.X) + 0.5,
-			float32(drop.Block.Y) + dropBaseAltitude +
-				dropFloatHeight*float32(math.Sin(float64(phase.float))),
-			float32(drop.Block.Z) + 0.5,
-		}
-		transform := mgl32.Translate3D(center.X(), center.Y(), center.Z()).
-			Mul4(mgl32.HomogRotate3DY(phase.spin)).
-			Mul4(mgl32.Scale3D(dropCubeSize, dropCubeSize, dropCubeSize))
-		dst = append(dst, avatarPart{transform: transform, color: color, material: avatarMaterialSolid})
-	}
-	return dst
+	// SupportY 是掉落方块下方首个不透明方块顶面的世界高度（方块 Y+1）。
+	// HasSupport 为假表示镜像无数据或支撑超出扫描定界，此时按生成高度保持、
+	// 不下落。呈现下落不反馈服务端。
+	SupportY   float32
+	HasSupport bool
 }
 
 type dropPhase struct {

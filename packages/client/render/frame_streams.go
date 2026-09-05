@@ -17,11 +17,13 @@ import (
 // InstanceEncoder 持有实例编码的复用缓冲:热路径(每帧编码)零分配。
 // bursts 是破碎 burst 的跨帧跟踪表:调用方每帧以与掉落物同样的输入
 // (serverTick + drops)驱动,状态在编码器内跨帧存续,会话重置时经
-// `ResetBursts` 清空。
+// `ResetBursts` 清空。falls 是掉落物下落的首现 tick 表:同输入驱动,
+// 会话重置时经 `ResetFalls` 清空。
 type InstanceEncoder struct {
 	ordered    []Avatar
 	parts      []avatarPart
 	bursts     BreakBursts
+	falls      DropFalls
 	burstBytes []byte
 }
 
@@ -36,9 +38,10 @@ func (e *InstanceEncoder) EncodeAvatarInstances(dst []byte, avatars []Avatar) []
 }
 
 // EncodeItemDropInstances 把掉落物编码为 96 字节/实例的字节流,
-// 与 ItemDropRenderer.Render 的内部编码逐字节一致。
+// 与 ItemDropRenderer.Render 的内部编码逐字节一致。下落年龄来自编码器内
+// 跨帧存续的首现表,会话重置时经 `ResetFalls` 清空。
 func (e *InstanceEncoder) EncodeItemDropInstances(dst []byte, serverTick uint64, drops []ItemDrop) []byte {
-	e.parts = buildItemDropParts(e.parts[:0], serverTick, drops)
+	e.parts = e.falls.buildItemDropParts(e.parts[:0], serverTick, drops)
 	dst = growEncodeBuffer(dst, len(e.parts)*avatarInstanceBytes)
 	encodeAvatarPartsInto(dst, e.parts)
 	return dst
@@ -80,6 +83,11 @@ func (e *InstanceEncoder) AppendBreakBurstInstances(dst []byte, serverTick uint6
 // 不得抑制新会话的首现,旧首次 tick 也不得带入新会话。
 func (e *InstanceEncoder) ResetBursts() {
 	e.bursts.Reset()
+}
+
+// ResetFalls 清空掉落物下落的首现表:会话重置后旧首次 tick 不得带入新会话。
+func (e *InstanceEncoder) ResetFalls() {
+	e.falls.Reset()
 }
 
 // EncodeBlockOutlineInstances 把目标方块轮廓编码为 12×96 字节实例流;

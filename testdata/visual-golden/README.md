@@ -74,7 +74,7 @@ motion 演示产物只验呈现、不进比对：`make visual-check` 与 `--upda
 
 | 演示文件 | 场景 | 帧数/时长 | 生成入口 |
 |---|---|---|---|
-| `break-burst.gif` | `break-burst-motion`：完整采掘生命周期——F0–4 目标静置，F5–24 采掘爬坡（裂纹 0→9 扫完），F25 破坏同帧（目标置空 + 采掘熄灭 + 泥土掉落注入），F25–44 粒子存续 + 掉落留存 | 45 帧，每帧 0.13 秒，循环约 5.9 秒 | `go run ./packages/client/cmd/mornlea --motion-demo testdata/visual-golden/motion/break-burst.gif`（仓库根运行） |
+| `break-burst.gif` | `break-burst-motion`：完整采掘生命周期——F0–4 目标静置，F5–24 采掘爬坡（裂纹 0→9 扫完），F25 破坏同帧（目标置空 + 采掘熄灭 + 泥土掉落注入），F25–44 粒子存续 + 掉落下落（3 格落差 20 tick，F45 着陆），F45–49 掉落静置留存 | 50 帧，每帧 0.13 秒，循环约 6.5 秒 | `go run ./packages/client/cmd/mornlea --motion-demo testdata/visual-golden/motion/break-burst.gif`（仓库根运行） |
 
 - 演示场景值住 `packages/client/cmd/mornlea/capture/motion_break_burst.go`，不追加进 `captureScenes`。
 - 编码只用标准库 `image/gif`（固定调色板 + 抖动），固定输入逐字节一致。

@@ -3,10 +3,11 @@
 package capture
 
 // motion_break_burst_test.go：完整采掘生命周期 motion 演示的回归测试。
-// 45 帧时间线：F0–4 静置 → F5–24 采掘爬坡（裂纹 0→9 扫完）→ F25 破坏同帧
+// 50 帧时间线：F0–4 静置 → F5–24 采掘爬坡（裂纹 0→9 扫完）→ F25 破坏同帧
 // （镜像置空 + overlay 熄灭 + 泥土掉落注入，burst 年龄 0 起算）→ F25–44
-// 粒子存续 + 掉落留存、裂纹不再出现。链路正确性由破碎 burst 的逐帧测试与
-// `RenderFrame` 接线测试承接，这里只钉时间线落点与产物约定。
+// 粒子存续 + 掉落下落（F45 着陆）→ F45–49 掉落静置留存、裂纹不再出现。
+// 链路正确性由破碎 burst 的逐帧测试与 `RenderFrame` 接线测试承接，
+// 这里只钉时间线落点与产物约定。
 
 import (
 	"bytes"
@@ -28,9 +29,9 @@ import (
 	"github.com/channing771/mornlea/packages/shared/world"
 )
 
-// TestBreakBurstMotionCaptures45FramesInOrder 钉住演示抓帧的帧约定：45 帧、
-// 帧号 0→44 顺序递进、同一固定序列两次抓取逐帧字节一致。
-func TestBreakBurstMotionCaptures45FramesInOrder(t *testing.T) {
+// TestBreakBurstMotionCaptures50FramesInOrder 钉住演示抓帧的帧约定：50 帧、
+// 帧号 0→49 顺序递进、同一固定序列两次抓取逐帧字节一致。
+func TestBreakBurstMotionCaptures50FramesInOrder(t *testing.T) {
 	capture := func(record *[]int) func(int) (*image.NRGBA, error) {
 		return func(frame int) (*image.NRGBA, error) {
 			*record = append(*record, frame)
@@ -47,8 +48,8 @@ func TestBreakBurstMotionCaptures45FramesInOrder(t *testing.T) {
 	if len(first) != breakBurstMotionFrameCount {
 		t.Fatalf("motion 帧数=%d，想要 %d", len(first), breakBurstMotionFrameCount)
 	}
-	if breakBurstMotionFrameCount != 45 {
-		t.Fatalf("motion 帧数常量=%d，想要 45", breakBurstMotionFrameCount)
+	if breakBurstMotionFrameCount != 50 {
+		t.Fatalf("motion 帧数常量=%d，想要 50", breakBurstMotionFrameCount)
 	}
 	for index, frame := range firstFrames {
 		if frame != index {
@@ -257,7 +258,41 @@ func TestBreakBurstMotionBreakFrameGrabsSettledPixels(t *testing.T) {
 	}
 }
 
-// TestBreakBurstMotionStaysClearAfterBreak 钉住 F26–44：overlay 保持熄灭
+// TestBreakBurstMotionFloorAndFrameBudgetFitLanding 钉住着陆演示的两项静态
+// 前提：目标正下方有草地（顶面 y=0），3 格落差按恒定速率恰好 20 tick 着陆
+// （`render` 呈现下落速率 0.15 格/tick）；破坏帧之后留够 20 tick 下落 +
+// 至少 3 帧静置掉落。
+func TestBreakBurstMotionFloorAndFrameBudgetFitLanding(t *testing.T) {
+	app := newCaptureAICompanionState()
+	app.SetMirror(client.NewMirror())
+	mesher := client.NewMesher(assets.NewRegistry(), 1)
+	t.Cleanup(mesher.Close)
+	app.SetMesher(mesher)
+	if err := prepareMiningLifecycleDirt(app); err != nil {
+		t.Fatalf("装入泥土目标: %v", err)
+	}
+	if got, loaded := app.Mirror().BlockAt(core.Overworld, breakBurstMotionTarget); !loaded || got != core.DirtID {
+		t.Fatalf("目标 BlockAt=%d/%v，想要泥土/true", got, loaded)
+	}
+	for y := int32(0); y <= 2; y++ {
+		position := core.BlockPos{X: 0, Y: y, Z: -3}
+		if got, loaded := app.Mirror().BlockAt(core.Overworld, position); !loaded || got != core.AirID {
+			t.Fatalf("下落通道 %+v BlockAt=%d/%v，想要空气/true", position, got, loaded)
+		}
+	}
+	floor := core.BlockPos{X: 0, Y: -1, Z: -3}
+	if got, loaded := app.Mirror().BlockAt(core.Overworld, floor); !loaded || got != core.GrassID {
+		t.Fatalf("支撑地 BlockAt=%d/%v，想要草地/true（顶面 y=0）", got, loaded)
+	}
+	const wantFallTicks = 20
+	const wantSettledFrames = 3
+	if got := breakBurstMotionFrameCount - 1 - breakBurstMotionBreakFrame; got < wantFallTicks+wantSettledFrames {
+		t.Fatalf("破坏帧后帧数=%d，想要 ≥%d（%d tick 下落 + ≥%d 帧静置）",
+			got, wantFallTicks+wantSettledFrames, wantFallTicks, wantSettledFrames)
+	}
+}
+
+// TestBreakBurstMotionStaysClearAfterBreak 钉住 F26–49：overlay 保持熄灭
 // （裂纹实例无来源）、目标保持空气、掉落留存。
 func TestBreakBurstMotionStaysClearAfterBreak(t *testing.T) {
 	app := newCaptureAICompanionState()
@@ -290,8 +325,8 @@ func TestBreakBurstMotionStaysClearAfterBreak(t *testing.T) {
 	}
 }
 
-// TestBreakBurstMotionGIFDecodesTo45Frames 钉住编码产物可解码且帧数符合约定。
-func TestBreakBurstMotionGIFDecodesTo45Frames(t *testing.T) {
+// TestBreakBurstMotionGIFDecodesTo50Frames 钉住编码产物可解码且帧数符合约定。
+func TestBreakBurstMotionGIFDecodesTo50Frames(t *testing.T) {
 	frames := make([]*image.NRGBA, 0, breakBurstMotionFrameCount)
 	for index := range breakBurstMotionFrameCount {
 		img := image.NewNRGBA(image.Rect(0, 0, 4, 3))
@@ -320,7 +355,7 @@ func TestBreakBurstMotionGIFDecodesTo45Frames(t *testing.T) {
 }
 
 // TestBreakBurstMotionGIFEncodingIsDeterministic 钉住固定输入→固定字节：
-// 同一份 45 帧两次编码逐字节一致。
+// 同一份 50 帧两次编码逐字节一致。
 func TestBreakBurstMotionGIFEncodingIsDeterministic(t *testing.T) {
 	frames := make([]*image.NRGBA, 0, breakBurstMotionFrameCount)
 	for range breakBurstMotionFrameCount {
@@ -335,7 +370,7 @@ func TestBreakBurstMotionGIFEncodingIsDeterministic(t *testing.T) {
 		t.Fatalf("重编码 motion GIF: %v", err)
 	}
 	if !bytes.Equal(first, second) {
-		t.Fatalf("同一 45 帧两次编码字节不一致（%d vs %d 字节）", len(first), len(second))
+		t.Fatalf("同一 50 帧两次编码字节不一致（%d vs %d 字节）", len(first), len(second))
 	}
 }
 

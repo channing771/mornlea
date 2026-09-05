@@ -61,8 +61,8 @@ func (bursts *BreakBursts) Reset() {
 
 // BuildParts 更新跟踪表并把存活 burst 编码为 avatar pass 的实心小立方体：
 // 新 ID 建条目、消失 ID 删条目、年龄达到寿命停止编码、总数超限时淘汰最老的
-// burst。输入先按 `DropID` 全序规范化再建条目，编码上限内按该顺序输出，
-// 同集合乱序输入逐帧一致。
+// burst，有支撑时粒子纵向以输入携带的支撑高度为地板钳制。输入先按 `DropID`
+// 全序规范化再建条目，编码上限内按该顺序输出，同集合乱序输入逐帧一致。
 func (bursts *BreakBursts) BuildParts(dst []avatarPart, serverTick uint64, drops []ItemDrop) []avatarPart {
 	kept := bursts.entries[:0]
 	for _, entry := range bursts.entries {
@@ -130,10 +130,18 @@ func (bursts *BreakBursts) BuildParts(dst []avatarPart, serverTick uint64, drops
 		}
 		elapsed := float32(age)
 		size := breakBurstCubeSize * (1 - elapsed/float32(breakBurstLifetimeTicks))
+		supportY, hasSupport := breakBurstSupport(ordered, entry.id)
 		for index := range breakBurstParticlesPerBurst {
 			velocity := breakBurstVelocity(entry.id, index)
 			center := entry.origin.Add(velocity.Mul(elapsed))
 			center[1] -= breakBurstGravity * elapsed * elapsed
+			// 粒子以同一支撑高度为地板钳制（防穿地）：burst 原点仍是破坏方块
+			// 位置，不动；地板取支撑顶面加当前半边长，立方体整体留在地上。
+			if hasSupport {
+				if floor := supportY + size/2; center[1] < floor {
+					center[1] = floor
+				}
+			}
 			transform := mgl32.Translate3D(center.X(), center.Y(), center.Z()).
 				Mul4(mgl32.Scale3D(size, size, size))
 			dst = append(dst, avatarPart{transform: transform, color: entry.color, material: avatarMaterialSolid})
@@ -167,6 +175,18 @@ func hasBreakBurstDrop(drops []ItemDrop, id core.DropID) bool {
 		}
 	}
 	return false
+}
+
+// breakBurstSupport 取本帧输入中该 ID 的支撑顶面：支撑随镜像加载逐帧变化，
+// 故每次从本帧输入现查，不存入条目；线性扫描定界（条目 ≤16，输入 ≤800），
+// 与本文件既有的 `find`/`hasBreakBurstDrop` 同量级。
+func breakBurstSupport(drops []ItemDrop, id core.DropID) (float32, bool) {
+	for _, drop := range drops {
+		if drop.ID == id {
+			return drop.SupportY, drop.HasSupport
+		}
+	}
+	return 0, false
 }
 
 // breakBurstAge 返回 burst 年龄：tick 回退时钳制为零，不下溢。钳制只兜底同
