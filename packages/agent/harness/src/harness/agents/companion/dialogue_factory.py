@@ -11,8 +11,8 @@ from uuid import uuid4
 from langgraph.graph import END, START, StateGraph
 from pydantic import TypeAdapter, ValidationError
 
-from mornlea_companion_agent.domain.common import UUIDv4, canonical_json_bytes
-from mornlea_companion_agent.domain.dialogue import (
+from harness.domain.common import UUIDv4, canonical_json_bytes
+from harness.domain.dialogue import (
     DialogueDeadlineExceeded,
     DialogueFailure,
     DialogueLimits,
@@ -24,14 +24,14 @@ from mornlea_companion_agent.domain.dialogue import (
     TerminalModelOutput,
     parse_dialogue_output,
 )
-from mornlea_companion_agent.domain.http_v1 import (
+from harness.domain.http_v1 import (
     DialogueNonterminalRequest,
     DialogueNonterminalResponse,
     DialogueTerminalRequest,
     DialogueTerminalResponse,
     MemoryProposal,
 )
-from mornlea_companion_agent.domain.memory import (
+from harness.domain.memory import (
     AgentDomainFailure,
     LeaseIdentity,
     MemoryLookup,

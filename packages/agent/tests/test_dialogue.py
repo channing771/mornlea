@@ -8,37 +8,36 @@ from pathlib import Path
 
 import httpx
 import pytest
-from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
-from pydantic import SecretStr
-
-from mornlea_companion_agent.adapters import model as model_adapter
-from mornlea_companion_agent.adapters.model import (
-    ChatOpenAIDialogueModel,
-    ChatOpenAIModelAdapters,
-)
-from mornlea_companion_agent.domain.dialogue import (
+from harness.agents.companion.dialogue_factory import DialogueHarness
+from harness.domain.dialogue import (
     DialogueDeadlineExceeded,
     DialogueLimits,
     DialogueMessage,
     DialogueUnavailable,
     InvalidDialogueOutput,
 )
-from mornlea_companion_agent.domain.http_v1 import (
+from harness.domain.http_v1 import (
     DialogueNonterminalRequest,
     DialogueNonterminalResponse,
     DialogueTerminalRequest,
     DialogueTerminalResponse,
 )
-from mornlea_companion_agent.domain.memory import (
+from harness.domain.memory import (
     LeaseIdentity,
     MemoryLookup,
     MemoryStateNonzero,
 )
-from mornlea_companion_agent.harness.dialogue import DialogueHarness
+from harness.models import chat_openai as model_adapter
+from harness.models.chat_openai import (
+    ChatOpenAIDialogueModel,
+    ChatOpenAIModelAdapters,
+)
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+from pydantic import SecretStr
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 HTTP_GOLDEN = REPOSITORY_ROOT / "packages/contracts/companion-agent/http-v1/golden/valid.json"
 
 

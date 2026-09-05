@@ -12,12 +12,11 @@ from mcp import ClientSession, types
 from mcp.client.streamable_http import streamable_http_client
 from pydantic import ValidationError
 
-from mornlea_companion_agent.adapters.response_limit import BoundedAsyncTransport
-from mornlea_companion_agent.domain import adapter_for
-from mornlea_companion_agent.domain.common import canonical_json_bytes
-from mornlea_companion_agent.domain.http_v1 import PlanRequest
-from mornlea_companion_agent.domain.mcp_contract import mcp_tool_contracts
-from mornlea_companion_agent.domain.mcp_v1 import (
+from harness.domain import adapter_for
+from harness.domain.common import canonical_json_bytes
+from harness.domain.http_v1 import PlanRequest
+from harness.domain.mcp_contract import mcp_tool_contracts
+from harness.domain.mcp_v1 import (
     GetPlanningContextResult,
     Plan,
     QueryTerrainInput,
@@ -25,7 +24,7 @@ from mornlea_companion_agent.domain.mcp_v1 import (
     ValidatePlanInput,
     ValidatePlanSuccessResult,
 )
-from mornlea_companion_agent.domain.planner import (
+from harness.domain.planner import (
     MODEL_VISIBLE_TOOLS,
     InvalidModelOutput,
     PlannerFailure,
@@ -35,6 +34,7 @@ from mornlea_companion_agent.domain.planner import (
     validate_tool_input,
     validate_tool_output,
 )
+from harness.tools.response_limit import BoundedAsyncTransport
 
 MCP_PROTOCOL_VERSION = "2025-11-25"
 MCP_RESPONSE_BODY_LIMIT = 160 * 1024

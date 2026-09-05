@@ -5,8 +5,7 @@ from collections.abc import AsyncIterator, Awaitable
 
 import httpx
 import pytest
-
-from mornlea_companion_agent.adapters.response_limit import (
+from harness.tools.response_limit import (
     BoundedAsyncTransport,
     ResponseBodyLimitError,
 )

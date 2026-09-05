@@ -19,20 +19,20 @@ from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
-from mornlea_companion_agent.adapters.response_limit import BoundedAsyncTransport
-from mornlea_companion_agent.domain.dialogue import (
+from harness.domain.dialogue import (
     DialogueMessage,
     DialogueUnavailable,
     InvalidDialogueOutput,
 )
-from mornlea_companion_agent.domain.mcp_contract import mcp_tool_contracts
-from mornlea_companion_agent.domain.planner import (
+from harness.domain.mcp_contract import mcp_tool_contracts
+from harness.domain.planner import (
     InvalidModelOutput,
     ModelOutput,
     ModelToolCall,
     PlannerMessage,
     PlannerUnavailable,
 )
+from harness.tools.response_limit import BoundedAsyncTransport
 
 # provider envelope 会再次转义最大 64 KiB 的 canonical `Plan`；1 MiB 保留有界放大余量。
 PROVIDER_RESPONSE_BODY_LIMIT = 1024 * 1024

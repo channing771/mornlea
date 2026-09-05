@@ -8,25 +8,24 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from langgraph.graph import StateGraph
-
-from mornlea_companion_agent.domain.http_v1 import PlanRequest
-from mornlea_companion_agent.domain.mcp_v1 import (
+from harness.agents.companion.planner_factory import PlannerHarness
+from harness.domain.http_v1 import PlanRequest
+from harness.domain.mcp_v1 import (
     GetPlanningContextResult,
     Plan,
     ValidatePlanSuccessResult,
 )
-from mornlea_companion_agent.domain.planner import (
+from harness.domain.planner import (
     ModelOutput,
     PlannerMessage,
     PlannerModel,
     PlanningToolSession,
     PlanningToolSessionFactory,
 )
-from mornlea_companion_agent.harness.planner import PlannerHarness
+from langgraph.graph import StateGraph
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
-SERVICE_ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+HARNESS_ROOT = REPOSITORY_ROOT / "packages/agent/harness/src/harness"
 
 
 def run(coroutine: Awaitable[object]) -> object:
@@ -124,8 +123,8 @@ def test_each_invoke_compiles_without_checkpointer_and_has_fresh_state(monkeypat
 
 
 def test_planner_sources_do_not_import_checkpoint_or_persistence_modules() -> None:
-    for relative in ("domain/planner.py", "harness/planner.py"):
-        path = SERVICE_ROOT / "src/mornlea_companion_agent" / relative
+    for relative in ("domain/planner.py", "agents/companion/planner_factory.py"):
+        path = HARNESS_ROOT / relative
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         imports = {
             alias.name

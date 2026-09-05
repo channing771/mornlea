@@ -10,24 +10,16 @@ from typing import Any, cast
 
 import httpx
 import pytest
-from langchain_core.messages import AIMessage
-from pydantic import ValidationError
-from pydantic.types import SecretStr
-
-from mornlea_companion_agent.adapters import model as model_adapter
-from mornlea_companion_agent.adapters.model import (
-    PROVIDER_RESPONSE_BODY_LIMIT,
-    ChatOpenAIPlannerModel,
-)
-from mornlea_companion_agent.domain.common import canonical_json_bytes
-from mornlea_companion_agent.domain.http_v1 import PlanRequest
-from mornlea_companion_agent.domain.mcp_v1 import (
+from harness.agents.companion.planner_factory import PlannerHarness
+from harness.domain.common import canonical_json_bytes
+from harness.domain.http_v1 import PlanRequest
+from harness.domain.mcp_v1 import (
     GetPlanningContextResult,
     Plan,
     ValidatePlanFailureResult,
     ValidatePlanSuccessResult,
 )
-from mornlea_companion_agent.domain.planner import (
+from harness.domain.planner import (
     InvalidModelOutput,
     ModelOutput,
     ModelToolCall,
@@ -39,9 +31,16 @@ from mornlea_companion_agent.domain.planner import (
     PlanningToolSession,
     PlanningToolSessionFactory,
 )
-from mornlea_companion_agent.harness.planner import PlannerHarness
+from harness.models import chat_openai as model_adapter
+from harness.models.chat_openai import (
+    PROVIDER_RESPONSE_BODY_LIMIT,
+    ChatOpenAIPlannerModel,
+)
+from langchain_core.messages import AIMessage
+from pydantic import ValidationError
+from pydantic.types import SecretStr
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CONTRACT_ROOT = REPOSITORY_ROOT / "packages/contracts/companion-agent"
 PROVIDER_RESPONSE_LIMIT = PROVIDER_RESPONSE_BODY_LIMIT
 

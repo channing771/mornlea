@@ -10,15 +10,15 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from mornlea_companion_agent.domain.common import canonical_json_bytes
-from mornlea_companion_agent.domain.http_v1 import PlanRequest, PlanResponse
-from mornlea_companion_agent.domain.mcp_v1 import (
+from harness.domain.common import canonical_json_bytes
+from harness.domain.http_v1 import PlanRequest, PlanResponse
+from harness.domain.mcp_v1 import (
     GetPlanningContextResult,
     Plan,
     ValidatePlanFailureResult,
     ValidatePlanSuccessResult,
 )
-from mornlea_companion_agent.domain.planner import (
+from harness.domain.planner import (
     InvalidModelOutput,
     ModelOutput,
     ModelToolCall,

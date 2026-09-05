@@ -9,23 +9,22 @@ from typing import Any
 
 import httpx
 import pytest
-
-from mornlea_companion_agent.adapters import mcp as mcp_adapter
-from mornlea_companion_agent.adapters.mcp import (
-    MCP_RESPONSE_BODY_LIMIT,
-    MCPToolSessionFactory,
-)
-from mornlea_companion_agent.domain.http_v1 import PlanRequest
-from mornlea_companion_agent.domain.mcp_v1 import (
+from harness.domain.http_v1 import PlanRequest
+from harness.domain.mcp_v1 import (
     FindVisibleBlocksFailureResult,
     ListAffordancesResult,
     Plan,
     QueryTerrainFailureResult,
     QueryTerrainResult,
 )
-from mornlea_companion_agent.domain.planner import PlannerUnavailable
+from harness.domain.planner import PlannerUnavailable
+from harness.tools import mcp_session as mcp_adapter
+from harness.tools.mcp_session import (
+    MCP_RESPONSE_BODY_LIMIT,
+    MCPToolSessionFactory,
+)
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CONTRACT_ROOT = REPOSITORY_ROOT / "packages/contracts/companion-agent"
 PROTOCOL_VERSION = "2025-11-25"
 MCP_WIRE_LIMIT = MCP_RESPONSE_BODY_LIMIT
