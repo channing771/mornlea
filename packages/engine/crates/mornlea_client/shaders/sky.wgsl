@@ -126,7 +126,7 @@ fn cloud_mask(direction: vec3f) -> f32 {
     return select(0.0, d * smoothstep(0.02, 0.08, direction.y), d > 0.003);
 }
 
-fn cloud_light(density: f32, direction: vec3f) -> vec3f {
+fn cloud_light(density: f32) -> vec3f {
     let sun_direction = normalize(sky.sun_daylight.xyz);
     let daylight = clamp(sky.sun_daylight.w, 0.0, 1.0);
     let day_cloud = vec3f(0.84, 0.88, 0.92);
@@ -176,6 +176,6 @@ fn fs_main(in: VsOut) -> @location(0) vec4f {
     color = mix(color, vec3f(0.72, 0.80, 0.95), moon_disc);
     color = mix(color, vec3f(1.0, 0.92, 0.68), sun_disc);
     let density = cloud_mask(direction);
-    color = mix(color, cloud_light(density, direction), clamp(density, 0.0, 1.0) * 0.9);
+    color = mix(color, cloud_light(density), clamp(density, 0.0, 1.0) * 0.9);
     return vec4f(clamp(color, vec3f(0.0), vec3f(1.0)), 1.0);
 }
