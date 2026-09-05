@@ -64,10 +64,10 @@ func TestDayNightPhaseFormula(t *testing.T) {
 		wantSun      float32
 		wantDaylight float32
 	}{
-		{"黎明", 0, 0, 0.15},
+		{"黎明", 0, 0, 0.12},
 		{"正午", 6000, 1, 1},
-		{"黄昏", 12000, 0, 0.15},
-		{"午夜", 18000, 0, 0.15},
+		{"黄昏", 12000, 0, 0.12},
+		{"午夜", 18000, 0, 0.12},
 		{"跨周期正午", DayLengthTicks + 6000, 1, 1},
 	}
 	for _, tc := range tests {
@@ -83,6 +83,63 @@ func TestDayNightPhaseFormula(t *testing.T) {
 	}
 }
 
+func TestDayNightShoulderCurveMatchesHandComputedValues(t *testing.T) {
+	tests := []struct {
+		name         string
+		worldTime    uint64
+		wantSun      float32
+		wantDaylight float32
+	}{
+		{"午夜", 18000, 0, 0.12},
+		{"正午", 6000, 1, 1},
+		{"低太阳", 1000, 0.258819, 0.266332},
+		{"高太阳", 3000, 0.707107, 0.817746},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := DayNightAt(tc.worldTime, 0)
+			if !closeEnough(got.Sun, tc.wantSun) {
+				t.Fatalf("sun = %v，想要 %v", got.Sun, tc.wantSun)
+			}
+			if !closeEnough(got.Daylight, tc.wantDaylight) {
+				t.Fatalf("daylight = %v，想要 %v", got.Daylight, tc.wantDaylight)
+			}
+		})
+	}
+
+	// shoulder 形状：低太阳处新曲线比线性更暗（晨昏压低），高处保持明亮。
+	low := DayNightAt(1000, 0)
+	if low.Daylight >= 0.15+0.85*low.Sun {
+		t.Fatalf("低太阳 daylight = %v，想要低于线性值 %v", low.Daylight, 0.15+0.85*low.Sun)
+	}
+}
+
+func TestDayNightLowSunWarmsClearColorButNightStaysPure(t *testing.T) {
+	low := DayNightAt(1000, 0)
+	for index := range low.ClearColor {
+		night, day := nightSkyColor[index], daySkyColor[index]
+		base := night + (day-night)*low.Sun
+		if index == 0 || index == 3 {
+			// 暖光 R 恒为 1、alpha 不参与混色：与既有夜昼 lerp 一致。
+			if !closeEnough(low.ClearColor[index], base) {
+				t.Fatalf("低太阳 clear 通道 %d = %v，想要 %v", index, low.ClearColor[index], base)
+			}
+			continue
+		}
+		if low.ClearColor[index] >= base {
+			t.Fatalf("低太阳 clear 通道 %d = %v，想要低于夜昼 lerp 值 %v", index, low.ClearColor[index], base)
+		}
+		if low.ClearColor[index] <= night {
+			t.Fatalf("低太阳 clear 通道 %d = %v，想要高于纯夜色 %v", index, low.ClearColor[index], night)
+		}
+	}
+
+	// 夜间门控：午夜暖度为满但 `daylight` 门控强度为 0，天空保持纯净夜色。
+	if midnight := DayNightAt(18000, 0); midnight.ClearColor != nightSkyColor {
+		t.Fatalf("午夜 clear color = %v，想要纯净夜色 %v", midnight.ClearColor, nightSkyColor)
+	}
+}
+
 func TestDayNightSunIsClampedAtNight(t *testing.T) {
 	// 相位 12000..24000 太阳位于地平线以下，sun 必须被夹到 0。
 	for phase := uint64(12001); phase < DayLengthTicks; phase += 137 {
@@ -90,8 +147,8 @@ func TestDayNightSunIsClampedAtNight(t *testing.T) {
 		if got.Sun != 0 {
 			t.Fatalf("相位 %d 的 sun = %v，想要 0", phase, got.Sun)
 		}
-		if !closeEnough(got.Daylight, 0.15) {
-			t.Fatalf("相位 %d 的 daylight = %v，想要 0.15", phase, got.Daylight)
+		if !closeEnough(got.Daylight, 0.12) {
+			t.Fatalf("相位 %d 的 daylight = %v，想要 0.12", phase, got.Daylight)
 		}
 	}
 }
@@ -144,10 +201,10 @@ func TestCelestialDirectionsFollowAuthoritativePhase(t *testing.T) {
 		wantDaylight   float32
 		wantClearColor [4]float32
 	}{
-		{"日出", 0, [3]float32{1, 0, 0}, [3]float32{-1, 0, 0}, 0, 0.15, [4]float32{0.02, 0.03, 0.08, 1}},
+		{"日出", 0, [3]float32{1, 0, 0}, [3]float32{-1, 0, 0}, 0, 0.12, [4]float32{0.02, 0.03, 0.08, 1}},
 		{"正午", 6000, [3]float32{0, 1, 0}, [3]float32{0, -1, 0}, 1, 1, [4]float32{0.42, 0.68, 0.92, 1}},
-		{"日落", 12000, [3]float32{-1, 0, 0}, [3]float32{1, 0, 0}, 0, 0.15, [4]float32{0.02, 0.03, 0.08, 1}},
-		{"午夜", 18000, [3]float32{0, -1, 0}, [3]float32{0, 1, 0}, 0, 0.15, [4]float32{0.02, 0.03, 0.08, 1}},
+		{"日落", 12000, [3]float32{-1, 0, 0}, [3]float32{1, 0, 0}, 0, 0.12, [4]float32{0.02, 0.03, 0.08, 1}},
+		{"午夜", 18000, [3]float32{0, -1, 0}, [3]float32{0, 1, 0}, 0, 0.12, [4]float32{0.02, 0.03, 0.08, 1}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -187,7 +244,7 @@ func TestTerrainBrightnessMatchesSpecification(t *testing.T) {
 	}{
 		{"正午露天全亮", 6000, 15, 1},
 		{"正午遮蔽保留室内亮度", 6000, 0, 0.08},
-		{"午夜露天最低可见度", 18000, 15, 0.15},
+		{"午夜露天最低可见度", 18000, 15, 0.12},
 		{"午夜遮蔽室内亮度", 18000, 0, 0.08},
 	}
 	for _, tc := range tests {
