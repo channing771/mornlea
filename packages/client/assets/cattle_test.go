@@ -23,8 +23,8 @@ func TestCattleLayersAreAppendedAfterCrack(t *testing.T) {
 	if got := int(LayerCookedBeef); got != 82 {
 		t.Fatalf("LayerCookedBeef=%d，想要追加值 82", got)
 	}
-	if got := int(layerCount); got != int(LayerItemBrokenIronSword)+1 {
-		t.Fatalf("layerCount=%d，想要覆盖末个物品层 %d", got, int(LayerItemBrokenIronSword)+1)
+	if got := int(layerCount); got != int(LayerHumanClayLeg)+6 {
+		t.Fatalf("layerCount=%d，想要覆盖末个人物分面层 %d", got, int(LayerHumanClayLeg)+6)
 	}
 	if LayerCowHide != LayerCrack9+1 {
 		t.Fatalf("LayerCowHide=%d 不紧贴裂纹区间上界 %d，插层检测失效", LayerCowHide, LayerCrack9+1)

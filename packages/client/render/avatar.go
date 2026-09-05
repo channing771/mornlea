@@ -161,6 +161,10 @@ func buildOrderedAvatarParts(dst []avatarPart, ordered []Avatar) []avatarPart {
 			mgl32.HomogRotate3DY(avatar.Yaw),
 		)
 		base := avatarColor(avatar.Key)
+		material := uint32(assets.LayerHumanSageHead)
+		if swingPhaseID(avatar.Key)%2 != 0 {
+			material = uint32(assets.LayerHumanClayHead)
+		}
 		head := root.Mul4(mgl32.Translate3D(0, 1.4, 0)).
 			Mul4(mgl32.HomogRotate3DX(avatar.Pitch)).
 			Mul4(mgl32.Translate3D(0, 0.2, 0)).
@@ -169,47 +173,48 @@ func buildOrderedAvatarParts(dst []avatarPart, ordered []Avatar) []avatarPart {
 		// 为零时 `swungLimb` 直通旧链，逐字节一致。
 		swing := avatar.Swing
 		dst = append(dst,
-			avatarPart{transform: head, color: avatarShade(base, 1.12), material: avatarMaterialSolid},
-			avatarCuboid(root, mgl32.Vec3{0, 1.05, 0}, mgl32.Vec3{0.4, 0.7, 0.25}, base),
+			avatarPart{transform: head, color: avatarShade(base, 1.12), material: material},
+			swungLimb(root, mgl32.Vec3{}, mgl32.Vec3{0, 1.05, 0}, mgl32.Vec3{0.4, 0.7, 0.25}, mgl32.Ident4(), 0, base, material+6),
 			swungLimb(root, mgl32.Vec3{-0.25, 1.4, 0}, mgl32.Vec3{-0.25, 1.05, 0}, mgl32.Vec3{0.1, 0.7, 0.25},
-				mgl32.HomogRotate3DX(swing), swing, avatarShade(base, 0.82), avatarMaterialSolid),
+				mgl32.HomogRotate3DX(swing), swing, avatarShade(base, 0.82), material+12),
 			swungLimb(root, mgl32.Vec3{0.25, 1.4, 0}, mgl32.Vec3{0.25, 1.05, 0}, mgl32.Vec3{0.1, 0.7, 0.25},
-				mgl32.HomogRotate3DX(-swing), -swing, avatarShade(base, 0.82), avatarMaterialSolid),
-			swungLimb(root, mgl32.Vec3{-0.1, 0.7, 0}, mgl32.Vec3{-0.1, 0.35, 0}, mgl32.Vec3{0.18, 0.7, 0.25},
-				mgl32.HomogRotate3DX(-swing), -swing, avatarShade(base, 0.82), avatarMaterialSolid),
-			swungLimb(root, mgl32.Vec3{0.1, 0.7, 0}, mgl32.Vec3{0.1, 0.35, 0}, mgl32.Vec3{0.18, 0.7, 0.25},
-				mgl32.HomogRotate3DX(swing), swing, avatarShade(base, 0.82), avatarMaterialSolid),
+				mgl32.HomogRotate3DX(-swing), -swing, avatarShade(base, 0.82), material+12),
+			swungLimb(root, mgl32.Vec3{-0.1, 0.7, 0}, mgl32.Vec3{-0.1, 0.35, 0}, mgl32.Vec3{0.18, avatarLegLength, 0.25},
+				mgl32.HomogRotate3DX(-swing), -swing, avatarShade(base, 0.82), material+18),
+			swungLimb(root, mgl32.Vec3{0.1, 0.7, 0}, mgl32.Vec3{0.1, 0.35, 0}, mgl32.Vec3{0.18, avatarLegLength, 0.25},
+				mgl32.HomogRotate3DX(swing), swing, avatarShade(base, 0.82), material+18),
 		)
 	}
 	return dst
 }
 
-// avatarStrideLength 是四肢摆动的固定步幅（格/周期）：走满一个完整正弦周期
-// （左右各一步）的前进行进距离取 2 格；全速行走（约 0.086 格/tick）约 23
-// tick 一周期，半速则约 46 tick——步频由距离决定，脚底不再打滑。
-const avatarStrideLength = float32(2.0)
+// 人类步幅按腿长和最大摆角的前后弧投影校准；这是视觉近似而非 IK，
+// 不保证脚底物理锁定。20 Hz 下全速 4.3 格/秒约每秒 2.54 周期。
+const avatarLegLength = float32(0.7)
+const avatarSwingAmplitude = float32(0.65)
 
-// avatarSwingAmplitude 是四肢摆动的振幅（弧度）：0.35 约 20°，感知下限之上、
-// 夸张之下。
-const avatarSwingAmplitude = float32(0.35)
+var avatarStrideLength = float32(4 * float64(avatarLegLength) * math.Sin(float64(avatarSwingAmplitude)))
 
-// avatarSwingSpeedThreshold 是摆动的速度门限（格/tick）：全速行走约 0.086
-// （`WalkSpeed` 4.3 格/秒 ÷ 50 tick），门限取约十七分之一，静止与插值抖动回
-// 中，加速爬升一两拍即起摆。
+// `avatarSwingSpeedThreshold` 的单位是格/权威 tick；实际 tick 为 50 ms。
 const avatarSwingSpeedThreshold = float32(0.005)
 
-// AvatarSwingAngle 由累积行进距离、实体相位 ID 与呈现速度派生四肢摆动角：阈
-// 值下回中（不原地踏步），否则相位按距离除以步幅推进（`avatarStrideLength`），
-// 同距离异速同相位；ID 只贡献固定错相，同速同频。距离累积由调用方在呈现态里
-// 维护（见 `InstanceEncoder` 的差分历史），本函数是纯函数（禁用墙钟与 tick
-// 计数），不读任何权威字段。
+// `AvatarSwingAngle` 按人类的水平累计距离推进相位，速度低于阈值时回中。
+// 相位只依赖呈现历史和固定身份错相，不读取墙钟或权威状态。
 func AvatarSwingAngle(distance float32, phaseID uint64, speed float32) float32 {
+	return avatarKindSwingAngle(EntityPlayer, distance, phaseID, speed)
+}
+
+func avatarKindSwingAngle(kind EntityKind, distance float32, phaseID uint64, speed float32) float32 {
 	if speed < avatarSwingSpeedThreshold {
 		return 0
 	}
-	phase := 2*math.Pi*float64(distance/avatarStrideLength) +
-		2*math.Pi*float64(phaseID%32)/32
-	return avatarSwingAmplitude * float32(math.Sin(phase))
+	amplitude, stride := avatarSwingAmplitude, avatarStrideLength
+	// 牛和夜行者保留较小摆角与原两格周期，避免人类校准改变它们的节奏。
+	if kind == EntityHostile || kind == EntityPassive {
+		amplitude, stride = 0.35, 2
+	}
+	phase := 2*math.Pi*float64(distance/stride) + 2*math.Pi*float64(phaseID%32)/32
+	return amplitude * float32(math.Sin(phase))
 }
 
 // swingPhaseID 把实体键折成摆动相位 ID：FNV-1a 混合身份域与全部 16 字节，跨

@@ -174,7 +174,17 @@ const (
 	LayerItemBrokenWoodenSword
 	LayerItemBrokenStoneSword
 	LayerItemBrokenIronSword
-	layerCount
+	// `LayerHumanSageHead` 起每六层按 +X、-X、+Y、-Y、+Z、-Z 排列；
+	// 人物专属内部层不开放材质包覆盖，面部仅位于本地前向 -Z。
+	LayerHumanSageHead
+	LayerHumanSageTorso = LayerHumanSageHead + 6
+	LayerHumanSageArm   = LayerHumanSageHead + 12
+	LayerHumanSageLeg   = LayerHumanSageHead + 18
+	LayerHumanClayHead  = LayerHumanSageHead + 24
+	LayerHumanClayTorso = LayerHumanSageHead + 30
+	LayerHumanClayArm   = LayerHumanSageHead + 36
+	LayerHumanClayLeg   = LayerHumanSageHead + 42
+	layerCount          = LayerHumanSageHead + 48
 )
 
 type textureBinding struct {
@@ -352,6 +362,9 @@ func NewRegistry() *Registry {
 			continue
 		}
 		r.layers[int(layer)] = originalItemTexture(item)
+	}
+	for layer := LayerHumanSageHead; layer < layerCount; layer++ {
+		r.layers[layer] = originalHumanTexture(int(layer - LayerHumanSageHead))
 	}
 	r.refreshItemIcons()
 	// ids 覆盖 core 的全部已注册方块编号，上界一律用独占哨兵 core.BlockIDMax

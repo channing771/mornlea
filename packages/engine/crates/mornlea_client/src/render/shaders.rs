@@ -81,6 +81,14 @@ pub const HUD_HOTBAR: &str = include_str!("../../shaders/hotbar.wgsl");
 mod tests {
     use super::*;
 
+    #[test]
+    fn human_material_faces_are_isolated_from_existing_entities() {
+        assert!(AVATAR.contains("material >= 112u && material < 160u"));
+        assert!(AVATAR.contains("return material + face;"));
+        assert!(AVATAR.contains("out.material = avatar_face_material(instance.material, vi / 4u);"));
+        assert!(AVATAR.contains("default: { return vec2f(local.x + 0.5, 0.5 - local.y); }"));
+    }
+
     /// 单源存在性:路径失效或文件清空都必须在编译/测试期暴露。
     #[test]
     fn shaders_are_nonempty_and_have_entry_points() {

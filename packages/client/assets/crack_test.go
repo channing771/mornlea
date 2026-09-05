@@ -21,8 +21,8 @@ func TestCrackLayerNumbersAreFrozen(t *testing.T) {
 	if got := int(LayerCrack9); got != 78 {
 		t.Fatalf("LayerCrack9=%d，想要冻结值 78", got)
 	}
-	if got := int(layerCount); got != int(LayerItemBrokenIronSword)+1 {
-		t.Fatalf("layerCount=%d，想要覆盖末个物品层 %d", got, int(LayerItemBrokenIronSword)+1)
+	if got := int(layerCount); got != int(LayerHumanClayLeg)+6 {
+		t.Fatalf("layerCount=%d，想要覆盖末个人物分面层 %d", got, int(LayerHumanClayLeg)+6)
 	}
 	if LayerCrack0 != LayerShortGrass+1 {
 		t.Fatalf("LayerCrack0=%d 不紧贴短草层上界 %d，插层检测失效", LayerCrack0, LayerShortGrass+1)

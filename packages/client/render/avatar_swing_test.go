@@ -263,7 +263,7 @@ func TestInstanceEncoderEstimatesSpeedFromPresentations(t *testing.T) {
 	swung := encoder.EncodeAvatarInstances(nil, 11, moved)
 	want := buildAvatarParts(nil, []Avatar{{
 		Key: key, Position: start.Add(mgl32.Vec3{0.086, 0, 0}),
-		Swing: AvatarSwingAngle(0.086, swingPhaseID(key), 0.086),
+		Swing: avatarKindSwingAngle(key.Kind, 0.086, swingPhaseID(key), 0.086),
 	}})
 	assertPartStreamsEqual(t, swung, avatarPartBytes(want))
 	if AvatarSwingAngle(0.086, swingPhaseID(key), 0.086) == 0 {

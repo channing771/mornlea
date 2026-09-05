@@ -56,6 +56,15 @@ fn avatar_uv(local: vec3f, face: u32) -> vec2f {
     }
 }
 
+// 人物内部材质每六层对应六面；本地 -Z 是前向，后脑独占 +Z 层。
+// 旧牛、敌怪、物品与纯色哨兵保持原采样规则。
+fn avatar_face_material(material: u32, face: u32) -> u32 {
+    if (material >= 112u && material < 160u) {
+        return material + face;
+    }
+    return material;
+}
+
 @vertex
 fn vs_main(
     @location(0)             local: vec3f,
@@ -76,7 +85,7 @@ fn vs_main(
         instance.transform[2].xyz,
     ) * cube_normal(vi / 4u));
     out.uv = avatar_uv(local, vi / 4u);
-    out.material = instance.material;
+    out.material = avatar_face_material(instance.material, vi / 4u);
     out.daylight = camera.daylight.x;
     return out;
 }

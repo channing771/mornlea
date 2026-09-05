@@ -35,13 +35,15 @@ type InstanceEncoder struct {
 
 // swingTrack 记录单个实体上次编码时的呈现位置、权威 tick 与累积行进距离：
 // `speed` 是据此差分出的上次估计速度（格/tick），`distance` 是历次位移差分的
-// 和（格）——摆动相位的唯一推进量（见 `AvatarSwingAngle`）。累积器是纯呈现
+// 和（格）——摆动相位的唯一推进量。`pending` 保留同 tick 插值路程，
+// 供下一权威 tick 估速；每次呈现仅累计 XZ 距离。累积器是纯呈现
 // 态，不进协议与存档；tick 回退（场景切换/重连）与 `ResetLocomotion` 清零。
 type swingTrack struct {
 	pos      [3]float32
 	tick     uint64
 	speed    float32
 	distance float32
+	pending  float32
 }
 
 // EncodeAvatarInstances 把插值后的 avatars 编码为 96 字节/实例的字节流,
@@ -49,7 +51,7 @@ type swingTrack struct {
 //
 // `tick` 是最后确认的权威 server tick：编码器据此估计呈现速度（位置差分除
 // 以 tick 差），并累积每实体的行进距离推进四肢摆动相位（见
-// `AvatarSwingAngle`）——同 tick 重复编码沿用上次速度与距离，tick 回退（场景
+// `AvatarSwingAngle`）——同 tick 编码沿用速度并继续累计 XZ 路程，tick 回退（场景
 // 切换重钉/重连）时重新锚定清零。静止实体恒为中性位姿，因此静态抓帧基线与机
 // 器速度无关；同消息流的累积距离一致，抓帧可复现。
 func (e *InstanceEncoder) EncodeAvatarInstances(dst []byte, tick uint64, avatars []Avatar) []byte {
@@ -62,7 +64,7 @@ func (e *InstanceEncoder) EncodeAvatarInstances(dst []byte, tick uint64, avatars
 }
 
 // applyLocomotionSwing 为已排序的本帧身体逐个估计呈现速度、累积行进距离并
-// 填写 `Swing`：首见/回退锚定为 0，同 tick 沿用上次值，前进时按位移差分重估
+// 填写 `Swing`：首见/回退/传送锚定为 0，同 tick 累加路程，tick 前进时重估
 // 速度并累加距离；离场实体的历史同步清理。死亡/低头让路由装配侧
 // （`appendPassiveAvatarParts` 等）按位姿门控，本函数只填角。
 func (e *InstanceEncoder) applyLocomotionSwing(tick uint64) {
@@ -71,20 +73,23 @@ func (e *InstanceEncoder) applyLocomotionSwing(tick uint64) {
 	}
 	for index := range e.ordered {
 		avatar := &e.ordered[index]
-		var speed, distance float32
-		if last, ok := e.tracks[avatar.Key]; ok {
-			switch {
-			case tick > last.tick:
-				moved := mgl32.Vec3(avatar.Position).Sub(mgl32.Vec3(last.pos)).Len()
-				distance = last.distance + moved
-				speed = moved / float32(tick-last.tick)
-			case tick == last.tick:
-				speed = last.speed
-				distance = last.distance
+		track := swingTrack{pos: [3]float32(avatar.Position), tick: tick}
+		if last, ok := e.tracks[avatar.Key]; ok && tick >= last.tick {
+			delta := avatar.Position.Sub(mgl32.Vec3(last.pos))
+			// 单帧超过八格视为传送；垂直跳变也重锚，正常跳跃仅忽略 Y 路程。
+			if delta.LenSqr() <= 64 {
+				moved := float32(math.Hypot(float64(delta[0]), float64(delta[2])))
+				track.distance = last.distance + moved
+				track.speed = last.speed
+				track.pending = last.pending + moved
+				if tick > last.tick {
+					track.speed = track.pending / float32(tick-last.tick)
+					track.pending = 0
+				}
 			}
 		}
-		e.tracks[avatar.Key] = swingTrack{pos: [3]float32(avatar.Position), tick: tick, speed: speed, distance: distance}
-		avatar.Swing = AvatarSwingAngle(distance, swingPhaseID(avatar.Key), speed)
+		e.tracks[avatar.Key] = track
+		avatar.Swing = avatarKindSwingAngle(avatar.Key.Kind, track.distance, swingPhaseID(avatar.Key), track.speed)
 	}
 	if len(e.tracks) > len(e.ordered) {
 		seen := make(map[EntityKey]struct{}, len(e.ordered))
