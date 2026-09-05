@@ -299,12 +299,15 @@ func (engine *engineContext) passiveStepInput(entry *passiveState) physics.Input
 	if target, ok := engine.passiveTemptTarget(entry); ok {
 		dx := target.X() - entry.state.Position.X()
 		dz := target.Z() - entry.state.Position.Z()
+		want := normalizeYaw(float32(math.Atan2(float64(-dx), float64(-dz))))
 		stopSq := float32(passiveTemptStopDistance) * float32(passiveTemptStopDistance)
 		if dx*dx+dz*dz > stopSq {
-			yaw := normalizeYaw(float32(math.Atan2(float64(-dx), float64(-dz))))
-			entry.yaw = yaw
-			return physics.Input{MoveZ: 1, Yaw: yaw}
+			entry.yaw = turnYawToward(entry.yaw, want, passiveIdleLookMaxTurn)
+			return physics.Input{MoveZ: 1, Yaw: entry.yaw}
 		}
+		// 止步只冻结位移，不冻结朝向：引诱牛（含止步）每 tick 有界转向持麦
+		// 玩家，头部朝向与身体一致（头部无 yaw 通道，随身体走）。
+		entry.yaw = turnYawToward(entry.yaw, want, passiveIdleLookMaxTurn)
 		return physics.Input{Yaw: entry.yaw}
 	}
 	if target, ok := engine.passiveIdleLookTarget(entry); ok {
