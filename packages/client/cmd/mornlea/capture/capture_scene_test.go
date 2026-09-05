@@ -867,9 +867,11 @@ func TestTorchNightScenePixelsShowLightFalloffAndCutout(t *testing.T) {
 	t.Run("封墙暗室无漏光", func(t *testing.T) {
 		ceiling := torchNightPatchLuma(t, img, captureSceneProject(t, camera, mgl32.Vec3{4.0, 6.0, -12.0}))
 		// 阈值按内嵌默认包标定：光照与几何与换肤前完全一致，Pastelcraft 石面
-		// 反照率更高，同光场下该采样块实测 76（换肤前 <70），取 90 保留裕量；
-		// 真实漏光（天空光灌入或方块光穿墙）会把该值推高到被照亮面量级。
-		if ceiling >= 90 {
+		// 反照率更高，同光场下该采样块换肤时实测 76（换肤前 <70），取 90 保留裕量；
+		// 物理光照管线（线性光 + ACES）下暗部响应整体抬升，同采样块实测 91，
+		// 取 105 保留与换肤前相同的 14 点裕量；真实漏光（天空光灌入或方块光穿墙）
+		// 会把该值推高到被照亮面量级（火把光池约 200），判别力不受影响。
+		if ceiling >= 105 {
 			t.Fatalf("远端天花板亮度=%d，封闭暗室的未照到面应当保持暗色", ceiling)
 		}
 	})

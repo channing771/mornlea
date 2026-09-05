@@ -134,7 +134,7 @@ func TestDayNightLowSunWarmsClearColorButNightStaysPure(t *testing.T) {
 		}
 	}
 
-	// 夜间门控：午夜暖度为满但 `daylight` 门控强度为 0，天空保持纯净夜色。
+	// 夜间门控：午夜暖度为满但 `Daylight` 门控强度为 0，天空保持纯净夜色。
 	if midnight := DayNightAt(18000, 0); midnight.ClearColor != nightSkyColor {
 		t.Fatalf("午夜 clear color = %v，想要纯净夜色 %v", midnight.ClearColor, nightSkyColor)
 	}

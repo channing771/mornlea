@@ -66,7 +66,7 @@ func smoothstep(t float32) float32 {
 // 低太阳色温近似（非真实黑体辐射）：暖光 (1.0,0.55,0.30) 按
 // `1-warmth` 向白光过渡，`warmth = 1-smoothstep(sun/0.5)`；`ClearColor`
 // 在既有夜昼 lerp 后乘该暖色，并用 `smoothstep((daylight-0.12)/0.28)`
-// 门控强度——夜间 `daylight` 为 0.12 时强度为 0，天空保持纯净夜色。
+// 门控强度——夜间 `Daylight` 为 0.12 时强度为 0，天空保持纯净夜色。
 //
 // 偏移是服务端随权威玩家状态下发、客户端只读的显示相位单值（跳夜交付）：
 // 全仓相位算式收敛在 `core.DisplayDayPhase`，客户端不得自建。云层漂移等绝对
