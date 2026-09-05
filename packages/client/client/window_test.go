@@ -20,7 +20,8 @@ func buildSnapshot(mutate func([]byte)) []byte {
 }
 
 func TestClientABIVersionMatchesHeader(t *testing.T) {
-	// v16 与 v15 同表面（仅相机可见性出口的版本号提升），v15 在 v14 render
+	// v16 在 v15 表面上新增无状态相机视图投影查询出口
+	// mornlea_client_camera_viewproj；v15 在 v14 render
 	// world update 表面上叠加 avatar 贴图实例布局；
 	// 动态库 identity 与编译期 header 必须同步切换。
 	if got := ClientABIVersion(); got != 16 {

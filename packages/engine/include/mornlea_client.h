@@ -4,7 +4,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* v15:avatar 实例 80→96 字节(transform mat4 + color vec4 + material u32 +
+/* v16:新增无状态相机视图投影查询出口 mornlea_client_camera_viewproj
+ * (位姿→列主序视图投影矩阵＋6 平面视锥，无窗口句柄)。
+ * v15:avatar 实例 80→96 字节(transform mat4 + color vec4 + material u32 +
  * 12B 保留零填充),`avatar.wgsl` 复 terrain atlas 绑定范式做贴图采样,
  * 纯色分支传哨兵材质像素不变;容量 75 具身体(450 实例)不变。
  * v14:在 v13 窗口合成捕获表面上新增 render world update 入口。
@@ -46,6 +48,22 @@
 #define MORNLEA_CLIENT_SNAPSHOT_BYTES 4160u
 
 uint32_t mornlea_client_abi_version(void);
+
+/* 相机视图投影与视锥查询(client ABI v16 新增的无状态纯计算出口)：以相机
+ * 位置 pos_xyz(3 个 float)与 yaw/pitch/fov_y/aspect/near/far 求解列主序
+ * 视图投影矩阵与 6 平面视锥(左、右、下、上、近、远)，分别写进 out_viewproj
+ * (16 个 float)与 out_frustum(24 个 float)；失败不写任何输出。 */
+uint32_t mornlea_client_camera_viewproj(
+    uint32_t abi_version,
+    const float *pos_xyz,
+    float yaw,
+    float pitch,
+    float fov_y,
+    float aspect,
+    float near,
+    float far,
+    float *out_viewproj,
+    float *out_frustum);
 
 uint32_t mornlea_client_window_create(
     uint32_t abi_version,
