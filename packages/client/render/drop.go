@@ -24,6 +24,11 @@ const (
 	dropSpinPeriod   = 80
 	dropFloatPeriod  = 48
 	dropBaseAltitude = float32(0.5)
+	// dropFlakeSize/dropFlakeThin 是非方块掉落薄片的平面边长与厚度：单张贴
+	// 图的极薄扁盒（约 1/2 缩放），前后大面采样同一层，双面同图；实例仍是
+	// 立方体图元，零管线变更。
+	dropFlakeSize = float32(0.5)
+	dropFlakeThin = float32(0.02)
 )
 
 // ItemDrop 是一个权威掉落物的渲染输入；位置由方块位置决定。`DeathTick` 是
@@ -45,17 +50,21 @@ func buildItemDropParts(dst []avatarPart, serverTick uint64, drops []ItemDrop) [
 		if !ok {
 			continue
 		}
-		scale := dropCubeSize
+		unit := float32(1)
 		color := [4]float32{1, 1, 1, 1}
 		if drop.DeathTick != 0 {
 			visible, linkedScale, flash := deathLinkedDropAppearance(serverTick, drop.DeathTick)
 			if !visible {
 				continue
 			}
-			scale = dropCubeSize * linkedScale
+			unit = linkedScale
 			if flash {
 				color = [4]float32{2, 2, 2, 1}
 			}
+		}
+		sx, sy, sz := dropCubeSize*unit, dropCubeSize*unit, dropCubeSize*unit
+		if itemDropFlake(drop.Item) {
+			sx, sy, sz = dropFlakeSize*unit, dropFlakeThin*unit, dropFlakeSize*unit
 		}
 		phase := dropAnimationPhase(serverTick, drop.ID)
 		center := mgl32.Vec3{
@@ -66,7 +75,7 @@ func buildItemDropParts(dst []avatarPart, serverTick uint64, drops []ItemDrop) [
 		}
 		transform := mgl32.Translate3D(center.X(), center.Y(), center.Z()).
 			Mul4(mgl32.HomogRotate3DY(phase.spin)).
-			Mul4(mgl32.Scale3D(scale, scale, scale))
+			Mul4(mgl32.Scale3D(sx, sy, sz))
 		// 贴图分支颜色与漫反射相乘（见 avatar 着色器）：中性白保持原样，
 		// 超白即一次白色闪光；填色保持编码确定。
 		dst = append(dst, avatarPart{transform: transform, color: color, material: material})
@@ -258,6 +267,19 @@ func itemDropMaterial(item core.ItemID) (uint32, bool) {
 	default:
 		return 0, false
 	}
+}
+
+// itemDropFlake 报告掉落物是否按非方块薄片呈现：不可放置的物品（食物/工
+// 具/火把等）一律薄片；可放置但放置体不是完整立方体的（作物/门/床）同样薄
+// 片，其余方块类保持迷你立方体。火把不在 `ItemPlacement` 表里（形态经
+// `PlaceableBlockAtFace` 按命中面选择），天然落入薄片分支。
+func itemDropFlake(item core.ItemID) bool {
+	switch item {
+	case core.ItemWheatSeeds, core.ItemPotato, core.ItemCarrot, core.ItemDoor, core.ItemBed:
+		return true
+	}
+	_, ok := core.ItemPlacement(item)
+	return !ok
 }
 
 // ItemDropBlock 把掉落物的区块内索引还原为世界方块位置。
