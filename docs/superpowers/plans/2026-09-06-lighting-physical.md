@@ -43,9 +43,7 @@ Expected: PASS（记住失败即停，先修环境再动曲线）。
 sunClip := sun // 0..1
 shoulder := sunClip * sunClip * (3 - 2*sunClip) // smoothstep
 daylight := float32(0.12 + 0.88*shoulder)
-// 色温近似混色：太阳高度角 sinTheta∈[-1,1]，地平线附近暖，正午白
-warm := float32(1 - math.Min(1, math.Abs(theta-math.Pi/2)/(math.Pi/2))) // 正午1、地平0？不——
-// 如实采用：warmth = 1-smoothstep(0,0.5,sunClip)，暖光 (1.0,0.55,0.30)→白光 (1,1,1)
+// 色温近似混色（非真实黑体辐射）：warmth = 1-smoothstep(0,0.5,sunClip)，暖光 (1.0,0.55,0.30)→白光 (1,1,1)
 ```
 
 具体实现：`warmth := 1 - smoothstep(0, 0.5, sun)`（smoothstep 用 `t*t*(3-2t)` 手写，不引入依赖）；`sunTint := lerp([1.0,0.55,0.30],[1,1,1],1-warmth)`；`ClearColor` 在既有 night→day lerp 后再乘 `sunTint`（夜间 sun=0 时 warmth=1 会染暖——必须用 `daylight` 门控：`tintStrength = smoothstep(0.12, 0.4, daylight)`，夜间保持纯净夜空）。`Sun` 字段语义不变（仍是 max(0,sin)），`StarVisibility` 公式不变。`TerrainBrightness` 不动。
