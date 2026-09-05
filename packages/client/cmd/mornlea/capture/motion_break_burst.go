@@ -1,13 +1,19 @@
 package capture
 
-// motion_break_burst.go：破碎 burst 的 motion 演示入口。产物是 24 帧 GIF，
+// motion_break_burst.go：完整采掘生命周期的 motion 演示入口。产物是 45 帧 GIF，
 // 只验呈现、不进任何比对门禁：场景值不追加进 `captureScenes`（27 张 PNG
 // 纪律不动），`RunCapture`/`visual-check`/`visual-update` 都不感知它。
+//
+// 时间线（帧号 = 合成 tick 偏移，延迟沿用 13cs）：F0–4 目标静置无采掘；
+// F5–24 采掘爬坡（`RequiredTicks=200`，`ProgressTicks=(i-5)*10`，裂纹 0→9 扫完）；
+// F25 破坏同帧三件事（镜像目标置空 + `MiningOverlay` 熄灭 + 泥土掉落注入，
+// burst 年龄 0 从此帧起算）；F25–44 粒子存续 + 掉落留存，裂纹不再出现
+// （`mining-crack-presentation` 破坏即清理语义）。
 //
 // 演示驱动的是真实 `RenderFrame` 破碎链路（掉落物镜像 + 合成 tick 经
 // `AppendBreakBurstInstances` 编码），只是 tick 来源是合成推进而非真实
 // 无头 tick：真实权威 tick 取决于加载收敛花了多久，随机器速度漂移
-// （见 `captureScene` 的注释），演示必须逐帧确定才钉得住 24 帧约定。
+// （见 `captureScene` 的注释），演示必须逐帧确定才钉得住 45 帧约定。
 // 链路本身已有逐帧编码测试与接线测试覆盖，这里不管链路、只管呈现。
 
 import (
@@ -20,68 +26,113 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/go-gl/mathgl/mgl32"
-
-	"github.com/channing771/mornlea/packages/client/client"
-	application "github.com/channing771/mornlea/packages/client/cmd/mornlea/app"
+	"github.com/channing771/mornlea/packages/client/render/hud"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
 	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 const (
-	// breakBurstMotionFrameCount 是演示 GIF 的固定帧数：20 tick 粒子寿命 +
-	// 首尾各 2 帧余量（首帧 burst 诞生、尾帧过期清空都有像素证据）。
-	breakBurstMotionFrameCount = 24
+	// breakBurstMotionFrameCount 是演示 GIF 的固定帧数：5 帧静置 + 20 帧采掘
+	// 爬坡 + 破坏帧起 20 tick 粒子存续（含破坏帧本身）。
+	breakBurstMotionFrameCount = 45
 	// breakBurstMotionTickBase 是合成 tick 序列的起点：取值任意、固定即可，
 	// burst 年龄只与相对差有关，绝对值不进画面。
 	breakBurstMotionTickBase = uint64(1)
 	// breakBurstMotionFrameDelay 是 GIF 单帧延迟（百分之一秒）：约 8fps，
-	// 与开发捕获服务的 GIF 口径一致，24 帧循环约 3.1 秒。
+	// 与开发捕获服务的 GIF 口径一致，45 帧循环约 5.9 秒。
 	breakBurstMotionFrameDelay = 13
+	// breakBurstMotionMiningStartFrame 是采掘爬坡的首帧：之前静置无采掘。
+	breakBurstMotionMiningStartFrame = 5
+	// breakBurstMotionBreakFrame 是破坏帧：镜像目标置空、采掘熄灭、掉落注入
+	// 三件事同帧发生，burst 年龄 0 从此帧起算。
+	breakBurstMotionBreakFrame = 25
+	// breakBurstMotionMiningRequiredTicks 是演示采掘的总需求 tick：20 帧爬坡
+	// 每帧 +10，与破坏帧对齐时恰好差一档（末帧 190/200，阶段 9 不提前破坏）。
+	breakBurstMotionMiningRequiredTicks = uint16(200)
+	// breakBurstMotionMiningStepTicks 是爬坡每帧的进度步长。
+	breakBurstMotionMiningStepTicks = uint16(10)
 )
 
-// breakBurstMotionDropBlock 是合成泥土掉落的锚定方块：与牛群场景验证过的
-// 掉落机位同值，相机姿态也沿用该机位，burst 粒子落在画面近景中央。
-var breakBurstMotionDropBlock = core.BlockPos{X: 0, Y: 1, Z: 3}
+// breakBurstMotionTarget 是演示的采掘目标：泥土方块，直接取裂纹场景的目标坐标
+// （同一格，机位也沿用裂纹姿势，选框射线天然命中它——裂纹与选框同源门控，
+// 不允许摆拍在空气坐标上）；与砖夹具的区别仅在于方块种类。
+var breakBurstMotionTarget = captureMiningCrackTarget
 
 // breakBurstMotionScene 是演示的收敛场景值：仅本文件内部使用，绝不追加进
-// `captureScenes`。世界夹具复用牛群场景的草地（空气邻域 + y=0 草地条），
-// 呈现实体（牛群/掉落）一律不装，画面里只有草地与第 0 帧后注入的合成掉落。
+// `captureScenes`。世界夹具是泥土目标（`prepareMiningLifecycleDirt`），
+// 呈现状态钉死沿用裂纹场景（`applyMiningCrackCaptureState`：正午 + 同机位 +
+// 前序残留清理），不另起一套摆拍。
 var breakBurstMotionScene = captureScene{
 	Name:         "break-burst-motion",
 	WarmupFrames: 8,
-	Prepare:      preparePassiveHerdDay,
-	Apply:        applyBreakBurstMotionState,
+	Prepare:      prepareMiningLifecycleDirt,
+	Apply:        applyMiningCrackCaptureState,
 }
 
-// applyBreakBurstMotionState 钉死演示的全部呈现状态：固定正午、牛群场景的
-// 已验证机位、前序场景残留清空（与牛群 `Apply` 同一份清理语义，但不注入
-// 任何实体——合成掉落在收敛之后、`RunBreakBurstMotion` 的抓帧循环之前注入）。
-func applyBreakBurstMotionState(app SceneApplication) error {
-	if err := resetCapturePresentation(app); err != nil {
+// prepareMiningLifecycleDirt 装入采掘目标：空气邻域基线上在目标坐标摆一格泥土。
+// 写法照抄 `prepareTargetBlockFeedback`（砖从哪来、怎么进镜像——泥土照此办理），
+// 只换方块种类：经 headless mirror 既有写接口进入，不手造第二套世界。
+func prepareMiningLifecycleDirt(app SceneApplication) error {
+	if err := prepareCaptureAirNeighborhood(app); err != nil {
 		return err
 	}
-	app.SetWorldTimeTicks(6000)
-	*app.Camera() = client.Camera{
-		Pos: mgl32.Vec3{0.5, 2.8, 6.5}, Yaw: 0, Pitch: -0.12,
-		FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
-		Near: 0.1, Far: 2000,
-	}
-	app.SetCenter(application.CameraChunk(app.Camera().Pos))
-	app.SetBlockTargetReset(false)
-	return nil
+	return applyCaptureMirror(app, network.BlockChanges{
+		Dimension:    core.Overworld,
+		Chunk:        core.ChunkPos{Z: -1},
+		BaseRevision: 1,
+		NewRevision:  2,
+		Changes: []network.BlockChange{{
+			Position: breakBurstMotionTarget,
+			Block:    core.DirtID,
+		}},
+	})
 }
 
-// breakBurstMotionDropUpsert 构造第 0 帧注入的合成泥土掉落：单个泥土堆，
+// breakBurstMotionTick 把帧号映射为合成 tick：逐帧 +1。
+func breakBurstMotionTick(frame int) uint64 {
+	return breakBurstMotionTickBase + uint64(frame)
+}
+
+// breakBurstMotionOverlay 给出指定帧的采掘镜像：F5–24  active 爬坡，其余帧
+// 一律熄灭（F0–4 尚未开掘，F25 起已破坏，裂纹即行清理）。
+func breakBurstMotionOverlay(frame int) hud.MiningOverlay {
+	if frame < breakBurstMotionMiningStartFrame || frame >= breakBurstMotionBreakFrame {
+		return hud.MiningOverlay{}
+	}
+	return hud.MiningOverlay{
+		Active: true, HasTarget: true, Target: breakBurstMotionTarget,
+		ProgressTicks: uint16(frame-breakBurstMotionMiningStartFrame) * breakBurstMotionMiningStepTicks,
+		RequiredTicks: breakBurstMotionMiningRequiredTicks,
+	}
+}
+
+// breakBurstMotionClearTarget 构造破坏帧的镜像置空消息：目标格泥土→空气。
+// 版本号紧随 `prepareMiningLifecycleDirt`（快照 1 → 装入 2 → 置空 3）：
+// 收敛与抓帧期间不再 drain 权威消息，版本号是确定的，不存在竞态。
+func breakBurstMotionClearTarget() network.BlockChanges {
+	return network.BlockChanges{
+		Dimension:    core.Overworld,
+		Chunk:        core.ChunkPos{Z: -1},
+		BaseRevision: 2,
+		NewRevision:  3,
+		Changes: []network.BlockChange{{
+			Position: breakBurstMotionTarget,
+			Block:    core.AirID,
+		}},
+	}
+}
+
+// breakBurstMotionDropUpsert 构造破坏帧注入的合成泥土掉落：单个泥土堆，
 // 经与权威消息相同的 `Apply` 入口进入掉落物镜像；颜色由 `RenderFrame` 经
-// 既有掉落物/burst 路径走 `ItemColor`，演示侧不另起一套取色。
+// 既有掉落物/burst 路径走 `ItemColor`，演示侧不另起一套取色。`ServerTick`
+// 取破坏帧 tick，与该帧合成 tick 同值——burst 年龄 0 从此帧起算。
 func breakBurstMotionDropUpsert() network.ItemDropUpserts {
-	blockIndex, _ := world.ChunkBlockIndex(breakBurstMotionDropBlock)
+	blockIndex, _ := world.ChunkBlockIndex(breakBurstMotionTarget)
 	return network.ItemDropUpserts{
-		ServerTick: breakBurstMotionTickBase,
+		ServerTick: breakBurstMotionTick(breakBurstMotionBreakFrame),
 		Drops: []network.ItemDrop{{
-			ID:         core.DropID{Dimension: core.Overworld, Chunk: breakBurstMotionDropBlock.Chunk(), Slot: 0, Generation: 1},
+			ID:         core.DropID{Dimension: core.Overworld, Chunk: breakBurstMotionTarget.Chunk(), Slot: 0, Generation: 1},
 			BlockIndex: blockIndex,
 			Item:       core.ItemDirt,
 			Count:      1,
@@ -89,29 +140,45 @@ func breakBurstMotionDropUpsert() network.ItemDropUpserts {
 	}
 }
 
-// captureBreakBurstMotionFrames 以合成 tick 逐帧 +1 连抓固定帧数：抓帧回调
-// 由调用方注入（生产走真实 `RenderFrame` + 回读，测试走合成帧），本函数只
-// 钉住帧数与 tick 序列，是演示确定性的落点。
+// applyMiningLifecycleFrame 推进一帧时间线状态：合成 tick 直写 + 采掘镜像直装；
+// 破坏帧额外做镜像置空与掉落注入（overlay 熄灭已由 `breakBurstMotionOverlay`
+// 覆盖）。调用方随后走真实 `RenderFrame` 抓帧。
+func applyMiningLifecycleFrame(app SceneApplication, frame int) error {
+	app.SetServerTick(breakBurstMotionTick(frame))
+	app.SetMiningOverlay(breakBurstMotionOverlay(frame))
+	if frame != breakBurstMotionBreakFrame {
+		return nil
+	}
+	if err := applyCaptureMirror(app, breakBurstMotionClearTarget()); err != nil {
+		return fmt.Errorf("破坏帧置空采掘目标: %w", err)
+	}
+	if err := app.ItemDrops().Apply(breakBurstMotionDropUpsert()); err != nil {
+		return fmt.Errorf("破坏帧注入合成泥土掉落: %w", err)
+	}
+	return nil
+}
+
+// captureBreakBurstMotionFrames 以帧号 0→44 连抓固定帧数：抓帧回调由调用方
+// 注入（生产走时间线状态 + 真实 `RenderFrame` + 回读，测试走合成帧），
+// 本函数只钉住帧数与帧序，是演示确定性的落点。
 func captureBreakBurstMotionFrames(
-	capture func(tick uint64) (*image.NRGBA, error),
-	baseTick uint64,
+	capture func(frame int) (*image.NRGBA, error),
 ) ([]*image.NRGBA, error) {
 	frames := make([]*image.NRGBA, 0, breakBurstMotionFrameCount)
-	for index := range breakBurstMotionFrameCount {
-		tick := baseTick + uint64(index)
-		frame, err := capture(tick)
+	for frame := range breakBurstMotionFrameCount {
+		img, err := capture(frame)
 		if err != nil {
-			return nil, fmt.Errorf("抓取 motion 第 %d 帧（tick %d）: %w", index, tick, err)
+			return nil, fmt.Errorf("抓取 motion 第 %d 帧（tick %d）: %w", frame, breakBurstMotionTick(frame), err)
 		}
-		if frame == nil {
-			return nil, fmt.Errorf("抓取 motion 第 %d 帧（tick %d）: 空帧", index, tick)
+		if img == nil {
+			return nil, fmt.Errorf("抓取 motion 第 %d 帧（tick %d）: 空帧", frame, breakBurstMotionTick(frame))
 		}
-		frames = append(frames, frame)
+		frames = append(frames, img)
 	}
 	return frames, nil
 }
 
-// encodeBreakBurstMotionGIF 把 24 帧 NRGBA 编成 GIF 字节：固定 Plan9 调色板
+// encodeBreakBurstMotionGIF 把 45 帧 NRGBA 编成 GIF 字节：固定 Plan9 调色板
 // + Floyd-Steinberg 抖动（与开发捕获服务的 GIF 口径同源，但 capture 不得
 // 导入 devcapture，方向由架构门禁强制，故此处保留小体量重复）。固定调色板
 // 使同输入逐字节一致；空输入直接失败，不产出零帧 GIF 假证据。
@@ -142,9 +209,9 @@ func encodeBreakBurstMotionGIF(frames []*image.NRGBA) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// RunBreakBurstMotion 是 motion 演示的独立入口：收敛世界 → 第 0 帧注入合成
-// 泥土掉落 → 合成 tick 连抓 24 帧 → 标准库编码写盘。只写传入的输出路径那一个文件，
-// 不碰 `captureScenes` 与任何 PNG 基线。
+// RunBreakBurstMotion 是 motion 演示的独立入口：收敛世界 → 45 帧时间线连抓
+// （合成 tick + 采掘镜像 + 破坏帧置空/掉落注入）→ 标准库编码写盘。只写传入的
+// 输出路径那一个文件，不碰 `captureScenes` 与任何 PNG 基线。
 func RunBreakBurstMotion(app SceneApplication, outPath string) error {
 	if outPath == "" {
 		return fmt.Errorf("motion 演示输出路径为空")
@@ -153,26 +220,26 @@ func RunBreakBurstMotion(app SceneApplication, outPath string) error {
 		return err
 	}
 	// 昼夜冻结与正式抓帧同一理由：收敛帧期间到达的权威时间会改写钉死的正午，
-	// 最终 24 帧的天空光因此随进程启动漂移。
+	// 最终 45 帧的天空光因此随进程启动漂移。
 	app.SetWorldTimeFrozen(true)
 	defer app.SetWorldTimeFrozen(false)
-	// 收敛帧先行（产出帧丢弃）：网格化与上传收敛后，24 帧循环里的画面只随
-	// 合成 tick 与 burst 年龄变化，不混入渐进加载像素。
+	// 收敛帧先行（产出帧丢弃）：网格化与上传收敛后，45 帧循环里的画面只随
+	// 合成 tick、采掘镜像与 burst 年龄变化，不混入渐进加载像素。掉落不在此处
+	// 注入：收敛帧会提前触发 burst 并钉错首现 tick，破坏帧的年龄 0 起算点就错位了。
 	if _, err := captureSceneImage(app, breakBurstMotionScene); err != nil {
 		return fmt.Errorf("收敛 motion 场景: %w", err)
 	}
-	if err := app.ItemDrops().Apply(breakBurstMotionDropUpsert()); err != nil {
-		return fmt.Errorf("注入合成泥土掉落: %w", err)
-	}
-	frames, err := captureBreakBurstMotionFrames(func(tick uint64) (*image.NRGBA, error) {
+	frames, err := captureBreakBurstMotionFrames(func(frame int) (*image.NRGBA, error) {
 		// 合成 tick 直写呈现量：`RenderFrame` 不 drain 服务端消息，注入的
-		// 掉落镜像与钉死的 tick 在 24 帧内不被任何权威消息覆盖。
-		app.SetServerTick(tick)
+		// 掉落镜像与钉死的 tick 在 45 帧内不被任何权威消息覆盖。
+		if err := applyMiningLifecycleFrame(app, frame); err != nil {
+			return nil, err
+		}
 		if _, err := app.RenderFrame(captureDrainMax); err != nil {
 			return nil, err
 		}
 		return bgraToNRGBA(app.Renderer().Readback(), captureWidth, captureHeight), nil
-	}, breakBurstMotionTickBase)
+	})
 	if err != nil {
 		return err
 	}
