@@ -17,11 +17,10 @@ const (
 	dropIndirectOffset = dropInstanceOffset + dropInstanceSize
 	dropUploadBytes    = dropIndirectOffset + avatarIndirectBytes
 
-	dropCubeSize     = float32(0.25)
-	dropFloatHeight  = float32(0.08)
-	dropSpinPeriod   = 80
-	dropFloatPeriod  = 48
-	dropBaseAltitude = float32(0.5)
+	dropCubeSize    = float32(0.25)
+	dropFloatHeight = float32(0.08)
+	dropSpinPeriod  = 80
+	dropFloatPeriod = 48
 	// dropFlakeSize/dropFlakeThin 是非方块掉落薄片的平面边长与厚度：竖立的
 	// 单张贴图牌（约 1/2 缩放），平面竖直（宽与高为边长、厚度沿前后），绕 Y
 	// 旋转；前后大面采样同一层，双面同图；实例仍是立方体图元，零管线变更。

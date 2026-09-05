@@ -85,8 +85,8 @@ func TestItemDropFlakeGeometryIsThinSheet(t *testing.T) {
 	if parts[0].material != uint32(assets.LayerRawBeef) {
 		t.Fatalf("牛肉材质=%d，想要牛肉层 %d", parts[0].material, uint32(assets.LayerRawBeef))
 	}
-	// 同 ID 的石头对照：仍是 1/4 缩放的迷你立方体，且与薄片同中心（只有形
-	// 状分形，浮动与旋转不变）。
+	// 同 ID 的石头对照：仍是 1/4 缩放的迷你立方体；两种形态共享 XZ 与底面
+	// 锚点，高薄片中心按真实半高自然高于立方体。
 	stone := []ItemDrop{{
 		ID: id, Block: core.BlockPos{X: 0, Y: 3, Z: 0}, Item: core.ItemStone,
 	}}
@@ -101,8 +101,11 @@ func TestItemDropFlakeGeometryIsThinSheet(t *testing.T) {
 	}
 	beefCenter := bounds.min.Add(bounds.max.Sub(bounds.min).Mul(0.5))
 	stoneCenter := cubeBounds.min.Add(cubeBounds.max.Sub(cubeBounds.min).Mul(0.5))
-	if !beefCenter.ApproxEqualThreshold(stoneCenter, 1e-5) {
-		t.Fatalf("薄片中心=%v，立方体中心=%v，想要同相位同中心", beefCenter, stoneCenter)
+	if beefCenter.X() != stoneCenter.X() || beefCenter.Z() != stoneCenter.Z() {
+		t.Fatalf("薄片中心=%v，立方体中心=%v，想要相同 XZ", beefCenter, stoneCenter)
+	}
+	if diff := bounds.min.Y() - cubeBounds.min.Y(); diff < -1e-5 || diff > 1e-5 {
+		t.Fatalf("薄片底面=%v，立方体底面=%v，想要相同支撑锚点", bounds.min.Y(), cubeBounds.min.Y())
 	}
 }
 

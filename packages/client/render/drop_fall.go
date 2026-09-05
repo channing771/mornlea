@@ -2,6 +2,7 @@ package render
 
 import (
 	"math"
+	"slices"
 
 	"github.com/go-gl/mathgl/mgl32"
 
@@ -26,6 +27,7 @@ const (
 type DropFalls struct {
 	ids        []core.DropID
 	firstTicks []uint64
+	ordered    [maxItemDrops]ItemDrop
 }
 
 // Reset 清空首现表：会话重置后旧首次 tick 不得带入新会话（tick 回退钳制
@@ -95,50 +97,67 @@ func dropFallOffset(age uint64, spawnY, supportTopY float32, hasSupport bool, gr
 	}
 }
 
-// buildItemDropParts 把掉落物编码为贴图实例：材质采样、薄片分形与死亡关联
-// 外观（滞后隐藏、渐显、白闪）沿用层采样语义，中心高度 = 生成基准 − 重力积分
-// 下落偏移；正弦浮动与自转在着陆后继续，输出恒不超过固定容量。年龄来自首现
-// 表，`gravity`/`terminal` 由调用方显式传参（生产取生效 tunables），同 tick
-// 重复编码逐字节一致。
+// buildItemDropParts 把掉落物编码为贴图实例：输入复制到固定 scratch，按完整
+// 同格键与 `DropID` 排序后线性分组。每堆独占 XZ cell；死亡前隐藏堆仍占槽并
+// 登记年龄。中心从支撑顶面按实际半高和非负浮动锚定，下落、自转、渐显与白闪
+// 保持原语义。生产输入已由镜像拒绝非法值与真实 overflow；此处仍防御性限制
+// 固定实例容量，不扩大 CPU/GPU 缓冲。
 func (falls *DropFalls) buildItemDropParts(dst []avatarPart, serverTick uint64, drops []ItemDrop, gravity, terminal float32) []avatarPart {
-	for _, drop := range drops {
-		if len(dst) == maxItemDrops {
-			break
+	count := min(len(drops), maxItemDrops)
+	ordered := falls.ordered[:count]
+	copy(ordered, drops[:count])
+	slices.SortFunc(ordered, compareDropScatterInputs)
+
+	for groupStart := 0; groupStart < len(ordered); {
+		groupEnd := groupStart + 1
+		for groupEnd < len(ordered) && sameDropScatterGroup(ordered[groupStart], ordered[groupEnd]) {
+			groupEnd++
 		}
-		material, ok := itemDropMaterial(drop.Item)
-		if !ok {
-			continue
-		}
-		unit := float32(1)
-		color := [4]float32{1, 1, 1, 1}
-		if drop.DeathTick != 0 {
-			visible, linkedScale, flash := deathLinkedDropAppearance(serverTick, drop.DeathTick)
-			if !visible {
+		groupCount := groupEnd - groupStart
+		for rank, drop := range ordered[groupStart:groupEnd] {
+			if len(dst) == maxItemDrops {
+				return dst
+			}
+			age := falls.age(serverTick, drop.ID)
+			material, ok := itemDropMaterial(drop.Item)
+			if !ok {
 				continue
 			}
-			unit = linkedScale
-			if flash {
-				color = [4]float32{2, 2, 2, 1}
+			unit := float32(1)
+			color := [4]float32{1, 1, 1, 1}
+			if drop.DeathTick != 0 {
+				visible, linkedScale, flash := deathLinkedDropAppearance(serverTick, drop.DeathTick)
+				if !visible {
+					continue
+				}
+				unit = linkedScale
+				if flash {
+					color = [4]float32{2, 2, 2, 1}
+				}
 			}
+			placement := dropScatterPlacementFor(groupCount, rank, drop.ID)
+			actualScale := placement.scale * unit
+			sx, sy, sz := dropCubeSize*actualScale, dropCubeSize*actualScale, dropCubeSize*actualScale
+			if itemDropFlake(drop.Item) {
+				sx, sy, sz = dropFlakeSize*actualScale, dropFlakeSize*actualScale, dropFlakeThin*actualScale
+			}
+			phase := dropAnimationPhase(serverTick, drop.ID)
+			center := mgl32.Vec3{
+				float32(drop.Block.X) + placement.x,
+				dropScatterCenterY(
+					dropScatterBaseY(drop, age, gravity, terminal), sy/2, placement.layerRise,
+					placement.bob*unit, phase.float,
+				),
+				float32(drop.Block.Z) + placement.z,
+			}
+			transform := mgl32.Translate3D(center.X(), center.Y(), center.Z()).
+				Mul4(mgl32.HomogRotate3DY(phase.spin)).
+				Mul4(mgl32.Scale3D(sx, sy, sz))
+			// 贴图分支颜色与漫反射相乘（见 avatar 着色器）：中性白保持原样，
+			// 超白即一次白色闪光；填色保持编码确定。
+			dst = append(dst, avatarPart{transform: transform, color: color, material: material})
 		}
-		sx, sy, sz := dropCubeSize*unit, dropCubeSize*unit, dropCubeSize*unit
-		if itemDropFlake(drop.Item) {
-			sx, sy, sz = dropFlakeSize*unit, dropFlakeSize*unit, dropFlakeThin*unit
-		}
-		phase := dropAnimationPhase(serverTick, drop.ID)
-		spawnBaseY := float32(drop.Block.Y) + dropBaseAltitude
-		center := mgl32.Vec3{
-			float32(drop.Block.X) + 0.5,
-			spawnBaseY - dropFallOffset(falls.age(serverTick, drop.ID), float32(drop.Block.Y), drop.SupportY, drop.HasSupport, gravity, terminal) +
-				dropFloatHeight*float32(math.Sin(float64(phase.float))),
-			float32(drop.Block.Z) + 0.5,
-		}
-		transform := mgl32.Translate3D(center.X(), center.Y(), center.Z()).
-			Mul4(mgl32.HomogRotate3DY(phase.spin)).
-			Mul4(mgl32.Scale3D(sx, sy, sz))
-		// 贴图分支颜色与漫反射相乘（见 avatar 着色器）：中性白保持原样，
-		// 超白即一次白色闪光；填色保持编码确定。
-		dst = append(dst, avatarPart{transform: transform, color: color, material: material})
+		groupStart = groupEnd
 	}
 	return dst
 }

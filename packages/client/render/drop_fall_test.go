@@ -40,10 +40,13 @@ func testFallWant(age uint64, gravity, terminal float32) float32 {
 	return fallen
 }
 
-// dropFallBaseY 返回无下落时的呈现基准高度：生成中心高度 + 正弦浮动，
-// 下落偏移只在此基础上扣除，浮动本身永不停。
-func dropFallBaseY(block core.BlockPos, serverTick uint64, id core.DropID) float32 {
-	return float32(block.Y) + dropBaseAltitude + dropFallSine(serverTick, id)
+// dropFallBaseY 返回无下落时的呈现中心：底面留白、半高与非负浮动依次叠加。
+func dropFallBaseY(block core.BlockPos, serverTick uint64, id core.DropID, item core.ItemID) float32 {
+	height := dropCubeSize
+	if itemDropFlake(item) {
+		height = dropFlakeSize
+	}
+	return float32(block.Y) + 0.02 + height/2 + dropFloatHeight + dropFallSine(serverTick, id)
 }
 
 // dropFallSine 返回指定 tick 的正弦浮动项：期望高度按与实现相同的结合顺序
@@ -55,7 +58,7 @@ func dropFallSine(serverTick uint64, id core.DropID) float32 {
 
 // dropFallWant 按实现结合顺序组装期望中心高度。
 func dropFallWant(block core.BlockPos, serverTick uint64, id core.DropID, fallen float32) float32 {
-	return float32(block.Y) + dropBaseAltitude - fallen + dropFallSine(serverTick, id)
+	return dropFallBaseY(block, serverTick, id, core.ItemDirt) - fallen
 }
 
 func dropPartCenterY(part avatarPart) float32 {
@@ -83,7 +86,7 @@ func TestDropFallKeepsSpawnHeightWithoutSupport(t *testing.T) {
 		if len(parts) != 1 {
 			t.Fatalf("tick %d 实例数 = %d，想要 1", tick, len(parts))
 		}
-		assertCenterYNear(t, tick, dropPartCenterY(parts[0]), dropFallBaseY(block, tick, drops[0].ID))
+		assertCenterYNear(t, tick, dropPartCenterY(parts[0]), dropFallBaseY(block, tick, drops[0].ID, drops[0].Item))
 	}
 }
 
@@ -183,7 +186,7 @@ func TestDropLandsOnSupportAndKeepsFloating(t *testing.T) {
 	if bytes.Equal(landed, floating) {
 		t.Fatal("着陆后两帧字节一致，想要浮动与自转继续")
 	}
-	if got := dropPartCenterY(falls.buildItemDropParts(nil, 26, drops, dropFallTestGravity, dropFallTestTerminal)[0]); got >= float32(block.Y)+dropBaseAltitude {
+	if got := dropPartCenterY(falls.buildItemDropParts(nil, 26, drops, dropFallTestGravity, dropFallTestTerminal)[0]); got >= float32(block.Y)+0.5 {
 		t.Fatalf("着陆后中心 Y = %v，想要守在支撑面上方", got)
 	}
 }
@@ -199,7 +202,7 @@ func TestDropOnGroundHasZeroOffset(t *testing.T) {
 		if len(parts) != 1 {
 			t.Fatalf("tick %d 实例数 = %d，想要 1", tick, len(parts))
 		}
-		assertCenterYNear(t, tick, dropPartCenterY(parts[0]), dropFallBaseY(block, tick, drops[0].ID))
+		assertCenterYNear(t, tick, dropPartCenterY(parts[0]), dropFallBaseY(block, tick, drops[0].ID, drops[0].Item))
 	}
 }
 

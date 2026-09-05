@@ -65,11 +65,13 @@
 
 ### Task 4: 同格稳定散落与有界高密度布局
 
-**Files/ownership:** `packages/client/render/drop_fall.go`, `drop.go`, 新增 focused scatter helper/tests，app/drop 仅必要接线。
+**Files/ownership:** `packages/client/render/drop_fall.go`, `drop.go`, 新增 focused scatter helper/tests，app/drop 仅必要接线；`packages/engine/crates/mornlea_client/shaders/avatar.wgsl` 与对应 shader 测试仅修物品薄片窄侧面。
 
 **Interfaces:** 消费现有 ItemDrop ID/Block/Item/SupportY/DeathTick 与 Task 2 物品图层；每权威堆仅一实例，DropID/网络/存档不变，固定800容量不变。
 
 **Deliverable:** 同 BlockPos 分组，按完整稳定 ID 排序分配确定槽位，ID 哈希抖动留有边界；单堆也不固定中心。同组1/4/16/32堆在 XZ 方块内呈现，按旋转包围半径保证稀疏不重叠，高密度缩放并分层且漂浮幅度计入层间净空。原支撑下落与死亡渐显保留，中心计算考虑缩放后的底面避免穿地。重排输入同身份同变换，当前集合变更允许重新分配；不得按时钟随机，每帧不得无界排序/搜索或破坏原零分配约束。
+
+**Flake faces:** 实际 GPU 预览发现压扁 cuboid 的四窄侧面把整幅图压成矩形边框。非方块物品图层仅呈现 ±Z 正背大面，四窄侧面须丢弃；保持原薄片厚度的保守包围体、96-byte ABI、实例数与其他方块/人物/牛/粒子分支。补 item layer 边界与其他材质不受影响的 shader 测试，执行对应 Rust focused tests、make rust 后重出候选。
 
 **Geometry:** 为不同首见年龄仍不相交，每个同组堆始终占唯一 XZ cell，层不能复用XZ位置。以完整维度/BlockPos分组，完整DropID排序；`m=ceil(sqrt(n))`（有界阈值）、`cell=0.9/m`、两侧边距0.05、`jitter<=0.04*cell`、旋转半径保守界0.251、`scale=min(1,0.84*cell/(2*0.251))`；单堆可用不为零的较明显偏移但不得破坏边界。bob幅度随scale缩小，rank/16只作高密度辅助层，层高应计入完整薄片高度与两倍bob。以真实缩放半高和非负bob偏置从支撑顶面锚定，最低底面留0.02。XZ最密理论净空0.012格，测试按真实float矩阵验证合理坐标范围。采用可复用固定scratch排序，不修改调用者切片；隐藏的死亡前期堆也占位，避免首现重新分配。分组不保证不同原始Y的跨组掉落落到同支撑后的全局去重；不扩大权威/容量范围。
 
