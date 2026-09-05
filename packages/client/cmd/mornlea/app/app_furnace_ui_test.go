@@ -5,7 +5,6 @@ package app
 // app_furnace_ui_test.go：熔炉界面镜像生命周期——权威状态开 UI、两次点击一次移动、显式/服务端关闭与 reset 清理。
 
 import (
-	"github.com/channing771/mornlea/packages/client/render/hud"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
 	"github.com/go-gl/mathgl/mgl32"
@@ -53,12 +52,10 @@ func TestFurnaceTwoClicksSendOneMoveWithoutPrediction(t *testing.T) {
 	}
 	app.inventoryOpen = true
 
-	width, height := uint32(1280), uint32(720)
-	sourceX, sourceY := furnaceSlotCenter(t, 1, width, height)
-	targetX, targetY := furnaceSlotCenter(t, core.FurnaceInputSlot, width, height)
-	app.clickInventorySlot(sourceX, sourceY, width, height)
+	app.menu.phase = MenuPhaseGame
+	gameTestAction(app, "slot", "inventory", 1)
 	assertNoInteractiveClientMessage(t, serverEndpoint)
-	app.clickInventorySlot(targetX, targetY, width, height)
+	gameTestAction(app, "slot", "furnace", 0)
 
 	message := receiveInteractiveClientMessage(t, serverEndpoint)
 	want := network.MoveContainerStack{
@@ -149,18 +146,4 @@ func TestPlayerResetClosesFurnaceUI(t *testing.T) {
 		t.Fatal("reset 后仍保留熔炉镜像")
 	}
 	assertNoInteractiveClientMessage(t, serverEndpoint)
-}
-
-func furnaceSlotCenter(t *testing.T, slot int, width, height uint32) (float64, float64) {
-	t.Helper()
-	for x := range int(width) {
-		for y := range int(height) {
-			got, ok := hud.FurnaceSlotAt(float64(x), float64(y), width, height)
-			if ok && int(got) == slot {
-				return float64(x), float64(y)
-			}
-		}
-	}
-	t.Fatalf("找不到熔炉统一栏位 %d 的像素", slot)
-	return 0, 0
 }

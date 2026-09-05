@@ -536,3 +536,8 @@ body {
   height: calc(var(--debug-row-height) - 2 * var(--pixel-border-width));
   padding: 0 var(--pixel-input-inline-pad);
 }
+
+/* 原有菜单控件消费同族奶油表面，替换上游像素切角描边。 */
+.pixel-button.pixel-button { border-image:none; border:var(--game-border) solid var(--hud-slot-edge); border-radius:var(--game-control-radius); background:var(--game-surface); box-shadow:0 var(--hud-slot-shadow-offset) var(--hud-slot-shadow-blur) var(--hud-slot-shadow); }
+.pixel-button.pixel-button:hover:not(:disabled),.pixel-button.pixel-button[aria-pressed=true] { background:var(--accent-wash); }
+.settings-panel,.pause-panel,.debug-panel { box-shadow:var(--game-shadow); border-color:var(--hud-slot-edge); }

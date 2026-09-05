@@ -160,6 +160,13 @@ type Application struct {
 	itemDropInstances []render.ItemDrop
 	inventoryOpen     bool
 	inventorySource   int
+	gameToken         uint64
+	gameIdentity      string
+	gameSource        *client.UIGameSlotRef
+	gameRecipeIndex   int
+	gameCursorFree    bool
+	gameCharacter     bool
+	gameUIDirty       bool
 	serverTick        uint64
 	combatFeedback    combatFeedback
 	// worldTimeTicks 是最后确认的权威绝对世界时间，只在接受更新状态时前进。

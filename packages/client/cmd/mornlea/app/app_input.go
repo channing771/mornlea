@@ -7,9 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/channing771/mornlea/packages/client/audio"
 	"github.com/channing771/mornlea/packages/client/client"
-	"github.com/channing771/mornlea/packages/client/render/hud"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
 )
@@ -140,6 +138,9 @@ func (a *Application) containerOpen() bool {
 
 // setInventoryOpen 切换容器界面：显式关闭时立即清理并通知服务端。
 func (a *Application) setInventoryOpen(open bool) {
+	a.invalidateGameView()
+	a.gameCursorFree = false
+	a.gameCharacter = false
 	if !open && a.containerOpen() {
 		a.clearContainerUI()
 		if err := a.send(network.CloseContainer{Sequence: a.nextSequence()}); err != nil {
@@ -167,6 +168,7 @@ func (a *Application) setInventoryOpen(open bool) {
 // clearContainerUI 丢弃当前熔炉、箱子与工作台镜像并关闭容器界面，不发送协议
 // 消息。个人 2×2 网格镜像保留：它不是容器，其权威内容在会话内持续有效。
 func (a *Application) clearContainerUI() {
+	a.invalidateGameView()
 	a.furnace.Reset()
 	a.chest.Reset()
 	if state, opened := a.crafting.State(); opened && state.Size == 3 {
@@ -177,134 +179,6 @@ func (a *Application) clearContainerUI() {
 	if a.window != nil {
 		a.window.SetCursorCaptured(true)
 	}
-}
-
-// clickInventorySlot 按当前打开的视图分流点击：熔炉/箱子走既有容器两次点击
-// 移动，合成视图走统一网格格移动与产物取出。
-func (a *Application) clickInventorySlot(cursorX, cursorY float64, width, height uint32) {
-	furnace, furnaceOpen := a.furnace.State()
-	chest, chestOpen := a.chest.State()
-	if !furnaceOpen && !chestOpen {
-		a.clickCraftingSlot(cursorX, cursorY, width, height)
-		return
-	}
-
-	var slot uint8
-	var ok bool
-	switch {
-	case chestOpen:
-		slot, ok = hud.ChestSlotAt(cursorX, cursorY, width, height)
-	default:
-		// 到这里 furnaceOpen 必为真：合成视图已在分流处单独处理。
-		slot, ok = hud.FurnaceSlotAt(cursorX, cursorY, width, height)
-	}
-	if !ok {
-		return
-	}
-	if a.inventorySource < 0 {
-		a.inventorySource = int(slot)
-		a.playLocalCue(audio.CueUIClick)
-		return
-	}
-	from := uint8(a.inventorySource)
-	a.inventorySource = -1
-	if from == slot {
-		a.playLocalCue(audio.CueUIClick)
-		return
-	}
-	if chestOpen {
-		if err := a.send(network.MoveContainerStack{
-			Sequence: a.nextSequence(), Container: chest.Chest, From: from, To: slot,
-		}); err != nil {
-			slog.Warn("发送箱子移动失败", "error", err)
-			return
-		}
-		a.playLocalCue(audio.CueUIClick)
-		return
-	}
-	if furnaceOpen {
-		if slot == core.FurnaceOutputSlot {
-			return
-		}
-		if err := a.send(network.MoveContainerStack{
-			Sequence: a.nextSequence(), Container: furnace.Furnace, From: from, To: slot,
-		}); err != nil {
-			slog.Warn("发送熔炉移动失败", "error", err)
-			return
-		}
-		a.playLocalCue(audio.CueUIClick)
-		return
-	}
-	if err := a.send(network.MoveInventoryStack{
-		Sequence: a.nextSequence(), From: from, To: slot,
-	}); err != nil {
-		slog.Warn("发送背包移动失败", "error", err)
-		return
-	}
-	a.playLocalCue(audio.CueUIClick)
-}
-
-// clickCraftingSlot 处理合成视图的点击：统一视图格（网格 0..8、背包 9..44）
-// 用两次点击组成一次移动请求，产物格独立于两次点击语义——单击即发送产物
-// 取出请求。所有命令只发权威请求，确认前不本地改写任何镜像。
-func (a *Application) clickCraftingSlot(cursorX, cursorY float64, width, height uint32) {
-	// 未确认镜像按个人 2×2 呈现：3×3 工作台视图只能在收到尺寸 3 的权威
-	// 状态后出现（spec authoritative-inventory「工作台界面显示 3×3 网格」）。
-	size := 2
-	state, confirmed := a.crafting.State()
-	if confirmed {
-		size = int(state.Size)
-	}
-	if hud.CraftingOutputAt(cursorX, cursorY, width, height, size) {
-		// 产物格不是普通移动目标，不进入来源选择；空产物格没有可声明的
-		// 产物，既不发送也不消耗序号。
-		if !confirmed || state.Output.Item == core.ItemNone {
-			return
-		}
-		a.inventorySource = -1
-		if err := a.send(network.TakeCraftingOutput{Sequence: a.nextSequence()}); err != nil {
-			slog.Warn("发送产物取出请求失败", "error", err)
-			return
-		}
-		a.playLocalCue(audio.CueUIClick)
-		return
-	}
-	slot, ok := hud.CraftingSlotAt(cursorX, cursorY, width, height, size)
-	if !ok {
-		return
-	}
-	if a.inventorySource < 0 {
-		a.inventorySource = int(slot)
-		a.playLocalCue(audio.CueUIClick)
-		return
-	}
-	from := uint8(a.inventorySource)
-	a.inventorySource = -1
-	if from == slot {
-		a.playLocalCue(audio.CueUIClick)
-		return
-	}
-	if from >= core.CraftingGridSlots && slot >= core.CraftingGridSlots {
-		// 两端都在背包区：网格命令拒绝这种移动（背包内部移动只能走既有
-		// MoveInventoryStack），换算回 0..35 栏位索引发送。
-		if err := a.send(network.MoveInventoryStack{
-			Sequence: a.nextSequence(),
-			From:     from - core.CraftingGridSlots,
-			To:       slot - core.CraftingGridSlots,
-		}); err != nil {
-			slog.Warn("发送背包移动失败", "error", err)
-			return
-		}
-		a.playLocalCue(audio.CueUIClick)
-		return
-	}
-	if err := a.send(network.MoveCraftingStack{
-		Sequence: a.nextSequence(), From: from, To: slot,
-	}); err != nil {
-		slog.Warn("发送网格移动失败", "error", err)
-		return
-	}
-	a.playLocalCue(audio.CueUIClick)
 }
 
 // selectHotbarSlot 只发送选择请求，不本地改写快捷栏镜像。

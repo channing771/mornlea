@@ -81,6 +81,7 @@ const (
 	KeyEnter
 	KeyLeftAlt
 	KeyBackspace
+	KeyTab
 )
 
 // 快照布局常量,必须与 Rust `input` 模块的布局文档逐字一致。

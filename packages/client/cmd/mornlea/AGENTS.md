@@ -73,8 +73,8 @@ packages/client/cmd/mornlea/
 WebView 组件；采掘不再有屏幕进度条，其进度反馈由世界空间方块裂纹承载
 （`remove-mining-hud-bar`）。只承载这部分像素的 `hud-hotbar-health`、
 `hud-survival-feedback`与 `hud-item-name-popup` 三景随之退役移出清单，其像素
-验收由前端 HUD 组件断言与 `frontend/visual` 部件基线承接；capture 只保留
-世界、夜景、材质与容器保留面（容器四景）场景。
+验收由前端 HUD 组件断言与 `frontend/visual` 部件基线承接；capture 的世界、夜景与材质场景继续走离屏 GPU；容器四景的旧场景登记正在迁移，
+生产帧已不绘制 GPU 面板，面板像素由前端 fixture 承接。
 
 ## Documentation Sync Policy
 

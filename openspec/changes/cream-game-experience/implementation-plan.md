@@ -23,9 +23,9 @@
 
 **Interfaces:** 下行扩展 UIHudState（可新增独立 UI 游戏状态文件），带明确视图 kind、会话/视图 token、来源、玩家 36 格、合成 2/3 网格与产物、箱子 27 格、熔炉 3 格和权威进度、十条既有配方。slot 添加可选 name/icon 图像信息出口，供后续物品素材任务接线。上行新增严格 game action 类型，携带操作与合法索引/视图 token；不要用字符串拼接任意 action id，更不能把语义索引反算成坐标调用旧命中。所有传入值逐层 schema/TS/Rust/Go 验证，过期面板事件不得改变新面板来源。可使用现有 typed JSON ABI，不新增 C 出口。
 
-**Deliverable:** 真实生产可操作的前端个人背包/合成、工作台、箱子、熔炉、只读人物信息与 tooltip。奶油卡面、可可轮廓和文字，槽位与 HUD 同族圆角阴影；个人页可有背包/人物切换，人物页为原创纸面体素肖像及已有生命/饥饿读数，不造装备系统。配方保持原有选择语义；合成产物只发送 TakeCraftingOutput。数量/耐久/进度等待权威确认，第一次点击来源只本地记录高亮，第二次发对应命令。槽位用 button/aria，tooltip 不吞指针，窄视口可访问全部网格和关闭按钮。菜单/设置/暂停/调试沿同一 tokens 奶油外观。
+**Deliverable:** 真实生产可操作的前端个人背包/合成、工作台、箱子、熔炉、只读人物信息与 tooltip。奶油卡面、可可轮廓和文字，槽位与 HUD 同族圆角阴影；个人页可有背包/人物切换，人物页为原创纸面体素肖像及已有生命/饥饿读数，不造装备系统。配方点击为只读配方高亮与材料布局展示，不自动填料、不新增网络合成命令；合成产物只发送 TakeCraftingOutput。数量/耐久/进度等待权威确认，第一次点击来源只本地记录高亮，第二次发对应命令。槽位用 button/aria，tooltip 不吞指针，窄视口可访问全部网格和关闭按钮。菜单/设置/暂停/调试沿同一 tokens 奶油外观。
 
-**Input:** 先核实原有释放入口；若无合适入口，用 Tab 显示自由光标（前端显示简短按键提示），再次 Tab/点击世界背景恢复捕获。自由光标可点击 HUD，捕获时 HUD 完全穿透。面板 E/Esc/关闭按钮与数字键正确返回 Go；原生键鼠状态在 WebView 接管/归还时清理，关闭当帧不挖掘、不跳视角。-connect 交互窗口支持同一前端；capture/benchmark 无 WebView。面板本地变化及时下行，权威值仍按 tick 合并。复用现有请求方法并删除失去生产消费的 GPU 命中/渲染接线；暂时保留固定 ABI 兼容编解码不是 fallback。
+**Input:** 先核实原有释放入口；若无合适入口，用 Tab 显示自由光标（前端显示简短按键提示），再次 Tab/点击世界背景恢复捕获。自由光标可点击 HUD，捕获时 HUD 完全穿透。UI布局按CSS逻辑视口（窗口ContentSize）约束，不能把物理FramebufferSize当CSS尺寸；Retina逻辑360/物理720时HUD九格含动效仍完整可访问，世界渲染继续物理像素。面板 E/Esc/关闭按钮与数字键正确返回 Go；原生键鼠状态在 WebView 接管/归还时清理，关闭当帧不挖掘、不跳视角。-connect 交互窗口支持同一前端；capture/benchmark 无 WebView。面板本地变化及时下行，权威值仍按 tick 合并。复用现有请求方法并删除失去生产消费的 GPU 命中/渲染接线；暂时保留固定 ABI 兼容编解码不是 fallback。
 
 **HUD motion:** 基础槽位命中不动，内部视觉层选中上移 5 design px/scale 1.08，左右邻格上移 2 design px/scale 1.03，180ms ease-out，全部经 tokens；减少动态效果时零过渡，边缘不裁切。不乐观改变选中状态。真实图标由 Task 2 接入，本任务保留明确的 slot icon 出口。
 
@@ -41,7 +41,7 @@
 
 **Interfaces:** 在 assets 提供 `func (r *Registry) ItemIconRGBA(item core.ItemID) ([]byte, bool)`，返回 16×16 RGBA 的只读缓存；`func ItemIconLayer(item core.ItemID) (uint32, bool)` 返回非方块原创物品图的 atlas layer。所有已注册 ItemID 可取得 icon，未知返回 false。前端消费 Task 1 slot icon 出口；实际 UI 目录只在 registry 装配时缓存编码，消息有界且不重复编码。若单槽 data URI 使现有消息上界不足，改用一次缓存目录/引用而不放宽容量。
 
-**Deliverable:** 可放置方块依据当前材质生成可辨小方块图；非方块使用原创透明底轮廓，具体包含镐/剑/锄（木石铁材质与断裂状态）、煤/粗铁/铁锭、木棍/骨粉、牛肉/熟肉/腐肉、种子/小麦/面包/胡萝卜/马铃薯，其他注册项同样穷举。奶油色调保留材料差异，边缘深浅分层与透明空隙，小图可读。HUD/背包/容器/配方同源；世界非方块薄片使用同图层，不再工具贴成铁块整面。未知图标明确缺失，不使用 generic 方块代替。禁止以同一白方块假装覆盖所有物品。
+**Deliverable:** 可放置方块依据当前材质生成可辨小方块图；非方块使用原创透明底轮廓，具体包含镐/剑/锄（木石铁材质与断裂状态）、煤/粗铁/铁锭、木棍/骨粉、牛肉/熟肉/腐肉、种子/小麦/面包/胡萝卜/马铃薯，火把用火焰/柄、门用门扇、床用床体轮廓（不能因可放置就拿不可辨顶面代替）；毒土豆与普通土豆可辨，其他注册项同样穷举。奶油色调保留材料差异，边缘深浅分层与透明空隙，小图可读。HUD/背包/容器/配方同源；世界非方块薄片使用同图层，不再工具贴成铁块整面。未知图标明确缺失，不使用 generic 方块代替。禁止以同一白方块假装覆盖所有物品。
 
 **Steps:**
 - [ ] 先写失败测试穷举 registered IDs、未知 ID、像素非空、alpha 輪廓、相邻材料/完好与破损不相同；UI icon 与 registry 像素同源；最坏面板 JSON 不越桥容量；图像缓存不在每次 HUD tick 编码。
@@ -71,6 +71,8 @@
 
 **Deliverable:** 同 BlockPos 分组，按完整稳定 ID 排序分配确定槽位，ID 哈希抖动留有边界；单堆也不固定中心。同组1/4/16/32堆在 XZ 方块内呈现，按旋转包围半径保证稀疏不重叠，高密度缩放并分层且漂浮幅度计入层间净空。原支撑下落与死亡渐显保留，中心计算考虑缩放后的底面避免穿地。重排输入同身份同变换，当前集合变更允许重新分配；不得按时钟随机，每帧不得无界排序/搜索或破坏原零分配约束。
 
+**Geometry:** 为不同首见年龄仍不相交，每个同组堆始终占唯一 XZ cell，层不能复用XZ位置。以完整维度/BlockPos分组，完整DropID排序；`m=ceil(sqrt(n))`（有界阈值）、`cell=0.9/m`、两侧边距0.05、`jitter<=0.04*cell`、旋转半径保守界0.251、`scale=min(1,0.84*cell/(2*0.251))`；单堆可用不为零的较明显偏移但不得破坏边界。bob幅度随scale缩小，rank/16只作高密度辅助层，层高应计入完整薄片高度与两倍bob。以真实缩放半高和非负bob偏置从支撑顶面锚定，最低底面留0.02。XZ最密理论净空0.012格，测试按真实float矩阵验证合理坐标范围。采用可复用固定scratch排序，不修改调用者切片；隐藏的死亡前期堆也占位，避免首现重新分配。分组不保证不同原始Y的跨组掉落落到同支撑后的全局去重；不扩大权威/容量范围。
+
 **Steps:**
 - [ ] 失败测试对1/4/16/32混合块/薄片、多个位置正负坐标、相同ID重排、旋转全部关键相位、浮动与死亡scale-in测保守包围体不重叠、XZ边界和支撑；invalid 与超过800仍真实失败。
 - [ ] 实现有界分组与布局，复用 scratch 固定容量；保留首见年龄表和生命周期，不生成额外实例。
@@ -82,6 +84,8 @@
 **Files/ownership:** 前端 visual fixtures、world/motion capture 适当测试与基线、局部 AGENTS 与 docs 当前说明、必要集成修复，change tasks/ledger 由控制会话勾选。
 
 **Deliverable:** 按 visual-baseline skill 路由所有 UI 面板到 UI，人物/掉落稳定画面到 world，走路与散落过程到 GIF。覆盖空/满背包、人物页、工作台、箱子、熔炉、HUD选中两端、全物品、小窗口。先生成审查产物并告知控制会话路径；控制会话目检通过后才能更新黄金基线。无头无需 WebView 的世界图不重新加入旧 GPU 面板。按用户要求核实所有面板前端一致，旧生产入口不残留。当前文档与 AGENTS 写事实并解释 -connect 现在支持前端面板。
+
+**Capture interfaces:** 现有四个 GPU 容器 world 场景 `inventory-crafting`、`workbench-crafting`、`chest-container`、`furnace-container` 迁到前端 `panel-inventory`、`panel-workbench`、`panel-chest`、`panel-furnace` fixtures；新增 `panel-character`，不能用空世界图更新旧基线。同步 captureScenes/顺序断言与README。现有 `--motion-demo` 仅 hardcoded break-burst，保留兼容，并可添加 `--motion-scene` 显式选择 `break-burst`（默认）、`avatar-walk`、`drop-scatter`、`drop-density`，复用有界 recorder。人物 motion 覆盖静止→慢走→快走同距离→停稳；drop-density 覆盖1→4→9→16→32→移除部分堆的完整过程；出生/破坏只在正式帧注入。材质静态 `avatar-detail` world PNG 应包含正侧背，和行走GIF职责不同，README记录此区别。
 
 **Steps:**
 - [ ] 读 visual-baseline skill 与相关 capture/docs AGENTS。补相称 fixtures，先跑比对，输出差异/预览供控制会话目检，再经显式 update 入口更新认可基线；不得更新无关世界基线或放宽阈值。

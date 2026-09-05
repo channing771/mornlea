@@ -383,3 +383,30 @@ describe("App 键盘路由（WebView 是 firstResponder，菜单键经桥上行�
     expect(screen.getByText("viewDistance").closest(".debug-row")?.getAttribute("aria-disabled")).toBe("true");
   });
 });
+
+const gameSlots = (count:number)=>Array.from({length:count},()=>({item:0,count:0}));
+const gameState: NonNullable<UIState["game"]> = {
+ token:42,kind:"inventory",cursorFree:true,confirmed:true,inventory:gameSlots(36),grid:gameSlots(9),gridSize:2,output:{item:0,count:0},chest:gameSlots(27),furnace:gameSlots(3),progress:0,burn:0,recipes:Array.from({length:10},()=>({name:"石砖",size:3,slots:gameSlots(9),output:{item:4,count:4}})),recipeIndex:-1,
+};
+it.each(["e","Escape"])("面板 %s 关闭按键返回语义事件",key=>{
+ const {events}=renderWithState({phase:"game",game:gameState},true);
+ fireEvent.keyDown(window,{key});expect(events).toEqual([{type:"game-action",token:42,op:"close"}]);
+});
+it("自由光标 Tab / 世界点击捕获，数字键请求权威选中",()=>{
+ const {events}=renderWithState({phase:"game",game:{...gameState,kind:"none"}},true);
+ fireEvent.keyDown(window,{key:"9"});fireEvent.keyDown(window,{key:"Tab"});
+ expect(events).toEqual([{type:"game-action",token:42,op:"hotbar",index:8},{type:"game-action",token:42,op:"capture"}]);
+ fireEvent.click(document.querySelector('.game-free-cursor')!);expect(events.at(-1)).toEqual({type:"game-action",token:42,op:"capture"});
+});
+it("捕获和暂停态不产生游戏操作",()=>{
+ const {events}=renderWithState({phase:"game",game:{...gameState,kind:"none",cursorFree:false}},true);
+ fireEvent.keyDown(window,{key:"e"});fireEvent.keyDown(window,{key:"9"});expect(events).toEqual([]);
+ cleanup();const paused=renderWithState({phase:"paused",pause:{remote:false},game:gameState},true);
+ fireEvent.keyDown(window,{key:"9"});expect(paused.events).toEqual([]);expect(screen.queryByRole('dialog')).toBeNull();
+});
+it("下行游戏状态拒绝越界来源与额外字段",()=>{
+ const bridge=new BridgeClient(null);
+ expect(()=>bridge.handleState({phase:"game",game:{...gameState,source:{area:"furnace",index:3}}})).toThrow();
+ expect(()=>bridge.handleState({phase:"game",game:{...gameState,extra:true}})).toThrow();
+ expect(()=>bridge.handleState({phase:"game",game:{...gameState,inventory:gameSlots(35)}})).toThrow();
+});

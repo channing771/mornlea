@@ -433,7 +433,9 @@ pub(crate) fn state_wants_visible(json: &[u8]) -> Result<bool, StateError> {
 fn state_wants_visible_parsed(phase: &str, value: &serde_json::Value) -> bool {
     // debug.visible 可叠加在任意相位(含 game):面板可见时 WebView 全参与。
     let debug_visible = value.pointer("/debug/visible").and_then(|v| v.as_bool()) == Some(true);
-    phase != "game" || debug_visible
+    phase != "game"
+        || debug_visible
+        || value.pointer("/game/cursorFree").and_then(|v| v.as_bool()) == Some(true)
 }
 
 /// 一个挂载在 winit 窗口上的菜单 WebView。生命周期由持有它的渲染器管理:
@@ -460,16 +462,10 @@ pub struct MenuWebview {
     /// 仍可见,本字段只表示「以菜单形态参与」,真实显隐由动作表的
     /// `hide_view` 决定,两者只在强制 Menu 档的游戏相位出现分歧。
     ///
-    /// 不变式(跨文件,依赖 [`crate::window::should_mount`]):初值 `false`
-    /// 成立的前提是 `attach` 只在 `wants_visible == true` 的推送里发生——
-    /// 因此挂载后对同一份状态的 [`Self::push_state`] 必然触发一次
-    /// `false -> true` 翻转,首套 AppKit 动作(显示 + 夺取焦点 + 页面相位)
-    /// 由此落地。若挂载门被绕开(例如挂载发生在游戏相位推送),首个同值推送
-    /// 不触发任何切换:视图停留在挂载时的隐藏态,参与模式停留在缺省
-    /// `Menu`(穿透关闭),GameOverlay 的可见合成、穿透与页面
-    /// 相位在首个相位周期内静默不生效(视图隐藏时输入仍由 winit 独占,缺省
-    /// 不穿透保证不会吞输入;但 HUD 不呈现,直到下一次相位翻转自愈)。
+    /// 首次挂载必须应用状态；远程连接可直接从游戏相位开始。
     menu_participating: bool,
+    /// 首份状态尚未应用时，不能以布尔同值去重跳过原生显隐和焦点。
+    transition_applied: bool,
 }
 
 // 线程模型:全部方法都在创建窗口的 OS 主线程调用(FFI 层 thread-local
@@ -584,6 +580,7 @@ impl MenuWebview {
             spike_forced,
             game_view,
             menu_participating: false,
+            transition_applied: false,
         })
     }
 
@@ -609,13 +606,20 @@ impl MenuWebview {
             .and_then(|phase| phase.as_str())
             .ok_or(StateError::Malformed)?;
         let wants_visible = state_wants_visible_parsed(phase, &value);
-        let mode = self
-            .spike_forced
-            .unwrap_or_else(|| crate::overlay::mode_for_phase(wants_visible));
+        let mode = self.spike_forced.unwrap_or_else(|| {
+            crate::overlay::mode_for_phase(
+                phase != "game"
+                    || value.pointer("/debug/visible").and_then(|v| v.as_bool()) == Some(true),
+            )
+        });
         let transition = crate::overlay::plan_transition(mode, wants_visible);
         *self.shared.last_state.lock().expect("桥状态缓存锁中毒") = Some(text.to_owned());
         let mut handoff = false;
-        if wants_visible != self.menu_participating {
+        if !self.transition_applied
+            || wants_visible != self.menu_participating
+            || mode != self.shared.overlay.mode()
+        {
+            self.transition_applied = true;
             self.menu_participating = wants_visible;
             self.apply_transition(mode, transition);
             handoff = true;
@@ -875,5 +879,29 @@ mod tests {
         let script = evaluate_state_script("{}");
         assert!(script.contains("10000"));
         assert!(script.contains("16"));
+    }
+}
+
+#[cfg(test)]
+mod game_input_tests {
+    use super::*;
+    #[test]
+    fn panels_and_free_cursor_own_input_but_keep_game_transparent() {
+        for (kind, free) in [
+            ("none", false),
+            ("none", true),
+            ("inventory", true),
+            ("chest", true),
+            ("character", true),
+        ] {
+            let state = serde_json::json!({"phase":"game","game":{"kind":kind,"cursorFree":free}});
+            let participates = state_wants_visible_parsed("game", &state);
+            assert_eq!(participates, free);
+            let transition =
+                crate::overlay::plan_transition(OverlayMode::GameOverlay, participates);
+            assert!(!transition.hide_view);
+            assert_eq!(transition.hit_test_passthrough, !free);
+            assert_eq!(transition.focus_game_view, !free);
+        }
     }
 }

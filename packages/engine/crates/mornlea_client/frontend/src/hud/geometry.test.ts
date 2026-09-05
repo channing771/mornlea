@@ -147,6 +147,8 @@ const TOKENS_WITHOUT_GEOMETRY_CONSTANT: readonly string[] = [
   "--hud-count-font-size",
   "--hud-popup-font-size",
   "--hud-chat-font-size",
+  "--hud-selected-lift",
+  "--hud-neighbor-lift",
 ];
 
 /** 宽口径：所有以 px 结尾的 `--hud-*` 声明（含小数/负值/var() 等），只用来
@@ -209,4 +211,13 @@ describe("HUD 令牌与 design 常量互钉", () => {
     expect(stale, `互钉表引用了 tokens.css 已不存在的令牌：${stale.join("、")}`).toEqual([]);
     expect(new Set(pinned).size, "TOKEN_PINNING 内令牌重复登记").toBe(pinned.length);
   });
+});
+
+it("逻辑宽 360 的 Retina 窗口容纳九格与边缘动效", () => {
+ const scale = hudScale({width: 360, height: 640});
+ expect(DESIGN_WIDTH * scale).toBeLessThanOrEqual(360 - 2 * EDGE_MARGIN);
+ expect(HOTBAR_SLOT_SIZE * (1.08 - 1) / 2 * scale).toBeLessThan(HOTBAR_PANEL_PADDING * scale);
+ const tokens = readFileSync(path.resolve("src/tokens.css"), "utf8");
+ expect(tokens).toMatch(/--hud-dock-duration:\s*180ms/);
+ expect(tokens).toMatch(/@media \(prefers-reduced-motion: reduce\)[^{]*\{\s*:root\s*\{\s*--hud-dock-duration:\s*0ms/);
 });

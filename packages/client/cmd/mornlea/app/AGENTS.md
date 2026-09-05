@@ -129,3 +129,10 @@ packages/client/cmd/mornlea/app/
   时逐字保留 build tag，不引入新平台矩阵。
 - 定点验证：`go test ./packages/client/cmd/mornlea/app -race -count=1`——不编译执行
   capture/benchmark 的重型测试，这是分包的直接收益之一。
+
+## 前端游戏面板 (`app_game_ui.go`)
+
+- `game` 分节独立于 HUD，带跨会话递增的视图 token；视图身份/来源/配方选择变化及时下行，库存、网格和容器权威消息也置游戏分节脏标记，避免纯背包变化被 HUD 内容去重吞掉。
+- `drainGameUIEvents` 在非 dev 游戏帧照常排空 typed 事件。相位、会话、调试与聊天、确认位、token 和索引通过后才路由既有 Memory/TCP 同源请求。第一次槽位点击只存来源，第二次仅发送一次命令，产物只走 `TakeCraftingOutput`，熔炉产物拒绝作为输入目标。
+- 游戏面板全部由前端 DOM 绘制与命中，`RenderFrame` 不再准备或提交容器和 tooltip GPU 实例。`inventorySource` 与 capture 访问器暂为旧场景迁移保留，正式面板只消费 `gameSource` 语义引用。
+- Tab 进入自由光标，WebView 返回的关闭/捕获事件刷新鼠标基线并抑制当帧世界动作。交互远程连接也装配前端，capture/benchmark 保持无 WebView。

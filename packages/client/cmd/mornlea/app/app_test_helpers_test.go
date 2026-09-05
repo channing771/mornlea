@@ -156,3 +156,20 @@ func audioPlayerState(tick uint64, health, hunger uint8, reset bool) network.Pla
 		OnGround: true, Ready: true, Reset: reset, Health: health, Hunger: hunger,
 	}
 }
+
+// gameTestAction 保留真实视图身份与生产守卫，测试只提供语义操作。
+func gameTestAction(a *Application, op, area string, index int) {
+	a.handleGameAction(client.UIGameAction{Token: a.buildGameUIState().Token, Op: op, Area: area, Index: index})
+}
+
+type gameEventDrainer struct {
+	events []client.UIEvent
+	drains int
+}
+
+func (d *gameEventDrainer) DrainUIEvents() []client.UIEvent {
+	d.drains++
+	events := d.events
+	d.events = nil
+	return events
+}

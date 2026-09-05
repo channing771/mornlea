@@ -4,28 +4,58 @@
   "title": "Mornlea 菜单层桥协议（单源 schema）",
   "description": "菜单层与游戏相位 HUD 的桥协议单源定义。下行 uiState 由 Go 组装、经 Rust evaluateJavaScript 调用 window.mornlea.onState 注入，仅在状态变化时推送；上行 uplinkEnvelope 由前端经 window.webkit.messageHandlers.mornlea.postMessage 发出，由 Rust 排空后交给 Go 依序消费。Go/Rust/TS 三端测试共同引用本文件钉值；未知相位、未知动作、未知事件类型、未知状态分节一律拒绝。字符串长度上界为码点数，与 Go 组装侧的字节上界（如调试行两侧各 24 字节）取宽松侧：字节精确约束由 Go 组装时维持。",
   "oneOf": [
-    { "$ref": "#/$defs/uiState" },
-    { "$ref": "#/$defs/uplinkEnvelope" }
+    {
+      "$ref": "#/$defs/uiState"
+    },
+    {
+      "$ref": "#/$defs/uplinkEnvelope"
+    }
   ],
   "$defs": {
     "uiState": {
       "type": "object",
       "description": "下行状态快照。相位决定的分节按需出现：menu 出现在 menu/starting 相位，settings 出现在 settings 相位，loading 出现在 loading 相位，pause 出现在 paused 相位，hud 出现在有已装配世界的相位（game/paused），debug 可见于任意相位（F3 调试面板可叠加在游戏之上）。",
       "additionalProperties": false,
-      "required": ["phase"],
+      "required": [
+        "phase"
+      ],
       "properties": {
-        "phase": { "$ref": "#/$defs/phase" },
-        "menu": { "$ref": "#/$defs/menuState" },
-        "settings": { "$ref": "#/$defs/settingsState" },
-        "pause": { "$ref": "#/$defs/pauseState" },
-        "loading": { "$ref": "#/$defs/loadingState" },
-        "debug": { "$ref": "#/$defs/debugState" },
-        "hud": { "$ref": "#/$defs/hudState" }
+        "phase": {
+          "$ref": "#/$defs/phase"
+        },
+        "menu": {
+          "$ref": "#/$defs/menuState"
+        },
+        "settings": {
+          "$ref": "#/$defs/settingsState"
+        },
+        "pause": {
+          "$ref": "#/$defs/pauseState"
+        },
+        "loading": {
+          "$ref": "#/$defs/loadingState"
+        },
+        "debug": {
+          "$ref": "#/$defs/debugState"
+        },
+        "hud": {
+          "$ref": "#/$defs/hudState"
+        },
+        "game": {
+          "$ref": "#/$defs/gameState"
+        }
       }
     },
     "phase": {
       "description": "菜单相位机当前相位，语义与 Go 侧 MenuPhase 一一对应：game=世界已装配；menu=主菜单可见；starting=世界装配进行中（主菜单仍可见，重复点击由 Go 忽略）；loading=世界装配成功后的初始加载期（不透明加载屏覆盖渐进加载中的世界，无游戏输入，加载收敛后进入 game）；settings=设置页可见；paused=暂停层可见、权威模拟冻结。",
-      "enum": ["game", "menu", "starting", "loading", "settings", "paused"]
+      "enum": [
+        "game",
+        "menu",
+        "starting",
+        "loading",
+        "settings",
+        "paused"
+      ]
     },
     "menuAction": {
       "description": "菜单动作 id，与 Go cmd/mornlea/app 的 menuAction* 常量及 Rust 既有 UI_ACTION_* 清单逐值互钉：enter-game=1 进入游戏、multiplayer=2 多人游戏（禁用态）、open-settings=3 设置、quit=4 退出游戏、settings-save=5 保存、settings-cancel=6 取消更改、settings-back=7 返回或 Esc、pause-back=8 返回游戏、pause-quit-to-menu=9 退回主菜单。两侧任何一方不得单方面改动映射。",
@@ -44,10 +74,19 @@
     "menuButton": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "label", "enabled"],
+      "required": [
+        "id",
+        "label",
+        "enabled"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/menuAction" },
-        "label": { "type": "string", "maxLength": 64 },
+        "id": {
+          "$ref": "#/$defs/menuAction"
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 64
+        },
         "enabled": {
           "description": "禁用态按钮置灰且不得发出上行动作事件（多人游戏当前恒为 false）。",
           "type": "boolean"
@@ -58,15 +97,31 @@
       "type": "object",
       "description": "主菜单分节：标题、版本行、装配失败错误行与按钮表，文本由 Go 权威下发。",
       "additionalProperties": false,
-      "required": ["title", "version", "error", "buttons"],
+      "required": [
+        "title",
+        "version",
+        "error",
+        "buttons"
+      ],
       "properties": {
-        "title": { "type": "string", "maxLength": 128 },
-        "version": { "type": "string", "maxLength": 64 },
-        "error": { "type": "string", "maxLength": 256 },
+        "title": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "error": {
+          "type": "string",
+          "maxLength": 256
+        },
         "buttons": {
           "type": "array",
           "maxItems": 8,
-          "items": { "$ref": "#/$defs/menuButton" }
+          "items": {
+            "$ref": "#/$defs/menuButton"
+          }
         }
       }
     },
@@ -74,7 +129,11 @@
       "type": "object",
       "description": "设置三字段的取值。audioVolume 取闭区间 [0,1]；windowSize 与 Go UISettingsWindow 1/2/3 逐值互钉。",
       "additionalProperties": false,
-      "required": ["audioVolume", "texturePackPath", "windowSize"],
+      "required": [
+        "audioVolume",
+        "texturePackPath",
+        "windowSize"
+      ],
       "properties": {
         "audioVolume": {
           "type": "number",
@@ -86,40 +145,71 @@
           "maxLength": 1024,
           "pattern": "^[^\\r\\n]*$"
         },
-        "windowSize": { "$ref": "#/$defs/windowSize" }
+        "windowSize": {
+          "$ref": "#/$defs/windowSize"
+        }
       }
     },
     "windowSize": {
       "description": "三个固定逻辑窗口预设（Go UISettingsWindow640x360/960x540/1280x720）。",
-      "enum": ["640x360", "960x540", "1280x720"]
+      "enum": [
+        "640x360",
+        "960x540",
+        "1280x720"
+      ]
     },
     "settingsState": {
       "type": "object",
       "description": "设置页分节：draft 为当前草稿，saved 为已保存值，dirty 由 Go 裁决（前端不得自行比较持久化），status/error 为有界提示行。",
       "additionalProperties": false,
-      "required": ["draft", "saved", "dirty", "status", "error"],
+      "required": [
+        "draft",
+        "saved",
+        "dirty",
+        "status",
+        "error"
+      ],
       "properties": {
-        "draft": { "$ref": "#/$defs/settingsValues" },
-        "saved": { "$ref": "#/$defs/settingsValues" },
-        "dirty": { "type": "boolean" },
-        "status": { "type": "string", "maxLength": 256 },
-        "error": { "type": "string", "maxLength": 256 }
+        "draft": {
+          "$ref": "#/$defs/settingsValues"
+        },
+        "saved": {
+          "$ref": "#/$defs/settingsValues"
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "status": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "error": {
+          "type": "string",
+          "maxLength": 256
+        }
       }
     },
     "pauseState": {
       "type": "object",
       "description": "暂停层分节。标题与两枚固定按钮文案由前端常量呈现（与 Rust PAUSE_* 常量一致）；remote=true 时追加远程注明行。",
       "additionalProperties": false,
-      "required": ["remote"],
+      "required": [
+        "remote"
+      ],
       "properties": {
-        "remote": { "type": "boolean" }
+        "remote": {
+          "type": "boolean"
+        }
       }
     },
     "loadingState": {
       "type": "object",
       "description": "世界加载屏分节：loading 相位携带。loaded 是当前已就绪的区块列数（客户端区块列镜像的势），total 是与无头加载判据同源的目标列数（(2*(ViewDistance+1)+1)^2，恒为正奇数平方，下界 1）。可选 meshed/meshTotal 是初始网格化的单调完成估计与目标段数（目标列数×每区块段数；mesher 装配且完成计数开始后才携带，重复网格化会计数多次、由 Go 钳制到上界）；进度条按工作量单位 clamp((loaded+meshed)/(total+meshTotal), 0, 1) 合并两阶段进度，网格字段缺席时退回 clamp(loaded/total, 0, 1)。前端不自行预测或平滑进度。",
       "additionalProperties": false,
-      "required": ["loaded", "total"],
+      "required": [
+        "loaded",
+        "total"
+      ],
       "properties": {
         "loaded": {
           "type": "integer",
@@ -143,14 +233,25 @@
       "type": "object",
       "description": "F3 调试面板分节。visible 决定面板是否叠加呈现（可出现在任意相位）；mode 是顶部连接模式文案；rows 上限 64 行。",
       "additionalProperties": false,
-      "required": ["visible", "mode", "rows"],
+      "required": [
+        "visible",
+        "mode",
+        "rows"
+      ],
       "properties": {
-        "visible": { "type": "boolean" },
-        "mode": { "type": "string", "maxLength": 64 },
+        "visible": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string",
+          "maxLength": 64
+        },
         "rows": {
           "type": "array",
           "maxItems": 64,
-          "items": { "$ref": "#/$defs/debugRow" }
+          "items": {
+            "$ref": "#/$defs/debugRow"
+          }
         }
       }
     },
@@ -158,23 +259,65 @@
       "type": "object",
       "description": "调试面板行。kind=readout 为顶部只读读数行、section 为分组段头（值恒空）、param 为可选中/编辑的参数行。readonly 行不得被选中或进入编辑（对应 Rust flags 语义：EDITING 置位行必须同时可编辑）。editValue 为可选的编辑播种文本：展示值只有 4 位有效数字，输入框必须以全精度文本播种，「不改文本直接确认」才不会把有效值悄悄写成显示形式；仅可编辑 param 行携带，只读行与段头缺席。",
       "additionalProperties": false,
-      "required": ["label", "value", "kind", "readonly", "selected", "editing"],
+      "required": [
+        "label",
+        "value",
+        "kind",
+        "readonly",
+        "selected",
+        "editing"
+      ],
       "properties": {
-        "label": { "type": "string", "maxLength": 24 },
-        "value": { "type": "string", "maxLength": 24 },
-        "kind": { "enum": ["readout", "section", "param"] },
-        "editValue": { "type": "string", "maxLength": 64, "pattern": "^[^\\r\\n]*$" },
-        "readonly": { "type": "boolean" },
-        "selected": { "type": "boolean" },
-        "editing": { "type": "boolean" }
+        "label": {
+          "type": "string",
+          "maxLength": 24
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 24
+        },
+        "kind": {
+          "enum": [
+            "readout",
+            "section",
+            "param"
+          ]
+        },
+        "editValue": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[^\\r\\n]*$"
+        },
+        "readonly": {
+          "type": "boolean"
+        },
+        "selected": {
+          "type": "boolean"
+        },
+        "editing": {
+          "type": "boolean"
+        }
       },
       "allOf": [
         {
-          "if": { "properties": { "readonly": { "const": true } }, "required": ["readonly"] },
+          "if": {
+            "properties": {
+              "readonly": {
+                "const": true
+              }
+            },
+            "required": [
+              "readonly"
+            ]
+          },
           "then": {
             "properties": {
-              "selected": { "const": false },
-              "editing": { "const": false }
+              "selected": {
+                "const": false
+              },
+              "editing": {
+                "const": false
+              }
             }
           }
         }
@@ -184,16 +327,35 @@
       "type": "object",
       "description": "游戏相位常显 HUD 分节：全部字段都是语义值（数值/比例/标志），不下发任何坐标矩形——布局由 CSS 组件按 design 基准与 viewport 推导。仅在有已装配世界的相位出现（game/paused），菜单相位缺席。三类字段的呈现规则：权威镜像（hotbar/health/hunger/oxygen）可选，缺席即该镜像尚未确认，组件据此隐藏、不另设布尔确认位；进食进度条（eating）恒携带，以 active 表达是否呈现（采掘进度不再占用屏幕进度条，其反馈由世界空间方块裂纹承载）；窗口结果（popup/chat/marker/crosshair/containerOpen）可选，缺席即不在呈现窗口内。viewport 必填，零尺寸或非法尺寸视口由前端安全降级为不呈现。",
       "additionalProperties": false,
-      "required": ["viewport", "eating"],
+      "required": [
+        "viewport",
+        "eating"
+      ],
       "properties": {
-        "viewport": { "$ref": "#/$defs/hudViewport" },
-        "hotbar": { "$ref": "#/$defs/hudHotbar" },
-        "health": { "$ref": "#/$defs/hudHealth" },
-        "hunger": { "$ref": "#/$defs/hudHunger" },
-        "oxygen": { "$ref": "#/$defs/hudOxygen" },
-        "eating": { "$ref": "#/$defs/hudEating" },
-        "popup": { "$ref": "#/$defs/hudPopup" },
-        "chat": { "$ref": "#/$defs/hudChat" },
+        "viewport": {
+          "$ref": "#/$defs/hudViewport"
+        },
+        "hotbar": {
+          "$ref": "#/$defs/hudHotbar"
+        },
+        "health": {
+          "$ref": "#/$defs/hudHealth"
+        },
+        "hunger": {
+          "$ref": "#/$defs/hudHunger"
+        },
+        "oxygen": {
+          "$ref": "#/$defs/hudOxygen"
+        },
+        "eating": {
+          "$ref": "#/$defs/hudEating"
+        },
+        "popup": {
+          "$ref": "#/$defs/hudPopup"
+        },
+        "chat": {
+          "$ref": "#/$defs/hudChat"
+        },
         "marker": {
           "type": "boolean",
           "description": "权威命中标记显隐。呈现帧计数、失败不消耗与生命周期 reset 的窗口计时留在 Go 侧，这里只下行结果布尔；缺席或 false 都不呈现。"
@@ -210,97 +372,181 @@
     },
     "hudViewport": {
       "type": "object",
-      "description": "framebuffer 像素尺寸：前端单一比例缩放变量 --hud-scale 的唯一窗口输入。上界与 Go 侧 framebuffer 尺寸的 uint32 域同界。",
+      "description": "CSS 逻辑像素尺寸（窗口 ContentSize）：前端单一比例缩放变量 --hud-scale 的唯一窗口输入，与物理帧缓冲尺寸分离；上界沿用 uint32 域。",
       "additionalProperties": false,
-      "required": ["width", "height"],
+      "required": [
+        "width",
+        "height"
+      ],
       "properties": {
-        "width": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
-        "height": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+        "width": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        }
       }
     },
     "hudHotbar": {
       "type": "object",
       "description": "快捷栏镜像：恰九格且格序即栏位序，selectedIndex 是选中格下标。物品编号与 Go core.ItemID 同值（协议稳定、0 为空格），数量上界与 core.MaxStackCount 同值。",
       "additionalProperties": false,
-      "required": ["slots", "selectedIndex"],
+      "required": [
+        "slots",
+        "selectedIndex"
+      ],
       "properties": {
         "slots": {
           "type": "array",
           "minItems": 9,
           "maxItems": 9,
-          "items": { "$ref": "#/$defs/hudSlot" }
+          "items": {
+            "$ref": "#/$defs/hudSlot"
+          }
         },
-        "selectedIndex": { "type": "integer", "minimum": 0, "maximum": 8 }
+        "selectedIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
+        }
       }
     },
     "hudSlot": {
       "type": "object",
       "description": "快捷栏单格。空格以 item=0、count=0 表达；数量只对多于一件的堆叠呈现，前端不得对 count<=1 绘制数字。durability 是剩余耐久比例：只在存在耐久上限且部分磨损的工具上携带，schema 上界按闭区间 [0,1] 表达、开区间 (0,1) 约束由 Go 组装侧维持（满耐久与无耐久概念一律缺席）。",
       "additionalProperties": false,
-      "required": ["item", "count"],
+      "required": [
+        "item",
+        "count"
+      ],
       "properties": {
-        "item": { "type": "integer", "minimum": 0, "maximum": 65535 },
-        "count": { "type": "integer", "minimum": 0, "maximum": 64 },
-        "durability": { "type": "number", "minimum": 0, "maximum": 1 }
+        "item": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "durability": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "icon": {
+          "type": "string",
+          "maxLength": 65536,
+          "pattern": "^data:image/png;base64,[A-Za-z0-9+/]+={0,2}$"
+        }
       }
     },
     "hudHealth": {
       "type": "object",
       "description": "已确认权威生命值，上界与 core.MaxHealth 同值（满血 20）。前端按钳制值解析空心/半心/满心：每格两点、恰十格，生命起点对齐快捷栏左缘。",
       "additionalProperties": false,
-      "required": ["value"],
+      "required": [
+        "value"
+      ],
       "properties": {
-        "value": { "type": "integer", "minimum": 0, "maximum": 20 }
+        "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20
+        }
       }
     },
     "hudHunger": {
       "type": "object",
       "description": "已确认权威饥饿值，上界与 core.MaxHunger 同值。饥饿条常驻：满值仍呈现（与氧气的「耗损才出现」相反）。saturationZero 置位时前端追加 1 design px 的垂直抖动偏移，属呈现分支、不改数值。",
       "additionalProperties": false,
-      "required": ["value", "saturationZero"],
+      "required": [
+        "value",
+        "saturationZero"
+      ],
       "properties": {
-        "value": { "type": "integer", "minimum": 0, "maximum": 20 },
-        "saturationZero": { "type": "boolean" }
+        "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20
+        },
+        "saturationZero": {
+          "type": "boolean"
+        }
       }
     },
     "hudOxygen": {
       "type": "object",
       "description": "已确认且耗损的权威氧气，上界与 core.MaxOxygenTicks 同值。满氧与未确认值都不携带本分节——氧气是异常态，只在耗损时占用界面；前端因此无需知晓权威上限，按十格等分解析已耗损气泡数并沿饥饿条外缘堆叠。",
       "additionalProperties": false,
-      "required": ["value"],
+      "required": [
+        "value"
+      ],
       "properties": {
-        "value": { "type": "integer", "minimum": 0, "maximum": 300 }
+        "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300
+        }
       }
     },
     "hudEating": {
       "type": "object",
       "description": "进食进度：恒携带，active 表达本 tick 是否在进食。progress 是已钳制到 0..1 的填充比例（权威侧没有进食进度 wire 字段，值来自客户端按帧间时长以权威 tick 周期累积的呈现预测）；active=false 时 progress 无呈现意义，组件不得据此绘制。",
       "additionalProperties": false,
-      "required": ["active", "progress"],
+      "required": [
+        "active",
+        "progress"
+      ],
       "properties": {
-        "active": { "type": "boolean" },
-        "progress": { "type": "number", "minimum": 0, "maximum": 1 }
+        "active": {
+          "type": "boolean"
+        },
+        "progress": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
       }
     },
     "hudPopup": {
       "type": "object",
       "description": "物品名弹条。40 tick 可见窗口、「只由已确认选中变化触发」与容器/菜单抑制的判定全部留在 Go，本分节仅在窗口内出现——presence 即可见性，前端零计时。text 是 Go 已截断到 32 rune 的显示名（超长以省略号收尾）。",
       "additionalProperties": false,
-      "required": ["text"],
+      "required": [
+        "text"
+      ],
       "properties": {
-        "text": { "type": "string", "maxLength": 32 }
+        "text": {
+          "type": "string",
+          "maxLength": 32
+        }
       }
     },
     "hudChat": {
       "type": "object",
       "description": "最近聊天行缓冲：至多 6 行、每行至多 32 rune，行序即呈现序（最新在最下）。空串是合法行且仍占用一个行槽，与迁移前同口径。聊天输入与开关不在此列：输入仍走 winit 采集路径，不经桥下行。",
       "additionalProperties": false,
-      "required": ["lines"],
+      "required": [
+        "lines"
+      ],
       "properties": {
         "lines": {
           "type": "array",
           "maxItems": 6,
-          "items": { "type": "string", "maxLength": 32 }
+          "items": {
+            "type": "string",
+            "maxLength": 32
+          }
         }
       }
     },
@@ -308,55 +554,139 @@
       "type": "object",
       "description": "上行事件信封：版本化（v 恒为 1），Rust 排空后按序交 Go 消费。单批事件数上界与 Go maxUIEventsPerBatch 同值。",
       "additionalProperties": false,
-      "required": ["v", "events"],
+      "required": [
+        "v",
+        "events"
+      ],
       "properties": {
-        "v": { "const": 1 },
+        "v": {
+          "const": 1
+        },
         "events": {
           "type": "array",
           "minItems": 1,
           "maxItems": 64,
-          "items": { "$ref": "#/$defs/uplinkEvent" }
+          "items": {
+            "$ref": "#/$defs/uplinkEvent"
+          }
         }
       }
     },
     "uplinkEvent": {
       "description": "上行事件三型：action 为菜单动作、settings-change 为单字段设置草稿变化、debug-edit 为调试面板编辑事件。未知 type 落不进任何分支即被拒绝。",
       "oneOf": [
-        { "$ref": "#/$defs/actionEvent" },
-        { "$ref": "#/$defs/settingsChangeEvent" },
-        { "$ref": "#/$defs/debugEditEvent" }
+        {
+          "$ref": "#/$defs/actionEvent"
+        },
+        {
+          "$ref": "#/$defs/settingsChangeEvent"
+        },
+        {
+          "$ref": "#/$defs/debugEditEvent"
+        },
+        {
+          "$ref": "#/$defs/gameActionEvent"
+        }
       ]
     },
     "actionEvent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "id"],
+      "required": [
+        "type",
+        "id"
+      ],
       "properties": {
-        "type": { "const": "action" },
-        "id": { "$ref": "#/$defs/menuAction" }
+        "type": {
+          "const": "action"
+        },
+        "id": {
+          "$ref": "#/$defs/menuAction"
+        }
       }
     },
     "settingsChangeEvent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "field", "value"],
+      "required": [
+        "type",
+        "field",
+        "value"
+      ],
       "properties": {
-        "type": { "const": "settings-change" },
-        "field": { "enum": ["audioVolume", "texturePackPath", "windowSize"] },
+        "type": {
+          "const": "settings-change"
+        },
+        "field": {
+          "enum": [
+            "audioVolume",
+            "texturePackPath",
+            "windowSize"
+          ]
+        },
         "value": {}
       },
       "allOf": [
         {
-          "if": { "properties": { "field": { "const": "audioVolume" } }, "required": ["field"] },
-          "then": { "properties": { "value": { "type": "number", "minimum": 0, "maximum": 1 } } }
+          "if": {
+            "properties": {
+              "field": {
+                "const": "audioVolume"
+              }
+            },
+            "required": [
+              "field"
+            ]
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          }
         },
         {
-          "if": { "properties": { "field": { "const": "texturePackPath" } }, "required": ["field"] },
-          "then": { "properties": { "value": { "type": "string", "maxLength": 1024, "pattern": "^[^\\r\\n]*$" } } }
+          "if": {
+            "properties": {
+              "field": {
+                "const": "texturePackPath"
+              }
+            },
+            "required": [
+              "field"
+            ]
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "type": "string",
+                "maxLength": 1024,
+                "pattern": "^[^\\r\\n]*$"
+              }
+            }
+          }
         },
         {
-          "if": { "properties": { "field": { "const": "windowSize" } }, "required": ["field"] },
-          "then": { "properties": { "value": { "$ref": "#/$defs/windowSize" } } }
+          "if": {
+            "properties": {
+              "field": {
+                "const": "windowSize"
+              }
+            },
+            "required": [
+              "field"
+            ]
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "$ref": "#/$defs/windowSize"
+              }
+            }
+          }
         }
       ]
     },
@@ -364,9 +694,14 @@
       "type": "object",
       "description": "调试面板编辑事件，op 与 Go DebugPanelAction* 1..7 逐值互钉。edit-value/confirm 必须携带 value 文本，其余 op 禁止携带。",
       "additionalProperties": false,
-      "required": ["type", "op"],
+      "required": [
+        "type",
+        "op"
+      ],
       "properties": {
-        "type": { "const": "debug-edit" },
+        "type": {
+          "const": "debug-edit"
+        },
         "op": {
           "enum": [
             "select-next",
@@ -378,26 +713,581 @@
             "close"
           ]
         },
-        "value": { "type": "string", "maxLength": 64, "pattern": "^[^\\r\\n]*$" }
+        "value": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[^\\r\\n]*$"
+        }
       },
       "allOf": [
         {
-          "if": { "properties": { "op": { "enum": ["edit-value", "confirm"] } }, "required": ["op"] },
-          "then": {
-            "required": ["value"],
+          "if": {
             "properties": {
-              "value": { "type": "string", "maxLength": 64, "pattern": "^[^\\r\\n]*$" }
+              "op": {
+                "enum": [
+                  "edit-value",
+                  "confirm"
+                ]
+              }
+            },
+            "required": [
+              "op"
+            ]
+          },
+          "then": {
+            "required": [
+              "value"
+            ],
+            "properties": {
+              "value": {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[^\\r\\n]*$"
+              }
             }
           }
         },
         {
           "if": {
-            "properties": { "op": { "enum": ["select-next", "select-prev", "enter-edit", "cancel", "close"] } },
-            "required": ["op"]
+            "properties": {
+              "op": {
+                "enum": [
+                  "select-next",
+                  "select-prev",
+                  "enter-edit",
+                  "cancel",
+                  "close"
+                ]
+              }
+            },
+            "required": [
+              "op"
+            ]
           },
-          "then": { "properties": { "value": false } }
+          "then": {
+            "properties": {
+              "value": false
+            }
+          }
         }
       ]
+    },
+    "gameSlotRef": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "area",
+            "index"
+          ],
+          "properties": {
+            "area": {
+              "const": "inventory"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 35
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "area",
+            "index"
+          ],
+          "properties": {
+            "area": {
+              "const": "crafting"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 8
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "area",
+            "index"
+          ],
+          "properties": {
+            "area": {
+              "const": "chest"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 26
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "area",
+            "index"
+          ],
+          "properties": {
+            "area": {
+              "const": "furnace"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2
+            }
+          }
+        }
+      ]
+    },
+    "gameActionEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "token",
+            "op"
+          ],
+          "properties": {
+            "type": {
+              "const": "game-action"
+            },
+            "token": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "op": {
+              "const": "close"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "token",
+            "op"
+          ],
+          "properties": {
+            "type": {
+              "const": "game-action"
+            },
+            "token": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "op": {
+              "const": "capture"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "token",
+            "op"
+          ],
+          "properties": {
+            "type": {
+              "const": "game-action"
+            },
+            "token": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "op": {
+              "const": "inventory"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "token",
+            "op"
+          ],
+          "properties": {
+            "type": {
+              "const": "game-action"
+            },
+            "token": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "op": {
+              "const": "character"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "token",
+            "op"
+          ],
+          "properties": {
+            "type": {
+              "const": "game-action"
+            },
+            "token": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "op": {
+              "const": "take-output"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "token",
+            "op",
+            "index"
+          ],
+          "properties": {
+            "type": {
+              "const": "game-action"
+            },
+            "token": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "op": {
+              "const": "hotbar"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 8
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "token",
+            "op",
+            "index"
+          ],
+          "properties": {
+            "type": {
+              "const": "game-action"
+            },
+            "token": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "op": {
+              "const": "recipe"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "token",
+            "op",
+            "area",
+            "index"
+          ],
+          "properties": {
+            "type": {
+              "const": "game-action"
+            },
+            "token": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "op": {
+              "const": "slot"
+            },
+            "area": {
+              "const": "inventory"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 35
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "token",
+            "op",
+            "area",
+            "index"
+          ],
+          "properties": {
+            "type": {
+              "const": "game-action"
+            },
+            "token": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "op": {
+              "const": "slot"
+            },
+            "area": {
+              "const": "crafting"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 8
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "token",
+            "op",
+            "area",
+            "index"
+          ],
+          "properties": {
+            "type": {
+              "const": "game-action"
+            },
+            "token": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "op": {
+              "const": "slot"
+            },
+            "area": {
+              "const": "chest"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 26
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "token",
+            "op",
+            "area",
+            "index"
+          ],
+          "properties": {
+            "type": {
+              "const": "game-action"
+            },
+            "token": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "op": {
+              "const": "slot"
+            },
+            "area": {
+              "const": "furnace"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2
+            }
+          }
+        }
+      ]
+    },
+    "gameRecipe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "size",
+        "slots",
+        "output"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "size": {
+          "enum": [
+            2,
+            3
+          ]
+        },
+        "slots": {
+          "type": "array",
+          "minItems": 9,
+          "maxItems": 9,
+          "items": {
+            "$ref": "#/$defs/hudSlot"
+          }
+        },
+        "output": {
+          "$ref": "#/$defs/hudSlot"
+        }
+      }
+    },
+    "gameState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "token",
+        "kind",
+        "cursorFree",
+        "confirmed",
+        "inventory",
+        "grid",
+        "gridSize",
+        "output",
+        "chest",
+        "furnace",
+        "progress",
+        "burn",
+        "recipes",
+        "recipeIndex"
+      ],
+      "properties": {
+        "token": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "kind": {
+          "enum": [
+            "none",
+            "inventory",
+            "character",
+            "workbench",
+            "chest",
+            "furnace"
+          ]
+        },
+        "cursorFree": {
+          "type": "boolean"
+        },
+        "confirmed": {
+          "type": "boolean"
+        },
+        "inventory": {
+          "type": "array",
+          "minItems": 36,
+          "maxItems": 36,
+          "items": {
+            "$ref": "#/$defs/hudSlot"
+          }
+        },
+        "grid": {
+          "type": "array",
+          "minItems": 9,
+          "maxItems": 9,
+          "items": {
+            "$ref": "#/$defs/hudSlot"
+          }
+        },
+        "gridSize": {
+          "enum": [
+            2,
+            3
+          ]
+        },
+        "output": {
+          "$ref": "#/$defs/hudSlot"
+        },
+        "chest": {
+          "type": "array",
+          "minItems": 27,
+          "maxItems": 27,
+          "items": {
+            "$ref": "#/$defs/hudSlot"
+          }
+        },
+        "furnace": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/hudSlot"
+          }
+        },
+        "progress": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "burn": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "recipes": {
+          "type": "array",
+          "minItems": 10,
+          "maxItems": 10,
+          "items": {
+            "$ref": "#/$defs/gameRecipe"
+          }
+        },
+        "recipeIndex": {
+          "type": "integer",
+          "minimum": -1,
+          "maximum": 9
+        },
+        "source": {
+          "$ref": "#/$defs/gameSlotRef"
+        }
+      }
     }
   }
 }

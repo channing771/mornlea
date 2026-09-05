@@ -23,7 +23,7 @@ import (
 
 // HUD 分节的字段边界，与 schema 的 integer/maxLength 上界及 Go 镜像域逐值同源。
 const (
-	// hudViewportSideMax 是 framebuffer 单边的上界，与 schema `hudViewport` 的
+	// `hudViewportSideMax` 是逻辑视口单边的上界，与 schema `hudViewport` 的
 	// maximum 同值：不另设更紧的上界，避免显示设备演进时被迫改协议。
 	hudViewportSideMax = 1<<32 - 1
 	// hudSelectedItemMax 与 schema `hudSlot.item` 的 maximum 同值，即 core.ItemID
@@ -64,7 +64,7 @@ func truncateHUDRunes(text string, limit int) string {
 	return text[:visibleEnd] + "…"
 }
 
-// UIHudViewport 是 framebuffer 像素尺寸：前端单一比例缩放变量 --hud-scale 的唯一
+// `UIHudViewport` 是 CSS 逻辑像素尺寸：前端单一比例缩放变量 --hud-scale 的唯一
 // 窗口输入。零尺寸视口照常下行，由前端安全降级为不呈现。
 type UIHudViewport struct {
 	Width  uint32 `json:"width"`
@@ -80,6 +80,8 @@ func NewUIHudViewport(width, height uint32) UIHudViewport {
 // 只对存在耐久上限且部分磨损的工具置位，满耐久与无耐久概念一律缺席（序列化为
 // 键缺省），前端据此隐藏耐久条。
 type UIHudSlot struct {
+	Name       string      `json:"name,omitempty"`
+	Icon       string      `json:"icon,omitempty"`
 	Item       core.ItemID `json:"item"`
 	Count      uint8       `json:"count"`
 	Durability float32     `json:"durability,omitempty"`

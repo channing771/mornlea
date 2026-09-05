@@ -115,6 +115,7 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			continue
 		}
 		if state, ok := message.(network.InventoryState); ok {
+			a.gameUIDirty = true
 			if err := a.inventory.Apply(state); err != nil {
 				a.CloseClientSession(err)
 				return
@@ -134,6 +135,7 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			continue
 		}
 		if state, ok := message.(network.FurnaceState); ok {
+			a.gameUIDirty = true
 			previous, opened := a.furnace.Ref()
 			if err := a.furnace.Apply(state); err != nil {
 				a.CloseClientSession(err)
@@ -155,6 +157,7 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			continue
 		}
 		if state, ok := message.(network.ChestState); ok {
+			a.gameUIDirty = true
 			previous, opened := a.chest.Ref()
 			if err := a.chest.Apply(state); err != nil {
 				a.CloseClientSession(err)
@@ -172,6 +175,7 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			continue
 		}
 		if state, ok := message.(network.CraftingState); ok {
+			a.gameUIDirty = true
 			previous, confirmed := a.crafting.State()
 			if err := a.crafting.Apply(state); err != nil {
 				a.CloseClientSession(err)

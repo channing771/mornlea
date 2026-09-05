@@ -31,6 +31,8 @@ const (
 	UIEventSettingsChanged UIEventKind = 2
 	// UIEventDebugAction 表示一条调试面板编辑事件(字符串 op)。
 	UIEventDebugAction UIEventKind = 3
+	// UIEventGameAction 传递带视图身份的游戏交互。
+	UIEventGameAction UIEventKind = 4
 )
 
 // 菜单动作 id,与 schema `menuAction` 枚举及 Go app 层动作分发表逐值互钉
@@ -129,6 +131,7 @@ const (
 // `ActionID`;为 `UIEventSettingsChanged` 时只读 `Field` 与 `Value`;
 // 为 `UIEventDebugAction` 时只读 `PanelAction`(与 `PanelValue`)。
 type UIEvent struct {
+	GameAction UIGameAction
 	// Kind 决定其余字段的解释方式。
 	Kind UIEventKind
 	// ActionID 仅在 `Kind` 为 `UIEventAction` 时有效,取 UIAction* 之一。
@@ -216,6 +219,8 @@ func decodeUIEvent(payload json.RawMessage) (UIEvent, error) {
 		return UIEvent{}, errors.New("type 必须是字符串")
 	}
 	switch eventType {
+	case "game-action":
+		return decodeGameActionEvent(fields)
 	case "action":
 		return decodeActionEvent(fields)
 	case "settings-change":

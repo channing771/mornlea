@@ -593,7 +593,11 @@ func TestPushUIStateOnlyOnChange(t *testing.T) {
 	if got := len(window.pushedUIStates); got != 3 {
 		t.Fatalf("相位切换应恰推送一次,实际 %d", got-2)
 	}
-	if got := string(window.pushedUIStates[2]); got != `{"phase":"game"}` {
-		t.Fatalf("游戏相位文档 = %q", got)
+	var gameDoc uiStateJSON
+	if err := json.Unmarshal(window.pushedUIStates[2], &gameDoc); err != nil {
+		t.Fatal(err)
+	}
+	if gameDoc.Phase != "game" || gameDoc.Game == nil || gameDoc.Game.Kind != "none" {
+		t.Fatal("游戏相位必须携带无面板状态")
 	}
 }

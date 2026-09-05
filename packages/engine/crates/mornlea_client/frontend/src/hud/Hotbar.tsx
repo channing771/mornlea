@@ -6,28 +6,30 @@
 import type { CSSProperties } from "react";
 import type { HudSlot } from "../bridge/client";
 import { DURABILITY_LOW_RATIO } from "./geometry";
+import { SlotIcon } from "./SlotIcon";
 import { SlotDoodle } from "./slotDoodles";
 
 export interface HotbarProps {
   /** 恰九格的权威镜像；缺席（未确认）时不呈现格内容但保留贴条空间。 */
   readonly slots: readonly HudSlot[] | undefined;
   readonly selectedIndex: number | undefined;
+ readonly onSelect?: (index:number)=>void;
 }
 
-export function Hotbar({ slots, selectedIndex }: HotbarProps) {
+export function Hotbar({ slots, selectedIndex, onSelect }: HotbarProps) {
   const confirmed = slots !== undefined && selectedIndex !== undefined;
   const cells = slots ?? [];
   return (
     <div className={confirmed ? "hud-hotbar" : "hud-hotbar hud-hotbar--unconfirmed"}>
       {cells.map((slot, index) => (
-        <HotbarCell key={index} index={index} slot={slot} selected={index === selectedIndex} />
+        <button type="button" className="hud-slot-hit" key={index} disabled={!onSelect} aria-label={`快捷栏 ${index+1}：${slot.name||"空"}`} aria-pressed={index===selectedIndex} onClick={()=>onSelect?.(index)}><HotbarCell index={index} slot={slot} selected={index === selectedIndex} neighbor={selectedIndex!==undefined&&Math.abs(index-selectedIndex)===1}/></button>
       ))}
     </div>
   );
 }
 
-function HotbarCell({ index, slot, selected }: { index: number; slot: HudSlot; selected: boolean }) {
-  const className = selected ? "hud-slot hud-slot--selected" : "hud-slot";
+function HotbarCell({ index, slot, selected, neighbor }: { index: number; slot: HudSlot; selected: boolean; neighbor:boolean }) {
+  const className = selected ? "hud-slot hud-slot--selected" : neighbor ? "hud-slot hud-slot--neighbor" : "hud-slot";
   // 空格以 item=0 表达；数量只对多于一件的堆叠显示，耐久只对存在耐久上限
   // 且 `0 < ratio < 1` 的工具显示（与迁移前 `appendDurabilityBarScaled` 同口径，
   // 满耐久与单件堆叠不产生附加标记）。
@@ -37,7 +39,7 @@ function HotbarCell({ index, slot, selected }: { index: number; slot: HudSlot; s
   const showDurability = durability !== undefined && durability > 0 && durability < 1;
   return (
     <div className={className} data-index={index}>
-      {showTile ? <span className="hud-slot-tile" /> : null}
+      {showTile ? <span className="hud-slot-tile"><SlotIcon slot={slot}/></span> : null}
       {showTile ? null : (
         <span className="hud-slot-doodle">
           <SlotDoodle index={index} />

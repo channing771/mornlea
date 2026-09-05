@@ -139,8 +139,15 @@ func TestHUDStatePushRepublishesAfterSessionBoundary(t *testing.T) {
 	if got := len(window.pushedUIStates); got != 3 {
 		t.Fatalf("新会话首次冲刷下行 %d 次，想要 1", got-2)
 	}
-	if got := string(window.pushedUIStates[2]); got != baseline {
-		t.Fatalf("新会话载荷=%s，想要与旧基线同形的完整分节 %s", got, baseline)
+	var oldDoc, newDoc uiStateJSON
+	if err := json.Unmarshal([]byte(baseline), &oldDoc); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(window.pushedUIStates[2], &newDoc); err != nil {
+		t.Fatal(err)
+	}
+	if string(oldDoc.Hud) != string(newDoc.Hud) || newDoc.Game.Token <= oldDoc.Game.Token {
+		t.Fatal("新会话必须重发相同HUD且轮换视图token")
 	}
 }
 
@@ -318,5 +325,21 @@ func TestInventoryOpenToggleMarksHUDState(t *testing.T) {
 	}
 	if section := hudSection(); strings.Contains(section, `"containerOpen"`) {
 		t.Fatalf("本地关容器后的 hud 分节仍携带 containerOpen: %s", section)
+	}
+}
+
+func TestHUDViewportUsesLogicalPointsOnRetina(t *testing.T) {
+	app, _ := newHUDPushTestApplication(t)
+	app.frameWidth, app.frameHeight = 720, 1280
+	app.window = &sizingTestWindow{contentWidth: 360, contentHeight: 640, framebufferWidth: 720, framebufferHeight: 1280}
+	for _, closed := range []bool{false, true} {
+		app.clientSessionClosed = closed
+		viewport := app.assembleHUDState().Viewport
+		if viewport.Width != 360 || viewport.Height != 640 {
+			t.Fatalf("逻辑视口=%+v，想要360×640", viewport)
+		}
+		if app.frameWidth != 720 || app.frameHeight != 1280 {
+			t.Fatal("HUD改变了世界渲染尺寸")
+		}
 	}
 }

@@ -65,6 +65,7 @@ pub fn key_bit(code: KeyCode) -> Option<u32> {
         KeyCode::Enter => 26,
         KeyCode::AltLeft => 27,
         KeyCode::Backspace => 28,
+        KeyCode::Tab => 29,
         _ => return None,
     })
 }

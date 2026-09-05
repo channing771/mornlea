@@ -21,6 +21,8 @@ import type {
   SettingsState,
   UplinkEvent,
 } from "../src/bridge/client";
+import { GamePanels } from "../src/ui/GamePanels";
+import { gameFixture } from "./game-fixtures";
 import { HudRoot } from "../src/hud/HudRoot";
 import { ProgressTrack } from "../src/hud/ProgressTrack";
 import { DebugPanel } from "../src/ui/DebugPanel";
@@ -204,6 +206,12 @@ const hudContainerOpenFixture: HudState = hudState({
 // 字面量联合双向钉死（新增部件先加清单条目，否则这里编译不过），随后跑
 // update 入口把基线随部件一并入库。
 const registry: Record<FixtureName, ReactElement> = {
+  "panel-inventory": <GamePanels game={gameFixture} hud={hudContainerOpenFixture} onEvent={noEvent}/>,
+  "panel-workbench": <GamePanels game={{...gameFixture,kind:"workbench",gridSize:3}} hud={hudContainerOpenFixture} onEvent={noEvent}/>,
+  "panel-chest": <GamePanels game={{...gameFixture,kind:"chest"}} hud={hudContainerOpenFixture} onEvent={noEvent}/>,
+  "panel-furnace": <GamePanels game={{...gameFixture,kind:"furnace"}} hud={hudContainerOpenFixture} onEvent={noEvent}/>,
+  "panel-character": <GamePanels game={{...gameFixture,kind:"character"}} hud={hudContainerOpenFixture} onEvent={noEvent}/>,
+  "panel-inventory-narrow": <div className="game-narrow-fixture"><GamePanels game={gameFixture} hud={hudContainerOpenFixture} onEvent={noEvent}/></div>,
   "panel-main-menu": <MainMenu menu={menuFixture} onEvent={noEvent} />,
   "panel-settings": <SettingsPanel settings={settingsFixture} onEvent={noEvent} />,
   "panel-pause": <PauseMenu pause={pauseFixture} onEvent={noEvent} />,

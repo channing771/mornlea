@@ -5,7 +5,6 @@ package app
 // app_chest_ui_test.go：箱子界面镜像生命周期与熔炉/箱子互斥。
 
 import (
-	"github.com/channing771/mornlea/packages/client/render/hud"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
 	"github.com/go-gl/mathgl/mgl32"
@@ -54,12 +53,10 @@ func TestChestTwoClicksSendOneMoveWithoutPrediction(t *testing.T) {
 	}
 	app.inventoryOpen = true
 
-	width, height := uint32(1280), uint32(720)
-	sourceX, sourceY := chestSlotCenter(t, 1, width, height)
-	targetX, targetY := chestSlotCenter(t, core.ChestFirstSlot+5, width, height)
-	app.clickInventorySlot(sourceX, sourceY, width, height)
+	app.menu.phase = MenuPhaseGame
+	gameTestAction(app, "slot", "inventory", 1)
 	assertNoInteractiveClientMessage(t, serverEndpoint)
-	app.clickInventorySlot(targetX, targetY, width, height)
+	gameTestAction(app, "slot", "chest", 5)
 
 	message := receiveInteractiveClientMessage(t, serverEndpoint)
 	want := network.MoveContainerStack{
@@ -211,18 +208,4 @@ func TestClientSessionCloseClearsChestMirror(t *testing.T) {
 	if _, opened := app.chest.State(); opened {
 		t.Fatal("断线后仍保留箱子镜像")
 	}
-}
-
-func chestSlotCenter(t *testing.T, slot int, width, height uint32) (float64, float64) {
-	t.Helper()
-	for x := range int(width) {
-		for y := range int(height) {
-			got, ok := hud.ChestSlotAt(float64(x), float64(y), width, height)
-			if ok && int(got) == slot {
-				return float64(x), float64(y)
-			}
-		}
-	}
-	t.Fatalf("找不到箱子统一栏位 %d 的像素", slot)
-	return 0, 0
 }

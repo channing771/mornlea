@@ -43,3 +43,4 @@
   align-items: center;
   gap: var(--hud-progress-track-gap);
 }
+.game-narrow-fixture { width:360px; height:640px; transform:translateZ(0); margin:auto; }
