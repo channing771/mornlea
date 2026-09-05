@@ -223,7 +223,15 @@ fn vs_main(
     let sky = f32((light >> 4u) & 0xFu) / 15.0;
     let block = f32(light & 0xFu) / 15.0;
     let daylight = clamp(camera.cam_pos.w, 0.0, 1.0);
-    let sky_base = 0.08 + sky * (daylight - 0.08);
+    // 夜晚氛围门控：`daylight`≤0.15 全额生效、≥0.5 零效应，之间手写
+    // 三次过渡（`t*t*(3-2t)`）。夜间把天空环境基压到 0.3、总曝光压到
+    // 0.5：无光面回到夜色，火把方块光主导的池面与火芯仍远高于可辨门限；
+    // 正午两系数恒为 1.0，输出与门控前逐位一致。
+    let t = clamp((daylight - 0.15) / 0.35, 0.0, 1.0);
+    let day_t = t * t * (3.0 - 2.0 * t);
+    let night_amb = mix(0.3, 1.0, day_t);
+    let night_expo = mix(0.5, 1.0, day_t);
+    let sky_base = (0.08 + sky * (daylight - 0.08)) * night_amb;
     let base = max(sky_base, block);
 
     // 交叉斜面的 uv 显式取 (world.x, -world.y)：一片斜面在这两轴上恰好各跨一格，
@@ -240,7 +248,7 @@ fn vs_main(
     out.clip  = camera.view_proj * vec4f(world, 1.0);
     out.uv    = uv;
     out.layer = f32(mat);
-    out.shade = face_shade(face) * ao_factor * base * hemi_factor(face);
+    out.shade = face_shade(face) * ao_factor * base * hemi_factor(face) * night_expo;
     return out;
 }
 
