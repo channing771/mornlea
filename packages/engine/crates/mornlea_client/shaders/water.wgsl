@@ -52,6 +52,15 @@ fn face_shade(face: u32) -> f32 {
     }
 }
 
+// 半球环境光：与 terrain.wgsl 同源（WGSL 没有 include，两 pass 各持一份）。
+// 水面只有轴向面，6/7 分支实际走不到，留着只为与地形侧逐字同源。
+fn hemi_factor(face: u32) -> f32 {
+    if (face >= 6u) { return 0.95; }
+    var ny = 0.0;
+    if (face == 3u) { ny = 1.0; } else if (face == 2u) { ny = -1.0; }
+    return mix(0.38, 1.0, ny * 0.5 + 0.5);
+}
+
 // corner_height 取出第 vi 个顶点的 4-bit 角高度原值。
 //
 // 位布局与 engine 的 `quad.rs`（SHIFT_W / SHIFT_H / SHIFT_CORNER2 /
@@ -128,13 +137,24 @@ fn vs_main(
     out.clip  = camera.view_proj * vec4f(world, 1.0);
     out.uv    = face_uv(world, axis);
     out.layer = f32(mat);
-    out.shade = face_shade(face) * ao_factor * base;
+    out.shade = face_shade(face) * ao_factor * base * hemi_factor(face);
     return out;
+}
+
+fn aces_approx(x: vec3f) -> vec3f {
+    // Narkowicz 近似，把高光柔和地卷进 0..1。
+    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), vec3f(0.0), vec3f(1.0));
+}
+
+fn linear_to_srgb(x: vec3f) -> vec3f {
+    return mix(x * 12.92, 1.055 * pow(clamp(x, vec3f(0.0), vec3f(1.0)), vec3f(1.0 / 2.4)) - 0.055, step(vec3f(0.0031308), x));
 }
 
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4f {
     let c = textureSample(atlas, atlas_smp, in.uv, i32(in.layer));
     // 保留材质 alpha 交给 alpha blend：水面是半透明的，不是 cutout。
-    return vec4f(c.rgb * in.shade, c.a);
+    // alpha 不进 tone map，只有 rgb 走线性光→ACES→sRGB。
+    let linear = pow(c.rgb, vec3f(2.2)) * in.shade;
+    return vec4f(linear_to_srgb(aces_approx(linear * 1.0)), c.a);
 }

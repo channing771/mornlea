@@ -48,6 +48,16 @@ fn face_shade(face: u32) -> f32 {
     }
 }
 
+// 半球环境光：按面法线在地面色与天空色之间混合。顶面取天空环境 1.0，
+// 底面取 0.38，侧面取 0.69；植物交叉面没有朝向可言，固定 0.95 不打折
+// （与 `face_shade` 里交叉面取满值的先例一致）。
+fn hemi_factor(face: u32) -> f32 {
+    if (face >= 6u) { return 0.95; }
+    var ny = 0.0;
+    if (face == 3u) { ny = 1.0; } else if (face == 2u) { ny = -1.0; }
+    return mix(0.38, 1.0, ny * 0.5 + 0.5);
+}
+
 // 耕地材质层闭区间（干/湿两态）。material 落入区间 ⟺ 这条 quad 是 registry
 // block_top_raw 非零的短方块，bit 12..19/55..62 是角高度原值而不是 w/h 尺寸。
 //
@@ -230,13 +240,25 @@ fn vs_main(
     out.clip  = camera.view_proj * vec4f(world, 1.0);
     out.uv    = uv;
     out.layer = f32(mat);
-    out.shade = face_shade(face) * ao_factor * base;
+    out.shade = face_shade(face) * ao_factor * base * hemi_factor(face);
     return out;
+}
+
+fn aces_approx(x: vec3f) -> vec3f {
+    // Narkowicz 近似，把高光柔和地卷进 0..1。
+    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), vec3f(0.0), vec3f(1.0));
+}
+
+fn linear_to_srgb(x: vec3f) -> vec3f {
+    return mix(x * 12.92, 1.055 * pow(clamp(x, vec3f(0.0), vec3f(1.0)), vec3f(1.0 / 2.4)) - 0.055, step(vec3f(0.0031308), x));
 }
 
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4f {
     let c = textureSample(atlas, atlas_smp, in.uv, i32(in.layer));
     if (c.a < 0.5) { discard; }
-    return vec4f(c.rgb * in.shade, 1.0);
+    // atlas 存的是 sRGB 纹素，先平方回线性光再乘 `in.shade`，最后走
+    // ACES 近似（曝光钉死 1.0）与线性→sRGB 回到输出空间。
+    let linear = pow(c.rgb, vec3f(2.2)) * in.shade;
+    return vec4f(linear_to_srgb(aces_approx(linear * 1.0)), 1.0);
 }
