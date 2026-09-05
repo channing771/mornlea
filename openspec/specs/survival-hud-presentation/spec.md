@@ -6,7 +6,7 @@
 ## Requirements
 ### Requirement: 快捷栏固定为居中九格并明确标识选中格
 
-系统 SHALL 在关闭容器界面时经 WebView HUD 组件显示固定九格、水平居中的快捷栏（呈现职责自 GPU HUD 迁移，语义逐项平移，见 `game-overlay-webview` capability）。快捷栏贴条 MUST 为透明悬浮排布（无深色长条底带）；每格 MUST 是独立粉彩方块——逐格不同的低饱和底色、深可可描边、大圆角、顶部浅高光加底部沉边加柔投影。选中格 MUST 具有暖橙赭石外扩外框加方块抬起阴影，使其在忽略颜色后仍可由外扩几何与阴影抬起与未选中格区分；呈现数据 MUST 仅来自已确认权威镜像。
+系统 SHALL 在关闭容器界面时经 WebView HUD 组件显示固定九格、水平居中的快捷栏（呈现职责自 GPU HUD 迁移，语义逐项平移，见 `game-overlay-webview` capability）。快捷栏贴条 MUST 为透明悬浮排布（无深色长条底带）；每格 MUST 是独立粉彩方块——逐格不同的低饱和底色、深可可描边、大圆角、顶部浅高光加底部沉边加柔投影。选中格 MUST 具有暖橙赭石外扩外框加方块抬起阴影，使其在忽略颜色后仍可由外扩几何与阴影抬起与未选中格区分；呈现数据 MUST 仅来自已确认权威镜像。选中格 SHALL 轻微抬升，相邻格可轻柔跟随；动效必须有界、不改变槽位命中矩形且在减少动态效果时禁用过渡。槽内 MUST 显示实际物品图像而非统一色块。
 
 #### Scenario: 九格快捷栏和选中格可由几何判定
 
@@ -152,36 +152,27 @@
 
 ### Requirement: 生存 HUD 保持固定资源和实例兼容性
 
-常显 HUD 层的 GPU 呈现（快捷栏贴条与选中框、状态行图标、氧气气泡、采掘/进食轨道、物品名弹条、准星、聊天呈现与权威命中 marker 绘制）SHALL 自本 change 起退役，容器浮动面板（背包/合成、箱子、熔炉的 GPU 呈现）与容器悬停 tooltip SHALL 保留既有 HUD pass。退役后的保留面最坏组合 SHALL 钉为：关闭容器界面 0 quad/0 glyph（容器面板、tooltip 与容器内容只在打开态布局）；打开任一容器界面 218 quad/268 glyph（悬停 tooltip 背景、来源轮廓等保留项全数计入，由箱子视图见证）。权威命中 marker 的呈现职责已迁 WebView 组件，GPU 保留面 MUST NOT 再产生 marker quad；若过渡实现仍保留 marker 绘制路径，两分支最坏 MUST 只分别增加 4 个 quad。保留面 MUST 继续使用 48-byte instance 编码、256-byte 区间对齐与稳定态零每帧动态资源；固定 quad 上限 320、glyph 上限 768、glyph offset 15616 bytes 与固定上传总容量 52480 bytes MUST 保持不变，各最坏组合 MUST NOT 超过固定上限。禁止为退役路径保留死资源或放宽任何真实 overflow 门禁。
+容器与常显 HUD SHALL 全部由前端呈现，生产 GPU 面板在打开与关闭态均产生零 quad/glyph。48-byte 编码、256-byte 对齐、320 quad、768 glyph、15616 bytes glyph offset、52480 bytes 固定上传容量 MUST 保持兼容。严禁重启 GPU 面板 fallback 或放宽 overflow。
 
 #### Scenario: 关闭和打开界面的合法最坏组合均有界
-
-- **GIVEN** 打开箱子界面的合法最坏组合（统一栏位与箱子 27 格全满两位数量、面板快捷栏行九格磨损耐久、选中格与来源格高亮、悬停 tooltip 背景）且常显层已退役
-- **WHEN** HUD 准备 quad 与 glyph 实例
-- **THEN** 打开态 quad 数 MUST 恰好为面板族 7 + 选中格与来源格高亮 2 + 统一栏位凹槽 36 + 双层物品 tile 72 + 耐久条 18 + 箱子内容 81 + tooltip 背景 2 = 218，且 MUST NOT 超过固定上限 320
-- **AND** 打开态 glyph 预算 MUST 恰好为统一栏位两位数量 144 + 箱子两位数量 108 + tooltip 双层显示名 16 = 268（tooltip 按 8 rune 截断上限封顶；注册表实测最长名 5 rune 双层 10，对应实测见证 262），且 MUST NOT 超过固定上限 768
-- **AND** 48-byte 编码、256-byte 对齐、glyph offset 15616 bytes 与固定上传总容量 52480 bytes MUST 保持不变
+- **GIVEN** 本场景对应的合法 HUD 状态组合
+- **WHEN** 准备生产渲染帧
+- **THEN** 面板与 HUD MUST 仅由前端呈现，GPU 面板 MUST 为零实例，既有容量与 overflow 门禁 MUST 保留，稳定态不得新建 GPU 资源
 
 #### Scenario: marker 只增加四个 quad 且不扩容
-
-- **GIVEN** 上述合法最坏组合收到新鲜 combat 确认
-- **WHEN** HUD 同时准备呈现（marker 绘制已迁 WebView 组件）
-- **THEN** GPU 保留面 quad 数 MUST NOT 因 marker 增加（迁移后组件呈现不经 GPU 保留面）；若过渡实现仍保留 marker 绘制路径，两分支最坏 MUST 只分别增加 4 个 quad 至 222
-- **AND** 所有 buffer offset 与总容量 MUST 不变化
+- **GIVEN** 本场景对应的合法 HUD 状态组合
+- **WHEN** 准备生产渲染帧
+- **THEN** 面板与 HUD MUST 仅由前端呈现，GPU 面板 MUST 为零实例，既有容量与 overflow 门禁 MUST 保留，稳定态不得新建 GPU 资源
 
 #### Scenario: 关闭态保留面不产生实例
-
-- **GIVEN** 容器界面关闭且常显层已退役
-- **WHEN** HUD 准备 quad 与 glyph 实例
-- **THEN** 关闭态 MUST 恰好产生 0 quad 与 0 glyph，快捷栏贴条、选中框、状态行图标、氧气、采掘/进食轨道、物品名弹条、准星与聊天呈现 MUST NOT 在 GPU 保留面出现
-- **AND** 固定上传区间 MUST 保持既有容量、offset 与对齐，MUST NOT 因关闭态零实例而收缩或重排
+- **GIVEN** 本场景对应的合法 HUD 状态组合
+- **WHEN** 准备生产渲染帧
+- **THEN** 面板与 HUD MUST 仅由前端呈现，GPU 面板 MUST 为零实例，既有容量与 overflow 门禁 MUST 保留，稳定态不得新建 GPU 资源
 
 #### Scenario: 稳定态不创建每帧动态 GPU 资源
-
-- **GIVEN** HUD atlas 与固定上传资源已预热完成
-- **WHEN** 系统连续准备和呈现多帧容器 HUD
-- **THEN** 每帧 MUST 只更新固定资源中的实际实例前缀
-- **AND** MUST NOT 创建新的每帧动态 GPU 资源、HUD pass 或 shader
+- **GIVEN** 本场景对应的合法 HUD 状态组合
+- **WHEN** 准备生产渲染帧
+- **THEN** 面板与 HUD MUST 仅由前端呈现，GPU 面板 MUST 为零实例，既有容量与 overflow 门禁 MUST 保留，稳定态不得新建 GPU 资源
 
 ### Requirement: 权威命中 marker 使用四个 quad 并按成功呈现帧计时
 
