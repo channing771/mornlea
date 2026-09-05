@@ -79,6 +79,40 @@ fn cloud_hash(macro_cell: vec2i, macro_offset: u32) -> u32 {
     return hash_cell(vec3u(bitcast<u32>(macro_cell.x) - macro_offset, bitcast<u32>(macro_cell.y), 0u));
 }
 
+fn cloud_value_noise(p: vec2f) -> f32 {
+    let cell = vec2i(floor(p));
+    let frac = fract(p);
+    let fade = frac * frac * (3.0 - 2.0 * frac);
+    let a = f32(hash_cell(vec3u(bitcast<u32>(cell.x), bitcast<u32>(cell.y), 0u)) & 255u) / 255.0;
+    let b = f32(hash_cell(vec3u(bitcast<u32>(cell.x + 1), bitcast<u32>(cell.y), 0u)) & 255u) / 255.0;
+    let c = f32(hash_cell(vec3u(bitcast<u32>(cell.x), bitcast<u32>(cell.y + 1), 0u)) & 255u) / 255.0;
+    let d = f32(hash_cell(vec3u(bitcast<u32>(cell.x + 1), bitcast<u32>(cell.y + 1), 0u)) & 255u) / 255.0;
+    return mix(mix(a, b, fade.x), mix(c, d, fade.x), fade.y);
+}
+
+const CLOUD_OCTAVES: u32 = 3u; // 钉死为 3，不得参数化
+
+fn cloud_density(intersection: vec2f) -> f32 {
+    // 基准格 16 block（与既有 cell 口径一致），macro 每 64 block 覆盖调制
+    let base = (intersection - vec2f(sky.camera_cloud.w, 0.0)) / 16.0;
+    // 细节层同向差速：高频 octave 以 1.7 倍 local 偏移漂移（w 系数恒为 -1.7/16，
+    // 与频率无关）；首 octave 与覆盖调制仍用 `base`（macro 原速）
+    var fbm = 0.0;
+    var amp = 0.55;
+    var freq = 1.0;
+    for (var o = 0u; o < CLOUD_OCTAVES; o++) {
+        let detail_p = (intersection * freq - vec2f(sky.camera_cloud.w * 1.7, 0.0)) / 16.0;
+        let p = select(detail_p, base * freq, o == 0u);
+        fbm += amp * cloud_value_noise(p);
+        amp *= 0.5;
+        freq *= 2.03;
+    }
+    let macro_cell = vec2i(floor(base / 4.0));
+    let cover = f32((cloud_hash(macro_cell, sky.cloud_macro_x) >> 4u) & 255u) / 255.0;
+    let threshold = mix(0.62, 0.38, cover); // macro 覆盖高处阈值低、云多
+    return smoothstep(threshold, threshold + 0.25, fbm);
+}
+
 fn cloud_mask(direction: vec3f) -> f32 {
     if (sky.camera_cloud.y >= 192.0 || direction.y <= 0.001) {
         return 0.0;
@@ -88,16 +122,22 @@ fn cloud_mask(direction: vec3f) -> f32 {
         return 0.0;
     }
     let intersection = sky.camera_cloud.xz + direction.xz * distance;
-    let cell = vec2i(floor((intersection - vec2f(sky.camera_cloud.w, 0.0)) / 16.0));
-    let macro_cell = vec2i(floor(vec2f(cell) / 4.0));
-    let hash = cloud_hash(macro_cell, sky.cloud_macro_x);
-    if ((hash & 3u) == 0u) {
-        return 0.0;
-    }
-    let center = vec2i(1 + i32((hash >> 2u) & 1u), 1 + i32((hash >> 3u) & 1u));
-    let local = cell - macro_cell * 4;
-    let filled = abs(local.x - center.x) + abs(local.y - center.y) <= 1;
-    return select(0.0, smoothstep(0.02, 0.08, direction.y), filled);
+    let d = cloud_density(intersection);
+    return select(0.0, d * smoothstep(0.02, 0.08, direction.y), d > 0.003);
+}
+
+fn cloud_light(density: f32) -> vec3f {
+    let sun_direction = normalize(sky.sun_daylight.xyz);
+    let daylight = clamp(sky.sun_daylight.w, 0.0, 1.0);
+    let day_cloud = vec3f(0.84, 0.88, 0.92);
+    let night_cloud = vec3f(0.18, 0.22, 0.28);
+    var base = mix(night_cloud, day_cloud, daylight);
+    // 低太阳高度染橙：sun_direction.y 越接近地平线权重越大
+    let dusk = (1.0 - smoothstep(0.0, 0.35, abs(sun_direction.y))) * step(0.001, daylight) * (1.0 - daylight * 0.5);
+    base = mix(base, vec3f(0.98, 0.62, 0.42), clamp(dusk, 0.0, 1.0) * 0.65);
+    // 厚度：密度高处提亮顶、密度低处压暗边（伪厚度，无真实法线）
+    let shade = mix(0.72, 1.06, smoothstep(0.0, 1.0, density));
+    return clamp(base * shade, vec3f(0.0), vec3f(1.0));
 }
 
 @fragment
@@ -135,7 +175,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4f {
         * select(0.0, 1.0, moon_direction.y > 0.0);
     color = mix(color, vec3f(0.72, 0.80, 0.95), moon_disc);
     color = mix(color, vec3f(1.0, 0.92, 0.68), sun_disc);
-    let cloud = cloud_mask(direction);
-    color = mix(color, mix(vec3f(0.18, 0.22, 0.28), vec3f(0.84, 0.88, 0.92), sky.sun_daylight.w), cloud * 0.82);
+    let density = cloud_mask(direction);
+    color = mix(color, cloud_light(density), clamp(density, 0.0, 1.0) * 0.9);
     return vec4f(clamp(color, vec3f(0.0), vec3f(1.0)), 1.0);
 }
