@@ -91,6 +91,20 @@ motion 演示产物只验呈现、不进比对：`make visual-check` 与 `--upda
 | `kill.gif` | `kill` | 击杀：第 4 帧死亡 despawn 并刷出生牛肉掉落，随后 20 帧红闪侧倒保留期。 |
 | `beef-drop.gif` | `beef-drop` | 牛肉掉落：单个生牛肉掉落的浮动与旋转（权威 tick 派生）。 |
 
+## 三类边界与选用规则
+
+三大家族按“渲染源 × 时间维度”路由，文件名与数量以各注册表为准（本文不复制清单）：
+
+- 第一类 UI 窗口型（`ui/`）：窗口与 WebView 层的部件级 PNG。清单以 `fixture-names.ts` 的 `fixtureNames` 为准；本机 Chrome 截图、既有双阈值比对，不进 CI。
+- 第二类世界静态（`world/`）：无头离屏渲染收敛后的单帧稳定态 PNG。场景定义与顺序以 `captureScenes` 为准；`make visual-check` 比对、`make visual-update` 显式覆盖。
+- 第三类过程 GIF（`motion/` + `passive-death/`）：跨 tick 状态迁移的全流程 GIF，按 tick 步进抓帧，覆盖触发前、结算、收敛全过程，不得只截片段。内分两小类：
+  - `motion/` 演示：只验呈现、不进任何比对门禁，供人眼审查全流程；
+  - `passive-death/` 门禁：逐帧沿用双阈值比对，全部帧通过方为通过，单基线帧预算有界。
+
+路由纪律：窗口 chrome 只进 `ui/`，世界单帧只进 `world/`，时间过程只进 GIF；世界帧不得携带窗口 chrome 像素，UI 夹具不得复刻世界像素。
+
+去重纪律：同一行为禁止 PNG + GIF 双存。已并存且职责不同（门禁采样点与全流程人工审查物，如裂纹双帧与采掘演示）必须在本节注明理由；新增重叠由所属玩法 change 按本节收敛，本节只立规则不动既有基线。
+
 ## 更新入口与纪律
 
 - 世界基线比对入口为 `make visual-check`（含 GIF 剧本），覆盖入口为 `make visual-update`，路径常量为 `capture/capture_image.go` 的 `captureGoldenDir` 与 `capture/passive_death_gif.go` 的 `passiveDeathGoldenDir`。
