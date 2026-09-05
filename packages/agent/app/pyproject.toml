@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling>=1.29,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mornlea-agent-app"
+version = "0.1.0"
+description = "Mornlea agent HTTP gateway"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi>=0.136.1,<1",
+  "mornlea-harness",
+  "pydantic>=2.12.5,<3",
+  "uvicorn>=0.41.0,<1",
+]
+
+[project.scripts]
+mornlea-agent = "app.gateway.cli:entrypoint"
+mornlea-companion-agent = "app.gateway.cli_compat:entrypoint"
+
+[tool.uv.sources]
+mornlea-harness = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/app"]

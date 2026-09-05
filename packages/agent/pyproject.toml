@@ -4,19 +4,19 @@ version = "0.1.0"
 description = "Mornlea agent workspace root (virtual)"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-  "fastapi>=0.136.1,<1",
+  "mornlea-agent-app",
   "mornlea-extension-api",
   "mornlea-harness",
-  "uvicorn>=0.41.0,<1",
 ]
 
 [tool.uv]
 package = false
 
 [tool.uv.workspace]
-members = ["harness", "extension-api"]
+members = ["app", "harness", "extension-api"]
 
 [tool.uv.sources]
+mornlea-agent-app = { workspace = true }
 mornlea-extension-api = { workspace = true }
 mornlea-harness = { workspace = true }
 
@@ -31,8 +31,8 @@ dev = [
 [tool.mypy]
 python_version = "3.12"
 strict = true
-packages = ["harness", "extension_api"]
-mypy_path = ["harness/src", "extension-api/src"]
+packages = ["app", "harness", "extension_api"]
+mypy_path = ["app/src", "harness/src", "extension-api/src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -43,3 +43,7 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["B", "E", "F", "I", "UP"]
+
+[tool.ruff.lint.isort]
+# `app` 为工作区成员包；`mornlea_companion_agent` 为待后续清理的旧包名，暂保留其首方分类。
+known-first-party = ["app", "mornlea_companion_agent"]

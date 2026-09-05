@@ -153,21 +153,23 @@ dev-check:
 	cd $(RUST_DIR) && $(CARGO) clippy --workspace --all-targets -- -D warnings
 	cd $(RUST_DIR) && $(CARGO) test --workspace --locked
 
-COMPANION_AGENT_DIR := packages/agent/companion
-COMPANION_AGENT_PYTHON := $(CURDIR)/$(COMPANION_AGENT_DIR)/.venv/bin/python
+AGENT_DIR := packages/agent
+AGENT_PYTHON := $(CURDIR)/$(AGENT_DIR)/.venv/bin/python
+COMPANION_AGENT_DIR := $(AGENT_DIR)
+COMPANION_AGENT_PYTHON := $(AGENT_PYTHON)
 
 companion-agent-check:
-	cd $(COMPANION_AGENT_DIR) && uv sync --locked
-	cd $(COMPANION_AGENT_DIR) && uv run ruff format --check .
-	cd $(COMPANION_AGENT_DIR) && uv run ruff check .
-	cd $(COMPANION_AGENT_DIR) && uv run mypy src
-	cd $(COMPANION_AGENT_DIR) && uv run pytest -q
+	cd $(AGENT_DIR) && uv sync --locked
+	cd $(AGENT_DIR) && uv run ruff format --check .
+	cd $(AGENT_DIR) && uv run ruff check .
+	cd $(AGENT_DIR) && uv run mypy
+	cd $(AGENT_DIR) && uv run pytest -q
 
 companion-agent-integration:
-	cd $(COMPANION_AGENT_DIR) && uv sync --locked
-	cd $(COMPANION_AGENT_DIR) && uv run ruff format --check tests/integration && uv run ruff check tests/integration
-	cd $(COMPANION_AGENT_DIR) && uv run mypy src tests/integration
-	MORNLEA_COMPANION_AGENT_PYTHON=$(COMPANION_AGENT_PYTHON) $(GO) test ./packages/shared/companion ./packages/server/server \
+	cd $(AGENT_DIR) && uv sync --locked
+	cd $(AGENT_DIR) && uv run ruff format --check companion/tests/integration && uv run ruff check companion/tests/integration
+	cd $(AGENT_DIR) && uv run mypy
+	MORNLEA_AGENT_PYTHON=$(AGENT_PYTHON) MORNLEA_COMPANION_AGENT_PYTHON=$(COMPANION_AGENT_PYTHON) $(GO) test ./packages/shared/companion ./packages/server/server \
 		-run 'CompanionAgent.*Integration|CrossLanguage|MCP.*Integration' -race -count=1 -timeout=120s
 
 fmt:

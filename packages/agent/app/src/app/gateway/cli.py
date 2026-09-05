@@ -73,4 +73,8 @@ def entrypoint() -> None:
     raise SystemExit(main())
 
 
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+
 __all__ = ["ServeRunner", "build_parser", "entrypoint", "main"]
