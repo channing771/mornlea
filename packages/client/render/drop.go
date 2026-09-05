@@ -24,9 +24,9 @@ const (
 	dropSpinPeriod   = 80
 	dropFloatPeriod  = 48
 	dropBaseAltitude = float32(0.5)
-	// dropFlakeSize/dropFlakeThin 是非方块掉落薄片的平面边长与厚度：单张贴
-	// 图的极薄扁盒（约 1/2 缩放），前后大面采样同一层，双面同图；实例仍是
-	// 立方体图元，零管线变更。
+	// dropFlakeSize/dropFlakeThin 是非方块掉落薄片的平面边长与厚度：竖立的
+	// 单张贴图牌（约 1/2 缩放），平面竖直（宽与高为边长、厚度沿前后），绕 Y
+	// 旋转；前后大面采样同一层，双面同图；实例仍是立方体图元，零管线变更。
 	dropFlakeSize = float32(0.5)
 	dropFlakeThin = float32(0.02)
 )
@@ -64,7 +64,7 @@ func buildItemDropParts(dst []avatarPart, serverTick uint64, drops []ItemDrop) [
 		}
 		sx, sy, sz := dropCubeSize*unit, dropCubeSize*unit, dropCubeSize*unit
 		if itemDropFlake(drop.Item) {
-			sx, sy, sz = dropFlakeSize*unit, dropFlakeThin*unit, dropFlakeSize*unit
+			sx, sy, sz = dropFlakeSize*unit, dropFlakeSize*unit, dropFlakeThin*unit
 		}
 		phase := dropAnimationPhase(serverTick, drop.ID)
 		center := mgl32.Vec3{

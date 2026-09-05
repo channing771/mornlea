@@ -76,6 +76,9 @@ type SceneApplication interface {
 	SetCompanionPresentations(presentations []client.CompanionPresentation)
 	RemoteAvatars() []render.Avatar
 	SetRemoteAvatars(avatars []render.Avatar)
+	// ResetLocomotion 清零摆动行进距离累积：公共清场的一部分，保证后一场景
+	// 的步态相位只由本场景夹具决定。
+	ResetLocomotion()
 	RemoteNameTags() []render.NameTag
 	SetRemoteNameTags(tags []render.NameTag)
 	Hostiles() *client.Hostiles

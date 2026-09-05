@@ -184,9 +184,10 @@ func buildOrderedAvatarParts(dst []avatarPart, ordered []Avatar) []avatarPart {
 	return dst
 }
 
-// avatarSwingPeriodTicks 是四肢摆动的正弦周期（权威 tick）：32 tick 约半秒多
-// 一点，走路时约每秒三步。
-const avatarSwingPeriodTicks = 32
+// avatarStrideLength 是四肢摆动的固定步幅（格/周期）：走满一个完整正弦周期
+// （左右各一步）的前进行进距离取 2 格；全速行走（约 0.086 格/tick）约 23
+// tick 一周期，半速则约 46 tick——步频由距离决定，脚底不再打滑。
+const avatarStrideLength = float32(2.0)
 
 // avatarSwingAmplitude 是四肢摆动的振幅（弧度）：0.35 约 20°，感知下限之上、
 // 夸张之下。
@@ -197,14 +198,17 @@ const avatarSwingAmplitude = float32(0.35)
 // 中，加速爬升一两拍即起摆。
 const avatarSwingSpeedThreshold = float32(0.005)
 
-// AvatarSwingAngle 由权威 tick、实体相位 ID 与呈现速度派生四肢摆动角：阈值
-// 下回中（不原地踏步），否则为 tick 派生的正弦纯函数（掉落旋转同先例，禁用
-// 墙钟）。调用方负责供给速度，本函数不读任何权威字段。
-func AvatarSwingAngle(tick, phaseID uint64, speed float32) float32 {
+// AvatarSwingAngle 由累积行进距离、实体相位 ID 与呈现速度派生四肢摆动角：阈
+// 值下回中（不原地踏步），否则相位按距离除以步幅推进（`avatarStrideLength`），
+// 同距离异速同相位；ID 只贡献固定错相，同速同频。距离累积由调用方在呈现态里
+// 维护（见 `InstanceEncoder` 的差分历史），本函数是纯函数（禁用墙钟与 tick
+// 计数），不读任何权威字段。
+func AvatarSwingAngle(distance float32, phaseID uint64, speed float32) float32 {
 	if speed < avatarSwingSpeedThreshold {
 		return 0
 	}
-	phase := 2 * math.Pi * float64((tick+phaseID)%avatarSwingPeriodTicks) / avatarSwingPeriodTicks
+	phase := 2*math.Pi*float64(distance/avatarStrideLength) +
+		2*math.Pi*float64(phaseID%32)/32
 	return avatarSwingAmplitude * float32(math.Sin(phase))
 }
 

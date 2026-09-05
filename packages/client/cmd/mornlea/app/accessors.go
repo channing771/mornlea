@@ -113,6 +113,10 @@ func (a *Application) RemoteAvatars() []render.Avatar { return a.remoteAvatars }
 // SetRemoteAvatars 写入远端玩家 avatar 批次缓冲。
 func (a *Application) SetRemoteAvatars(avatars []render.Avatar) { a.remoteAvatars = avatars }
 
+// ResetLocomotion 清零摆动行进距离累积：抓帧清场后调用，后续场景按新夹具
+// 重新累积，不把前一场景的相位带进基线。
+func (a *Application) ResetLocomotion() { a.entityEncoder.ResetLocomotion() }
+
 // RemoteNameTags 返回名牌批次缓冲。
 func (a *Application) RemoteNameTags() []render.NameTag { return a.remoteNameTags }
 

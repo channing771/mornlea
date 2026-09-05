@@ -8,30 +8,43 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 )
 
-// TestAvatarSwingAngleIsTickDrivenAndSpeedGated 锁定摆动相位函数：纯 tick派
-// 生（禁用墙钟），速度阈值下回中，同输入重放一致。
-func TestAvatarSwingAngleIsTickDrivenAndSpeedGated(t *testing.T) {
-	if got := AvatarSwingAngle(100, 7, 0); got != 0 {
+// TestAvatarSwingAngleIsDistanceDrivenAndSpeedGated 锁定摆动相位函数：相位
+// 按累积行进距离推进（固定步幅，禁用墙钟与 tick 计数），速度阈值下回中，同
+// 输入重放一致。
+func TestAvatarSwingAngleIsDistanceDrivenAndSpeedGated(t *testing.T) {
+	if got := AvatarSwingAngle(0, 7, 0); got != 0 {
 		t.Fatalf("静止摆动=%v，想要回中 0", got)
 	}
-	if got := AvatarSwingAngle(100, 7, 0.004); got != 0 {
+	if got := AvatarSwingAngle(1.5, 7, 0.004); got != 0 {
 		t.Fatalf("阈值下摆动=%v，想要回中 0", got)
 	}
-	moving := AvatarSwingAngle(100, 7, 0.086)
+	moving := AvatarSwingAngle(1.0, 7, 0.086)
 	if moving == 0 {
 		t.Fatal("行走速度下摆动为 0，想要非零")
 	}
 	if moving < -avatarSwingAmplitude || moving > avatarSwingAmplitude {
 		t.Fatalf("摆动=%v，超出振幅 ±%v", moving, avatarSwingAmplitude)
 	}
-	if repeat := AvatarSwingAngle(100, 7, 0.086); repeat != moving {
-		t.Fatal("同 tick 同 ID 同速度重放不一致")
+	if repeat := AvatarSwingAngle(1.0, 7, 0.086); repeat != moving {
+		t.Fatal("同距离同 ID 同速度重放不一致")
 	}
-	if next := AvatarSwingAngle(101, 7, 0.086); next == moving {
-		t.Fatal("tick 前进后相位未变化")
+	// 同距离不同速度（皆高于阈值）同相位：步幅锁定，与时间频率无关。
+	if same := AvatarSwingAngle(1.0, 7, 0.043); same != moving {
+		t.Fatal("同距离异速相位不同，想要步幅锁定")
 	}
-	if other := AvatarSwingAngle(100, 8, 0.086); other == moving {
+	if next := AvatarSwingAngle(1.5, 7, 0.086); next == moving {
+		t.Fatal("距离前进后相位未变化")
+	}
+	if other := AvatarSwingAngle(1.0, 8, 0.086); other == moving {
 		t.Fatal("不同实体得到相同相位，想要 ID 错相")
+	}
+	// 走满一个步幅回到同相位：不同实体同节奏。
+	for _, phaseID := range []uint64{7, 8} {
+		again := AvatarSwingAngle(1.0+avatarStrideLength, phaseID, 0.086)
+		want := AvatarSwingAngle(1.0, phaseID, 0.086)
+		if diff := again - want; diff < -1e-5 || diff > 1e-5 {
+			t.Fatalf("ID %d 步幅周期前后=%v/%v，想要同相位", phaseID, again, want)
+		}
 	}
 }
 
@@ -245,15 +258,15 @@ func TestInstanceEncoderEstimatesSpeedFromPresentations(t *testing.T) {
 	// 同 tick 同位置：仍回中。
 	again := encoder.EncodeAvatarInstances(nil, 10, avatars)
 	assertPartStreamsEqual(t, again, first)
-	// 下一 tick 位移 0.086 格：速度 0.086，摆动角即相位函数值。
+	// 下一 tick 位移 0.086 格：累积距离 0.086、速度 0.086，摆动角即相位函数值。
 	moved := []Avatar{{Key: key, Position: start.Add(mgl32.Vec3{0.086, 0, 0})}}
 	swung := encoder.EncodeAvatarInstances(nil, 11, moved)
 	want := buildAvatarParts(nil, []Avatar{{
 		Key: key, Position: start.Add(mgl32.Vec3{0.086, 0, 0}),
-		Swing: AvatarSwingAngle(11, swingPhaseID(key), 0.086),
+		Swing: AvatarSwingAngle(0.086, swingPhaseID(key), 0.086),
 	}})
 	assertPartStreamsEqual(t, swung, avatarPartBytes(want))
-	if AvatarSwingAngle(11, swingPhaseID(key), 0.086) == 0 {
+	if AvatarSwingAngle(0.086, swingPhaseID(key), 0.086) == 0 {
 		t.Fatal("行走相位角为 0，本用例失去摆动覆盖")
 	}
 	// 同 tick 保持：速度沿用，不回中。
@@ -268,6 +281,81 @@ func TestInstanceEncoderEstimatesSpeedFromPresentations(t *testing.T) {
 		steady = encoder.EncodeAvatarInstances(nil, tick, moved)
 	}
 	assertPartStreamsEqual(t, steady, stopped)
+}
+
+// TestInstanceEncoderStrideLocksCyclesAcrossSpeeds 锁定步幅语义：慢速与快速
+// 走完相同距离时周期数相同（终相位一致），慢速走完则用更多 tick（单周期更长）。
+func TestInstanceEncoderStrideLocksCyclesAcrossSpeeds(t *testing.T) {
+	drive := func(step float32, frames int) (float32, int) {
+		var encoder InstanceEncoder
+		key := PassiveEntityKey(7)
+		position := mgl32.Vec3{0, 1, 0}
+		tick := uint64(20)
+		encoder.EncodeAvatarInstances(nil, tick, []Avatar{{Key: key, Position: position}})
+		for frame := 0; frame < frames; frame++ {
+			tick++
+			position = position.Add(mgl32.Vec3{step, 0, 0})
+			encoded := encoder.EncodeAvatarInstances(nil, tick, []Avatar{{Key: key, Position: position}})
+			neutral := avatarPartBytes(buildAvatarParts(nil, []Avatar{{Key: key, Position: position}}))
+			if string(encoded) == string(neutral) {
+				t.Fatalf("步速 %v 第 %d 帧未起摆", step, frame)
+			}
+		}
+		return encoder.tracks[key].distance, int(tick)
+	}
+	const total = float32(2.0)
+	slowDistance, slowEnd := drive(0.05, 40)
+	fastDistance, fastEnd := drive(0.1, 20)
+	if diff := slowDistance - total; diff < -1e-4 || diff > 1e-4 {
+		t.Fatalf("慢速累积距离=%v，想要 %v", slowDistance, total)
+	}
+	if diff := fastDistance - total; diff < -1e-4 || diff > 1e-4 {
+		t.Fatalf("快速累积距离=%v，想要 %v", fastDistance, total)
+	}
+	if slowEnd-20 == fastEnd-20 {
+		t.Fatal("慢速与快速用 tick 数相同，想要慢速单周期更长")
+	}
+	// 同距离终相位一致：两编码器末帧摆动角互相接近。
+	swingAt := func(distance float32) float32 {
+		return AvatarSwingAngle(distance, swingPhaseID(PassiveEntityKey(7)), 0.1)
+	}
+	if diff := swingAt(slowDistance) - swingAt(fastDistance); diff < -1e-5 || diff > 1e-5 {
+		t.Fatalf("同距离终相位差=%v，想要一致", diff)
+	}
+}
+
+// TestInstanceEncoderSwingResetsOnRollbackAndReset 锁定累积器清零：tick 回退
+// （场景切换/重连）与显式重置都从零重新累积，同消息流重放逐字节一致。
+func TestInstanceEncoderSwingResetsOnRollbackAndReset(t *testing.T) {
+	key := PassiveEntityKey(7)
+	start := mgl32.Vec3{4, 5, 6}
+	sequence := func(encoder *InstanceEncoder) []byte {
+		encoder.EncodeAvatarInstances(nil, 10, []Avatar{{Key: key, Position: start}})
+		return encoder.EncodeAvatarInstances(nil, 11, []Avatar{{Key: key, Position: start.Add(mgl32.Vec3{0.086, 0, 0})}})
+	}
+	var first InstanceEncoder
+	want := sequence(&first)
+	// tick 回退后重走同序列：旧距离不清就会把回退前的位移带进相位。
+	var rolled InstanceEncoder
+	rolled.EncodeAvatarInstances(nil, 30, []Avatar{{Key: key, Position: mgl32.Vec3{9, 9, 9}}})
+	rolled.EncodeAvatarInstances(nil, 5, []Avatar{{Key: key, Position: start}})
+	rolled.EncodeAvatarInstances(nil, 11, []Avatar{{Key: key, Position: start.Add(mgl32.Vec3{0.086, 0, 0})}})
+	// 回退的中途帧（tick 5）已重新锚定：此处的 tick 11 距锚点 6 tick，速度即
+	// 0.086/6；直接比较会引入不同的速度门控路径，因此只断言距离已清零。
+	distance := rolled.tracks[key].distance
+	if diff := distance - 0.086; diff < -1e-5 || diff > 1e-5 {
+		t.Fatalf("回退后累积距离=%v，想要 0.086", distance)
+	}
+	// 显式重置后重走同序列：与首跑逐字节一致。
+	var reset InstanceEncoder
+	reset.EncodeAvatarInstances(nil, 10, []Avatar{{Key: key, Position: mgl32.Vec3{9, 9, 9}}})
+	reset.ResetLocomotion()
+	if len(reset.tracks) != 0 {
+		t.Fatalf("重置后残留 tracks=%d，想要 0", len(reset.tracks))
+	}
+	if replayed := sequence(&reset); string(replayed) != string(want) {
+		t.Fatal("重置后同序列重放不一致")
+	}
 }
 
 // TestInstanceEncoderSwingIsDeterministicAndBounded 锁定编码器确定性与有界：

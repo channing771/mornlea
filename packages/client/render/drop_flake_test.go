@@ -78,8 +78,9 @@ func TestItemDropFlakeGeometryIsThinSheet(t *testing.T) {
 	}
 	bounds := transformedUnitCubeBounds(parts[0].transform)
 	size := bounds.max.Sub(bounds.min)
-	if !size.ApproxEqualThreshold(mgl32.Vec3{dropFlakeSize, dropFlakeThin, dropFlakeSize}, 1e-5) {
-		t.Fatalf("牛肉薄片尺寸=%v，想要 (%v,%v,%v)", size, dropFlakeSize, dropFlakeThin, dropFlakeSize)
+	// 薄片竖立：贴图平面竖直（高与宽为边长），厚度沿前后（Z），绕 Y 旋转。
+	if !size.ApproxEqualThreshold(mgl32.Vec3{dropFlakeSize, dropFlakeSize, dropFlakeThin}, 1e-5) {
+		t.Fatalf("牛肉薄片尺寸=%v，想要 (%v,%v,%v)", size, dropFlakeSize, dropFlakeSize, dropFlakeThin)
 	}
 	if parts[0].material != uint32(assets.LayerRawBeef) {
 		t.Fatalf("牛肉材质=%d，想要牛肉层 %d", parts[0].material, uint32(assets.LayerRawBeef))
@@ -145,8 +146,9 @@ func TestItemDropFlakeDeathScaleIn(t *testing.T) {
 	}
 	bounds := transformedUnitCubeBounds(half[0].transform)
 	size := bounds.max.Sub(bounds.min)
-	if size.Y() >= dropFlakeThin || size.Y() <= 0 {
-		t.Fatalf("T+10 薄片厚度=%v，想要 (0,%v) 内的渐显值", size.Y(), dropFlakeThin)
+	// 竖立薄片的高度按 scale-in 缩放：首现约一成、保留末长满。
+	if size.Y() >= dropFlakeSize || size.Y() <= 0 {
+		t.Fatalf("T+10 薄片高度=%v，想要 (0,%v) 内的渐显值", size.Y(), dropFlakeSize)
 	}
 	if size.X() >= dropFlakeSize {
 		t.Fatalf("T+10 薄片平面=%v，想要小于全尺寸 %v", size.X(), dropFlakeSize)
@@ -160,11 +162,48 @@ func TestItemDropFlakeDeathScaleIn(t *testing.T) {
 	}
 	fullSize := transformedUnitCubeBounds(full[0].transform).max.Sub(
 		transformedUnitCubeBounds(full[0].transform).min)
-	// 绕 Y 旋转不改变厚度，平面包围盒介于边长与对角线之间。
-	if diff := fullSize.Y() - dropFlakeThin; diff < -1e-5 || diff > 1e-5 {
-		t.Fatalf("T+20 薄片厚度=%v，想要 %v", fullSize.Y(), dropFlakeThin)
+	// 竖立绕 Y 旋转不改变高度，水平包围盒介于厚度与边长之间。
+	if diff := fullSize.Y() - dropFlakeSize; diff < -1e-5 || diff > 1e-5 {
+		t.Fatalf("T+20 薄片高度=%v，想要 %v", fullSize.Y(), dropFlakeSize)
 	}
-	if fullSize.X() < dropFlakeSize-1e-5 || fullSize.X() > dropFlakeSize*1.42 {
-		t.Fatalf("T+20 薄片平面=%v，想要 [%v,%v]", fullSize.X(), dropFlakeSize, dropFlakeSize*1.42)
+	if fullSize.X() < dropFlakeThin-1e-5 || fullSize.X() > dropFlakeSize*1.42 {
+		t.Fatalf("T+20 薄片平面=%v，想要 [%v,%v]", fullSize.X(), dropFlakeThin, dropFlakeSize*1.42)
+	}
+}
+
+// TestItemDropFlakeStandsUprightWhileSpinning 锁定竖立旋转：薄片高度在旋转
+// 全程保持边长（绝不拍平成薄层），水平两轴随 spin 相位互换厚度与边长。
+func TestItemDropFlakeStandsUprightWhileSpinning(t *testing.T) {
+	id := core.DropID{Dimension: core.Overworld, Slot: 0, Generation: 1}
+	beef := []ItemDrop{{
+		ID: id, Block: core.BlockPos{X: 0, Y: 3, Z: 0}, Item: core.ItemRawBeef,
+	}}
+	for tick := uint64(0); tick < 80; tick++ {
+		parts := buildItemDropParts(nil, tick, beef)
+		if len(parts) != 1 {
+			t.Fatalf("tick %d 实例数=%d，想要 1", tick, len(parts))
+		}
+		size := transformedUnitCubeBounds(parts[0].transform).max.Sub(
+			transformedUnitCubeBounds(parts[0].transform).min)
+		if diff := size.Y() - dropFlakeSize; diff < -1e-4 || diff > 1e-4 {
+			t.Fatalf("tick %d 薄片高度=%v，想要 %v（竖立）", tick, size.Y(), dropFlakeSize)
+		}
+	}
+	// 零旋转 tick（49）宽为边长、厚沿 Z；四分之一转后（69）两者互换。
+	zero := transformedUnitCubeBounds(buildItemDropParts(nil, flakeZeroSpinTick, beef)[0].transform)
+	zeroSize := zero.max.Sub(zero.min)
+	quarter := transformedUnitCubeBounds(buildItemDropParts(nil, flakeZeroSpinTick+20, beef)[0].transform)
+	quarterSize := quarter.max.Sub(quarter.min)
+	if diff := zeroSize.X() - dropFlakeSize; diff < -1e-5 || diff > 1e-5 {
+		t.Fatalf("零旋转宽=%v，想要 %v", zeroSize.X(), dropFlakeSize)
+	}
+	if diff := zeroSize.Z() - dropFlakeThin; diff < -1e-5 || diff > 1e-5 {
+		t.Fatalf("零旋转厚=%v，想要 %v", zeroSize.Z(), dropFlakeThin)
+	}
+	if diff := quarterSize.X() - dropFlakeThin; diff < -1e-4 || diff > 1e-4 {
+		t.Fatalf("四分之一转宽=%v，想要 %v", quarterSize.X(), dropFlakeThin)
+	}
+	if diff := quarterSize.Z() - dropFlakeSize; diff < -1e-4 || diff > 1e-4 {
+		t.Fatalf("四分之一转纵深=%v，想要 %v", quarterSize.Z(), dropFlakeSize)
 	}
 }
