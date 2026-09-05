@@ -12,14 +12,17 @@ import (
 	"bytes"
 	"image"
 	"image/color"
+	"image/draw"
 	"image/gif"
 	"strings"
 	"testing"
 
 	"github.com/channing771/mornlea/packages/client/assets"
 	"github.com/channing771/mornlea/packages/client/client"
+	application "github.com/channing771/mornlea/packages/client/cmd/mornlea/app"
 	"github.com/channing771/mornlea/packages/client/render"
 	"github.com/channing771/mornlea/packages/client/render/hud"
+	"github.com/channing771/mornlea/packages/shared/config"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
 	"github.com/channing771/mornlea/packages/shared/world"
@@ -161,6 +164,96 @@ func TestBreakBurstMotionBreakFrameClearsTargetAndSeedsDrop(t *testing.T) {
 	}
 	if _, ok := app.CurrentBlockTarget(); ok {
 		t.Fatalf("破坏帧选框仍有命中，目标置空后应脱靶")
+	}
+}
+
+// TestBreakBurstMotionBreakFrameGrabsSettledPixels 钉住破坏帧抓帧时刻的诚实性：
+// 生产抓帧缝（`captureMotionFrame`）回读的那一刻，镜像置空必须已落到网格，
+// 否则抓到的是重建前的旧网格（方块残留一帧，而叠加层熄灭是 CPU 即时量、裂纹
+// 已消失——恰是旧 GIF 里 F25 的样子）。断言三层：状态与抓帧同帧（镜像空气 +
+// 熄灭 + 掉落年龄 0）；该帧编码的裂纹实例流为空；抓帧时刻网格已收敛且目标区域
+// 像素稳定（重收敛重抓零差异，即回读像素已是置空后的网格）。
+func TestBreakBurstMotionBreakFrameGrabsSettledPixels(t *testing.T) {
+	app := application.NewOffscreenRenderApplicationForTest(
+		t, &application.IntegrationGlyphSource{}, captureWidth, captureHeight,
+		config.Defaults().Render)
+	predictor := client.NewPredictor()
+	if err := predictor.Begin(network.PlayerState{
+		Dimension: core.Overworld, Position: captureCrackCameraPos,
+		Yaw: 0, Pitch: 0, Ready: true,
+		Health: core.MaxHealth, Oxygen: core.MaxOxygenTicks, Hunger: core.MaxHunger,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	app.SetPredictor(predictor)
+	// 收敛帧走生产同款场景值（装入泥土目标 + 裂纹机位并落网格，产出丢弃）：
+	// 此后 0→25 帧与 `RunBreakBurstMotion` 的循环完全同构。
+	if _, err := captureSceneImage(app, breakBurstMotionScene); err != nil {
+		t.Fatalf("收敛 motion 场景: %v", err)
+	}
+	var breakImg *image.NRGBA
+	for frame := 0; frame <= breakBurstMotionBreakFrame; frame++ {
+		img, err := captureMotionFrame(app, frame)
+		if err != nil {
+			t.Fatalf("抓取第 %d 帧: %v", frame, err)
+		}
+		if frame == breakBurstMotionBreakFrame {
+			breakImg = img
+		}
+	}
+	if got, loaded := app.Mirror().BlockAt(core.Overworld, breakBurstMotionTarget); !loaded || got != core.AirID {
+		t.Fatalf("抓帧时刻目标 BlockAt=%d/%v，想要空气/true", got, loaded)
+	}
+	if got := app.MiningOverlay(); got != (hud.MiningOverlay{}) {
+		t.Fatalf("抓帧时刻 overlay=%+v，想要熄灭", got)
+	}
+	drops := app.ItemDrops().Presentations()
+	if len(drops) != 1 || drops[0].Item != core.ItemDirt {
+		t.Fatalf("抓帧时刻掉落=%+v，想要 1 个泥土", drops)
+	}
+	if upsert := breakBurstMotionDropUpsert(); app.ServerTick() != upsert.ServerTick {
+		t.Fatalf("抓帧时刻 tick=%d，注入 ServerTick=%d，burst 年龄非 0",
+			app.ServerTick(), upsert.ServerTick)
+	}
+	// 裂纹实例流为空即该帧零裂纹像素：裂纹通道的唯一生产者是 `RenderFrame`
+	// 内的裂纹实例编码（消费端是 Rust 裂纹管线），流为空则零实例下行，也就
+	// 没有任何裂纹像素来源；派生门控（选框脱靶 + 熄灭）由 app 侧裂纹测试钉住，
+	// 这里不断言门控、只断言进入渲染器的实例流本身。
+	if got := app.CrackInstances(); len(got) != 0 {
+		t.Fatalf("破坏帧裂纹实例流=%d 字节，想要 0", len(got))
+	}
+	// 抓帧时刻已收敛：生产缝回读前落过网格，统计量当场即满足抓帧判据；单次
+	// `RenderFrame` 后立刻回读会留下数十个脏 section，该断言在旧缝下失败。
+	stats, pending := app.Mesher().Stats(), app.Scheduler().PendingUploads()
+	lodBusy := 0
+	if app.LODScheduler() != nil {
+		lodBusy = app.LODScheduler().Busy()
+	}
+	if vista := app.MenuVistaPending(); !captureSettled(stats, pending, lodBusy, vista) {
+		t.Fatalf("破坏帧抓帧时刻未收敛：mesher=%+v pending=%d lodBusy=%d vista=%d",
+			stats, pending, lodBusy, vista)
+	}
+	// 目标区域像素稳定：再落一轮网格并重抓，区域零差异——回读像素已是置空后
+	// 的网格，而非重建前的旧网格。窗口复用裂纹像素测试的断言窗口（同机位同目标）。
+	if err := settleMotionBreakFrame(app); err != nil {
+		t.Fatalf("重收敛: %v", err)
+	}
+	if _, err := app.RenderFrame(captureDrainMax); err != nil {
+		t.Fatalf("重抓渲染: %v", err)
+	}
+	again := bgraToNRGBA(app.Renderer().Readback(), captureWidth, captureHeight)
+	crop := func(img *image.NRGBA) *image.NRGBA {
+		cropped := image.NewNRGBA(image.Rect(0, 0, captureCrackTargetRegion.Dx(), captureCrackTargetRegion.Dy()))
+		draw.Draw(cropped, cropped.Bounds(), img, captureCrackTargetRegion.Min, draw.Src)
+		return cropped
+	}
+	diff, _, err := compareImages(crop(breakImg), crop(again))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("破坏帧目标区域重抓差异：%s", diff)
+	if diff.DiffPixels != 0 {
+		t.Fatalf("破坏帧目标区域重抓漂移：%s，抓帧时刻像素仍是旧网格", diff)
 	}
 }
 

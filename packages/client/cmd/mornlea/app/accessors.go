@@ -160,6 +160,12 @@ func (a *Application) SetItemDropInstances(instances []render.ItemDrop) {
 	a.itemDropInstances = instances
 }
 
+// CrackInstances 返回上一帧编码的采掘裂纹实例字节流：空即该帧零裂纹实例
+// 进入渲染器。裂纹通道的唯一生产者是 `RenderFrame` 内的
+// `EncodeBlockCrackInstances`，流为空则裂纹之外的任何输入都组装不出裂纹
+// 像素；motion 演示的破坏帧测试经此断言抓帧时刻的零裂纹。
+func (a *Application) CrackInstances() []byte { return a.crackStream }
+
 // Predictor 返回输入预测器（当前方块目标的射线来源）。
 func (a *Application) Predictor() *client.Predictor { return a.predictor }
 

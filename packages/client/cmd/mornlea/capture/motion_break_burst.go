@@ -52,6 +52,13 @@ const (
 	breakBurstMotionMiningRequiredTicks = uint16(200)
 	// breakBurstMotionMiningStepTicks 是爬坡每帧的进度步长。
 	breakBurstMotionMiningStepTicks = uint16(10)
+	// breakBurstMotionSettleMaxFrames 是破坏帧回读前网格重收敛的固定轮次上限：
+	// 单格置空只脏数十个区段，单 worker 数轮即收敛；`-race` 下网格化慢一个
+	// 数量级，需数十轮，上限按数倍余量取整。轮次固定、无墙钟依赖（刻意不用
+	// 抓帧管线的墙钟超时，演示逐字节确定性不随机器速度漂移）；收敛与否只看
+	// 网格与上传状态，与 tick 无关，循环内不推进 tick，burst 年龄仍从破坏帧
+	// 起算。触及上限仍未收敛直接报错，不回读旧网格的假帧。
+	breakBurstMotionSettleMaxFrames = 512
 )
 
 // breakBurstMotionTarget 是演示的采掘目标：泥土方块，直接取裂纹场景的目标坐标
@@ -158,8 +165,57 @@ func applyMiningLifecycleFrame(app SceneApplication, frame int) error {
 	return nil
 }
 
+// settleMotionBreakFrame 把破坏帧的镜像置空落到网格：回读前复用 `captureSettled`
+// 判据循环 `RenderFrame`，直到网格与上传队列收敛或触及固定轮次上限。单次
+// `RenderFrame` 只推进一轮网格化与上传，置空后立刻回读会抓到重建前的旧网格
+// （破坏像素滞后一帧）；`MiningOverlay` 熄灭是 CPU 即时量，不经网格管线，故
+// 裂纹消失而方块残留——这正是破坏帧必须先落网格再抓帧的原因。`RenderFrame`
+// 不 drain 服务端消息，循环内注入的掉落镜像与钉死的 tick 不被权威消息覆盖。
+func settleMotionBreakFrame(app SceneApplication) error {
+	for i := 0; i < breakBurstMotionSettleMaxFrames; i++ {
+		if _, err := app.RenderFrame(captureDrainMax); err != nil {
+			return fmt.Errorf("破坏帧收敛第 %d 轮: %w", i, err)
+		}
+		stats, pending := app.Mesher().Stats(), app.Scheduler().PendingUploads()
+		lodBusy := 0
+		if app.LODScheduler() != nil {
+			lodBusy = app.LODScheduler().Busy()
+		}
+		if captureSettled(stats, pending, lodBusy, app.MenuVistaPending()) {
+			return nil
+		}
+	}
+	stats, pending := app.Mesher().Stats(), app.Scheduler().PendingUploads()
+	lodBusy := 0
+	if app.LODScheduler() != nil {
+		lodBusy = app.LODScheduler().Busy()
+	}
+	return fmt.Errorf("破坏帧 %d 轮内未收敛：mesher=%+v pending=%d lodBusy=%d vista=%d",
+		breakBurstMotionSettleMaxFrames, stats, pending, lodBusy, app.MenuVistaPending())
+}
+
+// captureMotionFrame 是演示时间线单帧的生产抓帧缝：合成 tick 直写 + 采掘镜像
+// 直装（破坏帧兼做镜像置空与掉落注入）→ 破坏帧先落网格 → 真实 `RenderFrame` +
+// 回读。`RunBreakBurstMotion` 与回归测试共用它，测试抓到的即产物抓到的。
+func captureMotionFrame(app SceneApplication, frame int) (*image.NRGBA, error) {
+	// 合成 tick 直写呈现量：`RenderFrame` 不 drain 服务端消息，注入的
+	// 掉落镜像与钉死的 tick 在 45 帧内不被任何权威消息覆盖。
+	if err := applyMiningLifecycleFrame(app, frame); err != nil {
+		return nil, err
+	}
+	if frame == breakBurstMotionBreakFrame {
+		if err := settleMotionBreakFrame(app); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := app.RenderFrame(captureDrainMax); err != nil {
+		return nil, err
+	}
+	return bgraToNRGBA(app.Renderer().Readback(), captureWidth, captureHeight), nil
+}
+
 // captureBreakBurstMotionFrames 以帧号 0→44 连抓固定帧数：抓帧回调由调用方
-// 注入（生产走时间线状态 + 真实 `RenderFrame` + 回读，测试走合成帧），
+// 注入（生产走 `captureMotionFrame`，测试走合成帧），
 // 本函数只钉住帧数与帧序，是演示确定性的落点。
 func captureBreakBurstMotionFrames(
 	capture func(frame int) (*image.NRGBA, error),
@@ -230,15 +286,7 @@ func RunBreakBurstMotion(app SceneApplication, outPath string) error {
 		return fmt.Errorf("收敛 motion 场景: %w", err)
 	}
 	frames, err := captureBreakBurstMotionFrames(func(frame int) (*image.NRGBA, error) {
-		// 合成 tick 直写呈现量：`RenderFrame` 不 drain 服务端消息，注入的
-		// 掉落镜像与钉死的 tick 在 45 帧内不被任何权威消息覆盖。
-		if err := applyMiningLifecycleFrame(app, frame); err != nil {
-			return nil, err
-		}
-		if _, err := app.RenderFrame(captureDrainMax); err != nil {
-			return nil, err
-		}
-		return bgraToNRGBA(app.Renderer().Readback(), captureWidth, captureHeight), nil
+		return captureMotionFrame(app, frame)
 	})
 	if err != nil {
 		return err
