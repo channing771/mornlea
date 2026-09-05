@@ -10,27 +10,29 @@ import (
 )
 
 // 本文件锁定被动牛的闲时朝向规则：漫游态（非逃跑、非吃草、非引诱）下同维
-// 最近 active 玩家进入水平 6 格即每 tick 有界转向该玩家，位置速度不动；离
-// 开 6 格恢复漫游派生；逃跑/吃草/引诱生效时让路。
+// 最近 active 玩家进入水平 6 格即每 tick 有界转向该玩家并靠近到 1.5 格止步
+// （止步后仍跟踪朝向）；离开 6 格恢复漫游派生；逃跑/吃草/引诱生效时让路。
 
-func TestPassiveIdleLookTurnsTowardPlayerWithoutMoving(t *testing.T) {
+func TestPassiveIdleLookApproachesAndStopsNearPlayer(t *testing.T) {
 	engine, session := newTemptEngine(t)
 	restoreGrazeCow(t, engine, 31, mgl32.Vec3{2.5, 1, 2.5})
 	// 空手玩家（非引诱）在东 4 格静立：只触发闲时看人。
 	placeSessionPlayer(engine, session, mgl32.Vec3{6.5, 1, 2.5})
 	entry := &engine.passives.entries[0]
 	entry.yaw = 0
-	want := normalizeYaw(float32(math.Atan2(float64(-(6.5 - 2.5)), float64(0))))
-	before := entry.state.Position
-	for range 60 {
+	for range 200 {
 		engine.advancePassiveMovement()
 	}
 	got := engine.passives.entries[0]
+	// 牛走弧线接近（转向角速率限制），终点朝向按终点位置重算。
+	dx := 6.5 - got.state.Position.X()
+	dz := 2.5 - got.state.Position.Z()
+	want := normalizeYaw(float32(math.Atan2(float64(-dx), float64(-dz))))
 	if got.yaw != want {
 		t.Fatalf("闲时朝向=%v，想要转向玩家的 %v", got.yaw, want)
 	}
-	if horizontalDist(before, got.state.Position) > 1e-6 {
-		t.Fatalf("闲时看人位移=%v，想要位置不变", horizontalDist(before, got.state.Position))
+	if dist := horizontalDist(mgl32.Vec3{6.5, 1, 2.5}, got.state.Position); math.Abs(float64(dist-1.5)) > 0.3 {
+		t.Fatalf("闲时止步距离=%v，想要约 1.5 格", dist)
 	}
 }
 

@@ -26,6 +26,9 @@ const (
 	// passiveIdleLookMaxTurn 是闲时转向每 `tick` 的有界转向角（弧度）：不瞬
 	// 移，多拍收敛。
 	passiveIdleLookMaxTurn = float32(0.2)
+	// passiveIdleLookStopDistance 是闲时靠近的个人空间止步距离（格）：进入
+	// 后只冻位移不冻朝向，避免顶进玩家身体；离开 6 格半径即恢复漫游。
+	passiveIdleLookStopDistance = float32(1.5)
 )
 
 // passiveState 是一头被动牛的权威身体事实。字段面与夜行者侧对齐但类型独立：
@@ -279,7 +282,7 @@ func (engine *engineContext) advancePassiveMovement() {
 // 世界轴到朝向折算）；吃草事件中只给中性输入（事件个体的位移已由
 // `advancePassiveMovement` 冻结，这里是输入层的防御性表态，防未来调用方绕
 // 过冻结直调本函数）；否则有引诱目标就转向目标、无目标但有 6 格内闲时目标
-// 就原地转向看人（位置速度不动，多拍有界收敛）、两者皆无才以世界种子、
+// 就面向玩家靠近到 1.5 格止步（止步后仍跟踪朝向）、两者皆无才以世界种子、
 // `tick` 与 `id` 确定性派生的朝向漫游。全部输入为纯函数派生，不读全局随机
 // 数、不遍历 `map`。
 func (engine *engineContext) passiveStepInput(entry *passiveState) physics.Input {
@@ -316,6 +319,10 @@ func (engine *engineContext) passiveStepInput(entry *passiveState) physics.Input
 		if dx != 0 || dz != 0 {
 			want := normalizeYaw(float32(math.Atan2(float64(-dx), float64(-dz))))
 			entry.yaw = turnYawToward(entry.yaw, want, passiveIdleLookMaxTurn)
+		}
+		// 闲时靠近：1.5 格外保持漫游速度贴近，1.5 格内只冻位移不冻朝向。
+		if dx*dx+dz*dz > passiveIdleLookStopDistance*passiveIdleLookStopDistance {
+			return physics.Input{MoveZ: 1, Yaw: entry.yaw}
 		}
 		return physics.Input{Yaw: entry.yaw}
 	}
