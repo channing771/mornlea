@@ -83,7 +83,7 @@
 
 ### Task 5: 视觉验收、文档同步与全量门禁
 
-**Files/ownership:** 前端 visual fixtures、world/motion capture 适当测试与基线、局部 AGENTS 与 docs 当前说明、必要集成修复，change tasks/ledger 由控制会话勾选。
+**Files/ownership:** 前端 visual fixtures、world/motion capture 适当测试与基线、局部 AGENTS 与 docs 当前说明、必要集成修复，change tasks/ledger 由控制会话勾选。 最终回放门禁若被未纳入断言的被动生物吃草污染，可在 `packages/server/server/player_integration_test.go` 使用回放专用 dirt-top generator 隔离环境，保留原碰撞、障碍、消息顺序与严格断言；不得修改共享地形夹具或服务端生产行为。
 
 **Deliverable:** 按 visual-baseline skill 路由所有 UI 面板到 UI，人物/掉落稳定画面到 world，走路与散落过程到 GIF。覆盖空/满背包、人物页、工作台、箱子、熔炉、HUD选中两端、全物品、小窗口。先生成审查产物并告知控制会话路径；控制会话目检通过后才能更新黄金基线。无头无需 WebView 的世界图不重新加入旧 GPU 面板。按用户要求核实所有面板前端一致，旧生产入口不残留。当前文档与 AGENTS 写事实并解释 -connect 现在支持前端面板。
 

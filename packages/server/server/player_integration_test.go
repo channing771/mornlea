@@ -16,6 +16,7 @@ import (
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
 	"github.com/channing771/mornlea/packages/shared/physics"
+	"github.com/channing771/mornlea/packages/shared/world"
 )
 
 func TestAuthoritativePlayerConvergesAfterThreeTickStateDelay(t *testing.T) {
@@ -224,6 +225,28 @@ type delayedReplayResult struct {
 	Rejected   []network.CommandRejected
 }
 
+// `delayedPlayerGenerator` 保留平坦夹具的碰撞与障碍，只将草地替换成泥土，
+// 避免自然刷牛和吃草向玩家回放注入无关方块变化。共享夹具仍保留真实草地。
+type delayedPlayerGenerator struct{}
+
+func (delayedPlayerGenerator) GenerateChunk(position core.ChunkPos) *world.Chunk {
+	chunk := flatTestGenerator{}.GenerateChunk(position)
+	for z := 0; z < core.SectionSize; z++ {
+		for x := 0; x < core.SectionSize; x++ {
+			chunk.SetBlock(x, 0, z, core.DirtID)
+		}
+	}
+	chunk.Compact()
+	return chunk
+}
+
+func (delayedPlayerGenerator) BaseBlockAt(position core.BlockPos) core.BlockID {
+	if position.Y == 0 {
+		return core.DirtID
+	}
+	return flatTestGenerator{}.BaseBlockAt(position)
+}
+
 func newDelayedPlayerHarness(t *testing.T, delayTicks uint64) *delayedPlayerHarness {
 	t.Helper()
 	clientEndpoint, serverEndpoint := network.NewMemoryPair(4096)
@@ -241,7 +264,7 @@ func newDelayedPlayerHarness(t *testing.T, delayTicks uint64) *delayedPlayerHarn
 		delayTicks:     delayTicks,
 		goroutines:     runtime.NumGoroutine(),
 	}
-	h.running = newMemoryAttachedWorldForTest(config, serverEndpoint, flatTestGenerator{})
+	h.running = newMemoryAttachedWorldForTest(config, serverEndpoint, delayedPlayerGenerator{})
 	t.Cleanup(func() {
 		h.closeGate.cleanup(func() {
 			shutdownServerForTest(t, h.running)
