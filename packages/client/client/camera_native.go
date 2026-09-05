@@ -94,7 +94,7 @@ func NativeVisibleSections(
 	if count == 0 {
 		return nil
 	}
-	// 可见数的 3 倍恒为 3 的倍数，满足 `fetch` 的 `out_cap` 契约。
+	// 可见数的 3 倍恒为 3 的倍数，满足取数半段的输出容量契约。
 	out := make([]int32, uint(count)*3)
 	var written C.size_t
 	checkCameraStatus("visible fetch", uint32(C.mornlea_client_camera_visible_fetch(

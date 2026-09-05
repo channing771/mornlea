@@ -153,7 +153,7 @@ mod tests {
     #[test]
     fn camera_golden_vectors_match_go() {
         let fwd = forward(0.7, -0.25);
-        for (got, want) in fwd.iter().zip([-0.62419051, -0.24740396, -0.74106514]) {
+        for (got, want) in fwd.iter().zip([-0.624_190_5, -0.24740396, -0.74106514]) {
             assert!(
                 (got - want).abs() <= EPS,
                 "前向分量 {got} 与真值 {want} 不一致"
@@ -170,9 +170,9 @@ mod tests {
         );
         for (idx, want) in [
             (0, 0.61442345),
-            (5, 1.38375044),
-            (10, -0.74111301),
-            (15, 14.30052853),
+            (5, 1.383_750_4),
+            (10, -0.741_113),
+            (15, 14.300_529),
         ] {
             assert!(
                 (vp[idx] - want).abs() <= EPS,
