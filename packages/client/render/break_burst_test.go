@@ -33,7 +33,8 @@ func breakPartCenter(part avatarPart) mgl32.Vec3 {
 }
 
 // TestBreakBurstSpawnsEightSameColorParts 钉住新掉落物触发一次同色 burst：
-// 8 粒实心小立方体，颜色与物品基色一致，首帧全部位于方块中心。
+// 8 粒实心小立方体，颜色与物品基色一致，首帧初始位置按散列铺展在原方块
+// 体积内（相对中心 [-0.5,0.5]³），两两不同且至少一粒在掉落体外可见。
 func TestBreakBurstSpawnsEightSameColorParts(t *testing.T) {
 	tracker := &BreakBursts{}
 	block := core.BlockPos{X: 4, Y: 2, Z: -1}
@@ -44,6 +45,8 @@ func TestBreakBurstSpawnsEightSameColorParts(t *testing.T) {
 	}
 	wantColor := ItemColor(core.ItemDirt)
 	wantOrigin := breakTestOrigin(block)
+	seen := make(map[mgl32.Vec3]struct{}, 8)
+	outside := false
 	for index, part := range parts {
 		if part.color != wantColor {
 			t.Fatalf("粒子 %d 颜色 = %v，想要泥土基色 %v", index, part.color, wantColor)
@@ -51,9 +54,32 @@ func TestBreakBurstSpawnsEightSameColorParts(t *testing.T) {
 		if part.material != avatarMaterialSolid {
 			t.Fatalf("粒子 %d 材质 = %v，想要实心哨兵 %v", index, part.material, avatarMaterialSolid)
 		}
-		if got := breakPartCenter(part); got != wantOrigin {
-			t.Fatalf("粒子 %d 首帧位置 = %v，想要方块中心 %v", index, got, wantOrigin)
+		center := breakPartCenter(part)
+		offset := center.Sub(wantOrigin)
+		for axis, name := range map[int]string{0: "X", 1: "Y", 2: "Z"} {
+			if offset[axis] < -0.5-1e-5 || offset[axis] > 0.5+1e-5 {
+				t.Fatalf("粒子 %d 首帧偏移 %v 超出原方块体积 [-0.5,0.5]³（%s=%v）", index, offset, name, offset[axis])
+			}
 		}
+		if _, dup := seen[center]; dup {
+			t.Fatalf("粒子 %d 首帧位置 %v 与之前粒子重复，想要体积内两两不同", index, center)
+		}
+		seen[center] = struct{}{}
+		// 掉落体半边 0.125 加粒子半边 0.045：切比雪夫距离超 0.17 即在体外，
+		// 首帧至少一粒在外则破裂在原方块处可见（不再全藏于掉落体内）。
+		maxAxis := float32(math.Abs(float64(offset.X())))
+		if got := float32(math.Abs(float64(offset.Y()))); got > maxAxis {
+			maxAxis = got
+		}
+		if got := float32(math.Abs(float64(offset.Z()))); got > maxAxis {
+			maxAxis = got
+		}
+		if maxAxis > dropCubeSize/2+breakBurstCubeSize/2 {
+			outside = true
+		}
+	}
+	if !outside {
+		t.Fatal("8 粒全在掉落体内，想要至少一粒在体外可见")
 	}
 }
 
@@ -78,8 +104,8 @@ func TestBreakBurstVelocitiesAreDistinctAndLowerHemisphere(t *testing.T) {
 	}
 }
 
-// TestBreakBurstTrajectoryFollowsFixedGravity 钉住位置公式「起点 + v·t − g·t²」：
-// 年龄 1 时位置恰为起点加初速再扣纵向重力项。
+// TestBreakBurstTrajectoryFollowsFixedGravity 钉住位置公式「起点 + 铺展偏移 +
+// v·t − g·t²」：年龄 1 时位置恰为铺展起点加初速再扣纵向重力项。
 func TestBreakBurstTrajectoryFollowsFixedGravity(t *testing.T) {
 	tracker := &BreakBursts{}
 	block := core.BlockPos{X: 1, Y: 5, Z: 2}
@@ -91,7 +117,7 @@ func TestBreakBurstTrajectoryFollowsFixedGravity(t *testing.T) {
 	}
 	origin := breakTestOrigin(block)
 	for index, part := range parts {
-		want := origin.Add(breakBurstVelocity(drop.ID, index))
+		want := origin.Add(breakBurstOriginOffset(drop.ID, index)).Add(breakBurstVelocity(drop.ID, index))
 		want[1] -= breakBurstGravity
 		assertVec3Near(t, breakPartCenter(part), want)
 	}
@@ -172,6 +198,17 @@ func TestBreakBurstEvictsOldestWhenTableFull(t *testing.T) {
 	}
 }
 
+// breakTestInitialCenters 返回该掉落物 burst 首帧的 8 个铺展中心：原点加
+// `(ID,i)` 散列偏移，与实现同式推导，测试与实现共享散列、不共享位置公式。
+func breakTestInitialCenters(block core.BlockPos, id core.DropID) []mgl32.Vec3 {
+	origin := breakTestOrigin(block)
+	centers := make([]mgl32.Vec3, breakBurstParticlesPerBurst)
+	for index := range breakBurstParticlesPerBurst {
+		centers[index] = origin.Add(breakBurstOriginOffset(id, index))
+	}
+	return centers
+}
+
 // TestBreakBurstRemovedDropDeletesEntry 钉住掉落物消失即删：条目清空后无编码；
 // 同 ID 再次出现视为全新 burst。
 func TestBreakBurstRemovedDropDeletesEntry(t *testing.T) {
@@ -191,21 +228,21 @@ func TestBreakBurstRemovedDropDeletesEntry(t *testing.T) {
 	if len(reburst) != 8 {
 		t.Fatalf("重现实例数 = %d，想要全新 burst 的 8", len(reburst))
 	}
-	wantOrigin := breakTestOrigin(block)
+	want := breakTestInitialCenters(block, drops[0].ID)
 	for index, part := range reburst {
-		if got := breakPartCenter(part); got != wantOrigin {
-			t.Fatalf("重现粒子 %d 位置 = %v，想要方块中心 %v", index, got, wantOrigin)
+		if got := breakPartCenter(part); got != want[index] {
+			t.Fatalf("重现粒子 %d 位置 = %v，想要铺展起点 %v", index, got, want[index])
 		}
 	}
 }
 
 // TestBreakBurstDoesNotRetriggerWhilePresent 钉住存续期间只 burst 一次：
-// 25 tick 内恰有一帧全部粒子位于起点，20 tick 后自然消失。
+// 25 tick 内恰有一帧全部粒子位于铺展起点，20 tick 后自然消失。
 func TestBreakBurstDoesNotRetriggerWhilePresent(t *testing.T) {
 	tracker := &BreakBursts{}
 	block := core.BlockPos{X: 0, Y: 3, Z: 0}
 	drops := []ItemDrop{breakTestDrop(3, block, core.ItemDirt)}
-	origin := breakTestOrigin(block)
+	want := breakTestInitialCenters(block, drops[0].ID)
 	originFrames := 0
 	for tick := uint64(5); tick <= 30; tick++ {
 		parts := tracker.BuildParts(nil, tick, drops)
@@ -215,8 +252,8 @@ func TestBreakBurstDoesNotRetriggerWhilePresent(t *testing.T) {
 				t.Fatalf("tick %d 实例数 = %d，想要 8", tick, len(parts))
 			}
 			atOrigin := true
-			for _, part := range parts {
-				if breakPartCenter(part) != origin {
+			for index, part := range parts {
+				if breakPartCenter(part) != want[index] {
 					atOrigin = false
 					break
 				}
@@ -243,18 +280,22 @@ func TestBreakBurstDoesNotRetriggerWhilePresent(t *testing.T) {
 func TestBreakBurstEvictedDropDoesNotReburstWhilePresent(t *testing.T) {
 	tracker := &BreakBursts{}
 	var drops []ItemDrop
-	var origins []mgl32.Vec3
+	var initials [][]mgl32.Vec3
 	for tick := uint64(0); tick < 17; tick++ {
 		block := core.BlockPos{X: int32(tick), Y: 3, Z: 0}
-		drops = append(drops, breakTestDrop(uint8(tick), block, core.ItemDirt))
-		origins = append(origins, breakTestOrigin(block))
+		drop := breakTestDrop(uint8(tick), block, core.ItemDirt)
+		drops = append(drops, drop)
+		initials = append(initials, breakTestInitialCenters(block, drop.ID))
 	}
-	originFrames := make([]int, len(origins))
-	countAtOrigin := func(parts []avatarPart, origin mgl32.Vec3) int {
+	originFrames := make([]int, len(initials))
+	countAtInitial := func(parts []avatarPart, want []mgl32.Vec3) int {
 		count := 0
 		for _, part := range parts {
-			if breakPartCenter(part) == origin {
-				count++
+			for _, center := range want {
+				if breakPartCenter(part) == center {
+					count++
+					break
+				}
 			}
 		}
 		return count
@@ -267,15 +308,15 @@ func TestBreakBurstEvictedDropDoesNotReburstWhilePresent(t *testing.T) {
 			frame = drops
 		}
 		parts := tracker.BuildParts(nil, tick, frame)
-		for index, origin := range origins {
-			switch got := countAtOrigin(parts, origin); {
+		for index, want := range initials {
+			switch got := countAtInitial(parts, want); {
 			case tick < 17 && index == int(tick):
 				if got != 8 {
 					t.Fatalf("tick %d 新掉落物起点粒子 = %d，想要 8", tick, got)
 				}
 				originFrames[index]++
 			case got != 0:
-				t.Fatalf("tick %d 起点 %v 粒子 = %d，想要 0（重复 burst）", tick, origin, got)
+				t.Fatalf("tick %d 起点 %v 粒子 = %d，想要 0（重复 burst）", tick, want[0], got)
 			}
 		}
 	}

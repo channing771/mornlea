@@ -27,7 +27,7 @@ func testItemDrops(count int) []ItemDrop {
 // Mutation killed: exceeding the fixed instance budget or rendering unknown
 // items would break the固定 800 实例上限。
 func TestItemDropPartsStayWithinFixedCapacity(t *testing.T) {
-	parts := (&DropFalls{}).buildItemDropParts(nil, 0, testItemDrops(maxItemDrops+16))
+	parts := (&DropFalls{}).buildItemDropParts(nil, 0, testItemDrops(maxItemDrops+16), dropFallTestGravity, dropFallTestTerminal)
 	if len(parts) != maxItemDrops {
 		t.Fatalf("实例数 = %d，想要固定上限 %d", len(parts), maxItemDrops)
 	}
@@ -36,7 +36,7 @@ func TestItemDropPartsStayWithinFixedCapacity(t *testing.T) {
 		ID:   core.DropID{Slot: 0, Generation: 1},
 		Item: core.ItemID(4242),
 	}}
-	if got := (&DropFalls{}).buildItemDropParts(nil, 0, unknown); len(got) != 0 {
+	if got := (&DropFalls{}).buildItemDropParts(nil, 0, unknown, dropFallTestGravity, dropFallTestTerminal); len(got) != 0 {
 		t.Fatalf("未注册物品产生了实例: %+v", got)
 	}
 }
@@ -59,8 +59,8 @@ func TestItemDropColorsMatchProceduralBlocks(t *testing.T) {
 func TestItemDropAnimationIsDeterministicAndTickDriven(t *testing.T) {
 	drops := testItemDrops(2)
 	falls := &DropFalls{}
-	first := append([]avatarPart(nil), falls.buildItemDropParts(nil, 7, drops)...)
-	repeat := falls.buildItemDropParts(nil, 7, drops)
+	first := append([]avatarPart(nil), falls.buildItemDropParts(nil, 7, drops, dropFallTestGravity, dropFallTestTerminal)...)
+	repeat := falls.buildItemDropParts(nil, 7, drops, dropFallTestGravity, dropFallTestTerminal)
 	if len(first) != len(repeat) {
 		t.Fatalf("同一 tick 实例数不同: %d vs %d", len(first), len(repeat))
 	}
@@ -70,7 +70,7 @@ func TestItemDropAnimationIsDeterministicAndTickDriven(t *testing.T) {
 		}
 	}
 
-	later := falls.buildItemDropParts(nil, 8, drops)
+	later := falls.buildItemDropParts(nil, 8, drops, dropFallTestGravity, dropFallTestTerminal)
 	if later[0] == first[0] {
 		t.Fatal("server tick 前进后动画相位未变化")
 	}

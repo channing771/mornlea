@@ -133,7 +133,9 @@ func (bursts *BreakBursts) BuildParts(dst []avatarPart, serverTick uint64, drops
 		supportY, hasSupport := breakBurstSupport(ordered, entry.id)
 		for index := range breakBurstParticlesPerBurst {
 			velocity := breakBurstVelocity(entry.id, index)
-			center := entry.origin.Add(velocity.Mul(elapsed))
+			// 初速聚于中心会全藏进掉落体内：初始位置按散列铺展在原方块体积
+			// 内，速度/重力/寿命一律不动，首帧即在原方块处可见。
+			center := entry.origin.Add(breakBurstOriginOffset(entry.id, index)).Add(velocity.Mul(elapsed))
 			center[1] -= breakBurstGravity * elapsed * elapsed
 			// 粒子以同一支撑高度为地板钳制（防穿地）：burst 原点仍是破坏方块
 			// 位置，不动；地板取支撑顶面加当前半边长，立方体整体留在地上。
@@ -210,6 +212,22 @@ func breakBurstHash(id core.DropID) uint32 {
 	hash *= 16777619
 	hash ^= hash >> 13
 	return hash
+}
+
+// breakBurstOriginOffset 把 `(ID,index)` 映射为相对方块中心的初始偏移：取值
+// 在原 1 格方块体积 `[-0.5,0.5]³` 内（可偏表面），确定性、与速度/重力/寿命
+// 正交。散列在既有 `breakBurstHash` 上再混入序号并雪崩，每粒取三字节分别映射
+// 一轴，8 粒几乎必然两两不同且多在掉落体外，首帧即在原方块处可见。
+func breakBurstOriginOffset(id core.DropID, index int) mgl32.Vec3 {
+	hash := breakBurstHash(id) ^ (uint32(index+1) * breakBurstSalt)
+	hash ^= hash >> 16
+	hash *= 16777619
+	hash ^= hash >> 13
+	return mgl32.Vec3{
+		float32(hash&255)/255 - 0.5,
+		float32((hash>>8)&255)/255 - 0.5,
+		float32((hash>>16)&255)/255 - 0.5,
+	}
 }
 
 // breakBurstVelocity 由掉落物 ID 散列派生第 index 粒的初速：8 粒方位角均分整圆

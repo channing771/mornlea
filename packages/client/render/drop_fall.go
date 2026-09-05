@@ -9,9 +9,9 @@ import (
 )
 
 const (
-	// dropFallBlocksPerTick 是掉落物呈现下落的恒定速率（方块/tick）：3 格
-	// 落差恰好 20 tick 着陆。呈现下落不反馈服务端，权威位置、拾取与存档一律不动。
-	dropFallBlocksPerTick = float32(0.15)
+	// dropFallTickSeconds 是呈现下落的 tick 步长（秒）：与权威 50ms ticker
+	// 同值，`g`/终端速度由调用方显式传参（生产取生效 tunables）。
+	dropFallTickSeconds = float32(0.05)
 	// dropFallMaxTracked 是下落首现表的固定容量：只留最近的该数量掉落物 ID，
 	// 满表后环形淘汰最老的 ID。
 	dropFallMaxTracked = 128
@@ -57,29 +57,49 @@ func (falls *DropFalls) age(serverTick uint64, id core.DropID) uint64 {
 	return 0
 }
 
-// dropFallOffset 是下落偏移的纯函数：`fallen = min（年龄×速率，生成高度−
-// 支撑高度）`，其中生成高度与支撑高度都取方块坐标系（掉落方块 Y、支撑顶面
-// Y）：贴地掉落（生成方块紧贴支撑顶面）上限为零，恒零偏移。上钳着陆面、
-// 下钳零（支撑高于生成时不反向顶起）；无支撑信息（镜像无数据或支撑超深）
-// 时返回零，按生成高度保持。
-func dropFallOffset(age uint64, spawnY, supportTopY float32, hasSupport bool) float32 {
+// dropFallOffset 是下落偏移的纯函数：从静止起按半隐式欧拉积分（每 tick
+// `v += g·dt`、终端钳制、`y -= v·dt`，与角色重力同形），再按
+// `min（积分下落，生成高度−支撑高度）`着陆钳制。其中生成高度与支撑高度都取
+// 方块坐标系（掉落方块 Y、支撑顶面 Y）：贴地掉落（生成方块紧贴支撑顶面）上限
+// 为零，恒零偏移。上钳着陆面、下钳零（支撑高于生成时不反向顶起）；无支撑信息
+// （镜像无数据或支撑超深）时返回零，按生成高度保持。`g`/终端由调用方显式传参，
+// 本包不读全局 tunables；闭式解逐帧有界，不随年龄增长做无界循环。
+func dropFallOffset(age uint64, spawnY, supportTopY float32, hasSupport bool, gravity, terminal float32) float32 {
 	if !hasSupport {
 		return 0
 	}
-	fallen := float32(age) * dropFallBlocksPerTick
-	if max := spawnY - supportTopY; fallen > max {
-		fallen = max
+	if max := spawnY - supportTopY; max <= 0 {
+		return 0
+	} else if gravity <= 0 || terminal <= 0 {
+		return 0
+	} else {
+		step := gravity * dropFallTickSeconds
+		reach := uint64(math.Ceil(float64(terminal / step)))
+		if reach < 1 {
+			reach = 1
+		}
+		var fallen float32
+		if age < reach {
+			fallen = step * dropFallTickSeconds * float32(age) * float32(age+1) / 2
+		} else {
+			fallen = step*dropFallTickSeconds*float32(reach-1)*float32(reach)/2 +
+				float32(age-reach+1)*terminal*dropFallTickSeconds
+		}
+		if fallen > max {
+			fallen = max
+		}
+		if fallen < 0 {
+			fallen = 0
+		}
+		return fallen
 	}
-	if fallen < 0 {
-		fallen = 0
-	}
-	return fallen
 }
 
 // buildItemDropParts 把掉落物编码为实心小立方体：颜色与未知物品规则沿用
-// 既有语义，中心高度 = 生成基准 − 下落偏移；正弦浮动与自转在着陆后继续，
-// 输出恒不超过固定容量。年龄来自首现表，同 tick 重复编码逐字节一致。
-func (falls *DropFalls) buildItemDropParts(dst []avatarPart, serverTick uint64, drops []ItemDrop) []avatarPart {
+// 既有语义，中心高度 = 生成基准 − 重力积分下落偏移；正弦浮动与自转在着陆后
+// 继续，输出恒不超过固定容量。年龄来自首现表，`gravity`/`terminal` 由调用方
+// 显式传参（生产取生效 tunables），同 tick 重复编码逐字节一致。
+func (falls *DropFalls) buildItemDropParts(dst []avatarPart, serverTick uint64, drops []ItemDrop, gravity, terminal float32) []avatarPart {
 	for _, drop := range drops {
 		if len(dst) == maxItemDrops {
 			break
@@ -92,7 +112,7 @@ func (falls *DropFalls) buildItemDropParts(dst []avatarPart, serverTick uint64, 
 		spawnBaseY := float32(drop.Block.Y) + dropBaseAltitude
 		center := mgl32.Vec3{
 			float32(drop.Block.X) + 0.5,
-			spawnBaseY - dropFallOffset(falls.age(serverTick, drop.ID), float32(drop.Block.Y), drop.SupportY, drop.HasSupport) +
+			spawnBaseY - dropFallOffset(falls.age(serverTick, drop.ID), float32(drop.Block.Y), drop.SupportY, drop.HasSupport, gravity, terminal) +
 				dropFloatHeight*float32(math.Sin(float64(phase.float))),
 			float32(drop.Block.Z) + 0.5,
 		}

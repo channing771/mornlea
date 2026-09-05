@@ -39,9 +39,10 @@ func (e *InstanceEncoder) EncodeAvatarInstances(dst []byte, avatars []Avatar) []
 
 // EncodeItemDropInstances 把掉落物编码为 96 字节/实例的字节流,
 // 与 ItemDropRenderer.Render 的内部编码逐字节一致。下落年龄来自编码器内
-// 跨帧存续的首现表,会话重置时经 `ResetFalls` 清空。
-func (e *InstanceEncoder) EncodeItemDropInstances(dst []byte, serverTick uint64, drops []ItemDrop) []byte {
-	e.parts = e.falls.buildItemDropParts(e.parts[:0], serverTick, drops)
+// 跨帧存续的首现表,下落重力 `gravity`/终端 `terminal` 由调用方显式传参
+// (生产取生效 tunables,本包不读全局),会话重置时经 `ResetFalls` 清空。
+func (e *InstanceEncoder) EncodeItemDropInstances(dst []byte, serverTick uint64, drops []ItemDrop, gravity, terminal float32) []byte {
+	e.parts = e.falls.buildItemDropParts(e.parts[:0], serverTick, drops, gravity, terminal)
 	dst = growEncodeBuffer(dst, len(e.parts)*avatarInstanceBytes)
 	encodeAvatarPartsInto(dst, e.parts)
 	return dst

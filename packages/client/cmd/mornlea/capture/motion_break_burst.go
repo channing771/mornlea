@@ -7,8 +7,8 @@ package capture
 // 时间线（帧号 = 合成 tick 偏移，延迟沿用 13cs）：F0–4 目标静置无采掘；
 // F5–24 采掘爬坡（`RequiredTicks=200`，`ProgressTicks=(i-5)*10`，裂纹 0→9 扫完）；
 // F25 破坏同帧三件事（镜像目标置空 + `MiningOverlay` 熄灭 + 泥土掉落注入，
-// burst 年龄 0 从此帧起算）；F25–44 粒子存续 + 掉落下落（3 格落差恒速 20 tick，
-// F45 恰好着陆）；F45–49 粒子过期、掉落静置留存，裂纹不再出现
+// burst 年龄 0 从此帧起算）；F25–44 粒子存续 + 掉落下落（3 格落差重力积分约
+// 9 tick，F34 着陆）；F34–49 粒子过期、掉落静置留存，裂纹不再出现
 // （`mining-crack-presentation` 破坏即清理语义）。
 //
 // 演示驱动的是真实 `RenderFrame` 破碎链路（掉落物镜像 + 合成 tick 经
@@ -35,7 +35,7 @@ import (
 
 const (
 	// breakBurstMotionFrameCount 是演示 GIF 的固定帧数：5 帧静置 + 20 帧采掘
-	// 爬坡 + 破坏帧起 20 tick 下落着陆 + 5 帧静置掉落（含着陆帧本身）。
+	// 爬坡 + 破坏帧起重力下落着陆（3 格约 9 tick）+ 余帧静置掉落（含着陆帧本身）。
 	breakBurstMotionFrameCount = 50
 	// breakBurstMotionTickBase 是合成 tick 序列的起点：取值任意、固定即可，
 	// burst 年龄只与相对差有关，绝对值不进画面。

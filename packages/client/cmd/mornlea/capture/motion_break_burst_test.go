@@ -5,7 +5,7 @@ package capture
 // motion_break_burst_test.go：完整采掘生命周期 motion 演示的回归测试。
 // 50 帧时间线：F0–4 静置 → F5–24 采掘爬坡（裂纹 0→9 扫完）→ F25 破坏同帧
 // （镜像置空 + overlay 熄灭 + 泥土掉落注入，burst 年龄 0 起算）→ F25–44
-// 粒子存续 + 掉落下落（F45 着陆）→ F45–49 掉落静置留存、裂纹不再出现。
+// 粒子存续 + 掉落下落（重力积分约 9 tick 着陆）→ F34–49 掉落静置留存、裂纹不再出现。
 // 链路正确性由破碎 burst 的逐帧测试与 `RenderFrame` 接线测试承接，
 // 这里只钉时间线落点与产物约定。
 
@@ -259,8 +259,8 @@ func TestBreakBurstMotionBreakFrameGrabsSettledPixels(t *testing.T) {
 }
 
 // TestBreakBurstMotionFloorAndFrameBudgetFitLanding 钉住着陆演示的两项静态
-// 前提：目标正下方有草地（顶面 y=0），3 格落差按恒定速率恰好 20 tick 着陆
-// （`render` 呈现下落速率 0.15 格/tick）；破坏帧之后留够 20 tick 下落 +
+// 前提：目标正下方有草地（顶面 y=0），3 格落差按重力积分约 9 tick 着陆
+// （`render` 呈现下落与角色同形）；破坏帧之后留够 9 tick 下落 +
 // 至少 3 帧静置掉落。
 func TestBreakBurstMotionFloorAndFrameBudgetFitLanding(t *testing.T) {
 	app := newCaptureAICompanionState()
@@ -284,7 +284,7 @@ func TestBreakBurstMotionFloorAndFrameBudgetFitLanding(t *testing.T) {
 	if got, loaded := app.Mirror().BlockAt(core.Overworld, floor); !loaded || got != core.GrassID {
 		t.Fatalf("支撑地 BlockAt=%d/%v，想要草地/true（顶面 y=0）", got, loaded)
 	}
-	const wantFallTicks = 20
+	const wantFallTicks = 9
 	const wantSettledFrames = 3
 	if got := breakBurstMotionFrameCount - 1 - breakBurstMotionBreakFrame; got < wantFallTicks+wantSettledFrames {
 		t.Fatalf("破坏帧后帧数=%d，想要 ≥%d（%d tick 下落 + ≥%d 帧静置）",

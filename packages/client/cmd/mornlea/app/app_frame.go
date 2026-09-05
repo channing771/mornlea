@@ -15,6 +15,7 @@ import (
 	"github.com/channing771/mornlea/packages/client/render"
 	"github.com/channing771/mornlea/packages/client/render/hud"
 	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/physics"
 )
 
 // baseVisibleRadius 是相机不在流体时的可见 section 搜索半径（区段），
@@ -329,7 +330,10 @@ func (a *Application) RenderFrame(workMax int) (bool, error) {
 	a.itemDropInstances = appendItemDropInstances(
 		a.itemDropInstances[:0], a.itemDrops.Presentations(), a.mirror,
 	)
-	a.dropStream = a.entityEncoder.EncodeItemDropInstances(a.dropStream, a.serverTick, a.itemDropInstances)
+	// 呈现下落与角色共用重力积分形状：`g`/终端取生效 tunables（与照相机
+	// `EyeHeight` 同式），纯函数在 `render` 侧显式传参、不读全局。
+	fallTunables := physics.ActiveTunables()
+	a.dropStream = a.entityEncoder.EncodeItemDropInstances(a.dropStream, a.serverTick, a.itemDropInstances, fallTunables.Gravity, fallTunables.TerminalFallSpeed)
 	// 破碎 burst 与掉落物本体共用同一份 serverTick + 掉落物输入,跟踪表在
 	// entityEncoder 内跨帧存续;输出并入 avatar 实例段(段预算不足时 burst 让路)。
 	a.avatarStream = a.entityEncoder.AppendBreakBurstInstances(a.avatarStream, a.serverTick, a.itemDropInstances)
