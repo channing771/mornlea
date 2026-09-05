@@ -1,0 +1,30 @@
+# 伙伴 Agent 服务配置示例（strict v1）：复制为同目录 config.yaml 后填入本机值。
+# 配置文件只写 secret 的环境变量名，不写 secret 本体；语义见 docs/notes/configuration.md。
+# 启动前设置：
+# export MORNLEA_AGENT_TOKEN='replace-with-random-local-token'
+# export MORNLEA_PROVIDER_KEY='replace-with-provider-key'
+
+config_version: v1
+http:
+  # 仅限 loopback IP 字面量。
+  bind: 127.0.0.1
+  port: 8080
+  # 固定为 1，不接受其他值。
+  workers: 1
+  # 只写变量名，不写 secret 本体。
+  bearer_token_env: MORNLEA_AGENT_TOKEN
+storage:
+  # 持久 SQLite 文件路径（相对路径按本文件所在目录解析，不接受 :memory:、URI 或目录）。
+  sqlite_path: companion-agent.sqlite3
+provider:
+  base_url: http://127.0.0.1:11434/v1
+  model: local-model
+  # 只写变量名，不写 secret 本体。
+  api_key_env: MORNLEA_PROVIDER_KEY
+limits:
+  # 默认 3，硬上限 5。
+  model_calls: 3
+  # 默认 4，硬上限 8。
+  tool_calls: 4
+  # 默认 30，硬上限 60。
+  timeout_seconds: 30

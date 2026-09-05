@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling>=1.29,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mornlea-harness"
+version = "0.1.0"
+description = "Mornlea agent harness"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "aiosqlite>=0.22.1,<1",
+  "httpx>=0.28.1,<1",
+  "idna>=3.11,<4",
+  "langchain>=1.3.14,<2",
+  "langchain-mcp-adapters>=0.2.2,<1",
+  "langchain-openai>=1.2.1,<2",
+  "langgraph>=1.2.9,<2",
+  "mcp>=1.28.1,<2",
+  "pydantic>=2.12.5,<3",
+  "pyyaml>=6.0.3,<7",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/harness"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"../../../packages/contracts/companion-agent/mcp-v1/manifest.json" = "harness/_contracts/mcp-v1/manifest.json"
+"../../../packages/contracts/companion-agent/mcp-v1/schema.json" = "harness/_contracts/mcp-v1/schema.json"
