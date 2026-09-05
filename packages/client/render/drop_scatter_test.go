@@ -182,7 +182,7 @@ func TestDropScatterReorderIsByteStableAndKeepsCallerInput(t *testing.T) {
 }
 
 // TestDropScatterHiddenDeathDropReservesCell 钉住死亡前期隐藏堆仍参与分组与
-// 首见年龄：显现时不会因先前不可见而挤占已有堆位置。
+// 槽位分配：显现时不会因先前不可见而挤占已有堆位置。
 func TestDropScatterHiddenDeathDropReservesCell(t *testing.T) {
 	block := core.BlockPos{X: 0, Y: 3, Z: 0}
 	drops := scatterTestDrops(2, core.Overworld, block)
@@ -192,13 +192,40 @@ func TestDropScatterHiddenDeathDropReservesCell(t *testing.T) {
 	if len(parts) != 1 {
 		t.Fatalf("死亡前期实例=%d，想要只显示普通堆", len(parts))
 	}
-	if len(withHidden.ids) != 2 {
-		t.Fatalf("首见表=%d 项，想要隐藏堆也登记", len(withHidden.ids))
-	}
 	alone := (&DropFalls{}).buildItemDropParts(nil, 109, drops[1:], dropFallTestGravity, dropFallTestTerminal)
 	if scatterPartCenter(parts[0]) == scatterPartCenter(alone[0]) {
 		t.Fatal("隐藏堆未占槽，普通堆退回单堆位置")
 	}
+}
+
+// TestDropScatterDeathLinkedFallStartsWhenFirstVisible 钉住隐藏期只占 XZ 槽位、
+// 不累计下落年龄：首次可见帧仍位于出生底面，下一帧才开始原有重力积分。
+func TestDropScatterDeathLinkedFallStartsWhenFirstVisible(t *testing.T) {
+	block := core.BlockPos{X: 0, Y: 5, Z: 0}
+	drop := scatterTestDrops(1, core.Overworld, block)[0]
+	drop.DeathTick = 100
+	drop.SupportY = 0
+	drops := []ItemDrop{drop}
+	falls := &DropFalls{}
+	for _, tick := range []uint64{100, 109} {
+		if got := falls.buildItemDropParts(nil, tick, drops, dropFallTestGravity, dropFallTestTerminal); len(got) != 0 {
+			t.Fatalf("隐藏 tick %d 实例=%d，想要 0", tick, len(got))
+		}
+	}
+
+	wantCenter := func(tick uint64, unit, fallen float32) float32 {
+		phase := dropAnimationPhase(tick, drop.ID)
+		bob := dropFloatHeight * unit
+		return float32(block.Y) - fallen + dropCubeSize*unit/2 + dropScatterFloorGap +
+			bob + bob*float32(math.Sin(float64(phase.float)))
+	}
+	first := falls.buildItemDropParts(nil, 110, drops, dropFallTestGravity, dropFallTestTerminal)
+	if len(first) != 1 {
+		t.Fatalf("首次可见实例=%d，想要 1", len(first))
+	}
+	assertCenterYNear(t, 110, dropPartCenterY(first[0]), wantCenter(110, 1.0/11, 0))
+	next := falls.buildItemDropParts(nil, 111, drops, dropFallTestGravity, dropFallTestTerminal)
+	assertCenterYNear(t, 111, dropPartCenterY(next[0]), wantCenter(111, 2.0/11, 0.08))
 }
 
 // TestDropScatterBottomAnchorsToSupportDuringScaleIn 钉住实际缩放半高与非负

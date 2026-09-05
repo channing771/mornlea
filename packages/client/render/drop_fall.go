@@ -98,10 +98,10 @@ func dropFallOffset(age uint64, spawnY, supportTopY float32, hasSupport bool, gr
 }
 
 // buildItemDropParts 把掉落物编码为贴图实例：输入复制到固定 scratch，按完整
-// 同格键与 `DropID` 排序后线性分组。每堆独占 XZ cell；死亡前隐藏堆仍占槽并
-// 登记年龄。中心从支撑顶面按实际半高和非负浮动锚定，下落、自转、渐显与白闪
-// 保持原语义。生产输入已由镜像拒绝非法值与真实 overflow；此处仍防御性限制
-// 固定实例容量，不扩大 CPU/GPU 缓冲。
+// 同格键与 `DropID` 排序后线性分组。每堆独占 XZ cell；死亡前隐藏堆仍占槽，
+// 首次可见时才登记年龄。中心从支撑顶面按实际半高和非负浮动锚定，下落、自转、
+// 渐显与白闪保持原语义。生产输入已由镜像拒绝非法值与真实 overflow；此处仍
+// 防御性限制固定实例容量，不扩大 CPU/GPU 缓冲。
 func (falls *DropFalls) buildItemDropParts(dst []avatarPart, serverTick uint64, drops []ItemDrop, gravity, terminal float32) []avatarPart {
 	count := min(len(drops), maxItemDrops)
 	ordered := falls.ordered[:count]
@@ -118,7 +118,6 @@ func (falls *DropFalls) buildItemDropParts(dst []avatarPart, serverTick uint64, 
 			if len(dst) == maxItemDrops {
 				return dst
 			}
-			age := falls.age(serverTick, drop.ID)
 			material, ok := itemDropMaterial(drop.Item)
 			if !ok {
 				continue
@@ -135,6 +134,7 @@ func (falls *DropFalls) buildItemDropParts(dst []avatarPart, serverTick uint64, 
 					color = [4]float32{2, 2, 2, 1}
 				}
 			}
+			age := falls.age(serverTick, drop.ID)
 			placement := dropScatterPlacementFor(groupCount, rank, drop.ID)
 			actualScale := placement.scale * unit
 			sx, sy, sz := dropCubeSize*actualScale, dropCubeSize*actualScale, dropCubeSize*actualScale
