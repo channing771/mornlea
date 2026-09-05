@@ -119,7 +119,21 @@ fn cloud_mask(direction: vec3f) -> f32 {
     }
     let intersection = sky.camera_cloud.xz + direction.xz * distance;
     let d = cloud_density(intersection);
-    return select(0.0, smoothstep(0.02, 0.08, direction.y) * smoothstep(0.0, 0.15, d), d > 0.003);
+    return select(0.0, d * smoothstep(0.02, 0.08, direction.y), d > 0.003);
+}
+
+fn cloud_light(density: f32, direction: vec3f) -> vec3f {
+    let sun_direction = normalize(sky.sun_daylight.xyz);
+    let daylight = clamp(sky.sun_daylight.w, 0.0, 1.0);
+    let day_cloud = vec3f(0.84, 0.88, 0.92);
+    let night_cloud = vec3f(0.18, 0.22, 0.28);
+    var base = mix(night_cloud, day_cloud, daylight);
+    // 低太阳高度染橙：sun_direction.y 越接近地平线权重越大
+    let dusk = (1.0 - smoothstep(0.0, 0.35, abs(sun_direction.y))) * step(0.001, daylight) * (1.0 - daylight * 0.5);
+    base = mix(base, vec3f(0.98, 0.62, 0.42), clamp(dusk, 0.0, 1.0) * 0.65);
+    // 厚度：密度高处提亮顶、密度低处压暗边（伪厚度，无真实法线）
+    let shade = mix(0.72, 1.06, smoothstep(0.0, 1.0, density));
+    return clamp(base * shade, vec3f(0.0), vec3f(1.0));
 }
 
 @fragment
@@ -157,7 +171,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4f {
         * select(0.0, 1.0, moon_direction.y > 0.0);
     color = mix(color, vec3f(0.72, 0.80, 0.95), moon_disc);
     color = mix(color, vec3f(1.0, 0.92, 0.68), sun_disc);
-    let cloud = cloud_mask(direction);
-    color = mix(color, mix(vec3f(0.18, 0.22, 0.28), vec3f(0.84, 0.88, 0.92), sky.sun_daylight.w), cloud * 0.82);
+    let density = cloud_mask(direction);
+    color = mix(color, cloud_light(density, direction), clamp(density, 0.0, 1.0) * 0.9);
     return vec4f(clamp(color, vec3f(0.0), vec3f(1.0)), 1.0);
 }
