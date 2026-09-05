@@ -1,24 +1,76 @@
-"""网关命令行占位（脚手架，仅解析参数，不实际运行，后续按计划替换）。"""
+"""Mornlea 伙伴 Agent 服务命令行入口。"""
+
+from __future__ import annotations
 
 import argparse
+from collections.abc import Sequence
+from importlib import import_module
+from typing import TYPE_CHECKING, Protocol, cast
+
+from harness import __version__
+
+if TYPE_CHECKING:
+    from harness.config import AgentConfig, ResolvedSecrets
+
+
+class ServeRunner(Protocol):
+    def __call__(self, config: AgentConfig, secrets: ResolvedSecrets) -> int: ...
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """构造网关命令行参数解析器（脚手架占位）。"""
-    parser = argparse.ArgumentParser(description="伙伴 Agent 网关（脚手架占位）")
-    subparsers = parser.add_subparsers(dest="command", required=True)
-    serve = subparsers.add_parser("serve", help="启动网关服务（尚未实现）")
-    serve.add_argument("--config", required=True, help="配置文件路径")
+    parser = argparse.ArgumentParser(
+        prog="mornlea-companion-agent",
+        description="Mornlea companion Agent service",
+    )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    commands = parser.add_subparsers(dest="command", required=True)
+    serve = commands.add_parser("serve", help="启动单 worker Agent 服务")
+    serve.add_argument("--config", required=True, help="严格 v1 YAML 配置路径")
     return parser
 
 
-def main(argv=None) -> int:
-    """解析命令行（脚手架占位，实际运行尚未实现）。"""
-    args = build_parser().parse_args(argv)
-    if args.command == "serve":
-        raise NotImplementedError("脚手架占位：网关运行后续迁入后实现")
-    return 0
+def _load_serve_runner() -> ServeRunner:
+    """延迟导入 app，避免帮助和版本命令初始化服务依赖。"""
+
+    try:
+        module = import_module("app.gateway.app")
+    except ImportError as error:
+        raise RuntimeError("Agent HTTP application is not installed yet") from error
+    runner = vars(module).get("serve")
+    if not callable(runner):
+        raise RuntimeError("Agent HTTP application does not expose serve")
+    return cast(ServeRunner, runner)
 
 
-if __name__ == "__main__":
-    main()
+def main(argv: Sequence[str] | None = None, *, serve_runner: ServeRunner | None = None) -> int:
+    parser = build_parser()
+    try:
+        arguments = parser.parse_args(argv)
+    except SystemExit as error:
+        if error.code == 0:
+            return 0
+        raise
+    if arguments.command == "serve":
+        from harness.config import (
+            ConfigError,
+            load_config,
+            resolve_config_path,
+            resolve_secrets,
+        )
+
+        try:
+            config = load_config(resolve_config_path(arguments.config))
+            secrets = resolve_secrets(config)
+        except ConfigError as error:
+            parser.error(str(error))
+        runner = serve_runner if serve_runner is not None else _load_serve_runner()
+        return runner(config, secrets)
+    parser.error("unknown command")
+    return 2
+
+
+def entrypoint() -> None:
+    raise SystemExit(main())
+
+
+__all__ = ["ServeRunner", "build_parser", "entrypoint", "main"]

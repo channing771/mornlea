@@ -11,10 +11,8 @@ from typing import Any, cast
 
 import httpx
 import pytest
-from pydantic import SecretStr
-
-from mornlea_companion_agent.app import AppComponents, create_app, serve
-from mornlea_companion_agent.config import (
+from harness.agents.companion import DialogueHarness
+from harness.config import (
     AgentConfig,
     HTTPConfig,
     LimitConfig,
@@ -22,9 +20,9 @@ from mornlea_companion_agent.config import (
     ResolvedSecrets,
     StorageConfig,
 )
-from mornlea_companion_agent.domain import adapter_for
-from mornlea_companion_agent.domain.dialogue import DialogueMessage
-from mornlea_companion_agent.domain.http_v1 import (
+from harness.domain import adapter_for
+from harness.domain.dialogue import DialogueMessage
+from harness.domain.http_v1 import (
     DialogueNonterminalRequest,
     DialogueNonterminalResponse,
     DialogueTerminalRequest,
@@ -33,12 +31,14 @@ from mornlea_companion_agent.domain.http_v1 import (
     PlanRequest,
     PlanResponse,
 )
-from mornlea_companion_agent.domain.mcp_v1 import Plan
-from mornlea_companion_agent.domain.memory import LeaseIdentity, MemoryLookup
-from mornlea_companion_agent.harness.dialogue import DialogueHarness
-from mornlea_companion_agent.storage.sqlite_memory import SQLiteMemoryStore
+from harness.domain.mcp_v1 import Plan
+from harness.domain.memory import LeaseIdentity, MemoryLookup
+from harness.store.sqlite_memory import SQLiteMemoryStore
+from pydantic import SecretStr
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+from app.gateway.app import AppComponents, create_app, serve
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CONTRACT_ROOT = REPOSITORY_ROOT / "packages/contracts/companion-agent/http-v1"
 TOKEN = "HTTP_TEST_BEARER_TOKEN_4fbe93"
 
@@ -1366,7 +1366,7 @@ def test_serve_uses_single_worker_h11_without_proxy_or_access_log(
         captured["app"] = app
         captured.update(kwargs)
 
-    monkeypatch.setattr("mornlea_companion_agent.app.uvicorn.run", fake_run)
+    monkeypatch.setattr("app.gateway.app.uvicorn.run", fake_run)
     assert serve(config(tmp_path), secrets()) == 0
     assert captured["host"] == "127.0.0.1"
     assert captured["port"] == 8765
