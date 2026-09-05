@@ -52,7 +52,7 @@ use crate::window::ClientWindow;
 /// v15:avatar 实例扩至 96 字节并新增材质槽与 atlas 采样(容量不变)。
 /// v15 另新增相机可见性两段式出口 `mornlea_client_camera_visible_len`/
 /// `mornlea_client_camera_visible_fetch`(暂与 v15 同门控,版本号提升另行同步)。
-pub const CLIENT_ABI_VERSION: u32 = 15;
+pub const CLIENT_ABI_VERSION: u32 = 16;
 
 /// 调用成功。
 pub const MORNLEA_CLIENT_STATUS_OK: u32 = 0;
@@ -417,11 +417,11 @@ mod tests {
     // 校验拒绝路径:ABI 版本、参数校验与无效句柄。
 
     #[test]
-    fn abi_version_is_fifteen() {
+    fn abi_version_is_sixteen() {
         // v15 在 v14 render world update 表面上叠加 avatar 贴图实例布局与
-        // 相机可见性两段式出口；
+        // 相机可见性两段式出口；v16 与 v15 同表面，仅版本号提升；
         // identity 必须与完整 31 个 versioned exports 同步切换。
-        assert_eq!(mornlea_client_abi_version(), 15);
+        assert_eq!(mornlea_client_abi_version(), 16);
     }
 
     #[test]
@@ -1152,8 +1152,8 @@ mod render_ffi_tests {
                 assert_eq!($call, MORNLEA_CLIENT_STATUS_ABI_VERSION)
             }};
         }
-        let bad = 14;
-        assert_eq!(CLIENT_ABI_VERSION, bad + 1, "被测版本必须是 v15 的直接前代");
+        let bad = 15;
+        assert_eq!(CLIENT_ABI_VERSION, bad + 1, "被测版本必须是 v16 的直接前代");
 
         assert_bad_abi!(unsafe {
             mornlea_client_window_create(bad, 0, 0, std::ptr::null(), 0, std::ptr::null_mut())

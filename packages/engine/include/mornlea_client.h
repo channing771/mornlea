@@ -25,7 +25,7 @@
  * 契约);v6:新增远环 LOD tile 出口(render_upload_lod_tile/drop_lod_tile)。
  * 变基重编:远环两项出口在旧基线上原编号 v5/v6,main 的 water pass
  * (按 material 分流 + 半透明 water pass)占用 v5 后整体顺延一格。 */
-#define MORNLEA_CLIENT_ABI_VERSION 15u
+#define MORNLEA_CLIENT_ABI_VERSION 16u
 
 #define MORNLEA_CLIENT_STATUS_OK 0u
 #define MORNLEA_CLIENT_STATUS_ABI_VERSION 1u
