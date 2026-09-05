@@ -397,6 +397,24 @@
 - **AND** 退役的 `hud-hotbar-health.png`、`hud-survival-feedback.png` 与 `hud-item-name-popup.png` MUST 从 golden 目录移除，golden 目录 MUST 恰好有 24 张 PNG
 - **AND** 集成后全部 24 张 golden 在 compare 模式下 MUST 全部通过既有双阈值
 
+### Requirement: 短草近景基线场景
+
+`grass-closeup` SHALL 为短草提供近景图片基线：确定性手工夹具在草地支撑上立短草列，固定正午与固定近景机位，画面 MUST 呈现至少一株可辨识的短草（交叉斜面、四 quad cutout、上缘透空、贴地生长），经与交互客户端相同的完整呈现链路收敛后无窗口抓取。在场景清单中 `grass-closeup` MUST 紧随 `target-block-feedback` 且先于 `oak-grove`。既有双阈值 MUST 保持不变。
+
+#### Scenario: 近景呈现可辨识短草
+
+- **GIVEN** `grass-closeup` 的确定性夹具已装入客户端镜像（草地支撑上的短草列、固定正午、固定近景机位）
+- **WHEN** 场景完成预热、网格收敛和上传并抓帧
+- **THEN** 图像 MUST 显示至少一株短草，其屏幕矩形内差分像素 MUST 达到显眼下限（相对剔除短草的差分夹具，任一通道差 ≥ 8 的差分像素 ≥ 150）
+- **AND** 该矩形 MUST 不铺满（cutout 透过背景），顶部带 MUST 几乎无差分（上缘透空），底部带 MUST 有差分（贴地叶片）
+
+#### Scenario: 近景场景只走无窗口完整链路
+
+- **GIVEN** `grass-closeup` 使用固定正午与固定近景机位
+- **WHEN** 生成或比对 `grass-closeup`
+- **THEN** 抓帧 MUST 使用与交互客户端相同的完整呈现链路
+- **AND** MUST NOT 创建或聚焦前台游戏窗口，且 MUST 继续使用现有双阈值
+
 ### Requirement: 视觉基线覆盖调试面板
 
 调试面板的呈现（读数区、参数分组段头、可编辑行与只读行对比、选中行高亮）SHALL 由 WebView 组件承担，其结构、可编辑语义与像素验收由 `game-overlay-webview` 的前端组件断言与 `frontend/visual` 部件基线承接。无头抓帧路径的程序化面板渲染路径 MUST NOT 保留：`debug-panel` 场景 MUST 继续存在并装入面板可见态，用于钉住「面板可见不产生任何无头面板像素」这一边界，其 golden SHALL 为同一相位与相机下的纯世界底图。既有双阈值 MUST 保持不变。
