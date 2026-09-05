@@ -67,6 +67,18 @@
 | `hud-chat.png` | `hud-chat` | `HudRoot` 多行聊天。 |
 | `hud-container-open.png` | `hud-container-open` | `HudRoot` 容器打开态翻转构图。 |
 
+## motion（1 个）
+
+motion 演示产物只验呈现、不进比对：`make visual-check` 与 `--update-golden`
+都不感知本目录，`world/` 的 27 张 PNG 纪律也不含它。
+
+| 演示文件 | 场景 | 帧数/时长 | 生成入口 |
+|---|---|---|---|
+| `break-burst.gif` | `break-burst-motion`：第 0 帧注入合成泥土掉落，合成 tick 逐帧 +1（20 tick 粒子寿命 + 首尾各 2 帧余量） | 24 帧，每帧 0.13 秒，循环约 3.1 秒 | `go run ./packages/client/cmd/mornlea --motion-demo testdata/visual-golden/motion/break-burst.gif`（仓库根运行） |
+
+- 演示场景值住 `packages/client/cmd/mornlea/capture/motion_break_burst.go`，不追加进 `captureScenes`。
+- 编码只用标准库 `image/gif`（固定调色板 + 抖动），固定输入逐字节一致。
+
 ## 更新入口与纪律
 
 - 世界基线比对入口为 `make visual-check`，覆盖入口为 `make visual-update`，路径常量为 `capture/capture_image.go` 的 `captureGoldenDir`。

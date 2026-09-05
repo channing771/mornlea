@@ -24,6 +24,9 @@ type mainOptions struct {
 	// 与 application.Options 无关：它只影响 runCapture 的行为，从
 	// runWithDependencies 直接传给 dependencies.runCapture。
 	UpdateGolden bool
+	// MotionDemoPath 非空时走 motion 演示模式：无头装配与抓帧同源，只跑
+	// capture 包的 motion 演示入口并把 GIF 写到该路径，不进场景表与比对。
+	MotionDemoPath string
 	// ConfigPath 是调参配置文件路径；留空表示使用 config.DefaultPath()。
 	ConfigPath string
 	// Dev 为真时启用调试面板（F3 切换）。它只门控面板可用性，不门控配置文件
@@ -50,6 +53,7 @@ func parseMainOptions(args []string) (mainOptions, error) {
 	name := flags.String("name", "", "玩家显示名")
 	capture := flags.String("capture", "", "视觉抓帧输出目录；非空时走无头抓帧模式")
 	updateGolden := flags.Bool("update-golden", false, "把本次抓帧结果写入 golden 基线")
+	motionDemo := flags.String("motion-demo", "", "motion 演示 GIF 输出路径；非空时走无头 motion 演示模式")
 	dev := flags.Bool("dev", false, "启用调试面板（F3 切换）")
 	configPath := flags.String("config", "", "配置文件路径，留空使用默认路径")
 	devCapture := flags.Bool("dev-capture", false, "启用本地开发捕获服务（仅绑定回环地址）")
@@ -69,6 +73,17 @@ func parseMainOptions(args []string) (mainOptions, error) {
 	if *capture != "" && *connect != "" {
 		return mainOptions{}, errors.New("--capture 不能与 --connect 同时使用")
 	}
+	// motion 演示同样独占无头渲染路径并按自己的 tick 节奏驱动帧循环，
+	// 与其余独占路径组合的语义无法定义，直接拒绝而不是让某一方静默胜出。
+	if *motionDemo != "" && *benchmark {
+		return mainOptions{}, errors.New("--motion-demo 不能与 --benchmark 同时使用")
+	}
+	if *motionDemo != "" && *connect != "" {
+		return mainOptions{}, errors.New("--motion-demo 不能与 --connect 同时使用")
+	}
+	if *motionDemo != "" && *capture != "" {
+		return mainOptions{}, errors.New("--motion-demo 不能与 --capture 同时使用")
+	}
 	// --dev-capture 消费交互窗口的合成画面；benchmark 与 capture 无头运行，
 	// 没有窗口可捕获，组合语义无法定义，直接拒绝而不是让一方静默胜出。
 	if *devCapture && *benchmark {
@@ -76,6 +91,9 @@ func parseMainOptions(args []string) (mainOptions, error) {
 	}
 	if *devCapture && *capture != "" {
 		return mainOptions{}, errors.New("--dev-capture 不能与 --capture 同时使用")
+	}
+	if *devCapture && *motionDemo != "" {
+		return mainOptions{}, errors.New("--dev-capture 不能与 --motion-demo 同时使用")
 	}
 	if *updateGolden && *capture == "" {
 		return mainOptions{}, errors.New("--update-golden 只能与 --capture 同时使用")
@@ -123,8 +141,12 @@ func parseMainOptions(args []string) (mainOptions, error) {
 		}(),
 		CaptureDir:   *capture,
 		UpdateGolden: *updateGolden,
-		ConfigPath:   *configPath,
-		Dev:          *dev,
+		// `--update-golden 只能与 --capture 同时使用` 的既有校验已顺带拒绝
+		// `--motion-demo + --update-golden` 组合（此时 capture 为空），这里
+		// 不再重复设限。
+		MotionDemoPath: *motionDemo,
+		ConfigPath:     *configPath,
+		Dev:            *dev,
 
 		DevCapture:     *devCapture,
 		DevCaptureAddr: *devCaptureAddr,
@@ -142,10 +164,10 @@ func resolveConfigPath(options mainOptions) (string, error) {
 
 // resolveConfig 决定本次运行的生效配置。
 //
-// benchmark 与抓帧路径强制使用编译默认值：这两条路径的产出会与基线比对，
-// 若读入本机配置，结论就取决于开发者本机的配置文件内容而非代码。
+// benchmark、抓帧与 motion 演示三条路径强制使用编译默认值：它们的产出会与基线比对
+// 或作为演示产物入库，若读入本机配置，结论就取决于开发者本机的配置文件内容而非代码。
 func resolveConfig(options mainOptions) (config.Config, error) {
-	if options.Application.Benchmark || options.CaptureDir != "" {
+	if options.Application.Benchmark || options.CaptureDir != "" || options.MotionDemoPath != "" {
 		return config.Defaults(), nil
 	}
 	if options.ConfigPath != "" {

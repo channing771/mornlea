@@ -49,6 +49,10 @@ type Options struct {
 	Identity           *network.Identity
 	// CaptureDir 非空时进入视觉抓帧模式：走无头设备，按固定场景抓帧写 PNG。
 	CaptureDir string
+	// MotionDemo 为真时进入 motion 演示模式：与抓帧模式共用同一套无头装配
+	// （离屏设备、固定分辨率、内存存档、无音频），但不跑固定场景表，只由
+	// capture 包的 motion 演示入口连抓 GIF 帧。
+	MotionDemo bool
 	// Dev 为真时启用调试面板（F3 切换）；不影响配置文件是否生效。
 	Dev bool
 	// Render 是渲染相关的生效配置（视距、FOV、鼠标灵敏度），由 packages/client/cmd/mornlea 从
