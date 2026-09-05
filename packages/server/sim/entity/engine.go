@@ -20,11 +20,15 @@ type sessionState struct {
 
 // State 是玩家、伙伴、夜行者、被动牛及其玩法结算状态的唯一 owner。
 type State struct {
-	seed                   int64
-	sessions               map[SessionID]*sessionState
-	companions             map[companion.ID]*companionState
-	hostiles               hostileSet
-	passives               passiveSet
+	seed       int64
+	sessions   map[SessionID]*sessionState
+	companions map[companion.ID]*companionState
+	hostiles   hostileSet
+	passives   passiveSet
+	// passiveDeaths 是本 tick 死亡结算移除的被动牛 ID 集合（ID 升序、有界
+	// ≤32）：发布侧同 tick 取一次投影 despawn 原因位，下次结算先清空，不跨
+	// tick 累积。
+	passiveDeaths          []uint64
 	hostileLight           *blockLightScratch
 	subscriptionsDirty     bool
 	tramplePending         []tramplePendingCell

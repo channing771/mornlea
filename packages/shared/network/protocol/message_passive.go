@@ -11,7 +11,7 @@ import (
 
 // 被动牛三类 S→C 消息（`PassiveSpawn`/`PassiveState`/`PassiveDespawn`）的
 // 固定 wire 契约。字段面与 `contract.PassiveMob` 对齐：spawn 携带出生时的
-// 完整身体，state 携带逐 tick 的身体状态，despawn 只携带 ID。上限与 record
+// 完整身体，state 携带逐 tick 的身体状态，despawn 携带 ID 与移除原因位。上限与 record
 // 步长由 `TestPassiveMessagesWireLimitsAreFrozen` 的字节推导锁死：单包至多
 // 64 条记录（协议上界，与权威侧全服 32 头的容量是两层概念——解码接受 64，
 // 服务端实际发布与客户端镜像按 32 收敛），任何一侧单独调整都必须同步另一
@@ -27,9 +27,9 @@ const (
 	// PassiveStateWireBytes 是单条 state record 的固定编码长度：u64 ID +
 	// 3×f32 position + 3×f32 velocity + f32 yaw + u8 health + u8 放牧标志 = 38。
 	PassiveStateWireBytes = 38
-	// PassiveDespawnWireBytes 是单条 despawn record 的固定编码长度：只携带
-	// u64 ID = 8。
-	PassiveDespawnWireBytes = 8
+	// PassiveDespawnWireBytes 是单条 despawn record 的固定编码长度：u64 ID +
+	// u8 原因位 = 9。
+	PassiveDespawnWireBytes = 9
 	// PassiveSpawnMaxWireBytes/PassiveStateMaxWireBytes/PassiveDespawnMaxWireBytes
 	// 是三类载荷（u64 tick + u8 count + records）的固定 wire 上限，供解码端
 	// 在分配前做总量截断拒绝。
@@ -146,26 +146,51 @@ func (state PassiveState) Validate() error {
 	return nil
 }
 
+// PassiveDespawnVanished/PassiveDespawnDied 是 despawn 原因位的全部合法
+// 取值：0 表示离开订阅范围等非死亡消失，1 表示死亡。解码侧按普通值域校
+// 验，越界即整包拒绝，不做任何兼容解读。
+const (
+	PassiveDespawnVanished uint8 = 0
+	PassiveDespawnDied     uint8 = 1
+)
+
+// PassiveDespawnRecord 是一头被动牛的移除事实：ID 非零，原因位只取上述两
+// 个合法值。record 按 ID 严格升序，每 tick 至多一包。
+type PassiveDespawnRecord struct {
+	ID     uint64
+	Reason uint8
+}
+
+func (record PassiveDespawnRecord) validate() error {
+	if record.ID == 0 {
+		return errors.New("network: passive despawn ID is zero")
+	}
+	if record.Reason != PassiveDespawnVanished && record.Reason != PassiveDespawnDied {
+		return fmt.Errorf("network: passive despawn reason %d is invalid", record.Reason)
+	}
+	return nil
+}
+
 // PassiveDespawn 在被动牛离开订阅范围或死亡时按 ID 移除客户端可见身体。
-// record 只携带 ID，按 ID 严格升序，每 tick 至多一包。
+// record 携带 ID 与原因位，按 ID 严格升序，每 tick 至多一包。
 type PassiveDespawn struct {
 	ServerTick uint64
-	IDs        []uint64
+	Despawns   []PassiveDespawnRecord
 }
 
 func (PassiveDespawn) serverMessage() {}
 func (PassiveDespawn) serverPacket()  {}
 
-// Validate 验证批次数量与 ID 严格升序且非零；任何一条不成立都整体拒绝。
+// Validate 验证批次数量、每条记录与 ID 严格升序且非零；任何一条不成立都整体拒绝。
 func (despawn PassiveDespawn) Validate() error {
-	if len(despawn.IDs) < 1 || len(despawn.IDs) > MaxPassiveRecords {
+	if len(despawn.Despawns) < 1 || len(despawn.Despawns) > MaxPassiveRecords {
 		return fmt.Errorf("network: passive despawn count is outside 1..%d", MaxPassiveRecords)
 	}
-	for index, id := range despawn.IDs {
-		if id == 0 {
-			return fmt.Errorf("network: passive despawn %d ID is zero", index)
+	for index := range despawn.Despawns {
+		if err := despawn.Despawns[index].validate(); err != nil {
+			return fmt.Errorf("network: passive despawn %d: %w", index, err)
 		}
-		if index > 0 && despawn.IDs[index-1] >= id {
+		if index > 0 && despawn.Despawns[index-1].ID >= despawn.Despawns[index].ID {
 			return errors.New("network: passive despawns are not strictly sorted")
 		}
 	}

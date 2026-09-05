@@ -13,15 +13,17 @@ import (
 )
 
 // publishPassives 是 publishSession 的被动牛段。passives 是 tick 末的全量
-// 值快照（Engine 集合秩序，即 ID 升序），由 `publishWithChats` 每 tick 取一
-// 次并供全部会话共享。固定次序为先 despawn、再 spawn、后 state：镜像容量先
-// 释放后占用，新可见个体只在 spawn tick 携带完整身体（state 从下一 tick 开
-// 始，与夜行者发布的「新 spawn 跳过当 tick state」语义一致）。任一包校验失
-// 败或入队失败都关闭该会话并中止本段，绝不留下半更新的会话镜像。
+// 值快照（Engine 集合秩序，即 ID 升序），deaths 是同 tick 的死亡 ID 集合，
+// 均由 `publishWithChats` 每 tick 取一次并供全部会话共享。固定次序为先
+// despawn、再 spawn、后 state：镜像容量先释放后占用，新可见个体只在 spawn
+// tick 携带完整身体（state 从下一 tick 开始，与夜行者发布的「新 spawn 跳过
+// 当 tick state」语义一致）。任一包校验失败或入队失败都关闭该会话并中止本
+// 段，绝不留下半更新的会话镜像。
 func (server *Server) publishPassives(
 	current *session,
 	tick uint64,
 	passives []contract.PassiveMob,
+	deaths []uint64,
 ) bool {
 	if len(passives) == 0 && len(current.visiblePassives) == 0 {
 		return true
@@ -40,17 +42,30 @@ func (server *Server) publishPassives(
 		}
 	}
 
-	// 1) despawn：镜像里登记、当前不可见的个体。死亡与远离消失的个体已从
-	// Engine 集合移除，走同一条「镜像有而可见截面无」的判据，不需要单独通道。
-	despawned := make([]uint64, 0, len(current.visiblePassives))
+	// 1) despawn：镜像里登记、当前不可见的个体。死亡且同时出视野的个体记
+	// 死亡原因（死亡集合命中即 1），其余（单纯离开视野）记消失。
+	despawned := make([]network.PassiveDespawnRecord, 0, len(current.visiblePassives))
 	for id := range current.visiblePassives {
 		if passiveIndexOf(visible, id) < 0 {
-			despawned = append(despawned, id)
+			reason := network.PassiveDespawnVanished
+			if slices.Contains(deaths, id) {
+				reason = network.PassiveDespawnDied
+			}
+			despawned = append(despawned, network.PassiveDespawnRecord{ID: id, Reason: reason})
 		}
 	}
-	slices.Sort(despawned)
+	slices.SortFunc(despawned, func(left, right network.PassiveDespawnRecord) int {
+		switch {
+		case left.ID < right.ID:
+			return -1
+		case left.ID > right.ID:
+			return 1
+		default:
+			return 0
+		}
+	})
 	if len(despawned) != 0 {
-		despawn := network.PassiveDespawn{ServerTick: tick, IDs: despawned}
+		despawn := network.PassiveDespawn{ServerTick: tick, Despawns: despawned}
 		if err := despawn.Validate(); err != nil {
 			server.closePublicationSessionLocked(current, err)
 			return false
@@ -59,8 +74,8 @@ func (server *Server) publishPassives(
 			server.closePublicationSessionLocked(current, errSessionOutboxFull)
 			return false
 		}
-		for _, id := range despawned {
-			delete(current.visiblePassives, id)
+		for _, record := range despawned {
+			delete(current.visiblePassives, record.ID)
 		}
 	}
 

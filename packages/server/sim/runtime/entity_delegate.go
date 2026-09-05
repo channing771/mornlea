@@ -160,6 +160,12 @@ func (engine *Engine) PassiveMobs() []PassiveMob {
 	return engine.entities.PassiveMobs()
 }
 
+// PassiveDeaths 返回本 tick 死亡结算移除的被动牛 ID（升序）：与 `PassiveMobs`
+// 同 tick 同源，供发布侧投影 despawn 原因位。调用方只读消费。
+func (engine *Engine) PassiveDeaths() []uint64 {
+	return engine.entities.PassiveDeaths()
+}
+
 func (engine *Engine) PlanHostileChase(
 	id uint64,
 	hasTarget bool,

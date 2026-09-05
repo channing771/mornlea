@@ -7,14 +7,16 @@ import (
 	"github.com/channing771/mornlea/packages/shared/core"
 )
 
-// ProtocolVersion 是当前唯一支持的协议版本；v34 在 `PassiveState` record
+// ProtocolVersion 是当前唯一支持的协议版本；v35 在 `PassiveDespawn` record
+// 尾部追加 1 字节原因位（u8，仅 0/1 合法，0=消失/出视野，1=死亡，紧跟 ID
+// 之后；越界拒绝），record 步长由 8 变为 9；v34 在 `PassiveState` record
 // 尾部追加 1 字节放牧标志（u8，仅 0/1 合法，紧跟 `Health` 之后；越界拒绝），
 // record 步长由 37 变为 38；v33 在 Play S→C 尾部追加
 // ID 26/27/28 的三类被动牛消息 `PassiveSpawn`/`PassiveState`/
 // `PassiveDespawn`（每类 `ServerTick` u64 + count u8 + ≤64 条按 ID 严格升序
 // 的 record；spawn 携带 ID/dimension/position/yaw/health，state 携带
-// ID/position/velocity/yaw/health/grazing，despawn 只携带 ID），并维护旧客户端握手
-// 拒绝语义；v32 在 Play S→C 尾部追加
+// ID/position/velocity/yaw/health/grazing，despawn 携带 ID 与原因位），
+// 并维护旧客户端握手拒绝语义；v32 在 Play S→C 尾部追加
 // ID 25 的 10-byte 私有 `CombatHit`（`ServerTick` u64 + `Damage` u8 +
 // `TargetKind` u8，little-endian，固定 10 字节，要求 tick>0、damage 1..20、
 // kind 仅 `CombatTargetPlayer`/`CombatTargetHostile`/`CombatTargetPassive`，拒绝截断、尾随、unknown kind、wrong state 及 ID 26）；
@@ -26,6 +28,8 @@ import (
 // despawn 只携带 ID），并维护旧客户端握手拒绝语义；v29 在 `PlayerState` 尾部追加
 // `SaturationZero` 饱和度归零提示位（紧跟 `Hunger` 之后、`WorldTimeTicks` 之前）；v28 在 `PlayerInput` 尾部追加 `Sprinting` 疾跑位（紧跟 `Eating` 之后）；v27 新增 Play C→S ID 14 `BoneMeal`，v26 新增 Play S→C ID 20 `PlaceBlockSucceeded`，v25 只扩展既有 `Mining` 位语义不新增字段，v24 上线权威饥饿 Eating/Hunger 并拒绝 v23 及更早登录。
 //
+// v35 是纯追加：只在 `PassiveDespawn` record 尾部新增 1 字节原因位，不新增
+// packet、不改动既有包 ID、不新增 `RejectReason`；旧版握手拒绝是既有语义。
 // v34 是纯追加：只在 `PassiveState` record 尾部新增 1 字节放牧标志，不新增
 // packet、不改动既有包 ID、不新增 `RejectReason`；旧版握手拒绝是既有语义。
 // v33 是纯追加：只在 Play S→C 尾部新增 ID 26/27/28 的被动牛三类消息，
@@ -48,7 +52,7 @@ import (
 // v21 在 `PlayerState` 末尾追加 2 字节权威氧气（只发给玩家本人的权威
 // 值）；v20 追加 8 个流体方块编号（只扩方块 ID 集合，wire 形状不变），流体
 // 变更走既有区块变更通道（design.md D8）。
-const ProtocolVersion uint32 = 34
+const ProtocolVersion uint32 = 35
 
 // State 标识连接当前允许交换的 packet 集合。
 type State uint8

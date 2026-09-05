@@ -109,6 +109,12 @@ func (state *State) PassiveMobs() []PassiveMob {
 	return (&engineContext{State: state}).PassiveMobs()
 }
 
+// PassiveDeaths 返回本 tick 死亡结算移除的被动牛 ID（升序）：与 `PassiveMobs`
+// 同形的窄查询，供发布侧同 tick 投影 despawn 原因位。调用方只读消费。
+func (state *State) PassiveDeaths() []uint64 {
+	return state.passiveDeaths
+}
+
 func (state *State) AppendSessionDrops(
 	id SessionID,
 	dst []DropSnapshot,

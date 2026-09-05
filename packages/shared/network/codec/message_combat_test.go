@@ -57,8 +57,8 @@ func TestCombatHitRegistryIsFrozen(t *testing.T) {
 	if _, err := decodeServerControlPayload(protocol.StatePlay, 29, nil); !errors.Is(err, errUnknownPacketID) {
 		t.Fatalf("Play S→C ID 29 解码错误=%v，想要 %v", err, errUnknownPacketID)
 	}
-	if protocol.ProtocolVersion != 34 {
-		t.Fatalf("协议版本 = %d，想要 34", protocol.ProtocolVersion)
+	if protocol.ProtocolVersion != 35 {
+		t.Fatalf("协议版本 = %d，想要 35", protocol.ProtocolVersion)
 	}
 }
 

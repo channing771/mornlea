@@ -38,7 +38,29 @@ func passiveStateMessage() PassiveState {
 }
 
 func passiveDespawnMessage() PassiveDespawn {
-	return PassiveDespawn{ServerTick: 0x0102030405060708, IDs: []uint64{5, 8, 11}}
+	return PassiveDespawn{ServerTick: 0x0102030405060708, Despawns: []PassiveDespawnRecord{
+		{ID: 5, Reason: PassiveDespawnVanished},
+		{ID: 8, Reason: PassiveDespawnDied},
+		{ID: 11, Reason: PassiveDespawnVanished},
+	}}
+}
+
+// TestPassiveDespawnCarriesReason 锁定原因位的搬运与值域：死亡与消失可分辨，
+// 越界原因整包拒绝。
+func TestPassiveDespawnCarriesReason(t *testing.T) {
+	despawn := PassiveDespawn{ServerTick: 7, Despawns: []PassiveDespawnRecord{
+		{ID: 5, Reason: PassiveDespawnVanished},
+		{ID: 8, Reason: PassiveDespawnDied},
+	}}
+	if err := ValidateServerPacket(StatePlay, despawn); err != nil {
+		t.Fatalf("合法原因位被拒绝: %v", err)
+	}
+	bad := PassiveDespawn{ServerTick: 7, Despawns: []PassiveDespawnRecord{
+		{ID: 5, Reason: 2},
+	}}
+	if err := ValidateServerPacket(StatePlay, bad); err == nil {
+		t.Fatalf("原因位 2 被接受，想要整体拒绝")
+	}
 }
 
 // TestPassiveMessageIDsAreFrozen 钉死被动牛三类消息的最终编号：S→C 26/27/28
@@ -123,9 +145,10 @@ func TestPassiveMessagesValidateRejectsInvalidRecords(t *testing.T) {
 			ID: 1, Position: mgl32.Vec3{1, 1, 1}, Velocity: mgl32.Vec3{0, 0, 0}, Health: 10, Grazing: 2,
 		}}}},
 		{"state count 0", PassiveState{ServerTick: 1}},
-		{"despawn 重复 ID", PassiveDespawn{ServerTick: 1, IDs: []uint64{5, 5}}},
-		{"despawn 逆序 ID", PassiveDespawn{ServerTick: 1, IDs: []uint64{8, 5}}},
-		{"despawn 零 ID", PassiveDespawn{ServerTick: 1, IDs: []uint64{0}}},
+		{"despawn 重复 ID", PassiveDespawn{ServerTick: 1, Despawns: []PassiveDespawnRecord{{ID: 5}, {ID: 5}}}},
+		{"despawn 逆序 ID", PassiveDespawn{ServerTick: 1, Despawns: []PassiveDespawnRecord{{ID: 8}, {ID: 5}}}},
+		{"despawn 零 ID", PassiveDespawn{ServerTick: 1, Despawns: []PassiveDespawnRecord{{ID: 0}}}},
+		{"despawn 原因位非 0/1", PassiveDespawn{ServerTick: 1, Despawns: []PassiveDespawnRecord{{ID: 5, Reason: 2}}}},
 		{"despawn count 0", PassiveDespawn{ServerTick: 1}},
 	}
 	for _, test := range tests {

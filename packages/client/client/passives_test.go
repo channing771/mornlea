@@ -74,10 +74,10 @@ func TestPassivesLatestWinsMirror(t *testing.T) {
 	}
 
 	// 未知 ID 的 despawn 丢弃；已知 ID 的 despawn 移除镜像。
-	if err := passives.ApplyDespawn(network.PassiveDespawn{ServerTick: 102, IDs: []uint64{8}}); err != nil {
+	if err := passives.ApplyDespawn(network.PassiveDespawn{ServerTick: 102, Despawns: []network.PassiveDespawnRecord{{ID: 8}}}); err != nil {
 		t.Fatalf("未知 ID ApplyDespawn: %v", err)
 	}
-	if err := passives.ApplyDespawn(network.PassiveDespawn{ServerTick: 102, IDs: []uint64{7}}); err != nil {
+	if err := passives.ApplyDespawn(network.PassiveDespawn{ServerTick: 102, Despawns: []network.PassiveDespawnRecord{{ID: 7}}}); err != nil {
 		t.Fatalf("ApplyDespawn: %v", err)
 	}
 	if got := len(passives.AppendPresentations(nil)); got != 0 {

@@ -601,11 +601,11 @@ var captureScenes = []captureScene{
 	{
 		// passive-graze 是放牧吃草的无窗口昼间 capture 场景：固定正午（6000
 		// tick）的开阔草地，2 头牛经客户端被动镜像夹具站在草地上——其中 1 头
-		// 经与权威消息相同的 state 入口置放牧位（低头，牛头俯仰为呈现侧固定
-		// 下压角），另 1 头保持常态作对照；低头牛吻部身前的那格经方块夹具摆
-		// 成泥土（吃草结算把草方块变为泥土的前后对照），周围仍是草地。本场景
-		// 不含掉落物与任何随机器速度变化的读数，无需 PinVolatile。夹具与注入
-		// 细节见 capture_passive_graze.go。
+		// 经与权威消息相同的 state 入口置放牧位（低头，牛头绕颈轴俯转、吻部
+		// 贴草），另 1 头保持常态作对照（闲时点头相位经 PinVolatile 钉死为常
+		// 量，与机器速度无关）；低头牛吻部身前的那格经方块夹具摆成泥土（吃草
+		// 结算把草方块变为泥土的前后对照），周围仍是草地。本场景不含掉落物。
+		// 夹具与注入细节见 capture_passive_graze.go。
 		//
 		// 排序约束：本场景 MUST 紧随 passive-herd、先于 water-surface-slope
 		//（完整相邻链为 sword-combat、hostile-mob、passive-herd、
@@ -616,6 +616,7 @@ var captureScenes = []captureScene{
 		WarmupFrames: 8,
 		Prepare:      preparePassiveGrazeDay,
 		Apply:        applyPassiveGrazeCaptureState,
+		PinVolatile:  pinPassiveGrazeVolatile,
 	},
 	{
 		// 水景一：水面之上俯瞰。覆盖「水面斜坡」与「水面之下的地形」——
@@ -823,6 +824,11 @@ func RunCapture(app SceneApplication, dir string, updateGolden bool) error {
 		if err := captureOne(app, dir, scene, updateGolden); err != nil {
 			errs = append(errs, fmt.Errorf("场景 %s: %w", scene.Name, err))
 		}
+	}
+	// GIF 动态基线与 PNG 场景表共用同一个已预热 application（世界时间仍冻结）：
+	// 新基线只进独立目录，既有 PNG 逐字节不动。
+	if err := RunPassiveDeathGIFs(app, dir, updateGolden); err != nil {
+		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
 }

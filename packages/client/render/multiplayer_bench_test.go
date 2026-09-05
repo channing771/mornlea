@@ -49,7 +49,7 @@ func BenchmarkRemoteAvatarNameTag(b *testing.B) {
 			b.Fatal(err)
 		}
 		backgrounds, glyphs := tagRenderer.FrameStreams()
-		avatarStream = encoder.EncodeAvatarInstances(avatarStream[:0], avatars)
+		avatarStream = encoder.EncodeAvatarInstances(avatarStream[:0], 0, avatars)
 		billboardBytes = EncodeBillboardCameraBytes(billboardBytes[:0], billboard)
 		if len(backgrounds) == 0 || len(glyphs) == 0 || len(avatarStream) == 0 {
 			b.Fatal("empty frame streams")

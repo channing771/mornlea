@@ -92,12 +92,19 @@ func compareEntityKeys(left, right EntityKey) int {
 	return bytes.Compare(left.ID[:], right.ID[:])
 }
 
-// Avatar 是远端玩家或伙伴渲染所需的插值后姿态。
+// Avatar 是远端玩家或伙伴渲染所需的插值后姿态。`Roll` 与 `Flash` 只服务
+// 被动牛的死亡保留呈现（侧倒滚转角与向红插值系数，由死亡相位函数赋值）；
+// `Swing` 是四肢摆动角（弧度，有符号基准值，由呈现速度差分门控后赋值，见
+// `AvatarSwingAngle`）；其余身份域保持零值，零值时牛实例变换与颜色与变更前
+// 逐字节一致。
 type Avatar struct {
 	Key      EntityKey
 	Position mgl32.Vec3
 	Yaw      float32
 	Pitch    float32
+	Roll     float32
+	Flash    float32
+	Swing    float32
 }
 
 type avatarPart struct {
@@ -158,16 +165,90 @@ func buildOrderedAvatarParts(dst []avatarPart, ordered []Avatar) []avatarPart {
 			Mul4(mgl32.HomogRotate3DX(avatar.Pitch)).
 			Mul4(mgl32.Translate3D(0, 0.2, 0)).
 			Mul4(mgl32.Scale3D(0.6, 0.4, 0.6))
+		// 四肢摆动绕肩/髋转轴（手臂肩高 1.4、腿髋高 0.7），对角反相；`Swing`
+		// 为零时 `swungLimb` 直通旧链，逐字节一致。
+		swing := avatar.Swing
 		dst = append(dst,
 			avatarPart{transform: head, color: avatarShade(base, 1.12), material: avatarMaterialSolid},
 			avatarCuboid(root, mgl32.Vec3{0, 1.05, 0}, mgl32.Vec3{0.4, 0.7, 0.25}, base),
-			avatarCuboid(root, mgl32.Vec3{-0.25, 1.05, 0}, mgl32.Vec3{0.1, 0.7, 0.25}, avatarShade(base, 0.82)),
-			avatarCuboid(root, mgl32.Vec3{0.25, 1.05, 0}, mgl32.Vec3{0.1, 0.7, 0.25}, avatarShade(base, 0.82)),
-			avatarCuboid(root, mgl32.Vec3{-0.1, 0.35, 0}, mgl32.Vec3{0.18, 0.7, 0.25}, avatarShade(base, 0.82)),
-			avatarCuboid(root, mgl32.Vec3{0.1, 0.35, 0}, mgl32.Vec3{0.18, 0.7, 0.25}, avatarShade(base, 0.82)),
+			swungLimb(root, mgl32.Vec3{-0.25, 1.4, 0}, mgl32.Vec3{-0.25, 1.05, 0}, mgl32.Vec3{0.1, 0.7, 0.25},
+				mgl32.HomogRotate3DX(swing), swing, avatarShade(base, 0.82), avatarMaterialSolid),
+			swungLimb(root, mgl32.Vec3{0.25, 1.4, 0}, mgl32.Vec3{0.25, 1.05, 0}, mgl32.Vec3{0.1, 0.7, 0.25},
+				mgl32.HomogRotate3DX(-swing), -swing, avatarShade(base, 0.82), avatarMaterialSolid),
+			swungLimb(root, mgl32.Vec3{-0.1, 0.7, 0}, mgl32.Vec3{-0.1, 0.35, 0}, mgl32.Vec3{0.18, 0.7, 0.25},
+				mgl32.HomogRotate3DX(-swing), -swing, avatarShade(base, 0.82), avatarMaterialSolid),
+			swungLimb(root, mgl32.Vec3{0.1, 0.7, 0}, mgl32.Vec3{0.1, 0.35, 0}, mgl32.Vec3{0.18, 0.7, 0.25},
+				mgl32.HomogRotate3DX(swing), swing, avatarShade(base, 0.82), avatarMaterialSolid),
 		)
 	}
 	return dst
+}
+
+// avatarStrideLength 是四肢摆动的固定步幅（格/周期）：走满一个完整正弦周期
+// （左右各一步）的前进行进距离取 2 格；全速行走（约 0.086 格/tick）约 23
+// tick 一周期，半速则约 46 tick——步频由距离决定，脚底不再打滑。
+const avatarStrideLength = float32(2.0)
+
+// avatarSwingAmplitude 是四肢摆动的振幅（弧度）：0.35 约 20°，感知下限之上、
+// 夸张之下。
+const avatarSwingAmplitude = float32(0.35)
+
+// avatarSwingSpeedThreshold 是摆动的速度门限（格/tick）：全速行走约 0.086
+// （`WalkSpeed` 4.3 格/秒 ÷ 50 tick），门限取约十七分之一，静止与插值抖动回
+// 中，加速爬升一两拍即起摆。
+const avatarSwingSpeedThreshold = float32(0.005)
+
+// AvatarSwingAngle 由累积行进距离、实体相位 ID 与呈现速度派生四肢摆动角：阈
+// 值下回中（不原地踏步），否则相位按距离除以步幅推进（`avatarStrideLength`），
+// 同距离异速同相位；ID 只贡献固定错相，同速同频。距离累积由调用方在呈现态里
+// 维护（见 `InstanceEncoder` 的差分历史），本函数是纯函数（禁用墙钟与 tick
+// 计数），不读任何权威字段。
+func AvatarSwingAngle(distance float32, phaseID uint64, speed float32) float32 {
+	if speed < avatarSwingSpeedThreshold {
+		return 0
+	}
+	phase := 2*math.Pi*float64(distance/avatarStrideLength) +
+		2*math.Pi*float64(phaseID%32)/32
+	return avatarSwingAmplitude * float32(math.Sin(phase))
+}
+
+// swingPhaseID 把实体键折成摆动相位 ID：FNV-1a 混合身份域与全部 16 字节，跨
+// 身份域同 bytes 的键相位不同，同 `(tick, ID)` 重放逐帧相同。
+func swingPhaseID(key EntityKey) uint64 {
+	const (
+		offset64 = uint64(14695981039346656037)
+		prime64  = uint64(1099511628211)
+	)
+	hash := offset64
+	hash ^= uint64(key.Kind)
+	hash *= prime64
+	for _, value := range key.ID {
+		hash ^= uint64(value)
+		hash *= prime64
+	}
+	return hash
+}
+
+// swungLimb 把四肢 cuboid 绕关节转轴摆动：摆动角为零时与旧链（`root` 平移
+// 到中心再缩放）逐字节一致，非零时绕转轴旋转。转轴、旋转方向与正负由调用方
+// 按对角步态供给，本函数只做装配。
+func swungLimb(root mgl32.Mat4, pivot, center, size mgl32.Vec3, rot mgl32.Mat4, swing float32, color [4]float32, material uint32) avatarPart {
+	if swing == 0 {
+		return avatarPart{
+			transform: root.Mul4(mgl32.Translate3D(center[0], center[1], center[2])).
+				Mul4(mgl32.Scale3D(size[0], size[1], size[2])),
+			color:    color,
+			material: material,
+		}
+	}
+	return avatarPart{
+		transform: root.Mul4(mgl32.Translate3D(pivot[0], pivot[1], pivot[2])).
+			Mul4(rot).
+			Mul4(mgl32.Translate3D(center[0]-pivot[0], center[1]-pivot[1], center[2]-pivot[2])).
+			Mul4(mgl32.Scale3D(size[0], size[1], size[2])),
+		color:    color,
+		material: material,
+	}
 }
 
 // hostilePalette 是夜行者的原创固定调色：暗青基底（蓝绿主导）与灰紫头部
@@ -195,13 +276,20 @@ func appendHostileAvatarParts(dst []avatarPart, avatar Avatar) []avatarPart {
 		Mul4(mgl32.HomogRotate3DX(avatar.Pitch)).
 		Mul4(mgl32.Translate3D(0, 0.25, 0)).
 		Mul4(mgl32.Scale3D(0.72, 0.5, 0.72))
+	// 四肢与玩家同形的对角步态，转轴按夜行者自己的比例（肩高 1.405、髋高
+	// 0.55）取值；零摆动直通旧链。
+	swing := avatar.Swing
 	dst = append(dst,
 		avatarPart{transform: head, color: avatarShade(hostileHeadColor, hostileHeadShade), material: avatarMaterialSolid},
 		avatarCuboid(root, mgl32.Vec3{0, 1.0, 0}, mgl32.Vec3{0.34, 0.55, 0.22}, hostileBaseColor),
-		avatarCuboid(root, mgl32.Vec3{-0.23, 0.98, 0}, mgl32.Vec3{0.1, 0.85, 0.2}, avatarShade(hostileBaseColor, hostileLimbShade)),
-		avatarCuboid(root, mgl32.Vec3{0.23, 0.98, 0}, mgl32.Vec3{0.1, 0.85, 0.2}, avatarShade(hostileBaseColor, hostileLimbShade)),
-		avatarCuboid(root, mgl32.Vec3{-0.09, 0.275, 0}, mgl32.Vec3{0.15, 0.55, 0.2}, avatarShade(hostileBaseColor, hostileLimbShade)),
-		avatarCuboid(root, mgl32.Vec3{0.09, 0.275, 0}, mgl32.Vec3{0.15, 0.55, 0.2}, avatarShade(hostileBaseColor, hostileLimbShade)),
+		swungLimb(root, mgl32.Vec3{-0.23, 1.405, 0}, mgl32.Vec3{-0.23, 0.98, 0}, mgl32.Vec3{0.1, 0.85, 0.2},
+			mgl32.HomogRotate3DX(swing), swing, avatarShade(hostileBaseColor, hostileLimbShade), avatarMaterialSolid),
+		swungLimb(root, mgl32.Vec3{0.23, 1.405, 0}, mgl32.Vec3{0.23, 0.98, 0}, mgl32.Vec3{0.1, 0.85, 0.2},
+			mgl32.HomogRotate3DX(-swing), -swing, avatarShade(hostileBaseColor, hostileLimbShade), avatarMaterialSolid),
+		swungLimb(root, mgl32.Vec3{-0.09, 0.55, 0}, mgl32.Vec3{-0.09, 0.275, 0}, mgl32.Vec3{0.15, 0.55, 0.2},
+			mgl32.HomogRotate3DX(-swing), -swing, avatarShade(hostileBaseColor, hostileLimbShade), avatarMaterialSolid),
+		swungLimb(root, mgl32.Vec3{0.09, 0.55, 0}, mgl32.Vec3{0.09, 0.275, 0}, mgl32.Vec3{0.15, 0.55, 0.2},
+			mgl32.HomogRotate3DX(swing), swing, avatarShade(hostileBaseColor, hostileLimbShade), avatarMaterialSolid),
 	)
 	return dst
 }
@@ -222,22 +310,89 @@ func PassiveGrazeHeadPitch(grazing bool) float32 {
 	return 0
 }
 
+// passiveIdleNodPeriodTicks 是闲时点头的正弦周期（权威 tick）：64 tick 约
+// 3 秒，40 tick 窗内必含极值，起伏肉眼可辨。
+const passiveIdleNodPeriodTicks = 64
+
+// passiveIdleNodAmplitude 是闲时点头的振幅（弧度）：0.09 约 5°，小幅不抢戏。
+const passiveIdleNodAmplitude = float32(0.09)
+
+// PassiveIdleNodPitch 由权威 tick 与牛 ID 派生闲时点头俯仰：慢速小幅正弦纯
+// 函数（掉落旋转同先例，禁用墙钟）；同 `(tick, ID)` 重放逐帧相同，ID 参与错
+// 相。只服务非放牧、非死亡的牛，调用方负责门控，本函数不读任何权威字段。
+func PassiveIdleNodPitch(tick, id uint64) float32 {
+	phase := 2 * math.Pi * float64((tick+id*7)%passiveIdleNodPeriodTicks) / passiveIdleNodPeriodTicks
+	return passiveIdleNodAmplitude * float32(math.Sin(phase))
+}
+
+// PassiveDeathTicks 是被动牛死亡保留的权威 tick 数：保留体在 T+19 仍在、
+// T+20 移除。渲染侧拥有该常量的呈现解释权；客户端镜像侧的同值常量与本值
+// 由应用装配包的边界测试钉住一致（见 `app` 的死亡保留边界测试）。
+const PassiveDeathTicks = 20
+
+// PassiveDeathPhase 由 despawn 权威 tick、牛 ID 与当前 tick 派生死亡相位：
+// 返回侧倒滚转角（0→90°）与向红插值系数（0→1）。与掉落物动画相位同形——
+// 纯函数，不读墙钟、帧间隔或本地随机数；同 `(T, ID)` 序列重放逐帧相同；ID
+// 参与红闪错相，避免同 tick 死亡的个体整齐划一。死亡当 tick 返回零值，调用
+// 方零值分支因此与变更前逐字节一致。
+func PassiveDeathPhase(deathTick, id, nowTick uint64) (roll, flash float32) {
+	var elapsed uint64
+	if nowTick > deathTick {
+		elapsed = nowTick - deathTick
+	}
+	if elapsed > PassiveDeathTicks {
+		elapsed = PassiveDeathTicks
+	}
+	progress := float32(elapsed) / PassiveDeathTicks
+	roll = progress * math.Pi / 2
+	offset := float32(id%8) * (math.Pi / 4)
+	shimmer := 0.5 + 0.5*float32(math.Sin(float64(progress*4*math.Pi+offset)))
+	flash = progress * (0.45 + 0.55*shimmer)
+	return roll, flash
+}
+
 // appendPassiveAvatarParts 追加一头牛的 6 个 cuboid：横向躯干 + 4 短腿 +
 // 头部的四足体型，与夜行者直立骨架一眼可辨。身体锚定在站位 Y（脚底），
 // 俯仰只作用于牛头（`Avatar.Pitch` 由放牧位映射而来，复用既有的头部俯仰
 // 通道）：牛面朝 +X，俯仰绕侧轴 Z 把面朝压向前下方；`Pitch` 为零时旋转即
 // 单位阵，头部链与引入放牧位之前逐字节一致。各面采样材质贴图而非纯色：头部
 // 采牛头层，其余五部件采牛皮层；颜色通道被着色器忽略，填中性白。
+// 死亡保留体另由 `Avatar.Roll`（绕面朝轴 X 的整体滚转，0→90° 侧倒）与
+// `Avatar.Flash`（中性白向红插值）修饰：两者零值时分支跳过，变换与颜色与
+// 变更前逐字节一致。
 func appendPassiveAvatarParts(dst []avatarPart, avatar Avatar) []avatarPart {
 	root := mgl32.Translate3D(avatar.Position[0], avatar.Position[1], avatar.Position[2]).Mul4(
 		mgl32.HomogRotate3DY(avatar.Yaw),
 	)
+	if avatar.Roll != 0 {
+		root = root.Mul4(mgl32.HomogRotate3DX(avatar.Roll))
+	}
 	white := [4]float32{1, 1, 1, 1}
+	if avatar.Flash != 0 {
+		blend := min(max(avatar.Flash, 0), 1)
+		white = [4]float32{1, 1 - 0.85*blend, 1 - 0.9*blend, 1}
+	}
 	hide := uint32(assets.LayerCowHide)
 	headLayer := uint32(assets.LayerCowHead)
+	// 四腿绕髋（腿顶 y=0.5）前后摆动：牛面朝 +X，摆动轴即侧轴 Z；对角同相、
+	// 邻腿反相。死亡（`Roll`/`Flash`）与放牧低头（`Pitch` 恰为下压角）时摆
+	// 动让路——闲时点头的小俯仰与玩家的观察俯仰不门控。
+	swing := avatar.Swing
+	if avatar.Roll != 0 || avatar.Flash != 0 || avatar.Pitch == passiveGrazeHeadPitch {
+		swing = 0
+	}
+	// 牛头绕颈轴俯转：零俯仰时与旧链逐字节一致（直通分支），非零时头心绕颈
+	// 点摆动下压，吻部（头包围盒最低点）落在站立平面上 0.5 格以内；旧链绕头
+	// 心自转，任何角度都够不到 0.5（头心高 1.0、半对角仅 0.32）。
 	head := root.Mul4(mgl32.Translate3D(0.7, 1.0, 0)).
 		Mul4(mgl32.HomogRotate3DZ(avatar.Pitch)).
 		Mul4(mgl32.Scale3D(0.45, 0.45, 0.45))
+	if avatar.Pitch != 0 {
+		head = root.Mul4(mgl32.Translate3D(0.35, 0.85, 0)).
+			Mul4(mgl32.HomogRotate3DZ(avatar.Pitch)).
+			Mul4(mgl32.Translate3D(0.35, 0.15, 0)).
+			Mul4(mgl32.Scale3D(0.45, 0.45, 0.45))
+	}
 	dst = append(dst,
 		avatarPart{transform: head, color: white, material: headLayer},
 		avatarPart{
@@ -246,30 +401,14 @@ func appendPassiveAvatarParts(dst []avatarPart, avatar Avatar) []avatarPart {
 			color:    white,
 			material: hide,
 		},
-		avatarPart{
-			transform: root.Mul4(mgl32.Translate3D(-0.4, 0.25, -0.18)).
-				Mul4(mgl32.Scale3D(0.18, 0.5, 0.18)),
-			color:    white,
-			material: hide,
-		},
-		avatarPart{
-			transform: root.Mul4(mgl32.Translate3D(-0.4, 0.25, 0.18)).
-				Mul4(mgl32.Scale3D(0.18, 0.5, 0.18)),
-			color:    white,
-			material: hide,
-		},
-		avatarPart{
-			transform: root.Mul4(mgl32.Translate3D(0.4, 0.25, -0.18)).
-				Mul4(mgl32.Scale3D(0.18, 0.5, 0.18)),
-			color:    white,
-			material: hide,
-		},
-		avatarPart{
-			transform: root.Mul4(mgl32.Translate3D(0.4, 0.25, 0.18)).
-				Mul4(mgl32.Scale3D(0.18, 0.5, 0.18)),
-			color:    white,
-			material: hide,
-		},
+		swungLimb(root, mgl32.Vec3{-0.4, 0.5, -0.18}, mgl32.Vec3{-0.4, 0.25, -0.18}, mgl32.Vec3{0.18, 0.5, 0.18},
+			mgl32.HomogRotate3DZ(swing), swing, white, hide),
+		swungLimb(root, mgl32.Vec3{-0.4, 0.5, 0.18}, mgl32.Vec3{-0.4, 0.25, 0.18}, mgl32.Vec3{0.18, 0.5, 0.18},
+			mgl32.HomogRotate3DZ(-swing), -swing, white, hide),
+		swungLimb(root, mgl32.Vec3{0.4, 0.5, -0.18}, mgl32.Vec3{0.4, 0.25, -0.18}, mgl32.Vec3{0.18, 0.5, 0.18},
+			mgl32.HomogRotate3DZ(-swing), -swing, white, hide),
+		swungLimb(root, mgl32.Vec3{0.4, 0.5, 0.18}, mgl32.Vec3{0.4, 0.25, 0.18}, mgl32.Vec3{0.18, 0.5, 0.18},
+			mgl32.HomogRotate3DZ(swing), swing, white, hide),
 	)
 	return dst
 }

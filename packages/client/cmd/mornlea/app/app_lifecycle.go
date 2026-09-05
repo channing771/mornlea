@@ -136,4 +136,7 @@ func (a *Application) resetSessionOwnedState() {
 	a.inventorySource = -1
 	a.itemDrops.Reset()
 	a.clientSessionClosed = true
+	// 摆动行进距离是纯呈现累积：随会话一并清零，重连后按新消息流重新累积，
+	// 不把旧会话的相位带进新会话。
+	a.entityEncoder.ResetLocomotion()
 }

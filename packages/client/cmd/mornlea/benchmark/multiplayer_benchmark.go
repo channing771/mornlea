@@ -145,7 +145,7 @@ func (probe *multiplayerClientProbe) measureGPUCompletion(app BenchmarkApplicati
 			return err
 		}
 		viewProj := app.Camera().ViewProj()
-		avatarStream := (&render.InstanceEncoder{}).EncodeAvatarInstances(nil, avatars)
+		avatarStream := (&render.InstanceEncoder{}).EncodeAvatarInstances(nil, 0, avatars)
 		billboard := benchmarkBillboardCamera(app)
 		backgrounds, glyphs := app.NameTagRenderer().FrameStreams()
 		frame := client.RenderFrame{
