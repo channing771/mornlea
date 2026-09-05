@@ -167,7 +167,7 @@ companion-agent-check:
 
 companion-agent-integration:
 	cd $(AGENT_DIR) && uv sync --locked
-	cd $(AGENT_DIR) && uv run ruff format --check companion/tests/integration && uv run ruff check companion/tests/integration
+	cd $(AGENT_DIR) && uv run ruff format --check tests/integration && uv run ruff check tests/integration
 	cd $(AGENT_DIR) && uv run mypy
 	MORNLEA_AGENT_PYTHON=$(AGENT_PYTHON) MORNLEA_COMPANION_AGENT_PYTHON=$(COMPANION_AGENT_PYTHON) $(GO) test ./packages/shared/companion ./packages/server/server \
 		-run 'CompanionAgent.*Integration|CrossLanguage|MCP.*Integration' -race -count=1 -timeout=120s

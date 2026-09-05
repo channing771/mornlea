@@ -22,7 +22,7 @@ Mornlea 是使用 Go 1.26 编写的独立体素游戏，Go 源码经根 `go.work
 - Rust engine、client 与 C ABI：`packages/engine/AGENTS.md`
 - 文档结构、长期说明和测试组织文档：`docs/AGENTS.md`
 - 脚本、发布与自动化：`scripts/AGENTS.md`
-- Python 伙伴 Agent 服务：`packages/agent/companion/AGENTS.md`
+- Python 伙伴 Agent 服务：`packages/agent/AGENTS.md`
 - OpenSpec 项目上下文与产物规则：`openspec/config.yaml`
 
 ## 开始工作前

@@ -45,5 +45,5 @@ line-length = 100
 select = ["B", "E", "F", "I", "UP"]
 
 [tool.ruff.lint.isort]
-# `app` 为工作区成员包；`mornlea_companion_agent` 为待后续清理的旧包名，暂保留其首方分类。
-known-first-party = ["app", "mornlea_companion_agent"]
+# `app` 为工作区成员包，保持首方分类；旧 `mornlea_companion_agent` 已随布局收尾删除。
+known-first-party = ["app"]

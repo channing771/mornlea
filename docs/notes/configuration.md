@@ -67,35 +67,16 @@
 
 `ai` 缺失、为 `null`，或 `companions` 缺失/为空时不要求 endpoint、credential 或超时。Go 仍会先做 metadata-only existence probe：没有 `companions.ai` 时不 Load/Save/create；已有文件时会加载并把原 active 记录同步退休为 v5 tombstone，随后保持 Agent/MCP 关闭。
 
-Python 服务读取另一份 strict v1 YAML，未知字段、重复 key、多 worker、非持久 SQLite 路径或非法 limit 都会拒绝启动。相对 `sqlite_path` 按该 YAML 所在目录解析；`workers` 固定为 1。`model_calls`、`tool_calls`、`timeout_seconds` 默认分别为 3、4、30，硬上限分别为 5、8、60：
-
-```yaml
-config_version: v1
-http:
-  bind: 127.0.0.1
-  port: 8080
-  workers: 1
-  bearer_token_env: MORNLEA_AGENT_TOKEN
-storage:
-  sqlite_path: companion-agent.sqlite3
-provider:
-  base_url: http://127.0.0.1:11434/v1
-  model: local-model
-  api_key_env: MORNLEA_PROVIDER_KEY
-limits:
-  model_calls: 3
-  tool_calls: 4
-  timeout_seconds: 30
-```
+Python 服务读取另一份 strict v1 YAML，未知字段、重复 key、多 worker、非持久 SQLite 路径或非法 limit 都会拒绝启动。相对 `sqlite_path` 按该 YAML 所在目录解析；`workers` 固定为 1。`model_calls`、`tool_calls`、`timeout_seconds` 默认分别为 3、4、30，硬上限分别为 5、8、60。完整模板与注释见根 [`config.example.yaml`](../../config.example.yaml)，键说明以该文件为准，本文不再复制第二份示例。
 
 环境变量只保存 secret 值，配置文件只写变量名；以下占位符必须替换，不能提交真实 secret：
 
 ```bash
 export MORNLEA_AGENT_TOKEN='replace-with-random-local-token'
 export MORNLEA_PROVIDER_KEY='replace-with-provider-key'
-cd packages/agent/companion
+cd packages/agent
 uv sync --locked
-uv run mornlea-companion-agent serve --config /absolute/path/to/agent.yaml
+uv run mornlea-agent serve --config /absolute/path/to/agent.yaml
 ```
 
 先启动 Python 单 worker 并确认带认证的 `/readyz` 成功，再启动内置或专用 Go 服务端；两边的 `MORNLEA_AGENT_TOKEN` 值必须一致。Go 不会自动拉起或监护 Python。Agent HTTP 与 Go MCP 都只监听 loopback，不支持远程 MCP、反向代理或 LAN 暴露。`/livez` 只表示进程存活；`/readyz` 失败通常表示配置、provider adapter 或 SQLite 未就绪。Agent、MCP 或 provider 故障不会停止世界 tick：Planner 稳定失败为 `PlannerUnavailable`，Dialogue 跳过；终态 memory 未确认时不广播模型台词。
