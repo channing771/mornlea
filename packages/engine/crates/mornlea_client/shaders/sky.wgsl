@@ -79,6 +79,36 @@ fn cloud_hash(macro_cell: vec2i, macro_offset: u32) -> u32 {
     return hash_cell(vec3u(bitcast<u32>(macro_cell.x) - macro_offset, bitcast<u32>(macro_cell.y), 0u));
 }
 
+fn cloud_value_noise(p: vec2f) -> f32 {
+    let cell = vec2i(floor(p));
+    let frac = fract(p);
+    let fade = frac * frac * (3.0 - 2.0 * frac);
+    let a = f32(hash_cell(vec3u(bitcast<u32>(cell.x), bitcast<u32>(cell.y), 0u)) & 255u) / 255.0;
+    let b = f32(hash_cell(vec3u(bitcast<u32>(cell.x + 1), bitcast<u32>(cell.y), 0u)) & 255u) / 255.0;
+    let c = f32(hash_cell(vec3u(bitcast<u32>(cell.x), bitcast<u32>(cell.y + 1), 0u)) & 255u) / 255.0;
+    let d = f32(hash_cell(vec3u(bitcast<u32>(cell.x + 1), bitcast<u32>(cell.y + 1), 0u)) & 255u) / 255.0;
+    return mix(mix(a, b, fade.x), mix(c, d, fade.x), fade.y);
+}
+
+const CLOUD_OCTAVES: u32 = 3u; // 钉死为 3，不得参数化
+
+fn cloud_density(intersection: vec2f) -> f32 {
+    // 基准格 16 block（与既有 cell 口径一致），macro 每 64 block 覆盖调制
+    let base = (intersection - vec2f(sky.camera_cloud.w, 0.0)) / 16.0;
+    var fbm = 0.0;
+    var amp = 0.55;
+    var freq = 1.0;
+    for (var o = 0u; o < CLOUD_OCTAVES; o++) {
+        fbm += amp * cloud_value_noise(base * freq);
+        amp *= 0.5;
+        freq *= 2.03;
+    }
+    let macro_cell = vec2i(floor(base / 4.0));
+    let cover = f32((cloud_hash(macro_cell, sky.cloud_macro_x) >> 4u) & 255u) / 255.0;
+    let threshold = mix(0.62, 0.38, cover); // macro 覆盖高处阈值低、云多
+    return smoothstep(threshold, threshold + 0.25, fbm);
+}
+
 fn cloud_mask(direction: vec3f) -> f32 {
     if (sky.camera_cloud.y >= 192.0 || direction.y <= 0.001) {
         return 0.0;
@@ -88,16 +118,8 @@ fn cloud_mask(direction: vec3f) -> f32 {
         return 0.0;
     }
     let intersection = sky.camera_cloud.xz + direction.xz * distance;
-    let cell = vec2i(floor((intersection - vec2f(sky.camera_cloud.w, 0.0)) / 16.0));
-    let macro_cell = vec2i(floor(vec2f(cell) / 4.0));
-    let hash = cloud_hash(macro_cell, sky.cloud_macro_x);
-    if ((hash & 3u) == 0u) {
-        return 0.0;
-    }
-    let center = vec2i(1 + i32((hash >> 2u) & 1u), 1 + i32((hash >> 3u) & 1u));
-    let local = cell - macro_cell * 4;
-    let filled = abs(local.x - center.x) + abs(local.y - center.y) <= 1;
-    return select(0.0, smoothstep(0.02, 0.08, direction.y), filled);
+    let d = cloud_density(intersection);
+    return select(0.0, smoothstep(0.02, 0.08, direction.y) * smoothstep(0.0, 0.15, d), d > 0.003);
 }
 
 @fragment
