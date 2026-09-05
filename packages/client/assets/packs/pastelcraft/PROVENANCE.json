@@ -67,56 +67,6 @@
       "sha256": "fc3c9f5bf88d196ef2f557b5035bc725462dd7861ed643e73406215d9b758316"
     },
     {
-      "destination": "textures/crack_0.png",
-      "source": "assets/minecraft/textures/block/destroy_stage_0.png",
-      "sha256": "b9da7e4ae6fecd3463c77a99c5501bf24200757180ebe8ab636d5231b62b3b76"
-    },
-    {
-      "destination": "textures/crack_1.png",
-      "source": "assets/minecraft/textures/block/destroy_stage_1.png",
-      "sha256": "819e76b5895e03770d444bfdd021806747b8f53a3c4502386441f54754fe26dc"
-    },
-    {
-      "destination": "textures/crack_2.png",
-      "source": "assets/minecraft/textures/block/destroy_stage_2.png",
-      "sha256": "50458cf86550c51bc0687fdce0f7e09f215ab2bc545449db31422206314f3e13"
-    },
-    {
-      "destination": "textures/crack_3.png",
-      "source": "assets/minecraft/textures/block/destroy_stage_3.png",
-      "sha256": "fd6033ca4a80e2b28cef8ac510f76b55b4d80fa8e7991e92e746c15729ba042e"
-    },
-    {
-      "destination": "textures/crack_4.png",
-      "source": "assets/minecraft/textures/block/destroy_stage_4.png",
-      "sha256": "5b99d5ae54def6b9f66a1909d726f13a39b4c6e6b97ae19dd5e8e643d06467be"
-    },
-    {
-      "destination": "textures/crack_5.png",
-      "source": "assets/minecraft/textures/block/destroy_stage_5.png",
-      "sha256": "d0037c8df64990fc05e3b958cf790478443ebb635c6812d6af59637a015ecd8f"
-    },
-    {
-      "destination": "textures/crack_6.png",
-      "source": "assets/minecraft/textures/block/destroy_stage_6.png",
-      "sha256": "fc80401f32523592208324c8f4ee3757fb3022656c3ead05229a9f9eaaaa84e0"
-    },
-    {
-      "destination": "textures/crack_7.png",
-      "source": "assets/minecraft/textures/block/destroy_stage_7.png",
-      "sha256": "63c849b38e8301a4e72e9d63a34f91725faa69e29e8b4589316b52fc00cb4f3d"
-    },
-    {
-      "destination": "textures/crack_8.png",
-      "source": "assets/minecraft/textures/block/destroy_stage_8.png",
-      "sha256": "b209b497047ed9c4f97bfd578f004ccd4ccf4937e9584737367326759d640df5"
-    },
-    {
-      "destination": "textures/crack_9.png",
-      "source": "assets/minecraft/textures/block/destroy_stage_9.png",
-      "sha256": "5d92ccc8531ee2b7a618e8233c78610c0c3a0fb38ea6842fbd68206469274eba"
-    },
-    {
       "destination": "textures/dirt.png",
       "source": "assets/minecraft/textures/block/dirt.png",
       "sha256": "944dbed5c954448daeebeacc99df500a73877e3df38f5af13b512d7040119c9c"

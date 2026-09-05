@@ -193,16 +193,16 @@ func breakBurstHash(id core.DropID) uint32 {
 }
 
 // breakBurstVelocity 由掉落物 ID 散列派生第 index 粒的初速：8 粒方位角均分整圆
-// （散列只给整体旋转），纵向分量恒为正即上半球，径向与纵向的档位取自散列位。
+// （散列只给整体旋转），纵向分量恒为负即下半球向外下坠，径向与纵向的档位取自散列位。
 func breakBurstVelocity(id core.DropID, index int) mgl32.Vec3 {
 	hash := breakBurstHash(id)
 	azimuth := (float32(index) + float32(hash&7)/8) * (math.Pi / 4)
 	spread := (hash >> (4 * uint(index))) & 15
 	radius := 0.05 + 0.01*float32(spread&3)
-	up := 0.16 + 0.03*float32(spread>>2)
+	down := -(0.16 + 0.03*float32(spread>>2))
 	return mgl32.Vec3{
 		radius * float32(math.Cos(float64(azimuth))),
-		up,
+		down,
 		radius * float32(math.Sin(float64(azimuth))),
 	}
 }

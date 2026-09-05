@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"math"
 	"slices"
 	"testing"
 
@@ -56,15 +57,19 @@ func TestBreakBurstSpawnsEightSameColorParts(t *testing.T) {
 	}
 }
 
-// TestBreakBurstVelocitiesAreDistinctAndUpperHemisphere 钉住 8 粒初速两两不同
-// 且全部指向上半球：方向完全由掉落物 ID 散列派生，不依赖随机与时间。
-func TestBreakBurstVelocitiesAreDistinctAndUpperHemisphere(t *testing.T) {
+// TestBreakBurstVelocitiesAreDistinctAndLowerHemisphere 钉住 8 粒初速两两不同
+// 且全部指向下半球向外：方向完全由掉落物 ID 散列派生，不依赖随机与时间；
+// 纵向为负（下坠），水平径向分量保留（向外散开）。
+func TestBreakBurstVelocitiesAreDistinctAndLowerHemisphere(t *testing.T) {
 	id := core.DropID{Dimension: core.Overworld, Slot: 3, Generation: 1}
 	seen := make(map[mgl32.Vec3]struct{}, 8)
 	for index := range 8 {
 		velocity := breakBurstVelocity(id, index)
-		if velocity.Y() <= 0 {
-			t.Fatalf("粒子 %d 初速 Y = %v，想要上半球（>0）", index, velocity.Y())
+		if velocity.Y() >= 0 {
+			t.Fatalf("粒子 %d 初速 Y = %v，想要下半球（<0）", index, velocity.Y())
+		}
+		if horizontal := float32(math.Hypot(float64(velocity.X()), float64(velocity.Z()))); horizontal <= 0 {
+			t.Fatalf("粒子 %d 水平径向 = %v，想要向外分量（>0）", index, horizontal)
 		}
 		if _, dup := seen[velocity]; dup {
 			t.Fatalf("粒子 %d 初速 %v 与之前粒子重复", index, velocity)

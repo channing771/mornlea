@@ -53,8 +53,6 @@ Mornlea selected and renamed a subset without pixel transformations.
 - `crafting_table_top.png` → `workbench_top`
 - `crafting_table_side.png` → `workbench_side`（单层侧面槽位只取 side）
 - `torch.png` → `torch`
-- `destroy_stage_0.png`..`destroy_stage_9.png` → `crack_0`..`crack_9`
-  （`-sheet.png` 变体未用）
 
 ## 未映射槽位（程序化回退）
 
@@ -71,6 +69,7 @@ Mornlea selected and renamed a subset without pixel transformations.
 - `short_grass`（上游为灰度图，需生物群系染色；Mornlea 无染色路径，直接使用呈近白色难辨，退回程序化绿色）
 - `grass_top`（上游为灰度图，需生物群系染色；Mornlea 无染色路径，直接使用呈灰白色，退回程序化绿色）
 - `leaves`（上游为灰度图，需生物群系染色；Mornlea 无染色路径，直接使用呈灰白色，退回程序化绿色）
+- `crack_0`..`crack_9`（上游 `destroy_stage_0..9.png` 是灰度 overlay 图，需乘法混合染色；Mornlea 裂纹按直接像素采样，直接使用呈灰白色、与程序化暖棕裂纹贴合度差，退回程序化）
 - `bed_foot_south`/`bed_foot_west`/`bed_foot_north`/`bed_foot_east`/
   `bed_head_south`/`bed_head_west`/`bed_head_north`/`bed_head_east`
  （`entity/bed/*.png` 是 64×64 实体 atlas，非 16×16）
