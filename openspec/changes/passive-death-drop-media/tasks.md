@@ -39,3 +39,5 @@
 - [ ] 7.3 引诱朝向权威化：跟随（含止步）每 tick 面向持麦玩家（`packages/server/sim/entity`；验证 `-race` 全绿）
 - [ ] 7.4 牛皮奶油风重绘：`cow_hide`/`cow_head` 程序化重画（柔和高光/规范斑块/五官/蹄色），几何层号不动（`packages/client/assets`；验证 `-race` 全绿）
 - [ ] 7.5 基线再生与确认：全部 Avatar 相关 PNG/GIF 按预期变更逐图确认后再生（`packages/client/cmd/mornlea/capture`；验证 capture 测试 + `make visual-check`，GIF 逐帧目检）
+- [ ] 7.6 步频位移协调：摆动相位按行进距离推进（固定步幅），速度差分驱动，静止回中（`packages/client/render`；验证 `-race` 全绿 + GIF 目检步态）
+- [ ] 7.7 牛肉竖立旋转：薄片竖直绕 Y 旋转 + 浮沉，不平躺（`packages/client/render`；验证 `-race` 全绿 + GIF 目检）
