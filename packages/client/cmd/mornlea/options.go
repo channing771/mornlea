@@ -27,6 +27,7 @@ type mainOptions struct {
 	// MotionDemoPath 非空时走 motion 演示模式：无头装配与抓帧同源，只跑
 	// capture 包的 motion 演示入口并把 GIF 写到该路径，不进场景表与比对。
 	MotionDemoPath string
+	MotionScene    string
 	// ConfigPath 是调参配置文件路径；留空表示使用 config.DefaultPath()。
 	ConfigPath string
 	// Dev 为真时启用调试面板（F3 切换）。它只门控面板可用性，不门控配置文件
@@ -53,6 +54,7 @@ func parseMainOptions(args []string) (mainOptions, error) {
 	name := flags.String("name", "", "玩家显示名")
 	capture := flags.String("capture", "", "视觉抓帧输出目录；非空时走无头抓帧模式")
 	updateGolden := flags.Bool("update-golden", false, "把本次抓帧结果写入 golden 基线")
+	motionScene := flags.String("motion-scene", "break-burst", "motion 场景：break-burst/avatar-walk/drop-scatter/drop-density")
 	motionDemo := flags.String("motion-demo", "", "motion 演示 GIF 输出路径；非空时走无头 motion 演示模式")
 	dev := flags.Bool("dev", false, "启用调试面板（F3 切换）")
 	configPath := flags.String("config", "", "配置文件路径，留空使用默认路径")
@@ -75,6 +77,12 @@ func parseMainOptions(args []string) (mainOptions, error) {
 	}
 	// motion 演示同样独占无头渲染路径并按自己的 tick 节奏驱动帧循环，
 	// 与其余独占路径组合的语义无法定义，直接拒绝而不是让某一方静默胜出。
+	if *motionScene != "break-burst" && *motionScene != "avatar-walk" && *motionScene != "drop-scatter" && *motionScene != "drop-density" {
+		return mainOptions{}, errors.New("未知 --motion-scene")
+	}
+	if *motionDemo == "" && *motionScene != "break-burst" {
+		return mainOptions{}, errors.New("--motion-scene 需要 --motion-demo")
+	}
 	if *motionDemo != "" && *benchmark {
 		return mainOptions{}, errors.New("--motion-demo 不能与 --benchmark 同时使用")
 	}
@@ -145,6 +153,7 @@ func parseMainOptions(args []string) (mainOptions, error) {
 		// `--motion-demo + --update-golden` 组合（此时 capture 为空），这里
 		// 不再重复设限。
 		MotionDemoPath: *motionDemo,
+		MotionScene:    *motionScene,
 		ConfigPath:     *configPath,
 		Dev:            *dev,
 

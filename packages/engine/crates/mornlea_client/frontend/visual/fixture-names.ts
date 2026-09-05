@@ -4,6 +4,11 @@
 // 一个双引号 kebab-case 名称加逗号，闭于 `] as const;`。
 export const fixtureNames = [
   "panel-inventory",
+  "panel-inventory-empty",
+  "panel-inventory-full",
+  "items-all",
+  "hud-hotbar-first",
+  "hud-hotbar-last",
   "panel-workbench",
   "panel-chest",
   "panel-furnace",

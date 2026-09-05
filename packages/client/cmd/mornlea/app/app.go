@@ -162,7 +162,6 @@ type Application struct {
 	itemDrops         *client.ItemDrops
 	itemDropInstances []render.ItemDrop
 	inventoryOpen     bool
-	inventorySource   int
 	gameToken         uint64
 	gameIdentity      string
 	gameSource        *client.UIGameSlotRef

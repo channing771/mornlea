@@ -12,9 +12,9 @@
 
 ## 4. 掉落散列
 
-- [ ] 4.1 测试先行实现同格稳定分配、有界随机扰动与高密度缩放分层；覆盖 1/4/16/32 堆、重排、旋转/浮动包围体、支撑与死亡渐显，运行 render 和 app 掉落定点 race。
+- [x] 4.1 测试先行实现同格稳定分配、有界随机扰动与高密度缩放分层；覆盖 1/4/16/32 堆、重排、旋转/浮动包围体、支撑与死亡渐显，运行 render 和 app 掉落定点 race。
 
 ## 5. 整体验证与文档
 
 - [ ] 5.1 按 visual-baseline skill 补全前端所有面板与物品 fixtures、人物/掉落 world 和运动演示，查看产物后更新允许的基线，记录完整命令；同步局部指南及必要当前文档，确认无生产 GPU 面板 fallback。
-- [ ] 5.2 执行 gofmt、make frontend-check、make rust-check、make test-race、六模块 go vet（make dev-check）、openspec validate --all --strict --no-interactive 与整分支独立审查；将结果和裁决写入 ledger，所有真实失败必须修复后复核，不推送或合并。
+- [ ] 5.2 执行 gofmt、make frontend-check、make test-race、make dev-check（六模块 vet/short 与 Rust fmt/clippy/tests，覆盖等价 rust-check 命令且不重复运行）、openspec validate --all --strict --no-interactive 与整分支独立审查；将结果和裁决写入 ledger，所有真实失败必须修复后复核，不推送或合并。

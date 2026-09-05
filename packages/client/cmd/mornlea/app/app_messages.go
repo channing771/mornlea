@@ -97,7 +97,6 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 				if a.containerOpen() {
 					a.clearContainerUI()
 				} else {
-					a.inventorySource = -1
 				}
 			}
 			if result.ResetView {
@@ -148,7 +147,6 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			// 否则两个镜像会同时报告 opened，点击分流会用错容器。
 			a.chest.Reset()
 			if !opened || previous != state.Furnace {
-				a.inventorySource = -1
 			}
 			a.inventoryOpen = true
 			if a.window != nil {
@@ -166,7 +164,6 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 			a.hudPush.Mark()
 			a.furnace.Reset()
 			if !opened || previous != state.Chest {
-				a.inventorySource = -1
 			}
 			a.inventoryOpen = true
 			if a.window != nil {
@@ -189,7 +186,6 @@ func (a *Application) DrainServerMessages(maxMessages int) {
 				// 结束既有容器查看关系（sim 侧语义），镜像同步互斥。
 				a.furnace.Reset()
 				a.chest.Reset()
-				a.inventorySource = -1
 				a.inventoryOpen = true
 				if a.window != nil {
 					a.window.SetCursorCaptured(false)

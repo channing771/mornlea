@@ -13,9 +13,9 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "check": "pnpm typecheck && pnpm test && pnpm build",
-    "visual-check": "tsc --noEmit -p visual/tsconfig.json && node visual/visual.mjs check",
-    "visual-typecheck": "tsc --noEmit -p visual/tsconfig.json",
-    "visual-update": "node visual/visual.mjs update"
+    "visual-check": "node visual/export-catalog.mjs && tsc --noEmit -p visual/tsconfig.json && node visual/visual.mjs check",
+    "visual-typecheck": "node visual/export-catalog.mjs && tsc --noEmit -p visual/tsconfig.json",
+    "visual-update": "node visual/export-catalog.mjs && tsc --noEmit -p visual/tsconfig.json && node visual/visual.mjs update"
   },
   "dependencies": {
     "pixel-retroui": "^2.1.0",

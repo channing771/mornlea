@@ -59,3 +59,5 @@ packages/engine/crates/mornlea_client/frontend/node_modules/
 packages/engine/crates/mornlea_client/frontend/visual-dist/
 scripts/agents/.npm-cache/
 /packages/tools/agent-board/web/dist/
+
+/packages/engine/crates/mornlea_client/frontend/visual/item-catalog.generated.json

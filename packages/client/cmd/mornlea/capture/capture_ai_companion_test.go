@@ -58,7 +58,6 @@ func TestCaptureAICompanionClearsPriorClientState(t *testing.T) {
 		t.Fatal(err)
 	}
 	app.SetInventoryOpen(true)
-	app.SetInventorySource(7)
 	if app.Panel() != nil {
 		app.Panel().SetVisible(true)
 	}
@@ -110,9 +109,9 @@ func TestCaptureAICompanionClearsPriorClientState(t *testing.T) {
 		t.Fatalf("旧聊天缓存未清空: buffer=%+v lines=%+v count=%d id=%d",
 			app.ChatEventBuffer(), app.ChatLines(), app.ChatLineCount(), app.FormattedChatEventID())
 	}
-	if _, confirmed := app.Inventory().State(); confirmed || app.InventoryOpen() || app.InventorySource() != -1 {
-		t.Fatalf("inventory 未重置: confirmed=%v open=%v source=%d",
-			confirmed, app.InventoryOpen(), app.InventorySource())
+	if _, confirmed := app.Inventory().State(); confirmed || app.InventoryOpen() {
+		t.Fatalf("inventory 未重置: confirmed=%v open=%v",
+			confirmed, app.InventoryOpen())
 	}
 	if app.Panel().Visible() {
 		t.Fatal("panel 未隐藏")

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"image/png"
+	"os"
 	"strings"
 	"testing"
 
@@ -138,4 +139,39 @@ func TestHUDGameAndRecipesUseCachedIconsWithinBridgeLimit(t *testing.T) {
 		t.Fatalf("最坏面板 JSON=%d bytes，越过桥容量 %d", len(payload), client.MaxUIEnvelopeBytes)
 	}
 	t.Logf("最大图标物品=%d URI=%d bytes；最坏面板 JSON=%d bytes", maxItem, len(maxMetadata.Icon), len(payload))
+}
+
+// `TestExportUIVisualCatalog` 为离线 UI 夹具导出生产目录；每次视觉入口均重新生成。
+func TestExportUIVisualCatalog(t *testing.T) {
+	output := os.Getenv("MORNLEA_UI_VISUAL_CATALOG")
+	if output == "" {
+		t.Skip("未请求视觉目录导出")
+	}
+	catalog, err := newItemIconCatalog(assets.NewRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := make([]client.UIHudSlot, 0, int(core.ItemIDMax)-1)
+	for item := core.ItemID(1); item < core.ItemIDMax; item++ {
+		limit, _ := core.ItemStackLimit(item)
+		durability, _ := core.ItemMaxDurability(item)
+		stack := core.ItemStack{Item: item, Count: limit, Durability: durability / 2}
+		if !stack.Valid() {
+			t.Fatalf("非法视觉物品堆 %+v", stack)
+		}
+		items = append(items, client.NewUIGameSlot(stack, &catalog))
+	}
+	app, _ := newInteractiveTestApplication(t)
+	app.itemIcons = catalog
+	recipes := app.buildGameUIState().Recipes
+	data, err := json.Marshal(struct {
+		Items   []client.UIHudSlot      `json:"items"`
+		Recipes [10]client.UIGameRecipe `json:"recipes"`
+	}{Items: items, Recipes: recipes})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(output, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
 }

@@ -143,12 +143,11 @@ func NewServerTeardownApplicationForTest(serverDone chan error, onRelease func()
 // 呈现状态。
 func NewPresentationApplicationForTest() *Application {
 	return &Application{
-		remotePlayers:   client.NewRemotePlayers(),
-		companions:      &client.Companions{},
-		chatEvents:      &client.ChatEvents{},
-		itemDrops:       client.NewItemDrops(),
-		inventorySource: -1,
-		panel:           &panelState{},
+		remotePlayers: client.NewRemotePlayers(),
+		companions:    &client.Companions{},
+		chatEvents:    &client.ChatEvents{},
+		itemDrops:     client.NewItemDrops(),
+		panel:         &panelState{},
 	}
 }
 

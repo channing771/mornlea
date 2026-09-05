@@ -73,7 +73,7 @@ func TestRunMotionDemoUsesOneApplicationWithoutCapture(t *testing.T) {
 				}
 				return application.NewCloseTrackedApplicationForTest(func() { closed++ }), nil
 			},
-			runMotionDemo: func(_ *application.Application, path string) error {
+			runMotionDemo: func(_ *application.Application, path, _ string) error {
 				demonstrated++
 				gotPath = path
 				return nil
@@ -118,10 +118,24 @@ func TestRunMotionDemoPropagatesError(t *testing.T) {
 			newApplication: func(application.Options) (*application.Application, error) {
 				return application.NewCloseTrackedApplicationForTest(func() {}), nil
 			},
-			runMotionDemo: func(*application.Application, string) error { return want },
+			runMotionDemo: func(*application.Application, string, string) error { return want },
 		},
 	)
 	if !errors.Is(err, want) {
 		t.Fatalf("error = %v，want %v", err, want)
+	}
+}
+
+func TestMotionSceneSelector(t *testing.T) {
+	for _, scene := range []string{"break-burst", "avatar-walk", "drop-scatter", "drop-density"} {
+		opts, err := parseMainOptions([]string{"--motion-demo", "x.gif", "--motion-scene", scene})
+		if err != nil || opts.MotionScene != scene {
+			t.Fatalf("scene=%s opts=%+v err=%v", scene, opts, err)
+		}
+	}
+	for _, args := range [][]string{{"--motion-scene", "avatar-walk"}, {"--motion-demo", "x.gif", "--motion-scene", "unknown"}} {
+		if _, err := parseMainOptions(args); err == nil {
+			t.Fatalf("接受非法选择 %v", args)
+		}
 	}
 }

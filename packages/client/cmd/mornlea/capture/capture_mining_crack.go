@@ -35,7 +35,6 @@ func applyMiningCrackCaptureState(app SceneApplication) error {
 	}
 	app.SetCenter(application.CameraChunk(app.Camera().Pos))
 	app.SetInventoryOpen(false)
-	app.SetInventorySource(-1)
 	app.SetBlockTargetReset(false)
 	if app.Panel() != nil {
 		app.Panel().SetVisible(false)

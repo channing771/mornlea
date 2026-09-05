@@ -81,21 +81,6 @@ type captureScene struct {
 	PinVolatile func(SceneApplication) error
 }
 
-// captureContainerInventory 返回箱子和熔炉场景共用的 36 格已确认背包，刻意在
-// 快捷栏与背包两段都放入物品，让两个容器画面能同时审查统一栏位与来源轮廓。
-func captureContainerInventory() core.Inventory {
-	inventory := core.Inventory{}
-	inventory.Hotbar.Selected = 4
-	inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 64}
-	inventory.Hotbar.Slots[2] = core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: 40}
-	inventory.Hotbar.Slots[4] = core.ItemStack{Item: core.ItemChest, Count: 3}
-	inventory.Backpack[0] = core.ItemStack{Item: core.ItemDirt, Count: 48}
-	inventory.Backpack[2] = core.ItemStack{Item: core.ItemCoal, Count: 12}
-	inventory.Backpack[3] = core.ItemStack{Item: core.ItemRawIron, Count: 8}
-	inventory.Backpack[4] = core.ItemStack{Item: core.ItemIronIngot, Count: 9}
-	return inventory
-}
-
 // captureSettled 判定抓帧收敛。近环半部沿用 mesher stats + pending uploads；
 // lodBusy 是远环调度器的 Busy() 计数（未接线 LOD 的运行传 0）。vistaPending
 // 是菜单全景管线的未完成工作量（非菜单相位恒为 0）。远环 tile 与全景区块
@@ -167,170 +152,6 @@ var captureScenes = []captureScene{
 				Position:    app.Camera().Pos.Add(mgl32.Vec3{0, 0, -6}),
 			}
 			return app.RemotePlayers().Apply(spawn)
-		},
-	},
-	{
-		Name:         "inventory-crafting",
-		WarmupFrames: 8,
-		Apply: func(app SceneApplication) error {
-			app.SetWorldTimeTicks(6000)
-			app.Camera().Yaw = 0
-			app.Camera().Pitch = -0.25
-			app.RemotePlayers().Reset()
-			app.Furnace().Reset()
-			app.Chest().Reset()
-			app.SetInventoryOpen(true)
-			// 已选来源格取统一视图格 12（背包格 3）：来源轮廓落在背包区，
-			// 与下一场景落在网格区的轮廓互为对照。
-			app.SetInventorySource(12)
-
-			inventory := core.Inventory{}
-			inventory.Hotbar.Selected = 1
-			inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 64}
-			inventory.Hotbar.Slots[1] = core.ItemStack{Item: core.ItemGrass, Count: 32}
-			inventory.Hotbar.Slots[2] = core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: 40}
-			inventory.Hotbar.Slots[3] = core.ItemStack{Item: core.ItemFurnace, Count: 2}
-			inventory.Hotbar.Slots[4] = core.ItemStack{Item: core.ItemChest, Count: 1}
-			inventory.Backpack[0] = core.ItemStack{Item: core.ItemDirt, Count: 48}
-			inventory.Backpack[1] = core.ItemStack{Item: core.ItemStoneBrick, Count: 16}
-			inventory.Backpack[2] = core.ItemStack{Item: core.ItemCoal, Count: 12}
-			inventory.Backpack[3] = core.ItemStack{Item: core.ItemRawIron, Count: 8}
-			inventory.Backpack[4] = core.ItemStack{Item: core.ItemIronIngot, Count: 9}
-			inventory.Backpack[5] = core.ItemStack{Item: core.ItemOakLog, Count: 1}
-			inventory.Backpack[6] = core.ItemStack{Item: core.ItemGlass, Count: 4}
-			inventory.Backpack[9] = core.ItemStack{Item: core.ItemIronBlock, Count: 1}
-			if err := app.Inventory().Apply(network.InventoryState{Inventory: inventory}); err != nil {
-				return err
-			}
-			// 个人 2×2 网格装入已匹配的真实原料形状（石砖 2×2）与非空产物格：
-			// 产物直接取形状表的派生值，镜像注入因此与权威匹配器一致。
-			recipe, ok := core.Recipe(core.RecipeStoneBricks)
-			if !ok {
-				return errors.New("石砖配方不存在")
-			}
-			personal := network.CraftingState{Size: 2, Output: recipe.Output}
-			for slot := range 4 {
-				personal.Slots[slot] = core.ItemStack{Item: core.ItemStone, Count: 1}
-			}
-			return app.Crafting().Apply(personal)
-		},
-	},
-	{
-		// workbench-crafting 是格子工作台的无窗口 capture 场景：已打开的 3×3
-		// 网格装入一条水平镜像不对称配方的合法摆放（石锄：石头纵列在左、
-		// 木棍纵列在右，Mirror 关闭，镜像摆放不匹配）与合法产物，覆盖统一
-		// 凹槽风格与产物格。镐类配方整形镜像后与自身相同，覆盖不到镜像不
-		// 对称语义，因此选石锄。场景不依赖前一场景留下的容器或网格状态——
-		// 镜像经 Apply 全量覆盖（latest-wins）；golden PNG 由批次集成任务在
-		// scenario 迁移时统一生成。
-		Name:         "workbench-crafting",
-		WarmupFrames: 8,
-		Apply: func(app SceneApplication) error {
-			app.SetWorldTimeTicks(6000)
-			app.Camera().Yaw = 0
-			app.Camera().Pitch = -0.25
-			app.RemotePlayers().Reset()
-			app.Furnace().Reset()
-			app.Chest().Reset()
-			app.SetInventoryOpen(true)
-			// 已选来源格取统一视图格 1（网格格 1，石锄木棍列顶格）：来源轮廓
-			// 落在网格区，与前一场景落在背包区的轮廓互为对照。
-			app.SetInventorySource(1)
-
-			inventory := core.Inventory{}
-			inventory.Hotbar.Selected = 1
-			inventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 64}
-			inventory.Hotbar.Slots[1] = core.ItemStack{Item: core.ItemStick, Count: 12}
-			inventory.Hotbar.Slots[2] = core.ItemStack{Item: core.ItemOakLog, Count: 3}
-			inventory.Hotbar.Slots[3] = core.ItemStack{Item: core.ItemOakPlanks, Count: 24}
-			inventory.Hotbar.Slots[4] = core.ItemStack{Item: core.ItemWorkbench, Count: 1}
-			inventory.Backpack[0] = core.ItemStack{Item: core.ItemDirt, Count: 48}
-			inventory.Backpack[2] = core.ItemStack{Item: core.ItemCoal, Count: 12}
-			inventory.Backpack[3] = core.ItemStack{Item: core.ItemRawIron, Count: 8}
-			inventory.Backpack[4] = core.ItemStack{Item: core.ItemIronIngot, Count: 9}
-			inventory.Backpack[6] = core.ItemStack{Item: core.ItemGlass, Count: 4}
-			if err := app.Inventory().Apply(network.InventoryState{Inventory: inventory}); err != nil {
-				return err
-			}
-			// 3×3 石锄摆放：左列石头（格 0、3）旁接右列木棍（格 1、4），占据
-			// 网格左上 2×2。产物直接取形状表的派生值（工具带满耐久），注入
-			// 与权威匹配器一致。
-			recipe, ok := core.Recipe(core.RecipeStoneHoe)
-			if !ok {
-				return errors.New("石锄配方不存在")
-			}
-			workbench := network.CraftingState{Size: 3, Output: recipe.Output}
-			for _, slot := range []int{0, 3} {
-				workbench.Slots[slot] = core.ItemStack{Item: core.ItemStone, Count: 1}
-			}
-			for _, slot := range []int{1, 4} {
-				workbench.Slots[slot] = core.ItemStack{Item: core.ItemStick, Count: 1}
-			}
-			return app.Crafting().Apply(workbench)
-		},
-	},
-	{
-		Name:         "chest-container",
-		WarmupFrames: 8,
-		Apply: func(app SceneApplication) error {
-			if err := resetCapturePresentation(app); err != nil {
-				return err
-			}
-			app.SetWorldTimeTicks(6000)
-			*app.Camera() = client.Camera{
-				Pos: mgl32.Vec3{0, 110, 0}, Pitch: -0.25,
-				FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
-				Near: 0.1, Far: 2000,
-			}
-			app.SetCenter(application.CameraChunk(app.Camera().Pos))
-			app.SetInventoryOpen(true)
-			app.SetInventorySource(core.ChestFirstSlot)
-			if err := app.Inventory().Apply(network.InventoryState{Inventory: captureContainerInventory()}); err != nil {
-				return fmt.Errorf("装入箱子场景背包: %w", err)
-			}
-			state := network.ChestState{Chest: core.ContainerRef{
-				Dimension: core.Overworld, Kind: core.ContainerKindChest, Slot: 2, Generation: 3,
-			}}
-			state.Items[0] = core.ItemStack{Item: core.ItemStone, Count: 64}
-			state.Items[8] = core.ItemStack{Item: core.ItemCoal, Count: 17}
-			state.Items[17] = core.ItemStack{Item: core.ItemRawIron, Count: 1}
-			state.Items[26] = core.ItemStack{Item: core.ItemIronIngot, Count: 64}
-			if err := app.Chest().Apply(state); err != nil {
-				return fmt.Errorf("装入箱子场景镜像: %w", err)
-			}
-			return nil
-		},
-	},
-	{
-		Name:         "furnace-container",
-		WarmupFrames: 8,
-		Apply: func(app SceneApplication) error {
-			if err := resetCapturePresentation(app); err != nil {
-				return err
-			}
-			app.SetWorldTimeTicks(6000)
-			*app.Camera() = client.Camera{
-				Pos: mgl32.Vec3{0, 110, 0}, Pitch: -0.25,
-				FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
-				Near: 0.1, Far: 2000,
-			}
-			app.SetCenter(application.CameraChunk(app.Camera().Pos))
-			app.SetInventoryOpen(true)
-			app.SetInventorySource(core.FurnaceFuelSlot)
-			if err := app.Inventory().Apply(network.InventoryState{Inventory: captureContainerInventory()}); err != nil {
-				return fmt.Errorf("装入熔炉场景背包: %w", err)
-			}
-			if err := app.Furnace().Apply(network.FurnaceState{
-				Furnace:       core.FurnaceRef{Dimension: core.Overworld, Slot: 3, Generation: 4},
-				Input:         core.ItemStack{Item: core.ItemRawIron, Count: 8},
-				Fuel:          core.ItemStack{Item: core.ItemCoal, Count: 12},
-				Output:        core.ItemStack{Item: core.ItemIronIngot, Count: 5},
-				ProgressTicks: 73,
-				BurnTicks:     911,
-			}); err != nil {
-				return fmt.Errorf("装入熔炉场景镜像: %w", err)
-			}
-			return nil
 		},
 	},
 	{
@@ -521,7 +342,6 @@ var captureScenes = []captureScene{
 			app.Camera().Pos = mgl32.Vec3{0.5, 3.5, 2.5}
 			app.Camera().Yaw, app.Camera().Pitch = 0, 0
 			app.SetInventoryOpen(false)
-			app.SetInventorySource(-1)
 			app.RemotePlayers().Reset()
 			app.Furnace().Reset()
 			app.Chest().Reset()
@@ -756,6 +576,7 @@ var captureScenes = []captureScene{
 			return nil
 		},
 	},
+	{Name: "avatar-detail", WarmupFrames: 8, Prepare: prepareAvatarStage, Apply: applyAvatarDetail},
 	{
 		// far-horizon 是远环 LOD 的长期视觉门禁(spec delta「MUST 新增
 		// far-horizon 视觉场景」):相机钉在近环边缘 -z 内侧的高空,朝

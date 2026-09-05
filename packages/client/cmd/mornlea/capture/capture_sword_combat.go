@@ -51,7 +51,6 @@ func applySwordCombatCaptureState(app SceneApplication) error {
 		return fmt.Errorf("装入剑场景背包: %w", err)
 	}
 	app.SetInventoryOpen(false)
-	app.SetInventorySource(-1)
 	if app.RemotePlayers() == nil {
 		return fmt.Errorf("sword-combat 需要远端玩家追踪器")
 	}

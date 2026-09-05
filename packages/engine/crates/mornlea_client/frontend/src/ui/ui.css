@@ -541,3 +541,7 @@ body {
 .pixel-button.pixel-button { border-image:none; border:var(--game-border) solid var(--hud-slot-edge); border-radius:var(--game-control-radius); background:var(--game-surface); box-shadow:0 var(--hud-slot-shadow-offset) var(--hud-slot-shadow-blur) var(--hud-slot-shadow); }
 .pixel-button.pixel-button:hover:not(:disabled),.pixel-button.pixel-button[aria-pressed=true] { background:var(--accent-wash); }
 .settings-panel,.pause-panel,.debug-panel { box-shadow:var(--game-shadow); border-color:var(--hud-slot-edge); }
+
+/* 文本框与按钮共用奶油表面和细描边；焦点仍由公共 sage 外环承担。 */
+.pixel-input.pixel-input { border-image: none; border: var(--game-border) solid var(--hud-slot-edge); border-radius: var(--game-control-radius); background: var(--slot-well); box-shadow: none; }
+.pixel-input.pixel-input input { border-image: none; border: none; border-radius: var(--game-control-radius); background: transparent; color: var(--text-on-panel); }

@@ -158,3 +158,6 @@ corepack pnpm build
 - 游戏捕获态 HUD 不接收点击；自由光标允许 HUD 选择，面板与自由光标状态下 E/Esc/Tab/数字键按 Go 视图 token 上行。任何关闭/换会话后的旧 token 均由 Go 拒绝。
 - `HudSlot.name/icon` 是共享出口。`icon` 只允许有上界的内嵌 PNG data URL，由 Go 装配缓存供给；禁止页面加载网络图像或持久化。选中 HUD 内层上移 5px/scale 1.08，左右邻格上移 2px/scale 1.03，180ms ease-out；全部经 tokens，减少动态效果时过渡归零，button 命中框固定。
 - 面板 fixture 的候选截图先目检，再按 `visual-baseline` 的阶段验收流程更新基线。
+
+- 视觉入口先经 `visual/export-catalog.mjs` 调离线Go导出测试，重新构建生产图标目录与生产配方快照；生成JSON被忽略、不入dist。类型检查与截图只消费本次导出，缺图/非法物品堆立即失败，禁止静态占位图片。
+- `PixelInput` 在既有桥接层内使用原生input与包装层，移除了retroui内联SVG border-image；连续细可可描边、cream填色与sage焦点环均经既有tokens。语义属性照常透传。

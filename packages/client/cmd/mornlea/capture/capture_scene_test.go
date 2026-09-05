@@ -63,115 +63,6 @@ func TestCaptureSkylightTunnelFixtureUsesMirrorAndMesher(t *testing.T) {
 // TestContainerCaptureFixturesUseIndependentConfirmedMirrors 锁住两个容器场景的
 // 已确认镜像、统一来源索引和跨场景 reset；漏掉任一状态都会让下一张 golden
 // 继承上一个容器或实体。
-func TestContainerCaptureFixturesUseIndependentConfirmedMirrors(t *testing.T) {
-	wantCamera := client.Camera{
-		Pos: mgl32.Vec3{0, 110, 0}, Pitch: -0.25,
-		FovY: mgl32.DegToRad(70), Aspect: float32(captureWidth) / captureHeight,
-		Near: 0.1, Far: 2000,
-	}
-	wantInventory := core.Inventory{}
-	wantInventory.Hotbar.Selected = 4
-	wantInventory.Hotbar.Slots[0] = core.ItemStack{Item: core.ItemStone, Count: 64}
-	wantInventory.Hotbar.Slots[2] = core.ItemStack{Item: core.ItemStonePickaxe, Count: 1, Durability: 40}
-	wantInventory.Hotbar.Slots[4] = core.ItemStack{Item: core.ItemChest, Count: 3}
-	wantInventory.Backpack[0] = core.ItemStack{Item: core.ItemDirt, Count: 48}
-	wantInventory.Backpack[2] = core.ItemStack{Item: core.ItemCoal, Count: 12}
-	wantInventory.Backpack[3] = core.ItemStack{Item: core.ItemRawIron, Count: 8}
-	wantInventory.Backpack[4] = core.ItemStack{Item: core.ItemIronIngot, Count: 9}
-
-	wantChest := network.ChestState{Chest: core.ContainerRef{
-		Dimension: core.Overworld, Kind: core.ContainerKindChest, Slot: 2, Generation: 3,
-	}}
-	wantChest.Items[0] = core.ItemStack{Item: core.ItemStone, Count: 64}
-	wantChest.Items[8] = core.ItemStack{Item: core.ItemCoal, Count: 17}
-	wantChest.Items[17] = core.ItemStack{Item: core.ItemRawIron, Count: 1}
-	wantChest.Items[26] = core.ItemStack{Item: core.ItemIronIngot, Count: 64}
-
-	wantFurnace := network.FurnaceState{
-		Furnace:       core.FurnaceRef{Dimension: core.Overworld, Slot: 3, Generation: 4},
-		Input:         core.ItemStack{Item: core.ItemRawIron, Count: 8},
-		Fuel:          core.ItemStack{Item: core.ItemCoal, Count: 12},
-		Output:        core.ItemStack{Item: core.ItemIronIngot, Count: 5},
-		ProgressTicks: 73,
-		BurnTicks:     911,
-	}
-
-	for _, test := range []struct {
-		name   string
-		source int
-		assert func(*testing.T, *application.Application)
-	}{
-		{
-			name: "chest-container", source: 36,
-			assert: func(t *testing.T, app *application.Application) {
-				t.Helper()
-				if got, opened := app.Chest().State(); !opened || got != wantChest {
-					t.Fatalf("chest=%+v opened=%v，想要 %+v/true", got, opened, wantChest)
-				}
-				if _, opened := app.Furnace().State(); opened {
-					t.Fatal("箱子场景没有显式清空熔炉镜像")
-				}
-			},
-		},
-		{
-			name: "furnace-container", source: 37,
-			assert: func(t *testing.T, app *application.Application) {
-				t.Helper()
-				if got, opened := app.Furnace().State(); !opened || got != wantFurnace {
-					t.Fatalf("furnace=%+v opened=%v，想要 %+v/true", got, opened, wantFurnace)
-				}
-				if _, opened := app.Chest().State(); opened {
-					t.Fatal("熔炉场景没有显式清空箱子镜像")
-				}
-			},
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			scene := captureSceneByName(t, test.name)
-			if scene.Apply == nil || scene.WarmupFrames != 8 {
-				t.Fatalf("场景=%+v，想要完整 8 帧夹具", scene)
-			}
-			app := newCaptureAICompanionState()
-			if err := app.RemotePlayers().Apply(network.RemotePlayerSpawn{
-				PlayerID: core.PlayerID{6: 0x40, 8: 0x80, 15: 1}, DisplayName: "旧玩家",
-				ServerTick: 1, Position: mgl32.Vec3{1, 2, 3},
-			}); err != nil {
-				t.Fatal(err)
-			}
-			if app.Panel() != nil {
-				app.Panel().SetVisible(true)
-			}
-			*app.Camera() = client.Camera{Pos: mgl32.Vec3{99, 99, 99}, Yaw: 1, Pitch: 1}
-			app.SetWorldTimeTicks(18000)
-			if err := app.Furnace().Apply(network.FurnaceState{
-				Furnace: core.FurnaceRef{Dimension: core.Overworld, Generation: 1},
-			}); err != nil {
-				t.Fatal(err)
-			}
-			if err := app.Chest().Apply(network.ChestState{Chest: core.ContainerRef{
-				Dimension: core.Overworld, Kind: core.ContainerKindChest, Generation: 1,
-			}}); err != nil {
-				t.Fatal(err)
-			}
-
-			if err := scene.Apply(app); err != nil {
-				t.Fatal(err)
-			}
-			if got, confirmed := app.Inventory().State(); !confirmed || got != wantInventory {
-				t.Fatalf("inventory=%+v confirmed=%v，想要 %+v/true", got, confirmed, wantInventory)
-			}
-			if !app.InventoryOpen() || app.InventorySource() != test.source {
-				t.Fatalf("open/source=%v/%d，想要 true/%d", app.InventoryOpen(), app.InventorySource(), test.source)
-			}
-			if app.Panel().Visible() || len(app.RemotePlayers().Presentations()) != 0 ||
-				app.WorldTimeTicks() != 6000 || *app.Camera() != wantCamera {
-				t.Fatalf("reset 后 panel=%v remotes=%d time=%d camera=%+v",
-					app.Panel().Visible(), len(app.RemotePlayers().Presentations()), app.WorldTimeTicks(), app.Camera())
-			}
-			test.assert(t, app)
-		})
-	}
-}
 
 func TestCaptureMaterialsShowcaseFixtureUsesMirrorAndMesher(t *testing.T) {
 	var scene captureScene
@@ -312,142 +203,6 @@ func TestCaptureMaterialsShowcaseFixtureUsesMirrorAndMesher(t *testing.T) {
 	}
 }
 
-// TestCraftingCaptureScenePosition 锁住 workbench-crafting 的表内位置：紧随
-// inventory-crafting 且在 chest-container 之前（spec visual-verification
-// 「完整场景顺序」）。
-func TestCraftingCaptureScenePosition(t *testing.T) {
-	indexOf := func(name string) int {
-		for index, scene := range captureScenes {
-			if scene.Name == name {
-				return index
-			}
-		}
-		t.Fatalf("场景 %q 不存在", name)
-		return -1
-	}
-	personal := indexOf("inventory-crafting")
-	workbench := indexOf("workbench-crafting")
-	chest := indexOf("chest-container")
-	if workbench != personal+1 {
-		t.Fatalf("workbench-crafting=%d 必须紧随 inventory-crafting=%d", workbench, personal)
-	}
-	if workbench >= chest {
-		t.Fatalf("workbench-crafting=%d 必须在 chest-container=%d 之前", workbench, chest)
-	}
-}
-
-// TestCraftingCaptureScenesCoverGridsAndLegalOutputs 锁住两个合成场景的构造：
-// inventory-crafting 呈现已匹配的 2×2 实物配方、非空产物格与已选来源格；
-// workbench-crafting 呈现 3×3 工作台网格与一条水平镜像不对称配方的合法摆放
-// （石锄：Mirror 关闭，镜像摆放不匹配）。两个场景都不依赖前一场景留下的容器
-// 或网格状态，产物格内容都与形状匹配器的派生值一致（客户端不预测）。
-func TestCraftingCaptureScenesCoverGridsAndLegalOutputs(t *testing.T) {
-	personalGrid := network.CraftingState{Size: 2}
-	for slot := range 4 {
-		personalGrid.Slots[slot] = core.ItemStack{Item: core.ItemStone, Count: 1}
-	}
-	personalRecipe, ok := core.Recipe(core.RecipeStoneBricks)
-	if !ok {
-		t.Fatal("石砖配方不存在")
-	}
-	personalGrid.Output = personalRecipe.Output
-
-	// 石锄是形状表里真正水平镜像不对称的工具配方（石头纵列在左、木棍纵列
-	// 在右，Mirror 关闭，镜像摆放不匹配），摆在 3×3 网格左上 2×2。镐类配方
-	//（顶排 + 中列）整形镜像后与自身相同，覆盖不到镜像不对称语义——
-	// brief 的「如石镐」示例因此按实测纠正为石锄。
-	workbenchGrid := network.CraftingState{Size: 3}
-	for _, slot := range []int{0, 3} {
-		workbenchGrid.Slots[slot] = core.ItemStack{Item: core.ItemStone, Count: 1}
-	}
-	for _, slot := range []int{1, 4} {
-		workbenchGrid.Slots[slot] = core.ItemStack{Item: core.ItemStick, Count: 1}
-	}
-	// 产物格直接取形状表的产物（工具带满耐久）：场景注入值与匹配器派生值
-	// 逐字段一致，不复制任何魔数。
-	workbenchRecipe, ok := core.Recipe(core.RecipeStoneHoe)
-	if !ok {
-		t.Fatal("石锄配方不存在")
-	}
-	workbenchGrid.Output = workbenchRecipe.Output
-
-	// 场景注入的网格必须是真实合法匹配：产物格来自形状匹配器的派生值。
-	id, output, matched := core.MatchCraftingGrid(2, personalGrid.Slots)
-	if !matched || id != core.RecipeStoneBricks || output != personalGrid.Output {
-		t.Fatalf("个人场景网格匹配 = %d/%+v/%v，想要石砖 ×4", id, output, matched)
-	}
-	id, output, matched = core.MatchCraftingGrid(3, workbenchGrid.Slots)
-	if !matched || id != core.RecipeStoneHoe || output != workbenchGrid.Output {
-		t.Fatalf("工作台场景网格匹配 = %d/%+v/%v，想要石锄 ×1", id, output, matched)
-	}
-	// 石锄是水平镜像不对称配方：同一形状镜像摆放（木棍列在左）必须不匹配，
-	// 这是本场景选它的原因——3×3 网格必须按原方向摆放。
-	mirrored := workbenchGrid
-	mirrored.Slots[0], mirrored.Slots[1] = mirrored.Slots[1], mirrored.Slots[0]
-	mirrored.Slots[3], mirrored.Slots[4] = mirrored.Slots[4], mirrored.Slots[3]
-	if _, _, matched := core.MatchCraftingGrid(3, mirrored.Slots); matched {
-		t.Fatal("石锄形状被水平镜像匹配，场景不再覆盖镜像不对称语义")
-	}
-
-	for _, test := range []struct {
-		name      string
-		wantGrid  network.CraftingState
-		wantIndex int
-	}{
-		{"inventory-crafting", personalGrid, 12},
-		{"workbench-crafting", workbenchGrid, 1},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			scene := captureSceneByName(t, test.name)
-			if scene.Apply == nil || scene.WarmupFrames != 8 {
-				t.Fatalf("场景=%+v，想要完整 8 帧夹具", scene)
-			}
-			app := newCaptureAICompanionState()
-			// 预置前一个场景可能留下的全部共享状态：Apply 必须全部覆盖。
-			if err := app.Crafting().Apply(network.CraftingState{
-				Size:  2,
-				Slots: [9]core.ItemStack{0: {Item: core.ItemDirt, Count: 9}},
-			}); err != nil {
-				t.Fatal(err)
-			}
-			if err := app.Furnace().Apply(network.FurnaceState{
-				Furnace: core.FurnaceRef{Dimension: core.Overworld, Generation: 1},
-			}); err != nil {
-				t.Fatal(err)
-			}
-			if err := app.Chest().Apply(network.ChestState{Chest: core.ContainerRef{
-				Dimension: core.Overworld, Kind: core.ContainerKindChest, Generation: 1,
-			}}); err != nil {
-				t.Fatal(err)
-			}
-			app.SetInventoryOpen(false)
-			app.SetInventorySource(44)
-
-			if err := scene.Apply(app); err != nil {
-				t.Fatalf("应用场景: %v", err)
-			}
-			got, confirmed := app.Crafting().State()
-			if !confirmed || got != test.wantGrid {
-				t.Fatalf("网格=%+v confirmed=%v，想要 %+v/true", got, confirmed, test.wantGrid)
-			}
-			if !app.InventoryOpen() || app.InventorySource() != test.wantIndex {
-				t.Fatalf("open/source=%v/%d，想要 true/%d",
-					app.InventoryOpen(), app.InventorySource(), test.wantIndex)
-			}
-			if _, opened := app.Furnace().State(); opened {
-				t.Fatal("合成场景没有显式清空熔炉镜像")
-			}
-			if _, opened := app.Chest().State(); opened {
-				t.Fatal("合成场景没有显式清空箱子镜像")
-			}
-			inventory, confirmed := app.Inventory().State()
-			if !confirmed || inventory.Hotbar.Slots[0].Item != core.ItemStone {
-				t.Fatalf("背包=%+v confirmed=%v，想要含石头的固定背包", inventory, confirmed)
-			}
-		})
-	}
-}
-
 // 杀死变异：遗漏目标反馈场景、未装入唯一砖块、绕过 Mirror/Mesher、未固定相机，
 // 或继承上个场景的 UI 与远端玩家状态都会改变这些可观察结果。
 func TestCaptureTargetBlockFeedbackFindsSceneByName(t *testing.T) {
@@ -473,7 +228,6 @@ func TestCaptureTargetBlockFeedbackFindsSceneByName(t *testing.T) {
 	app.SetRemotePlayers(remotePlayers)
 	app.Panel().SetVisible(true)
 	app.SetInventoryOpen(true)
-	app.SetInventorySource(12)
 	if err := app.Predictor().Begin(network.PlayerState{
 		ServerTick: 1, Dimension: core.Overworld, Ready: true,
 	}); err != nil {
@@ -528,10 +282,10 @@ func TestCaptureTargetBlockFeedbackFindsSceneByName(t *testing.T) {
 		t.Fatalf("场景状态错误: time=%d camera=%+v yaw=%v pitch=%v",
 			app.WorldTimeTicks(), app.Camera().Pos, app.Camera().Yaw, app.Camera().Pitch)
 	}
-	if app.InventoryOpen() || app.InventorySource() != -1 || app.Panel().Visible() ||
+	if app.InventoryOpen() || app.Panel().Visible() ||
 		len(app.RemotePlayers().Presentations()) != 0 {
-		t.Fatalf("共享状态未清空: inventory=%v/%d panel=%v remotes=%d",
-			app.InventoryOpen(), app.InventorySource(), app.Panel().Visible(),
+		t.Fatalf("共享状态未清空: inventory=%v panel=%v remotes=%d",
+			app.InventoryOpen(), app.Panel().Visible(),
 			len(app.RemotePlayers().Presentations()))
 	}
 	if _, opened := app.Furnace().State(); opened {

@@ -5,6 +5,7 @@ package app
 // app_furnace_ui_test.go：熔炉界面镜像生命周期——权威状态开 UI、两次点击一次移动、显式/服务端关闭与 reset 清理。
 
 import (
+	"github.com/channing771/mornlea/packages/client/client"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/network"
 	"github.com/go-gl/mathgl/mgl32"
@@ -23,16 +24,16 @@ func TestAuthoritativeFurnaceStateOpensUI(t *testing.T) {
 	sendInteractiveServerMessage(t, serverEndpoint, state)
 	app.DrainServerMessages(1)
 	got, opened := app.furnace.State()
-	if !opened || got != state || !app.inventoryOpen || app.inventorySource != -1 {
-		t.Fatalf("权威熔炉界面 state=%+v opened=%v ui=%v source=%d",
-			got, opened, app.inventoryOpen, app.inventorySource)
+	if !opened || got != state || !app.inventoryOpen || app.gameSource != nil {
+		t.Fatalf("权威熔炉界面 state=%+v opened=%v ui=%v source=%v",
+			got, opened, app.inventoryOpen, app.gameSource)
 	}
-	app.inventorySource = 1
+	app.gameSource = &client.UIGameSlotRef{Area: "inventory", Index: 1}
 	state.ProgressTicks++
 	sendInteractiveServerMessage(t, serverEndpoint, state)
 	app.DrainServerMessages(1)
-	if app.inventorySource != 1 {
-		t.Fatalf("连续权威更新清除了已选来源: %d", app.inventorySource)
+	if app.gameSource == nil || app.gameSource.Index != 1 {
+		t.Fatalf("连续权威更新清除了已选来源: %v", app.gameSource)
 	}
 }
 
@@ -84,7 +85,7 @@ func TestExplicitFurnaceCloseClearsUIAndSendsOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	app.inventoryOpen = true
-	app.inventorySource = core.FurnaceFuelSlot
+	app.gameSource = &client.UIGameSlotRef{Area: "furnace", Index: core.FurnaceFuelSlot - core.FurnaceInputSlot}
 
 	app.setInventoryOpen(false)
 	message := receiveInteractiveClientMessage(t, serverEndpoint)
@@ -93,8 +94,8 @@ func TestExplicitFurnaceCloseClearsUIAndSendsOnce(t *testing.T) {
 	}
 	app.setInventoryOpen(false)
 	assertNoInteractiveClientMessage(t, serverEndpoint)
-	if app.inventoryOpen || app.inventorySource != -1 {
-		t.Fatalf("关闭后 ui=%v source=%d", app.inventoryOpen, app.inventorySource)
+	if app.inventoryOpen || app.gameSource != nil {
+		t.Fatalf("关闭后 ui=%v source=%v", app.inventoryOpen, app.gameSource)
 	}
 	if !window.CursorCaptured() {
 		t.Fatal("关闭熔炉后未恢复鼠标捕获")
@@ -111,12 +112,12 @@ func TestFurnaceClosedMessageClearsUIWithoutEcho(t *testing.T) {
 	}
 	sendInteractiveServerMessage(t, serverEndpoint, state)
 	app.DrainServerMessages(1)
-	app.inventorySource = core.FurnaceOutputSlot
+	app.gameSource = &client.UIGameSlotRef{Area: "furnace", Index: core.FurnaceOutputSlot - core.FurnaceInputSlot}
 
 	sendInteractiveServerMessage(t, serverEndpoint, network.ContainerClosed{Container: state.Furnace})
 	app.DrainServerMessages(1)
-	if app.inventoryOpen || app.inventorySource != -1 {
-		t.Fatalf("服务端关闭后 ui=%v source=%d", app.inventoryOpen, app.inventorySource)
+	if app.inventoryOpen || app.gameSource != nil {
+		t.Fatalf("服务端关闭后 ui=%v source=%v", app.inventoryOpen, app.gameSource)
 	}
 	if _, opened := app.furnace.State(); opened {
 		t.Fatal("服务端关闭后仍保留熔炉镜像")
@@ -132,15 +133,15 @@ func TestPlayerResetClosesFurnaceUI(t *testing.T) {
 		t.Fatal(err)
 	}
 	app.inventoryOpen = true
-	app.inventorySource = core.FurnaceInputSlot
+	app.gameSource = &client.UIGameSlotRef{Area: "furnace", Index: core.FurnaceInputSlot - core.FurnaceInputSlot}
 	sendInteractiveServerMessage(t, serverEndpoint, network.PlayerState{
 		ServerTick: 1, Dimension: core.Overworld,
 		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true, Ready: true, Reset: true,
 	})
 
 	app.DrainServerMessages(1)
-	if app.inventoryOpen || app.inventorySource != -1 {
-		t.Fatalf("reset 后 ui=%v source=%d", app.inventoryOpen, app.inventorySource)
+	if app.inventoryOpen || app.gameSource != nil {
+		t.Fatalf("reset 后 ui=%v source=%v", app.inventoryOpen, app.gameSource)
 	}
 	if _, opened := app.furnace.State(); opened {
 		t.Fatal("reset 后仍保留熔炉镜像")

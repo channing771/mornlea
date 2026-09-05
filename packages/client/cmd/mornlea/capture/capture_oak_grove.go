@@ -61,20 +61,12 @@ func captureOakGroveSnapshot(chunk *world.Chunk) network.ChunkSnapshot {
 }
 
 func applyOakGroveCaptureState(app SceneApplication) error {
+	if err := resetCapturePresentation(app); err != nil {
+		return err
+	}
 	app.SetWorldTimeTicks(6000)
 	app.Camera().Pos = mgl32.Vec3{-3.5, 75.5, 12.5}
 	app.Camera().Yaw = 0
 	app.Camera().Pitch = -0.38
-	app.SetInventoryOpen(false)
-	app.SetInventorySource(-1)
-	if app.RemotePlayers() == nil {
-		return fmt.Errorf("oak-grove 需要远端玩家追踪器，当前为 nil")
-	}
-	app.RemotePlayers().Reset()
-	app.Furnace().Reset()
-	app.Chest().Reset()
-	if app.Panel() != nil {
-		app.Panel().SetVisible(false)
-	}
-	return app.Inventory().Apply(network.InventoryState{Inventory: core.Inventory{}})
+	return nil
 }

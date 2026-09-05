@@ -630,3 +630,15 @@ func (w *zeroFramebufferWindow) ContentSize() (int, int)              { return 0
 func (w *zeroFramebufferWindow) SetContentSize(int, int)              {}
 func (w *zeroFramebufferWindow) CancelClose()                         {}
 func (w *zeroFramebufferWindow) Close()                               {}
+
+func TestCaptureEntityResetClearsPriorBursts(t *testing.T) {
+	app := &Application{}
+	drops := []render.ItemDrop{{ID: core.DropID{Dimension: core.Overworld, Generation: 1}, Block: core.BlockPos{}, Item: core.ItemStone}}
+	if got := app.entityEncoder.EncodeBreakBurstInstances(nil, 1, drops); len(got) == 0 {
+		t.Fatal("未装入粒子夹具")
+	}
+	app.ResetEntityPresentation()
+	if got := app.entityEncoder.EncodeBreakBurstInstances(nil, 2, nil); len(got) != 0 {
+		t.Fatal("抓帧清场残留前景粒子")
+	}
+}

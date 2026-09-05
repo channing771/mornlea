@@ -197,3 +197,12 @@ func TestItemIconContactSheet(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestOriginalItemArtworkRejectsMissingDefinition(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("未定义物品图稿返回了通用占位符")
+		}
+	}()
+	originalItemTexture(core.ItemIDMax)
+}

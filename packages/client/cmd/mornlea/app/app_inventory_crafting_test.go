@@ -39,25 +39,25 @@ func TestCraftingStateSizeThreeOpensWorkbenchUI(t *testing.T) {
 		t.Fatal("工作台界面打开后仍捕获鼠标")
 	}
 
-	app.inventorySource = 7
+	app.gameSource = &client.UIGameSlotRef{Area: "inventory", Index: 7}
 	next := state
 	next.Slots[1] = core.ItemStack{Item: core.ItemStone, Count: 3}
 	sendInteractiveServerMessage(t, serverEndpoint, next)
 	app.DrainServerMessages(1)
-	if app.inventorySource != 7 {
-		t.Fatalf("连续尺寸 3 更新清除了已选来源: %d", app.inventorySource)
+	if app.gameSource == nil || app.gameSource.Index != 7 {
+		t.Fatalf("连续尺寸 3 更新清除了已选来源: %v", app.gameSource)
 	}
 	if !app.inventoryOpen {
 		t.Fatal("连续尺寸 3 更新关闭了界面")
 	}
 
 	// 尺寸降级 = 服务端关闭通知（关闭、断线或工作台失效后的权威回收）。
-	app.inventorySource = 2
+	app.gameSource = &client.UIGameSlotRef{Area: "inventory", Index: 2}
 	sendInteractiveServerMessage(t, serverEndpoint, network.CraftingState{Size: 2})
 	app.DrainServerMessages(1)
-	if app.inventoryOpen || app.inventorySource != -1 {
-		t.Fatalf("尺寸降级后 open=%v source=%d，想要界面关闭且来源清除",
-			app.inventoryOpen, app.inventorySource)
+	if app.inventoryOpen || app.gameSource != nil {
+		t.Fatalf("尺寸降级后 open=%v source=%v，想要界面关闭且来源清除",
+			app.inventoryOpen, app.gameSource)
 	}
 	if !window.CursorCaptured() {
 		t.Fatal("尺寸降级后未恢复鼠标捕获")
@@ -79,7 +79,7 @@ func TestWorkbenchCloseSendsCloseContainerAndClearsUI(t *testing.T) {
 		t.Fatal(err)
 	}
 	app.inventoryOpen = true
-	app.inventorySource = 4
+	app.gameSource = &client.UIGameSlotRef{Area: "inventory", Index: 4}
 
 	app.setInventoryOpen(false)
 	message := receiveInteractiveClientMessage(t, serverEndpoint)
@@ -87,8 +87,8 @@ func TestWorkbenchCloseSendsCloseContainerAndClearsUI(t *testing.T) {
 		t.Fatalf("关闭请求 = %#v，想要 CloseContainer 序号 1", message)
 	}
 	assertNoInteractiveClientMessage(t, serverEndpoint)
-	if app.inventoryOpen || app.inventorySource != -1 {
-		t.Fatalf("关闭后 open=%v source=%d", app.inventoryOpen, app.inventorySource)
+	if app.inventoryOpen || app.gameSource != nil {
+		t.Fatalf("关闭后 open=%v source=%v", app.inventoryOpen, app.gameSource)
 	}
 	if !window.CursorCaptured() {
 		t.Fatal("关闭工作台后未恢复鼠标捕获")
@@ -106,33 +106,33 @@ func TestPlayerResetClosesWorkbenchUI(t *testing.T) {
 		t.Fatal(err)
 	}
 	app.inventoryOpen = true
-	app.inventorySource = 8
+	app.gameSource = &client.UIGameSlotRef{Area: "inventory", Index: 8}
 	sendInteractiveServerMessage(t, serverEndpoint, network.PlayerState{
 		ServerTick: 1, Dimension: core.Overworld,
 		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true, Ready: true, Reset: true,
 	})
 	app.DrainServerMessages(1)
-	if app.inventoryOpen || app.inventorySource != -1 {
-		t.Fatalf("reset 后 open=%v source=%d，想要界面关闭且来源清除",
-			app.inventoryOpen, app.inventorySource)
+	if app.inventoryOpen || app.gameSource != nil {
+		t.Fatalf("reset 后 open=%v source=%v，想要界面关闭且来源清除",
+			app.inventoryOpen, app.gameSource)
 	}
 	if _, confirmed := app.crafting.State(); confirmed {
 		t.Fatal("reset 后仍保留网格镜像")
 	}
 }
 
-func TestPlayerResetClearsInventorySource(t *testing.T) {
+func TestPlayerResetClearsGameSource(t *testing.T) {
 	app, serverEndpoint := newInteractiveTestApplication(t)
 	app.inventoryOpen = true
-	app.inventorySource = 8
+	app.gameSource = &client.UIGameSlotRef{Area: "inventory", Index: 8}
 	sendInteractiveServerMessage(t, serverEndpoint, network.PlayerState{
 		ServerTick: 1, Dimension: core.Overworld,
 		Position: mgl32.Vec3{0.5, 10, 0.5}, OnGround: true, Ready: true, Reset: true,
 	})
 
 	app.DrainServerMessages(1)
-	if !app.inventoryOpen || app.inventorySource != -1 {
-		t.Fatalf("reset 后 open=%v source=%d，想要界面保持且来源清除", app.inventoryOpen, app.inventorySource)
+	if !app.inventoryOpen || app.gameSource != nil {
+		t.Fatalf("reset 后 open=%v source=%v，想要界面保持且来源清除", app.inventoryOpen, app.gameSource)
 	}
 }
 
@@ -147,11 +147,11 @@ func TestClientSessionCloseClearsInventoryUIState(t *testing.T) {
 		t.Fatal(err)
 	}
 	app.inventoryOpen = true
-	app.inventorySource = 8
+	app.gameSource = &client.UIGameSlotRef{Area: "inventory", Index: 8}
 
 	app.CloseClientSession(nil)
-	if app.inventoryOpen || app.inventorySource != -1 {
-		t.Fatalf("断线后 open=%v source=%d，想要界面关闭且来源清除", app.inventoryOpen, app.inventorySource)
+	if app.inventoryOpen || app.gameSource != nil {
+		t.Fatalf("断线后 open=%v source=%v，想要界面关闭且来源清除", app.inventoryOpen, app.gameSource)
 	}
 	if _, opened := app.furnace.State(); opened {
 		t.Fatal("断线后仍保留熔炉镜像")
@@ -172,8 +172,8 @@ func TestInventoryCloseClearsSourceAndRecapturesCursor(t *testing.T) {
 	app.gameSource = &client.UIGameSlotRef{Area: "inventory", Index: 5}
 
 	app.setInventoryOpen(false)
-	if app.inventoryOpen || app.inventorySource != -1 {
-		t.Fatalf("关闭后 open=%v source=%d", app.inventoryOpen, app.inventorySource)
+	if app.inventoryOpen || app.gameSource != nil {
+		t.Fatalf("关闭后 open=%v source=%v", app.inventoryOpen, app.gameSource)
 	}
 	if !window.CursorCaptured() {
 		t.Fatal("关闭背包后未恢复鼠标捕获")

@@ -75,7 +75,7 @@ func TestApplicationMiningOverlayIgnoresStaleAndEqualPlayerState(t *testing.T) {
 		ProgressTicks: 6, RequiredTicks: 15,
 	}
 	app.inventoryOpen = true
-	app.inventorySource = 8
+	app.gameSource = &client.UIGameSlotRef{Area: "inventory", Index: 8}
 
 	for _, tick := range []uint64{1, 2} {
 		sendInteractiveServerMessage(t, serverEndpoint, network.PlayerState{
@@ -87,9 +87,9 @@ func TestApplicationMiningOverlayIgnoresStaleAndEqualPlayerState(t *testing.T) {
 			t.Fatalf("tick=%d 后 app tick/overlay=%d/%+v，想要 2/%+v",
 				tick, app.serverTick, app.miningOverlay, want)
 		}
-		if !app.inventoryOpen || app.inventorySource != 8 {
-			t.Fatalf("tick=%d 的旧 reset 改写界面: open=%v source=%d",
-				tick, app.inventoryOpen, app.inventorySource)
+		if !app.inventoryOpen || (app.gameSource == nil || app.gameSource.Index != 8) {
+			t.Fatalf("tick=%d 的旧 reset 改写界面: open=%v source=%v",
+				tick, app.inventoryOpen, app.gameSource)
 		}
 	}
 

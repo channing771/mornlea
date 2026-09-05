@@ -76,9 +76,8 @@ type SceneApplication interface {
 	SetCompanionPresentations(presentations []client.CompanionPresentation)
 	RemoteAvatars() []render.Avatar
 	SetRemoteAvatars(avatars []render.Avatar)
-	// ResetLocomotion 清零摆动行进距离累积：公共清场的一部分，保证后一场景
-	// 的步态相位只由本场景夹具决定。
-	ResetLocomotion()
+	// `ResetEntityPresentation` 清除步态、粒子与下落历史，隔离场景。
+	ResetEntityPresentation()
 	RemoteNameTags() []render.NameTag
 	SetRemoteNameTags(tags []render.NameTag)
 	Hostiles() *client.Hostiles
@@ -104,7 +103,7 @@ type SceneApplication interface {
 
 	// UI 相位与菜单覆盖。
 	SetInventoryOpen(open bool)
-	SetInventorySource(source int)
+
 	SetMenuPhase(phase application.MenuPhase)
 	SetSettings(settings application.SettingsState)
 	Panel() *application.PanelState

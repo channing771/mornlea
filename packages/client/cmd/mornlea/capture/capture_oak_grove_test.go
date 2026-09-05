@@ -10,6 +10,7 @@ import (
 	"github.com/channing771/mornlea/packages/client/client"
 	application "github.com/channing771/mornlea/packages/client/cmd/mornlea/app"
 	"github.com/channing771/mornlea/packages/shared/core"
+	"github.com/channing771/mornlea/packages/shared/network"
 	"github.com/channing771/mornlea/packages/shared/worldgen"
 )
 
@@ -109,5 +110,19 @@ func TestCaptureOakGroveFindsSceneByName(t *testing.T) {
 		stateApp.Camera().Yaw != 0 || stateApp.Camera().Pitch != -0.38 {
 		t.Fatalf("oak-grove 状态 time=%d camera=%+v yaw=%v pitch=%v",
 			stateApp.WorldTimeTicks(), stateApp.Camera().Pos, stateApp.Camera().Yaw, stateApp.Camera().Pitch)
+	}
+}
+
+func TestOakGroveClearsAmbientPassiveEntities(t *testing.T) {
+	app := application.NewPresentationApplicationForTest()
+	app.SetPassives(&client.Passives{})
+	if err := app.Passives().ApplySpawn(network.PassiveSpawn{ServerTick: 1, Spawns: []network.PassiveSpawnRecord{{ID: 1, Dimension: core.Overworld, Position: mgl32.Vec3{0, 1, 0}, Health: core.MaxHealth}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyOakGroveCaptureState(app); err != nil {
+		t.Fatal(err)
+	}
+	if len(app.Passives().AppendPresentations(nil)) != 0 {
+		t.Fatal("橡树林夹具残留加载期间生成的牛")
 	}
 }

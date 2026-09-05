@@ -25,16 +25,15 @@ import (
 // 断言与 frontend/visual 部件基线承接。
 func TestCaptureSceneOrderAndAICompanionDeterminism(t *testing.T) {
 	wantNames := []string{
-		"terrain-noon", "avatar-nametag", "inventory-crafting",
-		"workbench-crafting", "chest-container", "furnace-container",
+		"terrain-noon", "avatar-nametag",
 		"debug-panel", "skylight-tunnel", "block-light-room", "torch-night", "bed-night",
 		"materials-showcase",
 		"target-block-feedback", "grass-closeup", "oak-grove", "ai-companion", "sword-combat",
 		"hostile-mob", "passive-herd", "passive-graze", "water-surface-slope", "mining-crack-early", "mining-crack-heavy",
-		"main-menu", "settings-menu", "far-horizon", "water-underwater",
+		"main-menu", "settings-menu", "avatar-detail", "far-horizon", "water-underwater",
 	}
-	if len(captureScenes) != 27 {
-		t.Fatalf("正式场景数=%d，想要 27", len(captureScenes))
+	if len(captureScenes) != 24 {
+		t.Fatalf("正式场景数=%d，想要 24", len(captureScenes))
 	}
 	gotNames := make([]string, len(captureScenes))
 	for index, scene := range captureScenes {

@@ -155,7 +155,6 @@ func (a *Application) setInventoryOpen(open bool) {
 	a.inventoryOpen = open
 	// 同上：本地开容器同样即时置脏，不依赖下一次权威状态。
 	a.hudPush.Mark()
-	a.inventorySource = -1
 	if a.window != nil {
 		a.window.SetCursorCaptured(!open)
 	}
@@ -175,7 +174,6 @@ func (a *Application) clearContainerUI() {
 		a.crafting.Reset()
 	}
 	a.inventoryOpen = false
-	a.inventorySource = -1
 	if a.window != nil {
 		a.window.SetCursorCaptured(true)
 	}

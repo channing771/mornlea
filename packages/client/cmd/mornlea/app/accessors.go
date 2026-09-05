@@ -113,9 +113,12 @@ func (a *Application) RemoteAvatars() []render.Avatar { return a.remoteAvatars }
 // SetRemoteAvatars 写入远端玩家 avatar 批次缓冲。
 func (a *Application) SetRemoteAvatars(avatars []render.Avatar) { a.remoteAvatars = avatars }
 
-// ResetLocomotion 清零摆动行进距离累积：抓帧清场后调用，后续场景按新夹具
-// 重新累积，不把前一场景的相位带进基线。
-func (a *Application) ResetLocomotion() { a.entityEncoder.ResetLocomotion() }
+// `ResetEntityPresentation` 清除抓帧场景间的步态、粒子和下落历史。
+func (a *Application) ResetEntityPresentation() {
+	a.entityEncoder.ResetLocomotion()
+	a.entityEncoder.ResetBursts()
+	a.entityEncoder.ResetFalls()
+}
 
 // RemoteNameTags 返回名牌批次缓冲。
 func (a *Application) RemoteNameTags() []render.NameTag { return a.remoteNameTags }
@@ -273,12 +276,6 @@ func (a *Application) InventoryOpen() bool { return a.inventoryOpen }
 
 // SetInventoryOpen 写入容器/背包 UI 开合状态。
 func (a *Application) SetInventoryOpen(open bool) { a.inventoryOpen = open }
-
-// InventorySource 读取打开中的容器来源槽（-1 表示未打开）。
-func (a *Application) InventorySource() int { return a.inventorySource }
-
-// SetInventorySource 写入打开中的容器来源槽。
-func (a *Application) SetInventorySource(source int) { a.inventorySource = source }
 
 // Center 读取相机所在的中心区块。
 func (a *Application) Center() core.ChunkPos { return a.center }

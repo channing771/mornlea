@@ -91,5 +91,5 @@
 
 **Steps:**
 - [ ] 读 visual-baseline skill 与相关 capture/docs AGENTS。补相称 fixtures，先跑比对，输出差异/预览供控制会话目检，再经显式 update 入口更新认可基线；不得更新无关世界基线或放宽阈值。
-- [ ] 执行 gofmt（改动Go文件）、`make frontend-check`（dist先构建并提交，保证字节门禁）、`make rust-check`、`make test-race`、`make dev-check`（六模块vet）、`openspec validate --all --strict --no-interactive`。每个相同基线只跑一次，失败做具体诊断与必要修复后覆盖复测。
+- [ ] 执行 gofmt（改动Go文件）、`make frontend-check`（dist先构建并提交，保证字节门禁）、`make test-race`、`make dev-check`（六模块 vet/short tests 与 Rust fmt/clippy/workspace tests；其 Rust 命令与 rust-check 相同，本基线不再重复独立执行 rust-check）、`openspec validate --all --strict --no-interactive`。每个相同基线只跑一次，失败做具体诊断与必要修复后覆盖复测。
 - [ ] 将命令、退出码、输出文件与环境限制逐项写报告；未经执行不能声称视觉全绿。自审，提交集成/文档更改，等待控制会话整分支独立审查，不推送、不合并。

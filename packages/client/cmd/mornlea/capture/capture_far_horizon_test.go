@@ -78,7 +78,6 @@ func TestFarHorizonApplyPinsCameraAndResetsSharedState(t *testing.T) {
 	}
 	app.Panel().SetVisible(true)
 	app.SetInventoryOpen(true)
-	app.SetInventorySource(12)
 	app.SetCenter(core.ChunkPos{X: 0, Z: 0})
 	app.SetLODTileCenter(lod.TilePos{X: 0, Z: 0})
 	*app.Camera() = client.Camera{Pos: mgl32.Vec3{99, 99, 99}, Yaw: 2, Pitch: 1}
@@ -114,10 +113,10 @@ func TestFarHorizonApplyPinsCameraAndResetsSharedState(t *testing.T) {
 	if app.LODTileCenter() != (lod.TilePos{X: 0, Z: 0}) {
 		t.Fatalf("lodTileCenter = %v, want (0,0)", app.LODTileCenter())
 	}
-	if app.InventoryOpen() || app.InventorySource() != -1 || app.Panel().Visible() ||
+	if app.InventoryOpen() || app.Panel().Visible() ||
 		len(app.RemotePlayers().Presentations()) != 0 {
-		t.Fatalf("共享状态未清空: inventory=%v/%d panel=%v remotes=%d",
-			app.InventoryOpen(), app.InventorySource(), app.Panel().Visible(),
+		t.Fatalf("共享状态未清空: inventory=%v panel=%v remotes=%d",
+			app.InventoryOpen(), app.Panel().Visible(),
 			len(app.RemotePlayers().Presentations()))
 	}
 	if _, opened := app.Furnace().State(); opened {

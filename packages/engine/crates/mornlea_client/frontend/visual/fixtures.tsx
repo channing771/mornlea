@@ -22,7 +22,7 @@ import type {
   UplinkEvent,
 } from "../src/bridge/client";
 import { GamePanels } from "../src/ui/GamePanels";
-import { gameFixture } from "./game-fixtures";
+import { gameFixture, allItems, emptySlots, itemSlot, workbenchRecipe } from "./game-fixtures";
 import { HudRoot } from "../src/hud/HudRoot";
 import { ProgressTrack } from "../src/hud/ProgressTrack";
 import { DebugPanel } from "../src/ui/DebugPanel";
@@ -138,7 +138,7 @@ const hudHotbarSlots: readonly HudSlot[] = [
   { item: 11, count: 1, durability: 0.15 },
   { item: 0, count: 0 },
   { item: 5, count: 2 },
-];
+].map(slot => slot.item ? itemSlot(slot.item, slot.count) : slot);
 
 // 状态栈/弹条/聊天/容器各 fixture 共用的九格镜像：空格与少量物品混合，
 // 状态行两缘按这份镜像的内容行宽对齐。
@@ -152,7 +152,7 @@ const hudInventorySlots: readonly HudSlot[] = [
   { item: 12, count: 5 },
   { item: 0, count: 0 },
   { item: 2, count: 1 },
-];
+].map(slot => slot.item ? itemSlot(slot.item, slot.count) : slot);
 
 // hud-hotbar：只携带快捷栏镜像，生命/饥饿/氧气缺席顺带见证「镜像未确认
 // 不产生状态格」。
@@ -206,10 +206,15 @@ const hudContainerOpenFixture: HudState = hudState({
 // 字面量联合双向钉死（新增部件先加清单条目，否则这里编译不过），随后跑
 // update 入口把基线随部件一并入库。
 const registry: Record<FixtureName, ReactElement> = {
+  "panel-inventory-empty": <GamePanels game={{...gameFixture, inventory: emptySlots(36), grid: emptySlots(9), output: {item:0,count:0},source:undefined}} hud={hudContainerOpenFixture} onEvent={noEvent}/>,
+  "panel-inventory-full": <GamePanels game={{...gameFixture, inventory: Array.from({length:36}, (_, index) => ({...allItems[index % allItems.length]!}))}} hud={hudContainerOpenFixture} onEvent={noEvent}/>,
+  "items-all": <div className="visual-items-all">{allItems.map(slot => <figure key={slot.item}><img src={slot.icon} alt={slot.name}/><figcaption>{slot.item} · {slot.name}</figcaption></figure>)}</div>,
+  "hud-hotbar-first": hudStage(<HudRoot hud={hudState({hotbar:{slots:hudHotbarSlots,selectedIndex:0}})}/>),
+  "hud-hotbar-last": hudStage(<HudRoot hud={hudState({hotbar:{slots:hudHotbarSlots,selectedIndex:8}})}/>),
   "panel-inventory": <GamePanels game={gameFixture} hud={hudContainerOpenFixture} onEvent={noEvent}/>,
-  "panel-workbench": <GamePanels game={{...gameFixture,kind:"workbench",gridSize:3}} hud={hudContainerOpenFixture} onEvent={noEvent}/>,
-  "panel-chest": <GamePanels game={{...gameFixture,kind:"chest"}} hud={hudContainerOpenFixture} onEvent={noEvent}/>,
-  "panel-furnace": <GamePanels game={{...gameFixture,kind:"furnace"}} hud={hudContainerOpenFixture} onEvent={noEvent}/>,
+  "panel-workbench": <GamePanels game={{...gameFixture,kind:"workbench",gridSize:3,grid:workbenchRecipe.slots,output:workbenchRecipe.output,source:{area:"crafting",index:1}}} hud={hudContainerOpenFixture} onEvent={noEvent}/>,
+  "panel-chest": <GamePanels game={{...gameFixture,kind:"chest",source:{area:"chest",index:0}}} hud={hudContainerOpenFixture} onEvent={noEvent}/>,
+  "panel-furnace": <GamePanels game={{...gameFixture,kind:"furnace",source:{area:"furnace",index:1}}} hud={hudContainerOpenFixture} onEvent={noEvent}/>,
   "panel-character": <GamePanels game={{...gameFixture,kind:"character"}} hud={hudContainerOpenFixture} onEvent={noEvent}/>,
   "panel-inventory-narrow": <div className="game-narrow-fixture"><GamePanels game={gameFixture} hud={hudContainerOpenFixture} onEvent={noEvent}/></div>,
   "panel-main-menu": <MainMenu menu={menuFixture} onEvent={noEvent} />,

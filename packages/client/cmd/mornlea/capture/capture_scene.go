@@ -57,7 +57,6 @@ func applyAICompanionCaptureState(app SceneApplication) error {
 	app.SetFormattedChatEventID(0)
 	app.Inventory().Reset()
 	app.SetInventoryOpen(false)
-	app.SetInventorySource(-1)
 	app.Furnace().Reset()
 	app.Chest().Reset()
 	// 合成网格镜像一并清空：ai-companion 场景不呈现容器与网格，前序容器
@@ -509,7 +508,6 @@ func applyGrassCloseupCaptureState(app SceneApplication) error {
 	app.Camera().Yaw = 0
 	app.Camera().Pitch = -0.15
 	app.SetInventoryOpen(false)
-	app.SetInventorySource(-1)
 	if app.RemotePlayers() == nil {
 		return fmt.Errorf("grass-closeup 需要远端玩家追踪器，当前为 nil")
 	}
@@ -689,7 +687,7 @@ func resetCapturePresentation(app SceneApplication) error {
 	app.SetItemDropInstances(app.ItemDropInstances()[:0])
 	// 摆动行进距离是场景间共享的呈现累积：与镜像一并清零，后一场景按新夹
 	// 具重新累积，步态相位因此只由本场景夹具决定。
-	app.ResetLocomotion()
+	app.ResetEntityPresentation()
 	// 夜行者镜像是场景夹具的一部分：hostile-mob 注入的 8 只个体（含受击与
 	// 追逐状态）必须在这里一并恢复，否则水景会带着夜景敌怪出图。镜像可能
 	// 为 nil（最小测试装配），nil 时无从谈起夹具残留，跳过即可。
@@ -711,7 +709,6 @@ func resetCapturePresentation(app SceneApplication) error {
 	app.Chest().Reset()
 	app.Crafting().Reset()
 	app.SetInventoryOpen(false)
-	app.SetInventorySource(-1)
 	app.SetBlockTargetReset(false)
 	if app.Panel() != nil {
 		app.Panel().SetVisible(false)

@@ -70,13 +70,13 @@ func newInteractiveTestApplication(
 	clientEndpoint, serverEndpoint := network.NewMemoryPair(8)
 	t.Cleanup(func() { _ = clientEndpoint.Close() })
 	return &Application{
-		clientEndpoint:  clientEndpoint,
-		receiver:        client.NewReceiver(clientEndpoint, 8),
-		mirror:          client.NewMirror(),
-		itemDrops:       client.NewItemDrops(),
-		inventorySource: -1,
-		predictor:       client.NewPredictor(),
-		serverCancel:    func() {},
+		clientEndpoint: clientEndpoint,
+		receiver:       client.NewReceiver(clientEndpoint, 8),
+		mirror:         client.NewMirror(),
+		itemDrops:      client.NewItemDrops(),
+
+		predictor:    client.NewPredictor(),
+		serverCancel: func() {},
 	}, serverEndpoint
 }
 func sendInteractiveServerMessage(

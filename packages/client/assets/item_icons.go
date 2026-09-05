@@ -1,6 +1,7 @@
 package assets
 
 import (
+	"fmt"
 	"github.com/channing771/mornlea/packages/client/mesh"
 	"github.com/channing771/mornlea/packages/shared/core"
 )
@@ -387,7 +388,7 @@ func originalItemTexture(item core.ItemID) []byte {
 			}
 		}
 	default:
-		m.line(4, 11, 11, 4, 2, false)
+		panic(fmt.Sprintf("物品 %d 缺少原创图稿定义", item))
 	}
 	return renderItemMask(m, palette, uint32(item))
 }
