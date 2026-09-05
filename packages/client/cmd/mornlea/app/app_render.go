@@ -195,14 +195,36 @@ func CameraChunk(pos mgl32.Vec3) core.ChunkPos {
 	}.Chunk()
 }
 
-// appendItemDropInstances 把只读镜像转换为渲染实例，复用调用方切片。死亡
-// 保留期内的掉落按（死亡牛位置邻域 2 格 + upsert tick 落在 [deathTick,
+// dropSupportScanDepth 是支撑扫描的定界：从掉落方块向下一格起至多读该格数。
+const dropSupportScanDepth = 16
+
+// dropSupportHeight 从掉落方块位置向下读只读镜像，首个不透明方块的顶面
+// （方块 Y+1）为支撑高度；扫描窗内遇到未加载格或 16 格无不透明方块时按
+// 生成高度保持（无支撑），不下落。只读镜像，不触碰服务端权威状态。
+func dropSupportHeight(mirror *client.Mirror, dimension core.DimensionID, block core.BlockPos) (float32, bool) {
+	for depth := int32(1); depth <= dropSupportScanDepth; depth++ {
+		below := core.BlockPos{X: block.X, Y: block.Y - depth, Z: block.Z}
+		id, loaded := mirror.BlockAt(dimension, below)
+		if !loaded {
+			return 0, false
+		}
+		if core.BlockOpaque(id) {
+			return float32(below.Y) + 1, true
+		}
+	}
+	return 0, false
+}
+
+// appendItemDropInstances 把只读镜像转换为渲染实例，复用调用方切片；支撑
+// 高度随同一结构传入 render（不另开通道），呈现下落不反馈服务端。死亡保留
+// 期内的掉落按（死亡牛位置邻域 2 格 + upsert tick 落在 [deathTick,
 // deathTick+20] 窗内）关联死亡：关联只影响呈现（50% 前隐藏、后 scale-in +
 // 白闪，见 `render` 掉落 pass），拾取走权威不受影响。密集击杀下多个死亡同
 // 时命中一格时取最近者、再取小 ID——任取其一亦可接受，测试只锁确定性。
 func appendItemDropInstances(
 	dst []render.ItemDrop,
 	drops []client.ItemDropPresentation,
+	mirror *client.Mirror,
 	deaths []client.PassivePresentation,
 ) []render.ItemDrop {
 	for _, drop := range drops {
@@ -210,8 +232,10 @@ func appendItemDropInstances(
 		if !ok {
 			continue
 		}
+		supportY, hasSupport := dropSupportHeight(mirror, drop.ID.Dimension, block)
 		dst = append(dst, render.ItemDrop{
 			ID: drop.ID, Block: block, Item: drop.Item,
+			SupportY: supportY, HasSupport: hasSupport,
 			DeathTick: linkDeathTick(block, drop.UpsertTick, deaths),
 		})
 	}

@@ -83,7 +83,7 @@ func TestShortGrassPackOverrideAndDefaultFallback(t *testing.T) {
 	if got, want := defaults.LayerRGBA(int(expectedShortGrassLayer)), procedural.LayerRGBA(int(expectedShortGrassLayer)); !bytes.Equal(got, want) {
 		t.Fatal("默认包缺少 short_grass.png 时未保留程序化 fallback")
 	}
-	root, err := fs.Sub(defaultPackFS, "packs/pixel_perfection")
+	root, err := fs.Sub(defaultPackFS, "packs/pastelcraft")
 	if err != nil {
 		t.Fatalf("打开默认材质包: %v", err)
 	}

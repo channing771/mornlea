@@ -68,6 +68,18 @@
 | `hud-chat.png` | `hud-chat` | `HudRoot` 多行聊天。 |
 | `hud-container-open.png` | `hud-container-open` | `HudRoot` 容器打开态翻转构图。 |
 
+## motion（1 个）
+
+motion 演示产物只验呈现、不进比对：`make visual-check` 与 `--update-golden`
+都不感知本目录，`world/` 的 27 张 PNG 纪律也不含它。
+
+| 演示文件 | 场景 | 帧数/时长 | 生成入口 |
+|---|---|---|---|
+| `break-burst.gif` | `break-burst-motion`：完整采掘生命周期——F0–4 目标静置，F5–24 采掘爬坡（裂纹 0→9 扫完），F25 破坏同帧（目标置空 + 采掘熄灭 + 泥土掉落注入），F25–44 粒子存续 + 掉落下落（3 格落差重力积分约 9 tick，F34 着陆），F34–49 掉落静置留存 | 50 帧，每帧 0.13 秒，循环约 6.5 秒 | `go run ./packages/client/cmd/mornlea --motion-demo testdata/visual-golden/motion/break-burst.gif`（仓库根运行） |
+
+- 演示场景值住 `packages/client/cmd/mornlea/capture/motion_break_burst.go`，不追加进 `captureScenes`。
+- 编码只用标准库 `image/gif`（固定调色板 + 抖动），固定输入逐字节一致。
+
 ## passive-death（4 个）
 
 文件名即剧本名加 `.gif` 后缀，剧本定义以 `passiveDeathGIFScripts` 为准；单基线帧预算 ≤48（8fps×6s），比对时解码逐帧沿用双阈值，全部帧通过方为通过。

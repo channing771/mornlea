@@ -582,8 +582,8 @@ func TestTorchEmissionEntersMeshSnapshot(t *testing.T) {
 // material，六面同层才不会在某一面串味）、层号冻结为 59（terrain.wgsl 的
 // torch_material 门控函数与 Rust 侧的 TORCH_MATERIAL 常量各自硬编码该值，
 // 本断言是 Go 侧的唯一机械钉子）、alpha 只取 0/255 的 cutout 语义、与既有
-// 全部层逐像素不同；默认材质包不覆盖该层——火把像素只来自程序化生成路径，
-// 不存在任何外部 PNG 依赖。
+// 全部层逐像素不同；内嵌默认包携带同槽位贴图并覆盖该层，程序化像素仍是
+// 独立可构造的回退基线。
 func TestTorchFormsUseDedicatedCutoutLayer(t *testing.T) {
 	registry := assets.NewRegistry()
 	if got := assets.LayerTorch; got != 59 {
@@ -638,10 +638,10 @@ func TestTorchFormsUseDedicatedCutoutLayer(t *testing.T) {
 			t.Fatalf("火把层与既有第 %d 层逐像素相同", layer)
 		}
 	}
-	// 无外部 PNG：内嵌默认材质包没有火把贴图可覆盖，程序化像素原样存活；
-	// 一旦有人往 packs 里塞 torch.png，这里会先于 golden 变红。
-	if got := assets.NewDefaultRegistry().LayerRGBA(int(assets.LayerTorch)); string(got) != string(px) {
-		t.Fatal("默认材质包覆盖了火把层：火把纹理必须只来自程序化生成路径")
+	// 内嵌默认包携带火把贴图：默认火把层即包内像素，程序化像素仍是独立
+	// 可构造的回退基线；包内文件一旦缺失或改名，这里会先于呈现变红。
+	if got, want := assets.NewDefaultRegistry().LayerRGBA(int(assets.LayerTorch)), px; string(got) == string(want) {
+		t.Fatal("默认材质包未覆盖火把层：换肤后火把纹理必须来自内嵌新包")
 	}
 }
 

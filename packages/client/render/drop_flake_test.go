@@ -72,7 +72,7 @@ func TestItemDropFlakeGeometryIsThinSheet(t *testing.T) {
 	beef := []ItemDrop{{
 		ID: id, Block: core.BlockPos{X: 0, Y: 3, Z: 0}, Item: core.ItemRawBeef,
 	}}
-	parts := buildItemDropParts(nil, flakeZeroSpinTick, beef)
+	parts := (&DropFalls{}).buildItemDropParts(nil, flakeZeroSpinTick, beef, dropFallTestGravity, dropFallTestTerminal)
 	if len(parts) != 1 {
 		t.Fatalf("实例数=%d，想要 1", len(parts))
 	}
@@ -90,7 +90,7 @@ func TestItemDropFlakeGeometryIsThinSheet(t *testing.T) {
 	stone := []ItemDrop{{
 		ID: id, Block: core.BlockPos{X: 0, Y: 3, Z: 0}, Item: core.ItemStone,
 	}}
-	cubes := buildItemDropParts(nil, flakeZeroSpinTick, stone)
+	cubes := (&DropFalls{}).buildItemDropParts(nil, flakeZeroSpinTick, stone, dropFallTestGravity, dropFallTestTerminal)
 	if len(cubes) != 1 {
 		t.Fatalf("石头实例数=%d，想要 1", len(cubes))
 	}
@@ -114,15 +114,15 @@ func TestItemDropFlakeKeepsSpinAndFloat(t *testing.T) {
 		Block: core.BlockPos{X: 0, Y: 3, Z: 0},
 		Item:  core.ItemRawBeef,
 	}}
-	first := buildItemDropParts(nil, flakeZeroSpinTick, beef)
-	later := buildItemDropParts(nil, flakeZeroSpinTick+1, beef)
+	first := (&DropFalls{}).buildItemDropParts(nil, flakeZeroSpinTick, beef, dropFallTestGravity, dropFallTestTerminal)
+	later := (&DropFalls{}).buildItemDropParts(nil, flakeZeroSpinTick+1, beef, dropFallTestGravity, dropFallTestTerminal)
 	if len(first) != 1 || len(later) != 1 {
 		t.Fatalf("实例数=%d/%d，想要 1/1", len(first), len(later))
 	}
 	if first[0] == later[0] {
 		t.Fatal("tick 前进后薄片相位未变化")
 	}
-	repeat := buildItemDropParts(nil, flakeZeroSpinTick, beef)
+	repeat := (&DropFalls{}).buildItemDropParts(nil, flakeZeroSpinTick, beef, dropFallTestGravity, dropFallTestTerminal)
 	if repeat[0] != first[0] {
 		t.Fatal("同 tick 薄片重放不一致")
 	}
@@ -137,10 +137,10 @@ func TestItemDropFlakeDeathScaleIn(t *testing.T) {
 		Item:      core.ItemRawBeef,
 		DeathTick: 100,
 	}
-	if got := buildItemDropParts(nil, 109, []ItemDrop{linked}); len(got) != 0 {
+	if got := (&DropFalls{}).buildItemDropParts(nil, 109, []ItemDrop{linked}, dropFallTestGravity, dropFallTestTerminal); len(got) != 0 {
 		t.Fatalf("T+9 关联薄片实例=%d，想要 0（隐藏）", len(got))
 	}
-	half := buildItemDropParts(nil, 110, []ItemDrop{linked})
+	half := (&DropFalls{}).buildItemDropParts(nil, 110, []ItemDrop{linked}, dropFallTestGravity, dropFallTestTerminal)
 	if len(half) != 1 {
 		t.Fatalf("T+10 关联薄片实例=%d，想要 1", len(half))
 	}
@@ -156,7 +156,7 @@ func TestItemDropFlakeDeathScaleIn(t *testing.T) {
 	if half[0].color != [4]float32{2, 2, 2, 1} {
 		t.Fatalf("T+10 颜色=%v，想要白色闪光", half[0].color)
 	}
-	full := buildItemDropParts(nil, 120, []ItemDrop{linked})
+	full := (&DropFalls{}).buildItemDropParts(nil, 120, []ItemDrop{linked}, dropFallTestGravity, dropFallTestTerminal)
 	if len(full) != 1 {
 		t.Fatalf("T+20 关联薄片实例=%d，想要 1", len(full))
 	}
@@ -179,7 +179,7 @@ func TestItemDropFlakeStandsUprightWhileSpinning(t *testing.T) {
 		ID: id, Block: core.BlockPos{X: 0, Y: 3, Z: 0}, Item: core.ItemRawBeef,
 	}}
 	for tick := uint64(0); tick < 80; tick++ {
-		parts := buildItemDropParts(nil, tick, beef)
+		parts := (&DropFalls{}).buildItemDropParts(nil, tick, beef, dropFallTestGravity, dropFallTestTerminal)
 		if len(parts) != 1 {
 			t.Fatalf("tick %d 实例数=%d，想要 1", tick, len(parts))
 		}
@@ -190,9 +190,9 @@ func TestItemDropFlakeStandsUprightWhileSpinning(t *testing.T) {
 		}
 	}
 	// 零旋转 tick（49）宽为边长、厚沿 Z；四分之一转后（69）两者互换。
-	zero := transformedUnitCubeBounds(buildItemDropParts(nil, flakeZeroSpinTick, beef)[0].transform)
+	zero := transformedUnitCubeBounds((&DropFalls{}).buildItemDropParts(nil, flakeZeroSpinTick, beef, dropFallTestGravity, dropFallTestTerminal)[0].transform)
 	zeroSize := zero.max.Sub(zero.min)
-	quarter := transformedUnitCubeBounds(buildItemDropParts(nil, flakeZeroSpinTick+20, beef)[0].transform)
+	quarter := transformedUnitCubeBounds((&DropFalls{}).buildItemDropParts(nil, flakeZeroSpinTick+20, beef, dropFallTestGravity, dropFallTestTerminal)[0].transform)
 	quarterSize := quarter.max.Sub(quarter.min)
 	if diff := zeroSize.X() - dropFlakeSize; diff < -1e-5 || diff > 1e-5 {
 		t.Fatalf("零旋转宽=%v，想要 %v", zeroSize.X(), dropFlakeSize)

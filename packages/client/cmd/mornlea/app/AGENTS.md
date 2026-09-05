@@ -35,6 +35,9 @@ packages/client/cmd/mornlea/app/
   加 `network.LoginClient` 走流式登录，不因同进程运行而直接读写权威模拟状态。
   `TestMornleaUsesLoginStreamsInsteadOfAttachedServerEndpoints` 递归扫描本包
   生产源码强制该边界（拒绝 `server.NewEmbedded(`/`server.New(` 等构造）。
+- 无头装配（内存存档、离屏设备、固定分辨率、无音频）由 `Options.CaptureDir`
+  非空或 `Options.MotionDemo` 置位触发：前者跑固定场景表的 PNG 抓帧，后者只
+  跑 capture 包的 motion 演示入口（GIF 连抓），两者都不经过交互菜单与登录。
 - 权威 tick、渲染与网络热路径不执行无界工作：接收管线的缓冲按「全量初始
   快照 + 运行期 fail-fast」定容（`applicationReceiverCapacity`），drain 预算
   集中为导出常量 `MessageDrainMax`，capture 与 benchmark 与本包共用一个值。

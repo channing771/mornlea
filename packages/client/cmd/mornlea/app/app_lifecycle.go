@@ -135,6 +135,12 @@ func (a *Application) resetSessionOwnedState() {
 	a.inventoryOpen = false
 	a.inventorySource = -1
 	a.itemDrops.Reset()
+	// burst 跟踪表随会话一并清空:旧会话的首次 tick 在新会话是未来 tick(年龄
+	// 钳制为 0 会误重 burst),旧 ID 的淘汰抑制也不得带入新会话。
+	a.entityEncoder.ResetBursts()
+	// 下落首现表随会话一并清空：旧首次 tick 会让新会话的掉落一露面就直接
+	// 下落（年龄虚大），与首现即从生成高度起落的语义相悖。
+	a.entityEncoder.ResetFalls()
 	a.clientSessionClosed = true
 	// 摆动行进距离是纯呈现累积：随会话一并清零，重连后按新消息流重新累积，
 	// 不把旧会话的相位带进新会话。

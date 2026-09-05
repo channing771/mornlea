@@ -3,8 +3,6 @@ package render
 import (
 	"math"
 
-	"github.com/go-gl/mathgl/mgl32"
-
 	"github.com/channing771/mornlea/packages/client/assets"
 	"github.com/channing771/mornlea/packages/shared/core"
 	"github.com/channing771/mornlea/packages/shared/world"
@@ -31,56 +29,21 @@ const (
 	dropFlakeThin = float32(0.02)
 )
 
-// ItemDrop 是一个权威掉落物的渲染输入；位置由方块位置决定。`DeathTick` 是
-// 可选的关联死亡 tick（0 表示未关联）：关联掉落在死亡相位 50% 前不渲染，
-// 50% 起 scale-in 渐显并叠一次白色闪光；纯呈现启发式，拾取走权威不受影响。
+// ItemDrop 是一个权威掉落物的渲染输入；位置由方块位置决定，支撑高度由
+// app 层从只读镜像算出后随本结构传入，不另开通道。`DeathTick` 是可选的关联
+// 死亡 tick（0 表示未关联）：关联掉落在死亡相位 50% 前不渲染，50% 起 scale-in
+// 渐显并叠一次白色闪光；纯呈现启发式，拾取走权威不受影响。
 type ItemDrop struct {
-	ID        core.DropID
-	Block     core.BlockPos
-	Item      core.ItemID
+	ID    core.DropID
+	Block core.BlockPos
+	Item  core.ItemID
+	// SupportY 是掉落方块下方首个不透明方块顶面的世界高度（方块 Y+1）。
+	// HasSupport 为假表示镜像无数据或支撑超出扫描定界，此时按生成高度保持、
+	// 不下落。呈现下落不反馈服务端。
+	SupportY   float32
+	HasSupport bool
+	// DeathTick 为零表示未关联死亡；非零时呈现侧按死亡相位滞后渐显。
 	DeathTick uint64
-}
-
-func buildItemDropParts(dst []avatarPart, serverTick uint64, drops []ItemDrop) []avatarPart {
-	for _, drop := range drops {
-		if len(dst) == maxItemDrops {
-			break
-		}
-		material, ok := itemDropMaterial(drop.Item)
-		if !ok {
-			continue
-		}
-		unit := float32(1)
-		color := [4]float32{1, 1, 1, 1}
-		if drop.DeathTick != 0 {
-			visible, linkedScale, flash := deathLinkedDropAppearance(serverTick, drop.DeathTick)
-			if !visible {
-				continue
-			}
-			unit = linkedScale
-			if flash {
-				color = [4]float32{2, 2, 2, 1}
-			}
-		}
-		sx, sy, sz := dropCubeSize*unit, dropCubeSize*unit, dropCubeSize*unit
-		if itemDropFlake(drop.Item) {
-			sx, sy, sz = dropFlakeSize*unit, dropFlakeSize*unit, dropFlakeThin*unit
-		}
-		phase := dropAnimationPhase(serverTick, drop.ID)
-		center := mgl32.Vec3{
-			float32(drop.Block.X) + 0.5,
-			float32(drop.Block.Y) + dropBaseAltitude +
-				dropFloatHeight*float32(math.Sin(float64(phase.float))),
-			float32(drop.Block.Z) + 0.5,
-		}
-		transform := mgl32.Translate3D(center.X(), center.Y(), center.Z()).
-			Mul4(mgl32.HomogRotate3DY(phase.spin)).
-			Mul4(mgl32.Scale3D(sx, sy, sz))
-		// 贴图分支颜色与漫反射相乘（见 avatar 着色器）：中性白保持原样，
-		// 超白即一次白色闪光；填色保持编码确定。
-		dst = append(dst, avatarPart{transform: transform, color: color, material: material})
-	}
-	return dst
 }
 
 // deathLinkedDropAppearance 计算关联掉落在当前权威 tick 的呈现：相位 50% 前
@@ -169,6 +132,14 @@ func ItemColor(item core.ItemID) [4]float32 {
 	default:
 		return [4]float32{}
 	}
+}
+
+// itemDropColor 复用与程序化方块一致的稳定基色。
+func itemDropColor(item core.ItemID) ([4]float32, bool) {
+	if !core.RegisteredItem(item) {
+		return [4]float32{}, false
+	}
+	return ItemColor(item), true
 }
 
 // itemDropMaterial 把掉落物品映射到材质 atlas 的采样层：可放置物品取注册表

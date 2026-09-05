@@ -24,11 +24,11 @@ func TestDeathLinkedDropHidesBeforeHalfAndScalesInWithFlash(t *testing.T) {
 		DeathTick: 100,
 	}
 	// 50% 之前（T+9）不可见。
-	if got := buildItemDropParts(nil, 109, []ItemDrop{linked}); len(got) != 0 {
+	if got := (&DropFalls{}).buildItemDropParts(nil, 109, []ItemDrop{linked}, dropFallTestGravity, dropFallTestTerminal); len(got) != 0 {
 		t.Fatalf("T+9 关联掉落实例=%d，想要 0（隐藏）", len(got))
 	}
 	// 50% 起（T+10）渐显：小尺寸 + 白闪。
-	half := buildItemDropParts(nil, 110, []ItemDrop{linked})
+	half := (&DropFalls{}).buildItemDropParts(nil, 110, []ItemDrop{linked}, dropFallTestGravity, dropFallTestTerminal)
 	if len(half) != 1 {
 		t.Fatalf("T+10 关联掉落实例=%d，想要 1", len(half))
 	}
@@ -39,7 +39,7 @@ func TestDeathLinkedDropHidesBeforeHalfAndScalesInWithFlash(t *testing.T) {
 		t.Fatalf("T+10 颜色=%v，想要白色闪光", half[0].color)
 	}
 	// 保留末（T+20）长满：全尺寸 + 正常白。
-	full := buildItemDropParts(nil, 120, []ItemDrop{linked})
+	full := (&DropFalls{}).buildItemDropParts(nil, 120, []ItemDrop{linked}, dropFallTestGravity, dropFallTestTerminal)
 	if len(full) != 1 {
 		t.Fatalf("T+20 关联掉落实例=%d，想要 1", len(full))
 	}
@@ -50,7 +50,7 @@ func TestDeathLinkedDropHidesBeforeHalfAndScalesInWithFlash(t *testing.T) {
 		t.Fatalf("T+20 颜色=%v，想要正常白", full[0].color)
 	}
 	// 渐显单调：T+15 尺寸介于两者之间。
-	mid := buildItemDropParts(nil, 115, []ItemDrop{linked})
+	mid := (&DropFalls{}).buildItemDropParts(nil, 115, []ItemDrop{linked}, dropFallTestGravity, dropFallTestTerminal)
 	if len(mid) != 1 {
 		t.Fatalf("T+15 关联掉落实例=%d，想要 1", len(mid))
 	}
@@ -63,7 +63,7 @@ func TestDeathLinkedDropHidesBeforeHalfAndScalesInWithFlash(t *testing.T) {
 		Block: core.BlockPos{X: 0, Y: 1, Z: -1},
 		Item:  core.ItemStone,
 	}
-	control := buildItemDropParts(nil, 109, []ItemDrop{plain})
+	control := (&DropFalls{}).buildItemDropParts(nil, 109, []ItemDrop{plain}, dropFallTestGravity, dropFallTestTerminal)
 	if len(control) != 1 {
 		t.Fatalf("非关联掉落实例=%d，想要 1（不受滞后影响）", len(control))
 	}
@@ -71,7 +71,7 @@ func TestDeathLinkedDropHidesBeforeHalfAndScalesInWithFlash(t *testing.T) {
 		t.Fatalf("非关联缩放=%v，想要全尺寸", scale)
 	}
 	// 同 tick 重放确定。
-	repeat := buildItemDropParts(nil, 115, []ItemDrop{linked})
+	repeat := (&DropFalls{}).buildItemDropParts(nil, 115, []ItemDrop{linked}, dropFallTestGravity, dropFallTestTerminal)
 	if len(repeat) != 1 || repeat[0] != mid[0] {
 		t.Fatal("同 tick 关联掉落重放不一致，想要确定")
 	}

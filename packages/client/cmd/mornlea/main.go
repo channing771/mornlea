@@ -32,6 +32,8 @@ type runDependencies struct {
 	runInteractive func(*application.Application) error
 	runBenchmark   func(*application.Application, string) error
 	runCapture     func(*application.Application, string, bool) error
+	// `runMotionDemo` 只服务显式 motion 演示；普通 capture 与游戏不调用。
+	runMotionDemo func(*application.Application, string) error
 	// `runGoldenUpdateControl` 只服务显式 baseline update；普通 capture 与游戏不调用。
 	runGoldenUpdateControl func(*application.Application, *application.Application, string) error
 }
@@ -46,6 +48,9 @@ func run(args []string) error {
 		// 隐式实现该接口，这里的适配只为对齐 `runDependencies` 字段的具体签名。
 		runCapture: func(app *application.Application, dir string, updateGolden bool) error {
 			return capture.RunCapture(app, dir, updateGolden)
+		},
+		runMotionDemo: func(app *application.Application, outPath string) error {
+			return capture.RunBreakBurstMotion(app, outPath)
 		},
 		runGoldenUpdateControl: func(lodOn, lodOff *application.Application, dir string) error {
 			return capture.RunGoldenUpdateControl(lodOn, lodOff, dir)
@@ -76,7 +81,8 @@ func runWithDependencies(args []string, dependencies runDependencies) error {
 		Level: slog.LevelDebug,
 	}), effective.Logging)
 	effective.Apply()
-	if options.Application.Connect == "" && !options.Application.Benchmark && options.CaptureDir == "" {
+	if options.Application.Connect == "" && !options.Application.Benchmark && options.CaptureDir == "" &&
+		options.MotionDemoPath == "" {
 		// 交互本地客户端启动停留在主菜单，世界装配延迟到「进入游戏」之后。
 		options.Application.StartAtMenu = true
 		options.Application.Companions = slices.Clone(effective.CompanionDefinitions())
@@ -162,6 +168,21 @@ func runWithDependencies(args []string, dependencies runDependencies) error {
 		return errors.Join(
 			dependencies.runCapture(app, options.CaptureDir, true),
 			app.Close(),
+		)
+	}
+
+	if options.MotionDemoPath != "" {
+		// motion 演示是独立的无头路径：单个 fresh application，不跑 LOD
+		// control（那是 PNG 基线更新的专属门禁），演示场景不进场景表。
+		motionOptions := options.Application
+		motionOptions.MotionDemo = true
+		motionApp, err := dependencies.newApplication(motionOptions)
+		if err != nil {
+			return fmt.Errorf("启动 motion 演示抓帧: %w", err)
+		}
+		return errors.Join(
+			dependencies.runMotionDemo(motionApp, options.MotionDemoPath),
+			motionApp.Close(),
 		)
 	}
 

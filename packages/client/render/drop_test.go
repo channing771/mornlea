@@ -28,7 +28,7 @@ func testItemDrops(count int) []ItemDrop {
 // Mutation killed: exceeding the fixed instance budget or rendering unknown
 // items would break the固定 800 实例上限。
 func TestItemDropPartsStayWithinFixedCapacity(t *testing.T) {
-	parts := buildItemDropParts(nil, 0, testItemDrops(maxItemDrops+16))
+	parts := (&DropFalls{}).buildItemDropParts(nil, 0, testItemDrops(maxItemDrops+16), dropFallTestGravity, dropFallTestTerminal)
 	if len(parts) != maxItemDrops {
 		t.Fatalf("实例数 = %d，想要固定上限 %d", len(parts), maxItemDrops)
 	}
@@ -37,7 +37,7 @@ func TestItemDropPartsStayWithinFixedCapacity(t *testing.T) {
 		ID:   core.DropID{Slot: 0, Generation: 1},
 		Item: core.ItemID(4242),
 	}}
-	if got := buildItemDropParts(nil, 0, unknown); len(got) != 0 {
+	if got := (&DropFalls{}).buildItemDropParts(nil, 0, unknown, dropFallTestGravity, dropFallTestTerminal); len(got) != 0 {
 		t.Fatalf("未注册物品产生了实例: %+v", got)
 	}
 }
@@ -54,7 +54,7 @@ func TestItemDropPartsSampleAtlasLayers(t *testing.T) {
 		Block: core.BlockPos{X: 1, Y: 3, Z: 1},
 		Item:  core.ItemRawBeef,
 	}}
-	parts := buildItemDropParts(nil, 7, drops)
+	parts := (&DropFalls{}).buildItemDropParts(nil, 7, drops, dropFallTestGravity, dropFallTestTerminal)
 	if len(parts) != 2 {
 		t.Fatalf("实例数=%d，想要 2", len(parts))
 	}
@@ -70,8 +70,9 @@ func TestItemDropPartsSampleAtlasLayers(t *testing.T) {
 // mirror would break determinism across identical ticks.
 func TestItemDropAnimationIsDeterministicAndTickDriven(t *testing.T) {
 	drops := testItemDrops(2)
-	first := append([]avatarPart(nil), buildItemDropParts(nil, 7, drops)...)
-	repeat := buildItemDropParts(nil, 7, drops)
+	falls := &DropFalls{}
+	first := append([]avatarPart(nil), falls.buildItemDropParts(nil, 7, drops, dropFallTestGravity, dropFallTestTerminal)...)
+	repeat := falls.buildItemDropParts(nil, 7, drops, dropFallTestGravity, dropFallTestTerminal)
 	if len(first) != len(repeat) {
 		t.Fatalf("同一 tick 实例数不同: %d vs %d", len(first), len(repeat))
 	}
@@ -81,7 +82,7 @@ func TestItemDropAnimationIsDeterministicAndTickDriven(t *testing.T) {
 		}
 	}
 
-	later := buildItemDropParts(nil, 8, drops)
+	later := falls.buildItemDropParts(nil, 8, drops, dropFallTestGravity, dropFallTestTerminal)
 	if later[0] == first[0] {
 		t.Fatal("server tick 前进后动画相位未变化")
 	}
@@ -115,7 +116,7 @@ func TestItemDropPartsCoverPreviouslyInvisibleItems(t *testing.T) {
 			Block: core.BlockPos{X: 0, Y: 3, Z: 0},
 			Item:  item,
 		}}
-		parts := buildItemDropParts(nil, 7, drops)
+		parts := (&DropFalls{}).buildItemDropParts(nil, 7, drops, dropFallTestGravity, dropFallTestTerminal)
 		if len(parts) != 1 {
 			t.Fatalf("物品 %d 实例数=%d，想要 1", item, len(parts))
 		}

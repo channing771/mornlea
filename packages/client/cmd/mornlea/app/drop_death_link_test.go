@@ -36,7 +36,7 @@ func TestAppendItemDropInstancesLinksDeathWindowDrops(t *testing.T) {
 		{ID: nearID, BlockIndex: nearIndex, Item: core.ItemRawBeef, Count: 1, UpsertTick: 100},
 		{ID: farID, BlockIndex: farIndex, Item: core.ItemRawBeef, Count: 1, UpsertTick: 100},
 	}
-	instances := appendItemDropInstances(nil, drops, deaths)
+	instances := appendItemDropInstances(nil, drops, client.NewMirror(), deaths)
 	if len(instances) != 2 {
 		t.Fatalf("实例=%d，想要 2", len(instances))
 	}
@@ -54,7 +54,7 @@ func TestAppendItemDropInstancesLinksDeathWindowDrops(t *testing.T) {
 	stale := []client.ItemDropPresentation{
 		{ID: nearID, BlockIndex: nearIndex, Item: core.ItemRawBeef, Count: 1, UpsertTick: 50},
 	}
-	if got := appendItemDropInstances(nil, stale, deaths); len(got) != 1 || got[0].DeathTick != 0 {
+	if got := appendItemDropInstances(nil, stale, client.NewMirror(), deaths); len(got) != 1 || got[0].DeathTick != 0 {
 		t.Fatalf("窗外掉落=%+v，想要不关联", got)
 	}
 }

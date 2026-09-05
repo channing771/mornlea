@@ -48,10 +48,10 @@ func openApplicationStore(
 		SpawnDimension: core.Overworld,
 		SpawnAnchor:    core.ChunkPos{},
 	}
-	// benchmark 与 capture 都要求世界状态与本机磁盘上的真实存档隔离：
-	// benchmark 为了性能测量不被磁盘 I/O 干扰，capture 为了抓帧结果不随
-	// "这台机器碰巧玩到哪一步"漂移——两者都复用内存 store 达成确定性初始状态。
-	if options.Benchmark || options.CaptureDir != "" {
+	// benchmark、capture 与 motion 演示都要求世界状态与本机磁盘上的真实存档隔离：
+	// benchmark 为了性能测量不被磁盘 I/O 干扰，capture/motion 为了抓帧结果不随
+	// "这台机器碰巧玩到哪一步"漂移——三者都复用内存 store 达成确定性初始状态。
+	if options.Benchmark || options.CaptureDir != "" || options.MotionDemo {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
@@ -224,8 +224,8 @@ func NewWithDependencies(
 	// 交互渲染的目标物理帧缓冲(见 `fitFramebuffer` 注释);benchmark 离屏
 	// 渲染沿用同一基准分辨率并在报告中固定钉住。
 	width, height := interactiveFramebufferWidth, interactiveFramebufferHeight
-	headless := options.Benchmark || options.CaptureDir != ""
-	if options.CaptureDir != "" {
+	headless := options.Benchmark || options.CaptureDir != "" || options.MotionDemo
+	if options.CaptureDir != "" || options.MotionDemo {
 		width, height = CaptureWidth, CaptureHeight
 	}
 	var playCue func(audio.Cue)

@@ -1054,8 +1054,9 @@ func torchNightPatchLuma(t *testing.T, img *image.NRGBA, center image.Point) int
 }
 
 // torchNightFlamePixels 收集屏幕矩形内判为「火芯暖色」的像素：亮暖（R 显著
-// 高于 B）。石面被火把照亮是中性灰（R≈B），木柄暗棕达不到亮度门槛，两者
-// 都不会被误判成火芯。
+// 高于 B）。石面被火把照亮是中性灰（R≈B），不会被误判成火芯。暖色门槛按内嵌
+// 默认包标定：Pastelcraft 火把是浅奶油色杆（纹理暖色 R-B≈140），夜景渲染后
+// R-B 实测 78，中性石面 R-B 贴近 0，门槛取 60 留出两侧裕量。
 func torchNightFlamePixels(img *image.NRGBA, rect image.Rectangle) []image.Point {
 	var flames []image.Point
 	rect = rect.Intersect(img.Bounds())
@@ -1063,7 +1064,7 @@ func torchNightFlamePixels(img *image.NRGBA, rect image.Rectangle) []image.Point
 		for x := rect.Min.X; x < rect.Max.X; x++ {
 			i := img.PixOffset(x, y)
 			r, b := int(img.Pix[i]), int(img.Pix[i+2])
-			if r >= 160 && r-b >= 80 {
+			if r >= 160 && r-b >= 60 {
 				flames = append(flames, image.Pt(x, y))
 			}
 		}
@@ -1111,7 +1112,10 @@ func TestTorchNightScenePixelsShowLightFalloffAndCutout(t *testing.T) {
 	})
 	t.Run("封墙暗室无漏光", func(t *testing.T) {
 		ceiling := torchNightPatchLuma(t, img, captureSceneProject(t, camera, mgl32.Vec3{4.0, 6.0, -12.0}))
-		if ceiling >= 70 {
+		// 阈值按内嵌默认包标定：光照与几何与换肤前完全一致，Pastelcraft 石面
+		// 反照率更高，同光场下该采样块实测 76（换肤前 <70），取 90 保留裕量；
+		// 真实漏光（天空光灌入或方块光穿墙）会把该值推高到被照亮面量级。
+		if ceiling >= 90 {
 			t.Fatalf("远端天花板亮度=%d，封闭暗室的未照到面应当保持暗色", ceiling)
 		}
 	})
@@ -1152,6 +1156,30 @@ func TestTorchNightScenePixelsShowLightFalloffAndCutout(t *testing.T) {
 			})
 		}
 	})
+}
+
+// TestTorchNightPatchLumaCatchesGrossLeak 用合成亮斑证明暗室阈值的漏光侧仍
+// 被抓住：同一采样函数 `torchNightPatchLuma`（11×11 均值）在被照亮面量级的
+// 灰斑上返回值远高于阈值 90。干净侧实测 76（阈值 90，裕量 14），漏光侧合成
+// 160（阈值 90，裕量 70），两侧都有明确余量。
+func TestTorchNightPatchLumaCatchesGrossLeak(t *testing.T) {
+	img := image.NewNRGBA(image.Rect(0, 0, captureWidth, captureHeight))
+	center := image.Pt(captureWidth/2, captureHeight/2)
+	const lit = 160
+	for dy := -5; dy <= 5; dy++ {
+		for dx := -5; dx <= 5; dx++ {
+			i := img.PixOffset(center.X+dx, center.Y+dy)
+			img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = lit, lit, lit, 255
+		}
+	}
+	got := torchNightPatchLuma(t, img, center)
+	if got < 150 {
+		t.Fatalf("合成漏光采样=%d，想要至少 150（被照亮面量级）", got)
+	}
+	if got < 90 {
+		t.Fatalf("合成漏光采样=%d，未触发暗室阈值 90", got)
+	}
+	t.Logf("干净侧实测 76 vs 阈值 90（裕量 14），合成漏光 %d vs 阈值 90（裕量 %d）", got, got-90)
 }
 
 // TestBedNightCaptureSceneIsRegistered 锁住 bed-night 场景条目的完整性：

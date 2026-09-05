@@ -46,13 +46,14 @@ packages/client/cmd/mornlea/
 
 ## Entry Modes
 
-四种模式都在 `main.go` 的 `runWithDependencies` 路由，装配差异只发生在 main：
+四种模式与一种演示都在 `main.go` 的 `runWithDependencies` 路由，装配差异只发生在 main：
 
 | 模式 | 触发 | 装配行为 |
 |---|---|---|
 | 普通本地 | 无特殊 flag | 启动停留在主菜单，进入游戏后才打开存档、启动本地 Host 并登录；AI 模型设置只注入此模式 |
 | 远程联机 | `--connect` | 跳过本地 Host 与菜单延迟装配，经 TCP 连接并登录远程服务端；不携带 AI 运行时 |
 | 视觉抓帧 | `--capture`（可带 `--update-golden`） | 确定性内存世界加离屏 renderer，跑完 capture 包的固定场景表；不能与 `--benchmark`/`--connect` 同用 |
+| motion 演示 | `--motion-demo`（GIF 输出路径） | 与抓帧同源的无头装配，只跑 capture 包的 motion 演示入口（50 帧采掘生命周期 GIF 连抓）；不进场景表与比对，不能与其余无头/联机路径同用 |
 | 性能场景 | `--benchmark` + `--perf-output` | 固定工作负载、`--benchmark-transport` 指定 transport 的无头观察者路径 |
 | 画面捕获（叠加项） | `--dev-capture`（可带 `--dev-capture-addr`） | 不是独立模式：叠加在普通本地/远程联机交互路径上，main 拉起 devcapture 的回环捕获服务并注入 `CaptureCoordinator`；与 `--benchmark`/`--capture` 互斥，服务启动失败仅告警降级、游戏照常运行 |
 
