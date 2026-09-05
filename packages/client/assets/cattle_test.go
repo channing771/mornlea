@@ -9,7 +9,7 @@ import (
 
 // TestCattleLayersAreAppendedAfterCrack 锁定牛四层的层号追加纪律：牛皮、牛头、
 // 生牛肉、熟牛肉只能追加在既有枚举末位（裂纹之后），植物 31..54、火把、床、
-// 短草与裂纹的冻结层号一律不动。
+// 短草与裂纹的冻结层号一律不动；物品图标层继续追加在牛层之后。
 func TestCattleLayersAreAppendedAfterCrack(t *testing.T) {
 	if got := int(LayerCowHide); got != 79 {
 		t.Fatalf("LayerCowHide=%d，想要追加值 79", got)
@@ -23,8 +23,8 @@ func TestCattleLayersAreAppendedAfterCrack(t *testing.T) {
 	if got := int(LayerCookedBeef); got != 82 {
 		t.Fatalf("LayerCookedBeef=%d，想要追加值 82", got)
 	}
-	if got := int(layerCount); got != 83 {
-		t.Fatalf("layerCount=%d，想要 83", got)
+	if got := int(layerCount); got != int(LayerItemBrokenIronSword)+1 {
+		t.Fatalf("layerCount=%d，想要覆盖末个物品层 %d", got, int(LayerItemBrokenIronSword)+1)
 	}
 	if LayerCowHide != LayerCrack9+1 {
 		t.Fatalf("LayerCowHide=%d 不紧贴裂纹区间上界 %d，插层检测失效", LayerCowHide, LayerCrack9+1)

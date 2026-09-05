@@ -464,7 +464,7 @@ func (a *Application) assembleHUDState() client.UIHudState {
 		Viewport: viewport,
 	}
 	if hotbar, confirmed := a.inventory.Hotbar(); confirmed {
-		state.Hotbar = client.NewUIHudHotbar(hotbar)
+		state.Hotbar = client.NewUIHudHotbar(hotbar, &a.itemIcons)
 	}
 	if health, ready := a.predictor.Health(); ready {
 		state.Health = client.NewUIHudHealth(health)

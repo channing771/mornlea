@@ -23,6 +23,9 @@ import (
 
 // HUD 分节的字段边界，与 schema 的 integer/maxLength 上界及 Go 镜像域逐值同源。
 const (
+	// UIIconMaxChars 与 schema `hudSlot.icon` 的 maxLength 同值。图标目录在
+	// 应用装配时校验这一上界，避免每 tick 重复检查或编码。
+	UIIconMaxChars = 65536
 	// `hudViewportSideMax` 是逻辑视口单边的上界，与 schema `hudViewport` 的
 	// maximum 同值：不另设更紧的上界，避免显示设备演进时被迫改协议。
 	hudViewportSideMax = 1<<32 - 1
@@ -87,6 +90,18 @@ type UIHudSlot struct {
 	Durability float32     `json:"durability,omitempty"`
 }
 
+// UIItemMetadata 是栏位共享的只读呈现元数据。应用装配层一次性生成名称与 PNG
+// data URI，HUD、背包、容器和配方只通过本接口取缓存值。
+type UIItemMetadata struct {
+	Name string
+	Icon string
+}
+
+// UIItemMetadataSource 提供按物品编号索引的装配期缓存；未知物品返回 false。
+type UIItemMetadataSource interface {
+	UIItemMetadata(core.ItemID) (UIItemMetadata, bool)
+}
+
 // UIHudHotbar 是快捷栏镜像：恰九格且格序即栏位序，`SelectedIndex` 是选中格下标。
 type UIHudHotbar struct {
 	Slots         []UIHudSlot `json:"slots"`
@@ -96,19 +111,36 @@ type UIHudHotbar struct {
 // NewUIHudHotbar 把已确认权威快捷栏镜像转成下行分节；非法镜像返回 nil，绝不把
 // 越界选中下标或未注册物品下行给前端。`InventoryMirror.Apply` 已在入口拒绝非法
 // 状态，这条分支只兜住绕过镜像的编程错误。
-func NewUIHudHotbar(hotbar core.Hotbar) *UIHudHotbar {
+func NewUIHudHotbar(hotbar core.Hotbar, sources ...UIItemMetadataSource) *UIHudHotbar {
 	if !hotbar.Valid() {
 		return nil
 	}
 	slots := make([]UIHudSlot, 0, len(hotbar.Slots))
 	for _, stack := range hotbar.Slots {
-		slots = append(slots, UIHudSlot{
-			Item:       stack.Item,
-			Count:      stack.Count,
-			Durability: hudDurabilityRatio(stack),
-		})
+		slots = append(slots, newUIItemSlot(stack, firstUIItemMetadataSource(sources)))
 	}
 	return &UIHudHotbar{Slots: slots, SelectedIndex: hotbar.Selected}
+}
+
+func firstUIItemMetadataSource(sources []UIItemMetadataSource) UIItemMetadataSource {
+	if len(sources) == 0 {
+		return nil
+	}
+	return sources[0]
+}
+
+// newUIItemSlot 是 HUD 与各游戏面板的唯一缓存元数据组装点；无缓存时只保留
+// 物品栈字段，由需要名称回退的游戏面板构造器按既有契约补齐。
+func newUIItemSlot(stack core.ItemStack, source UIItemMetadataSource) UIHudSlot {
+	slot := UIHudSlot{Item: stack.Item, Count: stack.Count, Durability: hudDurabilityRatio(stack)}
+	if source != nil {
+		if metadata, ok := source.UIItemMetadata(stack.Item); ok {
+			slot.Name = metadata.Name
+			slot.Icon = metadata.Icon
+			return slot
+		}
+	}
+	return slot
 }
 
 // hudDurabilityRatio 返回部分磨损工具的剩余耐久比例，其余情形返回 0（序列化时

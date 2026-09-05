@@ -126,6 +126,10 @@ func NewWithDependencies(
 	if registryErr != nil {
 		return nil, fmt.Errorf("加载材质包 %q: %w", options.ResolvedTexturePackPath, registryErr)
 	}
+	itemIcons, itemIconErr := newItemIconCatalog(reg)
+	if itemIconErr != nil {
+		return nil, fmt.Errorf("构建物品图标目录: %w", itemIconErr)
+	}
 	ctx := context.Background()
 	var store storage.WorldStore
 	var clientEndpoint network.ClientEndpoint
@@ -296,6 +300,7 @@ func NewWithDependencies(
 		mirror:          client.NewMirror(),
 		itemDrops:       client.NewItemDrops(),
 		inventorySource: -1,
+		itemIcons:       itemIcons,
 		predictor:       client.NewPredictor(),
 		remotePlayers:   client.NewRemotePlayers(),
 		companions:      &client.Companions{},

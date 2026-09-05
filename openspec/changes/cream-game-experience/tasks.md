@@ -1,10 +1,10 @@
 ## 1. 前端面板与鼠标交互
 
-- [ ] 1.1 先为 schema/Go 解码、面板 DOM 操作、原生参与切换写失败测试；在 frontend、client 与 app 完成语义快照/事件、统一奶油面板、人物只读页、HUD 动效与鼠标选择，退役生产 GPU 面板调用；运行 pnpm typecheck/test/build、cargo test -p mornlea_client --locked、client/app 定点 race 与 audit。
+- [x] 1.1 先为 schema/Go 解码、面板 DOM 操作、原生参与切换写失败测试；在 frontend、client 与 app 完成语义快照/事件、统一奶油面板、人物只读页、HUD 动效与鼠标选择，退役生产 GPU 面板调用；运行 pnpm typecheck/test/build、cargo test -p mornlea_client --locked、client/app 定点 race 与 audit。
 
 ## 2. 同源物品图标
 
-- [ ] 2.1 assets 为全部注册物品补齐透明原创图标与层映射，前端槽位/配方和非方块掉落消费同源图片；先覆盖全 ID/未知值/透明/破损区分测试，再运行 assets/render/client/app 定点 race 与前端检查。
+- [x] 2.1 assets 为全部注册物品补齐透明原创图标与层映射，前端槽位/配方和非方块掉落消费同源图片；先覆盖全 ID/未知值/透明/破损区分测试，再运行 assets/render/client/app 定点 race 与前端检查。
 
 ## 3. 人物细节和步态
 

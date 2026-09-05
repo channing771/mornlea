@@ -142,6 +142,38 @@ const (
 	LayerCowHead
 	LayerRawBeef
 	LayerCookedBeef
+	// LayerItemCoal..LayerItemBrokenIronSword 是非立方体物品共用的原创图标层。
+	// 只能追加在既有世界材质之后，保持所有冻结层号不变；UI 与世界薄片直接
+	// 采样同一层，避免各自维护一套轮廓。
+	LayerItemCoal
+	LayerItemRawIron
+	LayerItemIronIngot
+	LayerItemStonePickaxe
+	LayerItemIronPickaxe
+	LayerItemBrokenStonePickaxe
+	LayerItemBrokenIronPickaxe
+	LayerItemStoneHoe
+	LayerItemIronHoe
+	LayerItemBrokenStoneHoe
+	LayerItemBrokenIronHoe
+	LayerItemWheatSeeds
+	LayerItemWheat
+	LayerItemBread
+	LayerItemStick
+	LayerItemBoneMeal
+	LayerItemPotato
+	LayerItemCarrot
+	LayerItemPoisonousPotato
+	LayerItemDoor
+	LayerItemTorch
+	LayerItemRottenFlesh
+	LayerItemBed
+	LayerItemWoodenSword
+	LayerItemStoneSword
+	LayerItemIronSword
+	LayerItemBrokenWoodenSword
+	LayerItemBrokenStoneSword
+	LayerItemBrokenIronSword
 	layerCount
 )
 
@@ -250,6 +282,7 @@ var textureBindings = [...]textureBinding{
 // Registry 是方块属性与材质的注册表。
 type Registry struct {
 	layers       [layerCount][]byte
+	itemIcons    [core.ItemIDMax][]byte
 	meshSnapshot mesh.RegistrySnapshot
 }
 
@@ -313,6 +346,14 @@ func NewRegistry() *Registry {
 	r.layers[LayerCowHead] = cowHeadTexture()
 	r.layers[LayerRawBeef] = rawBeefTexture()
 	r.layers[LayerCookedBeef] = cookedBeefTexture()
+	for item := core.ItemID(1); item < core.ItemIDMax; item++ {
+		layer, ok := ItemIconLayer(item)
+		if !ok || r.layers[int(layer)] != nil {
+			continue
+		}
+		r.layers[int(layer)] = originalItemTexture(item)
+	}
+	r.refreshItemIcons()
 	// ids 覆盖 core 的全部已注册方块编号，上界一律用独占哨兵 core.BlockIDMax
 	// 表达——写死某个具体末位编号（历史上写过 WaterLevel7ID）会在追加新编号时
 	// 静默退化成子集，新方块就永远进不了快照。Rust 侧的
@@ -643,7 +684,8 @@ func isCutoutLayer(layer int) bool {
 		(layer >= int(LayerWheat0) && layer <= int(LayerCarrot7)) || layer == int(LayerTorch) ||
 		layer == int(LayerShortGrass) ||
 		(layer >= int(LayerCrack0) && layer <= int(LayerCrack9)) ||
-		layer == int(LayerRawBeef) || layer == int(LayerCookedBeef)
+		layer == int(LayerRawBeef) || layer == int(LayerCookedBeef) ||
+		(layer >= int(LayerItemCoal) && layer <= int(LayerItemBrokenIronSword))
 }
 
 func (r *Registry) LayerCount() int { return int(layerCount) }

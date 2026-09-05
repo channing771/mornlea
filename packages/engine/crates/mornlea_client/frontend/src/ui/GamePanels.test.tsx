@@ -10,3 +10,12 @@ it.each(["chest", "furnace", "workbench"] as const)("%s 面板语义槽位", kin
 it("未确认时槽位禁用且人物页只读", () => { const emit = vi.fn(); const { rerender } = render(<GamePanels game={{ ...state, confirmed: false }} onEvent={emit}/>); fireEvent.click(screen.getByRole("button", { name: "背包 1：空" })); expect(emit).not.toHaveBeenCalled(); rerender(<GamePanels game={{ ...state, kind: "character" }} onEvent={emit}/>); expect(screen.queryByRole("button", { name: "背包 1：空" })).toBeNull(); expect(screen.getByLabelText("原创体素旅人肖像")).toBeTruthy(); });
 it("关闭与人物切换携带当前视图token", () => { const emit = vi.fn(); render(<GamePanels game={state} onEvent={emit}/>); fireEvent.click(screen.getByRole("button", { name: "人物" })); expect(emit).toHaveBeenLastCalledWith({ type: "game-action", token: 3, op: "character" }); fireEvent.click(screen.getByRole("button", { name: "关闭面板" })); expect(emit).toHaveBeenLastCalledWith({ type: "game-action", token: 3, op: "close" }); });
 it("最后一个背包格和关闭按钮都可键盘聚焦",()=>{render(<GamePanels game={state} onEvent={()=>{}}/>);const last=screen.getByRole("button",{name:"背包 36：空"});last.focus();expect(document.activeElement).toBe(last);const close=screen.getByRole("button",{name:"关闭面板"});close.focus();expect(document.activeElement).toBe(close)});
+it("背包与配方材料复用同一缓存图标", () => {
+    const icon = "data:image/png;base64,c2FtZS1zb3VyY2U=";
+    const inventory = state.inventory.map(slot => ({ ...slot }));
+    inventory[0] = { item: 1, count: 2, name: "石头", icon };
+    const recipes = state.recipes.map(recipe => ({ ...recipe, slots: [...recipe.slots] }));
+    recipes[0]!.slots[0] = { item: 1, count: 1, name: "石头", icon };
+    const { container } = render(<GamePanels game={{ ...state, inventory, recipes, recipeIndex: 0 }} onEvent={() => {}}/>);
+    expect(container.querySelectorAll(`img.game-item-icon[src="${icon}"]`)).toHaveLength(2);
+});

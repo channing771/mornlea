@@ -12,6 +12,10 @@
 - 窗口、renderer、worker 和接收器都要明确关闭；构造中途失败时按已取得资源的逆序释放，重复关闭保持安全。
 - Darwin `AudioQueue` 由 `packages/client/audio` 持有，应用层只把确认后的 cue 注入客户端装配；不要把音频设备生命周期混入镜像或预测状态。
 - capture 与 benchmark 必须使用离屏 renderer，不创建交互窗口、不捕获光标，也不请求音频设备。
+- HUD、背包、容器与配方栏位通过 `UIItemMetadataSource` 共用装配层缓存的名称与
+  PNG data URI；`NewUIHudHotbar` 与 `NewUIGameSlot` 只读取元数据，不编码图像。
+  单槽 `icon` 上界由导出常量 `UIIconMaxChars` 与桥 schema 同值，桥整体容量由
+  `MaxUIEnvelopeBytes` 暴露给最坏载荷测试，不得为图标放宽。
 
 ## 定点验证与入口
 

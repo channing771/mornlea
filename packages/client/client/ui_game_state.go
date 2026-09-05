@@ -36,7 +36,10 @@ type UIGameState struct {
 }
 
 // NewUIGameSlot 统一背包与快捷栏的名称、数量及耐久出口；图像由装配层缓存注入。
-func NewUIGameSlot(stack core.ItemStack) UIHudSlot {
-	name, _ := core.ItemDisplayName(stack.Item)
-	return UIHudSlot{Item: stack.Item, Count: stack.Count, Durability: hudDurabilityRatio(stack), Name: name}
+func NewUIGameSlot(stack core.ItemStack, sources ...UIItemMetadataSource) UIHudSlot {
+	slot := newUIItemSlot(stack, firstUIItemMetadataSource(sources))
+	if slot.Name == "" {
+		slot.Name, _ = core.ItemDisplayName(stack.Item)
+	}
+	return slot
 }

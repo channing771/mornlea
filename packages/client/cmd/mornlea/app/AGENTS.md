@@ -41,6 +41,10 @@ packages/client/cmd/mornlea/app/
 - 权威 tick、渲染与网络热路径不执行无界工作：接收管线的缓冲按「全量初始
   快照 + 运行期 fail-fast」定容（`applicationReceiverCapacity`），drain 预算
   集中为导出常量 `MessageDrainMax`，capture 与 benchmark 与本包共用一个值。
+- 材质 `Registry` 创建成功后立即构建 `itemIconCatalog`：每个注册物品只做一次
+  16×16 RGBA → PNG data URI 编码，应用生命周期内只读复用。HUD、背包、合成
+  网格、箱子、熔炉和配方都把同一目录传给 client 栏位构造器；不得在 tick 或
+  UI 文档组装路径重新编码。
 
 ## 导出面纪律 (`app/accessors.go`, `app/app.go`)
 

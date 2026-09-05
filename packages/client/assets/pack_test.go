@@ -275,8 +275,8 @@ func TestApplyPack(t *testing.T) {
 	})
 }
 
-func TestTextureBindingsCoverEveryLayerExactlyOnce(t *testing.T) {
-	if got, want := len(textureBindings), int(layerCount); got != want {
+func TestTextureBindingsCoverEveryPackLayerExactlyOnce(t *testing.T) {
+	if got, want := len(textureBindings), int(LayerItemCoal); got != want {
 		t.Fatalf("textureBindings 长度 = %d，想要 %d", got, want)
 	}
 	names := make(map[string]struct{}, len(textureBindings))
@@ -297,9 +297,14 @@ func TestTextureBindingsCoverEveryLayerExactlyOnce(t *testing.T) {
 		}
 		layers[binding.layer] = true
 	}
-	for layer, present := range layers {
+	for layer, present := range layers[:LayerItemCoal] {
 		if !present {
 			t.Fatalf("textureBindings 缺少 layer %d", layer)
+		}
+	}
+	for layer, present := range layers[LayerItemCoal:] {
+		if present {
+			t.Fatalf("原创内部物品层 %d 意外开放材质包文件覆盖", int(LayerItemCoal)+layer)
 		}
 	}
 }

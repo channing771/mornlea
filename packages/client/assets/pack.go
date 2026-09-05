@@ -95,6 +95,7 @@ func applyPack(registry *Registry, root fs.FS) error {
 			registry.layers[layer] = pixels
 		}
 	}
+	registry.refreshItemIcons()
 	return nil
 }
 

@@ -57,36 +57,36 @@ func (a *Application) buildGameUIState() *client.UIGameState {
 	if confirmed {
 		for i := range state.Inventory {
 			stack, _ := inventory.Slot(uint8(i))
-			state.Inventory[i] = client.NewUIGameSlot(stack)
+			state.Inventory[i] = client.NewUIGameSlot(stack, &a.itemIcons)
 		}
 	}
 	if grid, ok := a.crafting.State(); ok {
 		state.GridSize = int(grid.Size)
 		for i, stack := range grid.Slots {
-			state.Grid[i] = client.NewUIGameSlot(stack)
+			state.Grid[i] = client.NewUIGameSlot(stack, &a.itemIcons)
 		}
-		state.Output = client.NewUIGameSlot(grid.Output)
+		state.Output = client.NewUIGameSlot(grid.Output, &a.itemIcons)
 	}
 	if chest, ok := a.chest.State(); ok {
 		for i, stack := range chest.Items {
-			state.Chest[i] = client.NewUIGameSlot(stack)
+			state.Chest[i] = client.NewUIGameSlot(stack, &a.itemIcons)
 		}
 	}
 	if furnace, ok := a.furnace.State(); ok {
-		state.Furnace = [3]client.UIHudSlot{client.NewUIGameSlot(furnace.Input), client.NewUIGameSlot(furnace.Fuel), client.NewUIGameSlot(furnace.Output)}
+		state.Furnace = [3]client.UIHudSlot{client.NewUIGameSlot(furnace.Input, &a.itemIcons), client.NewUIGameSlot(furnace.Fuel, &a.itemIcons), client.NewUIGameSlot(furnace.Output, &a.itemIcons)}
 		state.Progress = float32(furnace.ProgressTicks) / float32(core.FurnaceSmeltTicks)
 		state.Burn = float32(furnace.BurnTicks) / float32(core.FurnaceBurnTicks)
 	}
 	for i, id := range gameRecipeIDs {
 		pattern, _ := core.Recipe(id)
-		recipe := client.UIGameRecipe{Size: 3, Output: client.NewUIGameSlot(pattern.Output)}
+		recipe := client.UIGameRecipe{Size: 3, Output: client.NewUIGameSlot(pattern.Output, &a.itemIcons)}
 		recipe.Name = recipe.Output.Name
 		for j, item := range pattern.Cells {
 			stack := core.ItemStack{Item: item}
 			if item != 0 {
 				stack.Count = 1
 			}
-			recipe.Slots[j] = client.NewUIGameSlot(stack)
+			recipe.Slots[j] = client.NewUIGameSlot(stack, &a.itemIcons)
 		}
 		state.Recipes[i] = recipe
 	}
