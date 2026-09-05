@@ -2,24 +2,19 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
-import sys
 from pathlib import Path
-from typing import Any
 
 import httpx
 import pytest
-from pydantic import ValidationError
-
-from mornlea_companion_agent import __version__
-from mornlea_companion_agent.cli import main
-from mornlea_companion_agent.config import (
+from harness.config import (
     AgentConfig,
     ConfigError,
     ResolvedSecrets,
     load_config,
+    resolve_config_path,
     resolve_secrets,
 )
+from pydantic import ValidationError
 
 
 def _write_config(path: Path, overrides: str = "") -> Path:
@@ -45,15 +40,8 @@ provider:
 
 
 def _write_documented_config(path: Path) -> Path:
-    repository_root = Path(__file__).resolve().parents[4]
-    documentation = (repository_root / "docs/notes/configuration.md").read_text(encoding="utf-8")
-    section_marker = "Python 服务读取另一份 strict v1 YAML"
-    _, marker, section = documentation.partition(section_marker)
-    assert marker == section_marker
-    _, fence, fenced = section.partition("```yaml\n")
-    assert fence == "```yaml\n"
-    example, closing_fence, _ = fenced.partition("```\n")
-    assert closing_fence == "```\n"
+    repository_root = Path(__file__).resolve().parents[3]
+    example = (repository_root / "config.example.yaml").read_text(encoding="utf-8")
     path.write_text(example, encoding="utf-8")
     return path
 
@@ -174,7 +162,7 @@ def test_sqlite_path_symlink_loop_becomes_redacted_config_error(tmp_path: Path) 
     assert "symlink" not in str(captured.value).lower()
 
 
-def test_config_path_symlink_loop_is_a_controlled_cli_error(tmp_path: Path) -> None:
+def test_config_path_symlink_loop_is_a_controlled_error(tmp_path: Path) -> None:
     loop = tmp_path / "agent.yaml"
     try:
         loop.symlink_to(loop.name)
@@ -183,16 +171,6 @@ def test_config_path_symlink_loop_is_a_controlled_cli_error(tmp_path: Path) -> N
 
     with pytest.raises(ConfigError, match="unable to load configuration"):
         load_config(loop)
-
-    completed = subprocess.run(
-        [sys.executable, "-m", "mornlea_companion_agent", "serve", "--config", os.fspath(loop)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert completed.returncode == 2
-    assert "unable to load configuration" in completed.stderr
-    assert "Traceback" not in completed.stderr
 
 
 @pytest.mark.parametrize(
@@ -458,41 +436,16 @@ def test_resolved_secrets_can_be_encoded_as_httpx_authorization_headers(tmp_path
         assert headers.raw[0][1].isascii()
 
 
-def test_cli_version_and_help_are_lightweight(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["--version"]) == 0
-    assert __version__ in capsys.readouterr().out
-    assert main(["--help"]) == 0
-    help_output = capsys.readouterr().out
-    assert "Mornlea" in help_output
-    assert "serve" in help_output
-
-
-def test_cli_serve_resolves_config_and_secrets_then_calls_injected_runner(
+def test_resolve_config_path_prefers_explicit_over_env_over_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    config_path = _write_config(tmp_path / "agent.yaml")
-    monkeypatch.setenv("MORNLEA_AGENT_TOKEN", "agent-token")
-    monkeypatch.setenv("MORNLEA_PROVIDER_KEY", "provider-token")
-    captured: dict[str, Any] = {}
-
-    def runner(config: AgentConfig, secrets: ResolvedSecrets) -> int:
-        captured["config"] = config
-        captured["secrets"] = secrets
-        return 17
-
-    assert main(["serve", "--config", os.fspath(config_path)], serve_runner=runner) == 17
-    assert captured["config"].http.workers == 1
-    assert captured["secrets"].http_bearer_token.get_secret_value() == "agent-token"
-
-
-def test_cli_serve_does_not_accept_reload_workers_or_daemon(tmp_path: Path) -> None:
-    config_path = _write_config(tmp_path / "agent.yaml")
-
-    def unused_runner(_config: AgentConfig, _secrets: ResolvedSecrets) -> int:
-        return 0
-
-    for argument in ("--reload", "--workers", "--daemon"):
-        with pytest.raises(SystemExit):
-            main(
-                ["serve", "--config", os.fspath(config_path), argument], serve_runner=unused_runner
-            )
+    explicit = tmp_path / "explicit.yaml"
+    from_env = tmp_path / "from-env.yaml"
+    monkeypatch.setenv("MORNLEA_AGENT_CONFIG", os.fspath(from_env))
+    assert resolve_config_path(explicit) == explicit
+    assert resolve_config_path(os.fspath(explicit)) == explicit
+    assert resolve_config_path() == from_env
+    monkeypatch.delenv("MORNLEA_AGENT_CONFIG")
+    assert resolve_config_path() == Path("config.yaml")
+    monkeypatch.setenv("MORNLEA_AGENT_CONFIG", "")
+    assert resolve_config_path() == Path("config.yaml")
